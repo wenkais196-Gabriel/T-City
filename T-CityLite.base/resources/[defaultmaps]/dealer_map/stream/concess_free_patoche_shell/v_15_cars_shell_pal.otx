@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image v_15_cars_shell_pal.png
+	Type Regular
+	PixelFormat A8R8G8B8
+	Levels 5
+	Usage TINTPALETTE
+	UsageFlags -
+	ExtraFlags 0
+}

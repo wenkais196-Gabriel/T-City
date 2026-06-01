@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image os_prop_bath_towels_blue.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage DIFFUSE
+	UsageFlags NOT_HALF
+	ExtraFlags 0
+}

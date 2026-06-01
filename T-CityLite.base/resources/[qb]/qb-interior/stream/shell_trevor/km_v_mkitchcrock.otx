@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image km_v_mkitchcrock.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 7
+	Usage DEFAULT
+	UsageFlags -
+	ExtraFlags 0
+}

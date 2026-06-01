@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image xj_v_plant_leafxj_v_plant_leaf_a.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 5
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

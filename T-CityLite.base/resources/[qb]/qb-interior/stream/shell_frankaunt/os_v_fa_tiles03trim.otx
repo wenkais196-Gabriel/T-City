@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image os_v_fa_tiles03trim.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image v_glass_d_greenv_10percentgrey_a.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 3
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

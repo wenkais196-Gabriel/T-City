@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image v_gb_dvdcover01.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image prop_billboard_back_lod.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

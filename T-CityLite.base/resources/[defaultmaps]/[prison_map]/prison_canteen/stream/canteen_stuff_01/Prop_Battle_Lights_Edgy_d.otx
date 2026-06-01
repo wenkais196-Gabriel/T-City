@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image Prop_Battle_Lights_Edgy_d.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 7
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

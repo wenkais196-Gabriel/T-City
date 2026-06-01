@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image mh_v_woodcherry01_d.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage DEFAULT
+	UsageFlags -
+	ExtraFlags 0
+}

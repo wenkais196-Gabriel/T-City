@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image nxg_tl_v_psycheoffice_wall1.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 8
+	Usage DEFAULT
+	UsageFlags -
+	ExtraFlags 0
+}

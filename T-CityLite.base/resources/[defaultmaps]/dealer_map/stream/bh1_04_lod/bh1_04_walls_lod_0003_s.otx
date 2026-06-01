@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image bh1_04_walls_lod_0003_s.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

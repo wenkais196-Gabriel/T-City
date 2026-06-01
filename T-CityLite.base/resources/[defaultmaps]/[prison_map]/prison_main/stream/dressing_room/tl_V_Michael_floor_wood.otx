@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image tl_V_Michael_floor_wood.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 8
+	Usage DEFAULT
+	UsageFlags -
+	ExtraFlags 0
+}

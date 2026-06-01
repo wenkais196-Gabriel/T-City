@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Debug Overlay</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: transparent; font-family: 'Courier New', monospace; }
+
+        #color-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: 999998;
+            pointer-events: none;
+        }
+        #color-overlay.visible { display: block; }
+
+        #debug-overlay {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            padding: 16px 20px;
+            color: #00ff88;
+            font-size: 13px;
+            min-width: 320px;
+            z-index: 99999;
+        }
+
+        #debug-overlay.visible { display: block; }
+
+        .debug-title {
+            font-size: 15px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #00ff88;
+            padding-bottom: 8px;
+        }
+
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .debug-label { color: #aaa; }
+        .debug-val { font-weight: bold; }
+        .debug-val.ok { color: #00ff88; }
+        .debug-val.bad { color: #ff4444; }
+        .debug-val.warn { color: #ffaa00; }
+
+        #close-btn {
+            margin-top: 12px;
+            width: 100%;
+            padding: 6px;
+            background: #333;
+            border: 1px solid #666;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        #close-btn:hover { background: #555; }
+    </style>
+</head>
+<body>
+    <div id="debug-overlay">
+        <div class="debug-title">🔍 黑屏诊断面板</div>
+
+        <div class="debug-row">
+            <span class="debug-label">屏幕淡入 (fadedIn):</span>
+            <span class="debug-val" id="val-fadedin">-</span>
+        </div>
+        <div class="debug-row">
+            <span class="debug-label">屏幕淡出 (fadedOut):</span>
+            <span class="debug-val" id="val-fadedout">-</span>
+        </div>
+        <div class="debug-row">
+            <span class="debug-label">Ped 可见:</span>
+            <span class="debug-val" id="val-visible">-</span>
+        </div>
+        <div class="debug-row">
+            <span class="debug-label">Ped 冻结:</span>
+            <span class="debug-val" id="val-frozen">-</span>
+        </div>
+        <div class="debug-row">
+            <span class="debug-label">NUI 焦点锁定:</span>
+            <span class="debug-val" id="val-nuifocus">-</span>
+        </div>
+        <div class="debug-row">
+            <span class="debug-label">血量:</span>
+            <span class="debug-val" id="val-health">-</span>
+        </div>
+        <div class="debug-row">
+            <span class="debug-label">Z 轴坐标:</span>
+            <span class="debug-val" id="val-z">-</span>
+        </div>
+        <div class="debug-row">
+            <span class="debug-label">已登录 (isLoggedIn):</span>
+            <span class="debug-val" id="val-loggedin">-</span>
+        </div>
+
+        <div class="debug-title" style="margin-top:12px; font-size:12px; color:#ffaa00;">
+            ⚠️ 如果 fadedOut=true 或 Ped不可见，<br>请在 F8 输入 /fullfix
+        </div>
+
+        <button id="close-btn" onclick="closeDebug()">关闭 (Close)</button>
+    </div>
+
+    <!-- 红色颜色测试覆盖层（/colortest 命令使用）-->
+    <div id="color-overlay"></div>
+
+    <script>
+
+        function setVal(id, val, okCondition) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = String(val);
+            el.className = 'debug-val';
+            if (okCondition === true) el.classList.add('ok');
+            else if (okCondition === false) el.classList.add('bad');
+            else el.classList.add('warn');
+        }
+
+        function closeDebug() {
+            fetch('https://custom-debug/closeDebug', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            document.getElementById('debug-overlay').classList.remove('visible');
+        }
+
+        window.addEventListener('message', function(event) {
+            const data = event.data;
+            if (data.action === 'showDebug') {
+                const overlay = document.getElementById('debug-overlay');
+                overlay.classList.add('visible');
+
+                setVal('val-fadedin',   data.fadedIn,    data.fadedIn === true);
+                setVal('val-fadedout',  data.fadedOut,   data.fadedOut === false);
+                setVal('val-visible',   data.pedVisible, data.pedVisible === true);
+                setVal('val-frozen',    data.pedFrozen,  data.pedFrozen === false);
+                setVal('val-nuifocus',  data.nuiFocus,   data.nuiFocus === false);
+                setVal('val-health',    data.health,     data.health > 100);
+                setVal('val-z',         data.coordsZ !== undefined ? data.coordsZ.toFixed(2) : '?', null);
+                setVal('val-loggedin',  data.loggedIn,   data.loggedIn === true);
+            } else if (data.action === 'hideDebug') {
+                document.getElementById('debug-overlay').classList.remove('visible');
+            } else if (data.action === 'colorTest') {
+                const overlay = document.getElementById('color-overlay');
+                if (data.color === 'transparent') {
+                    overlay.style.background = 'transparent';
+                    overlay.classList.remove('visible');
+                } else {
+                    overlay.style.background = data.color;
+                    overlay.classList.add('visible');
+                }
+            }
+        });
+    </script>
+</body>
+</html>

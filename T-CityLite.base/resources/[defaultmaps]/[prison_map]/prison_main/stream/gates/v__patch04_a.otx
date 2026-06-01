@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image v__patch04_a.png
+	Type Regular
+	PixelFormat A8R8G8B8
+	Levels 5
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

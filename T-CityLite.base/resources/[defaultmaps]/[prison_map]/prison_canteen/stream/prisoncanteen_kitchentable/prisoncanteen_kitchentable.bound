@@ -1,0 +1,141 @@
+Version 43 31
+{
+	Type BoundComposite
+	Radius 3.13903000
+	AABBMax 2.69439700 1.54079300 0.46531140
+	AABBMin -2.69439700 -1.54286400 -0.46530520
+	Centroid 0.00000000 -0.00103520 0.00000310
+	CG 0.00000000 -0.00103520 0.00000310
+	Children 1
+	{
+		phBound
+		{
+			Type BoundBVH
+			Radius 3.13903000
+			AABBMax 2.69439700 1.54079300 0.46531140
+			AABBMin -2.69439700 -1.54286400 -0.46530520
+			Centroid 0.00000000 -0.00103520 0.00000310
+			CG 0.00000000 -0.00103520 0.00000310
+			Polygons 12
+			{
+				Tri 0
+				{
+					Vertices 0 2 4
+					Siblings 0 11 5
+					MaterialIndex 0
+				}
+				Tri 1
+				{
+					Vertices 6 4 2
+					Siblings 3 10 8
+					MaterialIndex 0
+				}
+				Tri 2
+				{
+					Vertices 1 0 5
+					Siblings 1 5 7
+					MaterialIndex 0
+				}
+				Tri 3
+				{
+					Vertices 4 5 0
+					Siblings 2 4 10
+					MaterialIndex 0
+				}
+				Tri 4
+				{
+					Vertices 2 0 3
+					Siblings 10 1 8
+					MaterialIndex 0
+				}
+				Tri 5
+				{
+					Vertices 1 3 0
+					Siblings 6 0 4
+					MaterialIndex 0
+				}
+				Tri 6
+				{
+					Vertices 6 7 4
+					Siblings 9 2 11
+					MaterialIndex 0
+				}
+				Tri 7
+				{
+					Vertices 5 4 7
+					Siblings 5 3 7
+					MaterialIndex 0
+				}
+				Tri 8
+				{
+					Vertices 7 6 3
+					Siblings 3 8 6
+					MaterialIndex 0
+				}
+				Tri 9
+				{
+					Vertices 2 3 6
+					Siblings 0 9 11
+					MaterialIndex 0
+				}
+				Tri 10
+				{
+					Vertices 3 1 7
+					Siblings 1 7 9
+					MaterialIndex 0
+				}
+				Tri 11
+				{
+					Vertices 5 7 1
+					Siblings 2 6 4
+					MaterialIndex 0
+				}
+			}
+			GeometryCenter 0.00000000 -0.00103520 0.00000310 0.00200000
+			Vertices 8
+			{
+				-2.69439700 -1.54182900 0.46530830
+				2.69439700 -1.54182900 0.46530830
+				-2.69439700 1.54182900 0.46530830
+				2.69439700 1.54182900 0.46530830
+				-2.69439700 -1.54182900 -0.46530830
+				2.69439700 -1.54182900 -0.46530830
+				-2.69439700 1.54182900 -0.46530830
+				2.69439700 1.54182900 -0.46530830
+			}
+			VertexColors null
+			Materials 1
+			{
+				Material 0
+				{
+					MaterialIndex 1
+					ProcId 0
+					RoomId 0
+					PedDensity 0
+					PolyFlags FORMATS_EMPTY_FLAGS
+					MaterialColorIndex 0
+				}
+			}
+			MaterialColors null
+			Margin 0.00500000
+		}
+	}
+	ChildTransforms 1
+	{
+		Matrix 0
+		{
+			1.00000000 0.00000000 0.00000000
+			0.00000000 1.00000000 0.00000000
+			0.00000000 0.00000000 1.00000000
+			0.00000000 0.00000000 0.00000000
+		}
+	}
+	ChildFlags 1
+	{
+		Item
+		{
+			Flags1 MAP_WEAPON MAP_DYNAMIC MAP_ANIMAL MAP_COVER MAP_VEHICLE
+			Flags2 UNKNOWN MAP_WEAPON MAP_DYNAMIC MAP_ANIMAL MAP_COVER MAP_VEHICLE VEHICLE_NOT_BVH VEHICLE_BVH VEHICLE_BOX PED RAGDOLL ANIMAL ANIMAL_RAGDOLL OBJECT OBJECT_ENV_CLOTH PLANT PROJECTILE EXPLOSION PICKUP FOLIAGE FORKLIFT_FORKS TEST_WEAPON TEST_CAMERA TEST_AI TEST_SCRIPT TEST_VEHICLE_WHEEL GLASS MAP_RIVER SMOKE UNSMASHED MAP_STAIRS MAP_DEEP_SURFACE
+		}
+	}
+}

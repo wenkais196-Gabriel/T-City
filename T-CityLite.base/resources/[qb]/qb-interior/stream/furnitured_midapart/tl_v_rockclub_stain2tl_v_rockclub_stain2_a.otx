@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image tl_v_rockclub_stain2tl_v_rockclub_stain2_a.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 7
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

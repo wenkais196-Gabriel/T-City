@@ -1,0 +1,82 @@
+# T-City Lite — server.cfg 模板
+#
+# 使用方法:
+#   1. 复制此文件为 server.cfg
+#   2. 填入你的实际配置（sv_licenseKey, mysql_connection_string, steam_webApiKey）
+#   3. 可选: 修改 sv_hostname / sv_maxclients / 管理员标识
+#
+# ⚠️  不要直接修改此模板文件
+# ⚠️  server.cfg 已在 .gitignore 中，不会提交到 GitHub
+
+## Network
+endpoint_add_tcp "0.0.0.0:30120"
+endpoint_add_udp "0.0.0.0:30120"
+sv_maxclients 48
+## 如果你使用 txAdmin，在 txAdmin 设置中开启 OneSync，不要在这里设
+# set onesync on
+
+
+## Server identity
+# ── 替换以下 3 项 ──
+set steam_webApiKey "YOUR_STEAM_WEB_API_KEY_HERE"     # 从 https://steamcommunity.com/dev/apikey 获取
+sv_licenseKey "YOUR_FIVEM_LICENSE_KEY_HERE"           # 从 https://keymaster.fivem.net 获取
+# ──────────────────
+sets tags "default, deployer, qbcore, qb-core, lite, rp"
+sv_hostname "T-City Lite [YOUR_SERVER_NAME]"
+sets sv_projectName "T-City Lite"
+sets sv_projectDesc "Lite QBCore RP chain"
+sets locale "zh-CN"
+load_server_icon myLogo.png
+sv_enforceGameBuild 3095
+set resources_useSystemChat true
+
+## Database
+# ── 替换以下连接字符串 ──
+# 格式: mysql://用户名:密码@主机/数据库名?charset=utf8mb4
+set mysql_connection_string "mysql://YOUR_USER:YOUR_PASSWORD@YOUR_HOST/YOUR_DATABASE?charset=utf8mb4"
+# ──────────────────────
+
+## QBCore locale/config
+setr qb_locale "zh-cn"
+setr UseTarget true
+
+## Voice config
+setr voice_useNativeAudio true
+setr voice_useSendingRangeOnly true
+setr voice_defaultCycle "GRAVE"
+setr voice_defaultVolume 0.3
+setr voice_enableRadioAnim 1
+setr voice_syncData 1
+
+## Lite startup modules
+exec configs/modules/core.cfg
+exec configs/modules/player.cfg
+exec configs/modules/voice.cfg
+exec configs/modules/custom.cfg
+exec configs/modules/economy.cfg
+exec configs/modules/security.cfg
+exec configs/modules/jobs.cfg
+exec configs/modules/banking.cfg
+exec configs/modules/vehicles.cfg
+exec configs/modules/police.cfg
+exec configs/modules/medical.cfg
+exec configs/modules/crime.cfg
+exec configs/modules/career.cfg
+exec configs/modules/admin.cfg
+
+## Permissions
+# ── 替换为你的管理员标识 ──
+add_ace group.admin command allow
+# add_principal identifier.fivem:YOUR_FIVEM_ID group.admin
+# ──────────────────────
+
+## Resources
+add_ace resource.qb-core command allow
+
+## Gods
+add_ace qbcore.god command allow
+
+## Inheritance
+add_principal qbcore.god group.admin
+add_principal qbcore.god qbcore.admin
+add_principal qbcore.admin qbcore.mod

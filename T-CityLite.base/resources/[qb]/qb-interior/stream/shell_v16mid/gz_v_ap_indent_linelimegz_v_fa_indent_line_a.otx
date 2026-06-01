@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_v_ap_indent_linelimegz_v_fa_indent_line_a.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 6
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

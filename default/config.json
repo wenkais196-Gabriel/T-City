@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "general": {
+    "serverName": "T-City"
+  },
+  "server": {
+    "dataPath": "D:/txData/T-CityLite.base/"
+  },
+  "whitelist": {
+    "mode": "adminOnly"
+  }
+}

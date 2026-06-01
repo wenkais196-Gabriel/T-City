@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image bh1_01_superlod01.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 9
+	Usage DIFFUSE
+	UsageFlags NOT_HALF
+	ExtraFlags 0
+}

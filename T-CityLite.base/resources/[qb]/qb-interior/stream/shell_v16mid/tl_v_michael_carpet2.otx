@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image tl_v_michael_carpet2.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 7
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

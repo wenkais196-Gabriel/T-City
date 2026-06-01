@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image V_GLASS_S_N.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

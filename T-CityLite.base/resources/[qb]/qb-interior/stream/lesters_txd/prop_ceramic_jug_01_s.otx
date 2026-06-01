@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image prop_ceramic_jug_01_s.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 7
+	Usage SPECULAR
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

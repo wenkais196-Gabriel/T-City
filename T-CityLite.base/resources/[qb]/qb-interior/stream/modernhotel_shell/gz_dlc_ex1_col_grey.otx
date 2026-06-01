@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_dlc_ex1_col_grey.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

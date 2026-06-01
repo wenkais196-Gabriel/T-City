@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image prop_micro_glass01km_v_ovenglass1_a.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 6
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

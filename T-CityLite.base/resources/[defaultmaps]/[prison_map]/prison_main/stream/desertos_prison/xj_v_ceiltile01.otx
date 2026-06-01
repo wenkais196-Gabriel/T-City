@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image xj_v_ceiltile01.png
+	Type Regular
+	PixelFormat A8R8G8B8
+	Levels 5
+	Usage DEFAULT
+	UsageFlags -
+	ExtraFlags 0
+}

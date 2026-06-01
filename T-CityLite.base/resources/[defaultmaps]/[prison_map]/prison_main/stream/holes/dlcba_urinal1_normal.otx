@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image dlcba_urinal1_normal.png
+	Type Regular
+	PixelFormat A8R8G8B8
+	Levels 5
+	Usage NORMAL
+	UsageFlags -
+	ExtraFlags 0
+}

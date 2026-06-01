@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image mh_v_lest_doorsheet_n.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 8
+	Usage NORMAL
+	UsageFlags NOT_HALF HD_SPLIT
+	ExtraFlags 0
+}

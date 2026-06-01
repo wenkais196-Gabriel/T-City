@@ -1,0 +1,106 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# T-City Lite — .gitignore
+# 五层过滤: 安全 → 环境 → 构建 → IDE → 系统
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ═════════════════════════════════════════════════════════
+# Layer 1: 安全 — 永远不要提交的敏感文件
+# ═════════════════════════════════════════════════════════
+
+# 服务器授权密钥 (server.cfg 中的 sv_licenseKey)
+# 使用 server.cfg.template 替代提交
+server.cfg
+!server.cfg.template
+
+# 数据库连接字符串 (包含密码)
+# 配置在 server.cfg 的 mysql_connection_string
+
+# Discord Webhook URL (包含敏感 token)
+# 已移除 CFG 和 Lua fallback 中的真实 URL
+# 配置在 configs/modules/economy.cfg 和 security.cfg
+
+# 玩家数据 (包含真实玩家信息)
+default/data/
+default/logs/
+
+# 备份配置 (包含与 server.cfg 相同的敏感数据)
+T-CityLite.base/server.cfg.bkp
+T-CityLite.base/server.cfg.full-backup
+T-CityLite.base/server.cfg.lite-draft
+
+# ═════════════════════════════════════════════════════════
+# Layer 2: 环境 — 机器特定、运行时生成
+# ═════════════════════════════════════════════════════════
+
+# FiveM 服务器缓存
+cache/
+**/cache/
+T-CityLite.base/cache/
+
+# 运行时日志
+logs/
+**/logs/
+T-CityLite.base/logs/
+!T-CityLite.base/logs/test_reports/
+!**/logs/*.md
+
+# Yarn 缓存
+yarn-cache/
+**/yarn-cache/
+
+# npm 缓存
+node_modules/
+
+# cfx 构建产物
+**/resource.rpf
+**/resource.rpf.db
+**/resource.sfl
+**/resource.sfl.db
+
+# stream 缓存
+**/stream_cache/
+
+# ═════════════════════════════════════════════════════════
+# Layer 3: 构建产物 — Web 构建 / 打包
+# ═════════════════════════════════════════════════════════
+
+# NUI/Vite build
+dist/
+build/
+.nuxt/
+.next/
+.svelte-kit/
+
+# TypeScript build
+*.js.map
+*.tsbuildinfo
+
+# ═════════════════════════════════════════════════════════
+# Layer 4: IDE / 编辑器
+# ═════════════════════════════════════════════════════════
+
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.replxx_history
+
+# ═════════════════════════════════════════════════════════
+# Layer 5: 系统 / 其他
+# ═════════════════════════════════════════════════════════
+
+.env
+.env.local
+*.pyc
+__pycache__/
+.reasonix/
+
+# 原始 QBCore base（只追踪修改后的 T-CityLite）
+QBCore_CDB34E.base/
+
+# 技能 / AI 辅助文件（开发端本地配置）
+skills/
+AI_SYNC_MEMO.md
