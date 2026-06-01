@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image DirtyShippingContainerSiding_normal.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 11
+	Usage NORMAL
+	UsageFlags NOT_HALF HD_SPLIT
+	ExtraFlags 0
+}

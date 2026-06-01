@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_v_ta_pipewraps_n.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage NORMAL
+	UsageFlags NOT_HALF
+	ExtraFlags 0
+}

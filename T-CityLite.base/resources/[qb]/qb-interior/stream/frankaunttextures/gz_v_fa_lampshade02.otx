@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_v_fa_lampshade02.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage DEFAULT
+	UsageFlags -
+	ExtraFlags 0
+}

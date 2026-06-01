@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_v_dirtyglass3gz_v_dirtyglass3_a.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 7
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

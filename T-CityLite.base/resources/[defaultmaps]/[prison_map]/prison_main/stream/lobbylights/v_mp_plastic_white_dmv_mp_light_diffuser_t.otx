@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image v_mp_plastic_white_dmv_mp_light_diffuser_t.png
+	Type Regular
+	PixelFormat A8R8G8B8
+	Levels 5
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

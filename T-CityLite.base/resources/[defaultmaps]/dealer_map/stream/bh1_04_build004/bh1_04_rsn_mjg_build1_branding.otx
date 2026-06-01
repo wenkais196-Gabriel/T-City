@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image bh1_04_rsn_mjg_build1_branding.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 8
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

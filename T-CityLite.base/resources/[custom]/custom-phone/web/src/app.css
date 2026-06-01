@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* HSL Tailored Color Palette */
+  --phone-bg-dark: 240 10% 3.9%;
+  --phone-bg-card: 240 10% 6%;
+  --phone-accent: 263.4 83.3% 57.8%; /* iOS Premium Purple */
+  --phone-accent-hover: 263.4 83.3% 65%;
+  --phone-text: 0 0% 98%;
+  --phone-text-muted: 240 5% 64.9%;
+  --phone-border: 240 5.9% 12%;
+  
+  --system-red: 346.8 77.2% 49.8%;
+  --system-green: 142.1 76.2% 36.3%;
+  --system-blue: 221.2 83.2% 53.3%;
+  --system-orange: 24.6 95% 53.1%;
+  
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* FiveM NUI requires transparent body background */
+  background: transparent;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Scrollbar styles inside the phone */
+.phone-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.phone-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.phone-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+
+.phone-scrollable::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Glassmorphism templates */
+.glass-effect {
+  background: rgba(15, 15, 20, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Glass card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  transition: background 0.25s, transform 0.25s;
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+}
+
+/* Form inputs styling */
+.phone-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.phone-input:focus {
+  border-color: hsl(var(--phone-accent));
+  box-shadow: 0 0 0 2px rgba(138, 43, 226, 0.25);
+}
+
+/* Premium Buttons */
+.phone-btn {
+  background: hsl(var(--phone-accent));
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.phone-btn:hover {
+  background: hsl(var(--phone-accent-hover));
+}
+
+.phone-btn:active {
+  transform: scale(0.96);
+}
+
+.phone-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.phone-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Dynamic App Transition animations */
+.app-transition {
+  animation: app-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes app-fade-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

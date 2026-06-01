@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image rsn_dc_emissive_windows_0001.png
+	Type Regular
+	PixelFormat A8R8G8B8
+	Levels 5
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

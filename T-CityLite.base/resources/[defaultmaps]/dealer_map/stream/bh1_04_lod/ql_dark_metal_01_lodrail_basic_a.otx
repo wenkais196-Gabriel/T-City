@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image ql_dark_metal_01_lodrail_basic_a.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 4
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

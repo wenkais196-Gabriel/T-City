@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image prop_tv_flat_01.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

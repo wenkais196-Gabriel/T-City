@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image mh_v_flatnormal_n.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 2
+	Usage NORMAL
+	UsageFlags -
+	ExtraFlags 0
+}

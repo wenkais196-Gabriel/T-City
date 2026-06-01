@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image nxg_tl_v_ranch_floor_wood_n.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 8
+	Usage NORMAL
+	UsageFlags -
+	ExtraFlags 0
+}

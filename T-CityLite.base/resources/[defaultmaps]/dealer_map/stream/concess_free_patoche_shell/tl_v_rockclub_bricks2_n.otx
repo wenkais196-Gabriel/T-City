@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image tl_v_rockclub_bricks2_n.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 7
+	Usage NORMAL
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

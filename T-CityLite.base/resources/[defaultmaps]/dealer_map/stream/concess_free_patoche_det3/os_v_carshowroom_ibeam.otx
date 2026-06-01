@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image os_v_carshowroom_ibeam.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

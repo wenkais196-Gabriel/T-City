@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image boltedconcrete_spec.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 11
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

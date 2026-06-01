@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image tl_V_Office_wall_sockets_s.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage DEFAULT
+	UsageFlags -
+	ExtraFlags 0
+}

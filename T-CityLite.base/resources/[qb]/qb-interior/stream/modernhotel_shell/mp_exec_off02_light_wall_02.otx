@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image mp_exec_off02_light_wall_02.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

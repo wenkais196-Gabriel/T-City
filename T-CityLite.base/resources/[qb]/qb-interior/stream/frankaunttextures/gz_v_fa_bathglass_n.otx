@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_v_fa_bathglass_n.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage NORMAL
+	UsageFlags -
+	ExtraFlags 0
+}

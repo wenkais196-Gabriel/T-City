@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_v_white64.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage SPECULAR
+	UsageFlags -
+	ExtraFlags 0
+}

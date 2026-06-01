@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_v_fa_crystals02_s.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage SPECULAR
+	UsageFlags -
+	ExtraFlags 0
+}

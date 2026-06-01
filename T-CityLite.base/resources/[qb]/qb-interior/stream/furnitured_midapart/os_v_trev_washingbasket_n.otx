@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image os_v_trev_washingbasket_n.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage NORMAL
+	UsageFlags -
+	ExtraFlags 0
+}

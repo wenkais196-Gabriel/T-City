@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image prop_telegraph_01prop_lodpole_l2.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 4
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

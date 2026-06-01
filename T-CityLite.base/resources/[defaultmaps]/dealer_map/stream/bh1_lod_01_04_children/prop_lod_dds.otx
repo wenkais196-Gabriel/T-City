@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image prop_lod_dds.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 3
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

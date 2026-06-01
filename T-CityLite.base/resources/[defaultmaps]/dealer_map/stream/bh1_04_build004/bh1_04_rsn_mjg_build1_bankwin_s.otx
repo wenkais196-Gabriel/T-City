@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image bh1_04_rsn_mjg_build1_bankwin_s.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage SPECULAR
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

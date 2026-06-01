@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image gz_v_cf_lockers.png
+	Type Regular
+	PixelFormat DXT3
+	Levels 9
+	Usage DEFAULT
+	UsageFlags -
+	ExtraFlags 0
+}

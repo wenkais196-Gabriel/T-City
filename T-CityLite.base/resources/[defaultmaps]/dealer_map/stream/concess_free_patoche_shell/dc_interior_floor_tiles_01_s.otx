@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image dc_interior_floor_tiles_01_s.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 9
+	Usage SPECULAR
+	UsageFlags -
+	ExtraFlags 0
+}

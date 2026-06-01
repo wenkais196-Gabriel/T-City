@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image prop_battle_lights_light_white.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 5
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}

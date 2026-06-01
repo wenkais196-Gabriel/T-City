@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image rsnos_km_fh_crystal_hd_refgreen.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 6
+	Usage DIFFUSE
+	UsageFlags -
+	ExtraFlags 0
+}

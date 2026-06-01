@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image os_v_fa_showcurtainos_v_fa_showcurtain_a.png
+	Type Regular
+	PixelFormat DXT5
+	Levels 7
+	Usage DIFFUSE
+	UsageFlags HD_SPLIT
+	ExtraFlags 0
+}

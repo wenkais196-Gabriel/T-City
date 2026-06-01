@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image nxg_tl_v_ranch_wall_plaster_n.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 7
+	Usage NORMAL
+	UsageFlags -
+	ExtraFlags 0
+}

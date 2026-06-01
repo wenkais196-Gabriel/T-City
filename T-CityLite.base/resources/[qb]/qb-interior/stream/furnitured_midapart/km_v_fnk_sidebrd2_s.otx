@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image km_v_fnk_sidebrd2_s.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 7
+	Usage SPECULAR
+	UsageFlags -
+	ExtraFlags 0
+}

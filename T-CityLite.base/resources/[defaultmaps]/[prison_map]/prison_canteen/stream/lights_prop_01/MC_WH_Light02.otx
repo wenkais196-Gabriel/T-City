@@ -1,0 +1,10 @@
+Version 13 30
+{
+	Image MC_WH_Light02.png
+	Type Regular
+	PixelFormat DXT1
+	Levels 4
+	Usage UNKNOWN
+	UsageFlags -
+	ExtraFlags 0
+}
