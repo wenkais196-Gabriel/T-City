@@ -157,7 +157,6 @@ end
 -- Helper functions
 function BoxZone:isPointInside(point)
   if self.destroyed then
-    print("[PolyZone] Warning: Called isPointInside on destroyed zone {name=" .. self.name .. "}")
     return false
   end
 

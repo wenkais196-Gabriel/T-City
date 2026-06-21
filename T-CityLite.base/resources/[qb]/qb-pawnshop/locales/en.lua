@@ -26,6 +26,9 @@ local Translations = {
         max = 'Max Amount %{value}',
         submit = 'Melt',
         melt_wait = 'Give me %{value} minutes and I\'ll have your stuff melted',
+        launder_money = 'Launder Money',
+        launder_prompt = 'Enter amount to launder (min $%{value})',
+        launder_submit = 'Launder',
     }
 }
 

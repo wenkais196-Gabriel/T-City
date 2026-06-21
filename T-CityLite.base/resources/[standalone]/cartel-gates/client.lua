@@ -221,8 +221,11 @@ RegisterCommand('gatesave', function()
     local modelHash = GetEntityModel(tempGate)
     
     local coordsStr = string.format("vector3(%.2f, %.2f, %.2f)", coords.x, coords.y, coords.z)
-    print("----- GATESAVE CONFIG -----")
-    print(string.format("coords = %s", coordsStr))
+    -- 🔒 Security: 仅在调试模式输出坐标，防止 F8 泄露
+    if GetConvar('debug_client', 'false') == 'true' then
+        print("----- GATESAVE CONFIG -----")
+        print(string.format("coords = %s", coordsStr))
+    end
     print(string.format("heading = %.2f", heading))
     print(string.format("hash = %s", modelHash))
     

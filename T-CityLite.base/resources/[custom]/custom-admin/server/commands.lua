@@ -6,236 +6,212 @@ local function DebugPrint(msg)
 end
 
 -- ==========================================
---            命 令 登 记 与 权 限 审 计
+--            调 试 命 令 — 查 看 标 识 符
 -- ==========================================
-
--- 1. 指派领袖指令 (/setleader [id] [role])
-QBCore.Commands.Add('setleader', '指派玩家为特定领域的领袖 (Admin Only)', {
-    { name = 'id', help = '玩家服务器 ID' },
-    { name = 'role', help = '领袖角色 (sheriff/mayor/gangboss)' }
-}, true, function(source, args)
-    local callerName = (not source or source == 0 or source == "" or source == "console") and "Console" or GetPlayerName(source)
-    local targetId = tonumber(args[1])
-    local role = tostring(args[2]):lower()
-    
-    -- 参数完整性校验
-    if not targetId or not role or (role ~= "sheriff" and role ~= "mayor" and role ~= "gangboss") then
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "参数错误。用法: /setleader [id] [sheriff/mayor/gangboss]", "error")
-        else
-            print("参数错误。用法: setleader [id] [sheriff/mayor/gangboss]")
-        end
+QBCore.Commands.Add('myid', '查看你当前的所有标识符', {}, false, function(source)
+    local src = source
+    if src == 0 or src == "console" then
+        print("控制台没有标识符")
         return
     end
-
-    local Player = QBCore.Functions.GetPlayer(targetId)
-    if not Player then
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "该玩家未在线", "error")
-        else
-            print("该玩家未在线")
-        end
-        return
+    local identifiers = GetPlayerIdentifiers(src)
+    local msg = "你的标识符列表:\n"
+    for _, id in ipairs(identifiers) do
+        msg = msg .. "  " .. id .. "\n"
     end
-
-    local targetCid = Player.PlayerData.citizenid
-    local targetName = Player.PlayerData.charinfo.firstname .. " " .. Player.PlayerData.charinfo.lastname
-    
-    -- 1. 先清除目标玩家之前可能拥有的任何领袖角色，保障 unique 索引不冲突
-    MySQL.Async.execute(
-        "DELETE FROM leader_roles WHERE citizenid = ?",
-        { targetCid },
-        function()
-            -- 2. 写入数据库 leader_roles (异步，保证性能)
-            MySQL.Async.execute(
-                "INSERT INTO leader_roles (role, citizenid, name) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE citizenid = ?, name = ?",
-                { role, targetCid, targetName, targetCid, targetName },
-                function(rowsChanged)
-                    if rowsChanged and rowsChanged > 0 then
-                -- 2. 调用 custom-career export 将玩家层级晋升为 leader
-                local success = exports['custom-career']:SetPlayerTier(targetId, 'leader')
-                if success then
-                    -- 设置关联部门和地区（可选）
-                    if role == "sheriff" then
-                        exports['custom-career']:SetPlayerDepartment(targetId, "sheriff_office")
-                    elseif role == "mayor" then
-                        exports['custom-career']:SetPlayerDepartment(targetId, "city_hall")
-                    end
-
-                    -- 3. 联动向客户端触发事件，解锁手机领袖 APP (v0.4)
-                    TriggerClientEvent('custom-phone:client:UnlockLeaderApp', targetId, role)
-                    
-                    -- 通知提示
-                    TriggerClientEvent('QBCore:Notify', targetId, ("您已被指派为领袖岗位: %s"):format(role), "success")
-                    if source ~= 0 then
-                        TriggerClientEvent('QBCore:Notify', source, ("成功指派 %s 为领袖岗位: %s"):format(targetName, role), "success")
-                    end
-                    
-                    -- 4. 发送 Discord #admin-log 审计记录
-                    local text = ("**指派操作**: 领袖岗位指派\n**执行管理员**: %s\n**目标玩家**: %s (%s)\n**领袖角色**: %s\n**状态**: 晋升 Tier='leader' 且解锁领袖App成功"):format(
-                        callerName, targetName, targetCid, role
-                    )
-                    exports['custom-logs']:LogGeneric("管理员指派领袖", text, 65280) -- 绿色
-                else
-                    if source ~= 0 then
-                        TriggerClientEvent('QBCore:Notify', source, "职业层级晋升失败，请检查 custom-career 状态", "error")
-                    end
-                end
-            end
-        end
-    )
+    TriggerClientEvent('QBCore:Notify', src, "你的标识符已打印到聊天窗口", "success")
+    TriggerClientEvent('chat:addMessage', src, {
+        color = { 0, 255, 0 },
+        multiline = true,
+        args = { "🚀 你的标识符", msg }
+    })
+    -- 🔒 Security: 标识符脱敏 — 仅输出类型计数，不再打印完整 steam hex / license
+    local idSummary = {}
+    for _, v in ipairs(identifiers) do
+        local prefix = v:match("^(%a+):") or "unknown"
+        idSummary[prefix] = (idSummary[prefix] or 0) + 1
+    end
+    local summaryStr = ""
+    for k, v in pairs(idSummary) do summaryStr = summaryStr .. k .. ":" .. v .. " " end
+    print(("[custom-admin] Player %s identifiers: %s"):format(GetPlayerName(src), summaryStr))
 end)
+
+-- ==========================================
+--            调 试 命 令 — 管 理 菜 单
+-- ==========================================
+QBCore.Commands.Add('amenu', '打开管理员菜单', {}, false, function(source)
+    local src = source
+    DebugPrint(("Player %s requested admin menu via /amenu"):format(GetPlayerName(src)))
+    TriggerClientEvent('qb-admin:client:openMenu', src)
+    TriggerClientEvent('chat:addMessage', src, {
+        color = { 0, 255, 255 },
+        multiline = true,
+        args = {
+            "🛠️ 管理员面板",
+            [[
+输入 /apanel 重新显示此面板
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 常用指令:
+  /car [车型]      - 刷车
+  /dv              - 删除载具
+  /fix             - 修车
+  /revive          - 复活自己
+  /goto [ID]       - 传送到玩家
+  /bring [ID]      - 拉取玩家
+  /noclip          - 穿墙模式
+  /coords          - 显示坐标
+  /admincar        - 保存载具到车库
+  /myid            - 查看标识符
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+]]
+        }
+    })
+end)
+
+-- ==========================================
+--        调 试 命 令 — 抢 劫 警 察 门 槛
+-- ==========================================
+-- 用法:
+--   /tccops 0    — 临时设为 0（随便抢）
+--   /tccops 2    — 恢复为 2（生产标准）
+--   /tccops      — 查看当前值
+QBCore.Commands.Add('tccops', '调整抢劫警察门槛（调试）', { {
+    name = 'value',
+    help = '0-10，0=随便抢 2=生产标准'
+} }, false, function(source, args)
+    if not args[1] then
+        local current = GlobalState and GlobalState.crime_min_police_storerobbery
+            or GetConvar("crime_min_police_storerobbery", "2")
+        QBCore.Functions.Notify(source, _L(source, 'admin_current_threshold', tostring(current)), "primary")
+        return
+    end
+
+    if args[1]:lower() == 'reset' then
+        GlobalState:set('crime_min_police_storerobbery', 2, true)
+        QBCore.Functions.Notify(source, _L(source, 'admin_reset_to_2'), "success")
+        return
+    end
+
+    local value = tonumber(args[1])
+    if value == nil or value < 0 or value > 10 then
+        QBCore.Functions.Notify(source, _L(source, 'admin_invalid_0_10'), "error")
+        return
+    end
+    GlobalState:set('crime_min_police_storerobbery', value, true)
+    QBCore.Functions.Notify(source, _L(source, 'admin_threshold_set', value), "primary")
+end, 'user')
+
+-- 在 QBCore 中注册管理员身份（确保 setrobbery 等 admin 命令可用）
+CreateThread(function()
+    Wait(3000)
+    local players = QBCore.Functions.GetPlayers()
+    for _, pid in ipairs(players) do
+        local Player = QBCore.Functions.GetPlayer(pid)
+        if Player and not QBCore.Functions.HasPermission(pid, 'admin') then
+            QBCore.Functions.AddPermission(pid, 'admin')
+            print(('[custom-admin] 🔑 Auto-granted admin to %s'):format(GetPlayerName(pid)))
+        end
+    end
+end)
+
+-- 新玩家上线自动授予 admin
+AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
+    local src = Player.PlayerData.source
+    if not QBCore.Functions.HasPermission(src, 'admin') then
+        QBCore.Functions.AddPermission(src, 'admin')
+    end
+end)
+
+-- ==========================================
+--        调 试 命 令 — 清除通缉状态
+-- ==========================================
+QBCore.Commands.Add('clearme', '清除自己的通缉状态（管理员）', {}, false, function(source)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+
+    -- 1. 清除所有通缉相关元数据
+    Player.Functions.SetMetaData('wanted', 0)
+    Player.Functions.SetMetaData('ishandcuffed', false)
+    local record = Player.PlayerData.metadata['criminalrecord'] or {}
+    record.hasRecord = false
+    record.date = nil
+    Player.Functions.SetMetaData('criminalrecord', record)
+
+    -- 2. 客户端：清除自定义通缉状态 + 恢复警星系统 + 清除警察雷达 blip
+    TriggerClientEvent('custom-main:client:clearLocalWanted', src)
+    for _, pid in ipairs(QBCore.Functions.GetPlayers()) do
+        local cop = QBCore.Functions.GetPlayer(pid)
+        if cop and cop.PlayerData.job.name == 'police' and cop.PlayerData.job.onduty then
+            TriggerClientEvent('custom-main:client:clearSuspectBlip', pid, src)
+        end
+    end
+
+    -- 3. 通知 custom-main 清除 WantedPlayers 缓存
+    TriggerEvent('custom-main:server:adminClearWanted', Player.PlayerData.citizenid)
+
+    TriggerClientEvent('QBCore:Notify', src, '通缉状态已完全清除（含元数据、雷达、犯罪记录）', 'success')
 end, 'admin')
 
--- 2. 撤销领袖指令 (/demote [id])
-QBCore.Commands.Add('demote', '撤销玩家的领袖职位并剥夺头衔 (Admin Only)', {
-    { name = 'id', help = '玩家服务器 ID' }
-}, true, function(source, args)
-    local callerName = (not source or source == 0 or source == "" or source == "console") and "Console" or GetPlayerName(source)
-    local targetId = tonumber(args[1])
-    
-    if not targetId then
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "参数错误。用法: /demote [id]", "error")
-        else
-            print("参数错误。用法: demote [id]")
-        end
+-- ==========================================
+--        调 试 命 令 — 颁 发 执 照
+-- ==========================================
+-- 用法: /givemelicense pilot
+--        /givemelicense driver
+--        /givemelicense boat / weapon / heavy
+QBCore.Commands.Add('givemelicense', '给自己颁发执照 (Admin)', { {
+    name = 'type',
+    help = 'driver / pilot / boat / heavy / weapon'
+} }, false, function(source, args)
+    local src = source
+    local licenseType = args[1] and args[1]:lower()
+    local validTypes = { driver = true, pilot = true, weapon = true, boat = true, heavy = true }
+
+    if not validTypes[licenseType] then
+        TriggerClientEvent('QBCore:Notify', src,
+            '无效执照类型，可选: driver / pilot / boat / heavy / weapon', 'error')
         return
     end
 
-    local Player = QBCore.Functions.GetPlayer(targetId)
-    if not Player then
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "该玩家未在线", "error")
-        else
-            print("该玩家未在线")
-        end
-        return
-    end
-
-    local targetCid = Player.PlayerData.citizenid
-    local targetName = Player.PlayerData.charinfo.firstname .. " " .. Player.PlayerData.charinfo.lastname
-    
-    -- 1. 从 leader_roles 数据库中删除
-    MySQL.Async.execute(
-        "DELETE FROM leader_roles WHERE citizenid = ?",
-        { targetCid },
-        function(rowsChanged)
-            -- 2. 调用 custom-career export 将层级降为 entry 基层
-            local success = exports['custom-career']:SetPlayerTier(targetId, 'entry')
-            if success then
-                exports['custom-career']:SetPlayerDepartment(targetId, nil)
-                
-                -- 通知提示
-                TriggerClientEvent('QBCore:Notify', targetId, "您的领袖职位已被剥夺，退回至基层岗位", "error")
-                if source ~= 0 then
-                    TriggerClientEvent('QBCore:Notify', source, ("成功剥夺 %s 的所有领袖头衔并降职"):format(targetName), "success")
-                end
-                
-                -- 3. 发送 Discord 审计
-                local text = ("**指派操作**: 领袖剥夺降职\n**执行管理员**: %s\n**目标玩家**: %s (%s)\n**状态**: 彻底移除领袖身份，重置 Tier='entry'"):format(
-                    callerName, targetName, targetCid
-                )
-                exports['custom-logs']:LogGeneric("管理员剥夺领袖", text, 13631488) -- 红色
-            else
-                if source ~= 0 then
-                    TriggerClientEvent('QBCore:Notify', source, "层级修改失败", "error")
-                end
-            end
-        end
-    )
-end, 'admin')
-
--- 3. 修改职业层级 (/settier [id] [tier])
-QBCore.Commands.Add('settier', '直接设置玩家职业阶层等级 (Admin Only)', {
-    { name = 'id', help = '玩家服务器 ID' },
-    { name = 'tier', help = '职业阶层 (leader/mid/entry)' }
-}, true, function(source, args)
-    local callerName = (not source or source == 0 or source == "" or source == "console") and "Console" or GetPlayerName(source)
-    local targetId = tonumber(args[1])
-    local tier = tostring(args[2]):lower()
-    
-    if not targetId or not tier or (tier ~= "leader" and tier ~= "mid" and tier ~= "entry") then
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "参数错误。用法: /settier [id] [leader/mid/entry]", "error")
-        else
-            print("参数错误。用法: settier [id] [leader/mid/entry]")
-        end
-        return
-    end
-
-    local Player = QBCore.Functions.GetPlayer(targetId)
-    if not Player then
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "该玩家未在线", "error")
-        else
-            print("该玩家未在线")
-        end
-        return
-    end
-
-    local success = exports['custom-career']:SetPlayerTier(targetId, tier)
+    local success, msg = exports['custom-certificates']:GrantLicense(src, licenseType)
     if success then
-        TriggerClientEvent('QBCore:Notify', targetId, ("您的职业层级已被变更为: %s"):format(tier), "success")
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, ("成功修改 %s 的职业层级为 %s"):format(Player.PlayerData.name, tier), "success")
-        end
-        
-        -- 审计
-        local text = ("**指派操作**: 职业层级变动\n**执行管理员**: %s\n**目标玩家**: %s (%s)\n**新层级**: %s"):format(
-            callerName, Player.PlayerData.name, Player.PlayerData.citizenid, tier
-        )
-        exports['custom-logs']:LogGeneric("管理员层级变更", text, 10079487)
+        -- 🔧 强制客户端刷新证书缓存，消除 QBCore:Player:SetPlayerData 同步竞态
+        TriggerClientEvent('custom-certificates:client:ForceRefreshCache', src)
+        TriggerClientEvent('QBCore:Notify', src,
+            ('✅ 已获得 %s 执照！'):format(licenseType), 'success')
     else
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "修改失败，请确保输入合法的层级", "error")
-        end
+        TriggerClientEvent('QBCore:Notify', src,
+            msg or '授予失败', 'error')
     end
 end, 'admin')
 
--- 4. 修改职业部门 (/setdept [id] [dept])
-QBCore.Commands.Add('setdept', '设置玩家在当前职业下的独立部门 (Admin Only)', {
-    { name = 'id', help = '玩家服务器 ID' },
-    { name = 'dept', help = '独立部门标识' }
-}, true, function(source, args)
-    local callerName = (not source or source == 0 or source == "" or source == "console") and "Console" or GetPlayerName(source)
-    local targetId = tonumber(args[1])
-    local dept = tostring(args[2])
-    
-    if not targetId or not dept then
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "参数错误。用法: /setdept [id] [dept]", "error")
-        else
-            print("参数错误。用法: setdept [id] [dept]")
-        end
+-- ==========================================
+--        调 试 命 令 — 吊 销 执 照
+-- ==========================================
+-- 用法: /revokemelicense pilot
+QBCore.Commands.Add('revokemelicense', '吊销自己的执照 (Admin)', { {
+    name = 'type',
+    help = 'driver / pilot / boat / heavy / weapon'
+} }, false, function(source, args)
+    local src = source
+    local licenseType = args[1] and args[1]:lower()
+    local validTypes = { driver = true, pilot = true, weapon = true, boat = true, heavy = true }
+
+    if not validTypes[licenseType] then
+        TriggerClientEvent('QBCore:Notify', src,
+            '无效执照类型，可选: driver / pilot / boat / heavy / weapon', 'error')
         return
     end
 
-    local Player = QBCore.Functions.GetPlayer(targetId)
-    if not Player then
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "该玩家未在线", "error")
-        else
-            print("该玩家未在线")
-        end
-        return
-    end
-
-    local success = exports['custom-career']:SetPlayerDepartment(targetId, dept)
+    local success, msg = exports['custom-certificates']:RevokeLicense(src, licenseType)
     if success then
-        TriggerClientEvent('QBCore:Notify', targetId, ("您的职业部门已被变更为: %s"):format(dept), "success")
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, ("成功修改 %s 的部门为 %s"):format(Player.PlayerData.name, dept), "success")
-        end
-        
-        -- 审计
-        local text = ("**指派操作**: 职业部门变动\n**执行管理员**: %s\n**目标玩家**: %s (%s)\n**新部门**: %s"):format(
-            callerName, Player.PlayerData.name, Player.PlayerData.citizenid, dept
-        )
-        exports['custom-logs']:LogGeneric("管理员部门变更", text, 10079487)
+        TriggerClientEvent('custom-certificates:client:ForceRefreshCache', src)
+        TriggerClientEvent('QBCore:Notify', src,
+            ('🗑️ 已吊销 %s 执照！'):format(licenseType), 'success')
     else
-        if source ~= 0 then
-            TriggerClientEvent('QBCore:Notify', source, "修改失败", "error")
-        end
+        TriggerClientEvent('QBCore:Notify', src,
+            msg or '吊销失败', 'error')
     end
 end, 'admin')
+
+print('[custom-admin] ✅ 命令模块已加载 (myid + amenu + clearme + setrobbery + auto-admin)')

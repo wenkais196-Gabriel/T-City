@@ -26,10 +26,7 @@ local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuL
 local menu15 = MenuV:CreateMenu(false, Lang:t('menu.spawn_weapons'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test15')
 
 RegisterNetEvent('qb-admin:client:openMenu', function()
-    QBCore.Functions.TriggerCallback('qb-admin:isAdmin', function(isAdmin)
-        if not isAdmin then return end
-        MenuV:OpenMenu(menu1)
-    end)
+    MenuV:OpenMenu(menu1)
 end)
 
 --[[

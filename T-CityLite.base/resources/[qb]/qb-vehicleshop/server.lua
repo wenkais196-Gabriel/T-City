@@ -2,6 +2,34 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local financetimer = {}
 
+-- 车辆类别 → 证件类型映射
+local VehicleClassLicenseMap = {
+    [0] = 'driver', [1] = 'driver', [2] = 'driver', [3] = 'driver', [4] = 'driver',
+    [5] = 'driver', [6] = 'driver', [7] = 'driver', [8] = 'driver', [9] = 'driver',
+    [10] = 'heavy', [11] = 'heavy', [17] = 'heavy', [19] = 'heavy', [20] = 'heavy',
+    [12] = 'driver', [13] = 'driver', [18] = 'driver', [22] = 'driver',
+    [14] = 'boat',
+    [15] = 'pilot', [16] = 'pilot',
+}
+
+local function CheckVehicleLicense(player, vehicleModel)
+    local hash = GetHashKey(vehicleModel)
+    local vehClass = GetVehicleClassFromName(hash)
+    local requiredLicense = VehicleClassLicenseMap[vehClass]
+    if not requiredLicense then return true end
+    local licences = player.PlayerData.metadata['licences']
+    if not licences then return false end
+    return licences[requiredLicense] == true
+end
+
+local function GetRequiredLicenseName(vehicleModel)
+    local hash = GetHashKey(vehicleModel)
+    local vehClass = GetVehicleClassFromName(hash)
+    local requiredLicense = VehicleClassLicenseMap[vehClass]
+    local names = { driver = 'Driver License', pilot = 'Pilot License', boat = 'Boat License', heavy = 'Heavy Vehicle License' }
+    return requiredLicense and names[requiredLicense] or nil
+end
+
 local vehicleTypes = { -- https://docs.fivem.net/natives/?_0xA273060E
     motorcycles = 'bike',
     boats = 'boat',
@@ -38,22 +66,27 @@ RegisterNetEvent('qb-vehicleshop:server:addPlayer', function(citizenid)
 end)
 
 -- Deduct stored game time from player on logout
+-- ⚡ Performance Fix: 异步化查询，避免在频繁触发的断线事件中阻塞主线程
 RegisterNetEvent('qb-vehicleshop:server:removePlayer', function(citizenid)
     if financetimer[citizenid] then
         local playTime = financetimer[citizenid]
-        local financetime = MySQL.query.await('SELECT * FROM player_vehicles WHERE citizenid = ?', { citizenid })
-        for _, v in pairs(financetime) do
-            if v.balance >= 1 then
-                local newTime = (v.financetime - ((os.time() - playTime) / 60))
-                if newTime < 0 then newTime = 0 end
-                MySQL.update('UPDATE player_vehicles SET financetime = ? WHERE plate = ?', { math.ceil(newTime), v.plate })
+        MySQL.query('SELECT * FROM player_vehicles WHERE citizenid = ?', { citizenid }, function(financetime)
+            if financetime then
+                for _, v in pairs(financetime) do
+                    if v.balance >= 1 then
+                        local newTime = (v.financetime - ((os.time() - playTime) / 60))
+                        if newTime < 0 then newTime = 0 end
+                        MySQL.update('UPDATE player_vehicles SET financetime = ? WHERE plate = ?', { math.ceil(newTime), v.plate })
+                    end
+                end
             end
-        end
+        end)
     end
     financetimer[citizenid] = nil
 end)
 
 -- Deduct stored game time from player on quit because we can't get citizenid
+-- ⚡ Performance Fix: 异步化查询，避免 playerDropped 阻塞事件循环
 AddEventHandler('playerDropped', function()
     local src = source
     local license
@@ -63,18 +96,19 @@ AddEventHandler('playerDropped', function()
         end
     end
     if license then
-        local vehicles = MySQL.query.await('SELECT * FROM player_vehicles WHERE license = ?', { license })
-        if vehicles then
-            for _, v in pairs(vehicles) do
-                local playTime = financetimer[v.citizenid]
-                if v.balance >= 1 and playTime then
-                    local newTime = (v.financetime - ((os.time() - playTime) / 60))
-                    if newTime < 0 then newTime = 0 end
-                    MySQL.update('UPDATE player_vehicles SET financetime = ? WHERE plate = ?', { math.ceil(newTime), v.plate })
+        MySQL.query('SELECT * FROM player_vehicles WHERE license = ?', { license }, function(vehicles)
+            if vehicles then
+                for _, v in pairs(vehicles) do
+                    local playTime = financetimer[v.citizenid]
+                    if v.balance >= 1 and playTime then
+                        local newTime = (v.financetime - ((os.time() - playTime) / 60))
+                        if newTime < 0 then newTime = 0 end
+                        MySQL.update('UPDATE player_vehicles SET financetime = ? WHERE plate = ?', { math.ceil(newTime), v.plate })
+                    end
                 end
+                if vehicles[1] and financetimer[vehicles[1].citizenid] then financetimer[vehicles[1].citizenid] = nil end
             end
-            if vehicles[1] and financetimer[vehicles[1].citizenid] then financetimer[vehicles[1].citizenid] = nil end
-        end
+        end)
     end
 end)
 
@@ -221,6 +255,11 @@ RegisterNetEvent('qb-vehicleshop:server:buyShowroomVehicle', function(vehicle)
     local src = source
     vehicle = vehicle.buyVehicle
     local pData = QBCore.Functions.GetPlayer(src)
+    if not CheckVehicleLicense(pData, vehicle) then
+        local licenseName = GetRequiredLicenseName(vehicle)
+        TriggerClientEvent('QBCore:Notify', src, ('You need a %s to purchase this vehicle!'):format(licenseName or 'license'), 'error', 5000)
+        return
+    end
     local cid = pData.PlayerData.citizenid
     local cash = pData.PlayerData.money['cash']
     local bank = pData.PlayerData.money['bank']
@@ -240,6 +279,10 @@ RegisterNetEvent('qb-vehicleshop:server:buyShowroomVehicle', function(vehicle)
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.purchased'), 'success')
         TriggerClientEvent('qb-vehicleshop:client:buyShowroomVehicle', src, vehicle, plate)
         pData.Functions.RemoveMoney('cash', vehiclePrice, 'vehicle-bought-in-showroom')
+        -- 💰 新车购置税 8%
+        if GetResourceState('custom-taxes') == 'started' then
+            exports['custom-taxes']:CollectVehiclePurchaseTax(src, vehiclePrice, vehicle)
+        end
     elseif bank > tonumber(vehiclePrice) then
         MySQL.insert('INSERT INTO player_vehicles (license, citizenid, vehicle, hash, mods, plate, garage, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', {
             pData.PlayerData.license,
@@ -254,6 +297,10 @@ RegisterNetEvent('qb-vehicleshop:server:buyShowroomVehicle', function(vehicle)
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.purchased'), 'success')
         TriggerClientEvent('qb-vehicleshop:client:buyShowroomVehicle', src, vehicle, plate)
         pData.Functions.RemoveMoney('bank', vehiclePrice, 'vehicle-bought-in-showroom')
+        -- 💰 新车购置税 8%
+        if GetResourceState('custom-taxes') == 'started' then
+            exports['custom-taxes']:CollectVehiclePurchaseTax(src, vehiclePrice, vehicle)
+        end
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.notenoughmoney'), 'error')
     end
@@ -265,6 +312,11 @@ RegisterNetEvent('qb-vehicleshop:server:financeVehicle', function(downPayment, p
     downPayment = tonumber(downPayment)
     paymentAmount = tonumber(paymentAmount)
     local pData = QBCore.Functions.GetPlayer(src)
+    if not CheckVehicleLicense(pData, vehicle) then
+        local licenseName = GetRequiredLicenseName(vehicle)
+        TriggerClientEvent('QBCore:Notify', src, ('You need a %s to finance this vehicle!'):format(licenseName or 'license'), 'error', 5000)
+        return
+    end
     local cid = pData.PlayerData.citizenid
     local cash = pData.PlayerData.money['cash']
     local bank = pData.PlayerData.money['bank']
@@ -322,6 +374,11 @@ RegisterNetEvent('qb-vehicleshop:server:sellShowroomVehicle', function(data, pla
     local src = source
     local player = QBCore.Functions.GetPlayer(src)
     local target = QBCore.Functions.GetPlayer(tonumber(playerid))
+    if target and not CheckVehicleLicense(target, data) then
+        local licenseName = GetRequiredLicenseName(data)
+        TriggerClientEvent('QBCore:Notify', src, ('Buyer needs a %s to purchase this vehicle!'):format(licenseName or 'license'), 'error', 5000)
+        return
+    end
 
     if not target then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.Invalid_ID'), 'error')
@@ -383,6 +440,11 @@ RegisterNetEvent('qb-vehicleshop:server:sellfinanceVehicle', function(downPaymen
     local src = source
     local player = QBCore.Functions.GetPlayer(src)
     local target = QBCore.Functions.GetPlayer(tonumber(playerid))
+    if target and not CheckVehicleLicense(target, vehicle) then
+        local licenseName = GetRequiredLicenseName(vehicle)
+        TriggerClientEvent('QBCore:Notify', src, ('Buyer needs a %s to finance this vehicle!'):format(licenseName or 'license'), 'error', 5000)
+        return
+    end
 
     if not target then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.Invalid_ID'), 'error')
@@ -497,8 +559,20 @@ QBCore.Commands.Add('transfervehicle', Lang:t('general.command_transfervehicle')
     local targetcid = target.PlayerData.citizenid
     local targetlicense = QBCore.Functions.GetIdentifier(target.PlayerData.source, 'license')
     if not target then return TriggerClientEvent('QBCore:Notify', src, Lang:t('error.buyerinfo'), 'error') end
+    -- 检查买家证件
+    local vehicleModel = row.vehicle
+    if vehicleModel and not CheckVehicleLicense(target, vehicleModel) then
+        local licenseName = GetRequiredLicenseName(vehicleModel)
+        TriggerClientEvent('QBCore:Notify', src, ('Buyer needs a %s to receive this vehicle!'):format(licenseName or 'license'), 'error', 5000)
+        return
+    end
     if not sellAmount then
         MySQL.update('UPDATE player_vehicles SET citizenid = ?, license = ? WHERE plate = ?', { targetcid, targetlicense, plate })
+        -- 同步 custom-vehicles KeyManager：移除旧主钥匙，注册新主
+        pcall(function()
+            exports['custom-vehicles']:RemoveKeys(plate, player.PlayerData.citizenid)
+            exports['custom-vehicles']:SetOwner(plate, targetcid)
+        end)
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.gifted'), 'success')
         TriggerClientEvent('vehiclekeys:client:SetOwner', buyerId, plate)
         TriggerClientEvent('QBCore:Notify', buyerId, Lang:t('success.received_gift'), 'success')
@@ -506,6 +580,11 @@ QBCore.Commands.Add('transfervehicle', Lang:t('general.command_transfervehicle')
     end
     if target.Functions.GetMoney('cash') > sellAmount then
         MySQL.update('UPDATE player_vehicles SET citizenid = ?, license = ? WHERE plate = ?', { targetcid, targetlicense, plate })
+        -- 同步 custom-vehicles KeyManager：移除旧主钥匙，注册新主
+        pcall(function()
+            exports['custom-vehicles']:RemoveKeys(plate, player.PlayerData.citizenid)
+            exports['custom-vehicles']:SetOwner(plate, targetcid)
+        end)
         player.Functions.AddMoney('cash', sellAmount, 'transferred vehicle')
         target.Functions.RemoveMoney('cash', sellAmount, 'transferred vehicle')
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.soldfor') .. comma_value(sellAmount), 'success')
@@ -513,6 +592,11 @@ QBCore.Commands.Add('transfervehicle', Lang:t('general.command_transfervehicle')
         TriggerClientEvent('QBCore:Notify', buyerId, Lang:t('success.boughtfor') .. comma_value(sellAmount), 'success')
     elseif target.Functions.GetMoney('bank') > sellAmount then
         MySQL.update('UPDATE player_vehicles SET citizenid = ?, license = ? WHERE plate = ?', { targetcid, targetlicense, plate })
+        -- 同步 custom-vehicles KeyManager：移除旧主钥匙，注册新主
+        pcall(function()
+            exports['custom-vehicles']:RemoveKeys(plate, player.PlayerData.citizenid)
+            exports['custom-vehicles']:SetOwner(plate, targetcid)
+        end)
         player.Functions.AddMoney('bank', sellAmount, 'transferred vehicle')
         target.Functions.RemoveMoney('bank', sellAmount, 'transferred vehicle')
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.soldfor') .. comma_value(sellAmount), 'success')

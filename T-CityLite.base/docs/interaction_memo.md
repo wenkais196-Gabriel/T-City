@@ -169,3 +169,22 @@ Config = {
 ```
 * 当 `Config.useTarget` 为 `true` 时：注册 `qb-target` 交互。
 * 当 `Config.useTarget` 为 `false` 时：动态降级注册 `E` 键近身交互（如 qb-banking 对 ATM 的降级处理）。
+
+---
+
+## 🔌 v0.6 附录：Bus API 快速参考
+
+在编写交互逻辑涉及经济/职业/安全操作时，优先通过 Bus API 而非直接操作 QBCore：
+
+```lua
+-- ✅ 推荐：通过 Bus API
+Bus.Economy.AddScaled(source, 'bank', 5000, 'quest_reward')
+Bus.JobService.GetOnDutyCount('police')
+Bus.SecurityService.ValidateSource(source)
+
+-- ✅ 兼容：老接口仍可用（底层自动路由）
+local Player = QBCore.Functions.GetPlayer(source)
+Player.Functions.AddMoney('bank', 5000, 'quest_reward')
+```
+
+详见 `docs/bus-api-reference.md`。

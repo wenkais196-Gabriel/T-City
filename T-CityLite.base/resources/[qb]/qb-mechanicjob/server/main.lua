@@ -1,19 +1,15 @@
 local QBCore = exports['qb-core']:GetCoreObject()
-local vehicleComponents = {}
-local drivingDistance = {}
-local tunedVehicles = {}
-local nitrousVehicles = {}
+-- ═══════════════════════════════════════════════════════════════
+-- v3.1: 车辆状态管理已迁移至 custom-vehicles (server/vehicle_state.lua)
+--   - vehicleComponents / drivingDistance / tunedVehicles / nitrousVehicles
+--   - 所有持久化事件 & callback 由 custom-vehicles 统一处理
+--   - qb-mechanicjob 通过 exports.custom-vehicles 或 Bus 访问车辆状态
+-- ═══════════════════════════════════════════════════════════════
 
 -- Functions
 
 function Trim(plate)
     return (string.gsub(plate, '^%s*(.-)%s*$', '%1'))
-end
-
-local function IsVehicleOwned(plate)
-    local result = MySQL.scalar.await('SELECT 1 from player_vehicles WHERE plate = ?', { plate })
-    if result then return true end
-    return false
 end
 
 local function StartParticles(coords, netId, color)
@@ -68,21 +64,13 @@ local function GetPaintTypeIndex(type)
     return 0
 end
 
+-- ═══════════════════════════════════════════════════════════════
 -- Callbacks
-
-QBCore.Functions.CreateCallback('qb-mechanicjob:server:getnitrousVehicles', function(_, cb)
-    cb(nitrousVehicles)
-end)
-
-QBCore.Functions.CreateCallback('qb-mechanicjob:server:checkTune', function(_, cb, plate)
-    if not tunedVehicles[plate] then cb(false) end
-    cb(tunedVehicles[plate])
-end)
-
-QBCore.Functions.CreateCallback('qb-mechanicjob:server:getVehicleStatus', function(_, cb, plate)
-    if not vehicleComponents[plate] then cb(false) end
-    cb(vehicleComponents[plate])
-end)
+--   getnitrousVehicles / checkTune / getVehicleStatus
+--   已由 custom-vehicles/server/vehicle_state.lua 统一注册。
+--   qb-mechanicjob 不再重复注册，避免 FiveM 后加载覆盖前加载。
+--   仅保留 hasPermission (机修专属权限检查)。
+-- ═══════════════════════════════════════════════════════════════
 
 QBCore.Functions.CreateCallback('qb-mechanicjob:server:hasPermission', function(source, cb)
     if QBCore.Functions.HasPermission(source, { 'god', 'admin', 'command' }) then
@@ -181,63 +169,12 @@ RegisterNetEvent('qb-mechanicjob:server:sprayVehicle', function(netId, primary, 
     FreezeEntityPosition(vehicle, false)
 end)
 
-RegisterNetEvent('qb-mechanicjob:server:syncNitrous', function(plate, hasnitro, level)
-    if not nitrousVehicles[plate] then
-        nitrousVehicles[plate] = { hasnitro = hasnitro, level = level }
-    else
-        nitrousVehicles[plate].hasnitro = hasnitro
-        nitrousVehicles[plate].level = level
-    end
-end)
-
-RegisterNetEvent('qb-mechanicjob:server:syncNitrousFlames', function(netId, toggle)
-    TriggerClientEvent('qb-mechanicjob:client:syncNitrousFlames', -1, netId, toggle)
-end)
-
-RegisterNetEvent('qb-mechanicjob:server:tuneStatus', function(plate)
-    if not tunedVehicles[plate] then
-        tunedVehicles[plate] = true
-    end
-end)
-
-RegisterNetEvent('qb-mechanicjob:server:SaveVehicleProps', function(vehicleProps)
-    if IsVehicleOwned(vehicleProps.plate) then
-        MySQL.update('UPDATE player_vehicles SET mods = ? WHERE plate = ?', { json.encode(vehicleProps), vehicleProps.plate })
-    end
-end)
-
-RegisterNetEvent('qb-mechanicjob:server:repairVehicleComponent', function(plate, component)
-    if plate and component then
-        if not vehicleComponents[plate] then return end
-        if vehicleComponents[plate][component] then
-            vehicleComponents[plate][component] = 100
-        end
-    end
-end)
-
-RegisterNetEvent('qb-mechanicjob:server:updateVehicleComponents', function(plate, componentData)
-    if plate and componentData then
-        if vehicleComponents[plate] then
-            vehicleComponents[plate] = componentData
-        else
-            vehicleComponents[plate] = componentData
-        end
-    end
-    local isOwned = IsVehicleOwned(plate)
-    if isOwned then MySQL.update('UPDATE player_vehicles SET status = ? WHERE plate = ?', { json.encode(vehicleComponents[plate]), plate }) end
-end)
-
-RegisterNetEvent('qb-mechanicjob:server:updateDrivingDistance', function(plate, distance)
-    if plate and distance then
-        if drivingDistance[plate] then
-            drivingDistance[plate] = drivingDistance[plate] + distance
-        else
-            drivingDistance[plate] = distance
-        end
-    end
-    local isOwned = IsVehicleOwned(plate)
-    if isOwned then MySQL.update('UPDATE player_vehicles SET drivingdistance = drivingdistance + ? WHERE plate = ?', { drivingDistance[plate], plate }) end
-end)
+-- ═══════════════════════════════════════════════════════════════
+-- 车辆状态事件已迁移至 custom-vehicles/server/vehicle_state.lua
+--   syncNitrous / syncNitrousFlames / tuneStatus / SaveVehicleProps
+--   repairVehicleComponent / updateVehicleComponents / updateDrivingDistance
+-- 兼容事件名在 custom-vehicles 中注册，qb-mechanicjob 不再重复处理
+-- ═══════════════════════════════════════════════════════════════
 
 RegisterNetEvent('qb-mechanicjob:server:removeItem', function(part, amount)
     local src = source
@@ -332,19 +269,53 @@ QBCore.Functions.CreateUseableItem('cleaningkit', function(source)
     TriggerClientEvent('qb-mechanicjob:client:cleanVehicle', source)
 end)
 
+-- 🔧 车间分配指令（对接 custom-career department）
+QBCore.Commands.Add('setmechdept', '分配机修工车间', { { name = 'id', help = 'Player ID' }, { name = 'shop', help = 'mechanic / bennys / beeker' } }, true, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    local targetId = tonumber(args[1])
+    local shop = args[2] and args[2]:lower()
+    if not Player or Player.PlayerData.job.type ~= 'mechanic' or Player.PlayerData.job.grade.level < 4 then
+        TriggerClientEvent('QBCore:Notify', src, '仅机修老板 (Boss) 可分配车间', 'error')
+        return
+    end
+    if not Config.ShopDepartments[shop] then
+        TriggerClientEvent('QBCore:Notify', src, ('无效车间: %s'):format(shop or 'nil'), 'error')
+        return
+    end
+    local Target = QBCore.Functions.GetPlayer(targetId)
+    if not Target then TriggerClientEvent('QBCore:Notify', src, '目标玩家不在线', 'error'); return end
+    if Target.PlayerData.job.type ~= 'mechanic' then TriggerClientEvent('QBCore:Notify', src, '目标不是机修工', 'error'); return end
+    local success = exports['custom-career']:SetPlayerDepartment(targetId, shop)
+    if success then
+        TriggerClientEvent('QBCore:Notify', src, ('已将 %s 分配至 %s'):format(Target.PlayerData.charinfo.firstname, Config.ShopDepartments[shop].label), 'success')
+        TriggerClientEvent('QBCore:Notify', Target.PlayerData.source, ('你已被分配至 %s'):format(Config.ShopDepartments[shop].label), 'success')
+    else
+        TriggerClientEvent('QBCore:Notify', src, '操作失败', 'error')
+    end
+end)
+
 -- Commands
 
 QBCore.Commands.Add('fix', 'Repair your vehicle (Admin Only)', {}, false, function(source)
+    -- 🛡️ Fix: 添加服务器侧玩家有效性校验
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return end
+
     local ped = GetPlayerPed(source)
     local vehicle = GetVehiclePedIsIn(ped, false)
-    if not vehicle then return end
+    if vehicle == 0 then
+        TriggerClientEvent('QBCore:Notify', source, '你不在任何载具中', 'error')
+        return
+    end
+
     local plate = GetVehicleNumberPlateText(vehicle)
     if not plate then return end
     local trimmedPlate = Trim(plate)
-    if vehicleComponents[trimmedPlate] then
-        for k in pairs(vehicleComponents[trimmedPlate]) do
-            vehicleComponents[trimmedPlate][k] = 100
-        end
+    -- v3.1: 使用 custom-vehicles 统一接口重置部件状态
+    if exports['custom-vehicles'] and exports['custom-vehicles'].ResetVehicleComponents then
+        exports['custom-vehicles']:ResetVehicleComponents(trimmedPlate)
     end
+    -- 先修复耐久数据，再触发客户端视觉效果
     TriggerClientEvent('qb-mechanicjob:client:fixEverything', source)
 end, 'admin')

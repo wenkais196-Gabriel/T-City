@@ -113,10 +113,34 @@ Config.Locations = {                -- Edit the various interaction points for p
 }
 
 Config.AuthorizedVehicles = { -- Grade is key, don't add same vehicle in multiple grades. Higher rank can see lower
-    [0] = {
-        ['ambulance'] = 'Ambulance'
-    }
+    -- 🔧 阶梯累进解锁: 0=实习医护 → 4=院长
+    [0] = { -- 实习医护 (Recruit)
+        ['ambulance'] = 'Classic Ambulance (常规救护车)',
+    },
+    [1] = { -- 正式急救员 (Paramedic)
+        ['rescue'] = 'Off-road Rescue Van (野外应急救护车)',
+    },
+    [2] = { -- 主治医生 (Doctor)
+        ['emssuv'] = 'Medical Response SUV (医疗指挥 SUV)',
+    },
+    [3] = { -- 外科主任 (Surgeon)
+        ['emsrun'] = 'High-speed Medical Interceptor (极速救护跑车)',
+    },
+    [4] = { -- 院长 (Chief)
+        ['emscommander'] = 'Chief Executive SUV (行政长官 SUV)',
+    },
 }
+
+-- 🔧 医院科室定义（对接 custom-career department）
+Config.Departments = {
+    EMERGENCY  = { label = '急诊科/前线急救员', description = '出警车去现场接伤员、实施包扎与除颤', allowSurgery = false },
+    SURGERY    = { label = '外科手术部/医生', description = '在医院无菌手术室对重伤员进行手术', allowSurgery = true },
+    AIR_RESCUE = { label = '空中救援组', description = '使用直升机转运偏远郊区重伤患', allowSurgery = false, requirePilot = true },
+}
+Config.DefaultDepartment = 'EMERGENCY'
+
+-- 🔧 医疗执照要求（对接 custom-career / custom-certificates）
+Config.RequireMedicalCert = true  -- 启用后，使用 firstaid 复活他人需持有 medical_cert
 
 Config.WeaponClasses = { -- Define gta weapon classe numbers
     ['SMALL_CALIBER'] = 1,

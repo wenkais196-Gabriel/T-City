@@ -57,7 +57,7 @@ CreateThread(function()
             
             -- 持续更新坐标脉冲给警察
             TriggerServerEvent('custom-main:server:policeHandoverAlert', coords, streetName, customWantedStars)
-            TriggerEvent('QBCore:Notify', "【警用直升机】你的 GPS 信号正被警方基站雷达三角定位，位置已被广播！", "warning", 3000)
+            TriggerEvent('QBCore:Notify', _L('dispatch_heli_tracking'), "warning", 3000)
         end
     end
 end)
@@ -72,7 +72,7 @@ RegisterNetEvent('custom-main:client:clearLocalWanted', function()
     SetMaxWantedLevel(5) -- 恢复原生最大警星限制为 5 星
     ClearPlayerWantedLevel(playerId) -- 清空当前累积的原生警星
     SetPoliceIgnorePlayer(playerId, false) -- 确保恢复为可被 NPC 警察追捕状态
-    TriggerEvent('QBCore:Notify', "你已被解除通缉，警方的雷达定位信号已消失。", "success")
+    TriggerEvent('QBCore:Notify', _L('dispatch_wanted_cleared'), "success")
 end)
 
 -- ==========================================
@@ -102,7 +102,7 @@ RegisterNetEvent('custom-main:client:updateSuspectBlip', function(suspectSource,
         
         -- blip 文本标签
         BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString(string.format("【通缉犯】%s (%d星)", suspectName, wantedLevel))
+        AddTextComponentString(_L('blip_wanted_suspect', suspectName, wantedLevel))
         EndTextCommandSetBlipName(blip)
         
         SuspectBlips[suspectSource] = blip

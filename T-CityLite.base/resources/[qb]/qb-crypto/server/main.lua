@@ -212,11 +212,13 @@ RegisterServerEvent('qb-crypto:server:SyncReboot', function()
     TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
 end)
 
-RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function(LuckChance)
+RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     local ItemData = Player.Functions.GetItemByName('cryptostick')
     if ItemData ~= nil then
+        -- 🛡️ Security: Both LuckChance and LuckyNumber generated server-side (client value ignored)
+        local LuckChance = math.random(1, 10)
         local LuckyNumber = math.random(1, 10)
         local DeelNumber = 1000000
         local Amount = (math.random(611111, 1599999) / DeelNumber)

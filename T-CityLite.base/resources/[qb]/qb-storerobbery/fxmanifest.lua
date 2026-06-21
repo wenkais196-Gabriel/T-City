@@ -17,6 +17,11 @@ shared_scripts {
 client_script 'client/main.lua'
 server_script 'server/main.lua'
 
+dependencies {
+    'qb-core',
+    'production-freeze',
+}
+
 files {
     'html/index.html',
     'html/script.js',

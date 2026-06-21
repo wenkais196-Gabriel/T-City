@@ -785,6 +785,21 @@ const playerHud = {
             if (event.data.action === "hudtick") {
                 this.hudTick(event.data);
             }
+            if (event.data.action === "debug_ringpos") {
+                var el = document.getElementById('playerHud');
+                if (el) {
+                    el.style.left = event.data.x;
+                    el.style.bottom = event.data.y;
+                    if (event.data.mode === '居中') {
+                        el.style.transform = 'translateX(-50%)';
+                    } else {
+                        el.style.transform = '';
+                    }
+                    console.log('[ringpos] OK: left=' + event.data.x + ' bottom=' + event.data.y + ' mode=' + event.data.mode);
+                } else {
+                    console.error('[ringpos] FAIL: #playerHud 元素不存在');
+                }
+            }
             // else if(event.data.update) {
             //   eval(event.data.action + "(" + event.data.show + ')')
             // }
@@ -1163,3 +1178,127 @@ const baseplateHud = {
 const app4 = Vue.createApp(baseplateHud);
 app4.use(Quasar);
 app4.mount("#baseplate-container");
+
+// ============================================================
+// Waypoint Distance Display
+// 接收 client.lua waypoint 追踪线程的 NUI message
+// 距离格式: <1000m 显示米, >=1000m 显示公里
+// ============================================================
+const waypointDistanceApp = Vue.createApp({
+    data() {
+        return {
+            show: false,
+            distance: 0,
+            displayText: "",
+        };
+    },
+    destroyed() {
+        window.removeEventListener("message", this.listener);
+    },
+    mounted() {
+        this.listener = window.addEventListener("message", (event) => {
+            if (event.data.action === "waypoint") {
+                this.updateWaypoint(event.data);
+            }
+        });
+    },
+    methods: {
+        updateWaypoint(data) {
+            this.show = data.show;
+            if (data.show) {
+                this.distance = data.distance;
+                if (data.distance >= 1000) {
+                    this.displayText = (data.distance / 1000).toFixed(1) + " km";
+                } else {
+                    this.displayText = Math.round(data.distance) + " m";
+                }
+            }
+        },
+    },
+}).mount("#waypoint-distance-container");
+
+// ============================================================
+// Task Timer Display
+// 左侧垂直居中，三色阶段（绿→黄→红）
+// 供所有任务系统（配送、赛车、垃圾车等）复用
+// ============================================================
+const taskTimerApp = Vue.createApp({
+    data() {
+        return {
+            show: false,
+            timeText: "",
+            phaseClass: "",
+            watchdog: null,
+        };
+    },
+    destroyed() {
+        window.removeEventListener("message", this.listener);
+        if (this.watchdog) clearTimeout(this.watchdog);
+    },
+    mounted() {
+        this.listener = window.addEventListener("message", (event) => {
+            if (event.data.action === "tasktimer") {
+                this.updateTimer(event.data);
+            }
+        });
+    },
+    methods: {
+        updateTimer(data) {
+            if (this.watchdog) clearTimeout(this.watchdog);
+            this.show = data.show;
+            if (data.show) {
+                this.timeText = data.time;
+                this.phaseClass = "phase-" + (data.phase || "normal");
+                // 看门狗：2 秒内未收到更新则自动隐藏
+                var self = this;
+                this.watchdog = setTimeout(function () {
+                    self.show = false;
+                }, 2000);
+            }
+        },
+    },
+}).mount("#task-timer-container");
+
+// ═══════════════════════════════════════════════════════════
+// 全局调试消息监听 — 仪表盘 / 距离 / 地图组件
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('message', function (e) {
+    var d = e.data;
+
+    // ── 仪表盘整体平移 (平移父容器，不动子元素 transform) ──
+    if (d.action === 'debug_gauges') {
+        var container = document.getElementById('veh-container');
+        if (container) {
+            if (d.reset) {
+                container.style.removeProperty('transform');
+            } else {
+                container.style.setProperty('transform', 'translate(' + d.x + ', ' + d.y + ')', 'important');
+            }
+            console.log('[gauges] ' + (d.reset ? 'RESET' : 'translate(' + d.x + ', ' + d.y + ')'));
+        } else {
+            console.error('[gauges] FAIL: #veh-container 不存在');
+        }
+    }
+
+    // ── 目的地距离位置 ──
+    if (d.action === 'debug_wpdist') {
+        var el = document.getElementById('waypoint-distance-container');
+        if (el) {
+            if (d.reset) {
+                el.style.removeProperty('left');
+                el.style.removeProperty('bottom');
+            } else {
+                el.style.setProperty('left', d.x, 'important');
+                el.style.setProperty('bottom', d.y, 'important');
+            }
+            console.log('[wpdist] ' + (d.reset ? 'RESET' : 'left=' + d.x + ' bottom=' + d.y));
+        } else {
+            console.error('[wpdist] FAIL: #waypoint-distance-container 不存在');
+        }
+    }
+
+    // ── 地图组件位置 (回显到 console 供 F8 查看) ──
+    if (d.action === 'debug_mapcomp') {
+        console.log('[mapcomp] ' + d.name + ' posX=' + d.posX + ' posY=' + d.posY + ' sizeX=' + d.sizeX + ' sizeY=' + d.sizeY);
+    }
+});

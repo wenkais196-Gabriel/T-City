@@ -5,6 +5,7 @@
   // Hotline categories config list
   let hotlineDirectories = $state<any[]>([
     { name: '🚨 Police Dispatch Emergency', job: 'police', label: 'Emergency Transfer', phone: '911', icon: '👮', agents: 0 },
+    { name: '⚖️ Surrender to Police (自首热线)', job: 'surrender', label: 'Self-Surrender', phone: '911-SURR', icon: '⚖️', agents: 0 },
     { name: '🚑 Pillbox Medical Emergency', job: 'ambulance', label: 'EMS Dispatch', phone: '912', icon: '🏥', agents: 0 },
     { name: '🔧 LS Auto Repair Services', job: 'mechanic', label: 'Mechanical Repair', phone: '444-TOW', icon: '⚙️', agents: 0 },
     { name: '🏛️ Municipal Public Services', job: 'mayor', label: 'Government Line', phone: '311-GOV', icon: '🏛️', agents: 0 },

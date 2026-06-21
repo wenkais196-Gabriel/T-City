@@ -24,7 +24,16 @@ client_scripts {
 	'client/anpr.lua',
 	'client/evidence.lua',
 	'client/objects.lua',
-	'client/tracker.lua'
+	'client/tracker.lua',
+	'client/stolen_radar.lua',
+}
+
+dependencies {
+	'qb-core',
+	'qb-inventory',
+	'custom-career',
+	'custom-certificates',
+	'custom-documents',
 }
 
 server_scripts {

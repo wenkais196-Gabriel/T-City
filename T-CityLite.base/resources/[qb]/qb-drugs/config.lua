@@ -3,34 +3,78 @@ Config = {
     NearbyDeliveries = false, -- true / false - Do you want deliveries to be within a certain amount of units?
     DeliveryWithin = 2000,    -- int (Default 2000) - How many units do you want the delivery location to be within from the player when making a delivery request?
     Dealers = {
-        -- Example:
-        --['Sandy Dealer'] = {
-        --    time = {min = 5, max = 23},
-        --    name = "LiL Shady",
-        --    coords = {x = 1894.4, y = 3895.88, z = 33.19},
-        --    products = {
-        --        [1] = {
-        --            name = "weed_whitewidow",
-        --            price = 15,
-        --            amount = 150,
-        --            info = {},
-        --            type = "item",
-        --            slot = 1,
-        --            minrep = 0,
-        --        },
-        --        [2] = {
-        --            name = "weed_skunk",
-        --            price = 15,
-        --            amount = 150,
-        --            info = {},
-        --            type = "item",
-        --            slot = 2,
-        --            minrep = 0,
-        --        },
-        --    },
-        --},
+        -- 郊区采集点 #1: 沙灘海岸 (Sandy Shores) — Harmony 汽车旅馆附近
+        ['Sandy Dealer'] = {
+            time = {min = 0, max = 23},
+            name = '郊區採集人',
+            coords = {x = 1960.0, y = 3700.0, z = 32.0},
+            products = {
+                [1] = {
+                    name = 'weed_whitewidow',
+                    price = 15,
+                    amount = 150,
+                    info = {},
+                    type = 'item',
+                    slot = 1,
+                    minrep = 0,
+                },
+                [2] = {
+                    name = 'weed_skunk',
+                    price = 15,
+                    amount = 150,
+                    info = {},
+                    type = 'item',
+                    slot = 2,
+                    minrep = 20,
+                },
+                [3] = {
+                    name = 'weed_ogkush',
+                    price = 15,
+                    amount = 150,
+                    info = {},
+                    type = 'item',
+                    slot = 3,
+                    minrep = 40,
+                },
+            },
+        },
+        -- 郊区采集点 #2: 帕勒托灣 (Paleto Bay) — 主街加油站附近
+        ['Paleto Dealer'] = {
+            time = {min = 0, max = 23},
+            name = '鄉村採集人',
+            coords = {x = -160.0, y = 6420.0, z = 31.0},
+            products = {
+                [1] = {
+                    name = 'weed_purplehaze',
+                    price = 15,
+                    amount = 150,
+                    info = {},
+                    type = 'item',
+                    slot = 1,
+                    minrep = 0,
+                },
+                [2] = {
+                    name = 'weed_amnesia',
+                    price = 15,
+                    amount = 150,
+                    info = {},
+                    type = 'item',
+                    slot = 2,
+                    minrep = 20,
+                },
+                [3] = {
+                    name = 'weed_whitewidow_seed',
+                    price = 15,
+                    amount = 100,
+                    info = {},
+                    type = 'item',
+                    slot = 3,
+                    minrep = 40,
+                },
+            },
+        },
     },
-    UseTarget = GetConvar('UseTarget', 'false') == 'true', -- Use qb-target interactions (don't change this, go to your server.cfg and add setr UseTarget true)
+    UseTarget = GetConvar('UseTarget', 'true') == 'true', -- Use qb-target interactions (don't change this, go to your server.cfg and add setr UseTarget true)
     PoliceCallChance = 99,                                 --in percentage (if 99, theres the 99% to call the police)
 
     -- Shop Config
@@ -173,12 +217,21 @@ Config = {
     },
 
     -- Delivery Config
+    DeliveryDepositRate = 0.5,  -- 押金 = 基础报酬 × 50%
+    DeliveryAvgSpeed = 15.0,    -- 城市平均车速 (m/s), GTA V 基准 ≈15m/s=54km/h
+    DeliveryFixedTime = 60,     -- 取货/交接固定时间 (秒)
+    DeliveryFastMult = 0.5,     -- 快速: ≤ 基准时间 × 0.5 (120% 报酬)
+    DeliveryNormalMult = 1.0,   -- 合格: ≤ 基准时间 × 1.0 (100% 报酬)
+    DeliveryLateMult = 2.0,     -- 迟到: ≤ 基准时间 × 2.0 (返还押金)
+                                 -- 超时: > 基准时间 × 2.0 (扣押金+货)
+    DeliveryRewardFast = 1.2,    -- 快速奖励倍率
+    DeliveryRewardNormal = 1.0,  -- 合格奖励倍率
+    DeliveryRewardLate = 0.0,    -- 迟到只退押金
+
     UseMarkedBills = false,     -- true for marked bills, false for cash
-    DeliveryRepGain = 1,        -- amount of rep gained per delivery
+    DeliveryRepGain = 1,        -- amount of rep gained per delivery (快速+2, 合格+1)
     DeliveryRepLoss = 1,        -- amount of rep lost if delivery wrong or late
     PoliceDeliveryModifier = 2, -- amount to multiply active cop count by
-    WrongAmountFee = 2,         -- divide the payout by this value for wrong delivery amount
-    OverdueDeliveryFee = 4,     -- divide the payout by this value for overdue delivery
 
     DeliveryItems = {
         [1] = {

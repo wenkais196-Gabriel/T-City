@@ -1,0 +1,76 @@
+{
+  "parameters": {
+    "players": 100,
+    "cycles": 8000,
+    "simulated_days": 23.9
+  },
+  "summary": {
+    "initial_total_money": 550000.0,
+    "final_total_money": 7388026.000000002,
+    "money_growth": 6838026.000000002,
+    "money_growth_pct": 1243.3,
+    "avg_money_per_player": 73880,
+    "total_earned": 145639727.0,
+    "total_spent": 139486102.5,
+    "total_taxed": 48135861.2,
+    "sink_ratio": 33.1,
+    "final_global_multiplier": 0.95,
+    "gini_coefficient": 0.652,
+    "verdict": "\ud83d\udfe1 DEFLATIONARY: Sink ratio >30%. Players may feel punished. Consider easing taxes. \u26a0\ufe0f Gini >0.6: Wealth inequality is extreme. Add progressive taxation. \u26a0\ufe0f Money supply grew >500% \u2014 severe inflation risk."
+  },
+  "wealth_distribution": {
+    "top_5_pct_avg": 487803,
+    "bottom_20_pct_avg": 6949,
+    "median": 31155
+  },
+  "heat_ranking": [
+    {
+      "activity": "mining",
+      "total_completions": 16585
+    },
+    {
+      "activity": "mechanic_repair",
+      "total_completions": 16381
+    },
+    {
+      "activity": "ems_rescue",
+      "total_completions": 16283
+    },
+    {
+      "activity": "police_patrol",
+      "total_completions": 16220
+    },
+    {
+      "activity": "truck_delivery",
+      "total_completions": 16161
+    },
+    {
+      "activity": "fishing",
+      "total_completions": 16035
+    },
+    {
+      "activity": "taxi_mission",
+      "total_completions": 15906
+    },
+    {
+      "activity": "store_robbery",
+      "total_completions": 6618
+    },
+    {
+      "activity": "bank_heist",
+      "total_completions": 6593
+    },
+    {
+      "activity": "drug_sale",
+      "total_completions": 6552
+    }
+  ],
+  "sink_distribution": {
+    "weapon_repair": 22126200,
+    "vehicle_purchase_tax": 16292852,
+    "vehicle_overhaul": 3507836,
+    "housing_tax": 2974134,
+    "vehicle_insurance": 2218580,
+    "atm_fee": 87317
+  }
+}

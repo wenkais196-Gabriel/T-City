@@ -2,10 +2,48 @@ Config = {}
 Config.minEarn = 100
 Config.maxEarn = 450
 Config.RegisterEarnings = math.random(Config.minEarn, Config.maxEarn)
-Config.MinimumStoreRobberyPolice = 0
+Config.MinimumStoreRobberyPolice = 2   -- 与 crime.cfg 同步，最少 2 名警察在岗
 Config.resetTime = (60 * 1000) * 30
 Config.tickInterval = 1000
 Config.stickyNoteChance = 100 -- Percent chance to get the safe code from a cash register
+
+-- ═══════════════════════════════════════════════════════════════
+-- 良心系统配置 (v0.6: 教育向犯罪设计)
+-- ═══════════════════════════════════════════════════════════════
+Config.Conscience = {
+    defaultPoints = 100,        -- 初始良心值 (0-200)
+    crimePenalty = -10,          -- 每次抢劫扣分
+    stealthEscapeBonus = 2,     -- 悄悄逃跑少扣2分
+    returnGoodsReward = 25,     -- 归还赃物加分
+    surrenderReward = 50,       -- 自首加分
+    nightmareThreshold = 30,    -- 低于此值触发噩梦
+    goodDeedThreshold = 5,      -- 累计善行5次获得称号
+    hotGoodsDuration = 48,      -- 热赃物冷却小时数
+}
+
+-- ═══════════════════════════════════════════════════════════════
+-- 沉浸式叙事配置 (v0.6)
+-- ═══════════════════════════════════════════════════════════════
+Config.Narrative = {
+    threatCheckInterval = 5000,     -- 环境威胁检查间隔(ms)
+    threatChance = 20,               -- 威胁触发概率(%)
+    ambientSirenChance = 20,         -- 背景警笛概率(%)
+    npcFearRadius = 40.0,           -- NPC恐惧半径
+    npcReactionTime = 1200,         -- NPC反应最大延迟(ms)
+    scoutingTime = 3000,            -- 侦查时间(ms)
+    escapeSpeedBoost = 1.3,         -- 冲刺逃跑速度倍率
+    escapeSpeedDuration = 5000,     -- 冲刺持续时间(ms)
+}
+
+-- ═══════════════════════════════════════════════════════════════
+-- 赃物处理配置 (v0.6)
+-- ═══════════════════════════════════════════════════════════════
+Config.Loot = {
+    lootingDuration = 25000,        -- 翻找总时间(ms)
+    minTakePercent = 10,            -- 最低拿取比例
+    maxTakePercent = 100,           -- 最高拿取比例
+    markedbillsHotDuration = 48,    -- 热赃物标记时长(小时)
+}
 
 Config.Registers = {
     [1] = { vector3(-47.24, -1757.65, 29.53), robbed = false, time = 0, safeKey = 1, camId = 4 },

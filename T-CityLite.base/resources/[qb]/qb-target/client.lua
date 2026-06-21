@@ -418,7 +418,8 @@ local function EnableTarget()
 				-- Zone targets
 				local closestDis, closestZone
 				for k, zone in pairs(Zones) do
-					if distance < (closestDis or Config.MaxDistance) and distance <= zone.targetoptions.distance and zone:isPointInside(coords) then
+					if zone.destroyed then Zones[k] = nil
+					elseif distance < (closestDis or Config.MaxDistance) and distance <= zone.targetoptions.distance and zone:isPointInside(coords) then
 						closestDis = distance
 						closestZone = zone
 					end
@@ -442,7 +443,7 @@ local function EnableTarget()
 						DrawOutlineEntity(entity, true)
 						while targetActive and success do
 							local newCoords, dist = RaycastCamera(flag)
-							if not closestZone:isPointInside(newCoords) or dist > closestZone.targetoptions.distance then
+							if closestZone.destroyed or not closestZone:isPointInside(newCoords) or dist > closestZone.targetoptions.distance then
 								LeftTarget()
 								DrawOutlineEntity(entity, false)
 								break

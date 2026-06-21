@@ -13,6 +13,12 @@ shared_scripts {
     'config.lua'
 }
 server_script 'server/*.lua'
+
+dependencies {
+    'qb-core',
+    'production-freeze',
+}
+
 client_scripts {
     '@PolyZone/client.lua',
     '@PolyZone/BoxZone.lua',

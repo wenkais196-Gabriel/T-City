@@ -55,94 +55,84 @@ html::-webkit-scrollbar {
     display: none;
 }
 
-@media (width: 3840px) and (height: 2160px) {
-    .success {
-        background-color: rgba(23, 23, 23, 90%);
-        color: var(--md-on-surface);
-        box-shadow: var(--md-elevation-1);
-        border-left: 0.5rem solid var(--md-success);
-        font-size: 1.5vh;
-    }
+/* ═══════════════════════════════════════════════════════════
+   NUI 高级通知 — GTA 原生风格 (黑色半透明底 + 白字 + 左侧细色条)
+   覆盖 Quasar 通知样式，与原生 The Feed 视觉统一
+   ═══════════════════════════════════════════════════════════ */
 
-    .primary {
-        background-color: rgba(23, 23, 23, 90%);
-        color: var(--md-on-surface);
-        box-shadow: var(--md-elevation-1);
-        border-left: 5px solid var(--md-primary);
-        font-size: 1.5vh;
-    }
-
-    .error {
-        background-color: rgba(23, 23, 23, 90%);
-        color: var(--md-on-surface);
-        box-shadow: var(--md-elevation-1);
-        border-left: 5px solid var(--md-error);
-        font-size: 1.5vh;
-    }
-
-    .warning {
-        background-color: rgba(23, 23, 23, 90%);
-        color: var(--md-on-surface);
-        box-shadow: var(--md-elevation-1);
-        border-left: 5px solid var(--md-warning);
-        font-size: 1.5vh;
-    }
-
-    .police {
-        background-color: rgba(23, 23, 23, 90%);
-        color: var(--md-on-surface);
-        box-shadow: var(--md-elevation-1);
-        border-left: 5px solid var(--md-info);
-        font-size: 1.5vh;
-    }
-
-    .ambulance {
-        background-color: rgba(23, 23, 23, 90%);
-        color: var(--md-on-surface);
-        box-shadow: var(--md-elevation-1);
-        border-left: 5px solid var(--md-error);
-        font-size: 1.5vh;
-    }
+/* ---- 通知容器: 覆盖 Quasar 默认 ---- */
+.q-notification {
+    background: rgba(0, 0, 0, 0.78) !important;    /* GTA 原生黑底 */
+    color: #ffffff !important;                      /* 白字 */
+    font-family: 'Exo 2', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 14px !important;
+    border-radius: 2px !important;                  /* 微圆角，近似原生直角 */
+    box-shadow: none !important;                    /* 去掉 Material 阴影 */
+    min-width: 240px;
+    max-width: 380px;
+    backdrop-filter: blur(6px);                     /* 毛玻璃微效果 */
+    -webkit-backdrop-filter: blur(6px);
 }
 
+/* ---- 类型色条 (左侧 3px 细线) ---- */
 .success {
-    background-color: var(--md-success-container);
-    color: var(--md-on-success-container);
-    padding: 12px 16px;
-    font-weight: var(--font-weight-medium);
+    border-left: 3px solid #4caf50 !important;     /* 绿色 */
 }
-
 .primary {
-    background-color: var(--md-primary-container);
-    color: var(--md-on-primary-container);
-    padding: 12px 16px;
-    font-weight: var(--font-weight-medium);
+    border-left: 3px solid #64b5f6 !important;     /* 浅蓝 */
 }
-
 .warning {
-    background-color: var(--md-warning-container);
-    color: var(--md-on-warning-container);
-    padding: 12px 16px;
-    font-weight: var(--font-weight-medium);
+    border-left: 3px solid #ffb74d !important;     /* 橙色 */
 }
-
 .error {
-    background-color: var(--md-error-container);
-    color: var(--md-on-error-container);
-    padding: 12px 16px;
-    font-weight: var(--font-weight-medium);
+    border-left: 3px solid #ef5350 !important;     /* 红色 */
 }
-
 .police {
-    background-color: var(--md-info-container);
-    color: var(--md-on-info-container);
-    padding: 12px 16px;
-    font-weight: var(--font-weight-medium);
+    border-left: 3px solid #42a5f5 !important;     /* 警蓝 */
+}
+.ambulance {
+    border-left: 3px solid #ef5350 !important;     /* 红十字红 */
 }
 
-.ambulance {
-    background-color: var(--md-error-container);
-    color: var(--md-on-error-container);
-    padding: 12px 16px;
-    font-weight: var(--font-weight-medium);
+/* ---- 图标: 缩小并调暗 ---- */
+.q-notification__icon {
+    font-size: 16px !important;
+    opacity: 0.6 !important;
+    margin-right: 8px !important;
+}
+
+/* ---- 消息文本 ---- */
+.q-notification__message {
+    color: #ffffff !important;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+/* ---- 进度条 (保留但改为细线) ---- */
+.q-notification__progress {
+    background: rgba(255, 255, 255, 0.3) !important;
+    height: 2px !important;
+}
+
+/* ---- 关闭按钮隐藏 ---- */
+.q-notification__close {
+    display: none !important;
+}
+
+/* ---- 4K 缩放适配 ---- */
+@media (width: 3840px) and (height: 2160px) {
+    .q-notification {
+        font-size: 1.4vh !important;
+        padding: 1vh 1.4vh !important;
+        min-width: 24vh;
+        max-width: 38vh;
+    }
+    .q-notification__message {
+        font-size: 1.4vh;
+    }
+    .q-notification__icon {
+        font-size: 1.6vh !important;
+    }
 }

@@ -48,6 +48,7 @@ local function createBlip(options)
     SetBlipScale(blip, options.scale or 1.0)
     SetBlipColour(blip, options.colour or 1)
     SetBlipAsShortRange(blip, options.shortRange or false)
+    if options.category then SetBlipCategory(blip, options.category) end
     BeginTextCommandSetBlipName('STRING')
     AddTextComponentSubstringPlayerName(options.title or 'No Title Given')
     EndTextCommandSetBlipName(blip)
@@ -145,8 +146,9 @@ local function openIdentityMenu()
 
         for license, data in pairs(licenses) do
             table.insert(identityMenu, {
-                header = data.label,
-                txt = 'Cost: $' .. data.cost,
+                header = data.applyLabel or data.label,
+                txt = data.canApply == false and 'Not Available' or ('Cost: $' .. data.cost),
+                disabled = data.canApply == false,
                 params = {
                     event = 'qb-cityhall:client:requestId',
                     args = {

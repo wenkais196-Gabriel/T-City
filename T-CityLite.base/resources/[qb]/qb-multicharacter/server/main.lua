@@ -92,7 +92,9 @@ RegisterNetEvent('qb-multicharacter:server:loadUserData', function(cData)
         repeat
             Wait(10)
         until hasDonePreloading[src]
-        print('^2[qb-core]^7 ' .. GetPlayerName(src) .. ' (Citizen ID: ' .. cData.citizenid .. ') has successfully loaded!')
+        -- 🔒 Security: citizenid 脱敏
+        local maskedCid = cData.citizenid:sub(1,4) .. '...' .. cData.citizenid:sub(-4)
+        print('^2[qb-core]^7 ' .. GetPlayerName(src) .. ' (CID: ' .. maskedCid .. ') has successfully loaded!')
         QBCore.Commands.Refresh(src)
         loadHouseData(src)
         if Config.SkipSelection then

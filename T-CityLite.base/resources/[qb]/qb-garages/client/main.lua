@@ -3,7 +3,23 @@ local PlayerData = {}
 local PlayerGang = {}
 local PlayerJob = {}
 local garageZones = {}
+local garageBlips = {}  -- 跟踪所有创建的 blip，按 garage index 索引
 local listenForKey = false
+local playerLicences = {}  -- 缓存玩家证件状态
+
+-- 检查玩家是否拥有进入指定车库所需的证件
+local function HasRequiredLicense(garage)
+    if not garage.requiredLicense then return true end
+    return playerLicences[garage.requiredLicense] == true
+end
+
+-- 刷新玩家证件缓存（O(1) 内存查询）
+local function RefreshLicenseCache()
+    local metadata = PlayerData.metadata
+    if metadata and metadata['licences'] then
+        playerLicences = metadata['licences']
+    end
+end
 
 -- Functions
 
@@ -82,16 +98,26 @@ local function IsVehicleAllowed(classList, vehicle)
     return false
 end
 
-local function CreateBlips(setloc)
-    local Garage = AddBlipForCoord(setloc.takeVehicle.x, setloc.takeVehicle.y, setloc.takeVehicle.z)
-    SetBlipSprite(Garage, setloc.blipNumber)
-    SetBlipDisplay(Garage, 4)
-    SetBlipScale(Garage, 0.60)
-    SetBlipAsShortRange(Garage, true)
-    SetBlipColour(Garage, setloc.blipColor)
+local function CreateBlip(garage)
+    local blip = AddBlipForCoord(garage.takeVehicle.x, garage.takeVehicle.y, garage.takeVehicle.z)
+    SetBlipSprite(blip, garage.blipNumber)
+    SetBlipDisplay(blip, 4)
+    SetBlipScale(blip, 0.60)
+    SetBlipAsShortRange(blip, true)
+    SetBlipColour(blip, garage.blipColor)
     BeginTextCommandSetBlipName('STRING')
-    AddTextComponentSubstringPlayerName(setloc.blipName)
-    EndTextCommandSetBlipName(Garage)
+    AddTextComponentSubstringPlayerName(garage.blipName)
+    EndTextCommandSetBlipName(blip)
+    return blip
+end
+
+local function RemoveAllBlips()
+    for index, blip in pairs(garageBlips) do
+        if DoesBlipExist(blip) then
+            RemoveBlip(blip)
+        end
+    end
+    garageBlips = {}
 end
 
 local function CreateZone(index, garage, zoneType)
@@ -113,20 +139,36 @@ local function CreateBlipsZones()
     PlayerData = QBCore.Functions.GetPlayerData()
     PlayerGang = PlayerData.gang
     PlayerJob = PlayerData.job
+    RefreshLicenseCache()
+
+    -- 先清除旧 blip 和 zone
+    RemoveAllBlips()
+    for _, zone in ipairs(garageZones) do
+        zone:destroy()
+    end
+    garageZones = {}
 
     for index, garage in pairs(Config.Garages) do
         local zone
-        if garage.showBlip then
-            CreateBlips(garage)
+        -- 证件门控：blip 仅在持有对应证件时显示
+        if garage.showBlip and HasRequiredLicense(garage) then
+            garageBlips[index] = CreateBlip(garage)
         end
-        if garage.type == 'job' and (PlayerJob.name == garage.job or PlayerJob.type == garage.jobType) then
+
+        if garage.type == 'job' and PlayerJob and (PlayerJob.name == garage.job or PlayerJob.type == garage.jobType) then
             zone = CreateZone(index, garage, 'job')
-        elseif garage.type == 'gang' and PlayerGang.name == garage.job then
+        elseif garage.type == 'gang' and PlayerGang and PlayerGang.name == garage.job then
             zone = CreateZone(index, garage, 'gang')
         elseif garage.type == 'depot' then
-            zone = CreateZone(index, garage, 'depot')
+            -- depot 也需要证件检查
+            if HasRequiredLicense(garage) then
+                zone = CreateZone(index, garage, 'depot')
+            end
         elseif garage.type == 'public' then
-            zone = CreateZone(index, garage, 'public')
+            -- public 车库：证件门控交互
+            if HasRequiredLicense(garage) then
+                zone = CreateZone(index, garage, 'public')
+            end
         end
 
         if zone then
@@ -138,6 +180,12 @@ local function CreateBlipsZones()
 
     comboZone:onPlayerInOut(function(isPointInside, _, zone)
         if isPointInside then
+            -- 二次验证：确保玩家仍持有证件（防止并发变更）
+            local garage = Config.Garages[zone.data.indexgarage]
+            if garage and garage.requiredLicense and not HasRequiredLicense(garage) then
+                return  -- 无证件，静默忽略交互
+            end
+
             listenForKey = true
             CreateThread(function()
                 while listenForKey do
@@ -311,6 +359,11 @@ RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
                 exports[Config.FuelResource]:SetFuel(veh, data.stats.fuel)
                 TriggerServerEvent('qb-garages:server:updateVehicleState', 0, vehPlate)
                 TriggerEvent('vehiclekeys:client:SetOwner', vehPlate)
+                -- 同步预热 custom-vehicles 客户端缓存，防止 Warp 后冷缓存误锁
+                local normPlate = vehPlate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
+                TriggerEvent('custom-vehicles:client:keysUpdated', {
+                    plate = normPlate, hasKeys = true, keyType = 'owner'
+                })
                 if Config.Warp then TaskWarpPedIntoVehicle(PlayerPedId(), veh, -1) end
                 if Config.VisuallyDamageCars then doCarDamage(veh, data.stats, properties) end
                 SetVehicleEngineOn(veh, true, true, false)
@@ -467,6 +520,20 @@ end)
 AddEventHandler('onResourceStart', function(res)
     if res ~= GetCurrentResourceName() then return end
     CreateBlipsZones()
+end)
+
+-- 证件状态变化时实时重建 blip 和 zone
+RegisterNetEvent('QBCore:Player:SetPlayerData', function(val)
+    local oldLicences = playerLicences
+    PlayerData = val
+    RefreshLicenseCache()
+    -- 仅在证件状态实际变化时重建（避免不必要的开销）
+    for certType, hasLicense in pairs(playerLicences) do
+        if oldLicences[certType] ~= hasLicense then
+            CreateBlipsZones()
+            return
+        end
+    end
 end)
 
 RegisterNetEvent('QBCore:Client:OnGangUpdate', function(gang)

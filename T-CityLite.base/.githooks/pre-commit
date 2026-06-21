@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""
+pre-commit hook — T-City Lite 提交前自动检测
+安装: 复制到 .git/hooks/pre-commit
+"""
+
+import os
+import sys
+import subprocess
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TEST_SCRIPT = os.path.join(BASE_DIR, 'T-CityLite.base', 'tests', 'run_all.py')
+
+def main():
+    print('═' * 50)
+    print('  🔍 pre-commit: 运行离线检测...')
+    print('═' * 50)
+
+    if not os.path.exists(TEST_SCRIPT):
+        print('  ⚠️  测试脚本不存在，跳过')
+        return True
+
+    result = subprocess.run(
+        [sys.executable, TEST_SCRIPT],
+        capture_output=False,
+        cwd=os.path.dirname(TEST_SCRIPT),
+    )
+
+    if result.returncode != 0:
+        print()
+        print('  ❌ 离线检测未通过！修复后再提交:')
+        print('     python T-CityLite.base/tests/run_all.py')
+        print()
+        return False
+
+    print()
+    print('  ✅ 离线检测通过，允许提交')
+    print()
+    return True
+
+
+if __name__ == '__main__':
+    if not main():
+        sys.exit(1)

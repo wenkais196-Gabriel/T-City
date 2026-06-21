@@ -7,6 +7,10 @@ version '1.0.0'
 
 lua54 'yes'
 
+client_scripts {
+    'client/admin_panel.lua'
+}
+
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/commands.lua'

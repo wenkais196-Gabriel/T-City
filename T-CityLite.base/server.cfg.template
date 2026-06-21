@@ -27,7 +27,7 @@ sets sv_projectName "T-City Lite"
 sets sv_projectDesc "Lite QBCore RP chain"
 sets locale "zh-CN"
 load_server_icon myLogo.png
-sv_enforceGameBuild 3095
+sv_enforceGameBuild 3258
 set resources_useSystemChat true
 
 ## Database

@@ -25,6 +25,9 @@ local Translations = {
         max = '最大數量 %{value}',
         submit = '熔解',
         melt_wait = '給我 %{value} 分鐘, 我會將您委託的物品熔解',
+        launder_money = '洗錢',
+        launder_prompt = '輸入洗錢金額 (最低 $%{value})',
+        launder_submit = '確認洗錢',
     }
 }
 

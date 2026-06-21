@@ -36,6 +36,18 @@ end)
 
 RegisterNetEvent('police:server:Impound', function(plate, fullImpound, price, body, engine, fuel)
     local src = source
+
+    -- 🛡️ Security Fix: 服务端权威校验 — 仅值班执法人员可扣押/没收车辆
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or Player.PlayerData.job.type ~= 'leo' or not Player.PlayerData.job.onduty then
+        if exports['custom-logs'] then
+            exports['custom-logs']:LogSecurity('拦截非法扣押车辆',
+                ('**Source**: %d | **Plate**: %s | **fullImpound**: %s'):format(src, plate or 'nil', tostring(fullImpound)),
+                16711680)
+        end
+        return
+    end
+
     price = price and price or 0
     if IsVehicleOwned(plate) then
         if not fullImpound then
@@ -50,6 +62,18 @@ end)
 
 RegisterNetEvent('police:server:TakeOutImpound', function(plate, garage)
     local src = source
+
+    -- 🛡️ Security Fix: 仅值班执法人员可取回扣押车辆
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or Player.PlayerData.job.type ~= 'leo' or not Player.PlayerData.job.onduty then
+        if exports['custom-logs'] then
+            exports['custom-logs']:LogSecurity('拦截非法取回扣押车辆',
+                ('**Source**: %d | **Plate**: %s | **Garage**: %s'):format(src, plate or 'nil', tostring(garage or 'nil')),
+                16711680)
+        end
+        return
+    end
+
     local playerPed = GetPlayerPed(src)
     local playerCoords = GetEntityCoords(playerPed)
     local targetCoords = Config.Locations['impound'][garage]
@@ -68,6 +92,8 @@ RegisterNetEvent('police:server:FlaggedPlateTriggered', function(coords, plate)
             end
         end
     end
+    -- 🌐 Atmosphere: chase scene on flagged vehicle pursuit
+    if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', source, 'chase') end
 end)
 
 -- Commands
@@ -126,3 +152,40 @@ QBCore.Commands.Add('plateinfo', Lang:t('commands.plateinfo'), { { name = 'plate
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.on_duty_police_only'), 'error')
     end
 end)
+
+-- /impoundplayer [playerID] — 扣押指定玩家所有载具
+QBCore.Commands.Add('impoundplayer', 'Impound all vehicles of a player', { { name = 'playerID', help = 'Player ID' } }, false, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or Player.PlayerData.job.type ~= 'leo' or not Player.PlayerData.job.onduty then
+        TriggerClientEvent('QBCore:Notify', src, '仅限值班警察使用', 'error')
+        return
+    end
+    local targetId = tonumber(args[1])
+    if not targetId then
+        TriggerClientEvent('QBCore:Notify', src, '用法: /impoundplayer [玩家ID]', 'error')
+        return
+    end
+    local Target = QBCore.Functions.GetPlayer(targetId)
+    if not Target then
+        TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
+        return
+    end
+    local affected = MySQL.update.await('UPDATE player_vehicles SET state = 2 WHERE citizenid = ? AND state = 0', { Target.PlayerData.citizenid })
+    TriggerClientEvent('QBCore:Notify', src, ('已扣押 %s 的 %d 辆载具'):format(GetPlayerName(targetId), affected), 'success')
+    if exports['custom-logs'] then
+        exports['custom-logs']:LogGeneric('警察扣押全部',
+            ('**%s** 扣押了 **%s** 的全部 %d 辆载具'):format(GetPlayerName(src), GetPlayerName(targetId), affected), 16711680)
+    end
+end, 'admin')
+
+-- /impoundnear — 扣押警官周围最近的玩家载具
+QBCore.Commands.Add('impoundnear', 'Impound nearest vehicle', {}, false, function(source)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or Player.PlayerData.job.type ~= 'leo' or not Player.PlayerData.job.onduty then
+        TriggerClientEvent('QBCore:Notify', src, '仅限值班警察使用', 'error')
+        return
+    end
+    TriggerClientEvent('police:client:impoundNear', src)
+end, 'admin')

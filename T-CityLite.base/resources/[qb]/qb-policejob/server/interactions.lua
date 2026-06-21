@@ -118,9 +118,14 @@ RegisterNetEvent('police:server:BillPlayer', function(playerId, price)
     local OtherPlayer = QBCore.Functions.GetPlayer(playerId)
     if not Player or not OtherPlayer or Player.PlayerData.job.type ~= 'leo' then return end
 
-    OtherPlayer.Functions.RemoveMoney('bank', price, 'paid-bills')
-    exports['qb-banking']:AddMoney('police', price, 'Fine paid')
-    TriggerClientEvent('QBCore:Notify', OtherPlayer.PlayerData.source, Lang:t('info.fine_received', { fine = price }))
+    -- 🛡️ Security: 罚金服务器端强制上限，防止客户端注入天价罚单
+    local fineAmount = tonumber(price) or 0
+    if fineAmount <= 0 then return end
+    if fineAmount > 50000 then fineAmount = 50000 end
+
+    OtherPlayer.Functions.RemoveMoney('bank', fineAmount, 'paid-bills')
+    exports['qb-banking']:AddMoney('police', fineAmount, 'Fine paid')
+    TriggerClientEvent('QBCore:Notify', OtherPlayer.PlayerData.source, Lang:t('info.fine_received', { fine = fineAmount }))
 end)
 
 RegisterNetEvent('police:server:JailPlayer', function(playerId, time)
@@ -179,13 +184,12 @@ RegisterNetEvent('police:server:SeizeDriverLicense', function(playerId)
     local SearchedPlayer = QBCore.Functions.GetPlayer(playerId)
     if not QBCore.Functions.GetPlayer(src) or not SearchedPlayer then return end
 
-    local driverLicense = SearchedPlayer.PlayerData.metadata['licences']['driver']
-    if driverLicense then
-        local licenses = { ['driver'] = false, ['business'] = SearchedPlayer.PlayerData.metadata['licences']['business'] }
-        SearchedPlayer.Functions.SetMetaData('licences', licenses)
+    -- 🔄 委托给 custom-certificates 统一管理（含实体证件移除 + cert_status 同步）
+    local success, msg = exports['custom-certificates']:RevokeLicense(playerId, 'driver')
+    if success then
         TriggerClientEvent('QBCore:Notify', SearchedPlayer.PlayerData.source, Lang:t('info.driving_license_confiscated'))
     else
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_driver_license'), 'error')
+        TriggerClientEvent('QBCore:Notify', src, msg or Lang:t('error.no_driver_license'), 'error')
     end
 end)
 

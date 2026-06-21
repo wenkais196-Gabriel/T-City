@@ -220,6 +220,9 @@ QBShared.Items = {
     -- Card ITEMS
     id_card                      = { name = 'id_card', label = 'ID Card', weight = 0, type = 'item', image = 'id_card.png', unique = true, useable = true, shouldClose = false, description = 'A card containing all your information to identify yourself' },
     driver_license               = { name = 'driver_license', label = 'Drivers License', weight = 0, type = 'item', image = 'driver_license.png', unique = true, useable = true, shouldClose = false, description = 'Permit to show you can drive a vehicle' },
+    pilot_license                = { name = 'pilot_license', label = 'Pilot License', weight = 0, type = 'item', image = 'pilot_license.png', unique = true, useable = true, shouldClose = false, description = 'Permit to show you can fly an aircraft' },
+    boat_license                 = { name = 'boat_license', label = 'Boat License', weight = 0, type = 'item', image = 'boat_license.png', unique = true, useable = true, shouldClose = false, description = 'Permit to show you can operate a watercraft' },
+    heavy_license                = { name = 'heavy_license', label = 'Heavy Vehicle License', weight = 0, type = 'item', image = 'heavy_license.png', unique = true, useable = true, shouldClose = false, description = 'Permit to show you can operate heavy vehicles' },
     lawyerpass                   = { name = 'lawyerpass', label = 'Lawyer Pass', weight = 0, type = 'item', image = 'lawyerpass.png', unique = true, useable = true, shouldClose = false, description = 'Pass exclusive to lawyers to show they can represent a suspect' },
     weaponlicense                = { name = 'weaponlicense', label = 'Weapon License', weight = 0, type = 'item', image = 'weapon_license.png', unique = true, useable = true, shouldClose = true, description = 'Weapon License' },
     bank_card                    = { name = 'bank_card', label = 'Bank Card', weight = 0, type = 'item', image = 'bank_card.png', unique = true, useable = true, shouldClose = true, description = 'Used to access ATM' },
@@ -386,5 +389,37 @@ QBShared.Items = {
     -- Crafting table's
     item_bench = {name = "item_bench", label = "Workbench", weight = 15000, type = "item", image = "workbench.png", unique = true, useable = true, shouldClose = false, combinable = nil, description = "A workbench to craft items."},
     attachment_bench = {name = "attachment_bench", label = "Attachment Workbench", weight = 15000, type = "item", image = "attworkbench.png", unique = true, useable = true, shouldClose = false, combinable = nil, description = "A workbench for crafting attachments."},
+
+    -- ==============================================================
+    -- 矿业 / 矿石 (v0.7 — custom-mining)
+    -- ==============================================================
+    pickaxe                 = { name = 'pickaxe', label = '矿镐', weight = 5000, type = 'item', image = 'pickaxe.png', unique = false, useable = true, shouldClose = true, description = '用于采集矿石的基本工具' },
+    pickaxe_pro             = { name = 'pickaxe_pro', label = '高级矿镐', weight = 5000, type = 'item', image = 'pickaxe.png', unique = false, useable = true, shouldClose = true, description = '专业矿工的升级工具，采集速度+30%' },
+    pickaxe_legendary       = { name = 'pickaxe_legendary', label = '传奇矿镐', weight = 5000, type = 'item', image = 'pickaxe.png', unique = true, useable = true, shouldClose = true, description = '矿工传奇奖励，采集速度+50%' },
+    iron_ore                = { name = 'iron_ore', label = '铁矿石', weight = 100, type = 'item', image = 'iron_ore.png', unique = false, useable = false, shouldClose = false, description = '未加工的铁矿石，可在冶炼厂精炼' },
+    copper_ore              = { name = 'copper_ore', label = '铜矿石', weight = 100, type = 'item', image = 'copper_ore.png', unique = false, useable = false, shouldClose = false, description = '未加工的铜矿石' },
+    gold_ore                = { name = 'gold_ore', label = '金矿石', weight = 100, type = 'item', image = 'gold_ore.png', unique = false, useable = false, shouldClose = false, description = '含金量不等的原始金矿石' },
+    silver_ore              = { name = 'silver_ore', label = '银矿石', weight = 100, type = 'item', image = 'silver_ore.png', unique = false, useable = false, shouldClose = false, description = '未加工的银矿石' },
+    coal                    = { name = 'coal', label = '煤炭', weight = 200, type = 'item', image = 'coal.png', unique = false, useable = false, shouldClose = false, description = '冶炼金属的燃料' },
+    stone                   = { name = 'stone', label = '石料', weight = 200, type = 'item', image = 'stone.png', unique = false, useable = false, shouldClose = false, description = '建筑材料' },
+    iron_ingot              = { name = 'iron_ingot', label = '铁锭', weight = 200, type = 'item', image = 'iron_ingot.png', unique = false, useable = false, shouldClose = false, description = '冶炼后的铁锭' },
+    copper_ingot            = { name = 'copper_ingot', label = '铜锭', weight = 200, type = 'item', image = 'copper_ingot.png', unique = false, useable = false, shouldClose = false, description = '冶炼后的铜锭' },
+    gold_ingot              = { name = 'gold_ingot', label = '金锭', weight = 200, type = 'item', image = 'gold_ingot.png', unique = false, useable = false, shouldClose = false, description = '高纯度金锭，可在市场出售' },
+    silver_ingot            = { name = 'silver_ingot', label = '银锭', weight = 200, type = 'item', image = 'silver_ingot.png', unique = false, useable = false, shouldClose = false, description = '高纯度银锭' },
+
+    -- ==============================================================
+    -- Cartel 毒品产业链 (v0.7 — custom-cartel)
+    -- ==============================================================
+    coca_leaf               = { name = 'coca_leaf', label = '古柯叶', weight = 100, type = 'item', image = 'coca_leaf.png', unique = false, useable = false, shouldClose = false, description = '新鲜的古柯叶，可加工成古柯膏' },
+    coca_paste              = { name = 'coca_paste', label = '古柯膏', weight = 200, type = 'item', image = 'coca_paste.png', unique = false, useable = false, shouldClose = false, description = '半成品可卡因，需要进一步精炼' },
+    cocaine                 = { name = 'cocaine', label = '可卡因', weight = 100, type = 'item', image = 'cocaine.png', unique = false, useable = true, shouldClose = true, description = '高纯度可卡因成品，黑市高价商品' },
+    cannabis_bud            = { name = 'cannabis_bud', label = '大麻花', weight = 150, type = 'item', image = 'cannabis_bud.png', unique = false, useable = false, shouldClose = false, description = '未加工的大麻花蕾，可包装出售' },
+    weed_pack               = { name = 'weed_pack', label = '大麻包装', weight = 100, type = 'item', image = 'weed_pack.png', unique = false, useable = true, shouldClose = true, description = '真空包装的大麻成品' },
+
+    -- ==============================================================
+    -- 化学原料 (毒品加工)
+    -- ==============================================================
+    sulfuric_acid           = { name = 'sulfuric_acid', label = '硫酸', weight = 300, type = 'item', image = 'sulfuric_acid.png', unique = false, useable = false, shouldClose = false, description = '强腐蚀性化学品，用于毒品提纯' },
+    acetone                 = { name = 'acetone', label = '丙酮', weight = 250, type = 'item', image = 'acetone.png', unique = false, useable = false, shouldClose = false, description = '有机溶剂，可卡因精炼必需原料' },
 
 }

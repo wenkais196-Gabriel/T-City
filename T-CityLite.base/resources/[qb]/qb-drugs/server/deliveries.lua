@@ -10,6 +10,56 @@ QBCore.Functions.CreateCallback('qb-drugs:server:RequestConfig', function(_, cb)
     cb(Config.Dealers)
 end)
 
+-- =============================================
+-- 接取配送：扣押金 + 给货
+-- =============================================
+-- 🔒 排他锁: 防止同一玩家快速连续接取刷物品
+local acceptLocks = {}
+
+RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+
+    -- 🔒 Mutex Lock: 同一玩家同一时间只能有一个接取操作在处理中
+    if acceptLocks[src] then
+        TriggerClientEvent('QBCore:Notify', src, 'Please wait...', 'error')
+        return
+    end
+    acceptLocks[src] = true
+
+    local deposit = deliveryData['deposit'] or 0
+    local item = Config.DeliveryItems[deliveryData.item].item
+    local itemAmount = deliveryData.amount
+
+    -- 检查余额
+    local cash = Player.Functions.GetMoney('cash')
+    if cash < deposit then
+        TriggerClientEvent('QBCore:Notify', src, ('押金不足！需要 $%d，你只有 $%d'):format(deposit, cash), 'error')
+        acceptLocks[src] = nil
+        return
+    end
+
+    -- 原子操作: 先扣钱再给货 (顺序不可逆, 防止余额检查与扣款之间的竞态)
+    local removed = Player.Functions.RemoveMoney('cash', deposit, '配送押金')
+    if not removed then
+        acceptLocks[src] = nil
+        return
+    end
+
+    -- 给货
+    exports['qb-inventory']:AddItem(src, item, itemAmount, false, false, 'qb-drugs:server:acceptDelivery')
+    TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'add')
+
+    -- 延迟释放锁 (防止极速连续触发)
+    SetTimeout(2000, function()
+        acceptLocks[src] = nil
+    end)
+
+    print(('[qb-drugs] %s accepted delivery: %s x%d, deposit=$%d, distance=%.0fm'):format(
+        GetPlayerName(src), item, itemAmount, deposit, deliveryData['distance'] or 0))
+end)
+
 -- Events
 RegisterNetEvent('qb-drugs:server:updateDealerItems', function(itemData, amount, dealer)
     local src = source
@@ -25,95 +75,130 @@ RegisterNetEvent('qb-drugs:server:updateDealerItems', function(itemData, amount,
     end
 end)
 
-RegisterNetEvent('qb-drugs:server:giveDeliveryItems', function(deliveryData)
+-- 配送失败（超时/取消）：从背包移除任务物品
+RegisterNetEvent('qb-drugs:server:failDelivery', function(deliveryData)
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
-    local item = Config.DeliveryItems[deliveryData.item].item
-    if not item then return end
-    exports['qb-inventory']:AddItem(src, item, deliveryData.amount, false, false, 'qb-drugs:server:giveDeliveryItems')
-    TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'add')
-end)
-
-RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, inTime)
-    local src = source
-    if not exports['custom-main']:CheckDrugs(src) then
-        return
-    end
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
     local item = Config.DeliveryItems[deliveryData.item].item
     local itemAmount = deliveryData.amount
-    local payout = deliveryData.itemData.payout * itemAmount
+    local invItem = Player.Functions.GetItemByName(item)
+    if invItem and invItem.amount >= itemAmount then
+        exports['qb-inventory']:RemoveItem(src, item, itemAmount, false, 'qb-drugs:server:failDelivery')
+        TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
+    end
+    print(('[qb-drugs] %s delivery failed (timeout/cancel): removed %s x%d'):format(GetPlayerName(src), item, itemAmount))
+end)
+
+RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, completed, elapsed)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    local item = Config.DeliveryItems[deliveryData.item].item
+    local itemAmount = deliveryData.amount
+    local basePayout = deliveryData.basePayout or (deliveryData.itemData.payout * itemAmount)
+    local deposit = deliveryData.deposit or 0
+    local fastTime = deliveryData.fastTime or 300
+    local maxTime = deliveryData.maxTime or 600
     local copsOnline = QBCore.Functions.GetDutyCount('police')
     local invItem = Player.Functions.GetItemByName(item)
-    if inTime then
-        if invItem and invItem.amount >= itemAmount then -- on time correct amount
-            exports['qb-inventory']:RemoveItem(src, item, itemAmount, false, 'qb-drugs:server:successDelivery')
-            local scale = exports['custom-main']:GetEconomyRewardScale()
-            if copsOnline > 0 then
-                local copModifier = copsOnline * Config.PoliceDeliveryModifier
-                if Config.UseMarkedBills then
-                    local worthValue = math.floor(payout * copModifier * scale + 0.5)
-                    local info = { worth = worthValue }
-                    exports['qb-inventory']:AddItem(src, 'markedbills', 1, false, info, 'qb-drugs:server:successDelivery')
-                else
-                    exports['custom-main']:AddScaledMoney(src, 'cash', math.floor(payout * copModifier), 'qb-drugs:server:successDelivery')
-                end
-            else
-                if Config.UseMarkedBills then
-                    local worthValue = math.floor(payout * scale + 0.5)
-                    local info = { worth = worthValue }
-                    exports['qb-inventory']:AddItem(src, 'markedbills', 1, false, info, 'qb-drugs:server:successDelivery')
-                else
-                    exports['custom-main']:AddScaledMoney(src, 'cash', payout, 'qb-drugs:server:successDelivery')
-                end
-            end
-            TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
-            TriggerClientEvent('QBCore:Notify', src, Lang:t('success.order_delivered'), 'success')
-            SetTimeout(math.random(5000, 10000), function()
-                TriggerClientEvent('qb-drugs:client:sendDeliveryMail', src, 'perfect', deliveryData)
-                Player.Functions.AddRep('dealer', Config.DeliveryRepGain)
-            end)
-        else
-            TriggerClientEvent('QBCore:Notify', src, Lang:t('error.order_not_right'), 'error') -- on time incorrect amount
-            if invItem then
-                local newItemAmount = invItem.amount
-                local modifiedPayout = deliveryData.itemData.payout * newItemAmount
-                exports['qb-inventory']:RemoveItem(src, item, newItemAmount, false, 'qb-drugs:server:successDelivery')
-                TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
-                exports['custom-main']:AddScaledMoney(src, 'cash', math.floor(modifiedPayout / Config.WrongAmountFee), 'qb-drugs:server:successDelivery')
-            end
-            SetTimeout(math.random(5000, 10000), function()
-                TriggerClientEvent('qb-drugs:client:sendDeliveryMail', src, 'bad', deliveryData)
-                Player.Functions.RemoveRep('dealer', Config.DeliveryRepLoss)
-            end)
-        end
-    else
-        if invItem and invItem.amount >= itemAmount then -- late correct amount
-            TriggerClientEvent('QBCore:Notify', src, Lang:t('error.too_late'), 'error')
-            exports['qb-inventory']:RemoveItem(src, item, itemAmount, false, 'qb-drugs:server:successDelivery')
-            exports['custom-main']:AddScaledMoney(src, 'cash', math.floor(payout / Config.OverdueDeliveryFee), 'qb-drugs:server:successDelivery')
-            TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
-            SetTimeout(math.random(5000, 10000), function()
-                TriggerClientEvent('qb-drugs:client:sendDeliveryMail', src, 'late', deliveryData)
-                Player.Functions.RemoveRep('dealer', Config.DeliveryRepLoss)
-            end)
-        else
-            if invItem then -- late incorrect amount
-                local newItemAmount = invItem.amount
-                local modifiedPayout = deliveryData.itemData.payout * newItemAmount
-                TriggerClientEvent('QBCore:Notify', src, Lang:t('error.too_late'), 'error')
-                exports['qb-inventory']:RemoveItem(src, item, itemAmount, false, 'qb-drugs:server:successDelivery')
-                exports['custom-main']:AddScaledMoney(src, 'cash', math.floor(modifiedPayout / Config.OverdueDeliveryFee), 'qb-drugs:server:successDelivery')
-                TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
-                SetTimeout(math.random(5000, 10000), function()
-                    TriggerClientEvent('qb-drugs:client:sendDeliveryMail', src, 'late', deliveryData)
-                    Player.Functions.RemoveRep('dealer', Config.DeliveryRepLoss)
-                end)
-            end
+    elapsed = tonumber(elapsed) or 0
+
+    -- 判定等级
+    local tier = 'timeout'  -- 超时
+    if completed then
+        if elapsed <= fastTime then tier = 'fast'
+        elseif elapsed <= maxTime then tier = 'normal'
+        else tier = 'late'
         end
     end
+
+    -- 先回收货物
+    if invItem and invItem.amount >= itemAmount then
+        exports['qb-inventory']:RemoveItem(src, item, itemAmount, false, 'qb-drugs:server:successDelivery')
+        TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
+    end
+
+    if tier == 'fast' then
+        -- ⚡ 快速：120% 报酬 + 返还押金 + 声望+2
+        local reward = math.floor(basePayout * Config.DeliveryRewardFast)
+        local finalReward = reward
+        if copsOnline > 0 then
+            finalReward = math.floor(reward * (1 + copsOnline * 0.1))
+        end
+        Player.Functions.AddMoney('cash', finalReward + deposit, '配送奖励(快速)')
+        Player.Functions.AddRep('dealer', Config.DeliveryRepGain + 1)
+        local dealerRep = Player.Functions.GetRep('dealer')
+        TriggerClientEvent('QBCore:Notify', src,
+            ('⚡ 快速送达！+$%d (含押金$%d) | 声望+%d'):format(finalReward + deposit, deposit, Config.DeliveryRepGain + 1), 'success')
+
+    elseif tier == 'normal' then
+        -- 🟢 合格：100% 报酬 + 返还押金 + 声望+1
+        local finalReward = basePayout
+        if copsOnline > 0 then
+            finalReward = math.floor(basePayout * (1 + copsOnline * 0.08))
+        end
+        Player.Functions.AddMoney('cash', finalReward + deposit, '配送奖励(合格)')
+        Player.Functions.AddRep('dealer', Config.DeliveryRepGain)
+        local dealerRep = Player.Functions.GetRep('dealer')
+        TriggerClientEvent('QBCore:Notify', src,
+            ('🟢 合格送达！+$%d (含押金$%d) | 声望+%d'):format(finalReward + deposit, deposit, Config.DeliveryRepGain), 'success')
+
+    elseif tier == 'late' then
+        -- 🟡 迟到：仅返还押金，无报酬，无声望
+        Player.Functions.AddMoney('cash', deposit, '配送押金退还(迟到)')
+        TriggerClientEvent('QBCore:Notify', src,
+            ('🟡 迟到送达！押金 $%d 已退还，无额外报酬'):format(deposit), 'primary')
+
+    else
+        -- 🔴 超时：扣押金，货物已在顶部回收
+        TriggerClientEvent('QBCore:Notify', src,
+            ('🔴 配送失败！押金 $%d 已损失'):format(deposit), 'error')
+
+    end
+
+    -- 通知手机：配送已结束，GPS 导航失效
+    if deliveryData.coords and deliveryData.coords.x then
+        TriggerClientEvent('phone:client:gpsMessage', src, {
+            status = 'done',
+            gps = { x = deliveryData.coords.x, y = deliveryData.coords.y, label = deliveryData.locationLabel or '目的地' },
+        })
+    end
+end)
+
+
+RegisterNetEvent('qb-drugs:server:sendDeliverySMS', function(message, coords, status)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    local phoneNumber = Player.PlayerData.charinfo.phone
+    if not phoneNumber then return end
+    local msgData = {
+        id = math.random(10000, 99999),
+        sender_number = '000-0000',
+        receiver_number = phoneNumber,
+        message = message,
+        timestamp = os.time(),
+        is_read = false,
+    }
+    -- 附带 GPS 坐标 + 状态（走统一 GPS 消息总线）
+    if coords and coords.x then
+        msgData.gps = { x = coords.x, y = coords.y, label = coords.label or '目的地' }
+    end
+    if status then
+        msgData.status = status
+    end
+    local gpsJson = (coords and coords.x) and json.encode({ x = coords.x, y = coords.y, label = coords.label }) or nil
+    MySQL.insert('INSERT INTO phone_messages (sender_number, receiver_number, message, gps, msg_status) VALUES (?, ?, ?, ?, ?)', {
+        '000-0000', phoneNumber, message, gpsJson, status or nil
+    }, function()
+        -- 有 GPS → 走统一总线（自动设导航点 + 通知）
+        if coords and coords.x then
+            TriggerClientEvent('phone:client:gpsMessage', src, msgData)
+        else
+            TriggerClientEvent('phone:client:newMessage', src, msgData)
+        end
+    end)
 end)
 
 RegisterNetEvent('qb-drugs:server:dealerShop', function(currentDealer)

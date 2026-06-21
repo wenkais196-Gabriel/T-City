@@ -1,0 +1,325 @@
+@import "tailwindcss";
+
+/* ── T-City Dashboard v2.0 — 全局样式 ── */
+
+/* CSS 变量 (由 Lua 端通过 ThemePayload.cssVars 动态注入) */
+:root {
+  --tcity-accent: #FF2244;
+  --tcity-accent-glow: rgba(255, 34, 68, 0.3);
+  --tcity-bg-primary: rgba(0, 0, 0, 0.65);
+  --tcity-text-primary: #F0F0F5;
+  --tcity-text-dim: #8899AA;
+  --tcity-danger: #FF3344;
+  --tcity-success: #22DD88;
+  --tcity-warning: #FFAA00;
+  --tcity-border: rgba(255, 255, 255, 0.08);
+  --tcity-blur: 24px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: transparent;
+  color: var(--tcity-text-primary);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Glassmorphic 容器 ── */
+.dash-shell {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 440px;
+  height: 600px;
+  background: var(--tcity-bg-primary);
+  backdrop-filter: blur(var(--tcity-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--tcity-blur)) saturate(180%);
+  border: 1px solid var(--tcity-border);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.25s, transform 0.25s;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.95);
+  pointer-events: none;
+}
+.dash-shell.active {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+  pointer-events: all;
+}
+
+/* ── Header ── */
+.dash-header {
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--tcity-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vehicle-plate {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: linear-gradient(135deg, var(--tcity-accent), white);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.vehicle-model {
+  font-size: 11px;
+  color: var(--tcity-text-dim);
+  margin-top: 2px;
+}
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--tcity-border);
+  padding: 0 6px;
+  gap: 1px;
+}
+.tab-btn {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  color: var(--tcity-text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: 0.2s;
+  text-align: center;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: white; }
+.tab-btn.active {
+  color: var(--tcity-accent);
+  border-bottom-color: var(--tcity-accent);
+}
+
+/* ── Content ── */
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+.tab-content::-webkit-scrollbar { width: 4px; }
+.tab-content::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+}
+
+/* ── Gauge Cards ── */
+.gauge-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.gauge-card {
+  flex: 1;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--tcity-border);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+.gauge-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--tcity-accent);
+}
+.gauge-label {
+  font-size: 9px;
+  color: var(--tcity-text-dim);
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+/* ── Progress Bar ── */
+.progress-bar {
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  margin: 6px 0 10px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--tcity-accent), var(--tcity-accent-glow));
+  transform-origin: left center;
+  transition: transform 0.4s ease-out;
+}
+.progress-fill.warning {
+  background: linear-gradient(90deg, var(--tcity-warning), #FF6600);
+}
+.progress-fill.danger {
+  background: linear-gradient(90deg, var(--tcity-danger), #FF0066);
+}
+
+/* ── Status Row ── */
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.status-row .label { color: var(--tcity-text-dim); }
+.status-row .value { color: var(--tcity-text-primary); font-weight: 600; }
+
+/* ── Control Grid ── */
+.ctrl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ctrl-btn {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--tcity-border);
+  background: rgba(255,255,255,0.05);
+  color: var(--tcity-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: 0.2s;
+  text-align: center;
+}
+.ctrl-btn:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: var(--tcity-accent);
+}
+.ctrl-btn .btn-icon {
+  display: block;
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+.ctrl-btn.danger:hover {
+  background: rgba(255,50,50,0.15);
+  border-color: var(--tcity-danger);
+}
+.ctrl-btn.warn-active {
+  background: rgba(255,170,0,0.2);
+  border-color: var(--tcity-warning);
+}
+
+/* ── Drive Mode ── */
+.drive-section { margin-bottom: 16px; }
+.drive-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tcity-text-dim);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.mode-btn {
+  padding: 10px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--tcity-border);
+  background: rgba(255,255,255,0.04);
+  color: var(--tcity-text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  transition: 0.2s;
+  text-align: center;
+}
+.mode-btn:hover { border-color: var(--tcity-accent); color: white; }
+.mode-btn.active {
+  background: var(--tcity-accent);
+  color: white;
+  border-color: var(--tcity-accent);
+}
+
+/* ── Night Mode ── */
+.theme-night {
+  --tcity-bg-primary: rgba(0,0,0,0.78);
+  --tcity-text-dim: #667788;
+}
+
+/* ── RPM Redline ── */
+.rpm-redline {
+  color: var(--tcity-danger) !important;
+  animation: pulse-red 0.5s infinite alternate;
+}
+@keyframes pulse-red {
+  from { opacity: 0.7; }
+  to { opacity: 1; }
+}
+
+/* ── 航空仪表 ── */
+.adi-ring {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid var(--tcity-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  position: relative;
+}
+.adi-horizon {
+  width: 100%;
+  height: 2px;
+  background: var(--tcity-accent);
+  position: absolute;
+}
+
+/* ── 战术HUD ── */
+.hud-crosshair {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto;
+}
+.hud-crosshair::before,
+.hud-crosshair::after {
+  content: '';
+  position: absolute;
+  background: var(--tcity-accent);
+  opacity: 0.6;
+}
+.hud-crosshair::before {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(-50%);
+}
+.hud-crosshair::after {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+/* ── 航海罗盘 ── */
+.compass-ring {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 2px solid var(--tcity-border);
+  position: relative;
+  margin: 0 auto;
+}
+.compass-needle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 40px;
+  background: var(--tcity-accent);
+  transform-origin: bottom center;
+  transform: translate(-50%, -100%);
+}

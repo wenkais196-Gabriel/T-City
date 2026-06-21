@@ -1,17 +1,12 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
-function ExploitBan(id, reason)
-	MySQL.insert('INSERT INTO bans (name, license, discord, ip, reason, expire, bannedby) VALUES (?, ?, ?, ?, ?, ?, ?)', {
-		GetPlayerName(id),
-		QBCore.Functions.GetIdentifier(id, 'license'),
-		QBCore.Functions.GetIdentifier(id, 'discord'),
-		QBCore.Functions.GetIdentifier(id, 'ip'),
-		reason,
-		2147483647,
-		'qb-management'
-	})
-	TriggerEvent('qb-log:server:CreateLog', 'bans', 'Player Banned', 'red', string.format('%s was banned by %s for %s', GetPlayerName(id), 'qb-management', reason), true)
-	DropPlayer(id, 'You were permanently banned by the server for: Exploiting')
+-- 🔧 安全审计：不再永久封禁，改为记录 + 通知
+local function SecurityAuditLog(src, action, detail)
+	local playerName = GetPlayerName(src)
+	print(('[SECURITY-MANAGEMENT] %s (src=%s) attempted %s — %s'):format(playerName, src, action, detail))
+	TriggerEvent('qb-log:server:CreateLog', 'bossmenu', 'Suspicious Activity', 'orange',
+		string.format('%s (src=%s) attempted %s: %s', playerName, src, action, detail), false)
+	TriggerClientEvent('QBCore:Notify', src, '你没有权限执行此操作', 'error')
 end
 
 -- Get Employees
@@ -20,13 +15,14 @@ QBCore.Functions.CreateCallback('qb-bossmenu:server:GetEmployees', function(sour
 	local Player = QBCore.Functions.GetPlayer(src)
 
 	if not Player.PlayerData.job.isboss then
-		ExploitBan(src, 'GetEmployees Exploiting')
+		SecurityAuditLog(src, 'GetEmployees', '非 Boss 尝试获取员工列表')
 		return
 	end
 
 	local employees = {}
 
-	local players = MySQL.query.await("SELECT * FROM `players` WHERE `job` LIKE '%" .. jobname .. "%'", {})
+	-- 🔒 Security Fix: 参数化查询替代字符串拼接，消除 SQL 注入风险
+	local players = MySQL.query.await('SELECT * FROM players WHERE JSON_UNQUOTE(JSON_EXTRACT(job, "$.name")) = ?', { jobname })
 
 	if players[1] ~= nil then
 		for _, value in pairs(players) do
@@ -78,8 +74,23 @@ RegisterNetEvent('qb-bossmenu:server:GradeUpdate', function(data)
 	local Player = QBCore.Functions.GetPlayer(src)
 	local Employee = QBCore.Functions.GetPlayerByCitizenId(data.cid) or QBCore.Functions.GetOfflinePlayerByCitizenId(data.cid)
 
+	-- 🔒 Security: 距离校验 — Boss 必须在对应 Boss 菜单点附近
+	if not Config.BossMenus[Player.PlayerData.job.name] then return end
+	local bossCoords = Config.BossMenus[Player.PlayerData.job.name]
+	local playerPed = GetPlayerPed(src)
+	local playerCoords = GetEntityCoords(playerPed)
+	local nearBoss = false
+	for i = 1, #bossCoords do
+		local coords = bossCoords[i]
+		if #(playerCoords - coords) < 5.0 then nearBoss = true; break end
+	end
+	if not nearBoss then
+		SecurityAuditLog(src, 'GradeUpdate', '非 Boss 菜单点操作 — 疑似远程发包')
+		return
+	end
+
 	if not Player.PlayerData.job.isboss then
-		ExploitBan(src, 'GradeUpdate Exploiting')
+		SecurityAuditLog(src, 'GradeUpdate', '非 Boss 尝试晋升员工')
 		return
 	end
 	if data.grade > Player.PlayerData.job.grade.level then
@@ -108,8 +119,23 @@ RegisterNetEvent('qb-bossmenu:server:FireEmployee', function(target)
 	local Player = QBCore.Functions.GetPlayer(src)
 	local Employee = QBCore.Functions.GetPlayerByCitizenId(target) or QBCore.Functions.GetOfflinePlayerByCitizenId(target)
 
+	-- 🔒 Security: 距离校验
+	if not Config.BossMenus[Player.PlayerData.job.name] then return end
+	local bossCoords = Config.BossMenus[Player.PlayerData.job.name]
+	local playerPed = GetPlayerPed(src)
+	local playerCoords = GetEntityCoords(playerPed)
+	local nearBoss = false
+	for i = 1, #bossCoords do
+		local coords = bossCoords[i]
+		if #(playerCoords - coords) < 5.0 then nearBoss = true; break end
+	end
+	if not nearBoss then
+		SecurityAuditLog(src, 'FireEmployee', '非 Boss 菜单点操作 — 疑似远程发包')
+		return
+	end
+
 	if not Player.PlayerData.job.isboss then
-		ExploitBan(src, 'FireEmployee Exploiting')
+		SecurityAuditLog(src, 'FireEmployee', '非 Boss 尝试解雇员工')
 		return
 	end
 
@@ -142,8 +168,23 @@ RegisterNetEvent('qb-bossmenu:server:HireEmployee', function(recruit)
 	local Player = QBCore.Functions.GetPlayer(src)
 	local Target = QBCore.Functions.GetPlayer(recruit)
 
+	-- 🔒 Security: 距离校验
+	if not Config.BossMenus[Player.PlayerData.job.name] then return end
+	local bossCoords = Config.BossMenus[Player.PlayerData.job.name]
+	local playerPed = GetPlayerPed(src)
+	local playerCoords = GetEntityCoords(playerPed)
+	local nearBoss = false
+	for i = 1, #bossCoords do
+		local coords = bossCoords[i]
+		if #(playerCoords - coords) < 5.0 then nearBoss = true; break end
+	end
+	if not nearBoss then
+		SecurityAuditLog(src, 'HireEmployee', '非 Boss 菜单点操作 — 疑似远程发包')
+		return
+	end
+
 	if not Player.PlayerData.job.isboss then
-		ExploitBan(src, 'HireEmployee Exploiting')
+		SecurityAuditLog(src, 'HireEmployee', '非 Boss 尝试招募员工')
 		return
 	end
 
@@ -181,4 +222,101 @@ QBCore.Functions.CreateCallback('qb-bossmenu:getplayers', function(source, cb)
 		return a.name < b.name
 	end)
 	cb(players)
+end)
+
+-- ==============================================================
+-- 🔑 向后兼容桥接: 职业 Boss 退位交接
+-- 事件名保留旧命名空间 qb-bossmenu:server:TransferOwnership
+-- （与 sv_org.lua 中的 qb-orgmenu:server:TransferOwnership 并行工作）
+-- ==============================================================
+
+RegisterNetEvent('qb-bossmenu:server:TransferOwnership', function(data)
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
+
+	-- 🔒 Security: 距离校验
+	if not Config.BossMenus[Player.PlayerData.job.name] then return end
+	local bossCoords = Config.BossMenus[Player.PlayerData.job.name]
+	local playerPed = GetPlayerPed(src)
+	local playerCoords = GetEntityCoords(playerPed)
+	local nearBoss = false
+	for i = 1, #bossCoords do
+		local coords = bossCoords[i]
+		if #(playerCoords - coords) < 5.0 then nearBoss = true; break end
+	end
+	if not nearBoss then
+		SecurityAuditLog(src, 'TransferOwnership', '非 Boss 菜单点操作 — 疑似远程发包')
+		return
+	end
+
+	local jobName = data.orgName
+	if not jobName or not QBCore.Shared.Jobs[jobName] then
+		TriggerClientEvent('QBCore:Notify', src, 'Invalid job.', 'error')
+		return
+	end
+
+	-- 🔒 安全校验
+	if not Player.PlayerData.job.isboss then
+		SecurityAuditLog(src, 'TransferOwnership', '非 Boss 尝试转让所有权')
+		return
+	end
+
+	if data.successorCid == Player.PlayerData.citizenid then
+		TriggerClientEvent('QBCore:Notify', src, 'You cannot transfer ownership to yourself!', 'error')
+		return
+	end
+
+	local Successor = QBCore.Functions.GetPlayerByCitizenId(data.successorCid)
+	if not Successor then
+		TriggerClientEvent('QBCore:Notify', src, 'The designated successor is not found.', 'error')
+		return
+	end
+
+	if Successor.PlayerData.job.name ~= jobName then
+		TriggerClientEvent('QBCore:Notify', src, 'The designated successor is not in your organization!', 'error')
+		return
+	end
+
+	if not Successor.PlayerData.source then
+		TriggerClientEvent('QBCore:Notify', src, 'The designated successor must be online.', 'error')
+		return
+	end
+
+	if Successor.PlayerData.job.isboss then
+		TriggerClientEvent('QBCore:Notify', src, 'This member is already a Boss!', 'error')
+		return
+	end
+
+	-- 原子交接
+	local step1Success = Successor.Functions.SetJob(jobName, 4)
+	if not step1Success then
+		TriggerClientEvent('QBCore:Notify', src, 'Failed to promote successor. Transfer aborted.', 'error')
+		return
+	end
+	Successor.Functions.Save()
+
+	local step2Success = Player.Functions.SetJob('unemployed', 0)
+	if not step2Success then
+		Successor.Functions.SetJob(jobName, Successor.PlayerData.job.grade.level)
+		TriggerClientEvent('QBCore:Notify', src, 'Failed to complete transfer. Rolled back.', 'error')
+		return
+	end
+	Player.Functions.Save()
+
+	local jobLabel = QBCore.Shared.Jobs[jobName].label
+	TriggerClientEvent('QBCore:Notify', src,
+		'You have transferred ' .. jobLabel .. ' to '
+		.. Successor.PlayerData.charinfo.firstname .. ' '
+		.. Successor.PlayerData.charinfo.lastname .. '. You are now a civilian.', 'success')
+	TriggerClientEvent('QBCore:Notify', Successor.PlayerData.source,
+		'⚠️ You are now the new Boss of ' .. jobLabel .. '!', 'success')
+
+	TriggerEvent('qb-log:server:CreateLog', 'bossmenu', 'Ownership Transfer', 'gold',
+		Player.PlayerData.charinfo.firstname .. ' ' .. Player.PlayerData.charinfo.lastname
+		.. ' transferred ' .. jobName .. ' to '
+		.. Successor.PlayerData.charinfo.firstname .. ' '
+		.. Successor.PlayerData.charinfo.lastname, false)
+
+	TriggerClientEvent('qb-bossmenu:client:CloseMenu', src)
 end)

@@ -28,7 +28,9 @@ RegisterNetEvent('custom-main:server:policeHandoverAlert', function(coords, stre
         record.date = os.date('%Y-%m-%d %H:%M:%S')
         Player.Functions.SetMetaData('criminalrecord', record)
         
-        print(("[custom-main][police-dispatch] Citizen '%s' (%s) entered player wanted state. Level: %d stars."):format(charName, citizenid, wantedLevel))
+        -- 🔒 Security: citizenid 脱敏
+        local maskedCid = citizenid:sub(1,4) .. "..." .. citizenid:sub(-4)
+        print(("[custom-main][police-dispatch] Citizen '%s' (%s) entered player wanted state. Level: %d stars."):format(charName, maskedCid, wantedLevel))
         exports['custom-logs']:LogGeneric("高星通缉移交", string.format("**嫌疑人**: %s\n**CitizenID**: %s\n**通缉星级**: %d 星\n**案发街道**: %s\n**状态**: 原生 AI 警车已清除，通缉权已移交玩家警察！", charName, citizenid, wantedLevel, streetName), 16711680) -- 红色
     end
     
@@ -59,19 +61,19 @@ local function ClearWantedCallback(source, args)
     
     -- 安全校验：必须是执勤中的警察才能清除通缉
     if cop.PlayerData.job.name ~= 'police' or not cop.PlayerData.job.onduty then
-        TriggerClientEvent('QBCore:Notify', src, "你没有执行此命令的权限或尚未上岗！", "error")
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_no_permission'), "error")
         return
     end
     
     local targetId = tonumber(args[1])
     if not targetId then
-        TriggerClientEvent('QBCore:Notify', src, "请输入正确的玩家 ID！", "error")
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_invalid_id'), "error")
         return
     end
     
     local suspect = QBCore.Functions.GetPlayer(targetId)
     if not suspect then
-        TriggerClientEvent('QBCore:Notify', src, "该玩家已离线！", "error")
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_player_offline'), "error")
         return
     end
     
@@ -130,6 +132,18 @@ AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
     end
 end)
 
+-- ==========================================
+--    管理员强制清除通缉（custom-admin 调用）
+-- ==========================================
+AddEventHandler('custom-main:server:adminClearWanted', function(citizenid)
+    if WantedPlayers[citizenid] then
+        WantedPlayers[citizenid] = nil
+        -- 🔒 Security: citizenid 脱敏
+        local maskedCid = citizenid:sub(1,4) .. "..." .. citizenid:sub(-4)
+        print(('[custom-main] Admin cleared wanted status for %s'):format(maskedCid))
+    end
+end)
+
 AddEventHandler('QBCore:Server:OnPlayerUnload', function(src)
     -- 玩家离线时，从活动通缉缓存中移除（但保留数据库 metadata 记录，下次上线自动恢复）
     for cid, data in pairs(WantedPlayers) do
@@ -163,7 +177,7 @@ QBCore.Commands.Add('duty', '快速切换执勤 (On Duty) / 下班 (Off Duty) �
     
     -- 逃犯安全拦截：在逃通缉犯不能使用指令打卡上班/下班以逃避追踪
     if WantedPlayers[citizenid] or savedWanted > 0 then
-        TriggerClientEvent('QBCore:Notify', src, "【执勤拦截】你当前处于通缉在逃状态，无法打卡上班或切换执勤状态！", "error", 8000)
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_wanted_block_duty'), "error", 8000)
         return
     end
     
@@ -176,12 +190,12 @@ QBCore.Commands.Add('duty', '快速切换执勤 (On Duty) / 下班 (Off Duty) �
         Player.Functions.SetJobDuty(newDuty)
         
         if newDuty then
-            TriggerClientEvent('QBCore:Notify', src, "你已成功进入【执勤上班】状态！", "success")
+            TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_on_duty'), "success")
         else
             TriggerClientEvent('QBCore:Notify', src, "你已成功进入【下班休息】状态！", "warning")
         end
     else
-        TriggerClientEvent('QBCore:Notify', src, "你当前的职业类型不支持上下班状态切换！", "error")
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_no_duty_switch'), "error")
     end
 end, 'user')
 
@@ -199,6 +213,6 @@ AddEventHandler('QBCore:Server:OnJobUpdate', function(src, job)
     if (WantedPlayers[citizenid] or savedWanted > 0) and job.onduty then
         -- 强行锁回下班状态
         Player.Functions.SetJobDuty(false)
-        TriggerClientEvent('QBCore:Notify', src, "【执勤拦截】你当前处于通缉在逃状态，无法打卡上班以逃避罪责！", "error", 8000)
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_wanted_block_clock'), "error", 8000)
     end
 end)

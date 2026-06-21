@@ -188,6 +188,15 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
     function self.Functions.SetJob(job, grade)
         job = job:lower()
         grade = grade or '0'
+        -- 🛡️ SecurityService: source 校验 + 职业名清洗 + 等级清洗
+        if not self.Offline and Bus and Bus.SecurityService then
+            local ok, cleanedJob, cleanedGrade = Bus.SecurityService.ValidateJobEvent(
+                self.PlayerData.source, job, grade
+            )
+            if not ok then return false end
+            job = cleanedJob
+            grade = cleanedGrade
+        end
         if not QBCore.Shared.Jobs[job] then return false end
         self.PlayerData.job = {
             name = job,
@@ -212,6 +221,8 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
         end
 
         self.IsDirty = true
+        -- ⚡ Type-tracked dirty mark for DirtyFlush pipeline
+        if DirtyFlush then DirtyFlush.MarkDirty(self.PlayerData.citizenid, 'job') end
         if not self.Offline then
             self.Functions.UpdatePlayerData()
             TriggerEvent('QBCore:Server:OnJobUpdate', self.PlayerData.source, self.PlayerData.job)
@@ -224,6 +235,15 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
     function self.Functions.SetGang(gang, grade)
         gang = gang:lower()
         grade = grade or '0'
+        -- 🛡️ SecurityService: source 校验 + 帮派名清洗 + 等级清洗
+        if not self.Offline and Bus and Bus.SecurityService then
+            local ok, cleanedGang, cleanedGrade = Bus.SecurityService.ValidateGangEvent(
+                self.PlayerData.source, gang, grade
+            )
+            if not ok then return false end
+            gang = cleanedGang
+            grade = cleanedGrade
+        end
         if not QBCore.Shared.Gangs[gang] then return false end
         self.PlayerData.gang = {
             name = gang,
@@ -244,6 +264,8 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
         end
 
         self.IsDirty = true
+        -- ⚡ Type-tracked dirty mark for DirtyFlush pipeline
+        if DirtyFlush then DirtyFlush.MarkDirty(self.PlayerData.citizenid, 'gang') end
         if not self.Offline then
             self.Functions.UpdatePlayerData()
             TriggerEvent('QBCore:Server:OnGangUpdate', self.PlayerData.source, self.PlayerData.gang)
@@ -278,6 +300,8 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
         if not key or type(key) ~= 'string' then return end
         self.PlayerData[key] = val
         self.IsDirty = true
+        -- ⚡ Type-tracked dirty mark (key-based fallback)
+        if DirtyFlush then DirtyFlush.MarkDirty(self.PlayerData.citizenid, 'metadata') end
         self.Functions.UpdatePlayerData()
     end
 
@@ -287,7 +311,14 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
             val = val > 100 and 100 or val
         end
         self.PlayerData.metadata[meta] = val
-        self.IsDirty = true
+        -- ⚡ Performance Fix: hunger/thirst 是高频变动字段（每 5 分钟一次），
+        -- 不标记全字段 dirty，避免每 5 分钟触发一次全字段 MySQL UPDATE。
+        -- 这些值会在玩家下线/断线时由 ForceFlush 强制落盘。
+        if meta ~= 'hunger' and meta ~= 'thirst' then
+            self.IsDirty = true
+            -- ⚡ Type-tracked dirty mark for DirtyFlush pipeline
+            if DirtyFlush then DirtyFlush.MarkDirty(self.PlayerData.citizenid, 'metadata') end
+        end
         self.Functions.UpdatePlayerData()
     end
 
@@ -324,82 +355,83 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
     end
 
     function self.Functions.AddMoney(moneytype, amount, reason)
-        reason = reason or 'unknown'
-        moneytype = moneytype:lower()
-        amount = tonumber(amount)
-        if amount < 0 then return end
-        if not self.PlayerData.money[moneytype] then return false end
-        self.PlayerData.money[moneytype] = self.PlayerData.money[moneytype] + amount
-
-        self.IsDirty = true
-        if not self.Offline then
-            self.Functions.UpdatePlayerData()
-            if amount > 100000 then
-                TriggerEvent('qb-log:server:CreateLog', 'playermoney', 'AddMoney', 'lightgreen', '**' .. GetPlayerName(self.PlayerData.source) .. ' (citizenid: ' .. self.PlayerData.citizenid .. ' | id: ' .. self.PlayerData.source .. ')** $' .. amount .. ' (' .. moneytype .. ') added, new ' .. moneytype .. ' balance: ' .. self.PlayerData.money[moneytype] .. ' reason: ' .. reason, true)
-            else
-                TriggerEvent('qb-log:server:CreateLog', 'playermoney', 'AddMoney', 'lightgreen', '**' .. GetPlayerName(self.PlayerData.source) .. ' (citizenid: ' .. self.PlayerData.citizenid .. ' | id: ' .. self.PlayerData.source .. ')** $' .. amount .. ' (' .. moneytype .. ') added, new ' .. moneytype .. ' balance: ' .. self.PlayerData.money[moneytype] .. ' reason: ' .. reason)
-            end
-            TriggerClientEvent('hud:client:OnMoneyChange', self.PlayerData.source, moneytype, amount, false)
-            TriggerClientEvent('QBCore:Client:OnMoneyChange', self.PlayerData.source, moneytype, amount, 'add', reason)
-            TriggerEvent('QBCore:Server:OnMoneyChange', self.PlayerData.source, moneytype, amount, 'add', reason)
+        -- 🔄 桥接层: 底层路由到 EconomyService (内存优先 + DirtyFlush 管道)
+        -- 外部 API 签名完全不变 — 第三方插件零改动
+        if self.Offline then
+            -- 离线玩家: 保留原始内存操作逻辑 (EconomyService 仅操作在线玩家)
+            reason = reason or 'unknown'
+            moneytype = moneytype:lower()
+            amount = tonumber(amount)
+            if amount < 0 then return false end
+            if not self.PlayerData.money[moneytype] then return false end
+            self.PlayerData.money[moneytype] = self.PlayerData.money[moneytype] + amount
+            self.IsDirty = true
+            return true
         end
-
+        -- Online player: delegate to EconomyService (via Bus) if available, else fallback
+        local ES = _G.Bus and _G.Bus.EconomyService
+        if ES then
+            return ES.AddMoney(self.PlayerData.citizenid, moneytype, amount, reason)
+        end
+        self.PlayerData.money[moneytype] = self.PlayerData.money[moneytype] + amount
+        self.IsDirty = true
         return true
     end
 
     function self.Functions.RemoveMoney(moneytype, amount, reason)
-        reason = reason or 'unknown'
-        moneytype = moneytype:lower()
-        amount = tonumber(amount)
-        if amount < 0 then return end
-        if not self.PlayerData.money[moneytype] then return false end
-        for _, mtype in pairs(QBCore.Config.Money.DontAllowMinus) do
-            if mtype == moneytype then
-                if (self.PlayerData.money[moneytype] - amount) < 0 then
-                    return false
+        -- 🔄 桥接层: 底层路由到 EconomyService (内存优先 + DirtyFlush 管道)
+        if self.Offline then
+            reason = reason or 'unknown'
+            moneytype = moneytype:lower()
+            amount = tonumber(amount)
+            if amount < 0 then return false end
+            if not self.PlayerData.money[moneytype] then return false end
+            for _, mtype in pairs(QBCore.Config.Money.DontAllowMinus) do
+                if mtype == moneytype then
+                    if (self.PlayerData.money[moneytype] - amount) < 0 then
+                        return false
+                    end
                 end
             end
+            if self.PlayerData.money[moneytype] - amount < QBCore.Config.Money.MinusLimit then return false end
+            self.PlayerData.money[moneytype] = self.PlayerData.money[moneytype] - amount
+            self.IsDirty = true
+            return true
         end
-        if self.PlayerData.money[moneytype] - amount < QBCore.Config.Money.MinusLimit then return false end
+        local ES = _G.Bus and _G.Bus.EconomyService
+        if ES then
+            return ES.RemoveMoney(self.PlayerData.citizenid, moneytype, amount, reason)
+        end
         self.PlayerData.money[moneytype] = self.PlayerData.money[moneytype] - amount
-
         self.IsDirty = true
-        if not self.Offline then
-            self.Functions.UpdatePlayerData()
-            if amount > 100000 then
-                TriggerEvent('qb-log:server:CreateLog', 'playermoney', 'RemoveMoney', 'red', '**' .. GetPlayerName(self.PlayerData.source) .. ' (citizenid: ' .. self.PlayerData.citizenid .. ' | id: ' .. self.PlayerData.source .. ')** $' .. amount .. ' (' .. moneytype .. ') removed, new ' .. moneytype .. ' balance: ' .. self.PlayerData.money[moneytype] .. ' reason: ' .. reason, true)
-            else
-                TriggerEvent('qb-log:server:CreateLog', 'playermoney', 'RemoveMoney', 'red', '**' .. GetPlayerName(self.PlayerData.source) .. ' (citizenid: ' .. self.PlayerData.citizenid .. ' | id: ' .. self.PlayerData.source .. ')** $' .. amount .. ' (' .. moneytype .. ') removed, new ' .. moneytype .. ' balance: ' .. self.PlayerData.money[moneytype] .. ' reason: ' .. reason)
-            end
-            TriggerClientEvent('hud:client:OnMoneyChange', self.PlayerData.source, moneytype, amount, true)
-            if moneytype == 'bank' then
-                TriggerClientEvent('qb-phone:client:RemoveBankMoney', self.PlayerData.source, amount)
-            end
-            TriggerClientEvent('QBCore:Client:OnMoneyChange', self.PlayerData.source, moneytype, amount, 'remove', reason)
-            TriggerEvent('QBCore:Server:OnMoneyChange', self.PlayerData.source, moneytype, amount, 'remove', reason)
-        end
-
         return true
     end
 
     function self.Functions.SetMoney(moneytype, amount, reason)
-        reason = reason or 'unknown'
-        moneytype = moneytype:lower()
-        amount = tonumber(amount)
-        if amount < 0 then return false end
-        if not self.PlayerData.money[moneytype] then return false end
-        local difference = amount - self.PlayerData.money[moneytype]
-        self.PlayerData.money[moneytype] = amount
-
-        self.IsDirty = true
-        if not self.Offline then
-            self.Functions.UpdatePlayerData()
-            TriggerEvent('qb-log:server:CreateLog', 'playermoney', 'SetMoney', 'green', '**' .. GetPlayerName(self.PlayerData.source) .. ' (citizenid: ' .. self.PlayerData.citizenid .. ' | id: ' .. self.PlayerData.source .. ')** $' .. amount .. ' (' .. moneytype .. ') set, new ' .. moneytype .. ' balance: ' .. self.PlayerData.money[moneytype] .. ' reason: ' .. reason)
-            TriggerClientEvent('hud:client:OnMoneyChange', self.PlayerData.source, moneytype, math.abs(difference), difference < 0)
-            TriggerClientEvent('QBCore:Client:OnMoneyChange', self.PlayerData.source, moneytype, amount, 'set', reason)
-            TriggerEvent('QBCore:Server:OnMoneyChange', self.PlayerData.source, moneytype, amount, 'set', reason)
+        -- 🔄 桥接层: 底层路由到 EconomyService (含 SecurityService 安全校验)
+        if self.Offline then
+            reason = reason or 'unknown'
+            moneytype = moneytype:lower()
+            amount = tonumber(amount)
+            if amount < 0 then return false end
+            if not self.PlayerData.money[moneytype] then return false end
+            if Bus and Bus.SecurityService then
+                local ok, cleaned = Bus.SecurityService.ValidateMoneyEvent(
+                    self.PlayerData.source, amount, moneytype, reason
+                )
+                if not ok then return false end
+                amount = cleaned
+            end
+            self.PlayerData.money[moneytype] = amount
+            self.IsDirty = true
+            return true
         end
-
+        local ES = _G.Bus and _G.Bus.EconomyService
+        if ES then
+            return ES.SetMoney(self.PlayerData.citizenid, moneytype, amount, reason)
+        end
+        self.PlayerData.money[moneytype] = amount
+        self.IsDirty = true
         return true
     end
 
@@ -407,6 +439,34 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
         if not moneytype then return false end
         moneytype = moneytype:lower()
         return self.PlayerData.money[moneytype]
+    end
+
+    -- ── 三位一体: 资质 (Qualification) 方法 ────────────────────────
+    -- 资质只认标签，不看职业/等级 — 三位一体第三维度
+
+    ---检查玩家是否拥有某项资质
+    ---@param qualification string 资质标识 (如 'police_heli_pilot')
+    ---@return boolean
+    function self.Functions.HasQualification(qualification)
+        if self.Offline then return false end
+        return QualificationService.HasQual(self, qualification)
+    end
+
+    ---获取玩家全部资质列表 (含标签信息)
+    ---@return table { {id, label, category}, ... }
+    function self.Functions.GetQualifications()
+        if self.Offline then return {} end
+        return QualificationService.GetQuals(self)
+    end
+
+    ---检查玩家是否满足三位一体 AND 条件
+    ---@param jobName string|nil 需要的职业
+    ---@param minRank number|nil 最低组织等级
+    ---@param qualifications table|nil 需要的资质列表
+    ---@return boolean, string|nil
+    function self.Functions.CheckTrinityAccess(jobName, minRank, qualifications)
+        if self.Offline then return false, 'offline' end
+        return QualificationService.EvaluateTrinityAccess(self, jobName, minRank, qualifications)
     end
 
     function self.Functions.Save(force)
@@ -523,26 +583,45 @@ function QBCore.Player.Save(source, force)
             return
         end
 
-        MySQL.insert('INSERT INTO players (citizenid, cid, license, name, money, charinfo, job, gang, position, metadata) VALUES (:citizenid, :cid, :license, :name, :money, :charinfo, :job, :gang, :position, :metadata) ON DUPLICATE KEY UPDATE cid = :cid, name = :name, money = :money, charinfo = :charinfo, job = :job, gang = :gang, position = :position, metadata = :metadata', {
-            citizenid = PlayerData.citizenid,
-            cid = tonumber(PlayerData.cid),
-            license = PlayerData.license,
-            name = PlayerData.name,
-            money = json.encode(PlayerData.money),
-            charinfo = json.encode(PlayerData.charinfo),
-            job = json.encode(PlayerData.job),
-            gang = json.encode(PlayerData.gang),
-            position = json.encode(pcoords),
-            metadata = json.encode(PlayerData.metadata)
-        }, function()
-            -- 显式异步回调，防止数据库操作同步阻塞服务端主线程
-        end)
+        -- ⚡ Performance Fix: 接入 DirtyFlush 管道
+        -- 非强制存盘 → 仅标记脏数据，由 DirtyFlush 定时批量落盘（默认 15 分钟一批）
+        -- 强制存盘 → 立即 Flush 单个玩家
+        -- 此举将每 5 分钟 100 次全字段 UPDATE 降低为每 15 分钟一次的批量写入，IO 削减 ~66%
+        local useDirtyFlush = DirtyFlush ~= nil
+        
+        if useDirtyFlush then
+            -- 标记脏数据到管道
+            DirtyFlush.MarkDirty(PlayerData.citizenid, 'all')
+            if force then
+                -- 强制存盘：立即刷盘（下线/重启/管理员手动存档）
+                DirtyFlush.ForceFlush(PlayerData.citizenid)
+            end
+        else
+            -- Fallback: DirtyFlush 不可用时走原始直接 SQL
+            MySQL.insert('INSERT INTO players (citizenid, cid, license, name, money, charinfo, job, gang, position, metadata) VALUES (:citizenid, :cid, :license, :name, :money, :charinfo, :job, :gang, :position, :metadata) ON DUPLICATE KEY UPDATE cid = :cid, name = :name, money = :money, charinfo = :charinfo, job = :job, gang = :gang, position = :position, metadata = :metadata', {
+                citizenid = PlayerData.citizenid,
+                cid = tonumber(PlayerData.cid),
+                license = PlayerData.license,
+                name = PlayerData.name,
+                money = json.encode(PlayerData.money),
+                charinfo = json.encode(PlayerData.charinfo),
+                job = json.encode(PlayerData.job),
+                gang = json.encode(PlayerData.gang),
+                position = json.encode(pcoords),
+                metadata = json.encode(PlayerData.metadata)
+            }, function()
+                -- 显式异步回调，防止数据库操作同步阻塞服务端主线程
+            end)
+        end
+        
         if GetResourceState('qb-inventory') ~= 'missing' then exports['qb-inventory']:SaveInventory(source) end
         
         -- 保存完成，重置脏标记并缓存当前保存坐标位置
         Player.IsDirty = false
         Player.LastSavedCoords = pcoords
-        QBCore.ShowSuccess(resourceName, PlayerData.name .. ' PLAYER SAVED! (FORCE=' .. tostring(not not force) .. ')')
+        if not useDirtyFlush or force then
+            QBCore.ShowSuccess(resourceName, PlayerData.name .. ' PLAYER SAVED! (FORCE=' .. tostring(not not force) .. ')')
+        end
     else
         QBCore.ShowError(resourceName, 'ERROR QBCORE.PLAYER.SAVE - PLAYERDATA IS EMPTY!')
     end
@@ -579,7 +658,7 @@ local playertables = { -- Add tables as needed
     { table = 'bank_accounts' },
     { table = 'crypto_transactions' },
     { table = 'phone_invoices' },
-    { table = 'phone_messages' },
+    -- { table = 'phone_messages' }, -- disabled: schema mismatch with custom-phone
     { table = 'playerskins' },
     { table = 'player_contacts' },
     { table = 'player_houses' },

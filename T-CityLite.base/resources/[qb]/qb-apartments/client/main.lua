@@ -404,8 +404,6 @@ local function EnterApartment(house, apartmentId, new)
                 ClosestHouse = house
                 RangDoorbell = nil
                 Wait(500)
-                TriggerEvent('qb-weathersync:client:DisableSync')
-                Wait(100)
                 TriggerServerEvent('qb-apartments:server:SetInsideMeta', house, apartmentId, true, false)
                 TriggerServerEvent('InteractSound_SV:PlayOnSource', 'houses_door_close', 0.1)
                 TriggerServerEvent('apartments:server:setCurrentApartment', CurrentApartment)
@@ -425,8 +423,6 @@ local function EnterApartment(house, apartmentId, new)
             InApartment = true
             CurrentApartment = apartmentId
             Wait(500)
-            TriggerEvent('qb-weathersync:client:DisableSync')
-            Wait(100)
             TriggerServerEvent('qb-apartments:server:SetInsideMeta', house, apartmentId, true, true)
             TriggerServerEvent('InteractSound_SV:PlayOnSource', 'houses_door_close', 0.1)
             TriggerServerEvent('apartments:server:setCurrentApartment', CurrentApartment)
@@ -451,7 +447,6 @@ local function LeaveApartment(house)
     DoScreenFadeOut(500)
     while not IsScreenFadedOut() do Wait(10) end
     exports['qb-interior']:DespawnInterior(HouseObj, function()
-        TriggerEvent('qb-weathersync:client:EnableSync')
         SetEntityCoords(PlayerPedId(), Apartments.Locations[house].coords.enter.x, Apartments.Locations[house].coords.enter.y, Apartments.Locations[house].coords.enter.z)
         SetEntityHeading(PlayerPedId(), Apartments.Locations[house].coords.enter.w)
         Wait(1000)
@@ -540,7 +535,6 @@ AddEventHandler('onResourceStop', function(resource)
         if HouseObj ~= nil then
             exports['qb-interior']:DespawnInterior(HouseObj, function()
                 CurrentApartment = nil
-                TriggerEvent('qb-weathersync:client:EnableSync')
                 DoScreenFadeIn(500)
                 while not IsScreenFadedOut() do
                     Wait(10)

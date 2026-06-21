@@ -49,7 +49,7 @@
                                     <div class="char-job-box">
                                         <span class="material-symbols-outlined section-icon">work</span>
                                         <div class="section-details">
-                                            <div class="section-title">职业与职级</div>
+                                            <div class="section-title">Job & Grade</div>
                                             <div class="section-value">{{characters[index].job.label}} - {{characters[index].job.grade.name}}</div>
                                         </div>
                                     </div>
@@ -59,14 +59,14 @@
                                         <div class="fin-item">
                                             <span class="material-symbols-outlined fin-icon cash">payments</span>
                                             <div class="fin-details">
-                                                <span class="fin-label">现金</span>
+                                                <span class="fin-label">Cash</span>
                                                 <span class="fin-value">${{dollar.format(characters[index].money.cash)}}</span>
                                             </div>
                                         </div>
                                         <div class="fin-item">
                                             <span class="material-symbols-outlined fin-icon bank">account_balance</span>
                                             <div class="fin-details">
-                                                <span class="fin-label">银行</span>
+                                                <span class="fin-label">Bank</span>
                                                 <span class="fin-value">${{dollar.format(characters[index].money.bank)}}</span>
                                             </div>
                                         </div>
@@ -77,7 +77,7 @@
                                         <!-- Health Status -->
                                         <div class="status-bar-container">
                                             <div class="status-bar-header">
-                                                <span class="status-bar-title"><span class="material-symbols-outlined status-icon-health">favorite</span> 生命值</span>
+                                                <span class="status-bar-title"><span class="material-symbols-outlined status-icon-health">favorite</span> Health</span>
                                                 <span class="status-bar-percent">{{ Math.round((characters[index].metadata?.health || 100) / (characters[index].metadata?.health > 100 ? 2 : 1)) }}%</span>
                                             </div>
                                             <div class="status-bar-bg">
@@ -88,7 +88,7 @@
                                         <!-- Sanity / Stress Status -->
                                         <div class="status-bar-container">
                                             <div class="status-bar-header">
-                                                <span class="status-bar-title"><span class="material-symbols-outlined status-icon-sanity">psychology</span> 理智度</span>
+                                                <span class="status-bar-title"><span class="material-symbols-outlined status-icon-sanity">psychology</span> Sanity</span>
                                                 <span class="status-bar-percent">{{ 100 - Math.round(characters[index].metadata?.stress || 0) }}%</span>
                                             </div>
                                             <div class="status-bar-bg">
@@ -99,7 +99,7 @@
                                         <!-- Hunger Status -->
                                         <div class="status-bar-container">
                                             <div class="status-bar-header">
-                                                <span class="status-bar-title"><span class="material-symbols-outlined status-icon-hunger">restaurant</span> 饱食度</span>
+                                                <span class="status-bar-title"><span class="material-symbols-outlined status-icon-hunger">restaurant</span> Hunger</span>
                                                 <span class="status-bar-percent">{{ Math.round(characters[index].metadata?.hunger || 100) }}%</span>
                                             </div>
                                             <div class="status-bar-bg">
@@ -110,7 +110,7 @@
                                         <!-- Thirst Status -->
                                         <div class="status-bar-container">
                                             <div class="status-bar-header">
-                                                <span class="status-bar-title"><span class="material-symbols-outlined status-icon-thirst">water_drop</span> 水分值</span>
+                                                <span class="status-bar-title"><span class="material-symbols-outlined status-icon-thirst">water_drop</span> Thirst</span>
                                                 <span class="status-bar-percent">{{ Math.round(characters[index].metadata?.thirst || 100) }}%</span>
                                             </div>
                                             <div class="status-bar-bg">
@@ -122,8 +122,8 @@
                                     <!-- Last Logout Location -->
                                     <div class="char-location-box">
                                         <span class="material-symbols-outlined location-icon">location_on</span>
-                                        <div class="location-text" :title="characters[index].location || '未知位置'">
-                                            {{characters[index].location || '未知位置'}}
+                                        <div class="location-text" :title="characters[index].location || 'Unknown Location'">
+                                            {{characters[index].location || 'Unknown Location'}}
                                         </div>
                                     </div>
 
@@ -131,11 +131,11 @@
                                     <div v-if="selectedCharacter == index" class="character-actions">
                                         <div class="action-btn play-btn" @click.stop="play_character">
                                             <span class="material-symbols-outlined">play_circle</span>
-                                            <span class="action-btn-text">进入游戏</span>
+                                            <span class="action-btn-text">Enter Game</span>
                                         </div>
                                         <div v-if="allowDelete" class="action-btn delete-btn" @click.stop="prepareDelete">
                                             <span class="material-symbols-outlined">delete</span>
-                                            <span class="action-btn-text">注销角色</span>
+                                            <span class="action-btn-text">Delete Character</span>
                                         </div>
                                     </div>
                                 </template>
@@ -144,7 +144,7 @@
                                 <template v-else>
                                     <div class="empty-slot-container" @click.stop="selectedCharacter = index; resetRegisterData(); show.characters = false; show.register = true;">
                                         <div class="empty-slot-plus">+</div>
-                                        <div class="empty-slot-text">创建新角色</div>
+                                        <div class="empty-slot-text">Create Character</div>
                                     </div>
                                 </template>
                             </div>

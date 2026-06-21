@@ -4,7 +4,7 @@
     "serverName": "T-City"
   },
   "server": {
-    "dataPath": "D:/txData/T-CityLite.base/"
+    "dataPath": "F:/t-city/T-CityLite.base/"
   },
   "whitelist": {
     "mode": "adminOnly"

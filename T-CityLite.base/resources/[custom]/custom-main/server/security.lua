@@ -173,7 +173,7 @@ CreateThread(function()
             
             -- 检查冷却限制
             if not CheckRateLimit(source, "shop_purchase", rateLimitMs) then
-                TriggerClientEvent('QBCore:Notify', source, "您的操作过于频繁，请慢一点", "error")
+                TriggerClientEvent('QBCore:Notify', source, _L(src, 'security_too_frequent'), "error")
                 cb(false)
                 return
             end
@@ -213,14 +213,14 @@ CreateThread(function()
                     )
                     exports['custom-main']:LogSecurity("拦截非法刷车企图", text, 16711680)
                     
-                    TriggerClientEvent('QBCore:Notify', source, "您没有权限生成此载具", "error")
+                    TriggerClientEvent('QBCore:Notify', source, _L(src, 'security_no_car_perm'), "error")
                     cb(false)
                     return
                 end
 
                 -- 频率限制：非管理员限频，每 5 秒只能刷 1 辆车，防止刷车搞崩服务器
                 if not isadmin and not CheckRateLimit(source, "vehicle_spawn", 5000) then
-                    TriggerClientEvent('QBCore:Notify', source, "召唤载具过于频繁，请稍等 5 秒", "error")
+                    TriggerClientEvent('QBCore:Notify', source, _L(src, 'security_car_cooldown'), "error")
                     cb(false)
                     return
                 end

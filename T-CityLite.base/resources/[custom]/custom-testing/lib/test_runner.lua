@@ -246,9 +246,9 @@ function Test.runAll(source)
         overall.skip = overall.skip + (result.skip or 0)
     end
 
-    print("\n" .. "=" * 60)
+    print("\n" .. string.rep("=", 60))
     print("  总体报告")
-    print("=" * 60)
+    print(string.rep("=", 60))
     print(("  ✅ %d PASS | ❌ %d FAIL | 🔴 %d ERROR | ⏭️ %d SKIP"):format(
         overall.pass, overall.fail, overall.error, overall.skip))
     print()

@@ -84,7 +84,9 @@ function LoadInventory(source, citizenid)
     end
 
     if #missingItems > 0 then
-        print(('The following items were removed for player %s as they no longer exist: %s'):format(source and GetPlayerName(source) or citizenid, table.concat(missingItems, ', ')))
+        -- 🔒 Security: 用玩家名替代 citizenid
+        local playerLabel = source and GetPlayerName(source) or ('cid:' .. citizenid:sub(1,4) .. '...')
+        print(('The following items were removed for player %s as they no longer exist: %s'):format(playerLabel, table.concat(missingItems, ', ')))
     end
 
     return loadedInventory
@@ -136,7 +138,9 @@ exports('SaveInventory', SaveInventory)
 function SetInventory(identifier, items, reason)
     local player = QBCore.Functions.GetPlayer(identifier)
 
-    print('Setting inventory for ' .. identifier)
+    -- 🔒 Security: identifier 脱敏
+    local maskedId = #identifier > 8 and (identifier:sub(1,4) .. '...' .. identifier:sub(-4)) or '***'
+    print('Setting inventory for ' .. maskedId)
 
     if not player and not Inventories[identifier] and not Drops[identifier] then
         print('SetInventory: Inventory not found')

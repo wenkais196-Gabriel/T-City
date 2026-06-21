@@ -34,8 +34,14 @@
   } from './stores/phone';
   import { onMount } from 'svelte';
 
-  // Background Wallpaper URL
-  const wallpaperUrl = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=375&auto=format&fit=crop';
+  // Background Wallpaper - 使用 CSS 渐变替代 Unsplash 网络图片（消除 HTTP 请求卡顿）
+  const wallpaperUrl = '';
+
+  // Game Time sync state (必须在 onMount 外层，模板才能访问)
+  let gameHour = $state(12);
+  let gameMinute = $state(0);
+  let gameDayName = $state('Sunday');
+  let gameDate = $state('May 31');
 
   onMount(() => {
     // 1. Listen for Phone Open signal from Lua
@@ -107,9 +113,19 @@
       activeApp.update(app => app.startsWith('leader_') ? 'home' : app);
     });
 
-    // Global keydown Escape listener to safely exit
+    // 8. Game Time sync from Lua (GTA V native clock)
+    registerNuiEvent('phone:updateTime', (data) => {
+      if (data) {
+        gameHour = data.hour;
+        gameMinute = data.minute;
+        gameDayName = data.dayName;
+        gameDate = data.date;
+      }
+    });
+
+    // Global keydown listener to safely exit (Esc = close, M = toggle)
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' || e.key === 'm' || e.key === 'M') {
         closePhone();
       }
     };
@@ -153,11 +169,11 @@
     {#if $activeApp === 'home'}
       <!-- iOS-Style Premium Home Screen -->
       <div class="home-screen app-transition">
-        <!-- Widget Area -->
+        <!-- Widget Area (Game Time Sync) -->
         <div class="widget-area glass-effect">
           <div class="widget-time-row">
-            <span class="widget-day">Sunday</span>
-            <span class="widget-date">May 31</span>
+            <span class="widget-time">{String(gameHour).padStart(2, '0')}:{String(gameMinute).padStart(2, '0')}</span>
+            <span class="widget-day">{gameDayName} · {gameDate}</span>
           </div>
           <div class="widget-details">
             <span class="widget-temp">72°F</span>
@@ -320,8 +336,7 @@
   .phone-wallpaper {
     position: absolute;
     inset: 0;
-    background-size: cover;
-    background-position: center;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
     z-index: 0;
   }
 
@@ -368,16 +383,20 @@
     gap: 2px;
   }
 
-  .widget-day {
-    font-size: 14.5px;
+  .widget-time {
+    font-size: 42px;
     font-weight: 800;
     font-family: 'Outfit', sans-serif;
+    letter-spacing: 2px;
+    line-height: 1;
   }
 
-  .widget-date {
-    font-size: 11px;
-    color: #bbb;
+  .widget-day {
+    font-size: 13px;
     font-weight: 600;
+    color: #ddd;
+    font-family: 'Outfit', sans-serif;
+    margin-top: 2px;
   }
 
   .widget-details {

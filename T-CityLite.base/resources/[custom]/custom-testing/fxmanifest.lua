@@ -13,9 +13,11 @@ shared_scripts {
 }
 
 server_scripts {
+    '@core-framework/bus.lua',
     'lib/test_runner.lua',
     'lib/mock_events.lua',
     'server_test.lua',
+    'stress_test.lua',
     'suites/*.lua',
 }
 

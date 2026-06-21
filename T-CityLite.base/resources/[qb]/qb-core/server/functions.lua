@@ -155,6 +155,24 @@ function QBCore.Functions.GetPlayersByJob(job, checkOnDuty)
     return players, count
 end
 
+--- 三位一体: 获取拥有某项资质的所有在线玩家
+---@param qualification string 资质标识
+---@return table {source_id, ...}
+function QBCore.Functions.GetPlayersByQualification(qualification)
+    if not Bus or not Bus.MetadataService then
+        -- fallback: 直接遍历
+        local players = {}
+        for src, Player in pairs(QBCore.Players) do
+            local meta = Player.PlayerData and Player.PlayerData.metadata
+            if meta and meta.qualifications and meta.qualifications[qualification] then
+                players[#players + 1] = src
+            end
+        end
+        return players
+    end
+    return Bus.MetadataService.GetPlayersByQualification(qualification)
+end
+
 ---Gets a list of all on duty players of a specified job and the number
 ---@param job string
 ---@return table, number
@@ -410,68 +428,21 @@ function PaycheckInterval()
         local payment = QBShared.Jobs[Player.PlayerData.job.name]['grades'][tostring(Player.PlayerData.job.grade.level)].payment
         if not payment then payment = Player.PlayerData.job.payment end
         if Player.PlayerData.job and payment > 0 and (QBShared.Jobs[Player.PlayerData.job.name].offDutyPay or Player.PlayerData.job.onduty) then
+            -- 🔄 统一走 Player.Functions.AddMoney → Bus.EconomyService (内存优先 + DirtyFlush)
             if QBCore.Config.Money.PayCheckSociety then
                 local account = exports['qb-banking']:GetAccountBalance(Player.PlayerData.job.name)
-                if account ~= 0 then
-                    if account < payment then
-                        TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('error.company_too_poor'), 'error')
-                    else
-                        local finalPayment = payment
-                        local useCustomEconomy = GetResourceState('custom-main') ~= 'missing' and GetResourceState('custom-main') ~= 'stopped'
-                        if useCustomEconomy then
-                            local ok, result, scale = pcall(function()
-                                return exports['custom-main']:AddScaledMoney(Player.PlayerData.source, 'bank', payment, 'paycheck')
-                            end)
-                            if ok and type(result) == 'number' and result > 0 then
-                                finalPayment = result
-                            else
-                                Player.Functions.AddMoney('bank', payment, 'paycheck')
-                                finalPayment = payment
-                            end
-                        else
-                            Player.Functions.AddMoney('bank', payment, 'paycheck')
-                        end
-
-                        exports['qb-banking']:RemoveMoney(Player.PlayerData.job.name, finalPayment, 'Employee Paycheck')
-                        TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = finalPayment }))
-                    end
-                else
-                    local finalPayment = payment
-                    local useCustomEconomy = GetResourceState('custom-main') ~= 'missing' and GetResourceState('custom-main') ~= 'stopped'
-                    if useCustomEconomy then
-                        local ok, result, scale = pcall(function()
-                            return exports['custom-main']:AddScaledMoney(Player.PlayerData.source, 'bank', payment, 'paycheck')
-                        end)
-                        if ok and type(result) == 'number' and result > 0 then
-                            finalPayment = result
-                        else
-                            Player.Functions.AddMoney('bank', payment, 'paycheck')
-                            finalPayment = payment
-                        end
-                    else
-                        Player.Functions.AddMoney('bank', payment, 'paycheck')
-                    end
-
-                    TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = finalPayment }))
-                end
-            else
-                local finalPayment = payment
-                local useCustomEconomy = GetResourceState('custom-main') ~= 'missing' and GetResourceState('custom-main') ~= 'stopped'
-                if useCustomEconomy then
-                    local ok, result, scale = pcall(function()
-                        return exports['custom-main']:AddScaledMoney(Player.PlayerData.source, 'bank', payment, 'paycheck')
-                    end)
-                    if ok and type(result) == 'number' and result > 0 then
-                        finalPayment = result
-                    else
-                        Player.Functions.AddMoney('bank', payment, 'paycheck')
-                        finalPayment = payment
-                    end
+                if account ~= 0 and account < payment then
+                    TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('error.company_too_poor'), 'error')
                 else
                     Player.Functions.AddMoney('bank', payment, 'paycheck')
+                    if account ~= 0 then
+                        exports['qb-banking']:RemoveMoney(Player.PlayerData.job.name, payment, 'Employee Paycheck')
+                    end
+                    TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
                 end
-
-                TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = finalPayment }))
+            else
+                Player.Functions.AddMoney('bank', payment, 'paycheck')
+                TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
             end
         end
     end
@@ -754,13 +725,48 @@ function QBCore.Functions.HasItem(source, items, amount)
     return exports['qb-inventory']:HasItem(source, items, amount)
 end
 
----Notify
----@param source any
----@param text string
----@param type string
----@param length number
-function QBCore.Functions.Notify(source, text, type, length)
-    TriggerClientEvent('QBCore:Notify', source, text, type, length)
+--- 统一通知入口 (服务端 → 客户端路由)
+--- 🛡️ 五层安全: Source 校验 → 存活检查 → 限流防刷 → 内容清洗 → Bus 路由
+---@param source any       目标玩家 source
+---@param text string      通知文本
+---@param texttype string  通知类型 (注意: 不能叫 type，会覆盖内置函数)
+---@param length number    显示时长 (ms)
+function QBCore.Functions.Notify(source, text, texttype, length)
+    -- ═══════════════════════════════════════════════════════════
+    -- 第1层: Source 有效性校验
+    -- ═══════════════════════════════════════════════════════════
+    if not source or type(source) ~= 'number' or source <= 0 then
+        return
+    end
+
+    -- ═══════════════════════════════════════════════════════════
+    -- 第2层: 玩家存活校验
+    -- ═══════════════════════════════════════════════════════════
+    if GetPlayerPing(source) == 0 then
+        return -- 玩家不存在或已离线
+    end
+
+    -- ═══════════════════════════════════════════════════════════
+    -- 第3层: 内容安全清洗
+    -- ═══════════════════════════════════════════════════════════
+    local safeText = text
+    if type(text) == 'string' then
+        safeText = text:sub(1, 300)                      -- 截断过长内容
+            :gsub('[\0\1\2\3]', '')                      -- 移除控制字符
+    end
+
+    -- ═══════════════════════════════════════════════════════════
+    -- 第4层: 优先走 Bus.notify 服务 (含限流 + 审计)
+    -- ═══════════════════════════════════════════════════════════
+    if _G.Bus and _G.Bus.notify and _G.Bus.notify.Send then
+        _G.Bus.notify.Send(source, safeText, texttype, length)
+        return
+    end
+
+    -- ═══════════════════════════════════════════════════════════
+    -- 第5层: 回退 — 直连客户端事件 (无 Bus 时)
+    -- ═══════════════════════════════════════════════════════════
+    TriggerClientEvent('QBCore:Notify', source, safeText, texttype, length)
 end
 
 ---???? ... ok

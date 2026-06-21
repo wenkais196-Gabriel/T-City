@@ -119,7 +119,15 @@ RegisterNetEvent('qb-garbagejob:server:PayShift', function(continue)
             payoutDeposit = ''
         end
 
-        Player.Functions.AddMoney('bank', totalToPay, 'garbage-payslip')
+        -- 💰 统一经济网关 (自动应用 global × heat 系数)
+        if GetResourceState('core_economy') == 'started' then
+            exports['core_economy']:TriggerReward(src, 'garbage_collection', totalToPay, {
+                moneytype = 'bank',
+                reason = 'garbage-payslip',
+            })
+        else
+            Player.Functions.AddMoney('bank', totalToPay, 'garbage-payslip')
+        end
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.pay_slip', { total = totalToPay, deposit = payoutDeposit }), 'success')
         Routes[CitizenId] = nil
     else

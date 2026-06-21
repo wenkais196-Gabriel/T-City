@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>剧情抉择</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        #decision-panel {
+            display: none;
+            width: 600px;
+            max-width: 90vw;
+            background: linear-gradient(180deg, rgba(20,20,30,0.95) 0%, rgba(10,10,20,0.98) 100%);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 8px 8px 0 0;
+            padding: 24px 28px 28px;
+            margin-bottom: 80px;
+            box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        #prompt {
+            color: #ccc;
+            font-size: 15px;
+            line-height: 1.5;
+            margin-bottom: 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding-bottom: 16px;
+        }
+        #options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .option-btn {
+            width: 100%;
+            padding: 14px 18px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            color: #ddd;
+            font-size: 14px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            outline: none;
+        }
+        .option-btn:hover {
+            background: rgba(200,160,60,0.15);
+            border-color: rgba(200,160,60,0.4);
+            color: #fff;
+            transform: translateX(4px);
+        }
+        .option-btn:active {
+            background: rgba(200,160,60,0.25);
+        }
+        .option-label {
+            font-weight: 600;
+            color: #c8a03c;
+            margin-right: 8px;
+        }
+        #timer {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.04);
+        }
+        #timer.warning { color: #c84; }
+        #timer.danger { color: #c44; }
+    </style>
+</head>
+<body>
+    <div id="decision-panel">
+        <div id="prompt"></div>
+        <div id="options"></div>
+        <div id="timer"></div>
+    </div>
+
+    <script>
+        var remainingSec = 0;
+        var timerInterval = null;
+
+        function openDecision(data) {
+            var panel = document.getElementById('decision-panel');
+            var prompt = document.getElementById('prompt');
+            var options = document.getElementById('options');
+            var timer = document.getElementById('timer');
+
+            prompt.textContent = data.prompt || '做出你的选择...';
+
+            // 渲染选项
+            options.innerHTML = '';
+            var labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+            (data.options || []).forEach(function(opt, idx) {
+                var btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.innerHTML = '<span class="option-label">[' + (labels[idx] || '?') + ']</span>' + (opt.text || '选项 ' + (idx+1));
+                btn.onclick = function() {
+                    fetch('https://cfx-nui-story-engine/makeChoice', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ optionId: opt.id })
+                    });
+                    closePanel();
+                };
+                options.appendChild(btn);
+            });
+
+            // 倒计时
+            remainingSec = data.timeout || 120;
+            updateTimer();
+            timerInterval = setInterval(function() {
+                remainingSec--;
+                if (remainingSec <= 0) {
+                    clearInterval(timerInterval);
+                    fetch('https://cfx-nui-story-engine/decisionTimeout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reason: 'timeout' })
+                    });
+                    closePanel();
+                }
+                updateTimer();
+            }, 1000);
+
+            panel.style.display = 'block';
+        }
+
+        function updateTimer() {
+            var timer = document.getElementById('timer');
+            var min = Math.floor(remainingSec / 60);
+            var sec = remainingSec % 60;
+            timer.textContent = '⏳ ' + min + ':' + (sec < 10 ? '0' : '') + sec;
+
+            timer.className = '';
+            if (remainingSec <= 15) timer.className = 'danger';
+            else if (remainingSec <= 30) timer.className = 'warning';
+        }
+
+        function closePanel() {
+            var panel = document.getElementById('decision-panel');
+            panel.style.display = 'none';
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        // 监听 Lua 端消息
+        window.addEventListener('message', function(event) {
+            var data = event.data;
+            if (!data || !data.type) return;
+
+            switch (data.type) {
+                case 'openDecision':
+                    openDecision(data);
+                    break;
+                case 'closeDecision':
+                    closePanel();
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>

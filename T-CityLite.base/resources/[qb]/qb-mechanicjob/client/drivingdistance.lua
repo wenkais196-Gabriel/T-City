@@ -1,6 +1,8 @@
 local vehicle, plate
 local vehicleComponents = {}
 local drivingDistance = {}
+-- 防重复触发：记录每个部件是否已触发过故障效果（修理后清除）
+local componentEffectTriggered = {}
 
 -- Function
 
@@ -45,8 +47,15 @@ local function DamageRandomComponent()
     end
     local componentToDamage = componentKeys[math.random(#componentKeys)]
     vehicleComponents[plate][componentToDamage] = math.max(0, vehicleComponents[plate][componentToDamage] - Config.WearablePartsDamage)
+    -- 只在首次跌破阈值时触发一次故障效果，防止反复触发（如散热器反复扣50引擎健康度导致不可逆着火）
     if vehicleComponents[plate][componentToDamage] <= Config.DamageThreshold then
-        ApplyComponentEffect(componentToDamage)
+        if not componentEffectTriggered[plate] then
+            componentEffectTriggered[plate] = {}
+        end
+        if not componentEffectTriggered[plate][componentToDamage] then
+            ApplyComponentEffect(componentToDamage)
+            componentEffectTriggered[plate][componentToDamage] = true
+        end
     end
 end
 
@@ -112,6 +121,22 @@ local function TrackDistance()
         end
     end)
 end
+
+-- 修理后重置所有磨损部件状态（来自 repair.lua 的 fix/fixEverything）
+RegisterNetEvent('qb-mechanicjob:client:resetAllComponents', function(resetPlate)
+    if not Config.UseWearableParts then return end
+    if not resetPlate then return end
+    resetPlate = Trim(resetPlate)
+    if vehicleComponents[resetPlate] then
+        for part, data in pairs(Config.WearableParts) do
+            vehicleComponents[resetPlate][part] = data.maxValue
+        end
+    end
+    -- 清除故障效果触发记录，允许再次触发（正常磨损流程）
+    if componentEffectTriggered[resetPlate] then
+        componentEffectTriggered[resetPlate] = nil
+    end
+end)
 
 -- Handler
 

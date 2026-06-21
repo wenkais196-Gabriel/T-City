@@ -130,6 +130,8 @@ $(".dial").on("touchend", function () {
     findCombo(combo);
 });
 
+var toastTimeout = null;
+
 $(function () {
     //pop vars
     pin = $("#pin");
@@ -137,6 +139,7 @@ $(function () {
     driver = $("#driver");
 
     $("#wrap").hide();
+    $("#conscience-toast").hide();
 
     window.addEventListener("message", function (event) {
         var eventData = event.data;
@@ -167,6 +170,18 @@ $(function () {
 
         if (eventData.action == "closePadlock") {
             Padlock.Close();
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // 良心弹窗 (纯独白文字, CSS动画30秒自动淡出)
+        // ═══════════════════════════════════════════════════════
+        if (eventData.action == "openConscienceToast") {
+            $("#toastMonologue").text(eventData.monologue || "");
+            // 移除旧实例重新触发CSS动画
+            $("#conscience-toast").removeClass("active").hide();
+            setTimeout(function() {
+                $("#conscience-toast").addClass("active").show();
+            }, 50);
         }
 
         if (eventData.action == "kekw") {

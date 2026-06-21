@@ -143,3 +143,18 @@ function Locale:delete(phraseTarget, prefix)
         end
     end
 end
+
+-- ═══════════════════════════════════════════════════════════
+-- v0.7.1: _L 全局安全兜底 (共享脚本 — client + server 均生效)
+-- 防止 production-freeze 加载前其他脚本调用 _L 导致 nil 崩溃
+-- production-freeze 加载后会用自己的 _L 覆盖此 fallback
+-- ═══════════════════════════════════════════════════════════
+if _L == nil then
+    _L = function(key, ...)
+        if not key then return '' end
+        if select('#', ...) > 0 then
+            return ('[%s]'):format(tostring(key))
+        end
+        return '[' .. tostring(key) .. ']'
+    end
+end

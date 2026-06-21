@@ -161,6 +161,11 @@ RegisterNetEvent('qb-mechanicjob:client:repairVehicleFull', function()
         SetVehicleDeformationFixed(vehicle)
         SetVehiclePetrolTankHealth(vehicle, 1000.0)
         SetVehicleFixed(vehicle)
+        -- 🔧 重置所有磨损部件状态，防止修好后散热器/刹车等仍处于损坏状态导致再次着火
+        local plate = QBCore.Functions.GetPlate(vehicle)
+        if plate then
+            TriggerEvent('qb-mechanicjob:client:resetAllComponents', plate)
+        end
         ToggleHood(vehicle)
         QBCore.Functions.Notify(Lang:t('success.repaired'), 'success')
         TriggerServerEvent('qb-mechanicjob:server:removeItem', 'advancedrepairkit')
@@ -238,6 +243,11 @@ RegisterNetEvent('qb-mechanicjob:client:fixEverything', function()
             FixVehicleWindow(vehicle, i)
         end
         exports[Config.FuelResource]:SetFuel(vehicle, 100)
+        -- 🔧 重置所有磨损部件状态（管理员 fix 命令同样需要）
+        local plate = QBCore.Functions.GetPlate(vehicle)
+        if plate then
+            TriggerEvent('qb-mechanicjob:client:resetAllComponents', plate)
+        end
         QBCore.Functions.Notify(Lang:t('success.repaired'), 'success')
     end)
 end)

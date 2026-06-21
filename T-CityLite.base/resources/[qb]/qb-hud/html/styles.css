@@ -138,6 +138,11 @@ div#q-loading-bar {
     height: auto;
 }
 
+/* 仪表盘整体左移 2vh */
+#veh-container {
+    margin-left: -2vh;
+}
+
 /* Money */
 #money-container {
     position: absolute;
@@ -183,8 +188,9 @@ div#q-loading-bar {
 #playerhud {
     position: absolute;
     display: flex;
-    left: 3vh;
+    left: 50%;
     bottom: 0.2vw;
+    transform: translateX(-50%);
 }
 
 .q-ml-xl {
@@ -243,7 +249,7 @@ altitude {
     bottom: 6.3%;
     width: 29vh;
     height: 18.5vh;
-    border: 4px solid #bababa;
+    border: none;
     position: absolute;
     display: inline-block;
 }
@@ -252,7 +258,7 @@ altitude {
     bottom: 6.9%;
     width: 27vh;
     height: 22.9vh;
-    border: 4px solid #bababa;
+    border: none;
     position: absolute;
     display: inline-block;
     border-radius: 50%;
@@ -377,3 +383,51 @@ altitude {
     font-weight: 600;
     text-shadow: 0 0 1px rgba(0, 0, 0, 0.6), 0 0 1px rgba(0, 0, 0, 0.6), 0 0 1px rgba(0, 0, 0, 0.6), 0 0 1px rgba(0, 0, 0, 0.6);
 }
+
+/* Waypoint Distance — 原生 GTA 小地图风格 */
+#waypoint-distance-container {
+    position: absolute;
+    bottom: 19%;
+    left: 17vh;
+    width: 16vh;
+    text-align: center;
+    z-index: 100;
+}
+
+.waypoint-distance-text {
+    font-family: "Yantramanav", "Arial", sans-serif;
+    font-size: 1.8vh;
+    font-weight: 700;
+    font-variant: small-caps;
+    letter-spacing: 0.5px;
+    color: #ffffff;
+    opacity: 0.9;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 4px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+/* Task Timer — 左侧垂直居中，三色阶段过渡 */
+#task-timer-container {
+    position: absolute;
+    left: 2.5vh;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 100;
+}
+
+.task-timer-wrapper {
+    /* v-show 挂载点，无额外样式 */
+}
+
+.task-timer-text {
+    font-family: "Yantramanav", "Arial", sans-serif;
+    font-size: 3vh;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.6);
+    transition: color 0.5s ease;
+}
+
+.phase-fast    { color: #00c850; }
+.phase-normal  { color: #dcaa00; }
+.phase-overtime { color: #dc2828; }

@@ -207,7 +207,6 @@ end
 
 function ComboZone:isPointInside(point, zoneName)
   if self.destroyed then
-    print("[PolyZone] Warning: Called isPointInside on destroyed zone {name=" .. self.name .. "}")
     return false, {}
   end
 
@@ -225,7 +224,6 @@ end
 
 function ComboZone:isPointInsideExhaustive(point, insideZones)
   if self.destroyed then
-    print("[PolyZone] Warning: Called isPointInside on destroyed zone {name=" .. self.name .. "}")
     return false, {}
   end
 

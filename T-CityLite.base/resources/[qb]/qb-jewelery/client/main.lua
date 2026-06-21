@@ -110,7 +110,7 @@ CreateThread(function()
     SetBlipAsShortRange(Dealer, true)
     SetBlipColour(Dealer, 3)
     BeginTextCommandSetBlipName('STRING')
-    AddTextComponentSubstringPlayerName('Vangelico Jewelry')
+    AddTextComponentSubstringPlayerName(_L('blip_vangelico_jewelry'))
     EndTextCommandSetBlipName(Dealer)
 end)
 

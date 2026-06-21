@@ -142,9 +142,21 @@ local function getItem(source, item, amount)
     end
 end
 
+-- [SECURITY] Per-player cooldown for recycle job
+local RecycleCooldowns = {}
+
 RegisterNetEvent('qb-recyclejob:server:getItem', function()
     local src = source
+    if not src or src == 0 then return end
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- [SECURITY] 3-second cooldown per player
+    local cid = Player.PlayerData.citizenid
+    local now = os.time()
+    if RecycleCooldowns[cid] and (now - RecycleCooldowns[cid]) < 3 then
+        return
+    end
+    RecycleCooldowns[cid] = now
     if not isClose(src, 'turnIn') then
         if not uhohs[src] then uhohs[src] = 1 return end
         uhohs[src] = uhohs[src] + 1 or 1

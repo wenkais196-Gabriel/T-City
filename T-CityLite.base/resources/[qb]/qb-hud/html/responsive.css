@@ -566,3 +566,5 @@
         bottom: 6.9% !important;
     }
 }
+
+/* Waypoint Distance — 使用 styles.css 统一值 (20vh, 6%)，不再按分辨率覆盖 */
