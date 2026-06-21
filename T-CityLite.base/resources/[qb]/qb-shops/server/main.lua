@@ -25,6 +25,25 @@ local function checkTable(inputValue, requiredValue)
     return false
 end
 
+-- 📊 动态定价: 读取 NPCPricing 引擎或 economy_baseline 的实时价格
+---@param itemName string
+---@param basePrice number
+---@return number dynamicPrice
+local function getDynamicPrice(itemName, basePrice)
+    -- 优先使用 NPCPricing 引擎 (NPC 动态定价)
+    if _G.Bus and _G.Bus.NPCPricing then
+        return _G.Bus.NPCPricing.GetBuyPrice(itemName, basePrice)
+    end
+    -- Fallback: 使用全局经济乘数
+    local globalMult = 1.0
+    if exports['core_economy'] then
+        globalMult = exports['core_economy']:GetGlobalMultiplier()
+    else
+        globalMult = (GetConvarInt('economy_reward_scale', 100) / 100.0)
+    end
+    return math.floor(basePrice * globalMult + 0.5)
+end
+
 local function saveShopInv(shop, products)
     local shopinv = {}
     shopinv[shop] = {}
@@ -55,7 +74,7 @@ RegisterNetEvent('qb-shops:server:RestockShopItems', function(shop)
     deliveryPay(src, shop)
     if not Config.Locations[shop].useStock then return end
     local randAmount = math.random(10, 50)
-    for k in pairs(Config.Locations[shop].products) do Config.Locations[shop].products[k].amount += randAmount end
+    for k in pairs(Config.Locations[shop].products) do Config.Locations[shop].products[k].amount = Config.Locations[shop].products[k].amount + randAmount end
     saveShopInv(shop, Config.Locations[shop].products)
     TriggerClientEvent('qb-shops:client:SetShopItems', -1, shop, Config.Locations[shop].products)
 end)
@@ -64,7 +83,7 @@ RegisterNetEvent('qb-shops:server:UpdateShopItems', function(shop, itemData, amo
     if not shop or not itemData or not amount then return end
     if not Config.Locations[shop] then return end
     if not Config.Locations[shop].useStock then return end
-    Config.Locations[shop].products[itemData.slot].amount -= amount
+    Config.Locations[shop].products[itemData.slot].amount = Config.Locations[shop].products[itemData.slot].amount - amount
     if Config.Locations[shop].products[itemData.slot].amount < 0 then
         Config.Locations[shop].products[itemData.slot].amount = 0
     end
@@ -159,6 +178,8 @@ RegisterNetEvent('qb-shops:server:openShop', function(data)
 
         if addProduct then
             curProduct.slot = #items + 1
+            -- 📊 动态定价: 基础价格 × 全局乘数 × 供需热度
+            curProduct.price = getDynamicPrice(curProduct.name, curProduct.price)
             items[#items + 1] = curProduct
         end
     end

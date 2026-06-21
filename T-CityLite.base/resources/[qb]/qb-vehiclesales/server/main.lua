@@ -1,5 +1,33 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- 车辆类别 → 证件类型映射
+local VehicleClassLicenseMap = {
+    [0] = 'driver', [1] = 'driver', [2] = 'driver', [3] = 'driver', [4] = 'driver',
+    [5] = 'driver', [6] = 'driver', [7] = 'driver', [8] = 'driver', [9] = 'driver',
+    [10] = 'heavy', [11] = 'heavy', [17] = 'heavy', [19] = 'heavy', [20] = 'heavy',
+    [12] = 'driver', [13] = 'driver', [18] = 'driver', [22] = 'driver',
+    [14] = 'boat',
+    [15] = 'pilot', [16] = 'pilot',
+}
+
+local function CheckVehicleLicense(player, vehicleModel)
+    local hash = GetHashKey(vehicleModel)
+    local vehClass = GetVehicleClassFromName(hash)
+    local requiredLicense = VehicleClassLicenseMap[vehClass]
+    if not requiredLicense then return true end
+    local licences = player.PlayerData.metadata['licences']
+    if not licences then return false end
+    return licences[requiredLicense] == true
+end
+
+local function GetRequiredLicenseName(vehicleModel)
+    local hash = GetHashKey(vehicleModel)
+    local vehClass = GetVehicleClassFromName(hash)
+    local requiredLicense = VehicleClassLicenseMap[vehClass]
+    local names = { driver = 'Driver License', pilot = 'Pilot License', boat = 'Boat License', heavy = 'Heavy Vehicle License' }
+    return requiredLicense and names[requiredLicense] or nil
+end
+
 -- Functions
 
 local function generateOID()
@@ -105,6 +133,11 @@ end)
 RegisterNetEvent('qb-occasions:server:buyVehicle', function(vehicleData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not CheckVehicleLicense(Player, vehicleData.model) then
+        local licenseName = GetRequiredLicenseName(vehicleData.model)
+        TriggerClientEvent('QBCore:Notify', src, ('You need a %s to purchase this vehicle!'):format(licenseName or 'license'), 'error', 5000)
+        return
+    end
     local result = MySQL.query.await('SELECT * FROM occasion_vehicles WHERE plate = ? AND occasionid = ?', { vehicleData['plate'], vehicleData['oid'] })
     if result[1] and next(result[1]) then
         if Player.PlayerData.money.bank >= result[1].price then

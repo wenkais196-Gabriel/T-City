@@ -27,7 +27,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public', -- public, gang, job, depot
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     casinogarage = {
         label = 'Casino Parking',
@@ -40,7 +41,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     sapcounsel = {
         label = 'San Andreas Parking',
@@ -53,7 +55,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     spanishave = {
         label = 'Spanish Ave Parking',
@@ -66,7 +69,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     caears24 = {
         label = 'Caears 24 Parking',
@@ -79,7 +83,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     caears242 = {
         label = 'Caears 24 Parking',
@@ -92,7 +97,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     lagunapi = {
         label = 'Laguna Parking',
@@ -105,7 +111,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     airportp = {
         label = 'Airport Parking',
@@ -118,7 +125,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     beachp = {
         label = 'Beach Parking',
@@ -131,7 +139,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     themotorhotel = {
         label = 'The Motor Hotel Parking',
@@ -144,7 +153,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     liqourparking = {
         label = 'Liqour Parking',
@@ -157,7 +167,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     shoreparking = {
         label = 'Shore Parking',
@@ -170,7 +181,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     haanparking = {
         label = 'Bell Farms Parking',
@@ -183,7 +195,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     dumbogarage = {
         label = 'Dumbo Private Parking',
@@ -196,7 +209,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     pillboxgarage = {
         label = 'Pillbox Garage Parking',
@@ -213,7 +227,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     grapeseedgarage = {
         label = 'Grapeseed Parking',
@@ -226,7 +241,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     depotLot = {
         label = 'Depot Lot',
@@ -239,7 +255,8 @@ Config.Garages = {
         blipNumber = 68,
         blipColor = 3,
         type = 'depot',
-        category = Config.VehicleClass['car']
+        category = Config.VehicleClass['car'],
+        requiredLicense = 'driver'
     },
     ballas = {
         label = 'Ballas',
@@ -328,7 +345,8 @@ Config.Garages = {
         blipNumber = 360,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['air']
+        category = Config.VehicleClass['air'],
+        requiredLicense = 'pilot'
     },
     higginsheli = {
         label = 'Higgins Helitours',
@@ -342,7 +360,8 @@ Config.Garages = {
         blipNumber = 360,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['air']
+        category = Config.VehicleClass['air'],
+        requiredLicense = 'pilot'
     },
     airsshores = {
         label = 'Sandy Shores Hangar',
@@ -355,7 +374,8 @@ Config.Garages = {
         blipNumber = 360,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['air']
+        category = Config.VehicleClass['air'],
+        requiredLicense = 'pilot'
     },
     airzancudo = {
         label = 'Fort Zancudo Hangar',
@@ -368,7 +388,8 @@ Config.Garages = {
         blipNumber = 360,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['air']
+        category = Config.VehicleClass['air'],
+        requiredLicense = 'pilot'
     },
     airdepot = {
         label = 'Air Depot',
@@ -381,7 +402,8 @@ Config.Garages = {
         blipNumber = 359,
         blipColor = 3,
         type = 'depot',
-        category = Config.VehicleClass['air']
+        category = Config.VehicleClass['air'],
+        requiredLicense = 'pilot'
     },
     lsymc = {
         label = 'LSYMC Boathouse',
@@ -394,7 +416,8 @@ Config.Garages = {
         blipNumber = 356,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['sea']
+        category = Config.VehicleClass['sea'],
+        requiredLicense = 'boat'
     },
     paleto = {
         label = 'Paleto Boathouse',
@@ -407,7 +430,8 @@ Config.Garages = {
         blipNumber = 356,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['sea']
+        category = Config.VehicleClass['sea'],
+        requiredLicense = 'boat'
     },
     millars = {
         label = 'Millars Boathouse',
@@ -420,7 +444,8 @@ Config.Garages = {
         blipNumber = 356,
         blipColor = 3,
         type = 'public',
-        category = Config.VehicleClass['sea']
+        category = Config.VehicleClass['sea'],
+        requiredLicense = 'boat'
     },
     seadepot = {
         label = 'LSYMC Depot',
@@ -433,7 +458,8 @@ Config.Garages = {
         blipNumber = 356,
         blipColor = 3,
         type = 'depot',
-        category = Config.VehicleClass['sea']
+        category = Config.VehicleClass['sea'],
+        requiredLicense = 'boat'
     },
     rigdepot = {
         label = 'Big Rig Depot',
@@ -446,7 +472,8 @@ Config.Garages = {
         blipNumber = 68,
         blipColor = 2,
         type = 'depot',
-        category = Config.VehicleClass['rig']
+        category = Config.VehicleClass['rig'],
+        requiredLicense = 'heavy'
     },
     dumborigparking = {
         label = 'Dumbo Big Rig Parking',
@@ -459,7 +486,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 2,
         type = 'public',
-        category = Config.VehicleClass['rig']
+        category = Config.VehicleClass['rig'],
+        requiredLicense = 'heavy'
     },
     popsrigparking = {
         label = 'Pop\'s Big Rig Parking',
@@ -472,7 +500,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 2,
         type = 'public',
-        category = Config.VehicleClass['rig']
+        category = Config.VehicleClass['rig'],
+        requiredLicense = 'heavy'
     },
     ronsrigparking = {
         label = 'Ron\'s Big Rig Parking',
@@ -485,7 +514,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 2,
         type = 'public',
-        category = Config.VehicleClass['rig']
+        category = Config.VehicleClass['rig'],
+        requiredLicense = 'heavy'
     },
     ronsrigparking2 = {
         label = 'Ron\'s Big Rig Parking',
@@ -498,7 +528,8 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 2,
         type = 'public',
-        category = Config.VehicleClass['rig']
+        category = Config.VehicleClass['rig'],
+        requiredLicense = 'heavy'
     },
     ronsrigparking3 = {
         label = 'Ron\'s Big Rig Parking',
@@ -511,6 +542,7 @@ Config.Garages = {
         blipNumber = 357,
         blipColor = 2,
         type = 'public',
-        category = Config.VehicleClass['rig']
+        category = Config.VehicleClass['rig'],
+        requiredLicense = 'heavy'
     },
 }

@@ -80,7 +80,7 @@ local function RobberyPed()
                     exports['qb-target']:RemoveZone('stealingPed')
                     break
                 end
-                Wait(0)
+                Wait(200)
             end
         end)
     else
@@ -121,7 +121,7 @@ local function RobberyPed()
                         break
                     end
                 end
-                Wait(0)
+                Wait(200)
             end
         end)
     end
@@ -222,6 +222,7 @@ local function SellToPed(ped)
                                         if IsPedInAnyVehicle(PlayerPedId(), false) then
                                             QBCore.Functions.Notify(Lang:t('error.in_vehicle'), 'error')
                                             hasTarget = false
+                                            zoneMade = false
                                             SetPedKeepTask(entity, false)
                                             SetEntityAsNoLongerNeeded(entity)
                                             ClearPedTasksImmediately(entity)
@@ -238,6 +239,8 @@ local function SellToPed(ped)
                                             }, {}, {}, {}, function()
                                                 TriggerServerEvent('qb-drugs:server:sellCornerDrugs', drugType, bagAmount, randomPrice)
                                                 hasTarget = false
+                                                zoneMade = false
+                                                exports['qb-target']:RemoveZone('sellingPed')
                                                 LoadAnimDict('gestures@f@standing@casual')
                                                 TaskPlayAnim(PlayerPedId(), 'gestures@f@standing@casual', 'gesture_point', 3.0, 3.0, -1, 49, 0, 0, 0, 0)
                                                 Wait(650)
@@ -246,7 +249,6 @@ local function SellToPed(ped)
                                                 SetEntityAsNoLongerNeeded(entity)
                                                 ClearPedTasksImmediately(entity)
                                                 lastPed[#lastPed + 1] = entity
-                                                --exports['qb-target']:RemoveZone('sellingPed')
                                                 PoliceCall()
                                             end)
                                         end
@@ -258,6 +260,7 @@ local function SellToPed(ped)
                                     action = function(entity)
                                         QBCore.Functions.Notify(Lang:t('error.offer_declined'), 'error')
                                         hasTarget = false
+                                        zoneMade = false
                                         SetPedKeepTask(entity, false)
                                         SetEntityAsNoLongerNeeded(entity)
                                         ClearPedTasksImmediately(entity)
@@ -337,10 +340,47 @@ local function SellToPed(ped)
                     break
                 end
             end
-            Wait(0)
+            Wait(100)
         end
         Wait(math.random(4000, 7000))
     end
+end
+
+-- 生成一个买家 NPC 并走向玩家（带调试蓝点）
+local function SpawnBuyerPed(playerCoords)
+    local pedModel = 'a_m_m_skater_01'
+    if not IsModelInCdimage(pedModel) then pedModel = 'a_m_y_stbla_02' end
+    if not IsModelInCdimage(pedModel) then pedModel = 'csb_ramp_marine' end
+    RequestModel(pedModel)
+    local timeout = 0
+    while not HasModelLoaded(pedModel) and timeout < 100 do
+        Wait(0); timeout = timeout + 1
+    end
+    if not HasModelLoaded(pedModel) then return nil end
+
+    local spawnPos = playerCoords + vector3(math.random(20, 40) * (math.random() > 0.5 and 1 or -1),
+                                             math.random(20, 40) * (math.random() > 0.5 and 1 or -1), 0)
+    local ped = CreatePed(4, GetHashKey(pedModel), spawnPos.x, spawnPos.y, spawnPos.z, 0.0, true, false)
+    if ped == 0 then return nil end
+
+    SetPedFleeAttributes(ped, 0, 0)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedSeeingRange(ped, 50.0)
+    TaskGoStraightToCoord(ped, playerCoords.x, playerCoords.y, playerCoords.z, 1.2, -1, 0.0, 0.0)
+    SetModelAsNoLongerNeeded(pedModel)
+
+    -- 调试蓝点：在地图上标记买家位置
+    local blip = AddBlipForEntity(ped)
+    SetBlipSprite(blip, 1)       -- 白色方块
+    SetBlipColour(blip, 3)       -- 蓝色
+    SetBlipScale(blip, 0.8)
+    SetBlipAsFriendly(blip, true)
+    BeginTextCommandSetBlipName('STRING')
+    AddTextComponentSubstringPlayerName(_L('blip_drugs_buyer'))
+    EndTextCommandSetBlipName(blip)
+    SetPedIsDrunk(ped, true)     -- 让 NPC 走路摇晃更像 "瘾君子"
+
+    return ped
 end
 
 local function ToggleSelling()
@@ -349,33 +389,72 @@ local function ToggleSelling()
         LocalPlayer.state:set('inv_busy', true, true)
         QBCore.Functions.Notify(Lang:t('info.started_selling_drugs'))
         local startLocation = GetEntityCoords(PlayerPedId())
+        local noPedTimer = 0  -- 等待 NPC 计时器（秒）
+        local spawnedPed = nil
         CreateThread(function()
             while cornerselling do
                 local player = PlayerPedId()
                 local coords = GetEntityCoords(player)
+
                 if not hasTarget then
+                    -- 先找附近已有的 NPC
                     local PlayerPeds = {}
-                    if next(PlayerPeds) == nil then
-                        for _, activePlayer in ipairs(GetActivePlayers()) do
-                            local ped = GetPlayerPed(activePlayer)
-                            PlayerPeds[#PlayerPeds + 1] = ped
-                        end
+                    for _, activePlayer in ipairs(GetActivePlayers()) do
+                        local ped = GetPlayerPed(activePlayer)
+                        PlayerPeds[#PlayerPeds + 1] = ped
                     end
                     local closestPed, closestDistance = QBCore.Functions.GetClosestPed(coords, PlayerPeds)
+                    local foundPed = false
+
                     if closestDistance < 15.0 and closestPed ~= 0 and not IsPedInAnyVehicle(closestPed) and GetPedType(closestPed) ~= 28 then
+                        -- 已有 NPC 在附近，直接交互
+                        spawnedPed = nil
+                        noPedTimer = 0
                         SellToPed(closestPed)
+                        foundPed = true
+                    elseif spawnedPed and DoesEntityExist(spawnedPed) then
+                        -- 检查我们生成的 NPC 是否已走到附近
+                        local spDist = #(coords - GetEntityCoords(spawnedPed))
+                        if spDist < 3.0 then
+                            local buyer = spawnedPed
+                            spawnedPed = nil
+                            noPedTimer = 0
+                            SellToPed(buyer)
+                            foundPed = true
+                        end
+                    end
+
+                    if not foundPed then
+                        noPedTimer = noPedTimer + 1
+                        if noPedTimer >= 50 then  -- 50 ticks × 200ms = 10 秒
+                            noPedTimer = 0
+                            if not spawnedPed or not DoesEntityExist(spawnedPed) then
+                                spawnedPed = SpawnBuyerPed(coords)
+                                if spawnedPed then
+                                    QBCore.Functions.Notify("有个鬼鬼祟祟的人正在靠近你...", "primary")
+                                end
+                            end
+                        end
                     end
                 end
+
                 local startDist = #(startLocation - coords)
                 if startDist > 10 then
+                    if spawnedPed and DoesEntityExist(spawnedPed) then
+                        DeleteEntity(spawnedPed)
+                        spawnedPed = nil
+                    end
                     TooFarAway()
                 end
-                Wait(0)
+                Wait(200)
             end
         end)
     else
         stealingPed = nil
         stealData = {}
+        if spawnedPed and DoesEntityExist(spawnedPed) then
+            DeleteEntity(spawnedPed)
+        end
         cornerselling = false
         LocalPlayer.state:set('inv_busy', false, true)
         QBCore.Functions.Notify(Lang:t('info.stopped_selling_drugs'))

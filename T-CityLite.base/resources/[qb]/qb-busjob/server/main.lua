@@ -11,9 +11,21 @@ function NearBus(src)
     end
 end
 
+-- 🛡️ Security: Per-player cooldown to prevent spam
+local BusPayCooldowns = {}
+
 RegisterNetEvent('qb-busjob:server:NpcPay', function()
     local src = source
+    if not src or src == 0 then return end
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- 🛡️ Security: 5-second cooldown per player
+    local cid = Player.PlayerData.citizenid
+    local now = os.time()
+    if BusPayCooldowns[cid] and (now - BusPayCooldowns[cid]) < 5 then
+        return
+    end
+    BusPayCooldowns[cid] = now
     local Payment = math.random(15, 25)
     if Player.PlayerData.job.name == 'bus' then
         if NearBus(src) then

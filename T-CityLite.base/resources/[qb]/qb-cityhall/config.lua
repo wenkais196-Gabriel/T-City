@@ -30,13 +30,28 @@ Config.Cityhalls = {
             },
             ['driver_license'] = {
                 label = 'Driver License',
-                cost = 50,
+                cost = 150,
                 metadata = 'driver'
             },
             ['weaponlicense'] = {
                 label = 'Weapon License',
-                cost = 50,
+                cost = 150,
                 metadata = 'weapon'
+            },
+            ['pilot_license'] = {
+                label = 'Pilot License',
+                cost = 150,
+                metadata = 'pilot'
+            },
+            ['boat_license'] = {
+                label = 'Boat License',
+                cost = 150,
+                metadata = 'boat'
+            },
+            ['heavy_license'] = {
+                label = 'Heavy Vehicle License',
+                cost = 150,
+                metadata = 'heavy'
             },
         }
     },
@@ -51,7 +66,8 @@ Config.DrivingSchools = {
             display = 4,
             scale = 0.65,
             colour = 3,
-            title = 'Driving School'
+            title = 'Driving School',
+            category = 137
         },
         instructors = {
             'DJD56142',

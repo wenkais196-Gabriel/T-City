@@ -9,20 +9,21 @@ end
 
 QBCore.Commands.Add('grantlicense', Lang:t('commands.license_grant'), { { name = 'id', help = Lang:t('info.player_id') }, { name = 'license', help = Lang:t('info.license_type') } }, true, function(source, args)
     local src = source
+    local validTypes = { driver = true, weapon = true, pilot = true, boat = true, heavy = true }
     local Player = QBCore.Functions.GetPlayer(src)
     if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.grade.level >= Config.LicenseRank then
-        if args[2] == 'driver' or args[2] == 'weapon' then
-            local SearchedPlayer = QBCore.Functions.GetPlayer(tonumber(args[1]))
+        if validTypes[args[2]] then
+            local targetId = tonumber(args[1])
+            local SearchedPlayer = QBCore.Functions.GetPlayer(targetId)
             if not SearchedPlayer then return end
-            local licenseTable = SearchedPlayer.PlayerData.metadata['licences']
-            if licenseTable[args[2]] then
-                TriggerClientEvent('QBCore:Notify', src, Lang:t('error.license_already'), 'error')
-                return
+            -- 🔄 委托给 custom-certificates 统一管理
+            local success, msg = exports['custom-certificates']:GrantLicense(targetId, args[2])
+            if success then
+                TriggerClientEvent('QBCore:Notify', SearchedPlayer.PlayerData.source, Lang:t('success.granted_license'), 'success')
+                TriggerClientEvent('QBCore:Notify', src, Lang:t('success.grant_license'), 'success')
+            else
+                TriggerClientEvent('QBCore:Notify', src, msg or Lang:t('error.license_already'), 'error')
             end
-            licenseTable[args[2]] = true
-            SearchedPlayer.Functions.SetMetaData('licences', licenseTable)
-            TriggerClientEvent('QBCore:Notify', SearchedPlayer.PlayerData.source, Lang:t('success.granted_license'), 'success')
-            TriggerClientEvent('QBCore:Notify', src, Lang:t('success.grant_license'), 'success')
         else
             TriggerClientEvent('QBCore:Notify', src, Lang:t('error.error_license_type'), 'error')
         end
@@ -33,25 +34,76 @@ end)
 
 QBCore.Commands.Add('revokelicense', Lang:t('commands.license_revoke'), { { name = 'id', help = Lang:t('info.player_id') }, { name = 'license', help = Lang:t('info.license_type') } }, true, function(source, args)
     local src = source
+    local validTypes = { driver = true, weapon = true, pilot = true, boat = true, heavy = true }
     local Player = QBCore.Functions.GetPlayer(src)
     if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.grade.level >= Config.LicenseRank then
-        if args[2] == 'driver' or args[2] == 'weapon' then
-            local SearchedPlayer = QBCore.Functions.GetPlayer(tonumber(args[1]))
+        if validTypes[args[2]] then
+            local targetId = tonumber(args[1])
+            local SearchedPlayer = QBCore.Functions.GetPlayer(targetId)
             if not SearchedPlayer then return end
-            local licenseTable = SearchedPlayer.PlayerData.metadata['licences']
-            if not licenseTable[args[2]] then
-                TriggerClientEvent('QBCore:Notify', src, Lang:t('error.error_license'), 'error')
-                return
+            -- 🔄 委托给 custom-certificates 统一管理（含实体证件移除）
+            local success, msg = exports['custom-certificates']:RevokeLicense(targetId, args[2])
+            if success then
+                TriggerClientEvent('QBCore:Notify', SearchedPlayer.PlayerData.source, Lang:t('error.revoked_license'), 'error')
+                TriggerClientEvent('QBCore:Notify', src, Lang:t('success.revoke_license'), 'success')
+            else
+                TriggerClientEvent('QBCore:Notify', src, msg or Lang:t('error.error_license'), 'error')
             end
-            licenseTable[args[2]] = false
-            SearchedPlayer.Functions.SetMetaData('licences', licenseTable)
-            TriggerClientEvent('QBCore:Notify', SearchedPlayer.PlayerData.source, Lang:t('error.revoked_license'), 'error')
-            TriggerClientEvent('QBCore:Notify', src, Lang:t('success.revoke_license'), 'success')
         else
             TriggerClientEvent('QBCore:Notify', src, Lang:t('error.error_license'), 'error')
         end
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.rank_revoke'), 'error')
+    end
+end)
+
+-- 🔧 新增: 暂停执照（对接 custom-certificates）
+QBCore.Commands.Add('suspendlicense', '暂停玩家执照', { { name = 'id', help = Lang:t('info.player_id') }, { name = 'license', help = Lang:t('info.license_type') } }, true, function(source, args)
+    local src = source
+    local validTypes = { driver = true, weapon = true, pilot = true, boat = true, heavy = true }
+    local Player = QBCore.Functions.GetPlayer(src)
+    if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.grade.level >= Config.LicenseRank then
+        if validTypes[args[2]] then
+            local targetId = tonumber(args[1])
+            local SearchedPlayer = QBCore.Functions.GetPlayer(targetId)
+            if not SearchedPlayer then return end
+            local success, msg = exports['custom-certificates']:SuspendLicense(targetId, args[2])
+            if success then
+                TriggerClientEvent('QBCore:Notify', SearchedPlayer.PlayerData.source, ('你的 %s 执照已被暂停'):format(args[2]), 'error')
+                TriggerClientEvent('QBCore:Notify', src, ('已暂停玩家 %s 的 %s 执照'):format(targetId, args[2]), 'success')
+            else
+                TriggerClientEvent('QBCore:Notify', src, msg or '操作失败', 'error')
+            end
+        else
+            TriggerClientEvent('QBCore:Notify', src, '无效的执照类型', 'error')
+        end
+    else
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.rank_license'), 'error')
+    end
+end)
+
+-- 🔧 新增: 恢复执照（对接 custom-certificates）
+QBCore.Commands.Add('reinstatelicense', '恢复玩家执照', { { name = 'id', help = Lang:t('info.player_id') }, { name = 'license', help = Lang:t('info.license_type') } }, true, function(source, args)
+    local src = source
+    local validTypes = { driver = true, weapon = true, pilot = true, boat = true, heavy = true }
+    local Player = QBCore.Functions.GetPlayer(src)
+    if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.grade.level >= Config.LicenseRank then
+        if validTypes[args[2]] then
+            local targetId = tonumber(args[1])
+            local SearchedPlayer = QBCore.Functions.GetPlayer(targetId)
+            if not SearchedPlayer then return end
+            local success, msg = exports['custom-certificates']:ReinstateLicense(targetId, args[2])
+            if success then
+                TriggerClientEvent('QBCore:Notify', SearchedPlayer.PlayerData.source, ('你的 %s 执照已恢复'):format(args[2]), 'success')
+                TriggerClientEvent('QBCore:Notify', src, ('已恢复玩家 %s 的 %s 执照'):format(targetId, args[2]), 'success')
+            else
+                TriggerClientEvent('QBCore:Notify', src, msg or '操作失败', 'error')
+            end
+        else
+            TriggerClientEvent('QBCore:Notify', src, '无效的执照类型', 'error')
+        end
+    else
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.rank_license'), 'error')
     end
 end)
 
@@ -95,6 +147,58 @@ QBCore.Commands.Add('pobject', Lang:t('commands.place_object'), { { name = 'type
         end
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.on_duty_police_only'), 'error')
+    end
+end)
+
+-- Department & District Management
+
+QBCore.Commands.Add('setdept', '分配警员部门 (SWAT/CID/TRAFFIC/PATROL)', { { name = 'id', help = Lang:t('info.player_id') }, { name = 'dept', help = 'SWAT / CID / TRAFFIC / PATROL' } }, true, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    local targetId = tonumber(args[1])
+    local dept = args[2] and args[2]:upper()
+    if Player.PlayerData.job.type ~= 'leo' or Player.PlayerData.job.grade.level < 3 then
+        TriggerClientEvent('QBCore:Notify', src, '仅副警监 (Lieutenant) 及以上可分配部门', 'error')
+        return
+    end
+    if not Config.Departments[dept] then
+        TriggerClientEvent('QBCore:Notify', src, ('无效部门: %s (可选: SWAT, CID, TRAFFIC, PATROL)'):format(dept or 'nil'), 'error')
+        return
+    end
+    local Target = QBCore.Functions.GetPlayer(targetId)
+    if not Target then TriggerClientEvent('QBCore:Notify', src, '目标玩家不在线', 'error'); return end
+    if Target.PlayerData.job.type ~= 'leo' then TriggerClientEvent('QBCore:Notify', src, '目标不是执法人员', 'error'); return end
+    local success = exports['custom-career']:SetPlayerDepartment(targetId, dept)
+    if success then
+        TriggerClientEvent('QBCore:Notify', src, ('已将 %s 分配至 %s'):format(Target.PlayerData.charinfo.firstname, Config.Departments[dept].label), 'success')
+        TriggerClientEvent('QBCore:Notify', Target.PlayerData.source, ('你已被分配至 %s 部门'):format(Config.Departments[dept].label), 'success')
+    else
+        TriggerClientEvent('QBCore:Notify', src, '操作失败', 'error')
+    end
+end)
+
+QBCore.Commands.Add('setdistrict', '分配警员辖区 (MissionRow/Paleto/Sandy)', { { name = 'id', help = Lang:t('info.player_id') }, { name = 'district', help = 'MissionRow / Paleto / Sandy' } }, true, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    local targetId = tonumber(args[1])
+    local district = args[2]
+    if Player.PlayerData.job.type ~= 'leo' or Player.PlayerData.job.grade.level < 3 then
+        TriggerClientEvent('QBCore:Notify', src, '仅副警监 (Lieutenant) 及以上可分配辖区', 'error')
+        return
+    end
+    if not Config.Districts[district] then
+        TriggerClientEvent('QBCore:Notify', src, ('无效辖区: %s (可选: MissionRow, Paleto, Sandy)'):format(district or 'nil'), 'error')
+        return
+    end
+    local Target = QBCore.Functions.GetPlayer(targetId)
+    if not Target then TriggerClientEvent('QBCore:Notify', src, '目标玩家不在线', 'error'); return end
+    if Target.PlayerData.job.type ~= 'leo' then TriggerClientEvent('QBCore:Notify', src, '目标不是执法人员', 'error'); return end
+    local success = exports['custom-career']:SetPlayerDistrict(targetId, district)
+    if success then
+        TriggerClientEvent('QBCore:Notify', src, ('已将 %s 分配至 %s 辖区'):format(Target.PlayerData.charinfo.firstname, Config.Districts[district].label), 'success')
+        TriggerClientEvent('QBCore:Notify', Target.PlayerData.source, ('你已被分配至 %s 辖区'):format(Config.Districts[district].label), 'success')
+    else
+        TriggerClientEvent('QBCore:Notify', src, '操作失败', 'error')
     end
 end)
 
@@ -243,6 +347,84 @@ QBCore.Commands.Add('takedna', Lang:t('commands.takedna'), { { name = 'id', help
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.have_evidence_bag'), 'error')
     end
+end)
+
+-- 🔍 警用 3D 文档查验（对接 custom-documents）
+
+QBCore.Commands.Add('checkid', '查验目标玩家ID卡', { { name = 'id', help = Lang:t('info.player_id') } }, true, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or Player.PlayerData.job.type ~= 'leo' or not Player.PlayerData.job.onduty then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.on_duty_police_only'), 'error')
+        return
+    end
+    local targetId = tonumber(args[1])
+    local targetPed = GetPlayerPed(targetId)
+    local playerPed = GetPlayerPed(src)
+    local playerCoords = GetEntityCoords(playerPed)
+    local targetCoords = GetEntityCoords(targetPed)
+    -- 🛡️ 物理距离校验（3.5m 查验距离）
+    if #(playerCoords - targetCoords) > 3.5 then
+        TriggerClientEvent('QBCore:Notify', src, '目标距离太远（需 < 3.5m）', 'error')
+        return
+    end
+    -- 委托 custom-documents 进行 ID 卡查验
+    QBCore.Functions.TriggerCallback('custom-documents:server:verifyPlayer', src, function(result)
+        if not result then
+            TriggerClientEvent('QBCore:Notify', src, '查验失败', 'error')
+            return
+        end
+        if result.error then
+            TriggerClientEvent('QBCore:Notify', src, result.error, 'error')
+            return
+        end
+        -- 展示目标玩家证照状态
+        local lines = { ('📋 玩家: %s (CID: %s)'):format(result.targetName, result.targetCitizenId) }
+        for _, lic in ipairs(result.licenses) do
+            lines[#lines + 1] = ('  %s %s — %s'):format(lic.label, lic.hasLicence and '✅ 持有' or '❌ 未持有', lic.statusLabel)
+        end
+        TriggerClientEvent('chat:addMessage', src, {
+            color = { 100, 180, 255 }, multiline = true,
+            args = { '🔍 证照查验', table.concat(lines, '\n') }
+        })
+        -- F8 审计日志
+        print(('[POLICE-CHECK] %s (src=%s) verified licenses of %s (target=%s)')
+            :format(GetPlayerName(src), src, result.targetName, targetId))
+    end, targetId)
+end)
+
+QBCore.Commands.Add('checklicense', '查验目标玩家证照状态', { { name = 'id', help = Lang:t('info.player_id') } }, true, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or Player.PlayerData.job.type ~= 'leo' or not Player.PlayerData.job.onduty then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.on_duty_police_only'), 'error')
+        return
+    end
+    local targetId = tonumber(args[1])
+    local targetPed = GetPlayerPed(targetId)
+    local playerPed = GetPlayerPed(src)
+    local playerCoords = GetEntityCoords(playerPed)
+    local targetCoords = GetEntityCoords(targetPed)
+    if #(playerCoords - targetCoords) > 3.5 then
+        TriggerClientEvent('QBCore:Notify', src, '目标距离太远（需 < 3.5m）', 'error')
+        return
+    end
+    QBCore.Functions.TriggerCallback('custom-documents:server:verifyPlayer', src, function(result)
+        if not result or result.error then
+            TriggerClientEvent('QBCore:Notify', src, result and result.error or '查验失败', 'error')
+            return
+        end
+        local lines = { ('📋 %s 的证照状态:'):format(result.targetName) }
+        for _, lic in ipairs(result.licenses) do
+            lines[#lines + 1] = ('  %s: %s'):format(lic.label, lic.statusLabel)
+        end
+        TriggerClientEvent('chat:addMessage', src, {
+            color = { 255, 200, 100 }, multiline = true,
+            args = { '📜 证照状态', table.concat(lines, '\n') }
+        })
+        print(('[POLICE-CHECK] %s (src=%s) checked licenses of %s (target=%s)')
+            :format(GetPlayerName(src), src, result.targetName, targetId))
+    end, targetId)
 end)
 
 QBCore.Commands.Add('anklet', Lang:t('commands.anklet'), {}, false, function(source)

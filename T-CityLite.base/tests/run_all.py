@@ -14,7 +14,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Test modules: (name, file, critical)
 TESTS = [
     ("CFG 配置完整性", "check_cfgs.py", True),
-    ("Lua 语法检查", "check_lua_syntax.py", False),
+    ("Lua 语法检查", "light_lint.py", False),
     ("数据库表结构", "check_db_schema.py", False),
     ("资源依赖图", "check_dependencies.py", True),
 ]

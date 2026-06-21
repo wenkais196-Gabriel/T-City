@@ -1,0 +1,6 @@
+{
+  "artifactType":  "ARTIFACT_TYPE_OTHER",
+  "summary":  "Updated developer manual for the custom-quest atomic nodes task system. It specifies a decoupled architecture (Adapter Pattern) to eliminate direct QBCore dependencies, server-authoritative anti-cheat validation loops, event-driven zero-tick client interaction engines, and details the payload parameters for GOTO, INTERACT, DELIVER, COMBAT, and WAIT nodes.",
+  "updatedAt":  "2026-06-05T13:20:29.589200300Z",
+  "requestFeedback":  true
+}

@@ -749,3 +749,40 @@ p.disclaimer {
         text-shadow: 0 0 1px var(--text-color), 0 0 20px var(--text-color);
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   良心弹窗 (Conscience Toast) — 纯氛围文字, 右侧淡入
+   ═══════════════════════════════════════════════════════════════ */
+#conscience-toast {
+    display: none;
+    position: fixed;
+    top: 35%;
+    right: -20px;
+    width: 240px;
+    background: transparent;
+    color: #fff;
+    font-family: 'Lato', sans-serif;
+    z-index: 3000;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    animation: toastFadeInOut 30s ease forwards;
+    pointer-events: none;
+}
+@keyframes toastFadeInOut {
+    0% { opacity: 0; transform: translateX(30px); }
+    3% { opacity: 0.9; transform: translateX(0); }
+    80% { opacity: 0.9; }
+    100% { opacity: 0; }
+}
+#conscience-toast .toast-icon {
+    font-size: 1.4em;
+    margin-bottom: 4px;
+    opacity: 0.5;
+}
+#conscience-toast .toast-monologue {
+    font-size: 1em;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.75);
+    font-style: italic;
+    border-left: 2px solid rgba(255,255,255,0.2);
+    padding-left: 14px;
+}

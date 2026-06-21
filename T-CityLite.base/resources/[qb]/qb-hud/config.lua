@@ -174,4 +174,5 @@ Config.Menu = {
     isDegreesShowChecked = true,        -- isDegreesShowChecked
     isCinematicModeChecked = false,     -- isCinematicModeChecked
     isToggleMapShapeChecked = 'square', -- isToggleMapShapeChecked
+    isWaypointDistanceChecked = true,   -- isWaypointDistanceChecked
 }

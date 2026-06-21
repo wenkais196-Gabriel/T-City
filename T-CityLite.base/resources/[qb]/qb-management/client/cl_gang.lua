@@ -33,8 +33,9 @@ local function UpdateGangBlips()
         SetBlipScale(hqBlip, 0.8)
         SetBlipColour(hqBlip, 1) -- Red
         SetBlipAsShortRange(hqBlip, true)
+        SetBlipCategory(hqBlip, 136)
         BeginTextCommandSetBlipName("STRING")
-        AddTextComponentSubstringPlayerName("卡特尔总部 (Cartel HQ)")
+        AddTextComponentSubstringPlayerName(_L('blip_cartel_hq'))
         EndTextCommandSetBlipName(hqBlip)
         gangBlips[#gangBlips + 1] = hqBlip
 
@@ -45,8 +46,9 @@ local function UpdateGangBlips()
         SetBlipScale(garageBlip, 0.7)
         SetBlipColour(garageBlip, 1) -- Red
         SetBlipAsShortRange(garageBlip, true)
+        SetBlipCategory(garageBlip, 136)
         BeginTextCommandSetBlipName("STRING")
-        AddTextComponentSubstringPlayerName("卡特尔车库 (Cartel Garage)")
+        AddTextComponentSubstringPlayerName(_L('blip_cartel_garage'))
         EndTextCommandSetBlipName(garageBlip)
         gangBlips[#gangBlips + 1] = garageBlip
 
@@ -58,11 +60,56 @@ local function UpdateGangBlips()
             SetBlipScale(bossBlip, 0.8)
             SetBlipColour(bossBlip, 28) -- Gold color!
             SetBlipAsShortRange(bossBlip, true)
+            SetBlipCategory(bossBlip, 136)
             BeginTextCommandSetBlipName("STRING")
-            AddTextComponentSubstringPlayerName("卡特尔首脑控制台 (Cartel Boss Suite)")
+            AddTextComponentSubstringPlayerName(_L('blip_cartel_boss'))
             EndTextCommandSetBlipName(bossBlip)
             gangBlips[#gangBlips + 1] = bossBlip
         end
+    elseif PlayerGang and PlayerGang.name == 'ballas' then
+        local hqBlip = AddBlipForCoord(98.15, -1929.74, 20.80)
+        SetBlipSprite(hqBlip, 84)
+        SetBlipDisplay(hqBlip, 4)
+        SetBlipScale(hqBlip, 0.8)
+        SetBlipColour(hqBlip, 30) -- Purple
+        SetBlipAsShortRange(hqBlip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentSubstringPlayerName(_L('blip_ballas_hq'))
+        EndTextCommandSetBlipName(hqBlip)
+        gangBlips[#gangBlips + 1] = hqBlip
+    elseif PlayerGang and PlayerGang.name == 'families' then
+        local hqBlip = AddBlipForCoord(-144.13, -1693.93, 29.29)
+        SetBlipSprite(hqBlip, 84)
+        SetBlipDisplay(hqBlip, 4)
+        SetBlipScale(hqBlip, 0.8)
+        SetBlipColour(hqBlip, 25) -- Green
+        SetBlipAsShortRange(hqBlip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentSubstringPlayerName(_L('blip_families_hq'))
+        EndTextCommandSetBlipName(hqBlip)
+        gangBlips[#gangBlips + 1] = hqBlip
+    elseif PlayerGang and PlayerGang.name == 'lostmc' then
+        local hqBlip = AddBlipForCoord(982.26, -104.22, 74.85)
+        SetBlipSprite(hqBlip, 84)
+        SetBlipDisplay(hqBlip, 4)
+        SetBlipScale(hqBlip, 0.8)
+        SetBlipColour(hqBlip, 27) -- Brown/Orange
+        SetBlipAsShortRange(hqBlip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentSubstringPlayerName(_L('blip_lostmc_hq'))
+        EndTextCommandSetBlipName(hqBlip)
+        gangBlips[#gangBlips + 1] = hqBlip
+    elseif PlayerGang and PlayerGang.name == 'vagos' then
+        local hqBlip = AddBlipForCoord(336.57, -2012.39, 22.31)
+        SetBlipSprite(hqBlip, 84)
+        SetBlipDisplay(hqBlip, 4)
+        SetBlipScale(hqBlip, 0.8)
+        SetBlipColour(hqBlip, 49) -- Yellow
+        SetBlipAsShortRange(hqBlip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentSubstringPlayerName(_L('blip_vagos_hq'))
+        EndTextCommandSetBlipName(hqBlip)
+        gangBlips[#gangBlips + 1] = hqBlip
     end
 end
 

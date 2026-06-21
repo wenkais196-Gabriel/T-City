@@ -100,6 +100,13 @@ RegisterNetEvent('qb-pawnshop:client:openMenu', function()
                     }
                 }
             end
+            pawnShop[#pawnShop + 1] = {
+                header = Lang:t('info.launder_money'),
+                txt = '',
+                params = {
+                    event = 'qb-pawnshop:client:openLaunder'
+                }
+            }
             if canTake then
                 pawnShop[#pawnShop + 1] = {
                     header = Lang:t('info.melt_pickup'),
@@ -146,6 +153,13 @@ RegisterNetEvent('qb-pawnshop:client:openMenu', function()
                 }
             }
         end
+        pawnShop[#pawnShop + 1] = {
+            header = Lang:t('info.launder_money'),
+            txt = '',
+            params = {
+                event = 'qb-pawnshop:client:openLaunder'
+            }
+        }
         if canTake then
             pawnShop[#pawnShop + 1] = {
                 header = Lang:t('info.melt_pickup'),
@@ -331,6 +345,29 @@ RegisterNetEvent('qb-pawnshop:client:startMelting', function(item, meltingAmount
                 Wait(1000)
             end
         end)
+    end
+end)
+
+RegisterNetEvent('qb-pawnshop:client:openLaunder', function()
+    local launderAmount = exports['qb-input']:ShowInput({
+        header = Lang:t('info.launder_money'),
+        submitText = Lang:t('info.launder_submit'),
+        inputs = {
+            {
+                type = 'number',
+                isRequired = true,
+                name = 'amount',
+                text = Lang:t('info.launder_money')
+            }
+        }
+    })
+    if launderAmount and launderAmount.amount then
+        local amount = tonumber(launderAmount.amount)
+        if amount and amount > 0 then
+            TriggerServerEvent('qb-pawnshop:server:launderMoney', amount)
+        else
+            QBCore.Functions.Notify(Lang:t('error.negative'), 'error')
+        end
     end
 end)
 

@@ -13,7 +13,7 @@ shared_scripts {
 }
 
 server_scripts {
-    'server/economy.lua'
+    -- ⚠️ server/economy.lua removed — replaced by core_economy (Unified Reward Gateway)
 }
 
 dependencies {

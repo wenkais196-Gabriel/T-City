@@ -72,7 +72,12 @@ RegisterNetEvent('qb-tow:server:11101110', function(drops)
     local price = (DropPrice * drops) + bonus
     local taxAmount = math.ceil((price / 100) * PaymentTax)
     local payment = price - taxAmount
-    Player.Functions.AddMoney('bank', payment, 'tow-salary')
+    -- 💰 统一经济网关
+    if GetResourceState('core_economy') == 'started' then
+        exports['core_economy']:TriggerReward(src, 'tow_job', payment, { moneytype = 'bank', reason = 'tow-salary' })
+    else
+        Player.Functions.AddMoney('bank', payment, 'tow-salary')
+    end
     TriggerClientEvent('QBCore:Notify', src, Lang:t('success.you_earned', { value = payment }), 'success')
 end)
 
@@ -82,7 +87,10 @@ end)
 
 QBCore.Commands.Add('tow', Lang:t('info.tow'), {}, false, function(source)
     local Player = QBCore.Functions.GetPlayer(source)
-    if Player.PlayerData.job.name == 'tow' or Player.PlayerData.job.name == 'mechanic' then
+    -- 🛡️ Fix: 必须为拖车工或机械师且在值班状态
+    if (Player.PlayerData.job.name == 'tow' or Player.PlayerData.job.name == 'mechanic') and Player.PlayerData.job.onduty then
         TriggerClientEvent('qb-tow:client:TowVehicle', source)
+    else
+        TriggerClientEvent('QBCore:Notify', source, Lang:t('error.on_duty_police_only'), 'error')
     end
 end)

@@ -4,9 +4,20 @@ local Races = {}
 
 RegisterNetEvent('qb-streetraces:NewRace', function(RaceTable)
     local src = source
-    local RaceId = math.random(1000, 9999)
+    if not src or src == 0 then return end
     local xPlayer = QBCore.Functions.GetPlayer(src)
-    if xPlayer.Functions.RemoveMoney('cash', RaceTable.amount, 'streetrace-created') then
+    if not xPlayer then return end
+    -- [SECURITY] Validate and clamp amount from client
+    local stakeAmount = tonumber(RaceTable.amount) or 0
+    if stakeAmount <= 0 then
+        TriggerClientEvent('QBCore:Notify', src, 'Invalid stake amount', 'error')
+        return
+    end
+    if stakeAmount < Config.MinimumStake then stakeAmount = Config.MinimumStake end
+    if stakeAmount > Config.MaximumStake then stakeAmount = Config.MaximumStake end
+    local RaceId = math.random(1000, 9999)
+    RaceTable.amount = stakeAmount
+    if xPlayer.Functions.RemoveMoney('cash', stakeAmount, 'streetrace-created') then
         Races[RaceId] = RaceTable
         Races[RaceId].creator = src
         Races[RaceId].joined[#Races[RaceId].joined + 1] = src
@@ -21,9 +32,26 @@ end)
 
 RegisterNetEvent('qb-streetraces:RaceWon', function(RaceId)
     local src = source
+    if not src or src == 0 then return end
     local xPlayer = QBCore.Functions.GetPlayer(src)
-    xPlayer.Functions.AddMoney('cash', Races[RaceId].pot, 'race-won')
-    TriggerClientEvent('QBCore:Notify', src, 'You won the race and ' .. Config.Currency .. Races[RaceId].pot .. ',- recieved', 'success')
+    if not xPlayer then return end
+    -- [SECURITY] Validate race exists and player actually participated
+    if not Races[RaceId] or not Races[RaceId].started then
+        TriggerClientEvent('QBCore:Notify', src, 'Invalid race', 'error')
+        return
+    end
+    local isInRace = false
+    for _, joined in ipairs(Races[RaceId].joined) do
+        if joined == src then isInRace = true; break end
+    end
+    if not isInRace then
+        TriggerClientEvent('QBCore:Notify', src, 'You did not participate in this race', 'error')
+        return
+    end
+    local pot = tonumber(Races[RaceId].pot) or 0
+    if pot <= 0 then return end
+    xPlayer.Functions.AddMoney('cash', pot, 'race-won')
+    TriggerClientEvent('QBCore:Notify', src, 'You won the race and ' .. Config.Currency .. pot .. ',- recieved', 'success')
     TriggerClientEvent('qb-streetraces:SetRace', -1, Races)
     TriggerClientEvent('qb-streetraces:RaceDone', -1, RaceId, GetPlayerName(src))
 end)

@@ -20,3 +20,8 @@ client_script {
 }
 
 server_script 'server/main.lua'
+
+dependencies {
+    'qb-core',
+    'production-freeze',
+}

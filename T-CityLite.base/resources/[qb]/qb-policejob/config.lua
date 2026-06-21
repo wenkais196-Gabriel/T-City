@@ -6,6 +6,21 @@ Config.LicenseRank = 2
 Config.ArmoryWhitelist = {}
 Config.WhitelistedVehicles = {}
 Config.PoliceHelicopter = 'POLMAV'
+
+-- 🔧 部门与辖区定义（对接 custom-career department/district）
+Config.Departments = {
+    PATROL = { label = '常规巡逻组', weapons = { 'WEAPON_PISTOL', 'WEAPON_NIGHTSTICK', 'WEAPON_STUNGUN', 'WEAPON_FLASHLIGHT', 'WEAPON_PUMPSHOTGUN' } },
+    TRAFFIC = { label = '交通组', weapons = { 'WEAPON_PISTOL', 'WEAPON_NIGHTSTICK', 'WEAPON_STUNGUN', 'WEAPON_FLASHLIGHT' } },
+    CID     = { label = '刑事侦查组', weapons = { 'WEAPON_PISTOL', 'WEAPON_NIGHTSTICK', 'WEAPON_STUNGUN', 'WEAPON_FLASHLIGHT', 'WEAPON_COMBATPISTOL' }, allowOffdutyCuff = true },
+    SWAT    = { label = '特警组', weapons = { 'WEAPON_PISTOL', 'WEAPON_NIGHTSTICK', 'WEAPON_STUNGUN', 'WEAPON_FLASHLIGHT', 'WEAPON_PUMPSHOTGUN', 'WEAPON_ASSAULTRIFLE', 'WEAPON_SMG', 'WEAPON_CARBINERIFLE', 'WEAPON_HEAVYSNIPER' } },
+}
+Config.DefaultDepartment = 'PATROL'
+Config.Districts = {
+    MissionRow = { label = '市区 (Mission Row)' },
+    Paleto     = { label = '北部 (Paleto Bay)' },
+    Sandy      = { label = '沙漠 (Sandy Shores)' },
+}
+Config.DefaultDistrict = 'MissionRow'
 Config.FuelResource = 'LegacyFuel' -- supports any that has a GetFuel() and SetFuel() export
 
 Config.AmmoLabels = {
@@ -124,16 +139,38 @@ Config.CarItems = {
 }
 
 Config.AuthorizedVehicles = {
-    -- Grade 0 and higher
-    [0] = {
-        police = 'Police Car 1',
-        police2 = 'Police Car 2',
-        police3 = 'Police Car 3',
-        police4 = 'Police Car 4',
-        policeb = 'Police Car 5',
-        policet = 'Police Car 6',
-        sheriff = 'Sheriff Car 1',
-        sheriff2 = 'Sheriff Car 2',
+    -- 🔧 阶梯累进解锁: 0=实习警员 → 4=警长
+    [0] = { -- 实习警员 (Recruit)
+        police = 'Vapid Stanier (Recruit Cruiser)',
+    },
+    [1] = { -- 正式警员 (Officer)
+        police = 'Vapid Stanier (Recruit Cruiser)',
+        police2 = 'Buffalo SX (Officer Cruiser)',
+        policet = 'Transporter (Prison Transport)',
+    },
+    [2] = { -- 警司 (Sergeant)
+        police = 'Vapid Stanier (Recruit Cruiser)',
+        police2 = 'Buffalo SX (Officer Cruiser)',
+        police3 = 'Interceptor (Highway Patrol)',
+        policet = 'Transporter (Prison Transport)',
+        sheriff = 'Sheriff Cruiser (County Patrol)',
+    },
+    [3] = { -- 副警监 (Lieutenant)
+        police = 'Vapid Stanier (Recruit Cruiser)',
+        police2 = 'Buffalo SX (Officer Cruiser)',
+        police3 = 'Interceptor (Highway Patrol)',
+        policet = 'Transporter (Prison Transport)',
+        sheriff = 'Sheriff Cruiser (County Patrol)',
+        sheriff2 = 'Sheriff Granger (Utility SUV)',
+    },
+    [4] = { -- 警长 (Chief)
+        police = 'Vapid Stanier (Recruit Cruiser)',
+        police2 = 'Buffalo SX (Officer Cruiser)',
+        police3 = 'Interceptor (Highway Patrol)',
+        policet = 'Transporter (Prison Transport)',
+        sheriff = 'Sheriff Cruiser (County Patrol)',
+        sheriff2 = 'Sheriff Granger (Utility SUV)',
+        fbi = 'Unmarked Granger (Executive Cruiser)',
     },
 }
 

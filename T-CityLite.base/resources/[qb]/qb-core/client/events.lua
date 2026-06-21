@@ -134,11 +134,19 @@ RegisterNetEvent('QBCore:Command:SpawnVehicle', function(vehName)
     end
 
     local vehicle = CreateVehicle(hash, GetEntityCoords(ped), GetEntityHeading(ped), true, false)
-    TaskWarpPedIntoVehicle(ped, vehicle, -1)
+    local plate = QBCore.Functions.GetPlate(vehicle)
+    -- 异步：通过旧版 qb-vehiclekeys 事件向服务端 KeyManager 注册所有权
+    TriggerEvent('vehiclekeys:client:SetOwner', plate)
+    -- 同步：立即预热 custom-vehicles 客户端 keyCache，消除 Warp 入车后的竞态窗口
+    -- 服务端 KeyManager 注册是异步的，但客户端缓存可以在本地同步完成
+    local normPlate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
+    TriggerEvent('custom-vehicles:client:keysUpdated', {
+        plate = normPlate, hasKeys = true, keyType = 'owner'
+    })
     SetVehicleFuelLevel(vehicle, 100.0)
     SetVehicleDirtLevel(vehicle, 0.0)
+    TaskWarpPedIntoVehicle(ped, vehicle, -1)
     SetModelAsNoLongerNeeded(hash)
-    TriggerEvent('vehiclekeys:client:SetOwner', QBCore.Functions.GetPlate(vehicle))
 end)
 
 RegisterNetEvent('QBCore:Command:DeleteVehicle', function()
@@ -192,6 +200,25 @@ end)
 
 RegisterNetEvent('QBCore:Notify', function(text, type, length, icon)
     QBCore.Functions.Notify(text, type, length, icon)
+end)
+
+-- 🔔 高级原生通知 (带头像/标题/副标题)
+RegisterNetEvent('QBCore:Notify:Advanced', function(data)
+    if not data or not data.text then return end
+    local NN = _G.NativeNotify
+    if NN then
+        NN.ShowAdvanced(
+            data.title or '',
+            data.subject or '',
+            data.text,
+            data.icon or 'CHAR_MULTIPLAYER',
+            NN.ICONS and NN.ICONS.ICON_DEFAULT or 0,
+            false
+        )
+    else
+        -- 回退: 转为普通 NUI 通知
+        QBCore.Functions.Notify(data.text, 'primary', data.length)
+    end
 end)
 
 -- This event is exploitable and should not be used. It has been deprecated, and will be removed soon.

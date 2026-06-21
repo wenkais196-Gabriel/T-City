@@ -1,0 +1,2724 @@
+[
+  {
+    "path": "[cfx-default]\\[gamemodes]\\[maps]\\fivem-map-hipster\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gamemodes]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Example spawn points for FiveM with a ",
+    "version": "1.0.0",
+    "deps": [
+      "basic-gamemode"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gamemodes]\\[maps]\\fivem-map-skater\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gamemodes]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Example spawn points for FiveM with a ",
+    "version": "1.0.0",
+    "deps": [
+      "basic-gamemode"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gamemodes]\\[maps]\\redm-map-one\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gamemodes]",
+    "game": "rdr3",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Example spawn points for RedM.",
+    "version": "1.0.0",
+    "deps": [
+      "basic-gamemode"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gamemodes]\\basic-gamemode\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gamemodes]",
+    "game": "common",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "A basic freeroam gametype that uses the default spawn logic from spawnmanager.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gameplay]\\[examples]\\money-fountain-example-map\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gameplay]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "An example money system fountain spawn point.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gameplay]\\[examples]\\money-fountain\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gameplay]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "An example money system client containing a money fountain.",
+    "version": "1.0.0",
+    "deps": [
+      "mapmanager"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gameplay]\\[examples]\\money\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gameplay]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "An example money system using KVS.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gameplay]\\[examples]\\ped-money-drops\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gameplay]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "An example money system client.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gameplay]\\chat-theme-gtao\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gameplay]",
+    "game": "common",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "A GTA Online-styled theme for the chat resource.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gameplay]\\player-data\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gameplay]",
+    "game": "common",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "A basic resource for storing player identifiers.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[gameplay]\\playernames\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[gameplay]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "A basic resource for displaying player names.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[managers]\\mapmanager\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[managers]",
+    "game": "",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "A flexible handler for game type/map association.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[managers]\\spawnmanager\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[managers]",
+    "game": "",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Handles spawning a player in a unified fashion to prevent resources from having to implement custom spawn logic.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[system]\\[builders]\\webpack\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[system]",
+    "game": "common",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Builds resources with webpack. To learn more: https://webpack.js.org",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[system]\\[builders]\\yarn\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[system]",
+    "game": "common",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Builds resources with yarn. To learn more: https://classic.yarnpkg.com",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[system]\\baseevents\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[system]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Adds basic events for developers to use in their scripts. Some third party resources may depend on this resource.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[system]\\hardcap\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[system]",
+    "game": "",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Limits the number of players to the amount set by sv_maxclients in your server.cfg.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[system]\\rconlog\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[system]",
+    "game": "",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Handles old-style server player management commands.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[system]\\runcode\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[system]",
+    "game": "common",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Allows server owners to execute arbitrary server-side or client-side JavaScript/Lua code. *Consider only using this on development servers.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[system]\\sessionmanager-rdr3\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[system]",
+    "game": "rdr3",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Handles Social Club conductor session API for RedM. Do not disable.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[system]\\sessionmanager\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[system]",
+    "game": "",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Handles the ",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[test]\\example-loadscreen\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[test]",
+    "game": "gta5",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "Example loading screen.",
+    "version": "1.0.0",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[cfx-default]\\[test]\\fivem\\fxmanifest.lua",
+    "category": "[cfx-default]",
+    "resource": "[test]",
+    "game": "common",
+    "author": "Cfx.re <root@cfx.re>",
+    "description": "A compatibility resource to load basic-gamemode.",
+    "version": "1.0.0",
+    "deps": [
+      "basic-gamemode"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-admin\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-admin",
+    "game": "gta5",
+    "author": "Custom Server",
+    "description": "High-Security Admin Command Panel and Webhook Auditing for T-City Lite",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "custom-career",
+      "custom-main"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-career\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-career",
+    "game": "gta5",
+    "author": "Custom Server",
+    "description": "High-Performance Multi-label Career Tag System for T-City Lite",
+    "version": "cerulean",
+    "deps": [
+      "qb-core"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-certificates\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-certificates",
+    "game": "gta5",
+    "author": "T-City",
+    "description": "Certificate License System — modular, high-performance, secure, extensible",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-inventory"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-crime\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-crime",
+    "game": "gta5",
+    "author": "Custom Server",
+    "description": "Central robbery and crime validations",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "custom-logs"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-debug\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-debug",
+    "game": "gta5",
+    "author": "Debug Tool",
+    "description": "黑屏诊断与强制修复工具",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-documents\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-documents",
+    "game": "gta5",
+    "author": "T-City",
+    "description": "Custom Documents — Unified Document Presentation & Verification System",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-target"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-economy\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-economy",
+    "game": "gta5",
+    "author": "Custom Server",
+    "description": "Unified economic API and adaptive macroeconomic stabilizer",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "custom-logs"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-logs\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-logs",
+    "game": "gta5",
+    "author": "Custom Server",
+    "description": "Custom logging and audit dispatches",
+    "version": "cerulean",
+    "deps": [
+      "qb-core"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-main\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-main",
+    "game": "gta5",
+    "author": "Custom Server",
+    "description": "Central custom logic entry for this QBCore server",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "custom-logs",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-phone\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-phone",
+    "game": "gta5",
+    "author": "Custom Server",
+    "description": "High-Performance Phone-First Custom Phone System for T-City Lite",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "oxmysql"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-quest\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-quest",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Data-driven quest/mission system with state machine, security guards, and external script API",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "oxmysql",
+      "core-framework",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-security\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-security",
+    "game": "gta5",
+    "author": "Custom Server",
+    "description": "Security firewall, Rate Limit and anti-exploit dispatches",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "custom-logs"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-taxes\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-taxes",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Economic Sink Systems: Property Tax, Vehicle Lifecycle, NPC Pricing, Item Durability, Transaction Monitor",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "oxmysql"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-testing\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-testing",
+    "game": "gta5",
+    "author": "T-City Lite Dev",
+    "description": "T-City Lite 自动化游戏内测试框架 — 使用 /test 命令运行测试套件",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "custom-logs"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[custom]\\custom-vehicles\\fxmanifest.lua",
+    "category": "[custom]",
+    "resource": "custom-vehicles",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Unified vehicle system — keys + state management + driving aids. O(1) cache, event-driven, drop-in replacement for qb-vehiclekeys + qb-mechanicjob state.",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql",
+      "qb-core",
+      "core-framework",
+      "custom-quest"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[defaultmaps]\\[prison_map]\\prison_canteen\\fxmanifest.lua",
+    "category": "[defaultmaps]",
+    "resource": "[prison_map]",
+    "game": "gta5",
+    "author": "",
+    "description": "",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[defaultmaps]\\[prison_map]\\prison_main\\fxmanifest.lua",
+    "category": "[defaultmaps]",
+    "resource": "[prison_map]",
+    "game": "gta5",
+    "author": "",
+    "description": "",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[defaultmaps]\\[prison_map]\\prison_meeting\\fxmanifest.lua",
+    "category": "[defaultmaps]",
+    "resource": "[prison_map]",
+    "game": "gta5",
+    "author": "",
+    "description": "",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[defaultmaps]\\dealer_map\\fxmanifest.lua",
+    "category": "[defaultmaps]",
+    "resource": "dealer_map",
+    "game": "gta5",
+    "author": "",
+    "description": "",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[defaultmaps]\\hospital_map\\fxmanifest.lua",
+    "category": "[defaultmaps]",
+    "resource": "hospital_map",
+    "game": "gta5",
+    "author": "",
+    "description": "",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-adminmenu\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-adminmenu",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Provides a menu for server and player management",
+    "version": "cerulean",
+    "deps": [
+      "menuv"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-ambulancejob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-ambulancejob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Player health, death, and wounding system with ems job",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-inventory",
+      "custom-career",
+      "custom-certificates"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-apartments\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-apartments",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Provides players with an apartment on server join",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-interior",
+      "qb-clothing",
+      "qb-weathersync"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-banking\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-banking",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to deposit/withdraw money from their bank/job account and create shared accounts",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-bankrobbery\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-bankrobbery",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to rob banks and blow up power stations",
+    "version": "cerulean",
+    "deps": [
+      "PolyZone"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-busjob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-busjob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to work as a bus driver and pickup npcs around the map",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-cityhall\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-cityhall",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to purchase id cards and licenses or change their job",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-inventory",
+      "custom-certificates"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-clothing\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-clothing",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "A menu providing players the ability to change their clothing and accessories",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-core\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-core",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Core resource for the framework, contains all the core functionality and features",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql",
+      "core-framework"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-crafting\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-crafting",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to craft items and earn experience",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-crypto\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-crypto",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Provides the logic for handling cryptocurrency aka qbit",
+    "version": "cerulean",
+    "deps": [
+      "qb-minigames"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-diving\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-diving",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to dive and search for materials underwater to sell",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-doorlock\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-doorlock",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Door management system allowing players to lock and unlock doors",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-drugs\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-drugs",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to deliver packages and sell drugs to npcs",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-fuel\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-fuel",
+    "game": "gta5",
+    "author": "Cocodrulo",
+    "description": "A siple Fuel System for FiveM",
+    "version": "cerulean",
+    "deps": [
+      "qb-target"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-garages\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-garages",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to store their vehicles in garages and withdraw job vehicles",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-garbagejob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-garbagejob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to collect garbage for money",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-hotdogjob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-hotdogjob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to sell hotdogs to npcs for money",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-houserobbery\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-houserobbery",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to rob houses for items to sell",
+    "version": "cerulean",
+    "deps": [
+      "qb-minigames"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-houses\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-houses",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Housing system for players using shells and furniture items to decorate their homes",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-interior",
+      "qb-clothing",
+      "qb-weathersync"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-hud\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-hud",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Heads-up display letting players track their hunger, thirst, stress, and more",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-input\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-input",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Menu that allows players to input information for various things",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-interior\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-interior",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Collection of shell models with exports for creating them",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-inventory\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-inventory",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Player inventory system providing a variety of features for storing and managing items",
+    "version": "cerulean",
+    "deps": [
+      "qb-weapons"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-jewelery\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-jewelery",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to rob jewelry stores for items to sell",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-lapraces\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-lapraces",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to create vehicle races to compete in for money",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-loading\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-loading",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Loading screen",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-management\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-management",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Employee management system allowing players to hire/fire other players",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-inventory",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-mapsidebar\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-mapsidebar",
+    "game": "gta5",
+    "author": "T-City",
+    "description": "Map sidebar NUI — categorized blip browser with i18n",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-mechanicjob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-mechanicjob",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Mechanic job — repair/customize vehicles. Vehicle state managed by custom-vehicles.",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-inventory",
+      "custom-career",
+      "custom-vehicles"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-menu\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-menu",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Menu of options for players to interact with to do certain tasks",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-minigames\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-minigames",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Various minigames that can be used for players to complete",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-multicharacter\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-multicharacter",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to create multiple characters",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-spawn"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-newsjob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-newsjob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to play as a news reporter and access the equipment for it",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-pawnshop\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-pawnshop",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to sell items for money",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-phone\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-phone",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to access a phone to interact with various apps and features",
+    "version": "bodacious",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-policejob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-policejob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Provides police tools, evidence, job and more functionality for players to use as a cop",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "qb-inventory",
+      "custom-career",
+      "custom-certificates",
+      "custom-documents"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-prison\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-prison",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to be jailed, escape from jail and work in jail",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-radialmenu\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-radialmenu",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players quick access to a menu for various actions",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-recyclejob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-recyclejob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to work in the recycling plant for money",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-scoreboard\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-scoreboard",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to view a menu that displays various information about the server and players",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-scrapyard\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-scrapyard",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to scrap cars for money",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-shops\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-shops",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to purchase items from various shops around the map",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-smallresources\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-smallresources",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Various small code snippets compiled into one resource for ease of use",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-spawn\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-spawn",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to select a spawn point from a list of available locations",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-storerobbery\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-storerobbery",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to rob various stores on the map for money and items",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-streetraces\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-streetraces",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to compete in quick vehicle races with wagers",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-target\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-target",
+    "game": "gta5",
+    "author": "BerkieB",
+    "description": "Allows players to interact with various objects and entities in the world",
+    "version": "cerulean",
+    "deps": [
+      "PolyZone"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-taxijob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-taxijob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to work as a taxi driver and pickup npcs around the map",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-towjob\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-towjob",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to tow vehicles around the map for money",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-truckrobbery\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-truckrobbery",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to rob specific trucks for money and items",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-vehiclesales\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-vehiclesales",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to set their vehicles on display for sale to other players",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-vehicleshop\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-vehicleshop",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to purchase vehicles and manage shops through a job",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-vineyard\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-vineyard",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to work at the vineyard for items to sell",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-weapons\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-weapons",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Manages all weapon logic for ammo, attachments, and more",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-weathersync\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-weathersync",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Syncs the time & weather for all players on the server and allows editing by command",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[qb]\\qb-weed\\fxmanifest.lua",
+    "category": "[qb]",
+    "resource": "qb-weed",
+    "game": "gta5",
+    "author": "Kakarot",
+    "description": "Allows players to grow weed plants in their house to harvest for items to sell",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\PolyZone\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "PolyZone",
+    "game": "",
+    "author": "",
+    "description": "Define zones of different shapes and test whether a point is inside or outside of the zone",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\aaa_silence\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "aaa_silence",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Silence: PRODUCTION_MODE flag for shared/client/server Lua states",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\bob74_ipl\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "bob74_ipl",
+    "game": "gta5",
+    "author": "Bob_74",
+    "description": "Load and customize your map",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\cartel-gates\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "cartel-gates",
+    "game": "gta5",
+    "author": "Antigravity",
+    "description": "Cartel Base Gates Spawner and Placer Tool",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\connectqueue\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "connectqueue",
+    "game": "common",
+    "author": "",
+    "description": "",
+    "version": "bodacious",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\core-framework\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "core-framework",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Core service framework: unified data access layer, cache engine, dirty flush pipeline, event firewall",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql",
+      "qb-core",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\custom-cartel\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "custom-cartel",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Cartel organization core — drug production chain, NPC allies, territory management",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql",
+      "qb-core",
+      "qb-inventory",
+      "qb-target",
+      "qb-menu",
+      "progressbar",
+      "core-framework",
+      "custom-storage",
+      "custom-market",
+      "custom-security",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\custom-justice\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "custom-justice",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Justice system — arrest, lawyer, trial, prison ecosystem",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql",
+      "qb-core",
+      "qb-menu",
+      "qb-target",
+      "core-framework",
+      "qb-policejob",
+      "qb-prison",
+      "custom-career",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\custom-market\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "custom-market",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Dynamic commodity market with supply-demand price engine — buy high/sell low with mean reversion",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql",
+      "qb-core",
+      "qb-inventory",
+      "core-framework"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\custom-mining\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "custom-mining",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Mining system — ore gathering, smelting, org storage integration",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql",
+      "qb-core",
+      "qb-inventory",
+      "qb-target",
+      "qb-menu",
+      "progressbar",
+      "core-framework",
+      "custom-storage",
+      "custom-market",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\custom-storage\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "custom-storage",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Generic organization storage system — per-org shared stash with differentiated capacity (job & gang)",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql",
+      "qb-core",
+      "qb-inventory",
+      "core-framework"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\interact-sound\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "interact-sound",
+    "game": "",
+    "author": "",
+    "description": "",
+    "version": "adamant",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\menuv\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "menuv",
+    "game": "gta5",
+    "author": "ThymonA",
+    "description": "FiveM menu library for creating menu\\",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\menuv\\menuv_example\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "menuv",
+    "game": "gta5",
+    "author": "ThymonA",
+    "description": "FiveM menu libarary for creating menu\\",
+    "version": "cerulean",
+    "deps": [
+      "menuv"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\oxmysql\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "oxmysql",
+    "game": "common",
+    "author": "Overextended",
+    "description": "FXServer to MySQL communication via node-mysql2",
+    "version": "cerulean",
+    "deps": [
+      "oxmysql"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\progressbar\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "progressbar",
+    "game": "gta5",
+    "author": "qbcore-framework",
+    "description": "Dependency for creating progressbars in QB-Core.",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\safecracker\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "safecracker",
+    "game": "gta5",
+    "author": "",
+    "description": "Safecracker Minigame",
+    "version": "bodacious",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[standalone]\\screenshot-basic\\fxmanifest.lua",
+    "category": "[standalone]",
+    "resource": "screenshot-basic",
+    "game": "common",
+    "author": "",
+    "description": "",
+    "version": "bodacious",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[system]\\atom_nodes\\fxmanifest.lua",
+    "category": "[system]",
+    "resource": "atom_nodes",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Event-Driven Atomic Quest Nodes — GOTO | INTERACT | DELIVER (PolyZone-powered, zero polling)",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "PolyZone",
+      "production-freeze"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[system]\\core_economy\\fxmanifest.lua",
+    "category": "[system]",
+    "resource": "core_economy",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Unified Economic Reward Gateway — single entry point for ALL money/item/rep rewards",
+    "version": "cerulean",
+    "deps": [
+      "qb-core"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[system]\\economy-dashboard\\fxmanifest.lua",
+    "category": "[system]",
+    "resource": "economy-dashboard",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Real-time economy telemetry dashboard — cash flow, activity heat, asset distribution",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "oxmysql"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[system]\\monitor\\fxmanifest.lua",
+    "category": "[system]",
+    "resource": "monitor",
+    "game": "common",
+    "author": "Tabarra",
+    "description": "The official FiveM/RedM server web/in-game management platform.",
+    "version": "8.0.1",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[system]\\production-freeze\\fxmanifest.lua",
+    "category": "[system]",
+    "resource": "production-freeze",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Production Freeze: i18n + Debug OFF + Entity GC + PolyZone Polish",
+    "version": "cerulean",
+    "deps": [
+      "qb-core"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[system]\\tcity-dashboard\\fxmanifest.lua",
+    "category": "[system]",
+    "resource": "tcity-dashboard",
+    "game": "gta5",
+    "author": "T-City Lite",
+    "description": "Universal Multi-Modal Vehicle Dashboard — Vue 3 NUI, 6-class templates, event-driven, zero-idle overhead. v2.1: Police console + ANPR/radar/tracker/CCTV/plate system.",
+    "version": "cerulean",
+    "deps": [
+      "qb-core",
+      "core-framework",
+      "qb-policejob"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[voice]\\pma-voice\\fxmanifest.lua",
+    "category": "[voice]",
+    "resource": "pma-voice",
+    "game": "common",
+    "author": "AvarianKnight",
+    "description": "VOIP built using FiveM\\",
+    "version": "cerulean",
+    "deps": [],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  },
+  {
+    "path": "[voice]\\qb-radio\\fxmanifest.lua",
+    "category": "[voice]",
+    "resource": "qb-radio",
+    "game": "gta5",
+    "author": "",
+    "description": "QB-Radio",
+    "version": "cerulean",
+    "deps": [
+      "pma-voice"
+    ],
+    "client_scripts": [],
+    "server_scripts": [],
+    "shared_scripts": [],
+    "files_count": {
+      "lua": 0,
+      "js": 0,
+      "html": 0,
+      "cfg": 0,
+      "total": 0
+    }
+  }
+]

@@ -79,9 +79,7 @@ local function StartLoginProtection()
     end)
 end
 
-CreateThread(function()
-    DebugPrint('custom-main client initialized')
-end)
+-- custom-main client init print removed
 
 -- 玩家加载完成（客户端）事件桥接
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()

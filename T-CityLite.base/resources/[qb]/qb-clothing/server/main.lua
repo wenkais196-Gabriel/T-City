@@ -13,7 +13,9 @@ local function SavePlayerSkinOffline(citizenid)
                 1
             })
             cache.isDirty = false
-            print(("[qb-clothing] 成功将角色服装 RAM 脏数据 (%s) 批量持久化同步至数据库。"):format(citizenid))
+            -- 🔒 Security: citizenid 脱敏
+            local maskedCid = citizenid:sub(1,4) .. "..." .. citizenid:sub(-4)
+            print(("[qb-clothing] 成功将角色服装 RAM 脏数据 (%s) 批量持久化同步至数据库。"):format(maskedCid))
         end)
     end
 end

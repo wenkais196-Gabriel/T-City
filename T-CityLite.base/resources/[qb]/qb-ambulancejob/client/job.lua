@@ -369,6 +369,12 @@ local function EMSHelicopter(k)
                 exports['qb-core']:KeyPressed(38)
                 CheckHeli = false
                 local ped = PlayerPedId()
+                -- 🛡️ 飞行执照前置校验
+                local hasPilotLicense = exports['custom-certificates']:HasLicense(GetPlayerServerId(PlayerId()), 'pilot')
+                if not hasPilotLicense then
+                    QBCore.Functions.Notify('你没有飞行执照 (Pilot License)，无法申领空中急救直升机！', 'error')
+                    return
+                end
                 if IsPedInAnyVehicle(ped, false) then
                     QBCore.Functions.DeleteVehicle(GetVehiclePedIsIn(ped))
                 else

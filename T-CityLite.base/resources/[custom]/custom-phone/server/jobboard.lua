@@ -100,6 +100,7 @@ QBCore.Functions.CreateCallback('phone:server:postJob', function(source, cb, tit
 
     reward = tonumber(reward) or 0
     if reward <= 0 then return cb({ success = false, message = 'Invalid payout budget' }) end
+    if reward > 50000 then return cb({ success = false, message = 'Payout budget exceeds city limit of $50,000' }) end
 
     local target_tags = json.encode({ role = 'civilian', tier = 'entry' })
     local task_id = math.random(100, 999)
@@ -159,7 +160,8 @@ RegisterNetEvent('phone:server:completeJob', function(id)
         if not results or #results == 0 then return end
         
         local job = results[1]
-        if job.status ~= 'open' and (job.status ~= 'taken' or job.taken_by ~= citizenid) then return end
+        -- Only the player who accepted this job can complete it
+        if job.status ~= 'taken' or job.taken_by ~= citizenid then return end
 
         -- Server-side Distance Verification (Antispoof / Anti-Cheat)
         local targetCoords = GetJobCoords(job.title)

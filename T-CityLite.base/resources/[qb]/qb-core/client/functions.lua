@@ -166,27 +166,101 @@ function QBCore.Functions.IsWearingGloves()
     return true
 end
 
--- NUI Calls
+-- ═══════════════════════════════════════════════════════════
+-- 通知系统 — 双轨制路由器
+--   默认 (无 type 或 'primary') → 原生 GTA The Feed (黑底白字)
+--   指定 type (success/error/warning/police/ambulance) → NUI 高级通知
+--   自定义 type (通过 Bus.Plugin 注册) → 事件总线发布
+-- ═══════════════════════════════════════════════════════════
 
+--- 统一通知入口 (双轨制)
+---@param text string|table  通知文本 (支持 GTA 颜色标签 ~r~~g~~b~~y~)
+---                            或 {text=string, caption=string}
+---@param texttype? string   通知类型: nil/'primary'→原生, success/error/warning/police/ambulance→NUI, 自定义→插件通道
+---@param length? number     显示时长 (ms), 默认 5000
+---@param icon? string       图标 (仅高级 NUI 通知使用)
 function QBCore.Functions.Notify(text, texttype, length, icon)
-    local message = {
-        action = 'notify',
-        type = texttype or 'primary',
-        length = length or 5000,
-    }
+    local duration = length or 5000
 
+    -- 提取纯文本 (兼容 table 格式)
+    local messageText = text
+    local captionText = nil
     if type(text) == 'table' then
-        message.text = text.text or 'Placeholder'
-        message.caption = text.caption or 'Placeholder'
-    else
-        message.text = text
+        messageText = text.text or text.caption or 'Placeholder'
+        captionText = text.caption
     end
 
-    if icon then
-        message.icon = icon
+    -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    -- 轨 1: 自定义插件类型 → Bus.Plugin.Publish 事件总线
+    -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if texttype and _G.Bus and _G.Bus.Plugin and _G.Bus.Plugin._plugins then
+        for pluginName, schema in pairs(_G.Bus.Plugin._plugins) do
+            if schema.notifyTypes then
+                for _, notifyType in ipairs(schema.notifyTypes) do
+                    if notifyType == texttype then
+                        TriggerEvent('QBCore:Notify:Custom', {
+                            plugin = pluginName, type = texttype,
+                            text = messageText, caption = captionText,
+                            length = duration, icon = icon,
+                        })
+                        return
+                    end
+                end
+            end
+        end
     end
 
-    SendNUIMessage(message)
+    -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    -- 轨 2: NUI 通知 — 所有显式指定的 type (primary/success/error/...)
+    -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if texttype ~= nil then
+        local message = {
+            action = 'notify',
+            type = texttype,
+            length = duration,
+        }
+        if type(text) == 'table' then
+            message.text = text.text or 'Placeholder'
+            message.caption = text.caption or 'Placeholder'
+        else
+            message.text = text
+        end
+        if icon then message.icon = icon end
+        SendNUIMessage(message)
+        return
+    end
+
+    -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    -- 轨 3: 原生 GTA The Feed — 无 type 参数时走这里 (默认通道)
+    -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    local nativeOk = false
+    local NN = _G.NativeNotify  -- lua54: 显式 _G 跨资源引用
+    if NN then
+        if captionText then
+            nativeOk = NN.ShowAdvanced(
+                captionText,             -- title
+                '',                       -- subject
+                messageText,             -- text
+                icon or 'CHAR_MULTIPLAYER',
+                NN.ICONS.ICON_DEFAULT,
+                false
+            )
+        else
+            nativeOk = NN.Show(messageText)
+        end
+    end
+
+    -- 回退: 原生失败或模块未加载时走 NUI 通道
+    if not nativeOk then
+        local message = {
+            action = 'notify',
+            type = 'primary',
+            length = duration,
+            text = messageText,
+        }
+        if icon then message.icon = icon end
+        SendNUIMessage(message)
+    end
 end
 
 function QBCore.Functions.Progressbar(name, label, duration, useWhileDead, canCancel, disableControls, animation, prop, propTwo, onFinish, onCancel)

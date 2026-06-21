@@ -1,9 +1,16 @@
 fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
-author 'Kakarot'
-description 'Allows players to repair/customize vehicles through a specified job'
-version '3.0.0'
+author 'T-City Lite'
+description 'Mechanic job — repair/customize vehicles. Vehicle state managed by custom-vehicles.'
+version '3.1.0'
+
+dependencies {
+    'qb-core',
+    'qb-inventory',
+    'custom-career',
+    'custom-vehicles',
+}
 
 shared_scripts {
     '@qb-core/shared/locale.lua',
@@ -13,7 +20,12 @@ shared_scripts {
 }
 
 client_scripts {
-    'client/*.lua',
+    -- v3.1: drivingdistance.lua + nitrous.lua 已迁移至 custom-vehicles
+    'client/main.lua',
+    'client/repair.lua',
+    'client/performance.lua',
+    'client/cosmetic.lua',
+    'client/tunerchip.lua',
 }
 
 server_scripts {

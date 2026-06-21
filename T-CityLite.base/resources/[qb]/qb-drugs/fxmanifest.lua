@@ -25,3 +25,8 @@ server_scripts {
     'server/deliveries.lua',
     'server/cornerselling.lua'
 }
+
+dependencies {
+    'qb-core',
+    'production-freeze',
+}

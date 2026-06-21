@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>T-City2 改装店玩家体验流程设计</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --dim: #8b949e;
+    --accent: #f78166;
+    --accent2: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d2991d;
+    --red: #f85149;
+    --purple: #a371f7;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.7;
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+  }
+  h1 { font-size: 2rem; border-bottom: 2px solid var(--accent); padding-bottom: .5rem; margin-bottom: .5rem; }
+  h2 { font-size: 1.4rem; color: var(--accent2); margin: 2.5rem 0 1rem; padding-left: .5rem; border-left: 3px solid var(--accent2); }
+  h3 { font-size: 1.15rem; color: var(--text); margin: 1.8rem 0 .8rem; }
+  p { margin: .8rem 0; }
+  .meta { color: var(--dim); font-size: .85rem; margin-bottom: 2rem; }
+  .meta a { color: var(--accent2); }
+
+  /* Cards */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem 1.5rem; margin: 1rem 0;
+  }
+  .card-header {
+    font-weight: 700; font-size: 1.05rem; margin-bottom: .8rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+
+  /* Principle grid */
+  .principle-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: .8rem; margin: 1rem 0;
+  }
+  .principle-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.2rem;
+  }
+  .principle-card .label { font-weight: 700; color: var(--accent); }
+  .principle-card .desc { color: var(--dim); font-size: .9rem; margin-top: .3rem; }
+
+  /* Flow */
+  .flow-container {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.5rem; margin: 1rem 0; font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: .85rem; line-height: 1.5; overflow-x: auto; white-space: pre;
+  }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .9rem; }
+  th { background: var(--surface); color: var(--accent2); text-align: left; padding: .6rem .8rem; border: 1px solid var(--border); }
+  td { padding: .5rem .8rem; border: 1px solid var(--border); }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+
+  /* Badges */
+  .badge { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .78rem; font-weight: 600; }
+  .badge-red { background: rgba(248,81,73,.15); color: var(--red); }
+  .badge-green { background: rgba(63,185,80,.15); color: var(--green); }
+  .badge-yellow { background: rgba(210,153,29,.15); color: var(--yellow); }
+  .badge-purple { background: rgba(163,113,247,.15); color: var(--purple); }
+  .badge-blue { background: rgba(88,166,255,.15); color: var(--accent2); }
+
+  /* UI mockup */
+  .ui-mockup {
+    background: #0a0e14; border: 1px solid var(--border); border-radius: 6px;
+    padding: 1rem; margin: 1rem 0; font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: .8rem; line-height: 1.4; overflow-x: auto; white-space: pre;
+    color: #a8b8c8;
+  }
+  .ui-mockup .hl { color: var(--accent2); }
+  .ui-mockup .hl2 { color: var(--accent); }
+  .ui-mockup .dim { color: #555; }
+  .ui-mockup .lock { color: var(--red); }
+
+  /* Stage flow diagram */
+  .stage-row {
+    display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 1.5rem 0;
+  }
+  .stage-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: .6rem 1rem; font-size: .85rem; text-align: center; min-width: 120px; flex: 1;
+  }
+  .stage-box .num { font-size: 1.5rem; font-weight: 800; color: var(--accent); }
+  .stage-box .title { font-weight: 600; }
+  .stage-box .sub { color: var(--dim); font-size: .75rem; }
+  .stage-arrow { color: var(--accent); font-size: 1.2rem; font-weight: bold; }
+
+  /* State machine */
+  .state-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .5rem; margin: 1rem 0;
+  }
+  .state-node {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: .5rem .8rem; text-align: center; font-size: .82rem;
+  }
+  .state-node.active { border-color: var(--green); }
+  .state-node.end { border-color: var(--accent2); }
+  .state-node.fail { border-color: var(--red); }
+
+  /* Comparison table highlight */
+  .highlight { background: rgba(248,129,102,.08); }
+  .our-feature { color: var(--green); font-weight: 600; }
+
+  /* Roadmap */
+  .roadmap-phase {
+    background: var(--surface); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    padding: 1rem 1.5rem; margin: 1rem 0;
+  }
+  .roadmap-phase.p1 { border-left-color: var(--accent2); }
+  .roadmap-phase.p2 { border-left-color: var(--purple); }
+  .roadmap-phase.p3 { border-left-color: var(--dim); }
+  .roadmap-phase h4 { margin: 0 0 .5rem; }
+  .roadmap-phase ul { margin: .3rem 0 0 1.2rem; color: var(--dim); font-size: .9rem; }
+
+  /* Summary cards */
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: .8rem; margin: 1rem 0;
+  }
+  .summary-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem; text-align: center;
+  }
+  .summary-card .big { font-size: 2rem; font-weight: 800; color: var(--accent); }
+  .summary-card .label { color: var(--dim); font-size: .85rem; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  @media (max-width: 768px) {
+    body { padding: 1rem; }
+    .stage-row { flex-direction: column; }
+    .stage-arrow { transform: rotate(90deg); }
+    h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>🔧 T-City2 改装店玩家体验流程设计</h1>
+
+<div class="meta">
+  版本 v1.0 · 2026-06-05 · 状态: 设计草案<br>
+  前序文档: <a href="tuning_shop_analysis.html">tuning_shop_analysis.html</a> — 项目现状审计 + 社区调研
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: Principles -->
+<!-- ============================================================ -->
+<h2>1. 设计原则</h2>
+
+<div class="card">
+  <div class="card-header">🎯 核心理念</div>
+  <p style="font-size:1.05rem; text-align:center; color:var(--accent);">
+    改装不是"点菜单→付钱→秒装完"的廉价体验，而是<br>
+    <strong>玩家设计 → 技师评估 → 预约排期 → 备料施工 → 交付验收 → 后续服务</strong><br>
+    六阶段完整 RP 闭环
+  </p>
+</div>
+
+<div class="principle-grid">
+  <div class="principle-card">
+    <div class="label">🆓 预览免费、施工收费</div>
+    <div class="desc">玩家在预览菜单随心设计，0成本探索，只有提交订单后才涉及经济</div>
+  </div>
+  <div class="principle-card">
+    <div class="label">👨‍🔧 技师是必要中介</div>
+    <div class="desc">改装必须由在线技师施工，玩家不可自助改装（维修除外）</div>
+  </div>
+  <div class="principle-card">
+    <div class="label">📊 等级=能力边界</div>
+    <div class="desc">技师等级决定可施工的改装范围，预览时透明标注</div>
+  </div>
+  <div class="principle-card">
+    <div class="label">📅 预约=时间成本</div>
+    <div class="desc">复杂改装需要预约档期，期间技师需要备料</div>
+  </div>
+  <div class="principle-card">
+    <div class="label">📦 物料=经济循环</div>
+    <div class="desc">零件/漆料/工具需要提前准备，连接采矿→冶炼→零件供应链</div>
+  </div>
+  <div class="principle-card">
+    <div class="label">📱 中控屏=交付物延伸</div>
+    <div class="desc">NOS/霓虹灯/底盘灯等特殊改装，安装后在车载中控屏出现控制开关</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: Global Journey -->
+<!-- ============================================================ -->
+<h2>2. 全局玩家旅程</h2>
+
+<div class="stage-row">
+  <div class="stage-box">
+    <div class="num">①</div>
+    <div class="title">自助预览</div>
+    <div class="sub">Customs Marker</div>
+    <div class="sub">设计改装方案</div>
+    <div class="sub">系统生成预报价</div>
+  </div>
+  <div class="stage-arrow">→</div>
+  <div class="stage-box">
+    <div class="num">②</div>
+    <div class="title">技师评估</div>
+    <div class="sub">Tuning Bay</div>
+    <div class="sub">审查→调整报价</div>
+    <div class="sub">设定档期</div>
+  </div>
+  <div class="stage-arrow">→</div>
+  <div class="stage-box">
+    <div class="num">③</div>
+    <div class="title">技师备料</div>
+    <div class="sub">Storage+Workbench</div>
+    <div class="sub">检查库存→采购</div>
+    <div class="sub">制作零件→调漆</div>
+  </div>
+  <div class="stage-arrow">→</div>
+  <div class="stage-box">
+    <div class="num">④</div>
+    <div class="title">施工安装</div>
+    <div class="sub">步骤化工作流</div>
+    <div class="sub">动画+进度条</div>
+    <div class="sub">物料实时消耗</div>
+  </div>
+  <div class="stage-arrow">→</div>
+  <div class="stage-box">
+    <div class="num">⑤</div>
+    <div class="title">交付验收</div>
+    <div class="sub">验车→付款→取车</div>
+    <div class="sub">改装记录+保修卡</div>
+    <div class="sub">中控屏激活</div>
+  </div>
+  <div class="stage-arrow">→</div>
+  <div class="stage-box">
+    <div class="num">⑥</div>
+    <div class="title">后续服务</div>
+    <div class="sub">保修返修</div>
+    <div class="sub">改装历史查询</div>
+    <div class="sub">方案复用</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: Detailed Design -->
+<!-- ============================================================ -->
+<h2>3. 各阶段详细设计</h2>
+
+<!-- Stage 1: Preview -->
+<h3>3.1 阶段① — 自助预览终端</h3>
+
+<p><strong>触发</strong>: 玩家驾驶自有车辆进入改装店，走向 <span class="badge badge-blue">Customs Marker</span></p>
+
+<div class="card">
+  <div class="card-header">🖥️ 预览终端 UI 布局</div>
+  <div class="ui-mockup">
+┌──────────────────────────────────┬──────────────────────────┐
+│                                  │  ▲ <span class="hl">外观改装</span>               │
+│                                  │  ├─ Spoiler      <span class="hl2">Lv2</span>  │
+│     [车辆 <span class="hl">3D 实时预览</span>]         │  ├─ Front Bumper <span class="hl2">Lv3</span>  │
+│     可拖拽旋转/滚轮缩放           │  ├─ Side Skirt   <span class="hl2">Lv1</span>  │
+│     每选一个改装即时渲染           │  ├─ Exhaust      <span class="hl2">Lv4</span>  │
+│                                  │  ┊                         │
+│                                  │  ▲ <span class="hl">性能改装</span>               │
+│                                  │  ├─ Engine       <span class="hl2">Lv3</span>  │
+│                                  │  ├─ Brakes       <span class="hl2">Lv2</span>  │
+│                                  │  ├─ Turbo        <span class="hl2">Lv1</span>  │
+│                                  │  ┊                         │
+│                                  │  ▲ <span class="hl">特殊改装</span>               │
+│                                  │  ├─ Nitrous    <span class="lock">🔒大师</span>  │
+│                                  │  ├─ Neon Kit   <span class="lock">🔒宗师</span>  │
+│                                  │  └─ ECU Tune   <span class="lock">🔒宗师</span>  │
+├──────────────────────────────────┴──────────────────────────┤
+│  <span class="hl2">预报价: $48,500</span>  │  [保存方案] [提交订单] [放弃离开]  │
+└─────────────────────────────────────────────────────────────┘
+  </div>
+</div>
+
+<table>
+  <tr><th>规则</th><th>说明</th></tr>
+  <tr><td><strong>仅限自有车辆</strong></td><td>非自有车辆进入预览终端提示"你不是该车辆的所有者"</td></tr>
+  <tr><td><strong>实时预览</strong></td><td>每选一个零件，车辆模型立即更新（SetVehicleMod 本地预览）</td></tr>
+  <tr><td><strong>兼容性过滤</strong></td><td>菜单只显示该车型支持的改装（GetNumVehicleMods 过滤）</td></tr>
+  <tr><td><strong>等级标注</strong></td><td>需要技师等级的改装标注 <span class="badge badge-red">🔒大师</span> <span class="badge badge-purple">🔒宗师</span> <span class="badge badge-yellow">🔒传奇</span>，灰色不可选</td></tr>
+  <tr><td><strong>预报价</strong></td><td>系统自动计算：<code>零件费 + 基础工时费</code>，不含技师调整</td></tr>
+  <tr><td><strong>方案存取</strong></td><td>玩家可保存最多 5 套方案，下次直接加载</td></tr>
+</table>
+
+<p><strong>预报价公式</strong>: <code>preQuote = Σ partBasePrice × shopMultiplier</code></p>
+
+<!-- Stage 2: Mechanic Review -->
+<h3>3.2 阶段② — 技师接单评估</h3>
+
+<p><strong>触发</strong>: 玩家提交订单 → 系统广播给所有当班技师</p>
+
+<div class="card">
+  <div class="card-header">📋 技师订单 App（平板 NUI）</div>
+  <div class="ui-mockup">
+┌──────────────────────────────────────────────┐
+│  📋 改装订单 <span class="hl">#TUN-20260605-0042</span>              │
+│                                               │
+│  客户: Tony_Soprano  |  车辆: Elegy RH8       │
+│  车牌: ABC123        |  里程: 45,230 km       │
+│                                               │
+│  ┌─ 改装项目清单 ──────────────────────────┐  │
+│  │ <span class="hl">✅</span> Spoiler Lv2              $1,200    │  │
+│  │ <span class="hl">✅</span> Front Bumper Lv3         $2,500    │  │
+│  │ <span class="hl">✅</span> Engine Lv3            $15,000 <span class="lock">🔒大师</span>│  │
+│  │ <span class="hl">✅</span> Turbo Lv1              $8,000 <span class="lock">🔒宗师</span>│  │
+│  │ <span class="hl">✅</span> Primary Paint #FF0000    $2,000    │  │
+│  │ <span class="lock">❌</span> Nitrous                 $12,000 <span class="lock">🔒宗师</span>│  │
+│  │    ⤷ 你当前等级无法安装,已自动剔除         │  │
+│  └──────────────────────────────────────────┘  │
+│                                               │
+│  系统预报价: $28,700                           │
+│  <span class="hl2">你的工时费: $______  (建议 $2,000-5,000)</span>     │
+│  <span class="hl2">最终报价:   $______</span>                       │
+│                                               │
+│  预计工时: [▢ 1h] [▢ 2h] [▢ 半天] [▢ 1天]    │
+│  <span class="hl2">预约档期: [日期选择器] [时间段]</span>            │
+│                                               │
+│  [<span class="hl">确认接单</span>]  [拒绝订单]  [要求修改]            │
+└──────────────────────────────────────────────┘
+  </div>
+</div>
+
+<table>
+  <tr><th>规则</th><th>说明</th></tr>
+  <tr><td><strong>等级过滤</strong></td><td>技师等级不够的改装项自动标红剔除，不可接</td></tr>
+  <tr><td><strong>工时费自定义</strong></td><td>技师在系统建议范围内自定义工时费</td></tr>
+  <tr><td><strong>档期设定</strong></td><td>技师设定预约时间，玩家必须在约定时间送车</td></tr>
+  <tr><td><strong>订单状态机</strong></td><td><code>pending → accepted → preparing → in_progress → completed</code></td></tr>
+  <tr><td><strong>多技师可见</strong></td><td>所有当班技师可见待接订单，先接先得</td></tr>
+</table>
+
+<h4>技师等级体系</h4>
+
+<table>
+  <tr><th>等级</th><th>称号</th><th>所需经验</th><th>可施工范围</th></tr>
+  <tr><td><span class="badge badge-green">Lv1</span></td><td>学徒</td><td>0 XP</td><td>外观1-10类、喷漆(普通/金属)、维修</td></tr>
+  <tr><td><span class="badge badge-blue">Lv2</span></td><td>技师</td><td>50 XP</td><td>+全部外观、性能Lv1-3、喷漆全部</td></tr>
+  <tr><td><span class="badge badge-yellow">Lv3</span></td><td>高级技师</td><td>150 XP</td><td>+全部性能、ECU基础调校、氮气</td></tr>
+  <tr><td><span class="badge badge-red">Lv4</span></td><td>大师</td><td>400 XP</td><td>+ECU高级调校、引擎更换、宽体套件</td></tr>
+  <tr><td><span class="badge badge-purple">Lv5</span></td><td>宗师</td><td>1000 XP</td><td>+全部特殊改装、跨车型移植</td></tr>
+</table>
+
+<!-- Stage 3: Material Prep -->
+<h3>3.3 阶段③ — 技师备料</h3>
+
+<p><strong>触发</strong>: 技师确认接单、玩家确认报价后，订单进入 <span class="badge badge-yellow">preparing</span> 状态</p>
+
+<div class="card">
+  <div class="card-header">📦 物料来源链</div>
+  <div class="flow-container">
+采矿 (custom-mining)
+  ↓ 原矿
+冶炼 (custom-mining 冶炼炉)
+  ↓ iron_ingot / copper_ingot / steel_plate 等
+零件制作 (Workbench Marker)
+  ↓ veh_engine / veh_brakes / veh_turbo 等
+改装店库存 (Storage Marker)
+  ↓ 技师从库存取用 → 施工消耗
+  </div>
+</div>
+
+<table>
+  <tr><th>规则</th><th>说明</th></tr>
+  <tr><td><strong>库存检查</strong></td><td>接单时自动检查店铺库存，不足的标黄提示</td></tr>
+  <tr><td><strong>零件订购</strong></td><td>技师可通过 Laptop Marker 向供应商订购（扣除店铺资金，延迟送达）</td></tr>
+  <tr><td><strong>玩家自备料</strong></td><td>玩家可以自己提供零件（从背包/后备箱），降低改装费用</td></tr>
+  <tr><td><strong>备料完成通知</strong></td><td>备料OK后，系统通知玩家"可以送车了"</td></tr>
+  <tr><td><strong>超时惩罚</strong></td><td>技师备料超时（>档期24h），订单自动取消，技师扣信用分</td></tr>
+</table>
+
+<!-- Stage 4: Installation -->
+<h3>3.4 阶段④ — 施工安装</h3>
+
+<p><strong>触发</strong>: 玩家按档期送车到店，技师在 Tuning Bay 开始施工</p>
+
+<div class="card">
+  <div class="card-header">🔧 施工步骤化工作流</div>
+  <div class="ui-mockup">
+┌──────────────────────────────────────────┐
+│  🔧 正在施工: Elegy RH8 | <span class="hl">#TUN-...-0042</span>    │
+│                                           │
+│  ┌─ 施工清单 ──────────────────────────┐  │
+│  │ <span class="hl">✅</span> 1. 车辆上架举升机               │  │
+│  │ <span class="hl">✅</span> 2. 安装 Spoiler Lv2   <span class="dim">-1 veh_ext</span>│  │
+│  │ <span class="hl2">⏳</span> 3. 安装 Front Bumper  <span class="dim">-1 veh_ext</span>│  │ ← 当前步骤
+│  │ ⬜ 4. 安装 Engine Lv3     <span class="dim">-1 veh_eng</span>│  │
+│  │ ⬜ 5. 安装 Turbo Lv1      <span class="dim">-1 veh_tur</span>│  │
+│  │ ⬜ 6. 喷漆 Primary       <span class="dim">-1 paint_m</span>│  │
+│  │ ⬜ 7. 车辆下架交付                  │  │
+│  └──────────────────────────────────────┘  │
+│                                           │
+│  ████████████░░░░░░  <span class="hl2">60%</span>  当前: 安装Bumper│
+│  物料消耗: veh_exterior ×1 (库存剩余: 3)  │
+└──────────────────────────────────────────┘
+  </div>
+</div>
+
+<p><strong>每步施工 = 动画 + 进度条 + 粒子特效</strong>:</p>
+<ul>
+  <li><strong>性能件</strong>: 打开引擎盖 → 拆卸旧件 → 安装新件 → 扭力扳手上紧 → 关闭引擎盖</li>
+  <li><strong>外观件</strong>: 对准位置 → 螺丝固定 → 调整缝隙</li>
+  <li><strong>喷漆</strong>: 遮蔽胶带 → 打磨旧漆 → 调色 → 喷涂（颜色渐变过渡）→ 清漆 → 烘烤</li>
+  <li><strong>NOS</strong>: 后备箱走管路 → 气瓶固定 → 电磁阀接线 → 中控屏配对</li>
+</ul>
+
+<table>
+  <tr><th>规则</th><th>说明</th></tr>
+  <tr><td><strong>不可中断</strong></td><td>单个改装步骤不可中断，但步骤之间技师可以暂停</td></tr>
+  <tr><td><strong>物料实时扣</strong></td><td>每步开始即消耗对应物料</td></tr>
+  <tr><td><strong>施工质量</strong></td><td>技师施工有小概率"失误"（minigame 失败），需重新施工</td></tr>
+  <tr><td><strong>客户可见进度</strong></td><td>玩家可在店外看到实时进度条</td></tr>
+  <tr><td><strong>特殊改装激活中控屏</strong></td><td>NOS/霓虹灯/底盘灯/ECU 安装后自动在 custom-vehicles dashboard 中激活控制面板</td></tr>
+</table>
+
+<!-- Stage 5: Delivery -->
+<h3>3.5 阶段⑤ — 交付验收</h3>
+
+<p><strong>触发</strong>: 技师完成所有施工步骤</p>
+
+<div class="card">
+  <div class="card-header">🎉 交付界面</div>
+  <div class="ui-mockup">
+┌──────────────────────────────────────────┐
+│  🎉 改装完成! <span class="hl">#TUN-20260605-0042</span>          │
+│                                           │
+│  车辆: Elegy RH8 [ABC123]                 │
+│  施工项目: 5 项                            │
+│                                           │
+│  ┌─ 费用明细 ──────────────────────────┐  │
+│  │ 零件费:          $26,700             │  │
+│  │ 工时费:           $3,500             │  │
+│  │ 税收 (5%):       $1,510              │  │
+│  │ ─────────────────────────            │  │
+│  │ <span class="hl2">合计:            $31,710</span>             │  │
+│  └──────────────────────────────────────┘  │
+│                                           │
+│  保修: 7天 (外观) / 30天 (性能)            │
+│  保修卡已存入你的物品栏                     │
+│                                           │
+│  ⚡ 车载中控屏已激活:                       │
+│     • NOS 氮气加速控制                      │
+│     • ECU 调校面板                         │
+│                                           │
+│  [<span class="hl">支付并取车</span>]  [有异议,投诉]                │
+└──────────────────────────────────────────┘
+  </div>
+</div>
+
+<p><strong>支付渠道</strong>: 现金 / 银行卡 / 店铺账户转账 / 分期付款（>$50k，3期，每期+5%手续费）</p>
+
+<table>
+  <tr><th>规则</th><th>说明</th></tr>
+  <tr><td><strong>支付才交货</strong></td><td>玩家不付款，车辆锁定在改装店不可开出</td></tr>
+  <tr><td><strong>保修机制</strong></td><td>保修期内同部位故障，免费返修（技师出物料）</td></tr>
+  <tr><td><strong>改装记录</strong></td><td>每次改装记录存入数据库，玩家可随时查询</td></tr>
+  <tr><td><strong>中控屏激活</strong></td><td>安装的特殊改装自动在 dashboard 中添加控制项</td></tr>
+</table>
+
+<!-- Stage 6: After-Sales -->
+<h3>3.6 阶段⑥ — 后续服务</h3>
+
+<table>
+  <tr><th>服务</th><th>说明</th></tr>
+  <tr><td><strong>保修返修</strong></td><td>保修期内同部位免费修；超期正常收费</td></tr>
+  <tr><td><strong>改装历史</strong></td><td>玩家输入 <code>/carhistory [plate]</code> 查看全部改装记录</td></tr>
+  <tr><td><strong>方案复用</strong></td><td>历史订单中的改装方案可一键加载到预览终端</td></tr>
+  <tr><td><strong>技师评价</strong></td><td>玩家给技师评分（1-5星），影响技师信用和接单优先级</td></tr>
+  <tr><td><strong>定期保养提醒</strong></td><td>里程达到保养间隔，中控屏自动提醒</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: Repair -->
+<!-- ============================================================ -->
+<h2>4. 维修分流设计</h2>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin:1.5rem 0;">
+  <div class="card">
+    <div class="card-header">🏪 自助维修站</div>
+    <p>玩家开车到维修站 → 交互 → 检测报告 → 选择维修项目 → 消耗物料 → 进度条 → 完成</p>
+    <table>
+      <tr><td>最高修复度</td><td><span class="badge badge-yellow">80%</span></td></tr>
+      <tr><td>可修项目</td><td>引擎健康、轮胎、车窗、基础车体</td></tr>
+      <tr><td>不可修</td><td>磨损部件、严重变形</td></tr>
+      <tr><td>物料消耗</td><td>与技师维修相同</td></tr>
+      <tr><td>耗时</td><td>30秒</td></tr>
+      <tr><td>费用</td><td>无工时费，仅物料消耗</td></tr>
+      <tr><td>适用场景</td><td>应急 / 省钱</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">👨‍🔧 技师维修</div>
+    <p>玩家到店 → 技师接车 → 检测 → 报价 → 施工 → 付款取车</p>
+    <table>
+      <tr><td>最高修复度</td><td><span class="badge badge-green">100%</span></td></tr>
+      <tr><td>可修项目</td><td>全部：引擎/车体/磨损部件/变形/车窗/轮胎</td></tr>
+      <tr><td>物料消耗</td><td>与自助相同</td></tr>
+      <tr><td>额外费用</td><td>工时费（技师自定义）</td></tr>
+      <tr><td>额外服务</td><td>洗车、打蜡、四轮定位</td></tr>
+      <tr><td>适用场景</td><td>全面保养 / 高性能要求</td></tr>
+    </table>
+  </div>
+</div>
+
+<table>
+  <tr><th>维度</th><th>自助维修站</th><th>技师维修</th></tr>
+  <tr><td>引擎修复上限</td><td><span class="badge badge-yellow">80%</span></td><td><span class="badge badge-green">100%</span></td></tr>
+  <tr><td>磨损部件</td><td>❌</td><td>✅</td></tr>
+  <tr><td>工时费</td><td>$0</td><td>技师自定义</td></tr>
+  <tr><td>等待时间</td><td>30s</td><td>视技师效率</td></tr>
+  <tr><td>RP 深度</td><td>低（纯功能性）</td><td>高（互动+检测+施工）</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: Dashboard Integration -->
+<!-- ============================================================ -->
+<h2>5. 特殊改装 → 车载中控屏映射</h2>
+
+<table>
+  <tr><th>改装类型</th><th>Dashboard 激活的模块</th></tr>
+  <tr><td><strong>NOS 氮气</strong></td><td>氮气控制面板：开关 / 喷射力度 / 剩余量 / 温度监控</td></tr>
+  <tr><td><strong>霓虹灯套件</strong></td><td>灯光控制面板：开关 / 颜色 / 闪烁模式（音乐/呼吸灯/常亮）</td></tr>
+  <tr><td><strong>底盘灯</strong></td><td>灯光控制面板：同上</td></tr>
+  <tr><td><strong>ECU 调校</strong></td><td>性能调校面板：预设模式切换（经济/运动/赛道）/ 自定义参数</td></tr>
+  <tr><td><strong>防滚架</strong></td><td>安全面板：显示"赛道模式已激活"</td></tr>
+  <tr><td><strong>宽体套件</strong></td><td>车身面板：显示宽体套件安装状态</td></tr>
+  <tr><td><strong>引擎更换</strong></td><td>性能面板：新引擎型号 / 马力 / 扭矩显示</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: State Machine -->
+<!-- ============================================================ -->
+<h2>6. 订单状态机</h2>
+
+<div class="state-grid">
+  <div class="state-node"><strong>draft</strong><br><span style="color:var(--dim)">玩家保存草稿</span></div>
+  <div class="state-node active"><strong>pending</strong><br><span style="color:var(--dim)">等待技师接单</span></div>
+  <div class="state-node active"><strong>accepted</strong><br><span style="color:var(--dim)">技师调整报价+档期</span></div>
+  <div class="state-node active"><strong>preparing</strong><br><span style="color:var(--dim)">技师备料中</span></div>
+  <div class="state-node active"><strong>in_progress</strong><br><span style="color:var(--dim)">施工中</span></div>
+  <div class="state-node end"><strong>completed</strong><br><span style="color:var(--dim)">已交付</span></div>
+  <div class="state-node fail"><strong>rejected</strong><br><span style="color:var(--dim)">技师拒绝</span></div>
+  <div class="state-node fail"><strong>cancelled</strong><br><span style="color:var(--dim)">任意阶段取消</span></div>
+  <div class="state-node fail"><strong>disputed</strong><br><span style="color:var(--dim)">争议(管理员介入)</span></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 7: Comparison -->
+<!-- ============================================================ -->
+<h2>7. 社区参考与差异化</h2>
+
+<table>
+  <tr><th>脚本</th><th>预览</th><th>订单</th><th>档期</th><th>备料</th><th>等级门槛</th><th>维修分流</th></tr>
+  <tr><td>Sky Mechanic</td><td>✅ NUI</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr>
+  <tr><td>T1GER Tuning</td><td>✅ NUI</td><td>✅</td><td>❌</td><td>✅</td><td>✅</td><td>✅ NPC站</td></tr>
+  <tr><td>PC Mechanic</td><td>✅ Vue.js</td><td>✅</td><td>❌</td><td>✅</td><td>✅</td><td>✅ 修理套件</td></tr>
+  <tr><td>VMS Tuning</td><td>✅ NUI</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr>
+  <tr class="highlight"><td><strong>T-City2 (设计)</strong></td><td>✅ NUI 3D</td><td>✅</td><td class="our-feature">✅ 首例</td><td>✅ 全链路</td><td>✅ 透明标注</td><td class="our-feature">✅ 80/100分流</td></tr>
+</table>
+
+<p style="margin-top:1rem;"><strong>T-City2 独有优势</strong>:</p>
+<ul>
+  <li><span class="our-feature">预约档期</span> — 所有竞品均未实现，T-City2 首创技师设定档期+玩家按时送车</li>
+  <li><span class="our-feature">等级透明化</span> — 预览菜单标注🔒，技师接单自动过滤，而非后台暗箱限制</li>
+  <li><span class="our-feature">供应链闭环</span> — 采矿→冶炼→零件→改装 完整经济链路，而非孤立的制作系统</li>
+  <li><span class="our-feature">Dashboard 集成</span> — 改装后自动激活车载中控屏控制面板，交付物延伸到车内体验</li>
+  <li><span class="our-feature">80/100 维修分流</span> — 自助应急 vs 技师全面保养，物料消耗相同但修复上限不同</li>
+  <li><span class="our-feature">保修+评价</span> — 社区无人实现的售后体系</li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- SECTION 8: Roadmap -->
+<!-- ============================================================ -->
+<h2>8. 实施路线</h2>
+
+<div class="roadmap-phase">
+  <h4><span class="badge badge-red">P0</span> 首周 — 核心闭环</h4>
+  <ul>
+    <li>预览终端 NUI（3D 车辆预览 + 类别菜单 + 预报价）</li>
+    <li>技师订单 App（接单 / 报价 / 档期）</li>
+    <li>施工工作流（步骤化 + 动画 + 物料消耗）</li>
+    <li>交付 + 付款（economy_service 统一扣款）</li>
+  </ul>
+</div>
+
+<div class="roadmap-phase p1">
+  <h4><span class="badge badge-blue">P1</span> 第二周 — 技师体系</h4>
+  <ul>
+    <li>技师等级 + 经验系统</li>
+    <li>等级门槛标注 + 自动过滤</li>
+    <li>备料系统（库存检查 + 订购 + 制作）</li>
+    <li>自助维修站（Repair Station）</li>
+  </ul>
+</div>
+
+<div class="roadmap-phase p2">
+  <h4><span class="badge badge-purple">P2</span> 第三周 — Dashboard 集成</h4>
+  <ul>
+    <li>NOS / 霓虹灯 / ECU 激活 dashboard 面板</li>
+    <li>改装历史查询 <code>/carhistory</code></li>
+    <li>保修 + 技师评价系统</li>
+  </ul>
+</div>
+
+<div class="roadmap-phase p3">
+  <h4><span class="badge badge-blue">P3</span> 远期 — 经营系统</h4>
+  <ul>
+    <li>玩家自有改装店</li>
+    <li>技师招聘</li>
+    <li>营收仪表盘</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 9: Summary -->
+<!-- ============================================================ -->
+<h2>9. 数据模型</h2>
+
+<div class="ui-mockup">
+<span class="dim">-- 改装订单表</span>
+CREATE TABLE mechanic_orders (
+    id VARCHAR(32) PRIMARY KEY,          <span class="dim">-- TUN-20260605-0042</span>
+    shop_id VARCHAR(32) NOT NULL,
+    customer_citizenid VARCHAR(64) NOT NULL,
+    mechanic_citizenid VARCHAR(64),
+    vehicle_plate VARCHAR(16) NOT NULL,
+    status ENUM('draft','pending','accepted','preparing','in_progress',
+                'completed','rejected','cancelled','disputed'),
+    items JSON,                          <span class="dim">-- 改装项目清单</span>
+    system_quote DECIMAL(12,2),          <span class="dim">-- 系统预报价</span>
+    final_quote DECIMAL(12,2),           <span class="dim">-- 技师最终报价</span>
+    labor_fee DECIMAL(12,2),             <span class="dim">-- 工时费</span>
+    scheduled_at DATETIME,               <span class="dim">-- 预约时间</span>
+    completed_at DATETIME,
+    warranty_days INT DEFAULT 7,
+    rating TINYINT,                      <span class="dim">-- 玩家评分 1-5</span>
+    created_at DATETIME DEFAULT NOW()
+);
+
+<span class="dim">-- 改装历史表 (每辆车的完整记录)</span>
+CREATE TABLE vehicle_mod_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vehicle_plate VARCHAR(16) NOT NULL,
+    order_id VARCHAR(32),
+    shop_id VARCHAR(32),
+    mechanic_citizenid VARCHAR(64),
+    mod_type INT,
+    mod_index INT,
+    part_consumed VARCHAR(64),           <span class="dim">-- 消耗的零件物品名</span>
+    created_at DATETIME DEFAULT NOW(),
+    INDEX idx_plate (vehicle_plate)
+);
+</div>
+
+<!-- ============================================================ -->
+<hr>
+<p style="text-align:center; color:var(--dim); font-size:.85rem;">
+  本设计文档基于 T-CityLite.base 现有代码架构 + 社区 6 款主流改装脚本调研 + GTA World RP 社区讨论综合设计。<br>
+  配套 MD 版: <code>docs/analysis/tuning_shop_player_experience.md</code>
+</p>
+
+</body>
+</html>

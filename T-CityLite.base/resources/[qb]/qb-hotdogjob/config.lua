@@ -1,5 +1,5 @@
 Config = Config or {}
-Config.UseTarget = GetConvar('UseTarget', 'false') == 'true'
+Config.UseTarget = true  -- 🔧 强制事件驱动: 移除轮询路径, 使用 qb-target (零 CPU 轮询)
 -- Config --
 
 Config.StandDeposit = 250

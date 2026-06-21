@@ -144,7 +144,19 @@
             <div class="message-bubble-wrapper {isMe ? 'me' : 'them'}">
               <div class="message-bubble">
                 <p class="bubble-text">{msg.message}</p>
-                <span class="bubble-time">{formatTime(msg.timestamp)}</span>
+                {#if msg.gps && msg.gps.x}
+                  {#if msg.status === 'active'}
+                    <button class="gps-btn gps-active"
+                      onclick={() => fetchNui('setGpsRoute', { x: msg.gps.x, y: msg.gps.y, label: msg.gps.label })}>
+                      📍 设置导航: {msg.gps.label || '目的地'}
+                    </button>
+                  {:else if msg.status === 'done' || msg.status === 'expired'}
+                    <span class="gps-done">📍 {msg.gps.label || '目的地'}（已完成）</span>
+                  {:else}
+                    <span class="gps-inactive">📍 {msg.gps.label || '目的地'}</span>
+                  {/if}
+                {/if}
+                <span class="bubble-time">{formatTime(msg.timestamp || msg.date)}</span>
               </div>
             </div>
           {/each}
@@ -416,5 +428,52 @@
     padding: 50px 10px;
     color: #555;
     font-size: 13.5px;
+  }
+
+  /* GPS Route Button */
+  .gps-btn {
+    display: block;
+    margin-top: 8px;
+    padding: 7px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    width: 100%;
+    text-align: center;
+    transition: all 0.2s;
+  }
+
+  .gps-active {
+    background: linear-gradient(135deg, hsl(var(--phone-accent)), color-mix(in srgb, hsl(var(--phone-accent)) 70%, #fff));
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(168, 85, 247, 0.35);
+  }
+
+  .gps-active:hover {
+    transform: scale(1.03);
+    box-shadow: 0 3px 14px rgba(168, 85, 247, 0.5);
+  }
+
+  .gps-active:active {
+    transform: scale(0.95);
+  }
+
+  .gps-done {
+    display: block;
+    margin-top: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: #666;
+    text-decoration: line-through;
+  }
+
+  .gps-inactive {
+    display: block;
+    margin-top: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: #888;
   }
 </style>

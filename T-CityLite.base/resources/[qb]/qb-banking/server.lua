@@ -2,6 +2,21 @@ local QBCore = exports['qb-core']:GetCoreObject()
 local Accounts = {}
 local Statements = {}
 
+-- 🛡️ Rate Limiter: 防止金融操作被恶意高频调用
+local RateLimiter = {}
+local RATE_LIMIT_MS = 2000 -- 同类型操作最小间隔 2 秒
+
+local function CheckBankRateLimit(source, action)
+    local now = os.time() * 1000 + math.floor((os.clock() % 1) * 1000)
+    if not RateLimiter[source] then RateLimiter[source] = {} end
+    local last = RateLimiter[source][action] or 0
+    if now - last < RATE_LIMIT_MS then
+        return false
+    end
+    RateLimiter[source][action] = now
+    return true
+end
+
 -- Functions
 
 local function getPlayerAndCitizenId(playerId)
@@ -162,7 +177,9 @@ QBCore.Functions.CreateCallback('qb-banking:server:openBank', function(source, c
         print("[qb-banking] Error: Player or citizenid is nil inside openBank callback!")
         return 
     end
-    print(("[qb-banking] Player Name: %s %s | CitizenID: %s"):format(Player.PlayerData.charinfo.firstname, Player.PlayerData.charinfo.lastname, citizenid))
+    -- 🔒 Security: citizenid 脱敏 — 仅输出前4后4
+    local maskedCid = citizenid:sub(1,4) .. "..." .. citizenid:sub(-4)
+    print(("[qb-banking] Player Name: %s %s | CID: %s"):format(Player.PlayerData.charinfo.firstname, Player.PlayerData.charinfo.lastname, maskedCid))
     
     local job = Player.PlayerData.job
     local gang = Player.PlayerData.gang
@@ -312,6 +329,8 @@ end)
 
 QBCore.Functions.CreateCallback('qb-banking:server:withdraw', function(source, cb, data)
     local src = source
+    -- 🛡️ Rate Limit: 防止高频提现
+    if not CheckBankRateLimit(src, 'withdraw') then return cb({ success = false, message = '操作过于频繁，请稍后再试' }) end
     local Player, citizenid = getPlayerAndCitizenId(src)
     if not Player or not citizenid then return cb({ success = false, message = Lang:t('error.error') }) end
     local accountName = data.accountName
@@ -347,6 +366,8 @@ end)
 
 QBCore.Functions.CreateCallback('qb-banking:server:deposit', function(source, cb, data)
     local src = source
+    -- 🛡️ Rate Limit: 防止高频存款
+    if not CheckBankRateLimit(src, 'deposit') then return cb({ success = false, message = '操作过于频繁，请稍后再试' }) end
     local Player, citizenid = getPlayerAndCitizenId(src)
     if not Player or not citizenid then return cb({ success = false, message = Lang:t('error.error') }) end
     local accountName = data.accountName
@@ -380,6 +401,8 @@ end)
 
 QBCore.Functions.CreateCallback('qb-banking:server:internalTransfer', function(source, cb, data)
     local src = source
+    -- 🛡️ Rate Limit: 防止高频内部转账
+    if not CheckBankRateLimit(src, 'transfer') then return cb({ success = false, message = '操作过于频繁，请稍后再试' }) end
     local Player, citizenid = getPlayerAndCitizenId(src)
     if not Player or not citizenid then return cb({ success = false, message = Lang:t('error.error') }) end
     local job = Player.PlayerData.job
@@ -429,6 +452,8 @@ end)
 
 QBCore.Functions.CreateCallback('qb-banking:server:externalTransfer', function(source, cb, data)
     local src = source
+    -- 🛡️ Rate Limit: 防止高频外部汇款
+    if not CheckBankRateLimit(src, 'transfer') then return cb({ success = false, message = '操作过于频繁，请稍后再试' }) end
     local Player, citizenid = getPlayerAndCitizenId(src)
     if not Player or not citizenid then return cb({ success = false, message = Lang:t('error.error') }) end
     local job = Player.PlayerData.job
@@ -527,7 +552,9 @@ QBCore.Functions.CreateCallback('qb-banking:server:deleteAccount', function(sour
     if Accounts[accountName].citizenid ~= citizenid then return cb({ success = false, message = Lang:t('error.access') }) end
     
     local refundAmount = Accounts[accountName].account_balance or 0
-    print(("[qb-banking] Deleting account '%s' for citizen '%s'. Refunding $%s to checking."):format(accountName, citizenid, refundAmount))
+    -- 🔒 Security: citizenid 脱敏
+    local maskedCid = citizenid:sub(1,4) .. "..." .. citizenid:sub(-4)
+    print(("[qb-banking] Deleting account '%s' for citizen '%s'. Refunding $%s to checking."):format(accountName, maskedCid, refundAmount))
     
     -- Refund the money to the player's primary bank account in QBCore
     Player.Functions.AddMoney('bank', refundAmount, 'Account closure refund: ' .. accountName)

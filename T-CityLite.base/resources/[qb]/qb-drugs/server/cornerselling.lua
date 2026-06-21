@@ -38,15 +38,38 @@ end)
 
 RegisterNetEvent('qb-drugs:server:sellCornerDrugs', function(drugType, amount, price)
     local src = source
+    if not src or src == 0 then return end
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
     local availableDrugs = getAvailableDrugs(src)
-    if not availableDrugs or not Player then return end
+    if not availableDrugs or not availableDrugs[drugType] then return end
     local item = availableDrugs[drugType].item
+    amount = tonumber(amount) or 0
+    if amount <= 0 then return end
+    -- [SECURITY] Calculate price server-side from Config (DrugsPrice[item] = {min, max})
+    local priceCfg = Config.DrugsPrice[item]
+    local unitPrice = 0
+    if type(priceCfg) == 'table' then
+        unitPrice = math.floor((priceCfg.min + priceCfg.max) / 2 + 0.5)   -- 取中间价作为服务端计价
+    elseif type(priceCfg) == 'number' then
+        unitPrice = priceCfg
+    end
+    local serverPrice = unitPrice * amount
+    if serverPrice <= 0 then return end
     local hasItem = Player.Functions.GetItemByName(item)
-    if hasItem.amount >= amount then
+    if hasItem and hasItem.amount >= amount then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.offer_accepted'), 'success')
         exports['qb-inventory']:RemoveItem(src, item, amount, false, 'qb-drugs:server:sellCornerDrugs')
-        Player.Functions.AddMoney('cash', price, 'qb-drugs:server:sellCornerDrugs')
+        -- [SECURITY] Route through AddScaledMoney unified economy exit
+        local function doPayout(src, amount, reason)
+            if exports['custom-economy'] and exports['custom-economy'].AddScaledMoney then
+                exports['custom-economy']:AddScaledMoney(src, 'cash', amount, reason)
+            else
+                local Player = QBCore.Functions.GetPlayer(src)
+                if Player then Player.Functions.AddMoney('cash', amount, reason) end
+            end
+        end
+        doPayout(src, serverPrice, 'qb-drugs:server:sellCornerDrugs')
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
         TriggerClientEvent('qb-drugs:client:refreshAvailableDrugs', src, getAvailableDrugs(src))
     else
@@ -65,3 +88,10 @@ RegisterNetEvent('qb-drugs:server:robCornerDrugs', function(drugType, amount)
     TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
     TriggerClientEvent('qb-drugs:client:refreshAvailableDrugs', src, getAvailableDrugs(src))
 end)
+
+-- =============================================
+-- 命令：/selldrugs — 打开街头毒品出售界面
+-- =============================================
+QBCore.Commands.Add('selldrugs', '切换街头毒品出售模式', {}, false, function(source)
+    TriggerClientEvent('qb-drugs:client:cornerselling', source)
+end, 'user')

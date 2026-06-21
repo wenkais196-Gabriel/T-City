@@ -1,17 +1,27 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- 🔧 自愈: 安全审计日志（不再永久封禁）
+local function SecurityAuditLog(src, action, detail)
+    local playerName = GetPlayerName(src)
+    print(('[SECURITY-GANG] %s (src=%s) attempted %s — %s'):format(playerName, src, action, detail))
+    TriggerEvent('qb-log:server:CreateLog', 'gangmenu', 'Suspicious Activity', 'orange',
+        string.format('%s (src=%s) attempted %s: %s', playerName, src, action, detail), false)
+    TriggerClientEvent('QBCore:Notify', src, '你没有权限执行此操作', 'error')
+end
+
 -- Get Employees
 QBCore.Functions.CreateCallback('qb-gangmenu:server:GetEmployees', function(source, cb, gangname)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
 
 	if not Player.PlayerData.gang.isboss then
-		ExploitBan(src, 'GetEmployees Exploiting')
+		SecurityAuditLog(src, 'GetEmployees', '非帮派Boss尝试获取成员列表')
 		return
 	end
 
 	local employees = {}
-	local players = MySQL.query.await("SELECT * FROM `players` WHERE `gang` LIKE '%" .. gangname .. "%'", {})
+	-- 🔒 Security Fix: 参数化查询替代字符串拼接，消除 SQL 注入风险
+	local players = MySQL.query.await('SELECT * FROM players WHERE JSON_UNQUOTE(JSON_EXTRACT(gang, "$.name")) = ?', { gangname })
 	if players[1] ~= nil then
 		for _, value in pairs(players) do
 			local Target = QBCore.Functions.GetPlayerByCitizenId(value.citizenid) or QBCore.Functions.GetOfflinePlayerByCitizenId(value.citizenid)
@@ -73,8 +83,23 @@ RegisterNetEvent('qb-gangmenu:server:GradeUpdate', function(data)
 	local Player = QBCore.Functions.GetPlayer(src)
 	local Employee = QBCore.Functions.GetPlayerByCitizenId(data.cid) or QBCore.Functions.GetOfflinePlayerByCitizenId(data.cid)
 
+	-- 🔒 Security: 距离校验
+	if not Config.GangMenus[Player.PlayerData.gang.name] then return end
+	local bossCoords = Config.GangMenus[Player.PlayerData.gang.name]
+	local playerPed = GetPlayerPed(src)
+	local playerCoords = GetEntityCoords(playerPed)
+	local nearBoss = false
+	for i = 1, #bossCoords do
+		local coords = bossCoords[i]
+		if #(playerCoords - coords) < 5.0 then nearBoss = true; break end
+	end
+	if not nearBoss then
+		SecurityAuditLog(src, 'GradeUpdate', '非帮派Boss菜单点操作 — 疑似远程发包')
+		return
+	end
+
 	if not Player.PlayerData.gang.isboss then
-		ExploitBan(src, 'GradeUpdate Exploiting')
+		SecurityAuditLog(src, 'GradeUpdate', '非帮派Boss尝试晋升成员')
 		return
 	end
 	if data.grade > Player.PlayerData.gang.grade.level then
@@ -103,8 +128,23 @@ RegisterNetEvent('qb-gangmenu:server:FireMember', function(target)
 	local Player = QBCore.Functions.GetPlayer(src)
 	local Employee = QBCore.Functions.GetPlayerByCitizenId(target) or QBCore.Functions.GetOfflinePlayerByCitizenId(target)
 
+	-- 🔒 Security: 距离校验
+	if not Config.GangMenus[Player.PlayerData.gang.name] then return end
+	local bossCoords = Config.GangMenus[Player.PlayerData.gang.name]
+	local playerPed = GetPlayerPed(src)
+	local playerCoords = GetEntityCoords(playerPed)
+	local nearBoss = false
+	for i = 1, #bossCoords do
+		local coords = bossCoords[i]
+		if #(playerCoords - coords) < 5.0 then nearBoss = true; break end
+	end
+	if not nearBoss then
+		SecurityAuditLog(src, 'FireMember', '非帮派Boss菜单点操作 — 疑似远程发包')
+		return
+	end
+
 	if not Player.PlayerData.gang.isboss then
-		ExploitBan(src, 'FireEmployee Exploiting')
+		SecurityAuditLog(src, 'FireMember', '非帮派Boss尝试开除成员')
 		return
 	end
 
@@ -137,8 +177,23 @@ RegisterNetEvent('qb-gangmenu:server:HireMember', function(recruit)
 	local Player = QBCore.Functions.GetPlayer(src)
 	local Target = QBCore.Functions.GetPlayer(recruit)
 
+	-- 🔒 Security: 距离校验
+	if not Config.GangMenus[Player.PlayerData.gang.name] then return end
+	local bossCoords = Config.GangMenus[Player.PlayerData.gang.name]
+	local playerPed = GetPlayerPed(src)
+	local playerCoords = GetEntityCoords(playerPed)
+	local nearBoss = false
+	for i = 1, #bossCoords do
+		local coords = bossCoords[i]
+		if #(playerCoords - coords) < 5.0 then nearBoss = true; break end
+	end
+	if not nearBoss then
+		SecurityAuditLog(src, 'HireMember', '非帮派Boss菜单点操作 — 疑似远程发包')
+		return
+	end
+
 	if not Player.PlayerData.gang.isboss then
-		ExploitBan(src, 'HireEmployee Exploiting')
+		SecurityAuditLog(src, 'HireMember', '非帮派Boss尝试招募成员')
 		return
 	end
 
@@ -176,4 +231,101 @@ QBCore.Functions.CreateCallback('qb-gangmenu:getplayers', function(source, cb)
 		return a.name < b.name
 	end)
 	cb(players)
+end)
+
+-- ==============================================================
+-- 🔑 向后兼容桥接: 帮派 Boss 退位交接
+-- 事件名保留旧命名空间 qb-gangmenu:server:TransferOwnership
+-- （与 sv_org.lua 中的 qb-orgmenu:server:TransferOwnership 并行工作）
+-- ==============================================================
+
+RegisterNetEvent('qb-gangmenu:server:TransferOwnership', function(data)
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
+
+	-- 🔒 Security: 距离校验
+	if not Config.GangMenus[Player.PlayerData.gang.name] then return end
+	local bossCoords = Config.GangMenus[Player.PlayerData.gang.name]
+	local playerPed = GetPlayerPed(src)
+	local playerCoords = GetEntityCoords(playerPed)
+	local nearBoss = false
+	for i = 1, #bossCoords do
+		local coords = bossCoords[i]
+		if #(playerCoords - coords) < 5.0 then nearBoss = true; break end
+	end
+	if not nearBoss then
+		SecurityAuditLog(src, 'TransferOwnership', '非帮派Boss菜单点操作 — 疑似远程发包')
+		return
+	end
+
+	local gangName = data.orgName
+	if not gangName or not QBCore.Shared.Gangs[gangName] then
+		TriggerClientEvent('QBCore:Notify', src, 'Invalid gang.', 'error')
+		return
+	end
+
+	-- 🔒 安全校验
+	if not Player.PlayerData.gang.isboss then
+		SecurityAuditLog(src, 'TransferOwnership', '非帮派Boss尝试转让所有权')
+		return
+	end
+
+	if data.successorCid == Player.PlayerData.citizenid then
+		TriggerClientEvent('QBCore:Notify', src, 'You cannot transfer ownership to yourself!', 'error')
+		return
+	end
+
+	local Successor = QBCore.Functions.GetPlayerByCitizenId(data.successorCid)
+	if not Successor then
+		TriggerClientEvent('QBCore:Notify', src, 'The designated successor is not found.', 'error')
+		return
+	end
+
+	if Successor.PlayerData.gang.name ~= gangName then
+		TriggerClientEvent('QBCore:Notify', src, 'The designated successor is not in your gang!', 'error')
+		return
+	end
+
+	if not Successor.PlayerData.source then
+		TriggerClientEvent('QBCore:Notify', src, 'The designated successor must be online.', 'error')
+		return
+	end
+
+	if Successor.PlayerData.gang.isboss then
+		TriggerClientEvent('QBCore:Notify', src, 'This member is already a Boss!', 'error')
+		return
+	end
+
+	-- 原子交接
+	local step1Success = Successor.Functions.SetGang(gangName, 4)
+	if not step1Success then
+		TriggerClientEvent('QBCore:Notify', src, 'Failed to promote successor. Transfer aborted.', 'error')
+		return
+	end
+	Successor.Functions.Save()
+
+	local step2Success = Player.Functions.SetGang('none', 0)
+	if not step2Success then
+		Successor.Functions.SetGang(gangName, Successor.PlayerData.gang.grade.level)
+		TriggerClientEvent('QBCore:Notify', src, 'Failed to complete transfer. Rolled back.', 'error')
+		return
+	end
+	Player.Functions.Save()
+
+	local gangLabel = QBCore.Shared.Gangs[gangName].label
+	TriggerClientEvent('QBCore:Notify', src,
+		'You have transferred ' .. gangLabel .. ' to '
+		.. Successor.PlayerData.charinfo.firstname .. ' '
+		.. Successor.PlayerData.charinfo.lastname .. '. You are now unaffiliated.', 'success')
+	TriggerClientEvent('QBCore:Notify', Successor.PlayerData.source,
+		'⚠️ You are now the new Boss of ' .. gangLabel .. '!', 'success')
+
+	TriggerEvent('qb-log:server:CreateLog', 'gangmenu', 'Ownership Transfer', 'gold',
+		Player.PlayerData.charinfo.firstname .. ' ' .. Player.PlayerData.charinfo.lastname
+		.. ' transferred ' .. gangName .. ' to '
+		.. Successor.PlayerData.charinfo.firstname .. ' '
+		.. Successor.PlayerData.charinfo.lastname, false)
+
+	TriggerClientEvent('qb-gangmenu:client:CloseMenu', src)
 end)

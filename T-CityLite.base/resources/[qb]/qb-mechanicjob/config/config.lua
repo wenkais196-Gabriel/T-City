@@ -23,12 +23,23 @@ Config.MinimalMetersForDamage = {              -- unused if Config.UseDistanceDa
 }
 
 Config.WearableParts = { -- unused if Config.UseWearableParts is false (feel free to add/remove parts)
-    radiator = { label = Lang:t('menu.radiator_repair'), maxValue = 100, repair = { steel = 2 } },
-    axle = { label = Lang:t('menu.axle_repair'), maxValue = 100, repair = { aluminum = 2 } },
-    brakes = { label = Lang:t('menu.brakes_repair'), maxValue = 100, repair = { copper = 2 } },
-    clutch = { label = Lang:t('menu.clutch_repair'), maxValue = 100, repair = { copper = 2 } },
+    -- 🔧 材料对接 custom-mining 冶炼产出 (iron_ingot / copper_ingot / gold_ingot / silver_ingot)
+    radiator = { label = Lang:t('menu.radiator_repair'), maxValue = 100, repair = { iron_ingot = 2 } },
+    axle = { label = Lang:t('menu.axle_repair'), maxValue = 100, repair = { iron_ingot = 2 } },
+    brakes = { label = Lang:t('menu.brakes_repair'), maxValue = 100, repair = { copper_ingot = 2 } },
+    clutch = { label = Lang:t('menu.clutch_repair'), maxValue = 100, repair = { copper_ingot = 2 } },
     fuel = { label = Lang:t('menu.fuel_repair'), maxValue = 100, repair = { plastic = 2 } },
 }
+
+-- 🔧 Shop → Department 映射（对接 custom-career）
+Config.ShopDepartments = {
+    mechanic  = { label = 'LS Customs (市区总店)', org = 'lscustoms' },
+    mechanic2 = { label = 'LS Customs (Harmony分店)', org = 'lscustoms' },
+    mechanic3 = { label = 'LS Customs (机场分店)', org = 'lscustoms' },
+    bennys    = { label = 'Benny\'s Original Motor Works', org = 'bennys' },
+    beeker    = { label = 'Beeker\'s Garage (Paleto)', org = 'beekers' },
+}
+Config.DefaultMechanicDepartment = 'mechanic'
 
 Config.Shops = {
     mechanic = { -- City location

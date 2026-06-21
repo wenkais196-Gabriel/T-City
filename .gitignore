@@ -98,6 +98,11 @@ Thumbs.db
 __pycache__/
 .reasonix/
 
+# txAdmin 运行时数据（含 dashboard token）
+config.json
+T-CityLite.base/default/
+T-CityLite.base/txData/
+
 # 原始 QBCore base（只追踪修改后的 T-CityLite）
 QBCore_CDB34E.base/
 

@@ -383,6 +383,40 @@ RegisterNetEvent('police:client:TakeOutImpound', function(data)
     end
 end)
 
+-- /impoundnear — 扣押警官最近的非警用玩家载具
+RegisterNetEvent('police:client:impoundNear', function()
+    local ped = PlayerPedId()
+    local pCoords = GetEntityCoords(ped)
+    local closestVeh, closestDist, closestPlate = nil, 10.0, nil
+
+    local allVehicles = GetGamePool('CVehicle')
+    for _, v in ipairs(allVehicles) do
+        local dist = #(pCoords - GetEntityCoords(v))
+        if dist < closestDist then
+            local plate = QBCore.Functions.GetPlate(v)
+            -- 排除警车和无牌车
+            if GetVehicleClass(v) ~= 18 and plate and plate ~= '' then
+                closestDist = dist
+                closestVeh = v
+                closestPlate = plate
+            end
+        end
+    end
+
+    if not closestVeh then
+        QBCore.Functions.Notify('附近没有可扣押的玩家载具', 'error')
+        return
+    end
+
+    TriggerServerEvent('police:server:Impound', closestPlate, true, 0, GetVehicleBodyHealth(closestVeh), GetVehicleEngineHealth(closestVeh), GetVehicleFuelLevel(closestVeh))
+    while NetworkGetEntityOwner(closestVeh) ~= 128 do
+        NetworkRequestControlOfEntity(closestVeh)
+        Wait(100)
+    end
+    QBCore.Functions.DeleteVehicle(closestVeh)
+    QBCore.Functions.Notify(('已扣押 %s (距离 %.1fm)'):format(closestPlate, closestDist), 'success')
+end)
+
 RegisterNetEvent('police:client:TakeOutVehicle', function(data)
     if inGarage then
         local vehicle = data.vehicle
@@ -442,6 +476,12 @@ RegisterNetEvent('qb-police:client:scanFingerPrint', function()
 end)
 
 RegisterNetEvent('qb-police:client:spawnHelicopter', function(k)
+    -- 🛡️ 飞行执照前置校验
+    local hasPilotLicense = exports['custom-certificates']:HasLicense(GetPlayerServerId(PlayerId()), 'pilot')
+    if not hasPilotLicense then
+        QBCore.Functions.Notify('你没有飞行执照 (Pilot License)，无法申领警用直升机！', 'error')
+        return
+    end
     if IsPedInAnyVehicle(PlayerPedId(), false) then
         QBCore.Functions.DeleteVehicle(GetVehiclePedIsIn(PlayerPedId()))
     else

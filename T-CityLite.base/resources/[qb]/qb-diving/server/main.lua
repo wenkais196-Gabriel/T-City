@@ -46,10 +46,22 @@ RegisterNetEvent('qb-diving:server:CallCops', function(coords)
     end
 end)
 
+-- [SECURITY] Per-player cooldown for diving sells
+local DivingSellCooldowns = {}
+
 RegisterNetEvent('qb-diving:server:SellCorals', function()
     local src = source
+    if not src or src == 0 then return end
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    -- [SECURITY] 30-second cooldown per player
+    local cid = Player.PlayerData.citizenid
+    local now = os.time()
+    if DivingSellCooldowns[cid] and (now - DivingSellCooldowns[cid]) < 30 then
+        TriggerClientEvent('QBCore:Notify', src, 'Please wait before selling again', 'error')
+        return
+    end
+    DivingSellCooldowns[cid] = now
     if hasCoral(src) then
         for _, v in pairs(AvailableCorals) do
             local item = Player.Functions.GetItemByName(v.item)
@@ -64,10 +76,21 @@ RegisterNetEvent('qb-diving:server:SellCorals', function()
     end
 end)
 
+-- [SECURITY] Per-player cooldown for coral taking
+local DivingTakeCooldowns = {}
+
 RegisterNetEvent('qb-diving:server:TakeCoral', function(area, coral, bool)
     local src = source
+    if not src or src == 0 then return end
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    -- [SECURITY] 5-second cooldown per player
+    local cid = Player.PlayerData.citizenid
+    local now = os.time()
+    if DivingTakeCooldowns[cid] and (now - DivingTakeCooldowns[cid]) < 5 then
+        return
+    end
+    DivingTakeCooldowns[cid] = now
     local coralType = math.random(1, #Config.CoralTypes)
     local amount = math.random(1, Config.CoralTypes[coralType].maxAmount)
     local ItemData = QBCore.Shared.Items[Config.CoralTypes[coralType].item]

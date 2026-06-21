@@ -118,10 +118,43 @@ local function GetVehicleTypeByModel(model)
     local vehicleType = vehicleTypes[category]
     return vehicleType or 'automobile'
 end
+-- 车辆类别 → 证件类型映射
+local VehicleClassLicenseMap = {
+    [0] = 'driver', [1] = 'driver', [2] = 'driver', [3] = 'driver', [4] = 'driver',
+    [5] = 'driver', [6] = 'driver', [7] = 'driver', [8] = 'driver', [9] = 'driver',
+    [10] = 'heavy', [11] = 'heavy', [17] = 'heavy', [19] = 'heavy', [20] = 'heavy',
+    [12] = 'driver', [13] = 'driver', [18] = 'driver', [22] = 'driver',
+    [14] = 'boat',
+    [15] = 'pilot', [16] = 'pilot',
+}
 -- Backwards Compat
 
 -- Spawns a vehicle and returns its network ID and properties.
+-- 🔒 服务端证件验证：防止客户端绕过车库 blip/zone 门控
 QBCore.Functions.CreateCallback('qb-garages:server:spawnvehicle', function(source, cb, plate, vehicle, coords)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if Player then
+        -- 🚗 每人最多 3 辆载具在车库外
+        local outsideCount = MySQL.scalar.await('SELECT COUNT(*) FROM player_vehicles WHERE citizenid = ? AND state = 0', { Player.PlayerData.citizenid })
+        if outsideCount >= 3 then
+            TriggerClientEvent('QBCore:Notify', source, '你已经有 3 辆载具在外面了，先存一辆再取', 'error', 5000)
+            cb(nil)
+            return
+        end
+
+        local vehData = QBCore.Shared.Vehicles[vehicle]
+        local vehCategory = vehData and vehData.category
+        local vehClassNum = vehCategory and vehicleClasses[vehCategory]
+        local requiredLicense = vehClassNum and VehicleClassLicenseMap[vehClassNum]
+        if requiredLicense then
+            local licences = Player.PlayerData.metadata['licences']
+            if not licences or not licences[requiredLicense] then
+                TriggerClientEvent('QBCore:Notify', source, 'You need a valid license to spawn this vehicle type!', 'error', 5000)
+                cb(nil)
+                return
+            end
+        end
+    end
     local vehType = QBCore.Shared.Vehicles[vehicle] and QBCore.Shared.Vehicles[vehicle].type or GetVehicleTypeByModel(vehicle)
     local veh = CreateVehicleServerSetter(GetHashKey(vehicle), vehType, coords.x, coords.y, coords.z, coords.w)
     local netId = NetworkGetNetworkIdFromEntity(veh)

@@ -57,17 +57,93 @@ const load = Vue.createApp({
 load.use(Quasar, { config: {} })
 load.mount('#loading-main')
 
-var audio = document.getElementById("audio");
-audio.volume = 0.05;
+// ─── Playlist Engine ───────────────────────────────────────
+// Track 1 (Dusk Prelude) → Track 2 (City Lights Pulse) → Track 3 (Last Call Reprise)
+// Cross-fade: last 5s of current track fades out while next fades in
 
+var playlist = [
+    { src: '/assets/audio/Dusk_Prelude.mp3',        duration: 120 },
+    { src: '/assets/audio/City_Lights_Pulse.mp3',    duration: 120 },
+    { src: '/assets/audio/Last_Call_Reprise.mp3',    duration: 120 },
+];
+var currentTrack = 0;
+var audioA = new Audio();  // primary player
+var audioB = new Audio();  // cross-fade player
+var baseVolume = 0.10;
+var playlistActive = true;
+var crossFadeActive = false;
+
+audioA.volume = baseVolume;
+audioB.volume = 0;
+
+// Start playlist
+function playlistStart() {
+    if (currentTrack >= playlist.length) return;
+    audioA.src = playlist[currentTrack].src;
+    audioA.play().catch(function() { /* autoplay blocked — retry on user gesture */ });
+    audioA.onended = playlistNext;
+}
+
+// Cross-fade to next track
+function playlistNext() {
+    if (crossFadeActive) return;
+    if (!playlistActive) return;
+    currentTrack++;
+    if (currentTrack >= playlist.length) {
+        // All tracks done — loop back to Track 2 (city pulse) for long loads
+        currentTrack = 1;
+    }
+
+    crossFadeActive = true;
+    var next = playlist[currentTrack];
+    audioB.src = next.src;
+    audioB.volume = 0;
+    audioB.play().catch(function() {});
+    audioB.onended = playlistNext;
+
+    // Cross-fade: 5-second overlap
+    var steps = 25;
+    var stepMs = 200;  // 25 * 200 = 5000ms
+    var volStep = baseVolume / steps;
+    var step = 0;
+
+    var fadeInterval = setInterval(function() {
+        step++;
+        audioA.volume = Math.max(0, baseVolume - volStep * step);
+        audioB.volume = Math.min(baseVolume, volStep * step);
+
+        if (step >= steps) {
+            clearInterval(fadeInterval);
+            audioA.pause();
+            audioA.volume = baseVolume;
+            audioB.volume = baseVolume;
+            // Swap: B becomes the new primary
+            var tmp = audioA;
+            audioA = audioB;
+            audioB = tmp;
+            audioB.volume = 0;
+            crossFadeActive = false;
+        }
+    }, stepMs);
+}
+
+// Toggle audio (wired to settings dialog)
 function audiotoggle() {
-    var audio = document.getElementById("audio");
-    if (audio.paused) {
-        audio.play();
+    playlistActive = !playlistActive;
+    if (playlistActive) {
+        if (audioA.paused && audioA.src) {
+            audioA.play().catch(function() {});
+        } else if (!audioA.src) {
+            playlistStart();
+        }
     } else {
-        audio.pause();
+        audioA.pause();
+        audioB.pause();
     }
 }
+
+// Kick off
+playlistStart();
 
 function videotoggle() {
     var video = document.getElementById("video");

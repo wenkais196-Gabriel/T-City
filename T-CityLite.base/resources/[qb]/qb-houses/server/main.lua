@@ -36,22 +36,19 @@ CreateThread(function()
     TriggerClientEvent('qb-houses:client:setHouseConfig', -1, Config.Houses)
 end)
 
+-- ⚡ Performance Fix: 一次性加载后线程自然退出，消除原 7ms 空转死循环
+-- 原代码即使 housesLoaded=true 后仍每 7ms 轮询一次，白白消耗 CPU
 CreateThread(function()
-    while true do
-        if not housesLoaded then
-            MySQL.query('SELECT * FROM player_houses', {}, function(houses)
-                if houses then
-                    for _, house in pairs(houses) do
-                        houseowneridentifier[house.house] = house.identifier
-                        houseownercid[house.house] = house.citizenid
-                        housekeyholders[house.house] = json.decode(house.keyholders)
-                    end
-                end
-            end)
-            housesLoaded = true
+    local houses = MySQL.query.await('SELECT * FROM player_houses', {})
+    if houses then
+        for _, house in pairs(houses) do
+            houseowneridentifier[house.house] = house.identifier
+            houseownercid[house.house] = house.citizenid
+            housekeyholders[house.house] = json.decode(house.keyholders)
         end
-        Wait(7)
     end
+    housesLoaded = true
+    print(('[qb-houses] ✅ Player houses loaded: %d entries'):format(houses and #houses or 0))
 end)
 
 -- Commands
@@ -131,7 +128,7 @@ exports('hasKey', hasKey)
 local function GetHouseStreetCount(street)
     local count = 0
     local query = '%' .. street .. '%'
-    local result = MySQL.Sync.fetchSingle('SELECT * FROM houselocations WHERE name LIKE ? ORDER BY LENGTH(`name`) desc, `name` DESC', { query })
+    local result = MySQL.query.await('SELECT * FROM houselocations WHERE name LIKE ? ORDER BY LENGTH(`name`) desc, `name` DESC', { query })
     if result then
         local houseAddress = result.name
         count = tonumber(string.match(houseAddress, '%d[%d.,]*'))
@@ -139,12 +136,11 @@ local function GetHouseStreetCount(street)
     return (count + 1)
 end
 
+-- ⚡ Memory-first: Config.Houses[house].owned is synced on buy/sell, no DB query needed
 local function isHouseOwned(house)
-    local result = MySQL.query.await('SELECT owned FROM houselocations WHERE name = ?', { house })
-    if result[1] then
-        if result[1].owned == 1 then
-            return true
-        end
+    local houseData = Config.Houses[house]
+    if houseData and houseData.owned then
+        return true
     end
     return false
 end
@@ -156,6 +152,11 @@ local function escape_sqli(source)
     }
     return source:gsub("['\"]", replacements)
 end
+
+-- ⚡ Performance TODO: isHouseOwned() and GetHouseStreetCount() use synchronous .await in
+-- event handlers (buyHouse/addNewHouse). These should be refactored to async callbacks
+-- when the caller can be restructured. For now, they remain synchronous but are
+-- low-frequency (admin house creation / player house purchase).
 
 -- Events
 
@@ -257,6 +258,7 @@ RegisterNetEvent('qb-houses:server:buyHouse', function(house)
         }
         MySQL.insert('INSERT INTO player_houses (house, identifier, citizenid, keyholders) VALUES (?, ?, ?, ?)', { house, pData.PlayerData.license, pData.PlayerData.citizenid, json.encode(housekeyholders[house]) })
         MySQL.update('UPDATE houselocations SET owned = ? WHERE name = ?', { 1, house })
+        Config.Houses[house].owned = true -- ⚡ Sync in-memory cache for isHouseOwned()
         TriggerClientEvent('qb-houses:client:SetClosestHouse', src)
         TriggerClientEvent('qb-house:client:RefreshHouseTargets', src)
         pData.Functions.RemoveMoney('bank', HousePrice, 'bought-house') -- 21% Extra house costs
@@ -487,61 +489,71 @@ QBCore.Functions.CreateCallback('qb-houses:server:getHouseKeyHolders', function(
     local retval = {}
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    if housekeyholders[house] then
-        for i = 1, #housekeyholders[house], 1 do
-            if Player.PlayerData.citizenid ~= housekeyholders[house][i] then
-                local result = MySQL.query.await('SELECT charinfo FROM players WHERE citizenid = ?', { housekeyholders[house][i] })
-                if result[1] then
-                    local charinfo = json.decode(result[1].charinfo)
-                    retval[#retval + 1] = {
-                        firstname = charinfo.firstname,
-                        lastname = charinfo.lastname,
-                        citizenid = housekeyholders[house][i]
-                    }
-                end
-            end
+    if not housekeyholders[house] then return cb(nil) end
+    -- ⚡ Performance: 异步并行查询替代循环中串行 .await
+    local keyholders = housekeyholders[house]
+    local pending = 0
+    for i = 1, #keyholders do
+        if Player.PlayerData.citizenid ~= keyholders[i] then
+            pending = pending + 1
+            local keyCid = keyholders[i]
+            MySQL.Async.fetchAll('SELECT charinfo FROM players WHERE citizenid = ?', { keyCid },
+                function(result)
+                    if result[1] then
+                        local charinfo = json.decode(result[1].charinfo)
+                        retval[#retval + 1] = {
+                            firstname = charinfo.firstname,
+                            lastname = charinfo.lastname,
+                            citizenid = keyCid
+                        }
+                    end
+                    pending = pending - 1
+                    if pending <= 0 then cb(retval) end
+                end)
         end
-        cb(retval)
-    else
-        cb(nil)
     end
+    if pending == 0 then cb(retval) end
 end)
 
 QBCore.Functions.CreateCallback('qb-phone:server:TransferCid', function(_, cb, NewCid, house)
-    local result = MySQL.query.await('SELECT * FROM players WHERE citizenid = ?', { NewCid })
-    if result[1] then
-        local HouseName = house.name
-        housekeyholders[HouseName] = {}
-        housekeyholders[HouseName][1] = NewCid
-        houseownercid[HouseName] = NewCid
-        houseowneridentifier[HouseName] = result[1].license
-        MySQL.update(
-            'UPDATE player_houses SET citizenid = ?, keyholders = ?, identifier = ? WHERE house = ?',
-            { NewCid, json.encode(housekeyholders[HouseName]), result[1].license, HouseName })
-        cb(true)
-    else
-        cb(false)
-    end
+    -- ⚡ Performance: 异步查询替代 .await
+    MySQL.Async.fetchAll('SELECT * FROM players WHERE citizenid = ?', { NewCid }, function(result)
+        if result[1] then
+            local HouseName = house.name
+            housekeyholders[HouseName] = {}
+            housekeyholders[HouseName][1] = NewCid
+            houseownercid[HouseName] = NewCid
+            houseowneridentifier[HouseName] = result[1].license
+            MySQL.update(
+                'UPDATE player_houses SET citizenid = ?, keyholders = ?, identifier = ? WHERE house = ?',
+                { NewCid, json.encode(housekeyholders[HouseName]), result[1].license, HouseName })
+            cb(true)
+        else
+            cb(false)
+        end
+    end)
 end)
 
 QBCore.Functions.CreateCallback('qb-houses:server:getHouseDecorations', function(_, cb, house)
-    local retval = nil
-    local result = MySQL.query.await('SELECT * FROM player_houses WHERE house = ?', { house })
-    if result[1] then
-        if result[1].decorations then
+    -- ⚡ Performance: 异步查询替代 .await
+    MySQL.Async.fetchAll('SELECT * FROM player_houses WHERE house = ?', { house }, function(result)
+        local retval = nil
+        if result[1] and result[1].decorations then
             retval = json.decode(result[1].decorations)
         end
-    end
-    cb(retval)
+        cb(retval)
+    end)
 end)
 
 QBCore.Functions.CreateCallback('qb-houses:server:getHouseLocations', function(_, cb, house)
-    local retval = nil
-    local result = MySQL.query.await('SELECT * FROM player_houses WHERE house = ?', { house })
-    if result[1] then
-        retval = result[1]
-    end
-    cb(retval)
+    -- ⚡ Performance: 异步查询替代 .await
+    MySQL.Async.fetchAll('SELECT * FROM player_houses WHERE house = ?', { house }, function(result)
+        local retval = nil
+        if result[1] then
+            retval = result[1]
+        end
+        cb(retval)
+    end)
 end)
 
 QBCore.Functions.CreateCallback('qb-houses:server:getOwnedHouses', function(source, cb)

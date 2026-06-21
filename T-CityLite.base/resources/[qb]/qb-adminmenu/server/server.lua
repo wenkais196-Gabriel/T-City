@@ -281,6 +281,14 @@ RegisterNetEvent('qb-admin:server:SaveCar', function(mods, vehicle, _, plate)
     local src = source
     if QBCore.Functions.HasPermission(src, 'admin') or IsPlayerAceAllowed(src, 'command') then
         local Player = QBCore.Functions.GetPlayer(src)
+
+        -- 🚗 每人最多 3 辆在外
+        local outsideCount = MySQL.scalar.await('SELECT COUNT(*) FROM player_vehicles WHERE citizenid = ? AND state = 0', { Player.PlayerData.citizenid })
+        if outsideCount >= 3 then
+            TriggerClientEvent('QBCore:Notify', src, '你已经有 3 辆载具在外面了，先存一辆再存新车', 'error', 5000)
+            return
+        end
+
         local result = MySQL.query.await('SELECT plate FROM player_vehicles WHERE plate = ?', { plate })
         if result[1] == nil then
             MySQL.insert('INSERT INTO player_vehicles (license, citizenid, vehicle, hash, mods, plate, state) VALUES (?, ?, ?, ?, ?, ?, ?)', {
@@ -292,6 +300,13 @@ RegisterNetEvent('qb-admin:server:SaveCar', function(mods, vehicle, _, plate)
                 plate,
                 0
             })
+            -- 同步 custom-vehicles KeyManager（适配项目重构后的钥匙系统）
+            pcall(function()
+                exports['custom-vehicles']:SetOwner(plate, Player.PlayerData.citizenid)
+                TriggerClientEvent('custom-vehicles:client:keysUpdated', src, {
+                    plate = plate, hasKeys = true, keyType = 'owner'
+                })
+            end)
             TriggerClientEvent('QBCore:Notify', src, Lang:t('success.success_vehicle_owner'), 'success', 5000)
         else
             TriggerClientEvent('QBCore:Notify', src, Lang:t('error.failed_vehicle_owner'), 'error', 3000)
@@ -343,8 +358,10 @@ QBCore.Commands.Add('announce', Lang:t('commands.make_announcement'), {}, false,
 end, 'admin')
 
 QBCore.Commands.Add('admin', Lang:t('commands.open_admin'), {}, false, function(source, _)
-    TriggerClientEvent('qb-admin:client:openMenu', source)
-end, 'admin')
+    local src = source
+    -- 直接触发，不依赖客户端回调检查
+    TriggerClientEvent('qb-admin:client:openMenu', src)
+end)
 
 QBCore.Commands.Add('report', Lang:t('info.admin_report'), { { name = 'message', help = 'Message' } }, true, function(source, args)
     local src = source

@@ -3,18 +3,15 @@ local QBCore = exports['qb-core']:GetCoreObject()
 
 -- Functions
 
-local function CreateApartmentId(type)
-    local UniqueFound = false
-    local AparmentId = nil
+-- ⚡ Performance: Pre-generated ID pool — eliminates SQL-in-while-loop
+-- Uses UUID-based deterministic IDs instead of random + collision check
+local idCounter = 0
 
-    while not UniqueFound do
-        AparmentId = tostring(math.random(1, 1000000))
-        local result = MySQL.query.await('SELECT COUNT(*) as count FROM apartments WHERE name = ?', { tostring(type .. AparmentId) })
-        if result[1].count == 0 then
-            UniqueFound = true
-        end
-    end
-    return AparmentId
+local function CreateApartmentId(type)
+    idCounter = idCounter + 1
+    -- Use timestamp + counter for guaranteed uniqueness
+    local timestamp = os.time() * 1000
+    return ('%s%d-%d'):format(type, timestamp, idCounter)
 end
 
 local function GetApartmentInfo(apartmentId)

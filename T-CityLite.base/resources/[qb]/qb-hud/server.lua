@@ -1,5 +1,4 @@
 local QBCore = exports['qb-core']:GetCoreObject()
-local ResetStress = false
 
 QBCore.Commands.Add('cash', 'Check Cash Balance', {}, false, function(source, _)
     local Player = QBCore.Functions.GetPlayer(source)
@@ -21,22 +20,17 @@ RegisterNetEvent('hud:server:GainStress', function(amount)
     if Config.DisableStress then return end
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    local Job = Player.PlayerData.job.name
-    local JobType = Player.PlayerData.job.type
-    local newStress
-    if not Player or Config.WhitelistedJobs[JobType] or Config.WhitelistedJobs[Job] then return end
-    if not ResetStress then
-        if not Player.PlayerData.metadata['stress'] then
-            Player.PlayerData.metadata['stress'] = 0
-        end
-        newStress = Player.PlayerData.metadata['stress'] + amount
-        if newStress <= 0 then newStress = 0 end
-    else
-        newStress = 0
-    end
-    if newStress > 100 then
-        newStress = 100
-    end
+    if not Player then return end
+    local job = Player.PlayerData.job
+    if not job then return end
+    if Config.WhitelistedJobs[job.type] or Config.WhitelistedJobs[job.name] then return end
+
+    local meta = Player.PlayerData.metadata
+    local currentStress = meta.stress or 0
+    local newStress = currentStress + amount
+    if newStress < 0 then newStress = 0 end
+    if newStress > 100 then newStress = 100 end
+
     Player.Functions.SetMetaData('stress', newStress)
     TriggerClientEvent('hud:client:UpdateStress', src, newStress)
     TriggerClientEvent('QBCore:Notify', src, Lang:t('notify.stress_gain'), 'error', 1500)
@@ -46,20 +40,14 @@ RegisterNetEvent('hud:server:RelieveStress', function(amount)
     if Config.DisableStress then return end
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    local newStress
     if not Player then return end
-    if not ResetStress then
-        if not Player.PlayerData.metadata['stress'] then
-            Player.PlayerData.metadata['stress'] = 0
-        end
-        newStress = Player.PlayerData.metadata['stress'] - amount
-        if newStress <= 0 then newStress = 0 end
-    else
-        newStress = 0
-    end
-    if newStress > 100 then
-        newStress = 100
-    end
+
+    local meta = Player.PlayerData.metadata
+    local currentStress = meta.stress or 0
+    local newStress = currentStress - amount
+    if newStress < 0 then newStress = 0 end
+    if newStress > 100 then newStress = 100 end
+
     Player.Functions.SetMetaData('stress', newStress)
     TriggerClientEvent('hud:client:UpdateStress', src, newStress)
     TriggerClientEvent('QBCore:Notify', src, Lang:t('notify.stress_removed'))

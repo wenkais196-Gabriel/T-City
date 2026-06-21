@@ -140,6 +140,14 @@ RegisterNetEvent('qb-inventory:server:openVending', function(data)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    -- 🔒 Security: 距离校验 — 防止远程开售货机
+    if not data.coords then return end
+    local playerPed = GetPlayerPed(src)
+    local playerCoords = GetEntityCoords(playerPed)
+    local dx = playerCoords.x - (data.coords.x or data.coords[1])
+    local dy = playerCoords.y - (data.coords.y or data.coords[2])
+    local dz = playerCoords.z - (data.coords.z or data.coords[3])
+    if dx*dx + dy*dy + dz*dz > 9.0 then return end -- 3m 平方
     CreateShop({
         name = 'vending',
         label = 'Vending Machine',
@@ -191,7 +199,7 @@ RegisterNetEvent('qb-inventory:server:useItem', function(item)
         local playerPed = GetPlayerPed(src)
         local playerCoords = GetEntityCoords(playerPed)
         local players = QBCore.Functions.GetPlayers()
-        local gender = item.info.gender == 0 and 'Male' or 'Female'
+        local gender = itemData.info.gender == 0 and 'Male' or 'Female'
         for _, v in pairs(players) do
             local targetPed = GetPlayerPed(v)
             local dist = #(playerCoords - GetEntityCoords(targetPed))
@@ -200,12 +208,12 @@ RegisterNetEvent('qb-inventory:server:useItem', function(item)
                     template = '<div class="chat-message advert" style="background: linear-gradient(to right, rgba(5, 5, 5, 0.6), #74807c); display: flex;"><div style="margin-right: 10px;"><i class="far fa-id-card" style="height: 100%;"></i><strong> {0}</strong><br> <strong>Civ ID:</strong> {1} <br><strong>First Name:</strong> {2} <br><strong>Last Name:</strong> {3} <br><strong>Birthdate:</strong> {4} <br><strong>Gender:</strong> {5} <br><strong>Nationality:</strong> {6}</div></div>',
                     args = {
                         'ID Card',
-                        item.info.citizenid,
-                        item.info.firstname,
-                        item.info.lastname,
-                        item.info.birthdate,
+                        itemData.info.citizenid,
+                        itemData.info.firstname,
+                        itemData.info.lastname,
+                        itemData.info.birthdate,
                         gender,
-                        item.info.nationality
+                        itemData.info.nationality
                     }
                 })
             end
@@ -224,13 +232,12 @@ RegisterNetEvent('qb-inventory:server:useItem', function(item)
                     template = '<div class="chat-message advert" style="background: linear-gradient(to right, rgba(5, 5, 5, 0.6), #657175); display: flex;"><div style="margin-right: 10px;"><i class="far fa-id-card" style="height: 100%;"></i><strong> {0}</strong><br> <strong>First Name:</strong> {1} <br><strong>Last Name:</strong> {2} <br><strong>Birth Date:</strong> {3} <br><strong>Licenses:</strong> {4}</div></div>',
                     args = {
                         'Drivers License',
-                        item.info.firstname,
-                        item.info.lastname,
-                        item.info.birthdate,
-                        item.info.type
+                        itemData.info.firstname,
+                        itemData.info.lastname,
+                        itemData.info.birthdate,
+                        itemData.info.type
                     }
-                }
-                )
+                })
             end
         end
     else
@@ -262,14 +269,40 @@ RegisterNetEvent('qb-inventory:server:openDrop', function(dropId)
 end)
 
 RegisterNetEvent('qb-inventory:server:updateDrop', function(dropId, coords)
-    Drops[dropId].coords = coords
+    -- 🔒 Security: 校验 source 有效性 + 距离限制 + 防坐标篡改
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    if not Drops[dropId] then return end
+    -- 坐标必须是 vector3 类型且分量在合理范围内（FiveM 地图边界: -4000 ~ 8000）
+    if type(coords) ~= 'vector3' and type(coords) ~= 'table' then return end
+    local cx, cy, cz = coords.x or coords[1], coords.y or coords[2], coords.z or coords[3]
+    if not cx or not cy or not cz then return end
+    if cx < -5000 or cx > 9000 or cy < -5000 or cy > 9000 or cz < -200 or cz > 2000 then return end
+    -- 服务端距离校验：玩家当前位置与声称的掉落坐标距离不得超过 5 米
+    local playerPed = GetPlayerPed(src)
+    local playerCoords = GetEntityCoords(playerPed)
+    local dx = playerCoords.x - cx
+    local dy = playerCoords.y - cy
+    local dz = playerCoords.z - cz
+    if dx*dx + dy*dy + dz*dz > 25.0 then return end -- 5m 平方
+    Drops[dropId].coords = vector3(cx, cy, cz)
 end)
 
 RegisterNetEvent('qb-inventory:server:snowball', function(action)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- 🔒 Security: 限流 — 防止客户端高频刷雪球
+    local cooldownKey = 'snowball_' .. src
+    if _snowballCooldowns == nil then _snowballCooldowns = {} end
+    local now = os.time()
+    if _snowballCooldowns[cooldownKey] and (now - _snowballCooldowns[cooldownKey]) < 2 then return end
+    _snowballCooldowns[cooldownKey] = now
     if action == 'add' then
-        AddItem(source, 'weapon_snowball', 1, false, false, 'qb-inventory:server:snowball')
+        AddItem(src, 'weapon_snowball', 1, false, false, 'qb-inventory:server:snowball')
     elseif action == 'remove' then
-        RemoveItem(source, 'weapon_snowball', 1, false, 'qb-inventory:server:snowball')
+        RemoveItem(src, 'weapon_snowball', 1, false, 'qb-inventory:server:snowball')
     end
 end)
 

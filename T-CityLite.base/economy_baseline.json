@@ -1,0 +1,214 @@
+{
+  "_schema": "economy_baseline v2.0",
+  "_description": "全服最高权重基准表。修改此文件的数字，全服物价、任务奖励、物资价格瞬间同步缩放。具体物资/任务只配置标签(时间权重/稀有度/风险)，价格由本表自动推导。",
+  "_formula": "item_price = baseline.target_hourly_income / baseline.items_per_hour_lookup[rarity] × baseline.rarity_multiplier[rarity]",
+
+  "global": {
+    "multiplier": 1.0,
+    "_note_multiplier": "管理员一键缩放：1.0=正常，0.8=全服八折抗通胀，1.2=全服刺激经济",
+
+    "currency": {
+      "starting_cash": 500,
+      "starting_bank": 5000,
+      "starting_crypto": 0
+    },
+
+    "target_hourly_income": {
+      "_note": "各类玩家一小时合理劳动的目标净收益（作为全服定价的锚点）",
+      "civilian_grind": 1500,
+      "_civilian_grind_note": "平民一小时无脑合法劳动（送外卖/采矿/钓鱼）的目标收益",
+      "skilled_labor": 2500,
+      "_skilled_labor_note": "需要资质的专业劳动（技工修车/医生急救/律师出庭）",
+      "high_risk_illegal": 5000,
+      "_high_risk_illegal_note": "高风险非法活动（抢银行/走私/贩毒）的目标期望收益",
+      "passive_income": 200,
+      "_passive_income_note": "纯挂机/房产出租/股票分红的目标时收益（极低）"
+    },
+
+    "paycheck_interval_minutes": 10,
+    "_paycheck_note": "合法职业基础工资发放间隔"
+  },
+
+  "rarity": {
+    "_note": "物资稀有度定义。物品只配置 rarity 标签，价格由系统根据 target_hourly_income 自动计算",
+    "trash": {
+      "label": "废品/极常见",
+      "items_per_hour": 80,
+      "multiplier": 0.3,
+      "examples": ["sand", "stone", "scrap_metal", "glass"]
+    },
+    "common": {
+      "label": "普通",
+      "items_per_hour": 30,
+      "multiplier": 1.0,
+      "examples": ["iron_ore", "copper_ore", "wood_plank", "herb_basic"]
+    },
+    "uncommon": {
+      "label": "稀有",
+      "items_per_hour": 12,
+      "multiplier": 2.5,
+      "examples": ["gold_ore", "diamond_raw", "herb_rare", "electronic_parts"]
+    },
+    "rare": {
+      "label": "珍贵",
+      "items_per_hour": 4,
+      "multiplier": 6.0,
+      "examples": ["platinum_ore", "military_grade_chip", "research_data"]
+    },
+    "legendary": {
+      "label": "传说/极罕见",
+      "items_per_hour": 1,
+      "multiplier": 15.0,
+      "examples": ["alien_artifact", "government_secret_file", "nuclear_material"]
+    }
+  },
+
+  "pricing": {
+    "_note": "以下价格全部由 baseline 自动推导。示例: iron_ore = 1500 / 30 × 1.0 = $50",
+
+    "materials": {
+      "iron_ore":          { "rarity": "common",    "_price": 50 },
+      "copper_ore":        { "rarity": "common",    "_price": 50 },
+      "gold_ore":          { "rarity": "uncommon",  "_price": 312 },
+      "diamond_raw":       { "rarity": "rare",      "_price": 2250 },
+      "platinum_ore":      { "rarity": "rare",      "_price": 2250 },
+      "sand":              { "rarity": "trash",     "_price": 5 },
+      "stone":             { "rarity": "trash",     "_price": 5 },
+      "scrap_metal":       { "rarity": "trash",     "_price": 5 },
+      "wood_plank":        { "rarity": "common",    "_price": 50 },
+      "electronic_parts":  { "rarity": "uncommon",  "_price": 312 },
+      "military_grade_chip": { "rarity": "rare",    "_price": 2250 },
+      "herb_basic":        { "rarity": "common",    "_price": 50 },
+      "herb_rare":         { "rarity": "uncommon",  "_price": 312 },
+      "oil_crude":         { "rarity": "common",    "_price": 50 },
+      "oil_refined":       { "rarity": "uncommon",  "_price": 312 }
+    },
+
+    "processed_goods": {
+      "_note": "加工品 = 原材料成本 + 加工附加值。加工附加值 = skilled_labor / items_per_hour × complexity",
+      "steel_ingot":       { "inputs": {"iron_ore": 3, "coal": 1}, "complexity": 1.0, "_price": 250 },
+      "gold_bar":          { "inputs": {"gold_ore": 2},            "complexity": 1.2, "_price": 800 },
+      "diamond_cut":       { "inputs": {"diamond_raw": 2},         "complexity": 2.0, "_price": 5500 },
+      "refined_oil":       { "inputs": {"oil_crude": 2},           "complexity": 0.8, "_price": 200 },
+      "circuit_board":     { "inputs": {"copper_ore": 2, "electronic_parts": 1}, "complexity": 1.5, "_price": 550 },
+      "bullet_casing":     { "inputs": {"steel_ingot": 1},         "complexity": 0.5, "_price": 350 }
+    },
+
+    "consumables": {
+      "armor":             { "rarity": "common",  "_price": 200 },
+      "heavy_armor":       { "rarity": "uncommon","_price": 600 },
+      "lockpick":          { "rarity": "common",  "_price": 150 },
+      "advanced_lockpick": { "rarity": "uncommon","_price": 400 },
+      "repair_kit":        { "rarity": "common",  "_price": 300 },
+      "medkit_basic":      { "rarity": "common",  "_price": 100 },
+      "medkit_advanced":   { "rarity": "uncommon","_price": 350 },
+      "bandage":           { "rarity": "trash",   "_price": 20 },
+      "food_burger":       { "rarity": "trash",   "_price": 10 },
+      "food_premium":      { "rarity": "common",  "_price": 50 },
+      "water_bottle":      { "rarity": "trash",   "_price": 5 }
+    },
+
+    "illegal_goods": {
+      "_note": "非法物资价格 = civilian_grind / items_per_hour × risk_multiplier",
+      "_risk_multiplier": 3.0,
+      "cocaine_raw":       { "rarity": "common",   "_price": 150 },
+      "cocaine_pure":      { "rarity": "uncommon", "_price": 900 },
+      "meth_raw":           { "rarity": "common",   "_price": 150 },
+      "meth_crystal":       { "rarity": "uncommon", "_price": 900 },
+      "weed_bag":           { "rarity": "common",   "_price": 150 },
+      "weed_premium":       { "rarity": "uncommon", "_price": 900 },
+      "counterfeit_cash":   { "rarity": "rare",     "_price": 6750 },
+      "laundered_money":    { "rarity": "legendary", "_price": 22500 }
+    },
+
+    "vehicles": {
+      "_note": "车辆价格 = vehicle_base + luxury_tier × tier_price_step",
+      "vehicle_base_price": 5000,
+      "tier_price_step": 15000,
+      "tiers": {
+        "economy":  { "multiplier": 0,  "label": "经济型",  "examples": ["blista", "asterope", "dilettante"] },
+        "standard": { "multiplier": 1,  "label": "标准型",  "examples": ["buffalo", "tailgater", "warrener"] },
+        "premium":  { "multiplier": 3,  "label": "豪华型",  "examples": ["baller", "cog55", "superd"] },
+        "luxury":   { "multiplier": 8,  "label": "奢侈型",  "examples": ["adder", "zentorno", "t20"] },
+        "hyper":    { "multiplier": 20, "label": "顶级超跑", "examples": ["prototipo", "tezeract", "krieger"] }
+      }
+    },
+
+    "properties": {
+      "_note": "房产价格 = property_base + tier × tier_step × location_modifier",
+      "property_base_price": 25000,
+      "tier_price_step": 50000,
+      "tiers": {
+        "trailer":  { "value": 0,  "label": "拖车/贫民窟" },
+        "basic":    { "value": 1,  "label": "基础公寓" },
+        "mid":      { "value": 3,  "label": "中档住宅" },
+        "high":     { "value": 8,  "label": "高级别墅" },
+        "mansion":  { "value": 25, "label": "海滨豪宅" }
+      },
+      "location_modifiers": {
+        "downtown": 2.0,
+        "hills": 1.8,
+        "suburb": 1.0,
+        "desert": 0.6,
+        "industrial": 0.5
+      }
+    }
+  },
+
+  "missions": {
+    "_note": "任务奖励 = target_hourly_income × time_weight × risk_multiplier × player_count_factor",
+    "time_weights": {
+      "short":   { "minutes": 5,   "weight": 0.15, "label": "短任务 (~5分钟)" },
+      "medium":  { "minutes": 15,  "weight": 0.35, "label": "中等任务 (~15分钟)" },
+      "long":    { "minutes": 30,  "weight": 0.60, "label": "长任务 (~30分钟)" },
+      "epic":    { "minutes": 60,  "weight": 1.20, "label": "史诗任务 (~60分钟)" }
+    },
+    "risk_multipliers": {
+      "safe":      1.0,
+      "low_risk":  1.3,
+      "medium_risk": 1.8,
+      "high_risk": 2.5,
+      "extreme_risk": 4.0
+    },
+    "player_count_factor": {
+      "_note": "多人任务的总奖励 = base × (1 + 0.5 × (n-1))，n=参与人数",
+      "base_factor": 0.5
+    }
+  },
+
+  "sinks": {
+    "_note": "消耗口费率 — 修改此处全服税收同步调整",
+    "vehicle_purchase_tax": 0.08,
+    "vehicle_transfer_tax": 0.05,
+    "vehicle_insurance_interval_h": 48,
+    "vehicle_insurance_base": 500,
+    "vehicle_insurance_rate": 0.001,
+    "vehicle_overhaul_mileage_km": 1000,
+    "vehicle_overhaul_base": 1500,
+    "vehicle_overhaul_rate": 0.002,
+
+    "housing_tax_interval_h": 72,
+    "housing_tax_tiers": [
+      { "count": 1, "rate": 0.003 },
+      { "count": 2, "rate": 0.005 },
+      { "count": 3, "rate": 0.010 },
+      { "count": 5, "rate": 0.020 },
+      { "count": 99, "rate": 0.050 }
+    ],
+    "housing_tax_location_multipliers": {
+      "tier_1": 0.8,
+      "tier_2": 1.0,
+      "tier_3": 1.5,
+      "tier_4": 2.0
+    },
+
+    "atm_fee_rate": 0.02,
+    "transaction_tax_rate": 0.05,
+    "large_transfer_threshold": 100000,
+    "org_transfer_tax_rate": 0.03,
+    "org_transfer_threshold": 50000,
+
+    "prison_bail_base": 5000,
+    "impound_base_fee": 2500
+  }
+}

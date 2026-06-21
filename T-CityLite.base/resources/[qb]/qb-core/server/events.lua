@@ -230,22 +230,45 @@ end)
 
 -- Items
 
--- This event is exploitable and should not be used. It has been deprecated, and will be removed soon.
+-- 🛡️ Security Fix: 以下三个事件已于原版 QBCore 标记为"可被利用且已废弃"。
+-- 原实现仅打印警告但仍允许执行，存在客户端注入漏洞。
+-- 现改为记录安全日志并直接拒绝，彻底堵死注入面。
+--
+-- 如需从服务端使用物品，请使用 qb-inventory exports:
+--   exports['qb-inventory']:AddItem(source, item, amount, slot, info)
+--   exports['qb-inventory']:RemoveItem(source, item, amount, slot)
+
 RegisterNetEvent('QBCore:Server:UseItem', function(item)
-    print(string.format('%s triggered QBCore:Server:UseItem by ID %s with the following data. This event is deprecated due to exploitation, and will be removed soon. Check qb-inventory for the right use on this event.', GetInvokingResource(), source))
-    QBCore.Debug(item)
+    local src = source
+    local resource = GetInvokingResource() or 'unknown'
+    print(('[SECURITY] %s (ID %d) attempted to use deprecated QBCore:Server:UseItem — BLOCKED'):format(resource, src))
+    if exports['custom-logs'] then
+        exports['custom-logs']:LogSecurity('弃用事件拦截',
+            ('**资源**: %s | **Source**: %d | **事件**: QBCore:Server:UseItem | **数据**: %s'):format(resource, src, json.encode(item or {})),
+            16711680)
+    end
 end)
 
--- This event is exploitable and should not be used. It has been deprecated, and will be removed soon. function(itemName, amount, slot)
 RegisterNetEvent('QBCore:Server:RemoveItem', function(itemName, amount)
     local src = source
-    print(string.format('%s triggered QBCore:Server:RemoveItem by ID %s for %s %s. This event is deprecated due to exploitation, and will be removed soon. Adjust your events accordingly to do this server side with player functions.', GetInvokingResource(), src, amount, itemName))
+    local resource = GetInvokingResource() or 'unknown'
+    print(('[SECURITY] %s (ID %d) attempted to use deprecated QBCore:Server:RemoveItem (%s x%s) — BLOCKED'):format(resource, src, itemName or 'nil', amount or 0))
+    if exports['custom-logs'] then
+        exports['custom-logs']:LogSecurity('弃用事件拦截',
+            ('**资源**: %s | **Source**: %d | **事件**: QBCore:Server:RemoveItem | **物品**: %s x%s'):format(resource, src, itemName or 'nil', tostring(amount)),
+            16711680)
+    end
 end)
 
--- This event is exploitable and should not be used. It has been deprecated, and will be removed soon. function(itemName, amount, slot, info)
 RegisterNetEvent('QBCore:Server:AddItem', function(itemName, amount)
     local src = source
-    print(string.format('%s triggered QBCore:Server:AddItem by ID %s for %s %s. This event is deprecated due to exploitation, and will be removed soon. Adjust your events accordingly to do this server side with player functions.', GetInvokingResource(), src, amount, itemName))
+    local resource = GetInvokingResource() or 'unknown'
+    print(('[SECURITY] %s (ID %d) attempted to use deprecated QBCore:Server:AddItem (%s x%s) — BLOCKED'):format(resource, src, itemName or 'nil', amount or 0))
+    if exports['custom-logs'] then
+        exports['custom-logs']:LogSecurity('弃用事件拦截',
+            ('**资源**: %s | **Source**: %d | **事件**: QBCore:Server:AddItem | **物品**: %s x%s'):format(resource, src, itemName or 'nil', tostring(amount)),
+            16711680)
+    end
 end)
 
 -- Non-Chat Command Calling (ex: qb-adminmenu)

@@ -23,7 +23,7 @@ RegisterNetEvent('qb-taxi:server:NpcPay', function(payment, hasReceivedBonus)
             if Config.Advanced.Bonus.Enabled then
                 local tipAmount = math.floor(payment * Config.Advanced.Bonus.Percentage / 100)
 
-                payment += tipAmount
+                payment = payment + tipAmount
                 if hasReceivedBonus then
                     TriggerClientEvent('QBCore:Notify', src, string.format(Lang:t('info.tip_received'), tipAmount), 'primary', 5000)
                 else
@@ -34,7 +34,12 @@ RegisterNetEvent('qb-taxi:server:NpcPay', function(payment, hasReceivedBonus)
             if Config.Management then
                 exports['qb-banking']:AddMoney('taxi', payment, 'Customer payment')
             else
-                Player.Functions.AddMoney('cash', payment, 'Taxi payout')
+                -- 💰 统一经济网关
+                if GetResourceState('core_economy') == 'started' then
+                    exports['core_economy']:TriggerReward(src, 'taxi_mission', payment, { moneytype = 'cash', reason = 'taxi_payout' })
+                else
+                    Player.Functions.AddMoney('cash', payment, 'Taxi payout')
+                end
             end
 
             local chance = math.random(1, 100)

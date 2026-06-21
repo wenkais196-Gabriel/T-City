@@ -309,6 +309,14 @@
                     </transition>
                 </div>
             </div>
+            <div id="waypoint-distance-container">
+                <div class="waypoint-distance-text" v-show="show">{{displayText}}</div>
+            </div>
+            <div id="task-timer-container">
+                <div class="task-timer-wrapper" v-show="show">
+                    <div class="task-timer-text" :class="phaseClass">{{timeText}}</div>
+                </div>
+            </div>
             <div id="veh-container">
                 <div v-show="show">
                     <div class="responsive" id="speedometer">

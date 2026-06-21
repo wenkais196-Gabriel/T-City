@@ -63,7 +63,7 @@ local function CreateBlip()
     SetBlipScale(blip, 1.0)
     SetBlipAsShortRange(blip, false)
     BeginTextCommandSetBlipName("STRING")
-    AddTextComponentSubstringPlayerName("Drop Off")
+    AddTextComponentSubstringPlayerName(_L('blip_vineyard_dropoff'))
     EndTextCommandSetBlipName(blip)
 end
 

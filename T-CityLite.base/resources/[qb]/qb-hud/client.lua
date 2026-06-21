@@ -28,6 +28,14 @@ local CinematicHeight = 0.2
 local w = 0
 local radioActive = false
 
+-- Debug: /rings command to force all status rings visible for testing
+local debugShowAllRings = false
+
+-- Waypoint distance tracking
+local waypointActive = false
+local waypointDistance = 0
+local customTarget = nil -- {x, y, z, label} for future task integration
+
 DisplayRadar(false)
 
 local function CinematicShow(bool)
@@ -74,6 +82,18 @@ local function saveSettings()
     SetResourceKvp('hudSettings', json.encode(Menu))
 end
 
+-- Check if minimap/radar should be visible (mirrors DisplayRadar logic exactly)
+local function isRadarVisible()
+    if Menu.isHideMapChecked then return false end
+    if Menu.isCinematicModeChecked then return false end
+    if IsPauseMenuActive() then return false end
+    local ped = PlayerPedId()
+    if IsPedInAnyVehicle(ped) and not IsThisModelABicycle(GetVehiclePedIsIn(ped)) then
+        return true
+    end
+    return Menu.isOutMapChecked
+end
+
 local function hasHarness(items)
     local ped = PlayerPedId()
     if not IsPedInAnyVehicle(ped, false) then return end
@@ -95,6 +115,12 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     local hudSettings = GetResourceKvpString('hudSettings')
     if hudSettings then loadSettings(json.decode(hudSettings)) end
     PlayerData = QBCore.Functions.GetPlayerData()
+    -- 从服务端数据恢复本地压力/饥饿/口渴值 (修复登录后显示为 0 的问题)
+    if PlayerData.metadata then
+        stress = PlayerData.metadata.stress or 0
+        hunger = PlayerData.metadata.hunger or 100
+        thirst = PlayerData.metadata.thirst or 100
+    end
     Wait(3000)
     SetEntityHealth(PlayerPedId(), 200)
 end)
@@ -163,6 +189,15 @@ end)
 RegisterCommand('resethud', function()
     Wait(50)
     restartHud()
+end)
+
+RegisterCommand('rings', function()
+    debugShowAllRings = not debugShowAllRings
+    if debugShowAllRings then
+        QBCore.Functions.Notify('🔍 Rings Debug: ALL rings forced visible', 'success')
+    else
+        QBCore.Functions.Notify('🔍 Rings Debug: back to normal', 'error')
+    end
 end)
 
 RegisterNUICallback('resetStorage', function(_, cb)
@@ -376,19 +411,13 @@ RegisterNetEvent('hud:client:LoadMap', function()
         SetMinimapClipType(0)
         AddReplaceTexture('platform:/textures/graphics', 'radarmasksm', 'squaremap', 'radarmasksm')
         AddReplaceTexture('platform:/textures/graphics', 'radarmask1g', 'squaremap', 'radarmasksm')
-        -- 0.0 = nav symbol and icons left
-        -- 0.1638 = nav symbol and icons stretched
-        -- 0.216 = nav symbol and icons raised up
-        SetMinimapComponentPosition('minimap', 'L', 'B', 0.0 + minimapOffset, -0.047, 0.1638, 0.183)
+        -- 87.5% scale minimap (square)
+        SetMinimapComponentPosition('minimap', 'L', 'B', 0.0 + minimapOffset, -0.047, 0.1433, 0.1601)
 
-        -- icons within map
-        SetMinimapComponentPosition('minimap_mask', 'L', 'B', 0.0 + minimapOffset, 0.0, 0.128, 0.20)
+        -- mask 完全匹配 blur (同位置同尺寸)
+        SetMinimapComponentPosition('minimap_mask', 'L', 'B', -0.01 + minimapOffset, 0.025, 0.2293, 0.2625)
 
-        -- -0.01 = map pulled left
-        -- 0.025 = map raised up
-        -- 0.262 = map stretched
-        -- 0.315 = map shorten
-        SetMinimapComponentPosition('minimap_blur', 'L', 'B', -0.01 + minimapOffset, 0.025, 0.262, 0.300)
+        SetMinimapComponentPosition('minimap_blur', 'L', 'B', -0.01 + minimapOffset, 0.025, 0.2293, 0.2625)
         SetBlipAlpha(GetNorthRadarBlip(), 0)
         SetBigmapActive(true, false)
         SetMinimapClipType(0)
@@ -413,19 +442,13 @@ RegisterNetEvent('hud:client:LoadMap', function()
         SetMinimapClipType(1)
         AddReplaceTexture('platform:/textures/graphics', 'radarmasksm', 'circlemap', 'radarmasksm')
         AddReplaceTexture('platform:/textures/graphics', 'radarmask1g', 'circlemap', 'radarmasksm')
-        -- -0.0100 = nav symbol and icons left
-        -- 0.180 = nav symbol and icons stretched
-        -- 0.258 = nav symbol and icons raised up
-        SetMinimapComponentPosition('minimap', 'L', 'B', -0.0100 + minimapOffset, -0.030, 0.180, 0.258)
+        -- 87.5% scale minimap (circle)
+        SetMinimapComponentPosition('minimap', 'L', 'B', -0.0100 + minimapOffset, -0.030, 0.1575, 0.2258)
 
         -- icons within map
-        SetMinimapComponentPosition('minimap_mask', 'L', 'B', 0.200 + minimapOffset, 0.0, 0.065, 0.20)
+        SetMinimapComponentPosition('minimap_mask', 'L', 'B', 0.200 + minimapOffset, 0.0, 0.0569, 0.175)
 
-        -- -0.00 = map pulled left
-        -- 0.015 = map raised up
-        -- 0.252 = map stretched
-        -- 0.338 = map shorten
-        SetMinimapComponentPosition('minimap_blur', 'L', 'B', -0.00 + minimapOffset, 0.015, 0.252, 0.338)
+        SetMinimapComponentPosition('minimap_blur', 'L', 'B', -0.00 + minimapOffset, 0.015, 0.2205, 0.2958)
         SetBlipAlpha(GetNorthRadarBlip(), 0)
         SetMinimapClipType(1)
         SetBigmapActive(true, false)
@@ -567,8 +590,8 @@ RegisterNetEvent('hud:client:ToggleShowSeatbelt', function()
     showSeatbelt = not showSeatbelt
 end)
 
-RegisterNetEvent('seatbelt:client:ToggleSeatbelt', function() -- Triggered in smallresources
-    seatbeltOn = not seatbeltOn
+RegisterNetEvent('seatbelt:client:ToggleSeatbelt', function(state) -- Triggered in smallresources
+    seatbeltOn = state
 end)
 
 RegisterNetEvent('seatbelt:client:ToggleCruise', function() -- Triggered in smallresources
@@ -590,7 +613,36 @@ end)
 
 local prevPlayerStats = { nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil }
 
+local function debugOverrideRings(data)
+    if not debugShowAllRings then return data end
+    -- Force ALL dynamic visibility flags to false → rings always show
+    data[2] = false  -- dynamicHealth
+    data[3] = false  -- dynamicArmor
+    data[4] = false  -- dynamicHunger
+    data[5] = false  -- dynamicThirst
+    data[6] = false  -- dynamicStress
+    data[7] = false  -- dynamicOxygen
+    data[8] = false  -- dynamicEngine
+    data[9] = false  -- dynamicNitro
+    -- Force game-state values to non-extreme so rings are visible
+    data[10] = math.min(data[10], 75)   -- health: force < 100
+    data[12] = math.max(data[12], 40)   -- armor: force > 0
+    data[13] = math.min(data[13], 80)   -- thirst: force < 100
+    data[14] = math.min(data[14], 80)   -- hunger: force < 100
+    data[15] = math.max(data[15], 25)   -- stress: force > 0
+    data[19] = true                     -- armed
+    data[20] = math.min(data[20], 85)   -- oxygen: force < 100
+    data[21] = math.max(data[21], 0)    -- parachute: force >= 0
+    data[22] = math.max(data[22], 40)   -- nos: force > 0
+    data[23] = true                     -- cruise
+    data[25] = true                     -- harness
+    data[28] = math.max(data[28], 50)   -- engine: force in visible range
+    data[30] = true                     -- dev
+    return data
+end
+
 local function updatePlayerHud(data)
+    data = debugOverrideRings(data)
     local shouldUpdate = false
     for k, v in pairs(data) do
         if prevPlayerStats[k] ~= v then
@@ -685,7 +737,7 @@ CreateThread(function()
         if Menu.isChangeFPSChecked then
             Wait(500)
         else
-            Wait(50)
+            Wait(200)
         end
         if LocalPlayer.state.isLoggedIn then
             local show = true
@@ -981,14 +1033,13 @@ CreateThread(function()
         if stress >= 100 then
             local BlurIntensity = GetBlurIntensity(stress)
             local FallRepeat = math.random(2, 4)
-            local RagdollTimeout = FallRepeat * 1750
             TriggerScreenblurFadeIn(1000.0)
             Wait(BlurIntensity)
             TriggerScreenblurFadeOut(1000.0)
 
-            if not IsPedRagdoll(ped) and IsPedOnFoot(ped) and not IsPedSwimming(ped) then
-                SetPedToRagdollWithFall(ped, RagdollTimeout, RagdollTimeout, 1, GetEntityForwardVector(ped), 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-            end
+            -- Ragdoll removed (v0.7b): SetPedToRagdollWithFall caused vehicle
+            -- emergency-stop during enter/exit state transitions. Blackout
+            -- screen flash is retained as the stress penalty instead.
 
             Wait(1000)
             for _ = 1, FallRepeat, 1 do
@@ -1095,9 +1146,9 @@ CreateThread(function()
     local heading
     while true do
         if Menu.isChangeCompassFPSChecked then
-            Wait(50)
+            Wait(100)
         else
-            Wait(0)
+            Wait(100)
         end
         local show = true
         local player = PlayerPedId()
@@ -1145,4 +1196,158 @@ CreateThread(function()
         end
         lastHeading = heading
     end
+end)
+
+-- ============================================================
+-- Waypoint Distance Tracker
+-- 显示权限与时间完全跟随左下小地图（DisplayRadar 逻辑）
+-- 提供 exports 供后期任务系统（配送、赛车、洗钱等）复用
+-- ============================================================
+CreateThread(function()
+    local lastSent = false
+    local lastDist = 0
+    while true do
+        Wait(500)
+        if LocalPlayer.state.isLoggedIn and Menu.isWaypointDistanceChecked then
+            local shouldShow = isRadarVisible()
+            local ped = PlayerPedId()
+            local pCoords = GetEntityCoords(ped)
+            local dist = nil
+            local targetType = nil
+            local targetLabel = nil
+
+            if shouldShow then
+                if customTarget then
+                    -- 自定义追踪目标（后期任务系统使用）优先级高于原生 waypoint
+                    dist = #(vector2(pCoords.x, pCoords.y) - vector2(customTarget.x, customTarget.y))
+                    targetType = 'custom'
+                    targetLabel = customTarget.label
+                else
+                    -- 读取原生 GTA waypoint (blip type 8)
+                    local blip = GetFirstBlipInfoId(8)
+                    if DoesBlipExist(blip) then
+                        local wpCoords = GetBlipInfoIdCoord(blip)
+                        dist = #(vector2(pCoords.x, pCoords.y) - vector2(wpCoords.x, wpCoords.y))
+                        targetType = 'waypoint'
+                    end
+                end
+
+                if dist then
+                    waypointActive = true
+                    waypointDistance = dist
+                    SendNUIMessage({
+                        action = 'waypoint',
+                        show = true,
+                        distance = dist,
+                        type = targetType,
+                        label = targetLabel,
+                    })
+                    lastSent = true
+                    lastDist = dist
+                    TriggerEvent('hud:client:WaypointDistance', {
+                        exists = true,
+                        distance = dist,
+                        type = targetType,
+                        label = targetLabel,
+                    })
+                elseif lastSent then
+                    waypointActive = false
+                    waypointDistance = 0
+                    SendNUIMessage({ action = 'waypoint', show = false })
+                    lastSent = false
+                    lastDist = 0
+                    TriggerEvent('hud:client:WaypointDistance', { exists = false, distance = 0 })
+                end
+            elseif lastSent then
+                waypointActive = false
+                waypointDistance = 0
+                SendNUIMessage({ action = 'waypoint', show = false })
+                lastSent = false
+                lastDist = 0
+            end
+        end
+    end
+end)
+
+-- ============================================================
+-- Exports: 供其他资源调用的模块化接口
+-- ============================================================
+exports('GetWaypointInfo', function()
+    return {
+        exists = waypointActive,
+        distance = waypointDistance,
+        type = customTarget and 'custom' or 'waypoint',
+        label = customTarget and customTarget.label or nil,
+    }
+end)
+
+exports('SetCustomTarget', function(x, y, z, label)
+    customTarget = { x = x, y = y, z = z, label = label }
+end)
+
+exports('ClearCustomTarget', function()
+    customTarget = nil
+end)
+
+-- ============================================================
+-- Task Timer Exports
+-- 供 qb-drugs 等所有任务系统复用的左侧倒计时
+-- ============================================================
+exports('ShowTaskTimer', function(mins, secs, phase)
+    local timeStr
+    if mins < 0 then
+        timeStr = ('-%d:%02d'):format(math.abs(mins), secs)
+    else
+        timeStr = ('%d:%02d'):format(mins, secs)
+    end
+    SendNUIMessage({
+        action = 'tasktimer',
+        show = true,
+        time = timeStr,
+        phase = phase or 'normal',
+    })
+end)
+
+exports('HideTaskTimer', function()
+    SendNUIMessage({
+        action = 'tasktimer',
+        show = false,
+    })
+end)
+
+-- ============================================================
+-- 调试工具桥接: hud-position-tool 命令 → NUI 位置覆盖
+-- ============================================================
+RegisterNetEvent('hud-position-tool:ringPosition', function(data)
+    SendNUIMessage({
+        action = 'debug_ringpos',
+        x = data.x,
+        y = data.y,
+        mode = data.mode,
+    })
+end)
+
+-- 导出: 供 hud-position-tool 读取当前地图形状
+exports('GetCurrentMapShape', function()
+    return Menu.isToggleMapShapeChecked or 'circle'
+end)
+
+-- 调试: 仪表盘位置覆盖
+RegisterNetEvent('hud-position-tool:gaugePosition', function(data)
+    SendNUIMessage({
+        action = 'debug_gauges',
+        x = data.x,
+        y = data.y,
+        reset = data.reset,
+    })
+end)
+
+-- 调试: 目的地距离位置覆盖
+RegisterNetEvent('hud-position-tool:wpDistPosition', function(data)
+    SendNUIMessage({
+        action = 'debug_wpdist',
+        x = data.x,
+        y = data.y,
+        reset = data.reset,
+    })
 end)

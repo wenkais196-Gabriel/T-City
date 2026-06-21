@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        background: transparent;
+        font-family: 'Consolas', 'Courier New', monospace;
+        overflow: hidden;
+        user-select: none;
+    }
+    #panel {
+        display: none;
+        position: fixed;
+        top: 1.5vh;
+        right: 1.5vh;
+        background: rgba(0, 0, 0, 0.84);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 6px;
+        padding: 10px 14px;
+        color: #ccc;
+        font-size: 11px;
+        line-height: 1.5;
+        min-width: 240px;
+        backdrop-filter: blur(4px);
+        pointer-events: none;
+    }
+    #panel .title {
+        font-weight: 700;
+        font-size: 12px;
+        color: #4fc3f7;
+        margin-bottom: 3px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        padding-bottom: 3px;
+    }
+    #panel .section {
+        color: #81c784;
+        font-size: 10px;
+        font-weight: 600;
+        margin-top: 5px;
+        margin-bottom: 1px;
+    }
+    #panel .row { display: flex; justify-content: space-between; }
+    #panel .val { color: #ffcc80; font-weight: 600; }
+    #panel .hint {
+        color: #616161;
+        font-size: 9px;
+        margin-top: 5px;
+        border-top: 1px solid rgba(255,255,255,0.05);
+        padding-top: 4px;
+    }
+</style>
+</head>
+<body>
+<div id="panel">
+    <div class="title">🔧 HUD 定位调试 v2</div>
+    <div class="section">地图</div>
+    <div class="row"><span>缩放</span><span class="val" id="v-scale">87.5%</span></div>
+    <div class="row"><span>形状</span><span class="val" id="v-shape">circle</span></div>
+    <div class="section">状态环</div>
+    <div class="row"><span>X / Y</span><span class="val" id="v-ring">50% / 0.2vw</span></div>
+    <div class="row"><span>模式</span><span class="val" id="v-mode">居中</span></div>
+    <div class="section">仪表盘</div>
+    <div class="row"><span>X / Y</span><span class="val" id="v-gauge">CSS / CSS</span></div>
+    <div class="section">距离</div>
+    <div class="row"><span>X / Y</span><span class="val" id="v-wpdist">CSS / CSS</span></div>
+    <div class="hint">mapcomp | mapdump | ringdiag | gauges | wpdist</div>
+</div>
+
+<script>
+    var panel = document.getElementById('panel');
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (d.action === 'update') {
+            document.getElementById('v-scale').textContent = d.scale + '%';
+            document.getElementById('v-shape').textContent = d.shape;
+            document.getElementById('v-ring').textContent = d.ringX + ' / ' + d.ringY;
+            document.getElementById('v-mode').textContent = d.ringMode;
+            document.getElementById('v-gauge').textContent = d.gaugeX + ' / ' + d.gaugeY;
+            document.getElementById('v-wpdist').textContent = d.wpDistX + ' / ' + d.wpDistY;
+        }
+        if (d.action === 'show') panel.style.display = 'block';
+        if (d.action === 'hide') panel.style.display = 'none';
+    });
+</script>
+</body>
+</html>

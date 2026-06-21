@@ -25,6 +25,7 @@ server_scripts {
 
 dependencies {
     'qb-core',
-    'custom-logs'
+    'custom-logs',
+    'production-freeze'
 }
 

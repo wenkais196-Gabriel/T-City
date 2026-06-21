@@ -147,6 +147,10 @@ end)
 
 RegisterNetEvent('police:server:policeAlert', function(text)
     local src = source
+    -- 🔒 Security: 仅 LEO 可发警用通知
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    if Player.PlayerData.job.type ~= 'leo' and Player.PlayerData.job.name ~= 'ambulance' then return end
     local ped = GetPlayerPed(src)
     local coords = GetEntityCoords(ped)
     local players = QBCore.Functions.GetQBPlayers()
@@ -157,6 +161,21 @@ RegisterNetEvent('police:server:policeAlert', function(text)
             TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, coords, text)
         end
     end
+end)
+
+-- 系统自动警报 (车辆盗窃等) — 无职业鉴权，任何资源可触发
+RegisterNetEvent('police:server:autoAlert', function(coords, text)
+    local sent = 0
+    local players = QBCore.Functions.GetQBPlayers()
+    for _, v in pairs(players) do
+        if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
+            local alertData = { title = Lang:t('info.new_call'), coords = { x = coords.x, y = coords.y, z = coords.z }, description = text }
+            TriggerClientEvent('qb-phone:client:addPoliceAlert', v.PlayerData.source, alertData)
+            TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, coords, text)
+            sent = sent + 1
+        end
+    end
+    print(('[autoAlert] %s | 值班警察: %d 人'):format(text, sent))
 end)
 
 RegisterNetEvent('police:server:UpdateCurrentCops', function()
@@ -175,8 +194,16 @@ end)
 
 RegisterNetEvent('police:server:SetHandcuffStatus', function(isHandcuffed)
     local src = source
+    -- 🔒 Security: 仅接受 boolean 类型 + 仅限 LEO 或 EMS 调用
+    if type(isHandcuffed) ~= 'boolean' then return end
     local Player = QBCore.Functions.GetPlayer(src)
     if Player then
+        -- 只有执法/医疗人员才能设置他人手铐状态；玩家自己不能解锁
+        local jobType = Player.PlayerData.job.type
+        if isHandcuffed == false then
+            -- 解锁手铐：必须是 LEO 或 EMS
+            if jobType ~= 'leo' and Player.PlayerData.job.name ~= 'ambulance' then return end
+        end
         Player.Functions.SetMetaData('ishandcuffed', isHandcuffed)
     end
 end)

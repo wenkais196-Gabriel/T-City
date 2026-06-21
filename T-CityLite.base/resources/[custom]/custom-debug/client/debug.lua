@@ -247,7 +247,5 @@ RegisterCommand('gamecam', function()
     print(('^3[custom-debug] TimecycleModifier: ok=%s val=%s^7'):format(tostring(ok4), tostring(v4)))
 end, false)
 
-print('^2[custom-debug] 黑屏诊断工具已加载！^7')
-print('^2[custom-debug] 指令: /debugscreen | /nuioff | /camreset | /fullfix | /watchscreen^7')
-print('^2[custom-debug] 新增: /colortest（红色NUI层测试）| /gamecam（相机+Timecycle诊断）^7')
+-- custom-debug startup prints removed (production mode)
 

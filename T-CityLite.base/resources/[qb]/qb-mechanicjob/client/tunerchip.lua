@@ -151,6 +151,7 @@ RegisterNetEvent('qb-mechanicjob:client:openChip', function()
             disableCombat = true,
         }, {}, {}, {}, function()
             TriggerServerEvent('qb-mechanicjob:server:tuneStatus', plate)
+            TriggerServerEvent('custom-vehicles:server:tuneStatus', plate)  -- v3.1: 双写兼容
             SetNuiFocus(true, true)
             SendNUIMessage({
                 action = 'openTuner',

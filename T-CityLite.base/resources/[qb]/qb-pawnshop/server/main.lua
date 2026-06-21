@@ -92,6 +92,22 @@ RegisterNetEvent('qb-pawnshop:server:pickupMelted', function(item)
     TriggerClientEvent('qb-pawnshop:client:openMenu', src)
 end)
 
+RegisterNetEvent('qb-pawnshop:server:launderMoney', function(amount)
+    local src = source
+    amount = tonumber(amount) or 0
+    if amount <= 0 then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.negative'), 'error')
+        return
+    end
+    -- 调用 custom-crime 的 LaunderMoney 导出（含折旧/审计/冷却/警察校验）
+    local hasExport = exports['custom-crime'] and exports['custom-crime'].LaunderMoney
+    if hasExport then
+        exports['custom-crime']:LaunderMoney(src, amount)
+    else
+        TriggerClientEvent('QBCore:Notify', src, '洗钱服务暂不可用，请联系管理员', 'error')
+    end
+end)
+
 QBCore.Functions.CreateCallback('qb-pawnshop:server:getInv', function(source, cb)
     local Player = QBCore.Functions.GetPlayer(source)
     local inventory = Player.PlayerData.items
