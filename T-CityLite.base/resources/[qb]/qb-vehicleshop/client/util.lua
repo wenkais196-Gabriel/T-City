@@ -20,6 +20,7 @@ vehicleMenu   = {}
 Initialized   = false
 testDriveVeh  = 0
 inTestDrive   = false
+testDrivePlate = nil   -- Phase 5: 试驾车牌 (用于钥匙清理)
 ClosestVehicle = 1
 zones         = {}
 insideShop    = nil
