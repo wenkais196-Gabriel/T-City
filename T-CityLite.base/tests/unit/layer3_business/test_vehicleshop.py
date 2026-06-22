@@ -18,6 +18,9 @@ PURCHASES_LUA = os.path.join(SHOP_DIR, 'server', 'purchases.lua')
 FINANCE_LUA = os.path.join(SHOP_DIR, 'server', 'finance.lua')
 INTEGRATION_LUA = os.path.join(SHOP_DIR, 'server', 'integration.lua')
 ZONES_LUA   = os.path.join(SHOP_DIR, 'client', 'zones.lua')     # Phase 1: client zones file
+# Phase 2: finance split paths (will exist after GREEN)
+FINANCE_LC_LUA = os.path.join(SHOP_DIR, 'server', 'finance-lifecycle.lua')
+FINANCE_PM_LUA = os.path.join(SHOP_DIR, 'server', 'finance-payments.lua')
 
 
 # ── Mock ───────────────────────────────────────────────────────────
@@ -660,7 +663,7 @@ class TestFinanceEvents:
     """分期事件注册"""
     
     def test_events_registered(self):
-        r = run_vehicleshop_test([BUS_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_LC_LUA, FINANCE_PM_LUA], """
 local required = {
     'qb-vehicleshop:server:addPlayer',
     'qb-vehicleshop:server:removePlayer',
@@ -682,10 +685,10 @@ end
 assert(__test.callbacks['qb-vehicleshop:server:getVehicles'] ~= nil, "getVehicles callback missing")
 """)
         assert r['ok'], f"Lua error: {r['stderr']}"
-    
+
     def test_add_player_tracks_timer(self):
         """addPlayer 设置计时器"""
-        r = run_vehicleshop_test([BUS_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_LC_LUA], """
 local evt = __test['evt_qb_vehicleshop_server_addPlayer']
 assert(evt ~= nil, "addPlayer handler not found")
 evt('CID001')
@@ -695,7 +698,7 @@ evt('CID001')
     
     def test_finance_payment_makes_payment(self):
         """分期还款成功"""
-        r = run_vehicleshop_test([BUS_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 local evt = __test['evt_qb_vehicleshop_server_financePayment']
 evt(15000, { vehiclePlate = 'ABC123', balance = 120000, paymentsLeft = 12, paymentAmount = 10000 })
@@ -705,7 +708,7 @@ assert(#__test.money_removed >= 1, "payment should remove money")
     
     def test_finance_payment_below_minimum(self):
         """还款金额低于最低额被拒绝"""
-        r = run_vehicleshop_test([BUS_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 local evt = __test['evt_qb_vehicleshop_server_financePayment']
 -- paymentAmount=1000 < minPayment=10000 → should reject
@@ -717,7 +720,7 @@ assert(#__test.money_removed == 0, "should reject below-minimum payment")
     
     def test_finance_vehicle_license_check(self):
         """分期购买也需要驾照检查"""
-        r = run_vehicleshop_test([BUS_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 __test.inserts = {}
 source = 99  -- no license
@@ -729,7 +732,7 @@ assert(#__test.money_removed == 0, "should block finance without license")
     
     def test_finance_vehicle_success(self):
         """分期购买成功"""
-        r = run_vehicleshop_test([BUS_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 __test.inserts = {}
 source = 1  -- has driver license
@@ -742,7 +745,7 @@ assert(#__test.inserts >= 1, "vehicle should be inserted into DB")
     
     def test_finance_payment_full(self):
         """全额结清"""
-        r = run_vehicleshop_test([BUS_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 __test.updates = {}
 source = 1
@@ -909,7 +912,7 @@ assert(Bus.dealership.CheckLicense(player, 'comet2') == true)
     
     def test_bus_available_to_finance(self):
         """finance.lua 可以访问 bus.lua 注册的服务"""
-        r = run_vehicleshop_test([BUS_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 assert(Bus.dealership ~= nil, "dealership should be available to finance")
 assert(Bus.dealership.CalculateFinance ~= nil)
 local b, p = Bus.dealership.CalculateFinance(200000, 40000, 16)
@@ -931,7 +934,7 @@ assert(svc.GetVehicleState ~= nil, "service ref missing")
     
     def test_full_stack_loads(self):
         """全部 4 个模块能同时加载不报错"""
-        r = run_vehicleshop_test([BUS_LUA, PURCHASES_LUA, FINANCE_LUA, INTEGRATION_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, PURCHASES_LUA, FINANCE_LC_LUA, FINANCE_PM_LUA, INTEGRATION_LUA], """
 -- Verify all layers
 assert(Bus.dealership ~= nil)
 assert(Bus.dealership.CheckLicense ~= nil)
@@ -949,7 +952,7 @@ assert(__test.commands['transfervehicle'] ~= nil)
     
     def test_event_backward_compat(self):
         """所有旧版事件名保留"""
-        r = run_vehicleshop_test([BUS_LUA, PURCHASES_LUA, FINANCE_LUA], """
+        r = run_vehicleshop_test([BUS_LUA, PURCHASES_LUA, FINANCE_LC_LUA, FINANCE_PM_LUA], """
 local expected = {
     'qb-vehicleshop:server:addPlayer',
     'qb-vehicleshop:server:removePlayer',
@@ -994,6 +997,68 @@ class TestPhase1PollingFix:
             "zones.lua should not have while insideShop polling loop"
 
 
+# ═════════════════════════════════════════════════════════════════
+# 9. Phase 2: finance.lua 拆分 — lifecycle + payments
+# ═════════════════════════════════════════════════════════════════
+
+class TestPhase2FinanceSplit:
+    """Phase 2: 验证 finance-lifecycle + finance-payments 分拆正确"""
+
+    def test_split_modules_exist(self):
+        """两个新分文件存在"""
+        assert os.path.exists(FINANCE_LC_LUA), "finance-lifecycle.lua should exist"
+        assert os.path.exists(FINANCE_PM_LUA), "finance-payments.lua should exist"
+
+    def test_split_modules_load_together(self):
+        """两模块同时加载不报错且所有事件完整"""
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_LC_LUA, FINANCE_PM_LUA], """
+local required = {
+    'qb-vehicleshop:server:addPlayer',
+    'qb-vehicleshop:server:removePlayer',
+    'playerDropped',
+    'qb-vehicleshop:server:deleteVehicle',
+    'qb-vehicleshop:server:swapVehicle',
+    'qb-vehicleshop:server:customTestDrive',
+    'qb-vehicleshop:server:financePayment',
+    'qb-vehicleshop:server:financePaymentFull',
+    'qb-vehicleshop:server:financeVehicle',
+    'qb-vehicleshop:server:sellfinanceVehicle',
+    'qb-vehicleshop:server:checkFinance',
+}
+local reg = {}
+for _, name in ipairs(__test.events) do reg[name] = true end
+for _, name in ipairs(required) do
+    assert(reg[name], "missing event: " .. name)
+end
+assert(__test.callbacks['qb-vehicleshop:server:getVehicles'] ~= nil)
+""")
+        assert r['ok'], f"Split modules load failed: {r['stderr']}"
+
+    def test_split_finance_payment_still_works(self):
+        """分期还款在拆分后仍然有效"""
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_LC_LUA, FINANCE_PM_LUA], """
+__test.money_removed = {}
+source = 1
+local evt = __test['evt_qb_vehicleshop_server_financePayment']
+evt(15000, { vehiclePlate='ABC123', balance=120000, paymentsLeft=12, paymentAmount=10000 })
+assert(#__test.money_removed >= 1, "payment should remove money after split")
+""")
+        assert r['ok'], f"Split finance payment failed: {r['stderr']}"
+
+    def test_split_full_stack_loads(self):
+        """全模块加载 (bus + lifecycle + payments + purchases + integration) 不报错"""
+        r = run_vehicleshop_test(
+            [BUS_LUA, FINANCE_LC_LUA, FINANCE_PM_LUA, PURCHASES_LUA, INTEGRATION_LUA], """
+assert(Bus.dealership ~= nil)
+assert(Bus.dealership.CheckLicense ~= nil)
+assert(Bus.dealership.EstimateUsedPrice ~= nil)
+assert(__test.callbacks['qb-vehicleshop:server:spawnvehicle'] ~= nil)
+assert(__test.callbacks['qb-vehicleshop:server:getVehicles'] ~= nil)
+assert(__test.commands['transfervehicle'] ~= nil)
+""")
+        assert r['ok'], f"Full stack split failed: {r['stderr']}"
+
+
 
 def test_coverage_report():
     """Print coverage summary for qb-vehicleshop server modules"""
@@ -1013,13 +1078,18 @@ def test_coverage_report():
             'items': ['buyShowroomVehicle', 'sellShowroomVehicle', 'transfervehicle cmd',
                       'InsertVehicleAndDeduct']
         },
-        'finance.lua': {
-            'total': 14,
-            'tested': 14,
-            'items': ['addPlayer', 'removePlayer', 'playerDropped', 'deleteVehicle', 'swapVehicle',
-                      'customTestDrive', 'financePayment', 'financePaymentFull', 'financeVehicle',
-                      'sellfinanceVehicle', 'checkFinance', 'getVehicles callback',
-                      'calculateFinance', 'calculateNewFinance']
+        'finance-lifecycle.lua': {
+            'total': 8,
+            'tested': 8,
+            'items': ['addPlayer', 'removePlayer', 'playerDropped', 'deleteVehicle',
+                      'swapVehicle', 'customTestDrive', 'checkFinance', 'financetimer']
+        },
+        'finance-payments.lua': {
+            'total': 7,
+            'tested': 7,
+            'items': ['calculateFinance', 'calculateNewFinance', 'getVehicles callback',
+                      'financePayment', 'financePaymentFull', 'financeVehicle',
+                      'sellfinanceVehicle']
         },
         'integration.lua': {
             'total': 3,
