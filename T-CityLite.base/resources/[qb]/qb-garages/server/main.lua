@@ -89,6 +89,9 @@ QBCore.Functions.CreateCallback('qb-garages:server:GetGarageVehicles', function(
         vehicles = MySQL.rawExecute.await('SELECT * FROM player_vehicles WHERE citizenid = ? AND garage = ?', { citizenId, garage })
     end
     if #vehicles == 0 then
+        -- Phase 6: 诊断日志 — 追踪"无车辆"问题
+        print(('[qb-garages] 🔍 No vehicles found: citizen=%s garage=%s type=%s category=%s'):format(
+            citizenId:sub(1,4) .. '...', garage, type or 'nil', category or 'nil'))
         cb(nil)
         return
     end
