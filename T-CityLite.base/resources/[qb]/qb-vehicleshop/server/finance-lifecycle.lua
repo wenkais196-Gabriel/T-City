@@ -72,9 +72,19 @@ end)
 -- 车辆操作事件
 -- ==============================================================
 
-RegisterNetEvent('qb-vehicleshop:server:deleteVehicle', function(netId)
+RegisterNetEvent('qb-vehicleshop:server:deleteVehicle', function(netId, plate)
     local vehicle = NetworkGetEntityFromNetworkId(netId)
     DeleteEntity(vehicle)
+    -- Phase 5: 清理试驾钥匙 (避免 compat 安全校验拦截下次试驾)
+    if plate then
+        local src = source
+        local Player = QBCore.Functions.GetPlayer(src)
+        if Player then
+            pcall(function()
+                exports['custom-vehicles']:RemoveKeys(plate, Player.PlayerData.citizenid)
+            end)
+        end
+    end
 end)
 
 -- 同步展车切换
