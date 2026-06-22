@@ -24,19 +24,20 @@
   let isLoadingIvr = $state(false);
 
   onMount(async () => {
-    // Dynamic Query for Active Workers (🟢 Agent presence checker)
-    for (let i = 0; i < hotlineDirectories.length; i++) {
-      const entry = hotlineDirectories[i];
-      if (isBrowser()) {
+    // Batch fetch all hotline statuses in one call
+    if (isBrowser()) {
+      for (const entry of hotlineDirectories) {
         entry.agents = entry.job === 'mechanic' ? 0 : Math.floor(Math.random() * 3);
-        continue;
       }
-      try {
-        const count = await fetchNui<number>('getHotlineStatus', { jobType: entry.job });
-        entry.agents = count || 0;
-      } catch (err) {
-        console.error(err);
+      return;
+    }
+    try {
+      const statuses = await fetchNui<Record<string, number>>('getAllHotlineStatus');
+      for (const entry of hotlineDirectories) {
+        entry.agents = (statuses && statuses[entry.job]) || 0;
       }
+    } catch (err) {
+      console.error(err);
     }
   });
 

@@ -9,10 +9,23 @@ CreateThread(function()
             for i = 1, #result do
                 local inventory = result[i]
                 local cacheKey = inventory.identifier
-                Inventories[cacheKey] = {
-                    items = json.decode(inventory.items) or {},
-                    isOpen = false
-                }
+                local raw = inventory.items
+                if type(raw) == 'string' then
+                    Inventories[cacheKey] = {
+                        items = json.decode(raw) or {},
+                        isOpen = false
+                    }
+                elseif type(raw) == 'table' then
+                    Inventories[cacheKey] = {
+                        items = raw,
+                        isOpen = false
+                    }
+                else
+                    Inventories[cacheKey] = {
+                        items = {},
+                        isOpen = false
+                    }
+                end
             end
             print(#result .. ' inventories successfully loaded')
         end

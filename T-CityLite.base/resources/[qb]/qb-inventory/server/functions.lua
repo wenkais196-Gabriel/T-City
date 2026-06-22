@@ -54,7 +54,11 @@ function LoadInventory(source, citizenid)
     local inventory = MySQL.prepare.await('SELECT inventory FROM players WHERE citizenid = ?', { citizenid })
     local loadedInventory = {}
     local missingItems = {}
-    inventory = json.decode(inventory)
+    if type(inventory) == 'string' then
+        inventory = json.decode(inventory)
+    elseif type(inventory) ~= 'table' then
+        inventory = nil
+    end
     if not inventory or not next(inventory) then return loadedInventory end
 
     for _, item in pairs(inventory) do

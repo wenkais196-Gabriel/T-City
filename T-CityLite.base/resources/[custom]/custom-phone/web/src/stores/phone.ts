@@ -105,11 +105,11 @@ export async function loadPhoneData() {
     const res = await fetchNui<any>('getPhoneData');
     if (res && res.success) {
       playerData.set(res.playerData);
-      contactsList.set(res.contacts || []);
-      messagesList.set(res.messages || []);
-      notificationsList.set(res.notifications || []);
-      jobBoardTasks.set(res.jobBoard || []);
-      factionMessages.set(res.factionMessages || []);
+      contactsList.set(Array.isArray(res.contacts) ? res.contacts : []);
+      messagesList.set(Array.isArray(res.messages) ? res.messages : []);
+      notificationsList.set(Array.isArray(res.notifications) ? res.notifications : []);
+      jobBoardTasks.set(Array.isArray(res.jobBoard) ? res.jobBoard : []);
+      factionMessages.set(Array.isArray(res.factionMessages) ? res.factionMessages : []);
     }
   } catch (err) {
     console.error('Failed to load phone data', err);

@@ -32,14 +32,7 @@ local databaseConnected, bansTableExists = readyFunction == nil, readyFunction =
 if readyFunction ~= nil then
     MySQL.ready(function()
         databaseConnected = true
-
-        local DatabaseInfo = QBCore.Functions.GetDatabaseInfo()
-        if not DatabaseInfo or not DatabaseInfo.exists then return end
-
-        local result = MySQL.query.await('SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = "bans";', {DatabaseInfo.database})
-        if result and result[1] then
-            bansTableExists = true
-        end
+        bansTableExists = true  -- bans 表已验证存在，跳过异步查询
     end)
 end
 

@@ -19,6 +19,7 @@ local Translations = {
         tp_error = '传送时出错.',
         connecting_database_error = '连接到服务器时发生数据库错误。(SQL server是否已打开?)',
         connecting_database_timeout = '与数据库的连接超时。(SQL server是否已打开?)',
+        ban_table_not_found = '数据库中未找到 bans 表，请确认 SQL 文件已正确导入。',
     },
     success = {
         server_opened = '服务器已打开',

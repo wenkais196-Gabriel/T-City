@@ -15,8 +15,15 @@ ALTER TABLE `players`
   AFTER `gang`;
 
 -- 2. 资质索引 (支持 GetPlayersByQualification 查询)
+-- MariaDB 不支持表达式索引，改用虚拟生成列
 ALTER TABLE `players`
-  ADD INDEX IF NOT EXISTS `idx_qualifications` ((CAST(`qualifications` AS CHAR(256))));
+  ADD COLUMN IF NOT EXISTS `qualifications_idx` TEXT
+  GENERATED ALWAYS AS (JSON_EXTRACT(`qualifications`, '$'))
+  VIRTUAL
+  COMMENT '资质索引辅助列 (虚拟生成)';
+
+ALTER TABLE `players`
+  ADD INDEX IF NOT EXISTS `idx_qualifications` (`qualifications_idx`(256));
 
 -- ── 第二阶段: 房产税懒加载时间戳 ──────────────────────────────────────
 

@@ -89,6 +89,20 @@ MySQL.ready(function()
             INDEX idx_time (timestamp)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ]])
+
+    -- phone_notifications: persistent user notification tray
+    MySQL.query([[
+        CREATE TABLE IF NOT EXISTS phone_notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            citizenid VARCHAR(50) NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            content TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT FALSE,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_citizenid (citizenid),
+            INDEX idx_time (timestamp)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]])
 end)
 
 -- Helper to find online player by phone number
@@ -147,54 +161,98 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
         factionMessages = {}
     }
 
-    -- ⚡ Optimized: 5 queries → 3 queries (contacts+numbers combined, messages, job_board cached for 2min)
-    local contacts = MySQL.prepare.await('SELECT * FROM phone_contacts WHERE citizenid = ?', { citizenid }) or {}
-    data.contacts = contacts
+    -- ⚡ Parallel: fire 5 independent queries simultaneously (async counter pattern)
+    local pending = 0
+    local contacts, numberRows, messages, jobs, notifs
 
-    local numberRows = MySQL.prepare.await('SELECT number, is_primary FROM phone_numbers WHERE citizenid = ?', { citizenid }) or {}
-    local finalNumbers = {}
-    local hasPrimary = false
-    for _, val in ipairs(numberRows) do
-        table.insert(finalNumbers, val.number)
-        if val.is_primary == 1 then hasPrimary = true; data.playerData.phone = val.number end
-    end
-    if #finalNumbers == 0 or not hasPrimary then
-        table.insert(finalNumbers, phoneNum)
-        data.playerData.phone = phoneNum
-        pcall(MySQL.prepare, 'INSERT IGNORE INTO phone_numbers (citizenid, number, is_primary) VALUES (?, ?, 1)', { citizenid, phoneNum })
-    end
-    data.playerData.phoneNumbers = finalNumbers
+    local function tryAssemble()
+        if pending > 0 then return end
 
-    local messages = MySQL.prepare.await(
-        'SELECT * FROM phone_messages WHERE sender_number = ? OR receiver_number = ? ORDER BY timestamp DESC LIMIT 100',
-        { phoneNum, phoneNum }
-    ) or {}
-    for _, msg in ipairs(messages) do
-        if msg.gps and msg.gps ~= '' and msg.gps ~= 'null' then
-            local ok, decoded = pcall(json.decode, msg.gps)
-            if ok and decoded then msg.gps = decoded end
-        else msg.gps = nil end
-        if msg.msg_status then msg.status = msg.msg_status; msg.msg_status = nil end
-    end
-    data.messages = messages
-
-    -- ⚡ Job board: use global cache (refreshed every 2 min by background thread)
-    local jobs = phoneJobBoardCache or {}
-    if not jobs or #jobs == 0 then
-        jobs = MySQL.prepare.await('SELECT * FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}) or {}
-        for i = 1, #jobs do
-            if type(jobs[i].target_tags) == 'string' then jobs[i].target_tags = json.decode(jobs[i].target_tags) end
+        -- Process phone numbers
+        local finalNumbers = {}
+        local hasPrimary = false
+        for _, val in ipairs(numberRows) do
+            table.insert(finalNumbers, val.number)
+            if val.is_primary == 1 then hasPrimary = true; data.playerData.phone = val.number end
         end
-        phoneJobBoardCache = jobs
+        if #finalNumbers == 0 or not hasPrimary then
+            table.insert(finalNumbers, phoneNum)
+            data.playerData.phone = phoneNum
+            pcall(MySQL.prepare, 'INSERT IGNORE INTO phone_numbers (citizenid, number, is_primary) VALUES (?, ?, 1)', { citizenid, phoneNum })
+        end
+        data.playerData.phoneNumbers = finalNumbers
+
+        data.contacts = contacts
+        data.messages = messages
+        data.jobBoard = jobs
+        data.notifications = notifs
+
+        local faction = identity.primary_role
+        data.factionMessages = (GlobalState.FactionMessages and GlobalState.FactionMessages[faction]) or {}
+
+        -- ⚡ Store in cache (30s TTL for personal data)
+        phoneDataCache[citizenid] = { data = data, expires = os.time() + 30 }
+        cb(data)
     end
-    data.jobBoard = jobs
 
-    local faction = identity.primary_role
-    data.factionMessages = (GlobalState.FactionMessages and GlobalState.FactionMessages[faction]) or {}
+    -- 1. Contacts
+    pending = pending + 1
+    MySQL.Async.fetchAll('SELECT * FROM phone_contacts WHERE citizenid = ?', { citizenid }, function(result)
+        contacts = result or {}
+        pending = pending - 1
+        tryAssemble()
+    end)
 
-    -- ⚡ Store in cache (30s TTL for personal data)
-    phoneDataCache[citizenid] = { data = data, expires = os.time() + 30 }
-    cb(data)
+    -- 2. Phone numbers
+    pending = pending + 1
+    MySQL.Async.fetchAll('SELECT number, is_primary FROM phone_numbers WHERE citizenid = ?', { citizenid }, function(result)
+        numberRows = result or {}
+        pending = pending - 1
+        tryAssemble()
+    end)
+
+    -- 3. Messages (with GPS decode post-processing)
+    pending = pending + 1
+    MySQL.Async.fetchAll(
+        'SELECT * FROM phone_messages WHERE sender_number = ? OR receiver_number = ? ORDER BY timestamp DESC LIMIT 100',
+        { phoneNum, phoneNum },
+        function(result)
+            messages = result or {}
+            for _, msg in ipairs(messages) do
+                if msg.gps and msg.gps ~= '' and msg.gps ~= 'null' then
+                    local ok, decoded = pcall(json.decode, msg.gps)
+                    if ok and decoded then msg.gps = decoded end
+                else msg.gps = nil end
+                if msg.msg_status then msg.status = msg.msg_status; msg.msg_status = nil end
+            end
+            pending = pending - 1
+            tryAssemble()
+        end
+    )
+
+    -- 4. Job board (cache-aware: skip query if cache warm)
+    if phoneJobBoardCache and #phoneJobBoardCache > 0 then
+        jobs = phoneJobBoardCache
+    else
+        pending = pending + 1
+        MySQL.Async.fetchAll('SELECT * FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}, function(result)
+            jobs = result or {}
+            for i = 1, #jobs do
+                if jobs[i] and type(jobs[i].target_tags) == 'string' then jobs[i].target_tags = json.decode(jobs[i].target_tags) end
+            end
+            phoneJobBoardCache = jobs
+            pending = pending - 1
+            tryAssemble()
+        end)
+    end
+
+    -- 5. Notifications (persistent, newest first, limit 50)
+    pending = pending + 1
+    MySQL.Async.fetchAll('SELECT * FROM phone_notifications WHERE citizenid = ? ORDER BY timestamp DESC LIMIT 50', { citizenid }, function(result)
+        notifs = result or {}
+        pending = pending - 1
+        tryAssemble()
+    end)
 end)
 
 -- ⚡ Job board background refresh (every 2 minutes)
@@ -202,9 +260,9 @@ local phoneJobBoardCache = nil
 CreateThread(function()
     while true do
         Wait(2 * 60 * 1000)
-        local jobs = MySQL.prepare.await('SELECT * FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}) or {}
+        local jobs = MySQL.query.await('SELECT * FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}) or {}
         for i = 1, #jobs do
-            if type(jobs[i].target_tags) == 'string' then jobs[i].target_tags = json.decode(jobs[i].target_tags) end
+            if jobs[i] and type(jobs[i].target_tags) == 'string' then jobs[i].target_tags = json.decode(jobs[i].target_tags) end
         end
         phoneJobBoardCache = jobs
     end
@@ -244,7 +302,7 @@ QBCore.Functions.CreateCallback('phone:server:deleteContact', function(source, c
 
     MySQL.Async.execute('DELETE FROM phone_contacts WHERE id = ? AND citizenid = ?', { id, Player.PlayerData.citizenid }, function(affected)
         phoneDataCache[Player.PlayerData.citizenid] = nil -- ⚡ Invalidate cache
-        cb({ success = affected > 0 })
+        cb({ success = affected.affectedRows > 0 })
     end)
 end)
 
@@ -311,6 +369,69 @@ RegisterNetEvent('phone:server:markMessagesRead', function(sender_number)
 end)
 
 -- ----------------------------------------------------
+-- Notification Persistence (DB-backed)
+-- ----------------------------------------------------
+
+-- Helper: store notification in DB + push to client
+local function StoreAndPushNotification(targetSrc, notification)
+    local Player = QBCore.Functions.GetPlayer(targetSrc)
+    if not Player then return end
+    local citizenid = Player.PlayerData.citizenid
+
+    MySQL.Async.insert('INSERT INTO phone_notifications (citizenid, title, content) VALUES (?, ?, ?)', {
+        citizenid, notification.title, notification.content
+    }, function(insertId)
+        if insertId then
+            notification.id = insertId
+            notification.is_read = false
+            notification.timestamp = os.date('%Y-%m-%d %H:%M:%S')
+            TriggerClientEvent('phone:client:newNotification', targetSrc, notification)
+        end
+    end)
+end
+
+RegisterNetEvent('phone:server:storeNotification', function(notification)
+    StoreAndPushNotification(source, notification)
+end)
+
+QBCore.Functions.CreateCallback('phone:server:markNotificationsRead', function(source, cb)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return cb({ success = false }) end
+    MySQL.Async.execute('UPDATE phone_notifications SET is_read = 1 WHERE citizenid = ?', {
+        Player.PlayerData.citizenid
+    }, function(_)
+        phoneDataCache[Player.PlayerData.citizenid] = nil
+        cb({ success = true })
+    end)
+end)
+
+QBCore.Functions.CreateCallback('phone:server:clearNotifications', function(source, cb)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return cb({ success = false }) end
+    MySQL.Async.execute('DELETE FROM phone_notifications WHERE citizenid = ?', {
+        Player.PlayerData.citizenid
+    }, function(_)
+        phoneDataCache[Player.PlayerData.citizenid] = nil
+        cb({ success = true })
+    end)
+end)
+
+QBCore.Functions.CreateCallback('phone:server:deleteNotification', function(source, cb, id)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return cb({ success = false }) end
+    MySQL.Async.execute('DELETE FROM phone_notifications WHERE id = ? AND citizenid = ?', {
+        id, Player.PlayerData.citizenid
+    }, function(affected)
+        if affected.affectedRows > 0 then
+            phoneDataCache[Player.PlayerData.citizenid] = nil
+            cb({ success = true })
+        else
+            cb({ success = false })
+        end
+    end)
+end)
+
+-- ----------------------------------------------------
 -- CityFeed Callbacks & SQL
 -- ----------------------------------------------------
 QBCore.Functions.CreateCallback('phone:server:getCityFeed', function(source, cb)
@@ -370,7 +491,7 @@ end)
 
 QBCore.Functions.CreateCallback('phone:server:likeCityFeed', function(source, cb, id)
     MySQL.Async.execute('UPDATE phone_cityfeed SET likes = likes + 1 WHERE id = ?', { id }, function(affected)
-        if affected > 0 then
+        if affected.affectedRows > 0 then
             MySQL.Async.fetchScalar('SELECT likes FROM phone_cityfeed WHERE id = ?', { id }, function(likes)
                 cb({ success = true, likes = likes or 0 })
             end)
@@ -495,6 +616,28 @@ QBCore.Functions.CreateCallback('phone:server:getOwnedVehicles', function(source
 end)
 
 -- 4. Yellow Pages & Service Hotline callbacks
+
+-- Batch endpoint: get all hotline statuses in one call
+QBCore.Functions.CreateCallback('phone:server:getAllHotlineStatus', function(source, cb)
+    local result = {}
+    local jobTypes = { 'police', 'surrender', 'ambulance', 'mechanic', 'mayor', 'bank' }
+    local playerJobs = {}
+
+    for _, pid in ipairs(QBCore.Functions.GetPlayers()) do
+        local identity = exports['custom-career']:GetPlayerIdentity(pid)
+        if identity then
+            local role = identity.primary_role
+            playerJobs[role] = (playerJobs[role] or 0) + 1
+        end
+    end
+
+    for _, jt in ipairs(jobTypes) do
+        result[jt] = playerJobs[jt] or 0
+    end
+
+    cb(result)
+end)
+
 QBCore.Functions.CreateCallback('phone:server:getHotlineStatus', function(source, cb, jobType)
     local count = 0
     for _, playerId in ipairs(QBCore.Functions.GetPlayers()) do
@@ -562,4 +705,135 @@ QBCore.Functions.CreateCallback('phone:server:queryAutomatedIvr', function(sourc
     else
         cb(nil)
     end
+end)
+
+-- ----------------------------------------------------
+-- Phone Call System (real server-side implementation)
+-- ----------------------------------------------------
+
+-- In-memory active calls: { [callId] = { caller, receiver, startTime, status } }
+local activeCalls = {}
+
+QBCore.Functions.CreateCallback('phone:server:initiateCall', function(source, cb, targetNumber)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return cb({ success = false, message = 'Invalid player' }) end
+
+    local callerNumber = Player.PlayerData.charinfo.phone
+    local callerName = Player.PlayerData.charinfo.firstname .. ' ' .. Player.PlayerData.charinfo.lastname
+
+    if targetNumber == callerNumber then
+        return cb({ success = false, message = 'Cannot call yourself' })
+    end
+    if not targetNumber or #targetNumber == 0 then
+        return cb({ success = false, message = 'Invalid number' })
+    end
+
+    -- Find target player
+    local targetPlayer = nil
+    for _, pid in ipairs(QBCore.Functions.GetPlayers()) do
+        local P = QBCore.Functions.GetPlayer(pid)
+        if P and P.PlayerData.charinfo.phone == targetNumber then
+            targetPlayer = P
+            break
+        end
+    end
+
+    if not targetPlayer then
+        -- Offline: record as missed call
+        MySQL.Async.insert('INSERT INTO phone_calls (caller, receiver, status) VALUES (?, ?, ?)', {
+            callerNumber, targetNumber, 'missed'
+        })
+        return cb({ success = false, message = 'Number unreachable. Left a missed call.' })
+    end
+
+    -- Create call record
+    MySQL.Async.insert('INSERT INTO phone_calls (caller, receiver, status) VALUES (?, ?, ?)', {
+        callerNumber, targetNumber, 'ringing'
+    }, function(callId)
+        if not callId then return cb({ success = false, message = 'Database error' }) end
+
+        activeCalls[callId] = {
+            caller = source,
+            receiver = targetPlayer.PlayerData.source,
+            callerNumber = callerNumber,
+            receiverNumber = targetNumber,
+            startTime = os.time(),
+            status = 'ringing'
+        }
+
+        -- Push incoming call to target
+        TriggerClientEvent('phone:client:incomingCall', targetPlayer.PlayerData.source, {
+            callId = callId,
+            callerNumber = callerNumber,
+            callerName = callerName
+        })
+
+        cb({ success = true, callId = callId, message = 'Calling ' .. targetNumber .. '...' })
+    end)
+end)
+
+QBCore.Functions.CreateCallback('phone:server:answerCall', function(source, cb, callId)
+    local call = activeCalls[callId]
+    if not call then return cb({ success = false, message = 'Call not found' }) end
+    if call.receiver ~= source then return cb({ success = false, message = 'Not your call' }) end
+
+    call.status = 'ongoing'
+    call.startTime = os.time()
+
+    MySQL.Async.execute('UPDATE phone_calls SET status = ? WHERE id = ?', { 'ongoing', callId })
+
+    -- Notify caller that call was answered
+    TriggerClientEvent('phone:client:callAnswered', call.caller, { callId = callId })
+
+    cb({ success = true, message = 'Call connected' })
+end)
+
+QBCore.Functions.CreateCallback('phone:server:rejectCall', function(source, cb, callId)
+    local call = activeCalls[callId]
+    if not call then return cb({ success = false, message = 'Call not found' }) end
+
+    local isCaller = (call.caller == source)
+    local isReceiver = (call.receiver == source)
+    if not isCaller and not isReceiver then return cb({ success = false, message = 'Not your call' }) end
+
+    local status = 'missed'
+    local duration = 0
+    if isCaller then
+        status = 'cancelled'
+    end
+
+    MySQL.Async.execute('UPDATE phone_calls SET status = ?, duration = ? WHERE id = ?', { status, duration, callId })
+
+    local otherParty = isCaller and call.receiver or call.caller
+    TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
+    TriggerClientEvent('phone:client:callEnded', source, { callId = callId, status = status })
+
+    activeCalls[callId] = nil
+    cb({ success = true })
+end)
+
+QBCore.Functions.CreateCallback('phone:server:hangupCall', function(source, cb, callId)
+    local call = activeCalls[callId]
+    if not call then return cb({ success = false, message = 'Call not found' }) end
+
+    local isCaller = (call.caller == source)
+    local isReceiver = (call.receiver == source)
+    if not isCaller and not isReceiver then return cb({ success = false, message = 'Not your call' }) end
+
+    local duration = os.time() - call.startTime
+    local status = 'completed'
+    if call.status == 'ringing' and isCaller then
+        status = 'cancelled'
+    elseif call.status == 'ringing' then
+        status = 'missed'
+    end
+
+    MySQL.Async.execute('UPDATE phone_calls SET status = ?, duration = ? WHERE id = ?', { status, duration, callId })
+
+    local otherParty = isCaller and call.receiver or call.caller
+    TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
+    TriggerClientEvent('phone:client:callEnded', source, { callId = callId, status = status })
+
+    activeCalls[callId] = nil
+    cb({ success = true })
 end)

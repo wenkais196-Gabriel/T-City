@@ -49,7 +49,7 @@ QBCore.Functions.CreateCallback('phone:server:acceptJob', function(source, cb, i
         MySQL.Async.execute('UPDATE phone_jobboard SET status = "taken", taken_by = ? WHERE id = ?', {
             citizenid, id
         }, function(affected)
-            if affected > 0 then
+            if affected.affectedRows > 0 then
                 local coords = GetJobCoords(job.title)
                 
                 -- Broadcast state update to all players
@@ -182,7 +182,7 @@ RegisterNetEvent('phone:server:completeJob', function(id)
 
         -- Update DB status to completed
         MySQL.Async.execute('UPDATE phone_jobboard SET status = "completed" WHERE id = ?', { id }, function(affected)
-            if affected > 0 then
+            if affected.affectedRows > 0 then
                 -- Add money using the unified custom-economy export (AddScaledMoney)
                 local finalAmount, scale = exports['custom-main']:AddScaledMoney(src, 'bank', job.reward, "Urban Project: " .. job.title)
 

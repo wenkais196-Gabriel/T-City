@@ -61,49 +61,55 @@ local function getDirtyFlush()
     return nil
 end
 
--- ── 公开 API (委托 + fallback) ────────────────────────────────────
+-- ── 公开 API (自维护 _dirty 表) ────────────────────────────────────
 
 local ThinDirtyFlush = {}
 
+-- 🔧 Fix: ThinDirtyFlush 必须维护自己的 _dirty 表
+-- 否则 core-framework 的 persistence_manager 定时 tick 永远看到 dirty_count=0
+-- 导致非强制存盘变成空操作，玩家数据无法持久化到 DB
+ThinDirtyFlush._dirty = {}
+
 function ThinDirtyFlush.MarkDirty(citizenid, dataType)
-    local df = getDirtyFlush()
-    if df then
-        df.MarkDirty(citizenid, dataType)
-    else
-        -- Fallback: 直接标记 Player.IsDirty
-        local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
-        if Player then Player.IsDirty = true end
-    end
+    -- 记入 _dirty 表（persistence tick 需要此表来查找脏玩家）
+    ThinDirtyFlush._dirty[citizenid] = ThinDirtyFlush._dirty[citizenid] or {}
+    ThinDirtyFlush._dirty[citizenid].dataType = dataType
+    ThinDirtyFlush._dirty[citizenid].marked_at = os.time()
+
+    -- 同时标记 Player.IsDirty（player.lua Save() 的早期出口依赖此标记）
+    local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
+    if Player then Player.IsDirty = true end
 end
 
 function ThinDirtyFlush.ForceFlush(citizenid)
-    local df = getDirtyFlush()
-    if df then
-        df.ForceFlush(citizenid)
+    if citizenid then
+        local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
+        if Player then
+            Player.IsDirty = true
+            fallbackFlushSinglePlayer(Player)
+        end
+        -- 🔧 Fix: 刷盘成功后从 _dirty 表移除
+        ThinDirtyFlush._dirty[citizenid] = nil
     else
-        if citizenid then
-            local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
-            if Player then Player.IsDirty = true; fallbackFlushSinglePlayer(Player) end
-        else
-            for _, Player in pairs(QBCore.Players) do
-                if Player and Player.PlayerData then
-                    Player.IsDirty = true
-                    fallbackFlushSinglePlayer(Player)
-                end
+        -- FlushAll: 刷盘所有脏玩家
+        for cid, _ in pairs(ThinDirtyFlush._dirty) do
+            local Player = QBCore.Functions.GetPlayerByCitizenId(cid)
+            if Player and Player.PlayerData then
+                Player.IsDirty = true
+                fallbackFlushSinglePlayer(Player)
             end
+            ThinDirtyFlush._dirty[cid] = nil
         end
     end
 end
 
 function ThinDirtyFlush.Stats()
-    local df = getDirtyFlush()
-    if df then return df.Stats() end
-    return { dirty_count = 0 }
+    local count = 0
+    for _ in pairs(ThinDirtyFlush._dirty) do count = count + 1 end
+    return { dirty_count = count }
 end
 
 function ThinDirtyFlush.FlushAll()
-    local df = getDirtyFlush()
-    if df then return df.FlushAll() end
     ThinDirtyFlush.ForceFlush(nil)
 end
 

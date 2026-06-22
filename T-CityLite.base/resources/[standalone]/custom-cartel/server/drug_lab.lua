@@ -224,6 +224,16 @@ RegisterNetEvent('cartel:server:finishProduction', function(recipeId)
     -- 🌐 Atmosphere: danger scene on cartel production (raid risk)
     if shouldRaid and Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'danger') end
 
+    -- 🌍 Phase 1: 发射世界状态变更事件 (cartel 生产成功 = 领地影响力强化)
+    if EventTypes and EventTypes.Publish then
+        local regionId = 'cartel_farm'
+        local stateKey = 'production_activity'
+        EventTypes.Publish(EventTypes.WORLD.TERRITORY_CHANGED,
+            regionId, stateKey,
+            { last_producer = Player.PlayerData.citizenid, recipe = recipeId, raid_triggered = shouldRaid },
+            Player.PlayerData.citizenid)
+    end
+
     print(('[cartel-lab] ✅ %s produced %d x %s (raid risk: %s)')
         :format(GetPlayerName(src), recipe.output.count, L(recipe.output.label),
             shouldRaid and '⚠️ TRIGGERED' or 'Safe'))

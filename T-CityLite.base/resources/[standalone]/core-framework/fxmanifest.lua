@@ -9,15 +9,19 @@ version '0.6.0'
 
 shared_scripts {
     'bus.lua',
+    'events/event_types.lua',
 }
 
 server_scripts {
     'compat.lua',
+    'contracts.lua',
     'services/economy_service.lua',
     'services/metadata_service.lua',
     'services/security_service.lua',
     'services/job_service.lua',
     'services/notify_service.lua',
+    'services/world_state_service.lua',
+    'services/patron_service.lua',
     'cache/cache_manager.lua',
     'cache/dirty_flush.lua',
     'services/persistence_manager.lua',

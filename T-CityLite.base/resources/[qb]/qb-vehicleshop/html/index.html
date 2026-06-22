@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vehicle Shop</title>
+  <link rel="stylesheet" href="nui.css">
+  <script src="vue.min.js"></script>
+</head>
+<body>
+  <div id="app" v-if="visible">
+    <div class="dealership-overlay">
+      <div class="dealership-panel">
+        <!-- Header -->
+        <div class="panel-header">
+          <div class="shop-name">{{ shopLabel }}</div>
+          <div class="header-actions">
+            <button class="btn-icon" @click="close" title="Close (ESC)">✕</button>
+          </div>
+        </div>
+
+        <!-- Vehicle Preview (static image placeholder for now) -->
+        <div class="vehicle-preview">
+          <div class="preview-placeholder">
+            <span class="car-icon">🚗</span>
+            <div class="vehicle-name">{{ vehicle.brand }} {{ vehicle.name }}</div>
+            <div class="vehicle-price">${{ formattedPrice }}</div>
+          </div>
+        </div>
+
+        <!-- Specs Bar -->
+        <div class="specs-section">
+          <div class="spec-row" v-for="spec in specs" :key="spec.label">
+            <span class="spec-label">{{ spec.label }}</span>
+            <div class="spec-bar-bg">
+              <div class="spec-bar-fill" :style="{ width: spec.value + '%' }"></div>
+            </div>
+            <span class="spec-value">{{ spec.display }}</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions-section">
+          <!-- Buy -->
+          <div class="action-row">
+            <button class="btn-primary" @click="buyVehicle" :disabled="!canAfford">
+              Buy Now — ${{ formattedPrice }}
+            </button>
+          </div>
+
+          <!-- Test Drive -->
+          <div class="action-row">
+            <button class="btn-secondary" @click="testDrive" :disabled="isTestDriving">
+              {{ isTestDriving ? 'In Test Drive...' : 'Test Drive (' + testDriveMinutes + ' min)' }}
+            </button>
+          </div>
+
+          <!-- Finance -->
+          <div class="action-row" v-if="showFinance">
+            <div class="finance-section">
+              <div class="finance-inputs">
+                <div class="input-group">
+                  <label>Down Payment ({{ minDownPercent }}% min)</label>
+                  <input type="number" v-model.number="downPayment" :min="minDownAmount" :max="vehiclePrice">
+                </div>
+                <div class="input-group">
+                  <label>Payments (max {{ maxPayments }})</label>
+                  <input type="number" v-model.number="paymentCount" :min="1" :max="maxPayments">
+                </div>
+              </div>
+              <div class="finance-summary" v-if="downPayment >= minDownAmount && paymentCount > 0">
+                <span>Monthly: ${{ monthlyPayment }}</span>
+                <span>Total: ${{ (downPayment + monthlyPayment * paymentCount) | comma }}</span>
+              </div>
+              <button class="btn-finance" @click="financeVehicle"
+                      :disabled="downPayment < minDownAmount || paymentCount < 1">
+                Finance — ${{ downPayment | comma }} down
+              </button>
+            </div>
+          </div>
+
+          <!-- Swap Vehicle -->
+          <div class="action-row">
+            <button class="btn-ghost" @click="swapVehicle">Change Vehicle →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="nui.js"></script>
+</body>
+</html>
