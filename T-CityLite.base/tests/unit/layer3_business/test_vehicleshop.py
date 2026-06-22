@@ -1065,6 +1065,8 @@ assert(__test.commands['transfervehicle'] ~= nil)
 
 NUI_JS = os.path.join(SHOP_DIR, 'html', 'nui.js')
 
+CLIENT_BUS_LUA = os.path.join(SHOP_DIR, 'client', 'bus.lua')
+
 class TestPhase3NuiIntegration:
     """Phase 3: NUI 全功能集成验证"""
 
@@ -1084,6 +1086,35 @@ class TestPhase3NuiIntegration:
         content = open(NUI_LUA, 'r').read()
         for cb in ['closeNui', 'buyVehicle', 'financeVehicle', 'testDrive', 'swapVehicle']:
             assert cb in content, f"nui.lua should have {cb} callback"
+
+
+# ═════════════════════════════════════════════════════════════════
+# 11. Phase 4: 客户端 Bus 注册
+# ═════════════════════════════════════════════════════════════════
+
+class TestPhase4ClientBus:
+    """Phase 4: 客户端 Bus 注册验证"""
+
+    def test_client_bus_file_exists(self):
+        """client/bus.lua 存在"""
+        assert os.path.exists(CLIENT_BUS_LUA), "client/bus.lua should exist"
+
+    def test_client_bus_registers_dealership_client(self):
+        """client/bus.lua 注册 dealership_client 服务"""
+        content = open(CLIENT_BUS_LUA, 'r').read()
+        assert "dealership_client" in content, "should register dealership_client service"
+        assert "GetCurrentShop" in content
+        assert "GetClosestVehicle" in content
+        assert "GetShopVehicles" in content
+        assert "GetCurrentVehicle" in content
+        assert "BuildMenu" in content
+        assert "IsTestDriving" in content
+
+    def test_fxmanifest_has_client_bus(self):
+        """fxmanifest.lua 的 client_scripts 中包含 client/bus.lua"""
+        fxmanifest = os.path.join(SHOP_DIR, 'fxmanifest.lua')
+        content = open(fxmanifest, 'r').read()
+        assert 'client/bus.lua' in content, "fxmanifest.lua should include client/bus.lua"
 
 
 
