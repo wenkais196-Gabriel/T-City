@@ -1059,6 +1059,33 @@ assert(__test.commands['transfervehicle'] ~= nil)
         assert r['ok'], f"Full stack split failed: {r['stderr']}"
 
 
+# ═════════════════════════════════════════════════════════════════
+# 10. Phase 3: NUI 集成验证
+# ═════════════════════════════════════════════════════════════════
+
+NUI_JS = os.path.join(SHOP_DIR, 'html', 'nui.js')
+
+class TestPhase3NuiIntegration:
+    """Phase 3: NUI 全功能集成验证"""
+
+    def test_nui_js_has_right_click_close(self):
+        """nui.js 应有右键关闭支持"""
+        content = open(NUI_JS, 'r').read()
+        assert 'contextmenu' in content, "nui.js should have contextmenu listener for right-click close"
+
+    def test_zones_lua_has_nui_integration(self):
+        """zones.lua 应在 Config.UseNui 时调用 _vOpenNui"""
+        content = open(ZONES_LUA, 'r').read()
+        assert '_vOpenNui' in content, "zones.lua should call _vOpenNui for NUI mode"
+
+    def test_nui_callbacks_registered(self):
+        """nui.lua 应注册所有必需的 NUICallback"""
+        NUI_LUA = os.path.join(SHOP_DIR, 'client', 'nui.lua')
+        content = open(NUI_LUA, 'r').read()
+        for cb in ['closeNui', 'buyVehicle', 'financeVehicle', 'testDrive', 'swapVehicle']:
+            assert cb in content, f"nui.lua should have {cb} callback"
+
+
 
 def test_coverage_report():
     """Print coverage summary for qb-vehicleshop server modules"""

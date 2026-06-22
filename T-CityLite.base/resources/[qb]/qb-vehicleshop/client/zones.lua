@@ -76,8 +76,17 @@ function _vCreateFreeUseShop(shopShape, name)
         if isPointInside then
             insideShop = name
             _vSetClosestShowroomVehicle()
-            _vBuildVehicleMenu(name)  -- Phase 1: 事件驱动, 替代 while insideShop 轮询
+            if Config.UseNui then
+                _vOpenNui(name)  -- Phase 3: NUI 交互模式
+            else
+                _vBuildVehicleMenu(name)  -- Phase 1: 事件驱动, 替代 while insideShop 轮询
+            end
         else
+            if Config.UseNui then
+                SetNuiFocus(false, false)
+                SetNuiFocusKeepInput(false)
+                SendNUIMessage({ type = 'close' })
+            end
             insideShop = nil
             ClosestVehicle = 1
             vehicleMenu = {}
@@ -101,9 +110,18 @@ function _vCreateManagedShop(shopShape, name)
             insideShop = name
             if PlayerData and PlayerData.job and PlayerData.job.name == Config.Shops[name]['Job'] then
                 _vSetClosestShowroomVehicle()
-                _vBuildVehicleMenu(name)  -- Phase 1: 事件驱动
+                if Config.UseNui then
+                    _vOpenNui(name)  -- Phase 3: NUI 交互模式
+                else
+                    _vBuildVehicleMenu(name)  -- Phase 1: 事件驱动
+                end
             end
         else
+            if Config.UseNui then
+                SetNuiFocus(false, false)
+                SetNuiFocusKeepInput(false)
+                SendNUIMessage({ type = 'close' })
+            end
             insideShop = nil
             ClosestVehicle = 1
             vehicleMenu = {}
@@ -225,7 +243,11 @@ end
 RegisterNetEvent('qb-vehicleshop:client:refreshMenu', function()
     if insideShop then
         _vSetClosestShowroomVehicle()
-        _vBuildVehicleMenu(insideShop)
+        if Config.UseNui then
+            _vOpenNui(insideShop)  -- Phase 3: NUI 模式下重开以刷新车辆
+        else
+            _vBuildVehicleMenu(insideShop)
+        end
     end
 end)
 
