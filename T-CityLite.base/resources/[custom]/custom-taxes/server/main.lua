@@ -9,6 +9,33 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- ==============================================================
+-- 桩函数 (Phase 1: 模块未实现前静默通过, 不阻塞调用方)
+-- ==============================================================
+
+local function _stub(name)
+    return function(...)
+        -- Debug mode 下打印调用信息
+        if GetConvar('taxes_debug', 'false') == 'true' then
+            print(('[custom-taxes] STUB: %s called (not yet implemented)'):format(name))
+        end
+        return true
+    end
+end
+
+-- 车辆税 (待实现)
+CollectPurchaseTax     = _stub('CollectPurchaseTax')
+CollectTransferTax     = _stub('CollectTransferTax')
+CheckVehicleInsurance  = _stub('CheckVehicleInsurance')
+
+-- NPC 动态定价 (待实现)
+NPCPricing = {
+    GetBuyPrice  = _stub('NPCPricing.GetBuyPrice'),
+    GetSellPrice = _stub('NPCPricing.GetSellPrice'),
+    RecordBuy    = _stub('NPCPricing.RecordBuy'),
+    RecordSell   = _stub('NPCPricing.RecordSell'),
+}
+
 -- ── 车辆购置税 Hook ────────────────────────────────────────────────────
 
 -- Hook qb-vehicleshop: buyShowroomVehicle
