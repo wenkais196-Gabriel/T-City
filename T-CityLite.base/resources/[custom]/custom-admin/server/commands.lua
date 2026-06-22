@@ -214,4 +214,149 @@ QBCore.Commands.Add('revokemelicense', '吊销自己的执照 (Admin)', { {
     end
 end, 'admin')
 
-print('[custom-admin] ✅ 命令模块已加载 (myid + amenu + clearme + setrobbery + auto-admin)')
+-- ==========================================
+--        管 理 命 令 — 他人执 照 管 理
+-- ==========================================
+-- 用法: /givelicense [玩家ID] [类型]
+--       /revokelicense [玩家ID] [类型]
+--       /reinstatelicense [玩家ID] [类型]
+--       /suspendlicense [玩家ID] [类型]
+--       /checklicense [玩家ID]
+local AdminLicenseTypes = { driver = true, pilot = true, boat = true, heavy = true, weapon = true }
+
+QBCore.Commands.Add('givelicense', '授予玩家执照 (Admin)', {
+    { name = 'id', help = '玩家 ID' },
+    { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
+}, false, function(source, args)
+    local src = source
+    local targetId = tonumber(args[1])
+    local licenseType = args[2] and args[2]:lower()
+    if not targetId or not AdminLicenseTypes[licenseType] then
+        TriggerClientEvent('QBCore:Notify', src, '用法: /givelicense [ID] [driver|pilot|boat|heavy|weapon]', 'error')
+        return
+    end
+    local target = QBCore.Functions.GetPlayer(targetId)
+    if not target then
+        TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
+        return
+    end
+    local success, msg = exports['custom-certificates']:GrantLicense(targetId, licenseType)
+    if success then
+        TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
+        TriggerClientEvent('QBCore:Notify', src, ('✅ 已授予 %s %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
+        TriggerClientEvent('QBCore:Notify', targetId, ('管理员授予了你 %s 执照'):format(licenseType), 'success')
+    else
+        TriggerClientEvent('QBCore:Notify', src, msg or '授予失败', 'error')
+    end
+end, 'admin')
+
+QBCore.Commands.Add('revokelicense', '吊销玩家执照 (Admin)', {
+    { name = 'id', help = '玩家 ID' },
+    { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
+}, false, function(source, args)
+    local src = source
+    local targetId = tonumber(args[1])
+    local licenseType = args[2] and args[2]:lower()
+    if not targetId or not AdminLicenseTypes[licenseType] then
+        TriggerClientEvent('QBCore:Notify', src, '用法: /revokelicense [ID] [driver|pilot|boat|heavy|weapon]', 'error')
+        return
+    end
+    local target = QBCore.Functions.GetPlayer(targetId)
+    if not target then
+        TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
+        return
+    end
+    local success, msg = exports['custom-certificates']:RevokeLicense(targetId, licenseType)
+    if success then
+        TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
+        TriggerClientEvent('QBCore:Notify', src, ('🗑️ 已吊销 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
+        TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已被吊销'):format(licenseType), 'error')
+    else
+        TriggerClientEvent('QBCore:Notify', src, msg or '吊销失败', 'error')
+    end
+end, 'admin')
+
+QBCore.Commands.Add('reinstatelicense', '恢复玩家执照 (Admin)', {
+    { name = 'id', help = '玩家 ID' },
+    { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
+}, false, function(source, args)
+    local src = source
+    local targetId = tonumber(args[1])
+    local licenseType = args[2] and args[2]:lower()
+    if not targetId or not AdminLicenseTypes[licenseType] then
+        TriggerClientEvent('QBCore:Notify', src, '用法: /reinstatelicense [ID] [driver|pilot|boat|heavy|weapon]', 'error')
+        return
+    end
+    local target = QBCore.Functions.GetPlayer(targetId)
+    if not target then
+        TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
+        return
+    end
+    local success, msg = exports['custom-certificates']:ReinstateLicense(targetId, licenseType)
+    if success then
+        TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
+        TriggerClientEvent('QBCore:Notify', src, ('🔄 已恢复 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
+        TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已恢复'):format(licenseType), 'success')
+    else
+        TriggerClientEvent('QBCore:Notify', src, msg or '恢复失败', 'error')
+    end
+end, 'admin')
+
+QBCore.Commands.Add('suspendlicense', '暂停玩家执照 (Admin)', {
+    { name = 'id', help = '玩家 ID' },
+    { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
+}, false, function(source, args)
+    local src = source
+    local targetId = tonumber(args[1])
+    local licenseType = args[2] and args[2]:lower()
+    if not targetId or not AdminLicenseTypes[licenseType] then
+        TriggerClientEvent('QBCore:Notify', src, '用法: /suspendlicense [ID] [driver|pilot|boat|heavy|weapon]', 'error')
+        return
+    end
+    local target = QBCore.Functions.GetPlayer(targetId)
+    if not target then
+        TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
+        return
+    end
+    local success, msg = exports['custom-certificates']:SuspendLicense(targetId, licenseType)
+    if success then
+        TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
+        TriggerClientEvent('QBCore:Notify', src, ('⏸️ 已暂停 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
+        TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已被暂停'):format(licenseType), 'error')
+    else
+        TriggerClientEvent('QBCore:Notify', src, msg or '暂停失败', 'error')
+    end
+end, 'admin')
+
+QBCore.Commands.Add('checklicense', '查看玩家执照状态 (Admin)', {
+    { name = 'id', help = '玩家 ID' }
+}, false, function(source, args)
+    local src = source
+    local targetId = tonumber(args[1]) or source
+    local target = QBCore.Functions.GetPlayer(targetId)
+    if not target then
+        TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
+        return
+    end
+    local licences = target.PlayerData.metadata['licences'] or {}
+    local certStatus = target.PlayerData.metadata['cert_status'] or {}
+
+    local msg = ('📋 %s 的执照状态:\\n'):format(GetPlayerName(targetId))
+    local types = { 'driver', 'pilot', 'boat', 'heavy', 'weapon' }
+    for _, t in ipairs(types) do
+        local status = certStatus[t] or 'unclaimed'
+        local has = licences[t] and '✅' or '❌'
+        local statusIcon = ({ unclaimed = '⚪', held = '🟢', suspended = '🟡', revoked = '🔴' })[status] or '⚪'
+        local label = ({ driver = '普通驾照', pilot = '飞行执照', boat = '船证', heavy = '重型驾照', weapon = '武器执照' })[t]
+        msg = msg .. ('  %s%s %s: %s %s\\n'):format(has, statusIcon, label, t, status)
+    end
+
+    TriggerClientEvent('chat:addMessage', src, {
+        color = { 0, 255, 255 },
+        multiline = true,
+        args = { '📋 执照检查', msg }
+    })
+    TriggerClientEvent('QBCore:Notify', src, '执照状态已打印到聊天窗口', 'success')
+end, 'admin')
+
+print('[custom-admin] ✅ 命令模块已加载 (myid + amenu + clearme + setrobbery + auto-admin + license管理)')

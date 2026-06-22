@@ -705,6 +705,12 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
         TriggerEvent('quest:server:onQuestCompleted', citizenid, questId)
         TriggerEvent(('quest:server:onQuestCompleted:%s'):format(questId), citizenid)
 
+        -- 🌍 Phase 1: 发射漏斗社交信号 (玩家完成任务 = 社交活跃度+1)
+        if EventTypes and EventTypes.Publish then
+            EventTypes.Publish(EventTypes.FUNNEL.SOCIAL_SIGNAL,
+                citizenid, 'quest_completed', { quest_id = questId, timestamp = os.time() })
+        end
+
         QuestPrint('✅ Quest completed: %s → %s', citizenid, questId)
         return true, 'Quest completed'
     end

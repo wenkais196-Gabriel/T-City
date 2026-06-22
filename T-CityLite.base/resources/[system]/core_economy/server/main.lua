@@ -203,6 +203,23 @@ function TriggerReward(source, activityId, baseReward, options)
         TriggerEvent('core_economy:rewardGranted', source, activityId or 'unknown', totalGranted, finalMult)
     end
 
+    -- 🌍 Phase 1: 经济异常检测 (单笔大额 或 倍率偏离 >30%)
+    if EventTypes and EventTypes.Publish then
+        local ANOMALY_THRESHOLD = 50000  -- 单笔 >$50K 视为异常
+        local MULTIPLIER_DEVIATION = 0.30  -- 倍率偏离超过 30%
+        if totalGranted > ANOMALY_THRESHOLD then
+            EventTypes.Publish(EventTypes.WORLD.ECONOMIC_ANOMALY,
+                'large_transaction', 'major',
+                ('Large reward: $%d via %s (mult=%.2f)'):format(totalGranted, activityId, finalMult),
+                { citizenid = Player.PlayerData.citizenid, amount = totalGranted, activity = activityId, multiplier = finalMult })
+        elseif finalMult > (1.0 + MULTIPLIER_DEVIATION) or finalMult < (1.0 - MULTIPLIER_DEVIATION) then
+            EventTypes.Publish(EventTypes.WORLD.ECONOMIC_ANOMALY,
+                'multiplier_deviation', 'notable',
+                ('Multiplier deviation: %.2f via %s'):format(finalMult, activityId),
+                { citizenid = Player.PlayerData.citizenid, activity = activityId, multiplier = finalMult, amount = totalGranted })
+        end
+    end
+
     return true, totalGranted, heatCoeff
 end
 

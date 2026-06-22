@@ -209,6 +209,14 @@ AddEventHandler('QBCore:Server:OnJobUpdate', function(src, job)
 
     DebugPrint(('JobUpdate: %s → 职业:%s 组织:%s 阶层:%s')
         :format(qbPlayer.PlayerData.name, job.label, org.label, targetTier))
+
+    -- 🌍 Phase 1: 发射漏斗社交信号 (职业变更 = 社交网络变化)
+    if EventTypes and EventTypes.Publish then
+        local signalType = job.name == 'unemployed' and 'job_left' or 'job_joined'
+        EventTypes.Publish(EventTypes.FUNNEL.SOCIAL_SIGNAL,
+            qbPlayer.PlayerData.citizenid, signalType,
+            { job_name = job.name, job_label = job.label, org_id = orgId, tier = targetTier })
+    end
 end)
 
 AddEventHandler('QBCore:Server:OnGangUpdate', function(src, gang)
@@ -242,6 +250,14 @@ AddEventHandler('QBCore:Server:OnGangUpdate', function(src, gang)
 
     DebugPrint(('GangUpdate: %s → 帮派:%s 组织:%s 阶层:%s')
         :format(qbPlayer.PlayerData.name, gang.label, org.label, targetTier))
+
+    -- 🌍 Phase 1: 发射漏斗社交信号 + 世界领土变更事件
+    if EventTypes and EventTypes.Publish then
+        local signalType = (gang.name == 'none' or not gang.name) and 'gang_left' or 'gang_joined'
+        EventTypes.Publish(EventTypes.FUNNEL.SOCIAL_SIGNAL,
+            qbPlayer.PlayerData.citizenid, signalType,
+            { gang_name = gang.name, gang_label = gang.label, org_id = orgId, tier = targetTier })
+    end
 end)
 
 -- ==========================================

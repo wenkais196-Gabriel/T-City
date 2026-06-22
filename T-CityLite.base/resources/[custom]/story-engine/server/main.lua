@@ -18,16 +18,32 @@ local QBCore = exports['qb-core']:GetCoreObject()
 -- ==============================================================
 
 -- 加载决策定义
-local decisions = require 'config.decisions'
+-- FiveM 沙箱中 require/dofile 不可用，使用 LoadResourceFile + load
+local resourceName = GetCurrentResourceName()
+local function loadConfigFile(filename)
+    local content = LoadResourceFile(resourceName, filename)
+    if not content then
+        print('[story-engine] ⚠️ Failed to load ' .. filename)
+        return nil
+    end
+    local chunk, err = load(content, '@' .. filename)
+    if not chunk then
+        print('[story-engine] ⚠️ Syntax error in ' .. filename .. ': ' .. tostring(err))
+        return nil
+    end
+    return chunk()
+end
+
+local decisions = loadConfigFile('config/decisions.lua')
 local registeredCount = DecisionEngine.RegisterAll(decisions)
 print(('[story-engine] 📋 %d 决策定义已注册'):format(registeredCount))
 
 -- 加载剧情线定义
-local arcs = require 'config.story_arcs'
+local arcs = loadConfigFile('config/story_arcs.lua')
 print(('[story-engine] 📚 %d 条剧情线已加载'):format(#arcs))
 
 -- 加载终章映射
-local ArcFinales = require 'config.arc_finales'
+local ArcFinales = loadConfigFile('config/arc_finales.lua')
 
 -- ==============================================================
 -- v0.7 一次性门控: 监听 quest 完成 → 标记剧情线完成

@@ -20,9 +20,64 @@
 --   - 断线立即刷盘 → 零数据丢失
 --   - 服务器关闭前全量刷盘 → 零数据丢失
 --   - 批量 UPDATE 单条 SQL → 原子性
+--
+-- 🔧 架构修复 (2026-06-22):
+--   _G.DirtyFlush 在 qb-core → core-framework 初始化窗口内不定期变 nil（根因不明）。
+--   本文件现在使用 LOCAL DirtyFlush，不再依赖 _G.DirtyFlush。
+--   每次 tick 时将 LocalDirtyFlush 同步到 _G.DirtyFlush 和 _G.Bus.PersistenceManager，
+--   确保 player.lua 的 MarkDirty/ForceFlush 调用能到达正确的对象。
 
 local QBCore = exports['qb-core']:GetCoreObject()
 PersistenceManager = {}
+
+-- ==============================================================
+-- LOCAL DirtyFlush — 不受全局变量清理影响的自治实例
+-- ==============================================================
+
+local LocalDirtyFlush = {
+    _dirty = {},
+}
+
+function LocalDirtyFlush.MarkDirty(citizenid, dataType)
+    LocalDirtyFlush._dirty[citizenid] = LocalDirtyFlush._dirty[citizenid] or {}
+    LocalDirtyFlush._dirty[citizenid].dataType = dataType
+    LocalDirtyFlush._dirty[citizenid].marked_at = os.time()
+end
+
+function LocalDirtyFlush.ForceFlush(citizenid)
+    if citizenid then
+        local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
+        if Player then
+            Player.Functions.Save(true)  -- 强制刷盘
+        end
+        LocalDirtyFlush._dirty[citizenid] = nil
+    else
+        -- FlushAll
+        for cid, _ in pairs(LocalDirtyFlush._dirty) do
+            local Player = QBCore.Functions.GetPlayerByCitizenId(cid)
+            if Player and Player.PlayerData then
+                Player.Functions.Save(true)
+            end
+            LocalDirtyFlush._dirty[cid] = nil
+        end
+    end
+end
+
+function LocalDirtyFlush.FlushAll()
+    LocalDirtyFlush.ForceFlush(nil)
+end
+
+function LocalDirtyFlush.Stats()
+    local count = 0
+    for _ in pairs(LocalDirtyFlush._dirty) do count = count + 1 end
+    return { dirty_count = count }
+end
+
+-- 立即设到 _G（可能会被清，但 tick 会周期性恢复）
+_G.DirtyFlush = LocalDirtyFlush
+if _G.Bus then
+    _G.Bus.PersistenceManager = LocalDirtyFlush
+end
 
 -- ==============================================================
 -- 配置（可通过 Convar 动态调整）
@@ -42,7 +97,7 @@ local stats = {
     flush_count = 0,
     force_count = 0,
     last_flush_time = 0,
-    last_flush_duration = 0, -- ms
+    last_flush_duration = 0,
     total_players_flushed = 0,
     failed_flushes = 0,
 }
@@ -51,11 +106,9 @@ local stats = {
 -- 配置化刷盘管道
 -- ==============================================================
 
---- 启动可配置的定时刷盘 Tick
----@param intervalSec number|nil 刷盘间隔（秒），nil 时从 Convar 读取，默认 900 (15 分钟)
 function PersistenceManager.StartFlushTick(intervalSec)
     local interval = intervalSec or GetIntConvar('persistence_flush_interval', 900)
-    if interval < 30 then interval = 30 end  -- 最小 30 秒，防止过于频繁
+    if interval < 30 then interval = 30 end
 
     print(('[persistence] ⏰ Flush tick started: every %d seconds'):format(interval))
 
@@ -63,24 +116,24 @@ function PersistenceManager.StartFlushTick(intervalSec)
         while true do
             Wait(interval * 1000)
 
-            if not DirtyFlush then
-                print('[persistence] ⚠️ DirtyFlush not available, skipping tick')
-                goto continue
+            -- 周期性恢复 _G.DirtyFlush（对抗未知的全局清理）
+            _G.DirtyFlush = LocalDirtyFlush
+            if _G.Bus then
+                _G.Bus.PersistenceManager = LocalDirtyFlush
             end
 
-            local startTime = os.clock()
-            local dirtyStats = DirtyFlush.Stats()
+            local dirtyStats = LocalDirtyFlush.Stats()
             local dirtyCount = dirtyStats.dirty_count or 0
 
             if dirtyCount > 0 then
+                local startTime = os.clock()
                 local flushed = 0
-                for cid, entry in pairs(DirtyFlush._dirty) do
-                    -- 避免频繁重试（同一玩家在 interval/2 秒内只刷一次）
+                for cid, entry in pairs(LocalDirtyFlush._dirty) do
                     local now = os.time()
                     local minRetryInterval = math.floor(interval / 2)
                     if now - (entry.last_flush_attempt or 0) >= minRetryInterval then
                         entry.last_flush_attempt = now
-                        DirtyFlush.ForceFlush(cid)
+                        LocalDirtyFlush.ForceFlush(cid)
                         flushed = flushed + 1
                     end
                 end
@@ -93,15 +146,11 @@ function PersistenceManager.StartFlushTick(intervalSec)
                     print(('[persistence] ⏰ Tick flushed %d/%d dirty players in %dms'):format(
                         flushed, dirtyCount, stats.last_flush_duration
                     ))
-
-                    -- 延迟告警
                     if stats.last_flush_duration > 5000 then
-                        print(('[persistence] ⚠️ Flush took >5s — consider increasing interval or reducing dirty pool'))
+                        print('[persistence] ⚠️ Flush took >5s — consider increasing interval')
                     end
                 end
             end
-
-            ::continue::
         end
     end)
 end
@@ -110,16 +159,12 @@ end
 -- 紧急刷盘
 -- ==============================================================
 
---- 强制刷盘所有脏玩家（用于服务器关闭/txAdmin 重启/资源停止）
----@return number flushedCount
 function PersistenceManager.FlushAll()
-    if not DirtyFlush then return 0 end
-
     local startTime = os.clock()
     local count = 0
 
-    for cid, _ in pairs(DirtyFlush._dirty) do
-        DirtyFlush.ForceFlush(cid)
+    for cid, _ in pairs(LocalDirtyFlush._dirty) do
+        LocalDirtyFlush.ForceFlush(cid)
         count = count + 1
     end
 
@@ -133,12 +178,10 @@ function PersistenceManager.FlushAll()
     return count
 end
 
---- 强制刷盘单个玩家（用于断线/退出）
----@param citizenid string
 function PersistenceManager.ForceFlushPlayer(citizenid)
-    if not DirtyFlush or not citizenid then return end
-    local wasDirty = DirtyFlush._dirty[citizenid] ~= nil
-    DirtyFlush.ForceFlush(citizenid)
+    if not citizenid then return end
+    local wasDirty = LocalDirtyFlush._dirty[citizenid] ~= nil
+    LocalDirtyFlush.ForceFlush(citizenid)
 
     if wasDirty then
         stats.force_count = stats.force_count + 1
@@ -149,8 +192,6 @@ end
 -- 健康监控
 -- ==============================================================
 
---- 获取持久化统计
----@return table
 function PersistenceManager.Stats()
     local result = {
         flush_count = stats.flush_count,
@@ -162,20 +203,16 @@ function PersistenceManager.Stats()
         dirty_pool_size = 0,
     }
 
-    if DirtyFlush then
-        local ds = DirtyFlush.Stats()
-        result.dirty_pool_size = ds.dirty_count or 0
-    end
+    local ds = LocalDirtyFlush.Stats()
+    result.dirty_pool_size = ds.dirty_count or 0
 
     return result
 end
 
---- 定期输出健康报告（每 15 分钟）
 function PersistenceManager.StartHealthReport()
     CreateThread(function()
         while true do
             Wait(15 * 60 * 1000)
-
             local s = PersistenceManager.Stats()
             print(('[persistence] 📊 Health Report | Dirty: %d | Flushes: %d | Forces: %d | Total: %d | Last: %dms'):format(
                 s.dirty_pool_size, s.flush_count, s.force_count, s.total_players_flushed, s.last_flush_duration
@@ -187,10 +224,7 @@ end
 -- ==============================================================
 -- 生命周期钩子
 -- ==============================================================
--- ⚠️ playerDropped + txAdmin 关机钩子已由 dirty_flush.lua 统一处理
---    此处不再重复注册，避免双重 ForceFlush + 双轮询循环
 
--- 1. 资源停止时的全量刷盘保护
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName == GetCurrentResourceName() then
         print('[persistence] ⚠️ Resource stopping, flushing all dirty players...')
@@ -214,10 +248,8 @@ if Bus and Bus.RegisterService then
 end
 
 -- ==============================================================
--- 自动启动（默认 15 分钟 tick）
+-- 自动启动
 -- ==============================================================
 
 PersistenceManager.StartFlushTick()
 PersistenceManager.StartHealthReport()
-
--- persistence startup prints removed (production mode)

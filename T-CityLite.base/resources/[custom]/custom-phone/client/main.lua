@@ -1,11 +1,29 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local isPhoneOpen = false
 
+-- Close Phone Function (must be defined before OpenPhone — CreateThread closure)
+local function ClosePhone()
+    if not isPhoneOpen then return end
+    isPhoneOpen = false
+    SetNuiFocusKeepInput(false)
+    SetNuiFocus(false, false)
+    SendNUIMessage({
+        action = 'phone:close'
+    })
+    -- Stop phone animation
+    local ped = GetPlayerPed(-1)
+    if DoesEntityExist(ped) then
+        StopAnimTask(ped, 'cellphone@', 'cellphone_text_read_base', 1.0)
+        ClearPedTasks(ped)
+    end
+end
+
 -- Open Phone Function
 local function OpenPhone()
     if isPhoneOpen then return end
     isPhoneOpen = true
-    SetNuiFocus(true, true)
+    SetNuiFocus(true, true)          -- cursor visible, keyboard to NUI
+    SetNuiFocusKeepInput(true)      -- WASD/Space pass through for movement
     
     -- Play GTA V native phone-out animation
     local ped = PlayerPedId()
@@ -90,6 +108,12 @@ local function OpenPhone()
             DisableControlAction(0, 141, true) -- Heavy Attack
             DisableControlAction(0, 142, true) -- Melee Attack Alternate
 
+            -- ESC key closes phone — handled by NUI JS (window keydown listener)
+            -- Right mouse button closes phone (AIM input, already disabled above)
+            if IsDisabledControlJustPressed(0, 25) then  -- INPUT_AIM
+                ClosePhone()
+            end
+
             -- 每 2 秒同步一次游戏内时间（减少 SendNUIMessage 频率）
             timeTick = timeTick + 1
             if timeTick >= 120 then
@@ -109,22 +133,6 @@ local function OpenPhone()
         -- Clear animation when phone closes
         ClearPedTasks(GetPlayerPed(-1))
     end)
-end
-
--- Close Phone Function
-local function ClosePhone()
-    if not isPhoneOpen then return end
-    isPhoneOpen = false
-    SetNuiFocus(false, false)
-    SendNUIMessage({
-        action = 'phone:close'
-    })
-    -- Stop phone animation
-    local ped = GetPlayerPed(-1)
-    if DoesEntityExist(ped) then
-        StopAnimTask(ped, 'cellphone@', 'cellphone_text_read_base', 1.0)
-        ClearPedTasks(ped)
-    end
 end
 
 -- Command & Keybind to toggle phone
@@ -148,6 +156,15 @@ end)
 -- ----------------------------------------------------
 RegisterNUICallback('closePhone', function(_, cb)
     ClosePhone()
+    cb({ success = true })
+end)
+
+-- Keyboard mode callbacks (no-op: always in SetNuiFocus(true,true) mode)
+RegisterNUICallback('enableKeyboard', function(_, cb)
+    cb({ success = true })
+end)
+
+RegisterNUICallback('disableKeyboard', function(_, cb)
     cb({ success = true })
 end)
 
@@ -182,17 +199,23 @@ RegisterNUICallback('markMessagesRead', function(data, cb)
     cb({ success = true })
 end)
 
--- Notification Tray Callbacks (Transient UI Store syncing)
+-- Notification Tray Callbacks (DB-backed persistence)
 RegisterNUICallback('markNotificationsRead', function(_, cb)
-    cb({ success = true })
+    QBCore.Functions.TriggerCallback('phone:server:markNotificationsRead', function(res)
+        cb(res)
+    end)
 end)
 
 RegisterNUICallback('clearNotifications', function(_, cb)
-    cb({ success = true })
+    QBCore.Functions.TriggerCallback('phone:server:clearNotifications', function(res)
+        cb(res)
+    end)
 end)
 
 RegisterNUICallback('deleteNotification', function(data, cb)
-    cb({ success = true })
+    QBCore.Functions.TriggerCallback('phone:server:deleteNotification', function(res)
+        cb(res)
+    end, data.id)
 end)
 
 -- Banking Callbacks (Wire Transfer & Secure Fallbacks)
@@ -270,6 +293,37 @@ RegisterNUICallback('triggerHotlineCall', function(data, cb)
     end
 end)
 
+RegisterNUICallback('getAllHotlineStatus', function(_, cb)
+    QBCore.Functions.TriggerCallback('phone:server:getAllHotlineStatus', function(res)
+        cb(res)
+    end)
+end)
+
+-- Phone Call System Callbacks (real implementation)
+RegisterNUICallback('initiateCall', function(data, cb)
+    QBCore.Functions.TriggerCallback('phone:server:initiateCall', function(res)
+        cb(res)
+    end, data.targetNumber)
+end)
+
+RegisterNUICallback('answerCall', function(data, cb)
+    QBCore.Functions.TriggerCallback('phone:server:answerCall', function(res)
+        cb(res)
+    end, data.callId)
+end)
+
+RegisterNUICallback('rejectCall', function(data, cb)
+    QBCore.Functions.TriggerCallback('phone:server:rejectCall', function(res)
+        cb(res)
+    end, data.callId)
+end)
+
+RegisterNUICallback('hangupCall', function(data, cb)
+    QBCore.Functions.TriggerCallback('phone:server:hangupCall', function(res)
+        cb(res)
+    end, data.callId)
+end)
+
 RegisterNUICallback('queryAutomatedIvr', function(data, cb)
     QBCore.Functions.TriggerCallback('phone:server:queryAutomatedIvr', function(res)
         cb(res)
@@ -345,6 +399,8 @@ RegisterNetEvent('phone:client:newNotification', function(notif)
         action = 'phone:newNotification',
         notification = notif
     })
+    -- Also persist to DB via server
+    TriggerServerEvent('phone:server:storeNotification', notif)
 end)
 
 RegisterNetEvent('phone:client:newJob', function(job)
@@ -358,6 +414,29 @@ RegisterNetEvent('phone:client:factionReceive', function(msg)
     SendNUIMessage({
         action = 'phone:faction:receive',
         message = msg
+    })
+end)
+
+-- Phone Call Events (real-time push from server)
+RegisterNetEvent('phone:client:incomingCall', function(callData)
+    SendNUIMessage({
+        action = 'phone:incomingCall',
+        callData = callData
+    })
+end)
+
+RegisterNetEvent('phone:client:callAnswered', function(data)
+    SendNUIMessage({
+        action = 'phone:callAnswered',
+        callId = data.callId
+    })
+end)
+
+RegisterNetEvent('phone:client:callEnded', function(data)
+    SendNUIMessage({
+        action = 'phone:callEnded',
+        callId = data.callId,
+        status = data.status
     })
 end)
 

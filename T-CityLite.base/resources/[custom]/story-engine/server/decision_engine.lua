@@ -119,7 +119,7 @@ function DecisionEngine.MakeChoice(source, questId, stepId, decisionId, chosenOp
     -- 4c. 授予即时奖励（如果有）
     if effects.rewards then
         pcall(function()
-            exports['custom-quest']:TriggerQuest and nil  -- 不在这里发奖励，让 quest 的 reward 步骤处理
+            -- exports['custom-quest']:TriggerQuest(source, questId) — 不在这里发奖励，让 quest 的 reward 步骤处理
         end)
     end
 

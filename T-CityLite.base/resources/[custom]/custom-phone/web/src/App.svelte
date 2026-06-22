@@ -123,9 +123,12 @@
       }
     });
 
-    // Global keydown listener to safely exit (Esc = close, M = toggle)
+    // Global keydown: ESC closes phone; M closes phone when NUI has focus
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === 'm' || e.key === 'M') {
+      if (e.key === 'Escape') {
+        closePhone();
+      }
+      if (e.key === 'm' || e.key === 'M') {
         closePhone();
       }
     };

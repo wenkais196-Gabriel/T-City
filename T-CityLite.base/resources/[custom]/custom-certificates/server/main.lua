@@ -58,8 +58,14 @@ local function SetLicenseStatus(source, certType, newStatus)
     local certStatus = GetCertStatus(player)
     local licences = GetLicences(player)
 
-    if not certStatus or not licences then
-        return false, 'player metadata not available'
+    -- 🔧 自动初始化 nil 元数据字段（DB 中旧玩家可能缺少 cert_status/licences）
+    if not certStatus then
+        certStatus = {}
+        player.PlayerData.metadata['cert_status'] = certStatus
+    end
+    if not licences then
+        licences = {}
+        player.PlayerData.metadata['licences'] = licences
     end
 
     -- 更新状态
@@ -89,7 +95,10 @@ local function GrantLicense(source, certType)
     if not player then return false, 'player not found' end
 
     local certStatus = GetCertStatus(player)
-    if not certStatus then return false, 'metadata not available' end
+    if not certStatus then
+        certStatus = {}
+        player.PlayerData.metadata['cert_status'] = certStatus
+    end
 
     local currentStatus = certStatus[certType] or 'unclaimed'
     if currentStatus == 'held' then
@@ -133,7 +142,10 @@ local function ReinstateLicense(source, certType)
     if not player then return false, 'player not found' end
 
     local certStatus = GetCertStatus(player)
-    if not certStatus then return false, 'metadata not available' end
+    if not certStatus then
+        certStatus = {}
+        player.PlayerData.metadata['cert_status'] = certStatus
+    end
 
     local currentStatus = certStatus[certType] or 'unclaimed'
     if currentStatus ~= 'suspended' and currentStatus ~= 'revoked' then
@@ -166,7 +178,10 @@ local function IssueCertificate(source, certType)
     end
 
     local certStatus = GetCertStatus(player)
-    if not certStatus then return false, 'metadata not available' end
+    if not certStatus then
+        certStatus = {}
+        player.PlayerData.metadata['cert_status'] = certStatus
+    end
 
     local status = certStatus[certType] or 'unclaimed'
     if status == 'suspended' then
