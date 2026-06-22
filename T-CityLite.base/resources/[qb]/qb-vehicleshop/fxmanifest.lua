@@ -29,6 +29,7 @@ client_scripts {
     '@PolyZone/CircleZone.lua',
     '@PolyZone/ComboZone.lua',
     'client/util.lua',       -- 共享工具 + 全局状态 + 玩家生命周期
+    'client/bus.lua',        -- Phase 4: 客户端 Bus 注册 (在 util 之后)
     'client/zones.lua',      -- 区域管理 + 展示车辆 + Blip
     'client/menus.lua',      -- qb-menu / qb-input 菜单逻辑
     'client/testdrive.lua',  -- 试驾逻辑
