@@ -119,7 +119,7 @@
 
 | # | 问题 | 影响 | 建议 |
 |:---|:---|:---|:---|
-| R1 | **Bus 跨资源不可见** | 组织仓库、市场价、律师通知等曾"代码在、功能不在" | 🟡 部分修复：7 个注册方 include `bus.lua`；cartel/mining/justice 18 处改显式 `service_*` export；剩 `custom-crime`/`custom-phone` 两处（均有 fallback） |
+| R1 | **Bus 跨资源不可见** | 组织仓库、市场价、律师通知等曾"代码在、功能不在" | 🟡 部分修复：9 个注册方 include `bus.lua`；cartel/mining/justice/crime 共 19 处改显式 `service_*` export；剩 `custom-phone` 一处（有 fallback） |
 | R2 | **任务奖励不幂等** | 重复调用可重复发钱/物品 | ✅ 已修复：`CompleteQuest` affectedRows 回调 + 内存完成锁 + 10s 超时兜底 |
 | R3 | **组队双锁** | 组队实例曾永远建不出来 | ✅ 已修复：只调 `CreateGroupInstance`；`RemoveGroupMember` 用真实 key；断线释放锁 |
 | R4 | **多任务缓存覆盖** | 接新任务会把旧任务挤出缓存 | ✅ 已修复：读现有缓存后 append |
@@ -201,7 +201,7 @@
 | `custom-quest/server/{quest_db,quest_manager,quest_security}.lua` | 奖励幂等（affectedRows 回调 + 内存完成锁 + 10s 超时）、`_currentSteps` 步骤比对、完成锁清理 |
 | `custom-main/server/{main,dispatch}.lua` | `ResetDeathStatus` 医疗启用时拦截 + 10s 冷却；`policeHandoverAlert` 坐标/星级/街道校验 + 5s 冷却 |
 | `tcity-dashboard/server/police_api.lua` | `plateFlagged` 值班 LEO/admin 鉴权 + 车牌规范化 + 2s 冷却；内部同步改本地调用 |
-| 7 个注册方 `fxmanifest.lua` + cartel/mining/justice 8 个 server Lua | include `@core-framework/bus.lua`；18 处 `Bus.PascalCase` → 显式 `service_*` export，保留 fallback |
+| 9 个注册方 `fxmanifest.lua` + cartel/mining/justice/crime 9 个 server Lua | include `@core-framework/bus.lua`；19 处 `Bus.PascalCase` → 显式 `service_*` export，保留 fallback |
 | `core-framework/compat.lua` | `GetPlayer` 缓存活性校验改用 `GetPlayerName`（`GetPlayerPing >= 0` 恒真） |
 | `configs/modules/{custom,dev}.cfg` + `server.cfg.template` | `custom-testing` 移出生产，改由 `dev.cfg` 按需启用 |
 | `tests/check_bus_wiring.py` + CI / `run_all.py` | 新增 Bus 接线检查：注册方漏 include `bus.lua` 直接 CI 失败 |

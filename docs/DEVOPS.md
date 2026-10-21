@@ -150,7 +150,7 @@ bash tools/bootstrap_github.sh
 
 | 阶段 | 状态 | 入口 |
 |:---|:---|:---|
-| Phase 1 — 基础功能 | 🚧 进行中 | [审查报告 §5](../T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md) |
+| Phase 1 — 基础功能 | 🟡 静态修复完成，待实机启动/压测 | [审查报告 §5](../T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md) |
 | Phase 2 — 角色扮演 / 多系统 | ⏳ 待开始 | 同上 |
 | Phase 3 — Agent 中枢导演 | ⏳ 设计完成 | [08 — Agent 导演](server-design/08-agent-director.md) |
 
