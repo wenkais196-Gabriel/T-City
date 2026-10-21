@@ -9,7 +9,7 @@ import sys
 import subprocess
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEST_SCRIPT = os.path.join(BASE_DIR, 'T-CityLite.base', 'tests', 'run_all.py')
+TEST_SCRIPT = os.path.join(BASE_DIR, 'tests', 'run_all.py')
 
 def main():
     print('═' * 50)
