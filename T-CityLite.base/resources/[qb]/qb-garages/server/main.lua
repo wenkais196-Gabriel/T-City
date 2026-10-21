@@ -101,6 +101,20 @@ QBCore.Functions.CreateCallback('qb-garages:server:GetGarageVehicles', function(
         end
         print(('[qb-garages] 🔍 No vehicles at garage=%s (citizen=%s owned=%d: %s)'):format(
             tostring(garage), citizenId:sub(1, 4) .. '...', owned, table.concat(where, ', ')))
+
+        -- 玩家在错误车库时给出明确提示（车辆集中在哪个车库）
+        if owned > 0 then
+            local hints = {}
+            for _, row in ipairs(rows) do
+                local cfg = Config.Garages[row.garage]
+                hints[#hints + 1] = ('%s ×%d'):format(
+                    cfg and cfg.label or tostring(row.garage), row.c)
+            end
+            TriggerClientEvent('QBCore:Notify', source,
+                ('本车库没有车辆。你的车停在：%s'):format(table.concat(hints, ' / ')),
+                'primary', 8000)
+        end
+
         cb(nil)
         return
     end
