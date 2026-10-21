@@ -10,9 +10,9 @@
 ---
 
 ## 📅 项目最新同步时间
-- **最后更新时间**: 2026-06-04
-- **当前开发阶段**: `v0.7a 载具重构与物流货运系统` 🚧 → custom-vehicles 已完成，物流任务配置已完成，待验收
-- **已完成前置**: v0.5 ✅, v0.6-quest ✅ (任务系统基础设施已到位), v0.7a custom-vehicles ✅
+- **最后更新时间**: 2026-10-21
+- **当前开发阶段**: `v0.7a 载具重构与物流` 🚧 代码完成，待实机验收
+- **已完成前置**: v0.1–v0.6 ✅；v0.5 主体 ✅（3 项历史遗留待确认）；v0.6-quest ✅
 - **开发策略**: **完成度优先，周期不限** — 每个版本以验收标准为准，不设硬性截止日期
 
 ---
@@ -21,25 +21,61 @@
 
 | 阶段版本 | 阶段名称 | 状态 | 交付日期 / 计划周期 | 说明 | 详细规范文档 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **v0.1** | [精简启动链](./QBCore_Lite_versions/v0.1-lite-startup.md) | ✅ 已完成 | 2026-05-28 | 剔除 `ensure [qb]`，实现最小可运行启动链，建立模块化 cfg。 | [v0.1 Spec](file:///d:/txData/QBCore_Lite_versions/v0.1-lite-startup.md) |
-| **v0.2** | [基础 RP 闭环](./QBCore_Lite_versions/v0.2-basic-rp.md) | ✅ 已完成 | 2026-05-29 (修补) | 启用警用、医院、银行、车辆基础功能，完成 wanted wantedlevel 接管与 duty 快捷切换。 | [v0.2 Spec](file:///d:/txData/QBCore_Lite_versions/v0.2-basic-rp.md) |
-| **v0.3** | [基础设施层](./QBCore_Lite_versions/v0.3-economy.md) | ✅ 已完成 | 2026-05-31 | 统一经济出口、安全边界、多标签职业 API、服装/帮派/门锁激活、管理员面板及 Discord 审计。 | [v0.3 Spec](file:///d:/txData/QBCore_Lite_versions/v0.3-economy.md) |
-| **v0.4** | [自研手机系统](./QBCore_Lite_versions/v0.4-custom-phone.md) | ✅ 已完成 | 2026-05-31 | 独立于 qb-phone，基于 Svelte + Vite 的 Phone-First 自研手机，包含 Job Board 与领袖 App。 | [v0.4 Spec](file:///d:/txData/QBCore_Lite_versions/v0.4-custom-phone.md) |
-| **v0.5** | [犯罪玩法系统](./QBCore_Lite_versions/v0.5-crime-gameplay.md) | 🚧 进行中 | 完成验收后进入下一阶段 | 便利店抢劫、毒品产业链，打通供应链与警方对抗。 | [v0.5 Spec](file:///d:/txData/QBCore_Lite_versions/v0.5-crime-gameplay.md) |
-| **v0.6-quest** | [通用任务系统](./QBCore_Lite_versions/v0.6-quest-system.md) | ⏳ 待开始 | v0.5 验收后启动 | **新增基础设施**：数据驱动的任务状态机、外部脚本联动 API（OnCustomEvent/CompleteStep/RegisterStepValidator）、手机任务追踪 UI、DB 持久化 | [v0.6-quest Spec](./QBCore_Lite_versions/v0.6-quest-system.md) |
-| **v0.6a**| [民间经济职业](./QBCore_Lite_versions/v0.6a-civilian-economy.md) | ⏳ 待开始 | v0.6-quest 验收后启动 | 矿工/渔民/农民/货运/机修 5 大 civilian 职业体系，**基于任务系统瘦身实现**（交互小游戏薄层 + quest 配置管理步骤/奖励） | [v0.6a Spec](file:///d:/txData/QBCore_Lite_versions/v0.6a-civilian-economy.md) |
-| **v0.6b**| [沙盒社会生态](./QBCore_Lite_versions/v0.6-sandbox-sociology.md) | ⏳ 待开始 | v0.6-quest 验收后启动（与 v0.6a 并行开发） | 三线领袖 KPI 系统（**基于任务系统的动态任务**）、催化剂卡牌（作为任务链奖励）、防剧透盲盒百科 | [v0.6b Spec](file:///d:/txData/QBCore_Lite_versions/v0.6-sandbox-sociology.md) |
-| **v0.7a**| [载具重构与物流](./QBCore_Lite_versions/v0.7a-civilian-logistics.md) | ⏳ 待开始 | v0.6-quest 验收后启动 | 重构 qb-vehiclekeys 为 custom-vehicles，打造安全高性能钥匙，集成通用物流货运模板与私家车优先机制 | [v0.7a Spec](./QBCore_Lite_versions/v0.7a-civilian-logistics.md) |
-| **v0.7b**| [智能车载中控屏](./QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) | ⏳ 待开始 | v0.7a 验收后启动 | 开发车载智能中控面板 NUI，集成诊断、系统车控、货运APP和特殊职业工具（警车雷达/PA喊话/高度预警/抛锚等） | [v0.7b Spec](file:///d:/txData/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) |
-| **v1.0** | [Beta 开放公测](./QBCore_Lite_versions/v1.0-beta-launch.md) | ⏳ 待开始 | v0.6a + v0.6b 均验收后启动 | 全系统联调、压力测试、数据清理及发布清单。 | [v1.0 Spec](file:///d:/txData/QBCore_Lite_versions/v1.0-beta-launch.md) |
-| **v1.3** | [硬核原位登录](./QBCore_Lite_versions/v0.7-hardcore-spawn-system.md) | ⏳ 规划中 | 上线后迭代 | 放弃传统出生点选择，实现下线原位登录与出生。 | [v0.7 Spec](file:///d:/txData/QBCore_Lite_versions/v0.7-hardcore-spawn-system.md) |
-| **v1.4** | [多语言本土化](./QBCore_Lite_versions/v0.8-localization-adaptation.md) | ⏳ 规划中 | 上线后迭代 | 支持全服国际化多语言自适应切换。 | [v0.8 Spec](file:///d:/txData/QBCore_Lite_versions/v0.8-localization-adaptation.md) |
+| **v0.1** | [精简启动链](./QBCore_Lite_versions/v0.1-lite-startup.md) | ✅ 已完成 | 2026-05-28 | 剔除 `ensure [qb]`，实现最小可运行启动链，建立模块化 cfg。 | [v0.1 Spec](./QBCore_Lite_versions/v0.1-lite-startup.md) |
+| **v0.2** | [基础 RP 闭环](./QBCore_Lite_versions/v0.2-basic-rp.md) | ✅ 已完成 | 2026-05-29 (修补) | 启用警用、医院、银行、车辆基础功能，完成 wanted wantedlevel 接管与 duty 快捷切换。 | [v0.2 Spec](./QBCore_Lite_versions/v0.2-basic-rp.md) |
+| **v0.3** | [基础设施层](./QBCore_Lite_versions/v0.3-economy.md) | ✅ 已完成 | 2026-05-31 | 统一经济出口、安全边界、多标签职业 API、服装/帮派/门锁激活、管理员面板及 Discord 审计。 | [v0.3 Spec](./QBCore_Lite_versions/v0.3-economy.md) |
+| **v0.4** | [自研手机系统](./QBCore_Lite_versions/v0.4-custom-phone.md) | ✅ 已完成 | 2026-05-31 | 独立于 qb-phone，基于 Svelte + Vite 的 Phone-First 自研手机，包含 Job Board 与领袖 App。 | [v0.4 Spec](./QBCore_Lite_versions/v0.4-custom-phone.md) |
+| **v0.5** | [犯罪玩法系统](./QBCore_Lite_versions/v0.5-crime-gameplay.md) | ✅ 主体完成 | 2026-06 | 便利店抢劫、毒品产业链、经济/安全联动已落地；3 项文档遗留待确认（原料点/配方/洗钱折旧）。 | [v0.5 Spec](./QBCore_Lite_versions/v0.5-crime-gameplay.md) |
+| **v0.6-quest** | [通用任务系统](./QBCore_Lite_versions/v0.6-quest-system.md) | ✅ 已完成 | 2026-06-21 | `custom-quest` 已启用：数据驱动状态机、外部 API、手机追踪、DB 持久化、安全门控。 | [v0.6-quest Spec](./QBCore_Lite_versions/v0.6-quest-system.md) |
+| **v0.6a**| [民间经济职业](./QBCore_Lite_versions/v0.6a-civilian-economy.md) | 🟡 部分落地 | - | 矿业 `custom-mining` + 物流任务已落地；渔民/农民/机修职业尚未落地。 | [v0.6a Spec](./QBCore_Lite_versions/v0.6a-civilian-economy.md) |
+| **v0.6b**| [沙盒社会生态](./QBCore_Lite_versions/v0.6-sandbox-sociology.md) | 🟡 部分落地 | - | `custom-cartel`、`story-engine`、`custom-justice` 已落地；三线领袖 KPI/催化剂卡牌/盲盒百科未见实现。 | [v0.6b Spec](./QBCore_Lite_versions/v0.6-sandbox-sociology.md) |
+| **v0.7a**| [载具重构与物流](./QBCore_Lite_versions/v0.7a-civilian-logistics.md) | 🚧 待验收 | 2026-06-22 代码完成 / 2026-10-21 tag | `custom-vehicles` 替换 qb-vehiclekeys；qb-vehicleshop Phase 1–5；物流任务配置；已打 tag `v0.7a`，缺实机验收记录。 | [v0.7a Spec](./QBCore_Lite_versions/v0.7a-civilian-logistics.md) |
+| **v0.7b**| [智能车载中控屏](./QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) | 🟡 提前落地 | - | `tcity-dashboard` v2.1 已启用并接入 vehicles.cfg；待实机验收。 | [v0.7b Spec](./QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) |
+| **v1.0** | [Beta 开放公测](./QBCore_Lite_versions/v1.0-beta-launch.md) | ⏳ 待开始 | v0.7a 验收后启动 | 全系统联调、压力测试、数据清理及发布清单。 | [v1.0 Spec](./QBCore_Lite_versions/v1.0-beta-launch.md) |
+| **v1.3** | [硬核原位登录](./QBCore_Lite_versions/v0.7-hardcore-spawn-system.md) | ⏳ 规划中 | 上线后迭代 | 放弃传统出生点选择，实现下线原位登录与出生。 | [v0.7 Spec](./QBCore_Lite_versions/v0.7-hardcore-spawn-system.md) |
+| **v1.4** | [多语言本土化](./QBCore_Lite_versions/v0.8-localization-adaptation.md) | ⏳ 规划中 | 上线后迭代 | 支持全服国际化多语言自适应切换。 | [v0.8 Spec](./QBCore_Lite_versions/v0.8-localization-adaptation.md) |
 
 ---
 
-## 🚧 当前阶段任务清单 (v0.5 犯罪玩法系统)
+## 🚧 当前阶段任务清单 (v0.7a 载具重构与物流)
 
-本部分为 `v0.5` 版本的核心任务。随着开发的进行，我们会逐步将 `[ ]` 标记修改为 `[/]` (进行中) 或 `[x]` (已完成)。
+> 代码于 2026-06-22 完成，2026-10-21 打 tag `v0.7a`。以下为剩余验收清单。
+
+### 1. custom-vehicles（已替换 qb-vehiclekeys）
+- [x] 事件驱动钥匙系统，移除 qb-vehiclekeys 常驻 Tick
+- [x] O(1) 内存缓存 + 锁车/解锁/共享钥匙
+- [x] 兼容旧版 exports/events（车店、车库、警察无需改调用）
+- [x] 驾驶辅助：安全带、巡航、转向灯、氮气、车辆损耗
+
+### 2. qb-vehicleshop 改造
+- [x] Phase 1：`while insideShop` 轮询 → 事件驱动菜单（refreshMenu）
+- [x] Phase 2：`finance.lua` 拆分 `finance-lifecycle.lua` + `finance-payments.lua`
+- [x] Phase 3：NUI 模式接通（`Config.UseNui`）
+- [x] Phase 4：客户端 Bus 注册（`dealership_client`）
+- [x] Phase 5：试驾独立车牌 + 钥匙清理
+- [ ] 实机：NUI 购车 / 分期 / 试驾 / 换车全流程
+
+### 3. 物流与任务
+- [x] `quest_logistics` 配置（取货 → 运输 → 交付）
+- [x] 车辆校验 / 到达校验 / 货损
+- [ ] 实机：接单 → 装货 → 跨点运输 → 结算
+
+### 4. 质量门禁
+- [x] 修复 persistence / vehicleshop 失效测试夹具
+- [x] `pytest tests`：286 passed / 132 skipped（跳过项需 MySQL）
+- [x] GitHub Actions CI（CFG + 依赖 + 语法 + pytest）
+- [ ] 132 个 skipped 在带数据库环境跑通
+
+### 5. 发版收尾
+- [x] tag `v0.7a` 已推送
+- [ ] 实机验收记录归档
+- [x] CHANGELOG / README 与 tag 对齐（本次更新）
+
+---
+
+## 📦 v0.5 犯罪玩法 — 收尾遗留（历史）
+
+> 以下 3 项在文档中仍未勾选；`custom-mining`、`custom-crime` 与 `qb-drugs` 已有对应实现，验收时确认即可。
 
 ### 1. 便利店抢劫 (qb-storerobbery)
 - [x] 确认 `qb-storerobbery` 资源存在于代码库中
@@ -112,30 +148,46 @@
 
 <!-- ACTIVE_RESOURCES_START -->
 
-Active resources detected in codebase (**56** resources across **14** modules):
+Active resources detected in codebase (**77** unique resources across **17** module CFGs):
 
 | Module Cfg | Description | Active Count | Active Resources |
 | :--- | :--- | :--- | :--- |
-| **admin.cfg** | T-City Lite v0.3 - 管理指令及高安全审计配置文件 | **1** | `custom-admin` |
-| **banking.cfg** | T-City Lite v0.2 - banking module | **1** | `qb-banking` |
-| **career.cfg** | T-City Lite v0.3 - 职业多标签管理配置文件 | **1** | `custom-career` |
-| **core.cfg** | T-City Lite v0.1 - core startup module | **12** | `mapmanager`, `chat`, `spawnmanager`, `sessionmanager`, `basic-gamemode`, `hardcap`, `baseevents`, `oxmysql`, `qb-core`, `qb-loading`, `menuv`, `qb-adminmenu` |
-| **crime.cfg** | T-City Lite v0.5 - 犯罪模块统一配置文件 | **5** | `qb-doorlock`, `qb-storerobbery`, `qb-houserobbery`, `qb-drugs`, `qb-pawnshop` |
-| **custom.cfg** | Module configuration | **10** | `custom-logs`, `custom-economy`, `custom-security`, `custom-crime`, `custom-main`, `bob74_ipl`, `cartel-gates`, `custom-phone`, `custom-debug`, `custom-testing` |
-| **economy.cfg** | T-City Lite v0.3 - 经济平衡配置文件 | **0** | *No active resources* |
-| **jobs.cfg** | T-City Lite v0.2 - basic jobs and shared RP dependencies | **3** | `progressbar`, `qb-management`, `qb-mechanicjob` |
-| **medical.cfg** | T-City Lite v0.2 - medical module | **2** | `hospital_map`, `qb-ambulancejob` |
-| **player.cfg** | T-City Lite v0.1 - player flow startup module | **14** | `PolyZone`, `qb-menu`, `qb-input`, `qb-target`, `qb-interior`, `qb-clothing`, `qb-weathersync`, `qb-apartments`, `qb-spawn`, `qb-multicharacter`, `qb-weapons`, `qb-inventory`, `qb-hud`, `qb-scoreboard` |
-| **police.cfg** | T-City Lite v0.2 - police module | **1** | `qb-policejob` |
-| **security.cfg** | T-City Lite v0.3 - 安全边界配置文件 | **0** | *No active resources* |
-| **vehicles.cfg** | T-City Lite v0.2 - basic vehicle module | **5** | `qb-fuel`, `qb-vehiclekeys`, `qb-garages`, `qb-vehicleshop`, `dealer_map` |
-| **voice.cfg** | T-City Lite v0.1 - voice startup module | **1** | `pma-voice` |
+| **admin.cfg** | 管理指令及高安全审计 | **1** | `custom-admin` |
+| **atmosphere.cfg** | 场景化 BGM（Bus + NUI） | **1** | `tcity-atmosphere` |
+| **banking.cfg** | 银行模块 | **1** | `qb-banking` |
+| **career.cfg** | 职业多标签管理 | **1** | `custom-career` |
+| **core.cfg** | v0.1 核心启动链 | **15** | `aaa_silence`, `mapmanager`, `chat`, `spawnmanager`, `sessionmanager`, `basic-gamemode`, `hardcap`, `baseevents`, `oxmysql`, `qb-core`, `production-freeze`, `qb-loading`, `menuv`, `qb-adminmenu`, `hud-position-tool` |
+| **crime.cfg** | v0.5 犯罪模块 | **5** | `qb-doorlock`, `qb-storerobbery`, `qb-houserobbery`, `qb-drugs`, `qb-pawnshop` |
+| **custom.cfg** | 自研资源主配置（v0.5–v0.7） | **20** | `core-framework`, `custom-logs`, `custom-economy`, `custom-taxes`, `custom-quest`, `custom-security`, `custom-crime`, `custom-main`, `bob74_ipl`, `cartel-gates`, `custom-phone`, `custom-certificates`, `custom-debug`, `custom-storage`, `custom-market`, `custom-cartel`, `custom-mining`, `custom-justice`, `custom-documents`, `custom-testing` |
+| **economy.cfg** | 经济监控与事件节点 | **3** | `core_economy`, `economy-dashboard`, `atom_nodes` |
+| **jobs.cfg** | 基础职业与 RP 依赖 | **3** | `progressbar`, `qb-management`, `qb-mechanicjob` |
+| **medical.cfg** | 医疗模块 | **2** | `hospital_map`, `qb-ambulancejob` |
+| **player.cfg** | 玩家流程启动 | **15** | `PolyZone`, `qb-menu`, `qb-input`, `qb-target`, `qb-interior`, `qb-clothing`, `qb-weathersync`, `qb-apartments`, `qb-spawn`, `qb-multicharacter`, `qb-cityhall`, `qb-weapons`, `qb-inventory`, `qb-hud`, `qb-scoreboard` |
+| **police.cfg** | 警察模块 | **1** | `qb-policejob` |
+| **quest.cfg** | v0.6 通用任务系统 | **1** | `custom-quest` |
+| **security.cfg** | 安全边界参数（无独立资源） | **0** | *No active resources* |
+| **story.cfg** | v0.7 剧情引擎 | **1** | `story-engine` |
+| **vehicles.cfg** | 载具 / 车库 / 车店 / 中控屏 | **7** | `qb-fuel`, `interact-sound`, `custom-vehicles`, `tcity-dashboard`, `qb-garages`, `qb-vehicleshop`, `dealer_map` |
+| **voice.cfg** | 语音 | **1** | `pma-voice` |
+
+> 维护说明：原 `manage_progress.py sync` 已在 `aa9a595` 中移除，本块自 2026-10-21 起手工维护。`custom-quest` 同时出现在 `custom.cfg` 与 `quest.cfg`，总数按去重计。
 
 <!-- ACTIVE_RESOURCES_END -->
 
 ---
 
 ## 📝 历史已完成版本详情 (Changelog Summary)
+
+### v0.7a — 载具重构与物流（代码 2026-06-22 / tag 2026-10-21）
+- **启用资源**: `custom-vehicles`, `custom-quest`, `story-engine`, `tcity-dashboard`
+- **核心工作**:
+  - **custom-vehicles**: 替换 `qb-vehiclekeys`，事件驱动钥匙/锁车/共享，O(1) 内存缓存，兼容旧 exports/events；驾驶辅助（安全带、巡航、转向灯、氮气、车辆损耗）
+  - **qb-vehicleshop Phase 1–5**: 空闲轮询改事件驱动、`finance.lua` 拆分、NUI 模式、客户端 Bus 注册、试驾独立车牌
+  - **物流任务**: `quest_logistics` 取货 → 运输 → 交付，含车辆/到达/货损校验
+  - **任务与剧情**: `custom-quest` 状态机 + 安全门控；`story-engine` 决策树
+  - **质量门禁**: 修复 5 个失效测试夹具；`pytest tests` 286 passed / 132 skipped；新增 GitHub Actions CI
+- **待办**: 实机验收；132 个依赖 MySQL 的用例在带库环境跑通
+- **详见文档**: [v0.7a Spec](./QBCore_Lite_versions/v0.7a-civilian-logistics.md) | [v0.7a 维护手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
 
 ### v0.4 — 自研手机系统验证与完善
 - **日期**: 2026-06-01
@@ -163,7 +215,7 @@ Active resources detected in codebase (**56** resources across **14** modules):
   - 修复了 NUI shared users 列表的 JSON 解析错误，实现了 shared users 的 Lua table 转换。
   - ** wantedlevel 接管系统**：自研 wantedlevel Dispatch 系统，当 Wanted >= 3 时屏蔽 AI 警车并派单给在线玩家警员，并在 Cop HUD 上生成每 8 秒一次的红圈追踪 blip。伴随 25 米范围内平民 NPC 尖叫逃跑、司机制动加速逃离的恐慌逻辑。
   - **duty 一键切换**：新增 `/duty` 聊天命令，允许警员、医生、机修、出租车司机免去跑回原大楼 marker 的烦恼，实时一键上下岗。
-- **详见文档**: [v0.2 维护指南](file:///d:/txData/T-CityLite.base/docs/v0.2-maintenance.md) | [wantedlevel 接管技术备忘录](file:///d:/txData/T-CityLite.base/docs/v0.2-wanted-handover-technical-memo.md)
+- **详见文档**: [v0.2 维护指南](./T-CityLite.base/docs/v0.2-maintenance.md) | [wantedlevel 接管技术备忘录](./T-CityLite.base/docs/v0.2-wanted-handover-technical-memo.md)
 
 ### v0.1 - 精简启动链
 - **日期**: 2026-05-28
@@ -172,16 +224,18 @@ Active resources detected in codebase (**56** resources across **14** modules):
   - 创建了 `T-CityLite.base`，重构 `server.cfg`，彻底废除 `ensure [qb]`，改由模块化 `.cfg` 白名单加载。
   - 实现了 **Spawn Death Fallback** 应急处理，当医疗模块尚未启用时，若玩家出生判定为死亡状态，由 `custom-main` 自动恢复血量并复活，防止进入无限死亡卡死。
   - 补充了 `PolyZone`, `qb-interior`, `qb-clothing`, `qb-weapons` 等作为核心玩家流动的必要前置依赖加载。
-- **详见文档**: [v0.1 维护指南](file:///d:/txData/T-CityLite.base/docs/v0.1-maintenance.md)
+- **详见文档**: [v0.1 维护指南](./T-CityLite.base/docs/v0.1-maintenance.md)
 
 ---
 
 ## 🔗 项目核心参考文档链接
-- [QBCore Lite 技术讨论记录](file:///d:/txData/QBCore_Lite_技术讨论.md)
-- [LITE_CHANGELOG.md](file:///d:/txData/T-CityLite.base/LITE_CHANGELOG.md)
+- [QBCore Lite 技术讨论记录](./QBCore_Lite_技术讨论.md)
+- [LITE_CHANGELOG.md](./T-CityLite.base/LITE_CHANGELOG.md)
 - [v0.5 技术维护手册](./T-CityLite.base/docs/v0.5-maintenance-guide.md)
 - [v0.5 联合测试手册](./T-CityLite.base/docs/v0.5-joint-test-manual.md)
 - [v0.5 代码审查报告](./T-CityLite.base/docs/v0.5-code-review-report.md)
 - [v0.5 架构重构交付报告](./T-CityLite.base/docs/v0.5-architecture-migration.md)
 - [NUI 前端开发标准规范](./T-CityLite.base/docs/v0.4-nui-standard.md)
-- [**v0.6-quest 通用任务系统设计方案**](./quest-system-design.md) ← **新建**
+- [**v0.7a 载具重构与物流**](./QBCore_Lite_versions/v0.7a-civilian-logistics.md)
+- [v0.7 集成测试手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
+- [**v0.6-quest 通用任务系统设计方案**](./QBCore_Lite_versions/v0.6-quest-system.md)

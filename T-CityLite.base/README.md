@@ -3,14 +3,14 @@
 基于 QBCore 的精简模块化 FiveM RP 服务器框架。
 
 > **核心理念**: 模块化启动、安全优先、可迭代架构
-> **当前版本**: v0.7a 载具重构与物流（开发中）
+> **当前版本**: v0.7a 载具重构与物流（代码完成，待实机验收）
 
 ---
 
 ## ✨ 特点
 
-- **模块化启动** — 废除 `ensure [qb]` 粗粒度加载，14 个独立 CFG 模块按需启用
-- **双层自动化测试** — 离线检测 + 游戏内测试框架，118 个测试用例覆盖 v0.1~v0.4
+- **模块化启动** — 废除 `ensure [qb]` 粗粒度加载，17 个独立 CFG 模块按需启用
+- **三层自动化测试** — pytest 单测/集成 286 例 + oxmysql JS 148 例 + 游戏内测试框架；GitHub Actions 门禁
 - **统一经济出口** — 所有资金变动通过 `AddScaledMoney`，Convar 热调节
 - **安全边界** — Rate Limit、距离校验、服务端事件拦截、Discord 审计日志
 - **自研手机系统** — Svelte + Vite 构建，Phone-First 架构，<250KB gzipped
@@ -23,8 +23,11 @@
 | v0.2 | ✅ 完成 | 基础 RP（职业/银行/警察/医疗/载具） |
 | v0.3 | ✅ 完成 | 基础设施层（经济出口/安全边界/审计） |
 | v0.4 | ✅ 完成 | 自研手机系统（Svelte + Vite） |
-| v0.5 | 🚧 进行中 | 犯罪玩法系统 |
-| v0.6+ | ⏳ 规划中 | 民间经济 / 沙盒社会生态 |
+| v0.5 | ✅ 主体完成 | 犯罪玩法系统（3 项文档遗留待确认） |
+| v0.6 | ✅ 完成 | 架构安全与性能加固（DirtyFlush / SecurityService） |
+| v0.6-quest | ✅ 完成 | 通用任务系统 `custom-quest` |
+| v0.7a | 🚧 待验收 | 载具重构（custom-vehicles）+ 物流任务 + 车店 NUI |
+| v0.7b | 🟡 提前落地 | 车载中控屏 `tcity-dashboard` v2.1，待验收 |
 
 ---
 
@@ -64,6 +67,22 @@ tar -xJf alpine.tar.xz                  # 在仓库根目录解压
 ```
 
 > ⚠️ 不要用 `git add -f alpine/` 强行提交，否则推送会被 GitHub 拒绝（单文件超限）。
+
+### 构建产物（oxmysql / menuv / dashboard）
+
+以下目录是构建产物，被各自资源内的 `.gitignore` 排除，**新克隆后不存在**：
+
+```
+T-CityLite.base/resources/[standalone]/oxmysql/dist/build.js
+T-CityLite.base/resources/[standalone]/oxmysql/web/build/index.html
+T-CityLite.base/resources/[standalone]/menuv/dist/
+T-CityLite.base/resources/[system]/tcity-dashboard/nui/dist/
+```
+
+- `oxmysql/dist/build.js` 是 FXServer 实际加载的服务端脚本，缺失会导致 `oxmysql` 启动失败。
+- 新机器可从已有安装复制这些目录；或使用上游 oxmysql release 自带的 `dist/`（版本需与 `fxmanifest.lua` 的 2.14.1 对齐）。
+
+> 这是当前仓库的可复现性缺口：建议后续将这些运行时产物纳入版本管理，或提供 release 附件。
 
 ### 安装
 
@@ -107,7 +126,7 @@ python tests/run_all.py
 ```
 T-CityLite.base/
 ├── server.cfg.template      # 服务器配置模板（首次使用请复制为 server.cfg）
-├── configs/modules/         # 14 个模块化启动配置
+├── configs/modules/         # 17 个模块化启动配置
 │   ├── core.cfg             # v0.1 核心框架
 │   ├── player.cfg           # v0.1 玩家流程
 │   ├── voice.cfg            # v0.1 语音
@@ -116,12 +135,15 @@ T-CityLite.base/
 │   ├── security.cfg         # v0.3 安全边界
 │   ├── jobs.cfg             # v0.2 职业
 │   ├── banking.cfg          # v0.2 银行
-│   ├── vehicles.cfg         # v0.2 载具
+│   ├── vehicles.cfg         # v0.2/v0.7a 载具与中控屏
 │   ├── police.cfg           # v0.2 警察
 │   ├── medical.cfg          # v0.2 医疗
 │   ├── crime.cfg            # v0.5 犯罪
 │   ├── career.cfg           # v0.3 多职业
-│   └── admin.cfg            # v0.3 管理
+│   ├── admin.cfg            # v0.3 管理
+│   ├── quest.cfg            # v0.6 任务系统
+│   ├── story.cfg            # v0.7 剧情引擎
+│   └── atmosphere.cfg       # 场景 BGM
 ├── resources/[custom]/      # 自研资源
 │   ├── custom-main          # 主逻辑（Spawn Death / duty / 通缉接管）
 │   ├── custom-economy       # 统一经济出口
@@ -130,10 +152,14 @@ T-CityLite.base/
 │   ├── custom-career        # 多标签职业
 │   ├── custom-admin         # 管理面板
 │   ├── custom-crime         # 犯罪逻辑
+│   ├── custom-quest         # v0.6 任务系统
+│   ├── custom-vehicles      # v0.7a 钥匙/车辆状态
 │   ├── custom-phone         # v0.4 自研手机（Svelte + Vite）
 │   └── custom-testing       # 🧪 自动化测试框架
-├── tests/                   # 离线检测脚本
-│   ├── run_all.py           # 一键执行
+├── tests/                   # pytest + 离线检测脚本
+│   ├── unit/                # 单元测试（layer0~layer3）
+│   ├── integration/         # 跨服务集成测试
+│   ├── run_all.py           # 离线检测一键入口
 │   ├── check_cfgs.py        # CFG 完整性
 │   ├── check_lua_syntax.py  # Lua 语法
 │   ├── check_db_schema.py   # 数据库结构
@@ -148,8 +174,11 @@ T-CityLite.base/
 ## 🧪 测试
 
 ```bash
-# 离线检测（不进游戏，5 秒）
+# 离线检测（不进游戏）
 python T-CityLite.base/tests/run_all.py
+
+# pytest 单元 + 集成测试（需要 lua5.4）
+cd T-CityLite.base && python -m pytest tests -q
 
 # 游戏内测试
 F8 → /test run all          # 全部套件
@@ -157,10 +186,11 @@ F8 → /test run banking      # 银行专用
 F8 → /test mock 2           # 模拟 2 名警察在线
 ```
 
-测试覆盖率:
-- **118 个测试用例**，覆盖 v0.1~v0.4 全部 14 个模块
-- **9 个测试套件**: 核心启动 / 银行 / 警察 / 犯罪 / 安全 / 持久化 / 职业载具 / 经济管理 / 手机
-- **单人模式**: 用 `mock_events.lua` 模拟多玩家场景
+测试覆盖:
+- **286 个 pytest 用例**（unit + integration；132 个需 MySQL 的用例默认跳过）
+- **148 个 oxmysql JS 用例**（需先存在 `oxmysql/dist/build.js`）
+- **游戏内套件**: 核心启动 / 银行 / 警察 / 犯罪 / 安全 / 持久化 / 职业载具 / 经济管理 / 手机
+- **CI**: `.github/workflows/ci.yml` 运行 CFG、语法、依赖图与 pytest
 
 ---
 
@@ -184,8 +214,8 @@ F8 → /test mock 2           # 模拟 2 名警察在线
 | 前端 NUI | Svelte + Vite + TypeScript |
 | 数据库 | MariaDB / MySQL (oxmysql) |
 | 语音 | pma-voice |
-| 测试离线 | Python 3.12+ |
-| 自动化 CI | (规划中) |
+| 测试离线 | Python 3.12+ / pytest / Lua 5.4 |
+| 自动化 CI | GitHub Actions（`.github/workflows/ci.yml`） |
 
 ---
 

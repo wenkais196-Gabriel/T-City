@@ -7,14 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.7a] — 载具重构与物流 — 2026-10-21
+
+> 代码完成于 2026-06-22，tag 于 2026-10-21；实机验收仍待完成。
 
 ### Added
-- 开发工作流指南 (`docs/dev-workflow-guide.md`)，涵盖目录结构、分支策略、日常开发流程、Git 速查
-- `start_server.bat` 一键启动脚本（UTF-8 编码，自动切换工作目录）
+- **custom-vehicles**：替换 `qb-vehiclekeys`，事件驱动钥匙/锁车/共享，O(1) 内存缓存，兼容旧 exports/events；含安全带、巡航、转向灯、氮气、车辆损耗
+- **tcity-dashboard v2.1**：Vue 3 车载中控屏，6 类载具模板，警用控制台 / ANPR / 雷达 / 追踪 / CCTV
+- **custom-quest**：数据驱动任务状态机、外部脚本 API、安全门控、DB 持久化（v0.6 基础设施）
+- **story-engine**：决策树与玩家选择追踪
+- **物流任务模板**：`quest_logistics` 取货 → 运输 → 交付，含车辆/到达/货损校验
+- **GitHub Actions CI**：CFG 完整性 + Lua 语法 + 依赖图 + pytest
+- 开发工作流指南（`docs/dev-workflow-guide.md`）与一键启动脚本
+
+### Changed
+- **qb-vehicleshop Phase 1–5**：`while insideShop` 轮询改事件驱动；`finance.lua` 拆分为 lifecycle + payments；NUI 模式接通；客户端 Bus 注册；试驾独立车牌与钥匙清理
+- `vehicles.cfg` 启用 `custom-vehicles` + `tcity-dashboard`，停用 `qb-vehiclekeys`
 
 ### Fixed
+- **qb-garages**：SELECT 查询从 `rawExecute` 改为 `query/single`，并补充空车库诊断
+- **qb-vehicleshop NUI**：加载顺序与 ConVar 同步修复
+- **custom-taxes**：为未实现的车辆税 / NPC 定价补桩，避免调用报错
+- **测试夹具**：对齐 `LocalDirtyFlush` 与 oxmysql `insert` 回调契约；测试路径改为相对仓库根目录
 - `txAdminPort 0` 禁用管理员模式，避免端口冲突
+
+### Testing
+- `pytest tests`：**286 passed / 132 skipped**（跳过项需 MySQL）
+- oxmysql JS 单测：**148 passed**
+- 离线检查：CFG / 依赖图 PASS；`light_lint` 仍为 advisory（vendor 资源遗留 ~250 条 `Wait(0)` / `MySQL.Sync`）
+
+### Known
+- 车店 NUI、车库、物流任务尚未完成实机验收
+- 132 个数据库相关用例需在带 MySQL 的环境执行
+- `oxmysql/dist/build.js`、`oxmysql/web/build/index.html`、`menuv/dist/`、`tcity-dashboard/nui/dist/` 为构建产物，当前未入库；新克隆需自行补齐
 
 ---
 
@@ -161,10 +186,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/YOUR_USER/T-City-Lite/releases/tag/v0.1.0
+[0.7a]: https://github.com/wenkais196-Gabriel/T-City/releases/tag/v0.7a
+[0.6.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/wenkais196-Gabriel/T-City/releases/tag/v0.1.0
