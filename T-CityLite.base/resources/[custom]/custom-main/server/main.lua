@@ -49,14 +49,42 @@ AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
 end)
 
 -- 统一的状态重置事件（用于医疗职业停用时的生命状态同步）
+-- 安全约束: 仅在服务端判定玩家确实死亡/倒地且医疗资源未启用时允许重置，每名玩家 10 秒冷却
+local ResetDeathCooldowns = {}
+local RESET_DEATH_COOLDOWN_MS = 10000
+
 RegisterNetEvent('custom-main:server:ResetDeathStatus', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    if Player then
-        Player.Functions.SetMetaData('isdead', false)
-        Player.Functions.SetMetaData('inlaststand', false)
-        DebugPrint(('ResetDeathStatus triggered for citizenid: %s'):format(Player.PlayerData.citizenid))
+    if not Player then return end
+
+    local now = GetGameTimer()
+    local lastReset = ResetDeathCooldowns[src]
+    if lastReset and (now - lastReset) < RESET_DEATH_COOLDOWN_MS then return end
+
+    local metadata = Player.PlayerData.metadata or {}
+    if not metadata['isdead'] and not metadata['inlaststand'] then
+        -- 无死亡/倒地状态可清，忽略重复的客户端同步请求（不占用冷却）
+        return
     end
+
+    ResetDeathCooldowns[src] = now
+
+    -- 医疗资源运行期间不存在合法的客户端重置场景，直接拦截并审计
+    if GetResourceState('qb-ambulancejob') == 'started' then
+        exports['custom-logs']:LogSecurity('拦截非法死亡状态重置', ('**玩家**: %s\n**CitizenID**: %s\n**物理ID**: %d\n**isdead**: %s | **inlaststand**: %s\n**说明**: 医疗资源运行中，客户端无权清除死亡/倒地状态。'):format(
+            GetPlayerName(src) or 'unknown', Player.PlayerData.citizenid or 'unknown', src,
+            tostring(metadata['isdead']), tostring(metadata['inlaststand'])), 16711680) -- 红色
+        return
+    end
+
+    Player.Functions.SetMetaData('isdead', false)
+    Player.Functions.SetMetaData('inlaststand', false)
+    DebugPrint(('ResetDeathStatus accepted for citizenid: %s'):format(Player.PlayerData.citizenid))
+end)
+
+AddEventHandler('playerDropped', function()
+    ResetDeathCooldowns[source] = nil
 end)
 
 -- ==========================================

@@ -80,12 +80,41 @@ local function isOnDutyLeo(src)
 end
 
 -- ==============================================================
+-- 车牌规范化 + 外部标记同步冷却
+-- ==============================================================
+
+-- 去除首尾空白、转大写，长度必须在 1..12 之间（否则返回 nil）
+local function normalizePlate(plate)
+    if type(plate) ~= 'string' then return nil end
+    plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
+    if #plate < 1 or #plate > 12 then return nil end
+    return plate
+end
+
+-- 同步外部标记到内存表（仅限已校验的字符串；内部调用不经过网络鉴权）
+local function syncExternalPlateFlag(plate, reason, flaggedBy)
+    local key = plate:upper()
+    if not FlaggedPlates[key] or not FlaggedPlates[key].isflagged then
+        FlaggedPlates[key] = {
+            isflagged = true,
+            reason = reason or '外部标记',
+            flaggedBy = flaggedBy or 'qb-policejob',
+            flaggedAt = os.time(),
+        }
+    end
+end
+
+local plateFlagCooldowns = {}
+local PLATE_FLAG_COOLDOWN_MS = 2000
+
+-- ==============================================================
 -- 清理玩家缓存 (playerDropped)
 -- ==============================================================
 
 AddEventHandler('playerDropped', function()
     local src = source
     opCooldowns[src] = nil
+    plateFlagCooldowns[src] = nil
 end)
 
 -- ==============================================================
@@ -121,8 +150,8 @@ RegisterNetEvent('tcity-dashboard:server:flagPlate', function(plate, reason)
     -- v2.2: 持久化到 SQL
     _saveFlagToDb(plate, reason, Player.PlayerData.citizenid)
 
-    -- 同时也更新 qb-policejob 的 Plates 表 (如果可访问)
-    TriggerEvent('police:server:plateFlagged', plate, reason)
+    -- 同时同步到外部标记入口（改为本地调用，避免内部调用被网络鉴权误伤/绕过）
+    syncExternalPlateFlag(plate, reason, 'qb-policejob')
 
     TriggerClientEvent('QBCore:Notify', src,
         ('已标记车牌: %s — 原因: %s'):format(plate, reason), 'success')
@@ -258,16 +287,38 @@ end
 -- ==============================================================
 
 -- 监听 qb-policejob 的标记事件，保持 FlaggedPlates 同步
+-- 安全约束: 仅值班警察或管理员可触发；车牌 1..12 位；每名玩家 2 秒冷却
 RegisterNetEvent('police:server:plateFlagged', function(plate, reason)
-    -- 来自外部 (qb-policejob /flagplate 命令等) 的标记同步
-    if not FlaggedPlates[plate:upper()] or not FlaggedPlates[plate:upper()].isflagged then
-        FlaggedPlates[plate:upper()] = {
-            isflagged = true,
-            reason = reason or '外部标记',
-            flaggedBy = 'qb-policejob',
-            flaggedAt = os.time(),
-        }
+    local src = source
+
+    -- 防刷: 超频请求直接丢弃
+    local now = GetGameTimer()
+    local lastFlag = plateFlagCooldowns[src]
+    if lastFlag and (now - lastFlag) < PLATE_FLAG_COOLDOWN_MS then return end
+    plateFlagCooldowns[src] = now
+
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+
+    -- 鉴权: 值班执法人员或管理员
+    if not isOnDutyLeo(src)
+        and not QBCore.Functions.HasPermission(src, 'admin')
+        and not QBCore.Functions.HasPermission(src, 'god') then
+        if exports['custom-logs'] then
+            exports['custom-logs']:LogSecurity('非法车牌同步标记',
+                ('**Source**: %d | **CitizenID**: %s | **Plate**: %s'):format(
+                    src, Player.PlayerData.citizenid or 'unknown', tostring(plate)), 16711680) -- 红色
+        end
+        return
     end
+
+    local normalizedPlate = normalizePlate(plate)
+    if not normalizedPlate then return end
+
+    if type(reason) ~= 'string' then reason = '外部标记' end
+    reason = reason:sub(1, 128)
+
+    syncExternalPlateFlag(normalizedPlate, reason, 'qb-policejob')
 end)
 
 -- ==============================================================
