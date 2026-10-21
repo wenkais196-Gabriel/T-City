@@ -37,6 +37,23 @@ local function Trim(s)
     return (s:gsub('^%s*(.-)%s*$', '%1'))
 end
 
+--- 车辆状态写权限：车主，或执勤中的机修
+local function CanModifyPlate(src, plate)
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false end
+    plate = Trim(plate)
+    if not plate or plate == '' then return false end
+
+    local cid = Player.PlayerData.citizenid
+    local owner = KeyManager and KeyManager.GetOwner and KeyManager.GetOwner(plate)
+    if owner == cid then return true end
+
+    local job = Player.PlayerData.job
+    if job and job.name == 'mechanic' and job.onduty then return true end
+
+    return false
+end
+
 local function IsVehicleOwned(plate)
     if not plate then return false end
     local result = MySQL.scalar.await('SELECT 1 FROM player_vehicles WHERE plate = ?', { plate })
@@ -185,22 +202,32 @@ end
 --- 里程更新 (客户端下车/换车时触发)
 RegisterNetEvent('custom-vehicles:server:updateDistance', function(plate, distance)
     if not plate or not distance then return end
+    if not CanModifyPlate(source, plate) then return end
+    distance = tonumber(distance)
+    if not distance or distance < 0 or distance > 100000 then return end
     AddDistance(plate, distance)
 end)
 
 --- 部件状态批量同步
 RegisterNetEvent('custom-vehicles:server:updateComponents', function(plate, componentData)
-    if not plate or not componentData then return end
+    if not plate or type(componentData) ~= 'table' then return end
+    if not CanModifyPlate(source, plate) then return end
     plate = Trim(plate)
     if vehicleComponents[plate] then
-        -- 合并而非覆盖：只更新客户端传回的脏字段
+        -- 合并而非覆盖：只更新客户端传回的脏字段，并夹紧到 0-100
         for k, v in pairs(componentData) do
-            if type(v) == 'number' then
-                vehicleComponents[plate][k] = math.max(0, v)
+            if type(k) == 'string' and type(v) == 'number' then
+                vehicleComponents[plate][k] = math.max(0, math.min(100, v))
             end
         end
     else
-        vehicleComponents[plate] = componentData
+        local safe = {}
+        for k, v in pairs(componentData) do
+            if type(k) == 'string' and type(v) == 'number' then
+                safe[k] = math.max(0, math.min(100, v))
+            end
+        end
+        vehicleComponents[plate] = safe
     end
 
     if IsVehicleOwned(plate) then
@@ -212,16 +239,20 @@ end)
 
 --- 氮气同步
 RegisterNetEvent('custom-vehicles:server:syncNitrous', function(plate, hasnitro, level)
-    SetNitrous(plate, hasnitro, level)
+    if not CanModifyPlate(source, plate) then return end
+    SetNitrous(plate, hasnitro == true, tonumber(level))
 end)
 
 --- Tuner Chip 同步
 RegisterNetEvent('custom-vehicles:server:tuneStatus', function(plate)
+    if not CanModifyPlate(source, plate) then return end
     SetTuned(plate, true)
 end)
 
---- 保存车辆改装 (外部资源如 qb-garages 调用)
+--- 保存车辆改装 (外部资源如 qb-garages / qb-mechanicjob 调用)
 RegisterNetEvent('custom-vehicles:server:SaveVehicleProps', function(vehicleProps)
+    if type(vehicleProps) ~= 'table' or not vehicleProps.plate then return end
+    if not CanModifyPlate(source, vehicleProps.plate) then return end
     SaveMods(vehicleProps)
 end)
 
@@ -261,13 +292,17 @@ RegisterNetEvent('qb-mechanicjob:server:updateDrivingDistance', function(plate, 
 end)
 
 RegisterNetEvent('qb-mechanicjob:server:updateVehicleComponents', function(plate, componentData)
-    if not plate or not componentData then return end
+    if not plate or type(componentData) ~= 'table' then return end
+    if not CanModifyPlate(source, plate) then return end
     plate = Trim(plate)
-    if vehicleComponents[plate] then
-        vehicleComponents[plate] = componentData
-    else
-        vehicleComponents[plate] = componentData
+    local safe = {}
+    for k, v in pairs(componentData) do
+        if type(k) == 'string' and type(v) == 'number' then
+            safe[k] = math.max(0, math.min(100, v))
+        end
     end
+    vehicleComponents[plate] = safe
+
     if IsVehicleOwned(plate) then
         MySQL.update('UPDATE player_vehicles SET status = ? WHERE plate = ?', {
             json.encode(vehicleComponents[plate]), plate
@@ -276,18 +311,23 @@ RegisterNetEvent('qb-mechanicjob:server:updateVehicleComponents', function(plate
 end)
 
 RegisterNetEvent('qb-mechanicjob:server:repairVehicleComponent', function(plate, component)
+    if not CanModifyPlate(source, plate) then return end
     UpdateComponent(plate, component, 100)
 end)
 
 RegisterNetEvent('qb-mechanicjob:server:syncNitrous', function(plate, hasnitro, level)
-    SetNitrous(plate, hasnitro, level)
+    if not CanModifyPlate(source, plate) then return end
+    SetNitrous(plate, hasnitro == true, tonumber(level))
 end)
 
 RegisterNetEvent('qb-mechanicjob:server:tuneStatus', function(plate)
+    if not CanModifyPlate(source, plate) then return end
     SetTuned(plate, true)
 end)
 
 RegisterNetEvent('qb-mechanicjob:server:SaveVehicleProps', function(vehicleProps)
+    if type(vehicleProps) ~= 'table' or not vehicleProps.plate then return end
+    if not CanModifyPlate(source, vehicleProps.plate) then return end
     SaveMods(vehicleProps)
 end)
 

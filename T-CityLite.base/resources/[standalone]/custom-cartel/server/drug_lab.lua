@@ -89,6 +89,11 @@ RegisterNetEvent('cartel:server:startProduction', function(recipeId)
 
     -- 8. 设置冷却
     CartelService.SetProductionCooldown(Player.PlayerData.citizenid)
+    -- 记录本次生产；finishProduction 必须匹配且已达到配方时长
+    CartelService._activeProductions[Player.PlayerData.citizenid] = {
+        recipeId = recipeId,
+        finishAt = os.time() + (recipe.duration or 0),
+    }
 
     -- 9. 通知客户端开始加工 (返回配方信息)
     TriggerClientEvent('cartel:client:productionStarted', src, {
@@ -123,6 +128,19 @@ RegisterNetEvent('cartel:server:finishProduction', function(recipeId)
         TriggerClientEvent('QBCore:Notify', src, _L(src, 'cartel_identity_fail'), 'error')
         return
     end
+
+    -- 🔒 必须真的开始过生产且达到配方时长，防止直接回调 finish 跳过计时
+    local cid = Player.PlayerData.citizenid
+    local active = CartelService._activeProductions[cid]
+    if not active or active.recipeId ~= recipeId then
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'cartel_recipe_error'), 'error')
+        return
+    end
+    if os.time() < active.finishAt then
+        TriggerClientEvent('QBCore:Notify', src, 'Production not finished yet', 'error')
+        return
+    end
+    CartelService._activeProductions[cid] = nil
 
     -- 再次校验原料 (防止中间被转移)
     for _, input in ipairs(recipe.inputs) do

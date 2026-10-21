@@ -50,6 +50,16 @@ RegisterNetEvent('mining:server:mineOre', function(siteId)
     end
     if not site then return end
 
+    -- 4b. 🔒 矿点距离校验（服务端独立坐标，不信任客户端 siteId）
+    local ped = GetPlayerPed(src)
+    if ped and ped ~= 0 then
+        local pc = GetEntityCoords(ped)
+        local radius = (site.radius or 20.0) + 5.0
+        if #(pc - site.coords) > radius then
+            return
+        end
+    end
+
     -- 5. 工具检测 (客户端带了什么矿镐)
     local toolName = 'pickaxe'
     if QBCore.Functions.HasItem(src, 'pickaxe_legendary', 1) then

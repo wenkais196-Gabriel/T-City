@@ -16,6 +16,9 @@ CartelService = {}
 -- 生产冷却追踪: citizenid → last_production_time
 local productionCooldowns = {}
 
+-- 进行中的生产: citizenid → { recipeId, finishAt }
+CartelService._activeProductions = {}
+
 -- 在线 cartel 成员缓存: citizenid → { source, name, grade }
 local cartelMembers = {}
 
@@ -51,6 +54,7 @@ AddEventHandler('playerDropped', function()
         cartelMembers[cid] = nil
     end
     productionCooldowns[cid] = nil
+    CartelService._activeProductions[cid] = nil
 end)
 
 -- ==============================================================

@@ -102,25 +102,33 @@ QBCore.Commands.Add('tccops', '调整抢劫警察门槛（调试）', { {
 end, 'user')
 
 -- 在 QBCore 中注册管理员身份（确保 setrobbery 等 admin 命令可用）
-CreateThread(function()
-    Wait(3000)
-    local players = QBCore.Functions.GetPlayers()
-    for _, pid in ipairs(players) do
-        local Player = QBCore.Functions.GetPlayer(pid)
-        if Player and not QBCore.Functions.HasPermission(pid, 'admin') then
-            QBCore.Functions.AddPermission(pid, 'admin')
-            print(('[custom-admin] 🔑 Auto-granted admin to %s'):format(GetPlayerName(pid)))
-        end
-    end
-end)
+-- 🔒 默认关闭: 全量自动 admin 会让每个玩家获得管理命令与面板权限。
+--    仅在本地开发/沙盒中通过 server.cfg 里 `set admin_autogrant "true"` 显式开启。
+local AUTO_GRANT_ADMIN = GetConvar('admin_autogrant', 'false') == 'true'
 
--- 新玩家上线自动授予 admin
-AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
-    local src = Player.PlayerData.source
-    if not QBCore.Functions.HasPermission(src, 'admin') then
-        QBCore.Functions.AddPermission(src, 'admin')
-    end
-end)
+if AUTO_GRANT_ADMIN then
+    print('[custom-admin] ⚠️  admin_autogrant=true — 所有玩家都将被授予 admin 权限，仅限开发环境使用')
+
+    CreateThread(function()
+        Wait(3000)
+        local players = QBCore.Functions.GetPlayers()
+        for _, pid in ipairs(players) do
+            local Player = QBCore.Functions.GetPlayer(pid)
+            if Player and not QBCore.Functions.HasPermission(pid, 'admin') then
+                QBCore.Functions.AddPermission(pid, 'admin')
+                print(('[custom-admin] 🔑 Auto-granted admin to %s'):format(GetPlayerName(pid)))
+            end
+        end
+    end)
+
+    -- 新玩家上线自动授予 admin
+    AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
+        local src = Player.PlayerData.source
+        if not QBCore.Functions.HasPermission(src, 'admin') then
+            QBCore.Functions.AddPermission(src, 'admin')
+        end
+    end)
+end
 
 -- ==========================================
 --        调 试 命 令 — 清除通缉状态

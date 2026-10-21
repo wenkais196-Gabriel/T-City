@@ -262,9 +262,16 @@ function MarketService.Sell(source, itemName, quantity)
     end
 
     -- 4. 付款（走统一经济出口）
-    if Bus and Bus.EconomyService then
-        Bus.EconomyService.AddScaled(source, 'bank', totalRevenue, 'MarketSell:' .. itemName)
-    else
+    -- Bus 是每个资源独立的 Lua state，跨资源拿不到；改用 core-framework 的
+    -- service_economy_* export（Bus.RegisterService 会自动导出）。
+    local paid = false
+    if GetResourceState('core-framework') == 'started' then
+        paid = pcall(function()
+            exports['core-framework']:service_economy_AddScaled(
+                source, 'bank', totalRevenue, 'MarketSell:' .. itemName)
+        end)
+    end
+    if not paid then
         Player.Functions.AddMoney('bank', totalRevenue, 'MarketSell:' .. itemName)
     end
 
