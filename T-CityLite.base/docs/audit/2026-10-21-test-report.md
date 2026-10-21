@@ -19,6 +19,7 @@
 | `pytest tests/unit`（CI 无 DB） | ✅ **245 passed, 136 skipped** | 1.6s | DB 测试自动 skip |
 | `pytest tests/integration`（有 DB） | ✅ **34 passed, 4 skipped** | 0.2s | 跨服务/生命周期 |
 | `run_all.py` | ⚠️ 4/5 | 2.9s | 唯一失败是 `light_lint.py` 基线噪音 |
+| **实机 FXServer 启动** | ✅ PASS | ~45s | 79 个资源启动，0 script error / 0 缺失文件 |
 | `luac5.4 -p`（改动 Lua） | ✅ PASS | — | 42 个文件 |
 
 > `light_lint.py` 对全仓（含第三方 `[qb]`/`[standalone]`）报 252 errors / 96411 warnings，属既有基线；它不是 CI 阻断项。
@@ -99,8 +100,8 @@ DB schema 测试还做了 MariaDB 兼容：
 
 | 项 | 原因 | 后续 |
 |:---|:---|:---|
-| FXServer 启动冒烟 | 无 `alpine/` 运行时、无 license key、无 `server.cfg` | 需要提供运行时 + key；对应 Issue #1 |
-| 48 人并发 / 24h 压测 | 同上 | 同上 |
+| 客户端连接 / 游戏内玩法回归 | 无 GTA V 客户端 | 需要真实客户端 |
+| 48 人并发 / 24h 压测 | 需要长时间占用实例 | 在测试服执行 |
 | 游戏内 `/test`、`/stress` | 需要真实服务器 | `dev.cfg` 已就绪 |
 | 4 个 persistence 单测 | 旧 `DirtyFlush` mock 无法注入 `LocalDirtyFlush` | 需要新 fixture（Issue） |
 | 3 个 economy/persistence 集成测试 | 同上 | 同上 |
@@ -138,8 +139,43 @@ python3 tests/run_all.py
 
 ---
 
-## 6. 结论
+## 7. 实机启动冒烟（2026-10-21 13:30）
+
+启动方式：
+
+- 运行时：`alpine/`（从已有 DEV 环境复制，293MB，已落在仓库根目录并被 `.gitignore` 忽略）
+- 配置：`server.cfg` 由旧 DEV 配置复制，保留 license / DB / Steam key / admin principal；
+  `exec configs/modules/*` 已替换为当前 master 的依赖顺序。
+- 构建产物：从旧环境补齐 `oxmysql/dist + node_modules`、`menuv/dist`、`tcity-dashboard/nui/dist`。
+
+结果：
+
+| 项 | 结果 |
+|:---|:---|
+| 监听端口 | ✅ `0.0.0.0:30120` |
+| 启动资源数 | ✅ **79**（80 个 ensure − `custom-testing`，生产默认不加载） |
+| `SCRIPT ERROR` / `Could not start` | ✅ 0 |
+| `could not find file` | ✅ 0（补齐 NUI/构建产物后） |
+| Bus 服务 | ✅ 25 个：economy / job / security / storage / market / persistence / metadata / notify / world_state / patron / quest / story / atmosphere / cartel / mining / justice / police / dashboard / vehicles 等 |
+| 持久化 | ✅ `[persistence] Flush tick started: every 900 seconds` |
+| DB 连接 | ✅ 无 table/query 报错；`qb-inventory` 16 个背包加载成功 |
+| HTTP | ✅ `/dynamic.json`、`/info.json` 正常返回，hostname = `T-City Lite [DEV]` |
+| 关键系统 | ✅ custom-quest / story-engine / custom-justice / custom-vehicles / tcity-dashboard / custom-market / custom-mining / custom-cartel 全部 started |
+
+未覆盖：
+
+- 真实 GTA V 客户端连接（需要客户端环境）；
+- 游戏内任务/剧情/经济闭环回归；
+- 48 人并发 / 24h 压测。
+
+> 结论：**启动链、资源依赖、DB 连接、Bus 注册、持久化 tick 已经在真实 FXServer 上闭环**；
+> 剩余验证需要客户端与压测环境。
+
+---
+
+## 8. 结论
 
 - 离线 + 单元 + 集成测试已从 **66 failed** 收敛到 **0 failed**（11 skipped，均有明确原因）。
 - 发现并修复了一个公开泄露的 DB 密码、一个真实购车插入判断 bug、一处 DB 迁移缺口。
-- **发布前仍必须完成真实 FXServer 启动冒烟与 24h 压测**——这是当前唯一无法在本机闭环的验证。
+- **真实 FXServer 启动冒烟已通过**（79 资源、0 script error、25 个 Bus 服务、持久化 tick 正常）。
+- 发布前仍需：客户端连接回归、48 人并发、24h 压测。
