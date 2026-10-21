@@ -1,0 +1,16 @@
+# 默认负责人：仓库维护者
+* @wenkais196-Gabriel
+
+# 启动链 / 框架 / 持久化
+/T-CityLite.base/server.cfg.template @wenkais196-Gabriel
+/T-CityLite.base/configs/ @wenkais196-Gabriel
+/T-CityLite.base/resources/[standalone]/core-framework/ @wenkais196-Gabriel
+/T-CityLite.base/resources/[custom]/custom-quest/ @wenkais196-Gabriel
+/T-CityLite.base/resources/[custom]/story-engine/ @wenkais196-Gabriel
+/T-CityLite.base/resources/[qb]/qb-core/ @wenkais196-Gabriel
+
+# CI / 文档 / 迁移
+/.github/ @wenkais196-Gabriel
+/T-CityLite.base/tests/ @wenkais196-Gabriel
+/T-CityLite.base/migrations/ @wenkais196-Gabriel
+/docs/ @wenkais196-Gabriel
