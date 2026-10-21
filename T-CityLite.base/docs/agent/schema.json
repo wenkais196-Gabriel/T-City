@@ -228,6 +228,51 @@
           "pii": false
         }
       ]
+    },
+    "agent_events_feed": {
+      "description": "Read-only, SECURITY DEFINER view over the append-only agent_events outbox. id is the monotonic cursor for since_id pagination; payload is a JSON object written by the v2.2.1 triggers. The view has no write path.",
+      "source_tables": [
+        "agent_events"
+      ],
+      "pii_fields": [],
+      "fields": [
+        {
+          "name": "event_type",
+          "type": "varchar(64)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "citizenid",
+          "type": "varchar(11)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "payload",
+          "type": "longtext",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "schema_version",
+          "type": "smallint(6)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "id",
+          "type": "bigint(20)",
+          "nullable": false,
+          "pii": false
+        }
+      ]
     }
   }
 }

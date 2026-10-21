@@ -33,6 +33,7 @@ VIEWS = (
     "agent_player_timeline",
     "agent_world_state",
     "agent_economy_metrics",
+    "agent_events_feed",
 )
 
 VIEW_DESCRIPTIONS = {
@@ -55,6 +56,11 @@ VIEW_DESCRIPTIONS = {
         "Per-job aggregates from players: player_count, total_cash, total_bank, "
         "avg_bank and max_bank. Cash/bank are extracted from the players.money JSON."
     ),
+    "agent_events_feed": (
+        "Read-only, SECURITY DEFINER view over the append-only agent_events "
+        "outbox. id is the monotonic cursor for since_id pagination; payload is a "
+        "JSON object written by the v2.2.1 triggers. The view has no write path."
+    ),
 }
 
 VIEW_SOURCES = {
@@ -62,6 +68,7 @@ VIEW_SOURCES = {
     "agent_player_timeline": ["quest_event_log", "player_choices", "bank_statements"],
     "agent_world_state": ["world_state", "world_events"],
     "agent_economy_metrics": ["players"],
+    "agent_events_feed": ["agent_events"],
 }
 
 
@@ -207,7 +214,8 @@ def build_schema(columns: dict[str, list[tuple[str, str, str]]], database: str) 
     if missing:
         raise RuntimeError(
             "missing or empty views: " + ", ".join(missing) +
-            " (apply T-CityLite.base/migrations/v2.2_agent_read_layer.sql first)"
+            " (apply T-CityLite.base/migrations/v2.2_agent_read_layer.sql and "
+            "v2.2.2_agent_events_view.sql first)"
         )
 
     views: dict[str, dict] = {}
