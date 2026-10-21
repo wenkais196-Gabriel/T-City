@@ -475,6 +475,47 @@ exports('GetQuestStep', function(source, questId)
     return QuestManager.GetQuestStep(source, questId)
 end)
 
+-- 12. 🧪 E2E ONLY: 虚拟时钟 — 将冷却/每日限制时间戳前移 seconds 秒
+-- 仅在 `setr tcity_e2e 1` 时可用；convar 关闭时返回 (false, 'disabled')，
+-- 不读写 DB，生产行为不变。只影响指定 citizenid（E2E 运行期 CID），
+-- 不修改全局 os.time 或服务器时钟。
+local MAX_DEBUG_CLOCK_SECONDS = 7 * 24 * 60 * 60 -- 7 days
+
+exports('DebugAdvanceClock', function(citizenid, seconds)
+    if GetConvar('tcity_e2e', '0') ~= '1' then
+        return false, 'disabled'
+    end
+    if type(citizenid) ~= 'string' or citizenid == '' then
+        return false, 'invalid citizenid'
+    end
+    if type(seconds) ~= 'number' or seconds ~= seconds
+        or seconds <= 0 or seconds > MAX_DEBUG_CLOCK_SECONDS then
+        return false, 'invalid seconds'
+    end
+
+    local ok, err = pcall(function()
+        MySQL.update.await(
+            'UPDATE quest_cooldowns SET expires_at = DATE_SUB(expires_at, INTERVAL ? SECOND) WHERE citizenid = ?',
+            { seconds, citizenid })
+        MySQL.update.await(
+            'UPDATE quest_daily_limits SET period_start = DATE_SUB(period_start, INTERVAL ? SECOND) WHERE citizenid = ?',
+            { seconds, citizenid })
+    end)
+    if not ok then
+        return false, tostring(err)
+    end
+
+    -- IsOnCooldown 以内存表为权威来源：从 DB 重新加载，而不是直接改内存。
+    if QuestCooldown and QuestCooldown.Load then
+        QuestCooldown.Load(citizenid)
+    end
+    if QuestCache and QuestCache.InvalidateCooldowns then
+        QuestCache.InvalidateCooldowns(citizenid)
+    end
+
+    return true
+end)
+
 -- ==============================================================
 -- 注册到 Bus（如果 core-framework 可用）
 -- ==============================================================

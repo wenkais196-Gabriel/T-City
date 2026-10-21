@@ -264,8 +264,11 @@ local VALID_ACTIONS = {
     complete_step = true,
     make_choice = true,
     add_money = true,
+    advance_clock = true,
     wait = true,
 }
+
+local MAX_CLOCK_SECONDS = 7 * 24 * 60 * 60 -- 7 days
 
 local VALID_ASSERTS = {
     db = true,
@@ -422,6 +425,12 @@ local function validateScenario(s, name)
                 return false, ('steps[%d].reason must be a non-empty string'):format(i)
             end
             step.account = isNonEmptyString(step.account) and step.account:lower() or 'bank'
+        end
+        if step.action == 'advance_clock' then
+            if type(step.seconds) ~= 'number' or step.seconds ~= step.seconds
+                or step.seconds < 1 or step.seconds > MAX_CLOCK_SECONDS then
+                return false, ('steps[%d].seconds must be 1..%d'):format(i, MAX_CLOCK_SECONDS)
+            end
         end
         if step.action == 'wait' and step.ms ~= nil
             and (type(step.ms) ~= 'number' or step.ms < 0 or step.ms > 600000) then
@@ -782,6 +791,13 @@ local function executeStep(step)
 
     if step.action == 'accept_quest' then
         local ok, msg = callExport('custom-quest', 'TriggerQuest', p.source, step.quest)
+        if step.expect_fail then
+            check('quest.trigger_rejected', ok == false,
+                ('%s %s'):format(stepDetails(step, p), tostring(msg)), p.logicalCid)
+            Wait(step.wait or 300)
+            return ok == false, msg
+        end
+
         check('quest.trigger', ok,
             ('%s %s'):format(stepDetails(step, p), tostring(msg)), p.logicalCid)
         Wait(step.wait or 500)
@@ -825,6 +841,20 @@ local function executeStep(step)
 
     if step.action == 'add_money' then
         return executeAddMoney(step, p)
+    end
+
+    if step.action == 'advance_clock' then
+        local ok, msg = callExport('custom-quest', 'DebugAdvanceClock', p.runtimeCid, step.seconds)
+        -- Load() 重新读取 DB 冷却到内存是异步的，等它完成后再让后续步骤判定。
+        Wait(step.wait or 500)
+        check(('clock.advance.%s'):format(step._id), ok == true,
+            ('%s seconds=%s %s'):format(
+                stepDetails(step, p), tostring(step.seconds),
+                ok == true and 'applied' or tostring(msg)),
+            p.logicalCid)
+        return ok == true, ok == true
+            and ('advanced %s seconds'):format(tostring(step.seconds))
+            or tostring(msg)
     end
 
     return false, 'unsupported action: ' .. tostring(step.action)

@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "name": "cooldown_clock",
+  "description": "Virtual clock: miner_apprentice cooldown blocks immediate re-accept, then expires after advancing the test clock (3700s) instead of waiting one real hour.",
+  "ordering": "sequential",
+  "seed": 28,
+  "players": [
+    {
+      "cid": "SIM001",
+      "job": "unemployed",
+      "gang": "none",
+      "grade": 0,
+      "money": {
+        "cash": 1000,
+        "bank": 10000,
+        "crypto": 0
+      },
+      "charinfo": {
+        "firstname": "Sim",
+        "lastname": "One",
+        "birthdate": "1990-01-01",
+        "gender": 0,
+        "nationality": "US"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "accept",
+      "action": "accept_quest",
+      "cid": "SIM001",
+      "quest": "miner_apprentice"
+    },
+    {
+      "id": "accepted",
+      "action": "wait",
+      "ms": 700
+    },
+    {
+      "id": "step_go_mine",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "miner_apprentice",
+      "step": "step_go_mine"
+    },
+    {
+      "id": "step_mine_iron",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "miner_apprentice",
+      "step": "step_mine_iron"
+    },
+    {
+      "id": "step_return",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "miner_apprentice",
+      "step": "step_return"
+    },
+    {
+      "id": "reward_settled",
+      "action": "wait",
+      "ms": 1500
+    },
+    {
+      "id": "accept_blocked",
+      "action": "accept_quest",
+      "cid": "SIM001",
+      "quest": "miner_apprentice",
+      "expect_fail": true
+    },
+    {
+      "id": "blocked_settled",
+      "action": "wait",
+      "ms": 500
+    },
+    {
+      "id": "advance_clock",
+      "action": "advance_clock",
+      "cid": "SIM001",
+      "seconds": 3700,
+      "wait": 1000
+    },
+    {
+      "id": "clock_settled",
+      "action": "wait",
+      "ms": 700
+    },
+    {
+      "id": "accept_after_clock",
+      "action": "accept_quest",
+      "cid": "SIM001",
+      "quest": "miner_apprentice",
+      "wait": 700
+    },
+    {
+      "id": "settle",
+      "action": "wait",
+      "ms": 700
+    }
+  ],
+  "assert": [
+    {
+      "name": "quest.completed_after_first_run",
+      "type": "quest_status",
+      "after": "reward_settled",
+      "cid": "SIM001",
+      "quest": "miner_apprentice",
+      "expect": "completed",
+      "completion_count": 1
+    },
+    {
+      "name": "quest.first_run_only_one_row",
+      "type": "db_scalar",
+      "after": "reward_settled",
+      "cid": "SIM001",
+      "sql": "SELECT COUNT(*) FROM player_quests WHERE citizenid = ? AND quest_id = 'miner_apprentice'",
+      "expect": 1
+    },
+    {
+      "name": "cooldown.set_on_completion",
+      "type": "db_scalar",
+      "after": "reward_settled",
+      "cid": "SIM001",
+      "sql": "SELECT COUNT(*) FROM quest_cooldowns WHERE citizenid = ? AND quest_id = 'miner_apprentice' AND expires_at > NOW()",
+      "expect": 1
+    },
+    {
+      "name": "quest.completed_after_blocked_accept",
+      "type": "quest_status",
+      "after": "accept_blocked",
+      "cid": "SIM001",
+      "quest": "miner_apprentice",
+      "expect": "completed",
+      "completion_count": 1
+    },
+    {
+      "name": "quest.blocked_accept_no_new_row",
+      "type": "db_scalar",
+      "after": "accept_blocked",
+      "cid": "SIM001",
+      "sql": "SELECT COUNT(*) FROM player_quests WHERE citizenid = ? AND quest_id = 'miner_apprentice'",
+      "expect": 1
+    },
+    {
+      "name": "cooldown.active_before_advance",
+      "type": "db_scalar",
+      "after": "accept_blocked",
+      "cid": "SIM001",
+      "sql": "SELECT COUNT(*) FROM quest_cooldowns WHERE citizenid = ? AND quest_id = 'miner_apprentice' AND expires_at > NOW()",
+      "expect": 1
+    },
+    {
+      "name": "cooldown.expired_after_advance",
+      "type": "db_scalar",
+      "after": "advance_clock",
+      "cid": "SIM001",
+      "sql": "SELECT COUNT(*) FROM quest_cooldowns WHERE citizenid = ? AND quest_id = 'miner_apprentice' AND expires_at > NOW()",
+      "expect": 0
+    },
+    {
+      "name": "quest.reaccept_after_clock_in_progress",
+      "type": "quest_status",
+      "after": "accept_after_clock",
+      "cid": "SIM001",
+      "quest": "miner_apprentice",
+      "expect": "in_progress"
+    },
+    {
+      "name": "quest.second_run_row_created",
+      "type": "db_scalar",
+      "after": "settle",
+      "cid": "SIM001",
+      "sql": "SELECT COUNT(*) FROM player_quests WHERE citizenid = ? AND quest_id = 'miner_apprentice'",
+      "expect": 2
+    }
+  ]
+}
