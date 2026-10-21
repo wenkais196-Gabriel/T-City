@@ -98,6 +98,12 @@ RegisterNetEvent('qb-vehicleshop:server:buyShowroomVehicle', function(vehicleDat
         return
     end
 
+    -- 服务端距离校验：防止远程伪造购买事件
+    if not shopUtil.IsPlayerNearShopWithVehicle(src, vehicle) then
+        PurchaseResult(src, false, '距离车店太远，无法购买')
+        return
+    end
+
     -- 安全: 驾照检查
     if not shopUtil.CheckVehicleLicense(pData, vehicle) then
         local licenseName = shopUtil.GetRequiredLicenseName(vehicle)

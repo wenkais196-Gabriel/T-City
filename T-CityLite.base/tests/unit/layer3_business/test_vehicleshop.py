@@ -133,7 +133,13 @@ NetworkGetEntityFromNetworkId = function(netId) return netId end
 SetVehicleNumberPlateText = function(veh, plate) end
 CreateVehicleServerSetter = function(hash, vtype, x, y, z, w) return 1 end
 DeleteEntity = function(ent) end
-GetEntityCoords = function(ped) return 0, 0, 0 end
+-- 让服务端距离校验能拿到 PDM 展车附近坐标
+local __vec_mt = {
+    __sub = function(a, b) return setmetatable({ x = a.x - b.x, y = a.y - b.y, z = a.z - b.z }, __vec_mt) end,
+    __len = function(v) return math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) end,
+}
+function vector3(x, y, z) return setmetatable({ x = x, y = y, z = z }, __vec_mt) end
+GetEntityCoords = function(ped) return vector3(-45.65, -1093.66, 25.44) end
 GetPlayerPed = function(src) return src end
 GetPlayerIdentifiers = function(src) return { "license:mock" .. tostring(src) } end
 
