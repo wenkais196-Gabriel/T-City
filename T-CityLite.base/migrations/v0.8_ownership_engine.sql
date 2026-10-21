@@ -2,7 +2,7 @@
 -- DB Migration v0.8: Phase 0 所有权引擎骨架表
 -- ============================================================================
 -- 设计依据: docs/server-design/ 全系列 (00-ownership-philosophy 至 07-architecture-integration)
--- 执行方式: mysql -u swk -p1543368168 TCityLite < v0.8_ownership_engine.sql
+-- 执行方式: mysql -u swk -p TCityLite < v0.8_ownership_engine.sql
 -- 兼容性:  全部使用 CREATE TABLE IF NOT EXISTS，可重复执行
 -- 影响范围: 零 —— 不修改任何现有表，纯新增
 -- 四原则落地:

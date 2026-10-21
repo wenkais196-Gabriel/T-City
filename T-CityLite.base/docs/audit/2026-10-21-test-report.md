@@ -32,7 +32,7 @@
 
 | 文件 | 问题 |
 |:---|:---|
-| `tests/conftest.py` | 两处默认密码 `1543368168` |
+| `tests/conftest.py` | 两处默认密码（已于 2026-10-21 轮换并脱敏） |
 | `tests/db_check.js` / `db_chain_check.js` | 连接串含明文密码与旧库名 |
 | `tests/unit/layer0_js/test_flatten_json.cjs` | 默认连接串含明文密码 |
 
@@ -43,7 +43,7 @@
 - 新增 `.env.example` 与 [`tests/README.md`](../../tests/README.md)。
 - `check_db_schema.py` 优先读环境变量，回退 `server.cfg`。
 
-**⚠️ 行动项**：该密码已随历史提交公开在 GitHub，**必须轮换数据库账号密码**，并评估是否需要清理 git 历史。已建 Issue 跟踪。
+**✅ 已完成（2026-10-21 13:28）**：`swk@localhost` 密码已轮换，旧密码验证失败、新密码可用；`server.cfg` 与 `.env` 已更新，单元/集成测试与 FXServer 实机启动复验通过。历史提交中仍残留**已失效**的旧密码；清理 git 历史需要 force-push，暂未执行。
 
 ### 2.2 🟠 测试实际在跑旧目录 `/home/swk/tcity`
 
