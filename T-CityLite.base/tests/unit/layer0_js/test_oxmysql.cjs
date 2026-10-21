@@ -22,6 +22,8 @@
 //   Fetch aliases and parameter passthrough
 
 'use strict';
+const path = require('path');
+const BASE = path.resolve(__dirname, '../../..');
 
 const fs = require('fs');
 const vm = require('vm');
@@ -169,7 +171,7 @@ const sandbox = {
 
 // Create VM context and execute build.js
 const context = vm.createContext(sandbox);
-const buildPath = '/home/swk/tcity/T-CityLite.base/resources/[standalone]/oxmysql/dist/build.js';
+const buildPath = BASE + '//resources/[standalone]/oxmysql/dist/build.js';
 const buildCode = fs.readFileSync(buildPath, 'utf8');
 
 try {

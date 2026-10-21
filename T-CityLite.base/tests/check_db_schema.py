@@ -12,45 +12,53 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 预期表结构定义
 # 格式: {表名: {字段: [col1, col2, ...], 索引: [idx1, idx2, ...]}}
 EXPECTED_SCHEMA = {
+    # 实际 QBCore/T-City 表结构（charinfo/money 为 JSON 文本，MariaDB 无原生 JSON）
     "players": {
-        "fields": ["citizenid", "license", "money", "charinfo", "metadata",
-                    "position", "job", "gang", "firstname", "lastname"],
+        "fields": ["citizenid", "license", "name", "money", "charinfo",
+                    "metadata", "position", "job", "gang"],
         "indexes": ["PRIMARY", "license"],
     },
     "bank_accounts": {
-        "fields": ["account_id", "citizenid", "account_name", "balance",
-                    "account_type", "is_active", "created_at"],
-        "indexes": ["PRIMARY", "citizenid"],
+        "fields": ["id", "citizenid", "account_name", "account_balance",
+                    "account_type", "users"],
+        "indexes": ["PRIMARY", "account_name"],
     },
     "bank_statements": {
-        "fields": ["id", "citizenid", "account_id", "amount", "balance",
-                    "date", "type", "reason", "note"],
-        "indexes": ["PRIMARY", "idx_citizenid_account_date"],
+        "fields": ["id", "citizenid", "account_name", "amount", "reason",
+                    "statement_type", "date"],
+        "indexes": ["PRIMARY", "citizenid"],
     },
     "player_vehicles": {
-        "fields": ["id", "citizenid", "plate", "vehicle", "garage",
-                    "state", "fuel", "engine", "body", "mods"],
+        "fields": ["id", "license", "citizenid", "vehicle", "hash", "mods",
+                    "plate", "garage", "fuel", "engine", "body", "state", "status"],
         "indexes": ["PRIMARY", "citizenid", "plate"],
     },
     "phone_contacts": {
-        "fields": ["id", "citizenid", "name", "number", "avatar"],
-        "indexes": ["PRIMARY", "citizenid"],
+        "fields": ["id", "citizenid", "name", "number"],
+        "indexes": ["PRIMARY", "uq_contact", "idx_citizenid"],
     },
     "phone_messages": {
-        "fields": ["id", "citizenid", "sender", "receiver", "message",
-                    "date", "isread"],
+        "fields": ["id", "citizenid", "number", "messages", "gps", "msg_status"],
         "indexes": ["PRIMARY", "citizenid"],
     },
     "phone_calls": {
-        "fields": ["id", "citizenid", "sender", "receiver", "start",
-                    "end", "duration"],
-        "indexes": ["PRIMARY", "citizenid"],
+        "fields": ["id", "caller", "receiver", "duration", "status", "timestamp"],
+        "indexes": ["PRIMARY", "idx_caller", "idx_receiver"],
     },
 }
 
 
 def get_db_config() -> dict | None:
-    """Parse MySQL connection string from server.cfg"""
+    """Resolve DB config from env first, then server.cfg."""
+    if os.environ.get('TCITY_DB_PASS'):
+        return {
+            'host': os.environ.get('TCITY_DB_HOST', 'localhost'),
+            'port': int(os.environ.get('TCITY_DB_PORT', 3306)),
+            'user': os.environ.get('TCITY_DB_USER', 'root'),
+            'password': os.environ['TCITY_DB_PASS'],
+            'database': os.environ.get('TCITY_DB_NAME', 'TCityLite'),
+        }
+
     cfg_path = os.path.join(BASE_DIR, "server.cfg")
     if not os.path.exists(cfg_path):
         return None

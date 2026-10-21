@@ -13,6 +13,8 @@ Note: quest_manager.lua 全长 1101 行，但大部分依赖 MySQL/exports。
 """
 
 import os
+from pathlib import Path
+BASE_DIR = str(Path(__file__).resolve().parents[3])
 import sys
 import subprocess
 import tempfile
@@ -24,13 +26,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # ── Constants ────────────────────────────────────────────────────────────
 
 QUEST_MANAGER_LUA = (
-    "/home/swk/tcity/T-CityLite.base/resources/[custom]/custom-quest/"
+    BASE_DIR + "//resources/[custom]/custom-quest/"
     "server/quest_manager.lua"
 )
 
 # Lines of quest_manager.lua to load (pure Lua, no exports/MySQL calls)
 # Stops just before `local QBCore = exports['qb-core']:GetCoreObject()`
-QUEST_MANAGER_CUTOFF_LINE = 82
+def _find_cutoff_line(path):
+    with open(path, encoding='utf-8') as f:
+        for i, line in enumerate(f):
+            if line.startswith("local QBCore = exports"):
+                return i
+    return 82
+
+QUEST_MANAGER_CUTOFF_LINE = _find_cutoff_line(QUEST_MANAGER_LUA)
 
 
 def _load_quest_manager_section() -> str:
@@ -439,7 +448,7 @@ assert(__tracked_events[1].data.questId == "QUEST_XYZ",
 # ── Tests: QuestNodes.ValidateNode ──────────────────────────────────────
 
 class TestQuestNodesValidateNode:
-    """验证 ValidateNode stub 始终返回 true"""
+    """ValidateNode 现在会查询 QuestRegistry 并校验步骤/类型，不再是恒真 stub"""
 
     def test_validate_node_exists(self):
         result = run_lua_test("""
@@ -448,11 +457,22 @@ assert(type(QuestNodes.ValidateNode) == "function")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
-    def test_validate_node_returns_true(self):
+    def test_validate_node_rejects_unknown_quest(self):
         result = run_lua_test("""
 local ok, msg = QuestNodes.ValidateNode(1, "Q", "step", {})
-assert(ok == true, "expected true, got " .. tostring(ok))
-assert(msg == "ok", "expected 'ok', got " .. tostring(msg))
+assert(ok == false, "unknown quest should be rejected, got " .. tostring(ok))
+assert(msg == "Quest not found", "unexpected message: " .. tostring(msg))
+""")
+        assert result['ok'], f"Lua error: {result['stderr']}"
+
+    def test_validate_node_accepts_matching_step(self):
+        result = run_lua_test("""
+QuestRegistry.GetTemplate = function(questId)
+    return { steps = { { id = "step", type = "goto", data = {} } } }
+end
+local ok, msg = QuestNodes.ValidateNode(1, "Q", "step", { nodeType = "GOTO" })
+assert(ok == true, "matching step should pass, got " .. tostring(ok))
+assert(msg == "ok", "unexpected message: " .. tostring(msg))
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
