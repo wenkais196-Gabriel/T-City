@@ -70,6 +70,9 @@ exec configs/modules/story.cfg
 exec configs/modules/atmosphere.cfg
 exec configs/modules/admin.cfg
 
+## 开发/测试环境（生产环境保持注释）
+# exec configs/modules/dev.cfg
+
 ## Permissions
 # ── 替换为你的管理员标识 ──
 add_ace group.admin command allow
