@@ -69,7 +69,7 @@
 
 ### 5. 发版收尾
 - [x] tag `v0.7a` 已推送
-- [x] 服务端 / 无头验收归档（`/test run all` 225 PASS / 0 FAIL / 8 SKIP）
+- [x] 服务端 / 无头验收归档（`/test run all` 298 PASS / 0 FAIL / 9 SKIP（有玩家上下文）；无玩家时 225 PASS / 8 SKIP）
 - [ ] 真人客户端 UI 验收（车店 NUI / 车库 / 中控屏 / 物流）
 - [x] 构建产物入库（oxmysql/menuv/tcity-dashboard）
 - [x] CHANGELOG / README 与 tag 对齐（本次更新）
