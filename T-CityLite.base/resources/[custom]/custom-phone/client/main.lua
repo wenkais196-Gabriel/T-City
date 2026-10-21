@@ -23,7 +23,8 @@ local function OpenPhone()
     if isPhoneOpen then return end
     isPhoneOpen = true
     SetNuiFocus(true, true)          -- cursor visible, keyboard to NUI
-    SetNuiFocusKeepInput(true)      -- WASD/Space pass through for movement
+    -- 手机打开时完全接管输入：否则滚轮仍会穿透到武器轮盘/电台
+    SetNuiFocusKeepInput(false)
     
     -- Play GTA V native phone-out animation
     local ped = PlayerPedId()

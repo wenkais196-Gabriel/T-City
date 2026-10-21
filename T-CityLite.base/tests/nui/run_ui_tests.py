@@ -235,8 +235,14 @@ def test_phone(browser, artifacts: Path) -> list[str]:
         page.wait_for_timeout(800)
         page.evaluate("() => window.postMessage({ action: 'phone:open' }, '*')")
         page.wait_for_function("document.body.innerText.includes('Messages')", timeout=5000)
+        page.evaluate("""() => window.postMessage({
+            action: 'phone:updateTime', hour: 17, minute: 35,
+            dayName: 'Sunday', date: 'October 21', weatherIcon: '', weatherLabel: ''
+        }, '*')""")
+        page.wait_for_timeout(300)
         text = page.inner_text("body")
         assert len(text.strip()) > 20, f"phone UI looks empty: {text!r}"
+        assert text.count("17:35") >= 2, f"status bar and widget clock should both show 17:35: {text[:200]}"
         page.screenshot(path=str(artifacts / "phone-open.png"), full_page=True)
         errors.extend(page_errors)
         ctx.close()
