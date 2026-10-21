@@ -25,6 +25,7 @@
 | **Agent 读 API / MCP** | ✅ PASS | ~2s | 7 个 HTTP endpoint + 5 个 MCP tool，401 生效 |
 | **虚拟时钟 E2E** | ✅ **27/27 PASS** | ~20s | 完成→冷却→加速→重接 |
 | **P3 动作 broker 实机** | ✅ PASS | ~2s | notify / add_money 审批 / 幂等 / 限额 |
+| **P3 director bridge 实机** | ✅ PASS | ~40s | 事件 → 提议 → 人工批准 → ch2 启动 |
 | `luac5.4 -p`（改动 Lua） | ✅ PASS | — | 42 个文件 |
 
 > `light_lint.py` 对全仓（含第三方 `[qb]`/`[standalone]`）报 252 errors / 96411 warnings，属既有基线；它不是 CI 阻断项。
@@ -340,7 +341,33 @@ ensure tcity-e2e
 
 ---
 
-## 11. 结论
+## 11. P3 导演桥（2026-10-21 16:48）
+
+`custom-director` 新增规则桥：
+
+- 轮询 `agent_events`，cursor 持久化在 `agent_director_state`。
+- `quest.completed` 按规则映射到后续 `start_quest` **proposal**，不自动批准/执行。
+- 规则：
+  - `civilian_ch1_first_dollar` → `civilian_ch2_startup_struggle`
+  - `police_ch1_first_shift` → `police_ch2_corruption_web`
+  - cartel ch1→ch2 故意不做：ch1 是 civilian，ch2 需要 gang_member，不能保证资格
+- 默认 `agent_director_enabled=0`；仅在 `agent_actions_enabled=1` 时轮询。
+
+### 实机结果
+
+- `agent_director_state.cursor` 0 → 75，后续 tick 不再重复提议。
+- 生成 1 条 `agent_actions`：`director:rules` / `start_quest` / `pending_approval`。
+- 人工 admin approve 后 `status=executed`。
+- `player_quests`：ch1 `completed`，ch2 `in_progress` @ `step_city_hall`。
+
+### 抓到的运行时问题
+
+1. `agent_events.created_at` 是带 `T`/`Z` 和引号的 ISO 字符串，直接写 `last_event_at` 报 `Incorrect datetime value`；已归一化为 MariaDB DATETIME。
+2. oxmysql 的 `MySQL.query.await` 可能返回**错误字符串**而不抛异常；cursor 更新把字符串当成功，导致 cursor 永远 0、同一事件每 tick 重复提议。现在字符串结果按失败处理，并加了 cursor 前进保护。
+
+---
+
+## 12. 结论
 
 - 离线 + 单元 + 集成测试已从 **66 failed** 收敛到 **0 failed**（11 skipped，均有明确原因）。
 - 发现并修复了一个公开泄露的 DB 密码、一个真实购车插入判断 bug、一处 DB 迁移缺口。
