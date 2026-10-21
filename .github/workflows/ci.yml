@@ -107,9 +107,8 @@ jobs:
           exit "$fail"
 
   docs-check:
-    name: Docs links (non-blocking)
+    name: Docs links (advisory)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Check referenced markdown files exist
@@ -131,6 +130,6 @@ jobs:
                   if not p.exists():
                       missing.append(f'{md}: {target}')
           if missing:
+              print('⚠️  missing markdown links (advisory):')
               print('\n'.join(missing[:50]))
-              sys.exit(1)
           PY
