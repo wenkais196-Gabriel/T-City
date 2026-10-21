@@ -25,6 +25,7 @@
 
 const fs = require('fs');
 const vm = require('vm');
+const path = require('path');
 
 // ============================================================================
 // SECTION 1: Test framework
@@ -169,7 +170,7 @@ const sandbox = {
 
 // Create VM context and execute build.js
 const context = vm.createContext(sandbox);
-const buildPath = '/home/swk/tcity/T-CityLite.base/resources/[standalone]/oxmysql/dist/build.js';
+const buildPath = path.resolve(__dirname, '../../../resources/[standalone]/oxmysql/dist/build.js');
 const buildCode = fs.readFileSync(buildPath, 'utf8');
 
 try {
@@ -220,7 +221,9 @@ ok(poolCfg !== undefined, 'pool config object exists');
 
 eq(poolCfg.typeCast, undefined, 'typeCast is not explicitly set (mysql2 default handles types; flattenJSON handles JSON columns)');
 eq(poolCfg.supportBigNumbers, true, 'supportBigNumbers is true');
-eq(poolCfg.bigNumberStrings, true, 'bigNumberStrings is true');
+// 与 vendored dist/build.js 的实际构建保持一致：本项目将 bigNumberStrings 设为 false
+// （若为 true，BIGINT 会以字符串返回，Lua 侧需自行转换）
+eq(poolCfg.bigNumberStrings, false, 'bigNumberStrings matches vendored build (false)');
 eq(poolCfg.connectTimeout, 10000, 'connectTimeout is 10000');
 eq(poolCfg.connectionLimit, 10, 'connectionLimit is 10');
 eq(poolCfg.charset, 'utf8mb4', 'default charset is utf8mb4');

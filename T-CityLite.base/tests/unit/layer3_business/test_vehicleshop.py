@@ -9,9 +9,10 @@ test_vehicleshop.py — qb-vehicleshop 单元测试 + 集成测试 v2.2.0
   finance.lua:     financeVehicle, financePayment, checkFinance, addPlayer/removePlayer
 """
 import os, subprocess, tempfile, re, pytest
+from pathlib import Path
 
 # ── Paths ──────────────────────────────────────────────────────────
-BASE = '/home/swk/tcity/T-CityLite.base'
+BASE = str(Path(__file__).resolve().parents[3])
 SHOP_DIR = os.path.join(BASE, 'resources', '[qb]', 'qb-vehicleshop')
 BUS_LUA = os.path.join(SHOP_DIR, 'server', 'bus.lua')
 PURCHASES_LUA = os.path.join(SHOP_DIR, 'server', 'purchases.lua')
@@ -142,7 +143,8 @@ MySQL.scalar = { await = function(sql, params) table.insert(__test.scalars, { sq
 MySQL.single = { await = function(sql, params) return { citizenid = "CID001", vehicle = "comet2", balance = 0, plate = "ABC123" } end }
 MySQL.query = { await = function(sql, params) return {} end }
 MySQL.update = function(sql, params, cb) table.insert(__test.updates, { sql=sql }) if cb then cb(1) end end
-MySQL.insert = function(sql, params, cb) table.insert(__test.inserts, { sql=sql }) if cb then cb(1) end end
+-- oxmysql 的 insert 回调实际返回 { insertId, affectedRows } 表（见 oxmysql/dist/build.js）
+MySQL.insert = function(sql, params, cb) table.insert(__test.inserts, { sql=sql }) if cb then cb({ insertId = 1, affectedRows = 1 }) end end
 MySQL.rawExecute = { await = function(sql, params) return {} end }
 
 -- Config (must be set BEFORE loading bus.lua)

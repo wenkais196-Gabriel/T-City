@@ -11,10 +11,11 @@ test_decision_engine.py — Decision Engine 单元测试
 import os
 import subprocess
 import tempfile
+from pathlib import Path
 import pytest
 
 
-DECISION_ENGINE_LUA = '/home/swk/tcity/T-CityLite.base/resources/[custom]/story-engine/server/decision_engine.lua'
+DECISION_ENGINE_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[custom]' / 'story-engine' / 'server' / 'decision_engine.lua')
 
 
 def run_decision_test(test_code: str) -> dict:

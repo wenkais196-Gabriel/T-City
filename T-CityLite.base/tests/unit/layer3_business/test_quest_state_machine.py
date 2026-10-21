@@ -12,10 +12,11 @@ import os
 import subprocess
 import tempfile
 import re
+from pathlib import Path
 import pytest
 
 
-QUEST_LUA = '/home/swk/tcity/T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua'
+QUEST_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[custom]' / 'custom-quest' / 'server' / 'quest_manager.lua')
 
 
 def run_quest_test(test_code: str, extra_mocks: str = "") -> dict:

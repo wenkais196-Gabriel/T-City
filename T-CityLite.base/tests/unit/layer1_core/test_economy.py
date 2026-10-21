@@ -10,10 +10,11 @@ test_economy.py — Economy Service 单元测试
 import os
 import subprocess
 import tempfile
+from pathlib import Path
 import pytest
 
 
-ECONOMY_LUA = '/home/swk/tcity/T-CityLite.base/resources/[standalone]/core-framework/services/economy_service.lua'
+ECONOMY_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'services' / 'economy_service.lua')
 
 
 def run_economy_test(test_code: str, extra_mocks: str = "") -> dict:

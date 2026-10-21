@@ -13,11 +13,12 @@ import os
 import subprocess
 import tempfile
 import re
+from pathlib import Path
 import pytest
 
 
 # ── Resource paths ──────────────────────────────────────────────────────
-BASE = '/home/swk/tcity/T-CityLite.base/resources/[standalone]/core-framework'
+BASE = str(Path(__file__).resolve().parents[2] / 'resources' / '[standalone]' / 'core-framework')
 BUS_LUA = f'{BASE}/bus.lua'
 ECONOMY_LUA = f'{BASE}/services/economy_service.lua'
 SECURITY_LUA = f'{BASE}/services/security_service.lua'
@@ -30,7 +31,7 @@ SHARED_MOCK = r'''
 -- Shared FiveM mock for integration tests
 -- Provides the full environment needed by all services
 
-local __test = { money_added = {}, dirty_marked = {}, security_events = {} }
+local __test = { money_added = {}, dirty_marked = {}, security_events = {}, saves = {} }
 
 _G.QBCore = {
     Functions = {
@@ -64,6 +65,9 @@ _G.QBCore = {
                 Functions = {
                     AddMoney = function(account, amount, reason)
                         return true
+                    end,
+                    Save = function(force)
+                        table.insert(__test.saves, cid)
                     end,
                 },
             }
@@ -193,6 +197,16 @@ def run_integration_test(services: list, test_code: str) -> dict:
                          r'-- \1()', code, flags=re.MULTILINE)
             code = re.sub(r'^(PersistenceManager\.StartHealthReport)\(\)',
                          r'-- \1()', code, flags=re.MULTILINE)
+            # persistence_manager 会用 LocalDirtyFlush 覆盖 _G.DirtyFlush；
+            # 重新对齐测试观察点，并保留 MarkDirty 的测试记录。
+            code += r'''
+_DirtyFlushData = DirtyFlush._dirty
+local _origMarkDirty = DirtyFlush.MarkDirty
+function DirtyFlush.MarkDirty(cid, dataType)
+    _origMarkDirty(cid, dataType)
+    table.insert(__test.dirty_marked, { cid = cid, dataType = dataType })
+end
+'''
         full += '\n-- === ' + os.path.basename(svc_path) + ' ===\n' + code + '\n'
 
     full += '\n' + test_code

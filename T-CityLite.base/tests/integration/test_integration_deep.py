@@ -14,23 +14,25 @@ import os
 import subprocess
 import tempfile
 import re
+from pathlib import Path
 import pytest
 
 # ── Resource paths ──────────────────────────────────────────────────────
-BASE = '/home/swk/tcity/T-CityLite.base/resources/[standalone]/core-framework'
+_ROOT = Path(__file__).resolve().parents[2]
+BASE = str(_ROOT / 'resources' / '[standalone]' / 'core-framework')
 BUS_LUA = f'{BASE}/bus.lua'
 ECONOMY_LUA = f'{BASE}/services/economy_service.lua'
 SECURITY_LUA = f'{BASE}/services/security_service.lua'
 PERSISTENCE_LUA = f'{BASE}/services/persistence_manager.lua'
 CONTRACTS_LUA = f'{BASE}/contracts.lua'
-DECISION_LUA = '/home/swk/tcity/T-CityLite.base/resources/[custom]/story-engine/server/decision_engine.lua'
-QUEST_LUA = '/home/swk/tcity/T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua'
+DECISION_LUA = str(_ROOT / 'resources' / '[custom]' / 'story-engine' / 'server' / 'decision_engine.lua')
+QUEST_LUA = str(_ROOT / 'resources' / '[custom]' / 'custom-quest' / 'server' / 'quest_manager.lua')
 
 
 # ── Shared Mock ─────────────────────────────────────────────────────────
 
 SHARED_MOCK = r'''
-local __test = { money = {}, dirty = {}, events = {}, decisions = {}, quests = {} }
+local __test = { money = {}, dirty = {}, events = {}, decisions = {}, quests = {}, saves = {} }
 
 _G.QBCore = {
     Functions = {
@@ -58,7 +60,14 @@ _G.QBCore = {
         end,
         GetPlayerByCitizenId = function(cid)
             if cid == "CID_INT_1" then
-                return { PlayerData = { citizenid = cid, source = 1 } }
+                return {
+                    PlayerData = { citizenid = cid, source = 1 },
+                    Functions = {
+                        Save = function(force)
+                            table.insert(__test.saves, cid)
+                        end,
+                    },
+                }
             end
             return nil
         end,
@@ -209,7 +218,19 @@ def run_deep_integration(services: list, test_code: str) -> dict:
     full = SHARED_MOCK + '\n'
     for svc_path in services:
         full += '\n-- === ' + os.path.basename(svc_path) + ' ===\n'
-        full += load_and_patch(svc_path) + '\n'
+        code = load_and_patch(svc_path)
+        if 'persistence_manager' in svc_path:
+            # persistence_manager 用 LocalDirtyFlush 覆盖 _G.DirtyFlush；
+            # 重新对齐测试观察点，并保留 MarkDirty 的测试记录。
+            code += r'''
+_DirtyFlushData = DirtyFlush._dirty
+local _origMarkDirty = DirtyFlush.MarkDirty
+function DirtyFlush.MarkDirty(cid, dataType)
+    _origMarkDirty(cid, dataType)
+    table.insert(__test.dirty, { cid = cid, dataType = dataType })
+end
+'''
+        full += code + '\n'
 
     full += '\n' + test_code
 

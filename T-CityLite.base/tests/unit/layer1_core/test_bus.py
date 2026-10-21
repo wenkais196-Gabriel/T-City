@@ -11,6 +11,7 @@ test_bus.py — Bus 总线单元测试
 
 import os
 import sys
+from pathlib import Path
 import pytest
 
 # Add tests dir to path so conftest fixtures work
@@ -27,7 +28,7 @@ def _resolve_bus():
     global BUS_LUA_FILE
     if BUS_LUA_FILE is None:
         patterns = [
-            '/home/swk/tcity/T-CityLite.base/resources/[standalone]/core-framework/bus.lua',
+            str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'bus.lua'),
         ]
         for p in patterns:
             if os.path.exists(p):

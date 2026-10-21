@@ -16,6 +16,7 @@ import os
 import sys
 import subprocess
 import tempfile
+from pathlib import Path
 import pytest
 
 # Add tests dir to path so conftest fixtures work
@@ -23,9 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ── Constants ────────────────────────────────────────────────────────────
 
-QUEST_MANAGER_LUA = (
-    "/home/swk/tcity/T-CityLite.base/resources/[custom]/custom-quest/"
-    "server/quest_manager.lua"
+QUEST_MANAGER_LUA = str(
+    Path(__file__).resolve().parents[3]
+    / "resources" / "[custom]" / "custom-quest" / "server" / "quest_manager.lua"
 )
 
 # Lines of quest_manager.lua to load (pure Lua, no exports/MySQL calls)
