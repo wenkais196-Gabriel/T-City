@@ -50,7 +50,16 @@ EXPECTED_SCHEMA = {
 
 
 def get_db_config() -> dict | None:
-    """Parse MySQL connection string from server.cfg"""
+    """Resolve DB config from env first, then server.cfg."""
+    if os.environ.get('TCITY_DB_PASS'):
+        return {
+            'host': os.environ.get('TCITY_DB_HOST', 'localhost'),
+            'port': int(os.environ.get('TCITY_DB_PORT', 3306)),
+            'user': os.environ.get('TCITY_DB_USER', 'root'),
+            'password': os.environ['TCITY_DB_PASS'],
+            'database': os.environ.get('TCITY_DB_NAME', 'TCityLite'),
+        }
+
     cfg_path = os.path.join(BASE_DIR, "server.cfg")
     if not os.path.exists(cfg_path):
         return None

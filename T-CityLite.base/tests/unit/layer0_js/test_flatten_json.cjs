@@ -43,7 +43,11 @@ function flattenJSON(result) {
 
 // ── 读取连接配置 ──────────────────────────────────────────────────────
 function getConfig() {
-    var cs = process.env.MYSQL_URL || 'mysql://swk:REDACTED_DB_PASSWORD@localhost/TCityLite?charset=utf8mb4';
+    var cs = process.env.MYSQL_URL || process.env.TCITY_DB_URI;
+    if (!cs) {
+        console.error('[SKIP] Set MYSQL_URL or TCITY_DB_URI');
+        process.exit(1);
+    }
     var url = new URL(cs);
     return {
         host: url.hostname,

@@ -54,7 +54,7 @@ def db_config():
         'host': os.environ.get('TCITY_DB_HOST', 'localhost'),
         'port': int(os.environ.get('TCITY_DB_PORT', 3306)),
         'user': os.environ.get('TCITY_DB_USER', 'swk'),
-        'password': os.environ.get('TCITY_DB_PASS', 'REDACTED_DB_PASSWORD'),
+        'password': os.environ.get('TCITY_DB_PASS', ''),
         'database': os.environ.get('TCITY_DB_NAME', 'TCityLite'),
         'charset': 'utf8mb4',
     }
@@ -67,6 +67,8 @@ def db_conn(db_config):
         import mysql.connector
     except ImportError:
         pytest.skip('mysql-connector-python not installed')
+    if not db_config.get('password'):
+        pytest.skip('TCITY_DB_PASS not set')
     conn = mysql.connector.connect(**db_config)
     yield conn
     conn.close()
@@ -285,9 +287,10 @@ def load_lua_resource(resource: str, path: str) -> str:
 def tcity_db_config():
     """Return the TCityLite MySQL connection string for tests."""
     return {
-        'host': 'localhost',
-        'user': 'swk',
-        'password': 'REDACTED_DB_PASSWORD',
-        'database': 'TCityLite',
+        'host': os.environ.get('TCITY_DB_HOST', 'localhost'),
+        'port': int(os.environ.get('TCITY_DB_PORT', 3306)),
+        'user': os.environ.get('TCITY_DB_USER', 'swk'),
+        'password': os.environ.get('TCITY_DB_PASS', ''),
+        'database': os.environ.get('TCITY_DB_NAME', 'TCityLite'),
         'charset': 'utf8mb4',
     }
