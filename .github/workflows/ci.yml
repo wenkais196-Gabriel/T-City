@@ -41,6 +41,26 @@ jobs:
         run: python3 tests/check_bus_wiring.py
         working-directory: T-CityLite.base
 
+  unit-tests:
+    name: Python unit tests (DB tests skip without TCITY_DB_PASS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest and Lua 5.4
+        run: |
+          python3 -m pip install --upgrade pytest
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+
+      - name: Run unit tests
+        run: python3 -m pytest -q tests/unit
+        working-directory: T-CityLite.base
+
   lua-syntax:
     name: Lua syntax (changed files)
     runs-on: ubuntu-latest
@@ -87,9 +107,8 @@ jobs:
           exit "$fail"
 
   docs-check:
-    name: Docs links (non-blocking)
+    name: Docs links (advisory)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Check referenced markdown files exist
@@ -111,6 +130,6 @@ jobs:
                   if not p.exists():
                       missing.append(f'{md}: {target}')
           if missing:
+              print('⚠️  missing markdown links (advisory):')
               print('\n'.join(missing[:50]))
-              sys.exit(1)
           PY

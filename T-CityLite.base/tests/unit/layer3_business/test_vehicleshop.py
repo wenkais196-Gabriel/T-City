@@ -1,3 +1,5 @@
+from pathlib import Path
+BASE_DIR = str(Path(__file__).resolve().parents[3])
 """
 test_vehicleshop.py — qb-vehicleshop 单元测试 + 集成测试 v2.2.0
 
@@ -11,7 +13,7 @@ test_vehicleshop.py — qb-vehicleshop 单元测试 + 集成测试 v2.2.0
 import os, subprocess, tempfile, re, pytest
 
 # ── Paths ──────────────────────────────────────────────────────────
-BASE = '/home/swk/tcity/T-CityLite.base'
+BASE = BASE_DIR + '/'
 SHOP_DIR = os.path.join(BASE, 'resources', '[qb]', 'qb-vehicleshop')
 BUS_LUA = os.path.join(SHOP_DIR, 'server', 'bus.lua')
 PURCHASES_LUA = os.path.join(SHOP_DIR, 'server', 'purchases.lua')
@@ -26,6 +28,18 @@ FINANCE_PM_LUA = os.path.join(SHOP_DIR, 'server', 'finance-payments.lua')
 # ── Mock ───────────────────────────────────────────────────────────
 MOCK_BASE = r'''
 -- FiveM Mock for qb-vehicleshop tests
+-- vector3/vector4 with distance arithmetic (#(a-b))
+local _vec_mt = {
+    __sub = function(a, b) return vector3((a.x or 0) - (b.x or 0), (a.y or 0) - (b.y or 0), (a.z or 0) - (b.z or 0)) end,
+    __add = function(a, b) return vector3((a.x or 0) + (b.x or 0), (a.y or 0) + (b.y or 0), (a.z or 0) + (b.z or 0)) end,
+    __len = function(v) return math.sqrt((v.x or 0)^2 + (v.y or 0)^2 + (v.z or 0)^2) end,
+}
+function vector3(x, y, z)
+    return setmetatable({ x = x or 0, y = y or 0, z = z or 0 }, _vec_mt)
+end
+function vector4(x, y, z, w)
+    return setmetatable({ x = x or 0, y = y or 0, z = z or 0, w = w or 0 }, _vec_mt)
+end
 __test = { events = {}, callbacks = {}, commands = {}, inserts = {}, updates = {}, scalars = {}, money_removed = {}, money_added = {}, bank_job_added = {} }
 
 -- Player cache so mutations persist across GetPlayer calls
