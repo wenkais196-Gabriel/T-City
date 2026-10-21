@@ -188,8 +188,9 @@ F8 → /test mock 2           # 模拟 2 名警察在线
 测试覆盖:
 - **418 个 pytest 用例**（完整环境，含 MySQL schema 校验）；无 DB 连接时 **286 passed / 132 skipped**
 - **148 个 oxmysql JS 用例**
+- **3 个 NUI 无头冒烟用例**（Playwright：车店 / 中控屏 / 手机）
 - **游戏内套件**: 控制台 `test run all` → 225 PASS / 0 FAIL / 8 SKIP（无客户端环境下）
-- **CI**: `.github/workflows/ci.yml` 含离线检查、oxmysql JS、以及 MariaDB schema 任务
+- **CI**: `.github/workflows/ci.yml` 含离线检查、oxmysql JS、MariaDB schema、NUI 冒烟
 
 本地跑 DB 用例：
 
@@ -198,6 +199,14 @@ pip install mysql-connector-python
 # 可选：导入 schema 到一次性库
 mysql -uroot -p<db> < tests/fixtures/tcity_schema.sql
 TCITY_DB_NAME=<db> python -m pytest tests -q
+```
+
+NUI 冒烟（无头 Chromium）：
+
+```bash
+pip install playwright
+playwright install chromium
+python tests/nui/run_ui_tests.py          # 截图输出到 tests/nui/artifacts/
 ```
 
 ---

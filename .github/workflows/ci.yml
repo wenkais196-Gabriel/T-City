@@ -104,3 +104,26 @@ jobs:
           TCITY_DB_PASS: root
           TCITY_DB_NAME: tcity_ci
         run: python -m pytest tests -q
+
+  nui:
+    name: NUI smoke tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: T-CityLite.base
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run NUI smoke tests
+        run: python tests/nui/run_ui_tests.py

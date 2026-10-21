@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **物流任务模板**：`quest_logistics` 取货 → 运输 → 交付，含车辆/到达/货损校验
 - **GitHub Actions CI**：CFG 完整性 + Lua 语法 + 依赖图 + pytest + oxmysql JS + MariaDB schema
 - **运行时构建产物入库**：oxmysql `dist/web`、menuv `dist`、tcity-dashboard `nui/dist`
+- **NUI 无头冒烟**：Playwright 覆盖车店 / 中控屏 / 手机三个页面
 - 开发工作流指南（`docs/dev-workflow-guide.md`）与一键启动脚本
 
 ### Changed
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 - `pytest tests`：**418 passed**（含 MariaDB schema；无 DB 连接时 286 passed / 132 skipped）
 - oxmysql JS 单测：**148 passed**
+- NUI 冒烟：**3/3 passed**（Playwright Chromium）
 - 游戏内 `/test run all`：**225 PASS / 0 FAIL / 8 SKIP**（服务端无头；见 `docs/v0.7a-acceptance-report.md`）
 - 离线检查：CFG / 依赖图 PASS；`light_lint` 仍为 advisory（vendor 资源遗留 ~250 条 `Wait(0)` / `MySQL.Sync`）
 
