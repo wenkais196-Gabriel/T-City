@@ -37,6 +37,10 @@ jobs:
         run: python3 tests/check_dependencies.py
         working-directory: T-CityLite.base
 
+      - name: Bus wiring (registrar manifest includes bus.lua)
+        run: python3 tests/check_bus_wiring.py
+        working-directory: T-CityLite.base
+
   lua-syntax:
     name: Lua syntax (changed files)
     runs-on: ubuntu-latest

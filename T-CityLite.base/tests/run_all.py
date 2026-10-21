@@ -17,6 +17,7 @@ TESTS = [
     ("Lua 语法检查", "light_lint.py", False),
     ("数据库表结构", "check_db_schema.py", False),
     ("资源依赖图", "check_dependencies.py", True),
+    ("Bus 接线检查", "check_bus_wiring.py", True),
 ]
 
 
