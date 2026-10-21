@@ -14,6 +14,10 @@ views, `agent_ro`, PII).
 > **Issue #24 update:** the read-only HTTP API, MCP sidecar and the
 > `agent_events_feed` view are documented in [`API.md`](API.md). The schema
 > registry and `setup_agent_ro.sh` now include that fifth view.
+>
+> **Issues #30/#32 update:** server-side action proposals, previews, budget
+> policy and human approval are documented in [`ACTIONS.md`](ACTIONS.md)
+> (`custom-director`, table `agent_actions`).
 
 Agents read through a small, stable set of views instead of joining 20+ game
 tables. All access goes directly to MariaDB; it does not touch the FXServer

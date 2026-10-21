@@ -24,6 +24,7 @@
 | **Agent 场景 DSL E2E** | ✅ **32/32 PASS** | ~20s | 2 fake players，13 步场景 + 断言 + JSON 报告 |
 | **Agent 读 API / MCP** | ✅ PASS | ~2s | 7 个 HTTP endpoint + 5 个 MCP tool，401 生效 |
 | **虚拟时钟 E2E** | ✅ **27/27 PASS** | ~20s | 完成→冷却→加速→重接 |
+| **P3 动作 broker 实机** | ✅ PASS | ~2s | notify / add_money 审批 / 幂等 / 限额 |
 | `luac5.4 -p`（改动 Lua） | ✅ PASS | — | 42 个文件 |
 
 > `light_lint.py` 对全仓（含第三方 `[qb]`/`[standalone]`）报 252 errors / 96411 warnings，属既有基线；它不是 CI 阻断项。
@@ -304,7 +305,42 @@ ensure tcity-e2e
 
 ---
 
-## 10. 结论
+## 10. P3 动作层第一刀（2026-10-21 16:00）
+
+新增 `custom-director`（server-only）与 `agent_actions` 审计表：
+
+- 动作：`notify`（L1 自动）、`add_money`（L4 必须审批）、`start_quest`（L3 必须审批）。
+- 默认 `agent_actions_enabled=0`；agent/admin 双 token；`/agentapprove` 仅 console 或 `qbcore.god`。
+- HTTP：`POST /custom-director/agent/v1/act`、GET actions、GET policy、admin approve/reject。
+- 预览、单笔上限 1000、每日预算 5000、TTL 900s、幂等 key、审计字段。
+
+### 实机结果
+
+用 `tcity-e2e` hold 一个 fake player 后：
+
+| 用例 | 结果 |
+|:---|:---|
+| `notify` | executed，delivered=true |
+| `add_money` 250 | pending → admin approve → executed，DB 10000→10250 |
+| 重复 idempotency key | 返回同一 action id，不重复加钱 |
+| amount 5000 | `money_cap_exceeded` |
+| agent token approve | 401 |
+| `start_quest` | pending → approve → executed |
+
+### 抓到的实现问题
+
+1. oxmysql `insertId` 是 `{affectedRows,insertId}` 表，原代码把表当 id，approve URL 直接坏掉；已归一化。
+2. `Player.Functions.AddMoney` 在 qb-core 原始闭包与 core-framework `function(self, ...)` wrapper 之间有两种签名；且跨资源 player 是副本，读内存余额会误判。
+   已改为 `debug.getinfo` 选签名 + `Save(true)` + **从 DB 校验**增量。
+
+### 状态
+
+- #30 / #32 完成；#29 P3 Epic 仍 In Progress（#31 director bridge 未做）。
+- 默认关闭；生产启用前必须配置双 token 与审批流程。
+
+---
+
+## 11. 结论
 
 - 离线 + 单元 + 集成测试已从 **66 failed** 收敛到 **0 failed**（11 skipped，均有明确原因）。
 - 发现并修复了一个公开泄露的 DB 密码、一个真实购车插入判断 bug、一处 DB 迁移缺口。
