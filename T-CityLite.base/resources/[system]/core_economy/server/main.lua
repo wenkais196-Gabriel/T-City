@@ -163,7 +163,9 @@ function TriggerReward(source, activityId, baseReward, options)
         local moneytype = options.moneytype or 'bank'
         local finalAmount = math.floor(baseReward * finalMult)
         if finalAmount > 0 then
-            local ok = EconomyService.AddMoney(Player.PlayerData.citizenid, moneytype, finalAmount, reason)
+            -- 直接走 qb-core 的 Player API（跨资源可用），
+            -- 原 `EconomyService` 是未定义全局，每次奖励都会 nil 报错。
+            local ok = Player.Functions.AddMoney(moneytype, finalAmount, reason)
             if ok then totalGranted = finalAmount end
         end
 
@@ -173,7 +175,7 @@ function TriggerReward(source, activityId, baseReward, options)
             for mt, amt in pairs(baseReward.money) do
                 local finalAmount = math.floor(tonumber(amt) * finalMult)
                 if finalAmount > 0 then
-                    EconomyService.AddMoney(Player.PlayerData.citizenid, mt, finalAmount, reason)
+                    Player.Functions.AddMoney(mt, finalAmount, reason)
                     totalGranted = totalGranted + finalAmount
                 end
             end

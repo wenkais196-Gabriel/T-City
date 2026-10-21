@@ -32,6 +32,12 @@ QuestManager = QuestManager or {}
 -- v0.8b: 地址池解析后模板缓存 — citizenid_questId → resolved_template
 QuestManager._resolvedTemplates = {}
 
+-- v1.1: 内存当前步骤 — citizenid_questId → stepId（缓存空窗期步骤顺序校验的同步兜底）
+QuestManager._currentSteps = {}
+
+-- v1.1: 完成去重锁 — citizenid_questId → true（DB 完成回调返回前有效，防止重复发奖）
+QuestManager._completing = {}
+
 -- ══════════════════════════════════════════════════════════════
 -- v0.8a: QuestNodes 兼容层 — 原 quest_nodes.lua 已移除，
 -- atom_nodes 使用不同事件名。此 shim 将旧 API 桥接到客户端现有事件。
@@ -64,6 +70,21 @@ QuestNodes = {
         if payload then
             for k, v in pairs(payload) do data[k] = v end
         end
+
+        -- v0.7 story-engine: 决策步骤由服务端先登记 pending，再让客户端弹窗，
+        -- 防止客户端伪造 questId/stepId 推进任意任务，也为超时提供兜底。
+        if normalizedType == 'DECISION' and data.decision_id then
+            local ok, result = pcall(function()
+                return exports['story-engine']:OfferDecision(
+                    source, questId, stepId, data.decision_id, data.timeout)
+            end)
+            if not ok or result == false then
+                print(('[quest-nodes] ⚠️ OfferDecision failed: quest=%s, step=%s (%s)'):format(
+                    tostring(questId), tostring(stepId),
+                    tostring(ok and 'decision not registered' or result)))
+            end
+        end
+
         TriggerClientEvent(eventName, source, data)
     end,
 
@@ -72,10 +93,47 @@ QuestNodes = {
         -- 客户端通过 ClearZone / ClearBlip 自行清理
         -- 此处发送一个清理事件作为兜底
         TriggerClientEvent('quest:client:clearAllNodes', source, { questId = questId })
+        pcall(function() exports['story-engine']:ClearDecision(source) end)
     end,
 
-    --- 服务端节点验证（stub — 实际验证在各 quest 的 validator 步骤中完成）
+    --- 服务端节点验证：类型必须与模板步骤一致；带坐标的步骤由服务端复核距离
     ValidateNode = function(source, questId, stepId, clientData)
+        local template = QuestRegistry.GetTemplate(questId)
+        if not template then
+            return false, 'Quest not found'
+        end
+
+        local step = nil
+        for _, s in ipairs(template.steps or {}) do
+            if s.id == stepId then step = s; break end
+        end
+        if not step then
+            return false, 'Step not found'
+        end
+
+        local claimed = clientData and string.upper(tostring(clientData.nodeType or '')) or ''
+        local expected = string.upper(tostring(step.type or ''))
+        if claimed ~= '' and expected ~= '' then
+            local alias = { REACH = 'GOTO' }
+            if claimed ~= expected and alias[expected] ~= claimed then
+                return false, ('Node type mismatch: expected %s, got %s'):format(expected, claimed)
+            end
+        end
+
+        -- 不信任客户端坐标：模板带坐标时，以服务端 PlayerPed 位置复核
+        local coords = step.data and step.data.coords
+        if coords and coords.x and source and source > 0 then
+            local ped = GetPlayerPed(source)
+            if ped and ped ~= 0 then
+                local pc = GetEntityCoords(ped)
+                local dist = #(pc - vector3(coords.x, coords.y, coords.z))
+                local radius = (step.data.radius or 10.0) + 5.0
+                if dist > radius then
+                    return false, ('Too far from step target (%.1fm, max %.1fm)'):format(dist, radius)
+                end
+            end
+        end
+
         return true, 'ok'
     end,
 }
@@ -519,33 +577,32 @@ function QuestManager.TriggerQuest(source, questId)
         end
     end
 
-    -- 7. 创建任务记录
-    local firstStep = template.steps[1] and template.steps[1].id or nil
-    QuestDB.CreateQuest(citizenid, questId, firstStep)
-
-    -- 8. 记录事件
-    QuestDB.LogEvent(citizenid, questId, 'trigger', firstStep, {
-        action = 'start',
-        category = template.category,
-        steps_total = #template.steps,
-    })
-
-    -- 8b. v1.0.0: 竞争/组队模式 → 获取排他锁
+    -- 7. v1.0.0: 竞争/组队模式 → 先抢排他锁；失败则不落库，避免幽灵 in_progress
     if template.mode == 'competitive' then
         local acquired, _, rejectReason = QuestMutex.AcquireLock(questId, source, 'competitive')
         if not acquired then
             return false, rejectReason or 'Quest target already locked'
         end
     elseif template.mode == 'group' then
-        -- 组队模式: 暂以单人创建 (队员通过 QuestGroup.AddMember 加入)
-        local acquired, instanceId, rejectReason = QuestMutex.AcquireLock(questId, source, 'group')
-        if not acquired then
+        -- CreateGroupInstance 内部会抢 group 锁；这里不能再抢一次
+        local ok, instanceId, rejectReason = QuestGroup.CreateGroupInstance(source, questId)
+        if not ok then
             return false, rejectReason or 'Failed to create group'
         end
-        -- 创建组队实例 (记录 instanceId 以便奖励阶段遍历队员)
-        QuestGroup.CreateGroupInstance(source, questId)
         print(('[quest-manager] Group instance created: %s'):format(instanceId or 'unknown'))
     end
+
+    -- 8. 创建任务记录（锁成功后）
+    local firstStep = template.steps[1] and template.steps[1].id or nil
+    QuestDB.CreateQuest(citizenid, questId, firstStep)
+    -- v1.1: 记录内存当前步骤（缓存空窗期 ValidateStepOrder 兜底）
+    QuestManager._currentSteps[citizenid .. '_' .. questId] = firstStep
+
+    QuestDB.LogEvent(citizenid, questId, 'trigger', firstStep, {
+        action = 'start',
+        category = template.category,
+        steps_total = #template.steps,
+    })
 
     -- 9. v0.7.0: 为 custom_event 步骤建立反向索引
     for _, step in ipairs(template.steps) do
@@ -555,14 +612,20 @@ function QuestManager.TriggerQuest(source, questId)
     end
 
     -- 10. v0.7.2: 更新缓存而非清空（支持无 MySQL 环境下运行）
-    -- 将新创建的任务直接注入缓存，后续 ValidateStepOrder 可命中
-    QuestCache.SetActiveQuests(citizenid, {{
+    -- ⚠️ 必须 append，不能覆盖：覆盖会把其他活跃任务挤出缓存，导致其步骤校验失败
+    local activeList = QuestCache.GetActiveQuests(citizenid) or {}
+    local merged = {}
+    for _, q in ipairs(activeList) do
+        if q.quest_id ~= questId then merged[#merged + 1] = q end
+    end
+    merged[#merged + 1] = {
         quest_id = questId,
         status = 'in_progress',
         current_step = firstStep,
         progress_data = '{}',
         started_at = os.date('%Y-%m-%d %H:%M:%S'),
-    }})
+    }
+    QuestCache.SetActiveQuests(citizenid, merged)
 
     -- 10b. v1.0.0: 如果第一步是节点类型，初始化节点
     if firstStep then
@@ -636,6 +699,9 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
         return false, ('Step not found: %s'):format(stepId)
     end
 
+    -- 步骤即将被推进 → 清零该步尝试次数（可重复任务不会跑满上限后永久锁死）
+    QuestSecurity.ResetStepAttempts(citizenid, questId, stepId)
+
     -- 2. 判断下一步
     local nextIndex = currentIndex + 1
     local nextStep = template.steps[nextIndex]
@@ -653,63 +719,95 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
 
     -- 4. 如果没有下一步 → 任务完成
     if not nextStep then
-        -- 触发完成
-        QuestDB.CompleteQuest(citizenid, questId)
-        QuestDB.LogEvent(citizenid, questId, 'complete', stepId, data)
-
-        -- 发放奖励
-        local src = getSourceFromCid(citizenid)
-        print(('[quest-manager] 🏁 COMPLETING quest: %s, citizenid=%s, src=%s'):format(questId, citizenid, tostring(src)))
-        if src then
-            TriggerClientEvent(Config.Quest.Events.QUEST_COMPLETED, src, {
-                quest_id = questId,
-                title = template.title,
-                rewards = template.rewards,
-            })
-
-            -- v0.7.2: 奖励在完成事件之后发放，避免奖励异常阻断客户端清理
-            pcall(QuestRewards.GrantRewards, src, template.rewards, questId)
-
-            TriggerClientEvent('QBCore:Notify', src,
-                ('Quest completed: %s!'):format(template.title), 'success')
-        else
-            print('[quest-manager] ❌ getSourceFromCid returned nil — cannot send completion to client!')
+        local lockKey = citizenid .. '_' .. questId
+        -- v1.1: 内存级完成锁 — DB 回调返回前拒绝重复完成请求（防止重复发奖）
+        if QuestManager._completing[lockKey] then
+            return false, 'Quest already completing'
+        end
+        -- 用唯一 token 而非 true：超时兜底与迟到的回调都不会误清新持有者的锁
+        local lockToken = {}
+        QuestManager._completing[lockKey] = lockToken
+        -- 兜底：DB 回调因异常未触发时释放锁，避免该玩家该任务永久卡死
+        if SetTimeout then
+            SetTimeout(10000, function()
+                if QuestManager._completing[lockKey] == lockToken then
+                    QuestManager._completing[lockKey] = nil
+                    print(('[quest-manager] ⏱️ Complete lock timeout released: %s'):format(lockKey))
+                end
+            end)
         end
 
-        -- 设置冷却
-        local cooldownHours = template.conditions and template.conditions.cooldown_hours or 0
-        if cooldownHours > 0 then
-            QuestDB.SetCooldown(citizenid, questId, cooldownHours)
-            QuestCache.InvalidateCooldowns(citizenid)
-        end
-
-        -- v0.7.0: 清理事件反向索引
-        QuestCache.UnindexEvent(citizenid, questId)
-
-        -- v1.0.0: 释放排他锁 + 清理节点
-        local template = QuestRegistry.GetTemplate(questId)
-        if template then
-            if template.mode == 'competitive' or template.mode == 'group' then
-                local src = getSourceFromCid(citizenid)
-                if src then QuestMutex.ReleaseLock(questId, src) end
+        -- 触发完成：仅 affectedRows > 0（真正从 in_progress 迁移）才执行副作用
+        QuestDB.CompleteQuest(citizenid, questId, function(affected)
+            -- 无论成功/affected=0 都释放完成锁（仅当仍持有本 token 时）
+            if QuestManager._completing[lockKey] == lockToken then
+                QuestManager._completing[lockKey] = nil
             end
-            -- 清理客户端节点
-            if src then QuestNodes.CancelAllNodes(src, questId) end
-        end
+            -- 任务已终结（无论本次是否迁移成功），内存当前步骤一并清理
+            QuestManager._currentSteps[lockKey] = nil
 
-        -- 缓存失效
-        QuestCache.InvalidateActive(citizenid)
-        QuestManager._resolvedTemplates[citizenid .. '_' .. questId] = nil
+            if not affected or affected <= 0 then
+                print(('[quest-manager] ⚠️ CompleteQuest affected=0, side effects skipped: %s / %s'):format(
+                    citizenid, questId))
+                return
+            end
 
-        -- v0.7.0: 广播任务完成事件
-        TriggerEvent('quest:server:onQuestCompleted', citizenid, questId)
-        TriggerEvent(('quest:server:onQuestCompleted:%s'):format(questId), citizenid)
+            QuestDB.LogEvent(citizenid, questId, 'complete', stepId, data)
 
-        -- 🌍 Phase 1: 发射漏斗社交信号 (玩家完成任务 = 社交活跃度+1)
-        if EventTypes and EventTypes.Publish then
-            EventTypes.Publish(EventTypes.FUNNEL.SOCIAL_SIGNAL,
-                citizenid, 'quest_completed', { quest_id = questId, timestamp = os.time() })
-        end
+            -- 发放奖励
+            local src = getSourceFromCid(citizenid)
+            print(('[quest-manager] 🏁 COMPLETING quest: %s, citizenid=%s, src=%s'):format(questId, citizenid, tostring(src)))
+            if src then
+                TriggerClientEvent(Config.Quest.Events.QUEST_COMPLETED, src, {
+                    quest_id = questId,
+                    title = template.title,
+                    rewards = template.rewards,
+                })
+
+                -- v0.7.2: 奖励在完成事件之后发放，避免奖励异常阻断客户端清理
+                pcall(QuestRewards.GrantRewards, src, template.rewards, questId)
+
+                TriggerClientEvent('QBCore:Notify', src,
+                    ('Quest completed: %s!'):format(template.title), 'success')
+            else
+                print('[quest-manager] ❌ getSourceFromCid returned nil — cannot send completion to client!')
+            end
+
+            -- 设置冷却
+            local cooldownHours = template.conditions and template.conditions.cooldown_hours or 0
+            if cooldownHours > 0 then
+                QuestDB.SetCooldown(citizenid, questId, cooldownHours)
+                QuestCache.InvalidateCooldowns(citizenid)
+            end
+
+            -- v0.7.0: 清理事件反向索引
+            QuestCache.UnindexEvent(citizenid, questId)
+
+            -- v1.0.0: 释放排他锁 + 清理节点
+            -- 注意: 此处必须用独立变量，避免遮蔽上面地址池解析后的 template
+            local registryTemplate = QuestRegistry.GetTemplate(questId)
+            if registryTemplate then
+                if registryTemplate.mode == 'competitive' or registryTemplate.mode == 'group' then
+                    if src then QuestMutex.ReleaseLock(questId, src) end
+                end
+                -- 清理客户端节点
+                if src then QuestNodes.CancelAllNodes(src, questId) end
+            end
+
+            -- 缓存失效
+            QuestCache.InvalidateActive(citizenid)
+            QuestManager._resolvedTemplates[lockKey] = nil
+
+            -- v0.7.0: 广播任务完成事件
+            TriggerEvent('quest:server:onQuestCompleted', citizenid, questId)
+            TriggerEvent(('quest:server:onQuestCompleted:%s'):format(questId), citizenid)
+
+            -- 🌍 Phase 1: 发射漏斗社交信号 (玩家完成任务 = 社交活跃度+1)
+            if EventTypes and EventTypes.Publish then
+                EventTypes.Publish(EventTypes.FUNNEL.SOCIAL_SIGNAL,
+                    citizenid, 'quest_completed', { quest_id = questId, timestamp = os.time() })
+            end
+        end)
 
         QuestPrint('✅ Quest completed: %s → %s', citizenid, questId)
         return true, 'Quest completed'
@@ -717,6 +815,8 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
 
     -- 5. 更新 DB 进度到下一步
     QuestDB.UpdateProgress(citizenid, questId, nextStep.id, progressData)
+    -- v1.1: 同步内存当前步骤（缓存空窗期兜底）
+    QuestManager._currentSteps[citizenid .. '_' .. questId] = nextStep.id
     QuestDB.LogEvent(citizenid, questId, 'advance', stepId, {
         from_step = stepId,
         to_step = nextStep.id,
@@ -912,6 +1012,9 @@ function QuestManager.FailQuest(source, questId, reason)
     QuestCache.UnindexEvent(citizenid, questId)
     QuestCache.InvalidateActive(citizenid)
     QuestManager._resolvedTemplates[citizenid .. '_' .. questId] = nil
+    -- v1.1: 任务终结 → 清理内存步骤与完成锁
+    QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
+    QuestManager._completing[citizenid .. '_' .. questId] = nil
 
     local src = getSourceFromCid(citizenid)
     if src then
@@ -955,6 +1058,9 @@ function QuestManager.AbandonQuest(source, questId)
     QuestCache.UnindexEvent(citizenid, questId)
     QuestCache.InvalidateActive(citizenid)
     QuestManager._resolvedTemplates[citizenid .. '_' .. questId] = nil
+    -- v1.1: 任务终结 → 清理内存步骤与完成锁
+    QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
+    QuestManager._completing[citizenid .. '_' .. questId] = nil
 
     local src = getSourceFromCid(citizenid)
     if src then

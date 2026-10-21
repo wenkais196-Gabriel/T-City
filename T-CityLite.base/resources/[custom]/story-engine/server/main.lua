@@ -66,14 +66,12 @@ end)
 -- v0.7 一次性门控: 玩家登录时加载已完成剧情线
 -- ==============================================================
 
-RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
+-- qb-core 的服务端加载事件（注意：不存在 QBCore:Server:OnPlayerLoaded）
+AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
     if Player and Player.PlayerData then
         StoryDB.LoadArcCompletions(Player.PlayerData.citizenid)
     end
 end)
-
 -- ==============================================================
 -- 事件: 玩家做出决策
 -- ==============================================================
@@ -150,6 +148,30 @@ exports('IsArcEnabled', function(arcId)
     return arc and arc.enabled ~= false  -- nil → true (默认启用)
 end)
 
+-- 服务端下发决策（custom-quest 推进到 decision 步骤时调用）
+exports('OfferDecision', function(source, questId, stepId, decisionId, timeout)
+    return DecisionEngine.OfferDecision(source, questId, stepId, decisionId, timeout)
+end)
+
+-- 清除待响应决策（任务结束/放弃时调用）
+exports('ClearDecision', function(source)
+    DecisionEngine.ClearPending(source)
+end)
+
+-- 玩家离线时清理，避免 pending/计时器泄漏
+AddEventHandler('playerDropped', function()
+    DecisionEngine.ClearPending(source)
+end)
+
+-- 任务失败/放弃时收口，避免遗留决策在后续任务中被复用
+AddEventHandler('quest:server:onQuestFailed', function(citizenid, questId)
+    for src, pending in pairs(DecisionEngine._pending) do
+        if pending.citizenid == citizenid and pending.questId == questId then
+            DecisionEngine.ClearPending(src)
+        end
+    end
+end)
+
 -- ==============================================================
 -- 注册到 Bus
 -- ==============================================================
@@ -176,4 +198,4 @@ end
 
 print('[story-engine] ✅ 剧情引擎已启动 (v0.7.0)')
 print('[story-engine]   事件: story:server:makeDecision')
-print('[story-engine]   7 exports: GetArcChoices, GetAllChoices, CheckChoiceCondition, RegisterDecision, GetDecision, IsArcCompleted, IsArcEnabled')
+print('[story-engine]   9 exports: GetArcChoices, GetAllChoices, CheckChoiceCondition, RegisterDecision, GetDecision, IsArcCompleted, IsArcEnabled, OfferDecision, ClearDecision')

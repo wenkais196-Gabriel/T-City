@@ -16,6 +16,9 @@ CartelService = {}
 -- 生产冷却追踪: citizenid → last_production_time
 local productionCooldowns = {}
 
+-- 进行中的生产: citizenid → { recipeId, finishAt }
+CartelService._activeProductions = {}
+
 -- 在线 cartel 成员缓存: citizenid → { source, name, grade }
 local cartelMembers = {}
 
@@ -51,6 +54,7 @@ AddEventHandler('playerDropped', function()
         cartelMembers[cid] = nil
     end
     productionCooldowns[cid] = nil
+    CartelService._activeProductions[cid] = nil
 end)
 
 -- ==============================================================
@@ -119,9 +123,13 @@ end
 --- 打开 cartel 组织仓库
 ---@param source number
 function CartelService.OpenStorage(source)
-    if Bus and Bus.StorageService then
-        Bus.StorageService.OpenOrgStorage(source, 'cartel')
-    else
+    local opened = false
+    if GetResourceState('custom-storage') == 'started' then
+        opened = pcall(function()
+            exports['custom-storage']:service_storage_OpenOrgStorage(source, 'cartel')
+        end)
+    end
+    if not opened then
         TriggerClientEvent('QBCore:Notify', source, _L(source, 'cartel_storage_down'), 'error')
     end
 end
@@ -130,10 +138,14 @@ end
 ---@return boolean shouldRaid
 ---@return number policeCount
 function CartelService.CheckRaidConditions()
-    local policeOnline = 0
-    if Bus and Bus.JobService then
-        policeOnline = Bus.JobService.GetOnDutyCount('police')
-    else
+    local policeOnline
+    if GetResourceState('core-framework') == 'started' then
+        local ok, count = pcall(function()
+            return exports['core-framework']:service_job_GetOnDutyCount('police')
+        end)
+        if ok then policeOnline = count end
+    end
+    if not policeOnline then
         policeOnline = QBCore.Functions.GetDutyCount('police')
     end
 

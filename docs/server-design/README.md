@@ -20,6 +20,7 @@
 | 05 | [叙事所有权](05-narrative-ownership.md) | 如何让服务器拥有自己的历史，让玩家成为历史的一部分？ | 功能层 |
 | 06 | [付费模型](06-payment-model.md) | Patron（养服务器）+ Identity（买面儿）双轨设计 | 商业层 |
 | 07 | [架构集成](07-architecture-integration.md) | 以上所有系统如何嵌入 T-City Phase 0-3 架构？ | 工程层 |
+| 08 | [Agent 中枢游戏导演](08-agent-director.md) | 如何让 AI/Agent 以可审计、可预算、可回滚的方式介入叙事？ | 工程层（设计稿） |
 
 ---
 

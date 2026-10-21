@@ -51,9 +51,20 @@ def parse_manifest(manifest_path: str) -> dict:
     with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
 
-    # Extract dependency() declarations
-    for match in re.finditer(r'dependency\s*\(\s*["\']([^"\']+)["\']\s*\)', content):
-        info["dependencies"].append(match.group(1))
+    # Extract dependency() / optional_dependency() declarations
+    deps = []
+    for match in re.finditer(r"(?<!optional_)dependency\s*\(\s*[\"']([^\"']+)[\"']\s*\)", content):
+        deps.append(match.group(1))
+    for match in re.finditer(r"(?<!optional_)dependency\s+[\"']([^\"']+)[\"']", content):
+        deps.append(match.group(1))
+
+    # Extract dependencies { 'a', 'b' } table form (the dominant style in this repo)
+    for match in re.finditer(r"dependencies\s*\{([^}]*)\}", content, re.DOTALL):
+        deps.extend(re.findall(r"[\"']([^\"']+)[\"']", match.group(1)))
+
+    info["dependencies"] = sorted(
+        set(d for d in deps if re.match(r"^[A-Za-z0-9_.\-]+$", d))
+    )
 
     # Extract @exports references in server_scripts
     for match in re.finditer(r"exports\[?['\"]([^'\"\]]+)['\"]", content):
@@ -89,6 +100,58 @@ def get_cfg_resource_list() -> set[str]:
     return resources
 
 
+def get_startup_sequence() -> list[tuple[str, str]]:
+    """Parse server.cfg.template exec order → [(resource, module_cfg), ...]"""
+    template = os.path.join(BASE_DIR, "server.cfg.template")
+    sequence = []
+    if not os.path.exists(template):
+        return sequence
+
+    with open(template, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            match = re.match(r"^\s*exec\s+configs/modules/(\S+)", line)
+            if not match:
+                continue
+            cfg_name = match.group(1)
+            cfg_path = os.path.join(BASE_DIR, "configs", "modules", cfg_name)
+            if not os.path.exists(cfg_path):
+                continue
+            with open(cfg_path, "r", encoding="utf-8", errors="ignore") as cf:
+                for cfg_line in cf:
+                    m = re.match(r"^\s*(ensure|start)\s+(\S+)", cfg_line.strip(), re.IGNORECASE)
+                    if m:
+                        resource = re.split(r"[\s#;]", m.group(2))[0]
+                        sequence.append((resource.lower(), cfg_name))
+    return sequence
+
+
+def check_startup_order(sequence: list[tuple[str, str]], index: dict[str, str]) -> list[dict]:
+    """Verify every hard dependency is started before its consumer."""
+    issues = []
+    position = {}
+    for i, (resource, _) in enumerate(sequence):
+        position.setdefault(resource, i)
+
+    for resource, module in sequence:
+        manifest = index.get(resource)
+        if not manifest:
+            continue
+        info = parse_manifest(manifest)
+        for dep in info["dependencies"]:
+            dep_lower = dep.lower()
+            if dep_lower not in position:
+                continue  # missing deps are reported separately
+            if position[dep_lower] > position[resource]:
+                issues.append({
+                    "type": "startup_order",
+                    "resource": resource,
+                    "dep": dep,
+                    "msg": (f"{resource}（{module}）依赖 {dep}，"
+                            f"但 {dep} 在更晚的位置启动"),
+                })
+    return issues
+
+
 def run():
     print("=" * 60)
     print("  资源依赖图检查")
@@ -100,7 +163,7 @@ def run():
     print(f"\n  代码库中资源总数: {len(resource_index)}")
     print(f"  CFG 中启用的资源: {len(active_resources)}")
     unused = len(resource_index) - len(active_resources & set(resource_index.keys()))
-    deferred = len(DEFERRED_RESOURCES & set(resource_index.keys()))
+    deferred = len(DEFERRED_RESOURCES & (set(resource_index.keys()) - active_resources))
     print(f"  未启用: {unused}（其中 {deferred} 为已知延期资源，不计入问题）")
 
     issues = []
@@ -140,7 +203,11 @@ def run():
                     "msg": f"{res_name} 依赖 {dep}，该资源存在但未在任何 CFG 中启用",
                 })
 
-    # 4. Check for orphan resources (exist but not referenced by anything)
+    # 4. Check startup order against server.cfg.template exec sequence
+    sequence = get_startup_sequence()
+    issues.extend(check_startup_order(sequence, resource_index))
+
+    # 5. Check for orphan resources (exist but not referenced by anything)
     for res_name, manifest_path in resource_index.items():
         if res_name in active_resources:
             continue
@@ -192,6 +259,7 @@ def run():
     categories = {
         "missing_resource": ("❌ 资源缺失", []),
         "missing_dependency": ("❌ 依赖缺失", []),
+        "startup_order": ("🔴 启动顺序冲突", []),
         "inactive_dependency": ("⚠️  依赖未启用", []),
         "orphan": ("💡 孤儿资源", []),
         "circular_dep": ("🔴 循环依赖", []),
@@ -210,7 +278,7 @@ def run():
                 print(f"    {item['msg']}")
             if len(items) > 15:
                 print(f"    ... 还有 {len(items) - 15} 个")
-            if cat_type in ("missing_resource", "missing_dependency", "circular_dep"):
+            if cat_type in ("missing_resource", "missing_dependency", "startup_order", "circular_dep"):
                 has_error = True
 
     if not any(items for _, items in categories.values()):

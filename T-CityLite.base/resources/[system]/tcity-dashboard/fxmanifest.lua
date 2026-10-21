@@ -31,6 +31,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@core-framework/bus.lua',
     '@oxmysql/lib/MySQL.lua',
     'server/security.lua',
     'server/compat.lua',

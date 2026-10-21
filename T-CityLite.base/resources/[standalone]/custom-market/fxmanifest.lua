@@ -12,6 +12,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@core-framework/bus.lua',
     'server/main.lua',
 }
 

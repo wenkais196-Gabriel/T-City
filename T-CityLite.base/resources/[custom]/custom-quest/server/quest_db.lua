@@ -76,11 +76,19 @@ end
 --- 完成任务
 ---@param citizenid string
 ---@param questId string
-function QuestDB.CompleteQuest(citizenid, questId)
-    if not MySQL then return end
+---@param cb function|nil 回调: function(affectedRows) — 仅当真正从 in_progress 迁移时为 1
+function QuestDB.CompleteQuest(citizenid, questId, cb)
+    if not MySQL then
+        -- 无 DB 测试模式：视为完成成功，保证流程可走完
+        if cb then cb(1) end
+        return
+    end
     MySQL.Async.execute(
         'UPDATE player_quests SET status = ?, completed_at = NOW(), completion_count = completion_count + 1 WHERE citizenid = ? AND quest_id = ? AND status = ?',
-        { 'completed', citizenid, questId, 'in_progress' }
+        { 'completed', citizenid, questId, 'in_progress' },
+        function(affected)
+            if cb then cb(affected or 0) end
+        end
     )
 end
 
