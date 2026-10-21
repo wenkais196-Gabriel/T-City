@@ -1,6 +1,37 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local WantedPlayers = {} -- 缓存当前在线且被通缉的玩家 { [citizenid] = { source = id, wantedLevel = lv } }
 
+-- 通缉上报限流: 每名玩家 5 秒一次（客户端正常 GPS 脉冲间隔为 8 秒）
+local HandoverCooldowns = {}
+local HANDOVER_COOLDOWN_MS = 5000
+local MAP_COORD_LIMIT = 10000
+
+-- 校验并规范化客户端坐标，拒绝非数字/NaN/超出地图范围的输入
+local function SanitizeCoords(coords)
+    local x, y, z
+    if type(coords) == 'vector3' then
+        x, y, z = coords.x, coords.y, coords.z
+    elseif type(coords) == 'table' then
+        x, y, z = tonumber(coords.x) or tonumber(coords[1]),
+                  tonumber(coords.y) or tonumber(coords[2]),
+                  tonumber(coords.z) or tonumber(coords[3])
+    end
+
+    if not x or not y or not z then return nil end
+    if x ~= x or y ~= y or z ~= z then return nil end -- NaN
+    if x < -MAP_COORD_LIMIT or x > MAP_COORD_LIMIT
+        or y < -MAP_COORD_LIMIT or y > MAP_COORD_LIMIT
+        or z < -MAP_COORD_LIMIT or z > MAP_COORD_LIMIT then
+        return nil
+    end
+
+    return vector3(x, y, z)
+end
+
+AddEventHandler('playerDropped', function()
+    HandoverCooldowns[source] = nil
+end)
+
 -- ==========================================
 --        接 收 警 星 移 交 及 GPS 脉 冲
 -- ==========================================
@@ -8,6 +39,21 @@ RegisterNetEvent('custom-main:server:policeHandoverAlert', function(coords, stre
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+
+    -- 防刷: 超频请求直接丢弃
+    local now = GetGameTimer()
+    local lastAlert = HandoverCooldowns[src]
+    if lastAlert and (now - lastAlert) < HANDOVER_COOLDOWN_MS then return end
+    HandoverCooldowns[src] = now
+
+    -- 参数校验: 坐标必须是数字且在合理地图范围；通缉星级夹紧到 1..5；街道名截断
+    coords = SanitizeCoords(coords)
+    if not coords then return end
+
+    local level = tonumber(wantedLevel)
+    if not level or level ~= level then return end
+    wantedLevel = math.max(1, math.min(5, math.floor(level)))
+    streetName = tostring(streetName or '未知地点'):sub(1, 64)
     
     local citizenid = Player.PlayerData.citizenid
     local charName = Player.PlayerData.charinfo.firstname .. " " .. Player.PlayerData.charinfo.lastname

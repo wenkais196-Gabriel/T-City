@@ -1,5 +1,11 @@
 # 🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)
 
+> [!IMPORTANT]
+> **2026-10-21 全局审查更新**：本文件的资源清单与版本状态已落后于代码（实际 80 个启用资源 / 17 个模块）。
+> 最新审计结论、已修复缺陷与三阶段路线图见
+> [`T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md`](T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md)。
+> 在下一次 `manage_progress.py sync` 前，请以该报告为准。
+
 本文件是 T-City Lite 项目的 **单一数据源 (Single Source of Truth)**，汇总了项目当前的整体状态、路线图、当前阶段任务清单，以及当前代码库中实际处于启用状态的模块与资源。
 
 > [!NOTE]

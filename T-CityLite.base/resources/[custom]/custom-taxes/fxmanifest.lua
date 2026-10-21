@@ -18,6 +18,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@oxmysql/lib/MySQL.lua',
     -- ⚠️ vehicle_lifecycle.lua removed — merged to core_economy SinkService
     -- ⚠️ npc_pricing.lua removed — replaced by economy_baseline.json + core_economy
     'server/property_tax.lua',

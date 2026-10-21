@@ -20,6 +20,14 @@ RegisterNetEvent('justice:server:imprison', function(citizenid, sentenceMinutes,
         return
     end
 
+    -- 🛡️ 参数清洗：刑期必须有界，citizenid 必须是合法字符串
+    citizenid = tostring(citizenid or '')
+    if #citizenid == 0 or #citizenid > 50 then return end
+    sentenceMinutes = math.floor(tonumber(sentenceMinutes) or 0)
+    if sentenceMinutes <= 0 then return end
+    local maxSentence = (Config.Justice and Config.Justice.MaxSentence) or 120
+    if sentenceMinutes > maxSentence then sentenceMinutes = maxSentence end
+
     local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
     if not Player then
         -- 离线囚犯: 仅记录, 上线时恢复
@@ -120,10 +128,27 @@ RegisterNetEvent('justice:server:sentenceComplete', function()
     if not Player then return end
 
     local cid = Player.PlayerData.citizenid
+    local inmate = JusticeService.GetInmate(cid)
+    if not inmate then
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'justice_not_inmate') or 'You are not in prison', 'error')
+        return
+    end
+
+    -- 🔒 刑期校验：客户端不能自报"服刑完毕"
+    local elapsedMin = math.floor((os.time() - (inmate.startTime or os.time())) / 60)
+    if elapsedMin < (inmate.sentenceMinutes or 0) then
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'justice_not_done') or 'Sentence not served yet', 'error')
+        return
+    end
+
     JusticeService.ReleaseInmate(cid)
 
     -- 🌐 Atmosphere: complete scene on sentence served
-    if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'complete') end
+    if GetResourceState('tcity-atmosphere') == 'started' then
+        pcall(function()
+            exports['tcity-atmosphere']:service_atmosphere_PlayScene(src, 'complete')
+        end)
+    end
 
     TriggerClientEvent('QBCore:Notify', src, _L(src, 'justice_sentence_done'), 'success', 10000)
 

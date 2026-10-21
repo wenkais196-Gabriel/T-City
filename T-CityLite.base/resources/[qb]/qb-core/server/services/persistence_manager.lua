@@ -22,13 +22,18 @@ local function fallbackFlushSinglePlayer(Player)
     local PlayerData = Player.PlayerData
     local citizenid = PlayerData.citizenid
     local ped = GetPlayerPed(PlayerData.source)
-    local pcoords = GetEntityCoords(ped)
-
+    -- ⚠️ 先判断 ped 有效性再取坐标：断线时 ped 可能已为 0，
+    --    否则会把 0,0,0 当成最后位置写库。
+    local pcoords
     if ped and ped ~= 0 then
+        pcoords = GetEntityCoords(ped)
         local phealth = GetEntityHealth(ped)
         if phealth > 0 then
             PlayerData.metadata['health'] = phealth
         end
+    else
+        local pos = PlayerData.position
+        pcoords = pos and vector3(pos.x or 0.0, pos.y or 0.0, pos.z or 0.0) or vector3(0.0, 0.0, 0.0)
     end
 
     MySQL.insert('INSERT INTO players (citizenid, cid, license, name, money, charinfo, job, gang, position, metadata) VALUES (:citizenid, :cid, :license, :name, :money, :charinfo, :job, :gang, :position, :metadata) ON DUPLICATE KEY UPDATE cid = :cid, name = :name, money = :money, charinfo = :charinfo, job = :job, gang = :gang, position = :position, metadata = :metadata', {
@@ -137,3 +142,22 @@ AddEventHandler('onResourceStart', function(resourceName)
 end)
 
 print('[PersistenceManager] ✅ Unified delegation layer loaded (delegates to core-framework when available)')
+
+-- ── 定时刷盘 / 停机兜底 ──────────────────────────────────────────
+-- core-framework 的 tick 跑在它自己的资源状态里，看不到 qb-core 的 _dirty 表，
+-- 因此定时器必须挂在持有脏标记的这一侧（本文件）。
+CreateThread(function()
+    local interval = tonumber(GetConvar('persistence_flush_interval', '900')) or 900
+    if interval < 30 then interval = 30 end
+
+    while true do
+        Wait(interval * 1000)
+        ThinDirtyFlush.ForceFlush(nil)
+    end
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName == GetCurrentResourceName() then
+        ThinDirtyFlush.ForceFlush(nil)
+    end
+end)

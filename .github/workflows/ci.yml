@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+    branches: [master, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-checks:
+    name: Config & dependency checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python syntax
+        run: python3 -m compileall -q tests
+        working-directory: T-CityLite.base
+
+      - name: CFG integrity (ensure targets exist)
+        run: python3 tests/check_cfgs.py
+        working-directory: T-CityLite.base
+
+      - name: Dependency graph & startup order
+        run: python3 tests/check_dependencies.py
+        working-directory: T-CityLite.base
+
+      - name: Bus wiring (registrar manifest includes bus.lua)
+        run: python3 tests/check_bus_wiring.py
+        working-directory: T-CityLite.base
+
+  lua-syntax:
+    name: Lua syntax (changed files)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Lua 5.4
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+
+      - name: Parse changed Lua files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="HEAD^"
+          fi
+
+          mapfile -t files < <(git diff --name-only "$BASE"...HEAD -- '*.lua' || true)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No Lua changes detected — skipping."
+            exit 0
+          fi
+
+          fail=0
+          for f in "${files[@]}"; do
+            [[ -f "$f" ]] || continue
+            # FiveM's Lua dialect supports backtick hash literals (`model`),
+            # which vanilla luac cannot parse. Skip those files.
+            if grep -q '`' "$f"; then
+              echo "SKIP (FiveM hash literal): $f"
+              continue
+            fi
+            echo "luac -p $f"
+            luac5.4 -p "$f" || fail=1
+          done
+          exit "$fail"
+
+  docs-check:
+    name: Docs links (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check referenced markdown files exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib, re, sys
+          root = pathlib.Path('.')
+          missing = []
+          for md in root.rglob('*.md'):
+              if '.git' in md.parts:
+                  continue
+              text = md.read_text(encoding='utf-8', errors='ignore')
+              for target in re.findall(r'\]\(([^)#]+\.md)', text):
+                  if target.startswith(('http://', 'https://', 'file://')):
+                      continue
+                  p = (md.parent / target).resolve()
+                  if not p.exists():
+                      missing.append(f'{md}: {target}')
+          if missing:
+              print('\n'.join(missing[:50]))
+              sys.exit(1)
+          PY

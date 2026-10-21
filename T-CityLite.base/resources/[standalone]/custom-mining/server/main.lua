@@ -50,6 +50,16 @@ RegisterNetEvent('mining:server:mineOre', function(siteId)
     end
     if not site then return end
 
+    -- 4b. 🔒 矿点距离校验（服务端独立坐标，不信任客户端 siteId）
+    local ped = GetPlayerPed(src)
+    if ped and ped ~= 0 then
+        local pc = GetEntityCoords(ped)
+        local radius = (site.radius or 20.0) + 5.0
+        if #(pc - site.coords) > radius then
+            return
+        end
+    end
+
     -- 5. 工具检测 (客户端带了什么矿镐)
     local toolName = 'pickaxe'
     if QBCore.Functions.HasItem(src, 'pickaxe_legendary', 1) then
@@ -90,18 +100,24 @@ RegisterNetEvent('mining:server:mineOre', function(siteId)
     end
 
     -- 8. 安全清洗
-    if Bus and Bus.SecurityService then
-        local ok, _, cleanedCount = Bus.SecurityService.ValidateItemEvent(src, selectedOre.name, yield)
-        if ok then yield = cleanedCount end
+    if GetResourceState('core-framework') == 'started' then
+        local callOk, ok, _, cleanedCount = pcall(function()
+            return exports['core-framework']:service_security_ValidateItemEvent(src, selectedOre.name, yield)
+        end)
+        if callOk and ok and tonumber(cleanedCount) then yield = cleanedCount end
     end
 
     -- 9. 尝试存入组织仓库 (优先)
     local storedInOrg = false
-    if Bus and Bus.StorageService then
-        local canAccess = Bus.StorageService.CanAccess(src, 'mining_co')
-        if canAccess then
-            local addOk = Bus.StorageService.AddItem('mining_co', selectedOre.name, yield, nil, nil)
-            if addOk then storedInOrg = true end
+    if GetResourceState('custom-storage') == 'started' then
+        local accessOk, canAccess = pcall(function()
+            return exports['custom-storage']:service_storage_CanAccess(src, 'mining_co')
+        end)
+        if accessOk and canAccess then
+            local addOk, added = pcall(function()
+                return exports['custom-storage']:service_storage_AddItem('mining_co', selectedOre.name, yield, nil, nil)
+            end)
+            if addOk and added then storedInOrg = true end
         end
     end
 

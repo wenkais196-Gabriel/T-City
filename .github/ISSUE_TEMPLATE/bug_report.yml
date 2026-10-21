@@ -1,0 +1,70 @@
+name: Bug report
+description: 报告一个可复现的问题（脚本错误、数据错误、安全漏洞请走私密渠道）
+title: "[bug] "
+labels: ["type:bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。安全漏洞请不要公开提交，见 `SECURITY.md`。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 实际行为与预期行为
+      placeholder: |
+        实际：
+        预期：
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 新角色登录
+        2. 接取任务 xxx
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 控制台 / 日志
+      description: 请粘贴 FXServer 控制台、txAdmin 日志或客户端 F8 输出（注意脱敏）
+      render: shell
+  - type: input
+    id: artifact
+    attributes:
+      label: FXServer artifact / 版本
+      placeholder: "例如 12000 / 2026-10"
+  - type: input
+    id: commit
+    attributes:
+      label: 复现的 commit
+      placeholder: "例如 4b53496"
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响区域
+      multiple: true
+      options:
+        - 启动 / 依赖
+        - 任务 custom-quest
+        - 剧情 story-engine
+        - 经济 / 银行
+        - 载具
+        - 警察 / EMS / 司法
+        - 手机
+        - 数据库 / 持久化
+        - NUI / 前端
+        - 其他
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索过现有 Issue，没有重复
+          required: true
+        - label: 我已移除日志中的密钥 / 玩家隐私
+          required: true

@@ -564,12 +564,17 @@ function QBCore.Player.Save(source, force)
     local PlayerData = Player.PlayerData
     if PlayerData then
         local ped = GetPlayerPed(source)
-        local pcoords = GetEntityCoords(ped)
+        local pcoords
         if ped and ped ~= 0 then
+            pcoords = GetEntityCoords(ped)
             local phealth = GetEntityHealth(ped)
             if phealth > 0 then
                 PlayerData.metadata['health'] = phealth
             end
+        else
+            -- 断线时 ped 可能已销毁，回退到上次持久化位置，避免写入 0,0,0
+            local pos = PlayerData.position
+            pcoords = pos and vector3(pos.x or 0.0, pos.y or 0.0, pos.z or 0.0) or vector3(0.0, 0.0, 0.0)
         end
 
         -- 物理位移增量检测：若位移差大于 5.0 米，同样标记为脏数据需要入库

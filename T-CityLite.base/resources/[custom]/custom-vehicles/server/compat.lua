@@ -58,8 +58,31 @@ RegisterNetEvent('qb-vehiclekeys:server:GiveKeys', function(plate)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if type(plate) ~= 'string' or #plate == 0 then return end
 
-    KeyManager.GiveKeys(plate, Player.PlayerData.citizenid, 'shared')
+    -- 🔒 车主校验：知道车牌不等于能拿钥匙
+    local cid = Player.PlayerData.citizenid
+    local owner = KeyManager.GetOwner(plate)
+    if owner and owner ~= cid then
+        if exports['custom-logs'] then
+            exports['custom-logs']:LogSecurity('钥匙冒领拦截',
+                ('**%s** (%s) | Plate: %s | Owner: %s'):format(
+                    GetPlayerName(src), cid, plate, owner), 16711680)
+        end
+        return
+    end
+
+    -- 无主车辆（任务/警车等）只允许在车内授权，防止远程刷钥匙
+    if not owner then
+        local ped = GetPlayerPed(src)
+        local veh = ped ~= 0 and GetVehiclePedIsIn(ped, false) or 0
+        if veh == 0 then return end
+        local vehPlate = GetVehicleNumberPlateText(veh)
+        vehPlate = vehPlate and vehPlate:gsub('^%s+', ''):gsub('%s+$', ''):upper() or ''
+        if vehPlate ~= plate:gsub('^%s+', ''):gsub('%s+$', ''):upper() then return end
+    end
+
+    KeyManager.GiveKeys(plate, cid, 'shared')
 
     -- 通知相关客户端
     TriggerClientEvent('custom-vehicles:client:keysUpdated', src, {

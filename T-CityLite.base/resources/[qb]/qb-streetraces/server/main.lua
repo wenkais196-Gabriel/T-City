@@ -7,27 +7,50 @@ RegisterNetEvent('qb-streetraces:NewRace', function(RaceTable)
     if not src or src == 0 then return end
     local xPlayer = QBCore.Functions.GetPlayer(src)
     if not xPlayer then return end
-    -- [SECURITY] Validate and clamp amount from client
-    local stakeAmount = tonumber(RaceTable.amount) or 0
-    if stakeAmount <= 0 then
+    if type(RaceTable) ~= 'table' then return end
+
+    -- [SECURITY] 只接受白名单字段，金额/奖池由服务端重建
+    local stakeAmount = math.floor(tonumber(RaceTable.amount) or 0)
+    if stakeAmount <= 0 or stakeAmount < Config.MinimumStake or stakeAmount > Config.MaximumStake then
         TriggerClientEvent('QBCore:Notify', src, 'Invalid stake amount', 'error')
         return
     end
-    if stakeAmount < Config.MinimumStake then stakeAmount = Config.MinimumStake end
-    if stakeAmount > Config.MaximumStake then stakeAmount = Config.MaximumStake end
-    local RaceId = math.random(1000, 9999)
-    RaceTable.amount = stakeAmount
-    if xPlayer.Functions.RemoveMoney('cash', stakeAmount, 'streetrace-created') then
-        Races[RaceId] = RaceTable
-        Races[RaceId].creator = src
-        Races[RaceId].joined[#Races[RaceId].joined + 1] = src
-        TriggerClientEvent('qb-streetraces:SetRace', -1, Races)
-        TriggerClientEvent('qb-streetraces:SetRaceId', src, RaceId)
-        TriggerClientEvent('QBCore:Notify', src, 'You joined the race for ' .. Config.Currency .. Races[RaceId].amount .. '.', 'success')
-        UpdateRaceInfo(Races[RaceId])
-    else
-        TriggerClientEvent('QBCore:Notify', src, 'You do not have ' .. Config.Currency .. RaceTable.amount .. '.', 'error')
+
+    local sx, sy, sz = tonumber(RaceTable.startx), tonumber(RaceTable.starty), tonumber(RaceTable.startz)
+    local ex, ey, ez = tonumber(RaceTable.endx), tonumber(RaceTable.endy), tonumber(RaceTable.endz)
+    if not (sx and sy and sz and ex and ey and ez) then
+        TriggerClientEvent('QBCore:Notify', src, 'Invalid race route', 'error')
+        return
     end
+
+    local startPos, endPos = vector3(sx, sy, sz), vector3(ex, ey, ez)
+    if #(startPos - endPos) < Config.MinimumRaceDistance then
+        TriggerClientEvent('QBCore:Notify', src, 'End Position Is Too Close', 'error')
+        return
+    end
+
+    if not xPlayer.Functions.RemoveMoney('cash', stakeAmount, 'streetrace-created') then
+        TriggerClientEvent('QBCore:Notify', src, 'You do not have ' .. Config.Currency .. stakeAmount .. '.', 'error')
+        return
+    end
+
+    local RaceId = math.random(1000, 9999)
+    while Races[RaceId] do RaceId = math.random(1000, 9999) end
+
+    Races[RaceId] = {
+        creator = src,
+        started = false,
+        startx = sx, starty = sy, startz = sz,
+        endx = ex, endy = ey, endz = ez,
+        amount = stakeAmount,
+        pot = stakeAmount,
+        joined = { src },
+    }
+
+    TriggerClientEvent('qb-streetraces:SetRace', -1, Races)
+    TriggerClientEvent('qb-streetraces:SetRaceId', src, RaceId)
+    TriggerClientEvent('QBCore:Notify', src, 'You joined the race for ' .. Config.Currency .. stakeAmount .. '.', 'success')
+    UpdateRaceInfo(Races[RaceId])
 end)
 
 RegisterNetEvent('qb-streetraces:RaceWon', function(RaceId)
@@ -35,20 +58,26 @@ RegisterNetEvent('qb-streetraces:RaceWon', function(RaceId)
     if not src or src == 0 then return end
     local xPlayer = QBCore.Functions.GetPlayer(src)
     if not xPlayer then return end
-    -- [SECURITY] Validate race exists and player actually participated
-    if not Races[RaceId] or not Races[RaceId].started then
+
+    local race = Races[RaceId]
+    if not race or not race.started then
         TriggerClientEvent('QBCore:Notify', src, 'Invalid race', 'error')
         return
     end
+
     local isInRace = false
-    for _, joined in ipairs(Races[RaceId].joined) do
+    for _, joined in ipairs(race.joined) do
         if joined == src then isInRace = true; break end
     end
     if not isInRace then
         TriggerClientEvent('QBCore:Notify', src, 'You did not participate in this race', 'error')
         return
     end
-    local pot = tonumber(Races[RaceId].pot) or 0
+
+    -- [SECURITY] 奖池由服务端按参赛人数重建，并先销毁赛局防重复领奖
+    local pot = (tonumber(race.amount) or 0) * #race.joined
+    Races[RaceId] = nil
+
     if pot <= 0 then return end
     xPlayer.Functions.AddMoney('cash', pot, 'race-won')
     TriggerClientEvent('QBCore:Notify', src, 'You won the race and ' .. Config.Currency .. pot .. ',- recieved', 'success')
@@ -58,23 +87,40 @@ end)
 
 RegisterNetEvent('qb-streetraces:JoinRace', function(RaceId)
     local src = source
+    if not src or src == 0 then return end
     local xPlayer = QBCore.Functions.GetPlayer(src)
-    local zPlayer = QBCore.Functions.GetPlayer(Races[RaceId].creator)
+    if not xPlayer then return end
+
+    local race = Races[RaceId]
+    if not race or race.started then
+        TriggerClientEvent('QBCore:Notify', src, 'Invalid race', 'error')
+        return
+    end
+
+    -- 防止重复加入 / 重复扣款
+    for _, joined in ipairs(race.joined) do
+        if joined == src then
+            TriggerClientEvent('QBCore:Notify', src, 'You are already in this race', 'error')
+            return
+        end
+    end
+
+    local zPlayer = QBCore.Functions.GetPlayer(race.creator)
     if zPlayer ~= nil then
-        if xPlayer.Functions.RemoveMoney('cash', Races[RaceId].amount, 'streetrace-joined') then
-            Races[RaceId].pot = Races[RaceId].pot + Races[RaceId].amount
-            Races[RaceId].joined[#Races[RaceId].joined + 1] = src
+        if xPlayer.Functions.RemoveMoney('cash', race.amount, 'streetrace-joined') then
+            race.pot = race.pot + race.amount
+            race.joined[#race.joined + 1] = src
             TriggerClientEvent('qb-streetraces:SetRace', -1, Races)
             TriggerClientEvent('qb-streetraces:SetRaceId', src, RaceId)
             TriggerClientEvent('QBCore:Notify', src, 'You joined the race', 'primary')
-            TriggerClientEvent('QBCore:Notify', Races[RaceId].creator, GetPlayerName(src) .. ' Joined the race', 'primary')
-            UpdateRaceInfo(Races[RaceId])
+            TriggerClientEvent('QBCore:Notify', race.creator, GetPlayerName(src) .. ' Joined the race', 'primary')
+            UpdateRaceInfo(race)
         else
             TriggerClientEvent('QBCore:Notify', src, 'You dont have enough cash', 'error')
         end
     else
         TriggerClientEvent('QBCore:Notify', src, 'The person wo made the race is offline!', 'error')
-        Races[RaceId] = {}
+        Races[RaceId] = nil
     end
 end)
 

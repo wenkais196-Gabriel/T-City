@@ -84,8 +84,11 @@ end
 -- ==============================================================
 
 function JusticeService.GetOnlineJobCount(jobName)
-    if Bus and Bus.JobService then
-        return Bus.JobService.GetOnDutyCount(jobName)
+    if GetResourceState('core-framework') == 'started' then
+        local ok, count = pcall(function()
+            return exports['core-framework']:service_job_GetOnDutyCount(jobName)
+        end)
+        if ok then return count end
     end
     return QBCore.Functions.GetDutyCount(jobName)
 end
