@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `txAdminPort 0` 禁用管理员模式，避免端口冲突
 
 ### Testing
-- `pytest tests`：**424 passed**（含 MariaDB schema；无 DB 连接时 286 passed / 132 skipped）
+- `pytest tests`：**426 passed**（含 MariaDB schema；无 DB 连接时 286 passed / 132 skipped）
 - oxmysql JS 单测：**148 passed**
 - NUI 冒烟：**4/4 passed**（Playwright Chromium）
 - 游戏内 `/test run all`：**298 PASS / 0 FAIL / 9 SKIP**（有玩家上下文；无玩家时 225 PASS / 8 SKIP；见 `docs/v0.7a-acceptance-report.md`）

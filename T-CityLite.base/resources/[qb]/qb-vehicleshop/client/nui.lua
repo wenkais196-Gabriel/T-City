@@ -24,8 +24,11 @@ end
 
 function _vCloseNui()
     nuiOpen = false
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    if not ok then
+        SetNuiFocus(false, false)
+        SetNuiFocusKeepInput(false)
+    end
     SendNUIMessage({ type = 'close' })
 end
 
@@ -150,8 +153,11 @@ function OpenVehicleShopNui(shopName)
     end
 
     payload.type = 'open'
-    SetNuiFocus(true, true)
-    SetNuiFocusKeepInput(true)
+    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    if not ok then
+        SetNuiFocus(true, true)
+        SetNuiFocusKeepInput(true)
+    end
     nuiOpen = true
 
     print(('[qb-vehicleshop] 🖥️ Opening NUI for shop=%s vehicle=%s price=%s'):format(

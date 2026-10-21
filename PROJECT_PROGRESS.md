@@ -65,7 +65,7 @@
 - [x] `pytest tests`：286 passed / 132 skipped（跳过项需 MySQL）
 - [x] GitHub Actions CI（CFG + 依赖 + 语法 + pytest + MariaDB schema + NUI 冒烟）
 - [x] NUI 无头冒烟 4/4（车店 / 中控屏 / 车库 / 手机，Playwright）
-- [x] 132 个 DB 用例在一次性库跑通（424 passed；schema fixture + CI MariaDB 任务）
+- [x] 132 个 DB 用例在一次性库跑通（426 passed；schema fixture + CI MariaDB 任务）
 
 ### 5. 发版收尾
 - [x] tag `v0.7a` 已推送
@@ -152,7 +152,7 @@
 
 <!-- ACTIVE_RESOURCES_START -->
 
-Active resources detected in codebase (**77** unique resources across **17** module CFGs):
+Active resources detected in codebase (**78** unique resources across **17** module CFGs):
 
 | Module Cfg | Description | Active Count | Active Resources |
 | :--- | :--- | :--- | :--- |
@@ -162,7 +162,7 @@ Active resources detected in codebase (**77** unique resources across **17** mod
 | **career.cfg** | 职业多标签管理 | **1** | `custom-career` |
 | **core.cfg** | v0.1 核心启动链 | **15** | `aaa_silence`, `mapmanager`, `chat`, `spawnmanager`, `sessionmanager`, `basic-gamemode`, `hardcap`, `baseevents`, `oxmysql`, `qb-core`, `production-freeze`, `qb-loading`, `menuv`, `qb-adminmenu`, `hud-position-tool` |
 | **crime.cfg** | v0.5 犯罪模块 | **5** | `qb-doorlock`, `qb-storerobbery`, `qb-houserobbery`, `qb-drugs`, `qb-pawnshop` |
-| **custom.cfg** | 自研资源主配置（v0.5–v0.7） | **20** | `core-framework`, `custom-logs`, `custom-economy`, `custom-taxes`, `custom-quest`, `custom-security`, `custom-crime`, `custom-main`, `bob74_ipl`, `cartel-gates`, `custom-phone`, `custom-certificates`, `custom-debug`, `custom-storage`, `custom-market`, `custom-cartel`, `custom-mining`, `custom-justice`, `custom-documents`, `custom-testing` |
+| **custom.cfg** | 自研资源主配置（v0.5–v0.7） | **21** | `core-framework`, `custom-ui`, `custom-logs`, `custom-economy`, `custom-taxes`, `custom-quest`, `custom-security`, `custom-crime`, `custom-main`, `bob74_ipl`, `cartel-gates`, `custom-phone`, `custom-certificates`, `custom-debug`, `custom-storage`, `custom-market`, `custom-cartel`, `custom-mining`, `custom-justice`, `custom-documents`, `custom-testing` |
 | **economy.cfg** | 经济监控与事件节点 | **3** | `core_economy`, `economy-dashboard`, `atom_nodes` |
 | **jobs.cfg** | 基础职业与 RP 依赖 | **3** | `progressbar`, `qb-management`, `qb-mechanicjob` |
 | **medical.cfg** | 医疗模块 | **2** | `hospital_map`, `qb-ambulancejob` |
@@ -244,5 +244,6 @@ Active resources detected in codebase (**77** unique resources across **17** mod
 - [v0.7a 验收报告](./T-CityLite.base/docs/v0.7a-acceptance-report.md)
 - [v0.7b 收尾 vs v1.0 联调建议](./T-CityLite.base/docs/v0.7b-v1.0-decision.md)
 - [注意项解决方案](./T-CityLite.base/docs/attention-items-solutions.md)
+- [菜单交互设计规范](./T-CityLite.base/docs/menu-interaction-design.md)
 - [v0.7 集成测试手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
 - [**v0.6-quest 通用任务系统设计方案**](./QBCore_Lite_versions/v0.6-quest-system.md)

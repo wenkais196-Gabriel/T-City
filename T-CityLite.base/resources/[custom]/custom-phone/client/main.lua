@@ -5,8 +5,11 @@ local isPhoneOpen = false
 local function ClosePhone()
     if not isPhoneOpen then return end
     isPhoneOpen = false
-    SetNuiFocusKeepInput(false)
-    SetNuiFocus(false, false)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    if not ok then
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+    end
     SendNUIMessage({
         action = 'phone:close'
     })
@@ -22,9 +25,12 @@ end
 local function OpenPhone()
     if isPhoneOpen then return end
     isPhoneOpen = true
-    SetNuiFocus(true, true)          -- cursor visible, keyboard to NUI
-    -- 手机打开时完全接管输入：否则滚轮仍会穿透到武器轮盘/电台
-    SetNuiFocusKeepInput(false)
+    -- 参考 qb-phone：保留移动输入，用 DisableDisplayControlActions 屏蔽武器/电台轮盘
+    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = true }) end)
+    if not ok then
+        SetNuiFocus(true, true)
+        SetNuiFocusKeepInput(true)
+    end
     
     -- Play GTA V native phone-out animation
     local ped = PlayerPedId()
@@ -95,6 +101,8 @@ local function OpenPhone()
             if not IsEntityPlayingAnim(GetPlayerPed(-1), 'cellphone@', 'cellphone_text_read_base', 3) then
                 TaskPlayAnim(GetPlayerPed(-1), 'cellphone@', 'cellphone_text_read_base', 8.0, -8.0, -1, 49, 0, false, false, false)
             end
+            -- 参考 qb-phone：保留 WASD 移动，只屏蔽显示类控制（武器/电台轮盘）
+            DisableDisplayControlActions()
             -- While phone is open, disable standard game control keys that interfere with UI typing
             -- NOTE: Do NOT disable INPUT_CHAT (T key/245) so players can still chat
             DisableControlAction(0, 1, true) -- LookLeftRight

@@ -159,10 +159,13 @@ local VehicleClassLicenseMap = {
 -- 🔒 服务端证件验证：防止客户端绕过车库 blip/zone 门控
 QBCore.Functions.CreateCallback('qb-garages:server:spawnvehicle', function(source, cb, plate, vehicle, coords)
     local Player = QBCore.Functions.GetPlayer(source)
+    print(('[qb-garages] spawnvehicle request src=%s plate=%s vehicle=%s'):format(
+        tostring(source), tostring(plate), tostring(vehicle)))
     if Player then
         -- 🚗 每人最多 3 辆载具在车库外
         local outsideCount = MySQL.scalar.await('SELECT COUNT(*) FROM player_vehicles WHERE citizenid = ? AND state = 0', { Player.PlayerData.citizenid })
         if outsideCount >= 3 then
+            print(('[qb-garages] spawnvehicle rejected: outsideCount=%d'):format(outsideCount))
             TriggerClientEvent('QBCore:Notify', source, '你已经有 3 辆载具在外面了，先存一辆再取', 'error', 5000)
             cb(nil)
             return
@@ -175,6 +178,7 @@ QBCore.Functions.CreateCallback('qb-garages:server:spawnvehicle', function(sourc
         if requiredLicense then
             local licences = Player.PlayerData.metadata['licences']
             if not licences or not licences[requiredLicense] then
+                print(('[qb-garages] spawnvehicle rejected: missing license=%s'):format(tostring(requiredLicense)))
                 TriggerClientEvent('QBCore:Notify', source, 'You need a valid license to spawn this vehicle type!', 'error', 5000)
                 cb(nil)
                 return

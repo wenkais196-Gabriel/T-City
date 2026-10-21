@@ -78,7 +78,19 @@ local function _vStartShopPrompt()
                 and not IsPedInAnyVehicle(PlayerPedId(), false)
                 and not _vIsNuiOpen() then
                 _vSetClosestShowroomVehicle()
-                _vOpenNui(insideShop)
+                -- 距离校验：必须在当前展车 3.5m 内才允许打开
+                local shop = Config.Shops[insideShop]
+                local chosen = shop and shop.ShowroomVehicles[ClosestVehicle]
+                local c = chosen and chosen.coords
+                local near = false
+                if c then
+                    near = #(GetEntityCoords(PlayerPedId()) - vector3(c.x, c.y, c.z)) <= 3.5
+                end
+                if not near then
+                    QBCore.Functions.Notify('靠近展车后再按 E', 'error', 3000)
+                else
+                    _vOpenNui(insideShop)
+                end
             end
         end
         shopPromptRunning = false

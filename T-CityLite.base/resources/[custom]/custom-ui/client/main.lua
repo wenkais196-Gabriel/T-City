@@ -1,0 +1,88 @@
+-- client/main.lua — T-City 通用菜单/焦点工具
+--
+-- 解决所有 NUI 菜单的共性问题：
+--   1. SetNuiFocus / SetNuiFocusKeepInput 成对管理
+--   2. 关闭菜单后短时间屏蔽攻击/瞄准/武器轮盘，避免"点关闭打一拳"
+--   3. 统一的距离判断
+--
+-- 用法:
+--   exports['custom-ui']:OpenMenu({ keepInput = false })
+--   exports['custom-ui']:CloseMenu()
+--   exports['custom-ui']:GuardControls(300)
+--   exports['custom-ui']:DistanceToCoords(vector3(...), 3.0)
+
+local isOpen = false
+
+local GUARD_CONTROLS = {
+    24,  -- INPUT_ATTACK
+    257, -- INPUT_ATTACK2
+    25,  -- INPUT_AIM
+    37,  -- INPUT_SELECT_WEAPON
+    14,  -- INPUT_WEAPON_WHEEL_NEXT
+    15,  -- INPUT_WEAPON_WHEEL_PREV
+    16,  -- INPUT_SELECT_NEXT_WEAPON
+    17,  -- INPUT_SELECT_PREV_WEAPON
+    81,  -- INPUT_VEH_RADIO_WHEEL
+    82,  -- INPUT_VEH_NEXT_RADIO
+    83,  -- INPUT_VEH_PREV_RADIO
+}
+
+--- 短时间屏蔽会误触的攻击/武器轮盘控制
+---@param durationMs number|nil 默认 300ms
+function GuardControls(durationMs)
+    local untilMs = GetGameTimer() + (durationMs or 300)
+    CreateThread(function()
+        while GetGameTimer() < untilMs do
+            for _, control in ipairs(GUARD_CONTROLS) do
+                DisableControlAction(0, control, true)
+            end
+            Wait(0)
+        end
+    end)
+end
+
+--- 打开菜单
+---@param opts table|nil { keepInput = boolean }
+function OpenMenu(opts)
+    opts = opts or {}
+    if opts.keepInput then
+        SetNuiFocusKeepInput(true)
+    else
+        SetNuiFocusKeepInput(false)
+    end
+    SetNuiFocus(true, true)
+    isOpen = true
+end
+
+--- 关闭菜单：释放焦点 + 防误触保护
+---@param opts table|nil { guardMs = number }
+function CloseMenu(opts)
+    opts = opts or {}
+    isOpen = false
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    GuardControls(opts.guardMs or 300)
+end
+
+--- 菜单是否打开
+function IsMenuOpen()
+    return isOpen
+end
+
+--- 玩家与坐标的距离
+function DistanceToCoords(coords, maxDistance)
+    if not coords then return false, 9999.0 end
+    local ped = PlayerPedId()
+    local playerCoords = GetEntityCoords(ped)
+    local target = vector3(coords.x, coords.y, coords.z)
+    local dist = #(playerCoords - target)
+    return dist <= (maxDistance or 3.0), dist
+end
+
+exports('OpenMenu', OpenMenu)
+exports('CloseMenu', CloseMenu)
+exports('GuardControls', GuardControls)
+exports('IsMenuOpen', IsMenuOpen)
+exports('DistanceToCoords', DistanceToCoords)
+
+print('[custom-ui] ✅ menu focus/guard/distance helpers ready')
