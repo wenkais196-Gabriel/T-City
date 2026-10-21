@@ -67,10 +67,17 @@ end)
 local origGetPlayer = QBCore.Functions.GetPlayer
 local playerCache = {}
 
+-- 🛡️ 活性校验：GetPlayerPing 对无效玩家也返回 0（>=0 恒真），
+-- 改用 GetPlayerName（无效 source 返回 nil）判断玩家是否仍在线。
+local function isOnline(source)
+    if not source or source <= 0 then return false end
+    return GetPlayerName(source) ~= nil
+end
+
 function QBCore.Functions.GetPlayer(source)
-    -- 缓存命中 + 🛡️ 活性校验：GetPlayerPing >= 0 确保玩家仍在服务器上
+    -- 缓存命中 + 活性校验
     local cached = playerCache[source]
-    if cached and GetPlayerPing(source) >= 0 then
+    if cached and isOnline(source) then
         return cached
     end
     -- 缓存过期或无效 → 清除并穿透到原始接口
@@ -79,7 +86,7 @@ function QBCore.Functions.GetPlayer(source)
     end
     -- 调原始接口
     local Player = origGetPlayer(source)
-    if Player and GetPlayerPing(source) >= 0 then
+    if Player and isOnline(source) then
         playerCache[source] = Player
     end
     return Player
