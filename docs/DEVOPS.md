@@ -79,11 +79,17 @@ New → Triaged → Ready → In Progress → In Review → Done
 
 | Job | 内容 | 失败即阻断 |
 |:---|:---|:---|
-| **Config & dependency checks** | `check_cfgs.py`（ensure 目标存在）、`check_dependencies.py`（依赖图 + 启动顺序） | ✅ |
+| **Config & dependency checks** | `check_cfgs.py`（ensure 目标存在）、`check_dependencies.py`（依赖图 + 启动顺序）、`check_bus_wiring.py`（注册方是否 include bus.lua） | ✅ |
 | **Lua syntax (changed files)** | 对 PR/本次 push 改动的 Lua 执行 `luac5.4 -p`（含反引号的 FiveM 文件自动跳过） | ✅ |
 | **Docs links** | 检查 Markdown 相对链接是否存在（当前非阻断） | ⚠️ |
 
 本地等价命令见 [`CONTRIBUTING.md`](../CONTRIBUTING.md) §4。
+
+安装仓库自带的 pre-commit（可选，提交前自动跑离线检测）：
+
+```bash
+bash tools/install-hooks.sh
+```
 
 > 为什么不做全仓 Lua 解析：FiveM 的 Lua 方言支持反引号 hash 字面量（`` `prop` ``），标准 `luac` 会误报。CI 只检查**本次改动**，并跳过这类文件。
 
