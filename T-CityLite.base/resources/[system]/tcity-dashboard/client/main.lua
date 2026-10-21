@@ -48,7 +48,8 @@ local function _closeNui()
     end
     Poller.Stop()
     PoliceModule.Deactivate()
-    SetNuiFocus(false, false)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    if not ok then SetNuiFocus(false, false) end
     SendNUIMessage({ type = 'close' })
     _isDashboardOpen = false
     _currentVehicle = nil
@@ -82,13 +83,15 @@ local function _openSeatPicker(veh, currentSeat)
         currentSeat = currentSeat,
     })
 
-    SetNuiFocus(true, true)
+    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    if not ok then SetNuiFocus(true, true) end
     _isSeatPickerOpen = true
 end
 
 local function _closeSeatPicker()
     if not _isSeatPickerOpen then return end
-    SetNuiFocus(false, false)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    if not ok then SetNuiFocus(false, false) end
     SendNUIMessage({ type = 'close' })
     _isSeatPickerOpen = false
 end
@@ -176,7 +179,8 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
     })
 
     -- 启动 NUI focus
-    SetNuiFocus(true, true)
+    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    if not ok then SetNuiFocus(true, true) end
     _isDashboardOpen = true
     _currentVehicle = veh
     _currentTemplate = template

@@ -164,4 +164,4 @@ exports['custom-ui']:CloseMenu()                     -- 内部 GuardControls
 | qb-vehicleshop | ✅ E 打开 + 3.5m 距离 + custom-ui + 关闭防误触 |
 | qb-garages | ✅ E 打开 + 6m 距离 + custom-ui + index 取 spawnPoint |
 | custom-phone | ✅ qb-phone 式 keepInput + DisableDisplayControlActions + 关闭防误触 |
-| tcity-dashboard | ✅ 已有独立焦点管理，后续可迁移 |
+| tcity-dashboard | ✅ Open/Close 走 custom-ui（含座椅浮层） |
