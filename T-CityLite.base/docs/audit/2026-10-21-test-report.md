@@ -22,6 +22,8 @@
 | **实机 FXServer 启动** | ✅ PASS | ~45s | 79 个资源启动，0 script error / 0 缺失文件 |
 | **服务端 E2E（无客户端）** | ✅ **21/21 PASS** | ~15s | fake player 跑通经济/任务/决策/奖励幂等 |
 | **Agent 场景 DSL E2E** | ✅ **32/32 PASS** | ~20s | 2 fake players，13 步场景 + 断言 + JSON 报告 |
+| **Agent 读 API / MCP** | ✅ PASS | ~2s | 7 个 HTTP endpoint + 5 个 MCP tool，401 生效 |
+| **虚拟时钟 E2E** | ✅ **27/27 PASS** | ~20s | 完成→冷却→加速→重接 |
 | `luac5.4 -p`（改动 Lua） | ✅ PASS | — | 42 个文件 |
 
 > `light_lint.py` 对全仓（含第三方 `[qb]`/`[standalone]`）报 252 errors / 96411 warnings，属既有基线；它不是 CI 阻断项。
@@ -270,7 +272,39 @@ ensure tcity-e2e
 
 ---
 
-## 9. 结论
+## 9. Agent 读 API + 虚拟时钟（2026-10-21 14:50）
+
+### P1 #24：只读 HTTP + MCP
+
+- `tools/agent_data.py`：只读查询层，`AGENT_DB_*` 优先，缺省 `agent_ro`；mysql.connector 或 mysql CLI 回退。
+- `tools/agent_gateway.py`：Bearer `AGENT_TOKEN`，`127.0.0.1:8787`；7 个 GET：
+  - `/agent/v1/health`、`/schema`、`/players`、`/players/<cid>`
+  - `/players/<cid>/timeline`、`/events`、`/world`、`/economy`、`/world/digest`
+- `tools/agent_mcp.py`：stdio MCP，tools：`get_schema` / `query_players` / `get_player_snapshot` / `list_events` / `get_world_digest`。
+- `v2.2.2_agent_events_view.sql`：`agent_events_feed` 视图；`setup_agent_ro.sh` 已扩到 5 个视图。
+- 验证：health/schema/players/events/world/economy/digest 200；无 token 401；MCP initialize/tools.list/tools.call 正常。
+- 本机 `agent_ro` 仍通过 tables_priv 授权（无 GRANT OPTION），生产脚本需 admin 运行。
+
+### P2 #28：虚拟时钟
+
+- `custom-quest` 新增 E2E-only `DebugAdvanceClock(citizenid, seconds)`（`tcity_e2e=1` 才启用），把 `quest_cooldowns.expires_at` / `quest_daily_limits.period_start` 前移。
+- `tcity-e2e` 新增 `advance_clock` action；`cooldown_clock.json`：
+  accept `miner_apprentice` → 3 步完成 → 立即重接必须失败 → +3700s → 重接成功。
+- 结果：**27/27 PASS**。
+
+### 抓到的真实缺陷
+
+任务完成分支原本只调用 `QuestDB.SetCooldown` + `QuestCache.InvalidateCooldowns`，**没有刷新 `QuestCooldown._mem`**；而 `IsOnCooldown` 是内存优先，导致刚完成的任务可以立刻重接。
+修复：完成时改走 `QuestCooldown.SetCooldown`（DB + 内存 + 缓存）。场景已验证“立即重接被拒”。
+
+### 未覆盖
+
+- 每日限制：export 会前移 `period_start`，但当前 QuestManager 没有调用 `CheckDailyLimit/UpdateDailyLimit`，未做场景断言。
+- 决策超时加速：不在本次范围。
+
+---
+
+## 10. 结论
 
 - 离线 + 单元 + 集成测试已从 **66 failed** 收敛到 **0 failed**（11 skipped，均有明确原因）。
 - 发现并修复了一个公开泄露的 DB 密码、一个真实购车插入判断 bug、一处 DB 迁移缺口。

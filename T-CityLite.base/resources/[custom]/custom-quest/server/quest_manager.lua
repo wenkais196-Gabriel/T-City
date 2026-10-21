@@ -780,11 +780,11 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
                 print('[quest-manager] ❌ getSourceFromCid returned nil — cannot send completion to client!')
             end
 
-            -- 设置冷却
+            -- 设置冷却（必须走 QuestCooldown.SetCooldown：同时更新 DB + 内存 + 缓存，
+            -- 否则刚完成的任务在内存里仍是无冷却，玩家可以立刻重接）
             local cooldownHours = template.conditions and template.conditions.cooldown_hours or 0
             if cooldownHours > 0 then
-                QuestDB.SetCooldown(citizenid, questId, cooldownHours)
-                QuestCache.InvalidateCooldowns(citizenid)
+                QuestCooldown.SetCooldown(citizenid, questId, cooldownHours)
             end
 
             -- v0.7.0: 清理事件反向索引

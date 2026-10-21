@@ -2,9 +2,9 @@
 # ============================================================================
 # setup_agent_ro.sh — create/refresh the MariaDB read-only account for agents
 # ============================================================================
-# Creates `agent_ro`@`localhost` with SELECT on exactly these four views:
+# Creates `agent_ro`@`localhost` with SELECT on exactly these five views:
 #   agent_player_snapshot, agent_player_timeline,
-#   agent_world_state, agent_economy_metrics
+#   agent_world_state, agent_economy_metrics, agent_events_feed
 #
 # It never grants access to base tables and never grants write privileges.
 #
@@ -84,8 +84,8 @@ view_count="$("${MYSQL_ADMIN[@]}" "$TCITY_DB_NAME" -e "
     SELECT COUNT(*) FROM information_schema.VIEWS
     WHERE TABLE_SCHEMA = '$TCITY_DB_NAME'
       AND TABLE_NAME IN ('agent_player_snapshot','agent_player_timeline',
-                         'agent_world_state','agent_economy_metrics');")"
-[[ "$view_count" == "4" ]] || die "expected 4 agent_* views, found ${view_count}. Apply T-CityLite.base/migrations/v2.2_agent_read_layer.sql first."
+                         'agent_world_state','agent_economy_metrics','agent_events_feed');")"
+[[ "$view_count" == "5" ]] || die "expected 5 agent_* views, found ${view_count}. Apply v2.2_agent_read_layer.sql and v2.2.2_agent_events_view.sql first."
 
 # GRANT requires GRANT OPTION. Check before touching .env or the account so a
 # non-admin app account fails cleanly instead of leaving a password-only user.
@@ -116,6 +116,7 @@ GRANT SELECT ON \`${TCITY_DB_NAME}\`.\`agent_player_snapshot\` TO 'agent_ro'@'lo
 GRANT SELECT ON \`${TCITY_DB_NAME}\`.\`agent_player_timeline\` TO 'agent_ro'@'localhost';
 GRANT SELECT ON \`${TCITY_DB_NAME}\`.\`agent_world_state\`    TO 'agent_ro'@'localhost';
 GRANT SELECT ON \`${TCITY_DB_NAME}\`.\`agent_economy_metrics\` TO 'agent_ro'@'localhost';
+GRANT SELECT ON \`${TCITY_DB_NAME}\`.\`agent_events_feed\`     TO 'agent_ro'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 
@@ -124,5 +125,5 @@ if [[ "$generated_password" == "1" ]]; then
 else
     printf 'Used AGENT_DB_PASS from environment/.env.\n'
 fi
-printf 'agent_ro@localhost now has SELECT on the 4 agent_* views only.\n'
+printf 'agent_ro@localhost now has SELECT on the 5 agent_* views only.\n'
 printf 'No password was printed. .env permissions set to 600.\n'

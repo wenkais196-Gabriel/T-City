@@ -11,6 +11,10 @@ views, `agent_ro`, PII).
 - **Generator:** [`tools/agent_schema.py`](../../../tools/agent_schema.py)
 - **Account setup:** [`tools/setup_agent_ro.sh`](../../../tools/setup_agent_ro.sh)
 
+> **Issue #24 update:** the read-only HTTP API, MCP sidecar and the
+> `agent_events_feed` view are documented in [`API.md`](API.md). The schema
+> registry and `setup_agent_ro.sh` now include that fifth view.
+
 Agents read through a small, stable set of views instead of joining 20+ game
 tables. All access goes directly to MariaDB; it does not touch the FXServer
 thread. Writes are deliberately out of scope for this layer.
@@ -62,7 +66,7 @@ endpoint.
 ## 2. Security model
 
 1. **Dedicated read-only account.** `agent_ro@localhost` gets `SELECT` on the
-   four views only. It gets no privileges on `players`, `quest_event_log`,
+   five views only. It gets no privileges on `players`, `quest_event_log`,
    `bank_statements`, `world_*`, `agent_events`, or any other base table. It
    cannot `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, or grant.
 2. **Views are `SQL SECURITY DEFINER`.** The views are owned by the migration
@@ -227,7 +231,7 @@ MYSQL_PWD="$AGENT_DB_PASS" mysql -u agent_ro "$TCITY_DB_NAME" \
 ```
 
 `SHOW GRANTS FOR 'agent_ro'@'localhost'` should list `SELECT` on exactly the
-four views. If the local `.env` user cannot grant, ask an admin to run the setup
+five views. If the local `.env` user cannot grant, ask an admin to run the setup
 script. Do not work around it by writing to `mysql.tables_priv`.
 
 ### Regenerate the schema contract
@@ -391,8 +395,8 @@ above was performed with the normal `.env` credentials.
   the table.
 - **#23 follow-up:** run `tools/setup_agent_ro.sh` as an admin, then add the
   negative-access test (`players` must be denied) to CI.
-- **#24:** publish `schema.json` through the schema registry/MCP read API once
-  these view columns are frozen.
+- **#24:** schema registry + read-only HTTP API + MCP sidecar are implemented;
+  see [`API.md`](API.md), `tools/agent_gateway.py` and `tools/agent_mcp.py`.
 - Future: if `player_vehicles` gains a creation timestamp, add a vehicle branch
   to `agent_player_timeline`. If a per-player crypto ledger is added, replace
   `players.money.$.crypto` with that authoritative source.
