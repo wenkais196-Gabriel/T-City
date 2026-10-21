@@ -58,7 +58,9 @@ jobs:
           sudo apt-get install -y -qq lua5.4
 
       - name: Run unit tests
-        run: python3 -m pytest -q tests/unit
+        run: |
+          python3 -m pytest -q tests/unit
+          python3 -m pytest -q ../tests/agent
         working-directory: T-CityLite.base
 
   lua-syntax:
