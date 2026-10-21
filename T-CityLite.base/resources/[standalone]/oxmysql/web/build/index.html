@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>oxmysql — Admin</title>
+    <style>
+        body { background: transparent; color: #e0e0e0; font-family: monospace; display: none; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        body.visible { display: flex; background: #1a1a2e; }
+        .box { text-align: center; padding: 2rem; border: 1px solid #333; border-radius: 8px; }
+        h1 { color: #7c3aed; }
+        p { color: #888; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>oxmysql v2.14.1-lite</h1>
+        <p>Admin UI not built — using minimal JS backend.</p>
+        <p>Database connection: active</p>
+    </div>
+    <script>
+        window.addEventListener('message', function(event) {
+            var data = event.data;
+            if (data.action === 'openUI') {
+                document.body.classList.add('visible');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -64,12 +64,13 @@
 - [x] 修复 persistence / vehicleshop 失效测试夹具
 - [x] `pytest tests`：286 passed / 132 skipped（跳过项需 MySQL）
 - [x] GitHub Actions CI（CFG + 依赖 + 语法 + pytest）
-- [ ] 132 个 skipped 在带数据库环境跑通
+- [x] 132 个 DB 用例在一次性库跑通（418 passed；schema fixture + CI MariaDB 任务）
 
 ### 5. 发版收尾
 - [x] tag `v0.7a` 已推送
 - [x] 服务端 / 无头验收归档（`/test run all` 225 PASS / 0 FAIL / 8 SKIP）
 - [ ] 真人客户端 UI 验收（车店 NUI / 车库 / 中控屏 / 物流）
+- [x] 构建产物入库（oxmysql/menuv/tcity-dashboard）
 - [x] CHANGELOG / README 与 tag 对齐（本次更新）
 - [验收报告](./T-CityLite.base/docs/v0.7a-acceptance-report.md)
 

@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **custom-quest**：数据驱动任务状态机、外部脚本 API、安全门控、DB 持久化（v0.6 基础设施）
 - **story-engine**：决策树与玩家选择追踪
 - **物流任务模板**：`quest_logistics` 取货 → 运输 → 交付，含车辆/到达/货损校验
-- **GitHub Actions CI**：CFG 完整性 + Lua 语法 + 依赖图 + pytest
+- **GitHub Actions CI**：CFG 完整性 + Lua 语法 + 依赖图 + pytest + oxmysql JS + MariaDB schema
+- **运行时构建产物入库**：oxmysql `dist/web`、menuv `dist`、tcity-dashboard `nui/dist`
 - 开发工作流指南（`docs/dev-workflow-guide.md`）与一键启动脚本
 
 ### Changed
@@ -29,18 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **qb-vehicleshop NUI**：加载顺序与 ConVar 同步修复
 - **custom-taxes**：为未实现的车辆税 / NPC 定价补桩，避免调用报错
 - **测试夹具**：对齐 `LocalDirtyFlush` 与 oxmysql `insert` 回调契约；测试路径改为相对仓库根目录
+- **DB schema 测试**：兼容 MariaDB（JSON=LONGTEXT、ENUM 默认值引号、COLUMN_KEY）；新增 `v2.2_schema_reconcile.sql` 补齐 story-engine 索引
 - `txAdminPort 0` 禁用管理员模式，避免端口冲突
 
 ### Testing
-- `pytest tests`：**286 passed / 132 skipped**（跳过项需 MySQL）
+- `pytest tests`：**418 passed**（含 MariaDB schema；无 DB 连接时 286 passed / 132 skipped）
 - oxmysql JS 单测：**148 passed**
 - 游戏内 `/test run all`：**225 PASS / 0 FAIL / 8 SKIP**（服务端无头；见 `docs/v0.7a-acceptance-report.md`）
 - 离线检查：CFG / 依赖图 PASS；`light_lint` 仍为 advisory（vendor 资源遗留 ~250 条 `Wait(0)` / `MySQL.Sync`）
 
 ### Known
-- 车店 NUI、车库、物流任务尚未完成实机验收
-- 132 个数据库相关用例需在带 MySQL 的环境执行
-- `oxmysql/dist/build.js`、`oxmysql/web/build/index.html`、`menuv/dist/`、`tcity-dashboard/nui/dist/` 为构建产物，当前未入库；新克隆需自行补齐
+- 车店 NUI、车库、物流任务尚未完成真人客户端验收
+- 8 个手机用例需要真实玩家上下文（无客户端环境会 SKIP）
 
 ---
 

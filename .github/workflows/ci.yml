@@ -33,6 +33,13 @@ jobs:
       - name: Install Python test dependencies
         run: python -m pip install --upgrade pip pytest
 
+      - name: Verify runtime build artifacts
+        run: |
+          test -f "resources/[standalone]/oxmysql/dist/build.js"
+          test -f "resources/[standalone]/oxmysql/web/build/index.html"
+          test -f "resources/[standalone]/menuv/dist/menuv.html"
+          test -f "resources/[system]/tcity-dashboard/nui/dist/index.html"
+
       - name: Validate module CFGs
         run: python tests/check_cfgs.py
 
@@ -45,6 +52,55 @@ jobs:
       - name: Run unit + integration tests
         run: python -m pytest tests -q
 
+      - name: Run oxmysql JS tests
+        run: node tests/unit/layer0_js/test_oxmysql.cjs
+
       # light_lint.py is advisory: it scans vendored qb-*/cfx-default resources
       # and currently reports ~250 legacy Wait(0)/MySQL.Sync findings.
       # Run it locally with: python tests/light_lint.py
+
+  db-schema:
+    name: DB schema tests
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: tcity_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    defaults:
+      run:
+        working-directory: T-CityLite.base
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install DB client + test deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mariadb-client
+          python -m pip install --upgrade pip pytest mysql-connector-python
+
+      - name: Import schema fixture
+        run: mariadb -h 127.0.0.1 -P 3306 -uroot -proot tcity_ci < tests/fixtures/tcity_schema.sql
+
+      - name: Run full test suite against MariaDB
+        env:
+          TCITY_DB_HOST: 127.0.0.1
+          TCITY_DB_PORT: "3306"
+          TCITY_DB_USER: root
+          TCITY_DB_PASS: root
+          TCITY_DB_NAME: tcity_ci
+        run: python -m pytest tests -q

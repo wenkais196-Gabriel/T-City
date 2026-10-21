@@ -70,7 +70,7 @@ tar -xJf alpine.tar.xz                  # 在仓库根目录解压
 
 ### 构建产物（oxmysql / menuv / dashboard）
 
-以下目录是构建产物，被各自资源内的 `.gitignore` 排除，**新克隆后不存在**：
+以下运行时构建产物已强制纳入版本管理（2026-10-21，约 370KB）：
 
 ```
 T-CityLite.base/resources/[standalone]/oxmysql/dist/build.js
@@ -80,9 +80,8 @@ T-CityLite.base/resources/[system]/tcity-dashboard/nui/dist/
 ```
 
 - `oxmysql/dist/build.js` 是 FXServer 实际加载的服务端脚本，缺失会导致 `oxmysql` 启动失败。
-- 新机器可从已有安装复制这些目录；或使用上游 oxmysql release 自带的 `dist/`（版本需与 `fxmanifest.lua` 的 2.14.1 对齐）。
-
-> 这是当前仓库的可复现性缺口：建议后续将这些运行时产物纳入版本管理，或提供 release 附件。
+- 这些文件被各自上游 `.gitignore` 忽略，但部署必须存在，因此用 `git add -f` 跟踪；更新后同样需要 `git add -f`。
+- CI 的 `Verify runtime build artifacts` 步骤会校验它们存在。
 
 ### 安装
 
@@ -187,10 +186,19 @@ F8 → /test mock 2           # 模拟 2 名警察在线
 ```
 
 测试覆盖:
-- **286 个 pytest 用例**（unit + integration；132 个需 MySQL 的用例默认跳过）
-- **148 个 oxmysql JS 用例**（需先存在 `oxmysql/dist/build.js`）
+- **418 个 pytest 用例**（完整环境，含 MySQL schema 校验）；无 DB 连接时 **286 passed / 132 skipped**
+- **148 个 oxmysql JS 用例**
 - **游戏内套件**: 控制台 `test run all` → 225 PASS / 0 FAIL / 8 SKIP（无客户端环境下）
-- **CI**: `.github/workflows/ci.yml` 运行 CFG、语法、依赖图与 pytest
+- **CI**: `.github/workflows/ci.yml` 含离线检查、oxmysql JS、以及 MariaDB schema 任务
+
+本地跑 DB 用例：
+
+```bash
+pip install mysql-connector-python
+# 可选：导入 schema 到一次性库
+mysql -uroot -p<db> < tests/fixtures/tcity_schema.sql
+TCITY_DB_NAME=<db> python -m pytest tests -q
+```
 
 ---
 
