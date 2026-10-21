@@ -41,6 +41,23 @@ jobs:
         run: python3 tests/check_bus_wiring.py
         working-directory: T-CityLite.base
 
+  unit-tests:
+    name: Python unit tests (DB tests skip without TCITY_DB_PASS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: python3 -m pip install --upgrade pytest
+
+      - name: Run unit tests
+        run: python3 -m pytest -q tests/unit
+        working-directory: T-CityLite.base
+
   lua-syntax:
     name: Lua syntax (changed files)
     runs-on: ubuntu-latest
