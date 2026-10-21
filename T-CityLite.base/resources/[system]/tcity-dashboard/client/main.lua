@@ -152,6 +152,13 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
     local job = playerData and playerData.job or {}
     local jobName = job.name or 'unemployed'
 
+    -- 职业功能门控提示：警车但非警察/未上岗时，职业页没有可用功能
+    if vclass == 18 and jobName ~= 'police' then
+        QBCore.Functions.Notify(('职业功能需要警察职业并 on duty（当前: %s）'):format(jobName), 'error', 5000)
+    elseif vclass == 18 and jobName == 'police' and not job.onduty then
+        QBCore.Functions.Notify('警察职业功能需要先 /duty 上岗', 'error', 5000)
+    end
+
     -- 发送 open → NUI 渲染
     SendNUIMessage({
         type = 'open',
@@ -178,8 +185,8 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
     -- 启动轮询
     Poller.Start(veh, template, pollInterval)
 
-    -- v2.1: 警车模块激活
-    if jobName == 'police' and vclass == 18 then
+    -- v2.1: 警车模块激活（必须警察 + 上岗）
+    if jobName == 'police' and job.onduty and vclass == 18 then
         PoliceModule.Activate()
     end
 

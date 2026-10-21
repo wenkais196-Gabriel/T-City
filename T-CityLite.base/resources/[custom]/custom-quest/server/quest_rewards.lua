@@ -86,19 +86,30 @@ function QuestRewards.GrantRewards(source, rewards, questId)
         end
 
         if finalAmount > 0 then
-            -- v0.7.2: 优先 custom-economy，fallback custom-main，再 fallback QBCore
+            -- v0.7.2: 统一走 core_economy 奖励网关；失败才回退 QBCore
             local useScaled = false
+            local rewardReason = ('quest:%s'):format(questId)
             if Config.Quest.Rewards.UseAddScaledMoney then
-                if exports['custom-economy'] and exports['custom-economy'].AddScaledMoney then
-                    exports['custom-economy']:AddScaledMoney(source, accountType, finalAmount, ('quest:%s'):format(questId))
-                    useScaled = true
-                elseif exports['custom-main'] and exports['custom-main'].AddScaledMoney then
-                    exports['custom-main']:AddScaledMoney(source, accountType, finalAmount, ('quest:%s'):format(questId))
-                    useScaled = true
+                local gateway = exports['core_economy']
+                if gateway and gateway.TriggerReward then
+                    local gatewayOk, gatewayResult = pcall(function()
+                        return exports['core_economy']:TriggerReward(source, rewardReason, finalAmount, {
+                            moneytype = accountType,
+                            reason = rewardReason,
+                            skipHeat = true,
+                        })
+                    end)
+                    if gatewayOk and gatewayResult then
+                        useScaled = true
+                    else
+                        print(('[quest-rewards] ❌ core_economy failed for %s: %s'):format(
+                            rewardReason, tostring(gatewayResult)))
+                    end
                 end
             end
             if not useScaled then
-                Player.Functions.AddMoney(accountType, finalAmount, ('quest:%s'):format(questId))
+                print(('[quest-rewards] ⚠️ fallback AddMoney %s $%d'):format(rewardReason, finalAmount))
+                Player.Functions.AddMoney(accountType, finalAmount, rewardReason)
             end
             table.insert(granted, ('$%d (%s)'):format(finalAmount, accountType))
         end

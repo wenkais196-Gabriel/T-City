@@ -11,13 +11,22 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- NUI 是否已经打开：打开状态下只 update，不重复 SetNuiFocus / 重新挂载
+local nuiOpen = false
+
 -- ==============================================================
 -- NUI Callback: 关闭
 -- ==============================================================
 
-RegisterNUICallback('closeNui', function(_, cb)
+function _vCloseNui()
+    nuiOpen = false
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
+    SendNUIMessage({ type = 'close' })
+end
+
+RegisterNUICallback('closeNui', function(_, cb)
+    _vCloseNui()
     cb('ok')
 end)
 
@@ -26,8 +35,10 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('buyVehicle', function(data, cb)
+    nuiOpen = false
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
+    SendNUIMessage({ type = 'close' })
     if data and data.vehicle then
         TriggerServerEvent('qb-vehicleshop:server:buyShowroomVehicle',
             { buyVehicle = data.vehicle })
@@ -40,8 +51,10 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('financeVehicle', function(data, cb)
+    nuiOpen = false
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
+    SendNUIMessage({ type = 'close' })
     if data and data.vehicle and data.downPayment and data.paymentCount then
         TriggerServerEvent('qb-vehicleshop:server:financeVehicle',
             tonumber(data.downPayment), tonumber(data.paymentCount), data.vehicle)
@@ -54,8 +67,10 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('testDrive', function(data, cb)
+    nuiOpen = false
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
+    SendNUIMessage({ type = 'close' })
     -- 试驾由现有的 TestDrive 事件处理
     -- NUI 关闭后, 模拟触发 TestDrive
     if not inTestDrive and ClosestVehicle ~= 0 then
@@ -69,8 +84,10 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('swapVehicle', function(_, cb)
+    nuiOpen = false
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
+    SendNUIMessage({ type = 'close' })
     -- 触发车辆类别选择菜单
     TriggerEvent(Config.FilterByMake and 'qb-vehicleshop:client:vehMakes'
                                       or 'qb-vehicleshop:client:vehCategories')
@@ -101,15 +118,7 @@ function OpenVehicleShopNui(shopName)
         { label = 'HDL', value = vehData.handling or math.random(50, 95), display = (vehData.handling or math.random(50, 95)) .. '/100' },
     }
 
-    SetNuiFocus(true, true)
-    SetNuiFocusKeepInput(true)
-
-    -- Phase 3 debug: 确认 NUI 模式已触发
-    print(('[qb-vehicleshop] 🖥️ Opening NUI for shop=%s vehicle=%s price=%s'):format(
-        shopName, vehData.name or chosen.chosenVehicle, vehData.price or 0))
-
-    SendNUIMessage({
-        type             = 'open',
+    local payload = {
         shopLabel        = shop['ShopLabel'],
         shopName         = shopName,
         vehicle          = {
@@ -123,7 +132,24 @@ function OpenVehicleShopNui(shopName)
         showFinance      = shop['Type'] == 'free-use',
         maxPayments      = Config.MaximumPayments or 24,
         minDownPercent   = Config.MinimumDown or 10,
-    })
+    }
+
+    -- 已经打开 → 原地更新展示车，不重新抢焦点/不闪屏
+    if nuiOpen then
+        payload.type = 'update'
+        SendNUIMessage(payload)
+        return
+    end
+
+    payload.type = 'open'
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(true)
+    nuiOpen = true
+
+    print(('[qb-vehicleshop] 🖥️ Opening NUI for shop=%s vehicle=%s price=%s'):format(
+        shopName, vehData.name or chosen.chosenVehicle, vehData.price or 0))
+
+    SendNUIMessage(payload)
 end
 
 -- 暴露全局供 zones.lua 调用

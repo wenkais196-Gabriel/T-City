@@ -83,9 +83,7 @@ function _vCreateFreeUseShop(shopShape, name)
             end
         else
             if Config.UseNui then
-                SetNuiFocus(false, false)
-                SetNuiFocusKeepInput(false)
-                SendNUIMessage({ type = 'close' })
+                _vCloseNui()
             end
             insideShop = nil
             ClosestVehicle = 1
@@ -118,9 +116,7 @@ function _vCreateManagedShop(shopShape, name)
             end
         else
             if Config.UseNui then
-                SetNuiFocus(false, false)
-                SetNuiFocusKeepInput(false)
-                SendNUIMessage({ type = 'close' })
+                _vCloseNui()
             end
             insideShop = nil
             ClosestVehicle = 1

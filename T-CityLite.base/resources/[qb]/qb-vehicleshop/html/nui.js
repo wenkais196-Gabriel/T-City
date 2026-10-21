@@ -100,6 +100,22 @@ new Vue({
           self.paymentCount = 12
           break
 
+        case 'update':
+          // 展示车切换：原地更新，不重置分期输入/不闪屏
+          self.visible = true
+          self.shopLabel = data.shopLabel || self.shopLabel
+          self.shopName = data.shopName || self.shopName
+          self.vehicle = data.vehicle || self.vehicle
+          self.vehiclePrice = data.vehicle ? data.vehicle.price : self.vehiclePrice
+          self.specs = data.specs || []
+          self.showFinance = data.showFinance !== false
+          self.maxPayments = data.maxPayments || self.maxPayments
+          self.minDownPercent = data.minDownPercent || self.minDownPercent
+          if (self.downPayment < self.minDownAmount) {
+            self.downPayment = self.minDownAmount
+          }
+          break
+
         case 'close':
           self.visible = false
           break

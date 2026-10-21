@@ -298,10 +298,14 @@ CreateThread(function()
     while true do
         Wait(60000)
         if not frozen then
-            local realMinutes = math.floor(os.time(os.date("!*t")) / 2 + 360) % 1440
+            -- 与初始化公式保持一致：1 真实秒 = 1 游戏分钟（TIME_SCALE 默认 1.0）
+            -- 旧公式 /2 + 360 会导致每 60 秒把时间向前/向后猛拉，表现为手机时间跳变。
+            local realMinutes = math.floor(os.time(os.date("!*t")) / 60) % 1440
             -- 漂移修正：如果独立推进与真实时间相差超过 1 分钟，对齐
             local cur = getCurrentGameMinutes()
-            if math.abs(cur - realMinutes) > 1 then
+            local drift = math.abs(cur - realMinutes)
+            if drift > 720 then drift = 1440 - drift end -- 处理跨午夜
+            if drift > 1 then
                 gameMinutes = realMinutes
                 timerStart = GetGameTimer()
             end

@@ -89,9 +89,18 @@ QBCore.Functions.CreateCallback('qb-garages:server:GetGarageVehicles', function(
         vehicles = MySQL.query.await('SELECT * FROM player_vehicles WHERE citizenid = ? AND garage = ?', { citizenId, garage })
     end
     if #vehicles == 0 then
-        -- Phase 6: 诊断日志 — 追踪"无车辆"问题
-        print(('[qb-garages] 🔍 No vehicles found: citizen=%s garage=%s type=%s category=%s'):format(
-            citizenId:sub(1,4) .. '...', garage, type or 'nil', category or 'nil'))
+        -- Phase 6: 诊断日志 — 区分"没车"与"车停在别的车库"
+        local owned = MySQL.scalar.await(
+            'SELECT COUNT(*) FROM player_vehicles WHERE citizenid = ?', { citizenId }) or 0
+        local rows = MySQL.query.await(
+            'SELECT garage, COUNT(*) AS c FROM player_vehicles WHERE citizenid = ? GROUP BY garage',
+            { citizenId }) or {}
+        local where = {}
+        for _, row in ipairs(rows) do
+            where[#where + 1] = ('%s=%d'):format(row.garage or 'nil', row.c)
+        end
+        print(('[qb-garages] 🔍 No vehicles at garage=%s (citizen=%s owned=%d: %s)'):format(
+            tostring(garage), citizenId:sub(1, 4) .. '...', owned, table.concat(where, ', ')))
         cb(nil)
         return
     end

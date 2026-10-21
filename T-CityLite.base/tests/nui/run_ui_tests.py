@@ -115,10 +115,45 @@ def test_vehicleshop(browser, artifacts: Path) -> list[str]:
         assert "150,000" in text, f"formatted price missing: {text[:200]}"
         page.screenshot(path=str(artifacts / "vehicleshop-open.png"), full_page=True)
 
+        # 展示车切换：update 原地刷新，不重新打开/不丢焦点
+        page.evaluate(
+            """() => window.postMessage({
+                type: 'update',
+                shopLabel: 'PDM',
+                shopName: 'pdm',
+                vehicle: { brand: 'Declasse', name: 'Vigero', model: 'vigero', price: 39500 },
+                specs: [{ label: 'Speed', value: 80, display: '80' }],
+                showFinance: true
+            }, '*')"""
+        )
+        page.wait_for_function("document.body.innerText.includes('39,500')", timeout=3000)
+        assert "Declasse" in page.inner_text("#app"), "update did not change vehicle"
+
         page.click("button.btn-icon")
         page.wait_for_timeout(200)
         calls = page.evaluate("window.__nuiCalls")
         assert any("closeNui" in c["url"] for c in calls), f"closeNui not called: {calls}"
+
+        # 重新打开 → 点击 Buy Now，验证购买请求携带正确车型
+        page.evaluate(
+            """() => window.postMessage({
+                type: 'open',
+                shopLabel: 'PDM',
+                shopName: 'pdm',
+                vehicle: { brand: 'Pfister', name: 'Comet', model: 'comet2', price: 150000 },
+                specs: [{ label: 'Speed', value: 90, display: '90' }],
+                showFinance: true
+            }, '*')"""
+        )
+        page.wait_for_selector(".dealership-panel", state="visible", timeout=3000)
+        page.click("button.btn-primary")
+        page.wait_for_timeout(300)
+        calls = page.evaluate("window.__nuiCalls")
+        buys = [c for c in calls if "buyVehicle" in c["url"]]
+        assert buys, f"buyVehicle not called: {calls}"
+        assert "comet2" in (buys[-1]["body"] or ""), f"wrong vehicle payload: {buys[-1]}"
+        assert page.is_hidden(".dealership-panel"), "NUI should hide after Buy Now"
+
         errors.extend(page_errors)
         ctx.close()
     return errors

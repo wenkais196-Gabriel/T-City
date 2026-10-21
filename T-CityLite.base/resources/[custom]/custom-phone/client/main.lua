@@ -103,6 +103,13 @@ local function OpenPhone()
             DisableControlAction(0, 25, true) -- Aim
             DisableControlAction(0, 263, true) -- Melee Attack 1
             DisableControlAction(0, 37, true) -- Select Weapon
+            DisableControlAction(0, 14, true) -- Weapon wheel next (mouse scroll)
+            DisableControlAction(0, 15, true) -- Weapon wheel prev (mouse scroll)
+            DisableControlAction(0, 16, true) -- Select next weapon
+            DisableControlAction(0, 17, true) -- Select prev weapon
+            DisableControlAction(0, 81, true) -- Vehicle radio wheel
+            DisableControlAction(0, 82, true) -- Next radio station
+            DisableControlAction(0, 83, true) -- Prev radio station
             DisableControlAction(0, 44, true) -- Cover
             DisableControlAction(0, 140, true) -- Light Attack
             DisableControlAction(0, 141, true) -- Heavy Attack
@@ -114,9 +121,9 @@ local function OpenPhone()
                 ClosePhone()
             end
 
-            -- 每 2 秒同步一次游戏内时间（减少 SendNUIMessage 频率）
+            -- 每 ~1 秒同步一次游戏内时间（1:1 时间比例下分钟变化快，2 秒会跳 2 分钟）
             timeTick = timeTick + 1
-            if timeTick >= 120 then
+            if timeTick >= 60 then
                 timeTick = 0
                 local h = GetClockHours(); local m = GetClockMinutes()
                 local wIcon, wLabel = getWeatherInfo()
