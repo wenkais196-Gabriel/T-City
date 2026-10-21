@@ -25,6 +25,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@core-framework/bus.lua',
     '@oxmysql/lib/MySQL.lua',
     'server/key_manager.lua',
     'server/compat.lua',        -- 兼容桥先加载，main.lua exports 覆盖

@@ -77,11 +77,13 @@ RegisterNetEvent('cartel:server:startProduction', function(recipeId)
     end
 
     -- 7. 安全清洗 (通过 SecurityService)
-    if Bus and Bus.SecurityService then
-        local ok, cleanedItem, cleanedCount, err = Bus.SecurityService.ValidateItemEvent(
-            src, recipe.output.name, recipe.output.count
-        )
-        if not ok then
+    if GetResourceState('core-framework') == 'started' then
+        local callOk, ok, _, _, err = pcall(function()
+            return exports['core-framework']:service_security_ValidateItemEvent(
+                src, recipe.output.name, recipe.output.count
+            )
+        end)
+        if callOk and not ok then
             TriggerClientEvent('QBCore:Notify', src, _L(src, 'cartel_security_fail', err or 'unknown'), 'error')
             return
         end
@@ -186,12 +188,16 @@ RegisterNetEvent('cartel:server:finishProduction', function(recipeId)
 
     -- 尝试存入组织仓库 (优先)
     local storedInOrg = false
-    if Bus and Bus.StorageService then
-        local canAccess, _ = Bus.StorageService.CanAccess(src, 'cartel')
-        if canAccess then
-            local addOk = Bus.StorageService.AddItem('cartel',
-                recipe.output.name, recipe.output.count, nil, nil)
-            if addOk then
+    if GetResourceState('custom-storage') == 'started' then
+        local accessOk, canAccess = pcall(function()
+            return exports['custom-storage']:service_storage_CanAccess(src, 'cartel')
+        end)
+        if accessOk and canAccess then
+            local addOk, added = pcall(function()
+                return exports['custom-storage']:service_storage_AddItem('cartel',
+                    recipe.output.name, recipe.output.count, nil, nil)
+            end)
+            if addOk and added then
                 storedInOrg = true
             end
         end
@@ -240,7 +246,11 @@ RegisterNetEvent('cartel:server:finishProduction', function(recipeId)
     end
 
     -- 🌐 Atmosphere: danger scene on cartel production (raid risk)
-    if shouldRaid and Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'danger') end
+    if shouldRaid and GetResourceState('tcity-atmosphere') == 'started' then
+        pcall(function()
+            exports['tcity-atmosphere']:service_atmosphere_PlayScene(src, 'danger')
+        end)
+    end
 
     -- 🌍 Phase 1: 发射世界状态变更事件 (cartel 生产成功 = 领地影响力强化)
     if EventTypes and EventTypes.Publish then

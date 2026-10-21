@@ -52,10 +52,15 @@ RegisterNetEvent('mining:server:smeltOre', function(recipeId)
 
     -- 6. 产出 → 优先组织仓库
     local storedInOrg = false
-    if Bus and Bus.StorageService then
-        local canAccess = Bus.StorageService.CanAccess(src, 'mining_co')
-        if canAccess then
-            storedInOrg = Bus.StorageService.AddItem('mining_co', recipe.output.name, recipe.output.count, nil, nil)
+    if GetResourceState('custom-storage') == 'started' then
+        local accessOk, canAccess = pcall(function()
+            return exports['custom-storage']:service_storage_CanAccess(src, 'mining_co')
+        end)
+        if accessOk and canAccess then
+            local addOk, added = pcall(function()
+                return exports['custom-storage']:service_storage_AddItem('mining_co', recipe.output.name, recipe.output.count, nil, nil)
+            end)
+            if addOk and added then storedInOrg = true end
         end
     end
     if not storedInOrg then

@@ -144,7 +144,11 @@ RegisterNetEvent('justice:server:sentenceComplete', function()
     JusticeService.ReleaseInmate(cid)
 
     -- 🌐 Atmosphere: complete scene on sentence served
-    if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'complete') end
+    if GetResourceState('tcity-atmosphere') == 'started' then
+        pcall(function()
+            exports['tcity-atmosphere']:service_atmosphere_PlayScene(src, 'complete')
+        end)
+    end
 
     TriggerClientEvent('QBCore:Notify', src, _L(src, 'justice_sentence_done'), 'success', 10000)
 

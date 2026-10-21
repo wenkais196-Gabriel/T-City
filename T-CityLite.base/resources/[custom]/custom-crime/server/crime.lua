@@ -388,11 +388,19 @@ local function MultiLaunderMoney(src, amount, tierLevel)
         return false, 0, "冷却中"
     end
 
-    -- 3. cartel 成员判定
+    -- 3. cartel 成员判定（Bus 不跨资源，改走 custom-cartel 的显式 export；失败回退 gang）
     local isCartel = false
-    if Bus and Bus.CartelService then
-        isCartel = Bus.CartelService.IsMember(src)
-    else
+    local cartelResolved = false
+    if GetResourceState('custom-cartel') == 'started' then
+        local ok, result = pcall(function()
+            return exports['custom-cartel']:service_cartel_IsMember(src)
+        end)
+        if ok and type(result) == 'boolean' then
+            isCartel = result
+            cartelResolved = true
+        end
+    end
+    if not cartelResolved then
         local gang = Player.PlayerData.gang
         isCartel = gang and gang.name == 'cartel'
     end
