@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "name": "civilian_ch1",
+  "description": "Civilian chapter 1: first dollar, decision, reward idempotency and multi-persona economy isolation.",
+  "ordering": "sequential",
+  "seed": 42,
+  "players": [
+    {
+      "cid": "SIM001",
+      "job": "unemployed",
+      "gang": "none",
+      "grade": 0,
+      "money": { "cash": 1000, "bank": 10000, "crypto": 0 },
+      "charinfo": {
+        "firstname": "Sim",
+        "lastname": "One",
+        "birthdate": "1990-01-01",
+        "gender": 0,
+        "nationality": "US"
+      }
+    },
+    {
+      "cid": "SIM002",
+      "job": "unemployed",
+      "gang": "none",
+      "grade": 0,
+      "money": { "cash": 250, "bank": 5000, "crypto": 0 },
+      "charinfo": {
+        "firstname": "Sim",
+        "lastname": "Two",
+        "birthdate": "1992-02-02",
+        "gender": 0,
+        "nationality": "US"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "accept",
+      "action": "accept_quest",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar"
+    },
+    {
+      "id": "accepted",
+      "action": "wait",
+      "ms": 700
+    },
+    {
+      "id": "step_meet_tony",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_meet_tony"
+    },
+    {
+      "id": "step_go_mine",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_go_mine"
+    },
+    {
+      "id": "step_mine_ore",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_mine_ore"
+    },
+    {
+      "id": "step_go_bank",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_go_bank",
+      "wait": 500
+    },
+    {
+      "id": "add_money_sim002",
+      "action": "add_money",
+      "cid": "SIM002",
+      "account": "bank",
+      "amount": 250,
+      "reason": "e2e_income"
+    },
+    {
+      "id": "after_add_money",
+      "action": "wait",
+      "ms": 500
+    },
+    {
+      "id": "choice",
+      "action": "make_choice",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_decision",
+      "decision": "civilian_ch1_honest_or_shadow",
+      "option": "honest_citizen"
+    },
+    {
+      "id": "reward_settled",
+      "action": "wait",
+      "ms": 1200
+    },
+    {
+      "id": "dup_choice",
+      "action": "make_choice",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_decision",
+      "decision": "civilian_ch1_honest_or_shadow",
+      "option": "honest_citizen",
+      "expect_fail": true
+    },
+    {
+      "id": "dup_complete",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_decision"
+    },
+    {
+      "id": "after_duplicate",
+      "action": "wait",
+      "ms": 700
+    }
+  ],
+  "assert": [
+    {
+      "name": "quest.at_decision_step",
+      "type": "db_scalar",
+      "after": "step_go_bank",
+      "cid": "SIM001",
+      "sql": "SELECT current_step FROM player_quests WHERE citizenid = ? AND quest_id = ? AND status = 'in_progress'",
+      "params": ["civilian_ch1_first_dollar"],
+      "expect": "step_decision"
+    },
+    {
+      "name": "quest.completed",
+      "type": "quest_status",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "expect": "completed",
+      "completion_count": 1
+    },
+    {
+      "name": "quest.completion_count_once",
+      "type": "db_scalar",
+      "cid": "SIM001",
+      "sql": "SELECT completion_count FROM player_quests WHERE citizenid = ? AND quest_id = ? ORDER BY id DESC LIMIT 1",
+      "params": ["civilian_ch1_first_dollar"],
+      "expect": 1
+    },
+    {
+      "name": "story.choice_persisted",
+      "type": "choice_count",
+      "cid": "SIM001",
+      "decision": "civilian_ch1_honest_or_shadow",
+      "expect": 1
+    },
+    {
+      "name": "quest.reward_granted_once",
+      "type": "money_delta",
+      "cid": "SIM001",
+      "account": "bank",
+      "since": "accepted",
+      "min": 300,
+      "max": 600
+    },
+    {
+      "name": "quest.duplicate_complete_no_reward",
+      "type": "no_change",
+      "cid": "SIM001",
+      "account": "bank",
+      "since": "reward_settled"
+    }
+  ]
+}
