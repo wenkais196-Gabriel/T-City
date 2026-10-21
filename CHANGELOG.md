@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **物流任务模板**：`quest_logistics` 取货 → 运输 → 交付，含车辆/到达/货损校验
 - **GitHub Actions CI**：CFG 完整性 + Lua 语法 + 依赖图 + pytest + oxmysql JS + MariaDB schema
 - **运行时构建产物入库**：oxmysql `dist/web`、menuv `dist`、tcity-dashboard `nui/dist`
-- **NUI 无头冒烟**：Playwright 覆盖车店 / 中控屏 / 手机三个页面
+- **custom-ui**：统一 NUI 焦点、关闭后 300ms 防误触、距离校验；车店/车库/qb-menu/手机/中控屏接入
+- **NUI 无头冒烟**：Playwright 覆盖车店 / 中控屏 / 车库 / 手机四个页面
 - 开发工作流指南（`docs/dev-workflow-guide.md`）与一键启动脚本
 
 ### Changed
@@ -30,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **qb-garages**：SELECT 查询从 `rawExecute` 改为 `query/single`，并补充空车库诊断
 - **qb-vehicleshop NUI**：加载顺序与 ConVar 同步修复
 - **custom-taxes**：为未实现的车辆税 / NPC 定价补桩，避免调用报错
+- **菜单交互**：车店改为按 E 主动打开（3.5m 距离），服务端购买距离 8m/30m；关闭菜单不再误触攻击
+- **车店购买**：Processing/错误态 + 2s 防连点；Change Vehicle 不再跳 qb-menu
+- **车库**：修复 NUI 回传 vector4 丢失导致的 spawnPoint nil；spawn 被拒时不再死循环；开发期共享车库
+- **手机**：qb-phone 式 keepInput + DisableDisplayControlActions；状态栏/主时钟统一游戏时间
 - **测试夹具**：对齐 `LocalDirtyFlush` 与 oxmysql `insert` 回调契约；测试路径改为相对仓库根目录
 - **DB schema 测试**：兼容 MariaDB（JSON=LONGTEXT、ENUM 默认值引号、COLUMN_KEY）；新增 `v2.2_schema_reconcile.sql` 补齐 story-engine 索引
 - `txAdminPort 0` 禁用管理员模式，避免端口冲突

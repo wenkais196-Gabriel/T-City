@@ -85,6 +85,8 @@ QBCore.Functions.CreateCallback('qb-garages:server:GetGarageVehicles', function(
         vehicles = MySQL.query.await('SELECT * FROM player_vehicles WHERE citizenid = ? AND depotprice > 0', { citizenId })
     elseif Config.SharedGarages then
         vehicles = MySQL.query.await('SELECT * FROM player_vehicles WHERE citizenid = ?', { citizenId })
+        print(('[qb-garages] shared query citizen=%s garage=%s -> %d vehicles'):format(
+            citizenId:sub(1, 4) .. '...', tostring(garage), #(vehicles or {})))
     else
         vehicles = MySQL.query.await('SELECT * FROM player_vehicles WHERE citizenid = ? AND garage = ?', { citizenId, garage })
     end
