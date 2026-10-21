@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "name": "director_bridge",
+  "description": "Rule-based director bridge (#31): complete civilian ch1, confirm the quest.completed event reached agent_events, then hold the fake player online for 120s so a human can inspect and approve the pending start_quest proposal. No director assertion is made because the human may approve/reject during the window.",
+  "ordering": "sequential",
+  "seed": 31,
+  "players": [
+    {
+      "cid": "SIM001",
+      "job": "unemployed",
+      "gang": "none",
+      "grade": 0,
+      "money": { "cash": 1000, "bank": 10000, "crypto": 0 },
+      "charinfo": {
+        "firstname": "Sim",
+        "lastname": "One",
+        "birthdate": "1990-01-01",
+        "gender": 0,
+        "nationality": "US"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "accept",
+      "action": "accept_quest",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar"
+    },
+    {
+      "id": "accepted",
+      "action": "wait",
+      "ms": 700
+    },
+    {
+      "id": "step_meet_tony",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_meet_tony"
+    },
+    {
+      "id": "step_go_mine",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_go_mine"
+    },
+    {
+      "id": "step_mine_ore",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_mine_ore"
+    },
+    {
+      "id": "step_go_bank",
+      "action": "complete_step",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_go_bank",
+      "wait": 500
+    },
+    {
+      "id": "choice",
+      "action": "make_choice",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "step": "step_decision",
+      "decision": "civilian_ch1_honest_or_shadow",
+      "option": "honest_citizen"
+    },
+    {
+      "id": "reward_settled",
+      "action": "wait",
+      "ms": 1200
+    },
+    {
+      "id": "director_window",
+      "action": "wait",
+      "ms": 120000
+    }
+  ],
+  "assert": [
+    {
+      "name": "quest.completed",
+      "type": "quest_status",
+      "cid": "SIM001",
+      "quest": "civilian_ch1_first_dollar",
+      "expect": "completed",
+      "completion_count": 1
+    },
+    {
+      "name": "quest.completion_count_once",
+      "type": "db_scalar",
+      "cid": "SIM001",
+      "sql": "SELECT completion_count FROM player_quests WHERE citizenid = ? AND quest_id = ? ORDER BY id DESC LIMIT 1",
+      "params": ["civilian_ch1_first_dollar"],
+      "expect": 1
+    },
+    {
+      "name": "story.choice_persisted",
+      "type": "choice_count",
+      "cid": "SIM001",
+      "decision": "civilian_ch1_honest_or_shadow",
+      "expect": 1
+    },
+    {
+      "name": "quest.reward_granted_once",
+      "type": "money_delta",
+      "cid": "SIM001",
+      "account": "bank",
+      "since": "accepted",
+      "min": 300,
+      "max": 600
+    },
+    {
+      "name": "director.quest_completed_event_observed",
+      "type": "db_scalar",
+      "after": "director_window",
+      "cid": "SIM001",
+      "sql": "SELECT COUNT(*) FROM agent_events WHERE citizenid = ? AND event_type = 'quest.completed'",
+      "expect": 1
+    }
+  ]
+}
