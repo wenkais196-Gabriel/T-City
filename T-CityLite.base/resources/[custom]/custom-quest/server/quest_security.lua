@@ -214,9 +214,15 @@ function QuestSecurity.ValidateStepOrder(citizenid, questId, claimedStepId)
         return Citizen.Await(p)
     end)
     if not activeQuests or #activeQuests == 0 then
-        -- v0.8b: 最后兜底 — 检查解析后模板是否存在（说明任务活跃）
-        if QuestManager._resolvedTemplates[citizenid .. '_' .. questId] then
-            return true  -- 信任解析后模板，放行
+        -- v1.1: 缓存空窗期 — 用 QuestManager 内存中的当前步骤同步兜底
+        -- （此前直接信任 _resolvedTemplates 放行，等于接受任意 stepId）
+        local key = citizenid .. '_' .. questId
+        local memoryStep = QuestManager._currentSteps and QuestManager._currentSteps[key]
+        if memoryStep then
+            if memoryStep ~= claimedStepId then
+                return false, ('Step order violation: expected %s, got %s'):format(memoryStep, claimedStepId)
+            end
+            return true
         end
         return false, 'No active quests in cache'
     end
