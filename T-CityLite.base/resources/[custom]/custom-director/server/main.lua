@@ -140,6 +140,9 @@ local function dbInsert(sql, params)
         return nil, tostring(insertId)
     end
     -- oxmysql may return a number or { affectedRows, insertId }
+    if type(insertId) == 'string' then
+        return nil, insertId
+    end
     if type(insertId) == 'table' then
         insertId = insertId.insertId or insertId.affectedRows or 0
     end
@@ -153,6 +156,9 @@ local function dbUpdate(sql, params)
     if not ok then
         print(('[custom-director] DB update failed: %s'):format(truncate(affected, 200)))
         return 0, tostring(affected)
+    end
+    if type(affected) == 'string' then
+        return 0, affected
     end
     if type(affected) == 'table' then
         affected = affected.affectedRows or 0

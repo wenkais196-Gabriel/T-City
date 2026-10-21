@@ -12,8 +12,10 @@ server_scripts {
     '@oxmysql/lib/MySQL.lua',
     '@core-framework/bus.lua',
     'server/policy.lua',
+    'server/director_rules.lua',
     'server/selftest.lua',
     'server/main.lua',
+    'server/director.lua',
 }
 
 dependencies {
