@@ -44,10 +44,15 @@ local function InsertVehicleAndDeduct(pData, vehicle, plate, price, paymentType,
     local colStr = table.concat(cols, ', ')
     local placeholders = {}
     for _ = 1, #cols do placeholders[#placeholders + 1] = '?' end
-    MySQL.insert(('INSERT INTO player_vehicles (%s) VALUES (%s)'):format(colStr, table.concat(placeholders, ', ')), vals, function(affected)
-        if affected and affected.affectedRows and affected.affectedRows > 0 then
-            -- Phase 6: 确认插入成功
-        else
+    MySQL.insert(('INSERT INTO player_vehicles (%s) VALUES (%s)'):format(colStr, table.concat(placeholders, ', ')), vals, function(insertId)
+        -- oxmysql 的 insert 回调给的是 insertId(number)；兼容旧式 table 形式
+        local ok = false
+        if type(insertId) == 'number' then
+            ok = insertId > 0
+        elseif type(insertId) == 'table' then
+            ok = (insertId.affectedRows or insertId.insertId or 0) > 0
+        end
+        if not ok then
             print('[qb-vehicleshop] ❌ DB INSERT FAILED for plate: ' .. tostring(plate) .. ' vehicle: ' .. tostring(vehicle))
         end
     end)
