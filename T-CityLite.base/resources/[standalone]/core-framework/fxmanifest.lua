@@ -13,6 +13,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@oxmysql/lib/MySQL.lua',
     'compat.lua',
     'contracts.lua',
     'services/economy_service.lua',
@@ -22,8 +23,6 @@ server_scripts {
     'services/notify_service.lua',
     'services/world_state_service.lua',
     'services/patron_service.lua',
-    'cache/cache_manager.lua',
-    'cache/dirty_flush.lua',
     'services/persistence_manager.lua',
 }
 

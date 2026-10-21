@@ -49,19 +49,25 @@ setr voice_enableRadioAnim 1
 setr voice_syncData 1
 
 ## Lite startup modules
+# 顺序由 resources 的 fxmanifest dependencies 决定：
+#   core → career → player → custom → police → vehicles → jobs → medical …
+# 调整前请运行 tests/check_dependencies.py（它现在会解析 dependencies{} 表）。
 exec configs/modules/core.cfg
+exec configs/modules/career.cfg
 exec configs/modules/player.cfg
 exec configs/modules/voice.cfg
 exec configs/modules/custom.cfg
-exec configs/modules/economy.cfg
-exec configs/modules/security.cfg
+exec configs/modules/quest.cfg
+exec configs/modules/police.cfg
+exec configs/modules/vehicles.cfg
 exec configs/modules/jobs.cfg
 exec configs/modules/banking.cfg
-exec configs/modules/vehicles.cfg
-exec configs/modules/police.cfg
 exec configs/modules/medical.cfg
+exec configs/modules/economy.cfg
+exec configs/modules/security.cfg
 exec configs/modules/crime.cfg
-exec configs/modules/career.cfg
+exec configs/modules/story.cfg
+exec configs/modules/atmosphere.cfg
 exec configs/modules/admin.cfg
 
 ## Permissions

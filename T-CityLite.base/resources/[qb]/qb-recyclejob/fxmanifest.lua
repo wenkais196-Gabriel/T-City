@@ -19,7 +19,10 @@ client_script {
   '@PolyZone/CircleZone.lua'
 }
 
-server_script 'server/main.lua'
+server_scripts {
+  '@oxmysql/lib/MySQL.lua',
+  'server/main.lua'
+}
 
 dependencies {
     'qb-core',
