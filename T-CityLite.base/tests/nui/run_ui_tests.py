@@ -152,7 +152,18 @@ def test_vehicleshop(browser, artifacts: Path) -> list[str]:
         buys = [c for c in calls if "buyVehicle" in c["url"]]
         assert buys, f"buyVehicle not called: {calls}"
         assert "comet2" in (buys[-1]["body"] or ""), f"wrong vehicle payload: {buys[-1]}"
-        assert page.is_hidden(".dealership-panel"), "NUI should hide after Buy Now"
+        assert page.is_visible(".dealership-panel"), "NUI should stay open while processing"
+        assert "Processing" in page.inner_text("#app"), "processing state missing"
+
+        # 服务端失败：面板保留并显示错误
+        page.evaluate("() => window.postMessage({ type: 'result', success: false, message: '余额不足' }, '*')")
+        page.wait_for_function("document.body.innerText.includes('余额不足')", timeout=3000)
+        assert page.is_visible(".dealership-panel"), "NUI should stay open on failure"
+
+        # 服务端成功：关闭面板
+        page.evaluate("() => window.postMessage({ type: 'result', success: true, message: '' }, '*')")
+        page.wait_for_timeout(200)
+        assert page.is_hidden(".dealership-panel"), "NUI should close on success"
 
         errors.extend(page_errors)
         ctx.close()

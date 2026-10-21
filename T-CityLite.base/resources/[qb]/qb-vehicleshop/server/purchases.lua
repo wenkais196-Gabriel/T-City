@@ -16,6 +16,13 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local shopUtil = _G._vehicleshop
 
+-- 购买防连点：同一玩家 2 秒内只处理一次
+local lastPurchaseAt = {}
+
+local function PurchaseResult(src, ok, message)
+    TriggerClientEvent('qb-vehicleshop:client:purchaseResult', src, ok, message or '')
+end
+
 -- ==============================================================
 -- 内部: 写入 player_vehicles 并扣款
 -- ==============================================================
@@ -68,32 +75,56 @@ end
 
 RegisterNetEvent('qb-vehicleshop:server:buyShowroomVehicle', function(vehicleData)
     local src = source
-    local vehicle = vehicleData.buyVehicle
     local pData = QBCore.Functions.GetPlayer(src)
+    if not pData then return end
+
+    -- 防连点 / 防事件刷屏
+    local now = os.time()
+    if lastPurchaseAt[src] and (now - lastPurchaseAt[src]) < 2 then
+        PurchaseResult(src, false, '操作太快，请稍后再试')
+        return
+    end
+    lastPurchaseAt[src] = now
+
+    if type(vehicleData) ~= 'table' or type(vehicleData.buyVehicle) ~= 'string' then
+        PurchaseResult(src, false, '无效的车辆参数')
+        return
+    end
+
+    local vehicle = vehicleData.buyVehicle
+    local vehicleCfg = QBCore.Shared.Vehicles[vehicle]
+    if not vehicleCfg then
+        PurchaseResult(src, false, '该车辆不存在')
+        return
+    end
 
     -- 安全: 驾照检查
     if not shopUtil.CheckVehicleLicense(pData, vehicle) then
         local licenseName = shopUtil.GetRequiredLicenseName(vehicle)
-        TriggerClientEvent('QBCore:Notify', src,
-            ('You need a %s to purchase this vehicle!'):format(licenseName or 'license'), 'error', 5000)
+        local msg = ('You need a %s to purchase this vehicle!'):format(licenseName or 'license')
+        TriggerClientEvent('QBCore:Notify', src, msg, 'error', 5000)
+        PurchaseResult(src, false, msg)
         return
     end
 
     local cash         = pData.PlayerData.money['cash']
     local bank         = pData.PlayerData.money['bank']
-    local vehiclePrice = QBCore.Shared.Vehicles[vehicle]['price']
+    local vehiclePrice = tonumber(vehicleCfg.price) or 0
     local plate        = shopUtil.GeneratePlate()
 
-    if cash >= tonumber(vehiclePrice) then
+    if cash >= vehiclePrice then
         InsertVehicleAndDeduct(pData, vehicle, plate, vehiclePrice, 'cash')
-    elseif bank >= tonumber(vehiclePrice) then
+    elseif bank >= vehiclePrice then
         InsertVehicleAndDeduct(pData, vehicle, plate, vehiclePrice, 'bank')
     else
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.notenoughmoney'), 'error')
+        local msg = Lang:t('error.notenoughmoney')
+        TriggerClientEvent('QBCore:Notify', src, msg, 'error')
+        PurchaseResult(src, false, msg)
         return
     end
 
     TriggerClientEvent('QBCore:Notify', src, Lang:t('success.purchased'), 'success')
+    PurchaseResult(src, true, '')
     TriggerClientEvent('qb-vehicleshop:client:buyShowroomVehicle', src, vehicle, plate)
 end)
 

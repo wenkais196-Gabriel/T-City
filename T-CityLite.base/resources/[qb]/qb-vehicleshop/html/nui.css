@@ -152,6 +152,18 @@ body {
   width: 100%;
 }
 
+.error-banner {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+  font-size: 13px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
 .btn-primary, .btn-secondary, .btn-finance, .btn-ghost {
   width: 100%;
   padding: 14px 20px;

@@ -22,6 +22,8 @@ new Vue({
     minDownPercent: 10,
     downPayment: 0,
     paymentCount: 12,
+    processing: false,
+    error: '',
   },
   computed: {
     formattedPrice: function () {
@@ -45,11 +47,20 @@ new Vue({
       fetch('https://qb-vehicleshop/closeNui', { method: 'POST', body: '{}' })
     },
     buyVehicle: function () {
+      if (this.processing) return
+      var self = this
+      this.processing = true
+      this.error = ''
       fetch('https://qb-vehicleshop/buyVehicle', {
         method: 'POST',
         body: JSON.stringify({ vehicle: this.vehicle.model })
       })
-      this.visible = false
+      setTimeout(function () {
+        if (self.processing) {
+          self.processing = false
+          self.error = '请求超时，请重试'
+        }
+      }, 5000)
     },
     testDrive: function () {
       this.isTestDriving = true
@@ -86,6 +97,8 @@ new Vue({
       switch (data.type) {
         case 'open':
           self.visible = true
+          self.processing = false
+          self.error = ''
           self.shopLabel = data.shopLabel || 'Vehicle Shop'
           self.shopName = data.shopName || ''
           self.vehicle = data.vehicle || { brand: '', name: '', model: '', price: 0 }
@@ -103,6 +116,7 @@ new Vue({
         case 'update':
           // 展示车切换：原地更新，不重置分期输入/不闪屏
           self.visible = true
+          self.error = ''
           self.shopLabel = data.shopLabel || self.shopLabel
           self.shopName = data.shopName || self.shopName
           self.vehicle = data.vehicle || self.vehicle
@@ -116,8 +130,18 @@ new Vue({
           }
           break
 
+        case 'result':
+          self.processing = false
+          if (data.success) {
+            self.visible = false
+          } else {
+            self.error = data.message || '购买失败'
+          }
+          break
+
         case 'close':
           self.visible = false
+          self.processing = false
           break
 
         case 'testDriveEnd':

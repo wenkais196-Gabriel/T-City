@@ -35,15 +35,23 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('buyVehicle', function(data, cb)
-    nuiOpen = false
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
-    SendNUIMessage({ type = 'close' })
+    -- 保持 NUI 打开并显示 processing，等服务端 purchaseResult 再决定关闭/报错
     if data and data.vehicle then
         TriggerServerEvent('qb-vehicleshop:server:buyShowroomVehicle',
             { buyVehicle = data.vehicle })
     end
     cb('ok')
+end)
+
+RegisterNetEvent('qb-vehicleshop:client:purchaseResult', function(success, message)
+    SendNUIMessage({
+        type = 'result',
+        success = success == true,
+        message = message or '',
+    })
+    if success then
+        _vCloseNui()
+    end
 end)
 
 -- ==============================================================
