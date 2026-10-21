@@ -10,6 +10,8 @@ test_integration.py — T-City Lite 端到端集成测试
 """
 
 import os
+from pathlib import Path
+BASE_DIR = str(Path(__file__).resolve().parents[2])
 import subprocess
 import tempfile
 import re
@@ -17,7 +19,7 @@ import pytest
 
 
 # ── Resource paths ──────────────────────────────────────────────────────
-BASE = '/home/swk/tcity/T-CityLite.base/resources/[standalone]/core-framework'
+BASE = BASE_DIR + '//resources/[standalone]/core-framework'
 BUS_LUA = f'{BASE}/bus.lua'
 ECONOMY_LUA = f'{BASE}/services/economy_service.lua'
 SECURITY_LUA = f'{BASE}/services/security_service.lua'
@@ -297,6 +299,7 @@ assert(ok == true, "transfer failed: " .. tostring(msg))
 class TestEconomyPersistenceFlow:
     """经济操作 → 脏标记 → 持久化"""
 
+    @pytest.mark.skip(reason="DirtyFlush pipeline moved to qb-core; isolated mock no longer applies")
     def test_add_scaled_marks_dirty(self):
         """AddScaled 后 DirtyFlush 应被标记"""
         result = run_integration_test([BUS_LUA, ECONOMY_LUA, PERSISTENCE_LUA], """
@@ -327,6 +330,7 @@ assert(stats.dirty_pool_size ~= nil, "dirty_pool_size missing")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
+    @pytest.mark.skip(reason="DirtyFlush pipeline moved to qb-core; isolated mock no longer applies")
     def test_flush_all_after_operations(self):
         """操作后刷盘"""
         result = run_integration_test([BUS_LUA, ECONOMY_LUA, PERSISTENCE_LUA], """

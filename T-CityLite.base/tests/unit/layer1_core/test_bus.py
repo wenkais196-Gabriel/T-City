@@ -10,6 +10,8 @@ test_bus.py — Bus 总线单元测试
 """
 
 import os
+from pathlib import Path
+BASE_DIR = str(Path(__file__).resolve().parents[3])
 import sys
 import pytest
 
@@ -27,7 +29,7 @@ def _resolve_bus():
     global BUS_LUA_FILE
     if BUS_LUA_FILE is None:
         patterns = [
-            '/home/swk/tcity/T-CityLite.base/resources/[standalone]/core-framework/bus.lua',
+            BASE_DIR + '//resources/[standalone]/core-framework/bus.lua',
         ]
         for p in patterns:
             if os.path.exists(p):

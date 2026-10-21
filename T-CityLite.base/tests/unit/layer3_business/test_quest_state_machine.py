@@ -9,13 +9,15 @@ GetActiveQuests, GetQuestProgress, IsQuestActive, GetQuestStep 的验证门控�
 """
 
 import os
+from pathlib import Path
+BASE_DIR = str(Path(__file__).resolve().parents[3])
 import subprocess
 import tempfile
 import re
 import pytest
 
 
-QUEST_LUA = '/home/swk/tcity/T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua'
+QUEST_LUA = BASE_DIR + '//resources/[custom]/custom-quest/server/quest_manager.lua'
 
 
 def run_quest_test(test_code: str, extra_mocks: str = "") -> dict:
