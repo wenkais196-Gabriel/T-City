@@ -765,7 +765,14 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
                 })
 
                 -- v0.7.2: 奖励在完成事件之后发放，避免奖励异常阻断客户端清理
-                pcall(QuestRewards.GrantRewards, src, template.rewards, questId)
+                local rewardOk, rewardErr = xpcall(function()
+                    return QuestRewards.GrantRewards(src, template.rewards, questId)
+                end, function(err)
+                    return debug.traceback(tostring(err), 2)
+                end)
+                if not rewardOk then
+                    print(('[quest-manager] ❌ GrantRewards failed: %s'):format(tostring(rewardErr)))
+                end
 
                 TriggerClientEvent('QBCore:Notify', src,
                     ('Quest completed: %s!'):format(template.title), 'success')
