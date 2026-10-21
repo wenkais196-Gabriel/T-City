@@ -66,7 +66,7 @@
 | **启动** | ✅ 修复后静态通过 | 原先 core-framework 缺文件 + 11 处顺序冲突 + 3 个硬依赖缺失 |
 | **玩家加载** | 🟡 基本通 | qb-core 链路完整；位置落盘有 0,0,0 风险（已修） |
 | **经济变动** | 🟡 主路径通 | 卖货/奖励已接；Bus 服务名不一致导致仓库/市场仍降级 |
-| **任务** | 🟡 可跑但需验收 | 表/冷却/步骤校验已补；奖励幂等、组队、多任务缓存仍待修 |
+| **任务** | 🟡 可跑但需验收 | 表/冷却/步骤/组队/多任务缓存已补；奖励幂等仍待修 |
 | **剧情** | 🟡 可跑 | 已接入；决策越权/超时卡死已修；放弃任务收口已补 |
 | **存档** | 🟡 改善 | qb-core 补 15min tick + 停机刷盘；仍需压测确认 |
 | **断线** | 🟡 改善 | force 刷盘存在；位置回退已修 |
@@ -121,10 +121,10 @@
 |:---|:---|:---|:---|
 | R1 | **Bus 跨资源不可见**：`_G.Bus` 只在各自 resource 内；20+ 消费方 `if Bus` 静默跳过。且服务名不一致（`Bus.job` vs `Bus.JobService`） | 组织仓库、市场价、律师通知、世界状态等"代码在、功能不在" | Phase 1 引入 `BusCall(service, method, ...)` export + 各资源显式调用；统一 snake_case 命名 |
 | R2 | **任务奖励不幂等**：完成分支直接 `GrantRewards`，不看 DB `affectedRows`；`CompleteStep` export 无状态校验 | 重复调用可重复发钱/物品 | 把发奖移入 `CompleteQuest` 的 affectedRows 回调（>0 才发） |
-| R3 | **组队双锁**：`TriggerQuest` 先 `AcquireLock`，`CreateGroupInstance` 再抢一次 → 实例永不存在，组队奖励从未发放 | 组队玩法不可用 | 只调 `CreateGroupInstance`，或传句柄避免二次抢锁 |
-| R4 | **多任务缓存覆盖**：接新任务用单条数组覆盖 `_dirty` 缓存 → 旧任务步骤校验失败，持续 30min | 多线任务卡死 | 读现有缓存后 append |
+| R3 | **组队双锁** | 组队实例曾永远建不出来 | ✅ 已修复：只调 `CreateGroupInstance`；`RemoveGroupMember` 用真实 key；断线释放锁 |
+| R4 | **多任务缓存覆盖** | 接新任务会把旧任务挤出缓存 | ✅ 已修复：读现有缓存后 append |
 | R5 | **地址池任务顺序校验被绕过**：缓存空且解析模板存在时直接 `return true` | 可跳步 | 回填缓存后再校验 |
-| R6 | 其余未鉴权事件：`mining:mineOre` 无矿点距离、`cartel:finishProduction` 无 start/时长、`custom-main:ResetDeathStatus`、`policeHandoverAlert`、`savePosCollection` 写盘 DoS | 刷资源/骚扰/磁盘 | 按 §3.2 模式加 source/距离/冷却 |
+| R6 | 其余未鉴权事件 | 刷资源/骚扰 | 🟡 部分修复：`mining` 矿点距离、`cartel` 生产时长、`savePosCollection` 管理限制、`registerTrailer`/`cleanupTrailers` 已收口；仍剩 `ResetDeathStatus`、`policeHandoverAlert`、`plateFlagged`、`nodeComplete` 跳过 nonce |
 | R7 | `world_state_service` 用 `Citizen.Await` 同步查 DB，且 `prepare` 返回结构自相矛盾 | 首次读取阻塞主线程/返回错值 | 改 `execute` + `rows[1].state_value`，异步化 |
 | R8 | `custom-testing` 在生产 cfg 中 ensure，`/test` 对所有玩家开放 | 攻击面/性能 | 生产 cfg 移除，或加 `admin` 限制 |
 | R9 | `player_warns` / `server_logs` 等表无 DDL | 新库功能报错 | 补迁移（本轮只补了任务四表） |
@@ -175,7 +175,9 @@
 | 文件 | 改动 |
 |:---|:---|
 | `custom-quest/server/quest_cooldown.lua` | 重写：内存权威 + 登录回填 + DB 异步只做回填 |
-| `custom-quest/server/quest_manager.lua` | `ValidateNode` 实现（类型 + 服务端距离）；决策节点下发前登记 pending；`CancelAllNodes` 清理 pending |
+| `custom-quest/server/quest_manager.lua` | `ValidateNode` 实现（类型 + 服务端距离）；决策节点下发前登记 pending；`CancelAllNodes` 清理 pending；组队锁只抢一次；活跃任务缓存 append |
+| `custom-quest/server/quest_mutex.lua` | `RemoveGroupMember` 使用真实锁 key；`playerDropped` 释放锁并移除组成员 |
+| `custom-quest/server/quest_security.lua` | 新增 `ResetStepAttempts`，步骤推进时清零，避免可重复任务跑满上限被永久锁死 |
 | `custom-quest/server/main.lua` | `dashboardStampDelivery` 防伪造；`registerTrailer` 校验实体/距离；`cleanupTrailers` 改为非网络事件 |
 | `story-engine/server/decision_engine.lua` | 新增 pending offer、超时兜底、上下文绑定、幂等消费、日志 |
 | `story-engine/server/main.lua` | 修正登录事件名；新增 `OfferDecision`/`ClearDecision` exports；断线/任务失败清理 |
@@ -189,6 +191,8 @@
 | `qb-streetraces/server/main.lua` | 服务端重建赛局、奖池按人数计算、领奖销毁、加入去重 |
 | `custom-vehicles/server/{compat,vehicle_state}.lua` | 统一车主/执勤机修校验；部件值夹紧 |
 | `custom-justice/server/prison.lua` | 刑期校验 + 刑期上限 |
+| `custom-mining/server/main.lua` | 矿点距离校验（服务端坐标） |
+| `custom-cartel/server/{main,drug_lab}.lua` | 生产会话记录 + 配方时长校验 + 断线清理 |
 
 ---
 
@@ -219,7 +223,7 @@
 
 | 工作流 | 交付 | 验收 |
 |:---|:---|:---|
-| 剧情 | 修 R2/R3/R4/R5；决策选择持久化；三线 Ch1–Ch4 可通 | 选择重登后仍在；完成度门控正确 |
+| 剧情 | 修 R2/R5；决策选择持久化；三线 Ch1–Ch4 可通 | 选择重登后仍在；完成度门控正确 |
 | 角色扮演 | quest + phone + job + justice 联动；RP 动词（/me、/do、911/311、场景标记）；新手引导 → 桥接 → 涌现漏斗 | 新玩家 30min 内首次真人交互；3 条弧线可玩 |
 | 多系统 | `world_state` 真正接线；组织仓库/市场/司法用显式 export 调用（R1 的渐进修复）；`world_events` 开始写入 | 一次帮派易主能在世界状态/编年史看到 |
 | 社交信号 | `funnel:social_signal` 从 quest/career 真实发射并被消费 | 能统计"完成任务的玩家有多少进入组织" |
