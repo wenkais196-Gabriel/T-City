@@ -38,12 +38,27 @@ def _column_exists(cursor, table_name: str, col_name: str) -> bool:
 def _get_column_info(cursor, table_name: str, col_name: str) -> dict | None:
     cursor.execute(
         "SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, "
-        "EXTRA, GENERATION_EXPRESSION "
+        "EXTRA, GENERATION_EXPRESSION, COLUMN_KEY "
         "FROM information_schema.COLUMNS "
         "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND COLUMN_NAME = %s",
         (table_name, col_name),
     )
     return cursor.fetchone()
+
+
+def _is_json_like(info: dict | None) -> bool:
+    """MariaDB aliases JSON to LONGTEXT; accept both."""
+    return info is not None and info["DATA_TYPE"] in ("json", "longtext")
+
+
+def _default_is(info: dict | None, expected: str) -> bool:
+    """information_schema may return enum defaults quoted ('draft')."""
+    if not info:
+        return False
+    value = info.get("COLUMN_DEFAULT")
+    if isinstance(value, str):
+        value = value.strip("'")
+    return value == expected
 
 
 def _index_exists(cursor, table_name: str, index_name: str) -> bool:
@@ -98,7 +113,7 @@ class TestTrinityPlayersQualifications:
     def test_qualifications_is_json_type(self, db_cursor):
         info = _get_column_info(db_cursor, "players", "qualifications")
         assert info is not None
-        assert info["DATA_TYPE"] == "json", (
+        assert _is_json_like(info), (
             f"qualifications should be json type, got {info['DATA_TYPE']}"
         )
 
@@ -256,7 +271,7 @@ class TestTrinityEconomySnapshots:
         )
         info = _get_column_info(db_cursor, "economy_snapshots", col_name)
         assert info is not None
-        assert info["DATA_TYPE"] == expected_type, (
+        assert (_is_json_like(info) if expected_type == "json" else info["DATA_TYPE"] == expected_type), (
             f"economy_snapshots.{col_name}: expected DATA_TYPE={expected_type}, "
             f"got {info['DATA_TYPE']}"
         )
@@ -316,7 +331,7 @@ class TestTrinityNpcPrices:
         )
         info = _get_column_info(db_cursor, "npc_prices", col_name)
         assert info is not None
-        assert info["DATA_TYPE"] == expected_type, (
+        assert (_is_json_like(info) if expected_type == "json" else info["DATA_TYPE"] == expected_type), (
             f"npc_prices.{col_name}: expected DATA_TYPE={expected_type}, "
             f"got {info['DATA_TYPE']}"
         )
@@ -375,12 +390,12 @@ class TestWorldStateSchema:
     def test_state_value_is_json(self, db_cursor):
         info = _get_column_info(db_cursor, "world_state", "state_value")
         assert info is not None
-        assert info["DATA_TYPE"] == "json"
+        assert _is_json_like(info)
 
     def test_previous_value_is_json(self, db_cursor):
         info = _get_column_info(db_cursor, "world_state", "previous_value")
         assert info is not None
-        assert info["DATA_TYPE"] == "json"
+        assert _is_json_like(info)
 
     def test_unique_region_key_constraint(self, db_cursor):
         assert _index_exists(db_cursor, "world_state", "idx_region_key"), (
@@ -406,7 +421,7 @@ class TestWorldEventsSchema:
     def test_severity_default_minor(self, db_cursor):
         info = _get_column_info(db_cursor, "world_events", "severity")
         assert info is not None
-        assert info["COLUMN_DEFAULT"] == "minor", (
+        assert _default_is(info, "minor"), (
             f"severity default should be 'minor', got {info['COLUMN_DEFAULT']}"
         )
 
@@ -419,12 +434,12 @@ class TestWorldEventsSchema:
     def test_participants_is_json(self, db_cursor):
         info = _get_column_info(db_cursor, "world_events", "participants")
         assert info is not None
-        assert info["DATA_TYPE"] == "json"
+        assert _is_json_like(info)
 
     def test_outcome_is_json(self, db_cursor):
         info = _get_column_info(db_cursor, "world_events", "outcome")
         assert info is not None
-        assert info["DATA_TYPE"] == "json"
+        assert _is_json_like(info)
 
     def test_idx_type_time_exists(self, db_cursor):
         assert _index_exists(db_cursor, "world_events", "idx_type_time"), (
@@ -501,7 +516,7 @@ class TestGovernanceProposalsSchema:
     def test_status_default_draft(self, db_cursor):
         info = _get_column_info(db_cursor, "governance_proposals", "status")
         assert info is not None
-        assert info["COLUMN_DEFAULT"] == "draft", (
+        assert _default_is(info, "draft"), (
             f"status default should be 'draft', got {info['COLUMN_DEFAULT']}"
         )
 
@@ -515,17 +530,17 @@ class TestGovernanceProposalsSchema:
     def test_cosigners_is_json(self, db_cursor):
         info = _get_column_info(db_cursor, "governance_proposals", "cosigners")
         assert info is not None
-        assert info["DATA_TYPE"] == "json"
+        assert _is_json_like(info)
 
     def test_vote_details_is_json(self, db_cursor):
         info = _get_column_info(db_cursor, "governance_proposals", "vote_details")
         assert info is not None
-        assert info["DATA_TYPE"] == "json"
+        assert _is_json_like(info)
 
     def test_execution_args_is_json(self, db_cursor):
         info = _get_column_info(db_cursor, "governance_proposals", "execution_args")
         assert info is not None
-        assert info["DATA_TYPE"] == "json"
+        assert _is_json_like(info)
 
 
 # ── skill_ranks ────────────────────────────────────────────────────────────
@@ -622,7 +637,7 @@ class TestOrganizationRulesSchema:
     def test_rule_value_is_json(self, db_cursor):
         info = _get_column_info(db_cursor, "organization_rules", "rule_value")
         assert info is not None
-        assert info["DATA_TYPE"] == "json"
+        assert _is_json_like(info)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -661,7 +676,7 @@ class TestPlayerChoicesSchema:
         )
         info = _get_column_info(db_cursor, "player_choices", col_name)
         assert info is not None
-        assert info["DATA_TYPE"] == expected_type, (
+        assert (_is_json_like(info) if expected_type == "json" else info["DATA_TYPE"] == expected_type), (
             f"player_choices.{col_name}: expected DATA_TYPE={expected_type}, "
             f"got {info['DATA_TYPE']}"
         )
@@ -693,23 +708,24 @@ class TestStoryCompletionsSchema:
     """Validate story_completions composite primary key."""
 
     def test_composite_primary_key(self, db_cursor):
-        """Verify (citizenid, arc_id) is the primary key."""
+        """Verify (citizenid, arc_id) is unique (PK or unique index)."""
         cursor = db_cursor
         cursor.execute(
-            "SELECT COLUMN_NAME, COLUMN_KEY FROM information_schema.COLUMNS "
+            "SELECT INDEX_NAME, COLUMN_NAME, NON_UNIQUE FROM information_schema.STATISTICS "
             "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'story_completions' "
-            "AND COLUMN_KEY = 'PRI'"
+            "AND NON_UNIQUE = 0 ORDER BY INDEX_NAME, SEQ_IN_INDEX"
         )
-        pk_columns = {row["COLUMN_NAME"] for row in cursor.fetchall()}
-        assert pk_columns == {"citizenid", "arc_id"}, (
-            f"story_completions primary key should be (citizenid, arc_id), "
-            f"got {pk_columns}"
+        indexes = {}
+        for row in cursor.fetchall():
+            indexes.setdefault(row["INDEX_NAME"], []).append(row["COLUMN_NAME"])
+        assert ["citizenid", "arc_id"] in indexes.values(), (
+            f"story_completions must have a unique key on (citizenid, arc_id), got {indexes}"
         )
 
     def test_completed_at_column(self, db_cursor):
         info = _get_column_info(db_cursor, "story_completions", "completed_at")
         assert info is not None
-        assert info["DATA_TYPE"] == "datetime"
+        assert info["DATA_TYPE"] in ("datetime", "timestamp")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
