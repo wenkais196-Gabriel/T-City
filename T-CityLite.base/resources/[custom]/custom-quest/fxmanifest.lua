@@ -67,6 +67,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@oxmysql/lib/MySQL.lua',
     'server/quest_cache.lua',
     'server/quest_db.lua',
     'server/quest_registry.lua',
