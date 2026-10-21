@@ -64,7 +64,7 @@
 - [x] 修复 persistence / vehicleshop 失效测试夹具
 - [x] `pytest tests`：286 passed / 132 skipped（跳过项需 MySQL）
 - [x] GitHub Actions CI（CFG + 依赖 + 语法 + pytest + MariaDB schema + NUI 冒烟）
-- [x] NUI 无头冒烟 3/3（车店 / 中控屏 / 手机，Playwright）
+- [x] NUI 无头冒烟 4/4（车店 / 中控屏 / 车库 / 手机，Playwright）
 - [x] 132 个 DB 用例在一次性库跑通（424 passed；schema fixture + CI MariaDB 任务）
 
 ### 5. 发版收尾

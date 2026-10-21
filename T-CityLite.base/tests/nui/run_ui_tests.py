@@ -222,6 +222,39 @@ def test_dashboard(browser, artifacts: Path) -> list[str]:
     return errors
 
 
+def test_garage(browser, artifacts: Path) -> list[str]:
+    resource_dir = BASE / "resources/[qb]/qb-garages"
+    errors: list[str] = []
+    with StaticServer(resource_dir) as url:
+        ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+        ctx.add_init_script(nui_init_script("qb-garages"))
+        page = ctx.new_page()
+        page_errors = collect_errors(page)
+        page.goto(f"{url}/html/index.html")
+        page.evaluate(
+            """() => window.postMessage({
+                action: 'VehicleList',
+                garageLabel: 'Pillbox Garage Parking',
+                vehicles: [
+                    { vehicle: 'rhapsody', vehicleLabel: 'Rhapsody', plate: 'ABC123', state: 1,
+                      fuel: 100, engine: 100, body: 100, distance: 0, type: 'public',
+                      index: 'pillboxgarage', depotPrice: 0, balance: 0 },
+                    { vehicle: 'vigero', vehicleLabel: 'Vigero', plate: 'XYZ789', state: 1,
+                      fuel: 90, engine: 950, body: 980, distance: 12, type: 'public',
+                      index: 'pillboxgarage', depotPrice: 0, balance: 0 }
+                ]
+            }, '*')"""
+        )
+        page.wait_for_selector(".vehicle-item", timeout=3000)
+        assert page.eval_on_selector_all(".vehicle-item", "els => els.length") == 2
+        text = page.inner_text("body")
+        assert "ABC123" in text and "XYZ789" in text, f"plates missing: {text[:200]}"
+        page.screenshot(path=str(artifacts / "garage-open.png"), full_page=True)
+        errors.extend(page_errors)
+        ctx.close()
+    return errors
+
+
 def test_phone(browser, artifacts: Path) -> list[str]:
     resource_dir = BASE / "resources/[custom]/custom-phone"
     errors: list[str] = []
@@ -263,6 +296,7 @@ def main() -> int:
             for name, fn in [
                 ("qb-vehicleshop", test_vehicleshop),
                 ("tcity-dashboard", test_dashboard),
+                ("qb-garages", test_garage),
                 ("custom-phone", test_phone),
             ]:
                 try:

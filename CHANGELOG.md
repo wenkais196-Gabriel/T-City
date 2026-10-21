@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 - `pytest tests`：**424 passed**（含 MariaDB schema；无 DB 连接时 286 passed / 132 skipped）
 - oxmysql JS 单测：**148 passed**
-- NUI 冒烟：**3/3 passed**（Playwright Chromium）
+- NUI 冒烟：**4/4 passed**（Playwright Chromium）
 - 游戏内 `/test run all`：**298 PASS / 0 FAIL / 9 SKIP**（有玩家上下文；无玩家时 225 PASS / 8 SKIP；见 `docs/v0.7a-acceptance-report.md`）
 - 离线检查：CFG / 依赖图 PASS；`light_lint` 仍为 advisory（vendor 资源遗留 ~250 条 `Wait(0)` / `MySQL.Sync`）
 
