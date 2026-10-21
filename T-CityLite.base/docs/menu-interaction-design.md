@@ -55,6 +55,7 @@ sequenceDiagram
         N->>C: NUI callback
         C->>S: TriggerServerEvent(purchase)
         S->>S: 驾照/金额/2s 防连点/参数校验
+        S->>S: 服务端距离校验（展车 8m / 车店 30m）
         S->>DB: 扣款 + INSERT player_vehicles
         S-->>C: purchaseResult(success,msg)
         alt 成功
@@ -148,7 +149,7 @@ exports['custom-ui']:CloseMenu()                     -- 内部 GuardControls
 
 - [ ] 不自动打开，先提示按键
 - [ ] 打开前做客户端距离判断
-- [ ] 服务端对关键操作再做距离/频率/参数校验
+- [ ] 服务端对关键操作再做距离/频率/参数校验（车店已加 8m/30m）
 - [ ] 打开用 `custom-ui:OpenMenu`
 - [ ] 关闭用 `custom-ui:CloseMenu`（自动 300ms 防误触）
 - [ ] 静态面板 `keepInput=false`；需要移动的界面 `keepInput=true` + `DisableDisplayControlActions`
