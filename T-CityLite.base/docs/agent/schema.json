@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "database": "TCityLite",
+  "generated_by": "tools/agent_schema.py",
+  "views": {
+    "agent_player_snapshot": {
+      "description": "One flat row per player: citizenid, display name, job/gang names, cash/bank/crypto balances, character first/last name, last_updated. License, identifier, position, inventory, metadata and phone are excluded.",
+      "source_tables": [
+        "players"
+      ],
+      "pii_fields": [
+        "name",
+        "firstname",
+        "lastname"
+      ],
+      "fields": [
+        {
+          "name": "citizenid",
+          "type": "varchar(11)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": false,
+          "pii": true,
+          "pii_reason": "display_name"
+        },
+        {
+          "name": "job",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "gang",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "cash",
+          "type": "decimal(18,2)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "bank",
+          "type": "decimal(18,2)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "crypto",
+          "type": "decimal(18,2)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "firstname",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": true,
+          "pii_reason": "display_name"
+        },
+        {
+          "name": "lastname",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": true,
+          "pii_reason": "display_name"
+        },
+        {
+          "name": "last_updated",
+          "type": "timestamp",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "schema_version",
+          "type": "int(1) unsigned",
+          "nullable": false,
+          "pii": false
+        }
+      ]
+    },
+    "agent_player_timeline": {
+      "description": "Read-only UNION ALL of quest_event_log, player_choices and bank_statements. event_type is namespaced (quest.*, story.choice, economy.*); payload is a JSON object; source_table identifies the origin.",
+      "source_tables": [
+        "quest_event_log",
+        "player_choices",
+        "bank_statements"
+      ],
+      "pii_fields": [],
+      "fields": [
+        {
+          "name": "citizenid",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "event_type",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "occurred_at",
+          "type": "datetime(3)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "payload",
+          "type": "longtext",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "source_table",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "schema_version",
+          "type": "int(1) unsigned",
+          "nullable": false,
+          "pii": false
+        }
+      ]
+    },
+    "agent_world_state": {
+      "description": "world_state rows plus one summary row per world_events.event_type. When both source tables are empty, a single source_table='fallback' row is returned instead of an empty result.",
+      "source_tables": [
+        "world_state",
+        "world_events"
+      ],
+      "pii_fields": [],
+      "fields": [
+        {
+          "name": "region_id",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "state_key",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "state_value",
+          "type": "longtext",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "changed_at",
+          "type": "datetime(3)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "source_table",
+          "type": "varchar(64)",
+          "nullable": true,
+          "pii": false
+        },
+        {
+          "name": "schema_version",
+          "type": "int(1) unsigned",
+          "nullable": false,
+          "pii": false
+        }
+      ]
+    },
+    "agent_economy_metrics": {
+      "description": "Per-job aggregates from players: player_count, total_cash, total_bank, avg_bank and max_bank. Cash/bank are extracted from the players.money JSON.",
+      "source_tables": [
+        "players"
+      ],
+      "pii_fields": [],
+      "fields": [
+        {
+          "name": "job",
+          "type": "varchar(64)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "player_count",
+          "type": "bigint(21)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "total_cash",
+          "type": "decimal(18,2)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "total_bank",
+          "type": "decimal(18,2)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "avg_bank",
+          "type": "decimal(18,2)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "max_bank",
+          "type": "decimal(18,2)",
+          "nullable": false,
+          "pii": false
+        },
+        {
+          "name": "schema_version",
+          "type": "int(1) unsigned",
+          "nullable": false,
+          "pii": false
+        }
+      ]
+    }
+  }
+}
