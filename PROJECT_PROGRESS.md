@@ -243,5 +243,6 @@ Active resources detected in codebase (**77** unique resources across **17** mod
 - [**v0.7a 载具重构与物流**](./QBCore_Lite_versions/v0.7a-civilian-logistics.md)
 - [v0.7a 验收报告](./T-CityLite.base/docs/v0.7a-acceptance-report.md)
 - [v0.7b 收尾 vs v1.0 联调建议](./T-CityLite.base/docs/v0.7b-v1.0-decision.md)
+- [注意项解决方案](./T-CityLite.base/docs/attention-items-solutions.md)
 - [v0.7 集成测试手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
 - [**v0.6-quest 通用任务系统设计方案**](./QBCore_Lite_versions/v0.6-quest-system.md)
