@@ -3,7 +3,7 @@
 基于 QBCore 的精简模块化 FiveM RP 服务器框架。
 
 > **核心理念**: 模块化启动、安全优先、可迭代架构
-> **当前版本**: v0.5 犯罪玩法系统（开发中）
+> **当前版本**: v0.7a 载具重构与物流（开发中）
 
 ---
 
@@ -37,12 +37,40 @@
 - Node.js 18+（用于 NUI 构建）
 - Python 3.12+（用于离线检测脚本）
 
+### 运行时目录 `alpine/`（必须自行准备）
+
+本仓库**不包含** `alpine/` 目录——它已被 `.gitignore` 排除。这是 FXServer 的 Alpine 运行时（约 293MB，其中 `libnode22.so` 单文件 123MB），超过 GitHub 单文件 100MB 上限，无法入库。
+
+`start.sh` 依赖以下路径，缺一不可：
+
+```
+alpine/opt/cfx-server/FXServer
+alpine/opt/cfx-server/ld-musl-x86_64.so.1
+alpine/opt/cfx-server/citizen/
+alpine/usr/lib/v8/    alpine/lib/    alpine/usr/lib/
+```
+
+新机器克隆后按以下任一方式补齐（放在仓库根目录，与 `T-CityLite.base/` 同级）：
+
+```bash
+# 方式 A：从已有开发机打包（推荐，版本一致）
+tar -cJf alpine.tar.xz alpine/          # 在旧机器上
+scp alpine.tar.xz newhost:~/T-City/     # 传到新机器
+tar -xJf alpine.tar.xz                  # 在仓库根目录解压
+
+# 方式 B：用官方 Linux artifact
+# 从 https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/ 下载 fx.tar.xz
+# 解压后把 cfx-server 相关内容按上面的结构放进 alpine/，并核对 start.sh 中的路径
+```
+
+> ⚠️ 不要用 `git add -f alpine/` 强行提交，否则推送会被 GitHub 拒绝（单文件超限）。
+
 ### 安装
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/YOUR_USER/T-City-Lite.git
-cd T-City-Lite/T-CityLite.base
+git clone https://github.com/wenkais196-Gabriel/T-City.git
+cd T-City/T-CityLite.base
 
 # 2. 配置服务器
 cp server.cfg.template server.cfg
