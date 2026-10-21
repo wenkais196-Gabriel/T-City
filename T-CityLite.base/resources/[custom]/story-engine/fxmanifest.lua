@@ -29,6 +29,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@core-framework/bus.lua',
     'server/story_db.lua',
     'server/decision_engine.lua',
     'server/main.lua',

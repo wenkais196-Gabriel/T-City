@@ -57,8 +57,11 @@ RegisterNetEvent('justice:server:registerArrest', function(suspectSrc, crimes, o
 
     -- 6. 通知在线律师
     local lawyerSources = {}
-    if Bus and Bus.JobService then
-        lawyerSources = Bus.JobService.GetOnlinePlayersByJob('lawyer')
+    if GetResourceState('core-framework') == 'started' then
+        local ok, players = pcall(function()
+            return exports['core-framework']:service_job_GetOnlinePlayersByJob('lawyer')
+        end)
+        if ok and type(players) == 'table' then lawyerSources = players end
     end
 
     local lawyerNotified = false
@@ -122,7 +125,12 @@ RegisterNetEvent('justice:server:lawyerAcceptCase', function(caseId)
 
     -- 通知其他律师案件已受理
     local allLawyers = {}
-    if Bus and Bus.JobService then allLawyers = Bus.JobService.GetOnlinePlayersByJob('lawyer') end
+    if GetResourceState('core-framework') == 'started' then
+        local ok, players = pcall(function()
+            return exports['core-framework']:service_job_GetOnlinePlayersByJob('lawyer')
+        end)
+        if ok and type(players) == 'table' then allLawyers = players end
+    end
     for _, ls in ipairs(allLawyers) do
         if ls ~= src then
             TriggerClientEvent('QBCore:Notify', ls,

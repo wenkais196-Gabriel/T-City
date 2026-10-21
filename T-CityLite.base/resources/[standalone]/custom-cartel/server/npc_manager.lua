@@ -87,9 +87,11 @@ RegisterNetEvent('cartel:server:buyFromSupplier', function(npcId, itemName, quan
 
     -- 6. 计算价格 (走动态市场价或固定价)
     local unitPrice = itemCfg.price
-    if Bus and Bus.MarketService then
-        local marketPrice = Bus.MarketService.GetPrice(itemName)
-        if marketPrice then
+    if GetResourceState('custom-market') == 'started' then
+        local priceOk, marketPrice = pcall(function()
+            return exports['custom-market']:service_market_GetPrice(itemName)
+        end)
+        if priceOk and marketPrice then
             -- 供应商价格 = 市场价 * 0.8 (8折进货)
             unitPrice = math.floor(marketPrice * 0.8 + 0.5)
         end
@@ -176,9 +178,11 @@ RegisterNetEvent('cartel:server:sellToDealer', function(npcId, itemName, quantit
 
     -- 6. 使用动态市场价 (如果有)
     local finalPrice = unitPrice
-    if Bus and Bus.MarketService then
-        local marketPrice = Bus.MarketService.GetPrice(itemName)
-        if marketPrice then
+    if GetResourceState('custom-market') == 'started' then
+        local priceOk, marketPrice = pcall(function()
+            return exports['custom-market']:service_market_GetPrice(itemName)
+        end)
+        if priceOk and marketPrice then
             -- 分销商收购价 = 市场价 * 0.85
             finalPrice = math.floor(marketPrice * 0.85 + 0.5)
         end
@@ -202,11 +206,13 @@ RegisterNetEvent('cartel:server:sellToDealer', function(npcId, itemName, quantit
     end
 
     -- 9. 更新市场供给 (如果 MarketService 可用)
-    if Bus and Bus.MarketService then
+    if GetResourceState('custom-market') == 'started' then
         -- MarketService.Sell 会增加 supply，但我们直接卖给了 NPC
         -- 这里手动触发市场调整：分销商出货 → 市场供给增加
         -- 用 Sell 间接影响市场价格
-        Bus.MarketService.Sell(src, itemName, math.floor(quantity * 0.5))
+        pcall(function()
+            exports['custom-market']:service_market_Sell(src, itemName, math.floor(quantity * 0.5))
+        end)
     end
 
     -- 10. 通知

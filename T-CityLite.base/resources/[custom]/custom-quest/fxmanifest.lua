@@ -67,6 +67,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@core-framework/bus.lua',
     '@oxmysql/lib/MySQL.lua',
     'server/quest_cache.lua',
     'server/quest_db.lua',

@@ -100,18 +100,24 @@ RegisterNetEvent('mining:server:mineOre', function(siteId)
     end
 
     -- 8. 安全清洗
-    if Bus and Bus.SecurityService then
-        local ok, _, cleanedCount = Bus.SecurityService.ValidateItemEvent(src, selectedOre.name, yield)
-        if ok then yield = cleanedCount end
+    if GetResourceState('core-framework') == 'started' then
+        local callOk, ok, _, cleanedCount = pcall(function()
+            return exports['core-framework']:service_security_ValidateItemEvent(src, selectedOre.name, yield)
+        end)
+        if callOk and ok and tonumber(cleanedCount) then yield = cleanedCount end
     end
 
     -- 9. 尝试存入组织仓库 (优先)
     local storedInOrg = false
-    if Bus and Bus.StorageService then
-        local canAccess = Bus.StorageService.CanAccess(src, 'mining_co')
-        if canAccess then
-            local addOk = Bus.StorageService.AddItem('mining_co', selectedOre.name, yield, nil, nil)
-            if addOk then storedInOrg = true end
+    if GetResourceState('custom-storage') == 'started' then
+        local accessOk, canAccess = pcall(function()
+            return exports['custom-storage']:service_storage_CanAccess(src, 'mining_co')
+        end)
+        if accessOk and canAccess then
+            local addOk, added = pcall(function()
+                return exports['custom-storage']:service_storage_AddItem('mining_co', selectedOre.name, yield, nil, nil)
+            end)
+            if addOk and added then storedInOrg = true end
         end
     end
 

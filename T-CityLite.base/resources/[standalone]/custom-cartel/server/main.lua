@@ -123,9 +123,13 @@ end
 --- 打开 cartel 组织仓库
 ---@param source number
 function CartelService.OpenStorage(source)
-    if Bus and Bus.StorageService then
-        Bus.StorageService.OpenOrgStorage(source, 'cartel')
-    else
+    local opened = false
+    if GetResourceState('custom-storage') == 'started' then
+        opened = pcall(function()
+            exports['custom-storage']:service_storage_OpenOrgStorage(source, 'cartel')
+        end)
+    end
+    if not opened then
         TriggerClientEvent('QBCore:Notify', source, _L(source, 'cartel_storage_down'), 'error')
     end
 end
@@ -134,10 +138,14 @@ end
 ---@return boolean shouldRaid
 ---@return number policeCount
 function CartelService.CheckRaidConditions()
-    local policeOnline = 0
-    if Bus and Bus.JobService then
-        policeOnline = Bus.JobService.GetOnDutyCount('police')
-    else
+    local policeOnline
+    if GetResourceState('core-framework') == 'started' then
+        local ok, count = pcall(function()
+            return exports['core-framework']:service_job_GetOnDutyCount('police')
+        end)
+        if ok then policeOnline = count end
+    end
+    if not policeOnline then
         policeOnline = QBCore.Functions.GetDutyCount('police')
     end
 
