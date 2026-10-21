@@ -189,7 +189,7 @@ F8 → /test mock 2           # 模拟 2 名警察在线
 测试覆盖:
 - **286 个 pytest 用例**（unit + integration；132 个需 MySQL 的用例默认跳过）
 - **148 个 oxmysql JS 用例**（需先存在 `oxmysql/dist/build.js`）
-- **游戏内套件**: 核心启动 / 银行 / 警察 / 犯罪 / 安全 / 持久化 / 职业载具 / 经济管理 / 手机
+- **游戏内套件**: 控制台 `test run all` → 225 PASS / 0 FAIL / 8 SKIP（无客户端环境下）
 - **CI**: `.github/workflows/ci.yml` 运行 CFG、语法、依赖图与 pytest
 
 ---

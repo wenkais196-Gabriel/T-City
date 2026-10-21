@@ -68,8 +68,10 @@
 
 ### 5. 发版收尾
 - [x] tag `v0.7a` 已推送
-- [ ] 实机验收记录归档
+- [x] 服务端 / 无头验收归档（`/test run all` 225 PASS / 0 FAIL / 8 SKIP）
+- [ ] 真人客户端 UI 验收（车店 NUI / 车库 / 中控屏 / 物流）
 - [x] CHANGELOG / README 与 tag 对齐（本次更新）
+- [验收报告](./T-CityLite.base/docs/v0.7a-acceptance-report.md)
 
 ---
 

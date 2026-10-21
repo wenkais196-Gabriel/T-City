@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 - `pytest tests`：**286 passed / 132 skipped**（跳过项需 MySQL）
 - oxmysql JS 单测：**148 passed**
+- 游戏内 `/test run all`：**225 PASS / 0 FAIL / 8 SKIP**（服务端无头；见 `docs/v0.7a-acceptance-report.md`）
 - 离线检查：CFG / 依赖图 PASS；`light_lint` 仍为 advisory（vendor 资源遗留 ~250 条 `Wait(0)` / `MySQL.Sync`）
 
 ### Known
