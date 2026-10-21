@@ -8,12 +8,14 @@ test_economy.py — Economy Service 单元测试
 """
 
 import os
+from pathlib import Path
+BASE_DIR = str(Path(__file__).resolve().parents[3])
 import subprocess
 import tempfile
 import pytest
 
 
-ECONOMY_LUA = '/home/swk/tcity/T-CityLite.base/resources/[standalone]/core-framework/services/economy_service.lua'
+ECONOMY_LUA = BASE_DIR + '//resources/[standalone]/core-framework/services/economy_service.lua'
 
 
 def run_economy_test(test_code: str, extra_mocks: str = "") -> dict:
