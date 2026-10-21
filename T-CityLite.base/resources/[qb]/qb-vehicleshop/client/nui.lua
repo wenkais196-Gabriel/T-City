@@ -18,6 +18,10 @@ local nuiOpen = false
 -- NUI Callback: 关闭
 -- ==============================================================
 
+function _vIsNuiOpen()
+    return nuiOpen
+end
+
 function _vCloseNui()
     nuiOpen = false
     SetNuiFocus(false, false)
@@ -92,13 +96,9 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('swapVehicle', function(_, cb)
-    nuiOpen = false
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
-    SendNUIMessage({ type = 'close' })
-    -- 触发车辆类别选择菜单
-    TriggerEvent(Config.FilterByMake and 'qb-vehicleshop:client:vehMakes'
-                                      or 'qb-vehicleshop:client:vehCategories')
+    -- 主动交互流程：关闭面板，走到其他展车旁再按 E
+    _vCloseNui()
+    QBCore.Functions.Notify('走到其他展车旁，按 E 浏览该车', 'primary', 4000)
     cb('ok')
 end)
 

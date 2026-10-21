@@ -10,7 +10,8 @@
 ```
 玩家走入 PDM PolyZone
   → zones.lua: insideShop=name, _vSetClosestShowroomVehicle()
-  → _vOpenNui(name)
+  → 仅提示“按 E 浏览车辆”，不自动打开面板
+  → 玩家按 E → _vOpenNui(name)
   → nui.lua: SetNuiFocus(true,true) + SetNuiFocusKeepInput(true)
   → SendNUIMessage({type='open', vehicle/specs/finance...})
   → NUI 渲染面板
@@ -21,7 +22,7 @@
   │                → TriggerClientEvent(buyShowroomVehicle) → 客户端 spawn → 给钥匙 → 传送上车
   ├─ Finance    → fetch financeVehicle → 扣首付 → 插入分期字段
   ├─ Test Drive → fetch testDrive → 关闭焦点 → TestDrive 事件（NUI 仍 visible）
-  ├─ Change     → fetch swapVehicle → 关闭焦点 → qb-menu 分类 → refreshMenu → 重开 NUI
+  ├─ Change     → fetch swapVehicle → 关闭面板 → 提示走到其他展车旁按 E
   └─ Close/ESC  → fetch closeNui → 关闭焦点 + 隐藏
 
 玩家离开区域
@@ -36,7 +37,7 @@
 | 2 | 离开区域没有重置 `nuiOpen` | 再进店只 update 不显示/不抢焦点 | ✅ `_vCloseNui()` |
 | 3 | Buy/Finance 乐观隐藏 NUI，失败无反馈 | 余额不足/执照不足时只看到通知，面板已消失 | ✅ Buy 已改为 processing/error；Finance 仍乐观 |
 | 4 | TestDrive 只关焦点不隐藏 NUI | 试驾时车店面板残留在屏幕上 | ⚠️ 仍待做关闭+试驾 HUD |
-| 5 | Change Vehicle 走 qb-menu 分类再重开 | 两套菜单切换，体验割裂 | ⚠️ 建议 NUI 内做左右切换 |
+| 5 | Change Vehicle 走 qb-menu 分类再重开 | 两套菜单切换，体验割裂 | ✅ 关闭并提示按 E 换车 |
 | 6 | 无 loading / 防连点 | 快速双击可能重复发购买事件 | ✅ NUI processing + 服务端 2s 防连点 |
 | 7 | 服务端无距离/频率二次校验 | 客户端可伪造事件远程购买 | 🟡 已加 2s 频率限制；距离校验待做 |
 | 8 | 扣钱与 INSERT 非事务 | INSERT 失败会扣钱不交车 | ⚠️ 建议失败退款/事务 |
@@ -46,7 +47,7 @@
 
 | 环节 | 成熟做法（qb/ESX/ox 系） | 当前实现 | 建议 |
 |------|--------------------------|----------|------|
-| 打开 | 进店一次打开，车辆切换不重开 | 已修为 update | ✅ |
+| 打开 | 进店按 E 主动打开，不自动劫持 | 已修为 E 提示 + update | ✅ |
 | 数据 | 服务端报价 + 车辆配置，客户端只展示 | 客户端读 `QBCore.Shared.Vehicles` | 中 |
 | 购买 | 确认弹窗 → loading → 成功/失败 → 关闭 | 直接买，失败仅 notify | 高 |
 | 防刷 | 服务端校验距离/事件 nonce/rate limit | 仅金额/执照 | 高 |
@@ -58,6 +59,7 @@
 
 ## 4. 本轮已修
 
+- 进店不再自动打开购买面板，改为“按 E 浏览车辆”；关闭后不会自动重开。
 - NUI `open` / `update` 分离：展示车变化不再闪屏/重复抢焦点。
 - 离开区域统一 `_vCloseNui()`，重置 `nuiOpen`。
 - Buy/Finance/TestDrive/Swap 回调统一关闭 NUI，避免面板残留。
