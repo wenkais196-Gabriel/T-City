@@ -276,6 +276,17 @@ function QuestSecurity.CheckStepAttempts(citizenid, questId, stepId)
     return true
 end
 
+--- 步骤成功后清零尝试计数（否则可重复任务跑满上限会被永久锁死）
+---@param citizenid string
+---@param questId string
+---@param stepId string
+function QuestSecurity.ResetStepAttempts(citizenid, questId, stepId)
+    local bucket = QuestSecurity._stepAttempts[citizenid]
+    if bucket then
+        bucket[('%s_%s'):format(questId, stepId)] = nil
+    end
+end
+
 -- ==============================================================
 -- Distance Check 服务端坐标拉取
 -- ==============================================================

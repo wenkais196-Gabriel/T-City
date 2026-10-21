@@ -250,7 +250,7 @@ end
 ---@param playerSource number
 ---@return boolean removed
 function QuestMutex.RemoveGroupMember(questId, instanceId, playerSource)
-    for _, lock in pairs(locks) do
+    for key, lock in pairs(locks) do
         if lock.instanceId == instanceId and lock.mode == 'group' then
             lock.members[playerSource] = nil
             -- 如果队长离开，转移所有权或解散
@@ -260,8 +260,8 @@ function QuestMutex.RemoveGroupMember(questId, instanceId, playerSource)
                 if nextOwner then
                     lock.owner = nextOwner
                 else
-                    -- 无人了，释放锁
-                    locks[questId] = nil
+                    -- 无人了，释放锁（用真实 key，不能再用 questId）
+                    locks[key] = nil
                 end
             end
             return true
@@ -290,6 +290,18 @@ function QuestMutex.GetActiveLockCount()
     end
     return count
 end
+
+-- ── 断线清理：释放本人持锁 / 从组队成员中移除 ──────────────────────
+AddEventHandler('playerDropped', function()
+    local src = source
+    for key, lock in pairs(locks) do
+        if lock.owner == src then
+            locks[key] = nil
+        elseif lock.members then
+            lock.members[src] = nil
+        end
+    end
+end)
 
 -- ── 定时清理 ──────────────────────────────────────────────────────────
 
