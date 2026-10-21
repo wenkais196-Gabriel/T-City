@@ -1,9 +1,12 @@
 const mysql = require('mysql2/promise');
 
 (async () => {
-  const conn = await mysql.createConnection({ 
-    uri: 'mysql://root:1543368168@localhost/QBCore_CDB34E?charset=utf8mb4' 
-  });
+  const uri = process.env.TCITY_DB_URI;
+  if (!uri) {
+    console.error('[SKIP] Set TCITY_DB_URI=mysql://user:pass@host/database');
+    process.exit(1);
+  }
+  const conn = await mysql.createConnection({ uri });
 
   // 1. Create table
   await conn.execute(`
