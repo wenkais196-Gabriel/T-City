@@ -73,6 +73,9 @@ python3 tests/check_cfgs.py
 # 依赖图 + 启动顺序（会解析 dependencies{} 表）
 python3 tests/check_dependencies.py
 
+# Bus 接线（注册方必须 include @core-framework/bus.lua）
+python3 tests/check_bus_wiring.py
+
 # Python 语法
 python3 -m compileall -q tests
 

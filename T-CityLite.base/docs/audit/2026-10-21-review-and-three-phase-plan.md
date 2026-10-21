@@ -20,7 +20,7 @@
 - 跨资源 `Bus` 依赖 `_G` 共享，而 FiveM 每个 resource 是独立 Lua state → 20+ 个消费方看到的 `Bus` 是 `nil`，全部走 `if Bus then` 静默降级；
 - 真正的持久化定时器不存在（core-framework 的 tick 看不到 qb-core 的脏表）→ 崩溃/重启会丢在线期间的数据。
 
-**本次已修复 30+ 处 P0/P1**（见 §4），使"从空库启动 → 框架加载 → 任务/剧情可跑 → 下线不丢档"这条主链在静态层面成立。**仍需一次真实 FXServer 启动验证**。
+**本次已修复 40+ 处 P0/P1**（见 §4），使"从空库启动 → 框架加载 → 任务/剧情可跑 → 下线不丢档"这条主链在静态层面成立。**仍需一次真实 FXServer 启动验证**。
 
 ### 真实完成度评估
 
@@ -28,7 +28,7 @@
 |:---|:---|:---|:---|
 | 启动链 | v0.7 完成 | ❌ core-framework 起不来 | ✅ 依赖图/顺序通过 |
 | 经济统一出口 | 已落地 | ❌ 卖货扣物不付钱、core_economy 报错 | ✅ 主路径已接 |
-| 任务系统 | v0.6 完成 | ❌ 无表、冷却失效、可跳步 | 🟡 表/冷却/决策已修，奖励幂等待修 |
+| 任务系统 | v0.6 完成 | ❌ 无表、冷却失效、可跳步 | 🟡 表/冷却/步骤/奖励幂等已修，待实机验收 |
 | 剧情系统 | v0.7 完成 | ❌ 从未启动 + 登录事件名错 | ✅ 已接入并加防越权 |
 | 持久化 | DirtyFlush | ❌ 无定时刷盘 | ✅ qb-core 侧补 tick |
 | Bus 总线 | "统一总线" | ❌ 跨资源不可见 | 🔴 仅修了经济出口，整体待重构 |
@@ -66,7 +66,7 @@
 | **启动** | ✅ 修复后静态通过 | 原先 core-framework 缺文件 + 11 处顺序冲突 + 3 个硬依赖缺失 |
 | **玩家加载** | 🟡 基本通 | qb-core 链路完整；位置落盘有 0,0,0 风险（已修） |
 | **经济变动** | 🟡 主路径通 | 卖货/奖励已接；Bus 服务名不一致导致仓库/市场仍降级 |
-| **任务** | 🟡 可跑但需验收 | 表/冷却/步骤/组队/多任务缓存已补；奖励幂等仍待修 |
+| **任务** | 🟡 可跑但需验收 | 表/冷却/步骤/组队/多任务缓存/奖励幂等已补；待实机验收 |
 | **剧情** | 🟡 可跑 | 已接入；决策越权/超时卡死已修；放弃任务收口已补 |
 | **存档** | 🟡 改善 | qb-core 补 15min tick + 停机刷盘；仍需压测确认 |
 | **断线** | 🟡 改善 | force 刷盘存在；位置回退已修 |
@@ -119,12 +119,12 @@
 
 | # | 问题 | 影响 | 建议 |
 |:---|:---|:---|:---|
-| R1 | **Bus 跨资源不可见**：`_G.Bus` 只在各自 resource 内；20+ 消费方 `if Bus` 静默跳过。且服务名不一致（`Bus.job` vs `Bus.JobService`） | 组织仓库、市场价、律师通知、世界状态等"代码在、功能不在" | Phase 1 引入 `BusCall(service, method, ...)` export + 各资源显式调用；统一 snake_case 命名 |
-| R2 | **任务奖励不幂等**：完成分支直接 `GrantRewards`，不看 DB `affectedRows`；`CompleteStep` export 无状态校验 | 重复调用可重复发钱/物品 | 把发奖移入 `CompleteQuest` 的 affectedRows 回调（>0 才发） |
+| R1 | **Bus 跨资源不可见** | 组织仓库、市场价、律师通知等曾"代码在、功能不在" | 🟡 部分修复：7 个注册方 include `bus.lua`；cartel/mining/justice 18 处改显式 `service_*` export；剩 `custom-crime`/`custom-phone` 两处（均有 fallback） |
+| R2 | **任务奖励不幂等** | 重复调用可重复发钱/物品 | ✅ 已修复：`CompleteQuest` affectedRows 回调 + 内存完成锁 + 10s 超时兜底 |
 | R3 | **组队双锁** | 组队实例曾永远建不出来 | ✅ 已修复：只调 `CreateGroupInstance`；`RemoveGroupMember` 用真实 key；断线释放锁 |
 | R4 | **多任务缓存覆盖** | 接新任务会把旧任务挤出缓存 | ✅ 已修复：读现有缓存后 append |
-| R5 | **地址池任务顺序校验被绕过**：缓存空且解析模板存在时直接 `return true` | 可跳步 | 回填缓存后再校验 |
-| R6 | 其余未鉴权事件 | 刷资源/骚扰 | 🟡 部分修复：`mining` 矿点距离、`cartel` 生产时长、`savePosCollection` 管理限制、`registerTrailer`/`cleanupTrailers` 已收口；仍剩 `ResetDeathStatus`、`policeHandoverAlert`、`plateFlagged`、`nodeComplete` 跳过 nonce |
+| R5 | **地址池任务顺序校验被绕过** | 可跳步 | ✅ 已修复：缓存空窗期改用 `_currentSteps` 内存步骤比对，不匹配即拒绝 |
+| R6 | 其余未鉴权事件 | 刷资源/骚扰 | 🟡 部分修复：`mining`/`cartel`/`savePosCollection`/`registerTrailer`/`cleanupTrailers`/`ResetDeathStatus`/`policeHandoverAlert`/`plateFlagged` 已收口；仅剩 `nodeComplete` 跳过 nonce（需改客户端，另开 Issue） |
 | R7 | `world_state_service` 用 `Citizen.Await` 同步查 DB，且 `prepare` 返回结构自相矛盾 | 首次读取阻塞主线程/返回错值 | 改 `execute` + `rows[1].state_value`，异步化 |
 | R8 | `custom-testing` 在生产 cfg 中 ensure，`/test` 对所有玩家开放 | 攻击面/性能 | 生产 cfg 移除，或加 `admin` 限制 |
 | R9 | `player_warns` / `server_logs` 等表无 DDL | 新库功能报错 | 补迁移（本轮只补了任务四表） |
@@ -194,6 +194,18 @@
 | `custom-mining/server/main.lua` | 矿点距离校验（服务端坐标） |
 | `custom-cartel/server/{main,drug_lab}.lua` | 生产会话记录 + 配方时长校验 + 断线清理 |
 
+### 4.5 Phase 1 收尾（多 agent 并行，第二轮）
+
+| 文件 | 改动 |
+|:---|:---|
+| `custom-quest/server/{quest_db,quest_manager,quest_security}.lua` | 奖励幂等（affectedRows 回调 + 内存完成锁 + 10s 超时）、`_currentSteps` 步骤比对、完成锁清理 |
+| `custom-main/server/{main,dispatch}.lua` | `ResetDeathStatus` 医疗启用时拦截 + 10s 冷却；`policeHandoverAlert` 坐标/星级/街道校验 + 5s 冷却 |
+| `tcity-dashboard/server/police_api.lua` | `plateFlagged` 值班 LEO/admin 鉴权 + 车牌规范化 + 2s 冷却；内部同步改本地调用 |
+| 7 个注册方 `fxmanifest.lua` + cartel/mining/justice 8 个 server Lua | include `@core-framework/bus.lua`；18 处 `Bus.PascalCase` → 显式 `service_*` export，保留 fallback |
+| `core-framework/compat.lua` | `GetPlayer` 缓存活性校验改用 `GetPlayerName`（`GetPlayerPing >= 0` 恒真） |
+| `configs/modules/{custom,dev}.cfg` + `server.cfg.template` | `custom-testing` 移出生产，改由 `dev.cfg` 按需启用 |
+| `tests/check_bus_wiring.py` + CI / `run_all.py` | 新增 Bus 接线检查：注册方漏 include `bus.lua` 直接 CI 失败 |
+
 ---
 
 ## 5. 三阶段路线图
@@ -211,7 +223,7 @@
 | 启动链 | 本报告 §4.1；console 无 `Could not start resource` / `Failed to load script` | 80 个资源全部 started |
 | 数据层 | 执行全部 `migrations/*.sql`；补 `player_warns`/`server_logs` DDL | 新库无 "table doesn't exist" |
 | 持久化 | qb-core tick + 停机刷盘；压测崩溃恢复 | kill -9 后重启，最近 15min 数据在 |
-| 安全 | 本报告 §4.4；剩余 R6 事件加校验 | 5 个"印钞/删实体"路径复测失败 |
+| 安全 | 本报告 §4.4/§4.5；剩余 R6 事件加校验 | 5 个"印钞/删实体"路径复测失败 |
 | 观测底座 | 统一结构化日志（事件名/actor/quest/action id）；`/health` 输出资源状态 | 能回答"刚才发生了什么" |
 | 测试 | 修好依赖检查；加启动冒烟脚本（资源状态 + DB 表 + 关键 export） | CI 红灯能拦住本次这类问题 |
 
@@ -223,7 +235,7 @@
 
 | 工作流 | 交付 | 验收 |
 |:---|:---|:---|
-| 剧情 | 修 R2/R5；决策选择持久化；三线 Ch1–Ch4 可通 | 选择重登后仍在；完成度门控正确 |
+| 剧情 | R2/R5 已完成，补实机回归；决策选择持久化；三线 Ch1–Ch4 可通 | 选择重登后仍在；完成度门控正确 |
 | 角色扮演 | quest + phone + job + justice 联动；RP 动词（/me、/do、911/311、场景标记）；新手引导 → 桥接 → 涌现漏斗 | 新玩家 30min 内首次真人交互；3 条弧线可玩 |
 | 多系统 | `world_state` 真正接线；组织仓库/市场/司法用显式 export 调用（R1 的渐进修复）；`world_events` 开始写入 | 一次帮派易主能在世界状态/编年史看到 |
 | 社交信号 | `funnel:social_signal` 从 quest/career 真实发射并被消费 | 能统计"完成任务的玩家有多少进入组织" |
@@ -298,6 +310,7 @@
 # 1) 依赖与顺序
 python3 tests/check_dependencies.py     # 期望：无 ❌ / 🔴
 python3 tests/check_cfgs.py             # 期望：0 缺失、0 重复
+python3 tests/check_bus_wiring.py       # 期望：0 ERROR（WARN 可接受）
 
 # 2) 数据库
 mysql -u ... < migrations/v0.7_quest_system.sql
@@ -328,7 +341,7 @@ mysql -u ... < migrations/v0.8_ownership_engine.sql
 1. 新角色创建 → 出生 → 打开手机 → 接一个任务 → 完成 → 重登，进度仍在。
 2. 接任务 A，再接任务 B，确认 A 仍能推进（R4 修复后）。
 3. 决策任务：选一个选项 → 重登 → `player_choices` 有记录；故意关 NUI 等 2 分钟 → 任务不应卡死。
-4. 卖一辆车/卖一次货 → 钱到账、日志有记录。
+4. 卖一辆车/卖一次货 → 钱到账、日志有记录；重复调用完成事件不会二次发奖。
 5. 断线重连 → 位置不是 `0,0,0`。
 6. `/test` 是否仍对普通玩家开放（R8，未修则手动移除）。
 
@@ -339,6 +352,9 @@ mysql -u ... < migrations/v0.8_ownership_engine.sql
 - 客户端伪造 `quest:server:nodeComplete` 远程完成 → 带坐标步骤应被距离拒绝。
 - 知道车牌触发 `qb-vehiclekeys:server:GiveKeys`（非车主）→ 应被拒。
 - 热狗摊非摊主触发 Sell → 应被拒。
+- 医疗启用时伪造 `ResetDeathStatus` → 应被拦截并写安全日志。
+- 非警察伪造 `policeHandoverAlert` 坐标/999 星 → 应被丢弃或夹紧。
+- 非警察触发 `police:server:plateFlagged` → 应被拒。
 
 ---
 
@@ -351,7 +367,7 @@ mysql -u ... < migrations/v0.8_ownership_engine.sql
 | `oxmysql lib` 注入 | `@oxmysql/lib/MySQL.lua` 在各资源重复加载，可能有版本差异 | 确认 oxmysql 版本；启动后看 `MySQL` 是否非 nil |
 | 载具 owner 校验 | 任务/警车等无主车辆依赖"车内授权"；若流程在车外给钥匙会被拒 | 重点回归警察/EMS/机修取车流程 |
 | 热狗价格边界 | 仍是"客户端报价 + 服务端夹紧"，不是完整服务端定价 | 阶段 2 做服务端库存/定价模型 |
-| 任务奖励幂等 | 未修（R2） | 阶段 2 第一优先 |
+| 任务奖励幂等 | 已修（R2），需实机回归 | 阶段 1 退出前验证 |
 | Bus 架构 | 仅修了经济出口；仓库/市场/组织服务仍静默降级 | 阶段 1 末做 `BusCall` bridge + 统一命名 |
 
 ---

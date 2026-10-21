@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `qb-streetraces`: 服务端重建赛局与奖池，领奖前销毁，加入去重
 - `custom-justice`: 出狱按刑期校验；入狱刑期上限
 - `custom-mining` / `custom-cartel`: 矿点距离、生产开始/时长校验
+- `custom-main`: `ResetDeathStatus` 仅在医疗未启用且服务端判定死亡/倒地时允许，10s 冷却；`policeHandoverAlert` 加 5s 冷却 + 坐标/星级/街道校验
+- `tcity-dashboard`: `police:server:plateFlagged` 要求值班 LEO/admin，车牌规范化 + 2s 冷却；内部同步改为本地调用
+- `custom-testing` 移出生产 cfg，改由 `configs/modules/dev.cfg` 按需启用
 
 ### Fixed
 - `core-framework` 引用了不存在的 `cache/*.lua`，导致自身及 9 个下游资源无法启动
@@ -38,11 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 剧情登录事件名错误（`QBCore:Server:OnPlayerLoaded` → `PlayerLoaded`）
 - 组队任务双重抢锁、`RemoveGroupMember` 错误 key、断线不释放锁
 - 接新任务覆盖活跃任务缓存；步骤尝试次数不重置
+- 任务完成奖励幂等：`CompleteQuest` 回调只看 affectedRows，内存锁 + 10s 超时兜底，避免重复发奖
+- 地址池任务步骤顺序绕过：缓存空窗期改用 `_currentSteps` 内存步骤比对，不再直接放行
+- Bus 跨资源调用：7 个注册方 manifest include `@core-framework/bus.lua`，cartel/mining/justice 共 18 处改为显式 `service_*` export
+- `core-framework/compat.lua`: `GetPlayer` 缓存改用 `GetPlayerName` 做活性校验（`GetPlayerPing >= 0` 恒真）
 - `txAdminPort 0` 禁用管理员模式，避免端口冲突
 
 ### Changed
 - `server.cfg.template` 按依赖图重排：`core → career → player → voice → custom → quest → police → vehicles → jobs → banking → medical → economy → security → crime → story → atmosphere → admin`
 - `custom-quest` 从 `custom.cfg` 移到 `quest.cfg`；`custom-justice` 移到 `police.cfg`；`progressbar` 提前到 `player.cfg`
+- `custom-testing` 从 `custom.cfg` 移到 `dev.cfg`（生产默认不加载）
+- CI 增加 `check_bus_wiring.py`，防止注册方再次漏 include `bus.lua`
 
 ---
 
