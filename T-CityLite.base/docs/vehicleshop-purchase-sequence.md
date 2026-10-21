@@ -34,11 +34,11 @@
 |---|------|------|------|
 | 1 | 每次展示车变化都重新 `open` + 抢焦点 | 闪屏、焦点丢失、日志重复 Opening NUI | ✅ 改为 `update` 原地刷新 |
 | 2 | 离开区域没有重置 `nuiOpen` | 再进店只 update 不显示/不抢焦点 | ✅ `_vCloseNui()` |
-| 3 | Buy/Finance 乐观隐藏 NUI，失败无反馈 | 余额不足/执照不足时只看到通知，面板已消失 | ⚠️ 仍待做错误态 |
+| 3 | Buy/Finance 乐观隐藏 NUI，失败无反馈 | 余额不足/执照不足时只看到通知，面板已消失 | ✅ Buy 已改为 processing/error；Finance 仍乐观 |
 | 4 | TestDrive 只关焦点不隐藏 NUI | 试驾时车店面板残留在屏幕上 | ⚠️ 仍待做关闭+试驾 HUD |
 | 5 | Change Vehicle 走 qb-menu 分类再重开 | 两套菜单切换，体验割裂 | ⚠️ 建议 NUI 内做左右切换 |
-| 6 | 无 loading / 防连点 | 快速双击可能重复发购买事件 | ⚠️ 服务端有扣钱校验，但仍应禁用按钮 |
-| 7 | 服务端无距离/频率二次校验 | 客户端可伪造事件远程购买 | ⚠️ 建议接入 SecurityService |
+| 6 | 无 loading / 防连点 | 快速双击可能重复发购买事件 | ✅ NUI processing + 服务端 2s 防连点 |
+| 7 | 服务端无距离/频率二次校验 | 客户端可伪造事件远程购买 | 🟡 已加 2s 频率限制；距离校验待做 |
 | 8 | 扣钱与 INSERT 非事务 | INSERT 失败会扣钱不交车 | ⚠️ 建议失败退款/事务 |
 | 9 | 车店 NUI 默认关闭 | 用户默认看到 qb-menu，不是 v0.7a NUI | 配置项 `vehicleshop_use_nui` 控制 |
 
@@ -62,7 +62,8 @@
 - 离开区域统一 `_vCloseNui()`，重置 `nuiOpen`。
 - Buy/Finance/TestDrive/Swap 回调统一关闭 NUI，避免面板残留。
 - NUI 增加 `update` 消息处理，切换车辆保留分期输入。
-- 新增 Playwright 购车序列断言：open → update → close → open → Buy Now → 校验 `buyVehicle` 请求体含正确车型。
+- 新增 Playwright 购车序列断言：open → update → close → open → Buy Now → 校验 `buyVehicle` 请求体含正确车型 → 失败错误态 → 成功关闭。
+- 服务端购买新增车辆参数校验、2 秒防连点、`purchaseResult` 事件。
 
 ## 5. 自动化覆盖
 
@@ -72,7 +73,7 @@
 | 服务端 | `tests/unit/layer3_business/test_vehicleshop.py` | 购买扣钱、INSERT、事件路径 |
 | 游戏内 | `test run all` | 车店资源加载/Convar/callback 注册 |
 
-**未覆盖**：真实余额不足、INSERT 失败退款、双击防抖、服务端距离校验、试驾全流程。这些需要下一轮补。
+**未覆盖**：INSERT 失败退款、服务端距离校验、分期失败反馈、试驾全流程。
 
 ## 6. 下一步优先级
 
