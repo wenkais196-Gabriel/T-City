@@ -160,11 +160,47 @@ exports('GetPlayerIdentity', GetPlayerIdentity)
 --        标 签 比 对 器 (增加 org 标签)
 -- ==========================================
 
+-- role 是"身份类别"，不是 job.name：
+--   unemployed 也算 civilian；有 gang 就是 gang_member。
+local function RoleOf(identity)
+    local job = string.lower(identity.job_name or '')
+    local gang = identity.gang_name
+    if gang and gang ~= 'none' then return 'gang_member' end
+    if job == 'police' then return 'police' end
+    if job == 'ambulance' then return 'ems' end
+    if job == 'judge' or job == 'lawyer' then return 'justice' end
+    if job == 'unemployed' then return 'unemployed' end
+    return 'civilian'
+end
+
+local function RoleMatches(identity, required)
+    required = string.lower(tostring(required or ''))
+    local job = string.lower(identity.job_name or '')
+    local gang = identity.gang_name
+    if required == 'civilian' then
+        -- 无帮派 + 非执法/司法职业（unemployed 也算平民）
+        return (not gang) and job ~= 'police' and job ~= 'ambulance'
+            and job ~= 'judge' and job ~= 'lawyer'
+    elseif required == 'gang_member' then
+        return gang ~= nil and gang ~= 'none'
+    elseif required == 'unemployed' then
+        return job == 'unemployed'
+    elseif required == 'police' then
+        return job == 'police'
+    elseif required == 'ems' then
+        return job == 'ambulance'
+    elseif required == 'justice' then
+        return job == 'judge' or job == 'lawyer'
+    end
+    return job == required or RoleOf(identity) == required
+end
+
 local function PlayerMatchesTags(src, requiredTags)
     local identity = GetPlayerIdentity(src)
     if not identity then return false end
     for tag, val in pairs(requiredTags) do
-        if tag == 'role'     and identity.job_name ~= val then return false end
+        if tag == 'role'     and not RoleMatches(identity, val) then return false end
+        if tag == 'job'      and string.lower(identity.job_name or '') ~= string.lower(tostring(val)) then return false end
         if tag == 'org'      and identity.org_id ~= val then return false end
         if tag == 'tier'     and identity.rank_tier ~= val then return false end
         if tag == 'gang'     and identity.gang_name ~= val then return false end
@@ -172,7 +208,7 @@ local function PlayerMatchesTags(src, requiredTags)
         if tag == 'district' and identity.district ~= val then return false end
         if tag == 'cert' then
             local has = false
-            for _, c in ipairs(identity.certs) do if c == val then has = true; break end end
+            for _, c in ipairs(identity.certs or {}) do if c == val then has = true; break end end
             if not has then return false end
         end
     end

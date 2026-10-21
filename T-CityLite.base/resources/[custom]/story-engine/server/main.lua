@@ -158,6 +158,11 @@ exports('ClearDecision', function(source)
     DecisionEngine.ClearPending(source)
 end)
 
+-- 服务端可信资源直接提交决策（仍走 pending 上下文校验，不经过客户端事件）
+exports('MakeChoice', function(source, questId, stepId, decisionId, chosenOptionId)
+    return DecisionEngine.MakeChoice(source, questId, stepId, decisionId, chosenOptionId)
+end)
+
 -- 玩家离线时清理，避免 pending/计时器泄漏
 AddEventHandler('playerDropped', function()
     DecisionEngine.ClearPending(source)

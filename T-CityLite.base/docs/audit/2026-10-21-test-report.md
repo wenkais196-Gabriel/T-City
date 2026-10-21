@@ -20,6 +20,7 @@
 | `pytest tests/integration`（有 DB） | ✅ **34 passed, 4 skipped** | 0.2s | 跨服务/生命周期 |
 | `run_all.py` | ⚠️ 4/5 | 2.9s | 唯一失败是 `light_lint.py` 基线噪音 |
 | **实机 FXServer 启动** | ✅ PASS | ~45s | 79 个资源启动，0 script error / 0 缺失文件 |
+| **服务端 E2E（无客户端）** | ✅ **21/21 PASS** | ~15s | fake player 跑通经济/任务/决策/奖励幂等 |
 | `luac5.4 -p`（改动 Lua） | ✅ PASS | — | 42 个文件 |
 
 > `light_lint.py` 对全仓（含第三方 `[qb]`/`[standalone]`）报 252 errors / 96411 warnings，属既有基线；它不是 CI 阻断项。
@@ -139,7 +140,7 @@ python3 tests/run_all.py
 
 ---
 
-## 7. 实机启动冒烟（2026-10-21 13:30）
+## 6. 实机启动冒烟（2026-10-21 13:30）
 
 启动方式：
 
@@ -170,6 +171,60 @@ python3 tests/run_all.py
 
 > 结论：**启动链、资源依赖、DB 连接、Bus 注册、持久化 tick 已经在真实 FXServer 上闭环**；
 > 剩余验证需要客户端与压测环境。
+
+---
+
+## 7. 服务端 E2E（无客户端，2026-10-21 13:45）
+
+新增测试资源 `resources/[custom]/tcity-e2e`：用 fake player 在真实 FXServer 上跑通
+**经济 → 任务 → 决策 → 奖励幂等 → DB 持久化**，不依赖 GTA V 客户端。
+
+运行方式（仅测试环境）：
+
+```cfg
+setr tcity_e2e 1
+ensure tcity-e2e
+```
+
+结果：**21/21 PASS**
+
+```
+[E2E] PASS | career.role_civilian
+[E2E] PASS | career.role_unemployed
+[E2E] PASS | career.job_police_rejected
+[E2E] PASS | economy.add_money_persisted
+[E2E] PASS | quest.trigger
+[E2E] PASS | quest.db_in_progress
+[E2E] PASS | quest.complete.step_meet_tony
+[E2E] PASS | quest.complete.step_go_mine
+[E2E] PASS | quest.complete.step_mine_ore
+[E2E] PASS | quest.complete.step_go_bank
+[E2E] PASS | quest.at_decision_step
+[E2E] PASS | story.make_choice
+[E2E] PASS | quest.completed
+[E2E] PASS | quest.completion_count_once
+[E2E] PASS | story.choice_persisted
+[E2E] PASS | quest.reward_granted_once | delta=585
+[E2E] PASS | story.duplicate_choice_rejected
+[E2E] PASS | quest.duplicate_complete_no_reward
+[E2E] DONE | pass=21 fail=0
+```
+
+### E2E 抓到并修复的真实缺陷
+
+| 缺陷 | 影响 | 修复 |
+|:---|:---|:---|
+| `PlayerMatchesTags` 把 `role='civilian'` 当 job.name 比较 | 21 个 `role='civilian'` 任务无法接取；`job='police'` 标签被忽略 | `custom-career` 增加 role 语义映射（unemployed 也算 civilian；有 gang 即 gang_member；job 标签独立校验） |
+| `player_quests.completion_count` 默认值在老库是 `1` | 首次完成就变 2 | `v0.7.2_schema_reconcile.sql` 改为默认 0，并已应用到本地库 |
+| `CompleteQuest` 回调把 `affectedRows` 当 number | oxmysql 返回 table 时 `attempt to compare table with number`，完成副作用全部跳过 | `quest_db.lua` 统一归一化 number / `{affectedRows=n}` |
+| `exports['custom-economy'].AddScaledMoney` 是 truthy proxy | 调用报 “No such export”，奖励整段被静默吞掉 | `quest_rewards.lua` 改为 `pcall` 实际调用，失败后 fallback 到 `custom-main` / `Player.Functions.AddMoney` |
+| 物品/声望奖励失败会中断后续奖励 | 金钱已发但审计/物品异常 | 物品、声望分别 pcall；审计日志对 nil 玩家名兜底 |
+
+### 限制
+
+- fake player 没有真实 `inventories` 行，物品奖励会记录 `item reward failed: sandwich x2`；
+  **金额/声望/DB/幂等已覆盖，物品发放仍需真实客户端**。
+- 不覆盖客户端渲染、NUI 输入、载具/警察/EMS 的 ped 交互。
 
 ---
 
