@@ -297,18 +297,11 @@ end, 'admin')
 CreateThread(function()
     while true do
         Wait(60000)
-        if not frozen then
-            -- 与初始化公式保持一致：1 真实秒 = 1 游戏分钟（TIME_SCALE 默认 1.0）
-            -- 旧公式 /2 + 360 会导致每 60 秒把时间向前/向后猛拉，表现为手机时间跳变。
-            local realMinutes = math.floor(os.time(os.date("!*t")) / 60) % 1440
-            -- 漂移修正：如果独立推进与真实时间相差超过 1 分钟，对齐
-            local cur = getCurrentGameMinutes()
-            local drift = math.abs(cur - realMinutes)
-            if drift > 720 then drift = 1440 - drift end -- 处理跨午夜
-            if drift > 1 then
-                gameMinutes = realMinutes
-                timerStart = GetGameTimer()
-            end
+        -- 只广播状态，不再按真实时间硬对齐。
+        -- 旧实现每 60 秒把 gameMinutes 拉向 realMinutes，会造成时间倒跳/猛跳；
+        -- 时间推进由 TIME_SCALE 决定，客户端按同一状态插值即可。
+        if frozen then
+            -- 冻结时保持当前值
         end
         -- 广播当前状态供客户端对表
         TriggerEvent('qb-weathersync:server:RequestStateSync')
