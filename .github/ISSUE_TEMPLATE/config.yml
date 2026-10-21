@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全问题（私密）
+    url: https://github.com/wenkais196-Gabriel/T-City/security/advisories/new
+    about: 请不要公开提交漏洞细节；使用 GitHub Security Advisory。
+  - name: 项目审查与路线图
+    url: https://github.com/wenkais196-Gabriel/T-City/blob/master/T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md
+    about: 先看全局审查报告与三阶段计划，再提 Issue。
