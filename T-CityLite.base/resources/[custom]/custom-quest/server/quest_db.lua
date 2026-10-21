@@ -86,8 +86,15 @@ function QuestDB.CompleteQuest(citizenid, questId, cb)
     MySQL.Async.execute(
         'UPDATE player_quests SET status = ?, completed_at = NOW(), completion_count = completion_count + 1 WHERE citizenid = ? AND quest_id = ? AND status = ?',
         { 'completed', citizenid, questId, 'in_progress' },
-        function(affected)
-            if cb then cb(affected or 0) end
+        function(result)
+            -- oxmysql 的 execute 回调可能是 number，也可能是 { affectedRows = n }
+            local affected = 0
+            if type(result) == 'number' then
+                affected = result
+            elseif type(result) == 'table' then
+                affected = tonumber(result.affectedRows or result.insertId or 0) or 0
+            end
+            if cb then cb(affected) end
         end
     )
 end

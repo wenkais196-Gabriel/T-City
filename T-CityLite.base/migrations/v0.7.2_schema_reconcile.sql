@@ -30,3 +30,6 @@ CREATE TABLE IF NOT EXISTS quest_event_log (
 -- player_choices: 剧情查询索引（v0.7_story_engine 里有定义，老库可能缺）
 CREATE INDEX IF NOT EXISTS idx_arc_chapter ON player_choices (arc_id, chapter);
 CREATE INDEX IF NOT EXISTS idx_decision ON player_choices (decision_id);
+
+-- player_quests 完成计数默认值：部分老库是 1，会导致首次完成就变 2
+ALTER TABLE player_quests ALTER COLUMN completion_count SET DEFAULT 0;

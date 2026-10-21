@@ -87,14 +87,20 @@ function QuestRewards.GrantRewards(source, rewards, questId)
 
         if finalAmount > 0 then
             -- v0.7.2: 优先 custom-economy，fallback custom-main，再 fallback QBCore
+            -- 注意: exports['res'].Foo 即使不存在也可能是 truthy proxy，
+            -- 必须 pcall 实际调用，失败后再 fallback，否则整段奖励会被静默吞掉。
             local useScaled = false
             if Config.Quest.Rewards.UseAddScaledMoney then
-                if exports['custom-economy'] and exports['custom-economy'].AddScaledMoney then
-                    exports['custom-economy']:AddScaledMoney(source, accountType, finalAmount, ('quest:%s'):format(questId))
-                    useScaled = true
-                elseif exports['custom-main'] and exports['custom-main'].AddScaledMoney then
-                    exports['custom-main']:AddScaledMoney(source, accountType, finalAmount, ('quest:%s'):format(questId))
-                    useScaled = true
+                for _, res in ipairs({ 'custom-economy', 'custom-main' }) do
+                    if GetResourceState(res) == 'started' then
+                        local ok = pcall(function()
+                            exports[res]:AddScaledMoney(source, accountType, finalAmount, ('quest:%s'):format(questId))
+                        end)
+                        if ok then
+                            useScaled = true
+                            break
+                        end
+                    end
                 end
             end
             if not useScaled then
@@ -104,14 +110,21 @@ function QuestRewards.GrantRewards(source, rewards, questId)
         end
     end
 
-    -- 2. 物品奖励
+    -- 2. 物品奖励（单件失败不阻断金钱/声望奖励）
     if rewards.items then
         for _, itemReward in ipairs(rewards.items) do
             if itemReward.name and itemReward.count then
                 local count = tonumber(itemReward.count) or 1
                 if count > 0 then
-                    Player.Functions.AddItem(itemReward.name, count)
-                    table.insert(granted, ('%s x%d'):format(itemReward.name, count))
+                    local okItem, itemErr = pcall(function()
+                        Player.Functions.AddItem(itemReward.name, count)
+                    end)
+                    if okItem then
+                        table.insert(granted, ('%s x%d'):format(itemReward.name, count))
+                    else
+                        print(('[quest-rewards] ⚠️ item reward failed: %s x%d | %s'):format(
+                            itemReward.name, count, tostring(itemErr or 'unknown')))
+                    end
                 end
             end
         end
@@ -122,20 +135,30 @@ function QuestRewards.GrantRewards(source, rewards, questId)
         for repType, amount in pairs(rewards.rep) do
             local repAmount = tonumber(amount) or 0
             if repAmount > 0 then
-                Player.Functions.AddRep(repType, repAmount)
-                table.insert(granted, ('%s rep +%d'):format(repType, repAmount))
+                local okRep, repErr = pcall(function()
+                    Player.Functions.AddRep(repType, repAmount)
+                end)
+                if okRep then
+                    table.insert(granted, ('%s rep +%d'):format(repType, repAmount))
+                else
+                    print(('[quest-rewards] ⚠️ rep reward failed: %s +%d | %s'):format(
+                        repType, repAmount, tostring(repErr or 'unknown')))
+                end
             end
         end
     end
 
     -- 4. 审计日志
     if #granted > 0 then
+        local charName = GetPlayerName(source) or Player.PlayerData.name or citizenid
         local logText = ('**%s** (%s) | Quest: %s | Rewards: %s'):format(
-            GetPlayerName(source), citizenid, questId,
+            charName, citizenid, questId,
             table.concat(granted, ', ')
         )
         if exports['custom-logs'] then
-            exports['custom-logs']:LogGeneric('任务奖励发放', logText, 65280)
+            pcall(function()
+                exports['custom-logs']:LogGeneric('任务奖励发放', logText, 65280)
+            end)
         end
 
         TriggerClientEvent('QBCore:Notify', source,
