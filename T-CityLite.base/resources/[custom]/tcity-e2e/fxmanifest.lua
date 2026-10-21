@@ -2,8 +2,12 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 author 'T-City E2E'
-description 'Server-side end-to-end harness (no client required) — dev only'
-version '0.1.0'
+description 'Server-side Scenario DSL end-to-end harness (no client required) — dev only'
+version '0.2.0'
+
+files {
+    'config/scenarios/*.json',
+}
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',

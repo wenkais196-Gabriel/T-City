@@ -21,6 +21,7 @@
 | `run_all.py` | ⚠️ 4/5 | 2.9s | 唯一失败是 `light_lint.py` 基线噪音 |
 | **实机 FXServer 启动** | ✅ PASS | ~45s | 79 个资源启动，0 script error / 0 缺失文件 |
 | **服务端 E2E（无客户端）** | ✅ **21/21 PASS** | ~15s | fake player 跑通经济/任务/决策/奖励幂等 |
+| **Agent 场景 DSL E2E** | ✅ **32/32 PASS** | ~20s | 2 fake players，13 步场景 + 断言 + JSON 报告 |
 | `luac5.4 -p`（改动 Lua） | ✅ PASS | — | 42 个文件 |
 
 > `light_lint.py` 对全仓（含第三方 `[qb]`/`[standalone]`）报 252 errors / 96411 warnings，属既有基线；它不是 CI 阻断项。
@@ -228,7 +229,48 @@ ensure tcity-e2e
 
 ---
 
-## 8. 结论
+## 8. Agent P1 / P2 进展（2026-10-21 14:20）
+
+### P1 读层
+
+- `migrations/v2.2_agent_read_layer.sql`：`agent_events` + 4 个只读视图
+  （player snapshot / timeline / world state / economy metrics）。
+- `migrations/v2.2.1_agent_event_triggers.sql`：给 quest/choice/bank/vehicle
+  写入加 AFTER INSERT 触发器，事件真正进入 `agent_events`。
+- `agent_ro`：生产脚本 `tools/setup_agent_ro.sh` 需要 GRANT OPTION；
+  本机 `swk` 没有，开发环境用 `mysql.tables_priv` 做了**仅本地**授权验证：
+  - 4 个视图 SELECT 正常
+  - `players` / `agent_events` / 写操作均被拒绝（ERROR 1142）
+- `docs/agent/schema.json`：4 views / 30 fields，name/firstname/lastname 标记 PII。
+
+### P2 模拟层
+
+- `tcity-e2e` 从单玩家硬编码升级为 Scenario DSL：
+  - `config/scenarios/civilian_ch1.json`
+  - 2 个 fake player（SIM001/SIM002）、13 步、assert 列表
+  - JSON 报告 `reports/agent-sim-*.json`
+- 实机结果：**32/32 PASS**，包括：
+  - 多 fake player 创建/隔离/清理
+  - role 标签、任务 5 步、决策、奖励 300–600 只发一次
+  - 重复决策/完成不重复发奖
+  - 报告落盘、cleanup 残留 0
+
+### 两个 harness 自身 bug
+
+1. `callExport` 用 dot 调用 `exports[res][method]`，丢失 self，参数错位，
+   导致 `TriggerQuest` 收到错误 source。改为显式传 proxy。
+2. `PlayerMatchesTags` 是单返回值 export，原 helper 把返回值当 `(ok, value)`，
+   导致 `actual=nil`。新增 `callExportBool`。
+
+### 下一步
+
+- #24 schema/MCP 只读 API
+- #28 虚拟时钟（冷却加速）
+- P3 动作层（#30/#32/#31）
+
+---
+
+## 9. 结论
 
 - 离线 + 单元 + 集成测试已从 **66 failed** 收敛到 **0 failed**（11 skipped，均有明确原因）。
 - 发现并修复了一个公开泄露的 DB 密码、一个真实购车插入判断 bug、一处 DB 迁移缺口。
