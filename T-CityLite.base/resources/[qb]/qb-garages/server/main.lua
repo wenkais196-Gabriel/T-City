@@ -204,6 +204,9 @@ end)
 QBCore.Functions.CreateCallback('qb-garages:server:canDeposit', function(source, cb, plate, type, garage, state)
     local Player = QBCore.Functions.GetPlayer(source)
     local isOwned = MySQL.scalar.await('SELECT citizenid FROM player_vehicles WHERE plate = ? LIMIT 1', { plate })
+    print(('[qb-garages] canDeposit plate=%s type=%s garage=%s state=%s owner=%s player=%s'):format(
+        tostring(plate), tostring(type), tostring(garage), tostring(state),
+        tostring(isOwned), tostring(Player.PlayerData.citizenid)))
     if isOwned ~= Player.PlayerData.citizenid then
         cb(false)
         return
