@@ -64,6 +64,21 @@ QuestNodes = {
         if payload then
             for k, v in pairs(payload) do data[k] = v end
         end
+
+        -- v0.7 story-engine: 决策步骤由服务端先登记 pending，再让客户端弹窗，
+        -- 防止客户端伪造 questId/stepId 推进任意任务，也为超时提供兜底。
+        if normalizedType == 'DECISION' and data.decision_id then
+            local ok, result = pcall(function()
+                return exports['story-engine']:OfferDecision(
+                    source, questId, stepId, data.decision_id, data.timeout)
+            end)
+            if not ok or result == false then
+                print(('[quest-nodes] ⚠️ OfferDecision failed: quest=%s, step=%s (%s)'):format(
+                    tostring(questId), tostring(stepId),
+                    tostring(ok and 'decision not registered' or result)))
+            end
+        end
+
         TriggerClientEvent(eventName, source, data)
     end,
 
@@ -72,10 +87,47 @@ QuestNodes = {
         -- 客户端通过 ClearZone / ClearBlip 自行清理
         -- 此处发送一个清理事件作为兜底
         TriggerClientEvent('quest:client:clearAllNodes', source, { questId = questId })
+        pcall(function() exports['story-engine']:ClearDecision(source) end)
     end,
 
-    --- 服务端节点验证（stub — 实际验证在各 quest 的 validator 步骤中完成）
+    --- 服务端节点验证：类型必须与模板步骤一致；带坐标的步骤由服务端复核距离
     ValidateNode = function(source, questId, stepId, clientData)
+        local template = QuestRegistry.GetTemplate(questId)
+        if not template then
+            return false, 'Quest not found'
+        end
+
+        local step = nil
+        for _, s in ipairs(template.steps or {}) do
+            if s.id == stepId then step = s; break end
+        end
+        if not step then
+            return false, 'Step not found'
+        end
+
+        local claimed = clientData and string.upper(tostring(clientData.nodeType or '')) or ''
+        local expected = string.upper(tostring(step.type or ''))
+        if claimed ~= '' and expected ~= '' then
+            local alias = { REACH = 'GOTO' }
+            if claimed ~= expected and alias[expected] ~= claimed then
+                return false, ('Node type mismatch: expected %s, got %s'):format(expected, claimed)
+            end
+        end
+
+        -- 不信任客户端坐标：模板带坐标时，以服务端 PlayerPed 位置复核
+        local coords = step.data and step.data.coords
+        if coords and coords.x and source and source > 0 then
+            local ped = GetPlayerPed(source)
+            if ped and ped ~= 0 then
+                local pc = GetEntityCoords(ped)
+                local dist = #(pc - vector3(coords.x, coords.y, coords.z))
+                local radius = (step.data.radius or 10.0) + 5.0
+                if dist > radius then
+                    return false, ('Too far from step target (%.1fm, max %.1fm)'):format(dist, radius)
+                end
+            end
+        end
+
         return true, 'ok'
     end,
 }
@@ -519,33 +571,30 @@ function QuestManager.TriggerQuest(source, questId)
         end
     end
 
-    -- 7. 创建任务记录
-    local firstStep = template.steps[1] and template.steps[1].id or nil
-    QuestDB.CreateQuest(citizenid, questId, firstStep)
-
-    -- 8. 记录事件
-    QuestDB.LogEvent(citizenid, questId, 'trigger', firstStep, {
-        action = 'start',
-        category = template.category,
-        steps_total = #template.steps,
-    })
-
-    -- 8b. v1.0.0: 竞争/组队模式 → 获取排他锁
+    -- 7. v1.0.0: 竞争/组队模式 → 先抢排他锁；失败则不落库，避免幽灵 in_progress
     if template.mode == 'competitive' then
         local acquired, _, rejectReason = QuestMutex.AcquireLock(questId, source, 'competitive')
         if not acquired then
             return false, rejectReason or 'Quest target already locked'
         end
     elseif template.mode == 'group' then
-        -- 组队模式: 暂以单人创建 (队员通过 QuestGroup.AddMember 加入)
-        local acquired, instanceId, rejectReason = QuestMutex.AcquireLock(questId, source, 'group')
-        if not acquired then
+        -- CreateGroupInstance 内部会抢 group 锁；这里不能再抢一次
+        local ok, instanceId, rejectReason = QuestGroup.CreateGroupInstance(source, questId)
+        if not ok then
             return false, rejectReason or 'Failed to create group'
         end
-        -- 创建组队实例 (记录 instanceId 以便奖励阶段遍历队员)
-        QuestGroup.CreateGroupInstance(source, questId)
         print(('[quest-manager] Group instance created: %s'):format(instanceId or 'unknown'))
     end
+
+    -- 8. 创建任务记录（锁成功后）
+    local firstStep = template.steps[1] and template.steps[1].id or nil
+    QuestDB.CreateQuest(citizenid, questId, firstStep)
+
+    QuestDB.LogEvent(citizenid, questId, 'trigger', firstStep, {
+        action = 'start',
+        category = template.category,
+        steps_total = #template.steps,
+    })
 
     -- 9. v0.7.0: 为 custom_event 步骤建立反向索引
     for _, step in ipairs(template.steps) do
@@ -555,14 +604,20 @@ function QuestManager.TriggerQuest(source, questId)
     end
 
     -- 10. v0.7.2: 更新缓存而非清空（支持无 MySQL 环境下运行）
-    -- 将新创建的任务直接注入缓存，后续 ValidateStepOrder 可命中
-    QuestCache.SetActiveQuests(citizenid, {{
+    -- ⚠️ 必须 append，不能覆盖：覆盖会把其他活跃任务挤出缓存，导致其步骤校验失败
+    local activeList = QuestCache.GetActiveQuests(citizenid) or {}
+    local merged = {}
+    for _, q in ipairs(activeList) do
+        if q.quest_id ~= questId then merged[#merged + 1] = q end
+    end
+    merged[#merged + 1] = {
         quest_id = questId,
         status = 'in_progress',
         current_step = firstStep,
         progress_data = '{}',
         started_at = os.date('%Y-%m-%d %H:%M:%S'),
-    }})
+    }
+    QuestCache.SetActiveQuests(citizenid, merged)
 
     -- 10b. v1.0.0: 如果第一步是节点类型，初始化节点
     if firstStep then
@@ -635,6 +690,9 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
     if not currentIndex then
         return false, ('Step not found: %s'):format(stepId)
     end
+
+    -- 步骤即将被推进 → 清零该步尝试次数（可重复任务不会跑满上限后永久锁死）
+    QuestSecurity.ResetStepAttempts(citizenid, questId, stepId)
 
     -- 2. 判断下一步
     local nextIndex = currentIndex + 1

@@ -528,6 +528,16 @@ RegisterNetEvent('quest:server:registerTrailer', function(questId, trailerNetId,
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if not QuestRegistry.GetTemplate(questId) then return end
+
+    -- 🔒 netId/实体由客户端提供，必须验证存在性与归属距离，防止注册他人实体后被回收删除
+    local netId = tonumber(trailerNetId)
+    if not netId or netId <= 0 then return end
+    local entity = NetworkGetEntityFromNetworkId(netId)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return end
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return end
+    if #(GetEntityCoords(ped) - GetEntityCoords(entity)) > 50.0 then return end
 
     local citizenid = Player.PlayerData.citizenid
 
@@ -535,12 +545,12 @@ RegisterNetEvent('quest:server:registerTrailer', function(questId, trailerNetId,
         TrailerTracker[citizenid] = {}
     end
     TrailerTracker[citizenid][questId] = {
-        netId = trailerNetId,
+        netId = netId,
         hitched = false,
     }
 
     -- v0.10: 注册到实体注册表 (延迟回收: 玩家离开 50m 后或 60s 超时)
-    QuestEntityRegistry.Register(citizenid, questId, 'trailer', trailerNetId, {
+    QuestEntityRegistry.Register(citizenid, questId, 'trailer', netId, {
         model = trailerModel or 'unknown',
         recyclePolicy = 'on_leave',
         leaveRadius = 50.0,
@@ -548,7 +558,7 @@ RegisterNetEvent('quest:server:registerTrailer', function(questId, trailerNetId,
     })
 
     print(('[trailer-tracker] 📋 registered: %s | %s | netId=%d | model=%s'):format(
-        citizenid, questId, trailerNetId, trailerModel or 'unknown'))
+        citizenid, questId, netId, trailerModel or 'unknown'))
 end)
 
 --- v0.10: 清理指定玩家的所有 trailer（包括已挂接和未挂接）
@@ -614,7 +624,9 @@ RegisterNetEvent('quest:server:trailerHitched', function(questId, stepId, traile
 end)
 
 -- v0.10: 内部事件 — 触发 trailer 清理 (已改为清理所有 trailer)
-RegisterNetEvent('quest:server:cleanupTrailers', function(citizenid)
+-- 仅服务端内部调用（quest_logistics_validators 用 TriggerEvent）
+-- 不能注册为 NetEvent：否则任何客户端可传入他人 citizenid 删除其任务实体。
+AddEventHandler('quest:server:cleanupTrailers', function(citizenid)
     CleanupAllTrailers(citizenid)
 end)
 
@@ -647,7 +659,19 @@ end)
 -- ==============================================================
 
 RegisterNetEvent('quest:server:dashboardStampDelivery', function(callerSrc, questId, stepId)
-    local src = callerSrc or source  -- 跨资源 TriggerEvent 显式传入
+    -- 客户端触发时 source>0，必须与 callerSrc 一致；source==0 表示服务端内部
+    -- TriggerEvent（如 tcity-dashboard），才允许使用 callerSrc。
+    local src
+    if source and source > 0 then
+        if callerSrc ~= nil and callerSrc ~= source then
+            return
+        end
+        src = source
+    else
+        src = callerSrc
+    end
+    if not src or src <= 0 then return end
+
     print(('[custom-quest] 📥 dashboardDelivery: src=%d, quest=%s, step=%s'):format(
         src, questId, stepId))
 
@@ -1049,6 +1073,13 @@ end)
 RegisterNetEvent('quest:server:savePosCollection', function(collection)
     local src = source
     if not collection or type(collection) ~= 'table' or #collection == 0 then return end
+    if #collection > 500 then return end
+
+    -- 🔒 地图编辑器工具：仅管理员可用，防止任意客户端循环写盘（DoS）
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or not QBCore.Functions.HasPermission(src, 'admin') then
+        return
+    end
 
     local resourceName = GetCurrentResourceName()
     local filePath = ('pos_collection_%s.json'):format(os.date('%Y%m%d_%H%M%S'))
