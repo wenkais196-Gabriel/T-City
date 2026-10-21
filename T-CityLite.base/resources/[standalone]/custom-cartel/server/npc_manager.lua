@@ -190,9 +190,14 @@ RegisterNetEvent('cartel:server:sellToDealer', function(npcId, itemName, quantit
     exports['qb-inventory']:RemoveItem(src, itemName, quantity, nil, 'CartelDealer')
 
     -- 8. 付款 (走统一经济出口)
-    if Bus and Bus.EconomyService then
-        Bus.EconomyService.AddScaled(src, 'bank', totalRevenue, 'CartelDealer:' .. itemName)
-    else
+    local paid = false
+    if GetResourceState('core-framework') == 'started' then
+        paid = pcall(function()
+            exports['core-framework']:service_economy_AddScaled(
+                src, 'bank', totalRevenue, 'CartelDealer:' .. itemName)
+        end)
+    end
+    if not paid then
         Player.Functions.AddMoney('bank', totalRevenue, 'CartelDealer:' .. itemName)
     end
 
