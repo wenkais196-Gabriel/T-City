@@ -97,6 +97,24 @@ return {
             assert(LiveRules.mask_plate('') == nil)
         end)
 
+        check('sanitize_text_truncates_on_utf8_boundaries', function()
+            -- A 40-character CJK name is 120 bytes. Byte slicing would leave a
+            -- dangling lead byte and make the whole response invalid UTF-8.
+            local text = LiveRules.sanitize_text(string.rep('张', 40), 64)
+            assert(text and #text <= 64, 'must stay within the byte budget')
+            assert(#text % 3 == 0, 'CJK truncation must end on a codepoint boundary')
+            assert(utf8.len(text) ~= nil, 'truncated text must remain valid UTF-8')
+            assert(LiveRules.sanitize_text('ok', 64) == 'ok')
+        end)
+
+        check('sanitize_text_strips_hidden_controls', function()
+            -- U+202E (right-to-left override), U+200B (zero width space), U+FEFF.
+            local hidden = 'a\226\128\174b\226\128\139c\239\187\191d'
+            assert(LiveRules.sanitize_text(hidden, 64) == 'abcd')
+            local c1 = 'x\194\133y' -- U+0085 NEL
+            assert(LiveRules.sanitize_text(c1, 64) == 'xy')
+        end)
+
         -- 4. metadata allow-list ----------------------------------------------
         check('sanitize_metadata_whitelist', function()
             local metadata = LiveRules.sanitize_metadata({

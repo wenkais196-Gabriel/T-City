@@ -73,11 +73,11 @@ end
 local function liveConfig(cfg)
     local enabled = convarString('agent_live_enabled', '0') == '1'
 
+    -- Deliberately no fallback to the actions token: the whole point of the
+    -- live credential is that a read-only agent cannot hold a write-capable
+    -- one. A deployment that does not set agent_live_token simply has no live
+    -- channel (503 live_token_not_configured).
     local token = trim(convarString('agent_live_token', ''))
-    if token == '' and type(cfg) == 'table' and type(cfg.token) == 'string' then
-        -- Backwards-compatible fallback: live may share the actions token.
-        token = trim(cfg.token)
-    end
 
     local rawPrecision = trim(convarString('agent_live_precision', '25')):lower()
     local precision = LiveRules.DEFAULT_PRECISION_M
@@ -85,7 +85,9 @@ local function liveConfig(cfg)
         precision = 0
     else
         local value = tonumber(rawPrecision)
-        if value and value > 0 and value == value then precision = math.floor(value) end
+        -- Only whole metres above zero are meaningful. "0.5" used to floor to
+        -- 0, which silently meant "fine" (exact coordinates).
+        if value and value >= 1 and value == math.floor(value) then precision = value end
     end
 
     return { enabled = enabled, token = token, precision = precision }
@@ -310,7 +312,10 @@ local function handlePlayers(request, live)
 end
 
 local function handlePlayer(request, live, citizenid)
-    local player = findPlayer(citizenid)
+    -- Compare with the same normalisation the list projection uses, otherwise
+    -- a citizenid that the list sanitises would 404 on the detail route.
+    local wanted = LiveRules.sanitize_text(citizenid, 32)
+    local player = wanted and findPlayer(wanted) or nil
     if not player then
         return failure(404, 'player_not_found', 'player not found')
     end

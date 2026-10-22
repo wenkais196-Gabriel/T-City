@@ -72,11 +72,41 @@ end
 -- Text / PII helpers
 -- ---------------------------------------------------------------------------
 
+-- Cut at a UTF-8 boundary. Byte-wise sub() can leave a dangling lead byte,
+-- which makes json.encode produce invalid UTF-8 and breaks the whole response
+-- for every player, not just the one with the long name.
+local function utf8_truncate(text, maxBytes)
+    if not maxBytes or #text <= maxBytes then return text end
+    local index = 1
+    while index <= #text do
+        local byte = text:byte(index)
+        local width = 1
+        if byte >= 0xF0 then width = 4
+        elseif byte >= 0xE0 then width = 3
+        elseif byte >= 0xC0 then width = 2 end
+        if index + width - 1 > maxBytes then return text:sub(1, index - 1) end
+        index = index + width
+    end
+    return text
+end
+
+-- Zero-width, bidi and C1 controls can hide text from a human reviewer while
+-- still reaching the model. Strip them before truncating.
+local ZERO_WIDTH = '\226\128[\139-\143\170-\174]'
+local BIDI_ISOLATES = '\226\129[\166-\169]'
+local BOM = '\239\187\191'
+local C1 = '\194[\128-\159]'
+
 function LiveRules.sanitize_text(value, maxLength)
     if type(value) ~= 'string' then return nil end
-    local text = value:gsub('%c', ''):gsub('^%s+', ''):gsub('%s+$', '')
-    if maxLength and #text > maxLength then text = text:sub(1, maxLength) end
-    return text
+    -- Bound the work before running any gsub: a 1 MB display name must not
+    -- cost 16 ms per player. UTF-8 is at most 4 bytes per character.
+    local text = value
+    if maxLength and #text > maxLength * 4 then text = text:sub(1, maxLength * 4) end
+    text = text:gsub('%c', ''):gsub(ZERO_WIDTH, ''):gsub(BIDI_ISOLATES, '')
+        :gsub(BOM, ''):gsub(C1, '')
+    text = text:gsub('^%s+', ''):gsub('%s+$', '')
+    return utf8_truncate(text, maxLength)
 end
 
 -- Plate is PII: keep the first and last two characters and mask the middle.

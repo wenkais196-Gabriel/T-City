@@ -200,11 +200,13 @@ local function onMoneyChange(source, account, amount, operation, reason)
     if operation == 'set' then delta = nil end
 
     local money = type(data.money) == 'table' and data.money or nil
+    -- The reason string is free text produced by other resources: custom-phone
+    -- writes "Transfer to <number>", which would leak a phone number that the
+    -- read layer is forbidden to expose. Drop it rather than try to scrub it.
     emit('money.change', data.citizenid, {
         account = account,
         delta = delta,
         operation = operation,
-        reason = LiveRules.sanitize_text(reason, 64),
         after = money and tonumber(money[account]) or nil,
     })
 end

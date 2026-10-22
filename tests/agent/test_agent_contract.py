@@ -233,7 +233,7 @@ class GatewayAdditiveEnvelopeTests(unittest.TestCase):
         self.assertIs(body["ok"], True)
         self.assertEqual(body["kind"], "ok")
         data = body["data"]
-        self.assertEqual(data["registry_version"], "1.0.0")
+        self.assertEqual(data["registry_version"], "1.1.0")
         self.assertEqual(len(data["tools"]), 23, "GET /agent/v1/tools must serve all 23 tools")
         self.assertEqual(body["meta"]["count"], 23)
 

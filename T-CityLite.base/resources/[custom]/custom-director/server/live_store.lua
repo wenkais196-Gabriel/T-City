@@ -126,6 +126,11 @@ function LiveStore:List(since, limit)
         end
         local requested = tonumber(since.seq)
         if not requested or requested < 0 then requested = 0 end
+        -- A cursor from the future (clock skew, a hand-written seq, or an
+        -- epoch reused after a same-second restart) must clamp to newest.
+        -- Echoing it back would make next_cursor point past every future
+        -- event and strand the consumer forever.
+        if requested > self.seq then requested = self.seq end
         if requested < oldest - 1 then
             return nil, {
                 code = 'cursor_expired',

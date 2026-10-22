@@ -286,16 +286,23 @@ class ReadRoutingTests(RoutingTestBase):
         self.assertEqual(payload["code"], "invalid_cursor")
         self.assertEqual(payload["error"], "cursor expired")
 
-    def test_live_tools_fall_back_to_the_director_token(self) -> None:
+    def test_live_tool_is_not_callable_without_the_live_token(self) -> None:
         with mock.patch.dict(os.environ, DIRECTOR_ENV, clear=True), mock.patch(
             "agent_mcp.urllib.request.urlopen"
         ) as mock_urlopen:
-            mock_urlopen.return_value = FakeResponse(
-                {"schema_version": 1, "players": [], "count": 0, "sampled_at": 1, "precision_m": 25}
+            response = agent_mcp.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "get_live_players", "arguments": {}},
+                }
             )
-            result, _payload = _call("get_live_players", {})
-        self.assertFalse(result["isError"], _payload)
-        self.assertEqual(_headers(_request(mock_urlopen))["authorization"], "Bearer write-token")
+        self.assertIsNotNone(response)
+        self.assertTrue(response["result"]["isError"], "a hidden live tool must not be callable")
+        payload = json.loads(response["result"]["content"][0]["text"])
+        self.assertEqual(payload["code"], "unauthorized")
+        self.assertEqual(mock_urlopen.call_count, 0, "no write credential may be sent to live")
 
     def test_read_timeout_is_retried_and_reported(self) -> None:
         with mock.patch.dict(os.environ, GATEWAY_ENV, clear=True), mock.patch(
@@ -553,10 +560,13 @@ class VisibilityTests(RoutingTestBase):
             self.assertEqual(_tools(), [], "a partially configured gateway must advertise nothing")
 
     def test_toolset_all_lists_every_active_tool(self) -> None:
-        with mock.patch.dict(
-            os.environ, {"AGENT_DIRECTOR_URL": "http://director.test", "AGENT_DIRECTOR_TOKEN": "x",
-                         "AGENT_TOOLSET": "all"}, clear=True
-        ):
+        env = {
+            "AGENT_DIRECTOR_URL": "http://director.test",
+            "AGENT_DIRECTOR_TOKEN": "x",
+            "AGENT_LIVE_TOKEN": "y",
+            "AGENT_TOOLSET": "all",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
             names = {tool["name"] for tool in _tools()}
         self.assertEqual(len(names), 16, "AGENT_TOOLSET=all lists the 16 active tools")
         self.assertIn("add_player_money", names, "debug mode lists writes but calls still need a token")
@@ -586,13 +596,15 @@ class VisibilityTests(RoutingTestBase):
         for hidden in ("get_live_players", "get_live_player", "list_live_events"):
             self.assertNotIn(hidden, names, "the live grant is never implied by AGENT_TOOLSET=all")
 
-    def test_director_token_fallback_advertises_the_live_tools(self) -> None:
+    def test_director_token_alone_does_not_advertise_live_tools(self) -> None:
+        # The live channel has its own credential. Falling back to the write
+        # token would mean a single-token deployment silently equates "can
+        # read" with "can spend", which is exactly what auth=live prevents.
         with mock.patch.dict(os.environ, DIRECTOR_ENV, clear=True):
             names = {tool["name"] for tool in _tools()}
-        self.assertTrue(
-            {"get_live_players", "get_live_player", "list_live_events"} <= names,
-            "the Lua-compatible AGENT_DIRECTOR_TOKEN fallback must keep live reads visible",
-        )
+        for hidden in ("get_live_players", "get_live_player", "list_live_events"):
+            self.assertNotIn(hidden, names)
+        self.assertIn("send_notify", names, "the write tools must still be visible")
 
     def test_toolset_read_filters_by_channel(self) -> None:
         with mock.patch.dict(
@@ -735,6 +747,31 @@ class ContractHardeningTests(RoutingTestBase):
         text = agent_mcp._json_text({"text": "\ud800"})
         self.assertIsInstance(text.encode("utf-8"), bytes)
         self.assertEqual(json.loads(text)["text"], "\ud800")
+
+
+    def test_live_body_is_never_reclassified_as_an_action(self) -> None:
+        # A live payload may contain keys named action/ok in its data. The live
+        # branch must win before the director action branches.
+        tool = {
+            "name": "get_live_players",
+            "route": "director",
+            "channel": "read",
+            "risk": "L0",
+            "auth": "live",
+        }
+        raw = {"schema_version": 1, "action": "player.kick", "ok": True, "players": []}
+        envelope = agent_mcp._normalize(tool, raw, request_id="r")
+        self.assertTrue(envelope["ok"])
+        self.assertEqual(envelope["data"], raw, "live data must stay whole")
+
+    def test_untrusted_fields_ignore_nested_configuration_names(self) -> None:
+        tool = {"pii": {"untrusted_fields": ["name"]}}
+        envelope = {
+            "ok": True,
+            "data": [{"name": "Bob", "job": {"name": "police"}, "gang": {"name": "none"}}],
+        }
+        agent_mcp._annotate_untrusted(tool, envelope)
+        self.assertEqual(envelope["meta"]["untrusted_fields"], ["0.name"])
 
 
 if __name__ == "__main__":

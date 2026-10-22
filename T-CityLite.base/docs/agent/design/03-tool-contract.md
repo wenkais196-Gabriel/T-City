@@ -328,6 +328,7 @@ def sanitize_untrusted(text: str, max_chars: int = 200) -> tuple[str, bool]
     "name":{"$ref":"#/$defs/name"},"title":{"type":"string","maxLength":60},
     "description":{"type":"string","minLength":20,"maxLength":400},
     "channel":{"enum":["read","write","effect"]},"route":{"enum":["gateway","director"]},
+    "auth":{"enum":["default","live"]},
     "director_action":{"type":["string","null"],"pattern":"^[a-z][a-z0-9_]{2,40}$"},
     "risk":{"enum":["L0","L1","L2","L3","L4"]},"blast_radius":{"enum":["single","group","world"]},
     "requires_approval":{"type":"boolean"},"idempotency":{"enum":["required","optional","none"]},

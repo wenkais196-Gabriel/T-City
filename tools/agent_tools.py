@@ -154,26 +154,39 @@ def parse_simple_pattern(pattern: str) -> tuple[str, int, int] | None:
 
 
 def parse_segmented_pattern(pattern: str) -> list[tuple[str, int, int, bool]] | None:
-    """Expand ``^\\d{m,n}:\\d{m,n}$`` into a list of (charset, min, max, literal).
+    """Expand ``^[0-9]{m,n}:[0-9]{m,n}$`` into (charset, min, max, literal) runs.
 
     The strict live-event cursor is the one pattern in the registry that a
     single char class cannot express.  Supporting exactly "digit runs joined
     by a literal ``:``" keeps the generated Lua validator byte-equivalent to
     Python's ``re.fullmatch`` without shipping a regex engine to Lua.
+
+    Two adjacent digit runs are rejected: ``^\\d{1,2}\\d{1,2}$`` is expressible
+    in Python but has no unambiguous Lua equivalent, and a generated validator
+    that can never match would be worse than refusing the pattern.
     """
     if not (pattern.startswith("^") and pattern.endswith("$")):
         return None
     body = pattern[1:-1]
     segments: list[tuple[str, int, int, bool]] = []
     index = 0
+    previous_was_digit = False
     while index < len(body):
+        digit_open = None
         if body.startswith("\\d", index):
-            if not body.startswith("{", index + 2):
+            digit_open = index + 2
+        elif body.startswith("[0-9]", index):
+            digit_open = index + 5
+        if digit_open is not None:
+            if previous_was_digit:
+                # Adjacent digit runs have no unambiguous Lua equivalent.
                 return None
-            close = body.find("}", index + 3)
+            if not body.startswith("{", digit_open):
+                return None
+            close = body.find("}", digit_open + 1)
             if close < 0:
                 return None
-            bounds = body[index + 3 : close].split(",")
+            bounds = body[digit_open + 1 : close].split(",")
             if len(bounds) != 2 or not all(piece.isdigit() for piece in bounds):
                 return None
             minimum, maximum = int(bounds[0]), int(bounds[1])
@@ -181,10 +194,12 @@ def parse_segmented_pattern(pattern: str) -> list[tuple[str, int, int, bool]] | 
                 return None
             segments.append(("0123456789", minimum, maximum, False))
             index = close + 1
+            previous_was_digit = True
             continue
         if body[index] == ":":
             segments.append((":", 1, 1, True))
             index += 1
+            previous_was_digit = False
             continue
         return None
     if len(segments) < 2 or not any(literal for _chars, _low, _high, literal in segments):
@@ -484,6 +499,9 @@ def _validate_tool(errors: list[str], tool: Any, index: int) -> str | None:
             _err(errors, f"{path}.auth", "auth=live is only allowed for read tools")
         if route != "director":
             _err(errors, f"{path}.auth", "auth=live requires route=director")
+        live_path = (tool.get("http") or {}).get("path")
+        if not isinstance(live_path, str) or not live_path.startswith("/agent/v1/live/"):
+            _err(errors, f"{path}.auth", "auth=live requires a /agent/v1/live/ path")
 
     # Channel / risk / approval / idempotency / dry-run matrix (§4, §6).
     if channel == "read":
@@ -1127,8 +1145,8 @@ def render_tools_md(registry: dict[str, Any] | None = None) -> str:
         "",
         "## Routing table",
         "",
-        "| # | Tool | Status | Channel | Route | HTTP | Risk | Approval | Idempotency | Dry run | Verify | Undo |",
-        "|---:|:---|:---|:---|:---|:---|:---|:---:|:---|:---|:---|:---|",
+        "| # | Tool | Status | Channel | Route | Auth | HTTP | Risk | Approval | Idempotency | Dry run | Verify | Undo |",
+        "|---:|:---|:---|:---|:---|:---|:---|:---|:---:|:---|:---|:---|:---|",
     ]
     for index, tool in enumerate(tools, start=1):
         http = tool.get("http") or {}
@@ -1136,13 +1154,14 @@ def render_tools_md(registry: dict[str, Any] | None = None) -> str:
         verify = tool.get("verify")
         undo = tool.get("undo")
         lines.append(
-            "| {index} | `{name}` | {status} | {channel} | {route} | {http} | {risk} | {approval} | "
-            "{idempotency} | {dry_run} | {verify} | {undo} |".format(
+            "| {index} | `{name}` | {status} | {channel} | {route} | {auth} | {http} | {risk} | "
+            "{approval} | {idempotency} | {dry_run} | {verify} | {undo} |".format(
                 index=index,
                 name=_md_cell(tool.get("name")),
                 status=_md_cell(tool.get("status")),
                 channel=_md_cell(tool.get("channel")),
                 route=_md_cell(tool.get("route")),
+                auth=_md_cell(tool.get("auth", "default")),
                 http=_md_cell(route_text),
                 risk=_md_cell(tool.get("risk")),
                 approval="yes" if tool.get("requires_approval") else "no",
@@ -1281,6 +1300,7 @@ def render_lua(registry: dict[str, Any] | None = None) -> str:
             lines.append(f"    director_action = {_lua_string(director_action)},")
         else:
             lines.append("    director_action = false,")
+        lines.append(f"    auth = {_lua_string(str(tool.get('auth', 'default'))) },")
         lines.append(f"    params = {_lua_string_list(props.keys())},")
         lines.append(f"    required = {_lua_string_list(required)},")
         if props:
