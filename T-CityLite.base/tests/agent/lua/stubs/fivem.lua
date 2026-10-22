@@ -25,6 +25,8 @@ return function(env)
     env.created_entities = env.created_entities or {}
     env.vehicles = env.vehicles or {}
     env.vehicle_plates = env.vehicle_plates or {}
+    env.vehicle_in_use = env.vehicle_in_use or {}
+    env.entity_models = env.entity_models or {}
     env.deleted_entities = env.deleted_entities or {}
     env.hashes = env.hashes or {}
     env.player_buckets = env.player_buckets or {}
@@ -188,6 +190,26 @@ return function(env)
 
     function _G.GetEntityCoords(ped)
         return env.entity_coords[tonumber(ped) or ped] or { x = 0.0, y = 0.0, z = 0.0 }
+    end
+
+    -- Vehicle-in-use lookup for custom-director's delete_vehicle executor.
+    -- env.vehicle_in_use[ped] = entity; missing or 0 means "not in a vehicle".
+    function _G.GetVehiclePedIsIn(ped, lastVehicle)
+        local id = tonumber(ped) or ped
+        local entity = env.vehicle_in_use[id]
+        if entity == nil then return 0 end
+        return tonumber(entity) or entity
+    end
+
+    function _G.GetEntityModel(entity)
+        local id = tonumber(entity) or entity
+        if env.entity_models[id] ~= nil then return env.entity_models[id] end
+        for _, vehicle in ipairs(env.vehicles) do
+            if vehicle.entity == id and vehicle.model then
+                return GetHashKey(tostring(vehicle.model))
+            end
+        end
+        return 0
     end
 
     function _G.GetGameTimer()

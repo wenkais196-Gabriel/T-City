@@ -20,6 +20,7 @@ return function(env)
                 money = money or { cash = 0, bank = 0, crypto = 0 },
                 job = { name = 'unemployed', grade = { level = 0 } },
                 items = {},
+                metadata = {},
             },
             Functions = {},
         }
@@ -62,6 +63,18 @@ return function(env)
         function player.Functions.Save()
             env.log[#env.log + 1] = { save = citizenid }
             return true
+        end
+
+        -- Mirrors qb-core player.lua: SetMetaData mutates PlayerData.metadata
+        -- and returns nothing. custom-director's revive executor reads it back.
+        function player.Functions.SetMetaData(meta, value)
+            if type(meta) ~= 'string' then return end
+            player.PlayerData.metadata[meta] = value
+            env.log[#env.log + 1] = {
+                set_metadata = citizenid,
+                meta = meta,
+                value = value,
+            }
         end
 
         -- Mirrors qb-core player.lua: an unknown job returns false, while an

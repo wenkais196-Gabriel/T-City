@@ -60,6 +60,7 @@ VERBS = (
     # exposes; both are single-object and statically auditable.
     "remove",
     "kick",
+    "revive",
 )
 NAME_RE = re.compile(
     r"^(?:" + "|".join(VERBS) + r")_[a-z][a-z0-9_]{2,48}$",

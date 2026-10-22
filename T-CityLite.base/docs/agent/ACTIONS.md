@@ -2,10 +2,11 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope covers thirteen actions (ten player-scoped
-plus three L2 world/presentation actions); there is no LLM integration. Adding
-the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`, `set_bucket` and
-`kick` did not change `schema_version` (still `1`).
+risky actions and an audit row. Scope covers fifteen actions (twelve
+player-scoped plus three L2 world/presentation actions); there is no LLM
+integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
+`set_bucket`, `kick`, `revive` and `delete_vehicle` did not change
+`schema_version` (still `1`).
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -28,6 +29,8 @@ the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`, `set_bucket` and
 | `set_job` | L3 职业 | `citizenid`, `job`, `grade?` | `pending_approval` | **always** | `Player.Functions.SetJob(job, grade)` + job/grade read-back verification |
 | `teleport` | L3 位置 | `citizenid`, `x`, `y`, `z`, `heading?` | `pending_approval` | **always** | `exports['custom-agent-client']:Execute(source, 'teleport', {x,y,z,heading}, 5000, {agent_id='director:<id>'})` + client ack |
 | `spawn_vehicle` | L3 载具 | `citizenid`, `model`, `plate?` | `pending_approval` | **always** | server-side `CreateVehicleServerSetter` 1.5 m in front of the ped, bounded existence wait (2 s), optional plate write + read-back |
+| `revive` | L3 医疗 | `citizenid` | `pending_approval` | **always** | `Player.Functions.SetMetaData('isdead'/'inlaststand', false)` + `TriggerClientEvent('hospital:client:Revive', source)` (pcall) + metadata read-back |
+| `delete_vehicle` | L4 载具 | `citizenid`, `plate?` | `pending_approval` | **always** | only the vehicle the player is currently in (`GetVehiclePedIsIn`) → `DeleteEntity` (pcall) + bounded 1 s `DoesEntityExist` check; `compensation = "manual"` |
 | `grant_item` | L4 物品 | `citizenid`, `item`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddItem(item, amount)` + inventory delta verification |
 | `remove_item` | L4 物品 | `citizenid`, `item`, `amount?`, `reason` | `pending_approval` | **always** | `Player.Functions.RemoveItem(item, amount)` + inventory delta verification; `compensation = "manual"` |
 | `set_bucket` | L3 会话 | `citizenid`, `bucket` | `pending_approval` | **always** | `QBCore.Functions.SetPlayerBucket(source, bucket)` + `GetPlayerRoutingBucket` read-back; session-scoped |
@@ -67,6 +70,7 @@ approves every broadcast/weather/time change before it runs.
 | `teleport.heading` | optional finite number `0..360`; omitted when not supplied |
 | `spawn_vehicle.model` | 1–64 chars, `[A-Za-z0-9_-]`, trimmed and lowercased; must resolve to a non-zero `GetHashKey` |
 | `spawn_vehicle.plate` | optional, 1–8 chars, `[A-Z0-9]`, trimmed and uppercased |
+| `delete_vehicle.plate` | optional, 1–8 chars, `[A-Z0-9]`, trimmed and uppercased; must match the current vehicle plate when supplied |
 | `grant_item.item` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `QBCore.Shared.Items` |
 | `grant_item.amount` | integer `1..agent_actions_max_item_amount` (default 50, clamped 1..1000) |
 | `grant_item.reason` | 1–128 chars, no C0 controls |
@@ -81,7 +85,7 @@ approves every broadcast/weather/time change before it runs.
 Unknown keys inside `args` are dropped for `notify`, `add_money` and
 `start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
 `remove_item`, `set_bucket`, `kick`, `announce`, `set_weather`,
-`set_time_of_day`, `teleport` and `spawn_vehicle`.
+`set_time_of_day`, `teleport`, `spawn_vehicle`, `revive` and `delete_vehicle`.
 Unknown action types are rejected. There is no client-side validation path.
 
 ---
@@ -403,6 +407,48 @@ Kick is irreversible: there is no preview undo and no automatic restore. The
 execution result records `kicked: true` once `QBCore.Functions.Kick` returns
 without throwing.
 
+### 3.14 `revive`
+
+```json
+{
+  "action_type": "revive",
+  "risk": "L3",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "metadata": { "isdead": true, "inlaststand": true }
+}
+```
+
+`metadata` is read from the live `PlayerData.metadata` while building context.
+`isdead` / `inlaststand` are omitted when the key is missing; the whole
+`metadata` object is omitted while the player is offline (policy rejects that
+proposal with `player_not_found`). It is advisory: the executor re-reads the
+metadata after clearing it.
+
+### 3.15 `delete_vehicle`
+
+```json
+{
+  "action_type": "delete_vehicle",
+  "risk": "L4",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "plate": "ABC123",
+  "target": { "entity": 1234, "model": -12345, "plate": "ABC123" }
+}
+```
+
+`plate` is omitted when the caller did not supply one. `target` is the live
+vehicle captured with `GetVehiclePedIsIn(GetPlayerPed(source), false)` while
+building context: `entity` is the vehicle handle, `model` is `GetEntityModel`
+and `plate` is the whitespace-stripped uppercase plate. `target` is absent when
+the player is on foot (policy rejects with `not_in_vehicle`). The caller can
+never pass an arbitrary entity id.
+
 ---
 
 ## 4. Status lifecycle
@@ -415,7 +461,7 @@ notify (dry_run = false)
   propose ──► approved ──► executed
                        └─► failed             (notify/AddMoney/quest execution error)
 
-add_money / start_quest / set_job / grant_item / remove_item / set_bucket / kick / announce / set_weather / set_time_of_day / teleport / spawn_vehicle (dry_run = false)
+add_money / start_quest / set_job / grant_item / remove_item / set_bucket / kick / announce / set_weather / set_time_of_day / teleport / spawn_vehicle / revive / delete_vehicle (dry_run = false)
   propose ──► pending_approval ──► approved ──► executed
                               │             └─► failed
                               ├─► rejected              (operator reject)
@@ -599,7 +645,29 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 - Neither action is reversible: there is no inverse action and no automatic
   re-bucket/reconnect.
 
-### 5.11 Approval matrix
+### 5.11 Revive and vehicle deletion
+
+- `revive` is **L3** and `blast_radius = "single"`. The target must be online at
+  propose and approve time (`player_not_found` otherwise). There is no
+  "must be dead" gate: reviving an already-alive player succeeds with a
+  `before`/`after` of `false/false`.
+- `revive` depends on `qb-ambulancejob`'s client handler
+  (`hospital:client:Revive`) for the actual resurrection animation/health
+  reset. The event is dispatched inside `pcall` and is **best-effort**: if
+  ambulancejob is stopped, the metadata mutation still succeeds. The server
+  `PlayerData.metadata.isdead` / `inlaststand` read-back is the authority.
+- `delete_vehicle` is **L4**, `blast_radius = "single"` and
+  `compensation = "manual"`. It only deletes the vehicle the target player is
+  currently in; no entity id is accepted. The target must be online and in a
+  vehicle at propose and approve time (`not_in_vehicle` otherwise). If `plate`
+  is supplied it must match the current vehicle (`plate_mismatch`), and the
+  executor re-checks it at execution time.
+- Deletion is irreversible: the entity is removed, not impounded, not stored in
+  `player_vehicles` and not regenerated by a garage. The only recovery is a
+  garage/resource respawn outside this action.
+- Unknown fields are rejected for both actions (`invalid_params`).
+
+### 5.12 Approval matrix
 
 | Action | Risk | Auto-execute | Human approval | Budget / cap |
 |:---|:---|:---|:---|:---|
@@ -611,6 +679,8 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 | `set_job` | L3 | no | **always** | `QBCore.Shared.Jobs` + grades |
 | `teleport` | L3 | no | **always** | `custom-agent-client` started + map bounds + client ack (5 s) |
 | `spawn_vehicle` | L3 | no | **always** | online player + non-zero model hash + bounded 2 s spawn wait |
+| `revive` | L3 | no | **always** | online player + `isdead`/`inlaststand` metadata read-back; ambulancejob client event best-effort |
+| `delete_vehicle` | L4 | no | **always** | online player in vehicle + optional plate match + entity-gone read-back; manual compensation |
 | `remove_item` | L4 | no | **always** | `max_item_amount`; manual compensation |
 | `set_bucket` | L3 | no | **always** | online player + `0..65535` + routing-bucket read-back; session-scoped |
 | `kick` | L4 | no | **always** | online player + non-throwing `Kick`; irreversible |
@@ -618,8 +688,8 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 | `grant_item` | L4 | no | **always** | `max_item_amount` only |
 
 `blast_radius` is `world` only for the three L2 actions; all other actions are
-player-scoped (`teleport`, `spawn_vehicle`, `remove_item`, `set_bucket` and
-`kick` set `single` explicitly).
+player-scoped (`teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
+`remove_item`, `set_bucket` and `kick` set `single` explicitly).
 `agent_actions_enabled = 0` disables every action. A proposal rejected by
 policy before persistence is not an approval-matrix exception: it never
 executes.
@@ -650,7 +720,7 @@ executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `teleport` \| `spawn_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` |
 | `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
@@ -758,6 +828,43 @@ This is an L3 action: it never auto-executes, even if `dry_run` is false.
    No keys, no bucket change and no `player_vehicles` row are produced.
 
 This is an L3 action: it never auto-executes, even if `dry_run` is false.
+
+### `revive`
+
+1. Re-resolve the online player and `source`; record
+   `before = { isdead, inlaststand }` from `PlayerData.metadata`.
+2. `Player.Functions.SetMetaData('isdead', false)` and
+   `SetMetaData('inlaststand', false)` inside `pcall`.
+3. `TriggerClientEvent('hospital:client:Revive', source)` inside `pcall`. The
+   event is best-effort: `qb-ambulancejob` may be stopped or its handler may
+   throw, and the executor still continues to verification.
+4. Read `PlayerData.metadata` back and require both values to be exactly
+   `false`; otherwise `verification_failed`.
+5. Success `result` is `{ before = { isdead, inlaststand },
+   after = { isdead, inlaststand }, at }`.
+
+This is an L3 action: it never auto-executes, and it depends on
+`qb-ambulancejob`'s client event for the visual/health reset (the server
+metadata is the verified state).
+
+### `delete_vehicle`
+
+1. Re-resolve the online player, `source` and ped (`GetPlayerPed(source) == 0`
+   → `player_offline`).
+2. `GetVehiclePedIsIn(ped, false)`; `0` → `not_in_vehicle`. There is no
+   arbitrary entity-id parameter.
+3. If `plate` was supplied, compare it with the current vehicle plate
+   (whitespace stripped, uppercased); a mismatch → `plate_mismatch`. This
+   re-check after approval prevents a stale/TOCTOU target.
+4. `pcall(DeleteEntity, entity)`. `DeleteEntity` returns `nil` even on success,
+   so its return value is ignored; only `DoesEntityExist` is trusted.
+5. Poll `DoesEntityExist(entity)` for at most 1000 ms (`GetGameTimer`
+   deadline). If it still exists, fail with `verification_failed`.
+6. Success `result` is `{ entity, model, plate, at }`. The vehicle is gone from
+   the world; it is not impounded or persisted as a garage vehicle.
+
+This is an L4 action: it never auto-executes, its compensation is `manual`,
+and the deletion is irreversible except for a garage/resource respawn.
 
 ### `grant_item`
 
@@ -879,6 +986,8 @@ appear for action results). No stack traces.
 | `weather_sync_unavailable` | 400 | `qb-weathersync` is not started |
 | `executor_unavailable` | 400 | `custom-agent-client` is not started (teleport) |
 | `model_not_found` | 400 | `spawn_vehicle.model` hashes to `0` |
+| `not_in_vehicle` | 400 | `delete_vehicle` target is not in a vehicle |
+| `plate_mismatch` | 400 | `delete_vehicle.plate` does not match the current vehicle |
 | `not_found` | 404 | Unknown route or own-row id not found |
 | `method_not_allowed` | 405 | Wrong method (`Allow` set) |
 | `idempotency_conflict` | 409 | Key reused with different action/params |
@@ -907,11 +1016,13 @@ with `executor_unavailable`.
 HTTP callers see `execution_failed` (409) and the specific code is in the
 `error`/`result.error` text.
 
-The same wrapping applies to `remove_item`, `set_bucket` and `kick`:
-`execution_failed` (409) is returned, with `verification_failed ...`,
-`execution_failed: RemoveItem ...`, `execution_failed: SetPlayerBucket ...` or
-`execution_failed: Kick ...` in the `error` text. `player_not_found` /
-`item_not_found` remain policy rejections before execution.
+The same wrapping applies to `remove_item`, `set_bucket`, `kick`, `revive` and
+`delete_vehicle`: `execution_failed` (409) is returned, with
+`verification_failed ...`, `execution_failed: RemoveItem ...`,
+`execution_failed: SetPlayerBucket ...`, `execution_failed: Kick ...`,
+`execution_failed: SetMetaData ...` or `verification_failed ...` in the `error`
+text. `player_not_found` / `item_not_found` / `not_in_vehicle` /
+`plate_mismatch` remain policy rejections before execution.
 
 ---
 
@@ -929,8 +1040,8 @@ The same wrapping applies to `remove_item`, `set_bucket` and `kick`:
 9. No automatic rollback of economy mutations; failures are audited loudly.
 10. `add_money`, `start_quest`, `set_job`, `grant_item`, `remove_item`,
     `set_bucket`, `kick`, `announce`, `set_weather`, `set_time_of_day`,
-    `teleport` and `spawn_vehicle` always require `pending_approval`,
-    regardless of the proposing agent.
+    `teleport`, `spawn_vehicle`, `revive` and `delete_vehicle` always require
+    `pending_approval`, regardless of the proposing agent.
 
 ---
 

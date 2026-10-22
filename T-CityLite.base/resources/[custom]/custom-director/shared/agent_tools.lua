@@ -5,7 +5,7 @@
 local AgentTools = {}
 
 AgentTools.SCHEMA_VERSION = 1
-AgentTools.REGISTRY_VERSION = "1.2.0"
+AgentTools.REGISTRY_VERSION = "1.3.0"
 
 AgentTools.TOOLS = {
   ["get_schema"] = {
@@ -571,6 +571,49 @@ AgentTools.TOOLS = {
     schema = {
       ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["reason"] = { type = "string", min_length = 1, max_length = 128 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["revive_player"] = {
+    name = "revive_player",
+    title = "Revive one player (L3, approval required)",
+    channel = "effect",
+    route = "director",
+    risk = "L3",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "revive",
+    auth = "default",
+    params = { "citizenid", "idempotency_key" },
+    required = { "citizenid" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["remove_player_vehicle"] = {
+    name = "remove_player_vehicle",
+    title = "Remove the vehicle a player is in (L4, approval)",
+    channel = "effect",
+    route = "director",
+    risk = "L4",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "delete_vehicle",
+    auth = "default",
+    params = { "citizenid", "plate", "idempotency_key" },
+    required = { "citizenid" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["plate"] = { type = "string", chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", min_length = 1, max_length = 8 },
       ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },

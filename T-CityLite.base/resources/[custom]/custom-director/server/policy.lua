@@ -21,6 +21,8 @@ local AgentPolicy = {}
 -- L4 经济类：add_money（需人工审批 + 每日预算）
 -- L4 物品类：grant_item / remove_item（需人工审批，不计入 add_money 每日预算）
 -- L4 惩罚类：kick（需人工审批，不可撤销）
+-- L3 医疗类：revive（需人工审批 + qb-ambulancejob 客户端事件）
+-- L4 载具类：delete_vehicle（需人工审批，只删当前载具，不可逆）
 AgentPolicy.ACTIONS = {
     notify = {
         risk = 'L1',
@@ -97,6 +99,19 @@ AgentPolicy.ACTIONS = {
         requires_approval = true,
         auto_execute = false,
         blast_radius = 'world',
+    },
+    revive = {
+        risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+    },
+    delete_vehicle = {
+        risk = 'L4',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+        compensation = 'manual',
     },
 }
 
@@ -759,6 +774,37 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         return normalized
     end
 
+    if actionType == 'revive' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+        }, 'revive')
+        if unknownErr then return nil, unknownErr end
+
+        return { citizenid = citizenid }
+    end
+
+    if actionType == 'delete_vehicle' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            plate = true,
+        }, 'delete_vehicle')
+        if unknownErr then return nil, unknownErr end
+
+        local normalized = { citizenid = citizenid }
+        if params.plate ~= nil then
+            if type(params.plate) ~= 'string' then
+                return fail('invalid_params', 'plate must be a string')
+            end
+            local plate = AgentPolicy.Trim(params.plate):upper()
+            if #plate < 1 or #plate > 8 or not plate:match('^[A-Z0-9]+$') then
+                return fail('invalid_params', 'plate must be 1-8 characters of A-Z or 0-9')
+            end
+            normalized.plate = plate
+        end
+
+        return normalized
+    end
+
     return fail('unsupported_action', 'unsupported action type')
 end
 
@@ -961,6 +1007,24 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'revive' then
+        if type(player) == 'table' then
+            local metadata = { isdead = nil, inlaststand = nil }
+            if type(player.metadata) == 'table' then
+                metadata.isdead = player.metadata.isdead
+                metadata.inlaststand = player.metadata.inlaststand
+            end
+            preview.metadata = metadata
+        end
+        return preview
+    end
+
+    if actionType == 'delete_vehicle' then
+        preview.plate = params.plate
+        preview.target = ctx.vehicle_target
+        return preview
+    end
+
     return fail('unsupported_action', 'unsupported action type')
 end
 
@@ -1121,6 +1185,31 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
     end
 
     if actionType == 'kick' then
+        return true
+    end
+
+    if actionType == 'revive' then
+        -- The generic player-online gate above is the whole policy: metadata
+        -- is read again at execution time and must end up false/false.
+        return true
+    end
+
+    if actionType == 'delete_vehicle' then
+        local entity = ctx.vehicle_entity
+        if type(entity) ~= 'number' or entity == 0 then
+            return failBool('not_in_vehicle', 'target player is not in a vehicle')
+        end
+
+        if params.plate ~= nil then
+            local currentPlate = nil
+            if type(ctx.vehicle_target) == 'table' then
+                currentPlate = ctx.vehicle_target.plate
+            end
+            if currentPlate ~= params.plate then
+                return failBool('plate_mismatch', ('plate mismatch: current %s, expected %s'):format(
+                    tostring(currentPlate), tostring(params.plate)))
+            end
+        end
         return true
     end
 

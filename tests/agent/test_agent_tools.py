@@ -43,6 +43,8 @@ ACTIVE_NAMES = {
     "remove_player_item",
     "set_player_bucket",
     "kick_player",
+    "revive_player",
+    "remove_player_vehicle",
     "get_live_players",
     "get_live_player",
     "list_live_events",
@@ -79,10 +81,10 @@ class RegistryContentTests(unittest.TestCase):
         registry = _registry()
         self.assertEqual(registry["schema_version"], 1, "registry schema_version must be 1")
         self.assertRegex(registry["registry_version"], r"^\d+\.\d+\.\d+$")
-        self.assertEqual(len(registry["tools"]), 26, "v1 ships exactly 26 tools")
+        self.assertEqual(len(registry["tools"]), 28, "v1 ships exactly 28 tools")
         active = {tool["name"] for tool in registry["tools"] if tool["status"] == "active"}
         planned = {tool["name"] for tool in registry["tools"] if tool["status"] == "planned"}
-        self.assertEqual(active, ACTIVE_NAMES, "all 26 tools are active for v1")
+        self.assertEqual(active, ACTIVE_NAMES, "all 28 tools are active for v1")
         self.assertEqual(planned, PLANNED_NAMES, "no tool remains planned")
 
     def test_every_tool_has_the_required_contract_fields(self) -> None:

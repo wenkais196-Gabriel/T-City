@@ -299,6 +299,26 @@ local function playerPosition(source)
     return GetEntityCoords(ped)
 end
 
+-- delete_vehicle only ever targets the vehicle the player is currently in;
+-- arbitrary entity ids are never accepted from the caller.
+local function vehiclePlate(entity)
+    if not entity or entity == 0 then return nil end
+    local plate = GetVehicleNumberPlateText(entity)
+    if type(plate) ~= 'string' then return nil end
+    plate = plate:gsub('%s+', ''):upper()
+    if plate == '' then return nil end
+    return plate
+end
+
+local function playerVehicle(source)
+    if not source then return nil end
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return nil end
+    local entity = GetVehiclePedIsIn(ped, false)
+    if not entity or entity == 0 then return nil end
+    return tonumber(entity) or entity
+end
+
 local function getQuestCatalog()
     local ok, catalog = pcall(function()
         return exports['custom-quest']:GetQuestCatalog()
@@ -332,6 +352,18 @@ local function buildContext(actionType, params)
                 context.player.item_count = playerItemCount(player, params.item) or 0
             elseif actionType == 'set_bucket' then
                 context.player.bucket = playerBucket(context.player.source)
+            elseif actionType == 'revive' then
+                context.player.metadata = player.PlayerData and player.PlayerData.metadata or nil
+            elseif actionType == 'delete_vehicle' then
+                local entity = playerVehicle(context.player.source)
+                if entity then
+                    context.vehicle_entity = entity
+                    context.vehicle_target = {
+                        entity = entity,
+                        model = GetEntityModel(entity),
+                        plate = vehiclePlate(entity),
+                    }
+                end
             end
         end
     end
@@ -892,6 +924,98 @@ local function executeSpawnVehicle(actionId, params)
     }
 end
 
+-- qb-ambulancejob owns the actual resurrection (ped/health reset), but its
+-- client event is fire-and-forget: the server metadata read-back is the
+-- authority, so a stopped ambulancejob cannot crash the approval thread.
+local function executeRevive(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    local current = player.PlayerData and player.PlayerData.metadata or {}
+    local before = {
+        isdead = current.isdead,
+        inlaststand = current.inlaststand,
+    }
+
+    local setOk, setErr = pcall(function()
+        player.Functions.SetMetaData('isdead', false)
+        player.Functions.SetMetaData('inlaststand', false)
+    end)
+    if not setOk then
+        return false, ('execution_failed: SetMetaData threw: %s'):format(truncate(setErr, 150)), nil
+    end
+
+    pcall(TriggerClientEvent, 'hospital:client:Revive', source)
+
+    local updated = player.PlayerData and player.PlayerData.metadata or {}
+    local after = {
+        isdead = updated.isdead,
+        inlaststand = updated.inlaststand,
+    }
+    if after.isdead ~= false or after.inlaststand ~= false then
+        return false, ('verification_failed isdead=%s inlaststand=%s'):format(
+            tostring(after.isdead), tostring(after.inlaststand)), nil
+    end
+
+    return true, nil, {
+        before = before,
+        after = after,
+        at = os.time(),
+    }
+end
+
+-- DeleteEntity returns nil even on success, so only DoesEntityExist is
+-- trusted. The bounded wait keeps a stubborn entity from hanging the approval.
+local DELETE_VERIFY_TIMEOUT_MS = 1000
+
+local function executeDeleteVehicle(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false, 'player_offline', nil end
+
+    local entity = GetVehiclePedIsIn(ped, false)
+    if not entity or entity == 0 then return false, 'not_in_vehicle', nil end
+
+    -- Re-read the plate at execution time: the approved preview may be stale.
+    local plate = vehiclePlate(entity)
+    if params.plate and plate ~= params.plate then
+        return false, ('plate_mismatch: current %s, expected %s'):format(
+            tostring(plate), tostring(params.plate)), nil
+    end
+
+    local model = GetEntityModel(entity)
+
+    local ok, deleteErr = pcall(DeleteEntity, entity)
+    if not ok then
+        return false, ('execution_failed: DeleteEntity threw: %s'):format(
+            truncate(deleteErr, 150)), nil
+    end
+
+    local deadline = GetGameTimer() + DELETE_VERIFY_TIMEOUT_MS
+    while DoesEntityExist(entity) and GetGameTimer() < deadline do
+        Wait(0)
+    end
+    if DoesEntityExist(entity) then
+        return false, ('verification_failed: vehicle entity %s still exists'):format(
+            tostring(entity)), nil
+    end
+
+    return true, nil, {
+        entity = entity,
+        model = model,
+        plate = plate,
+        at = os.time(),
+    }
+end
+
 local function executeAction(actionId, actionType, params)
     if actionType == 'notify' then
         return executeNotify(actionId, params)
@@ -919,6 +1043,10 @@ local function executeAction(actionId, actionType, params)
         return executeTeleport(actionId, params)
     elseif actionType == 'spawn_vehicle' then
         return executeSpawnVehicle(actionId, params)
+    elseif actionType == 'revive' then
+        return executeRevive(actionId, params)
+    elseif actionType == 'delete_vehicle' then
+        return executeDeleteVehicle(actionId, params)
     end
     return false, 'unsupported_action', nil
 end
@@ -936,6 +1064,8 @@ AgentActions._Execute = {
     set_time_of_day = executeSetTimeOfDay,
     teleport = executeTeleport,
     spawn_vehicle = executeSpawnVehicle,
+    revive = executeRevive,
+    delete_vehicle = executeDeleteVehicle,
 }
 
 -- Internal context builder for the pure-Lua harness (same contract as
