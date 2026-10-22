@@ -1734,6 +1734,17 @@ return {
             assert(tostring(err):match('metadata channel down'), tostring(err))
         end)
 
+        check('self_approval_detection', function()
+            local env = newEnv()
+            local isSelf = env.actions._IsSelfApproval
+            assert(type(isSelf) == 'function', 'self-approval helper not exposed')
+            assert(isSelf('agent-1', 'agent-1') == true, 'same id must be self-approval')
+            assert(isSelf('Agent-1', 'agent-1') == true, 'comparison is case-insensitive')
+            assert(isSelf('agent:agent-1', 'agent-1') == true, 'agent: prefix must be self')
+            assert(isSelf('console', 'agent-1') == false, 'console is not the agent')
+            assert(isSelf('discord:alice', 'agent-1') == false, 'a human approver is allowed')
+        end)
+
         return {
             ok = failed == 0,
             data = { total = #results, failed = failed, cases = results },

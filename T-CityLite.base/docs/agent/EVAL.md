@@ -168,7 +168,7 @@ parameter names (`param_keys`), a 64-bit hash of the normalized params
 (`params_hash`) and the policy's own `message`. The denial export is therefore
 much less sensitive than the action export, but still keep it out of git.
 
-The denials input is subject to the same `--root` / `AGENT_EVAL_ROOT`
+The denials input is subject to the same `AGENT_EVAL_ROOT`
 containment as `--input`. A row that is not a JSON object, or that lacks
 `agent_id`, `action_type` or `code`, is skipped and counted in
 `denials.bad_rows_skipped` (on top of the loader's malformed-JSON count).

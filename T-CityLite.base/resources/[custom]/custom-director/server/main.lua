@@ -1425,6 +1425,18 @@ end
 -- Public export: approve / reject
 -- ---------------------------------------------------------------------------
 
+-- Exposed for the pure-Lua harness only; not a FiveM export.
+-- An agent must not be able to approve its own proposal. The admin token is
+-- already separate, but a misconfigured deployment can hand both tokens to the
+-- same principal; this is the code-level check that still holds then.
+local function isSelfApproval(approver, agentId)
+    if type(approver) ~= 'string' or type(agentId) ~= 'string' then return false end
+    local a = approver:lower()
+    local b = agentId:lower()
+    return a == b or a == ('agent:' .. b) or a == ('agent:' .. b .. ':approver')
+end
+AgentActions._IsSelfApproval = isSelfApproval
+
 function AgentActions.Approve(id, approver)
     local cfg = Config()
     if not cfg.enabled then
@@ -1442,6 +1454,12 @@ function AgentActions.Approve(id, approver)
     local row, rowErr = getActionRow(actionId)
     if rowErr then return failure('db_error', 'database unavailable') end
     if not row then return failure('not_found', 'action not found', { id = actionId }) end
+    if isSelfApproval(normalizedApprover, row.agent_id) then
+        return failure('self_approval_denied', 'an agent cannot approve its own action', {
+            id = actionId,
+            status = row.status,
+        })
+    end
     if row.status ~= 'pending_approval' then
         return failure('invalid_status', 'action is not pending approval', {
             id = actionId,
@@ -1575,6 +1593,12 @@ function AgentActions.Reject(id, approver, reason)
     local row, rowErr = getActionRow(actionId)
     if rowErr then return failure('db_error', 'database unavailable') end
     if not row then return failure('not_found', 'action not found', { id = actionId }) end
+    if isSelfApproval(normalizedApprover, row.agent_id) then
+        return failure('self_approval_denied', 'an agent cannot reject its own action', {
+            id = actionId,
+            status = row.status,
+        })
+    end
     if row.status ~= 'pending_approval' then
         return failure('invalid_status', 'action is not pending approval', {
             id = actionId,
@@ -1878,5 +1902,10 @@ RegisterCommand('agentapprove', function(source, args)
         tostring(id), tostring(result.ok), tostring(result.status), tostring(result.error)))
 end, false)
 
+local startupCfg = Config()
 print(('[custom-director] loaded (enabled=%s). Exports: Propose, Approve, Reject, Get, List, Policy'):format(
-    tostring(Config().enabled)))
+    tostring(startupCfg.enabled)))
+if startupCfg.token ~= '' and startupCfg.token == startupCfg.admin_token then
+    print('[custom-director] ⚠️ agent_actions_token equals agent_actions_admin_token; '
+        .. 'self-approval protection is the only remaining guard')
+end

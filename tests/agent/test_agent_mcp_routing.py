@@ -607,6 +607,14 @@ class VisibilityTests(RoutingTestBase):
             self.assertNotIn(hidden, names)
         self.assertIn("send_notify", names, "the write tools must still be visible")
 
+    def test_live_token_alone_disables_the_local_fallback(self) -> None:
+        # The live credential is a remote channel grant. If it were ignored,
+        # a "read-only" agent holding only AGENT_LIVE_TOKEN would silently fall
+        # back to unauthenticated local DB reads (the opposite of least data).
+        with mock.patch.dict(os.environ, {"AGENT_LIVE_TOKEN": "LIVE-ONLY"}, clear=True):
+            self.assertFalse(agent_mcp._standalone_mode())
+            self.assertEqual(_tools(), [], "no channel is configured, so nothing is advertised")
+
     def test_toolset_read_filters_by_channel(self) -> None:
         with mock.patch.dict(
             os.environ, dict(GATEWAY_ENV, AGENT_TOOLSET="read"), clear=True
