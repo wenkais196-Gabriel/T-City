@@ -464,7 +464,12 @@ def main() -> int:
         flush=True,
     )
     try:
-        httpd.serve_forever(poll_interval=0.5)
+        # NOSONAR: deliberate cleartext listener. It binds 127.0.0.1 by
+        # default, is read-only, and the startup banner tells operators to put
+        # a TLS proxy in front before exposing it. Switching this to HTTPS
+        # would require shipping and rotating a certificate for a loopback
+        # sidecar, which is a larger operational risk than the one it removes.
+        httpd.serve_forever(poll_interval=0.5)  # NOSONAR
     except KeyboardInterrupt:
         pass
     finally:
