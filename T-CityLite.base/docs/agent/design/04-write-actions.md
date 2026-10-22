@@ -625,3 +625,18 @@ TTL 线程 30s tick：过期 → `delete_vehicle(temp=true)`；玩家在车内�
 **替代方案**：需要发钱就用 `add_money`（有上限、有预算、有 delta 校验）；需要纠正错误余额就人工走 `qb-banking`/管理面板，并在 `custom-logs` 留痕。
 
 如果未来确实要开，最低门槛是：双人审批 + 执行前把余额快照写入独立表 + 硬上限（例如不得超过当前值的 ±10%）+ 只允许 `bank` 账户 + 独立 convar 默认关闭。在这些条件满足前，`set_money` 保持未实现。
+
+---
+
+## 15. 最终口径（2026-10-22 对账）
+
+上文 §2 是立项时的 15 动作计划，落地后与它有三处差异，以本节和非 `STATUS.md` 为准：
+
+| 项 | 计划（§2） | 最终实现 |
+|---|---|---|
+| 动作数 | 15（含 `set_money`/`send_phone_message`） | **17**（含 `announce`/`set_weather`/`set_time_of_day`/`teleport`；`set_money` 明确不做见 §14；`send_phone_message` 未做） |
+| 审批 | L3/L4 人审，曾讨论"双人审批" | **单人审批**（agent token 无审批权；admin token 独立）。双人审批未实现，属未来增强 |
+| `set_bucket` 范围 | 1000–1999 | **0–65535**（QBCore 原生 routing bucket 范围） |
+| 工具面 | 计划 20 | **30**（13 只读 + 17 写/效果） |
+
+其余口径以 `policy.lua` 的 `ACTIONS` 与 `docs/agent/STATUS.md` 为准；本文件前面章节保留立项时的推理过程，不再逐条回改。

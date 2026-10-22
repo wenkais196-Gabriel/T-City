@@ -689,9 +689,12 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         local item, itemErr = cleanString(params.item, 'item', 64, '^[A-Za-z0-9_.:%-]+$')
         if not item then return nil, itemErr end
 
-        -- Defaults to the configured per-action cap, which is 50 by default.
+        -- amount is required: silently defaulting to the per-action cap would
+        -- turn an omitted field into "remove the maximum allowed".
         local amount = params.amount
-        if amount == nil then amount = maxItemAmount end
+        if amount == nil then
+            return fail('invalid_params', 'amount is required')
+        end
         if type(amount) ~= 'number' or amount ~= amount or amount == math.huge or amount == -math.huge then
             return fail('invalid_params', 'amount must be a finite number')
         end

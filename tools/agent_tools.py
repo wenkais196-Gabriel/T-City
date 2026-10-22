@@ -1207,7 +1207,7 @@ def render_tools_md(registry: dict[str, Any] | None = None) -> str:
             "",
             "## Contract notes",
             "",
-            "- `L0` ⇔ channel `read`; `effect` tools are `L3`/`L4`; `L3`/`L4` always require approval.",
+            "- `L0` ⇔ channel `read`; `effect` tools are `L2`–`L4`; `L2` defaults to approval, `L3`/`L4` always require it.",
             "- Read tools use `idempotency=none` and `dry_run=not_applicable`; write/effect tools "
             "require an idempotency key (derived by the facade when omitted) and support dry-run.",
             "- `verify` always references an existing read tool; `undo` (when present) references an "
