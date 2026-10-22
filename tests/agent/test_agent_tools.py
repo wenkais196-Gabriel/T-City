@@ -314,6 +314,19 @@ class RegistryInvariantTests(unittest.TestCase):
         self.assertTrue(any("at most 300" in error for error in errors), errors)
 
 
+    def test_auth_live_requires_a_live_path(self) -> None:
+        # auth=live must not be a second credential path for arbitrary routes.
+        tool = _tool(self.registry, "get_live_players")
+        tool["http"]["path"] = "/agent/v1/actions"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "auth=live requires a /agent/v1/live/ path"), errors)
+
+    def test_auth_live_on_a_non_live_read_tool_is_rejected(self) -> None:
+        _tool(self.registry, "get_action")["auth"] = "live"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "auth=live requires a /agent/v1/live/ path"), errors)
+
+
 class PatternConversionTests(unittest.TestCase):
     """The generated Lua validator must see the same rule as Python."""
 

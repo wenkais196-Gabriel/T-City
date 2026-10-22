@@ -156,11 +156,14 @@ def _director_config() -> tuple[str, str] | None:
 def _live_config() -> tuple[str, str] | None:
     """Live-perception channel: director URL plus the dedicated live token.
 
-    Mirroring the Lua side, an unset ``AGENT_LIVE_TOKEN`` falls back to
-    ``AGENT_DIRECTOR_TOKEN`` so single-token deployments keep working.
+    There is deliberately no fallback to ``AGENT_DIRECTOR_TOKEN``.  Sharing the
+    write credential with the read channel would defeat the reason the live
+    token exists: a read-only agent must be able to hold a credential that
+    cannot write.  Deployments without a live token simply do not get the live
+    tools, instead of advertising three tools that would answer 401.
     """
     url = _env("AGENT_DIRECTOR_URL").rstrip("/")
-    token = _env("AGENT_LIVE_TOKEN") or _env("AGENT_DIRECTOR_TOKEN")
+    token = _env("AGENT_LIVE_TOKEN")
     if url and token and _safe_header_value(url) and _safe_header_value(token):
         return url, token
     return None
@@ -744,9 +747,10 @@ UNTRUSTED_NOTICE = (
 def _untrusted_paths(tool: dict[str, Any], data: Any) -> list[str]:
     """Return dotted paths of player-controlled text in a read response.
 
-    The registry names the fields (``pii.untrusted_fields``); walking the
-    payload lets the model see exactly which values are untrusted without
-    changing the shape of the data itself (v1 compatibility).
+    Only fields that sit directly on the response root or on a list element
+    are candidates.  Matching by key name at any depth would flag
+    ``job.name``/``gang.name`` (server-side config text) just because a player
+    object also has a ``name`` field.
     """
     names = (tool.get("pii") or {}).get("untrusted_fields") or []
     if not isinstance(names, list) or not names:
@@ -754,19 +758,23 @@ def _untrusted_paths(tool: dict[str, Any], data: Any) -> list[str]:
     wanted = {str(name) for name in names}
     found: list[str] = []
 
-    def walk(value: Any, prefix: str) -> None:
+    def walk(value: Any, prefix: str, direct: bool) -> None:
         if isinstance(value, dict):
+            # Root keys and list-element keys are the fields the registry
+            # names. Descending one container level (a single "player" object
+            # under the root) keeps that object's keys direct, but a nested
+            # object such as job/gang is configuration text and is skipped.
             for key, child in value.items():
                 path = f"{prefix}.{key}" if prefix else str(key)
-                if key in wanted:
+                if direct and key in wanted:
                     found.append(path)
                 else:
-                    walk(child, path)
+                    walk(child, path, prefix == "")
         elif isinstance(value, list):
             for index, child in enumerate(value):
-                walk(child, f"{prefix}.{index}" if prefix else str(index))
+                walk(child, f"{prefix}.{index}" if prefix else str(index), True)
 
-    walk(data, "")
+    walk(data, "", True)
     return found
 
 
@@ -805,6 +813,15 @@ def _normalize(
         return agent_contract.envelope_error(
             name, code, message, meta=stable_meta, request_id=request_id
         )
+
+    # Live responses are a plain object with no action envelope. Check this
+    # before the action branches: a live body may legitimately contain keys
+    # such as "action" or "ok" in its data and must not be reclassified.
+    if tool.get("auth") == "live":
+        meta = dict(stable_meta)
+        if isinstance(raw.get("count"), int):
+            meta["count"] = raw["count"]
+        return agent_contract.envelope_ok(name, raw, meta=meta, request_id=request_id)
 
     if route == "director":
         if "actions" in raw:

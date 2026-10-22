@@ -255,12 +255,14 @@ return {
             assert(response.headers and response.headers['WWW-Authenticate'] == 'Bearer')
         end)
 
-        check('actions_token_fallback', function()
+        check('actions_token_is_not_a_live_token', function()
             env.convars.agent_live_token = ''
-            local response = handle('/agent/v1/live/players', { Authorization = 'Bearer agent-token' })
+            local response = handle('/agent/v1/live/players', {
+                Authorization = 'Bearer agent-token',
+            })
             env.convars.agent_live_token = 'live-token'
-            assert(response.status == 200, 'expected fallback token to be accepted')
-            assert(response.body.count == 2)
+            assert(response.status == 503, 'the write token must not open the read channel')
+            assert(response.body.code == 'live_token_not_configured')
         end)
 
         check('wrong_method_returns_405', function()
@@ -334,6 +336,21 @@ return {
             assert(second.body.next_cursor ~= cursor, 'next_cursor must advance')
         end)
 
+        check('events_future_cursor_is_clamped', function()
+            -- A cursor from the future must clamp to newest. Echoing it back
+            -- would point next_cursor past every future event and strand the
+            -- consumer until the ring wraps.
+            local store = LiveStore.Default()
+            local future = tostring(store.epoch) .. ':999999999'
+            local response = handle('/agent/v1/live/events?since=' .. future)
+            assert(response.status == 200, 'a future cursor must not be an error')
+            assert(#response.body.events == 0)
+            assert(response.body.next_cursor ~= future,
+                'next_cursor must not echo a future sequence')
+            assert(tonumber(response.body.next_cursor:match(':(%d+)$')) == store.seq,
+                'next_cursor must clamp to the newest sequence')
+        end)
+
         check('events_invalid_cursor', function()
             local response = handle('/agent/v1/live/events?since=not-a-cursor')
             assert(response.status == 400 and response.body.code == 'invalid_cursor')
@@ -368,7 +385,8 @@ return {
             for _, event in ipairs(response.body.events) do types[#types + 1] = event.type end
             assert(table.concat(types, ',') == 'player.join,player.job.change,money.change,player.leave',
                 'unexpected hook event sequence: ' .. table.concat(types, ','))
-            assert(response.body.events[3].payload.reason == 'repair')
+            assert(response.body.events[3].payload.reason == nil,
+                'the free-text reason can carry a phone number and must be dropped')
             assertNoPII(response.body, 'hook events')
         end)
 
