@@ -1186,7 +1186,7 @@
       "idempotency": "required",
       "dry_run": "supported",
       "undo_supported": true,
-      "status": "planned",
+      "status": "active",
       "since": "1.1.0",
       "http": {
         "method": "POST",
@@ -1436,7 +1436,7 @@
       "idempotency": "required",
       "dry_run": "supported",
       "undo_supported": false,
-      "status": "planned",
+      "status": "active",
       "since": "1.3.0",
       "http": {
         "method": "POST",

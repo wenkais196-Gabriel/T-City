@@ -3,7 +3,8 @@
 -- Scope of this first slice:
 --   * accept action proposals from a trusted server-side caller / HTTP agent
 --   * validate + preview + policy-check + persist (agent_actions)
---   * low-risk notify executes after policy; add_money / start_quest need approval
+--   * low-risk notify executes after policy; add_money / start_quest /
+--     set_job / grant_item need approval
 --   * approve/reject re-check policy, execute, and write the audit row
 --
 -- No client script exists. Nothing here trusts client input.
@@ -50,6 +51,7 @@ local function Config()
         max_money = convarInt('agent_actions_max_money', 1000, 0, 1000000000),
         daily_budget = convarInt('agent_actions_daily_budget', 5000, 0, 1000000000),
         max_notify_chars = convarInt('agent_actions_max_notify_chars', 300, 1, 2000),
+        max_item_amount = convarInt('agent_actions_max_item_amount', 50, 1, 1000),
         ttl_seconds = convarInt('agent_actions_ttl_seconds', 900, 30, 86400),
     }
 end
@@ -264,6 +266,20 @@ local function dbMoney(citizenid, account)
     return value, nil
 end
 
+local function playerJob(player)
+    if type(player) ~= 'table' or type(player.PlayerData) ~= 'table' then return nil end
+    return player.PlayerData.job
+end
+
+local function playerItemCount(player, item)
+    if type(player) ~= 'table' or type(player.Functions) ~= 'table' then return nil end
+    local fn = player.Functions.GetItemByName
+    if type(fn) ~= 'function' then return nil end
+    local ok, itemData = pcall(fn, item)
+    if not ok or type(itemData) ~= 'table' then return 0 end
+    return tonumber(itemData.amount) or 0
+end
+
 local function getQuestCatalog()
     local ok, catalog = pcall(function()
         return exports['custom-quest']:GetQuestCatalog()
@@ -285,12 +301,21 @@ local function buildContext(actionType, params)
             source = playerSource(player),
             money = player.PlayerData and player.PlayerData.money or nil,
         }
+        if actionType == 'set_job' then
+            context.player.job = playerJob(player)
+        elseif actionType == 'grant_item' then
+            context.player.item_count = playerItemCount(player, params.item) or 0
+        end
     end
 
     if actionType == 'start_quest' then
         local catalog, err = getQuestCatalog()
         if err then return nil, err end
         context.quests = catalog
+    elseif actionType == 'set_job' then
+        context.jobs = QBCore.Shared and QBCore.Shared.Jobs or nil
+    elseif actionType == 'grant_item' then
+        context.items = QBCore.Shared and QBCore.Shared.Items or nil
     end
 
     return context, nil
@@ -414,6 +439,83 @@ local function executeStartQuest(actionId, params)
     }
 end
 
+local function executeSetJob(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local currentJob = playerJob(player) or {}
+    local currentGrade = type(currentJob.grade) == 'table' and currentJob.grade.level or 0
+    local before = { job = currentJob.name, grade = currentGrade }
+
+    local callOk, result = pcall(function()
+        return player.Functions.SetJob(params.job, params.grade)
+    end)
+    if not callOk then
+        return false, ('set_job_failed: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: SetJob returned non-true', nil
+    end
+
+    -- 回读同一个 player 对象；SetJob 成功后 PlayerData.job 必须已更新。
+    local updatedJob = playerJob(player) or {}
+    local updatedGrade = type(updatedJob.grade) == 'table' and updatedJob.grade.level or nil
+    if updatedJob.name ~= params.job or tostring(updatedGrade) ~= tostring(params.grade) then
+        return false, ('verification_failed before=%s/%s after=%s/%s expected=%s/%s'):format(
+            tostring(before.job), tostring(before.grade),
+            tostring(updatedJob.name), tostring(updatedGrade),
+            tostring(params.job), tostring(params.grade)), nil
+    end
+
+    return true, nil, {
+        before = before,
+        after = { job = updatedJob.name, grade = updatedGrade },
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeGrantItem(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local before = playerItemCount(player, params.item)
+    if before == nil then
+        return false, 'item_api_unavailable', nil
+    end
+
+    local callOk, result = pcall(function()
+        return player.Functions.AddItem(params.item, params.amount)
+    end)
+    if not callOk then
+        return false, ('grant_item_failed: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: AddItem returned non-true', nil
+    end
+
+    local after = playerItemCount(player, params.item)
+    if after == nil then
+        return false, 'item_api_unavailable_after_add', nil
+    end
+    if after - before ~= params.amount then
+        -- No automatic rollback: same stance as add_money. A partial item
+        -- mutation is more dangerous to "fix" blindly than to audit loudly.
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.amount)), nil
+    end
+
+    return true, nil, {
+        item = params.item,
+        amount = params.amount,
+        before = before,
+        after = after,
+        reason = params.reason,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
 local function executeAction(actionId, actionType, params)
     if actionType == 'notify' then
         return executeNotify(actionId, params)
@@ -421,9 +523,20 @@ local function executeAction(actionId, actionType, params)
         return executeAddMoney(actionId, params)
     elseif actionType == 'start_quest' then
         return executeStartQuest(actionId, params)
+    elseif actionType == 'set_job' then
+        return executeSetJob(actionId, params)
+    elseif actionType == 'grant_item' then
+        return executeGrantItem(actionId, params)
     end
     return false, 'unsupported_action', nil
 end
+
+-- Internal executors for the pure-Lua harness. Not a FiveM export; approval
+-- still flows exclusively through Propose/Approve.
+AgentActions._Execute = {
+    set_job = executeSetJob,
+    grant_item = executeGrantItem,
+}
 
 -- ---------------------------------------------------------------------------
 -- Audit transitions
@@ -884,6 +997,7 @@ function AgentActions.Policy()
         }
     end
     actions.add_money.max_money = cfg.max_money
+    actions.grant_item.max_amount = cfg.max_item_amount
 
     local dailySpent = nil
     if cfg.enabled then
@@ -899,6 +1013,7 @@ function AgentActions.Policy()
             max_money = cfg.max_money,
             daily_budget = cfg.daily_budget,
             max_notify_chars = cfg.max_notify_chars,
+            max_item_amount = cfg.max_item_amount,
             ttl_seconds = cfg.ttl_seconds,
         },
         daily_spent = dailySpent,

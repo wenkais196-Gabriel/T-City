@@ -13,7 +13,9 @@ local AgentPolicy = {}
 -- ---------------------------------------------------------------------------
 -- L1 表现类：notify（自动执行）
 -- L3 任务类：start_quest（需人工审批）
+-- L3 职业类：set_job（需人工审批）
 -- L4 经济类：add_money（需人工审批 + 每日预算）
+-- L4 物品类：grant_item（需人工审批，不计入 add_money 每日预算）
 AgentPolicy.ACTIONS = {
     notify = {
         risk = 'L1',
@@ -27,6 +29,16 @@ AgentPolicy.ACTIONS = {
     },
     start_quest = {
         risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+    },
+    set_job = {
+        risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+    },
+    grant_item = {
+        risk = 'L4',
         requires_approval = true,
         auto_execute = false,
     },
@@ -60,6 +72,7 @@ AgentPolicy.DEFAULTS = {
     max_money = 1000,
     daily_budget = 5000,
     max_notify_chars = 300,
+    max_item_amount = 50,
     ttl_seconds = 900,
 }
 
@@ -104,6 +117,16 @@ function AgentPolicy.HasUnsafeControlChars(value)
     return false
 end
 
+-- Strict variant for single-line audit fields: rejects tab/LF/CR as well.
+function AgentPolicy.HasControlChars(value)
+    if type(value) ~= 'string' then return true end
+    for i = 1, #value do
+        local byte = value:byte(i)
+        if byte < 32 or byte == 127 then return true end
+    end
+    return false
+end
+
 local function cleanString(value, field, maxLength, pattern)
     if type(value) ~= 'string' then
         return fail('invalid_params', ('%s must be a string'):format(field))
@@ -122,6 +145,19 @@ local function cleanString(value, field, maxLength, pattern)
         return fail('invalid_params', ('%s contains control characters'):format(field))
     end
     return cleaned
+end
+
+-- Reject anything outside the action's documented schema. Existing actions
+-- keep their historical "unknown keys are dropped" behaviour; set_job and
+-- grant_item opt into this stricter check.
+local function rejectUnknownFields(params, allowed, actionType)
+    for key in pairs(params) do
+        if not allowed[key] then
+            return { code = 'invalid_params', message = ('unknown field %s for %s'):format(
+                tostring(key), actionType) }
+        end
+    end
+    return nil
 end
 
 function AgentPolicy.DeepEqual(a, b)
@@ -190,6 +226,7 @@ function AgentPolicy.Normalize(actionType, params, cfg)
     cfg = cfg or {}
     local maxMoney = cfg.max_money or AgentPolicy.DEFAULTS.max_money
     local maxNotifyChars = cfg.max_notify_chars or AgentPolicy.DEFAULTS.max_notify_chars
+    local maxItemAmount = cfg.max_item_amount or AgentPolicy.DEFAULTS.max_item_amount
 
     if type(actionType) ~= 'string' or not AgentPolicy.ACTIONS[actionType] then
         return fail('unsupported_action', 'unsupported action type')
@@ -282,6 +319,76 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         }
     end
 
+    if actionType == 'set_job' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            job = true,
+            grade = true,
+        }, 'set_job')
+        if unknownErr then return nil, unknownErr end
+
+        local job, jobErr = cleanString(params.job, 'job', 64, '^[A-Za-z0-9_.%-]+$')
+        if not job then return nil, jobErr end
+
+        local grade = params.grade
+        if grade == nil then grade = 0 end
+        if type(grade) ~= 'number' or grade ~= grade or grade == math.huge or grade == -math.huge then
+            return fail('invalid_params', 'grade must be a finite integer')
+        end
+        if grade ~= math.floor(grade) then
+            return fail('invalid_params', 'grade must be a whole number')
+        end
+        if grade < 0 or grade > 100 then
+            return fail('invalid_params', 'grade must be between 0 and 100')
+        end
+
+        return {
+            citizenid = citizenid,
+            job = job:lower(),
+            grade = math.tointeger(grade) or grade,
+        }
+    end
+
+    if actionType == 'grant_item' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            item = true,
+            amount = true,
+            reason = true,
+        }, 'grant_item')
+        if unknownErr then return nil, unknownErr end
+
+        local item, itemErr = cleanString(params.item, 'item', 64, '^[A-Za-z0-9_.:%-]+$')
+        if not item then return nil, itemErr end
+
+        local amount = params.amount
+        if type(amount) ~= 'number' or amount ~= amount or amount == math.huge or amount == -math.huge then
+            return fail('invalid_params', 'amount must be a finite number')
+        end
+        if amount ~= math.floor(amount) then
+            return fail('invalid_params', 'amount must be a whole number')
+        end
+        if amount < 1 then
+            return fail('invalid_params', 'amount must be at least 1')
+        end
+        if amount > maxItemAmount then
+            return fail('invalid_params', ('amount exceeds per-action cap of %d'):format(maxItemAmount))
+        end
+
+        local reason, reasonErr = cleanString(params.reason, 'reason', 128)
+        if not reason then return nil, reasonErr end
+        if AgentPolicy.HasControlChars(reason) then
+            return fail('invalid_params', 'reason contains control characters')
+        end
+
+        return {
+            citizenid = citizenid,
+            item = item,
+            amount = math.tointeger(amount) or amount,
+            reason = reason,
+        }
+    end
+
     return fail('unsupported_action', 'unsupported action type')
 end
 
@@ -325,8 +432,11 @@ end
 -- ---------------------------------------------------------------------------
 -- Pure: callers gather live player/quest context.
 -- ctx = {
---   player = { source = number, money = { cash=, bank=, crypto= } } | nil,
+--   player = { source = number, money = { cash=, bank=, crypto= },
+--              job = PlayerData.job, item_count = number } | nil,
 --   quests = GetQuestCatalog() result | nil,
+--   jobs = QBCore.Shared.Jobs | nil,
+--   items = QBCore.Shared.Items | nil,
 --   daily_spent = number (add_money only, excluding the row being approved)
 -- }
 function AgentPolicy.Preview(actionType, params, ctx, cfg)
@@ -397,6 +507,30 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'set_job' then
+        preview.job = params.job
+        preview.grade = params.grade
+        local current = nil
+        if type(player) == 'table' then current = player.job end
+        if type(current) == 'table' then
+            preview.before = {
+                job = current.name,
+                grade = current.grade and current.grade.level or 0,
+            }
+        end
+        return preview
+    end
+
+    if actionType == 'grant_item' then
+        preview.item = params.item
+        preview.amount = params.amount
+        preview.reason = params.reason
+        if type(player) == 'table' then
+            preview.before = tonumber(player.item_count) or 0
+        end
+        return preview
+    end
+
     return fail('unsupported_action', 'unsupported action type')
 end
 
@@ -458,6 +592,29 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
         end
         if not found then
             return failBool('quest_not_found', 'quest does not exist in the catalog')
+        end
+        return true
+    end
+
+    if actionType == 'set_job' then
+        local jobDefinition = nil
+        if type(ctx.jobs) == 'table' then jobDefinition = ctx.jobs[params.job] end
+        if type(jobDefinition) ~= 'table' then
+            return failBool('job_not_found', 'job does not exist in QBCore.Shared.Jobs')
+        end
+        local grades = jobDefinition.grades
+        if type(grades) == 'table' and grades[tostring(params.grade)] == nil then
+            return failBool('grade_not_found', ('grade %s does not exist for job %s'):format(
+                tostring(params.grade), tostring(params.job)))
+        end
+        return true
+    end
+
+    if actionType == 'grant_item' then
+        local itemDefinition = nil
+        if type(ctx.items) == 'table' then itemDefinition = ctx.items[params.item] end
+        if type(itemDefinition) ~= 'table' then
+            return failBool('item_not_found', 'item does not exist in QBCore.Shared.Items')
         end
         return true
     end

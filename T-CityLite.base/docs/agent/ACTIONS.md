@@ -1,9 +1,9 @@
 # Agent Action Contract (`custom-director`, v1)
 
-Server-side contract for agent-proposed game actions. This is the first safe
-slice of issues **#30 / #32**: proposals, previews, policy/budget, human
-approval for risky actions and an audit row. Scope is deliberately limited to
-three actions; there is no LLM integration.
+Server-side contract for agent-proposed game actions. This is a safe slice of
+issues **#30 / #32**: proposals, previews, policy/budget, human approval for
+risky actions and an audit row. Scope is deliberately limited to five actions;
+there is no LLM integration.
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -20,6 +20,8 @@ three actions; there is no LLM integration.
 | `notify` | L1 表现 | `citizenid`, `text`, `kind?` | `approved` → `executed` | none (policy only) | `Player.Functions.Notify` (or `QBCore:Notify`) |
 | `add_money` | L4 经济 | `citizenid`, `account`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddMoney(account, amount, 'agent_action:<id>')` + delta verification |
 | `start_quest` | L3 任务 | `citizenid`, `quest_id` | `pending_approval` | **always** | `exports['custom-quest']:TriggerQuest(source, quest_id)` |
+| `set_job` | L3 职业 | `citizenid`, `job`, `grade?` | `pending_approval` | **always** | `Player.Functions.SetJob(job, grade)` + job/grade read-back verification |
+| `grant_item` | L4 物品 | `citizenid`, `item`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddItem(item, amount)` + inventory delta verification |
 
 Anything else is rejected with `code: "unsupported_action"`.
 
@@ -36,11 +38,18 @@ Anything else is rejected with `code: "unsupported_action"`.
 | `add_money.amount` | finite whole number, 1..`agent_actions_max_money` |
 | `add_money.reason` | 1–128 chars, no C0 controls |
 | `start_quest.quest_id` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `GetQuestCatalog` |
+| `set_job.job` | 1–64 chars, `[A-Za-z0-9_.-]`, lowercased; must exist in `QBCore.Shared.Jobs` |
+| `set_job.grade` | optional integer `0..100`, default `0`; must exist in `jobs[job].grades` when that table is present |
+| `grant_item.item` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `QBCore.Shared.Items` |
+| `grant_item.amount` | integer `1..agent_actions_max_item_amount` (default 50, clamped 1..1000) |
+| `grant_item.reason` | 1–128 chars, no C0 controls |
 | `approver` | 1–64 chars, no C0 controls (e.g. `discord:alice`, `console`) |
 | reject `reason` | optional, 1–255 chars |
 
-Unknown keys inside `args` are dropped, not persisted. Unknown action types are
-rejected. There is no client-side validation path.
+Unknown keys inside `args` are dropped for `notify`, `add_money` and
+`start_quest`, but rejected with `invalid_params` for `set_job` and
+`grant_item`. Unknown action types are rejected. There is no client-side
+validation path.
 
 ---
 
@@ -170,6 +179,46 @@ The broker indexes both that shape and a flat quest array. If the export fails,
 the proposal is rejected with `quest_catalog_unavailable`; if the id is absent,
 policy rejects with `quest_not_found`.
 
+### 3.4 `set_job`
+
+```json
+{
+  "action_type": "set_job",
+  "risk": "L3",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "job": "police",
+  "grade": 2,
+  "before": { "job": "unemployed", "grade": 0 }
+}
+```
+
+`before` comes from the live `PlayerData.job` and is omitted while the player is
+offline (policy rejects that proposal with `player_not_found`). Approval
+recomputes the preview, so `before` reflects the job at approval time.
+
+### 3.5 `grant_item`
+
+```json
+{
+  "action_type": "grant_item",
+  "risk": "L4",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "item": "bread",
+  "amount": 3,
+  "reason": "director reward",
+  "before": 2
+}
+```
+
+`before` is the current held quantity from `Player.Functions.GetItemByName(item)`
+(`0` when the player holds none). It is omitted while the player is offline.
+
 ---
 
 ## 4. Status lifecycle
@@ -182,7 +231,7 @@ notify (dry_run = false)
   propose ──► approved ──► executed
                        └─► failed             (notify/AddMoney/quest execution error)
 
-add_money / start_quest (dry_run = false)
+add_money / start_quest / set_job / grant_item (dry_run = false)
   propose ──► pending_approval ──► approved ──► executed
                               │             └─► failed
                               ├─► rejected              (operator reject)
@@ -259,6 +308,33 @@ on every call. Any other value:
 Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 `503` while leaving server exports available.
 
+### 5.6 Jobs and items
+
+- `job` must exist in `QBCore.Shared.Jobs` at propose and approve time
+  (`job_not_found` otherwise).
+- If `jobs[job].grades` is present, `tostring(grade)` must be one of its keys
+  (`grade_not_found` otherwise). Jobs without a `grades` table accept any
+  in-range grade.
+- `item` must exist in `QBCore.Shared.Items` at propose and approve time
+  (`item_not_found` otherwise).
+- `grant_item.amount` is capped by `agent_actions_max_item_amount`
+  (default `50`, clamped `1..1000`). It does **not** consume the `add_money`
+  daily budget; there is no item budget in this slice.
+- Both actions require the target player to be online.
+
+### 5.7 Approval matrix
+
+| Action | Risk | Auto-execute | Human approval | Budget / cap |
+|:---|:---|:---|:---|:---|
+| `notify` | L1 | yes (policy only) | no | `max_notify_chars` |
+| `start_quest` | L3 | no | **always** | quest catalog |
+| `set_job` | L3 | no | **always** | `QBCore.Shared.Jobs` + grades |
+| `add_money` | L4 | no | **always** | `max_money` + daily budget |
+| `grant_item` | L4 | no | **always** | `max_item_amount` only |
+
+`agent_actions_enabled = 0` disables every action. A proposal rejected by policy
+before persistence is not an approval-matrix exception: it never executes.
+
 ---
 
 ## 6. Idempotency
@@ -285,8 +361,8 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `add_money` \| `start_quest` |
-| `params` | Normalized JSON args (unknown fields dropped) |
+| `action_type` | `notify` \| `add_money` \| `start_quest` \| `set_job` \| `grant_item` |
+| `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for `set_job`/`grant_item`) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
 | `preview` | Last computed preview JSON |
@@ -328,6 +404,38 @@ This is an L4 action: it never auto-executes, even if `dry_run` is false.
 - Success requires the export's first return value to be `true`.
 - Any `false`/`nil` result or thrown error becomes `failed` with the message.
 
+### `set_job`
+
+1. Re-resolve the online player and record `before = { job, grade }`.
+2. `Player.Functions.SetJob(job, grade)`; a return other than `true` becomes
+   `failed` (`execution_failed`).
+3. Read back `PlayerData.job.name` and `PlayerData.job.grade.level`; they must
+   equal the requested `job`/`grade`.
+4. On mismatch, mark `failed` with a `verification_failed` message. **No
+   automatic rollback**; the previous job is in the audit `result.before`.
+
+This is an L3 action: it never auto-executes, even if `dry_run` is false.
+
+### `grant_item`
+
+1. Re-resolve the online player and record `before` from
+   `Player.Functions.GetItemByName(item)` (`0` if none).
+2. `Player.Functions.AddItem(item, amount)` (this is the player method, **not**
+   the `exports['qb-core']:AddItem` item-definition registrar); a return other
+   than `true` becomes `failed` (`execution_failed`).
+3. Re-read the held quantity and require `after - before == amount`.
+4. On mismatch, mark `failed` with a `verification_failed` message. **No
+   automatic rollback**; operators use the audit row.
+
+The success `result` JSON contains `{ item, amount, before, after, reason,
+verify_result }` (plus `at`); `set_job` contains `{ before, after,
+verify_result, at }`. Execution failures surface as `code: "execution_failed"`;
+the detailed `verification_failed ...` / `execution_failed ...` text is in
+`error` and in `result.error`.
+
+This is an L4 action: it never auto-executes, even if `dry_run` is false, and
+it does not consume the `add_money` daily budget.
+
 ---
 
 ## 9. HTTP errors
@@ -346,6 +454,9 @@ appear for action results). No stack traces.
 | `player_not_found` | 400 | Target not online |
 | `account_unavailable` | 400 | Target lacks the account |
 | `quest_not_found` | 400 | Quest not in catalog |
+| `job_not_found` | 400 | Job not in `QBCore.Shared.Jobs` |
+| `grade_not_found` | 400 | Grade not in `jobs[job].grades` |
+| `item_not_found` | 400 | Item not in `QBCore.Shared.Items` |
 | `text_too_long` | 400 | Notify text over cap |
 | `not_found` | 404 | Unknown route or own-row id not found |
 | `method_not_allowed` | 405 | Wrong method (`Allow` set) |
@@ -378,8 +489,8 @@ underlying code is a `400`-class policy code.
 8. Keep the FXServer HTTP port on loopback/private networks; terminate TLS at a
    trusted proxy if needed. CORS is not enabled.
 9. No automatic rollback of economy mutations; failures are audited loudly.
-10. `add_money` and `start_quest` always require `pending_approval`, regardless
-    of the proposing agent.
+10. `add_money`, `start_quest`, `set_job` and `grant_item` always require
+    `pending_approval`, regardless of the proposing agent.
 
 ---
 

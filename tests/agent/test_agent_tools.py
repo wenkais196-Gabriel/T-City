@@ -33,6 +33,8 @@ ACTIVE_NAMES = {
     "get_world_digest",
     "get_world_state",
     "get_economy_metrics",
+    "set_player_job",
+    "grant_player_item",
     "get_live_players",
     "get_live_player",
     "list_live_events",
@@ -46,10 +48,8 @@ PLANNED_NAMES = {
     "send_announce",
     "set_weather",
     "set_time_of_day",
-    "set_player_job",
     "teleport_player",
     "spawn_vehicle",
-    "grant_player_item",
 }
 
 
@@ -80,8 +80,8 @@ class RegistryContentTests(unittest.TestCase):
         self.assertEqual(len(registry["tools"]), 23, "v1 ships exactly 23 tools")
         active = {tool["name"] for tool in registry["tools"] if tool["status"] == "active"}
         planned = {tool["name"] for tool in registry["tools"] if tool["status"] == "planned"}
-        self.assertEqual(active, ACTIVE_NAMES, "the active set is the 13 pre-live tools plus 3 live reads")
-        self.assertEqual(planned, PLANNED_NAMES, "the seven M1/M2 tools stay planned")
+        self.assertEqual(active, ACTIVE_NAMES, "the active set is the 10 reads, 3 live reads, 3 M0 writes and 2 new actions")
+        self.assertEqual(planned, PLANNED_NAMES, "the five remaining M2 tools stay planned")
 
     def test_every_tool_has_the_required_contract_fields(self) -> None:
         required = (
