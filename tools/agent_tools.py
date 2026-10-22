@@ -41,9 +41,7 @@ LUA_PATH = (
 SCHEMA_VERSION = 1
 MAX_TOOLS = 40
 
-# Design 03 §4 whitelists these broad-but-static verbs.  ``add_`` is the one
-# published legacy name (add_player_money) that predates the rule; names are
-# immutable (§3.2 rule 1), so it stays and the regex has to admit it.
+# Design 03 §4 whitelists these broad-but-static verbs.
 VERBS = (
     "get",
     "list",
@@ -58,12 +56,20 @@ VERBS = (
     "spawn",
     "teleport",
     "cancel",
-    "add",
 )
 NAME_RE = re.compile(
     r"^(?:" + "|".join(VERBS) + r")_[a-z][a-z0-9_]{2,48}$",
     re.ASCII,
 )
+# Names published before the verb rule existed are immutable (§3.2 rule 1), so
+# they are grandfathered by exact name only.  Never widen this into a prefix
+# rule: an ``add_*`` wildcard would let any future verb bypass the invariant.
+LEGACY_NAMES = frozenset({"add_player_money"})
+
+
+def is_valid_name(name: str) -> bool:
+    """True for a whitelisted verb_name, or a grandfathered exact legacy name."""
+    return name in LEGACY_NAMES or NAME_RE.fullmatch(name) is not None
 DIRECTOR_ACTION_RE = re.compile(r"^[a-z][a-z0-9_]{2,40}$", re.ASCII)
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$", re.ASCII)
 PARAM_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$", re.ASCII)
@@ -87,6 +93,63 @@ STATUSES = ("active", "planned", "deprecated")
 COMPENSATIONS = ("inverse", "manual", "none")
 VERIFY_OPS = ("eq", "neq", "delta_eq", "gte", "lte", "contains", "exists")
 CHANNEL_RATE_CAP = {"read": 60, "write": 10, "effect": 2}
+
+# The registry only uses ``^[chars]{m,n}$`` patterns so the generated Lua
+# validator can enforce exactly the same rule as Python's re.fullmatch without
+# shipping a regex engine or depending on Lua's different pattern dialect.
+SIMPLE_PATTERN_PREFIX = "^["
+SIMPLE_PATTERN_SUFFIX = "}$"
+
+
+def parse_simple_pattern(pattern: str) -> tuple[str, int, int] | None:
+    """Expand ``^[chars]{m,n}$`` into (charset, min, max), or None.
+
+    Parsing is done by hand rather than with a regex: the pattern itself is
+    full of brackets and backslashes, and a second layer of escaping is exactly
+    the kind of thing that silently stops matching.
+
+    ``charset`` is the literal set of accepted characters, so the Lua side can
+    do a plain byte lookup instead of interpreting ranges or escapes.
+    """
+    if not (pattern.startswith(SIMPLE_PATTERN_PREFIX) and pattern.endswith(SIMPLE_PATTERN_SUFFIX)):
+        return None
+    inner = pattern[len(SIMPLE_PATTERN_PREFIX) : -len(SIMPLE_PATTERN_SUFFIX)]
+    if "]{" not in inner:
+        return None
+    body, bounds = inner.rsplit("]{", 1)
+    if not body:
+        return None
+    pieces = bounds.split(",")
+    if len(pieces) == 1:
+        minimum = maximum = pieces[0]
+    elif len(pieces) == 2:
+        minimum, maximum = pieces
+    else:
+        return None
+    if not (minimum.isdigit() and maximum.isdigit()):
+        return None
+    chars: set[str] = set()
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if char == "\\":
+            if index + 1 >= len(body):
+                return None
+            chars.add(body[index + 1])
+            index += 2
+            continue
+        if index + 2 < len(body) and body[index + 1] == "-":
+            low, high = ord(body[index]), ord(body[index + 2])
+            if low > high:
+                return None
+            chars.update(chr(code) for code in range(low, high + 1))
+            index += 3
+            continue
+        chars.add(char)
+        index += 1
+    if not chars:
+        return None
+    return "".join(sorted(chars)), int(minimum), int(maximum)
 
 TOOL_KEYS = frozenset(
     {
@@ -324,8 +387,8 @@ def _validate_tool(errors: list[str], tool: Any, index: int) -> str | None:
     name_ok = False
     if not isinstance(name, str):
         _err(errors, f"{path}.name", "must be a string")
-    elif not NAME_RE.fullmatch(name):
-        _err(errors, f"{path}.name", f"must match {NAME_RE.pattern!r}")
+    elif not is_valid_name(name):
+        _err(errors, f"{path}.name", f"must match {NAME_RE.pattern!r} (or be a legacy name)")
     else:
         name_ok = True
 
@@ -385,11 +448,19 @@ def _validate_tool(errors: list[str], tool: Any, index: int) -> str | None:
             _err(errors, f"{path}.risk", "write/effect tools cannot be L0")
         # Design 03 §6 says effect ⇒ L3/L4, but its own §7.3 matrix marks the
         # L2 world-atmosphere tools (send_announce/set_weather/set_time_of_day)
-        # as effect.  The concrete tool matrix wins; L0/read stays strict.
+        # as effect.  The concrete tool matrix wins; effect still may not be L1,
+        # because an L1 effect would be a destructive-free but unapproved write.
+        if channel == "effect" and risk == "L1":
+            _err(errors, f"{path}.risk", "effect tools must be L2, L3 or L4")
         if idempotency != "required":
             _err(errors, f"{path}.idempotency", "write/effect tools must require idempotency")
         if dry_run != "supported":
             _err(errors, f"{path}.dry_run", "write/effect tools must support dry_run")
+    # L2 is "default approval" (design 03 §6); the runtime convar may downgrade
+    # it to auto only when the tool also declares an undo.  A registry that
+    # starts at requires_approval=false would silently bypass that gate.
+    if risk == "L2" and tool.get("requires_approval") is not True:
+        _err(errors, f"{path}.requires_approval", "L2 tools must default to approval")
     if risk in ("L3", "L4") and tool.get("requires_approval") is not True:
         _err(errors, f"{path}.requires_approval", f"{risk} tools must require approval")
     if blast == "world" and tool.get("requires_approval") is not True:
@@ -417,7 +488,7 @@ def _validate_tool(errors: list[str], tool: Any, index: int) -> str | None:
     _validate_undo(errors, tool, path, channel)
     _validate_deprecated(errors, tool, path, status, by_name=None)
 
-    if isinstance(name, str) and not NAME_RE.fullmatch(name):
+    if isinstance(name, str) and not is_valid_name(name):
         return None
     return name if name_ok and isinstance(name, str) else None
 
@@ -494,6 +565,18 @@ def _validate_input_schema(
                     re.compile(spec["pattern"])
                 except re.error as exc:
                     _err(errors, f"{prop_path}.pattern", f"invalid regex: {exc}")
+                else:
+                    # The generated Lua validator must enforce the same rule as
+                    # Python. That is only possible for the simple
+                    # ``^[chars]{m,n}$`` subset, so anything else is rejected
+                    # here rather than silently ignored on the Lua side.
+                    if parse_simple_pattern(spec["pattern"]) is None:
+                        _err(
+                            errors,
+                            f"{prop_path}.pattern",
+                            "pattern must be a single char class with {m,n} bounds "
+                            "(the Lua validator cannot express other regexes)",
+                        )
         if "minimum" in spec and not _is_number(spec["minimum"]):
             _err(errors, f"{prop_path}.minimum", "must be a number")
         if "maximum" in spec and not _is_number(spec["maximum"]):
@@ -1145,8 +1228,19 @@ def render_lua(registry: dict[str, Any] | None = None) -> str:
             lines.append("    schema = {")
             for prop_name, spec in props.items():
                 rule = [f'type = {_lua_string(str(spec.get("type", "")))}']
+                effective = dict(spec)
                 if "enum" in spec:
                     rule.append(f"enum = {_lua_string_list([str(item) for item in spec['enum']])}")
+                if isinstance(spec.get("pattern"), str):
+                    parsed = parse_simple_pattern(spec["pattern"])
+                    if parsed is None:
+                        raise ValueError(
+                            f"{tool.get('name')}.{prop_name}: pattern is not Lua-validatable"
+                        )
+                    chars, pattern_min, pattern_max = parsed
+                    effective.setdefault("minLength", pattern_min)
+                    effective.setdefault("maxLength", pattern_max)
+                    rule.append(f"chars = {_lua_string(chars)}")
                 for keyword, lua_key in (
                     ("minimum", "minimum"),
                     ("maximum", "maximum"),
@@ -1154,8 +1248,8 @@ def render_lua(registry: dict[str, Any] | None = None) -> str:
                     ("maxLength", "max_length"),
                     ("maxItems", "max_items"),
                 ):
-                    if keyword in spec and isinstance(spec[keyword], (int, float)):
-                        rule.append(f"{lua_key} = {_lua_literal(spec[keyword])}")
+                    if keyword in effective and isinstance(effective[keyword], (int, float)):
+                        rule.append(f"{lua_key} = {_lua_literal(effective[keyword])}")
                 lines.append(
                     f"      [{_lua_string(str(prop_name))}] = {{ "
                     + ", ".join(rule)
@@ -1220,6 +1314,14 @@ def render_lua(registry: dict[str, Any] | None = None) -> str:
             "      end",
             "      if rule.max_length ~= nil and #value > rule.max_length then",
             "        return false, 'invalid_params'",
+            "      end",
+            "      if rule.chars then",
+            "        for i = 1, #value do",
+            "          local char = value:sub(i, i)",
+            "          if not string.find(rule.chars, char, 1, true) then",
+            "            return false, 'invalid_params'",
+            "          end",
+            "        end",
             "      end",
             "    end",
             "  end",

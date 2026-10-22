@@ -234,7 +234,7 @@
       },
       "pii": {
         "returns_pii": false,
-        "untrusted_fields": []
+        "untrusted_fields": ["payload"]
       },
       "verify": null,
       "undo": null,
@@ -289,7 +289,7 @@
       },
       "pii": {
         "returns_pii": false,
-        "untrusted_fields": []
+        "untrusted_fields": ["payload"]
       },
       "verify": null,
       "undo": null,
@@ -339,7 +339,7 @@
       },
       "pii": {
         "returns_pii": false,
-        "untrusted_fields": []
+        "untrusted_fields": ["summary", "text", "payload"]
       },
       "verify": null,
       "undo": null,
@@ -387,7 +387,7 @@
       },
       "pii": {
         "returns_pii": false,
-        "untrusted_fields": []
+        "untrusted_fields": ["state_value"]
       },
       "verify": null,
       "undo": null,

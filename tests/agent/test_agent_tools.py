@@ -100,6 +100,12 @@ class RegistryContentTests(unittest.TestCase):
             for field in ("method", "path"):
                 self.assertIn(field, tool["http"])
 
+    def test_payload_tools_declare_untrusted_fields(self) -> None:
+        for name in ("list_events", "get_player_timeline", "get_world_state", "get_world_digest"):
+            with self.subTest(tool=name):
+                fields = _tool(_registry(), name)["pii"]["untrusted_fields"]
+                self.assertTrue(fields, f"{name} returns player-controlled text")
+
     def test_m0_write_tools_have_approval_and_verify(self) -> None:
         registry = _registry()
         add_money = _tool(registry, "add_player_money")
@@ -184,6 +190,26 @@ class RegistryInvariantTests(unittest.TestCase):
         # Published names are immutable; add_ is the explicit legacy verb.
         self.assertEqual(_errors(self.registry), [])
 
+    def test_legacy_add_prefix_is_not_a_wildcard(self) -> None:
+        # Only the exact published name may keep the add_ prefix; a new add_*
+        # tool would otherwise bypass the verb whitelist entirely.
+        clone = copy.deepcopy(_tool(self.registry, "send_notify"))
+        clone["name"] = "add_world_notice"
+        clone["director_action"] = "add_world_notice"
+        self.registry["tools"].append(clone)
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "must match"), errors)
+
+    def test_l2_must_default_to_approval(self) -> None:
+        _tool(self.registry, "send_announce")["requires_approval"] = False
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "L2 tools must default to approval"), errors)
+
+    def test_effect_cannot_be_l1(self) -> None:
+        _tool(self.registry, "send_announce")["risk"] = "L1"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "effect tools must be L2, L3 or L4"), errors)
+
     def test_missing_required_field_is_rejected(self) -> None:
         del _tool(self.registry, "get_schema")["description"]
         errors = _errors(self.registry)
@@ -256,6 +282,36 @@ class RegistryInvariantTests(unittest.TestCase):
             tool, {"citizenid": "ABC123", "text": "x" * 301}
         )
         self.assertTrue(any("at most 300" in error for error in errors), errors)
+
+
+class PatternConversionTests(unittest.TestCase):
+    """The generated Lua validator must see the same rule as Python."""
+
+    def test_expands_ranges_and_escaped_literals(self) -> None:
+        chars, minimum, maximum = agent_tools.parse_simple_pattern(r"^[A-Za-z0-9_-]{1,11}$")
+        self.assertEqual((minimum, maximum), (1, 11))
+        self.assertIn("A", chars)
+        self.assertIn("z", chars)
+        self.assertIn("_", chars)
+        self.assertIn("-", chars)
+        self.assertNotIn(" ", chars)
+
+        chars, minimum, maximum = agent_tools.parse_simple_pattern(r"^[0-9A-Za-z:+.,\- T]{1,64}$")
+        self.assertEqual((minimum, maximum), (1, 64))
+        self.assertIn("-", chars)
+        self.assertIn(" ", chars)
+        self.assertNotIn("\\", chars)
+
+    def test_rejects_unsupported_regexes(self) -> None:
+        for pattern in (r"^\d+$", r"^(a|b)$", r"^[a-z]+$", r"^[a-z]{2,}$", r"[a-z]{1,3}"):
+            with self.subTest(pattern=pattern):
+                self.assertIsNone(agent_tools.parse_simple_pattern(pattern))
+
+    def test_unsupported_pattern_fails_registry_validation(self) -> None:
+        registry = copy.deepcopy(_registry())
+        _tool(registry, "send_notify")["inputSchema"]["properties"]["text"]["pattern"] = r"^\d+$"
+        errors = _errors(registry)
+        self.assertTrue(_has(errors, "single char class"), errors)
 
 
 class GeneratedArtifactTests(unittest.TestCase):

@@ -978,6 +978,14 @@ end
 
 SetHttpHandler(function(req, res)
     local respond = makeResponder(res)
+    -- Read the live config once per request: probing and finishing must see the
+    -- same token, otherwise a convar rotation mid-request can 401 a request
+    -- that already passed the probe.
+    local cfg = Config()
+    -- Guards against FXServer invoking the data handler more than once, and
+    -- against a late callback after a synchronous response.  Without it a
+    -- duplicate callback would call Propose() twice for one HTTP request.
+    local handled = false
 
     -- FXServer only invokes setDataHandler when the request carries a body, so
     -- first run Handle with body=nil. It returns need_body=true only after the
@@ -991,15 +999,24 @@ SetHttpHandler(function(req, res)
             headers = req.headers,
             body = raw,
         }, {
-            cfg = Config(),
+            cfg = cfg,
             actions = AgentActions,
             policy = AgentPolicy,
         })
     end
 
     local function finish(raw)
+        if handled then return end
+        handled = true
+
         local ok, err = pcall(function()
             local result = run(raw)
+            -- raw == nil means FXServer called the handler without a body even
+            -- though the route needs one; the old readJsonBody() answered 400.
+            if result.need_body then
+                respond(400, { error = 'request body required', code = 'missing_body' })
+                return
+            end
             respond(result.status, result.body, result.headers)
         end)
         if not ok then
@@ -1008,25 +1025,27 @@ SetHttpHandler(function(req, res)
         end
     end
 
-    -- Same 16 KiB guard as before, applied before reading the stream.
-    local length = tonumber(AgentHttp.GetHeader(req.headers, 'content-length'))
-    if length and length > AgentHttp.MAX_BODY then
-        respond(413, { error = 'request body too large', code = 'body_too_large' })
-        return
-    end
-
     local probeOk, probe = pcall(run, nil)
     if not probeOk then
         print(('[custom-director] HTTP error: %s'):format(truncate(probe, 200)))
+        handled = true
         fail(respond)
         return
     end
     if not probe.need_body then
-        respond(probe.status, probe.body, probe.headers)
+        handled = true
+        local sent, sendErr = pcall(function()
+            respond(probe.status, probe.body, probe.headers)
+        end)
+        if not sent then
+            print(('[custom-director] HTTP error: %s'):format(truncate(sendErr, 200)))
+            fail(respond)
+        end
         return
     end
 
     if not pcall(function() req.setDataHandler(finish) end) then
+        handled = true
         fail(respond)
     end
 end)

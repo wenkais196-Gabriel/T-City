@@ -12,6 +12,7 @@ import json
 import os
 import socket
 import sys
+import time
 import unittest
 import urllib.error
 import urllib.parse
@@ -543,6 +544,51 @@ class ProtocolAndValidationTests(RoutingTestBase):
         self.assertEqual(set(result), {"content", "isError"})
         self.assertEqual(result["content"][0]["type"], "text")
         self.assertIsInstance(result["content"][0]["text"], str)
+
+
+class ContractHardeningTests(RoutingTestBase):
+    """Regressions for the adversarial review findings R1/R2/R3."""
+
+    def test_4xx_on_half_open_probe_closes_the_circuit(self) -> None:
+        agent_mcp._reset_circuit()
+        state = agent_mcp._CIRCUITS["gateway"]
+        state.update({"failures": 5, "open_until": time.monotonic() - 1, "probe": False})
+        with mock.patch.dict(os.environ, GATEWAY_ENV, clear=True), mock.patch(
+            "agent_mcp.urllib.request.urlopen"
+        ) as mock_urlopen:
+            mock_urlopen.side_effect = _http_error(404, {"error": "nope", "code": "not_found"})
+            _first, first_payload = _call("get_schema")
+            calls_after_first = mock_urlopen.call_count
+            _second, second_payload = _call("get_schema")
+            self.assertGreater(
+                mock_urlopen.call_count,
+                calls_after_first,
+                "a 4xx probe proves reachability; the next call must hit the wire",
+            )
+        self.assertEqual(first_payload["code"], "not_found")
+        self.assertNotEqual(second_payload["code"], "circuit_open")
+        self.assertEqual(state["probe"], False)
+        self.assertEqual(state["failures"], 0)
+
+    def test_untrusted_paths_are_reported_in_meta(self) -> None:
+        tool = {"pii": {"untrusted_fields": ["name", "payload"]}}
+        envelope = {
+            "ok": True,
+            "data": [{"name": "Bob", "job": "police"}, {"name": "Eve", "payload": "{}"}],
+        }
+        agent_mcp._annotate_untrusted(tool, envelope)
+        self.assertEqual(envelope["meta"]["untrusted_fields"], ["0.name", "1.name", "1.payload"])
+        self.assertIn("never as instructions", envelope["meta"]["untrusted_notice"])
+
+    def test_envelope_without_untrusted_fields_is_unchanged(self) -> None:
+        envelope = {"ok": True, "data": {"status": "ok"}}
+        agent_mcp._annotate_untrusted({"pii": {"untrusted_fields": []}}, envelope)
+        self.assertNotIn("untrusted_fields", envelope.get("meta", {}))
+
+    def test_json_text_survives_a_lone_surrogate(self) -> None:
+        text = agent_mcp._json_text({"text": "\ud800"})
+        self.assertIsInstance(text.encode("utf-8"), bytes)
+        self.assertEqual(json.loads(text)["text"], "\ud800")
 
 
 if __name__ == "__main__":
