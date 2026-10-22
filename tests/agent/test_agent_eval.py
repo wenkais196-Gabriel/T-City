@@ -14,6 +14,7 @@ import contextlib
 import datetime as dt
 import io
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -59,6 +60,18 @@ class TempFileTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="agent-eval-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
+        # The evaluator confines reads/writes to AGENT_EVAL_ROOT; temp files
+        # live outside the repo, so point the root at the per-test directory.
+        previous = os.environ.get("AGENT_EVAL_ROOT")
+        os.environ["AGENT_EVAL_ROOT"] = str(self.tmp)
+        self.addCleanup(self._restore_root, previous)
+
+    @staticmethod
+    def _restore_root(previous: str | None) -> None:
+        if previous is None:
+            os.environ.pop("AGENT_EVAL_ROOT", None)
+        else:
+            os.environ["AGENT_EVAL_ROOT"] = previous
 
     def write(self, name: str, text: str) -> Path:
         path = self.tmp / name
@@ -73,6 +86,12 @@ class TempFileTests(unittest.TestCase):
 
 
 class LoadRowsTests(TempFileTests):
+    def test_path_outside_root_is_rejected(self) -> None:
+        # The evaluator is agent-callable; --input/--out must not escape the
+        # configured root (this is the Sandbox/Path-Traversal guard).
+        with self.assertRaises(ValueError):
+            agent_eval.load_rows("/etc/hostname")
+
     def test_empty_file_is_an_empty_list(self) -> None:
         rows = agent_eval.load_rows(self.write("empty.jsonl", ""))
         self.assertEqual(len(rows), 0)
