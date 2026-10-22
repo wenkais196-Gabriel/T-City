@@ -34,6 +34,16 @@ QUEST_LUA = str(_ROOT / 'resources' / '[custom]' / 'custom-quest' / 'server' / '
 SHARED_MOCK = r'''
 local __test = { money = {}, dirty = {}, events = {}, decisions = {}, quests = {}, saves = {} }
 
+-- MakeChoice now requires a server-issued pending offer.
+function __seed_pending(src, q, s, d, default)
+    DecisionEngine._pending = DecisionEngine._pending or {}
+    DecisionEngine._pending[src] = {
+        questId = q, stepId = s, decisionId = d,
+        citizenid = "CID_INT_" .. tostring(src),
+        expiresAt = os.time() + 60, defaultOption = default,
+    }
+end
+
 _G.QBCore = {
     Functions = {
         GetPlayer = function(src)
@@ -358,6 +368,7 @@ DecisionEngine.Register({
     options = { { id = "opt_a", text = "Report", effects = { advance_step = true } } },
 })
 -- Player makes a choice
+__seed_pending(1, "q1", "s1", "d_cross", "opt_a")
 local ok, msg = DecisionEngine.MakeChoice(1, "q1", "s1", "d_cross", "opt_a")
 assert(ok == true, "decision failed: " .. tostring(msg))
 -- Verify decision recorded
@@ -374,6 +385,7 @@ DecisionEngine.Register({
     options = { { id = "loyal", text = "Stay Loyal" }, { id = "betray", text = "Betray" } },
 })
 -- Try injected option
+__seed_pending(1, "q1", "s1", "d_inject_test", "loyal")
 local ok, msg = DecisionEngine.MakeChoice(1, "q1", "s1", "d_inject_test", "hack_option")
 assert(ok == false, "should reject injected option")
 assert(msg:find("Invalid") ~= nil, "wrong reject msg: " .. tostring(msg))
@@ -406,6 +418,7 @@ DecisionEngine.Register({
     id = "lifecycle_d", arc_id = "civilian", chapter = 1,
     options = { { id = "accept", text = "Accept Job" } },
 })
+__seed_pending(1, "lifecycle_q", "s1", "lifecycle_d", "accept")
 local ok_d, msg_d = DecisionEngine.MakeChoice(1, "lifecycle_q", "s1", "lifecycle_d", "accept")
 assert(ok_d == true, "decision failed: " .. tostring(msg_d))
 
