@@ -207,12 +207,20 @@ class GatewayAdditiveEnvelopeTests(unittest.TestCase):
         )
         self.assertEqual(captured["status"], 503)
         body = captured["body"]
-        self.assertEqual(body["error"], "agent actions are disabled")
-        self.assertEqual(body["code"], "disabled")
+        # The wire text is fixed per code; the detailed message is logged to
+        # stderr instead of being reflected (reflected-input sink).
         self.assertIsInstance(body["error"], str)
-        self.assertIsInstance(body["code"], str)
+        self.assertTrue(body["error"])
+        self.assertNotEqual(body["error"], "agent actions are disabled")
+        self.assertEqual(body["code"], "disabled")
         self.assertEqual(body["kind"], "policy_denied")
         self.assertIs(body["retryable"], False)
+
+        agent_gateway.AgentHandler._error(
+            FakeHandler(), 400, "<script>alert(1)</script>", "validation_error"
+        )
+        self.assertNotIn("<script>", captured["body"]["error"])
+        self.assertEqual(captured["body"]["error"], "invalid request")
         self.assertNotIn("ok", body, "the error shape is only extended by kind/retryable")
 
     def test_tools_route_serves_the_runtime_registry(self) -> None:

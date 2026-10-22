@@ -70,7 +70,8 @@ def _call(name: str, arguments: dict | None = None, *, dry_run: bool | None = No
     response = agent_mcp.handle_message(
         {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params}
     )
-    assert response is not None and "result" in response, response
+    assert response is not None
+    assert "result" in response, response
     result = response["result"]
     payload = json.loads(result["content"][0]["text"])
     return result, payload

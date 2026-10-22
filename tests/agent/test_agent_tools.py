@@ -393,9 +393,12 @@ class GeneratedArtifactTests(unittest.TestCase):
         )
 
     def test_rendering_is_deterministic(self) -> None:
-        registry = _registry()
-        self.assertEqual(agent_tools.render_tools_md(registry), agent_tools.render_tools_md(registry))
-        self.assertEqual(agent_tools.render_lua(registry), agent_tools.render_lua(registry))
+        md_first = agent_tools.render_tools_md(_registry())
+        md_second = agent_tools.render_tools_md(_registry())
+        lua_first = agent_tools.render_lua(_registry())
+        lua_second = agent_tools.render_lua(_registry())
+        self.assertEqual(md_first, md_second)
+        self.assertEqual(lua_first, lua_second)
 
     def test_markdown_has_do_not_edit_header_and_tables(self) -> None:
         text = agent_tools.TOOLS_MD_PATH.read_text(encoding="utf-8")
