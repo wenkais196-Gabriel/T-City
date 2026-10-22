@@ -89,10 +89,31 @@ class LoadedRows(list):
             self.bad_samples.extend(other.bad_samples[:room])
 
 
+def _allowed_root() -> Path:
+    """Directory the CLI may read/write, from AGENT_EVAL_ROOT or the cwd.
+
+    The evaluator is meant to be callable by an agent, so a path from a prompt
+    must not be able to escape into ~/.ssh or a service unit file. Library
+    callers that pass absolute temp paths set the env var (the tests do).
+    """
+    return Path(os.environ.get("AGENT_EVAL_ROOT", Path.cwd())).resolve()
+
+
+def _contained(path: str) -> Path:
+    candidate = Path(path).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    candidate = candidate.resolve()
+    root = _allowed_root()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError(f"path escapes the allowed root {root}: {candidate}")
+    return candidate
+
+
 def _read_text(path: str) -> str:
     if path == "-":
         return sys.stdin.read()
-    return Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    return _contained(path).read_text(encoding="utf-8-sig", errors="replace")
 
 
 def load_rows(path: str | os.PathLike[str], *, warn: bool = True) -> LoadedRows:
@@ -634,9 +655,10 @@ def _rate_argument(value: str) -> float:
 
 
 def _write_text(path: Path, text: str) -> None:
-    if path.parent != Path("."):
-        path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    target = _contained(str(path))
+    if target.parent != Path("."):
+        target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -658,6 +680,11 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="export to read; repeatable; '-' reads stdin",
     )
+    parser.add_argument(
+        "--root",
+        metavar="DIR",
+        help="directory inputs/outputs must stay inside (default: AGENT_EVAL_ROOT or cwd)",
+    )
     parser.add_argument("--out", metavar="JSON", help="write the JSON report here (default: stdout)")
     parser.add_argument("--markdown", metavar="MD", help="also write a one-page Markdown report")
     parser.add_argument(
@@ -674,11 +701,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    if args.root:
+        os.environ["AGENT_EVAL_ROOT"] = args.root
+
     combined = LoadedRows()
     try:
         for path in args.input:
             combined.extend_loaded(load_rows(path))
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         print(f"agent_eval: cannot read input: {exc}", file=sys.stderr)
         return 1
 
