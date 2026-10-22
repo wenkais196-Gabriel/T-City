@@ -21,7 +21,6 @@ _G.AgentActions = AgentActions
 
 local DEFAULT_LIST_LIMIT = 20
 local MAX_LIST_LIMIT = 100
-local MAX_HTTP_BODY = 16 * 1024
 
 -- ---------------------------------------------------------------------------
 -- Convar configuration (read per request so the kill switch is live)
@@ -936,71 +935,13 @@ exports('Policy', function()
 end)
 
 -- ---------------------------------------------------------------------------
--- HTTP helpers
+-- HTTP adapter (pure routing/validation lives in server/http_api.lua)
 -- ---------------------------------------------------------------------------
 
-local function splitPath(rawPath)
-    local queryPos = rawPath:find('?', 1, true)
-    if not queryPos then return rawPath, '' end
-    return rawPath:sub(1, queryPos - 1), rawPath:sub(queryPos + 1)
-end
-
-local function urlDecode(value)
-    value = value:gsub('+', ' ')
-    return (value:gsub('%%(%x%x)', function(hex)
-        return string.char(tonumber(hex, 16))
-    end))
-end
-
-local function parseQuery(query)
-    local result = {}
-    for pair in query:gmatch('[^&]+') do
-        local equals = pair:find('=', 1, true)
-        local key, value
-        if equals then
-            key = pair:sub(1, equals - 1)
-            value = pair:sub(equals + 1)
-        else
-            key = pair
-            value = ''
-        end
-        key = urlDecode(key)
-        if key ~= '' then result[key] = urlDecode(value) end
-    end
-    return result
-end
-
-local function getHeader(req, name)
-    local headers = req.headers
-    if type(headers) ~= 'table' then return nil end
-    for key, value in pairs(headers) do
-        if type(key) == 'string' and key:lower() == name then
-            if type(value) == 'table' then return value[1] end
-            return value
-        end
-    end
-    return nil
-end
-
-local function bearerToken(req)
-    local authorization = getHeader(req, 'authorization')
-    if type(authorization) ~= 'string' then return nil end
-    local token = authorization:match('^[Bb][Ee][Aa][Rr][Ee][Rr]%s+(.+)$')
-    if not token then return nil end
-    return AgentPolicy.Trim(token)
-end
-
-local function secureEquals(a, b)
-    if type(a) ~= 'string' or type(b) ~= 'string' then return false end
-    if #a == 0 or #b == 0 then return false end
-    local diff = #a == #b and 0 or 1
-    local maxLength = math.max(#a, #b)
-    for index = 1, maxLength do
-        local byteA = index <= #a and a:byte(index) or 0
-        local byteB = index <= #b and b:byte(index) or 0
-        diff = diff | (byteA ~ byteB)
-    end
-    return diff == 0
+local AgentHttp = _G.AgentHttp
+if not AgentHttp then
+    print('[custom-director] ❌ server/http_api.lua missing')
+    return
 end
 
 local function makeResponder(res)
@@ -1031,272 +972,62 @@ local function makeResponder(res)
     end
 end
 
-local function decodeJsonBody(body)
-    if type(body) ~= 'string' or body == '' then return nil, 'request body is empty' end
-    local ok, decoded = pcall(json.decode, body)
-    if not ok or type(decoded) ~= 'table' then return nil, 'request body must be valid JSON' end
-    for key in pairs(decoded) do
-        if type(key) ~= 'string' then return nil, 'request body must be a JSON object' end
-    end
-    return decoded
-end
-
-local function readJsonBody(req, respond, callback)
-    local contentLength = tonumber(getHeader(req, 'content-length'))
-    local transferEncoding = getHeader(req, 'transfer-encoding')
-    local isChunked = type(transferEncoding) == 'string'
-        and transferEncoding:lower():find('chunked', 1, true) ~= nil
-
-    if (contentLength == nil or contentLength == 0) and not isChunked then
-        respond(400, { error = 'request body required', code = 'missing_body' })
-        return
-    end
-    if contentLength and contentLength > MAX_HTTP_BODY then
-        respond(413, { error = 'request body too large', code = 'body_too_large' })
-        return
-    end
-
-    local done = false
-    local handlerOk, handlerErr = pcall(function()
-        req.setDataHandler(function(body)
-            if done then return end
-            done = true
-
-            local ok, err = pcall(function()
-                if type(body) ~= 'string' then
-                    respond(400, { error = 'request body must be text', code = 'missing_body' })
-                    return
-                end
-                if #body > MAX_HTTP_BODY then
-                    respond(413, { error = 'request body too large', code = 'body_too_large' })
-                    return
-                end
-                local decoded, decodeErr = decodeJsonBody(body)
-                if not decoded then
-                    respond(400, { error = decodeErr, code = 'bad_request' })
-                    return
-                end
-                callback(decoded)
-            end)
-            if not ok then
-                print(('[custom-director] HTTP body handler error: %s'):format(truncate(err, 200)))
-                respond(500, { error = 'internal server error', code = 'internal_error' })
-            end
-        end)
-    end)
-    if not handlerOk then
-        print(('[custom-director] HTTP data handler registration failed: %s'):format(truncate(handlerErr, 200)))
-        respond(500, { error = 'internal server error', code = 'internal_error' })
-    end
-end
-
-local function matchRoute(path)
-    if path == '/agent/v1/act' then
-        return { name = 'act', method = 'POST' }
-    end
-    if path == '/agent/v1/policy' then
-        return { name = 'policy', method = 'GET' }
-    end
-    if path == '/agent/v1/actions' then
-        return { name = 'list', method = 'GET' }
-    end
-
-    local id = path:match('^/agent/v1/actions/(%d+)$')
-    if id then return { name = 'get', method = 'GET', id = tonumber(id) } end
-
-    id = path:match('^/agent/v1/actions/(%d+)/approve$')
-    if id then return { name = 'approve', method = 'POST', id = tonumber(id) } end
-
-    id = path:match('^/agent/v1/actions/(%d+)/reject$')
-    if id then return { name = 'reject', method = 'POST', id = tonumber(id) } end
-
-    return nil
-end
-
-local function httpStatusForResult(result)
-    if result.ok then
-        if result.status == 'pending_approval' then return 202 end
-        return 200
-    end
-
-    local code = result.code
-    if code == 'disabled' then return 503 end
-    if code == 'not_found' then return 404 end
-    if code == 'expired' then return 410 end
-    if code == 'idempotency_conflict' or code == 'invalid_status' or code == 'execution_failed' then
-        return 409
-    end
-    if code == 'db_error' or code == 'quest_catalog_unavailable' then return 500 end
-    return 400
-end
-
-local function handleAct(body, agentId, respond)
-    local actionType = body.type
-    if type(actionType) ~= 'string' then
-        respond(400, { error = 'type is required', code = 'bad_request' })
-        return
-    end
-
-    local args = body.args
-    if args == nil then args = {} end
-    if type(args) ~= 'table' then
-        respond(400, { error = 'args must be an object', code = 'bad_request' })
-        return
-    end
-
-    local dryRun = body.dry_run
-    if dryRun == nil then dryRun = false end
-    if type(dryRun) ~= 'boolean' then
-        respond(400, { error = 'dry_run must be a boolean', code = 'bad_request' })
-        return
-    end
-
-    local result = AgentActions.Propose(agentId, actionType, args, body.idempotency_key, dryRun)
-    respond(httpStatusForResult(result), result)
-end
-
-local function handleAdminAction(body, route, respond)
-    local approver, approverErr = AgentPolicy.NormalizeApprover(body.approver)
-    if not approver then
-        respond(400, { error = approverErr.message, code = approverErr.code })
-        return
-    end
-
-    local result
-    if route.name == 'approve' then
-        result = AgentActions.Approve(route.id, approver)
-    else
-        local reason = nil
-        if body.reason ~= nil then
-            local reasonErr
-            reason, reasonErr = AgentPolicy.NormalizeReason(body.reason, 255)
-            if not reason then
-                respond(400, { error = reasonErr.message, code = reasonErr.code })
-                return
-            end
-        end
-        result = AgentActions.Reject(route.id, approver, reason)
-    end
-
-    local statusCode = httpStatusForResult(result)
-    if not result.ok and result.status == 'rejected' and statusCode == 400 then
-        statusCode = 409
-    end
-    respond(statusCode, result)
-end
-
-local function dispatchHttp(req, res, respond)
-    local cfg = Config()
-    if not cfg.enabled then
-        respond(503, { error = 'agent actions are disabled', code = 'disabled' })
-        return
-    end
-    if cfg.token == '' then
-        respond(503, { error = 'agent token is not configured', code = 'agent_token_not_configured' })
-        return
-    end
-
-    local method = tostring(req.method or ''):upper()
-    local path, query = splitPath(tostring(req.path or '/'))
-    local route = matchRoute(path)
-    if not route then
-        respond(404, { error = 'not found', code = 'not_found' })
-        return
-    end
-    if route.method ~= method then
-        respond(405, { error = 'method not allowed', code = 'method_not_allowed' }, {
-            ['Allow'] = route.method,
-        })
-        return
-    end
-
-    -- Admin endpoints use a separate token. The agent token cannot approve.
-    if route.name == 'approve' or route.name == 'reject' then
-        if cfg.admin_token == '' then
-            respond(503, { error = 'admin token is not configured', code = 'admin_token_not_configured' })
-            return
-        end
-        if not secureEquals(bearerToken(req), cfg.admin_token) then
-            respond(401, { error = 'unauthorized', code = 'unauthorized' }, {
-                ['WWW-Authenticate'] = 'Bearer',
-            })
-            return
-        end
-        readJsonBody(req, respond, function(body)
-            handleAdminAction(body, route, respond)
-        end)
-        return
-    end
-
-    if not secureEquals(bearerToken(req), cfg.token) then
-        respond(401, { error = 'unauthorized', code = 'unauthorized' }, {
-            ['WWW-Authenticate'] = 'Bearer',
-        })
-        return
-    end
-
-    if route.name == 'policy' then
-        respond(200, AgentActions.Policy())
-        return
-    end
-
-    local agentId = AgentPolicy.NormalizeAgentId(getHeader(req, 'x-agent-id'))
-    if not agentId then
-        respond(400, { error = 'X-Agent-Id header is required', code = 'missing_agent_id' })
-        return
-    end
-
-    if route.name == 'act' then
-        readJsonBody(req, respond, function(body)
-            handleAct(body, agentId, respond)
-        end)
-        return
-    end
-
-    if route.name == 'get' then
-        local action, err = AgentActions.Get(route.id)
-        if err then
-            respond(500, { error = 'database unavailable', code = 'db_error' })
-            return
-        end
-        if not action or action.agent_id ~= agentId then
-            respond(404, { error = 'action not found', code = 'not_found' })
-            return
-        end
-        respond(200, { action = action })
-        return
-    end
-
-    if route.name == 'list' then
-        local queryParams = parseQuery(query)
-        local status = nil
-        if queryParams.status ~= nil then
-            local statusErr
-            status, statusErr = AgentPolicy.NormalizeStatus(queryParams.status)
-            if not status then
-                respond(400, { error = statusErr.message, code = 'bad_request' })
-                return
-            end
-        end
-        local limit = AgentPolicy.NormalizeLimit(queryParams.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT)
-        local actions, err = AgentActions.List(status, limit, agentId)
-        if not actions then
-            respond(500, { error = 'database unavailable', code = 'db_error' })
-            return
-        end
-        respond(200, { actions = actions, count = #actions })
-        return
-    end
-
-    respond(404, { error = 'not found', code = 'not_found' })
+local function fail(respond)
+    respond(500, { error = 'internal server error', code = 'internal_error' })
 end
 
 SetHttpHandler(function(req, res)
     local respond = makeResponder(res)
-    local ok, err = pcall(dispatchHttp, req, res, respond)
-    if not ok then
-        print(('[custom-director] HTTP handler error: %s'):format(truncate(err, 200)))
-        respond(500, { error = 'internal server error', code = 'internal_error' })
+
+    -- FXServer only invokes setDataHandler when the request carries a body, so
+    -- first run Handle with body=nil. It returns need_body=true only after the
+    -- same routing/auth checks the old dispatchHttp() did, and only for routes
+    -- that actually read a body. Everything else (GET /policy, /actions, 404s,
+    -- 405s, 401s, missing content-length) is answered synchronously as before.
+    local function run(raw)
+        return AgentHttp.Handle({
+            method = tostring(req.method or ''):upper(),
+            path = tostring(req.path or '/'),
+            headers = req.headers,
+            body = raw,
+        }, {
+            cfg = Config(),
+            actions = AgentActions,
+            policy = AgentPolicy,
+        })
+    end
+
+    local function finish(raw)
+        local ok, err = pcall(function()
+            local result = run(raw)
+            respond(result.status, result.body, result.headers)
+        end)
+        if not ok then
+            print(('[custom-director] HTTP error: %s'):format(truncate(err, 200)))
+            fail(respond)
+        end
+    end
+
+    -- Same 16 KiB guard as before, applied before reading the stream.
+    local length = tonumber(AgentHttp.GetHeader(req.headers, 'content-length'))
+    if length and length > AgentHttp.MAX_BODY then
+        respond(413, { error = 'request body too large', code = 'body_too_large' })
+        return
+    end
+
+    local probeOk, probe = pcall(run, nil)
+    if not probeOk then
+        print(('[custom-director] HTTP error: %s'):format(truncate(probe, 200)))
+        fail(respond)
+        return
+    end
+    if not probe.need_body then
+        respond(probe.status, probe.body, probe.headers)
+        return
+    end
+
+    if not pcall(function() req.setDataHandler(finish) end) then
+        fail(respond)
     end
 end)
 
