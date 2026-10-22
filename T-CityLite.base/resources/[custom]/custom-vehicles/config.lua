@@ -24,6 +24,10 @@ Config.Vehicles.Security = {
     -- 热线发动 / 撬锁最大物理距离（米）
     MaxInteractionDistance = tonumber(GetConvar('vehicles_max_interaction_dist', '5.0')) or 5.0,
 
+    -- 声明无主载具所有权时的最大物理距离（米）
+    -- 仅对 player_vehicles 未登记的载具（警车/任务车/NPC 车）生效
+    ClaimMaxDistance = tonumber(GetConvar('vehicles_claim_max_dist', '10.0')) or 10.0,
+
     -- 热线发动耗时（毫秒）
     HotwireDuration = tonumber(GetConvar('vehicles_hotwire_duration', '15000')) or 15000,
 

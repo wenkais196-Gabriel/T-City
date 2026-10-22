@@ -46,12 +46,18 @@ RegisterNetEvent(Config.Vehicles.Events.GIVE_KEYS, function(plate, targetId)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
-    if not plate then return end
+    if type(plate) ~= 'string' then return end
 
     -- 只有车主可以授予他人钥匙
+    local cid = Player.PlayerData.citizenid
     local owner = KeyManager.GetOwner(plate)
-    if owner and owner ~= Player.PlayerData.citizenid then
-        TriggerClientEvent('QBCore:Notify', src, '你不是车主，无法授予钥匙', 'error')
+    if owner then
+        if owner ~= cid then
+            TriggerClientEvent('QBCore:Notify', src, '你不是车主，无法授予钥匙', 'error')
+            return
+        end
+    elseif not KeyManager.HasKeys(plate, cid) then
+        -- 无主载具: 只能转授自己已持有的钥匙，防止远程为任意车牌发钥匙
         return
     end
 
@@ -79,7 +85,7 @@ RegisterNetEvent(Config.Vehicles.Events.REMOVE_KEYS, function(plate, targetId)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
-    if not plate then return end
+    if type(plate) ~= 'string' then return end
 
     local targetCitizenid
     if targetId then
@@ -91,10 +97,17 @@ RegisterNetEvent(Config.Vehicles.Events.REMOVE_KEYS, function(plate, targetId)
 
     -- 如果未指定目标，移除自己的钥匙
     local removeCid = targetCitizenid or Player.PlayerData.citizenid
+    local cid = Player.PlayerData.citizenid
+    local owner = KeyManager.GetOwner(plate)
+
+    -- 非车主只能移除自己的钥匙
+    if targetCitizenid and targetCitizenid ~= cid and owner ~= cid then
+        TriggerClientEvent('QBCore:Notify', src, '只有车主可以移除他人钥匙', 'error')
+        return
+    end
 
     -- 不能移除车主的钥匙
-    local owner = KeyManager.GetOwner(plate)
-    if owner == removeCid and removeCid ~= Player.PlayerData.citizenid then
+    if owner == removeCid and removeCid ~= cid then
         TriggerClientEvent('QBCore:Notify', src, '无法移除车主的钥匙', 'error')
         return
     end
@@ -112,6 +125,8 @@ RegisterNetEvent(Config.Vehicles.Events.CHECK_KEYS, function(plate)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+
+    if type(plate) ~= 'string' then return end
 
     local hasKey, keyType = KeyManager.HasKeys(plate, Player.PlayerData.citizenid)
     TriggerClientEvent(Config.Vehicles.Events.KEYS_UPDATED, src, {

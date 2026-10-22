@@ -343,7 +343,7 @@ QBCore.Functions.CreateCallback('qb-inventory:server:createDrop', function(sourc
         local itemsTable = setmetatable({ item }, {
             __len = function(t)
                 local length = 0
-                for _ in pairs(t) do length += 1 end
+                for _ in pairs(t) do length = length + 1 end
                 return length
             end
         })
@@ -535,14 +535,36 @@ local function getIdentifier(inventoryId, src)
     end
 end
 
+-- otherplayer-* 容器必须对应附近的在线玩家，否则客户端可伪造本事件远程搬运他人物品
+-- （警察搜身 / 抢劫等合法入口已在各自事件中校验 2.5m；管理员保留远程查看能力）
+local function validateOtherPlayerInventory(src, inventoryId)
+    if type(inventoryId) ~= 'string' or not inventoryId:find('otherplayer%-') then
+        return true
+    end
+
+    local targetId = tonumber(inventoryId:match('otherplayer%-(%d+)'))
+    if not targetId then return false end
+
+    if QBCore.Functions.HasPermission(src, 'admin') or QBCore.Functions.HasPermission(src, 'god') then
+        return true
+    end
+
+    local srcPed, targetPed = GetPlayerPed(src), GetPlayerPed(targetId)
+    if srcPed == 0 or targetPed == 0 then return false end
+    return #(GetEntityCoords(srcPed) - GetEntityCoords(targetPed)) <= 3.0
+end
+
 RegisterNetEvent('qb-inventory:server:SetInventoryData', function(fromInventory, toInventory, fromSlot, toSlot, fromAmount, toAmount)
+    if type(fromInventory) ~= 'string' or type(toInventory) ~= 'string' then return end
     if toInventory:find('shop%-') then return end
-    if not fromInventory or not toInventory or not fromSlot or not toSlot or not fromAmount or not toAmount or fromAmount < 0 or toAmount < 0 then return end
+
+    fromSlot, toSlot, fromAmount, toAmount = tonumber(fromSlot), tonumber(toSlot), tonumber(fromAmount), tonumber(toAmount)
+    if not fromSlot or not toSlot or not fromAmount or not toAmount or fromAmount < 0 or toAmount < 0 then return end
+
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-
-    fromSlot, toSlot, fromAmount, toAmount = tonumber(fromSlot), tonumber(toSlot), tonumber(fromAmount), tonumber(toAmount)
+    if not validateOtherPlayerInventory(src, fromInventory) or not validateOtherPlayerInventory(src, toInventory) then return end
 
     local fromItem = getItem(fromInventory, src, fromSlot)
     local toItem = getItem(toInventory, src, toSlot)
