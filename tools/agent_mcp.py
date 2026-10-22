@@ -1223,7 +1223,7 @@ def main() -> int:
             except (BrokenPipeError, ConnectionResetError):
                 # The host closed the pipe; that is a normal shutdown.
                 return 0
-            except OSError as exc:  # noqa: BLE001 - report, do not traceback
+            except OSError as exc:  # report, do not traceback
                 print(f"agent_mcp: stdout write failed: {type(exc).__name__}", file=sys.stderr, flush=True)
                 return 1
     return 0
