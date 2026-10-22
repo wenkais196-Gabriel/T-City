@@ -35,11 +35,12 @@
 - 执行后回读：`set_job`/`grant_item`/`remove_item`/`set_weather`/`set_time_of_day`/`set_bucket`/`set_metadata`/`set_job_duty` 都做服务端回读；失败记 `verification_failed`。
 - 拒绝审计：`agent_denials` 记录 Normalize/CheckPolicy/审批复核失败，不存参数值。
 - 效果通道 `not_yieldable` 显式失败，不降级为 fire-and-forget。
+- live 读端点是令牌桶限流（`agent_live_rate_per_min`，默认 120/min，burst 40），超限 429。
 
 ## 4. 验证现状
 
 ```
-lua5.4 tests/agent/lua/runner.lua        8 suites / 210 checks
+lua5.4 tests/agent/lua/runner.lua        8 suites / 211 checks
 python3 -m pytest -q tests/agent         203 passed
 cd T-CityLite.base && pytest -q tests/unit   262 passed
 python3 tools/agent_tools.py --check     30 tools, no drift
