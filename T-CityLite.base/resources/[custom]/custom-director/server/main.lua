@@ -281,6 +281,15 @@ local function playerItemCount(player, item)
     return tonumber(itemData.amount) or 0
 end
 
+-- GetPlayerPed returns 0 while the player is loading or already dropping, so
+-- callers must treat a missing position as "unknown", not as (0, 0, 0).
+local function playerPosition(source)
+    if not source then return nil end
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return nil end
+    return GetEntityCoords(ped)
+end
+
 local function getQuestCatalog()
     local ok, catalog = pcall(function()
         return exports['custom-quest']:GetQuestCatalog()
@@ -295,6 +304,7 @@ end
 local function buildContext(actionType, params)
     local context = {
         player = nil,
+        executor_ready = GetResourceState('custom-agent-client') == 'started',
     }
 
     -- World actions have no target player; everything below is per-player.
@@ -305,7 +315,9 @@ local function buildContext(actionType, params)
                 source = playerSource(player),
                 money = player.PlayerData and player.PlayerData.money or nil,
             }
-            if actionType == 'set_job' then
+            if actionType == 'teleport' then
+                context.position = playerPosition(playerSource(player))
+            elseif actionType == 'set_job' then
                 context.player.job = playerJob(player)
             elseif actionType == 'grant_item' then
                 context.player.item_count = playerItemCount(player, params.item) or 0
@@ -635,6 +647,49 @@ local function executeSetTimeOfDay(actionId, params)
     }
 end
 
+local function executeTeleport(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_offline', nil end
+
+    local source = player.PlayerData and tonumber(player.PlayerData.source)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    -- Captured before dispatch so the audit row records where the player was,
+    -- even when the client later acks with its own detail.
+    local from = playerPosition(source)
+
+    local callOk, ok, result, err = pcall(function()
+        return exports['custom-agent-client']:Execute(source, 'teleport', {
+            x = params.x,
+            y = params.y,
+            z = params.z,
+            heading = params.heading,
+        }, 5000, { agent_id = 'director:' .. tostring(actionId) })
+    end)
+    if not callOk then
+        -- Missing export/resource: the pcall error must not be swallowed.
+        return false, 'executor_unavailable', nil
+    end
+    if ok ~= true then
+        local code = type(err) == 'table' and err.code or nil
+        local message = type(err) == 'table' and err.message or nil
+        code = code ~= nil and tostring(code) or 'unknown'
+        if code == 'executor_disabled' then
+            return false, 'executor_disabled', nil
+        end
+        if code == 'not_yieldable' then
+            return false, 'not_yieldable: teleport must run inside a coroutine', nil
+        end
+        return false, ('execution_failed: %s: %s'):format(code, tostring(message or '')), nil
+    end
+
+    return true, nil, {
+        ack = result,
+        from = from,
+        at = os.time(),
+    }
+end
+
 local function executeAction(actionId, actionType, params)
     if actionType == 'notify' then
         return executeNotify(actionId, params)
@@ -652,6 +707,8 @@ local function executeAction(actionId, actionType, params)
         return executeSetWeather(actionId, params)
     elseif actionType == 'set_time_of_day' then
         return executeSetTimeOfDay(actionId, params)
+    elseif actionType == 'teleport' then
+        return executeTeleport(actionId, params)
     end
     return false, 'unsupported_action', nil
 end
@@ -664,6 +721,7 @@ AgentActions._Execute = {
     announce = executeAnnounce,
     set_weather = executeSetWeather,
     set_time_of_day = executeSetTimeOfDay,
+    teleport = executeTeleport,
 }
 
 -- Internal context builder for the pure-Lua harness (same contract as

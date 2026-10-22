@@ -19,6 +19,7 @@ return function(env)
     env.convars = env.convars or {}
     env.resource_states = env.resource_states or {}
     env.peds = env.peds or {}
+    env.entity_coords = env.entity_coords or {}
     env.now = env.now or 0
     env.invoking_resource = env.invoking_resource
     env.export_overrides = env.export_overrides or {}
@@ -161,6 +162,10 @@ return function(env)
 
     function _G.GetPlayerPed(source)
         return env.peds[tonumber(source) or source] or 0
+    end
+
+    function _G.GetEntityCoords(ped)
+        return env.entity_coords[tonumber(ped) or ped] or { x = 0.0, y = 0.0, z = 0.0 }
     end
 
     function _G.GetGameTimer()

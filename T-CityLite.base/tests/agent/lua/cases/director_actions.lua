@@ -1,5 +1,6 @@
 -- tests/agent/lua/cases/director_actions.lua — executor contract for
--- custom-director's set_job (L3) and grant_item (L4) actions.
+-- custom-director's set_job (L3), grant_item (L4) and teleport (L3, delegated
+-- to custom-agent-client) actions.
 --
 -- The executors live in server/main.lua; main exposes them on the internal
 -- AgentActions._Execute table so this harness can drive them against the stub
@@ -86,6 +87,7 @@ return {
             assert(type(env.actions._Execute.announce) == 'function', 'announce executor missing')
             assert(type(env.actions._Execute.set_weather) == 'function', 'set_weather executor missing')
             assert(type(env.actions._Execute.set_time_of_day) == 'function', 'set_time_of_day executor missing')
+            assert(type(env.actions._Execute.teleport) == 'function', 'teleport executor missing')
             assert(type(env.actions._Context) == 'function', 'context builder missing')
         end)
 
@@ -326,6 +328,244 @@ return {
 
             local fallback = newEnv()
             assert(fallback.actions.Policy().limits.max_announce_chars == 300, 'default cap failed')
+        end)
+
+        check('teleport_policy_requires_executor', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+
+            local definition = env.policy.ACTIONS.teleport
+            assert(type(definition) == 'table', 'teleport missing from ACTIONS')
+            assert(definition.risk == 'L3', 'teleport risk must be L3')
+            assert(definition.requires_approval == true, 'teleport must require approval')
+            assert(definition.auto_execute == false, 'teleport must never auto-execute')
+            assert(definition.blast_radius == 'single', 'teleport blast radius must be single')
+
+            local params = { citizenid = 'ABC12345', x = 100.0, y = 200.0, z = 30.0 }
+            local context = env.actions._Context('teleport', params)
+            assert(context.executor_ready == false, 'executor_ready should be false')
+            local ok, err = env.policy.CheckPolicy('teleport', params, {}, context)
+            assert(ok == false, 'policy must reject without custom-agent-client')
+            assert(err.code == 'executor_unavailable', tostring(err.code))
+        end)
+
+        check('teleport_context_position_and_preview', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.resource_states['custom-agent-client'] = 'started'
+            env.peds[7] = 99
+            env.entity_coords[99] = { x = 10.5, y = -20.25, z = 30.0 }
+
+            local params = {
+                citizenid = 'ABC12345',
+                x = 300.0,
+                y = 400.0,
+                z = 20.0,
+                heading = 90.0,
+            }
+            local context = env.actions._Context('teleport', params)
+            assert(context.executor_ready == true, 'executor_ready should be true')
+            assert(context.position and context.position.x == 10.5,
+                'context.position must be the player position')
+            assert(context.position.y == -20.25 and context.position.z == 30.0,
+                'context.position y/z mismatch')
+
+            local preview = env.policy.Preview('teleport', params, context, {})
+            assert(preview.citizenid == 'ABC12345', 'preview citizenid missing')
+            assert(preview.target.x == 300.0 and preview.target.y == 400.0
+                and preview.target.z == 20.0, 'preview.target mismatch')
+            assert(preview.target.heading == 90.0, 'preview.target.heading missing')
+            assert(preview.from.x == 10.5 and preview.from.z == 30.0, 'preview.from mismatch')
+
+            local ok, err = env.policy.CheckPolicy('teleport', params, {}, context)
+            assert(ok == true, tostring(err and err.code))
+        end)
+
+        check('teleport_success_keeps_ack_and_from', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.resource_states['custom-agent-client'] = 'started'
+            env.peds[7] = 99
+            env.entity_coords[99] = { x = 1.0, y = 2.0, z = 3.0 }
+
+            local seen = nil
+            env.export_overrides['custom-agent-client'] = {
+                Execute = function(source, action, payload, timeoutMs, opts)
+                    seen = {
+                        source = source,
+                        action = action,
+                        payload = payload,
+                        timeoutMs = timeoutMs,
+                        opts = opts,
+                    }
+                    return true, { request_id = 'req-1', status = 'ok' }
+                end,
+            }
+
+            local ok, err, result = env.actions._Execute.teleport(42, {
+                citizenid = 'ABC12345',
+                x = 300.0,
+                y = 400.0,
+                z = 20.0,
+                heading = 90.0,
+            })
+            assert(ok == true, tostring(err))
+            assert(result.ack.request_id == 'req-1' and result.ack.status == 'ok',
+                'ack must be preserved in result.ack')
+            assert(result.from.x == 1.0 and result.from.y == 2.0 and result.from.z == 3.0,
+                'from must be the pre-execution position')
+            assert(type(result.at) == 'number', 'at timestamp missing')
+
+            assert(seen.source == 7, 'wrong source')
+            assert(seen.action == 'teleport', 'wrong action')
+            assert(seen.payload.x == 300.0 and seen.payload.y == 400.0
+                and seen.payload.z == 20.0 and seen.payload.heading == 90.0,
+                'payload mismatch')
+            assert(seen.timeoutMs == 5000, 'timeout must be 5000ms')
+            assert(seen.opts.agent_id == 'director:42', 'agent_id mismatch')
+        end)
+
+        check('teleport_timeout_is_execution_failed', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.export_overrides['custom-agent-client'] = {
+                Execute = function()
+                    return false, nil, { code = 'timeout', message = 'no ack within 5000ms' }
+                end,
+            }
+            local ok, err = env.actions._Execute.teleport(1, {
+                citizenid = 'ABC12345',
+                x = 1.0,
+                y = 2.0,
+                z = 3.0,
+            })
+            assert(ok == false, 'timeout must fail')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+            assert(tostring(err):match('timeout'), tostring(err))
+        end)
+
+        check('teleport_executor_disabled_is_reported', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.export_overrides['custom-agent-client'] = {
+                Execute = function()
+                    return false, nil, { code = 'executor_disabled', message = 'channel disabled' }
+                end,
+            }
+            local ok, err = env.actions._Execute.teleport(1, {
+                citizenid = 'ABC12345',
+                x = 1.0,
+                y = 2.0,
+                z = 3.0,
+            })
+            assert(ok == false, 'disabled executor must fail')
+            assert(err == 'executor_disabled', tostring(err))
+        end)
+
+        check('teleport_not_yieldable_mentions_coroutine', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.export_overrides['custom-agent-client'] = {
+                Execute = function()
+                    return false, nil, { code = 'not_yieldable', message = 'needs a coroutine' }
+                end,
+            }
+            local ok, err = env.actions._Execute.teleport(1, {
+                citizenid = 'ABC12345',
+                x = 1.0,
+                y = 2.0,
+                z = 3.0,
+            })
+            assert(ok == false, 'not_yieldable must fail')
+            assert(tostring(err):match('^not_yieldable'), tostring(err))
+            assert(tostring(err):match('coroutine'), tostring(err))
+        end)
+
+        check('teleport_throwing_export_is_executor_unavailable', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.export_overrides['custom-agent-client'] = {
+                Execute = function()
+                    error('custom-agent-client export failed')
+                end,
+            }
+            local ok, err = env.actions._Execute.teleport(1, {
+                citizenid = 'ABC12345',
+                x = 1.0,
+                y = 2.0,
+                z = 3.0,
+            })
+            assert(ok == false, 'throwing export must fail')
+            assert(err == 'executor_unavailable', tostring(err))
+        end)
+
+        check('teleport_normalize_rejects_bad_coordinates', function()
+            local env = newEnv()
+            local bad = {
+                { x = 9000.0, y = 0.0, z = 0.0, label = 'x out of bounds' },
+                { x = 0.0, y = -5000.0, z = 0.0, label = 'y out of bounds' },
+                { x = 0.0, y = 0.0, z = -500.0, label = 'z out of bounds' },
+                { x = 0 / 0, y = 0.0, z = 0.0, label = 'x NaN' },
+                { x = 0.0, y = math.huge, z = 0.0, label = 'y +inf' },
+                { x = 0.0, y = 0.0, z = -math.huge, label = 'z -inf' },
+            }
+            for _, case in ipairs(bad) do
+                local normalized, err = env.policy.Normalize('teleport', {
+                    citizenid = 'ABC12345',
+                    x = case.x,
+                    y = case.y,
+                    z = case.z,
+                })
+                assert(normalized == nil, case.label .. ' must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    case.label .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local missing, missingErr = env.policy.Normalize('teleport', { citizenid = 'ABC12345' })
+            assert(missing == nil, 'missing coordinates must be rejected')
+            assert(missingErr.code == 'invalid_params', tostring(missingErr.code))
+
+            local edge = env.policy.Normalize('teleport', {
+                citizenid = 'ABC12345',
+                x = -4500,
+                y = 8500,
+                z = 3000,
+                heading = 360,
+            })
+            assert(edge and edge.x == -4500 and edge.y == 8500 and edge.z == 3000,
+                'map bounds must be inclusive')
+            assert(edge.heading == 360, 'heading 360 must be accepted')
+        end)
+
+        check('teleport_normalize_rejects_bad_heading', function()
+            local env = newEnv()
+            local bad = { -1, 361, 0 / 0, math.huge, '90' }
+            for _, heading in ipairs(bad) do
+                local normalized, err = env.policy.Normalize('teleport', {
+                    citizenid = 'ABC12345',
+                    x = 1.0,
+                    y = 2.0,
+                    z = 3.0,
+                    heading = heading,
+                })
+                assert(normalized == nil, 'heading ' .. tostring(heading) .. ' must be rejected')
+                assert(err and err.code == 'invalid_params', tostring(err and err.code))
+            end
+        end)
+
+        check('teleport_normalize_rejects_unknown_field', function()
+            local env = newEnv()
+            local normalized, err = env.policy.Normalize('teleport', {
+                citizenid = 'ABC12345',
+                x = 1.0,
+                y = 2.0,
+                z = 3.0,
+                weapon = 'WEAPON_CARBINERIFLE',
+            })
+            assert(normalized == nil, 'unknown field must be rejected')
+            assert(err and err.code == 'invalid_params', tostring(err and err.code))
+            assert(tostring(err.message):match('unknown field weapon'), tostring(err.message))
         end)
 
         return {

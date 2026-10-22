@@ -89,7 +89,7 @@ check('preview_offline_player',
     noPlayerPreview.player_found == false and noPlayerPreview.account_exists == false,
     'offline preview must be explicit')
 
-local unknownPreview, unknownPreviewErr = AgentPolicy.Preview('teleport', {}, context, cfg)
+local unknownPreview, unknownPreviewErr = AgentPolicy.Preview('delete_player', {}, context, cfg)
 check('preview_unknown_action', unknownPreview == nil and unknownPreviewErr.code == 'unsupported_action')
 
 local noCatalogPolicy, noCatalogErr = AgentPolicy.CheckPolicy('start_quest', {

@@ -2,9 +2,9 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope covers eight actions (five player-scoped
+risky actions and an audit row. Scope covers nine actions (six player-scoped
 plus three L2 world/presentation actions); there is no LLM integration. Adding
-the L2 actions did not change `schema_version` (still `1`).
+the L2 actions and `teleport` did not change `schema_version` (still `1`).
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -25,6 +25,7 @@ the L2 actions did not change `schema_version` (still `1`).
 | `add_money` | L4 经济 | `citizenid`, `account`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddMoney(account, amount, 'agent_action:<id>')` + delta verification |
 | `start_quest` | L3 任务 | `citizenid`, `quest_id` | `pending_approval` | **always** | `exports['custom-quest']:TriggerQuest(source, quest_id)` |
 | `set_job` | L3 职业 | `citizenid`, `job`, `grade?` | `pending_approval` | **always** | `Player.Functions.SetJob(job, grade)` + job/grade read-back verification |
+| `teleport` | L3 位置 | `citizenid`, `x`, `y`, `z`, `heading?` | `pending_approval` | **always** | `exports['custom-agent-client']:Execute(source, 'teleport', {x,y,z,heading}, 5000, {agent_id='director:<id>'})` + client ack |
 | `grant_item` | L4 物品 | `citizenid`, `item`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddItem(item, amount)` + inventory delta verification |
 
 Anything else is rejected with `code: "unsupported_action"`.
@@ -56,6 +57,9 @@ approves every broadcast/weather/time change before it runs.
 | `start_quest.quest_id` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `GetQuestCatalog` |
 | `set_job.job` | 1–64 chars, `[A-Za-z0-9_.-]`, lowercased; must exist in `QBCore.Shared.Jobs` |
 | `set_job.grade` | optional integer `0..100`, default `0`; must exist in `jobs[job].grades` when that table is present |
+| `teleport.x` / `teleport.y` | finite number within `-4500..8500` (GTA map bounds; NaN/±inf rejected) |
+| `teleport.z` | finite number within `-200..3000` (GTA map bounds; NaN/±inf rejected) |
+| `teleport.heading` | optional finite number `0..360`; omitted when not supplied |
 | `grant_item.item` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `QBCore.Shared.Items` |
 | `grant_item.amount` | integer `1..agent_actions_max_item_amount` (default 50, clamped 1..1000) |
 | `grant_item.reason` | 1–128 chars, no C0 controls |
@@ -64,8 +68,8 @@ approves every broadcast/weather/time change before it runs.
 
 Unknown keys inside `args` are dropped for `notify`, `add_money` and
 `start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
-`announce`, `set_weather` and `set_time_of_day`. Unknown action types are
-rejected. There is no client-side validation path.
+`announce`, `set_weather`, `set_time_of_day` and `teleport`. Unknown action
+types are rejected. There is no client-side validation path.
 
 ---
 
@@ -284,6 +288,26 @@ while building the preview; it is omitted when the resource is unavailable.
 
 No `before` is recorded: this slice does not read the weathersync clock back.
 
+### 3.9 `teleport`
+
+```json
+{
+  "action_type": "teleport",
+  "risk": "L3",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "target": { "x": 300.0, "y": 400.0, "z": 20.0, "heading": 90.0 },
+  "from": { "x": 10.5, "y": -20.25, "z": 30.0 }
+}
+```
+
+`target.heading` is absent when the caller did not supply one. `from` is the
+live `GetEntityCoords(GetPlayerPed(source))` captured while building context
+(or absent when `GetPlayerPed` returns `0`, e.g. the player is still loading);
+it is advisory and may be stale by approval time.
+
 ---
 
 ## 4. Status lifecycle
@@ -296,7 +320,7 @@ notify (dry_run = false)
   propose ──► approved ──► executed
                        └─► failed             (notify/AddMoney/quest execution error)
 
-add_money / start_quest / set_job / grant_item / announce / set_weather / set_time_of_day (dry_run = false)
+add_money / start_quest / set_job / grant_item / announce / set_weather / set_time_of_day / teleport (dry_run = false)
   propose ──► pending_approval ──► approved ──► executed
                               │             └─► failed
                               ├─► rejected              (operator reject)
@@ -409,7 +433,29 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 - An `announce` that reaches zero players is `executed` with
   `result.delivered = 0`; that is a normal result, not a failure.
 
-### 5.8 Approval matrix
+### 5.8 Teleport / executor dependency
+
+- `teleport` is **L3** and `blast_radius = "single"`: it moves exactly one
+  player. Like every non-notify action it always goes through human approval.
+- Propose **and** Approve require
+  `GetResourceState('custom-agent-client') == 'started'`; otherwise policy
+  rejects with `executor_unavailable` (a pending row is rejected at approval
+  time).
+- `x`/`y`/`z` are validated by `policy.lua` against the same GTA map bounds
+  used by the effect channel, so an out-of-bounds or non-finite value never
+  reaches `custom-agent-client`. `heading` is optional and must be `0..360`.
+- Unknown fields are rejected (`invalid_params`); the only accepted keys are
+  `citizenid`, `x`, `y`, `z` and `heading`.
+- The executor can still refuse at dispatch time: effect channel disabled
+  (`executor_disabled`), no `tcity:agent:ready` handshake
+  (`handshake_missing`), target dropped (`player_offline`), or no client ack
+  within 5 s (`timeout`). Those become execution failures; the director does
+  not retry automatically.
+- A dispatch must run on a coroutine (the HTTP request handler or a
+  `CreateThread`). A caller outside a coroutine gets `not_yieldable` and no
+  client event is sent.
+
+### 5.9 Approval matrix
 
 | Action | Risk | Auto-execute | Human approval | Budget / cap |
 |:---|:---|:---|:---|:---|
@@ -419,13 +465,15 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 | `set_time_of_day` | L2 | no | **always** | weathersync started + `0..23` / `0..59`; `blast_radius = world` |
 | `start_quest` | L3 | no | **always** | quest catalog |
 | `set_job` | L3 | no | **always** | `QBCore.Shared.Jobs` + grades |
+| `teleport` | L3 | no | **always** | `custom-agent-client` started + map bounds + client ack (5 s) |
 | `add_money` | L4 | no | **always** | `max_money` + daily budget |
 | `grant_item` | L4 | no | **always** | `max_item_amount` only |
 
 `blast_radius` is `world` only for the three L2 actions; all other actions are
-player-scoped. `agent_actions_enabled = 0` disables every action. A proposal
-rejected by policy before persistence is not an approval-matrix exception: it
-never executes.
+player-scoped (and only `teleport` sets `single` explicitly).
+`agent_actions_enabled = 0` disables every action. A proposal rejected by
+policy before persistence is not an approval-matrix exception: it never
+executes.
 
 ---
 
@@ -453,7 +501,7 @@ never executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `grant_item` |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `teleport` \| `grant_item` |
 | `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
@@ -505,6 +553,35 @@ This is an L4 action: it never auto-executes, even if `dry_run` is false.
    equal the requested `job`/`grade`.
 4. On mismatch, mark `failed` with a `verification_failed` message. **No
    automatic rollback**; the previous job is in the audit `result.before`.
+
+This is an L3 action: it never auto-executes, even if `dry_run` is false.
+
+### `teleport`
+
+1. Re-resolve the online player and read `source = Player.PlayerData.source`.
+2. Capture `from = GetEntityCoords(GetPlayerPed(source))` for the audit result;
+   it is absent when the ped is `0` (loading/dropping).
+3. Dispatch
+   `exports['custom-agent-client']:Execute(source, 'teleport', { x, y, z,
+   heading }, 5000, { agent_id = 'director:<id>' })`.
+4. Success requires the export's first return value to be `true`. The success
+   `result` is `{ ack, from, at }`: `ack` is the effect channel's result table
+   (including its request id and client detail), `from` is the pre-dispatch
+   position and `at` is the audit timestamp.
+5. Failure mapping:
+   - `executor_disabled` → `executor_disabled`;
+   - `not_yieldable` → `not_yieldable: teleport must run inside a coroutine`;
+   - `timeout`, `player_offline`, `handshake_missing`, `rate_limited`,
+     `too_many_inflight`, `client_rejected`, `client_failed` and any other
+     executor code → `execution_failed: <code>: <message>`;
+   - a thrown export reference/call (resource or export missing) →
+     `executor_unavailable`.
+
+   Every failure marks the row `failed` with that text in `error` and
+   `result.error`; no automatic retry is queued. The director does not verify
+   the final position or interpret `ack.detail`; the client's `ok` ack is the
+   authority for that leg. `custom-agent-client` must have
+   `agent_effect_enabled = 1` and a live `tcity:agent:ready` session.
 
 This is an L3 action: it never auto-executes, even if `dry_run` is false.
 
@@ -581,6 +658,7 @@ appear for action results). No stack traces.
 | `item_not_found` | 400 | Item not in `QBCore.Shared.Items` |
 | `text_too_long` | 400 | Notify/announce text over cap |
 | `weather_sync_unavailable` | 400 | `qb-weathersync` is not started |
+| `executor_unavailable` | 400 | `custom-agent-client` is not started (teleport) |
 | `not_found` | 404 | Unknown route or own-row id not found |
 | `method_not_allowed` | 405 | Wrong method (`Allow` set) |
 | `idempotency_conflict` | 409 | Key reused with different action/params |
@@ -598,6 +676,12 @@ Policy rejection at **proposal** time returns the policy code; policy rejection
 at **approval** time also marks the row `rejected` and returns `409` when the
 underlying code is a `400`-class policy code.
 
+Teleport dispatch failures (`executor_disabled`, `not_yieldable`, `timeout`,
+`handshake_missing`, ...) are wrapped by the broker: HTTP callers see
+`execution_failed` (409) with the executor code embedded in the `error` text.
+At propose/approve time, a stopped `custom-agent-client` is a policy rejection
+with `executor_unavailable`.
+
 ---
 
 ## 10. Security invariants
@@ -613,8 +697,8 @@ underlying code is a `400`-class policy code.
    trusted proxy if needed. CORS is not enabled.
 9. No automatic rollback of economy mutations; failures are audited loudly.
 10. `add_money`, `start_quest`, `set_job`, `grant_item`, `announce`,
-    `set_weather` and `set_time_of_day` always require `pending_approval`,
-    regardless of the proposing agent.
+    `set_weather`, `set_time_of_day` and `teleport` always require
+    `pending_approval`, regardless of the proposing agent.
 
 ---
 
@@ -648,5 +732,8 @@ underlying code is a `400`-class policy code.
 - World-state/atmosphere/scene/NPC actions beyond `announce`, weather and time
   (L2+ from the design doc).
 - Undo/rollback for money; compensation flows for quests.
+- Teleport position verification, bucket/combat/vehicle guards and named
+  locations: this slice sends exact coordinates and trusts the client's `ok`
+  ack; the full v2.1 teleport contract is still open.
 - LLM/Hub implementation; this resource only accepts proposals.
 - Offline-player money operations (QB `GetPlayerByCitizenId` is online-only).
