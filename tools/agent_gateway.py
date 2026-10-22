@@ -456,8 +456,10 @@ def main() -> int:
         return 1
 
     print(
-        f"agent_gateway: read-only API listening on http://{host}:{port} "
-        f"(schema_version={agent_data.SCHEMA_VERSION}, backend={agent_data.backend_name()})",
+        f"agent_gateway: read-only API listening on {host}:{port} "
+        f"(schema_version={agent_data.SCHEMA_VERSION}, backend={agent_data.backend_name()}); "
+        "this listener is plaintext and loopback-only - put a TLS proxy in front "
+        "of it before exposing it beyond 127.0.0.1",
         file=sys.stderr,
         flush=True,
     )
