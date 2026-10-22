@@ -9,13 +9,14 @@ test_decision_engine.py — Decision Engine 单元测试
 """
 
 import os
+from pathlib import Path
+BASE_DIR = str(Path(__file__).resolve().parents[3])
 import subprocess
 import tempfile
-from pathlib import Path
 import pytest
 
 
-DECISION_ENGINE_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[custom]' / 'story-engine' / 'server' / 'decision_engine.lua')
+DECISION_ENGINE_LUA = BASE_DIR + '//resources/[custom]/story-engine/server/decision_engine.lua'
 
 
 def run_decision_test(test_code: str) -> dict:
@@ -50,6 +51,15 @@ end
 -- Exports mocks (replaced in code via string substitution)
 __custom_logs = { LogSecurity = function(self, category, message, color) end }
 __custom_quest = { CompleteStep = function(self, source, questId, stepId) return true, "ok" end }
+
+-- Test helper: MakeChoice now requires a server-issued pending offer.
+function __seed_pending(src, q, s, d, cid, default)
+    DecisionEngine._pending = DecisionEngine._pending or {}
+    DecisionEngine._pending[src] = {
+        questId = q, stepId = s, decisionId = d, citizenid = cid,
+        expiresAt = os.time() + 60, defaultOption = default,
+    }
+end
 
 -- json mock (simple)
 json = { encode = function(t) return "{}" end }
@@ -431,6 +441,7 @@ DecisionEngine.Register({
     },
 })
 __storydb_calls = {}
+__seed_pending(1, "quest1", "step1", "mychoice", "CID_1", "opt_yes")
 local ok, msg = DecisionEngine.MakeChoice(1, "quest1", "step1", "mychoice", "opt_yes")
 assert(ok == true, "MakeChoice failed: " .. tostring(msg))
 assert(msg == "Choice recorded", "unexpected message: " .. tostring(msg))
@@ -454,6 +465,7 @@ DecisionEngine.Register({
     chapter = 1,
     options = { { id = "opt", text = "X" } },
 })
+__seed_pending(0, "q", "s", "any", "CID_0", "opt")
 local ok, msg = DecisionEngine.MakeChoice(0, "q", "s", "any", "opt")
 assert(ok == false, "should fail for source 0")
 assert(msg == "Player not found", "wrong message: " .. tostring(msg))
@@ -464,6 +476,7 @@ assert(msg == "Player not found", "wrong message: " .. tostring(msg))
         """Valid player but unknown decisionId → 'Decision not found'."""
         result = run_decision_test("""
 DecisionEngine._registry = {}
+__seed_pending(1, "q", "s", "no_such_decision", "CID_1", "opt")
 local ok, msg = DecisionEngine.MakeChoice(1, "q", "s", "no_such_decision", "opt")
 assert(ok == false, "should fail for unknown decision")
 assert(msg == "Decision not found", "wrong message: " .. tostring(msg))
@@ -483,6 +496,7 @@ DecisionEngine.Register({
         { id = "opt_b", text = "B" },
     },
 })
+__seed_pending(1, "q", "s", "locked", "CID_1", "opt_a")
 local ok, msg = DecisionEngine.MakeChoice(1, "q", "s", "locked", "opt_injected")
 assert(ok == false, "should reject injected option")
 assert(msg == "Invalid choice option", "wrong message: " .. tostring(msg))
@@ -503,6 +517,7 @@ DecisionEngine.Register({
     },
 })
 __storydb_calls = {}
+__seed_pending(2, "quest2", "step2", "two_opts", "CID_2", "opt_first")
 local ok, msg = DecisionEngine.MakeChoice(2, "quest2", "step2", "two_opts", "opt_second")
 assert(ok == true, "MakeChoice failed: " .. tostring(msg))
 assert(#__storydb_calls == 1, "RecordChoice should be called")
@@ -521,6 +536,7 @@ DecisionEngine.Register({
     chapter = 1,
     options = {},
 })
+__seed_pending(1, "q", "s", "no_opts", "CID_1", "anything")
 local ok, msg = DecisionEngine.MakeChoice(1, "q", "s", "no_opts", "anything")
 assert(ok == false, "should reject when no options defined")
 assert(msg == "Invalid choice option", "wrong message: " .. tostring(msg))
@@ -537,6 +553,7 @@ DecisionEngine.Register({
     chapter = 1,
     -- options is nil (not provided)
 })
+__seed_pending(1, "q", "s", "nil_opts", "CID_1", "anything")
 local ok, msg = DecisionEngine.MakeChoice(1, "q", "s", "nil_opts", "anything")
 assert(ok == false, "should reject when options is nil")
 assert(msg == "Invalid choice option", "wrong message: " .. tostring(msg))
@@ -558,6 +575,7 @@ __custom_quest.CompleteStep = function(self, source, questId, stepId)
     return false, "Step engine down"
 end
 __storydb_calls = {}
+__seed_pending(1, "q", "s", "broken", "CID_1", "opt")
 local ok, msg = DecisionEngine.MakeChoice(1, "q", "s", "broken", "opt")
 assert(ok == false, "should fail when CompleteStep fails")
 assert(msg == "Step engine down", "wrong error message: " .. tostring(msg))
@@ -586,6 +604,7 @@ DecisionEngine.Register({
     } },
 })
 __storydb_calls = {}
+__seed_pending(1, "q", "s", "flags_choice", "CID_1", "flag_opt")
 local ok, msg = DecisionEngine.MakeChoice(1, "q", "s", "flags_choice", "flag_opt")
 assert(ok == true, "MakeChoice with flags failed: " .. tostring(msg))
 assert(#__storydb_calls == 1)
@@ -602,6 +621,7 @@ DecisionEngine.Register({
     chapter = 1,
     options = { { id = "opt", text = "X" } },
 })
+__seed_pending(999, "q", "s", "exists", "CID_999", "opt")
 local ok, msg = DecisionEngine.MakeChoice(999, "q", "s", "exists", "opt")
 assert(ok == false, "should fail for unknown player (999)")
 assert(msg == "Player not found", "wrong: " .. tostring(msg))
@@ -618,10 +638,10 @@ DecisionEngine.Register({
     chapter = 1,
     options = { { id = "o", text = "X" } },
 })
--- nil source → GetPlayer(nil) returns nil → "Player not found"
+-- nil source cannot have a pending offer → "No active decision"
 local ok, msg = DecisionEngine.MakeChoice(nil, "q", "s", "d", "o")
 assert(ok == false, "should fail for nil source")
-assert(msg == "Player not found", "wrong: " .. tostring(msg))
+assert(msg == "No active decision", "wrong: " .. tostring(msg))
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
@@ -629,6 +649,7 @@ assert(msg == "Player not found", "wrong: " .. tostring(msg))
         """nil decisionId → lookup nil key → nil → 'Decision not found'."""
         result = run_decision_test("""
 DecisionEngine._registry = {}
+__seed_pending(1, "q", "s", nil, "CID_1", "opt")
 local ok, msg = DecisionEngine.MakeChoice(1, "q", "s", nil, "opt")
 assert(ok == false, "should fail for nil decisionId")
 assert(msg == "Decision not found", "wrong: " .. tostring(msg))
