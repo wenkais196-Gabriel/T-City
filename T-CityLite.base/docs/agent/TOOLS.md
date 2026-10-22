@@ -3,7 +3,7 @@
 
 **Generated file — DO NOT EDIT.** Source: `tools/agent_tools.json` (registry_version `1.1.0`, schema_version `1`).
 
-23 tools: 16 active, 7 planned, 0 deprecated. Only `active` tools are advertised to agents.
+23 tools: 18 active, 5 planned, 0 deprecated. Only `active` tools are advertised to agents.
 
 ## Routing table
 
@@ -28,10 +28,10 @@
 | 17 | `send_announce` | planned | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
 | 18 | `set_weather` | planned | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_weather |
 | 19 | `set_time_of_day` | planned | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_time_of_day |
-| 20 | `set_player_job` | planned | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | set_player_job |
+| 20 | `set_player_job` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | set_player_job |
 | 21 | `teleport_player` | planned | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | teleport_player |
 | 22 | `spawn_vehicle` | planned | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_timeline | — |
-| 23 | `grant_player_item` | planned | effect | director | default | POST `/agent/v1/act` | L4 | yes | required | supported | get_player_snapshot | — |
+| 23 | `grant_player_item` | active | effect | director | default | POST `/agent/v1/act` | L4 | yes | required | supported | get_player_snapshot | — |
 
 ## Risk and approval table
 

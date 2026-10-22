@@ -548,3 +548,22 @@ TTL 线程 30s tick：过期 → `delete_vehicle(temp=true)`；玩家在车内�
 **依赖顺序**：1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12/13。6/7/8 可与 4/5 并行，但必须在 L3/L4 动作前完成。
 
 **验收基线**：`lua5.4 tests/agent/test_agent_actions_policy.lua`、`luac5.4 -p` 所有新增 server 文件、v1 live smoke，以及每动作至少 1 正例 + 2 负例（越界/离线/验真失败）。批量与熔断需脚本化失败注入，不能只靠人工点。
+
+---
+
+## 13. 实现回填 · 第一片（2026-10-22）
+
+本片只增加两个动作，**没有**做声明式重构：`policy.lua` 仍是 if-chain。理由：现有 3 个动作的校验逻辑已被 selftest 与生产使用验证，一次性重写会把"已验证"换成"未验证"；先以增量方式补齐高风险动作，等动作数逼近 10 个再重构，收益更大、回归面更小。
+
+已落地：
+- `set_job`（L3，必须人审）：`job` 必须在 `QBCore.Shared.Jobs`，`grade` 必须在职业的 grades 中；`SetJob` 返回 true 后**回读** `PlayerData.job.name` 与 `grade.level`，不一致记 `verification_failed`；结果含 `before/after`。
+- `grant_item`（L4，必须人审）：`item` 必须在 `QBCore.Shared.Items`；`AddItem` 后回读数量差必须等于 `amount`；上限用 `agent_actions_max_item_amount`（默认 50，clamp 1..1000），不参与 `add_money` 的每日预算。
+- 两者都**严格拒绝未知字段**（旧 3 个动作保持"丢弃未知字段"的历史行为，未改）。
+
+偏差：
+1. 执行失败仍映射为 API `code=execution_failed`，`verification_failed` 只出现在 `error`/`result.error` 与审计里；未新增失败码，避免改变既有 HTTP 映射。
+2. 未预检负重/槽位，`AddItem` 返回 false 即 `execution_failed`；不做 undo。
+3. `grant_item.reason` 严格拒绝 tab/LF/CR（比 `add_money.reason` 更严，后者暂未收紧）。
+4. 未做真实 FXServer/QBCore 联机冒烟。
+
+下一步：`set_job`/`grant_item` 已在 registry 由 `planned` 改为 `active`（23 工具 / 18 active），MCP 可直接调用；剩余 5 个动作（`send_announce`/`set_weather`/`set_time_of_day`/`teleport_player`/`spawn_vehicle`）留待后续。

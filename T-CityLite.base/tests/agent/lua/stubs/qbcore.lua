@@ -16,6 +16,7 @@ return function(env)
                 citizenid = citizenid,
                 money = money or { cash = 0, bank = 0, crypto = 0 },
                 job = { name = 'unemployed', grade = { level = 0 } },
+                items = {},
             },
             Functions = {},
         }
@@ -57,6 +58,54 @@ return function(env)
 
         function player.Functions.Save()
             env.log[#env.log + 1] = { save = citizenid }
+            return true
+        end
+
+        -- Mirrors qb-core player.lua: an unknown job returns false, while an
+        -- unknown grade still applies the job at level 0.
+        function player.Functions.SetJob(job, grade)
+            job = tostring(job):lower()
+            local definition = (env.qb.Shared.Jobs or {})[job]
+            if not definition then return false end
+            local gradeKey = tostring(grade or '0')
+            player.PlayerData.job = {
+                name = job,
+                grade = { level = 0, name = 'No Grades', payment = 30 },
+            }
+            local gradeInfo = definition.grades and definition.grades[gradeKey]
+            if gradeInfo then
+                player.PlayerData.job.grade = {
+                    level = tonumber(gradeKey),
+                    name = gradeInfo.name,
+                    payment = gradeInfo.payment or 0,
+                }
+            end
+            env.log[#env.log + 1] = {
+                set_job = citizenid,
+                job = job,
+                grade = tonumber(gradeKey),
+            }
+            return true
+        end
+
+        -- qb-inventory AddPlayerMethod shape: GetItemByName returns nil when the
+        -- player holds none, otherwise { amount = <count> }.
+        function player.Functions.GetItemByName(item)
+            local held = player.PlayerData.items[item]
+            if held == nil then return nil end
+            if type(held) == 'table' then return held end
+            return { name = item, amount = held }
+        end
+
+        function player.Functions.AddItem(item, amount)
+            local definition = (env.qb.Shared.Items or {})[tostring(item):lower()]
+            if not definition then return false end
+            local held = player.PlayerData.items[item]
+            if type(held) == 'table' then
+                held.amount = (held.amount or 0) + amount
+            else
+                player.PlayerData.items[item] = (held or 0) + amount
+            end
             return true
         end
 

@@ -28,12 +28,15 @@ function AgentActionsSelfTest.Run()
         max_money = 1000,
         daily_budget = 5000,
         max_notify_chars = 300,
+        max_item_amount = 50,
         ttl_seconds = 900,
     }
 
     local player = {
         source = 5,
         money = { cash = 100, bank = 900, crypto = 0 },
+        job = { name = 'unemployed', grade = { level = 0 } },
+        item_count = 2,
     }
     local context = {
         player = player,
@@ -42,6 +45,18 @@ function AgentActionsSelfTest.Run()
             delivery = {
                 { id = 'delivery_001', title = 'First Delivery', category = 'delivery' },
             },
+        },
+        jobs = {
+            police = {
+                label = 'Police',
+                grades = {
+                    ['0'] = { name = 'Cadet', payment = 30 },
+                    ['2'] = { name = 'Officer', payment = 50 },
+                },
+            },
+        },
+        items = {
+            bread = { name = 'bread', label = 'Bread' },
         },
     }
 
@@ -209,6 +224,176 @@ function AgentActionsSelfTest.Run()
         quest_id = 'flat_002',
     }, { player = player, quests = flatCatalog }, cfg)
     check('quest_catalog_flat_array', flatPreview.quest_found == true, 'flat catalog should be indexed')
+
+    -- set_job ---------------------------------------------------------------
+    local job, jobErr = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'Police',
+        grade = 2,
+    }, cfg)
+    check('job_normalizes',
+        job ~= nil and job.job == 'police' and job.grade == 2,
+        jobErr and jobErr.message or 'ok')
+
+    local defaultJob, defaultJobErr = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+    }, cfg)
+    check('job_grade_defaults_to_zero',
+        defaultJob ~= nil and defaultJob.grade == 0,
+        defaultJobErr and defaultJobErr.message or 'ok')
+
+    local badJob = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police unit!',
+    }, cfg)
+    check('job_invalid_chars',
+        badJob == nil, 'job characters outside the whitelist must be rejected')
+
+    local badGrade = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+        grade = 101,
+    }, cfg)
+    check('job_grade_range', badGrade == nil, 'grade above 100 must be rejected')
+
+    local fractionalGrade = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+        grade = 1.5,
+    }, cfg)
+    check('job_grade_integer', fractionalGrade == nil, 'fractional grade must be rejected')
+
+    local jobUnknownField = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+        beat_id = 'beat_1',
+    }, cfg)
+    check('job_unknown_field', jobUnknownField == nil, 'set_job must reject unknown fields')
+
+    local jobPreview = job and AgentPolicy.Preview('set_job', job, context, cfg)
+    check('job_preview_before',
+        jobPreview ~= nil
+            and jobPreview.job == 'police'
+            and jobPreview.grade == 2
+            and jobPreview.before.job == 'unemployed'
+            and jobPreview.before.grade == 0,
+        jobPreview and ('before=' .. tostring(jobPreview.before and jobPreview.before.job)) or 'no preview')
+
+    local jobPolicy, jobPolicyErr = AgentPolicy.CheckPolicy('set_job', job, cfg, context)
+    check('job_policy_ok', jobPolicy == true, jobPolicyErr and jobPolicyErr.code or 'ok')
+    check('job_requires_approval',
+        AgentPolicy.RequiresApproval('set_job') == true
+            and AgentPolicy.StatusFor('set_job', false) == 'pending_approval',
+        'set_job must require approval')
+
+    local missingJobPolicy, missingJobErr = AgentPolicy.CheckPolicy('set_job', {
+        citizenid = 'ABC12345',
+        job = 'ghostjob',
+        grade = 0,
+    }, cfg, context)
+    check('job_missing_rejected',
+        missingJobPolicy == false and missingJobErr and missingJobErr.code == 'job_not_found',
+        missingJobErr and missingJobErr.code or 'missing job not rejected')
+
+    local missingGradePolicy, missingGradeErr = AgentPolicy.CheckPolicy('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+        grade = 9,
+    }, cfg, context)
+    check('job_grade_missing_rejected',
+        missingGradePolicy == false and missingGradeErr and missingGradeErr.code == 'grade_not_found',
+        missingGradeErr and missingGradeErr.code or 'missing grade not rejected')
+
+    -- grant_item -------------------------------------------------------------
+    local item, itemErr = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 3,
+        reason = 'director reward',
+    }, cfg)
+    check('item_normalizes',
+        item ~= nil and item.item == 'bread' and item.amount == 3,
+        itemErr and itemErr.message or 'ok')
+
+    local badItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread!',
+        amount = 1,
+        reason = 'bad item',
+    }, cfg)
+    check('item_invalid_chars', badItem == nil, 'item characters outside the whitelist must be rejected')
+
+    local zeroItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 0,
+        reason = 'zero',
+    }, cfg)
+    check('item_minimum', zeroItem == nil, 'zero amount must be rejected')
+
+    local overCapItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 51,
+        reason = 'too many',
+    }, cfg)
+    check('item_cap', overCapItem == nil, 'amount above max_item_amount must be rejected')
+
+    local fractionalItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 1.5,
+        reason = 'fraction',
+    }, cfg)
+    check('item_integer', fractionalItem == nil, 'fractional amount must be rejected')
+
+    local noReasonItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 1,
+    }, cfg)
+    check('item_requires_reason', noReasonItem == nil, 'reason is required')
+
+    local controlReasonItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 1,
+        reason = 'bad\nreason',
+    }, cfg)
+    check('item_reason_control_chars', controlReasonItem == nil,
+        'single-line reason must reject tab/LF/CR')
+
+    local itemUnknownField = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 1,
+        reason = 'reward',
+        slot = 3,
+    }, cfg)
+    check('item_unknown_field', itemUnknownField == nil, 'grant_item must reject unknown fields')
+
+    local itemPreview = item and AgentPolicy.Preview('grant_item', item, context, cfg)
+    check('item_preview_before',
+        itemPreview ~= nil and itemPreview.before == 2 and itemPreview.amount == 3,
+        itemPreview and ('before=' .. tostring(itemPreview.before)) or 'no preview')
+
+    local itemPolicy, itemPolicyErr = AgentPolicy.CheckPolicy('grant_item', item, cfg, context)
+    check('item_policy_ok', itemPolicy == true, itemPolicyErr and itemPolicyErr.code or 'ok')
+    check('item_requires_approval',
+        AgentPolicy.RequiresApproval('grant_item') == true
+            and AgentPolicy.StatusFor('grant_item', false) == 'pending_approval',
+        'grant_item must require approval')
+
+    local missingItemPolicy, missingItemErr = AgentPolicy.CheckPolicy('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'ghostitem',
+        amount = 1,
+        reason = 'reward',
+    }, cfg, context)
+    check('item_missing_rejected',
+        missingItemPolicy == false and missingItemErr and missingItemErr.code == 'item_not_found',
+        missingItemErr and missingItemErr.code or 'missing item not rejected')
 
     -- Envelope helpers -------------------------------------------------------
     local validAgent = AgentPolicy.NormalizeAgentId('director.local')

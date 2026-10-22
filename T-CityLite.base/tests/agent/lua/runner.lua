@@ -30,6 +30,7 @@ local CASES = {
     'live_api',
     'effect_rules',
     'effect_server',
+    'director_actions',
 }
 
 local function readAll(path)
