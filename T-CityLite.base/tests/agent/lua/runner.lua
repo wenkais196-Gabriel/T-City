@@ -23,7 +23,7 @@ _G.print = function(...)
 end
 
 -- No directory-listing API in plain Lua; keep this list explicit.
-local CASES = { 'http_contract', 'http_adapter' }
+local CASES = { 'http_contract', 'http_adapter', 'live_rules', 'live_api' }
 
 local function readAll(path)
     local handle = assert(io.open(path, 'rb'))
