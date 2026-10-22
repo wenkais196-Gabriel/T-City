@@ -1002,6 +1002,7 @@ SetHttpHandler(function(req, res)
             cfg = cfg,
             actions = AgentActions,
             policy = AgentPolicy,
+            live = _G.LiveApi,
         })
     end
 

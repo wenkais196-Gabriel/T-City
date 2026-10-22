@@ -95,6 +95,13 @@ local function secureEquals(a, b)
     return diff == 0
 end
 
+-- Shared with server/live_api.lua, which is loaded before this file and only
+-- dereferences AgentHttp at request time (manifest order: live_* then http_api).
+AgentHttp.SplitPath = splitPath
+AgentHttp.ParseQuery = parseQuery
+AgentHttp.SecureEquals = secureEquals
+AgentHttp.BearerToken = bearerToken
+
 -- ---------------------------------------------------------------------------
 -- Routes and result mapping
 -- ---------------------------------------------------------------------------
@@ -256,6 +263,18 @@ function AgentHttp.Handle(request, deps)
     local actions = deps.actions
     local policy = deps.policy
     local headers = request.headers
+
+    -- Live perception owns /agent/v1/live/* only. It is checked before the
+    -- actions kill switch so the two switches stay independent; deps.live is
+    -- nil in tests/embedders that do not inject the module.
+    local live = deps.live
+    if type(live) == 'table' and type(live.TryHandle) == 'function' then
+        local ok, response = pcall(live.TryHandle, request, cfg)
+        if not ok then
+            return { status = 500, body = { error = 'internal server error', code = 'internal_error' } }
+        end
+        if response ~= nil then return response end
+    end
 
     if not cfg.enabled then
         return { status = 503, body = { error = 'agent actions are disabled', code = 'disabled' } }

@@ -83,6 +83,10 @@ function Bootstrap.Load(options)
     end
 
     env.policy = loadServerFile('policy.lua') or _G.AgentPolicy
+    env.live_rules = loadServerFile('live_rules.lua') or _G.LiveRules
+    env.live_store = loadServerFile('live_store.lua') or _G.LiveStore
+    env.live_events = loadServerFile('live_events.lua') or _G.LiveEvents
+    env.live_api = loadServerFile('live_api.lua') or _G.LiveApi
     env.http = loadServerFile('http_api.lua') or _G.AgentHttp
 
     if options.load_main then
