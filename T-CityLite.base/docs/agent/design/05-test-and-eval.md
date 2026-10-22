@@ -497,3 +497,22 @@ def test_act_requires_agent_id(handle):
 1. 未知路径先于鉴权返回 404（信息泄露）。v1 锁行为，调整需安全评审 + `actions_api_version` bump。
 2. `/agent/v1/actions` 要求 `X-Agent-Id` 而 `/policy` 不要求。已锁定，是否统一待定。
 3. 是否在 `http_api` 内建令牌桶（`agent_actions_rate_limit=0` 默认关）。关闭时不影响契约，限流测试先做函数级。
+
+---
+
+## 16. 实现回填（2026-10-22，commit `ccdd61e` + 评审修正）
+
+实际落地与 §4.3 的伪代码有三处差异，均已由对抗评审发现并修正，这里回填以免后来者照抄旧稿：
+
+1. **适配器不能无条件注册 `setDataHandler`**。FXServer 只在请求带 body 时调用它，照抄 §4.3 会让 `GET /policy`、`GET /actions` 永久不响应。实现改为先以 `body=nil` 调 `Handle` 探测，只有返回 `need_body=true` 才注册；`Handle` 在 `decodeRequest` 之前已完成鉴权，所以未授权 POST 仍不读 body。
+2. **不要早退 413**。§4.4 要求「CL > 16 KiB 最前置 413」，实测这会把 503/401/404/405/200 全部压成 413（360 条随机差分 98 条 drift）。`Handle` 在旧位置（鉴权之后）已有同样检查，适配器里的前置判断已删除。
+3. **必须保留旧 `readJsonBody` 的 `done` 守卫**。FXServer 若重复调用 body 回调，缺守卫会执行两次 `Propose`（只发一次响应，静默重复执行）。适配器现在用 `handled` 一次性闸门。
+
+对应 golden：`oversized_content_length_keeps_auth_order`、`oversized_content_length_returns_413_after_auth`、`duplicate_body_callback_executes_once`。
+
+### 16.1 已验证的等价性
+
+- `matchRoute` / `httpStatusForResult` 与原实现逐行等价。
+- 关闭适配器早 413 后，360 条随机请求的状态码/响应体/headers/动作调用 **0 drift**。
+- `splitPath` / `urlDecode` / `parseQuery` / `getHeader` / `bearerToken` / `secureEquals` / `decodeJsonBody` / `handleAct` / `handleAdminAction` 逐函数核对通过。
+- 仍未覆盖：真实 FXServer 的 `setDataHandler` 触发时机、chunked body、202 `pending_approval` 主路径、admin reject、真实 MySQL 幂等 race。这些需要实机或 DB 环境，标为 T1/T2。
