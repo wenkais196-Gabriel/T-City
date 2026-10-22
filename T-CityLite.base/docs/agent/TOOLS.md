@@ -3,7 +3,7 @@
 
 **Generated file — DO NOT EDIT.** Source: `tools/agent_tools.json` (registry_version `1.1.0`, schema_version `1`).
 
-23 tools: 18 active, 5 planned, 0 deprecated. Only `active` tools are advertised to agents.
+23 tools: 21 active, 2 planned, 0 deprecated. Only `active` tools are advertised to agents.
 
 ## Routing table
 
@@ -25,9 +25,9 @@
 | 14 | `send_notify` | active | write | director | default | POST `/agent/v1/act` | L1 | no | required | supported | get_action | — |
 | 15 | `add_player_money` | active | effect | director | default | POST `/agent/v1/act` | L4 | yes | required | supported | get_player_snapshot | — |
 | 16 | `start_player_quest` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
-| 17 | `send_announce` | planned | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
-| 18 | `set_weather` | planned | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_weather |
-| 19 | `set_time_of_day` | planned | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_time_of_day |
+| 17 | `send_announce` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
+| 18 | `set_weather` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_weather |
+| 19 | `set_time_of_day` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_time_of_day |
 | 20 | `set_player_job` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | set_player_job |
 | 21 | `teleport_player` | planned | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | teleport_player |
 | 22 | `spawn_vehicle` | planned | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_timeline | — |
@@ -53,9 +53,9 @@
 | `send_notify` | L1 | single | no | none | 10/min burst 5 |
 | `add_player_money` | L4 | single | yes | manual | 2/min burst 1 |
 | `start_player_quest` | L3 | single | yes | manual | 10/min burst 2 |
-| `send_announce` | L2 | single | yes | none | 2/min burst 1 |
-| `set_weather` | L2 | single | yes | inverse | 2/min burst 1 |
-| `set_time_of_day` | L2 | single | yes | inverse | 2/min burst 1 |
+| `send_announce` | L2 | world | yes | none | 2/min burst 1 |
+| `set_weather` | L2 | world | yes | inverse | 2/min burst 1 |
+| `set_time_of_day` | L2 | world | yes | inverse | 2/min burst 1 |
 | `set_player_job` | L3 | single | yes | inverse | 10/min burst 2 |
 | `teleport_player` | L3 | single | yes | inverse | 10/min burst 2 |
 | `spawn_vehicle` | L3 | single | yes | manual | 2/min burst 1 |

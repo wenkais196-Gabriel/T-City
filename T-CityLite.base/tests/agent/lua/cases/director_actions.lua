@@ -64,11 +64,29 @@ return {
             })
         end
 
+        local function startedWeatherSync(env, state)
+            env.resource_states['qb-weathersync'] = 'started'
+            env.weather_state = state or 'EXTRASUNNY'
+            env.export_overrides['qb-weathersync'] = {
+                setWeather = function(weather)
+                    env.weather_state = weather
+                    return true
+                end,
+                getWeatherState = function()
+                    return env.weather_state
+                end,
+            }
+        end
+
         check('executors_exposed', function()
             local env = newEnv()
             assert(type(env.actions._Execute) == 'table', '_Execute table missing')
             assert(type(env.actions._Execute.set_job) == 'function', 'set_job executor missing')
             assert(type(env.actions._Execute.grant_item) == 'function', 'grant_item executor missing')
+            assert(type(env.actions._Execute.announce) == 'function', 'announce executor missing')
+            assert(type(env.actions._Execute.set_weather) == 'function', 'set_weather executor missing')
+            assert(type(env.actions._Execute.set_time_of_day) == 'function', 'set_time_of_day executor missing')
+            assert(type(env.actions._Context) == 'function', 'context builder missing')
         end)
 
         check('set_job_success_records_before_after', function()
@@ -163,6 +181,151 @@ return {
 
             local fallback = newEnv()
             assert(fallback.actions.Policy().limits.max_item_amount == 50, 'default cap failed')
+        end)
+
+        check('announce_broadcasts_to_two_online_players', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345') -- source 7
+            env.makePlayer(8, 'DEF67890', { cash = 0, bank = 0, crypto = 0 })
+            local ok, err, result = env.actions._Execute.announce(1, {
+                message = 'Server restart in 5 minutes',
+                kind = 'warning',
+            })
+            assert(ok == true, tostring(err))
+            assert(result.delivered == 2,
+                'expected 2 deliveries, got ' .. tostring(result.delivered))
+            assert(result.kind == 'warning', 'kind missing from result')
+            assert(#env.notifications == 2,
+                'expected 2 notify calls, got ' .. tostring(#env.notifications))
+            for _, notification in ipairs(env.notifications) do
+                assert(notification.text == 'Server restart in 5 minutes', 'wrong notify text')
+                assert(notification.kind == 'warning', 'wrong notify kind')
+                assert(notification.duration == 5000, 'wrong notify duration')
+            end
+        end)
+
+        check('announce_with_no_players_is_not_failure', function()
+            local env = newEnv()
+            local ok, err, result = env.actions._Execute.announce(1, {
+                message = 'Nobody is online',
+                kind = 'info',
+            })
+            assert(ok == true, tostring(err))
+            assert(result.delivered == 0, 'expected zero deliveries')
+            assert(#env.notifications == 0, 'no player should be notified')
+        end)
+
+        check('set_weather_rejected_when_weathersync_stopped', function()
+            local env = newEnv()
+            local params = { weather = 'RAIN' }
+            local context = env.actions._Context('set_weather', params)
+            assert(context.weather_sync == false, 'context.weather_sync should be false')
+            local ok, err = env.policy.CheckPolicy('set_weather', params, {}, context)
+            assert(ok == false, 'policy must reject without qb-weathersync')
+            assert(err.code == 'weather_sync_unavailable', tostring(err.code))
+        end)
+
+        check('set_weather_success_records_before_and_verifies', function()
+            local env = newEnv()
+            startedWeatherSync(env, 'CLEAR')
+            local context = env.actions._Context('set_weather', { weather = 'RAIN' })
+            assert(context.weather_sync == true, 'context.weather_sync should be true')
+            assert(context.weather == 'CLEAR', 'context.weather should be the live state')
+
+            local ok, err, result = env.actions._Execute.set_weather(1, { weather = 'RAIN' })
+            assert(ok == true, tostring(err))
+            assert(result.weather == 'RAIN', 'result.weather mismatch')
+            assert(result.before == 'CLEAR', 'result.before mismatch')
+            assert(result.verify_result == true, 'verify_result must be true')
+            assert(env.weather_state == 'RAIN', 'weathersync state was not updated')
+        end)
+
+        check('set_weather_returns_false_is_execution_failed', function()
+            local env = newEnv()
+            env.resource_states['qb-weathersync'] = 'started'
+            env.export_overrides['qb-weathersync'] = {
+                setWeather = function() return false end,
+                getWeatherState = function() return 'CLEAR' end,
+            }
+            local ok, err = env.actions._Execute.set_weather(1, { weather = 'RAIN' })
+            assert(ok == false, 'false setWeather must fail')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+        end)
+
+        check('set_weather_readback_mismatch_is_verification_failed', function()
+            local env = newEnv()
+            env.resource_states['qb-weathersync'] = 'started'
+            env.export_overrides['qb-weathersync'] = {
+                setWeather = function() return true end, -- lies: no state change
+                getWeatherState = function() return 'CLEAR' end,
+            }
+            local ok, err = env.actions._Execute.set_weather(1, { weather = 'RAIN' })
+            assert(ok == false, 'unchanged weather must fail verification')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+        end)
+
+        check('set_time_success_records_hour_minute', function()
+            local env = newEnv()
+            local calls = {}
+            env.resource_states['qb-weathersync'] = 'started'
+            env.export_overrides['qb-weathersync'] = {
+                setTime = function(hour, minute)
+                    calls[#calls + 1] = { hour, minute }
+                    return true
+                end,
+                getTime = function() return 22, 30 end,
+            }
+            local ok, err, result = env.actions._Execute.set_time_of_day(1, {
+                hour = 22,
+                minute = 30,
+            })
+            assert(ok == true, tostring(err))
+            assert(result.hour == 22 and result.minute == 30, 'result time mismatch')
+            assert(#calls == 1 and calls[1][1] == 22 and calls[1][2] == 30,
+                'setTime was not called with hour/minute')
+            assert(result.verify_result == true, 'getTime read-back should verify')
+        end)
+
+        check('set_time_readback_mismatch_is_verification_failed', function()
+            local env = newEnv()
+            env.resource_states['qb-weathersync'] = 'started'
+            env.export_overrides['qb-weathersync'] = {
+                setTime = function() return true end,
+                getTime = function() return 23, 0 end,
+            }
+            local ok, err = env.actions._Execute.set_time_of_day(1, {
+                hour = 22,
+                minute = 30,
+            })
+            assert(ok == false, 'a clock that did not move must not be reported as success')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+        end)
+
+        check('set_time_returns_false_is_execution_failed', function()
+            local env = newEnv()
+            env.resource_states['qb-weathersync'] = 'started'
+            env.export_overrides['qb-weathersync'] = {
+                setTime = function() return false end,
+            }
+            local ok, err = env.actions._Execute.set_time_of_day(1, {
+                hour = 22,
+                minute = 30,
+            })
+            assert(ok == false, 'false setTime must fail')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+        end)
+
+        check('announce_cap_comes_from_convar', function()
+            local env = newEnv({ agent_actions_max_announce_chars = '7' })
+            assert(env.actions.Policy().limits.max_announce_chars == 7, 'convar cap not read')
+            assert(env.actions.Policy().actions.announce.blast_radius == 'world',
+                'announce blast radius not exposed')
+
+            local clamped = newEnv({ agent_actions_max_announce_chars = '9999' })
+            assert(clamped.actions.Policy().limits.max_announce_chars == 2000, 'convar clamp failed')
+
+            local fallback = newEnv()
+            assert(fallback.actions.Policy().limits.max_announce_chars == 300, 'default cap failed')
         end)
 
         return {

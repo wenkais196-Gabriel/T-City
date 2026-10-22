@@ -567,3 +567,17 @@ TTL 线程 30s tick：过期 → `delete_vehicle(temp=true)`；玩家在车内�
 4. 未做真实 FXServer/QBCore 联机冒烟。
 
 下一步：`set_job`/`grant_item` 已在 registry 由 `planned` 改为 `active`（23 工具 / 18 active），MCP 可直接调用；剩余 5 个动作（`send_announce`/`set_weather`/`set_time_of_day`/`teleport_player`/`spawn_vehicle`）留待后续。
+
+### 13.1 第二片（世界/表现类，2026-10-22）
+
+新增 `announce` / `set_weather` / `set_time_of_day`，均为 L2 + `requires_approval=true` + `blast_radius='world'`：
+
+| 动作 | 执行 | 校验 |
+|---|---|---|
+| `announce` | 遍历在线玩家逐个 `Notify` | 统计 `delivered`；0 人在线视为成功（无人可发不是失败） |
+| `set_weather` | `qb-weathersync:setWeather` | 回读 `getWeatherState() == weather`，否则 `verification_failed` |
+| `set_time_of_day` | `qb-weathersync:setTime` | 回读 `getTime()` 的 hour/minute，不一致 `verification_failed`；无 `getTime()` 的旧版本退化为只信返回值（`verify_result=false`） |
+
+`blast_radius` 先前在 registry 里误写为 `single`（广播/世界状态应是 `world`），本片一并修正；该字段与 `risk` 正交，`world` 强制要求审批。
+
+三个工具已由 `planned` 改为 `active`（23 工具 / 21 active）。仍余 `teleport_player` 与 `spawn_vehicle`：前者需要把 `custom-agent-client` 接进执行链（`Citizen.Await` 可让出性），后者需要服务端实体创建与超时控制。

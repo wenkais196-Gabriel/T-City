@@ -28,6 +28,7 @@ function AgentActionsSelfTest.Run()
         max_money = 1000,
         daily_budget = 5000,
         max_notify_chars = 300,
+        max_announce_chars = 300,
         max_item_amount = 50,
         ttl_seconds = 900,
     }
@@ -394,6 +395,162 @@ function AgentActionsSelfTest.Run()
     check('item_missing_rejected',
         missingItemPolicy == false and missingItemErr and missingItemErr.code == 'item_not_found',
         missingItemErr and missingItemErr.code or 'missing item not rejected')
+
+    -- announce (L2, world) ---------------------------------------------------
+    local announce, announceErr = AgentPolicy.Normalize('announce', {
+        message = 'Server restart in 5 minutes',
+        kind = 'warning',
+    }, cfg)
+    check('announce_normalizes',
+        announce ~= nil and announce.kind == 'warning'
+            and announce.message == 'Server restart in 5 minutes',
+        announceErr and announceErr.message or 'ok')
+
+    local announceDefault, announceDefaultErr = AgentPolicy.Normalize('announce', {
+        message = 'hello',
+    }, cfg)
+    check('announce_kind_defaults_to_info',
+        announceDefault ~= nil and announceDefault.kind == 'info',
+        announceDefaultErr and announceDefaultErr.message or 'ok')
+
+    local announcePreview = announce and AgentPolicy.Preview('announce', announce, {}, cfg)
+    check('announce_preview',
+        announcePreview ~= nil
+            and announcePreview.kind == 'warning'
+            and announcePreview.length == AgentPolicy.TextLength(announce.message)
+            and announcePreview.preview == announce.message,
+        announcePreview and ('len=' .. tostring(announcePreview.length)) or 'no preview')
+
+    local announcePolicy, announcePolicyErr = AgentPolicy.CheckPolicy('announce', announce, cfg, {})
+    check('announce_policy_ok', announcePolicy == true,
+        announcePolicyErr and announcePolicyErr.code or 'ok')
+
+    local badAnnounceKind, badAnnounceKindErr = AgentPolicy.Normalize('announce', {
+        message = 'hello',
+        kind = 'script',
+    }, cfg)
+    check('announce_kind_whitelist',
+        badAnnounceKind == nil and badAnnounceKindErr and badAnnounceKindErr.code == 'invalid_params',
+        badAnnounceKindErr and badAnnounceKindErr.code or 'unknown kind accepted')
+
+    local longAnnounce = AgentPolicy.Normalize('announce', {
+        message = string.rep('x', 301),
+    }, cfg)
+    check('announce_length_cap', longAnnounce == nil, '301-char message must be rejected')
+
+    local controlAnnounce = AgentPolicy.Normalize('announce', {
+        message = 'bad\0text',
+    }, cfg)
+    check('announce_control_chars', controlAnnounce == nil, 'NUL must be rejected')
+
+    local announceUnknownField = AgentPolicy.Normalize('announce', {
+        message = 'hello',
+        citizenid = 'ABC12345',
+    }, cfg)
+    check('announce_unknown_field', announceUnknownField == nil,
+        'announce must reject unknown fields')
+
+    -- set_weather (L2, world) ------------------------------------------------
+    local weather, weatherErr = AgentPolicy.Normalize('set_weather', {
+        weather = 'rain',
+    }, cfg)
+    check('weather_normalizes_uppercase',
+        weather ~= nil and weather.weather == 'RAIN',
+        weatherErr and weatherErr.message or 'ok')
+
+    local badWeather, badWeatherErr = AgentPolicy.Normalize('set_weather', {
+        weather = 'SANDSTORM',
+    }, cfg)
+    check('weather_enum_whitelist',
+        badWeather == nil and badWeatherErr and badWeatherErr.code == 'invalid_params',
+        badWeatherErr and badWeatherErr.code or 'unknown weather accepted')
+
+    local weatherUnknownField = AgentPolicy.Normalize('set_weather', {
+        weather = 'RAIN',
+        citizenid = 'ABC12345',
+    }, cfg)
+    check('weather_unknown_field', weatherUnknownField == nil,
+        'set_weather must reject unknown fields')
+
+    local weatherPreview = weather and AgentPolicy.Preview('set_weather', weather, {
+        weather = 'CLEAR',
+    }, cfg)
+    check('weather_preview_before',
+        weatherPreview ~= nil and weatherPreview.weather == 'RAIN'
+            and weatherPreview.before == 'CLEAR',
+        weatherPreview and ('before=' .. tostring(weatherPreview.before)) or 'no preview')
+
+    local weatherPolicy, weatherPolicyErr = AgentPolicy.CheckPolicy('set_weather', weather, cfg, {
+        weather_sync = true,
+    })
+    check('weather_policy_ok', weatherPolicy == true,
+        weatherPolicyErr and weatherPolicyErr.code or 'ok')
+
+    local weatherStopped, weatherStoppedErr = AgentPolicy.CheckPolicy('set_weather', weather, cfg, {})
+    check('weather_sync_unavailable',
+        weatherStopped == false and weatherStoppedErr and weatherStoppedErr.code == 'weather_sync_unavailable',
+        weatherStoppedErr and weatherStoppedErr.code or 'stopped weathersync accepted')
+
+    -- set_time_of_day (L2, world) -------------------------------------------
+    local timeOfDay, timeOfDayErr = AgentPolicy.Normalize('set_time_of_day', {
+        hour = 22,
+    }, cfg)
+    check('time_normalizes_default_minute',
+        timeOfDay ~= nil and timeOfDay.hour == 22 and timeOfDay.minute == 0,
+        timeOfDayErr and timeOfDayErr.message or 'ok')
+
+    local explicitTime, explicitTimeErr = AgentPolicy.Normalize('set_time_of_day', {
+        hour = 7,
+        minute = 30,
+    }, cfg)
+    check('time_normalizes_explicit_minute',
+        explicitTime ~= nil and explicitTime.hour == 7 and explicitTime.minute == 30,
+        explicitTimeErr and explicitTimeErr.message or 'ok')
+
+    local badHour = AgentPolicy.Normalize('set_time_of_day', { hour = 24 }, cfg)
+    check('time_hour_range', badHour == nil, 'hour above 23 must be rejected')
+
+    local badMinute = AgentPolicy.Normalize('set_time_of_day', {
+        hour = 12,
+        minute = 60,
+    }, cfg)
+    check('time_minute_range', badMinute == nil, 'minute above 59 must be rejected')
+
+    local fractionalHour = AgentPolicy.Normalize('set_time_of_day', { hour = 1.5 }, cfg)
+    check('time_hour_integer', fractionalHour == nil, 'fractional hour must be rejected')
+
+    local timeUnknownField = AgentPolicy.Normalize('set_time_of_day', {
+        hour = 12,
+        frozen = true,
+    }, cfg)
+    check('time_unknown_field', timeUnknownField == nil,
+        'set_time_of_day must reject unknown fields')
+
+    local timePreview = timeOfDay and AgentPolicy.Preview('set_time_of_day', timeOfDay, {}, cfg)
+    check('time_preview', timePreview ~= nil and timePreview.hour == 22 and timePreview.minute == 0,
+        timePreview and ('hour=' .. tostring(timePreview.hour)) or 'no preview')
+
+    local timePolicy, timePolicyErr = AgentPolicy.CheckPolicy('set_time_of_day', timeOfDay, cfg, {
+        weather_sync = true,
+    })
+    check('time_policy_ok', timePolicy == true, timePolicyErr and timePolicyErr.code or 'ok')
+
+    local timeStopped, timeStoppedErr = AgentPolicy.CheckPolicy('set_time_of_day', timeOfDay, cfg, {})
+    check('time_weather_sync_unavailable',
+        timeStopped == false and timeStoppedErr and timeStoppedErr.code == 'weather_sync_unavailable',
+        timeStoppedErr and timeStoppedErr.code or 'stopped weathersync accepted')
+
+    check('world_actions_require_approval',
+        AgentPolicy.ACTIONS.announce.blast_radius == 'world'
+            and AgentPolicy.ACTIONS.set_weather.blast_radius == 'world'
+            and AgentPolicy.ACTIONS.set_time_of_day.blast_radius == 'world'
+            and AgentPolicy.RequiresApproval('announce') == true
+            and AgentPolicy.RequiresApproval('set_weather') == true
+            and AgentPolicy.RequiresApproval('set_time_of_day') == true
+            and AgentPolicy.StatusFor('announce', false) == 'pending_approval'
+            and AgentPolicy.StatusFor('set_weather', false) == 'pending_approval'
+            and AgentPolicy.StatusFor('set_time_of_day', false) == 'pending_approval',
+        'L2 world actions must never auto-execute')
 
     -- Envelope helpers -------------------------------------------------------
     local validAgent = AgentPolicy.NormalizeAgentId('director.local')

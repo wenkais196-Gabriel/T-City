@@ -569,7 +569,7 @@ class VisibilityTests(RoutingTestBase):
         }
         with mock.patch.dict(os.environ, env, clear=True):
             names = {tool["name"] for tool in _tools()}
-        self.assertEqual(len(names), 18, "AGENT_TOOLSET=all lists the 18 active tools")
+        self.assertEqual(len(names), 21, "AGENT_TOOLSET=all lists the 21 active tools")
         self.assertIn("add_player_money", names, "debug mode lists writes but calls still need a token")
 
     def test_live_tools_need_the_live_token_to_be_advertised(self) -> None:
@@ -626,7 +626,7 @@ class VisibilityTests(RoutingTestBase):
     def test_planned_tools_are_never_advertised(self) -> None:
         with mock.patch.dict(os.environ, dict(GATEWAY_ENV, **DIRECTOR_ENV), clear=True):
             names = {tool["name"] for tool in _tools()}
-        for planned in ("set_weather", "send_announce", "spawn_vehicle", "teleport_player"):
+        for planned in ("spawn_vehicle", "teleport_player"):
             self.assertNotIn(planned, names)
 
     def test_tool_descriptors_carry_annotations_and_meta(self) -> None:
@@ -652,7 +652,7 @@ class VisibilityTests(RoutingTestBase):
 class ProtocolAndValidationTests(RoutingTestBase):
     def test_unknown_and_planned_tools_remain_jsonrpc_errors(self) -> None:
         with mock.patch.dict(os.environ, GATEWAY_ENV, clear=True):
-            for name in ("not_a_tool", "set_weather"):
+            for name in ("not_a_tool", "spawn_vehicle"):
                 response = agent_mcp.handle_message(
                     {
                         "jsonrpc": "2.0",
