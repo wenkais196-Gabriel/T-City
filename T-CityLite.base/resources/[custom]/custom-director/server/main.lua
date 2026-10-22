@@ -4,7 +4,7 @@
 --   * accept action proposals from a trusted server-side caller / HTTP agent
 --   * validate + preview + policy-check + persist (agent_actions)
 --   * low-risk notify executes after policy; add_money / start_quest /
---     set_job / grant_item need approval
+--     set_job / grant_item / remove_item / set_bucket / kick need approval
 --   * approve/reject re-check policy, execute, and write the audit row
 --
 -- No client script exists. Nothing here trusts client input.
@@ -281,6 +281,15 @@ local function playerItemCount(player, item)
     return tonumber(itemData.amount) or 0
 end
 
+-- Routing buckets live in the FXServer session only (no DB backing), so every
+-- read is best-effort: a nil result means "unknown", not bucket 0.
+local function playerBucket(source)
+    if not source or type(GetPlayerRoutingBucket) ~= 'function' then return nil end
+    local ok, bucket = pcall(GetPlayerRoutingBucket, source)
+    if not ok then return nil end
+    return tonumber(bucket)
+end
+
 -- GetPlayerPed returns 0 while the player is loading or already dropping, so
 -- callers must treat a missing position as "unknown", not as (0, 0, 0).
 local function playerPosition(source)
@@ -319,8 +328,10 @@ local function buildContext(actionType, params)
                 context.position = playerPosition(playerSource(player))
             elseif actionType == 'set_job' then
                 context.player.job = playerJob(player)
-            elseif actionType == 'grant_item' then
+            elseif actionType == 'grant_item' or actionType == 'remove_item' then
                 context.player.item_count = playerItemCount(player, params.item) or 0
+            elseif actionType == 'set_bucket' then
+                context.player.bucket = playerBucket(context.player.source)
             end
         end
     end
@@ -339,7 +350,7 @@ local function buildContext(actionType, params)
         context.quests = catalog
     elseif actionType == 'set_job' then
         context.jobs = QBCore.Shared and QBCore.Shared.Jobs or nil
-    elseif actionType == 'grant_item' then
+    elseif actionType == 'grant_item' or actionType == 'remove_item' then
         context.items = QBCore.Shared and QBCore.Shared.Items or nil
     end
 
@@ -543,6 +554,111 @@ local function executeGrantItem(actionId, params)
         after = after,
         reason = params.reason,
         verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeRemoveItem(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local before = playerItemCount(player, params.item)
+    if before == nil then
+        return false, 'item_api_unavailable', nil
+    end
+
+    local callOk, result = pcall(function()
+        return player.Functions.RemoveItem(params.item, params.amount)
+    end)
+    if not callOk then
+        return false, ('execution_failed: RemoveItem threw: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: RemoveItem returned non-true', nil
+    end
+
+    local after = playerItemCount(player, params.item)
+    if after == nil then
+        return false, 'item_api_unavailable_after_remove', nil
+    end
+    if before - after ~= params.amount then
+        -- No automatic rollback: a partial inventory mutation is safer to
+        -- audit loudly than to "fix" blindly (same stance as grant_item).
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.amount)), nil
+    end
+
+    return true, nil, {
+        item = params.item,
+        amount = params.amount,
+        before = before,
+        after = after,
+        reason = params.reason,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeSetBucket(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    local before = playerBucket(source)
+
+    local setBucket = QBCore.Functions and QBCore.Functions.SetPlayerBucket
+    if type(setBucket) ~= 'function' then
+        return false, 'bucket_api_unavailable', nil
+    end
+
+    local callOk, result = pcall(setBucket, source, params.bucket)
+    if not callOk then
+        return false, ('execution_failed: SetPlayerBucket threw: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: SetPlayerBucket returned non-true', nil
+    end
+
+    local after = playerBucket(source)
+    if after ~= params.bucket then
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.bucket)), nil
+    end
+
+    return true, nil, {
+        bucket = params.bucket,
+        before = before,
+        notes = 'routing bucket is session-scoped; it resets when the player reconnects',
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeKick(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    local kick = QBCore.Functions and QBCore.Functions.Kick
+    if type(kick) ~= 'function' then
+        return false, 'kick_api_unavailable', nil
+    end
+
+    -- DropPlayer (inside QBCore.Functions.Kick) is asynchronous: the player may
+    -- still be online when this returns. We deliberately do not verify that the
+    -- player is gone; a successful call is the contract.
+    local callOk, err = pcall(kick, source, params.reason)
+    if not callOk then
+        return false, ('execution_failed: Kick threw: %s'):format(truncate(err, 150)), nil
+    end
+
+    return true, nil, {
+        kicked = true,
+        reason = params.reason,
         at = os.time(),
     }
 end
@@ -787,6 +903,12 @@ local function executeAction(actionId, actionType, params)
         return executeSetJob(actionId, params)
     elseif actionType == 'grant_item' then
         return executeGrantItem(actionId, params)
+    elseif actionType == 'remove_item' then
+        return executeRemoveItem(actionId, params)
+    elseif actionType == 'set_bucket' then
+        return executeSetBucket(actionId, params)
+    elseif actionType == 'kick' then
+        return executeKick(actionId, params)
     elseif actionType == 'announce' then
         return executeAnnounce(actionId, params)
     elseif actionType == 'set_weather' then
@@ -806,6 +928,9 @@ end
 AgentActions._Execute = {
     set_job = executeSetJob,
     grant_item = executeGrantItem,
+    remove_item = executeRemoveItem,
+    set_bucket = executeSetBucket,
+    kick = executeKick,
     announce = executeAnnounce,
     set_weather = executeSetWeather,
     set_time_of_day = executeSetTimeOfDay,
@@ -1274,10 +1399,12 @@ function AgentActions.Policy()
             requires_approval = definition.requires_approval,
             auto_execute = definition.auto_execute,
             blast_radius = definition.blast_radius,
+            compensation = definition.compensation,
         }
     end
     actions.add_money.max_money = cfg.max_money
     actions.grant_item.max_amount = cfg.max_item_amount
+    actions.remove_item.max_amount = cfg.max_item_amount
 
     local dailySpent = nil
     if cfg.enabled then

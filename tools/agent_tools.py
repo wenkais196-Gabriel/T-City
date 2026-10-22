@@ -56,6 +56,10 @@ VERBS = (
     "spawn",
     "teleport",
     "cancel",
+    # Narrow verbs for moderation/economy actions that the director now
+    # exposes; both are single-object and statically auditable.
+    "remove",
+    "kick",
 )
 NAME_RE = re.compile(
     r"^(?:" + "|".join(VERBS) + r")_[a-z][a-z0-9_]{2,48}$",

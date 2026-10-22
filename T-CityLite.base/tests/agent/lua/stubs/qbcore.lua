@@ -8,6 +8,9 @@ return function(env)
     env.players_by_citizenid = env.players_by_citizenid or {}
     env.notifications = env.notifications or {}
     env.money_log = env.money_log or {}
+    env.kicks = env.kicks or {}
+    env.bucket_log = env.bucket_log or {}
+    env.player_buckets = env.player_buckets or {}
 
     local function makePlayer(source, citizenid, money)
         local player = {
@@ -109,6 +112,30 @@ return function(env)
             return true
         end
 
+        -- Mirrors qb-inventory RemoveItem: false when the item is unknown, the
+        -- slot is missing or the held quantity is too small.
+        function player.Functions.RemoveItem(item, amount)
+            local definition = (env.qb.Shared.Items or {})[tostring(item):lower()]
+            if not definition then return false end
+            local held = player.PlayerData.items[item]
+            local current = type(held) == 'table' and held.amount or held
+            if type(current) ~= 'number' or current < amount then return false end
+            local remaining = current - amount
+            if remaining <= 0 then
+                player.PlayerData.items[item] = nil
+            elseif type(held) == 'table' then
+                held.amount = remaining
+            else
+                player.PlayerData.items[item] = remaining
+            end
+            env.log[#env.log + 1] = {
+                remove_item = citizenid,
+                item = item,
+                amount = amount,
+            }
+            return true
+        end
+
         env.players[source] = player
         env.players_by_citizenid[citizenid] = player
         return player
@@ -131,6 +158,28 @@ return function(env)
             end,
             GetPlayerByCitizenId = function(citizenid)
                 return env.players_by_citizenid[citizenid]
+            end,
+            -- Mirrors qb-core SetPlayerBucket: sets the native bucket and
+            -- returns true. The session-state bookkeeping is the native stub's.
+            SetPlayerBucket = function(source, bucket)
+                local src = tonumber(source) or source
+                env.bucket_log[#env.bucket_log + 1] = { source = src, bucket = bucket }
+                if type(SetPlayerRoutingBucket) == 'function' then
+                    local ok = pcall(SetPlayerRoutingBucket, src, bucket)
+                    if not ok then return false end
+                else
+                    env.player_buckets[src] = bucket
+                end
+                return true
+            end,
+            -- Mirrors qb-core Kick: queues DropPlayer asynchronously and returns
+            -- nothing. The harness only records the call.
+            Kick = function(source, reason)
+                env.kicks[#env.kicks + 1] = {
+                    source = tonumber(source) or source,
+                    reason = reason,
+                }
+                return true
             end,
             Notify = function(source, text, kind)
                 env.notifications[#env.notifications + 1] = {

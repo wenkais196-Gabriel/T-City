@@ -5,7 +5,7 @@
 local AgentTools = {}
 
 AgentTools.SCHEMA_VERSION = 1
-AgentTools.REGISTRY_VERSION = "1.1.0"
+AgentTools.REGISTRY_VERSION = "1.2.0"
 
 AgentTools.TOOLS = {
   ["get_schema"] = {
@@ -502,6 +502,74 @@ AgentTools.TOOLS = {
       ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["item"] = { type = "string", chars = "-.0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
       ["amount"] = { type = "integer", minimum = 1, maximum = 50 },
+      ["reason"] = { type = "string", min_length = 1, max_length = 128 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["remove_player_item"] = {
+    name = "remove_player_item",
+    title = "Remove an item from one player (L4, approval required)",
+    channel = "effect",
+    route = "director",
+    risk = "L4",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "remove_item",
+    auth = "default",
+    params = { "citizenid", "item", "amount", "reason", "idempotency_key" },
+    required = { "citizenid", "item", "amount", "reason" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["item"] = { type = "string", chars = "-.0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
+      ["amount"] = { type = "integer", minimum = 1, maximum = 50 },
+      ["reason"] = { type = "string", min_length = 1, max_length = 128 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["set_player_bucket"] = {
+    name = "set_player_bucket",
+    title = "Move one player to a routing bucket (L3, approval required)",
+    channel = "write",
+    route = "director",
+    risk = "L3",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "set_bucket",
+    auth = "default",
+    params = { "citizenid", "bucket", "idempotency_key" },
+    required = { "citizenid", "bucket" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["bucket"] = { type = "integer", minimum = 0, maximum = 65535 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["kick_player"] = {
+    name = "kick_player",
+    title = "Kick one player (L4, approval required)",
+    channel = "effect",
+    route = "director",
+    risk = "L4",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "kick",
+    auth = "default",
+    params = { "citizenid", "reason", "idempotency_key" },
+    required = { "citizenid", "reason" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["reason"] = { type = "string", min_length = 1, max_length = 128 },
       ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },

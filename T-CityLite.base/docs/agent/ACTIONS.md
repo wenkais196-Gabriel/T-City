@@ -2,10 +2,10 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope covers ten actions (seven player-scoped
+risky actions and an audit row. Scope covers thirteen actions (ten player-scoped
 plus three L2 world/presentation actions); there is no LLM integration. Adding
-the L2 actions, `teleport` and `spawn_vehicle` did not change
-`schema_version` (still `1`).
+the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`, `set_bucket` and
+`kick` did not change `schema_version` (still `1`).
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -29,6 +29,9 @@ the L2 actions, `teleport` and `spawn_vehicle` did not change
 | `teleport` | L3 位置 | `citizenid`, `x`, `y`, `z`, `heading?` | `pending_approval` | **always** | `exports['custom-agent-client']:Execute(source, 'teleport', {x,y,z,heading}, 5000, {agent_id='director:<id>'})` + client ack |
 | `spawn_vehicle` | L3 载具 | `citizenid`, `model`, `plate?` | `pending_approval` | **always** | server-side `CreateVehicleServerSetter` 1.5 m in front of the ped, bounded existence wait (2 s), optional plate write + read-back |
 | `grant_item` | L4 物品 | `citizenid`, `item`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddItem(item, amount)` + inventory delta verification |
+| `remove_item` | L4 物品 | `citizenid`, `item`, `amount?`, `reason` | `pending_approval` | **always** | `Player.Functions.RemoveItem(item, amount)` + inventory delta verification; `compensation = "manual"` |
+| `set_bucket` | L3 会话 | `citizenid`, `bucket` | `pending_approval` | **always** | `QBCore.Functions.SetPlayerBucket(source, bucket)` + `GetPlayerRoutingBucket` read-back; session-scoped |
+| `kick` | L4 惩罚 | `citizenid`, `reason` | `pending_approval` | **always** | `QBCore.Functions.Kick(source, reason)` inside `pcall`; no offline read-back; `compensation = "manual"`, no undo |
 
 Anything else is rejected with `code: "unsupported_action"`.
 
@@ -67,12 +70,18 @@ approves every broadcast/weather/time change before it runs.
 | `grant_item.item` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `QBCore.Shared.Items` |
 | `grant_item.amount` | integer `1..agent_actions_max_item_amount` (default 50, clamped 1..1000) |
 | `grant_item.reason` | 1–128 chars, no C0 controls |
+| `remove_item.item` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `QBCore.Shared.Items` |
+| `remove_item.amount` | optional integer `1..agent_actions_max_item_amount`; defaults to the configured cap (50 by default) |
+| `remove_item.reason` | 1–128 chars, no C0 controls |
+| `set_bucket.bucket` | integer `0..65535` |
+| `kick.reason` | 1–128 chars, no C0 controls |
 | `approver` | 1–64 chars, no C0 controls (e.g. `discord:alice`, `console`) |
 | reject `reason` | optional, 1–255 chars |
 
 Unknown keys inside `args` are dropped for `notify`, `add_money` and
 `start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
-`announce`, `set_weather`, `set_time_of_day`, `teleport` and `spawn_vehicle`.
+`remove_item`, `set_bucket`, `kick`, `announce`, `set_weather`,
+`set_time_of_day`, `teleport` and `spawn_vehicle`.
 Unknown action types are rejected. There is no client-side validation path.
 
 ---
@@ -334,6 +343,66 @@ caller did not supply one. `from` is the live
 absent while the ped is `0`); the actual spawn point is recomputed at execution
 time as 1.5 m in front of the ped.
 
+### 3.11 `remove_item`
+
+```json
+{
+  "action_type": "remove_item",
+  "risk": "L4",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "item": "bread",
+  "amount": 2,
+  "reason": "confiscated",
+  "before": 5
+}
+```
+
+`before` is the current held quantity from `Player.Functions.GetItemByName(item)`
+(`0` when the player holds none). It is omitted while the player is offline
+(policy rejects that proposal with `player_not_found`). `amount` is the
+normalized value after applying the `agent_actions_max_item_amount` cap.
+
+### 3.12 `set_bucket`
+
+```json
+{
+  "action_type": "set_bucket",
+  "risk": "L3",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "bucket": 42,
+  "from": 0
+}
+```
+
+`from` is the current `GetPlayerRoutingBucket(source)` value, captured while
+building context. It is omitted while the player is offline. Routing buckets
+are **session state**: they are not persisted and reset when the player
+reconnects.
+
+### 3.13 `kick`
+
+```json
+{
+  "action_type": "kick",
+  "risk": "L4",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "reason": "cheating"
+}
+```
+
+Kick is irreversible: there is no preview undo and no automatic restore. The
+execution result records `kicked: true` once `QBCore.Functions.Kick` returns
+without throwing.
+
 ---
 
 ## 4. Status lifecycle
@@ -346,7 +415,7 @@ notify (dry_run = false)
   propose ──► approved ──► executed
                        └─► failed             (notify/AddMoney/quest execution error)
 
-add_money / start_quest / set_job / grant_item / announce / set_weather / set_time_of_day / teleport / spawn_vehicle (dry_run = false)
+add_money / start_quest / set_job / grant_item / remove_item / set_bucket / kick / announce / set_weather / set_time_of_day / teleport / spawn_vehicle (dry_run = false)
   propose ──► pending_approval ──► approved ──► executed
                               │             └─► failed
                               ├─► rejected              (operator reject)
@@ -431,11 +500,13 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
   (`grade_not_found` otherwise). Jobs without a `grades` table accept any
   in-range grade.
 - `item` must exist in `QBCore.Shared.Items` at propose and approve time
-  (`item_not_found` otherwise).
-- `grant_item.amount` is capped by `agent_actions_max_item_amount`
-  (default `50`, clamped `1..1000`). It does **not** consume the `add_money`
-  daily budget; there is no item budget in this slice.
-- Both actions require the target player to be online.
+  (`item_not_found` otherwise) for both `grant_item` and `remove_item`.
+- `grant_item.amount` and `remove_item.amount` are capped by
+  `agent_actions_max_item_amount` (default `50`, clamped `1..1000`).
+  `remove_item.amount` defaults to that cap when omitted. Neither action
+  consumes the `add_money` daily budget; there is no item budget in this slice.
+- All three actions (`set_job`, `grant_item`, `remove_item`) require the target
+  player to be online.
 
 ### 5.7 World and presentation actions
 
@@ -506,10 +577,29 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 - Optional `plate` is written with `SetVehicleNumberPlateText` and read back
   with `GetVehicleNumberPlateText` (whitespace stripped); a mismatch fails with
   `verification_failed`. There is no automatic entity deletion on that path.
-- This slice does **not** hand over keys, set a routing bucket, or write
-  `player_vehicles`; spawned vehicles are not persisted as owned vehicles.
+- `spawn_vehicle` itself does **not** hand over keys, change the routing
+  bucket, or write `player_vehicles`; spawned vehicles are not persisted as
+  owned vehicles. A bucket change requires the separate `set_bucket` action.
 
-### 5.10 Approval matrix
+### 5.10 Buckets and kicks
+
+- `set_bucket` is **L3** and `blast_radius = "single"`. `bucket` is an integer
+  `0..65535`; the target must be online at propose and approve time
+  (`player_not_found` otherwise). The executor calls
+  `QBCore.Functions.SetPlayerBucket(source, bucket)` and reads the value back
+  with `GetPlayerRoutingBucket(source)`; a mismatch is `verification_failed`.
+  Buckets are **session-scoped**: nothing is written to the database and the
+  bucket resets on reconnect. The audit `result.notes` says so explicitly.
+- `kick` is **L4**, `blast_radius = "single"`, `compensation = "manual"` and has
+  **no undo**. The target must be online. The executor calls
+  `QBCore.Functions.Kick(source, reason)` inside `pcall`; a thrown call is
+  `execution_failed`, otherwise the result is `{ kicked = true, reason }`.
+  `DropPlayer` is asynchronous, so the executor deliberately does **not**
+  require the player to be offline after the call.
+- Neither action is reversible: there is no inverse action and no automatic
+  re-bucket/reconnect.
+
+### 5.11 Approval matrix
 
 | Action | Risk | Auto-execute | Human approval | Budget / cap |
 |:---|:---|:---|:---|:---|
@@ -521,11 +611,15 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 | `set_job` | L3 | no | **always** | `QBCore.Shared.Jobs` + grades |
 | `teleport` | L3 | no | **always** | `custom-agent-client` started + map bounds + client ack (5 s) |
 | `spawn_vehicle` | L3 | no | **always** | online player + non-zero model hash + bounded 2 s spawn wait |
+| `remove_item` | L4 | no | **always** | `max_item_amount`; manual compensation |
+| `set_bucket` | L3 | no | **always** | online player + `0..65535` + routing-bucket read-back; session-scoped |
+| `kick` | L4 | no | **always** | online player + non-throwing `Kick`; irreversible |
 | `add_money` | L4 | no | **always** | `max_money` + daily budget |
 | `grant_item` | L4 | no | **always** | `max_item_amount` only |
 
 `blast_radius` is `world` only for the three L2 actions; all other actions are
-player-scoped (`teleport` and `spawn_vehicle` set `single` explicitly).
+player-scoped (`teleport`, `spawn_vehicle`, `remove_item`, `set_bucket` and
+`kick` set `single` explicitly).
 `agent_actions_enabled = 0` disables every action. A proposal rejected by
 policy before persistence is not an approval-matrix exception: it never
 executes.
@@ -556,7 +650,7 @@ executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `teleport` \| `spawn_vehicle` \| `grant_item` |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `teleport` \| `spawn_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` |
 | `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
@@ -685,6 +779,51 @@ the detailed `verification_failed ...` / `execution_failed ...` text is in
 This is an L4 action: it never auto-executes, even if `dry_run` is false, and
 it does not consume the `add_money` daily budget.
 
+### `remove_item`
+
+1. Re-resolve the online player and record `before` from
+   `Player.Functions.GetItemByName(item)` (`0` if none).
+2. `Player.Functions.RemoveItem(item, amount)` (the player method, **not** the
+   `exports['qb-inventory']:RemoveItem` export); a return other than `true`
+   becomes `failed` (`execution_failed`).
+3. Re-read the held quantity and require `before - after == amount`.
+4. On mismatch, mark `failed` with a `verification_failed` message. **No
+   automatic rollback**; operators use the audit row.
+
+The success `result` contains `{ item, amount, before, after, reason,
+verify_result }` (plus `at`). This is an L4 action: it never auto-executes and
+its compensation is `manual` (the removed items are not re-granted silently).
+Execution failures surface as `code: "execution_failed"` with the detailed
+`verification_failed ...` / `execution_failed ...` text in `error` and
+`result.error`.
+
+### `set_bucket`
+
+1. Re-resolve the online player and `source`; record
+   `before = GetPlayerRoutingBucket(source)` (best-effort).
+2. `QBCore.Functions.SetPlayerBucket(source, bucket)`; anything other than
+   `true` becomes `failed` (`execution_failed`).
+3. Read the native bucket back and require it to equal the requested bucket;
+   otherwise `failed` with `verification_failed`.
+4. Success `result` is `{ bucket, before, notes, verify_result, at }`. `notes`
+   states that the routing bucket is session-scoped and resets on reconnect.
+   There is no automatic restore of the previous bucket.
+
+This is an L3 action: it never auto-executes, even if `dry_run` is false.
+
+### `kick`
+
+1. Re-resolve the online player and `source`.
+2. Call `QBCore.Functions.Kick(source, reason)` inside `pcall`; a thrown call
+   becomes `failed` (`execution_failed`).
+3. A call that returns without throwing is success:
+   `result = { kicked = true, reason, at }`. No "player is offline" read-back is
+   performed: `DropPlayer` is asynchronous, so the player may still be online
+   when the executor returns. There is no undo.
+
+This is an L4 action: it never auto-executes, its compensation is `manual`, and
+it is irreversible.
+
 ### `announce`
 
 1. Calls `QBCore.Functions.GetPlayers()` and, for each source,
@@ -768,6 +907,12 @@ with `executor_unavailable`.
 HTTP callers see `execution_failed` (409) and the specific code is in the
 `error`/`result.error` text.
 
+The same wrapping applies to `remove_item`, `set_bucket` and `kick`:
+`execution_failed` (409) is returned, with `verification_failed ...`,
+`execution_failed: RemoveItem ...`, `execution_failed: SetPlayerBucket ...` or
+`execution_failed: Kick ...` in the `error` text. `player_not_found` /
+`item_not_found` remain policy rejections before execution.
+
 ---
 
 ## 10. Security invariants
@@ -782,9 +927,10 @@ HTTP callers see `execution_failed` (409) and the specific code is in the
 8. Keep the FXServer HTTP port on loopback/private networks; terminate TLS at a
    trusted proxy if needed. CORS is not enabled.
 9. No automatic rollback of economy mutations; failures are audited loudly.
-10. `add_money`, `start_quest`, `set_job`, `grant_item`, `announce`,
-    `set_weather`, `set_time_of_day`, `teleport` and `spawn_vehicle` always
-    require `pending_approval`, regardless of the proposing agent.
+10. `add_money`, `start_quest`, `set_job`, `grant_item`, `remove_item`,
+    `set_bucket`, `kick`, `announce`, `set_weather`, `set_time_of_day`,
+    `teleport` and `spawn_vehicle` always require `pending_approval`,
+    regardless of the proposing agent.
 
 ---
 
@@ -817,12 +963,15 @@ HTTP callers see `execution_failed` (409) and the specific code is in the
 - Background TTL worker (currently lazy sweep on `List`/`Approve`).
 - World-state/atmosphere/scene/NPC actions beyond `announce`, weather and time
   (L2+ from the design doc).
-- Undo/rollback for money; compensation flows for quests.
+- Undo/rollback for money; compensation flows for quests, removed items,
+  routing buckets and kicks. `remove_item` and `kick` are explicitly
+  `compensation = "manual"`; `set_bucket` is `none`.
 - Teleport position verification, bucket/combat/vehicle guards and named
   locations: this slice sends exact coordinates and trusts the client's `ok`
   ack; the full v2.1 teleport contract is still open.
-- Vehicle keys, routing buckets, `player_vehicles` persistence and garage
-  integration for `spawn_vehicle`: this slice only creates the entity (and an
-  optional plate) next to the player.
+- Vehicle keys, automatic bucket selection for `spawn_vehicle`,
+  `player_vehicles` persistence and garage integration: this slice only creates
+  the entity (and an optional plate) next to the player. Bucket changes require
+  the explicit `set_bucket` action.
 - LLM/Hub implementation; this resource only accepts proposals.
 - Offline-player money operations (QB `GetPlayerByCitizenId` is online-only).
