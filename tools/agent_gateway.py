@@ -41,6 +41,20 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
 _BEARER_RE = re.compile(r"^\s*Bearer\s+(.+?)\s*$", re.IGNORECASE)
 
+# Fixed wire text per error code. Validation details (which can quote request
+# parameters) are logged to stderr instead of being reflected to the caller.
+_SAFE_ERRORS = {
+    "unauthorized": "missing or invalid bearer token",
+    "not_found": "not found",
+    "method_not_allowed": "method not allowed",
+    "body_too_large": "request body too large",
+    "schema_unavailable": "schema is unavailable",
+    "database_error": "database is unavailable",
+    "database_unavailable": "database is unavailable",
+    "permission_denied": "permission denied",
+    "internal_error": "internal server error",
+}
+
 
 # ---------------------------------------------------------------------------
 # Response helpers
@@ -126,10 +140,25 @@ class AgentHandler(BaseHTTPRequestHandler):
                 pass
 
     def _error(self, status: int, message: str, code: str, headers: dict[str, str] | None = None) -> None:
+        # Never reflect the detailed message: ValidationError strings can
+        # contain query parameter names/values, which makes the response a
+        # reflected-input sink (Sonar: reflected XSS). The detail goes to
+        # stderr for operators; the wire gets a fixed, code-derived text.
+        if message:
+            print(
+                f"agent_gateway: {status} {code}: {message}",
+                file=sys.stderr,
+                flush=True,
+            )
         kind, retryable = agent_contract.classify(code)
         self._send_json(
             status,
-            {"error": message, "code": code, "kind": kind, "retryable": retryable},
+            {
+                "error": _SAFE_ERRORS.get(code, "invalid request"),
+                "code": code,
+                "kind": kind,
+                "retryable": retryable,
+            },
             headers,
         )
 

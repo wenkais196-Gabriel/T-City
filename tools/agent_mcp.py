@@ -646,7 +646,7 @@ _LOCAL_READERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
 }
 
 
-def _call_local(tool: dict[str, Any], args: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
+def _call_local(tool: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:
     reader = _LOCAL_READERS.get(str(tool.get("name")))
     if reader is None:
         raise ToolCallError(
@@ -663,7 +663,7 @@ def _call_gateway(tool: dict[str, Any], args: dict[str, Any], *, timeout_s: floa
     config = _gateway_config()
     if config is None:
         if _standalone_mode():
-            return _call_local(tool, args, timeout_s=timeout_s)
+            return _call_local(tool, args)
         raise ToolCallError("gateway channel is not configured", code="unauthorized")
     _url, token = config
     url = _gateway_url(tool, args)
@@ -1221,7 +1221,11 @@ def main() -> int:
                 sys.stdout.write(_json_text(response) + "\n")
                 sys.stdout.flush()
             except (BrokenPipeError, ConnectionResetError):
+                # The host closed the pipe; that is a normal shutdown.
                 return 0
+            except OSError as exc:  # noqa: BLE001 - report, do not traceback
+                print(f"agent_mcp: stdout write failed: {type(exc).__name__}", file=sys.stderr, flush=True)
+                return 1
     return 0
 
 

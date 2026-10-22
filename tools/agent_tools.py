@@ -369,15 +369,14 @@ def validate_registry(registry: Any = None) -> list[str]:
         _err(errors, "registry.schema_version", f"must be {SCHEMA_VERSION}")
     if "$schema" in registry:
         _check_str(errors, "registry.$schema", registry["$schema"], min_length=1, max_length=200)
-    if not _check_str(
+    _check_str(
         errors,
         "registry.registry_version",
         registry.get("registry_version"),
         min_length=5,
         max_length=20,
         pattern=SEMVER_RE,
-    ):
-        pass
+    )
     generated = registry.get("generated")
     if generated is not None and isinstance(generated, str):
         try:
@@ -936,7 +935,6 @@ def _validate_references(
     index: int,
 ) -> None:
     path = f"registry.tools[{index}]"
-    name = tool.get("name") if isinstance(tool.get("name"), str) else "?"
     own_props = set()
     schema = tool.get("inputSchema")
     if isinstance(schema, dict) and isinstance(schema.get("properties"), dict):
@@ -1300,9 +1298,13 @@ def render_lua(registry: dict[str, Any] | None = None) -> str:
             lines.append(f"    director_action = {_lua_string(director_action)},")
         else:
             lines.append("    director_action = false,")
-        lines.append(f"    auth = {_lua_string(str(tool.get('auth', 'default'))) },")
-        lines.append(f"    params = {_lua_string_list(props.keys())},")
-        lines.append(f"    required = {_lua_string_list(required)},")
+        lines.extend(
+            [
+                f"    auth = {_lua_string(str(tool.get('auth', 'default')))},",
+                f"    params = {_lua_string_list(props.keys())},",
+                f"    required = {_lua_string_list(required)},",
+            ]
+        )
         if props:
             lines.append("    schema = {")
             for prop_name, spec in props.items():
