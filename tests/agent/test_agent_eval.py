@@ -56,6 +56,22 @@ def make_row(**overrides: object) -> dict:
     return row
 
 
+def make_denial(**overrides: object) -> dict:
+    row = {
+        "id": 1,
+        "agent_id": "director.rules",
+        "action_type": "add_money",
+        "code": "daily_budget_exceeded",
+        "message": "daily budget exceeded (0 + 500 > 100)",
+        "param_keys": "account,amount,citizenid,reason",
+        "params_hash": "691bb6f4105ec199",
+        "dry_run": 0,
+        "created_at": iso(0),
+    }
+    row.update(overrides)
+    return row
+
+
 class TempFileTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="agent-eval-"))
@@ -162,7 +178,9 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(report["idempotency"]["duplicate_keys"], 0)
         self.assertIsNone(report["idempotency"]["replay_rate"])
         self.assertIsNone(report["risk"])
-        self.assertIn("越权拒绝率无法从本表计算", report["notes"][0])
+        self.assertIsNone(report["denials"])
+        self.assertIsNone(report["rates"]["denial_rate"])
+        self.assertIn("未提供 --denials", report["notes"][0])
         self.assertIn("# Agent Action Evaluation", agent_eval.render_markdown(report))
 
     def test_totals_and_distributions(self) -> None:
@@ -382,7 +400,7 @@ class RiskAndNotesTests(unittest.TestCase):
     def test_risk_is_null_without_a_row_level_field(self) -> None:
         report = agent_eval.summarize([make_row()])
         self.assertIsNone(report["risk"])
-        self.assertIn("越权拒绝率无法从本表计算", report["notes"][0])
+        self.assertIn("未提供 --denials", report["notes"][0])
         self.assertTrue(any("risk" in note and "null" in note for note in report["notes"]))
         self.assertTrue(any("不落库" in note for note in report["notes"]))
 
@@ -405,6 +423,85 @@ class RiskAndNotesTests(unittest.TestCase):
         self.assertEqual(report["rates"]["execution_success_rate"], 1.0)
 
 
+class DenialTests(unittest.TestCase):
+    def test_denials_block_aggregates_and_counts_dry_runs(self) -> None:
+        denials = [
+            make_denial(id=1, code="daily_budget_exceeded", action_type="add_money", agent_id="a"),
+            make_denial(
+                id=2,
+                code="money_cap_exceeded",
+                action_type="add_money",
+                agent_id="a",
+                dry_run=1,
+            ),
+            make_denial(
+                id=3,
+                code="weather_sync_unavailable",
+                action_type="set_weather",
+                agent_id="b",
+            ),
+        ]
+        report = agent_eval.summarize([], denials=denials)
+        self.assertEqual(
+            report["denials"],
+            {
+                "total": 3,
+                "by_code": {
+                    "daily_budget_exceeded": 1,
+                    "money_cap_exceeded": 1,
+                    "weather_sync_unavailable": 1,
+                },
+                "by_action": {"add_money": 2, "set_weather": 1},
+                "by_agent": {"a": 2, "b": 1},
+                "dry_run_count": 1,
+                "bad_rows_skipped": 0,
+            },
+        )
+
+    def test_denial_rate_uses_denials_plus_persisted_rows(self) -> None:
+        rows = [make_row(id=1, idempotency_key="1"), make_row(id=2, idempotency_key="2")]
+        denials = [make_denial(id=1), make_denial(id=2, code="money_cap_exceeded")]
+        report = agent_eval.summarize(rows, denials=denials)
+        self.assertAlmostEqual(report["rates"]["denial_rate"], 2 / 4)
+
+    def test_denial_rate_is_null_without_denials_input(self) -> None:
+        report = agent_eval.summarize([make_row()])
+        self.assertIsNone(report["rates"]["denial_rate"])
+        self.assertIsNone(report["denials"])
+        self.assertIn("未提供 --denials", report["notes"][0])
+
+    def test_denial_rate_is_null_when_both_sides_are_empty(self) -> None:
+        report = agent_eval.summarize([], denials=[])
+        self.assertEqual(report["denials"]["total"], 0)
+        self.assertIsNone(report["rates"]["denial_rate"])
+        self.assertIn("已计入 --denials", report["notes"][0])
+
+    def test_invalid_denial_rows_are_skipped_and_counted(self) -> None:
+        # Two malformed JSON lines were already dropped by the loader; two more
+        # rows parse but carry no code / are not objects.
+        loaded = agent_eval.LoadedRows(
+            [
+                make_denial(),
+                {"agent_id": "a", "action_type": "kick"},
+                "not-a-row",
+            ]
+        )
+        loaded.bad_lines = 2
+        report = agent_eval.summarize([], denials=loaded)
+        self.assertEqual(report["denials"]["total"], 1)
+        self.assertEqual(report["denials"]["bad_rows_skipped"], 4)
+
+    def test_string_and_int_dry_run_flags(self) -> None:
+        denials = [
+            make_denial(id=1, dry_run="1"),
+            make_denial(id=2, dry_run=True),
+            make_denial(id=3, dry_run=0),
+            make_denial(id=4, dry_run=None),
+        ]
+        report = agent_eval.summarize([], denials=denials)
+        self.assertEqual(report["denials"]["dry_run_count"], 2)
+
+
 class MarkdownTests(unittest.TestCase):
     def test_markdown_contains_key_tables_and_headers(self) -> None:
         report = agent_eval.summarize([make_row()])
@@ -421,6 +518,17 @@ class MarkdownTests(unittest.TestCase):
         self.assertIn("| Execution success rate |", markdown)
         self.assertIn("| p95 |", markdown)
         self.assertIn("| Duplicate keys |", markdown)
+
+    def test_markdown_denial_rate_line(self) -> None:
+        with_denials = agent_eval.render_markdown(
+            agent_eval.summarize([make_row()], denials=[make_denial()])
+        )
+        self.assertIn("| Denial rate |", with_denials)
+        self.assertIn("1 / 2 (denials + persisted)", with_denials)
+
+        without = agent_eval.render_markdown(agent_eval.summarize([make_row()]))
+        self.assertIn("| Denial rate |", without)
+        self.assertIn("no --denials input", without)
 
     def test_markdown_marks_empty_sections(self) -> None:
         markdown = agent_eval.render_markdown(agent_eval.summarize([]))
@@ -503,6 +611,56 @@ class CliTests(TempFileTests):
         code, stdout, _ = self.call_main(["--input", str(source)])
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(stdout)["totals"]["actions"], 1)
+
+    def test_cli_reads_denials_and_counts_bad_rows(self) -> None:
+        source = self.write("rows.jsonl", json.dumps(make_row()) + "\n")
+        denials = self.write(
+            "denials.jsonl",
+            "\n".join(
+                [
+                    json.dumps(make_denial(id=1)),
+                    "{broken",
+                    json.dumps({"agent_id": "a", "action_type": "kick"}),
+                    json.dumps(make_denial(id=2, code="money_cap_exceeded", dry_run=1)),
+                ]
+            )
+            + "\n",
+        )
+        out = self.tmp / "out.json"
+        code, _, err = self.call_main(
+            ["--input", str(source), "--denials", str(denials), "--out", str(out)]
+        )
+        self.assertEqual(code, 0)
+        report = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(report["denials"]["total"], 2)
+        self.assertEqual(report["denials"]["bad_rows_skipped"], 2)
+        self.assertEqual(report["denials"]["dry_run_count"], 1)
+        self.assertAlmostEqual(report["rates"]["denial_rate"], 2 / 3)
+        self.assertEqual(report["input"]["denial_files"], [str(denials)])
+        self.assertIn("skipped 1 malformed record(s)", err)
+        self.assertIn("已计入 --denials", report["notes"][0])
+
+    def test_cli_denials_path_outside_root_is_rejected(self) -> None:
+        source = self.write("rows.jsonl", "")
+        code, _, err = self.call_main(["--input", str(source), "--denials", "/etc/hostname"])
+        self.assertEqual(code, 1)
+        self.assertIn("cannot read denials input", err)
+
+    def test_dev_null_is_an_empty_export(self) -> None:
+        code, stdout, _ = self.call_main(["--input", os.devnull, "--denials", os.devnull])
+        self.assertEqual(code, 0)
+        report = json.loads(stdout)
+        self.assertEqual(report["totals"]["actions"], 0)
+        self.assertEqual(report["denials"]["total"], 0)
+        self.assertIsNone(report["rates"]["denial_rate"])
+
+    def test_cli_json_flag_prints_stdout_even_with_out(self) -> None:
+        source = self.write("rows.jsonl", json.dumps(make_row()) + "\n")
+        out = self.tmp / "out.json"
+        code, stdout, _ = self.call_main(["--input", str(source), "--out", str(out), "--json"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout)["totals"]["actions"], 1)
+        self.assertFalse(out.exists())
 
 
 if __name__ == "__main__":
