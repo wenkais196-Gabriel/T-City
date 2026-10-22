@@ -2,9 +2,10 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope covers nine actions (six player-scoped
+risky actions and an audit row. Scope covers ten actions (seven player-scoped
 plus three L2 world/presentation actions); there is no LLM integration. Adding
-the L2 actions and `teleport` did not change `schema_version` (still `1`).
+the L2 actions, `teleport` and `spawn_vehicle` did not change
+`schema_version` (still `1`).
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -26,6 +27,7 @@ the L2 actions and `teleport` did not change `schema_version` (still `1`).
 | `start_quest` | L3 任务 | `citizenid`, `quest_id` | `pending_approval` | **always** | `exports['custom-quest']:TriggerQuest(source, quest_id)` |
 | `set_job` | L3 职业 | `citizenid`, `job`, `grade?` | `pending_approval` | **always** | `Player.Functions.SetJob(job, grade)` + job/grade read-back verification |
 | `teleport` | L3 位置 | `citizenid`, `x`, `y`, `z`, `heading?` | `pending_approval` | **always** | `exports['custom-agent-client']:Execute(source, 'teleport', {x,y,z,heading}, 5000, {agent_id='director:<id>'})` + client ack |
+| `spawn_vehicle` | L3 载具 | `citizenid`, `model`, `plate?` | `pending_approval` | **always** | server-side `CreateVehicleServerSetter` 1.5 m in front of the ped, bounded existence wait (2 s), optional plate write + read-back |
 | `grant_item` | L4 物品 | `citizenid`, `item`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddItem(item, amount)` + inventory delta verification |
 
 Anything else is rejected with `code: "unsupported_action"`.
@@ -60,6 +62,8 @@ approves every broadcast/weather/time change before it runs.
 | `teleport.x` / `teleport.y` | finite number within `-4500..8500` (GTA map bounds; NaN/±inf rejected) |
 | `teleport.z` | finite number within `-200..3000` (GTA map bounds; NaN/±inf rejected) |
 | `teleport.heading` | optional finite number `0..360`; omitted when not supplied |
+| `spawn_vehicle.model` | 1–64 chars, `[A-Za-z0-9_-]`, trimmed and lowercased; must resolve to a non-zero `GetHashKey` |
+| `spawn_vehicle.plate` | optional, 1–8 chars, `[A-Z0-9]`, trimmed and uppercased |
 | `grant_item.item` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `QBCore.Shared.Items` |
 | `grant_item.amount` | integer `1..agent_actions_max_item_amount` (default 50, clamped 1..1000) |
 | `grant_item.reason` | 1–128 chars, no C0 controls |
@@ -68,8 +72,8 @@ approves every broadcast/weather/time change before it runs.
 
 Unknown keys inside `args` are dropped for `notify`, `add_money` and
 `start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
-`announce`, `set_weather`, `set_time_of_day` and `teleport`. Unknown action
-types are rejected. There is no client-side validation path.
+`announce`, `set_weather`, `set_time_of_day`, `teleport` and `spawn_vehicle`.
+Unknown action types are rejected. There is no client-side validation path.
 
 ---
 
@@ -308,6 +312,28 @@ live `GetEntityCoords(GetPlayerPed(source))` captured while building context
 (or absent when `GetPlayerPed` returns `0`, e.g. the player is still loading);
 it is advisory and may be stale by approval time.
 
+### 3.10 `spawn_vehicle`
+
+```json
+{
+  "action_type": "spawn_vehicle",
+  "risk": "L3",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "model": "sultan",
+  "plate": "ABC123",
+  "from": { "x": 10.5, "y": -20.25, "z": 30.0 }
+}
+```
+
+`model` is the normalized lowercase model name. `plate` is omitted when the
+caller did not supply one. `from` is the live
+`GetEntityCoords(GetPlayerPed(source))` captured while building context (also
+absent while the ped is `0`); the actual spawn point is recomputed at execution
+time as 1.5 m in front of the ped.
+
 ---
 
 ## 4. Status lifecycle
@@ -320,7 +346,7 @@ notify (dry_run = false)
   propose ──► approved ──► executed
                        └─► failed             (notify/AddMoney/quest execution error)
 
-add_money / start_quest / set_job / grant_item / announce / set_weather / set_time_of_day / teleport (dry_run = false)
+add_money / start_quest / set_job / grant_item / announce / set_weather / set_time_of_day / teleport / spawn_vehicle (dry_run = false)
   propose ──► pending_approval ──► approved ──► executed
                               │             └─► failed
                               ├─► rejected              (operator reject)
@@ -455,7 +481,35 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
   `CreateThread`). A caller outside a coroutine gets `not_yieldable` and no
   client event is sent.
 
-### 5.9 Approval matrix
+### 5.9 Vehicles (`spawn_vehicle`)
+
+- `spawn_vehicle` is **L3** and `blast_radius = "single"`: it spawns exactly one
+  vehicle next to the target player. Like every non-notify action it always
+  goes through human approval.
+- Propose **and** Approve require the target player to be online
+  (`player_not_found` otherwise). `model` must resolve through `GetHashKey` to a
+  non-zero hash at propose and approve time; otherwise the proposal is rejected
+  with `model_not_found`. Policy stays native-free: `main.lua` injects
+  `ctx.model_hash`.
+- Execution re-resolves the player and ped (`GetPlayerPed(source) == 0` →
+  `player_offline`), captures `GetEntityCoords`/`GetEntityHeading`, and spawns
+  1.5 m in front of the ped using `GetEntityForwardVector` (or at the same point
+  when that native is unavailable).
+- Vehicle creation uses server-side `CreateVehicleServerSetter(model,
+  'automobile', x, y, z, heading)`; when that native is absent it falls back to
+  `CreateVehicle(model, x, y, z, heading, true, false)`.
+- **Bounded wait**: existence is polled for at most 2000 ms (`GetGameTimer`
+  deadline). `QBCore.Functions.SpawnVehicle` is deliberately not used because
+  its `while not DoesEntityExist(veh) do Wait(0) end` has no timeout. On timeout
+  the entity is deleted (pcall) and the action fails with
+  `vehicle_spawn_timeout`.
+- Optional `plate` is written with `SetVehicleNumberPlateText` and read back
+  with `GetVehicleNumberPlateText` (whitespace stripped); a mismatch fails with
+  `verification_failed`. There is no automatic entity deletion on that path.
+- This slice does **not** hand over keys, set a routing bucket, or write
+  `player_vehicles`; spawned vehicles are not persisted as owned vehicles.
+
+### 5.10 Approval matrix
 
 | Action | Risk | Auto-execute | Human approval | Budget / cap |
 |:---|:---|:---|:---|:---|
@@ -466,11 +520,12 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 | `start_quest` | L3 | no | **always** | quest catalog |
 | `set_job` | L3 | no | **always** | `QBCore.Shared.Jobs` + grades |
 | `teleport` | L3 | no | **always** | `custom-agent-client` started + map bounds + client ack (5 s) |
+| `spawn_vehicle` | L3 | no | **always** | online player + non-zero model hash + bounded 2 s spawn wait |
 | `add_money` | L4 | no | **always** | `max_money` + daily budget |
 | `grant_item` | L4 | no | **always** | `max_item_amount` only |
 
 `blast_radius` is `world` only for the three L2 actions; all other actions are
-player-scoped (and only `teleport` sets `single` explicitly).
+player-scoped (`teleport` and `spawn_vehicle` set `single` explicitly).
 `agent_actions_enabled = 0` disables every action. A proposal rejected by
 policy before persistence is not an approval-matrix exception: it never
 executes.
@@ -501,7 +556,7 @@ executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `teleport` \| `grant_item` |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `teleport` \| `spawn_vehicle` \| `grant_item` |
 | `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
@@ -585,6 +640,31 @@ This is an L3 action: it never auto-executes, even if `dry_run` is false.
 
 This is an L3 action: it never auto-executes, even if `dry_run` is false.
 
+### `spawn_vehicle`
+
+1. Re-resolve the online player and `source`; `GetPlayerPed(source)` returning
+   `0` (loading/dropping) fails with `player_offline`.
+2. Read `GetEntityCoords(ped)` and `GetEntityHeading(ped)`. The spawn point is
+   shifted 1.5 m along `GetEntityForwardVector(ped)`; if that native is not
+   available the vehicle spawns at the ped's exact position.
+3. Create with
+   `CreateVehicleServerSetter(model, 'automobile', x, y, z, heading)`, falling
+   back to `CreateVehicle(model, x, y, z, heading, true, false)` when the
+   server-setter native is absent.
+4. Wait for existence with a hard deadline:
+   `deadline = GetGameTimer() + 2000; while not DoesEntityExist(veh) and
+   GetGameTimer() < deadline do Wait(0) end`. On timeout the entity is deleted
+   inside `pcall` and the action fails with `vehicle_spawn_timeout` (the broker
+   surfaces `execution_failed` with that text).
+5. If `plate` was supplied, `SetVehicleNumberPlateText(veh, plate)` then compare
+   `GetVehicleNumberPlateText(veh)` with whitespace stripped; a mismatch fails
+   with `verification_failed` (the vehicle is left in place for operator
+   review).
+6. Success `result` is `{ entity, model, plate, coords = { x, y, z } }`.
+   No keys, no bucket change and no `player_vehicles` row are produced.
+
+This is an L3 action: it never auto-executes, even if `dry_run` is false.
+
 ### `grant_item`
 
 1. Re-resolve the online player and record `before` from
@@ -659,6 +739,7 @@ appear for action results). No stack traces.
 | `text_too_long` | 400 | Notify/announce text over cap |
 | `weather_sync_unavailable` | 400 | `qb-weathersync` is not started |
 | `executor_unavailable` | 400 | `custom-agent-client` is not started (teleport) |
+| `model_not_found` | 400 | `spawn_vehicle.model` hashes to `0` |
 | `not_found` | 404 | Unknown route or own-row id not found |
 | `method_not_allowed` | 405 | Wrong method (`Allow` set) |
 | `idempotency_conflict` | 409 | Key reused with different action/params |
@@ -682,6 +763,11 @@ Teleport dispatch failures (`executor_disabled`, `not_yieldable`, `timeout`,
 At propose/approve time, a stopped `custom-agent-client` is a policy rejection
 with `executor_unavailable`.
 
+`spawn_vehicle` execution failures (`player_offline`, `vehicle_spawn_failed`,
+`vehicle_spawn_timeout`, `verification_failed`) are wrapped the same way:
+HTTP callers see `execution_failed` (409) and the specific code is in the
+`error`/`result.error` text.
+
 ---
 
 ## 10. Security invariants
@@ -697,8 +783,8 @@ with `executor_unavailable`.
    trusted proxy if needed. CORS is not enabled.
 9. No automatic rollback of economy mutations; failures are audited loudly.
 10. `add_money`, `start_quest`, `set_job`, `grant_item`, `announce`,
-    `set_weather`, `set_time_of_day` and `teleport` always require
-    `pending_approval`, regardless of the proposing agent.
+    `set_weather`, `set_time_of_day`, `teleport` and `spawn_vehicle` always
+    require `pending_approval`, regardless of the proposing agent.
 
 ---
 
@@ -735,5 +821,8 @@ with `executor_unavailable`.
 - Teleport position verification, bucket/combat/vehicle guards and named
   locations: this slice sends exact coordinates and trusts the client's `ok`
   ack; the full v2.1 teleport contract is still open.
+- Vehicle keys, routing buckets, `player_vehicles` persistence and garage
+  integration for `spawn_vehicle`: this slice only creates the entity (and an
+  optional plate) next to the player.
 - LLM/Hub implementation; this resource only accepts proposals.
 - Offline-player money operations (QB `GetPlayerByCitizenId` is online-only).

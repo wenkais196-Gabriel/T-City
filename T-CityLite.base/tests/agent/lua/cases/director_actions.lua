@@ -1,6 +1,6 @@
 -- tests/agent/lua/cases/director_actions.lua — executor contract for
--- custom-director's set_job (L3), grant_item (L4) and teleport (L3, delegated
--- to custom-agent-client) actions.
+-- custom-director's set_job (L3), grant_item (L4), teleport (L3, delegated to
+-- custom-agent-client) and spawn_vehicle (L3, server-side) actions.
 --
 -- The executors live in server/main.lua; main exposes them on the internal
 -- AgentActions._Execute table so this harness can drive them against the stub
@@ -88,6 +88,7 @@ return {
             assert(type(env.actions._Execute.set_weather) == 'function', 'set_weather executor missing')
             assert(type(env.actions._Execute.set_time_of_day) == 'function', 'set_time_of_day executor missing')
             assert(type(env.actions._Execute.teleport) == 'function', 'teleport executor missing')
+            assert(type(env.actions._Execute.spawn_vehicle) == 'function', 'spawn_vehicle executor missing')
             assert(type(env.actions._Context) == 'function', 'context builder missing')
         end)
 
@@ -566,6 +567,235 @@ return {
             assert(normalized == nil, 'unknown field must be rejected')
             assert(err and err.code == 'invalid_params', tostring(err and err.code))
             assert(tostring(err.message):match('unknown field weapon'), tostring(err.message))
+        end)
+
+        check('spawn_vehicle_registry_and_preview', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.peds[7] = 99
+            env.entity_coords[99] = { x = 10.0, y = 20.0, z = 30.0 }
+
+            local definition = env.policy.ACTIONS.spawn_vehicle
+            assert(type(definition) == 'table', 'spawn_vehicle missing from ACTIONS')
+            assert(definition.risk == 'L3', 'spawn_vehicle risk must be L3')
+            assert(definition.requires_approval == true, 'spawn_vehicle must require approval')
+            assert(definition.auto_execute == false, 'spawn_vehicle must never auto-execute')
+            assert(definition.blast_radius == 'single', 'spawn_vehicle blast radius must be single')
+
+            local params = assert(env.policy.Normalize('spawn_vehicle', {
+                citizenid = 'ABC12345',
+                model = 'Sultan',
+                plate = 'abc123',
+            }))
+            assert(params.model == 'sultan', 'model must be lowercased')
+            assert(params.plate == 'ABC123', 'plate must be uppercased')
+
+            local context = env.actions._Context('spawn_vehicle', params)
+            assert(context.position and context.position.x == 10.0,
+                'context.position must be the player position')
+            assert(type(context.model_hash) == 'number' and context.model_hash ~= 0,
+                'context.model_hash must be injected by main')
+
+            local preview = env.policy.Preview('spawn_vehicle', params, context, {})
+            assert(preview.citizenid == 'ABC12345', 'preview citizenid missing')
+            assert(preview.model == 'sultan' and preview.plate == 'ABC123',
+                'preview model/plate mismatch')
+            assert(preview.from.x == 10.0 and preview.from.y == 20.0
+                and preview.from.z == 30.0, 'preview.from mismatch')
+
+            local ok, err = env.policy.CheckPolicy('spawn_vehicle', params, {}, context)
+            assert(ok == true, tostring(err and err.code))
+        end)
+
+        check('spawn_vehicle_normalize_rejects_bad_model', function()
+            local env = newEnv()
+            local badModels = {
+                { value = '', label = 'empty' },
+                { value = 'bad model', label = 'space' },
+                { value = 'sultan!', label = 'bang' },
+                { value = string.rep('a', 65), label = 'too long' },
+                { value = 123, label = 'non-string' },
+            }
+            for _, case in ipairs(badModels) do
+                local normalized, err = env.policy.Normalize('spawn_vehicle', {
+                    citizenid = 'ABC12345',
+                    model = case.value,
+                })
+                assert(normalized == nil, case.label .. ' model must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    case.label .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local edge = env.policy.Normalize('spawn_vehicle', {
+                citizenid = 'ABC12345',
+                model = string.rep('a', 64),
+            })
+            assert(edge ~= nil and #edge.model == 64, '64-char model must be accepted')
+        end)
+
+        check('spawn_vehicle_normalize_rejects_bad_plate', function()
+            local env = newEnv()
+            local badPlates = {
+                { value = '', label = 'empty' },
+                { value = 'ABCDEFGHI', label = 'too long' },
+                { value = 'AB-CD', label = 'dash' },
+                { value = 'ABC 123', label = 'inner space' },
+                { value = 42, label = 'non-string' },
+            }
+            for _, case in ipairs(badPlates) do
+                local normalized, err = env.policy.Normalize('spawn_vehicle', {
+                    citizenid = 'ABC12345',
+                    model = 'sultan',
+                    plate = case.value,
+                })
+                assert(normalized == nil, case.label .. ' plate must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    case.label .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local noPlate = env.policy.Normalize('spawn_vehicle', {
+                citizenid = 'ABC12345',
+                model = 'sultan',
+            })
+            assert(noPlate ~= nil and noPlate.plate == nil, 'plate must stay optional')
+        end)
+
+        check('spawn_vehicle_normalize_rejects_unknown_field', function()
+            local env = newEnv()
+            local normalized, err = env.policy.Normalize('spawn_vehicle', {
+                citizenid = 'ABC12345',
+                model = 'sultan',
+                color = 'red',
+            })
+            assert(normalized == nil, 'unknown field must be rejected')
+            assert(err and err.code == 'invalid_params', tostring(err and err.code))
+            assert(tostring(err.message):match('unknown field color'), tostring(err.message))
+        end)
+
+        check('spawn_vehicle_policy_rejects_zero_model_hash', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.hashes.ghostcar = 0
+
+            local params = { citizenid = 'ABC12345', model = 'ghostcar' }
+            local context = env.actions._Context('spawn_vehicle', params)
+            assert(context.model_hash == 0, 'model_hash should be 0')
+
+            local ok, err = env.policy.CheckPolicy('spawn_vehicle', params, {}, context)
+            assert(ok == false, 'zero model hash must be rejected')
+            assert(err.code == 'model_not_found', tostring(err.code))
+        end)
+
+        check('spawn_vehicle_ped_zero_is_player_offline', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345') -- no env.peds entry: GetPlayerPed returns 0
+            local ok, err = env.actions._Execute.spawn_vehicle(1, {
+                citizenid = 'ABC12345',
+                model = 'sultan',
+            })
+            assert(ok == false, 'missing ped must fail')
+            assert(err == 'player_offline', tostring(err))
+            assert(#env.vehicles == 0, 'no vehicle should be created')
+            assert(#env.deleted_entities == 0, 'nothing to delete')
+        end)
+
+        check('spawn_vehicle_success_returns_entity', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.peds[7] = 99
+            env.entity_coords[99] = { x = 100.0, y = 200.0, z = 30.0 }
+            env.entity_headings[99] = 90.0
+            env.entity_forward[99] = { x = 0.0, y = 1.0, z = 0.0 }
+
+            local params = assert(env.policy.Normalize('spawn_vehicle', {
+                citizenid = 'ABC12345',
+                model = 'Sultan',
+                plate = 'abc123',
+            }))
+            local ok, err, result = env.actions._Execute.spawn_vehicle(1, params)
+            assert(ok == true, tostring(err))
+            assert(type(result.entity) == 'number', 'result.entity missing')
+            assert(result.model == 'sultan' and result.plate == 'ABC123',
+                'result model/plate mismatch')
+            assert(result.coords.x == 100.0 and result.coords.y == 201.5
+                and result.coords.z == 30.0, 'result.coords must be 1.5m in front')
+
+            local vehicle = env.vehicles[1]
+            assert(vehicle and vehicle.native == 'server_setter',
+                'CreateVehicleServerSetter was not used')
+            assert(vehicle.model == 'sultan' and vehicle.vehtype == 'automobile',
+                'vehicle model/type mismatch')
+            assert(vehicle.heading == 90.0, 'vehicle heading mismatch')
+            assert(vehicle.x == 100.0 and vehicle.y == 201.5,
+                'vehicle spawn position mismatch')
+            assert(env.vehicle_plates[result.entity] == 'ABC123',
+                'plate was not applied')
+            assert(#env.deleted_entities == 0, 'a live vehicle must not be deleted')
+        end)
+
+        check('spawn_vehicle_timeout_is_bounded_and_deletes_entity', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.peds[7] = 99
+            env.entity_coords[99] = { x = 1.0, y = 2.0, z = 3.0 }
+            env.entity_exists_override = false
+
+            -- Controlled clock: Wait advances env.now by 500 ms, so the 2000 ms
+            -- deadline is reached in four iterations instead of really sleeping.
+            local waits = 0
+            _G.Wait = function()
+                waits = waits + 1
+                env.now = env.now + 500
+            end
+            _G.GetGameTimer = function() return env.now end
+
+            local ok, err = env.actions._Execute.spawn_vehicle(1, {
+                citizenid = 'ABC12345',
+                model = 'sultan',
+            })
+            assert(ok == false, 'timeout must fail')
+            assert(err == 'vehicle_spawn_timeout', tostring(err))
+            assert(waits >= 1 and waits <= 10,
+                'wait loop must be bounded, took ' .. tostring(waits) .. ' waits')
+            assert(#env.deleted_entities == 1, 'timed-out entity must be deleted')
+            assert(env.deleted_entities[1] == env.vehicles[1].entity,
+                'deleted entity must be the spawned one')
+        end)
+
+        check('spawn_vehicle_plate_readback_mismatch_is_verification_failed', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.peds[7] = 99
+            env.entity_coords[99] = { x = 1.0, y = 2.0, z = 3.0 }
+            env.plate_readback_override = 'ZZZ999'
+
+            local ok, err = env.actions._Execute.spawn_vehicle(1, {
+                citizenid = 'ABC12345',
+                model = 'sultan',
+                plate = 'ABC123',
+            })
+            assert(ok == false, 'plate read-back mismatch must fail')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+            assert(tostring(err):match('ZZZ999'), 'error must include the read-back plate')
+        end)
+
+        check('spawn_vehicle_falls_back_without_server_setter', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.peds[7] = 99
+            env.entity_coords[99] = { x = 5.0, y = 6.0, z = 7.0 }
+            _G.CreateVehicleServerSetter = nil
+
+            local ok, err, result = env.actions._Execute.spawn_vehicle(1, {
+                citizenid = 'ABC12345',
+                model = 'sultan',
+            })
+            assert(ok == true, tostring(err))
+            assert(type(result.entity) == 'number', 'result.entity missing')
+            assert(env.vehicles[1].native == 'create_vehicle',
+                'CreateVehicle fallback was not used')
         end)
 
         return {

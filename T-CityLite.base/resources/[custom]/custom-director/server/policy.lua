@@ -16,6 +16,7 @@ local AgentPolicy = {}
 -- L3 任务类：start_quest（需人工审批）
 -- L3 职业类：set_job（需人工审批）
 -- L3 位置类：teleport（需人工审批 + custom-agent-client 执行通道）
+-- L3 载具类：spawn_vehicle（需人工审批 + 服务端 CreateVehicleServerSetter）
 -- L4 经济类：add_money（需人工审批 + 每日预算）
 -- L4 物品类：grant_item（需人工审批，不计入 add_money 每日预算）
 AgentPolicy.ACTIONS = {
@@ -40,6 +41,12 @@ AgentPolicy.ACTIONS = {
         auto_execute = false,
     },
     teleport = {
+        risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+    },
+    spawn_vehicle = {
         risk = 'L3',
         requires_approval = true,
         auto_execute = false,
@@ -609,6 +616,40 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         return normalized
     end
 
+    if actionType == 'spawn_vehicle' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            model = true,
+            plate = true,
+        }, 'spawn_vehicle')
+        if unknownErr then return nil, unknownErr end
+
+        if type(params.model) ~= 'string' then
+            return fail('invalid_params', 'model must be a string')
+        end
+        local model = AgentPolicy.Trim(params.model):lower()
+        if #model < 1 or #model > 64 or not model:match('^[A-Za-z0-9_-]+$') then
+            return fail('invalid_params', 'model must be 1-64 characters of A-Z, a-z, 0-9, _ or -')
+        end
+        local normalized = {
+            citizenid = citizenid,
+            model = model,
+        }
+
+        if params.plate ~= nil then
+            if type(params.plate) ~= 'string' then
+                return fail('invalid_params', 'plate must be a string')
+            end
+            local plate = AgentPolicy.Trim(params.plate):upper()
+            if #plate < 1 or #plate > 8 or not plate:match('^[A-Z0-9]+$') then
+                return fail('invalid_params', 'plate must be 1-8 characters of A-Z or 0-9')
+            end
+            normalized.plate = plate
+        end
+
+        return normalized
+    end
+
     return fail('unsupported_action', 'unsupported action type')
 end
 
@@ -781,6 +822,13 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'spawn_vehicle' then
+        preview.model = params.model
+        preview.plate = params.plate
+        preview.from = ctx.position
+        return preview
+    end
+
     return fail('unsupported_action', 'unsupported action type')
 end
 
@@ -843,6 +891,14 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
     if actionType == 'teleport' then
         if ctx.executor_ready ~= true then
             return failBool('executor_unavailable', 'custom-agent-client is not started')
+        end
+        return true
+    end
+
+    if actionType == 'spawn_vehicle' then
+        -- main.lua injects GetHashKey(model); policy stays native-free.
+        if type(ctx.model_hash) ~= 'number' or ctx.model_hash == 0 then
+            return failBool('model_not_found', 'model does not resolve to a vehicle hash')
         end
         return true
     end
