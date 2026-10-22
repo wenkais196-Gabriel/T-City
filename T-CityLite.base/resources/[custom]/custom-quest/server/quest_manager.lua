@@ -1104,3 +1104,26 @@ end
 print('[quest-manager] ✅ 任务状态机已加载 (v0.7.0)')
 print('[quest-manager]   7-State FSM: Not Started → In Progress → Completed / Failed / Abandoned')
 print('[quest-manager]   script_trigger + 步骤事件广播 + 事件反向索引')
+-- ==============================================================
+-- 重连恢复：PlayerLoaded 时把 DB 活跃任务预加载进 QuestCache
+-- 否则 GetActiveQuests 的异步 DB fallback 会先返回空表，
+-- 导致 step_decision 重连后无法重新弹窗。
+-- ==============================================================
+AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
+    local citizenid = Player and Player.PlayerData and Player.PlayerData.citizenid
+    if not citizenid then return end
+    QuestDB.GetActiveQuests(citizenid, function(rows)
+        local list = {}
+        for _, row in ipairs(rows or {}) do
+            list[#list + 1] = {
+                quest_id = row.quest_id,
+                status = row.status,
+                current_step = row.current_step,
+                progress_data = row.progress_data,
+                started_at = row.started_at,
+            }
+        end
+        QuestCache.SetActiveQuests(citizenid, list)
+        print(('[custom-quest] cache preload cid=%s quests=%d'):format(citizenid, #list))
+    end)
+end)

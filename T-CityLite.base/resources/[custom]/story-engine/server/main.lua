@@ -93,15 +93,39 @@ RegisterNetEvent('story:server:makeDecision', function(questId, stepId, decision
         return
     end
 
-    if StoryConfig.Debug then
-        print(('[story-engine] 📩 Decision from %s: %s = %s (quest=%s, step=%s)'):format(
-            Player.PlayerData.citizenid, decisionId, chosenOptionId, questId, stepId))
-    end
+    print(('[story-engine] 📩 makeDecision src=%s cid=%s quest=%s step=%s decision=%s choice=%s'):format(
+        tostring(src), Player.PlayerData.citizenid, tostring(questId), tostring(stepId),
+        tostring(decisionId), tostring(chosenOptionId)))
 
     local success, message = DecisionEngine.MakeChoice(src, questId, stepId, decisionId, chosenOptionId)
 
     if not success then
         TriggerClientEvent('QBCore:Notify', src, message or 'Choice failed', 'error')
+    end
+end)
+
+-- ==============================================================
+-- 客户端可观测性（NUI / 焦点 / 回调失败）
+-- ==============================================================
+
+RegisterNetEvent('tcity:client:telemetry', function(event, data)
+    local src = source
+    if not src or src <= 0 then return end
+    local Player = QBCore.Functions.GetPlayer(src)
+    local cid = Player and Player.PlayerData and Player.PlayerData.citizenid or nil
+    local eventName = tostring(event or 'unknown')
+    local payload = json.encode({ event = eventName, data = data or {} })
+
+    print(('[client-telemetry] src=%s cid=%s event=%s data=%s'):format(
+        tostring(src), tostring(cid), eventName, tostring(payload)))
+
+    -- Heartbeat is console-only to avoid filling the event outbox every 10s.
+    if eventName ~= 'heartbeat' and cid then
+        pcall(function()
+            exports.oxmysql:execute(
+                'INSERT INTO agent_events (event_type, citizenid, payload, schema_version) VALUES (?, ?, ?, 1)',
+                { 'client.telemetry', cid, payload })
+        end)
     end
 end)
 

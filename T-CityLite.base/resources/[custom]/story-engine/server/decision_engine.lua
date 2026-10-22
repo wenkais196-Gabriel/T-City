@@ -50,6 +50,195 @@ function DecisionEngine.GetDecision(decisionId)
 end
 
 -- ==============================================================
+-- 待响应决策（服务端下发 → 校验 → 收口）
+-- ==============================================================
+
+-- source → { questId, stepId, decisionId, citizenid, expiresAt, defaultOption, timer }
+DecisionEngine._pending = {}
+
+local function clearPending(source, reason)
+    local pending = DecisionEngine._pending[source]
+    if pending and pending.timer then
+        ClearTimeout(pending.timer)
+    end
+    DecisionEngine._pending[source] = nil
+    if pending and reason and StoryConfig.Debug then
+        print(('[decision-engine] 🧹 Pending cleared (%s) for source=%s'):format(reason, tostring(source)))
+    end
+end
+
+--- 服务端下发决策时登记（由 custom-quest 推进到 decision 步骤时调用）
+---@param source number
+---@param questId string
+---@param stepId string
+---@param decisionId string
+---@param timeout number|nil
+---@return boolean success
+---@return string message
+function DecisionEngine.OfferDecision(source, questId, stepId, decisionId, timeout)
+    local decision = DecisionEngine._registry[decisionId]
+    if not decision then
+        return false, 'unknown decision'
+    end
+
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then
+        return false, 'Player not found'
+    end
+
+    if type(questId) ~= 'string' or type(stepId) ~= 'string' then
+        return false, 'invalid quest step'
+    end
+
+    -- 同一玩家只保留一个待响应决策，避免并发弹窗
+    clearPending(source, 'replaced')
+
+    local seconds = tonumber(timeout) or tonumber(decision.timeout) or StoryConfig.DecisionTimeout
+    if seconds < 5 then seconds = 5 end
+
+    local defaultOption = decision.default_option
+    if not defaultOption and decision.options and decision.options[1] then
+        defaultOption = decision.options[1].id
+    end
+
+    local pending = {
+        questId = questId,
+        stepId = stepId,
+        decisionId = decisionId,
+        citizenid = Player.PlayerData.citizenid,
+        expiresAt = os.time() + seconds,
+        defaultOption = defaultOption,
+    }
+    DecisionEngine._pending[source] = pending
+
+    -- 服务端兜底：客户端超时/断线/NUI 异常时按默认选项收口，避免任务永久卡在 decision 步骤
+    pending.timer = SetTimeout((seconds + 5) * 1000, function()
+        if DecisionEngine._pending[source] == pending then
+            print(('[decision-engine] ⏰ Decision timeout (server fallback): %s for %s'):format(
+                decisionId, pending.citizenid))
+            DecisionEngine.Resolve(source, '__timeout__', true)
+        end
+    end)
+
+    return true, 'offered'
+end
+
+--- 清除玩家待响应决策（任务完成/失败/放弃、玩家离线时调用）
+---@param source number
+function DecisionEngine.ClearPending(source)
+    clearPending(source, 'external')
+end
+
+local function findOption(decision, optionId)
+    for _, opt in ipairs(decision.options or {}) do
+        if opt.id == optionId then
+            return opt
+        end
+    end
+    return nil
+end
+
+--- 校验并落盘，随后推进任务
+---@param source number
+---@param chosenOptionId string
+---@param isTimeout boolean
+---@return boolean success
+---@return string message
+function DecisionEngine.Resolve(source, chosenOptionId, isTimeout)
+    local pending = DecisionEngine._pending[source]
+    if not pending then
+        return false, 'No active decision'
+    end
+
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then
+        clearPending(source, 'player missing')
+        return false, 'Player not found'
+    end
+
+    if pending.citizenid ~= Player.PlayerData.citizenid then
+        clearPending(source, 'citizen mismatch')
+        return false, 'Player mismatch'
+    end
+
+    -- 客户端超时信号或服务端兜底 → 使用默认选项
+    if isTimeout or chosenOptionId == '__timeout__' or chosenOptionId == 'timeout' or chosenOptionId == 'skip' then
+        chosenOptionId = pending.defaultOption
+        if not chosenOptionId then
+            clearPending(source, 'no default option')
+            return false, 'No default option'
+        end
+    end
+
+    local decision = DecisionEngine._registry[pending.decisionId]
+    if not decision then
+        clearPending(source, 'decision removed')
+        return false, 'Decision not found'
+    end
+
+    -- 🔒 白名单校验：chosenOptionId 必须在定义中存在（防客户端注入）
+    local matchedOption = findOption(decision, chosenOptionId)
+    if not matchedOption then
+        -- 不消费 pending：玩家仍可重试，最终由服务端超时兜底
+        if exports['custom-logs'] then
+            exports['custom-logs']:LogSecurity('剧情决策作弊-无效选项',
+                ('**%s** (%s) | Decision: %s | Invalid option: %s'):format(
+                    GetPlayerName(source), pending.citizenid, pending.decisionId,
+                    tostring(chosenOptionId)), 16711680)
+        end
+        return false, 'Invalid choice option'
+    end
+
+    local decisionId = pending.decisionId
+    local citizenid = pending.citizenid
+    local questId = pending.questId
+    local stepId = pending.stepId
+
+    -- 先消费 pending，防止重复提交/重复推进
+    clearPending(source, 'resolved')
+
+    -- 服务端兜底超时/正常结算都要关掉客户端 NUI；否则 SetNuiFocus(true)
+    -- 会把玩家控制锁死（本次实机卡在“口袋里的纸条”就是这个）。
+    TriggerClientEvent('story:client:closeDecision', source)
+
+    -- 执行 effects
+    local effects = matchedOption.effects or {}
+
+    -- 写入 player_choices 表
+    StoryDB.RecordChoice(citizenid, decisionId, chosenOptionId,
+        decision.arc_id, decision.chapter or 1)
+
+    -- 写入 player_flags（通过 QBCore metadata）
+    if effects.player_flags then
+        for flag, value in pairs(effects.player_flags) do
+            Player.Functions.SetMetaData(('story_flag_%s'):format(flag), value)
+        end
+        if StoryConfig.Debug then
+            print(('[decision-engine] 🏷️ Flags set for %s: %s'):format(
+                citizenid, json.encode(effects.player_flags)))
+        end
+    end
+
+    if StoryConfig.Debug then
+        print(('[decision-engine] ✅ Choice: %s → %s = %s (quest=%s)'):format(
+            citizenid, decisionId, chosenOptionId, questId))
+    end
+
+    -- 回调 custom-quest 完成 decision 步骤
+    local ok, msg = exports['custom-quest']:CompleteStep(source, questId, stepId)
+    if not ok then
+        print(('[decision-engine] ⚠️ CompleteStep failed: %s'):format(msg or 'unknown'))
+        return false, msg or 'Failed to advance quest'
+    end
+
+    -- 广播决策事件（供外部系统监听，如日志/统计/导演系统）
+    TriggerEvent('story:server:onDecisionMade', citizenid, decisionId, chosenOptionId,
+        decision.arc_id, questId, stepId)
+
+    return true, 'Choice recorded'
+end
+
+-- ==============================================================
 -- 决策执行
 -- ==============================================================
 
@@ -62,84 +251,30 @@ end
 ---@return boolean success
 ---@return string message
 function DecisionEngine.MakeChoice(source, questId, stepId, decisionId, chosenOptionId)
-    -- 1. 获取玩家
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then
-        return false, 'Player not found'
+    local pending = DecisionEngine._pending[source]
+    if not pending then
+        return false, 'No active decision'
     end
 
-    local citizenid = Player.PlayerData.citizenid
-
-    -- 2. 查找决策定义
-    local decision = DecisionEngine._registry[decisionId]
-    if not decision then
+    -- 🔒 只接受服务端刚刚下发的那个决策，拒绝跨任务/跨步骤/跨决策的伪造请求
+    if pending.questId ~= questId or pending.stepId ~= stepId
+        or pending.decisionId ~= decisionId then
         if exports['custom-logs'] then
-            exports['custom-logs']:LogSecurity('剧情决策作弊',
-                ('**%s** (%s) | Unknown decision: %s'):format(
-                    GetPlayerName(source), citizenid, decisionId), 16711680)
+            exports['custom-logs']:LogSecurity('剧情决策作弊-上下文不匹配',
+                ('**%s** (%s) | pending=%s/%s/%s | got=%s/%s/%s'):format(
+                    GetPlayerName(source), pending.citizenid,
+                    pending.questId, pending.stepId, pending.decisionId,
+                    tostring(questId), tostring(stepId), tostring(decisionId)), 16711680)
         end
-        return false, 'Decision not found'
+        return false, 'Decision context mismatch'
     end
 
-    -- 3. 🔒 白名单校验：chosenOptionId 必须在定义中存在（防客户端注入）
-    local matchedOption = nil
-    for _, opt in ipairs(decision.options or {}) do
-        if opt.id == chosenOptionId then
-            matchedOption = opt
-            break
-        end
-    end
-    if not matchedOption then
-        if exports['custom-logs'] then
-            exports['custom-logs']:LogSecurity('剧情决策作弊-无效选项',
-                ('**%s** (%s) | Decision: %s | Invalid option: %s'):format(
-                    GetPlayerName(source), citizenid, decisionId, chosenOptionId), 16711680)
-        end
-        return false, 'Invalid choice option'
+    -- 超过客户端展示期限的迟到请求按超时处理，避免玩家用旧弹窗绕过计时
+    if os.time() > pending.expiresAt then
+        return DecisionEngine.Resolve(source, '__timeout__', true)
     end
 
-    -- 4. 执行 effects
-    local effects = matchedOption.effects or {}
-
-    -- 4a. 写入 player_choices 表
-    StoryDB.RecordChoice(citizenid, decisionId, chosenOptionId,
-        decision.arc_id, decision.chapter or 1)
-
-    -- 4b. 写入 player_flags（通过 QBCore metadata）
-    if effects.player_flags then
-        for flag, value in pairs(effects.player_flags) do
-            Player.Functions.SetMetaData(('story_flag_%s'):format(flag), value)
-        end
-        if StoryConfig.Debug then
-            print(('[decision-engine] 🏷️ Flags set for %s: %s'):format(
-                citizenid, json.encode(effects.player_flags)))
-        end
-    end
-
-    -- 4c. 授予即时奖励（如果有）
-    if effects.rewards then
-        pcall(function()
-            -- exports['custom-quest']:TriggerQuest(source, questId) — 不在这里发奖励，让 quest 的 reward 步骤处理
-        end)
-    end
-
-    -- 5. 日志
-    if StoryConfig.Debug then
-        print(('[decision-engine] ✅ Choice: %s → %s = %s (quest=%s)'):format(
-            citizenid, decisionId, chosenOptionId, questId))
-    end
-
-    -- 6. 回调 custom-quest 完成 decision 步骤
-    local ok, msg = exports['custom-quest']:CompleteStep(source, questId, stepId)
-    if not ok then
-        print(('[decision-engine] ⚠️ CompleteStep failed: %s'):format(msg or 'unknown'))
-        return false, msg or 'Failed to advance quest'
-    end
-
-    -- 7. 广播决策事件（供外部系统监听，如日志/统计）
-    TriggerEvent('story:server:onDecisionMade', citizenid, decisionId, chosenOptionId, decision.arc_id)
-
-    return true, 'Choice recorded'
+    return DecisionEngine.Resolve(source, chosenOptionId, false)
 end
 
 -- ==============================================================
