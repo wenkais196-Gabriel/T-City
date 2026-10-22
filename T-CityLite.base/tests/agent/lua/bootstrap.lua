@@ -57,6 +57,10 @@ function Bootstrap.Load(options)
         commands = {},
         ace = {},
         http_handlers = {},
+        resource_name = options.resource_name,
+        resource_states = options.resource_states or {},
+        peds = options.peds or {},
+        now = options.now or 0,
     }
     _G.TCITY = env
 
@@ -88,6 +92,16 @@ function Bootstrap.Load(options)
     env.live_events = loadServerFile('live_events.lua') or _G.LiveEvents
     env.live_api = loadServerFile('live_api.lua') or _G.LiveApi
     env.http = loadServerFile('http_api.lua') or _G.AgentHttp
+
+    -- custom-agent-client (effect channel): shared rules plus the server
+    -- executor. Client scripts are not loaded in the Lua harness.
+    if options.agent_client then
+        local clientDir = findRepoRoot()
+            .. '/T-CityLite.base/resources/[custom]/custom-agent-client'
+        env.resource_name = options.resource_name or 'custom-agent-client'
+        env.effect_rules = dofile(clientDir .. '/shared/effect_rules.lua') or _G.EffectRules
+        dofile(clientDir .. '/server/main.lua')
+    end
 
     if options.load_main then
         env.selftest = loadServerFile('selftest.lua')

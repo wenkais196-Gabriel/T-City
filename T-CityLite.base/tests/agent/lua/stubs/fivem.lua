@@ -17,6 +17,9 @@ return function(env)
     env.money_log = env.money_log or {}
     env.log = env.log or {}
     env.convars = env.convars or {}
+    env.resource_states = env.resource_states or {}
+    env.peds = env.peds or {}
+    env.now = env.now or 0
     env.invoking_resource = env.invoking_resource
 
     local function exportObject(resource)
@@ -95,13 +98,26 @@ return function(env)
         env.convars[name] = value
     end
 
+    -- Stable ids so ClearTimeout() keeps working after earlier timers drain.
+    local nextTimerId = 0
     local function queueTimer(delay, fn)
-        env.timers[#env.timers + 1] = { delay = tonumber(delay) or 0, fn = fn }
-        return #env.timers
+        nextTimerId = nextTimerId + 1
+        env.timers[#env.timers + 1] = { id = nextTimerId, delay = tonumber(delay) or 0, fn = fn }
+        return nextTimerId
     end
 
     function _G.SetTimeout(delay, fn)
         return queueTimer(delay, fn)
+    end
+
+    function _G.ClearTimeout(timerId)
+        for index, timer in ipairs(env.timers) do
+            if timer.id == timerId then
+                table.remove(env.timers, index)
+                return true
+            end
+        end
+        return false
     end
 
     function _G.CreateThread(fn)
@@ -131,7 +147,19 @@ return function(env)
     end
 
     function _G.GetCurrentResourceName()
-        return 'custom-director'
+        return env.resource_name or 'custom-director'
+    end
+
+    function _G.GetResourceState(name)
+        return env.resource_states[name] or 'missing'
+    end
+
+    function _G.GetPlayerPed(source)
+        return env.peds[tonumber(source) or source] or 0
+    end
+
+    function _G.GetGameTimer()
+        return tonumber(env.now) or 0
     end
 
     function _G.StopResource()
@@ -168,8 +196,17 @@ return function(env)
             return self
         end
 
+        -- Yield a pending promise so a coroutine-driven caller (clientExec)
+        -- suspends until settle() resolves it; that is what Citizen.Await
+        -- does inside FXServer.
         function promise:await()
             if state == 'rejected' then error(failure, 0) end
+            while state == 'pending' do
+                if not coroutine.isyieldable() then
+                    error('await on a pending promise outside a coroutine', 0)
+                end
+                coroutine.yield()
+            end
             return value
         end
 
@@ -183,8 +220,10 @@ return function(env)
             return self
         end
 
-        local ok, err = pcall(executor, resolve, reject)
-        if not ok then reject(err) end
+        if type(executor) == 'function' then
+            local ok, err = pcall(executor, resolve, reject)
+            if not ok then reject(err) end
+        end
         return promise
     end
 

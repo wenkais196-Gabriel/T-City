@@ -593,3 +593,18 @@ end
 6. `stop custom-agent-client` → director 返回 `executor_unavailable`（503），`agent_actions` 无 `executed` 行。
 7. 审计覆盖 ok/timeout/rejected/aborted 四种终态，行数 = dispatch 次数。
 8. review 用 grep 确认：`settle(` 之后没有任何游戏状态写入。
+
+---
+
+## 12. M2 实现回填（2026-10-22）
+
+首片实现落在 `T-CityLite.base/resources/[custom]/custom-agent-client/`，与本文档的差异：
+
+1. **动作名**为 `send_notify`（文档里常写作 `notify`）；其余 `play_anim` / `clear_anim` / `teleport` / `screen_effect` / `open_text_ui` / `give_vehicle_keys` 一致。
+2. **`give_vehicle_keys` 只校验不执行**：`clientExec` 返回 `server_action_unsupported`，绝不转发给 client。接入 `custom-vehicles` 的 `KeyManager` 属于后续切片。
+3. **审计不落库**：优先 `custom-logs` 的 `LogGeneric`，方法不存在时回落 `print`，不新增 `agent_effect_log` 表/迁移。审计不含 notify/UI 正文。
+4. **未实现**：`Verify`/`CheckState`（死亡/手铐/载具前置）、审批、动作冷却、全局在飞上限、`allow_teleport`/`allow_keys` 二次开关、NUI（`open_text_ui` 用 help text 只读展示）。
+5. **timeout 未做上限裁切**；地图边界按任务取 `-4500..8500`（文档 §5 写的是 `-4000..4500`）。
+6. **限流桶容量**用 `agent_effect_burst`，默认 5；速率 `agent_effect_rate_per_min` 默认 20。
+7. **session 生命周期**：session 存在 server 内存，server 重启即丢；client 只在自身资源启动时发 `tcity:agent:ready`，因此 server 重启后需要重启该 client 资源或重连才能恢复效果通道。这是 M2 已知限制，不是 bug。
+8. 未在真实 FXServer + GTA 客户端验证 `AddTextComponentSubstringPlayerName`、`SetPedCoordsKeepVehicle`、`StartScreenEffect`、`IsEntityPlayingAnim` 的运行时行为。
