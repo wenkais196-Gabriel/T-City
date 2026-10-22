@@ -17,8 +17,10 @@ local AgentPolicy = {}
 -- L3 职业类：set_job（需人工审批）
 -- L3 位置类：teleport（需人工审批 + custom-agent-client 执行通道）
 -- L3 载具类：spawn_vehicle（需人工审批 + 服务端 CreateVehicleServerSetter）
+-- L3 会话类：set_bucket（需人工审批；routing bucket 不持久化）
 -- L4 经济类：add_money（需人工审批 + 每日预算）
--- L4 物品类：grant_item（需人工审批，不计入 add_money 每日预算）
+-- L4 物品类：grant_item / remove_item（需人工审批，不计入 add_money 每日预算）
+-- L4 惩罚类：kick（需人工审批，不可撤销）
 AgentPolicy.ACTIONS = {
     notify = {
         risk = 'L1',
@@ -56,6 +58,27 @@ AgentPolicy.ACTIONS = {
         risk = 'L4',
         requires_approval = true,
         auto_execute = false,
+    },
+    remove_item = {
+        risk = 'L4',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+        compensation = 'manual',
+    },
+    set_bucket = {
+        risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+        compensation = 'none',
+    },
+    kick = {
+        risk = 'L4',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+        compensation = 'manual',
     },
     announce = {
         risk = 'L2',
@@ -568,6 +591,92 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         }
     end
 
+    if actionType == 'remove_item' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            item = true,
+            amount = true,
+            reason = true,
+        }, 'remove_item')
+        if unknownErr then return nil, unknownErr end
+
+        local item, itemErr = cleanString(params.item, 'item', 64, '^[A-Za-z0-9_.:%-]+$')
+        if not item then return nil, itemErr end
+
+        -- Defaults to the configured per-action cap, which is 50 by default.
+        local amount = params.amount
+        if amount == nil then amount = maxItemAmount end
+        if type(amount) ~= 'number' or amount ~= amount or amount == math.huge or amount == -math.huge then
+            return fail('invalid_params', 'amount must be a finite number')
+        end
+        if amount ~= math.floor(amount) then
+            return fail('invalid_params', 'amount must be a whole number')
+        end
+        if amount < 1 then
+            return fail('invalid_params', 'amount must be at least 1')
+        end
+        if amount > maxItemAmount then
+            return fail('invalid_params', ('amount exceeds per-action cap of %d'):format(maxItemAmount))
+        end
+
+        local reason, reasonErr = cleanString(params.reason, 'reason', 128)
+        if not reason then return nil, reasonErr end
+        if AgentPolicy.HasControlChars(reason) then
+            return fail('invalid_params', 'reason contains control characters')
+        end
+
+        return {
+            citizenid = citizenid,
+            item = item,
+            amount = math.tointeger(amount) or amount,
+            reason = reason,
+        }
+    end
+
+    if actionType == 'set_bucket' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            bucket = true,
+        }, 'set_bucket')
+        if unknownErr then return nil, unknownErr end
+
+        local bucket = params.bucket
+        if type(bucket) ~= 'number' or bucket ~= bucket
+            or bucket == math.huge or bucket == -math.huge then
+            return fail('invalid_params', 'bucket must be a finite integer')
+        end
+        if bucket ~= math.floor(bucket) then
+            return fail('invalid_params', 'bucket must be a whole number')
+        end
+        if bucket < 0 or bucket > 65535 then
+            return fail('invalid_params', 'bucket must be between 0 and 65535')
+        end
+
+        return {
+            citizenid = citizenid,
+            bucket = math.tointeger(bucket) or bucket,
+        }
+    end
+
+    if actionType == 'kick' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            reason = true,
+        }, 'kick')
+        if unknownErr then return nil, unknownErr end
+
+        local reason, reasonErr = cleanString(params.reason, 'reason', 128)
+        if not reason then return nil, reasonErr end
+        if AgentPolicy.HasControlChars(reason) then
+            return fail('invalid_params', 'reason contains control characters')
+        end
+
+        return {
+            citizenid = citizenid,
+            reason = reason,
+        }
+    end
+
     if actionType == 'teleport' then
         local unknownErr = rejectUnknownFields(params, {
             citizenid = true,
@@ -811,6 +920,29 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'remove_item' then
+        preview.item = params.item
+        preview.amount = params.amount
+        preview.reason = params.reason
+        if type(player) == 'table' then
+            preview.before = tonumber(player.item_count) or 0
+        end
+        return preview
+    end
+
+    if actionType == 'set_bucket' then
+        preview.bucket = params.bucket
+        if type(player) == 'table' and player.bucket ~= nil then
+            preview.from = player.bucket
+        end
+        return preview
+    end
+
+    if actionType == 'kick' then
+        preview.reason = params.reason
+        return preview
+    end
+
     if actionType == 'teleport' then
         preview.target = {
             x = params.x,
@@ -967,6 +1099,28 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
         if type(itemDefinition) ~= 'table' then
             return failBool('item_not_found', 'item does not exist in QBCore.Shared.Items')
         end
+        return true
+    end
+
+    if actionType == 'remove_item' then
+        local itemDefinition = nil
+        if type(ctx.items) == 'table' then itemDefinition = ctx.items[params.item] end
+        if type(itemDefinition) ~= 'table' then
+            return failBool('item_not_found', 'item does not exist in QBCore.Shared.Items')
+        end
+        return true
+    end
+
+    if actionType == 'set_bucket' then
+        local bucket = params.bucket
+        if type(bucket) ~= 'number' or bucket ~= math.floor(bucket)
+            or bucket < 0 or bucket > 65535 then
+            return failBool('invalid_params', 'bucket must be an integer between 0 and 65535')
+        end
+        return true
+    end
+
+    if actionType == 'kick' then
         return true
     end
 

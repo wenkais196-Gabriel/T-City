@@ -65,6 +65,29 @@ return {
             })
         end
 
+        local function removeItem(env, citizenid, item, amount, reason)
+            return env.actions._Execute.remove_item(1, {
+                citizenid = citizenid,
+                item = item,
+                amount = amount,
+                reason = reason or 'test cleanup',
+            })
+        end
+
+        local function setBucket(env, citizenid, bucket)
+            return env.actions._Execute.set_bucket(1, {
+                citizenid = citizenid,
+                bucket = bucket,
+            })
+        end
+
+        local function kick(env, citizenid, reason)
+            return env.actions._Execute.kick(1, {
+                citizenid = citizenid,
+                reason = reason or 'test kick',
+            })
+        end
+
         local function startedWeatherSync(env, state)
             env.resource_states['qb-weathersync'] = 'started'
             env.weather_state = state or 'EXTRASUNNY'
@@ -89,6 +112,9 @@ return {
             assert(type(env.actions._Execute.set_time_of_day) == 'function', 'set_time_of_day executor missing')
             assert(type(env.actions._Execute.teleport) == 'function', 'teleport executor missing')
             assert(type(env.actions._Execute.spawn_vehicle) == 'function', 'spawn_vehicle executor missing')
+            assert(type(env.actions._Execute.remove_item) == 'function', 'remove_item executor missing')
+            assert(type(env.actions._Execute.set_bucket) == 'function', 'set_bucket executor missing')
+            assert(type(env.actions._Execute.kick) == 'function', 'kick executor missing')
             assert(type(env.actions._Context) == 'function', 'context builder missing')
         end)
 
@@ -796,6 +822,329 @@ return {
             assert(type(result.entity) == 'number', 'result.entity missing')
             assert(env.vehicles[1].native == 'create_vehicle',
                 'CreateVehicle fallback was not used')
+        end)
+
+        -- remove_item -----------------------------------------------------------
+
+        check('remove_item_normalize_amount_bounds_and_default', function()
+            local env = newEnv()
+            for _, amount in ipairs({ 0, -1, 1.5, 51 }) do
+                local normalized, err = env.policy.Normalize('remove_item', {
+                    citizenid = 'ABC12345',
+                    item = 'bread',
+                    amount = amount,
+                    reason = 'cleanup',
+                })
+                assert(normalized == nil, 'amount ' .. tostring(amount) .. ' must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    'amount ' .. tostring(amount) .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local defaulted = assert(env.policy.Normalize('remove_item', {
+                citizenid = 'ABC12345',
+                item = 'bread',
+                reason = 'cleanup',
+            }))
+            assert(defaulted.amount == 50, 'amount must default to 50 (the default cap)')
+
+            local capped = newEnv({ agent_actions_max_item_amount = '7' })
+            local overCap, overCapErr = capped.policy.Normalize('remove_item', {
+                citizenid = 'ABC12345',
+                item = 'bread',
+                amount = 8,
+                reason = 'cleanup',
+            }, { max_item_amount = 7 })
+            assert(overCap == nil, 'amount above the configured cap must be rejected')
+            assert(overCapErr.code == 'invalid_params', tostring(overCapErr.code))
+
+            local noReason, noReasonErr = env.policy.Normalize('remove_item', {
+                citizenid = 'ABC12345',
+                item = 'bread',
+                amount = 1,
+            })
+            assert(noReason == nil, 'reason is required')
+            assert(noReasonErr.code == 'invalid_params', tostring(noReasonErr.code))
+        end)
+
+        check('remove_item_normalize_rejects_unknown_field', function()
+            local env = newEnv()
+            local normalized, err = env.policy.Normalize('remove_item', {
+                citizenid = 'ABC12345',
+                item = 'bread',
+                amount = 1,
+                reason = 'cleanup',
+                slot = 3,
+            })
+            assert(normalized == nil, 'unknown field must be rejected')
+            assert(err and err.code == 'invalid_params', tostring(err and err.code))
+            assert(tostring(err.message):match('unknown field slot'), tostring(err.message))
+        end)
+
+        check('remove_item_policy_requires_item_definition', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+
+            local missing = { citizenid = 'ABC12345', item = 'gold', amount = 1, reason = 'cleanup' }
+            local missingContext = env.actions._Context('remove_item', missing)
+            local ok, err = env.policy.CheckPolicy('remove_item', missing, {}, missingContext)
+            assert(ok == false, 'unknown item must be rejected')
+            assert(err.code == 'item_not_found', tostring(err.code))
+
+            local known = { citizenid = 'ABC12345', item = 'bread', amount = 1, reason = 'cleanup' }
+            local knownContext = env.actions._Context('remove_item', known)
+            local knownOk, knownErr = env.policy.CheckPolicy('remove_item', known, {}, knownContext)
+            assert(knownOk == true, tostring(knownErr and knownErr.code))
+
+            local definition = env.policy.ACTIONS.remove_item
+            assert(definition.risk == 'L4', 'remove_item risk must be L4')
+            assert(definition.requires_approval == true, 'remove_item must require approval')
+            assert(definition.auto_execute == false, 'remove_item must never auto-execute')
+            assert(definition.blast_radius == 'single', 'remove_item blast radius must be single')
+            assert(definition.compensation == 'manual', 'remove_item compensation must be manual')
+        end)
+
+        check('remove_item_success_records_delta', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.items.bread = 5
+
+            local params = assert(env.policy.Normalize('remove_item', {
+                citizenid = 'ABC12345',
+                item = 'bread',
+                amount = 2,
+                reason = 'confiscated',
+            }))
+            local context = env.actions._Context('remove_item', params)
+            local preview = env.policy.Preview('remove_item', params, context, {})
+            assert(preview.before == 5, 'preview.before must be the held quantity')
+            assert(preview.amount == 2 and preview.reason == 'confiscated',
+                'preview item/amount/reason mismatch')
+
+            local ok, err, result = removeItem(env, 'ABC12345', 'bread', 2, 'confiscated')
+            assert(ok == true, tostring(err))
+            assert(result.item == 'bread' and result.amount == 2, 'result item/amount mismatch')
+            assert(result.before == 5 and result.after == 3, 'before/after mismatch')
+            assert(result.reason == 'confiscated', 'reason missing from result')
+            assert(result.verify_result == true, 'verify_result must be true')
+            assert(player.PlayerData.items['bread'] == 3, 'inventory was not mutated')
+            assert(env.log[#env.log].remove_item == 'ABC12345',
+                'RemoveItem call was not recorded')
+        end)
+
+        check('remove_item_returns_false_when_removeitem_fails', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.items.bread = 2
+            player.Functions.RemoveItem = function() return false end
+
+            local ok, err = removeItem(env, 'ABC12345', 'bread', 1)
+            assert(ok == false, 'RemoveItem false must fail')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+        end)
+
+        check('remove_item_delta_mismatch_is_verification_failed', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.items.bread = 5
+            player.Functions.RemoveItem = function(item, amount)
+                player.PlayerData.items[item] = player.PlayerData.items[item] - (amount - 1)
+                return true
+            end
+
+            local ok, err = removeItem(env, 'ABC12345', 'bread', 2)
+            assert(ok == false, 'partial remove must fail verification')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+        end)
+
+        check('remove_item_offline_player', function()
+            local env = newEnv()
+            local ok, err = removeItem(env, 'OFFLINE01', 'bread', 1)
+            assert(ok == false, 'offline target must fail')
+            assert(err == 'player_not_found', tostring(err))
+        end)
+
+        -- set_bucket ------------------------------------------------------------
+
+        check('set_bucket_normalize_rejects_out_of_range', function()
+            local env = newEnv()
+            for _, bucket in ipairs({ -1, 65536, 1.5, 0 / 0, math.huge }) do
+                local normalized, err = env.policy.Normalize('set_bucket', {
+                    citizenid = 'ABC12345',
+                    bucket = bucket,
+                })
+                assert(normalized == nil, 'bucket ' .. tostring(bucket) .. ' must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    'bucket ' .. tostring(bucket) .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local low = assert(env.policy.Normalize('set_bucket', {
+                citizenid = 'ABC12345',
+                bucket = 0,
+            }))
+            local high = assert(env.policy.Normalize('set_bucket', {
+                citizenid = 'ABC12345',
+                bucket = 65535,
+            }))
+            assert(low.bucket == 0 and high.bucket == 65535, 'bucket bounds must be inclusive')
+        end)
+
+        check('set_bucket_preview_and_success_readback', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.player_buckets[7] = 3
+
+            local params = assert(env.policy.Normalize('set_bucket', {
+                citizenid = 'ABC12345',
+                bucket = 42,
+            }))
+            local context = env.actions._Context('set_bucket', params)
+            assert(context.player.bucket == 3, 'context.player.bucket must be the live bucket')
+
+            local preview = env.policy.Preview('set_bucket', params, context, {})
+            assert(preview.bucket == 42, 'preview.bucket mismatch')
+            assert(preview.from == 3, 'preview.from must be the current bucket')
+
+            local policyOk, policyErr = env.policy.CheckPolicy('set_bucket', params, {}, context)
+            assert(policyOk == true, tostring(policyErr and policyErr.code))
+
+            local ok, err, result = setBucket(env, 'ABC12345', 42)
+            assert(ok == true, tostring(err))
+            assert(result.bucket == 42 and result.before == 3, 'result bucket/before mismatch')
+            assert(result.verify_result == true, 'verify_result must be true')
+            assert(tostring(result.notes):match('session%-scoped'), 'notes must explain scope')
+            assert(tostring(result.notes):match('reconnect'), 'notes must mention reconnects')
+            assert(env.player_buckets[7] == 42, 'routing bucket was not updated')
+        end)
+
+        check('set_bucket_returns_false_is_execution_failed', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.qb.Functions.SetPlayerBucket = function() return false end
+
+            local ok, err = setBucket(env, 'ABC12345', 42)
+            assert(ok == false, 'SetPlayerBucket false must fail')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+        end)
+
+        check('set_bucket_readback_mismatch_is_verification_failed', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.qb.Functions.SetPlayerBucket = function() return true end -- lies: no mutation
+
+            local ok, err = setBucket(env, 'ABC12345', 42)
+            assert(ok == false, 'unchanged bucket must fail verification')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+        end)
+
+        check('set_bucket_policy_and_metadata', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+
+            local params = assert(env.policy.Normalize('set_bucket', {
+                citizenid = 'ABC12345',
+                bucket = 7,
+            }))
+            local context = env.actions._Context('set_bucket', params)
+            local ok, err = env.policy.CheckPolicy('set_bucket', params, {}, context)
+            assert(ok == true, tostring(err and err.code))
+
+            local definition = env.policy.ACTIONS.set_bucket
+            assert(definition.risk == 'L3', 'set_bucket risk must be L3')
+            assert(definition.requires_approval == true, 'set_bucket must require approval')
+            assert(definition.auto_execute == false, 'set_bucket must never auto-execute')
+            assert(definition.blast_radius == 'single', 'set_bucket blast radius must be single')
+        end)
+
+        -- kick ------------------------------------------------------------------
+
+        check('kick_requires_reason_and_rejects_unknown_field', function()
+            local env = newEnv()
+            local missing, missingErr = env.policy.Normalize('kick', { citizenid = 'ABC12345' })
+            assert(missing == nil, 'missing reason must be rejected')
+            assert(missingErr.code == 'invalid_params', tostring(missingErr.code))
+
+            local blank, blankErr = env.policy.Normalize('kick', {
+                citizenid = 'ABC12345',
+                reason = '   ',
+            })
+            assert(blank == nil, 'blank reason must be rejected')
+            assert(blankErr.code == 'invalid_params', tostring(blankErr.code))
+
+            local control, controlErr = env.policy.Normalize('kick', {
+                citizenid = 'ABC12345',
+                reason = 'bad\nreason',
+            })
+            assert(control == nil, 'control characters must be rejected')
+            assert(controlErr.code == 'invalid_params', tostring(controlErr.code))
+
+            local unknown, unknownErr = env.policy.Normalize('kick', {
+                citizenid = 'ABC12345',
+                reason = 'cheating',
+                duration = 60,
+            })
+            assert(unknown == nil, 'unknown field must be rejected')
+            assert(unknownErr.code == 'invalid_params', tostring(unknownErr.code))
+            assert(tostring(unknownErr.message):match('unknown field duration'),
+                tostring(unknownErr.message))
+
+            local edge = assert(env.policy.Normalize('kick', {
+                citizenid = 'ABC12345',
+                reason = string.rep('a', 128),
+            }))
+            assert(#edge.reason == 128, '128-char reason must be accepted')
+            local tooLong, tooLongErr = env.policy.Normalize('kick', {
+                citizenid = 'ABC12345',
+                reason = string.rep('a', 129),
+            })
+            assert(tooLong == nil, '129-char reason must be rejected (contract cap)')
+            assert(tooLongErr.code == 'invalid_params', tostring(tooLongErr.code))
+        end)
+
+        check('kick_success_records_call', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+
+            local params = assert(env.policy.Normalize('kick', {
+                citizenid = 'ABC12345',
+                reason = 'cheating',
+            }))
+            local context = env.actions._Context('kick', params)
+            local preview = env.policy.Preview('kick', params, context, {})
+            assert(preview.citizenid == 'ABC12345' and preview.reason == 'cheating',
+                'kick preview mismatch')
+
+            local policyOk, policyErr = env.policy.CheckPolicy('kick', params, {}, context)
+            assert(policyOk == true, tostring(policyErr and policyErr.code))
+
+            local ok, err, result = kick(env, 'ABC12345', 'cheating')
+            assert(ok == true, tostring(err))
+            assert(result.kicked == true and result.reason == 'cheating', 'result mismatch')
+            assert(#env.kicks == 1, 'Kick was not called')
+            assert(env.kicks[1].source == 7 and env.kicks[1].reason == 'cheating',
+                'Kick call arguments mismatch')
+        end)
+
+        check('kick_throwing_kick_is_execution_failed', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.qb.Functions.Kick = function() error('kick channel down') end
+
+            local ok, err = kick(env, 'ABC12345', 'cheating')
+            assert(ok == false, 'throwing Kick must fail')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+            assert(tostring(err):match('kick channel down'), tostring(err))
+        end)
+
+        check('kick_metadata_requires_manual_compensation', function()
+            local env = newEnv()
+            local definition = env.policy.ACTIONS.kick
+            assert(definition.risk == 'L4', 'kick risk must be L4')
+            assert(definition.requires_approval == true, 'kick must require approval')
+            assert(definition.auto_execute == false, 'kick must never auto-execute')
+            assert(definition.blast_radius == 'single', 'kick blast radius must be single')
+            assert(definition.compensation == 'manual', 'kick compensation must be manual')
         end)
 
         return {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema_version": 1,
-  "registry_version": "1.1.0",
+  "registry_version": "1.2.0",
   "generated": "2026-10-22T16:00:00Z",
   "tools": [
     {
@@ -1503,6 +1503,232 @@
       "compensation": "manual",
       "rate_limit": {
         "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "remove_player_item",
+      "title": "Remove an item from one player (L4, approval required)",
+      "description": "Propose removing a catalog item from one player. Always requires human approval; compensation is manual.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "remove_item",
+      "risk": "L4",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.4.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "item": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,64}$"
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Short human-readable audit reason."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "item",
+          "amount",
+          "reason"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "set_player_bucket",
+      "title": "Move one player to a routing bucket (L3, approval required)",
+      "description": "Propose moving one player to a routing bucket. Session-scoped: it does not survive a reconnect. Human approval required.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "set_bucket",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.4.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "bucket": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "bucket"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "kick_player",
+      "title": "Kick one player (L4, approval required)",
+      "description": "Propose kicking one online player with a reason. Irreversible; compensation is manual and means re-inviting the player.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "kick",
+      "risk": "L4",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.4.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Shown to the player and written to the audit row."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "reason"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "rate_limit": {
+        "per_minute": 1,
         "burst": 1
       }
     }

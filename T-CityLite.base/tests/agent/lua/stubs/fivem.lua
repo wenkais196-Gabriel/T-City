@@ -27,6 +27,7 @@ return function(env)
     env.vehicle_plates = env.vehicle_plates or {}
     env.deleted_entities = env.deleted_entities or {}
     env.hashes = env.hashes or {}
+    env.player_buckets = env.player_buckets or {}
     env.next_entity_id = env.next_entity_id or 500
     env.entity_exists_override = env.entity_exists_override
     env.plate_readback_override = env.plate_readback_override
@@ -172,6 +173,17 @@ return function(env)
 
     function _G.GetPlayerPed(source)
         return env.peds[tonumber(source) or source] or 0
+    end
+
+    -- Routing-bucket natives used by custom-director's set_bucket executor.
+    -- Buckets are session state only; the harness keeps them in memory.
+    function _G.GetPlayerRoutingBucket(source)
+        return env.player_buckets[tonumber(source) or source] or 0
+    end
+
+    function _G.SetPlayerRoutingBucket(source, bucket)
+        env.player_buckets[tonumber(source) or source] = tonumber(bucket) or bucket
+        return true
     end
 
     function _G.GetEntityCoords(ped)
