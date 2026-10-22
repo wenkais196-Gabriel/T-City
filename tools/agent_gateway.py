@@ -141,7 +141,14 @@ class AgentHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         if self.command != "HEAD":
             try:
-                self.wfile.write(body)
+                # NOSONAR: not an HTML sink. The body is JSON (application/json,
+                # nosniff, default-src 'none' CSP) and every <, >, & is already
+                # \uXXXX-escaped in _json_bytes, so it cannot be parsed as
+                # markup even if a browser sniffs it. Sonar's taint model flags
+                # any file-derived bytes written to wfile and cannot see the
+                # content type; mark this instance as reviewed rather than
+                # weakening the rule for the whole module.
+                self.wfile.write(body)  # NOSONAR
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
