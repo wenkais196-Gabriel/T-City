@@ -1,6 +1,8 @@
 -- tests/agent/lua/cases/director_actions.lua — executor contract for
 -- custom-director's set_job (L3), grant_item (L4), teleport (L3, delegated to
--- custom-agent-client) and spawn_vehicle (L3, server-side) actions.
+-- custom-agent-client), spawn_vehicle (L3, server-side), revive (L3, server
+-- metadata + qb-ambulancejob client event) and delete_vehicle (L4, current
+-- vehicle only) actions.
 --
 -- The executors live in server/main.lua; main exposes them on the internal
 -- AgentActions._Execute table so this harness can drive them against the stub
@@ -1145,6 +1147,289 @@ return {
             assert(definition.auto_execute == false, 'kick must never auto-execute')
             assert(definition.blast_radius == 'single', 'kick blast radius must be single')
             assert(definition.compensation == 'manual', 'kick compensation must be manual')
+        end)
+
+        -- revive ---------------------------------------------------------------
+
+        local function putPlayerInVehicle(env, source, entity, plate)
+            env.peds[source] = 99
+            env.vehicle_in_use[99] = entity
+            env.created_entities[entity] = true
+            env.entity_models[entity] = 123456
+            env.vehicle_plates[entity] = plate or 'ABC123'
+        end
+
+        check('revive_success_sets_metadata_and_client_event', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.metadata.isdead = true
+            player.PlayerData.metadata.inlaststand = true
+
+            local definition = env.policy.ACTIONS.revive
+            assert(type(definition) == 'table', 'revive missing from ACTIONS')
+            assert(definition.risk == 'L3', 'revive risk must be L3')
+            assert(definition.requires_approval == true, 'revive must require approval')
+            assert(definition.auto_execute == false, 'revive must never auto-execute')
+            assert(definition.blast_radius == 'single', 'revive blast radius must be single')
+
+            local params = assert(env.policy.Normalize('revive', { citizenid = 'ABC12345' }))
+            local context = env.actions._Context('revive', params)
+            local preview = env.policy.Preview('revive', params, context, {})
+            assert(preview.metadata.isdead == true and preview.metadata.inlaststand == true,
+                'preview metadata must reflect the live death state')
+
+            local policyOk, policyErr = env.policy.CheckPolicy('revive', params, {}, context)
+            assert(policyOk == true, tostring(policyErr and policyErr.code))
+
+            local ok, err, result = env.actions._Execute.revive(1, params)
+            assert(ok == true, tostring(err))
+            assert(result.before.isdead == true and result.before.inlaststand == true,
+                'before must capture the pre-revive metadata')
+            assert(result.after.isdead == false and result.after.inlaststand == false,
+                'after must capture the cleared metadata')
+            assert(player.PlayerData.metadata.isdead == false,
+                'PlayerData.metadata.isdead was not cleared')
+            assert(player.PlayerData.metadata.inlaststand == false,
+                'PlayerData.metadata.inlaststand was not cleared')
+
+            assert(#env.client_events == 1, 'hospital:client:Revive was not triggered')
+            assert(env.client_events[1].event == 'hospital:client:Revive',
+                'wrong client event: ' .. tostring(env.client_events[1].event))
+            assert(env.client_events[1].target == 7, 'client event target must be the player source')
+        end)
+
+        check('revive_already_alive_still_succeeds', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.metadata.isdead = false
+            player.PlayerData.metadata.inlaststand = false
+
+            local ok, err, result = env.actions._Execute.revive(1, { citizenid = 'ABC12345' })
+            assert(ok == true, tostring(err))
+            assert(result.before.isdead == false and result.before.inlaststand == false,
+                'before must keep the already-alive values')
+            assert(result.after.isdead == false and result.after.inlaststand == false,
+                'after must stay false/false')
+            assert(#env.client_events == 1, 'the client event should still be attempted')
+        end)
+
+        check('revive_preview_missing_metadata_fields_are_nil', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345') -- metadata = {} in the stub
+            local params = { citizenid = 'ABC12345' }
+            local context = env.actions._Context('revive', params)
+            local preview = env.policy.Preview('revive', params, context, {})
+            assert(type(preview.metadata) == 'table', 'preview.metadata must be present')
+            assert(preview.metadata.isdead == nil and preview.metadata.inlaststand == nil,
+                'missing metadata keys must stay nil')
+        end)
+
+        check('revive_client_event_failure_is_contained', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.metadata.isdead = true
+            player.PlayerData.metadata.inlaststand = true
+            _G.TriggerClientEvent = function() error('ambulancejob handler crashed') end
+
+            local ok, err, result = env.actions._Execute.revive(1, { citizenid = 'ABC12345' })
+            assert(ok == true, 'a throwing client event must not fail the server mutation: '
+                .. tostring(err))
+            assert(result.after.isdead == false and result.after.inlaststand == false,
+                'metadata must still be cleared')
+            assert(player.PlayerData.metadata.isdead == false,
+                'metadata read-back must reflect the cleared state')
+        end)
+
+        check('revive_normalize_rejects_unknown_field', function()
+            local env = newEnv()
+            local normalized, err = env.policy.Normalize('revive', {
+                citizenid = 'ABC12345',
+                reason = 'player asked',
+            })
+            assert(normalized == nil, 'unknown field must be rejected')
+            assert(err and err.code == 'invalid_params', tostring(err and err.code))
+            assert(tostring(err.message):match('unknown field reason'), tostring(err.message))
+        end)
+
+        check('revive_metadata_not_cleared_is_verification_failed', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.metadata.isdead = true
+            player.Functions.SetMetaData = function() end -- lies: no mutation
+
+            local ok, err = env.actions._Execute.revive(1, { citizenid = 'ABC12345' })
+            assert(ok == false, 'unchanged metadata must fail verification')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+            assert(#env.client_events == 1, 'the client event is still best-effort')
+        end)
+
+        check('revive_offline_player_is_rejected', function()
+            local env = newEnv()
+            local params = { citizenid = 'OFFLINE01' }
+            local context = env.actions._Context('revive', params)
+            local ok, err = env.policy.CheckPolicy('revive', params, {}, context)
+            assert(ok == false, 'offline target must be rejected')
+            assert(err.code == 'player_not_found', tostring(err.code))
+
+            local execOk, execErr = env.actions._Execute.revive(1, params)
+            assert(execOk == false and execErr == 'player_not_found', tostring(execErr))
+        end)
+
+        -- delete_vehicle --------------------------------------------------------
+
+        check('delete_vehicle_registry_preview_and_policy', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            putPlayerInVehicle(env, 7, 701, 'ABC123')
+
+            local definition = env.policy.ACTIONS.delete_vehicle
+            assert(type(definition) == 'table', 'delete_vehicle missing from ACTIONS')
+            assert(definition.risk == 'L4', 'delete_vehicle risk must be L4')
+            assert(definition.requires_approval == true, 'delete_vehicle must require approval')
+            assert(definition.auto_execute == false, 'delete_vehicle must never auto-execute')
+            assert(definition.blast_radius == 'single', 'delete_vehicle blast radius must be single')
+            assert(definition.compensation == 'manual', 'delete_vehicle compensation must be manual')
+
+            local params = assert(env.policy.Normalize('delete_vehicle', {
+                citizenid = 'ABC12345',
+                plate = 'abc123',
+            }))
+            assert(params.plate == 'ABC123', 'plate must be uppercased')
+
+            local context = env.actions._Context('delete_vehicle', params)
+            assert(context.vehicle_entity == 701, 'context.vehicle_entity must be the current vehicle')
+            assert(context.vehicle_target.entity == 701
+                and context.vehicle_target.model == 123456
+                and context.vehicle_target.plate == 'ABC123',
+                'context.vehicle_target mismatch')
+
+            local preview = env.policy.Preview('delete_vehicle', params, context, {})
+            assert(preview.plate == 'ABC123', 'preview.plate mismatch')
+            assert(preview.target.entity == 701 and preview.target.model == 123456
+                and preview.target.plate == 'ABC123', 'preview.target mismatch')
+
+            local policyOk, policyErr = env.policy.CheckPolicy('delete_vehicle', params, {}, context)
+            assert(policyOk == true, tostring(policyErr and policyErr.code))
+        end)
+
+        check('delete_vehicle_not_in_vehicle_is_rejected', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            env.peds[7] = 99 -- online and spawned, but on foot (no vehicle_in_use entry)
+
+            local params = assert(env.policy.Normalize('delete_vehicle', {
+                citizenid = 'ABC12345',
+            }))
+            local context = env.actions._Context('delete_vehicle', params)
+            assert(context.vehicle_entity == nil, 'context must not invent a vehicle')
+            local preview = env.policy.Preview('delete_vehicle', params, context, {})
+            assert(preview.target == nil, 'preview.target must be nil when on foot')
+
+            local ok, err = env.policy.CheckPolicy('delete_vehicle', params, {}, context)
+            assert(ok == false, 'a player on foot must be rejected')
+            assert(err.code == 'not_in_vehicle', tostring(err.code))
+
+            local execOk, execErr = env.actions._Execute.delete_vehicle(1, params)
+            assert(execOk == false and execErr == 'not_in_vehicle', tostring(execErr))
+            assert(#env.deleted_entities == 0, 'nothing may be deleted')
+        end)
+
+        check('delete_vehicle_plate_mismatch_is_rejected', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            putPlayerInVehicle(env, 7, 702, 'ABC123')
+
+            local params = assert(env.policy.Normalize('delete_vehicle', {
+                citizenid = 'ABC12345',
+                plate = 'zzz999',
+            }))
+            local context = env.actions._Context('delete_vehicle', params)
+
+            local ok, err = env.policy.CheckPolicy('delete_vehicle', params, {}, context)
+            assert(ok == false, 'plate mismatch must be rejected by policy')
+            assert(err.code == 'plate_mismatch', tostring(err.code))
+
+            local execOk, execErr = env.actions._Execute.delete_vehicle(1, params)
+            assert(execOk == false, 'executor must re-check the plate (TOCTOU)')
+            assert(tostring(execErr):match('^plate_mismatch'), tostring(execErr))
+            assert(#env.deleted_entities == 0, 'mismatched vehicle must not be deleted')
+        end)
+
+        check('delete_vehicle_success_confirms_entity_gone', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            putPlayerInVehicle(env, 7, 703, 'ABC123')
+
+            local params = assert(env.policy.Normalize('delete_vehicle', {
+                citizenid = 'ABC12345',
+                plate = 'abc123',
+            }))
+            local ok, err, result = env.actions._Execute.delete_vehicle(1, params)
+            assert(ok == true, tostring(err))
+            assert(result.entity == 703, 'result.entity mismatch')
+            assert(result.model == 123456, 'result.model mismatch')
+            assert(result.plate == 'ABC123', 'result.plate mismatch')
+            assert(#env.deleted_entities == 1 and env.deleted_entities[1] == 703,
+                'DeleteEntity was not called with the current vehicle')
+            assert(DoesEntityExist(703) == false, 'the deleted entity must not exist')
+        end)
+
+        check('delete_vehicle_lingering_entity_is_verification_failed', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+            putPlayerInVehicle(env, 7, 704, 'ABC123')
+            env.entity_exists_override = true -- DeleteEntity "fails" to remove it
+
+            local waits = 0
+            _G.Wait = function()
+                waits = waits + 1
+                env.now = env.now + 500
+            end
+            _G.GetGameTimer = function() return env.now end
+
+            local ok, err = env.actions._Execute.delete_vehicle(1, { citizenid = 'ABC12345' })
+            assert(ok == false, 'a surviving entity must fail verification')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+            assert(#env.deleted_entities == 1 and env.deleted_entities[1] == 704,
+                'DeleteEntity must still have been attempted')
+            assert(waits >= 1 and waits <= 10,
+                'the confirmation wait must be bounded, took ' .. tostring(waits) .. ' waits')
+        end)
+
+        check('delete_vehicle_normalize_rejects_bad_plate_and_unknown_field', function()
+            local env = newEnv()
+            local badPlates = {
+                { value = '', label = 'empty' },
+                { value = 'ABCDEFGHI', label = 'too long' },
+                { value = 'AB-CD', label = 'dash' },
+                { value = 'ABC 123', label = 'inner space' },
+                { value = 42, label = 'non-string' },
+            }
+            for _, case in ipairs(badPlates) do
+                local normalized, err = env.policy.Normalize('delete_vehicle', {
+                    citizenid = 'ABC12345',
+                    plate = case.value,
+                })
+                assert(normalized == nil, case.label .. ' plate must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    case.label .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local unknown, unknownErr = env.policy.Normalize('delete_vehicle', {
+                citizenid = 'ABC12345',
+                entity = 123,
+            })
+            assert(unknown == nil, 'an arbitrary entity id must be rejected')
+            assert(unknownErr and unknownErr.code == 'invalid_params',
+                tostring(unknownErr and unknownErr.code))
+            assert(tostring(unknownErr.message):match('unknown field entity'),
+                tostring(unknownErr.message))
+
+            local optional = assert(env.policy.Normalize('delete_vehicle', {
+                citizenid = 'ABC12345',
+            }))
+            assert(optional.plate == nil, 'plate must stay optional')
         end)
 
         return {
