@@ -18,7 +18,7 @@ return function(env)
                 source = source,
                 citizenid = citizenid,
                 money = money or { cash = 0, bank = 0, crypto = 0 },
-                job = { name = 'unemployed', grade = { level = 0 } },
+                job = { name = 'unemployed', grade = { level = 0 }, onduty = false },
                 items = {},
                 metadata = {},
             },
@@ -74,6 +74,16 @@ return function(env)
                 set_metadata = citizenid,
                 meta = meta,
                 value = value,
+            }
+        end
+
+        -- Mirrors qb-core player.lua: SetJobDuty only mutates
+        -- PlayerData.job.onduty and marks the player dirty (no return value).
+        function player.Functions.SetJobDuty(onDuty)
+            player.PlayerData.job.onduty = not not onDuty
+            env.log[#env.log + 1] = {
+                set_job_duty = citizenid,
+                onduty = not not onDuty,
             }
         end
 

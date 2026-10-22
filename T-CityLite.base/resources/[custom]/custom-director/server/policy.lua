@@ -15,6 +15,8 @@ local AgentPolicy = {}
 -- L2 世界类：announce / set_weather / set_time_of_day（需人工审批，blast radius = world）
 -- L3 任务类：start_quest（需人工审批）
 -- L3 职业类：set_job（需人工审批）
+-- L2 出勤类：set_job_duty（需人工审批，blast radius = single）
+-- L3 属性类：set_metadata（需人工审批，key 白名单，blast radius = single）
 -- L3 位置类：teleport（需人工审批 + custom-agent-client 执行通道）
 -- L3 载具类：spawn_vehicle（需人工审批 + 服务端 CreateVehicleServerSetter）
 -- L3 会话类：set_bucket（需人工审批；routing bucket 不持久化）
@@ -43,6 +45,18 @@ AgentPolicy.ACTIONS = {
         risk = 'L3',
         requires_approval = true,
         auto_execute = false,
+    },
+    set_job_duty = {
+        risk = 'L2',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+    },
+    set_metadata = {
+        risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
     },
     teleport = {
         risk = 'L3',
@@ -165,6 +179,16 @@ AgentPolicy.ACCOUNTS = {
     cash = true,
     bank = true,
     crypto = true,
+}
+
+-- Only survival/cosmetic metadata is agent-writable. isdead, inlaststand and
+-- ishandcuffed are deliberately excluded: they change authority/gameplay state
+-- and must go through revive or a human operator instead of a generic setter.
+AgentPolicy.METADATA_KEYS = {
+    hunger = true,
+    thirst = true,
+    stress = true,
+    armor = true,
 }
 
 -- Mirrors custom-agent-client/shared/effect_rules.lua MAP_BOUNDS. The director
@@ -566,6 +590,53 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         }
     end
 
+    if actionType == 'set_job_duty' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            onduty = true,
+        }, 'set_job_duty')
+        if unknownErr then return nil, unknownErr end
+
+        if type(params.onduty) ~= 'boolean' then
+            return fail('invalid_params', 'onduty must be a boolean')
+        end
+
+        return {
+            citizenid = citizenid,
+            onduty = params.onduty,
+        }
+    end
+
+    if actionType == 'set_metadata' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            key = true,
+            value = true,
+        }, 'set_metadata')
+        if unknownErr then return nil, unknownErr end
+
+        if type(params.key) ~= 'string' or not AgentPolicy.METADATA_KEYS[params.key] then
+            return fail('invalid_params', 'key must be hunger, thirst, stress or armor')
+        end
+
+        local value = params.value
+        if type(value) ~= 'number' or value ~= value or value == math.huge or value == -math.huge then
+            return fail('invalid_params', 'value must be a finite integer')
+        end
+        if value ~= math.floor(value) then
+            return fail('invalid_params', 'value must be a whole number')
+        end
+        if value < 0 or value > 100 then
+            return fail('invalid_params', 'value must be between 0 and 100')
+        end
+
+        return {
+            citizenid = citizenid,
+            key = params.key,
+            value = math.tointeger(value) or value,
+        }
+    end
+
     if actionType == 'grant_item' then
         local unknownErr = rejectUnknownFields(params, {
             citizenid = true,
@@ -849,7 +920,8 @@ end
 -- Pure: callers gather live player/quest context.
 -- ctx = {
 --   player = { source = number, money = { cash=, bank=, crypto= },
---              job = PlayerData.job, item_count = number } | nil,
+--              job = PlayerData.job, metadata = PlayerData.metadata,
+--              item_count = number } | nil,
 --   quests = GetQuestCatalog() result | nil,
 --   jobs = QBCore.Shared.Jobs | nil,
 --   items = QBCore.Shared.Items | nil,
@@ -952,6 +1024,25 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
                 job = current.name,
                 grade = current.grade and current.grade.level or 0,
             }
+        end
+        return preview
+    end
+
+    if actionType == 'set_job_duty' then
+        preview.onduty = params.onduty
+        local current = nil
+        if type(player) == 'table' then current = player.job end
+        if type(current) == 'table' then
+            preview.from = current.onduty
+        end
+        return preview
+    end
+
+    if actionType == 'set_metadata' then
+        preview.key = params.key
+        preview.value = params.value
+        if type(player) == 'table' and type(player.metadata) == 'table' then
+            preview.from = player.metadata[params.key]
         end
         return preview
     end
@@ -1154,6 +1245,22 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
             return failBool('grade_not_found', ('grade %s does not exist for job %s'):format(
                 tostring(params.grade), tostring(params.job)))
         end
+        return true
+    end
+
+    if actionType == 'set_job_duty' then
+        -- The generic gate above already covers offline players. A nil job table
+        -- means the player object is a partial copy or the character is still
+        -- loading, so flipping duty would write to a nonexistent job.
+        if type(ctx.player.job) ~= 'table' then
+            return failBool('job_unavailable', 'target player has no job data')
+        end
+        return true
+    end
+
+    if actionType == 'set_metadata' then
+        -- Player online is the whole policy; the executor re-reads
+        -- PlayerData.metadata after SetMetaData and verifies the value.
         return true
     end
 

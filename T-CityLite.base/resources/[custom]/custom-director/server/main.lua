@@ -408,13 +408,13 @@ local function buildContext(actionType, params)
             }
             if actionType == 'teleport' or actionType == 'spawn_vehicle' then
                 context.position = playerPosition(playerSource(player))
-            elseif actionType == 'set_job' then
+            elseif actionType == 'set_job' or actionType == 'set_job_duty' then
                 context.player.job = playerJob(player)
             elseif actionType == 'grant_item' or actionType == 'remove_item' then
                 context.player.item_count = playerItemCount(player, params.item) or 0
             elseif actionType == 'set_bucket' then
                 context.player.bucket = playerBucket(context.player.source)
-            elseif actionType == 'revive' then
+            elseif actionType == 'revive' or actionType == 'set_metadata' then
                 context.player.metadata = player.PlayerData and player.PlayerData.metadata or nil
             elseif actionType == 'delete_vehicle' then
                 local entity = playerVehicle(context.player.source)
@@ -606,6 +606,70 @@ local function executeSetJob(actionId, params)
     return true, nil, {
         before = before,
         after = { job = updatedJob.name, grade = updatedGrade },
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeSetJobDuty(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local currentJob = playerJob(player) or {}
+    local before = currentJob.onduty
+
+    local callOk, callErr = pcall(function()
+        player.Functions.SetJobDuty(params.onduty)
+    end)
+    if not callOk then
+        return false, ('execution_failed: SetJobDuty threw: %s'):format(
+            truncate(callErr, 150)), nil
+    end
+
+    -- SetJobDuty may only set IsDirty in qb-core, so PlayerData.job.onduty is
+    -- the authority rather than any broadcast/event payload.
+    local updatedJob = playerJob(player) or {}
+    if updatedJob.onduty ~= params.onduty then
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(updatedJob.onduty), tostring(params.onduty)), nil
+    end
+
+    return true, nil, {
+        onduty = params.onduty,
+        before = before,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+-- Only AgentPolicy.METADATA_KEYS reach this executor; isdead/inlaststand/
+-- ishandcuffed are intentionally not agent-writable (revive or human only).
+local function executeSetMetadata(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local current = player.PlayerData and player.PlayerData.metadata or {}
+    local before = current[params.key]
+
+    local callOk, callErr = pcall(function()
+        player.Functions.SetMetaData(params.key, params.value)
+    end)
+    if not callOk then
+        return false, ('execution_failed: SetMetaData threw: %s'):format(
+            truncate(callErr, 150)), nil
+    end
+
+    local updated = player.PlayerData and player.PlayerData.metadata or {}
+    local after = updated[params.key]
+    if tonumber(after) ~= params.value then
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.value)), nil
+    end
+
+    return true, nil, {
+        key = params.key,
+        value = params.value,
+        before = before,
         verify_result = true,
         at = os.time(),
     }
@@ -1087,6 +1151,10 @@ local function executeAction(actionId, actionType, params)
         return executeStartQuest(actionId, params)
     elseif actionType == 'set_job' then
         return executeSetJob(actionId, params)
+    elseif actionType == 'set_job_duty' then
+        return executeSetJobDuty(actionId, params)
+    elseif actionType == 'set_metadata' then
+        return executeSetMetadata(actionId, params)
     elseif actionType == 'grant_item' then
         return executeGrantItem(actionId, params)
     elseif actionType == 'remove_item' then
@@ -1117,6 +1185,8 @@ end
 -- still flows exclusively through Propose/Approve.
 AgentActions._Execute = {
     set_job = executeSetJob,
+    set_job_duty = executeSetJobDuty,
+    set_metadata = executeSetMetadata,
     grant_item = executeGrantItem,
     remove_item = executeRemoveItem,
     set_bucket = executeSetBucket,

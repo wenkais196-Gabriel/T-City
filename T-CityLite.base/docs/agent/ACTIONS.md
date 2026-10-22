@@ -2,11 +2,11 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope covers fifteen actions (twelve
+risky actions and an audit row. Scope covers seventeen actions (fourteen
 player-scoped plus three L2 world/presentation actions); there is no LLM
 integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
-`set_bucket`, `kick`, `revive` and `delete_vehicle` did not change
-`schema_version` (still `1`).
+`set_bucket`, `kick`, `revive`, `delete_vehicle`, `set_job_duty` and
+`set_metadata` did not change `schema_version` (still `1`).
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -29,6 +29,8 @@ integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 | `add_money` | L4 经济 | `citizenid`, `account`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddMoney(account, amount, 'agent_action:<id>')` + delta verification |
 | `start_quest` | L3 任务 | `citizenid`, `quest_id` | `pending_approval` | **always** | `exports['custom-quest']:TriggerQuest(source, quest_id)` |
 | `set_job` | L3 职业 | `citizenid`, `job`, `grade?` | `pending_approval` | **always** | `Player.Functions.SetJob(job, grade)` + job/grade read-back verification |
+| `set_job_duty` | L2 出勤 | `citizenid`, `onduty` | `pending_approval` | **always** | `Player.Functions.SetJobDuty(onduty)` + `PlayerData.job.onduty` read-back; `blast_radius = "single"` |
+| `set_metadata` | L3 属性 | `citizenid`, `key`, `value` | `pending_approval` | **always** | `Player.Functions.SetMetaData(key, value)` + numeric metadata read-back; whitelist `hunger`/`thirst`/`stress`/`armor` |
 | `teleport` | L3 位置 | `citizenid`, `x`, `y`, `z`, `heading?` | `pending_approval` | **always** | `exports['custom-agent-client']:Execute(source, 'teleport', {x,y,z,heading}, 5000, {agent_id='director:<id>'})` + client ack |
 | `spawn_vehicle` | L3 载具 | `citizenid`, `model`, `plate?` | `pending_approval` | **always** | server-side `CreateVehicleServerSetter` 1.5 m in front of the ped, bounded existence wait (2 s), optional plate write + read-back |
 | `revive` | L3 医疗 | `citizenid` | `pending_approval` | **always** | `Player.Functions.SetMetaData('isdead'/'inlaststand', false)` + `TriggerClientEvent('hospital:client:Revive', source)` (pcall) + metadata read-back |
@@ -40,12 +42,14 @@ integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 
 Anything else is rejected with `code: "unsupported_action"`.
 
-The three L2 actions are **world-scoped**: they have no `citizenid`, they are
-valid even while nobody is online, and their `ACTIONS` metadata carries
-`blast_radius = "world"`. `blast_radius` is exposed by
-`GET /agent/v1/policy` for those actions (`nil` for player-scoped actions).
-L2 always means `requires_approval = true` and `auto_execute = false`: a human
-approves every broadcast/weather/time change before it runs.
+The three L2 world actions (`announce`, `set_weather`, `set_time_of_day`) are
+**world-scoped**: they have no `citizenid`, they are valid even while nobody is
+online, and their `ACTIONS` metadata carries `blast_radius = "world"`.
+`blast_radius` is exposed by `GET /agent/v1/policy` for those actions (`nil` for
+player-scoped actions). L2 always means `requires_approval = true` and
+`auto_execute = false`: a human approves every broadcast/weather/time change
+before it runs. `set_job_duty` is also L2 but player-scoped
+(`blast_radius = "single"`): it never auto-executes either.
 
 ### 1.1 Argument normalization
 
@@ -67,6 +71,9 @@ approves every broadcast/weather/time change before it runs.
 | `start_quest.quest_id` | 1–64 chars, `[A-Za-z0-9_.:-]`; must exist in `GetQuestCatalog` |
 | `set_job.job` | 1–64 chars, `[A-Za-z0-9_.-]`, lowercased; must exist in `QBCore.Shared.Jobs` |
 | `set_job.grade` | optional integer `0..100`, default `0`; must exist in `jobs[job].grades` when that table is present |
+| `set_job_duty.onduty` | boolean (no strings/numbers); the target must have a live `PlayerData.job` (`job_unavailable` otherwise) |
+| `set_metadata.key` | `hunger` \| `thirst` \| `stress` \| `armor` only; `isdead`/`inlaststand`/`ishandcuffed` are not accepted |
+| `set_metadata.value` | integer `0..100` (whole number; floats, NaN, ±inf and strings rejected) |
 | `teleport.x` / `teleport.y` | finite number within `-4500..8500` (GTA map bounds; NaN/±inf rejected) |
 | `teleport.z` | finite number within `-200..3000` (GTA map bounds; NaN/±inf rejected) |
 | `teleport.heading` | optional finite number `0..360`; omitted when not supplied |
@@ -87,7 +94,8 @@ approves every broadcast/weather/time change before it runs.
 Unknown keys inside `args` are dropped for `notify`, `add_money` and
 `start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
 `remove_item`, `set_bucket`, `kick`, `announce`, `set_weather`,
-`set_time_of_day`, `teleport`, `spawn_vehicle`, `revive` and `delete_vehicle`.
+`set_time_of_day`, `teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
+`set_job_duty` and `set_metadata`.
 Unknown action types are rejected. There is no client-side validation path.
 
 ---
@@ -451,6 +459,48 @@ and `plate` is the whitespace-stripped uppercase plate. `target` is absent when
 the player is on foot (policy rejects with `not_in_vehicle`). The caller can
 never pass an arbitrary entity id.
 
+### 3.16 `set_job_duty`
+
+```json
+{
+  "action_type": "set_job_duty",
+  "risk": "L2",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "onduty": true,
+  "from": false
+}
+```
+
+`from` is the current `PlayerData.job.onduty` boolean captured while building
+context; it is omitted when the player has no job table (policy rejects that
+proposal with `job_unavailable`). Approval recomputes the preview, so `from`
+reflects the duty state at approval time.
+
+### 3.17 `set_metadata`
+
+```json
+{
+  "action_type": "set_metadata",
+  "risk": "L3",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "key": "hunger",
+  "value": 80,
+  "from": 42
+}
+```
+
+`from` is the current `PlayerData.metadata[key]` value captured while building
+context; it is omitted when that key is absent. `key` is restricted to the
+whitelist `hunger`, `thirst`, `stress` and `armor` (see §5.13); `isdead`,
+`inlaststand` and `ishandcuffed` are deliberately rejected because they change
+gameplay/authority state and must go through `revive` or a human operator.
+
 ---
 
 ## 4. Status lifecycle
@@ -463,7 +513,7 @@ notify (dry_run = false)
   propose ──► approved ──► executed
                        └─► failed             (notify/AddMoney/quest execution error)
 
-add_money / start_quest / set_job / grant_item / remove_item / set_bucket / kick / announce / set_weather / set_time_of_day / teleport / spawn_vehicle / revive / delete_vehicle (dry_run = false)
+add_money / start_quest / set_job / set_job_duty / set_metadata / grant_item / remove_item / set_bucket / kick / announce / set_weather / set_time_of_day / teleport / spawn_vehicle / revive / delete_vehicle (dry_run = false)
   propose ──► pending_approval ──► approved ──► executed
                               │             └─► failed
                               ├─► rejected              (operator reject)
@@ -679,6 +729,8 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 | `set_time_of_day` | L2 | no | **always** | weathersync started + `0..23` / `0..59`; `blast_radius = world` |
 | `start_quest` | L3 | no | **always** | quest catalog |
 | `set_job` | L3 | no | **always** | `QBCore.Shared.Jobs` + grades |
+| `set_job_duty` | L2 | no | **always** | online player + live job table + boolean `onduty` + duty read-back |
+| `set_metadata` | L3 | no | **always** | online player + key whitelist + integer `0..100` + metadata read-back |
 | `teleport` | L3 | no | **always** | `custom-agent-client` started + map bounds + client ack (5 s) |
 | `spawn_vehicle` | L3 | no | **always** | online player + non-zero model hash + bounded 2 s spawn wait |
 | `revive` | L3 | no | **always** | online player + `isdead`/`inlaststand` metadata read-back; ambulancejob client event best-effort |
@@ -689,12 +741,37 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 | `add_money` | L4 | no | **always** | `max_money` + daily budget |
 | `grant_item` | L4 | no | **always** | `max_item_amount` only |
 
-`blast_radius` is `world` only for the three L2 actions; all other actions are
-player-scoped (`teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
-`remove_item`, `set_bucket` and `kick` set `single` explicitly).
+`blast_radius` is `world` only for the three L2 world actions; all other actions
+are player-scoped (`teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
+`remove_item`, `set_bucket`, `kick`, `set_job_duty` and `set_metadata` set
+`single` explicitly).
 `agent_actions_enabled = 0` disables every action. A proposal rejected by
 policy before persistence is not an approval-matrix exception: it never
 executes.
+
+### 5.13 Duty and metadata
+
+- `set_job_duty` is **L2** but player-scoped (`blast_radius = "single"`); it is
+  never auto-executed. The target must be online **and** have a live
+  `PlayerData.job` table (`job_unavailable` otherwise, e.g. a partial player
+  copy while loading). `onduty` must be a JSON boolean; strings and numbers are
+  rejected with `invalid_params`. The executor calls
+  `Player.Functions.SetJobDuty(onduty)` and reads `PlayerData.job.onduty` back;
+  qb-core may only set `IsDirty` without a broadcast, so the read-back is the
+  authority. A mismatch is `verification_failed`.
+- `set_metadata` is **L3** and `blast_radius = "single"`. The target must be
+  online. `key` is a fixed whitelist — `hunger`, `thirst`, `stress`, `armor` —
+  and `value` must be an integer `0..100`. The whitelist deliberately excludes
+  `isdead`, `inlaststand` and `ishandcuffed`: those flags decide whether a
+  player is dead or restrained, so an agent-triggered flip would bypass
+  `revive`/ambulancejob or police restraint and leave client/server state
+  inconsistent. They stay operator-only. The executor calls
+  `Player.Functions.SetMetaData(key, value)` and requires the numeric read-back
+  `tonumber(PlayerData.metadata[key]) == value`; otherwise
+  `verification_failed`. Unknown keys and unknown fields are rejected with
+  `invalid_params`.
+- Neither action has an inverse/undo in this slice; the audit `result.before`
+  is the recovery reference.
 
 ---
 
@@ -722,7 +799,7 @@ executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `set_job_duty` \| `set_metadata` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` |
 | `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
@@ -818,6 +895,35 @@ This is an L4 action: it never auto-executes, even if `dry_run` is false.
    automatic rollback**; the previous job is in the audit `result.before`.
 
 This is an L3 action: it never auto-executes, even if `dry_run` is false.
+
+### `set_job_duty`
+
+1. Re-resolve the online player and record
+   `before = PlayerData.job.onduty`.
+2. `Player.Functions.SetJobDuty(onduty)` inside `pcall`; a thrown call becomes
+   `failed` (`execution_failed: SetJobDuty threw: ...`).
+3. Read `PlayerData.job.onduty` back and require it to equal the requested
+   boolean; otherwise `failed` with `verification_failed`.
+4. Success `result` is `{ onduty, before, verify_result, at }`. No automatic
+   restore of the previous duty state; `before` is the audit reference.
+
+This is an L2 action but player-scoped: it never auto-executes, even if
+`dry_run` is false. qb-core's `SetJobDuty` may only mark the player dirty without
+a broadcast, so `PlayerData.job.onduty` is the verification authority.
+
+### `set_metadata`
+
+1. Re-resolve the online player and record `before = PlayerData.metadata[key]`.
+2. `Player.Functions.SetMetaData(key, value)` inside `pcall`; a thrown call
+   becomes `failed` (`execution_failed: SetMetaData threw: ...`).
+3. Read `PlayerData.metadata[key]` back and require the numeric comparison
+   `tonumber(after) == value`; otherwise `failed` with `verification_failed`.
+4. Success `result` is `{ key, value, before, verify_result, at }`.
+
+Only the `hunger`/`thirst`/`stress`/`armor` whitelist reaches this executor;
+`isdead`/`inlaststand`/`ishandcuffed` are rejected during normalization (use
+`revive` or a human operator). This is an L3 action: it never auto-executes,
+even if `dry_run` is false, and there is no automatic restore of `before`.
 
 ### `teleport`
 
@@ -1024,6 +1130,7 @@ appear for action results). No stack traces.
 | `account_unavailable` | 400 | Target lacks the account |
 | `quest_not_found` | 400 | Quest not in catalog |
 | `job_not_found` | 400 | Job not in `QBCore.Shared.Jobs` |
+| `job_unavailable` | 400 | Target player has no live `PlayerData.job` (`set_job_duty`) |
 | `grade_not_found` | 400 | Grade not in `jobs[job].grades` |
 | `item_not_found` | 400 | Item not in `QBCore.Shared.Items` |
 | `text_too_long` | 400 | Notify/announce text over cap |
@@ -1060,13 +1167,14 @@ with `executor_unavailable`.
 HTTP callers see `execution_failed` (409) and the specific code is in the
 `error`/`result.error` text.
 
-The same wrapping applies to `remove_item`, `set_bucket`, `kick`, `revive` and
-`delete_vehicle`: `execution_failed` (409) is returned, with
-`verification_failed ...`, `execution_failed: RemoveItem ...`,
-`execution_failed: SetPlayerBucket ...`, `execution_failed: Kick ...`,
-`execution_failed: SetMetaData ...` or `verification_failed ...` in the `error`
-text. `player_not_found` / `item_not_found` / `not_in_vehicle` /
-`plate_mismatch` remain policy rejections before execution.
+The same wrapping applies to `remove_item`, `set_bucket`, `kick`, `revive`,
+`delete_vehicle`, `set_job_duty` and `set_metadata`: `execution_failed` (409)
+is returned, with `verification_failed ...`,
+`execution_failed: RemoveItem ...`, `execution_failed: SetPlayerBucket ...`,
+`execution_failed: Kick ...`, `execution_failed: SetJobDuty ...` or
+`execution_failed: SetMetaData ...` in the `error` text. `player_not_found` /
+`item_not_found` / `not_in_vehicle` / `plate_mismatch` / `job_unavailable`
+remain policy rejections before execution.
 
 ---
 
@@ -1082,10 +1190,11 @@ text. `player_not_found` / `item_not_found` / `not_in_vehicle` /
 8. Keep the FXServer HTTP port on loopback/private networks; terminate TLS at a
    trusted proxy if needed. CORS is not enabled.
 9. No automatic rollback of economy mutations; failures are audited loudly.
-10. `add_money`, `start_quest`, `set_job`, `grant_item`, `remove_item`,
-    `set_bucket`, `kick`, `announce`, `set_weather`, `set_time_of_day`,
-    `teleport`, `spawn_vehicle`, `revive` and `delete_vehicle` always require
-    `pending_approval`, regardless of the proposing agent.
+10. `add_money`, `start_quest`, `set_job`, `set_job_duty`, `set_metadata`,
+    `grant_item`, `remove_item`, `set_bucket`, `kick`, `announce`,
+    `set_weather`, `set_time_of_day`, `teleport`, `spawn_vehicle`, `revive` and
+    `delete_vehicle` always require `pending_approval`, regardless of the
+    proposing agent.
 
 ---
 

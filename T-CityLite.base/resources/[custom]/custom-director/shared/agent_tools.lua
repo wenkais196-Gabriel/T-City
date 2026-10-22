@@ -5,7 +5,7 @@
 local AgentTools = {}
 
 AgentTools.SCHEMA_VERSION = 1
-AgentTools.REGISTRY_VERSION = "1.3.0"
+AgentTools.REGISTRY_VERSION = "1.4.0"
 
 AgentTools.TOOLS = {
   ["get_schema"] = {
@@ -614,6 +614,51 @@ AgentTools.TOOLS = {
     schema = {
       ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["plate"] = { type = "string", chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", min_length = 1, max_length = 8 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["set_job_duty"] = {
+    name = "set_job_duty",
+    title = "Set a player on or off duty (L2, approval)",
+    channel = "write",
+    route = "director",
+    risk = "L2",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "set_job_duty",
+    auth = "default",
+    params = { "citizenid", "onduty", "idempotency_key" },
+    required = { "citizenid", "onduty" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["onduty"] = { type = "boolean" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["set_player_metadata"] = {
+    name = "set_player_metadata",
+    title = "Set hunger/thirst/stress/armor (L3, approval)",
+    channel = "effect",
+    route = "director",
+    risk = "L3",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "set_metadata",
+    auth = "default",
+    params = { "citizenid", "key", "value", "idempotency_key" },
+    required = { "citizenid", "key", "value" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["key"] = { type = "string", enum = { "hunger", "thirst", "stress", "armor" } },
+      ["value"] = { type = "integer", minimum = 0, maximum = 100 },
       ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },

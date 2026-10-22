@@ -83,6 +83,21 @@ return {
             })
         end
 
+        local function setJobDuty(env, citizenid, onduty)
+            return env.actions._Execute.set_job_duty(1, {
+                citizenid = citizenid,
+                onduty = onduty,
+            })
+        end
+
+        local function setMetadata(env, citizenid, key, value)
+            return env.actions._Execute.set_metadata(1, {
+                citizenid = citizenid,
+                key = key,
+                value = value,
+            })
+        end
+
         local function kick(env, citizenid, reason)
             return env.actions._Execute.kick(1, {
                 citizenid = citizenid,
@@ -108,6 +123,8 @@ return {
             local env = newEnv()
             assert(type(env.actions._Execute) == 'table', '_Execute table missing')
             assert(type(env.actions._Execute.set_job) == 'function', 'set_job executor missing')
+            assert(type(env.actions._Execute.set_job_duty) == 'function', 'set_job_duty executor missing')
+            assert(type(env.actions._Execute.set_metadata) == 'function', 'set_metadata executor missing')
             assert(type(env.actions._Execute.grant_item) == 'function', 'grant_item executor missing')
             assert(type(env.actions._Execute.announce) == 'function', 'announce executor missing')
             assert(type(env.actions._Execute.set_weather) == 'function', 'set_weather executor missing')
@@ -1430,6 +1447,290 @@ return {
                 citizenid = 'ABC12345',
             }))
             assert(optional.plate == nil, 'plate must stay optional')
+        end)
+
+        -- set_job_duty ----------------------------------------------------------
+
+        check('set_job_duty_normalize_rejects_non_boolean', function()
+            local env = newEnv()
+            for _, onduty in ipairs({ 'true', 'false', 1, 0, {} }) do
+                local normalized, err = env.policy.Normalize('set_job_duty', {
+                    citizenid = 'ABC12345',
+                    onduty = onduty,
+                })
+                assert(normalized == nil, 'onduty ' .. tostring(onduty) .. ' must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    'onduty ' .. tostring(onduty) .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local missing, missingErr = env.policy.Normalize('set_job_duty', {
+                citizenid = 'ABC12345',
+            })
+            assert(missing == nil, 'missing onduty must be rejected')
+            assert(missingErr.code == 'invalid_params', tostring(missingErr.code))
+
+            local on = assert(env.policy.Normalize('set_job_duty', {
+                citizenid = 'ABC12345',
+                onduty = true,
+            }))
+            local off = assert(env.policy.Normalize('set_job_duty', {
+                citizenid = 'ABC12345',
+                onduty = false,
+            }))
+            assert(on.onduty == true and off.onduty == false, 'boolean values must be preserved')
+        end)
+
+        check('set_job_duty_normalize_rejects_unknown_field', function()
+            local env = newEnv()
+            local unknown, unknownErr = env.policy.Normalize('set_job_duty', {
+                citizenid = 'ABC12345',
+                onduty = true,
+                duration = 60,
+            })
+            assert(unknown == nil, 'unknown field must be rejected')
+            assert(unknownErr and unknownErr.code == 'invalid_params',
+                tostring(unknownErr and unknownErr.code))
+            assert(tostring(unknownErr.message):match('unknown field duration'),
+                tostring(unknownErr.message))
+        end)
+
+        check('set_job_duty_registry_preview_and_policy', function()
+            local env = newEnv()
+            newPlayer(env, 'ABC12345')
+
+            local definition = env.policy.ACTIONS.set_job_duty
+            assert(type(definition) == 'table', 'set_job_duty missing from ACTIONS')
+            assert(definition.risk == 'L2', 'set_job_duty risk must be L2')
+            assert(definition.requires_approval == true, 'set_job_duty must require approval')
+            assert(definition.auto_execute == false, 'set_job_duty must never auto-execute')
+            assert(definition.blast_radius == 'single', 'set_job_duty blast radius must be single')
+
+            local params = assert(env.policy.Normalize('set_job_duty', {
+                citizenid = 'ABC12345',
+                onduty = true,
+            }))
+            local context = env.actions._Context('set_job_duty', params)
+            assert(type(context.player) == 'table' and type(context.player.job) == 'table',
+                'context.player.job must be present')
+
+            local preview = env.policy.Preview('set_job_duty', params, context, {})
+            assert(preview.citizenid == 'ABC12345', 'preview.citizenid mismatch')
+            assert(preview.onduty == true, 'preview.onduty mismatch')
+            assert(preview.from == false, 'preview.from must be the current onduty state')
+
+            local policyOk, policyErr = env.policy.CheckPolicy('set_job_duty', params, {}, context)
+            assert(policyOk == true, tostring(policyErr and policyErr.code))
+        end)
+
+        check('set_job_duty_success_records_before_and_readback', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+
+            local ok, err, result = setJobDuty(env, 'ABC12345', true)
+            assert(ok == true, tostring(err))
+            assert(result.onduty == true and result.before == false, 'result onduty/before mismatch')
+            assert(result.verify_result == true, 'verify_result must be true')
+            assert(player.PlayerData.job.onduty == true, 'PlayerData.job.onduty was not updated')
+
+            local offOk, offErr, off = setJobDuty(env, 'ABC12345', false)
+            assert(offOk == true, tostring(offErr))
+            assert(off.before == true and off.onduty == false, 'second flip mismatch')
+            assert(player.PlayerData.job.onduty == false, 'onduty was not cleared')
+        end)
+
+        check('set_job_duty_readback_mismatch_is_verification_failed', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.Functions.SetJobDuty = function() end -- lies: no mutation
+
+            local ok, err = setJobDuty(env, 'ABC12345', true)
+            assert(ok == false, 'unchanged duty must fail verification')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+        end)
+
+        check('set_job_duty_policy_requires_job', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.job = nil
+
+            local params = assert(env.policy.Normalize('set_job_duty', {
+                citizenid = 'ABC12345',
+                onduty = true,
+            }))
+            local context = env.actions._Context('set_job_duty', params)
+            assert(context.player.job == nil, 'context.player.job must stay nil')
+
+            local policyOk, policyErr = env.policy.CheckPolicy('set_job_duty', params, {}, context)
+            assert(policyOk == false, 'missing job must be rejected')
+            assert(policyErr.code == 'job_unavailable', tostring(policyErr.code))
+        end)
+
+        check('set_job_duty_offline_and_throwing_api', function()
+            local env = newEnv()
+
+            local offlineOk, offlineErr = setJobDuty(env, 'OFFLINE01', true)
+            assert(offlineOk == false, 'offline target must fail')
+            assert(offlineErr == 'player_not_found', tostring(offlineErr))
+
+            local player = newPlayer(env, 'ABC12345')
+            player.Functions.SetJobDuty = function() error('duty channel down') end
+            local ok, err = setJobDuty(env, 'ABC12345', true)
+            assert(ok == false, 'throwing SetJobDuty must fail')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+            assert(tostring(err):match('duty channel down'), tostring(err))
+        end)
+
+        -- set_metadata -----------------------------------------------------------
+
+        check('set_metadata_normalize_rejects_unknown_key', function()
+            local env = newEnv()
+            local invalidKeys = {
+                'isdead', 'inlaststand', 'ishandcuffed', 'health', 'rep', 'HUNGER', 'armour',
+            }
+            for _, key in ipairs(invalidKeys) do
+                local normalized, err = env.policy.Normalize('set_metadata', {
+                    citizenid = 'ABC12345',
+                    key = key,
+                    value = 50,
+                })
+                assert(normalized == nil, 'key ' .. tostring(key) .. ' must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    'key ' .. tostring(key) .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local missing, missingErr = env.policy.Normalize('set_metadata', {
+                citizenid = 'ABC12345',
+                value = 50,
+            })
+            assert(missing == nil, 'missing key must be rejected')
+            assert(missingErr.code == 'invalid_params', tostring(missingErr.code))
+
+            for _, key in ipairs({ 'hunger', 'thirst', 'stress', 'armor' }) do
+                local normalized = assert(env.policy.Normalize('set_metadata', {
+                    citizenid = 'ABC12345',
+                    key = key,
+                    value = 100,
+                }))
+                assert(normalized.key == key, 'key ' .. key .. ' must be whitelisted')
+            end
+        end)
+
+        check('set_metadata_normalize_rejects_bad_value', function()
+            local env = newEnv()
+            local badValues = { -1, 101, 1.5, '50', 0 / 0, math.huge, true }
+            for _, value in ipairs(badValues) do
+                local normalized, err = env.policy.Normalize('set_metadata', {
+                    citizenid = 'ABC12345',
+                    key = 'hunger',
+                    value = value,
+                })
+                assert(normalized == nil, 'value ' .. tostring(value) .. ' must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    'value ' .. tostring(value) .. ': expected invalid_params, got '
+                        .. tostring(err and err.code))
+            end
+
+            local low = assert(env.policy.Normalize('set_metadata', {
+                citizenid = 'ABC12345',
+                key = 'hunger',
+                value = 0,
+            }))
+            local high = assert(env.policy.Normalize('set_metadata', {
+                citizenid = 'ABC12345',
+                key = 'hunger',
+                value = 100,
+            }))
+            assert(low.value == 0 and high.value == 100, 'value bounds must be inclusive')
+        end)
+
+        check('set_metadata_normalize_rejects_unknown_field', function()
+            local env = newEnv()
+            local unknown, unknownErr = env.policy.Normalize('set_metadata', {
+                citizenid = 'ABC12345',
+                key = 'hunger',
+                value = 50,
+                meta = 'isdead',
+            })
+            assert(unknown == nil, 'unknown field must be rejected')
+            assert(unknownErr and unknownErr.code == 'invalid_params',
+                tostring(unknownErr and unknownErr.code))
+            assert(tostring(unknownErr.message):match('unknown field meta'),
+                tostring(unknownErr.message))
+        end)
+
+        check('set_metadata_registry_preview_and_success', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.metadata.hunger = 42
+
+            local definition = env.policy.ACTIONS.set_metadata
+            assert(type(definition) == 'table', 'set_metadata missing from ACTIONS')
+            assert(definition.risk == 'L3', 'set_metadata risk must be L3')
+            assert(definition.requires_approval == true, 'set_metadata must require approval')
+            assert(definition.auto_execute == false, 'set_metadata must never auto-execute')
+            assert(definition.blast_radius == 'single', 'set_metadata blast radius must be single')
+
+            local params = assert(env.policy.Normalize('set_metadata', {
+                citizenid = 'ABC12345',
+                key = 'hunger',
+                value = 80,
+            }))
+            local context = env.actions._Context('set_metadata', params)
+            assert(type(context.player.metadata) == 'table', 'context.player.metadata missing')
+
+            local preview = env.policy.Preview('set_metadata', params, context, {})
+            assert(preview.key == 'hunger' and preview.value == 80, 'preview key/value mismatch')
+            assert(preview.from == 42, 'preview.from must be the current metadata value')
+
+            local policyOk, policyErr = env.policy.CheckPolicy('set_metadata', params, {}, context)
+            assert(policyOk == true, tostring(policyErr and policyErr.code))
+
+            local ok, err, result = setMetadata(env, 'ABC12345', 'hunger', 80)
+            assert(ok == true, tostring(err))
+            assert(result.key == 'hunger' and result.value == 80, 'result key/value mismatch')
+            assert(result.before == 42, 'result.before must be the previous value')
+            assert(result.verify_result == true, 'verify_result must be true')
+            assert(player.PlayerData.metadata.hunger == 80, 'metadata was not updated')
+        end)
+
+        check('set_metadata_readback_mismatch_is_verification_failed', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.Functions.SetMetaData = function() end -- lies: no mutation
+
+            local ok, err = setMetadata(env, 'ABC12345', 'stress', 20)
+            assert(ok == false, 'unchanged metadata must fail verification')
+            assert(tostring(err):match('^verification_failed'), tostring(err))
+        end)
+
+        check('set_metadata_policy_and_execution_require_online_player', function()
+            local env = newEnv()
+            local params = assert(env.policy.Normalize('set_metadata', {
+                citizenid = 'OFFLINE01',
+                key = 'thirst',
+                value = 60,
+            }))
+            local context = env.actions._Context('set_metadata', params)
+            local policyOk, policyErr = env.policy.CheckPolicy('set_metadata', params, {}, context)
+            assert(policyOk == false, 'offline target must be rejected by policy')
+            assert(policyErr.code == 'player_not_found', tostring(policyErr.code))
+
+            local ok, err = setMetadata(env, 'OFFLINE01', 'thirst', 60)
+            assert(ok == false, 'offline execution must fail')
+            assert(err == 'player_not_found', tostring(err))
+        end)
+
+        check('set_metadata_throwing_setmetadata_is_execution_failed', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.Functions.SetMetaData = function() error('metadata channel down') end
+
+            local ok, err = setMetadata(env, 'ABC12345', 'armor', 100)
+            assert(ok == false, 'throwing SetMetaData must fail')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+            assert(tostring(err):match('metadata channel down'), tostring(err))
         end)
 
         return {
