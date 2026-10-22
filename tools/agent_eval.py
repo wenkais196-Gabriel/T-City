@@ -14,6 +14,9 @@ One JSON object per line (``.jsonl``) or a JSON array of objects (``.json``).
 (``T`` or space separated, optional offset) or epoch milliseconds.  Unknown
 fields are ignored.
 
+The optional ``--denials`` input uses the same loader and format; each row must
+carry ``agent_id``, ``action_type`` and ``code`` (``dry_run`` is optional).
+
 Metric contract (see T-CityLite.base/docs/agent/EVAL.md for the full table):
 
 * ``execution_success_rate``  = executed / (executed + failed), null if 0
@@ -24,14 +27,18 @@ Metric contract (see T-CityLite.base/docs/agent/EVAL.md for the full table):
   (``proposed``) rows are not approval-required; rejected rows are (they also
   carry ``approved_at``, so this measures "reached an approval decision").
 * ``rejection_rate`` = rejected / all persisted rows, null if 0
+* ``denial_rate`` = policy denials / (policy denials + persisted rows), null when
+  no ``--denials`` input was supplied (and when both counts are 0)
 * ``latency_ms`` = executed_at - requested_at for executed/failed rows; rows
   missing either timestamp are excluded and counted in ``skipped_samples``.
 * ``idempotency`` = duplicate-key counts over the export; ``replay_rate`` is
   the share of rows beyond the first occurrence of their key.
 
-Policy-rejected proposals never reach the table, so an over-privilege rejection
-rate cannot be computed from this export; the report says so in ``notes`` and
-emits ``risk: null`` because ``agent_actions`` has no risk column.
+Policy-rejected proposals never reach ``agent_actions`` (their idempotency key
+must stay reusable), so the over-privilege rejection rate needs a second input:
+pass one or more ``--denials`` exports of the ``agent_denials`` table.  Without
+that input ``rates.denial_rate`` is ``null`` (not ``0``) and a note says so.
+``risk`` stays ``null`` because ``agent_actions`` has no risk column.
 """
 
 from __future__ import annotations
@@ -113,6 +120,10 @@ def _contained(path: str) -> Path:
 def _read_text(path: str) -> str:
     if path == "-":
         return sys.stdin.read()
+    # ``/dev/null`` is the conventional "empty export" argument (see EVAL.md).
+    # It carries no data, so accepting it does not widen the root guard.
+    if Path(path).is_absolute() and Path(path) == Path(os.devnull):
+        return ""
     return _contained(path).read_text(encoding="utf-8-sig", errors="replace")
 
 
@@ -284,8 +295,74 @@ def _percentile(sorted_values: Sequence[int], percentile: float) -> int | None:
     return sorted_values[rank - 1]
 
 
-def summarize(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    """Compute the schema-version-1 report for parsed ``agent_actions`` rows."""
+# Columns an ``agent_denials`` row must carry to be aggregated.  The table has
+# no nullable identity/code columns, so a row missing one is an export defect
+# and is counted in ``bad_rows_skipped`` instead of silently landing in
+# ``unknown``.
+DENIAL_REQUIRED_FIELDS: tuple[str, ...] = ("agent_id", "action_type", "code")
+
+
+def _is_dry_run(value: Any) -> bool:
+    """Interpret the ``dry_run`` column (TINYINT(1) exports as 0/1)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "y")
+    return False
+
+
+def summarize_denials(denials: Iterable[Mapping[str, Any]] | None) -> dict[str, Any] | None:
+    """Aggregate an ``agent_denials`` export.
+
+    ``None`` means "no denial input was supplied" and must stay distinct from an
+    empty export: a report without denial data cannot claim a denial rate of 0.
+    """
+    if denials is None:
+        return None
+
+    total = 0
+    dry_run_count = 0
+    by_code: Counter[str] = Counter()
+    by_action: Counter[str] = Counter()
+    by_agent: Counter[str] = Counter()
+    bad_rows = int(getattr(denials, "bad_lines", 0))
+
+    for row in denials:
+        if not isinstance(row, Mapping) or any(
+            not _present(row.get(field)) for field in DENIAL_REQUIRED_FIELDS
+        ):
+            bad_rows += 1
+            continue
+        total += 1
+        by_code[_label(row, "code")] += 1
+        by_action[_label(row, "action_type")] += 1
+        by_agent[_label(row, "agent_id")] += 1
+        if _is_dry_run(row.get("dry_run")):
+            dry_run_count += 1
+
+    return {
+        "total": total,
+        "by_code": dict(sorted(by_code.items())),
+        "by_action": dict(sorted(by_action.items())),
+        "by_agent": dict(sorted(by_agent.items())),
+        "dry_run_count": dry_run_count,
+        "bad_rows_skipped": bad_rows,
+    }
+
+
+def summarize(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    denials: Iterable[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Compute the schema-version-1 report for parsed ``agent_actions`` rows.
+
+    ``denials`` is an optional ``agent_denials`` export (see ``--denials``).  It
+    defaults to ``None``, which keeps ``rates.denial_rate`` and the ``denials``
+    block ``null`` rather than inventing a zero denominator.
+    """
     materialized = [row for row in rows]
     total = len(materialized)
 
@@ -354,6 +431,12 @@ def summarize(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     approval_required_rate = rate(approval_required, total)
     rejection_rate = rate(rejected, total)
 
+    denial_report = summarize_denials(denials)
+    denial_total = int(denial_report["total"]) if denial_report is not None else 0
+    denial_rate = (
+        rate(denial_total, denial_total + total) if denial_report is not None else None
+    )
+
     risk: dict[str, Any] | None
     if risks:
         risk = {
@@ -365,8 +448,13 @@ def summarize(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         risk = None
 
     notes = [
-        "被 policy 拒绝的提案不落库，因此越权拒绝率无法从本表计算"
-        "（rejection_rate 只是已落库行的 rejected 占比）。",
+        (
+            "已计入 --denials：denial_rate = 被 policy 拒绝的提案数 / "
+            "(被拒数 + 落库动作数)；agent_actions 本身不记录被拒提案（幂等键需复用）。"
+            if denial_report is not None
+            else "未提供 --denials，越权拒绝率不可计算；被 policy 拒绝的提案不落库，"
+            "rejection_rate 只是已落库行的 rejected 占比。"
+        ),
         (
             "agent_actions 表没有 risk 列，导出行也没有 risk 字段；risk 输出 null，"
             "未根据 action_type 反推。"
@@ -416,6 +504,7 @@ def summarize(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             "human_approval_rate": human_approval_rate,
             "approval_required_rate": approval_required_rate,
             "rejection_rate": rejection_rate,
+            "denial_rate": denial_rate,
         },
         "latency_ms": {
             "p50": _percentile(latency_samples, 50),
@@ -443,6 +532,7 @@ def summarize(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             "duplicate_key_rows": duplicate_key_rows,
         },
         "risk": risk,
+        "denials": denial_report,
         "notes": notes,
     }
 
@@ -548,6 +638,12 @@ def render_markdown(report: Mapping[str, Any]) -> str:
 
     terminal = int(counts.get("terminal_executions", 0))
     approval_required = int(counts.get("approval_required", 0))
+    denials = report.get("denials")
+    if isinstance(denials, Mapping):
+        denial_total = int(denials.get("total", 0))
+        denial_basis = f"{denial_total} / {denial_total + total} (denials + persisted)"
+    else:
+        denial_basis = "no --denials input"
     lines.extend(["## Rates", ""])
     lines.extend(
         _md_table(
@@ -583,6 +679,11 @@ def render_markdown(report: Mapping[str, Any]) -> str:
                     "Rejection rate",
                     _fmt_rate(rates.get("rejection_rate")),
                     f"{totals.get('by_status', {}).get('rejected', 0)} / {total} persisted",
+                ),
+                (
+                    "Denial rate",
+                    _fmt_rate(rates.get("denial_rate")),
+                    denial_basis,
                 ),
             ],
         )
@@ -681,11 +782,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="export to read; repeatable; '-' reads stdin",
     )
     parser.add_argument(
+        "--denials",
+        action="append",
+        metavar="PATH",
+        help=(
+            "agent_denials export to read; repeatable; enables rates.denial_rate "
+            "(omitted: the denial rate is null, not 0)"
+        ),
+    )
+    parser.add_argument(
         "--root",
         metavar="DIR",
         help="directory inputs/outputs must stay inside (default: AGENT_EVAL_ROOT or cwd)",
     )
     parser.add_argument("--out", metavar="JSON", help="write the JSON report here (default: stdout)")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print the JSON report to stdout even when --out is given",
+    )
     parser.add_argument("--markdown", metavar="MD", help="also write a one-page Markdown report")
     parser.add_argument(
         "--fail-under-success",
@@ -712,16 +827,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"agent_eval: cannot read input: {exc}", file=sys.stderr)
         return 1
 
-    report = summarize(combined)
+    denial_rows: LoadedRows | None = None
+    if args.denials:
+        denial_rows = LoadedRows()
+        try:
+            for path in args.denials:
+                denial_rows.extend_loaded(load_rows(path))
+        except (OSError, ValueError) as exc:
+            print(f"agent_eval: cannot read denials input: {exc}", file=sys.stderr)
+            return 1
+
+    report = summarize(combined, denials=denial_rows)
     report["input"] = {
         "files": combined.files,
         "rows_loaded": len(combined),
         "bad_rows_skipped": combined.bad_lines,
     }
+    if denial_rows is not None:
+        report["input"]["denial_files"] = denial_rows.files
+        report["input"]["denial_rows_loaded"] = len(denial_rows)
     payload = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
 
     try:
-        if args.out:
+        if args.out and not args.json:
             _write_text(Path(args.out), payload)
         else:
             sys.stdout.write(payload)

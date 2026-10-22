@@ -11,6 +11,8 @@ integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
 - **Table:** `agent_actions`
+- **Denial migration:** `T-CityLite.base/migrations/v2.5_agent_denials.sql`
+- **Denial table:** `agent_denials` (policy rejections; no parameter values)
 - **Audience:** out-of-process Agent Hub, trusted server resources, approval UI
 - **Schema version:** `1` (`GET /agent/v1/policy` → `schema_version: 1`)
 
@@ -735,6 +737,48 @@ executes.
 
 `params`/`preview`/`result` never contain tokens, licenses or IPs. Tokens are
 not stored.
+
+### 7.1 Policy denials (`agent_denials`)
+
+A proposal rejected by policy is **not** written to `agent_actions`: its
+idempotency key has to stay reusable after an operator raises a cap or the
+player reconnects. The rejection is audited separately, in `agent_denials`
+(migration [`v2.5_agent_denials.sql`](../../migrations/v2.5_agent_denials.sql)),
+so an over-privileged request is never invisible:
+
+- **When:** `Propose` fails `CheckPolicy`, or `Approve` fails the policy
+  re-check (the world changed between propose and approve). Normalization
+  failures (`invalid_params`, `invalid_account`, and the per-action cap check
+  that runs while normalizing) return before policy and are not denial rows.
+- **Response unchanged:** the denial insert is best-effort (`pcall`, warning
+  only) and never changes the response body, the status code or the idempotency
+  semantics. A rejected proposal still gets no action id.
+
+| Column | Content |
+|:---|:---|
+| `id` | Denial id |
+| `agent_id` | Caller identity from `X-Agent-Id` / export argument |
+| `action_type` | Denied action |
+| `code` | Policy code (`daily_budget_exceeded`, `job_not_found`, `item_not_found`, `weather_sync_unavailable`, `player_not_found`, ...) |
+| `message` | Policy message, ≤255 chars (may name a cap or a target label) |
+| `param_keys` | Sorted, comma-separated parameter **names** only, ≤255 chars |
+| `params_hash` | 64-bit djb2 of the normalized params JSON as 16 hex chars |
+| `dry_run` | `1` when the denied proposal was a dry run |
+| `created_at` | `DATETIME(3)` insert time |
+
+**Privacy:** the params blob is never copied. Only the parameter names, a
+non-reversible hash and the policy's own message are stored — no citizenid,
+inventory count, reason text or full params object. The message is produced by
+`policy.lua` and may repeat a cap, job, grade or plate from the request; it
+never contains tokens. `param_keys` plus `params_hash` still let an operator
+group identical attempts and see which fields a denied call carried. The denial
+export is safe to feed to [`tools/agent_eval.py`](EVAL.md) via `--denials` to
+compute `denial_rate`.
+
+**Switch:** `agent_actions_denial_log` defaults to `1`; set it to `0` to stop
+writing denial rows (the rejection response is identical either way). A failed
+insert logs `[custom-director] DB insert failed: ...` and is otherwise ignored;
+there is no retry and no extra query on the rejection path.
 
 ---
 

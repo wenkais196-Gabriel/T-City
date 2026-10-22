@@ -31,6 +31,7 @@ local CASES = {
     'effect_rules',
     'effect_server',
     'director_actions',
+    'director_denials',
 }
 
 local function readAll(path)

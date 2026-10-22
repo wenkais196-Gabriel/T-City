@@ -168,6 +168,68 @@ local function dbUpdate(sql, params)
     return tonumber(affected) or 0, nil
 end
 
+-- ---------------------------------------------------------------------------
+-- Denial audit
+--
+-- Propose/Approve deliberately do not persist policy-rejected proposals: the
+-- idempotency key must stay reusable after an operator raises a cap or the
+-- player reconnects. The rejection itself is still the most important thing an
+-- evaluation needs to see, so it goes to its own table.
+--
+-- Privacy: agent_denials stores only the sorted parameter NAMES, the policy's
+-- own message and a hash of the normalized params JSON. The params blob (which
+-- may hold a citizenid or free text) is never copied into a second table.
+-- ---------------------------------------------------------------------------
+
+local DENIAL_PARAM_KEYS_MAX = 255
+
+-- 64-bit djb2 over the encoded params. Lua 5.4 integer arithmetic wraps, so the
+-- result is stable across runs and platforms; only 16 hex chars are stored.
+local function denialHash(text)
+    local hash = 5381
+    for index = 1, #text do
+        hash = hash * 33 + text:byte(index)
+    end
+    return string.format('%016x', hash)
+end
+
+local function denialParamKeys(params)
+    if type(params) ~= 'table' then return '' end
+    local keys = {}
+    for key in pairs(params) do keys[#keys + 1] = tostring(key) end
+    table.sort(keys)
+    return truncate(table.concat(keys, ','), DENIAL_PARAM_KEYS_MAX)
+end
+
+local function denialLogEnabled()
+    return convarString('agent_actions_denial_log', '1') == '1'
+end
+
+-- Never throws and never changes the caller's result: a failed denial insert is
+-- a warning in the console, not a different answer to the agent.
+local function recordDenial(agentId, actionType, params, code, message, dryRun)
+    if not denialLogEnabled() then return false end
+    local ok, err = pcall(function()
+        dbInsert([[
+            INSERT INTO agent_denials
+                (agent_id, action_type, code, message, param_keys, params_hash, dry_run)
+            VALUES (?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?)
+        ]], {
+            truncate(agentId, 64),
+            truncate(actionType, 32),
+            truncate(code, 64),
+            truncate(message, 255),
+            denialParamKeys(params),
+            denialHash(safeEncode(params)),
+            dryRun == true and 1 or 0,
+        })
+    end)
+    if not ok then
+        print(('[custom-director] ⚠️ denial audit failed: %s'):format(truncate(err, 200)))
+    end
+    return ok
+end
+
 local function rowToApi(row)
     if type(row) ~= 'table' then return nil end
     return {
@@ -1136,7 +1198,12 @@ function AgentActions.Propose(agentId, actionType, params, idempotencyKey, dryRu
     if not normalizedAgentId then return failure(agentErr.code, agentErr.message) end
 
     local normalized, normalizeErr = AgentPolicy.Normalize(actionType, params, cfg)
-    if not normalized then return failure(normalizeErr.code, normalizeErr.message) end
+    if not normalized then
+        -- Normalize rejections are where over-privilege usually shows up
+        -- (unsupported_action, invalid_params), so they are audited too.
+        recordDenial(normalizedAgentId, actionType, params, normalizeErr.code, normalizeErr.message, dryRun)
+        return failure(normalizeErr.code, normalizeErr.message)
+    end
 
     local normalizedKey, keyErr = AgentPolicy.NormalizeIdempotencyKey(idempotencyKey)
     if not normalizedKey then return failure(keyErr.code, keyErr.message) end
@@ -1185,7 +1252,9 @@ function AgentActions.Propose(agentId, actionType, params, idempotencyKey, dryRu
     local policyOk, policyErr = AgentPolicy.CheckPolicy(actionType, normalized, cfg, context)
     if not policyOk then
         -- Do not persist policy-rejected proposals: the key stays reusable
-        -- after the operator raises a cap / the player reconnects.
+        -- after the operator raises a cap / the player reconnects. The denial
+        -- audit row is the only durable trace of the rejected request.
+        recordDenial(normalizedAgentId, actionType, normalized, policyErr.code, policyErr.message, dryRun)
         return failure(policyErr.code, policyErr.message, {
             status = 'rejected',
             preview = preview,
@@ -1321,6 +1390,7 @@ function AgentActions.Approve(id, approver)
     local storedParams = decodeJson(row.params)
     local normalized, normalizeErr = AgentPolicy.Normalize(row.action_type, storedParams, cfg)
     if not normalized then
+        recordDenial(row.agent_id, row.action_type, storedParams, normalizeErr.code, normalizeErr.message, false)
         rejectPending(actionId, normalizedApprover, normalizeErr.code, normalizeErr.message, decodeJson(row.preview))
         return failure(normalizeErr.code, normalizeErr.message, {
             id = actionId,
@@ -1358,7 +1428,10 @@ function AgentActions.Approve(id, approver)
 
     local policyOk, policyErr = AgentPolicy.CheckPolicy(row.action_type, normalized, cfg, context)
     if not policyOk then
+        -- The world moved between propose and approve (player offline, cap
+        -- lowered, weathersync stopped): reject the row and audit the denial.
         rejectPending(actionId, normalizedApprover, policyErr.code, policyErr.message, preview)
+        recordDenial(row.agent_id or 'unknown', row.action_type, normalized, policyErr.code, policyErr.message, false)
         return failure(policyErr.code, policyErr.message, {
             id = actionId,
             status = 'rejected',

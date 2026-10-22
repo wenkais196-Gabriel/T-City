@@ -6,9 +6,13 @@
 --
 -- A queued entry is matched by a substring of the SQL (or by entry.match(sql))
 -- and consumed once. Tests push failures with { match = 'INSERT', error = '...' }.
+--
+-- Every call is also appended to mysql.log as { kind, sql, params } before the
+-- queue is consulted, so a test can assert what was written (for example that
+-- an INSERT INTO agent_denials carried only key names and a hash).
 
 return function(env)
-    local mysql = { queue = {} }
+    local mysql = { queue = {}, log = {} }
 
     function mysql.push(entry)
         mysql.queue[#mysql.queue + 1] = entry
@@ -44,6 +48,7 @@ return function(env)
             if type(params) == 'function' then
                 callback, params = params, {}
             end
+            mysql.log[#mysql.log + 1] = { kind = kind, sql = sql, params = params }
             local entry = take(sql)
             if entry.error then error(entry.error, 0) end
             local result = entry.result
