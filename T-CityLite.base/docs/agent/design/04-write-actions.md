@@ -581,3 +581,20 @@ TTL 线程 30s tick：过期 → `delete_vehicle(temp=true)`；玩家在车内�
 `blast_radius` 先前在 registry 里误写为 `single`（广播/世界状态应是 `world`），本片一并修正；该字段与 `risk` 正交，`world` 强制要求审批。
 
 三个工具已由 `planned` 改为 `active`（23 工具 / 21 active）。仍余 `teleport_player` 与 `spawn_vehicle`：前者需要把 `custom-agent-client` 接进执行链（`Citizen.Await` 可让出性），后者需要服务端实体创建与超时控制。
+
+### 13.2 第三片（teleport，2026-10-22）
+
+`teleport`（L3，必须审批）把动作代理接到 `custom-agent-client`：
+
+- 参数严格白名单 `citizenid/x/y/z/heading?`；坐标必须有限且在地图边界内。
+- `CheckPolicy` 要求玩家在线且 `custom-agent-client` 已启动（`ctx.executor_ready`），否则 `executor_unavailable`。
+- 执行：`exports['custom-agent-client']:Execute(src,'teleport',{...},5000,{agent_id='director:<id>'})`。
+  - 成功返回 `{ack, from, at}`；
+  - `not_yieldable` **显式失败**（提示必须在 coroutine 内），不静默降级为 fire-and-forget；
+  - `timeout`/`player_offline`/`handshake_missing`/`executor_disabled` 原样映射；
+  - export 调用抛错 → `executor_unavailable`。
+- 不做落点回读、不解析 `ack.detail`、无 bucket/战斗/载具守卫、无重试/回滚。
+
+**关键结论**：`Propose`/`Approve` 在 FiveM 的 HTTP 回调协程内执行，`Citizen.Await` 可正常让出；非协程调用会得到 `not_yieldable`。因此审批路径不需要改成两段式队列。
+
+`teleport_player` 已由 `planned` 改为 `active`（23 工具 / 22 active），仅剩 `spawn_vehicle`。

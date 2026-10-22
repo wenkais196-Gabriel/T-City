@@ -15,6 +15,7 @@ local AgentPolicy = {}
 -- L2 世界类：announce / set_weather / set_time_of_day（需人工审批，blast radius = world）
 -- L3 任务类：start_quest（需人工审批）
 -- L3 职业类：set_job（需人工审批）
+-- L3 位置类：teleport（需人工审批 + custom-agent-client 执行通道）
 -- L4 经济类：add_money（需人工审批 + 每日预算）
 -- L4 物品类：grant_item（需人工审批，不计入 add_money 每日预算）
 AgentPolicy.ACTIONS = {
@@ -37,6 +38,12 @@ AgentPolicy.ACTIONS = {
         risk = 'L3',
         requires_approval = true,
         auto_execute = false,
+    },
+    teleport = {
+        risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
     },
     grant_item = {
         risk = 'L4',
@@ -113,6 +120,14 @@ AgentPolicy.ACCOUNTS = {
     cash = true,
     bank = true,
     crypto = true,
+}
+
+-- Mirrors custom-agent-client/shared/effect_rules.lua MAP_BOUNDS. The director
+-- validates before dispatch, so a bad proposal never reaches the executor.
+AgentPolicy.MAP_BOUNDS = {
+    x_min = -4500, x_max = 8500,
+    y_min = -4500, y_max = 8500,
+    z_min = -200, z_max = 3000,
 }
 
 -- Safe defaults, mirrored by the convars in server/main.lua.
@@ -546,6 +561,54 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         }
     end
 
+    if actionType == 'teleport' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            x = true,
+            y = true,
+            z = true,
+            heading = true,
+        }, 'teleport')
+        if unknownErr then return nil, unknownErr end
+
+        local bounds = AgentPolicy.MAP_BOUNDS
+        local axes = {
+            { name = 'x', value = params.x, min = bounds.x_min, max = bounds.x_max },
+            { name = 'y', value = params.y, min = bounds.y_min, max = bounds.y_max },
+            { name = 'z', value = params.z, min = bounds.z_min, max = bounds.z_max },
+        }
+        for _, axis in ipairs(axes) do
+            local value = axis.value
+            if type(value) ~= 'number' or value ~= value
+                or value == math.huge or value == -math.huge then
+                return fail('invalid_params', ('%s must be a finite number'):format(axis.name))
+            end
+            if value < axis.min or value > axis.max then
+                return fail('invalid_params', ('%s is outside the GTA map bounds'):format(axis.name))
+            end
+        end
+
+        local heading = params.heading
+        if heading ~= nil then
+            if type(heading) ~= 'number' or heading ~= heading
+                or heading == math.huge or heading == -math.huge then
+                return fail('invalid_params', 'heading must be a finite number')
+            end
+            if heading < 0 or heading > 360 then
+                return fail('invalid_params', 'heading must be between 0 and 360')
+            end
+        end
+
+        local normalized = {
+            citizenid = citizenid,
+            x = params.x,
+            y = params.y,
+            z = params.z,
+        }
+        if heading ~= nil then normalized.heading = heading end
+        return normalized
+    end
+
     return fail('unsupported_action', 'unsupported action type')
 end
 
@@ -707,6 +770,17 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'teleport' then
+        preview.target = {
+            x = params.x,
+            y = params.y,
+            z = params.z,
+            heading = params.heading,
+        }
+        preview.from = ctx.position
+        return preview
+    end
+
     return fail('unsupported_action', 'unsupported action type')
 end
 
@@ -762,6 +836,13 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
         end
         if not ctx.weather_sync then
             return failBool('weather_sync_unavailable', 'qb-weathersync is not started')
+        end
+        return true
+    end
+
+    if actionType == 'teleport' then
+        if ctx.executor_ready ~= true then
+            return failBool('executor_unavailable', 'custom-agent-client is not started')
         end
         return true
     end

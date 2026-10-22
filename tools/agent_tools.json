@@ -1269,7 +1269,7 @@
       "idempotency": "required",
       "dry_run": "supported",
       "undo_supported": true,
-      "status": "planned",
+      "status": "active",
       "since": "1.2.0",
       "http": {
         "method": "POST",
