@@ -334,12 +334,34 @@ function AgentHttp.Handle(request, deps)
         return { status = 200, body = actions.Policy() }
     end
 
-    local agentId = policy.NormalizeAgentId(AgentHttp.GetHeader(headers, 'x-agent-id'))
-    if not agentId then
-        return {
-            status = 400,
-            body = { error = 'X-Agent-Id header is required', code = 'missing_agent_id' },
-        }
+    -- When the operator pins an agent identity, it wins over the header:
+    -- X-Agent-Id is a self-declared label and must not be usable to read or
+    -- attribute another agent's rows. Pinning is opt-in per deployment.
+    local agentId
+    local configuredAgent = cfg.agent_id
+    if type(configuredAgent) == 'string' and configuredAgent ~= '' then
+        agentId = policy.NormalizeAgentId(configuredAgent)
+        if not agentId then
+            return {
+                status = 500,
+                body = { error = 'agent_actions_agent_id is invalid', code = 'config_error' },
+            }
+        end
+        local presented = policy.NormalizeAgentId(AgentHttp.GetHeader(headers, 'x-agent-id'))
+        if presented and presented ~= agentId then
+            return {
+                status = 400,
+                body = { error = 'X-Agent-Id does not match the configured agent', code = 'agent_id_mismatch' },
+            }
+        end
+    else
+        agentId = policy.NormalizeAgentId(AgentHttp.GetHeader(headers, 'x-agent-id'))
+        if not agentId then
+            return {
+                status = 400,
+                body = { error = 'X-Agent-Id header is required', code = 'missing_agent_id' },
+            }
+        end
     end
 
     if route.name == 'act' then

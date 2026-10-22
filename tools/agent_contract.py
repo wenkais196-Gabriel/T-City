@@ -64,6 +64,8 @@ CODE_TO_KIND: dict[str, str] = {
     "unauthorized": "unauthorized",
     "forbidden": "unauthorized",
     "missing_agent_id": "unauthorized",
+    "agent_id_mismatch": "unauthorized",
+    "config_error": "internal_error",
     "agent_token_not_configured": "unauthorized",
     "live_token_not_configured": "unauthorized",
     "admin_token_not_configured": "unauthorized",

@@ -590,6 +590,12 @@ on every call. Any other value:
 Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
 `503` while leaving server exports available.
 
+`X-Agent-Id` is a **self-declared label**. Set `agent_actions_agent_id` to pin
+the identity server-side: the convar wins, a missing header is accepted, and a
+conflicting header is rejected with `agent_id_mismatch` instead of being
+trusted. Without it, a holder of the shared token can attribute rows to another
+agent id or read that id's `/actions` rows.
+
 ### 5.6 Jobs and items
 
 - `job` must exist in `QBCore.Shared.Jobs` at propose and approve time
