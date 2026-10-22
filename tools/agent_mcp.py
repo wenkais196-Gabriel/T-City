@@ -22,6 +22,8 @@ If no remote channel is configured at all, gateway reads fall back to the local
 Environment:
     AGENT_GATEWAY_URL / AGENT_GATEWAY_TOKEN   read channel
     AGENT_DIRECTOR_URL / AGENT_DIRECTOR_TOKEN write/effect channel
+    AGENT_LIVE_TOKEN                          live-perception credential
+                                              (falls back to AGENT_DIRECTOR_TOKEN)
     AGENT_AGENT_ID                            default "mcp.local"
     AGENT_TOOLSET                             auto (default) | read | all
     AGENT_MCP_READ_TIMEOUT_MS                 default 4000
@@ -151,6 +153,19 @@ def _director_config() -> tuple[str, str] | None:
     return None
 
 
+def _live_config() -> tuple[str, str] | None:
+    """Live-perception channel: director URL plus the dedicated live token.
+
+    Mirroring the Lua side, an unset ``AGENT_LIVE_TOKEN`` falls back to
+    ``AGENT_DIRECTOR_TOKEN`` so single-token deployments keep working.
+    """
+    url = _env("AGENT_DIRECTOR_URL").rstrip("/")
+    token = _env("AGENT_LIVE_TOKEN") or _env("AGENT_DIRECTOR_TOKEN")
+    if url and token and _safe_header_value(url) and _safe_header_value(token):
+        return url, token
+    return None
+
+
 def _standalone_mode() -> bool:
     """True only when no remote channel variable is set at all.
 
@@ -240,6 +255,8 @@ def _tool_descriptor(tool: dict[str, Any]) -> dict[str, Any]:
 
 
 def _route_available(tool: dict[str, Any]) -> bool:
+    if tool.get("auth") == "live":
+        return _live_config() is not None
     if tool.get("route") == "gateway":
         return _gateway_config() is not None or _standalone_mode()
     return _director_config() is not None
@@ -250,6 +267,10 @@ def _visible_tools() -> list[dict[str, Any]]:
     visible: list[dict[str, Any]] = []
     for tool in _active_tools():
         if toolset == "read" and tool.get("channel") != "read":
+            continue
+        # A live tool is never advertised without its credential, not even in
+        # the AGENT_TOOLSET=all debug mode: the live token is a separate grant.
+        if tool.get("auth") == "live" and _live_config() is None:
             continue
         if toolset != "all" and not _route_available(tool):
             continue
@@ -505,7 +526,7 @@ def _gateway_url(tool: dict[str, Any], args: dict[str, Any]) -> str:
 
 
 def _director_url(tool: dict[str, Any], args: dict[str, Any]) -> str:
-    config = _director_config()
+    config = _live_config() if tool.get("auth") == "live" else _director_config()
     if config is None:
         raise ToolCallError("director channel is not configured", code="unauthorized")
     base, _token = config
@@ -670,7 +691,7 @@ def _call_director(
     idem_key: str,
     dry_run: bool,
 ) -> dict[str, Any]:
-    config = _director_config()
+    config = _live_config() if tool.get("auth") == "live" else _director_config()
     if config is None:
         raise ToolCallError("director channel is not configured", code="unauthorized")
     _url, token = config
@@ -822,7 +843,15 @@ def _normalize(
                     meta=stable_meta,
                     request_id=request_id,
                 )
-        return agent_contract.envelope_ok(name, raw, meta=stable_meta, request_id=request_id)
+        # Fallback for payload-shaped director reads (the /agent/v1/live/*
+        # endpoints return {schema_version, players|events, count?, ...} with
+        # no ok/data/action wrapper). Keep the whole object as data and lift
+        # count into meta when the upstream provides one.
+        meta = dict(stable_meta)
+        count = raw.get("count")
+        if isinstance(count, int) and not isinstance(count, bool):
+            meta["count"] = count
+        return agent_contract.envelope_ok(name, raw, meta=meta, request_id=request_id)
 
     # Gateway (or local fallback) keeps its v1 data/next_cursor/meta shape.
     raw_meta = raw.get("meta") if isinstance(raw.get("meta"), dict) else {}

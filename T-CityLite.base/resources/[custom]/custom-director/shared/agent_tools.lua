@@ -167,6 +167,65 @@ AgentTools.TOOLS = {
     required = { },
     schema = {},
   },
+  ["get_live_players"] = {
+    name = "get_live_players",
+    title = "List live online players",
+    channel = "read",
+    route = "director",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    params = { "limit", "job" },
+    required = { },
+    schema = {
+      ["limit"] = { type = "integer", minimum = 1, maximum = 48 },
+      ["job"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
+    },
+  },
+  ["get_live_player"] = {
+    name = "get_live_player",
+    title = "Get one live player",
+    channel = "read",
+    route = "director",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    params = { "citizenid" },
+    required = { "citizenid" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+    },
+  },
+  ["list_live_events"] = {
+    name = "list_live_events",
+    title = "List live game events",
+    channel = "read",
+    route = "director",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    params = { "since", "limit" },
+    required = { },
+    schema = {
+      ["since"] = { type = "string", segments = { { chars = "0123456789", min_length = 1, max_length = 10 }, { literal = true, chars = ":" }, { chars = "0123456789", min_length = 1, max_length = 9 } } },
+      ["limit"] = { type = "integer", minimum = 1, maximum = 200 },
+    },
+  },
   ["get_action"] = {
     name = "get_action",
     title = "Get one agent action",
@@ -442,6 +501,38 @@ local function typeMatches(expected, value)
   return true
 end
 
+local function segmentsMatch(segments, value)
+  local pos = 1
+  for index = 1, #segments do
+    local segment = segments[index]
+    if segment.literal then
+      if value:sub(pos, pos) ~= segment.chars then return false end
+      pos = pos + 1
+    else
+      local stop
+      local next_segment = segments[index + 1]
+      if next_segment and next_segment.literal then
+        stop = string.find(value, next_segment.chars, pos, true)
+      else
+        stop = #value + 1
+      end
+      if not stop then return false end
+      local length = stop - pos
+      if length < segment.min_length or length > segment.max_length then
+        return false
+      end
+      for i = pos, stop - 1 do
+        local char = value:sub(i, i)
+        if not string.find(segment.chars, char, 1, true) then
+          return false
+        end
+      end
+      pos = stop
+    end
+  end
+  return pos == #value + 1
+end
+
 --- Minimal contract validation.  Returns true, nil or false, code.
 function AgentTools.validate(name, args)
   local tool = AgentTools.get(name)
@@ -485,6 +576,9 @@ function AgentTools.validate(name, args)
             return false, 'invalid_params'
           end
         end
+      end
+      if rule.segments and not segmentsMatch(rule.segments, value) then
+        return false, 'invalid_params'
       end
     end
   end
