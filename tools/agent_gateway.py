@@ -141,7 +141,7 @@ class AgentHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         if self.command != "HEAD":
             try:
-                # NOSONAR: not an HTML sink. The body is JSON (application/json,
+                # Reviewed exception: not an HTML sink. The body is JSON (application/json,
                 # nosniff, default-src 'none' CSP) and every <, >, & is already
                 # \uXXXX-escaped in _json_bytes, so it cannot be parsed as
                 # markup even if a browser sniffs it. Sonar's taint model flags
@@ -464,7 +464,7 @@ def main() -> int:
         flush=True,
     )
     try:
-        # NOSONAR: deliberate cleartext listener. It binds 127.0.0.1 by
+        # Reviewed exception: deliberate cleartext listener. It binds 127.0.0.1 by
         # default, is read-only, and the startup banner tells operators to put
         # a TLS proxy in front before exposing it. Switching this to HTTPS
         # would require shipping and rotating a certificate for a loopback
