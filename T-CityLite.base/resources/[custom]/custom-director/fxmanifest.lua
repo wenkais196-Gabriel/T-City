@@ -8,6 +8,10 @@ version '0.1.0'
 
 server_only 'yes'
 
+shared_scripts {
+    'shared/agent_tools.lua',
+}
+
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     '@core-framework/bus.lua',

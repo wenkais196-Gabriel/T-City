@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+"""Contract tests for the single-source tool registry (design 03 D1/D2/D3).
+
+No database access and no network access: the registry is read from disk and
+the generated files are byte-compared.
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TOOLS_DIR = REPO_ROOT / "tools"
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+import agent_tools  # noqa: E402
+
+ACTIVE_NAMES = {
+    "get_schema",
+    "query_players",
+    "get_player_snapshot",
+    "get_player_timeline",
+    "list_events",
+    "get_world_digest",
+    "get_world_state",
+    "get_economy_metrics",
+    "get_action",
+    "list_actions",
+    "send_notify",
+    "add_player_money",
+    "start_player_quest",
+}
+PLANNED_NAMES = {
+    "send_announce",
+    "set_weather",
+    "set_time_of_day",
+    "set_player_job",
+    "teleport_player",
+    "spawn_vehicle",
+    "grant_player_item",
+}
+
+
+def _registry() -> dict:
+    return agent_tools.load_registry()
+
+
+def _tool(registry: dict, name: str) -> dict:
+    for tool in registry["tools"]:
+        if tool["name"] == name:
+            return tool
+    raise AssertionError(f"tool {name!r} not found in registry")
+
+
+def _errors(registry: dict) -> list[str]:
+    return agent_tools.validate_registry(registry)
+
+
+def _has(errors: list[str], needle: str) -> bool:
+    return any(needle in error for error in errors)
+
+
+class RegistryContentTests(unittest.TestCase):
+    def test_registry_shape_and_status_counts(self) -> None:
+        registry = _registry()
+        self.assertEqual(registry["schema_version"], 1, "registry schema_version must be 1")
+        self.assertRegex(registry["registry_version"], r"^\d+\.\d+\.\d+$")
+        self.assertEqual(len(registry["tools"]), 20, "v1 ships exactly 20 tools")
+        active = {tool["name"] for tool in registry["tools"] if tool["status"] == "active"}
+        planned = {tool["name"] for tool in registry["tools"] if tool["status"] == "planned"}
+        self.assertEqual(active, ACTIVE_NAMES, "the M0 active set is the 10 reads plus 3 writes")
+        self.assertEqual(planned, PLANNED_NAMES, "the seven M1/M2 tools stay planned")
+
+    def test_every_tool_has_the_required_contract_fields(self) -> None:
+        required = (
+            "risk",
+            "blast_radius",
+            "requires_approval",
+            "idempotency",
+            "dry_run",
+            "http",
+            "inputSchema",
+            "verify",
+            "undo",
+            "compensation",
+        )
+        for tool in _registry()["tools"]:
+            for field in required:
+                with self.subTest(tool=tool["name"], field=field):
+                    self.assertIn(field, tool)
+            for field in ("method", "path"):
+                self.assertIn(field, tool["http"])
+
+    def test_m0_write_tools_have_approval_and_verify(self) -> None:
+        registry = _registry()
+        add_money = _tool(registry, "add_player_money")
+        self.assertEqual(add_money["risk"], "L4")
+        self.assertTrue(add_money["requires_approval"])
+        self.assertEqual(add_money["compensation"], "manual")
+        self.assertEqual(add_money["verify"]["tool"], "get_player_snapshot")
+
+        notify = _tool(registry, "send_notify")
+        self.assertFalse(notify["requires_approval"])
+        self.assertEqual(notify["risk"], "L1")
+        self.assertEqual(notify["verify"]["tool"], "get_action")
+
+        quest = _tool(registry, "start_player_quest")
+        self.assertEqual(quest["risk"], "L3")
+        self.assertTrue(quest["requires_approval"])
+        self.assertEqual(quest["enum_source"]["source"], "quest_catalog")
+
+
+class RegistryInvariantTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.registry = copy.deepcopy(_registry())
+        self.assertEqual(_errors(self.registry), [], "the committed registry must be valid")
+
+    def test_duplicate_name_is_rejected(self) -> None:
+        duplicate = copy.deepcopy(self.registry["tools"][0])
+        self.registry["tools"].append(duplicate)
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "duplicate tool name"), errors)
+
+    def test_l0_must_be_read_only(self) -> None:
+        tool = _tool(self.registry, "send_notify")
+        tool["risk"] = "L0"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "write/effect tools cannot be L0"), errors)
+
+    def test_l3_and_l4_require_approval(self) -> None:
+        _tool(self.registry, "add_player_money")["requires_approval"] = False
+        _tool(self.registry, "start_player_quest")["requires_approval"] = False
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "L4 tools must require approval"), errors)
+        self.assertTrue(_has(errors, "L3 tools must require approval"), errors)
+
+    def test_l4_compensation_must_be_manual(self) -> None:
+        _tool(self.registry, "add_player_money")["compensation"] = "none"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "L4 tools must declare compensation=manual"), errors)
+
+    def test_read_tool_cannot_require_idempotency(self) -> None:
+        _tool(self.registry, "get_schema")["idempotency"] = "required"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "read tools must use idempotency=none"), errors)
+
+    def test_verify_must_reference_an_existing_read_tool(self) -> None:
+        _tool(self.registry, "send_notify")["verify"]["tool"] = "get_missing_action"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "unknown verify tool"), errors)
+
+    def test_undo_must_reference_an_existing_undoable_tool(self) -> None:
+        _tool(self.registry, "set_weather")["undo"]["tool"] = "set_missing_weather"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "unknown undo tool"), errors)
+
+    def test_dangerous_parameter_name_is_rejected(self) -> None:
+        tool = _tool(self.registry, "send_notify")
+        tool["inputSchema"]["properties"]["script"] = {"type": "string"}
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "dangerous parameter name"), errors)
+
+    def test_volatile_source_identifier_is_rejected(self) -> None:
+        tool = _tool(self.registry, "send_notify")
+        tool["inputSchema"]["properties"]["source"] = {"type": "string"}
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "volatile source identifiers are forbidden"), errors)
+
+    def test_wide_open_name_is_rejected(self) -> None:
+        _tool(self.registry, "send_notify")["name"] = "run_command"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "must match"), errors)
+
+    def test_legacy_add_player_money_name_is_allowed(self) -> None:
+        # Published names are immutable; add_ is the explicit legacy verb.
+        self.assertEqual(_errors(self.registry), [])
+
+    def test_missing_required_field_is_rejected(self) -> None:
+        del _tool(self.registry, "get_schema")["description"]
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "description: is required"), errors)
+
+    def test_schema_version_is_pinned(self) -> None:
+        self.registry["schema_version"] = 2
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "registry.schema_version: must be 1"), errors)
+
+    def test_unknown_argument_is_rejected_at_runtime(self) -> None:
+        tool = _tool(_registry(), "send_notify")
+        errors = agent_tools.validate_arguments(
+            tool, {"citizenid": "ABC123", "text": "hi", "unexpected": 1}
+        )
+        self.assertTrue(any("unknown argument" in error for error in errors), errors)
+
+    def test_missing_required_argument_is_rejected_at_runtime(self) -> None:
+        tool = _tool(_registry(), "send_notify")
+        errors = agent_tools.validate_arguments(tool, {"citizenid": "ABC123"})
+        self.assertTrue(any(error.startswith("text is required") for error in errors), errors)
+
+    def test_argument_type_enum_pattern_and_bounds(self) -> None:
+        money = _tool(_registry(), "add_player_money")
+        cases = [
+            ({"citizenid": "ABC123", "account": "bank", "amount": 10, "reason": "gift"}, []),
+            (
+                {"citizenid": "ABC123", "account": "wallet", "amount": 10, "reason": "gift"},
+                "account must be one of",
+            ),
+            (
+                {"citizenid": "ABC123", "account": "bank", "amount": 10.5, "reason": "gift"},
+                "amount must be integer",
+            ),
+            (
+                {"citizenid": "ABC123", "account": "bank", "amount": 0, "reason": "gift"},
+                "amount must be >= 1",
+            ),
+            (
+                {"citizenid": "bad citizen", "account": "bank", "amount": 10, "reason": "gift"},
+                "citizenid has invalid characters",
+            ),
+        ]
+        for arguments, expected in cases:
+            with self.subTest(arguments=arguments):
+                errors = agent_tools.validate_arguments(money, arguments)
+                if expected == []:
+                    self.assertEqual(errors, [], "valid arguments should pass")
+                else:
+                    self.assertTrue(any(expected in error for error in errors), errors)
+
+    def test_validate_arguments_accepts_a_tool_name(self) -> None:
+        self.assertEqual(
+            agent_tools.validate_arguments(
+                "send_notify", {"citizenid": "ABC123", "text": "hi"}
+            ),
+            [],
+            "the helper must accept a tool name as well as a tool object",
+        )
+        self.assertTrue(
+            any(
+                "unknown tool" in error
+                for error in agent_tools.validate_arguments("no_such_tool", {})
+            )
+        )
+
+    def test_text_length_limit_is_enforced_at_runtime(self) -> None:
+        tool = _tool(_registry(), "send_notify")
+        errors = agent_tools.validate_arguments(
+            tool, {"citizenid": "ABC123", "text": "x" * 301}
+        )
+        self.assertTrue(any("at most 300" in error for error in errors), errors)
+
+
+class GeneratedArtifactTests(unittest.TestCase):
+    def test_committed_artifacts_match_renderers(self) -> None:
+        registry = _registry()
+        self.assertEqual(
+            agent_tools.TOOLS_MD_PATH.read_text(encoding="utf-8"),
+            agent_tools.render_tools_md(registry),
+            "TOOLS.md is stale; run python3 tools/agent_tools.py --write",
+        )
+        self.assertEqual(
+            agent_tools.LUA_PATH.read_text(encoding="utf-8"),
+            agent_tools.render_lua(registry),
+            "agent_tools.lua is stale; run python3 tools/agent_tools.py --write",
+        )
+
+    def test_rendering_is_deterministic(self) -> None:
+        registry = _registry()
+        self.assertEqual(agent_tools.render_tools_md(registry), agent_tools.render_tools_md(registry))
+        self.assertEqual(agent_tools.render_lua(registry), agent_tools.render_lua(registry))
+
+    def test_markdown_has_do_not_edit_header_and_tables(self) -> None:
+        text = agent_tools.TOOLS_MD_PATH.read_text(encoding="utf-8")
+        self.assertIn("DO NOT EDIT", text)
+        self.assertIn("Routing table", text)
+        self.assertIn("Risk and approval table", text)
+        for name in ACTIVE_NAMES | PLANNED_NAMES:
+            self.assertIn(f"`{name}`", text, f"{name} missing from generated TOOLS.md")
+
+    def test_lua_has_get_and_validate(self) -> None:
+        text = agent_tools.LUA_PATH.read_text(encoding="utf-8")
+        self.assertIn("function AgentTools.get(name)", text)
+        self.assertIn("function AgentTools.validate(name, args)", text)
+        self.assertIn("AgentTools.TOOLS", text)
+        self.assertIn("_G.AgentTools = AgentTools", text, "the table must be exposed to the resource")
+
+    def test_check_detects_missing_and_drifted_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            md_path = Path(temp_dir) / "TOOLS.md"
+            lua_path = Path(temp_dir) / "agent_tools.lua"
+            with mock.patch.object(agent_tools, "TOOLS_MD_PATH", md_path), mock.patch.object(
+                agent_tools, "LUA_PATH", lua_path
+            ):
+                self.assertEqual(
+                    agent_tools.main(["--check"]), 1, "missing generated files must fail --check"
+                )
+                self.assertEqual(agent_tools.main(["--write"]), 0, "--write must succeed")
+                self.assertEqual(
+                    agent_tools.main(["--check"]), 0, "--write output must be check-clean"
+                )
+                md_path.write_text(md_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+                self.assertEqual(
+                    agent_tools.main(["--check"]), 1, "drift must fail --check"
+                )
+
+    def test_committed_artifacts_pass_check(self) -> None:
+        self.assertEqual(
+            agent_tools.main(["--check"]), 0, "the committed generated files must be check-clean"
+        )
+
+    def test_write_is_idempotent_in_a_temp_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            md_path = Path(temp_dir) / "TOOLS.md"
+            lua_path = Path(temp_dir) / "agent_tools.lua"
+            with mock.patch.object(agent_tools, "TOOLS_MD_PATH", md_path), mock.patch.object(
+                agent_tools, "LUA_PATH", lua_path
+            ):
+                self.assertEqual(agent_tools.main(["--write"]), 0)
+                first_md = md_path.read_text(encoding="utf-8")
+                first_lua = lua_path.read_text(encoding="utf-8")
+                self.assertEqual(agent_tools.main(["--write"]), 0)
+                self.assertEqual(md_path.read_text(encoding="utf-8"), first_md)
+                self.assertEqual(lua_path.read_text(encoding="utf-8"), first_lua)
+                self.assertEqual(agent_tools.main(["--check"]), 0)
+
+    @unittest.skipUnless(
+        shutil.which("luac5.4") or shutil.which("luac"),
+        "luac is not installed",
+    )
+    def test_generated_lua_compiles(self) -> None:
+        luac = shutil.which("luac5.4") or shutil.which("luac")
+        result = subprocess.run(
+            [luac, "-p", str(agent_tools.LUA_PATH)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            msg=f"luac rejected {agent_tools.LUA_PATH}:\n{result.stderr}",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

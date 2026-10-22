@@ -40,9 +40,10 @@ class McpProtocolTests(unittest.TestCase):
 
     def test_tools_list(self) -> None:
         tools = _call("tools/list")["result"]["tools"]
-        self.assertEqual(
-            {tool["name"] for tool in tools},
+        self.assertLessEqual(
             {"get_schema", "query_players", "get_player_snapshot", "list_events", "get_world_digest"},
+            {tool["name"] for tool in tools},
+            msg="the five pre-M0 tools must stay advertised after registry routing",
         )
         for tool in tools:
             self.assertEqual(tool["inputSchema"]["type"], "object")

@@ -22,6 +22,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,7 +33,9 @@ TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
+import agent_contract  # noqa: E402
 import agent_data  # noqa: E402
+import agent_tools  # noqa: E402
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
@@ -46,7 +49,19 @@ def _json_bytes(payload: Any) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
-def _envelope(data: Any, next_cursor: Any = None, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+def _envelope(
+    data: Any,
+    next_cursor: Any = None,
+    meta: dict[str, Any] | None = None,
+    *,
+    request_id: str | None = None,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    """v1 success envelope plus the additive contract fields (design 03 §5.3 B).
+
+    The four original keys keep their exact shape and are written first; the
+    new fields are appended so pre-M0 clients can ignore them byte-for-byte.
+    """
     payload: dict[str, Any] = {
         "schema_version": agent_data.SCHEMA_VERSION,
         "data": data,
@@ -55,6 +70,11 @@ def _envelope(data: Any, next_cursor: Any = None, meta: dict[str, Any] | None = 
         payload["next_cursor"] = next_cursor
     if meta:
         payload["meta"] = meta
+    payload["ok"] = True
+    payload["kind"] = "ok"
+    payload["retryable"] = False
+    payload["request_id"] = request_id or secrets.token_hex(8)
+    payload["warnings"] = list(warnings or [])
     return payload
 
 
@@ -106,7 +126,12 @@ class AgentHandler(BaseHTTPRequestHandler):
                 pass
 
     def _error(self, status: int, message: str, code: str, headers: dict[str, str] | None = None) -> None:
-        self._send_json(status, {"error": message, "code": code}, headers)
+        kind, retryable = agent_contract.classify(code)
+        self._send_json(
+            status,
+            {"error": message, "code": code, "kind": kind, "retryable": retryable},
+            headers,
+        )
 
     def _method_not_allowed(self) -> None:
         self._error(405, "method not allowed", "method_not_allowed", {"Allow": "GET"})
@@ -187,6 +212,10 @@ class AgentHandler(BaseHTTPRequestHandler):
             self._check_no_params(query)
             self._send_json(200, _envelope(agent_data.get_schema()))
             return
+        if segments == ["agent", "v1", "tools"]:
+            self._check_no_params(query)
+            self._tools_registry()
+            return
         if segments == ["agent", "v1", "players"]:
             self._players(query)
             return
@@ -214,6 +243,25 @@ class AgentHandler(BaseHTTPRequestHandler):
 
     def _check_no_params(self, query: dict[str, list[str]]) -> None:
         _check_params(query, set())
+
+    def _tools_registry(self) -> None:
+        """Serve the runtime tool registry (read from tools/agent_tools.json)."""
+        try:
+            registry = agent_tools.load_registry()
+        except agent_tools.RegistryError:
+            self._error(503, "tool registry unavailable", "registry_unavailable")
+            return
+        tools = registry.get("tools", [])
+        self._send_json(
+            200,
+            _envelope(
+                {
+                    "registry_version": registry.get("registry_version"),
+                    "tools": tools,
+                },
+                meta={"count": len(tools)},
+            ),
+        )
 
     # -- endpoints -----------------------------------------------------------
     def _health(self) -> None:
