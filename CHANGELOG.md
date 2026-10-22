@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- 客户端 MCP 测试 harness：Windows FiveM Legacy + `fivem-mcp-server`，经 FXServer 30120 HTTP 轮询桥接；提供 `client_command` / `screenshot` / `read_client_log` / `nuitest` 测试钩子
+- 全局审查报告与三阶段路线图：`T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md`
+- Agent 中枢导演架构设计：`docs/server-design/08-agent-director.md`
+- 任务系统建表脚本：`migrations/v0.7_quest_system.sql`（player_quests / quest_cooldowns / quest_event_log / quest_daily_limits）
+- DevOps 工作流：CI（配置/依赖/Lua 语法）、Release、PR/Issue 模板、CODEOWNERS、CONTRIBUTING、SECURITY
+- GitHub 初始化脚本：`tools/bootstrap_github.sh`（标签 / 里程碑 / 待办 Issue）
+- 开发工作流指南 (`docs/dev-workflow-guide.md`)，涵盖目录结构、分支策略、日常开发流程、Git 速查
+- `start_server.bat` 一键启动脚本（UTF-8 编码，自动切换工作目录）
+
+### Security
+- `custom-vehicles`: `qb-vehiclekeys:server:AcquireVehicleKeys` 此前只校验会话内车主，任何客户端可伪造车牌远程认领载具；现改为车牌格式校验 → 会话车主 → `player_vehicles` 登记车主 → 无主载具 10m 邻近（`vehicles_claim_max_dist`）+ 1s 限流 + 审计
+- `custom-vehicles`: `KeyManager.*` 拒绝非字符串车牌；`GiveKeys` 对无主载具要求先持有钥匙；`RemoveKeys` 仅车主可移除他人钥匙
+- `qb-inventory`: `SetInventoryData` 对 `otherplayer-*` 容器增加 3m 距离校验（管理员豁免），堵住伪造事件远程搬运他人物品；槽位/数量先 `tonumber` 再比较，避免非法类型报错
+- `custom-admin`: 全量自动 admin 改为 `admin_autogrant` convar（默认关闭）
+- `story-engine`: 决策绑定服务端 pending offer（quest/step/decision），拒绝跨任务伪造；超时由服务端按默认选项收口
+- `custom-quest`: `ValidateNode` 实现类型 + 服务端距离校验；`registerTrailer` 校验实体与距离；`cleanupTrailers` 改为非网络事件；`savePosCollection` 限制管理员
+- `custom-vehicles`: 钥匙/改装/部件/氮气事件统一校验车主或执勤机修；部件值夹紧 0–100
+- `qb-hotdogjob`: 职业校验 + 数量≤5 + 单价按 Config 边界，堵住 `$10k/秒`
+- `qb-streetraces`: 服务端重建赛局与奖池，领奖前销毁，加入去重
+- `custom-justice`: 出狱按刑期校验；入狱刑期上限
+- `custom-mining` / `custom-cartel`: 矿点距离、生产开始/时长校验
+- `custom-main`: `ResetDeathStatus` 仅在医疗未启用且服务端判定死亡/倒地时允许，10s 冷却；`policeHandoverAlert` 加 5s 冷却 + 坐标/星级/街道校验
+- `tcity-dashboard`: `police:server:plateFlagged` 要求值班 LEO/admin，车牌规范化 + 2s 冷却；内部同步改为本地调用
+- `custom-testing` 移出生产 cfg，改由 `configs/modules/dev.cfg` 按需启用
+
+### Fixed
+- `custom-quest`: 服务端重启后 `QuestCache` 未从 DB 预加载，`step_decision` 重连不弹窗；改为 `QBCore:Server:PlayerLoaded` 预加载 + `/questrestore`
+- `story-engine`: decision NUI 增加焦点/`keepInput` 遥测、300s 看门狗、`SetNuiFocusKeepInput(false)`，避免重连软锁与手机 UI 抢焦点
+- `core-framework` 引用了不存在的 `cache/*.lua`，导致自身及 9 个下游资源无法启动
+- 启动顺序与 `fxmanifest` 依赖冲突（11 处）；补齐 `qb-prison`、`qb-minigames`、`safecracker`
+- `custom-quest` / `custom-taxes` / `core-framework` / `qb-recyclejob` 缺少 `@oxmysql/lib/MySQL.lua`
+- qb-core 无定时刷盘：补 15min tick + `onResourceStop`；断线位置回退，避免写 `0,0,0`
+- 任务冷却异步查询导致永久失效；改为内存权威 + 登录回填
+- `core_economy` 未定义 `EconomyService`；市场/卡特尔卖货扣物不付钱
+- 剧情登录事件名错误（`QBCore:Server:OnPlayerLoaded` → `PlayerLoaded`）
+- 组队任务双重抢锁、`RemoveGroupMember` 错误 key、断线不释放锁
+- 接新任务覆盖活跃任务缓存；步骤尝试次数不重置
+- 任务完成奖励幂等：`CompleteQuest` 回调只看 affectedRows，内存锁 + 10s 超时兜底，避免重复发奖
+- 地址池任务步骤顺序绕过：缓存空窗期改用 `_currentSteps` 内存步骤比对，不再直接放行
+- Bus 跨资源调用：7 个注册方 manifest include `@core-framework/bus.lua`，cartel/mining/justice 共 18 处改为显式 `service_*` export
+- `core-framework/compat.lua`: `GetPlayer` 缓存改用 `GetPlayerName` 做活性校验（`GetPlayerPing >= 0` 恒真）
+- `txAdminPort 0` 禁用管理员模式，避免端口冲突
+
+### Changed
+- `server.cfg.template` 按依赖图重排：`core → career → player → voice → custom → quest → police → vehicles → jobs → banking → medical → economy → security → crime → story → atmosphere → admin`
+- `custom-quest` 从 `custom.cfg` 移到 `quest.cfg`；`custom-justice` 移到 `police.cfg`；`progressbar` 提前到 `player.cfg`
+- `custom-testing` 从 `custom.cfg` 移到 `dev.cfg`（生产默认不加载）
+- CI 增加 `check_bus_wiring.py`，防止注册方再次漏 include `bus.lua`
+
+---
+
 ## [0.7a] — 载具重构与物流 — 2026-10-21
 
 > 代码完成于 2026-06-22，tag 于 2026-10-21；实机验收仍待完成。
