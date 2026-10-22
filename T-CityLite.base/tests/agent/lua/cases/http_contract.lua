@@ -241,6 +241,37 @@ return {
             assert(response.body.error == 'X-Agent-Id header is required')
         end)
 
+        -- 9b. A pinned agent identity wins over the self-declared header.
+        golden('configured_agent_id_is_used_without_header', 200, nil, function()
+            log = {}
+            return handle({
+                method = 'POST',
+                path = '/agent/v1/act',
+                headers = merge(bearer('agent-token'), {
+                    ['Content-Length'] = tostring(91),
+                }),
+                body = '{"type":"notify","args":{"citizenid":"ABC12345","text":"hi"},'
+                    .. '"dry_run":true,"idempotency_key":"cfg-1"}',
+            }, { agent_id = 'director.pinned' }, log)
+        end, function(response)
+            assert(log.propose and log.propose.agent_id == 'director.pinned',
+                'the configured agent id must be used: ' .. tostring(log.propose and log.propose.agent_id))
+        end)
+
+        -- 9c. A conflicting header is rejected instead of being trusted.
+        golden('configured_agent_id_rejects_mismatched_header', 400, 'agent_id_mismatch', function()
+            return handle({
+                method = 'POST',
+                path = '/agent/v1/act',
+                headers = merge(bearer('agent-token'), {
+                    ['X-Agent-Id'] = 'spoofed.agent',
+                    ['Content-Length'] = tostring(91),
+                }),
+                body = '{"type":"notify","args":{"citizenid":"ABC12345","text":"hi"},'
+                    .. '"dry_run":true,"idempotency_key":"cfg-2"}',
+            }, { agent_id = 'director.pinned' })
+        end)
+
         -- 10. Malformed JSON is a bad_request.
         golden('invalid_json_returns_400', 400, 'bad_request', function()
             local body = '{'

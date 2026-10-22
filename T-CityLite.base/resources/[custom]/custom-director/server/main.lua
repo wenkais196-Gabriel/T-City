@@ -54,6 +54,7 @@ local function Config()
         max_announce_chars = convarInt('agent_actions_max_announce_chars', 300, 1, 2000),
         max_item_amount = convarInt('agent_actions_max_item_amount', 50, 1, 1000),
         ttl_seconds = convarInt('agent_actions_ttl_seconds', 900, 30, 86400),
+        agent_id = convarString('agent_actions_agent_id', ''),
     }
 end
 
