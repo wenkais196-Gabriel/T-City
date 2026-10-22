@@ -26,6 +26,8 @@ python3 tools/agent_tools.py --check
 
 测试全绿，但下面 F1–F7 的输入组合都不在现有用例里（只测了“正常四 token 分离”，没测 live-only、`--root`、ack 文本、live 限流、token 相同）。
 
+> 工作区说明：本 agent 只新增了本文件，没有修改任何被跟踪文件。评审期间工作区里另有并发进程产生的 tracked 改动（`ACTIONS.md` / `TOOLS.md` / `design/04` / `policy.lua` / `agent_tools.*` / `agent_tools.lua` / `director_actions.lua`）；经 `git diff` 核对，它们未触及 F1–F7 的代码路径（F1/F2 的 `agent_mcp.py`、`agent_eval.py` 无改动；F3 的 ack/teleport 路径无改动）。行号以 HEAD `4400d8b` 加本次读取快照为准。
+
 ---
 
 ## 1. 威胁模型表

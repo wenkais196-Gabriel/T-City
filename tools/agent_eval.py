@@ -790,11 +790,6 @@ def _build_parser() -> argparse.ArgumentParser:
             "(omitted: the denial rate is null, not 0)"
         ),
     )
-    parser.add_argument(
-        "--root",
-        metavar="DIR",
-        help="directory inputs/outputs must stay inside (default: AGENT_EVAL_ROOT or cwd)",
-    )
     parser.add_argument("--out", metavar="JSON", help="write the JSON report here (default: stdout)")
     parser.add_argument(
         "--json",
@@ -815,9 +810,6 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-
-    if args.root:
-        os.environ["AGENT_EVAL_ROOT"] = args.root
 
     combined = LoadedRows()
     try:

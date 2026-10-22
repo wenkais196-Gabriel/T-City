@@ -176,7 +176,11 @@ def _standalone_mode() -> bool:
     setting even a partial channel configuration disables the fallback so a
     missing token can never silently change where a read comes from.
     """
-    return not any(_env(name) for name in _GATEWAY_ENV + _DIRECTOR_ENV)
+    # Every channel credential counts, including the live token: an operator
+    # who only handed the agent AGENT_LIVE_TOKEN must not get a silent
+    # fallback to unauthenticated local DB reads.
+    remote = _GATEWAY_ENV + _DIRECTOR_ENV + ("AGENT_LIVE_TOKEN", "AGENT_ADMIN_TOKEN")
+    return not any(_env(name) for name in remote)
 
 
 def _agent_id() -> str:

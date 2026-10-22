@@ -247,9 +247,16 @@ RegisterNetEvent('tcity:agent:ack', function(ack)
             mkerr('cancelled', 'client cancelled the effect', detail))
     end
     local fallback = ack.status == 'rejected' and 'client_rejected' or 'client_failed'
-    local message = tostring(detail and detail.message or fallback)
-    settle(src, rid, ack.status, nil,
-        mkerr(tostring(ack.error_code or fallback), truncate(message, 200), detail))
+    -- The client is untrusted: strip control characters and bound both the
+    -- code and the message before they can reach the agent's context.
+    local function safeText(value, limit)
+        if type(value) ~= 'string' then return nil end
+        local text = value:gsub('%c', ' '):sub(1, limit)
+        return text
+    end
+    local code = safeText(ack.error_code, 64) or fallback
+    local message = safeText(detail and detail.message, 200) or fallback
+    settle(src, rid, ack.status, nil, mkerr(code, message, { message = message }))
 end)
 
 RegisterNetEvent('tcity:agent:ready', function()

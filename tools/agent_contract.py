@@ -87,6 +87,7 @@ CODE_TO_KIND: dict[str, str] = {
     "unsupported_tool": "policy_denied",
     "cursor_expired": "policy_denied",
     "live_disabled": "policy_denied",
+    "self_approval_denied": "policy_denied",
     # rate_limited
     "rate_limited": "rate_limited",
     # timeout
