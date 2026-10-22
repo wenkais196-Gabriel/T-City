@@ -21,6 +21,7 @@ return function(env)
     env.peds = env.peds or {}
     env.now = env.now or 0
     env.invoking_resource = env.invoking_resource
+    env.export_overrides = env.export_overrides or {}
 
     local function exportObject(resource)
         if resource == 'qb-core' then
@@ -33,6 +34,10 @@ return function(env)
         return setmetatable({}, {
             __index = function(_, functionName)
                 return function(_, ...)
+                    local overrides = env.export_overrides[resource]
+                    if type(overrides) == 'table' and type(overrides[functionName]) == 'function' then
+                        return overrides[functionName](...)
+                    end
                     env.log[#env.log + 1] = {
                         export = tostring(resource) .. ':' .. tostring(functionName),
                         args = { ... },

@@ -12,6 +12,7 @@ local AgentPolicy = {}
 -- Action registry
 -- ---------------------------------------------------------------------------
 -- L1 表现类：notify（自动执行）
+-- L2 世界类：announce / set_weather / set_time_of_day（需人工审批，blast radius = world）
 -- L3 任务类：start_quest（需人工审批）
 -- L3 职业类：set_job（需人工审批）
 -- L4 经济类：add_money（需人工审批 + 每日预算）
@@ -42,6 +43,32 @@ AgentPolicy.ACTIONS = {
         requires_approval = true,
         auto_execute = false,
     },
+    announce = {
+        risk = 'L2',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'world',
+    },
+    set_weather = {
+        risk = 'L2',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'world',
+    },
+    set_time_of_day = {
+        risk = 'L2',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'world',
+    },
+}
+
+-- Actions that affect the whole server instead of one target player. They have
+-- no citizenid and must stay usable while no player is online.
+AgentPolicy.WORLD_ACTIONS = {
+    announce = true,
+    set_weather = true,
+    set_time_of_day = true,
 }
 
 AgentPolicy.STATUSES = {
@@ -61,6 +88,27 @@ AgentPolicy.NOTIFY_KINDS = {
     primary = true,
 }
 
+-- Mirrors qb-weathersync's Config.AvailableWeatherTypes. Validation happens
+-- against this registry (uppercase) so a policy rejection does not depend on
+-- the resource being started.
+AgentPolicy.WEATHER_TYPES = {
+    EXTRASUNNY = true,
+    CLEAR = true,
+    CLOUDS = true,
+    SMOG = true,
+    FOGGY = true,
+    OVERCAST = true,
+    RAIN = true,
+    THUNDER = true,
+    CLEARING = true,
+    NEUTRAL = true,
+    SNOW = true,
+    BLIZZARD = true,
+    SNOWLIGHT = true,
+    XMAS = true,
+    HALLOWEEN = true,
+}
+
 AgentPolicy.ACCOUNTS = {
     cash = true,
     bank = true,
@@ -72,6 +120,7 @@ AgentPolicy.DEFAULTS = {
     max_money = 1000,
     daily_budget = 5000,
     max_notify_chars = 300,
+    max_announce_chars = 300,
     max_item_amount = 50,
     ttl_seconds = 900,
 }
@@ -104,6 +153,22 @@ function AgentPolicy.TextLength(value)
         if ok and length then return length end
     end
     return #value
+end
+
+-- UTF-8-safe head slice used by the announce preview.
+function AgentPolicy.TruncateText(value, limit)
+    if type(value) ~= 'string' or type(limit) ~= 'number' or limit < 1 then return '' end
+    if #value <= limit then return value end
+    if utf8 and utf8.len and utf8.offset then
+        local ok, length = pcall(utf8.len, value)
+        if ok and length then
+            if length <= limit then return value end
+            local offsetOk, byteEnd = pcall(utf8.offset, value, limit + 1)
+            if offsetOk and byteEnd then return value:sub(1, byteEnd - 1) end
+            return value
+        end
+    end
+    return value:sub(1, limit)
 end
 
 function AgentPolicy.HasUnsafeControlChars(value)
@@ -238,6 +303,98 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         if type(key) ~= 'string' then
             return fail('invalid_params', 'args must be a JSON object, not an array')
         end
+    end
+
+    -- World actions (L2) have no target player and no citizenid.
+    if actionType == 'announce' then
+        local unknownErr = rejectUnknownFields(params, {
+            message = true,
+            kind = true,
+        }, 'announce')
+        if unknownErr then return nil, unknownErr end
+
+        if type(params.message) ~= 'string' then
+            return fail('invalid_params', 'message must be a string')
+        end
+        if AgentPolicy.HasUnsafeControlChars(params.message) then
+            return fail('invalid_params', 'message contains control characters')
+        end
+        local maxAnnounceChars = cfg.max_announce_chars or AgentPolicy.DEFAULTS.max_announce_chars
+        local messageLength = AgentPolicy.TextLength(params.message)
+        if messageLength < 1 then
+            return fail('invalid_params', 'message is required')
+        end
+        if messageLength > maxAnnounceChars then
+            return fail('text_too_long', ('message exceeds %d characters'):format(maxAnnounceChars))
+        end
+
+        local kind = 'info'
+        if params.kind ~= nil then
+            if type(params.kind) ~= 'string' then
+                return fail('invalid_params', 'kind must be a string')
+            end
+            kind = params.kind:lower()
+            if not AgentPolicy.NOTIFY_KINDS[kind] then
+                return fail('invalid_params', 'kind must be info, success, warning, error or primary')
+            end
+        end
+
+        return {
+            message = params.message,
+            kind = kind,
+        }
+    end
+
+    if actionType == 'set_weather' then
+        local unknownErr = rejectUnknownFields(params, {
+            weather = true,
+        }, 'set_weather')
+        if unknownErr then return nil, unknownErr end
+
+        if type(params.weather) ~= 'string' then
+            return fail('invalid_params', 'weather must be a string')
+        end
+        local weather = AgentPolicy.Trim(params.weather):upper()
+        if not AgentPolicy.WEATHER_TYPES[weather] then
+            return fail('invalid_params', 'weather must be a supported weather type')
+        end
+        return { weather = weather }
+    end
+
+    if actionType == 'set_time_of_day' then
+        local unknownErr = rejectUnknownFields(params, {
+            hour = true,
+            minute = true,
+        }, 'set_time_of_day')
+        if unknownErr then return nil, unknownErr end
+
+        local hour = params.hour
+        if type(hour) ~= 'number' or hour ~= hour or hour == math.huge or hour == -math.huge then
+            return fail('invalid_params', 'hour must be a finite integer')
+        end
+        if hour ~= math.floor(hour) then
+            return fail('invalid_params', 'hour must be a whole number')
+        end
+        if hour < 0 or hour > 23 then
+            return fail('invalid_params', 'hour must be between 0 and 23')
+        end
+
+        local minute = params.minute
+        if minute == nil then minute = 0 end
+        if type(minute) ~= 'number' or minute ~= minute or minute == math.huge or minute == -math.huge then
+            return fail('invalid_params', 'minute must be a finite integer')
+        end
+        if minute ~= math.floor(minute) then
+            return fail('invalid_params', 'minute must be a whole number')
+        end
+        if minute < 0 or minute > 59 then
+            return fail('invalid_params', 'minute must be between 0 and 59')
+        end
+
+        return {
+            hour = math.tointeger(hour) or hour,
+            minute = math.tointeger(minute) or minute,
+        }
     end
 
     local citizenid, err = AgentPolicy.NormalizeCitizenId(params.citizenid)
@@ -462,9 +619,28 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         preview.player_source = tonumber(player.source) or nil
     end
 
+    if actionType == 'announce' then
+        preview.length = AgentPolicy.TextLength(params.message)
+        preview.kind = params.kind
+        preview.preview = AgentPolicy.TruncateText(params.message, 40)
+        return preview
+    end
+
     if actionType == 'notify' then
         preview.text_length = AgentPolicy.TextLength(params.text)
         preview.kind = params.kind
+        return preview
+    end
+
+    if actionType == 'set_weather' then
+        preview.weather = params.weather
+        if type(ctx.weather) == 'string' then preview.before = ctx.weather end
+        return preview
+    end
+
+    if actionType == 'set_time_of_day' then
+        preview.hour = params.hour
+        preview.minute = params.minute
         return preview
     end
 
@@ -548,8 +724,46 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
     cfg = cfg or {}
     ctx = ctx or {}
 
-    if not ctx.player then
+    if not AgentPolicy.WORLD_ACTIONS[actionType] and not ctx.player then
         return failBool('player_not_found', 'target player is not online')
+    end
+
+    if actionType == 'announce' then
+        local maxChars = cfg.max_announce_chars or AgentPolicy.DEFAULTS.max_announce_chars
+        local length = AgentPolicy.TextLength(params.message)
+        if length < 1 then
+            return failBool('invalid_params', 'message is required')
+        end
+        if length > maxChars then
+            return failBool('text_too_long', ('message exceeds %d characters'):format(maxChars))
+        end
+        return true
+    end
+
+    if actionType == 'set_weather' then
+        if type(params.weather) ~= 'string' or not AgentPolicy.WEATHER_TYPES[params.weather] then
+            return failBool('invalid_params', 'weather is invalid')
+        end
+        if not ctx.weather_sync then
+            return failBool('weather_sync_unavailable', 'qb-weathersync is not started')
+        end
+        return true
+    end
+
+    if actionType == 'set_time_of_day' then
+        local hour = params.hour
+        local minute = params.minute
+        if minute == nil then minute = 0 end
+        if type(hour) ~= 'number' or hour ~= math.floor(hour) or hour < 0 or hour > 23 then
+            return failBool('invalid_params', 'hour must be an integer between 0 and 23')
+        end
+        if type(minute) ~= 'number' or minute ~= math.floor(minute) or minute < 0 or minute > 59 then
+            return failBool('invalid_params', 'minute must be an integer between 0 and 59')
+        end
+        if not ctx.weather_sync then
+            return failBool('weather_sync_unavailable', 'qb-weathersync is not started')
+        end
+        return true
     end
 
     if actionType == 'notify' then

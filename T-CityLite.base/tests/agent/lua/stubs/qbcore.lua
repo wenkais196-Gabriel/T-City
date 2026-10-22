@@ -121,6 +121,14 @@ return function(env)
             GetPlayer = function(source)
                 return env.players[tonumber(source) or source]
             end,
+            GetPlayers = function()
+                local sources = {}
+                for source in pairs(env.players) do
+                    sources[#sources + 1] = source
+                end
+                table.sort(sources)
+                return sources
+            end,
             GetPlayerByCitizenId = function(citizenid)
                 return env.players_by_citizenid[citizenid]
             end,

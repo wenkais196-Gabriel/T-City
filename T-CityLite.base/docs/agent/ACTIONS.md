@@ -2,8 +2,9 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope is deliberately limited to five actions;
-there is no LLM integration.
+risky actions and an audit row. Scope covers eight actions (five player-scoped
+plus three L2 world/presentation actions); there is no LLM integration. Adding
+the L2 actions did not change `schema_version` (still `1`).
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -18,12 +19,22 @@ there is no LLM integration.
 | Action | Risk | Args | Status after propose | Approval | Execution |
 |:---|:---|:---|:---|:---|:---|
 | `notify` | L1 表现 | `citizenid`, `text`, `kind?` | `approved` → `executed` | none (policy only) | `Player.Functions.Notify` (or `QBCore:Notify`) |
+| `announce` | L2 世界 | `message`, `kind?` | `pending_approval` | **always** | broadcast to `QBCore.Functions.GetPlayers()` via `Player.Functions.Notify(message, kind, 5000)`; `delivered` count, `0` is not a failure |
+| `set_weather` | L2 世界 | `weather` | `pending_approval` | **always** | `exports['qb-weathersync']:setWeather(weather)` + `getWeatherState()` read-back |
+| `set_time_of_day` | L2 世界 | `hour`, `minute?` | `pending_approval` | **always** | `exports['qb-weathersync']:setTime(hour, minute)` (no read-back) |
 | `add_money` | L4 经济 | `citizenid`, `account`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddMoney(account, amount, 'agent_action:<id>')` + delta verification |
 | `start_quest` | L3 任务 | `citizenid`, `quest_id` | `pending_approval` | **always** | `exports['custom-quest']:TriggerQuest(source, quest_id)` |
 | `set_job` | L3 职业 | `citizenid`, `job`, `grade?` | `pending_approval` | **always** | `Player.Functions.SetJob(job, grade)` + job/grade read-back verification |
 | `grant_item` | L4 物品 | `citizenid`, `item`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddItem(item, amount)` + inventory delta verification |
 
 Anything else is rejected with `code: "unsupported_action"`.
+
+The three L2 actions are **world-scoped**: they have no `citizenid`, they are
+valid even while nobody is online, and their `ACTIONS` metadata carries
+`blast_radius = "world"`. `blast_radius` is exposed by
+`GET /agent/v1/policy` for those actions (`nil` for player-scoped actions).
+L2 always means `requires_approval = true` and `auto_execute = false`: a human
+approves every broadcast/weather/time change before it runs.
 
 ### 1.1 Argument normalization
 
@@ -34,6 +45,11 @@ Anything else is rejected with `code: "unsupported_action"`.
 | `idempotency_key` | 1–128 printable non-space chars, globally unique |
 | `notify.text` | non-empty; ≤ `agent_actions_max_notify_chars` UTF-8 chars; C0 controls except tab/LF/CR rejected |
 | `notify.kind` | `info` \| `success` \| `warning` \| `error` \| `primary`; default `info` |
+| `announce.message` | non-empty; ≤ `agent_actions_max_announce_chars` UTF-8 chars (default `300`, clamped `1..2000`); C0 controls except tab/LF/CR rejected |
+| `announce.kind` | same enum as `notify.kind`; default `info` |
+| `set_weather.weather` | `EXTRASUNNY` \| `CLEAR` \| `CLOUDS` \| `SMOG` \| `FOGGY` \| `OVERCAST` \| `RAIN` \| `THUNDER` \| `CLEARING` \| `NEUTRAL` \| `SNOW` \| `BLIZZARD` \| `SNOWLIGHT` \| `XMAS` \| `HALLOWEEN`; case-insensitive, normalized to uppercase |
+| `set_time_of_day.hour` | integer `0..23` |
+| `set_time_of_day.minute` | optional integer `0..59`, default `0` |
 | `add_money.account` | `cash` \| `bank` \| `crypto` |
 | `add_money.amount` | finite whole number, 1..`agent_actions_max_money` |
 | `add_money.reason` | 1–128 chars, no C0 controls |
@@ -47,9 +63,9 @@ Anything else is rejected with `code: "unsupported_action"`.
 | reject `reason` | optional, 1–255 chars |
 
 Unknown keys inside `args` are dropped for `notify`, `add_money` and
-`start_quest`, but rejected with `invalid_params` for `set_job` and
-`grant_item`. Unknown action types are rejected. There is no client-side
-validation path.
+`start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
+`announce`, `set_weather` and `set_time_of_day`. Unknown action types are
+rejected. There is no client-side validation path.
 
 ---
 
@@ -219,6 +235,55 @@ recomputes the preview, so `before` reflects the job at approval time.
 `before` is the current held quantity from `Player.Functions.GetItemByName(item)`
 (`0` when the player holds none). It is omitted while the player is offline.
 
+### 3.6 `announce`
+
+```json
+{
+  "action_type": "announce",
+  "risk": "L2",
+  "requires_approval": true,
+  "player_found": false,
+  "length": 27,
+  "kind": "warning",
+  "preview": "Server restart in 5 minutes"
+}
+```
+
+`length` is the UTF-8 length of `message`; `preview` is its first 40 UTF-8
+characters. There is no `citizenid` or `player_source`: the broadcast is
+resolved at execution time.
+
+### 3.7 `set_weather`
+
+```json
+{
+  "action_type": "set_weather",
+  "risk": "L2",
+  "requires_approval": true,
+  "player_found": false,
+  "weather": "RAIN",
+  "before": "CLEAR"
+}
+```
+
+`before` is the live `exports['qb-weathersync']:getWeatherState()` captured
+while building the preview; it is omitted when the resource is unavailable.
+
+### 3.8 `set_time_of_day`
+
+```json
+{
+  "action_type": "set_time_of_day",
+  "risk": "L2",
+  "requires_approval": true,
+  "player_found": false,
+  "hour": 22,
+  "minute": 30
+}
+```
+
+No `before` is recorded: this slice does not read the weathersync clock back.
+
 ---
 
 ## 4. Status lifecycle
@@ -231,7 +296,7 @@ notify (dry_run = false)
   propose ──► approved ──► executed
                        └─► failed             (notify/AddMoney/quest execution error)
 
-add_money / start_quest / set_job / grant_item (dry_run = false)
+add_money / start_quest / set_job / grant_item / announce / set_weather / set_time_of_day (dry_run = false)
   propose ──► pending_approval ──► approved ──► executed
                               │             └─► failed
                               ├─► rejected              (operator reject)
@@ -322,18 +387,45 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
   daily budget; there is no item budget in this slice.
 - Both actions require the target player to be online.
 
-### 5.7 Approval matrix
+### 5.7 World and presentation actions
+
+- `announce`, `set_weather` and `set_time_of_day` are **L2**, `blast_radius =
+  "world"`: one approval changes what every connected player sees/hears. They
+  never target a single player and work with zero players online.
+- All three always require human approval (`pending_approval`), even when
+  `dry_run` is false and regardless of the proposing agent.
+- `announce.message` is capped by `agent_actions_max_announce_chars` (default
+  `300`, clamped `1..2000`) and rejects C0 control characters except tab/LF/CR,
+  matching `notify`.
+- `set_weather` and `set_time_of_day` require
+  `GetResourceState('qb-weathersync') == 'started'` at propose **and** approve
+  time; otherwise the proposal is rejected with
+  `weather_sync_unavailable` (a pending row is rejected at approval time).
+- `set_weather.weather` is validated against the static enum above, not against
+  a live resource config; the executor still verifies the applied state.
+- `set_time_of_day` has no read-back step (see §8): a successful `setTime`
+  return is trusted. `qb-weathersync.setTime` also freezes the clock as a side
+  effect of that resource; this slice does not change that behaviour.
+- An `announce` that reaches zero players is `executed` with
+  `result.delivered = 0`; that is a normal result, not a failure.
+
+### 5.8 Approval matrix
 
 | Action | Risk | Auto-execute | Human approval | Budget / cap |
 |:---|:---|:---|:---|:---|
 | `notify` | L1 | yes (policy only) | no | `max_notify_chars` |
+| `announce` | L2 | no | **always** | `max_announce_chars`; `blast_radius = world` |
+| `set_weather` | L2 | no | **always** | weathersync started + enum; `blast_radius = world` |
+| `set_time_of_day` | L2 | no | **always** | weathersync started + `0..23` / `0..59`; `blast_radius = world` |
 | `start_quest` | L3 | no | **always** | quest catalog |
 | `set_job` | L3 | no | **always** | `QBCore.Shared.Jobs` + grades |
 | `add_money` | L4 | no | **always** | `max_money` + daily budget |
 | `grant_item` | L4 | no | **always** | `max_item_amount` only |
 
-`agent_actions_enabled = 0` disables every action. A proposal rejected by policy
-before persistence is not an approval-matrix exception: it never executes.
+`blast_radius` is `world` only for the three L2 actions; all other actions are
+player-scoped. `agent_actions_enabled = 0` disables every action. A proposal
+rejected by policy before persistence is not an approval-matrix exception: it
+never executes.
 
 ---
 
@@ -361,8 +453,8 @@ before persistence is not an approval-matrix exception: it never executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `add_money` \| `start_quest` \| `set_job` \| `grant_item` |
-| `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for `set_job`/`grant_item`) |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `grant_item` |
+| `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
 | `preview` | Last computed preview JSON |
@@ -436,6 +528,36 @@ the detailed `verification_failed ...` / `execution_failed ...` text is in
 This is an L4 action: it never auto-executes, even if `dry_run` is false, and
 it does not consume the `add_money` daily budget.
 
+### `announce`
+
+1. Calls `QBCore.Functions.GetPlayers()` and, for each source,
+   `QBCore.Functions.GetPlayer(source).Functions.Notify(message, kind, 5000)`.
+2. Counts successful notify calls as `result.delivered`. A player whose player
+   object/Notify method is unavailable is skipped.
+3. `delivered == 0` (nobody online) still marks the row `executed`; it is **not**
+   an execution failure. If `GetPlayers()` itself throws, the row becomes
+   `failed`.
+
+### `set_weather`
+
+1. Record `before = exports['qb-weathersync']:getWeatherState()` (best effort).
+2. `exports['qb-weathersync']:setWeather(weather)`; anything other than `true`
+   becomes `failed` (`execution_failed`).
+3. Re-read `getWeatherState()` and require it to equal the requested uppercase
+   weather; otherwise `failed` with `verification_failed`.
+4. Success `result` is `{ weather, before, verify_result, at }`.
+
+### `set_time_of_day`
+
+1. `exports['qb-weathersync']:setTime(hour, minute)`; anything other than
+   `true` becomes `failed` (`execution_failed`).
+2. This slice intentionally performs **no read-back** (the contract does not
+   trust the clock getter); success `result` is `{ hour, minute, at }`.
+
+Both world-state actions require `qb-weathersync` to be `started` before the
+approval is executed (re-checked in `Approve`); a stopped resource rejects the
+pending row with `weather_sync_unavailable`.
+
 ---
 
 ## 9. HTTP errors
@@ -457,7 +579,8 @@ appear for action results). No stack traces.
 | `job_not_found` | 400 | Job not in `QBCore.Shared.Jobs` |
 | `grade_not_found` | 400 | Grade not in `jobs[job].grades` |
 | `item_not_found` | 400 | Item not in `QBCore.Shared.Items` |
-| `text_too_long` | 400 | Notify text over cap |
+| `text_too_long` | 400 | Notify/announce text over cap |
+| `weather_sync_unavailable` | 400 | `qb-weathersync` is not started |
 | `not_found` | 404 | Unknown route or own-row id not found |
 | `method_not_allowed` | 405 | Wrong method (`Allow` set) |
 | `idempotency_conflict` | 409 | Key reused with different action/params |
@@ -489,8 +612,9 @@ underlying code is a `400`-class policy code.
 8. Keep the FXServer HTTP port on loopback/private networks; terminate TLS at a
    trusted proxy if needed. CORS is not enabled.
 9. No automatic rollback of economy mutations; failures are audited loudly.
-10. `add_money`, `start_quest`, `set_job` and `grant_item` always require
-    `pending_approval`, regardless of the proposing agent.
+10. `add_money`, `start_quest`, `set_job`, `grant_item`, `announce`,
+    `set_weather` and `set_time_of_day` always require `pending_approval`,
+    regardless of the proposing agent.
 
 ---
 
@@ -508,6 +632,10 @@ underlying code is a `400`-class policy code.
 - Live smoke (2026-10-21): notify executed, add_money 250 approved and persisted,
   duplicate key idempotent, cap rejected, agent token cannot approve, start_quest
   approved and executed.
+- World actions: `announce` counts per-player Notify calls; `set_weather`
+  verifies with `getWeatherState()`; `set_time_of_day` deliberately skips the
+  `getTime()` export and trusts `setTime()` (see §8). `AgentPolicy` (the
+  registry) rejects a weather value before any resource call.
 
 ---
 
@@ -517,7 +645,8 @@ underlying code is a `400`-class policy code.
 - Per-agent rate limiting beyond FXServer's HTTP limiter (10/s, burst 25) and
   the daily money budget.
 - Background TTL worker (currently lazy sweep on `List`/`Approve`).
-- World-state/atmosphere/scene/NPC actions (L2+ from the design doc).
+- World-state/atmosphere/scene/NPC actions beyond `announce`, weather and time
+  (L2+ from the design doc).
 - Undo/rollback for money; compensation flows for quests.
 - LLM/Hub implementation; this resource only accepts proposals.
 - Offline-player money operations (QB `GetPlayerByCitizenId` is online-only).

@@ -51,6 +51,7 @@ local function Config()
         max_money = convarInt('agent_actions_max_money', 1000, 0, 1000000000),
         daily_budget = convarInt('agent_actions_daily_budget', 5000, 0, 1000000000),
         max_notify_chars = convarInt('agent_actions_max_notify_chars', 300, 1, 2000),
+        max_announce_chars = convarInt('agent_actions_max_announce_chars', 300, 1, 2000),
         max_item_amount = convarInt('agent_actions_max_item_amount', 50, 1, 1000),
         ttl_seconds = convarInt('agent_actions_ttl_seconds', 900, 30, 86400),
     }
@@ -292,23 +293,35 @@ local function getQuestCatalog()
 end
 
 local function buildContext(actionType, params)
-    local player = getPlayerByCitizenId(params.citizenid)
     local context = {
         player = nil,
     }
-    if player then
-        context.player = {
-            source = playerSource(player),
-            money = player.PlayerData and player.PlayerData.money or nil,
-        }
-        if actionType == 'set_job' then
-            context.player.job = playerJob(player)
-        elseif actionType == 'grant_item' then
-            context.player.item_count = playerItemCount(player, params.item) or 0
+
+    -- World actions have no target player; everything below is per-player.
+    if not AgentPolicy.WORLD_ACTIONS[actionType] then
+        local player = getPlayerByCitizenId(params.citizenid)
+        if player then
+            context.player = {
+                source = playerSource(player),
+                money = player.PlayerData and player.PlayerData.money or nil,
+            }
+            if actionType == 'set_job' then
+                context.player.job = playerJob(player)
+            elseif actionType == 'grant_item' then
+                context.player.item_count = playerItemCount(player, params.item) or 0
+            end
         end
     end
 
-    if actionType == 'start_quest' then
+    if actionType == 'set_weather' or actionType == 'set_time_of_day' then
+        context.weather_sync = GetResourceState('qb-weathersync') == 'started'
+        if context.weather_sync then
+            local ok, state = pcall(function()
+                return exports['qb-weathersync']:getWeatherState()
+            end)
+            if ok and type(state) == 'string' then context.weather = state end
+        end
+    elseif actionType == 'start_quest' then
         local catalog, err = getQuestCatalog()
         if err then return nil, err end
         context.quests = catalog
@@ -516,6 +529,112 @@ local function executeGrantItem(actionId, params)
     }
 end
 
+local function executeAnnounce(actionId, params)
+    local listOk, players = pcall(QBCore.Functions.GetPlayers)
+    if not listOk or type(players) ~= 'table' then
+        return false, ('player_list_unavailable: %s'):format(truncate(players, 150)), nil
+    end
+
+    local delivered = 0
+    for _, source in ipairs(players) do
+        local src = tonumber(source)
+        if src then
+            local playerOk, player = pcall(QBCore.Functions.GetPlayer, src)
+            if playerOk and type(player) == 'table'
+                and type(player.Functions) == 'table'
+                and type(player.Functions.Notify) == 'function' then
+                if pcall(player.Functions.Notify, params.message, params.kind, 5000) then
+                    delivered = delivered + 1
+                end
+            end
+        end
+    end
+
+    -- Nobody online is a normal result, not a failure: the broadcast simply
+    -- reached zero players. The audit row records the count.
+    return true, nil, {
+        delivered = delivered,
+        kind = params.kind,
+        at = os.time(),
+    }
+end
+
+local function executeSetWeather(actionId, params)
+    local before = nil
+    local beforeOk, beforeState = pcall(function()
+        return exports['qb-weathersync']:getWeatherState()
+    end)
+    if beforeOk and type(beforeState) == 'string' then before = beforeState end
+
+    local callOk, result = pcall(function()
+        return exports['qb-weathersync']:setWeather(params.weather)
+    end)
+    if not callOk then
+        return false, ('set_weather_failed: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: setWeather returned non-true', nil
+    end
+
+    local verifyOk, after = pcall(function()
+        return exports['qb-weathersync']:getWeatherState()
+    end)
+    if not verifyOk then
+        return false, ('verification_failed: getWeatherState failed: %s'):format(truncate(after, 150)), nil
+    end
+    if after ~= params.weather then
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.weather)), nil
+    end
+
+    return true, nil, {
+        weather = params.weather,
+        before = before,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function readWeatherTime()
+    local ok, hour, minute = pcall(function()
+        return exports['qb-weathersync']:getTime()
+    end)
+    if not ok or type(hour) ~= 'number' or type(minute) ~= 'number' then return nil end
+    return { hour = hour, minute = minute }
+end
+
+local function executeSetTimeOfDay(actionId, params)
+    local before = readWeatherTime()
+
+    local callOk, result = pcall(function()
+        return exports['qb-weathersync']:setTime(params.hour, params.minute)
+    end)
+    if not callOk then
+        return false, ('set_time_of_day_failed: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: setTime returned non-true', nil
+    end
+
+    -- qb-weathersync 的 setTime() 会冻结时钟并同步全服，getTime() 读的是同一
+    -- 份 gameMinutes，所以可以回读比对。老版本没有 getTime 时退化为只信任
+    -- setTime 的返回值（result.verify_result = nil）。
+    local after = readWeatherTime()
+    if after and (after.hour ~= params.hour or after.minute ~= params.minute) then
+        return false, ('verification_failed: expected %02d:%02d, read %02d:%02d'):format(
+            params.hour, params.minute, after.hour, after.minute), nil
+    end
+
+    return true, nil, {
+        hour = params.hour,
+        minute = params.minute,
+        before = before,
+        after = after,
+        verify_result = after ~= nil,
+        at = os.time(),
+    }
+end
+
 local function executeAction(actionId, actionType, params)
     if actionType == 'notify' then
         return executeNotify(actionId, params)
@@ -527,6 +646,12 @@ local function executeAction(actionId, actionType, params)
         return executeSetJob(actionId, params)
     elseif actionType == 'grant_item' then
         return executeGrantItem(actionId, params)
+    elseif actionType == 'announce' then
+        return executeAnnounce(actionId, params)
+    elseif actionType == 'set_weather' then
+        return executeSetWeather(actionId, params)
+    elseif actionType == 'set_time_of_day' then
+        return executeSetTimeOfDay(actionId, params)
     end
     return false, 'unsupported_action', nil
 end
@@ -536,7 +661,14 @@ end
 AgentActions._Execute = {
     set_job = executeSetJob,
     grant_item = executeGrantItem,
+    announce = executeAnnounce,
+    set_weather = executeSetWeather,
+    set_time_of_day = executeSetTimeOfDay,
 }
+
+-- Internal context builder for the pure-Lua harness (same contract as
+-- _Execute): lets tests prove CheckPolicy receives live weathersync state.
+AgentActions._Context = buildContext
 
 -- ---------------------------------------------------------------------------
 -- Audit transitions
@@ -994,6 +1126,7 @@ function AgentActions.Policy()
             risk = definition.risk,
             requires_approval = definition.requires_approval,
             auto_execute = definition.auto_execute,
+            blast_radius = definition.blast_radius,
         }
     end
     actions.add_money.max_money = cfg.max_money
@@ -1013,6 +1146,7 @@ function AgentActions.Policy()
             max_money = cfg.max_money,
             daily_budget = cfg.daily_budget,
             max_notify_chars = cfg.max_notify_chars,
+            max_announce_chars = cfg.max_announce_chars,
             max_item_amount = cfg.max_item_amount,
             ttl_seconds = cfg.ttl_seconds,
         },
