@@ -35,6 +35,10 @@ DIRECTOR_ENV = {
     "AGENT_DIRECTOR_URL": "http://director.test",
     "AGENT_DIRECTOR_TOKEN": "write-token",
 }
+LIVE_ENV = {
+    "AGENT_DIRECTOR_URL": "http://director.test",
+    "AGENT_LIVE_TOKEN": "live-token",
+}
 
 
 class FakeResponse:
@@ -193,6 +197,105 @@ class ReadRoutingTests(RoutingTestBase):
             urllib.parse.parse_qs(parsed.query),
             {"status": ["pending_approval"], "limit": ["5"]},
         )
+
+    def test_live_players_use_live_token_and_keep_the_whole_body(self) -> None:
+        env = dict(LIVE_ENV, AGENT_AGENT_ID="agent.7")
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch(
+            "agent_mcp.urllib.request.urlopen"
+        ) as mock_urlopen:
+            mock_urlopen.return_value = FakeResponse(
+                {
+                    "schema_version": 1,
+                    "players": [{"citizenid": "ABC123", "name": "Bob", "job": "police"}],
+                    "count": 1,
+                    "sampled_at": 1761136800000,
+                    "precision_m": 25,
+                }
+            )
+            result, payload = _call("get_live_players", {"limit": 10, "job": "police"})
+        self.assertFalse(result["isError"], payload)
+        self.assertEqual(payload["kind"], "ok")
+        self.assertEqual(payload["data"]["count"], 1)
+        self.assertEqual(payload["data"]["precision_m"], 25)
+        self.assertEqual(payload["data"]["players"][0]["name"], "Bob")
+        self.assertEqual(payload["meta"]["count"], 1)
+        self.assertEqual(payload["meta"]["route"], "director")
+        self.assertEqual(payload["meta"]["tool"], "get_live_players")
+        self.assertIn("players.0.name", payload["meta"]["untrusted_fields"])
+        request = _request(mock_urlopen)
+        self.assertEqual(request.get_method(), "GET")
+        parsed = urllib.parse.urlsplit(request.full_url)
+        self.assertEqual(parsed.path, "/agent/v1/live/players")
+        self.assertEqual(
+            urllib.parse.parse_qs(parsed.query), {"limit": ["10"], "job": ["police"]}
+        )
+        headers = _headers(request)
+        self.assertEqual(headers["authorization"], "Bearer live-token")
+        self.assertEqual(headers["x-agent-id"], "agent.7")
+
+    def test_live_player_path_substitution(self) -> None:
+        with mock.patch.dict(os.environ, LIVE_ENV, clear=True), mock.patch(
+            "agent_mcp.urllib.request.urlopen"
+        ) as mock_urlopen:
+            mock_urlopen.return_value = FakeResponse(
+                {"schema_version": 1, "player": {"citizenid": "ABC123", "name": "Bob"}}
+            )
+            result, payload = _call("get_live_player", {"citizenid": "ABC123"})
+        self.assertFalse(result["isError"], payload)
+        self.assertEqual(payload["data"]["player"]["citizenid"], "ABC123")
+        self.assertIn("player.name", payload["meta"]["untrusted_fields"])
+        request = _request(mock_urlopen)
+        self.assertEqual(request.full_url, "http://director.test/agent/v1/live/players/ABC123")
+        headers = _headers(request)
+        self.assertEqual(headers["authorization"], "Bearer live-token")
+        self.assertEqual(headers["x-agent-id"], "mcp.local")
+
+    def test_live_events_keep_cursor_and_report_errors(self) -> None:
+        with mock.patch.dict(os.environ, LIVE_ENV, clear=True), mock.patch(
+            "agent_mcp.urllib.request.urlopen"
+        ) as mock_urlopen:
+            mock_urlopen.return_value = FakeResponse(
+                {
+                    "schema_version": 1,
+                    "events": [{"seq": 8821, "type": "player.join", "name": "Bob"}],
+                    "next_cursor": "1761136800:8821",
+                    "dropped": 2,
+                }
+            )
+            result, payload = _call(
+                "list_live_events", {"since": "1761136800:8821", "limit": 25}
+            )
+            self.assertFalse(result["isError"], payload)
+            self.assertEqual(payload["data"]["events"][0]["seq"], 8821)
+            self.assertEqual(payload["data"]["next_cursor"], "1761136800:8821")
+            self.assertEqual(payload["data"]["dropped"], 2)
+            self.assertNotIn("count", payload["meta"])
+            parsed = urllib.parse.urlsplit(_request(mock_urlopen).full_url)
+            self.assertEqual(parsed.path, "/agent/v1/live/events")
+            self.assertEqual(
+                urllib.parse.parse_qs(parsed.query),
+                {"since": ["1761136800:8821"], "limit": ["25"]},
+            )
+
+            mock_urlopen.reset_mock()
+            mock_urlopen.return_value = FakeResponse(
+                {"error": "cursor expired", "code": "invalid_cursor"}
+            )
+            result, payload = _call("list_live_events", {"since": "1:1"})
+        self.assertTrue(result["isError"])
+        self.assertEqual(payload["code"], "invalid_cursor")
+        self.assertEqual(payload["error"], "cursor expired")
+
+    def test_live_tools_fall_back_to_the_director_token(self) -> None:
+        with mock.patch.dict(os.environ, DIRECTOR_ENV, clear=True), mock.patch(
+            "agent_mcp.urllib.request.urlopen"
+        ) as mock_urlopen:
+            mock_urlopen.return_value = FakeResponse(
+                {"schema_version": 1, "players": [], "count": 0, "sampled_at": 1, "precision_m": 25}
+            )
+            result, _payload = _call("get_live_players", {})
+        self.assertFalse(result["isError"], _payload)
+        self.assertEqual(_headers(_request(mock_urlopen))["authorization"], "Bearer write-token")
 
     def test_read_timeout_is_retried_and_reported(self) -> None:
         with mock.patch.dict(os.environ, GATEWAY_ENV, clear=True), mock.patch(
@@ -455,8 +558,41 @@ class VisibilityTests(RoutingTestBase):
                          "AGENT_TOOLSET": "all"}, clear=True
         ):
             names = {tool["name"] for tool in _tools()}
-        self.assertEqual(len(names), 13, "AGENT_TOOLSET=all lists the 13 active tools")
+        self.assertEqual(len(names), 16, "AGENT_TOOLSET=all lists the 16 active tools")
         self.assertIn("add_player_money", names, "debug mode lists writes but calls still need a token")
+
+    def test_live_tools_need_the_live_token_to_be_advertised(self) -> None:
+        env = dict(GATEWAY_ENV, AGENT_DIRECTOR_URL="http://director.test")
+        with mock.patch.dict(os.environ, env, clear=True):
+            names = {tool["name"] for tool in _tools()}
+        self.assertIn("get_schema", names)
+        for hidden in ("get_live_players", "get_live_player", "list_live_events"):
+            self.assertNotIn(
+                hidden, names, f"{hidden} must not be advertised without a live token"
+            )
+
+    def test_live_token_advertises_the_live_tools(self) -> None:
+        with mock.patch.dict(os.environ, LIVE_ENV, clear=True):
+            names = {tool["name"] for tool in _tools()}
+        self.assertTrue(
+            {"get_live_players", "get_live_player", "list_live_events"} <= names,
+            "a configured live token must publish the live reads",
+        )
+
+    def test_debug_toolset_still_hides_live_tools_without_a_token(self) -> None:
+        with mock.patch.dict(os.environ, {"AGENT_TOOLSET": "all"}, clear=True):
+            names = {tool["name"] for tool in _tools()}
+        self.assertIn("send_notify", names, "all lists every non-live active tool")
+        for hidden in ("get_live_players", "get_live_player", "list_live_events"):
+            self.assertNotIn(hidden, names, "the live grant is never implied by AGENT_TOOLSET=all")
+
+    def test_director_token_fallback_advertises_the_live_tools(self) -> None:
+        with mock.patch.dict(os.environ, DIRECTOR_ENV, clear=True):
+            names = {tool["name"] for tool in _tools()}
+        self.assertTrue(
+            {"get_live_players", "get_live_player", "list_live_events"} <= names,
+            "the Lua-compatible AGENT_DIRECTOR_TOKEN fallback must keep live reads visible",
+        )
 
     def test_toolset_read_filters_by_channel(self) -> None:
         with mock.patch.dict(
@@ -531,6 +667,16 @@ class ProtocolAndValidationTests(RoutingTestBase):
             "agent_mcp.urllib.request.urlopen"
         ) as mock_urlopen:
             result, payload = _call("send_notify", {"citizenid": "ABC123", "text": "hello"})
+        self.assertTrue(result["isError"])
+        self.assertEqual(payload["code"], "unauthorized")
+        self.assertEqual(mock_urlopen.call_count, 0)
+
+    def test_hidden_live_tool_cannot_be_called(self) -> None:
+        env = dict(GATEWAY_ENV, AGENT_DIRECTOR_URL="http://director.test")
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch(
+            "agent_mcp.urllib.request.urlopen"
+        ) as mock_urlopen:
+            result, payload = _call("get_live_players", {})
         self.assertTrue(result["isError"])
         self.assertEqual(payload["code"], "unauthorized")
         self.assertEqual(mock_urlopen.call_count, 0)

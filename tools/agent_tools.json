@@ -431,6 +431,159 @@
       "compensation": "none"
     },
     {
+      "name": "get_live_players",
+      "title": "List live online players",
+      "description": "Read the live player roster: sampled positions, vitals, job and vehicle for online players, optionally filtered by job. Read-only and bounded to 48 rows.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "auth": "live",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/live/players"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 48,
+            "default": 48
+          },
+          "job": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "Exact job name, e.g. police."
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": true,
+        "untrusted_fields": [
+          "name"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_live_player",
+      "title": "Get one live player",
+      "description": "Read the live state of one online player by citizenid: sampled position, vitals, job, vehicle and session. Read-only; use get_live_players to discover ids.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "auth": "live",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/live/players/{citizenid}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          }
+        },
+        "required": [
+          "citizenid"
+        ]
+      },
+      "pii": {
+        "returns_pii": true,
+        "untrusted_fields": [
+          "name"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "list_live_events",
+      "title": "List live game events",
+      "description": "Read the live event ring buffer since an epoch:seq cursor, oldest first, with a bounded limit. Read-only and best-effort; dropped events are reported.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "auth": "live",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/live/events"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "since": {
+            "type": "string",
+            "pattern": "^\\d{1,10}:\\d{1,9}$",
+            "description": "Cursor as epoch:seq, e.g. 1761136800:8841."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": [
+          "name",
+          "payload"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
       "name": "get_action",
       "title": "Get one agent action",
       "description": "Read one action row owned by this agent (proposal, approval state, preview and result). Read-only; used to verify a write after it was submitted.",

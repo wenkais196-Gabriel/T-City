@@ -33,6 +33,9 @@ ACTIVE_NAMES = {
     "get_world_digest",
     "get_world_state",
     "get_economy_metrics",
+    "get_live_players",
+    "get_live_player",
+    "list_live_events",
     "get_action",
     "list_actions",
     "send_notify",
@@ -74,10 +77,10 @@ class RegistryContentTests(unittest.TestCase):
         registry = _registry()
         self.assertEqual(registry["schema_version"], 1, "registry schema_version must be 1")
         self.assertRegex(registry["registry_version"], r"^\d+\.\d+\.\d+$")
-        self.assertEqual(len(registry["tools"]), 20, "v1 ships exactly 20 tools")
+        self.assertEqual(len(registry["tools"]), 23, "v1 ships exactly 23 tools")
         active = {tool["name"] for tool in registry["tools"] if tool["status"] == "active"}
         planned = {tool["name"] for tool in registry["tools"] if tool["status"] == "planned"}
-        self.assertEqual(active, ACTIVE_NAMES, "the M0 active set is the 10 reads plus 3 writes")
+        self.assertEqual(active, ACTIVE_NAMES, "the active set is the 13 pre-live tools plus 3 live reads")
         self.assertEqual(planned, PLANNED_NAMES, "the seven M1/M2 tools stay planned")
 
     def test_every_tool_has_the_required_contract_fields(self) -> None:
@@ -123,6 +126,18 @@ class RegistryContentTests(unittest.TestCase):
         self.assertEqual(quest["risk"], "L3")
         self.assertTrue(quest["requires_approval"])
         self.assertEqual(quest["enum_source"]["source"], "quest_catalog")
+
+    def test_live_tools_are_read_only_director_reads_with_live_auth(self) -> None:
+        registry = _registry()
+        for name in ("get_live_players", "get_live_player", "list_live_events"):
+            with self.subTest(tool=name):
+                tool = _tool(registry, name)
+                self.assertEqual(tool["channel"], "read")
+                self.assertEqual(tool["route"], "director")
+                self.assertEqual(tool["risk"], "L0")
+                self.assertEqual(tool["auth"], "live")
+                self.assertIn("name", tool["pii"]["untrusted_fields"])
+                self.assertEqual(tool["http"]["method"], "GET")
 
 
 class RegistryInvariantTests(unittest.TestCase):
@@ -204,6 +219,21 @@ class RegistryInvariantTests(unittest.TestCase):
         _tool(self.registry, "send_announce")["requires_approval"] = False
         errors = _errors(self.registry)
         self.assertTrue(_has(errors, "L2 tools must default to approval"), errors)
+
+    def test_live_auth_is_rejected_on_gateway_reads(self) -> None:
+        _tool(self.registry, "get_schema")["auth"] = "live"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "auth=live requires route=director"), errors)
+
+    def test_live_auth_is_rejected_on_write_tools(self) -> None:
+        _tool(self.registry, "send_notify")["auth"] = "live"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, "auth=live is only allowed for read tools"), errors)
+
+    def test_unknown_auth_mode_is_rejected(self) -> None:
+        _tool(self.registry, "get_live_players")["auth"] = "admin"
+        errors = _errors(self.registry)
+        self.assertTrue(_has(errors, ".auth: must be one of"), errors)
 
     def test_effect_cannot_be_l1(self) -> None:
         _tool(self.registry, "send_announce")["risk"] = "L1"
@@ -306,6 +336,27 @@ class PatternConversionTests(unittest.TestCase):
         for pattern in (r"^\d+$", r"^(a|b)$", r"^[a-z]+$", r"^[a-z]{2,}$", r"[a-z]{1,3}"):
             with self.subTest(pattern=pattern):
                 self.assertIsNone(agent_tools.parse_simple_pattern(pattern))
+                self.assertIsNone(agent_tools.parse_segmented_pattern(pattern))
+
+    def test_expands_the_live_event_cursor(self) -> None:
+        segments = agent_tools.parse_segmented_pattern(r"^\d{1,10}:\d{1,9}$")
+        self.assertIsNotNone(segments)
+        self.assertEqual(
+            [(minimum, maximum, literal) for _chars, minimum, maximum, literal in segments],
+            [(1, 10, False), (1, 1, True), (1, 9, False)],
+        )
+
+    def test_live_cursor_is_enforced_by_python(self) -> None:
+        tool = _tool(_registry(), "list_live_events")
+        self.assertEqual(
+            agent_tools.validate_arguments(tool, {"since": "1761136800:8841"}), []
+        )
+        for cursor in ("12345678901:1", "1:1234567890", "1761136800-8841", "1:2:3"):
+            with self.subTest(cursor=cursor):
+                errors = agent_tools.validate_arguments(tool, {"since": cursor})
+                self.assertTrue(
+                    any("since has invalid characters" in error for error in errors), errors
+                )
 
     def test_unsupported_pattern_fails_registry_validation(self) -> None:
         registry = copy.deepcopy(_registry())

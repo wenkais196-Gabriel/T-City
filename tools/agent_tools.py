@@ -91,6 +91,7 @@ IDEMPOTENCY_MODES = ("required", "optional", "none")
 DRY_RUN_MODES = ("supported", "unsupported", "not_applicable")
 STATUSES = ("active", "planned", "deprecated")
 COMPENSATIONS = ("inverse", "manual", "none")
+AUTH_MODES = ("default", "live")
 VERIFY_OPS = ("eq", "neq", "delta_eq", "gte", "lte", "contains", "exists")
 CHANNEL_RATE_CAP = {"read": 60, "write": 10, "effect": 2}
 
@@ -151,6 +152,46 @@ def parse_simple_pattern(pattern: str) -> tuple[str, int, int] | None:
         return None
     return "".join(sorted(chars)), int(minimum), int(maximum)
 
+
+def parse_segmented_pattern(pattern: str) -> list[tuple[str, int, int, bool]] | None:
+    """Expand ``^\\d{m,n}:\\d{m,n}$`` into a list of (charset, min, max, literal).
+
+    The strict live-event cursor is the one pattern in the registry that a
+    single char class cannot express.  Supporting exactly "digit runs joined
+    by a literal ``:``" keeps the generated Lua validator byte-equivalent to
+    Python's ``re.fullmatch`` without shipping a regex engine to Lua.
+    """
+    if not (pattern.startswith("^") and pattern.endswith("$")):
+        return None
+    body = pattern[1:-1]
+    segments: list[tuple[str, int, int, bool]] = []
+    index = 0
+    while index < len(body):
+        if body.startswith("\\d", index):
+            if not body.startswith("{", index + 2):
+                return None
+            close = body.find("}", index + 3)
+            if close < 0:
+                return None
+            bounds = body[index + 3 : close].split(",")
+            if len(bounds) != 2 or not all(piece.isdigit() for piece in bounds):
+                return None
+            minimum, maximum = int(bounds[0]), int(bounds[1])
+            if minimum < 1 or maximum < minimum or maximum > 999:
+                return None
+            segments.append(("0123456789", minimum, maximum, False))
+            index = close + 1
+            continue
+        if body[index] == ":":
+            segments.append((":", 1, 1, True))
+            index += 1
+            continue
+        return None
+    if len(segments) < 2 or not any(literal for _chars, _low, _high, literal in segments):
+        return None
+    return segments
+
+
 TOOL_KEYS = frozenset(
     {
         "name",
@@ -167,6 +208,7 @@ TOOL_KEYS = frozenset(
         "undo_supported",
         "status",
         "since",
+        "auth",
         "rate_limit",
         "http",
         "inputSchema",
@@ -431,6 +473,18 @@ def _validate_tool(errors: list[str], tool: Any, index: int) -> str | None:
     if compensation not in COMPENSATIONS:
         _err(errors, f"{path}.compensation", f"must be one of {list(COMPENSATIONS)}")
 
+    # ``auth`` selects the live-perception credential instead of the default one.
+    # Only read tools may use it, and only on the director route that serves
+    # /agent/v1/live/*; anything else would widen the live token's reach.
+    auth = tool.get("auth", "default")
+    if auth not in AUTH_MODES:
+        _err(errors, f"{path}.auth", f"must be one of {list(AUTH_MODES)}")
+    elif auth == "live":
+        if channel != "read":
+            _err(errors, f"{path}.auth", "auth=live is only allowed for read tools")
+        if route != "director":
+            _err(errors, f"{path}.auth", "auth=live requires route=director")
+
     # Channel / risk / approval / idempotency / dry-run matrix (§4, §6).
     if channel == "read":
         if risk != "L0":
@@ -568,13 +622,18 @@ def _validate_input_schema(
                 else:
                     # The generated Lua validator must enforce the same rule as
                     # Python. That is only possible for the simple
-                    # ``^[chars]{m,n}$`` subset, so anything else is rejected
-                    # here rather than silently ignored on the Lua side.
-                    if parse_simple_pattern(spec["pattern"]) is None:
+                    # ``^[chars]{m,n}$`` subset and the bounded
+                    # ``^\d{m,n}:\d{m,n}$`` cursor, so anything else is
+                    # rejected here rather than silently ignored on the Lua side.
+                    if (
+                        parse_simple_pattern(spec["pattern"]) is None
+                        and parse_segmented_pattern(spec["pattern"]) is None
+                    ):
                         _err(
                             errors,
                             f"{prop_path}.pattern",
                             "pattern must be a single char class with {m,n} bounds "
+                            "or a bounded digit:digit cursor "
                             "(the Lua validator cannot express other regexes)",
                         )
         if "minimum" in spec and not _is_number(spec["minimum"]):
@@ -1233,14 +1292,31 @@ def render_lua(registry: dict[str, Any] | None = None) -> str:
                     rule.append(f"enum = {_lua_string_list([str(item) for item in spec['enum']])}")
                 if isinstance(spec.get("pattern"), str):
                     parsed = parse_simple_pattern(spec["pattern"])
-                    if parsed is None:
-                        raise ValueError(
-                            f"{tool.get('name')}.{prop_name}: pattern is not Lua-validatable"
-                        )
-                    chars, pattern_min, pattern_max = parsed
-                    effective.setdefault("minLength", pattern_min)
-                    effective.setdefault("maxLength", pattern_max)
-                    rule.append(f"chars = {_lua_string(chars)}")
+                    if parsed is not None:
+                        chars, pattern_min, pattern_max = parsed
+                        effective.setdefault("minLength", pattern_min)
+                        effective.setdefault("maxLength", pattern_max)
+                        rule.append(f"chars = {_lua_string(chars)}")
+                    else:
+                        segments = parse_segmented_pattern(spec["pattern"])
+                        if segments is None:
+                            raise ValueError(
+                                f"{tool.get('name')}.{prop_name}: pattern is not Lua-validatable"
+                            )
+                        rendered = []
+                        for chars, pattern_min, pattern_max, literal in segments:
+                            if literal:
+                                rendered.append(
+                                    "{ literal = true, chars = "
+                                    f"{_lua_string(chars)} }}"
+                                )
+                            else:
+                                rendered.append(
+                                    "{ chars = "
+                                    f"{_lua_string(chars)}, min_length = {pattern_min}, "
+                                    f"max_length = {pattern_max} }}"
+                                )
+                        rule.append("segments = { " + ", ".join(rendered) + " }")
                 for keyword, lua_key in (
                     ("minimum", "minimum"),
                     ("maximum", "maximum"),
@@ -1277,6 +1353,38 @@ def render_lua(registry: dict[str, Any] | None = None) -> str:
             "  if expected == 'boolean' then return type(value) == 'boolean' end",
             "  if expected == 'array' then return type(value) == 'table' end",
             "  return true",
+            "end",
+            "",
+            "local function segmentsMatch(segments, value)",
+            "  local pos = 1",
+            "  for index = 1, #segments do",
+            "    local segment = segments[index]",
+            "    if segment.literal then",
+            "      if value:sub(pos, pos) ~= segment.chars then return false end",
+            "      pos = pos + 1",
+            "    else",
+            "      local stop",
+            "      local next_segment = segments[index + 1]",
+            "      if next_segment and next_segment.literal then",
+            "        stop = string.find(value, next_segment.chars, pos, true)",
+            "      else",
+            "        stop = #value + 1",
+            "      end",
+            "      if not stop then return false end",
+            "      local length = stop - pos",
+            "      if length < segment.min_length or length > segment.max_length then",
+            "        return false",
+            "      end",
+            "      for i = pos, stop - 1 do",
+            "        local char = value:sub(i, i)",
+            "        if not string.find(segment.chars, char, 1, true) then",
+            "          return false",
+            "        end",
+            "      end",
+            "      pos = stop",
+            "    end",
+            "  end",
+            "  return pos == #value + 1",
             "end",
             "",
             "--- Minimal contract validation.  Returns true, nil or false, code.",
@@ -1322,6 +1430,9 @@ def render_lua(registry: dict[str, Any] | None = None) -> str:
             "            return false, 'invalid_params'",
             "          end",
             "        end",
+            "      end",
+            "      if rule.segments and not segmentsMatch(rule.segments, value) then",
+            "        return false, 'invalid_params'",
             "      end",
             "    end",
             "  end",
