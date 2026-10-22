@@ -90,7 +90,58 @@ local function liveConfig(cfg)
         if value and value >= 1 and value == math.floor(value) then precision = value end
     end
 
-    return { enabled = enabled, token = token, precision = precision }
+    local function clampInt(name, default, minimum, maximum)
+        local value = tonumber(trim(convarString(name, tostring(default))))
+        if not value or value ~= value then value = default end
+        value = math.floor(value)
+        if value < minimum then value = minimum end
+        if value > maximum then value = maximum end
+        return value
+    end
+
+    return {
+        enabled = enabled,
+        token = token,
+        precision = precision,
+        rate_per_min = clampInt('agent_live_rate_per_min', 120, 0, 6000),
+        burst = clampInt('agent_live_burst', 40, 1, 1000),
+    }
+end
+
+-- Token bucket per live credential. The key is a cheap hash so the secret is
+-- not used as a table key. agent_live_rate_per_min=0 disables the limit.
+local liveBuckets = {}
+
+local function liveKey(token)
+    local hash = 5381
+    for i = 1, #token do
+        hash = (hash * 33 + token:byte(i)) % 4294967296
+    end
+    return ('%08x'):format(hash)
+end
+
+local function rateGate(live)
+    if live.rate_per_min <= 0 then return nil end
+    local key = liveKey(live.token)
+    local now = GetGameTimer()
+    local bucket = liveBuckets[key]
+    if not bucket then
+        bucket = { tokens = live.burst, updatedAt = now }
+        liveBuckets[key] = bucket
+    end
+    local elapsed = math.max(0, now - bucket.updatedAt)
+    if elapsed > 0 then
+        bucket.tokens = math.min(live.burst, bucket.tokens + elapsed * (live.rate_per_min / 60000))
+        bucket.updatedAt = now
+    end
+    if bucket.tokens < 1 then
+        local retryMs = math.ceil((1 - bucket.tokens) / (live.rate_per_min / 60000))
+        return failure(429, 'rate_limited', 'too many live requests', {
+            ['Retry-After'] = tostring(math.max(1, math.ceil(retryMs / 1000))),
+        })
+    end
+    bucket.tokens = bucket.tokens - 1
+    return nil
 end
 
 local function authorized(request, token)
@@ -377,6 +428,11 @@ end
 -- ---------------------------------------------------------------------------
 
 -- Returns nil for non-live paths so the existing director routes are untouched.
+-- Test hook: drop the rate-limit buckets (not a FiveM export).
+function LiveApi._ResetRateLimit()
+    liveBuckets = {}
+end
+
 function LiveApi.TryHandle(request, cfg)
     if type(request) ~= 'table' then return nil end
     local rawPath = tostring(request.path or '/')
@@ -392,6 +448,8 @@ function LiveApi.TryHandle(request, cfg)
     if not authorized(request, live.token) then
         return failure(401, 'unauthorized', 'unauthorized', { ['WWW-Authenticate'] = 'Bearer' })
     end
+    local limited = rateGate(live)
+    if limited then return limited end
 
     local method = tostring(request.method or ''):upper()
     if method ~= 'GET' then

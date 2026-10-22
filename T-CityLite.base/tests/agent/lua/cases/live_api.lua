@@ -427,6 +427,44 @@ return {
             assert(captures.headers['Content-Type']:find('application/json', 1, true) ~= nil)
         end)
 
+        check('rate_limit_returns_429', function()
+            -- Reload with a tiny bucket: earlier checks may have rebound the
+            -- global FiveM stubs to a different env.
+            ctx.bootstrap.Load({
+                convars = {
+                    agent_live_enabled = '1',
+                    agent_live_token = 'live-token',
+                    agent_live_rate_per_min = '1',
+                    agent_live_burst = '1',
+                },
+            })
+            local RateHttp = assert(_G.AgentHttp, 'http_api not reloaded')
+            local RateLive = assert(_G.LiveApi, 'live_api not reloaded')
+            RateLive._ResetRateLimit()
+            local deps = {
+                cfg = { enabled = false, token = 't', admin_token = 'a' },
+                actions = { Policy = function() return {} end },
+                policy = _G.AgentPolicy,
+                live = RateLive,
+            }
+            local function call()
+                return RateHttp.Handle({
+                    method = 'GET',
+                    path = '/agent/v1/live/players',
+                    headers = { Authorization = 'Bearer live-token' },
+                    body = '',
+                }, deps)
+            end
+            local first = call()
+            local second = call()
+            assert(first.status == 200, 'the first request must pass, got ' .. tostring(first.status))
+            assert(second.status == 429, 'the second request must be rate limited, got '
+                .. tostring(second.status))
+            assert(second.body.code == 'rate_limited', tostring(second.body.code))
+            assert(second.headers and second.headers['Retry-After'],
+                'a 429 must tell the caller when to retry')
+        end)
+
         return {
             ok = failed == 0,
             error = failed == 0 and nil or ('%d live_api case(s) failed'):format(failed),
