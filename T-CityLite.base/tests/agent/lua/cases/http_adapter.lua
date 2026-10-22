@@ -162,11 +162,68 @@ return {
             return status, { code = body.code, single_response = true }
         end)
 
-        golden('oversized_content_length_early_413', function()
+        golden('duplicate_body_callback_executes_once', function()
+            -- FXServer is not expected to invoke the data handler twice, but the
+            -- old readJsonBody() had a `done` guard. Without it a duplicate
+            -- callback would run Propose() twice for one HTTP request while
+            -- still sending only one response, which is silent double execution.
+            local original = env.actions.Propose
+            local calls = 0
+            env.actions.Propose = function()
+                calls = calls + 1
+                return { ok = true, id = 1, status = 'proposed' }
+            end
+            local dataHandler
             local captures = call({
                 method = 'POST',
                 path = '/agent/v1/act',
-                headers = { ['content-length'] = tostring(env.http.MAX_BODY + 1) },
+                headers = {
+                    Authorization = 'Bearer agent-token',
+                    ['X-Agent-Id'] = 'agent-1',
+                    ['content-length'] = '2',
+                },
+                setDataHandler = function(handler) dataHandler = handler end,
+            })
+            assert(dataHandler, 'setDataHandler was not registered')
+            dataHandler('{"type":"notify"}')
+            dataHandler('{"type":"notify"}')
+            env.actions.Propose = original
+            assert(calls == 1, 'Propose must run exactly once, got ' .. tostring(calls))
+            local status = decode(captures)
+            assert(status == 200, 'status ' .. tostring(status))
+            return status, { propose_calls = calls, single_execution = true }
+        end)
+
+        golden('oversized_content_length_keeps_auth_order', function()
+            -- The old dispatchHttp checked auth before the 16 KiB cap, so a
+            -- huge body with a bad token was 401, not 413. The adapter must
+            -- not short-circuit to 413 before authentication.
+            local captures = call({
+                method = 'POST',
+                path = '/agent/v1/act',
+                headers = {
+                    ['content-length'] = tostring(env.http.MAX_BODY + 1),
+                    ['authorization'] = 'Bearer wrong-token',
+                },
+                setDataHandler = forbidden,
+            })
+            local status, body = decode(captures)
+            assert(status == 401, 'status ' .. tostring(status))
+            assert(body.code == 'unauthorized')
+            return status, { code = body.code }
+        end)
+
+        golden('oversized_content_length_returns_413_after_auth', function()
+            -- With a valid token the cap is still enforced, and it is decided
+            -- before the body stream is requested (no setDataHandler call).
+            local captures = call({
+                method = 'POST',
+                path = '/agent/v1/act',
+                headers = {
+                    ['content-length'] = tostring(env.http.MAX_BODY + 1),
+                    ['authorization'] = 'Bearer agent-token',
+                    ['x-agent-id'] = 'agent-1',
+                },
                 setDataHandler = forbidden,
             })
             local status, body = decode(captures)

@@ -42,10 +42,10 @@ AgentTools.TOOLS = {
     required = { },
     schema = {
       ["limit"] = { type = "integer", minimum = 1, maximum = 200 },
-      ["job"] = { type = "string" },
-      ["gang"] = { type = "string" },
-      ["updated_since"] = { type = "string" },
-      ["fields"] = { type = "string" },
+      ["job"] = { type = "string", chars = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
+      ["gang"] = { type = "string", chars = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
+      ["updated_since"] = { type = "string", chars = " +,-.0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
+      ["fields"] = { type = "string", chars = ",ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 200 },
       ["order_by"] = { type = "string", enum = { "citizenid", "name", "job", "gang", "cash", "bank", "crypto", "last_updated", "schema_version" } },
       ["order"] = { type = "string", enum = { "asc", "desc" } },
     },
@@ -66,7 +66,7 @@ AgentTools.TOOLS = {
     params = { "citizenid" },
     required = { "citizenid" },
     schema = {
-      ["citizenid"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
     },
   },
   ["get_player_timeline"] = {
@@ -85,9 +85,9 @@ AgentTools.TOOLS = {
     params = { "citizenid", "limit", "since" },
     required = { "citizenid" },
     schema = {
-      ["citizenid"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["limit"] = { type = "integer", minimum = 1, maximum = 200 },
-      ["since"] = { type = "string" },
+      ["since"] = { type = "string", chars = " +,-.0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
     },
   },
   ["list_events"] = {
@@ -107,7 +107,7 @@ AgentTools.TOOLS = {
     required = { },
     schema = {
       ["since_id"] = { type = "integer", minimum = 0 },
-      ["type"] = { type = "string" },
+      ["type"] = { type = "string", chars = "*-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
       ["limit"] = { type = "integer", minimum = 1, maximum = 200 },
     },
   },
@@ -222,10 +222,10 @@ AgentTools.TOOLS = {
     params = { "citizenid", "text", "kind", "idempotency_key" },
     required = { "citizenid", "text" },
     schema = {
-      ["citizenid"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["text"] = { type = "string", min_length = 1, max_length = 300 },
       ["kind"] = { type = "string", enum = { "info", "success", "warning", "error", "primary" } },
-      ["idempotency_key"] = { type = "string" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["add_player_money"] = {
@@ -244,11 +244,11 @@ AgentTools.TOOLS = {
     params = { "citizenid", "account", "amount", "reason", "idempotency_key" },
     required = { "citizenid", "account", "amount", "reason" },
     schema = {
-      ["citizenid"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["account"] = { type = "string", enum = { "cash", "bank", "crypto" } },
       ["amount"] = { type = "integer", minimum = 1, maximum = 1000 },
       ["reason"] = { type = "string", min_length = 1, max_length = 128 },
-      ["idempotency_key"] = { type = "string" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["start_player_quest"] = {
@@ -267,9 +267,9 @@ AgentTools.TOOLS = {
     params = { "citizenid", "quest_id", "idempotency_key" },
     required = { "citizenid", "quest_id" },
     schema = {
-      ["citizenid"] = { type = "string" },
-      ["quest_id"] = { type = "string" },
-      ["idempotency_key"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["quest_id"] = { type = "string", chars = "-.0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["send_announce"] = {
@@ -290,7 +290,7 @@ AgentTools.TOOLS = {
     schema = {
       ["message"] = { type = "string", min_length = 1, max_length = 300 },
       ["kind"] = { type = "string", enum = { "info", "success", "warning", "error", "primary" } },
-      ["idempotency_key"] = { type = "string" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["set_weather"] = {
@@ -310,7 +310,7 @@ AgentTools.TOOLS = {
     required = { "weather" },
     schema = {
       ["weather"] = { type = "string", enum = { "EXTRASUNNY", "CLEAR", "CLOUDS", "SMOG", "FOGGY", "OVERCAST", "RAIN", "THUNDER", "CLEARING", "NEUTRAL", "SNOW", "BLIZZARD", "SNOWLIGHT", "XMAS", "HALLOWEEN" } },
-      ["idempotency_key"] = { type = "string" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["set_time_of_day"] = {
@@ -331,7 +331,7 @@ AgentTools.TOOLS = {
     schema = {
       ["hour"] = { type = "integer", minimum = 0, maximum = 23 },
       ["minute"] = { type = "integer", minimum = 0, maximum = 59 },
-      ["idempotency_key"] = { type = "string" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["set_player_job"] = {
@@ -350,10 +350,10 @@ AgentTools.TOOLS = {
     params = { "citizenid", "job", "grade", "idempotency_key" },
     required = { "citizenid", "job" },
     schema = {
-      ["citizenid"] = { type = "string" },
-      ["job"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["job"] = { type = "string", chars = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
       ["grade"] = { type = "integer", minimum = 0, maximum = 100 },
-      ["idempotency_key"] = { type = "string" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["teleport_player"] = {
@@ -372,11 +372,11 @@ AgentTools.TOOLS = {
     params = { "citizenid", "x", "y", "z", "idempotency_key" },
     required = { "citizenid", "x", "y", "z" },
     schema = {
-      ["citizenid"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["x"] = { type = "number", minimum = -10000, maximum = 10000 },
       ["y"] = { type = "number", minimum = -10000, maximum = 10000 },
       ["z"] = { type = "number", minimum = -10000, maximum = 10000 },
-      ["idempotency_key"] = { type = "string" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["spawn_vehicle"] = {
@@ -395,10 +395,10 @@ AgentTools.TOOLS = {
     params = { "citizenid", "model", "plate", "idempotency_key" },
     required = { "citizenid", "model" },
     schema = {
-      ["citizenid"] = { type = "string" },
-      ["model"] = { type = "string" },
-      ["plate"] = { type = "string" },
-      ["idempotency_key"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["model"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
+      ["plate"] = { type = "string", chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", min_length = 1, max_length = 8 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
   ["grant_player_item"] = {
@@ -417,11 +417,11 @@ AgentTools.TOOLS = {
     params = { "citizenid", "item", "amount", "reason", "idempotency_key" },
     required = { "citizenid", "item", "amount", "reason" },
     schema = {
-      ["citizenid"] = { type = "string" },
-      ["item"] = { type = "string" },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["item"] = { type = "string", chars = "-.0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
       ["amount"] = { type = "integer", minimum = 1, maximum = 50 },
       ["reason"] = { type = "string", min_length = 1, max_length = 128 },
-      ["idempotency_key"] = { type = "string" },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
 }
@@ -477,6 +477,14 @@ function AgentTools.validate(name, args)
       end
       if rule.max_length ~= nil and #value > rule.max_length then
         return false, 'invalid_params'
+      end
+      if rule.chars then
+        for i = 1, #value do
+          local char = value:sub(i, i)
+          if not string.find(rule.chars, char, 1, true) then
+            return false, 'invalid_params'
+          end
+        end
       end
     end
   end

@@ -26,8 +26,11 @@ jobs:
           python-version: "3.12"
 
       - name: Python syntax
-        run: python3 -m compileall -q tests
+        run: python3 -m compileall -q tests ../tools
         working-directory: T-CityLite.base
+
+      - name: Agent tool registry drift
+        run: python3 tools/agent_tools.py --check
 
       - name: CFG integrity (ensure targets exist)
         run: python3 tests/check_cfgs.py
@@ -60,6 +63,7 @@ jobs:
       - name: Run unit tests
         run: |
           python3 -m pytest -q tests/unit
+          python3 -m pytest -q tests/agent
           python3 -m pytest -q ../tests/agent
         working-directory: T-CityLite.base
 
