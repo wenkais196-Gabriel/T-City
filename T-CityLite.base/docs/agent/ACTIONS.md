@@ -25,7 +25,7 @@ integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 | `notify` | L1 表现 | `citizenid`, `text`, `kind?` | `approved` → `executed` | none (policy only) | `Player.Functions.Notify` (or `QBCore:Notify`) |
 | `announce` | L2 世界 | `message`, `kind?` | `pending_approval` | **always** | broadcast to `QBCore.Functions.GetPlayers()` via `Player.Functions.Notify(message, kind, 5000)`; `delivered` count, `0` is not a failure |
 | `set_weather` | L2 世界 | `weather` | `pending_approval` | **always** | `exports['qb-weathersync']:setWeather(weather)` + `getWeatherState()` read-back |
-| `set_time_of_day` | L2 世界 | `hour`, `minute?` | `pending_approval` | **always** | `exports['qb-weathersync']:setTime(hour, minute)` (no read-back) |
+| `set_time_of_day` | L2 世界 | `hour`, `minute?` | `pending_approval` | **always** | `setTime(hour, minute)` + `getTime()` read-back |
 | `add_money` | L4 经济 | `citizenid`, `account`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddMoney(account, amount, 'agent_action:<id>')` + delta verification |
 | `start_quest` | L3 任务 | `citizenid`, `quest_id` | `pending_approval` | **always** | `exports['custom-quest']:TriggerQuest(source, quest_id)` |
 | `set_job` | L3 职业 | `citizenid`, `job`, `grade?` | `pending_approval` | **always** | `Player.Functions.SetJob(job, grade)` + job/grade read-back verification |
@@ -622,9 +622,11 @@ Tokens are convars only; clearing `agent_actions_token` makes all HTTP calls
   `weather_sync_unavailable` (a pending row is rejected at approval time).
 - `set_weather.weather` is validated against the static enum above, not against
   a live resource config; the executor still verifies the applied state.
-- `set_time_of_day` has no read-back step (see §8): a successful `setTime`
-  return is trusted. `qb-weathersync.setTime` also freezes the clock as a side
-  effect of that resource; this slice does not change that behaviour.
+- `set_time_of_day` reads `getTime()` back after `setTime` and compares
+  hour/minute; older weathersync builds without that export degrade to trusting
+  the `setTime` return value with `result.verify_result = false`.
+  `qb-weathersync.setTime` also freezes the clock as a side effect of that
+  resource; this slice does not change that behaviour.
 - An `announce` that reaches zero players is `executed` with
   `result.delivered = 0`; that is a normal result, not a failure.
 
@@ -825,8 +827,10 @@ so an over-privileged request is never invisible:
 
 - **When:** `Propose` fails `CheckPolicy`, or `Approve` fails the policy
   re-check (the world changed between propose and approve). Normalization
-  failures (`invalid_params`, `invalid_account`, and the per-action cap check
-  that runs while normalizing) return before policy and are not denial rows.
+  failures (`invalid_params`, `invalid_account`, `unsupported_action`, and the
+  per-action cap check that runs while normalizing) **are** denial rows too.
+  Only failures before normalization runs (resource disabled, bad token, missing
+  `X-Agent-Id`, bad idempotency key) return too early to be recorded.
 - **Response unchanged:** the denial insert is best-effort (`pcall`, warning
   only) and never changes the response body, the status code or the idempotency
   semantics. A rejected proposal still gets no action id.
@@ -1104,8 +1108,9 @@ it is irreversible.
 
 1. `exports['qb-weathersync']:setTime(hour, minute)`; anything other than
    `true` becomes `failed` (`execution_failed`).
-2. This slice intentionally performs **no read-back** (the contract does not
-   trust the clock getter); success `result` is `{ hour, minute, at }`.
+2. Reads `getTime()` back and compares hour/minute; a mismatch is
+   `verification_failed`. If the export is absent (older weathersync), success
+   `result` is `{ hour, minute, at }` with `verify_result = false`.
 
 Both world-state actions require `qb-weathersync` to be `started` before the
 approval is executed (re-checked in `Approve`); a stopped resource rejects the
@@ -1213,8 +1218,8 @@ remain policy rejections before execution.
   duplicate key idempotent, cap rejected, agent token cannot approve, start_quest
   approved and executed.
 - World actions: `announce` counts per-player Notify calls; `set_weather`
-  verifies with `getWeatherState()`; `set_time_of_day` deliberately skips the
-  `getTime()` export and trusts `setTime()` (see §8). `AgentPolicy` (the
+  verifies with `getWeatherState()`; `set_time_of_day` verifies with
+  `getTime()` (see §8). `AgentPolicy` (the
   registry) rejects a weather value before any resource call.
 
 ---

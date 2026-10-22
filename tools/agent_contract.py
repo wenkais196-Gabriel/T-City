@@ -55,25 +55,38 @@ CODE_TO_KIND: dict[str, str] = {
     "body_too_large": "invalid_argument",
     "idempotency_key_required": "invalid_argument",
     "idempotency_conflict": "invalid_argument",
+    "missing_body": "invalid_argument",
+    "invalid_cursor": "invalid_argument",
+    "cursor_epoch_mismatch": "invalid_argument",
+    "plate_mismatch": "invalid_argument",
     "method_not_allowed": "invalid_argument",
     # unauthorized
     "unauthorized": "unauthorized",
     "forbidden": "unauthorized",
     "missing_agent_id": "unauthorized",
     "agent_token_not_configured": "unauthorized",
+    "live_token_not_configured": "unauthorized",
     "admin_token_not_configured": "unauthorized",
     # not_found
     "not_found": "not_found",
     "quest_not_found": "not_found",
+    "job_not_found": "not_found",
+    "grade_not_found": "not_found",
+    "item_not_found": "not_found",
+    "model_not_found": "not_found",
     # target_offline
     "player_not_found": "target_offline",
     # target_unavailable
     "account_unavailable": "target_unavailable",
+    "job_unavailable": "target_unavailable",
+    "not_in_vehicle": "target_unavailable",
     # policy_denied
     "disabled": "policy_denied",
     "invalid_status": "policy_denied",
     "expired": "policy_denied",
     "unsupported_tool": "policy_denied",
+    "cursor_expired": "policy_denied",
+    "live_disabled": "policy_denied",
     # rate_limited
     "rate_limited": "rate_limited",
     # timeout
@@ -89,10 +102,14 @@ CODE_TO_KIND: dict[str, str] = {
     "circuit_open": "upstream_unavailable",
     "gateway_unreachable": "upstream_unavailable",
     "director_unreachable": "upstream_unavailable",
+    "executor_unavailable": "upstream_unavailable",
+    "weather_sync_unavailable": "upstream_unavailable",
     "registry_unavailable": "upstream_unavailable",
     # execution_failed
     "execution_failed": "execution_failed",
     "trigger_quest_failed": "execution_failed",
+    "verification_failed": "execution_failed",
+    "not_yieldable": "execution_failed",
     # partial_success
     "partial_success": "partial_success",
     # internal_error

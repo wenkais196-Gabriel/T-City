@@ -860,12 +860,13 @@ return {
                         .. tostring(err and err.code))
             end
 
-            local defaulted = assert(env.policy.Normalize('remove_item', {
+            local missing, missingErr = env.policy.Normalize('remove_item', {
                 citizenid = 'ABC12345',
                 item = 'bread',
                 reason = 'cleanup',
-            }))
-            assert(defaulted.amount == 50, 'amount must default to 50 (the default cap)')
+            })
+            assert(missing == nil, 'amount must be required, not defaulted to the cap')
+            assert(missingErr.code == 'invalid_params', tostring(missingErr.code))
 
             local capped = newEnv({ agent_actions_max_item_amount = '7' })
             local overCap, overCapErr = capped.policy.Normalize('remove_item', {
