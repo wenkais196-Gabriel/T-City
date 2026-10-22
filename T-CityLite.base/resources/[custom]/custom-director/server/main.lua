@@ -315,7 +315,7 @@ local function buildContext(actionType, params)
                 source = playerSource(player),
                 money = player.PlayerData and player.PlayerData.money or nil,
             }
-            if actionType == 'teleport' then
+            if actionType == 'teleport' or actionType == 'spawn_vehicle' then
                 context.position = playerPosition(playerSource(player))
             elseif actionType == 'set_job' then
                 context.player.job = playerJob(player)
@@ -341,6 +341,12 @@ local function buildContext(actionType, params)
         context.jobs = QBCore.Shared and QBCore.Shared.Jobs or nil
     elseif actionType == 'grant_item' then
         context.items = QBCore.Shared and QBCore.Shared.Items or nil
+    end
+
+    -- spawn_vehicle: resolve the model hash here so policy.lua keeps zero
+    -- native dependencies.
+    if actionType == 'spawn_vehicle' then
+        context.model_hash = GetHashKey(params.model)
     end
 
     return context, nil
@@ -690,6 +696,86 @@ local function executeTeleport(actionId, params)
     }
 end
 
+-- Bounded server-side vehicle spawn. Deliberately not QBCore.Functions.SpawnVehicle:
+-- its `while not DoesEntityExist(veh) do Wait(0) end` has no timeout and can
+-- hang the approving thread forever on a model that never materialises.
+local SPAWN_TIMEOUT_MS = 2000
+
+local function executeSpawnVehicle(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_offline', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    -- GetPlayerPed is 0 while the player is loading or already dropping.
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false, 'player_offline', nil end
+
+    local coords = GetEntityCoords(ped)
+    local x, y, z = coords.x, coords.y, coords.z
+
+    local heading = 0.0
+    if type(GetEntityHeading) == 'function' then
+        heading = GetEntityHeading(ped) or 0.0
+    end
+
+    -- Spawn 1.5 m in front of the ped. If the forward-vector native is not
+    -- available, degrade to spawning at the ped's exact position.
+    local forwardX, forwardY = nil, nil
+    if type(GetEntityForwardVector) == 'function' then
+        local forwardOk, forward = pcall(GetEntityForwardVector, ped)
+        if forwardOk and forward then
+            local readOk, read = pcall(function()
+                return { x = forward.x, y = forward.y }
+            end)
+            if readOk and type(read.x) == 'number' and type(read.y) == 'number' then
+                forwardX, forwardY = read.x, read.y
+            end
+        end
+    end
+    if forwardX ~= nil and forwardY ~= nil then
+        x = x + forwardX * 1.5
+        y = y + forwardY * 1.5
+    end
+
+    local veh
+    if type(CreateVehicleServerSetter) == 'function' then
+        veh = CreateVehicleServerSetter(params.model, 'automobile', x, y, z, heading)
+    else
+        veh = CreateVehicle(params.model, x, y, z, heading, true, false)
+    end
+    if not veh or veh == 0 then
+        return false, 'vehicle_spawn_failed', nil
+    end
+
+    local deadline = GetGameTimer() + SPAWN_TIMEOUT_MS
+    while not DoesEntityExist(veh) and GetGameTimer() < deadline do
+        Wait(0)
+    end
+    if not DoesEntityExist(veh) then
+        pcall(DeleteEntity, veh)
+        return false, 'vehicle_spawn_timeout', nil
+    end
+
+    if params.plate then
+        SetVehicleNumberPlateText(veh, params.plate)
+        local readBack = GetVehicleNumberPlateText(veh)
+        local readPlate = type(readBack) == 'string' and readBack:gsub('%s+', '') or ''
+        if readPlate ~= params.plate then
+            return false, ('verification_failed: plate read back %q, expected %q'):format(
+                tostring(readBack), tostring(params.plate)), nil
+        end
+    end
+
+    return true, nil, {
+        entity = veh,
+        model = params.model,
+        plate = params.plate,
+        coords = { x = x, y = y, z = z },
+    }
+end
+
 local function executeAction(actionId, actionType, params)
     if actionType == 'notify' then
         return executeNotify(actionId, params)
@@ -709,6 +795,8 @@ local function executeAction(actionId, actionType, params)
         return executeSetTimeOfDay(actionId, params)
     elseif actionType == 'teleport' then
         return executeTeleport(actionId, params)
+    elseif actionType == 'spawn_vehicle' then
+        return executeSpawnVehicle(actionId, params)
     end
     return false, 'unsupported_action', nil
 end
@@ -722,6 +810,7 @@ AgentActions._Execute = {
     set_weather = executeSetWeather,
     set_time_of_day = executeSetTimeOfDay,
     teleport = executeTeleport,
+    spawn_vehicle = executeSpawnVehicle,
 }
 
 -- Internal context builder for the pure-Lua harness (same contract as

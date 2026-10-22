@@ -598,3 +598,15 @@ TTL 线程 30s tick：过期 → `delete_vehicle(temp=true)`；玩家在车内�
 **关键结论**：`Propose`/`Approve` 在 FiveM 的 HTTP 回调协程内执行，`Citizen.Await` 可正常让出；非协程调用会得到 `not_yieldable`。因此审批路径不需要改成两段式队列。
 
 `teleport_player` 已由 `planned` 改为 `active`（23 工具 / 22 active），仅剩 `spawn_vehicle`。
+
+### 13.3 第四片（spawn_vehicle，2026-10-22）
+
+`spawn_vehicle`（L3，必须审批）补齐 15 个在册动作里的最后一个：
+
+- 参数严格白名单 `citizenid/model/plate?`；`model` 小写化后用 `GetHashKey` 判存（hash 由 main 注入 `ctx.model_hash`，policy 保持无 native）。
+- 执行：玩家上前方 1.5m 生成，`CreateVehicleServerSetter` 优先、`CreateVehicle` 回退。
+- **有界等待**：`deadline = GetGameTimer() + 2000`，`DoesEntityExist` 轮询；超时 `DeleteEntity` 后返回 `vehicle_spawn_timeout`。**不使用** qb-core 的 `SpawnVehicle`（内部 `while Wait(0)` 无上界）。
+- plate 写入后回读、去空格比较，不一致 `verification_failed`；该路径**不删除实体**（已文档化，避免"报错但车还在"变成"报错且车没了"）。
+- 不发钥匙、不写 `player_vehicles`、不设 bucket——这些属于车库/钥匙领域，不应由 agent 动作直接越权完成。
+
+至此 v1 工具面 **23 工具 / 23 active** 全部落地，`planned` 集合为空。

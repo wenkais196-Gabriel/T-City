@@ -20,6 +20,16 @@ return function(env)
     env.resource_states = env.resource_states or {}
     env.peds = env.peds or {}
     env.entity_coords = env.entity_coords or {}
+    env.entity_headings = env.entity_headings or {}
+    env.entity_forward = env.entity_forward or {}
+    env.created_entities = env.created_entities or {}
+    env.vehicles = env.vehicles or {}
+    env.vehicle_plates = env.vehicle_plates or {}
+    env.deleted_entities = env.deleted_entities or {}
+    env.hashes = env.hashes or {}
+    env.next_entity_id = env.next_entity_id or 500
+    env.entity_exists_override = env.entity_exists_override
+    env.plate_readback_override = env.plate_readback_override
     env.now = env.now or 0
     env.invoking_resource = env.invoking_resource
     env.export_overrides = env.export_overrides or {}
@@ -170,6 +180,77 @@ return function(env)
 
     function _G.GetGameTimer()
         return tonumber(env.now) or 0
+    end
+
+    -- Vehicle spawn/verification natives used by custom-director's
+    -- spawn_vehicle executor. env.hashes overrides a model hash (0 = unknown);
+    -- env.entity_exists_override forces the bounded-wait timeout path.
+    function _G.GetHashKey(model)
+        local key = tostring(model)
+        if env.hashes[key] ~= nil then
+            return tonumber(env.hashes[key]) or 0
+        end
+        local hash = 0
+        for index = 1, #key do
+            hash = (hash * 31 + key:byte(index)) % 2147483647
+        end
+        return hash == 0 and 1 or hash
+    end
+
+    function _G.GetEntityHeading(ped)
+        return env.entity_headings[tonumber(ped) or ped] or 0.0
+    end
+
+    function _G.GetEntityForwardVector(ped)
+        return env.entity_forward[tonumber(ped) or ped] or { x = 1.0, y = 0.0, z = 0.0 }
+    end
+
+    local function recordVehicle(native, model, vehtype, x, y, z, heading)
+        env.next_entity_id = env.next_entity_id + 1
+        local entity = env.next_entity_id
+        env.vehicles[#env.vehicles + 1] = {
+            entity = entity,
+            native = native,
+            model = model,
+            vehtype = vehtype,
+            x = x,
+            y = y,
+            z = z,
+            heading = heading,
+        }
+        env.created_entities[entity] = true
+        return entity
+    end
+
+    function _G.CreateVehicleServerSetter(model, vehtype, x, y, z, heading)
+        return recordVehicle('server_setter', model, vehtype, x, y, z, heading)
+    end
+
+    function _G.CreateVehicle(model, x, y, z, heading)
+        return recordVehicle('create_vehicle', model, nil, x, y, z, heading)
+    end
+
+    function _G.DoesEntityExist(entity)
+        if env.entity_exists_override ~= nil then
+            return env.entity_exists_override == true
+        end
+        return env.created_entities[tonumber(entity) or entity] == true
+    end
+
+    function _G.DeleteEntity(entity)
+        env.deleted_entities[#env.deleted_entities + 1] = entity
+        env.created_entities[tonumber(entity) or entity] = nil
+        return true
+    end
+
+    function _G.SetVehicleNumberPlateText(entity, plate)
+        env.vehicle_plates[tonumber(entity) or entity] = plate
+        return true
+    end
+
+    function _G.GetVehicleNumberPlateText(entity)
+        if env.plate_readback_override ~= nil then return env.plate_readback_override end
+        return env.vehicle_plates[tonumber(entity) or entity] or ''
     end
 
     function _G.StopResource()

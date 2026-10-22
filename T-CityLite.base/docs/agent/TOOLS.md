@@ -3,7 +3,7 @@
 
 **Generated file — DO NOT EDIT.** Source: `tools/agent_tools.json` (registry_version `1.1.0`, schema_version `1`).
 
-23 tools: 22 active, 1 planned, 0 deprecated. Only `active` tools are advertised to agents.
+23 tools: 23 active, 0 planned, 0 deprecated. Only `active` tools are advertised to agents.
 
 ## Routing table
 
@@ -30,7 +30,7 @@
 | 19 | `set_time_of_day` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_time_of_day |
 | 20 | `set_player_job` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | set_player_job |
 | 21 | `teleport_player` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | teleport_player |
-| 22 | `spawn_vehicle` | planned | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_timeline | — |
+| 22 | `spawn_vehicle` | active | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_timeline | — |
 | 23 | `grant_player_item` | active | effect | director | default | POST `/agent/v1/act` | L4 | yes | required | supported | get_player_snapshot | — |
 
 ## Risk and approval table
