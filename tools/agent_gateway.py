@@ -60,7 +60,12 @@ _SAFE_ERRORS = {
 # Response helpers
 # ---------------------------------------------------------------------------
 def _json_bytes(payload: Any) -> bytes:
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    # Defence in depth for a JSON API that can echo file content (the schema
+    # registry). Escaping the HTML metacharacters keeps the bytes valid JSON
+    # while making the body inert if a browser ever sniffs it as markup.
+    text = text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    return text.encode("utf-8")
 
 
 def _envelope(
@@ -128,6 +133,7 @@ class AgentHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
         self.send_header("Connection", "close")
         for key, value in (headers or {}).items():
             self.send_header(key, value)
