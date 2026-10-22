@@ -404,3 +404,20 @@ above was performed with the normal `.env` credentials.
 - Future: if `player_vehicles` gains a creation timestamp, add a vehicle branch
   to `agent_player_timeline`. If a per-player crypto ledger is added, replace
   `players.money.$.crypto` with that authoritative source.
+
+---
+
+## 7. Agent 接管栈（2026-10）
+
+读层之上又叠了四层，文档分别如下：
+
+| 文档 | 内容 |
+|---|---|
+| [`STATUS.md`](STATUS.md) | **先看这个**：分层现状、17 个动作覆盖、设计差异、上手顺序、未验证项 |
+| [`ACTIONS.md`](ACTIONS.md) | 动作契约：风险分级、参数规范化、审批、执行与回读、错误码、`agent_denials` |
+| [`TOOLS.md`](TOOLS.md) | 30 个工具的路由与风险表（由 `tools/agent_tools.json` 生成，勿手改） |
+| [`EVAL.md`](EVAL.md) | 评测：导出、指标定义（含 denial_rate）、已知盲区 |
+| [`SMOKE.md`](SMOKE.md) | 实机冒烟：三段式检查与常见失败 |
+| [`design/`](design/) | 五份设计（实时感知 / 效果通道 / 工具契约 / 写操作 / 测试评测） |
+
+实机验证顺序：建表（`v2.3`、`v2.5`）→ 开 convar → `tools/agent_smoke.py` → 导出审计 → `tools/agent_eval.py`。
