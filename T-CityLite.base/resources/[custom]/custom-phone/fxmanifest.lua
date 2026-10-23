@@ -13,7 +13,8 @@ shared_scripts {
 }
 
 client_scripts {
-    'client/main.lua'
+    'client/main.lua',
+    'client/call_history.lua'
 }
 
 server_scripts {
@@ -29,7 +30,8 @@ ui_page 'html/index.html'
 
 files {
     'html/index.html',
-    'html/assets/*'
+    'html/assets/*',
+    'html/assets/audio/*'
 }
 
 dependencies {

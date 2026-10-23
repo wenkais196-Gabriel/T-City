@@ -14,11 +14,49 @@
   --system-green: 142.1 76.2% 36.3%;
   --system-blue: 221.2 83.2% 53.3%;
   --system-orange: 24.6 95% 53.1%;
-  
+
+  /* Theme tokens used by the shell/home screen. `body.theme-light` below
+     swaps them; individual apps keep their own per-app skins. */
+  --phone-screen-bg: #09090b;
+  --phone-status-text: #ffffff;
+  --phone-status-border: rgba(255, 255, 255, 0.7);
+  --phone-signal: rgba(255, 255, 255, 0.3);
+  --phone-signal-active: #ffffff;
+  --phone-home-bar: rgba(255, 255, 255, 0.6);
+  --phone-home-bar-hover: #ffffff;
+  --phone-wallpaper: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+  --phone-wallpaper-dim: rgba(0, 0, 0, 0.4);
+  --phone-home-text: #ffffff;
+  --phone-home-muted: #dddddd;
+  --phone-home-accent: #e5c060;
+  --phone-home-muted-2: #999999;
+  --phone-home-label-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  --phone-glass-bg: rgba(15, 15, 20, 0.65);
+  --phone-glass-border: rgba(255, 255, 255, 0.08);
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+body.theme-light {
+  --phone-screen-bg: #eef1f6;
+  --phone-status-text: #14151a;
+  --phone-status-border: rgba(0, 0, 0, 0.65);
+  --phone-signal: rgba(0, 0, 0, 0.25);
+  --phone-signal-active: #14151a;
+  --phone-home-bar: rgba(0, 0, 0, 0.35);
+  --phone-home-bar-hover: #14151a;
+  --phone-wallpaper: linear-gradient(135deg, #dbeafe, #eef2ff 45%, #fce7f3);
+  --phone-wallpaper-dim: rgba(255, 255, 255, 0.15);
+  --phone-home-text: #14151a;
+  --phone-home-muted: #475569;
+  --phone-home-accent: #a16207;
+  --phone-home-muted-2: #475569;
+  --phone-home-label-shadow: none;
+  --phone-glass-bg: rgba(255, 255, 255, 0.72);
+  --phone-glass-border: rgba(0, 0, 0, 0.08);
 }
 
 body {

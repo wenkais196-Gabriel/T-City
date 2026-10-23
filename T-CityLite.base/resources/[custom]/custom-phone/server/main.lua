@@ -1053,6 +1053,60 @@ QBCore.Functions.CreateCallback('phone:server:hangupCall', function(source, cb, 
 end)
 
 -- ----------------------------------------------------
+-- Call history (read-only; does not touch activeCalls)
+-- ----------------------------------------------------
+-- The NUI opens this from the Phone app's "Recent" list. The viewer's own
+-- number comes from charinfo, so a client can never read another player's log.
+QBCore.Functions.CreateCallback('phone:server:getCallHistory', function(source, cb)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return cb({ success = false, calls = {} }) end
+
+    local ownNumber = Player.PlayerData.charinfo.phone
+    local citizenid = Player.PlayerData.citizenid
+    if not ownNumber then return cb({ success = false, calls = {} }) end
+
+    -- Names of players currently online, keyed by their phone number.
+    local onlineNames = {}
+    for _, playerId in ipairs(QBCore.Functions.GetPlayers()) do
+        local Online = QBCore.Functions.GetPlayer(playerId)
+        if Online and Online.PlayerData.charinfo and Online.PlayerData.charinfo.phone then
+            local info = Online.PlayerData.charinfo
+            onlineNames[info.phone] = info.firstname .. ' ' .. info.lastname
+        end
+    end
+
+    -- LEFT JOIN resolves the viewer's own contact name in the same round trip.
+    -- The other party is the receiver for outgoing rows and the caller for
+    -- incoming rows; `direction` uses the same caller check.
+    MySQL.Async.fetchAll([[
+        SELECT c.id, c.caller, c.receiver, c.duration, c.status, c.timestamp,
+               ct.name AS contact_name
+        FROM phone_calls c
+        LEFT JOIN phone_contacts ct
+               ON ct.citizenid = ? AND ct.number = IF(c.caller = ?, c.receiver, c.caller)
+        WHERE c.caller = ? OR c.receiver = ?
+        ORDER BY c.id DESC
+        LIMIT 20
+    ]], { citizenid, ownNumber, ownNumber, ownNumber }, function(rows)
+        local calls = {}
+        for _, row in ipairs(rows or {}) do
+            local outgoing = row.caller == ownNumber
+            local otherNumber = outgoing and row.receiver or row.caller
+            calls[#calls + 1] = {
+                id = row.id,
+                direction = outgoing and 'out' or 'in',
+                number = otherNumber,
+                name = onlineNames[otherNumber] or row.contact_name or '',
+                status = row.status,
+                duration = tonumber(row.duration) or 0,
+                timestamp = row.timestamp,
+            }
+        end
+        cb({ success = true, calls = calls })
+    end)
+end)
+
+-- ----------------------------------------------------
 -- Player cleanup (cache + orphaned calls)
 -- ----------------------------------------------------
 AddEventHandler('playerDropped', function()

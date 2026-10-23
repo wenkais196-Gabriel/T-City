@@ -58,6 +58,12 @@ let mockNotifications = [
   { id: 2, title: '👮 Police Dispatch', content: 'Wanted fugitive reported near Sandy Shores.', timestamp: new Date(Date.now() - 3600000 * 3).toISOString(), is_read: false },
 ];
 
+let mockCallHistory = [
+  { id: 3, direction: 'in', number: '1112223333', name: 'Sheriff Miller', status: 'completed', duration: 142, timestamp: new Date(Date.now() - 3600000 * 1).toISOString() },
+  { id: 2, direction: 'out', number: '5556667777', name: 'Dr. Sarah', status: 'completed', duration: 37, timestamp: new Date(Date.now() - 3600000 * 2).toISOString() },
+  { id: 1, direction: 'in', number: '9998887777', name: 'Big Tony', status: 'missed', duration: 0, timestamp: new Date(Date.now() - 3600000 * 6).toISOString() },
+];
+
 let mockJobBoard = [
   {
     id: 1,
@@ -142,6 +148,9 @@ export async function fetchNui<T = any>(eventName: string, data?: any): Promise<
         jobBoard: mockJobBoard,
         factionMessages: mockFactionMessages[mockPlayerData.career.primary_role as keyof typeof mockFactionMessages] || []
       } as any;
+
+    case 'getCallHistory':
+      return { success: true, calls: mockCallHistory } as any;
 
     // Contact CRUD Mock
     case 'addContact': {
