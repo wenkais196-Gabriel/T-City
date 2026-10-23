@@ -59,7 +59,7 @@
 
 手机的开/关逻辑、游戏内时间天气同步、主数据初始化加载。按下 `M` 键或输入 `/phone` 命令开机；`M`、`ESC`、鼠标右键或在 UI 中点击关闭按钮关机。
 
-打开时通过 `custom-ui:OpenMenu({ keepInput = true })` 取得 NUI 焦点并**保留 WASD 移动**：先复位焦点，再 `SetNuiFocus(true,true)`，最后 `SetNuiFocusKeepInput(true)`。关闭统一走 `custom-ui:CloseMenu()`，释放焦点、`keepInput` 并触发 300ms 攻击/瞄准保护。打开后 50–750ms 内有焦点自检，被别的资源抢走会重新申请；资源停止或重启时也会强制释放，避免光标卡死。
+打开时 `SetNuiFocus(true,true)` 后立即 `SetNuiFocusKeepInput(true)`，取得光标的同时**保留 WASD 移动**；视角/近战每帧禁用（控制 1–6 等），movement（30–35）不碰。关闭统一走 `custom-ui:CloseMenu()`：只 `SetNuiFocus(false,false)` 并触发 300ms 攻击/瞄准保护，**不强制关闭 keepInput**（qb-phone 同款；提前关掉会把下一次打开的 WASD 冻结）。打开后 50–750ms 内有焦点自检，被别的资源抢走会重新申请；资源停止或重启时也会强制释放，避免光标卡死。
 
 **源码**: `client/main.lua` (OpenPhone / ClosePhone 函数), `web/src/App.svelte` (事件监听)
 
