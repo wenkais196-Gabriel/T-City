@@ -73,7 +73,8 @@ function CloseMenu(opts)
     opts = opts or {}
     isOpen = false
     SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
+    -- Do not force keepInput off here: qb-phone leaves it alone and movement
+    -- resumes after close because focus is already gone.
     GuardControls(opts.guardMs or 300)
 end
 

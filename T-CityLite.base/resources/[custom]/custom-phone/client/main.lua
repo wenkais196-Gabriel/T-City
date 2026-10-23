@@ -16,8 +16,8 @@ local function ClosePhone()
     TriggerServerEvent('phone:server:focusState', { phase = 'close-start' })
     local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
     if not ok then
-        SetNuiFocusKeepInput(false)
         SetNuiFocus(false, false)
+        -- Keep keepInput untouched (qb-phone style): movement must resume.
     end
     SendNUIMessage({
         action = 'phone:close'
@@ -51,9 +51,10 @@ local function OpenPhone()
     -- Cursor first: keepInput=true left the mouse bound to camera look on a
     -- real client (NUI focused, no usable cursor). Menus that need movement
     -- can opt in later, but a phone must be clickable.
-    -- Exactly qb-phone: grant focus only. No focus reset and no keepInput call
-    -- before/after; the previous reset path is what froze WASD here.
+    -- qb-phone never turns keepInput off, so movement survives while the phone
+    -- is open. Grant focus, then explicitly keep game input on.
     SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(true)
     
     -- Play GTA V native phone-out animation
     local ped = PlayerPedId()
