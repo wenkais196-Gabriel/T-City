@@ -8,14 +8,13 @@ test_economy.py — Economy Service 单元测试
 """
 
 import os
-from pathlib import Path
-BASE_DIR = str(Path(__file__).resolve().parents[3])
 import subprocess
 import tempfile
+from pathlib import Path
 import pytest
 
 
-ECONOMY_LUA = BASE_DIR + '//resources/[standalone]/core-framework/services/economy_service.lua'
+ECONOMY_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'services' / 'economy_service.lua')
 
 
 def run_economy_test(test_code: str, extra_mocks: str = "") -> dict:
@@ -298,8 +297,34 @@ class TestEconomyBusRegistration:
 assert(Bus.economy ~= nil, "not on Bus.economy")
 assert(Bus.economy.GetBalance ~= nil, "GetBalance missing")
 assert(Bus.economy.AddScaled ~= nil, "AddScaled missing")
+assert(Bus.economy.AddMoney ~= nil, "AddMoney missing")
 assert(Bus.economy.Transfer ~= nil, "Transfer missing")
 local svc = Bus.GetService("economy")
 assert(svc ~= nil, "GetService('economy') returned nil")
+""")
+        assert result['ok'], f"Lua error: {result['stderr']}"
+
+
+class TestEconomyAddMoney:
+    """core_economy 网关使用的直接加钱路径"""
+
+    def test_add_money_by_citizenid(self):
+        result = run_economy_test("""
+__test.money_added = {}
+_DirtyFlush.marked_dirty = {}
+local ok = EconomyService.AddMoney("CID002", "bank", 1234, "quest:test")
+assert(ok == true, "AddMoney should succeed")
+assert(#__test.money_added == 1, "money should be added once")
+assert(__test.money_added[1].account == "bank")
+assert(__test.money_added[1].amount == 1234)
+assert(#_DirtyFlush.marked_dirty == 1, "dirty should be marked")
+assert(_DirtyFlush.marked_dirty[1].cid == "CID002")
+""")
+        assert result['ok'], f"Lua error: {result['stderr']}"
+
+    def test_add_money_unknown_player(self):
+        result = run_economy_test("""
+local ok = EconomyService.AddMoney("NOPE", "bank", 100, "quest:test")
+assert(ok == false, "unknown player should return false")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"

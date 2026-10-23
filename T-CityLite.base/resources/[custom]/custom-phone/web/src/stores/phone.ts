@@ -7,6 +7,9 @@ import { fetchNui } from '../utils/nui';
 export const isPhoneOpen = writable<boolean>(false);
 export const activeApp = writable<string>('home'); // home, messages, contacts, banking, notifications, jobboard, faction, cityfeed, leader_mayor, leader_sheriff, leader_gangboss
 
+// Game clock (GTA V native time) — status bar and home widget share this
+export const gameTime = writable<{ hour: number; minute: number }>({ hour: 0, minute: 0 });
+
 // Player Metadata
 export const playerData = writable<any>({
   citizenid: 'CIV12345',

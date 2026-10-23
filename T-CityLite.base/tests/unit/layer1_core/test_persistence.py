@@ -12,26 +12,35 @@ test_persistence.py — Persistence Manager 单元测试
 """
 
 import os
-from pathlib import Path
-BASE_DIR = str(Path(__file__).resolve().parents[3])
 import subprocess
 import tempfile
+from pathlib import Path
 import pytest
 
 
-PERSISTENCE_LUA = BASE_DIR + '//resources/[standalone]/core-framework/services/persistence_manager.lua'
+PERSISTENCE_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'services' / 'persistence_manager.lua')
 
 
 def run_persistence_test(test_code: str) -> dict:
     """Load persistence manager with mocks and run test code."""
     mock = r'''
 -- Mocks for Persistence Manager
+__saves = {}
 _G.QBCore = {
     Functions = {
         GetPlayer = function(src) return {
             PlayerData = { citizenid = "MOCK001", money = { bank = 10000, cash = 500 } },
             Functions = { AddMoney = function() return true end, RemoveMoney = function() return true end },
         } end,
+        -- PersistenceManager.ForceFlush 通过 citizenid 找到在线玩家并调用 Save(true)
+        GetPlayerByCitizenId = function(cid)
+            return {
+                PlayerData = { citizenid = cid },
+                Functions = {
+                    Save = function(force) __saves[#__saves + 1] = cid end,
+                },
+            }
+        end,
     },
     Shared = { Round = function(v) return math.floor(v + 0.5) end },
 }
@@ -124,7 +133,12 @@ end
         persistence_code, flags=re.MULTILINE
     )
 
-    full_script = mock + '\n' + persistence_code + '\n' + test_code
+    # persistence_manager.lua 在加载时会用 LocalDirtyFlush 覆盖 _G.DirtyFlush
+    # （2026-06-22 架构修复：不再依赖外部注入的 DirtyFlush）。
+    # 把测试用的 _DirtyFlushData 重新指向真实脏数据表，保证测试观察/修改的是同一实例。
+    bridge = '\n_DirtyFlushData = DirtyFlush._dirty\n'
+
+    full_script = mock + '\n' + persistence_code + bridge + test_code
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False) as f:
         f.write(full_script)
@@ -147,7 +161,6 @@ assert(count == 0, "empty pool should flush 0")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
-    @pytest.mark.skip(reason="core-framework persistence uses a private LocalDirtyFlush; old DirtyFlush mock cannot seed it (needs new fixture)")
     def test_flush_all_with_dirty_players(self):
         result = run_persistence_test("""
 _DirtyFlushData["CID_A"] = true
@@ -155,6 +168,8 @@ _DirtyFlushData["CID_B"] = true
 _DirtyFlushData["CID_C"] = true
 local count = PersistenceManager.FlushAll()
 assert(count == 3, "should flush 3, got: " .. tostring(count))
+-- Each dirty player must be force-saved via Player.Functions.Save(true)
+assert(#__saves == 3, "should call Player.Functions.Save 3 times, got: " .. tostring(#__saves))
 -- All should be cleared
 assert(_DirtyFlushData["CID_A"] == nil, "CID_A not flushed")
 assert(_DirtyFlushData["CID_B"] == nil, "CID_B not flushed")
@@ -174,16 +189,15 @@ assert(count == 0, "should return 0 without DirtyFlush")
 class TestPersistenceForceFlush:
     """ForceFlushPlayer — 单玩家刷盘"""
 
-    @pytest.mark.skip(reason="core-framework persistence uses a private LocalDirtyFlush; old DirtyFlush mock cannot seed it (needs new fixture)")
     def test_force_flush_dirty_player(self):
         result = run_persistence_test("""
 _DirtyFlushData["CID_X"] = true
 PersistenceManager.ForceFlushPlayer("CID_X")
+assert(#__saves == 1, "dirty player should be force-saved once")
 assert(_DirtyFlushData["CID_X"] == nil, "CID_X should be flushed")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
-    @pytest.mark.skip(reason="core-framework persistence uses a private LocalDirtyFlush; old DirtyFlush mock cannot seed it (needs new fixture)")
     def test_force_flush_clean_player(self):
         result = run_persistence_test("""
 -- Player not dirty — should not error
@@ -301,7 +315,6 @@ assert(svc ~= nil, "GetService returned nil")
 class TestPersistenceOnResourceStop:
     """onResourceStop 钩子"""
 
-    @pytest.mark.skip(reason="core-framework persistence uses a private LocalDirtyFlush; old DirtyFlush mock cannot seed it (needs new fixture)")
     def test_resource_stop_flushes_all(self):
         result = run_persistence_test("""
 _DirtyFlushData["CID_STOP"] = true

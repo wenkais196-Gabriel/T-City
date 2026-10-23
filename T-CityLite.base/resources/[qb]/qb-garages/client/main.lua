@@ -35,6 +35,14 @@ local function CheckPlayers(vehicle)
 end
 
 local function OpenGarageMenu(data)
+    local garage = Config.Garages[data.indexgarage]
+    if garage and garage.takeVehicle then
+        local dist = #(GetEntityCoords(PlayerPedId()) - garage.takeVehicle)
+        if dist > 6.0 then
+            QBCore.Functions.Notify('靠近车库入口后再按 E', 'error', 3000)
+            return
+        end
+    end
     QBCore.Functions.TriggerCallback('qb-garages:server:GetGarageVehicles', function(result)
         if result == nil then return QBCore.Functions.Notify(Lang:t('error.no_vehicles'), 'error', 5000) end
         local formattedVehicles = {}
@@ -61,7 +69,8 @@ local function OpenGarageMenu(data)
                 balance = v.balance or 0
             }
         end
-        SetNuiFocus(true, true)
+        local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+        if not ok then SetNuiFocus(true, true) end
         SendNUIMessage({
             action = 'VehicleList',
             garageLabel = Config.Garages[data.indexgarage].label,
@@ -300,7 +309,8 @@ end
 -- NUI Callbacks
 
 RegisterNUICallback('closeGarage', function(_, cb)
-    SetNuiFocus(false, false)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    if not ok then SetNuiFocus(false, false) end
     cb('ok')
 end)
 
@@ -349,9 +359,21 @@ end
 RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
     QBCore.Functions.TriggerCallback('qb-garages:server:IsSpawnOk', function(spawn)
         if spawn then
-            local location = GetSpawnPoint(data.garage)
+            -- NUI 回传的 garage 表可能丢失 vector4 类型；优先用 index 从客户端 Config 取
+            local garage = Config.Garages[data.index] or data.garage
+            print(('[qb-garages] takeOutGarage plate=%s index=%s garage=%s'):format(
+                tostring(data.plate), tostring(data.index), tostring(garage and garage.label)))
+            if not garage or not garage.spawnPoint then
+                QBCore.Functions.Notify('车库配置无效', 'error', 5000)
+                return
+            end
+            local location = GetSpawnPoint(garage)
             if not location then return end
             QBCore.Functions.TriggerCallback('qb-garages:server:spawnvehicle', function(netId, properties, vehPlate)
+                if not netId then
+                    QBCore.Functions.Notify('取车失败：服务端拒绝生成载具（驾照/在外车辆上限）', 'error', 6000)
+                    return
+                end
                 while not NetworkDoesNetworkIdExist(netId) do Wait(10) end
                 local veh = NetworkGetEntityFromNetworkId(netId)
                 Citizen.Await(CheckPlate(veh, vehPlate))

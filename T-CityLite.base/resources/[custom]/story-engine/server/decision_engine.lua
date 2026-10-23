@@ -197,6 +197,9 @@ function DecisionEngine.Resolve(source, chosenOptionId, isTimeout)
     -- 先消费 pending，防止重复提交/重复推进
     clearPending(source, 'resolved')
 
+    -- 服务端兜底超时/正常结算都要关掉客户端 NUI；否则 SetNuiFocus(true)
+    -- 会把玩家控制锁死（本次实机卡在“口袋里的纸条”就是这个）。
+    TriggerClientEvent('story:client:closeDecision', source)
     -- 执行 effects
     local effects = matchedOption.effects or {}
 

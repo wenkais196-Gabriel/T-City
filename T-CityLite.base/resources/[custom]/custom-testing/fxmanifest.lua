@@ -13,6 +13,7 @@ shared_scripts {
 }
 
 server_scripts {
+    '@oxmysql/lib/MySQL.lua',
     '@core-framework/bus.lua',
     'lib/test_runner.lua',
     'lib/mock_events.lua',
@@ -24,4 +25,5 @@ server_scripts {
 dependencies {
     'qb-core',
     'custom-logs',
+    'oxmysql',
 }

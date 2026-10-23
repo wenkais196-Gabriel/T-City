@@ -135,3 +135,72 @@ jobs:
               print('⚠️  missing markdown links (advisory):')
               print('\n'.join(missing[:50]))
           PY
+
+  db-schema:
+    name: DB schema tests
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: tcity_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    defaults:
+      run:
+        working-directory: T-CityLite.base
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install DB client + test deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mariadb-client lua5.4
+          python -m pip install --upgrade pip pytest mysql-connector-python
+
+      - name: Import schema fixture
+        run: mariadb -h 127.0.0.1 -P 3306 -uroot -proot tcity_ci < tests/fixtures/tcity_schema.sql
+
+      - name: Run full test suite against MariaDB
+        env:
+          TCITY_DB_HOST: 127.0.0.1
+          TCITY_DB_PORT: "3306"
+          TCITY_DB_USER: root
+          TCITY_DB_PASS: root
+          TCITY_DB_NAME: tcity_ci
+        run: python -m pytest tests -q
+
+  nui:
+    name: NUI smoke tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: T-CityLite.base
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run NUI smoke tests
+        run: python tests/nui/run_ui_tests.py

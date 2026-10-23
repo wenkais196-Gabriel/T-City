@@ -11,6 +11,12 @@
 
 local isNuiOpen = false
 local pendingDecision = nil
+local nuiOpenedAt = 0
+
+-- 客户端可观测性：把 NUI/焦点/回调状态送到服务端日志与 agent_events。
+local function telemetry(event, data)
+    TriggerServerEvent('tcity:client:telemetry', event, data or {})
+end
 
 -- ==============================================================
 -- 事件: quest 步骤 decision 触发 → 打开 NUI
@@ -19,6 +25,7 @@ local pendingDecision = nil
 RegisterNetEvent('story:client:offerDecision', function(data)
     if isNuiOpen then
         print('[story-engine] ⚠️ NUI already open, ignoring duplicate decision')
+        telemetry('decision.duplicate', { questId = questId, stepId = stepId })
         return
     end
 
@@ -41,6 +48,7 @@ RegisterNetEvent('story:client:offerDecision', function(data)
         questId = questId,
         stepId = stepId,
         decisionId = decisionId,
+        options = data.options or {},
     }
 
     -- 从服务端获取决策定义（通过 NUI 回调时 client data 中注入 prompt/options）
@@ -50,9 +58,21 @@ RegisterNetEvent('story:client:offerDecision', function(data)
     local timeout = data.timeout or StoryConfig.DecisionTimeout
 
     -- 如果 data 中包含完整 options，直接渲染
+    telemetry('decision.offer', {
+        questId = questId, stepId = stepId, decisionId = decisionId,
+        option_count = #options, timeout = timeout,
+    })
+
     if data.options and #data.options > 0 then
+        -- 防止其他 NUI（如手机）留下的 KeepInput=true 抢走键盘/鼠标
+        SetNuiFocusKeepInput(false)
         SetNuiFocus(true, true)
         isNuiOpen = true
+        nuiOpenedAt = GetGameTimer()
+        telemetry('nui.focus', {
+            open = true, option_count = #options, decisionId = decisionId,
+            focused = IsNuiFocused(), keepInput = IsNuiFocusKeepingInput(),
+        })
         SendNUIMessage({
             type = 'openDecision',
             prompt = prompt,
@@ -63,6 +83,7 @@ RegisterNetEvent('story:client:offerDecision', function(data)
         -- fallback: 仅有 decision_id，需要从服务端获取
         -- 此路径暂不实现（v0.8），序章 quest 模板直接在 step.data.options 中提供
         print('[story-engine] ⚠️ No options in step data — skipping')
+        telemetry('decision.no_options', { questId = questId, stepId = stepId, decisionId = decisionId })
         TriggerServerEvent('story:server:makeDecision', questId, stepId, decisionId, 'skip')
     end
 end)
@@ -72,10 +93,12 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('makeChoice', function(data, cb)
+    telemetry('nui.makeChoice', { optionId = data and data.optionId or nil })
     cb('ok') -- 先确认收到
 
     SetNuiFocus(false, false)
     isNuiOpen = false
+    nuiOpenedAt = 0
 
     if not pendingDecision then
         print('[story-engine] ⚠️ makeChoice but no pending decision')
@@ -100,14 +123,35 @@ RegisterNUICallback('makeChoice', function(data, cb)
 end)
 
 -- ==============================================================
+-- NUI 回调: 关闭弹窗（ESC / 外部兜底）
+-- ==============================================================
+
+RegisterNUICallback('closeDecision', function(_, cb)
+    telemetry('nui.closeDecision', {})
+    cb('ok')
+    SetNuiFocus(false, false)
+    isNuiOpen = false
+    nuiOpenedAt = 0
+    pendingDecision = nil
+end)
+
+-- NUI 端 JS 错误/ fetch 失败的专用回传通道。
+RegisterNUICallback('debugNui', function(data, cb)
+    cb('ok')
+    telemetry('nui.error', data or {})
+end)
+
+-- ==============================================================
 -- NUI 回调: 超时（玩家未在时间内选择）
 -- ==============================================================
 
 RegisterNUICallback('decisionTimeout', function(data, cb)
+    telemetry('nui.timeout', data or {})
     cb('ok')
 
     SetNuiFocus(false, false)
     isNuiOpen = false
+    nuiOpenedAt = 0
 
     if not pendingDecision then return end
 
@@ -127,11 +171,92 @@ end)
 -- ==============================================================
 
 RegisterNetEvent('story:client:closeDecision', function()
+    telemetry('nui.serverClose', { wasOpen = isNuiOpen })
     if isNuiOpen then
         SetNuiFocus(false, false)
         isNuiOpen = false
+        nuiOpenedAt = 0
         pendingDecision = nil
         SendNUIMessage({ type = 'closeDecision' })
+    end
+end)
+
+-- ==============================================================
+-- 兜底命令：NUI 焦点异常/点击回调失败时使用（F8 控制台也可执行）
+-- ==============================================================
+
+RegisterCommand('decision', function(_, args)
+    if not pendingDecision then
+        print('[story-engine] no pending decision')
+        return
+    end
+    local choice = args[1]
+    if not choice then
+        local ids = {}
+        for _, opt in ipairs(pendingDecision.options or {}) do
+            ids[#ids + 1] = opt.id
+        end
+        print('[story-engine] usage: decision <optionId> | options: ' .. table.concat(ids, ', '))
+        return
+    end
+    SetNuiFocus(false, false)
+    isNuiOpen = false
+    nuiOpenedAt = 0
+    telemetry('command.decision', { choice = choice })
+    TriggerServerEvent('story:server:makeDecision',
+        pendingDecision.questId, pendingDecision.stepId,
+        pendingDecision.decisionId, choice)
+    pendingDecision = nil
+    SendNUIMessage({ type = 'closeDecision' })
+end, false)
+
+RegisterCommand('nuitest', function(_, args)
+    local optionId = args[1] or 'honest_cop'
+    SendNUIMessage({ type = 'testChoose', optionId = optionId })
+    print('[story-engine] nuitest -> ' .. optionId)
+end, false)
+
+RegisterCommand('nuifocus', function()
+    SetNuiFocusKeepInput(false)
+    SetNuiFocus(true, true)
+    print(('[story-engine] nuifocus focused=%s keepInput=%s'):format(
+        tostring(IsNuiFocused()), tostring(IsNuiFocusKeepingInput())))
+    telemetry('command.nuifocus', { focused = IsNuiFocused(), keepInput = IsNuiFocusKeepingInput() })
+end, false)
+
+RegisterCommand('fixui', function()
+    telemetry('command.fixui', { wasOpen = isNuiOpen })
+    SetNuiFocus(false, false)
+    isNuiOpen = false
+    nuiOpenedAt = 0
+    pendingDecision = nil
+    SendNUIMessage({ type = 'closeDecision' })
+    print('[story-engine] UI focus reset')
+end, false)
+
+-- 心跳 + 软锁保护：NUI 打开超过 45 秒仍没有回调，主动释放焦点。
+CreateThread(function()
+    while true do
+        Wait(10000)
+        telemetry('heartbeat', {
+            nuiOpen = isNuiOpen,
+            pending = pendingDecision and pendingDecision.decisionId or nil,
+            nuiAgeMs = nuiOpenedAt > 0 and (GetGameTimer() - nuiOpenedAt) or 0,
+        })
+    end
+end)
+
+CreateThread(function()
+    while true do
+        Wait(1000)
+        if isNuiOpen and nuiOpenedAt > 0 and (GetGameTimer() - nuiOpenedAt) > 300000 then
+            telemetry('nui.watchdog', { decisionId = pendingDecision and pendingDecision.decisionId or nil })
+            SetNuiFocus(false, false)
+            isNuiOpen = false
+            nuiOpenedAt = 0
+            SendNUIMessage({ type = 'closeDecision' })
+            print('[story-engine] ⚠️ NUI watchdog released focus after 300s')
+        end
     end
 end)
 

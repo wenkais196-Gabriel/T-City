@@ -40,7 +40,7 @@ local KEY = Config.Vehicles.KeyTypes
 ---@param keyType string|nil 钥匙类型 (默认 'owner')
 ---@return boolean success
 function KeyManager.GiveKeys(plate, citizenid, keyType)
-    if not plate or not citizenid then return false end
+    if type(plate) ~= 'string' or not citizenid then return false end
     plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
     keyType = keyType or KEY.OWNER
 
@@ -57,7 +57,7 @@ end
 ---@param citizenid string 玩家 citizenid
 ---@return boolean success
 function KeyManager.RemoveKeys(plate, citizenid)
-    if not plate or not citizenid then return false end
+    if type(plate) ~= 'string' or not citizenid then return false end
     plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
 
     local store = KeyManager._keys[plate]
@@ -86,7 +86,7 @@ end
 ---@return boolean hasKey
 ---@return string|nil keyType
 function KeyManager.HasKeys(plate, citizenid)
-    if not plate or not citizenid then return false, nil end
+    if type(plate) ~= 'string' or not citizenid then return false, nil end
     plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
 
     local store = KeyManager._keys[plate]
@@ -102,7 +102,7 @@ end
 ---@param plate string
 ---@return table<string, string> citizenid → KeyType
 function KeyManager.GetKeyHolders(plate)
-    if not plate then return {} end
+    if type(plate) ~= 'string' then return {} end
     plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
 
     local store = KeyManager._keys[plate]
@@ -121,7 +121,7 @@ end
 ---@param plate string
 ---@return string|nil citizenid
 function KeyManager.GetOwner(plate)
-    if not plate then return nil end
+    if type(plate) ~= 'string' then return nil end
     plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
 
     local store = KeyManager._keys[plate]
@@ -133,7 +133,7 @@ end
 ---@param plate string
 ---@param citizenid string
 function KeyManager.SetOwner(plate, citizenid)
-    if not plate or not citizenid then return end
+    if type(plate) ~= 'string' or not citizenid then return end
     plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
 
     if not KeyManager._keys[plate] then

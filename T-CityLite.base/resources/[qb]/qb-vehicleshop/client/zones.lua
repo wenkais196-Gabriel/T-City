@@ -62,6 +62,42 @@ function _vCreateVehZones(shopName, entity)
 end
 
 -- ==============================================================
+-- NUI 主动交互：进入区域后按 E 打开，而不是自动劫持面板
+-- ==============================================================
+local shopPromptRunning = false
+
+local function _vStartShopPrompt()
+    if not Config.UseNui or shopPromptRunning then return end
+    shopPromptRunning = true
+    CreateThread(function()
+        -- 10Hz 轻量轮询：只监听 E 提示，不在店内做 0ms 空转
+        while true do
+            if not insideShop then break end
+            Wait(100)
+            if IsControlJustReleased(0, 38) -- E
+                and not IsPedInAnyVehicle(PlayerPedId(), false)
+                and not _vIsNuiOpen() then
+                _vSetClosestShowroomVehicle()
+                -- 距离校验：必须在当前展车 3.5m 内才允许打开
+                local shop = Config.Shops[insideShop]
+                local chosen = shop and shop.ShowroomVehicles[ClosestVehicle]
+                local c = chosen and chosen.coords
+                local near = false
+                if c then
+                    near = #(GetEntityCoords(PlayerPedId()) - vector3(c.x, c.y, c.z)) <= 3.5
+                end
+                if not near then
+                    QBCore.Functions.Notify('靠近展车后再按 E', 'error', 3000)
+                else
+                    _vOpenNui(insideShop)
+                end
+            end
+        end
+        shopPromptRunning = false
+    end)
+end
+
+-- ==============================================================
 -- 自由商店 (free-use) 区域
 -- ==============================================================
 
@@ -77,15 +113,14 @@ function _vCreateFreeUseShop(shopShape, name)
             insideShop = name
             _vSetClosestShowroomVehicle()
             if Config.UseNui then
-                _vOpenNui(name)  -- Phase 3: NUI 交互模式
+                _vStartShopPrompt()
+                QBCore.Functions.Notify('按 E 浏览车辆', 'primary', 4000)
             else
                 _vBuildVehicleMenu(name)  -- Phase 1: 事件驱动, 替代 while insideShop 轮询
             end
         else
             if Config.UseNui then
-                SetNuiFocus(false, false)
-                SetNuiFocusKeepInput(false)
-                SendNUIMessage({ type = 'close' })
+                _vCloseNui()
             end
             insideShop = nil
             ClosestVehicle = 1
@@ -111,16 +146,15 @@ function _vCreateManagedShop(shopShape, name)
             if PlayerData and PlayerData.job and PlayerData.job.name == Config.Shops[name]['Job'] then
                 _vSetClosestShowroomVehicle()
                 if Config.UseNui then
-                    _vOpenNui(name)  -- Phase 3: NUI 交互模式
+                    _vStartShopPrompt()
+                    QBCore.Functions.Notify('按 E 浏览车辆', 'primary', 4000)
                 else
                     _vBuildVehicleMenu(name)  -- Phase 1: 事件驱动
                 end
             end
         else
             if Config.UseNui then
-                SetNuiFocus(false, false)
-                SetNuiFocusKeepInput(false)
-                SendNUIMessage({ type = 'close' })
+                _vCloseNui()
             end
             insideShop = nil
             ClosestVehicle = 1
@@ -244,7 +278,10 @@ RegisterNetEvent('qb-vehicleshop:client:refreshMenu', function()
     if insideShop then
         _vSetClosestShowroomVehicle()
         if Config.UseNui then
-            _vOpenNui(insideShop)  -- Phase 3: NUI 模式下重开以刷新车辆
+            -- 只有面板已打开时才原地刷新；关闭状态不主动劫持
+            if _vIsNuiOpen() then
+                _vOpenNui(insideShop)
+            end
         else
             _vBuildVehicleMenu(insideShop)
         end

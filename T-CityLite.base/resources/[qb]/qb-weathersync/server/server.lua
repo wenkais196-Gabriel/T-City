@@ -297,14 +297,11 @@ end, 'admin')
 CreateThread(function()
     while true do
         Wait(60000)
-        if not frozen then
-            local realMinutes = math.floor(os.time(os.date("!*t")) / 2 + 360) % 1440
-            -- 漂移修正：如果独立推进与真实时间相差超过 1 分钟，对齐
-            local cur = getCurrentGameMinutes()
-            if math.abs(cur - realMinutes) > 1 then
-                gameMinutes = realMinutes
-                timerStart = GetGameTimer()
-            end
+        -- 只广播状态，不再按真实时间硬对齐。
+        -- 旧实现每 60 秒把 gameMinutes 拉向 realMinutes，会造成时间倒跳/猛跳；
+        -- 时间推进由 TIME_SCALE 决定，客户端按同一状态插值即可。
+        if frozen then
+            -- 冻结时保持当前值
         end
         -- 广播当前状态供客户端对表
         TriggerEvent('qb-weathersync:server:RequestStateSync')

@@ -1,24 +1,9 @@
 <script lang="ts">
-  import { closePhone, activeApp, playerData, unreadMessagesCount, unreadNotificationsCount } from '../stores/phone';
-  import { onMount } from 'svelte';
+  import { closePhone, activeApp, playerData, unreadMessagesCount, unreadNotificationsCount, gameTime } from '../stores/phone';
 
   // Svelte 5 children prop
   let { children } = $props();
 
-  // Real-time status bar clock
-  let timeStr = $state('08:00');
-  
-  onMount(() => {
-    const updateTime = () => {
-      const d = new Date();
-      let h = d.getHours().toString().padStart(2, '0');
-      let m = d.getMinutes().toString().padStart(2, '0');
-      timeStr = `${h}:${m}`;
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  });
 
   const handleHomeClick = () => {
     activeApp.set('home');
@@ -46,7 +31,7 @@
         <!-- Top Status Bar -->
         <div class="status-bar">
           <div class="status-left">
-            <span class="status-time">{timeStr}</span>
+            <span class="status-time">{String($gameTime.hour).padStart(2, '0')}:{String($gameTime.minute).padStart(2, '0')}</span>
           </div>
           <div class="status-right">
             <!-- Network Signal -->

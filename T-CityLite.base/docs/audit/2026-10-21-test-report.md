@@ -373,3 +373,34 @@ ensure tcity-e2e
 - 发现并修复了一个公开泄露的 DB 密码、一个真实购车插入判断 bug、一处 DB 迁移缺口。
 - **真实 FXServer 启动冒烟已通过**（79 资源、0 script error、25 个 Bus 服务、持久化 tick 正常）。
 - 发布前仍需：客户端连接回归、48 人并发、24h 压测。
+
+---
+
+## 13. 客户端双端测试（2026-10-22）
+
+在 Windows 宿主机（FiveM Legacy，devcon 29200）上接入了 MCP 客户端测试面：
+
+- 宿主机 `fivem-mcp-server`，通过 FXServer 30120 的 HTTP 轮询桥接到 VM；
+- 已能 `launch` / `client_command` / `screenshot` / `read_client_log` / `server_info`；
+- 不依赖管理员权限，不开放宿主机入站端口。
+
+### 结果
+
+| 用例 | 结果 |
+|:---|:---|
+| 客户端启动/连接 | ✅ `connect` 后 `players.json` 出现角色 |
+| 任务缓存重连恢复 | ✅ `PlayerLoaded` 后 `cache preload ... quests=1` |
+| `step_decision` 重新弹窗 | ✅ `decision.offer` + `nui.focus`（`focused=1`、`keepInput=false`） |
+| 服务端 decision 收口 | ✅ `makeDecision src=1 ... choice=honest_cop`；`player_quests=completed`、`player_choices` 写入 |
+| NUI 合成鼠标/键盘 | ❌ `nui.makeChoice` 未出现；`nuitest` 钩子/人工点击待复测 |
+| 45s watchdog | ⚠️ 曾先于人工点击释放焦点；已改为 300s |
+
+### 抓到的实现问题
+
+1. `QuestCache` 的 DB fallback 是异步的，服务端重启后第一次 `GetActiveQuests` 返回空表，
+   导致 `step_decision` 重连不弹窗、`/questrestore` 看不到任务。已改为 `PlayerLoaded` 预加载。
+2. NUI 合成输入未送达 CEF（`IsNuiFocused=true` 仍无效）；自动化改用 `nuitest`
+   （`SendNUIMessage` → `chooseOption` → fetch）验证 NUI 回调链路，真实输入只做人工冒烟。
+3. `read_console` 的 devcon tap 有竞态；客户端日志优先 `read_client_log`。
+
+详细操作与边界见 `T-CityLite.base/docs/agent/CLIENT_HARNESS.md`。

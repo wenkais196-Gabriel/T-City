@@ -120,7 +120,7 @@ function Test.skip(reason)
     if Test._current_suite and Test._current_test then
         Test._results[Test._current_suite].tests[Test._current_test] = entry
     end
-    error(("[SKIP] %s"):format(reason))  -- 中断当前用例
+    error(("[SKIP] %s"):format(reason), 0)  -- level 0: 让 Test.run 能识别为 SKIP 而不是 ERROR
 end
 
 -- ─── 内部方法 ───

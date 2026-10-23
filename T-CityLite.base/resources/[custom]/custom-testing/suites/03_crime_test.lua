@@ -55,11 +55,11 @@ Test.describe("犯罪系统 (v0.5)", function()
     -- 统一经济出口校验
     -- ==============================================================
 
-    Test.it("3.7 custom-economy 存在 AddScaledMoney 导出", function()
+    Test.it("3.7 core_economy 存在 TriggerReward 导出", function()
         local ok, result = pcall(function()
-            return exports['custom-economy'] and exports['custom-economy'].AddScaledMoney
+            return exports['core_economy'] and exports['core_economy'].TriggerReward
         end)
-        Test.assert_true(ok and result ~= nil, "custom-economy:AddScaledMoney 应作为导出函数存在")
+        Test.assert_true(ok and result ~= nil, "core_economy:TriggerReward 应作为统一奖励出口存在")
     end)
 
     Test.it("3.8 custom-crime 存在 CheckStoreRobbery 导出", function()
@@ -76,11 +76,11 @@ Test.describe("犯罪系统 (v0.5)", function()
         Test.assert_true(ok and result ~= nil, "custom-crime:CheckDrugs 应作为导出函数存在")
     end)
 
-    Test.it("3.10 custom-economy GetEconomyRewardScale 导出存在", function()
+    Test.it("3.10 core_economy GetGlobalMultiplier 导出存在", function()
         local ok, result = pcall(function()
-            return exports['custom-economy'] and exports['custom-economy'].GetEconomyRewardScale
+            return exports['core_economy'] and exports['core_economy'].GetGlobalMultiplier
         end)
-        Test.assert_true(ok and result ~= nil, "custom-economy:GetEconomyRewardScale 应作为导出函数存在")
+        Test.assert_true(ok and result ~= nil, "core_economy:GetGlobalMultiplier 应作为经济倍率出口存在")
     end)
 
     -- ==============================================================

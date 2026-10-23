@@ -4,6 +4,17 @@ RegisterNetEvent('QBCore:Client:UpdateObject', function() QBCore = exports['qb-c
 local headerShown = false
 local sendData = nil
 
+-- 复用 custom-ui：统一焦点 + 关闭后防误触攻击
+local function uiOpen()
+    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    if not ok then SetNuiFocus(true, true) end
+end
+
+local function uiClose()
+    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    if not ok then SetNuiFocus(false, false) end
+end
+
 -- Functions
 
 local function sortData(data, skipfirst)
@@ -27,7 +38,7 @@ local function openMenu(data, sort, skipFirst)
 			end
 		end
 	end
-    SetNuiFocus(true, true)
+    uiOpen()
     headerShown = false
     sendData = data
     SendNUIMessage({
@@ -39,7 +50,7 @@ end
 local function closeMenu()
     sendData = nil
     headerShown = false
-    SetNuiFocus(false)
+    uiClose()
     SendNUIMessage({
         action = 'CLOSE_MENU'
     })
