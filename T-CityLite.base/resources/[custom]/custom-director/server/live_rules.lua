@@ -271,7 +271,8 @@ function LiveRules.sanitize_player(player, opts)
         -- Display name only: it is player-controlled text and is flagged as
         -- untrusted by the tool registry; never the license or identifiers.
         name = LiveRules.sanitize_text(data.name, 64),
-        source = tonumberOr(data.source, 0),
+        -- PlayerData.source is not guaranteed; the caller passes the roster key.
+        source = tonumberOr(opts.source, tonumberOr(data.source, 0)),
         job = project_job(data.job),
         gang = project_gang(data.gang),
         metadata = metadata,
