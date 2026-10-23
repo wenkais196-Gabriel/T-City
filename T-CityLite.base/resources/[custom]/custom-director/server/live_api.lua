@@ -350,11 +350,24 @@ local function findPlayer(citizenid)
     local qb = qbCore()
     local getter = type(qb) == 'table' and type(qb.Functions) == 'table'
         and qb.Functions.GetPlayerByCitizenId or nil
+    local sourceTable = playersTable()
     if type(getter) == 'function' then
         local ok, player = pcall(getter, citizenid)
         if ok and player then
             local data = playerData(player)
-            return player, data and tonumber(data.source) or nil
+            local resolved = data and tonumber(data.source) or nil
+            if not resolved and sourceTable then
+                -- The getter does not expose the roster key; match it back.
+                for key, candidate in pairs(sourceTable) do
+                    local candidateData = playerData(candidate)
+                    if candidate == player or (candidateData and data
+                        and candidateData.citizenid == data.citizenid) then
+                        resolved = tonumber(key)
+                        break
+                    end
+                end
+            end
+            return player, resolved
         end
     end
 
