@@ -42,7 +42,7 @@
 ## 4. 验证现状
 
 ```
-lua5.4 tests/agent/lua/runner.lua        8 suites / 228 checks
+lua5.4 tests/agent/lua/runner.lua        8 suites / 229 checks
 python3 -m pytest -q tests/agent         203 passed
 cd T-CityLite.base && pytest -q tests/unit   262 passed
 python3 tools/agent_tools.py --check     30 tools, no drift
