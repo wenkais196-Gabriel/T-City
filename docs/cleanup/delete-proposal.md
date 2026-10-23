@@ -78,8 +78,8 @@
 | `node_modules` | `find` 结果 0 个目录；`.gitignore:44` 已覆盖 | 无 |
 | `*.log` / `*.tmp` / `*.bak` / dump | 0 个跟踪、0 个存在（`.gitignore` 已覆盖） | 无 |
 | `server_archive` | **不存在**（全仓库 `git grep -i 'server_archive'` = 0） | 无 |
-| 根目录散落文件 | `fxmanifest_inventory.json`→A5；`simulation_report.json`→B12；`REASONIX.md`→B11；`QBCore_Lite_技术讨论.md` 被 `PROJECT_PROGRESS.md` + `QBCore_Lite_versions/README.md` 引用→保留；`PROJECT_PROGRESS.md` 为当前路线图→保留 | 见各表 |
-| `QBCore_Lite_versions/` | 30 文件 / 356K；5 个外部引用 | B8 |
+| 根目录散落文件 | `fxmanifest_inventory.json`→A5；`simulation_report.json`→B12；`REASONIX.md`→B11；`QBCore_Lite_技术讨论.md` 被 `PROJECT_PROGRESS.md` + `docs/archive/QBCore_Lite_versions/README.md` 引用→保留；`PROJECT_PROGRESS.md` 为当前路线图→保留 | 见各表 |
+| `docs/archive/QBCore_Lite_versions/` | 30 文件 / 356K；5 个外部引用 | B8 |
 | `docs/` 旧版文档 | 472K 历史版本手册 + 审计报告，部分仍被引用 | B9 |
 | 分支 `recons` / `v0.5-crime` / `feat/agent-takeover` | 前两者已完全合并；后者 102 behind、内容已被 master 覆盖 | §8 |
 
@@ -127,7 +127,7 @@ git rm -r 'T-CityLite.base/resources/[qb]/qb-phone'
 | B5 | `[voice]/qb-radio`（1.7M，22 文件） | 跟踪 | 未 ensure；**0 个外部代码引用**；`docs/01:183,206,254`：“已由 pma-voice 内置替代” | 中低 | 归档 | `git mv 'T-CityLite.base/resources/[voice]/qb-radio' archive/qb-radio` |
 | B6 | `[qb]/qb-smallresources`（864K，65 文件） | 跟踪 | 未 ensure；4 个引用**全部**来自 `qb-radialmenu`（同样未启用）；`docs/01:205` v0.2 deferred | 中低 | 归档（与 B3 绑定） | `git mv 'T-CityLite.base/resources/[qb]/qb-smallresources' archive/qb-smallresources` |
 | B7 | 15 个零外部引用的延期 qb 资源（约 2.7M）：`qb-bankrobbery`、`qb-busjob`、`qb-crafting`、`qb-diving`、`qb-garbagejob`、`qb-jewelery`、`qb-mapsidebar`、`qb-newsjob`、`qb-recyclejob`、`qb-scrapyard`、`qb-taxijob`、`qb-towjob`、`qb-truckrobbery`、`qb-vehiclesales`、`qb-vineyard` | 跟踪 | 全部未 ensure；被引用数=0（`qb-scrapyard` / `qb-vehiclesales` / `qb-diving` / `qb-truckrobbery` 只是**向外**调用 `qb-phone`）；`docs/01:203` 列为“未列入当前版本” | 中 | 归档（保留未来玩法素材）；不要直接删 | `mkdir -p archive/qb && for d in qb-bankrobbery qb-busjob qb-crafting qb-diving qb-garbagejob qb-jewelery qb-mapsidebar qb-newsjob qb-recyclejob qb-scrapyard qb-taxijob qb-towjob qb-truckrobbery qb-vehiclesales qb-vineyard; do git mv "T-CityLite.base/resources/[qb]/$d" archive/qb/; done` |
-| B8 | `QBCore_Lite_versions/`（356K，30 文件） | 跟踪 | 5 个**外部**文件引用：`PROJECT_PROGRESS.md:33` + `T-CityLite.base/docs/` 下 4 篇（`agent/reviews/03-contract-ci.md`、`v0.3-test-checklist.md`、`v0.4-implementation-analysis.md`、`v0.4-validation-plan.md`）；目录内 `README.md` 还有相对链接；是 v0.1–v1.0 规格/路线历史，不是运行时资源 | 低 | **保留**或整体归档；不要逐文件删 | `git mv QBCore_Lite_versions docs/archive/QBCore_Lite_versions`（需同步 5 处外部链接） |
+| B8 | `docs/archive/QBCore_Lite_versions/`（356K，30 文件） | 跟踪 | 5 个**外部**文件引用：`PROJECT_PROGRESS.md:33` + `T-CityLite.base/docs/` 下 4 篇（`agent/reviews/03-contract-ci.md`、`v0.3-test-checklist.md`、`v0.4-implementation-analysis.md`、`v0.4-validation-plan.md`）；目录内 `README.md` 还有相对链接；是 v0.1–v1.0 规格/路线历史，不是运行时资源 | 低 | **保留**或整体归档；不要逐文件删 | `git mv QBCore_Lite_versions docs/archive/QBCore_Lite_versions`（需同步 5 处外部链接） |
 | B9 | 旧版文档包（472K）：`T-CityLite.base/docs/v0.*.md`、`T-CityLite.base/docs/audit/2026-06-20-*.md`、`test-report-v0.1-v0.4.md`、`global-audit-whitepaper.md`、`v0.5-code-review-report.md`、`bus-api-reference.md` | 跟踪 | 多为历史版本手册/审计。仍有引用：`bus-api-reference` 4 处、`2026-06-20-full-audit-report` 1 处（被 10-21 新审计复核引用）、`global-audit-whitepaper` 1 处、`test-report-v0.1-v0.4` 1 处、`v0.5-code-review-report` 2 处；`2026-06-20-delivery-report`、`2026-10-21-test-report/self-review/ingame-test-plan` 为 0 引用 | 中 | **归档，不删**（审计留痕）；新文档见 `docs/00_SERVER_MASTER_MANUAL.md`、`docs/03_maintenance_manuals/` | `mkdir -p docs/archive/legacy && git mv T-CityLite.base/docs/v0.*.md T-CityLite.base/docs/audit/2026-06-20-*.md T-CityLite.base/docs/{test-report-v0.1-v0.4.md,global-audit-whitepaper.md,v0.5-code-review-report.md,bus-api-reference.md} docs/archive/legacy/` |
 | B10 | `design/`（2 个文件，20K） | 跟踪 | 精确路径引用=0；`design/refactor-escape-sqli-20260601.md`、`design/store-robbery-redesign-20260601.md` 是**设计稿**，`docs/` 下已有对应的实施报告（内容不同：设计稿有目标/验收标准，报告有变更记录） | 低 | 归档（保留设计动机） | `git mv design docs/archive/design` |
 | B11 | `REASONIX.md`（16K） | 跟踪 | 0 处引用；内容是“全局逆向审计”的 **AI prompt 记忆**，与当前 `AGENTS.md` 重复；`.reasonix/` 已在 `.gitignore` | 低 | 删或归档 | `git rm REASONIX.md` |
@@ -182,7 +182,7 @@ git rm -r 'T-CityLite.base/resources/[qb]/qb-phone'
 | `monitor` | 无 | 无 | `check_dependencies.py` 会把它报为 **orphan**（非致命，仅提示） | `docs/01_resource_inventory.md:172,203`；`qb-ambulancejob/server/main.lua:13`；`docs/agent/design/02-client-effect-channel.md:33-34` |
 | `qb-radio` | `voice.cfg` 无 ensure，无需改 | 无 | `check_dependencies.py:38` | `docs/01_resource_inventory.md:183,206,254` |
 | B3–B7 延期 qb 资源 | 全部未 ensure，无需改 | 无互相依赖（`qb-radialmenu`→`qb-hotdogjob` 是配置引用，需一起归档） | `check_dependencies.py:23-38` 的 `DEFERRED_RESOURCES` 列表；移除后 orphan 检查不再提示 | `docs/01_resource_inventory.md` §2.2、§3；`T-CityLite.base/README.md` 资源树 |
-| `QBCore_Lite_versions/` | 无 | 无 | 无 | `PROJECT_PROGRESS.md:33`、`QBCore_Lite_versions/README.md:15,64,125`、4 篇旧文档的链接 |
+| `docs/archive/QBCore_Lite_versions/` | 无 | 无 | 无 | `PROJECT_PROGRESS.md:33`、`docs/archive/QBCore_Lite_versions/README.md:15,64,125`、4 篇旧文档的链接 |
 | 旧文档包 | 无 | 无 | `.github/workflows/ci.yml` 的 **docs-check 是 advisory**（只打印、不失败） | `CHANGELOG.md`、`T-CityLite.base/LITE_CHANGELOG.md`、`docs/interaction_memo.md:190`、`docs/v0.5-maintenance-guide.md:296`、`T-CityLite.base/README.md` |
 | 上游 `.github/` | 无 | 无 | 根 `.github/workflows/ci.yml` 不受影响 | 无 |
 

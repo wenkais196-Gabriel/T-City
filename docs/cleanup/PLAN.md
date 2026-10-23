@@ -89,7 +89,7 @@ git check-ignore -v T-CityLite.base/resources/'[system]'/tcity-dashboard/nui/dis
 | `[qb]/qb-phone`（3.2M） | **先迁移再归档**，不直接删 | 迁移 8 个已启用调用方（见下）到 `custom-phone` 兼容层 |
 | `[system]/monitor`（13M） | 保留 | txAdmin 集成，删了影响管理 |
 | 4 代 aviation 模拟/2 代 validate | 只留最高版本 | 人工确认 |
-| `QBCore_Lite_versions/` | 归档到 `archive/` 或删 | 确认无部署引用 |
+| `docs/archive/QBCore_Lite_versions/` | 归档到 `archive/` 或删 | 确认无部署引用 |
 | 历史分支 `recons`/`v0.5-crime`/`feat/agent-takeover` | 仅给建议，不执行 | 未合并分支需 owner 确认 |
 | 旧版文档（audit/report 草稿） | 归档 `docs/archive/` | 人工定正本 |
 
