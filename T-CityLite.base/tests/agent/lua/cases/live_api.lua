@@ -212,6 +212,24 @@ return {
             assert(response.body.players[1].position.x == 123.4, 'fine must not quantise')
         end)
 
+        check('roster_resolves_qb_core_from_the_export', function()
+            -- Regression: live_api used to read _G.QBCore, which nothing on a
+            -- real server sets (main.lua keeps a local). The harness used to
+            -- set the global, hiding the bug; clear it and require the export
+            -- fallback to find the roster.
+            local saved = _G.QBCore
+            _G.QBCore = nil
+            local ok, err = pcall(function()
+                local response = handle('/agent/v1/live/players')
+                assert(response.status == 200, 'expected 200, got ' .. tostring(response.status))
+                assert(response.body.count == 2,
+                    'expected 2 players via the qb-core export, got ' .. tostring(response.body.count))
+                assert(_G.QBCore ~= nil, 'the resolved core must be cached on _G')
+            end)
+            _G.QBCore = saved
+            if not ok then error(err, 0) end
+        end)
+
         -- 2. detail -----------------------------------------------------------
         check('detail_success', function()
             local response = handle('/agent/v1/live/players/CID00002')
