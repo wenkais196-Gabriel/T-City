@@ -744,3 +744,62 @@ RegisterNetEvent('phone:client:systemSpeech', function(data)
         text = data.text:sub(1, 300),
     })
 end)
+
+-- ----------------------------------------------------
+-- qb-phone compatibility bridge (see server/qb_phone_compat.lua)
+-- ----------------------------------------------------
+-- qb-core/server/services/economy_service.lua fires this after a bank
+-- removal. The amount is ignored on purpose: the UI refreshes from the
+-- authoritative server balance instead of trusting a client-delivered number,
+-- and nothing here changes money.
+RegisterNetEvent('qb-phone:client:RemoveBankMoney', function()
+    if not isPhoneOpen then return end
+    QBCore.Functions.TriggerCallback('phone:server:getPhoneData', function(data)
+        if data and data.success and data.playerData then
+            SendNUIMessage({
+                action = 'phone:updateMoney',
+                money = data.playerData.money
+            })
+        end
+    end)
+end)
+
+-- qb-policejob / qb-stolen-radar / qb-prison / qb-storerobbery broadcast
+-- police alerts to the phone. They are transient, so they are shown in the
+-- tray without a per-recipient DB write (qb-phone did not persist them
+-- either). No coords are auto-routed: the source resources already fire their
+-- own police:client:policeAlert/GPS path.
+local qbPoliceAlertSeq = 0
+RegisterNetEvent('qb-phone:client:addPoliceAlert', function(alertData)
+    if type(alertData) ~= 'table' then return end
+
+    -- qb-storerobbery broadcasts to -1; qb-phone's own client handler dropped
+    -- the alert unless the local player was an on-duty cop. The tray is
+    -- visible to everyone here, so keep that gate (LEO only).
+    local playerData = QBCore.Functions.GetPlayerData()
+    local job = playerData and playerData.job
+    if not job or not job.onduty then return end
+    if job.type ~= 'leo' and job.name ~= 'police' then return end
+
+    local title = type(alertData.title) == 'string' and alertData.title or ''
+    local description = type(alertData.description) == 'string' and alertData.description or ''
+    -- Plain text only: the tray renders text, not markup or coordinates.
+    title = title:gsub('[%c]', ' '):sub(1, 200)
+    description = description:gsub('[%c]', ' '):sub(1, 1000)
+    if not title:match('%S') then title = '🚨 Police Alert' end
+
+    -- Negative ids never collide with phone_notifications.id (positive), so
+    -- the keyed Svelte each-loop can hold DB rows and transient alerts at once.
+    qbPoliceAlertSeq = qbPoliceAlertSeq + 1
+    SendNUIMessage({
+        action = 'phone:newNotification',
+        notification = {
+            id = -qbPoliceAlertSeq,
+            title = title,
+            content = description,
+            timestamp = os.date('%Y-%m-%d %H:%M:%S'),
+            is_read = false,
+            origin = 'compat',
+        }
+    })
+end)

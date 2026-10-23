@@ -19,6 +19,7 @@ client_scripts {
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/sms.lua',
+    'server/qb_phone_compat.lua',
     'server/main.lua',
     'server/banking.lua',
     'server/jobboard.lua',
