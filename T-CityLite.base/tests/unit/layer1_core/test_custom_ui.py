@@ -50,7 +50,9 @@ assert(__keepInput == true, 'keepInput should be true')
 assert(__exports.IsMenuOpen() == true)
 __exports.CloseMenu()
 assert(__focus == false, 'focus should be false')
-assert(__keepInput == false, 'keepInput should be false')
+-- qb-phone semantics: close releases focus but does not force keepInput off;
+-- doing so froze WASD on the next open (live regression).
+assert(__keepInput == true, 'keepInput must be left as it was on close')
 assert(__exports.IsMenuOpen() == false)
 """)
     assert result['ok'], f"Lua error: {result['stderr']}"
