@@ -9,6 +9,7 @@ local caseCounter = 0
 
 -- 囚犯追踪: citizenid → { sentenceMinutes, startTime, crimes[], reductions[] }
 local inmates = {}
+JusticeService.Inmates = inmates
 
 -- ==============================================================
 -- 案件管理

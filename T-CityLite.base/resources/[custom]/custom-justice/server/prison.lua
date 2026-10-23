@@ -6,74 +6,60 @@ local QBCore = exports['qb-core']:GetCoreObject()
 -- 入狱处理
 -- ==============================================================
 
+--- Server-side incarceration. Only call from a trusted server path (trial
+--- verdict, judge command); the net event below is a compatibility wrapper
+--- that validates the caller first.
+function JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
+    citizenid = tostring(citizenid or '')
+    if #citizenid == 0 or #citizenid > 50 then return false, 'invalid_citizen' end
+    sentenceMinutes = math.floor(tonumber(sentenceMinutes) or 0)
+    if sentenceMinutes <= 0 then return false, 'invalid_sentence' end
+    local maxSentence = (Config.Justice and Config.Justice.MaxSentence) or 120
+    if sentenceMinutes > maxSentence then sentenceMinutes = maxSentence end
+    crimes = type(crimes) == 'table' and crimes or {}
+
+    local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
+    if not Player then
+        JusticeService.Inmates[citizenid] = {
+            sentenceMinutes = sentenceMinutes, startTime = os.time(),
+            crimes = crimes, reductions = {}, offline = true,
+        }
+        return true
+    end
+
+    local src = Player.PlayerData.source
+    JusticeService.Inmates[citizenid] = {
+        sentenceMinutes = sentenceMinutes, startTime = os.time(),
+        crimes = crimes, reductions = {}, src = src,
+    }
+    TriggerClientEvent('justice:client:enterPrison', src, {
+        sentenceMinutes = sentenceMinutes, startTime = os.time(),
+        crimes = crimes, reductions = {},
+    })
+    TriggerClientEvent('QBCore:Notify', src,
+        _L(src, 'justice_imprisoned', sentenceMinutes), 'error', 15000)
+    if exports['custom-logs'] then
+        local labels = {}
+        for _, cid in ipairs(crimes) do
+            local c = Config.Justice.Crimes[cid]
+            if c then labels[#labels + 1] = c.label end
+        end
+        exports['custom-logs']:LogGeneric('入狱', ('%s (%s) | 刑期: %d分钟 | 罪名: %s'):format(
+            GetPlayerName(src), citizenid, sentenceMinutes, table.concat(labels, ',')))
+    end
+    return true
+end
+
 RegisterNetEvent('justice:server:imprison', function(citizenid, sentenceMinutes, crimes)
-    -- 🛡️ Security: source 权威校验 + 权限检查 (仅警察/法官可入狱)
     local callerSrc = source
     local Caller = QBCore.Functions.GetPlayer(callerSrc)
-    if not Caller then
-        print(('[SECURITY] justice:server:imprison blocked — invalid caller (source=%s)'):format(tostring(callerSrc)))
-        return
-    end
+    if not Caller then return end
     local callerJob = Caller.PlayerData.job.name
     if callerJob ~= 'police' and callerJob ~= 'judge' then
         print(('[SECURITY] justice:server:imprison blocked — unauthorized caller %s (job=%s)'):format(GetPlayerName(callerSrc), callerJob))
         return
     end
-
-    -- 🛡️ 参数清洗：刑期必须有界，citizenid 必须是合法字符串
-    citizenid = tostring(citizenid or '')
-    if #citizenid == 0 or #citizenid > 50 then return end
-    sentenceMinutes = math.floor(tonumber(sentenceMinutes) or 0)
-    if sentenceMinutes <= 0 then return end
-    local maxSentence = (Config.Justice and Config.Justice.MaxSentence) or 120
-    if sentenceMinutes > maxSentence then sentenceMinutes = maxSentence end
-
-    local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
-    if not Player then
-        -- 离线囚犯: 仅记录, 上线时恢复
-        JusticeService.Inmates[citizenid] = {
-            sentenceMinutes = sentenceMinutes,
-            startTime = os.time(),
-            crimes = crimes or {},
-            reductions = {},
-            offline = true,
-        }
-        return
-    end
-
-    local src = Player.PlayerData.source
-
-    -- 存入囚犯追踪
-    JusticeService.Inmates[citizenid] = {
-        sentenceMinutes = sentenceMinutes,
-        startTime = os.time(),
-        crimes = crimes or {},
-        reductions = {},
-        src = src,
-    }
-
-    -- 传送入狱
-    TriggerClientEvent('justice:client:enterPrison', src, {
-        sentenceMinutes = sentenceMinutes,
-        startTime = os.time(),
-        crimes = crimes,
-        reductions = {},
-    })
-
-    -- 通知
-    TriggerClientEvent('QBCore:Notify', src,
-        _L(src, 'justice_imprisoned', sentenceMinutes), 'error', 15000)
-
-    -- 日志
-    if exports['custom-logs'] then
-        local crimeLabels = {}
-        for _, cid in ipairs(crimes or {}) do
-            local c = Config.Justice.Crimes[cid]
-            if c then crimeLabels[#crimeLabels + 1] = c.label end
-        end
-        exports['custom-logs']:LogGeneric('入狱', ('%s (%s) | 刑期: %d分钟 | 罪名: %s'):format(
-            GetPlayerName(src), citizenid, sentenceMinutes, table.concat(crimeLabels, ',')))
-    end
+    JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
 end)
 
 -- ==============================================================

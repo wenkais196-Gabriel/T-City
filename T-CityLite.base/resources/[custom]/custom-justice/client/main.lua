@@ -87,18 +87,10 @@ RegisterNetEvent('justice:client:released', function()
 end)
 
 RegisterNetEvent('justice:client:verdictReceived', function(verdict)
-    -- 嫌疑人收到判决 → 入狱
-    TriggerEvent('justice:client:enterPrison', {
-        sentenceMinutes = verdict.finalMinutes,
-        startTime = os.time(),
-        crimes = verdict.crimeLabels,
-        reductions = {},
-    })
-    TriggerServerEvent('justice:server:imprison',
-        QBCore.Functions.GetPlayerData().citizenid,
-        verdict.finalMinutes,
-        {}
-    )
+    -- Sentence and teleport are driven by the server (JusticeService.Imprison);
+    -- the client only shows the verdict summary.
+    QBCore.Functions.Notify(('判决：%s — %d 分钟'):format(
+        verdict.suspectName or '被告', verdict.finalMinutes or 0), 'error', 15000)
 end)
 
 -- ==============================================================
