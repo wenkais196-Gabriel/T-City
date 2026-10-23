@@ -7,12 +7,18 @@ local sendData = nil
 -- 复用 custom-ui：统一焦点 + 关闭后防误触攻击
 local function uiOpen()
     local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
-    if not ok then SetNuiFocus(true, true) end
+    if not ok then
+        SetNuiFocus(true, true)
+        SetNuiFocusKeepInput(false)
+    end
 end
 
 local function uiClose()
     local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
-    if not ok then SetNuiFocus(false, false) end
+    if not ok then
+        SetNuiFocus(false, false)
+        SetNuiFocusKeepInput(false)
+    end
 end
 
 -- Functions
@@ -81,7 +87,11 @@ end)
 RegisterNUICallback('clickedButton', function(option, cb)
     if headerShown then headerShown = false end
     PlaySoundFrontend(-1, 'Highlight_Cancel', 'DLC_HEIST_PLANNING_BOARD_SOUNDS', 1)
-    SetNuiFocus(false)
+    -- One-argument SetNuiFocus(false) left the NUI in a half-focused state on
+    -- a real client: the menu stayed visible but the cursor never came back.
+    -- Go through the shared closer so cursor, keepInput and the close guard
+    -- are released together.
+    uiClose()
     if sendData then
         local data = sendData[tonumber(option)]
         sendData = nil
@@ -113,7 +123,7 @@ end)
 RegisterNUICallback('closeMenu', function(_, cb)
     headerShown = false
     sendData = nil
-    SetNuiFocus(false)
+    uiClose()
     cb('ok')
     TriggerEvent("qb-menu:client:menuClosed")
 end)
@@ -122,7 +132,7 @@ end)
 
 RegisterCommand('playerfocus', function()
     if headerShown then
-        SetNuiFocus(true, true)
+        uiOpen()
     end
 end)
 
