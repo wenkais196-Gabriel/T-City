@@ -144,3 +144,12 @@ def test_verdict_imprisons_on_the_server():
     verdict_block = client[client.index("justice:client:verdictReceived"):client.index("法院 / 监狱 Blip")]
     assert "TriggerServerEvent('justice:server:imprison'" not in verdict_block
     assert "imprison" not in verdict_block.split("-- Sentence and teleport")[1]
+
+
+def test_p2_warrant_and_arrest_ui():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for name in ("requestWarrant", "decideWarrant", "registerArrest", "loadWarrants"):
+        assert name in ui
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    for name in ("request_warrant", "decide_warrant", "register_arrest"):
+        assert name in app
