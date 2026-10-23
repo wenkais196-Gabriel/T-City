@@ -76,7 +76,12 @@ RegisterNetEvent('justice:server:startTrial', function(caseId)
     -- 记录判决
     JusticeService.SetVerdict(caseId, verdict)
 
-    -- 通知嫌疑人 → 入狱
+    -- 入狱由服务端执行（嫌疑人客户端无权调用 imprison）
+    if case.suspect.citizenid then
+        JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes)
+    end
+
+    -- 通知嫌疑人判决结果
     if case.suspect.src and GetPlayerPing(case.suspect.src) >= 0 then
         TriggerClientEvent('justice:client:verdictReceived', case.suspect.src, verdict)
     end

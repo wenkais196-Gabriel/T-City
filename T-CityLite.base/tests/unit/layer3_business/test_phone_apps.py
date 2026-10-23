@@ -130,3 +130,17 @@ def test_p2_cases_bolos_warrants_arrests():
         assert name in app
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
     assert "createCase" in ui and "createBolo" in ui
+
+
+def test_verdict_imprisons_on_the_server():
+    justice = PHONE.parent / "custom-justice"
+    assert "JusticeService.Inmates = inmates" in (justice / "server/main.lua").read_text(encoding="utf-8")
+    prison = (justice / "server/prison.lua").read_text(encoding="utf-8")
+    assert "function JusticeService.Imprison" in prison
+    assert "function JusticeService.Imprison" in prison and "END" not in prison
+    trial = (justice / "server/trial.lua").read_text(encoding="utf-8")
+    assert "JusticeService.Imprison(case.suspect.citizenid" in trial
+    client = (justice / "client/main.lua").read_text(encoding="utf-8")
+    verdict_block = client[client.index("justice:client:verdictReceived"):client.index("法院 / 监狱 Blip")]
+    assert "TriggerServerEvent('justice:server:imprison'" not in verdict_block
+    assert "imprison" not in verdict_block.split("-- Sentence and teleport")[1]

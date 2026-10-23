@@ -173,7 +173,7 @@ end)
 
 RegisterNetEvent('prison:client:Enter', function(time)
 	local invokingResource = GetInvokingResource()
-	if invokingResource and invokingResource ~= 'qb-policejob' and invokingResource ~= 'qb-ambulancejob' and invokingResource ~= GetCurrentResourceName() then
+	if invokingResource and invokingResource ~= 'qb-policejob' and invokingResource ~= 'custom-police' and invokingResource ~= 'custom-justice' and invokingResource ~= 'qb-ambulancejob' and invokingResource ~= GetCurrentResourceName() then
 		-- Use QBCore.Debug here for a quick and easy way to print to the console to grab your attention with this message
 		QBCore.Debug({ ('Player with source %s tried to execute prison:client:Enter manually or from another resource which is not authorized to call this, invokedResource: %s'):format(GetPlayerServerId(PlayerId()), invokingResource) })
 		return
