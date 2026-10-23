@@ -16,6 +16,14 @@ local CAPS = {
     ['report.view']     = { minGrade = 1 },
     ['evidence.register'] = { minGrade = 1 },
     ['evidence.view']     = { minGrade = 1 },
+    ['case.create']       = { minGrade = 2 },
+    ['case.view']         = { minGrade = 1 },
+    ['bolo.create']       = { minGrade = 2 },
+    ['bolo.view']         = { minGrade = 1 },
+    ['warrant.request']   = { minGrade = 2 },
+    ['warrant.approve']   = { minGrade = 3 },
+    ['warrant.view']      = { minGrade = 1 },
+    ['arrest.create']     = { minGrade = 1 },
     ['audit.view']      = { minGrade = 3 },
 }
 

@@ -113,3 +113,20 @@ def test_citations_can_be_paid_by_owner():
     phone_client = read(PHONE / "client/main.lua")
     assert "phone:server:payCitation" in phone_server
     assert "paycitation" in phone_client
+
+
+def test_p2_cases_bolos_warrants_arrests():
+    policy = read(PHONE.parent / "custom-police/shared/policy.lua")
+    for cap in ("case.create", "bolo.create", "warrant.request", "warrant.approve", "arrest.create"):
+        assert cap in policy
+    p3 = read(PHONE.parent / "custom-police/server/p3_cases.lua")
+    for export in ("CreateCase", "GetCases", "CreateBolo", "GetBolos", "ClearBolo",
+                   "RequestWarrant", "DecideWarrant", "GetWarrants",
+                   "RegisterArrest", "GetArrests"):
+        assert f"exports('{export}'" in p3
+    assert "CASE-%s-%06d" in p3
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    for name in ("cases", "bolos", "warrants", "arrests", "create_case", "create_bolo"):
+        assert name in app
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "createCase" in ui and "createBolo" in ui
