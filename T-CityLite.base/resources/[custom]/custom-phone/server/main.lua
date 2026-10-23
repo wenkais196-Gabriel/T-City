@@ -890,6 +890,14 @@ end)
 
 -- In-memory active calls: { [callId] = { caller, receiver, startTime, status } }
 local activeCalls = {}
+local RING_TIMEOUT_MS = 45000
+
+-- pma-voice owns the real voice channel; calls are silent without it. Keep the
+-- export optional so the phone still works on a server without the resource.
+local function setVoiceChannel(src, channel)
+    if not src or src <= 0 then return end
+    pcall(function() exports['pma-voice']:setPlayerCall(src, channel) end)
+end
 
 QBCore.Functions.CreateCallback('phone:server:initiateCall', function(source, cb, targetNumber)
     local Player = QBCore.Functions.GetPlayer(source)
@@ -941,6 +949,23 @@ QBCore.Functions.CreateCallback('phone:server:initiateCall', function(source, cb
             status = 'ringing'
         }
 
+        -- Ring timeout: an unanswered call must not stay 'ringing' forever
+        -- (receiver crashed/closed the phone). Only the same call object may
+        -- be timed out; a newer call with the same id cannot happen, but a
+        -- rejected/answered call has been removed or changed status.
+        local thisCall = activeCalls[callId]
+        SetTimeout(RING_TIMEOUT_MS, function()
+            if activeCalls[callId] ~= thisCall or thisCall.status ~= 'ringing' then return end
+            activeCalls[callId] = nil
+            MySQL.Async.execute('UPDATE phone_calls SET status = ?, duration = ? WHERE id = ?', {
+                'missed', 0, callId,
+            })
+            setVoiceChannel(thisCall.caller, 0)
+            setVoiceChannel(thisCall.receiver, 0)
+            TriggerClientEvent('phone:client:callEnded', thisCall.caller, { callId = callId, status = 'missed' })
+            TriggerClientEvent('phone:client:callEnded', thisCall.receiver, { callId = callId, status = 'missed' })
+        end)
+
         -- Push incoming call to target
         TriggerClientEvent('phone:client:incomingCall', targetPlayer.PlayerData.source, {
             callId = callId,
@@ -962,6 +987,8 @@ QBCore.Functions.CreateCallback('phone:server:answerCall', function(source, cb, 
     call.startTime = os.time()
 
     MySQL.Async.execute('UPDATE phone_calls SET status = ? WHERE id = ?', { 'ongoing', callId })
+    setVoiceChannel(call.caller, callId)
+    setVoiceChannel(call.receiver, callId)
 
     -- Notify caller that call was answered
     TriggerClientEvent('phone:client:callAnswered', call.caller, { callId = callId })
@@ -987,6 +1014,8 @@ QBCore.Functions.CreateCallback('phone:server:rejectCall', function(source, cb, 
     MySQL.Async.execute('UPDATE phone_calls SET status = ?, duration = ? WHERE id = ?', { status, duration, callId })
 
     local otherParty = isCaller and call.receiver or call.caller
+    setVoiceChannel(call.caller, 0)
+    setVoiceChannel(call.receiver, 0)
     TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
     TriggerClientEvent('phone:client:callEnded', source, { callId = callId, status = status })
 
@@ -1014,6 +1043,8 @@ QBCore.Functions.CreateCallback('phone:server:hangupCall', function(source, cb, 
     MySQL.Async.execute('UPDATE phone_calls SET status = ?, duration = ? WHERE id = ?', { status, duration, callId })
 
     local otherParty = isCaller and call.receiver or call.caller
+    setVoiceChannel(call.caller, 0)
+    setVoiceChannel(call.receiver, 0)
     TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
     TriggerClientEvent('phone:client:callEnded', source, { callId = callId, status = status })
 
@@ -1042,6 +1073,8 @@ AddEventHandler('playerDropped', function()
                 status, duration, callId
             })
 
+            setVoiceChannel(call.caller, 0)
+            setVoiceChannel(call.receiver, 0)
             local otherParty = call.caller == src and call.receiver or call.caller
             if otherParty and otherParty ~= src then
                 TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })

@@ -1048,7 +1048,12 @@ MySQL.Async.fetchAll('SELECT vehicle, plate, garage, state, fuel, engine, body F
 
 ### 10.1 功能概述
 
-标准的九宫格拨号面板，当前阶段为纯 UI（模拟拨号），无后端连接。未来可对接 `pma-voice` 实现真实通话。
+标准九宫格拨号面板，已接服务端通话状态机与 `pma-voice` 语音通道。
+
+- 呼叫/接听/拒接/挂断走 `phone:server:initiateCall/answerCall/rejectCall/hangupCall`；
+- 接听时双方通过 `exports['pma-voice']:setPlayerCall(src, callId)` 加入同一语音频道，挂断/拒接/掉线/超时都会清零；
+- 45 秒无人接听由服务端自动置为 `missed` 并通知双方，避免 `activeCalls` 与 `phone_calls` 永远停在 `ringing`；
+- 离线号码插入 `missed` 呼叫记录。
 
 **源码**: `web/src/apps/PhoneCall.svelte`
 
@@ -1056,9 +1061,9 @@ MySQL.Async.fetchAll('SELECT vehicle, plate, garage, state, fuel, engine, body F
 
 | 接口 | 方向 | 状态 | 说明 |
 |------|------|------|------|
-| 拨号 | UI 本地 | ✅ 纯前端模拟 | 无后端交互 |
-| 接通/挂断 | UI 本地 | ✅ 前端状态机 | 显示拨号中 / 已接通 / X:XX 计时 |
-| 真实通话 | — | ⏳ **预留** | 需对接 `pma-voice` 的 `setCallChannel()` 等 |
+| 拨号 | Client ➔ Server | ✅ `initiateCall` | 离线号码记录 missed |
+| 接通/挂断 | Client ➔ Server | ✅ 状态机 + `phone_calls` | `ongoing` / `completed` / `cancelled` / `missed` |
+| 语音 | 服务端 ➔ pma-voice | ✅ `setPlayerCall(callId)` | 挂断/拒接/掉线/45s 超时清零 |
 
 ---
 
