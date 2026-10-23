@@ -41,7 +41,8 @@ local function toggleDashboard()
     end
     if not veh or veh == 0 then
         if dashboardOpen then
-            SetNuiFocus(false, false)
+            local uiOk = pcall(function() exports['custom-ui']:CloseMenu() end)
+            if not uiOk then SetNuiFocus(false, false) end
             SendNUIMessage({ type = 'close' })
             dashboardOpen = false
             currentVehicle = nil
@@ -57,7 +58,8 @@ local function toggleDashboard()
             local closePlate = GetVehicleNumberPlateText(currentVehicle):gsub('^%s+', ''):gsub('%s+$', ''):upper()
             TriggerServerEvent('custom-vehicles:server:releaseDashboard', closePlate)
         end
-        SetNuiFocus(false, false)
+        local closeOk = pcall(function() exports['custom-ui']:CloseMenu() end)
+        if not closeOk then SetNuiFocus(false, false) end
         SendNUIMessage({ type = 'close' })
         dashboardOpen = false
         currentVehicle = nil
@@ -232,7 +234,11 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
         local veh = GetVehiclePedIsIn(PlayerPedId(), false)
         if not veh or veh == 0 then return end
         currentVehicle = veh
-        SetNuiFocus(true, true)
+        local uiOk = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+        if not uiOk then
+            SetNuiFocus(false, false)
+            SetNuiFocus(true, true)
+        end
         local plate = GetVehicleNumberPlateText(veh):gsub('^%s+', ''):gsub('%s+$', ''):upper()
         local model = GetDisplayNameFromVehicleModel(GetEntityModel(veh))
         local class = GetVehicleClass(veh)

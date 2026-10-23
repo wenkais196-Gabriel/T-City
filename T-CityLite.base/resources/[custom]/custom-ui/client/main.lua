@@ -45,12 +45,13 @@ end
 ---@param opts table|nil { keepInput = boolean }
 function OpenMenu(opts)
     opts = opts or {}
-    if opts.keepInput then
-        SetNuiFocusKeepInput(true)
-    else
-        SetNuiFocusKeepInput(false)
-    end
+    -- Reset first: another resource (notably qb-menu's old one-argument
+    -- SetNuiFocus(false)) can leave the NUI half-focused, and a plain
+    -- SetNuiFocus(true, true) then shows the page without a usable cursor.
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
     SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(opts.keepInput == true)
     isOpen = true
 end
 
