@@ -6,6 +6,30 @@
 
 Sms = {}
 
+-- ---------------------------------------------------------------------------
+-- DB result normalisation (shared by every custom-phone server script).
+--
+-- The bundled oxmysql backend returns `{ insertId = n, affectedRows = n }`
+-- from `insert` / `update`, while stock oxmysql returns plain numbers. Every
+-- write callback must go through these helpers so a table is never used as a
+-- numeric id or compared with a number.
+-- ---------------------------------------------------------------------------
+PhoneDb = {}
+
+---@param result table|number|nil
+---@return number insertId  0 when the insert failed or returned no id
+function PhoneDb.InsertId(result)
+    if type(result) == 'table' then result = result.insertId end
+    return tonumber(result) or 0
+end
+
+---@param result table|number|nil
+---@return number affectedRows
+function PhoneDb.AffectedRows(result)
+    if type(result) == 'table' then result = result.affectedRows end
+    return tonumber(result) or 0
+end
+
 --- Truncate to at most `limit` UTF-8 characters (not bytes).
 function Sms.TruncateChars(value, limit)
     if type(value) ~= 'string' then return '' end

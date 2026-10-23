@@ -38,8 +38,9 @@ EXPECTED_SCHEMA = {
         "indexes": ["PRIMARY", "uq_contact", "idx_citizenid"],
     },
     "phone_messages": {
-        "fields": ["id", "citizenid", "number", "messages", "gps", "msg_status"],
-        "indexes": ["PRIMARY", "citizenid"],
+        "fields": ["id", "sender_number", "receiver_number", "message",
+                   "timestamp", "is_read", "gps", "msg_status"],
+        "indexes": ["PRIMARY", "idx_receiver", "idx_sender", "idx_time"],
     },
     "phone_calls": {
         "fields": ["id", "caller", "receiver", "duration", "status", "timestamp"],

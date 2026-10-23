@@ -49,15 +49,12 @@ QBCore.Functions.CreateCallback('phone:server:bankTransfer', function(source, cb
             targetPlayer.Functions.AddMoney('bank', amount, "Transfer from " .. Player.PlayerData.charinfo.phone)
         end
 
-        -- Push notification to recipient
-        TriggerClientEvent('phone:client:newNotification', targetPlayer.PlayerData.source, {
-            id = math.random(1000, 9999),
+        -- Persisted server-originated notification (pushed once to recipient).
+        PhoneNotify(targetPlayer.PlayerData.source, {
             title = "🏦 Wire Inbound",
             content = ("Received $%d from %s %s. Memo: %s"):format(
                 amount, Player.PlayerData.charinfo.firstname, Player.PlayerData.charinfo.lastname, reason or "None"
             ),
-            timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-            is_read = false
         })
 
         -- Audit Logs
@@ -110,7 +107,7 @@ QBCore.Functions.CreateCallback('phone:server:bankTransfer', function(source, cb
                     ) 
                     WHERE citizenid = ?
                 ]], { amount, foundCitizen }, function(rowsChanged)
-                    if rowsChanged > 0 then
+                    if PhoneDb.AffectedRows(rowsChanged) > 0 then
                         -- Trigger audit event for offline receiver (manual, since no in-memory Player)
                         TriggerEvent('QBCore:Server:OnMoneyChange', -1, 'bank', amount, 'add',
                             'phone-transfer-offline-to-' .. foundCitizen)

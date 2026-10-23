@@ -382,14 +382,17 @@ DROP TABLE IF EXISTS `phone_messages`;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `phone_messages` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `citizenid` varchar(11) DEFAULT NULL,
-  `number` varchar(50) DEFAULT NULL,
-  `messages` text DEFAULT NULL,
+  `sender_number` varchar(20) NOT NULL,
+  `receiver_number` varchar(20) NOT NULL,
+  `message` text NOT NULL,
+  `timestamp` datetime NOT NULL DEFAULT current_timestamp(),
+  `is_read` tinyint(1) NOT NULL DEFAULT 0,
   `gps` text DEFAULT NULL,
   `msg_status` varchar(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `citizenid` (`citizenid`),
-  KEY `number` (`number`)
+  KEY `idx_receiver` (`receiver_number`,`id`),
+  KEY `idx_sender` (`sender_number`,`id`),
+  KEY `idx_time` (`timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `phone_notifications`;

@@ -5,13 +5,16 @@ local FactionMessages = {
     police = {},
     medic = {},
     gang = {},
-    civilian = {}
+    civilian = {},
+    none = {}
 }
 GlobalState.FactionMessages = FactionMessages
 
 -- Helper to broadcast to specific career role
 local function BroadcastToFaction(role, msgData)
-    -- Append to in-memory history
+    -- A missing identity resolves to 'none' rather than nil; keep this guard so
+    -- an unexpected value can never index the table with nil.
+    role = role or 'none'
     if not FactionMessages[role] then FactionMessages[role] = {} end
     table.insert(FactionMessages[role], msgData)
     if #FactionMessages[role] > 50 then
@@ -21,8 +24,7 @@ local function BroadcastToFaction(role, msgData)
 
     -- Send event to all online members with this role
     for _, playerId in ipairs(QBCore.Functions.GetPlayers()) do
-        local identity = exports['custom-career']:GetPlayerIdentity(playerId)
-        if identity and identity.primary_role == role then
+        if PhoneIdentity.Resolve(playerId).primary_role == role then
             TriggerClientEvent('phone:client:factionReceive', playerId, msgData)
         end
     end
@@ -38,9 +40,7 @@ QBCore.Functions.CreateCallback('phone:server:sendFactionMessage', function(sour
         return cb({ success = false, message = 'Message must be between 1 and 200 characters' })
     end
 
-    local identity = exports['custom-career']:GetPlayerIdentity(source)
-    if not identity then return cb({ success = false, message = 'Career identity not found' }) end
-
+    local identity = PhoneIdentity.Resolve(source)
     local role = identity.primary_role
     local name = Player.PlayerData.charinfo.firstname .. " " .. Player.PlayerData.charinfo.lastname
 
@@ -64,8 +64,8 @@ QBCore.Functions.CreateCallback('phone:server:sendSheriffPatrol', function(sourc
         return cb({ success = false, message = 'Patrol instructions must be between 1 and 500 characters' })
     end
 
-    local identity = exports['custom-career']:GetPlayerIdentity(source)
-    if not identity or identity.rank_tier ~= 'leader' or identity.primary_role ~= 'police' then
+    local identity = PhoneIdentity.Resolve(source)
+    if not PhoneIdentity.IsLeader(identity) or identity.primary_role ~= 'police' then
         return cb({ success = false, message = 'Unauthorized clearance' })
     end
 
@@ -92,15 +92,12 @@ QBCore.Functions.CreateCallback('phone:server:sendSheriffPatrol', function(sourc
     end
 
     for _, playerId in ipairs(QBCore.Functions.GetPlayers()) do
-        local unit = exports['custom-career']:GetPlayerIdentity(playerId)
-        if unit and unit.primary_role == 'police' then
+        if PhoneIdentity.Resolve(playerId).primary_role == 'police' then
             TriggerClientEvent('phone:client:routeGps', playerId, coords, "Patrol Sector: " .. zone)
-            TriggerClientEvent('phone:client:newNotification', playerId, {
-                id = math.random(1000, 9999),
+            -- Persisted server-originated notification (pushed once).
+            PhoneNotify(playerId, {
                 title = "🚨 Tactical Waypoint",
                 content = "Patrol coordinates dispatched by Sheriff: Sector " .. zone,
-                timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-                is_read = false
             })
         end
     end
@@ -118,8 +115,8 @@ QBCore.Functions.CreateCallback('phone:server:sendGangObjective', function(sourc
         return cb({ success = false, message = 'Gang directive must be between 1 and 500 characters' })
     end
 
-    local identity = exports['custom-career']:GetPlayerIdentity(source)
-    if not identity or identity.rank_tier ~= 'leader' or identity.primary_role ~= 'gang' then
+    local identity = PhoneIdentity.Resolve(source)
+    if not PhoneIdentity.IsLeader(identity) or identity.primary_role ~= 'gang' then
         return cb({ success = false, message = 'Unauthorized clearance' })
     end
 

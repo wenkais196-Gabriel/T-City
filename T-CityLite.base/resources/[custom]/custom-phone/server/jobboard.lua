@@ -16,6 +16,14 @@ local function GetJobCoords(title)
     end
 end
 
+-- target_tags is nullable and may contain malformed JSON; never let a decode
+-- error abort accept/complete.
+local function DecodeTags(raw)
+    if type(raw) ~= 'string' or raw == '' or raw == 'null' then return nil end
+    local ok, decoded = pcall(json.decode, raw)
+    return ok and decoded or nil
+end
+
 -- 1. Accept job callback
 QBCore.Functions.CreateCallback('phone:server:acceptJob', function(source, cb, id)
     local Player = QBCore.Functions.GetPlayer(source)
@@ -35,7 +43,7 @@ QBCore.Functions.CreateCallback('phone:server:acceptJob', function(source, cb, i
         end
 
         -- Server-side Career Tags Verification (Security Hardening)
-        local targetTags = json.decode(job.target_tags)
+        local targetTags = DecodeTags(job.target_tags)
         if targetTags then
             local success, matched = pcall(function()
                 return exports['custom-career']:PlayerMatchesTags(source, targetTags)
@@ -49,7 +57,8 @@ QBCore.Functions.CreateCallback('phone:server:acceptJob', function(source, cb, i
         MySQL.Async.execute('UPDATE phone_jobboard SET status = "taken", taken_by = ? WHERE id = ?', {
             citizenid, id
         }, function(affected)
-            if affected.affectedRows > 0 then
+            if PhoneDb.AffectedRows(affected) > 0 then
+                PhoneInvalidateJobBoardCache()
                 local coords = GetJobCoords(job.title)
                 
                 -- Broadcast state update to all players
@@ -58,7 +67,7 @@ QBCore.Functions.CreateCallback('phone:server:acceptJob', function(source, cb, i
                     task_id = job.task_id,
                     title = job.title,
                     description = job.description,
-                    target_tags = json.decode(job.target_tags),
+                    target_tags = DecodeTags(job.target_tags),
                     reward = job.reward,
                     status = 'taken',
                     taken_by = citizenid
@@ -93,8 +102,8 @@ QBCore.Functions.CreateCallback('phone:server:postJob', function(source, cb, tit
     end
 
     -- Verify leader permission
-    local identity = exports['custom-career']:GetPlayerIdentity(source)
-    if not identity or identity.rank_tier ~= 'leader' or identity.primary_role ~= 'mayor' then
+    local identity = PhoneIdentity.Resolve(source)
+    if not PhoneIdentity.IsLeader(identity) or identity.primary_role ~= 'mayor' then
         return cb({ success = false, message = 'Unauthorized: Executive clearance required' })
     end
 
@@ -107,10 +116,12 @@ QBCore.Functions.CreateCallback('phone:server:postJob', function(source, cb, tit
 
     MySQL.Async.insert('INSERT INTO phone_jobboard (task_id, title, description, target_tags, reward, status) VALUES (?, ?, ?, ?, ?, "open")', {
         task_id, title, description, target_tags, reward
-    }, function(insertId)
-        if insertId then
+    }, function(result)
+        local jobId = PhoneDb.InsertId(result)
+        if jobId > 0 then
+            PhoneInvalidateJobBoardCache()
             local jobData = {
-                id = insertId,
+                id = jobId,
                 task_id = task_id,
                 title = title,
                 description = description,
@@ -124,14 +135,11 @@ QBCore.Functions.CreateCallback('phone:server:postJob', function(source, cb, tit
             -- Broadcast new job to all citizens
             TriggerClientEvent('phone:client:newJob', -1, jobData)
             
-            -- Push notification to all online players
+            -- Persist + push one notification per online player (once each).
             for _, playerId in ipairs(QBCore.Functions.GetPlayers()) do
-                TriggerClientEvent('phone:client:newNotification', playerId, {
-                    id = math.random(1000, 9999),
+                PhoneNotify(playerId, {
                     title = "📋 New Urban Project",
                     content = ("Project \"%s\" published by the Mayor! Payout: $%d."):format(title, reward),
-                    timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-                    is_read = false
                 })
             end
 
@@ -147,6 +155,44 @@ QBCore.Functions.CreateCallback('phone:server:postJob', function(source, cb, tit
         end
     end)
 end)
+
+--- Pay a completed job through the unified economy gateway. Only when the
+--- gateway is missing or refuses the payout do we fall back to QB's AddMoney.
+---@return boolean paid, number|nil amount, number scale
+local function GrantJobReward(src, job)
+    local base = tonumber(job.reward) or 0
+    if base <= 0 then return false end
+
+    local reason = "Urban Project: " .. tostring(job.title or '')
+
+    local gatewayOk, gatewayPaid, gatewayAmount = pcall(function()
+        return exports['core_economy']:TriggerReward(src, 'phone:jobboard', base, {
+            moneytype = 'bank',
+            reason = reason,
+            skipHeat = true,
+        })
+    end)
+    if gatewayOk and gatewayPaid then
+        local finalAmount = tonumber(gatewayAmount) or base
+        return true, finalAmount, base > 0 and (finalAmount / base) or 1.0
+    end
+
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false end
+
+    -- Some QBCore builds expose a top-level helper; otherwise use the
+    -- per-player API (the one this server actually ships).
+    if type(QBCore.Functions.AddMoney) == 'function' then
+        local ok, paid = pcall(QBCore.Functions.AddMoney, src, 'bank', base, reason)
+        if ok and paid then return true, base, 1.0 end
+    end
+
+    local ok, paid = pcall(function()
+        return Player.Functions.AddMoney('bank', base, reason)
+    end)
+    if ok and paid then return true, base, 1.0 end
+    return false
+end
 
 -- 3. Job completion receiver event
 RegisterNetEvent('phone:server:completeJob', function(id)
@@ -180,34 +226,43 @@ RegisterNetEvent('phone:server:completeJob', function(id)
             end
         end
 
-        -- Update DB status to completed
-        MySQL.Async.execute('UPDATE phone_jobboard SET status = "completed" WHERE id = ?', { id }, function(affected)
-            if affected.affectedRows > 0 then
-                -- Add money using the unified custom-economy export (AddScaledMoney)
-                local finalAmount, scale = exports['custom-main']:AddScaledMoney(src, 'bank', job.reward, "Urban Project: " .. job.title)
+        -- Atomically claim the completion, then pay. If the payout fails the
+        -- status is rolled back to 'taken' so the player can retry instead of
+        -- ending up with a completed job that never paid.
+        MySQL.Async.execute('UPDATE phone_jobboard SET status = "completed" WHERE id = ? AND status = "taken" AND taken_by = ?', {
+            id, citizenid
+        }, function(affected)
+            if PhoneDb.AffectedRows(affected) == 0 then return end
+            PhoneInvalidateJobBoardCache()
 
-                -- Push success notification to the player
-                TriggerClientEvent('phone:client:newNotification', src, {
-                    id = math.random(1000, 9999),
-                    title = "📋 Project Completed!",
-                    content = ("You completed \"%s\" and received $%d (scaled by %.2f multiplier)."):format(job.title, finalAmount, scale),
-                    timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-                    is_read = false
+            local paid, finalAmount, scale = GrantJobReward(src, job)
+            if not paid then
+                MySQL.Async.execute('UPDATE phone_jobboard SET status = "taken" WHERE id = ? AND status = "completed" AND taken_by = ?', {
+                    id, citizenid
                 })
-
-                -- Push update to NUI
-                local completedJob = {
-                    id = job.id,
-                    task_id = job.task_id,
-                    title = job.title,
-                    description = job.description,
-                    target_tags = json.decode(job.target_tags),
-                    reward = job.reward,
-                    status = 'completed',
-                    taken_by = citizenid
-                }
-                TriggerClientEvent('phone:client:newJob', -1, completedJob)
+                print(('[custom-phone][jobboard] reward failed for job %s (%s); rolled back to taken'):format(
+                    tostring(id), tostring(citizenid)))
+                return
             end
+
+            -- Persisted server-originated notification (pushed once).
+            PhoneNotify(src, {
+                title = "📋 Project Completed!",
+                content = ("You completed \"%s\" and received $%d (scaled by %.2f multiplier)."):format(job.title, finalAmount, scale),
+            })
+
+            -- Push update to NUI
+            local completedJob = {
+                id = job.id,
+                task_id = job.task_id,
+                title = job.title,
+                description = job.description,
+                target_tags = DecodeTags(job.target_tags),
+                reward = job.reward,
+                status = 'completed',
+                taken_by = citizenid
+            }
+            TriggerClientEvent('phone:client:newJob', -1, completedJob)
         end)
     end)
 end)
