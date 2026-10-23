@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { notificationsList } from '../stores/phone';
+  import { notificationsList, activeApp } from '../stores/phone';
   import { fetchNui } from '../utils/nui';
 
   const markAllRead = () => {
@@ -15,6 +15,17 @@
   const handleDelete = (id: number) => {
     notificationsList.update(list => list.filter(n => n.id !== id));
     fetchNui('deleteNotification', { id }).catch(err => console.error(err));
+  };
+
+  const openTarget = (notif: any) => {
+    if (notif && typeof notif.app_id === 'string' && notif.app_id.length > 0) {
+      activeApp.set(`dyn:${notif.app_id}`);
+    }
+    if (notif && !notif.is_read) {
+      notif.is_read = true;
+      notificationsList.update((list) => [...list]);
+      fetchNui('markNotificationsRead').catch((err) => console.error(err));
+    }
   };
 
   const formatTime = (timeStr: string) => {
@@ -44,7 +55,7 @@
     {:else}
       <div class="notif-list">
         {#each $notificationsList as notif (notif.id)}
-          <div class="notif-item glass-card {!notif.is_read ? 'unread' : ''}">
+          <div class="notif-item glass-card {!notif.is_read ? 'unread' : ''}" role="button" tabindex="0" onclick={() => openTarget(notif)} onkeydown={(e) => e.key === 'Enter' && openTarget(notif)}>
             <div class="notif-header">
               <span class="notif-tag">SYSTEM</span>
               <span class="notif-time">{formatTime(notif.timestamp)}</span>

@@ -230,8 +230,10 @@ local function StoreNotification(targetSrc, notification, origin)
     title = Sms.TruncateBytes(title, 200)
     content = Sms.TruncateChars(content, 1000)
 
-    MySQL.Async.insert('INSERT INTO phone_notifications (citizenid, title, content) VALUES (?, ?, ?)', {
-        citizenid, title, content
+    local appId = type(notification.app_id) == 'string' and notification.app_id:match('^[a-z0-9_]+$') or nil
+    if appId and #appId > 32 then appId = appId:sub(1, 32) end
+    MySQL.Async.insert('INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)', {
+        citizenid, title, content, appId
     }, function(result)
         local id = PhoneDb.InsertId(result)
         if id <= 0 then return end
@@ -249,6 +251,7 @@ local function StoreNotification(targetSrc, notification, origin)
             timestamp = os.date('%Y-%m-%d %H:%M:%S'),
             is_read = false,
             origin = 'server',
+            app_id = appId,
         })
     end)
 end

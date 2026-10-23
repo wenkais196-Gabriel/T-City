@@ -101,12 +101,13 @@ function P.CreateIncident(source, data)
         local d = p and p.PlayerData
         if isPolice(d) and d.job.onduty == true then
             MySQL.insert.await(
-                'INSERT INTO phone_notifications (citizenid, title, content) VALUES (?, ?, ?)',
-                { d.citizenid, notification.title, notification.content }
+                'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
+                { d.citizenid, notification.title, notification.content, 'police_mdt' }
             )
             TriggerClientEvent('phone:client:newNotification', src, {
                 id = 0, title = notification.title, content = notification.content,
                 timestamp = os.date('%Y-%m-%d %H:%M:%S'), is_read = false,
+                app_id = 'police_mdt',
             })
         end
     end
