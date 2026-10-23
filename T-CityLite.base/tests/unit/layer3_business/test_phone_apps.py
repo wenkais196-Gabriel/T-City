@@ -102,3 +102,14 @@ def test_evidence_register_and_chain():
     assert "register_evidence" in app and "evidence_chain" in app
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
     assert "registerEvidence" in ui and "showChain" in ui
+
+
+def test_citations_can_be_paid_by_owner():
+    p1 = read(PHONE.parent / "custom-police/server/p1.lua")
+    assert "function P1.PayCitation" in p1
+    assert "RemoveMoney('bank'" in p1
+    assert "citation.pay" in p1
+    phone_server = read(PHONE / "server/main.lua")
+    phone_client = read(PHONE / "client/main.lua")
+    assert "phone:server:payCitation" in phone_server
+    assert "paycitation" in phone_client

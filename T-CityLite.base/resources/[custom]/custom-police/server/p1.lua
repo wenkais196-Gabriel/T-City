@@ -104,7 +104,31 @@ function P1.GetReports(source, params)
     return { rows = rows or {}, count = #(rows or {}) }
 end
 
+--- Pay one's own citation from the bank account. No police capability: this
+--- is the citizen side, and ownership is checked against the citation row.
+function P1.PayCitation(source, citationId)
+    local player = QBCore.Functions.GetPlayer(source)
+    local actor = player and player.PlayerData
+    if not actor then return false, 'player_not_found' end
+    local id = tonumber(citationId)
+    if not id then return false, 'invalid_citation' end
+    local row = MySQL.single.await(
+        'SELECT id, citizenid, amount, status FROM police_citations WHERE id = ? LIMIT 1', { id })
+    if not row then return false, 'not_found' end
+    if row.citizenid ~= actor.citizenid then return false, 'not_owner' end
+    if row.status ~= 'unpaid' then return false, 'already_' .. tostring(row.status) end
+    local amount = tonumber(row.amount) or 0
+    local ok, removed = pcall(function()
+        return player.Functions.RemoveMoney('bank', amount, 'police-citation')
+    end)
+    if not ok or not removed then return false, 'insufficient_funds' end
+    MySQL.update.await("UPDATE police_citations SET status = 'paid', paid_at = NOW() WHERE id = ? AND status = 'unpaid'", { id })
+    audit(actor.citizenid, 'citation.pay', tostring(id), ('$%d'):format(amount))
+    return { id = id, amount = amount, status = 'paid' }
+end
+
 exports('IssueCitation', P1.IssueCitation)
+exports('PayCitation', P1.PayCitation)
 exports('GetCitations', P1.GetCitations)
 exports('CreateReport', P1.CreateReport)
 exports('GetReports', P1.GetReports)

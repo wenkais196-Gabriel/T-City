@@ -1381,3 +1381,14 @@ QBCore.Functions.CreateCallback('phone:server:appAction', function(source, cb, a
     if ok then cb({ success = true, data = result })
     else cb({ success = false, error = tostring(result) }) end
 end)
+
+
+QBCore.Functions.CreateCallback('phone:server:payCitation', function(source, cb, citationId)
+    local ok, res = pcall(function() return exports['custom-police']:PayCitation(source, citationId) end)
+    if not ok or type(res) ~= 'table' then
+        cb({ success = false, error = 'unavailable' })
+        return
+    end
+    if res == false then cb({ success = false, error = 'rejected' }) return end
+    cb({ success = true, id = res.id, amount = res.amount })
+end)
