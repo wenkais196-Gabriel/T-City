@@ -1051,3 +1051,15 @@ AddEventHandler('playerDropped', function()
         end
     end
 end)
+
+-- Dev-only focus telemetry: the client watchdog reports whether NUI focus
+-- stuck after opening the phone. No player data is involved.
+RegisterNetEvent('phone:server:focusState', function(state)
+    if type(state) ~= 'table' then return end
+    print(('[custom-phone][focus] src=%s phase=%s attempt=%s focused=%s keepInput=%s'):format(
+        tostring(source),
+        tostring(state.phase),
+        tostring(state.attempt),
+        tostring(state.focused),
+        tostring(state.keepInput)))
+end)

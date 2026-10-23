@@ -25,11 +25,14 @@ end
 local function OpenPhone()
     if isPhoneOpen then return end
     isPhoneOpen = true
-    -- 参考 qb-phone：保留移动输入，用 DisableDisplayControlActions 屏蔽武器/电台轮盘
-    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = true }) end)
+    -- Cursor first: keepInput=true left the mouse bound to camera look on a
+    -- real client (NUI focused, no usable cursor). Menus that need movement
+    -- can opt in later, but a phone must be clickable.
+    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
     if not ok then
+        SetNuiFocus(false, false)
         SetNuiFocus(true, true)
-        SetNuiFocusKeepInput(true)
+        SetNuiFocusKeepInput(false)
     end
     
     -- Play GTA V native phone-out animation
@@ -45,6 +48,23 @@ local function OpenPhone()
         action = 'phone:open'
     })
     
+    -- Focus watchdog: if something steals NUI focus, re-apply it instead of
+    -- leaving the phone visible with the mouse still driving the camera.
+    CreateThread(function()
+        for attempt = 1, 5 do
+            Wait(attempt == 1 and 50 or 150)
+            if not isPhoneOpen then return end
+            if not IsNuiFocused() then
+                pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+                TriggerServerEvent('phone:server:focusState', {
+                    phase = 'reapply', attempt = attempt,
+                    focused = IsNuiFocused(),
+                    keepInput = IsNuiFocusKeepingInput(),
+                })
+            end
+        end
+    end)
+
     -- Trigger open thread for zero tick overhead when closed
     -- 天气映射表（qb-weathersync 字符串名 → 显示名+图标）
     local weatherMap = {
