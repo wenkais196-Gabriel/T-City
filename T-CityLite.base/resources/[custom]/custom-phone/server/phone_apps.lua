@@ -172,6 +172,19 @@ local function registerCallbacks()
     end)
 end
 
-CreateThread(registerCallbacks)
+-- qb-core may not export yet when this resource starts; retry instead of
+-- silently registering nothing (which made every app query hang in the NUI).
+CreateThread(function()
+    local attempts = 0
+    while not core() and attempts < 60 do
+        attempts = attempts + 1
+        Wait(1000)
+    end
+    if not core() then
+        print('[custom-phone][apps] qb-core never became available; app callbacks not registered')
+        return
+    end
+    registerCallbacks()
+end)
 
 return PhoneApps
