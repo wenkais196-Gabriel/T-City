@@ -11,7 +11,9 @@ Covers:
 - a net event can only fill the caller's own tray, even if the payload
   carries another citizenid;
 - mails are mapped to phone_notifications as plain text (no HTML, no
-  player_mails writes).
+  player_mails writes);
+- the `[compat]/qb-phone` export shim keeps the `exports['qb-phone']`
+  namespace alive after qb-phone moved to archive/.
 """
 
 import re
@@ -28,6 +30,12 @@ COMPAT_LUA = PHONE_DIR / 'server' / 'qb_phone_compat.lua'
 SMS_LUA = PHONE_DIR / 'server' / 'sms.lua'
 CLIENT_LUA = PHONE_DIR / 'client' / 'main.lua'
 MANIFEST = PHONE_DIR / 'fxmanifest.lua'
+
+SHIM_DIR = BASE / 'resources' / '[compat]' / 'qb-phone'
+SHIM_LUA = SHIM_DIR / 'server' / 'main.lua'
+SHIM_MANIFEST = SHIM_DIR / 'fxmanifest.lua'
+CUSTOM_CFG = BASE / 'configs' / 'modules' / 'custom.cfg'
+ARCHIVED_PHONE = BASE.parent / 'archive' / 'qb-phone'
 
 BRIDGE_MARKER = '-- qb-phone compatibility bridge'
 
@@ -431,3 +439,88 @@ assert(State.inserts[1].params[1] == 'CID8', 'fallback inserted for wrong citize
 assert(#State.pushes == 0)
 ''')
     assert result.returncode == 0, result.stderr
+
+
+# ---------------------------------------------------------------------------
+# exports['qb-phone'] namespace shim
+# ---------------------------------------------------------------------------
+# Exports are namespaced per resource, so registering sendNewMail on
+# custom-phone alone does NOT satisfy `exports['qb-phone']:sendNewMail...`.
+# After archiving qb-phone, a resource literally named `qb-phone` must remain
+# loaded to answer that namespace; it forwards to custom-phone.
+
+class TestExportShim:
+    def test_shim_exists_and_has_no_duplicate_event_handlers(self):
+        assert SHIM_LUA.is_file(), '[compat]/qb-phone shim is missing'
+        shim = SHIM_LUA.read_text(encoding='utf-8')
+        assert "exports['custom-phone']" in shim
+        assert 'RegisterNetEvent' not in shim, \
+            'net events are already handled by custom-phone; do not duplicate them'
+
+    def test_shim_forwards_both_mail_exports(self):
+        shim = SHIM_LUA.read_text(encoding='utf-8')
+        for export in ('sendNewMail', 'sendNewMailToOffline'):
+            assert f"exports('{export}'" in shim, f'shim missing export {export}'
+            assert f":{export}(" in shim, f'shim does not forward {export}'
+
+    def test_shim_manifest_depends_on_custom_phone(self):
+        manifest = SHIM_MANIFEST.read_text(encoding='utf-8')
+        assert "'server/main.lua'" in manifest
+        assert "'custom-phone'" in manifest, \
+            'shim must load after the real phone (dependencies)'
+
+    def test_shim_is_ensured_after_custom_phone(self):
+        cfg = CUSTOM_CFG.read_text(encoding='utf-8')
+        assert re.search(r'^\s*ensure\s+custom-phone\b', cfg, re.M), \
+            'custom-phone must be ensured'
+        assert re.search(r'^\s*ensure\s+qb-phone\b', cfg, re.M), \
+            'the qb-phone export shim must be ensured'
+        assert cfg.index('ensure custom-phone') < cfg.index('ensure qb-phone'), \
+            'shim needs custom-phone running first'
+
+    def test_old_phone_is_out_of_the_resources_tree(self):
+        assert not (BASE / 'resources' / '[qb]' / 'qb-phone').exists(), \
+            'archived qb-phone must not be loadable from resources/'
+        assert ARCHIVED_PHONE.is_dir(), 'archived qb-phone is missing'
+
+    def test_shim_forwards_arguments_through_exports(self):
+        if not shutil.which('lua5.4'):
+            pytest.skip('lua5.4 not installed')
+        lua = r'''
+local State = { exports = {}, forwarded = {} }
+exports = setmetatable({}, {
+    __call = function(_, name, fn) State.exports[name] = fn end,
+    __index = function(_, name)
+        if name == 'custom-phone' then
+            -- FiveM's export proxy is the implicit self of `proxy:fn(...)`;
+            -- it is not forwarded to the Lua export function.
+            return {
+                sendNewMail = function(_, src, mail)
+                    State.forwarded[#State.forwarded + 1] = { name = 'sendNewMail', src = src, mail = mail }
+                    return true
+                end,
+                sendNewMailToOffline = function(_, cid, mail)
+                    State.forwarded[#State.forwarded + 1] = { name = 'sendNewMailToOffline', cid = cid, mail = mail }
+                    return true, nil
+                end,
+            }
+        end
+        return nil
+    end,
+})
+assert(loadfile([[@@SHIM@@]]))()
+
+local mail = { sender = 'City', subject = 'Sub', message = 'Body' }
+assert(State.exports.sendNewMail(7, mail) == true)
+assert(State.forwarded[1].name == 'sendNewMail')
+assert(State.forwarded[1].src == 7)
+assert(State.forwarded[1].mail == mail)
+
+local ok, err = State.exports.sendNewMailToOffline('CID7', mail)
+assert(ok == true and err == nil)
+assert(State.forwarded[2].name == 'sendNewMailToOffline')
+assert(State.forwarded[2].cid == 'CID7')
+assert(State.forwarded[2].mail == mail)
+'''.replace('@@SHIM@@', str(SHIM_LUA))
+        result = run_lua(lua)
+        assert result.returncode == 0, result.stderr
