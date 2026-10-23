@@ -150,6 +150,7 @@ coverage/
 
 # local env variants and logs
 .env.*
+!.env.example
 *.log
 *.sql.gz
 *.dump

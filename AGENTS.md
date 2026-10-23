@@ -133,7 +133,7 @@ agent_smoke.py ── 实机三段式冒烟
 - 31 个工具 / 18 个动作；L3/L4 需要 `pending_approval` + admin token 审批。
 - 拒绝写入 `agent_denials`（不含参数值）；效果审计写 `agent_effects`（不存正文）。
 - 特权接口：admin token 只用于审批；live token 只读；两者绝不能相同。
-- 参考文档：`docs/agent/{STATUS,ACTIONS,TOOLS,EVAL,SMOKE}.md`、`docs/agent/design/01..05`、`docs/agent/reviews/01..08`。
+- 参考文档：`T-CityLite.base/docs/agent/{STATUS,ACTIONS,TOOLS,EVAL,SMOKE}.md`、`T-CityLite.base/docs/agent/design/01..05`、`T-CityLite.base/docs/agent/reviews/01..08`。
 
 ---
 
@@ -186,12 +186,12 @@ agent_smoke.py ── 实机三段式冒烟
 | `tools/agent_tools.{json,py}` | 工具注册表 + 生成器/校验 |
 | `tools/agent_mcp.py` / `agent_gateway.py` / `agent_eval.py` / `agent_smoke.py` | MCP 路由 / 只读网关 / 评测 / 冒烟 |
 | `tests/agent/*.py` | Python agent 契约/路由/评测测试 |
-| `docs/agent/STATUS.md` | 当前状态一页纸（先读） |
-| `docs/agent/ACTIONS.md` / `TOOLS.md` / `EVAL.md` / `SMOKE.md` | 动作/工具/评测/冒烟 |
-| `docs/agent/design/01..05` | 感知/效果/契约/写操作/测试设计 |
-| `docs/agent/reviews/01..08` | 评审记录 |
-| `docs/agent/phone/{qb-phone-research,custom-phone-audit,DESIGN}.md` | 手机调研/审计/设计 |
-| `docs/agent/PHONE_API_TECHNICAL_MANUAL.md`（资源内） | 手机接口手册 |
+| `T-CityLite.base/docs/agent/STATUS.md` | 当前状态一页纸（先读） |
+| `T-CityLite.base/docs/agent/ACTIONS.md` / `TOOLS.md` / `EVAL.md` / `SMOKE.md` | 动作/工具/评测/冒烟 |
+| `T-CityLite.base/docs/agent/design/01..05` | 感知/效果/契约/写操作/测试设计 |
+| `T-CityLite.base/docs/agent/reviews/01..08` | 评审记录 |
+| `T-CityLite.base/docs/agent/phone/{qb-phone-research,custom-phone-audit,DESIGN}.md` | 手机调研/审计/设计 |
+| `T-CityLite.base/resources/[custom]/custom-phone/PHONE_API_TECHNICAL_MANUAL.md` | 手机接口手册 |
 
 ---
 
@@ -201,7 +201,7 @@ agent_smoke.py ── 实机三段式冒烟
 
 **待办**（按建议顺序）：
 
-1. **职业 App 注册表**（`docs/agent/phone/DESIGN.md`）：`PhoneApps.Register/CanUse` + 通用 `app:query/action`，先接警察 MDT；
+1. **职业 App 注册表**（`T-CityLite.base/docs/agent/phone/DESIGN.md`）：`PhoneApps.Register/CanUse` + 通用 `app:query/action`，先接警察 MDT；
 2. **相机/相册**（media 表、存储/清理、NUI 组件）；
 3. **实机联调**：`agent_smoke.py` 全链路（需真人玩家）；
 4. 手机 P2：旧 JSON 未展开、通话语音在真实客户端偶尔无 TTS 语音包（需 WAV 回退）、消息/头像 N+1。
