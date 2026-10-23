@@ -153,3 +153,13 @@ def test_p2_warrant_and_arrest_ui():
     app = read(PHONE / "server/apps/police_mdt.lua")
     for name in ("request_warrant", "decide_warrant", "register_arrest"):
         assert name in app
+
+
+def test_notifications_can_deeplink_into_mdt():
+    server = read(PHONE / "server/main.lua")
+    assert "phone_notifications (citizenid, title, content, app_id)" in server
+    assert "app_id = appId" in server
+    p0 = read(PHONE.parent / "custom-police/server/p0.lua")
+    assert "app_id" in p0 and "police_mdt" in p0
+    ui = read(PHONE / "web/src/apps/Notifications.svelte")
+    assert "openTarget" in ui and "dyn:" in ui
