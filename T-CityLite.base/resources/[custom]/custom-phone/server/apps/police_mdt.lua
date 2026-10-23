@@ -33,6 +33,36 @@ PhoneApps.Register({
     icon = '🛡️',
     audience = { jobs = { 'police' }, onduty = true },
     queries = {
+        units = function(_source)
+            local ok, res = pcall(function() return exports['custom-police']:GetUnits() end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.units or {}, count = res.count or 0 }
+        end,
+        incidents = function(_source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:GetIncidents(params and params.status)
+            end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.incidents or {}, count = res.count or 0 }
+        end,
+        citizen = function(_source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:LookupCitizen(_source, params and params.citizenid)
+            end)
+            if not ok or type(res) ~= 'table' or res == false then
+                return { rows = {}, count = 0 }
+            end
+            return { rows = { res }, count = 1 }
+        end,
+        vehicle = function(_source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:LookupVehicle(_source, params and params.plate)
+            end)
+            if not ok or type(res) ~= 'table' or res == false then
+                return { rows = {}, count = 0 }
+            end
+            return { rows = { res }, count = 1 }
+        end,
         officers = function(_source)
             local rows = {}
             for _, officer in ipairs(onDutyPolice()) do
@@ -46,6 +76,24 @@ PhoneApps.Register({
         end,
     },
     actions = {
+        set_status = function(source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:SetUnitStatusForSource(source, params.status)
+            end)
+            return ok and res == true
+        end,
+        assign = function(source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:AssignUnit(source, params.incident_id, params.citizenid)
+            end)
+            return ok and res ~= false
+        end,
+        clear = function(source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:SetIncidentStatus(source, params.incident_id, params.status or 'cleared')
+            end)
+            return ok and res ~= false
+        end,
         alert = function(source, params)
             local message = type(params.message) == 'string' and params.message:sub(1, 200) or ''
             if not message:match('%S') then return false end
