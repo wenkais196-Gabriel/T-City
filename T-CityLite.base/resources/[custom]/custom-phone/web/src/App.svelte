@@ -9,6 +9,7 @@
   import CityFeed from './apps/CityFeed.svelte';
   import Settings from './apps/Settings.svelte';
   import DynamicApp from './apps/DynamicApp.svelte';
+  import PoliceMDT from './apps/PoliceMDT.svelte';
   import { dynamicApps, loadDynamicApps } from './stores/apps';
 
   // v0.4.2 Premium features
@@ -386,6 +387,8 @@
           <SheriffApp />
         {:else if $activeApp === 'leader_gangboss'}
           <GangBossApp />
+        {:else if $activeApp === 'dyn:police_mdt'}
+          <PoliceMDT />
         {:else if $activeApp.startsWith('dyn:')}
           <DynamicApp appId={$activeApp.slice(4)} />
         {/if}
