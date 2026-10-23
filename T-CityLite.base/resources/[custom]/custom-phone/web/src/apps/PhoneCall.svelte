@@ -12,6 +12,7 @@
     endActiveCall
   } from '../stores/call';
   import { playHangupSound } from '../utils/ringtone';
+  import { callSubtitle } from '../stores/callSpeech';
 
   // Call events (incoming/answered/ended) are registered globally in App.svelte,
   // so the call state is received even when this app is not mounted.
@@ -122,6 +123,9 @@
         <div class="caller-name">{$callPeerName || $callPeerNumber}</div>
         <div class="call-timer">{formatDuration($callDuration)}</div>
         <div class="call-status-active">Connected</div>
+        {#if $callSubtitle}
+          <div class="dispatch-caption">{$callSubtitle}</div>
+        {/if}
         <div class="call-actions">
           <button class="call-btn end-call-btn" onclick={endCall} aria-label="End Call">
             <span class="btn-icon">🔴</span>
@@ -436,6 +440,17 @@
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
+  }
+  .dispatch-caption {
+    max-width: 85%;
+    margin: 8px auto 0;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #e8edf5;
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: center;
   }
   .call-actions {
     display: flex;

@@ -197,6 +197,13 @@ local playerCitizen = {}  -- { [source] = citizenid } for playerDropped cleanup
 -- a different (global) variable than the thread writes.
 local phoneJobBoardCache = { data = nil, expires = 0 }
 
+-- SMS window shared by the first screen and the paginated `getMessages`
+-- callback. getPhoneData ships at most SMS_PAGE_SIZE messages per conversation
+-- (30 x 50 conversations max); older pages are fetched on demand.
+local SMS_PAGE_SIZE = 30
+local SMS_PAGE_MAX = 50
+local SMS_FIRST_SCREEN_MAX_ROWS = SMS_PAGE_SIZE * 50
+
 --- Called by the job board write paths after insert/accept/complete. The
 --- per-player phone cache embeds the job list, so clear both layers.
 function PhoneInvalidateJobBoardCache()
@@ -251,6 +258,23 @@ end
 ---@param notification table
 function PhoneNotify(targetSrc, notification)
     StoreNotification(targetSrc, notification, 'server')
+end
+
+--- Decode the extra SMS columns the NUI expects (gps object, status alias).
+--- Shared by getPhoneData and getMessages so paginated rows look identical.
+---@param msg table
+local function NormaliseSmsRow(msg)
+    if msg.gps and msg.gps ~= '' and msg.gps ~= 'null' then
+        local ok, decoded = pcall(json.decode, msg.gps)
+        if ok and decoded then msg.gps = decoded end
+    else
+        msg.gps = nil
+    end
+    if msg.msg_status then
+        msg.status = msg.msg_status
+        msg.msg_status = nil
+    end
+    return msg
 end
 
 -- 1. Main callback to load all phone data
@@ -341,20 +365,27 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
         tryAssemble()
     end)
 
-    -- 3. Messages (with GPS decode post-processing)
+    -- 3. Messages: newest SMS_PAGE_SIZE (30) per conversation in ONE query.
+    -- The window function partitions by "the other party", so one chatty thread
+    -- can no longer push every other conversation out of the payload. The outer
+    -- LIMIT is a hard ceiling for pathological accounts. Column whitelist (no
+    -- SELECT *) keeps message/gps payloads predictable.
     pending = pending + 1
     MySQL.Async.fetchAll(
-        'SELECT * FROM phone_messages WHERE sender_number = ? OR receiver_number = ? ORDER BY timestamp DESC LIMIT 100',
-        { phoneNum, phoneNum },
+        'SELECT id, sender_number, receiver_number, message, timestamp, is_read, gps, msg_status FROM ('
+            .. 'SELECT id, sender_number, receiver_number, message, timestamp, is_read, gps, msg_status,'
+            .. ' ROW_NUMBER() OVER ('
+            .. '  PARTITION BY CASE WHEN sender_number = ? THEN receiver_number ELSE sender_number END'
+            .. '  ORDER BY id DESC'
+            .. ' ) AS row_num'
+            .. ' FROM phone_messages'
+            .. ' WHERE sender_number = ? OR receiver_number = ?'
+            .. ') ranked WHERE row_num <= ' .. SMS_PAGE_SIZE
+            .. ' ORDER BY id DESC LIMIT ' .. SMS_FIRST_SCREEN_MAX_ROWS,
+        { phoneNum, phoneNum, phoneNum },
         function(result)
             messages = result or {}
-            for _, msg in ipairs(messages) do
-                if msg.gps and msg.gps ~= '' and msg.gps ~= 'null' then
-                    local ok, decoded = pcall(json.decode, msg.gps)
-                    if ok and decoded then msg.gps = decoded end
-                else msg.gps = nil end
-                if msg.msg_status then msg.status = msg.msg_status; msg.msg_status = nil end
-            end
+            for _, msg in ipairs(messages) do NormaliseSmsRow(msg) end
             pending = pending - 1
             tryAssemble()
         end
@@ -501,6 +532,92 @@ RegisterNetEvent('phone:server:markMessagesRead', function(sender_number)
     MySQL.Async.execute('UPDATE phone_messages SET is_read = 1 WHERE sender_number = ? AND receiver_number = ?', {
         sender_number, my_number
     })
+end)
+
+-- ----------------------------------------------------
+-- SMS pagination (keyset)
+-- ----------------------------------------------------
+-- Older messages for one conversation. `number` must be a conversation the
+-- caller can actually see: their own charinfo number, a saved contact, or a
+-- counterparty already present in one of their own messages (system senders
+-- such as 'City Services' and unknown inbound numbers are not contacts). The
+-- SQL below is scoped to the caller's charinfo number as well, so an arbitrary
+-- number can never read another player's thread.
+QBCore.Functions.CreateCallback('phone:server:getMessages', function(source, cb, payload)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return cb({ success = false, message = 'Invalid player' }) end
+
+    local data = type(payload) == 'table' and payload or {}
+    local number = data.number
+    if type(number) ~= 'string' or number == '' or #number > 20 then
+        return cb({ success = false, message = 'Invalid conversation number' })
+    end
+
+    -- Keyset cursor: strictly older than the oldest id the client holds.
+    local beforeId = tonumber(data.before_id)
+    if beforeId and beforeId <= 0 then beforeId = nil end
+
+    local limit = math.floor(tonumber(data.limit) or SMS_PAGE_SIZE)
+    if limit < 1 then limit = 1 end
+    if limit > SMS_PAGE_MAX then limit = SMS_PAGE_MAX end
+
+    local citizenid = Player.PlayerData.citizenid
+    local ownNumber = Player.PlayerData.charinfo.phone
+
+    local ok, result = pcall(function()
+        local allowed = number == ownNumber
+        if not allowed then
+            local contact = MySQL.query.await(
+                'SELECT 1 AS allowed FROM phone_contacts WHERE citizenid = ? AND number = ? LIMIT 1',
+                { citizenid, number })
+            allowed = contact ~= nil and #contact > 0
+        end
+        if not allowed then
+            local history = MySQL.query.await(
+                'SELECT 1 AS allowed FROM phone_messages'
+                    .. ' WHERE (sender_number = ? AND receiver_number = ?)'
+                    .. ' OR (sender_number = ? AND receiver_number = ?) LIMIT 1',
+                { number, ownNumber, ownNumber, number })
+            allowed = history ~= nil and #history > 0
+        end
+        if not allowed then
+            return { success = false, message = 'Conversation not allowed' }
+        end
+
+        local args = { ownNumber, number, number, ownNumber }
+        local sql = 'SELECT id, sender_number, receiver_number, message, timestamp, is_read, gps, msg_status'
+            .. ' FROM phone_messages'
+            .. ' WHERE ((sender_number = ? AND receiver_number = ?)'
+            .. ' OR (sender_number = ? AND receiver_number = ?))'
+        if beforeId then
+            sql = sql .. ' AND id < ?'
+            args[#args + 1] = beforeId
+        end
+        -- One extra row tells the client whether another page exists without a
+        -- second round trip; the probe row itself is not sent.
+        local queryLimit = limit + 1
+        -- `queryLimit` is a clamped integer, never user text: safe to inline.
+        sql = sql .. ' ORDER BY id DESC LIMIT ' .. queryLimit
+
+        local messages = MySQL.query.await(sql, args) or {}
+        local hasMore = #messages > limit
+        if hasMore then messages[#messages] = nil end
+        for _, msg in ipairs(messages) do NormaliseSmsRow(msg) end
+
+        local last = messages[#messages]
+        return {
+            success = true,
+            messages = messages,
+            next_before_id = last and last.id or nil,
+            has_more = hasMore,
+        }
+    end)
+
+    if not ok then
+        print(('[custom-phone] phone:server:getMessages failed: %s'):format(result))
+        return cb({ success = false, message = 'Database error' })
+    end
+    cb(result)
 end)
 
 -- ----------------------------------------------------
@@ -985,7 +1102,7 @@ end)
 -- the server has no client event target).
 local SYSTEM_CALLER = 0
 
-local function startSystemCall(targetSource, label, number)
+local function startSystemCall(targetSource, label, number, speech)
     local Player = QBCore.Functions.GetPlayer(targetSource)
     if not Player then return false, 'Invalid player' end
     local receiverNumber = Player.PlayerData.charinfo.phone
@@ -993,6 +1110,7 @@ local function startSystemCall(targetSource, label, number)
 
     label = tostring(label or 'City Dispatch'):sub(1, 32)
     number = tostring(number or '000'):sub(1, 15)
+    speech = type(speech) == 'string' and speech:sub(1, 300) or nil
 
     MySQL.Async.insert('INSERT INTO phone_calls (caller, receiver, status) VALUES (?, ?, ?)', {
         number, receiverNumber, 'ringing'
@@ -1008,6 +1126,7 @@ local function startSystemCall(targetSource, label, number)
             startTime = os.time(),
             status = 'ringing',
             system = true,
+            speech = speech,
         }
         activeCalls[callId] = call
 
@@ -1039,7 +1158,14 @@ RegisterCommand('phone_call', function(_, args)
         print('[custom-phone] usage: phone_call <serverId> [label]')
         return
     end
-    local ok, err = startSystemCall(target, args[2] or 'City Dispatch')
+    local label = args[2] or 'City Dispatch'
+    local speech = nil
+    if #args >= 3 then
+        local parts = {}
+        for i = 3, #args do parts[#parts + 1] = args[i] end
+        speech = table.concat(parts, ' ')
+    end
+    local ok, err = startSystemCall(target, label, nil, speech)
     print(('[custom-phone] phone_call -> %s (%s)'):format(tostring(target), tostring(ok and 'ok' or err)))
 end, true)
 
@@ -1059,6 +1185,12 @@ QBCore.Functions.CreateCallback('phone:server:answerCall', function(source, cb, 
     -- Notify caller that call was answered (skip the server-side caller)
     if call.caller and call.caller > 0 then
         TriggerClientEvent('phone:client:callAnswered', call.caller, { callId = callId })
+    end
+    if call.system and call.speech then
+        TriggerClientEvent('phone:client:systemSpeech', call.receiver, {
+            callId = callId,
+            text = call.speech,
+        })
     end
 
     cb({ success = true, message = 'Call connected' })
