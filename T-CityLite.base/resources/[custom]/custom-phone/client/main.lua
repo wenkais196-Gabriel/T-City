@@ -54,14 +54,14 @@ local function OpenPhone()
         for attempt = 1, 5 do
             Wait(attempt == 1 and 50 or 150)
             if not isPhoneOpen then return end
-            if not IsNuiFocused() then
-                pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
-                TriggerServerEvent('phone:server:focusState', {
-                    phase = 'reapply', attempt = attempt,
-                    focused = IsNuiFocused(),
-                    keepInput = IsNuiFocusKeepingInput(),
-                })
-            end
+            -- Re-assert the cursor flag every time, not only when focus is
+            -- reported lost: focused=true with no cursor is the failure we saw.
+            SetNuiFocus(true, true)
+            TriggerServerEvent('phone:server:focusState', {
+                phase = 'reassert', attempt = attempt,
+                focused = IsNuiFocused(),
+                keepInput = IsNuiFocusKeepingInput(),
+            })
         end
     end)
 
@@ -656,3 +656,24 @@ RegisterNetEvent('phone:client:trackJobArrival', function(id, coords)
         end
     end)
 end)
+
+-- Dev diagnostic: probe whether NUI focus survives for 2s without opening
+-- any phone UI. /focusprobe → server log lines phase=probe.
+RegisterCommand('focusprobe', function()
+    SetNuiFocus(false, false)
+    Wait(100)
+    SetNuiFocus(true, true)
+    TriggerServerEvent('phone:server:focusState', {
+        phase = 'probe-start', focused = IsNuiFocused(),
+        keepInput = IsNuiFocusKeepingInput(),
+    })
+    CreateThread(function()
+        for i = 1, 20 do
+            Wait(100)
+            TriggerServerEvent('phone:server:focusState', {
+                phase = 'probe', attempt = i, focused = IsNuiFocused(),
+                keepInput = IsNuiFocusKeepingInput(),
+            })
+        end
+    end)
+end, false)

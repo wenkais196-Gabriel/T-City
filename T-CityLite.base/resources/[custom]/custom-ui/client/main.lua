@@ -49,10 +49,23 @@ function OpenMenu(opts)
     -- SetNuiFocus(false)) can leave the NUI half-focused, and a plain
     -- SetNuiFocus(true, true) then shows the page without a usable cursor.
     SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
+    if opts.keepInput then
+        SetNuiFocusKeepInput(true)
+    else
+        SetNuiFocusKeepInput(false)
+    end
     SetNuiFocus(true, true)
-    SetNuiFocusKeepInput(opts.keepInput == true)
     isOpen = true
+    -- Some builds ignore the cursor flag when focus is granted in the same
+    -- frame as the reset. Re-assert it after one frame and again after 100ms;
+    -- no keepInput call after this point (it can drop the cursor again).
+    CreateThread(function()
+        Wait(0)
+        if not isOpen then return end
+        SetNuiFocus(true, true)
+        Wait(100)
+        if isOpen then SetNuiFocus(true, true) end
+    end)
 end
 
 --- 关闭菜单：释放焦点 + 防误触保护
