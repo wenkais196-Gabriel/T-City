@@ -2,7 +2,7 @@
 # install-hooks.sh — 安装仓库自带的 Git hooks
 #
 # 用法（仓库根目录）:
-#   bash tools/install-hooks.sh
+#   bash tools/dev/install-hooks.sh
 #
 # 安装后每次 git commit 会先运行 T-CityLite.base/tests/run_all.py。
 # 紧急情况下可用 `git commit --no-verify` 跳过（不建议）。

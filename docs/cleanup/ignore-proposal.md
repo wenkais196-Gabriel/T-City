@@ -25,7 +25,7 @@
 |---|------|------|----------------|------|
 | A1 | `/admins.json` | txAdmin 管理员文件：含 bcrypt 口令哈希 + FiveM `identifier`，属凭据/PII | **是**（`git ls-files admins.json` → `admins.json`） | `git rm --cached admins.json`；**同时改 txAdmin 密码**；历史清理另议 |
 | A2 | `/default/config.json` | txAdmin 本地配置，含机器绝对路径 `F:/t-city/...`，非源码 | **是** | `git rm --cached default/config.json`；替代下面要删的裸 `config.json`（B16） |
-| A3 | `/simulation_report.json` | `T-CityLite.base/tools/sandbox_simulator.py` 的默认输出（`--output` 默认值），一次模拟的结果快照 | **是** | `git rm --cached simulation_report.json` |
+| A3 | `/simulation_report.json` | `tools/oneoff/sandbox_simulator.py` 的默认输出（`--output` 默认值），一次模拟的结果快照 | **是** | `git rm --cached simulation_report.json` |
 | A4 | `/fxmanifest_inventory.json` | 64KB 自动生成的资源清单（路径用 `\` 分隔），仓库内无生成脚本、无任何文档引用 | **是** | 先向团队确认；确认后 `git rm --cached`。若确认要留档，则不要加这条规则 |
 | A5 | `.pytest_cache/` | pytest 缓存。当前仅靠 `.pytest_cache/.gitignore`（内容为 `*`）自忽略，该文件由 pytest 生成而非仓库规则，脆弱 | 否 | 仅加规则 |
 | A6 | `.env*` + `!.env.example` | 现有规则只覆盖 `.env`、`.env.local`；`.env.production`、`.env.development.local` 等**未被忽略**（见证据 E3） | 否（`.env.example` 已跟踪，靠 `!` 保留） | 仅加规则（替换 B14/B15 两行） |
