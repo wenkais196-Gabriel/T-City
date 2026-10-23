@@ -977,6 +977,72 @@ QBCore.Functions.CreateCallback('phone:server:initiateCall', function(source, cb
     end)
 end)
 
+-- ----------------------------------------------------
+-- System / dispatch call (no human caller)
+-- ----------------------------------------------------
+-- A call whose caller side is the server (dispatch, 911 callback, agent).
+-- caller = 0 is the marker; voice is one-sided (the player hears the call UI,
+-- the server has no client event target).
+local SYSTEM_CALLER = 0
+
+local function startSystemCall(targetSource, label, number)
+    local Player = QBCore.Functions.GetPlayer(targetSource)
+    if not Player then return false, 'Invalid player' end
+    local receiverNumber = Player.PlayerData.charinfo.phone
+    if not receiverNumber then return false, 'No phone number' end
+
+    label = tostring(label or 'City Dispatch'):sub(1, 32)
+    number = tostring(number or '000'):sub(1, 15)
+
+    MySQL.Async.insert('INSERT INTO phone_calls (caller, receiver, status) VALUES (?, ?, ?)', {
+        number, receiverNumber, 'ringing'
+    }, function(result)
+        local callId = PhoneDb.InsertId(result)
+        if callId == 0 then return end
+
+        local call = {
+            caller = SYSTEM_CALLER,
+            receiver = targetSource,
+            callerNumber = number,
+            receiverNumber = receiverNumber,
+            startTime = os.time(),
+            status = 'ringing',
+            system = true,
+        }
+        activeCalls[callId] = call
+
+        SetTimeout(RING_TIMEOUT_MS, function()
+            if activeCalls[callId] ~= call or call.status ~= 'ringing' then return end
+            activeCalls[callId] = nil
+            MySQL.Async.execute('UPDATE phone_calls SET status = ?, duration = ? WHERE id = ?', {
+                'missed', 0, callId,
+            })
+            setVoiceChannel(targetSource, 0)
+            TriggerClientEvent('phone:client:callEnded', targetSource, { callId = callId, status = 'missed' })
+        end)
+
+        TriggerClientEvent('phone:client:incomingCall', targetSource, {
+            callId = callId,
+            callerNumber = number,
+            callerName = label,
+        })
+    end)
+    return true
+end
+
+exports('StartSystemCall', startSystemCall)
+
+-- Console command for local testing: phone_call <serverId> [label]
+RegisterCommand('phone_call', function(_, args)
+    local target = tonumber(args[1])
+    if not target then
+        print('[custom-phone] usage: phone_call <serverId> [label]')
+        return
+    end
+    local ok, err = startSystemCall(target, args[2] or 'City Dispatch')
+    print(('[custom-phone] phone_call -> %s (%s)'):format(tostring(target), tostring(ok and 'ok' or err)))
+end, true)
+
 QBCore.Functions.CreateCallback('phone:server:answerCall', function(source, cb, callId)
     callId = tonumber(callId)
     local call = callId and activeCalls[callId]
@@ -987,11 +1053,13 @@ QBCore.Functions.CreateCallback('phone:server:answerCall', function(source, cb, 
     call.startTime = os.time()
 
     MySQL.Async.execute('UPDATE phone_calls SET status = ? WHERE id = ?', { 'ongoing', callId })
-    setVoiceChannel(call.caller, callId)
+    if call.caller and call.caller > 0 then setVoiceChannel(call.caller, callId) end
     setVoiceChannel(call.receiver, callId)
 
-    -- Notify caller that call was answered
-    TriggerClientEvent('phone:client:callAnswered', call.caller, { callId = callId })
+    -- Notify caller that call was answered (skip the server-side caller)
+    if call.caller and call.caller > 0 then
+        TriggerClientEvent('phone:client:callAnswered', call.caller, { callId = callId })
+    end
 
     cb({ success = true, message = 'Call connected' })
 end)
@@ -1016,7 +1084,9 @@ QBCore.Functions.CreateCallback('phone:server:rejectCall', function(source, cb, 
     local otherParty = isCaller and call.receiver or call.caller
     setVoiceChannel(call.caller, 0)
     setVoiceChannel(call.receiver, 0)
-    TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
+    if otherParty and otherParty > 0 then
+        TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
+    end
     TriggerClientEvent('phone:client:callEnded', source, { callId = callId, status = status })
 
     activeCalls[callId] = nil
@@ -1045,7 +1115,9 @@ QBCore.Functions.CreateCallback('phone:server:hangupCall', function(source, cb, 
     local otherParty = isCaller and call.receiver or call.caller
     setVoiceChannel(call.caller, 0)
     setVoiceChannel(call.receiver, 0)
-    TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
+    if otherParty and otherParty > 0 then
+        TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
+    end
     TriggerClientEvent('phone:client:callEnded', source, { callId = callId, status = status })
 
     activeCalls[callId] = nil
