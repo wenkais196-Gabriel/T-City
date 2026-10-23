@@ -43,7 +43,7 @@
 
 ```
 lua5.4 tests/agent/lua/runner.lua        9 suites / 234 checks
-python3 -m pytest -q tests/agent         203 passed
+python3 -m pytest -q tests/tools          203 passed
 cd T-CityLite.base && pytest -q tests/unit   262 passed
 python3 tools/agent_tools.py --check     30 tools, no drift
 ```
