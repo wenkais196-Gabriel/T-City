@@ -17,6 +17,6 @@ client_scripts { 'client/main.lua' }
 
 dependencies {
     'oxmysql', 'qb-core', 'qb-menu', 'qb-target', 'core-framework',
-    'qb-policejob', 'qb-prison', 'custom-career',
+    'custom-police', 'qb-prison', 'custom-career',
     'production-freeze',
 }
