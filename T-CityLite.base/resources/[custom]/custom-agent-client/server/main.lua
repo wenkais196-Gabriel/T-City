@@ -46,6 +46,7 @@ local function Config()
         rate_per_min = convarInt('agent_effect_rate_per_min', 20, 1, 600),
         burst = convarInt('agent_effect_burst', 5, 1, 100),
         max_inflight = convarInt('agent_effect_max_inflight', 4, 1, 100),
+        audit = convarString('agent_effect_audit', '1') ~= '0',
     }
 end
 
@@ -74,6 +75,57 @@ end
 -- Audit never contains notify text or open_text_ui body; payloads are only
 -- summarised through the terminal status. custom-logs is optional: when the
 -- export is unavailable the line falls back to console.
+--
+-- The DB audit (agent_effects) is metadata only: request id, caller, target
+-- source, action, terminal status, a bounded error CODE and the measured
+-- latency. Payload values (notify body, UI title/body, phone numbers, ...)
+-- are never written to the database, mirroring the custom-logs line above.
+local auditFailures = 0
+local AUDIT_STATUS = {
+    ok = true,
+    rejected = true,
+    failed = true,
+    cancelled = true,
+    timeout = true,
+    player_offline = true,
+    executor_stopped = true,
+}
+
+local function auditInsertFailed(reason)
+    auditFailures = auditFailures + 1
+    -- A missing table fails on every request: print the first failure, then
+    -- only every tenth one, so a broken migration cannot flood the console
+    -- with one error per effect.
+    if auditFailures == 1 or auditFailures % 10 == 0 then
+        print(('[custom-agent-client] agent_effects audit insert failed (%d): %s')
+            :format(auditFailures, truncate(reason, 200)))
+    end
+end
+
+local function auditToDb(entry, status, elapsed)
+    if not Config().audit then return end
+    local errorCode
+    if type(entry.err) == 'table' then errorCode = entry.err.code end
+    local ok, err = pcall(function()
+        return MySQL.insert.await([[
+            INSERT INTO agent_effects
+                (request_id, agent_id, target_source, action, status, error_code, latency_ms)
+            VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?)
+        ]], {
+            truncate(entry.requestId, 80),
+            truncate(entry.agentId or 'unknown', 64),
+            math.floor(tonumber(entry.src) or 0),
+            truncate(entry.action, 32),
+            AUDIT_STATUS[status] and status or 'failed',
+            truncate(errorCode or '', 64),
+            math.max(0, math.floor(elapsed)),
+        })
+    end)
+    if not ok then auditInsertFailed(err) end
+    -- Best effort: the caller's result is settled before this runs and is
+    -- never changed by an insert failure.
+end
+
 local function audit(entry, status)
     local elapsed = math.max(0, GetGameTimer() - (entry.startedAt or GetGameTimer()))
     local line = ('[agent-effect] agent=%s src=%s action=%s status=%s ms=%d'):format(
@@ -82,13 +134,14 @@ local function audit(entry, status)
         tostring(entry.action),
         tostring(status),
         elapsed)
+    local logged = false
     if _G.GetResourceState and GetResourceState('custom-logs') == 'started' then
-        local ok = pcall(function()
+        logged = pcall(function()
             return exports['custom-logs']:LogGeneric('agent-effect', line)
         end)
-        if ok then return end
     end
-    print(line)
+    if not logged then print(line) end
+    auditToDb(entry, status, elapsed)
 end
 
 -- Idempotent: deletes the timer, releases the in-flight slot, resolves the
@@ -104,6 +157,7 @@ local function settle(src, rid, status, result, err)
         ClearTimeout(entry.timer)
         entry.timer = nil
     end
+    entry.err = err
     entry.promise:resolve({ ok = status == 'ok', status = status, result = result, err = err })
     audit(entry, status)
     return true

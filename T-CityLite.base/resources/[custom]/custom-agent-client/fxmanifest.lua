@@ -7,7 +7,10 @@ description 'Agent effect channel v1: server-issued client effects with ack + au
 version '0.1.0'
 
 shared_script 'shared/effect_rules.lua'
-server_script 'server/main.lua'
+server_scripts {
+    '@oxmysql/lib/MySQL.lua',
+    'server/main.lua',
+}
 client_script 'client/main.lua'
 
-dependencies { 'qb-core' }
+dependencies { 'qb-core', 'oxmysql' }

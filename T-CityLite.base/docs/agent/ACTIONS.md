@@ -1040,6 +1040,18 @@ even if `dry_run` is false, and there is no automatic restore of `before`.
    authority for that leg. `custom-agent-client` must have
    `agent_effect_enabled = 1` and a live `tcity:agent:ready` session.
 
+   In addition to the `custom-logs` line, every settled effect is written to
+   `agent_effects` (migration
+   [`v2.6_agent_effects.sql`](../../migrations/v2.6_agent_effects.sql)) when
+   `agent_effect_audit` is not `0` (default `1`). The row holds only
+   `request_id`, `agent_id`, `target_source`, `action`, terminal `status`
+   (`ok`/`rejected`/`failed`/`cancelled`/`timeout`/`player_offline`/
+   `executor_stopped`), a bounded `error_code` and `latency_ms`. It deliberately
+   stores **no payload or free text**: notify body, `open_text_ui` title/body,
+   phone numbers and all other parameter values never enter the table. The
+   insert is best-effort — a missing table or DB error is logged (throttled)
+   and never changes the effect result.
+
 This is an L3 action: it never auto-executes, even if `dry_run` is false.
 
 ### `spawn_vehicle`
