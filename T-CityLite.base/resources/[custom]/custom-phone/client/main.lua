@@ -13,6 +13,7 @@ end)
 local function ClosePhone()
     if not isPhoneOpen then return end
     isPhoneOpen = false
+    TriggerServerEvent('phone:server:focusState', { phase = 'close-start' })
     local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
     if not ok then
         SetNuiFocusKeepInput(false)
@@ -21,6 +22,20 @@ local function ClosePhone()
     SendNUIMessage({
         action = 'phone:close'
     })
+    -- Verify the release actually stuck; if any resource re-grabbed focus in
+    -- the same frame, force it off and report the state.
+    CreateThread(function()
+        Wait(80)
+        if IsNuiFocused() then
+            SetNuiFocus(false, false)
+            SetNuiFocusKeepInput(false)
+        end
+        TriggerServerEvent('phone:server:focusState', {
+            phase = 'close',
+            focused = IsNuiFocused(),
+            keepInput = IsNuiFocusKeepingInput(),
+        })
+    end)
     -- Stop phone animation
     local ped = GetPlayerPed(-1)
     if DoesEntityExist(ped) then
@@ -36,11 +51,11 @@ local function OpenPhone()
     -- Cursor first: keepInput=true left the mouse bound to camera look on a
     -- real client (NUI focused, no usable cursor). Menus that need movement
     -- can opt in later, but a phone must be clickable.
-    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = true }) end)
     if not ok then
         SetNuiFocus(false, false)
         SetNuiFocus(true, true)
-        SetNuiFocusKeepInput(false)
+        SetNuiFocusKeepInput(true)
     end
     
     -- Play GTA V native phone-out animation
@@ -183,6 +198,7 @@ local function OpenPhone()
         end
         -- Clear animation when phone closes
         ClearPedTasks(GetPlayerPed(-1))
+        TriggerServerEvent('phone:server:focusState', { phase = 'loop-exit' })
     end)
 end
 
