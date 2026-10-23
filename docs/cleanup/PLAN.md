@@ -133,7 +133,8 @@ cd .. && python3 tools/agent_tools.py --check
 
 ---
 
-## 附：明细
+## 附：三份审计
 
-三份审计明细（ignore/delete/structure proposal）已按要求删除，只保留本 PLAN；
-如需追溯，`git log -- docs/cleanup` 仍可找回原始内容。
+- `docs/cleanup/ignore-proposal.md` — 表格 A/B/C + diff + 验证命令
+- `docs/cleanup/delete-proposal.md` — A/B/C 组、引用证据、qb-phone 8 个调用方、批次建议
+- `docs/cleanup/structure-proposal.md` — M1–M10 迁移表、引用影响、Phase 1–3、不能动的 10 项
