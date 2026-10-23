@@ -230,6 +230,25 @@ return {
             if not ok then error(err, 0) end
         end)
 
+        check('roster_samples_position_without_entity_exists_or_source_field', function()
+            -- Server-side DoesEntityExist can be false for a remote ped and
+            -- PlayerData.source is not guaranteed; both must not gate sampling.
+            local savedExists = _G.DoesEntityExist
+            local savedSource = players[1].PlayerData.source
+            _G.DoesEntityExist = function() return false end
+            players[1].PlayerData.source = nil
+            local ok, err = pcall(function()
+                local response = handle('/agent/v1/live/players')
+                assert(response.status == 200)
+                local first = response.body.players[1]
+                assert(first.position ~= nil, 'position must be sampled despite DoesEntityExist=false')
+                assert(first.source == 1, 'source must come from the qb-core key')
+            end)
+            _G.DoesEntityExist = savedExists
+            players[1].PlayerData.source = savedSource
+            if not ok then error(err, 0) end
+        end)
+
         -- 2. detail -----------------------------------------------------------
         check('detail_success', function()
             local response = handle('/agent/v1/live/players/CID00002')
