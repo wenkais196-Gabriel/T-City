@@ -6,7 +6,7 @@
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
   type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string };
 
-  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'citations' | 'reports' | 'evidence' | 'cases' | 'bolos' | 'audit';
+  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'citations' | 'reports' | 'evidence' | 'cases' | 'bolos' | 'warrants' | 'arrests' | 'audit';
 
   let tab: Tab = 'home';
   let units: Unit[] = [];
@@ -32,6 +32,10 @@
   let boloRows: Record<string, unknown>[] = [];
   let caseForm = { title: '', summary: '' };
   let boloForm = { kind: 'person', target: '', reason: '' };
+  let warrantRows: Record<string, unknown>[] = [];
+  let arrestRows: Record<string, unknown>[] = [];
+  let warrantForm = { citizenid: '', reason: '' };
+  let arrestForm = { citizenid: '', charges: '', incident_id: '', case_id: '' };
 
   const statusLabel: Record<string, string> = {
     off_duty: '10-7 下班', available: '10-8 在勤', busy: '10-6 忙碌',
@@ -119,6 +123,45 @@
     await loadReports();
   }
 
+  async function loadWarrants() {
+    const res = await queryApp('police_mdt', 'warrants', {});
+    if (res?.success) warrantRows = res.data?.rows ?? [];
+  }
+
+  async function requestWarrant() {
+    const res = await appAction('police_mdt', 'request_warrant', {
+      citizenid: warrantForm.citizenid.trim(), reason: warrantForm.reason.trim(),
+    });
+    notice = res?.success ? '搜查令已提交审批' : `失败：${res?.error ?? 'unknown'}`;
+    if (res?.success) { warrantForm.citizenid = ''; warrantForm.reason = ''; }
+    await loadWarrants();
+  }
+
+  async function decideWarrant(row: Record<string, unknown>, approve: boolean) {
+    const res = await appAction('police_mdt', 'decide_warrant', {
+      warrant_id: Number(row.id), approve,
+    });
+    notice = res?.success ? (approve ? '已批准' : '已驳回') : `失败：${res?.error ?? 'unknown'}`;
+    await loadWarrants();
+  }
+
+  async function loadArrests() {
+    const res = await queryApp('police_mdt', 'arrests', {});
+    if (res?.success) arrestRows = res.data?.rows ?? [];
+  }
+
+  async function registerArrest() {
+    const res = await appAction('police_mdt', 'register_arrest', {
+      citizenid: arrestForm.citizenid.trim(),
+      charges: arrestForm.charges.trim(),
+      incident_id: arrestForm.incident_id ? Number(arrestForm.incident_id) : undefined,
+      case_id: arrestForm.case_id ? Number(arrestForm.case_id) : undefined,
+    });
+    notice = res?.success ? '逮捕已登记' : `失败：${res?.error ?? 'unknown'}`;
+    if (res?.success) { arrestForm.citizenid = ''; arrestForm.charges = ''; }
+    await loadArrests();
+  }
+
   async function loadCases() {
     const res = await queryApp('police_mdt', 'cases', {});
     if (res?.success) caseRows = res.data?.rows ?? [];
@@ -198,8 +241,8 @@
   </header>
 
   <nav class="tabs">
-    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['citations','罚单'],['reports','报告'],['evidence','证据'],['cases','案件'],['bolos','BOLO'],['audit','审计']] as [id, label]}
-      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); if (tab === 'evidence') loadEvidence(); if (tab === 'cases') loadCases(); if (tab === 'bolos') loadBolos(); }}>{label}</button>
+    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['citations','罚单'],['reports','报告'],['evidence','证据'],['cases','案件'],['bolos','BOLO'],['warrants','搜查令'],['arrests','逮捕'],['audit','审计']] as [id, label]}
+      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); if (tab === 'evidence') loadEvidence(); if (tab === 'cases') loadCases(); if (tab === 'bolos') loadBolos(); if (tab === 'warrants') loadWarrants(); if (tab === 'arrests') loadArrests(); }}>{label}</button>
     {/each}
   </nav>
 
@@ -374,6 +417,45 @@
       </div>
       {#each boloRows as row}
         <p class="line">{String(row.kind)} · {String(row.target)} · {String(row.reason)}</p>
+      {/each}
+    </section>
+
+  {:else if tab === 'warrants'}
+    <section class="card">
+      <h3>申请搜查令（Sergeant+）</h3>
+      <div class="form">
+        <input bind:value={warrantForm.citizenid} placeholder="citizenid" />
+        <input bind:value={warrantForm.reason} placeholder="理由" />
+        <button onclick={requestWarrant}>申请</button>
+      </div>
+      {#each warrantRows as row}
+        <div class="row">
+          <div>
+            <b>{String(row.citizenid)}</b>
+            <p class="muted">{String(row.reason)} · {String(row.status)}</p>
+          </div>
+          {#if row.status === 'requested'}
+            <div class="actions">
+              <button class="step" onclick={() => decideWarrant(row, true)}>批准</button>
+              <button class="clear" onclick={() => decideWarrant(row, false)}>驳回</button>
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </section>
+
+  {:else if tab === 'arrests'}
+    <section class="card">
+      <h3>逮捕登记</h3>
+      <div class="form">
+        <input bind:value={arrestForm.citizenid} placeholder="citizenid" />
+        <input bind:value={arrestForm.charges} placeholder="罪名" />
+        <input bind:value={arrestForm.incident_id} placeholder="警情 id(可选)" />
+        <input bind:value={arrestForm.case_id} placeholder="案件 id(可选)" />
+        <button onclick={registerArrest}>登记</button>
+      </div>
+      {#each arrestRows as row}
+        <p class="line">#{String(row.id)} · {String(row.citizenid)} · {String(row.charges)} <span class="muted">{String(row.officer_citizenid)}</span></p>
       {/each}
     </section>
 
