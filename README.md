@@ -16,7 +16,7 @@ cp T-CityLite.base/server.cfg.template T-CityLite.base/server.cfg   # 填 licens
 ./start.sh                                                          # 默认 30120
 
 # 离线测试
-python3 -m pytest -q tests/agent
+python3 -m pytest -q tests/tools
 cd T-CityLite.base && python3 -m pytest -q tests/unit && cd ..
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
 python3 tools/agent_tools.py --check
@@ -28,7 +28,7 @@ python3 tools/agent_tools.py --check
 |---|---|
 | `T-CityLite.base/` | 服务器数据目录（resources、configs、migrations、tests、docs） |
 | `tools/` | agent 工具注册表/MCP/评测/冒烟（Python 标准库） |
-| `tests/agent/` | agent 契约/路由/评测测试（Python） |
+| `tests/tools/` | agent 契约/路由/评测测试（Python） |
 | `T-CityLite.base/tests/agent/` | Lua golden harness（效果/动作/实时/手机） |
 | `docs/` | 项目级文档、审计、清理提案与归档 |
 | `.github/` | CI（Config/Python/Lua/Docs/Sonar/DB/NUI） |
