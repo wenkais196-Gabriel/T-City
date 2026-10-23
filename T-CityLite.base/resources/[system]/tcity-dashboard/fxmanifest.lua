@@ -49,5 +49,5 @@ client_scripts {
 dependencies {
     'qb-core',
     'core-framework',
-    'qb-policejob',       -- v2.1: 警车功能 (police:client:ActiveCamera 等)
+    'custom-police',       -- v2.1: 警车功能 (police:client:ActiveCamera 等)
 }
