@@ -377,53 +377,18 @@ end)
 -- foreign key, so a label such as 'City Services' is allowed and is rendered
 -- as-is by the client. Labels beyond 20 chars do not fit the VARCHAR(20)
 -- sender_number column; the default label does.
--- sender_number is VARCHAR(20), so the label is capped at 20 BYTES. A naive
--- sub(1, 20) can cut a UTF-8 sequence in half; back off to a lead byte.
-local function truncateUtf8Bytes(value, limit)
-    if #value <= limit then return value end
-    local cut = limit
-    while cut > 0 do
-        local byte = value:byte(cut + 1)
-        if not byte or byte < 0x80 or byte >= 0xC0 then break end
-        cut = cut - 1
-    end
-    return value:sub(1, cut)
-end
-
-local function SystemSenderLabel(label)
-    if type(label) ~= 'string' then return 'City Services' end
-    local cleaned = label:gsub('%c', '')
-    if cleaned == '' then return 'City Services' end
-    return truncateUtf8Bytes(cleaned, 20)
-end
-
-local function TruncateUtf8(value, limit)
-    if type(value) ~= 'string' then return '' end
-    if #value <= limit then return value end
-    if utf8 and utf8.len and utf8.offset then
-        local ok, length = pcall(utf8.len, value)
-        if ok and length and length > limit then
-            local offsetOk, byteEnd = pcall(utf8.offset, value, limit + 1)
-            if offsetOk and byteEnd then return value:sub(1, byteEnd - 1) end
-        end
-    end
-    return value:sub(1, limit)
-end
-
+-- Validation and label handling live in server/sms.lua (loaded before this
+-- file) so the rules can be unit tested without a FiveM runtime.
 --- Server-side system message. Not exposed to clients.
 ---@param receiverNumber string
 ---@param message string
 ---@param senderLabel string|nil  默认 'City Services'
 ---@return boolean ok, string|nil errCode
 exports('SendSystemMessage', function(receiverNumber, message, senderLabel)
-    if type(receiverNumber) ~= 'string' or #receiverNumber == 0 or #receiverNumber > 15 then
-        return false, 'invalid_params'
-    end
-    if type(message) ~= 'string' or #message == 0 or #message > 500 then
-        return false, 'invalid_params'
-    end
+    local valid, validationError = Sms.Validate(receiverNumber, message)
+    if not valid then return false, validationError end
 
-    local sender = SystemSenderLabel(senderLabel)
+    local sender = Sms.SenderLabel(senderLabel)
 
     local insertOk, insertId = pcall(function()
         return MySQL.insert.await(
@@ -453,7 +418,7 @@ exports('SendSystemMessage', function(receiverNumber, message, senderLabel)
         TriggerClientEvent('phone:client:newNotification', targetPlayer.PlayerData.source, {
             id = math.random(1000, 9999),
             title = sender,
-            content = TruncateUtf8(message, 200),
+            content = Sms.TruncateChars(message, 200),
             timestamp = timestamp,
             is_read = false,
         })
