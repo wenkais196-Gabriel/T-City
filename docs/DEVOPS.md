@@ -88,7 +88,7 @@ New → Triaged → Ready → In Progress → In Review → Done
 安装仓库自带的 pre-commit（可选，提交前自动跑离线检测）：
 
 ```bash
-bash tools/install-hooks.sh
+bash tools/dev/install-hooks.sh
 ```
 
 > 为什么不做全仓 Lua 解析：FiveM 的 Lua 方言支持反引号 hash 字面量（`` `prop` ``），标准 `luac` 会误报。CI 只检查**本次改动**，并跳过这类文件。
@@ -124,7 +124,7 @@ bash tools/install-hooks.sh
 # 2. 登录
 gh auth login
 # 3. 在仓库根目录执行
-bash tools/bootstrap_github.sh
+bash tools/dev/bootstrap_github.sh
 ```
 
 脚本会：

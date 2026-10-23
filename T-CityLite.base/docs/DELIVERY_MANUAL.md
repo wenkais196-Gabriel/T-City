@@ -421,7 +421,7 @@ end
 
 ### 5.2 经济沙盒模拟器
 
-**文件**: `T-CityLite.base/tools/sandbox_simulator.py`
+**文件**: `tools/oneoff/sandbox_simulator.py`
 
 **用法**:
 ```bash

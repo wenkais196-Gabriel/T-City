@@ -82,7 +82,7 @@
 | `storys/` | 目录名拼写错误（应为 `stories`），1 篇 30KB 叙事设计，**0 处引用** | `git grep '中东翻版'` 只命中文件自身 |
 | `start_txadmin.bat` | 硬编码 `cd /d D:\server`，`%~dp0` 与 `D:\server` 混用 | 本地启动脚本，0 处引用 |
 | `fxmanifest_inventory.json` | 64KB 生成物，`"path"` 用 Windows 反斜杠，已过期 | 0 处代码引用 |
-| `simulation_report.json` | `T-CityLite.base/tools/sandbox_simulator.py` 的输出物 | `sandbox_simulator.py:443` `--output` 默认值即 `simulation_report.json`（写 cwd） |
+| `simulation_report.json` | `tools/oneoff/sandbox_simulator.py` 的输出物 | `sandbox_simulator.py:443` `--output` 默认值即 `simulation_report.json`（写 cwd） |
 | `QBCore_Lite_versions/` | 16 篇 v0.1–v1.0 历史版本规格 | 仅 `PROJECT_PROGRESS.md:30-39` 引用 |
 
 ---
@@ -135,7 +135,7 @@ T-City-agent/
 ├── tools/
 │   ├── agent_*.py / agent_tools.json  [KEEP] 见「不建议动」
 │   ├── dev/                           [MOVE] install-hooks.sh、bootstrap_github.sh
-│   ├── oneoff/                        [MOVE] ← T-CityLite.base/tools/（3 个一次性脚本）
+│   ├── oneoff/                        [MOVE] ← tools/oneoff/（3 个一次性脚本）
 │   └── windows/                       [KEEP] + start_txadmin.bat
 │
 ├── design/                            [DEL]  内容并入 docs/06_design/ 后删除
@@ -238,11 +238,11 @@ T-City-agent/
 
 | 原路径 | 新路径 | 理由 | 需同步修改的引用（文件:行） | 风险 |
 |:---|:---|:---|:---|:---|
-| `tools/install-hooks.sh` | `tools/dev/install-hooks.sh` | 开发环境配置，不是 CI 入口；与 `tools/bootstrap_github.sh` 同类 | `docs/DEVOPS.md:91`；脚本自身 `:5` 的用法注释 | 🟢 2 处引用 |
-| `tools/bootstrap_github.sh` | `tools/dev/bootstrap_github.sh` | 一次性初始化 GitHub 标签/里程碑/Issue，只跑一次 | `docs/DEVOPS.md:127`；`CHANGELOG.md:23`；脚本自身 `:10` 用法注释 | 🟢 3 处引用 |
-| `T-CityLite.base/tools/concurrency_stress_test.py` | `tools/oneoff/concurrency_stress_test.py` | 第二个 `tools/` 目录，只有 3 个一次性脚本，容易和根 `tools/` 混淆 | 0 外部引用（仅自身 `:3` 注释） | 🟢 |
-| `T-CityLite.base/tools/i18n_replacer.py` | `tools/oneoff/i18n_replacer.py` | 一次性文本替换工具 | 0 外部引用 | 🟢 |
-| `T-CityLite.base/tools/sandbox_simulator.py` | `tools/oneoff/sandbox_simulator.py` | 经济沙盒模拟器，输出 `simulation_report.json` 到 cwd | `T-CityLite.base/docs/DELIVERY_MANUAL.md:424`、`:576`；`T-CityLite.base/docs/refactoring_manifest_v2.md:107`；`docs/server-design/08-agent-director.md:314` | 🟡 4 处文档引用 + 输出路径改为 `--output` 显式传入（否则会写到 `tools/oneoff/`） |
+| `tools/dev/install-hooks.sh` | `tools/dev/install-hooks.sh` | 开发环境配置，不是 CI 入口；与 `tools/dev/bootstrap_github.sh` 同类 | `docs/DEVOPS.md:91`；脚本自身 `:5` 的用法注释 | 🟢 2 处引用 |
+| `tools/dev/bootstrap_github.sh` | `tools/dev/bootstrap_github.sh` | 一次性初始化 GitHub 标签/里程碑/Issue，只跑一次 | `docs/DEVOPS.md:127`；`CHANGELOG.md:23`；脚本自身 `:10` 用法注释 | 🟢 3 处引用 |
+| `tools/oneoff/concurrency_stress_test.py` | `tools/oneoff/concurrency_stress_test.py` | 第二个 `tools/` 目录，只有 3 个一次性脚本，容易和根 `tools/` 混淆 | 0 外部引用（仅自身 `:3` 注释） | 🟢 |
+| `tools/oneoff/i18n_replacer.py` | `tools/oneoff/i18n_replacer.py` | 一次性文本替换工具 | 0 外部引用 | 🟢 |
+| `tools/oneoff/sandbox_simulator.py` | `tools/oneoff/sandbox_simulator.py` | 经济沙盒模拟器，输出 `simulation_report.json` 到 cwd | `T-CityLite.base/docs/DELIVERY_MANUAL.md:424`、`:576`；`T-CityLite.base/docs/refactoring_manifest_v2.md:107`；`docs/server-design/08-agent-director.md:314` | 🟡 4 处文档引用 + 输出路径改为 `--output` 显式传入（否则会写到 `tools/oneoff/`） |
 
 ### M10 `T-CityLite.base/tests/agent/` 与 `tools/agent_*` 不动（列出仅为"已评估"）
 
@@ -426,11 +426,11 @@ grep -rhoP '^\s*ensure\s+\K\S+' T-CityLite.base/configs/modules/*.cfg | sort -u 
 #   （与搬迁前快照 diff，必须完全一致）
 
 # M9 工具脚本
-git mv tools/install-hooks.sh tools/dev/
-git mv tools/bootstrap_github.sh tools/dev/
-git mv T-CityLite.base/tools/concurrency_stress_test.py tools/oneoff/
-git mv T-CityLite.base/tools/i18n_replacer.py tools/oneoff/
-git mv T-CityLite.base/tools/sandbox_simulator.py tools/oneoff/
+git mv tools/dev/install-hooks.sh tools/dev/
+git mv tools/dev/bootstrap_github.sh tools/dev/
+git mv tools/oneoff/concurrency_stress_test.py tools/oneoff/
+git mv tools/oneoff/i18n_replacer.py tools/oneoff/
+git mv tools/oneoff/sandbox_simulator.py tools/oneoff/
 #   改 docs/DEVOPS.md:91,127、CHANGELOG.md:23、DELIVERY_MANUAL.md:424,576、
 #      refactoring_manifest_v2.md:107、server-design/08-agent-director.md:314
 ```

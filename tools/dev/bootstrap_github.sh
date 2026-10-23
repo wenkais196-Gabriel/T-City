@@ -7,7 +7,7 @@
 #   3. 在仓库根目录执行
 #
 # 用法:
-#   bash tools/bootstrap_github.sh
+#   bash tools/dev/bootstrap_github.sh
 #
 # 说明:
 #   - 已存在的标签会自动跳过/更新
