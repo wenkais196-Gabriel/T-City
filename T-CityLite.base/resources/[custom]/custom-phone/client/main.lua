@@ -51,11 +51,12 @@ local function OpenPhone()
     -- Cursor first: keepInput=true left the mouse bound to camera look on a
     -- real client (NUI focused, no usable cursor). Menus that need movement
     -- can opt in later, but a phone must be clickable.
-    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = true }) end)
+    -- qb-phone style: focus without touching keepInput; the open loop below
+    -- disables look/melee only, so WASD keeps working.
+    local ok = pcall(function() exports['custom-ui']:OpenMenu() end)
     if not ok then
         SetNuiFocus(false, false)
         SetNuiFocus(true, true)
-        SetNuiFocusKeepInput(true)
     end
     
     -- Play GTA V native phone-out animation
@@ -151,8 +152,13 @@ local function OpenPhone()
             if DisableDisplayControlActions then DisableDisplayControlActions() end
             -- While phone is open, disable standard game control keys that interfere with UI typing
             -- NOTE: Do NOT disable INPUT_CHAT (T key/245) so players can still chat
+            -- qb-phone disables 1-6 (look), not movement 30-35.
             DisableControlAction(0, 1, true) -- LookLeftRight
             DisableControlAction(0, 2, true) -- LookUpDown
+            DisableControlAction(0, 3, true)
+            DisableControlAction(0, 4, true)
+            DisableControlAction(0, 5, true)
+            DisableControlAction(0, 6, true)
             DisableControlAction(0, 24, true) -- Attack
             DisableControlAction(0, 257, true) -- Attack 2
             DisableControlAction(0, 25, true) -- Aim

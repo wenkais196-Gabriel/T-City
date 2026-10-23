@@ -50,9 +50,10 @@ function OpenMenu(opts)
     -- SetNuiFocus(true, true) then shows the page without a usable cursor.
     SetNuiFocus(false, false)
     SetNuiFocus(true, true)
-    -- Match qb-phone / qb-radialmenu: grant focus first, then ask to keep game
-    -- input. keepInput before focus did not restore WASD on the live client.
-    SetNuiFocusKeepInput(opts.keepInput == true)
+    -- qb-phone never calls SetNuiFocusKeepInput(false): movement keeps working
+    -- while the phone is open and only look/attack are disabled per frame. An
+    -- explicit false here was what froze WASD, so only opt in when asked.
+    if opts.keepInput then SetNuiFocusKeepInput(true) end
     isOpen = true
     -- Some builds ignore the cursor flag when focus is granted in the same
     -- frame as the reset. Re-assert it after one frame and again after 100ms;
