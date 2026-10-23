@@ -6,7 +6,7 @@
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
   type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string };
 
-  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'citations' | 'reports' | 'audit';
+  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'citations' | 'reports' | 'evidence' | 'audit';
 
   let tab: Tab = 'home';
   let units: Unit[] = [];
@@ -26,6 +26,8 @@
   let citationError = '';
   let citationForm = { citizenid: '', amount: '500', reason: '', plate: '' };
   let reportForm = { title: '', incident_id: '', body: '' };
+  let evidenceRows: Record<string, unknown>[] = [];
+  let evidenceForm = { label: '', description: '', incident_id: '', location: '' };
 
   const statusLabel: Record<string, string> = {
     off_duty: '10-7 下班', available: '10-8 在勤', busy: '10-6 忙碌',
@@ -113,6 +115,31 @@
     await loadReports();
   }
 
+  async function loadEvidence() {
+    const res = await queryApp('police_mdt', 'evidence', {});
+    if (res?.success) evidenceRows = res.data?.rows ?? [];
+  }
+
+  async function registerEvidence() {
+    const res = await appAction('police_mdt', 'register_evidence', {
+      label: evidenceForm.label.trim(),
+      description: evidenceForm.description.trim(),
+      incident_id: evidenceForm.incident_id ? Number(evidenceForm.incident_id) : undefined,
+      location: evidenceForm.location.trim(),
+    });
+    notice = res?.success ? `证据已登记：${res.data?.exhibit_no ?? ''}` : `登记失败：${res?.error ?? 'unknown'}`;
+    if (res?.success) { evidenceForm.label = ''; evidenceForm.description = ''; }
+    await loadEvidence();
+  }
+
+  async function showChain(row: Record<string, unknown>) {
+    const res = await queryApp('police_mdt', 'evidence_chain', { evidence_id: Number(row.id) });
+    const steps = res?.success ? (res.data?.rows ?? []) : [];
+    notice = steps.length
+      ? `#${row.exhibit_no} 保管链：` + steps.map((s: any) => `${s.action}@${s.created_at}`).join(' → ')
+      : '暂无保管链记录';
+  }
+
   async function loadAudit() {
     auditError = '';
     const res = await queryApp('police_mdt', 'audit');
@@ -139,8 +166,8 @@
   </header>
 
   <nav class="tabs">
-    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['citations','罚单'],['reports','报告'],['audit','审计']] as [id, label]}
-      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); }}>{label}</button>
+    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['citations','罚单'],['reports','报告'],['evidence','证据'],['audit','审计']] as [id, label]}
+      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); if (tab === 'evidence') loadEvidence(); }}>{label}</button>
     {/each}
   </nav>
 
@@ -267,6 +294,27 @@
       </div>
       {#each reportRows as row}
         <p class="line">#{String(row.id)} · {String(row.title)} · {String(row.author_citizenid)}</p>
+      {/each}
+    </section>
+
+  {:else if tab === 'evidence'}
+    <section class="card">
+      <h3>登记证据</h3>
+      <div class="form">
+        <input bind:value={evidenceForm.label} placeholder="证据名称（≥3 字）" />
+        <input bind:value={evidenceForm.incident_id} placeholder="警情 id" />
+        <input bind:value={evidenceForm.location} placeholder="发现地点(可选)" />
+        <textarea bind:value={evidenceForm.description} rows="2" placeholder="描述"></textarea>
+        <button onclick={registerEvidence}>登记</button>
+      </div>
+      {#each evidenceRows as row}
+        <div class="row">
+          <div>
+            <b>{String(row.exhibit_no ?? '')}</b> {String(row.label)}
+            <p class="muted">{String(row.description ?? '')}</p>
+          </div>
+          <button class="step" onclick={() => showChain(row)}>保管链</button>
+        </div>
       {/each}
     </section>
 

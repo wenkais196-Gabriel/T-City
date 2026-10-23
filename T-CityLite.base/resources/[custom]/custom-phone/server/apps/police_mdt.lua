@@ -73,6 +73,18 @@ PhoneApps.Register({
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
             return { rows = res.rows or {}, count = res.count or 0 }
         end,
+        evidence = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:GetEvidence(source, params) end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.rows or {}, count = res.count or 0 }
+        end,
+        evidence_chain = function(source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:GetEvidenceChain(source, params and params.evidence_id)
+            end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.rows or {}, count = res.count or 0 }
+        end,
         audit = function(source)
             local ok, res = pcall(function() return exports['custom-police']:GetAudit(source) end)
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
@@ -101,6 +113,10 @@ PhoneApps.Register({
             local ok, res = pcall(function()
                 return exports['custom-police']:AssignUnit(source, params.incident_id, params.citizenid)
             end)
+            return ok and res ~= false
+        end,
+        register_evidence = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:RegisterEvidence(source, params) end)
             return ok and res ~= false
         end,
         issue_citation = function(source, params)

@@ -89,3 +89,16 @@ def test_p1_citations_and_reports():
     assert "issue_citation" in app and "create_report" in app
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
     assert "issueCitation" in ui and "createReport" in ui
+
+
+def test_evidence_register_and_chain():
+    policy = read(PHONE.parent / "custom-police/shared/policy.lua")
+    assert "evidence.register" in policy and "evidence.view" in policy
+    ev = read(PHONE.parent / "custom-police/server/p2_evidence.lua")
+    for name in ("RegisterEvidence", "GetEvidence", "GetEvidenceChain"):
+        assert f"exports('{name}'" in ev
+    assert "police_evidence_chain" in ev
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    assert "register_evidence" in app and "evidence_chain" in app
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "registerEvidence" in ui and "showChain" in ui

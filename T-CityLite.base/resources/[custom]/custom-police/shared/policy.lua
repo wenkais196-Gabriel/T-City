@@ -14,6 +14,8 @@ local CAPS = {
     ['citation.view']   = { minGrade = 1 },
     ['report.create']   = { minGrade = 1 },
     ['report.view']     = { minGrade = 1 },
+    ['evidence.register'] = { minGrade = 1 },
+    ['evidence.view']     = { minGrade = 1 },
     ['audit.view']      = { minGrade = 3 },
 }
 
