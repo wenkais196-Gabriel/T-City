@@ -165,8 +165,23 @@ end
 -- Player sampling (natives only, no PlayerData copy)
 -- ---------------------------------------------------------------------------
 
+-- live_api is loaded before main.lua, so the resource-local QBCore upvalue in
+-- main is not visible here. Resolve it from the qb-core export on first use and
+-- cache it on _G: relying on a global that nothing sets made the roster
+-- silently return zero players on a real server (the harness set it, so tests
+-- never caught it).
+local function qbCore()
+    if type(_G.QBCore) == 'table' then return _G.QBCore end
+    local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+    if ok and type(core) == 'table' then
+        _G.QBCore = core
+        return core
+    end
+    return nil
+end
+
 local function playersTable()
-    local qb = _G.QBCore
+    local qb = qbCore()
     if type(qb) == 'table' and type(qb.Players) == 'table' then return qb.Players end
     return nil
 end
@@ -327,7 +342,7 @@ local function listPlayers(query, precision)
 end
 
 local function findPlayer(citizenid)
-    local qb = _G.QBCore
+    local qb = qbCore()
     local getter = type(qb) == 'table' and type(qb.Functions) == 'table'
         and qb.Functions.GetPlayerByCitizenId or nil
     if type(getter) == 'function' then
