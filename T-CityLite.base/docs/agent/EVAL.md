@@ -7,7 +7,7 @@ connection, no network access, no game server, no clock-dependent output. The
 only writes are the explicit `--out` / `--markdown` paths.
 
 - **Tool:** [`tools/agent_eval.py`](../../../tools/agent_eval.py)
-- **Tests:** [`tests/agent/test_agent_eval.py`](../../../tests/agent/test_agent_eval.py)
+- **Tests:** [`tests/tools/test_agent_eval.py`](../../../tests/tools/test_agent_eval.py)
 - **Table:** `agent_actions` (migration
   [`v2.3_agent_actions.sql`](../../migrations/v2.3_agent_actions.sql))
 - **Denial table (optional input):** `agent_denials` (migration
@@ -46,7 +46,7 @@ python3 tools/agent_eval.py --input reports/agent_actions.jsonl \
   --out reports/agent_eval.json --fail-under-success 0.80
 
 # Tests (never touch the DB)
-python3 -m pytest -q tests/agent/test_agent_eval.py
+python3 -m pytest -q tests/tools/test_agent_eval.py
 ```
 
 `--input -` reads stdin; `--input /dev/null` is the documented empty export.
@@ -391,7 +391,7 @@ verification and idempotency caveats above.
 
 ## 5. CI integration
 
-`tests/agent` is already collected by the repository CI. To add the report as an
+`tests/tools` is already collected by the repository CI. To add the report as an
 optional gate in a nightly job (not in the PR workflow):
 
 ```yaml

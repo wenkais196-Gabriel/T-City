@@ -31,7 +31,7 @@
 |:---|:---|:---|:---|
 | Agent 文档 | `T-CityLite.base/docs/agent/` 23 篇（STATUS/ACTIONS/TOOLS/EVAL/SMOKE/DIRECTOR/API/CLIENT_HARNESS + design/5 + reviews/8） | `docs/agent/phone/` 3 篇 | `docs/agent/` 下**只有** `phone/`，没有任何 agent 正文 |
 | Bus API | `docs/04_call_reference/bus_api_reference.md` | `T-CityLite.base/docs/bus-api-reference.md` | 两篇都是 Bus API 手册 |
-| 开发工作流 | `T-CityLite.base/docs/dev-workflow-guide.md`（145 行） | `T-CityLite.base/docs/standards/dev_workflow.md`（72 行） | 同目录内两份 |
+| 开发工作流 | `T-CityLite.base/docs/archive/dev-workflow-guide-2026-06-01.md`（145 行） | `T-CityLite.base/docs/standards/dev_workflow.md`（72 行） | 同目录内两份 |
 | 商店抢劫 / 转义重构 | `docs/store-robbery-redesign-20260601.md`（200 行）、`docs/refactor-escape-sqli-20260601.md`（84 行） | `design/store-robbery-redesign-20260601.md`（219 行）、`design/refactor-escape-sqli-20260601.md`（71 行） | 同名不同内容，同属 `106ba48` 一次提交 |
 
 **直接后果**（已实测）：

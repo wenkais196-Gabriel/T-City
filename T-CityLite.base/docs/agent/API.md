@@ -601,8 +601,8 @@ agent_ro SELECT agent_events       -> ERROR 1142 (denied, as intended)
 cd /path/to/T-City
 
 # Unit + optional DB integration tests (integration auto-skips without agent_ro)
-python3 -m unittest discover -s tests/agent -v
-python3 -m pytest -q tests/agent
+python3 -m unittest discover -s tests/tools -v
+python3 -m pytest -q tests/tools
 
 # Data layer smoke (no token)
 python3 tools/agent_data.py
@@ -635,7 +635,7 @@ printf '%s\n' \
 ```bash
 # No password literals in the new tracked files.
 grep -RInE "(AGENT_DB_PASS|TCITY_DB_PASS|AGENT_TOKEN)[[:space:]]*=[[:space:]]*['\"][^$]" \
-  tools/agent_*.py tests/agent T-CityLite.base/docs/agent/API.md || true
+  tools/agent_*.py tests/tools T-CityLite.base/docs/agent/API.md || true
 
 # No write SQL in the Python surfaces (tests deliberately contain guard strings).
 grep -RInE "\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b" \

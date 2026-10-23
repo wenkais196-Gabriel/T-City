@@ -89,7 +89,7 @@ T-City 是一个 **QBCore / FiveM RP 服务器**（"T-City Lite"），外加一�
 
 ```bash
 # Python agent 测试（仓库根，T-City-agent）
-python3 -m pytest -q tests/agent
+python3 -m pytest -q tests/tools
 
 # 单元/集成（T-CityLite.base）
 cd T-CityLite.base && python3 -m pytest -q tests/unit
@@ -185,7 +185,7 @@ agent_smoke.py ── 实机三段式冒烟
 | `T-CityLite.base/tests/agent/lua/runner.lua` | Lua golden 入口（9 suites） |
 | `tools/agent_tools.{json,py}` | 工具注册表 + 生成器/校验 |
 | `tools/agent_mcp.py` / `agent_gateway.py` / `agent_eval.py` / `agent_smoke.py` | MCP 路由 / 只读网关 / 评测 / 冒烟 |
-| `tests/agent/*.py` | Python agent 契约/路由/评测测试 |
+| `tests/tools/*.py` | Python agent 契约/路由/评测测试 |
 | `T-CityLite.base/docs/agent/STATUS.md` | 当前状态一页纸（先读） |
 | `T-CityLite.base/docs/agent/ACTIONS.md` / `TOOLS.md` / `EVAL.md` / `SMOKE.md` | 动作/工具/评测/冒烟 |
 | `T-CityLite.base/docs/agent/design/01..05` | 感知/效果/契约/写操作/测试设计 |
@@ -211,7 +211,7 @@ agent_smoke.py ── 实机三段式冒烟
 ```bash
 cd T-City-agent && git status --short && git log --oneline -3
 sed -n '1,120p' T-CityLite.base/docs/agent/STATUS.md
-python3 -m pytest -q tests/agent
+python3 -m pytest -q tests/tools
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
 python3 tools/agent_tools.py --check
 curl -s http://127.0.0.1:30120/players.json   # 服务器/玩家是否在线
