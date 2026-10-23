@@ -716,3 +716,31 @@ AddEventHandler('onResourceStop', function(resource)
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
 end)
+
+
+-- ----------------------------------------------------
+-- NUI bridges that used to live in client/call_history.lua
+-- ----------------------------------------------------
+-- That extra client script is not reliably loaded on this server (its NUI
+-- callbacks and net events never registered), so the bridges live in the file
+-- that is known to run. call_history.lua is removed from the manifest.
+RegisterNUICallback('getCallHistory', function(_, cb)
+    QBCore.Functions.TriggerCallback('phone:server:getCallHistory', function(res)
+        cb(res or { success = false, calls = {} })
+    end)
+end)
+
+RegisterNUICallback('getMessages', function(data, cb)
+    QBCore.Functions.TriggerCallback('phone:server:getMessages', function(res)
+        cb(res or { success = false, messages = {}, next_before_id = nil })
+    end, data)
+end)
+
+RegisterNetEvent('phone:client:systemSpeech', function(data)
+    if type(data) ~= 'table' or type(data.text) ~= 'string' then return end
+    SendNUIMessage({
+        action = 'phone:systemSpeech',
+        callId = data.callId,
+        text = data.text:sub(1, 300),
+    })
+end)

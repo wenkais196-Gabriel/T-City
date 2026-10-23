@@ -13,8 +13,7 @@ shared_scripts {
 }
 
 client_scripts {
-    'client/main.lua',
-    'client/call_history.lua'
+    'client/main.lua'
 }
 
 server_scripts {
