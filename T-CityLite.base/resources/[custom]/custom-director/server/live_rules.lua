@@ -266,7 +266,7 @@ function LiveRules.sanitize_player(player, opts)
     local lastSeen = tonumber(opts.now_ms)
     if not lastSeen then lastSeen = LiveRules.now_ms(opts.clock) end
 
-    return {
+    local projected = {
         citizenid = citizenid,
         -- Display name only: it is player-controlled text and is flagged as
         -- untrusted by the tool registry; never the license or identifiers.
@@ -274,7 +274,6 @@ function LiveRules.sanitize_player(player, opts)
         source = tonumberOr(data.source, 0),
         job = project_job(data.job),
         gang = project_gang(data.gang),
-        money = project_money(data.money),
         metadata = metadata,
         position = LiveRules.quantize_position(opts.position, precision),
         heading = tonumber(opts.heading),
@@ -283,6 +282,12 @@ function LiveRules.sanitize_player(player, opts)
         vehicle = project_vehicle(opts.vehicle),
         last_seen_ms = lastSeen,
     }
+    -- The list projection omits balances (design 01 §2.1); callers that need
+    -- them ask for a single player or read the DB snapshot.
+    if opts.include_money ~= false then
+        projected.money = project_money(data.money)
+    end
+    return projected
 end
 
 return LiveRules
