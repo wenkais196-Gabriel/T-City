@@ -220,7 +220,7 @@ local function samplePlayer(player, precision, opts, sourceHint)
     if not data then return nil end
 
     -- PlayerData does not reliably carry the source; the roster key does.
-    local source = tonumber(sourceHint) or tonumber(data.source)
+    local source = tonumber(sourceHint) or tonumber(opts and opts.source) or tonumber(data.source)
     local sampled = {
         precision = precision,
         now_ms = LiveRules.now_ms(),
