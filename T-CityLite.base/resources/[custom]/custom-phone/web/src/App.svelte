@@ -171,6 +171,15 @@
     };
     window.addEventListener('keydown', handleKeyDown);
 
+    // Right-click closes the phone (previously a client control check; CEF
+    // consumes the context menu when NUI has focus, so handle it here too).
+    const handleContextMenu = (e: MouseEvent) => {
+      if (!get(isPhoneOpen)) return;
+      e.preventDefault();
+      closePhone();
+    };
+    window.addEventListener('contextmenu', handleContextMenu);
+
     // If running in browser, auto open for preview and set modern background
     if (isBrowser()) {
       isPhoneOpen.set(true);
@@ -180,6 +189,7 @@
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('contextmenu', handleContextMenu);
     };
   });
 

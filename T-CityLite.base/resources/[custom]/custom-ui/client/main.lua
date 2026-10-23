@@ -49,12 +49,10 @@ function OpenMenu(opts)
     -- SetNuiFocus(false)) can leave the NUI half-focused, and a plain
     -- SetNuiFocus(true, true) then shows the page without a usable cursor.
     SetNuiFocus(false, false)
-    if opts.keepInput then
-        SetNuiFocusKeepInput(true)
-    else
-        SetNuiFocusKeepInput(false)
-    end
     SetNuiFocus(true, true)
+    -- Match qb-phone / qb-radialmenu: grant focus first, then ask to keep game
+    -- input. keepInput before focus did not restore WASD on the live client.
+    SetNuiFocusKeepInput(opts.keepInput == true)
     isOpen = true
     -- Some builds ignore the cursor flag when focus is granted in the same
     -- frame as the reset. Re-assert it after one frame and again after 100ms;
