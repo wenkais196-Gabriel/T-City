@@ -126,7 +126,7 @@ return {
         end
 
         local PLAYER_FIELDS = {
-            citizenid = true, source = true, job = true, gang = true, money = true,
+            citizenid = true, source = true, job = true, gang = true,
             metadata = true, position = true, heading = true, bucket = true,
             ping = true, vehicle = true, last_seen_ms = true,
         }
@@ -179,6 +179,7 @@ return {
                 'coarse position must be snapped to 25m')
             assert(first.metadata.health == 172 and first.metadata.armor == 35)
             assert(first.job.name == 'police' and first.job.grade == 2 and first.job.onduty == true)
+            assert(first.money == nil, 'the list projection must omit balances')
             assert(first.vehicle == nil, 'player 1 is on foot, vehicle must be absent')
             assert(first.last_seen_ms ~= nil)
 
@@ -218,6 +219,7 @@ return {
             assertNoEnvelope(response, 'detail')
             assert(response.body.player.citizenid == 'CID00002')
             assert(response.body.player.vehicle.plate == 'TC***AB')
+            assert(response.body.player.money ~= nil, 'detail keeps balances')
             assert(response.body.players == nil)
             assertNoPII(response.body, 'detail response')
         end)

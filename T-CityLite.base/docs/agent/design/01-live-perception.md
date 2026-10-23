@@ -511,3 +511,5 @@ end
 6. **精度只接受 ≥1 的整数**；`0.5` 曾向下取整为 0，等价于 `fine`（精确坐标）。
 7. **列表与详情使用同一 `citizenid` 规范化**，避免列表能查到、详情 404。
 8. **已实现**：429 令牌桶限流（`agent_live_rate_per_min`/`agent_live_burst`）。仍未实现：字节预算/`truncated`、`X-Agent-Live-Epoch` 响应头透传到 MCP、`/agentlive` 运维命令、单事件 512B 上限、epoch 同秒重启冲突。列为 M2 候选。
+
+9. **列表与详情的字段集不同**：`/players` 列表省略 `money`（设计 §2.1），需要余额用 `/players/{citizenid}` 或 DB 快照；两者都保留 `metadata` 白名单字段。

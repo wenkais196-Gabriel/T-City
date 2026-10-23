@@ -485,7 +485,7 @@
     {
       "name": "get_live_player",
       "title": "Get one live player",
-      "description": "Read the live state of one online player by citizenid: sampled position, vitals, job, vehicle and session. Read-only; use get_live_players to discover ids.",
+      "description": "Read the live state of one online player by citizenid: sampled position, vitals, job, vehicle, balances and session. Read-only; use get_live_players to discover ids.",
       "channel": "read",
       "route": "director",
       "director_action": null,

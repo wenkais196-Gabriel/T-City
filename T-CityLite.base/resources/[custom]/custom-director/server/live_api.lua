@@ -200,12 +200,16 @@ local function sampleVehicle(getVehicle, getModel, getPlate, getSeat, ped)
     return { model = model, plate = plate, seat = seat }
 end
 
-local function samplePlayer(player, precision)
+local function samplePlayer(player, precision, opts)
     local data = playerData(player)
     if not data then return nil end
 
     local source = tonumber(data.source)
-    local sampled = { precision = precision, now_ms = LiveRules.now_ms() }
+    local sampled = {
+        precision = precision,
+        now_ms = LiveRules.now_ms(),
+        include_money = opts and opts.include_money,
+    }
 
     local getPed = native('GetPlayerPed')
     local doesExist = native('DoesEntityExist')
@@ -309,7 +313,7 @@ local function listPlayers(query, precision)
         if data then
             local job = type(data.job) == 'table' and data.job.name or nil
             if not jobFilter or job == jobFilter then
-                local projected = samplePlayer(player, precision)
+                local projected = samplePlayer(player, precision, { include_money = false })
                 if projected then
                     count = count + 1
                     collected[count] = projected
