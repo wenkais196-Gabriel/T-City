@@ -5,7 +5,7 @@
 > 输入：
 > - 本地实现审计：`qb-policejob`、`custom-justice`、`custom-career`、`custom-phone`、`custom-director`、`tcity-dashboard`
 > - 外部资料：[ps-mdt](https://github.com/Project-Sloth/ps-mdt)、[ps-dispatch](https://github.com/Project-Sloth/ps-dispatch)、[APCO Ten-code](https://en.wikipedia.org/wiki/Ten-code)
-> - 同目录 `research-external.md` / `audit-current.md` 在本稿生成时尚不存在；本文以对源码的直接审计替代，审计结论见 §10.1。
+> - 同目录 `research-external.md` / `audit-current.md` 由并行任务生成；本稿在 §0.4 给出结论对齐，在 §5.6 给出表清单差异，在 §10.1 采纳并补充其审计发现。
 > 关联：`T-CityLite.base/docs/agent/phone/DESIGN.md`（职业 App 注册表方向）、`T-CityLite.base/docs/agent/ACTIONS.md`（动作/风险分级）。
 
 ---
@@ -33,6 +33,14 @@
 ### 0.3 不做什么（摘要，完整版 §9）
 
 完整法庭模拟（陪审团/证据开示/上诉）、CAD 实时地图与路径规划、bodycam/监控摄像头、武器登记、IA/FTO/排行榜/法院日历、第二套手机或平板 UI、客户端权威的任何状态、K9 寻路 AI、SWAT 破门小游戏。
+
+### 0.4 与并行调研/审计的对齐
+
+- `research-external.md`：结论同为「新增 `custom-police`、不把逻辑塞进 `qb-policejob`」；本稿采纳其「沿用 PhoneApps、不新建通道」与「服务端权威/预算/安全清单」；不采纳其「先用 `DynamicApp` 出最小 MDT」——`DynamicApp` 只渲染第一个 query，塞不下 4 个页面（A9）。
+- 阶段差异：research 建议 MVP 直接带通缉/罚单；本稿按「先闭环调度、再记录、再调查」把罚单放 P1、通缉放 P2（§8.0）。表结构不冲突，只是交付顺序不同；如果只想先做 2 个切片，按 research 的「调度闭环 + MDT 只读」执行，P0-1..P0-9 正好覆盖。
+- `audit-current.md`：三个最大问题（判刑断链/两套监狱、零持久化、身份判定分裂）与本稿 §10.1 一致；本稿额外把「三套上下班入口」「tcity-dashboard 查询返回 money/phone/DOB」「qb-prison 资源白名单」纳入风险。
+- 表清单差异：审计草案是 9 张 MVP（含 `police_cases`/`police_prison_sentences`/`police_duty_log`），本稿 P0 只落 4 张、全量 11 张；映射见 §5.6。差异原因是本稿把「出警」与「案件」拆成 `police_incidents`/`police_case_files`，把「执勤审计」并入 `police_audit`，把「刑期」放在 P3 的 `police_arrests` + qb-prison，不单独建表。
+- PII 口径比 `audit-current.md` §5 更严：所有敏感读审计、审计失败 fail-closed；`tcity-dashboard` 的 `lookupCitizen` 返回 money/phone/DOB，**不直接复用**（§5.3）。
 
 ---
 
@@ -65,8 +73,8 @@
 |---|---|---|---|---|
 | 0 | Recruit | 实习警员 | entry | 10-8/10-6/10-7、接单、人员/车辆**基础**查询、写草稿报告 |
 | 1 | Officer | 巡警 | entry | 罚单/警告、报告、证据、交通拦截、逮捕登记 |
-| 2 | Sergeant | 警司（PATROL/TRAFFIC）/ **警探**（CID/SWAT） | mid | 派单、关单、报告审核、敏感查询、案件主办、申请搜查令 |
-| 3 | Lieutenant | 副警监 | mid | BOLO 审批、罚单作废、审计查看、跨区调度 |
+| 2 | Sergeant | 警司（PATROL/TRAFFIC）/ **警探**（CID/SWAT） | mid | 派单、关单、报告审核、敏感查询、案件主办、申请搜查令、罚单作废 |
+| 3 | Lieutenant | 副警监 | mid | 审计查看、跨区调度、大额罚单/敏感案件复核 |
 | 4 | Chief | 警长 / 局长（`isboss`） | leader | 全部；法官不在线时搜查令兜底审批；制度与审计导出 |
 
 说明：
@@ -156,9 +164,11 @@ flowchart LR
 |---|---|---|
 | `assigned` | 显示 `DISPATCHED`（10-6） | 被派单，尚未接受 |
 | `enroute` | 10-17（仅 UI 文案） | 接受派单/主动响应 |
-| `on_scene` | **10-23** | 到场 |
+| `on_scene` | **10-23**（可配 10-97） | 到场 |
 | 清场 | **10-24** | 清场回 10-8 |
 | 上下班 | 10-41 / 10-42 | 开始/结束勤务 |
+
+> 码表口径：10-23 是 APCO 的“到场”，10-97 是加州常用；`Config.Codes.on_scene` 默认 `10-23`，可切 `10-97`，**只影响显示，不影响状态机**。同理，有的服务器把 10-6 当“接单/前往”；本设计按需求把 **10-6 固定为忙碌**，接单只显示 `DISPATCHED`，不占用 10-6，避免“忙碌”和“已派单”混为一谈。
 
 交互：
 - 命令：`/10-41`、`/10-42`、`/10-8`、`/10-6`、`/10-7`；MDT 首页同样提供按钮。
@@ -166,6 +176,8 @@ flowchart LR
 - `/10-42` 调 `SetJobDuty(false)`，从所有未结束的 `police_incident_units` 摘除，status=off_duty。
 - `playerDropped`、资源 `onResourceStart` 把残留单位置 `off_duty`（防幽灵单位）。
 - 状态变更写 `police_audit`（`action='unit_status'`，`detail.from/to`），并广播给 MDT（5s 轮询 + 状态变更即时刷新）。
+
+> **上下班入口收敛**：现状已有三套改 `job.onduty` 的入口 —— qb-policejob 值班点、`custom-main` 的 `/duty`、director 的 `set_job_duty`（审计 `audit-current.md` G2）。P0 把 `/10-41`/`/10-42` 定为警察域唯一语义入口，并在 `QBCore:Server:OnJobUpdate` / duty 变化时同步 `police_units`（只处理 onduty/job 变化，不覆盖 busy/on_scene）；其余入口保留兼容但只改 `job.onduty`，由同步逻辑兜底，避免花名册与 `onduty` 不一致。P1 再评估把 `custom-main /duty` 转调 `PoliceDuty.Set`。
 
 > 10-codes 只用于无线电/UI 显示；所有卡片同时显示中文/英文 plain text，避免新玩家看不懂。
 
@@ -234,6 +246,8 @@ stateDiagram-v2
 | 通缉 | P2 | `police_warrants(type='arrest')` | 活跃即 `WANTED`；查询/拦截时显示 |
 | 证据保管链 | P1 | `police_evidence.custody` JSON | 追加式 `[{from,to,at,note}]`，不 UPDATE 覆盖 |
 
+> 现有 `custom-main` 的通缉是 `metadata.wanted` + 内存 `WantedPlayers`（`custom-main/server/dispatch.lua`），没有令状/审批/有效期。P2 起 `police_warrants` 是唯一事实源；`custom-main` 的 `wanted` 降级为缓存/兼容读取，`/clearwanted` 保留但转调 `custom-police:RevokeWarrant`（或标记 legacy），不由两套各写各的。
+
 **搜查令不做「强制搜查」玩法**：`execute_warrant` 只是记录执行人/时间/结果，实际搜屋由 RP 完成。这样避免与 qb-houses/门锁系统深度耦合。
 
 ### 2.6 逮捕 → 登记 → 保释/庭审 → 监狱
@@ -250,7 +264,8 @@ stateDiagram-v2
 - 法官用现有 `/cases` + `justice:server:startTrial` 出判决。
 - **关键取舍**：目前有两套监狱实现 —— `custom-justice` 的 `justice:client:enterPrison/justice:server:imprison`（客户端倒计时 + 内存 `inmates`）与 `qb-prison` 的 `prison:client:Enter`（写 `metadata.injail`、收/还物品、监狱工作、破狱警报、重启恢复）。本设计选 **`qb-prison` 作为唯一刑期执行器**，`custom-justice` 只保留法律记录（案件/判决）。
 - 因此 P3 需要一处 `custom-justice/server/trial.lua` 改动：判决后不再直接 `TriggerClientEvent('justice:client:verdictReceived', ...)`（该事件会让客户端自己 `TriggerServerEvent('justice:server:imprison')`，形成客户端驱动的双计时），改为发服务端事件 `justice:server:verdict`；`custom-police` 监听后更新 `police_arrests(jail_minutes, justice_case_id)` 并 `TriggerClientEvent('prison:client:Enter', src, minutes)`。
-- 若团队坚持用 `custom-justice` 自带监狱，则必须先修 `JusticeService.Inmates` 为 nil 的 bug（§10.1），并停用 `qb-prison` 的 `/jail` 路径；**二选一，不能并存**。
+- **白名单**：`qb-prison/client/main.lua:174-179` 会拒绝非 `qb-policejob`/`qb-ambulancejob`/`qb-prison` 的 `prison:client:Enter` 调用。P3 必须把 `custom-police` 加进该白名单（或由 qb-prison 增加服务端入口），否则判决后仍然进不了监狱。
+- 若团队坚持用 `custom-justice` 自带监狱，则必须先修 `JusticeService.Inmates` 为 nil 的 bug，并停用 `qb-prison` 的 `/jail` 路径；**二选一，不能并存**。
 
 ### 2.7 车队/装备/警犬/特警（P3，后置）
 
@@ -300,7 +315,7 @@ stateDiagram-v2
 
 ### 3.3 服务端注册（改写现有 `custom-phone/server/apps/police_mdt.lua`）
 
-现有文件只有 `officers` 查询和 `alert` 动作（`server/apps/police_mdt.lua:30-77`），无法承载 MDT。改写为**薄适配层**：显式列出 query/action 名，逐个转发到 `custom-police` 的 `MdtQuery/MdtAction`，不在 phone 内复制业务逻辑。
+现有文件只有 `officers` 查询和 `alert` 动作（`server/apps/police_mdt.lua:30-77`），无法承载 MDT。改写为**薄适配层**：显式列出 query/action 名，逐个转发到 `custom-police` 的 `MdtCall(source, kind, name, params)`，不在 phone 内复制业务逻辑。
 
 ```lua
 local QUERIES = { 'me','units','incidents','incident','person','vehicle' } -- 随阶段追加
@@ -349,6 +364,8 @@ PhoneApps.Register({
 - `me` 返回当前身份与 capability 列表，前端据此隐藏 tab（仅 UX，不是权限）。
 - 所有查询带 `LIMIT`（默认 20，最大 50）；人员姓名搜索至少 2 字符、最多 20 条；车牌精确匹配。
 - 所有写动作接受可选 `idem_key`；创建类动作在表内 `UNIQUE(idem_key)`，重复提交返回同一 id。
+- 不在 `PhoneApps` 注册表加 `min_grade/departments` 也能做（本稿选择）：把 page/action 权限集中在 `custom-police` 的 capability 表，注册表只负责「是否显示磁贴」。这样新增职业 App 不用反复改 `phone_apps.lua`；代价是每个 handler 必须复检，不能依赖 registry。
+- `audit-current.md` 建议复用 `tcity-dashboard` 的 `lookupCitizen`/`lookupVehicle`；本稿**不直接复用**：`lookupCitizen` 返回 `cash/bank/phone/dob` 且无审计（`tcity-dashboard/server/police_api.lua:328-375`），与本稿 PII 分档冲突。P2 反向让 `tcity-dashboard` 调 `custom-police:LookupPerson/Vehicle`，收敛为一套查询。
 
 ### 3.5 前端交互约定
 
@@ -834,8 +851,10 @@ idem_key        VARCHAR(96)   NULL
 | `agent_events` | P4 把 `police.incident.created/assigned/closed` 写入事件流（`event_type` 点号命名） | P0–P3 不写，避免耦合 |
 | `players.department/district/certs` | 身份同步来源（`custom-career` 已维护） | 不另建用户-部门表 |
 | `phone_calls` | 911 语音通话现有链路 | 不记录通话内容 |
+| `tcity-dashboard` 的 `lookupCitizen/lookupVehicle` | P2 起反向调用 `custom-police` 查询（一套数据路径） | 不复用其现有返回（含 money/phone/DOB、无审计） |
+| `custom-main` 的 `metadata.wanted` / `WantedPlayers` | 兼容读取/降级缓存 | 不再是通缉事实源（P2 起 `police_warrants`） |
 
-**刻意不复用 `plate_flags`**：三套 DDL 不一致 —— `tcity-dashboard/sql/plate_flags.sql` 以 `plate` 为 PK，`T-CityLite.base/tests/fixtures/tcity_schema.sql:447` 是 `id` PK + 非唯一 `idx_plate`，`T-CityLite.base/tests/db_check.js` 又是另一套；`ON DUPLICATE KEY UPDATE` 在非唯一索引下会产生重复行。P2 的 BOLO 用 `police_bolos` 作为唯一事实源；ANPR/中控屏的旧标记暂不并入 MDT，P4 再桥接。
+**刻意不复用 `plate_flags`**：三套 DDL 不一致 —— `tcity-dashboard/sql/plate_flags.sql` 以 `plate` 为 PK + `reason` 列，`T-CityLite.base/tests/fixtures/tcity_schema.sql:447` 是 `id` PK + 非唯一 `idx_plate` + `flag_reason` 列，`T-CityLite.base/tests/db_check.js` 又是另一套；且没有 migration 负责建表。`ON DUPLICATE KEY UPDATE` 在非唯一索引下会产生重复行，列名不一致还会直接报错。P2 的 BOLO 用 `police_bolos` 作为唯一事实源；ANPR/中控屏的旧标记暂不并入 MDT，P4 再桥接（先写一个幂等 migration 定版 `plate_flags`）。
 
 ### 5.4 迁移与 fixture
 
@@ -862,6 +881,24 @@ idem_key        VARCHAR(96)   NULL
 | `police_units` | 当前态 | `off_duty` 超 7 天删除 |
 
 P0 不实现清理任务，先把数据写对。
+
+### 5.6 与 `audit-current.md` 表草案的对应
+
+`audit-current.md` §5.1 给了 9 张 MVP 表；本稿刻意合并/拆分，理由如下。两边的**字段口径不冲突**，实现时以本稿为准，避免同一语义两张表。
+
+| audit 草案 | 本稿 | 差异理由 |
+|---|---|---|
+| `police_dispatch_calls` | `police_incidents` | 出警记录就是警情；不另建 calls 表 |
+| `police_cases` | `police_case_files`（P2）+ `police_arrests`（P2） | 案件档案与逮捕记录分离，避免一案多捕时字段打架 |
+| `police_case_evidence` | `police_evidence` | 证据可挂 case/incident/report 三者，不强制先有 case |
+| `police_reports` | `police_reports` | 同名同义；本稿加 `min_rank/sensitive/people` |
+| `police_citations` | `police_citations` | 同名同义；本稿加 `idem_key/points/plate` |
+| `police_warrants` | `police_warrants` | 同名同义；本稿加 `scope/probable_cause/decision` |
+| `police_duty_log` | `police_audit` | 状态变更只是审计的一种 `action`；不为每次上下班单开表 |
+| `police_prison_sentences` | `police_arrests` + `qb-prison.metadata.injail` | 刑期是逮捕记录的 P3 字段；执行状态由 qb-prison 持有，避免双写 |
+| `police_impound_log` | 不做 | 扣押仍由 qb-policejob/qb-garages 负责；本设计不接管（§9） |
+
+> 代价：`police_audit` 会比单独 duty_log 更大（已给 180 天清理 + 索引）。收益：少一张表、少一处双写。
 
 ---
 
@@ -1003,7 +1040,7 @@ exports['custom-police']:AgentPostBolo(agentId, params) -> table
 
 **原则**：agent 是调度助手，不是执法者。建/改警情是 L2（人审），派单/布控是 L3（人审），查人查车是 L1（自动执行但写审计）；agent **永远不能审批**，也不能拿到未掩码 PII。
 
-| agent 动作（director action） | 风险 | 审批 | 参数 | 返回 | 说明 |
+| agent 工具 / 动作 | 风险 | 审批 | 参数 | 返回 | 说明 |
 |---|---|---|---|---|---|
 | `police_get_board` | L0 | 否（只读） | `{limit?}` | 单位状态计数 + 开放警情摘要 | MCP read 工具；live token 只读；无姓名/电话 |
 | `police_lookup` | L1 | 否（自动） | `{kind:'person'/'vehicle', citizenid?/plate?}` | 掩码资料 + flags | 有副作用的读（写审计），因此 channel=write |
@@ -1038,9 +1075,9 @@ exports['custom-police']:AgentPostBolo(agentId, params) -> table
 
 | 资源 | 接口 | 方向 | 备注 |
 |---|---|---|---|
-| `custom-justice` | `justice:server:registerArrest(suspectSrc, crimes, officerSrc)` | custom-police → justice | 现有事件；P2 建议加导出并复用 |
+| `custom-justice` | `justice:server:registerArrest(suspectSrc, crimes, officerSrc)` | custom-police → justice | 现有事件；P2 加导出 `RegisterArrest` 并让事件转调，事件本身不作为新代码调用路径 |
 | `custom-justice` | `justice:server:startTrial(caseId)` / `justice:server:verdict` | justice → custom-police | P3 用判决更新 `police_arrests` |
-| `qb-prison` | `TriggerClientEvent('prison:client:Enter', src, minutes)` | custom-police → client | P3 唯一刑期执行器 |
+| `qb-prison` | `TriggerClientEvent('prison:client:Enter', src, minutes)` | custom-police → client | P3 唯一刑期执行器；必须先把 `custom-police` 加进 `qb-prison/client/main.lua:174-179` 白名单 |
 | `custom-career` | `GetPlayerIdentity` / `AddPlayerCert` / `SetPlayerDepartment` | custom-police ↔ career | dept/cert 同步 |
 | `custom-phone` | `SendSystemMessage(number, msg, label)` / `NotifyCitizen`（P1 新增） | custom-police → phone | 通知/短信；不直接写 phone_messages |
 | `custom-certificates` | `GetLicenseStatus(source, cert)` / `HasLicense` | custom-police → certificates | 驾照/飞行执照查询 |
@@ -1078,17 +1115,18 @@ exports['custom-police']:AgentPostBolo(agentId, params) -> table
 | `evidence.add` | — | — | — | — | ✓ | ✓ | ✓ | ✓ |
 | `evidence.sensitive` | — | — | — | — | — | ✓ | ✓ | ✓ |
 | `warrant.request` | — | — | — | — | — | ✓ | ✓ | ✓ |
-| `warrant.approve` | — | — | — | — | — | — | △ judge | ✓ |
+| `warrant.approve` | — | — | — | — | — | — | — | ✓ |
 | `warrant.execute` | — | — | — | — | — | ✓ | ✓ | ✓ |
 | `case.create` | — | — | — | — | — | ✓ | ✓ | ✓ |
 | `case.sensitive` | — | — | — | — | — | ✓ | ✓ | ✓ |
 | `bolo.create` | — | ✓ | ✓ | — | — | ✓ | ✓ | ✓ |
 | `bolo.close` | — | △ | ✓ | — | — | ✓ | ✓ | ✓ |
 | `arrest.book` | — | — | — | — | ✓ | ✓ | ✓ | ✓ |
-| `arrest.bail` | — | — | — | — | — | — | △ judge | ✓ |
+| `arrest.bail` | — | — | — | — | — | — | ✓ | ✓ |
 | `audit.view` | — | — | ✓ | — | — | — | ✓ | ✓ |
 
-`call.create` 对 P0/P1 的限制：只能建 `backup_request` 或 `traffic_stop`，不能凭空建抢劫/枪击警情。
+`call.create` 对 G0/G1 的限制：只能建 `backup_request` 或 `traffic_stop`，不能凭空建抢劫/枪击警情。
+`judge` 不在上表：`warrant.approve` 与 `arrest.bail` 对 `judge` 同样开放（服务端单独分支，不经过 police 职级）。
 
 ### 7.2 服务端校验顺序（每个入口都一样）
 
@@ -1123,7 +1161,7 @@ exports['custom-police']:AgentPostBolo(agentId, params) -> table
 | money/inventory/metadata/position/license/IP | — | — | — | **永不** |
 
 实现要点：
-- `players.charinfo` 是 JSON 文本：用 `JSON_UNQUOTE(JSON_EXTRACT(charinfo,'$.phone'))` 取字段，避免把整段 JSON 传给前端。
+- `players.charinfo` 是 JSON 文本：用 `JSON_UNQUOTE(JSON_EXTRACT(charinfo,'$.phone'))` 取字段，避免把整段 JSON 传给前端；电话精确查询改用生成列 `players.phone_number`（已有 `idx_players_phone`），不走 JSON 函数。
 - 人员姓名搜索：`WHERE name LIKE ?` 只允许 grade≥1；查询词 ≥2 字符，`LIMIT 20`；每次搜索写 `person_search` 审计（不写查询词原文，写长度与结果数）。
 - 电话查询只做**精确匹配**，不做前缀模糊。
 - 车辆查询同时匹配 `plate` 与 `fakeplate`；结果标注 `matched='plate'|'fakeplate'`（假牌值只在敏感档显示）。
@@ -1174,6 +1212,7 @@ exports['custom-police']:AgentPostBolo(agentId, params) -> table
 ## 8. 分阶段交付与验收
 
 > 验收环境：2 名警察（A=grade 2 警司，B=grade 1 巡警）+ 1 名平民（C）。所有场景默认服务器已启动、`custom-police`/`custom-phone` 无报错。
+> P0–P1 严格保持「2 警 + 1 平民」；P2 的审批场景额外需要 1 名 grade 4 或 `judge`（可用管理员临时 `setjob`），P3 需要 `judge`（律师可选）；平民 C 的角色不变。
 > 每次验收后跑：`python3 -m pytest -q tests/tools`、`lua5.4 T-CityLite.base/tests/agent/lua/runner.lua`、`python3 tools/agent_tools.py --check`（P4 时）。
 
 ### 8.0 功能优先级矩阵
@@ -1201,6 +1240,7 @@ exports['custom-police']:AgentPostBolo(agentId, params) -> table
 - `qb-core/shared/jobs.lua` 加 `dispatch`；`custom-career/configs.lua` 加组织成员；`custom-phone/server/main.lua` 加 `JOB_ROLE.dispatch`。
 - `T-CityLite.base/configs/modules/police.cfg`：`ensure custom-police`（放在 `custom-justice` 之后）。
 - 纯 Lua 测试：`T-CityLite.base/tests/agent/lua/cases/police_policy.lua` + runner/驱动注册。
+- 安全前置（独立小补丁，不阻塞功能）：给 `police:server:autoAlert` 加 LEO+onduty 校验或临时禁用；给 `police:server:RobPlayer` 加 LEO+距离校验。否则平民可刷假警情污染队列。
 
 **验收场景**
 
@@ -1214,6 +1254,7 @@ exports['custom-police']:AgentPostBolo(agentId, params) -> table
 | P0-6 | B 设 10-6，A（grade 2）试图把 B 派到新警情 | 返回 `unit_busy`；B 状态不变；无派单记录 |
 | P0-7 | 平民伪造 NUI 调 `appQuery('police_mdt','person',...)` 或下班后打开 MDT | `app_forbidden` / `forbidden`；`police_audit.result='denied'` |
 | P0-8 | `restart custom-police` | 所有单位变 `off_duty`；开放警情保留；MDT 重新上班后可用 |
+| P0-9 | 平民 C 触发 `police:server:autoAlert` / 远程 `police:server:RobPlayer` | 被拒绝或无效果；不产生警情/不扣钱；服务端打印拒绝 |
 
 **SQL 校验**
 
@@ -1242,7 +1283,7 @@ SELECT actor_ref,action,result,detail FROM police_audit ORDER BY id DESC LIMIT 1
 
 ### 8.3 P2 — 通缉 / 搜查令 / 案件 / 逮捕
 
-**交付**：`v3.0_police_investigation.sql`；`server/{cases,warrants,bolos,arrests}.lua`；MDT 4 个新 tab；`/warrant` 命令（judge/chief）；`custom-justice` 导出 `RegisterArrest`（建议）。
+**交付**：`v3.0_police_investigation.sql`；`server/{cases,warrants,bolos,arrests}.lua`；MDT 4 个新 tab；`/warrant` 命令（judge/chief）；`custom-justice` 导出 `RegisterArrest`（建议）；`custom-main` 的 `wanted` 降级兼容（读取 `police_warrants`，不再双写）。
 
 **验收场景**
 
@@ -1261,13 +1302,14 @@ SELECT actor_ref,action,result,detail FROM police_audit ORDER BY id DESC LIMIT 1
 **交付**
 - `custom-justice`：`trial.lua` 改发 `justice:server:verdict`（不再客户端入狱）；`main.lua` 暴露 `JusticeService.Inmates`（或删掉 prison.lua 的写入）；新增导出 `RegisterArrest`/`Imprison`（二选一）。
 - `custom-police`：`server/justice_bridge.lua`（判决→`prison:client:Enter`→更新 `police_arrests`）；SWAT/K9 证书与单位类型；直升机执照校验；`/setcert`。
-- `qb-prison`：不重写，只做服务端触发。
+- `qb-prison`：不重写；把 `custom-police` 加进 `prison:client:Enter` 的资源白名单（`client/main.lua:174-179`），或由 qb-prison 暴露服务端入口。
+- 服刑状态以 qb-prison 为准，`police_arrests` 只存 `jail_minutes/justice_case_id` 快照；释放用 qb-prison 的 `prison:client:Leave` 路径。
 
 **验收场景**
 
 | # | 操作 | 通过标准 |
 |---|---|---|
-| P3-1 | judge `/cases` → 开庭 → 判决 | `police_arrests.status='transferred'`；`jail_minutes` 写入；嫌疑人进入 qb-prison；**不出现双计时** |
+| P3-1 | judge `/cases` → 开庭 → 判决 | `police_arrests.status='transferred'`；`jail_minutes` 写入；嫌疑人进入 qb-prison（白名单放行）；**不出现双计时** |
 | P3-2 | 刑满释放 | `police_arrests.status='released'`；`metadata.injail=0`；物品归还 |
 | P3-3 | 无 `swat_cert` 取 SWAT 装备/载具 | 服务端拒绝并审计；有证书通过 |
 | P3-4 | K9 单位 `k9_search` | 5 分钟冷却；返回有/无线索；审计；无警犬 ped |
@@ -1340,12 +1382,12 @@ WHERE i.id = ?;
 
 | # | 发现 | 位置 | 影响 | 处理 |
 |---|---|---|---|---|
-| A1 | `JusticeService.Inmates` 从未定义，`prison.lua` 写入 nil | `custom-justice/server/prison.lua:34,47`；`main.lua:64` 只有 `GetInmates()` | 入狱路径运行时错误；P3 前必须修 | P3 前置：暴露 `Inmates` 或改 `SetInmate` |
-| A2 | 两套监狱并存（custom-justice 客户端倒计时 + qb-prison） | `custom-justice/client/main.lua:90-100`、`qb-prison/client/main.lua:174` | 双计时/双状态/物品丢失 | P3 选 `qb-prison` 唯一执行器，改 `trial.lua` |
-| A3 | 判决由客户端触发入狱（`justice:client:verdictReceived` → 客户端 `TriggerServerEvent('imprison')`） | `custom-justice/client/main.lua:88-100` | 客户端可伪造 citizenid/刑期；`prison.lua` 只校验调用者是警察/法官 | P3 改服务端事件 |
+| A1 | 判决→入狱链路断：嫌疑人客户端 `TriggerServerEvent('imprison')`，服务端却要求调用者 job 为 police/judge；绕过鉴权后 `JusticeService.Inmates` 又未定义 | `custom-justice/client/main.lua:89-101`；`server/prison.lua:17-21,34,47`；`server/main.lua:64` 只有 `GetInmates()` | 判决永远进不了监狱；P3 阻塞 | P3 改服务端判决事件 + qb-prison；只有坚持用 justice 监狱时才需要暴露 `Inmates` |
+| A2 | 两套监狱并存（custom-justice 客户端倒计时 + qb-prison） | `custom-justice/client/main.lua:42-75`；`qb-prison/client/main.lua:174-270` | 双计时/双状态/物品丢失 | P3 选 `qb-prison` 唯一执行器，改 `trial.lua` |
+| A3 | `registerArrest` 的 `officerSrc` 来自客户端参数，可冒用他人；`prison:server:SetJailStatus` 无鉴权 | `custom-justice/server/arrest.lua:11-16`；`qb-prison/server/main.lua:5-14` | 伪造警员身份/任意改 `injail` | P2 用服务端导出；P3 给 qb-prison 入口加资源/来源校验 |
 | A4 | `Config.Justice.MaxSentence` 未定义，刑期上限硬编码 120 | `custom-justice/server/prison.lua:28`；`config.lua` 无该键 | 长刑期被截断 | P3 加配置 |
 | A5 | `qb-policejob` 的 `/flagplate` 只写内存 `Plates`，与 `tcity-dashboard` 的 SQL `plate_flags` 不同步 | `qb-policejob/server/vehicle.lua:101-136`；`tcity-dashboard/server/police_api.lua:27-49` | 罚单车牌标记在 ANPR/中控屏可能看不到 | P2 不依赖旧标记；P4 桥接或统一 |
-| A6 | `plate_flags` 三套 DDL 不一致（PK plate vs id+非唯一索引） | `tcity-dashboard/sql/plate_flags.sql`；`T-CityLite.base/tests/fixtures/tcity_schema.sql:447`；`T-CityLite.base/tests/db_check.js:13` | `ON DUPLICATE KEY` 可能产生重复行 | 不复用；需要时单独治理 |
+| A6 | `plate_flags` 三套 DDL 不一致：PK `plate`+`reason` vs `id` PK+非唯一 `idx_plate`+`flag_reason`；且没有 migration 建表 | `tcity-dashboard/sql/plate_flags.sql`；`T-CityLite.base/tests/fixtures/tcity_schema.sql:447`；`T-CityLite.base/tests/db_check.js:13` | `ON DUPLICATE KEY` 产生重复行；列名不一致直接报错 | 不复用；需要时单独写幂等 migration 定版 |
 | A7 | `custom-phone` 没有账单/发票消费端，`qb-policejob /fine` 写的 `phone_invoices` 不可见 | `custom-phone/server/qb_phone_compat.lua:14`；`qb-policejob/server/commands.lua:303` | 罚款可能“消失” | 罚单用 `police_citations` + 现场收款 |
 | A8 | `PhoneApps` 只校验 `job + onduty`，无 rank/页面级权限 | `custom-phone/server/phone_apps.lua:39-52` | 任何在勤警察可读全量 | `custom-police` 单点 capability + 审计 |
 | A9 | `DynamicApp.svelte` 只渲染 `queries[0]`，动作写死 `alert` | `custom-phone/web/src/apps/DynamicApp.svelte` | 无法承载 MDT | 新增专用 `PoliceMDT.svelte` |
@@ -1353,7 +1395,13 @@ WHERE i.id = ?;
 | A11 | `agent_tools.json` 工具数 31 被测试硬编码 | `tests/tools/test_agent_tools.py:245` | 加工具后 CI 红 | P4 同步改测试与生成物 |
 | A12 | 直升机没有飞行执照校验 | `qb-policejob/client/job.lua:478-501` | 任何警察可开 | P3 服务端校验 |
 | A13 | `qb-policejob` 的 911 只是广播，无警情记录 | `qb-policejob/server/commands.lua:530-544` | 重复报警、无队列、无审计 | 由 `custom-police` 接管 |
-| A14 | `custom-justice` 案件仅内存，重启即丢，`CASE-0001` 会重置 | `custom-justice/server/main.lua:6-8,17-36` | 审计关联会指向重复 case id | 接受（P3 文档化）；`police_arrests` 保留快照 |
+| A14 | `custom-justice` 整个资源没有一处 SQL；案件/囚犯仅内存，重启即丢，`CASE-0001` 会重置 | `custom-justice/server/main.lua:6-8,17-36`（grep 无 MySQL） | 审计关联会指向重复 case id | 接受（P3 文档化）；`police_arrests` 保留快照 |
+| A15 | 三套上下班入口（值班点、`custom-main /duty`、director `set_job_duty`）都改 `job.onduty`，规则/审计不一致 | `qb-policejob/client/job.lua:462-466,767-800`；`custom-main/server/dispatch.lua:216-247`；`custom-director` `set_job_duty` | 花名册与 onduty 分叉，派单给错人 | P0 `/10-41/42` 唯一语义入口 + `OnJobUpdate` 同步；P1 收编 `/duty` |
+| A16 | `tcity-dashboard` 的 `lookupCitizen` 返回 `cash/bank/phone/dob` 且无审计 | `tcity-dashboard/server/police_api.lua:328-375` | 直接复用即 PII 泄露 | 不复用其返回；P2 反向让它调 `custom-police` |
+| A17 | qb-policejob 既有客户端信任漏洞：`autoAlert` 无鉴权、`RobPlayer` 无 LEO 校验、指纹/脚环事件无校验、证据仓库名由客户端传 | `qb-policejob/server/main.lua:167,211,225`；`server/interactions.lua:196-214`；`server/main.lua:137-146` | 任意玩家可刷警情/抢钱/伪造定位，污染 P0 调度 | P0 上线前至少给 `autoAlert`/`RobPlayer` 加 LEO+距离校验或临时禁用（独立补丁，不在本设计代码范围） |
+| A18 | `qb-prison` 的 `prison:client:Enter` 有资源白名单，只允许 `qb-policejob`/`qb-ambulancejob`/自身 | `qb-prison/client/main.lua:174-179` | P3 由 `custom-police` 触发会被拒 | P3 把 `custom-police` 加入白名单或改用服务端入口 |
+| A19 | 现有 `police_mdt` alert 直接 `MySQL.Async.insert` + 手发客户端事件，绕过 `PhoneNotify` 的缓存失效/长度处理 | `custom-phone/server/apps/police_mdt.lua:61-72` | 通知重复/长度/缓存问题 | P0 改写 MDT App 时删除此路径，统一走 `PhoneNotify`/兼容事件 |
+| A20 | `custom-main` 的通缉是 `metadata.wanted` + 内存 `WantedPlayers`，与 justice 案件无联动 | `custom-main/server/dispatch.lua:2,38-95` | 两套通缉状态 | P2 `police_warrants` 为事实源，旧状态降级兼容 |
 
 ### 10.2 依赖矩阵
 
@@ -1368,7 +1416,7 @@ WHERE i.id = ?;
 | `pma-voice` | 无线电/通话 | 无语音，文字照常 | 可选 |
 | `custom-certificates` | 驾照/飞行执照 | 查询显示“未知” | 软依赖 |
 | `custom-director` | P4 agent | P4 不启用 | P4 需要 |
-| `tcity-dashboard` | 车载屏 | 无影响 | 只读镜像 |
+| `tcity-dashboard` | 车载屏/现有查询 | P0/P1 无影响；P2 起反向调 `custom-police` | 只读镜像；不复用其 PII 返回 |
 | `T-CityLite.base/tests/fixtures/tcity_schema.sql` | CI DB | schema 测试失败 | 每次迁移同步 |
 
 ### 10.3 风险表
@@ -1384,6 +1432,10 @@ WHERE i.id = ?;
 | Agent 提示注入/审批疲劳 | 中 | 中（错误派单） | L2/L3 人审 + `untrusted_fields` + 只允许白名单状态 + 速率限制 |
 | 审计表增长过快 | 中 | 低（查询变慢） | 180 天清理 + 复合索引 + 只存掩码 |
 | 资源加载顺序/导出缺失 | 低 | 中（MDT 全挂） | 懒解析 + `service_unavailable` + police.cfg 顺序 |
+| 上下班入口分裂（A15） | 高 | 中（派单给错人） | P0 `/10-41/42` 唯一语义入口 + duty 变更同步；P1 收编 `/duty` |
+| 既有客户端漏洞污染调度（A17） | 高 | 中（假警情/假定位） | P0 前给 `autoAlert`/`RobPlayer` 加鉴权或临时禁用；MDT 只信服务端生成的 incident |
+| qb-prison 白名单拒绝（A18） | 高 | 高（P3 进不了监狱） | P3 显式加白名单，验收 P3-1 检查日志无 `unauthorized` |
+| 两份设计表口径不一致（audit vs 本稿） | 中 | 低（实现分歧） | §5.6 映射表；实现以本稿为准，迁移前对齐 |
 | `custom-career` 缓存与 qb-core 不同步 | 低 | 低（dept 短暂旧值） | 每次请求以 qb-core grade + career 实时查询为准，不缓存权限 |
 
 ### 10.4 待确认（产品决策，不阻塞 P0）
@@ -1449,4 +1501,4 @@ P0 新增表：`police_units`、`police_incidents`、`police_incident_units`、`
 P0 MDT 页面：首页、单位、接警、人员、车辆（4 个业务页 + 1 个首页）。
 P0 agent 工具：0 个（P4 才接；P0 仅预留 `police_audit.actor_kind='agent'` 与 `source` 字段）。
 最大风险：越权/PII 泄露 —— PhoneApps 只校验 job+onduty，rank/部门/用途必须由 `custom-police` 单点校验并审计，漏一处即全量平民档案泄露。
-预计改动文件数：P0 ≈ 26（新增 14 / 修改 12）；P0–P4 ≈ 60（不含 `html/` 构建产物逐个计数）。
+预计改动文件数：P0 ≈ 28（新增 14 / 修改 14，含 2 个既有事件鉴权补丁）；P0–P4 ≈ 62（不含 `html/` 构建产物逐个计数）。
