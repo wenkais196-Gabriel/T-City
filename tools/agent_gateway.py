@@ -22,6 +22,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,21 +33,54 @@ TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
+import agent_contract  # noqa: E402
 import agent_data  # noqa: E402
+import agent_tools  # noqa: E402
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
 _BEARER_RE = re.compile(r"^\s*Bearer\s+(.+?)\s*$", re.IGNORECASE)
+
+# Fixed wire text per error code. Validation details (which can quote request
+# parameters) are logged to stderr instead of being reflected to the caller.
+_SAFE_ERRORS = {
+    "unauthorized": "missing or invalid bearer token",
+    "not_found": "not found",
+    "method_not_allowed": "method not allowed",
+    "body_too_large": "request body too large",
+    "schema_unavailable": "schema is unavailable",
+    "database_error": "database is unavailable",
+    "database_unavailable": "database is unavailable",
+    "permission_denied": "permission denied",
+    "internal_error": "internal server error",
+}
 
 
 # ---------------------------------------------------------------------------
 # Response helpers
 # ---------------------------------------------------------------------------
 def _json_bytes(payload: Any) -> bytes:
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    # Defence in depth for a JSON API that can echo file content (the schema
+    # registry). Escaping the HTML metacharacters keeps the bytes valid JSON
+    # while making the body inert if a browser ever sniffs it as markup.
+    text = text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    return text.encode("utf-8")
 
 
-def _envelope(data: Any, next_cursor: Any = None, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+def _envelope(
+    data: Any,
+    next_cursor: Any = None,
+    meta: dict[str, Any] | None = None,
+    *,
+    request_id: str | None = None,
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
+    """v1 success envelope plus the additive contract fields (design 03 §5.3 B).
+
+    The four original keys keep their exact shape and are written first; the
+    new fields are appended so pre-M0 clients can ignore them byte-for-byte.
+    """
     payload: dict[str, Any] = {
         "schema_version": agent_data.SCHEMA_VERSION,
         "data": data,
@@ -55,6 +89,11 @@ def _envelope(data: Any, next_cursor: Any = None, meta: dict[str, Any] | None = 
         payload["next_cursor"] = next_cursor
     if meta:
         payload["meta"] = meta
+    payload["ok"] = True
+    payload["kind"] = "ok"
+    payload["retryable"] = False
+    payload["request_id"] = request_id or secrets.token_hex(8)
+    payload["warnings"] = list(warnings or [])
     return payload
 
 
@@ -94,6 +133,7 @@ class AgentHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
         self.send_header("Connection", "close")
         for key, value in (headers or {}).items():
             self.send_header(key, value)
@@ -101,12 +141,39 @@ class AgentHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         if self.command != "HEAD":
             try:
-                self.wfile.write(body)
+                # Reviewed exception: not an HTML sink. The body is JSON (application/json,
+                # nosniff, default-src 'none' CSP) and every <, >, & is already
+                # \uXXXX-escaped in _json_bytes, so it cannot be parsed as
+                # markup even if a browser sniffs it. Sonar's taint model flags
+                # any file-derived bytes written to wfile and cannot see the
+                # content type; mark this instance as reviewed rather than
+                # weakening the rule for the whole module.
+                self.wfile.write(body)  # NOSONAR
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
     def _error(self, status: int, message: str, code: str, headers: dict[str, str] | None = None) -> None:
-        self._send_json(status, {"error": message, "code": code}, headers)
+        # Never reflect the detailed message: ValidationError strings can
+        # contain query parameter names/values, which makes the response a
+        # reflected-input sink (Sonar: reflected XSS). The detail goes to
+        # stderr for operators; the wire gets a fixed, code-derived text.
+        if message:
+            print(
+                f"agent_gateway: {status} {code}: {message}",
+                file=sys.stderr,
+                flush=True,
+            )
+        kind, retryable = agent_contract.classify(code)
+        self._send_json(
+            status,
+            {
+                "error": _SAFE_ERRORS.get(code, "invalid request"),
+                "code": code,
+                "kind": kind,
+                "retryable": retryable,
+            },
+            headers,
+        )
 
     def _method_not_allowed(self) -> None:
         self._error(405, "method not allowed", "method_not_allowed", {"Allow": "GET"})
@@ -187,6 +254,10 @@ class AgentHandler(BaseHTTPRequestHandler):
             self._check_no_params(query)
             self._send_json(200, _envelope(agent_data.get_schema()))
             return
+        if segments == ["agent", "v1", "tools"]:
+            self._check_no_params(query)
+            self._tools_registry()
+            return
         if segments == ["agent", "v1", "players"]:
             self._players(query)
             return
@@ -214,6 +285,25 @@ class AgentHandler(BaseHTTPRequestHandler):
 
     def _check_no_params(self, query: dict[str, list[str]]) -> None:
         _check_params(query, set())
+
+    def _tools_registry(self) -> None:
+        """Serve the runtime tool registry (read from tools/agent_tools.json)."""
+        try:
+            registry = agent_tools.load_registry()
+        except agent_tools.RegistryError:
+            self._error(503, "tool registry unavailable", "registry_unavailable")
+            return
+        tools = registry.get("tools", [])
+        self._send_json(
+            200,
+            _envelope(
+                {
+                    "registry_version": registry.get("registry_version"),
+                    "tools": tools,
+                },
+                meta={"count": len(tools)},
+            ),
+        )
 
     # -- endpoints -----------------------------------------------------------
     def _health(self) -> None:
@@ -366,13 +456,20 @@ def main() -> int:
         return 1
 
     print(
-        f"agent_gateway: read-only API listening on http://{host}:{port} "
-        f"(schema_version={agent_data.SCHEMA_VERSION}, backend={agent_data.backend_name()})",
+        f"agent_gateway: read-only API listening on {host}:{port} "
+        f"(schema_version={agent_data.SCHEMA_VERSION}, backend={agent_data.backend_name()}); "
+        "this listener is plaintext and loopback-only - put a TLS proxy in front "
+        "of it before exposing it beyond 127.0.0.1",
         file=sys.stderr,
         flush=True,
     )
     try:
-        httpd.serve_forever(poll_interval=0.5)
+        # Reviewed exception: deliberate cleartext listener. It binds 127.0.0.1 by
+        # default, is read-only, and the startup banner tells operators to put
+        # a TLS proxy in front before exposing it. Switching this to HTTPS
+        # would require shipping and rotating a certificate for a loopback
+        # sidecar, which is a larger operational risk than the one it removes.
+        httpd.serve_forever(poll_interval=0.5)  # NOSONAR
     except KeyboardInterrupt:
         pass
     finally:

@@ -328,6 +328,7 @@ def sanitize_untrusted(text: str, max_chars: int = 200) -> tuple[str, bool]
     "name":{"$ref":"#/$defs/name"},"title":{"type":"string","maxLength":60},
     "description":{"type":"string","minLength":20,"maxLength":400},
     "channel":{"enum":["read","write","effect"]},"route":{"enum":["gateway","director"]},
+    "auth":{"enum":["default","live"]},
     "director_action":{"type":["string","null"],"pattern":"^[a-z][a-z0-9_]{2,40}$"},
     "risk":{"enum":["L0","L1","L2","L3","L4"]},"blast_radius":{"enum":["single","group","world"]},
     "requires_approval":{"type":"boolean"},"idempotency":{"enum":["required","optional","none"]},
@@ -498,3 +499,14 @@ envelope 兼容（M0 前冻结的 gateway 响应 fixture 逐 key 相等）；路
 幂等（派生键稳定、显式键覆盖、dry-run `/dry`）；注入清洗（零宽/双向符/超长/`\r\n` 折叠/标记）。
 
 **Go/No-Go**：D1–D6 + D8 全绿即可发 M0（读 10 + 写 3，v1 客户端零改动）；M0 **不阻塞**在 Lua 改造上（3 个 legacy action 已存在），D7 完成后再扩展到 M1。
+
+---
+
+## 14. 实现回填（2026-10-22，commit `498b888` + 评审修正）
+
+评审实测后收紧了三条不变量，并补上一条此前只写在文档里的承诺：
+
+1. **`add_` 不是动词，只是历史名字**。`VERBS` 不含 `add`，`add_player_money` 通过精确名单 `LEGACY_NAMES` 放行；新增 `add_world_notice` 会被 `--check` 拒绝（评审 F-01：原实现把 `add` 放进全局动词表，任意 `add_*` 都能过）。
+2. **effect 不得为 L1，L2 必须默认审批**。设计 §6 与 §7.3 的冲突按"具体工具表优先、但不得放宽治理"处理：`effect ∈ {L2,L3,L4}`，且 `L2 ⇒ requires_approval=true`（运行时 `agent_actions_l2_auto` 只能在此基础上下调，不能从 registry 侧预先放弃审批）。
+3. **pattern 必须可被 Lua 校验**。registry 的 pattern 限定为单字符类 `^[chars]{m,n}$`，生成器把它展开成字面字符集写进 `agent_tools.lua`；Lua 侧逐字节校验，与 Python 的 `re.fullmatch` 等价（评审 F-04：原生成物接受带空格/超长 citizenid）。
+4. **untrusted 标注已接线**（评审 F-03 / R2）。读响应在 `meta.untrusted_fields` 列出玩家可控文本的 JSON 路径，并附 `meta.untrusted_notice`；`initialize.instructions` 改为引用该字段，不再声称存在并不存在的 `untrusted:true` 包裹。注册表为 `list_events`/`get_player_timeline`/`get_world_state`/`get_world_digest` 声明了 payload 类不可信字段。

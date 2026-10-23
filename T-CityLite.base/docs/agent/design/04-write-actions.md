@@ -548,3 +548,95 @@ TTL 线程 30s tick：过期 → `delete_vehicle(temp=true)`；玩家在车内�
 **依赖顺序**：1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12/13。6/7/8 可与 4/5 并行，但必须在 L3/L4 动作前完成。
 
 **验收基线**：`lua5.4 tests/agent/test_agent_actions_policy.lua`、`luac5.4 -p` 所有新增 server 文件、v1 live smoke，以及每动作至少 1 正例 + 2 负例（越界/离线/验真失败）。批量与熔断需脚本化失败注入，不能只靠人工点。
+
+---
+
+## 13. 实现回填 · 第一片（2026-10-22）
+
+本片只增加两个动作，**没有**做声明式重构：`policy.lua` 仍是 if-chain。理由：现有 3 个动作的校验逻辑已被 selftest 与生产使用验证，一次性重写会把"已验证"换成"未验证"；先以增量方式补齐高风险动作，等动作数逼近 10 个再重构，收益更大、回归面更小。
+
+已落地：
+- `set_job`（L3，必须人审）：`job` 必须在 `QBCore.Shared.Jobs`，`grade` 必须在职业的 grades 中；`SetJob` 返回 true 后**回读** `PlayerData.job.name` 与 `grade.level`，不一致记 `verification_failed`；结果含 `before/after`。
+- `grant_item`（L4，必须人审）：`item` 必须在 `QBCore.Shared.Items`；`AddItem` 后回读数量差必须等于 `amount`；上限用 `agent_actions_max_item_amount`（默认 50，clamp 1..1000），不参与 `add_money` 的每日预算。
+- 两者都**严格拒绝未知字段**（旧 3 个动作保持"丢弃未知字段"的历史行为，未改）。
+
+偏差：
+1. 执行失败仍映射为 API `code=execution_failed`，`verification_failed` 只出现在 `error`/`result.error` 与审计里；未新增失败码，避免改变既有 HTTP 映射。
+2. 未预检负重/槽位，`AddItem` 返回 false 即 `execution_failed`；不做 undo。
+3. `grant_item.reason` 严格拒绝 tab/LF/CR（比 `add_money.reason` 更严，后者暂未收紧）。
+4. 未做真实 FXServer/QBCore 联机冒烟。
+
+下一步：`set_job`/`grant_item` 已在 registry 由 `planned` 改为 `active`（23 工具 / 18 active），MCP 可直接调用；剩余 5 个动作（`send_announce`/`set_weather`/`set_time_of_day`/`teleport_player`/`spawn_vehicle`）留待后续。
+
+### 13.1 第二片（世界/表现类，2026-10-22）
+
+新增 `announce` / `set_weather` / `set_time_of_day`，均为 L2 + `requires_approval=true` + `blast_radius='world'`：
+
+| 动作 | 执行 | 校验 |
+|---|---|---|
+| `announce` | 遍历在线玩家逐个 `Notify` | 统计 `delivered`；0 人在线视为成功（无人可发不是失败） |
+| `set_weather` | `qb-weathersync:setWeather` | 回读 `getWeatherState() == weather`，否则 `verification_failed` |
+| `set_time_of_day` | `qb-weathersync:setTime` | 回读 `getTime()` 的 hour/minute，不一致 `verification_failed`；无 `getTime()` 的旧版本退化为只信返回值（`verify_result=false`） |
+
+`blast_radius` 先前在 registry 里误写为 `single`（广播/世界状态应是 `world`），本片一并修正；该字段与 `risk` 正交，`world` 强制要求审批。
+
+三个工具已由 `planned` 改为 `active`（23 工具 / 21 active）。仍余 `teleport_player` 与 `spawn_vehicle`：前者需要把 `custom-agent-client` 接进执行链（`Citizen.Await` 可让出性），后者需要服务端实体创建与超时控制。
+
+### 13.2 第三片（teleport，2026-10-22）
+
+`teleport`（L3，必须审批）把动作代理接到 `custom-agent-client`：
+
+- 参数严格白名单 `citizenid/x/y/z/heading?`；坐标必须有限且在地图边界内。
+- `CheckPolicy` 要求玩家在线且 `custom-agent-client` 已启动（`ctx.executor_ready`），否则 `executor_unavailable`。
+- 执行：`exports['custom-agent-client']:Execute(src,'teleport',{...},5000,{agent_id='director:<id>'})`。
+  - 成功返回 `{ack, from, at}`；
+  - `not_yieldable` **显式失败**（提示必须在 coroutine 内），不静默降级为 fire-and-forget；
+  - `timeout`/`player_offline`/`handshake_missing`/`executor_disabled` 原样映射；
+  - export 调用抛错 → `executor_unavailable`。
+- 不做落点回读、不解析 `ack.detail`、无 bucket/战斗/载具守卫、无重试/回滚。
+
+**关键结论**：`Propose`/`Approve` 在 FiveM 的 HTTP 回调协程内执行，`Citizen.Await` 可正常让出；非协程调用会得到 `not_yieldable`。因此审批路径不需要改成两段式队列。
+
+`teleport_player` 已由 `planned` 改为 `active`（23 工具 / 22 active），仅剩 `spawn_vehicle`。
+
+### 13.3 第四片（spawn_vehicle，2026-10-22）
+
+`spawn_vehicle`（L3，必须审批）补齐 15 个在册动作里的最后一个：
+
+- 参数严格白名单 `citizenid/model/plate?`；`model` 小写化后用 `GetHashKey` 判存（hash 由 main 注入 `ctx.model_hash`，policy 保持无 native）。
+- 执行：玩家上前方 1.5m 生成，`CreateVehicleServerSetter` 优先、`CreateVehicle` 回退。
+- **有界等待**：`deadline = GetGameTimer() + 2000`，`DoesEntityExist` 轮询；超时 `DeleteEntity` 后返回 `vehicle_spawn_timeout`。**不使用** qb-core 的 `SpawnVehicle`（内部 `while Wait(0)` 无上界）。
+- plate 写入后回读、去空格比较，不一致 `verification_failed`；该路径**不删除实体**（已文档化，避免"报错但车还在"变成"报错且车没了"）。
+- 不发钥匙、不写 `player_vehicles`、不设 bucket——这些属于车库/钥匙领域，不应由 agent 动作直接越权完成。
+
+至此 v1 工具面 **23 工具 / 23 active** 全部落地，`planned` 集合为空。
+
+---
+
+## 14. 安全评审：为什么 `set_money` 不实现
+
+设计 §2 把 `set_money`（绝对值改余额）列为"最危险"。实现到第 14 个动作后，明确决定**不上线**，理由不是工作量：
+
+1. **它绕过所有现有护栏。** `add_money` 受单笔上限、每日预算、delta 二次校验三重约束；`set_money` 的语义是"把余额设成 X"，上限和预算都失去意义——一次调用可以把整个经济体的货币供应改掉。
+2. **反向操作不可靠。** 回滚需要 `RemoveMoney`，而它受 `DontAllowMinus`（cash/crypto）与 `MinusLimit`（默认 -5000）限制；玩家在两次操作之间消费过，回滚会失败，留下"审计说已回滚、实际没回滚"的状态。
+3. **崩溃窗口无法证明前值。** 执行前读到的余额是内存值，执行后崩溃/重启，审计行里的 `before` 无法证明与落盘值一致；这不是加锁能解决的，是跨存储的原子性问题。
+4. **它奖励错误行为。** 一旦 agent 知道有 `set_money`，它会用"设成 5000"替代"加 500"，而前者没有任何预算语义。
+
+**替代方案**：需要发钱就用 `add_money`（有上限、有预算、有 delta 校验）；需要纠正错误余额就人工走 `qb-banking`/管理面板，并在 `custom-logs` 留痕。
+
+如果未来确实要开，最低门槛是：双人审批 + 执行前把余额快照写入独立表 + 硬上限（例如不得超过当前值的 ±10%）+ 只允许 `bank` 账户 + 独立 convar 默认关闭。在这些条件满足前，`set_money` 保持未实现。
+
+---
+
+## 15. 最终口径（2026-10-22 对账）
+
+上文 §2 是立项时的 15 动作计划，落地后与它有三处差异，以本节和非 `STATUS.md` 为准：
+
+| 项 | 计划（§2） | 最终实现 |
+|---|---|---|
+| 动作数 | 15（含 `set_money`/`send_phone_message`） | **18**（含 `announce`/`set_weather`/`set_time_of_day`/`teleport`/`send_phone_message`；`set_money` 明确不做见 §14） |
+| 审批 | L3/L4 人审，曾讨论"双人审批" | **单人审批**（agent token 无审批权；admin token 独立）。双人审批未实现，属未来增强 |
+| `set_bucket` 范围 | 1000–1999 | **0–65535**（QBCore 原生 routing bucket 范围） |
+| 工具面 | 计划 20 | **31**（13 只读 + 18 写/效果） |
+
+其余口径以 `policy.lua` 的 `ACTIONS` 与 `docs/agent/STATUS.md` 为准；本文件前面章节保留立项时的推理过程，不再逐条回改。
