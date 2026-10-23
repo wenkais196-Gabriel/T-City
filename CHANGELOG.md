@@ -20,8 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent 中枢导演架构设计：`docs/server-design/08-agent-director.md`
 - 任务系统建表脚本：`migrations/v0.7_quest_system.sql`（player_quests / quest_cooldowns / quest_event_log / quest_daily_limits）
 - DevOps 工作流：CI（配置/依赖/Lua 语法）、Release、PR/Issue 模板、CODEOWNERS、CONTRIBUTING、SECURITY
-- GitHub 初始化脚本：`tools/bootstrap_github.sh`（标签 / 里程碑 / 待办 Issue）
-- 开发工作流指南 (`docs/dev-workflow-guide.md`)，涵盖目录结构、分支策略、日常开发流程、Git 速查
+- GitHub 初始化脚本：`tools/dev/bootstrap_github.sh`（标签 / 里程碑 / 待办 Issue）
+- 开发工作流指南 (`T-CityLite.base/docs/archive/dev-workflow-guide-2026-06-01.md`)，涵盖目录结构、分支策略、日常开发流程、Git 速查
 - `start_server.bat` 一键启动脚本（UTF-8 编码，自动切换工作目录）
 
 ### Security
@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **运行时构建产物入库**：oxmysql `dist/web`、menuv `dist`、tcity-dashboard `nui/dist`
 - **custom-ui**：统一 NUI 焦点、关闭后 300ms 防误触、距离校验；车店/车库/qb-menu/手机/中控屏接入
 - **NUI 无头冒烟**：Playwright 覆盖车店 / 中控屏 / 车库 / 手机四个页面
-- 开发工作流指南（`docs/dev-workflow-guide.md`）与一键启动脚本
+- 开发工作流指南（`T-CityLite.base/docs/archive/dev-workflow-guide-2026-06-01.md`）与一键启动脚本
 
 ### Changed
 - **qb-vehicleshop Phase 1–5**：`while insideShop` 轮询改事件驱动；`finance.lua` 拆分为 lifecycle + payments；NUI 模式接通；客户端 Bus 注册；试驾独立车牌与钥匙清理
