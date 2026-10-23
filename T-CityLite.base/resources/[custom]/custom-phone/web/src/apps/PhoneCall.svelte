@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { playerData } from '../stores/phone';
+  import { playerData, callHistory, loadCallHistory } from '../stores/phone';
   import {
     callPhase,
     callPeerName,
@@ -11,10 +11,20 @@
     rejectIncomingCall,
     endActiveCall
   } from '../stores/call';
+  import { playHangupSound } from '../utils/ringtone';
 
   // Call events (incoming/answered/ended) are registered globally in App.svelte,
   // so the call state is received even when this app is not mounted.
   let dialNumber = $state('');
+
+  // Refresh whenever the app is mounted and after a call returns to idle, so a
+  // call that just ended shows up without reopening the phone. The short delay
+  // lets the server finish writing the final status/duration first.
+  $effect(() => {
+    if ($callPhase !== 'idle') return;
+    const timer = window.setTimeout(() => void loadCallHistory(), 400);
+    return () => window.clearTimeout(timer);
+  });
 
   const appendNumber = (num: string) => {
     if (dialNumber.length < 15) {
@@ -36,11 +46,13 @@
   };
 
   const rejectCall = () => {
+    playHangupSound();
     void rejectIncomingCall();
     dialNumber = '';
   };
 
   const endCall = () => {
+    playHangupSound();
     void endActiveCall();
     dialNumber = '';
   };
@@ -49,6 +61,32 @@
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const isMissed = (entry: any) => entry.direction === 'in' && entry.status === 'missed';
+
+  const recentKind = (entry: any) => (isMissed(entry) ? 'missed' : entry.direction === 'out' ? 'out' : 'in');
+
+  const recentIcon = (entry: any) => (isMissed(entry) ? '📵' : entry.direction === 'out' ? '↗' : '↙');
+
+  const recentStatus = (entry: any) => {
+    if (entry.status === 'missed') return 'Missed';
+    if (entry.duration > 0) return formatDuration(entry.duration);
+    if (entry.status === 'cancelled') return 'Cancelled';
+    return '';
+  };
+
+  const formatWhen = (timestamp: string) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const callFromHistory = (number: string) => {
+    if (!number) return;
+    dialNumber = number;
+    void placeCall(number);
   };
 </script>
 
@@ -137,6 +175,35 @@
         <button class="dial-call-btn" onclick={startCall} disabled={!dialNumber} aria-label="Call">
           📞 Call
         </button>
+      </div>
+
+      <!-- Recent calls -->
+      <div class="recent-section">
+        <div class="recent-header">
+          <span>Recent</span>
+        </div>
+        {#if $callHistory.length === 0}
+          <div class="recent-empty">No recent calls yet</div>
+        {:else}
+          <div class="recent-list">
+            {#each $callHistory as entry (entry.id)}
+              <button
+                class="recent-item"
+                onclick={() => callFromHistory(entry.number)}
+                aria-label={`Call ${entry.name || entry.number}`}
+              >
+                <span class="recent-icon {recentKind(entry)}">{recentIcon(entry)}</span>
+                <span class="recent-main">
+                  <span class="recent-name">{entry.name || entry.number}</span>
+                  <span class="recent-meta">
+                    {entry.name ? `${entry.number} · ` : ''}{formatWhen(entry.timestamp)}
+                  </span>
+                </span>
+                <span class="recent-side {recentKind(entry)}">{recentStatus(entry)}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -236,6 +303,93 @@
     background: #333;
     color: #666;
     cursor: not-allowed;
+  }
+
+  /* Recent calls */
+  .recent-section {
+    margin-top: 22px;
+  }
+  .recent-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: #8e8e93;
+    margin-bottom: 6px;
+    padding: 0 2px;
+  }
+  .recent-empty {
+    padding: 18px 12px;
+    text-align: center;
+    color: #777;
+    font-size: 12.5px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+  }
+  .recent-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .recent-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 9px 2px;
+    color: #fff;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+  }
+  .recent-item:hover { background: rgba(255, 255, 255, 0.04); border-radius: 8px; }
+  .recent-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .recent-icon.in { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+  .recent-icon.out { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+  .recent-icon.missed { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+  .recent-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  .recent-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .recent-meta {
+    font-size: 10.5px;
+    color: #8e8e93;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .recent-side {
+    font-size: 11px;
+    color: #8e8e93;
+    flex-shrink: 0;
+  }
+  .recent-side.missed {
+    color: #ef4444;
+    font-weight: 600;
   }
 
   /* Call screens */

@@ -28,6 +28,9 @@ export const messagesList = writable<any[]>([]);
 // Notifications list
 export const notificationsList = writable<any[]>([]);
 
+// Recent calls (server `phone:server:getCallHistory`, newest first, max 20)
+export const callHistory = writable<any[]>([]);
+
 // Job Board tasks list
 export const jobBoardTasks = writable<any[]>([]);
 
@@ -113,9 +116,21 @@ export async function loadPhoneData() {
       notificationsList.set(Array.isArray(res.notifications) ? res.notifications : []);
       jobBoardTasks.set(Array.isArray(res.jobBoard) ? res.jobBoard : []);
       factionMessages.set(Array.isArray(res.factionMessages) ? res.factionMessages : []);
+      void loadCallHistory();
     }
   } catch (err) {
     console.error('Failed to load phone data', err);
+  }
+}
+
+export async function loadCallHistory() {
+  try {
+    const res = await fetchNui<any>('getCallHistory');
+    if (res && res.success) {
+      callHistory.set(Array.isArray(res.calls) ? res.calls : []);
+    }
+  } catch (err) {
+    console.error('Failed to load call history', err);
   }
 }
 

@@ -192,7 +192,7 @@
     position: relative;
     width: 100%;
     height: 100%;
-    background: #09090b;
+    background: var(--phone-screen-bg);
     border-radius: 38px;
     overflow: hidden;
     display: flex;
@@ -210,7 +210,7 @@
     padding-top: 4px;
     font-size: 11.5px;
     font-weight: 600;
-    color: #ffffff;
+    color: var(--phone-status-text);
     z-index: 99;
     box-sizing: border-box;
   }
@@ -236,7 +236,7 @@
   .battery-icon {
     width: 19px;
     height: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--phone-status-border);
     border-radius: 3px;
     padding: 1px;
     box-sizing: border-box;
@@ -251,7 +251,7 @@
     top: 3px;
     width: 1.5px;
     height: 3.5px;
-    background: rgba(255, 255, 255, 0.7);
+    background: var(--phone-status-border);
     border-top-right-radius: 1px;
     border-bottom-right-radius: 1px;
   }
@@ -272,7 +272,7 @@
 
   .signal-bars .bar {
     width: 2px;
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--phone-signal);
     border-radius: 0.5px;
   }
 
@@ -283,7 +283,7 @@
   .signal-bars .bar:nth-child(5) { height: 10px; }
 
   .signal-bars .bar.active {
-    background: #ffffff;
+    background: var(--phone-signal-active);
   }
 
   /* App Body container */
@@ -305,7 +305,7 @@
   .home-gesture-bar {
     width: 120px;
     height: 5px;
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--phone-home-bar);
     border-radius: 10px;
     border: none;
     cursor: pointer;
@@ -313,7 +313,7 @@
   }
 
   .home-gesture-bar:hover {
-    background: #ffffff;
+    background: var(--phone-home-bar-hover);
     transform: scaleX(1.05);
   }
 

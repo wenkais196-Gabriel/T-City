@@ -7,6 +7,7 @@
   import JobBoard from './apps/JobBoard.svelte';
   import FactionChannel from './apps/FactionChannel.svelte';
   import CityFeed from './apps/CityFeed.svelte';
+  import Settings from './apps/Settings.svelte';
 
   // v0.4.2 Premium features
   import PhoneCall from './apps/PhoneCall.svelte';
@@ -43,8 +44,8 @@
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
 
-  // Background Wallpaper - 使用 CSS 渐变替代 Unsplash 网络图片（消除 HTTP 请求卡顿）
-  const wallpaperUrl = '';
+  // Background Wallpaper: a themed CSS gradient defined in app.css (no remote
+  // image request, so opening the phone stays instant).
 
   // Game Time 由 phone:updateTime 写入共享 store
   let gameDayName = $state('Sunday');
@@ -212,7 +213,7 @@
 {#if $isPhoneOpen}
   <PhoneShell>
     <!-- Background Wallpaper -->
-    <div class="phone-wallpaper" style="background-image: url({wallpaperUrl})">
+    <div class="phone-wallpaper">
       <div class="wallpaper-dim"></div>
     </div>
 
@@ -289,6 +290,11 @@
             <span class="app-label">CityFeed</span>
           </button>
 
+          <button class="app-icon-wrapper" onclick={() => activeApp.set('settings')} aria-label="Settings">
+            <div class="app-icon settings-bg">⚙️</div>
+            <span class="app-label">Settings</span>
+          </button>
+
           <!-- Dynamic Leader App Icon -->
           {#if leaderApp}
             <button class="app-icon-wrapper app-transition" onclick={() => activeApp.set(leaderApp.app)} aria-label={leaderApp.name}>
@@ -340,6 +346,8 @@
           <FactionChannel />
         {:else if $activeApp === 'cityfeed'}
           <CityFeed />
+        {:else if $activeApp === 'settings'}
+          <Settings />
         {:else if $activeApp === 'leader_mayor'}
           <MayorApp />
         {:else if $activeApp === 'leader_sheriff'}
@@ -386,14 +394,14 @@
   .phone-wallpaper {
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    background: var(--phone-wallpaper);
     z-index: 0;
   }
 
   .wallpaper-dim {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--phone-wallpaper-dim);
   }
 
   .active-app-host {
@@ -425,6 +433,8 @@
     justify-content: space-between;
     align-items: center;
     box-sizing: border-box;
+    background: var(--phone-glass-bg);
+    border: 1px solid var(--phone-glass-border);
   }
 
   .widget-time-row {
@@ -439,12 +449,13 @@
     font-family: 'Outfit', sans-serif;
     letter-spacing: 2px;
     line-height: 1;
+    color: var(--phone-home-text);
   }
 
   .widget-day {
     font-size: 13px;
     font-weight: 600;
-    color: #ddd;
+    color: var(--phone-home-muted);
     font-family: 'Outfit', sans-serif;
     margin-top: 2px;
   }
@@ -459,13 +470,13 @@
   .widget-temp {
     font-size: 16px;
     font-weight: 800;
-    color: #e5c060;
+    color: var(--phone-home-accent);
   }
 
   .widget-cond {
     font-size: 10.5px;
     font-weight: 600;
-    color: #999;
+    color: var(--phone-home-muted-2);
   }
 
   /* App Icons Grid */
@@ -525,13 +536,15 @@
   .jobboard-bg { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); }
   .faction-bg { background: linear-gradient(135deg, #ec4899 0%, #be185d 100%); }
   .cityfeed-bg { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); }
+  .settings-bg { background: linear-gradient(135deg, #64748b 0%, #334155 100%); }
   .leader-bg { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); }
 
   .app-label {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.1px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    color: var(--phone-home-text);
+    text-shadow: var(--phone-home-label-shadow);
     text-align: center;
     max-width: 65px;
     white-space: nowrap;
@@ -565,6 +578,8 @@
     height: 76px;
     border-radius: 22px;
     padding: 10px 20px;
+    background: var(--phone-glass-bg);
+    border: 1px solid var(--phone-glass-border);
     display: flex;
     justify-content: space-around;
     align-items: center;
