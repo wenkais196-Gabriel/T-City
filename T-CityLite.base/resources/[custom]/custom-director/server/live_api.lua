@@ -226,6 +226,7 @@ local function samplePlayer(player, precision, opts, sourceHint)
         now_ms = LiveRules.now_ms(),
         include_money = opts and opts.include_money,
     }
+    sampled.source = source
 
     local getPed = native('GetPlayerPed')
     local doesExist = native('DoesEntityExist')
