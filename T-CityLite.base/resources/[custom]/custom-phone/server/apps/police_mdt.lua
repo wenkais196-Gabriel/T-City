@@ -63,6 +63,11 @@ PhoneApps.Register({
             end
             return { rows = { res }, count = 1 }
         end,
+        audit = function(source)
+            local ok, res = pcall(function() return exports['custom-police']:GetAudit(source) end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.rows or {}, count = res.count or 0 }
+        end,
         officers = function(_source)
             local rows = {}
             for _, officer in ipairs(onDutyPolice()) do
@@ -85,6 +90,18 @@ PhoneApps.Register({
         assign = function(source, params)
             local ok, res = pcall(function()
                 return exports['custom-police']:AssignUnit(source, params.incident_id, params.citizenid)
+            end)
+            return ok and res ~= false
+        end,
+        enroute = function(source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:SetIncidentStatus(source, params.incident_id, 'enroute')
+            end)
+            return ok and res ~= false
+        end,
+        on_scene = function(source, params)
+            local ok, res = pcall(function()
+                return exports['custom-police']:SetIncidentStatus(source, params.incident_id, 'on_scene')
             end)
             return ok and res ~= false
         end,

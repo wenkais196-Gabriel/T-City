@@ -6,7 +6,7 @@
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
   type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string };
 
-  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle';
+  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'audit';
 
   let tab: Tab = 'home';
   let units: Unit[] = [];
@@ -19,6 +19,8 @@
   let vehicleQuery = '';
   let lookupRows: Record<string, unknown>[] = [];
   let lookupError = '';
+  let auditRows: Record<string, unknown>[] = [];
+  let auditError = '';
 
   const statusLabel: Record<string, string> = {
     off_duty: '10-7 下班', available: '10-8 在勤', busy: '10-6 忙碌',
@@ -70,6 +72,19 @@
     else lookupError = res?.error ?? 'not_found';
   }
 
+  async function loadAudit() {
+    auditError = '';
+    const res = await queryApp('police_mdt', 'audit');
+    if (res?.success) auditRows = res.data?.rows ?? [];
+    else auditError = res?.error ?? 'audit_forbidden';
+  }
+
+  async function updateIncident(incident: Incident, action: 'enroute' | 'on_scene') {
+    const res = await appAction('police_mdt', action, { incident_id: incident.id });
+    notice = res?.success ? `#${incident.id} ${action === 'enroute' ? '前往中' : '已到场'}` : `失败：${res?.error ?? 'unknown'}`;
+    await refresh();
+  }
+
   onMount(refresh);
 </script>
 
@@ -83,8 +98,8 @@
   </header>
 
   <nav class="tabs">
-    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆']] as [id, label]}
-      <button class:active={tab === id} onclick={() => (tab = id as Tab)}>{label}</button>
+    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['audit','审计']] as [id, label]}
+      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); }}>{label}</button>
     {/each}
   </nav>
 
@@ -137,7 +152,11 @@
               <b>#{incident.id} [{incident.code}] {incident.title}</b>
               <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status} · {incident.created_at}</p>
             </div>
-            <button class="clear" onclick={() => clearIncident(incident)}>清场</button>
+            <div class="actions">
+              <button class="step" onclick={() => updateIncident(incident, 'enroute')}>前往</button>
+              <button class="step" onclick={() => updateIncident(incident, 'on_scene')}>到场</button>
+              <button class="clear" onclick={() => clearIncident(incident)}>清场</button>
+            </div>
           </div>
           {#if incident.description}<p class="desc">{incident.description}</p>{/if}
           <div class="assign-row">
@@ -179,6 +198,15 @@
         {#each Object.entries(row) as [k, v]}<p class="line"><b>{k}</b> {String(v)}</p>{/each}
       {/each}
     </section>
+
+  {:else if tab === 'audit'}
+    <section class="card">
+      <h3>审计（需 Lieutenant+）</h3>
+      {#if auditError}<p class="err">{auditError}</p>{/if}
+      {#each auditRows as row}
+        <p class="line">{String(row.created_at)} · {String(row.actor_citizenid)} · {String(row.action)} {String(row.target ?? '')}</p>
+      {/each}
+    </section>
   {/if}
 </div>
 
@@ -209,6 +237,8 @@
   .assign-row { display: flex; gap: 6px; margin-top: 6px; }
   .assign-row select, .lookup input { flex: 1; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
   .assign-row button, .lookup button { font-size: 11px; border: 0; border-radius: 8px; padding: 6px 10px; background: #2563eb; color: #fff; }
+  .actions { display: flex; gap: 4px; }
+  .step { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #f59e0b; color: #111; }
   .clear { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #b91c1c; color: #fff; }
   .lookup { display: flex; gap: 6px; margin-bottom: 8px; }
   .line { margin: 3px 0; }

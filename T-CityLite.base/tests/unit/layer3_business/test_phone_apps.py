@@ -60,3 +60,20 @@ def test_police_mdt_has_dedicated_pages():
     for name in ("units", "incidents", "citizen", "vehicle", "set_status", "assign", "clear"):
         assert f"'{name}'" in src or f'"{name}"' in src
     assert "PoliceMDT" in read(PHONE / "web/src/App.svelte")
+
+
+def test_police_capabilities_are_centralised():
+    policy = read(PHONE.parent / "custom-police/shared/policy.lua")
+    assert "PolicePolicy.Can" in policy
+    assert "incident.assign" in policy and "minGrade = 2" in policy
+    p0 = read(PHONE.parent / "custom-police/server/p0.lua")
+    assert "PolicePolicy.Can" in p0
+    assert "audit_unavailable" in p0
+
+
+def test_mdt_exposes_lifecycle_and_audit():
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    for action in ("enroute", "on_scene", "clear", "audit"):
+        assert action in app
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "loadAudit" in ui and "on_scene" in ui
