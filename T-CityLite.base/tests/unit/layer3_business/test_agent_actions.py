@@ -106,6 +106,7 @@ class ResourceContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = (RESOURCE_DIR / "fxmanifest.lua").read_text(encoding="utf-8")
         self.main = (RESOURCE_DIR / "server" / "main.lua").read_text(encoding="utf-8")
+        self.http = (RESOURCE_DIR / "server" / "http_api.lua").read_text(encoding="utf-8")
         self.selftest = (RESOURCE_DIR / "server" / "selftest.lua").read_text(encoding="utf-8")
 
     def test_manifest_is_server_only_and_has_dependencies(self) -> None:
@@ -131,6 +132,11 @@ class ResourceContractTests(unittest.TestCase):
                 self.assertIn(convar, self.main)
 
         self.assertIn("agent_actions_selftest", self.selftest)
+        self.assertIn("'server/http_api.lua'", self.manifest)
+        self.assertLess(
+            self.manifest.index("'server/http_api.lua'"),
+            self.manifest.index("'server/main.lua'"),
+        )
 
         for route in (
             "/agent/v1/act",
@@ -138,9 +144,9 @@ class ResourceContractTests(unittest.TestCase):
             "/agent/v1/policy",
         ):
             with self.subTest(route=route):
-                self.assertIn(route, self.main)
+                self.assertIn(route, self.http)
 
-        self.assertIn("X-Agent-Id", self.main)
+        self.assertIn("X-Agent-Id", self.http)
         self.assertIn("pending_approval", self.main)
         self.assertIn("agent_action:", self.main)
 

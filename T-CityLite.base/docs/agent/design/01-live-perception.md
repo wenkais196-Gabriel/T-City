@@ -496,3 +496,20 @@ end
    `throttled` 零改动但每次 `SetPlayerData` 都复制整份 PlayerData（48 人 CPU/GC 成本待实测）。
 4. **D4 live 与 DB 的类型词表是否统一**：live 多出的 `player.*/money.change/job.change` 在 `agent_events` 无行。要么接受"DB 是子集"，要么后续补写 DB（不建议，会把实时路径绑回落盘）。
 5. **D5 合并位置与暴露面**：Hub 直连 live，还是由 `agent_gateway.py` 统一代理（MCP 只认一个 base URL + 一个 token，需给 gateway 配 live token 与网络路径）？以及是否已用防火墙把 `:30120/custom-director/*` 限制为 Hub 主机——未限制前不应开 `agent_live_enabled=1`。
+
+---
+
+## 12. M1 实现回填（2026-10-22，commit `fe76857` + 评审修正）
+
+落地时与本文档的差异，按实际实现为准：
+
+1. **游标是十进制 `epoch:seq`，不是 `v1:<hex>:<seq>`**。`epoch` 取资源启动时的 `os.time()`，`seq` 从 1 递增。本文档 §4.3 的十六进制形式暂不实现；客户端应把游标当不透明字符串。纯 `since=<seq>` 也不支持（必须完整游标），`meta.epoch_assumed` 未实现。
+2. **`agent_live_token` 无回退**。评审推翻了"未配置时代用 `agent_actions_token`"的兼容设计：那会让单 token 部署下"能读"等于"能写钱"，正是拆分 token 要避免的。未配置 ⇒ 503 `live_token_not_configured`，MCP 侧也不广告 live 工具。
+3. **`money.change` 事件不再携带 `reason`**。该字段是自由文本，`custom-phone` 会写入 `"Transfer to <手机号>"`，与"phone 永不出现在读层"的约束冲突。事件只保留 `account/delta/operation/after`。
+4. **文本截断按 UTF-8 边界**。按字节 `sub()` 会截断在多字节字符中间，产生非法 UTF-8 并让整份响应失败；`sanitize_text` 先按 `maxLength*4` 字节兜底、再按码点边界截断，并剔除零宽/双向控制符与 C1。
+5. **未来游标钳制到最新**。`since > newest` 不再原样回显（否则 `next_cursor` 指向未来、事件被永久跳过），而是返回空列表并把游标收敛到当前 `seq`。
+6. **精度只接受 ≥1 的整数**；`0.5` 曾向下取整为 0，等价于 `fine`（精确坐标）。
+7. **列表与详情使用同一 `citizenid` 规范化**，避免列表能查到、详情 404。
+8. **已实现**：429 令牌桶限流（`agent_live_rate_per_min`/`agent_live_burst`）。仍未实现：字节预算/`truncated`、`X-Agent-Live-Epoch` 响应头透传到 MCP、`/agentlive` 运维命令、单事件 512B 上限、epoch 同秒重启冲突。列为 M2 候选。
+
+9. **列表与详情的字段集不同**：`/players` 列表省略 `money`（设计 §2.1），需要余额用 `/players/{citizenid}` 或 DB 快照；两者都保留 `metadata` 白名单字段。

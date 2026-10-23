@@ -28,12 +28,16 @@ function AgentActionsSelfTest.Run()
         max_money = 1000,
         daily_budget = 5000,
         max_notify_chars = 300,
+        max_announce_chars = 300,
+        max_item_amount = 50,
         ttl_seconds = 900,
     }
 
     local player = {
         source = 5,
         money = { cash = 100, bank = 900, crypto = 0 },
+        job = { name = 'unemployed', grade = { level = 0 } },
+        item_count = 2,
     }
     local context = {
         player = player,
@@ -42,6 +46,18 @@ function AgentActionsSelfTest.Run()
             delivery = {
                 { id = 'delivery_001', title = 'First Delivery', category = 'delivery' },
             },
+        },
+        jobs = {
+            police = {
+                label = 'Police',
+                grades = {
+                    ['0'] = { name = 'Cadet', payment = 30 },
+                    ['2'] = { name = 'Officer', payment = 50 },
+                },
+            },
+        },
+        items = {
+            bread = { name = 'bread', label = 'Bread' },
         },
     }
 
@@ -209,6 +225,332 @@ function AgentActionsSelfTest.Run()
         quest_id = 'flat_002',
     }, { player = player, quests = flatCatalog }, cfg)
     check('quest_catalog_flat_array', flatPreview.quest_found == true, 'flat catalog should be indexed')
+
+    -- set_job ---------------------------------------------------------------
+    local job, jobErr = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'Police',
+        grade = 2,
+    }, cfg)
+    check('job_normalizes',
+        job ~= nil and job.job == 'police' and job.grade == 2,
+        jobErr and jobErr.message or 'ok')
+
+    local defaultJob, defaultJobErr = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+    }, cfg)
+    check('job_grade_defaults_to_zero',
+        defaultJob ~= nil and defaultJob.grade == 0,
+        defaultJobErr and defaultJobErr.message or 'ok')
+
+    local badJob = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police unit!',
+    }, cfg)
+    check('job_invalid_chars',
+        badJob == nil, 'job characters outside the whitelist must be rejected')
+
+    local badGrade = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+        grade = 101,
+    }, cfg)
+    check('job_grade_range', badGrade == nil, 'grade above 100 must be rejected')
+
+    local fractionalGrade = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+        grade = 1.5,
+    }, cfg)
+    check('job_grade_integer', fractionalGrade == nil, 'fractional grade must be rejected')
+
+    local jobUnknownField = AgentPolicy.Normalize('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+        beat_id = 'beat_1',
+    }, cfg)
+    check('job_unknown_field', jobUnknownField == nil, 'set_job must reject unknown fields')
+
+    local jobPreview = job and AgentPolicy.Preview('set_job', job, context, cfg)
+    check('job_preview_before',
+        jobPreview ~= nil
+            and jobPreview.job == 'police'
+            and jobPreview.grade == 2
+            and jobPreview.before.job == 'unemployed'
+            and jobPreview.before.grade == 0,
+        jobPreview and ('before=' .. tostring(jobPreview.before and jobPreview.before.job)) or 'no preview')
+
+    local jobPolicy, jobPolicyErr = AgentPolicy.CheckPolicy('set_job', job, cfg, context)
+    check('job_policy_ok', jobPolicy == true, jobPolicyErr and jobPolicyErr.code or 'ok')
+    check('job_requires_approval',
+        AgentPolicy.RequiresApproval('set_job') == true
+            and AgentPolicy.StatusFor('set_job', false) == 'pending_approval',
+        'set_job must require approval')
+
+    local missingJobPolicy, missingJobErr = AgentPolicy.CheckPolicy('set_job', {
+        citizenid = 'ABC12345',
+        job = 'ghostjob',
+        grade = 0,
+    }, cfg, context)
+    check('job_missing_rejected',
+        missingJobPolicy == false and missingJobErr and missingJobErr.code == 'job_not_found',
+        missingJobErr and missingJobErr.code or 'missing job not rejected')
+
+    local missingGradePolicy, missingGradeErr = AgentPolicy.CheckPolicy('set_job', {
+        citizenid = 'ABC12345',
+        job = 'police',
+        grade = 9,
+    }, cfg, context)
+    check('job_grade_missing_rejected',
+        missingGradePolicy == false and missingGradeErr and missingGradeErr.code == 'grade_not_found',
+        missingGradeErr and missingGradeErr.code or 'missing grade not rejected')
+
+    -- grant_item -------------------------------------------------------------
+    local item, itemErr = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 3,
+        reason = 'director reward',
+    }, cfg)
+    check('item_normalizes',
+        item ~= nil and item.item == 'bread' and item.amount == 3,
+        itemErr and itemErr.message or 'ok')
+
+    local badItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread!',
+        amount = 1,
+        reason = 'bad item',
+    }, cfg)
+    check('item_invalid_chars', badItem == nil, 'item characters outside the whitelist must be rejected')
+
+    local zeroItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 0,
+        reason = 'zero',
+    }, cfg)
+    check('item_minimum', zeroItem == nil, 'zero amount must be rejected')
+
+    local overCapItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 51,
+        reason = 'too many',
+    }, cfg)
+    check('item_cap', overCapItem == nil, 'amount above max_item_amount must be rejected')
+
+    local fractionalItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 1.5,
+        reason = 'fraction',
+    }, cfg)
+    check('item_integer', fractionalItem == nil, 'fractional amount must be rejected')
+
+    local noReasonItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 1,
+    }, cfg)
+    check('item_requires_reason', noReasonItem == nil, 'reason is required')
+
+    local controlReasonItem = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 1,
+        reason = 'bad\nreason',
+    }, cfg)
+    check('item_reason_control_chars', controlReasonItem == nil,
+        'single-line reason must reject tab/LF/CR')
+
+    local itemUnknownField = AgentPolicy.Normalize('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'bread',
+        amount = 1,
+        reason = 'reward',
+        slot = 3,
+    }, cfg)
+    check('item_unknown_field', itemUnknownField == nil, 'grant_item must reject unknown fields')
+
+    local itemPreview = item and AgentPolicy.Preview('grant_item', item, context, cfg)
+    check('item_preview_before',
+        itemPreview ~= nil and itemPreview.before == 2 and itemPreview.amount == 3,
+        itemPreview and ('before=' .. tostring(itemPreview.before)) or 'no preview')
+
+    local itemPolicy, itemPolicyErr = AgentPolicy.CheckPolicy('grant_item', item, cfg, context)
+    check('item_policy_ok', itemPolicy == true, itemPolicyErr and itemPolicyErr.code or 'ok')
+    check('item_requires_approval',
+        AgentPolicy.RequiresApproval('grant_item') == true
+            and AgentPolicy.StatusFor('grant_item', false) == 'pending_approval',
+        'grant_item must require approval')
+
+    local missingItemPolicy, missingItemErr = AgentPolicy.CheckPolicy('grant_item', {
+        citizenid = 'ABC12345',
+        item = 'ghostitem',
+        amount = 1,
+        reason = 'reward',
+    }, cfg, context)
+    check('item_missing_rejected',
+        missingItemPolicy == false and missingItemErr and missingItemErr.code == 'item_not_found',
+        missingItemErr and missingItemErr.code or 'missing item not rejected')
+
+    -- announce (L2, world) ---------------------------------------------------
+    local announce, announceErr = AgentPolicy.Normalize('announce', {
+        message = 'Server restart in 5 minutes',
+        kind = 'warning',
+    }, cfg)
+    check('announce_normalizes',
+        announce ~= nil and announce.kind == 'warning'
+            and announce.message == 'Server restart in 5 minutes',
+        announceErr and announceErr.message or 'ok')
+
+    local announceDefault, announceDefaultErr = AgentPolicy.Normalize('announce', {
+        message = 'hello',
+    }, cfg)
+    check('announce_kind_defaults_to_info',
+        announceDefault ~= nil and announceDefault.kind == 'info',
+        announceDefaultErr and announceDefaultErr.message or 'ok')
+
+    local announcePreview = announce and AgentPolicy.Preview('announce', announce, {}, cfg)
+    check('announce_preview',
+        announcePreview ~= nil
+            and announcePreview.kind == 'warning'
+            and announcePreview.length == AgentPolicy.TextLength(announce.message)
+            and announcePreview.preview == announce.message,
+        announcePreview and ('len=' .. tostring(announcePreview.length)) or 'no preview')
+
+    local announcePolicy, announcePolicyErr = AgentPolicy.CheckPolicy('announce', announce, cfg, {})
+    check('announce_policy_ok', announcePolicy == true,
+        announcePolicyErr and announcePolicyErr.code or 'ok')
+
+    local badAnnounceKind, badAnnounceKindErr = AgentPolicy.Normalize('announce', {
+        message = 'hello',
+        kind = 'script',
+    }, cfg)
+    check('announce_kind_whitelist',
+        badAnnounceKind == nil and badAnnounceKindErr and badAnnounceKindErr.code == 'invalid_params',
+        badAnnounceKindErr and badAnnounceKindErr.code or 'unknown kind accepted')
+
+    local longAnnounce = AgentPolicy.Normalize('announce', {
+        message = string.rep('x', 301),
+    }, cfg)
+    check('announce_length_cap', longAnnounce == nil, '301-char message must be rejected')
+
+    local controlAnnounce = AgentPolicy.Normalize('announce', {
+        message = 'bad\0text',
+    }, cfg)
+    check('announce_control_chars', controlAnnounce == nil, 'NUL must be rejected')
+
+    local announceUnknownField = AgentPolicy.Normalize('announce', {
+        message = 'hello',
+        citizenid = 'ABC12345',
+    }, cfg)
+    check('announce_unknown_field', announceUnknownField == nil,
+        'announce must reject unknown fields')
+
+    -- set_weather (L2, world) ------------------------------------------------
+    local weather, weatherErr = AgentPolicy.Normalize('set_weather', {
+        weather = 'rain',
+    }, cfg)
+    check('weather_normalizes_uppercase',
+        weather ~= nil and weather.weather == 'RAIN',
+        weatherErr and weatherErr.message or 'ok')
+
+    local badWeather, badWeatherErr = AgentPolicy.Normalize('set_weather', {
+        weather = 'SANDSTORM',
+    }, cfg)
+    check('weather_enum_whitelist',
+        badWeather == nil and badWeatherErr and badWeatherErr.code == 'invalid_params',
+        badWeatherErr and badWeatherErr.code or 'unknown weather accepted')
+
+    local weatherUnknownField = AgentPolicy.Normalize('set_weather', {
+        weather = 'RAIN',
+        citizenid = 'ABC12345',
+    }, cfg)
+    check('weather_unknown_field', weatherUnknownField == nil,
+        'set_weather must reject unknown fields')
+
+    local weatherPreview = weather and AgentPolicy.Preview('set_weather', weather, {
+        weather = 'CLEAR',
+    }, cfg)
+    check('weather_preview_before',
+        weatherPreview ~= nil and weatherPreview.weather == 'RAIN'
+            and weatherPreview.before == 'CLEAR',
+        weatherPreview and ('before=' .. tostring(weatherPreview.before)) or 'no preview')
+
+    local weatherPolicy, weatherPolicyErr = AgentPolicy.CheckPolicy('set_weather', weather, cfg, {
+        weather_sync = true,
+    })
+    check('weather_policy_ok', weatherPolicy == true,
+        weatherPolicyErr and weatherPolicyErr.code or 'ok')
+
+    local weatherStopped, weatherStoppedErr = AgentPolicy.CheckPolicy('set_weather', weather, cfg, {})
+    check('weather_sync_unavailable',
+        weatherStopped == false and weatherStoppedErr and weatherStoppedErr.code == 'weather_sync_unavailable',
+        weatherStoppedErr and weatherStoppedErr.code or 'stopped weathersync accepted')
+
+    -- set_time_of_day (L2, world) -------------------------------------------
+    local timeOfDay, timeOfDayErr = AgentPolicy.Normalize('set_time_of_day', {
+        hour = 22,
+    }, cfg)
+    check('time_normalizes_default_minute',
+        timeOfDay ~= nil and timeOfDay.hour == 22 and timeOfDay.minute == 0,
+        timeOfDayErr and timeOfDayErr.message or 'ok')
+
+    local explicitTime, explicitTimeErr = AgentPolicy.Normalize('set_time_of_day', {
+        hour = 7,
+        minute = 30,
+    }, cfg)
+    check('time_normalizes_explicit_minute',
+        explicitTime ~= nil and explicitTime.hour == 7 and explicitTime.minute == 30,
+        explicitTimeErr and explicitTimeErr.message or 'ok')
+
+    local badHour = AgentPolicy.Normalize('set_time_of_day', { hour = 24 }, cfg)
+    check('time_hour_range', badHour == nil, 'hour above 23 must be rejected')
+
+    local badMinute = AgentPolicy.Normalize('set_time_of_day', {
+        hour = 12,
+        minute = 60,
+    }, cfg)
+    check('time_minute_range', badMinute == nil, 'minute above 59 must be rejected')
+
+    local fractionalHour = AgentPolicy.Normalize('set_time_of_day', { hour = 1.5 }, cfg)
+    check('time_hour_integer', fractionalHour == nil, 'fractional hour must be rejected')
+
+    local timeUnknownField = AgentPolicy.Normalize('set_time_of_day', {
+        hour = 12,
+        frozen = true,
+    }, cfg)
+    check('time_unknown_field', timeUnknownField == nil,
+        'set_time_of_day must reject unknown fields')
+
+    local timePreview = timeOfDay and AgentPolicy.Preview('set_time_of_day', timeOfDay, {}, cfg)
+    check('time_preview', timePreview ~= nil and timePreview.hour == 22 and timePreview.minute == 0,
+        timePreview and ('hour=' .. tostring(timePreview.hour)) or 'no preview')
+
+    local timePolicy, timePolicyErr = AgentPolicy.CheckPolicy('set_time_of_day', timeOfDay, cfg, {
+        weather_sync = true,
+    })
+    check('time_policy_ok', timePolicy == true, timePolicyErr and timePolicyErr.code or 'ok')
+
+    local timeStopped, timeStoppedErr = AgentPolicy.CheckPolicy('set_time_of_day', timeOfDay, cfg, {})
+    check('time_weather_sync_unavailable',
+        timeStopped == false and timeStoppedErr and timeStoppedErr.code == 'weather_sync_unavailable',
+        timeStoppedErr and timeStoppedErr.code or 'stopped weathersync accepted')
+
+    check('world_actions_require_approval',
+        AgentPolicy.ACTIONS.announce.blast_radius == 'world'
+            and AgentPolicy.ACTIONS.set_weather.blast_radius == 'world'
+            and AgentPolicy.ACTIONS.set_time_of_day.blast_radius == 'world'
+            and AgentPolicy.RequiresApproval('announce') == true
+            and AgentPolicy.RequiresApproval('set_weather') == true
+            and AgentPolicy.RequiresApproval('set_time_of_day') == true
+            and AgentPolicy.StatusFor('announce', false) == 'pending_approval'
+            and AgentPolicy.StatusFor('set_weather', false) == 'pending_approval'
+            and AgentPolicy.StatusFor('set_time_of_day', false) == 'pending_approval',
+        'L2 world actions must never auto-execute')
 
     -- Envelope helpers -------------------------------------------------------
     local validAgent = AgentPolicy.NormalizeAgentId('director.local')

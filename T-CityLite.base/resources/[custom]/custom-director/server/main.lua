@@ -3,7 +3,8 @@
 -- Scope of this first slice:
 --   * accept action proposals from a trusted server-side caller / HTTP agent
 --   * validate + preview + policy-check + persist (agent_actions)
---   * low-risk notify executes after policy; add_money / start_quest need approval
+--   * low-risk notify executes after policy; add_money / start_quest /
+--     set_job / grant_item / remove_item / set_bucket / kick need approval
 --   * approve/reject re-check policy, execute, and write the audit row
 --
 -- No client script exists. Nothing here trusts client input.
@@ -21,7 +22,6 @@ _G.AgentActions = AgentActions
 
 local DEFAULT_LIST_LIMIT = 20
 local MAX_LIST_LIMIT = 100
-local MAX_HTTP_BODY = 16 * 1024
 
 -- ---------------------------------------------------------------------------
 -- Convar configuration (read per request so the kill switch is live)
@@ -51,7 +51,10 @@ local function Config()
         max_money = convarInt('agent_actions_max_money', 1000, 0, 1000000000),
         daily_budget = convarInt('agent_actions_daily_budget', 5000, 0, 1000000000),
         max_notify_chars = convarInt('agent_actions_max_notify_chars', 300, 1, 2000),
+        max_announce_chars = convarInt('agent_actions_max_announce_chars', 300, 1, 2000),
+        max_item_amount = convarInt('agent_actions_max_item_amount', 50, 1, 1000),
         ttl_seconds = convarInt('agent_actions_ttl_seconds', 900, 30, 86400),
+        agent_id = convarString('agent_actions_agent_id', ''),
     }
 end
 
@@ -166,6 +169,68 @@ local function dbUpdate(sql, params)
     return tonumber(affected) or 0, nil
 end
 
+-- ---------------------------------------------------------------------------
+-- Denial audit
+--
+-- Propose/Approve deliberately do not persist policy-rejected proposals: the
+-- idempotency key must stay reusable after an operator raises a cap or the
+-- player reconnects. The rejection itself is still the most important thing an
+-- evaluation needs to see, so it goes to its own table.
+--
+-- Privacy: agent_denials stores only the sorted parameter NAMES, the policy's
+-- own message and a hash of the normalized params JSON. The params blob (which
+-- may hold a citizenid or free text) is never copied into a second table.
+-- ---------------------------------------------------------------------------
+
+local DENIAL_PARAM_KEYS_MAX = 255
+
+-- 64-bit djb2 over the encoded params. Lua 5.4 integer arithmetic wraps, so the
+-- result is stable across runs and platforms; only 16 hex chars are stored.
+local function denialHash(text)
+    local hash = 5381
+    for index = 1, #text do
+        hash = hash * 33 + text:byte(index)
+    end
+    return string.format('%016x', hash)
+end
+
+local function denialParamKeys(params)
+    if type(params) ~= 'table' then return '' end
+    local keys = {}
+    for key in pairs(params) do keys[#keys + 1] = tostring(key) end
+    table.sort(keys)
+    return truncate(table.concat(keys, ','), DENIAL_PARAM_KEYS_MAX)
+end
+
+local function denialLogEnabled()
+    return convarString('agent_actions_denial_log', '1') == '1'
+end
+
+-- Never throws and never changes the caller's result: a failed denial insert is
+-- a warning in the console, not a different answer to the agent.
+local function recordDenial(agentId, actionType, params, code, message, dryRun)
+    if not denialLogEnabled() then return false end
+    local ok, err = pcall(function()
+        dbInsert([[
+            INSERT INTO agent_denials
+                (agent_id, action_type, code, message, param_keys, params_hash, dry_run)
+            VALUES (?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?)
+        ]], {
+            truncate(agentId, 64),
+            truncate(actionType, 32),
+            truncate(code, 64),
+            truncate(message, 255),
+            denialParamKeys(params),
+            denialHash(safeEncode(params)),
+            dryRun == true and 1 or 0,
+        })
+    end)
+    if not ok then
+        print(('[custom-director] ⚠️ denial audit failed: %s'):format(truncate(err, 200)))
+    end
+    return ok
+end
+
 local function rowToApi(row)
     if type(row) ~= 'table' then return nil end
     return {
@@ -265,6 +330,58 @@ local function dbMoney(citizenid, account)
     return value, nil
 end
 
+local function playerJob(player)
+    if type(player) ~= 'table' or type(player.PlayerData) ~= 'table' then return nil end
+    return player.PlayerData.job
+end
+
+local function playerItemCount(player, item)
+    if type(player) ~= 'table' or type(player.Functions) ~= 'table' then return nil end
+    local fn = player.Functions.GetItemByName
+    if type(fn) ~= 'function' then return nil end
+    local ok, itemData = pcall(fn, item)
+    if not ok or type(itemData) ~= 'table' then return 0 end
+    return tonumber(itemData.amount) or 0
+end
+
+-- Routing buckets live in the FXServer session only (no DB backing), so every
+-- read is best-effort: a nil result means "unknown", not bucket 0.
+local function playerBucket(source)
+    if not source or type(GetPlayerRoutingBucket) ~= 'function' then return nil end
+    local ok, bucket = pcall(GetPlayerRoutingBucket, source)
+    if not ok then return nil end
+    return tonumber(bucket)
+end
+
+-- GetPlayerPed returns 0 while the player is loading or already dropping, so
+-- callers must treat a missing position as "unknown", not as (0, 0, 0).
+local function playerPosition(source)
+    if not source then return nil end
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return nil end
+    return GetEntityCoords(ped)
+end
+
+-- delete_vehicle only ever targets the vehicle the player is currently in;
+-- arbitrary entity ids are never accepted from the caller.
+local function vehiclePlate(entity)
+    if not entity or entity == 0 then return nil end
+    local plate = GetVehicleNumberPlateText(entity)
+    if type(plate) ~= 'string' then return nil end
+    plate = plate:gsub('%s+', ''):upper()
+    if plate == '' then return nil end
+    return plate
+end
+
+local function playerVehicle(source)
+    if not source then return nil end
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return nil end
+    local entity = GetVehiclePedIsIn(ped, false)
+    if not entity or entity == 0 then return nil end
+    return tonumber(entity) or entity
+end
+
 local function getQuestCatalog()
     local ok, catalog = pcall(function()
         return exports['custom-quest']:GetQuestCatalog()
@@ -277,21 +394,69 @@ local function getQuestCatalog()
 end
 
 local function buildContext(actionType, params)
-    local player = getPlayerByCitizenId(params.citizenid)
     local context = {
         player = nil,
+        executor_ready = GetResourceState('custom-agent-client') == 'started',
     }
-    if player then
-        context.player = {
-            source = playerSource(player),
-            money = player.PlayerData and player.PlayerData.money or nil,
-        }
+
+    -- World actions have no target player; everything below is per-player.
+    if not AgentPolicy.WORLD_ACTIONS[actionType] then
+        local player = getPlayerByCitizenId(params.citizenid)
+        if player then
+            context.player = {
+                source = playerSource(player),
+                money = player.PlayerData and player.PlayerData.money or nil,
+            }
+            if actionType == 'teleport' or actionType == 'spawn_vehicle' then
+                context.position = playerPosition(playerSource(player))
+            elseif actionType == 'set_job' or actionType == 'set_job_duty' then
+                context.player.job = playerJob(player)
+            elseif actionType == 'grant_item' or actionType == 'remove_item' then
+                context.player.item_count = playerItemCount(player, params.item) or 0
+            elseif actionType == 'set_bucket' then
+                context.player.bucket = playerBucket(context.player.source)
+            elseif actionType == 'revive' or actionType == 'set_metadata' then
+                context.player.metadata = player.PlayerData and player.PlayerData.metadata or nil
+            elseif actionType == 'send_phone_message' then
+                context.player.phone = player.PlayerData
+                    and player.PlayerData.charinfo
+                    and player.PlayerData.charinfo.phone or nil
+            elseif actionType == 'delete_vehicle' then
+                local entity = playerVehicle(context.player.source)
+                if entity then
+                    context.vehicle_entity = entity
+                    context.vehicle_target = {
+                        entity = entity,
+                        model = GetEntityModel(entity),
+                        plate = vehiclePlate(entity),
+                    }
+                end
+            end
+        end
     end
 
-    if actionType == 'start_quest' then
+    if actionType == 'set_weather' or actionType == 'set_time_of_day' then
+        context.weather_sync = GetResourceState('qb-weathersync') == 'started'
+        if context.weather_sync then
+            local ok, state = pcall(function()
+                return exports['qb-weathersync']:getWeatherState()
+            end)
+            if ok and type(state) == 'string' then context.weather = state end
+        end
+    elseif actionType == 'start_quest' then
         local catalog, err = getQuestCatalog()
         if err then return nil, err end
         context.quests = catalog
+    elseif actionType == 'set_job' then
+        context.jobs = QBCore.Shared and QBCore.Shared.Jobs or nil
+    elseif actionType == 'grant_item' or actionType == 'remove_item' then
+        context.items = QBCore.Shared and QBCore.Shared.Items or nil
+    end
+
+    -- spawn_vehicle: resolve the model hash here so policy.lua keeps zero
+    -- native dependencies.
+    if actionType == 'spawn_vehicle' then
+        context.model_hash = GetHashKey(params.model)
     end
 
     return context, nil
@@ -415,6 +580,612 @@ local function executeStartQuest(actionId, params)
     }
 end
 
+local function executeSetJob(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local currentJob = playerJob(player) or {}
+    local currentGrade = type(currentJob.grade) == 'table' and currentJob.grade.level or 0
+    local before = { job = currentJob.name, grade = currentGrade }
+
+    local callOk, result = pcall(function()
+        return player.Functions.SetJob(params.job, params.grade)
+    end)
+    if not callOk then
+        return false, ('set_job_failed: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: SetJob returned non-true', nil
+    end
+
+    -- 回读同一个 player 对象；SetJob 成功后 PlayerData.job 必须已更新。
+    local updatedJob = playerJob(player) or {}
+    local updatedGrade = type(updatedJob.grade) == 'table' and updatedJob.grade.level or nil
+    if updatedJob.name ~= params.job or tostring(updatedGrade) ~= tostring(params.grade) then
+        return false, ('verification_failed before=%s/%s after=%s/%s expected=%s/%s'):format(
+            tostring(before.job), tostring(before.grade),
+            tostring(updatedJob.name), tostring(updatedGrade),
+            tostring(params.job), tostring(params.grade)), nil
+    end
+
+    return true, nil, {
+        before = before,
+        after = { job = updatedJob.name, grade = updatedGrade },
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeSetJobDuty(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local currentJob = playerJob(player) or {}
+    local before = currentJob.onduty
+
+    local callOk, callErr = pcall(function()
+        player.Functions.SetJobDuty(params.onduty)
+    end)
+    if not callOk then
+        return false, ('execution_failed: SetJobDuty threw: %s'):format(
+            truncate(callErr, 150)), nil
+    end
+
+    -- SetJobDuty may only set IsDirty in qb-core, so PlayerData.job.onduty is
+    -- the authority rather than any broadcast/event payload.
+    local updatedJob = playerJob(player) or {}
+    if updatedJob.onduty ~= params.onduty then
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(updatedJob.onduty), tostring(params.onduty)), nil
+    end
+
+    return true, nil, {
+        onduty = params.onduty,
+        before = before,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+-- Only AgentPolicy.METADATA_KEYS reach this executor; isdead/inlaststand/
+-- ishandcuffed are intentionally not agent-writable (revive or human only).
+local function executeSetMetadata(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local current = player.PlayerData and player.PlayerData.metadata or {}
+    local before = current[params.key]
+
+    local callOk, callErr = pcall(function()
+        player.Functions.SetMetaData(params.key, params.value)
+    end)
+    if not callOk then
+        return false, ('execution_failed: SetMetaData threw: %s'):format(
+            truncate(callErr, 150)), nil
+    end
+
+    local updated = player.PlayerData and player.PlayerData.metadata or {}
+    local after = updated[params.key]
+    if tonumber(after) ~= params.value then
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.value)), nil
+    end
+
+    return true, nil, {
+        key = params.key,
+        value = params.value,
+        before = before,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeGrantItem(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local before = playerItemCount(player, params.item)
+    if before == nil then
+        return false, 'item_api_unavailable', nil
+    end
+
+    local callOk, result = pcall(function()
+        return player.Functions.AddItem(params.item, params.amount)
+    end)
+    if not callOk then
+        return false, ('grant_item_failed: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: AddItem returned non-true', nil
+    end
+
+    local after = playerItemCount(player, params.item)
+    if after == nil then
+        return false, 'item_api_unavailable_after_add', nil
+    end
+    if after - before ~= params.amount then
+        -- No automatic rollback: same stance as add_money. A partial item
+        -- mutation is more dangerous to "fix" blindly than to audit loudly.
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.amount)), nil
+    end
+
+    return true, nil, {
+        item = params.item,
+        amount = params.amount,
+        before = before,
+        after = after,
+        reason = params.reason,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeRemoveItem(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local before = playerItemCount(player, params.item)
+    if before == nil then
+        return false, 'item_api_unavailable', nil
+    end
+
+    local callOk, result = pcall(function()
+        return player.Functions.RemoveItem(params.item, params.amount)
+    end)
+    if not callOk then
+        return false, ('execution_failed: RemoveItem threw: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: RemoveItem returned non-true', nil
+    end
+
+    local after = playerItemCount(player, params.item)
+    if after == nil then
+        return false, 'item_api_unavailable_after_remove', nil
+    end
+    if before - after ~= params.amount then
+        -- No automatic rollback: a partial inventory mutation is safer to
+        -- audit loudly than to "fix" blindly (same stance as grant_item).
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.amount)), nil
+    end
+
+    return true, nil, {
+        item = params.item,
+        amount = params.amount,
+        before = before,
+        after = after,
+        reason = params.reason,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeSetBucket(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    local before = playerBucket(source)
+
+    local setBucket = QBCore.Functions and QBCore.Functions.SetPlayerBucket
+    if type(setBucket) ~= 'function' then
+        return false, 'bucket_api_unavailable', nil
+    end
+
+    local callOk, result = pcall(setBucket, source, params.bucket)
+    if not callOk then
+        return false, ('execution_failed: SetPlayerBucket threw: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: SetPlayerBucket returned non-true', nil
+    end
+
+    local after = playerBucket(source)
+    if after ~= params.bucket then
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.bucket)), nil
+    end
+
+    return true, nil, {
+        bucket = params.bucket,
+        before = before,
+        notes = 'routing bucket is session-scoped; it resets when the player reconnects',
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function executeKick(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    local kick = QBCore.Functions and QBCore.Functions.Kick
+    if type(kick) ~= 'function' then
+        return false, 'kick_api_unavailable', nil
+    end
+
+    -- DropPlayer (inside QBCore.Functions.Kick) is asynchronous: the player may
+    -- still be online when this returns. We deliberately do not verify that the
+    -- player is gone; a successful call is the contract.
+    local callOk, err = pcall(kick, source, params.reason)
+    if not callOk then
+        return false, ('execution_failed: Kick threw: %s'):format(truncate(err, 150)), nil
+    end
+
+    return true, nil, {
+        kicked = true,
+        reason = params.reason,
+        at = os.time(),
+    }
+end
+
+local function executeAnnounce(actionId, params)
+    local listOk, players = pcall(QBCore.Functions.GetPlayers)
+    if not listOk or type(players) ~= 'table' then
+        return false, ('player_list_unavailable: %s'):format(truncate(players, 150)), nil
+    end
+
+    local delivered = 0
+    for _, source in ipairs(players) do
+        local src = tonumber(source)
+        if src then
+            local playerOk, player = pcall(QBCore.Functions.GetPlayer, src)
+            if playerOk and type(player) == 'table'
+                and type(player.Functions) == 'table'
+                and type(player.Functions.Notify) == 'function' then
+                if pcall(player.Functions.Notify, params.message, params.kind, 5000) then
+                    delivered = delivered + 1
+                end
+            end
+        end
+    end
+
+    -- Nobody online is a normal result, not a failure: the broadcast simply
+    -- reached zero players. The audit row records the count.
+    return true, nil, {
+        delivered = delivered,
+        kind = params.kind,
+        at = os.time(),
+    }
+end
+
+local function executeSetWeather(actionId, params)
+    local before = nil
+    local beforeOk, beforeState = pcall(function()
+        return exports['qb-weathersync']:getWeatherState()
+    end)
+    if beforeOk and type(beforeState) == 'string' then before = beforeState end
+
+    local callOk, result = pcall(function()
+        return exports['qb-weathersync']:setWeather(params.weather)
+    end)
+    if not callOk then
+        return false, ('set_weather_failed: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: setWeather returned non-true', nil
+    end
+
+    local verifyOk, after = pcall(function()
+        return exports['qb-weathersync']:getWeatherState()
+    end)
+    if not verifyOk then
+        return false, ('verification_failed: getWeatherState failed: %s'):format(truncate(after, 150)), nil
+    end
+    if after ~= params.weather then
+        return false, ('verification_failed before=%s after=%s expected=%s'):format(
+            tostring(before), tostring(after), tostring(params.weather)), nil
+    end
+
+    return true, nil, {
+        weather = params.weather,
+        before = before,
+        verify_result = true,
+        at = os.time(),
+    }
+end
+
+local function readWeatherTime()
+    local ok, hour, minute = pcall(function()
+        return exports['qb-weathersync']:getTime()
+    end)
+    if not ok or type(hour) ~= 'number' or type(minute) ~= 'number' then return nil end
+    return { hour = hour, minute = minute }
+end
+
+local function executeSetTimeOfDay(actionId, params)
+    local before = readWeatherTime()
+
+    local callOk, result = pcall(function()
+        return exports['qb-weathersync']:setTime(params.hour, params.minute)
+    end)
+    if not callOk then
+        return false, ('set_time_of_day_failed: %s'):format(truncate(result, 150)), nil
+    end
+    if result ~= true then
+        return false, 'execution_failed: setTime returned non-true', nil
+    end
+
+    -- qb-weathersync 的 setTime() 会冻结时钟并同步全服，getTime() 读的是同一
+    -- 份 gameMinutes，所以可以回读比对。老版本没有 getTime 时退化为只信任
+    -- setTime 的返回值（result.verify_result = nil）。
+    local after = readWeatherTime()
+    if after and (after.hour ~= params.hour or after.minute ~= params.minute) then
+        return false, ('verification_failed: expected %02d:%02d, read %02d:%02d'):format(
+            params.hour, params.minute, after.hour, after.minute), nil
+    end
+
+    return true, nil, {
+        hour = params.hour,
+        minute = params.minute,
+        before = before,
+        after = after,
+        verify_result = after ~= nil,
+        at = os.time(),
+    }
+end
+
+local function executeTeleport(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_offline', nil end
+
+    local source = player.PlayerData and tonumber(player.PlayerData.source)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    -- Captured before dispatch so the audit row records where the player was,
+    -- even when the client later acks with its own detail.
+    local from = playerPosition(source)
+
+    local callOk, ok, result, err = pcall(function()
+        return exports['custom-agent-client']:Execute(source, 'teleport', {
+            x = params.x,
+            y = params.y,
+            z = params.z,
+            heading = params.heading,
+        }, 5000, { agent_id = 'director:' .. tostring(actionId) })
+    end)
+    if not callOk then
+        -- Missing export/resource: the pcall error must not be swallowed.
+        return false, 'executor_unavailable', nil
+    end
+    if ok ~= true then
+        local code = type(err) == 'table' and err.code or nil
+        local message = type(err) == 'table' and err.message or nil
+        code = code ~= nil and tostring(code) or 'unknown'
+        if code == 'executor_disabled' then
+            return false, 'executor_disabled', nil
+        end
+        if code == 'not_yieldable' then
+            return false, 'not_yieldable: teleport must run inside a coroutine', nil
+        end
+        return false, ('execution_failed: %s: %s'):format(code, tostring(message or '')), nil
+    end
+
+    return true, nil, {
+        ack = result,
+        from = from,
+        at = os.time(),
+    }
+end
+
+-- Bounded server-side vehicle spawn. Deliberately not QBCore.Functions.SpawnVehicle:
+-- its `while not DoesEntityExist(veh) do Wait(0) end` has no timeout and can
+-- hang the approving thread forever on a model that never materialises.
+local SPAWN_TIMEOUT_MS = 2000
+
+local function executeSpawnVehicle(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_offline', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    -- GetPlayerPed is 0 while the player is loading or already dropping.
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false, 'player_offline', nil end
+
+    local coords = GetEntityCoords(ped)
+    local x, y, z = coords.x, coords.y, coords.z
+
+    local heading = 0.0
+    if type(GetEntityHeading) == 'function' then
+        heading = GetEntityHeading(ped) or 0.0
+    end
+
+    -- Spawn 1.5 m in front of the ped. If the forward-vector native is not
+    -- available, degrade to spawning at the ped's exact position.
+    local forwardX, forwardY = nil, nil
+    if type(GetEntityForwardVector) == 'function' then
+        local forwardOk, forward = pcall(GetEntityForwardVector, ped)
+        if forwardOk and forward then
+            local readOk, read = pcall(function()
+                return { x = forward.x, y = forward.y }
+            end)
+            if readOk and type(read.x) == 'number' and type(read.y) == 'number' then
+                forwardX, forwardY = read.x, read.y
+            end
+        end
+    end
+    if forwardX ~= nil and forwardY ~= nil then
+        x = x + forwardX * 1.5
+        y = y + forwardY * 1.5
+    end
+
+    local veh
+    if type(CreateVehicleServerSetter) == 'function' then
+        veh = CreateVehicleServerSetter(params.model, 'automobile', x, y, z, heading)
+    else
+        veh = CreateVehicle(params.model, x, y, z, heading, true, false)
+    end
+    if not veh or veh == 0 then
+        return false, 'vehicle_spawn_failed', nil
+    end
+
+    local deadline = GetGameTimer() + SPAWN_TIMEOUT_MS
+    while not DoesEntityExist(veh) and GetGameTimer() < deadline do
+        Wait(0)
+    end
+    if not DoesEntityExist(veh) then
+        pcall(DeleteEntity, veh)
+        return false, 'vehicle_spawn_timeout', nil
+    end
+
+    if params.plate then
+        SetVehicleNumberPlateText(veh, params.plate)
+        local readBack = GetVehicleNumberPlateText(veh)
+        local readPlate = type(readBack) == 'string' and readBack:gsub('%s+', '') or ''
+        if readPlate ~= params.plate then
+            return false, ('verification_failed: plate read back %q, expected %q'):format(
+                tostring(readBack), tostring(params.plate)), nil
+        end
+    end
+
+    return true, nil, {
+        entity = veh,
+        model = params.model,
+        plate = params.plate,
+        coords = { x = x, y = y, z = z },
+    }
+end
+
+-- qb-ambulancejob owns the actual resurrection (ped/health reset), but its
+-- client event is fire-and-forget: the server metadata read-back is the
+-- authority, so a stopped ambulancejob cannot crash the approval thread.
+local function executeRevive(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    local current = player.PlayerData and player.PlayerData.metadata or {}
+    local before = {
+        isdead = current.isdead,
+        inlaststand = current.inlaststand,
+    }
+
+    local setOk, setErr = pcall(function()
+        player.Functions.SetMetaData('isdead', false)
+        player.Functions.SetMetaData('inlaststand', false)
+    end)
+    if not setOk then
+        return false, ('execution_failed: SetMetaData threw: %s'):format(truncate(setErr, 150)), nil
+    end
+
+    pcall(TriggerClientEvent, 'hospital:client:Revive', source)
+
+    local updated = player.PlayerData and player.PlayerData.metadata or {}
+    local after = {
+        isdead = updated.isdead,
+        inlaststand = updated.inlaststand,
+    }
+    if after.isdead ~= false or after.inlaststand ~= false then
+        return false, ('verification_failed isdead=%s inlaststand=%s'):format(
+            tostring(after.isdead), tostring(after.inlaststand)), nil
+    end
+
+    return true, nil, {
+        before = before,
+        after = after,
+        at = os.time(),
+    }
+end
+
+-- DeleteEntity returns nil even on success, so only DoesEntityExist is
+-- trusted. The bounded wait keeps a stubborn entity from hanging the approval.
+local DELETE_VERIFY_TIMEOUT_MS = 1000
+
+local function executeDeleteVehicle(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local source = playerSource(player)
+    if not source or source <= 0 then return false, 'player_source_unavailable', nil end
+
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false, 'player_offline', nil end
+
+    local entity = GetVehiclePedIsIn(ped, false)
+    if not entity or entity == 0 then return false, 'not_in_vehicle', nil end
+
+    -- Re-read the plate at execution time: the approved preview may be stale.
+    local plate = vehiclePlate(entity)
+    if params.plate and plate ~= params.plate then
+        return false, ('plate_mismatch: current %s, expected %s'):format(
+            tostring(plate), tostring(params.plate)), nil
+    end
+
+    local model = GetEntityModel(entity)
+
+    local ok, deleteErr = pcall(DeleteEntity, entity)
+    if not ok then
+        return false, ('execution_failed: DeleteEntity threw: %s'):format(
+            truncate(deleteErr, 150)), nil
+    end
+
+    local deadline = GetGameTimer() + DELETE_VERIFY_TIMEOUT_MS
+    while DoesEntityExist(entity) and GetGameTimer() < deadline do
+        Wait(0)
+    end
+    if DoesEntityExist(entity) then
+        return false, ('verification_failed: vehicle entity %s still exists'):format(
+            tostring(entity)), nil
+    end
+
+    return true, nil, {
+        entity = entity,
+        model = model,
+        plate = plate,
+        at = os.time(),
+    }
+end
+
+-- The full phone number never reaches the audit row or the logs: result only
+-- carries a masked form plus the message length.
+local function maskPhone(phone)
+    if type(phone) ~= 'string' or phone == '' then return nil end
+    -- Too short to mask without reconstructing the whole number.
+    if #phone <= 5 then return ('*'):rep(#phone) end
+    return phone:sub(1, 3) .. ('*'):rep(#phone - 5) .. phone:sub(-2)
+end
+
+local function executeSendPhoneMessage(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local charinfo = player.PlayerData and player.PlayerData.charinfo
+    local phone = charinfo and charinfo.phone
+    if type(phone) ~= 'string' or phone == '' then
+        return false, 'phone_unavailable', nil
+    end
+
+    -- custom-phone is the only writer for phone_messages. Its export is
+    -- server-only, takes the sender label from us (never from a client) and
+    -- returns (true, nil) or (false, errCode).
+    local callOk, sent, sendErr = pcall(function()
+        return exports['custom-phone']:SendSystemMessage(phone, params.message, 'City Services')
+    end)
+    if not callOk then
+        return false, 'phone_unavailable', nil
+    end
+    if sent ~= true or sendErr ~= nil then
+        return false, ('execution_failed: %s'):format(tostring(sendErr or 'unknown')), nil
+    end
+
+    return true, nil, {
+        message_length = #params.message,
+        phone_masked = maskPhone(phone),
+        at = os.time(),
+    }
+end
+
 local function executeAction(actionId, actionType, params)
     if actionType == 'notify' then
         return executeNotify(actionId, params)
@@ -422,9 +1193,63 @@ local function executeAction(actionId, actionType, params)
         return executeAddMoney(actionId, params)
     elseif actionType == 'start_quest' then
         return executeStartQuest(actionId, params)
+    elseif actionType == 'set_job' then
+        return executeSetJob(actionId, params)
+    elseif actionType == 'set_job_duty' then
+        return executeSetJobDuty(actionId, params)
+    elseif actionType == 'set_metadata' then
+        return executeSetMetadata(actionId, params)
+    elseif actionType == 'grant_item' then
+        return executeGrantItem(actionId, params)
+    elseif actionType == 'remove_item' then
+        return executeRemoveItem(actionId, params)
+    elseif actionType == 'set_bucket' then
+        return executeSetBucket(actionId, params)
+    elseif actionType == 'kick' then
+        return executeKick(actionId, params)
+    elseif actionType == 'announce' then
+        return executeAnnounce(actionId, params)
+    elseif actionType == 'set_weather' then
+        return executeSetWeather(actionId, params)
+    elseif actionType == 'set_time_of_day' then
+        return executeSetTimeOfDay(actionId, params)
+    elseif actionType == 'teleport' then
+        return executeTeleport(actionId, params)
+    elseif actionType == 'spawn_vehicle' then
+        return executeSpawnVehicle(actionId, params)
+    elseif actionType == 'revive' then
+        return executeRevive(actionId, params)
+    elseif actionType == 'delete_vehicle' then
+        return executeDeleteVehicle(actionId, params)
+    elseif actionType == 'send_phone_message' then
+        return executeSendPhoneMessage(actionId, params)
     end
     return false, 'unsupported_action', nil
 end
+
+-- Internal executors for the pure-Lua harness. Not a FiveM export; approval
+-- still flows exclusively through Propose/Approve.
+AgentActions._Execute = {
+    set_job = executeSetJob,
+    set_job_duty = executeSetJobDuty,
+    set_metadata = executeSetMetadata,
+    grant_item = executeGrantItem,
+    remove_item = executeRemoveItem,
+    set_bucket = executeSetBucket,
+    kick = executeKick,
+    announce = executeAnnounce,
+    set_weather = executeSetWeather,
+    set_time_of_day = executeSetTimeOfDay,
+    teleport = executeTeleport,
+    spawn_vehicle = executeSpawnVehicle,
+    revive = executeRevive,
+    delete_vehicle = executeDeleteVehicle,
+    send_phone_message = executeSendPhoneMessage,
+}
+
+-- Internal context builder for the pure-Lua harness (same contract as
+-- _Execute): lets tests prove CheckPolicy receives live weathersync state.
+AgentActions._Context = buildContext
 
 -- ---------------------------------------------------------------------------
 -- Audit transitions
@@ -490,7 +1315,12 @@ function AgentActions.Propose(agentId, actionType, params, idempotencyKey, dryRu
     if not normalizedAgentId then return failure(agentErr.code, agentErr.message) end
 
     local normalized, normalizeErr = AgentPolicy.Normalize(actionType, params, cfg)
-    if not normalized then return failure(normalizeErr.code, normalizeErr.message) end
+    if not normalized then
+        -- Normalize rejections are where over-privilege usually shows up
+        -- (unsupported_action, invalid_params), so they are audited too.
+        recordDenial(normalizedAgentId, actionType, params, normalizeErr.code, normalizeErr.message, dryRun)
+        return failure(normalizeErr.code, normalizeErr.message)
+    end
 
     local normalizedKey, keyErr = AgentPolicy.NormalizeIdempotencyKey(idempotencyKey)
     if not normalizedKey then return failure(keyErr.code, keyErr.message) end
@@ -539,7 +1369,9 @@ function AgentActions.Propose(agentId, actionType, params, idempotencyKey, dryRu
     local policyOk, policyErr = AgentPolicy.CheckPolicy(actionType, normalized, cfg, context)
     if not policyOk then
         -- Do not persist policy-rejected proposals: the key stays reusable
-        -- after the operator raises a cap / the player reconnects.
+        -- after the operator raises a cap / the player reconnects. The denial
+        -- audit row is the only durable trace of the rejected request.
+        recordDenial(normalizedAgentId, actionType, normalized, policyErr.code, policyErr.message, dryRun)
         return failure(policyErr.code, policyErr.message, {
             status = 'rejected',
             preview = preview,
@@ -640,6 +1472,18 @@ end
 -- Public export: approve / reject
 -- ---------------------------------------------------------------------------
 
+-- Exposed for the pure-Lua harness only; not a FiveM export.
+-- An agent must not be able to approve its own proposal. The admin token is
+-- already separate, but a misconfigured deployment can hand both tokens to the
+-- same principal; this is the code-level check that still holds then.
+local function isSelfApproval(approver, agentId)
+    if type(approver) ~= 'string' or type(agentId) ~= 'string' then return false end
+    local a = approver:lower()
+    local b = agentId:lower()
+    return a == b or a == ('agent:' .. b) or a == ('agent:' .. b .. ':approver')
+end
+AgentActions._IsSelfApproval = isSelfApproval
+
 function AgentActions.Approve(id, approver)
     local cfg = Config()
     if not cfg.enabled then
@@ -657,6 +1501,12 @@ function AgentActions.Approve(id, approver)
     local row, rowErr = getActionRow(actionId)
     if rowErr then return failure('db_error', 'database unavailable') end
     if not row then return failure('not_found', 'action not found', { id = actionId }) end
+    if isSelfApproval(normalizedApprover, row.agent_id) then
+        return failure('self_approval_denied', 'an agent cannot approve its own action', {
+            id = actionId,
+            status = row.status,
+        })
+    end
     if row.status ~= 'pending_approval' then
         return failure('invalid_status', 'action is not pending approval', {
             id = actionId,
@@ -675,6 +1525,7 @@ function AgentActions.Approve(id, approver)
     local storedParams = decodeJson(row.params)
     local normalized, normalizeErr = AgentPolicy.Normalize(row.action_type, storedParams, cfg)
     if not normalized then
+        recordDenial(row.agent_id, row.action_type, storedParams, normalizeErr.code, normalizeErr.message, false)
         rejectPending(actionId, normalizedApprover, normalizeErr.code, normalizeErr.message, decodeJson(row.preview))
         return failure(normalizeErr.code, normalizeErr.message, {
             id = actionId,
@@ -712,7 +1563,10 @@ function AgentActions.Approve(id, approver)
 
     local policyOk, policyErr = AgentPolicy.CheckPolicy(row.action_type, normalized, cfg, context)
     if not policyOk then
+        -- The world moved between propose and approve (player offline, cap
+        -- lowered, weathersync stopped): reject the row and audit the denial.
         rejectPending(actionId, normalizedApprover, policyErr.code, policyErr.message, preview)
+        recordDenial(row.agent_id or 'unknown', row.action_type, normalized, policyErr.code, policyErr.message, false)
         return failure(policyErr.code, policyErr.message, {
             id = actionId,
             status = 'rejected',
@@ -786,6 +1640,12 @@ function AgentActions.Reject(id, approver, reason)
     local row, rowErr = getActionRow(actionId)
     if rowErr then return failure('db_error', 'database unavailable') end
     if not row then return failure('not_found', 'action not found', { id = actionId }) end
+    if isSelfApproval(normalizedApprover, row.agent_id) then
+        return failure('self_approval_denied', 'an agent cannot reject its own action', {
+            id = actionId,
+            status = row.status,
+        })
+    end
     if row.status ~= 'pending_approval' then
         return failure('invalid_status', 'action is not pending approval', {
             id = actionId,
@@ -882,9 +1742,13 @@ function AgentActions.Policy()
             risk = definition.risk,
             requires_approval = definition.requires_approval,
             auto_execute = definition.auto_execute,
+            blast_radius = definition.blast_radius,
+            compensation = definition.compensation,
         }
     end
     actions.add_money.max_money = cfg.max_money
+    actions.grant_item.max_amount = cfg.max_item_amount
+    actions.remove_item.max_amount = cfg.max_item_amount
 
     local dailySpent = nil
     if cfg.enabled then
@@ -900,6 +1764,8 @@ function AgentActions.Policy()
             max_money = cfg.max_money,
             daily_budget = cfg.daily_budget,
             max_notify_chars = cfg.max_notify_chars,
+            max_announce_chars = cfg.max_announce_chars,
+            max_item_amount = cfg.max_item_amount,
             ttl_seconds = cfg.ttl_seconds,
         },
         daily_spent = dailySpent,
@@ -936,71 +1802,13 @@ exports('Policy', function()
 end)
 
 -- ---------------------------------------------------------------------------
--- HTTP helpers
+-- HTTP adapter (pure routing/validation lives in server/http_api.lua)
 -- ---------------------------------------------------------------------------
 
-local function splitPath(rawPath)
-    local queryPos = rawPath:find('?', 1, true)
-    if not queryPos then return rawPath, '' end
-    return rawPath:sub(1, queryPos - 1), rawPath:sub(queryPos + 1)
-end
-
-local function urlDecode(value)
-    value = value:gsub('+', ' ')
-    return (value:gsub('%%(%x%x)', function(hex)
-        return string.char(tonumber(hex, 16))
-    end))
-end
-
-local function parseQuery(query)
-    local result = {}
-    for pair in query:gmatch('[^&]+') do
-        local equals = pair:find('=', 1, true)
-        local key, value
-        if equals then
-            key = pair:sub(1, equals - 1)
-            value = pair:sub(equals + 1)
-        else
-            key = pair
-            value = ''
-        end
-        key = urlDecode(key)
-        if key ~= '' then result[key] = urlDecode(value) end
-    end
-    return result
-end
-
-local function getHeader(req, name)
-    local headers = req.headers
-    if type(headers) ~= 'table' then return nil end
-    for key, value in pairs(headers) do
-        if type(key) == 'string' and key:lower() == name then
-            if type(value) == 'table' then return value[1] end
-            return value
-        end
-    end
-    return nil
-end
-
-local function bearerToken(req)
-    local authorization = getHeader(req, 'authorization')
-    if type(authorization) ~= 'string' then return nil end
-    local token = authorization:match('^[Bb][Ee][Aa][Rr][Ee][Rr]%s+(.+)$')
-    if not token then return nil end
-    return AgentPolicy.Trim(token)
-end
-
-local function secureEquals(a, b)
-    if type(a) ~= 'string' or type(b) ~= 'string' then return false end
-    if #a == 0 or #b == 0 then return false end
-    local diff = #a == #b and 0 or 1
-    local maxLength = math.max(#a, #b)
-    for index = 1, maxLength do
-        local byteA = index <= #a and a:byte(index) or 0
-        local byteB = index <= #b and b:byte(index) or 0
-        diff = diff | (byteA ~ byteB)
-    end
-    return diff == 0
+local AgentHttp = _G.AgentHttp
+if not AgentHttp then
+    print('[custom-director] ❌ server/http_api.lua missing')
+    return
 end
 
 local function makeResponder(res)
@@ -1031,272 +1839,82 @@ local function makeResponder(res)
     end
 end
 
-local function decodeJsonBody(body)
-    if type(body) ~= 'string' or body == '' then return nil, 'request body is empty' end
-    local ok, decoded = pcall(json.decode, body)
-    if not ok or type(decoded) ~= 'table' then return nil, 'request body must be valid JSON' end
-    for key in pairs(decoded) do
-        if type(key) ~= 'string' then return nil, 'request body must be a JSON object' end
-    end
-    return decoded
-end
-
-local function readJsonBody(req, respond, callback)
-    local contentLength = tonumber(getHeader(req, 'content-length'))
-    local transferEncoding = getHeader(req, 'transfer-encoding')
-    local isChunked = type(transferEncoding) == 'string'
-        and transferEncoding:lower():find('chunked', 1, true) ~= nil
-
-    if (contentLength == nil or contentLength == 0) and not isChunked then
-        respond(400, { error = 'request body required', code = 'missing_body' })
-        return
-    end
-    if contentLength and contentLength > MAX_HTTP_BODY then
-        respond(413, { error = 'request body too large', code = 'body_too_large' })
-        return
-    end
-
-    local done = false
-    local handlerOk, handlerErr = pcall(function()
-        req.setDataHandler(function(body)
-            if done then return end
-            done = true
-
-            local ok, err = pcall(function()
-                if type(body) ~= 'string' then
-                    respond(400, { error = 'request body must be text', code = 'missing_body' })
-                    return
-                end
-                if #body > MAX_HTTP_BODY then
-                    respond(413, { error = 'request body too large', code = 'body_too_large' })
-                    return
-                end
-                local decoded, decodeErr = decodeJsonBody(body)
-                if not decoded then
-                    respond(400, { error = decodeErr, code = 'bad_request' })
-                    return
-                end
-                callback(decoded)
-            end)
-            if not ok then
-                print(('[custom-director] HTTP body handler error: %s'):format(truncate(err, 200)))
-                respond(500, { error = 'internal server error', code = 'internal_error' })
-            end
-        end)
-    end)
-    if not handlerOk then
-        print(('[custom-director] HTTP data handler registration failed: %s'):format(truncate(handlerErr, 200)))
-        respond(500, { error = 'internal server error', code = 'internal_error' })
-    end
-end
-
-local function matchRoute(path)
-    if path == '/agent/v1/act' then
-        return { name = 'act', method = 'POST' }
-    end
-    if path == '/agent/v1/policy' then
-        return { name = 'policy', method = 'GET' }
-    end
-    if path == '/agent/v1/actions' then
-        return { name = 'list', method = 'GET' }
-    end
-
-    local id = path:match('^/agent/v1/actions/(%d+)$')
-    if id then return { name = 'get', method = 'GET', id = tonumber(id) } end
-
-    id = path:match('^/agent/v1/actions/(%d+)/approve$')
-    if id then return { name = 'approve', method = 'POST', id = tonumber(id) } end
-
-    id = path:match('^/agent/v1/actions/(%d+)/reject$')
-    if id then return { name = 'reject', method = 'POST', id = tonumber(id) } end
-
-    return nil
-end
-
-local function httpStatusForResult(result)
-    if result.ok then
-        if result.status == 'pending_approval' then return 202 end
-        return 200
-    end
-
-    local code = result.code
-    if code == 'disabled' then return 503 end
-    if code == 'not_found' then return 404 end
-    if code == 'expired' then return 410 end
-    if code == 'idempotency_conflict' or code == 'invalid_status' or code == 'execution_failed' then
-        return 409
-    end
-    if code == 'db_error' or code == 'quest_catalog_unavailable' then return 500 end
-    return 400
-end
-
-local function handleAct(body, agentId, respond)
-    local actionType = body.type
-    if type(actionType) ~= 'string' then
-        respond(400, { error = 'type is required', code = 'bad_request' })
-        return
-    end
-
-    local args = body.args
-    if args == nil then args = {} end
-    if type(args) ~= 'table' then
-        respond(400, { error = 'args must be an object', code = 'bad_request' })
-        return
-    end
-
-    local dryRun = body.dry_run
-    if dryRun == nil then dryRun = false end
-    if type(dryRun) ~= 'boolean' then
-        respond(400, { error = 'dry_run must be a boolean', code = 'bad_request' })
-        return
-    end
-
-    local result = AgentActions.Propose(agentId, actionType, args, body.idempotency_key, dryRun)
-    respond(httpStatusForResult(result), result)
-end
-
-local function handleAdminAction(body, route, respond)
-    local approver, approverErr = AgentPolicy.NormalizeApprover(body.approver)
-    if not approver then
-        respond(400, { error = approverErr.message, code = approverErr.code })
-        return
-    end
-
-    local result
-    if route.name == 'approve' then
-        result = AgentActions.Approve(route.id, approver)
-    else
-        local reason = nil
-        if body.reason ~= nil then
-            local reasonErr
-            reason, reasonErr = AgentPolicy.NormalizeReason(body.reason, 255)
-            if not reason then
-                respond(400, { error = reasonErr.message, code = reasonErr.code })
-                return
-            end
-        end
-        result = AgentActions.Reject(route.id, approver, reason)
-    end
-
-    local statusCode = httpStatusForResult(result)
-    if not result.ok and result.status == 'rejected' and statusCode == 400 then
-        statusCode = 409
-    end
-    respond(statusCode, result)
-end
-
-local function dispatchHttp(req, res, respond)
-    local cfg = Config()
-    if not cfg.enabled then
-        respond(503, { error = 'agent actions are disabled', code = 'disabled' })
-        return
-    end
-    if cfg.token == '' then
-        respond(503, { error = 'agent token is not configured', code = 'agent_token_not_configured' })
-        return
-    end
-
-    local method = tostring(req.method or ''):upper()
-    local path, query = splitPath(tostring(req.path or '/'))
-    local route = matchRoute(path)
-    if not route then
-        respond(404, { error = 'not found', code = 'not_found' })
-        return
-    end
-    if route.method ~= method then
-        respond(405, { error = 'method not allowed', code = 'method_not_allowed' }, {
-            ['Allow'] = route.method,
-        })
-        return
-    end
-
-    -- Admin endpoints use a separate token. The agent token cannot approve.
-    if route.name == 'approve' or route.name == 'reject' then
-        if cfg.admin_token == '' then
-            respond(503, { error = 'admin token is not configured', code = 'admin_token_not_configured' })
-            return
-        end
-        if not secureEquals(bearerToken(req), cfg.admin_token) then
-            respond(401, { error = 'unauthorized', code = 'unauthorized' }, {
-                ['WWW-Authenticate'] = 'Bearer',
-            })
-            return
-        end
-        readJsonBody(req, respond, function(body)
-            handleAdminAction(body, route, respond)
-        end)
-        return
-    end
-
-    if not secureEquals(bearerToken(req), cfg.token) then
-        respond(401, { error = 'unauthorized', code = 'unauthorized' }, {
-            ['WWW-Authenticate'] = 'Bearer',
-        })
-        return
-    end
-
-    if route.name == 'policy' then
-        respond(200, AgentActions.Policy())
-        return
-    end
-
-    local agentId = AgentPolicy.NormalizeAgentId(getHeader(req, 'x-agent-id'))
-    if not agentId then
-        respond(400, { error = 'X-Agent-Id header is required', code = 'missing_agent_id' })
-        return
-    end
-
-    if route.name == 'act' then
-        readJsonBody(req, respond, function(body)
-            handleAct(body, agentId, respond)
-        end)
-        return
-    end
-
-    if route.name == 'get' then
-        local action, err = AgentActions.Get(route.id)
-        if err then
-            respond(500, { error = 'database unavailable', code = 'db_error' })
-            return
-        end
-        if not action or action.agent_id ~= agentId then
-            respond(404, { error = 'action not found', code = 'not_found' })
-            return
-        end
-        respond(200, { action = action })
-        return
-    end
-
-    if route.name == 'list' then
-        local queryParams = parseQuery(query)
-        local status = nil
-        if queryParams.status ~= nil then
-            local statusErr
-            status, statusErr = AgentPolicy.NormalizeStatus(queryParams.status)
-            if not status then
-                respond(400, { error = statusErr.message, code = 'bad_request' })
-                return
-            end
-        end
-        local limit = AgentPolicy.NormalizeLimit(queryParams.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT)
-        local actions, err = AgentActions.List(status, limit, agentId)
-        if not actions then
-            respond(500, { error = 'database unavailable', code = 'db_error' })
-            return
-        end
-        respond(200, { actions = actions, count = #actions })
-        return
-    end
-
-    respond(404, { error = 'not found', code = 'not_found' })
+local function fail(respond)
+    respond(500, { error = 'internal server error', code = 'internal_error' })
 end
 
 SetHttpHandler(function(req, res)
     local respond = makeResponder(res)
-    local ok, err = pcall(dispatchHttp, req, res, respond)
-    if not ok then
-        print(('[custom-director] HTTP handler error: %s'):format(truncate(err, 200)))
-        respond(500, { error = 'internal server error', code = 'internal_error' })
+    -- Read the live config once per request: probing and finishing must see the
+    -- same token, otherwise a convar rotation mid-request can 401 a request
+    -- that already passed the probe.
+    local cfg = Config()
+    -- Guards against FXServer invoking the data handler more than once, and
+    -- against a late callback after a synchronous response.  Without it a
+    -- duplicate callback would call Propose() twice for one HTTP request.
+    local handled = false
+
+    -- FXServer only invokes setDataHandler when the request carries a body, so
+    -- first run Handle with body=nil. It returns need_body=true only after the
+    -- same routing/auth checks the old dispatchHttp() did, and only for routes
+    -- that actually read a body. Everything else (GET /policy, /actions, 404s,
+    -- 405s, 401s, missing content-length) is answered synchronously as before.
+    local function run(raw)
+        return AgentHttp.Handle({
+            method = tostring(req.method or ''):upper(),
+            path = tostring(req.path or '/'),
+            headers = req.headers,
+            body = raw,
+        }, {
+            cfg = cfg,
+            actions = AgentActions,
+            policy = AgentPolicy,
+            live = _G.LiveApi,
+        })
+    end
+
+    local function finish(raw)
+        if handled then return end
+        handled = true
+
+        local ok, err = pcall(function()
+            local result = run(raw)
+            -- raw == nil means FXServer called the handler without a body even
+            -- though the route needs one; the old readJsonBody() answered 400.
+            if result.need_body then
+                respond(400, { error = 'request body required', code = 'missing_body' })
+                return
+            end
+            respond(result.status, result.body, result.headers)
+        end)
+        if not ok then
+            print(('[custom-director] HTTP error: %s'):format(truncate(err, 200)))
+            fail(respond)
+        end
+    end
+
+    local probeOk, probe = pcall(run, nil)
+    if not probeOk then
+        print(('[custom-director] HTTP error: %s'):format(truncate(probe, 200)))
+        handled = true
+        fail(respond)
+        return
+    end
+    if not probe.need_body then
+        handled = true
+        local sent, sendErr = pcall(function()
+            respond(probe.status, probe.body, probe.headers)
+        end)
+        if not sent then
+            print(('[custom-director] HTTP error: %s'):format(truncate(sendErr, 200)))
+            fail(respond)
+        end
+        return
+    end
+
+    if not pcall(function() req.setDataHandler(finish) end) then
+        handled = true
+        fail(respond)
     end
 end)
 
@@ -1331,5 +1949,10 @@ RegisterCommand('agentapprove', function(source, args)
         tostring(id), tostring(result.ok), tostring(result.status), tostring(result.error)))
 end, false)
 
+local startupCfg = Config()
 print(('[custom-director] loaded (enabled=%s). Exports: Propose, Approve, Reject, Get, List, Policy'):format(
-    tostring(Config().enabled)))
+    tostring(startupCfg.enabled)))
+if startupCfg.token ~= '' and startupCfg.token == startupCfg.admin_token then
+    print('[custom-director] ⚠️ agent_actions_token equals agent_actions_admin_token; '
+        .. 'self-approval protection is the only remaining guard')
+end

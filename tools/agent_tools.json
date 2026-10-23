@@ -1,0 +1,2096 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": 1,
+  "registry_version": "1.5.0",
+  "generated": "2026-10-22T16:00:00Z",
+  "tools": [
+    {
+      "name": "get_schema",
+      "title": "Get the agent read-layer contract",
+      "description": "Return the versioned agent read-layer contract: views, fields, PII flags and schema_version. Read-only and stable across releases.",
+      "channel": "read",
+      "route": "gateway",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/schema"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "query_players",
+      "title": "Query player snapshots",
+      "description": "Query player snapshots from agent_player_snapshot with exact job/gang filters, an updated_since window, whitelisted fields and ordering. Maximum 200 rows.",
+      "channel": "read",
+      "route": "gateway",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/players"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          },
+          "job": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$",
+            "description": "Exact job name, e.g. police."
+          },
+          "gang": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$",
+            "description": "Exact gang name, e.g. none."
+          },
+          "updated_since": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z:+.,\\- T]{1,64}$",
+            "description": "ISO 8601 timestamp/date or relative 15m / 5h / 7d."
+          },
+          "fields": {
+            "type": "string",
+            "pattern": "^[A-Za-z_,]{1,200}$",
+            "description": "Comma-separated whitelist; omit for all snapshot fields."
+          },
+          "order_by": {
+            "type": "string",
+            "enum": [
+              "citizenid",
+              "name",
+              "job",
+              "gang",
+              "cash",
+              "bank",
+              "crypto",
+              "last_updated",
+              "schema_version"
+            ],
+            "default": "citizenid"
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "default": "asc"
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": true,
+        "untrusted_fields": [
+          "name",
+          "firstname",
+          "lastname"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none",
+      "limits": {
+        "max_limit": 200
+      }
+    },
+    {
+      "name": "get_player_snapshot",
+      "title": "Get one player snapshot",
+      "description": "Return cash/bank/crypto, job, gang and PII-flagged display names for one citizenid. Read-only.",
+      "channel": "read",
+      "route": "gateway",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/players/{citizenid}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          }
+        },
+        "required": [
+          "citizenid"
+        ]
+      },
+      "pii": {
+        "returns_pii": true,
+        "untrusted_fields": [
+          "name",
+          "firstname",
+          "lastname"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_player_timeline",
+      "title": "Get one player timeline",
+      "description": "Read the player timeline (quests, story choices, bank statements) for one citizenid, newest first, with an optional since filter.",
+      "channel": "read",
+      "route": "gateway",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/players/{citizenid}/timeline"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          },
+          "since": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z:+.,\\- T]{1,64}$",
+            "description": "ISO 8601 timestamp/date or relative 15m / 5h / 7d."
+          }
+        },
+        "required": [
+          "citizenid"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": ["payload"]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "list_events",
+      "title": "List the agent event feed",
+      "description": "Read the append-only agent_events_feed ordered by id. Use since_id for cursor pagination; type may be exact or a prefix ending in *.",
+      "channel": "read",
+      "route": "gateway",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/events"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "since_id": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0,
+            "description": "Return events with id greater than this cursor."
+          },
+          "type": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.*-]{1,64}$",
+            "description": "Exact type (quest.completed) or prefix (quest.*)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": ["payload"]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_world_digest",
+      "title": "Get the budgeted world digest",
+      "description": "Return a compact world digest: player/online estimate, top event types, recent important events, economy totals and cheap risk hints, fitted to budget_tokens.",
+      "channel": "read",
+      "route": "gateway",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/world/digest"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "window_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440,
+            "default": 5
+          },
+          "budget_tokens": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20000,
+            "default": 2000
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": ["summary", "text", "payload"]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none",
+      "limits": {
+        "max_window_minutes": 1440,
+        "max_budget_tokens": 20000
+      }
+    },
+    {
+      "name": "get_world_state",
+      "title": "Get world state rows",
+      "description": "Return world_state rows plus one summary row per world event type. Read-only observation of the world atmosphere and flags.",
+      "channel": "read",
+      "route": "gateway",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/world"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": ["state_value"]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_economy_metrics",
+      "title": "Get economy metrics",
+      "description": "Return per-job aggregates from agent_economy_metrics: player counts and cash/bank totals. Read-only.",
+      "channel": "read",
+      "route": "gateway",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/economy"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_live_players",
+      "title": "List live online players",
+      "description": "Read the live player roster: sampled positions, vitals, job and vehicle for online players, optionally filtered by job. Read-only and bounded to 48 rows.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "auth": "live",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/live/players"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 48,
+            "default": 48
+          },
+          "job": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "description": "Exact job name, e.g. police."
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": true,
+        "untrusted_fields": [
+          "name"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_live_player",
+      "title": "Get one live player",
+      "description": "Read the live state of one online player by citizenid: sampled position, vitals, job, vehicle, balances and session. Read-only; use get_live_players to discover ids.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "auth": "live",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/live/players/{citizenid}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          }
+        },
+        "required": [
+          "citizenid"
+        ]
+      },
+      "pii": {
+        "returns_pii": true,
+        "untrusted_fields": [
+          "name"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "list_live_events",
+      "title": "List live game events",
+      "description": "Read the live event ring buffer since an epoch:seq cursor, oldest first, with a bounded limit. Read-only and best-effort; dropped events are reported.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "auth": "live",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/live/events"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "since": {
+            "type": "string",
+            "pattern": "^[0-9]{1,10}:[0-9]{1,9}$",
+            "description": "Cursor as epoch:seq, e.g. 1761136800:8841."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": [
+          "name",
+          "payload"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_action",
+      "title": "Get one agent action",
+      "description": "Read one action row owned by this agent (proposal, approval state, preview and result). Read-only; used to verify a write after it was submitted.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/actions/{action_id}",
+        "external_path": "/custom-director/agent/v1/actions/{action_id}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "description": "Numeric agent_actions id returned by a write."
+          }
+        },
+        "required": [
+          "action_id"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "list_actions",
+      "title": "List this agent's actions",
+      "description": "List actions previously proposed by this agent, newest first, optionally filtered by status. Read-only; the director filters by X-Agent-Id.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/actions",
+        "external_path": "/custom-director/agent/v1/actions"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "pending_approval",
+              "approved",
+              "executed",
+              "rejected",
+              "failed"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "send_notify",
+      "title": "Send a notification to one player",
+      "description": "Show a short plain-text notification to one online player. Text is display-only; it is never an event, command or script.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "notify",
+      "risk": "L1",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "info",
+              "success",
+              "warning",
+              "error",
+              "primary"
+            ],
+            "default": "info"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "text"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 5,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "limits": {
+        "max_string_chars": 300
+      },
+      "rate_limit": {
+        "per_minute": 10,
+        "burst": 5
+      }
+    },
+    {
+      "name": "add_player_money",
+      "title": "Add money to a player (L4, approval required)",
+      "description": "Propose a capped, budgeted money grant. Always requires human approval; verify by re-reading the balance delta.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "add_money",
+      "risk": "L4",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "account": {
+            "type": "string",
+            "enum": [
+              "cash",
+              "bank",
+              "crypto"
+            ]
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Short human-readable audit reason."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "account",
+          "amount",
+          "reason"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_player_snapshot",
+        "args": {
+          "citizenid": "$citizenid"
+        },
+        "assert": [
+          {
+            "field": "$account",
+            "op": "delta_eq",
+            "value": "$amount",
+            "tolerance": 0.001
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "limits": {
+        "max_amount": "agent_actions_max_money",
+        "daily_budget": "agent_actions_daily_budget"
+      },
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "start_player_quest",
+      "title": "Start a quest for one player (L3, approval required)",
+      "description": "Propose starting a catalog quest for one player. Always requires human approval; quest_id must exist in the live quest catalog.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "start_quest",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.0.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "quest_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,64}$"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "quest_id"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 5,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "rate_limit": {
+        "per_minute": 10,
+        "burst": 2
+      },
+      "enum_source": {
+        "param": "quest_id",
+        "source": "quest_catalog"
+      }
+    },
+    {
+      "name": "send_announce",
+      "title": "Broadcast a world announcement (L2, approval required)",
+      "description": "Propose a plain-text announcement to all players. World-scoped and reversible in the sense that it has no persistent state, but it still needs approval.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "announce",
+      "risk": "L2",
+      "blast_radius": "world",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.1.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "info",
+              "success",
+              "warning",
+              "error",
+              "primary"
+            ],
+            "default": "info"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 5,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "set_weather",
+      "title": "Set the world weather (L2, approval required)",
+      "description": "Propose changing the global weather. Reversible through a recorded before-value; always requires approval in v1.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "set_weather",
+      "risk": "L2",
+      "blast_radius": "world",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": true,
+      "status": "active",
+      "since": "1.1.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "weather": {
+            "type": "string",
+            "enum": [
+              "EXTRASUNNY",
+              "CLEAR",
+              "CLOUDS",
+              "SMOG",
+              "FOGGY",
+              "OVERCAST",
+              "RAIN",
+              "THUNDER",
+              "CLEARING",
+              "NEUTRAL",
+              "SNOW",
+              "BLIZZARD",
+              "SNOWLIGHT",
+              "XMAS",
+              "HALLOWEEN"
+            ]
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "weather"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_world_state",
+        "args": {},
+        "assert": [
+          {
+            "field": "state_key",
+            "op": "eq",
+            "value": "weather"
+          }
+        ],
+        "within_seconds": 5,
+        "on_mismatch": "failed"
+      },
+      "undo": {
+        "tool": "set_weather",
+        "args": {
+          "weather": "$before.weather"
+        },
+        "window_seconds": 300
+      },
+      "compensation": "inverse",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "set_time_of_day",
+      "title": "Set the world time of day (L2, approval required)",
+      "description": "Propose changing the global clock. Reversible through a recorded before-value; always requires approval in v1.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "set_time_of_day",
+      "risk": "L2",
+      "blast_radius": "world",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": true,
+      "status": "active",
+      "since": "1.1.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "minute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 59
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "hour",
+          "minute"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_world_state",
+        "args": {},
+        "assert": [
+          {
+            "field": "state_key",
+            "op": "eq",
+            "value": "time"
+          }
+        ],
+        "within_seconds": 5,
+        "on_mismatch": "failed"
+      },
+      "undo": {
+        "tool": "set_time_of_day",
+        "args": {
+          "hour": "$before.hour",
+          "minute": "$before.minute"
+        },
+        "window_seconds": 300
+      },
+      "compensation": "inverse",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "set_player_job",
+      "title": "Set a player's job (L3, approval required)",
+      "description": "Propose changing one player's job and grade. Always requires human approval; the previous job and grade are recorded for undo.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "set_job",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": true,
+      "status": "active",
+      "since": "1.1.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "job": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "grade": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "job"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_player_snapshot",
+        "args": {
+          "citizenid": "$citizenid"
+        },
+        "assert": [
+          {
+            "field": "job",
+            "op": "eq",
+            "value": "$job"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": {
+        "tool": "set_player_job",
+        "args": {
+          "citizenid": "$citizenid",
+          "job": "$before.job",
+          "grade": "$before.grade"
+        },
+        "window_seconds": 300
+      },
+      "compensation": "inverse",
+      "rate_limit": {
+        "per_minute": 10,
+        "burst": 2
+      }
+    },
+    {
+      "name": "teleport_player",
+      "title": "Teleport one player (L3, approval required)",
+      "description": "Propose moving one player to explicit coordinates. Always requires human approval; the previous position is recorded for undo.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "teleport",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": true,
+      "status": "active",
+      "since": "1.2.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "x": {
+            "type": "number",
+            "minimum": -4500,
+            "maximum": 8500
+          },
+          "y": {
+            "type": "number",
+            "minimum": -4500,
+            "maximum": 8500
+          },
+          "z": {
+            "type": "number",
+            "minimum": -200,
+            "maximum": 3000
+          },
+          "heading": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "x",
+          "y",
+          "z"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_player_snapshot",
+        "args": {
+          "citizenid": "$citizenid"
+        },
+        "assert": [
+          {
+            "field": "citizenid",
+            "op": "eq",
+            "value": "$citizenid"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": {
+        "tool": "teleport_player",
+        "args": {
+          "citizenid": "$citizenid",
+          "x": "$before.x",
+          "y": "$before.y",
+          "z": "$before.z"
+        },
+        "window_seconds": 60
+      },
+      "compensation": "inverse",
+      "rate_limit": {
+        "per_minute": 10,
+        "burst": 2
+      }
+    },
+    {
+      "name": "spawn_vehicle",
+      "title": "Spawn a vehicle (L3, approval required)",
+      "description": "Propose spawning a vehicle for one player. Always requires human approval; v1 has no safe delete tool, so removal is a manual operator action.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "spawn_vehicle",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.3.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "model": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "plate": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{1,8}$"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "model"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_player_timeline",
+        "args": {
+          "citizenid": "$citizenid",
+          "limit": 5
+        },
+        "assert": [
+          {
+            "field": "event_type",
+            "op": "eq",
+            "value": "vehicle.spawned"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "grant_player_item",
+      "title": "Grant an item to one player (L4, approval required)",
+      "description": "Propose granting a catalog item to one player. Always requires human approval and is not automatically reversible; compensation is manual.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "grant_item",
+      "risk": "L4",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.3.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "item": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,64}$"
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Short human-readable audit reason."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "item",
+          "amount",
+          "reason"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_player_snapshot",
+        "args": {
+          "citizenid": "$citizenid"
+        },
+        "assert": [
+          {
+            "field": "citizenid",
+            "op": "eq",
+            "value": "$citizenid"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "remove_player_item",
+      "title": "Remove an item from one player (L4, approval required)",
+      "description": "Propose removing a catalog item from one player. Always requires human approval; compensation is manual.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "remove_item",
+      "risk": "L4",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.4.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "item": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,64}$"
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Short human-readable audit reason."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "item",
+          "amount",
+          "reason"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "set_player_bucket",
+      "title": "Move one player to a routing bucket (L3, approval required)",
+      "description": "Propose moving one player to a routing bucket. Session-scoped: it does not survive a reconnect. Human approval required.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "set_bucket",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.4.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "bucket": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "bucket"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "kick_player",
+      "title": "Kick one player (L4, approval required)",
+      "description": "Propose kicking one online player with a reason. Irreversible; compensation is manual and means re-inviting the player.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "kick",
+      "risk": "L4",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.4.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Shown to the player and written to the audit row."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "reason"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "rate_limit": {
+        "per_minute": 1,
+        "burst": 1
+      }
+    },
+    {
+      "name": "revive_player",
+      "title": "Revive one player (L3, approval required)",
+      "description": "Propose reviving one online player. Clears isdead/inlaststand on the server and asks qb-ambulancejob to revive the client. Human approval required.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "revive",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.5.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "remove_player_vehicle",
+      "title": "Remove the vehicle a player is in (L4, approval)",
+      "description": "Propose deleting the vehicle the target player is currently in. Only the current vehicle can be targeted, never an arbitrary entity id. Irreversible; compensation is manual (respawn from a garage).",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "delete_vehicle",
+      "risk": "L4",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.5.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "plate": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{1,8}$"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "manual",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "set_job_duty",
+      "title": "Set a player on or off duty (L2, approval)",
+      "description": "Propose toggling on-duty state for one player. Reversible by calling again. Human approval required.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "set_job_duty",
+      "risk": "L2",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.6.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "onduty": {
+            "type": "boolean"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "onduty"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "set_player_metadata",
+      "title": "Set hunger/thirst/stress/armor (L3, approval)",
+      "description": "Propose setting one whitelisted metadata value (hunger, thirst, stress, armor) for one player. Death/handcuff flags are deliberately excluded. Human approval required.",
+      "channel": "effect",
+      "route": "director",
+      "director_action": "set_metadata",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.6.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "key": {
+            "type": "string",
+            "enum": [
+              "hunger",
+              "thirst",
+              "stress",
+              "armor"
+            ]
+          },
+          "value": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "key",
+          "value"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
+      "name": "send_phone_message",
+      "title": "Send a phone message to one player (L2)",
+      "description": "Propose a system SMS to one player. The sender is a server-side label; the recipient phone number is resolved server-side and never appears in the audit row. Human approval required.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "send_phone_message",
+      "risk": "L2",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.7.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id (1-11 letters, digits, underscore or dash)."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "message"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    }
+  ]
+}
