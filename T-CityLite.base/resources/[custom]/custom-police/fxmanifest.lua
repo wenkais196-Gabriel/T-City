@@ -44,6 +44,7 @@ server_scripts {
 	'server/p0.lua',
 	'server/p1.lua',
 	'server/p2_evidence.lua',
+	'server/p3_cases.lua',
 	'server/commands.lua',
 	'server/interactions.lua',
 	'server/evidence.lua',

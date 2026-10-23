@@ -6,7 +6,7 @@
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
   type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string };
 
-  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'citations' | 'reports' | 'evidence' | 'audit';
+  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'citations' | 'reports' | 'evidence' | 'cases' | 'bolos' | 'audit';
 
   let tab: Tab = 'home';
   let units: Unit[] = [];
@@ -28,6 +28,10 @@
   let reportForm = { title: '', incident_id: '', body: '' };
   let evidenceRows: Record<string, unknown>[] = [];
   let evidenceForm = { label: '', description: '', incident_id: '', location: '' };
+  let caseRows: Record<string, unknown>[] = [];
+  let boloRows: Record<string, unknown>[] = [];
+  let caseForm = { title: '', summary: '' };
+  let boloForm = { kind: 'person', target: '', reason: '' };
 
   const statusLabel: Record<string, string> = {
     off_duty: '10-7 下班', available: '10-8 在勤', busy: '10-6 忙碌',
@@ -115,6 +119,34 @@
     await loadReports();
   }
 
+  async function loadCases() {
+    const res = await queryApp('police_mdt', 'cases', {});
+    if (res?.success) caseRows = res.data?.rows ?? [];
+  }
+
+  async function createCase() {
+    const res = await appAction('police_mdt', 'create_case', {
+      title: caseForm.title.trim(), summary: caseForm.summary.trim(),
+    });
+    notice = res?.success ? `案件已建立：${res.data?.case_no ?? ''}` : `失败：${res?.error ?? 'unknown'}`;
+    if (res?.success) { caseForm.title = ''; caseForm.summary = ''; }
+    await loadCases();
+  }
+
+  async function loadBolos() {
+    const res = await queryApp('police_mdt', 'bolos');
+    if (res?.success) boloRows = res.data?.rows ?? [];
+  }
+
+  async function createBolo() {
+    const res = await appAction('police_mdt', 'create_bolo', {
+      kind: boloForm.kind, target: boloForm.target.trim(), reason: boloForm.reason.trim(),
+    });
+    notice = res?.success ? 'BOLO 已发布' : `失败：${res?.error ?? 'unknown'}`;
+    if (res?.success) { boloForm.target = ''; boloForm.reason = ''; }
+    await loadBolos();
+  }
+
   async function loadEvidence() {
     const res = await queryApp('police_mdt', 'evidence', {});
     if (res?.success) evidenceRows = res.data?.rows ?? [];
@@ -166,8 +198,8 @@
   </header>
 
   <nav class="tabs">
-    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['citations','罚单'],['reports','报告'],['evidence','证据'],['audit','审计']] as [id, label]}
-      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); if (tab === 'evidence') loadEvidence(); }}>{label}</button>
+    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['citations','罚单'],['reports','报告'],['evidence','证据'],['cases','案件'],['bolos','BOLO'],['audit','审计']] as [id, label]}
+      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); if (tab === 'evidence') loadEvidence(); if (tab === 'cases') loadCases(); if (tab === 'bolos') loadBolos(); }}>{label}</button>
     {/each}
   </nav>
 
@@ -315,6 +347,33 @@
           </div>
           <button class="step" onclick={() => showChain(row)}>保管链</button>
         </div>
+      {/each}
+    </section>
+
+  {:else if tab === 'cases'}
+    <section class="card">
+      <h3>新建案件（Sergeant+）</h3>
+      <div class="form">
+        <input bind:value={caseForm.title} placeholder="案件标题" />
+        <input bind:value={caseForm.summary} placeholder="摘要" />
+        <button onclick={createCase}>建档</button>
+      </div>
+      {#each caseRows as row}
+        <p class="line"><b>{String(row.case_no ?? '')}</b> · {String(row.title)} <span class="muted">{String(row.status)}</span></p>
+      {/each}
+    </section>
+
+  {:else if tab === 'bolos'}
+    <section class="card">
+      <h3>发布 BOLO（Sergeant+）</h3>
+      <div class="form">
+        <select bind:value={boloForm.kind}><option value="person">人员</option><option value="vehicle">车辆</option></select>
+        <input bind:value={boloForm.target} placeholder="citizenid / 车牌" />
+        <input bind:value={boloForm.reason} placeholder="原因" />
+        <button onclick={createBolo}>发布</button>
+      </div>
+      {#each boloRows as row}
+        <p class="line">{String(row.kind)} · {String(row.target)} · {String(row.reason)}</p>
       {/each}
     </section>
 

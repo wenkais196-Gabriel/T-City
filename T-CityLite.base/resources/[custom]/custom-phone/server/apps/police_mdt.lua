@@ -78,6 +78,26 @@ PhoneApps.Register({
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
             return { rows = res.rows or {}, count = res.count or 0 }
         end,
+        cases = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:GetCases(source, params) end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.rows or {}, count = res.count or 0 }
+        end,
+        bolos = function(source)
+            local ok, res = pcall(function() return exports['custom-police']:GetBolos(source) end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.rows or {}, count = res.count or 0 }
+        end,
+        warrants = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:GetWarrants(source, params) end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.rows or {}, count = res.count or 0 }
+        end,
+        arrests = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:GetArrests(source, params) end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.rows or {}, count = res.count or 0 }
+        end,
         evidence_chain = function(source, params)
             local ok, res = pcall(function()
                 return exports['custom-police']:GetEvidenceChain(source, params and params.evidence_id)
@@ -113,6 +133,26 @@ PhoneApps.Register({
             local ok, res = pcall(function()
                 return exports['custom-police']:AssignUnit(source, params.incident_id, params.citizenid)
             end)
+            return ok and res ~= false
+        end,
+        create_case = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:CreateCase(source, params) end)
+            return ok and res ~= false
+        end,
+        create_bolo = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:CreateBolo(source, params) end)
+            return ok and res ~= false
+        end,
+        request_warrant = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:RequestWarrant(source, params) end)
+            return ok and res ~= false
+        end,
+        decide_warrant = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:DecideWarrant(source, params) end)
+            return ok and res ~= false
+        end,
+        register_arrest = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:RegisterArrest(source, params) end)
             return ok and res ~= false
         end,
         register_evidence = function(source, params)
