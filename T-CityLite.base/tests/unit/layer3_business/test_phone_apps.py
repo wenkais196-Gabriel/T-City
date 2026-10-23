@@ -77,3 +77,15 @@ def test_mdt_exposes_lifecycle_and_audit():
         assert action in app
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
     assert "loadAudit" in ui and "on_scene" in ui
+
+
+def test_p1_citations_and_reports():
+    policy = read(PHONE.parent / "custom-police/shared/policy.lua")
+    assert "citation.issue" in policy and "report.create" in policy
+    p1 = read(PHONE.parent / "custom-police/server/p1.lua")
+    for export in ("IssueCitation", "GetCitations", "CreateReport", "GetReports"):
+        assert f"exports('{export}'" in p1
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    assert "issue_citation" in app and "create_report" in app
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "issueCitation" in ui and "createReport" in ui

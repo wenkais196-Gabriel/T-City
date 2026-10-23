@@ -10,6 +10,10 @@ local CAPS = {
     ['incident.update'] = { minGrade = 1 },
     ['lookup.citizen']  = { minGrade = 1 },
     ['lookup.vehicle']  = { minGrade = 1 },
+    ['citation.issue']  = { minGrade = 1 },
+    ['citation.view']   = { minGrade = 1 },
+    ['report.create']   = { minGrade = 1 },
+    ['report.view']     = { minGrade = 1 },
     ['audit.view']      = { minGrade = 3 },
 }
 

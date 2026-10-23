@@ -6,7 +6,7 @@
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
   type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string };
 
-  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'audit';
+  type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'citations' | 'reports' | 'audit';
 
   let tab: Tab = 'home';
   let units: Unit[] = [];
@@ -21,6 +21,11 @@
   let lookupError = '';
   let auditRows: Record<string, unknown>[] = [];
   let auditError = '';
+  let citationRows: Record<string, unknown>[] = [];
+  let reportRows: Record<string, unknown>[] = [];
+  let citationError = '';
+  let citationForm = { citizenid: '', amount: '500', reason: '', plate: '' };
+  let reportForm = { title: '', incident_id: '', body: '' };
 
   const statusLabel: Record<string, string> = {
     off_duty: '10-7 下班', available: '10-8 在勤', busy: '10-6 忙碌',
@@ -72,6 +77,42 @@
     else lookupError = res?.error ?? 'not_found';
   }
 
+  async function loadCitations() {
+    citationError = '';
+    const res = await queryApp('police_mdt', 'citations', {});
+    if (res?.success) citationRows = res.data?.rows ?? [];
+    else citationError = res?.error ?? 'citation_view_denied';
+  }
+
+  async function issueCitation() {
+    const res = await appAction('police_mdt', 'issue_citation', {
+      citizenid: citationForm.citizenid.trim(),
+      amount: Number(citationForm.amount),
+      reason: citationForm.reason.trim(),
+      plate: citationForm.plate.trim(),
+    });
+    notice = res?.success ? '罚单已开具并通知当事人' : `开单失败：${res?.error ?? 'unknown'}`;
+    if (res?.success) citationForm.reason = '';
+    await loadCitations();
+  }
+
+  async function loadReports() {
+    const res = await queryApp('police_mdt', 'reports', {});
+    if (res?.success) reportRows = res.data?.rows ?? [];
+    else citationError = res?.error ?? 'report_view_denied';
+  }
+
+  async function createReport() {
+    const res = await appAction('police_mdt', 'create_report', {
+      title: reportForm.title.trim(),
+      body: reportForm.body.trim(),
+      incident_id: reportForm.incident_id ? Number(reportForm.incident_id) : undefined,
+    });
+    notice = res?.success ? '报告已提交' : `提交失败：${res?.error ?? 'unknown'}`;
+    if (res?.success) { reportForm.title = ''; reportForm.body = ''; }
+    await loadReports();
+  }
+
   async function loadAudit() {
     auditError = '';
     const res = await queryApp('police_mdt', 'audit');
@@ -98,8 +139,8 @@
   </header>
 
   <nav class="tabs">
-    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['audit','审计']] as [id, label]}
-      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); }}>{label}</button>
+    {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['citations','罚单'],['reports','报告'],['audit','审计']] as [id, label]}
+      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); }}>{label}</button>
     {/each}
   </nav>
 
@@ -199,6 +240,36 @@
       {/each}
     </section>
 
+  {:else if tab === 'citations'}
+    <section class="card">
+      <h3>开罚单</h3>
+      <div class="form">
+        <input bind:value={citationForm.citizenid} placeholder="citizenid" />
+        <input bind:value={citationForm.amount} type="number" placeholder="金额" />
+        <input bind:value={citationForm.plate} placeholder="车牌(可选)" />
+        <input bind:value={citationForm.reason} placeholder="原因（至少 3 字）" />
+        <button onclick={issueCitation}>开具</button>
+      </div>
+      {#if citationError}<p class="err">{citationError}</p>{/if}
+      {#each citationRows as row}
+        <p class="line">#{String(row.id)} · {String(row.citizenid)} · ${String(row.amount)} · {String(row.reason)} <span class="muted">{String(row.status)}</span></p>
+      {/each}
+    </section>
+
+  {:else if tab === 'reports'}
+    <section class="card">
+      <h3>提交报告</h3>
+      <div class="form">
+        <input bind:value={reportForm.title} placeholder="标题" />
+        <input bind:value={reportForm.incident_id} placeholder="警情 id(可选)" />
+        <textarea bind:value={reportForm.body} rows="3" placeholder="报告正文（至少 10 字）"></textarea>
+        <button onclick={createReport}>提交</button>
+      </div>
+      {#each reportRows as row}
+        <p class="line">#{String(row.id)} · {String(row.title)} · {String(row.author_citizenid)}</p>
+      {/each}
+    </section>
+
   {:else if tab === 'audit'}
     <section class="card">
       <h3>审计（需 Lieutenant+）</h3>
@@ -217,7 +288,7 @@
   .sub, .muted { margin: 2px 0 0; opacity: 0.6; font-size: 11px; }
   .status-pill { font-size: 11px; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.1); }
   .status-pill.on { background: rgba(34,197,94,.25); color: #86efac; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 10px; overflow-x: auto; }
   .tabs button { flex: 1; font-size: 11px; padding: 6px 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,.15); background: transparent; color: inherit; }
   .tabs button.active { background: #2563eb; border-color: #2563eb; }
   .card { background: rgba(255,255,255,.05); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
@@ -240,7 +311,9 @@
   .actions { display: flex; gap: 4px; }
   .step { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #f59e0b; color: #111; }
   .clear { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #b91c1c; color: #fff; }
-  .lookup { display: flex; gap: 6px; margin-bottom: 8px; }
+  .lookup, .form { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .form input, .form textarea { flex: 1 1 45%; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
+  .form button { border: 0; border-radius: 8px; padding: 6px 10px; background: #2563eb; color: #fff; font-size: 11px; }
   .line { margin: 3px 0; }
   .empty { opacity: 0.6; }
   .err { color: #fca5a5; font-size: 11px; }
