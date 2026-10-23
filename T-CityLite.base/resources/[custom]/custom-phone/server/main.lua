@@ -369,6 +369,88 @@ RegisterNetEvent('phone:server:markMessagesRead', function(sender_number)
 end)
 
 -- ----------------------------------------------------
+-- Server-side system messages (trusted resources only)
+-- ----------------------------------------------------
+-- custom-director calls this after a human approval. No net event or callback
+-- is registered for this path, so a client can never inject a system sender.
+-- sender_number stores the sender label, not a number: phone_messages has no
+-- foreign key, so a label such as 'City Services' is allowed and is rendered
+-- as-is by the client. Labels beyond 20 chars do not fit the VARCHAR(20)
+-- sender_number column; the default label does.
+local function SystemSenderLabel(label)
+    if type(label) ~= 'string' then return 'City Services' end
+    local cleaned = label:gsub('%c', '')
+    if cleaned == '' then return 'City Services' end
+    if #cleaned > 32 then cleaned = cleaned:sub(1, 32) end
+    return cleaned
+end
+
+local function TruncateUtf8(value, limit)
+    if type(value) ~= 'string' then return '' end
+    if #value <= limit then return value end
+    if utf8 and utf8.len and utf8.offset then
+        local ok, length = pcall(utf8.len, value)
+        if ok and length and length > limit then
+            local offsetOk, byteEnd = pcall(utf8.offset, value, limit + 1)
+            if offsetOk and byteEnd then return value:sub(1, byteEnd - 1) end
+        end
+    end
+    return value:sub(1, limit)
+end
+
+--- Server-side system message. Not exposed to clients.
+---@param receiverNumber string
+---@param message string
+---@param senderLabel string|nil  默认 'City Services'
+---@return boolean ok, string|nil errCode
+exports('SendSystemMessage', function(receiverNumber, message, senderLabel)
+    if type(receiverNumber) ~= 'string' or #receiverNumber == 0 or #receiverNumber > 15 then
+        return false, 'invalid_params'
+    end
+    if type(message) ~= 'string' or #message == 0 or #message > 500 then
+        return false, 'invalid_params'
+    end
+
+    local sender = SystemSenderLabel(senderLabel)
+
+    local insertOk, insertId = pcall(function()
+        return MySQL.insert.await(
+            'INSERT INTO phone_messages (sender_number, receiver_number, message) VALUES (?, ?, ?)',
+            { sender, receiverNumber, message })
+    end)
+    -- oxmysql returns the insert id; some wrappers return { insertId = ... }.
+    if insertOk and type(insertId) == 'table' then insertId = insertId.insertId or 0 end
+    if not insertOk or not tonumber(insertId) or tonumber(insertId) == 0 then
+        return false, 'db_error'
+    end
+    insertId = tonumber(insertId)
+
+    -- Online receiver: push the same two client events the player-to-player
+    -- callback sends. Offline receivers still get the persisted row.
+    local targetPlayer = GetPlayerByPhone(receiverNumber)
+    if targetPlayer then
+        local timestamp = os.date('%Y-%m-%d %H:%M:%S')
+        TriggerClientEvent('phone:client:newMessage', targetPlayer.PlayerData.source, {
+            id = insertId,
+            sender_number = sender,
+            receiver_number = receiverNumber,
+            message = message,
+            timestamp = timestamp,
+            is_read = false,
+        })
+        TriggerClientEvent('phone:client:newNotification', targetPlayer.PlayerData.source, {
+            id = math.random(1000, 9999),
+            title = sender,
+            content = TruncateUtf8(message, 200),
+            timestamp = timestamp,
+            is_read = false,
+        })
+    end
+
+    return true, nil
+end)
+
+-- ----------------------------------------------------
 -- Notification Persistence (DB-backed)
 -- ----------------------------------------------------
 

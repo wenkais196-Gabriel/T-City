@@ -25,6 +25,7 @@ local AgentPolicy = {}
 -- L4 惩罚类：kick（需人工审批，不可撤销）
 -- L3 医疗类：revive（需人工审批 + qb-ambulancejob 客户端事件）
 -- L4 载具类：delete_vehicle（需人工审批，只删当前载具，不可逆）
+-- L2 消息类：send_phone_message（需人工审批 + custom-phone 服务端导出，blast_radius = single）
 AgentPolicy.ACTIONS = {
     notify = {
         risk = 'L1',
@@ -126,6 +127,12 @@ AgentPolicy.ACTIONS = {
         auto_execute = false,
         blast_radius = 'single',
         compensation = 'manual',
+    },
+    send_phone_message = {
+        risk = 'L2',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
     },
 }
 
@@ -514,6 +521,42 @@ function AgentPolicy.Normalize(actionType, params, cfg)
             citizenid = citizenid,
             text = params.text,
             kind = kind,
+        }
+    end
+
+    if actionType == 'send_phone_message' then
+        local unknownErr = rejectUnknownFields(params, {
+            citizenid = true,
+            message = true,
+        }, 'send_phone_message')
+        if unknownErr then return nil, unknownErr end
+
+        if type(params.message) ~= 'string' then
+            return fail('invalid_params', 'message must be a string')
+        end
+        -- SMS may span lines, so LF is allowed; every other C0 byte (and DEL)
+        -- is rejected, same stance as announce/notify.
+        for index = 1, #params.message do
+            local byte = params.message:byte(index)
+            if (byte < 32 and byte ~= 10) or byte == 127 then
+                return fail('invalid_params', 'message contains control characters')
+            end
+        end
+        -- 500 matches the hard cap in custom-phone's own sendMessage callback
+        -- and SendSystemMessage export. Those count bytes (#message), so this
+        -- mirrors them exactly: an approved SMS can never be refused by the
+        -- export for size afterwards.
+        local messageLength = #params.message
+        if messageLength < 1 then
+            return fail('invalid_params', 'message is required')
+        end
+        if messageLength > 500 then
+            return fail('invalid_params', 'message exceeds 500 characters')
+        end
+
+        return {
+            citizenid = citizenid,
+            message = params.message,
         }
     end
 
@@ -966,6 +1009,12 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'send_phone_message' then
+        preview.length = #params.message
+        preview.preview = AgentPolicy.TruncateText(params.message, 40)
+        return preview
+    end
+
     if actionType == 'set_weather' then
         preview.weather = params.weather
         if type(ctx.weather) == 'string' then preview.before = ctx.weather end
@@ -1201,6 +1250,16 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
         end
         if length > maxChars then
             return failBool('text_too_long', ('text exceeds %d characters'):format(maxChars))
+        end
+        return true
+    end
+
+    if actionType == 'send_phone_message' then
+        -- main.lua injects charinfo.phone; custom-phone's export needs it to
+        -- find the online receiver. No fallback to notify: a player without a
+        -- phone is a policy rejection, not a silently degraded ping.
+        if type(ctx.player.phone) ~= 'string' or ctx.player.phone == '' then
+            return failBool('phone_unavailable', 'target player has no phone number')
         end
         return true
     end

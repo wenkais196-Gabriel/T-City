@@ -241,9 +241,9 @@ class GatewayAdditiveEnvelopeTests(unittest.TestCase):
         self.assertIs(body["ok"], True)
         self.assertEqual(body["kind"], "ok")
         data = body["data"]
-        self.assertEqual(data["registry_version"], "1.4.0")
-        self.assertEqual(len(data["tools"]), 30, "GET /agent/v1/tools must serve all 30 tools")
-        self.assertEqual(body["meta"]["count"], 30)
+        self.assertEqual(data["registry_version"], "1.5.0")
+        self.assertEqual(len(data["tools"]), 31, "GET /agent/v1/tools must serve all 31 tools")
+        self.assertEqual(body["meta"]["count"], 31)
 
 class IdempotencyKeyTests(unittest.TestCase):
     def test_same_arguments_produce_the_same_key(self) -> None:

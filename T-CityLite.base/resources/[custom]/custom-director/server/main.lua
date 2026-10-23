@@ -417,6 +417,10 @@ local function buildContext(actionType, params)
                 context.player.bucket = playerBucket(context.player.source)
             elseif actionType == 'revive' or actionType == 'set_metadata' then
                 context.player.metadata = player.PlayerData and player.PlayerData.metadata or nil
+            elseif actionType == 'send_phone_message' then
+                context.player.phone = player.PlayerData
+                    and player.PlayerData.charinfo
+                    and player.PlayerData.charinfo.phone or nil
             elseif actionType == 'delete_vehicle' then
                 local entity = playerVehicle(context.player.source)
                 if entity then
@@ -1143,6 +1147,45 @@ local function executeDeleteVehicle(actionId, params)
     }
 end
 
+-- The full phone number never reaches the audit row or the logs: result only
+-- carries a masked form plus the message length.
+local function maskPhone(phone)
+    if type(phone) ~= 'string' or phone == '' then return nil end
+    -- Too short to mask without reconstructing the whole number.
+    if #phone <= 5 then return ('*'):rep(#phone) end
+    return phone:sub(1, 3) .. ('*'):rep(#phone - 5) .. phone:sub(-2)
+end
+
+local function executeSendPhoneMessage(actionId, params)
+    local player = getPlayerByCitizenId(params.citizenid)
+    if not player then return false, 'player_not_found', nil end
+
+    local charinfo = player.PlayerData and player.PlayerData.charinfo
+    local phone = charinfo and charinfo.phone
+    if type(phone) ~= 'string' or phone == '' then
+        return false, 'phone_unavailable', nil
+    end
+
+    -- custom-phone is the only writer for phone_messages. Its export is
+    -- server-only, takes the sender label from us (never from a client) and
+    -- returns (true, nil) or (false, errCode).
+    local callOk, sent, sendErr = pcall(function()
+        return exports['custom-phone']:SendSystemMessage(phone, params.message, 'City Services')
+    end)
+    if not callOk then
+        return false, 'phone_unavailable', nil
+    end
+    if sent ~= true or sendErr ~= nil then
+        return false, ('execution_failed: %s'):format(tostring(sendErr or 'unknown')), nil
+    end
+
+    return true, nil, {
+        message_length = #params.message,
+        phone_masked = maskPhone(phone),
+        at = os.time(),
+    }
+end
+
 local function executeAction(actionId, actionType, params)
     if actionType == 'notify' then
         return executeNotify(actionId, params)
@@ -1178,6 +1221,8 @@ local function executeAction(actionId, actionType, params)
         return executeRevive(actionId, params)
     elseif actionType == 'delete_vehicle' then
         return executeDeleteVehicle(actionId, params)
+    elseif actionType == 'send_phone_message' then
+        return executeSendPhoneMessage(actionId, params)
     end
     return false, 'unsupported_action', nil
 end
@@ -1199,6 +1244,7 @@ AgentActions._Execute = {
     spawn_vehicle = executeSpawnVehicle,
     revive = executeRevive,
     delete_vehicle = executeDeleteVehicle,
+    send_phone_message = executeSendPhoneMessage,
 }
 
 -- Internal context builder for the pure-Lua harness (same contract as

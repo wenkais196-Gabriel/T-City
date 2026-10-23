@@ -9,22 +9,22 @@
 |---|---|---|
 | 只读 DB 层 | `agent_gateway.py` + `agent_*` 视图 + `agent_ro` | 已上线（v1 契约未破坏） |
 | 实时感知层 | `custom-director` `/agent/v1/live/*` | 已实现，48 人 ≈2.2ms，默认关闭 |
-| 动作代理（写） | `custom-director` `/agent/v1/act` | 17 个动作，L1–L4 分级 + 人审 |
+| 动作代理（写） | `custom-director` `/agent/v1/act` | 18 个动作，L1–L4 分级 + 人审 |
 | 效果通道（client） | `custom-agent-client` | 6 个客户端动作 + 服务端 `give_vehicle_keys`（未接） |
-| 工具面 | `tools/agent_tools.json` → MCP / TOOLS.md / Lua 表 | 30 工具 / 30 active |
+| 工具面 | `tools/agent_tools.json` → MCP / TOOLS.md / Lua 表 | 31 工具 / 31 active |
 | MCP 路由 | `tools/agent_mcp.py` | 读→gateway、写→director、live 独立 token |
 | 评测 | `tools/agent_eval.py` + `agent_denials` | 成功/审批/拒绝/时延/幂等 |
 | 实机冒烟 | `tools/agent_smoke.py` | 10 项三段式检查 |
 
 ## 2. 动作覆盖
 
-已实现 17 个：`notify`、`add_money`、`start_quest`、`set_job`、`set_job_duty`、`set_metadata`、`teleport`、`spawn_vehicle`、`grant_item`、`remove_item`、`set_bucket`、`kick`、`announce`、`set_weather`、`set_time_of_day`、`revive`、`delete_vehicle`。
+已实现 18 个：`notify`、`add_money`、`start_quest`、`set_job`、`set_job_duty`、`set_metadata`、`teleport`、`spawn_vehicle`、`grant_item`、`remove_item`、`set_bucket`、`kick`、`announce`、`set_weather`、`set_time_of_day`、`revive`、`delete_vehicle`、`send_phone_message`。
 
 与设计 04 的差异：
 
 | 设计动作 | 状态 | 原因 |
 |---|---|---|
-| `send_phone_message` | **未实现** | `custom-phone` 只有客户端回调，没有服务端推送；需要先给该资源加一条受控推送接口 |
+| `send_phone_message` | 已实现 | `custom-phone` 新增服务端导出 `SendSystemMessage`；号码由服务端解析，审计只留掩码 |
 | `set_money` | **明确不做** | 见设计 04 §14：绕过预算/delta 护栏，反向操作受 `MinusLimit` 限制不可靠 |
 | `delete_vehicle` | 以 `remove_player_vehicle` 落地 | 只删玩家当前所在载具，不接受任意 entity id |
 
@@ -41,7 +41,7 @@
 ## 4. 验证现状
 
 ```
-lua5.4 tests/agent/lua/runner.lua        8 suites / 213 checks
+lua5.4 tests/agent/lua/runner.lua        8 suites / 224 checks
 python3 -m pytest -q tests/agent         203 passed
 cd T-CityLite.base && pytest -q tests/unit   262 passed
 python3 tools/agent_tools.py --check     30 tools, no drift
@@ -76,7 +76,7 @@ python3 tools/agent_eval.py --input actions.jsonl --denials denials.jsonl --out 
 ## 6. 仍然缺的
 
 1. 真机联调（最高优先级，见上）。
-2. `send_phone_message` 需要 `custom-phone` 增加服务端推送接口。
+2. `custom-phone:SendSystemMessage` 只有临时冒烟脚本，尚无仓内单测。
 3. 效果通道的 DB 审计表（当前走 `custom-logs` 或 console）。
 4. 客户端 ack 的端到端验证（NUI、动画、传送落点）。
 5. 越权拒绝率只覆盖 normalization 之后的拒绝；token/资源开关层失败仍需 HTTP 日志。
