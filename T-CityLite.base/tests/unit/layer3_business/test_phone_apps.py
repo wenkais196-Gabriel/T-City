@@ -17,8 +17,8 @@ def test_registry_module_authorises_server_side():
     assert "function PhoneApps.Action" in src
     assert "audienceAllows" in src
     assert "app_forbidden" in src
-    assert "phone:server:appQuery" in src
-    assert "phone:server:appAction" in src
+    assert "function PhoneApps.Query" in src
+    assert "function PhoneApps.Action" in src
 
 
 def test_police_mdt_is_registered_and_gated():
@@ -48,6 +48,9 @@ def test_nui_has_dynamic_renderer():
     assert "dyn:" in app
     assert "loadDynamicApps" in app
     assert "appQuery" in read(PHONE / "web/src/stores/apps.ts")
+    main = read(PHONE / "server/main.lua")
+    assert "phone:server:appQuery" in main
+    assert "phone:server:appAction" in main
 
 
 def test_police_mdt_has_dedicated_pages():
