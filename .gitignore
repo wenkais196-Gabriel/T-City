@@ -65,8 +65,8 @@ node_modules/
 # ═════════════════════════════════════════════════════════
 
 # NUI/Vite build
-dist/
-build/
+/dist/
+/build/
 .nuxt/
 .next/
 .svelte-kit/
@@ -126,3 +126,30 @@ T-CityLite.base/tests/nui/artifacts/
 
 # 服务器启动器日志
 logs/
+
+
+# ═════════════════════════════════════════════════════════
+# Layer 7: 2026-10 cleanup — local/generated files that must not be tracked
+# ═════════════════════════════════════════════════════════
+
+# txAdmin admins (contains bcrypt password hashes and identifiers)
+/admins.json
+
+# machine-specific / generated
+/default/config.json
+/simulation_report.json
+/fxmanifest_inventory.json
+
+# test/coverage caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage/
+.venv/
+
+# local env variants and logs
+.env.*
+*.log
+*.sql.gz
+*.dump
