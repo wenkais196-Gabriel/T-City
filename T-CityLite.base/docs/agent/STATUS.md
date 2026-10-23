@@ -42,10 +42,10 @@
 ## 4. 验证现状
 
 ```
-lua5.4 tests/agent/lua/runner.lua        9 suites / 234 checks
-python3 -m pytest -q tests/agent         203 passed
-cd T-CityLite.base && pytest -q tests/unit   262 passed
-python3 tools/agent_tools.py --check     30 tools, no drift
+lua5.4 tests/agent/lua/runner.lua        9 suites / 236 checks
+python3 -m pytest -q tests/agent         203 passed (3 skipped 需 DB)
+cd T-CityLite.base && pytest -q tests/unit   288 passed / 132 skipped（无库，2026-10-23 Windows 实测）
+python3 tools/agent_tools.py --check     31 tools, no drift
 ```
 
 **没有做过的**：真实 FXServer + GTA 客户端联调。所有 Lua 断言都在 stub 下；`DropPlayer` 异步、`DoesEntityExist` 延迟、`SetEntityCoords` 的 OneSync 时序均未在真机验证。

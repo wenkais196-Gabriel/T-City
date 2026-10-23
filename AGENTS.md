@@ -1,7 +1,7 @@
 # AGENTS.md — T-City 项目 Agent 指南
 
 > 给新开的对话/新 agent 的入口文件。先读这一页，再读 `T-CityLite.base/docs/agent/STATUS.md`。
-> 最后更新：2026-10-23（master/dev 同步于 `653f4f1` 之后的手机改动）。
+> 最后更新：2026-10-23（工作区迁到 Windows 单 checkout；静态基线实测全绿，见 `WORKSPACE.md`）。
 
 ---
 
@@ -21,30 +21,31 @@ T-City 是一个 **QBCore / FiveM RP 服务器**（"T-City Lite"），外加一�
 
 ## 1. 工作区、分支与运行中的服务
 
+> **当前工作区：Windows，`E:\T-City`，单 checkout（分支 `master`，HEAD `99e0c27`）。**
+> 早期的 Linux 双 worktree 布局（`T-City/` 跑服 + `T-City-agent/` 开发）已废弃，不再需要「两边同步」。
+> 这台机器装了什么、哪些命令实测能跑、起服还缺什么 → **先读根目录 [`WORKSPACE.md`](WORKSPACE.md)**。
+
 ```
-/home/swk/Documents/deepseek-harness/default-workspace/
-├── T-City/          # git worktree，分支 dev，运行服务器的工作区（有 alpine/、server.cfg）
-├── T-City-agent/    # git worktree，分支 master，主要开发/文档/CI 工作区
-└── .agent-state.md  # 长期交接笔记（非仓库文件）
+E:\T-City\                      # 唯一 checkout：开发 + 文档 + CI 都在这里
+├── T-CityLite.base\            # 服务器主体（resources/、configs/modules/、migrations/、tests/）
+├── tools\                      # agent 工具注册表 / MCP / 评测 / 冒烟（仅 Python 标准库）
+├── docs\                       # 手册、设计、审计
+└── WORKSPACE.md                # 本机环境实况（工具链、实测基线、缺项清单）
 ```
 
-- `master` 与 `dev` 现在指向同一提交；改完一边要同步另一边：
-  ```bash
-  git push origin dev
-  cd ../T-City-agent && git fetch origin && git merge --ff-only origin/dev && git push origin master
-  # 或反向：push master，再在 T-City 里 pull --rebase
-  ```
-- **不要在 `T-City/` 和 `T-City-agent/` 同时改同一文件后各自提交**，先 `git status` 看清。
-- `T-CityLite.base/server.cfg`、`alpine/`、`cache/` 均被 gitignore；`server.cfg` 里有 DB 密码、license key、agent token，**永远不要提交**。
-- 服务器：`cd T-City && ./start.sh`（alpine musl loader），端口 `30120/tcp+udp`，日志 `/tmp/fxserver.log`。
-- 本地控制台用 FIFO：启动时 `mkfifo /tmp/fxserver.in`，`setsid bash -c 'exec ./start.sh <>/tmp/fxserver.in'`；发命令：
+- `master` 与 `dev` 现在指向同一提交（`99e0c27`，0 ahead / 0 behind）；改完走 PR 合到一个分支后，另一边用 `git fetch && git merge --ff-only` 跟上。
+- 分支 / 评审 / 发布规范见 [`docs/DEVOPS.md`](docs/DEVOPS.md) 与 [`CONTRIBUTING.md`](CONTRIBUTING.md)：功能分支 ≤ 5 天，`master` 受保护，CI 绿 + 1 approval。
+- `T-CityLite.base/server.cfg`、`alpine/`、`cache/`、`node_modules/` 均被 gitignore；`server.cfg` 里有 DB 密码、license key、agent token，**永远不要提交**。
+- 起服（Linux/musl 环境，`alpine/` 需自备）：`cd T-CityLite.base && ../start.sh`，端口 `30120/tcp+udp`，日志 `/tmp/fxserver.log`。**Windows 上 `start.sh` 不适用**，需另下 FXServer Windows artifacts（`WORKSPACE.md` §5）。
+- 本地控制台用 FIFO（Linux）：启动时 `mkfifo /tmp/fxserver.in`，`setsid bash -c 'exec ./start.sh <>/tmp/fxserver.in'`；发命令：
   ```bash
   printf 'restart custom-phone\n' > /tmp/fxserver.in
   printf 'phone_call <serverId> "City Dispatch" 台词...\n' > /tmp/fxserver.in
   ```
 - 玩家重连后 **server id 会变**（5 → 6 …），所有按 id 的操作先 `curl -s localhost:30120/players.json`。
 - `cache/files/<resource>/resource.rpf` 是 FXServer 资源缓存；改了 manifest/新文件后 `restart <resource>`，异常时删缓存或整服重启。
-- 测试 token 在 `~/.tcity-agent-test.env`（600，未入库）：director/admin/live token、`AGENT_AGENT_ID`。
+- 测试 token 在 `~/.tcity-agent-test.env`（600，未入库）：director/admin/live token、`AGENT_AGENT_ID`；本机尚未创建。
+- 不装 `alpine/`、没有 MariaDB 时，静态验证仍可全绿（`WORKSPACE.md` §3 有实测命令与结果）。
 
 ---
 
@@ -209,10 +210,12 @@ agent_smoke.py ── 实机三段式冒烟
 **新对话开场 checklist**：
 
 ```bash
-cd T-City-agent && git status --short && git log --oneline -3
+# 在 E:\T-City 根目录
+git status --short && git log --oneline -3
 sed -n '1,120p' T-CityLite.base/docs/agent/STATUS.md
-python3 -m pytest -q tests/agent
-lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
-python3 tools/agent_tools.py --check
-curl -s http://127.0.0.1:30120/players.json   # 服务器/玩家是否在线
+python3 -m pytest -q tests/agent                        # 期望 203 passed / 3 skipped
+(cd T-CityLite.base && python3 -m pytest -q tests/unit)  # 期望 288 passed / 132 skipped（无库）
+lua5.4 T-CityLite.base/tests/agent/lua/runner.lua        # 期望 9 suites / 236 checks / 0 failed
+python3 tools/agent_tools.py --check                     # 期望 OK (31 tools)
+curl -s http://127.0.0.1:30120/players.json              # 服务器/玩家是否在线（无服时必然失败）
 ```
