@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { smsThreads, messagesList, playerData, contactsList } from '../stores/phone';
+  import { smsThreads, messagesList, playerData, contactsList, loadMessages, MESSAGE_PAGE_SIZE } from '../stores/phone';
   import { fetchNui } from '../utils/nui';
   import { onMount, tick } from 'svelte';
 
@@ -7,6 +7,13 @@
   let activeThreadName = $state<string>('');
   let messageInput = $state('');
   let chatScrollEl = $state<HTMLDivElement | null>(null);
+
+  // Pagination state for the open thread. getPhoneData already ships the newest
+  // MESSAGE_PAGE_SIZE messages per conversation, so a longer thread starts with
+  // the "load earlier" affordance visible.
+  let loadingOlder = $state(false);
+  let hasMore = $state(true);
+  let newestRenderedId = $state<number | null>(null);
 
   // Check if a target phone number was pre-selected (from Contacts app)
   onMount(() => {
@@ -27,11 +34,21 @@
       : []
   );
 
+  // Keyset cursor for the next older page. Ids are monotonic, so the smallest
+  // loaded id is the boundary even if timestamps tie.
+  let oldestMessageId = $derived(
+    threadMessages.length > 0 ? Math.min(...threadMessages.map(m => m.id)) : null
+  );
+
   const openThread = (number: string) => {
     activeThreadNum = number;
     const contact = $contactsList.find(c => c.number === number);
     activeThreadName = contact ? contact.name : number;
-    
+
+    loadingOlder = false;
+    hasMore = true;
+    newestRenderedId = null;
+
     // Mark messages in this thread as read on the backend
     fetchNui('markMessagesRead', { sender_number: number }).then(() => {
       // Synchronize in local store
@@ -48,6 +65,46 @@
 
   const closeThread = () => {
     activeThreadNum = null;
+  };
+
+  const loadEarlierMessages = async () => {
+    if (!activeThreadNum || loadingOlder || !hasMore) return;
+    const number = activeThreadNum;
+    const beforeId = oldestMessageId;
+    if (beforeId === null) {
+      hasMore = false;
+      return;
+    }
+
+    loadingOlder = true;
+    const el = chatScrollEl;
+    const previousHeight = el ? el.scrollHeight : 0;
+    const previousTop = el ? el.scrollTop : 0;
+
+    const res = await loadMessages(number, beforeId);
+
+    // The user may have navigated to another thread while the page was loading.
+    if (activeThreadNum !== number) {
+      loadingOlder = false;
+      return;
+    }
+    loadingOlder = false;
+
+    // Prefer the server's exact has_more probe. Older servers (or a rejected
+    // request) fall back to the short-page heuristic. Keep the button on a
+    // failed request so it can be retried.
+    if (res.success) {
+      const reachedStart = res.messages.length < MESSAGE_PAGE_SIZE || res.nextBeforeId === null;
+      if (res.hasMore === false || (res.hasMore === null && reachedStart)) {
+        hasMore = false;
+      }
+    }
+
+    await tick();
+    // Prepend should not move the bubble the user is reading.
+    if (chatScrollEl && el) {
+      chatScrollEl.scrollTop = previousTop + (chatScrollEl.scrollHeight - previousHeight);
+    }
   };
 
   const handleSendMessage = async () => {
@@ -83,11 +140,16 @@
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
   };
 
-  // Auto-scroll when new messages arrive in open thread
+  // Auto-scroll only when the newest message changes (send/receive). Prepending
+  // an older page leaves the newest id untouched, so it does not jump to the
+  // bottom.
   $effect(() => {
-    if (threadMessages.length > 0) {
-      scrollToBottom();
-    }
+    const newest = threadMessages.length > 0
+      ? threadMessages[threadMessages.length - 1].id ?? null
+      : null;
+    if (newest === newestRenderedId) return;
+    newestRenderedId = newest;
+    if (newest !== null) scrollToBottom();
   });
 </script>
 
@@ -138,6 +200,13 @@
       {#if threadMessages.length === 0}
         <div class="empty-chat">No messages yet. Send a greeting!</div>
       {:else}
+        {#if hasMore && threadMessages.length >= MESSAGE_PAGE_SIZE}
+          <div class="load-earlier">
+            <button class="load-earlier-btn" onclick={loadEarlierMessages} disabled={loadingOlder}>
+              {loadingOlder ? '正在加载…' : '加载更早消息'}
+            </button>
+          </div>
+        {/if}
         <div class="messages-bubble-container">
           {#each threadMessages as msg (msg.id)}
             {@const isMe = msg.sender_number === $playerData.phone}
@@ -326,6 +395,34 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+
+  /* Older-message pagination (keyset pages of MESSAGE_PAGE_SIZE) */
+  .load-earlier {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .load-earlier-btn {
+    padding: 6px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #aaa;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .load-earlier-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.09);
+    color: #ddd;
+  }
+
+  .load-earlier-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .message-bubble-wrapper {

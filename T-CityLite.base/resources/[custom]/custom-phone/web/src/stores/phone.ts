@@ -25,6 +25,10 @@ export const contactsList = writable<any[]>([]);
 // SMS messages list
 export const messagesList = writable<any[]>([]);
 
+// SMS page size. getPhoneData ships the newest 30 per conversation (server
+// side) and loadMessages() asks for older keyset pages of the same size.
+export const MESSAGE_PAGE_SIZE = 30;
+
 // Notifications list
 export const notificationsList = writable<any[]>([]);
 
@@ -120,6 +124,54 @@ export async function loadPhoneData() {
     }
   } catch (err) {
     console.error('Failed to load phone data', err);
+  }
+}
+
+// Load one older page of a conversation (keyset by id). The first 30 messages
+// per conversation already arrive with getPhoneData; this prepends anything
+// older and de-duplicates by id.
+export async function loadMessages(number: string, beforeId?: number) {
+  try {
+    const payload: { number: string; limit: number; before_id?: number } = {
+      number,
+      limit: MESSAGE_PAGE_SIZE,
+    };
+    if (typeof beforeId === 'number') payload.before_id = beforeId;
+
+    const res = await fetchNui<any>('getMessages', payload);
+    if (!res || !res.success) {
+      return {
+        success: false,
+        messages: [] as any[],
+        nextBeforeId: null as number | null,
+        hasMore: null as boolean | null,
+      };
+    }
+
+    const incoming: any[] = Array.isArray(res.messages) ? res.messages : [];
+    if (incoming.length > 0) {
+      messagesList.update(list => {
+        const known = new Set(list.map(m => m.id));
+        const fresh = incoming.filter(m => !known.has(m.id));
+        return fresh.length > 0 ? [...fresh, ...list] : list;
+      });
+    }
+
+    return {
+      success: true,
+      messages: incoming,
+      nextBeforeId: typeof res.next_before_id === 'number' ? res.next_before_id : null,
+      // The server probes one extra row, so this is exact when present.
+      hasMore: typeof res.has_more === 'boolean' ? res.has_more : null,
+    };
+  } catch (err) {
+    console.error('Failed to load earlier messages', err);
+    return {
+      success: false,
+      messages: [] as any[],
+      nextBeforeId: null as number | null,
+      hasMore: null as boolean | null,
+    };
   }
 }
 

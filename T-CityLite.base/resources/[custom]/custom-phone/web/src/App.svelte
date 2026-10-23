@@ -34,6 +34,8 @@
     loadPhoneData,
     closePhone
   } from './stores/phone';
+  import { showSubtitle, clearSubtitle } from './stores/callSpeech';
+  import { speakDispatch, stopDispatchSpeech } from './utils/tts';
   import {
     callPhase,
     handleIncomingCall,
@@ -60,10 +62,20 @@
       loadPhoneData();
     });
 
+    // Dispatch / agent voice line: CEF speaks it locally, subtitle mirrors it.
+    registerNuiEvent('phone:systemSpeech', (data) => {
+      const text = data && typeof data.text === 'string' ? data.text : '';
+      if (!text) return;
+      showSubtitle(text);
+      speakDispatch(text);
+    });
+
     // 2. Listen for Phone Close signal
     registerNuiEvent('phone:close', () => {
       isPhoneOpen.set(false);
       activeApp.set('home');
+      stopDispatchSpeech();
+      clearSubtitle();
       // The screen is gone, so end/decline any active call instead of leaving a
       // zombie call ringing until the timeout.
       if (get(callPhase) !== 'idle') void endActiveCall();

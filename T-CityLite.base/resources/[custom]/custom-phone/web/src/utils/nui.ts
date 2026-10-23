@@ -222,6 +222,25 @@ export async function fetchNui<T = any>(eventName: string, data?: any): Promise<
       return { success: true } as any;
     }
 
+    // Mirrors phone:server:getMessages: one keyset page, newest first.
+    case 'getMessages': {
+      const { number, before_id, limit } = data || {};
+      if (!number) return { success: false, messages: [] } as any;
+      const own = mockPlayerData.phone;
+      const pageSize = Math.min(Math.max(Number(limit) || 30, 1), 50);
+      const page = mockMessages
+        .filter(m => (m.sender_number === own && m.receiver_number === number) ||
+                     (m.sender_number === number && m.receiver_number === own))
+        .filter(m => (typeof before_id === 'number' ? m.id < before_id : true))
+        .sort((a, b) => b.id - a.id)
+        .slice(0, pageSize);
+      return {
+        success: true,
+        messages: page,
+        next_before_id: page.length > 0 ? page[page.length - 1].id : null,
+      } as any;
+    }
+
     // Banking App Mock
     case 'bankDeposit': {
       const amount = parseFloat(data.amount);
