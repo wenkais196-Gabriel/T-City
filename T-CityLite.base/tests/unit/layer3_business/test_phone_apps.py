@@ -48,3 +48,12 @@ def test_nui_has_dynamic_renderer():
     assert "dyn:" in app
     assert "loadDynamicApps" in app
     assert "appQuery" in read(PHONE / "web/src/stores/apps.ts")
+
+
+def test_police_mdt_has_dedicated_pages():
+    page = PHONE / "web/src/apps/PoliceMDT.svelte"
+    assert page.exists()
+    src = page.read_text(encoding="utf-8")
+    for name in ("units", "incidents", "citizen", "vehicle", "set_status", "assign", "clear"):
+        assert f"'{name}'" in src or f'"{name}"' in src
+    assert "PoliceMDT" in read(PHONE / "web/src/App.svelte")
