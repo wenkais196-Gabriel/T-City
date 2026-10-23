@@ -841,11 +841,11 @@ fetchNui<PhoneAppResult<unknown>>('appAction', { appId, action, payload });
 
 ### 本地对照
 
-- custom-phone 服务端：`T-CityLite.base/resources/[custom]/custom-phone/server/main.lua`（`getPhoneData` [:123-256](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L123-L256)、30s cache [:120-134](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L120-L134)、`SendSystemMessage` [:387-428](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L387-L428)）
-- custom-phone 客户端：`.../client/main.lua`（开屏 focus [:25-46](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/client/main.lua#L25-L46)、开屏循环 [:88-151](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/client/main.lua#L88-L151)）
-- custom-phone NUI：`.../web/src/App.svelte`（领袖 App 硬编码 [:147-158](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/App.svelte#L147-L158)、App 路由 [:274-298](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/App.svelte#L274-L298)）
-- custom-phone 数据层：`.../web/src/stores/phone.ts`（`loadPhoneData` [:106-120](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/stores/phone.ts#L106-L120)）
-- custom-career identity 字段：[`custom-career/server/main.lua:135-151`](../../../T-CityLite.base/resources/%5Bcustom%5D/custom-career/server/main.lua#L135-L151)
+- custom-phone 服务端：`T-CityLite.base/resources/[custom]/custom-phone/server/main.lua`（`getPhoneData` [:123-256](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L123-L256)、30s cache [:120-134](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L120-L134)、`SendSystemMessage` [:387-428](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L387-L428)）
+- custom-phone 客户端：`.../client/main.lua`（开屏 focus [:25-46](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/client/main.lua#L25-L46)、开屏循环 [:88-151](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/client/main.lua#L88-L151)）
+- custom-phone NUI：`.../web/src/App.svelte`（领袖 App 硬编码 [:147-158](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/App.svelte#L147-L158)、App 路由 [:274-298](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/App.svelte#L274-L298)）
+- custom-phone 数据层：`.../web/src/stores/phone.ts`（`loadPhoneData` [:106-120](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/stores/phone.ts#L106-L120)）
+- custom-career identity 字段：[`custom-career/server/main.lua:135-151`](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-career/server/main.lua#L135-L151)
 
 ---
 
