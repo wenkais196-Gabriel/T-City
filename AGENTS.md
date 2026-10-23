@@ -51,7 +51,11 @@ T-City 是一个 **QBCore / FiveM RP 服务器**（"T-City Lite"），外加一�
 - 启动参数（本地 `server.cfg`，gitignored）：`set monitorMode "true"`、`set citizen_root "<repo>/alpine/opt/cfx-server/citizen/"`、`set txAdminPort "40120"`，并 `ensure monitor`。
 - 面板：`http://<vm-ip>:40120`；首次 setup 用终端 PIN 创建管理员。
 - txAdmin 在 Linux 下按 `fxsPath/../../opt/cfx-server/...` 推导 loader，而本仓库的 alpine 布局会多一层 `opt`；已在 `alpine/opt/` 下建兼容软链 `opt -> .`（本地、gitignored）。
-- **当前为 txAdmin 托管模式**：独立 monitor 进程（40120）spawn 游戏服子进程（30120）。monitor 启动命令：FXServer + `+set monitorMode true +set txAdminPort 40120 +set citizen_root ...`（不 `+exec server.cfg`），并设置 `TXHOST_TXA_DATA=<repo>/alpine/txData`；游戏服由 txAdmin 的 Start 拉起。
+- **开发期用手动 `start.sh` + FIFO**（当前状态，便于 agent 直接敲 console）；**上线前再切 txAdmin 托管**：
+  - 独立 monitor 进程（40120）spawn 游戏服子进程（30120）；
+  - monitor 启动命令：FXServer + `+set monitorMode true +set txAdminPort 40120 +set citizen_root ...`（不 `+exec server.cfg`），并设置 `TXHOST_TXA_DATA=<repo>/alpine/txData`；
+  - 游戏服由 txAdmin 的 Start 拉起；此时把 `server.cfg` 的 `set onesync on` 注释掉（由 txAdmin 设置页接管）。
+  - 两种模式不要同时跑：手动服占 30120 时 txAdmin 的 Start 会报端口占用。
 - 自动化管理员账号 `agent` 的凭据在 `~/.txadmin-agent.env`（600，不入库）。API：
   - 登录：`POST /auth/password`，body `{username,password}`，响应含 `csrfToken` 并设置 cookie；
   - 后续请求带 cookie + `X-TxAdmin-CsrfToken` 头；
