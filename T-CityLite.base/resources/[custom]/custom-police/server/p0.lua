@@ -21,12 +21,11 @@ local function pd(source)
 end
 
 local function isPolice(data)
-    return data and type(data.job) == 'table' and data.job.name == 'police'
+    return PolicePolicy.IsPolice(data)
 end
 
 local function grade(data)
-    local g = data and data.job and data.job.grade
-    return type(g) == 'table' and tonumber(g.level) or 0
+    return PolicePolicy.Grade(data)
 end
 
 local function audit(actorCid, action, target, detail, actorKind)
@@ -137,8 +136,8 @@ end
 
 function P.AssignUnit(source, incidentId, targetCitizenId)
     local actor = pd(source)
-    if not isPolice(actor) then return false, 'not_police' end
-    if grade(actor) < 2 then return false, 'rank_too_low' end
+    local allowed, reason = PolicePolicy.Can(actor, 'incident.assign')
+    if not allowed then return false, reason end
     local id = tonumber(incidentId)
     if not id then return false, 'invalid_incident' end
     local target = tostring(targetCitizenId or ''):sub(1, 50)
@@ -157,32 +156,39 @@ end
 
 function P.SetIncidentStatus(source, incidentId, status)
     local actor = pd(source)
-    if not isPolice(actor) then return false, 'not_police' end
+    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return false, reason end
     if not INCIDENT_STATUS[status] then return false, 'invalid_status' end
     local id = tonumber(incidentId)
     if not id then return false, 'invalid_incident' end
+    local assigned = MySQL.single.await(
+        'SELECT 1 AS ok FROM police_incident_units WHERE incident_id = ? AND citizenid = ? LIMIT 1',
+        { id, actor.citizenid })
+    if grade(actor) < 2 and not assigned then return false, 'not_assigned' end
     local closed = (status == 'closed' or status == 'cleared')
     MySQL.update.await(
         'UPDATE police_incidents SET status = ?, closed_at = IF(?, NOW(), closed_at), updated_at = NOW() WHERE id = ?',
         { status, closed and 1 or 0, id })
-    if closed then
-        MySQL.update.await('UPDATE police_units SET incident_id = NULL, status = IF(status="assigned","available",status) WHERE incident_id = ?', { id })
+    if status == 'enroute' or status == 'on_scene' then
+        MySQL.update.await('UPDATE police_units SET status = ? WHERE incident_id = ?', { status, id })
+    elseif closed then
+        MySQL.update.await('UPDATE police_units SET incident_id = NULL, status = "available" WHERE incident_id = ?', { id })
     end
     audit(actor.citizenid, 'incident.status', tostring(id), status)
     return { id = id, status = status }
 end
 
-local function lookupAllowed(source, action)
+local function lookupAllowed(source, action, capability)
     local actor = pd(source)
-    if not isPolice(actor) then return nil, 'not_police' end
-    if grade(actor) < 1 then return nil, 'rank_too_low' end
+    local allowed, reason = PolicePolicy.Can(actor, capability)
+    if not allowed then return nil, reason end
     local ok = audit(actor.citizenid, action, nil, nil)
     if not ok then return nil, 'audit_unavailable' end
     return actor
 end
 
 function P.LookupCitizen(source, citizenid)
-    local actor, err = lookupAllowed(source, 'lookup.citizen')
+    local actor, err = lookupAllowed(source, 'lookup.citizen', 'lookup.citizen')
     if not actor then return false, err end
     local row = MySQL.single.await(
         'SELECT citizenid, charinfo, job, metadata, last_seen FROM players WHERE citizenid = ? LIMIT 1',
@@ -207,7 +213,7 @@ function P.LookupCitizen(source, citizenid)
 end
 
 function P.LookupVehicle(source, plate)
-    local actor, err = lookupAllowed(source, 'lookup.vehicle')
+    local actor, err = lookupAllowed(source, 'lookup.vehicle', 'lookup.vehicle')
     if not actor then return false, err end
     local normalized = tostring(plate or ''):upper():gsub('%s+', ''):sub(1, 12)
     if normalized == '' then return false, 'invalid_plate' end
@@ -216,6 +222,16 @@ function P.LookupVehicle(source, plate)
     if not row then return false, 'not_found' end
     audit(actor.citizenid, 'lookup.vehicle.result', normalized, nil)
     return { plate = row.plate, citizenid = row.citizenid, model = row.vehicle, state = row.state }
+end
+
+function P.GetAudit(source)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'audit.view')
+    if not allowed then return false, reason end
+    local rows = MySQL.query.await(
+        'SELECT actor_citizenid, actor_kind, action, target, detail, created_at FROM police_audit ORDER BY id DESC LIMIT 100'
+    ) or {}
+    return { rows = rows, count = #rows }
 end
 
 -- ---------------------------------------------------------------
@@ -279,5 +295,6 @@ exports('AssignUnit', P.AssignUnit)
 exports('SetIncidentStatus', P.SetIncidentStatus)
 exports('LookupCitizen', P.LookupCitizen)
 exports('LookupVehicle', P.LookupVehicle)
+exports('GetAudit', P.GetAudit)
 
 print('[custom-police] P0 dispatch layer loaded')
