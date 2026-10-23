@@ -57,7 +57,9 @@
 
 ### 1.1 功能概述
 
-手机的开/关逻辑、游戏内时间天气同步、主数据初始化加载。按下 `M` 键或输入 `/phone` 命令开机，`ESC` 或在 UI 中点击关闭按钮关机。
+手机的开/关逻辑、游戏内时间天气同步、主数据初始化加载。按下 `M` 键或输入 `/phone` 命令开机；`M`、`ESC`、鼠标右键或在 UI 中点击关闭按钮关机。
+
+打开时通过 `custom-ui:OpenMenu({ keepInput = true })` 取得 NUI 焦点并**保留 WASD 移动**：先复位焦点，再 `SetNuiFocus(true,true)`，最后 `SetNuiFocusKeepInput(true)`。关闭统一走 `custom-ui:CloseMenu()`，释放焦点、`keepInput` 并触发 300ms 攻击/瞄准保护。打开后 50–750ms 内有焦点自检，被别的资源抢走会重新申请；资源停止或重启时也会强制释放，避免光标卡死。
 
 **源码**: `client/main.lua` (OpenPhone / ClosePhone 函数), `web/src/App.svelte` (事件监听)
 
@@ -66,6 +68,7 @@
 | 名称 | 触发方式 | 作用 |
 |------|----------|------|
 | `phone` | 键盘 `M` 键 | 开/关手机（通过 `RegisterCommand` + `RegisterKeyMapping`） |
+| 关闭 | 鼠标右键 | NUI `contextmenu` → `closePhone`（CEF 聚焦时客户端 `IsDisabledControlJustPressed` 收不到右键，所以两边都处理） |
 
 ### 1.3 NUI ➔ Client (RegisterNUICallback)
 
@@ -433,11 +436,13 @@ CREATE TABLE IF NOT EXISTS phone_messages (
     message TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     is_read BOOLEAN DEFAULT FALSE,
-    INDEX idx_receiver (receiver_number),
-    INDEX idx_sender (sender_number),
+    INDEX idx_receiver (receiver_number, id),
+    INDEX idx_sender (sender_number, id),
     INDEX idx_time (timestamp)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
+
+> 旧库（qb-phone 列 `citizenid/number/messages/gps/msg_status`）由 `migrations/v2.7_phone_messages.sql` 迁移：旧表保留为 `phone_messages_legacy`，不自动展开 JSON。
 
 **查询**:
 - 加载消息: `SELECT * FROM phone_messages WHERE sender_number = ? OR receiver_number = ? ORDER BY timestamp DESC LIMIT 100`
@@ -763,7 +768,7 @@ CREATE TABLE IF NOT EXISTS phone_cityfeed (
 1. 检查 `job.status == 'taken' && job.taken_by == citizenid`
 2. 距离反欺骗验证: `#(playerCoords - targetCoords) > 25.0` → 触发安全日志拦截
 3. 通过后: `UPDATE phone_jobboard SET status = "completed"`
-4. 发放奖励: `exports['custom-main']:AddScaledMoney(src, 'bank', reward, ...)`
+4. 发放奖励: 优先 `exports['core_economy']:TriggerReward(src, 'phone:jobboard', reward, {...})`，失败回退 `QBCore.Functions.AddMoney` / `Player.Functions.AddMoney`；发奖失败会把状态回滚为 `taken`，不会出现"标记完成但没拿到钱"
 5. 推送完成通知
 
 #### phone:server:postJob (CreateCallback)
