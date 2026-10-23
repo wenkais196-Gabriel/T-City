@@ -122,8 +122,10 @@ local function OpenPhone()
             if not IsEntityPlayingAnim(GetPlayerPed(-1), 'cellphone@', 'cellphone_text_read_base', 3) then
                 TaskPlayAnim(GetPlayerPed(-1), 'cellphone@', 'cellphone_text_read_base', 8.0, -8.0, -1, 49, 0, false, false, false)
             end
-            -- 参考 qb-phone：保留 WASD 移动，只屏蔽显示类控制（武器/电台轮盘）
-            DisableDisplayControlActions()
+            -- This native is not present in every FXServer build (it threw
+            -- "attempt to call a nil value" and killed the phone loop on a real
+            -- client). Keep the effect only when it exists.
+            if DisableDisplayControlActions then DisableDisplayControlActions() end
             -- While phone is open, disable standard game control keys that interfere with UI typing
             -- NOTE: Do NOT disable INPUT_CHAT (T key/245) so players can still chat
             DisableControlAction(0, 1, true) -- LookLeftRight
