@@ -803,3 +803,27 @@ RegisterNetEvent('qb-phone:client:addPoliceAlert', function(alertData)
         }
     })
 end)
+
+
+-- ----------------------------------------------------
+-- Job app registry bridges
+-- ----------------------------------------------------
+RegisterNUICallback('getPhoneApps', function(_, cb)
+    QBCore.Functions.TriggerCallback('phone:server:getPhoneApps', function(res)
+        cb(res or { success = false, apps = {} })
+    end)
+end)
+
+RegisterNUICallback('appQuery', function(data, cb)
+    if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
+    QBCore.Functions.TriggerCallback('phone:server:appQuery', function(res)
+        cb(res or { success = false, error = 'no_response' })
+    end, data.app_id, data.query, data.params)
+end)
+
+RegisterNUICallback('appAction', function(data, cb)
+    if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
+    QBCore.Functions.TriggerCallback('phone:server:appAction', function(res)
+        cb(res or { success = false, error = 'no_response' })
+    end, data.app_id, data.action, data.params)
+end)

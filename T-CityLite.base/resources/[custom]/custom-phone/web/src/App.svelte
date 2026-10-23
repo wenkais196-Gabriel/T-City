@@ -8,6 +8,8 @@
   import FactionChannel from './apps/FactionChannel.svelte';
   import CityFeed from './apps/CityFeed.svelte';
   import Settings from './apps/Settings.svelte';
+  import DynamicApp from './apps/DynamicApp.svelte';
+  import { dynamicApps, loadDynamicApps } from './stores/apps';
 
   // v0.4.2 Premium features
   import PhoneCall from './apps/PhoneCall.svelte';
@@ -60,6 +62,7 @@
       // Keep the call screen if a call is still ringing/ongoing when reopened.
       activeApp.set(get(callPhase) === 'idle' ? 'home' : 'phonecall');
       loadPhoneData();
+      void loadDynamicApps();
     });
 
     // Dispatch / agent voice line: CEF speaks it locally, subtitle mirrors it.
@@ -307,6 +310,14 @@
             <span class="app-label">Settings</span>
           </button>
 
+          <!-- Job app registry tiles (server-filtered) -->
+          {#each $dynamicApps as app (app.id)}
+            <button class="app-icon-wrapper app-transition" onclick={() => activeApp.set(`dyn:${app.id}`)} aria-label={app.label}>
+              <div class="app-icon leader-bg">{app.icon}</div>
+              <span class="app-label">{app.label}</span>
+            </button>
+          {/each}
+
           <!-- Dynamic Leader App Icon -->
           {#if leaderApp}
             <button class="app-icon-wrapper app-transition" onclick={() => activeApp.set(leaderApp.app)} aria-label={leaderApp.name}>
@@ -366,6 +377,8 @@
           <SheriffApp />
         {:else if $activeApp === 'leader_gangboss'}
           <GangBossApp />
+        {:else if $activeApp.startsWith('dyn:')}
+          <DynamicApp appId={$activeApp.slice(4)} />
         {/if}
       </div>
     {/if}
