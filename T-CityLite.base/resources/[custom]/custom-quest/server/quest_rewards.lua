@@ -86,45 +86,43 @@ function QuestRewards.GrantRewards(source, rewards, questId)
         end
 
         if finalAmount > 0 then
-            -- v0.7.2: 优先 custom-economy，fallback custom-main，再 fallback QBCore
-            -- 注意: exports['res'].Foo 即使不存在也可能是 truthy proxy，
-            -- 必须 pcall 实际调用，失败后再 fallback，否则整段奖励会被静默吞掉。
+            -- v0.7.2: 统一走 core_economy 奖励网关；失败才回退 QBCore
             local useScaled = false
+            local rewardReason = ('quest:%s'):format(questId)
             if Config.Quest.Rewards.UseAddScaledMoney then
-                for _, res in ipairs({ 'custom-economy', 'custom-main' }) do
-                    if GetResourceState(res) == 'started' then
-                        local ok = pcall(function()
-                            exports[res]:AddScaledMoney(source, accountType, finalAmount, ('quest:%s'):format(questId))
-                        end)
-                        if ok then
-                            useScaled = true
-                            break
-                        end
+                local gateway = exports['core_economy']
+                if gateway and gateway.TriggerReward then
+                    local gatewayOk, gatewayResult = pcall(function()
+                        return exports['core_economy']:TriggerReward(source, rewardReason, finalAmount, {
+                            moneytype = accountType,
+                            reason = rewardReason,
+                            skipHeat = true,
+                        })
+                    end)
+                    if gatewayOk and gatewayResult then
+                        useScaled = true
+                    else
+                        print(('[quest-rewards] ❌ core_economy failed for %s: %s'):format(
+                            rewardReason, tostring(gatewayResult)))
                     end
                 end
             end
             if not useScaled then
-                Player.Functions.AddMoney(accountType, finalAmount, ('quest:%s'):format(questId))
+                print(('[quest-rewards] ⚠️ fallback AddMoney %s $%d'):format(rewardReason, finalAmount))
+                Player.Functions.AddMoney(accountType, finalAmount, rewardReason)
             end
             table.insert(granted, ('$%d (%s)'):format(finalAmount, accountType))
         end
     end
 
-    -- 2. 物品奖励（单件失败不阻断金钱/声望奖励）
+    -- 2. 物品奖励
     if rewards.items then
         for _, itemReward in ipairs(rewards.items) do
             if itemReward.name and itemReward.count then
                 local count = tonumber(itemReward.count) or 1
                 if count > 0 then
-                    local okItem, itemErr = pcall(function()
-                        Player.Functions.AddItem(itemReward.name, count)
-                    end)
-                    if okItem then
-                        table.insert(granted, ('%s x%d'):format(itemReward.name, count))
-                    else
-                        print(('[quest-rewards] ⚠️ item reward failed: %s x%d | %s'):format(
-                            itemReward.name, count, tostring(itemErr or 'unknown')))
-                    end
+                    Player.Functions.AddItem(itemReward.name, count)
+                    table.insert(granted, ('%s x%d'):format(itemReward.name, count))
                 end
             end
         end
@@ -135,30 +133,20 @@ function QuestRewards.GrantRewards(source, rewards, questId)
         for repType, amount in pairs(rewards.rep) do
             local repAmount = tonumber(amount) or 0
             if repAmount > 0 then
-                local okRep, repErr = pcall(function()
-                    Player.Functions.AddRep(repType, repAmount)
-                end)
-                if okRep then
-                    table.insert(granted, ('%s rep +%d'):format(repType, repAmount))
-                else
-                    print(('[quest-rewards] ⚠️ rep reward failed: %s +%d | %s'):format(
-                        repType, repAmount, tostring(repErr or 'unknown')))
-                end
+                Player.Functions.AddRep(repType, repAmount)
+                table.insert(granted, ('%s rep +%d'):format(repType, repAmount))
             end
         end
     end
 
     -- 4. 审计日志
     if #granted > 0 then
-        local charName = GetPlayerName(source) or Player.PlayerData.name or citizenid
         local logText = ('**%s** (%s) | Quest: %s | Rewards: %s'):format(
-            charName, citizenid, questId,
+            GetPlayerName(source), citizenid, questId,
             table.concat(granted, ', ')
         )
         if exports['custom-logs'] then
-            pcall(function()
-                exports['custom-logs']:LogGeneric('任务奖励发放', logText, 65280)
-            end)
+            exports['custom-logs']:LogGeneric('任务奖励发放', logText, 65280)
         end
 
         TriggerClientEvent('QBCore:Notify', source,

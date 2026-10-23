@@ -19,6 +19,9 @@ ui_page 'html/index.html'
 
 files {
     'html/*',
+    'html/vendor/*',
+    'html/vendor/fontawesome/css/*',
+    'html/vendor/fontawesome/webfonts/*',
     'html/index.html',
     'html/styles.css',
     'html/responsive.css',

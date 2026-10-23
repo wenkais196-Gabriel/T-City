@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 客户端 MCP 测试 harness：Windows FiveM Legacy + `fivem-mcp-server`，经 FXServer 30120 HTTP 轮询桥接；提供 `client_command` / `screenshot` / `read_client_log` / `nuitest` 测试钩子
 - 全局审查报告与三阶段路线图：`T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md`
 - Agent 中枢导演架构设计：`docs/server-design/08-agent-director.md`
 - 任务系统建表脚本：`migrations/v0.7_quest_system.sql`（player_quests / quest_cooldowns / quest_event_log / quest_daily_limits）
@@ -19,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `start_server.bat` 一键启动脚本（UTF-8 编码，自动切换工作目录）
 
 ### Security
+- `custom-vehicles`: `qb-vehiclekeys:server:AcquireVehicleKeys` 此前只校验会话内车主，任何客户端可伪造车牌远程认领载具；现改为车牌格式校验 → 会话车主 → `player_vehicles` 登记车主 → 无主载具 10m 邻近（`vehicles_claim_max_dist`）+ 1s 限流 + 审计
+- `custom-vehicles`: `KeyManager.*` 拒绝非字符串车牌；`GiveKeys` 对无主载具要求先持有钥匙；`RemoveKeys` 仅车主可移除他人钥匙
+- `qb-inventory`: `SetInventoryData` 对 `otherplayer-*` 容器增加 3m 距离校验（管理员豁免），堵住伪造事件远程搬运他人物品；槽位/数量先 `tonumber` 再比较，避免非法类型报错
 - `custom-admin`: 全量自动 admin 改为 `admin_autogrant` convar（默认关闭）
 - `story-engine`: 决策绑定服务端 pending offer（quest/step/decision），拒绝跨任务伪造；超时由服务端按默认选项收口
 - `custom-quest`: `ValidateNode` 实现类型 + 服务端距离校验；`registerTrailer` 校验实体与距离；`cleanupTrailers` 改为非网络事件；`savePosCollection` 限制管理员
@@ -32,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `custom-testing` 移出生产 cfg，改由 `configs/modules/dev.cfg` 按需启用
 
 ### Fixed
+- `custom-quest`: 服务端重启后 `QuestCache` 未从 DB 预加载，`step_decision` 重连不弹窗；改为 `QBCore:Server:PlayerLoaded` 预加载 + `/questrestore`
+- `story-engine`: decision NUI 增加焦点/`keepInput` 遥测、300s 看门狗、`SetNuiFocusKeepInput(false)`，避免重连软锁与手机 UI 抢焦点
 - `core-framework` 引用了不存在的 `cache/*.lua`，导致自身及 9 个下游资源无法启动
 - 启动顺序与 `fxmanifest` 依赖冲突（11 处）；补齐 `qb-prison`、`qb-minigames`、`safecracker`
 - `custom-quest` / `custom-taxes` / `core-framework` / `qb-recyclejob` 缺少 `@oxmysql/lib/MySQL.lua`
@@ -52,6 +58,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `custom-quest` 从 `custom.cfg` 移到 `quest.cfg`；`custom-justice` 移到 `police.cfg`；`progressbar` 提前到 `player.cfg`
 - `custom-testing` 从 `custom.cfg` 移到 `dev.cfg`（生产默认不加载）
 - CI 增加 `check_bus_wiring.py`，防止注册方再次漏 include `bus.lua`
+
+---
+
+## [0.7a] — 载具重构与物流 — 2026-10-21
+
+> 代码完成于 2026-06-22，tag 于 2026-10-21；实机验收仍待完成。
+
+### Added
+- **custom-vehicles**：替换 `qb-vehiclekeys`，事件驱动钥匙/锁车/共享，O(1) 内存缓存，兼容旧 exports/events；含安全带、巡航、转向灯、氮气、车辆损耗
+- **tcity-dashboard v2.1**：Vue 3 车载中控屏，6 类载具模板，警用控制台 / ANPR / 雷达 / 追踪 / CCTV
+- **custom-quest**：数据驱动任务状态机、外部脚本 API、安全门控、DB 持久化（v0.6 基础设施）
+- **story-engine**：决策树与玩家选择追踪
+- **物流任务模板**：`quest_logistics` 取货 → 运输 → 交付，含车辆/到达/货损校验
+- **GitHub Actions CI**：CFG 完整性 + Lua 语法 + 依赖图 + pytest + oxmysql JS + MariaDB schema
+- **运行时构建产物入库**：oxmysql `dist/web`、menuv `dist`、tcity-dashboard `nui/dist`
+- **custom-ui**：统一 NUI 焦点、关闭后 300ms 防误触、距离校验；车店/车库/qb-menu/手机/中控屏接入
+- **NUI 无头冒烟**：Playwright 覆盖车店 / 中控屏 / 车库 / 手机四个页面
+- 开发工作流指南（`docs/dev-workflow-guide.md`）与一键启动脚本
+
+### Changed
+- **qb-vehicleshop Phase 1–5**：`while insideShop` 轮询改事件驱动；`finance.lua` 拆分为 lifecycle + payments；NUI 模式接通；客户端 Bus 注册；试驾独立车牌与钥匙清理
+- `vehicles.cfg` 启用 `custom-vehicles` + `tcity-dashboard`，停用 `qb-vehiclekeys`
+
+### Fixed
+- **qb-garages**：SELECT 查询从 `rawExecute` 改为 `query/single`，并补充空车库诊断
+- **qb-vehicleshop NUI**：加载顺序与 ConVar 同步修复
+- **custom-taxes**：为未实现的车辆税 / NPC 定价补桩，避免调用报错
+- **菜单交互**：车店改为按 E 主动打开（3.5m 距离），服务端购买距离 8m/30m；关闭菜单不再误触攻击
+- **车店购买**：Processing/错误态 + 2s 防连点；Change Vehicle 不再跳 qb-menu
+- **车库**：修复 NUI 回传 vector4 丢失导致的 spawnPoint nil；spawn 被拒时不再死循环；开发期共享车库
+- **手机**：qb-phone 式 keepInput + DisableDisplayControlActions；状态栏/主时钟统一游戏时间
+- **测试夹具**：对齐 `LocalDirtyFlush` 与 oxmysql `insert` 回调契约；测试路径改为相对仓库根目录
+- **DB schema 测试**：兼容 MariaDB（JSON=LONGTEXT、ENUM 默认值引号、COLUMN_KEY）；新增 `v2.2_schema_reconcile.sql` 补齐 story-engine 索引
+- `txAdminPort 0` 禁用管理员模式，避免端口冲突
+
+### Testing
+- `pytest tests`：**426 passed**（含 MariaDB schema；无 DB 连接时 286 passed / 132 skipped）
+- oxmysql JS 单测：**148 passed**
+- NUI 冒烟：**4/4 passed**（Playwright Chromium）
+- 游戏内 `/test run all`：**298 PASS / 0 FAIL / 9 SKIP**（有玩家上下文；无玩家时 225 PASS / 8 SKIP；见 `docs/v0.7a-acceptance-report.md`）
+- 离线检查：CFG / 依赖图 PASS；`light_lint` 仍为 advisory（vendor 资源遗留 ~250 条 `Wait(0)` / `MySQL.Sync`）
+
+### Known
+- 车店 NUI、车库、物流任务尚未完成真人客户端验收
+- 8 个手机用例需要真实玩家上下文（无客户端环境会 SKIP）
 
 ---
 
@@ -198,10 +249,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/YOUR_USER/T-City-Lite/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/YOUR_USER/T-City-Lite/releases/tag/v0.1.0
+[0.7a]: https://github.com/wenkais196-Gabriel/T-City/releases/tag/v0.7a
+[0.6.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/wenkais196-Gabriel/T-City/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/wenkais196-Gabriel/T-City/releases/tag/v0.1.0

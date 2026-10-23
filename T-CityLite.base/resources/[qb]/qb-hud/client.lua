@@ -463,6 +463,11 @@ RegisterNetEvent('hud:client:LoadMap', function()
             QBCore.Functions.Notify(Lang:t('notify.loaded_circle_map'))
         end
     end
+
+    -- 初始 DisplayRadar(false) 只用于加载期；LoadMap 完成后恢复小地图
+    if not Menu.isHideMapChecked then
+        DisplayRadar(true)
+    end
 end)
 
 RegisterNUICallback('ToggleMapShape', function(_, cb)

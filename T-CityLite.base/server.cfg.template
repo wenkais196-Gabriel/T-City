@@ -14,6 +14,8 @@ endpoint_add_udp "0.0.0.0:30120"
 sv_maxclients 48
 ## 如果你使用 txAdmin，在 txAdmin 设置中开启 OneSync，不要在这里设
 # set onesync on
+## 游戏时间流速：0.5 = 1 游戏分钟 / 2 真实秒（GTA 默认节奏）
+setr weathersync_time_scale "0.5"
 
 
 ## Server identity

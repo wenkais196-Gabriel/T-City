@@ -82,6 +82,32 @@ function GetRequiredLicenseName(vehicleModel)
     return requiredLicense and names[requiredLicense] or nil
 end
 
+--- 服务端距离校验：玩家必须靠近出售该车的展车/车店
+---@param source number
+---@param vehicleModel string
+---@return boolean
+function IsPlayerNearShopWithVehicle(source, vehicleModel)
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false end
+    local coords = GetEntityCoords(ped)
+
+    for _, shop in pairs(Config.Shops) do
+        for _, sv in ipairs(shop.ShowroomVehicles or {}) do
+            if sv.chosenVehicle == vehicleModel then
+                local c = sv.coords
+                if c and #(coords - vector3(c.x, c.y, c.z)) <= 8.0 then
+                    return true
+                end
+                local loc = shop.Location
+                if loc and #(coords - loc) <= 30.0 then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
 --- 数字格式化: 1000 → "1,000"
 ---@param amount number
 ---@return string
@@ -233,6 +259,7 @@ _G._vehicleshop = {
     comma_value            = comma_value,
     round                  = round,
     GeneratePlate          = GeneratePlate,
+    IsPlayerNearShopWithVehicle = IsPlayerNearShopWithVehicle,
 }
 
 print('[qb-vehicleshop] 🏪 Bus 服务已注册 (dealership, 6 methods)')

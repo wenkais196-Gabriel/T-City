@@ -1,6 +1,6 @@
 # T-City Lite — 模块化架构开发路线图
 
-> 最后更新: Phase 1 完成
+> 最后更新: 2026-10-21 · v0.7a 代码完成（待实机验收）
 > 开发原则: 一次开发，多次调用，额外调试
 > 核心总线: `core-framework` Bus (economy / job / security / storage / market / persistence)
 
@@ -74,7 +74,7 @@ Bus.MetadataService    → GetJob / SetJob / GetGang / GetMetadata / SetMetadata
 
 ---
 
-## 🔜 Phase 2 — Cartel 核心玩法 (下一步)
+## ✅ Phase 2 — Cartel 核心玩法 (2026-06-21 完成)
 
 ### 2.1 custom-cartel 资源
 
@@ -126,7 +126,7 @@ custom-cartel/
 
 ---
 
-## 🔜 Phase 3 — 多组织生态
+## ✅ Phase 3 — 多组织生态（外交系统除外）
 
 ### 3.1 矿业公司 (custom-mining)
 
@@ -160,7 +160,7 @@ custom-mining/
 
 ---
 
-## 🔜 Phase 4 — 司法生态
+## ✅ Phase 4 — 司法生态（社区立法除外）
 
 ### 4.1 逮捕→审判→监狱 闭环
 
@@ -182,24 +182,42 @@ custom-mining/
 
 ---
 
+## ✅ Phase 5 — 载具与中控屏 (v0.7a / v0.7b)
+
+| 系统 | 状态 | 说明 |
+|------|------|------|
+| `custom-vehicles` | ✅ 完成 | 替换 `qb-vehiclekeys`，事件驱动钥匙/锁车/共享，驾驶辅助 |
+| `qb-vehicleshop` | ✅ 完成 | Phase 1–5：事件驱动、finance 拆分、NUI、客户端 Bus、试驾 |
+| `quest_logistics` | ✅ 完成 | 取货 → 运输 → 交付 + 车辆/到达/货损校验 |
+| `tcity-dashboard` | 🟡 待验收 | v2.1 已启用并接入 `vehicles.cfg`（原计划 v0.7b） |
+
+---
+
 ## 📋 开发进度追踪
+
+> 完成日期按代码落地提交（`aa9a595` / `d29cd2b`）与 tag 日期整理；“待验收”不等于“已验收”。
 
 | Phase | 系统 | 状态 | 完成日期 |
 |-------|------|------|----------|
-| 1 | custom-storage | ✅ 完成 | 2025-06-04 |
-| 1 | custom-market | ✅ 完成 | 2025-06-04 |
-| 1 | items.lua (+22) | ✅ 完成 | 2025-06-04 |
-| 1 | jobs.lua (+miner) | ✅ 完成 | 2025-06-04 |
-| 1 | server.cfg 集成 | ✅ 完成 | 2025-06-04 |
-| 2 | custom-cartel | ✅ 完成 | 2025-06-04 |
-| 2 | Cartel NPC 盟友 | ✅ 完成 | 2025-06-04 |
-| 2 | Cartel 任务链 | ✅ 完成 | 2025-06-04 |
-| 2 | 警察缉毒联动 | ✅ 完成 | 2025-06-04 |
-| 3 | custom-mining | ✅ 完成 | 2025-06-04 |
+| 1 | custom-storage | ✅ 完成 | 2026-06-21 |
+| 1 | custom-market | ✅ 完成 | 2026-06-21 |
+| 1 | items.lua (+22) | ✅ 完成 | 2026-06-21 |
+| 1 | jobs.lua (+miner) | ✅ 完成 | 2026-06-21 |
+| 1 | server.cfg 集成 | ✅ 完成 | 2026-06-21 |
+| 2 | custom-cartel | ✅ 完成 | 2026-06-21 |
+| 2 | Cartel NPC 盟友 | ✅ 完成 | 2026-06-21 |
+| 2 | Cartel 任务链 | ✅ 完成 | 2026-06-21 |
+| 2 | 警察缉毒联动 | ✅ 完成 | 2026-06-21 |
+| 3 | custom-mining | ✅ 完成 | 2026-06-21 |
 | 3 | 组织外交系统 | ⏳ 待开发 | - |
-| 3 | 洗钱管道升级 | ✅ 完成 | 2025-06-04 |
-| 4 | 司法-监狱联动 | ✅ 完成 | 2025-06-04 |
+| 3 | 洗钱管道升级 | ✅ 完成 | 2026-06-21 |
+| 4 | 司法-监狱联动 | ✅ 完成 | 2026-06-21 |
 | 4 | 社区立法系统 | ⏳ 待开发 | - |
+| 5 | custom-vehicles | ✅ 完成 | 2026-06-21 |
+| 5 | qb-vehicleshop Phase 1–5 | ✅ 完成 | 2026-06-22 |
+| 5 | 物流任务模板 | ✅ 完成 | 2026-06-21 |
+| 5 | tcity-dashboard v2.1 | 🟡 待验收 | 2026-06-21 |
+| - | tag `v0.7a` | ✅ 已推送 | 2026-10-21 |
 
 ---
 

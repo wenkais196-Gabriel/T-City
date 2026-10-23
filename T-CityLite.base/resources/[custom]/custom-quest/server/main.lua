@@ -285,6 +285,39 @@ RegisterNetEvent(Config.Quest.Events.QUEST_REQUEST_STATE, function()
                 current_step = quest.current_step,
                 progress_data = quest.progress_data,
             })
+
+            -- 重连/资源重启时如果停在 decision 步骤，必须重新登记 pending
+            -- 并重新下发弹窗；否则客户端只恢复路点，没有选项，任务永久软锁。
+            local currentStep = nil
+            for _, step in ipairs(template.steps or {}) do
+                if step.id == quest.current_step then
+                    currentStep = step
+                    break
+                end
+            end
+            if currentStep and currentStep.type == 'decision'
+                and currentStep.data and currentStep.data.decision_id then
+                local decisionId = currentStep.data.decision_id
+                local resolved = nil
+                local ok, result = pcall(function()
+                    return exports['story-engine']:GetDecision(decisionId)
+                end)
+                if ok and result then resolved = result end
+                if resolved then
+                    pcall(function()
+                        exports['story-engine']:OfferDecision(
+                            src, quest.quest_id, currentStep.id, decisionId, resolved.timeout)
+                    end)
+                    TriggerClientEvent('story:client:offerDecision', src, {
+                        questId = quest.quest_id,
+                        stepId = currentStep.id,
+                        decision_id = decisionId,
+                        prompt = resolved.prompt,
+                        options = resolved.options,
+                        timeout = resolved.timeout or 120,
+                    })
+                end
+            end
         end
     end
 end)

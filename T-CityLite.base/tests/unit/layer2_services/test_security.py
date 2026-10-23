@@ -14,14 +14,13 @@ test_security.py — Security Service 单元测试
 """
 
 import os
-from pathlib import Path
-BASE_DIR = str(Path(__file__).resolve().parents[3])
 import subprocess
 import tempfile
+from pathlib import Path
 import pytest
 
 
-SECURITY_LUA = BASE_DIR + '//resources/[standalone]/core-framework/services/security_service.lua'
+SECURITY_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'services' / 'security_service.lua')
 
 
 def run_security_test(test_code: str) -> dict:

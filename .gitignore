@@ -120,3 +120,9 @@ alpine/
 
 # 重构过程中的临时备份
 *.bak
+
+# NUI 冒烟测试截图（本地生成）
+T-CityLite.base/tests/nui/artifacts/
+
+# 服务器启动器日志
+logs/

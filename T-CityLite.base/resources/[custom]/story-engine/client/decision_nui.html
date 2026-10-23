@@ -112,12 +112,7 @@
                 btn.className = 'option-btn';
                 btn.innerHTML = '<span class="option-label">[' + (labels[idx] || '?') + ']</span>' + (opt.text || '选项 ' + (idx+1));
                 btn.onclick = function() {
-                    fetch('https://cfx-nui-story-engine/makeChoice', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ optionId: opt.id })
-                    });
-                    closePanel();
+                    chooseOption(opt.id);
                 };
                 options.appendChild(btn);
             });
@@ -129,11 +124,7 @@
                 remainingSec--;
                 if (remainingSec <= 0) {
                     clearInterval(timerInterval);
-                    fetch('https://cfx-nui-story-engine/decisionTimeout', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ reason: 'timeout' })
-                    });
+                    nuiPost('decisionTimeout', { reason: 'timeout' });
                     closePanel();
                 }
                 updateTimer();
@@ -153,6 +144,49 @@
             else if (remainingSec <= 30) timer.className = 'warning';
         }
 
+        function reportNuiError(kind, detail) {
+            try {
+                fetch('https://cfx-nui-story-engine/debugNui', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        kind: kind,
+                        detail: String(detail && detail.message ? detail.message : detail || '')
+                    })
+                }).catch(function() {});
+            } catch (e) {}
+        }
+
+        function nuiPost(path, payload) {
+            return fetch('https://cfx-nui-story-engine/' + path, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload || {})
+            }).then(function(r) {
+                return r.text();
+            }).then(function() {
+                return true;
+            }).catch(function(err) {
+                var timer = document.getElementById('timer');
+                if (timer) timer.textContent = '⚠️ NUI 回调失败: ' + (err && err.message ? err.message : 'unknown');
+                console.error('[decision-nui] ' + path + ' failed', err);
+                reportNuiError(path, err);
+                return false;
+            });
+        }
+
+        function chooseOption(optionId) {
+            // 只有 fetch 成功才隐藏面板；失败时保留错误文案，方便定位。
+            nuiPost('makeChoice', { optionId: optionId }).then(function(ok) {
+                if (ok) closePanel();
+            });
+        }
+
+        function closeDecision() {
+            closePanel();
+            nuiPost('closeDecision', {});
+        }
+
         function closePanel() {
             var panel = document.getElementById('decision-panel');
             panel.style.display = 'none';
@@ -161,6 +195,30 @@
                 timerInterval = null;
             }
         }
+
+        window.addEventListener('error', function(event) {
+            reportNuiError('window.error', event && event.message ? event.message : 'unknown');
+        });
+        window.addEventListener('unhandledrejection', function(event) {
+            reportNuiError('unhandledrejection', event && event.reason ? event.reason : 'unknown');
+        });
+
+        // 键盘兜底：鼠标/焦点异常时仍可选择；ESC 关闭并释放焦点。
+        document.addEventListener('keydown', function(event) {
+            var panel = document.getElementById('decision-panel');
+            if (!panel || panel.style.display !== 'block') return;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeDecision();
+                return;
+            }
+            var index = parseInt(event.key, 10) - 1;
+            var buttons = document.querySelectorAll('.option-btn');
+            if (index >= 0 && index < buttons.length) {
+                event.preventDefault();
+                buttons[index].click();
+            }
+        });
 
         // 监听 Lua 端消息
         window.addEventListener('message', function(event) {
@@ -173,6 +231,9 @@
                     break;
                 case 'closeDecision':
                     closePanel();
+                    break;
+                case 'testChoose':
+                    chooseOption(data.optionId);
                     break;
             }
         });

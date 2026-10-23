@@ -19,6 +19,9 @@ views, `agent_ro`, PII).
 > policy and human approval are documented in [`ACTIONS.md`](ACTIONS.md)
 > (`custom-director`, table `agent_actions`).
 
+> **Client harness:** Windows FiveM Legacy + MCP bridge, NUI test hooks and
+> known input limitations are documented in [`CLIENT_HARNESS.md`](CLIENT_HARNESS.md).
+
 Agents read through a small, stable set of views instead of joining 20+ game
 tables. All access goes directly to MariaDB; it does not touch the FXServer
 thread. Writes are deliberately out of scope for this layer.

@@ -1,5 +1,3 @@
-from pathlib import Path
-BASE_DIR = str(Path(__file__).resolve().parents[3])
 """
 test_vehicleshop.py — qb-vehicleshop 单元测试 + 集成测试 v2.2.0
 
@@ -11,9 +9,10 @@ test_vehicleshop.py — qb-vehicleshop 单元测试 + 集成测试 v2.2.0
   finance.lua:     financeVehicle, financePayment, checkFinance, addPlayer/removePlayer
 """
 import os, subprocess, tempfile, re, pytest
+from pathlib import Path
 
 # ── Paths ──────────────────────────────────────────────────────────
-BASE = BASE_DIR + '/'
+BASE = str(Path(__file__).resolve().parents[3])
 SHOP_DIR = os.path.join(BASE, 'resources', '[qb]', 'qb-vehicleshop')
 BUS_LUA = os.path.join(SHOP_DIR, 'server', 'bus.lua')
 PURCHASES_LUA = os.path.join(SHOP_DIR, 'server', 'purchases.lua')
@@ -28,18 +27,6 @@ FINANCE_PM_LUA = os.path.join(SHOP_DIR, 'server', 'finance-payments.lua')
 # ── Mock ───────────────────────────────────────────────────────────
 MOCK_BASE = r'''
 -- FiveM Mock for qb-vehicleshop tests
--- vector3/vector4 with distance arithmetic (#(a-b))
-local _vec_mt = {
-    __sub = function(a, b) return vector3((a.x or 0) - (b.x or 0), (a.y or 0) - (b.y or 0), (a.z or 0) - (b.z or 0)) end,
-    __add = function(a, b) return vector3((a.x or 0) + (b.x or 0), (a.y or 0) + (b.y or 0), (a.z or 0) + (b.z or 0)) end,
-    __len = function(v) return math.sqrt((v.x or 0)^2 + (v.y or 0)^2 + (v.z or 0)^2) end,
-}
-function vector3(x, y, z)
-    return setmetatable({ x = x or 0, y = y or 0, z = z or 0 }, _vec_mt)
-end
-function vector4(x, y, z, w)
-    return setmetatable({ x = x or 0, y = y or 0, z = z or 0, w = w or 0 }, _vec_mt)
-end
 __test = { events = {}, callbacks = {}, commands = {}, inserts = {}, updates = {}, scalars = {}, money_removed = {}, money_added = {}, bank_job_added = {} }
 
 -- Player cache so mutations persist across GetPlayer calls
@@ -146,7 +133,13 @@ NetworkGetEntityFromNetworkId = function(netId) return netId end
 SetVehicleNumberPlateText = function(veh, plate) end
 CreateVehicleServerSetter = function(hash, vtype, x, y, z, w) return 1 end
 DeleteEntity = function(ent) end
-GetEntityCoords = function(ped) return 0, 0, 0 end
+-- 让服务端距离校验能拿到 PDM 展车附近坐标
+local __vec_mt = {
+    __sub = function(a, b) return setmetatable({ x = a.x - b.x, y = a.y - b.y, z = a.z - b.z }, __vec_mt) end,
+    __len = function(v) return math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) end,
+}
+function vector3(x, y, z) return setmetatable({ x = x, y = y, z = z }, __vec_mt) end
+GetEntityCoords = function(ped) return vector3(-45.65, -1093.66, 25.44) end
 GetPlayerPed = function(src) return src end
 GetPlayerIdentifiers = function(src) return { "license:mock" .. tostring(src) } end
 
@@ -156,7 +149,8 @@ MySQL.scalar = { await = function(sql, params) table.insert(__test.scalars, { sq
 MySQL.single = { await = function(sql, params) return { citizenid = "CID001", vehicle = "comet2", balance = 0, plate = "ABC123" } end }
 MySQL.query = { await = function(sql, params) return {} end }
 MySQL.update = function(sql, params, cb) table.insert(__test.updates, { sql=sql }) if cb then cb(1) end end
-MySQL.insert = function(sql, params, cb) table.insert(__test.inserts, { sql=sql }) if cb then cb(1) end end
+-- oxmysql 的 insert 回调实际返回 { insertId, affectedRows } 表（见 oxmysql/dist/build.js）
+MySQL.insert = function(sql, params, cb) table.insert(__test.inserts, { sql=sql }) if cb then cb({ insertId = 1, affectedRows = 1 }) end end
 MySQL.rawExecute = { await = function(sql, params) return {} end }
 
 -- Config (must be set BEFORE loading bus.lua)

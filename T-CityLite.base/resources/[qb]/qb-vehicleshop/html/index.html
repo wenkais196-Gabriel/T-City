@@ -41,10 +41,11 @@
 
         <!-- Actions -->
         <div class="actions-section">
+          <div class="error-banner" v-if="error">{{ error }}</div>
           <!-- Buy -->
           <div class="action-row">
-            <button class="btn-primary" @click="buyVehicle" :disabled="!canAfford">
-              Buy Now — ${{ formattedPrice }}
+            <button class="btn-primary" @click="buyVehicle" :disabled="!canAfford || processing">
+              {{ processing ? 'Processing...' : 'Buy Now — $' + formattedPrice }}
             </button>
           </div>
 

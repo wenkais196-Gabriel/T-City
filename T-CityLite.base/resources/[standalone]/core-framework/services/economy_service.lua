@@ -73,6 +73,32 @@ function EconomyService.AddScaled(source, accountType, amount, reason)
 end
 
 -- ----------------------------------------------------
+-- 直接加钱（不叠加 wage multiplier）
+-- 供 core_economy 等已经算好最终金额的网关使用
+-- ----------------------------------------------------
+---@param citizenid string
+---@param accountType string
+---@param amount number
+---@param reason string|nil
+---@return boolean
+function EconomyService.AddMoney(citizenid, accountType, amount, reason)
+    local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
+    if not Player then return false end
+
+    amount = tonumber(amount) or 0
+    if amount <= 0 then return false end
+
+    local success = Player.Functions.AddMoney(accountType, amount, reason or 'EconomyService.AddMoney')
+    if not success then return false end
+
+    if DirtyFlush then
+        DirtyFlush.MarkDirty(citizenid, 'money')
+    end
+
+    return true
+end
+
+-- ----------------------------------------------------
 -- 玩家间转账（带安全校验）
 -- ----------------------------------------------------
 function EconomyService.Transfer(fromSource, toCitizenId, amount, reason)
@@ -137,6 +163,7 @@ if Bus and Bus.RegisterService then
     Bus.RegisterService('economy', {
         GetBalance  = EconomyService.GetBalance,
         AddScaled   = EconomyService.AddScaled,
+        AddMoney    = EconomyService.AddMoney,
         Transfer    = EconomyService.Transfer,
     })
 end

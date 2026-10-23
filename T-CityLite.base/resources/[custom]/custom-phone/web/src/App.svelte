@@ -29,6 +29,7 @@
     factionMessages,
     unreadMessagesCount,
     unreadNotificationsCount,
+    gameTime,
     loadPhoneData,
     closePhone
   } from './stores/phone';
@@ -37,9 +38,7 @@
   // Background Wallpaper - 使用 CSS 渐变替代 Unsplash 网络图片（消除 HTTP 请求卡顿）
   const wallpaperUrl = '';
 
-  // Game Time sync state (必须在 onMount 外层，模板才能访问)
-  let gameHour = $state(12);
-  let gameMinute = $state(0);
+  // Game Time 由 phone:updateTime 写入共享 store
   let gameDayName = $state('Sunday');
   let gameDate = $state('May 31');
 
@@ -116,8 +115,7 @@
     // 8. Game Time sync from Lua (GTA V native clock)
     registerNuiEvent('phone:updateTime', (data) => {
       if (data) {
-        gameHour = data.hour;
-        gameMinute = data.minute;
+        gameTime.set({ hour: data.hour ?? 0, minute: data.minute ?? 0 });
         gameDayName = data.dayName;
         gameDate = data.date;
       }
@@ -175,7 +173,7 @@
         <!-- Widget Area (Game Time Sync) -->
         <div class="widget-area glass-effect">
           <div class="widget-time-row">
-            <span class="widget-time">{String(gameHour).padStart(2, '0')}:{String(gameMinute).padStart(2, '0')}</span>
+            <span class="widget-time">{String($gameTime.hour).padStart(2, '0')}:{String($gameTime.minute).padStart(2, '0')}</span>
             <span class="widget-day">{gameDayName} · {gameDate}</span>
           </div>
           <div class="widget-details">

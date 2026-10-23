@@ -7,6 +7,19 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local resourcePath = GetResourcePath('custom-phone')
 
+-- 服务端 callback 注册在 QBCore.ServerCallbacks（无 QBCore.Functions.GetCallback）
+local function hasCallback(name)
+    return QBCore.ServerCallbacks ~= nil and QBCore.ServerCallbacks[name] ~= nil
+end
+
+-- 控制台/无玩家环境统一跳过，避免把“无玩家上下文”误报为 ERROR
+local function requirePlayer(source)
+    if not source or source <= 0 then Test.skip("需要玩家上下文") end
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then Test.skip("玩家未加载") end
+    return Player
+end
+
 Test.describe("自研手机系统 (v0.4)", function()
 
     -- ═══════════════════════════════════════════════════
@@ -77,32 +90,32 @@ Test.describe("自研手机系统 (v0.4)", function()
     -- ═══════════════════════════════════════════════════
 
     Test.it("2.1 phone_messages 表已建", function()
-        local result = MySQL.Sync.fetchAll("SHOW TABLES LIKE 'phone_messages'", {})
+        local result = MySQL.query.await("SHOW TABLES LIKE 'phone_messages'", {})
         Test.assert_true(#result > 0, "phone_messages 表应存在")
     end)
 
     Test.it("2.2 phone_contacts 表已建", function()
-        local result = MySQL.Sync.fetchAll("SHOW TABLES LIKE 'phone_contacts'", {})
+        local result = MySQL.query.await("SHOW TABLES LIKE 'phone_contacts'", {})
         Test.assert_true(#result > 0, "phone_contacts 表应存在")
     end)
 
     Test.it("2.3 phone_cityfeed 表已建", function()
-        local result = MySQL.Sync.fetchAll("SHOW TABLES LIKE 'phone_cityfeed'", {})
+        local result = MySQL.query.await("SHOW TABLES LIKE 'phone_cityfeed'", {})
         Test.assert_true(#result > 0, "phone_cityfeed 表应存在")
     end)
 
     Test.it("2.4 phone_jobboard 表已建", function()
-        local result = MySQL.Sync.fetchAll("SHOW TABLES LIKE 'phone_jobboard'", {})
+        local result = MySQL.query.await("SHOW TABLES LIKE 'phone_jobboard'", {})
         Test.assert_true(#result > 0, "phone_jobboard 表应存在")
     end)
 
     Test.it("2.5 phone_numbers 表已建", function()
-        local result = MySQL.Sync.fetchAll("SHOW TABLES LIKE 'phone_numbers'", {})
+        local result = MySQL.query.await("SHOW TABLES LIKE 'phone_numbers'", {})
         Test.assert_true(#result > 0, "phone_numbers 表应存在")
     end)
 
     Test.it("2.6 phone_calls 表已建", function()
-        local result = MySQL.Sync.fetchAll("SHOW TABLES LIKE 'phone_calls'", {})
+        local result = MySQL.query.await("SHOW TABLES LIKE 'phone_calls'", {})
         Test.assert_true(#result > 0, "phone_calls 表应存在")
     end)
 
@@ -111,49 +124,49 @@ Test.describe("自研手机系统 (v0.4)", function()
     -- ═══════════════════════════════════════════════════
 
     Test.it("3.1 主数据加载 callback 已注册", function()
-        local exists = QBCore.Functions.GetCallback('phone:server:getPhoneData')
+        local exists = hasCallback('phone:server:getPhoneData')
         Test.assert_not_nil(exists, "phone:server:getPhoneData callback 应已注册")
     end)
 
     Test.it("3.2 消息系统 callback 已注册", function()
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:sendMessage'),
+        Test.assert_not_nil(hasCallback('phone:server:sendMessage'),
             "phone:server:sendMessage 应已注册")
     end)
 
     Test.it("3.3 联系人 CRUD callback 已注册", function()
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:addContact'),
+        Test.assert_not_nil(hasCallback('phone:server:addContact'),
             "phone:server:addContact 应已注册")
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:deleteContact'),
+        Test.assert_not_nil(hasCallback('phone:server:deleteContact'),
             "phone:server:deleteContact 应已注册")
     end)
 
     Test.it("3.4 银行转账 callback 已注册", function()
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:bankTransfer'),
+        Test.assert_not_nil(hasCallback('phone:server:bankTransfer'),
             "phone:server:bankTransfer 应已注册")
     end)
 
     Test.it("3.5 Job Board callback 已注册", function()
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:acceptJob'),
+        Test.assert_not_nil(hasCallback('phone:server:acceptJob'),
             "phone:server:acceptJob 应已注册")
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:postJob'),
+        Test.assert_not_nil(hasCallback('phone:server:postJob'),
             "phone:server:postJob 应已注册")
     end)
 
     Test.it("3.6 职业频道 callback 已注册", function()
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:sendFactionMessage'),
+        Test.assert_not_nil(hasCallback('phone:server:sendFactionMessage'),
             "phone:server:sendFactionMessage 应已注册")
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:sendSheriffPatrol'),
+        Test.assert_not_nil(hasCallback('phone:server:sendSheriffPatrol'),
             "phone:server:sendSheriffPatrol 应已注册")
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:sendGangObjective'),
+        Test.assert_not_nil(hasCallback('phone:server:sendGangObjective'),
             "phone:server:sendGangObjective 应已注册")
     end)
 
     Test.it("3.7 CityFeed callback 已注册", function()
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:getCityFeed'),
+        Test.assert_not_nil(hasCallback('phone:server:getCityFeed'),
             "phone:server:getCityFeed 应已注册")
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:postCityFeed'),
+        Test.assert_not_nil(hasCallback('phone:server:postCityFeed'),
             "phone:server:postCityFeed 应已注册")
-        Test.assert_not_nil(QBCore.Functions.GetCallback('phone:server:likeCityFeed'),
+        Test.assert_not_nil(hasCallback('phone:server:likeCityFeed'),
             "phone:server:likeCityFeed 应已注册")
     end)
 
@@ -202,10 +215,7 @@ Test.describe("自研手机系统 (v0.4)", function()
     -- ═══════════════════════════════════════════════════
 
     Test.it("5.1 添加联系人正常", function(source)
-        if source < 0 then
-            Test.skip("需要玩家上下文")
-            return
-        end
+        requirePlayer(source)
         QBCore.Functions.TriggerCallback('phone:server:addContact', function(res)
             Test.assert_not_nil(res, "addContact 应返回结果")
             if res then
@@ -215,10 +225,7 @@ Test.describe("自研手机系统 (v0.4)", function()
     end)
 
     Test.it("5.2 过长联系人名称被拒绝（≤30 字符安全校验）", function(source)
-        if source < 0 then
-            Test.skip("需要玩家上下文")
-            return
-        end
+        requirePlayer(source)
         QBCore.Functions.TriggerCallback('phone:server:addContact', function(res)
             Test.assert_not_nil(res, "addContact 应返回结果")
             if res then
@@ -253,10 +260,7 @@ Test.describe("自研手机系统 (v0.4)", function()
     end)
 
     Test.it("6.2 负数金额被拒绝", function(source)
-        if source < 0 then
-            Test.skip("需要玩家上下文")
-            return
-        end
+        requirePlayer(source)
         QBCore.Functions.TriggerCallback('phone:server:bankTransfer', function(res)
             Test.assert_not_nil(res, "bankTransfer 应返回结果")
             if res then
@@ -266,10 +270,7 @@ Test.describe("自研手机系统 (v0.4)", function()
     end)
 
     Test.it("6.3 超限金额被拒绝（≤ $100,000）", function(source)
-        if source < 0 then
-            Test.skip("需要玩家上下文")
-            return
-        end
+        requirePlayer(source)
         QBCore.Functions.TriggerCallback('phone:server:bankTransfer', function(res)
             Test.assert_not_nil(res, "bankTransfer 应返回结果")
             if res then

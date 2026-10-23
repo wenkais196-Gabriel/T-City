@@ -85,13 +85,38 @@ QBCore.Functions.CreateCallback('qb-garages:server:GetGarageVehicles', function(
         vehicles = MySQL.query.await('SELECT * FROM player_vehicles WHERE citizenid = ? AND depotprice > 0', { citizenId })
     elseif Config.SharedGarages then
         vehicles = MySQL.query.await('SELECT * FROM player_vehicles WHERE citizenid = ?', { citizenId })
+        print(('[qb-garages] shared query citizen=%s garage=%s -> %d vehicles'):format(
+            citizenId:sub(1, 4) .. '...', tostring(garage), #(vehicles or {})))
     else
         vehicles = MySQL.query.await('SELECT * FROM player_vehicles WHERE citizenid = ? AND garage = ?', { citizenId, garage })
     end
     if #vehicles == 0 then
-        -- Phase 6: 诊断日志 — 追踪"无车辆"问题
-        print(('[qb-garages] 🔍 No vehicles found: citizen=%s garage=%s type=%s category=%s'):format(
-            citizenId:sub(1,4) .. '...', garage, type or 'nil', category or 'nil'))
+        -- Phase 6: 诊断日志 — 区分"没车"与"车停在别的车库"
+        local owned = MySQL.scalar.await(
+            'SELECT COUNT(*) FROM player_vehicles WHERE citizenid = ?', { citizenId }) or 0
+        local rows = MySQL.query.await(
+            'SELECT garage, COUNT(*) AS c FROM player_vehicles WHERE citizenid = ? GROUP BY garage',
+            { citizenId }) or {}
+        local where = {}
+        for _, row in ipairs(rows) do
+            where[#where + 1] = ('%s=%d'):format(row.garage or 'nil', row.c)
+        end
+        print(('[qb-garages] 🔍 No vehicles at garage=%s (citizen=%s owned=%d: %s)'):format(
+            tostring(garage), citizenId:sub(1, 4) .. '...', owned, table.concat(where, ', ')))
+
+        -- 玩家在错误车库时给出明确提示（车辆集中在哪个车库）
+        if owned > 0 then
+            local hints = {}
+            for _, row in ipairs(rows) do
+                local cfg = Config.Garages[row.garage]
+                hints[#hints + 1] = ('%s ×%d'):format(
+                    cfg and cfg.label or tostring(row.garage), row.c)
+            end
+            TriggerClientEvent('QBCore:Notify', source,
+                ('本车库没有车辆。你的车停在：%s'):format(table.concat(hints, ' / ')),
+                'primary', 8000)
+        end
+
         cb(nil)
         return
     end
@@ -136,10 +161,13 @@ local VehicleClassLicenseMap = {
 -- 🔒 服务端证件验证：防止客户端绕过车库 blip/zone 门控
 QBCore.Functions.CreateCallback('qb-garages:server:spawnvehicle', function(source, cb, plate, vehicle, coords)
     local Player = QBCore.Functions.GetPlayer(source)
+    print(('[qb-garages] spawnvehicle request src=%s plate=%s vehicle=%s'):format(
+        tostring(source), tostring(plate), tostring(vehicle)))
     if Player then
         -- 🚗 每人最多 3 辆载具在车库外
         local outsideCount = MySQL.scalar.await('SELECT COUNT(*) FROM player_vehicles WHERE citizenid = ? AND state = 0', { Player.PlayerData.citizenid })
         if outsideCount >= 3 then
+            print(('[qb-garages] spawnvehicle rejected: outsideCount=%d'):format(outsideCount))
             TriggerClientEvent('QBCore:Notify', source, '你已经有 3 辆载具在外面了，先存一辆再取', 'error', 5000)
             cb(nil)
             return
@@ -152,6 +180,7 @@ QBCore.Functions.CreateCallback('qb-garages:server:spawnvehicle', function(sourc
         if requiredLicense then
             local licences = Player.PlayerData.metadata['licences']
             if not licences or not licences[requiredLicense] then
+                print(('[qb-garages] spawnvehicle rejected: missing license=%s'):format(tostring(requiredLicense)))
                 TriggerClientEvent('QBCore:Notify', source, 'You need a valid license to spawn this vehicle type!', 'error', 5000)
                 cb(nil)
                 return
@@ -181,6 +210,9 @@ end)
 QBCore.Functions.CreateCallback('qb-garages:server:canDeposit', function(source, cb, plate, type, garage, state)
     local Player = QBCore.Functions.GetPlayer(source)
     local isOwned = MySQL.scalar.await('SELECT citizenid FROM player_vehicles WHERE plate = ? LIMIT 1', { plate })
+    print(('[qb-garages] canDeposit plate=%s type=%s garage=%s state=%s owner=%s player=%s'):format(
+        tostring(plate), tostring(type), tostring(garage), tostring(state),
+        tostring(isOwned), tostring(Player.PlayerData.citizenid)))
     if isOwned ~= Player.PlayerData.citizenid then
         cb(false)
         return

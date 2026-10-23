@@ -17,6 +17,53 @@ if not compatEnabled then
 end
 
 -- ==============================================================
+-- 安全: 客户端参数校验（任何客户端都能以任意参数触发网络事件）
+-- ==============================================================
+
+--- 规范化并校验客户端传入的车牌
+---@param plate any 客户端原始参数
+---@return string|nil 合法车牌，非法返回 nil
+local function NormalizePlate(plate)
+    if type(plate) ~= 'string' then return nil end
+    plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
+    if #plate == 0 or #plate > 8 then return nil end
+    if not plate:match('^[%w ]+$') then return nil end
+    return plate
+end
+
+--- 玩家附近是否真实存在该车牌的载具
+---@param src number 玩家服务器 ID
+---@param plate string 已规范化的车牌
+---@return boolean
+local function IsNearVehicleWithPlate(src, plate)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false end
+
+    local maxDist = Config.Vehicles.Security.ClaimMaxDistance
+    local pedCoords = GetEntityCoords(ped)
+
+    for _, veh in ipairs(GetAllVehicles()) do
+        if DoesEntityExist(veh) and NormalizePlate(GetVehicleNumberPlateText(veh)) == plate then
+            if #(pedCoords - GetEntityCoords(veh)) <= maxDist then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- 声明所有权频率限制，防止刷事件触发 DB 查询与实体遍历
+local lastClaimAt = {}
+local CLAIM_COOLDOWN_MS = 1000
+
+local function AllowClaim(src)
+    local now = GetGameTimer()
+    if now - (lastClaimAt[src] or 0) < CLAIM_COOLDOWN_MS then return false end
+    lastClaimAt[src] = now
+    return true
+end
+
+-- ==============================================================
 -- 兼容 exports（替代 exports['qb-vehiclekeys']）
 -- ==============================================================
 
@@ -106,23 +153,45 @@ RegisterNetEvent('qb-vehiclekeys:server:AcquireVehicleKeys', function(plate)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
-    -- 🛡️ 安全: 服务端权威校验
-    -- 1. 若车辆已有车主，仅原车主可重新声明所有权
-    -- 2. 若车辆无主（新建/刷出），首位声明者获得所有权
-    --    └─ 不再校验 GetVehiclePedIsIn — /car 命令在 Warp 前触发 SetOwner，
-    --       服务器处理时玩家尚未入车，旧校验会导致 KeyManager 未注册
-    local owner = KeyManager.GetOwner(plate)
-    if owner and owner ~= Player.PlayerData.citizenid then
+    plate = NormalizePlate(plate)
+    if not plate then return end
+    if not AllowClaim(src) then return end
+
+    local cid = Player.PlayerData.citizenid
+
+    local function Deny(reason)
         if exports['custom-logs'] then
             exports['custom-logs']:LogSecurity('钥匙所有权冒领拦截',
-                ('**%s** (%s) | Plate: %s | Owner: %s'):format(
-                    GetPlayerName(src), Player.PlayerData.citizenid, plate, owner),
+                ('**%s** (%s) | Plate: %s | %s'):format(
+                    GetPlayerName(src), cid, plate, reason),
                 16711680)
         end
+    end
+
+    -- 🛡️ 安全: 服务端权威校验（客户端车牌不可信，可随意伪造）
+    -- 1. 会话内已有车主 → 仅原车主可重新声明
+    local owner = KeyManager.GetOwner(plate)
+    if owner and owner ~= cid then
+        Deny('会话车主: ' .. owner)
         return
     end
 
-    KeyManager.GiveKeys(plate, Player.PlayerData.citizenid, 'owner')
+    -- 2. player_vehicles 登记车辆 → 以数据库车主为准
+    --    不校验物理距离，保留上线加载 / 远程取车的合法流程
+    local dbOwner = MySQL.scalar.await('SELECT citizenid FROM player_vehicles WHERE plate = ?', { plate })
+    if dbOwner and dbOwner ~= cid then
+        Deny('数据库车主: ' .. dbOwner)
+        return
+    end
+
+    -- 3. 未登记载具（警车 / 任务车 / NPC 车）→ 必须在载具旁
+    --    此前无任何校验，任何人可远程认领任意车牌
+    if not dbOwner and not IsNearVehicleWithPlate(src, plate) then
+        Deny('无主载具不在附近')
+        return
+    end
+
+    KeyManager.GiveKeys(plate, cid, 'owner')
 
     -- 立即推送客户端缓存，防止冷缓存导致误锁车门
     TriggerClientEvent(Config.Vehicles.Events.KEYS_UPDATED, src, {
@@ -215,6 +284,8 @@ end)
 
 AddEventHandler('playerDropped', function(reason)
     local src = source
+    lastClaimAt[src] = nil
+
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or not Player.PlayerData then return end
 

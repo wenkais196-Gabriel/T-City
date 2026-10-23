@@ -8,10 +8,11 @@ SCRIPT=$(readlink -f "$0")
 SCRIPTPATH=$(dirname "$SCRIPT")
 BASE="$SCRIPTPATH/T-CityLite.base"
 ALPINE="$SCRIPTPATH/alpine"
+BRANCH=$(git -C "$SCRIPTPATH" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
 echo "========================================"
 echo "  T-City Lite 开发服务器"
-echo "  当前分支: v0.5-crime"
+echo "  当前分支: $BRANCH"
 echo "  数据目录: $BASE"
 echo "========================================"
 echo ""

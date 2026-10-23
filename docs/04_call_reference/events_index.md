@@ -25,7 +25,7 @@
 
 | 事件 | 资源 | 验证链 | 风险 |
 |:---|:---|:---|:---|
-| `qb-inventory:server:SetInventoryData` | qb-inventory | Player 存在，`shop-` 禁止 | 🟠 otherplayer 无距离检查 |
+| `qb-inventory:server:SetInventoryData` | qb-inventory | Player 存在，`shop-` 禁止，`otherplayer-` 距离 3m（管理员豁免） | 🟢 |
 | `police:server:BillPlayer` | qb-policejob | 距离 + job.type + 50K 上限 | 🟢 |
 | `police:server:SeizeCash` | qb-policejob | 距离 + job.type | 🟢 |
 | `police:server:SeizeDriverLicense` | qb-policejob | 距离 → custom-certificates | 🟢 |
@@ -39,7 +39,7 @@
 | `mining:server:smeltOre` | custom-mining | job=miner → 配方配置 → ⚠️ 无 SecurityService | 🟡 |
 | `custom-vehicles:server:hotwireAttempt` | custom-vehicles | 3s冷却 + 5m距离 + 已有钥匙守卫 | 🟡 |
 | `custom-vehicles:server:lockpickAttempt` | custom-vehicles | 冷却 + 距离 + 背包 + 失败消耗 | 🟡 |
-| `qb-vehiclekeys:server:AcquireVehicleKeys` | custom-vehicles/compat | 现有车主检查 + 审计 | 🔴 |
+| `qb-vehiclekeys:server:AcquireVehicleKeys` | custom-vehicles/compat | 车牌格式 → 会话车主 → `player_vehicles` 车主 → 无主车 10m 邻近 + 1s 限流 + 审计 | 🟢 |
 
 ### 中优先级 — 状态/元数据变更
 
@@ -101,9 +101,12 @@
 
 | 风险等级 | 数量 | 主要问题 |
 |:---|:---:|:---|
-| 🔴 HIGH | 1 | `AcquireVehicleKeys` — 可声明车辆所有权 |
-| 🟠 MEDIUM | 4 | SetInventoryData (无距离), hotwireAttempt, lockpickAttempt, mineOre/smeltOre (无 SecurityService) |
+| 🔴 HIGH | 0 | 2026-10-22 修复 `AcquireVehicleKeys` 远程认领（登记车主 + 无主车 10m 邻近） |
+| 🟠 MEDIUM | 3 | hotwireAttempt, lockpickAttempt, mineOre/smeltOre (无 SecurityService) |
 | 🟡 LOW | ~15 | 有基础验证但有改进空间 |
 | 🟢 SAFE | ~30+ | 完整验证链 |
 
+> **2026-10-22 已修复**: `AcquireVehicleKeys`（远程认领载具所有权）与 `SetInventoryData`（`otherplayer-` 远程搬运物品）。
+> 回归测试: `tests/unit/layer3_business/test_vehiclekeys_claim.py`。
+>
 > **建议**: 对 marked 🟡 及以上的事件添加 `SecurityService.ValidateItemEvent` 调用，并补全物理距离校验。

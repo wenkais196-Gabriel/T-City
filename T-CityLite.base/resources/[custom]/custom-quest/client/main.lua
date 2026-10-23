@@ -278,6 +278,12 @@ end)
 -- v0.7.0: 事件: 重连状态恢复
 -- ==============================================================
 
+-- 测试/恢复用：手动请求服务端重发当前任务状态（含 decision 重新弹窗）
+RegisterCommand('questrestore', function()
+    TriggerServerEvent(Config.Quest.Events.QUEST_REQUEST_STATE)
+    print('[custom-quest] requested state restore')
+end, false)
+
 RegisterNetEvent(Config.Quest.Events.QUEST_STATE_RESTORE, function(data)
     if not data or not data.quest_id then return end
 

@@ -19,6 +19,7 @@ description 'Story engine with decision trees and player choice tracking'
 version '0.7.0'
 
 files {
+    'client/decision_nui.html',
     'config/story_arcs.lua',
     'config/decisions.lua',
     'config/arc_finales.lua',

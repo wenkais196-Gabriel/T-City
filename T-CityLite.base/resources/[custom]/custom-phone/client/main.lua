@@ -5,8 +5,11 @@ local isPhoneOpen = false
 local function ClosePhone()
     if not isPhoneOpen then return end
     isPhoneOpen = false
-    SetNuiFocusKeepInput(false)
-    SetNuiFocus(false, false)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    if not ok then
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+    end
     SendNUIMessage({
         action = 'phone:close'
     })
@@ -22,8 +25,12 @@ end
 local function OpenPhone()
     if isPhoneOpen then return end
     isPhoneOpen = true
-    SetNuiFocus(true, true)          -- cursor visible, keyboard to NUI
-    SetNuiFocusKeepInput(true)      -- WASD/Space pass through for movement
+    -- 参考 qb-phone：保留移动输入，用 DisableDisplayControlActions 屏蔽武器/电台轮盘
+    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = true }) end)
+    if not ok then
+        SetNuiFocus(true, true)
+        SetNuiFocusKeepInput(true)
+    end
     
     -- Play GTA V native phone-out animation
     local ped = PlayerPedId()
@@ -94,6 +101,8 @@ local function OpenPhone()
             if not IsEntityPlayingAnim(GetPlayerPed(-1), 'cellphone@', 'cellphone_text_read_base', 3) then
                 TaskPlayAnim(GetPlayerPed(-1), 'cellphone@', 'cellphone_text_read_base', 8.0, -8.0, -1, 49, 0, false, false, false)
             end
+            -- 参考 qb-phone：保留 WASD 移动，只屏蔽显示类控制（武器/电台轮盘）
+            DisableDisplayControlActions()
             -- While phone is open, disable standard game control keys that interfere with UI typing
             -- NOTE: Do NOT disable INPUT_CHAT (T key/245) so players can still chat
             DisableControlAction(0, 1, true) -- LookLeftRight
@@ -103,6 +112,13 @@ local function OpenPhone()
             DisableControlAction(0, 25, true) -- Aim
             DisableControlAction(0, 263, true) -- Melee Attack 1
             DisableControlAction(0, 37, true) -- Select Weapon
+            DisableControlAction(0, 14, true) -- Weapon wheel next (mouse scroll)
+            DisableControlAction(0, 15, true) -- Weapon wheel prev (mouse scroll)
+            DisableControlAction(0, 16, true) -- Select next weapon
+            DisableControlAction(0, 17, true) -- Select prev weapon
+            DisableControlAction(0, 81, true) -- Vehicle radio wheel
+            DisableControlAction(0, 82, true) -- Next radio station
+            DisableControlAction(0, 83, true) -- Prev radio station
             DisableControlAction(0, 44, true) -- Cover
             DisableControlAction(0, 140, true) -- Light Attack
             DisableControlAction(0, 141, true) -- Heavy Attack
@@ -114,9 +130,9 @@ local function OpenPhone()
                 ClosePhone()
             end
 
-            -- 每 2 秒同步一次游戏内时间（减少 SendNUIMessage 频率）
+            -- 每 ~1 秒同步一次游戏内时间（1:1 时间比例下分钟变化快，2 秒会跳 2 分钟）
             timeTick = timeTick + 1
-            if timeTick >= 120 then
+            if timeTick >= 60 then
                 timeTick = 0
                 local h = GetClockHours(); local m = GetClockMinutes()
                 local wIcon, wLabel = getWeatherInfo()
