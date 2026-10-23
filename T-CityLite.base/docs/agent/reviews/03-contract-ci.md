@@ -214,7 +214,7 @@ emoji 文本也会出现分歧。
 | `unit-tests` → `pytest -q tests/unit` | 是 | 包含 `test_director_http_contract.py`；`lua5.4` 已安装，本地 262 passed / 136 skipped。 |
 | `unit-tests` → `pytest -q ../tests/agent` | 是 | 包含 `test_agent_tools.py`，因此 `--check` 与合法性测试会被间接执行。 |
 | `lua-syntax` → changed `*.lua` | 是（有条件） | 本 commit 的 `agent_tools.lua`/`fxmanifest.lua` 在 diff 中，`luac5.4 -p` 本地通过；但 `git diff ... || true` 会静默吞掉 diff 失败。 |
-| `docs-check` | 否（advisory） | 只打印缺失链接，永远 exit 0；当前有 2 条既有缺失（`PROJECT_PROGRESS.md`、`QBCore_Lite_versions/README.md`），新文件不会让它红。 |
+| `docs-check` | 否（advisory） | 只打印缺失链接，永远 exit 0；当前有 2 条既有缺失（`PROJECT_PROGRESS.md`、`docs/archive/QBCore_Lite_versions/README.md`），新文件不会让它红。 |
 
 建议新增/修改：
 
@@ -286,7 +286,7 @@ CI 已安装 `lua5.4`，本地可跑通；`tests/agent/lua` 的 `http_contract` 
 | `API.md` | `:410-418` 只列 5 个 read 工具；`:476-477` 说“MCP exposes only the five read tools / No write endpoints”。与 `TOOLS.md` 的 13 active（含 3 个写）直接冲突。 | F-10 |
 | `ACTIONS.md` | `:18-24` 只列 `notify/add_money/start_quest`，`:288` 的 action_type 也只有 3 个；`:409` 仍把 L2+ 列为 out of scope。`TOOLS.md` 有 7 个 planned（含 L2/L3/L4）。严格说不是“已实现”的矛盾，但文档没有说明“planned 尚未进 policy.lua”，容易误读。 | F-13 |
 | `design/03-tool-contract.md` | `:15`（L2 默认审批）与 `:144`/`:153`（effect⇒L3/L4）互相矛盾；`:245` 要求 `http.query`，registry 实际隐式映射；`:284-296` 的 untrusted 未实现。 | D2/D3/D4 |
-| docs-check | 当前 2 条既有缺失：`PROJECT_PROGRESS.md: ./quest-system-design.md`、`QBCore_Lite_versions/README.md: ../quest-system-design.md`；脚本只打印、不 exit 1，所以不会因为新文件变红。 | F-18 |
+| docs-check | 当前 2 条既有缺失：`PROJECT_PROGRESS.md: ./quest-system-design.md`、`docs/archive/QBCore_Lite_versions/README.md: ../quest-system-design.md`；脚本只打印、不 exit 1，所以不会因为新文件变红。 | F-18 |
 
 ## 7. 复现命令（最小集）
 

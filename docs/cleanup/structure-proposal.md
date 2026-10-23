@@ -17,7 +17,7 @@
 | `T-CityLite.base/docs/` | 83 个文件（80 篇 md，含 40 篇根级散落） |
 | 资源目录 | 114 个，分 7 类 |
 | `ensure` 行数 | 82（`configs/modules/*.cfg`） |
-| 顶层目录 | 10 个（含 `design/`、`storys/`、`default/`、`QBCore_Lite_versions/`、`.hermes/`） |
+| 顶层目录 | 10 个（含 `design/`、`storys/`、`default/`、`docs/archive/QBCore_Lite_versions/`、`.hermes/`） |
 
 ---
 
@@ -38,7 +38,7 @@
 
 - `AGENTS.md` 有 8 处写成 `docs/agent/STATUS.md`、`docs/agent/ACTIONS.md` 等（`:136`、`:189`–`:194`、`:204`），而该路径在仓库根**不存在**，真身在 `T-CityLite.base/docs/agent/`。能"看懂"只是因为读者自己猜了第二个根。
 - `T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md:140` 已经把这件事记为缺陷：*"`docs/server-design/*` 在仓库根 `docs/`，但代码注释按 `T-CityLite.base/docs/server-design` 引用 | 路径漂移"*。
-- 全仓相对链接扫描命中 20 条，剔除代码片段误报后**真实失效 12 条**：`docs/agent/phone/qb-phone-research.md` 9 条（`%5Bcustom%5D` URL 编码成假路径）、`QBCore_Lite_versions/README.md`→`../quest-system-design.md`、`T-CityLite.base/docs/audit/2026-10-21-test-report.md`→`../migrations/v0.7.2_schema_reconcile.sql`、`T-CityLite.base/docs/agent/reviews/03-contract-ci.md`→`TOOLS.md`。
+- 全仓相对链接扫描命中 20 条，剔除代码片段误报后**真实失效 12 条**：`docs/agent/phone/qb-phone-research.md` 9 条（`%5Bcustom%5D` URL 编码成假路径）、`docs/archive/QBCore_Lite_versions/README.md`→`../quest-system-design.md`、`T-CityLite.base/docs/audit/2026-10-21-test-report.md`→`../migrations/v0.7.2_schema_reconcile.sql`、`T-CityLite.base/docs/agent/reviews/03-contract-ci.md`→`TOOLS.md`。
 - 失效**不会被 CI 拦住**：`docs-check` job 只 `print` 缺失列表，脚本没有 `sys.exit(1)`（`.github/workflows/ci.yml:107-131`），永远 exit 0。
 - 仓库根**没有** `README.md`；`docs/` 与 `T-CityLite.base/docs/` 都**没有** README 索引（`T-CityLite.base/docs/agent/README.md` 是 read-layer 规格而非全集索引；`standards/README.md`、`docs/server-design/README.md` 只为各自子目录做索引）。
 
@@ -83,7 +83,7 @@
 | `start_txadmin.bat` | 硬编码 `cd /d D:\server`，`%~dp0` 与 `D:\server` 混用 | 本地启动脚本，0 处引用 |
 | `fxmanifest_inventory.json` | 64KB 生成物，`"path"` 用 Windows 反斜杠，已过期 | 0 处代码引用 |
 | `simulation_report.json` | `tools/oneoff/sandbox_simulator.py` 的输出物 | `sandbox_simulator.py:443` `--output` 默认值即 `simulation_report.json`（写 cwd） |
-| `QBCore_Lite_versions/` | 16 篇 v0.1–v1.0 历史版本规格 | 仅 `PROJECT_PROGRESS.md:30-39` 引用 |
+| `docs/archive/QBCore_Lite_versions/` | 16 篇 v0.1–v1.0 历史版本规格 | 仅 `PROJECT_PROGRESS.md:30-39` 引用 |
 
 ---
 
@@ -472,7 +472,7 @@ git mv T-CityLite.base/tests/db_check.js T-CityLite.base/tests/db_chain_check.js
 
 # 历史文档簇（可选，需先确认无人在用）
 # T-CityLite.base/docs/audit/ → docs/archive/audit-2026-06-20/ 与 -2026-10-21/
-# QBCore_Lite_versions/ → docs/archive/versions/（PROJECT_PROGRESS.md:30-39 的 10 条链接要改）
+# docs/archive/QBCore_Lite_versions/ → docs/archive/versions/（PROJECT_PROGRESS.md:30-39 的 10 条链接要改）
 ```
 
 **Phase 3 附加建议**：修完链接后，把 `ci.yml` 的 `docs-check` 从 advisory 改成阻断（`sys.exit(1)`），否则下一轮腐烂仍然看不见。

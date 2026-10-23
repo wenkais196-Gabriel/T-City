@@ -27,19 +27,19 @@
 
 | 阶段版本 | 阶段名称 | 状态 | 交付日期 / 计划周期 | 说明 | 详细规范文档 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **v0.1** | [精简启动链](./QBCore_Lite_versions/v0.1-lite-startup.md) | ✅ 已完成 | 2026-05-28 | 剔除 `ensure [qb]`，实现最小可运行启动链，建立模块化 cfg。 | [v0.1 Spec](./QBCore_Lite_versions/v0.1-lite-startup.md) |
-| **v0.2** | [基础 RP 闭环](./QBCore_Lite_versions/v0.2-basic-rp.md) | ✅ 已完成 | 2026-05-29 (修补) | 启用警用、医院、银行、车辆基础功能，完成 wanted wantedlevel 接管与 duty 快捷切换。 | [v0.2 Spec](./QBCore_Lite_versions/v0.2-basic-rp.md) |
-| **v0.3** | [基础设施层](./QBCore_Lite_versions/v0.3-economy.md) | ✅ 已完成 | 2026-05-31 | 统一经济出口、安全边界、多标签职业 API、服装/帮派/门锁激活、管理员面板及 Discord 审计。 | [v0.3 Spec](./QBCore_Lite_versions/v0.3-economy.md) |
-| **v0.4** | [自研手机系统](./QBCore_Lite_versions/v0.4-custom-phone.md) | ✅ 已完成 | 2026-05-31 | 独立于 qb-phone，基于 Svelte + Vite 的 Phone-First 自研手机，包含 Job Board 与领袖 App。 | [v0.4 Spec](./QBCore_Lite_versions/v0.4-custom-phone.md) |
-| **v0.5** | [犯罪玩法系统](./QBCore_Lite_versions/v0.5-crime-gameplay.md) | ✅ 主体完成 | 2026-06 | 便利店抢劫、毒品产业链、经济/安全联动已落地；3 项文档遗留待确认（原料点/配方/洗钱折旧）。 | [v0.5 Spec](./QBCore_Lite_versions/v0.5-crime-gameplay.md) |
-| **v0.6-quest** | [通用任务系统](./QBCore_Lite_versions/v0.6-quest-system.md) | ✅ 已完成 | 2026-06-21 | `custom-quest` 已启用：数据驱动状态机、外部 API、手机追踪、DB 持久化、安全门控。 | [v0.6-quest Spec](./QBCore_Lite_versions/v0.6-quest-system.md) |
-| **v0.6a**| [民间经济职业](./QBCore_Lite_versions/v0.6a-civilian-economy.md) | 🟡 部分落地 | - | 矿业 `custom-mining` + 物流任务已落地；渔民/农民/机修职业尚未落地。 | [v0.6a Spec](./QBCore_Lite_versions/v0.6a-civilian-economy.md) |
-| **v0.6b**| [沙盒社会生态](./QBCore_Lite_versions/v0.6-sandbox-sociology.md) | 🟡 部分落地 | - | `custom-cartel`、`story-engine`、`custom-justice` 已落地；三线领袖 KPI/催化剂卡牌/盲盒百科未见实现。 | [v0.6b Spec](./QBCore_Lite_versions/v0.6-sandbox-sociology.md) |
-| **v0.7a**| [载具重构与物流](./QBCore_Lite_versions/v0.7a-civilian-logistics.md) | 🚧 待验收 | 2026-06-22 代码完成 / 2026-10-21 tag | `custom-vehicles` 替换 qb-vehiclekeys；qb-vehicleshop Phase 1–5；物流任务配置；已打 tag `v0.7a`，缺实机验收记录。 | [v0.7a Spec](./QBCore_Lite_versions/v0.7a-civilian-logistics.md) |
-| **v0.7b**| [智能车载中控屏](./QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) | 🟡 提前落地 | - | `tcity-dashboard` v2.1 已启用并接入 vehicles.cfg；待实机验收。 | [v0.7b Spec](./QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) |
-| **v1.0** | [Beta 开放公测](./QBCore_Lite_versions/v1.0-beta-launch.md) | ⏳ 待开始 | v0.7a 验收后启动 | 全系统联调、压力测试、数据清理及发布清单。 | [v1.0 Spec](./QBCore_Lite_versions/v1.0-beta-launch.md) |
-| **v1.3** | [硬核原位登录](./QBCore_Lite_versions/v0.7-hardcore-spawn-system.md) | ⏳ 规划中 | 上线后迭代 | 放弃传统出生点选择，实现下线原位登录与出生。 | [v0.7 Spec](./QBCore_Lite_versions/v0.7-hardcore-spawn-system.md) |
-| **v1.4** | [多语言本土化](./QBCore_Lite_versions/v0.8-localization-adaptation.md) | ⏳ 规划中 | 上线后迭代 | 支持全服国际化多语言自适应切换。 | [v0.8 Spec](./QBCore_Lite_versions/v0.8-localization-adaptation.md) |
+| **v0.1** | [精简启动链](./docs/archive/QBCore_Lite_versions/v0.1-lite-startup.md) | ✅ 已完成 | 2026-05-28 | 剔除 `ensure [qb]`，实现最小可运行启动链，建立模块化 cfg。 | [v0.1 Spec](./docs/archive/QBCore_Lite_versions/v0.1-lite-startup.md) |
+| **v0.2** | [基础 RP 闭环](./docs/archive/QBCore_Lite_versions/v0.2-basic-rp.md) | ✅ 已完成 | 2026-05-29 (修补) | 启用警用、医院、银行、车辆基础功能，完成 wanted wantedlevel 接管与 duty 快捷切换。 | [v0.2 Spec](./docs/archive/QBCore_Lite_versions/v0.2-basic-rp.md) |
+| **v0.3** | [基础设施层](./docs/archive/QBCore_Lite_versions/v0.3-economy.md) | ✅ 已完成 | 2026-05-31 | 统一经济出口、安全边界、多标签职业 API、服装/帮派/门锁激活、管理员面板及 Discord 审计。 | [v0.3 Spec](./docs/archive/QBCore_Lite_versions/v0.3-economy.md) |
+| **v0.4** | [自研手机系统](./docs/archive/QBCore_Lite_versions/v0.4-custom-phone.md) | ✅ 已完成 | 2026-05-31 | 独立于 qb-phone，基于 Svelte + Vite 的 Phone-First 自研手机，包含 Job Board 与领袖 App。 | [v0.4 Spec](./docs/archive/QBCore_Lite_versions/v0.4-custom-phone.md) |
+| **v0.5** | [犯罪玩法系统](./docs/archive/QBCore_Lite_versions/v0.5-crime-gameplay.md) | ✅ 主体完成 | 2026-06 | 便利店抢劫、毒品产业链、经济/安全联动已落地；3 项文档遗留待确认（原料点/配方/洗钱折旧）。 | [v0.5 Spec](./docs/archive/QBCore_Lite_versions/v0.5-crime-gameplay.md) |
+| **v0.6-quest** | [通用任务系统](./docs/archive/QBCore_Lite_versions/v0.6-quest-system.md) | ✅ 已完成 | 2026-06-21 | `custom-quest` 已启用：数据驱动状态机、外部 API、手机追踪、DB 持久化、安全门控。 | [v0.6-quest Spec](./docs/archive/QBCore_Lite_versions/v0.6-quest-system.md) |
+| **v0.6a**| [民间经济职业](./docs/archive/QBCore_Lite_versions/v0.6a-civilian-economy.md) | 🟡 部分落地 | - | 矿业 `custom-mining` + 物流任务已落地；渔民/农民/机修职业尚未落地。 | [v0.6a Spec](./docs/archive/QBCore_Lite_versions/v0.6a-civilian-economy.md) |
+| **v0.6b**| [沙盒社会生态](./docs/archive/QBCore_Lite_versions/v0.6-sandbox-sociology.md) | 🟡 部分落地 | - | `custom-cartel`、`story-engine`、`custom-justice` 已落地；三线领袖 KPI/催化剂卡牌/盲盒百科未见实现。 | [v0.6b Spec](./docs/archive/QBCore_Lite_versions/v0.6-sandbox-sociology.md) |
+| **v0.7a**| [载具重构与物流](./docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | 🚧 待验收 | 2026-06-22 代码完成 / 2026-10-21 tag | `custom-vehicles` 替换 qb-vehiclekeys；qb-vehicleshop Phase 1–5；物流任务配置；已打 tag `v0.7a`，缺实机验收记录。 | [v0.7a Spec](./docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) |
+| **v0.7b**| [智能车载中控屏](./docs/archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) | 🟡 提前落地 | - | `tcity-dashboard` v2.1 已启用并接入 vehicles.cfg；待实机验收。 | [v0.7b Spec](./docs/archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) |
+| **v1.0** | [Beta 开放公测](./docs/archive/QBCore_Lite_versions/v1.0-beta-launch.md) | ⏳ 待开始 | v0.7a 验收后启动 | 全系统联调、压力测试、数据清理及发布清单。 | [v1.0 Spec](./docs/archive/QBCore_Lite_versions/v1.0-beta-launch.md) |
+| **v1.3** | [硬核原位登录](./docs/archive/QBCore_Lite_versions/v0.7-hardcore-spawn-system.md) | ⏳ 规划中 | 上线后迭代 | 放弃传统出生点选择，实现下线原位登录与出生。 | [v0.7 Spec](./docs/archive/QBCore_Lite_versions/v0.7-hardcore-spawn-system.md) |
+| **v1.4** | [多语言本土化](./docs/archive/QBCore_Lite_versions/v0.8-localization-adaptation.md) | ⏳ 规划中 | 上线后迭代 | 支持全服国际化多语言自适应切换。 | [v0.8 Spec](./docs/archive/QBCore_Lite_versions/v0.8-localization-adaptation.md) |
 
 ---
 
@@ -197,7 +197,7 @@ Active resources detected in codebase (**78** unique resources across **17** mod
   - **任务与剧情**: `custom-quest` 状态机 + 安全门控；`story-engine` 决策树
   - **质量门禁**: 修复 5 个失效测试夹具；`pytest tests` 286 passed / 132 skipped；新增 GitHub Actions CI
 - **待办**: 实机验收；132 个依赖 MySQL 的用例在带库环境跑通
-- **详见文档**: [v0.7a Spec](./QBCore_Lite_versions/v0.7a-civilian-logistics.md) | [v0.7a 维护手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
+- **详见文档**: [v0.7a Spec](./docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | [v0.7a 维护手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
 
 ### v0.4 — 自研手机系统验证与完善
 - **日期**: 2026-06-01
@@ -246,10 +246,10 @@ Active resources detected in codebase (**78** unique resources across **17** mod
 - [v0.5 代码审查报告](./T-CityLite.base/docs/v0.5-code-review-report.md)
 - [v0.5 架构重构交付报告](./T-CityLite.base/docs/v0.5-architecture-migration.md)
 - [NUI 前端开发标准规范](./T-CityLite.base/docs/v0.4-nui-standard.md)
-- [**v0.7a 载具重构与物流**](./QBCore_Lite_versions/v0.7a-civilian-logistics.md)
+- [**v0.7a 载具重构与物流**](./docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md)
 - [v0.7a 验收报告](./T-CityLite.base/docs/v0.7a-acceptance-report.md)
 - [v0.7b 收尾 vs v1.0 联调建议](./T-CityLite.base/docs/v0.7b-v1.0-decision.md)
 - [注意项解决方案](./T-CityLite.base/docs/attention-items-solutions.md)
 - [菜单交互设计规范](./T-CityLite.base/docs/menu-interaction-design.md)
 - [v0.7 集成测试手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
-- [**v0.6-quest 通用任务系统设计方案**](./QBCore_Lite_versions/v0.6-quest-system.md)
+- [**v0.6-quest 通用任务系统设计方案**](./docs/archive/QBCore_Lite_versions/v0.6-quest-system.md)

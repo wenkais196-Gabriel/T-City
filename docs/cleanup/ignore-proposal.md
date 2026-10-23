@@ -69,7 +69,7 @@
 | B14 | 95 `.env` | 过窄，改为 A6 的 `.env*` + `!.env.example` |
 | B15 | 96 `.env.local` | 同上（`.env.production` 当前完全没被忽略） |
 | B16 | 102 `config.json` | **过宽**：匹配任意层级的 `config.json`，会静默吞掉未来资源的 `config.json`（QBCore 生态常见配置名）；改为 A2 的 `/default/config.json` |
-| B17 | 107 `QBCore_CDB34E.base/` | 死路径：两个 worktree 都没有该目录；实际保留的是 `QBCore_Lite_versions/`（已跟踪 30 个文件） |
+| B17 | 107 `QBCore_CDB34E.base/` | 死路径：两个 worktree 都没有该目录；实际保留的是 `docs/archive/QBCore_Lite_versions/`（已跟踪 30 个文件） |
 | B18 | 110 `skills/` | 死路径：两个 worktree 均不存在 |
 | B19 | 111 `AI_SYNC_MEMO.md` | 死路径：两个 worktree 均不存在 |
 | B20 | 128 `logs/` | 与 41 行重复；实测任意 `logs/` 路径最终都命中第 128 行（后者覆盖前者），删除后行为不变 |
