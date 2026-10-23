@@ -34,6 +34,19 @@ _G.QBCore = {
                     citizenid = 'CID_ECON',
                     metadata = {},
                 },
+                -- fa6afb4 moved TriggerReward onto the qb-core Player API;
+                -- record the same shape the old EconomyService stub used.
+                Functions = {
+                    AddMoney = function(account, amount, reason)
+                        table.insert(__calls, {
+                            citizenid = 'CID_ECON',
+                            account = account,
+                            amount = amount,
+                            reason = reason,
+                        })
+                        return true
+                    end,
+                },
             }
         end,
     },
