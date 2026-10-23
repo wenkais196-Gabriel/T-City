@@ -215,11 +215,12 @@ local function sampleVehicle(getVehicle, getModel, getPlate, getSeat, ped)
     return { model = model, plate = plate, seat = seat }
 end
 
-local function samplePlayer(player, precision, opts)
+local function samplePlayer(player, precision, opts, sourceHint)
     local data = playerData(player)
     if not data then return nil end
 
-    local source = tonumber(data.source)
+    -- PlayerData does not reliably carry the source; the roster key does.
+    local source = tonumber(sourceHint) or tonumber(data.source)
     local sampled = {
         precision = precision,
         now_ms = LiveRules.now_ms(),
@@ -245,13 +246,13 @@ local function samplePlayer(player, precision, opts)
         if ok then ped = value end
     end
 
-    local exists = false
-    if ped and ped ~= 0 then
-        exists = true
-        if doesExist then
-            local ok, value = pcall(doesExist, ped)
-            exists = ok and value == true
-        end
+    -- DoesEntityExist is unreliable on the server for remote players (it can
+    -- return false for a ped that GetEntityCoords happily resolves), so it is
+    -- advisory only: a non-zero ped is enough to attempt the reads.
+    local exists = ped ~= nil and ped ~= 0
+    if exists and doesExist then
+        local ok, value = pcall(doesExist, ped)
+        if ok and value == false then exists = true end
     end
 
     if exists then
@@ -323,12 +324,15 @@ local function listPlayers(query, precision)
     -- enumerate it.  The projected array is filled by index instead of
     -- table.insert and sorted once, keeping a 48-player snapshot allocation
     -- light (no per-player json.encode).
-    for _, player in pairs(sourceTable) do
+    for sourceKey, player in pairs(sourceTable) do
         local data = playerData(player)
         if data then
             local job = type(data.job) == 'table' and data.job.name or nil
             if not jobFilter or job == jobFilter then
-                local projected = samplePlayer(player, precision, { include_money = false })
+                local projected = samplePlayer(player, precision, {
+                    include_money = false,
+                    source = sourceKey,
+                })
                 if projected then
                     count = count + 1
                     collected[count] = projected
@@ -347,14 +351,19 @@ local function findPlayer(citizenid)
         and qb.Functions.GetPlayerByCitizenId or nil
     if type(getter) == 'function' then
         local ok, player = pcall(getter, citizenid)
-        if ok and player then return player end
+        if ok and player then
+            local data = playerData(player)
+            return player, data and tonumber(data.source) or nil
+        end
     end
 
     local sourceTable = playersTable()
     if not sourceTable then return nil end
-    for _, player in pairs(sourceTable) do
+    for sourceKey, player in pairs(sourceTable) do
         local data = playerData(player)
-        if data and data.citizenid == citizenid then return player end
+        if data and data.citizenid == citizenid then
+            return player, tonumber(data.source) or tonumber(sourceKey)
+        end
     end
     return nil
 end
@@ -385,11 +394,12 @@ local function handlePlayer(request, live, citizenid)
     -- Compare with the same normalisation the list projection uses, otherwise
     -- a citizenid that the list sanitises would 404 on the detail route.
     local wanted = LiveRules.sanitize_text(citizenid, 32)
-    local player = wanted and findPlayer(wanted) or nil
+    local player, sourceKey
+    if wanted then player, sourceKey = findPlayer(wanted) end
     if not player then
         return failure(404, 'player_not_found', 'player not found')
     end
-    local projected = samplePlayer(player, live.precision)
+    local projected = samplePlayer(player, live.precision, nil, sourceKey)
     if not projected then
         return failure(404, 'player_not_found', 'player not found')
     end
