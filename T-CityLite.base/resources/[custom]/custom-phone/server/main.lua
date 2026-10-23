@@ -1354,3 +1354,10 @@ RegisterNetEvent('phone:server:focusState', function(state)
         tostring(state.focused),
         tostring(state.keepInput)))
 end)
+
+
+RegisterNetEvent('phone:server:clientError', function(data)
+    if type(data) ~= 'table' then return end
+    print(('[custom-phone][nui-error] %s | %s'):format(
+        tostring(data.message):sub(1, 300), tostring(data.stack):sub(1, 500)))
+end)

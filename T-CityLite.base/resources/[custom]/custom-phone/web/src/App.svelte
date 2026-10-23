@@ -21,7 +21,16 @@
   import SheriffApp from './apps/leader/SheriffApp.svelte';
   import GangBossApp from './apps/leader/GangBossApp.svelte';
 
-  import { registerNuiEvent, isBrowser } from './utils/nui';
+  import { registerNuiEvent, isBrowser, fetchNui } from './utils/nui';
+  if (typeof window !== 'undefined') {
+    window.addEventListener('error', (event) => {
+      void fetchNui('clientError', { message: String(event.message), stack: String(event.error?.stack ?? '') }).catch(() => {});
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      void fetchNui('clientError', { message: String(event.reason), stack: '' }).catch(() => {});
+    });
+  }
+
   import {
     isPhoneOpen,
     activeApp,

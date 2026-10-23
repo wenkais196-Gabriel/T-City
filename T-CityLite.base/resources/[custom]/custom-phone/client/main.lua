@@ -827,3 +827,9 @@ RegisterNUICallback('appAction', function(data, cb)
         cb(res or { success = false, error = 'no_response' })
     end, data.app_id, data.action, data.params)
 end)
+
+
+RegisterNUICallback('clientError', function(data, cb)
+    TriggerServerEvent('phone:server:clientError', data)
+    cb({ ok = true })
+end)
