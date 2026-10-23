@@ -377,12 +377,24 @@ end)
 -- foreign key, so a label such as 'City Services' is allowed and is rendered
 -- as-is by the client. Labels beyond 20 chars do not fit the VARCHAR(20)
 -- sender_number column; the default label does.
+-- sender_number is VARCHAR(20), so the label is capped at 20 BYTES. A naive
+-- sub(1, 20) can cut a UTF-8 sequence in half; back off to a lead byte.
+local function truncateUtf8Bytes(value, limit)
+    if #value <= limit then return value end
+    local cut = limit
+    while cut > 0 do
+        local byte = value:byte(cut + 1)
+        if not byte or byte < 0x80 or byte >= 0xC0 then break end
+        cut = cut - 1
+    end
+    return value:sub(1, cut)
+end
+
 local function SystemSenderLabel(label)
     if type(label) ~= 'string' then return 'City Services' end
     local cleaned = label:gsub('%c', '')
     if cleaned == '' then return 'City Services' end
-    if #cleaned > 32 then cleaned = cleaned:sub(1, 32) end
-    return cleaned
+    return truncateUtf8Bytes(cleaned, 20)
 end
 
 local function TruncateUtf8(value, limit)

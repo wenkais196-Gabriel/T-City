@@ -383,6 +383,24 @@ return {
             assert(lines[1]:find('status=ok', 1, true) ~= nil)
         end)
 
+        check('client_ack_text_is_not_stored_as_error_code', function()
+            local env = newEnv(enabled())
+            handshake(env, 1)
+            local co, message = dispatch(env, 'send_notify', { text = 'x', kind = 'info' })
+            sendAck(env, 1, message, {
+                status = 'failed',
+                error_code = '<script>alert(1)</script>',
+                detail = { message = '<b>owned</b>' },
+            })
+            local ok = finish(co)
+            assert(ok == false, 'a failed ack must fail the request')
+
+            local rows = auditRows(env)
+            assert(#rows == 1, ('expected 1 audit row, got %d'):format(#rows))
+            assert(rows[1][6] == 'client_error',
+                'arbitrary client text must collapse to client_error, got ' .. tostring(rows[1][6]))
+        end)
+
         -- ------------------------------------------------------------------
         -- Cancel / lifecycle
         -- ------------------------------------------------------------------

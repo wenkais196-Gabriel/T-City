@@ -105,7 +105,15 @@ end
 local function auditToDb(entry, status, elapsed)
     if not Config().audit then return end
     local errorCode
-    if type(entry.err) == 'table' then errorCode = entry.err.code end
+    if type(entry.err) == 'table' and type(entry.err.code) == 'string' then
+        -- Only a machine token may reach the column. The ack text is client
+        -- controlled, so anything else collapses to client_error instead of
+        -- storing arbitrary prose in a field documented as a code.
+        errorCode = entry.err.code
+        if not errorCode:match('^[a-z0-9_]+$') or #errorCode > 64 then
+            errorCode = 'client_error'
+        end
+    end
     local ok, err = pcall(function()
         return MySQL.insert.await([[
             INSERT INTO agent_effects
