@@ -1,19 +1,20 @@
 <script lang="ts">
   import { playerData } from '../stores/phone';
-  import { fetchNui } from '../utils/nui';
-  import { registerNuiEvent } from '../utils/nui';
-  import { onMount, onDestroy } from 'svelte';
-  
+  import {
+    callPhase,
+    callPeerName,
+    callPeerNumber,
+    callStatusText,
+    callDuration,
+    placeCall,
+    answerIncomingCall,
+    rejectIncomingCall,
+    endActiveCall
+  } from '../stores/call';
+
+  // Call events (incoming/answered/ended) are registered globally in App.svelte,
+  // so the call state is received even when this app is not mounted.
   let dialNumber = $state('');
-  let isCalling = $state(false);
-  let isIncoming = $state(false);
-  let isOngoing = $state(false);
-  let callStatus = $state('');
-  let currentCallId = $state<number | null>(null);
-  let callerName = $state('');
-  let callerNumber = $state('');
-  let callDuration = $state(0);
-  let durationTimer: ReturnType<typeof setInterval> | null = null;
 
   const appendNumber = (num: string) => {
     if (dialNumber.length < 15) {
@@ -25,76 +26,23 @@
     dialNumber = dialNumber.slice(0, -1);
   };
 
-  const startCall = async () => {
+  const startCall = () => {
     if (!dialNumber) return;
-    isCalling = true;
-    callStatus = 'Dialing...';
-
-    try {
-      const res = await fetchNui('initiateCall', { targetNumber: dialNumber });
-      if (res.success) {
-        currentCallId = res.callId;
-        callStatus = 'Ringing...';
-      } else {
-        callStatus = res.message || 'Call failed';
-        setTimeout(() => { isCalling = false; dialNumber = ''; }, 2000);
-      }
-    } catch (err) {
-      callStatus = 'Network error';
-      setTimeout(() => { isCalling = false; dialNumber = ''; }, 2000);
-    }
+    void placeCall(dialNumber);
   };
 
-  const answerCall = async () => {
-    if (!currentCallId) return;
-    try {
-      const res = await fetchNui('answerCall', { callId: currentCallId });
-      if (res.success) {
-        isIncoming = false;
-        isOngoing = true;
-        callStatus = 'Connected';
-        startDurationTimer();
-      }
-    } catch (err) { console.error(err); }
+  const answerCall = () => {
+    void answerIncomingCall();
   };
 
-  const rejectCall = async () => {
-    if (!currentCallId) return;
-    try {
-      await fetchNui('rejectCall', { callId: currentCallId });
-    } catch (err) { console.error(err); }
-    resetCallState();
-  };
-
-  const endCall = async () => {
-    if (!currentCallId) {
-      resetCallState();
-      return;
-    }
-    try {
-      await fetchNui('hangupCall', { callId: currentCallId });
-    } catch (err) { console.error(err); }
-    resetCallState();
-  };
-
-  const resetCallState = () => {
-    isCalling = false;
-    isIncoming = false;
-    isOngoing = false;
+  const rejectCall = () => {
+    void rejectIncomingCall();
     dialNumber = '';
-    currentCallId = null;
-    callDuration = 0;
-    stopDurationTimer();
   };
 
-  const startDurationTimer = () => {
-    stopDurationTimer();
-    callDuration = 0;
-    durationTimer = setInterval(() => { callDuration++; }, 1000);
-  };
-
-  const stopDurationTimer = () => {
-    if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
+  const endCall = () => {
+    void endActiveCall();
+    dialNumber = '';
   };
 
   const formatDuration = (sec: number) => {
@@ -102,39 +50,6 @@
     const s = sec % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
-
-  onMount(() => {
-    // Listen for incoming calls
-    registerNuiEvent('phone:incomingCall', (data: any) => {
-      if (data && data.callData) {
-        isIncoming = true;
-        currentCallId = data.callData.callId;
-        callerName = data.callData.callerName;
-        callerNumber = data.callData.callerNumber;
-        dialNumber = data.callData.callerNumber;
-      }
-    });
-
-    // Call answered by other party
-    registerNuiEvent('phone:callAnswered', (data: any) => {
-      if (data && data.callId === currentCallId) {
-        isOngoing = true;
-        callStatus = 'Connected';
-        startDurationTimer();
-      }
-    });
-
-    // Call ended
-    registerNuiEvent('phone:callEnded', (data: any) => {
-      if (data && data.callId === currentCallId) {
-        resetCallState();
-      }
-    });
-  });
-
-  onDestroy(() => {
-    stopDurationTimer();
-  });
 </script>
 
 <div class="phone-call-app app-transition">
@@ -144,12 +59,12 @@
   </div>
 
   <div class="app-content phone-scrollable">
-    {#if isIncoming}
+    {#if $callPhase === 'incoming'}
       <!-- Incoming Call Screen -->
       <div class="incoming-call-screen">
         <div class="caller-avatar-large">👤</div>
-        <div class="caller-name">{callerName}</div>
-        <div class="caller-number">{callerNumber}</div>
+        <div class="caller-name">{$callPeerName}</div>
+        <div class="caller-number">{$callPeerNumber}</div>
         <div class="call-status-ringing">Incoming Call...</div>
         <div class="call-actions">
           <button class="call-btn answer-btn" onclick={answerCall} aria-label="Answer">
@@ -162,12 +77,12 @@
           </button>
         </div>
       </div>
-    {:else if isOngoing}
+    {:else if $callPhase === 'ongoing'}
       <!-- Ongoing Call Screen -->
       <div class="ongoing-call-screen">
         <div class="caller-avatar-large">👤</div>
-        <div class="caller-name">{dialNumber}</div>
-        <div class="call-timer">{formatDuration(callDuration)}</div>
+        <div class="caller-name">{$callPeerName || $callPeerNumber}</div>
+        <div class="call-timer">{formatDuration($callDuration)}</div>
         <div class="call-status-active">Connected</div>
         <div class="call-actions">
           <button class="call-btn end-call-btn" onclick={endCall} aria-label="End Call">
@@ -176,12 +91,12 @@
           </button>
         </div>
       </div>
-    {:else if isCalling}
+    {:else if $callPhase === 'dialing' || $callPhase === 'ringing'}
       <!-- Outgoing Call Screen -->
       <div class="outgoing-call-screen">
         <div class="caller-avatar-large">👤</div>
-        <div class="caller-name">{dialNumber}</div>
-        <div class="call-status-ringing">{callStatus}</div>
+        <div class="caller-name">{$callPeerNumber || dialNumber}</div>
+        <div class="call-status-ringing">{$callStatusText}</div>
         <div class="call-actions">
           <button class="call-btn end-call-btn" onclick={endCall} aria-label="Cancel Call">
             <span class="btn-icon">🔴</span>

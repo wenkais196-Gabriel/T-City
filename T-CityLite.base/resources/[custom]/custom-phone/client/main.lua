@@ -95,6 +95,7 @@ local function OpenPhone()
         SendNUIMessage({ action = 'phone:updateTime', hour = h, minute = m,
             dayName = dName, date = dDate,
             weatherIcon = wIcon, weatherLabel = wLabel })
+        local lastHour, lastMinute = h, m
 
         while isPhoneOpen do
             -- Keep phone animation looping after entry
@@ -130,19 +131,23 @@ local function OpenPhone()
                 ClosePhone()
             end
 
-            -- 每 ~1 秒同步一次游戏内时间（1:1 时间比例下分钟变化快，2 秒会跳 2 分钟）
+            -- 每 ~1 秒检查一次游戏内时间，但只在分钟真正变化时才推送，
+            -- 避免每秒刷新 NUI store 触发状态栏/首页重渲染（审计 §2）
             timeTick = timeTick + 1
             if timeTick >= 60 then
                 timeTick = 0
                 local h = GetClockHours(); local m = GetClockMinutes()
-                local wIcon, wLabel = getWeatherInfo()
-                local dName, dDate = getLocalDate()
-                SendNUIMessage({
-                    action = 'phone:updateTime',
-                    hour = h, minute = m,
-                    dayName = dName, date = dDate,
-                    weatherIcon = wIcon, weatherLabel = wLabel
-                })
+                if h ~= lastHour or m ~= lastMinute then
+                    lastHour, lastMinute = h, m
+                    local wIcon, wLabel = getWeatherInfo()
+                    local dName, dDate = getLocalDate()
+                    SendNUIMessage({
+                        action = 'phone:updateTime',
+                        hour = h, minute = m,
+                        dayName = dName, date = dDate,
+                        weatherIcon = wIcon, weatherLabel = wLabel
+                    })
+                end
             end
             Wait(0)
         end
@@ -411,12 +416,15 @@ RegisterNetEvent('phone:client:newMessage', function(msg)
 end)
 
 RegisterNetEvent('phone:client:newNotification', function(notif)
+    if not notif then return end
+    -- 只做本地展示：服务端推送前已经在 StoreAndPushNotification 里落库。
+    -- 这里曾把收到的通知回存服务端，会形成
+    -- 服务端推送 → 客户端回存 → 服务端再推送 的无限回环（审计 B03）。
+    -- 服务端发起的通知带 origin='server' / stored=true；即使没有标记也一律不回存。
     SendNUIMessage({
         action = 'phone:newNotification',
         notification = notif
     })
-    -- Also persist to DB via server
-    TriggerServerEvent('phone:server:storeNotification', notif)
 end)
 
 RegisterNetEvent('phone:client:newJob', function(job)
@@ -435,6 +443,10 @@ end)
 
 -- Phone Call Events (real-time push from server)
 RegisterNetEvent('phone:client:incomingCall', function(callData)
+    -- 手机未打开（关闭/锁屏）时自动弹出，确保来电一定能被看到（审计 B04）
+    if not isPhoneOpen then
+        OpenPhone()
+    end
     SendNUIMessage({
         action = 'phone:incomingCall',
         callData = callData

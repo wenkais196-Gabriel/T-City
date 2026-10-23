@@ -33,6 +33,14 @@
     loadPhoneData,
     closePhone
   } from './stores/phone';
+  import {
+    callPhase,
+    handleIncomingCall,
+    handleCallAnswered,
+    handleCallEnded,
+    endActiveCall
+  } from './stores/call';
+  import { get } from 'svelte/store';
   import { onMount } from 'svelte';
 
   // Background Wallpaper - 使用 CSS 渐变替代 Unsplash 网络图片（消除 HTTP 请求卡顿）
@@ -46,7 +54,8 @@
     // 1. Listen for Phone Open signal from Lua
     registerNuiEvent('phone:open', (data) => {
       isPhoneOpen.set(true);
-      activeApp.set('home');
+      // Keep the call screen if a call is still ringing/ongoing when reopened.
+      activeApp.set(get(callPhase) === 'idle' ? 'home' : 'phonecall');
       loadPhoneData();
     });
 
@@ -54,6 +63,9 @@
     registerNuiEvent('phone:close', () => {
       isPhoneOpen.set(false);
       activeApp.set('home');
+      // The screen is gone, so end/decline any active call instead of leaving a
+      // zombie call ringing until the timeout.
+      if (get(callPhase) !== 'idle') void endActiveCall();
     });
 
     // Money real-time updates
@@ -94,6 +106,19 @@
       }
     });
 
+    // 6b. Call events are global: App.svelte is always mounted, while PhoneCall
+    // only exists inside the phone, so receiving them there lost every call
+    // that arrived from Home or while the phone was closed (audit B04).
+    registerNuiEvent('phone:incomingCall', (data) => {
+      handleIncomingCall(data?.callData);
+    });
+    registerNuiEvent('phone:callAnswered', (data) => {
+      handleCallAnswered(data);
+    });
+    registerNuiEvent('phone:callEnded', (data) => {
+      handleCallEnded(data);
+    });
+
     // 7. Dynamic Leader registration updates
     registerNuiEvent('phone:registerLeaderApp', (data) => {
       playerData.update(pd => {
@@ -121,12 +146,26 @@
       }
     });
 
-    // Global keydown: ESC closes phone; M closes phone when NUI has focus
+    // Global keydown: ESC closes the phone, M toggles it closed — but only while
+    // the phone is open, without ctrl/meta/alt, and never while typing in a form
+    // field. Typing "me"/"message" used to close the phone mid-word (audit B05).
+    const isEditableTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!get(isPhoneOpen)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'Escape') {
         closePhone();
+        return;
       }
-      if (e.key === 'm' || e.key === 'M') {
+      // M is the phone hotkey; inside inputs it must reach the field untouched.
+      if ((e.key === 'm' || e.key === 'M') && !isEditableTarget(e.target)) {
         closePhone();
       }
     };

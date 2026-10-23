@@ -1,5 +1,77 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- ----------------------------------------------------
+-- Career identity -> phone role resolution
+-- ----------------------------------------------------
+-- custom-career v2 returns job_name/job_label/org_id/rank_tier/certs and no
+-- primary_role. This is the single place custom-phone maps that identity onto
+-- the roles the NUI/faction/hotline code expects, so no caller can end up
+-- indexing a table with nil.
+PhoneIdentity = {}
+
+local JOB_ROLE = {
+    police = 'police',
+    ambulance = 'medic',
+    doctor = 'medic',
+    ems = 'medic',
+    mayor = 'mayor',
+    judge = 'justice',
+    lawyer = 'justice',
+    mechanic = 'mechanic',
+    taxi = 'taxi',
+    bus = 'bus',
+}
+
+--- Normalise an identity table. `job_name` wins; legacy `primary_role` is
+--- honoured when the career data has no usable job. A missing identity
+--- resolves to the 'none' role instead of nil.
+---@param identity table|nil
+---@return table
+function PhoneIdentity.From(identity)
+    identity = type(identity) == 'table' and identity or {}
+
+    local job = type(identity.job_name) == 'string' and identity.job_name:lower() or nil
+    if job == '' or job == 'none' then job = nil end
+
+    local role
+    if job and job ~= 'unemployed' then
+        role = JOB_ROLE[job] or job
+    elseif type(identity.primary_role) == 'string' and identity.primary_role ~= '' then
+        role = identity.primary_role
+    end
+
+    local gang = identity.gang_name
+    if (not role or role == 'civilian')
+        and type(gang) == 'string' and gang ~= '' and gang ~= 'none' then
+        role = 'gang'
+    end
+
+    identity.primary_role = role or 'none'
+    identity.job_name = identity.job_name or 'unemployed'
+    identity.rank_tier = identity.rank_tier or 'entry'
+    identity.certs = type(identity.certs) == 'table' and identity.certs or {}
+    return identity
+end
+
+--- Career tier for a leader. custom-career uses 'leader' for jobs and 'boss'
+--- for gangs, so both count.
+---@param identity table|nil
+---@return boolean
+function PhoneIdentity.IsLeader(identity)
+    local tier = type(identity) == 'table' and identity.rank_tier or nil
+    return tier == 'leader' or tier == 'boss'
+end
+
+---@param source number
+---@return table
+function PhoneIdentity.Resolve(source)
+    local ok, identity = pcall(function()
+        return exports['custom-career']:GetPlayerIdentity(source)
+    end)
+    if not ok then identity = nil end
+    return PhoneIdentity.From(identity)
+end
+
 -- Create phone_numbers table if it does not exist
 MySQL.ready(function()
     MySQL.query([[
@@ -23,8 +95,8 @@ MySQL.ready(function()
             is_read BOOLEAN DEFAULT FALSE,
             gps TEXT DEFAULT NULL,
             msg_status VARCHAR(20) DEFAULT NULL,
-            INDEX idx_receiver (receiver_number),
-            INDEX idx_sender (sender_number),
+            INDEX idx_receiver (receiver_number, id),
+            INDEX idx_sender (sender_number, id),
             INDEX idx_time (timestamp)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ]])
@@ -118,6 +190,68 @@ end
 
 -- ⚡ TTL Cache: avoid re-querying phone data on rapid open/close (30s TTL)
 local phoneDataCache = {} -- { [citizenid] = { data, expires } }
+local playerCitizen = {}  -- { [source] = citizenid } for playerDropped cleanup
+
+-- Job board cache shared by the open callback and the refresh thread. Declared
+-- before getPhoneData on purpose: a later `local` would make the function read
+-- a different (global) variable than the thread writes.
+local phoneJobBoardCache = { data = nil, expires = 0 }
+
+--- Called by the job board write paths after insert/accept/complete. The
+--- per-player phone cache embeds the job list, so clear both layers.
+function PhoneInvalidateJobBoardCache()
+    phoneJobBoardCache.expires = 0
+    phoneDataCache = {}
+end
+
+-- ----------------------------------------------------
+-- Notification persistence
+-- ----------------------------------------------------
+-- Server-originated notifications are persisted here and pushed exactly once.
+-- Client-originated storeNotification requests are persisted without pushing
+-- back to the sender, which is what breaks the
+-- phone:client:newNotification -> phone:server:storeNotification loop.
+local function StoreNotification(targetSrc, notification, origin)
+    if type(notification) ~= 'table' then return end
+
+    local Player = QBCore.Functions.GetPlayer(targetSrc)
+    if not Player then return end
+
+    local citizenid = Player.PlayerData.citizenid
+    local title = type(notification.title) == 'string' and notification.title or 'Notification'
+    local content = type(notification.content) == 'string' and notification.content or ''
+    title = Sms.TruncateBytes(title, 200)
+    content = Sms.TruncateChars(content, 1000)
+
+    MySQL.Async.insert('INSERT INTO phone_notifications (citizenid, title, content) VALUES (?, ?, ?)', {
+        citizenid, title, content
+    }, function(result)
+        local id = PhoneDb.InsertId(result)
+        if id <= 0 then return end
+
+        phoneDataCache[citizenid] = nil
+
+        -- A client-originated row came from that client's own notification
+        -- tray. Pushing it back would make the client persist it again.
+        if origin == 'client' then return end
+
+        TriggerClientEvent('phone:client:newNotification', targetSrc, {
+            id = id,
+            title = title,
+            content = content,
+            timestamp = os.date('%Y-%m-%d %H:%M:%S'),
+            is_read = false,
+            origin = 'server',
+        })
+    end)
+end
+
+--- Persist a server-originated notification and push it to the target once.
+---@param targetSrc number
+---@param notification table
+function PhoneNotify(targetSrc, notification)
+    StoreNotification(targetSrc, notification, 'server')
+end
 
 -- 1. Main callback to load all phone data
 QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb)
@@ -125,6 +259,7 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
     if not Player then return cb(nil) end
 
     local citizenid = Player.PlayerData.citizenid
+    playerCitizen[source] = citizenid
 
     -- ⚡ Cache hit: return cached data if still valid (30s TTL)
     local cached = phoneDataCache[citizenid]
@@ -138,12 +273,7 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
     local phoneNum = Player.PlayerData.charinfo.phone
     local name = Player.PlayerData.charinfo.firstname .. " " .. Player.PlayerData.charinfo.lastname
 
-    local identity = exports['custom-career']:GetPlayerIdentity(source) or {
-        primary_role = 'civilian',
-        rank_tier = 'entry',
-        department = '',
-        certs = {}
-    }
+    local identity = PhoneIdentity.Resolve(source)
 
     local data = {
         success = true,
@@ -231,16 +361,19 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
     )
 
     -- 4. Job board (cache-aware: skip query if cache warm)
-    if phoneJobBoardCache and #phoneJobBoardCache > 0 then
-        jobs = phoneJobBoardCache
+    if phoneJobBoardCache.data and phoneJobBoardCache.expires > os.time() then
+        jobs = phoneJobBoardCache.data
     else
         pending = pending + 1
         MySQL.Async.fetchAll('SELECT * FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}, function(result)
             jobs = result or {}
             for i = 1, #jobs do
-                if jobs[i] and type(jobs[i].target_tags) == 'string' then jobs[i].target_tags = json.decode(jobs[i].target_tags) end
+                if jobs[i] and type(jobs[i].target_tags) == 'string' then
+                    local ok, decoded = pcall(json.decode, jobs[i].target_tags)
+                    jobs[i].target_tags = ok and decoded or nil
+                end
             end
-            phoneJobBoardCache = jobs
+            phoneJobBoardCache = { data = jobs, expires = os.time() + 120 }
             pending = pending - 1
             tryAssemble()
         end)
@@ -256,15 +389,17 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
 end)
 
 -- ⚡ Job board background refresh (every 2 minutes)
-local phoneJobBoardCache = nil
 CreateThread(function()
     while true do
         Wait(2 * 60 * 1000)
         local jobs = MySQL.query.await('SELECT * FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}) or {}
         for i = 1, #jobs do
-            if jobs[i] and type(jobs[i].target_tags) == 'string' then jobs[i].target_tags = json.decode(jobs[i].target_tags) end
+            if jobs[i] and type(jobs[i].target_tags) == 'string' then
+                local ok, decoded = pcall(json.decode, jobs[i].target_tags)
+                jobs[i].target_tags = ok and decoded or nil
+            end
         end
-        phoneJobBoardCache = jobs
+        phoneJobBoardCache = { data = jobs, expires = os.time() + 120 }
     end
 end)
 
@@ -286,10 +421,11 @@ QBCore.Functions.CreateCallback('phone:server:addContact', function(source, cb, 
 
     MySQL.Async.insert('INSERT INTO phone_contacts (citizenid, name, number) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)', {
         citizenid, name, number
-    }, function(insertId)
+    }, function(result)
+        local contactId = PhoneDb.InsertId(result)
         phoneDataCache[citizenid] = nil -- ⚡ Invalidate cache
-        if insertId then
-            cb({ success = true, contact = { id = insertId, citizenid = citizenid, name = name, number = number } })
+        if contactId > 0 then
+            cb({ success = true, contact = { id = contactId, citizenid = citizenid, name = name, number = number } })
         else
             cb({ success = false, message = 'Database error' })
         end
@@ -302,7 +438,7 @@ QBCore.Functions.CreateCallback('phone:server:deleteContact', function(source, c
 
     MySQL.Async.execute('DELETE FROM phone_contacts WHERE id = ? AND citizenid = ?', { id, Player.PlayerData.citizenid }, function(affected)
         phoneDataCache[Player.PlayerData.citizenid] = nil -- ⚡ Invalidate cache
-        cb({ success = affected.affectedRows > 0 })
+        cb({ success = PhoneDb.AffectedRows(affected) > 0 })
     end)
 end)
 
@@ -325,10 +461,11 @@ QBCore.Functions.CreateCallback('phone:server:sendMessage', function(source, cb,
 
     MySQL.Async.insert('INSERT INTO phone_messages (sender_number, receiver_number, message) VALUES (?, ?, ?)', {
         sender_number, receiver_number, message
-    }, function(insertId)
-        if insertId then
+    }, function(result)
+        local messageId = PhoneDb.InsertId(result)
+        if messageId > 0 then
             local msgData = {
-                id = insertId,
+                id = messageId,
                 sender_number = sender_number,
                 receiver_number = receiver_number,
                 message = message,
@@ -340,13 +477,11 @@ QBCore.Functions.CreateCallback('phone:server:sendMessage', function(source, cb,
             local targetPlayer = GetPlayerByPhone(receiver_number)
             if targetPlayer then
                 TriggerClientEvent('phone:client:newMessage', targetPlayer.PlayerData.source, msgData)
-                -- Push notification popup too!
-                TriggerClientEvent('phone:client:newNotification', targetPlayer.PlayerData.source, {
-                    id = math.random(1000, 9999),
+                -- Server-originated: persisted and pushed once. The client echo
+                -- of this event is dropped by phone:server:storeNotification.
+                PhoneNotify(targetPlayer.PlayerData.source, {
                     title = "💬 New Message",
                     content = "From " .. (Player.PlayerData.charinfo.firstname .. " " .. Player.PlayerData.charinfo.lastname) .. ": " .. message,
-                    timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-                    is_read = false
                 })
             end
 
@@ -390,17 +525,15 @@ exports('SendSystemMessage', function(receiverNumber, message, senderLabel)
 
     local sender = Sms.SenderLabel(senderLabel)
 
-    local insertOk, insertId = pcall(function()
+    local insertOk, insertResult = pcall(function()
         return MySQL.insert.await(
             'INSERT INTO phone_messages (sender_number, receiver_number, message) VALUES (?, ?, ?)',
             { sender, receiverNumber, message })
     end)
-    -- oxmysql returns the insert id; some wrappers return { insertId = ... }.
-    if insertOk and type(insertId) == 'table' then insertId = insertId.insertId or 0 end
-    if not insertOk or not tonumber(insertId) or tonumber(insertId) == 0 then
+    local insertId = insertOk and PhoneDb.InsertId(insertResult) or 0
+    if insertId == 0 then
         return false, 'db_error'
     end
-    insertId = tonumber(insertId)
 
     -- Online receiver: push the same two client events the player-to-player
     -- callback sends. Offline receivers still get the persisted row.
@@ -415,12 +548,9 @@ exports('SendSystemMessage', function(receiverNumber, message, senderLabel)
             timestamp = timestamp,
             is_read = false,
         })
-        TriggerClientEvent('phone:client:newNotification', targetPlayer.PlayerData.source, {
-            id = math.random(1000, 9999),
+        PhoneNotify(targetPlayer.PlayerData.source, {
             title = sender,
             content = Sms.TruncateChars(message, 200),
-            timestamp = timestamp,
-            is_read = false,
         })
     end
 
@@ -430,27 +560,18 @@ end)
 -- ----------------------------------------------------
 -- Notification Persistence (DB-backed)
 -- ----------------------------------------------------
+-- Notifications created by server code are persisted and pushed by
+-- PhoneNotify() above. The only notification that can arrive here is a
+-- client-originated one, which is stored without being echoed back.
+RegisterNetEvent('phone:server:storeNotification', function(notification, origin)
+    if type(notification) ~= 'table' then return end
 
--- Helper: store notification in DB + push to client
-local function StoreAndPushNotification(targetSrc, notification)
-    local Player = QBCore.Functions.GetPlayer(targetSrc)
-    if not Player then return end
-    local citizenid = Player.PlayerData.citizenid
+    -- Server-pushed notifications are already stored before they are sent.
+    -- Older clients echo them back from phone:client:newNotification; dropping
+    -- that echo breaks the store -> push -> store loop and keeps one row.
+    if origin == 'server' or notification.origin == 'server' then return end
 
-    MySQL.Async.insert('INSERT INTO phone_notifications (citizenid, title, content) VALUES (?, ?, ?)', {
-        citizenid, notification.title, notification.content
-    }, function(insertId)
-        if insertId then
-            notification.id = insertId
-            notification.is_read = false
-            notification.timestamp = os.date('%Y-%m-%d %H:%M:%S')
-            TriggerClientEvent('phone:client:newNotification', targetSrc, notification)
-        end
-    end)
-end
-
-RegisterNetEvent('phone:server:storeNotification', function(notification)
-    StoreAndPushNotification(source, notification)
+    StoreNotification(source, notification, 'client')
 end)
 
 QBCore.Functions.CreateCallback('phone:server:markNotificationsRead', function(source, cb)
@@ -481,7 +602,7 @@ QBCore.Functions.CreateCallback('phone:server:deleteNotification', function(sour
     MySQL.Async.execute('DELETE FROM phone_notifications WHERE id = ? AND citizenid = ?', {
         id, Player.PlayerData.citizenid
     }, function(affected)
-        if affected.affectedRows > 0 then
+        if PhoneDb.AffectedRows(affected) > 0 then
             phoneDataCache[Player.PlayerData.citizenid] = nil
             cb({ success = true })
         else
@@ -529,12 +650,13 @@ QBCore.Functions.CreateCallback('phone:server:postCityFeed', function(source, cb
 
     MySQL.Async.insert('INSERT INTO phone_cityfeed (citizenid, content) VALUES (?, ?)', {
         citizenid, content
-    }, function(insertId)
-        if insertId then
+    }, function(result)
+        local postId = PhoneDb.InsertId(result)
+        if postId > 0 then
             cb({
                 success = true,
                 post = {
-                    id = insertId,
+                    id = postId,
                     name = name,
                     citizenid = citizenid,
                     content = content,
@@ -550,7 +672,7 @@ end)
 
 QBCore.Functions.CreateCallback('phone:server:likeCityFeed', function(source, cb, id)
     MySQL.Async.execute('UPDATE phone_cityfeed SET likes = likes + 1 WHERE id = ?', { id }, function(affected)
-        if affected.affectedRows > 0 then
+        if PhoneDb.AffectedRows(affected) > 0 then
             MySQL.Async.fetchScalar('SELECT likes FROM phone_cityfeed WHERE id = ?', { id }, function(likes)
                 cb({ success = true, likes = likes or 0 })
             end)
@@ -624,15 +746,12 @@ QBCore.Functions.CreateCallback('phone:server:shareContactNearby', function(sour
     -- Insert contact directly into target player database
     MySQL.Async.insert('INSERT INTO phone_contacts (citizenid, name, number) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)', {
         targetCid, contactName, contactNumber
-    }, function(insertId)
-        if insertId then
-            -- Trigger UI push reload and visual notification for recipient
-            TriggerClientEvent('phone:client:newNotification', targetPlayerId, {
-                id = math.random(1000, 9999),
+    }, function(result)
+        if PhoneDb.InsertId(result) > 0 then
+            -- Persisted server-originated notification (pushed once).
+            PhoneNotify(targetPlayerId, {
                 title = "📥 Contact Received",
                 content = ("%s shared their card: %s. Added to contacts!"):format(contactName, contactNumber),
-                timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-                is_read = false
             })
             cb({ success = true, message = 'Contact shared successfully!' })
         else
@@ -683,10 +802,12 @@ QBCore.Functions.CreateCallback('phone:server:getAllHotlineStatus', function(sou
     local playerJobs = {}
 
     for _, pid in ipairs(QBCore.Functions.GetPlayers()) do
-        local identity = exports['custom-career']:GetPlayerIdentity(pid)
-        if identity then
-            local role = identity.primary_role
-            playerJobs[role] = (playerJobs[role] or 0) + 1
+        -- Hotline keys are QB job names (police/ambulance/...), not the NUI
+        -- role, so count the resolved identity's job_name.
+        local identity = PhoneIdentity.Resolve(pid)
+        local job = identity.job_name
+        if job and job ~= 'unemployed' and job ~= 'none' then
+            playerJobs[job] = (playerJobs[job] or 0) + 1
         end
     end
 
@@ -722,13 +843,10 @@ QBCore.Functions.CreateCallback('phone:server:triggerHotlineCall', function(sour
         if Target and Target.PlayerData.job.name == jobType and Target.PlayerData.job.onduty then
             table.insert(activeWorkers, playerId)
             
-            -- Push call alerting notification
-            TriggerClientEvent('phone:client:newNotification', playerId, {
-                id = math.random(1000, 9999),
+            -- Persisted server-originated notification (pushed once).
+            PhoneNotify(playerId, {
                 title = "📞 Inbound Hot Call",
                 content = ("Emergency call from %s (%s)"):format(callerName, callerPhone),
-                timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-                is_read = false
             })
         end
     end
@@ -808,8 +926,11 @@ QBCore.Functions.CreateCallback('phone:server:initiateCall', function(source, cb
     -- Create call record
     MySQL.Async.insert('INSERT INTO phone_calls (caller, receiver, status) VALUES (?, ?, ?)', {
         callerNumber, targetNumber, 'ringing'
-    }, function(callId)
-        if not callId then return cb({ success = false, message = 'Database error' }) end
+    }, function(result)
+        -- activeCalls keys must be scalars: the NUI round-trips callId through
+        -- JSON, so a table key ({ insertId = ... }) could never be looked up.
+        local callId = PhoneDb.InsertId(result)
+        if callId == 0 then return cb({ success = false, message = 'Database error' }) end
 
         activeCalls[callId] = {
             caller = source,
@@ -832,7 +953,8 @@ QBCore.Functions.CreateCallback('phone:server:initiateCall', function(source, cb
 end)
 
 QBCore.Functions.CreateCallback('phone:server:answerCall', function(source, cb, callId)
-    local call = activeCalls[callId]
+    callId = tonumber(callId)
+    local call = callId and activeCalls[callId]
     if not call then return cb({ success = false, message = 'Call not found' }) end
     if call.receiver ~= source then return cb({ success = false, message = 'Not your call' }) end
 
@@ -848,7 +970,8 @@ QBCore.Functions.CreateCallback('phone:server:answerCall', function(source, cb, 
 end)
 
 QBCore.Functions.CreateCallback('phone:server:rejectCall', function(source, cb, callId)
-    local call = activeCalls[callId]
+    callId = tonumber(callId)
+    local call = callId and activeCalls[callId]
     if not call then return cb({ success = false, message = 'Call not found' }) end
 
     local isCaller = (call.caller == source)
@@ -872,7 +995,8 @@ QBCore.Functions.CreateCallback('phone:server:rejectCall', function(source, cb, 
 end)
 
 QBCore.Functions.CreateCallback('phone:server:hangupCall', function(source, cb, callId)
-    local call = activeCalls[callId]
+    callId = tonumber(callId)
+    local call = callId and activeCalls[callId]
     if not call then return cb({ success = false, message = 'Call not found' }) end
 
     local isCaller = (call.caller == source)
@@ -895,4 +1019,35 @@ QBCore.Functions.CreateCallback('phone:server:hangupCall', function(source, cb, 
 
     activeCalls[callId] = nil
     cb({ success = true })
+end)
+
+-- ----------------------------------------------------
+-- Player cleanup (cache + orphaned calls)
+-- ----------------------------------------------------
+AddEventHandler('playerDropped', function()
+    local src = source
+
+    local citizenid = playerCitizen[src]
+    if citizenid then
+        phoneDataCache[citizenid] = nil
+        playerCitizen[src] = nil
+    end
+
+    for callId, call in pairs(activeCalls) do
+        if call.caller == src or call.receiver == src then
+            local duration = call.startTime and math.max(0, os.time() - call.startTime) or 0
+            local status = call.status == 'ringing' and 'missed' or 'completed'
+
+            MySQL.Async.execute('UPDATE phone_calls SET status = ?, duration = ? WHERE id = ?', {
+                status, duration, callId
+            })
+
+            local otherParty = call.caller == src and call.receiver or call.caller
+            if otherParty and otherParty ~= src then
+                TriggerClientEvent('phone:client:callEnded', otherParty, { callId = callId, status = status })
+            end
+
+            activeCalls[callId] = nil
+        end
+    end
 end)
