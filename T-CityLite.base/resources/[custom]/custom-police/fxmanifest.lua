@@ -26,6 +26,7 @@ client_scripts {
 	'client/objects.lua',
 	'client/tracker.lua',
 	'client/stolen_radar.lua',
+	'client/p0.lua',
 }
 
 dependencies {
@@ -39,6 +40,7 @@ dependencies {
 server_scripts {
 	'@oxmysql/lib/MySQL.lua',
 	'server/main.lua',
+	'server/p0.lua',
 	'server/commands.lua',
 	'server/interactions.lua',
 	'server/evidence.lua',
