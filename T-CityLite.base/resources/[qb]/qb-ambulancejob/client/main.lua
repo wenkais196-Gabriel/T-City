@@ -696,7 +696,7 @@ RegisterNetEvent('hospital:client:RespawnAtHospital', function()
         end
     end
     TriggerServerEvent('hospital:server:RespawnAtHospital', hospitalIndex)
-    if exports['qb-policejob']:IsHandcuffed() then
+    if exports['custom-police']:IsHandcuffed() then
         TriggerEvent('police:client:GetCuffed', -1)
     end
     TriggerEvent('police:client:DeEscort')
