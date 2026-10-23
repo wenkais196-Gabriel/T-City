@@ -51,7 +51,13 @@ T-City 是一个 **QBCore / FiveM RP 服务器**（"T-City Lite"），外加一�
 - 启动参数（本地 `server.cfg`，gitignored）：`set monitorMode "true"`、`set citizen_root "<repo>/alpine/opt/cfx-server/citizen/"`、`set txAdminPort "40120"`，并 `ensure monitor`。
 - 面板：`http://<vm-ip>:40120`；首次 setup 用终端 PIN 创建管理员。
 - txAdmin 在 Linux 下按 `fxsPath/../../opt/cfx-server/...` 推导 loader，而本仓库的 alpine 布局会多一层 `opt`；已在 `alpine/opt/` 下建兼容软链 `opt -> .`（本地、gitignored）。
-- 当前 `monitor` 跑在手动启动的游戏服进程里，txAdmin 无法再 spawn 子服（30120 被占）；要切成 txAdmin 托管，先停手动服，用 monitor 模式单独起 FXServer，再由面板 Start。
+- **当前为 txAdmin 托管模式**：独立 monitor 进程（40120）spawn 游戏服子进程（30120）。monitor 启动命令：FXServer + `+set monitorMode true +set txAdminPort 40120 +set citizen_root ...`（不 `+exec server.cfg`），并设置 `TXHOST_TXA_DATA=<repo>/alpine/txData`；游戏服由 txAdmin 的 Start 拉起。
+- 自动化管理员账号 `agent` 的凭据在 `~/.txadmin-agent.env`（600，不入库）。API：
+  - 登录：`POST /auth/password`，body `{username,password}`，响应含 `csrfToken` 并设置 cookie；
+  - 后续请求带 cookie + `X-TxAdmin-CsrfToken` 头；
+  - 资源：`POST /fxserver/commands`，body `{action:"restart_res"|"start_res"|"stop_res"|"ensure_res"|"refresh_res", parameter:"<resource>"}`；
+  - 服务器：`POST /fxserver/controls`，body `{action:"start"|"stop"|"restart"}`。
+  - 任意 console 命令不在 REST 里（仅面板 Live Console / WebSocket）。
 - 密码轮换后确认：`git check-ignore -v alpine/txData/admins.json`；历史里的旧哈希不会因轮换消失，必要时 filter-repo。
 
 
