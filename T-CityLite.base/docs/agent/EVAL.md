@@ -12,6 +12,9 @@ only writes are the explicit `--out` / `--markdown` paths.
   [`v2.3_agent_actions.sql`](../../migrations/v2.3_agent_actions.sql))
 - **Denial table (optional input):** `agent_denials` (migration
   [`v2.5_agent_denials.sql`](../../migrations/v2.5_agent_denials.sql))
+- **Effect-channel table (not a default input):** `agent_effects` (migration
+  [`v2.6_agent_effects.sql`](../../migrations/v2.6_agent_effects.sql)) — see
+  §2.2; it is **not** part of the default `agent_actions` export.
 - **Design reference:** [`design/05-test-and-eval.md`](design/05-test-and-eval.md) §10
 - **Report schema version:** `1`
 
@@ -172,6 +175,38 @@ The denials input is subject to the same `AGENT_EVAL_ROOT`
 containment as `--input`. A row that is not a JSON object, or that lacks
 `agent_id`, `action_type` or `code`, is skipped and counted in
 `denials.bad_rows_skipped` (on top of the loader's malformed-JSON count).
+
+### 2.2 Effect-channel audit (`agent_effects`)
+
+Client effect dispatches (`custom-agent-client`, e.g. `send_notify`,
+`open_text_ui`, `play_anim`) are audited in `agent_effects` (migration
+[`v2.6_agent_effects.sql`](../../migrations/v2.6_agent_effects.sql)), one row
+per settled request with `request_id`, `agent_id`, `target_source`, `action`,
+`status`, `error_code`, `latency_ms` and `created_at`. It is written
+best-effort by `custom-agent-client` and can be disabled with
+`agent_effect_audit = 0`.
+
+This table is useful for effect-channel **latency** (`latency_ms` is the
+server-side dispatch-to-settle delta, including client and network time) and
+**failure rate** (`status` / `error_code` grouped by `action` or `agent_id`),
+for example:
+
+```sql
+SELECT action, status, COUNT(*) AS n, AVG(latency_ms) AS avg_ms,
+       MAX(latency_ms) AS max_ms
+  FROM agent_effects
+ WHERE created_at >= CURDATE() - INTERVAL 7 DAY
+ GROUP BY action, status
+ ORDER BY n DESC;
+```
+
+It is **not part of the default `agent_actions` export** and
+`tools/agent_eval.py` does not read it, so none of the §3 metrics
+(`execution_success_rate`, `latency_ms`, denials, idempotency) include effect
+rows. To evaluate effects, query the table directly (or export it separately)
+and keep it out of git. Like the other audit tables it stores **no payload or
+free text** — no notify body, UI title/body or phone number — so it is safe to
+export, but `agent_id` and player `target_source` are still operational data.
 
 ---
 

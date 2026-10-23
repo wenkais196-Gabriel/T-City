@@ -113,6 +113,20 @@ return {
             return lines
         end
 
+        -- Parameter lists of every agent_effects INSERT the stub saw. The stub
+        -- logs before consulting its queue, so a forced failure still appears
+        -- here (which is what lets a case prove the attempt was swallowed).
+        local function auditRows(env)
+            local rows = {}
+            for _, item in ipairs(env.mysql.log) do
+                if item.kind == 'insert'
+                    and tostring(item.sql):find('INSERT INTO agent_effects', 1, true) then
+                    rows[#rows + 1] = item.params
+                end
+            end
+            return rows
+        end
+
         -- ------------------------------------------------------------------
         -- Gates
         -- ------------------------------------------------------------------
@@ -228,6 +242,81 @@ return {
             assert(lines[1]:find('agent=test.agent', 1, true) ~= nil)
             assert(lines[1]:find('top-secret-text', 1, true) == nil,
                 'audit must not contain the notify text')
+        end)
+
+        check('settle_ok_writes_one_agent_effects_row_without_payload', function()
+            local env = newEnv(enabled())
+            handshake(env, 1)
+            local co, message = dispatch(env, 'send_notify',
+                { text = 'effect-db-secret', kind = 'primary' }, 4000, { agent_id = 'test.agent' })
+
+            env.now = 37
+            sendAck(env, 1, message, { status = 'ok' })
+            local ok = finish(co)
+            assert(ok == true)
+
+            local rows = auditRows(env)
+            assert(#rows == 1, ('expected 1 agent_effects insert, got %d'):format(#rows))
+            local row = rows[1]
+            -- Column order: request_id, agent_id, target_source, action,
+            --               status, error_code, latency_ms
+            assert(row[1] == message.request_id, tostring(row[1]))
+            assert(row[2] == 'test.agent', tostring(row[2]))
+            assert(row[3] == 1, tostring(row[3]))
+            assert(row[4] == 'send_notify', tostring(row[4]))
+            assert(row[5] == 'ok', tostring(row[5]))
+            assert(row[6] == '', 'a successful settle has no error code: ' .. tostring(row[6]))
+            assert(row[7] == 37, 'latency must be the dispatch-to-settle delta: ' .. tostring(row[7]))
+            for index = 1, #row do
+                assert(not tostring(row[index]):find('effect-db-secret', 1, true),
+                    'notify text leaked into agent_effects')
+            end
+        end)
+
+        check('timeout_settle_writes_timeout_status_to_db', function()
+            local env = newEnv(enabled())
+            handshake(env, 1)
+            local co = dispatch(env, 'send_notify', { text = 'hi', kind = 'info' }, 250)
+
+            env.Drain()
+            local ok, result, err = finish(co)
+            assert(ok == false and result == nil and err.code == 'timeout')
+
+            local rows = auditRows(env)
+            assert(#rows == 1, ('expected 1 agent_effects insert, got %d'):format(#rows))
+            assert(rows[1][4] == 'send_notify', tostring(rows[1][4]))
+            assert(rows[1][5] == 'timeout', tostring(rows[1][5]))
+            assert(rows[1][6] == 'timeout', 'the timeout error code must be recorded: '
+                .. tostring(rows[1][6]))
+            assert(tonumber(rows[1][7]) >= 0, 'latency must be clamped >= 0')
+        end)
+
+        check('audit_convar_disables_the_db_write', function()
+            local env = newEnv(enabled({ agent_effect_audit = '0' }))
+            handshake(env, 1)
+            local co, message = dispatch(env, 'send_notify', { text = 'hi', kind = 'info' })
+
+            sendAck(env, 1, message, { status = 'ok' })
+            assert(finish(co) == true)
+            assert(#auditRows(env) == 0, 'agent_effect_audit=0 must not insert')
+            assert(#auditLines(env) == 1, 'custom-logs audit must still be written')
+        end)
+
+        check('audit_insert_failure_does_not_change_exec_result', function()
+            local env = newEnv(enabled())
+            handshake(env, 1)
+            local co, message = dispatch(env, 'send_notify', { text = 'hi', kind = 'info' })
+            env.mysql.push({
+                match = 'INSERT INTO agent_effects',
+                error = 'Table tcity.agent_effects does not exist',
+            })
+
+            sendAck(env, 1, message, { status = 'ok', detail = { survived = true } })
+            local ok, result, err = finish(co)
+            assert(ok == true and err == nil, 'a broken audit insert must not fail the effect')
+            assert(result.survived == true, 'the client result must be preserved')
+            assert(#auditRows(env) == 1, 'the insert was attempted')
+            assert(#auditLines(env) == 1, 'custom-logs audit must still be written')
         end)
 
         check('open_text_ui_audit_does_not_contain_body', function()
