@@ -1,6 +1,14 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local isPhoneOpen = false
 
+-- A resource (re)start is also the recovery path when a previous client left
+-- NUI focus/cursor stuck: never inherit that state.
+AddEventHandler('onClientResourceStart', function(resource)
+    if resource ~= GetCurrentResourceName() then return end
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+end)
+
 -- Close Phone Function (must be defined before OpenPhone — CreateThread closure)
 local function ClosePhone()
     if not isPhoneOpen then return end
@@ -675,5 +683,17 @@ RegisterCommand('focusprobe', function()
                 keepInput = IsNuiFocusKeepingInput(),
             })
         end
+        -- Always release, otherwise the probe leaves the game without input.
+        SetNuiFocus(false, false)
+        SetNuiFocusKeepInput(false)
+        TriggerServerEvent('phone:server:focusState', { phase = 'probe-end', focused = IsNuiFocused() })
     end)
 end, false)
+
+-- Never leave the game focused/cursor-locked if the resource stops while the
+-- phone (or a probe) still holds NUI focus.
+AddEventHandler('onResourceStop', function(resource)
+    if resource ~= GetCurrentResourceName() then return end
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+end)
