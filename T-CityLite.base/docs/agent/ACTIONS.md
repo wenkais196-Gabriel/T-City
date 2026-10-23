@@ -2,11 +2,12 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope covers seventeen actions (fourteen
+risky actions and an audit row. Scope covers eighteen actions (fifteen
 player-scoped plus three L2 world/presentation actions); there is no LLM
 integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
-`set_bucket`, `kick`, `revive`, `delete_vehicle`, `set_job_duty` and
-`set_metadata` did not change `schema_version` (still `1`).
+`set_bucket`, `kick`, `revive`, `delete_vehicle`, `set_job_duty`,
+`set_metadata` and `send_phone_message` did not change `schema_version` (still
+`1`).
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -30,6 +31,7 @@ integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 | `start_quest` | L3 任务 | `citizenid`, `quest_id` | `pending_approval` | **always** | `exports['custom-quest']:TriggerQuest(source, quest_id)` |
 | `set_job` | L3 职业 | `citizenid`, `job`, `grade?` | `pending_approval` | **always** | `Player.Functions.SetJob(job, grade)` + job/grade read-back verification |
 | `set_job_duty` | L2 出勤 | `citizenid`, `onduty` | `pending_approval` | **always** | `Player.Functions.SetJobDuty(onduty)` + `PlayerData.job.onduty` read-back; `blast_radius = "single"` |
+| `send_phone_message` | L2 消息 | `citizenid`, `message` | `pending_approval` | **always** | `exports['custom-phone']:SendSystemMessage(phone, message, 'City Services')`: persisted `phone_messages` row + `phone:client:newMessage`/`newNotification` to the online receiver; `blast_radius = "single"` |
 | `set_metadata` | L3 属性 | `citizenid`, `key`, `value` | `pending_approval` | **always** | `Player.Functions.SetMetaData(key, value)` + numeric metadata read-back; whitelist `hunger`/`thirst`/`stress`/`armor` |
 | `teleport` | L3 位置 | `citizenid`, `x`, `y`, `z`, `heading?` | `pending_approval` | **always** | `exports['custom-agent-client']:Execute(source, 'teleport', {x,y,z,heading}, 5000, {agent_id='director:<id>'})` + client ack |
 | `spawn_vehicle` | L3 载具 | `citizenid`, `model`, `plate?` | `pending_approval` | **always** | server-side `CreateVehicleServerSetter` 1.5 m in front of the ped, bounded existence wait (2 s), optional plate write + read-back |
@@ -49,7 +51,9 @@ online, and their `ACTIONS` metadata carries `blast_radius = "world"`.
 player-scoped actions). L2 always means `requires_approval = true` and
 `auto_execute = false`: a human approves every broadcast/weather/time change
 before it runs. `set_job_duty` is also L2 but player-scoped
-(`blast_radius = "single"`): it never auto-executes either.
+(`blast_radius = "single"`): it never auto-executes either. `send_phone_message`
+is L2 as well, player-scoped (`blast_radius = "single"`), and always requires
+human approval.
 
 ### 1.1 Argument normalization
 
@@ -74,6 +78,7 @@ before it runs. `set_job_duty` is also L2 but player-scoped
 | `set_job_duty.onduty` | boolean (no strings/numbers); the target must have a live `PlayerData.job` (`job_unavailable` otherwise) |
 | `set_metadata.key` | `hunger` \| `thirst` \| `stress` \| `armor` only; `isdead`/`inlaststand`/`ishandcuffed` are not accepted |
 | `set_metadata.value` | integer `0..100` (whole number; floats, NaN, ±inf and strings rejected) |
+| `send_phone_message.message` | non-empty; 1–500 bytes (`#message`, the same rule as `custom-phone`'s callback, so multi-byte UTF-8 counts per byte); C0 controls rejected except LF (`\n`), so multi-line SMS is allowed; no trim |
 | `teleport.x` / `teleport.y` | finite number within `-4500..8500` (GTA map bounds; NaN/±inf rejected) |
 | `teleport.z` | finite number within `-200..3000` (GTA map bounds; NaN/±inf rejected) |
 | `teleport.heading` | optional finite number `0..360`; omitted when not supplied |
@@ -95,7 +100,7 @@ Unknown keys inside `args` are dropped for `notify`, `add_money` and
 `start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
 `remove_item`, `set_bucket`, `kick`, `announce`, `set_weather`,
 `set_time_of_day`, `teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
-`set_job_duty` and `set_metadata`.
+`set_job_duty`, `set_metadata` and `send_phone_message`.
 Unknown action types are rejected. There is no client-side validation path.
 
 ---
@@ -501,6 +506,26 @@ whitelist `hunger`, `thirst`, `stress` and `armor` (see §5.13); `isdead`,
 `inlaststand` and `ishandcuffed` are deliberately rejected because they change
 gameplay/authority state and must go through `revive` or a human operator.
 
+### 3.18 `send_phone_message`
+
+```json
+{
+  "action_type": "send_phone_message",
+  "risk": "L2",
+  "requires_approval": true,
+  "citizenid": "ABC12345",
+  "player_found": true,
+  "player_source": 12,
+  "length": 55,
+  "preview": "Your vehicle has been impounded. Contact"
+}
+```
+
+`preview` is the first 40 characters of `message` (UTF-8-safe truncation);
+`length` is the full message length in bytes, the unit `custom-phone` enforces.
+The preview never includes the target phone number: the phone is only read from
+the live player during context building (§5.14).
+
 ---
 
 ## 4. Status lifecycle
@@ -738,6 +763,7 @@ agent id or read that id's `/actions` rows.
 | `start_quest` | L3 | no | **always** | quest catalog |
 | `set_job` | L3 | no | **always** | `QBCore.Shared.Jobs` + grades |
 | `set_job_duty` | L2 | no | **always** | online player + live job table + boolean `onduty` + duty read-back |
+| `send_phone_message` | L2 | no | **always** | online player + non-empty `charinfo.phone` + 1–500 byte message + `custom-phone` export returns `true, nil` |
 | `set_metadata` | L3 | no | **always** | online player + key whitelist + integer `0..100` + metadata read-back |
 | `teleport` | L3 | no | **always** | `custom-agent-client` started + map bounds + client ack (5 s) |
 | `spawn_vehicle` | L3 | no | **always** | online player + non-zero model hash + bounded 2 s spawn wait |
@@ -751,8 +777,8 @@ agent id or read that id's `/actions` rows.
 
 `blast_radius` is `world` only for the three L2 world actions; all other actions
 are player-scoped (`teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
-`remove_item`, `set_bucket`, `kick`, `set_job_duty` and `set_metadata` set
-`single` explicitly).
+`remove_item`, `set_bucket`, `kick`, `set_job_duty`, `set_metadata` and
+`send_phone_message` set `single` explicitly).
 `agent_actions_enabled = 0` disables every action. A proposal rejected by
 policy before persistence is not an approval-matrix exception: it never
 executes.
@@ -781,6 +807,45 @@ executes.
 - Neither action has an inverse/undo in this slice; the audit `result.before`
   is the recovery reference.
 
+### 5.14 Phone messages
+
+- `send_phone_message` is **L2**, player-scoped (`blast_radius = "single"`),
+  and always requires human approval; it never auto-executes.
+- The target must be online at propose and approve time. `main.lua` injects
+  `ctx.player.phone = PlayerData.charinfo.phone`; an absent or empty phone is a
+  policy rejection with `phone_unavailable`. There is **no** fallback to
+  `notify`: a player without a phone is refused, not silently pinged in-game.
+- Delivery goes through a new server-only export,
+  `exports['custom-phone']:SendSystemMessage(receiverNumber, message,
+  senderLabel)`. That resource writes the `phone_messages` row and, when the
+  receiver is online, emits `phone:client:newMessage` plus
+  `phone:client:newNotification`. No net event or callback is registered for
+  the export, so a client cannot invoke it.
+- The sender is chosen by the director (`'City Services'`), never by a client
+  or by the request body. `phone_messages.sender_number` stores that label
+  rather than a number: the table has no foreign key, so a non-numeric system
+  sender is allowed and is rendered as-is by the phone UI. The export strips
+  control characters and caps the label at 32 chars; the default label fits the
+  `VARCHAR(20)` column.
+- Message bounds mirror `custom-phone`'s own callback exactly: 1–500 **bytes**
+  (`#message`, so multi-byte UTF-8 counts per byte). C0 control characters are
+  rejected except LF, so multi-line SMS is allowed (tabs and CR are not).
+- The export itself validates the receiver number (1–15 chars) and the message
+  (1–500 bytes) again: bad input is `false, 'invalid_params'` and a failing
+  insert is `false, 'db_error'`.
+- `custom-phone` returning `false, 'db_error'` (or any other non-nil code) is
+  `execution_failed: <code>`; a thrown export, e.g. because `custom-phone` is
+  not started, is `phone_unavailable`. A successful call requires the export's
+  first return value to be `true` **and** its error slot to be `nil`.
+- **The phone number is not audited.** `result` only contains
+  `{ message_length, phone_masked, at }`, with `phone_masked` keeping the first
+  3 and last 2 characters (`555-0100` → `555***00`); numbers of 5 chars or fewer
+  are fully masked. The full number is never written to `result`, `error` or
+  the console logs. The target citizenid remains in `params`/`preview` like
+  every other player-scoped action.
+- Unknown fields are rejected (`invalid_params`); the only accepted keys are
+  `citizenid` and `message`.
+
 ---
 
 ## 6. Idempotency
@@ -807,12 +872,12 @@ executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `set_job_duty` \| `set_metadata` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `set_job_duty` \| `set_metadata` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` \| `send_phone_message` |
 | `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
 | `preview` | Last computed preview JSON |
-| `result` | Execution result JSON (balances/quest message) or rejection reason |
+| `result` | Execution result JSON (balances/quest message/masked phone) or rejection reason |
 | `error` | Short failure/rejection reason, ≤255 chars |
 | `requested_at` | `DATETIME(3)` insert time |
 | `approved_by` | Approver label, or `auto` for notify; `system:expired` on TTL |
@@ -846,7 +911,7 @@ so an over-privileged request is never invisible:
 | `id` | Denial id |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
 | `action_type` | Denied action |
-| `code` | Policy code (`daily_budget_exceeded`, `job_not_found`, `item_not_found`, `weather_sync_unavailable`, `player_not_found`, ...) |
+| `code` | Policy code (`daily_budget_exceeded`, `job_not_found`, `item_not_found`, `weather_sync_unavailable`, `player_not_found`, `phone_unavailable`, ...) |
 | `message` | Policy message, ≤255 chars (may name a cap or a target label) |
 | `param_keys` | Sorted, comma-separated parameter **names** only, ≤255 chars |
 | `params_hash` | 64-bit djb2 of the normalized params JSON as 16 hex chars |
@@ -877,6 +942,19 @@ there is no retry and no extra query on the rejection path.
   `Player.Functions.Notify(text, kind, 5000)` with `QBCore:Notify` fallback.
 - No delivery acknowledgement. If the call does not throw, the row becomes
   `executed`.
+
+### `send_phone_message`
+
+1. Re-resolves the online player and reads `PlayerData.charinfo.phone`; a
+   missing/empty phone becomes `phone_unavailable`.
+2. Calls `exports['custom-phone']:SendSystemMessage(phone, message,
+   'City Services')` inside `pcall`.
+3. Success requires `true, nil`; `false, <code>` becomes
+   `execution_failed: <code>` and a thrown export becomes `phone_unavailable`
+   (for example when `custom-phone` is stopped). There is no retry and no
+   fallback to `notify`.
+4. Success `result` is `{ message_length, phone_masked, at }`. The full phone
+   number is deliberately never written to `result`, `error` or the console.
 
 ### `add_money`
 
@@ -1150,6 +1228,7 @@ appear for action results). No stack traces.
 | `model_not_found` | 400 | `spawn_vehicle.model` hashes to `0` |
 | `not_in_vehicle` | 400 | `delete_vehicle` target is not in a vehicle |
 | `plate_mismatch` | 400 | `delete_vehicle.plate` does not match the current vehicle |
+| `phone_unavailable` | 400 | `send_phone_message` target has no phone, or the `custom-phone` export threw |
 | `not_found` | 404 | Unknown route or own-row id not found |
 | `method_not_allowed` | 405 | Wrong method (`Allow` set) |
 | `idempotency_conflict` | 409 | Key reused with different action/params |
@@ -1179,13 +1258,14 @@ HTTP callers see `execution_failed` (409) and the specific code is in the
 `error`/`result.error` text.
 
 The same wrapping applies to `remove_item`, `set_bucket`, `kick`, `revive`,
-`delete_vehicle`, `set_job_duty` and `set_metadata`: `execution_failed` (409)
-is returned, with `verification_failed ...`,
+`delete_vehicle`, `set_job_duty`, `set_metadata` and `send_phone_message`:
+`execution_failed` (409) is returned, with `verification_failed ...`,
 `execution_failed: RemoveItem ...`, `execution_failed: SetPlayerBucket ...`,
-`execution_failed: Kick ...`, `execution_failed: SetJobDuty ...` or
-`execution_failed: SetMetaData ...` in the `error` text. `player_not_found` /
-`item_not_found` / `not_in_vehicle` / `plate_mismatch` / `job_unavailable`
-remain policy rejections before execution.
+`execution_failed: Kick ...`, `execution_failed: SetJobDuty ...`,
+`execution_failed: SetMetaData ...` or `execution_failed: db_error` in the
+`error` text. `player_not_found` / `item_not_found` / `not_in_vehicle` /
+`plate_mismatch` / `job_unavailable` / `phone_unavailable` remain policy
+rejections before execution.
 
 ---
 
@@ -1203,9 +1283,12 @@ remain policy rejections before execution.
 9. No automatic rollback of economy mutations; failures are audited loudly.
 10. `add_money`, `start_quest`, `set_job`, `set_job_duty`, `set_metadata`,
     `grant_item`, `remove_item`, `set_bucket`, `kick`, `announce`,
-    `set_weather`, `set_time_of_day`, `teleport`, `spawn_vehicle`, `revive` and
-    `delete_vehicle` always require `pending_approval`, regardless of the
-    proposing agent.
+    `set_weather`, `set_time_of_day`, `teleport`, `spawn_vehicle`, `revive`,
+    `delete_vehicle` and `send_phone_message` always require
+    `pending_approval`, regardless of the proposing agent.
+11. `send_phone_message` reaches `custom-phone` only through a server-only
+    export: no client-visible net event/callback exists for system SMS, and the
+    sender label is chosen by the director, never by the request.
 
 ---
 

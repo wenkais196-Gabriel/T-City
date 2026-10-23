@@ -12,12 +12,14 @@ return function(env)
     env.bucket_log = env.bucket_log or {}
     env.player_buckets = env.player_buckets or {}
 
-    local function makePlayer(source, citizenid, money)
+    local function makePlayer(source, citizenid, money, charinfo)
         local player = {
             PlayerData = {
                 source = source,
                 citizenid = citizenid,
                 money = money or { cash = 0, bank = 0, crypto = 0 },
+                charinfo = charinfo
+                    or { firstname = 'Test', lastname = 'Player', phone = '555-0100' },
                 job = { name = 'unemployed', grade = { level = 0 }, onduty = false },
                 items = {},
                 metadata = {},

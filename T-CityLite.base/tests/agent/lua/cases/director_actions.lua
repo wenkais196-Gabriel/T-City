@@ -105,6 +105,19 @@ return {
             })
         end
 
+        local function newPlayerWithPhone(env, citizenid, phone)
+            local player = newPlayer(env, citizenid)
+            player.PlayerData.charinfo.phone = phone
+            return player
+        end
+
+        local function sendPhoneMessage(env, citizenid, message)
+            return env.actions._Execute.send_phone_message(1, {
+                citizenid = citizenid,
+                message = message,
+            })
+        end
+
         local function startedWeatherSync(env, state)
             env.resource_states['qb-weathersync'] = 'started'
             env.weather_state = state or 'EXTRASUNNY'
@@ -134,6 +147,8 @@ return {
             assert(type(env.actions._Execute.remove_item) == 'function', 'remove_item executor missing')
             assert(type(env.actions._Execute.set_bucket) == 'function', 'set_bucket executor missing')
             assert(type(env.actions._Execute.kick) == 'function', 'kick executor missing')
+            assert(type(env.actions._Execute.send_phone_message) == 'function',
+                'send_phone_message executor missing')
             assert(type(env.actions._Context) == 'function', 'context builder missing')
         end)
 
@@ -1732,6 +1747,247 @@ return {
             assert(ok == false, 'throwing SetMetaData must fail')
             assert(tostring(err):match('^execution_failed'), tostring(err))
             assert(tostring(err):match('metadata channel down'), tostring(err))
+        end)
+
+        check('send_phone_message_registry_context_preview_and_policy', function()
+            local env = newEnv()
+            local player = newPlayerWithPhone(env, 'ABC12345', '555-0100')
+
+            local definition = env.policy.ACTIONS.send_phone_message
+            assert(type(definition) == 'table', 'send_phone_message missing from ACTIONS')
+            assert(definition.risk == 'L2', 'send_phone_message risk must be L2')
+            assert(definition.requires_approval == true, 'send_phone_message must require approval')
+            assert(definition.auto_execute == false, 'send_phone_message must never auto-execute')
+            assert(definition.blast_radius == 'single', 'blast_radius must be single')
+
+            local message = string.rep('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 2)
+            local params = assert(env.policy.Normalize('send_phone_message', {
+                citizenid = 'ABC12345',
+                message = message,
+            }))
+            assert(params.message == message, 'message must be preserved verbatim')
+
+            local context = env.actions._Context('send_phone_message', params)
+            assert(context.player and context.player.phone == '555-0100',
+                'buildContext must inject charinfo.phone')
+
+            local preview = env.policy.Preview('send_phone_message', params, context, {})
+            assert(preview.citizenid == 'ABC12345', 'preview must carry citizenid')
+            assert(preview.length == #message, 'preview.length mismatch')
+            assert(preview.preview == message:sub(1, 40), 'preview must be the first 40 chars')
+
+            local policyOk, policyErr = env.policy.CheckPolicy(
+                'send_phone_message', params, {}, context)
+            assert(policyOk == true, tostring(policyErr and policyErr.code))
+            assert(player.PlayerData.charinfo.phone == '555-0100', 'context must not mutate player')
+        end)
+
+        check('send_phone_message_normalize_rejects_missing_message', function()
+            local env = newEnv()
+            local cases = {
+                { citizenid = 'ABC12345' },
+                { citizenid = 'ABC12345', message = '' },
+                { citizenid = 'ABC12345', message = 42 },
+                { citizenid = 'ABC12345', message = true },
+            }
+            for _, params in ipairs(cases) do
+                local normalized, err = env.policy.Normalize('send_phone_message', params)
+                assert(normalized == nil, 'invalid message must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    'expected invalid_params, got ' .. tostring(err and err.code))
+            end
+        end)
+
+        check('send_phone_message_normalize_rejects_overlong_message', function()
+            local env = newEnv()
+            local tooLong, tooLongErr = env.policy.Normalize('send_phone_message', {
+                citizenid = 'ABC12345',
+                message = string.rep('a', 501),
+            })
+            assert(tooLong == nil, '501 chars must be rejected')
+            assert(tooLongErr and tooLongErr.code == 'invalid_params',
+                tostring(tooLongErr and tooLongErr.code))
+
+            local max = assert(env.policy.Normalize('send_phone_message', {
+                citizenid = 'ABC12345',
+                message = string.rep('a', 500),
+            }))
+            assert(#max.message == 500, '500 chars must be accepted')
+
+            -- custom-phone counts bytes: 200 CJK chars are 600 bytes and must
+            -- be rejected here too, not after approval.
+            local multibyte, multibyteErr = env.policy.Normalize('send_phone_message', {
+                citizenid = 'ABC12345',
+                message = string.rep('你', 200),
+            })
+            assert(multibyte == nil, '600-byte message must be rejected')
+            assert(multibyteErr and multibyteErr.code == 'invalid_params',
+                tostring(multibyteErr and multibyteErr.code))
+        end)
+
+        check('send_phone_message_normalize_control_chars', function()
+            local env = newEnv()
+            -- LF is allowed (multi-line SMS); every other C0 byte and DEL is not.
+            local multiline = assert(env.policy.Normalize('send_phone_message', {
+                citizenid = 'ABC12345',
+                message = 'line one' .. string.char(10) .. 'line two',
+            }))
+            assert(#multiline.message == 17, 'LF must be preserved')
+
+            local rejected = {
+                string.char(0),
+                '\t',
+                '\r',
+                string.char(127),
+                'hi' .. string.char(7) .. 'there',
+            }
+            for _, message in ipairs(rejected) do
+                local normalized, err = env.policy.Normalize('send_phone_message', {
+                    citizenid = 'ABC12345',
+                    message = message,
+                })
+                assert(normalized == nil,
+                    ('message with byte %d must be rejected'):format(message:byte(1)))
+                assert(err and err.code == 'invalid_params',
+                    'expected invalid_params, got ' .. tostring(err and err.code))
+            end
+        end)
+
+        check('send_phone_message_normalize_rejects_unknown_field', function()
+            local env = newEnv()
+            for _, extra in ipairs({
+                { sender = 'City Services' },
+                { text = 'hello' },
+                { phone = '555-0100' },
+            }) do
+                local params = {
+                    citizenid = 'ABC12345',
+                    message = 'hello',
+                }
+                for key, value in pairs(extra) do params[key] = value end
+                local normalized, err = env.policy.Normalize('send_phone_message', params)
+                assert(normalized == nil, 'unknown field must be rejected')
+                assert(err and err.code == 'invalid_params',
+                    tostring(err and err.code))
+                assert(tostring(err.message):match('^unknown field'),
+                    tostring(err.message))
+            end
+        end)
+
+        check('send_phone_message_phone_missing_is_phone_unavailable', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.charinfo.phone = nil
+
+            local params = assert(env.policy.Normalize('send_phone_message', {
+                citizenid = 'ABC12345',
+                message = 'hello',
+            }))
+            local context = env.actions._Context('send_phone_message', params)
+            assert(context.player and context.player.phone == nil,
+                'missing phone must surface as nil in context')
+
+            local policyOk, policyErr = env.policy.CheckPolicy(
+                'send_phone_message', params, {}, context)
+            assert(policyOk == false, 'missing phone must be rejected by policy')
+            assert(policyErr.code == 'phone_unavailable', tostring(policyErr.code))
+
+            -- An empty string is unavailable too (not "a phone with no digits").
+            player.PlayerData.charinfo.phone = ''
+            local emptyContext = env.actions._Context('send_phone_message', params)
+            local emptyOk, emptyErr = env.policy.CheckPolicy(
+                'send_phone_message', params, {}, emptyContext)
+            assert(emptyOk == false and emptyErr.code == 'phone_unavailable',
+                tostring(emptyErr and emptyErr.code))
+
+            local ok, err = sendPhoneMessage(env, 'ABC12345', 'hello')
+            assert(ok == false, 'executor must refuse a player without a phone')
+            assert(err == 'phone_unavailable', tostring(err))
+        end)
+
+        check('send_phone_message_success_masks_number', function()
+            local env = newEnv()
+            local phone = '555-0100'
+            newPlayerWithPhone(env, 'ABC12345', phone)
+
+            local calls = {}
+            env.export_overrides['custom-phone'] = {
+                SendSystemMessage = function(receiverNumber, message, senderLabel)
+                    calls[#calls + 1] = {
+                        receiver = receiverNumber,
+                        message = message,
+                        sender = senderLabel,
+                    }
+                    return true
+                end,
+            }
+
+            local message = 'Your vehicle has been impounded. Contact City Services.'
+            local ok, err, result = sendPhoneMessage(env, 'ABC12345', message)
+            assert(ok == true, tostring(err))
+            assert(result.message_length == #message, 'message_length mismatch')
+            assert(result.phone_masked == '555***00', tostring(result.phone_masked))
+            assert(type(result.at) == 'number', 'result.at must be a timestamp')
+
+            -- The full number must never appear in the audit result.
+            for key, value in pairs(result) do
+                assert(tostring(value):find(phone, 1, true) == nil,
+                    'result.' .. tostring(key) .. ' leaked the full phone number')
+            end
+
+            assert(#calls == 1, 'export must be called exactly once')
+            assert(calls[1].receiver == phone, 'export must receive the target phone')
+            assert(calls[1].message == message, 'export must receive the message')
+            assert(calls[1].sender == 'City Services', 'sender label must be server-chosen')
+        end)
+
+        check('send_phone_message_export_false_is_execution_failed', function()
+            local env = newEnv()
+            newPlayerWithPhone(env, 'ABC12345', '555-0100')
+            env.export_overrides['custom-phone'] = {
+                SendSystemMessage = function()
+                    return false, 'db_error'
+                end,
+            }
+
+            local ok, err = sendPhoneMessage(env, 'ABC12345', 'hello')
+            assert(ok == false, 'export failure must fail the action')
+            assert(err == 'execution_failed: db_error', tostring(err))
+        end)
+
+        check('send_phone_message_export_true_with_error_is_execution_failed', function()
+            local env = newEnv()
+            newPlayerWithPhone(env, 'ABC12345', '555-0100')
+            env.export_overrides['custom-phone'] = {
+                SendSystemMessage = function()
+                    return true, 'unexpected'
+                end,
+            }
+
+            local ok, err = sendPhoneMessage(env, 'ABC12345', 'hello')
+            assert(ok == false, 'true plus a non-nil err must fail the action')
+            assert(err == 'execution_failed: unexpected', tostring(err))
+        end)
+
+        check('send_phone_message_export_throw_is_phone_unavailable', function()
+            local env = newEnv()
+            newPlayerWithPhone(env, 'ABC12345', '555-0100')
+            env.export_overrides['custom-phone'] = {
+                SendSystemMessage = function()
+                    error('phone channel down')
+                end,
+            }
+
+            local ok, err = sendPhoneMessage(env, 'ABC12345', 'hello')
+            assert(ok == false, 'throwing export must fail the action')
+            assert(err == 'phone_unavailable', tostring(err))
+        end)
+
+        check('send_phone_message_offline_player', function()
+            local env = newEnv()
+            local ok, err = sendPhoneMessage(env, 'OFFLINE01', 'hello')
+            assert(ok == false, 'offline target must fail')
+            assert(err == 'player_not_found', tostring(err))
         end)
 
         check('self_approval_detection', function()

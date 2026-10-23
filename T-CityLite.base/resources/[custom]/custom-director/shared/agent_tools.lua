@@ -5,7 +5,7 @@
 local AgentTools = {}
 
 AgentTools.SCHEMA_VERSION = 1
-AgentTools.REGISTRY_VERSION = "1.4.0"
+AgentTools.REGISTRY_VERSION = "1.5.0"
 
 AgentTools.TOOLS = {
   ["get_schema"] = {
@@ -660,6 +660,28 @@ AgentTools.TOOLS = {
       ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["key"] = { type = "string", enum = { "hunger", "thirst", "stress", "armor" } },
       ["value"] = { type = "integer", minimum = 0, maximum = 100 },
+      ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["send_phone_message"] = {
+    name = "send_phone_message",
+    title = "Send a phone message to one player (L2)",
+    channel = "write",
+    route = "director",
+    risk = "L2",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "send_phone_message",
+    auth = "default",
+    params = { "citizenid", "message", "idempotency_key" },
+    required = { "citizenid", "message" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["message"] = { type = "string", min_length = 1, max_length = 500 },
       ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
     },
   },
