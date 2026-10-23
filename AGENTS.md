@@ -45,6 +45,15 @@ T-City 是一个 **QBCore / FiveM RP 服务器**（"T-City Lite"），外加一�
 - 玩家重连后 **server id 会变**（5 → 6 …），所有按 id 的操作先 `curl -s localhost:30120/players.json`。
 - `cache/files/<resource>/resource.rpf` 是 FXServer 资源缓存；改了 manifest/新文件后 `restart <resource>`，异常时删缓存或整服重启。
 - 测试 token 在 `~/.tcity-agent-test.env`（600，未入库）：director/admin/live token、`AGENT_AGENT_ID`。
+### txAdmin（本地）
+
+- 配置文件：`alpine/txData/admins.json`（在 `alpine/` 下，已被 gitignore；**永不入库**）。
+- 启动参数（本地 `server.cfg`，gitignored）：`set monitorMode "true"`、`set citizen_root "<repo>/alpine/opt/cfx-server/citizen/"`、`set txAdminPort "40120"`，并 `ensure monitor`。
+- 面板：`http://<vm-ip>:40120`；首次 setup 用终端 PIN 创建管理员。
+- txAdmin 在 Linux 下按 `fxsPath/../../opt/cfx-server/...` 推导 loader，而本仓库的 alpine 布局会多一层 `opt`；已在 `alpine/opt/` 下建兼容软链 `opt -> .`（本地、gitignored）。
+- 当前 `monitor` 跑在手动启动的游戏服进程里，txAdmin 无法再 spawn 子服（30120 被占）；要切成 txAdmin 托管，先停手动服，用 monitor 模式单独起 FXServer，再由面板 Start。
+- 密码轮换后确认：`git check-ignore -v alpine/txData/admins.json`；历史里的旧哈希不会因轮换消失，必要时 filter-repo。
+
 
 ---
 
