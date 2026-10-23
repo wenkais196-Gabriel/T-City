@@ -1361,3 +1361,23 @@ RegisterNetEvent('phone:server:clientError', function(data)
     print(('[custom-phone][nui-error] %s | %s'):format(
         tostring(data.message):sub(1, 300), tostring(data.stack):sub(1, 500)))
 end)
+
+
+-- ----------------------------------------------------
+-- Job app registry callbacks (registered here because main owns QBCore)
+-- ----------------------------------------------------
+QBCore.Functions.CreateCallback('phone:server:getPhoneApps', function(source, cb)
+    cb({ success = true, apps = PhoneApps.ForPlayer(source) })
+end)
+
+QBCore.Functions.CreateCallback('phone:server:appQuery', function(source, cb, appId, queryName, params)
+    local ok, result = PhoneApps.Query(source, tostring(appId or ''), tostring(queryName or ''), params)
+    if ok then cb({ success = true, data = result })
+    else cb({ success = false, error = tostring(result) }) end
+end)
+
+QBCore.Functions.CreateCallback('phone:server:appAction', function(source, cb, appId, actionName, params)
+    local ok, result = PhoneApps.Action(source, tostring(appId or ''), tostring(actionName or ''), params)
+    if ok then cb({ success = true, data = result })
+    else cb({ success = false, error = tostring(result) }) end
+end)
