@@ -129,6 +129,15 @@ def test_mdt_exposes_lifecycle_and_audit():
     assert "loadAudit" in ui and "on_scene" in ui
 
 
+def test_police_mdt_dispatch_shows_incident_disposition():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "disposition?: string | null" in ui
+    assert "const dispositionLabel" in ui
+    assert "incident.disposition" in ui
+    # The clear action names its disposition; the server also defaults it.
+    assert "disposition: 'cleared'" in ui
+
+
 def test_p1_citations_and_reports():
     policy = read(PHONE.parent / "custom-police/shared/policy.lua")
     assert "citation.issue" in policy and "report.create" in policy

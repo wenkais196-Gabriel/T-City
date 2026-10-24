@@ -4,7 +4,7 @@
   import { queryApp, appAction } from '../stores/apps';
 
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
-  type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string; x?: number; y?: number; z?: number };
+  type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; disposition?: string | null; created_at: string; x?: number; y?: number; z?: number };
   type Charge = { id: number | string; label: string; minutes: number; fine: number };
   type Me = { citizenid: string; callsign: string; grade: number; status?: string };
 
@@ -211,6 +211,13 @@
     assigned: '已派单', enroute: '前往中', on_scene: '现场', unavailable: '不可用',
   };
 
+  // Closed calls never reach the dispatch queue; the label still documents the
+  // server-side dispositions so a stale/legacy row is not shown as a raw enum.
+  const dispositionLabel: Record<string, string> = {
+    cleared: '清场归档', cancelled: '取消', false_alarm: '误报',
+    stale: '超时归档', arrest: '逮捕归档',
+  };
+
   const me = $derived(units.find((u) => u.citizenid === $playerData.citizenid));
   const myStatus = $derived(me?.status ?? meInfo?.status ?? 'off_duty');
   const openIncidents = $derived(incidents.filter((i) => i.status !== 'closed' && i.status !== 'cleared').length);
@@ -324,7 +331,7 @@
   }
 
   async function clearIncident(incident: Incident) {
-    const res = await appAction(DB, 'clear', { incident_id: incident.id, status: 'cleared' });
+    const res = await appAction(DB, 'clear', { incident_id: incident.id, status: 'cleared', disposition: 'cleared' });
     notice = res?.success ? `警情 #${incident.id} 已清场` : `清场失败：${res?.error ?? 'unknown'}`;
     await refresh();
   }
@@ -775,7 +782,7 @@
             <div class="row">
               <div>
                 <b>#{incident.id} [{incident.code}] {incident.title}</b>
-                <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status} · {incident.created_at}</p>
+                <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status}{incident.disposition ? ` · ${dispositionLabel[incident.disposition] ?? incident.disposition}` : ''} · {incident.created_at}</p>
               </div>
               <div class="actions">
                 <button class="step" onclick={() => updateIncident(incident, 'enroute')}>前往</button>
