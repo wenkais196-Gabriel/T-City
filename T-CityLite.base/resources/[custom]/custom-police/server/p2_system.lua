@@ -121,7 +121,8 @@ RegisterCommand('police_release', function(source, args)
     TriggerClientEvent('prison:client:UnjailPerson', target)
     local job = args[2]
     if job and job ~= '' then
-        player.Functions.SetJob(job, args[3] or '0')
+        local okJob, errJob = player.Functions.SetJob(job, args[3] or '0')
+        print(('[custom-police] SetJob(%s,%s) -> %s %s'):format(job, tostring(args[3]), tostring(okJob), tostring(errJob)))
     end
     print(('[custom-police] released %s%s'):format(target, job and (' -> ' .. job) or ''))
 end, true)
