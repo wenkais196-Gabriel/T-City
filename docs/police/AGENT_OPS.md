@@ -2,7 +2,9 @@
 
 > 资源：`T-CityLite.base/resources/[custom]/custom-agent-ops/`
 > 定位：给 agent / 运维提供**实时事件环 + 状态快照 + 健康检查 + 控制台介入**。
-> 只读 `police_*` / `justice_sentences`，不写警察/司法表，不新增表，不新增依赖。
+> 本资源自身只读 `police_*` / `justice_sentences`，不写警察/司法表、不新增表、不新增依赖；
+> 唯一例外是 `RunTest` 把测试套件代理给 `custom-testing`（套件自己会在 `E2E_*`
+> 命名空间内写/清测试数据）。
 
 ## 1. 为什么需要它
 
@@ -23,7 +25,7 @@ police_units ─┘
 - 服务器现在怎么样？`/agent status` / `GetAgentSnapshot()`
 - 最近发生了什么？`/agent events [n]` / `GetAgentEvents(sinceId, limit)`
 - 有没有隐藏故障？`/agent health` / `HealthSnapshot()`
-- 某个测试套件怎么跑？`/agent test <suite>`
+- 某个测试套件怎么跑？`/agent test <suite>`，或 agent 工具 `run_police_e2e`
 - 原始审计/outbox 长什么样？`/agent tail [n]`
 
 ## 2. 命令
@@ -68,8 +70,69 @@ police_units ─┘
  "old_pending":0,"ring":{...},"file_log":{...}}
 
 > /agent test smoke
-{"ok":true,"suite":"smoke"}
+{"ok":true,"suite":"smoke","result":{"pass":12,"fail":0,"error":0,"skip":1}}
 ```
+
+### 2.1 一条命令跑 `police_e2e`（agent 推荐）
+
+调用链是固定的，agent 不需要解析控制台：
+
+```text
+tool run_police_e2e
+  -> custom-director action police_run_e2e
+  -> exports['custom-agent-ops']:RunTest('police_e2e')
+  -> exports['custom-testing']:RunTestSuite('police_e2e')
+  -> Test.run('police_e2e')                  -- 同步等待异步用例
+```
+
+工具注册在 `tools/agent_tools.json`，走 director 的 `POST /agent/v1/act`：
+
+```json
+{
+  "type": "police_run_e2e",
+  "args": { "suite": "police_e2e", "timeout_s": 180 },
+  "idempotency_key": "beat_42/police_e2e/1",
+  "dry_run": false
+}
+```
+
+参数只有两个，未知字段会被拒绝：
+
+| 字段 | 规则 | 说明 |
+|---|---|---|
+| `suite` | 可选，枚举 `police_e2e` | 只允许 E2E 命名空间；默认 `police_e2e` |
+| `timeout_s` | 可选整数 `30..180` | 记录在 preview/result；`police_e2e` 套件自身硬超时 180s |
+
+成功返回（套件失败也走这里，`ok=false` 表示测试断言失败，不是调用失败）：
+
+```json
+{
+  "ok": true,
+  "status": "executed",
+  "result": {
+    "ok": false,
+    "suite": "police_e2e",
+    "timeout_s": 180,
+    "result": { "pass": 9, "fail": 1, "error": 0, "skip": 2 }
+  }
+}
+```
+
+`custom-agent-ops` / `custom-testing` 未启动、导出缺失或抛错时，动作是
+`failed`，错误文本 `execution_failed: ...`。只有“调用失败”才会失败；套件内的
+断言失败被保留为结构化 `result`。
+
+`police_run_e2e` 是 **L1**、`requires_approval=false`、`auto_execute=true`，
+只用于测试套件：它在 `E2E_*` 命名空间写 `police_incidents` /
+`police_incident_units` / `police_units` / `police_outbox` /
+`justice_sentences` 测试行并在结束时清理（`police_audit` 保留）。它不是生产
+写路径，也永远不接受其他 suite。
+
+> MCP 默认写超时是 10s；跑 E2E 前把 `AGENT_MCP_WRITE_TIMEOUT_MS` 调到
+> `200000` 左右，避免客户端先超时（director 侧仍会完成并记录结果）。
+>
+> 也可以直接在服务器控制台跑 `/agent test police_e2e`，得到同一份
+> `{ok, suite, result}` JSON。
 
 ### ACE 配置
 
@@ -166,6 +229,15 @@ local id, err = exports['custom-agent-ops']:PushAgentEvent('incident', {
 
 -- 实时健康探测：会查 DB（SELECT 1）与 outbox 计数，按需调用
 local health = exports['custom-agent-ops']:HealthSnapshot()
+
+-- 跑一个 custom-testing 套件；返回结构化结果而不是控制台文本。
+-- 调用线程必须可 yield（Test.run 会等待异步用例）。
+local test = exports['custom-agent-ops']:RunTest('police_e2e')
+-- test = { ok = true/false, suite = 'police_e2e',
+--          result = { pass=, fail=, error=, skip= } }
+-- 失败时可能是 { ok=false, error='invalid_suite' |
+--   'custom_testing_not_running' | 'run_test_suite_unavailable' |
+--   'test_run_failed' | 'invalid_result', ... }
 ```
 
 ### 返回结构
@@ -211,6 +283,20 @@ local health = exports['custom-agent-ops']:HealthSnapshot()
 }
 ```
 
+`RunTest(name, source?)`：
+
+```json
+{
+  "ok": true,
+  "suite": "police_e2e",
+  "result": { "pass": 9, "fail": 0, "error": 0, "skip": 2 }
+}
+```
+
+`ok` 同时看 `fail` 与 `error`（异常用例不能被当成通过）；套件不存在时返回
+`{ "ok": false, "suite": "...", "error": "suite_not_found" }`。`source` 只用于
+转发给 `Test.run`，director 调用不传（默认 `-1`）。
+
 `PushAgentEvent` 的安全约束：
 
 - `type` 必须匹配 `^[a-z][a-z0-9_.-]{0,47}$`；
@@ -255,9 +341,12 @@ end
    pending 行超过 `outbox_stale_minutes`（默认 10 分钟）没有投递。
 4. **看原始证据**：`/agent tail 50` 同时打印 `police_audit` 与 `police_outbox`
    最近 50 行；`detail` 截断 160 字符，不打印 outbox payload。
-5. **跑套件**：确认 `custom-testing` 已启动（dev 环境默认在 `dev.cfg`），
-   控制台 `/agent test <suite>`；它会复用 `/test run <suite>`，最终在
-   `custom-testing` 内调用 `Test.run(suite)`。
+5. **跑套件**：确认 `custom-agent-ops` 与 `custom-testing` 都已启动（dev 环境
+   默认在 `dev.cfg`）。Agent 用工具 `run_police_e2e`，控制台用
+   `/agent test police_e2e`；两者都直接调用 `exports['custom-testing']:RunTestSuite`，
+   返回 `{ ok, suite, result }`，不再只把 `/test run` 的输出丢到控制台。
+   测试失败是 `ok=false`（动作仍 `executed`）；资源/导出不可用才是
+   `execution_failed`。
 6. **文件回溯**：`tail -f T-CityLite.base/resources/[custom]/custom-agent-ops/logs/agent-events.jsonl`；
    只包含关键事件，不是全量审计。
 
@@ -308,7 +397,8 @@ luac5.4 -p resources/\[custom\]/custom-agent-ops/server/main.lua
 `tests/architecture/test_agent_ops.py` 同时做静态契约和 Lua 运行时契约：
 
 - manifest 只 server、依赖 qb-core/oxmysql/custom-police；
-- 5 个命令、4 个 export、ACE / console-only 校验；
+- 5 个命令、5 个 export、ACE / console-only 校验；`RunTest` 的结构化结果由
+  真实 `server_test.lua` + mock `Test.run` 验证；
 - 无 net event / client script / HTTP；
 - 真实加载 `config.lua` + `server/main.lua` 验证 500 条环形上限、淘汰与 `dropped`、
   `GetAgentEvents` 游标与 200 条上限；
@@ -322,5 +412,8 @@ luac5.4 -p resources/\[custom\]/custom-agent-ops/server/main.lua
 - `GetAgentEvents` 的 `id` 只在一次资源生命周期内单调；跨重启用 `boot_id` 判断。
 - 事件环是**观测**，不是执法审计：关键写操作仍以 `custom-police` 的
   `police_audit` 为唯一事实源。
-- `custom-testing` 不在生产启动链；`/agent test` 在生产会明确返回
-  `custom_testing_not_running`，不会静默成功。
+- `custom-testing` 不在生产启动链；`/agent test` 和生产环境的
+  `run_police_e2e` 都会明确返回 `custom_testing_not_running`，不会静默成功。
+- `police_e2e` 会写测试 DB 行（`E2E_*` 命名空间）并清理；它只应由
+  `custom-testing` 的测试出口触发，绝不能被当作线上警察写路径。
+  运行期间不要并发跑第二个 `police_e2e`，否则两次清理会互相删除测试行。

@@ -3,7 +3,7 @@
 -- Read-only observability for the agent stack:
 --   * a 500-entry in-memory event ring fed by police_audit + table counters;
 --   * a cached status snapshot and a live health probe;
---   * four server exports for custom-director / custom-agent-client;
+--   * five server exports for custom-director / custom-agent-client;
 --   * console-only `/agent ...` commands guarded by source 0 or `agent.ops`.
 --
 -- This resource never writes to a police/justice table. It only SELECTs. The
@@ -875,6 +875,48 @@ function AgentOps.CanRun(source)
     return true
 end
 
+--- Run one custom-testing suite through its server export and return the
+--- structured result. Never dispatches `/test run` (which only writes the
+--- console): the caller gets `{ ok, suite, result }` or a stable error table.
+--- Must be invoked from a yieldable thread: Test.run() waits for async cases.
+function AgentOps.RunTest(name, source)
+    local suite = tostring(name or '')
+    if #suite < 1 or #suite > 64 or not suite:match('^[%w_%-]+$') then
+        return { ok = false, error = 'invalid_suite' }
+    end
+    if type(GetResourceState) ~= 'function' then
+        return { ok = false, error = 'resource_state_unavailable' }
+    end
+    local stateOk, resourceState = pcall(GetResourceState, 'custom-testing')
+    if not stateOk or resourceState ~= 'started' then
+        return {
+            ok = false,
+            error = 'custom_testing_not_running',
+            state = tostring(resourceState),
+        }
+    end
+
+    local testing = exports and exports['custom-testing']
+    if type(testing) ~= 'table' or type(testing.RunTestSuite) ~= 'function' then
+        return { ok = false, error = 'run_test_suite_unavailable' }
+    end
+
+    local called, result = pcall(function()
+        return testing:RunTestSuite(suite, source)
+    end)
+    if not called then
+        return {
+            ok = false,
+            error = 'test_run_failed',
+            detail = AgentOps.Truncate(result, 160),
+        }
+    end
+    if type(result) ~= 'table' then
+        return { ok = false, error = 'invalid_result' }
+    end
+    return result
+end
+
 local COMMANDS = {}
 
 function COMMANDS.status()
@@ -956,40 +998,9 @@ end
 
 function COMMANDS.test(source, args)
     local suite = tostring(args and args[2] or '')
-    if not suite:match('^[%w_%-]+$') then
-        print(json.encode({ ok = false, error = 'invalid_suite' }))
-        return
-    end
-    if type(GetResourceState) ~= 'function' then
-        print(json.encode({ ok = false, error = 'resource_state_unavailable' }))
-        return
-    end
-    local stateOk, resourceState = pcall(GetResourceState, 'custom-testing')
-    if not stateOk or resourceState ~= 'started' then
-        print(json.encode({ ok = false, error = 'custom_testing_not_running', state = tostring(resourceState) }))
-        return
-    end
-
-    local ok, err
-    -- In this repo each resource has its own Lua state, so _G.Test is only
-    -- populated when a test harness loads this file in-process. The normal
-    -- path dispatches the existing `/test run` command, which calls
-    -- Test.run(suite) inside custom-testing.
-    local Test = _G.Test
-    if type(Test) == 'table' and type(Test.run) == 'function' then
-        ok, err = pcall(function() Test.run(suite, source) end)
-    elseif type(ExecuteCommand) == 'function' then
-        ok, err = pcall(function() ExecuteCommand(('test run %s'):format(suite)) end)
-    else
-        ok, err = false, 'execute_command_unavailable'
-    end
-
-    emit('test', source, nil, { suite = suite, ok = ok })
-    print(json.encode({
-        ok = ok == true,
-        suite = suite,
-        error = (not ok) and AgentOps.Truncate(err, 160) or nil,
-    }))
+    local result = AgentOps.RunTest(suite, source)
+    emit('test', source, nil, { suite = suite, ok = result.ok == true })
+    print(json.encode(result))
 end
 
 function COMMANDS.help()
@@ -1092,6 +1103,10 @@ end)
 
 exports('HealthSnapshot', function()
     return AgentOps.Health()
+end)
+
+exports('RunTest', function(name, source)
+    return AgentOps.RunTest(name, source)
 end)
 
 -- ---------------------------------------------------------------------------

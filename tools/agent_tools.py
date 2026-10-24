@@ -69,11 +69,14 @@ NAME_RE = re.compile(
 # Names published before the verb rule existed are immutable (§3.2 rule 1), so
 # they are grandfathered by exact name only.  Never widen this into a prefix
 # rule: an ``add_*`` wildcard would let any future verb bypass the invariant.
-LEGACY_NAMES = frozenset({"add_player_money"})
+# ``run_police_e2e`` is pinned by the test-runner contract; adding a generic
+# ``run`` verb would make names like ``run_command`` look acceptable, so it is
+# an exact-name exception instead of a verb.
+LEGACY_NAMES = frozenset({"add_player_money", "run_police_e2e"})
 
 
 def is_valid_name(name: str) -> bool:
-    """True for a whitelisted verb_name, or a grandfathered exact legacy name."""
+    """True for a whitelisted verb_name, or an exact grandfathered/pinned name."""
     return name in LEGACY_NAMES or NAME_RE.fullmatch(name) is not None
 DIRECTOR_ACTION_RE = re.compile(r"^[a-z][a-z0-9_]{2,40}$", re.ASCII)
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$", re.ASCII)

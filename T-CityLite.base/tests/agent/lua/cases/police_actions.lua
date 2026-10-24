@@ -93,6 +93,44 @@ return {
             assert(preview.requires_approval == true)
         end)
 
+        check('police_e2e runner is L1 and test-only', function()
+            assert(policy.ACTIONS.police_run_e2e.risk == 'L1')
+            assert(policy.ACTIONS.police_run_e2e.requires_approval == false)
+            assert(policy.ACTIONS.police_run_e2e.auto_execute == true)
+            assert(policy.ACTIONS.police_run_e2e.blast_radius == 'single')
+            assert(policy.WORLD_ACTIONS.police_run_e2e == true)
+        end)
+
+        check('police_e2e normalizes suite and timeout', function()
+            local defaults = policy.Normalize('police_run_e2e', {})
+            assert(defaults and defaults.suite == 'police_e2e')
+            assert(defaults.timeout_s == nil)
+            local bounded = policy.Normalize('police_run_e2e', {
+                suite = 'police_e2e', timeout_s = 90,
+            })
+            assert(bounded and bounded.timeout_s == 90)
+            local badSuite = policy.Normalize('police_run_e2e', { suite = 'smoke' })
+            assert(not badSuite)
+            local badTimeout = policy.Normalize('police_run_e2e', { timeout_s = 181 })
+            assert(not badTimeout)
+            local unknown = policy.Normalize('police_run_e2e', { citizenid = 'ABC123' })
+            assert(not unknown)
+        end)
+
+        check('police_e2e runs without an online player', function()
+            assert(policy.CheckPolicy('police_run_e2e', {
+                suite = 'police_e2e',
+            }, {}, {}) == true)
+            local preview = policy.Preview('police_run_e2e', {
+                suite = 'police_e2e', timeout_s = 120,
+            }, {}, {})
+            assert(preview)
+            assert(preview.risk == 'L1')
+            assert(preview.test_namespace == 'police_e2e')
+            assert(preview.writes_database == true)
+            assert(preview.timeout_s == 120)
+        end)
+
         return { results = results, failed = failed }
     end,
 }

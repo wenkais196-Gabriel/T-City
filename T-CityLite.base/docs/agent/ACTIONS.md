@@ -2,12 +2,13 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope covers eighteen actions (fifteen
-player-scoped plus three L2 world/presentation actions); there is no LLM
-integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
+risky actions and an audit row. Scope covers twenty-two actions: player-scoped
+actions, three L2 world/presentation actions, the police dispatch/judicial
+actions, and the test-only `police_run_e2e`. There is no LLM integration.
+Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 `set_bucket`, `kick`, `revive`, `delete_vehicle`, `set_job_duty`,
-`set_metadata` and `send_phone_message` did not change `schema_version` (still
-`1`).
+`set_metadata`, `send_phone_message` and `police_run_e2e` did not change
+`schema_version` (still `1`).
 
 - **Resource:** `T-CityLite.base/resources/[custom]/custom-director` (server-only)
 - **Migration:** `T-CityLite.base/migrations/v2.3_agent_actions.sql`
@@ -43,7 +44,18 @@ integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 | `police_assign_unit` | L2 调度 | `incident_id`, `citizenid` | `pending_approval` | **always** | `exports['custom-police']:AssignUnitSystem('action:<id>', incident_id, citizenid)`：写 `police_incident_units`、单位置为 `assigned`、审计 `actor_kind='agent'` |
 | `police_jail_player` | L3 司法 | `citizenid`, `minutes`(1–120), `reason` | `pending_approval` | **always** | `exports['custom-police']:JailSystem(...)` → `custom-justice:Imprison` / qb-prison；写逮捕记录 + 审计 |
 | `police_incident_create` | L1 调度 | `title`, `code?`, `priority?`, `details?` | `executed`（免审） | 否 | `exports['custom-police']:CreateIncidentSystem('action:<id>', params)`：写 `police_incidents`、审计 `actor_kind='agent'`、推送给在勤警员；`blast_radius = "single"`（无目标玩家） |
+| `police_run_e2e` | L1 测试 | `suite?`（仅 `police_e2e`）, `timeout_s?` (30–180) | `executed`（免审） | 否 | `exports['custom-agent-ops']:RunTest(suite)` → `exports['custom-testing']:RunTestSuite` → `Test.run`；返回结构化 `{ok, suite, result}`，测试写/清 `E2E_*` 命名空间 |
 | `kick` | L4 惩罚 | `citizenid`, `reason` | `pending_approval` | **always** | `QBCore.Functions.Kick(source, reason)` inside `pcall`; no offline read-back; `compensation = "manual"`, no undo |
+
+`police_run_e2e` is L1 and has **no target player** (registered in
+`WORLD_ACTIONS` so the player-online gate is skipped), but it is **test-only**:
+the suite name is pinned to `police_e2e`, the action writes and cleans test rows
+in `police_incidents` / `police_incident_units` / `police_units` /
+`police_outbox` / `justice_sentences` under the `E2E_*` namespace, and it is
+never a production police write path. A failing suite still ends as
+`executed` with `result.ok = false`; only a missing `custom-agent-ops` /
+`custom-testing` export or a thrown call becomes `failed` with
+`execution_failed: ...`.
 
 `police_incident_create` is L1 and has **no target player** (its `citizenid` is
 absent, but it is registered player-scoped so the L1 auto-execute gate stays
@@ -85,6 +97,8 @@ human approval.
 | `set_metadata.key` | `hunger` \| `thirst` \| `stress` \| `armor` only; `isdead`/`inlaststand`/`ishandcuffed` are not accepted |
 | `set_metadata.value` | integer `0..100` (whole number; floats, NaN, ±inf and strings rejected) |
 | `send_phone_message.message` | non-empty; 1–500 bytes (`#message`, the same rule as `custom-phone`'s callback, so multi-byte UTF-8 counts per byte); C0 controls rejected except LF (`\n`), so multi-line SMS is allowed; no trim |
+| `police_run_e2e.suite` | optional; only `police_e2e`; defaults to `police_e2e` |
+| `police_run_e2e.timeout_s` | optional integer `30..180`; recorded in preview/result, `police_e2e` itself has a 180 s hard timeout |
 | `teleport.x` / `teleport.y` | finite number within `-4500..8500` (GTA map bounds; NaN/±inf rejected) |
 | `teleport.z` | finite number within `-200..3000` (GTA map bounds; NaN/±inf rejected) |
 | `teleport.heading` | optional finite number `0..360`; omitted when not supplied |
@@ -106,7 +120,7 @@ Unknown keys inside `args` are dropped for `notify`, `add_money` and
 `start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
 `remove_item`, `set_bucket`, `kick`, `announce`, `set_weather`,
 `set_time_of_day`, `teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
-`set_job_duty`, `set_metadata` and `send_phone_message`.
+`set_job_duty`, `set_metadata`, `send_phone_message` and `police_run_e2e`.
 Unknown action types are rejected. There is no client-side validation path.
 
 ---
@@ -532,6 +546,26 @@ gameplay/authority state and must go through `revive` or a human operator.
 The preview never includes the target phone number: the phone is only read from
 the live player during context building (§5.14).
 
+### 3.19 `police_run_e2e`
+
+```json
+{
+  "action_type": "police_run_e2e",
+  "risk": "L1",
+  "requires_approval": false,
+  "player_found": false,
+  "suite": "police_e2e",
+  "timeout_s": 180,
+  "test_namespace": "police_e2e",
+  "writes_database": true
+}
+```
+
+`player_found` is `false` because the action has no target player (it is in
+`WORLD_ACTIONS`). `writes_database` is explicit so an approver/agent never
+mistakes this for a read-only probe: the suite writes `E2E_*` test rows and
+cleans them before returning. There is no `citizenid` and no player source.
+
 ---
 
 ## 4. Status lifecycle
@@ -543,6 +577,10 @@ dry_run = true
 notify (dry_run = false)
   propose ──► approved ──► executed
                        └─► failed             (notify/AddMoney/quest execution error)
+
+police_run_e2e (dry_run = false)
+  propose ──► approved ──► executed             (suite failure keeps executed, result.ok=false)
+                       └─► failed             (agent-ops/custom-testing unavailable)
 
 add_money / start_quest / set_job / set_job_duty / set_metadata / grant_item / remove_item / set_bucket / kick / announce / set_weather / set_time_of_day / teleport / spawn_vehicle / revive / delete_vehicle (dry_run = false)
   propose ──► pending_approval ──► approved ──► executed
@@ -780,11 +818,13 @@ agent id or read that id's `/actions` rows.
 | `kick` | L4 | no | **always** | online player + non-throwing `Kick`; irreversible |
 | `add_money` | L4 | no | **always** | `max_money` + daily budget |
 | `grant_item` | L4 | no | **always** | `max_item_amount` only |
+| `police_run_e2e` | L1 | yes | no | only `police_e2e`; `timeout_s` 30–180; writes/cleans `E2E_*` test rows |
 
 `blast_radius` is `world` only for the three L2 world actions; all other actions
 are player-scoped (`teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
 `remove_item`, `set_bucket`, `kick`, `set_job_duty`, `set_metadata` and
-`send_phone_message` set `single` explicitly).
+`send_phone_message` set `single` explicitly). `police_run_e2e` has no target
+player but also declares `single`: it only touches the `E2E_*` test namespace.
 `agent_actions_enabled = 0` disables every action. A proposal rejected by
 policy before persistence is not an approval-matrix exception: it never
 executes.
@@ -852,6 +892,25 @@ executes.
 - Unknown fields are rejected (`invalid_params`); the only accepted keys are
   `citizenid` and `message`.
 
+### 5.15 Police E2E test runner
+
+- `police_run_e2e` is **L1**, has no target player (it is listed in
+  `WORLD_ACTIONS`), auto-executes, and is deliberately restricted to
+  `suite = "police_e2e"`. It exists so an agent can run the real-server E2E and
+  receive structured stats instead of scraping `/test run` console output.
+- Execution is a two-hop server export chain:
+  `exports['custom-agent-ops']:RunTest(suite)` →
+  `exports['custom-testing']:RunTestSuite(suite, source)` →
+  `Test.run(suite, source)`. `Test.run` is synchronous (its async cases wait
+  internally), so the result is the completed run, not a ticket id.
+- A suite assertion failure is a **successful execution** with
+  `result.ok = false` and `result.result = {pass, fail, error, skip}`. Only a
+  missing export/resource or a thrown call becomes `execution_failed`.
+- The suite writes only the `E2E_*` test namespace and cleans it up (audit rows
+  are retained). Running two `police_e2e` instances concurrently can delete each
+  other's fixtures; serialize E2E runs. `timeout_s` (30–180) is recorded in the
+  preview/result; the suite itself has a 180 s hard timeout.
+
 ---
 
 ## 6. Idempotency
@@ -878,7 +937,7 @@ executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `set_job_duty` \| `set_metadata` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` \| `send_phone_message` |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `set_job_duty` \| `set_metadata` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` \| `send_phone_message` \| `police_assign_unit` \| `police_jail_player` \| `police_incident_create` \| `police_run_e2e` |
 | `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
@@ -941,6 +1000,19 @@ there is no retry and no extra query on the rejection path.
 ---
 
 ## 8. Execution and failure semantics
+
+### `police_run_e2e`
+
+1. Normalization already pinned `suite` to `police_e2e` and validated
+   `timeout_s` (30–180).
+2. Calls `exports['custom-agent-ops']:RunTest(suite)` inside `pcall`. That export
+   calls `exports['custom-testing']:RunTestSuite(suite, source)`, which calls
+   `Test.run` and returns `{ ok, suite, result }`.
+3. Success `result` is `{ ok, suite, timeout_s?, result = {pass, fail, error,
+   skip} }`. `ok=false` means the suite failed its assertions; the action is
+   still `executed` because the runner completed.
+4. A thrown export or an error table without runner stats becomes
+   `execution_failed: <code>` and the row is `failed`.
 
 ### `notify`
 
@@ -1307,6 +1379,10 @@ rejections before execution.
 11. `send_phone_message` reaches `custom-phone` only through a server-only
     export: no client-visible net event/callback exists for system SMS, and the
     sender label is chosen by the director, never by the request.
+12. `police_run_e2e` is the only auto-executing write action besides `notify`
+    and `police_incident_create`. It stays L1 because its suite is pinned to
+    `police_e2e`, which writes only the `E2E_*` test namespace and cleans up;
+    it cannot be pointed at a production suite or an arbitrary resource.
 
 ---
 

@@ -26,6 +26,7 @@ local AgentPolicy = {}
 -- L3 医疗类：revive（需人工审批 + qb-ambulancejob 客户端事件）
 -- L4 载具类：delete_vehicle（需人工审批，只删当前载具，不可逆）
 -- L2 消息类：send_phone_message（需人工审批 + custom-phone 服务端导出，blast_radius = single）
+-- L1 测试类：police_run_e2e（测试专用，只允许 police_e2e 命名空间，自动执行）
 AgentPolicy.ACTIONS = {
     notify = {
         risk = 'L1',
@@ -64,6 +65,13 @@ AgentPolicy.ACTIONS = {
         requires_approval = false,
         auto_execute = true,
         blast_radius = 'single',
+    },
+    police_run_e2e = {
+        risk = 'L1',
+        requires_approval = false,
+        auto_execute = true,
+        blast_radius = 'single',
+        compensation = 'none',
     },
     set_job_duty = {
         risk = 'L2',
@@ -154,11 +162,13 @@ AgentPolicy.ACTIONS = {
     },
 }
 
--- Actions that affect the whole server instead of one target player. They have
--- no citizenid and must stay usable while no player is online.
+-- Actions that have no target player. World actions affect the whole server;
+-- police_run_e2e is test-only but still valid while nobody is online. All of
+-- them must stay usable without a citizenid.
 AgentPolicy.WORLD_ACTIONS = {
     announce = true,
     police_incident_create = true,
+    police_run_e2e = true,
     set_weather = true,
     set_time_of_day = true,
 }
@@ -446,6 +456,37 @@ function AgentPolicy.Normalize(actionType, params, cfg)
             return fail('invalid_params', 'reason must be 3-240 characters')
         end
         return { citizenid = params.citizenid, minutes = minutes, reason = reason }
+    end
+
+    -- L1 test action: no target player. Only the E2E namespace is reachable;
+    -- this action never accepts a suite name that could touch other test data.
+    if actionType == 'police_run_e2e' then
+        local unknownErr = rejectUnknownFields(params, {
+            suite = true,
+            timeout_s = true,
+        }, 'police_run_e2e')
+        if unknownErr then return nil, unknownErr end
+
+        local suite = params.suite
+        if suite == nil then suite = 'police_e2e' end
+        if type(suite) ~= 'string' or suite ~= 'police_e2e' then
+            return fail('invalid_params', 'suite must be police_e2e')
+        end
+
+        local timeout = params.timeout_s
+        if timeout ~= nil then
+            if type(timeout) ~= 'number' or timeout ~= timeout
+                or timeout == math.huge or timeout == -math.huge then
+                return fail('invalid_params', 'timeout_s must be a finite integer')
+            end
+            if timeout ~= math.floor(timeout) or timeout < 30 or timeout > 180 then
+                return fail('invalid_params', 'timeout_s must be an integer between 30 and 180')
+            end
+        end
+
+        local normalized = { suite = suite }
+        if timeout ~= nil then normalized.timeout_s = math.tointeger(timeout) or timeout end
+        return normalized
     end
 
     -- L1 dispatch action: no target player, validated data only.
@@ -1107,6 +1148,14 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'police_run_e2e' then
+        preview.suite = params.suite
+        preview.timeout_s = params.timeout_s or 180
+        preview.test_namespace = 'police_e2e'
+        preview.writes_database = true
+        return preview
+    end
+
     if actionType == 'announce' then
         preview.length = AgentPolicy.TextLength(params.message)
         preview.kind = params.kind
@@ -1320,6 +1369,19 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
         end
         if type(params.code) ~= 'string' or #params.code < 1 or #params.code > 16 then
             return failBool('invalid_params', 'invalid code')
+        end
+        return true
+    end
+
+    if actionType == 'police_run_e2e' then
+        if params.suite ~= 'police_e2e' then
+            return failBool('invalid_params', 'suite must be police_e2e')
+        end
+        if params.timeout_s ~= nil
+            and (type(params.timeout_s) ~= 'number'
+                or params.timeout_s ~= math.floor(params.timeout_s)
+                or params.timeout_s < 30 or params.timeout_s > 180) then
+            return failBool('invalid_params', 'timeout_s must be an integer between 30 and 180')
         end
         return true
     end

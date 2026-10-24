@@ -102,8 +102,28 @@ class RegistryPolicyParityTests(unittest.TestCase):
     def test_action_and_tool_counts_are_pinned(self) -> None:
         # If this fails, update the number on purpose in the same commit that
         # adds/removes an action; silent growth is what this test prevents.
-        self.assertEqual(len(self.actions), 21)
-        self.assertEqual(len(self.tools), 35)
+        self.assertEqual(len(self.actions), 22)
+        self.assertEqual(len(self.tools), 36)
+
+    def test_police_run_e2e_is_l1_test_only(self) -> None:
+        definition = self.actions["police_run_e2e"]
+        self.assertEqual(definition["risk"], "L1")
+        self.assertIs(definition["requires_approval"], False)
+
+        tool = next(
+            tool for tool in self.tools if tool["name"] == "run_police_e2e"
+        )
+        self.assertEqual(tool["director_action"], "police_run_e2e")
+        self.assertEqual(tool["channel"], "write")
+        self.assertEqual(tool["blast_radius"], "single")
+        self.assertIs(tool["requires_approval"], False)
+        schema = tool["inputSchema"]
+        self.assertEqual(
+            schema["properties"]["suite"]["enum"], ["police_e2e"]
+        )
+        self.assertEqual(schema["properties"]["timeout_s"]["minimum"], 30)
+        self.assertEqual(schema["properties"]["timeout_s"]["maximum"], 180)
+        self.assertEqual(schema["additionalProperties"], False)
 
     def test_l3_and_l4_never_auto_execute(self) -> None:
         for action, definition in self.actions.items():
