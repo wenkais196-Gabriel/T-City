@@ -348,7 +348,7 @@ Test.describe("police_e2e", function()
                     SELECT id, actor_kind, action, target, detail
                       FROM police_audit
                      WHERE id > ? AND action = 'incident.create'
-                       AND actor_citizenid = 'e2e' AND detail = ?
+                       AND actor_citizenid = 'agent:e2e' AND detail = ?
                      ORDER BY id DESC LIMIT 1
                 ]], { cursor, title })
                 expect(audit ~= nil, 'police_audit 记录 incident.create',
@@ -680,7 +680,7 @@ Test.describe("police_e2e", function()
                     local audit = MySQL.single.await([[
                         SELECT id FROM police_audit
                          WHERE action = 'incident.create'
-                           AND actor_citizenid = 'e2e' AND detail = ?
+                           AND actor_citizenid = 'agent:e2e' AND detail = ?
                          ORDER BY id DESC LIMIT 1
                     ]], { ctx.incidentTitle })
                     expect(audit ~= nil, '清理后 police_audit 仍保留',
