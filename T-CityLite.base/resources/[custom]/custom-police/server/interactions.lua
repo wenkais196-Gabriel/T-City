@@ -138,6 +138,11 @@ end)
 
 RegisterNetEvent('police:server:JailPlayer', function(playerId, time)
     local src = source
+    -- P6: legacy manual jail is retired. The /jail command and the
+    -- police:client:JailPlayer handler are gone; new arrests must go through
+    -- ArrestSubmit. Keep this handler only for internal/compat callers that
+    -- pass source 0 — any client-sourced trigger is ignored.
+    if src ~= 0 then return end
     local playerPed = GetPlayerPed(src)
     local targetPed = GetPlayerPed(playerId)
     local playerCoords = GetEntityCoords(playerPed)

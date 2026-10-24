@@ -922,3 +922,112 @@ def test_justice_case_id_is_persisted():
     assert "justice_case_id" in p3
     ui = read(POLICE.parent / "custom-phone/web/src/apps/PoliceMDT.svelte")
     assert "open_case" in ui
+
+
+# ---------------------------------------------------------------------------
+# P6: verdict persistence, legacy /jail retirement, wanted sources
+# ---------------------------------------------------------------------------
+
+MIGRATION_V37 = BASE / "migrations" / "v3.7_police_justice_verdict.sql"
+
+
+def lookup_citizen_block() -> str:
+    src = read(POLICE / "server/p0.lua")
+    start = src.index("function P.LookupCitizen(")
+    end = src.index("function P.LookupVehicle(", start)
+    return src[start:end]
+
+
+def test_v37_migration_adds_verdict_columns_idempotently():
+    migration = read(MIGRATION_V37)
+    assert "justice_verdict" in migration and "TEXT NULL" in migration
+    assert "justice_status" in migration and "VARCHAR(16) NULL" in migration
+    assert migration.count("information_schema.COLUMNS") == 2
+    assert "PREPARE st1 FROM @s1" in migration
+    assert "PREPARE st2 FROM @s2" in migration
+    assert "AFTER justice_case_id" in migration
+
+
+def test_justice_manifest_loads_oxmysql_before_its_scripts():
+    manifest = read(JUSTICE / "fxmanifest.lua")
+    assert "'@oxmysql/lib/MySQL.lua'" in manifest
+    assert manifest.index("'@oxmysql/lib/MySQL.lua'") < manifest.index("'server/main.lua'")
+
+
+def test_resolve_case_persists_the_verdict_without_blocking_the_sentence():
+    src = justice_trial_src()
+    block = resolve_case_block()
+
+    assert "local function persistVerdict(caseId, verdict, status)" in src
+    assert "pcall(json.encode, verdict)" in src
+    assert "UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?" in src
+    assert "{ encoded, status, tostring(caseId) }" in src
+    # A DB/encoding failure only warns; it never aborts the verdict. The await
+    # runs in its own thread because command callbacks may not be yieldable.
+    helper = src[src.index("local function persistVerdict("):src.index("function JusticeService.ResolveCase(")]
+    assert "CreateThread(function()" in helper
+    assert "if not wrote then" in helper
+    assert "print(" in helper
+
+    assert "persistVerdict(caseId, verdict, case.status)" in block
+    set_verdict = block.index("JusticeService.SetVerdict(caseId, verdict)")
+    imprison = block.index("JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes)")
+    persist = block.index("persistVerdict(caseId, verdict, case.status)")
+    assert set_verdict < persist, "the verdict must be set before it is written back"
+    assert imprison < persist, "a DB failure must not affect the jail sentence"
+    assert persist < block.index("return verdict")
+
+
+def test_case_detail_and_arrests_expose_the_justice_verdict_columns():
+    detail = case_detail_block()
+    assert "justice_case_id" in detail
+    assert "justice_verdict" in detail
+    assert "justice_status" in detail
+    assert "SELECT id, title, author_citizenid, status, created_at, justice_case_id" in detail
+    assert "FROM police_reports WHERE case_id = ?" in detail
+
+    arrests = get_arrests_block()
+    assert "justice_case_id" in arrests
+    assert "justice_verdict" in arrests
+    assert "justice_status" in arrests
+    assert "subject_citizenid AS citizenid" in arrests
+
+
+def test_legacy_jail_command_and_client_handler_are_removed():
+    commands = read(POLICE / "server/commands.lua")
+    assert "QBCore.Commands.Add('jail'" not in commands
+    assert "police:client:JailPlayer" not in commands
+    assert "QBCore.Commands.Add('unjail'" in commands
+
+    client = read(POLICE / "client/interactions.lua")
+    assert "police:client:JailPlayer" not in client
+    assert "police:server:JailPlayer" not in client
+
+
+def test_server_jail_event_only_accepts_internal_source_zero():
+    src = read(POLICE / "server/interactions.lua")
+    start = src.index("RegisterNetEvent('police:server:JailPlayer'")
+    block = src[start:src.index("RegisterNetEvent('police:server:SeizeCash'", start)]
+    assert "if src ~= 0 then return end" in block
+    assert "retired" in block and "P6" in block
+    guard = block.index("if src ~= 0 then return end")
+    assert guard < block.index("local Player = QBCore.Functions.GetPlayer(src)")
+
+
+def test_lookup_citizen_returns_separate_wanted_sources():
+    block = lookup_citizen_block()
+    assert "wants = meta.wanted" not in block
+    assert "active_wanted = meta.wanted" in block
+    assert "warrants = warrants" in block
+    assert "bolo = bolo" in block
+
+    assert "SELECT id, reason, status, created_at" in block
+    assert "FROM police_warrants" in block
+    assert "citizenid = ? AND status IN ('approved','requested')" in block
+    assert "SELECT id, kind, target, created_at" in block
+    assert "subject_citizenid = ? AND is_bolo = 1" in block
+    assert block.count("ORDER BY id DESC LIMIT 5") == 2
+    # Both queries are parameterised with the looked-up citizenid.
+    assert block.count("{ row.citizenid }") == 2
+    # The lookup audit is unchanged.
+    assert "audit(actor.citizenid, 'lookup.citizen.result', tostring(row.citizenid), nil)" in block

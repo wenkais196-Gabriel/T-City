@@ -461,3 +461,75 @@ def test_built_bundle_ships_the_five_page_mdt():
         "审计", "搜查令", "BOLO", "一次逮捕提交",
     ):
         assert token in bundle, token
+
+
+def test_case_detail_renders_justice_verdict():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "{#if caseDetail}" in ui
+    detail = ui[ui.index("{#if caseDetail}"):ui.index("{:else if caseSeg === 'bolos'}")]
+    for token in ("justice_case_id", "justice_status", "justice_verdict", "verdictText"):
+        assert token in detail, token
+    # verdict JSON is decoded to finalMinutes / fine / mode (trial vs plea) ...
+    for token in ("finalMinutes", "fine", "'trial'", "'plea'", "庭审", "认罪协商"):
+        assert token in ui, token
+    # ... and a malformed payload falls back to the raw string instead of hiding it.
+    assert "catch { return text; }" in ui
+    reports = detail[detail.index("{#each caseDetail.reports"):detail.index("{#each caseDetail.evidence")]
+    assert "verdictText(r.justice_verdict)" in reports
+    arrests = detail[detail.index("{#each caseDetail.arrests"):]
+    assert "verdictText(a.justice_verdict)" in arrests
+    assert "String(r.justice_case_id)" in reports and "String(a.justice_case_id)" in arrests
+
+
+def test_person_lookup_splits_warrant_bolo_and_active_wanted():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for token in (
+        "PERSON_GROUP_KEYS", "personFields", "row.warrants", "row.bolo",
+        "row.active_wanted", "describeItem", "wantedStars",
+        "通缉/令状", "BOLO", "实时通缉星级",
+    ):
+        assert token in ui, token
+    # wants is excluded from the plain key/value dump and never rendered directly.
+    assert "PERSON_GROUP_KEYS = new Set(['wants'" in ui
+    assert "String(row.wants" not in ui
+    assert "{#if row.wants}" not in ui
+    person_start = ui.index("{#if personSeg === 'citizen'}")
+    citizen = ui[person_start:ui.index("{:else}", person_start)]
+    assert "personFields(row)" in citizen
+    assert "asList(row.warrants)" in citizen
+    assert "asList(row.bolo)" in citizen
+    assert "Number(row.active_wanted ?? 0) > 0" in citizen
+
+
+def test_report_and_citation_templates_fill_forms():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for token in (
+        "REPORT_TEMPLATES", "CITATION_TEMPLATES",
+        "交通拦截", "盗窃", "暴力事件", "尾声报告",
+        "超速", "闯红灯", "非法停车", "扰乱秩序",
+        "applyReportTemplate", "applyArrestTemplate", "applyCitationTemplate",
+        "套用报告模板…", "套用逮捕报告模板…", "套用罚单模板…",
+    ):
+        assert token in ui, token
+    # templates only prefill editable local state; submit still posts to the server.
+    assert "if (!reportForm.title.trim()) reportForm.title = template.title;" in ui
+    assert "reportForm.body = template.body;" in ui
+    assert "arrestForm.details = heading;" in ui
+    assert "citationForm.reason = template.reason;" in ui
+    assert "onclick={createReport}" in ui and "onclick={submitArrest}" in ui
+    assert "onclick={issueCitation}" in ui
+
+
+def test_built_bundle_ships_justice_wanted_sources_and_templates():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    for token in (
+        "justice_case_id", "justice_verdict", "justice_status",
+        "通缉/令状", "实时通缉星级",
+        "交通拦截", "尾声报告", "超速", "闯红灯", "非法停车", "扰乱秩序",
+    ):
+        assert token in bundle, token
+    # the retired merged `wants` field is filtered, never dumped into the UI
+    assert "row.wants" not in bundle
