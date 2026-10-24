@@ -528,22 +528,32 @@ end
 -- NPC backup support ("请求支援"). The server is the authority for who may
 -- request, how often, how many units may exist per officer, and the audit
 -- trail. The requesting client only spawns/animates the car and officers.
--- Each request is one car + two NPC officers; pending units are tracked by
--- citizenid so reconnects and misattributed end events cannot corrupt counts.
+-- Each request is one car + two NPC officers, charged as one slot of the
+-- FIT-07 NPC budget (server/npc_budget.lua): the budget enforces the global
+-- 6-slot cap and the per-citizen 2-slot cap that used to live in this file.
 -- ---------------------------------------------------------------------------
 local BACKUP_COOLDOWN = 60
-local BACKUP_MAX_UNITS = 2
 local backupCooldown = {} -- [citizenid] = os.time() of the last accepted request
-local backupUnits = {}    -- [citizenid] = { [requestId] = true }
-local backupSource = {}   -- [source] = citizenid
+local backupSource = {}   -- [source] = citizenid, kept while any slot remains
 local backupSeq = 0
 
-local function backupUnitCount(citizenid)
-    local units = backupUnits[citizenid]
-    if type(units) ~= 'table' then return 0 end
-    local count = 0
-    for _ in pairs(units) do count = count + 1 end
-    return count
+--- Live backup budget entries owned by `citizenid` (at most two).
+local function backupSlots(citizenid)
+    local owned = {}
+    for _, entry in ipairs(GetNpcBudget().entries) do
+        if entry.kind == 'backup' and entry.citizenid == citizenid then
+            owned[#owned + 1] = entry
+        end
+    end
+    return owned
+end
+
+--- Release every backup slot for a session; used when the client drops and
+--- can no longer send `backupEnded`.
+local function releaseBackupSlots(citizenid, reason)
+    for _, entry in ipairs(backupSlots(citizenid)) do
+        NPCBudget.Release(entry.id, reason)
+    end
 end
 
 --- Ask for one NPC backup unit. Returns the request id the client must send
@@ -563,29 +573,26 @@ function RequestBackup(source)
     local now = os.time()
     local last = tonumber(backupCooldown[cid]) or 0
     if now - last < BACKUP_COOLDOWN then return fail('cooldown') end
-    if backupUnitCount(cid) >= BACKUP_MAX_UNITS then return fail('limit') end
 
     backupSeq = backupSeq + 1
     local requestId = ('BU-%d-%d-%d'):format(src, now, backupSeq)
 
-    -- Reserve the slot before the yielding audit insert, otherwise two
-    -- requests arriving in the same tick could both pass the limit check.
-    -- Keep a local reference: playerDropped may nil `backupUnits[cid]` while
-    -- the audit insert is suspended.
-    local units = backupUnits[cid] or {}
-    backupUnits[cid] = units
-    units[requestId] = true
+    -- Reserve the budget slot before the yielding audit insert: the budget
+    -- itself is the reservation, so two requests in the same tick cannot both
+    -- pass the limit check. A global refusal is propagated as global_limit;
+    -- the per-officer refusal keeps the MDT's historical `limit` code.
+    local admitted, budgetError = NPCBudget.Acquire('backup', requestId, cid)
+    if not admitted then
+        if budgetError == 'player_limit' then return fail('limit') end
+        return fail(budgetError or 'limit')
+    end
     backupSource[src] = cid
     local previousCooldown = backupCooldown[cid]
     backupCooldown[cid] = now
 
-    local function releaseReservation()
-        units[requestId] = nil
-        if next(units) == nil and backupUnits[cid] == units then backupUnits[cid] = nil end
-    end
-
     if not auditPlayer(cid, 'backup.request', cid, requestId) then
-        releaseReservation()
+        NPCBudget.Release(requestId, 'audit_unavailable')
+        backupSource[src] = nil
         backupCooldown[cid] = previousCooldown
         return fail('audit_unavailable')
     end
@@ -594,7 +601,7 @@ function RequestBackup(source)
     -- (or whose server id was reused by someone else in the meantime).
     local stillThere = QBCore.Functions.GetPlayer(src)
     if not stillThere or stillThere.PlayerData.citizenid ~= cid then
-        releaseReservation()
+        NPCBudget.Release(requestId, 'player_left')
         backupSource[src] = nil
         backupCooldown[cid] = previousCooldown
         return fail('not_police')
@@ -606,31 +613,41 @@ end
 
 --- Client finished (or failed) a backup unit: release exactly that unit.
 --- Unknown / foreign request ids are ignored so a client cannot free another
---- officer's slot.
+--- officer's slot. The source is captured locally so the ownership check is
+--- bound to the caller's session, never to a client-supplied citizenid.
 RegisterNetEvent('police:server:backupEnded', function(requestId)
-    local src = tonumber(source) or 0
-    local player = QBCore.Functions.GetPlayer(src)
+    local targetSrc = tonumber(source) or 0
+    local player = QBCore.Functions.GetPlayer(targetSrc)
     local actor = player and player.PlayerData
     local cid = actor and actor.citizenid
     if type(cid) ~= 'string' or cid == '' then return end
     if type(requestId) ~= 'string' or #requestId < 1 or #requestId > 64 then return end
-    local units = backupUnits[cid]
-    if type(units) ~= 'table' or units[requestId] ~= true then return end
-    units[requestId] = nil
-    if next(units) == nil then
-        backupUnits[cid] = nil
-        if backupSource[src] == cid then backupSource[src] = nil end
+
+    local owned = false
+    for _, entry in ipairs(backupSlots(cid)) do
+        if entry.id == requestId then
+            owned = true
+            break
+        end
+    end
+    if not owned then return end
+
+    NPCBudget.Release(requestId, 'backup_ended')
+    -- Keep the session -> citizenid binding until the last unit ends, otherwise
+    -- a later playerDropped would not know which slots still need releasing.
+    if #backupSlots(cid) == 0 and backupSource[targetSrc] == cid then
+        backupSource[targetSrc] = nil
     end
 end)
 
 -- A dropped client never gets to send backupEnded; release every pending unit
--- for that session so the per-officer limit cannot stay locked forever.
+-- for that session so the global/per-officer caps cannot stay locked forever.
 AddEventHandler('playerDropped', function()
     local src = tonumber(source) or 0
     local cid = backupSource[src]
     if not cid then return end
     backupSource[src] = nil
-    backupUnits[cid] = nil
+    releaseBackupSlots(cid, 'player_dropped')
 end)
 
 --- Best-effort notification for the citation created by an arrest. The arrest

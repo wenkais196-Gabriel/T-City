@@ -148,7 +148,8 @@ def test_manifest_loads_charge_catalog_and_version_is_bumped():
     manifest = read(POLICE / "fxmanifest.lua")
     assert "shared/charges.lua" in manifest
     assert manifest.index("shared/charges.lua") < manifest.index("server/p2_system.lua")
-    assert "version '1.6.0'" in manifest
+    assert "version '1.7.0'" in manifest
+    assert "version '1.6.0'" not in manifest
     assert "version '1.4.0'" not in manifest
     assert "version '1.5.0'" not in manifest
 
@@ -1098,7 +1099,8 @@ def backup_drop_block() -> str:
 def test_backup_manifest_ships_client_and_bumps_version():
     manifest = read(POLICE / "fxmanifest.lua")
     assert "client/backup.lua" in manifest
-    assert "version '1.6.0'" in manifest
+    assert "version '1.7.0'" in manifest
+    assert "version '1.6.0'" not in manifest
     assert "version '1.4.0'" not in manifest
     assert "version '1.5.0'" not in manifest
 
@@ -1116,19 +1118,21 @@ def test_request_backup_is_exported_gated_and_notifies_only_the_caller():
     assert "local requestId = ('BU-%d-%d-%d'):format(src, now, backupSeq)" in block
 
 
-def test_request_backup_enforces_cooldown_and_two_unit_cap():
+def test_request_backup_enforces_cooldown_and_unified_budget():
     src = read(POLICE / "server/p2_system.lua")
     block = backup_request_block()
     assert "BACKUP_COOLDOWN = 60" in src
-    assert "BACKUP_MAX_UNITS = 2" in src
+    assert "BACKUP_MAX_UNITS" not in src
+    assert "backupUnitCount" not in src
     assert "if now - last < BACKUP_COOLDOWN then return fail('cooldown') end" in block
-    assert "if backupUnitCount(cid) >= BACKUP_MAX_UNITS then return fail('limit') end" in block
-    # The slot is reserved before the yielding audit insert and rolled back if
-    # the audit cannot be written or the player left while it was in flight.
-    assert "local units = backupUnits[cid] or {}" in block
-    assert "units[requestId] = true" in block
-    assert "local function releaseReservation()" in block
-    assert "units[requestId] = nil" in block
+    # FIT-07: the per-citizen cap now comes from the shared budget (2 slots).
+    assert "NPCBudget.Acquire('backup', requestId, cid)" in block
+    assert "if budgetError == 'player_limit' then return fail('limit') end" in block
+    assert "return fail(budgetError or 'limit')" in block
+    # The budget entry is the reservation: it is released if the audit cannot
+    # be written or the player left while the audit insert was in flight.
+    assert "NPCBudget.Release(requestId, 'audit_unavailable')" in block
+    assert "NPCBudget.Release(requestId, 'player_left')" in block
     assert "backupCooldown[cid] = previousCooldown" in block
     assert "stillThere.PlayerData.citizenid ~= cid" in block
 
@@ -1147,19 +1151,26 @@ def test_backup_does_not_create_player_units_or_sentence_anyone():
     assert "Jail" not in block
 
 
-def test_backup_end_decrements_only_the_callers_owned_unit():
+def test_backup_end_releases_only_the_callers_owned_slot():
     block = backup_end_block()
-    assert "local units = backupUnits[cid]" in block
-    assert "units[requestId] ~= true then return end" in block
-    assert "units[requestId] = nil" in block
-    assert "if next(units) == nil then" in block
-    assert "backupUnits[cid] = nil" in block
-    assert "if backupSource[src] == cid then backupSource[src] = nil end" in block
-    # A dropped client releases its pending units so the cap cannot stay locked.
+    assert "local targetSrc = tonumber(source) or 0" in block
+    assert "QBCore.Functions.GetPlayer(targetSrc)" in block
+    assert "for _, entry in ipairs(backupSlots(cid)) do" in block
+    assert "if entry.id == requestId then" in block
+    assert "if not owned then return end" in block
+    assert "NPCBudget.Release(requestId, 'backup_ended')" in block
+    assert "if #backupSlots(cid) == 0 and backupSource[targetSrc] == cid then" in block
+    # A dropped client releases its pending slots so the caps cannot stay locked.
     drop = backup_drop_block()
     assert "local cid = backupSource[src]" in drop
     assert "backupSource[src] = nil" in drop
-    assert "backupUnits[cid] = nil" in drop
+    assert "releaseBackupSlots(cid, 'player_dropped')" in drop
+
+    src = read(POLICE / "server/p2_system.lua")
+    assert "local function backupSlots(citizenid)" in src
+    assert "for _, entry in ipairs(GetNpcBudget().entries)" in src
+    assert "entry.kind == 'backup' and entry.citizenid == citizenid" in src
+    assert "NPCBudget.Release(entry.id, reason)" in src
 
 
 def test_backup_client_spawns_one_car_and_two_officers():
@@ -1934,6 +1945,11 @@ def test_npc_create_is_gated_inserts_and_notifies():
     assert "PolicePolicy.IsPolice(data)" in block
     assert "data.job.onduty ~= true" in block
     assert "activeNpcCount() >= NPCCallouts.MAX_ACTIVE" in block
+    # FIT-07: the scene must acquire its two budget slots before any DB write.
+    assert "NPCBudget.Acquire('callout', budgetId, actorCid)" in block
+    assert "if otherCalloutActive(budgetId) then" in block
+    assert "NPCBudget.Release(budgetId, 'db_error')" in block
+    assert "calloutBudget[id] = budgetId" in block
     assert "template.locations[math.random(1, #template.locations)]" in block
     assert "INSERT INTO police_incidents" in block
     assert "npc_template)" in block
@@ -1986,6 +2002,9 @@ def test_npc_result_validates_close_reward_and_audit():
     assert "return false, 'close_failed'" in block
     # A concurrent second report is idempotent and must not pay twice.
     assert "if closed.idempotent == true then" in block
+    # Both the already-closed and normal success paths return the two slots.
+    assert "releaseCalloutBudget(id, 'callout_already_closed')" in block
+    assert "releaseCalloutBudget(id, 'callout_result')" in block
     assert "player.Functions.AddMoney('bank', 500, 'npc_callout')" in block
     assert "audit(actor.citizenid, 'npc.callout.resolve', tostring(id), result, 'player')" in block
     assert "broadcastEnd(id)" in block
@@ -2003,6 +2022,9 @@ def test_npc_scene_watcher_pushes_after_arrival_and_cleans_closed_calls():
     assert "NPCCallouts.SPAWN_RADIUS" in src
     assert "status <> 'closed'" in src
     assert "for incidentId, entry in pairs(spawned) do" in src
+    # A callout closed before any scene push is still reclaimed through the map.
+    assert "for incidentId in pairs(calloutBudget) do" in src
+    assert "releaseCalloutBudget(incidentId, 'callout_watcher')" in src
     assert "AddEventHandler('playerDropped'" in src
     assert "exports('SubmitNpcCalloutResult', NPC.SubmitResult)" in src
 
@@ -2063,11 +2085,16 @@ def test_npc_client_cleanup_on_end_distance_and_resource_stop():
 def test_npc_manifest_loads_shared_client_and_server_and_bumps_version():
     manifest = read(POLICE / "fxmanifest.lua")
     assert "shared/npc_callouts.lua" in manifest
+    assert "shared/npc_budget.lua" in manifest
+    assert "server/npc_budget.lua" in manifest
     assert "client/npc_callouts.lua" in manifest
     assert "server/p4_npc.lua" in manifest
+    assert manifest.index("shared/npc_budget.lua") < manifest.index("server/npc_budget.lua")
+    assert manifest.index("server/npc_budget.lua") < manifest.index("server/p2_system.lua")
     assert manifest.index("shared/npc_callouts.lua") < manifest.index("client/npc_callouts.lua")
     assert manifest.index("server/p0.lua") < manifest.index("server/p4_npc.lua")
-    assert "version '1.6.0'" in manifest
+    assert "version '1.7.0'" in manifest
+    assert "version '1.6.0'" not in manifest
     assert "version '1.5.0'" not in manifest
 
 

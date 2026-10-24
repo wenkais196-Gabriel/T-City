@@ -567,7 +567,8 @@ CREATE TABLE `player_quests` (
   `progress_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`progress_data`)),
   `started_at` datetime DEFAULT current_timestamp(),
   `completed_at` datetime DEFAULT NULL,
-  `completion_count` int(11) DEFAULT 1,
+  `failed_at` datetime DEFAULT NULL,
+  `completion_count` int(11) DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_citizenid` (`citizenid`),
   KEY `idx_quest_status` (`quest_id`,`status`)
@@ -779,6 +780,366 @@ CREATE TABLE `world_state` (
   KEY `idx_changed_at` (`changed_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='世界状态 — 高频读低频写，DirtyFlush 异步刷盘';
 /*!40101 SET character_set_client = @saved_cs_client */;
+-- ============================================================================
+-- Police / justice / agent domain — from T-CityLite.base/migrations (v2.2–v3.12)
+--
+-- The dump above is the QBCore baseline; these tables exist only in the
+-- migrations. Each statement is CREATE TABLE IF NOT EXISTS so the fixture can
+-- be imported repeatedly (FIT-06). Columns and indexes reflect the migrations'
+-- *final* state, i.e. the ALTERs from v3.3–v3.7 (reports / citations /
+-- evidence), v3.10–v3.11 (incident disposition / NPC callout) and v3.12
+-- (write-intent TTL / outbox) are already folded in. Keep this block in sync
+-- whenever a migration adds a table or column; tests/architecture/
+-- test_fixture_schema.py enforces it.
+-- ============================================================================
+
+-- v2.8_police_p0.sql
+CREATE TABLE IF NOT EXISTS `police_units` (
+  `citizenid` varchar(50) NOT NULL,
+  `callsign` varchar(16) DEFAULT NULL,
+  `dept` varchar(16) NOT NULL DEFAULT 'PATROL',
+  `status` enum('off_duty','available','busy','unavailable','assigned','enroute','on_scene') NOT NULL DEFAULT 'off_duty',
+  `incident_id` bigint unsigned DEFAULT NULL,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`citizenid`),
+  KEY `idx_status` (`status`),
+  KEY `idx_incident` (`incident_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- v2.8_police_p0.sql + v3.10_police_incident_disposition.sql + v3.11_police_npc_callout.sql
+CREATE TABLE IF NOT EXISTS `police_incidents` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(16) NOT NULL DEFAULT '911',
+  `title` varchar(120) NOT NULL,
+  `description` varchar(1000) NOT NULL DEFAULT '',
+  `priority` tinyint unsigned NOT NULL DEFAULT 2,
+  `status` enum('open','assigned','enroute','on_scene','cleared','closed') NOT NULL DEFAULT 'open',
+  `x` double DEFAULT NULL,
+  `y` double DEFAULT NULL,
+  `z` double DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `closed_at` datetime DEFAULT NULL,
+  `disposition` varchar(32) DEFAULT NULL,
+  `npc_template` varchar(32) DEFAULT NULL,
+  `closed_by` varchar(50) DEFAULT NULL,
+  `closed_reason` varchar(255) DEFAULT NULL,
+  `last_activity_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_status_created` (`status`,`created_at`),
+  KEY `idx_priority` (`priority`),
+  KEY `idx_npc_template_status` (`npc_template`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `police_incident_units` (
+  `incident_id` bigint unsigned NOT NULL,
+  `citizenid` varchar(50) NOT NULL,
+  `role` varchar(16) NOT NULL DEFAULT 'primary',
+  `joined_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`incident_id`,`citizenid`),
+  KEY `idx_citizenid` (`citizenid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `police_audit` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `actor_citizenid` varchar(50) DEFAULT NULL,
+  `actor_kind` enum('player','agent','system') NOT NULL DEFAULT 'player',
+  `action` varchar(48) NOT NULL,
+  `target` varchar(64) DEFAULT NULL,
+  `detail` varchar(500) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_actor_created` (`actor_citizenid`,`created_at`),
+  KEY `idx_action_created` (`action`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- v2.9_police_p1.sql + v3.4_police_arrest.sql (charge_id / base_amount / report_id)
+CREATE TABLE IF NOT EXISTS `police_citations` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `citizenid` varchar(50) NOT NULL,
+  `officer_citizenid` varchar(50) NOT NULL,
+  `plate` varchar(12) DEFAULT NULL,
+  `amount` int unsigned NOT NULL,
+  `charge_id` varchar(32) DEFAULT NULL,
+  `base_amount` int DEFAULT NULL,
+  `reason` varchar(240) NOT NULL,
+  `status` enum('unpaid','paid','void') NOT NULL DEFAULT 'unpaid',
+  `incident_id` bigint unsigned DEFAULT NULL,
+  `report_id` bigint unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `paid_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_citizen_status` (`citizenid`,`status`),
+  KEY `idx_officer_created` (`officer_citizenid`,`created_at`),
+  KEY `idx_report` (`report_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- v2.9_police_p1.sql + v3.3/v3.4/v3.5/v3.6/v3.7 (arrest + justice columns)
+CREATE TABLE IF NOT EXISTS `police_reports` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `incident_id` bigint unsigned DEFAULT NULL,
+  `case_id` bigint unsigned DEFAULT NULL,
+  `justice_case_id` varchar(32) DEFAULT NULL,
+  `justice_verdict` text DEFAULT NULL,
+  `justice_status` varchar(16) DEFAULT NULL,
+  `charges` JSON DEFAULT NULL,
+  `author_citizenid` varchar(50) NOT NULL,
+  `title` varchar(160) NOT NULL,
+  `body` varchar(4000) NOT NULL,
+  `status` enum('draft','submitted','approved') NOT NULL DEFAULT 'submitted',
+  `kind` enum('report','arrest') NOT NULL DEFAULT 'report',
+  `is_bolo` tinyint NOT NULL DEFAULT 0,
+  `bolo_kind` varchar(8) DEFAULT NULL,
+  `bolo_target` varchar(50) DEFAULT NULL,
+  `location` varchar(120) DEFAULT NULL,
+  `officer_citizenid` varchar(50) DEFAULT NULL,
+  `subject_citizenid` varchar(50) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_incident` (`incident_id`),
+  KEY `idx_author_created` (`author_citizenid`,`created_at`),
+  KEY `idx_case` (`case_id`),
+  KEY `idx_kind_created` (`kind`,`created_at`),
+  KEY `idx_subject_kind_created` (`subject_citizenid`,`kind`,`created_at`),
+  KEY `idx_justice_case` (`justice_case_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- v3.0_police_evidence.sql + v3.3/v3.4 (case_id / report_id)
+CREATE TABLE IF NOT EXISTS `police_evidence` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `exhibit_no` varchar(32) DEFAULT NULL,
+  `incident_id` bigint unsigned DEFAULT NULL,
+  `report_id` bigint unsigned DEFAULT NULL,
+  `case_id` bigint unsigned DEFAULT NULL,
+  `label` varchar(120) NOT NULL,
+  `description` varchar(1000) NOT NULL DEFAULT '',
+  `location` varchar(120) DEFAULT NULL,
+  `collected_by` varchar(50) NOT NULL,
+  `status` enum('collected','stored','released','destroyed') NOT NULL DEFAULT 'collected',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_exhibit` (`exhibit_no`),
+  KEY `idx_incident` (`incident_id`),
+  KEY `idx_report` (`report_id`),
+  KEY `idx_case` (`case_id`),
+  KEY `idx_status_created` (`status`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `police_evidence_chain` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `evidence_id` bigint unsigned NOT NULL,
+  `action` varchar(32) NOT NULL,
+  `actor_citizenid` varchar(50) NOT NULL,
+  `note` varchar(500) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_evidence_created` (`evidence_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- v3.1_police_p2.sql
+CREATE TABLE IF NOT EXISTS `police_cases` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `case_no` varchar(32) DEFAULT NULL,
+  `title` varchar(160) NOT NULL,
+  `summary` varchar(2000) NOT NULL DEFAULT '',
+  `status` enum('open','closed','archived') NOT NULL DEFAULT 'open',
+  `lead_citizenid` varchar(50) DEFAULT NULL,
+  `created_by` varchar(50) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_case_no` (`case_no`),
+  KEY `idx_status_created` (`status`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `police_bolos` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `kind` enum('person','vehicle') NOT NULL,
+  `target` varchar(50) NOT NULL,
+  `reason` varchar(500) NOT NULL,
+  `status` enum('active','cleared') NOT NULL DEFAULT 'active',
+  `created_by` varchar(50) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `cleared_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_kind_status` (`kind`,`status`),
+  KEY `idx_target` (`target`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `police_warrants` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `citizenid` varchar(50) NOT NULL,
+  `reason` varchar(500) NOT NULL,
+  `status` enum('requested','approved','denied','executed','expired') NOT NULL DEFAULT 'requested',
+  `requested_by` varchar(50) NOT NULL,
+  `approved_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `decided_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_citizen_status` (`citizenid`,`status`),
+  KEY `idx_status_created` (`status`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `police_arrests` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `citizenid` varchar(50) NOT NULL,
+  `officer_citizenid` varchar(50) NOT NULL,
+  `charges` varchar(1000) NOT NULL,
+  `incident_id` bigint unsigned DEFAULT NULL,
+  `case_id` bigint unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_citizen_created` (`citizenid`,`created_at`),
+  KEY `idx_case` (`case_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- v3.8_justice_sentences.sql
+CREATE TABLE IF NOT EXISTS `justice_sentences` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `citizenid` varchar(50) NOT NULL,
+  `case_id` varchar(32) DEFAULT NULL,
+  `minutes` int unsigned NOT NULL,
+  `reason` varchar(255) DEFAULT NULL,
+  `status` enum('active','released','expired') NOT NULL DEFAULT 'active',
+  `started_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `ends_at` datetime NOT NULL,
+  `released_at` datetime DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_citizen_status` (`citizenid`,`status`),
+  KEY `idx_status_ends` (`status`,`ends_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- v3.9_police_write_intents.sql + v3.12_police_outbox.sql (TTL columns)
+CREATE TABLE IF NOT EXISTS `police_write_intents` (
+  `idem_key` varchar(128) NOT NULL,
+  `action` varchar(32) NOT NULL,
+  `actor_citizenid` varchar(50) NOT NULL,
+  `status` enum('pending','done','failed') NOT NULL DEFAULT 'pending',
+  `result_json` text DEFAULT NULL,
+  `expires_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`idem_key`),
+  KEY `idx_actor_created` (`actor_citizenid`,`created_at`),
+  KEY `idx_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- v3.12_police_outbox.sql
+CREATE TABLE IF NOT EXISTS `police_outbox` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `topic` varchar(32) NOT NULL,
+  `payload` text NOT NULL,
+  `status` enum('pending','done','failed') NOT NULL DEFAULT 'pending',
+  `attempts` int unsigned NOT NULL DEFAULT 0,
+  `next_attempt_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_status_next` (`status`,`next_attempt_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- v2.2_agent_read_layer.sql
+CREATE TABLE IF NOT EXISTS `agent_events` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `event_type` varchar(64) NOT NULL,
+  `citizenid` varchar(11) DEFAULT NULL,
+  `payload` longtext DEFAULT NULL,
+  `schema_version` smallint NOT NULL DEFAULT 1,
+  `created_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_agent_events_type_id` (`event_type`,`id`),
+  KEY `idx_agent_events_citizen_id` (`citizenid`,`id`),
+  KEY `idx_agent_events_created_at` (`created_at`),
+  CONSTRAINT `chk_agent_events_payload_json` CHECK (`payload` IS NULL OR json_valid(`payload`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- v2.3_agent_actions.sql
+CREATE TABLE IF NOT EXISTS `agent_actions` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `agent_id` varchar(64) NOT NULL,
+  `action_type` varchar(32) NOT NULL,
+  `params` longtext NOT NULL,
+  `status` enum('proposed','pending_approval','approved','executed','rejected','failed') NOT NULL DEFAULT 'proposed',
+  `idempotency_key` varchar(128) NOT NULL,
+  `preview` longtext DEFAULT NULL,
+  `result` longtext DEFAULT NULL,
+  `error` varchar(255) DEFAULT NULL,
+  `requested_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  `approved_by` varchar(64) DEFAULT NULL,
+  `approved_at` datetime(3) DEFAULT NULL,
+  `executed_at` datetime(3) DEFAULT NULL,
+  `expires_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_idem` (`idempotency_key`),
+  KEY `idx_status_requested` (`status`,`requested_at`),
+  KEY `idx_agent_requested` (`agent_id`,`requested_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- v2.5_agent_denials.sql
+CREATE TABLE IF NOT EXISTS `agent_denials` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `agent_id` varchar(64) NOT NULL,
+  `action_type` varchar(32) NOT NULL,
+  `code` varchar(64) NOT NULL,
+  `message` varchar(255) DEFAULT NULL,
+  `param_keys` varchar(255) DEFAULT NULL,
+  `params_hash` char(16) DEFAULT NULL,
+  `dry_run` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_agent_created` (`agent_id`,`created_at`),
+  KEY `idx_code_created` (`code`,`created_at`),
+  KEY `idx_action_created` (`action_type`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- v2.6_agent_effects.sql
+CREATE TABLE IF NOT EXISTS `agent_effects` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `request_id` varchar(80) NOT NULL,
+  `agent_id` varchar(64) NOT NULL,
+  `target_source` int NOT NULL,
+  `action` varchar(32) NOT NULL,
+  `status` enum('ok','rejected','failed','cancelled','timeout','player_offline','executor_stopped') NOT NULL,
+  `error_code` varchar(64) DEFAULT NULL,
+  `latency_ms` int unsigned DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_created` (`created_at`),
+  KEY `idx_agent_created` (`agent_id`,`created_at`),
+  KEY `idx_action_created` (`action`,`created_at`),
+  KEY `idx_status_created` (`status`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- v2.3.1_agent_director.sql
+CREATE TABLE IF NOT EXISTS `agent_director_state` (
+  `name` varchar(64) NOT NULL,
+  `cursor` bigint NOT NULL DEFAULT 0,
+  `updated_at` datetime(3) NOT NULL DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3),
+  `last_event_at` datetime(3) DEFAULT NULL,
+  PRIMARY KEY (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- v0.7_quest_system.sql, widened by v0.7.2_schema_reconcile.sql
+CREATE TABLE IF NOT EXISTS `quest_event_log` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `citizenid` varchar(50) NOT NULL,
+  `quest_id` varchar(100) NOT NULL,
+  `step_id` varchar(100) DEFAULT NULL,
+  `event_type` varchar(32) NOT NULL,
+  `metadata` longtext DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_citizenid` (`citizenid`),
+  KEY `idx_quest` (`quest_id`),
+  KEY `idx_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
