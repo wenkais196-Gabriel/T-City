@@ -1293,20 +1293,26 @@ def test_startup_sweep_parks_offline_units_without_deleting_rows():
 def test_grade1_officers_may_only_self_claim_open_or_assigned_incidents():
     block = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
     assert "reason == 'rank_too_low' and grade(actor) < 2 and actor.job.onduty == true" in block
-    assert "if target ~= actor.citizenid then return false, 'rank_too_low' end" in block
-    assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then return false, 'rank_too_low' end" in block
+    assert "if selfClaim and target ~= actor.citizenid then return false, 'rank_too_low' end" in block
+    assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then" in block
+    assert "return false, 'invalid_transition'" in block
     assert "INSERT INTO police_incident_units" in block
     assert "assignUnitRow(target, id)" in block
     assert "UPDATE police_incidents SET status = 'assigned'" in block
 
 
-def test_clearing_an_incident_closes_it_and_releases_only_task_units():
+def test_clearing_an_incident_closes_it_with_disposition_and_releases_task_units():
     block = p0_block("function P.SetIncidentStatus(", "local function lookupAllowed")
-    assert "local storedStatus = (status == 'cleared') and 'closed' or status" in block
-    assert "local closed = (storedStatus == 'closed')" in block
-    assert "{ storedStatus, closed and 1 or 0, id }" in block
+    assert "if status == 'cleared' or status == 'cancelled' or status == 'closed' then" in block
+    assert "targetStatus = 'closed'" in block
+    assert "closeDisposition = (status == 'cancelled') and 'cancelled' or 'cleared'" in block
+    assert "if not INCIDENT_DISPOSITIONS[closeDisposition] then return false, 'invalid_disposition' end" in block
+    assert "SET status = 'closed', closed_at = NOW(), disposition = ?, closed_by = ?" in block
+    assert "closed_reason = ?, last_activity_at = NOW(), updated_at = NOW()" in block
+    assert "{ closeDisposition, actor.citizenid, closedReason, id }" in block
     assert "releaseIncidentUnits(id)" in block
-    assert "return { id = id, status = storedStatus }" in block
+    assert "audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition)" in block
+    assert "return { id = id, status = 'closed', disposition = closeDisposition }" in block
 
     release = p0_block("local function releaseIncidentUnits(", "function P.SetUnitStatus(")
     assert "SET status = 'available', incident_id = NULL" in release
@@ -1326,8 +1332,142 @@ def test_unit_writes_are_confined_to_p0_helpers():
 
     status = p0_block("function P.SetIncidentStatus(", "local function lookupAllowed")
     assert "UPDATE police_units" not in status
-    assert "markIncidentUnits(id, status)" in status
+    assert "markIncidentUnits(id, targetStatus)" in status
     assert "releaseIncidentUnits(id)" in status
+
+
+# ---------------------------------------------------------------------------
+# SM-02 incident lifecycle — guarded transitions, disposition, stale sweep
+# ---------------------------------------------------------------------------
+
+MIGRATION_V310 = BASE / "migrations" / "v3.10_police_incident_disposition.sql"
+
+
+def incident_status_block() -> str:
+    return p0_block("function P.SetIncidentStatus(", "local function lookupAllowed")
+
+
+def incident_transitions_block() -> str:
+    return p0_block("local INCIDENT_TRANSITIONS = {", "local INCIDENT_DISPOSITIONS = {")
+
+
+def test_v310_migration_adds_disposition_provenance_idempotently():
+    sql = read(MIGRATION_V310)
+
+    for column in (
+        "disposition VARCHAR(32) NULL",
+        "closed_by VARCHAR(50) NULL",
+        "closed_reason VARCHAR(255) NULL",
+        "last_activity_at DATETIME NULL",
+    ):
+        assert column in sql, f"v3.10 missing {column}"
+
+    # Every column is guarded through information_schema.COLUMNS, so re-running
+    # the migration is a no-op.
+    assert sql.count("SELECT COUNT(*) FROM information_schema.COLUMNS") == 4
+    assert len(re.findall(r"^PREPARE ", sql, re.M)) == 4
+    assert sql.count("DEALLOCATE PREPARE") == 4
+    assert "information_schema.TABLES" not in sql
+    assert "ALTER TABLE police_incidents ADD COLUMN" in sql
+
+
+def test_sm02_transition_table_allows_and_rejects_every_move():
+    transitions = incident_transitions_block()
+    assert "open = { assigned = true, closed = true }" in transitions
+    assert "assigned = { enroute = true, open = true, closed = true }" in transitions
+    assert "enroute = { on_scene = true, assigned = true, closed = true }" in transitions
+    assert "on_scene = { closed = true }" in transitions
+    # `closed` is terminal: only the same-status retry below is accepted.
+    assert "closed = {}" in transitions
+
+    block = incident_status_block()
+    assert "local nextStatuses = INCIDENT_TRANSITIONS[currentStatus]" in block
+    assert "if not nextStatuses or not nextStatuses[targetStatus] then" in block
+    assert "return false, 'invalid_transition'" in block
+    # The guard runs before any write.
+    assert block.index("invalid_transition") < block.index("UPDATE police_incidents")
+
+
+def test_sm02_closed_retry_is_idempotent_and_unknown_incidents_rejected():
+    block = incident_status_block()
+    assert "if currentStatus == targetStatus then" in block
+    assert "return { id = id, status = targetStatus, idempotent = true }" in block
+    assert "local currentStatus = tostring(incident.status or '')" in block
+    # Same-status short-circuit happens before the transition lookup, so a
+    # retried close never rewrites closed_at/disposition.
+    assert block.index("if currentStatus == targetStatus then") < block.index("local nextStatuses")
+
+    assert "SELECT id, status FROM police_incidents WHERE id = ? LIMIT 1" in block
+    assert "if not incident then return false, 'incident_not_found' end" in block
+
+
+def test_sm02_cleared_and_cancelled_normalise_to_closed_with_provenance():
+    block = incident_status_block()
+    assert "if status == 'cleared' or status == 'cancelled' or status == 'closed' then" in block
+    assert "targetStatus = 'closed'" in block
+    assert "closeDisposition = (status == 'cancelled') and 'cancelled' or 'cleared'" in block
+    assert "if not INCIDENT_DISPOSITIONS[closeDisposition] then return false, 'invalid_disposition' end" in block
+
+    assert "SET status = 'closed', closed_at = NOW(), disposition = ?, closed_by = ?" in block
+    assert "closed_reason = ?, last_activity_at = NOW(), updated_at = NOW()" in block
+    assert "{ closeDisposition, actor.citizenid, closedReason, id }" in block
+    assert "audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition)" in block
+    assert "return { id = id, status = 'closed', disposition = closeDisposition }" in block
+
+
+def test_sm02_non_close_moves_bump_last_activity():
+    block = incident_status_block()
+    assert "SET status = ?, last_activity_at = NOW(), updated_at = NOW()" in block
+    assert "{ targetStatus, id }" in block
+    assert "audit(actor.citizenid, 'incident.status', tostring(id), targetStatus)" in block
+    # Cancelling a dispatch frees its units but keeps manually busy units busy.
+    assert "elseif targetStatus == 'open' then" in block
+    assert "releaseIncidentUnits(id)" in block
+
+
+def test_sm02_assign_checks_state_and_bumps_last_activity():
+    block = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
+    assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then" in block
+    assert "return false, 'invalid_transition'" in block
+    assert "SET status = 'assigned', last_activity_at = NOW()" in block
+    # Re-assigning the same unit is idempotent: no duplicate row/audit.
+    assert "SELECT 1 AS ok FROM police_incident_units WHERE incident_id = ? AND citizenid = ? LIMIT 1" in block
+    assert "return { id = id, unit = target, status = 'assigned', idempotent = true }" in block
+
+
+def test_sm02_stale_sweep_closes_45_minute_old_calls_in_bounded_batches():
+    block = p0_block("function SweepStaleIncidents()", "local function staleSweepLoop()")
+    assert "status IN ('open','assigned','enroute','on_scene')" in block
+    assert "COALESCE(last_activity_at, created_at) < NOW() - INTERVAL 45 MINUTE" in block
+    assert "LIMIT 50" in block
+    assert "disposition = 'stale'" in block
+    assert "closed_by = 'system'" in block
+    assert "closed_reason = 'stale_timeout'" in block
+    assert "releaseIncidentUnits(id)" in block
+    assert "audit('system', 'incident.stale', tostring(id), 'stale_timeout', 'system')" in block
+
+    loop = p0_block("local function staleSweepLoop()", "AddEventHandler('onResourceStart'")
+    assert "Wait(15000)" in loop
+    assert "Wait(60000)" in loop
+    assert "pcall(SweepStaleIncidents)" in loop
+    # A failed batch is printed, never allowed to kill the loop thread.
+    assert "print(('[custom-police] stale incident sweep failed: %s')" in loop
+
+    src = p0_src()
+    assert "CreateThread(staleSweepLoop)" in src
+    assert "exports('SweepStaleIncidents', SweepStaleIncidents)" in src
+
+
+def test_sm02_get_incidents_excludes_closed_and_returns_disposition():
+    live = p0_block("local INCIDENT_LIST_STATUS = {", "local function pd(")
+    assert "open = true, assigned = true, enroute = true, on_scene = true," in live
+    assert "closed = true" not in live
+    assert "cleared = true" not in live
+
+    block = p0_block("function P.GetIncidents(", "function P.AssignUnit(")
+    assert "WHERE status NOT IN ('closed')" in block
+    assert "disposition = row.disposition" in block
+    assert "if not INCIDENT_LIST_STATUS[status] then return false, 'invalid_status' end" in block
 
 
 # ---------------------------------------------------------------------------

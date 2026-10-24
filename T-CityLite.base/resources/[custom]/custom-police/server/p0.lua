@@ -13,6 +13,25 @@ local INCIDENT_STATUS = {
     open = true, assigned = true, enroute = true, on_scene = true,
     cleared = true, closed = true,
 }
+-- SM-02 transition table. `cleared` only exists for rows written before the
+-- guard landed; new closes store `closed` directly, so it can only move on to
+-- `closed`. A same-status call is an idempotent retry, not a transition.
+local INCIDENT_TRANSITIONS = {
+    open = { assigned = true, closed = true },
+    assigned = { enroute = true, open = true, closed = true },
+    enroute = { on_scene = true, assigned = true, closed = true },
+    on_scene = { closed = true },
+    cleared = { closed = true },
+    closed = {},
+}
+local INCIDENT_DISPOSITIONS = {
+    cleared = true, cancelled = true, false_alarm = true, stale = true, arrest = true,
+}
+-- GetIncidents is a live queue/board read; callers may filter by an active
+-- status, but `closed` is never listed (archived calls live in cases/audit).
+local INCIDENT_LIST_STATUS = {
+    open = true, assigned = true, enroute = true, on_scene = true,
+}
 
 local function pd(source)
     local player = QBCore.Functions.GetPlayer(source)
@@ -164,8 +183,13 @@ function P.CreateIncident(source, data)
 end
 
 function P.GetIncidents(status)
+    if status ~= nil and status ~= '' then
+        if not INCIDENT_LIST_STATUS[status] then return false, 'invalid_status' end
+    else
+        status = nil
+    end
     local rows
-    if status and INCIDENT_STATUS[status] then
+    if status then
         rows = MySQL.query.await(
             'SELECT * FROM police_incidents WHERE status = ? ORDER BY priority ASC, id DESC LIMIT 50', { status })
     else
@@ -177,7 +201,8 @@ function P.GetIncidents(status)
         incidents[#incidents + 1] = {
             id = tonumber(row.id), code = row.code, title = row.title,
             description = row.description, priority = tonumber(row.priority),
-            status = row.status, x = row.x, y = row.y, z = row.z,
+            status = row.status, disposition = row.disposition,
+            x = row.x, y = row.y, z = row.z,
             created_at = tostring(row.created_at),
         }
     end
@@ -205,46 +230,96 @@ function P.AssignUnit(source, incidentId, targetCitizenId)
     if target == '' then return false, 'invalid_unit' end
     local incident = MySQL.single.await('SELECT id, status FROM police_incidents WHERE id = ?', { id })
     if not incident then return false, 'incident_not_found' end
-    if selfClaim then
-        if target ~= actor.citizenid then return false, 'rank_too_low' end
-        if incident.status ~= 'open' and incident.status ~= 'assigned' then return false, 'rank_too_low' end
+    if incident.status ~= 'open' and incident.status ~= 'assigned' then
+        return false, 'invalid_transition'
+    end
+    if selfClaim and target ~= actor.citizenid then return false, 'rank_too_low' end
+    -- Re-assigning the same unit is an idempotent retry: no duplicate row and
+    -- no duplicate audit entry.
+    local existing = MySQL.single.await(
+        'SELECT 1 AS ok FROM police_incident_units WHERE incident_id = ? AND citizenid = ? LIMIT 1',
+        { id, target })
+    if existing then
+        return { id = id, unit = target, status = 'assigned', idempotent = true }
     end
     MySQL.insert.await([[
         INSERT INTO police_incident_units (incident_id, citizenid) VALUES (?, ?)
         ON DUPLICATE KEY UPDATE joined_at = joined_at
     ]], { id, target })
     assignUnitRow(target, id)
-    MySQL.update.await("UPDATE police_incidents SET status = 'assigned' WHERE id = ?", { id })
+    MySQL.update.await(
+        "UPDATE police_incidents SET status = 'assigned', last_activity_at = NOW(), updated_at = NOW() WHERE id = ?",
+        { id })
     audit(actor.citizenid, 'incident.assign', tostring(id), target)
     return { id = id, unit = target, status = 'assigned' }
 end
 
-function P.SetIncidentStatus(source, incidentId, status)
+function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
     local actor = pd(source)
-    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
-    if not allowed then return false, reason end
-    if not INCIDENT_STATUS[status] then return false, 'invalid_status' end
+    local allowed, policyReason = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return false, policyReason end
+    if not INCIDENT_STATUS[status] and status ~= 'cancelled' then return false, 'invalid_status' end
     local id = tonumber(incidentId)
     if not id then return false, 'invalid_incident' end
+
+    -- `cleared`/`cancelled` are officer-facing actions; both archive the call.
+    local targetStatus = status
+    local closeDisposition
+    if status == 'cleared' or status == 'cancelled' or status == 'closed' then
+        targetStatus = 'closed'
+        closeDisposition = trim(disposition):sub(1, 32)
+        if closeDisposition == '' then
+            closeDisposition = (status == 'cancelled') and 'cancelled' or 'cleared'
+        end
+        if not INCIDENT_DISPOSITIONS[closeDisposition] then return false, 'invalid_disposition' end
+    end
+
+    local incident = MySQL.single.await(
+        'SELECT id, status FROM police_incidents WHERE id = ? LIMIT 1', { id })
+    if not incident then return false, 'incident_not_found' end
+
     local assigned = MySQL.single.await(
         'SELECT 1 AS ok FROM police_incident_units WHERE incident_id = ? AND citizenid = ? LIMIT 1',
         { id, actor.citizenid })
     if grade(actor) < 2 and not assigned then return false, 'not_assigned' end
-    -- `cleared` is the officer-facing action, but archived incidents must reach
-    -- `closed`; otherwise `GetIncidents` (which only filters `closed`) shows
-    -- cleared calls forever.
-    local storedStatus = (status == 'cleared') and 'closed' or status
-    local closed = (storedStatus == 'closed')
-    MySQL.update.await(
-        'UPDATE police_incidents SET status = ?, closed_at = IF(?, NOW(), closed_at), updated_at = NOW() WHERE id = ?',
-        { storedStatus, closed and 1 or 0, id })
-    if status == 'enroute' or status == 'on_scene' then
-        markIncidentUnits(id, status)
-    elseif closed then
+
+    -- A retried request that already landed is a success, not a transition.
+    local currentStatus = tostring(incident.status or '')
+    if currentStatus == targetStatus then
+        return { id = id, status = targetStatus, idempotent = true }
+    end
+    local nextStatuses = INCIDENT_TRANSITIONS[currentStatus]
+    if not nextStatuses or not nextStatuses[targetStatus] then
+        return false, 'invalid_transition'
+    end
+
+    if targetStatus == 'closed' then
+        local closedReason = trim(reason):sub(1, 255)
+        if closedReason == '' then closedReason = nil end
+        MySQL.update.await([[
+            UPDATE police_incidents
+               SET status = 'closed', closed_at = NOW(), disposition = ?, closed_by = ?,
+                   closed_reason = ?, last_activity_at = NOW(), updated_at = NOW()
+             WHERE id = ?
+        ]], { closeDisposition, actor.citizenid, closedReason, id })
+        releaseIncidentUnits(id)
+        audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition)
+        return { id = id, status = 'closed', disposition = closeDisposition }
+    end
+
+    MySQL.update.await([[
+        UPDATE police_incidents SET status = ?, last_activity_at = NOW(), updated_at = NOW()
+         WHERE id = ?
+    ]], { targetStatus, id })
+    if targetStatus == 'enroute' or targetStatus == 'on_scene' or targetStatus == 'assigned' then
+        markIncidentUnits(id, targetStatus)
+    elseif targetStatus == 'open' then
+        -- Cancelling a dispatch returns the task-derived units to the pool,
+        -- while manually busy units stay busy.
         releaseIncidentUnits(id)
     end
-    audit(actor.citizenid, 'incident.status', tostring(id), storedStatus)
-    return { id = id, status = storedStatus }
+    audit(actor.citizenid, 'incident.status', tostring(id), targetStatus)
+    return { id = id, status = targetStatus }
 end
 
 local function lookupAllowed(source, action, capability)
@@ -426,6 +501,43 @@ local function sweepOfflineUnits()
     end
 end
 
+-- Calls with no activity for 45 minutes are abandoned (the unit crashed or
+-- went off duty) and are archived. The sweep is bounded so one slow batch can
+-- never stall the server, and every incident it touches gets exactly one audit
+-- row. Export keeps it directly testable without waiting for the timer.
+function SweepStaleIncidents()
+    local rows = MySQL.query.await([[
+        SELECT id FROM police_incidents
+         WHERE status IN ('open','assigned','enroute','on_scene')
+           AND COALESCE(last_activity_at, created_at) < NOW() - INTERVAL 45 MINUTE
+         ORDER BY id ASC LIMIT 50
+    ]]) or {}
+    for _, row in ipairs(rows) do
+        local id = tonumber(row.id)
+        if id then
+            MySQL.update.await([[
+                UPDATE police_incidents
+                   SET status = 'closed', closed_at = NOW(), disposition = 'stale',
+                       closed_by = 'system', closed_reason = 'stale_timeout',
+                       last_activity_at = NOW(), updated_at = NOW()
+                 WHERE id = ? AND status IN ('open','assigned','enroute','on_scene')
+            ]], { id })
+            releaseIncidentUnits(id)
+            audit('system', 'incident.stale', tostring(id), 'stale_timeout', 'system')
+        end
+    end
+    return #rows
+end
+
+local function staleSweepLoop()
+    Wait(15000)
+    while true do
+        local ok, err = pcall(SweepStaleIncidents)
+        if not ok then print(('[custom-police] stale incident sweep failed: %s'):format(tostring(err))) end
+        Wait(60000)
+    end
+end
+
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     CreateThread(function()
@@ -433,6 +545,7 @@ AddEventHandler('onResourceStart', function(resourceName)
         local ok, err = pcall(sweepOfflineUnits)
         if not ok then print(('[custom-police] startup duty sweep failed: %s'):format(tostring(err))) end
     end)
+    CreateThread(staleSweepLoop)
 end)
 
 -- ---------------------------------------------------------------
@@ -490,6 +603,7 @@ exports('CreateIncident', P.CreateIncident)
 exports('GetIncidents', P.GetIncidents)
 exports('AssignUnit', P.AssignUnit)
 exports('SetIncidentStatus', P.SetIncidentStatus)
+exports('SweepStaleIncidents', SweepStaleIncidents)
 exports('LookupCitizen', P.LookupCitizen)
 exports('LookupVehicle', P.LookupVehicle)
 exports('GetAudit', P.GetAudit)
