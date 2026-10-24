@@ -1348,21 +1348,95 @@ end)
 
 -- Dev-only focus telemetry: the client watchdog reports whether NUI focus
 -- stuck after opening the phone. No player data is involved.
+--
+-- FIT-03: both diagnostic channels below are client-controlled console output,
+-- so they are whitelisted, rate limited per source and stripped of control
+-- characters (a newline in `phase`/`message` would forge server log lines).
+local FOCUS_PHASES = {
+    ['close-start'] = true,
+    ['close'] = true,
+    ['open-start'] = true,
+    ['open-nui-sent'] = true,
+    ['anim-timeout'] = true,
+    ['reassert'] = true,
+    ['loop-exit'] = true,
+    ['phonefix'] = true,
+    ['probe-start'] = true,
+    ['probe'] = true,
+    ['probe-end'] = true,
+    ['appQuery-hit'] = true,
+    ['appAction-hit'] = true,
+}
+local FOCUS_COOLDOWN = 5         -- seconds between logged focus events per source
+local CLIENT_ERROR_COOLDOWN = 10 -- seconds between logged NUI errors per source
+local diagAt = {}
+local diagDropped = {}
+
+---@return boolean dropped
+local function diagRateLimited(channel, src, cooldown)
+    local now = os.time()
+    for key, last in pairs(diagAt) do
+        if now - last > 120 then
+            diagAt[key] = nil
+            diagDropped[key] = nil
+        end
+    end
+    local key = ('%s:%s'):format(channel, tostring(src))
+    local last = diagAt[key]
+    if last and now - last < cooldown then
+        diagDropped[key] = (diagDropped[key] or 0) + 1
+        return true
+    end
+    if last and diagDropped[key] then
+        print(('[custom-phone][%s] src=%s dropped %d event(s) in the last window'):format(
+            channel, tostring(src), diagDropped[key]))
+        diagDropped[key] = nil
+    end
+    diagAt[key] = now
+    return false
+end
+
+--- Coerce one client-provided diagnostic field into a log-safe string.
+local function diagField(value, limit)
+    if type(value) == 'boolean' then return tostring(value) end
+    if type(value) == 'number' then
+        if value ~= value then return 'nan' end
+        return tostring(math.floor(value))
+    end
+    if type(value) ~= 'string' then return '?' end
+    value = value:gsub('%c', ' ')
+    if #value > limit then value = value:sub(1, limit) end
+    return value
+end
+
 RegisterNetEvent('phone:server:focusState', function(state)
+    local src = source
     if type(state) ~= 'table' then return end
-    print(('[custom-phone][focus] src=%s phase=%s attempt=%s focused=%s keepInput=%s'):format(
-        tostring(source),
-        tostring(state.phase),
-        tostring(state.attempt),
-        tostring(state.focused),
-        tostring(state.keepInput)))
+    local phase = state.phase
+    if type(phase) ~= 'string' or not FOCUS_PHASES[phase] then return end
+    if diagRateLimited('focus', src, FOCUS_COOLDOWN) then return end
+    local attempt = math.floor(tonumber(state.attempt) or 0)
+    if attempt ~= attempt then attempt = 0 end
+    if attempt < 0 then attempt = 0 end
+    if attempt > 100 then attempt = 100 end
+    -- Only the four known fields are read; everything else is dropped.
+    print(('[custom-phone][focus] src=%s phase=%s attempt=%d focused=%s keepInput=%s'):format(
+        tostring(src),
+        phase,
+        attempt,
+        tostring(state.focused == true),
+        tostring(state.keepInput == true)))
 end)
 
 
 RegisterNetEvent('phone:server:clientError', function(data)
+    local src = source
     if type(data) ~= 'table' then return end
-    print(('[custom-phone][nui-error] %s | %s'):format(
-        tostring(data.message):sub(1, 300), tostring(data.stack):sub(1, 500)))
+    if diagRateLimited('nui-error', src, CLIENT_ERROR_COOLDOWN) then return end
+    -- Only message/stack are read; every unknown field is dropped and both are
+    -- truncated so a client cannot flood or forge the log.
+    print(('[custom-phone][nui-error] src=%s | %s | %s'):format(
+        tostring(src), diagField(data.message, 300), diagField(data.stack, 500)))
 end)
 
 

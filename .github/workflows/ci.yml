@@ -63,6 +63,7 @@ jobs:
       - name: Run unit tests
         run: |
           python3 -m pytest -q tests/unit
+          python3 -m pytest -q tests/architecture
           python3 -m pytest -q tests/agent
           python3 -m pytest -q ../tests/tools
         working-directory: T-CityLite.base

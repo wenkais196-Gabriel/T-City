@@ -6,6 +6,11 @@ local updatingCops = false
 local autoAlertCooldown = {}
 local AUTO_ALERT_COOLDOWN = 10
 
+-- 平民报警 (qb-drugs / qb-storerobbery / qb-houserobbery / custom-vehicles 的
+-- 热接线报警都会触发 policeAlert) 每 source 15 秒 1 次。
+local policeAlertCooldown = {}
+local POLICE_ALERT_COOLDOWN = 15
+
 local function sanitizeAlertCoords(coords)
     if type(coords) ~= 'table' then return nil end
     local x, y, z = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
@@ -18,19 +23,29 @@ local function sanitizeAlertCoords(coords)
     return { x = x, y = y, z = z }
 end
 
-local function sanitizeAlertText(text)
-    if type(text) ~= 'string' then return nil end
-    text = text:gsub('^%s+', ''):gsub('%s+$', '')
-    if text == '' then return nil end
-    if #text > 200 then
-        if utf8 and utf8.offset then
-            local ok, byteEnd = pcall(utf8.offset, text, 201)
-            if ok and byteEnd then text = text:sub(1, byteEnd - 1) end
-        else
-            text = text:sub(1, 200)
+--- UTF-8-safe head slice: `limit` counts characters, not bytes.
+local function utf8Clip(text, limit)
+    if #text <= limit then return text end
+    if utf8 and utf8.len and utf8.offset then
+        local ok, length = pcall(utf8.len, text)
+        if ok and length then
+            if length <= limit then return text end
+            local offsetOk, byteEnd = pcall(utf8.offset, text, limit + 1)
+            if offsetOk and byteEnd then return text:sub(1, byteEnd - 1) end
+            return text
         end
     end
-    return text
+    return text:sub(1, limit)
+end
+
+local function sanitizeAlertText(text)
+    if type(text) ~= 'string' then return nil end
+    -- Control characters are stripped first: alert text is printed to the
+    -- server console and pushed to every on-duty officer, so a newline in it
+    -- could forge log lines.
+    text = text:gsub('%c', ' '):gsub('^%s+', ''):gsub('%s+$', '')
+    if text == '' then return nil end
+    return utf8Clip(text, 200)
 end
 
 -- Functions
@@ -176,22 +191,38 @@ RegisterNetEvent('qb-policejob:server:evidence', function(currentEvidence)
     })
 end)
 
+-- 平民报警：qb-drugs / qb-storerobbery / qb-houserobbery / custom-vehicles 的
+-- 热接线报警都从这里进来，所以**不能**只限警察。安全性靠三件事保证：
+-- 坐标完全由服务端从报警者 ped 上取（客户端不发坐标）、文本清洗截断、
+-- 每 source 15 秒最多 1 次。
 RegisterNetEvent('police:server:policeAlert', function(text)
     local src = source
-    -- 🔒 Security: 仅 LEO 可发警用通知
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
-    if Player.PlayerData.job.type ~= 'leo' and Player.PlayerData.job.name ~= 'ambulance' then return end
+    if not QBCore.Functions.GetPlayer(src) then return end
+    local now = os.time()
+    for otherSrc, lastAt in pairs(policeAlertCooldown) do
+        if now - lastAt > 120 then policeAlertCooldown[otherSrc] = nil end
+    end
+    local last = policeAlertCooldown[src]
+    if last and now - last < POLICE_ALERT_COOLDOWN then return end
+    local message = sanitizeAlertText(text)
+    if not message then return end
     local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return end
+    -- Server-authoritative location: a caller cannot place the alert elsewhere.
     local coords = GetEntityCoords(ped)
+    local alertCoords = { x = coords.x, y = coords.y, z = coords.z }
+    policeAlertCooldown[src] = now
+    local sent = 0
     local players = QBCore.Functions.GetQBPlayers()
     for _, v in pairs(players) do
         if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            local alertData = { title = Lang:t('info.new_call'), coords = { x = coords.x, y = coords.y, z = coords.z }, description = text }
+            local alertData = { title = Lang:t('info.new_call'), coords = alertCoords, description = message }
             TriggerClientEvent('qb-phone:client:addPoliceAlert', v.PlayerData.source, alertData)
-            TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, coords, text)
+            TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, alertCoords, message)
+            sent = sent + 1
         end
     end
+    print(('[policeAlert] src=%s | %s | 值班警察: %d 人'):format(tostring(src), message, sent))
 end)
 
 -- 系统自动警报 (车辆盗窃等) — 仅限在勤警察调用 + 每 source 10 秒 1 次
@@ -268,6 +299,10 @@ end)
 
 RegisterNetEvent('police:server:showFingerprint', function(playerId)
     local src = source
+    -- 指纹比对是警察取证动作：在勤 + lookup.citizen 能力
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or not PolicePolicy.Can(Player.PlayerData, 'lookup.citizen') then return end
+    if not QBCore.Functions.GetPlayer(tonumber(playerId)) then return end
     TriggerClientEvent('police:client:showFingerprint', playerId, src)
     TriggerClientEvent('police:client:showFingerprint', src, playerId)
 end)
@@ -275,7 +310,10 @@ end)
 RegisterNetEvent('police:server:showFingerprintId', function(sessionId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    local fid = Player.PlayerData.metadata['fingerprint']
+    if not Player or not PolicePolicy.Can(Player.PlayerData, 'lookup.citizen') then return end
+    local metadata = Player.PlayerData.metadata
+    local fid = type(metadata) == 'table' and metadata['fingerprint'] or nil
+    if type(fid) ~= 'string' then return end
     TriggerClientEvent('police:client:showFingerprintId', sessionId, fid)
     TriggerClientEvent('police:client:showFingerprintId', src, fid)
 end)
@@ -288,8 +326,10 @@ RegisterNetEvent('police:server:SetTracker', function(targetId)
     local targetCoords = GetEntityCoords(targetPed)
     if #(playerCoords - targetCoords) > 2.5 then return DropPlayer(src, 'Attempted exploit abuse') end
 
+    local actor = QBCore.Functions.GetPlayer(src)
     local Target = QBCore.Functions.GetPlayer(targetId)
-    if not QBCore.Functions.GetPlayer(src) or not Target then return end
+    -- 电子脚镣是警察动作：在勤 + arrest.create 能力
+    if not actor or not Target or not PolicePolicy.Can(actor.PlayerData, 'arrest.create') then return end
 
     local TrackerMeta = Target.PlayerData.metadata['tracker']
     if TrackerMeta then
@@ -306,19 +346,25 @@ RegisterNetEvent('police:server:SetTracker', function(targetId)
 end)
 
 RegisterNetEvent('police:server:SendTrackerLocation', function(coords, requestId)
-    local Target = QBCore.Functions.GetPlayer(source)
+    local src = source
+    -- 只有真的戴着电子脚镣的人（自己的 metadata）才能上报自己的位置；
+    -- 坐标由服务端清洗，requestId 必须是服务器 id，避免拿它当广播目标。
+    local Target = QBCore.Functions.GetPlayer(src)
+    if not Target then return end
+    local metadata = Target.PlayerData.metadata
+    if type(metadata) ~= 'table' or metadata['tracker'] ~= true then return end
+    local targetSrc = tonumber(requestId)
+    if not targetSrc or not QBCore.Functions.GetPlayer(targetSrc) then return end
+    local where = sanitizeAlertCoords(coords)
+    if not where then return end
     local msg = Lang:t('info.target_location', { firstname = Target.PlayerData.charinfo.firstname, lastname = Target.PlayerData.charinfo.lastname })
     local alertData = {
         title = Lang:t('info.anklet_location'),
-        coords = {
-            x = coords.x,
-            y = coords.y,
-            z = coords.z
-        },
+        coords = where,
         description = msg
     }
-    TriggerClientEvent('police:client:TrackerMessage', requestId, msg, coords)
-    TriggerClientEvent('qb-phone:client:addPoliceAlert', requestId, alertData)
+    TriggerClientEvent('police:client:TrackerMessage', targetSrc, msg, where)
+    TriggerClientEvent('qb-phone:client:addPoliceAlert', targetSrc, alertData)
 end)
 
 -- Threads

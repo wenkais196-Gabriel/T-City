@@ -116,7 +116,9 @@ function P.SetUnitStatus(citizenid, callsign, status)
         return false, 'not_on_duty'
     end
     upsertUnit(cid, callsign, status)
-    audit(cid, 'unit.status', status, nil)
+    if not audit(cid, 'unit.status', status, nil) then
+        print(('[custom-police] unit.status audit failed for %s'):format(tostring(cid)))
+    end
     return true
 end
 
@@ -158,7 +160,9 @@ function P.CreateIncident(source, data)
     ]], { code, title, description, priority, x, y, z, creator.citizenid })
     id = InsertId(id)
     if not id or id == 0 then return false, 'db_error' end
-    audit(creator.citizenid, 'incident.create', tostring(id), title)
+    if not audit(creator.citizenid, 'incident.create', tostring(id), title) then
+        print(('[custom-police] incident.create audit failed for #%s'):format(tostring(id)))
+    end
 
     local notification = {
         title = ('%s: %s'):format(code, title):sub(1, 200),
@@ -252,7 +256,9 @@ function P.AssignUnit(source, incidentId, targetCitizenId)
     MySQL.update.await(
         "UPDATE police_incidents SET status = 'assigned', last_activity_at = NOW(), updated_at = NOW() WHERE id = ?",
         { id })
-    audit(actor.citizenid, 'incident.assign', tostring(id), target)
+    if not audit(actor.citizenid, 'incident.assign', tostring(id), target) then
+        print(('[custom-police] incident.assign audit failed for #%s'):format(tostring(id)))
+    end
     return { id = id, unit = target, status = 'assigned' }
 end
 
@@ -305,7 +311,9 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
              WHERE id = ?
         ]], { closeDisposition, actor.citizenid, closedReason, id })
         releaseIncidentUnits(id)
-        audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition)
+        if not audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition) then
+            print(('[custom-police] incident.close audit failed for #%s'):format(tostring(id)))
+        end
         return { id = id, status = 'closed', disposition = closeDisposition }
     end
 
@@ -320,7 +328,9 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
         -- while manually busy units stay busy.
         releaseIncidentUnits(id)
     end
-    audit(actor.citizenid, 'incident.status', tostring(id), targetStatus)
+    if not audit(actor.citizenid, 'incident.status', tostring(id), targetStatus) then
+        print(('[custom-police] incident.status audit failed for #%s'):format(tostring(id)))
+    end
     return { id = id, status = targetStatus }
 end
 
@@ -368,7 +378,9 @@ function P.LookupCitizen(source, citizenid)
          ORDER BY id DESC LIMIT 5
     ]], { row.citizenid }) or {}
 
-    audit(actor.citizenid, 'lookup.citizen.result', tostring(row.citizenid), nil)
+    if not audit(actor.citizenid, 'lookup.citizen.result', tostring(row.citizenid), nil) then
+        print(('[custom-police] lookup.citizen.result audit failed for %s'):format(tostring(row.citizenid)))
+    end
     return {
         citizenid = row.citizenid,
         name = ('%s %s'):format(tostring(info.firstname or '?'), tostring(info.lastname or '?')),
@@ -386,7 +398,9 @@ function P.LookupVehicle(source, plate)
     local row = MySQL.single.await(
         'SELECT plate, citizenid, vehicle, state FROM player_vehicles WHERE plate = ? LIMIT 1', { normalized })
     if not row then return false, 'not_found' end
-    audit(actor.citizenid, 'lookup.vehicle.result', normalized, nil)
+    if not audit(actor.citizenid, 'lookup.vehicle.result', normalized, nil) then
+        print(('[custom-police] lookup.vehicle.result audit failed for %s'):format(tostring(normalized)))
+    end
     return { plate = row.plate, citizenid = row.citizenid, model = row.vehicle, state = row.state }
 end
 
@@ -394,6 +408,12 @@ function P.GetAudit(source)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'audit.view')
     if not allowed then return false, reason end
+    -- FIT-05: reading the forensic log is itself a sensitive read. Write the
+    -- row with the same direct INSERT (never by calling GetAudit, which would
+    -- recurse) and refuse the listing when the write fails.
+    if not audit(actor.citizenid, 'audit.view', 'police_audit', nil) then
+        return false, 'audit_unavailable'
+    end
     local rows = MySQL.query.await(
         'SELECT actor_citizenid, actor_kind, action, target, detail, created_at FROM police_audit ORDER BY id DESC LIMIT 100'
     ) or {}
@@ -424,14 +444,28 @@ local function syncDuty(data)
     end
 end
 
-RegisterNetEvent('QBCore:Server:OnJobUpdate', function(source, job)
+-- FIT-03: both are qb-core *server-internal* events (qb-core fires them with
+-- TriggerEvent). They were registered with RegisterNetEvent, which put them on
+-- the client-triggerable surface: any client could send a forged job table for
+-- another source and have syncDuty write a police unit row for it. Plain
+-- AddEventHandler keeps them off the net surface — every other resource
+-- (custom-career, custom-main, custom-director) listens to them this way.
+AddEventHandler('QBCore:Server:OnJobUpdate', function(source, job)
     local data = pd(source)
     if data and type(job) == 'table' then data.job = job end
     if data then syncDuty(data) end
 end)
 
-RegisterNetEvent('QBCore:Server:PlayerLoaded', function(Player)
-    if Player and Player.PlayerData then syncDuty(Player.PlayerData) end
+AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
+    local data = Player and Player.PlayerData
+    if type(data) ~= 'table' or type(data.citizenid) ~= 'string' then return end
+    -- `QBCore:Server:PlayerLoaded` is still RegisterNetEvent'd by
+    -- custom-justice/server/prison.lua, which keeps the *name* client-callable
+    -- for every handler. Accept only qb-core's live PlayerData table (reference
+    -- equality with the registered player), never a table a client built.
+    local live = QBCore.Functions.GetPlayerByCitizenId(data.citizenid)
+    if not live or live.PlayerData ~= data then return end
+    syncDuty(data)
 end)
 
 -- ---------------------------------------------------------------
@@ -452,10 +486,14 @@ local function releaseDroppedUnit(citizenid)
                 UPDATE police_incidents SET status = 'open', updated_at = NOW()
                  WHERE id = ? AND status IN ('assigned','enroute','on_scene')
             ]], { incidentId })
-            audit(citizenid, 'incident.unassign', tostring(incidentId), 'unit_dropped', 'system')
+            if not audit(citizenid, 'incident.unassign', tostring(incidentId), 'unit_dropped', 'system') then
+                print(('[custom-police] incident.unassign audit failed for #%s'):format(tostring(incidentId)))
+            end
         end
     end
-    audit(citizenid, 'unit.drop', 'off_duty', incidentId and tostring(incidentId) or nil, 'system')
+    if not audit(citizenid, 'unit.drop', 'off_duty', incidentId and tostring(incidentId) or nil, 'system') then
+        print(('[custom-police] unit.drop audit failed for %s'):format(tostring(citizenid)))
+    end
 end
 
 local function onPlayerDropped(citizenid)
@@ -498,7 +536,9 @@ local function sweepOfflineUnits()
         local cid = row.citizenid
         if cid and not online[cid] then
             takeUnitOffDuty(cid)
-            audit(cid, 'unit.stale', 'off_duty', 'startup_sweep', 'system')
+            if not audit(cid, 'unit.stale', 'off_duty', 'startup_sweep', 'system') then
+                print(('[custom-police] unit.stale audit failed for %s'):format(tostring(cid)))
+            end
         end
     end
 end
@@ -525,7 +565,9 @@ function SweepStaleIncidents()
                  WHERE id = ? AND status IN ('open','assigned','enroute','on_scene')
             ]], { id })
             releaseIncidentUnits(id)
-            audit('system', 'incident.stale', tostring(id), 'stale_timeout', 'system')
+            if not audit('system', 'incident.stale', tostring(id), 'stale_timeout', 'system') then
+                print(('[custom-police] incident.stale audit failed for #%s'):format(tostring(id)))
+            end
         end
     end
     return #rows
@@ -559,9 +601,23 @@ RegisterNetEvent('custom-police:server:setStatus', function(status)
     P.SetUnitStatusForSource(source, tostring(status or ''))
 end)
 
+-- 平民 911：任何玩家都能打，所以只接受 table、按 source 限流（5 秒 1 条），
+-- 其余校验（title/description 长度、priority 夹取）在 CreateIncident 里。
+local call911Cooldown = {}
+local CALL_911_COOLDOWN = 5
+
 RegisterNetEvent('custom-police:server:911', function(payload)
+    local src = source
     if type(payload) ~= 'table' then return end
-    P.CreateIncident(source, payload)
+    if not pd(src) then return end
+    local now = os.time()
+    for otherSrc, lastAt in pairs(call911Cooldown) do
+        if now - lastAt > 60 then call911Cooldown[otherSrc] = nil end
+    end
+    local last = call911Cooldown[src]
+    if last and now - last < CALL_911_COOLDOWN then return end
+    call911Cooldown[src] = now
+    P.CreateIncident(src, payload)
 end)
 
 function P.SetUnitStatusForSource(source, status)
@@ -578,7 +634,9 @@ function P.SetUnitStatusForSource(source, status)
         pcall(function() player.Functions.SetJobDuty(false) end)
         if data.job.onduty == true then return false, 'duty_failed' end
         upsertUnit(data.citizenid, callsign, 'off_duty')
-        audit(data.citizenid, 'unit.status', 'off_duty', nil)
+        if not audit(data.citizenid, 'unit.status', 'off_duty', nil) then
+            print(('[custom-police] unit.status audit failed for %s'):format(tostring(data.citizenid)))
+        end
         return true
     end
 
@@ -587,14 +645,18 @@ function P.SetUnitStatusForSource(source, status)
         pcall(function() player.Functions.SetJobDuty(true) end)
         if data.job.onduty ~= true then return false, 'duty_failed' end
         upsertUnit(data.citizenid, callsign, 'available')
-        audit(data.citizenid, 'unit.status', 'available', nil)
+        if not audit(data.citizenid, 'unit.status', 'available', nil) then
+            print(('[custom-police] unit.status audit failed for %s'):format(tostring(data.citizenid)))
+        end
         return true
     end
 
     -- busy/assigned/enroute/on_scene never change onduty: they require it.
     if data.job.onduty ~= true then return false, 'not_on_duty' end
     upsertUnit(data.citizenid, callsign, status)
-    audit(data.citizenid, 'unit.status', status, nil)
+    if not audit(data.citizenid, 'unit.status', status, nil) then
+        print(('[custom-police] unit.status audit failed for %s'):format(tostring(data.citizenid)))
+    end
     return true
 end
 

@@ -55,7 +55,9 @@ function C.CreateCase(source, params)
     if not id or id == 0 then return false, 'db_error' end
     local no = caseNo(tonumber(id))
     MySQL.update.await('UPDATE police_cases SET case_no = ? WHERE id = ?', { no, id })
-    audit(actor.citizenid, 'case.create', no, title)
+    if not audit(actor.citizenid, 'case.create', no, title) then
+        print(('[custom-police] case.create audit failed for %s'):format(tostring(no)))
+    end
     return { id = tonumber(id), case_no = no, status = 'open' }
 end
 
@@ -63,9 +65,12 @@ function C.GetCases(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'case.view')
     if not allowed then return false, reason end
+    -- FIT-05: audit before the read; a failed audit refuses the listing.
+    if not audit(actor.citizenid, 'case.view', nil, params and tostring(params.status or '') or '') then
+        return false, 'audit_unavailable'
+    end
     local rows = MySQL.query.await(
         'SELECT * FROM police_cases ORDER BY id DESC LIMIT 50') or {}
-    audit(actor.citizenid, 'case.view', nil, params and tostring(params.status or '') or '')
     return { rows = rows, count = #rows }
 end
 
@@ -84,7 +89,9 @@ function C.CreateBolo(source, params)
         { kind, target, why, actor.citizenid })
     id = InsertId(id)
     if not id or id == 0 then return false, 'db_error' end
-    audit(actor.citizenid, 'bolo.create', target, why)
+    if not audit(actor.citizenid, 'bolo.create', target, why) then
+        print(('[custom-police] bolo.create audit failed for %s'):format(tostring(target)))
+    end
     return { id = tonumber(id), kind = kind, target = target, status = 'active' }
 end
 
@@ -92,6 +99,10 @@ function C.GetBolos(source)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'bolo.view')
     if not allowed then return false, reason end
+    -- FIT-05: audit before the read; a failed audit refuses the listing.
+    if not audit(actor.citizenid, 'bolo.view', nil, nil) then
+        return false, 'audit_unavailable'
+    end
     -- P3: BOLOs are tagged on reports; police_bolos is the legacy table. Read
     -- both and merge here so old rows keep showing until they are cleared.
     local reportRows = MySQL.query.await([[
@@ -120,7 +131,6 @@ function C.GetBolos(source)
         for i = 1, 50 do kept[i] = rows[i] end
         rows = kept
     end
-    audit(actor.citizenid, 'bolo.view', nil, nil)
     return { rows = rows, count = #rows }
 end
 
@@ -131,7 +141,9 @@ function C.ClearBolo(source, boloId)
     local id = tonumber(boloId)
     if not id then return false, 'invalid_bolo' end
     MySQL.update.await("UPDATE police_bolos SET status = 'cleared', cleared_at = NOW() WHERE id = ? AND status = 'active'", { id })
-    audit(actor.citizenid, 'bolo.clear', tostring(id), nil)
+    if not audit(actor.citizenid, 'bolo.clear', tostring(id), nil) then
+        print(('[custom-police] bolo.clear audit failed for #%s'):format(tostring(id)))
+    end
     return { id = id, status = 'cleared' }
 end
 
@@ -150,7 +162,9 @@ function C.RequestWarrant(source, params)
         { target, why, actor.citizenid })
     id = InsertId(id)
     if not id or id == 0 then return false, 'db_error' end
-    audit(actor.citizenid, 'warrant.request', target, why)
+    if not audit(actor.citizenid, 'warrant.request', target, why) then
+        print(('[custom-police] warrant.request audit failed for %s'):format(tostring(target)))
+    end
     return { id = tonumber(id), citizenid = target, status = 'requested' }
 end
 
@@ -166,7 +180,9 @@ function C.DecideWarrant(source, params)
         "UPDATE police_warrants SET status = ?, approved_by = ?, decided_at = NOW() WHERE id = ? AND status = 'requested'",
         { status, actor.citizenid, id })
     if not changed then return false, 'not_pending' end
-    audit(actor.citizenid, 'warrant.decide', tostring(id), status)
+    if not audit(actor.citizenid, 'warrant.decide', tostring(id), status) then
+        print(('[custom-police] warrant.decide audit failed for #%s'):format(tostring(id)))
+    end
     return { id = id, status = status }
 end
 
@@ -174,6 +190,10 @@ function C.GetWarrants(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'warrant.view')
     if not allowed then return false, reason end
+    -- FIT-05: audit before the read; a failed audit refuses the listing.
+    if not audit(actor.citizenid, 'warrant.view', nil, nil) then
+        return false, 'audit_unavailable'
+    end
     local rows
     if params and params.citizenid then
         rows = MySQL.query.await(
@@ -182,7 +202,6 @@ function C.GetWarrants(source, params)
     else
         rows = MySQL.query.await('SELECT * FROM police_warrants ORDER BY id DESC LIMIT 50')
     end
-    audit(actor.citizenid, 'warrant.view', nil, nil)
     return { rows = rows or {}, count = #(rows or {}) }
 end
 
@@ -201,7 +220,9 @@ function C.RegisterArrest(source, params)
           tonumber(params and params.incident_id), tonumber(params and params.case_id) })
     id = InsertId(id)
     if not id or id == 0 then return false, 'db_error' end
-    audit(actor.citizenid, 'arrest.register', target, charges)
+    if not audit(actor.citizenid, 'arrest.register', target, charges) then
+        print(('[custom-police] arrest.register audit failed for %s'):format(tostring(target)))
+    end
     return { id = tonumber(id), citizenid = target, status = 'registered' }
 end
 
@@ -209,6 +230,10 @@ function C.GetArrests(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'arrest.create')
     if not allowed then return false, reason end
+    -- FIT-05: audit before the read; a failed audit refuses the listing.
+    if not audit(actor.citizenid, 'arrest.view', nil, nil) then
+        return false, 'audit_unavailable'
+    end
     -- New arrests live in police_reports(kind='arrest'); police_arrests is only
     -- kept for history written before v3.4 and is read via case detail.
     local sql = [[
@@ -225,7 +250,6 @@ function C.GetArrests(source, params)
     else
         rows = MySQL.query.await(sql .. ' ORDER BY id DESC LIMIT 50')
     end
-    audit(actor.citizenid, 'arrest.view', nil, nil)
     return { rows = rows or {}, count = #(rows or {}) }
 end
 

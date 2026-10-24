@@ -109,7 +109,7 @@ end)
 --- login hand-off: set metadata to the DB remaining minutes and, when there was
 --- no projection before login, enter the cell explicitly (qb-prison's own
 --- OnPlayerLoaded only enters when metadata was already > 0).
-RegisterNetEvent('QBCore:Server:PlayerLoaded', function(Player)
+AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
     local data = Player and Player.PlayerData
     if not data then return end
     local cid = data.citizenid
