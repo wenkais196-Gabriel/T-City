@@ -422,7 +422,7 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         if not incidentId or incidentId ~= math.floor(incidentId) or incidentId < 1 then
             return fail('invalid_params', 'incident_id must be a positive integer')
         end
-        if type(params.citizenid) ~= 'string' or not params.citizenid:match('^[A-Za-z0-9_-]{1,11}$') then
+        if type(params.citizenid) ~= 'string' or #params.citizenid > 11 or not params.citizenid:match('^[%w_%-]+$') then
             return fail('invalid_params', 'citizenid is invalid')
         end
         return { incident_id = incidentId, citizenid = params.citizenid }
@@ -431,7 +431,7 @@ function AgentPolicy.Normalize(actionType, params, cfg)
     if actionType == 'police_jail_player' then
         local unknownErr = rejectUnknownFields(params, { citizenid = true, minutes = true, reason = true }, 'police_jail_player')
         if unknownErr then return nil, unknownErr end
-        if type(params.citizenid) ~= 'string' or not params.citizenid:match('^[A-Za-z0-9_-]{1,11}$') then
+        if type(params.citizenid) ~= 'string' or #params.citizenid > 11 or not params.citizenid:match('^[%w_%-]+$') then
             return fail('invalid_params', 'citizenid is invalid')
         end
         local minutes = tonumber(params.minutes)
