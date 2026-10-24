@@ -14,7 +14,7 @@
 
 | # | 规则 | 域 | 现状 | 门禁 |
 |---|---|---|---|---|
-| FIT-01 | `job.onduty` 只有一个写者（duty 服务） | 状态一致性 | ⚠️ PARTIAL | advisory → blocking |
+| FIT-01 | `job.onduty` 只有一个写者（duty 服务） | 状态一致性 | ✅ PASS（`test_duty_writer.py`；4 个登记写者，0 未登记） | blocking |
 | FIT-02 | 禁止跨资源写别人拥有的表 | 边界 | ✅ PASS（`test_cross_resource_writes.py`；0 处未登记跨写） | blocking |
 | FIT-03 | 每个 net event 必须有来源/权限校验 | 安全 | ✅ PASS（3e720bf；13 强鉴权 + 35 登记例外，0 未登记） | blocking |
 | FIT-04 | 每个 export / app action 必须有稳定错误码 + 审计 | 契约 | ⚠️ PARTIAL（aea205c：17/17 action 结构化，export 审计仍不齐） | blocking |
@@ -33,6 +33,8 @@
 > **本轮（FIT-02/FIT-12）**：新增 `tests/architecture/test_cross_resource_writes.py`、`tests/architecture/table_owners.json`、`tests/architecture/test_deprecations.py`、`tests/architecture/deprecations.json`；`phone_notifications` 只剩 `custom-phone` 写，`police_reports` 只剩 `custom-police` 写。outbox/TTL 语义见 [09-outbox.md](09-outbox.md)。
 >
 > **post-baseline `3e720bf`**：FIT-03/FIT-05 扫描器、evidence 鉴权、敏感读 fail-closed 已提交；`tests/architecture/` 已加入 CI。上表状态已更新，评分数字待重算。
+>
+> **本轮（FIT-01）**：`custom-police` 新增唯一警察 duty 服务 `P.SetDutyForSource`（导出 `SetDutyForSource`），10-8/10-7、`custom-main` 的 `/duty` 与通缉锁、`custom-director` 的 `set_job_duty` 全部改走该服务；新增 `tests/architecture/test_duty_writer.py` + `duty_writers_allowlist.json`（4 条登记，0 处未登记）。
 
 ---
 
@@ -46,6 +48,7 @@ T-CityLite.base/tests/architecture/          # 已落地文件（其余规则按
 ├── test_query_discipline.py     # FIT-09
 ├── test_cross_resource_writes.py + table_owners.json   # FIT-02（owner 表 + 跨写 allowlist）
 ├── test_deprecations.py + deprecations.json            # FIT-12（弃用登记 + 到期强制）
+├── test_duty_writer.py + duty_writers_allowlist.json   # FIT-01（onduty 写者登记 + 反向验证）
 └── test_audit_fail_closed.py    # FIT-05
 docs/police/architecture/
 ├── error-codes.md                  # 人读词表（与 json 双向同步）
@@ -100,25 +103,22 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 ### FIT-01 · `job.onduty` 只有一个写者
 
-- **规则**：`PlayerData.job.onduty` 的写入只允许出现在 duty 服务（`core-framework/services/job_service.lua` 的 `SetOnDuty`）与 qb-core 的定义处（`qb-core/server/player.lua` 的 `SetJobDuty`，作为兼容投影）。其他资源必须调用 `Bus.JobService.SetOnDuty` 或触发 `QBCore:ToggleDuty`。
-- **为什么**：TD-01 的根因。当前 4 个写者（`custom-main/server/dispatch.lua:236,261`、`custom-director/server/main.lua:619-645`、plus 定义与 JobService），导致 `onduty=true` + `police_units=off_duty` 这类组合合法存在；权限、MDT、派单各读一套（`TECH_DEBT.md` TD-01）。在没有这条规则之前，"单一状态机"永远只是文档里的一句话。
-- **检查方式**：
-  - 扫描范围：`resources/**/server/**.lua`（排除 `client/`、`web/`、`custom-testing/`、`tests/`）。
-  - 正则（写入）：`\.job\.onduty\s*=(?!=)`、`SetJobDuty\s*\(`、`SetOnDuty\s*\(`、`^[^-\n]*\.onduty\s*=\s*(true|false|not)`。
-  - 伪代码：
-    ```
-    for path in server_lua_files:
-        for no, line in lines(path):
-            if WRITE_RE.search(strip_comment(line)):
-                rel = relpath(path)
-                if rel not in ONDUTY_WRITERS and rel not in allowlist:
-                    report(rel, no, "onduty_write")
-    ```
-  - 读侧子规则（advisory）：`data.job.onduty` 的读取必须紧跟 `GetPlayer(source)` 取得的最新 `PlayerData`，不得缓存到模块级变量。检查方式：模块级 `local .* = .*PlayerData` 赋值 → 警告。
-- **失败信息**：`FIT-01: <file>:<line> writes job.onduty directly; call Bus.JobService.SetOnDuty (owner: core-framework/services/job_service.lua) — see TD-01`。
-- **CI**：`Config & dependency checks` job 新增 step `Architecture fitness (FIT-01..)`；初期 `--rule FIT-01 --advisory`（只打印、不失败），duty 服务落地后同一 step 去掉 `--advisory` 即变 blocking。
-- **现状（post-baseline）**：⚠️ **PARTIAL**。`custom-police` 已把 10-8/10-7/自动 park 全部改为调用 qb-core 的 `SetJobDuty` 投影（`server/p0.lua:109,578,587`），`syncDuty` 不再在每次 JobUpdate 重置任务态（`406-425`）；但**违规写者仍在**：`custom-main/server/dispatch.lua:236,261`、`custom-director/server/main.lua:619-645`（agent `set_job_duty`，L2 人审）。许可写者/服务未变。扫描器**未实现**，`--advisory` 也没有接线，所以这条仍是“靠人看”。
-- **例外**：`custom-director` 的 `set_job_duty` 在 duty 服务提供 `SetOnDuty` 之前保留，allowlist 至 `2026-12-31`，到期必须改为调用服务或下线该动作。
+- **规则**：`PlayerData.job.onduty` 只有两类合法写者：
+  1. qb-core 的底层 primitive `Player.Functions.SetJobDuty`（`qb-core/server/player.lua`；不改 qb-core，`QBCore:ToggleDuty` 仍由框架内部调用它）；
+  2. `custom-police` 的唯一警察 duty 服务 `P.SetDutyForSource(source, onDuty, reason)`（导出 `SetDutyForSource`）：校验 source 是 police → `pcall(SetJobDuty)` → 回读 `PlayerData.job.onduty` 实际值 → `syncDuty` 投影 `police_units` → 审计 `duty.set`（`target=citizenid`、`detail=on/off:<reason>`），返回 `true` 或 `false, 'not_police'|'duty_failed'`。
+  所有**警察**写路径（10-8/10-7、`custom-main` 的 `/duty` 快速指令与通缉锁、`custom-director` 的 `set_job_duty`）必须先调该导出，不得直接调 `SetJobDuty`。非警察（ambulance/mechanic/taxi）保留 qb-core 原生 `SetJobDuty`，语义不变。
+- **为什么**：TD-01 的根因。4 个写者（qb-core 定义、`custom-main/server/dispatch.lua`、`custom-director/server/main.lua`、qb-core `QBCore:ToggleDuty`）曾让 `onduty=true` + `police_units=off_duty` 这类组合合法存在；权限、MDT、派单各读一套（`TECH_DEBT.md` TD-01）。没有这条规则之前，"单一状态机"永远只是文档里的一句话。
+- **检查方式**（`tests/architecture/test_duty_writer.py` + `duty_writers_allowlist.json`）：
+  - 扫描范围：`custom-police/server/**`、`custom-main/server/**`、`custom-director/server/**`，外加 primitive 文件 `qb-core/server/player.lua`；先 mask 注释/长字符串，注释掉的调用不算。
+  - 正则（写入）：`SetJobDuty\s*\(`。除 allowlist 外任何文件出现即 FAIL，输出 `file:line`。
+  - allowlist 只登记 4 条：`qb-core/server/player.lua`（primitive）、`custom-police/server/p0.lua`（服务实现）、`custom-main/server/dispatch.lua` 与 `custom-director/server/main.lua` 的**非警察分支**（reason 写明“非 leo / ambulance/mechanic/taxi”）。
+  - `custom-main`/`custom-director` 的每条调用还必须静态验证：同一函数体内、调用之前出现 `jobName == 'police'` 或 `type == 'leo'`、函数内出现 `SetDutyForSource`、且 guard 与调用之间有 `else`/`elseif`。否则报 `not_in_non_police_branch` / `no_police_guard_before_call` / `no_duty_service_in_function`。
+  - `p0.lua` 内只允许一处 `SetJobDuty`，且必须位于 `P.SetDutyForSource` 函数体内。
+  - 反向验证：把 `Player.Functions.SetJobDuty(true)` 注入临时副本的 `custom-main` 模块级或警察分支，扫描器必须报红。
+- **失败信息**：`FIT-01 FAIL 1 unregistered SetJobDuty writer(s)` / `custom-main/server/dispatch.lua:289 Player.Functions.SetJobDuty(false)  not_in_non_police_branch`。
+- **CI**：`pytest -q tests/architecture`（blocking）；`test_duty_writer.py` 离线、确定性，单次 <1 s。
+- **现状（本轮）**：✅ **PASS**。`P.SetDutyForSource` 落地并导出；10-8/10-7 与 `SetUnitStatus` 的 off_duty 路径改调服务（离线 citizen 只写 unit 行）；`/duty` 警察分支、通缉锁、director 警察目标均先调 export。allowlist 4 条、0 处未登记；`p0.lua` 仅服务内 1 处 primitive 调用。
+- **例外**：`custom-main`/`custom-director` 的非警察分支是 allowlist 的“非 leo / ambulance/mechanic/taxi”条目；警察分支**不得**回退直写。qb-core 的 `server/events.lua`（`QBCore:ToggleDuty`）是框架 vendor 代码，按约束不改 qb-core，其投影由 `p0.lua` 的 `OnJobUpdate → syncDuty` 兜底，因此不在自定义写者扫描范围。
 
 ### FIT-02 · 禁止跨资源写别人拥有的表
 
@@ -373,7 +373,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 | Job（现有） | 新增 step | 覆盖规则 | 门禁 | 预算 |
 |---|---|---|---|---|
-| `Config & dependency checks` | `Architecture fitness (static)` | FIT-01(adv) 02 03 04 05 06(静态) 07 10 11(adv) 12 | blocking（01/11 advisory） | <10 s |
+| `Config & dependency checks` | `Architecture fitness (static)` | FIT-01 02 03 04 05 06(静态) 07 10 11(adv) 12 | blocking（11 advisory） | <10 s |
 | `Config & dependency checks` | `Agent tool registry drift`（**已有**） | FIT-08 | blocking | <2 s |
 | `Python unit tests` | `pytest -q tests/architecture` | FIT-04 契约词表、FIT-05 形状、`error_codes.json` ↔ md 同步 | blocking | <5 s |
 | `DB schema tests` | `Import schema fixture twice` + police 表存在性断言 | FIT-06（③④） | blocking | +20 s（MariaDB 已在） |
@@ -381,7 +381,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | `Docs links (advisory)` | `Number budget drift` | FIT-13 | advisory | <2 s |
 | `Lua syntax (changed files)` | 无改动 | — | — | — |
 
-**post-baseline 落地状态（`3bbcab3`）**：上表仍是**建议接线**，没有实现。仓库里没有 `T-CityLite.base/tests/architecture/`，`ci.yml` 也没有 `Architecture fitness` / `pytest -q tests/architecture` / `Number budget drift` 这几个 step；FIT-08 的 `agent_tools.py --check` 仍存在。所以本轮 07 的所有状态都是**人工复评**，不是 CI 输出——这也是 FIT-03/05 仍标 FAIL 的原因。
+**post-baseline 落地状态（`3bbcab3`）**：上表在 `3bbcab3` 时仍是**建议接线**，仓库里没有 `T-CityLite.base/tests/architecture/`。**本轮已落地** `test_duty_writer.py`（FIT-01）与既有 FIT-02/03/05/09/12 扫描器；`pytest -q tests/architecture` 即可运行。CI 里若尚未加 step，仍以本地 pytest 输出为准。
 
 **为什么不新建 job**：6 个 job 的并行度已经足够，单条规则 <10 s 放进 `static-checks` 不拖慢反馈；新建 job 会让"必过检查"列表变长，反而降低执行力。
 
@@ -398,7 +398,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 | # | 规则 | 权重 | 状态 | 状态分 | 加权分 | 关键证据 |
 |---|---|---|---|---|---|---|
-| FIT-01 | onduty 单一写者 | 3 | ⚠️ PARTIAL | 0.5 | 1.5 | police 侧已全部走 `SetJobDuty` 投影（`p0.lua:109,578,587`）；`custom-main`/`custom-director` 仍有写者 |
+| FIT-01 | onduty 单一写者 | 3 | ✅ PASS | 1 | 3 | `test_duty_writer.py` 4 条 allowlist、0 未登记；警察写路径全部走 `SetDutyForSource`（p0 仅服务内 1 处 primitive） |
 | FIT-02 | 跨资源表所有权 | 2 | ✅ PASS | 1 | 2 | 0 处未登记跨写；`phone_notifications`/`police_reports` 单写者；8 条存量 allowlist（2026-12-31） |
 | FIT-03 | net event 鉴权 | 3 | ❌ FAIL | 0 | 0 | 2/44 强校验；9 条 evidence 仍零校验；**扫描器未落地（进行中）** |
 | FIT-04 | export/action 错误码 + 审计 | 2 | ⚠️ PARTIAL | 0.5 | 1.0 | arrest/report 已结构化 + citation/evidence 审计；action 层仍压平 14/17 |
@@ -411,7 +411,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | FIT-11 | 状态机写者登记 | 2 | ⚠️ PARTIAL | 0.5 | 1.0 | 写者收敛到 p0/p2_system，但仍无登记表；p0 内 5 个 helper 是事实上的状态写入口 |
 | FIT-12 | 弃用登记 | 1 | ✅ PASS | 1 | 1 | 6 条已知债务登记（2 表 + 2 命令 + 2 事件），全部 2026-12-31 到期 |
 | FIT-13 | 数字漂移 | 1 | ❓ UNKNOWN | 0 | 0 | 当前代码常量（`MAX_ACTIVE=1`、8min、30%、45min）未进 05，无机制 |
-| **合计** | | **24** | 快照未重算（FIT-02/12 本轮 +3 加权分） | — | **9.5（待重算）** | 上一轮 6.5 / 24 = 27 / 100；本轮 FIT-02/12 转 PASS 后待统一重算 |
+| **合计** | | **24** | 快照未重算（FIT-01 本轮 +1.5、FIT-02/12 前轮 +3） | — | **待重算** | 上一轮 27 / 100；FIT-01 转 PASS 后待与 FIT-09 等历史行统一重算 |
 
 按域看：
 
@@ -443,9 +443,9 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
    - 取证面是本系统唯一的"事后真相"。现在 DB 抖一下，罚单/报告/案件就静默无审计，而**没有任何地方会知道**。这条规则的修复量很小（16 个 `if not audit(...) then return ... end`，其余 7 处低风险调用随后收敛），但把 05 NFR-SEC-04 从"部分"变成"可承诺"。
    - 顺带解决 FIT-04 的一半（审计消费是同一批代码）。
 
-3. **FIT-01 onduty 单一写者**（police 侧已收敛 `bb64d87`，还剩 `custom-main`/`custom-director` 两个写者 + 扫描器）
-   - 它是 TD-01 的机器化表达。即使现在不修代码，这条规则也会在**每次新增写者时**提醒"你在加深 TD-01"。等 §05 COMPAT-01 的 4 个待定项拍板、`Bus.JobService.SetOnDuty` 成为唯一入口后，删 allowlist + 去 `--advisory` 即可。
-   - 之所以放在第 3 而不是第 1：它的修复依赖产品决策，而 FIT-03/05 不依赖。
+3. **FIT-01 onduty 单一写者**（✅ 本轮完成）
+   - `custom-police:SetDutyForSource` 成为唯一警察写入口；`custom-main`/`custom-director` 只保留非警察直写，扫描器 + 4 条 allowlist 已 blocking。
+   - 后续只剩收尾：把非警察分支也抽象成统一 duty 服务时删 allowlist，并评估 qb-core `QBCore:ToggleDuty` 是否改调服务（需要改 qb-core，当前约束下不做）。
 
 **快速胜利（1 小时，建议顺手做）**：**FIT-06 的 fixture 补齐**。`tests/fixtures/tcity_schema.sql` 缺 14 张表（12 张 `police_*` + `police_write_intents` + `justice_sentences`，TD-05），补上即可让 DB 集成用例从 skip 变 run——这是全仓库性价比最高的一小时，且它让 FIT-06 从 PARTIAL 直接转 PASS（+0.5 分），也为 05 NFR-REL-06 的"恢复演练"提供了可重放的 schema。
 
