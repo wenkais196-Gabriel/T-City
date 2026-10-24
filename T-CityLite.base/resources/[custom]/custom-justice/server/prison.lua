@@ -32,10 +32,20 @@ function JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
         sentenceMinutes = sentenceMinutes, startTime = os.time(),
         crimes = crimes, reductions = {}, src = src,
     }
-    TriggerClientEvent('justice:client:enterPrison', src, {
-        sentenceMinutes = sentenceMinutes, startTime = os.time(),
-        crimes = crimes, reductions = {},
-    })
+    -- Hand the sentence to qb-prison when available: it owns the cell,
+    -- countdown, item seizure and release. Fall back to the justice prison
+    -- only if qb-prison is not running.
+    local useQbPrison = GetResourceState('qb-prison') == 'started'
+    JusticeService.Inmates[citizenid].qbPrison = useQbPrison
+    if useQbPrison then
+        Player.Functions.SetMetaData('injail', sentenceMinutes)
+        TriggerClientEvent('prison:client:Enter', src, sentenceMinutes)
+    else
+        TriggerClientEvent('justice:client:enterPrison', src, {
+            sentenceMinutes = sentenceMinutes, startTime = os.time(),
+            crimes = crimes, reductions = {},
+        })
+    end
     TriggerClientEvent('QBCore:Notify', src,
         _L(src, 'justice_imprisoned', sentenceMinutes), 'error', 15000)
     if exports['custom-logs'] then
@@ -60,6 +70,20 @@ RegisterNetEvent('justice:server:imprison', function(citizenid, sentenceMinutes,
         return
     end
     JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
+end)
+
+RegisterNetEvent('QBCore:Server:PlayerLoaded', function(Player)
+    local data = Player and Player.PlayerData
+    if not data then return end
+    local inmate = JusticeService.Inmates[data.citizenid]
+    if not inmate or inmate.offline ~= true then return end
+    inmate.offline = nil
+    inmate.src = data.source
+    if GetResourceState('qb-prison') == 'started' then
+        inmate.qbPrison = true
+        Player.Functions.SetMetaData('injail', inmate.sentenceMinutes)
+        TriggerClientEvent('prison:client:Enter', data.source, inmate.sentenceMinutes)
+    end
 end)
 
 -- ==============================================================

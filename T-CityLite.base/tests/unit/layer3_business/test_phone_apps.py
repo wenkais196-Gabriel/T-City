@@ -163,3 +163,14 @@ def test_notifications_can_deeplink_into_mdt():
     assert "app_id" in p0 and "police_mdt" in p0
     ui = read(PHONE / "web/src/apps/Notifications.svelte")
     assert "openTarget" in ui and "dyn:" in ui
+
+
+def test_sentences_use_qb_prison_when_available():
+    justice = PHONE.parent / "custom-justice"
+    prison = (justice / "server/prison.lua").read_text(encoding="utf-8")
+    assert "GetResourceState('qb-prison')" in prison
+    assert "prison:client:Enter" in prison
+    assert "injail" in prison
+    assert "QBCore:Server:PlayerLoaded" in prison
+    main = (justice / "server/main.lua").read_text(encoding="utf-8")
+    assert "prison:client:UnjailPerson" in main
