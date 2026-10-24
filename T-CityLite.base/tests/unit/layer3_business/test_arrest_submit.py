@@ -1430,8 +1430,8 @@ def test_sm02_assign_checks_state_and_bumps_last_activity():
     assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then" in block
     assert "return false, 'invalid_transition'" in block
     assert "SET status = 'assigned', last_activity_at = NOW()" in block
-    # Re-assigning the same unit is idempotent: no duplicate row/audit.
-    assert "SELECT 1 AS ok FROM police_incident_units WHERE incident_id = ? AND citizenid = ? LIMIT 1" in block
+    # Re-assigning the same active unit is idempotent: no duplicate row/audit.
+    assert "SELECT status, incident_id FROM police_units WHERE citizenid = ? LIMIT 1" in block
     assert "return { id = id, unit = target, status = 'assigned', idempotent = true }" in block
 
 

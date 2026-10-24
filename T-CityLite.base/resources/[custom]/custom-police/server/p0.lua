@@ -234,12 +234,14 @@ function P.AssignUnit(source, incidentId, targetCitizenId)
         return false, 'invalid_transition'
     end
     if selfClaim and target ~= actor.citizenid then return false, 'rank_too_low' end
-    -- Re-assigning the same unit is an idempotent retry: no duplicate row and
-    -- no duplicate audit entry.
-    local existing = MySQL.single.await(
-        'SELECT 1 AS ok FROM police_incident_units WHERE incident_id = ? AND citizenid = ? LIMIT 1',
-        { id, target })
-    if existing then
+    -- Re-assigning the same, still-active unit is an idempotent retry: no
+    -- duplicate row and no duplicate audit entry. An off-duty/available unit
+    -- that kept a historical membership row is re-assigned, not skipped.
+    local currentAssignment = MySQL.single.await(
+        'SELECT status, incident_id FROM police_units WHERE citizenid = ? LIMIT 1', { target })
+    local activeStatus = currentAssignment and currentAssignment.status
+    if currentAssignment and tonumber(currentAssignment.incident_id) == id
+        and (activeStatus == 'assigned' or activeStatus == 'enroute' or activeStatus == 'on_scene') then
         return { id = id, unit = target, status = 'assigned', idempotent = true }
     end
     MySQL.insert.await([[
