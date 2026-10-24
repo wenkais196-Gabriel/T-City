@@ -62,6 +62,53 @@ def test_police_mdt_has_dedicated_pages():
     assert "PoliceMDT" in read(PHONE / "web/src/App.svelte")
 
 
+def test_police_mdt_has_exactly_five_pages():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "type Page = 'dispatch' | 'person' | 'report' | 'case' | 'me'" in ui
+    for page, label in (
+        ("dispatch", "调度"),
+        ("person", "人车"),
+        ("report", "文书"),
+        ("case", "案件"),
+        ("me", "我的"),
+    ):
+        assert f"['{page}', '{label}']" in ui, page
+    # the old 13-tab nav must be gone
+    for legacy in (
+        "['home','首页']", "['units','单位']", "['incidents','接警']",
+        "['citizen','人员']", "['vehicle','车辆']", "['citations','罚单']",
+        "['reports','报告']", "['cases','案件']", "['bolos','BOLO']",
+        "['warrants','搜查令']", "['arrests','逮捕']", "['audit','审计']",
+    ):
+        assert legacy not in ui, legacy
+
+
+def test_police_mdt_pages_expose_subsegments():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for token in (
+        "dispatchSeg", "personSeg", "reportSeg", "caseSeg",
+        "openDispatchSeg", "openPersonSeg", "openReportSeg", "openCaseSeg",
+        "dispatchSeg === 'units'", "dispatchSeg === 'incidents'",
+        "personSeg === 'citizen'", "personSeg === 'vehicle'",
+        "reportSeg === 'arrest'", "reportSeg === 'report'",
+        "reportSeg === 'citation'", "reportSeg === 'evidence'",
+        "caseSeg === 'cases'", "caseSeg === 'bolos'", "caseSeg === 'warrants'",
+    ):
+        assert token in ui, token
+
+
+def test_police_mdt_lazy_loads_each_subsegment_once():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for key in (
+        "dispatch", "report:arrest", "report:submit", "report:citation",
+        "report:evidence", "case:list", "case:bolos", "case:warrants",
+        "me", "audit",
+    ):
+        assert f"'{key}'" in ui, key
+    # one-shot guard: previously loaded keys are never re-queried
+    assert "if (loaded[key] || inflight.has(key)) return;" in ui
+
+
 def test_police_capabilities_are_centralised():
     policy = read(PHONE.parent / "custom-police/shared/policy.lua")
     assert "PolicePolicy.Can" in policy
@@ -148,10 +195,10 @@ def test_verdict_imprisons_on_the_server():
 
 def test_p2_warrant_and_arrest_ui():
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
-    for name in ("requestWarrant", "decideWarrant", "registerArrest", "loadWarrants"):
+    for name in ("requestWarrant", "decideWarrant", "submitArrest", "loadWarrants", "arrest_submit"):
         assert name in ui
     app = read(PHONE / "server/apps/police_mdt.lua")
-    for name in ("request_warrant", "decide_warrant", "register_arrest"):
+    for name in ("request_warrant", "decide_warrant", "arrest_submit"):
         assert name in app
 
 
@@ -251,7 +298,10 @@ def test_legacy_arrest_registration_form_is_no_longer_rendered():
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
     assert "onclick={registerArrest}" not in ui
     assert "bind:value={arrestForm.charges}" not in ui
-    assert "['arrests','逮捕']" in ui
+    assert "['arrests','逮捕']" not in ui
+    # arrest submission now lives under Report → 逮捕
+    assert "openReportSeg('arrest')" in ui
+    assert "onclick={submitArrest}" in ui
 
 
 def test_get_my_citations_callback_returns_rows():
@@ -355,11 +405,40 @@ def test_report_page_localises_server_rejections():
         assert token in ui, token
 
 
-def test_legacy_evidence_and_bolo_tabs_stay_available():
+def test_legacy_evidence_and_bolo_tabs_are_folded_into_report_and_case():
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
-    assert "['evidence','证据']" in ui
-    assert "['bolos','BOLO']" in ui
+    assert "openReportSeg('evidence')" in ui
+    assert "openCaseSeg('bolos')" in ui
     assert "registerEvidence" in ui and "createBolo" in ui
+    assert "['evidence','证据']" not in ui
+    assert "['bolos','BOLO']" not in ui
+
+
+def test_mdt_me_query_exposes_identity_and_grade():
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    assert "me = function(source)" in app
+    # resolved lazily through the shared helper, never a top-level QBCore upvalue
+    assert app.index("local function core()") < app.index("PhoneApps.Register")
+    assert "local QBCore" not in app
+    assert "qb.Functions.GetPlayer(source)" in app
+    assert "citizenid = data.citizenid" in app
+    assert "callsign = tostring(metadata.callsign or '')" in app
+    assert "grade = grade" in app
+    assert "tonumber(job.grade.level)" in app
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "queryApp(DB, 'me'" in ui
+    assert "meInfo" in ui
+
+
+def test_mdt_audit_section_requires_lieutenant_grade():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "const isLieutenant = $derived(Number(meInfo?.grade ?? 0) >= 3)" in ui
+    me_block = ui[ui.index("page === 'me'"):]
+    assert "{#if isLieutenant}" in me_block
+    assert "loadAudit" in me_block and "auditRows" in me_block
+    # audit is no longer a top-level tab
+    assert "['audit'" not in ui
+    assert "page === 'audit'" not in ui
 
 
 def test_built_bundle_ships_the_report_flow():
@@ -368,4 +447,17 @@ def test_built_bundle_ships_the_report_flow():
         for p in sorted((PHONE / "html/assets").glob("*.js"))
     )
     for token in ("report_submit", "evidence_label", "bolo_kind"):
+        assert token in bundle, token
+
+
+def test_built_bundle_ships_the_five_page_mdt():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    for token in (
+        "调度", "人车", "文书", "案件", "我的",
+        "10-8 在勤", "10-6 忙碌", "10-7 下班",
+        "审计", "搜查令", "BOLO", "一次逮捕提交",
+    ):
         assert token in bundle, token
