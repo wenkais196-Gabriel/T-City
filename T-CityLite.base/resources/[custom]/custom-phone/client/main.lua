@@ -847,6 +847,7 @@ RegisterNUICallback('getPhoneApps', function(_, cb)
 end)
 
 RegisterNUICallback('appQuery', function(data, cb)
+    TriggerServerEvent('phone:server:focusState', { phase = 'appQuery-hit' })
     if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
     QBCore.Functions.TriggerCallback('phone:server:appQuery', function(res)
         cb(res or { success = false, error = 'no_response' })
@@ -854,6 +855,7 @@ RegisterNUICallback('appQuery', function(data, cb)
 end)
 
 RegisterNUICallback('appAction', function(data, cb)
+    TriggerServerEvent('phone:server:focusState', { phase = 'appAction-hit' })
     if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
     QBCore.Functions.TriggerCallback('phone:server:appAction', function(res)
         cb(res or { success = false, error = 'no_response' })
