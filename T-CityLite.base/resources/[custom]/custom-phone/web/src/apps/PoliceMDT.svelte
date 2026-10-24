@@ -247,9 +247,19 @@
     });
     arrestSubmitting = false;
     if (!res?.success) {
-      arrestError = res?.error === 'action_rejected'
-        ? '服务端拒绝：请检查目标是否在线、罪名与权限'
-        : (res?.error ?? 'arrest_failed');
+      const reasons: Record<string, string> = {
+        action_rejected: '服务端拒绝：请检查目标是否在线、罪名与权限',
+        target_not_cuffed: '目标没有上铐/倒地，先 /cuff',
+        too_far: '目标距离超过 5 米',
+        target_unavailable: '目标或你的角色尚未加载',
+        already_jailed: '目标已在服刑',
+        citizen_offline: '目标已离线',
+        bolo_forbidden: 'BOLO 需要 Sergeant+',
+        case_forbidden: '创建案件需要 Sergeant+',
+        invalid_charges: '罪名无效或超过 8 条',
+        jail_failed: '送监失败，已回滚记录',
+      };
+      arrestError = reasons[String(res?.error)] ?? (res?.error ?? 'arrest_failed');
       return;
     }
     arrestResult = res.data ?? {};
