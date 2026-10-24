@@ -1,6 +1,6 @@
 # 02 状态机（执勤 / 警情 / 文书 / 司法 / 在押 / NPC 支援 / Agent）
 
-> 架构基线。基线提交 `master @ 568acd2`（2026-10-24）。本文件只读代码后写成，**未改代码、未连数据库、未碰 FXServer**。
+> 架构基线。基线提交 `master @ 568acd2`（2026-10-24）；**SM-01 已在 `bb64d87` 实施**，本节 SM-01 的“当前”列保留为基线快照，目标态已落地。本文件只读代码后写成，**未改代码、未连数据库、未碰 FXServer**。
 >
 > 路径简写（下文所有 `文件:行号` 均按此展开）：
 >
@@ -444,7 +444,7 @@ Incident.Sweep()
 
 ### 4.1 内存 vs 持久化（当前事实）
 
-- `activeCases` 是 `custom-justice/server/main.lua:6-8` 的模块级 table；`caseCounter` 是进程内数字，重启从 0 开始，案件号 `CASE-0001` 会**回绕**（`main.lua:18-21`）。
+- `activeCases` 是 `custom-justice/server/main.lua:7-8` 的模块级 table；`caseCounter` 是进程内数字，重启从 0 开始，案件号 `CASE-0001` 会**回绕**（`main.lua:18-21`）。
 - `JusticeService.Inmates` 同样是内存（`main.lua:10-12`）。
 - 唯一持久化是判决 best-effort 回写：`UPDATE police_reports SET justice_verdict=?, justice_status=? WHERE justice_case_id=?`（`custom-justice/server/trial.lua:30-49`）。
 - `police_reports.justice_case_id` 是 `VARCHAR(32)`（`migrations/v3.6_police_justice_case.sql`），justice 案件号是 `CASE-0001` 字符串；`police_reports.case_id` 是 `BIGINT`（police_cases），两者语义不同（TD-03）。
@@ -630,7 +630,7 @@ justice_sentences (
 2. **无 TTL**：客户端 5 分钟寿命只在客户端；如果客户端 Lua 卡死/异常，`backupEnded` 永不发送，服务端名额一直占着，直到 `playerDropped`（`p2_system.lua:266-272`）。玩家挂机在线时上限永久 -1。
 3. **无生成确认**：服务端 `TriggerClientEvent` 后立即认为成功；模型缺失/实体创建失败只靠客户端回报，服务端没有超时兜底。
 4. **无结束审计/指标**：只有 `backup.request`；无法算成功率、平均存活时长、战斗率、异常结束原因。
-5. **上限是“每警员 2 个”，不是全局**：48 人同时请求可生成 96 个 NPC；GTA_MOD_RESEARCH 建议“同时 2 个 NPC 单位”是全局/场景级，当前没有全局 cap。
+5. **上限是“每警员 2 个”，不是全局**：48 人同时请求可生成 96 个 NPC；GTA_MOD_RESEARCH 建议“同时 2 个 NPC 单位”是全局/场景级，当前没有全局 cap（目标 ≤6，见 §6.4）。
 6. **实体只在请求者客户端生成**：其他玩家是否看到取决于 OneSync 实体所有权/范围，服务端没有校验；这是设计取舍，但必须在文档/UI 说明“支援是本地表现”，否则会被当成全服单位。
 7. **`request_id` 不落库**：MDT 只显示一个字符串（`PoliceMDT.svelte:349-367`），刷新/重进后无法追踪。
 
@@ -643,7 +643,7 @@ justice_sentences (
   - `requested` 超过 10s 无 `spawning` ack → `expired`；
   - `spawning/enroute/onscene/engaged` 超过 `expires_at`（5 分钟）→ `expired`；
   - 玩家掉线 → 立即 `released`，并通知客户端清理（如果还在）。
-- 全局 cap（建议 4 个活动单位/全服，2 个/警员）；超限返回 `server_limit`。
+- 全局 cap **≤6 个活动单位/全服**（ADR-0003），2 个/警员；超限返回 `global_limit`。
 - 结束审计：`backup.spawned`、`backup.engaged`（可选采样）、`backup.ended`（reason: `timeout|dead|left|resource_stop|spawn_failed|expired`）。
 - 指标：请求成功率、生成成功率、平均存活秒数、战斗单位占比、异常结束率；全部可从 `police_audit` + `police_backup_units` 算。
 
@@ -737,7 +737,7 @@ justice_sentences (
 
 | action | 触发 | 目标/详情 | 代码 |
 |---|---|---|---|
-| `unit.status` | 10-8/10-6/10-7、MDT set_status | target=nil, detail=status | `p0.lua:52` |
+| `unit.status` | 10-8/10-6/10-7、MDT set_status | target=status, detail=nil | `p0.lua:52` |
 | `incident.create` | 玩家/agent 建单 | target=id, detail=title | `p0.lua:94`、`p2_system.lua:65` |
 | `incident.assign` | 派单（玩家/agent） | target=id, detail=unit | `p0.lua:155`、`p2_system.lua:87` |
 | `incident.status` | 前往/到场/清场 | target=id, detail=status | `p0.lua:179` |

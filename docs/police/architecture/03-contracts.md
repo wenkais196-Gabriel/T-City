@@ -16,10 +16,10 @@
 
 | # | 结论 | 证据 |
 |---|---|---|
-| 1 | 契约面共 **46 个 export、18 个跨资源事件、6 个 callback、17 个 PhoneApps query、17 个 action、21 个 director action、35 个 agent tool**；其中重点展开：警察 5 个 export（§2.3）、justice 2 个 export（§2.5）、3 个 police agent tool（§7） | `custom-police/server/{p0,p1,p2_evidence,p3_cases,p2_system}.lua`、`custom-justice/server/main.lua:221-227`、`custom-phone/server/main.lua:1372-1414`、`custom-director/server/policy.lua:29-160`、`tools/agent_tools.json:3-4` |
-| 2 | 只有 **4 个契约**返回结构化错误码（`ArrestSubmit`/`ReportSubmit`/`RequestBackup`/`GetCaseDetail`）；其余 13 个 MDT action 把下游错误压成裸 boolean，统一变成 `action_rejected` | `custom-phone/server/apps/police_mdt.lua:167-247`、`custom-phone/server/phone_apps.lua:138-142` |
+| 1 | 契约面共 **46 个 export（37 police 服务端 + 2 justice + 6 director + 1 client；若把 `custom-director/server/director.lua` 另 3 个 export 也算上则 49）、22 个跨资源事件（13 入站 + 9 出站）、6 个 callback、17 个 PhoneApps query、17 个 MDT action、21 个 director action、35 个 agent tool**；其中重点展开：警察 5 个 export（§2.3）、justice 2 个 export（§2.5）、3 个 police agent tool（§7） | `custom-police/server/{p0,p1,p2_evidence,p3_cases,p2_system}.lua`、`custom-justice/server/main.lua:221-227`、`custom-phone/server/main.lua:1372-1414`、`custom-director/server/policy.lua:29-160`、`tools/agent_tools.json:3-4` |
+| 2 | 在 export 层只有 **4 个契约**返回结构化错误码（`ArrestSubmit`/`ReportSubmit`/`RequestBackup`/`GetCaseDetail`）；在 MDT action 层只有 2 个透传（`report_submit`/`request_backup`），14 个被压平（13 个 `ok and res ~= false` + `arrest_submit`），`alert` 为特例（成功 `{sent}`、失败压平） | `custom-phone/server/apps/police_mdt.lua:167-275`、`custom-phone/server/phone_apps.lua:138-142` |
 | 3 | 所有 export 都**没有版本号、没有 `idempotency_key` 参数**；唯一有幂等保证的契约是 director HTTP（`agent_actions.idempotency_key` UNIQUE） | `custom-police/server/p2_system.lua:799-814`、`migrations/v2.3_agent_actions.sql:38`、`custom-director/server/main.lua:1367-1389` |
-| 4 | 契约方向是**环形的**：`custom-justice` 声明依赖 `custom-police`，同时 `custom-police` 运行时调 `custom-justice` 的 export，但自己的 fxmanifest 没有声明该依赖 | `custom-justice/fxmanifest.lua:22`、`custom-police/server/p2_system.lua:109,566,605` |
+| 4 | 契约方向是**环形的**：`custom-justice` 声明依赖 `custom-police`，同时 `custom-police` 运行时调 `custom-justice` 的 export，但自己的 fxmanifest 没有声明该依赖 | `custom-justice/fxmanifest.lua:21`、`custom-police/server/p2_system.lua:109,566,605` |
 | 5 | 事件命名有 5 套前缀、3 种大小写风格；`police:server:autoAlert`（camel）、`police:server:UpdateCurrentCops`（Pascal）、`custom-police:server:setStatus`（lower）同时存在 | `custom-police/server/main.lua:198`、`custom-police/server/main.lua:239`、`custom-police/server/p0.lua:294` |
 | 6 | 有 3 个 callback 是**死契约**（零消费者），1 个旧事件在 `source=0` 分支上不可用 | `custom-police/server/main.lua:75,90,106`、`custom-police/server/interactions.lua:139-149` |
 
@@ -45,7 +45,7 @@
 
 | Export | 消费者 | 输入 | 返回 / 错误 | 权限 | 幂等 | 审计 |
 |---|---|---|---|---|---|---|
-| `SetUnitStatus(citizenid, callsign, status)` | 内部 / MDT 间接 | `citizenid:string`, `callsign:string≤16`, `status:enum` | `true` / `false,'invalid_status'` | **无**（export 层零鉴权） | 是（UPSERT `p0.lua:47-51`） | `unit.status`，结果被忽略（`p0.lua:52`） |
+| `SetUnitStatus(citizenid, callsign, status)` | 内部 / MDT 间接 | `citizenid:string`, `callsign:string≤16`, `status:enum` | `true` / `false,'invalid_status'` | **无**（export 层零鉴权） | 是（UPSERT `p0.lua:47-51`） | `unit.status`（target=status, detail=nil），结果被忽略（`p0.lua:52`） |
 | `SetUnitStatusForSource(source, status)` | `police_mdt.lua:169` | `source:number`, `status:enum` | `true` / `false,'not_police'` / `false,'invalid_status'` | 仅 `IsPolice`（**不查 onduty、不查 grade**，`p0.lua:307`） | 是 | 同左 |
 | `GetUnits()` | `police_mdt.lua:49,66`；director `live_api.lua:484` 走 SQL | 无 | `{units[],count}`；`SELECT *`（`p0.lua:57`） | **无** | 读 | 无 |
 | `CreateIncident(source, data)` | `police_mdt` 未接；内部 `/911`（`p0.lua:300-303`） | `{title,code,priority,x,y,z,description}` | `{id,status='open'}` / `false,'invalid_title'\|'db_error'\|'player_not_found'` | 仅 `player_not_found`（`p0.lua:78-79`） | **否** | `incident.create`，非 fail-closed（`p0.lua:94`） |
@@ -145,7 +145,7 @@
 | 输出 | `true` / `false,'not_police'` / `false,'invalid_status'` | `p0.lua:306-308`、`p0.lua:46` |
 | 权限 | 仅 `job.name=='police'`；**不校验 onduty、不校验 grade**（与 `PolicePolicy.Can` 不一致） | `p0.lua:307` vs `custom-police/shared/policy.lua:40-47` |
 | 幂等 | 幂等（`INSERT ... ON DUPLICATE KEY UPDATE`） | `p0.lua:47-51` |
-| 审计 | `unit.status`，`actor_citizenid=本人`、`target=NULL`；写失败被 `pcall` 吞掉 | `p0.lua:31-39,52` |
+| 审计 | `unit.status`，`actor_citizenid=本人`、`target=status`、`detail=nil`；写失败返回值被 `pcall` 包装但调用点忽略 | `p0.lua:31-39,52` |
 | 超时 / 失败 | 无；DB 失败时 `MySQL.insert.await` 抛错 → export 抛给调用方 pcall → MDT 收到 `action_rejected` | `police_mdt.lua:167-172` |
 | 版本 | `status` ENUM 变更需同时迁移 `migrations/v2.8_police_p0.sql:11-12` + UI + `live_api` 过滤 | 同左 |
 
@@ -216,7 +216,7 @@
 
 | 事件 | 消费者 | 载荷 schema | 备注 | 证据 |
 |---|---|---|---|---|
-| `phone:client:newNotification` | `custom-phone/client/main.lua:499` → NUI | `{id:number, title≤200, content≤500, timestamp:'YYYY-MM-DD HH:MM:SS', is_read:false, app_id?:string≤32, origin?='server'}` | `app_id` 必须是内置 app id（如 `banking`）或 `PhoneApps` 注册 id（`Notifications.svelte:21-23` 走 `dyn:<id>`）；`id=0` 表示"未落库"（`p0.lua:109`） | `custom-police/server/p0.lua:108-112`、`p1.lua:30-33`、`p2_system.lua:48-51,288-291` |
+| `phone:client:newNotification` | `custom-phone/client/main.lua:499` → NUI | `{id:number, title≤200, content≤500, timestamp:'YYYY-MM-DD HH:MM:SS', is_read:false, app_id?:string≤32, origin?='server'}` | `app_id` 必须是内置 app id（如 `banking`）或 `PhoneApps` 注册 id（`Notifications.svelte:21-23` 走 `dyn:<id>`）；`id=0` = **客户端不要回存，但行已落库**（p0/p2_system 先 INSERT 再推 0，`p0.lua:104-109`、`p2_system.lua:45-51`；p1 与罚单通知推真实 insert id） | `custom-police/server/p0.lua:108-112`、`p1.lua:30-33`、`p2_system.lua:48-51,288-291` |
 | `prison:client:Enter` | qb-prison client | `(time:number)` 分钟 | **调用者白名单**：`qb-policejob`/`custom-police`/`custom-justice`/`qb-ambulancejob`/自身 | `qb-prison/client/main.lua:225-234`、`custom-police/server/p2_system.lua:115,612`、`custom-justice/server/prison.lua:47` |
 | `prison:client:UnjailPerson` | qb-prison client | 无 | 触发 `SetJailStatus 0` + 归还物品；**不恢复职业** | `qb-prison/client/main.lua:311-330`、`custom-police/server/p2_system.lua:827` |
 | `police:client:SpawnBackup` | custom-police client | `(requestId:string, 1..64)`（camelCase，历史命名） | 只 spawn/动画；服务端已裁决权限/冷却/上限 | `custom-police/server/p2_system.lua:241`、`client/backup.lua:497-504` |
@@ -274,13 +274,13 @@
 | query | `officers` | 本地 `onDutyPolice()`（不调 export） | — | `:154-164` |
 | action | `set_status` | `SetUnitStatusForSource` | **吞**（`ok and res==true` → 裸 boolean） | `:167-172` |
 | action | `assign` | `AssignUnit` | **吞** | `:173-178` |
-| action | `create_case` / `create_bolo` / `request_warrant` / `decide_warrant` / `register_arrest` / `register_evidence` / `issue_citation` / `create_report` / `enroute` / `on_scene` / `clear` | 对应 export | **吞**（`res ~= false`） | `:179-247` |
+| action | `create_case` / `create_bolo` / `request_warrant` / `decide_warrant` / `register_arrest` / `register_evidence` / `issue_citation` / `create_report` / `enroute` / `on_scene` / `clear` | 对应 export | **吞**（`ok and res ~= false`） | `:179-247` |
 | action | `alert` | 直接写 `phone_notifications` + 广播 | 只返回 `{sent}` | `:248-275` |
-| action | `arrest_submit` | `ArrestSubmit` | **透传**（`res.ok==false` → `error`） | `:199-203` |
+| action | `arrest_submit` | `ArrestSubmit` | **不透传**（失败一律 `return false` → `action_rejected`，`police_mdt.lua:201`） | `:199-203` |
 | action | `report_submit` | `ReportSubmit` | **透传** | `:204-208` |
 | action | `request_backup` | `RequestBackup` | **透传** | `:213-217` |
 
-**结论**：17 个 action 中 **3 个**保留错误码，**13 个**被压成 `action_rejected`（`phone_apps.lua:141`）。MDT 因此为 `action_rejected` 写了一整张兜底文案表（`web/src/apps/PoliceMDT.svelte:400-421`），仍无法区分"职级不足"与"数据库错误"。
+**结论**：17 个 action 中 **2 个**透传结构化错误（`report_submit` / `request_backup`），**14 个**被压平（13 个 `ok and res ~= false` + `arrest_submit`），`alert` 为特例（成功 `{sent}`、失败压平，`phone_apps.lua:141`）。MDT 因此为 `action_rejected` 写了一整张兜底文案表（`web/src/apps/PoliceMDT.svelte:400-421`），仍无法区分"职级不足"与"数据库错误"。
 
 ---
 
@@ -353,10 +353,10 @@
 | `input.*` | 参数非法 | 否（改参数） | `invalid_*`,`duplicate_charge`,`missing_case` | `input.invalid` + `field` | 
 | `state.*` | 状态冲突 | 是（状态变化后） | `incident_not_found`,`unit_not_found`,`unit_off_duty`,`case_closed`,`already_jailed`,`target_not_cuffed`,`too_far`,`citizen_offline`,`not_pending`,`cooldown`,`limit`,`already_paid` | `state.conflict` + `reason` |
 | `deps.*` | 依赖不可用 | 是（退避） | `db_error`,`audit_unavailable`,`police_unavailable`,`unavailable`,`query_failed`,`action_failed`,`open_case_failed`,`jail_failed` | `deps.db` / `deps.audit` / `deps.downstream` |
-| `internal.*` | 不可归类 | 否（需日志） | `action_rejected`（13 处兜底）、`invalid_status`（director 409） | **应被消灭**；仅保留 `internal.unknown` |
+| `internal.*` | 不可归类 | 否（需日志） | `action_rejected`（14 处兜底）、`invalid_status`（director 409） | **应被消灭**；仅保留 `internal.unknown` |
 
 **三条硬规则**：
-1. **禁止裸 boolean**：`set_status`/`assign`/`create_case`/`create_bolo`/`request_warrant`/`decide_warrant`/`register_arrest`/`register_evidence`/`issue_citation`/`create_report`/`enroute`/`on_scene`/`clear` 共 13 个 action 必须改为返回 `{ok,error}`（`police_mdt.lua:167-247`）。
+1. **禁止裸 boolean**：`set_status`/`assign`/`create_case`/`create_bolo`/`request_warrant`/`decide_warrant`/`register_arrest`/`register_evidence`/`issue_citation`/`create_report`/`enroute`/`on_scene`/`clear` 共 13 个 action 必须改为返回 `{ok,error}`；`arrest_submit` 也把失败压成 `false`（不透传，`police_mdt.lua:201`），合计 **14 个**（`police_mdt.lua:167-247`）。
 2. **禁止一码两义**：`not_police` 现在同时表示"不是警察"与"审计期间玩家已离开"（`p2_system.lua:197` vs `:238`）；以 `assign` 为例，`police_rejected` 覆盖 4 种下游原因（`incident_not_found`/`unit_not_found`/`unit_off_duty`/`audit_unavailable`，`p2_system.lua:83-87`；`main.lua:1194-1195`）。
 3. **禁止动态拼接 code**：`'already_'..row.status`（`p1.lua:147`）会产生 `already_unpaid`/`already_void` 等未登记 code，前端无法静态映射。
 
@@ -388,10 +388,10 @@
 
 | ID | 冲突 | 影响 | 证据 |
 |---|---|---|---|
-| X-01 | **环形依赖**：justice 依赖 police；police 运行时调 justice export 但未声明依赖 | 冷启动顺序不定；justice 未起时 `Imprison` 走 fallback（`metadata.injail` + `prison:client:Enter`），下次启动双计时风险 | `custom-justice/fxmanifest.lua:22`、`custom-police/server/p2_system.lua:108-117,604-614` |
+| X-01 | **环形依赖**：justice 依赖 police；police 运行时调 justice export 但未声明依赖 | 冷启动顺序不定；justice 未起时 `Imprison` 走 fallback（`metadata.injail` + `prison:client:Enter`），下次启动双计时风险 | `custom-justice/fxmanifest.lua:21`、`custom-police/server/p2_system.lua:108-117,604-614` |
 | X-02 | **税率/罪名目录双份**：`PoliceCharges`（13 条）自称镜像 justice `Config.Justice.Crimes`（13 条），但无 export、无测试强制一致；B_PLAN 计划的 `GetChargeCatalog` **未实现** | 改一处罪名 → 逮捕刑期与法庭量刑不一致 | `custom-police/shared/charges.lua:2-4`、`custom-justice/config.lua:9-26`、`custom-justice/server/main.lua:221-227` |
 | X-03 | **案件号类型冲突**：`police_reports.case_id BIGINT` ↔ justice `CASE-0001` 字符串；代码只写数字、把字符串静默丢弃 | `CASE-0001` 的判决/回写找不到对应 report（`justice_case_id` 兜底，但 `case_id` 被污染） | `p2_system.lua:580-595`、`migrations/v3.6_police_justice_case.sql` |
-| X-04 | **错误码被 clamp**：13 个 action 返回裸 boolean → `action_rejected` | MDT 无法区分权限/参数/依赖错误；director 日志只有 `police_rejected` | `police_mdt.lua:167-247`、`phone_apps.lua:138-142`、`main.lua:1194-1195` |
+| X-04 | **错误码被 clamp**：14 个 action 把失败压平（13 个 `ok and res ~= false` + `arrest_submit`）→ `action_rejected` | MDT 无法区分权限/参数/依赖错误；director 日志只有 `police_rejected` | `police_mdt.lua:167-247`、`phone_apps.lua:138-142`、`main.lua:1194-1195` |
 | X-05 | **出勤状态双写**：`job.onduty` 与 `police_units.status` 都可写且入口不同；`SetUnitStatusForSource` 不校验 onduty/grade | `onduty=true + unit=off_duty` 合法存在；派单/权限/UI 各读一套 | `p0.lua:262-270,294-309`、`TECH_DEBT.md:5-24` |
 | X-06 | **通知绕过 owner**：`custom-police` 直接 `INSERT INTO phone_notifications`，绕过 `custom-phone` 的 `StoreNotification/PhoneNotify`（后者负责清 `phoneDataCache` 并校验 `app_id`） | 列表缓存最多滞后 30s（`custom-phone/server/main.lua:351`）；`app_id` 由 police 硬编码，phone 侧正则/长度校验被绕过 | `custom-police/server/p0.lua:104-107`、`p1.lua:23-25`、`p2_system.lua:45-47,282-284` vs `custom-phone/server/main.lua:223-262` |
 | X-07 | **agent 逮捕不可见**：`JailSystem` 仍写 `police_arrests`，但 `GetArrests`/案件详情只读 `police_reports(kind='arrest')` | agent 判的刑在 MDT 逮捕历史里查不到（只有 union 的 `case_id` 路径能看到） | `p2_system.lua:118-121`、`p3_cases.lua:212-227`、`B_PLAN.md:54` |
@@ -411,7 +411,7 @@
 | 顺序 | 契约 | 统一内容 | 为什么先做 | 影响面 |
 |---|---|---|---|---|
 | **1** | `ArrestSubmit` + `custom-justice:Imprison` 配对 | ① 统一 `{ok,error,detail}` 与 §8.2 fail 表；② 增加可选 `idempotency_key`（服务端按 key 去重，重复提交返回首次 `report_id`）；③ justice 侧 `Imprison` 改返回 `{ok,error}`，与 `OpenCase` 的裸 `false` 对齐；④ `open_case` 失败时明确"记录已保留/已回滚" | 唯一同时写 5 张表 + 跨 2 个资源的写路径；当前重复提交会产生双报告、孤儿 justice 案件、`jailed=true` 却 `ok=false` 的歧义返回 | `p2_system.lua:336-662`、`prison.lua:12-66`、`police_mdt.lua:199-203,563-600` |
-| **2** | PhoneApps `appAction` 的 fail 透传 | 13 个 action 统一返回 `{ok=false,error=<code>}`；`PhoneApps.Action` 不做二次归类；MDT 删掉 `action_rejected` 兜底表 | 一次改动消灭 13 个契约的错误盲区；不需要改任何 export 签名（export 已返回 `false,reason`，只是 handler 丢掉了） | `police_mdt.lua:167-247`、`phone_apps.lua:128-143`、`PoliceMDT.svelte:400-421` |
+| **2** | PhoneApps `appAction` 的 fail 透传 | 14 个压平的 action 统一返回 `{ok=false,error=<code>}`；`PhoneApps.Action` 不做二次归类；MDT 删掉 `action_rejected` 兜底表 | 一次改动消灭 14 个契约的错误盲区；不需要改任何 export 签名（export 已返回 `false,reason`，只是 handler 丢掉了） | `police_mdt.lua:167-247`、`phone_apps.lua:128-143`、`PoliceMDT.svelte:400-421` |
 | **3** | 通知契约 `phone_notifications`（唯一写者 = `custom-phone`） | police 改为调用 `custom-phone` 的 `PhoneNotify`（或触发 `phone:server:notify`），不再直接 INSERT；`app_id` 白名单在 phone 侧校验；`id=0` 的"未落库推送"退役 | 现在 `custom-police` 3 个文件 4 处 + `police_mdt` app 1 处直接写同一张表，绕过缓存失效与 `app_id` 校验；通知是玩家可感知的最后一步，坏了最难查 | `custom-police/server/{p0,p1,p2_system}.lua` vs `custom-phone/server/main.lua:223-262` |
 
 **不建议现在动的**：事件重命名（收益低、回归面大，且 `qb-policejob:*` 兼容是刻意保留）、`police_arrests` 下线（需先补 agent 路径的可见性，X-07）、`ResolveCase` 落库（属 04 的数据所有权议题，见 [04-data-ownership.md](04-data-ownership.md) §5）。

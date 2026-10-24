@@ -150,7 +150,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
   - 反向检查（更强）：owner 的**写导出**必须被至少一个调用方使用；没人用的导出 → advisory（避免"加了导出但大家还在直写"）。
 - **失败信息**：`FIT-02: custom-police/server/p0.lua:105 INSERT phone_notifications — owned by custom-phone; use exports['custom-phone']:Notify(...)`。
 - **CI**：`Config & dependency checks`，blocking（allowlist 让存量通过）；owner 导出（`custom-phone:Notify`）落地后，删除豁免条目即自动变严。
-- **现状**：❌ **FAIL**。警察侧 4 处直写 `phone_notifications`：`server/p0.lua:105`、`server/p1.lua:24`、`server/p2_system.lua:46`、`server/p2_system.lua:283`；justice 1 处直写 `police_reports`：`custom-justice/server/trial.lua:42`（`justice_verdict` / `justice_status` 回写）。**合规样板**：`custom-director/server/live_api.lua:483-492` 只读 `police_units` / `police_incidents` 且列白名单明确。owner 侧的 `StoreNotification`（`custom-phone/server/main.lua:223-262`）已存在但未导出——规则落地时应当先补导出，而不是把豁免当成长期方案。
+- **现状**：❌ **FAIL**。警察侧 4 处直写 `phone_notifications`：`server/p0.lua:105`、`server/p1.lua:24`、`server/p2_system.lua:46`、`server/p2_system.lua:283`；justice 1 处直写 `police_reports`：`custom-justice/server/trial.lua:42`（`justice_verdict` / `justice_status` 回写）。**登记例外（唯一允许的跨资源直读）**：`custom-director/server/live_api.lua:483-492` 只读 `police_units` / `police_incidents` 且列白名单明确，按 04 §1 R2 登记为读例外。owner 侧的 `StoreNotification`（`custom-phone/server/main.lua:223-262`）已存在但未导出——规则落地时应当先补导出，而不是把豁免当成长期方案。
 - **例外**：上述 5 处进 allowlist 至 `2026-12-31`；但**新增**跨资源写必须在同一 PR 里加导出。`phone_notifications` 的 `content` 长度与 `app_id` 枚举由 FIT-04 的契约测试覆盖。
 
 ### FIT-03 · 每个 net event 必须有来源/权限校验
@@ -182,7 +182,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
   2. 每个 `return` 必须是"表"或 `false, '<code>'` / `nil, '<code>'` / `false, reason`（`reason` 来自 `PolicePolicy.Can`）；裸 `return` / `return false` / `return nil` → FAIL；
   3. 返回的字面量必须存在于 `error_codes.json`（新增错误码 = 显式 diff + 更新 `docs/police/architecture/error-codes.md`）；
   4. **action 层不得把错误码压成布尔**：`PhoneApps` action handler 必须返回 `{ok=false,error=...}` 或原样透传，不得 `return ok and res ~= false`。
-- **为什么**：MDT 是唯一接警 UI，用户看到的错误文案完全取决于 action 层有没有把码透传。17 个 action 里只有 3 个（`arrest_submit` / `report_submit` / `request_backup`）透传结构化结果，其余 13 个把 `cooldown`/`limit`/`rank_too_low`/`not_on_duty` 全压成 `action_rejected`（`custom-phone/server/apps/police_mdt.lua:167-276` + `custom-phone/server/phone_apps.lua:138-142`），玩家只能看到"失败"。
+- **为什么**：MDT 是唯一接警 UI，用户看到的错误文案完全取决于 action 层有没有把码透传。17 个 action 里只有 2 个（`report_submit` / `request_backup`）透传结构化结果，14 个把 `cooldown`/`limit`/`rank_too_low`/`not_on_duty` 全压平（13 个 `ok and res ~= false` + `arrest_submit`），`alert` 为特例（成功 `{sent}`、失败压平）（`custom-phone/server/apps/police_mdt.lua:167-275` + `custom-phone/server/phone_apps.lua:138-142`），玩家只能看到"失败"。
 - **检查方式**：
   - 函数体提取：`exports('<Name>', <sym>)` → 找 `function <sym>(` 或 `<sym> = function`，切到顶格 `end`；
   - 伪代码：
@@ -199,7 +199,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
     ```
 - **失败信息**：`FIT-04: custom-phone/server/apps/police_mdt.lua:222 action issue_citation collapses error code to boolean; return the {ok=false,error} table so the MDT can localise it`。
 - **CI**：`Python unit tests` job（`tests/architecture` 走 pytest）或独立 step；blocking。
-- **现状**：❌ **FAIL**。错误码面尚可：37 个导出基本都用 `false, '<code>'` 元组形态返回失败（p0/p1/p2/p3），`already_<status>` 是唯一的动态码（`server/p1.lua:152`）需要登记为模式；但只有 4 个契约返回结构化 `{ok,error}` 表（见 [03-contracts.md](03-contracts.md) §0 结论 2）。真正红的是 action 层压缩（13/17）与 `Sys.Jail` 的 audit 未消费（`server/p2_system.lua:121`）。
+- **现状**：❌ **FAIL**。错误码面尚可：37 个导出基本都用 `false, '<code>'` 元组形态返回失败（p0/p1/p2/p3），`already_<status>` 是唯一的动态码（`server/p1.lua:152`）需要登记为模式；但只有 4 个契约返回结构化 `{ok,error}` 表（见 [03-contracts.md](03-contracts.md) §0 结论 2）。真正红的是 action 层压缩（14/17：13 个 `ok and res ~= false` + `arrest_submit`）与 `Sys.Jail` 的 audit 未消费（`server/p2_system.lua:121`）。
 - **例外**：`GetUnits` / `GetIncidents` / `GetCharges` 这类纯读返回表，不需要错误码；但 `GetUnits`/`GetIncidents` **没有 capability 检查**（`server/p0.lua:56-75,118-137`，等同 FLOW B10），应在 FIT-03 的"读导出"扩展里补，或明确登记为"靠 phone audience 兜底"。
 
 ### FIT-05 · 审计不可写时敏感路径必须 fail-closed
@@ -221,8 +221,8 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
   - 合法形状白名单：`if not audit(...) then return ... end`、`local ok = audit(...)`、`auditsOk = false`（`server/p2_system.lua:636-651` 是样板）。
 - **失败信息**：`FIT-05: custom-police/server/p1.lua:29 audit() result ignored — a DB write failure would silently lose the forensic row; wrap it as "if not audit(...) then return false, 'audit_unavailable' end"`。
 - **CI**：与 FIT-04 同一个 step；blocking（存量进 allowlist）。
-- **现状**：❌ **FAIL**。fail-open（返回值被丢）**23 处**：`server/p0.lua` 6、`server/p1.lua` 3（`:56,96,154`，IssueCitation / CreateReport / PayCitation）、`server/p2_evidence.lua` 3、`server/p2_system.lua` 1（`:121`，Sys.Jail）、`server/p3_cases.lua` 10。零审计的敏感读：`GetCitations`（`server/p1.lua:84-95`）、`GetReports`（`server/p1.lua:117-132`）。已合规：`server/p0.lua:183-190`（lookup 双 fail-closed）、`server/p2_system.lua:225-229,635-651,781-794`、`server/p2_evidence.lua`、`server/p3_cases.lua` 的 view 类。
-- **例外**：`GetCitation`/`GetReport` 加审计会新增写放大（05 PERF-06），allowlist 里必须写清"加审计前先评估 qps"，到期日 `2026-12-31`。
+- **现状**：❌ **FAIL**。fail-open（返回值被丢）**23 处**：`server/p0.lua` 6、`server/p1.lua` 3（`:56,96,154`，IssueCitation / CreateReport / PayCitation）、`server/p2_evidence.lua` 3、`server/p2_system.lua` 1（`:121`，Sys.Jail）、`server/p3_cases.lua` 10。零审计的敏感读：`GetUnits`、`GetIncidents`、`GetAudit`、`GetCitations`（`server/p1.lua:84-95`）、`GetReports`（`server/p1.lua:117-132`），共 5 个。已合规：`server/p0.lua:183-190`（lookup 双 fail-closed）、`server/p3_cases.lua:242-244`（case.detail）、`server/p2_system.lua:225-229,635-651,781-794`。**注意**：`server/p2_evidence.lua` 与 `server/p3_cases.lua` 的 view 类审计（`evidence.view`/`evidence.chain`/`case.view`/`bolo.view`/`warrant.view`/`arrest.view`）都忽略 `audit()` 返回值，仍是 fail-open，不能算“已合规”。
+- **例外**：`GetCitations`/`GetReports` 加审计会新增写放大（05 PERF-06），allowlist 里必须写清"加审计前先评估 qps"，到期日 `2026-12-31`。
 
 ### FIT-06 · 迁移幂等 + fixture 覆盖 + 可重复执行
 
@@ -231,7 +231,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
   2. 迁移里出现 `DROP TABLE` / `TRUNCATE` / 无 `WHERE` 的 `DELETE` → FAIL（除非该文件在 `destructive` allowlist，且必须人工审批）；
   3. **fixture 覆盖**：迁移创建的每张表都必须出现在 `tests/fixtures/tcity_schema.sql`；
   4. **可重复执行**：CI 连续 import 两次，第二次不得报错、表/行数不变。
-- **为什么**：TD-05 直接说"fixture 缺 police 表，DB 集成用例目前 skip"。这意味着 9 张警察表的真实 SQL（索引、ENUM、字符集）**从未在 CI 里跑过**；`v2.8`–`v3.7` 的守卫写错只会在生产迁移时炸。
+- **为什么**：TD-05 直接说"fixture 缺 police 表，DB 集成用例目前 skip"。这意味着 12 张警察表的真实 SQL（索引、ENUM、字符集）**从未在 CI 里跑过**；`v2.8`–`v3.7` 的守卫写错只会在生产迁移时炸。
 - **检查方式**：
   ```
   for f in migrations/*.sql:
@@ -339,11 +339,11 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 ### FIT-12 · 弃用登记（deprecated 写路径为 0 或未过期豁免）
 
 - **规则**：任何被宣布"停止新写入"的表/事件，其写路径必须为 0；未清完的必须在 `allowlists/deprecated_writers.json` 登记（`owner`、`replacement`、`stop_write_by`、`remove_by`），到期 FAIL。
-- **为什么**：[B_PLAN.md](../B_PLAN.md) §2 明确"`police_arrests` 停止新写入；`police_bolos` 停止新写入"，但代码里 `police_arrests` 仍有 3 个写者，`police_bolos` 仍有 `CreateBolo`。**文档已经宣布弃用、代码还在写**，这是最坏的状态：读的人以为旧表是死的，实际上新旧两份都在长。同时 `GetBolos` 已经双源合并（`server/p3_cases.lua:96-135`），说明迁移方向是确定的，只是没执行完。
+- **为什么**：[B_PLAN.md](../B_PLAN.md) §2 明确"`police_arrests` 停止新写入；`police_bolos` 停止新写入"，但代码里 `police_arrests` 仍有 2 个写者，`police_bolos` 仍有 `CreateBolo`。**文档已经宣布弃用、代码还在写**，这是最坏的状态：读的人以为旧表是死的，实际上新旧两份都在长。同时 `GetBolos` 已经双源合并（`server/p3_cases.lua:96-135`），说明迁移方向是确定的，只是没执行完。
 - **检查方式**：从 `deprecations.md` 生成 json（或反之，人工同步 + 契约测试保证一致）；对每个 deprecated 表跑 FIT-02 的写扫描；命中且无 allowlist → FAIL。
 - **失败信息**：`FIT-12: custom-police/server/p2_system.lua:118 still INSERTs police_arrests, deprecated since v3.4 (replacement: police_reports kind='arrest')`。
 - **CI**：`Config & dependency checks`，blocking。
-- **现状**：❌ **FAIL**。`police_arrests` 写者：`server/p2_system.lua:118-120`（Sys.Jail，agent 路径）、`server/p3_cases.lua:145-162`（`RegisterArrest`）。`police_bolos` 写者：`server/p3_cases.lua:73-95`（`CreateBolo`），而 `GetBolos` 已改成 reports 优先（行 96-135）——写读不一致。legacy 命令/事件（`/911p`、`/fine`、`/jail`）没有登记。
+- **现状**：❌ **FAIL**。`police_arrests` 写者 2 个：`server/p2_system.lua:118-120`（Sys.Jail，agent 路径）、`server/p3_cases.lua:197-201`（`RegisterArrest`）。`police_bolos` 写者：`server/p3_cases.lua:73-95`（`CreateBolo`），而 `GetBolos` 已改成 reports 优先（行 96-135）——写读不一致。legacy 命令/事件（`/911p`、`/fine`、`/jail`）没有登记。
 - **例外**：`police_arrests` 历史数据要保留（`GetArrests` 继续读），allowlist 只豁免"读"，不豁免"写"。
 
 ### FIT-13 · 文档数字与代码常量一致
@@ -410,8 +410,8 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | FIT-01 | onduty 单一写者 | 3 | ❌ FAIL | 0 | 0 | 4 写者（`custom-main:236,261`、`custom-director:619-645`） |
 | FIT-02 | 跨资源表所有权 | 2 | ❌ FAIL | 0 | 0 | 5 处直写（police→phone_notifications ×4、justice→police_reports ×1） |
 | FIT-03 | net event 鉴权 | 3 | ❌ FAIL | 0 | 0 | 2/43 强校验；9 条 evidence 零校验 |
-| FIT-04 | export/action 错误码 + 审计 | 2 | ❌ FAIL | 0 | 0 | 13/17 action 把码压成布尔（与 [03-contracts.md](03-contracts.md) §0 结论 2 同一口径） |
-| FIT-05 | 审计 fail-closed | 3 | ❌ FAIL | 0 | 0 | p1/p3 忽略 audit 返回值；2 个读导出零审计 |
+| FIT-04 | export/action 错误码 + 审计 | 2 | ❌ FAIL | 0 | 0 | 14/17 action 把码压平（13 个 `ok and res ~= false` + `arrest_submit`；与 [03-contracts.md](03-contracts.md) §0 结论 2 同一口径） |
+| FIT-05 | 审计 fail-closed | 3 | ❌ FAIL | 0 | 0 | p1/p3 忽略 audit 返回值；5 个读导出零审计 |
 | FIT-06 | 迁移幂等 + fixture | 1 | ⚠️ PARTIAL | 0.5 | 0.5 | 迁移幂等 ✅ / fixture 缺 12 张表 ❌ |
 | FIT-07 | NPC 预算接口 | 2 | ✅ PASS | 1 | 2 | 唯一生成点 + 顺序正确；全局 cap 缺（属 05） |
 | FIT-08 | 注册表/生成物一致 | 1 | ✅ PASS | 1 | 1 | `agent_tools.py --check` 已进 CI |
@@ -479,5 +479,5 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | 12 张 fixture 缺表 | 迁移 `v2.8`–`v3.1` 的 `CREATE TABLE` 集合 − `tests/fixtures/tcity_schema.sql` 的 47 张表 |
 | 4 个 onduty 写者 | `custom-main/server/dispatch.lua:236,261`、`custom-director/server/main.lua:619-645` + 定义/服务两处 |
 | 5 处跨资源写 | `server/p0.lua:105`、`server/p1.lua:24`、`server/p2_system.lua:46,283`、`custom-justice/server/trial.lua:42` |
-| 13/17 action 压码 | `custom-phone/server/apps/police_mdt.lua:167-276`（仅 `arrest_submit`/`report_submit`/`request_backup` 透传表） |
+| 14/17 action 压平 | `custom-phone/server/apps/police_mdt.lua:167-275`（仅 `report_submit`/`request_backup` 透传表；13 个 `ok and res ~= false` + `arrest_submit`；`alert` 特例） |
 | 迁移幂等 | `migrations/v2.8`–`v3.7` 逐个人工核对（`IF NOT EXISTS` / `information_schema` 守卫），无 `DROP TABLE`/`TRUNCATE` |

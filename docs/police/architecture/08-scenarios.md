@@ -371,7 +371,7 @@ FROM police_audit WHERE action='backup.request' GROUP BY d ORDER BY d DESC;
 **4.2.5 资源重启**
 
 - `custom-police`：`police_units` 是 DB，状态保留；`syncDuty` 只在 JobUpdate/加载时写，启动后不会主动对账。`backupUnits`/`backupCooldown` 是内存，重启清零（名额“恢复”，但不审计）。
-- `custom-justice`：`activeCases`、`Inmates`、`caseCounter` 全丢（`main.lua:6-12`）。重启后 `CASE-0001` 从 0 重新开始；`persistVerdict` 按字符串 `justice_case_id` 更新，可能覆盖上一轮同号报告的判决（`trial.lua:41-43`）。这是当前最隐蔽的数据损坏路径。
+- `custom-justice`：`activeCases`、`Inmates`、`caseCounter` 全丢（`main.lua:7-12`）。重启后 `CASE-0001` 从 0 重新开始；`persistVerdict` 按字符串 `justice_case_id` 更新，可能覆盖上一轮同号报告的判决（`trial.lua:41-43`）。这是当前最隐蔽的数据损坏路径。
 - `qb-prison`：客户端 `onResourceStart` 从 `metadata.injail` 恢复（`qb-prison/client/main.lua:120-129`）；服务端 `GotItems` 内存表清零，`prison:server:CheckChance` 可再次触发（小号刷手机）。
 - 整服重启：DB 保留 report/citation/case/warrant，内存案件/囚犯/backup 全丢；`police_units` 旧状态保留；玩家 metadata 保留最后值。
 - 注意：改 `fxmanifest` 或新增 server 文件必须整服重启（或删 `cache/files/custom-police`），只 `restart` 不会加载新文件（`STATUS.md:36`）。
@@ -425,7 +425,7 @@ FROM police_audit WHERE action='backup.request' GROUP BY d ORDER BY d DESC;
 | grade 1 | `open_case`（逮捕时同时开庭） | **无 cap 检查**（`p2_system.lua:399-404,564-578`） | ⚠️ 可创建 justice 案件 | UI 写“Sergeant+”（`PoliceMDT.svelte:894-896`）与服务端不符；应加 `case.create` 或 `case.open` |
 | Sergeant (grade 2) | 派单/建案/BOLO/令状申请/`/plea` | caps minGrade=2；`/plea` 另有 grade≥2 + 无在线法官（`trial.lua:259-292`） | ✅ | `/plea` 无“被告同意”记录；逮捕已送监时判决无效 |
 | Sergeant | 令状批准/审计 | `warrant.approve`、`audit.view` minGrade=3（`policy.lua:24,27`） | ❌ `rank_too_low` | UI 仍显示“批准”按钮（`PoliceMDT.svelte:1119-1122`），F12 未修 |
-| Lieutenant (grade 3) | 令状批准/审计/部门/辖区 | `warrant.approve`、`audit.view` minGrade=3；部门/辖区命令要求 grade≥3（`commands.lua:160,184`） | ✅（批准/审计/部门/辖区，均 grade≥3） | 审计页 UI 已按 `isLieutenant` 隐藏（`PoliceMDT.svelte:295-296`），但后端仍正确；`/setjusticedept` 仍要求 judge 或 grade≥4（`custom-justice/server/main.lua:199`），与警察部门命令不同，需在文案区分 |
+| Lieutenant (grade 3) | 令状批准/审计/部门/辖区 | `warrant.approve`、`audit.view` minGrade=3；部门/辖区命令要求 grade≥3（`commands.lua:160,185`） | ✅（批准/审计/部门/辖区，均 grade≥3） | 审计页 UI 已按 `isLieutenant` 隐藏（`PoliceMDT.svelte:295-296`），但后端仍正确；`/setjusticedept` 仍要求 judge 或 grade≥4（`custom-justice/server/main.lua:199`），与警察部门命令不同，需在文案区分 |
 | Lieutenant | 罚单作废/报告审核/案件撤销 | 目标能力；当前没有 cap/入口 | ❌ | 无 `citation.void`、`report.approve`、`case.cancel` |
 | Agent L1 | `police_incident_create` | director risk L1、`requires_approval=false`、自动执行（`policy.lua:62-67`） | ✅ 自动建单 + 广播；`police_audit(actor_kind='agent')` | 无坐标；无人在线也能建（WORLD_ACTION） |
 | Agent L2 | `police_assign_unit` | L2、需审批（`policy.lua:50-55`）；`Sys.AssignUnit` 校验 incident/unit 非 off_duty（`p2_system.lua:77-95`） | ✅ 审批后执行 | 审批时重校验世界；unit 可能已变 busy |
@@ -445,7 +445,7 @@ FROM police_audit WHERE action='backup.request' GROUP BY d ORDER BY d DESC;
 6. **令状批准按钮**：UI 对所有 grade 渲染，服务端要 grade3（F12）；点击必失败。
 7. **agent L3 与玩家逮捕不一致**：agent 可对任意在线玩家送监，不要求上铐/距离；但有 L3 人审 + 审计，风险可接受但必须在文档/审批预览里写明“无物理前置”。
 8. **Agent 执行失败语义**：`Sys.Jail` 在 justice 失败时走 metadata 兜底，仍写 `police_arrests` 并返回表；director 认为 `ok=true`。可能出现“police_arrests 有记录、qb-prison 没进”或反之。
-9. **部门/辖区命令 grade**：`/setpoliceinfo` 类命令要 grade≥4（`commands.lua:161,186`），而 `Lieutenant` 是 grade3；文案/配置需对齐，否则“副警监不能分配部门”。
+9. **部门/辖区命令 grade 口径**：`/setdept`/`/setdistrict` 要求 grade≥3（`commands.lua:160,185`），与 `Lieutenant` 一致；真正不一致的是 `/setjusticedept` 要求 judge 或 grade≥4（`custom-justice/server/main.lua:199`），与警察侧部门命令口径不同，需在文案/配置对齐。
 
 ### 5.3 当前实现是否满足
 

@@ -10,6 +10,8 @@
 - 新增 `justice_cases` / `justice_verdicts` 持久表；
 - `custom-justice` 是唯一写者；`custom-police` 只读投影；
 - 案件号使用稳定序列，不回绕；
+- `justice_case_id` 是 `VARCHAR(32)` 展示号（`CASE-0001`）；与 `police_cases` 的关联用 BIGINT `case_id`（过渡期可加 `justice_case_ref`），不得把字符串写进 `case_id`；
+- 服刑计时落 `justice_sentences`（服务端 `ends_at`），由 ADR-0007 定义，不在本 ADR 重复；
 - 判决写入与 `police_reports.justice_verdict` 投影最终一致。
 
 ## 后果

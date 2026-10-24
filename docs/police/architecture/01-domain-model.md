@@ -159,7 +159,7 @@ flowchart LR
 | INV-R11 | `case_no` 唯一 | ⚠️ | 唯一索引（`migrations/v3.1:14`）但先插 NULL 再 UPDATE（`server/p3_cases.lua:51-57`） | 短窗口 NULL 号 |
 | INV-R12 | 金额由服务端计算 | ❌（独立路径） | 客户端直接传 `amount`（`server/p1.lua:43`） | 任意金额罚单（F4） |
 | INV-R13 | 所有记录写操作留审计 | ✅ | 每个写函数均 `audit(...)`（`p1:58,112`、`p2_evidence:63`、`p3:58,87,153,169,204`） | — |
-| INV-R14 | 所有敏感读留审计 | ❌ | 只有 `lookup.*`/`case.detail` 写（`server/p0.lua:187,227,245`、`p3:242`）；`GetCitations/GetReports/GetEvidence/GetWarrants/GetBolos/GetCases/GetAudit` 不写 | 批量翻档案无痕（A-13） |
+| INV-R14 | 所有敏感读留审计 | ❌ | **9 个写审计**（lookup.citizen/vehicle、case.detail、case.view、evidence.view、evidence.chain、bolo.view、warrant.view、arrest.view；仅前 3 个 fail-closed，其余忽略返回值）；**5 个完全不写**（`GetUnits/GetIncidents/GetAudit/GetCitations/GetReports`） | 批量翻档案无痕（A-13） |
 | INV-R15 | 幂等：重复提交返回同一 id | ❌ | `police_*` 全表无幂等键（对比 `agent_actions.idempotency_key`） | 重复点按生成多条记录 |
 
 ---
