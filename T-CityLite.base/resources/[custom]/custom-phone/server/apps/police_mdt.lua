@@ -33,6 +33,27 @@ PhoneApps.Register({
     icon = '🛡️',
     audience = { jobs = { 'police' }, onduty = true },
     queries = {
+        -- Identity of the caller for the "Me" page. The audit section is
+        -- rendered from this grade (Lieutenant+ = grade >= 3).
+        me = function(source)
+            local qb = core()
+            local Player = qb and qb.Functions and qb.Functions.GetPlayer(source)
+            local data = Player and Player.PlayerData
+            if type(data) ~= 'table' then return { rows = {}, count = 0 } end
+            local job = type(data.job) == 'table' and data.job or {}
+            local grade = 0
+            if type(job.grade) == 'table' then grade = tonumber(job.grade.level) or 0
+            else grade = tonumber(job.grade) or 0 end
+            local metadata = type(data.metadata) == 'table' and data.metadata or {}
+            return {
+                rows = { {
+                    citizenid = data.citizenid,
+                    callsign = tostring(metadata.callsign or ''),
+                    grade = grade,
+                } },
+                count = 1,
+            }
+        end,
         units = function(_source)
             local ok, res = pcall(function() return exports['custom-police']:GetUnits() end)
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
