@@ -20,6 +20,44 @@
 
   const DB = 'police_mdt';
 
+  type ReportTemplate = { id: string; label: string; title: string; body: string };
+  type CitationTemplate = { id: string; label: string; reason: string };
+
+  // MDT 内置模板：选中只做本地填充，用户仍可编辑，提交照旧走服务端校验。
+  const REPORT_TEMPLATES: ReportTemplate[] = [
+    {
+      id: 'traffic_stop',
+      label: '交通拦截',
+      title: '交通拦截报告',
+      body: '时间：\n地点：\n车牌 / 车辆：\n涉及人员：\n拦截经过：\n处置结果：',
+    },
+    {
+      id: 'theft',
+      label: '盗窃',
+      title: '盗窃案件报告',
+      body: '时间：\n地点：\n报案人 / 受害人：\n涉案财物：\n现场情况：\n调查经过：\n后续处理：',
+    },
+    {
+      id: 'violence',
+      label: '暴力事件',
+      title: '暴力事件报告',
+      body: '时间：\n地点：\n涉事人员：\n伤情 / 损失：\n事件经过：\n处置与缴获：',
+    },
+    {
+      id: 'after_action',
+      label: '尾声报告',
+      title: '行动尾声报告',
+      body: '行动名称：\n行动时间：\n参与单位：\n行动目标：\n行动经过：\n结果与后续：',
+    },
+  ];
+
+  const CITATION_TEMPLATES: CitationTemplate[] = [
+    { id: 'speeding', label: '超速', reason: '超速驾驶：在限速路段超过规定时速，违反交通法规。' },
+    { id: 'red_light', label: '闯红灯', reason: '闯红灯：未按交通信号灯指示通行，违反交通法规。' },
+    { id: 'illegal_parking', label: '非法停车', reason: '非法停车：在禁止停车区域停放车辆，妨碍交通通行。' },
+    { id: 'disorderly', label: '扰乱秩序', reason: '扰乱秩序：在公共场所实施扰乱公共秩序的行为。' },
+  ];
+
   let page = $state<Page>('dispatch');
   let dispatchSeg = $state<'units' | 'incidents'>('units');
   let personSeg = $state<'citizen' | 'vehicle'>('citizen');
@@ -98,6 +136,57 @@
     }
     return String(raw ?? '');
   };
+
+  // Person 查询分源展示：warrant / BOLO / 实时星级各自成组，旧 wants 不再渲染。
+  const PERSON_GROUP_KEYS = new Set(['wants', 'warrants', 'bolo', 'active_wanted']);
+
+  function personFields(row: Record<string, unknown>): [string, unknown][] {
+    return Object.entries(row).filter(([key, value]) => (
+      !PERSON_GROUP_KEYS.has(key) && value !== null && value !== undefined && value !== ''
+    ));
+  }
+
+  function asList(value: unknown): unknown[] {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function describeItem(item: unknown): string {
+    if (item === null || item === undefined) return '';
+    if (typeof item !== 'object') return String(item);
+    if (Array.isArray(item)) return item.map(describeItem).filter(Boolean).join('、');
+    return Object.entries(item as Record<string, unknown>)
+      .filter(([, value]) => value !== null && value !== undefined && value !== '' && typeof value !== 'object')
+      .map(([key, value]) => `${key}: ${String(value)}`)
+      .join(' · ');
+  }
+
+  function wantedStars(value: unknown): string {
+    const stars = Math.max(0, Math.min(5, Math.floor(Number(value) || 0)));
+    return '★'.repeat(stars) + '☆'.repeat(5 - stars);
+  }
+
+  // justice_verdict 由服务端写成 JSON；解析失败时原样显示，绝不吞掉判词。
+  function verdictText(raw: unknown): string {
+    if (raw === null || raw === undefined || raw === '') return '';
+    const text = typeof raw === 'string' ? raw : '';
+    let parsed: any = raw;
+    if (typeof raw === 'string') {
+      try { parsed = JSON.parse(raw); } catch { return text; }
+    }
+    if (!parsed || typeof parsed !== 'object') return text || String(raw);
+    const parts: string[] = [];
+    if (parsed.finalMinutes !== undefined && parsed.finalMinutes !== null) {
+      parts.push(`刑期 ${Number(parsed.finalMinutes) || 0} 分钟`);
+    }
+    if (parsed.fine !== undefined && parsed.fine !== null) {
+      parts.push(`罚款 $${Number(parsed.fine) || 0}`);
+    }
+    if (parsed.mode) {
+      parts.push(parsed.mode === 'trial' ? '庭审（trial）'
+        : parsed.mode === 'plea' ? '认罪协商（plea）' : String(parsed.mode));
+    }
+    return parts.length ? parts.join(' · ') : (text || JSON.stringify(parsed));
+  }
 
   const statusLabel: Record<string, string> = {
     off_duty: '10-7 下班', available: '10-8 在勤', busy: '10-6 忙碌',
@@ -292,6 +381,33 @@
     if (coords.every((n) => Number.isFinite(n))) {
       reportForm.location = coords.map((n) => n.toFixed(1)).join(', ');
     }
+  }
+
+  // 模板只填充开头，已有正文保留在模板之后，最终内容仍由用户确认。
+  function applyReportTemplate(templateId: string) {
+    const template = REPORT_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+    if (!reportForm.title.trim()) reportForm.title = template.title;
+    if (!reportForm.body.trim()) reportForm.body = template.body;
+    else if (!reportForm.body.startsWith(template.body)) {
+      reportForm.body = `${template.body}\n\n${reportForm.body}`;
+    }
+  }
+
+  function applyArrestTemplate(templateId: string) {
+    const template = REPORT_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+    const heading = `【${template.label}】\n${template.body}`;
+    if (!arrestForm.details.trim()) arrestForm.details = heading;
+    else if (!arrestForm.details.startsWith(heading)) {
+      arrestForm.details = `${heading}\n\n${arrestForm.details}`;
+    }
+  }
+
+  function applyCitationTemplate(templateId: string) {
+    const template = CITATION_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+    citationForm.reason = template.reason;
   }
 
   async function createReport() {
@@ -611,7 +727,18 @@
         </div>
         {#if lookupError}<p class="err">{lookupError}</p>{/if}
         {#each lookupRows as row}
-          {#each Object.entries(row) as [k, v]}<p class="line"><b>{k}</b> {String(v)}</p>{/each}
+          {#each personFields(row) as [k, v]}<p class="line"><b>{k}</b> {String(v)}</p>{/each}
+          {#if asList(row.warrants).length > 0}
+            <p class="line"><b>通缉/令状</b> <span class="tag">{asList(row.warrants).length}</span></p>
+            {#each asList(row.warrants) as w}<p class="line">• {describeItem(w)}</p>{/each}
+          {/if}
+          {#if asList(row.bolo).length > 0}
+            <p class="line"><b>BOLO</b> <span class="tag">{asList(row.bolo).length}</span></p>
+            {#each asList(row.bolo) as b}<p class="line">• {describeItem(b)}</p>{/each}
+          {/if}
+          {#if Number(row.active_wanted ?? 0) > 0}
+            <p class="line"><b>实时通缉星级</b> <span class="tag">{wantedStars(row.active_wanted)}</span> <span class="muted">{Number(row.active_wanted)} 星</span></p>
+          {/if}
         {/each}
       </section>
     {:else}
@@ -669,6 +796,14 @@
         <p class="line">合计：<b>{chargeMinutes}</b> 分钟 · <b>${chargeFine}</b> <span class="muted">实际以服务端裁定为准</span></p>
 
         <div class="form">
+          <select class="wide" value="" onchange={(e) => {
+            const el = e.currentTarget as HTMLSelectElement;
+            applyArrestTemplate(el.value);
+            el.value = '';
+          }}>
+            <option value="">套用逮捕报告模板…</option>
+            {#each REPORT_TEMPLATES as t}<option value={t.id}>{t.label}</option>{/each}
+          </select>
           <textarea bind:value={arrestForm.details} rows="3" placeholder="报告正文（可选）"></textarea>
         </div>
 
@@ -717,6 +852,14 @@
       <section class="card">
         <h3>提交报告</h3>
         <div class="form">
+          <select class="wide" value="" onchange={(e) => {
+            const el = e.currentTarget as HTMLSelectElement;
+            applyReportTemplate(el.value);
+            el.value = '';
+          }}>
+            <option value="">套用报告模板…</option>
+            {#each REPORT_TEMPLATES as t}<option value={t.id}>{t.label}</option>{/each}
+          </select>
           <input bind:value={reportForm.title} placeholder="标题（必填）" />
           <textarea class="wide" bind:value={reportForm.body} rows="4" placeholder="报告正文（必填，至少 10 字）"></textarea>
         </div>
@@ -786,6 +929,14 @@
       <section class="card">
         <h3>开罚单</h3>
         <div class="form">
+          <select class="wide" value="" onchange={(e) => {
+            const el = e.currentTarget as HTMLSelectElement;
+            applyCitationTemplate(el.value);
+            el.value = '';
+          }}>
+            <option value="">套用罚单模板…</option>
+            {#each CITATION_TEMPLATES as t}<option value={t.id}>{t.label}</option>{/each}
+          </select>
           <input bind:value={citationForm.citizenid} placeholder="citizenid" />
           <input bind:value={citationForm.amount} type="number" placeholder="金额" />
           <input bind:value={citationForm.plate} placeholder="车牌(可选)" />
@@ -851,13 +1002,23 @@
             <p class="muted">{caseDetail.case.summary}</p>
             <p class="line">报告 {caseDetail.reports.length} · 证据 {caseDetail.evidence.length} · 逮捕 {caseDetail.arrests.length}</p>
             {#each caseDetail.reports as r}
-              <p class="line">📄 #{String(r.id)} {String(r.title)}</p>
+              <div class="line">
+                📄 #{String(r.id)} {String(r.title)}
+                {#if r.justice_case_id}<span class="tag">justice 案件 {String(r.justice_case_id)}</span>{/if}
+                {#if r.justice_status}<span class="tag">{String(r.justice_status)}</span>{/if}
+                {#if r.justice_verdict}<p class="muted">判决：{verdictText(r.justice_verdict)}</p>{/if}
+              </div>
             {/each}
             {#each caseDetail.evidence as e}
               <p class="line">🧾 {String(e.exhibit_no ?? '')} {String(e.label)}</p>
             {/each}
             {#each caseDetail.arrests as a}
-              <p class="line">🚔 {String(a.citizenid)} · {String(a.charges)}</p>
+              <div class="line">
+                🚔 {String(a.citizenid)} · {formatCharges(a.charges)}
+                {#if a.justice_case_id}<span class="tag">justice 案件 {String(a.justice_case_id)}</span>{/if}
+                {#if a.justice_status}<span class="tag">{String(a.justice_status)}</span>{/if}
+                {#if a.justice_verdict}<p class="muted">判决：{verdictText(a.justice_verdict)}</p>{/if}
+              </div>
             {/each}
           </div>
         {/if}
@@ -974,7 +1135,7 @@
   .clear { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #b91c1c; color: #fff; }
   .lookup, .form { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   .form input, .form textarea, .form select { flex: 1 1 45%; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
-  .form textarea.wide { flex-basis: 100%; }
+  .form textarea.wide, .form select.wide { flex-basis: 100%; }
   .form button { border: 0; border-radius: 8px; padding: 6px 10px; background: #2563eb; color: #fff; font-size: 11px; }
   .charge-list { max-height: 200px; overflow-y: auto; margin-bottom: 6px; }
   .charge { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.06); }

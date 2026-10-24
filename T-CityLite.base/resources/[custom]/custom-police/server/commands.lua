@@ -225,16 +225,6 @@ QBCore.Commands.Add('callsign', Lang:t('commands.callsign'), { { name = 'name', 
     Player.Functions.SetMetaData('callsign', table.concat(args, ' '))
 end)
 
-QBCore.Commands.Add('jail', Lang:t('commands.jail_player'), {}, false, function(source)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.onduty then
-        TriggerClientEvent('police:client:JailPlayer', src)
-    else
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.on_duty_police_only'), 'error')
-    end
-end)
-
 QBCore.Commands.Add('unjail', Lang:t('commands.unjail_player'), { { name = 'id', help = Lang:t('info.player_id') } }, true, function(source, args)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)

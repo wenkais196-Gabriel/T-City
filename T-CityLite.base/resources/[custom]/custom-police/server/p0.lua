@@ -192,9 +192,10 @@ end
 function P.LookupCitizen(source, citizenid)
     local actor, err = lookupAllowed(source, 'lookup.citizen', 'lookup.citizen')
     if not actor then return false, err end
+    local cid = tostring(citizenid or ''):sub(1, 50)
     local row = MySQL.single.await(
         'SELECT citizenid, charinfo, job, metadata, last_seen FROM players WHERE citizenid = ? LIMIT 1',
-        { tostring(citizenid or ''):sub(1, 50) })
+        { cid })
     if not row then return false, 'not_found' end
     local info = row.charinfo
     if type(info) == 'string' then pcall(function() info = json.decode(info) end) end
@@ -205,12 +206,31 @@ function P.LookupCitizen(source, citizenid)
     local meta = row.metadata
     if type(meta) == 'string' then pcall(function() meta = json.decode(meta) end) end
     meta = type(meta) == 'table' and meta or {}
+
+    -- Three independent wanted sources stay separate so the MDT can label each
+    -- one: warrants (long-lived court orders), BOLO tags on reports, and the
+    -- live custom-main star level in metadata.wanted. Never merge them into a
+    -- single `wants` value.
+    local warrants = MySQL.query.await([[
+        SELECT id, reason, status, created_at
+          FROM police_warrants
+         WHERE citizenid = ? AND status IN ('approved','requested')
+         ORDER BY id DESC LIMIT 5
+    ]], { row.citizenid }) or {}
+    local bolo = MySQL.query.await([[
+        SELECT id, kind, target, created_at
+          FROM police_reports
+         WHERE subject_citizenid = ? AND is_bolo = 1
+         ORDER BY id DESC LIMIT 5
+    ]], { row.citizenid }) or {}
+
     audit(actor.citizenid, 'lookup.citizen.result', tostring(row.citizenid), nil)
     return {
         citizenid = row.citizenid,
         name = ('%s %s'):format(tostring(info.firstname or '?'), tostring(info.lastname or '?')),
         birthdate = info.birthdate, job = job.name or 'unemployed',
-        wants = meta.wanted, last_seen = tostring(row.last_seen or ''),
+        warrants = warrants, bolo = bolo, active_wanted = meta.wanted,
+        last_seen = tostring(row.last_seen or ''),
     }
 end
 

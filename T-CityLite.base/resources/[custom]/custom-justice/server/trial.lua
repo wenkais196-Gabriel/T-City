@@ -25,6 +25,29 @@ local function notifyResolveError(src, err)
     end
 end
 
+--- 把判决回写到关联的警情报告（police_reports.justice_case_id）。
+--- 尽力而为：编码或 DB 失败只打印警告，不影响内存判决与入狱流程。
+local function persistVerdict(caseId, verdict, status)
+    local ok, encoded = pcall(json.encode, verdict)
+    if not ok or type(encoded) ~= 'string' then
+        print(('[justice-trial] ⚠️ 判决编码失败，跳过回写: %s'):format(tostring(caseId)))
+        return
+    end
+    -- RegisterCommand callbacks are not guaranteed to be yieldable, so the
+    -- await runs in its own thread: the caller never waits on the DB and a
+    -- failure can only warn.
+    CreateThread(function()
+        local wrote, result = pcall(function()
+            return MySQL.update.await(
+                'UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?',
+                { encoded, status, tostring(caseId) })
+        end)
+        if not wrote then
+            print(('[justice-trial] ⚠️ 判决回写失败 (%s): %s'):format(tostring(caseId), tostring(result)))
+        end
+    end)
+end
+
 --- 用 QBCore.Functions.GetPlayers() + 每个玩家的 job 判断当前是否有在线法官。
 local function hasOnlineJudge()
     local players = QBCore.Functions.GetPlayers()
@@ -167,6 +190,12 @@ function JusticeService.ResolveCase(caseId, opts)
     end
 
     case.status = 'closed'
+
+    -- justice cases live in memory only; mirror the verdict onto the linked
+    -- police report so the MDT can still show it after the case is gone.
+    -- Best effort and placed after the sentence, so a DB failure cannot alter
+    -- the in-memory verdict or the jail time.
+    persistVerdict(caseId, verdict, case.status)
     return verdict
 end
 
