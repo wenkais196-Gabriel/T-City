@@ -623,12 +623,35 @@ local function executeSetJobDuty(actionId, params)
     local currentJob = playerJob(player) or {}
     local before = currentJob.onduty
 
-    local callOk, callErr = pcall(function()
-        player.Functions.SetJobDuty(params.onduty)
-    end)
-    if not callOk then
-        return false, ('execution_failed: SetJobDuty threw: %s'):format(
-            truncate(callErr, 150)), nil
+    if currentJob.type == 'leo' or currentJob.name == 'police' then
+        -- FIT-01: police duty has a single writer in custom-police. Route the
+        -- agent action through the owner export; the read-back below still
+        -- verifies the same PlayerData field.
+        local source = playerSource(player)
+        if not source or source <= 0 then
+            return false, 'player_source_unavailable', nil
+        end
+        local callOk, dutyOk, dutyErr = pcall(function()
+            return exports['custom-police']:SetDutyForSource(source, params.onduty, 'director')
+        end)
+        if not callOk then
+            return false, ('execution_failed: SetDutyForSource threw: %s'):format(
+                truncate(dutyOk, 150)), nil
+        end
+        if dutyOk ~= true then
+            return false, ('execution_failed: SetDutyForSource rejected: %s'):format(
+                tostring(dutyErr or 'duty_failed')), nil
+        end
+    else
+        -- FIT-01: 非 leo / ambulance/mechanic/taxi targets keep qb-core's own
+        -- projection; only police duty is owned by custom-police.
+        local callOk, callErr = pcall(function()
+            player.Functions.SetJobDuty(params.onduty)
+        end)
+        if not callOk then
+            return false, ('execution_failed: SetJobDuty threw: %s'):format(
+                truncate(callErr, 150)), nil
+        end
     end
 
     -- SetJobDuty may only set IsDirty in qb-core, so PlayerData.job.onduty is

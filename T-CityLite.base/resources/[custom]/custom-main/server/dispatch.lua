@@ -228,20 +228,33 @@ QBCore.Commands.Add('duty', '快速切换执勤 (On Duty) / 下班 (Off Duty) �
     end
     
     local jobName = Player.PlayerData.job.name
-    if jobName == 'police' or jobName == 'ambulance' or jobName == 'mechanic' or jobName == 'taxi' then
-        local currentDuty = Player.PlayerData.job.onduty
-        local newDuty = not currentDuty
-        
-        -- 调用 QBCore 原生 API 更新上下班状态
-        Player.Functions.SetJobDuty(newDuty)
-        
-        if newDuty then
-            TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_on_duty'), "success")
-        else
-            TriggerClientEvent('QBCore:Notify', src, "你已成功进入【下班休息】状态！", "warning")
+    local currentDuty = Player.PlayerData.job.onduty
+    local newDuty = not currentDuty
+    if jobName == 'police' then
+        -- FIT-01: police duty has a single writer in custom-police. Never
+        -- touch PlayerData.job.onduty from custom-main for a police officer.
+        local callOk, dutyOk, dutyErr = pcall(function()
+            return exports['custom-police']:SetDutyForSource(src, newDuty, 'quick_command')
+        end)
+        if not callOk or dutyOk ~= true then
+            local reason = callOk and tostring(dutyErr or 'duty_failed') or tostring(dutyOk)
+            TriggerClientEvent('QBCore:Notify', src,
+                ('切换执勤失败（%s），请稍后重试'):format(reason), "error", 6000)
+            return
         end
+    elseif jobName == 'ambulance' or jobName == 'mechanic' or jobName == 'taxi' then
+        -- FIT-01: 非 leo / ambulance/mechanic/taxi keep qb-core's own
+        -- projection; only police duty is owned by custom-police.
+        Player.Functions.SetJobDuty(newDuty)
     else
         TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_no_duty_switch'), "error")
+        return
+    end
+
+    if newDuty then
+        TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_on_duty'), "success")
+    else
+        TriggerClientEvent('QBCore:Notify', src, "你已成功进入【下班休息】状态！", "warning")
     end
 end, 'user')
 
@@ -257,8 +270,24 @@ AddEventHandler('QBCore:Server:OnJobUpdate', function(src, job)
     
     -- 如果玩家处于通缉在逃状态，且其新状态为执勤上班 (job.onduty == true)
     if (WantedPlayers[citizenid] or savedWanted > 0) and job.onduty then
-        -- 强行锁回下班状态
-        Player.Functions.SetJobDuty(false)
+        local jobName = job.name or Player.PlayerData.job.name
+        if jobName == 'police' then
+            -- FIT-01: police duty is owned by custom-police. Force the
+            -- projection through the service so the unit row and audit stay
+            -- consistent; never fall back to a direct write here.
+            local callOk, dutyOk, dutyErr = pcall(function()
+                return exports['custom-police']:SetDutyForSource(src, false, 'wanted_lock')
+            end)
+            if not callOk or dutyOk ~= true then
+                local maskedCid = citizenid:sub(1, 4) .. '...' .. citizenid:sub(-4)
+                print(('[custom-main] wanted duty lock failed for %s: %s'):format(
+                    maskedCid, callOk and tostring(dutyErr or 'duty_failed') or tostring(dutyOk)))
+            end
+        else
+            -- FIT-01: 非 leo / ambulance/mechanic/taxi keep qb-core's own
+            -- projection; only police duty is owned by custom-police.
+            Player.Functions.SetJobDuty(false)
+        end
         TriggerClientEvent('QBCore:Notify', src, _L(src, 'dispatch_wanted_block_clock'), "error", 8000)
     end
 end)

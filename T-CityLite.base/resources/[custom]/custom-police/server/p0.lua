@@ -120,8 +120,11 @@ function P.SetUnitStatus(citizenid, callsign, status)
     local player = QBCore.Functions.GetPlayerByCitizenId(cid)
     if status == 'off_duty' then
         if player and isPolice(player.PlayerData) then
-            pcall(function() player.Functions.SetJobDuty(false) end)
-            if player.PlayerData.job.onduty == true then return false, 'duty_failed' end
+            -- FIT-01: job.onduty is owned by the duty service below. An
+            -- offline citizen has no live player to project, so that branch
+            -- still writes the unit row only.
+            local ok, err = P.SetDutyForSource(player.PlayerData.source, false, 'unit_status')
+            if not ok then return false, err or 'duty_failed' end
         end
     elseif not player then
         -- A system/agent caller may only park an offline citizen.
@@ -451,6 +454,34 @@ local function syncDuty(data)
     end
 end
 
+-- FIT-01: the single police duty writer. 10-8/10-7, /duty's quick command and
+-- custom-director's set_job_duty on a police target all come through here.
+-- qb-core's SetJobDuty stays the primitive projection: it returns nothing, so
+-- the value is read back from PlayerData.job.onduty, then projected through
+-- syncDuty and audited as `duty.set`.
+function P.SetDutyForSource(source, onDuty, reason)
+    local data = pd(source)
+    if not isPolice(data) then return false, 'not_police' end
+    if onDuty ~= true and onDuty ~= false then return false, 'duty_failed' end
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player then return false, 'not_police' end
+
+    local ok = pcall(function() player.Functions.SetJobDuty(onDuty) end)
+    if not ok or data.job.onduty ~= onDuty then return false, 'duty_failed' end
+
+    -- SetJobDuty raises OnJobUpdate synchronously, whose handler already calls
+    -- syncDuty. Calling it again is an idempotent safety net for builds that
+    -- do not raise the event; syncDuty never calls SetJobDuty, so no recursion.
+    syncDuty(data)
+
+    local detail = ('%s:%s'):format(
+        onDuty and 'on' or 'off', tostring(reason or 'unspecified'):sub(1, 100))
+    if not audit(data.citizenid, 'duty.set', data.citizenid, detail) then
+        print(('[custom-police] duty.set audit failed for %s'):format(tostring(data.citizenid)))
+    end
+    return true
+end
+
 -- FIT-03: both are qb-core *server-internal* events (qb-core fires them with
 -- TriggerEvent). They were registered with RegisterNetEvent, which put them on
 -- the client-triggerable surface: any client could send a forged job table for
@@ -633,14 +664,11 @@ function P.SetUnitStatusForSource(source, status)
     if not isPolice(data) then return false, 'not_police' end
     if not VALID_STATUS[status] then return false, 'invalid_status' end
     local callsign = type(data.metadata) == 'table' and data.metadata.callsign or nil
-    local player = QBCore.Functions.GetPlayer(source)
 
     if status == 'off_duty' then
-        -- 10-7: qb-core projection first, then the unit row. SetJobDuty raises
-        -- OnJobUpdate synchronously; syncDuty is idempotent and never calls
-        -- SetJobDuty, so this cannot recurse.
-        pcall(function() player.Functions.SetJobDuty(false) end)
-        if data.job.onduty == true then return false, 'duty_failed' end
+        -- 10-7: the duty service owns the qb-core projection and its audit.
+        local ok, err = P.SetDutyForSource(source, false, 'unit_status')
+        if not ok then return false, err or 'duty_failed' end
         upsertUnit(data.citizenid, callsign, 'off_duty')
         if not audit(data.citizenid, 'unit.status', 'off_duty', nil) then
             print(('[custom-police] unit.status audit failed for %s'):format(tostring(data.citizenid)))
@@ -650,8 +678,8 @@ function P.SetUnitStatusForSource(source, status)
 
     if status == 'available' then
         -- 10-8 is the one status that turns the qb-core projection on.
-        pcall(function() player.Functions.SetJobDuty(true) end)
-        if data.job.onduty ~= true then return false, 'duty_failed' end
+        local ok, err = P.SetDutyForSource(source, true, 'unit_status')
+        if not ok then return false, err or 'duty_failed' end
         upsertUnit(data.citizenid, callsign, 'available')
         if not audit(data.citizenid, 'unit.status', 'available', nil) then
             print(('[custom-police] unit.status audit failed for %s'):format(tostring(data.citizenid)))
@@ -670,6 +698,7 @@ end
 
 exports('SetUnitStatus', P.SetUnitStatus)
 exports('SetUnitStatusForSource', P.SetUnitStatusForSource)
+exports('SetDutyForSource', P.SetDutyForSource)
 exports('GetUnits', P.GetUnits)
 exports('CreateIncident', P.CreateIncident)
 exports('GetIncidents', P.GetIncidents)
