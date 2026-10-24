@@ -29,11 +29,12 @@ local function utf8Sub(s, limit)
     return s:sub(1, limit)
 end
 
-local function audit(cid, action, target, detail)
+local function audit(cid, action, target, detail, actorKind)
     return pcall(function()
         MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, "player", ?, ?, ?)',
-            { cid, action, target, detail and utf8Sub(tostring(detail), 500) or nil })
+            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
+            { cid, actorKind or 'player', action, target,
+              detail and utf8Sub(tostring(detail), 500) or nil })
     end)
 end
 
@@ -262,13 +263,15 @@ function C.GetCaseDetail(source, caseId)
     if not allowed then return false, reason end
     local id = tonumber(caseId)
     if not id then return false, 'invalid_case' end
+    -- FIT-04: audit first, then read. The aggregate below contains reports,
+    -- evidence and arrests, so a failed audit must never release any of it.
+    if not audit(actor.citizenid, 'case.detail', tostring(id), nil) then
+        return false, 'audit_unavailable'
+    end
     local caseRow = MySQL.single.await(
         'SELECT id, case_no, title, summary, status, lead_citizenid, created_by, created_at, updated_at FROM police_cases WHERE id = ? LIMIT 1',
         { id })
     if not caseRow then return false, 'not_found' end
-    if not audit(actor.citizenid, 'case.detail', tostring(id), nil) then
-        return false, 'audit_unavailable'
-    end
     local reports = MySQL.query.await(
         'SELECT id, title, author_citizenid, status, created_at, justice_case_id, justice_verdict, justice_status FROM police_reports WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
     local evidence = MySQL.query.await(
@@ -302,13 +305,15 @@ end
 ---@param justiceCaseId string|number
 ---@param verdictJson string
 ---@param status string
----@return boolean ok
+---@return boolean ok, string|nil error
 function C.RecordVerdict(justiceCaseId, verdictJson, status)
     local caseId = type(justiceCaseId) == 'string' and justiceCaseId
         or (type(justiceCaseId) == 'number' and tostring(justiceCaseId) or '')
-    if caseId == '' or #caseId > 32 then return false end
-    if type(verdictJson) ~= 'string' or verdictJson == '' or #verdictJson > 65535 then return false end
-    if status ~= 'sentenced' and status ~= 'closed' then return false end
+    if caseId == '' or #caseId > 32 then return false, 'invalid_justice_case' end
+    if type(verdictJson) ~= 'string' or verdictJson == '' or #verdictJson > 65535 then
+        return false, 'invalid_verdict'
+    end
+    if status ~= 'sentenced' and status ~= 'closed' then return false, 'invalid_status' end
 
     local ok = pcall(function()
         MySQL.update.await(
@@ -317,8 +322,14 @@ function C.RecordVerdict(justiceCaseId, verdictJson, status)
     end)
     if not ok then
         print(('[custom-police] justice verdict write failed for %s'):format(tostring(caseId)))
+        return false, 'db_error'
     end
-    return ok
+    -- FIT-04: owner writes are audited too. The row is already committed, so a
+    -- failed audit is logged rather than reported as a write failure.
+    if not audit('system', 'justice.verdict', caseId, status, 'system') then
+        print(('[custom-police] justice.verdict audit failed for %s'):format(tostring(caseId)))
+    end
+    return true
 end
 
 exports('CreateCase', C.CreateCase)

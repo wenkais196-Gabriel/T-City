@@ -1,0 +1,36 @@
+{
+  "$comment": "FIT-10 export-consumer allowlist — a started resource may call exports['<res>'] only when <res> is also started (resolved from server.cfg / server.cfg.template) or is an external dependency that intentionally lives outside this repo. Entries are validated by tests/architecture/test_resource_wiring.py: every field is required, expires is a hard date, and an entry that no longer matches any consumer fails as stale. Do not use this file to hide a missing resource: start it or register the real dependency here.",
+  "version": 1,
+  "rule": "FIT-10",
+  "external_dependencies": [
+    {
+      "id": "legacyfuel-external",
+      "resource": "LegacyFuel",
+      "reason": "qb-ambulancejob / qb-hud / qb-vehicleshop 的既有车载油量兼容调用；LegacyFuel 是外部资源，不在本仓库也不在启动链中，替换为 qb-fuel 前保留。",
+      "added": "2026-10-24",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "qb-jobs-external",
+      "resource": "qb-jobs",
+      "reason": "qb-clothing 的旧 jobs 表读取桥接；qb-jobs 未随精简启动链加载，属于外部兼容依赖。",
+      "added": "2026-10-24",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "qb-vehiclekeys-external",
+      "resource": "qb-vehiclekeys",
+      "reason": "custom-vehicles 与 qb-core 的车辆钥匙兼容调用；本仓库不包含 qb-vehiclekeys，钥匙逻辑由 custom-vehicles 的兼容层兜底。",
+      "added": "2026-10-24",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "qb-houses-deferred",
+      "resource": "qb-houses",
+      "kind": "deferred_repo_resource",
+      "reason": "qb-houses 存在于 resources/ 但不在精简启动链里（check_dependencies.DEFERRED_RESOURCES）；qb-garages 只在车库类型为 house 时调用它的 hasKey 导出，属于休眠分支。真正启用房屋系统时先从启动链移除本例外。",
+      "added": "2026-10-24",
+      "expires": "2027-03-31"
+    }
+  ]
+}

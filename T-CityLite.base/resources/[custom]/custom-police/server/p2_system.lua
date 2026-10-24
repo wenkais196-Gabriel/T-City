@@ -99,12 +99,14 @@ end
 --- the caller decides whether that is fatal (notifications are best-effort).
 ---@param topic string
 ---@param payload table
----@return boolean ok, number|nil id
+---@return boolean ok, number|string|nil id_or_error
 function Outbox.Enqueue(topic, payload)
-    if type(topic) ~= 'string' or not OUTBOX_TOPICS[topic] then return false end
-    if type(payload) ~= 'table' then return false end
+    if type(topic) ~= 'string' or not OUTBOX_TOPICS[topic] then
+        return false, 'invalid_topic'
+    end
+    if type(payload) ~= 'table' then return false, 'invalid_payload' end
     local encoded = outboxEncode(payload)
-    if not encoded then return false end
+    if not encoded then return false, 'encode_failed' end
 
     local enqueued, result = pcall(function()
         return MySQL.insert.await(
@@ -113,7 +115,7 @@ function Outbox.Enqueue(topic, payload)
     end)
     if not enqueued then
         print(('[custom-police] outbox enqueue failed (%s): %s'):format(topic, tostring(result)))
-        return false
+        return false, 'db_error'
     end
     Outbox.Kick()
     return true, InsertId(result)

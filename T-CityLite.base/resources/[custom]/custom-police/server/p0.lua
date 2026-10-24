@@ -139,7 +139,17 @@ function P.SetUnitStatus(citizenid, callsign, status)
     return true
 end
 
-function P.GetUnits()
+--- Live unit board. The rows carry citizenid + display name, so this is a
+--- capability-gated sensitive read: the `units.view` audit row must land
+--- before the SELECT, and a failed audit refuses the listing.
+---@param source number requesting officer source
+function P.GetUnits(source)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'units.view')
+    if not allowed then return false, reason end
+    if not audit(actor.citizenid, 'units.view', nil, nil) then
+        return false, 'audit_unavailable'
+    end
     local rows = MySQL.query.await(
         'SELECT citizenid, callsign, dept, status, incident_id FROM police_units ORDER BY citizenid LIMIT 100') or {}
     local names = {}
@@ -196,11 +206,23 @@ function P.CreateIncident(source, data)
     return { id = tonumber(id), status = 'open' }
 end
 
-function P.GetIncidents(status)
+--- Live incident queue. Descriptions/locations are sensitive operational data,
+--- so the read requires `incident.update` (the existing board capability; the
+--- policy table has no incident.view) and writes an `incident.view` audit row
+--- before the SELECT. A failed audit refuses the listing.
+---@param source number requesting officer source
+---@param status string|nil optional active-status filter
+function P.GetIncidents(source, status)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return false, reason end
     if status ~= nil and status ~= '' then
         if not INCIDENT_LIST_STATUS[status] then return false, 'invalid_status' end
     else
         status = nil
+    end
+    if not audit(actor.citizenid, 'incident.view', tostring(status or 'active'), nil) then
+        return false, 'audit_unavailable'
     end
     local rows
     if status then

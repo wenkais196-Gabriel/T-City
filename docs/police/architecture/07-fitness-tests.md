@@ -17,7 +17,7 @@
 | FIT-01 | `job.onduty` 只有一个写者（duty 服务） | 状态一致性 | ✅ PASS（`test_duty_writer.py`；4 个登记写者，0 未登记） | blocking |
 | FIT-02 | 禁止跨资源写别人拥有的表 | 边界 | ✅ PASS（`test_cross_resource_writes.py`；0 处未登记跨写） | blocking |
 | FIT-03 | 每个 net event 必须有来源/权限校验 | 安全 | ✅ PASS（3e720bf；13 强鉴权 + 35 登记例外，0 未登记） | blocking |
-| FIT-04 | 每个 export / app action 必须有稳定错误码 + 审计 | 契约 | ⚠️ PARTIAL（aea205c：17/17 action 结构化，export 审计仍不齐） | blocking |
+| FIT-04 | 每个 export / app action 必须有稳定错误码 + 审计 | 契约 | ✅ PASS（46/46 export 扫描通过；11 条登记例外，0 未登记） | blocking |
 | FIT-05 | 审计不可写时敏感路径必须 fail-closed | 取证 | ✅ PASS（3e720bf；11 个敏感读，0 丢弃） | blocking |
 | FIT-06 | 迁移幂等 + fixture 覆盖 + 可重复执行 | 数据 | ⚠️ PARTIAL | blocking |
 | FIT-07 | NPC 生成必须走预算接口（唯一入口 + 冷却 + 上限 + 审计） | 资源预算 | ⚠️ PARTIAL | blocking |
@@ -35,6 +35,8 @@
 > **post-baseline `3e720bf`**：FIT-03/FIT-05 扫描器、evidence 鉴权、敏感读 fail-closed 已提交；`tests/architecture/` 已加入 CI。上表状态已更新，评分数字待重算。
 >
 > **本轮（FIT-01）**：`custom-police` 新增唯一警察 duty 服务 `P.SetDutyForSource`（导出 `SetDutyForSource`），10-8/10-7、`custom-main` 的 `/duty` 与通缉锁、`custom-director` 的 `set_job_duty` 全部改走该服务；新增 `tests/architecture/test_duty_writer.py` + `duty_writers_allowlist.json`（4 条登记，0 处未登记）。
+>
+> **本轮（FIT-04）**：新增 `tests/architecture/test_export_contracts.py` + `export_allowlist.json`，扫描 46 个 police export 的权限门、失败错误码、敏感读审计与 fail-closed；`GetUnits`/`GetIncidents` 补 `units.view` / `incident.update` + 先审计后查询，`GetCaseDetail` 审计移到首条 SELECT 之前；11 条登记例外（含 `GetCharges` 静态目录、`GetNpcBudget` 内部读取），0 条未登记。证据见 §FIT-04。
 
 ---
 
@@ -49,6 +51,7 @@ T-CityLite.base/tests/architecture/          # 已落地文件（其余规则按
 ├── test_cross_resource_writes.py + table_owners.json   # FIT-02（owner 表 + 跨写 allowlist）
 ├── test_deprecations.py + deprecations.json            # FIT-12（弃用登记 + 到期强制）
 ├── test_duty_writer.py + duty_writers_allowlist.json   # FIT-01（onduty 写者登记 + 反向验证）
+├── test_export_contracts.py + export_allowlist.json    # FIT-04（export 门禁/错误码/敏感读审计）
 └── test_audit_fail_closed.py    # FIT-05
 docs/police/architecture/
 ├── error-codes.md                  # 人读词表（与 json 双向同步）
@@ -168,27 +171,25 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 - **规则**：
   1. 写路径（函数体内含 `INSERT|UPDATE|DELETE`）必须调用 `audit(`（或 `auditPlayer(`），且审计动作名属于受控词表；
   2. 每个 `return` 必须是"表"或 `false, '<code>'` / `nil, '<code>'` / `false, reason`（`reason` 来自 `PolicePolicy.Can`）；裸 `return` / `return false` / `return nil` → FAIL；
-  3. 返回的字面量必须存在于 `error_codes.json`（新增错误码 = 显式 diff + 更新 `docs/police/architecture/error-codes.md`）；
+  3. 返回的字面量必须是稳定的 `snake_case` 码，并同步登记到 [ARCHITECTURE_ERRORS.md](../ARCHITECTURE_ERRORS.md)（`error_codes.json` 机器词表尚未落地，当前扫描器先强制字符串形态；新增码 = 显式 diff + 文档同步）；
   4. **action 层不得把错误码压成布尔**：`PhoneApps` action handler 必须返回 `{ok=false,error=...}` 或原样透传，不得 `return ok and res ~= false`。
-- **为什么**：MDT 是唯一接警 UI，用户看到的错误文案完全取决于 action 层有没有把码透传。17 个 action 里只有 2 个（`report_submit` / `request_backup`）透传结构化结果，14 个把 `cooldown`/`limit`/`rank_too_low`/`not_on_duty` 全压平（13 个 `ok and res ~= false` + `arrest_submit`），`alert` 为特例（成功 `{sent}`、失败压平）（`custom-phone/server/apps/police_mdt.lua:167-275` + `custom-phone/server/phone_apps.lua:138-142`），玩家只能看到"失败"。
-- **检查方式**：
-  - 函数体提取：`exports('<Name>', <sym>)` → 找 `function <sym>(` 或 `<sym> = function`，切到顶格 `end`；
-  - 伪代码：
-    ```
-    for name, body in exports(path):
-        if WRITE_RE.search(body) and not AUDIT_RE.search(body):
-            report(path, "export %s mutates without audit" % name)
-        for ret in RETURN_RE.finditer(body):
-            expr = ret.group(1).strip()
-            if expr in ('', 'nil', 'false'): report(..., "bare return")
-            if STRING_LITERAL_RE.search(expr) and literal not in CODES: report(..., "unknown_code")
-    for action in phone_app_actions():
-        if not RETURNS_TABLE_OR_PASSTHROUGH: report(..., "code_collapsed")
-    ```
-- **失败信息**：`FIT-04: custom-phone/server/apps/police_mdt.lua:222 action issue_citation collapses error code to boolean; return the {ok=false,error} table so the MDT can localise it`。
-- **CI**：`Python unit tests` job（`tests/architecture` 走 pytest）或独立 step；blocking。
-- **现状（post-baseline）**：⚠️ **PARTIAL**。`ArrestSubmit`/`ReportSubmit` 现在返回完整 `{ok=true,...}` / `{ok=false,error}`，并补齐 citation/evidence 独立审计（`p2_system.lua:766-797`）；错误码新增 `invalid_idempotency_key`/`in_progress`；`SetIncidentStatus` 新增 `invalid_disposition`/`invalid_transition`。**仍红**：action 层压缩 14/17（`police_mdt.lua:168-284`，新增 NPC 契约不经过 action，所以数量不变）；`Sys.Jail` 仍不消费 audit（`p2_system.lua:121`）；`already_<status>` 仍是动态码（`p1.lua:156`）。
-- **例外**：`GetUnits` / `GetIncidents` / `GetCharges` 这类纯读返回表，不需要错误码；但 `GetUnits`/`GetIncidents` **仍没有 capability 检查**（`server/p0.lua:123-142,185-210`，等同 FLOW B10），应在 FIT-03 的"读导出"扩展里补，或明确登记为"靠 phone audience 兜底"。
+- **为什么**：MDT 是唯一接警 UI，错误文案取决于 action 层有没有把码透传；`aea205c` 已把 17/17 action 收敛到 `structured()`。本轮补更底层：46 个 export 里仍有读导出没有 capability/审计（`GetUnits`/`GetIncidents` 会返回公民姓名/警情描述）、部分失败路径是裸 `false`、跨资源 owner 写没有稳定码。没有扫描器，新增一个 `exports(...)` 很容易再次绕过门禁/审计；allowlist 让存量例外必须带 owner + 到期日，而不是永久沉默。
+- **检查方式**（`tests/architecture/test_export_contracts.py` + `export_allowlist.json`，只扫 `custom-police/server/**/*.lua`）：
+  - 解析 `exports('<Name>', <sym>)`：`<sym>` 是 `P.GetUnits` / `C.CreateCase` / `GetNpcBudget` 时找顶格 `function <sym>(` 切到 `^end$`；是 `function(...)` 时切到 `^end)$`。每条 finding 带 `file:line export`。
+  - **门禁**：函数体（去注释后）必须含 `PolicePolicy.Can/Check/IsPolice`、`isPolice`、`hasCapability`、`IsPlayerAceAllowed`、已验证的 `lookupAllowed`，或显式 ownership 比较（`row.citizenid ~= actor.citizenid`）。
+  - **错误码**：逐个 `return false|nil` 检查第二个返回值；裸 `return false` / `return nil`（含 `then return false end`）→ `error_code`。`fail('<code>')` / `{ ok=false, error }` 视为合规。
+  - **敏感读**：capability 以 `.view/.detail/.chain` 结尾，或 `Get*/Lookup*` 返回 PII（citizenid/姓名/description/summary/body；`GetNpcBudget -> NPCBudget.Get` 这类一层委托也解析）→ 必须 `if not audit(...) then return false, 'audit_unavailable' end`（或 `lookupAllowed` + `return false, err`），且审计位置必须早于首条 SELECT。审计写晚于查询同样 FAIL。
+  - **allowlist**：每条必须有 `export`/`file`/`kind`/`exceptions`（`auth` / `error_code` / `sensitive_read_audit` 的精确集合）/`reason`/`owner`/`added`/`expires`。过期、未知 export、重复条目、以及"登记的 exception 已不再命中"（修好了没删条目）全部 FAIL；未登记的新违规立即 FAIL。
+- **失败信息**：`FIT-04: custom-police/server/p0.lua:729 SweepStaleIncidents auth (no permission/source gate)` / `custom-police/server/p1.lua:229 GetMyCitations sensitive_read_audit (sensitive read does not fail closed on audit_unavailable)`。
+- **CI**：`pytest -q tests/architecture`（blocking）；扫描器离线、确定性，单次 <0.2 s；行为层由 `tests/unit/layer3_business/test_police_read_exports.py` 的 Lua harness 补证。
+- **现状（本轮）**：✅ **PASS**。46 个 export 全部解析，0 条未登记；11 条登记例外（见下）。**已修**：`GetUnits` 改为 `P.GetUnits(source)` → `units.view` + 先写 `units.view` 审计再 SELECT，审计失败 `false, 'audit_unavailable'`；`GetIncidents` 改为 `P.GetIncidents(source, status)` → `incident.update`（policy 无 `incident.view`）+ 先写 `incident.view` 审计，同样 fail-closed；MDT 的 `me`/`units`/`incidents` 三个 query 已把 `source` 传进来。`C.GetCaseDetail` 的 `case.detail` 审计从 case 查询之后移到首条 SELECT 之前。`C.RecordVerdict` 补 `invalid_justice_case`/`invalid_verdict`/`invalid_status`/`db_error`；`Outbox.Enqueue` 补 `invalid_topic`/`invalid_payload`/`encode_failed`/`db_error`（`EnqueueOutbox` 原样透传）。action 层 17/17 已结构化（`aea205c` 的 `structured()`），不再压平错误码。
+- **剩余非 export 例外**：`PayCitation` 的 `already_<status>` 仍是动态码（公民侧 banking，不在 17 个 action 内）；`Sys.Jail` 的 `arrest.register` 审计失败只打印（arrest 行已提交，不能回滚），属 FIT-05 的"写路径 best-effort 必须留日志"，不计入本规则。
+- **例外（`export_allowlist.json`，11 条）**：
+  - system-only（6）：`SweepStaleIncidents`（定时器）、`CreateIncidentSystem` / `AssignUnitSystem` / `JailSystem`（custom-director agent 桥，actorId 不是玩家 source）、`EnqueueOutbox`（内部队列）、`RecordVerdict`（custom-justice owner 写）；均已有审计与稳定错误码。
+  - 静态目录（2）：`GetCharges`（罪名表，无 DB/PII/审计）、`GetNpcCalloutTemplates`（模板 id）。
+  - 诊断读（1）：`GetActiveNpcCallouts`（无 PII）。
+  - 公民自有读（1）：`GetMyCitations`（SQL 绑定 `actor.citizenid`，非警察审计面）。
+  - 内部读（1）：`GetNpcBudget`（`RequestBackup`/`CreateNpcCallout` 热路径共用；在 accessor 内加审计会读放大；快照含 citizenid，2026-12-31 前补带 source 的审计包装）。
 
 ### FIT-05 · 审计不可写时敏感路径必须 fail-closed
 
@@ -297,33 +298,39 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 ### FIT-10 · 资源接线（cfg ↔ manifest ↔ 文件 ↔ 导出消费者）
 
 - **规则**：
-  1. `configs/modules/*.cfg` 里 `ensure` 的资源都有 `fxmanifest.lua`（已有 `check_cfgs.py`）；
-  2. `fxmanifest` 里列出的每个 `server_scripts`/`client_scripts` 文件都存在，且仓库里没有"存在但未接线"的警察脚本（反向检查）；
-  3. 每个 `exports('<Name>')` 的生产者与消费者在同一资源或通过 `dependencies` 声明；
-  4. 启动顺序满足依赖（已有 `check_dependencies.py`）。
-- **为什么**：TD 里没有这一条，但它是"改完 manifest 忘了重启/忘了加文件"的机器化版本（`STATUS.md` 已警告"改 fxmanifest 或新增 server 文件后必须整服重启"）。第 3 条尤其重要：`custom-police` 依赖 `custom-phone` 的 app 注册、`custom-justice` 的导出，但依赖方向只写在文档里。
-- **检查方式**：复用 `check_cfgs.py` / `check_dependencies.py` / `check_bus_wiring.py` 的解析逻辑；新增 ② 反向检查（对比 `custom-police/{server,client}/*.lua` 与 `fxmanifest.lua` 的 `server_scripts`/`client_scripts` 列表）与 ③ 导出消费者扫描（`exports['<res>']:<Name>` 的 `<res>` 必须在 `fxmanifest` 的 `dependencies` 里）。
-- **失败信息**：`FIT-10: custom-police/fxmanifest.lua does not list server/p2_system.lua — a new file needs a manifest entry and a full restart`。
-- **CI**：`Config & dependency checks`（三个 step 已存在，新增反向检查）；blocking。
-- **现状**：⚠️ **PARTIAL**。①②④ 大体由现有脚本覆盖（`ci.yml:35-45`）；③ **未覆盖**——`custom-police` 调 `exports['custom-justice']`、`exports['qb-core']`、`exports['qb-inventory']`、`exports['custom-phone']`（经 phone app 反向调用），依赖声明靠人。
-- **例外**：无。
+  1. 启动链里 `ensure`/`start` 的资源都有 `fxmanifest.lua`（复用 `check_cfgs.py` 的内置资源集合与判定口径）；
+  2. 每个已启动 manifest 的 `shared_scripts` / `client_scripts` / `server_scripts` / `files` 列出的**字面文件**必须存在（`@resource/file.lua` 与 glob 不由本规则判定）；
+  3. 已启动资源里的每个 `exports['<res>']` / `exports["<res>"]` 消费者，`<res>` 要么是已启动资源，要么是 `resource_wiring_allowlist.json` 登记的外部/延期依赖；
+  4. 声明依赖存在且顺序正确（复用 `check_dependencies.py` 的 `parse_manifest` / `build_resource_index` / `get_startup_sequence` / `check_startup_order`，同进程 import，不 subprocess）。
+- **为什么**：这是"改完 manifest 忘了重启 / 忘了加文件 / 调了未启动资源的导出"的机器化版本（`STATUS.md` 已警告改 manifest 或新增 server 文件后必须整服重启）。第 3 条尤其重要：`custom-police` 依赖 `custom-phone` 的 app 注册、`custom-justice` 的判决导出，而依赖方向过去只写在文档里；一个拼错的资源名在运行时才会炸。
+- **检查方式**（`tests/architecture/test_resource_wiring.py` + `resource_wiring_allowlist.json`，离线、单文件 <1 s）：
+  - **配置来源**：优先读本地 `T-CityLite.base/server.cfg`（gitignored）；不存在时读 tracked 的 `server.cfg.template`。两者都通过 `exec configs/modules/*.cfg` 启动，测试沿 exec 链收集 `ensure`/`start`，因此 CI 与开发机得到同一资源集（当前 82 个；`chat` 等 FiveM 内置资源豁免）。
+  - **manifest 文件**：先 mask Lua 注释，再解析四个 block（含单数 `server_script` 等旧写法）；跳过 `@` 前缀与 `*`/`?`/`[]` glob。当前检查 **598** 个字面条目、0 缺失。反向测试用临时 manifest 引用 `server/ghost.lua`，必须报红。
+  - **导出消费者**：扫描 82 个已启动资源下 **951** 个 Lua 文件，共 **424** 处 `exports[...]`、**46** 个目标资源；未启动且未登记的目标 → FAIL。反向测试注入 `exports['ghost-resource']`，必须报红。
+  - **依赖/顺序**：对每个已启动 manifest 的 `dependencies{}` 断言依赖已启动或属于 system/built-in；并用 `check_dependencies.check_startup_order` 断言硬依赖早于消费者。当前 0 条。
+  - **allowlist**（`resource_wiring_allowlist.json`，4 条）：`LegacyFuel` / `qb-jobs` / `qb-vehiclekeys` 是仓库外的既有兼容依赖；`qb-houses` 是存在于 `resources/` 但不在精简启动链的 known deferred 资源，仅 `qb-garages` 的 house 分支调用。每条必须有 `reason` / `added` / `expires`；过期与 stale（不再被任何消费者引用）都 FAIL。
+- **失败信息**：`FIT-10: custom-police/fxmanifest.lua server_scripts:12 server/ghost.lua — file does not exist` / `FIT-10: qb-houses: referenced by [qb]/qb-garages/server/main.lua`。
+- **CI**：`pytest -q tests/architecture`，blocking。
+- **现状（本轮）**：✅ **PASS**。82 个启动资源全部有 manifest；598 个字面条目 0 缺失；424 导出引用只指向已启动资源或 4 条登记依赖；依赖声明与启动顺序 0 违规。**未改业务代码**。
+- **例外**：`qb-houses` 是"存在但未启动"的延期资源（不是外部依赖），登记为 `kind: deferred_repo_resource`，到期 `2027-03-31`；真正启用房屋系统时必须先从 allowlist 删除本例外。其余 3 条是仓库外兼容依赖，到期同上。
 
 ### FIT-11 · 状态机列只允许登记过的写者
 
-- **规则**：`police_incidents.status`、`police_units.status`、`police_units.incident_id`、`police_citations.status`、`police_warrants.status`、`police_evidence.status` 的 `UPDATE` 只允许出现在登记的状态函数内；新增写者必须改登记表。
-- **为什么**：状态列是最容易被"顺手写一行"破坏的地方。当前 `police_incidents.status` 有 3 个写者（`server/p0.lua:154,172`、`server/p2_system.lua:93`），`police_units.status` 有 5 个（`server/p0.lua:47,175,177,266`、`server/p2_system.lua:92`）。它们都在同一资源内、语义也说得通，但没有任何东西阻止第 6 个出现——而状态机一旦多点写，05 COMPAT-01 的"单一状态机"就永远收不回来。
-- **检查方式**：
-  ```
-  for path in custom_police_server_files:
-      for sql in sql_strings(path):
-          if re.search(r"UPDATE\s+police_\w+\s+SET\s+.*\b(status|incident_id)\s*=", sql, re.I|re.S):
-              fn = enclosing_function(path, sql.position)
-              if (path, fn.name) not in STATE_WRITERS: report(path, fn.line, "unregistered status writer")
-  ```
-- **失败信息**：`FIT-11: custom-police/server/p0.lua:175 updates police_units.status outside the registered state functions — register it in allowlists/state_writers.json or route it through SetUnitStatus`。
-- **CI**：`Config & dependency checks`，**advisory**（等 FIT-01/duty 状态机落地后再转 blocking，否则会在重构期持续红）。
-- **现状**：⚠️ **PARTIAL**。8 个写者全在同一资源内、逻辑自洽；但没有登记表，也就没有"谁是新来的"这一判断。**注意**：`syncDuty`（`server/p0.lua:433-452`）是"从 onduty 投影到 units"的唯一合法入口；FIT-01 已收敛，警察 duty 写路径统一经 `SetDutyForSource` 再进 `syncDuty`。
-- **例外**：登记现有 8 个（路径 + 函数名），到期 `2027-03-31`。
+- **规则**：`police_units.status`、`police_units.incident_id`、`police_incidents.status`、`police_reports`、`police_cases`、`police_citations`、`police_warrants.status`、`police_bolos.status` 的 `UPDATE` 只允许出现在登记过的服务文件/函数内；其他资源（`custom-justice` / `custom-phone` / `qb-prison`）只能经 `custom-police` 导出，不能直接写。新增写者必须改 `state_writers_allowlist.json` 或走服务导出。
+- **为什么**：状态列是最容易被"顺手写一行"破坏的地方。`police_incidents.status` 曾同时由 p0 与 p2_system 写，`police_units.status` 也有 5 个 helper；没有登记表就没有"谁是新来的"这一判断，05 COMPAT-01 的"单一状态机"永远收不回来。FIT-01 已把 duty 收敛到 `SetDutyForSource`，本规则把剩下的 SM-01/02/03/05 写点固定下来。
+- **检查方式**（`tests/architecture/test_state_writers.py` + `state_writers_allowlist.json`，离线、单文件 ~1 s）：
+  - **SQL 提取**：mask Lua 注释后匹配 `UPDATE police_* SET`，从 `SET` 到 `WHERE` 解析赋值列，再按"表 + 列"匹配规则：
+    - `police_units.status` / `police_units.incident_id` → 仅 `server/p0.lua`；
+    - `police_incidents.status` → 仅 `server/p0.lua`；
+    - `police_reports` → `p1.lua` / `p2_system.lua` / `p3_cases.lua`；
+    - `police_cases` → `p2_system.lua` / `p3_cases.lua`；`police_citations` → `p1.lua`；`police_warrants.status` / `police_bolos.status` → `p3_cases.lua`。
+  - **当前扫描**：22 个状态写点、7 条规则、4 个文件（p0/p1/p2_system/p3_cases）；`custom-justice` / `custom-phone` / `qb-prison` 对 `police_*` 的直接状态写 **0 处**（justice 判决已改走 `RecordVerdict` 导出）。
+  - **例外**：`p2_system.lua` 的 `Sys.AssignUnit` 仍直接写 `police_units` + `police_incidents`（旧 director L2 路径，绕过 `P.AssignUnit` 的 transition/在勤守卫）。两条 entry 按 `(writer, table, file, function)` 精确登记，因此同一文件里的新写点不会被这条例外放过；到期 `2027-03-31`。
+  - **反向测试**：向临时 `custom-justice/server/trial.lua` 注入 `UPDATE police_incidents SET status='closed'`、向 `custom-phone/server/pay.lua` 注入 `UPDATE police_citations`，扫描器都必须报红；向 `p2_system.lua` 的 **非** `Sys.AssignUnit` 函数注入 units 写，也必须红。
+- **失败信息**：`FIT-11: custom-justice/server/trial.lua:3 UPDATE police_incidents SET ['status'] in (top-level) — register the writer or route it through the service`。
+- **CI**：`pytest -q tests/architecture`，blocking（登记表已收敛，0 未登记；例外按函数钉死）。
+- **现状（本轮）**：✅ **PASS**。22 个写点全部命中 7 条规则或 2 条精确例外，0 未登记、0 非警察资源直写。**需代码修复**：`Sys.AssignUnit` 应改为调用 `P.AssignUnit`（或 `exports['custom-police']:AssignUnit`），修好后删除两条例外；目前它不影响运行，但状态机多了一个旁路。
+- **例外**：2 条 `Sys.AssignUnit`（units + incidents），到期 `2027-03-31`；allowlist 只减不增。
 
 ### FIT-12 · 弃用登记（deprecated 写路径为 0 或未过期豁免）
 
@@ -337,24 +344,16 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 ### FIT-13 · 文档数字与代码常量一致
 
-- **规则**：05 与 07 里出现的可执行数字（NPC 上限、冷却、刑期上下限、罚单滑轨、查询 LIMIT、48 人）必须与代码常量一致；不一致 → FAIL 并打印两侧数值。
-- **为什么**：文档里的"2 人 / 60 s / 120 分钟 / ±20% / LIMIT 50"是**唯一**的性能与安全承诺来源。代码改常量、文档不改，下一个 agent 就会按错的预算做设计（本仓库已经出现过 `MAX_MINUTES` 与 justice `MaxSentence` 两处上限，05 COMPAT-03）。
-- **检查方式**：
-  ```
-  pairs = [
-    ("BACKUP_MAX_UNITS",        r"BACKUP_MAX_UNITS\s*=\s*(\d+)",        05, "每玩家 ≤2"),
-    ("BACKUP_COOLDOWN",         r"BACKUP_COOLDOWN\s*=\s*(\d+)",         05, "冷却 60 s"),
-    ("MAX_MINUTES",             r"local MAX_MINUTES\s*=\s*(\d+)",       05, "刑期上限 120"),
-    ("CITATION_HIGH",           r"local CITATION_HIGH\s*=\s*([\d.]+)",   05, "±20%"),
-    ("MAX_CHARGES",             r"local MAX_CHARGES\s*=\s*(\d+)",       07, "≤8 罪名"),
-    ("mdt row limit",           r"LIMIT (\d+)",                         05, "行数 ≤50"),
-  ]
-  对每组：从文档表格里解析目标值，与代码常量比对
-  ```
-- **失败信息**：`FIT-13: 05-nfr.md says NPC cap = 2 per player, code BACKUP_MAX_UNITS = 3 — update the doc and the budget together`。
-- **CI**：`Docs links (advisory)` 旁边新增 step；**advisory**（文档措辞多变，先观察误报率）。
-- **现状**：❓ **UNKNOWN**。当前实际一致（`BACKUP_MAX_UNITS=2`、`BACKUP_COOLDOWN=60`、`MAX_MINUTES=120`、`CITATION 0.8/1.2`、`MAX_CHARGES=8`、`LIMIT 50`），但没有任何机制防止漂移，且 05 里大部分数字是**建议值**（还没有对应常量），所以这条规则要等 §6 之后才有意义。
-- **例外**：文档表格里标注为"建议值"的列不参与比对，只比对与代码常量对应的目标值列；新增映射需在 `number_budget.json` 显式登记，不允许靠正则猜。
+- **规则**：05 / 02 / 09 里承诺的可执行数字（NPC 预算、冷却、NPC 警情调度、stale 窗口、intent TTL、outbox 重试）必须与代码常量或 SQL interval 一致；不一致 → FAIL 并打印两侧数值。允许 `【建议】` 值与代码不同，但必须在 `number_budget.json` 显式标 `kind: proposed`；`kind: implemented` 则必须有代码 pattern。
+- **为什么**：文档里的"2 人 / 60 s / 8 min / 30% / 45 min / 7 天 / 10 分钟 / 30 秒 / 5 次"是**唯一**的性能与安全承诺来源。代码改常量、文档不改，下一个 agent 就会按错的预算做设计；本仓库已经出现过 `MAX_MINUTES` 与 justice `MaxSentence` 两处上限（05 COMPAT-03）。
+- **检查方式**（`tests/architecture/number_budget.json` + `test_number_budget.py`，离线、<0.1 s）：
+  - **登记 11 个数字**：`implemented` 10 条 — backup per-player 2（`NPCBudget.MAX_PLAYER`）、cooldown 60（`BACKUP_COOLDOWN`）、NPC global 6（`NPCBudget.MAX_GLOBAL`）、callout interval 8 min（`NPCCallouts.INTERVAL_MS = 8 * 60 * 1000`）、chance 0.30（`NPCCallouts.SPAWN_CHANCE`）、stale 45 min（p0 的 `INTERVAL 45 MINUTE`）、intent done 7 天 / pending 10 分钟（p2_system 的 `INTERVAL 7 DAY` / `INTERVAL 10 MINUTE`）、outbox interval 30 s（`OUTBOX_INTERVAL_MS = 30000`，scale 0.001）、max attempts 5（`OUTBOX_MAX_ATTEMPTS`）；`proposed` 1 条 — audit retention 180 天（05 SCALE-05 / SEC-05 目标值，代码尚无 retention 任务）。
+  - **比对**：每条代码 pattern 捕获值 × `scale` 必须等于 `value`；每条文档 pattern 的所有命中都必须等于 `value`。当前 31 条文档引用覆盖 05/02/09 三篇、4 个代码文件；任何一侧改数字都会打印 `file:line says X, expected Y`。
+  - **反向测试**：把 05 的"每玩家 ≤2 单位"改成 ≤3、把 `NPCBudget.MAX_PLAYER` 改成 3、把 `OUTBOX_INTERVAL_MS` 改成 60000，评估器都必须报红；删掉文档短语也会报 `did not match`。
+- **失败信息**：`FIT-13: docs/police/architecture/05-nfr.md:60 says 3 for npc-budget-per-player, expected 2`。
+- **CI**：`pytest -q tests/architecture`，blocking（映射显式登记，不靠正则猜措辞）。
+- **现状（本轮）**：✅ **PASS**。10 个实现值全一致，1 个建议值（audit retention 180 天）显式标 `proposed`；三篇文档 31 处引用全部命中且相等。**未改代码**；代码若改预算，FIT-13 会先红，强制同一 PR 更新 05/02/09。
+- **例外**：`police-audit-retention` 是唯一的 `proposed` 值；实现保留/归档任务后必须把 `kind` 改为 `implemented` 并补 code pattern，否则本规则会一直提醒它只是目标。
 
 ---
 
@@ -401,7 +400,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | FIT-01 | onduty 单一写者 | 3 | ✅ PASS | 1 | 3 | `test_duty_writer.py` 4 条 allowlist、0 未登记；警察写路径全部走 `SetDutyForSource`（p0 仅服务内 1 处 primitive） |
 | FIT-02 | 跨资源表所有权 | 2 | ✅ PASS | 1 | 2 | 0 处未登记跨写；`phone_notifications`/`police_reports` 单写者；8 条存量 allowlist（2026-12-31） |
 | FIT-03 | net event 鉴权 | 3 | ❌ FAIL | 0 | 0 | 2/44 强校验；9 条 evidence 仍零校验；**扫描器未落地（进行中）** |
-| FIT-04 | export/action 错误码 + 审计 | 2 | ⚠️ PARTIAL | 0.5 | 1.0 | arrest/report 已结构化 + citation/evidence 审计；action 层仍压平 14/17 |
+| FIT-04 | export/action 错误码 + 审计 | 2 | ✅ PASS | 1 | 2.0 | `test_export_contracts.py` 46/46 export、0 未登记、11 条登记例外；GetUnits/GetIncidents 补 capability + 先审计后查询 + fail-closed；action 17/17 结构化 |
 | FIT-05 | 审计 fail-closed | 3 | ❌ FAIL | 0 | 0 | 23 处 fail-open 未变；5 个读导出零审计 |
 | FIT-06 | 迁移幂等 + fixture | 1 | ⚠️ PARTIAL | 0.5 | 0.5 | 迁移幂等 ✅（含 v3.8–v3.11）/ fixture 仍缺 14 张表 ❌ |
 | FIT-07 | NPC 预算接口 | 2 | ⚠️ PARTIAL | 0.5 | 1.0 | backup 路径仍合规；NPC 警情新增独立 `CreatePed/CreateVehicle` 路径；全局 cap 缺 |
