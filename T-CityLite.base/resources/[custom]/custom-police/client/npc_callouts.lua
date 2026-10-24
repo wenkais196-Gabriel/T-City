@@ -408,7 +408,7 @@ local function updateControlled(state)
     state.controlled = suspectsNeutralised(state) and victimHandled(state)
 end
 
-local function reportScene(state, playerPed)
+local function reportScene(state)
     -- Any dead/restrained suspect means the police made an arrest; otherwise a
     -- controlled scene (or a treated traffic victim) is a normal clear.
     local outcome = 'resolved'
@@ -452,10 +452,10 @@ local function handleE(state, playerPed, playerCoords, distance, now)
     if not state.controlled or distance > REPORT_RADIUS then return end
     state.lastKeyAt = now
     if state.reported and now - state.reportedAt < REPORT_RETRY_MS then return end
-    reportScene(state, playerPed)
+    reportScene(state)
 end
 
-local function promptFor(state, playerPed, playerCoords, distance, now)
+local function promptFor(state, playerCoords, distance, now)
     if distance > DRAW_RADIUS then return end
     local label = ('[NPC] %s #%d'):format(
         tostring(state.template and (state.template.label or state.template.title) or '警情'),
@@ -464,7 +464,7 @@ local function promptFor(state, playerPed, playerCoords, distance, now)
 
     if state.victim and DoesEntityExist(state.victim) and not state.victimTreated and not isPedDead(state.victim) then
         local victimCoords = GetEntityCoords(state.victim)
-        if #(playerCoords - victimCoords) <= 6.0 then
+        if #(playerCoords - victimCoords) <= TREAT_RADIUS then
             drawText3D(victimCoords.x, victimCoords.y, victimCoords.z + 1.0, '按 E 救治伤员')
         end
     end
@@ -475,6 +475,8 @@ local function promptFor(state, playerPed, playerCoords, distance, now)
             text = '已上报，等待 MDT 确认…'
         elseif state.reported then
             text = '上报超时，按 E 重试'
+        elseif distance > REPORT_RADIUS then
+            text = '现场已控制，请到现场中心按 E 上报'
         else
             text = '现场已控制，按 E 上报 / 回 MDT 清场'
         end
@@ -513,7 +515,7 @@ sceneLoop = function(state)
         end
 
         handleE(state, playerPed, playerCoords, distance, now)
-        promptFor(state, playerPed, playerCoords, distance, now)
+        promptFor(state, playerCoords, distance, now)
 
         if distance > DRAW_RADIUS then
             Wait(500)
