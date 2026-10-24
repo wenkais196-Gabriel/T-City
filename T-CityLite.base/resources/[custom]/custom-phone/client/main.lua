@@ -56,18 +56,31 @@ local function OpenPhone()
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(true)
     
-    -- Play GTA V native phone-out animation
+    TriggerServerEvent('phone:server:focusState', { phase = 'open-start' })
+
+    -- Play GTA V native phone-out animation. Bounded: a missing/unloadable
+    -- anim dict used to hang this thread forever with isPhoneOpen already
+    -- true, so every later M press was swallowed.
     local ped = PlayerPedId()
     if DoesEntityExist(ped) then
         RequestAnimDict('cellphone@')
-        while not HasAnimDictLoaded('cellphone@') do Wait(0) end
-        TaskPlayAnim(ped, 'cellphone@', 'cellphone_text_in', 8.0, -8.0, 800, 49, 0, false, false, false)
+        local loaded = false
+        for _ = 1, 50 do
+            if HasAnimDictLoaded('cellphone@') then loaded = true break end
+            Wait(10)
+        end
+        if loaded then
+            TaskPlayAnim(ped, 'cellphone@', 'cellphone_text_in', 8.0, -8.0, 800, 49, 0, false, false, false)
+        else
+            TriggerServerEvent('phone:server:focusState', { phase = 'anim-timeout' })
+        end
     end
     
     -- Tell NUI to open phone
     SendNUIMessage({
         action = 'phone:open'
     })
+    TriggerServerEvent('phone:server:focusState', { phase = 'open-nui-sent', focused = IsNuiFocused() })
     
     -- Focus watchdog: if something steals NUI focus, re-apply it instead of
     -- leaving the phone visible with the mouse still driving the camera.
@@ -205,13 +218,32 @@ local function OpenPhone()
     end)
 end
 
--- Command & Keybind to toggle phone
+-- Command & Keybind to toggle phone.
+-- Recovery: if a previous open left isPhoneOpen=true without NUI focus (hung
+-- anim/open), M should reset and reopen instead of being swallowed forever.
 RegisterCommand('phone', function()
     if isPhoneOpen then
-        ClosePhone()
+        if IsNuiFocused() then
+            ClosePhone()
+        else
+            isPhoneOpen = false
+            SetNuiFocus(false, false)
+            Wait(50)
+            OpenPhone()
+        end
     else
         OpenPhone()
     end
+end, false)
+
+-- Manual recovery: release focus, reset state, close any stale NUI.
+RegisterCommand('phonefix', function()
+    isPhoneOpen = false
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'phone:close' })
+    TriggerEvent('chat:addMessage', { args = { 'SYSTEM', '手机状态已重置' } })
+    TriggerServerEvent('phone:server:focusState', { phase = 'phonefix', focused = IsNuiFocused() })
 end, false)
 
 
