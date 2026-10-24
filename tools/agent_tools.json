@@ -1413,6 +1413,77 @@
       }
     },
     {
+      "name": "run_police_e2e",
+      "title": "Run the police E2E suite (L1, test-only)",
+      "description": "Run the police_e2e server suite in custom-testing and return its structured stats. L1 auto-executes because the suite owns only the E2E_* namespace; it writes and cleans test rows in police/justice tables. Both custom-agent-ops and custom-testing must be started.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "police_run_e2e",
+      "risk": "L1",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.6.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "suite": {
+            "type": "string",
+            "enum": [
+              "police_e2e"
+            ],
+            "default": "police_e2e"
+          },
+          "timeout_s": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 180,
+            "default": 180
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 30,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none",
+      "rate_limit": {
+        "per_minute": 2,
+        "burst": 1
+      }
+    },
+    {
       "name": "send_announce",
       "title": "Broadcast a world announcement (L2, approval required)",
       "description": "Propose a plain-text announcement to all players. World-scoped and reversible in the sense that it has no persistent state, but it still needs approval.",

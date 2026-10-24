@@ -1242,6 +1242,38 @@ local function executePoliceIncidentCreate(actionId, params)
     return true, nil, { incident_id = result.id, status = result.status }
 end
 
+-- Test-only L1 executor. A failing suite is still a successful execution: the
+-- action ran and its structured stats are in result.ok/result.result. Only a
+-- call/transport failure (agent-ops or custom-testing stopped, export missing)
+-- marks the action failed.
+local function executePoliceRunE2E(actionId, params)
+    local suite = params.suite or 'police_e2e'
+    local called, result = pcall(function()
+        return exports['custom-agent-ops']:RunTest(suite)
+    end)
+    if not called then
+        return false, ('execution_failed: %s'):format(truncate(result, 180)), nil
+    end
+    if type(result) ~= 'table' then
+        return false, 'execution_failed: invalid_result', nil
+    end
+    if result.ok ~= true and result.result == nil then
+        return false, ('execution_failed: %s'):format(
+            truncate(result.error or 'unknown', 180)), nil
+    end
+    if type(result.result) ~= 'table' then
+        return false, 'execution_failed: missing_result', nil
+    end
+
+    local execResult = {
+        ok = result.ok == true,
+        suite = result.suite or suite,
+        result = result.result,
+    }
+    if params.timeout_s ~= nil then execResult.timeout_s = params.timeout_s end
+    return true, nil, execResult
+end
+
 local function executeAction(actionId, actionType, params)
     if actionType == 'notify' then
         return executeNotify(actionId, params)
@@ -1283,6 +1315,8 @@ local function executeAction(actionId, actionType, params)
         return executePoliceJailPlayer(actionId, params)
     elseif actionType == 'police_incident_create' then
         return executePoliceIncidentCreate(actionId, params)
+    elseif actionType == 'police_run_e2e' then
+        return executePoliceRunE2E(actionId, params)
     elseif actionType == 'send_phone_message' then
         return executeSendPhoneMessage(actionId, params)
     end
@@ -1310,6 +1344,7 @@ AgentActions._Execute = {
     police_incident_create = executePoliceIncidentCreate,
     police_assign_unit = executePoliceAssignUnit,
     police_jail_player = executePoliceJailPlayer,
+    police_run_e2e = executePoliceRunE2E,
 }
 
 -- Internal context builder for the pure-Lua harness (same contract as

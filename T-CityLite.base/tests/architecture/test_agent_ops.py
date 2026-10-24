@@ -8,7 +8,9 @@ Lua harness for the parts that only a runtime can prove:
 * ``/agent status|events|tail|health|test`` are registered behind
   ``source == 0`` or ``IsPlayerAceAllowed(source, 'agent.ops')``, and a console
   command invoked by another resource is rejected;
-* the four exports exist, and ``PushAgentEvent`` rejects in-process callers;
+* the five exports exist, ``RunTest`` returns the custom-testing structured
+  result (never the console-only ``/test run`` path), and ``PushAgentEvent``
+  rejects in-process callers;
 * the ring is capped at 500, evicts the oldest row, reports ``dropped`` and a
   cursor reset, and ``GetAgentEvents`` clamps ``limit`` to 200;
 * sanitisation removes credential keys, strips control characters and truncates
@@ -38,13 +40,19 @@ RESOURCE = BASE / "resources" / "[custom]" / "custom-agent-ops"
 MANIFEST = RESOURCE / "fxmanifest.lua"
 CONFIG = RESOURCE / "config.lua"
 MAIN = RESOURCE / "server" / "main.lua"
+TESTING_RESOURCE = BASE / "resources" / "[custom]" / "custom-testing"
+TESTING_MAIN = TESTING_RESOURCE / "server_test.lua"
+DIRECTOR_RESOURCE = BASE / "resources" / "[custom]" / "custom-director"
+DIRECTOR_POLICY = DIRECTOR_RESOURCE / "server" / "policy.lua"
+DIRECTOR_MAIN = DIRECTOR_RESOURCE / "server" / "main.lua"
+TOOLS_JSON = REPO / "tools" / "agent_tools.json"
 DOC = REPO / "docs" / "police" / "AGENT_OPS.md"
 DEV_CFG = BASE / "configs" / "modules" / "dev.cfg"
 
 LUA_BIN = shutil.which("lua5.4")
 
 COMMANDS = ("status", "events", "tail", "health", "test")
-EXPORTS = ("GetAgentSnapshot", "GetAgentEvents", "PushAgentEvent", "HealthSnapshot")
+EXPORTS = ("GetAgentSnapshot", "GetAgentEvents", "PushAgentEvent", "HealthSnapshot", "RunTest")
 
 
 def read(path: Path) -> str:
@@ -115,7 +123,26 @@ local qb = {
 local police = {
     GetNpcBudget = function() return { used = 2, max = 6 } end,
 }
-exports = setmetatable({ ['qb-core'] = qb, ['custom-police'] = police }, {
+TESTING_CALLS = {}
+TESTING_RESULT = nil
+TESTING_THROW = false
+local testing = {
+    RunTestSuite = function(_, name, source)
+        TESTING_CALLS[#TESTING_CALLS + 1] = { name = name, source = source }
+        if TESTING_THROW then error('runner exploded') end
+        if TESTING_RESULT ~= nil then return TESTING_RESULT end
+        return {
+            ok = true,
+            suite = name,
+            result = { pass = 1, fail = 0, error = 0, skip = 0 },
+        }
+    end,
+}
+exports = setmetatable({
+    ['qb-core'] = qb,
+    ['custom-police'] = police,
+    ['custom-testing'] = testing,
+}, {
     __call = function(_, name, fn) exported[name] = fn end,
 })
 
@@ -176,6 +203,57 @@ def run_lua(body: str, tmp_path: Path) -> str:
         .replace("__RESOURCE__", json.dumps(RESOURCE.as_posix()))
     ) + "\n" + body
     path = tmp_path / "agent_ops_harness.lua"
+    path.write_text(script, encoding="utf-8")
+    result = subprocess.run(
+        [LUA_BIN, str(path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    return result.stdout
+
+
+TESTING_HARNESS = r"""
+local MAIN = __MAIN__
+
+local exported = {}
+print = function() end
+exports = setmetatable({}, {
+    __call = function(_, name, fn) exported[name] = fn end,
+})
+RegisterCommand = function() end
+
+MODE = 'pass'
+CALLS = {}
+Test = {
+    listSuites = function() return { 'police_e2e', 'smoke' } end,
+    getLastResult = function() return {} end,
+    run = function(name, source)
+        CALLS[#CALLS + 1] = { name = name, source = source }
+        if MODE == 'throw' then error('boom') end
+        if MODE == 'fail' then return { pass = 1, fail = 1, error = 0, skip = 0 } end
+        if MODE == 'error' then return { pass = 0, fail = 0, error = 1, skip = 0 } end
+        return { pass = 2, fail = 0, error = 0, skip = 0 }
+    end,
+}
+Config = {}
+Mock = {
+    summary = function() end,
+    setPoliceOnDuty = function() end,
+}
+
+dofile(MAIN)
+"""
+
+
+def run_testing_lua(body: str, tmp_path: Path) -> str:
+    if LUA_BIN is None:
+        pytest.skip("lua5.4 is not installed")
+    script = TESTING_HARNESS.replace(
+        "__MAIN__", json.dumps(TESTING_MAIN.as_posix())
+    ) + "\n" + body
+    path = tmp_path / "custom_testing_harness.lua"
     path.write_text(script, encoding="utf-8")
     result = subprocess.run(
         [LUA_BIN, str(path)],
@@ -315,10 +393,47 @@ def test_documentation_covers_commands_exports_and_testing() -> None:
         "GetAgentEvents",
         "PushAgentEvent",
         "HealthSnapshot",
+        "RunTest",
+        "RunTestSuite",
+        "run_police_e2e",
+        "police_run_e2e",
         "Test.run",
         "agent-events.jsonl",
     ):
         assert text in doc, text
+
+
+def test_police_e2e_call_chain_is_wired_end_to_end() -> None:
+    testing = read(TESTING_MAIN)
+    assert "exports('RunTestSuite'" in testing
+    assert "pcall(Test.run" in testing
+    assert "test_run_failed" in testing
+
+    agent_ops = main_source()
+    assert "exports('RunTest'" in agent_ops
+    assert "testing:RunTestSuite(suite, source)" in agent_ops
+    assert "custom_testing_not_running" in agent_ops
+    assert "function COMMANDS.test(" in agent_ops
+    assert "print(json.encode(result))" in agent_ops
+
+    policy = read(DIRECTOR_POLICY)
+    assert "police_run_e2e = {" in policy
+    assert "police_run_e2e = true" in policy  # WORLD_ACTIONS: no target player
+    assert "suite must be police_e2e" in policy
+    assert "timeout_s must be an integer between 30 and 180" in policy
+
+    director = read(DIRECTOR_MAIN)
+    assert "local function executePoliceRunE2E(" in director
+    assert "exports['custom-agent-ops']:RunTest(suite)" in director
+    assert "police_run_e2e = executePoliceRunE2E" in director
+
+    registry = json.loads(read(TOOLS_JSON))
+    tool = next(item for item in registry["tools"] if item["name"] == "run_police_e2e")
+    assert tool["route"] == "director"
+    assert tool["director_action"] == "police_run_e2e"
+    assert tool["risk"] == "L1"
+    assert tool["requires_approval"] is False
+    assert tool["blast_radius"] == "single"
 
 
 # ---------------------------------------------------------------------------
@@ -433,11 +548,92 @@ assert(joined:find('custom_testing_not_running', 1, true) ~= nil, joined)
 
 RESOURCE_STATES['custom-testing'] = 'started'
 output = {}
-EXECUTED = nil
+TESTING_CALLS = {}
+TESTING_RESULT = {
+    ok = true,
+    suite = 'smoke',
+    result = { pass = 2, fail = 0, error = 0, skip = 0 },
+}
 commands['agent'](0, { 'test', 'smoke' }, '')
 joined = table.concat(output, '\n')
-assert(EXECUTED == 'test run smoke', 'dispatch: ' .. tostring(EXECUTED))
+assert(#TESTING_CALLS == 1, 'export must be called once')
+assert(TESTING_CALLS[1].name == 'smoke', 'suite: ' .. tostring(TESTING_CALLS[1].name))
+assert(joined:find('"result"', 1, true) ~= nil, joined)
+assert(joined:find('"fail":0', 1, true) ~= nil, joined)
 assert(joined:find('"ok":true', 1, true) ~= nil, joined)
+""",
+        tmp_path,
+    )
+
+
+def test_run_test_export_returns_structured_result(tmp_path: Path) -> None:
+    run_lua(
+        r"""
+INVOKING = nil
+RESOURCE_STATES['custom-testing'] = 'started'
+TESTING_CALLS = {}
+
+local result = exported.RunTest('police_e2e')
+assert(result.ok == true, 'ok')
+assert(result.suite == 'police_e2e', 'suite')
+assert(result.result.pass == 1 and result.result.fail == 0, 'stats')
+assert(TESTING_CALLS[1].name == 'police_e2e', 'suite forwarded')
+assert(TESTING_CALLS[1].source == nil, 'director call has no player source')
+
+local invalid = exported.RunTest('bad suite!')
+assert(invalid.ok == false and invalid.error == 'invalid_suite', 'invalid suite')
+
+RESOURCE_STATES['custom-testing'] = 'stopped'
+local down = exported.RunTest('police_e2e')
+assert(down.ok == false and down.error == 'custom_testing_not_running', 'stopped')
+assert(down.state == 'stopped', 'state included')
+
+RESOURCE_STATES['custom-testing'] = 'started'
+TESTING_THROW = true
+local thrown = exported.RunTest('police_e2e')
+assert(thrown.ok == false and thrown.error == 'test_run_failed', 'thrown export')
+assert(thrown.detail and thrown.detail:find('exploded', 1, true), 'detail')
+TESTING_THROW = false
+
+TESTING_RESULT = {
+    ok = false,
+    suite = 'police_e2e',
+    result = { pass = 1, fail = 1, error = 0, skip = 0 },
+}
+local failed = exported.RunTest('police_e2e')
+assert(failed.ok == false and failed.result.fail == 1, 'test failure is not a transport error')
+""",
+        tmp_path,
+    )
+
+
+def test_testing_export_wraps_test_run(tmp_path: Path) -> None:
+    run_testing_lua(
+        r"""
+local result = exported.RunTestSuite('police_e2e')
+assert(result.ok == true, 'ok')
+assert(result.suite == 'police_e2e', 'suite')
+assert(result.result.pass == 2, 'stats')
+assert(CALLS[1].name == 'police_e2e', 'name forwarded')
+
+MODE = 'fail'
+local failed = exported.RunTestSuite('police_e2e')
+assert(failed.ok == false and failed.result.fail == 1, 'fail stats')
+
+MODE = 'error'
+local errored = exported.RunTestSuite('police_e2e')
+assert(errored.ok == false and errored.result.error == 1, 'error stats are not ok')
+
+MODE = 'throw'
+local thrown = exported.RunTestSuite('police_e2e')
+assert(thrown.ok == false and thrown.error == 'test_run_failed', 'thrown Test.run')
+assert(thrown.detail and thrown.detail:find('boom', 1, true), 'detail')
+
+local unknown = exported.RunTestSuite('missing_suite')
+assert(unknown.ok == false and unknown.error == 'suite_not_found', 'unknown suite')
+
+local empty = exported.RunTestSuite('')
+assert(empty.ok == false and empty.error == 'invalid_suite', 'empty suite')
 """,
         tmp_path,
     )

@@ -44,6 +44,7 @@ ACTIVE_NAMES = {
     "set_player_bucket",
     "kick_player",
     "revive_player",
+    "run_police_e2e",
     "remove_player_vehicle",
     "set_job_duty",
     "set_player_metadata",
@@ -88,11 +89,28 @@ class RegistryContentTests(unittest.TestCase):
         registry = _registry()
         self.assertEqual(registry["schema_version"], 1, "registry schema_version must be 1")
         self.assertRegex(registry["registry_version"], r"^\d+\.\d+\.\d+$")
-        self.assertEqual(len(registry["tools"]), 35, "v1 ships exactly 31 tools")
+        self.assertEqual(len(registry["tools"]), 36, "v1 ships exactly 36 tools")
         active = {tool["name"] for tool in registry["tools"] if tool["status"] == "active"}
         planned = {tool["name"] for tool in registry["tools"] if tool["status"] == "planned"}
-        self.assertEqual(active, ACTIVE_NAMES, "all 35 tools are active for v1")
+        self.assertEqual(active, ACTIVE_NAMES, "all 36 tools are active for v1")
         self.assertEqual(planned, PLANNED_NAMES, "no tool remains planned")
+
+    def test_run_police_e2e_is_an_l1_test_only_action(self) -> None:
+        tool = _tool(_registry(), "run_police_e2e")
+        self.assertEqual(tool["channel"], "write", "the suite writes and cleans DB rows")
+        self.assertEqual(tool["route"], "director")
+        self.assertEqual(tool["director_action"], "police_run_e2e")
+        self.assertEqual(tool["risk"], "L1")
+        self.assertIs(tool["requires_approval"], False)
+        self.assertEqual(tool["blast_radius"], "single")
+        self.assertEqual(tool["idempotency"], "required")
+        self.assertEqual(tool["dry_run"], "supported")
+        schema = tool["inputSchema"]
+        self.assertEqual(schema["additionalProperties"], False)
+        self.assertEqual(schema["properties"]["suite"]["enum"], ["police_e2e"])
+        self.assertEqual(schema["properties"]["timeout_s"]["minimum"], 30)
+        self.assertEqual(schema["properties"]["timeout_s"]["maximum"], 180)
+        self.assertEqual(tool["verify"]["tool"], "get_action")
 
     def test_every_tool_has_the_required_contract_fields(self) -> None:
         required = (

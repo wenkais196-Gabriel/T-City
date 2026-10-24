@@ -111,6 +111,45 @@ RegisterCommand('test', function(source, args, raw)
     end
 end, false)
 
+-- ─── Agent/RCON export ───
+-- Test.run() 是同步的：异步用例由 Test._runAsync 内部 CreateThread + Wait
+-- 等待结束后才返回，所以调用方拿到的一定是本次运行的统计结果。
+-- 调用线程必须可 yield（director HTTP handler / console command / CreateThread）。
+exports('RunTestSuite', function(name, source)
+    name = tostring(name or '')
+    if name == '' then
+        return { ok = false, error = 'invalid_suite' }
+    end
+
+    local known = false
+    if type(Test.listSuites) == 'function' then
+        for _, candidate in ipairs(Test.listSuites()) do
+            if candidate == name then
+                known = true
+                break
+            end
+        end
+    end
+    if not known then
+        return { ok = false, suite = name, error = 'suite_not_found' }
+    end
+
+    local called, result = pcall(Test.run, name, source)
+    if not called then
+        return { ok = false, suite = name, error = 'test_run_failed', detail = tostring(result) }
+    end
+    if type(result) ~= 'table' then
+        return { ok = false, suite = name, error = 'invalid_result' }
+    end
+
+    return {
+        -- fail 与 error 都是失败用例；只看 fail 会把异常当成通过。
+        ok = (result.fail or 0) == 0 and (result.error or 0) == 0,
+        suite = name,
+        result = result,
+    }
+end)
+
 -- ─── 启动提示 ───
 print("[test] ✅ 测试调度器已加载")
 print("[test] 输入 /test help 查看可用命令")
