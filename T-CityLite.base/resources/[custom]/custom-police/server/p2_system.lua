@@ -42,14 +42,14 @@ function Sys.CreateIncident(actorId, data)
     local code = trim(data.code):sub(1, 16)
     if code == '' then code = '911' end
     local priority = math.max(1, math.min(3, math.floor(tonumber(data.priority) or 2)))
-    local description = trim(data.description):sub(1, 1000)
+    local details = trim(data.details or data.description):sub(1, 1000)
     if not audit(actorId, 'incident.create', nil, title) then return false, 'audit_unavailable' end
     local id = MySQL.insert.await([[
         INSERT INTO police_incidents (code, title, description, priority, created_by)
         VALUES (?, ?, ?, ?, ?)
-    ]], { code, title, description, priority, ('agent:%s'):format(tostring(actorId):sub(1, 40)) })
+    ]], { code, title, details, priority, ('agent:%s'):format(tostring(actorId):sub(1, 40)) })
     if not id then return false, 'db_error' end
-    broadcast(('%s: %s'):format(code, title), description)
+    broadcast(('%s: %s'):format(code, title), details)
     return { id = tonumber(id), status = 'open' }
 end
 

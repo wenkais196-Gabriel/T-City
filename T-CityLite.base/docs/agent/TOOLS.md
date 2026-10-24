@@ -3,7 +3,7 @@
 
 **Generated file — DO NOT EDIT.** Source: `tools/agent_tools.json` (registry_version `1.5.0`, schema_version `1`).
 
-32 tools: 32 active, 0 planned, 0 deprecated. Only `active` tools are advertised to agents.
+33 tools: 33 active, 0 planned, 0 deprecated. Only `active` tools are advertised to agents.
 
 ## Routing table
 
@@ -25,22 +25,23 @@
 | 14 | `list_actions` | active | read | director | default | GET `/agent/v1/actions` | L0 | no | none | not_applicable | — | — |
 | 15 | `list_events` | active | read | gateway | default | GET `/agent/v1/events` | L0 | no | none | not_applicable | — | — |
 | 16 | `list_live_events` | active | read | director | live | GET `/agent/v1/live/events` | L0 | no | none | not_applicable | — | — |
-| 17 | `query_players` | active | read | gateway | default | GET `/agent/v1/players` | L0 | no | none | not_applicable | — | — |
-| 18 | `remove_player_item` | active | effect | director | default | POST `/agent/v1/act` | L4 | yes | required | supported | get_action | — |
-| 19 | `remove_player_vehicle` | active | effect | director | default | POST `/agent/v1/act` | L4 | yes | required | supported | get_action | — |
-| 20 | `revive_player` | active | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
-| 21 | `send_announce` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
-| 22 | `send_notify` | active | write | director | default | POST `/agent/v1/act` | L1 | no | required | supported | get_action | — |
-| 23 | `send_phone_message` | active | write | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
-| 24 | `set_job_duty` | active | write | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
-| 25 | `set_player_bucket` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
-| 26 | `set_player_job` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | set_player_job |
-| 27 | `set_player_metadata` | active | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
-| 28 | `set_time_of_day` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_time_of_day |
-| 29 | `set_weather` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_weather |
-| 30 | `spawn_vehicle` | active | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_timeline | — |
-| 31 | `start_player_quest` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
-| 32 | `teleport_player` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | teleport_player |
+| 17 | `apply_police_incident` | active | write | director | default | POST `/agent/v1/act` | L1 | no | required | supported | get_action | — |
+| 18 | `query_players` | active | read | gateway | default | GET `/agent/v1/players` | L0 | no | none | not_applicable | — | — |
+| 19 | `remove_player_item` | active | effect | director | default | POST `/agent/v1/act` | L4 | yes | required | supported | get_action | — |
+| 20 | `remove_player_vehicle` | active | effect | director | default | POST `/agent/v1/act` | L4 | yes | required | supported | get_action | — |
+| 21 | `revive_player` | active | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
+| 22 | `send_announce` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
+| 23 | `send_notify` | active | write | director | default | POST `/agent/v1/act` | L1 | no | required | supported | get_action | — |
+| 24 | `send_phone_message` | active | write | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
+| 25 | `set_job_duty` | active | write | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
+| 26 | `set_player_bucket` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
+| 27 | `set_player_job` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | set_player_job |
+| 28 | `set_player_metadata` | active | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
+| 29 | `set_time_of_day` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_time_of_day |
+| 30 | `set_weather` | active | effect | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_world_state | set_weather |
+| 31 | `spawn_vehicle` | active | effect | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_timeline | — |
+| 32 | `start_player_quest` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
+| 33 | `teleport_player` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_player_snapshot | teleport_player |
 
 ## Risk and approval table
 
@@ -62,6 +63,7 @@
 | `list_actions` | L0 | single | no | none | 60/min burst 10 |
 | `list_events` | L0 | single | no | none | 60/min burst 10 |
 | `list_live_events` | L0 | single | no | none | 60/min burst 10 |
+| `apply_police_incident` | L1 | single | no | none | — |
 | `query_players` | L0 | single | no | none | 60/min burst 10 |
 | `remove_player_item` | L4 | single | yes | manual | 2/min burst 1 |
 | `remove_player_vehicle` | L4 | single | yes | manual | 2/min burst 1 |
