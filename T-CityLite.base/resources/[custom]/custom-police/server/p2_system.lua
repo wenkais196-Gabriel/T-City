@@ -259,23 +259,16 @@ end
 
 --- L2: assign a unit to an incident as an agent.
 function Sys.AssignUnit(actorId, incidentId, citizenid)
-    local id = tonumber(incidentId)
-    local target = tostring(citizenid or ''):sub(1, 50)
-    if not id then return false, 'invalid_incident' end
-    if target == '' then return false, 'invalid_unit' end
-    local incident = MySQL.single.await('SELECT id FROM police_incidents WHERE id = ? LIMIT 1', { id })
-    if not incident then return false, 'incident_not_found' end
-    local unit = MySQL.single.await('SELECT citizenid, status FROM police_units WHERE citizenid = ? LIMIT 1', { target })
-    if not unit then return false, 'unit_not_found' end
-    if unit.status == 'off_duty' then return false, 'unit_off_duty' end
-    if not audit(actorId, 'incident.assign', tostring(id), target) then return false, 'audit_unavailable' end
-    MySQL.insert.await([[
-        INSERT INTO police_incident_units (incident_id, citizenid) VALUES (?, ?)
-        ON DUPLICATE KEY UPDATE joined_at = joined_at
-    ]], { id, target })
-    MySQL.update.await("UPDATE police_units SET status = 'assigned', incident_id = ? WHERE citizenid = ?", { id, target })
-    MySQL.update.await("UPDATE police_incidents SET status = 'assigned' WHERE id = ?", { id })
-    return { id = id, unit = target, status = 'assigned' }
+    -- FIT-11: delegate to the p0 state-machine helper instead of writing
+    -- police_units/police_incidents directly. Agent callers have no player
+    -- source, so this uses the system path and records the actor citizenid.
+    local ok, result, reason = pcall(function()
+        return exports['custom-police']:AssignUnitSystemForAgent(
+            incidentId, citizenid, actorId)
+    end)
+    if not ok then return false, 'assign_failed' end
+    if result == false then return false, reason or 'assign_failed' end
+    return result
 end
 
 --- L3: jail a citizen as an agent. Delegates to custom-justice so the normal

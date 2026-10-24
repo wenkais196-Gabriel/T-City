@@ -334,12 +334,12 @@ def test_units_and_incidents_are_p0_only_plus_the_registered_legacy_branch():
             for write in writes
             if write.rule_id == rule_id
         }
-        # p0 helpers + the two pinned Sys.AssignUnit writes; no other file.
+        # Every unit/incident state write now goes through p0 helpers.
         assert {writer[0] for writer in writers} == {"custom-police"}
         non_p0 = {
             writer for writer in writers if writer[1] != "server/p0.lua"
         }
-        assert non_p0 == {("custom-police", "server/p2_system.lua", "Sys.AssignUnit")}
+        assert non_p0 == set()
 
 
 def test_report_and_citation_writers_match_the_registry():
