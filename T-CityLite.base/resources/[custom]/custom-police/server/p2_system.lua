@@ -461,6 +461,11 @@ function ArrestSubmit(source, params)
             return fail('open_case_failed')
         end
         created.justiceCaseId = tostring(justiceCaseId)
+        if not updateRow('UPDATE police_reports SET justice_case_id = ? WHERE id = ?',
+                { created.justiceCaseId, reportId }) then
+            rollback()
+            return fail('db_error')
+        end
     end
 
     -- Write the justice link back onto the report when it has no police case.

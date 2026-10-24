@@ -212,7 +212,7 @@ function C.GetArrests(source, params)
     -- New arrests live in police_reports(kind='arrest'); police_arrests is only
     -- kept for history written before v3.4 and is read via case detail.
     local sql = [[
-        SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid, created_at
+        SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid, justice_case_id, created_at
           FROM police_reports
          WHERE kind = 'arrest'
     ]]
@@ -246,7 +246,7 @@ function C.GetCaseDetail(source, caseId)
     local evidence = MySQL.query.await(
         'SELECT id, exhibit_no, label, status, created_at FROM police_evidence WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
     local arrests = MySQL.query.await([[
-        SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid, created_at
+        SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid, justice_case_id, created_at
           FROM police_reports WHERE kind = 'arrest' AND case_id = ?
         UNION ALL
         SELECT id, citizenid, charges, officer_citizenid, created_at

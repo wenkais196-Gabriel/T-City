@@ -81,6 +81,7 @@
     create_evidence: false, evidence_label: '',
     bolo: false, bolo_kind: 'person', bolo_target: '',
     create_case: false,
+    open_case: false,
   });
   let arrestSubmitting = $state(false);
   let arrestError = $state('');
@@ -410,6 +411,7 @@
       bolo_kind: arrestOpts.bolo ? arrestOpts.bolo_kind : undefined,
       bolo_target: arrestOpts.bolo ? arrestOpts.bolo_target.trim() : undefined,
       create_case: arrestOpts.create_case,
+      open_case: arrestOpts.open_case,
     });
     arrestSubmitting = false;
     if (!res?.success) {
@@ -439,6 +441,7 @@
     arrestOpts.create_evidence = false;
     arrestOpts.evidence_label = '';
     arrestOpts.create_case = false;
+    arrestOpts.open_case = false;
     arrestPick = '';
     await Promise.all([loadArrests(), refresh()]);
   }
@@ -689,6 +692,10 @@
             <input type="checkbox" bind:checked={arrestOpts.create_case} />
             <span>创建案件</span>
           </label>
+          <label class="opt">
+            <input type="checkbox" bind:checked={arrestOpts.open_case} />
+            <span>同时开庭（创建 justice 案件，Sergeant+）</span>
+          </label>
         </div>
 
         <button class="submit" onclick={submitArrest} disabled={arrestSubmitting}>
@@ -696,7 +703,7 @@
         </button>
         {#if arrestError}<p class="err">提交失败：{arrestError}</p>{/if}
         {#if arrestResult}
-          <p class="notice">报告 #{arrestResult.report_id} · 刑期 {arrestResult.minutes} 分钟 · 罚款 ${arrestResult.fine} · {arrestResult.jailed ? '已入狱' : '未入狱'}</p>
+          <p class="notice">报告 #{arrestResult.report_id} · 刑期 {arrestResult.minutes} 分钟 · 罚款 ${arrestResult.fine} · {arrestResult.jailed ? '已入狱' : '未入狱'}{arrestResult.justice_case_id ? ` · 开庭案件 ${arrestResult.justice_case_id}` : ''}</p>
         {/if}
 
         <h3>最近逮捕</h3>

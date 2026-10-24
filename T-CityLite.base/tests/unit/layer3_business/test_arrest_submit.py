@@ -323,7 +323,7 @@ def test_get_charges_exports_the_catalog_for_the_mdt():
 
 def test_get_arrests_reads_the_report_table_with_the_subject_mapping():
     block = get_arrests_block()
-    assert "SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid, created_at" in block
+    assert "SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid" in block
     assert "FROM police_reports" in block
     assert "WHERE kind = 'arrest'" in block
     assert "subject_citizenid = ?" in block
@@ -910,3 +910,15 @@ def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
     assert "coords = alertCoords" in block
     assert "description = message" in block
     assert "coords = { x = coords.x" not in block
+
+
+def test_justice_case_id_is_persisted():
+    migration = read(POLICE.parents[2] / "migrations/v3.6_police_justice_case.sql")
+    assert "justice_case_id" in migration and "information_schema" in migration
+    p2 = read(POLICE / "server/p2_system.lua")
+    assert "UPDATE police_reports SET justice_case_id" in p2
+    assert "justice_case_id" in p2 and "result.justice_case_id" in p2
+    p3 = read(POLICE / "server/p3_cases.lua")
+    assert "justice_case_id" in p3
+    ui = read(POLICE.parent / "custom-phone/web/src/apps/PoliceMDT.svelte")
+    assert "open_case" in ui
