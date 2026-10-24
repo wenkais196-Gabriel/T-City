@@ -211,6 +211,85 @@
     assigned: '已派单', enroute: '前往中', on_scene: '现场', unavailable: '不可用',
   };
 
+  // FIT-04: one stable snake_case -> Chinese table shared by every MDT action
+  // and query error. Unknown codes fall back to the raw code (never swallowed),
+  // so a new server rejection is visible until it gets a translation.
+  const ERROR_TEXT: Record<string, string> = {
+    not_police: '仅限警察使用',
+    not_on_duty: '请先上班（10-8 在勤）',
+    rank_too_low: '职级不足',
+    forbidden: '无权限执行该操作',
+    unknown_capability: '无权限执行该操作',
+    cooldown: '支援请求冷却中（60 秒），请稍后再试',
+    limit: '同时最多 2 个 NPC 支援单位，请等待现有单位结束',
+    global_limit: '全服支援单位已达上限，请稍后重试',
+    in_progress: '该提交正在处理中，请勿重复点击',
+    invalid_idempotency_key: '提交标识无效，请刷新后重试',
+    invalid_transition: '警情状态已变化，请刷新后重试',
+    incident_not_found: '警情不存在或已归档',
+    not_assigned: '你尚未被分配到该警情（需先派单/到场）',
+    already_jailed: '目标已在服刑',
+    too_far: '目标距离超过 5 米',
+    not_handcuffed: '目标没有上铐/倒地，先 /cuff',
+    target_not_cuffed: '目标没有上铐/倒地，先 /cuff',
+    case_forbidden: '创建案件需要 Sergeant+',
+    audit_unavailable: '审计不可用，请稍后重试',
+    db_error: '数据库错误，请重试',
+    export_error: '服务端处理异常，请稍后重试',
+    action_rejected: '服务端拒绝：请检查权限与状态',
+    action_failed: '服务端处理失败，请稍后重试',
+    action_not_found: 'MDT 未注册该动作',
+    app_forbidden: '无权限使用 MDT（需在勤警察）',
+    player_not_found: '角色尚未加载',
+    invalid_message: '请填写警情通报内容',
+    invalid_status: '状态无效',
+    invalid_disposition: '清场处置无效',
+    invalid_params: '参数无效',
+    invalid_incident: '警情 id 无效',
+    invalid_case: '案件 id 无效',
+    invalid_unit: '单位无效',
+    invalid_citizen: '目标 citizenid 无效',
+    invalid_amount: '金额无效（1–50000）',
+    invalid_reason: '原因至少 3 字',
+    invalid_title: '标题至少 3 字（≤160 字）',
+    invalid_body: '正文至少 10 字（≤4000 字）',
+    invalid_label: '证据名称至少 3 字',
+    invalid_evidence_label: '证据名称至少 3 字',
+    invalid_bolo_kind: 'BOLO 类型无效',
+    invalid_bolo_target: 'BOLO 目标不能为空',
+    invalid_kind: 'BOLO 类型无效',
+    invalid_target: 'BOLO 目标不能为空',
+    invalid_warrant: '搜查令 id 无效',
+    not_pending: '该搜查令已处理，无法重复裁决',
+    missing_case: '证据必须关联警情、报告或案件',
+    invalid_charges: '罪名无效或超过 8 条',
+    invalid_charge: '罪名无效',
+    invalid_case_combination: '不能同时关联已有案件并新建案件',
+    bolo_forbidden: 'BOLO 需要 Sergeant+（警长及以上）',
+    case_not_found: '案件不存在',
+    citizen_not_found: '目标公民不存在',
+    citizen_offline: '目标已离线',
+    target_unavailable: '目标或你的角色尚未加载',
+    jail_failed: '送监失败，已回滚记录',
+    case_create_failed: '案件创建失败，已回滚逮捕记录',
+    open_case_failed: '案件打开失败，已回滚逮捕记录',
+    duty_failed: '上班/下班状态切换失败，请重试',
+    not_found: '记录不存在',
+    not_owner: '无权操作该记录',
+    insufficient_funds: '余额不足',
+    rejected: '服务端拒绝：请检查权限与参数',
+    unavailable: '服务暂不可用，请稍后重试',
+  };
+
+  function errorText(code: unknown): string {
+    const key = String(code ?? '');
+    return ERROR_TEXT[key] ?? (key || '提交失败');
+  }
+
+  // Existing call-site names kept as aliases; both resolve to the one table.
+  const backupErrorFor = errorText;
+  const reportErrorFor = errorText;
+
   // Closed calls never reach the dispatch queue; the label still documents the
   // server-side dispositions so a stale/legacy row is not shown as a raw enum.
   const dispositionLabel: Record<string, string> = {
@@ -239,9 +318,9 @@
       queryApp(DB, 'incidents'),
     ]);
     if (u?.success) units = u.data?.rows ?? [];
-    else error = u?.error ?? 'units_failed';
+    else error = errorText(u?.error ?? 'units_failed');
     if (i?.success) incidents = i.data?.rows ?? [];
-    else error = error || (i?.error ?? 'incidents_failed');
+    else error = error || errorText(i?.error ?? 'incidents_failed');
     loading = false;
   }
 
@@ -307,7 +386,7 @@
       const rows = res.data?.rows ?? [];
       meInfo = (rows[0] as Me | undefined) ?? null;
     } else {
-      meError = res?.error ?? 'me_failed';
+      meError = errorText(res?.error ?? 'me_failed');
     }
   }
 
@@ -319,38 +398,24 @@
 
   async function setStatus(status: string) {
     const res = await appAction(DB, 'set_status', { status });
-    notice = res?.success ? `状态已切换：${statusLabel[status] ?? status}` : `失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? `状态已切换：${statusLabel[status] ?? status}` : `失败：${errorText(res?.error ?? 'unknown')}`;
     if (res?.success && meInfo) meInfo = { ...meInfo, status };
     await refresh();
   }
 
   async function assign(incident: Incident, unit: Unit) {
     const res = await appAction(DB, 'assign', { incident_id: incident.id, citizenid: unit.citizenid });
-    notice = res?.success ? `已派 ${unit.callsign || unit.name} → #${incident.id}` : `派单失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? `已派 ${unit.callsign || unit.name} → #${incident.id}` : `派单失败：${errorText(res?.error ?? 'unknown')}`;
     await refresh();
   }
 
   async function clearIncident(incident: Incident) {
     const res = await appAction(DB, 'clear', { incident_id: incident.id, status: 'cleared', disposition: 'cleared' });
-    notice = res?.success ? `警情 #${incident.id} 已清场` : `清场失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? `警情 #${incident.id} 已清场` : `清场失败：${errorText(res?.error ?? 'unknown')}`;
     await refresh();
   }
 
   // 调度页「请求支援」：服务端裁决权限/冷却/上限，前端只做展示与本地冷却倒计时。
-  function backupErrorFor(code: unknown): string {
-    const reasons: Record<string, string> = {
-      cooldown: '支援请求冷却中（60 秒），请稍后再试',
-      limit: '同时最多 2 个 NPC 支援单位，请等待现有单位结束',
-      not_police: '仅限在勤警察（grade ≥ 1）请求支援',
-      not_on_duty: '请先上班（10-8 在勤）',
-      rank_too_low: '职级不足，需 grade ≥ 1',
-      action_rejected: '服务端拒绝：请检查权限与状态',
-      action_failed: '服务端处理失败，请稍后重试',
-      action_not_found: 'MDT 未注册请求支援动作',
-    };
-    return reasons[String(code)] ?? `请求失败：${String(code ?? 'unknown')}`;
-  }
-
   function startBackupCooldown() {
     backupCooldown = 60;
     if (backupTimer) clearInterval(backupTimer);
@@ -385,14 +450,14 @@
     const params = kind === 'citizen' ? { citizenid: citizenQuery.trim() } : { plate: vehicleQuery.trim() };
     const res = await queryApp(DB, kind, params);
     if (res?.success) lookupRows = res.data?.rows ?? [];
-    else lookupError = res?.error ?? 'not_found';
+    else lookupError = errorText(res?.error ?? 'not_found');
   }
 
   async function loadCitations() {
     citationError = '';
     const res = await queryApp(DB, 'citations', {});
     if (res?.success) citationRows = res.data?.rows ?? [];
-    else citationError = res?.error ?? 'citation_view_denied';
+    else citationError = errorText(res?.error ?? 'citation_view_denied');
   }
 
   async function issueCitation() {
@@ -402,7 +467,7 @@
       reason: citationForm.reason.trim(),
       plate: citationForm.plate.trim(),
     });
-    notice = res?.success ? '罚单已开具并通知当事人' : `开单失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? '罚单已开具并通知当事人' : `开单失败：${errorText(res?.error ?? 'unknown')}`;
     if (res?.success) citationForm.reason = '';
     await loadCitations();
   }
@@ -412,36 +477,6 @@
     const res = await queryApp(DB, 'reports', {});
     if (res?.success) reportRows = res.data?.rows ?? [];
     else reportListError = reportErrorFor(res?.error ?? 'report_view_denied');
-  }
-
-  function reportErrorFor(code: unknown): string {
-    const reasons: Record<string, string> = {
-      action_rejected: '服务端拒绝：请检查权限与参数',
-      action_failed: '服务端处理失败，请稍后重试',
-      app_forbidden: '无权限使用 MDT（需在勤警察）',
-      player_not_found: '角色尚未加载',
-      not_police: '仅限警察使用',
-      not_on_duty: '请先上班（10-8 在勤）',
-      rank_too_low: '职级不足',
-      bolo_forbidden: 'BOLO 需要 Sergeant+（警长及以上）',
-      case_not_found: '案件不存在',
-      incident_not_found: '警情不存在',
-      invalid_params: '参数无效',
-      invalid_incident: '警情 id 无效',
-      invalid_case: '案件 id 无效',
-      invalid_title: '标题至少 3 字（≤160 字）',
-      invalid_body: '正文至少 10 字（≤4000 字）',
-      invalid_evidence_label: '证据名称至少 3 字',
-      invalid_bolo_kind: 'BOLO 类型无效',
-      invalid_bolo_target: 'BOLO 目标不能为空',
-      db_error: '数据库错误，请重试',
-      audit_unavailable: '审计不可用，请稍后重试',
-      invalid_idempotency_key: '提交标识无效，请刷新后重试',
-      in_progress: '该提交正在处理中，请勿重复点击',
-      unavailable: '服务暂不可用，请稍后重试',
-    };
-    const key = String(code ?? '');
-    return reasons[key] ?? (key || '提交失败');
   }
 
   // NPC callouts reuse the normal incident row. `GetIncidents` predates the
@@ -548,7 +583,7 @@
     const res = await appAction(DB, 'request_warrant', {
       citizenid: warrantForm.citizenid.trim(), reason: warrantForm.reason.trim(),
     });
-    notice = res?.success ? '搜查令已提交审批' : `失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? '搜查令已提交审批' : `失败：${errorText(res?.error ?? 'unknown')}`;
     if (res?.success) { warrantForm.citizenid = ''; warrantForm.reason = ''; }
     await loadWarrants();
   }
@@ -557,7 +592,7 @@
     const res = await appAction(DB, 'decide_warrant', {
       warrant_id: Number(row.id), approve,
     });
-    notice = res?.success ? (approve ? '已批准' : '已驳回') : `失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? (approve ? '已批准' : '已驳回') : `失败：${errorText(res?.error ?? 'unknown')}`;
     await loadWarrants();
   }
 
@@ -570,7 +605,7 @@
     chargesError = '';
     const res = await queryApp(DB, 'charges');
     if (res?.success) chargeRows = res.data?.rows ?? [];
-    else chargesError = res?.error ?? 'charges_failed';
+    else chargesError = errorText(res?.error ?? 'charges_failed');
   }
 
   function toggleCharge(id: number | string) {
@@ -617,21 +652,7 @@
     });
     arrestSubmitting = false;
     if (!res?.success) {
-      const reasons: Record<string, string> = {
-        action_rejected: '服务端拒绝：请检查目标是否在线、罪名与权限',
-        target_not_cuffed: '目标没有上铐/倒地，先 /cuff',
-        too_far: '目标距离超过 5 米',
-        target_unavailable: '目标或你的角色尚未加载',
-        already_jailed: '目标已在服刑',
-        citizen_offline: '目标已离线',
-        bolo_forbidden: 'BOLO 需要 Sergeant+',
-        case_forbidden: '创建案件需要 Sergeant+',
-        invalid_charges: '罪名无效或超过 8 条',
-        jail_failed: '送监失败，已回滚记录',
-        invalid_idempotency_key: '提交标识无效，请刷新后重试',
-        in_progress: '该提交正在处理中，请勿重复点击',
-      };
-      arrestError = reasons[String(res?.error)] ?? (res?.error ?? 'arrest_failed');
+      arrestError = errorText(res?.error ?? 'arrest_failed');
       return;
     }
     arrestResult = res.data ?? {};
@@ -661,14 +682,14 @@
     caseDetailError = '';
     const res = await queryApp(DB, 'case_detail', { case_id: id });
     if (res?.success && res.data?.rows?.length) caseDetail = res.data.rows[0];
-    else caseDetailError = res?.error ?? 'not_found';
+    else caseDetailError = errorText(res?.error ?? 'not_found');
   }
 
   async function createCase() {
     const res = await appAction(DB, 'create_case', {
       title: caseForm.title.trim(), summary: caseForm.summary.trim(),
     });
-    notice = res?.success ? `案件已建立：${res.data?.case_no ?? ''}` : `失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? `案件已建立：${res.data?.case_no ?? ''}` : `失败：${errorText(res?.error ?? 'unknown')}`;
     if (res?.success) { caseForm.title = ''; caseForm.summary = ''; }
     await loadCases();
   }
@@ -682,7 +703,7 @@
     const res = await appAction(DB, 'create_bolo', {
       kind: boloForm.kind, target: boloForm.target.trim(), reason: boloForm.reason.trim(),
     });
-    notice = res?.success ? 'BOLO 已发布' : `失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? 'BOLO 已发布' : `失败：${errorText(res?.error ?? 'unknown')}`;
     if (res?.success) { boloForm.target = ''; boloForm.reason = ''; }
     await loadBolos();
   }
@@ -699,7 +720,7 @@
       incident_id: evidenceForm.incident_id ? Number(evidenceForm.incident_id) : undefined,
       location: evidenceForm.location.trim(),
     });
-    notice = res?.success ? `证据已登记：${res.data?.exhibit_no ?? ''}` : `登记失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? `证据已登记：${res.data?.exhibit_no ?? ''}` : `登记失败：${errorText(res?.error ?? 'unknown')}`;
     if (res?.success) { evidenceForm.label = ''; evidenceForm.description = ''; }
     await loadEvidence();
   }
@@ -716,12 +737,12 @@
     auditError = '';
     const res = await queryApp(DB, 'audit');
     if (res?.success) auditRows = res.data?.rows ?? [];
-    else auditError = res?.error ?? 'audit_forbidden';
+    else auditError = errorText(res?.error ?? 'audit_forbidden');
   }
 
   async function updateIncident(incident: Incident, action: 'enroute' | 'on_scene') {
     const res = await appAction(DB, action, { incident_id: incident.id });
-    notice = res?.success ? `#${incident.id} ${action === 'enroute' ? '前往中' : '已到场'}` : `失败：${res?.error ?? 'unknown'}`;
+    notice = res?.success ? `#${incident.id} ${action === 'enroute' ? '前往中' : '已到场'}` : `失败：${errorText(res?.error ?? 'unknown')}`;
     await refresh();
   }
 

@@ -18,6 +18,10 @@ writes must go through an owner export instead (for example
 ``exports['custom-police']:RecordVerdict(...)``), which is exactly the boundary
 this rule protects.
 
+`police_*` / `justice_*` / `phone_notifications` are also checked **in every
+resource**, not only the curated `scan` cluster, so an unrelated resource cannot
+silently write a police table.
+
     python3 -m pytest -q tests/architecture/test_cross_resource_writes.py
 """
 from __future__ import annotations
@@ -163,6 +167,36 @@ def owner_of(table: str, registry: dict) -> str | None:
     return None
 
 
+def domain_tables(registry: dict) -> set[str]:
+    """High-value tables checked in every resource, not only the scan cluster."""
+    return {"phone_notifications", "police_reports"}
+
+
+def all_resource_server_dirs() -> list[tuple[str, Path]]:
+    return [
+        (directory.parent.name, directory)
+        for directory in sorted(RESOURCES.glob("*/*/server"))
+        if directory.is_dir()
+    ]
+
+
+def repo_wide_domain_violations(registry: dict) -> list[Violation]:
+    """Any resource outside the cluster writing a police/justice/phone table."""
+    violations: list[Violation] = []
+    for resource, directory in all_resource_server_dirs():
+        for path in sorted(directory.rglob("*.lua")):
+            for write in iter_writes(resource, path, path.read_text(encoding="utf-8")):
+                owner = owner_of(write.table, registry)
+                if owner is None or owner == write.resource:
+                    continue
+                if (
+                    write.table in domain_tables(registry)
+                    or write.table.startswith(("police_", "justice_"))
+                ):
+                    violations.append(Violation(write=write, owner=owner))
+    return violations
+
+
 def scan_files(registry: dict) -> tuple[list[Write], list[Violation]]:
     writes: list[Write] = []
     for resource in registry["scan"]:
@@ -271,6 +305,19 @@ def test_phone_notifications_and_police_reports_have_a_single_writer():
             f"{table} is written by {sorted(owners)}; only the owner may write it"
         )
         assert not [item for item in violations if item.write.table == table]
+
+
+def test_domain_tables_are_owner_only_in_every_resource():
+    """The scan cluster is curated, but police/phone/justice tables are not:
+    any resource writing them is a violation even if it is outside the cluster.
+    """
+    violations = repo_wide_domain_violations(load_registry())
+    detail = [
+        f"FIT-02: {item.write.where} {item.write.verb} {item.write.table} "
+        f"— owned by {item.owner}; use the owner export"
+        for item in violations
+    ]
+    assert not detail, "\n".join(detail)
 
 
 def test_notification_and_verdict_use_owner_exports():

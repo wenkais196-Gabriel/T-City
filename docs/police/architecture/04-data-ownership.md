@@ -17,12 +17,12 @@
 
 | # | 结论 | 证据 |
 |---|---|---|
-| 1 | **13 张 `police_*` 表**（基线 12 + `police_write_intents`）的唯一写者**在资源层是单一的**（全部由 `custom-police` 写）；另有 `justice_sentences` 由 `custom-justice` 独占。跨资源写只剩两处：`custom-justice` 回写 `police_reports.justice_verdict`（白名单例外 #1），以及 `custom-police` 直写 `phone_notifications`（违规，未收敛） | `custom-police/server/{p0,p1,p2_evidence,p3_cases,p2_system,p4_npc}.lua`、`custom-justice/server/{sentence,trial}.lua` |
+| 1 | **13 张 `police_*` 表**（基线 12 + `police_write_intents`）的唯一写者**在资源层是单一的**（全部由 `custom-police` 写）；另有 `justice_sentences` 由 `custom-justice` 独占。跨资源写已收敛：`custom-phone:Notify` 与 `custom-police:RecordVerdict` 两个 owner 导出，`phone_notifications`/`police_reports` 只剩 owner 写（FIT-02 → PASS） | `custom-police/server/{p0,p1,p2_evidence,p3_cases,p2_system,p4_npc}.lua`、`custom-justice/server/{sentence,trial}.lua`、`tests/architecture/test_cross_resource_writes.py` |
 | 2 | 基线有 **5 个概念没有单一事实源**：duty、custody、arrest 记录、wanted、罪名目录。现在 **duty 与 custody 已收敛**（duty=投影，custody=`justice_sentences.ends_at`）；arrest 仍双写（report vs `police_arrests`）；wanted/罪名目录未动 | `custom-police/server/p0.lua:406-425`、`custom-justice/server/sentence.lua`、`TECH_DEBT.md:5-24`、`shared/charges.lua:1-6` |
-| 3 | `phone_notifications` 有 **6 个写者文件**，基线 5 处绕过 owner；现在 police 侧增加到 **5 处**（p0/p1/p2_system×2/p4_npc），仍绕过 `StoreNotification` 的缓存失效 + `app_id` 白名单 | `custom-phone/server/main.lua:223-262` vs `custom-police/server/{p0,p1,p2_system,p4_npc}.lua`、`custom-phone/server/apps/police_mdt.lua:259-264` |
+| 3 | `phone_notifications` 现在只有 **owner（`custom-phone`）** 写：police 的 5 处通知改为 `police_outbox` → `exports['custom-phone']:Notify`，`police_mdt` 的 alert 也走同一导出；`app_id` 白名单与缓存失效由 owner 统一做 | `custom-phone/server/main.lua` 的 `Notify`、`custom-police/server/p2_system.lua` 的 `Outbox`、`tests/architecture/table_owners.json` |
 | 4 | `players.job/metadata/money` 是 TEXT JSON（无列约束、无 FK），有 **7 个资源**直接写（qb-core 加 6 个非 owner）；custody 的写入点现在只剩 qb-prison/justice 的投影（不再是权威） | `tests/fixtures/tcity_schema.sql:624-646`、`migrations/v2.8_police_p0.sql:7-8` |
 | 5 | 一致性策略**仍不统一**：同一资源里既有 fail-closed 审计，也有写完就忘；新增的 NPC 警情/服刑路径同样没有把审计写进 `police_audit`（justice 只 `print`/custom-logs） | `custom-police/server/p3_cases.lua:242-244` vs `p2_system.lua:121`、`p0.lua:50-58` |
-| 6 | 迁移链 `v2.8 → v3.11` 全部幂等，但 **fixture 里仍是 0 张 `police_*` 表**、也没有 `justice_sentences`/`police_write_intents`；DB 集成测试覆盖不到 | `tests/fixtures/tcity_schema.sql`（grep 0 命中）、`tests/check_db_schema.py:15-49` |
+| 6 | 迁移链 `v2.8 → v3.12` 全部幂等，但 **fixture 里仍是 0 张 `police_*` 表**、也没有 `justice_sentences`/`police_write_intents`/`police_outbox`；DB 集成测试覆盖不到 | `tests/fixtures/tcity_schema.sql`（grep 0 命中）、`tests/check_db_schema.py:15-49`、`migrations/v3.12_police_outbox.sql` |
 
 ---
 
@@ -59,7 +59,8 @@
 |---|---|---|---|---|
 | duty / unit | `job.onduty` 与 `police_units.status` 双写 | `police_units.status` 为状态，`onduty` 为投影；`syncDuty` 只投影/清理 | `custom-police/server/p0.lua`（`SetUnitStatus*`、`syncDuty`、掉线/sweep helper） | `p0.lua:67-121,406-425,567-599` |
 | custody | 三源：`metadata.injail` / `Inmates` / 客户端 `jailTime` | **DB 主（`justice_sentences.ends_at`）+ metadata 投影（已实施）**；客户端 `jailTime` 仅 UI | `custom-justice/server/sentence.lua`（写）；qb-prison 只写投影 | `sentence.lua:91-178,183-216`、`qb-prison/server/main.lua:14-50` |
-| arrest/report 幂等 | 无 | `police_write_intents` 账本：`pending→done`，失败删键；键由客户端传 | `custom-police/server/p2_system.lua`（`withIntent`） | `p2_system.lua:146-267`、v3.9 |
+| arrest/report 幂等 | 无 | `police_write_intents` 账本：`pending→done`（done 7 天 TTL，pending 10 分钟可重试），失败删键；键由客户端传 | `custom-police/server/p2_system.lua`（`withIntent`/`sweepIntents`） | `p2_system.lua`、v3.9 + v3.12 |
+| 通知副作用 | 调用方直写 `phone_notifications` | `police_outbox`：`pending→done/failed`，30s/2m/10m 退避，5 次失败；owner 导出 `Notify` 落库 + 推送 | custom-police（outbox）/ custom-phone（Notify） | `p2_system.lua` 的 `Outbox`、v3.12、[09-outbox.md](09-outbox.md) |
 | NPC 警情 | 不存在 | `police_incidents.npc_template` 写者只有 `custom-police`（p4_npc）；客户端不建单 | `custom-police/server/p4_npc.lua` | `p4_npc.lua:124-134`、v3.11 |
 | incident 关闭元数据 | 无 `disposition` | `disposition/closed_by/closed_reason/last_activity_at` 由 p0 关闭/清扫路径写 | `custom-police/server/p0.lua` | `p0.lua:298-310,506-532`、v3.10 |
 
@@ -77,7 +78,7 @@
 | `police_incidents` | custom-police（`p0.lua:144-183,212-325,506-532`；`p2_system.lua:56-75,77-95`；`p4_npc.lua:124-134`） | `p0.lua:185-210`、`live_api.lua:489-492`、`p2_system.lua:386,690`（存在性） | PK `id` | `created_by` 为多态字符串（citizenid / `agent:<id>` / `system:npc`），无 FK | `open→assigned→enroute→on_scene→closed`；关闭写 `disposition/closed_by/closed_reason/last_activity_at`；`npc_template` 标记 NPC 警情；45min stale sweep | `v2.8:21-39`、`v3.10`、`v3.11` | 否 |
 | `police_incident_units` | custom-police（`p0.lua:149-152`、`p2_system.lua:88-91`） | `p0.lua:166-168`（权限判定） | PK(`incident_id`,`citizenid`) | 无 | **只增不删**：清场只清 `police_units.incident_id`，join 行永久保留 | `v2.8:41-48` | 否 |
 | `police_audit` | custom-police（`p0.lua:31-39`、`p1.lua:14-20`、`p2_evidence.lua:14-21`、`p3_cases.lua:32-38`、`p2_system.lua:31-38,146-152`） | `p0.lua:249-257`（`LIMIT 100`） | PK `id` | `actor_citizenid` 多态（citizenid 或 `agent:<id>`） | append-only；**无 DELETE / 无 TTL / 无分区**（全库 grep 0 命中） | `v2.8:50-61` | 否（agent 也走同一 helper） |
-| `police_reports` | custom-police（`p2_system.lua:581-587,922-928`、`p1.lua:107`）+ **custom-justice**（`trial.lua:30-49`） | `p1.lua:116-133`、`p3_cases.lua:97-103,214-227,245-246`、`p0.lua:220-225` | PK `id` | `incident_id→incidents`、`case_id→police_cases`(**BIGINT**)、`justice_case_id`(string，无 FK)、`subject/author/officer_citizenid`(无 FK) | 只增 + 字段回填；`status` 的 `approved` **无写者**；rollback 会 DELETE | `v2.9:18-30`、`v3.3`、`v3.4`、`v3.5`、`v3.6`、`v3.7` | **是（白名单例外 #1）** |
+| `police_reports` | **custom-police 唯一**（`p2_system.lua:581-587,922-928`、`p1.lua:107`、`p3_cases.lua` 的 `RecordVerdict` 导出） | `p1.lua:116-133`、`p3_cases.lua:97-103,214-227,245-246`、`p0.lua:220-225`、`custom-justice/server/trial.lua`（经导出） | PK `id` | `incident_id→incidents`、`case_id→police_cases`(**BIGINT**)、`justice_case_id`(string，无 FK)、`subject/author/officer_citizenid`(无 FK) | 只增 + 字段回填；`status` 的 `approved` **无写者**；rollback 会 DELETE | `v2.9:18-30`、`v3.3`、`v3.4`、`v3.5`、`v3.6`、`v3.7` | **否（`RecordVerdict` 导出）** |
 | `police_citations` | custom-police（`p1.lua:51-56,164-168`、`p2_system.lua:653-659`） | `p1.lua:69-92,146-193` | PK `id` | `report_id→police_reports`、`incident_id→police_incidents`；`citizenid/officer` 无 FK | `unpaid→paid`（`void` 无写者）；`paid_at` | `v2.9:2-16`、`v3.4`（charge/base/report） | 否 |
 | `police_evidence` | custom-police（`p2_evidence.lua:69,79`、`p2_system.lua:669-691`） | `p2_evidence.lua:67-77`、`p3_cases.lua:247-248` | PK `id`；UNIQUE `exhibit_no` | `incident_id`/`report_id`/`case_id`（均无约束） | `collected→stored→released→destroyed`（只有 collected 有写者）；rollback 物理删除 | `v3.0:2-19`、`v3.3`、`v3.4` | 否 |
 | `police_evidence_chain` | custom-police（`p2_evidence.lua:23-27`、`p2_system.lua:550-553,771-773`） | `p2_evidence.lua:79-94` | PK `id` | `evidence_id`（无约束） | append-only；**无 UNIQUE(evidence_id,action)** → 重试会写第二条 `collected`；rollback 按 evidence_id 删除 | `v3.0:21-30` | 否 |
@@ -85,9 +86,9 @@
 | `police_bolos` | custom-police（`p3_cases.lua:82-85,133`） | `p3_cases.lua:104-105`（legacy 分支） | PK `id` | 无 | `active→cleared`（软删）；规划为下线但入口仍开（`police_mdt.lua:183`） | `v3.1:17-29` | 否 |
 | `police_warrants` | custom-police（`p3_cases.lua:148-151,165-167`） | `p3_cases.lua:179-183`、`p0.lua:214-219` | PK `id` | `citizenid/requested_by/approved_by`（无 FK） | `requested→approved\|denied`；`executed`/`expired` **无写者** | `v3.1:31-43` | 否 |
 | `police_arrests` | custom-police（`p3_cases.lua:197-201`、`p2_system.lua:118-120`） | `p3_cases.lua:249-258`（UNION 历史） | PK `id` | `incident_id`/`case_id`（无 FK） | 只增；"停止新写入"未落实（TD-06） | `v3.1:45-57` | 否（但 agent 路径仍写） |
-| `police_write_intents` | **custom-police 唯一**（`p2_system.lua:146-267` 的 `withIntent`） | 同文件（回放/并发判定） | PK `idem_key`(128) | 无 | `pending→done`；失败直接 DELETE；`created_at < 1 day` 的行惰性清 200 条/次；无 `failed` 写入者、无按 key 的 TTL | `v3.9:22-40` | 否 |
+| `police_write_intents` | **custom-police 唯一**（`p2_system.lua` 的 `withIntent`/`sweepIntents`） | 同文件（回放/并发判定） | PK `idem_key`(128) | 无 | `pending→done`；done 7 天 TTL（`expires_at`）、pending >10 分钟可重试、failed 立即清；启动 + 每次 claim 扫描 200 条 | `v3.9:22-40`、`v3.12` | 否 |
 
-> 新增列（不影响“唯一写者”结论）：`police_incidents.disposition/closed_by/closed_reason/last_activity_at/npc_template`（v3.10/v3.11），均由 `custom-police` 写；`police_reports.justice_verdict/justice_status`（v3.7）由 `custom-justice` 写（白名单例外 #1）。
+> 新增列（不影响“唯一写者”结论）：`police_incidents.disposition/closed_by/closed_reason/last_activity_at/npc_template`（v3.10/v3.11），均由 `custom-police` 写；`police_reports.justice_verdict/justice_status`（v3.7）由 `custom-police` 的 `RecordVerdict` 导出写（justice 只调用），`police_write_intents.expires_at/completed_at`（v3.12）由 `withIntent` 写。
 
 ### 3.2 平台域（2 张平台表 + `players` + justice 内存）
 
@@ -105,16 +106,16 @@
 
 | 写者 | 被写的非自有数据 | 目的 | 判定 | 证据 |
 |---|---|---|---|---|
-| `custom-police` | `phone_notifications` | 911/派单/罚单/支援/NPC 警情通知 | ❌ 违规：绕过 `StoreNotification`（不清 `phoneDataCache`、不校验 `app_id`）；现在 5 处 | `p0.lua:171-179`、`p1.lua:23-33`、`p2_system.lua:45-52`、`p4_npc.lua:78-90` |
+| `custom-police` | `phone_notifications` | 911/派单/罚单/支援/NPC 警情通知 | ✅ **已收敛**：不再直写；5 处全部 `police_outbox` → `exports['custom-phone']:Notify`（缓存失效 + `app_id` 白名单由 owner 做） | `p0.lua`、`p1.lua`、`p2_system.lua`、`p4_npc.lua` 的 `Outbox.Enqueue`、`custom-phone/server/main.lua` 的 `Notify` |
 | `custom-police` | `phone_invoices` | `/fine` 现金不足时兜底开票 | ❌ 违规且**无读者**：自研手机不读该表 | `commands.lua:293-299`（全库仅此 1 处写、0 处读） |
 | `custom-police` | `players.metadata`（`callsign`/`injail`/`criminalrecord`） | 警号、legacy 服刑、前科 | ✅ 经 `Player.Functions`（允许；但 `injail` 属于 custody 冲突，见 D-02） | `commands.lua:224`、`interactions.lua:181-185`、`p2_system.lua:611,826` |
 | `custom-police` | 经济（`RemoveMoney`/`qb-banking:AddMoney`） | 罚单支付、`/fine`、`/paylawyer` | ⚠️ 非原子：扣款与入账两条语句 | `p1.lua:149-153`、`commands.lua:289-291,513` |
-| `custom-justice` | `police_reports.justice_verdict/justice_status` | 判决投影（重启后唯一痕迹） | ✅ **白名单例外 #1**：只 UPDATE 两个字段，`WHERE justice_case_id=?`，best-effort | `trial.lua:30-49` |
+| `custom-justice` | `police_reports.justice_verdict/justice_status` | 判决投影（重启后唯一痕迹） | ✅ **已收敛**：改调 `exports['custom-police']:RecordVerdict`，只 UPDATE 两个字段，`WHERE justice_case_id=?`，best-effort | `trial.lua` 的 `persistVerdict`、`custom-police/server/p3_cases.lua` 的 `RecordVerdict` |
 | `custom-justice` | `players.metadata.injail` | 送监/登录投影 | ✅ 经 `Player.Functions`；**现在只是 `justice_sentences` 的投影**（`SetJailStatus`/`prison.lua` 都从剩余秒数算） | `prison.lua:77,161`、`qb-prison/server/main.lua:36-42` |
 | `custom-justice` | `custom-career` 部门 | `/setjusticedept` | ✅ 经 export `SetPlayerDepartment` | `main.lua:210` |
 | `custom-career` | `players.rank_tier` / `department` / `district` / `certs` | 职业等级/部门/辖区/证照 | ❌ 裸 SQL，绕过 `Player.Functions`，无任何审计 | `custom-career/server/main.lua:54,322-333,352` |
-| `custom-phone` | `phone_notifications`（自有） | 通知持久化 + 推送 | ✅ owner | `main.lua:235`、`qb_phone_compat.lua:156` |
-| `custom-phone` app `police_mdt` | `phone_notifications`（宿主自有表） | MDT `alert` 动作 | ⚠️ 表属 phone，但绕过 `PhoneNotify` 直接用 `MySQL.Async.insert` | `apps/police_mdt.lua:259-264` |
+| `custom-phone` | `phone_notifications`（自有） | 通知持久化 + 推送 | ✅ owner（`StoreNotification`、`PhoneNotify`、`Notify`） | `main.lua`、`qb_phone_compat.lua` |
+| `custom-phone` app `police_mdt` | `phone_notifications`（宿主自有表） | MDT `alert` 动作 | ✅ 同资源走 owner 导出 `Notify`，不再直写 | `apps/police_mdt.lua` |
 | `qb-prison` | `players.job` | 入狱强制改 `unemployed` | ❌ 无恢复路径（B3）；写入方不是 owner（qb-core/career） | `qb-prison/server/main.lua:11-14` |
 | `qb-prison` | `players.metadata`（`injail`/`jailitems`） | 服刑、物品托管 | ✅ 经 `Player.Functions`（custody 冲突见 D-02） | `qb-prison/server/main.lua:8,30,42` |
 | `custom-main` | `players.metadata`（`wanted`/`criminalrecord`） | 星级通缉持久化 | ❌ wanted 三源之一，与 warrants 竞争 | `custom-main/server/dispatch.lua:71-75,135` |
@@ -128,17 +129,17 @@
 | 数据 / 路径 | 等级 | 依据 | 失败表现 | 补偿 |
 |---|---|---|---|---|
 | `police_units` / `police_incidents` 多语句写 | **强一致（非原子）** | 同资源内逐条 `await`，但无事务（后端无 `transaction` export） | 中间失败 → `incident` 已 assigned、`unit` 未更新 | 无（依赖下一次动作覆盖） |
-| `ArrestSubmit`（report+citation+evidence+case+audit） | **补偿事务（saga）+ 幂等账本** | 顺序写 + 反向删除；键在第一条写前 claim | 任一失败 → 删除已写入的行并删键、返回错误码；同键重试重放首次结果 | ✅ `p2_system.lua:146-267,591-614`；**例外**：`open_case` 之后不可回滚（`:694-712`）；`done` 无 TTL 是剩余风险 |
+| `ArrestSubmit`（report+citation+evidence+case+audit） | **补偿事务（saga）+ 幂等账本** | 顺序写 + 反向删除；键在第一条写前 claim | 任一失败 → 删除已写入的行并删键、返回错误码；同键重试 7 天内重放首次结果 | ✅ `p2_system.lua` 的 `withIntent`/`ArrestSubmit`；**例外**：`open_case` 之后不可回滚 |
 | `ReportSubmit`（report+evidence+chain+audit） | **补偿事务** | 同上 | 失败回滚 report/evidence/chain | ✅ `p2_system.lua:743-754`；审计失败也回滚（`:791-794`） |
 | `justice verdict → police_reports` | **最终一致** | `CreateThread` + 只 `print` 警告 | DB 写失败 → 内存判决照常、MDT 看不到判决 | ⚠️ 无重试、无队列（`trial.lua:39-48`） |
 | `custody`（`justice_sentences.ends_at` → `metadata.injail` → qb-prison UI） | **强一致（DB 主）+ 最终一致投影** | `ends_at` 由 MySQL 时钟；qb-prison 只投影；登录/15s sweep 对账 | 客户端伪造不再改变剩余；投影失败最多显示旧值 | ✅ `sentence.lua:42-52,183-216`、`qb-prison/server/main.lua:14-50`；**残留**：`Inmates` 仍是内存缓存、`justice_sentences` 无审计 |
-| 罚单通知 / 案件通知 | **允许丢失** | `pcall` + 失败只 print | 玩家收到罚单但没通知（或反之） | 仅日志（`p2_system.lua:281-296`） |
+| 罚单通知 / 案件通知 | **允许丢失（outbox 至少一次）** | 先写 `police_outbox`，worker 失败退避 30s/2m/10m、5 次后 failed | 通知可能延迟；业务（罚单/逮捕）不受影响 | `p2_system.lua` 的 `Outbox`、[09-outbox.md](09-outbox.md) |
 | `backupUnits` / `backupCooldown` / `autoAlertCooldown` | **允许丢失** | 纯内存 | 重启后冷却清零、槽位归零 | ✅ 有 `playerDropped` 兜底释放（`p2_system.lua:387-395`）；仍无 TTL |
 | `justice.activeCases` / `Inmates` | **允许丢失（但用于判决；服刑已可恢复）** | 纯内存 | 重启后案件消失；在押者可由 `justice_sentences` 重新投影（登录路径已实现），`Inmates` 重建函数未实现 | ⚠️ 案件仍无持久化（TD-02）；服刑已落库 |
 | `police_audit` | **要求强一致（fail-closed）** | 敏感读/写前先写审计 | 审计失败应拒绝操作 | ⚠️ 策略不一：`GetCaseDetail`/`Lookup*`/`RequestBackup`/`ReportSubmit` 严格；`SetUnitStatus`/`JailSystem`/`CreateIncident` 忽略结果 |
 | `PayCitation`（改状态 → 扣款 → 失败回滚） | **抢占式（claim-first）** | 条件 UPDATE 命中才扣款；扣款失败把状态改回 `unpaid` | 并发只有一个赢家；扣款失败可重试 | ✅ `p1.lua:146-193`；仍有短窗口：扣款成功但进程崩溃则状态已 paid、钱未扣（可重试发现 `already_paid`） |
 | `justice_sentences`（应用/调整/释放） | **强一致（单行条件更新）** | `UPDATE ... WHERE status='active'`；`ends_at=GREATEST(NOW(), ...)` | 无 active 行则 INSERT；到点由 sweep 释放 | ✅ `sentence.lua:91-178,183-216`；**缺口**：无 `police_audit`、无 `case_id` 外键 |
-| `police_write_intents` | **强一致（PK 抢占）** | `INSERT` 冲突即判定重复；`done` 存结果 | 失败删键；`pending` 卡住时只能等惰性清理 | ⚠️ `p2_system.lua:191-267`；`done` 无 TTL、`failed` 无写入者 |
+| `police_write_intents` | **强一致（PK 抢占）+ TTL** | `INSERT` 冲突即判定重复；`done` 存结果 7 天；pending >10 分钟删除 | 失败删键；崩溃留下的 pending 会被扫描释放 | ✅ `p2_system.lua` 的 `withIntent`/`sweepIntents`；v3.12 |
 | `/fine`（扣款 + 部门入账） | **非原子** | 两条语句 | 扣了钱但部门没入账（或反之） | ❌ 无补偿（`commands.lua:289-291`） |
 
 ### 5.1 失败补偿明细
