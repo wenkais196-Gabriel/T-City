@@ -456,7 +456,7 @@ def test_get_my_citations_is_exported_and_reads_only_the_caller_rows():
     assert "PolicePolicy.Can" not in block
 
 
-def test_issue_citation_notification_has_ticket_number_app_id_and_insert_id():
+def test_issue_citation_notification_goes_through_the_phone_owner():
     src = p1_src()
     start = src.index("function P1.IssueCitation(")
     block = src[start:src.index("--- Citizen-side read", start)]
@@ -465,18 +465,18 @@ def test_issue_citation_notification_has_ticket_number_app_id_and_insert_id():
     assert "math.floor(amount), text, tonumber(id), actor.citizenid" in block
     assert "'banking'" in block
 
-    # Both the stored row and the live push carry app_id; the push uses the id
-    # returned by the insert (normalised through InsertId), not a hardcoded 0.
+    # FIT-02: custom-police never writes phone_notifications. The helper only
+    # enqueues a truncated payload with app_id='banking'; delivery (insert +
+    # phone:client:newNotification push) belongs to custom-phone.
     notify_start = src.index("local function notifyCitizen(")
     notify = src[notify_start:src.index("function P1.IssueCitation(", notify_start)]
-    assert (
-        "INSERT INTO phone_notifications (citizenid, title, content, app_id) "
-        "VALUES (?, ?, ?, ?)"
-    ) in notify
-    assert "{ citizenid, title:sub(1, 200), content:sub(1, 500), appId }" in notify
-    assert "local notificationId = InsertId(result)" in notify
-    assert "id = notificationId" in notify
+    assert "INSERT INTO phone_notifications" not in notify
+    assert "Outbox.Enqueue('notification'" in notify
+    assert "title = title:sub(1, 200)" in notify
+    assert "content = content:sub(1, 500)" in notify
     assert "app_id = appId" in notify
+    # Degraded fallback is still the owner export, never a direct insert.
+    assert "exports['custom-phone']:Notify(" in notify
 
 
 def test_arrest_submit_notifies_the_subject_about_the_citation_best_effort():
@@ -495,16 +495,12 @@ def test_arrest_submit_notifies_the_subject_about_the_citation_best_effort():
     src = read(POLICE / "server/p2_system.lua")
     start = src.index("local function notifyCitation(")
     helper = src[start:src.index("local function encodeCharges(", start)]
-    assert (
-        "INSERT INTO phone_notifications (citizenid, title, content, app_id) "
-        "VALUES (?, ?, ?, ?)"
-    ) in helper
+    assert "INSERT INTO phone_notifications" not in helper
+    assert "Outbox.Enqueue(OUTBOX_TOPIC_NOTIFICATION" in helper
     assert "'你收到一张罚单'" in helper
     assert "('你收到一张罚单 #%d，金额 $%d，罪名 %s'):format(" in helper
     assert "citationId" in helper
     assert "'banking'" in helper
-    assert "local notificationId = InsertId(result)" in helper
-    assert "id = notificationId" in helper
     assert "app_id = 'banking'" in helper
     # Failure is logged, never rolled back.
     assert "pcall(" in helper
@@ -977,20 +973,31 @@ def test_justice_manifest_loads_oxmysql_before_its_scripts():
     assert manifest.index("'@oxmysql/lib/MySQL.lua'") < manifest.index("'server/main.lua'")
 
 
-def test_resolve_case_persists_the_verdict_without_blocking_the_sentence():
+def test_resolve_case_persists_the_verdict_through_the_police_owner():
     src = justice_trial_src()
     block = resolve_case_block()
 
     assert "local function persistVerdict(caseId, verdict, status)" in src
     assert "pcall(json.encode, verdict)" in src
-    assert "UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?" in src
-    assert "{ encoded, status, tostring(caseId) }" in src
-    # A DB/encoding failure only warns; it never aborts the verdict. The await
+    # FIT-02: only custom-police writes police_reports; justice calls its export.
+    assert "UPDATE police_reports SET justice_verdict" not in src
+    assert "exports['custom-police']:RecordVerdict(tostring(caseId), encoded, status)" in src
+    # Encoding/export failure only warns; it never aborts the verdict. The call
     # runs in its own thread because command callbacks may not be yieldable.
     helper = src[src.index("local function persistVerdict("):src.index("function JusticeService.ResolveCase(")]
     assert "CreateThread(function()" in helper
-    assert "if not wrote then" in helper
+    assert "if not called or wrote ~= true then" in helper
     assert "print(" in helper
+
+    # The owner export validates every argument before the UPDATE.
+    p3 = read(POLICE / "server/p3_cases.lua")
+    assert "function C.RecordVerdict(justiceCaseId, verdictJson, status)" in p3
+    assert "UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?" in p3
+    assert "{ verdictJson, status, caseId }" in p3
+    assert "exports('RecordVerdict', C.RecordVerdict)" in p3
+    assert "#caseId > 32" in p3
+    assert "#verdictJson > 65535" in p3
+    assert "status ~= 'sentenced' and status ~= 'closed'" in p3
 
     assert "persistVerdict(caseId, verdict, case.status)" in block
     set_verdict = block.index("JusticeService.SetVerdict(caseId, verdict)")
@@ -1705,7 +1712,7 @@ def test_v39_migration_creates_the_write_intent_ledger_idempotently():
     assert sql.count("DEALLOCATE PREPARE") == 3
 
 
-def test_with_intent_replays_done_and_releases_pending_and_failed():
+def test_with_intent_replays_done_with_ttl_and_releases_stale_pending():
     src = read(POLICE / "server/p2_system.lua")
     assert "local INTENT_KEY_MIN = 8" in src
     assert "local INTENT_KEY_MAX = 128" in src
@@ -1719,21 +1726,30 @@ def test_with_intent_replays_done_and_releases_pending_and_failed():
     assert "INSERT INTO police_write_intents (idem_key, action, actor_citizenid)" in block
     assert "SET status = 'done', result_json = ?" in block
     assert "json.encode" in block and "json.decode" in src
-    # done → replay the cached result.
+    # done → replay the cached result only while its 7-day TTL is alive.
     assert "elseif existing.status == 'done' then" in block
+    assert "if dbFlag(existing.expired) then" in block
     assert "local cached = decodeIntentResult(existing)" in block
     assert "return cached" in block
-    # pending → a concurrent/duplicate submit is in flight.
+    assert "COALESCE(expires_at, created_at + INTERVAL 7 DAY) < NOW()" in src
+    assert "expires_at = NOW() + INTERVAL 7 DAY" in src
+    assert "completed_at = NOW()" in src
+    # pending → still in flight, unless it is older than 10 minutes (crashed
+    # submit), in which case it is swept so the key can be reclaimed.
     assert "elseif existing.status == 'pending' then" in block
+    assert "if dbFlag(existing.stale_pending) then" in block
+    assert "created_at < NOW() - INTERVAL 10 MINUTE" in src
     assert "return fail('in_progress')" in block
     # failed (and every business/exception failure) frees the key.
     assert "deleteIntent(key)" in block
     assert "result.ok ~= true" in block
     assert "if not ok then" in block
-    # Lazy sweep before the claim, bounded so it stays cheap.
-    sweep = "DELETE FROM police_write_intents WHERE created_at < NOW() - INTERVAL 1 DAY LIMIT 200"
-    assert sweep in block
-    assert block.index(sweep) < block.index("INSERT INTO police_write_intents")
+    # The TTL sweep runs before the claim, bounded so it stays cheap, and again
+    # on resource start.
+    assert "local function sweepIntents()" in src
+    assert "DELETE FROM police_write_intents" in src
+    assert block.index("sweepIntents()") < block.index("INSERT INTO police_write_intents")
+    assert "AddEventHandler('onResourceStart'" in src
 
 
 def test_arrest_submit_claims_an_intent_before_any_write():
@@ -1923,8 +1939,10 @@ def test_npc_create_is_gated_inserts_and_notifies():
     assert "notifyOfficers(template, location, coords)" in block
 
     src = read(NPC_SERVER)
-    assert "INSERT INTO phone_notifications" in src
-    assert "TriggerClientEvent('phone:client:newNotification'" in src
+    # FIT-02: the phone owns phone_notifications; the callout only enqueues.
+    assert "INSERT INTO phone_notifications" not in src
+    assert "Outbox.Enqueue('notification'" in src
+    assert "exports['custom-phone']:Notify(" in src
     assert "TriggerClientEvent('police:client:policeAlert'" in src
     assert "exports('CreateNpcCallout', NPC.CreateNpcCallout)" in src
 

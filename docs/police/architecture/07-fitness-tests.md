@@ -15,7 +15,7 @@
 | # | 规则 | 域 | 现状 | 门禁 |
 |---|---|---|---|---|
 | FIT-01 | `job.onduty` 只有一个写者（duty 服务） | 状态一致性 | ⚠️ PARTIAL | advisory → blocking |
-| FIT-02 | 禁止跨资源写别人拥有的表 | 边界 | ❌ FAIL | blocking |
+| FIT-02 | 禁止跨资源写别人拥有的表 | 边界 | ✅ PASS（`test_cross_resource_writes.py`；0 处未登记跨写） | blocking |
 | FIT-03 | 每个 net event 必须有来源/权限校验 | 安全 | ✅ PASS（3e720bf；13 强鉴权 + 35 登记例外，0 未登记） | blocking |
 | FIT-04 | 每个 export / app action 必须有稳定错误码 + 审计 | 契约 | ⚠️ PARTIAL | blocking |
 | FIT-05 | 审计不可写时敏感路径必须 fail-closed | 取证 | ✅ PASS（3e720bf；11 个敏感读，0 丢弃） | blocking |
@@ -25,11 +25,13 @@
 | FIT-09 | 查询纪律：禁 `SELECT *`、必须 `LIMIT`、字段白名单 | 性能/PII | ✅ PASS（dec840f；23 处通配投影清零，2 条 allowlist） | blocking |
 | FIT-10 | 资源接线：cfg ↔ manifest ↔ 文件 ↔ 导出消费者 | 可启动性 | ⚠️ PARTIAL | blocking |
 | FIT-11 | 状态机列只允许登记过的写者 | 一致性 | ⚠️ PARTIAL | advisory |
-| FIT-12 | 弃用登记：deprecated 写路径为 0 或未过期豁免 | 演进 | ❌ FAIL | blocking |
+| FIT-12 | 弃用登记：deprecated 写路径为 0 或未过期豁免 | 演进 | ✅ PASS（`test_deprecations.py`；6 条已知债务，2026-12-31 到期） | blocking |
 | FIT-13 | 文档数字与代码常量一致（05 的预算不得漂移） | 文档 | ❓ UNKNOWN | advisory |
 
-加权得分 **27 / 100**（见 §5；基线 21/100；以 `3bbcab3` 提交为准）。**post-baseline `3e720bf` 已把 FIT-03/FIT-05 转 PASS，`dec840f` 把 FIT-09 转 PASS**；权重分待下一轮统一重算；其余红项（FIT-02/12）仍在。
+加权得分 **27 / 100**（上一轮快照，见 §5；基线 21/100）。**本轮把 FIT-02/FIT-12 从 FAIL 转 PASS**：跨资源写收敛到 owner 导出 + 扫描器，弃用路径登记 + 到期强制；§5 的合计仍是旧快照，权重分待下一轮统一重算。
 
+> **本轮（FIT-02/FIT-12）**：新增 `tests/architecture/test_cross_resource_writes.py`、`tests/architecture/table_owners.json`、`tests/architecture/test_deprecations.py`、`tests/architecture/deprecations.json`；`phone_notifications` 只剩 `custom-phone` 写，`police_reports` 只剩 `custom-police` 写。outbox/TTL 语义见 [09-outbox.md](09-outbox.md)。
+>
 > **post-baseline `3e720bf`**：FIT-03/FIT-05 扫描器、evidence 鉴权、敏感读 fail-closed 已提交；`tests/architecture/` 已加入 CI。上表状态已更新，评分数字待重算。
 
 ---
@@ -39,17 +41,12 @@
 ### 1.1 文件布局（建议）
 
 ```
-T-CityLite.base/tests/architecture/
-├── check_architecture.py          # 唯一入口：--rule FIT-xx / --all / --json / --strict
-├── rules/                          # 每条规则一个模块（纯函数：ctx -> findings）
-├── allowlists/
-│   ├── onduty_writers.json         # FIT-01
-│   ├── table_owners.json           # FIT-02（owner 表 + 读白名单）
-│   ├── net_events.json             # FIT-03
-│   ├── read_without_audit.json     # FIT-05
-│   └── deprecated_writers.json     # FIT-12
-├── error_codes.json                # FIT-04 的词表基线
-└── number_budget.json              # FIT-13 的"文档 ↔ 代码"映射
+T-CityLite.base/tests/architecture/          # 已落地文件（其余规则按需新增）
+├── test_net_event_auth.py       # FIT-03
+├── test_query_discipline.py     # FIT-09
+├── test_cross_resource_writes.py + table_owners.json   # FIT-02（owner 表 + 跨写 allowlist）
+├── test_deprecations.py + deprecations.json            # FIT-12（弃用登记 + 到期强制）
+└── test_audit_fail_closed.py    # FIT-05
 docs/police/architecture/
 ├── error-codes.md                  # 人读词表（与 json 双向同步）
 └── deprecations.md                 # 人读弃用登记（与 json 双向同步）
@@ -126,34 +123,23 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 ### FIT-02 · 禁止跨资源写别人拥有的表
 
 - **规则**：每张表有唯一 owner；非 owner **只能读，且只读白名单列**；写必须通过 owner 的导出。允许的跨资源写只能是 owner 明确提供的导出路径。
-- **为什么**：这是"30+ 资源共用一库"的唯一边界。当前的现实是：`custom-police` 直接 `INSERT phone_notifications`（4 处），`custom-justice` 直接 `UPDATE police_reports`（1 处）。它们今天能跑，但任何一方改列/加约束/换存储，另一方静默坏掉，且坏在运行时而不是 CI。
-- **检查方式**：
-  - `table_owners.json` 定义 owner 与读白名单（语义以 `04-data-ownership.md` 为准，json 只是它的机器可读镜像，避免两份 owner 表打架）：
+- **为什么**：这是"30+ 资源共用一库"的唯一边界。曾经的现实是：`custom-police` 直接 `INSERT phone_notifications`（5 处），`custom-justice` 直接 `UPDATE police_reports`（1 处）。它们今天能跑，但任何一方改列/加约束/换存储，另一方静默坏掉，且坏在运行时而不是 CI。
+- **检查方式**（`tests/architecture/test_cross_resource_writes.py`）：
+  - `table_owners.json` 定义扫描资源、owner（精确名 / `prefix_*`）与跨写 allowlist（语义以 `04-data-ownership.md` 为准，json 只是它的机器可读镜像，避免两份 owner 表打架）：
     ```
     police_*            -> custom-police      (read: none)
     phone_*             -> custom-phone       (read: none)
-    players, player_vehicles, bank_* -> qb-core (read: 列白名单，写: 禁止)
+    players, player_vehicles, bans -> qb-core (write: 仅 API / 登记例外)
     agent_*             -> custom-director
     justice_*           -> custom-justice
-    inventories, *_items -> qb-inventory
+    inventories         -> qb-inventory
     ```
-  - 伪代码：
-    ```
-    for path in server_lua_files:
-        resource = resource_of(path)
-        for sql in sql_strings(path):
-            stmt, table = parse(sql)            # 首个动词 + 首个表名
-            if table not owned by resource:
-                if stmt == SELECT and table in READ_ALLOW[resource] and columns(only) ⊆ whitelist:
-                    pass
-                elif entry in allowlist: allowlisted += 1
-                else: report(path, no, f"{stmt} {table} owned by {owner}")
-    ```
-  - 反向检查（更强）：owner 的**写导出**必须被至少一个调用方使用；没人用的导出 → advisory（避免"加了导出但大家还在直写"）。
+  - 扫描 `scan` 列表里的 `server/**/*.lua`，抽取 SQL 写语句（`INSERT [IGNORE] INTO` / `REPLACE INTO` / `UPDATE <table> SET` / `DELETE FROM`，注释先 mask）：表有 owner 且资源 ≠ owner → 违规，必须命中 allowlist 条目（`writer`/`table`/`owner`/`reason`/`expires`）；过期条目与“没有命中任何违规”的 stale 条目都 FAIL。
+  - 反向检查：`test_reverse_check_detects_a_justice_write_to_police_reports` 把被本任务删除的 justice 直写形状注入扫描器，必须报红；`test_phone_notifications_and_police_reports_have_a_single_writer` 断言两张表只剩 owner 写。
 - **失败信息**：`FIT-02: custom-police/server/p0.lua:105 INSERT phone_notifications — owned by custom-phone; use exports['custom-phone']:Notify(...)`。
-- **CI**：`Config & dependency checks`，blocking（allowlist 让存量通过）；owner 导出（`custom-phone:Notify`）落地后，删除豁免条目即自动变严。
-- **现状（post-baseline）**：❌ **FAIL**。警察侧直写 `phone_notifications` 从 4 处增到 **5 处**：`server/p0.lua:171-179`、`server/p1.lua:23-33`、`server/p2_system.lua:45-52`、`server/p4_npc.lua:78-90`（NPC 警情广播），另 `custom-phone/server/apps/police_mdt.lua:268-270` 的 `alert` 也直写；justice 1 处直写 `police_reports`：`custom-justice/server/trial.lua:30-49`（`justice_verdict` / `justice_status` 回写）。**登记例外（唯一允许的跨资源直读）**：`custom-director/server/live_api.lua:483-492` 只读 `police_units` / `police_incidents` 且列白名单明确。owner 侧的 `StoreNotification` 仍存在但未导出。
-- **例外**：上述 6 处进 allowlist 至 `2026-12-31`；但**新增**跨资源写必须在同一 PR 里加导出。`phone_notifications` 的 `content` 长度与 `app_id` 枚举由 FIT-04 的契约测试覆盖。
+- **CI**：`Config & dependency checks`，blocking。
+- **现状（本轮）**：✅ **PASS**。owner 导出落地：`custom-phone:Notify(citizenid, title, content, appId, meta)`（字段截断 + `app_id` 白名单 + 单次推送，在线/离线都落库）；`custom-police:RecordVerdict(justiceCaseId, verdictJson, status)`（参数校验 + 只 UPDATE `justice_verdict/justice_status`）。5 处警察通知改走 `police_outbox`（见 [09-outbox.md](09-outbox.md)），justice 改调派生导出。当前 18 处跨资源写全部在 allowlist（career/main/phone-banking → `players`，police → `phone_invoices`/`inventories`/`player_vehicles`，agent-client/story-engine → `agent_*`），到期 `2026-12-31`。
+- **例外**：allowlist 只豁免“存量 + 明确理由 + 到期日”；**新增**跨资源写必须在同一 PR 里加 owner 导出，否则 `test_cross_resource_writes.py` 直接红。`phone_notifications` 的 `content` 长度与 `app_id` 枚举由 owner 导出 + `test_police_outbox.py` 覆盖。
 
 ### FIT-03 · 每个 net event 必须有来源/权限校验
 
@@ -341,13 +327,13 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 ### FIT-12 · 弃用登记（deprecated 写路径为 0 或未过期豁免）
 
-- **规则**：任何被宣布"停止新写入"的表/事件，其写路径必须为 0；未清完的必须在 `allowlists/deprecated_writers.json` 登记（`owner`、`replacement`、`stop_write_by`、`remove_by`），到期 FAIL。
+- **规则**：任何被宣布"停止新写入"的表/命令/事件，其写路径必须为 0；未清完的必须在 `tests/architecture/deprecations.json` 登记（`kind`、`target`、`owner`、`reason`、`replacement`、`expected_writes`、`expires`），到期 FAIL。
 - **为什么**：[B_PLAN.md](../B_PLAN.md) §2 明确"`police_arrests` 停止新写入；`police_bolos` 停止新写入"，但代码里 `police_arrests` 仍有 2 个写者，`police_bolos` 仍有 `CreateBolo`。**文档已经宣布弃用、代码还在写**，这是最坏的状态：读的人以为旧表是死的，实际上新旧两份都在长。同时 `GetBolos` 已经双源合并（`server/p3_cases.lua:96-135`），说明迁移方向是确定的，只是没执行完。
-- **检查方式**：从 `deprecations.md` 生成 json（或反之，人工同步 + 契约测试保证一致）；对每个 deprecated 表跑 FIT-02 的写扫描；命中且无 allowlist → FAIL。
+- **检查方式**（`tests/architecture/test_deprecations.py`）：对每条 entry 统计真实命中：`table` 数 `INSERT/UPDATE ... SET/DELETE` 写语句；`command` 数 `QBCore.Commands.Add`/`RegisterCommand` 注册；`event` 数 `RegisterNetEvent` 注册。命中数 > `expected_writes` → “新增债务” FAIL；`expires` 已过且仍命中 → FAIL；命中 0 → stale FAIL。带 `guard` 的 entry 还会校验 handler 体仍保留该守卫。人读镜像见 [deprecations.md](deprecations.md)。
 - **失败信息**：`FIT-12: custom-police/server/p2_system.lua:118 still INSERTs police_arrests, deprecated since v3.4 (replacement: police_reports kind='arrest')`。
 - **CI**：`Config & dependency checks`，blocking。
-- **现状**：❌ **FAIL**。`police_arrests` 写者 2 个：`server/p2_system.lua:118-120`（Sys.Jail，agent 路径）、`server/p3_cases.lua:197-201`（`RegisterArrest`）。`police_bolos` 写者：`server/p3_cases.lua:73-95`（`CreateBolo`），而 `GetBolos` 已改成 reports 优先（行 96-135）——写读不一致。legacy 命令/事件（`/911p`、`/fine`、`/jail`）没有登记。
-- **例外**：`police_arrests` 历史数据要保留（`GetArrests` 继续读），allowlist 只豁免"读"，不豁免"写"。
+- **现状（本轮）**：✅ **PASS（已知债务 + 到期强制）**。登记 6 条：`police_arrests`（2 写）、`police_bolos`（2 写）、`/fine`（1）、`/911p`（1）、`police:server:JailPlayer`（1，`src ~= 0` 守卫）、`police:server:policeAlert`（1）。全部 `expires = 2026-12-31`；到期未清 → 红。`/jail` 已删除，因此不登记（登记会因 stale 而红）。
+- **例外**：`police_arrests` 历史数据要保留（`GetArrests`/`GetCaseDetail` 继续读），登记只约束“写”；表级 allowlist 只豁免存量写并带到期日。
 
 ### FIT-13 · 文档数字与代码常量一致
 
@@ -413,7 +399,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | # | 规则 | 权重 | 状态 | 状态分 | 加权分 | 关键证据 |
 |---|---|---|---|---|---|---|
 | FIT-01 | onduty 单一写者 | 3 | ⚠️ PARTIAL | 0.5 | 1.5 | police 侧已全部走 `SetJobDuty` 投影（`p0.lua:109,578,587`）；`custom-main`/`custom-director` 仍有写者 |
-| FIT-02 | 跨资源表所有权 | 2 | ❌ FAIL | 0 | 0 | 6 处直写（police→phone_notifications ×5、justice→police_reports ×1） |
+| FIT-02 | 跨资源表所有权 | 2 | ✅ PASS | 1 | 2 | 0 处未登记跨写；`phone_notifications`/`police_reports` 单写者；8 条存量 allowlist（2026-12-31） |
 | FIT-03 | net event 鉴权 | 3 | ❌ FAIL | 0 | 0 | 2/44 强校验；9 条 evidence 仍零校验；**扫描器未落地（进行中）** |
 | FIT-04 | export/action 错误码 + 审计 | 2 | ⚠️ PARTIAL | 0.5 | 1.0 | arrest/report 已结构化 + citation/evidence 审计；action 层仍压平 14/17 |
 | FIT-05 | 审计 fail-closed | 3 | ❌ FAIL | 0 | 0 | 23 处 fail-open 未变；5 个读导出零审计 |
@@ -423,9 +409,9 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | FIT-09 | 查询纪律 | 2 | ❌ FAIL | 0 | 0 | 16 处 `SELECT *`，1 处无 LIMIT（未变） |
 | FIT-10 | 资源接线 | 1 | ⚠️ PARTIAL | 0.5 | 0.5 | cfg/manifest/顺序 ✅；`p4_npc` 已接线，但导出依赖仍靠人 |
 | FIT-11 | 状态机写者登记 | 2 | ⚠️ PARTIAL | 0.5 | 1.0 | 写者收敛到 p0/p2_system，但仍无登记表；p0 内 5 个 helper 是事实上的状态写入口 |
-| FIT-12 | 弃用登记 | 1 | ❌ FAIL | 0 | 0 | `police_arrests` 仍 2 写；`police_bolos` 写读不一致 |
+| FIT-12 | 弃用登记 | 1 | ✅ PASS | 1 | 1 | 6 条已知债务登记（2 表 + 2 命令 + 2 事件），全部 2026-12-31 到期 |
 | FIT-13 | 数字漂移 | 1 | ❓ UNKNOWN | 0 | 0 | 当前代码常量（`MAX_ACTIVE=1`、8min、30%、45min）未进 05，无机制 |
-| **合计** | | **24** | 1 PASS · 6 PARTIAL · 5 FAIL · 1 UNKNOWN | **4.0** | **6.5** | **加权 6.5 / 24 = 27 / 100** |
+| **合计** | | **24** | 快照未重算（FIT-02/12 本轮 +3 加权分） | — | **9.5（待重算）** | 上一轮 6.5 / 24 = 27 / 100；本轮 FIT-02/12 转 PASS 后待统一重算 |
 
 按域看：
 
@@ -439,7 +425,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | 状态机（11） | 部分 | **1.0 / 2 = 50%** |
 | 文档（13） | 未知 | **0 / 1 = 0%** |
 
-**读法（post-baseline）**：27 分（基线 21）的增量来自 4 条真实修复（duty 投影、incident 关闭/幂等、custody 服务端计时、迁移覆盖），不是评分口径变化。它仍不代表"系统坏了"——功能测试是绿的；它代表"架构约束仍没有被自动化保护"。**HEAD 没有新增扫描器**（工作区有未提交版本），所以 FIT-03/05 的 status 仍是人工结论。目标不变：P7 末 ≥70（FIT-01/03/05/09 转绿 + FIT-02/12 各清一半），v1.0 前 ≥85。
+**读法（post-baseline）**：27 分（基线 21）的增量来自 4 条真实修复（duty 投影、incident 关闭/幂等、custody 服务端计时、迁移覆盖），不是评分口径变化。本轮 FIT-02/FIT-12 转 PASS，加权分至少 +3（6.5 → 9.5 / 24），上表的 PASS/PARTIAL/FAIL 计数与总分留待下一轮统一重算。分数仍不代表"系统坏了"——功能测试是绿的；它代表"架构约束是否被自动化保护"。目标不变：P7 末 ≥70，v1.0 前 ≥85。
 
 ---
 
@@ -463,7 +449,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 **快速胜利（1 小时，建议顺手做）**：**FIT-06 的 fixture 补齐**。`tests/fixtures/tcity_schema.sql` 缺 14 张表（12 张 `police_*` + `police_write_intents` + `justice_sentences`，TD-05），补上即可让 DB 集成用例从 skip 变 run——这是全仓库性价比最高的一小时，且它让 FIT-06 从 PARTIAL 直接转 PASS（+0.5 分），也为 05 NFR-REL-06 的"恢复演练"提供了可重放的 schema。
 
-**明确不建议先做的**：FIT-02（跨资源写）。它需要先给 `custom-phone` 加 `Notify` 导出、给 `custom-justice` 加 verdict 回写导出，改动面横跨 3 个资源；在 FIT-03/05 之前做，等于先装修再补漏。
+**已先做的一步**：FIT-02（跨资源写）已在本轮落地——`custom-phone:Notify` 与 `custom-police:RecordVerdict` 两个 owner 导出 + 扫描器，剩余只在 allowlist 里的历史债务。教训是：先加导出、再改调用方、最后开扫描器，三步可以在一个变更里完成，不必等 FIT-03/05。
 
 ---
 

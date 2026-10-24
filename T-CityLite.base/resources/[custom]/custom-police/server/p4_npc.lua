@@ -75,19 +75,20 @@ local function notifyOfficers(template, location, coords)
     local content = ('%s（%s）'):format(
         (template.description:gsub('{location}', location.label)), location.label):sub(1, 500)
     for _, officer in ipairs(onDutyOfficers()) do
-        pcall(function()
-            MySQL.insert.await(
-                'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
-                { officer.data.citizenid, subject, content, 'police_mdt' })
-        end)
-        TriggerClientEvent('phone:client:newNotification', officer.source, {
-            id = 0,
-            title = subject,
-            content = content,
-            timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-            is_read = false,
-            app_id = 'police_mdt',
-        })
+        -- Persistence belongs to custom-phone (FIT-02): enqueue through the
+        -- outbox so a phone restart retries instead of dropping the callout.
+        local payload = {
+            citizenid = officer.data.citizenid,
+            title = subject, content = content, app_id = 'police_mdt',
+        }
+        if type(Outbox) == 'table' and type(Outbox.Enqueue) == 'function' then
+            Outbox.Enqueue('notification', payload)
+        else
+            pcall(function()
+                exports['custom-phone']:Notify(
+                    payload.citizenid, payload.title, payload.content, payload.app_id)
+            end)
+        end
         TriggerClientEvent('police:client:policeAlert', officer.source, coords, subject)
     end
 end

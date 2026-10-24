@@ -26,7 +26,9 @@ local function notifyResolveError(src, err)
 end
 
 --- 把判决回写到关联的警情报告（police_reports.justice_case_id）。
---- 尽力而为：编码或 DB 失败只打印警告，不影响内存判决与入狱流程。
+--- FIT-02：police_reports 的写者只有 custom-police，所以这里不再直接 UPDATE，
+--- 改为调用 owner 导出 RecordVerdict；尽力而为：编码或导出失败只打印警告，
+--- 不影响内存判决与入狱流程。
 local function persistVerdict(caseId, verdict, status)
     local ok, encoded = pcall(json.encode, verdict)
     if not ok or type(encoded) ~= 'string' then
@@ -34,16 +36,15 @@ local function persistVerdict(caseId, verdict, status)
         return
     end
     -- RegisterCommand callbacks are not guaranteed to be yieldable, so the
-    -- await runs in its own thread: the caller never waits on the DB and a
-    -- failure can only warn.
+    -- export (which awaits the DB) runs in its own thread: the caller never
+    -- waits on the write and a failure can only warn.
     CreateThread(function()
-        local wrote, result = pcall(function()
-            return MySQL.update.await(
-                'UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?',
-                { encoded, status, tostring(caseId) })
+        local called, wrote = pcall(function()
+            return exports['custom-police']:RecordVerdict(tostring(caseId), encoded, status)
         end)
-        if not wrote then
-            print(('[justice-trial] ⚠️ 判决回写失败 (%s): %s'):format(tostring(caseId), tostring(result)))
+        if not called or wrote ~= true then
+            print(('[justice-trial] ⚠️ 判决回写失败 (%s): %s'):format(
+                tostring(caseId), tostring(called and wrote or 'export_error')))
         end
     end)
 end

@@ -34,6 +34,7 @@ local CASES = {
     'director_denials',
     'police_actions',
     'police_system',
+    'police_outbox',
     'phone_sms',
 }
 

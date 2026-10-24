@@ -16,6 +16,8 @@
 | 06 | [adr](06-adr/) | 关键决策记录（为什么这样选） |
 | 07 | [fitness-tests](07-fitness-tests.md) | 13 条架构约束的自动检查与评分卡（当前 27/100） |
 | 08 | [scenarios](08-scenarios.md) | 6 条端到端场景走查（含失败、权限、NPC 警情） |
+| 09 | [outbox](09-outbox.md) | SM-03 残留：intent TTL（done 7 天 / pending 10 分钟）+ `police_outbox` 投递语义 |
+| — | [deprecations](deprecations.md) | FIT-12 人读弃用登记（机器可读源是 `tests/architecture/deprecations.json`） |
 
 ### ADR 索引
 

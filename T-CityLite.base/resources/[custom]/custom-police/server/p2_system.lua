@@ -37,17 +37,199 @@ local function audit(actorId, action, target, detail)
     end)
 end
 
+-- ---------------------------------------------------------------------------
+-- Outbox (v3.12 police_outbox). Notifications belong to custom-phone (FIT-02),
+-- so police never writes `phone_notifications` directly any more. Enqueue is the
+-- durable part; a worker delivers it with exponential backoff, so a phone
+-- restart or a transient export failure does not silently drop a dispatch or a
+-- citation notification. This backend has no transaction export, so the outbox
+-- is the compensation (see docs/police/architecture/09-outbox.md).
+-- ---------------------------------------------------------------------------
+local OUTBOX_TOPIC_NOTIFICATION = 'notification'
+local OUTBOX_INTERVAL_MS = 30000
+local OUTBOX_MAX_ATTEMPTS = 5
+local OUTBOX_BACKOFF_SECONDS = { 30, 120, 600 }
+local OUTBOX_TOPICS = { [OUTBOX_TOPIC_NOTIFICATION] = true }
+
+Outbox = Outbox or {}
+local outboxKickRunning = false
+
+local function outboxEncode(payload)
+    local ok, encoded = pcall(json.encode, payload)
+    if ok and type(encoded) == 'string' then return encoded end
+    return nil
+end
+
+local function outboxFail(row, attempts, reason)
+    local id = tonumber(row and row.id)
+    if not id then return false end
+    local nextAttempts = attempts + 1
+    if nextAttempts >= OUTBOX_MAX_ATTEMPTS then
+        pcall(function()
+            MySQL.update.await(
+                "UPDATE police_outbox SET status = 'failed', attempts = ?, next_attempt_at = NULL WHERE id = ?",
+                { nextAttempts, id })
+        end)
+        print(('[custom-police] outbox #%d failed permanently after %d attempts: %s'):format(
+            id, nextAttempts, tostring(reason)))
+        return false
+    end
+    -- 30s / 2m / 10m; the table only holds numbers from this list, so the
+    -- parameter never originates from a client.
+    local delay = OUTBOX_BACKOFF_SECONDS[nextAttempts]
+        or OUTBOX_BACKOFF_SECONDS[#OUTBOX_BACKOFF_SECONDS]
+    pcall(function()
+        MySQL.update.await(
+            "UPDATE police_outbox SET status = 'pending', attempts = ?, next_attempt_at = DATE_ADD(NOW(), INTERVAL ? SECOND) WHERE id = ?",
+            { nextAttempts, delay, id })
+    end)
+    return false
+end
+
+--- Delete old delivered/given-up rows; the worker also calls this before each
+--- batch so the table cannot grow without bound.
+function Outbox.Cleanup()
+    pcall(function()
+        MySQL.update.await(
+            "DELETE FROM police_outbox WHERE status IN ('done', 'failed') AND updated_at < NOW() - INTERVAL 7 DAY LIMIT 200")
+    end)
+end
+
+--- Queue one durable delivery. Returns false when the row could not be written;
+--- the caller decides whether that is fatal (notifications are best-effort).
+---@param topic string
+---@param payload table
+---@return boolean ok, number|nil id
+function Outbox.Enqueue(topic, payload)
+    if type(topic) ~= 'string' or not OUTBOX_TOPICS[topic] then return false end
+    if type(payload) ~= 'table' then return false end
+    local encoded = outboxEncode(payload)
+    if not encoded then return false end
+
+    local enqueued, result = pcall(function()
+        return MySQL.insert.await(
+            "INSERT INTO police_outbox (topic, payload, status, attempts, next_attempt_at) VALUES (?, ?, 'pending', 0, NOW())",
+            { topic, encoded })
+    end)
+    if not enqueued then
+        print(('[custom-police] outbox enqueue failed (%s): %s'):format(topic, tostring(result)))
+        return false
+    end
+    Outbox.Kick()
+    return true, InsertId(result)
+end
+
+--- Deliver one row and persist its new state. A short lease prevents an
+--- overlapping worker from pushing the same row twice: if this process dies
+--- mid-delivery, the row becomes eligible again after 60 seconds.
+---@param row table
+---@return boolean delivered
+function Outbox.Deliver(row)
+    local id = tonumber(row and row.id)
+    if not id then return false end
+    local attempts = math.floor(tonumber(row.attempts) or 0)
+    local topic = tostring(row.topic or '')
+
+    local decoded, payload = pcall(json.decode, tostring(row.payload or ''))
+    if not decoded or type(payload) ~= 'table' then
+        return outboxFail(row, attempts, 'invalid_payload')
+    end
+    if not OUTBOX_TOPICS[topic] then
+        return outboxFail(row, attempts, 'unknown_topic')
+    end
+
+    pcall(function()
+        MySQL.update.await(
+            'UPDATE police_outbox SET next_attempt_at = DATE_ADD(NOW(), INTERVAL 60 SECOND) WHERE id = ?',
+            { id })
+    end)
+
+    -- `source` is intentionally not trusted from the stored payload: a stale
+    -- server id can be reassigned, so the owner resolves the citizen again.
+    local called, delivered = pcall(function()
+        return exports['custom-phone']:Notify(
+            payload.citizenid, payload.title, payload.content, payload.app_id)
+    end)
+    if not called or not delivered then
+        return outboxFail(row, attempts, called and 'notify_rejected' or tostring(delivered))
+    end
+
+    pcall(function()
+        MySQL.update.await(
+            "UPDATE police_outbox SET status = 'done', attempts = ?, next_attempt_at = NULL WHERE id = ?",
+            { attempts + 1, id })
+    end)
+    return true
+end
+
+--- Drain up to 50 due rows. Safe to call from the loop, the export or a test;
+--- the busy flag keeps overlapping callers from double-processing.
+---@return number processed
+function Outbox.Work()
+    if Outbox.busy then return 0 end
+    Outbox.busy = true
+    local processed = 0
+    local ok, err = pcall(function()
+        Outbox.Cleanup()
+        local rows = MySQL.query.await([[
+            SELECT id, topic, payload, attempts
+              FROM police_outbox
+             WHERE status = 'pending'
+               AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
+             ORDER BY id ASC
+             LIMIT 50
+        ]])
+        for _, row in ipairs(rows or {}) do
+            processed = processed + 1
+            Outbox.Deliver(row)
+        end
+    end)
+    Outbox.busy = false
+    if not ok then
+        print(('[custom-police] outbox worker failed: %s'):format(tostring(err)))
+    end
+    return processed
+end
+
+--- Run the worker once as soon as possible after an enqueue, so a notification
+--- is still near-instant; the 30s loop is only the retry safety net.
+function Outbox.Kick()
+    Outbox.kicked = true
+    if outboxKickRunning then return end
+    outboxKickRunning = true
+    CreateThread(function()
+        while Outbox.kicked do
+            Outbox.kicked = false
+            Outbox.Work()
+        end
+        outboxKickRunning = false
+        -- An enqueue that landed while the loop was exiting must still wake a
+        -- worker; otherwise it would wait for the 30s tick.
+        if Outbox.kicked then Outbox.Kick() end
+    end)
+end
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    CreateThread(function()
+        Wait(5000)
+        while true do
+            Outbox.Work()
+            Wait(OUTBOX_INTERVAL_MS)
+        end
+    end)
+end)
+
 local function broadcast(title, content)
     for _, src in ipairs(QBCore.Functions.GetPlayers()) do
         local p = QBCore.Functions.GetPlayer(src)
         local d = p and p.PlayerData
         if d and type(d.job) == 'table' and d.job.name == 'police' and d.job.onduty == true then
-            MySQL.insert.await(
-                'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
-                { d.citizenid, utf8Sub(title, 200), utf8Sub(content, 500), 'police_mdt' })
-            TriggerClientEvent('phone:client:newNotification', src, {
-                id = 0, title = utf8Sub(title, 200), content = utf8Sub(content, 500),
-                timestamp = os.date('%Y-%m-%d %H:%M:%S'), is_read = false, app_id = 'police_mdt',
+            Outbox.Enqueue(OUTBOX_TOPIC_NOTIFICATION, {
+                citizenid = d.citizenid,
+                title = utf8Sub(title, 200),
+                content = utf8Sub(content, 500),
+                app_id = 'police_mdt',
             })
         end
     end
@@ -148,12 +330,23 @@ local function fail(error)
 end
 
 -- ---------------------------------------------------------------------------
--- Idempotency ledger (v3.9 police_write_intents). ArrestSubmit/ReportSubmit are
--- multi-table writes and the bundled oxmysql has no transaction export, so a
--- retry after a timeout or a double tap can otherwise write a second report and
--- citation. The phone sends an `idempotency_key`; the key is claimed before any
--- row is touched, `done` replays the cached result, and a failed submit frees
--- the key so a corrected retry can reuse it. Stale rows are swept lazily.
+-- Idempotency ledger (v3.9 police_write_intents + v3.12 TTL). ArrestSubmit and
+-- ReportSubmit are multi-table writes and the bundled oxmysql has no transaction
+-- export, so a retry after a timeout or a double tap can otherwise write a
+-- second report and citation. The phone sends an `idempotency_key`; the key is
+-- claimed before any row is touched, `done` replays the cached result, and a
+-- failed submit frees the key so a corrected retry can reuse it.
+--
+-- v3.12 TTL semantics:
+--   * a `done` result is valid for 7 days (`expires_at`); after that the row is
+--     swept and the key may be claimed again, so a stale replay cannot resurrect
+--     a week-old result;
+--   * a `pending` row older than 10 minutes is treated as a crashed submit and
+--     deleted (the submit's own rollback already ran or is unrecoverable), which
+--     frees the key instead of blocking it forever;
+--   * `failed` rows are swept immediately.
+-- The sweep runs on resource start and on every claim, limited to 200 rows so it
+-- stays a cheap indexed delete.
 -- ---------------------------------------------------------------------------
 local INTENT_KEY_MIN = 8
 local INTENT_KEY_MAX = 128
@@ -173,6 +366,26 @@ local function deleteIntent(key)
     end)
 end
 
+--- Delete expired done rows, stale pending rows and failed rows. Called on
+--- start and before every claim; the LIMIT keeps it cheap on a large table.
+local function sweepIntents()
+    pcall(function()
+        MySQL.update.await([[
+            DELETE FROM police_write_intents
+             WHERE (status = 'done'
+                    AND COALESCE(expires_at, created_at + INTERVAL 7 DAY) < NOW())
+                OR (status = 'pending' AND created_at < NOW() - INTERVAL 10 MINUTE)
+                OR status = 'failed'
+             LIMIT 200
+        ]])
+    end)
+end
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    sweepIntents()
+end)
+
 local function decodeIntentResult(row)
     if type(row) ~= 'table' or type(row.result_json) ~= 'string' then return nil end
     local ok, decoded = pcall(json.decode, row.result_json)
@@ -180,11 +393,18 @@ local function decodeIntentResult(row)
     return nil
 end
 
+--- oxmysql returns TINYINT expressions as numbers; stock builds may return a
+--- boolean/string. Normalise so the branches below read the same.
+local function dbFlag(value)
+    return value == true or value == 1 or value == '1'
+end
+
 --- Run `fn` at most once per client-supplied key.
 --- Without a key the call is unchanged (backward compatible). With a key:
 ---   * invalid format → `invalid_idempotency_key`;
----   * a `done` row replays its cached result;
----   * a `pending` row is a concurrent/submitted duplicate → `in_progress`;
+---   * a live `done` row replays its cached result (7-day TTL);
+---   * a `pending` row is a concurrent/submitted duplicate → `in_progress`,
+---     unless it is older than 10 minutes (crash) → swept and reclaimed;
 ---   * a `failed` row is deleted and claimed again;
 ---   * `ok=false` or an exception deletes the row (no caching of failures).
 ---@param action string
@@ -197,12 +417,7 @@ local function withIntent(action, actorCid, key, fn)
     if not validIntentKey(key) then return fail('invalid_idempotency_key') end
     actorCid = tostring(actorCid or ''):sub(1, 50)
 
-    -- Lazy TTL sweep: a day is far longer than any submit, and the LIMIT keeps
-    -- the delete cheap when the table is large.
-    pcall(function()
-        MySQL.update.await(
-            'DELETE FROM police_write_intents WHERE created_at < NOW() - INTERVAL 1 DAY LIMIT 200')
-    end)
+    sweepIntents()
 
     for _ = 1, 2 do
         -- Claim first: a duplicate INSERT raises, which is the concurrency guard.
@@ -233,35 +448,55 @@ local function withIntent(action, actorCid, key, fn)
                 -- duplicate it on retry, so keep it done without a result.
                 pcall(function()
                     MySQL.update.await(
-                        "UPDATE police_write_intents SET status = 'done' WHERE idem_key = ?", { key })
+                        "UPDATE police_write_intents SET status = 'done', completed_at = NOW(), expires_at = NOW() + INTERVAL 7 DAY WHERE idem_key = ?",
+                        { key })
                 end)
                 return result
             end
             pcall(function()
                 MySQL.update.await(
-                    "UPDATE police_write_intents SET status = 'done', result_json = ? WHERE idem_key = ?",
+                    "UPDATE police_write_intents SET status = 'done', result_json = ?, completed_at = NOW(), expires_at = NOW() + INTERVAL 7 DAY WHERE idem_key = ?",
                     { encoded, key })
             end)
             return result
         end
 
         local selectOk, existing = pcall(function()
-            return MySQL.single.await(
-                'SELECT idem_key, status, result_json FROM police_write_intents WHERE idem_key = ? LIMIT 1',
-                { key })
+            return MySQL.single.await([[
+                SELECT idem_key, status, result_json,
+                       (status = 'pending' AND created_at < NOW() - INTERVAL 10 MINUTE) AS stale_pending,
+                       (status = 'done'
+                        AND COALESCE(expires_at, created_at + INTERVAL 7 DAY) < NOW()) AS expired
+                  FROM police_write_intents
+                 WHERE idem_key = ?
+                 LIMIT 1
+            ]], { key })
         end)
         if not selectOk then return fail('db_error') end
         if not existing then
             -- The row vanished between INSERT and SELECT (TTL sweep or a
             -- concurrent failure); try to claim it again.
         elseif existing.status == 'done' then
-            local cached = decodeIntentResult(existing)
-            if cached then return cached end
-            -- A done row without a decodable result cannot be replayed without
-            -- duplicating the committed write.
-            return fail('db_error')
+            if dbFlag(existing.expired) then
+                -- 7-day TTL elapsed: drop the stale result and let this call
+                -- claim the key again (the sweep may have been truncated).
+                deleteIntent(key)
+            else
+                local cached = decodeIntentResult(existing)
+                if cached then return cached end
+                -- A done row without a decodable result cannot be replayed
+                -- without duplicating the committed write.
+                return fail('db_error')
+            end
         elseif existing.status == 'pending' then
-            return fail('in_progress')
+            if dbFlag(existing.stale_pending) then
+                -- The claiming process died mid-submit. Its compensating
+                -- rollback may have run; holding the key forever would make
+                -- every retry `in_progress`, so free it and reclaim.
+                deleteIntent(key)
+            else
+                return fail('in_progress')
+            end
         else
             -- failed: drop the old row and claim again.
             deleteIntent(key)
@@ -399,22 +634,18 @@ AddEventHandler('playerDropped', function()
 end)
 
 --- Best-effort notification for the citation created by an arrest. The arrest
---- is already committed when this runs, so a failing notification is only
---- logged and never rolls the arrest back.
+--- is already committed when this runs, so a failing enqueue is only logged and
+--- never rolls the arrest back; the outbox retries delivery in the background.
 local function notifyCitation(citizenid, citationId, amount, reason, source)
     local title = '你收到一张罚单'
     local content = utf8Sub(
         ('你收到一张罚单 #%d，金额 $%d，罪名 %s'):format(citationId, amount, reason), 500)
     local ok, err = pcall(function()
-        local result = MySQL.insert.await(
-            'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
-            { citizenid, title, content, 'banking' })
-        local notificationId = InsertId(result)
-        local src = tonumber(source)
-        if not src or src <= 0 then return end
-        TriggerClientEvent('phone:client:newNotification', src, {
-            id = notificationId, title = title, content = content,
-            timestamp = os.date('%Y-%m-%d %H:%M:%S'), is_read = false, app_id = 'banking',
+        return Outbox.Enqueue(OUTBOX_TOPIC_NOTIFICATION, {
+            citizenid = citizenid,
+            title = title,
+            content = content,
+            app_id = 'banking',
         })
     end)
     if not ok then
@@ -957,6 +1188,12 @@ exports('JailSystem', Sys.Jail)
 exports('ArrestSubmit', ArrestSubmit)
 exports('ReportSubmit', ReportSubmit)
 exports('RequestBackup', RequestBackup)
+-- Outbox entry point for other police modules and the Lua harness. The caller
+-- gets false when the durable row could not be written; delivery itself is the
+-- worker's job (immediate Kick + 30s retry loop).
+exports('EnqueueOutbox', function(topic, payload)
+    return Outbox.Enqueue(topic, payload)
+end)
 exports('GetCharges', function()
     local charges = {}
     for i, charge in ipairs(PoliceCharges.List()) do
