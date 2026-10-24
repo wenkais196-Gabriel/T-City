@@ -579,20 +579,25 @@ function RequestBackup(source)
 
     -- Reserve the budget slot before the yielding audit insert: the budget
     -- itself is the reservation, so two requests in the same tick cannot both
-    -- pass the limit check. A global refusal is propagated as global_limit;
-    -- the per-officer refusal keeps the MDT's historical `limit` code.
+    -- pass the limit check. Bind the source first: playerDropped can run while
+    -- the budget audit suspends, and it must be able to find this reservation.
+    local previousSource = backupSource[src]
+    local previousCooldown = backupCooldown[cid]
+    backupSource[src] = cid
+
     local admitted, budgetError = NPCBudget.Acquire('backup', requestId, cid)
     if not admitted then
+        -- Do not clear a mapping that belongs to an earlier live unit; do not
+        -- resurrect one that playerDropped already cleared.
+        if backupSource[src] == cid then backupSource[src] = previousSource end
         if budgetError == 'player_limit' then return fail('limit') end
         return fail(budgetError or 'limit')
     end
-    backupSource[src] = cid
-    local previousCooldown = backupCooldown[cid]
     backupCooldown[cid] = now
 
     if not auditPlayer(cid, 'backup.request', cid, requestId) then
         NPCBudget.Release(requestId, 'audit_unavailable')
-        backupSource[src] = nil
+        if backupSource[src] == cid then backupSource[src] = previousSource end
         backupCooldown[cid] = previousCooldown
         return fail('audit_unavailable')
     end
@@ -602,7 +607,7 @@ function RequestBackup(source)
     local stillThere = QBCore.Functions.GetPlayer(src)
     if not stillThere or stillThere.PlayerData.citizenid ~= cid then
         NPCBudget.Release(requestId, 'player_left')
-        backupSource[src] = nil
+        if backupSource[src] == cid then backupSource[src] = previousSource end
         backupCooldown[cid] = previousCooldown
         return fail('not_police')
     end
