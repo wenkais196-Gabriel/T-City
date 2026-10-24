@@ -1,0 +1,27 @@
+{
+  "$comment": "FIT-09 query-discipline allowlist — only violations that are safe but invisible to the static scanner belong here (for example a LIMIT appended from a clamped integer at the call site). Every entry is checked by tests/architecture/test_query_discipline.py: pattern/reason/owner/expires are mandatory, expired entries fail, and an entry that matches no violation fails as stale. Do not add an entry to hide a real SELECT * or an unbounded query; fix the query instead.",
+  "version": 1,
+  "rule": "FIT-09",
+  "entries": [
+    {
+      "id": "phone-sms-page-limit-appended",
+      "rule": "no_limit",
+      "file": "custom-phone/server/main.lua",
+      "pattern": "FROM phone_messages\\s+WHERE\\s+\\(\\(",
+      "reason": "短信分页把 WHERE/ORDER BY 先拼进局部变量 sql，执行前再追加 ' ORDER BY id DESC LIMIT ' .. queryLimit；queryLimit = limit + 1 且 limit 已 clamp 到 [1, SMS_PAGE_MAX=50]，永远是整数，静态扫描看不到这个 LIMIT。",
+      "owner": "custom-phone",
+      "added": "2026-10-24",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "police-get-arrests-limit-appended",
+      "rule": "no_limit",
+      "file": "custom-police/server/p3_cases.lua",
+      "pattern": "FROM police_reports\\s+WHERE kind = 'arrest'$",
+      "reason": "GetArrests 的公共 SELECT 片段只含 WHERE kind = 'arrest'，两个调用分支分别追加 ' AND subject_citizenid = ? ORDER BY id DESC LIMIT 50' 或 ' ORDER BY id DESC LIMIT 50'；实际执行的 SQL 一定有 LIMIT，静态片段看不到。",
+      "owner": "custom-police",
+      "added": "2026-10-24",
+      "expires": "2027-03-31"
+    }
+  ]
+}

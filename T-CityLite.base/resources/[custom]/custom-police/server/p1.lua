@@ -102,10 +102,11 @@ function P1.GetCitations(source, params)
     local rows
     if target then
         rows = MySQL.query.await(
-            'SELECT * FROM police_citations WHERE citizenid = ? ORDER BY id DESC LIMIT 50',
+            'SELECT id, citizenid, officer_citizenid, plate, amount, charge_id, base_amount, reason, status, incident_id, report_id, created_at, paid_at FROM police_citations WHERE citizenid = ? ORDER BY id DESC LIMIT 50',
             { target })
     else
-        rows = MySQL.query.await('SELECT * FROM police_citations ORDER BY id DESC LIMIT 50')
+        rows = MySQL.query.await(
+            'SELECT id, citizenid, officer_citizenid, plate, amount, charge_id, base_amount, reason, status, incident_id, report_id, created_at, paid_at FROM police_citations ORDER BY id DESC LIMIT 50')
     end
     return { rows = rows or {}, count = #(rows or {}) }
 end
@@ -153,14 +154,15 @@ function P1.GetReports(source, params)
     local rows
     if byCase then
         rows = MySQL.query.await(
-            'SELECT * FROM police_reports WHERE case_id = ? ORDER BY id DESC LIMIT 50',
+            'SELECT id, incident_id, case_id, kind, subject_citizenid, author_citizenid, officer_citizenid, title, status, charges, is_bolo, bolo_kind, bolo_target, location, justice_case_id, justice_verdict, justice_status, created_at, updated_at FROM police_reports WHERE case_id = ? ORDER BY id DESC LIMIT 50',
             { tonumber(byCase) })
     elseif byIncident then
         rows = MySQL.query.await(
-            'SELECT * FROM police_reports WHERE incident_id = ? ORDER BY id DESC LIMIT 50',
+            'SELECT id, incident_id, case_id, kind, subject_citizenid, author_citizenid, officer_citizenid, title, status, charges, is_bolo, bolo_kind, bolo_target, location, justice_case_id, justice_verdict, justice_status, created_at, updated_at FROM police_reports WHERE incident_id = ? ORDER BY id DESC LIMIT 50',
             { tonumber(byIncident) })
     else
-        rows = MySQL.query.await('SELECT * FROM police_reports ORDER BY id DESC LIMIT 50')
+        rows = MySQL.query.await(
+            'SELECT id, incident_id, case_id, kind, subject_citizenid, author_citizenid, officer_citizenid, title, status, charges, is_bolo, bolo_kind, bolo_target, location, justice_case_id, justice_verdict, justice_status, created_at, updated_at FROM police_reports ORDER BY id DESC LIMIT 50')
     end
     return { rows = rows or {}, count = #(rows or {}) }
 end

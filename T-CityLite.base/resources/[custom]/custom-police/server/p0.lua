@@ -123,7 +123,8 @@ function P.SetUnitStatus(citizenid, callsign, status)
 end
 
 function P.GetUnits()
-    local rows = MySQL.query.await('SELECT * FROM police_units ORDER BY citizenid LIMIT 100') or {}
+    local rows = MySQL.query.await(
+        'SELECT citizenid, callsign, dept, status, incident_id FROM police_units ORDER BY citizenid LIMIT 100') or {}
     local names = {}
     for _, src in ipairs(QBCore.Functions.GetPlayers()) do
         local p = QBCore.Functions.GetPlayer(src)
@@ -195,10 +196,10 @@ function P.GetIncidents(status)
     local rows
     if status then
         rows = MySQL.query.await(
-            'SELECT * FROM police_incidents WHERE status = ? ORDER BY priority ASC, id DESC LIMIT 50', { status })
+            'SELECT id, code, title, description, priority, status, disposition, npc_template, x, y, z, created_at FROM police_incidents WHERE status = ? ORDER BY priority ASC, id DESC LIMIT 50', { status })
     else
         rows = MySQL.query.await(
-            "SELECT * FROM police_incidents WHERE status NOT IN ('closed') ORDER BY priority ASC, id DESC LIMIT 50")
+            "SELECT id, code, title, description, priority, status, disposition, npc_template, x, y, z, created_at FROM police_incidents WHERE status NOT IN ('closed') ORDER BY priority ASC, id DESC LIMIT 50")
     end
     local incidents = {}
     for _, row in ipairs(rows or {}) do
@@ -232,7 +233,7 @@ function P.AssignUnit(source, incidentId, targetCitizenId)
     if not id then return false, 'invalid_incident' end
     local target = tostring(targetCitizenId or ''):sub(1, 50)
     if target == '' then return false, 'invalid_unit' end
-    local incident = MySQL.single.await('SELECT id, status FROM police_incidents WHERE id = ?', { id })
+    local incident = MySQL.single.await('SELECT id, status FROM police_incidents WHERE id = ? LIMIT 1', { id })
     if not incident then return false, 'incident_not_found' end
     if incident.status ~= 'open' and incident.status ~= 'assigned' then
         return false, 'invalid_transition'
@@ -531,6 +532,7 @@ local function sweepOfflineUnits()
     local rows = MySQL.query.await([[
         SELECT citizenid FROM police_units
          WHERE status <> 'off_duty' OR incident_id IS NOT NULL
+         LIMIT 200
     ]]) or {}
     for _, row in ipairs(rows) do
         local cid = row.citizenid
