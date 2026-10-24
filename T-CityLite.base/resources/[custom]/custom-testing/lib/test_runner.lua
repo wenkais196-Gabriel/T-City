@@ -7,8 +7,12 @@
 --       Test.assert_equal(a, b, "a 应等于 b")
 --       Test.assert_true(cond, "条件应为真")
 --     end)
+--     Test.it_async("异步用例", function(source)
+--       Wait(100)                  -- 在独立线程中运行，可 yield
+--       local row = MySQL.single.await('SELECT ... LIMIT 1')
+--     end, 30)
 --   end)
---   Test.run("套件名")  -- 或 Test.runAll()
+--   Test.run("套件名")  -- 或 Test.runAll()；需在 CreateThread/协程中调用
 
 Test = Test or {}
 
@@ -47,14 +51,31 @@ end
 --- 声明一个测试用例
 ---@param name string 用例描述
 ---@param fn function(source) 测试逻辑，接收调用者 source
-function Test.it(name, fn)
+---@param opts table|nil 可选: { async = true, timeout = 秒 }；异步用例内部可直接使用 Wait()/MySQL.*.await()
+function Test.it(name, fn, opts)
     if not Test._current_suite then
         error("Test.it() 必须在 Test.describe() 内调用")
     end
     if Test._suites[Test._current_suite].tests[name] then
         print(("[test] ⚠️  用例重名: %s.%s"):format(Test._current_suite, name))
     end
-    Test._suites[Test._current_suite].tests[name] = fn
+    local definition = fn
+    if type(opts) == 'table' and opts.async then
+        definition = {
+            __async = true,
+            fn = fn,
+            timeout = tonumber(opts.timeout),
+        }
+    end
+    Test._suites[Test._current_suite].tests[name] = definition
+end
+
+--- 声明一个异步测试用例：函数在独立线程中运行，可自由使用 Wait() / MySQL.*.await()。
+---@param name string 用例描述
+---@param fn function(source) 测试逻辑，接收调用者 source
+---@param timeout number|nil 超时秒数，默认 Config.TestTimeout
+function Test.it_async(name, fn, timeout)
+    Test.it(name, fn, { async = true, timeout = timeout })
 end
 
 -- ─── 断言 ───
@@ -146,6 +167,37 @@ end
 
 -- ─── 执行 ───
 
+--- 在独立线程中运行异步用例并等待其结束。
+--- 测试函数可像普通线程一样调用 Wait()/MySQL.*.await()；runner 只负责等待。
+--- 调用 Test.run() 的上下文必须是可 yield 的线程（/test 命令已用 CreateThread 包裹）。
+---@param definition table { fn = function, timeout = number|nil }
+---@param source number
+---@return boolean ok, string|nil err
+function Test._runAsync(definition, source)
+    if coroutine.isyieldable and not coroutine.isyieldable() then
+        return false, "[ASYNC] 异步用例必须在 CreateThread/协程中运行"
+    end
+
+    local done, ok, err = false, nil, nil
+    CreateThread(function()
+        local success, failure = pcall(definition.fn, source)
+        ok, err = success, failure
+        done = true
+    end)
+
+    local timeout = tonumber(definition.timeout)
+        or tonumber(Config and Config.TestTimeout)
+        or 30
+    local deadline = GetGameTimer() + math.floor(timeout * 1000)
+    while not done do
+        if GetGameTimer() > deadline then
+            return false, ("[TIMEOUT] 异步用例超过 %d 秒未完成"):format(timeout)
+        end
+        Wait(25)
+    end
+    return ok, err
+end
+
 --- 运行指定套件
 ---@param suite_name string 套件名
 ---@param source number|nil 调用者玩家的 source（可选，默认使用模拟玩家）
@@ -179,14 +231,20 @@ function Test.run(suite_name, source)
 
     for test_name, test_fn in pairs(suite.tests) do
         Test._current_test = test_name
-        local ok, err = pcall(test_fn, source or -1)
-        if not ok and err and not err:match("^%[SKIP%]") then
+        local ok, err
+        if type(test_fn) == 'table' and test_fn.__async then
+            ok, err = Test._runAsync(test_fn, source or -1)
+        else
+            ok, err = pcall(test_fn, source or -1)
+        end
+        local is_skip = type(err) == 'string' and err:match("^%[SKIP%]")
+        if not ok and err and not is_skip then
             -- 真正的错误（不是 skip）
             Test._stats.error = Test._stats.error + 1
-            print(("[test] 🔴 %s — 异常: %s"):format(test_name, err))
+            print(("[test] 🔴 %s — 异常: %s"):format(test_name, tostring(err)))
             Test._results[suite_name].tests[test_name] = {
                 status = "ERROR",
-                reason = err,
+                reason = tostring(err),
             }
         elseif ok or err then
             -- 正常通过，或已通过 _fail() 记录

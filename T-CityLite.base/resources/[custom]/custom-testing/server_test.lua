@@ -48,18 +48,21 @@ RegisterCommand('test', function(source, args, raw)
             return
         end
 
-        if target == 'all' then
-            Test.runAll(source)
-        else
-            Test.run(target, source)
-        end
+        -- 异步套件需要可 yield 的线程（内含 Wait/MySQL.await）。
+        CreateThread(function()
+            if target == 'all' then
+                Test.runAll(source)
+            else
+                Test.run(target, source)
+            end
 
-        -- 保存报告
-        if Config.TestReportPath then
-            local report = Test.getLastResult()
-            -- TODO: write report to file via oxmysql/fs
-            print(("[test] 📝 报告已保存 (current session)"))
-        end
+            -- 保存报告（在套件结束后执行，避免异步套件提前打印）
+            if Config.TestReportPath then
+                local report = Test.getLastResult()
+                -- TODO: write report to file via oxmysql/fs
+                print("[test] 📝 报告已保存 (current session)")
+            end
+        end)
 
     elseif cmd == 'mock' then
         if not Config.SinglePlayerMode then
