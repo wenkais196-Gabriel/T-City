@@ -107,3 +107,21 @@ exports('CreateIncidentSystem', Sys.CreateIncident)
 exports('AssignUnitSystem', Sys.AssignUnit)
 exports('JailSystem', Sys.Jail)
 print('[custom-police] P4 system entry points loaded')
+
+
+-- Ops command: release a jailed player and optionally restore their job.
+-- Console (source 0) or an ACE-allowed admin only.
+RegisterCommand('police_release', function(source, args)
+    if source ~= 0 and not IsPlayerAceAllowed(source, 'police.release') then return end
+    local target = tonumber(args and args[1])
+    if not target then return print('usage: police_release <serverId> [job] [grade]') end
+    local player = QBCore.Functions.GetPlayer(target)
+    if not player then return print('player not found') end
+    player.Functions.SetMetaData('injail', 0)
+    TriggerClientEvent('prison:client:UnjailPerson', target)
+    local job = args[2]
+    if job and job ~= '' then
+        player.Functions.SetJob(job, tonumber(args[3]) or 0)
+    end
+    print(('[custom-police] released %s%s'):format(target, job and (' -> ' .. job) or ''))
+end, true)
