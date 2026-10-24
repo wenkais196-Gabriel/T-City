@@ -30,10 +30,11 @@ end
 
 local function audit(actorId, action, target, detail)
     local ok, err = pcall(function()
-        MySQL.insert.await(
+        local res = MySQL.insert.await(
             "INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, 'agent', ?, ?, ?)",
             { ('agent:%s'):format(utf8Sub(tostring(actorId or 'unknown'), 40)), action, target,
               detail and utf8Sub(tostring(detail), 500) or nil })
+        print(('[custom-police] p2 audit insert %s -> %s'):format(tostring(action), tostring(res)))
     end)
     if not ok then print(('[custom-police] p2 audit failed %s: %s'):format(tostring(action), tostring(err))) end
     return ok
