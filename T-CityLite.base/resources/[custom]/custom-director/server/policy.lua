@@ -47,6 +47,18 @@ AgentPolicy.ACTIONS = {
         requires_approval = true,
         auto_execute = false,
     },
+    police_assign_unit = {
+        risk = 'L2',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+    },
+    police_jail_player = {
+        risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+    },
     police_incident_create = {
         risk = 'L1',
         requires_approval = false,
@@ -401,6 +413,39 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         if type(key) ~= 'string' then
             return fail('invalid_params', 'args must be a JSON object, not an array')
         end
+    end
+
+    if actionType == 'police_assign_unit' then
+        local unknownErr = rejectUnknownFields(params, { incident_id = true, citizenid = true }, 'police_assign_unit')
+        if unknownErr then return nil, unknownErr end
+        local incidentId = tonumber(params.incident_id)
+        if not incidentId or incidentId ~= math.floor(incidentId) or incidentId < 1 then
+            return fail('invalid_params', 'incident_id must be a positive integer')
+        end
+        if type(params.citizenid) ~= 'string' or not params.citizenid:match('^[A-Za-z0-9_-]{1,11}$') then
+            return fail('invalid_params', 'citizenid is invalid')
+        end
+        return { incident_id = incidentId, citizenid = params.citizenid }
+    end
+
+    if actionType == 'police_jail_player' then
+        local unknownErr = rejectUnknownFields(params, { citizenid = true, minutes = true, reason = true }, 'police_jail_player')
+        if unknownErr then return nil, unknownErr end
+        if type(params.citizenid) ~= 'string' or not params.citizenid:match('^[A-Za-z0-9_-]{1,11}$') then
+            return fail('invalid_params', 'citizenid is invalid')
+        end
+        local minutes = tonumber(params.minutes)
+        if not minutes or minutes ~= math.floor(minutes) or minutes < 1 or minutes > 120 then
+            return fail('invalid_params', 'minutes must be an integer between 1 and 120')
+        end
+        if type(params.reason) ~= 'string' or AgentPolicy.HasUnsafeControlChars(params.reason) then
+            return fail('invalid_params', 'reason must be a string without control characters')
+        end
+        local reason = AgentPolicy.Trim(params.reason)
+        if #reason < 3 or #reason > 240 then
+            return fail('invalid_params', 'reason must be 3-240 characters')
+        end
+        return { citizenid = params.citizenid, minutes = minutes, reason = reason }
     end
 
     -- L1 dispatch action: no target player, validated data only.
@@ -1042,6 +1087,18 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         preview.player_source = tonumber(player.source) or nil
     end
 
+    if actionType == 'police_assign_unit' then
+        preview.incident_id = params.incident_id
+        preview.unit = params.citizenid
+        return preview
+    end
+
+    if actionType == 'police_jail_player' then
+        preview.minutes = params.minutes
+        preview.reason_length = #params.reason
+        return preview
+    end
+
     if actionType == 'police_incident_create' then
         preview.title = params.title
         preview.code = params.code
@@ -1241,6 +1298,20 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
 
     if not AgentPolicy.WORLD_ACTIONS[actionType] and not ctx.player then
         return failBool('player_not_found', 'target player is not online')
+    end
+
+    if actionType == 'police_assign_unit' then
+        if type(params.incident_id) ~= 'number' or type(params.citizenid) ~= 'string' then
+            return failBool('invalid_params', 'invalid assignment')
+        end
+        return true
+    end
+
+    if actionType == 'police_jail_player' then
+        if type(params.minutes) ~= 'number' or params.minutes < 1 or params.minutes > 120 then
+            return failBool('invalid_params', 'invalid minutes')
+        end
+        return true
     end
 
     if actionType == 'police_incident_create' then

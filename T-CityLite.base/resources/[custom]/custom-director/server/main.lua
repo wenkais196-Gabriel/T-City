@@ -1186,6 +1186,26 @@ local function executeSendPhoneMessage(actionId, params)
     }
 end
 
+local function executePoliceAssignUnit(actionId, params)
+    local ok, result = pcall(function()
+        return exports['custom-police']:AssignUnitSystem(('action:%s'):format(tostring(actionId)),
+            params.incident_id, params.citizenid)
+    end)
+    if not ok then return false, ('police_unavailable: %s'):format(truncate(result, 150)), nil end
+    if type(result) ~= 'table' then return false, 'police_rejected', nil end
+    return true, nil, { incident_id = result.id, unit = result.unit, status = result.status }
+end
+
+local function executePoliceJailPlayer(actionId, params)
+    local ok, result = pcall(function()
+        return exports['custom-police']:JailSystem(('action:%s'):format(tostring(actionId)),
+            params.citizenid, params.minutes, params.reason)
+    end)
+    if not ok then return false, ('police_unavailable: %s'):format(truncate(result, 150)), nil end
+    if type(result) ~= 'table' then return false, 'police_rejected', nil end
+    return true, nil, { citizenid = result.citizenid, minutes = result.minutes, status = result.status }
+end
+
 local function executePoliceIncidentCreate(actionId, params)
     local ok, result = pcall(function()
         return exports['custom-police']:CreateIncidentSystem(('action:%s'):format(tostring(actionId)), params)
@@ -1234,6 +1254,10 @@ local function executeAction(actionId, actionType, params)
         return executeRevive(actionId, params)
     elseif actionType == 'delete_vehicle' then
         return executeDeleteVehicle(actionId, params)
+    elseif actionType == 'police_assign_unit' then
+        return executePoliceAssignUnit(actionId, params)
+    elseif actionType == 'police_jail_player' then
+        return executePoliceJailPlayer(actionId, params)
     elseif actionType == 'police_incident_create' then
         return executePoliceIncidentCreate(actionId, params)
     elseif actionType == 'send_phone_message' then
@@ -1261,6 +1285,8 @@ AgentActions._Execute = {
     delete_vehicle = executeDeleteVehicle,
     send_phone_message = executeSendPhoneMessage,
     police_incident_create = executePoliceIncidentCreate,
+    police_assign_unit = executePoliceAssignUnit,
+    police_jail_player = executePoliceJailPlayer,
 }
 
 -- Internal context builder for the pure-Lua harness (same contract as
