@@ -302,6 +302,8 @@ export function createWorld() {
     failError: 'db_error',
     /** One-shot aborted requests (simulates a dropped NUI callback). */
     abortQueries: new Set(),
+    /** One-shot requests that never settle until the client timeout aborts. */
+    hangQueries: new Set(),
     /** action name -> error code returned by appAction. */
     actionErrors: {},
     calls: [],
@@ -359,6 +361,10 @@ export function handleNui(world, callback, payload) {
         world.abortQueries.delete(query);
         return { abort: true };
       }
+      if (world.hangQueries.has(query)) {
+        world.hangQueries.delete(query);
+        return { hang: true };
+      }
       return ok({ success: true, data: queryData(world, query) });
     }
     case 'appAction': {
@@ -397,6 +403,10 @@ export async function installNuiMock(page, world) {
     const result = handleNui(world, callback, payload);
     if (result.abort) {
       await route.abort('failed');
+      return;
+    }
+    if (result.hang) {
+      await new Promise((resolve) => setTimeout(resolve, 20000));
       return;
     }
     await route.fulfill({

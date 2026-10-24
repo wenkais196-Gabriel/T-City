@@ -129,7 +129,13 @@ MySQL = {
         end,
     },
     query = {
-        await = function(sql)
+        await = function(sql, params)
+            if sql:find('INSERT INTO police_audit', 1, true) then
+                audits[#audits + 1] = { sql = sql, params = params }
+                events[#events + 1] = 'audit'
+                if auditFails then error('audit db down') end
+                return 1
+            end
             events[#events + 1] = 'query'
             if sql:find('police_units', 1, true) then
                 return { { citizenid = 'CID1', callsign = '1A', dept = 'PATROL',

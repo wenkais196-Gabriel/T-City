@@ -107,6 +107,8 @@ let mockCityFeed = [
   { id: 2, name: 'John Doe', citizenid: 'WKS99281', content: 'Recycling route is pretty relaxing today. Weather is perfect!', likes: 5, timestamp: new Date(Date.now() - 3600000 * 1).toISOString() }
 ];
 
+const NUI_TIMEOUT_MS = 6000;
+
 // NUI fetch function (sends requests to Lua)
 export async function fetchNui<T = any>(eventName: string, data?: any): Promise<T> {
   const options = {
@@ -119,13 +121,22 @@ export async function fetchNui<T = any>(eventName: string, data?: any): Promise<
 
   // If in game, use standard fetch
   if (!isBrowser()) {
+    // CEF can lose a NUI callback (resource restart, busy client) and leave the
+    // fetch pending forever. Bound it so callers can reset their loading state.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), NUI_TIMEOUT_MS);
     try {
       const resourceName = (window as any).GetParentResourceName();
-      const resp = await fetch(`https://${resourceName}/${eventName}`, options);
+      const resp = await fetch(`https://${resourceName}/${eventName}`, {
+        ...options,
+        signal: controller.signal,
+      });
       return await resp.json();
     } catch (error) {
       console.error(`Failed to fetch NUI event: ${eventName}`, error);
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

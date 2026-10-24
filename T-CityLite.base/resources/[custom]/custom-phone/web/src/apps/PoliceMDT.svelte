@@ -235,6 +235,8 @@
     case_forbidden: '创建案件需要 Sergeant+',
     audit_unavailable: '审计不可用，请稍后重试',
     db_error: '数据库错误，请重试',
+    query_failed: '查询失败，请重试',
+    action_failed: '操作失败，请重试',
     export_error: '服务端处理异常，请稍后重试',
     action_rejected: '服务端拒绝：请检查权限与状态',
     action_failed: '服务端处理失败，请稍后重试',
@@ -313,15 +315,18 @@
   async function refresh() {
     loading = true;
     error = '';
-    const [u, i] = await Promise.all([
-      queryApp(DB, 'units'),
-      queryApp(DB, 'incidents'),
-    ]);
-    if (u?.success) units = u.data?.rows ?? [];
-    else error = errorText(u?.error ?? 'units_failed');
-    if (i?.success) incidents = i.data?.rows ?? [];
-    else error = error || errorText(i?.error ?? 'incidents_failed');
-    loading = false;
+    try {
+      const [u, i] = await Promise.all([
+        queryApp(DB, 'units'),
+        queryApp(DB, 'incidents'),
+      ]);
+      if (u?.success) units = u.data?.rows ?? [];
+      else error = errorText(u?.error ?? 'units_failed');
+      if (i?.success) incidents = i.data?.rows ?? [];
+      else error = error || errorText(i?.error ?? 'incidents_failed');
+    } finally {
+      loading = false;
+    }
   }
 
   // Load a dataset at most once unless the user explicitly refreshes it.
