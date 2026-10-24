@@ -685,6 +685,12 @@ AddEventHandler('onResourceStart', function(resourceName)
         Wait(10000)
         local ok, err = pcall(sweepOfflineUnits)
         if not ok then print(('[custom-police] startup duty sweep failed: %s'):format(tostring(err))) end
+        -- Players who were already online during a resource restart never get
+        -- another PlayerLoaded, so reconcile their duty projection here.
+        for _, src in ipairs(QBCore.Functions.GetPlayers()) do
+            local player = QBCore.Functions.GetPlayer(src)
+            if player and player.PlayerData then syncDuty(player.PlayerData) end
+        end
     end)
     CreateThread(staleSweepLoop)
 end)
