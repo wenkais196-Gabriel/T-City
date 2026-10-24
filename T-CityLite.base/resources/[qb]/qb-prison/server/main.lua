@@ -2,18 +2,48 @@ local QBCore = exports['qb-core']:GetCoreObject()
 local GotItems = {}
 local AlarmActivated = false
 
+-- One-shot restore marker for seized items. Reset when a new custodial
+-- sentence starts, consumed by the first GiveJailItems after release.
+local JailItemsRestored = {}
+
+-- qb-prison no longer owns the clock. custom-justice's `justice_sentences` row
+-- is authoritative; this event only projects the server-side remaining time
+-- into `metadata.injail` (the value qb-prison restores from on reconnect).
 RegisterNetEvent('prison:server:SetJailStatus', function(jailTime)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    Player.Functions.SetMetaData('injail', jailTime)
-    if jailTime > 0 then
-        if Player.PlayerData.job.name ~= 'unemployed' then
-            Player.Functions.SetJob('unemployed')
-            TriggerClientEvent('QBCore:Notify', src, Lang:t('info.lost_job'))
-        end
+    local metadata = Player.PlayerData.metadata or {}
+    local cid = Player.PlayerData.citizenid
+
+    local lookedUp, remainingSeconds = pcall(function()
+        return exports['custom-justice']:RemainingSeconds(cid)
+    end)
+
+    local remainingMinutes
+    if lookedUp and type(remainingSeconds) == 'number' then
+        -- Never trust the client-supplied jailTime when the authority answers.
+        remainingSeconds = math.max(0, math.floor(remainingSeconds))
+        remainingMinutes = math.ceil(remainingSeconds / 60)
     else
-        GotItems[source] = nil
+        -- Justice unavailable: keep the legacy path, but bounded. Without
+        -- this clamp a client could still set an arbitrary sentence.
+        remainingMinutes = math.floor(tonumber(jailTime) or 0)
+        remainingMinutes = math.max(0, math.min(120, remainingMinutes))
+    end
+
+    if remainingMinutes <= 0 then
+        Player.Functions.SetMetaData('injail', 0)
+        GotItems[src] = nil
+        return
+    end
+
+    Player.Functions.SetMetaData('injail', remainingMinutes)
+    JailItemsRestored[src] = nil
+
+    if Player.PlayerData.job.name ~= 'unemployed' then
+        Player.Functions.SetJob('unemployed')
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('info.lost_job'))
     end
 end)
 
@@ -21,11 +51,17 @@ RegisterNetEvent('prison:server:SaveJailItems', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    local metadata = Player.PlayerData.metadata or {}
+    -- Items can only be seized while a sentence is active. Previously a free
+    -- player could loop Save/Give to farm the $80 jail stipend.
+    if (metadata.injail or 0) <= 0 then return end
     if not Player.PlayerData.metadata['jailitems'] or table.type(Player.PlayerData.metadata['jailitems']) == 'empty' then
         Player.Functions.SetMetaData('jailitems', Player.PlayerData.items)
         Player.Functions.AddMoney('cash', 80, 'jail money')
         Wait(2000)
         Player.Functions.ClearInventory()
+        -- A new sentence starts a fresh one-shot restore window.
+        JailItemsRestored[src] = nil
     end
 end)
 
@@ -33,11 +69,22 @@ RegisterNetEvent('prison:server:GiveJailItems', function(escaped)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    local metadata = Player.PlayerData.metadata or {}
+    local jailItems = metadata['jailitems']
+    local hasSeizedItems = type(jailItems) == 'table' and next(jailItems) ~= nil
+
+    -- On release metadata.injail is already 0 when the client asks for its
+    -- items back. Allow exactly one restoration of a non-empty snapshot and
+    -- never while free with nothing to restore.
+    if (metadata.injail or 0) <= 0 and not hasSeizedItems then return end
+    if JailItemsRestored[src] or not hasSeizedItems then return end
+    JailItemsRestored[src] = true
+
     if escaped then
         Player.Functions.SetMetaData('jailitems', {})
         return
     end
-    for _, v in pairs(Player.PlayerData.metadata['jailitems']) do
+    for _, v in pairs(jailItems) do
         exports['qb-inventory']:AddItem(src, v.name, v.amount, false, v.info, 'prison:server:GiveJailItems')
     end
     Player.Functions.SetMetaData('jailitems', {})
@@ -47,6 +94,8 @@ RegisterNetEvent('prison:server:ResetJailItems', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    local metadata = Player.PlayerData.metadata or {}
+    if (metadata.injail or 0) <= 0 then return end
     Player.Functions.SetMetaData('jailitems', {})
 end)
 

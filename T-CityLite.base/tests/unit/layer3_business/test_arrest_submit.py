@@ -757,7 +757,8 @@ def test_resolve_case_is_the_shared_sentencing_entry_point():
 
     # The service sentences and closes the case; notifications live in commands.
     assert "JusticeService.SetVerdict(caseId, verdict)" in block
-    assert "JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes)" in block
+    assert "JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes, {" in block
+    assert "replace = true" in block
     assert "case.status = 'closed'" in block
     assert "return verdict" in block
     assert "TriggerClientEvent" not in block
@@ -856,35 +857,50 @@ def test_arrest_submit_open_case_opens_a_justice_case_before_jailing():
     assert "cannot" in block and "rolled back" in block
 
 
-def test_imprison_does_not_reset_an_existing_sentence():
+def test_imprison_uses_the_durable_sentence_and_replace_mode():
     block = imprison_block()
-    assert "local metadata = Player.PlayerData.metadata or {}" in block
-    assert "if (tonumber(metadata.injail) or 0) > 0 then" in block
-    assert "return true" in block
 
-    metadata_check = block.index("(tonumber(metadata.injail) or 0) > 0")
-    online_write = block.index(
-        "JusticeService.Inmates[citizenid] = {",
-        block.index("local src = Player.PlayerData.source"),
-    )
-    assert metadata_check < online_write, "the dedupe check must run before the sentence is overwritten"
+    # The DB row is the authority: every imprisonment writes a sentence first.
+    assert "JusticeSentences.Apply" in block
+    assert "pcall(" in block
+    assert "local mode = opts.replace and 'set' or 'add'" in block
+    assert "return false, 'sentence_failed'" in block
+
+    # The old metadata-based early return must be gone, otherwise /trial and
+    # /plea cannot change an already-running sentence.
+    assert "(tonumber(metadata.injail) or 0) > 0 then" not in block
+    assert "local metadata = Player.PlayerData.metadata or {}" not in block
+
+    # Offline: write the row, never fake metadata/teleport.
+    assert "offline = true" in block
+    offline = block.index("if not Player then")
+    metadata_write = block.index("Player.Functions.SetMetaData('injail', remaining)")
+    assert offline < metadata_write, "offline sentencing must not write metadata"
+
+    # Online: project the authoritative remaining minutes and enter the cell.
+    assert "Player.Functions.SetMetaData('injail', remaining)" in block
+    assert "TriggerClientEvent('prison:client:Enter', src, remaining)" in block
 
 
-def test_player_loaded_recovery_does_not_double_count_with_qb_prison():
+def test_player_loaded_projects_the_durable_sentence_and_enters_once():
     block = prison_player_loaded_block()
-    assert "inmate.qbPrison = GetResourceState('qb-prison') == 'started'" in block
-    assert "if GetResourceState('qb-prison') ~= 'started' then" in block
-    guard = block.index("GetResourceState('qb-prison') ~= 'started'")
-    trigger = block.index("TriggerClientEvent('justice:client:enterPrison'")
-    assert guard < trigger
-    # qb-prison owns metadata.injail + prison:client:Enter on reconnect.
-    assert "Player.Functions.SetMetaData('injail'" not in block
-    assert "TriggerClientEvent('prison:client:Enter'" not in block
+    assert "JusticeSentences.RemainingSeconds" in block
+    assert "local remainingMinutes = math.ceil(remainingSeconds / 60)" in block
+    assert "Player.Functions.SetMetaData('injail', remainingMinutes)" in block
+    assert "if GetResourceState('qb-prison') == 'started' then" in block
+    assert "TriggerClientEvent('prison:client:Enter', data.source, remainingMinutes)" in block
+    # An offline verdict has no metadata projection yet, so the server enters;
+    # a reconnect with metadata>0 is restored by qb-prison itself.
+    assert "if not wasInJail then" in block
+    assert block.index("if not wasInJail then") < block.index(
+        "TriggerClientEvent('prison:client:Enter', data.source, remainingMinutes)")
+    # Expired-while-offline is projected to 0 and released, never left as-is.
+    assert "if remainingMinutes <= 0 then" in block
+    assert "Player.Functions.SetMetaData('injail', 0)" in block
 
-    main_block = justice_main_player_loaded_block()
-    assert "if inmate.offline then return end" in main_block
-    assert "if GetResourceState('qb-prison') == 'started' then return end" in main_block
-    assert main_block.index("inmate.offline") < main_block.index("TriggerClientEvent")
+    # prison.lua is the single owner of the login hand-off now.
+    main = read(JUSTICE / "server/main.lua")
+    assert "AddEventHandler('QBCore:Server:PlayerLoaded'" not in main
 
 
 def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
@@ -971,7 +987,7 @@ def test_resolve_case_persists_the_verdict_without_blocking_the_sentence():
 
     assert "persistVerdict(caseId, verdict, case.status)" in block
     set_verdict = block.index("JusticeService.SetVerdict(caseId, verdict)")
-    imprison = block.index("JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes)")
+    imprison = block.index("JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes, {")
     persist = block.index("persistVerdict(caseId, verdict, case.status)")
     assert set_verdict < persist, "the verdict must be set before it is written back"
     assert imprison < persist, "a DB failure must not affect the jail sentence"
@@ -1311,3 +1327,187 @@ def test_unit_writes_are_confined_to_p0_helpers():
     assert "UPDATE police_units" not in status
     assert "markIncidentUnits(id, status)" in status
     assert "releaseIncidentUnits(id)" in status
+
+
+# ---------------------------------------------------------------------------
+# P7: SM-05 custody — durable sentences, server clock, qb-prison projection
+# ---------------------------------------------------------------------------
+
+MIGRATION_V38 = BASE / "migrations" / "v3.8_justice_sentences.sql"
+SENTENCE = JUSTICE / "server" / "sentence.lua"
+PRISON_SERVER = BASE / "resources" / "[qb]" / "qb-prison" / "server" / "main.lua"
+
+
+def sentence_src() -> str:
+    return read(SENTENCE)
+
+
+def qb_prison_src() -> str:
+    return read(PRISON_SERVER)
+
+
+def set_jail_status_block() -> str:
+    src = qb_prison_src()
+    start = src.index("RegisterNetEvent('prison:server:SetJailStatus'")
+    end = src.index("RegisterNetEvent('prison:server:SaveJailItems'", start)
+    return src[start:end]
+
+
+def test_v38_migration_creates_the_sentences_table_and_indexes_idempotently():
+    sql = read(MIGRATION_V38)
+
+    for column in (
+        "id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT",
+        "citizenid VARCHAR(50) NOT NULL",
+        "case_id VARCHAR(32) NULL",
+        "minutes INT UNSIGNED NOT NULL",
+        "reason VARCHAR(255) NULL",
+        "started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        "ends_at DATETIME NOT NULL",
+        "released_at DATETIME NULL",
+        "created_by VARCHAR(50) NULL",
+    ):
+        assert column in sql, f"justice_sentences missing {column}"
+
+    assert "status ENUM(" in sql
+    for status in ("active", "released", "expired"):
+        assert status in sql
+    assert "DEFAULT " in sql and "active" in sql
+
+    assert "KEY idx_citizen_status (citizenid, status)" in sql
+    assert "KEY idx_status_ends (status, ends_at)" in sql
+
+    # Re-running the migration must be a no-op: table and indexes are all
+    # guarded through information_schema and prepared dynamic SQL.
+    assert "information_schema.TABLES" in sql
+    assert sql.count("information_schema.STATISTICS") == 2
+    assert "IF(@has_table = 0" in sql
+    assert "IF(@has_idx_citizen = 0" in sql
+    assert "IF(@has_idx_status = 0" in sql
+    prepared = len(re.findall(r"^PREPARE ", sql, re.M))
+    assert prepared == 3
+    assert prepared == sql.count("DEALLOCATE PREPARE")
+
+
+def test_sentence_service_is_exported_and_uses_server_clock_set_and_add_modes():
+    src = sentence_src()
+
+    for name in ("GetSentence", "RemainingSeconds", "ApplySentence", "ReleaseSentence"):
+        assert f"exports('{name}'" in src, f"missing export {name}"
+
+    assert "function JusticeSentences.Get(citizenid)" in src
+    assert "function JusticeSentences.RemainingSeconds(citizenid)" in src
+    assert "function JusticeSentences.Apply(citizenid, minutes, caseId, reason, mode, createdBy)" in src
+    assert "function JusticeSentences.Release(citizenid, reason, status)" in src
+    assert "function JusticeSentences.ExpireSweep()" in src
+
+    # Both time values come from MySQL NOW(), never from the client or os.time.
+    assert "GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), ends_at))" in src
+    assert "math.ceil(seconds / 60)" in src
+
+    # set = replace remaining time (verdict), add = extend (extra arrest).
+    assert "if mode ~= 'set' and mode ~= 'add' then return 0, 'invalid_mode' end" in src
+    assert "SET ends_at = DATE_ADD(NOW(), INTERVAL ? MINUTE)" in src
+    assert "SET ends_at = DATE_ADD(ends_at, INTERVAL ? MINUTE)" in src
+    assert "minutes = minutes + ?" in src
+    assert "WHERE citizenid = ? AND status = 'active'" in src
+
+    # Release is a conditional transition, so repeated calls are idempotent.
+    assert "SET status = ?, released_at = NOW()" in src
+    assert "local function affectedRows(result)" in src
+    assert "result.affectedRows" in src
+    assert "if affectedRows(affected) == 0 then return false end" in src
+
+    # Every statement is parameterised; no client value is concatenated.
+    assert ".. citizenid" not in src
+    assert ".. minutes" not in src
+
+
+def test_imprison_no_longer_blocks_on_injail_and_resolve_case_replaces():
+    imprison = imprison_block()
+    assert "JusticeSentences.Apply" in imprison
+    assert "opts.replace and 'set' or 'add'" in imprison
+    assert "(tonumber(metadata.injail) or 0) > 0 then" not in imprison
+    assert "return false, 'sentence_failed'" in imprison
+
+    resolve = resolve_case_block()
+    assert "JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes, {" in resolve
+    assert "replace = true" in resolve
+    assert "caseId = caseId" in resolve
+
+
+def test_qb_prison_set_jail_status_uses_justice_remaining_and_clamps_fallback():
+    block = set_jail_status_block()
+
+    assert "exports['custom-justice']:RemainingSeconds(cid)" in block
+    assert "pcall(function()" in block
+    # Authoritative branch: client jailTime is discarded, seconds -> ceil min.
+    assert "remainingMinutes = math.ceil(remainingSeconds / 60)" in block
+    # qb-prison fallback keeps the old shape but is bounded 0..120.
+    assert "remainingMinutes = math.max(0, math.min(120, remainingMinutes))" in block
+    assert "math.floor(tonumber(jailTime) or 0)" in block
+    # A zero/negative remaining sentence clears the projection and stops.
+    assert "if remainingMinutes <= 0 then" in block
+    assert "Player.Functions.SetMetaData('injail', 0)" in block
+    clear = block.index("if remainingMinutes <= 0 then")
+    write = block.index("Player.Functions.SetMetaData('injail', remainingMinutes)")
+    assert clear < write, "the zero branch must return before the positive write"
+    # The client value is never written to metadata.
+    assert "SetMetaData('injail', jailTime)" not in qb_prison_src()
+    # Job stripping happens after the projection and only for a live sentence.
+    assert block.index("Player.Functions.SetMetaData('injail', remainingMinutes)") < block.index(
+        "Player.PlayerData.job.name ~= 'unemployed'")
+
+
+def test_qb_prison_jail_item_events_require_an_active_sentence_and_give_once():
+    src = qb_prison_src()
+    save = src[src.index("RegisterNetEvent('prison:server:SaveJailItems'"):
+               src.index("RegisterNetEvent('prison:server:GiveJailItems'")]
+    give = src[src.index("RegisterNetEvent('prison:server:GiveJailItems'"):
+               src.index("RegisterNetEvent('prison:server:ResetJailItems'")]
+    reset = src[src.index("RegisterNetEvent('prison:server:ResetJailItems'"):
+                src.index("RegisterNetEvent('prison:server:SecurityLockdown'")]
+
+    for block in (save, give, reset):
+        assert "(metadata.injail or 0) <= 0" in block
+
+    # Save/Give cannot be looped to re-earn the $80 stipend: Save only snapshots
+    # while jailed, Give consumes the snapshot exactly once.
+    assert "JailItemsRestored[src] = nil" in save
+    assert "if JailItemsRestored[src] or not hasSeizedItems then return end" in give
+    assert give.index("JailItemsRestored[src] = true") < give.index("for _, v in pairs(jailItems)")
+    assert "Player.Functions.SetMetaData('jailitems', {})" in give
+
+
+def test_sentence_sweep_runs_on_start_and_every_fifteen_seconds():
+    src = sentence_src()
+
+    startup_start = src.index("AddEventHandler('onResourceStart'")
+    loop_start = src.index("\nCreateThread(function()", startup_start)
+    startup = src[startup_start:loop_start]
+    loop = src[loop_start:]
+    assert "pcall(JusticeSentences.ExpireSweep)" in startup
+    assert "pcall(JusticeSentences.ExpireSweep)" in loop
+    assert "Wait(15000)" in loop
+
+    sweep_start = src.index("function JusticeSentences.ExpireSweep()")
+    sweep = src[sweep_start:src.index("-- Startup sweep", sweep_start)]
+    assert "UPDATE justice_sentences" in sweep
+    assert "SET status = 'expired', released_at = NOW()" in sweep
+    assert "WHERE status = 'active' AND ends_at <= NOW()" in sweep
+    assert "TriggerClientEvent('prison:client:UnjailPerson'" in sweep
+    assert "SetMetaData('injail', 0)" in sweep
+
+
+def test_justice_manifest_loads_sentence_before_prison_and_release_uses_the_db():
+    manifest = read(JUSTICE / "fxmanifest.lua")
+    assert "'server/sentence.lua'" in manifest
+    assert manifest.index("server/sentence.lua") < manifest.index("server/prison.lua")
+
+    src = read(JUSTICE / "server/main.lua")
+    start = src.index("function JusticeService.ReleaseInmate(")
+    end = src.index("-- 获取在线职业人数", start)
+    block = src[start:end]
+    assert "pcall(JusticeSentences.Release" in block
+    assert "Player.Functions.SetMetaData('injail', 0)" in block
+    assert "TriggerClientEvent('prison:client:UnjailPerson'" in block

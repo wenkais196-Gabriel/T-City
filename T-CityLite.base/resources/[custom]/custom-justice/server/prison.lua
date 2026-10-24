@@ -9,7 +9,17 @@ local QBCore = exports['qb-core']:GetCoreObject()
 --- Server-side incarceration. Only call from a trusted server path (trial
 --- verdict, judge command); the net event below is a compatibility wrapper
 --- that validates the caller first.
-function JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
+---
+--- The durable row in `justice_sentences` is authoritative. `metadata.injail`
+--- is only the qb-prison projection; it is written here (online) or on the
+--- next PlayerLoaded (offline sentencing), never trusted as input.
+---
+--- @param citizenid string
+--- @param sentenceMinutes number
+--- @param crimes string[]|nil
+--- @param opts table|nil { replace=boolean, caseId=string, reason=string, createdBy=string }
+--- @return boolean ok, string|nil error
+function JusticeService.Imprison(citizenid, sentenceMinutes, crimes, opts)
     citizenid = tostring(citizenid or '')
     if #citizenid == 0 or #citizenid > 50 then return false, 'invalid_citizen' end
     sentenceMinutes = math.floor(tonumber(sentenceMinutes) or 0)
@@ -17,50 +27,66 @@ function JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
     local maxSentence = (Config.Justice and Config.Justice.MaxSentence) or 120
     if sentenceMinutes > maxSentence then sentenceMinutes = maxSentence end
     crimes = type(crimes) == 'table' and crimes or {}
+    opts = type(opts) == 'table' and opts or {}
+
+    local labels = {}
+    for _, crimeId in ipairs(crimes) do
+        local crime = Config.Justice.Crimes[crimeId]
+        if crime then labels[#labels + 1] = crime.label end
+    end
+    local caseId = opts.caseId or opts.case_id
+    local reason = opts.reason or ('罪名: ' .. table.concat(labels, ','))
+    local mode = opts.replace and 'set' or 'add'
+
+    -- Server-authoritative timer. A failed write must not be reported as a
+    -- successful jailing, otherwise the caller's rollback path is misled.
+    local called, remaining, applyErr = pcall(
+        JusticeSentences.Apply, citizenid, sentenceMinutes, caseId, reason, mode, opts.createdBy)
+    if not called or type(remaining) ~= 'number' or remaining <= 0 then
+        print(('[justice-prison] ⚠️ sentence write failed for %s: %s'):format(
+            citizenid, tostring(applyErr or remaining)))
+        return false, 'sentence_failed'
+    end
+    remaining = math.floor(remaining)
 
     local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
+    local useQbPrison = GetResourceState('qb-prison') == 'started'
+
     if not Player then
+        -- Offline sentencing: the DB row already runs. PlayerLoaded projects it
+        -- into metadata and enters the cell; do not try to teleport nobody.
         JusticeService.Inmates[citizenid] = {
-            sentenceMinutes = sentenceMinutes, startTime = os.time(),
+            sentenceMinutes = remaining, startTime = os.time(),
             crimes = crimes, reductions = {}, offline = true,
+            caseId = caseId, reason = reason,
         }
         return true
     end
 
     local src = Player.PlayerData.source
-    -- 已在服刑: 不重置刑期/startTime（防止“再抓一次洗刑期”）。
-    local metadata = Player.PlayerData.metadata or {}
-    if (tonumber(metadata.injail) or 0) > 0 then
-        return true
-    end
     JusticeService.Inmates[citizenid] = {
-        sentenceMinutes = sentenceMinutes, startTime = os.time(),
+        sentenceMinutes = remaining, startTime = os.time(),
         crimes = crimes, reductions = {}, src = src,
+        qbPrison = useQbPrison, caseId = caseId, reason = reason,
     }
-    -- Hand the sentence to qb-prison when available: it owns the cell,
-    -- countdown, item seizure and release. Fall back to the justice prison
-    -- only if qb-prison is not running.
-    local useQbPrison = GetResourceState('qb-prison') == 'started'
-    JusticeService.Inmates[citizenid].qbPrison = useQbPrison
+
+    -- Hand the sentence to qb-prison when available: it owns the cell, item
+    -- seizure and release. Fall back to the justice prison only if qb-prison
+    -- is not running.
     if useQbPrison then
-        Player.Functions.SetMetaData('injail', sentenceMinutes)
-        TriggerClientEvent('prison:client:Enter', src, sentenceMinutes)
+        Player.Functions.SetMetaData('injail', remaining)
+        TriggerClientEvent('prison:client:Enter', src, remaining)
     else
         TriggerClientEvent('justice:client:enterPrison', src, {
-            sentenceMinutes = sentenceMinutes, startTime = os.time(),
+            sentenceMinutes = remaining, startTime = os.time(),
             crimes = crimes, reductions = {},
         })
     end
     TriggerClientEvent('QBCore:Notify', src,
-        _L(src, 'justice_imprisoned', sentenceMinutes), 'error', 15000)
+        _L(src, 'justice_imprisoned', remaining), 'error', 15000)
     if exports['custom-logs'] then
-        local labels = {}
-        for _, cid in ipairs(crimes) do
-            local c = Config.Justice.Crimes[cid]
-            if c then labels[#labels + 1] = c.label end
-        end
         exports['custom-logs']:LogGeneric('入狱', ('%s (%s) | 刑期: %d分钟 | 罪名: %s'):format(
-            GetPlayerName(src), citizenid, sentenceMinutes, table.concat(labels, ',')))
+            GetPlayerName(src), citizenid, remaining, table.concat(labels, ',')))
     end
     return true
 end
@@ -77,25 +103,79 @@ RegisterNetEvent('justice:server:imprison', function(citizenid, sentenceMinutes,
     JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
 end)
 
+--- Project an active DB sentence onto a player who just loaded.
+---
+--- Offline sentencing cannot write metadata at verdict time, so this is the
+--- login hand-off: set metadata to the DB remaining minutes and, when there was
+--- no projection before login, enter the cell explicitly (qb-prison's own
+--- OnPlayerLoaded only enters when metadata was already > 0).
 RegisterNetEvent('QBCore:Server:PlayerLoaded', function(Player)
     local data = Player and Player.PlayerData
     if not data then return end
-    local inmate = JusticeService.Inmates[data.citizenid]
-    if not inmate or inmate.offline ~= true then return end
-    inmate.offline = nil
-    inmate.src = data.source
-    inmate.qbPrison = GetResourceState('qb-prison') == 'started'
-    -- qb-prison 会在玩家加载时自己读取 metadata.injail 并进入；此时再触发
-    -- justice 自有计时会造成双计时。只有 qb-prison 未启动时才由这里恢复。
-    if GetResourceState('qb-prison') ~= 'started' then
+    local cid = data.citizenid
+    if not cid or not JusticeSentences then return end
+
+    local ok, seconds = pcall(JusticeSentences.RemainingSeconds, cid)
+    if not ok then
+        -- DB unavailable: leave the existing projection untouched. qb-prison's
+        -- SetJailStatus will also fail its export lookup and use its clamped
+        -- fallback rather than silently freeing the player.
+        print(('[justice-prison] ⚠️ login sentence lookup failed for %s: %s'):format(
+            tostring(cid), tostring(seconds)))
+        return
+    end
+
+    local metadata = data.metadata or {}
+    local wasInJail = (tonumber(metadata.injail) or 0) > 0
+    local remainingSeconds = math.max(0, math.floor(tonumber(seconds) or 0))
+    local remainingMinutes = math.ceil(remainingSeconds / 60)
+
+    if remainingMinutes <= 0 then
+        JusticeService.Inmates[cid] = nil
+        if wasInJail then
+            Player.Functions.SetMetaData('injail', 0)
+            if GetResourceState('qb-prison') == 'started' then
+                TriggerClientEvent('prison:client:UnjailPerson', data.source)
+            else
+                TriggerClientEvent('justice:client:released', data.source)
+            end
+        end
+        return
+    end
+
+    local sentence = JusticeSentences.Get(cid)
+    local totalMinutes = sentence and tonumber(sentence.minutes) or remainingMinutes
+    totalMinutes = math.max(remainingMinutes, math.floor(totalMinutes))
+    local startedAt = os.time() - math.max(0, totalMinutes * 60 - remainingSeconds)
+
+    JusticeService.Inmates[cid] = {
+        sentenceMinutes = totalMinutes,
+        startTime = startedAt,
+        crimes = {},
+        reductions = {},
+        src = data.source,
+        qbPrison = GetResourceState('qb-prison') == 'started',
+        offline = false,
+    }
+    Player.Functions.SetMetaData('injail', remainingMinutes)
+
+    if GetResourceState('qb-prison') == 'started' then
+        -- A pre-existing projection is restored by qb-prison's own
+        -- OnPlayerLoaded using the metadata just refreshed above. An offline
+        -- verdict has no projection yet, so the server must enter the cell.
+        if not wasInJail then
+            TriggerClientEvent('prison:client:Enter', data.source, remainingMinutes)
+        end
+    else
         TriggerClientEvent('justice:client:enterPrison', data.source, {
-            sentenceMinutes = inmate.sentenceMinutes,
-            startTime = inmate.startTime,
-            crimes = inmate.crimes,
-            reductions = inmate.reductions,
+            sentenceMinutes = remainingMinutes,
+            startTime = startedAt,
+            crimes = {},
+            reductions = {},
         })
     end
 end)
+
 
 -- ==============================================================
 -- 减刑请求 (良好表现自动触发或律师申请)
