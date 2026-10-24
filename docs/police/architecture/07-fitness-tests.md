@@ -28,7 +28,7 @@
 | FIT-12 | 弃用登记：deprecated 写路径为 0 或未过期豁免 | 演进 | ✅ PASS（`test_deprecations.py`；6 条已知债务，2026-12-31 到期） | blocking |
 | FIT-13 | 文档数字与代码常量一致（05 的预算不得漂移） | 文档 | ✅ PASS（`test_number_budget.py`；11 个数字 / 31 处文档引用，10 implemented + 1 proposed） | blocking |
 
-加权得分 **217 / 100**（13 条规则全部 PASS；基线 21/100）。
+加权得分 **100 / 100**（13 条规则全部 PASS；基线 21/100）。
 
 > **本轮（FIT-02/FIT-12）**：新增 `tests/architecture/test_cross_resource_writes.py`、`tests/architecture/table_owners.json`、`tests/architecture/test_deprecations.py`、`tests/architecture/deprecations.json`；`phone_notifications` 只剩 `custom-phone` 写，`police_reports` 只剩 `custom-police` 写。outbox/TTL 语义见 [09-outbox.md](09-outbox.md)。
 >
@@ -403,21 +403,21 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 | # | 规则 | 权重 | 状态 | 状态分 | 加权分 | 关键证据 |
 |---|---|---|---|---|---|---|
-| FIT-01 | onduty 单一写者 | 3 | ✅ PASS | 3 | 9 | `test_duty_writer.py` 4 条 allowlist、0 未登记 |
-| FIT-02 | 跨资源表所有权 | 2 | ✅ PASS | 2 | 4 | `test_cross_resource_writes.py`；0 未登记；两表单写者 |
-| FIT-03 | net event 鉴权 | 3 | ✅ PASS | 3 | 9 | 48 事件：13 强鉴权 + 35 登记例外，0 未登记 |
-| FIT-04 | export/action 错误码 + 审计 | 2 | ✅ PASS | 2 | 4 | 46/46 export、17/17 action 结构化；11 条例外 |
-| FIT-05 | 审计 fail-closed | 3 | ✅ PASS | 3 | 9 | 11 个敏感读，0 丢弃 |
+| FIT-01 | onduty 单一写者 | 3 | ✅ PASS | 1 | 3 | `test_duty_writer.py` 4 条 allowlist、0 未登记 |
+| FIT-02 | 跨资源表所有权 | 2 | ✅ PASS | 1 | 2 | `test_cross_resource_writes.py`；0 未登记；两表单写者 |
+| FIT-03 | net event 鉴权 | 3 | ✅ PASS | 1 | 3 | 48 事件：13 强鉴权 + 35 登记例外，0 未登记 |
+| FIT-04 | export/action 错误码 + 审计 | 2 | ✅ PASS | 1 | 2 | 46/46 export、17/17 action 结构化；11 条例外 |
+| FIT-05 | 审计 fail-closed | 3 | ✅ PASS | 1 | 3 | 11 个敏感读，0 丢弃 |
 | FIT-06 | 迁移幂等 + fixture 覆盖 | 1 | ✅ PASS（静态） | 1 | 1 | fixture 覆盖 38 表/34 列；`test_fixture_schema.py` |
-| FIT-07 | NPC 预算接口 | 2 | ✅ PASS | 2 | 4 | `NPCBudget` 6/2/10min，backup+callout 接入 |
+| FIT-07 | NPC 预算接口 | 2 | ✅ PASS | 1 | 2 | `NPCBudget` 6/2/10min，backup+callout 接入 |
 | FIT-08 | 注册表/生成物一致 | 1 | ✅ PASS | 1 | 1 | `agent_tools.py --check` 已进 CI |
-| FIT-09 | 查询纪律 | 2 | ✅ PASS | 2 | 4 | 23 处通配投影清零，2 条 allowlist |
+| FIT-09 | 查询纪律 | 2 | ✅ PASS | 1 | 2 | 23 处通配投影清零，2 条 allowlist |
 | FIT-10 | 资源接线 | 1 | ✅ PASS | 1 | 1 | `test_resource_wiring.py` |
-| FIT-11 | 状态机写者登记 | 2 | ✅ PASS | 2 | 4 | `test_state_writers.py` + allowlist |
+| FIT-11 | 状态机写者登记 | 2 | ✅ PASS | 1 | 2 | `test_state_writers.py` + allowlist |
 | FIT-12 | 弃用登记 | 1 | ✅ PASS | 1 | 1 | 6 条债务，2026-12-31 到期 |
 | FIT-13 | 文档数字漂移 | 1 | ✅ PASS | 1 | 1 | `number_budget.json` + 扫描器 |
 
-**加权得分：52 / 24 = 217 / 100**（基线 21/100 → 27/100 → 当前）。
+**加权得分：24 / 24 = 100 / 100（基线 21/100 → 27/100 → 当前）。
 
 > 13 条规则已全部做成 `tests/architecture/` 的可执行检查；FIT-06 的“连续导入两次”仍需 DB job 实跑。分数表示架构约束是否被自动化保护，不等于功能覆盖率。
 
