@@ -184,9 +184,15 @@ function JusticeService.ResolveCase(caseId, opts)
     -- 记录判决（SetVerdict 会把状态置为 sentenced），随后关闭案件。
     JusticeService.SetVerdict(caseId, verdict)
 
-    -- 入狱由服务端执行（嫌疑人客户端无权调用 imprison）。
+    -- 入狱/改判由服务端执行（嫌疑人客户端无权调用 imprison）。判决覆盖
+    -- 当前剩余刑期（set），而不是在过去剩余刑期上追加。
     if case.suspect.citizenid then
-        JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes)
+        JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes, {
+            replace = true,
+            caseId = caseId,
+            reason = ('判决: %s'):format(table.concat(crimeLabels, ',')),
+            createdBy = opts.actorCitizenid,
+        })
     end
 
     case.status = 'closed'

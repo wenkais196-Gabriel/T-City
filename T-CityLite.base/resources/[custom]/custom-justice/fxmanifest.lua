@@ -10,6 +10,7 @@ server_scripts {
     '@oxmysql/lib/MySQL.lua',
     '@core-framework/bus.lua',
     'server/main.lua',
+    'server/sentence.lua',
     'server/arrest.lua',
     'server/trial.lua',
     'server/prison.lua',

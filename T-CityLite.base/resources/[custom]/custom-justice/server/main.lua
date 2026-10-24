@@ -100,17 +100,33 @@ function JusticeService.GetInmates() return inmates end
 
 function JusticeService.GetInmate(citizenid) return inmates[citizenid] end
 
-function JusticeService.ReleaseInmate(citizenid)
+--- Close the durable sentence first, then clear the runtime cache and push the
+--- online player out. `Release` is idempotent, so a repeated call (or a sweep
+--- that already expired the row) only clears the projection.
+function JusticeService.ReleaseInmate(citizenid, reason, status)
+    citizenid = tostring(citizenid or '')
+    if #citizenid == 0 or #citizenid > 50 then return false end
+
+    local released = false
+    if JusticeSentences then
+        local ok, result = pcall(JusticeSentences.Release, citizenid, reason, status)
+        released = ok and result == true
+    end
+
     local inmate = inmates[citizenid]
-    if not inmate then return false end
+    if not inmate and not released then return false end
     inmates[citizenid] = nil
 
     -- 找在线玩家传送出狱
     local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
     if Player then
         local src = Player.PlayerData.source
-        if inmate.qbPrison then
-            Player.Functions.SetMetaData('injail', 0)
+        Player.Functions.SetMetaData('injail', 0)
+        local qbPrison = inmate and inmate.qbPrison
+        if qbPrison == nil then
+            qbPrison = GetResourceState('qb-prison') == 'started'
+        end
+        if qbPrison then
             TriggerClientEvent('prison:client:UnjailPerson', src)
         else
             TriggerClientEvent('justice:client:released', src)
@@ -168,27 +184,11 @@ CreateThread(function()
 end)
 
 -- ==============================================================
--- 离线囚犯计时恢复（仅 justice 自有监狱计时）
+-- 离线/重连囚犯恢复
 -- ==============================================================
-AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
-    local cid = Player.PlayerData.citizenid
-    local inmate = inmates[cid]
-    if not inmate then return end
-
-    -- prison.lua 负责 offline=true 的恢复；这里只补“判刑时在线、重连时
-    -- qb-prison 未开”的情况。qb-prison 开启时会自己按 metadata.injail 进入，
-    -- 再触发 justice 客户端计时会造成双计时。
-    if inmate.offline then return end
-    if GetResourceState('qb-prison') == 'started' then return end
-
-    local src = Player.PlayerData.source
-    TriggerClientEvent('justice:client:enterPrison', src, {
-        sentenceMinutes = inmate.sentenceMinutes,
-        startTime = inmate.startTime,
-        crimes = inmate.crimes,
-        reductions = inmate.reductions,
-    })
-end)
+-- 恢复由 prison.lua 的 QBCore:Server:PlayerLoaded 统一处理：那里读取
+-- justice_sentences 的权威剩余时间，写 metadata.injail 并在需要时触发
+-- prison:client:Enter。此处不再注册第二个 handler，避免双计时/双入场。
 
 -- 🔧 司法部门管理指令
 QBCore.Commands.Add('setjusticedept', '分配司法人员部门', { { name = 'id', help = 'Player ID' }, { name = 'dept', help = 'court / defense' } }, true, function(source, args)
@@ -218,8 +218,8 @@ end)
 
 print('[custom-justice] ⚖️  司法服务已注册到 Bus')
 
-exports('Imprison', function(citizenid, minutes, crimes)
-    return JusticeService.Imprison(citizenid, minutes, crimes)
+exports('Imprison', function(citizenid, minutes, crimes, opts)
+    return JusticeService.Imprison(citizenid, minutes, crimes, opts)
 end)
 
 exports('OpenCase', function(citizenid, officerSrc, crimes)
