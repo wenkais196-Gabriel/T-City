@@ -58,6 +58,40 @@ function JusticeService.SetVerdict(caseId, verdict)
     return true
 end
 
+--- 为在线嫌疑人开一个司法案件（警察逮捕提交的 open_case 联动）。
+--- 只创建内存案件，不写 police_cases；失败统一返回 false。
+---@param citizenid string
+---@param officerSrc number
+---@param crimes string[]
+---@return string|false caseId
+function JusticeService.OpenCase(citizenid, officerSrc, crimes)
+    citizenid = tostring(citizenid or '')
+    if #citizenid == 0 or #citizenid > 50 then return false end
+    if type(crimes) ~= 'table' or #crimes < 1 then return false end
+
+    local Suspect = QBCore.Functions.GetPlayerByCitizenId(citizenid)
+    if not Suspect then return false end
+
+    local Officer = QBCore.Functions.GetPlayer(tonumber(officerSrc) or 0)
+    if not Officer then return false end
+    local officerJob = Officer.PlayerData.job and Officer.PlayerData.job.name
+    if officerJob ~= 'police' and officerJob ~= 'judge' then return false end
+
+    -- Only hand known charge ids to the case; unknown entries would produce a
+    -- 0-minute case.
+    local validCrimes = {}
+    for _, crimeId in ipairs(crimes) do
+        if Config.Justice.Crimes[crimeId] then
+            validCrimes[#validCrimes + 1] = crimeId
+        end
+    end
+    if #validCrimes < 1 then return false end
+
+    local caseId = JusticeService.CreateCase(
+        Suspect.PlayerData.source, Officer.PlayerData.source, validCrimes)
+    return caseId or false
+end
+
 -- ==============================================================
 -- 囚犯管理
 -- ==============================================================
@@ -110,6 +144,7 @@ if Bus and Bus.RegisterService then
         GetActiveCases = JusticeService.GetActiveCases,
         AssignLawyer = JusticeService.AssignLawyer,
         SetVerdict = JusticeService.SetVerdict,
+        OpenCase = JusticeService.OpenCase,
         GetInmates = JusticeService.GetInmates,
         GetInmate = JusticeService.GetInmate,
         ReleaseInmate = JusticeService.ReleaseInmate,
@@ -133,21 +168,26 @@ CreateThread(function()
 end)
 
 -- ==============================================================
--- 离线囚犯计时恢复
+-- 离线囚犯计时恢复（仅 justice 自有监狱计时）
 -- ==============================================================
 AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
     local cid = Player.PlayerData.citizenid
     local inmate = inmates[cid]
-    if inmate then
-        local src = Player.PlayerData.source
-        -- 通知客户端进入监狱模式
-        TriggerClientEvent('justice:client:enterPrison', src, {
-            sentenceMinutes = inmate.sentenceMinutes,
-            startTime = inmate.startTime,
-            crimes = inmate.crimes,
-            reductions = inmate.reductions,
-        })
-    end
+    if not inmate then return end
+
+    -- prison.lua 负责 offline=true 的恢复；这里只补“判刑时在线、重连时
+    -- qb-prison 未开”的情况。qb-prison 开启时会自己按 metadata.injail 进入，
+    -- 再触发 justice 客户端计时会造成双计时。
+    if inmate.offline then return end
+    if GetResourceState('qb-prison') == 'started' then return end
+
+    local src = Player.PlayerData.source
+    TriggerClientEvent('justice:client:enterPrison', src, {
+        sentenceMinutes = inmate.sentenceMinutes,
+        startTime = inmate.startTime,
+        crimes = inmate.crimes,
+        reductions = inmate.reductions,
+    })
 end)
 
 -- 🔧 司法部门管理指令
@@ -180,4 +220,8 @@ print('[custom-justice] ⚖️  司法服务已注册到 Bus')
 
 exports('Imprison', function(citizenid, minutes, crimes)
     return JusticeService.Imprison(citizenid, minutes, crimes)
+end)
+
+exports('OpenCase', function(citizenid, officerSrc, crimes)
+    return JusticeService.OpenCase(citizenid, officerSrc, crimes)
 end)

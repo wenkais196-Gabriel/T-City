@@ -2,6 +2,37 @@
 QBCore = exports['qb-core']:GetCoreObject()
 local updatingCops = false
 
+-- 自动警情限流: source -> 上次触发时间 (模块级)
+local autoAlertCooldown = {}
+local AUTO_ALERT_COOLDOWN = 10
+
+local function sanitizeAlertCoords(coords)
+    if type(coords) ~= 'table' then return nil end
+    local x, y, z = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
+    if not x or not y or not z then return nil end
+    -- Reject NaN/inf and absurd coordinates instead of forwarding client data.
+    if x ~= x or y ~= y or z ~= z then return nil end
+    if math.abs(x) > 10000.0 or math.abs(y) > 10000.0 or math.abs(z) > 10000.0 then
+        return nil
+    end
+    return { x = x, y = y, z = z }
+end
+
+local function sanitizeAlertText(text)
+    if type(text) ~= 'string' then return nil end
+    text = text:gsub('^%s+', ''):gsub('%s+$', '')
+    if text == '' then return nil end
+    if #text > 200 then
+        if utf8 and utf8.offset then
+            local ok, byteEnd = pcall(utf8.offset, text, 201)
+            if ok and byteEnd then text = text:sub(1, byteEnd - 1) end
+        else
+            text = text:sub(1, 200)
+        end
+    end
+    return text
+end
+
 -- Functions
 
 local function UpdateBlips()
@@ -33,7 +64,7 @@ local function GetCurrentCops()
     local players = QBCore.Functions.GetQBPlayers()
     for _, v in pairs(players) do
         if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            amount += 1
+            amount = amount + 1
         end
     end
     return amount
@@ -163,19 +194,39 @@ RegisterNetEvent('police:server:policeAlert', function(text)
     end
 end)
 
--- 系统自动警报 (车辆盗窃等) — 无职业鉴权，任何资源可触发
+-- 系统自动警报 (车辆盗窃等) — 仅限在勤警察调用 + 每 source 10 秒 1 次
 RegisterNetEvent('police:server:autoAlert', function(coords, text)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or not PolicePolicy.Can(Player.PlayerData, 'incident.create') then return end
+
+    local now = os.time()
+    for otherSrc, lastAt in pairs(autoAlertCooldown) do
+        if now - lastAt > 60 then autoAlertCooldown[otherSrc] = nil end
+    end
+    local last = autoAlertCooldown[src]
+    if last and now - last < AUTO_ALERT_COOLDOWN then return end
+
+    local alertCoords = sanitizeAlertCoords(coords)
+    local message = sanitizeAlertText(text)
+    if not alertCoords or not message then return end
+    autoAlertCooldown[src] = now
+
     local sent = 0
     local players = QBCore.Functions.GetQBPlayers()
     for _, v in pairs(players) do
         if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            local alertData = { title = Lang:t('info.new_call'), coords = { x = coords.x, y = coords.y, z = coords.z }, description = text }
+            local alertData = {
+                title = Lang:t('info.new_call'),
+                coords = alertCoords,
+                description = message,
+            }
             TriggerClientEvent('qb-phone:client:addPoliceAlert', v.PlayerData.source, alertData)
-            TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, coords, text)
+            TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, alertCoords, message)
             sent = sent + 1
         end
     end
-    print(('[autoAlert] %s | 值班警察: %d 人'):format(text, sent))
+    print(('[autoAlert] %s | 值班警察: %d 人'):format(message, sent))
 end)
 
 RegisterNetEvent('police:server:UpdateCurrentCops', function()
@@ -185,7 +236,7 @@ RegisterNetEvent('police:server:UpdateCurrentCops', function()
     updatingCops = true
     for _, v in pairs(players) do
         if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            amount += 1
+            amount = amount + 1
         end
     end
     TriggerClientEvent('police:SetCopCount', -1, amount)

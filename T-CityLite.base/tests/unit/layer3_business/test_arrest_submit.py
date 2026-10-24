@@ -667,3 +667,244 @@ def test_get_bolos_merges_report_tagged_bolos_with_the_legacy_table():
 
     assert "return { rows = rows, count = #rows }" in block
     assert "audit(actor.citizenid, 'bolo.view', nil, nil)" in block
+
+
+# ---------------------------------------------------------------------------
+# P4: trial / plea / justice case link / reconnect + autoAlert hardening
+# ---------------------------------------------------------------------------
+
+def justice_trial_src() -> str:
+    return read(JUSTICE / "server/trial.lua")
+
+
+def resolve_case_block() -> str:
+    src = justice_trial_src()
+    start = src.index("function JusticeService.ResolveCase(")
+    end = src.index("RegisterNetEvent('justice:server:startTrial'", start)
+    return src[start:end]
+
+
+def start_trial_block() -> str:
+    src = justice_trial_src()
+    start = src.index("RegisterNetEvent('justice:server:startTrial'")
+    end = src.index("QBCore.Commands.Add('trial'", start)
+    return src[start:end]
+
+
+def trial_command_block() -> str:
+    src = justice_trial_src()
+    start = src.index("QBCore.Commands.Add('trial'")
+    end = src.index("QBCore.Commands.Add('plea'", start)
+    return src[start:end]
+
+
+def plea_command_block() -> str:
+    src = justice_trial_src()
+    start = src.index("QBCore.Commands.Add('plea'")
+    end = src.index("QBCore.Commands.Add('cases'", start)
+    return src[start:end]
+
+
+def open_case_block() -> str:
+    src = read(JUSTICE / "server/main.lua")
+    start = src.index("function JusticeService.OpenCase(")
+    end = src.index("function JusticeService.GetInmates(", start)
+    return src[start:end]
+
+
+def imprison_block() -> str:
+    src = read(JUSTICE / "server/prison.lua")
+    start = src.index("function JusticeService.Imprison(")
+    end = src.index("RegisterNetEvent('justice:server:imprison'", start)
+    return src[start:end]
+
+
+def prison_player_loaded_block() -> str:
+    src = read(JUSTICE / "server/prison.lua")
+    start = src.index("RegisterNetEvent('QBCore:Server:PlayerLoaded'")
+    end = src.index("-- 减刑请求", start)
+    return src[start:end]
+
+
+def justice_main_player_loaded_block() -> str:
+    src = read(JUSTICE / "server/main.lua")
+    start = src.index("AddEventHandler('QBCore:Server:PlayerLoaded'")
+    end = src.index("-- 🔧 司法部门管理指令", start)
+    return src[start:end]
+
+
+def auto_alert_block() -> str:
+    src = read(POLICE / "server/main.lua")
+    start = src.index("RegisterNetEvent('police:server:autoAlert'")
+    end = src.index("RegisterNetEvent('police:server:UpdateCurrentCops'", start)
+    return src[start:end]
+
+
+def test_resolve_case_is_the_shared_sentencing_entry_point():
+    block = resolve_case_block()
+    assert "function JusticeService.ResolveCase(caseId, opts)" in block
+    assert "local mode = opts.mode" in block
+    assert "if mode ~= 'trial' and mode ~= 'plea'" in block
+
+    # trial: lawyer -30%, first offence -20%, floor 5 minutes (unchanged).
+    assert "local hasLawyer = #case.lawyers > 0" in block
+    assert "Config.Justice.Reductions.lawyer_defense.rate" in block
+    assert "Config.Justice.Reductions.first_offense.rate" in block
+    assert "math.max(5, baseMinutes - lawyerReduction - firstOffenseReduction)" in block
+
+    # plea: no lawyer/first-offence discount, exactly 60%.
+    assert "finalMinutes = math.max(5, math.floor(baseMinutes * 0.6))" in block
+
+    # The service sentences and closes the case; notifications live in commands.
+    assert "JusticeService.SetVerdict(caseId, verdict)" in block
+    assert "JusticeService.Imprison(case.suspect.citizenid, finalMinutes, case.crimes)" in block
+    assert "case.status = 'closed'" in block
+    assert "return verdict" in block
+    assert "TriggerClientEvent" not in block
+
+    for field in (
+        "caseId = caseId",
+        "baseMinutes = baseMinutes",
+        "finalMinutes = finalMinutes",
+        "fine = baseFine",
+        "crimeLabels = crimeLabels",
+        "mode = mode",
+    ):
+        assert field in block, field
+
+
+def test_trial_command_requires_a_judge_and_keeps_the_existing_notifications():
+    block = trial_command_block()
+    assert "QBCore.Commands.Add('trial'" in block
+    assert "Judge.PlayerData.job.name ~= 'judge'" in block
+    assert "mode = 'trial'" in block
+    assert "announceTrialVerdict(caseId, verdict, src)" in block
+
+    src = justice_trial_src()
+    assert "TriggerClientEvent('justice:client:verdictReceived'" in src
+    assert "notify(lawyer.src, 'justice_verdict_lawyer'" in src
+    assert "notify(judgeSrc, 'justice_verdict_judge'" in src
+
+    # The legacy net event is only a compatibility wrapper around ResolveCase.
+    wrapper = start_trial_block()
+    assert "JusticeService.ResolveCase(caseId" in wrapper
+    assert "mode = 'trial'" in wrapper
+    assert "local baseMinutes = 0" not in wrapper
+    assert "lawyerReduction" not in wrapper
+
+
+def test_plea_command_is_sergeant_plus_and_rejects_when_a_judge_is_online():
+    block = plea_command_block()
+    assert "QBCore.Commands.Add('plea'" in block
+    assert "local grade = tonumber(job and job.grade and job.grade.level) or 0" in block
+    assert "job.name ~= 'police'" in block
+    assert "grade < 2" in block
+    assert "hasOnlineJudge()" in block
+    assert "judge_online" in block
+    assert "mode = 'plea'" in block
+    assert "announcePleaVerdict(caseId, verdict, src)" in block
+
+    # The judge check must gate the sentencing call.
+    assert block.index("hasOnlineJudge()") < block.index("JusticeService.ResolveCase")
+
+    src = justice_trial_src()
+    start = src.index("local function hasOnlineJudge()")
+    end = src.index("--- 法官开庭后的通知", start)
+    judge = src[start:end]
+    assert "QBCore.Functions.GetPlayers()" in judge
+    assert "QBCore.Functions.GetPlayer(players[i])" in judge
+    assert "Player.PlayerData.job.name == 'judge'" in judge
+    assert "return true" in judge
+
+
+def test_opencase_export_creates_a_justice_case_for_an_online_suspect():
+    block = open_case_block()
+    src = read(JUSTICE / "server/main.lua")
+    assert "function JusticeService.OpenCase(citizenid, officerSrc, crimes)" in block
+    assert "exports('OpenCase'" in src
+    assert "OpenCase = JusticeService.OpenCase" in src
+    assert "QBCore.Functions.GetPlayerByCitizenId(citizenid)" in block
+    assert "Config.Justice.Crimes[crimeId]" in block
+    assert "JusticeService.CreateCase(" in block
+    assert "return false" in block
+    assert "return caseId or false" in block
+
+
+def test_arrest_submit_open_case_opens_a_justice_case_before_jailing():
+    block = arrest_block()
+    assert "local openCase = params.open_case == true" in block
+    assert "exports['custom-justice']:OpenCase(target, source, ids)" in block
+    assert "created.justiceCaseId = tostring(justiceCaseId)" in block
+    assert "return fail('open_case_failed')" in block
+    assert "result.justice_case_id = created.justiceCaseId" in block
+    assert "justice:%s" in block  # audit detail keeps the link
+
+    report = block.index("INSERT INTO police_reports")
+    open_call = block.index("exports['custom-justice']:OpenCase(")
+    imprison = block.index("custom-justice']:Imprison")
+    assert report < open_call < imprison, "open_case must run after the report and before jailing"
+
+    # The write-back is guarded: police_reports.case_id is BIGINT and joins
+    # police_cases, while justice ids are strings.
+    assert "if created.justiceCaseId and not caseId then" in block
+    assert "local numericJusticeId = tonumber(created.justiceCaseId)" in block
+    assert "UPDATE police_reports SET case_id = ? WHERE id = ?" in block
+
+    # The justice case is in-memory and cannot be rolled back with the police rows.
+    jail_failed = block.index("return fail('jail_failed')")
+    assert "custom-justice memory" in block[:jail_failed + 600]
+    assert "cannot" in block and "rolled back" in block
+
+
+def test_imprison_does_not_reset_an_existing_sentence():
+    block = imprison_block()
+    assert "local metadata = Player.PlayerData.metadata or {}" in block
+    assert "if (tonumber(metadata.injail) or 0) > 0 then" in block
+    assert "return true" in block
+
+    metadata_check = block.index("(tonumber(metadata.injail) or 0) > 0")
+    online_write = block.index(
+        "JusticeService.Inmates[citizenid] = {",
+        block.index("local src = Player.PlayerData.source"),
+    )
+    assert metadata_check < online_write, "the dedupe check must run before the sentence is overwritten"
+
+
+def test_player_loaded_recovery_does_not_double_count_with_qb_prison():
+    block = prison_player_loaded_block()
+    assert "inmate.qbPrison = GetResourceState('qb-prison') == 'started'" in block
+    assert "if GetResourceState('qb-prison') ~= 'started' then" in block
+    guard = block.index("GetResourceState('qb-prison') ~= 'started'")
+    trigger = block.index("TriggerClientEvent('justice:client:enterPrison'")
+    assert guard < trigger
+    # qb-prison owns metadata.injail + prison:client:Enter on reconnect.
+    assert "Player.Functions.SetMetaData('injail'" not in block
+    assert "TriggerClientEvent('prison:client:Enter'" not in block
+
+    main_block = justice_main_player_loaded_block()
+    assert "if inmate.offline then return end" in main_block
+    assert "if GetResourceState('qb-prison') == 'started' then return end" in main_block
+    assert main_block.index("inmate.offline") < main_block.index("TriggerClientEvent")
+
+
+def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
+    src = read(POLICE / "server/main.lua")
+    block = auto_alert_block()
+    assert "local Player = QBCore.Functions.GetPlayer(src)" in block
+    assert "if not Player or not PolicePolicy.Can(Player.PlayerData, 'incident.create') then return end" in block
+    assert block.index("PolicePolicy.Can") < block.index("GetQBPlayers()")
+
+    assert "local autoAlertCooldown = {}" in src
+    assert "local AUTO_ALERT_COOLDOWN = 10" in src
+    assert "if last and now - last < AUTO_ALERT_COOLDOWN then return end" in block
+    assert "autoAlertCooldown[src] = now" in block
+
+    assert "local function sanitizeAlertCoords(coords)" in src
+    assert "local function sanitizeAlertText(text)" in src
+    assert "utf8.offset" in src
+    assert "math.abs(x) > 10000.0" in src
+    assert "local alertCoords = sanitizeAlertCoords(coords)" in block
+    assert "local message = sanitizeAlertText(text)" in block
+    assert "coords = alertCoords" in block
+    assert "description = message" in block
+    assert "coords = { x = coords.x" not in block
