@@ -173,6 +173,29 @@ RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
 end)
 
 
+
+--- 监狱工作 blip（电工岗位）
+local jobBlips = {}
+local function CreateJobBlip(create)
+	for _, blip in ipairs(jobBlips) do RemoveBlip(blip) end
+	jobBlips = {}
+	if not create then return end
+	local positions = Config.Locations.jobs[currentJob]
+	if not positions then return end
+	for _, pos in ipairs(positions) do
+		local blip = AddBlipForCoord(pos.x, pos.y, pos.z)
+		SetBlipSprite(blip, 566)
+		SetBlipDisplay(blip, 4)
+		SetBlipScale(blip, 0.7)
+		SetBlipColour(blip, 5)
+		SetBlipAsShortRange(blip, true)
+		BeginTextCommandSetBlipName('STRING')
+		AddTextComponentSubstringPlayerName('监狱工作（减刑）')
+		EndTextCommandSetBlipName(blip)
+		jobBlips[#jobBlips + 1] = blip
+	end
+end
+
 --- 自由门指引 blip：让囚犯一眼看到出狱点
 local function CreateGuideBlip()
 	if GuideBlip then RemoveBlip(GuideBlip) end
@@ -338,6 +361,45 @@ CreateThread(function()
 				else
 					QBCore.Functions.Notify(('剩余刑期 %d 分钟 — 自由门按 E 出狱'):format(jailTime), 'primary', 6000)
 					TriggerServerEvent('prison:server:SetJailStatus', jailTime)
+				end
+			end
+		end
+		Wait(sleep)
+	end
+end)
+
+
+-- 监狱工作：走到电工岗位按 E，完成 8 秒工作减刑 2 分钟（60 秒冷却）
+local lastWorkAt = 0
+CreateThread(function()
+	while true do
+		local sleep = 1000
+		if inJail and currentJob then
+			local coords = GetEntityCoords(PlayerPedId())
+			for _, pos in ipairs(Config.Locations.jobs[currentJob] or {}) do
+				local target = vector3(pos.x, pos.y, pos.z)
+				if #(coords - target) < 2.2 then
+					sleep = 0
+					DrawMarker(1, target.x, target.y, target.z - 0.9, 0, 0, 0, 0, 0, 0, 1.2, 1.2, 0.6, 0, 200, 0, 120, false, true, 2, false, nil, nil, false)
+					if IsControlJustReleased(0, 38) then
+						if GetGameTimer() - lastWorkAt < 60000 then
+							QBCore.Functions.Notify('刚干过一轮，休息一下再来', 'error')
+						else
+							lastWorkAt = GetGameTimer()
+							QBCore.Functions.Progressbar('prison_job', '修理监狱电路…', 8000, false, true, {
+								disableMovement = true, disableCarMovement = true,
+								disableMouse = false, disableCombat = true,
+							}, {}, {}, {}, function()
+								jailTime = math.max(0, jailTime - 2)
+								TriggerServerEvent('prison:server:SetJailStatus', jailTime)
+								QBCore.Functions.Notify(('完成工作：减刑 2 分钟，剩余 %d 分钟'):format(jailTime), 'success', 8000)
+								if jailTime <= 0 then
+									Wait(1500)
+									if inJail then TriggerEvent('prison:client:Leave') end
+								end
+							end, function() end)
+						end
+					end
 				end
 			end
 		end
