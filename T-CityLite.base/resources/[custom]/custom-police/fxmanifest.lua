@@ -3,13 +3,14 @@ game 'gta5'
 lua54 'yes'
 author 'Kakarot'
 description 'Provides police tools, evidence, job and more functionality for players to use as a cop'
-version '1.5.0'
+version '1.6.0'
 
 shared_scripts {
 	'config.lua',
 	'shared/policy.lua',
 	'shared/charges.lua',
 	'shared/insert_id.lua',
+	'shared/npc_callouts.lua',
 	'@qb-core/shared/locale.lua',
 	'locales/en.lua',
 	'locales/*.lua'
@@ -31,6 +32,7 @@ client_scripts {
 	'client/stolen_radar.lua',
 	'client/p0.lua',
 	'client/backup.lua',
+	'client/npc_callouts.lua',
 }
 
 dependencies {
@@ -54,6 +56,7 @@ server_scripts {
 	'server/evidence.lua',
 	'server/objects.lua',
 	'server/vehicle.lua',
+	'server/p4_npc.lua',
 }
 
 ui_page 'html/index.html'

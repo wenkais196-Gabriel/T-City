@@ -4,7 +4,7 @@
   import { queryApp, appAction } from '../stores/apps';
 
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
-  type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; disposition?: string | null; created_at: string; x?: number; y?: number; z?: number };
+  type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; disposition?: string | null; npc_template?: string | null; created_at: string; x?: number; y?: number; z?: number };
   type Charge = { id: number | string; label: string; minutes: number; fine: number };
   type Me = { citizenid: string; callsign: string; grade: number; status?: string };
 
@@ -444,8 +444,18 @@
     return reasons[key] ?? (key || '提交失败');
   }
 
-  function applyReportIncident(incidentId: string) {
-    reportForm.incident_id = incidentId;
+  // NPC callouts reuse the normal incident row. `GetIncidents` predates the
+  // npc_template column, so the server also prefixes the title with [NPC];
+  // accepting either keeps the tag working without a second query.
+  function isNpcIncident(incident: Incident): boolean {
+    return Boolean(incident.npc_template) || (incident.title ?? '').startsWith('[NPC]');
+  }
+
+  function incidentTitle(incident: Incident): string {
+    return (incident.title ?? '').replace(/^\[NPC\]\s*/, '');
+  }
+
+  function applyReportIncident(incidentId: string) {    reportForm.incident_id = incidentId;
     if (!incidentId || reportForm.location.trim()) return;
     const incident = incidents.find((i) => String(i.id) === incidentId);
     const coords = [incident?.x, incident?.y, incident?.z].map(Number);
@@ -781,7 +791,8 @@
           <div class="incident">
             <div class="row">
               <div>
-                <b>#{incident.id} [{incident.code}] {incident.title}</b>
+                <b>#{incident.id} [{incident.code}] {incidentTitle(incident)}</b>
+                {#if isNpcIncident(incident)}<span class="tag npc">NPC</span>{/if}
                 <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status}{incident.disposition ? ` · ${dispositionLabel[incident.disposition] ?? incident.disposition}` : ''} · {incident.created_at}</p>
               </div>
               <div class="actions">
@@ -1219,6 +1230,7 @@
   .stats span { font-size: 10px; opacity: 0.6; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
   .tag { font-size: 10px; padding: 3px 7px; border-radius: 999px; background: rgba(255,255,255,.1); }
+  .tag.npc { margin-left: 6px; background: rgba(168,85,247,.35); color: #e9d5ff; }
   .incident { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
   .desc { font-size: 11px; opacity: 0.75; margin: 4px 0; }
   .assign-row { display: flex; gap: 6px; margin-top: 6px; }
