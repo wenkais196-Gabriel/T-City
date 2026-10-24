@@ -32,6 +32,7 @@ local CASES = {
     'effect_server',
     'director_actions',
     'director_denials',
+    'police_actions',
     'phone_sms',
 }
 

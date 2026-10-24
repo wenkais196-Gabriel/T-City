@@ -113,7 +113,7 @@ python3 -m pytest -q tests/tools
 # 单元/集成（T-CityLite.base）
 cd T-CityLite.base && python3 -m pytest -q tests/unit
 
-# Lua golden（9 suites，236 checks）
+# Lua golden（10 suites）
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
 
 # 工具注册表一致性
