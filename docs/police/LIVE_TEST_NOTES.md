@@ -28,3 +28,13 @@
 - **现象**：实测后认为 NPC 支援设计有缺陷（具体表现待用户补充：可能是到场不跟随/不反击/警车卡住/回收异常/误伤）。
 - **影响**：NPC 支援 MVP 不能按当前形态交付。
 - **后续**：需要拿到具体场景（截图/描述）后重做行为状态机或生成/回收逻辑。
+
+### L4 MDT「接警」空 + 刷新无反应（待修，阻断 B/D）
+
+- **现象**：`/911` 和 `npc_callout` 都已建单（DB `police_incidents #6/#7` open），但 MDT 接警页为空；点「刷新」无反应。
+- **代码定位**：
+  1. `PoliceMDT.svelte` 的 `refresh()` 没有 `try/finally`：首次 `queryApp` 只要一次 reject/挂起，`loading` 永远为 true，刷新按钮一直 disabled，表现为“点了没反应”。
+  2. `police_mdt.lua` 的 `units`/`incidents` handler 把 export 的 `false,error` 吞成 `{rows={},count=0}`，UI 显示空列表而不是错误，无法定位是权限/审计还是查询失败。
+  3. 首次失败可能来自资源重启后 phone app 注册/回调竞态；第二次打开或刷新才恢复（与 L1 同源）。
+- **建议修法**：`refresh()` 用 `try/finally` 复位 `loading`；handler 返回 `{ok=false,error}`；首次查询失败自动重试一次；911/NPC 创建后推事件刷新。
+- **临时绕行**：关闭手机重新打开 MDT，或先点其他页再回调度；仍可能空白。
