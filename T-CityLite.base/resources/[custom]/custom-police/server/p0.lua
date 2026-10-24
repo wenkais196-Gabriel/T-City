@@ -201,7 +201,7 @@ function P.GetIncidents(status)
         incidents[#incidents + 1] = {
             id = tonumber(row.id), code = row.code, title = row.title,
             description = row.description, priority = tonumber(row.priority),
-            status = row.status, disposition = row.disposition,
+            status = row.status, disposition = row.disposition, npc_template = row.npc_template,
             x = row.x, y = row.y, z = row.z,
             created_at = tostring(row.created_at),
         }

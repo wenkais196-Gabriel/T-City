@@ -343,7 +343,7 @@ local function sceneWatcher()
                 end
 
                 if target then
-                    spawned[incidentId] = { source = target.source, at = os.time() }
+                    spawned[incidentId] = { source = target.source }
                     TriggerClientEvent('police:client:NpcCallout', target.source, incidentId,
                         target.templateId, target.coords)
                     print(('[custom-police] NPC callout #%d scene pushed to %s (%s)'):format(
