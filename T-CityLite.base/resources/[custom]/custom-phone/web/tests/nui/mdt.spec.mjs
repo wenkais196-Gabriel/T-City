@@ -177,9 +177,35 @@ export const scenarios = [
   },
 
   {
-    name: '（已知缺口）挂起的 appQuery 不会自动恢复',
-    skip:
-      'CEF 丢失 NUI 回调时 fetch 永不 settle；queryApp() 没有超时，try/finally 只能覆盖 reject，覆盖不了挂起。' +
-      '需要 P2 在 fetchNui/queryApp 加 AbortController 超时后才能启用此场景。',
+    name: '挂起的 appQuery 在超时后恢复，刷新按钮可再次使用',
+    async run({ page, world }) {
+      world.units = [];
+      world.incidents = [];
+      // Both requests never settle; the 6s AbortController timeout must turn
+      // them into query_failed and let refresh() leave loading=false.
+      world.hangQueries = new Set(['units', 'incidents']);
+      await openMdt(page);
+      await waitEnabled(
+        await refreshButton(page),
+        9000,
+        '挂起的查询超时后刷新按钮应恢复可点击',
+      );
+      const text = await waitText(
+        page.locator('.mdt > p.err').first(),
+        3000,
+        '超时后应显示查询失败',
+        (value) => value.includes('查询失败') || value.includes('query_failed'),
+      );
+      checkIncludes('超时错误应可见', text, '查询失败');
+
+      // The one-shot hang is consumed; the next refresh succeeds normally.
+      await (await refreshButton(page)).click();
+      await waitEnabled(await refreshButton(page), 3000, '第二次刷新应结束');
+      checkEqual(
+        '超时后第二次 incidents 查询应发出',
+        incidentsRequestCount(world),
+        2,
+      );
+    },
   },
 ];
