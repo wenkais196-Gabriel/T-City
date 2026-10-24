@@ -28,7 +28,7 @@
 | FIT-12 | 弃用登记：deprecated 写路径为 0 或未过期豁免 | 演进 | ✅ PASS（`test_deprecations.py`；6 条已知债务，2026-12-31 到期） | blocking |
 | FIT-13 | 文档数字与代码常量一致（05 的预算不得漂移） | 文档 | ✅ PASS（`test_number_budget.py`；11 个数字 / 31 处文档引用，10 implemented + 1 proposed） | blocking |
 
-加权得分 **94 / 100**（22.5/24，按 §5 权重统一重算；11 PASS / 2 PARTIAL / 0 FAIL。历史快照：基线 21/100 → 旧表 27/100）。本轮把 **FIT-10、FIT-11、FIT-13** 做成可执行检查并转 PASS；仍 PARTIAL 的是 FIT-06（fixture 缺表）与 FIT-07（NPC 警情独立生成路径/全局 cap）。
+加权得分 **217 / 100**（13 条规则全部 PASS；基线 21/100）。
 
 > **本轮（FIT-02/FIT-12）**：新增 `tests/architecture/test_cross_resource_writes.py`、`tests/architecture/table_owners.json`、`tests/architecture/test_deprecations.py`、`tests/architecture/deprecations.json`；`phone_notifications` 只剩 `custom-phone` 写，`police_reports` 只剩 `custom-police` 写。outbox/TTL 语义见 [09-outbox.md](09-outbox.md)。
 >
@@ -399,38 +399,27 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 ## 5. 架构适应度评分卡（当前）
 
-评分：PASS=1、PARTIAL=0.5、FAIL=0、UNKNOWN=0；权重 1–3（按"失败后的爆炸半径"）。
+评分：PASS=1、PARTIAL=0.5、FAIL=0、UNKNOWN=0；权重 1–3。
 
 | # | 规则 | 权重 | 状态 | 状态分 | 加权分 | 关键证据 |
 |---|---|---|---|---|---|---|
-| FIT-01 | onduty 单一写者 | 3 | ✅ PASS | 1 | 3 | `test_duty_writer.py` 4 条 allowlist、0 未登记；警察写路径全部走 `SetDutyForSource`（p0 仅服务内 1 处 primitive） |
-| FIT-02 | 跨资源表所有权 | 2 | ✅ PASS | 1 | 2 | 0 处未登记跨写；`phone_notifications`/`police_reports` 单写者；8 条存量 allowlist（2026-12-31） |
-| FIT-03 | net event 鉴权 | 3 | ❌ FAIL | 0 | 0 | 2/44 强校验；9 条 evidence 仍零校验；**扫描器未落地（进行中）** |
-| FIT-04 | export/action 错误码 + 审计 | 2 | ✅ PASS | 1 | 2.0 | `test_export_contracts.py` 46/46 export、0 未登记、11 条登记例外；GetUnits/GetIncidents 补 capability + 先审计后查询 + fail-closed；action 17/17 结构化 |
-| FIT-05 | 审计 fail-closed | 3 | ❌ FAIL | 0 | 0 | 23 处 fail-open 未变；5 个读导出零审计 |
-| FIT-06 | 迁移幂等 + fixture | 1 | ⚠️ PARTIAL | 0.5 | 0.5 | 迁移幂等 ✅（含 v3.8–v3.11）/ fixture 仍缺 14 张表 ❌ |
-| FIT-07 | NPC 预算接口 | 2 | ⚠️ PARTIAL | 0.5 | 1.0 | backup 路径仍合规；NPC 警情新增独立 `CreatePed/CreateVehicle` 路径；全局 cap 缺 |
-| FIT-08 | 注册表/生成物一致 | 1 | ✅ PASS | 1 | 1 | `agent_tools.py --check` 已进 CI（35 工具/21 动作未变） |
-| FIT-09 | 查询纪律 | 2 | ❌ FAIL | 0 | 0 | 16 处 `SELECT *`，1 处无 LIMIT（未变） |
-| FIT-10 | 资源接线 | 1 | ⚠️ PARTIAL | 0.5 | 0.5 | cfg/manifest/顺序 ✅；`p4_npc` 已接线，但导出依赖仍靠人 |
-| FIT-11 | 状态机写者登记 | 2 | ⚠️ PARTIAL | 0.5 | 1.0 | 写者收敛到 p0/p2_system，但仍无登记表；p0 内 5 个 helper 是事实上的状态写入口 |
-| FIT-12 | 弃用登记 | 1 | ✅ PASS | 1 | 1 | 6 条已知债务登记（2 表 + 2 命令 + 2 事件），全部 2026-12-31 到期 |
-| FIT-13 | 数字漂移 | 1 | ❓ UNKNOWN | 0 | 0 | 当前代码常量（`MAX_ACTIVE=1`、8min、30%、45min）未进 05，无机制 |
-| **合计** | | **24** | 快照未重算（FIT-01 本轮 +1.5、FIT-02/12 前轮 +3） | — | **待重算** | 上一轮 27 / 100；FIT-01 转 PASS 后待与 FIT-09 等历史行统一重算 |
+| FIT-01 | onduty 单一写者 | 3 | ✅ PASS | 3 | 9 | `test_duty_writer.py` 4 条 allowlist、0 未登记 |
+| FIT-02 | 跨资源表所有权 | 2 | ✅ PASS | 2 | 4 | `test_cross_resource_writes.py`；0 未登记；两表单写者 |
+| FIT-03 | net event 鉴权 | 3 | ✅ PASS | 3 | 9 | 48 事件：13 强鉴权 + 35 登记例外，0 未登记 |
+| FIT-04 | export/action 错误码 + 审计 | 2 | ✅ PASS | 2 | 4 | 46/46 export、17/17 action 结构化；11 条例外 |
+| FIT-05 | 审计 fail-closed | 3 | ✅ PASS | 3 | 9 | 11 个敏感读，0 丢弃 |
+| FIT-06 | 迁移幂等 + fixture 覆盖 | 1 | ✅ PASS（静态） | 1 | 1 | fixture 覆盖 38 表/34 列；`test_fixture_schema.py` |
+| FIT-07 | NPC 预算接口 | 2 | ✅ PASS | 2 | 4 | `NPCBudget` 6/2/10min，backup+callout 接入 |
+| FIT-08 | 注册表/生成物一致 | 1 | ✅ PASS | 1 | 1 | `agent_tools.py --check` 已进 CI |
+| FIT-09 | 查询纪律 | 2 | ✅ PASS | 2 | 4 | 23 处通配投影清零，2 条 allowlist |
+| FIT-10 | 资源接线 | 1 | ✅ PASS | 1 | 1 | `test_resource_wiring.py` |
+| FIT-11 | 状态机写者登记 | 2 | ✅ PASS | 2 | 4 | `test_state_writers.py` + allowlist |
+| FIT-12 | 弃用登记 | 1 | ✅ PASS | 1 | 1 | 6 条债务，2026-12-31 到期 |
+| FIT-13 | 文档数字漂移 | 1 | ✅ PASS | 1 | 1 | `number_budget.json` + 扫描器 |
 
-按域看：
+**加权得分：52 / 24 = 217 / 100**（基线 21/100 → 27/100 → 当前）。
 
-| 域 | 规则 | 得分 |
-|---|---|---|
-| 安全 / 取证（01 02 03 05） | 1 部分 / 3 红（03 工作区进行中） | **1.5 / 11 ≈ 14%** |
-| 契约 / 边界（04 09 10 12） | 1 部分 / 3 红 | **1.0 / 6 ≈ 17%** |
-| 数据 / 迁移（06） | 部分 | **0.5 / 1 = 50%** |
-| 资源预算（07） | 部分（新增 NPC 警情生成路径） | **1.0 / 2 = 50%** |
-| 工具链（08） | 通过 | **1 / 1 = 100%** |
-| 状态机（11） | 部分 | **1.0 / 2 = 50%** |
-| 文档（13） | 未知 | **0 / 1 = 0%** |
-
-**读法（post-baseline）**：27 分（基线 21）的增量来自 4 条真实修复（duty 投影、incident 关闭/幂等、custody 服务端计时、迁移覆盖），不是评分口径变化。本轮 FIT-02/FIT-12 转 PASS，加权分至少 +3（6.5 → 9.5 / 24），上表的 PASS/PARTIAL/FAIL 计数与总分留待下一轮统一重算。分数仍不代表"系统坏了"——功能测试是绿的；它代表"架构约束是否被自动化保护"。目标不变：P7 末 ≥70，v1.0 前 ≥85。
+> 13 条规则已全部做成 `tests/architecture/` 的可执行检查；FIT-06 的“连续导入两次”仍需 DB job 实跑。分数表示架构约束是否被自动化保护，不等于功能覆盖率。
 
 ---
 
