@@ -29,17 +29,18 @@ local function utf8Sub(s, limit)
 end
 
 local function audit(actorId, action, target, detail)
-    local ok, err = pcall(function()
-        local result = MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
-            { ('agent:%s'):format(utf8Sub(tostring(actorId or 'unknown'), 40)), 'agent', action, target,
-              detail and utf8Sub(tostring(detail), 500) or nil })
-        -- oxmysql returns the driver error as a string instead of throwing, so
-        -- a bare pcall would treat a failed insert as success.
-        if type(result) == 'string' then error(result, 0) end
+    -- Reuse p0's proven writer; the duplicate INSERT here hit an oxmysql
+    -- prepared-statement quirk and returned an error string without throwing.
+    local ok, result = pcall(function()
+        return exports['custom-police']:WriteAudit(
+            ('agent:%s'):format(utf8Sub(tostring(actorId or 'unknown'), 40)),
+            'agent', action, target, detail)
     end)
-    if not ok then print(('[custom-police] p2 audit failed %s: %s'):format(tostring(action), tostring(err))) end
-    return ok
+    if not ok or result ~= true then
+        print(('[custom-police] p2 audit failed %s: %s'):format(tostring(action), tostring(result)))
+        return false
+    end
+    return ok and result == true
 end
 
 -- ---------------------------------------------------------------------------

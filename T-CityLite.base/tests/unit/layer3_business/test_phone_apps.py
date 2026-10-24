@@ -257,8 +257,7 @@ def test_agent_system_entry_points_are_audited():
     sys = read(PHONE.parent / "custom-police/server/p2_system.lua")
     for export in ("CreateIncidentSystem", "AssignUnitSystem", "JailSystem"):
         assert f"exports('{export}'" in sys
-    assert "actor_kind" in sys and '"agent"' in sys
-    assert "police_audit" in sys
+    assert "WriteAudit" in sys and "'agent'" in sys
     justice = (PHONE.parent / "custom-justice/server/main.lua").read_text(encoding="utf-8")
     assert "exports('Imprison'" in justice
 

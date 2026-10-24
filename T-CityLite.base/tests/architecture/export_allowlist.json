@@ -160,6 +160,19 @@
       "owner": "custom-police",
       "added": "2026-10-24",
       "expires": "2027-03-31"
+    },
+    {
+      "id": "p0-write-audit",
+      "file": "custom-police/server/p0.lua",
+      "export": "WriteAudit",
+      "kind": "system_only",
+      "exceptions": [
+        "auth"
+      ],
+      "reason": "供同资源的 p2_system agent 入口复用 p0 的统一审计 writer；不接收玩家 source，参数由服务端构造。",
+      "owner": "custom-police",
+      "added": "2026-10-24",
+      "expires": "2027-03-31"
     }
   ]
 }
