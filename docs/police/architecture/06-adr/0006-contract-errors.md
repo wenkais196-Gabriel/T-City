@@ -1,10 +1,10 @@
 # ADR-0006 跨资源契约统一错误码与版本
 
-- 状态：Proposed
+- 状态：Partially accepted（`f690230`：arrest/report 结构化 + 幂等键；14/17 action 仍压平）
 - 相关：03-contracts、FIT-04
 
 ## 背景
-14 个 MDT action 把下游错误压平（13 个 `ok and res ~= false` + `arrest_submit`；`alert` 为特例），只有 `report_submit`/`request_backup` 透传；export 无版本号、无幂等键。
+14 个 MDT action 把下游错误压平（13 个 `ok and res ~= false` + `arrest_submit`；`alert` 为特例），只有 `report_submit`/`request_backup` 透传；export 无版本号。**post-baseline（`f690230`）**：`ArrestSubmit`/`ReportSubmit` 已返回结构化 `{ok,error}` 并接受 `idempotency_key`，其余契约仍未统一。
 
 ## 决定
 - 统一返回 `{ok=true,data}` / `{ok=false,error=<code>,detail?}`；

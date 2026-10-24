@@ -1,9 +1,9 @@
 # 05 — 非功能需求（NFR）与数字预算
 
-> 架构基线 agent D ｜ 只读 + 文档 ｜ 未改代码、未 commit、未触碰 FXServer。
-> 基线：`master`（2026-10-24，与 [STATUS.md](../STATUS.md)、[TECH_DEBT.md](../TECH_DEBT.md)、[FLOW_INTERNAL.md](../FLOW_INTERNAL.md)、[GTA_MOD_RESEARCH.md](../GTA_MOD_RESEARCH.md) 同一快照）。
+> 架构基线 agent D ｜ 只读 + 文档 ｜ **基线快照 `568acd2` + post-baseline 注记，当前 HEAD `3bbcab3`**（2026-10-24）｜ 未改代码、未 commit、未触碰 FXServer。
+> 基线：`master`（与 [STATUS.md](../STATUS.md)、[TECH_DEBT.md](../TECH_DEBT.md)、[FLOW_INTERNAL.md](../FLOW_INTERNAL.md)、[GTA_MOD_RESEARCH.md](../GTA_MOD_RESEARCH.md) 同一快照）。
 > 口径：证据写 `路径:行号`，未带资源前缀的路径相对 `T-CityLite.base/resources/`；`server/*.lua`、`client/*.lua`、`shared/*.lua` 默认指 `custom-police/`。
-> 标注：**【现状】** = 2026-10-24 代码可验证的事实；**【建议】** = 本文给出的目标值，需在 P7 拍板后进入 CI/监控。凡未标【现状】的数字都是建议值。
+> 标注：**【现状】** = `568acd2` 可验证的事实；**【post-baseline】** = `3bbcab3` 的变化；**【建议】** = 目标值。凡未标【现状】/【post-baseline】的数字都是建议值。
 
 **与兄弟文档的关系**：本文只定义"数字 + 验证方式"，不重复功能设计（见 [DESIGN.md](../DESIGN.md)）与流程断点（见 [FLOW_INTERNAL.md](../FLOW_INTERNAL.md)）；可落地的约束检查与评分卡在 [07-fitness-tests.md](07-fitness-tests.md)。
 
@@ -22,14 +22,16 @@
 | 性能 | MDT 单次查询 P95 | ≤150 ms | 未测 |
 | 性能 | 逮捕提交（含送监）P95 | ≤500 ms（硬超时 2 s） | 未测；~15 次 DB 往返 + 2 次资源导出 |
 | 性能 | DB 稳态 / 峰值 qps | ≤30 / ≤120（5 s） | 未测 |
-| 可靠性 | 掉线 → 单位离勤 | ≤5 s | 即时（`server/p0.lua:282-289`） |
-| 可靠性 | 资源重启后 stale 单位 | 60 s 内归零 | 未知；无启动清扫 |
-| 可靠性 | 重复提交导致的双写 | 0 | 存在（支付 / 逮捕 / 报告，见 §3.5） |
+| 可靠性 | 掉线 → 单位离勤 | ≤5 s | 即时 + 释放 incident + 审计（`server/p0.lua:442-484`）**【post-baseline】** |
+| 可靠性 | 资源重启后 stale 单位 | 60 s 内归零 | 启动 10s 后 sweep（`server/p0.lua:486-504,543-551`）**【post-baseline】** |
+| 可靠性 | 重复提交导致的双写 | 0 | 支付已抢占（`p1.lua:146-193`）；逮捕/报告有键去重、无键不去重（§3.5）**【post-baseline】** |
 | 可靠性 | RPO / RTO | ≤15 min / ≤30 min | 手工 `mysqldump`，无计划、无演练 |
-| 安全 | net event 鉴权覆盖 | 100% | 2/43 走 capability 表（§4.2） |
-| 安全 | 敏感读审计 fail-closed | 100% | 3 个导出 fail-closed（`lookup.citizen` / `lookup.vehicle` / `GetCaseDetail`）；9 个读导出写审计（3 个即上述 fail-closed、6 个忽略返回值），5 个完全不写 |
+| 安全 | net event 鉴权覆盖 | 100% | 2/44 走 capability 表（§4.2）**【post-baseline 重数】** |
+| 安全 | 敏感读审计 fail-closed | 100% | 仍 3 个导出 fail-closed（`lookup.citizen`/`lookup.vehicle`/`GetCaseDetail`）；**未变** |
 | 可观测 | 审计写入失败可告警 | 有指标 + 阈值 | 无（多处忽略返回值） |
-| 兼容 | `job.onduty` 写入点 | 1（duty 服务） | 4（§6.1） |
+| 兼容 | `job.onduty` 写入点 | 1（duty 服务） | 4（§6.1）；**police 侧已统一走 `SetJobDuty` 投影** |
+
+**post-baseline 结论（`3bbcab3`）**：可靠性域的 3 条硬缺口（掉线、重启 stale、重复提交）已有代码级修复；规模域的 NPC 全局 cap、可观测域的指标、备份/恢复仍未做；安全域的 evidence 鉴权与审计 fail-closed 在 **HEAD 上没有变化**（工作区有未提交修复，见 07 的说明）。
 
 ---
 
@@ -59,7 +61,8 @@
   - 1 单位 = 1 车 + 2 ped = **3 个网络实体**（现状一致，`client/backup.lua:204-221`）；
   - 全局 NPC 实体 ≤18；连同 48 玩家与 ~20 台玩家载具，服务器网络实体总数 ≤250；
   - 冷却 60 s/人（现状），单位寿命 5 min、离场 150 m/30 s 回收（现状 `client/backup.lua:21-27`）。
-- **当前实现【现状】**：`BACKUP_MAX_UNITS = 2`、`BACKUP_COOLDOWN = 60`（`server/p2_system.lua:172-173`）只按 `citizenid` 计数（`backupUnits[cid]`，行 175），**没有全局计数器**。48 人满编时理论上限 96 单位 / 288 实体，是建议值的 16 倍。资源级上限靠客户端自清理 + `playerDropped`（行 266-272）。
+- **当前实现【现状】**：`BACKUP_MAX_UNITS = 2`、`BACKUP_COOLDOWN = 60`（`server/p2_system.lua:295-296`）只按 `citizenid` 计数（`backupUnits[cid]`），**没有全局计数器**。48 人满编时理论上限 96 单位 / 288 实体，是建议值的 16 倍。资源级上限靠客户端自清理 + `playerDropped`（`p2_system.lua:387-395`）。
+- **【post-baseline】**：新增的 NPC 警情（SM-09）在客户端再生成 1 个场景（最多 3 车 + 4 ped），受 `MAX_ACTIVE=1` 约束，但**不计入 backup 的每警员配额**，也不共享全局实体预算（`shared/npc_callouts.lua:22-29`、`client/npc_callouts.lua:192,210`）。
 - **验证方法**：Lua harness（`tests/agent/lua/cases/police_system.lua` 的 `env.exports` + MySQL stub）可直接驱动 `RequestBackup`：连续 3 次断言第 3 次 `limit`、60 s 内第 2 次 `cooldown`、audit 失败时返回 `audit_unavailable` 且不占槽。全局上限需要新增 `BACKUP_MAX_UNITS_GLOBAL` 常量后同样在 harness 覆盖。
 - **缺口**：全局上限、全局计数器、耗尽时的降级（排队/拒绝码 `global_limit`）、泄漏检测（见 NFR-OBS-03）。
 
@@ -155,6 +158,7 @@
 - **指标**：`playerDropped` → `police_units.status='off_duty'` 延迟；占用的 NPC 槽位释放数；incident 上的单位关联是否清理。
 - **目标【建议】**：≤5 s 内落库；100% 释放该玩家全部 NPC 单位；`police_incident_units` 保留历史但单位状态归零。
 - **当前实现【现状】**：`server/p0.lua:282-289` 立即 `UPDATE police_units SET status='off_duty', incident_id=NULL`（`pcall` 包裹）；`server/p2_system.lua:266-272` 清 `backupUnits[cid]`。**不写审计**（掉线属系统事件，`police_audit.actor_kind` 有 `system` 但无人使用）。重连后新的 source，`police_units` 按 `citizenid` 复用（表主键是 citizenid，正确）。
+- **【post-baseline】**：`releaseDroppedUnit` 先读 `incident_id`，park 单位后若该 incident 已无其他 unit 则回 `open`，并写 `incident.unassign` + `unit.drop`（`actor_kind='system'`）；`QBCore:Server:PlayerDropped` 与 `playerDropped` 双入口去重（`p0.lua:442-484`）。NFR-REL-01 从“≤5s”变为“≤5s + 审计 + 警情回开”。
 - **验证方法**：Lua harness 触发 `playerDropped` 后断言 `backupUnits` 为空、`police_units` 更新语句形状；实机杀进程后看日志与 DB。
 - **缺口**：掉线无审计（`actor_kind='system'` 未使用）→ 无法回答"XX 时间谁在勤"；如果 DB 在掉线瞬间不可用，`pcall` 吞掉失败，留下 stale 行且无重试。
 
@@ -183,6 +187,7 @@
 - **指标**：重启后 stale `police_units` 行数；内存态（冷却、NPC 计数、justice 案件）丢失量；重启后首个错误。
 - **目标【建议】**：重启 ≤60 s 内把"不在线但在勤"的单位行扫成 `off_duty`（启动清扫）；内存态丢失可接受但必须**可见**（启动日志打印重置项）；重启事件本身写 `police_audit(actor_kind='system')`。
 - **当前实现【现状】**：`server/p0.lua:262-270` 的 `syncDuty` 只在 `PlayerLoaded` / `OnJobUpdate` 触发；`custom-police` 单独 `restart` 时**既不会触发 PlayerLoaded，也不会清表**，于是所有在勤单位保持旧状态（含 `incident_id`）直到该玩家上下班或掉线。`backupUnits` / `backupCooldown` 归零（可被用来重置冷却刷 NPC）；`custom-justice` 的 `Inmates` 直接丢失（TD-02）；`police_units` 与 `players.job.onduty` 可能出现"表里 available、内存里 offduty"。
+- **【post-baseline】**：`onResourceStart` 10s 后 `sweepOfflineUnits`，把不在线但非 `off_duty` 的行 park 并写 `unit.stale`（`p0.lua:486-504,543-551`）；`custom-justice` 启动 1s 后 `ExpireSweep`，登录按 `justice_sentences` 重新投影（`sentence.lua:222-243`、`prison.lua:106-178`）。**仍未做**：重启审计、backup 槽位重建（允许丢失）。
 - **验证方法**：实机 `restart custom-police` 后立刻 `SELECT status FROM police_units`；Lua harness 可加载后调用不存在（无启动处理器）→ 静态检查 `AddEventHandler('onResourceStart'` 是否存在（当前无）。
 - **缺口**：无启动清扫、无重启审计、无"重启后单位状态以 players.job.onduty 为准"的对账逻辑。
 
@@ -195,8 +200,9 @@
   - `ArrestSubmit`：靠 `metadata.injail > 0` 拦第二次（`server/p2_system.lua:360`），同一 tick 内的两次提交都能通过；justice `Imprison` 对已在服刑者返回 `true` 而不重置（`custom-justice/server/prison.lua:36-39`），于是会产生 **2 report + 2 citation + 1 次生效刑期**。
   - `ReportSubmit`：无任何去重（`server/p2_system.lua:672-797`），双击 = 2 份报告。
   - 全仓库无 `idempotency_key` / nonce 字段（`request_id` 是 NPC 支援的一次性请求号，不是幂等键）。
+- **【post-baseline】**：`PayCitation` 改为条件 UPDATE 抢占后再扣款、失败回滚（`p1.lua:146-193`）；`ArrestSubmit`/`ReportSubmit` 接受 `idempotency_key`，`done` 重放、`pending` 拒绝（`p2_system.lua:146-267`、v3.9）。**仍缺**：无键调用不去重；`done` 无 TTL；无并发延迟注入测试；`police_write_intents` 没有 `failed` 写入者。
 - **验证方法**：静态检查"支付路径是否先占位再扣款"（FIT-05 的幂等子规则）；`tests/tools` 侧已有离线 eval 幂等用例可参照；并发用两个协程对 stub 交替调度可复现（Lua harness 的 `MySQL` stub 是同步的，需要新增延迟钩子）。
-- **缺口**：无幂等键、无乐观锁（`WHERE status='unpaid'` 的 affectedRows 未检查）、无并发测试。
+- **缺口（post-baseline）**：已有 `idempotency_key` 与支付条件抢占；仍缺 ① 无键调用不去重 ② `done` 无 TTL ③ 并发延迟注入测试 ④ `police_write_intents` 的 `failed` 无写入者。
 
 ### NFR-REL-06 · 恢复目标（RPO / RTO）
 
@@ -228,11 +234,11 @@
 
 - **指标**：需要鉴权的 net event 占比；鉴权强度分布（capability / job.type / 无）。
 - **目标【建议】**：100% 的 net event 满足下列之一：① `PolicePolicy.Can(data, cap)`；② `source == 0` 且调用方是可信服务端导出；③ 会话/所有权校验（例如 `backupEnded` 只释放自己的 request_id）；④ 明确标注为"平民入口"并有限流 + 输入校验（`911`）。新增未鉴权事件必须进 allowlist 并在 30 天内整改。
-- **当前实现【现状】**（`custom-police/server/*.lua` 共 **43** 个 `RegisterNetEvent`）：
+- **当前实现【现状】**（`custom-police/server/*.lua` 共 **44** 个 `RegisterNetEvent`；post-baseline 新增 `police:server:NpcCalloutResult`）：
   - 走 capability 表：**2 个**（`police:server:autoAlert`，`server/main.lua:198-236`；`police:server:JailPlayer`，`server/interactions.lua:139-186`，且只接受 `source==0`）；
   - 只校验 `job.type == 'leo'` 或 `PolicePolicy.IsPolice`（不校验 onduty/grade）：约 **27 个**（`interactions.lua` 10、`main.lua` ~10、`objects.lua` 3、`vehicle.lua` 4）；
-  - **完全不校验：9 个** `evidence:server:*`（`server/evidence.lua:64-155`）——任意客户端可伪造 DNA/指纹、清空全服血迹与弹壳；
-  - 其余为 self/会话校验（`custom-police:server:setStatus` 只查 `isPolice`，**不查 onduty**；`backupEnded` 校验 request_id 归属，正确）。
+  - **完全不校验：9 个** `evidence:server:*`（`server/evidence.lua:64-155`）——任意客户端可伪造 DNA/指纹、清空全服血迹与弹壳；**工作区（未提交）已加 capability 校验，HEAD 仍未修**；
+  - 其余为 self/会话校验（`custom-police:server:setStatus` 只查 `isPolice`，**不查 onduty**；`backupEnded` 校验 request_id 归属，正确；`NpcCalloutResult` 走 `PolicePolicy.Can(actor,'incident.update')` + membership，属合规新增）。
 - **验证方法**：07 FIT-04 的 allowlist 扫描；对 9 个 evidence 事件做一次"平民客户端触发"的实机验证（预期应被拒，当前能成功——即证明缺口）。
 - **缺口**：这是当前**最大的安全缺口**，也是本文最推荐先补的一条（见 07 §6）。`evidence.lua` 的 9 个事件应当直接下线或加 `PolicePolicy.Can` + `onduty`。
 
@@ -248,7 +254,8 @@
 
 - **指标**：写操作中"审计失败即拒绝/回滚"的比例；静默丢审计的写路径数。
 - **目标【建议】**：所有**敏感读**（lookup、案件/证据/报告/罚单查询）与**所有写**在审计不可写时要么拒绝、要么回滚并返回 `audit_unavailable`；静默容忍只允许"事后补写"场景，且必须有补偿日志。
-- **当前实现【现状】**：敏感读只有 **3 个 fail-closed**（`LookupCitizen`/`LookupVehicle`/`GetCaseDetail`，`server/p0.lua:183-190`、`server/p3_cases.lua:242-244`）；9 个读导出写审计，其中上述 3 个 fail-closed、其余 6 个忽略返回值；5 个完全不写（`GetUnits`/`GetIncidents`/`GetAudit`/`GetCitations`/`GetReports`，`server/p1.lua:84-95,117-132`、`server/p0.lua:56-75,118-137,249-257`）；写路径里 `p1`/`p3` 全部忽略审计返回值（见 NFR-REL-03）。`ArrestSubmit` 的"已送监但审计失败"返回 `{ok=false, error='audit_unavailable', jailed=true}`（`server/p2_system.lua:649-651`）——语义正确，但调用方（phone action）把它转成 `false`，丢掉了"已送监"这一关键事实。
+- **当前实现【现状】**：敏感读只有 **3 个 fail-closed**（`LookupCitizen`/`LookupVehicle`/`GetCaseDetail`，`server/p0.lua:183-190`、`server/p3_cases.lua:242-244`）；9 个读导出写审计，其中上述 3 个 fail-closed、其余 6 个忽略返回值；5 个完全不写（`GetUnits`/`GetIncidents`/`GetAudit`/`GetCitations`/`GetReports`，`server/p1.lua:84-95,117-132`、`server/p0.lua:123-142,185-210,393-401`）；写路径里 `p1`/`p3` 全部忽略审计返回值（见 NFR-REL-03）。`ArrestSubmit` 的"已送监但审计失败"返回 `{ok=false, error='audit_unavailable', jailed=true}`（`server/p2_system.lua:795-797`）——语义正确，但调用方（phone action）把它转成 `false`，丢掉了"已送监"这一关键事实。
+- **【post-baseline】**：逮捕内的 citation/evidence 现在各自写审计（`p2_system.lua:780-790`）；`p0` 的关闭/清扫/掉线路径新增审计但返回值仍被忽略；`p1`/`p3` 在 HEAD 未改，fail-closed 口径**仍不统一**。**工作区（未提交）**已把 `p0`（15 处）、`p1`（5 处）、`p2_evidence`（3 处）、`p3_cases`（11 处）、`p2_system`（12 处）、`p4_npc`（2 处）的 `audit()` 改为消费返回值，并让 `GetAudit`/`GetCitations`/`GetReports` 审计失败即拒绝；`GetUnits`/`GetIncidents` 仍零审计。
 - **验证方法**：07 FIT-05 的静态规则；Lua harness 注入 audit 失败断言行为。
 - **缺口**：fail-closed 口径不统一；`GetUnits`/`GetIncidents`/`GetAudit`/`GetCitations`/`GetReports` 零审计；`audit_unavailable + jailed=true` 的复合状态未进契约测试。
 
@@ -320,6 +327,7 @@
 - **契约**：`PlayerData.job` = `{ name, type, grade = { level = number, name }, onduty = boolean }`；`onduty` 的**唯一写者**应是 duty 服务；qb-core 的 `SetJobDuty` 是兼容投影。
 - **指标**：`job.onduty` 写入点数量（目标 1、现状 4）；读 `onduty` 而与 `police_units` 不一致的路径数。
 - **当前实现【现状】**：4 个写者——`qb-core/server/player.lua:291-297`（定义）、`core-framework/services/job_service.lua:125-152`（`SetOnDuty`，直接改字段）、`custom-main/server/dispatch.lua:236,261`（通缉自动下班）、`custom-director/server/main.lua:619-645`（agent `set_job_duty`）；`qb-core/server/events.lua:168-182` 的 `QBCore:ToggleDuty` 又调用定义。读侧更散：`job.type == 'leo'`（~27 处）、`job.name == 'police'`（`shared/policy.lua:36`）、`PolicePolicy.Grade` 只接受 `grade` 为 table（**若某处把 `grade` 存成 number，等级直接变 0，所有 rank 门失败**）。
+- **【post-baseline】**：police 侧所有 10-8/10-7/auto-park 都改为调用 qb-core 的 `Player.Functions.SetJobDuty`（`p0.lua:109,578,587`），不再直接写字段；`syncDuty` 不再在每次 JobUpdate 重置任务态。写者数量仍是 4（`custom-main`/`custom-director` 未迁移），所以 FIT-01 只能算 PARTIAL。
 - **目标【建议】**：单一状态机（`OffDuty/Available/Busy` + 派生 `Assigned/Enroute/OnScene`）；`on_duty = state ~= OffDuty`；`job.onduty` 只读投影；写入点 = 1。
 - **验证方法**：07 FIT-01 静态扫描；契约测试断言 `PolicePolicy.Can` 在 `onduty=false` 时拒绝所有 cap（应已有，需补一条 `grade` 为 number 的负例）。
 - **缺口**：TD-01 未拍板（4 个待定项见 [TECH_DEBT.md](../TECH_DEBT.md#td-01-值班勤务双状态高)）；`grade` 类型契约未文档化、未测试。
@@ -337,7 +345,8 @@
 
 - **契约**：`exports['custom-justice']:Imprison(citizenid, minutes, crimes)` → `true | false, code`；`OpenCase(citizenid, officerSrc, crimes)` → 案件号字符串（`CASE-0001`）；判决回写 `police_reports.justice_verdict` / `justice_status`（v3.7）；`justice_case_id` 是 **VARCHAR**，`police_reports.case_id` 是 **BIGINT**（TD-03）。
 - **指标**：返回结构化（`{ok,code}`）的契约数（目标 2、现状 0）；`case_id` 类型冲突写入次数（目标 0）。
-- **当前实现【现状】**：调用点 `server/p2_system.lua:108-117`（Sys.Jail）、`604-614`（ArrestSubmit）、`564-578`（open_case）；每次都用 `pcall` + 字符串比较 `result == true`，失败落到 metadata + `prison:client:Enter` 兜底。`activeCases` 在内存，重启即丢（TD-02）。
+- **当前实现【现状】**：调用点 `server/p2_system.lua:108-117`（Sys.Jail）、`738-740`（ArrestSubmit）、`699-704`（open_case）；每次都用 `pcall` + 字符串比较 `result == true`，失败落到 metadata + `prison:client:Enter` 兜底。`activeCases` 在内存，重启即丢（TD-02）。
+- **【post-baseline】**：`Imprison(citizenid, minutes, crimes, opts)` 现在先 `ApplySentence` 落 `justice_sentences`，返回 `false,'sentence_failed'` 而不是静默成功；trial/plea 传 `replace=true`。新增 `AdjustSentence`/`ReleaseSentence` 等 5 个 export 见 03 §2.8。
 - **目标【建议】**：导出返回结构化 `{ ok, code, case_id }`（字符串码），police 侧不再猜 `== true`；`justice_case_id` 永不写入 `case_id`（现状已用 `tonumber` 守卫，`server/p2_system.lua:586-595`）。
 - **验证方法**：`tests/unit/layer3_business/test_arrest_submit.py` 已锁住 charge 目录与 justice 配置的一致性（13 条）；补一条"导出返回值类型"契约。
 - **缺口**：内存态 + 双案件号；`Imprison` 对在押者返回 `true` 造成幂等假象（NFR-REL-05）。
@@ -346,7 +355,8 @@
 
 - **契约**：写 `metadata.injail` / `metadata.criminalrecord` / `metadata.jailitems`；事件 `prison:client:Enter` / `prison:client:UnjailPerson`；**入狱会把 `job` 强制改为 `unemployed`**（`qb-prison/server/main.lua:11-14`）。
 - **指标**：police 侧模块级缓存 `job`/`onduty` 的变量数（目标 0）；出狱后 MDT 访问被拒率（应 100%）。
-- **当前实现【现状】**：`custom-police` 通过 `TriggerClientEvent('prison:client:Enter'|'UnjailPerson')` 与 `SetMetaData('injail')` 交互（`server/p2_system.lua:114-116,611-613,826-827`），无导出封装。
+- **当前实现【现状】**：`custom-police` 通过 `TriggerClientEvent('prison:client:Enter'|'UnjailPerson')` 与 `SetMetaData('injail')` 交互（`server/p2_system.lua:114-116,744-747,969-978`），无导出封装。
+- **【post-baseline】**：custody 的唯一权威是 `justice_sentences`，qb-prison 只读剩余并写投影；`police_release`/`/unjail` 都先调 `ReleaseSentence`（`p2_system.lua:969-978`、`commands.lua:235-246`）。
 - **决策（已定）**：**不做"出狱恢复职业"**（`docs/police/STATUS.md`"方案 B 落地状态"末条）。因此警察系统**不得**缓存 `job.name`/`onduty` 跨会话或跨事件；每次判定必须重读 `PlayerData`。
 - **目标【建议】**：把"每次重读"写成显式约束（07 FIT-01 的读侧子规则 + 代码评审项）；文档标注 `qb-prison` 是 job 重置的合法 owner。
 - **验证方法**：静态检查 police 侧是否有模块级缓存 `PlayerData` / `job` 的变量（当前无模块级缓存，都是按 source 现查）。
@@ -378,6 +388,8 @@
 | 9 | 无备份计划 / 无演练 | REL-06 | 中 | cron + 季度演练 |
 | 10 | `job.onduty` 4 写者、无单一状态机 | COMPAT-01 | 高 | TD-01 拍板后收敛；FIT-01 advisory 先行 |
 
+**post-baseline 结算（`3bbcab3`）**：第 2 条**部分改善**（逮捕内 citation/evidence 已审计，p1/p3 仍 fail-open）；第 4 条**已做**（启动 sweep + 掉线释放）；第 5 条**部分已做**（支付抢占 + `idempotency_key`，无键仍可重复）；第 6 条**未做**（backup 仍无全局 cap/TTL），且新增 NPC 警情客户端实体路径；第 1/3/7/8/9/10 条未动（FIT-03/05/09 仍红）。
+
 ---
 
 ## 8. 附录
@@ -396,7 +408,7 @@
 - 所有 P95 数字（无实机采样，仓库也没有 perf baseline）。
 - 客户端 NPC 生成/清理（需真客户端；`tcity-e2e` 假人没有 ped，`GetPlayerPed` 返回 0，`ArrestSubmit` 的物理前置条件无法在假人上通过）。
 - DB 实际 qps 与慢查询（未接 `performance_schema`）。
-- `police_units` 重启后 stale 的实际分布（需在跑服采样；本文只从代码推断"无清扫"）。
+- ~~`police_units` 重启后 stale 的实际分布~~：post-baseline 已加启动 sweep（`p0.lua:486-504`），实际分布仍未采样。
 - 备份/恢复的实际 RTO（未演练）。
 - L2/L3 agent 的实机 approve→executed（`docs/police/STATUS.md` 已列为未完成）。
 

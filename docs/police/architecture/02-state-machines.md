@@ -1,6 +1,8 @@
-# 02 状态机（执勤 / 警情 / 文书 / 司法 / 在押 / NPC 支援 / Agent）
+# 02 状态机（执勤 / 警情 / 文书 / 司法 / 在押 / NPC 支援 / Agent / NPC 警情）
 
-> 架构基线。基线提交 `master @ 568acd2`（2026-10-24）；**SM-01 已在 `bb64d87` 实施**，本节 SM-01 的“当前”列保留为基线快照，目标态已落地。本文件只读代码后写成，**未改代码、未连数据库、未碰 FXServer**。
+> **基线与现状**：本文是 **基线快照（`568acd2`）+ post-baseline 注记**，当前 HEAD 为 `3bbcab3`（2026-10-24）。
+> 未标“现在”的表格/图仍是基线事实，保留不删；每节新增的 **`x.6 post-baseline`** 小节给“基线时 / 现在”两列与 file:line / commit 证据。
+> 已实施：SM-01 `bb64d87`、SM-02 `5c2d3ca`+`9481074`、SM-03 部分 `f690230`、SM-05 `2ae3da4`+`f690230`；SM-09 为新增（`a52d2ca`+`3bbcab3`）。本文件只读代码后写成，**未改代码、未连数据库、未碰 FXServer**。
 >
 > 路径简写（下文所有 `文件:行号` 均按此展开）：
 >
@@ -10,22 +12,24 @@
 > - `custom-director/` = `T-CityLite.base/resources/[custom]/custom-director/`
 > - `qb-prison/` = `T-CityLite.base/resources/[qb]/qb-prison/`
 >
-> **当前** = `568acd2` 的实际行为；**目标** = 重构后应满足的契约。迁移表优先于图：图只给全局关系，所有守卫、写入、审计、失败分支以表为准。
+> **基线时** = `568acd2` 的实际行为；**现在** = `3bbcab3` 的实际行为；**目标** = 重构后应满足的契约。迁移表优先于图：图只给全局关系，所有守卫、写入、审计、失败分支以表为准。
+> 正文里的“当前”一律指**基线快照**；`post-baseline` 小节里的“现在”才代表 HEAD。
 >
 > 未带资源前缀的短名（如 `p0.lua`、`main.lua`、`trial.lua`、`prison.lua`）按所在小节所属资源展开；`custom-justice/server/main.lua` 与 `qb-prison/*/main.lua` 不混用。
 > 相关文档：[STATUS.md](../STATUS.md)、[TECH_DEBT.md](../TECH_DEBT.md)、[B_PLAN.md](../B_PLAN.md)、[FLOW_INTERNAL.md](../FLOW_INTERNAL.md)。注意 `FLOW_INTERNAL` 是 P0–P2 之前的审计：`/jail` 手输、罚单无付款页、`/arrest` 三处录入等结论已被后续代码覆盖；本文件只在当前代码仍能复现时引用它（手机 911 不建单、`/fine` 并行、单位列表不过滤在线）。
 
 **状态机索引**
 
-| ID | 对象 | 权威源（当前） | 主要表 | 结论 |
+| ID | 对象 | 权威源（HEAD `3bbcab3`） | 主要表 | 结论（基线时 → 现在） |
 |---|---|---|---|---|
-| SM-01 | Officer Duty / Unit | `police_units.status` 与 `job.onduty` 双写 | `police_units`、`police_audit` | **P0 必须收敛**，现在可产生 6 种非法组合 |
-| SM-02 | Incident | `police_incidents.status` | `police_incidents`、`police_incident_units` | 无 from/to 守卫，`closed` 不可达 |
-| SM-03 | Arrest / Report / Citation / Evidence | `police_reports` 为锚点，其余补偿写 | `police_reports`、`police_citations`、`police_evidence`、`police_evidence_chain` | 无事务、无幂等；罚单/证据在逮捕内无独立审计 |
-| SM-04 | Justice Case | **custom-justice 内存** | 无（判决 best-effort 回写 `police_reports`） | 重启即丢；`CASE-0001` 会回绕并覆盖旧判决 |
-| SM-05 | Custody | **qb-prison 客户端计时** | `players.metadata.injail`、`jailitems` | 客户端可改刑期；离线不生效；出狱不通知 justice |
-| SM-06 | NPC Backup Unit | 服务端只记“占位 ID”，客户端记实体 | 无（仅 `police_audit` 一条 request） | 无服务端生命周期、无 TTL、无结束审计 |
-| SM-07 | Agent Action | `agent_actions` 表 | `agent_actions`、`agent_denials`、`police_audit` | 现有生命周期最完整；需补 police 动作补偿 |
+| SM-01 | Officer Duty / Unit | `police_units.status` 单写入口 + `job.onduty` 投影 | `police_units`、`police_audit` | **已实施（`bb64d87`）**：10-8/10-7 经 `SetJobDuty` 投影、OnJobUpdate 保留任务态、掉线释放、启动 sweep、grade1 自派、`cleared→closed`、MDT 下班可见。基线“6 种非法组合”不再可达 |
+| SM-02 | Incident | `police_incidents.status` + transition 表 + `disposition` | `police_incidents`、`police_incident_units` | **已实施（`5c2d3ca`/`9481074`）**：from/to 守卫、`closed` 可达、5 种 disposition、45min stale sweep（60s 周期）、`GetIncidents` 排除 `closed` |
+| SM-03 | Arrest / Report / Citation / Evidence | `police_reports` 为锚点 + `police_write_intents` 幂等账本 | `police_reports`、`police_citations`、`police_evidence`、`police_write_intents` | **部分实施（`f690230`）**：`idempotency_key`/`done`/`pending`、`open_case` cap、citation/evidence 独立审计、支付抢占；仍缺事务、`done` 无 TTL、`open_case` 孤儿不可回滚 |
+| SM-04 | Justice Case | **custom-justice 内存**（+ v3.7 投影） | 无（判决 best-effort 回写 `police_reports.justice_verdict`） | **未动**：重启即丢；`CASE-0001` 回绕；`27c2619` 只补 `justice_case_id` / v3.7 投影，不构成持久化 |
+| SM-05 | Custody | **`justice_sentences.ends_at`（DB 时钟）** | `justice_sentences`、`players.metadata.injail`（投影） | **已实施（`2ae3da4` + `f690230`）**：服务端计时/离线计刑、15s sweep、`SetJailStatus` 不信客户端、trial `replace`、工作减刑服务端化 |
+| SM-06 | NPC Backup Unit | 服务端只记“占位 ID”（每警员 ≤2） | 无（仅 `police_audit` 一条 request） | **部分实施**（MVP 保留）：掉线释放已补；服务端仍无状态机/TTL/结束审计/全局 cap |
+| SM-07 | Agent Action | `agent_actions` 表 | `agent_actions`、`agent_denials`、`police_audit` | **未动**：仍是全仓库最完整的生命周期；`Sys.Jail` 补偿仍未补 |
+| SM-09 | NPC Callout | 服务端 `police_incidents.npc_template` + 客户端场景 | `police_incidents`、`police_incident_units`、`police_audit` | **新增 MVP（`a52d2ca`/`3bbcab3`）**：scheduled→created→assigned→scene_ready→resolved/closed/stale；服务端 8min/30%/max1，客户端 300m/60s/End 清理 |
 
 ---
 
@@ -115,6 +119,8 @@ stateDiagram-v2
 ```
 
 **图 2 — 文书/司法/在押/Agent 链**
+
+> 图里没有画 **SM-09 NPC Callout**：它复用 `Incident` 的 `open→assigned→enroute→on_scene→closed` 迁移，只额外挂一个 `npc_template` 标记与客户端场景；状态与守卫见 §8。
 
 ```mermaid
 stateDiagram-v2
@@ -223,6 +229,8 @@ stateDiagram-v2
 | 7 | `RequestBackup` 服务端只有“按 citizenid 的 requestId 集合”，没有状态、TTL、结束原因；客户端崩溃/静默失败会把名额占住直到掉线 | `custom-police/server/p2_system.lua:172-272`、`custom-police/client/backup.lua:425-519` | 支援名额泄漏；无法度量成功率 |
 | 8 | Agent 生命周期是全仓库最完整的（幂等键、TTL、自审拒绝、重校验）；但 police 动作在 director 之外还有一条 `Sys.Jail` 兜底路径，失败时仍写 `police_arrests` 并返回成功表 | `custom-director/server/main.lua:1345-1665`、`custom-police/server/p2_system.lua:99-123` | agent L3 可能“记录成功、实际未入狱” |
 
+**post-baseline 状态（`3bbcab3`）**：第 1 条（duty 双源）由 `bb64d87` 收敛；第 2 条（入狱后幽灵单位）由 `bb64d87` 的 `syncDuty`/掉线释放 + 启动 sweep 覆盖；第 3 条（`closed` 不可达/清场不归档）由 `5c2d3ca`/`9481074` 修复；第 4 条（无事务/幂等）由 `f690230` 部分修复（幂等账本，仍无事务）；第 5 条（判决不改刑期）由 `2ae3da4` 的 `replace` 模式修复；第 6 条（客户端计时）由 `2ae3da4` 把 `ends_at` 收归 DB 修复；第 7 条（NPC 支援无 TTL）**未修**，仅补了掉线释放；第 8 条（`Sys.Jail` 兜底）**未修**。逐条证据见各节 `x.6 post-baseline`。
+
 ---
 
 ## 1. SM-01 Officer Duty / Unit
@@ -309,6 +317,24 @@ PoliceDuty.Sweep()                       -- 掉线/心跳/超时
 - **当前**：`playerDropped` 在 job 已变时早退（`p0.lua:282-289`）；`syncDuty` 对非 police 早退；两者叠加造成永久幽灵行。
 - **目标**：`Sweep` 每 30–60s 跑一次：不在线且 `updated_at` 超过 10 分钟 → `off_duty` + `unit.stale`；在线但 `updated_at` 超过 5 分钟无心跳 → 标记 `stale` 但不改状态（避免误伤），看板显示 stale。`GetUnits` 默认过滤 `stale`/离线，`include_offline=true` 才返回全量。掉线时立即 `Release`，不等待 Sweep。
 
+### 1.6 post-baseline 实施状态（**已实施**，`bb64d87`）
+
+| 项 | 基线时（`568acd2`） | 现在（`3bbcab3`） | 证据 |
+|---|---|---|---|
+| 10-8 上勤 | 只写 `police_units.status`，`onduty` 仍 false | `SetUnitStatusForSource('available')` 先 `SetJobDuty(true)`，投影失败返回 `duty_failed` | `custom-police/server/p0.lua:585-592` |
+| 10-7 下班 | 只写 units，`onduty` 仍 true；MDT 仍可用 | 先 `SetJobDuty(false)`，失败返回 `duty_failed`；同步写 `off_duty` | `custom-police/server/p0.lua:574-583` |
+| `OnJobUpdate` | 把 `assigned/enroute/on_scene` 覆盖回 `available` | 只在**新行或当前是 `off_duty`** 时写 `available`；busy/任务态保持 | `custom-police/server/p0.lua:406-425` |
+| 非 police / 入狱改职业 | `syncDuty` 早退，留下幽灵单位 | 非 police 一律 `takeUnitOffDuty`，清 `incident_id` | `custom-police/server/p0.lua:409-412,75-78` |
+| 掉线 | 只改 unit，`isPolice` 为假时跳过；incident 永远 assigned | `QBCore:Server:PlayerDropped` + `playerDropped` 双入口；释放 unit，若无其他 unit 则 incident 回 `open`，审计 `unit.drop`/`incident.unassign` | `custom-police/server/p0.lua:442-484` |
+| 启动 sweep | 无 | `onResourceStart` 10s 后把“不在线但非 off_duty”的行扫成 `off_duty`，审计 `unit.stale` | `custom-police/server/p0.lua:486-504,543-551` |
+| grade1 自派 | 硬阻断（`incident.assign` 要 grade2） | grade1 且 `onduty=true` 可把 `open/assigned` 的警情派给**自己**；派给别人仍 `rank_too_low` | `custom-police/server/p0.lua:216-226,236` |
+| `cleared` | 不进 `closed`，队列残留 | `cleared`/`cancelled` 归档为 `closed` 并写 disposition；`SetIncidentStatus` 走 transition 表 | `custom-police/server/p0.lua:267-310` |
+| MDT 下班可见 | App `audience.onduty=true` 把下班警员挡在外面 | MDT app 保留“下班可见”，仅 `jobs={'police'}`，权限仍逐 action 复检 | `custom-phone/server/apps/police_mdt.lua:1-3,32-36` |
+
+**不变量对齐**：`INV-1`（非 off_duty ⇒ onduty）现在由两个 duty 入口强制；`INV-2`（`incident_id` 只属于任务态）由 `upsertUnit` 的 `IF(... IN (...), NULL, incident_id)` 保证（`p0.lua:67-73`）；`INV-8` 的两套状态不再由 `job.onduty` 单独驱动。
+
+**仍未做**：`unavailable` 仍无写入入口；`GetUnits` 仍不过滤离线行（仅启动/掉线时清扫）；心跳/`updated_at` stale 标记未实现（只有启动 sweep，没有在线心跳超时）。
+
 ---
 
 ## 2. SM-02 Incident
@@ -376,6 +402,34 @@ Incident.Sweep()
 - **当前**：无任何超时；`playerDropped` 只改 unit，不改 incident，`police_incident_units` 仍保留该 citizenid，incident 保持 `assigned`/`enroute`。
 - **目标**：`playerDropped` → `Unit.Release(cid,'drop')` → `Incident.OnUnitReleased`：如果该 incident 没有其他活动 unit，状态回 `open` 并清 `police_incident_units.released_at`，审计 `incident.unassign`；`assigned` 超过 10 分钟无人 `enroute` → `incident.no_response` 通知调度；`on_scene` 超过 2 小时无更新 → stale 标记，不自动关闭。
 
+### 2.6 post-baseline 实施状态（**已实施**，`5c2d3ca` + `9481074`）
+
+**transition 表**（代码里的 `INCIDENT_TRANSITIONS`，`custom-police/server/p0.lua:19-26`）：
+
+| From | 允许的 To | 说明 |
+|---|---|---|
+| `open` | `assigned`、`closed` | 未派单可直接误报归档 |
+| `assigned` | `enroute`、`open`、`closed` | `open` = 全部释放/取消派单 |
+| `enroute` | `on_scene`、`assigned`、`closed` | 可退回 |
+| `on_scene` | `closed` | 只能归档 |
+| `cleared` | `closed` | 仅兼容历史行；新写入不再产生 `cleared` |
+| `closed` | ∅ | 终态 |
+
+同状态重试 = 幂等成功（`p0.lua:288-292`），不再写第二行审计；非法迁移返回 `invalid_transition`（`p0.lua:293-296`）。
+
+| 项 | 基线时 | 现在 | 证据 |
+|---|---|---|---|
+| from/to 守卫 | 任意 enum 可跳转，`closed` 不可达 | 表驱动迁移 + 条件 UPDATE；`cleared/cancelled/closed` 统一归档为 `closed` | `p0.lua:259-310` |
+| 关闭处置码 | 无 `disposition` | `disposition ∈ {cleared,cancelled,false_alarm,stale,arrest}`；非法返回 `invalid_disposition`；写 `closed_by`/`closed_reason`/`last_activity_at` | `p0.lua:27-29,267-277,298-306`、`migrations/v3.10_police_incident_disposition.sql` |
+| stale | 无超时，警情永久 `assigned` | 45 分钟无活动（`COALESCE(last_activity_at, created_at)`）→ `closed` + `disposition='stale'` + `closed_reason='stale_timeout'`，批量上限 50，每 60s 扫一次（启动 15s 后首跑） | `p0.lua:506-541`（`SweepStaleIncidents` 导出在 `:608`） |
+| `GetIncidents` | 排除 `closed` 但 `cleared` 永远在队列 | 只允许按 `open/assigned/enroute/on_scene` 过滤；默认 `status NOT IN ('closed')`，返回行显式带 `disposition` / `npc_template` | `p0.lua:32-34,185-210` |
+| 派单幂等 | 重复分配写第二行 | 同 incident + 同 unit 且状态仍活动 → `idempotent=true`，不写审计；`ON DUPLICATE KEY UPDATE joined_at=joined_at` | `p0.lua:237-256` |
+| 清场释放 | 一条 `UPDATE ... WHERE incident_id` 把所有单位改 `available`，覆盖手动 busy | 只释放 `assigned/enroute/on_scene`；`busy` 只清 `incident_id` 保留 busy | `p0.lua:89-100,307` |
+| 掉线释放 | incident 不变 | 无其他 unit 时回 `open` + `incident.unassign` 审计 | `p0.lua:442-459` |
+| `closed_at` 语义 | `cleared` 也写 `closed_at` | `closed_at` 只在 `closed` 写；`last_activity_at` 承担 SLA 心跳 | `p0.lua:298-306`、v3.10 |
+
+**仍未做**：30s/5min 去重限流、通知正文带 `#id`、手机 911 建单、`police_incident_units.released_at`（关联行仍只增不删，靠 `police_units.incident_id` 表达“当前”）；`stale` 是 `disposition` 而不是独立 `status`（与基线“目标新增标记”不同，但满足“自动归档”的验收）。
+
 ---
 
 ## 3. SM-03 Arrest / Report / Citation / Evidence
@@ -437,6 +491,24 @@ Incident.Sweep()
 - **DB `.await` 没有 statement timeout**：任一 await 卡住时，HTTP/phone 请求会一直挂起；客户端关闭手机不会取消服务端协程。目标：给 oxmysql 配置 query timeout，并在服务端加整体 deadline（例如 10s），超时走失败/补偿。
 - **重复点击/网络重试**：没有幂等键，客户端 `submitting` 只防 UI 层重复；换设备/重连/重试仍会重复写。目标：`idempotency_key` + 唯一索引（见 3.4）。
 - **审计失败**：`ReportSubmit` 在送监前审计失败会回滚；`ArrestSubmit` 在送监后审计失败只能返回 `ok=false, jailed=true`，没有补偿。目标：审计与业务同事务，或先写 intent；至少把 `jailed=true` 作为明确的可恢复状态返回给 UI。
+
+### 3.6 post-baseline 实施状态（**部分实施**，`f690230`）
+
+| 项 | 基线时 | 现在 | 证据 |
+|---|---|---|---|
+| 幂等键 | 无；双击写第二份 report/citation | `ArrestSubmit`/`ReportSubmit` 接受 `params.idempotency_key`（`^[A-Za-z0-9_-]{8,128}$`）；先 claim 再写，异常/业务失败删键，成功写 `done` + `result_json` | `custom-police/server/p2_system.lua:154-267,469,828`、`migrations/v3.9_police_write_intents.sql` |
+| 重复调用语义 | 无 | `done` 重放首次结果；`pending` 返回 `in_progress`；格式错返回 `invalid_idempotency_key`；同键不同参不会重新执行（仍返回首次结果，**没有** `idempotency_conflict`） | `p2_system.lua:179-266` |
+| 幂等账本 | 无表 | `police_write_intents(idem_key PK, action, status pending/done/failed, result_json, created_at)`；索引 `idx_actor_created`、`idx_created` | v3.9 |
+| `open_case` 权限 | 服务端完全不查 grade | 与 `create_case` 同门槛：`PolicePolicy.Can(actor,'case.create')`（≥2），失败 `case_forbidden` | `p2_system.lua:531-537` |
+| 审计补齐 | kind=arrest 不写 `report.create`/`citation.issue`/`evidence.register` | 送监成功后统一补 `citation.issue`/`evidence.register`/`arrest.register`（+ 可选 `bolo.create`/`case.create`），任一失败返回 `audit_unavailable` + `jailed=true` | `p2_system.lua:766-797` |
+| 支付抢占 | 先扣钱再条件 UPDATE，不检查 affectedRows；并发双扣 | 先 `UPDATE ... WHERE status='unpaid'` 抢占（affectedRows=1 才继续），再 `RemoveMoney`；扣款失败回滚 `paid→unpaid` | `custom-police/server/p1.lua:146-193` |
+| 事务 | 无（oxmysql 无 `transaction`），靠反向 DELETE | **仍无**；`rollback()` 仍是反向 DELETE（chain→evidence→citation→case→report） | `p2_system.lua:127-136,591-614` |
+| `open_case` 回滚 | 内存案件无法删 | **仍无**；`OpenCase` 在 report 之后、送监之前，`jail_failed` 时孤儿案件留给法官关闭 | `p2_system.lua:694-712,749-757` |
+| `done` 账本 TTL | — | **有风险**：`done` 行永不过期，只有 `created_at < NOW()-1 DAY` 的**全部状态**行被惰性删 200 条/次；删除后同键重放会重新执行（失去幂等），而 `done` 无 `result_json` 时直接 `db_error` | `p2_system.lua:196-201,253-258` |
+| 金额校验 | `deriveCitationAmount` 静默 clamp | **仍静默 clamp**（`base×0.8~1.2`）；`IssueCitation` 独立路径仍接受 1..50000 任意金额 | `p2_system.lua:436-451`、`p1.lua:40-72` |
+| `/fine` 旁路 | 扣钱不写表、不审计 | **未修** | `custom-police/server/commands.lua:259-311` |
+
+**结论**：可重试性从“无”变成“按键去重 + 结果重放”，但**不是事务**；崩溃窗口仍可能留下半写，`open_case` 孤儿与账本 TTL 是两个明确的剩余风险（FIT-04/FIT-05/04 D-16 跟踪）。
 
 ---
 
@@ -595,6 +667,23 @@ justice_sentences (
 - **当前**：离线时间不计；客户端崩溃最多丢 1 分钟同步；服务端重启后 `JusticeService.Inmates` 全丢，qb-prison 仍按 metadata 继续；客户端资源重启从 metadata 恢复（`qb-prison/client:74-79,120-129`）。
 - **目标**：所有时间以 `ends_at` 为准；服务端重启不影响；客户端崩溃只影响 UI，重连由服务端补发剩余；Sweep 兜底释放；审计 `custody.release` 带 `reason='expired'|'admin'|'escape'`。
 
+### 5.6 post-baseline 实施状态（**已实施**，`2ae3da4` + `f690230`）
+
+| 项 | 基线时 | 现在 | 证据 |
+|---|---|---|---|
+| 权威计时 | qb-prison 客户端 `jailTime` + `metadata.injail` | `justice_sentences.ends_at`（MySQL `DATE_ADD(NOW())`）；`metadata.injail` 只是投影 | `custom-justice/server/sentence.lua:91-135,249-267`、`migrations/v3.8_justice_sentences.sql` |
+| 离线计刑 | 离线时间不服刑 | `ends_at` 由 DB 时钟推进，离线自然计刑；登录把剩余分钟投影回 metadata | `sentence.lua:42-52`、`prison.lua:106-178` |
+| 客户端伪造 | `SetJailStatus` 不校验来源/数值 | 服务端**忽略客户端 jailTime**，改查 `custom-justice:RemainingSeconds`；justice 不可用才走 legacy 且 clamp 到 0..120 | `qb-prison/server/main.lua:14-50` |
+| 判决改刑期 | `Imprison` 见 `injail>0` 直接 return，判决无效 | trial/plea 用 `replace=true` → `ApplySentence(..., 'set')` 重算 `ends_at`；逮捕用 `add` 叠加 | `custom-justice/server/prison.lua:39,43-49`、`trial.lua:184-204`、`sentence.lua:106-122` |
+| 自动释放 | 客户端 timer / 自由门 | `ExpireSweep` 每 15s + 启动 1s 后扫 `status='active' AND ends_at<=NOW()`，置 `expired`、清 Inmates、`metadata.injail=0`、`UnjailPerson` | `sentence.lua:183-243` |
+| 工作减刑 | 客户端 `jailTime-2` 后回写 | 客户端只发 `prison:server:WorkReduction`；服务端校验在押、1..5 分钟、55s 冷却，调 `AdjustSentence(cid,-n)`，`ends_at=GREATEST(NOW(), ends_at-n)` | `qb-prison/server/main.lua:187-213`、`sentence.lua:160-178` |
+| 释放幂等 | 无 | `Release` 只在 `status='active'` 时更新，返回是否真的迁移；`/unjail`、`police_release` 都调 `ReleaseSentence` | `sentence.lua:139-154`、`custom-police/server/commands.lua:235-246`、`p2_system.lua:969-978` |
+| 物品托管防刷 | `Save/Give/Reset` 可循环刷 $80 | 只在 `injail>0` 时收物，`JailItemsSeized` 一句一次、`JailItemsRestored` 释放后一次 | `qb-prison/server/main.lua:52-110`、f690230 |
+
+**关于“未提交 work/release 修复”**：qB-prison 的劳动减刑/物品防刷在任务描述里预期为未提交；实际它们已随 `f690230` 一起提交（`qb-prison/server/main.lua:52-110,187-213`），`git status` 对这两个文件无未提交差异。本文按 HEAD 记为已实施。
+
+**仍未做**：`justice_sentences` 没有 `case_id` 外键（只有 `VARCHAR(32)` 展示号）、没有 audit 行（只有 `print`/custom-logs）、`release_reason` 不落库；`Inmates` 仍是内存缓存（可由 `justice_sentences` 重建，但代码没有重建函数）；qb-prison 客户端仍保留 `jailTime` 作为 UI 变量（不再是权威）。
+
 ---
 
 ## 6. SM-06 NPC Backup Unit
@@ -652,6 +741,19 @@ justice_sentences (
 - **当前**：客户端 5 分钟 `UNIT_LIFETIME_MS`、150m/30s 离开、30s escort timeout（`backup.lua:21-24,436-468,482-484`）；服务端只在 `playerDropped` 清（`p2_system.lua:266-272`）。
 - **目标**：服务端 TTL 是最终兜底；客户端计时只是体验优化；任何“客户端不再发消息”的情况都能在 ≤15s 释放名额。
 
+### 6.6 post-baseline 实施状态（**部分实施**，MVP 保留）
+
+| 项 | 基线时 | 现在（`3bbcab3`） | 证据 |
+|---|---|---|---|
+| 服务端状态 | 只有 `backupUnits[cid][requestId]=true` 的占位集合 | **仍是占位集合**；没有 `state/spawned_at/expires_at/last_ack` | `custom-police/server/p2_system.lua:295-300` |
+| TTL | 无 | **仍无**；只有客户端 5 分钟寿命 + `playerDropped` 释放 | `p2_system.lua:371-395`、`client/backup.lua:436-468` |
+| 生成确认 | 无 ack | **仍无**：`TriggerClientEvent('police:client:SpawnBackup')` 后即认为成功 | `p2_system.lua:364` |
+| 掉线释放 | `playerDropped` 清 `backupUnits[cid]` | 保留并加了来源校验（`backupSource`），按 session 释放 | `p2_system.lua:387-395` |
+| 结束审计 | 只有 `backup.request` | **仍只有 request**；无 `backup.ended`/`expired`/指标 | `p2_system.lua:348` |
+| 全局 cap | 无（只限每人 2） | **仍无**；48 人满编理论上限 96 单位 | `p2_system.lua:296-327` |
+
+**结论**：SM-06 仍是 **MVP**——服务端管权限/冷却/每人上限/requestId 归属，客户端管实体与生命周期。FIT-07 的“走预算接口”对 backup 成立，但新增的 NPC 警情在 `client/npc_callouts.lua` 里另开了一条 `CreateVehicle`/`CreatePed` 路径（见 SM-09），所以 07 把 FIT-07 降为 PARTIAL。
+
 ---
 
 ## 7. SM-07 Agent Action
@@ -706,50 +808,103 @@ justice_sentences (
 
 ---
 
-## 8. 跨状态机不变量（重构验收用）
+## 8. SM-09 NPC Callout（新增，MVP）
 
-| ID | 不变量 | 当前违反点 | 验收方式 |
+> 基线时**不存在**；`a52d2ca` 落地服务端/客户端，`3bbcab3` 暴露模板并打磨 scene prompt。它与 SM-06 的区别：SM-06 是“警员请求的 NPC 支援”，SM-09 是“服务端主动生成的 NPC 警情”。
+
+### 8.1 状态与权威源
+
+| 状态 | 含义 | 权威源 | 证据 |
 |---|---|---|---|
-| INV-1 | 任何 `status≠off_duty` 的单位，其 `job.onduty=true` | 10-8 未上勤、10-7 未清 onduty、入狱后幽灵行 | SQL 对账 + 单元测试 |
-| INV-2 | 任何 `incident_id≠NULL` 的单位，`status∈{assigned,enroute,on_scene}` | `syncDuty` 写 available 时保留 incident_id；清场把所有单位设 available | SQL 约束/服务层断言 |
-| INV-3 | 任何 `assigned/enroute/on_scene` 的 incident，至少一个活动 unit | 掉线后 unit 释放但 incident 不变 | 定时对账 + `incident.unassign` |
-| INV-4 | 任何 `cleared` 的 incident 必须有 `disposition`；`closed` 不可再迁移到活动态 | 当前 `cleared` 无处置码、`closed` 不可达 | 状态守卫 + 测试 |
-| INV-5 | 每次状态迁移 `affectedRows=1` 且写一条审计 | 多处 `UPDATE` 不检查结果、`syncDuty` 无审计 | 代码审计 + 故障注入 |
-| INV-6 | 同一次逮捕重试不产生第二份 report/citation/evidence | 无幂等键；并发可重复 | 并发测试 + 唯一索引 |
-| INV-7 | 判决必须能改变正在服的刑期，或明确“判决仅记录” | `Imprison` early-return 使判决无效 | 集成测试：arrest→trial→ends_at 变化 |
-| INV-8 | 在押剩余时间只由服务端时钟决定，客户端不可写 | `SetJailStatus` 无校验 | 安全测试：客户端伪造 0 分钟 |
-| INV-9 | 任何跨资源内存（justice cases/inmates、backup 配额）重启后可恢复或可安全丢弃 | 案件/囚犯全丢，backup 配额静默重置 | 重启演练 + 对账 |
-| INV-10 | NPC 支援名额在客户端无响应 ≤15s 内释放 | 无服务端 TTL | 故障注入：杀客户端 Lua |
+| `scheduled` | 调度器的一次评估：在勤 ≥1、无活动 NPC 警情、`math.random() < 0.30` | 服务端 `autoLoop`（内存，不落库） | `custom-police/server/p4_npc.lua:368-390`、`shared/npc_callouts.lua:22-29` |
+| `created` | 已 INSERT `police_incidents`，`npc_template` 非空；已写审计并通知在勤警员 | `police_incidents.npc_template` | `p4_npc.lua:100-146`、`migrations/v3.11_police_npc_callout.sql` |
+| `assigned` | 走 SM-02 的普通派单（grade1 自派 / grade2 指派） | `police_incident_units` + `police_units.incident_id` | `p0.lua:212-257` |
+| `scene_ready` | 被派单位 `on_scene` **或** 任一在勤警员距坐标 ≤80m；服务端推 `police:client:NpcCallout`，客户端建场景 | 服务端内存 `spawned[incidentId]` + 客户端 `scene` | `p4_npc.lua:252-358,345-350`、`shared/npc_callouts.lua:27` |
+| `resolved` | 警员上报 `resolved/arrest/false_alarm/failed` → 复用 P0 `SetIncidentStatus('cleared', disposition)` | `police_incidents.status='closed'` + `disposition` | `p4_npc.lua:171-243` |
+| `closed` | P0 关闭路径：`closed_at`、`closed_by`、释放单位、`incident.close` 审计 | `police_incidents` | `p0.lua:298-310` |
+| `stale` | 45 分钟无活动被 SM-02 sweep 归档，`disposition='stale'`；或警员上报 `failed`（映射 `stale`） | `police_incidents.disposition='stale'` | `p0.lua:506-532`、`p4_npc.lua:22-29` |
 
-### 8.1 建议重构顺序（按依赖/风险）
+### 8.2 迁移表
 
-1. **SM-01（P0）**：先做 `PoliceDuty` 单写入口 + `Release` 掉线/失业/入狱 + `Sweep`；把 `syncDuty` 改成投影/清理。它决定权限、派单、看板、MDT 的一致性。
-2. **SM-05（P0）**：`justice_sentences` + 服务端时钟 + `ReleaseSentence`；把 qb-prison 客户端降级为 UI。它决定“逮捕是否真的生效”，也是安全漏洞。
-3. **SM-03（P0/P1）**：幂等键 + 事务/outbox + 补齐 citation/evidence/report 审计 + `open_case` 权限。它决定“记录是否可信”。
-4. **SM-02（P1）**：from/to 守卫 + `closed` + 掉线释放 + stale；依赖 SM-01 的 `Release`。
-5. **SM-04（P1）**：`justice_cases`/`justice_verdicts` 落库 + 案件号不自增回绕 + 判决接 `AdjustSentence`；依赖 SM-05。
-6. **SM-06（P1/P2）**：服务端状态 + ack + TTL + 结束审计；可与 SM-02 并行。
-7. **SM-07（P2）**：给 `Sys.Jail` 补 fallback 状态/审计，统一 police action 的失败语义；现有生命周期无需重写。
+| From | To | 触发者 / 入口 | 校验 | 写入 / 事件 | 审计 | 失败 / 回退 |
+|---|---|---|---|---|---|---|
+| ∅ | `scheduled` | `autoLoop`（启动 30s 后，每 8min） | `onDutyCount() >= 1`；`activeNpcCount() < MAX_ACTIVE(1)`；`math.random() < 0.30` | 无（纯内存评估） | 无 | 任一条件不满足直接跳过，不产生记录 |
+| `scheduled` | `created` | `CreateNpcCallout(templateId, officerSrc?)`（调度器 / `npc_callout` 控制台 / export） | 模板存在；玩家 source 必须是 police + `onduty`；`MAX_ACTIVE` 未满；模板固定坐标存在 | `police_incidents`（含 `npc_template`、coords）；`phone_notifications` + `phone:client:newNotification` + `police:client:policeAlert` | `npc.callout.create`（system 或 player） | `invalid_template`/`player_not_found`/`not_police`/`not_on_duty`/`limit_reached`/`no_location`/`db_error`；不写半行 |
+| `created` | `assigned` | 普通派单（MDT/agent） | 同 SM-02：incident 必须 `open/assigned`；grade1 只能派自己 | `police_incident_units` + unit/incident 状态 | `incident.assign` | `invalid_transition`/`rank_too_low`/`incident_not_found` |
+| `assigned` | `scene_ready` | `sceneWatcher`（每 3s） | 仅当候选是 `on_scene` 或距坐标 ≤80m；候选必须仍 police + onduty | 内存 `spawned[id]={source}`；`police:client:NpcCallout(incidentId, templateId, {x,y,z,heading})` | 无（`print`） | 无客户端 → 不推、不标记；等下一次 watcher |
+| `scene_ready` | `resolved` | 客户端上报 `police:server:NpcCalloutResult(incidentId, outcome, notes)` | `incident.update`；`npc_template` 必须非空；grade<2 必须是该 incident 的成员；outcome ∈ {resolved,arrest,failed,false_alarm} | 复用 P0 close：`status='closed'`、disposition 映射（`resolved→cleared`、`arrest→arrest`、`failed→stale`、`false_alarm→false_alarm`）、释放单位、`closed_reason='npc_callout:<outcome>'` | `incident.close`（P0）+ `npc.callout.resolve` | `not_police`/`invalid_incident`/`invalid_outcome`/`incident_not_found`/`not_npc_callout`/`not_assigned`/`close_failed` |
+| `resolved` | 奖励 | `SubmitResult` | 只有**本次真正执行 close**（非 `idempotent`）才发奖 | `AddMoney('bank', 500, 'npc_callout')`（best-effort，pcall） | 与 `npc.callout.resolve` 同批 | 发奖失败不回滚关闭；重复上报关闭返回 `idempotent=true`，**不二次发奖** |
+| `created/assigned/scene_ready` | `stale` | SM-02 `SweepStaleIncidents` | 45 分钟无 `last_activity_at` | `status='closed'`、`disposition='stale'`、`closed_by='system'` | `incident.stale`（system） | 与普通警情共用；NPC 场景由 watcher 检测到 `status='closed'` 后推 `NpcCalloutEnd` |
+| `scene_ready` | `closed`（外部关闭） | MDT 清场 / stale sweep / 他人关闭 | — | 同 SM-02 | `incident.close`/`incident.stale` | watcher 在 3s 内发现行不再活动 → `NpcCalloutEnd` 清理实体 |
+
+### 8.3 客户端场景生命周期
+
+| 项 | 值 / 行为 | 证据 |
+|---|---|---|
+| 构建入口 | `police:client:NpcCallout` → 校验 id/template/坐标 → `buildScene`（车辆/ped/受害者/嫌疑人/店员/场景） | `custom-police/client/npc_callouts.lua:528-560` |
+| 放弃半径 | 玩家离场景中心 **300m** 持续 **60s** → `cleanupScene('distance')` | `client/npc_callouts.lua:23-24,493-503`、`shared/npc_callouts.lua:28-29` |
+| 服务端结束 | `police:client:NpcCalloutEnd` → `cleanupScene('server_end')`；资源 stop → `cleanupScene('resource_stop')`；新场景替换 → `replaced` | `client/npc_callouts.lua:562-575` |
+| 上报 | 场景受控后 `TriggerServerEvent('police:server:NpcCalloutResult', incidentId, outcome, 'scene_controlled')` | `client/npc_callouts.lua:419` |
+| 生成实体 | `CreateVehicle` + `CreatePed`（**只有客户端**，服务端不生成、不传送） | `client/npc_callouts.lua:192,210` |
+
+### 8.4 风险与缺口
+
+1. **AI 跑出场景**：嫌疑人 `flee_or_fight` 可能跑出 300m 放弃圈；客户端只按“玩家离场景中心”计时，不按 NPC 位置，也不重新 `TaskGoToCoord` 拉回。表现是“警员还在，场景实体已清”。目标：给 ped 加 leash / 按 NPC 最远距离触发重定位。
+2. **场景不重发**：`spawned[incidentId]` 一旦置位，watcher 不再推给第二个警员；客户端 `buildScene` 失败只清本地（`build_failed`），服务端仍认为已推送，直到 `playerDropped` 或警情关闭。目标：ack + 超时重发/改派。
+3. **奖励只给关闭者**：`resolved` 的 $500 只发给上报者；另一名警员从 MDT 关单不会发奖，也没有“参与人”记录。
+4. **无服务端生命周期表**：`spawned` 是内存 map，重启后所有场景丢失；警情还在，watcher 会重新推给仍在场/新到场的单位（这算恢复），但旧客户端可能残留实体直到资源 stop。
+5. **依赖 SM-02 的 stale**：NPC 警情最大滞留时间 = 45 分钟，与普通警情相同；`MAX_ACTIVE=1` 意味着一个卡住的 NPC 警情会让调度器 45 分钟不再生成新警情。
 
 ---
 
-## 9. 附录：审计动作清单（当前代码实际写入 `police_audit` 的 action）
+## 9. 跨状态机不变量（重构验收用）
+
+| ID | 不变量 | 基线违反点（`568acd2`） | 现在（`3bbcab3`） | 验收方式 |
+|---|---|---|---|---|
+| INV-1 | 任何 `status≠off_duty` 的单位，其 `job.onduty=true` | 10-8 未上勤、10-7 未清 onduty、入狱后幽灵行 | ⚠️ 两个 duty 入口强制投影；**但 `AssignUnit` 仍不校验目标 `onduty/available`**，grade≥2 可把下班单位设成 `assigned` | SQL 对账 + 单元测试 |
+| INV-2 | 任何 `incident_id≠NULL` 的单位，`status∈{assigned,enroute,on_scene}` | `syncDuty` 写 available 时保留 incident_id；清场把所有单位设 available | ✅ `upsertUnit` 对手动状态清 `incident_id`；清场只释放任务态，busy 只清链接 | SQL 约束/服务层断言 |
+| INV-3 | 任何 `assigned/enroute/on_scene` 的 incident，至少一个活动 unit | 掉线后 unit 释放但 incident 不变 | ✅ 掉线释放：无其他 unit → incident 回 `open` + `incident.unassign` | 定时对账 + `incident.unassign` |
+| INV-4 | 任何 `cleared` 的 incident 必须有 `disposition`；`closed` 不可再迁移到活动态 | `cleared` 无处置码、`closed` 不可达 | ✅ transition 表 + `disposition` 枚举；`closed` 终态 | 状态守卫 + 测试 |
+| INV-5 | 每次状态迁移 `affectedRows=1` 且写一条审计 | 多处 `UPDATE` 不检查结果、`syncDuty` 无审计 | ❌ 多数 `UPDATE` 仍不检查 affectedRows；`audit()` 返回值在 p0/p1/p3 仍被丢弃 | 代码审计 + 故障注入 |
+| INV-6 | 同一次逮捕重试不产生第二份 report/citation/evidence | 无幂等键；并发可重复 | ⚠️ 带 `idempotency_key` 的调用可去重/重放；无键调用仍可重复，且 `done` 无 TTL | 并发测试 + 唯一索引 |
+| INV-7 | 判决必须能改变正在服的刑期，或明确“判决仅记录” | `Imprison` early-return 使判决无效 | ✅ trial/plea 用 `replace=true` 重算 `ends_at` | 集成测试：arrest→trial→ends_at 变化 |
+| INV-8 | 在押剩余时间只由服务端时钟决定，客户端不可写 | `SetJailStatus` 无校验 | ✅ `SetJailStatus` 只投影 `justice_sentences` 剩余；客户端值仅在 justice 不可用时 clamp 兜底 | 安全测试：客户端伪造 0 分钟 |
+| INV-9 | 任何跨资源内存（justice cases/inmates、backup 配额）重启后可恢复或可安全丢弃 | 案件/囚犯全丢，backup 配额静默重置 | ⚠️ 服刑可由 `justice_sentences` 恢复（登录投影）；**案件仍全丢**、backup 配额仍静默重置 | 重启演练 + 对账 |
+| INV-10 | NPC 支援名额在客户端无响应 ≤15s 内释放 | 无服务端 TTL | ❌ 仍只有 `playerDropped` 兜底；无 TTL/ack | 故障注入：杀客户端 Lua |
+
+### 9.1 建议重构顺序（按依赖/风险，含现状）
+
+1. **SM-01（P0）**：`PoliceDuty` 单写入口 + `Release` 掉线/失业/入狱 + `Sweep`；把 `syncDuty` 改成投影/清理。→ **已落地 `bb64d87`**（未抽独立 service，逻辑集中在 `p0.lua`；仍缺 `AssignUnit` 的目标在勤校验）。
+2. **SM-05（P0）**：`justice_sentences` + 服务端时钟 + `ReleaseSentence`；把 qb-prison 客户端降级为 UI。→ **已落地 `2ae3da4`（+`f690230` work/release）**。
+3. **SM-03（P0/P1）**：幂等键 + 事务/outbox + 补齐 citation/evidence/report 审计 + `open_case` 权限。→ **部分落地 `f690230`**：幂等键/审计/`open_case` cap 已做；**事务/outbox 未做**，`done` TTL、`open_case` 孤儿仍是风险。
+4. **SM-02（P1）**：from/to 守卫 + `closed` + 掉线释放 + stale。→ **已落地 `5c2d3ca`/`9481074`**。
+5. **SM-04（P1）**：`justice_cases`/`justice_verdicts` 落库 + 案件号不自增回绕 + 判决接 `AdjustSentence`。→ **判决已接 `replace`，但案件仍内存**；下一步只剩持久化。
+6. **SM-06（P1/P2）**：服务端状态 + ack + TTL + 结束审计。→ **未做**。
+7. **SM-07（P2）**：给 `Sys.Jail` 补 fallback 状态/审计，统一 police action 的失败语义。→ **未做**。
+8. **SM-09（P2）**：NPC 警情 MVP 已落地；下一步补 ack/重发、AI leash、服务端场景状态。
+
+---
+
+## 10. 附录：审计动作清单（HEAD 实际写入 `police_audit` 的 action）
 
 | action | 触发 | 目标/详情 | 代码 |
 |---|---|---|---|
-| `unit.status` | 10-8/10-6/10-7、MDT set_status | target=status, detail=nil | `p0.lua:52` |
-| `incident.create` | 玩家/agent 建单 | target=id, detail=title | `p0.lua:94`、`p2_system.lua:65` |
-| `incident.assign` | 派单（玩家/agent） | target=id, detail=unit | `p0.lua:155`、`p2_system.lua:87` |
-| `incident.status` | 前往/到场/清场 | target=id, detail=status | `p0.lua:179` |
-| `lookup.citizen` / `lookup.citizen.result` | 人员查询（审计失败 fail-closed） | target=cid | `p0.lua:187,227` |
-| `lookup.vehicle` / `lookup.vehicle.result` | 车辆查询 | target=plate | `p0.lua:238,245` |
+| `unit.status` | 10-8/10-6/10-7、MDT set_status、`SetUnitStatus` | target=status, detail=nil | `p0.lua:119,581,590,597` |
+| `unit.drop` / `unit.stale` | 掉线释放 / 启动 sweep | target=`off_duty` | `p0.lua:458,501`（`actor_kind='system'`） |
+| `incident.create` | 玩家/agent/NPC 警情建单 | target=id, detail=title/template | `p0.lua:161`、`p2_system.lua:65`、`p4_npc.lua:134` |
+| `incident.assign` | 派单（玩家/agent） | target=id, detail=unit | `p0.lua:255`、`p2_system.lua:87` |
+| `incident.status` / `incident.close` | 前往/到场 / 清场归档 | target=id, detail=status/disposition | `p0.lua:323,308` |
+| `incident.unassign` / `incident.stale` | 掉线回开 / 45min sweep | target=id | `p0.lua:455,528`（system） |
+| `lookup.citizen` / `lookup.citizen.result` | 人员查询（审计失败 fail-closed） | target=cid | `p0.lua:331,371` |
+| `lookup.vehicle` / `lookup.vehicle.result` | 车辆查询 | target=plate | `p0.lua:331,389` |
 | `case.create` / `case.view` / `case.detail` | 案件 | target=case_no/id | `p3_cases.lua:58,68,242` |
-| `bolo.create` / `bolo.view` / `bolo.clear` | BOLO | target=target/id | `p3_cases.lua:87,123,134` |
+| `bolo.create` / `bolo.view` / `bolo.clear` | BOLO | target=target/id | `p3_cases.lua:87,123,134`、`p2_system.lua:771` |
 | `warrant.request` / `warrant.decide` / `warrant.view` | 令状 | target=cid/id | `p3_cases.lua:153,169,185` |
-| `arrest.register` / `arrest.view` | 逮捕 | target=cid | `p3_cases.lua:204,228`、`p2_system.lua:121,646` |
-| `citation.issue` / `citation.pay` | 罚单 | target=cid/id | `p1.lua:58,154` |
-| `report.create` / `report.view` | 报告 | target=id | `p1.lua:112`（view 无审计） |
-| `evidence.register` / `evidence.view` / `evidence.chain` | 证据 | target=exhibit/id | `p2_evidence.lua:63,79,92` |
-| `backup.request` | NPC 支援请求 | target=cid, detail=requestId | `p2_system.lua:225` |
+| `arrest.register` / `arrest.view` | 逮捕 | target=cid | `p3_cases.lua:204,228`、`p2_system.lua:121,792` |
+| `citation.issue` / `citation.pay` | 罚单 | target=cid/id | `p1.lua:67,190`、`p2_system.lua:781` |
+| `report.create` / `report.view` | 报告 | target=id | `p1.lua:121`、`p2_system.lua:932`（view 无审计） |
+| `evidence.register` / `evidence.view` / `evidence.chain` | 证据 | target=exhibit/id | `p2_evidence.lua:63,79,92`、`p2_system.lua:787,935` |
+| `backup.request` | NPC 支援请求 | target=cid, detail=requestId | `p2_system.lua:348` |
+| `npc.callout.create` / `npc.callout.resolve` | NPC 警情生成 / 结算 | target=id, detail=template/outcome | `p4_npc.lua:134,234` |
 
-**缺失（目标必须补）**：`unit.duty`/`unit.drop`/`unit.stale`、`incident.close`/`incident.reopen`/`incident.unassign`、`report.approve`、`citation.void`、`evidence.store/release/destroy`、`case.trial/plea/sentence/close`、`custody.imprison/release/adjust`、`backup.spawned/ended/expire`、逮捕内的 `citation.issue`/`evidence.register`/`report.create`。
+**基线缺失项中已补**：`unit.drop`/`unit.stale`、`incident.close`/`incident.unassign`/`incident.stale`、逮捕内的 `citation.issue`/`evidence.register`；**仍缺**：`unit.duty`（上勤本身）、`incident.reopen`、`report.approve`、`citation.void`、`evidence.store/release/destroy`、`case.trial/plea/sentence/close`、`custody.imprison/release/adjust`（justice 侧仍只写 `print`/custom-logs）、`backup.spawned/ended/expire`。
