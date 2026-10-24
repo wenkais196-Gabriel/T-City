@@ -403,6 +403,7 @@ CREATE TABLE `phone_notifications` (
   `citizenid` varchar(50) NOT NULL,
   `title` varchar(200) NOT NULL,
   `content` text NOT NULL,
+  `app_id` varchar(32) DEFAULT NULL,
   `is_read` tinyint(1) DEFAULT 0,
   `timestamp` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
