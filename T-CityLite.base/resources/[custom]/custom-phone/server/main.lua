@@ -354,7 +354,7 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
 
     -- 1. Contacts
     pending = pending + 1
-    MySQL.Async.fetchAll('SELECT * FROM phone_contacts WHERE citizenid = ?', { citizenid }, function(result)
+    MySQL.Async.fetchAll('SELECT id, name, number FROM phone_contacts WHERE citizenid = ? LIMIT 200', { citizenid }, function(result)
         contacts = result or {}
         pending = pending - 1
         tryAssemble()
@@ -362,7 +362,7 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
 
     -- 2. Phone numbers
     pending = pending + 1
-    MySQL.Async.fetchAll('SELECT number, is_primary FROM phone_numbers WHERE citizenid = ?', { citizenid }, function(result)
+    MySQL.Async.fetchAll('SELECT number, is_primary FROM phone_numbers WHERE citizenid = ? LIMIT 50', { citizenid }, function(result)
         numberRows = result or {}
         pending = pending - 1
         tryAssemble()
@@ -399,7 +399,7 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
         jobs = phoneJobBoardCache.data
     else
         pending = pending + 1
-        MySQL.Async.fetchAll('SELECT * FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}, function(result)
+        MySQL.Async.fetchAll('SELECT id, task_id, title, description, target_tags, reward, status, taken_by, posted_at, deadline FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}, function(result)
             jobs = result or {}
             for i = 1, #jobs do
                 if jobs[i] and type(jobs[i].target_tags) == 'string' then
@@ -415,7 +415,7 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneData', function(source, cb
 
     -- 5. Notifications (persistent, newest first, limit 50)
     pending = pending + 1
-    MySQL.Async.fetchAll('SELECT * FROM phone_notifications WHERE citizenid = ? ORDER BY timestamp DESC LIMIT 50', { citizenid }, function(result)
+    MySQL.Async.fetchAll('SELECT id, title, content, app_id, is_read, timestamp FROM phone_notifications WHERE citizenid = ? ORDER BY timestamp DESC LIMIT 50', { citizenid }, function(result)
         notifs = result or {}
         pending = pending - 1
         tryAssemble()
@@ -426,7 +426,8 @@ end)
 CreateThread(function()
     while true do
         Wait(2 * 60 * 1000)
-        local jobs = MySQL.query.await('SELECT * FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}) or {}
+        local jobs = MySQL.query.await(
+            'SELECT id, task_id, title, description, target_tags, reward, status, taken_by, posted_at, deadline FROM phone_jobboard ORDER BY posted_at DESC LIMIT 20', {}) or {}
         for i = 1, #jobs do
             if jobs[i] and type(jobs[i].target_tags) == 'string' then
                 local ok, decoded = pcall(json.decode, jobs[i].target_tags)
@@ -735,7 +736,7 @@ end)
 -- CityFeed Callbacks & SQL
 -- ----------------------------------------------------
 QBCore.Functions.CreateCallback('phone:server:getCityFeed', function(source, cb)
-    MySQL.Async.fetchAll('SELECT f.*, p.charinfo FROM phone_cityfeed f LEFT JOIN players p ON f.citizenid = p.citizenid ORDER BY f.timestamp DESC LIMIT 30', {}, function(posts)
+    MySQL.Async.fetchAll('SELECT f.id, f.citizenid, f.content, f.likes, f.timestamp, p.charinfo FROM phone_cityfeed f LEFT JOIN players p ON f.citizenid = p.citizenid ORDER BY f.timestamp DESC LIMIT 30', {}, function(posts)
         local formatted = {}
         for i = 1, #posts do
             local name = "Anonymous"
@@ -885,7 +886,7 @@ QBCore.Functions.CreateCallback('phone:server:getOwnedVehicles', function(source
     local Player = QBCore.Functions.GetPlayer(source)
     if not Player then return cb({}) end
 
-    MySQL.Async.fetchAll('SELECT vehicle, plate, garage, state, fuel, engine, body FROM player_vehicles WHERE citizenid = ?', {
+    MySQL.Async.fetchAll('SELECT vehicle, plate, garage, state, fuel, engine, body FROM player_vehicles WHERE citizenid = ? LIMIT 200', {
         Player.PlayerData.citizenid
     }, function(vehicles)
         local list = {}

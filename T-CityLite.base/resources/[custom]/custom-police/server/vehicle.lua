@@ -9,7 +9,7 @@ end
 
 QBCore.Functions.CreateCallback('police:GetImpoundedVehicles', function(_, cb)
     local vehicles = {}
-    MySQL.query('SELECT * FROM player_vehicles WHERE state = ?', { 2 }, function(result)
+    MySQL.query('SELECT plate, vehicle, engine, body, fuel, mods FROM player_vehicles WHERE state = ? LIMIT 200', { 2 }, function(result)
         if result[1] then
             vehicles = result
         end

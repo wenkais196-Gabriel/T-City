@@ -73,6 +73,7 @@ QBCore.Functions.CreateCallback('phone:server:bankTransfer', function(source, cb
         MySQL.Async.fetchAll([[
             SELECT citizenid, money, charinfo FROM players 
             WHERE JSON_UNQUOTE(JSON_EXTRACT(charinfo, '$.phone')) = ?
+            LIMIT 1
         ]], { toPhoneNumber }, function(results)
             local foundCitizen = nil
             local dbMoney = nil

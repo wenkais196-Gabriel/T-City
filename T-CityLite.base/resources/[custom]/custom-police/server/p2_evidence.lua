@@ -77,10 +77,11 @@ function EV.Get(source, params)
     local rows
     if params and params.incident_id then
         rows = MySQL.query.await(
-            'SELECT * FROM police_evidence WHERE incident_id = ? ORDER BY id DESC LIMIT 50',
+            'SELECT id, exhibit_no, incident_id, report_id, case_id, label, description, location, collected_by, status, created_at, updated_at FROM police_evidence WHERE incident_id = ? ORDER BY id DESC LIMIT 50',
             { tonumber(params.incident_id) })
     else
-        rows = MySQL.query.await('SELECT * FROM police_evidence ORDER BY id DESC LIMIT 50')
+        rows = MySQL.query.await(
+            'SELECT id, exhibit_no, incident_id, report_id, case_id, label, description, location, collected_by, status, created_at, updated_at FROM police_evidence ORDER BY id DESC LIMIT 50')
     end
     return { rows = rows or {}, count = #(rows or {}) }
 end

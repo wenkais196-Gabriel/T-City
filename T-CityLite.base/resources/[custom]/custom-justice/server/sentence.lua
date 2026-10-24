@@ -183,7 +183,8 @@ end
 function JusticeSentences.ExpireSweep()
     local rows = MySQL.query.await(
         [[SELECT DISTINCT citizenid FROM justice_sentences
-          WHERE status = 'active' AND ends_at <= NOW()]], {}) or {}
+          WHERE status = 'active' AND ends_at <= NOW()
+          LIMIT 200]], {}) or {}
     if #rows == 0 then return 0 end
 
     local affected = affectedRows(MySQL.update.await(

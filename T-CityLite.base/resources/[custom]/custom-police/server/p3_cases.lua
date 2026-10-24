@@ -70,7 +70,7 @@ function C.GetCases(source, params)
         return false, 'audit_unavailable'
     end
     local rows = MySQL.query.await(
-        'SELECT * FROM police_cases ORDER BY id DESC LIMIT 50') or {}
+        'SELECT id, case_no, title, status, lead_citizenid, created_by, created_at, updated_at FROM police_cases ORDER BY id DESC LIMIT 50') or {}
     return { rows = rows, count = #rows }
 end
 
@@ -113,7 +113,7 @@ function C.GetBolos(source)
          ORDER BY id DESC LIMIT 50
     ]]) or {}
     local legacyRows = MySQL.query.await(
-        "SELECT * FROM police_bolos WHERE status = 'active' ORDER BY id DESC LIMIT 50") or {}
+        "SELECT id, kind, target, reason, status, created_by, created_at, cleared_at FROM police_bolos WHERE status = 'active' ORDER BY id DESC LIMIT 50") or {}
     local rows = {}
     for _, row in ipairs(reportRows) do rows[#rows + 1] = row end
     for _, row in ipairs(legacyRows) do
@@ -197,10 +197,11 @@ function C.GetWarrants(source, params)
     local rows
     if params and params.citizenid then
         rows = MySQL.query.await(
-            'SELECT * FROM police_warrants WHERE citizenid = ? ORDER BY id DESC LIMIT 50',
+            'SELECT id, citizenid, reason, status, requested_by, approved_by, created_at, decided_at FROM police_warrants WHERE citizenid = ? ORDER BY id DESC LIMIT 50',
             { utf8Sub(tostring(params.citizenid), 50) })
     else
-        rows = MySQL.query.await('SELECT * FROM police_warrants ORDER BY id DESC LIMIT 50')
+        rows = MySQL.query.await(
+            'SELECT id, citizenid, reason, status, requested_by, approved_by, created_at, decided_at FROM police_warrants ORDER BY id DESC LIMIT 50')
     end
     return { rows = rows or {}, count = #(rows or {}) }
 end
@@ -261,7 +262,9 @@ function C.GetCaseDetail(source, caseId)
     if not allowed then return false, reason end
     local id = tonumber(caseId)
     if not id then return false, 'invalid_case' end
-    local caseRow = MySQL.single.await('SELECT * FROM police_cases WHERE id = ? LIMIT 1', { id })
+    local caseRow = MySQL.single.await(
+        'SELECT id, case_no, title, summary, status, lead_citizenid, created_by, created_at, updated_at FROM police_cases WHERE id = ? LIMIT 1',
+        { id })
     if not caseRow then return false, 'not_found' end
     if not audit(actor.citizenid, 'case.detail', tostring(id), nil) then
         return false, 'audit_unavailable'

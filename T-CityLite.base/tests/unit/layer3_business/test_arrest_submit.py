@@ -663,6 +663,11 @@ def test_get_bolos_merges_report_tagged_bolos_with_the_legacy_table():
 
     # Legacy table is still read and merged in Lua, not dropped.
     assert "FROM police_bolos WHERE status = 'active' ORDER BY id DESC LIMIT 50" in block
+    # FIT-09: the implicit SELECT * was replaced with the full explicit shape.
+    assert (
+        "SELECT id, kind, target, reason, status, created_by, created_at, cleared_at "
+        "FROM police_bolos WHERE status = 'active' ORDER BY id DESC LIMIT 50"
+    ) in block
     assert "row.source = 'legacy'" in block
     assert "table.sort" in block
     assert "#rows > 50" in block

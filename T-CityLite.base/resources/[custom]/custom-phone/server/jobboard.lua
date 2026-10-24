@@ -32,7 +32,7 @@ QBCore.Functions.CreateCallback('phone:server:acceptJob', function(source, cb, i
     local citizenid = Player.PlayerData.citizenid
 
     -- Retrieve job
-    MySQL.Async.fetchAll('SELECT * FROM phone_jobboard WHERE id = ?', { id }, function(results)
+    MySQL.Async.fetchAll('SELECT id, task_id, title, description, target_tags, reward, status, taken_by, posted_at, deadline FROM phone_jobboard WHERE id = ? LIMIT 1', { id }, function(results)
         if not results or #results == 0 then
             return cb({ success = false, message = 'Urban Project not found' })
         end
@@ -202,7 +202,7 @@ RegisterNetEvent('phone:server:completeJob', function(id)
 
     local citizenid = Player.PlayerData.citizenid
 
-    MySQL.Async.fetchAll('SELECT * FROM phone_jobboard WHERE id = ?', { id }, function(results)
+    MySQL.Async.fetchAll('SELECT id, task_id, title, description, target_tags, reward, status, taken_by, posted_at, deadline FROM phone_jobboard WHERE id = ? LIMIT 1', { id }, function(results)
         if not results or #results == 0 then return end
         
         local job = results[1]
