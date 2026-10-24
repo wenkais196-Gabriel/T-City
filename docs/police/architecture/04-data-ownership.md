@@ -30,7 +30,7 @@
 | 规则 | 内容 | 现状符合度 |
 |---|---|---|
 | R1 单写者 | 一张表只有一个写入资源；其他资源只能通过 export/事件请求写 | `police_*` ✅；`phone_notifications` ❌；`players.*` ❌（设计上多写者，但必须经 qb-core API） |
-| R2 读也走接口 | 跨资源读只能走 export / live API / callback，禁止直连他资源表 | `custom-phone` ✅（全部走 export）；`custom-director` live board ❌（直查 `police_units`/`police_incidents`，`live_api.lua:484-492`） |
+| R2 读也走接口 | 跨资源读默认走 export / live API / callback；**唯一允许的直读是 director live board 的列白名单**（登记为例外） | `custom-phone` ✅（全部走 export）；`custom-director` live board ⚠️ 登记例外（只读 `police_units`/`police_incidents` 的列白名单，`live_api.lua:484-492`） |
 | R3 白名单例外 | 跨资源直写只允许登记在案的例外，且必须写明理由 | 仅 1 条：justice → `police_reports` verdict 投影（`trial.lua:39-48`） |
 | R4 玩家数据唯一入口 | `players.job/metadata/money/inventory` 只能经 `Player.Functions.*`（或 `Bus.JobService`），禁止 SQL 直改 | ⚠️ 多数走 `Player.Functions`；`custom-career` 直接 `UPDATE players SET rank_tier/department/certs`（见 §4） |
 | R5 内存态标注可丢 | 内存事实（justice cases/inmates、backup 槽位、冷却表）必须声明"允许丢失"，不得作为判决/服刑唯一依据 | ❌ justice 判决与服刑状态只在内存（`TECH_DEBT.md:25-28`） |
@@ -81,7 +81,7 @@
 |---|---|---|---|---|---|---|
 | `agent_actions` | **custom-director 唯一** ✅（`main.lua:1435-1440` insert、`completeApproved` update、`Approve/Reject`） | `Get/List`、MCP `get_action`、verify 断言 | PK `id`；UNIQUE `idempotency_key` | `proposed→pending_approval→approved→executed/failed/rejected`；`expires_at` 仅审批期限，无清理任务 | `v2.3_agent_actions.sql:21-45` | 否 |
 | `phone_notifications` | 目标 = **custom-phone 唯一**；现状 6 个写者文件 / 5 个非 owner（见 §4） | `custom-phone/server/main.lua:418,697-725` | PK `id` | 长期保留；`is_read` 单条/全量更新；可单删/清空 | 表见 `v2.7`（未重建），`v3.2` 加 `app_id` | **是（违规）** |
-| `players`（`job`/`metadata`/`money`/`inventory`） | qb-core（`Player.Functions.*`）+ 6 个非 owner 资源（career/prison/justice/police/custom-main/director） | 全服 | PK `citizenid` `varchar(11)`；`job/metadata/money` 为 **TEXT JSON** | 角色删除时 qb-core 级联清理（`qb-core/server/player.lua:658-672` 的 `playertables` 含 `phone_invoices`，**不含 `police_*`**，见 G-13） | `v0.7.2_schema_reconcile.sql` 等；无警察专用迁移 | **是（设计使然，必须经 API）** |
+| `players`（`job`/`metadata`/`money`/`inventory`） | owner = qb-core（`Player.Functions.*`）；**共 7 个资源直写**：qb-core + 6 个非 owner（career/prison/justice/police/custom-main/director）。其中 qb-prison 写 `job`（入狱强制 `unemployed`），custom-main 写 `metadata.criminalrecord` | 全服 | PK `citizenid` `varchar(11)`；`job/metadata/money` 为 **TEXT JSON** | 角色删除时 qb-core 级联清理（`qb-core/server/player.lua:658-672` 的 `playertables` 含 `phone_invoices`，**不含 `police_*`**，见 G-13） | `v0.7.2_schema_reconcile.sql` 等；无警察专用迁移 | **是（设计使然，必须经 API）** |
 | `justice` 内存（`activeCases`/`inmates`） | custom-justice 唯一 ✅ | `/cases`、`/trial`、`/inmates`、`ResolveCase` | key 为 `caseId:string` / `citizenid` | 进程生命周期；closed 案件 2h 后清（每小时扫一次）；**重启全丢** | 无（TD-02） | 否（但可通过 export 间接改） |
 
 ---
@@ -144,7 +144,7 @@
 |---|---|---|
 | `police_audit` 结构 | `actor_citizenid`(50)、`actor_kind ENUM(player,agent,system)`、`action`(48)、`target`(64)、`detail`(500) | `migrations/v2.8_police_p0.sql:50-61` |
 | 保留策略 | **无**：无 TTL、无归档、无分区、无清理任务；读侧 `ORDER BY id DESC LIMIT 100` | `p0.lua:253-255` |
-| 覆盖度 | 写路径基本覆盖；**读路径缺口**：`GetCitations`、`GetReports`、`GetUnits`、`GetIncidents` 不审计 | `p1.lua:79-92,116-133`、`p0.lua:56-75,118-137` |
+| 覆盖度 | 写路径基本覆盖；**读路径缺口**：`GetUnits`、`GetIncidents`、`GetAudit`、`GetCitations`、`GetReports` 完全不写审计；其余 9 个读导出写审计（3 个 fail-closed、6 个忽略返回值） | `p1.lua:79-92,116-133`、`p0.lua:56-75,118-137,249-257` |
 | 司法侧 | 判决/送监**不写 `police_audit`**，只有 `custom-logs` 文本日志 | `prison.lua:56-64`、`trial.lua:86-91,107-112` |
 | Agent 侧 | `agent_actions`（含 preview/result）+ `agent_denials`（不含参数值）+ `custom-agent-client` 的 `agent_effects`（不存正文） | `migrations/v2.3_agent_actions.sql:21-45`、`AGENTS.md` §4 |
 | 截断 | `detail` 500 字符、`action` 48 字符，超长静默截断（UTF-8 安全截断只在部分文件实现） | `p2_system.lua:15-29,31-37` vs `p0.lua:35`（`tostring(detail):sub(1,500)` 按字节） |

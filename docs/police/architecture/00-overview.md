@@ -199,10 +199,11 @@ flowchart TB
 | `custom-police` | 警察域唯一服务端权威：勤务、警情、单据、案件、审计 | 服务端 exports + net 事件 + SQL | 12 张 `police_*` 表（`police_arrests` 是 legacy，但仍有 2 个写入点：`server/p2_system.lua:118-120`、`server/p3_cases.lua:197-201`） | 判决、刑期执行、通缉星级、job/grade |
 | `custom-phone` | 终端 UI；`police_mdt` App 是 MDT 唯一载体 | `PhoneApps.Query/Action` → export | `phone_*`（含 `phone_notifications`，**被 police 跨域写入**） | 任何 `police_*` 表、任何权限判定 |
 | `custom-justice` | 案件生命周期 + 量刑公式 + 律师通知 | 服务端 export（`Imprison`/`OpenCase`）+ net 事件 | **内存** `activeCases`/`inmates`；仅 `police_reports.justice_verdict` 一处落库 | 服刑执行、物品、执业记录 |
-| `qb-prison` | 唯一刑期执行器：收监、倒计时、工作减刑、释放、物品收还 | 客户端事件 + `metadata.injail`/`jailitems` | `players.metadata`（injail/jailitems/criminalrecord） | 量刑、逮捕记录 |
-| `custom-director` | agent 动作代理（风险分级 + 人审）+ live 只读感知 | export（动作）/ SQL（看板） | `agent_actions`/`agent_denials`/`agent_effects` | 执法数据本身；只写审计副本 |
+| `qb-prison` | 唯一刑期执行器：收监、倒计时、工作减刑、释放、物品收还 | 客户端事件 + `metadata.injail`/`jailitems` | `players.metadata`（injail/jailitems/criminalrecord）**与 `players.job`（入狱强制 `unemployed`）** | 量刑、逮捕记录 |
+| `custom-director` | agent 动作代理（风险分级 + 人审）+ live 只读感知 | export（动作）/ SQL（看板） | `agent_actions`/`agent_denials`；经 `Player.Functions` **借写** `players.job/metadata`（非 owner） | 执法数据本身；`agent_effects`（归 `custom-agent-client`） |
 | `qb-core` | 玩家数据与职业/职级/在勤真相 | 事件 + `Player.Functions` | `players` | 警情与执法文书 |
-| `custom-main` | 通缉星级（原生 5 星在逃） | `metadata.wanted` + 内存表 | `metadata.wanted` | 令状/BOLO |
+| `players`（表） | 玩家数据的唯一 owner | `Player.Functions`（多数）+ 裸 SQL（`custom-career`） | owner = `qb-core`；**7 个资源直写**（qb-core + career/prison/justice/police/custom-main/director） | 警情与执法文书 |
+| `custom-main` | 通缉星级（原生 5 星在逃） | `metadata.wanted` + 内存表 | `metadata.wanted`、`metadata.criminalrecord` | 令状/BOLO |
 | `custom-vehicles` | 车辆偷窃/警报生产方 | `TriggerEvent('police:server:autoAlert', ...)`（`source=0`） | 车辆状态 | 警情记录 |
 
 ### 3.2 `custom-police` 内部组件边界
@@ -342,7 +343,7 @@ flowchart TB
 
 | 入口 | 身份校验 | 权限校验 | 审计 | 备注 |
 |---|---|---|---|---|
-| MDT query/action | `PhoneApps` 校验 job+onduty（`custom-phone/server/phone_apps.lua:39-52`） | `PolicePolicy.Can`（每个 handler） | 部分查询审、`GetCitations/GetReports/GetEvidence/GetWarrants/GetBolos/GetCases/GetAudit` **不审** | 见 §7.1 A-13 |
+| MDT query/action | `PhoneApps` 校验 job+onduty（`custom-phone/server/phone_apps.lua:39-52`） | `PolicePolicy.Can`（每个 handler） | **9 个写审计**（lookup.citizen/vehicle、case.detail、case.view、evidence.view、evidence.chain、bolo.view、warrant.view、arrest.view；仅前 3 个 fail-closed），**5 个完全不写**（GetUnits/GetIncidents/GetAudit/GetCitations/GetReports） | 见 §7.1 A-13 |
 | 查询（人/车） | 同上 | `lookup.citizen` / `lookup.vehicle`（grade≥1） | **fail-closed**：审计失败即拒绝返回（`server/p0.lua:183-190`） | PII 分档未实现，返回字段固定 |
 | 逮捕 | qb-core 玩家 | `arrest.create`（grade≥1）+ 物理前置 | 成功后审计；审计失败返回 `audit_unavailable` 但判决已生效（`server/p2_system.lua:649-651`） | 无幂等键 |
 | 系统/agent | 无玩家 source，actor id 来自 director | director 策略 | `actor_kind='agent'` | `Sys.Jail` 的审计失败**不阻断**（`118-121`） |
@@ -380,7 +381,7 @@ DESIGN §7.4 要求的 `result='denied'` 目前无处落库。
 
 - 启动顺序 `qb-prison → custom-police → custom-justice`（`configs/modules/police.cfg:4-11`），
   与 `custom-justice` 的 manifest 依赖（含 `custom-police`、`qb-prison`）一致
-  （`custom-justice/fxmanifest.lua:22-25`）。
+  （`custom-justice/fxmanifest.lua:19-25`）。
 - **依赖声明成环、但一侧从不调用**：justice 的 manifest 依赖 `custom-police`（硬依赖），
   而运行时只由 police 调 justice 的 `Imprison`/`OpenCase`（`server/p2_system.lua:566,605`）；
   justice 侧没有任何 `exports['custom-police']` 引用。
@@ -397,7 +398,7 @@ DESIGN §7.4 要求的 `result='denied'` 目前无处落库。
 | 4 | `police_incident_units` 有 `role`（primary/backup）与 `left_at` | 只有 `role`（且代码从不写，恒为默认 `primary`）与 `joined_at` | `migrations/v2.8_police_p0.sql:41-49`、`server/p0.lua:149-152` |
 | 5 | 逮捕独立表 `police_arrests` 为事实源（DESIGN §5.2.11） | `kind='arrest'` 的 report 才是事实源；`GetArrests` 只读 report，`police_arrests` 只在案件详情里 UNION；但该表**仍有 2 个写入点**（`Sys.Jail`、legacy `RegisterArrest`） | `migrations/v3.4_police_arrest.sql:14`、`server/p3_cases.lua:208-230,249-258`、`server/p2_system.lua:118-120`、`server/p3_cases.lua:197-201` |
 | 6 | agent 建警情 L2 需审批、派单 L3（DESIGN §6.5） | 建警情 **L1 自动执行**、派单 L2、入狱 L3 | `custom-director/server/policy.lua:50-67` |
-| 7 | 罚单通知深链到 `police_mdt`（B_PLAN §1.2） | 实际 `app_id='banking'`（进入 Banking「我的罚单」），正文已带 `#id` | `server/p1.lua:59-62`、`server/p2_system.lua:283-291` |
+| 7 | 罚单通知深链到 `police_mdt`（`B_PLAN.md:84`） | 实际 `app_id='banking'`（进入 Banking「我的罚单」），正文已带 `#id` | `server/p1.lua:59-62`、`server/p2_system.lua:283-291` |
 | 8 | 敏感读一律审计且 fail-closed（DESIGN §7.4） | 仅 `lookup.*` 与 `case.detail` fail-closed；其余为 best-effort 或完全不审 | `server/p0.lua:183-190`、`server/p3_cases.lua:242-244` vs `server/p1.lua:79-92` |
 | 9 | 部门同步到 `police_units.dept`（DESIGN §1.2） | `dept` 列**没有任何写入点**；`/setdept` 只调 `custom-career:SetPlayerDepartment`，MDT 单位列表恒为 `PATROL` | `server/commands.lua:155-178`、`server/p0.lua:70`（对比 `server/p0.lua:45-54` 不写 dept） |
 

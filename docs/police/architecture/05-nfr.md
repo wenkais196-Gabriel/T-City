@@ -27,7 +27,7 @@
 | 可靠性 | 重复提交导致的双写 | 0 | 存在（支付 / 逮捕 / 报告，见 §3.5） |
 | 可靠性 | RPO / RTO | ≤15 min / ≤30 min | 手工 `mysqldump`，无计划、无演练 |
 | 安全 | net event 鉴权覆盖 | 100% | 2/43 走 capability 表（§4.2） |
-| 安全 | 敏感读审计 fail-closed | 100% | 3 个导出（`lookup.citizen` / `lookup.vehicle` / `GetCaseDetail`） |
+| 安全 | 敏感读审计 fail-closed | 100% | 3 个导出 fail-closed（`lookup.citizen` / `lookup.vehicle` / `GetCaseDetail`）；9 个读导出写审计（3 个即上述 fail-closed、6 个忽略返回值），5 个完全不写 |
 | 可观测 | 审计写入失败可告警 | 有指标 + 阈值 | 无（多处忽略返回值） |
 | 兼容 | `job.onduty` 写入点 | 1（duty 服务） | 4（§6.1） |
 
@@ -67,7 +67,7 @@
 
 - **指标**：`CreateVehicle` + `CreatePedInsideVehicle` 次数；`DeleteEntity`/`DeleteVehicle` 次数；残留实体数。
 - **目标【建议】**：生成 ≤1 车 + 2 ped；清理 100% 覆盖（5 条路径：超时 / 距离 / 玩家死亡 / 资源停止 / 车毁）；清理耗时 ≤300 ms（客户端线程内）；残留 0。
-- **当前实现【现状】**：生成点 `client/backup.lua:183-260`（`SPAWN_FORWARD 50m`，模型 `police`/`police2`、`s_m_y_cop_01`/`s_m_y_hwaycop_01`）；清理函数 `client/backup.lua:112-130`（blip + peds + 车，`SetEntityAsMissionEntity` 后删除），调用点覆盖行 428-483 与 `onResourceStop`（行 504-511）。模型加载失败只 `print` 不重试（`loadFirstModel`，行 95-101）。
+- **当前实现【现状】**：生成点 `client/backup.lua:183-260`（`SPAWN_FORWARD 50m`，模型 `police`/`police2`、`s_m_y_cop_01`/`s_m_y_hwaycop_01`）；清理函数 `client/backup.lua:112-130`（blip + peds + 车，`SetEntityAsMissionEntity` 后删除），调用点覆盖行 428-483 与 `onResourceStop`（行 506-519）。模型加载失败只 `print` 不重试（`loadFirstModel`，行 95-101）。
 - **验证方法**：客户端侧无自动化，只能实机回归 + 服务端计数对比（NFR-OBS-03 的 spawn/cleanup 计数差应为 0）；静态检查 `CreatePed*`/`CreateVehicle*` 只出现在 `client/backup.lua`（07 FIT-07）。
 - **缺口**：模型加载无超时（`loadModel` 自带 5 s 等待但不设整体预算），失败时服务端槽位要等 5 min 寿命才回收。
 
@@ -111,7 +111,7 @@
   - 单警官 ≤20 次/分钟、≤600 次/小时（含翻页与刷新）；超限返回 `rate_limited`；
   - MDT 首屏（dispatch）≤6 次查询、≤400 ms 总计。
 - **当前实现【现状】**：`PhoneApps.Query` 直接调用 handler，**无频率限制、无响应大小检查**（`custom-phone/server/phone_apps.lua:113-125`）；MDT 前端"每个数据集只加载一次除非手动刷新"（`PoliceMDT.svelte:227`），已有基本节流。最贵的两个查询：`me` 会顺带 `GetUnits()` 拉 100 行（`apps/police_mdt.lua:38-64`），`units` 也拉 100 行且 `SELECT *`（`server/p0.lua:57`）。
-- **验证方法**：离线静态检查每个 query handler 是否显式 `LIMIT`/`limit` 参数（FIT-09）；实机对 12 个 query 各打 50 次，记录 P50/P95 与 `#json.encode(result)` 字节数，写入 perf baseline。
+- **验证方法**：离线静态检查每个 query handler 是否显式 `LIMIT`/`limit` 参数（FIT-09）；实机对 17 个 query 各打 50 次，记录 P50/P95 与 `#json.encode(result)` 字节数，写入 perf baseline。
 - **缺口**：无 per-officer 限额、无 payload 上限、无慢查询日志。`SELECT *` 让 `reports` 单行最多 4 KB body（`migrations/v2.9_police_p1.sql`），50 行理论峰值 ~200 KB。
 
 ### NFR-PERF-03 · 敏感查询（lookup）
@@ -172,8 +172,9 @@
 - **目标【建议】**：所有 DB 调用有 5 s 超时；**敏感读**在审计不可写时拒绝（现状已是）；**敏感写**在审计不可写时拒绝或回滚（现状不一致）；DB 恢复后 ≤60 s 自愈，无需重启资源。
 - **当前实现【现状】**：
   - 无显式查询超时（沿用 oxmysql 连接参数，`server.cfg` 未记录）；
-  - fail-closed 只覆盖 `server/p0.lua:183-190`（lookup）与 `server/p2_system.lua`（CreateIncident/AssignUnit、ArrestSubmit 尾部、ReportSubmit、RequestBackup）；
-  - **fail-open**：`server/p1.lua:18-25` 的 `audit()` 返回值被所有调用点忽略（IssueCitation/CreateReport/PayCitation），`server/p3_cases.lua:37-44` 同理，`server/p2_system.lua:121`（Sys.Jail）也未检查。审计表不可写时，这些写路径照常成功且**静默丢审计**。
+  - fail-closed 覆盖 **3 个敏感读**：`server/p0.lua:183-190`（`LookupCitizen`/`LookupVehicle`）与 `server/p3_cases.lua:242-244`（`GetCaseDetail`）；写路径覆盖 `server/p2_system.lua`（CreateIncident/AssignUnit、ArrestSubmit 尾部、ReportSubmit、RequestBackup）；
+  - 其余敏感读 **fail-open**：9 个写审计的读中，除上述 3 个外其余 6 个忽略 `audit()` 返回值（`case.view`/`evidence.view`/`evidence.chain`/`bolo.view`/`warrant.view`/`arrest.view`）；另有 5 个完全不写（`GetUnits`/`GetIncidents`/`GetAudit`/`GetCitations`/`GetReports`）；
+  - 写路径 **fail-open**：`server/p1.lua:18-25` 的 `audit()` 返回值被所有调用点忽略（IssueCitation/CreateReport/PayCitation），`server/p3_cases.lua:37-44` 同理，`server/p2_system.lua:121`（Sys.Jail）也未检查。审计表不可写时，这些写路径照常成功且**静默丢审计**。
 - **验证方法**：静态检查"每个 `audit(` 调用点是否消费返回值"（07 FIT-05）；Lua harness 让 `env.mysql` 的 insert 抛错，断言 `lookup` 返回 `audit_unavailable`、`IssueCitation` 返回 `false, 'audit_unavailable'`（当前会失败，正是要修的）。
 - **缺口**：超时配置未文档化；**23 个 audit 调用点丢弃返回值**（`p0` 6、`p1` 3、`p2_evidence` 3、`p2_system` 1、`p3_cases` 10，`grep -E "^\s*audit\("` 计数），其中 p1/p2_evidence/p3 的 16 处在敏感写/读路径上；无"DB 降级"模式（例如只读缓存）。
 
@@ -188,12 +189,12 @@
 ### NFR-REL-05 · 重复提交 / 幂等
 
 - **指标**：同一逻辑操作产生 >1 条业务行的比例；双扣款次数；重复审计行。
-- **目标【建议】**：支付 0 双扣；逮捕 1 次提交 = 1 report + ≤1 citation；报告 0 重复；所有写动作接受 `request_id` 幂等键（建议 24 h 去重窗）。
+- **目标【建议】**：支付 0 双扣；逮捕 1 次提交 = 1 report + ≤1 citation；报告 0 重复；所有写动作接受 `idempotency_key` 幂等键（建议 24 h 去重窗）。
 - **当前实现【现状】**：
   - `PayCitation`：先 `RemoveMoney`，再 `UPDATE ... WHERE status='unpaid'`（`server/p1.lua:140-157`）。两个并发请求可同时通过状态检查 → **双扣款，只入账一次**（UPDATE 影响 0 行但未检查）。
   - `ArrestSubmit`：靠 `metadata.injail > 0` 拦第二次（`server/p2_system.lua:360`），同一 tick 内的两次提交都能通过；justice `Imprison` 对已在服刑者返回 `true` 而不重置（`custom-justice/server/prison.lua:36-39`），于是会产生 **2 report + 2 citation + 1 次生效刑期**。
   - `ReportSubmit`：无任何去重（`server/p2_system.lua:672-797`），双击 = 2 份报告。
-  - 全仓库无 `request_id` / nonce 字段。
+  - 全仓库无 `idempotency_key` / nonce 字段（`request_id` 是 NPC 支援的一次性请求号，不是幂等键）。
 - **验证方法**：静态检查"支付路径是否先占位再扣款"（FIT-05 的幂等子规则）；`tests/tools` 侧已有离线 eval 幂等用例可参照；并发用两个协程对 stub 交替调度可复现（Lua harness 的 `MySQL` stub 是同步的，需要新增延迟钩子）。
 - **缺口**：无幂等键、无乐观锁（`WHERE status='unpaid'` 的 affectedRows 未检查）、无并发测试。
 
@@ -247,9 +248,9 @@
 
 - **指标**：写操作中"审计失败即拒绝/回滚"的比例；静默丢审计的写路径数。
 - **目标【建议】**：所有**敏感读**（lookup、案件/证据/报告/罚单查询）与**所有写**在审计不可写时要么拒绝、要么回滚并返回 `audit_unavailable`；静默容忍只允许"事后补写"场景，且必须有补偿日志。
-- **当前实现【现状】**：敏感读只有 lookup 两条 fail-closed；读导出约 17 个，9 个写审计，其中 2 个 fail-closed，`GetCitations`/`GetReports` 根本不写审计（`server/p1.lua:84-95,117-132`）；写路径里 `p1`/`p3` 全部忽略审计返回值（见 NFR-REL-03）。`ArrestSubmit` 的"已送监但审计失败"返回 `{ok=false, error='audit_unavailable', jailed=true}`（`server/p2_system.lua:649-651`）——语义正确，但调用方（phone action）把它转成 `false`，丢掉了"已送监"这一关键事实。
+- **当前实现【现状】**：敏感读只有 **3 个 fail-closed**（`LookupCitizen`/`LookupVehicle`/`GetCaseDetail`，`server/p0.lua:183-190`、`server/p3_cases.lua:242-244`）；9 个读导出写审计，其中上述 3 个 fail-closed、其余 6 个忽略返回值；5 个完全不写（`GetUnits`/`GetIncidents`/`GetAudit`/`GetCitations`/`GetReports`，`server/p1.lua:84-95,117-132`、`server/p0.lua:56-75,118-137,249-257`）；写路径里 `p1`/`p3` 全部忽略审计返回值（见 NFR-REL-03）。`ArrestSubmit` 的"已送监但审计失败"返回 `{ok=false, error='audit_unavailable', jailed=true}`（`server/p2_system.lua:649-651`）——语义正确，但调用方（phone action）把它转成 `false`，丢掉了"已送监"这一关键事实。
 - **验证方法**：07 FIT-05 的静态规则；Lua harness 注入 audit 失败断言行为。
-- **缺口**：fail-closed 口径不统一；`GetCitations`/`GetReports` 零审计；`audit_unavailable + jailed=true` 的复合状态未进契约测试。
+- **缺口**：fail-closed 口径不统一；`GetUnits`/`GetIncidents`/`GetAudit`/`GetCitations`/`GetReports` 零审计；`audit_unavailable + jailed=true` 的复合状态未进契约测试。
 
 ### NFR-SEC-05 · PII
 
@@ -327,7 +328,7 @@
 
 - **契约**：① 通知 = `phone_notifications(citizenid,title,content,app_id)` + `phone:client:newNotification{ id,title,content,timestamp,is_read,app_id }`（**`app_id` 决定深链**）；② app = `PhoneApps.Register({ id,label,icon,audience,queries,actions })`，返回 `{success,data|error}`；③ 平民侧 `phone:server:getMyCitations` / `phone:server:payCitation` 是既有出口。
 - **指标**：跨资源直写 `phone_notifications` 的处数（目标 0、现状 4）；`app_id` 取值集合（目标 2 个：`police_mdt` / `banking`）。
-- **当前实现【现状】**：`custom-police` **直接 INSERT `phone_notifications`**（`server/p0.lua:104-107`、`server/p1.lua:29-34`、`server/p2_system.lua:45-47,282-284`）——这是跨资源写别人的表（07 FIT-02 会拦）。phone 侧其实有 owner 函数 `StoreNotification`（`custom-phone/server/main.lua:223-262`，含 `phoneDataCache` 失效与 `app_id` 格式/长度校验），但**没有导出**，所以警察侧只能直写并绕过缓存失效（详见 [04-data-ownership.md](04-data-ownership.md) §4 与 G-12）。`app_id` 取值已统一：`police_mdt`（警情/警报）、`banking`（罚单）。
+- **当前实现【现状】**：`custom-police` **直接 INSERT `phone_notifications`**（`server/p0.lua:104-107`、`server/p1.lua:29-34`、`server/p2_system.lua:45-47,282-284`）——这是跨资源写别人的表（07 FIT-02 会拦）。phone 侧其实有 owner 函数 `StoreNotification`（`custom-phone/server/main.lua:223-262`，含 `phoneDataCache` 失效与 `app_id` 格式/长度校验），但**没有导出**，所以警察侧只能直写并绕过缓存失效（详见 [04-data-ownership.md](04-data-ownership.md) §4 与 G-12）。`app_id` 取值**尚未统一**：警情/派单广播与 `police_mdt` 的 `alert` 走 `police_mdt`（但 `alert` 的 INSERT 仍不带 `app_id`，`apps/police_mdt.lua:261` → NULL），罚单走 `banking`。
 - **目标【建议】**：phone 把 `StoreNotification` 包成 `exports['custom-phone']:Notify(citizenid, { title, content, app_id })`，police 只调用导出；在导出落地前，FIT-02 对该表给**限时豁免**（写入点白名单 + 截止日期），避免"规则刚加就一片红"。
 - **验证方法**：FIT-02 的 owner 表；契约测试断言 `app_id ∈ {police_mdt, banking}` 且 `content ≤500`。
 - **缺口**：缺导出；跨资源写表；无 `app_id` 枚举校验。
@@ -356,7 +357,7 @@
 - **规则【建议】**：任何"停止新写入"的表/事件，必须在 `docs/police/architecture/deprecations.md` 登记（owner、替代物、停止写入日期、删除日期、CI 检查名），并由 07 FIT-12 强制：**deprecated 写路径必须为 0 或在 allowlist 内且未过期**。
 - **指标**：deprecated 表的写路径数（目标 0）；已登记弃用项比例。
 - **目标【建议】**：`police_arrests` / `police_bolos` 写路径 = 0；legacy 命令/事件 100% 登记并有删除日期。
-- **当前实现【现状】**：[B_PLAN.md](../B_PLAN.md) §2 已宣布 `police_arrests` 停止新写入、`police_bolos` 停止新写入（BOLO 改 report 标签），但代码里 `police_arrests` 仍有 **2 个写者**：`server/p2_system.lua:118-120`（Sys.Jail）、`server/p3_cases.lua:145-162`（`RegisterArrest`）。`police_bolos` 同样仍被 `CreateBolo` 写入（`server/p3_cases.lua:73-95`），而 `GetBolos` 已经双源合并（行 96-135）。legacy 命令 `/911p`、`/fine`、`/jail` 的去留也未登记。
+- **当前实现【现状】**：[B_PLAN.md](../B_PLAN.md) §2 已宣布 `police_arrests` 停止新写入、`police_bolos` 停止新写入（BOLO 改 report 标签），但代码里 `police_arrests` 仍有 **2 个写者**：`server/p2_system.lua:118-120`（Sys.Jail）、`server/p3_cases.lua:197-201`（`RegisterArrest`）。`police_bolos` 同样仍被 `CreateBolo` 写入（`server/p3_cases.lua:73-95`），而 `GetBolos` 已经双源合并（行 96-135）。legacy 命令 `/911p`、`/fine`、`/jail` 的去留也未登记。
 - **验证方法**：FIT-12；每季度 review 一次 allowlist 的 `expires`。
 - **缺口**：弃用只有文字、没有机器可读清单，也没有 CI 拦截；`police_arrests` 的"停止写入"事实上没有执行。
 
