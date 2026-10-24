@@ -28,6 +28,11 @@ function JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
     end
 
     local src = Player.PlayerData.source
+    -- 已在服刑: 不重置刑期/startTime（防止“再抓一次洗刑期”）。
+    local metadata = Player.PlayerData.metadata or {}
+    if (tonumber(metadata.injail) or 0) > 0 then
+        return true
+    end
     JusticeService.Inmates[citizenid] = {
         sentenceMinutes = sentenceMinutes, startTime = os.time(),
         crimes = crimes, reductions = {}, src = src,
@@ -79,10 +84,16 @@ RegisterNetEvent('QBCore:Server:PlayerLoaded', function(Player)
     if not inmate or inmate.offline ~= true then return end
     inmate.offline = nil
     inmate.src = data.source
-    if GetResourceState('qb-prison') == 'started' then
-        inmate.qbPrison = true
-        Player.Functions.SetMetaData('injail', inmate.sentenceMinutes)
-        TriggerClientEvent('prison:client:Enter', data.source, inmate.sentenceMinutes)
+    inmate.qbPrison = GetResourceState('qb-prison') == 'started'
+    -- qb-prison 会在玩家加载时自己读取 metadata.injail 并进入；此时再触发
+    -- justice 自有计时会造成双计时。只有 qb-prison 未启动时才由这里恢复。
+    if GetResourceState('qb-prison') ~= 'started' then
+        TriggerClientEvent('justice:client:enterPrison', data.source, {
+            sentenceMinutes = inmate.sentenceMinutes,
+            startTime = inmate.startTime,
+            crimes = inmate.crimes,
+            reductions = inmate.reductions,
+        })
     end
 end)
 

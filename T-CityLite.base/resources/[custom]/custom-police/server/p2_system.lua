@@ -223,7 +223,7 @@ end
 --- own { success, data } envelope.
 ---@param source number
 ---@param params table
----@return table { ok=true, report_id, minutes, fine, citation_id?, evidence_id?, case_id?, jailed=true }
+---@return table { ok=true, report_id, minutes, fine, citation_id?, evidence_id?, case_id?, justice_case_id?, jailed=true }
 function ArrestSubmit(source, params)
     local actorPlayer = QBCore.Functions.GetPlayer(tonumber(source) or 0)
     local actor = actorPlayer and actorPlayer.PlayerData
@@ -292,6 +292,7 @@ function ArrestSubmit(source, params)
         local canCase = PolicePolicy.Can(actor, 'case.create')
         if not canCase then return fail('case_forbidden') end
     end
+    local openCase = params.open_case == true
 
     local bolo = params.bolo == true
     local boloKind, boloTarget = nil, nil
@@ -447,7 +448,42 @@ function ArrestSubmit(source, params)
         end
     end
 
+    -- Optional justice case link (open_case). Created after the report and its
+    -- children exist and before the sentence: the justice case lives in
+    -- custom-justice memory and has no rollback hook, so it must be the last
+    -- write before the jail attempt (see the jail_failed branch below).
+    if openCase then
+        local opened, justiceCaseId = pcall(function()
+            return exports['custom-justice']:OpenCase(target, source, ids)
+        end)
+        if not opened or not justiceCaseId or justiceCaseId == false then
+            rollback()
+            return fail('open_case_failed')
+        end
+        created.justiceCaseId = tostring(justiceCaseId)
+    end
+
+    -- Write the justice link back onto the report when it has no police case.
+    -- police_reports.case_id is BIGINT UNSIGNED (it indexes police_cases) while
+    -- justice case ids are strings ("CASE-0001"), so writing the string would
+    -- fail on strict MariaDB or silently store 0 and corrupt the case join.
+    -- Only a numeric id is written; the string id is still returned to the
+    -- caller and recorded in the arrest audit below.
+    if created.justiceCaseId and not caseId then
+        local numericJusticeId = tonumber(created.justiceCaseId)
+        if numericJusticeId then
+            if not updateRow('UPDATE police_reports SET case_id = ? WHERE id = ?',
+                    { numericJusticeId, reportId }) then
+                rollback()
+                return fail('db_error')
+            end
+        end
+    end
+
     local auditDetail = ('%s | %d 分钟'):format(table.concat(sum.labels, '、'), minutes)
+    if created.justiceCaseId then
+        auditDetail = ('%s | justice:%s'):format(auditDetail, created.justiceCaseId)
+    end
     local applied = false
     -- custom-justice keys its crime table by charge id, so pass the ids (not
     -- the display labels) and let it resolve the labels for its own logging.
@@ -465,6 +501,9 @@ function ArrestSubmit(source, params)
     if not applied then
         -- Nothing has been audited yet: drop every row this submit created and
         -- report the failed sentence, leaving no half-written arrest behind.
+        -- A justice case opened above lives in custom-justice memory and cannot
+        -- be rolled back from here; the caller gets jail_failed and the orphan
+        -- case can be closed by a judge.
         rollback()
         return fail('jail_failed')
     end
@@ -503,6 +542,7 @@ function ArrestSubmit(source, params)
     }
     if created.citation then result.citation_id = created.citation end
     if created.evidence then result.evidence_id = created.evidence end
+    if created.justiceCaseId then result.justice_case_id = created.justiceCaseId end
     if caseId then result.case_id = caseId end
     return result
 end
