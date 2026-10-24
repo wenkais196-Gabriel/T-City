@@ -985,6 +985,10 @@ def test_case_detail_and_arrests_expose_the_justice_verdict_columns():
     assert "justice_status" in detail
     assert "SELECT id, title, author_citizenid, status, created_at, justice_case_id" in detail
     assert "FROM police_reports WHERE case_id = ?" in detail
+    # Both sides of the arrest UNION must expose the same columns.
+    assert "NULL AS justice_case_id" in detail
+    assert "NULL AS justice_verdict" in detail
+    assert "NULL AS justice_status" in detail
 
     arrests = get_arrests_block()
     assert "justice_case_id" in arrests

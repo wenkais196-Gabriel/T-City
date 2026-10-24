@@ -247,10 +247,12 @@ function C.GetCaseDetail(source, caseId)
     local evidence = MySQL.query.await(
         'SELECT id, exhibit_no, label, status, created_at FROM police_evidence WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
     local arrests = MySQL.query.await([[
-        SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid, justice_case_id, created_at
+        SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid,
+               justice_case_id, justice_verdict, justice_status, created_at
           FROM police_reports WHERE kind = 'arrest' AND case_id = ?
         UNION ALL
-        SELECT id, citizenid, charges, officer_citizenid, created_at
+        SELECT id, citizenid, charges, officer_citizenid,
+               NULL AS justice_case_id, NULL AS justice_verdict, NULL AS justice_status, created_at
           FROM police_arrests WHERE case_id = ?
         ORDER BY id DESC LIMIT 50
     ]], { id, id }) or {}
