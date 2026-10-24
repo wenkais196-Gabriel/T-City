@@ -97,6 +97,220 @@
       }
     },
     {
+      "name": "apply_police_assignment",
+      "title": "Assign a unit to a police incident (L2)",
+      "description": "Assign an on-duty unit to an open incident. L2: requires human approval before execution; audited as an agent action.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "police_assign_unit",
+      "risk": "L2",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.3.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "incident_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id of the unit to assign."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "incident_id",
+          "citizenid"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "apply_police_incident",
+      "title": "Create a police incident (L1)",
+      "description": "Open a dispatch incident for the police board and notify on-duty officers. L1: executes immediately, audited as an agent action. Acts without a target player and carries no PII.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "police_incident_create",
+      "risk": "L1",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.2.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,16}$",
+            "default": "911"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 2
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          },
+          "details": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "apply_police_jail",
+      "title": "Jail a citizen (L3)",
+      "description": "Send a citizen to prison through custom-justice/qb-prison. L3: requires human approval; audited as an agent action.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "police_jail_player",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.3.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$"
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          }
+        },
+        "required": [
+          "citizenid",
+          "minutes",
+          "reason"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none"
+    },
+    {
       "name": "get_action",
       "title": "Get one agent action",
       "description": "Read one action row owned by this agent (proposal, approval state, preview and result). Read-only; used to verify a write after it was submitted.",
@@ -884,82 +1098,6 @@
         ]
       },
       "verify": null,
-      "undo": null,
-      "compensation": "none"
-    },
-    {
-      "name": "apply_police_incident",
-      "title": "Create a police incident (L1)",
-      "description": "Open a dispatch incident for the police board and notify on-duty officers. L1: executes immediately, audited as an agent action. Acts without a target player and carries no PII.",
-      "channel": "write",
-      "route": "director",
-      "director_action": "police_incident_create",
-      "risk": "L1",
-      "blast_radius": "single",
-      "requires_approval": false,
-      "idempotency": "required",
-      "dry_run": "supported",
-      "undo_supported": false,
-      "status": "active",
-      "since": "1.2.0",
-      "http": {
-        "method": "POST",
-        "path": "/agent/v1/act",
-        "external_path": "/custom-director/agent/v1/act"
-      },
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "title": {
-            "type": "string",
-            "minLength": 3,
-            "maxLength": 120
-          },
-          "code": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{1,16}$",
-            "default": "911"
-          },
-          "priority": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 3,
-            "default": 2
-          },
-          "idempotency_key": {
-            "type": "string",
-            "pattern": "^[!-~]{1,128}$",
-            "description": "Optional caller-supplied idempotency key; derived when omitted."
-          },
-          "details": {
-            "type": "string",
-            "maxLength": 1000
-          }
-        },
-        "required": [
-          "title"
-        ]
-      },
-      "pii": {
-        "returns_pii": false,
-        "untrusted_fields": []
-      },
-      "verify": {
-        "tool": "get_action",
-        "args": {
-          "action_id": "$action_id"
-        },
-        "assert": [
-          {
-            "field": "status",
-            "op": "eq",
-            "value": "executed"
-          }
-        ],
-        "within_seconds": 10,
-        "on_mismatch": "failed"
-      },
       "undo": null,
       "compensation": "none"
     },
