@@ -62,13 +62,14 @@ local function notifyOfficer(citizenid, title, content, appId)
 end
 
 local function audit(actorCid, action, target, detail, actorKind)
-    local ok = pcall(function()
+    local ok, err = pcall(function()
         local result = MySQL.query.await(
             'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
             { actorCid, actorKind or 'player', action, target, detail and tostring(detail):sub(1, 500) or nil }
         )
         if type(result) == 'string' then error(result, 0) end
     end)
+    if not ok then print(('[custom-police] audit %s failed: %s'):format(tostring(action), tostring(err))) end
     return ok
 end
 
