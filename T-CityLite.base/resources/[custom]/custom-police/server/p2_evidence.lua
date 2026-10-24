@@ -55,7 +55,8 @@ function EV.Register(source, params)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ]], { nil, incidentId, reportId, caseId, label, description,
           trim(params and params.location):sub(1, 120), actor.citizenid })
-    if not id then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     local number = exhibitNo(tonumber(id))
     MySQL.update.await('UPDATE police_evidence SET exhibit_no = ? WHERE id = ?', { number, id })
     chain(tonumber(id), 'collected', actor.citizenid, label)
