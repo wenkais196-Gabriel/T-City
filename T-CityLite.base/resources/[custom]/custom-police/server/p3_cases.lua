@@ -11,11 +11,29 @@ local function trim(v)
     return type(v) == 'string' and v:match('^%s*(.-)%s*$') or ''
 end
 
+-- UTF-8-safe head slice: `limit` counts characters, not bytes, so truncating a
+-- Chinese title/target never leaves half a codepoint behind.
+local function utf8Sub(s, limit)
+    s = tostring(s or '')
+    if type(limit) ~= 'number' or limit < 1 then return '' end
+    if #s <= limit then return s end
+    if utf8 and utf8.len and utf8.offset then
+        local ok, length = pcall(utf8.len, s)
+        if ok and length then
+            if length <= limit then return s end
+            local offsetOk, byteEnd = pcall(utf8.offset, s, limit + 1)
+            if offsetOk and byteEnd then return s:sub(1, byteEnd - 1) end
+            return s
+        end
+    end
+    return s:sub(1, limit)
+end
+
 local function audit(cid, action, target, detail)
     return pcall(function()
         MySQL.insert.await(
             'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, "player", ?, ?, ?)',
-            { cid, action, target, detail and tostring(detail):sub(1, 500) or nil })
+            { cid, action, target, detail and utf8Sub(tostring(detail), 500) or nil })
     end)
 end
 
@@ -27,12 +45,12 @@ function C.CreateCase(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'case.create')
     if not allowed then return false, reason end
-    local title = trim(params and params.title):sub(1, 160)
-    local summary = trim(params and params.summary):sub(1, 2000)
+    local title = utf8Sub(trim(params and params.title), 160)
+    local summary = utf8Sub(trim(params and params.summary), 2000)
     if #title < 3 then return false, 'invalid_title' end
     local id = MySQL.insert.await(
         'INSERT INTO police_cases (title, summary, lead_citizenid, created_by) VALUES (?, ?, ?, ?)',
-        { title, summary, trim(params and params.lead_citizenid):sub(1, 50), actor.citizenid })
+        { title, summary, utf8Sub(trim(params and params.lead_citizenid), 50), actor.citizenid })
     id = InsertId(id)
     if not id or id == 0 then return false, 'db_error' end
     local no = caseNo(tonumber(id))
@@ -57,8 +75,8 @@ function C.CreateBolo(source, params)
     if not allowed then return false, reason end
     local kind = trim(params and params.kind)
     if kind ~= 'person' and kind ~= 'vehicle' then return false, 'invalid_kind' end
-    local target = trim(params and params.target):sub(1, 50)
-    local why = trim(params and params.reason):sub(1, 500)
+    local target = utf8Sub(trim(params and params.target), 50)
+    local why = utf8Sub(trim(params and params.reason), 500)
     if target == '' then return false, 'invalid_target' end
     if #why < 3 then return false, 'invalid_reason' end
     local id = MySQL.insert.await(
@@ -95,8 +113,8 @@ function C.RequestWarrant(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'warrant.request')
     if not allowed then return false, reason end
-    local target = trim(params and params.citizenid):sub(1, 50)
-    local why = trim(params and params.reason):sub(1, 500)
+    local target = utf8Sub(trim(params and params.citizenid), 50)
+    local why = utf8Sub(trim(params and params.reason), 500)
     if target == '' then return false, 'invalid_citizen' end
     if #why < 3 then return false, 'invalid_reason' end
     local exists = MySQL.single.await('SELECT citizenid FROM players WHERE citizenid = ? LIMIT 1', { target })
@@ -134,7 +152,7 @@ function C.GetWarrants(source, params)
     if params and params.citizenid then
         rows = MySQL.query.await(
             'SELECT * FROM police_warrants WHERE citizenid = ? ORDER BY id DESC LIMIT 50',
-            { tostring(params.citizenid):sub(1, 50) })
+            { utf8Sub(tostring(params.citizenid), 50) })
     else
         rows = MySQL.query.await('SELECT * FROM police_warrants ORDER BY id DESC LIMIT 50')
     end
@@ -146,8 +164,8 @@ function C.RegisterArrest(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'arrest.create')
     if not allowed then return false, reason end
-    local target = trim(params and params.citizenid):sub(1, 50)
-    local charges = trim(params and params.charges):sub(1, 1000)
+    local target = utf8Sub(trim(params and params.citizenid), 50)
+    local charges = utf8Sub(trim(params and params.charges), 1000)
     if target == '' then return false, 'invalid_citizen' end
     if #charges < 3 then return false, 'invalid_charges' end
     local id = MySQL.insert.await([[
@@ -165,13 +183,20 @@ function C.GetArrests(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'arrest.create')
     if not allowed then return false, reason end
+    -- New arrests live in police_reports(kind='arrest'); police_arrests is only
+    -- kept for history written before v3.4 and is read via case detail.
+    local sql = [[
+        SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid, created_at
+          FROM police_reports
+         WHERE kind = 'arrest'
+    ]]
     local rows
     if params and params.citizenid then
         rows = MySQL.query.await(
-            'SELECT * FROM police_arrests WHERE citizenid = ? ORDER BY id DESC LIMIT 50',
-            { tostring(params.citizenid):sub(1, 50) })
+            sql .. ' AND subject_citizenid = ? ORDER BY id DESC LIMIT 50',
+            { utf8Sub(tostring(params.citizenid), 50) })
     else
-        rows = MySQL.query.await('SELECT * FROM police_arrests ORDER BY id DESC LIMIT 50')
+        rows = MySQL.query.await(sql .. ' ORDER BY id DESC LIMIT 50')
     end
     audit(actor.citizenid, 'arrest.view', nil, nil)
     return { rows = rows or {}, count = #(rows or {}) }
@@ -194,8 +219,14 @@ function C.GetCaseDetail(source, caseId)
         'SELECT id, title, author_citizenid, status, created_at FROM police_reports WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
     local evidence = MySQL.query.await(
         'SELECT id, exhibit_no, label, status, created_at FROM police_evidence WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
-    local arrests = MySQL.query.await(
-        'SELECT id, citizenid, charges, officer_citizenid, created_at FROM police_arrests WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
+    local arrests = MySQL.query.await([[
+        SELECT id, subject_citizenid AS citizenid, charges, officer_citizenid, created_at
+          FROM police_reports WHERE kind = 'arrest' AND case_id = ?
+        UNION ALL
+        SELECT id, citizenid, charges, officer_citizenid, created_at
+          FROM police_arrests WHERE case_id = ?
+        ORDER BY id DESC LIMIT 50
+    ]], { id, id }) or {}
     return {
         case = { id = tonumber(caseRow.id), case_no = caseRow.case_no, title = caseRow.title,
                  summary = caseRow.summary, status = caseRow.status,

@@ -3,11 +3,12 @@ game 'gta5'
 lua54 'yes'
 author 'Kakarot'
 description 'Provides police tools, evidence, job and more functionality for players to use as a cop'
-version '1.3.5'
+version '1.4.0'
 
 shared_scripts {
 	'config.lua',
 	'shared/policy.lua',
+	'shared/charges.lua',
 	'shared/insert_id.lua',
 	'@qb-core/shared/locale.lua',
 	'locales/en.lua',

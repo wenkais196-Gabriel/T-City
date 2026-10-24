@@ -4,40 +4,55 @@
   import { queryApp, appAction } from '../stores/apps';
 
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
-  type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string };
+  type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string; x?: number; y?: number; z?: number };
+  type Charge = { id: number | string; label: string; minutes: number; fine: number };
 
   type Tab = 'home' | 'units' | 'incidents' | 'citizen' | 'vehicle' | 'citations' | 'reports' | 'evidence' | 'cases' | 'bolos' | 'warrants' | 'arrests' | 'audit';
 
-  let tab: Tab = 'home';
-  let units: Unit[] = [];
-  let incidents: Incident[] = [];
-  let loading = false;
-  let error = '';
-  let notice = '';
+  let tab = $state<Tab>('home');
+  let units = $state<Unit[]>([]);
+  let incidents = $state<Incident[]>([]);
+  let loading = $state(false);
+  let error = $state('');
+  let notice = $state('');
 
-  let citizenQuery = '';
-  let vehicleQuery = '';
-  let lookupRows: Record<string, unknown>[] = [];
-  let lookupError = '';
-  let auditRows: Record<string, unknown>[] = [];
-  let auditError = '';
-  let citationRows: Record<string, unknown>[] = [];
-  let reportRows: Record<string, unknown>[] = [];
-  let citationError = '';
-  let citationForm = { citizenid: '', amount: '500', reason: '', plate: '' };
-  let reportForm = { title: '', incident_id: '', body: '' };
-  let evidenceRows: Record<string, unknown>[] = [];
-  let evidenceForm = { label: '', description: '', incident_id: '', location: '' };
-  let caseRows: Record<string, unknown>[] = [];
-  let boloRows: Record<string, unknown>[] = [];
-  let caseForm = { title: '', summary: '' };
-  let caseDetail: any = null;
-  let caseDetailError = '';
-  let boloForm = { kind: 'person', target: '', reason: '' };
-  let warrantRows: Record<string, unknown>[] = [];
-  let arrestRows: Record<string, unknown>[] = [];
-  let warrantForm = { citizenid: '', reason: '' };
-  let arrestForm = { citizenid: '', charges: '', incident_id: '', case_id: '' };
+  let citizenQuery = $state('');
+  let vehicleQuery = $state('');
+  let lookupRows = $state<Record<string, unknown>[]>([]);
+  let lookupError = $state('');
+  let auditRows = $state<Record<string, unknown>[]>([]);
+  let auditError = $state('');
+  let citationRows = $state<Record<string, unknown>[]>([]);
+  let reportRows = $state<Record<string, unknown>[]>([]);
+  let citationError = $state('');
+  let citationForm = $state({ citizenid: '', amount: '500', reason: '', plate: '' });
+  let reportForm = $state({ title: '', incident_id: '', body: '' });
+  let evidenceRows = $state<Record<string, unknown>[]>([]);
+  let evidenceForm = $state({ label: '', description: '', incident_id: '', location: '' });
+  let caseRows = $state<Record<string, unknown>[]>([]);
+  let boloRows = $state<Record<string, unknown>[]>([]);
+  let caseForm = $state({ title: '', summary: '' });
+  let caseDetail = $state<any>(null);
+  let caseDetailError = $state('');
+  let boloForm = $state({ kind: 'person', target: '', reason: '' });
+  let warrantRows = $state<Record<string, unknown>[]>([]);
+  let arrestRows = $state<Record<string, unknown>[]>([]);
+  let warrantForm = $state({ citizenid: '', reason: '' });
+  let arrestForm = $state({ citizenid: '', charges: '', incident_id: '', case_id: '', location: '', details: '' });
+
+  let arrestPick = $state('');
+  let chargeRows = $state<Charge[]>([]);
+  let chargesError = $state('');
+  let selectedChargeIds = $state<string[]>([]);
+  let arrestOpts = $state({
+    create_citation: true, citation_pct: 100,
+    create_evidence: false, evidence_label: '',
+    bolo: false, bolo_kind: 'person', bolo_target: '',
+    create_case: false,
+  });
+  let arrestSubmitting = $state(false);
+  let arrestError = $state('');
+  let arrestResult = $state<any>(null);
 
   const statusLabel: Record<string, string> = {
     off_duty: '10-7 下班', available: '10-8 在勤', busy: '10-6 忙碌',
@@ -47,6 +62,14 @@
   const me = $derived(units.find((u) => u.citizenid === $playerData.citizenid));
   const myStatus = $derived(me?.status ?? 'off_duty');
   const openIncidents = $derived(incidents.filter((i) => i.status !== 'closed' && i.status !== 'cleared').length);
+  const selectedCharges = $derived(chargeRows.filter((c) => selectedChargeIds.includes(String(c.id))));
+  const chargeMinutes = $derived(selectedCharges.reduce((sum, c) => sum + Number(c.minutes || 0), 0));
+  const chargeFine = $derived(selectedCharges.reduce((sum, c) => sum + Number(c.fine || 0), 0));
+  const citationLow = $derived(Math.ceil(chargeFine * 0.8));
+  const citationHigh = $derived(Math.floor(chargeFine * 1.2));
+  const citationAmount = $derived(
+    Math.min(citationHigh, Math.max(citationLow, Math.floor((chargeFine * arrestOpts.citation_pct) / 100))),
+  );
 
   async function refresh() {
     loading = true;
@@ -164,6 +187,74 @@
     await loadArrests();
   }
 
+  async function loadCharges() {
+    chargesError = '';
+    const res = await queryApp('police_mdt', 'charges');
+    if (res?.success) chargeRows = res.data?.rows ?? [];
+    else chargesError = res?.error ?? 'charges_failed';
+  }
+
+  function toggleCharge(id: number | string) {
+    const key = String(id);
+    selectedChargeIds = selectedChargeIds.includes(key)
+      ? selectedChargeIds.filter((x) => x !== key)
+      : [...selectedChargeIds, key];
+  }
+
+  function applyIncidentPick() {
+    if (!arrestPick) return;
+    arrestForm.incident_id = arrestPick;
+    const incident = incidents.find((i) => String(i.id) === arrestPick);
+    const coords = [incident?.x, incident?.y, incident?.z].map(Number);
+    if (coords.every((n) => Number.isFinite(n))) {
+      arrestForm.location = coords.map((n) => n.toFixed(1)).join(', ');
+    }
+  }
+
+  async function submitArrest() {
+    arrestError = '';
+    arrestResult = null;
+    if (!arrestForm.citizenid.trim()) { arrestError = '请填写目标 citizenid'; return; }
+    if (selectedChargeIds.length === 0) { arrestError = '请至少选择一条罪名'; return; }
+    arrestSubmitting = true;
+    const res = await appAction('police_mdt', 'arrest_submit', {
+      citizenid: arrestForm.citizenid.trim(),
+      charge_ids: selectedChargeIds,
+      incident_id: arrestForm.incident_id ? Number(arrestForm.incident_id) : undefined,
+      case_id: arrestForm.case_id ? Number(arrestForm.case_id) : undefined,
+      location: arrestForm.location.trim() || undefined,
+      details: arrestForm.details.trim() || undefined,
+      create_citation: arrestOpts.create_citation,
+      citation_amount: arrestOpts.create_citation ? citationAmount : undefined,
+      create_evidence: arrestOpts.create_evidence,
+      evidence_label: arrestOpts.create_evidence ? arrestOpts.evidence_label.trim() : undefined,
+      bolo: arrestOpts.bolo,
+      bolo_kind: arrestOpts.bolo ? arrestOpts.bolo_kind : undefined,
+      bolo_target: arrestOpts.bolo ? arrestOpts.bolo_target.trim() : undefined,
+      create_case: arrestOpts.create_case,
+    });
+    arrestSubmitting = false;
+    if (!res?.success) {
+      arrestError = res?.error === 'action_rejected'
+        ? '服务端拒绝：请检查目标是否在线、罪名与权限'
+        : (res?.error ?? 'arrest_failed');
+      return;
+    }
+    arrestResult = res.data ?? {};
+    notice = `逮捕已提交：报告 #${arrestResult.report_id ?? '—'}`;
+    selectedChargeIds = [];
+    arrestForm.citizenid = '';
+    arrestForm.details = '';
+    arrestForm.incident_id = '';
+    arrestForm.case_id = '';
+    arrestForm.location = '';
+    arrestOpts.create_evidence = false;
+    arrestOpts.evidence_label = '';
+    arrestOpts.create_case = false;
+    arrestPick = '';
+    await Promise.all([loadArrests(), refresh()]);
+  }
+
   async function loadCases() {
     const res = await queryApp('police_mdt', 'cases', {});
     if (res?.success) caseRows = res.data?.rows ?? [];
@@ -252,7 +343,7 @@
 
   <nav class="tabs">
     {#each [['home','首页'],['units','单位'],['incidents','接警'],['citizen','人员'],['vehicle','车辆'],['citations','罚单'],['reports','报告'],['evidence','证据'],['cases','案件'],['bolos','BOLO'],['warrants','搜查令'],['arrests','逮捕'],['audit','审计']] as [id, label]}
-      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); if (tab === 'evidence') loadEvidence(); if (tab === 'cases') loadCases(); if (tab === 'bolos') loadBolos(); if (tab === 'warrants') loadWarrants(); if (tab === 'arrests') loadArrests(); }}>{label}</button>
+      <button class:active={tab === id} onclick={() => { tab = id as Tab; if (tab === 'audit') loadAudit(); if (tab === 'citations') loadCitations(); if (tab === 'reports') loadReports(); if (tab === 'evidence') loadEvidence(); if (tab === 'cases') loadCases(); if (tab === 'bolos') loadBolos(); if (tab === 'warrants') loadWarrants(); if (tab === 'arrests') { loadCharges(); loadArrests(); } }}>{label}</button>
     {/each}
   </nav>
 
@@ -479,14 +570,72 @@
 
   {:else if tab === 'arrests'}
     <section class="card">
-      <h3>逮捕登记</h3>
+      <h3>一次逮捕提交</h3>
       <div class="form">
-        <input bind:value={arrestForm.citizenid} placeholder="citizenid" />
-        <input bind:value={arrestForm.charges} placeholder="罪名" />
-        <input bind:value={arrestForm.incident_id} placeholder="警情 id(可选)" />
-        <input bind:value={arrestForm.case_id} placeholder="案件 id(可选)" />
-        <button onclick={registerArrest}>登记</button>
+        <input bind:value={arrestForm.citizenid} placeholder="目标 citizenid" />
+        <select value={arrestPick} onchange={(e) => { arrestPick = (e.currentTarget as HTMLSelectElement).value; applyIncidentPick(); }}>
+          <option value="">从最近警情带入…</option>
+          {#each incidents as incident}
+            <option value={String(incident.id)}>#{incident.id} [{incident.code}] {incident.title}</option>
+          {/each}
+        </select>
       </div>
+      <div class="form">
+        <input bind:value={arrestForm.incident_id} placeholder="关联警情 id（自动带入）" />
+        <input bind:value={arrestForm.case_id} placeholder="案件 id（可选）" />
+        <input bind:value={arrestForm.location} placeholder="地点（自动/可改）" />
+      </div>
+
+      <h3>罪名（可多选）</h3>
+      {#if chargesError}<p class="err">{chargesError}</p>{/if}
+      {#if chargeRows.length === 0}<p class="empty">暂无可选罪名</p>{/if}
+      <div class="charge-list">
+        {#each chargeRows as charge (charge.id)}
+          <label class="charge">
+            <input type="checkbox" checked={selectedChargeIds.includes(String(charge.id))} onchange={() => toggleCharge(charge.id)} />
+            <span>{charge.label}</span>
+            <span class="muted">{Number(charge.minutes || 0)} 分钟 · ${Number(charge.fine || 0)}</span>
+          </label>
+        {/each}
+      </div>
+      <p class="line">合计：<b>{chargeMinutes}</b> 分钟 · <b>${chargeFine}</b> <span class="muted">实际以服务端裁定为准</span></p>
+
+      <div class="form">
+        <textarea bind:value={arrestForm.details} rows="3" placeholder="报告正文（可选）"></textarea>
+      </div>
+
+      <div class="opts">
+        <label class="opt">
+          <input type="checkbox" bind:checked={arrestOpts.create_citation} />
+          <span>同时开罚单</span>
+        </label>
+        {#if arrestOpts.create_citation}
+          <input type="range" min="80" max="120" step="5" bind:value={arrestOpts.citation_pct} disabled={chargeFine === 0} />
+          <p class="muted">罚单金额 ${citationAmount}（基准 ${chargeFine}，0.8–1.2×；服务端最终 clamp）</p>
+        {/if}
+        <label class="opt">
+          <input type="checkbox" bind:checked={arrestOpts.create_evidence} />
+          <span>登记证据</span>
+        </label>
+        {#if arrestOpts.create_evidence}
+          <input bind:value={arrestOpts.evidence_label} placeholder="证据 label（≥3 字）" />
+        {/if}
+        <label class="opt">
+          <input type="checkbox" bind:checked={arrestOpts.create_case} />
+          <span>创建案件</span>
+        </label>
+      </div>
+
+      <button class="submit" onclick={submitArrest} disabled={arrestSubmitting}>
+        {arrestSubmitting ? '提交中…' : '提交逮捕'}
+      </button>
+      {#if arrestError}<p class="err">提交失败：{arrestError}</p>{/if}
+      {#if arrestResult}
+        <p class="notice">报告 #{arrestResult.report_id} · 刑期 {arrestResult.minutes} 分钟 · 罚款 ${arrestResult.fine} · {arrestResult.jailed ? '已入狱' : '未入狱'}</p>
+      {/if}
+
+      <h3>最近逮捕</h3>
+      {#if arrestRows.length === 0}<p class="empty">暂无</p>{/if}
       {#each arrestRows as row}
         <p class="line">#{String(row.id)} · {String(row.citizenid)} · {String(row.charges)} <span class="muted">{String(row.officer_citizenid)}</span></p>
       {/each}
@@ -535,8 +684,20 @@
   .step { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #f59e0b; color: #111; }
   .clear { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #b91c1c; color: #fff; }
   .lookup, .form { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-  .form input, .form textarea { flex: 1 1 45%; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
+  .form input, .form textarea, .form select { flex: 1 1 45%; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
   .form button { border: 0; border-radius: 8px; padding: 6px 10px; background: #2563eb; color: #fff; font-size: 11px; }
+  .charge-list { max-height: 200px; overflow-y: auto; margin-bottom: 6px; }
+  .charge { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .charge .muted { margin-left: auto; white-space: nowrap; }
+  .opts { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  .opt { display: flex; align-items: center; gap: 6px; }
+  .opts input:not([type="checkbox"]):not([type="range"]) { background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
+  .opts input[type="range"] { width: 100%; padding: 0; border: 0; background: transparent; accent-color: #2563eb; }
+  .opt-row { display: flex; gap: 6px; }
+  .opt-row select { background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
+  .opt-row input { flex: 1; }
+  .submit { width: 100%; font-size: 12px; border: 0; border-radius: 8px; padding: 8px 12px; background: #16a34a; color: #fff; }
+  .submit:disabled { opacity: .5; }
   .line { margin: 3px 0; }
   .empty { opacity: 0.6; }
   .err { color: #fca5a5; font-size: 11px; }
