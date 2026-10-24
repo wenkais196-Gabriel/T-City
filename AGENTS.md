@@ -10,7 +10,7 @@
 T-City 是一个 **QBCore / FiveM RP 服务器**（"T-City Lite"），外加一套 **LLM agent 接管栈**：
 
 - 30+ 资源、MariaDB、OneSync；
-- `custom-director`：服务端动作代理（18 个动作，L1–L4 风险分级，L3/L4 必须人审）；
+- `custom-director`：服务端动作代理（21 个动作，L1–L4 风险分级，L3/L4 必须人审）；
 - `tools/agent_tools.json`：35 个 agent 工具的唯一事实源 → MCP / 文档 / Lua 镜像；
 - 实时感知 `/agent/v1/live/*`、客户端效果通道 `custom-agent-client`、评测 `agent_eval.py`、实机冒烟 `agent_smoke.py`；
 - 手机是自研 Svelte 应用 `custom-phone`（不是 qb-phone，但借鉴其交互）。
@@ -143,7 +143,7 @@ AGENT_SMOKE_CITIZENID=<cid> python3 tools/agent_smoke.py --allow-write --allow-a
 LLM/MCP ── tools/agent_mcp.py ──┬─ read  → agent_gateway.py → DB views
                                 ├─ write → custom-director /agent/v1/act → 人审 → 执行 → 回读
                                 └─ live  → /agent/v1/live/*（独立 token）
-custom-director ── 18 actions / policy.lua（L1-L4）
+custom-director ── 21 actions / policy.lua（L1-L4）
 custom-agent-client ── 客户端效果（6 个动作）+ agent_effects 审计
 agent_eval.py ── 成功率/审批/拒绝/P95/幂等（离线）
 agent_smoke.py ── 实机三段式冒烟
@@ -201,7 +201,7 @@ agent_smoke.py ── 实机三段式冒烟
 | `T-CityLite.base/resources/[custom]/custom-phone/{server,client,web,html}` | 手机 |
 | `T-CityLite.base/migrations/*.sql` | 数据库迁移（幂等） |
 | `T-CityLite.base/tests/fixtures/tcity_schema.sql` | CI DB fixture |
-| `T-CityLite.base/tests/agent/lua/runner.lua` | Lua golden 入口（9 suites） |
+| `T-CityLite.base/tests/agent/lua/runner.lua` | Lua golden 入口（10 suites） |
 | `tools/agent_tools.{json,py}` | 工具注册表 + 生成器/校验 |
 | `tools/agent_mcp.py` / `agent_gateway.py` / `agent_eval.py` / `agent_smoke.py` | MCP 路由 / 只读网关 / 评测 / 冒烟 |
 | `tests/tools/*.py` | Python agent 契约/路由/评测测试 |
