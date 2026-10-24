@@ -177,3 +177,7 @@ QBCore.Commands.Add('setjusticedept', '分配司法人员部门', { { name = 'id
 end)
 
 print('[custom-justice] ⚖️  司法服务已注册到 Bus')
+
+exports('Imprison', function(citizenid, minutes, crimes)
+    return JusticeService.Imprison(citizenid, minutes, crimes)
+end)
