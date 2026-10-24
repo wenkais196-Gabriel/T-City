@@ -33,6 +33,7 @@ local CASES = {
     'director_actions',
     'director_denials',
     'police_actions',
+    'police_system',
     'phone_sms',
 }
 
