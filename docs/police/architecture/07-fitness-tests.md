@@ -23,12 +23,12 @@
 | FIT-07 | NPC 生成必须走预算接口（唯一入口 + 冷却 + 上限 + 审计） | 资源预算 | ⚠️ PARTIAL | blocking |
 | FIT-08 | 生成物/注册表一致（`agent_tools --check` + 禁止手改） | 工具链 | ✅ PASS | blocking（已存在） |
 | FIT-09 | 查询纪律：禁 `SELECT *`、必须 `LIMIT`、字段白名单 | 性能/PII | ✅ PASS（dec840f；23 处通配投影清零，2 条 allowlist） | blocking |
-| FIT-10 | 资源接线：cfg ↔ manifest ↔ 文件 ↔ 导出消费者 | 可启动性 | ⚠️ PARTIAL | blocking |
-| FIT-11 | 状态机列只允许登记过的写者 | 一致性 | ⚠️ PARTIAL | advisory |
+| FIT-10 | 资源接线：cfg ↔ manifest ↔ 文件 ↔ 导出消费者 | 可启动性 | ✅ PASS（`test_resource_wiring.py`；82 个启动资源 / 598 个字面条目 / 424 处导出引用，0 未登记） | blocking |
+| FIT-11 | 状态机列只允许登记过的写者 | 一致性 | ✅ PASS（`test_state_writers.py`；22 个写点 / 7 条规则 / 2 条精确例外，0 未登记） | blocking |
 | FIT-12 | 弃用登记：deprecated 写路径为 0 或未过期豁免 | 演进 | ✅ PASS（`test_deprecations.py`；6 条已知债务，2026-12-31 到期） | blocking |
-| FIT-13 | 文档数字与代码常量一致（05 的预算不得漂移） | 文档 | ❓ UNKNOWN | advisory |
+| FIT-13 | 文档数字与代码常量一致（05 的预算不得漂移） | 文档 | ✅ PASS（`test_number_budget.py`；11 个数字 / 31 处文档引用，10 implemented + 1 proposed） | blocking |
 
-加权得分 **27 / 100**（上一轮快照，见 §5；基线 21/100）。**本轮把 FIT-02/FIT-12 从 FAIL 转 PASS**：跨资源写收敛到 owner 导出 + 扫描器，弃用路径登记 + 到期强制；§5 的合计仍是旧快照，权重分待下一轮统一重算。
+加权得分 **94 / 100**（22.5/24，按 §5 权重统一重算；11 PASS / 2 PARTIAL / 0 FAIL。历史快照：基线 21/100 → 旧表 27/100）。本轮把 **FIT-10、FIT-11、FIT-13** 做成可执行检查并转 PASS；仍 PARTIAL 的是 FIT-06（fixture 缺表）与 FIT-07（NPC 警情独立生成路径/全局 cap）。
 
 > **本轮（FIT-02/FIT-12）**：新增 `tests/architecture/test_cross_resource_writes.py`、`tests/architecture/table_owners.json`、`tests/architecture/test_deprecations.py`、`tests/architecture/deprecations.json`；`phone_notifications` 只剩 `custom-phone` 写，`police_reports` 只剩 `custom-police` 写。outbox/TTL 语义见 [09-outbox.md](09-outbox.md)。
 >
@@ -37,6 +37,8 @@
 > **本轮（FIT-01）**：`custom-police` 新增唯一警察 duty 服务 `P.SetDutyForSource`（导出 `SetDutyForSource`），10-8/10-7、`custom-main` 的 `/duty` 与通缉锁、`custom-director` 的 `set_job_duty` 全部改走该服务；新增 `tests/architecture/test_duty_writer.py` + `duty_writers_allowlist.json`（4 条登记，0 处未登记）。
 >
 > **本轮（FIT-04）**：新增 `tests/architecture/test_export_contracts.py` + `export_allowlist.json`，扫描 46 个 police export 的权限门、失败错误码、敏感读审计与 fail-closed；`GetUnits`/`GetIncidents` 补 `units.view` / `incident.update` + 先审计后查询，`GetCaseDetail` 审计移到首条 SELECT 之前；11 条登记例外（含 `GetCharges` 静态目录、`GetNpcBudget` 内部读取），0 条未登记。证据见 §FIT-04。
+>
+> **本轮（FIT-10/11/13）**：新增 `test_resource_wiring.py` + `resource_wiring_allowlist.json`（82 个启动资源、598 个字面条目、424 处导出引用；4 条依赖例外，含 1 条 deferred repo 资源）、`test_state_writers.py` + `state_writers_allowlist.json`（22 个状态写点、7 条规则、2 条按函数钉死的例外）、`number_budget.json` + `test_number_budget.py`（11 个数字、31 处文档引用、10 implemented + 1 proposed）。三条规则均可反向验证，单文件运行 <1.1 s。
 
 ---
 
@@ -52,6 +54,9 @@ T-CityLite.base/tests/architecture/          # 已落地文件（其余规则按
 ├── test_deprecations.py + deprecations.json            # FIT-12（弃用登记 + 到期强制）
 ├── test_duty_writer.py + duty_writers_allowlist.json   # FIT-01（onduty 写者登记 + 反向验证）
 ├── test_export_contracts.py + export_allowlist.json    # FIT-04（export 门禁/错误码/敏感读审计）
+├── test_resource_wiring.py + resource_wiring_allowlist.json  # FIT-10（cfg/manifest/文件/导出消费者）
+├── test_state_writers.py + state_writers_allowlist.json      # FIT-11（状态列写者登记 + 反向验证）
+├── test_number_budget.py + number_budget.json                # FIT-13（文档/代码数字一致）
 └── test_audit_fail_closed.py    # FIT-05
 docs/police/architecture/
 ├── error-codes.md                  # 人读词表（与 json 双向同步）
@@ -177,12 +182,13 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 - **检查方式**（`tests/architecture/test_export_contracts.py` + `export_allowlist.json`，只扫 `custom-police/server/**/*.lua`）：
   - 解析 `exports('<Name>', <sym>)`：`<sym>` 是 `P.GetUnits` / `C.CreateCase` / `GetNpcBudget` 时找顶格 `function <sym>(` 切到 `^end$`；是 `function(...)` 时切到 `^end)$`。每条 finding 带 `file:line export`。
   - **门禁**：函数体（去注释后）必须含 `PolicePolicy.Can/Check/IsPolice`、`isPolice`、`hasCapability`、`IsPlayerAceAllowed`、已验证的 `lookupAllowed`，或显式 ownership 比较（`row.citizenid ~= actor.citizenid`）。
+  - **写审计**：函数体出现 `INSERT|UPDATE|DELETE` 时必须有 `audit(` / `auditPlayer(` 调用（`RecordVerdict` 的 `justice.verdict` 系统审计也在此列）；缺失 → `write_audit`。
   - **错误码**：逐个 `return false|nil` 检查第二个返回值；裸 `return false` / `return nil`（含 `then return false end`）→ `error_code`。`fail('<code>')` / `{ ok=false, error }` 视为合规。
   - **敏感读**：capability 以 `.view/.detail/.chain` 结尾，或 `Get*/Lookup*` 返回 PII（citizenid/姓名/description/summary/body；`GetNpcBudget -> NPCBudget.Get` 这类一层委托也解析）→ 必须 `if not audit(...) then return false, 'audit_unavailable' end`（或 `lookupAllowed` + `return false, err`），且审计位置必须早于首条 SELECT。审计写晚于查询同样 FAIL。
-  - **allowlist**：每条必须有 `export`/`file`/`kind`/`exceptions`（`auth` / `error_code` / `sensitive_read_audit` 的精确集合）/`reason`/`owner`/`added`/`expires`。过期、未知 export、重复条目、以及"登记的 exception 已不再命中"（修好了没删条目）全部 FAIL；未登记的新违规立即 FAIL。
+  - **allowlist**：每条必须有 `export`/`file`/`kind`/`exceptions`（`auth` / `write_audit` / `error_code` / `sensitive_read_audit` 的精确集合）/`reason`/`owner`/`added`/`expires`。过期、未知 export、重复条目、以及"登记的 exception 已不再命中"（修好了没删条目）全部 FAIL；未登记的新违规立即 FAIL。
 - **失败信息**：`FIT-04: custom-police/server/p0.lua:729 SweepStaleIncidents auth (no permission/source gate)` / `custom-police/server/p1.lua:229 GetMyCitations sensitive_read_audit (sensitive read does not fail closed on audit_unavailable)`。
 - **CI**：`pytest -q tests/architecture`（blocking）；扫描器离线、确定性，单次 <0.2 s；行为层由 `tests/unit/layer3_business/test_police_read_exports.py` 的 Lua harness 补证。
-- **现状（本轮）**：✅ **PASS**。46 个 export 全部解析，0 条未登记；11 条登记例外（见下）。**已修**：`GetUnits` 改为 `P.GetUnits(source)` → `units.view` + 先写 `units.view` 审计再 SELECT，审计失败 `false, 'audit_unavailable'`；`GetIncidents` 改为 `P.GetIncidents(source, status)` → `incident.update`（policy 无 `incident.view`）+ 先写 `incident.view` 审计，同样 fail-closed；MDT 的 `me`/`units`/`incidents` 三个 query 已把 `source` 传进来。`C.GetCaseDetail` 的 `case.detail` 审计从 case 查询之后移到首条 SELECT 之前。`C.RecordVerdict` 补 `invalid_justice_case`/`invalid_verdict`/`invalid_status`/`db_error`；`Outbox.Enqueue` 补 `invalid_topic`/`invalid_payload`/`encode_failed`/`db_error`（`EnqueueOutbox` 原样透传）。action 层 17/17 已结构化（`aea205c` 的 `structured()`），不再压平错误码。
+- **现状（本轮）**：✅ **PASS**。46 个 export 全部解析，0 条未登记；11 条登记例外（见下）。**已修**：`GetUnits` 改为 `P.GetUnits(source)` → `units.view` + 先写 `units.view` 审计再 SELECT，审计失败 `false, 'audit_unavailable'`；`GetIncidents` 改为 `P.GetIncidents(source, status)` → `incident.update`（policy 无 `incident.view`）+ 先写 `incident.view` 审计，同样 fail-closed；MDT 的 `me`/`units`/`incidents` 三个 query 已把 `source` 传进来。`C.GetCaseDetail` 的 `case.detail` 审计从 case 查询之后移到首条 SELECT 之前。`C.RecordVerdict` 补 `invalid_justice_case`/`invalid_verdict`/`invalid_status`/`db_error`，并新增 `justice.verdict` 系统审计；`Outbox.Enqueue` 补 `invalid_topic`/`invalid_payload`/`encode_failed`/`db_error`（`EnqueueOutbox` 原样透传）。action 层 17/17 已结构化（`aea205c` 的 `structured()`），不再压平错误码。
 - **剩余非 export 例外**：`PayCitation` 的 `already_<status>` 仍是动态码（公民侧 banking，不在 17 个 action 内）；`Sys.Jail` 的 `arrest.register` 审计失败只打印（arrest 行已提交，不能回滚），属 FIT-05 的"写路径 best-effort 必须留日志"，不计入本规则。
 - **例外（`export_allowlist.json`，11 条）**：
   - system-only（6）：`SweepStaleIncidents`（定时器）、`CreateIncidentSystem` / `AssignUnitSystem` / `JailSystem`（custom-director agent 桥，actorId 不是玩家 source）、`EnqueueOutbox`（内部队列）、`RecordVerdict`（custom-justice owner 写）；均已有审计与稳定错误码。
