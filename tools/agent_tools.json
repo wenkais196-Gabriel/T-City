@@ -888,6 +888,82 @@
       "compensation": "none"
     },
     {
+      "name": "apply_police_incident",
+      "title": "Create a police incident (L1)",
+      "description": "Open a dispatch incident for the police board and notify on-duty officers. L1: executes immediately, audited as an agent action. Acts without a target player and carries no PII.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "police_incident_create",
+      "risk": "L1",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.2.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,16}$",
+            "default": "911"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 2
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[!-~]{1,128}$",
+            "description": "Optional caller-supplied idempotency key; derived when omitted."
+          },
+          "details": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none"
+    },
+    {
       "name": "query_players",
       "title": "Query player snapshots",
       "description": "Query player snapshots from agent_player_snapshot with exact job/gang filters, an updated_since window, whitelisted fields and ordering. Maximum 200 rows.",

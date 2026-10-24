@@ -47,6 +47,12 @@ AgentPolicy.ACTIONS = {
         requires_approval = true,
         auto_execute = false,
     },
+    police_incident_create = {
+        risk = 'L1',
+        requires_approval = false,
+        auto_execute = true,
+        blast_radius = 'single',
+    },
     set_job_duty = {
         risk = 'L2',
         requires_approval = true,
@@ -140,6 +146,7 @@ AgentPolicy.ACTIONS = {
 -- no citizenid and must stay usable while no player is online.
 AgentPolicy.WORLD_ACTIONS = {
     announce = true,
+    police_incident_create = true,
     set_weather = true,
     set_time_of_day = true,
 }
@@ -394,6 +401,45 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         if type(key) ~= 'string' then
             return fail('invalid_params', 'args must be a JSON object, not an array')
         end
+    end
+
+    -- L1 dispatch action: no target player, validated data only.
+    if actionType == 'police_incident_create' then
+        local unknownErr = rejectUnknownFields(params, {
+            title = true, code = true, priority = true, details = true,
+        }, 'police_incident_create')
+        if unknownErr then return nil, unknownErr end
+        if type(params.title) ~= 'string' or AgentPolicy.HasUnsafeControlChars(params.title) then
+            return fail('invalid_params', 'title must be a string without control characters')
+        end
+        local title = AgentPolicy.Trim(params.title)
+        if #title < 3 or #title > 120 then
+            return fail('invalid_params', 'title must be 3-120 characters')
+        end
+        local code = '911'
+        if params.code ~= nil then
+            if type(params.code) ~= 'string' then return fail('invalid_params', 'code must be a string') end
+            code = AgentPolicy.Trim(params.code):upper()
+            if #code > 16 or not code:match('^[A-Z0-9_-]+$') then
+                return fail('invalid_params', 'code must be 1-16 uppercase letters, digits, _ or -')
+            end
+        end
+        local priority = 2
+        if params.priority ~= nil then
+            priority = tonumber(params.priority)
+            if not priority or priority ~= math.floor(priority) or priority < 1 or priority > 3 then
+                return fail('invalid_params', 'priority must be 1, 2 or 3')
+            end
+        end
+        local details = ''
+        if params.details ~= nil then
+            if type(params.details) ~= 'string' or AgentPolicy.HasUnsafeControlChars(params.details) then
+                return fail('invalid_params', 'details must be a string without control characters')
+            end
+            details = AgentPolicy.Trim(params.details)
+            if #details > 1000 then return fail('text_too_long', 'details exceeds 1000 characters') end
+        end
+        return { title = title, code = code, priority = priority, details = details }
     end
 
     -- World actions (L2) have no target player and no citizenid.
@@ -996,6 +1042,14 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         preview.player_source = tonumber(player.source) or nil
     end
 
+    if actionType == 'police_incident_create' then
+        preview.title = params.title
+        preview.code = params.code
+        preview.priority = params.priority
+        preview.length = AgentPolicy.TextLength(params.details)
+        return preview
+    end
+
     if actionType == 'announce' then
         preview.length = AgentPolicy.TextLength(params.message)
         preview.kind = params.kind
@@ -1187,6 +1241,16 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
 
     if not AgentPolicy.WORLD_ACTIONS[actionType] and not ctx.player then
         return failBool('player_not_found', 'target player is not online')
+    end
+
+    if actionType == 'police_incident_create' then
+        if type(params.title) ~= 'string' or #AgentPolicy.Trim(params.title) < 3 then
+            return failBool('invalid_params', 'title is required')
+        end
+        if type(params.code) ~= 'string' or #params.code < 1 or #params.code > 16 then
+            return failBool('invalid_params', 'invalid code')
+        end
+        return true
     end
 
     if actionType == 'announce' then

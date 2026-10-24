@@ -40,9 +40,13 @@ integration. Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 | `grant_item` | L4 物品 | `citizenid`, `item`, `amount`, `reason` | `pending_approval` | **always** | `Player.Functions.AddItem(item, amount)` + inventory delta verification |
 | `remove_item` | L4 物品 | `citizenid`, `item`, `amount?`, `reason` | `pending_approval` | **always** | `Player.Functions.RemoveItem(item, amount)` + inventory delta verification; `compensation = "manual"` |
 | `set_bucket` | L3 会话 | `citizenid`, `bucket` | `pending_approval` | **always** | `QBCore.Functions.SetPlayerBucket(source, bucket)` + `GetPlayerRoutingBucket` read-back; session-scoped |
+| `police_incident_create` | L1 调度 | `title`, `code?`, `priority?`, `details?` | `executed`（免审） | 否 | `exports['custom-police']:CreateIncidentSystem('action:<id>', params)`：写 `police_incidents`、审计 `actor_kind='agent'`、推送给在勤警员；`blast_radius = "single"`（无目标玩家） |
 | `kick` | L4 惩罚 | `citizenid`, `reason` | `pending_approval` | **always** | `QBCore.Functions.Kick(source, reason)` inside `pcall`; no offline read-back; `compensation = "manual"`, no undo |
 
-Anything else is rejected with `code: "unsupported_action"`.
+`police_incident_create` is L1 and has **no target player** (its `citizenid` is
+absent, but it is registered player-scoped so the L1 auto-execute gate stays
+valid); it is audited in `police_audit` as an agent action. Anything else is
+rejected with `code: "unsupported_action"`.
 
 The three L2 world actions (`announce`, `set_weather`, `set_time_of_day`) are
 **world-scoped**: they have no `citizenid`, they are valid even while nobody is

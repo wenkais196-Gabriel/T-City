@@ -102,8 +102,8 @@ class RegistryPolicyParityTests(unittest.TestCase):
     def test_action_and_tool_counts_are_pinned(self) -> None:
         # If this fails, update the number on purpose in the same commit that
         # adds/removes an action; silent growth is what this test prevents.
-        self.assertEqual(len(self.actions), 18)
-        self.assertEqual(len(self.tools), 32)
+        self.assertEqual(len(self.actions), 19)
+        self.assertEqual(len(self.tools), 33)
 
     def test_l3_and_l4_never_auto_execute(self) -> None:
         for action, definition in self.actions.items():
