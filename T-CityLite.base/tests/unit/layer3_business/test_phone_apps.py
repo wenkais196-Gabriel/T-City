@@ -25,7 +25,10 @@ def test_police_mdt_is_registered_and_gated():
     src = read(PHONE / "server/apps/police_mdt.lua")
     assert "id = 'police_mdt'" in src
     assert "jobs = { 'police' }" in src
-    assert "onduty = true" in src
+    # Visible off duty so a 10-7 officer can open the MDT and go 10-8 again;
+    # per-query police policy still enforces onduty.
+    assert "audience = { jobs = { 'police' } }" in src
+    assert "audience = { jobs = { 'police' }, onduty = true }" not in src
     assert "queries = {" in src and "officers" in src
     assert "actions = {" in src and "alert" in src
 

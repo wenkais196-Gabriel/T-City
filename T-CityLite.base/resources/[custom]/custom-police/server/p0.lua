@@ -42,14 +42,62 @@ local function trim(v)
     return type(v) == 'string' and v:match('^%s*(.-)%s*$') or ''
 end
 
-function P.SetUnitStatus(citizenid, callsign, status)
-    if not VALID_STATUS[status] then return false, 'invalid_status' end
+-- Every duty/unit write goes through one of the helpers below. `assigned`,
+-- `enroute` and `on_scene` keep their incident link; every manual state clears
+-- it so `incident_id ~= NULL` is only true for task-derived states.
+local function upsertUnit(citizenid, callsign, status)
     MySQL.insert.await([[
         INSERT INTO police_units (citizenid, callsign, status) VALUES (?, ?, ?)
         ON DUPLICATE KEY UPDATE callsign = VALUES(callsign), status = VALUES(status),
-            incident_id = IF(VALUES(status) IN ('off_duty','available'), NULL, incident_id)
+            incident_id = IF(VALUES(status) IN ('off_duty','available','busy','unavailable'), NULL, incident_id)
     ]], { citizenid, callsign and tostring(callsign):sub(1, 16) or nil, status })
-    audit(citizenid, 'unit.status', status, nil)
+end
+
+local function takeUnitOffDuty(citizenid)
+    MySQL.update.await(
+        "UPDATE police_units SET status = 'off_duty', incident_id = NULL WHERE citizenid = ?", { citizenid })
+end
+
+local function assignUnitRow(citizenid, incidentId)
+    MySQL.update.await(
+        "UPDATE police_units SET status = 'assigned', incident_id = ? WHERE citizenid = ?", { incidentId, citizenid })
+end
+
+local function markIncidentUnits(incidentId, status)
+    MySQL.update.await('UPDATE police_units SET status = ? WHERE incident_id = ?', { status, incidentId })
+end
+
+-- Clearing an incident releases task-derived units only. A manually busy unit
+-- keeps `busy` but loses the stale incident link.
+local function releaseIncidentUnits(incidentId)
+    MySQL.update.await([[
+        UPDATE police_units SET status = 'available', incident_id = NULL
+         WHERE incident_id = ? AND status IN ('assigned','enroute','on_scene')
+    ]], { incidentId })
+    MySQL.update.await([[
+        UPDATE police_units SET incident_id = NULL
+         WHERE incident_id = ? AND status = 'busy'
+    ]], { incidentId })
+end
+
+function P.SetUnitStatus(citizenid, callsign, status)
+    if not VALID_STATUS[status] then return false, 'invalid_status' end
+    local cid = tostring(citizenid or ''):sub(1, 50)
+    if cid == '' then return false, 'invalid_citizenid' end
+    local player = QBCore.Functions.GetPlayerByCitizenId(cid)
+    if status == 'off_duty' then
+        if player and isPolice(player.PlayerData) then
+            pcall(function() player.Functions.SetJobDuty(false) end)
+            if player.PlayerData.job.onduty == true then return false, 'duty_failed' end
+        end
+    elseif not player then
+        -- A system/agent caller may only park an offline citizen.
+        return false, 'not_on_duty'
+    elseif not isPolice(player.PlayerData) or player.PlayerData.job.onduty ~= true then
+        return false, 'not_on_duty'
+    end
+    upsertUnit(cid, callsign, status)
+    audit(cid, 'unit.status', status, nil)
     return true
 end
 
@@ -138,19 +186,34 @@ end
 
 function P.AssignUnit(source, incidentId, targetCitizenId)
     local actor = pd(source)
+    if not actor then return false, 'not_police' end
     local allowed, reason = PolicePolicy.Can(actor, 'incident.assign')
-    if not allowed then return false, reason end
+    -- Grade 1 officers may claim an open/assigned incident for themselves, but
+    -- no one else. Without this path a solo patrol can never go enroute (the
+    -- `incident.assign` capability starts at grade 2).
+    local selfClaim = false
+    if not allowed then
+        if reason == 'rank_too_low' and grade(actor) < 2 and actor.job.onduty == true then
+            selfClaim = true
+        else
+            return false, reason
+        end
+    end
     local id = tonumber(incidentId)
     if not id then return false, 'invalid_incident' end
     local target = tostring(targetCitizenId or ''):sub(1, 50)
     if target == '' then return false, 'invalid_unit' end
     local incident = MySQL.single.await('SELECT id, status FROM police_incidents WHERE id = ?', { id })
     if not incident then return false, 'incident_not_found' end
+    if selfClaim then
+        if target ~= actor.citizenid then return false, 'rank_too_low' end
+        if incident.status ~= 'open' and incident.status ~= 'assigned' then return false, 'rank_too_low' end
+    end
     MySQL.insert.await([[
         INSERT INTO police_incident_units (incident_id, citizenid) VALUES (?, ?)
         ON DUPLICATE KEY UPDATE joined_at = joined_at
     ]], { id, target })
-    MySQL.update.await("UPDATE police_units SET status = 'assigned', incident_id = ? WHERE citizenid = ?", { id, target })
+    assignUnitRow(target, id)
     MySQL.update.await("UPDATE police_incidents SET status = 'assigned' WHERE id = ?", { id })
     audit(actor.citizenid, 'incident.assign', tostring(id), target)
     return { id = id, unit = target, status = 'assigned' }
@@ -167,17 +230,21 @@ function P.SetIncidentStatus(source, incidentId, status)
         'SELECT 1 AS ok FROM police_incident_units WHERE incident_id = ? AND citizenid = ? LIMIT 1',
         { id, actor.citizenid })
     if grade(actor) < 2 and not assigned then return false, 'not_assigned' end
-    local closed = (status == 'closed' or status == 'cleared')
+    -- `cleared` is the officer-facing action, but archived incidents must reach
+    -- `closed`; otherwise `GetIncidents` (which only filters `closed`) shows
+    -- cleared calls forever.
+    local storedStatus = (status == 'cleared') and 'closed' or status
+    local closed = (storedStatus == 'closed')
     MySQL.update.await(
         'UPDATE police_incidents SET status = ?, closed_at = IF(?, NOW(), closed_at), updated_at = NOW() WHERE id = ?',
-        { status, closed and 1 or 0, id })
+        { storedStatus, closed and 1 or 0, id })
     if status == 'enroute' or status == 'on_scene' then
-        MySQL.update.await('UPDATE police_units SET status = ? WHERE incident_id = ?', { status, id })
+        markIncidentUnits(id, status)
     elseif closed then
-        MySQL.update.await('UPDATE police_units SET incident_id = NULL, status = "available" WHERE incident_id = ?', { id })
+        releaseIncidentUnits(id)
     end
-    audit(actor.citizenid, 'incident.status', tostring(id), status)
-    return { id = id, status = status }
+    audit(actor.citizenid, 'incident.status', tostring(id), storedStatus)
+    return { id = id, status = storedStatus }
 end
 
 local function lookupAllowed(source, action, capability)
@@ -260,13 +327,24 @@ end
 -- Sync on-duty state from qb-core (the three duty entry points all hit this)
 -- ---------------------------------------------------------------
 local function syncDuty(data)
-    if not isPolice(data) then return end
-    local status = data.job.onduty == true and 'available' or 'off_duty'
-    MySQL.insert.await([[
-        INSERT INTO police_units (citizenid, callsign, status) VALUES (?, ?, ?)
-        ON DUPLICATE KEY UPDATE callsign = VALUES(callsign), status = VALUES(status),
-            incident_id = IF(VALUES(status) = 'off_duty', NULL, incident_id)
-    ]], { data.citizenid, type(data.metadata) == 'table' and data.metadata.callsign or nil, status })
+    if not data or type(data.citizenid) ~= 'string' then return end
+    local callsign = type(data.metadata) == 'table' and data.metadata.callsign or nil
+    if not isPolice(data) then
+        -- A prisoner/former officer must not leave a ghost unit behind.
+        takeUnitOffDuty(data.citizenid)
+        return
+    end
+    if data.job.onduty ~= true then
+        upsertUnit(data.citizenid, callsign, 'off_duty')
+        return
+    end
+    local current = MySQL.single.await(
+        'SELECT status FROM police_units WHERE citizenid = ? LIMIT 1', { data.citizenid })
+    -- Only a fresh/off-duty unit becomes available. Busy and task-derived
+    -- states (assigned/enroute/on_scene) survive job updates untouched.
+    if not current or current.status == 'off_duty' then
+        upsertUnit(data.citizenid, callsign, 'available')
+    end
 end
 
 RegisterNetEvent('QBCore:Server:OnJobUpdate', function(source, job)
@@ -279,13 +357,82 @@ RegisterNetEvent('QBCore:Server:PlayerLoaded', function(Player)
     if Player and Player.PlayerData then syncDuty(Player.PlayerData) end
 end)
 
+-- ---------------------------------------------------------------
+-- Drop release + startup sweep (no row is ever deleted, only parked)
+-- ---------------------------------------------------------------
+local droppingUnits = {}
+
+local function releaseDroppedUnit(citizenid)
+    local unit = MySQL.single.await(
+        'SELECT incident_id FROM police_units WHERE citizenid = ? LIMIT 1', { citizenid })
+    local incidentId = unit and tonumber(unit.incident_id) or nil
+    takeUnitOffDuty(citizenid)
+    if incidentId then
+        local other = MySQL.single.await(
+            'SELECT 1 AS ok FROM police_units WHERE incident_id = ? LIMIT 1', { incidentId })
+        if not other then
+            MySQL.update.await([[
+                UPDATE police_incidents SET status = 'open', updated_at = NOW()
+                 WHERE id = ? AND status IN ('assigned','enroute','on_scene')
+            ]], { incidentId })
+            audit(citizenid, 'incident.unassign', tostring(incidentId), 'unit_dropped', 'system')
+        end
+    end
+    audit(citizenid, 'unit.drop', 'off_duty', incidentId and tostring(incidentId) or nil, 'system')
+end
+
+local function onPlayerDropped(citizenid)
+    if type(citizenid) ~= 'string' or citizenid == '' or droppingUnits[citizenid] then return end
+    droppingUnits[citizenid] = true
+    pcall(releaseDroppedUnit, citizenid)
+    droppingUnits[citizenid] = nil
+end
+
+-- qb-core removes `QBCore.Players[source]` before some resources see the raw
+-- `playerDropped` event, so the citizenid is captured from its own event too.
+AddEventHandler('QBCore:Server:PlayerDropped', function(Player)
+    local data = Player and Player.PlayerData
+    if type(data) == 'table' and type(data.citizenid) == 'string' then
+        local cid = data.citizenid
+        CreateThread(function() onPlayerDropped(cid) end)
+    end
+end)
+
 AddEventHandler('playerDropped', function()
     local data = pd(source)
-    if data and isPolice(data) then
-        pcall(function()
-            MySQL.update.await("UPDATE police_units SET status = 'off_duty', incident_id = NULL WHERE citizenid = ?", { data.citizenid })
-        end)
+    if data and type(data.citizenid) == 'string' then
+        local cid = data.citizenid
+        CreateThread(function() onPlayerDropped(cid) end)
     end
+end)
+
+local function sweepOfflineUnits()
+    local online = {}
+    for _, src in ipairs(QBCore.Functions.GetPlayers()) do
+        local player = QBCore.Functions.GetPlayer(src)
+        local data = player and player.PlayerData
+        if data and data.citizenid then online[data.citizenid] = true end
+    end
+    local rows = MySQL.query.await([[
+        SELECT citizenid FROM police_units
+         WHERE status <> 'off_duty' OR incident_id IS NOT NULL
+    ]]) or {}
+    for _, row in ipairs(rows) do
+        local cid = row.citizenid
+        if cid and not online[cid] then
+            takeUnitOffDuty(cid)
+            audit(cid, 'unit.stale', 'off_duty', 'startup_sweep', 'system')
+        end
+    end
+end
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    CreateThread(function()
+        Wait(10000)
+        local ok, err = pcall(sweepOfflineUnits)
+        if not ok then print(('[custom-police] startup duty sweep failed: %s'):format(tostring(err))) end
+    end)
 end)
 
 -- ---------------------------------------------------------------
@@ -294,7 +441,7 @@ end)
 RegisterNetEvent('custom-police:server:setStatus', function(status)
     local data = pd(source)
     if not isPolice(data) then return end
-    P.SetUnitStatus(data.citizenid, type(data.metadata) == 'table' and data.metadata.callsign or nil, tostring(status or ''))
+    P.SetUnitStatusForSource(source, tostring(status or ''))
 end)
 
 RegisterNetEvent('custom-police:server:911', function(payload)
@@ -305,7 +452,35 @@ end)
 function P.SetUnitStatusForSource(source, status)
     local data = pd(source)
     if not isPolice(data) then return false, 'not_police' end
-    return P.SetUnitStatus(data.citizenid, type(data.metadata) == 'table' and data.metadata.callsign or nil, tostring(status or ''))
+    if not VALID_STATUS[status] then return false, 'invalid_status' end
+    local callsign = type(data.metadata) == 'table' and data.metadata.callsign or nil
+    local player = QBCore.Functions.GetPlayer(source)
+
+    if status == 'off_duty' then
+        -- 10-7: qb-core projection first, then the unit row. SetJobDuty raises
+        -- OnJobUpdate synchronously; syncDuty is idempotent and never calls
+        -- SetJobDuty, so this cannot recurse.
+        pcall(function() player.Functions.SetJobDuty(false) end)
+        if data.job.onduty == true then return false, 'duty_failed' end
+        upsertUnit(data.citizenid, callsign, 'off_duty')
+        audit(data.citizenid, 'unit.status', 'off_duty', nil)
+        return true
+    end
+
+    if status == 'available' then
+        -- 10-8 is the one status that turns the qb-core projection on.
+        pcall(function() player.Functions.SetJobDuty(true) end)
+        if data.job.onduty ~= true then return false, 'duty_failed' end
+        upsertUnit(data.citizenid, callsign, 'available')
+        audit(data.citizenid, 'unit.status', 'available', nil)
+        return true
+    end
+
+    -- busy/assigned/enroute/on_scene never change onduty: they require it.
+    if data.job.onduty ~= true then return false, 'not_on_duty' end
+    upsertUnit(data.citizenid, callsign, status)
+    audit(data.citizenid, 'unit.status', status, nil)
+    return true
 end
 
 exports('SetUnitStatus', P.SetUnitStatus)
