@@ -727,15 +727,3 @@ RegisterCommand('police_release', function(source, args)
     end
     print(('[custom-police] released %s%s'):format(target, job and (' -> ' .. job) or ''))
 end, true)
-
-
--- Ops: force-save one player (console/ACE admin), e.g. after setjob so a
--- reconnect does not load a stale job from the database.
-RegisterCommand('force_save', function(source, args)
-    if source ~= 0 and not IsPlayerAceAllowed(source, 'police.release') then return end
-    local target = tonumber(args and args[1])
-    local player = target and QBCore.Functions.GetPlayer(target)
-    if not player then return print('usage: force_save <serverId>') end
-    player.Functions.Save(true)
-    print(('[custom-police] saved player %s'):format(target))
-end, true)
