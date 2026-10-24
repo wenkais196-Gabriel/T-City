@@ -22,6 +22,19 @@ set -a; . ./.env; set +a
 
 没有设置 `TCITY_DB_PASS` 时，DB 相关 fixture 会自动 `skip`，不会失败。
 
+### 一键 DB 验证（FIT-06）
+
+本机可把变量放到 `~/.tcity-agent-test.env`（`chmod 600`，不提交），然后：
+
+```bash
+cd T-CityLite.base
+./tests/run_db_tests.sh
+```
+
+脚本会：重建 `*_test` 库 → 连续导入 fixture 两次 → 校验 28 张表 → 跑
+`tests/unit tests/architecture`（含 DB 用例）。若不是 `_test` 结尾的库名，
+脚本会拒绝执行，避免误删正式库。
+
 ## 2. 离线检查（无需 FXServer / DB）
 
 ```bash
