@@ -62,11 +62,27 @@ local function notifyOfficer(citizenid, title, content, appId)
 end
 
 local function audit(actorCid, action, target, detail, actorKind)
+    -- Build the statement without nil holes in the parameter array: a nil
+    -- target/detail in the middle makes oxmysql truncate the list and sends
+    -- bare placeholders to MariaDB ("syntax error near '?, ?...'").
+    local values = { actorCid, actorKind or 'player', action }
+    local sql = 'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?'
+    if target ~= nil then
+        sql = sql .. ', ?'
+        values[#values + 1] = tostring(target):sub(1, 64)
+    else
+        sql = sql .. ', NULL'
+    end
+    if detail ~= nil then
+        sql = sql .. ', ?'
+        values[#values + 1] = tostring(detail):sub(1, 500)
+    else
+        sql = sql .. ', NULL'
+    end
+    sql = sql .. ')'
+
     local ok, err = pcall(function()
-        local result = MySQL.query.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
-            { actorCid, actorKind or 'player', action, target, detail and tostring(detail):sub(1, 500) or nil }
-        )
+        local result = MySQL.query.await(sql, values)
         if type(result) == 'string' then error(result, 0) end
     end)
     if not ok then print(('[custom-police] audit %s failed: %s'):format(tostring(action), tostring(err))) end
