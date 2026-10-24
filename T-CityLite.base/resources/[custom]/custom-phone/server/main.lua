@@ -1386,12 +1386,29 @@ QBCore.Functions.CreateCallback('phone:server:appAction', function(source, cb, a
 end)
 
 
-QBCore.Functions.CreateCallback('phone:server:payCitation', function(source, cb, citationId)
-    local ok, res = pcall(function() return exports['custom-police']:PayCitation(source, citationId) end)
+-- Citizen-side citation list. custom-police owns the query (ownership is
+-- enforced there); the phone only forwards the caller's own rows.
+QBCore.Functions.CreateCallback('phone:server:getMyCitations', function(source, cb)
+    local ok, res = pcall(function() return exports['custom-police']:GetMyCitations(source) end)
     if not ok or type(res) ~= 'table' then
         cb({ success = false, error = 'unavailable' })
         return
     end
-    if res == false then cb({ success = false, error = 'rejected' }) return end
+    local rows = type(res.rows) == 'table' and res.rows or {}
+    cb({ success = true, rows = rows, count = tonumber(res.count) or #rows })
+end)
+
+QBCore.Functions.CreateCallback('phone:server:payCitation', function(source, cb, citationId)
+    local ok, res, reason = pcall(function() return exports['custom-police']:PayCitation(source, citationId) end)
+    if not ok then
+        cb({ success = false, error = 'unavailable' })
+        return
+    end
+    if type(res) ~= 'table' then
+        -- PayCitation returns `false, reason` when the payment is rejected.
+        local err = type(reason) == 'string' and reason or 'rejected'
+        cb({ success = false, error = err })
+        return
+    end
     cb({ success = true, id = res.id, amount = res.amount })
 end)

@@ -252,3 +252,60 @@ def test_legacy_arrest_registration_form_is_no_longer_rendered():
     assert "onclick={registerArrest}" not in ui
     assert "bind:value={arrestForm.charges}" not in ui
     assert "['arrests','逮捕']" in ui
+
+
+def test_get_my_citations_callback_returns_rows():
+    server = read(PHONE / "server/main.lua")
+    assert "phone:server:getMyCitations" in server
+    start = server.index("phone:server:getMyCitations")
+    end = server.index("phone:server:payCitation", start)
+    block = server[start:end]
+    assert "pcall" in block
+    assert "exports['custom-police']:GetMyCitations(source)" in block
+    assert "success = true" in block and "rows = rows" in block
+    assert "count = tonumber(res.count) or #rows" in block
+    assert "success = false, error = 'unavailable'" in block
+
+
+def test_client_bridges_the_citation_callbacks():
+    client = read(PHONE / "client/main.lua")
+    assert "RegisterNUICallback('getMyCitations'" in client
+    assert "phone:server:getMyCitations" in client
+    assert "RegisterNUICallback('payCitation'" in client
+    assert "data.citationId" in client
+
+
+def test_banking_lists_and_pays_citations():
+    ui = read(PHONE / "web/src/apps/Banking.svelte")
+    for token in (
+        "我的罚单",
+        "getMyCitations",
+        "payCitation",
+        "citationId",
+        "citation.status === 'unpaid'",
+        "onMount",
+        "支付",
+    ):
+        assert token in ui, token
+    assert "fetchNui<any>('payCitation'" in ui
+    assert "await loadCitations()" in ui
+    assert "citations = Array.isArray(res.rows)" in ui
+    # The client never sets status locally: only custom-police may do that.
+    assert "status = 'paid'" not in ui
+
+
+def test_notification_deeplink_supports_banking_app():
+    ui = read(PHONE / "web/src/apps/Notifications.svelte")
+    assert "notif.app_id === 'banking'" in ui
+    assert "activeApp.set('banking')" in ui
+    assert "activeApp.set(`dyn:${notif.app_id}`)" in ui
+    assert "markNotificationsRead" in ui
+
+
+def test_built_bundle_ships_the_citation_flow():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    for token in ("getMyCitations", "payCitation", "我的罚单"):
+        assert token in bundle, token

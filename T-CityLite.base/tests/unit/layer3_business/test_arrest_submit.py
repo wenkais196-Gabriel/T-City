@@ -424,3 +424,102 @@ def test_legacy_jail_requires_arrest_capability_rejects_bad_time_and_audits():
     assert "SetMetaData('injail', jailTime)" in block
     assert "police:client:SendToJail" in block
     assert "time = jailTime" in block
+
+
+# ---------------------------------------------------------------------------
+# P2: citizen citations / fine notifications
+# ---------------------------------------------------------------------------
+
+def p1_src() -> str:
+    return read(POLICE / "server/p1.lua")
+
+
+def test_get_my_citations_is_exported_and_reads_only_the_caller_rows():
+    src = p1_src()
+    assert "exports('GetMyCitations', P1.GetMyCitations)" in src
+
+    start = src.index("function P1.GetMyCitations(")
+    block = src[start:src.index("function P1.GetCitations(", start)]
+    assert (
+        "SELECT id, amount, reason, status, plate, incident_id, created_at "
+        "FROM police_citations WHERE citizenid = ? ORDER BY id DESC LIMIT 50"
+    ) in block
+    # Parameterised on the caller's own citizenid, never on client input.
+    assert "{ actor.citizenid }" in block
+    assert "params" not in block.split("function P1.GetMyCitations(", 1)[1]
+    # A missing player is an empty result, not an error.
+    assert "if not actor or not actor.citizenid then return { rows = {}, count = 0 } end" in block
+    assert "rows = rows or {}" in block
+    assert "return { rows = rows, count = #rows }" in block
+    # Citizen side: no police capability gate.
+    assert "PolicePolicy.Can" not in block
+
+
+def test_issue_citation_notification_has_ticket_number_app_id_and_insert_id():
+    src = p1_src()
+    start = src.index("function P1.IssueCitation(")
+    block = src[start:src.index("--- Citizen-side read", start)]
+    assert "notifyCitizen(target, '你收到一张罚单'" in block
+    assert "('$%d — %s（罚单 #%d，警官 %s）'):format(" in block
+    assert "math.floor(amount), text, tonumber(id), actor.citizenid" in block
+    assert "'banking'" in block
+
+    # Both the stored row and the live push carry app_id; the push uses the id
+    # returned by the insert (normalised through InsertId), not a hardcoded 0.
+    notify_start = src.index("local function notifyCitizen(")
+    notify = src[notify_start:src.index("function P1.IssueCitation(", notify_start)]
+    assert (
+        "INSERT INTO phone_notifications (citizenid, title, content, app_id) "
+        "VALUES (?, ?, ?, ?)"
+    ) in notify
+    assert "{ citizenid, title:sub(1, 200), content:sub(1, 500), appId }" in notify
+    assert "local notificationId = InsertId(result)" in notify
+    assert "id = notificationId" in notify
+    assert "app_id = appId" in notify
+
+
+def test_arrest_submit_notifies_the_subject_about_the_citation_best_effort():
+    block = arrest_block()
+    assert "created.citationReason = citationReason" in block
+    assert "notifyCitation(target, created.citation, amount, created.citationReason, targetSrc)" in block
+
+    # Only after the citation insert, and after the jail-failed rollback point,
+    # so a rolled-back arrest never sends a notification.
+    citation_insert = block.index("INSERT INTO police_citations")
+    jail_failed = block.index("return fail('jail_failed')")
+    notify_call = block.index("notifyCitation(target, created.citation")
+    assert citation_insert < notify_call
+    assert jail_failed < notify_call
+
+    src = read(POLICE / "server/p2_system.lua")
+    start = src.index("local function notifyCitation(")
+    helper = src[start:src.index("local function encodeCharges(", start)]
+    assert (
+        "INSERT INTO phone_notifications (citizenid, title, content, app_id) "
+        "VALUES (?, ?, ?, ?)"
+    ) in helper
+    assert "'你收到一张罚单'" in helper
+    assert "('你收到一张罚单 #%d，金额 $%d，罪名 %s'):format(" in helper
+    assert "citationId" in helper
+    assert "'banking'" in helper
+    assert "local notificationId = InsertId(result)" in helper
+    assert "id = notificationId" in helper
+    assert "app_id = 'banking'" in helper
+    # Failure is logged, never rolled back.
+    assert "pcall(" in helper
+    assert "print(" in helper
+    assert "rollback()" not in helper
+
+
+def test_pay_citation_keeps_status_so_get_my_citations_shows_paid():
+    src = p1_src()
+    assert "exports('PayCitation', P1.PayCitation)" in src
+    assert (
+        "UPDATE police_citations SET status = 'paid', paid_at = NOW() "
+        "WHERE id = ? AND status = 'unpaid'"
+    ) in src
+
+    start = src.index("function P1.GetMyCitations(")
+    block = src[start:src.index("function P1.GetCitations(", start)]
+    # status is part of the projection, so a paid row is observable afterwards.
+    assert "status" in block
