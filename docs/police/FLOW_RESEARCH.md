@@ -1,8 +1,8 @@
 # 警察扮演流程调研（FLOW_RESEARCH）
 
 > **问题**：FiveM（QBCore / ESX）警察扮演里，怎样在「功能精简」的同时保证扮演质量？
-> **范围**：从平民报警到结案/入狱的**流程**（不是功能清单）。功能与架构对照见同目录 `research-external.md`；本地能力审计见 `audit-current.md`；一体化设计见 `DESIGN.md`。
-> **方式**：只读本地代码 + 公开文档/README/源码；**未改代码、未 commit、未碰 FXServer**。
+> **范围**：从平民报警到结案/入狱的**流程**（不是功能清单）。功能与架构对照见同目录 [research-external.md](research-external.md)；本地逐步审计见 [FLOW_INTERNAL.md](FLOW_INTERNAL.md)；一体化设计见 [DESIGN.md](DESIGN.md)。
+> **方式**：只读本地代码 + 公开文档/README/源码；**未改代码、未主动 commit、未碰 FXServer**。
 > **日期**：2026-10-24。仓库 `T-City-agent`，分支 `master`。
 
 ---
@@ -13,7 +13,7 @@
 |---|---|---|---|
 | 1 | **一个入口**：现场动作与文书在同一块屏上完成，不切聊天/不切弹窗/不换设备 | ps-mdt 的 `/mdtimpound` 复用 MDT 同一张扣押表单，README 原话「an officer only ever learns one screen」（S\*） | 现在上铐在聊天、入狱在 `qb-input`、记录在手机 MDT，是三个入口；先并成一个 |
 | 2 | **罪名目录即罚则**：金额与刑期由 penal code 求和，警员永不手填数字 | rcore_mdt 的 charge 自带 fine + jail 区间，提交报告即按罪名开罚单（D）；ESX `fine_types` 目录（S）；本地 `Config.Justice.Crimes` 已有 13 条罪名（S） | MDT 罚单仍手填金额、`/fine` 只有一个数字；应改成「选罪名 → 金额自动」 |
-| 3 | **一次提交产出全部记录**：报告提交 = 指控 + 罚单 + 案件链接，不做「报告/罚单/逮捕登记」三次填表 | rcore_mdt「file report → each charge 自动 bill」（D）；ps-mdt 报告内嵌 people/charges/evidence（S） | 本地三张表三次填：`police_reports`、`police_citations`、`police_arrests` 互不引用 |
+| 3 | **一次提交产出全部记录**：报告提交 = 指控 + 罚单 + 案件链接，不做「报告/罚单/逮捕登记」三次填表 | rcore_mdt「file report → each charge 自动 bill」（D）；ps-mdt 报告内嵌 people/charges/evidence（S\*） | 本地三张表三次填：`police_reports`、`police_citations`、`police_arrests` 互不引用 |
 | 4 | **默认值、模板、自动填充**：坐标/时间/警员/案号/警情 id/嫌疑人全自动，正文才让人写 | ps-dispatch 的 alert 自带 street、vehicle、plate、weaponTier、callsign（S）；fivenet 文档模板（D） | MDT 的 `citizenid`、`incident_id`、`case_id` 都要人手查/手抄 |
 | 5 | **机械步骤 ≤3 次输入**：超过 3 步的那一步必须是 RP 判断，而不是填表 | wasabi 到场自动标记、rcore 罚单预设、ESX fine 目录（D/S） | 目标：罚单 3 步、报告 1 个正文框、逮捕 ≤6 步 |
 | 6 | **只在不可逆处设卡**：入狱、搜查令、封存证据设硬门槛；清场/报告/结案可先跳过、事后补 | ps-dispatch 的 call 生命周期与 MDT 报告完全解耦（README 未要求「有报告才能关单」）（S\*）；ps-mdt 报告可留草稿；本地 [`DESIGN.md`](DESIGN.md) 的 `report_missing` 明确不阻断关单（S） | 不要为了「流程完整」逼玩家在枪战现场填 4 个字段 |
@@ -31,6 +31,8 @@
 - **UI 切换**单独计：聊天 → 弹窗（`qb-input`）→ 手机 → 手机内另一个 App/Tab，各算 1 次切换。
 - 打字算 1 步，但另记「打字量」（句 / 段）。「写一段报告正文」和「填一个 citizenid」都是 1 步，但扮演价值差 100 倍。
 - 只统计**最少必要路径**（熟练玩家、无查证、无失败重试）。
+
+> **与 [FLOW_INTERNAL.md](FLOW_INTERNAL.md) 的口径差异**：那份文档把「整张表单提交」算 1 步、并把上勤计入每条流程，所以同一条逮捕链记 12 步；本文按「字段/点击」逐个计、不重复计上勤，记 11–13 步。两套数字**不矛盾**，跨系统比较时只用同一口径内的相对值。
 
 **证据等级**（沿用 `research-external.md` 的口径）：
 
@@ -59,12 +61,12 @@
 
 **完整链路（S）**
 
-1. **接警**：平民在聊天打 `/911 <文本>` → `custom-police/server/p0.lua` 写 `police_incidents`（含坐标、priority 默认 2）→ 给所有在勤警察写 `phone_notifications`（`app_id='police_mdt'`）并推手机通知。
-2. **调度**：**没有调度台**。单位状态靠 `/10-8` `/10-6` `/10-7` 三条聊天命令；派单只能进手机 MDT「接警」tab，用下拉框选一个单位点「派单」（`PoliceMDT.svelte:298-327`）。
-3. **现场**：全是聊天命令，共 **30 条**：`/cuff` `/escort` `/jail` `/fine` `/seizecash` `/sc` `/checkid` `/checklicense` `/spikestrip` `/impoundnear` ……（`server/commands.lua`）。
+1. **接警**：平民在聊天打 `/911 <文本>` → [server/p0.lua](../../T-CityLite.base/resources/%5Bcustom%5D/custom-police/server/p0.lua) 写 `police_incidents`（含坐标、priority 默认 2）→ 给所有在勤警察写 `phone_notifications`（`app_id='police_mdt'`）并推手机通知（`/911` 固定 priority 1，未传时默认 2）。
+2. **调度**：**没有调度台**。单位状态靠 `/10-8` `/10-6` `/10-7` 三条聊天命令；派单只能进手机 MDT「接警」tab，用下拉框选一个单位点「派单」（[PoliceMDT.svelte:298–327](../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/apps/PoliceMDT.svelte#L298-L327)）。
+3. **现场**：全是聊天命令，共 **30 条**：`/cuff` `/escort` `/jail` `/fine` `/seizecash` `/sc` `/checkid` `/checklicense` `/spikestrip` `/impoundnear` ……（[server/commands.lua](../../T-CityLite.base/resources/%5Bcustom%5D/custom-police/server/commands.lua)）。
 4. **记录**：手机 → MDT App → **13 个 tab**（首页/单位/接警/人员/车辆/罚单/报告/证据/案件/BOLO/搜查令/逮捕/审计）。
 5. **逮捕**：三条互不相认的路径 —— `/jail`（`qb-input` 填分钟 → qb-prison）、`/arrest`（`custom-justice` 选罪名 id → 建案 → 通知律师 → 开庭 → 判决入狱）、MDT「逮捕」tab（只写 `police_arrests`，**不入狱**）。
-6. **法庭/监狱**：`custom-justice` 的链路是完整的（法官 `/startTrial` → 律师减刑 30% → 初犯减 20% → 服务端入狱），但**要求法官 + 律师同时在线**；`qb-prison` 是唯一真正执行刑期的资源。
+6. **法庭/监狱**：`custom-justice` 的链路是完整的（法官 `/startTrial` → 有律师减刑 30% + 代码里**一律**适用的初犯减免 20% → 服务端入狱），但**要求法官 + 律师同时在线**；`qb-prison` 是唯一真正执行刑期的资源。
 
 **强扮演 vs 机械**
 
@@ -75,7 +77,7 @@
 | 输入刑期分钟数 | 机械 | `/jail` 的 `qb-input` 只有一个数字，无罪名、无上限 |
 | 选罪名 | 半机械 | 点一次即可，但只在 justice 的 `/arrest` 里有目录，MDT 是自由文本 |
 | 写报告正文 | **强扮演** | 唯一值得保留的自由输入 |
-| 证据登记 | 机械（5 个字段） | label + incident_id + location + description + 提交 |
+| 证据登记 | 机械（4 个字段 + 提交） | label + incident_id + location + description |
 
 **精简技巧（本地已有的好东西）**
 
@@ -90,19 +92,19 @@
 - **三套逮捕**：`/jail`、`/arrest`、MDT 逮捕 tab。三者写三张不同的表，语义还不一致（一个进监狱、一个进法庭、一个只留痕）。
 - **两套证据**：`qb-policejob` 的弹壳/血迹/指纹在**服务端内存**（重启即失），MDT 的 `police_evidence` 是另一套带保管链的登记簿，互不引用。
 - **自由文本罪名**：MDT `charges` 是 `<input>`，可写「随便」；justice 的 13 条罪名目录根本没被 MDT 使用。
-- **前端表单字段顺序反人类**：罚单是 `citizenid → amount → plate → reason`，最重要的「原因」在最后，且 citizenid 最该自动带入。
+- **前端表单字段顺序不合理**：罚单是 `citizenid → amount → plate → reason`，最重要的「原因」在最后，且 citizenid 最该自动带入。
 
 **指标（实测/估算）**
 
 - 罚单（有记录）：7–9 步，2 次 UI 切换（手机 + tab），打字 0–1 段。
-- 报告：5 步（含 tab），打字 1 段。
+- 报告：6–7 步（手机 → App → tab → 标题 → 正文 → 提交），打字 1 段。
 - 完整逮捕 + 入狱 + 留痕：**11–13 步，3 次 UI 切换**（详见 §6）。
 
 ---
 
 ### 2.2 ps-mdt + ps-dispatch（Project Sloth）
 
-**完整链路（S）**
+**完整链路（S\*）**
 
 1. **接警**：资源内部 30+ 个硬编码 alert（抢劫/枪击/超速/车辆盗窃…）→ `ps-dispatch:server:notify` → 服务端按 `Config.Jobs` + 在勤过滤后**只发给合格玩家**（`FilteredBroadcast`）。
 2. **调度**：屏幕 alert（`E` 响应）→ `O` 打开 dispatch menu（Calls / Plates 两个 tab）→ 选中 call → **Attach** 单位 → 主管可把 call 标为 **major incident**（置顶 + banner + 对已附着单位静音 routine，二段确认）。
@@ -113,7 +115,7 @@
 
 **强扮演 vs 机械**
 
-- 强扮演：现场对话（无 UI）、报告叙事、案件串联（Report Link Graph/证据板）、法庭排期与出庭。
+- 强扮演：现场对话（无 UI）、报告叙事、案件串联（reports → case）、法庭排期与出庭。
 - 机械：F11 → 报告 → 逐条 `add person` / `add charge` / 上传照片；每个都是搜索框 + modal。
 
 **精简技巧**
@@ -316,13 +318,13 @@
 | | rcore | **3–4** ~ | 1 | 0–1 句 | 预设 + penal code 自动金额 |
 | | wasabi | **3–5** ~ | 1 | 0–1 句 | 预设 + grade 权限 |
 | **报告** | ESX policejob | **0** | — | — | 不存在 |
-| | 本地 MDT | **5** | 2 | 1 段 | 标题 + 警情 id + 正文 + 提交 |
+| | 本地 MDT | **6–7** | 2 | 1 段 | 手机 → App → tab → 标题 → 正文 → 提交 |
 | | ps-mdt | **10–14** ~ | 4 | 1 段 + 逐条关联 | 每个关联都是搜索 + modal |
 | | rcore | **8–10** ~ | 1 | 1 段 | 一次提交同时出罚单 |
 | | fivenet | **2–3** ~ | 1（但出游戏） | 1 段 | 选模板 + 填字段 |
 | **逮捕** | ESX policejob | **4–5** | 0 | 0 | 上铐 3 步 + 外部 jail 命令；无记录 |
 | | 本地（含记录 + 入狱） | **11–13** | 3（聊天/qb-input/手机） | 1 句 + 1 数字 | 见 §6 分解 |
-| | 本地（只入狱不记录） | **4** | 1（qb-input） | 1 数字 | `/cuff`→`/escort`→`/jail`→填分钟 |
+| | 本地（只入狱不记录） | **5** | 1（qb-input） | 1 数字 | `/cuff`→`/escort`→`/jail`→填分钟→提交 |
 | | ps-mdt（报告 + 外部监狱） | **12–16** ~ | 4 | 1 段 | 报告本身 10–14 步 |
 | | rcore（报告 + 送监） | **8–10** ~ | 1–2 | 1 段 | 报告即罚单，少一步 |
 | | wasabi | **8–12** ~ | 1–2 | 1 段 | 到场自动标记省 1 步 |
@@ -332,7 +334,7 @@
 | 动作 | 预算 | 超出后会发生什么 |
 |---|---|---|
 | 罚单 | **≤3 步**（人、罪名、可选备注） | 玩家宁可不给罚单，直接用 `/fine` 打字 → 记录丢失 |
-| 报告 | **≤2 步 + 1 段打字**（自动带警情/人/罪名） | 报告变成「下班前补」→ 内容失真、案件断链 |
+| 报告 | **≤3 步 + 1 段打字**（自动带警情/人/罪名，只剩「写正文 → 提交」） | 报告变成「下班前补」→ 内容失真、案件断链 |
 | 逮捕（含记录 + 入狱） | **≤6 步** | 玩家跳过登记 → `police_arrests` 空 → 累犯/通缉/法庭全部失效 |
 | 一次执法全程 | **≤60 秒**（不含 RP 对话） | 玩家把 RP 时间花在 UI 上，现场变安静 |
 
@@ -348,7 +350,7 @@
 | wasabi | 页面 / 依赖 | 16 个核心页 + 建站器 + CCTV + bodycam + 雷达柱 + 脚环 | 常用 ≤6 页；CCTV/bodycam 少数人玩 |
 | rcore | 产品拆分 / 监狱特性 | 4 个独立产品；prison 9 个特性（雪茄/食堂/交易商/椅子…） | 监狱只用 jail + break；其余装饰 |
 | fivenet | 部署栈 | Go + NATS + Postgres + Docker/K8s + Web 前端 | 运维成本 > 玩法收益 |
-| 法庭类（m-CourtSystem） | 角色门槛 | 律师考试、法官选举、税务、营业执照、动议 6 种、保释、量刑指南 | 开庭次数 ≈ 0；考试/选举无人参加 |
+| 法庭类（m-CourtSystem / agencyg 示例） | 角色门槛 | 律师考试、法官选举、税务、营业执照（m-CourtSystem）；动议 6 种、保释、量刑指南（agencyg 示例） | 开庭次数 ≈ 0；考试/选举无人参加 |
 | 本地 | 入口 | 30 条聊天命令 + 13 tab + 3 套逮捕 + 2 套证据 | 常用命令 ≤8 条（估）；逮捕三套互相打架 |
 
 **规律**：过度设计几乎总是发生在**「记录层」**（表、权限、页面、审批），而**「现场层」**反而功能不足（本地现场只有聊天命令）。精简的正确方向是：**把记录层压到 3 张表 1 个入口，把现场层补 1 个统一菜单。**
@@ -361,7 +363,7 @@
 
 1. **入口断点**：上铐/押运在聊天命令，刑期在 `qb-input`，记录在手机 App —— 一次逮捕要换 3 次焦点。
 2. **语义断点**：`/jail` 只写 `injail` metadata（无罪名），MDT 逮捕 tab 只写 `police_arrests`（不入狱），`/arrest` 写 justice 案件（需律师+法官）。**三张表没有一张能回答「这个人为什么在监狱里」。**
-3. **罪名断点**：MDT 的 `charges` 是自由文本 `<input>`（`PoliceMDT.svelte:485`），而 `Config.Justice.Crimes` 的 13 条罪名目录只被 `/arrest` 使用。
+3. **罪名断点**：MDT 的 `charges` 是自由文本 `<input>`（[PoliceMDT.svelte:485](../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/apps/PoliceMDT.svelte#L485)），而 `Config.Justice.Crimes` 的 13 条罪名目录只被 `/arrest` 使用。
 4. **证据断点**：`qb-policejob` 的弹壳/血迹/指纹在服务端内存，MDT 的 `police_evidence` 表是另一套；两者无外键。
 5. **法庭断点**：`/startTrial` 要求法官在线、律师在线（`minOnlineForAssignment=1`），任一缺失 → 案件永远 `pending`；没有「认罪协议 / 警长代判」降级路径。
 
@@ -478,7 +480,8 @@
 **本仓库内的证据与设计**
 
 - [research-external.md](research-external.md)：63 表 / 62 权限 / 许可证结论 / 各模组 3 借 3 不借
-- [audit-current.md](audit-current.md)：判刑断链、零持久化、身份分裂、客户端信任
+- [FLOW_INTERNAL.md](FLOW_INTERNAL.md)：本地三链路逐步审计（基线 `4603d4b`）、摩擦清单 F1–F14、断点 B1–B9、落地方案与文件清单
+- [audit-current.md](audit-current.md)：判刑断链、零持久化、身份分裂、客户端信任（**早于 P0–P3，结论部分已过期**）
 - [DESIGN.md](DESIGN.md)：警情状态机、交通拦截、逮捕 → 登记 → 保释/庭审 → 监狱、MDT 页面清单
 
 ---
