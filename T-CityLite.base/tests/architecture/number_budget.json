@@ -1,0 +1,293 @@
+{
+  "$comment": "FIT-13 number budget. Every implemented number is a code constant (or a literal SQL interval) that is also quoted in docs/police/architecture/{05-nfr,02-state-machines,09-outbox}.md. kind=implemented requires a code pattern and at least one doc pattern; kind=proposed means the doc may state a target that the code does not implement yet (audit retention is the current example). Each doc ref captures the value with its own regex; every match must equal `value` after applying `scale`. A doc or code drift fails tests/architecture/test_number_budget.py. Paths are relative to the repository root.",
+  "version": 1,
+  "rule": "FIT-13",
+  "entries": [
+    {
+      "id": "npc-budget-per-player",
+      "kind": "implemented",
+      "value": 2,
+      "unit": "slots per player",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/shared/npc_budget.lua",
+        "pattern": "NPCBudget\\.MAX_PLAYER\\s*=\\s*(\\d+)"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/05-nfr.md",
+          "pattern": "NPC 支援单位（全局 / 每人） \\| ≤\\d+ / ≤(\\d+)",
+          "label": "SLO card: global/per-player NPC units"
+        },
+        {
+          "file": "docs/police/architecture/05-nfr.md",
+          "pattern": "每玩家 ≤(\\d+) 单位",
+          "label": "NFR-SCALE-03 per-player cap"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "每警员 ≤(\\d+)",
+          "label": "SM-06 summary"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "每警员 (\\d+) 个",
+          "label": "SM-06 baseline note"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "(\\d+) 个/警员",
+          "label": "SM-06 target cap"
+        }
+      ]
+    },
+    {
+      "id": "backup-cooldown",
+      "kind": "implemented",
+      "value": 60,
+      "unit": "seconds",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua",
+        "pattern": "BACKUP_COOLDOWN\\s*=\\s*(\\d+)"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/05-nfr.md",
+          "pattern": "冷却 (\\d+) s/人",
+          "label": "NFR-SCALE-03 cooldown"
+        },
+        {
+          "file": "docs/police/architecture/05-nfr.md",
+          "pattern": "(\\d+) s 内第 2 次",
+          "label": "NFR-SCALE-03 harness expectation"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "(\\d+)s 冷却；每 citizenid",
+          "label": "SM-06 backup request"
+        }
+      ]
+    },
+    {
+      "id": "npc-budget-global",
+      "kind": "implemented",
+      "value": 6,
+      "unit": "slots globally",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/shared/npc_budget.lua",
+        "pattern": "NPCBudget\\.MAX_GLOBAL\\s*=\\s*(\\d+)"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/05-nfr.md",
+          "pattern": "NPC 支援单位（全局 / 每人） \\| ≤(\\d+) / ≤\\d+",
+          "label": "SLO card: global NPC units"
+        },
+        {
+          "file": "docs/police/architecture/05-nfr.md",
+          "pattern": "全局 ≤(\\d+) 单位",
+          "label": "NFR-SCALE-03 global cap"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "目标 ≤(\\d+)",
+          "label": "SM-06 target global cap"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "≤(\\d+) 个活动单位/全服",
+          "label": "SM-06 fleet-wide cap"
+        }
+      ]
+    },
+    {
+      "id": "npc-callout-interval",
+      "kind": "implemented",
+      "value": 8,
+      "unit": "minutes",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/shared/npc_callouts.lua",
+        "pattern": "NPCCallouts\\.INTERVAL_MS\\s*=\\s*(\\d+)\\s*\\*\\s*60\\s*\\*\\s*1000"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "服务端 (\\d+)min/30%/max1",
+          "label": "SM-09 summary"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "每 (\\d+)min",
+          "label": "SM-09 scheduler"
+        }
+      ]
+    },
+    {
+      "id": "npc-callout-chance",
+      "kind": "implemented",
+      "value": 0.3,
+      "unit": "probability per evaluation",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/shared/npc_callouts.lua",
+        "pattern": "NPCCallouts\\.SPAWN_CHANCE\\s*=\\s*([\\d.]+)"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "服务端 8min/(\\d+)%/max1",
+          "scale": 0.01,
+          "label": "SM-09 summary as percent"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "math\\.random\\(\\) < ([\\d.]+)",
+          "label": "SM-09 evaluation condition"
+        }
+      ]
+    },
+    {
+      "id": "incident-stale-minutes",
+      "kind": "implemented",
+      "value": 45,
+      "unit": "minutes",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/server/p0.lua",
+        "pattern": "COALESCE\\(last_activity_at, created_at\\) < NOW\\(\\) - INTERVAL (\\d+) MINUTE"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "(\\d+)min stale sweep",
+          "label": "SM-02 summary"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "(\\d+) 分钟无活动",
+          "label": "SM-02 stale transition"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "最大滞留时间 = (\\d+) 分钟",
+          "label": "SM-09 stale bound"
+        }
+      ]
+    },
+    {
+      "id": "intent-done-ttl",
+      "kind": "implemented",
+      "value": 7,
+      "unit": "days",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua",
+        "pattern": "expires_at = NOW\\(\\) \\+ INTERVAL (\\d+) DAY"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/09-outbox.md",
+          "pattern": "\\*\\*(\\d+) 天有效\\*\\*",
+          "label": "09 intent done TTL"
+        },
+        {
+          "file": "docs/police/architecture/09-outbox.md",
+          "pattern": "在 (\\d+) 天内重放",
+          "label": "09 replay window"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "`done` (\\d+) 天 TTL",
+          "label": "SM-03 summary"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "expires_at = NOW\\(\\) \\+ INTERVAL (\\d+) DAY",
+          "label": "SM-03 post-baseline"
+        }
+      ]
+    },
+    {
+      "id": "intent-pending-ttl",
+      "kind": "implemented",
+      "value": 10,
+      "unit": "minutes",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua",
+        "pattern": "created_at < NOW\\(\\) - INTERVAL (\\d+) MINUTE"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/09-outbox.md",
+          "pattern": "超过 (\\d+) 分钟",
+          "label": "09 pending TTL"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "`pending` (\\d+) 分钟",
+          "label": "SM-03 summary"
+        },
+        {
+          "file": "docs/police/architecture/02-state-machines.md",
+          "pattern": "`pending` 超过 (\\d+) 分钟",
+          "label": "SM-03 post-baseline"
+        }
+      ]
+    },
+    {
+      "id": "outbox-interval",
+      "kind": "implemented",
+      "value": 30,
+      "unit": "seconds",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua",
+        "pattern": "OUTBOX_INTERVAL_MS\\s*=\\s*(\\d+)",
+        "scale": 0.001
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/09-outbox.md",
+          "pattern": "不是等 (\\d+) 秒",
+          "label": "09 immediate Kick"
+        },
+        {
+          "file": "docs/police/architecture/09-outbox.md",
+          "pattern": "worker 每 \\*\\*(\\d+) 秒\\*\\*",
+          "label": "09 worker interval"
+        }
+      ]
+    },
+    {
+      "id": "outbox-max-attempts",
+      "kind": "implemented",
+      "value": 5,
+      "unit": "attempts",
+      "code": {
+        "file": "T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua",
+        "pattern": "OUTBOX_MAX_ATTEMPTS\\s*=\\s*(\\d+)"
+      },
+      "docs": [
+        {
+          "file": "docs/police/architecture/09-outbox.md",
+          "pattern": "第 \\*\\*(\\d+)\\*\\* 次失败",
+          "label": "09 permanent failure"
+        }
+      ]
+    },
+    {
+      "id": "police-audit-retention",
+      "kind": "proposed",
+      "value": 180,
+      "unit": "days",
+      "note": "05 NFR-SCALE-05 / SEC-05 的目标值。代码里没有 police_audit 清理任务，所以只校验文档自身不要再漂移；实现 retention 后把 kind 改为 implemented 并补 code pattern。",
+      "docs": [
+        {
+          "file": "docs/police/architecture/05-nfr.md",
+          "pattern": "\\| (\\d+) 天，之后归档",
+          "label": "NFR-SCALE-05 audit retention"
+        },
+        {
+          "file": "docs/police/architecture/05-nfr.md",
+          "pattern": "PII 保留 (\\d+) 天",
+          "label": "NFR-SEC-05 PII retention"
+        }
+      ]
+    }
+  ]
+}

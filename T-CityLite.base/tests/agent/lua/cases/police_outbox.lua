@@ -87,9 +87,9 @@ return {
 
         check('enqueue_rejects_unknown_topic_and_bad_payload', function()
             local ok, id = env.exports.EnqueueOutbox('bogus', { citizenid = 'ABC123' })
-            assert(ok == false and id == nil, 'unknown topic')
-            local ok2 = env.exports.EnqueueOutbox('notification', 'not-a-table')
-            assert(ok2 == false, 'payload must be a table')
+            assert(ok == false and id == 'invalid_topic', 'unknown topic code')
+            local ok2, err2 = env.exports.EnqueueOutbox('notification', 'not-a-table')
+            assert(ok2 == false and err2 == 'invalid_payload', 'payload must be a table')
         end)
 
         check('delivery_marks_done_once', function()

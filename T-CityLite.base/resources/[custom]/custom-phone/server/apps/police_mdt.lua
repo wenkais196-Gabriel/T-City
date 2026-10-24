@@ -86,7 +86,7 @@ PhoneApps.Register({
             else grade = tonumber(job.grade) or 0 end
             local metadata = type(data.metadata) == 'table' and data.metadata or {}
             local status = (job.onduty == true) and 'available' or 'off_duty'
-            local okUnits, unitRes = pcall(function() return exports['custom-police']:GetUnits() end)
+            local okUnits, unitRes = pcall(function() return exports['custom-police']:GetUnits(source) end)
             if okUnits and type(unitRes) == 'table' then
                 for _, unit in ipairs(unitRes.units or {}) do
                     if unit.citizenid == data.citizenid then status = unit.status break end
@@ -102,14 +102,14 @@ PhoneApps.Register({
                 count = 1,
             }
         end,
-        units = function(_source)
-            local ok, res = pcall(function() return exports['custom-police']:GetUnits() end)
+        units = function(source)
+            local ok, res = pcall(function() return exports['custom-police']:GetUnits(source) end)
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
             return { rows = res.units or {}, count = res.count or 0 }
         end,
-        incidents = function(_source, params)
+        incidents = function(source, params)
             local ok, res = pcall(function()
-                return exports['custom-police']:GetIncidents(params and params.status)
+                return exports['custom-police']:GetIncidents(source, params and params.status)
             end)
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
             return { rows = res.incidents or {}, count = res.count or 0 }

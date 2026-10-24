@@ -1,0 +1,87 @@
+{
+  "$comment": "FIT-11 state-machine writer registry. A domain UPDATE is legal only when its writer is listed in the rule's allowed_files (the police service split p0/p1/p2_system/p3_cases) or when the exact (writer, table, file, function) tuple is registered in entries with a reason and an expiry. entries are a debt register: expired or unused entries fail. Other resources (custom-justice, custom-phone, qb-prison) must go through a custom-police export; they may not write police state directly. Checked by tests/architecture/test_state_writers.py.",
+  "version": 1,
+  "rule": "FIT-11",
+  "rules": [
+    {
+      "id": "police_units.status",
+      "table": "police_units",
+      "columns": ["status", "incident_id"],
+      "allowed_files": ["custom-police/server/p0.lua"],
+      "reason": "police_units.status/incident_id 是 SM-01 单位状态机；唯一写入口是 p0 的 duty/incident helper（syncDuty、assignUnitRow、markIncidentUnits、releaseIncidentUnits、takeUnitOffDuty）。"
+    },
+    {
+      "id": "police_incidents.status",
+      "table": "police_incidents",
+      "columns": ["status"],
+      "allowed_files": ["custom-police/server/p0.lua"],
+      "reason": "police_incidents.status 是 SM-02 警情状态机；唯一写入口是 p0 的 AssignUnit / SetIncidentStatus / releaseDroppedUnit / SweepStaleIncidents。"
+    },
+    {
+      "id": "police_reports",
+      "table": "police_reports",
+      "columns": [],
+      "allowed_files": [
+        "custom-police/server/p1.lua",
+        "custom-police/server/p2_system.lua",
+        "custom-police/server/p3_cases.lua"
+      ],
+      "reason": "报告锚点由 p1（CreateReport）、p2_system（ArrestSubmit 链接与回滚）和 p3_cases（RecordVerdict 判决投影）维护。"
+    },
+    {
+      "id": "police_cases",
+      "table": "police_cases",
+      "columns": [],
+      "allowed_files": [
+        "custom-police/server/p2_system.lua",
+        "custom-police/server/p3_cases.lua"
+      ],
+      "reason": "案件号回填只在 CreateCase（p3）与 ArrestSubmit 的补偿路径（p2_system）。"
+    },
+    {
+      "id": "police_citations",
+      "table": "police_citations",
+      "columns": [],
+      "allowed_files": ["custom-police/server/p1.lua"],
+      "reason": "罚单状态 unpaid→paid 与支付回滚只在 p1.PayCitation；其他资源只能读或用 phone 的罚单接口。"
+    },
+    {
+      "id": "police_warrants.status",
+      "table": "police_warrants",
+      "columns": ["status"],
+      "allowed_files": ["custom-police/server/p3_cases.lua"],
+      "reason": "warrant requested→approved/denied 只在 p3_cases.DecideWarrant。"
+    },
+    {
+      "id": "police_bolos.status",
+      "table": "police_bolos",
+      "columns": ["status"],
+      "allowed_files": ["custom-police/server/p3_cases.lua"],
+      "reason": "BOLO active→cleared 只在 p3_cases.ClearBolo；表本身已是 FIT-12 弃用登记对象，不允许新增写者。"
+    }
+  ],
+  "entries": [
+    {
+      "id": "legacy-agent-assign-unit-units",
+      "writer": "custom-police",
+      "table": "police_units",
+      "file": "server/p2_system.lua",
+      "function": "Sys.AssignUnit",
+      "reason": "SEC-11：director L2 的旧 sys.assign 路径仍直接写 units 行，绕过 P.AssignUnit 的幂等/在勤校验。应改为 exports['custom-police']:AssignUnit；在改契约前登记，防止新增同类写点。",
+      "added": "2026-10-24",
+      "expires": "2027-03-31",
+      "ticket": "FIT-11"
+    },
+    {
+      "id": "legacy-agent-assign-unit-incidents",
+      "writer": "custom-police",
+      "table": "police_incidents",
+      "file": "server/p2_system.lua",
+      "function": "Sys.AssignUnit",
+      "reason": "同上：Sys.AssignUnit 直接 UPDATE police_incidents.status='assigned'，不经过 p0 的 transition 表。与 units 例外同一处代码修复，修好后两条一起删除。",
+      "added": "2026-10-24",
+      "expires": "2027-03-31",
+      "ticket": "FIT-11"
+    }
+  ]
+}

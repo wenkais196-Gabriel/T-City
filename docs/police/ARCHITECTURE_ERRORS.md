@@ -1,9 +1,11 @@
 # 警察 MDT 错误码契约（FIT-04）
 
-> 状态：`police_mdt` 的 17 个 action 已全部返回结构化结果；`PhoneApps.Action` 负责把
-> 结果压平成 `success/error`，MDT 用一张中文表本地化。
+> 状态：`police_mdt` 的 17 个 action 已全部返回结构化结果；`custom-police` 的 46 个
+> export 已由 `tests/architecture/test_export_contracts.py` 扫描权限门/错误码/敏感读审计
+> （0 未登记，11 条登记例外）。`PhoneApps.Action` 负责把结果压平成 `success/error`，
+> MDT 用一张中文表本地化。
 > 适用：`custom-phone/server/apps/police_mdt.lua`、`custom-phone/server/phone_apps.lua`、
-> `custom-phone/web/src/apps/PoliceMDT.svelte`。
+> `custom-phone/web/src/apps/PoliceMDT.svelte`、`custom-police/server/*.lua`。
 
 ## 1. 返回契约
 
@@ -49,6 +51,34 @@
 4. 内部码 `unknown_capability` 不外露，统一映射为 `forbidden`。
 5. 未知码在 UI 回退显示原码，绝不吞成“失败”。
 
+### 1.1 export 层返回契约
+
+`tests/architecture/test_export_contracts.py` 对 `custom-police/server/**/*.lua` 的每个
+`exports('Name', ...)` 强制三条：
+
+1. **门禁**：`PolicePolicy.Can/Check/IsPolice`、`isPolice`、`hasCapability`、
+   `IsPlayerAceAllowed`、`lookupAllowed`，或显式 ownership 比较；无玩家 source 的内部
+   export 必须登记为 `system_only` / `static_catalog` / `internal_read` 等显式类别。
+2. **错误码**：失败路径必须 `false, '<code>'` / `nil, '<code>'` / `fail('<code>')` /
+   `{ ok = false, error = '<code>' }`；裸 `return false` / `return nil` 直接 FAIL。
+3. **敏感读**：capability 以 `.view/.detail/.chain` 结尾，或返回 citizenid/姓名/
+   description 等 PII 的读，必须**先写审计再查询**，审计失败返回
+   `false, 'audit_unavailable'`（fail-closed）。
+
+例外登记在 `tests/architecture/export_allowlist.json`：每条带 `reason`、`owner`、
+`expires` 与精确的 `exceptions` 集合；过期、未知 export、重复条目、或“修好后未删
+条目”均 FAIL。
+
+本轮新增/变化的读契约：
+
+| export | 参数 | 权限 | 审计动作（查询前） | 失败码 |
+|---|---|---|---|---|
+| `GetUnits` | `source` | `units.view` | `units.view` | `not_police` / `not_on_duty` / `rank_too_low` / `audit_unavailable` |
+| `GetIncidents` | `source, status?` | `incident.update`（policy 无 `incident.view`） | `incident.view` | 同上 + `invalid_status` |
+
+`custom-phone` 的 `me` / `units` / `incidents` query 已把调用者 `source` 传进来；
+off-duty 或非法来源返回稳定错误码，MDT 显示空列表/错误，不再静默返回全量数据。
+
 ## 2. 通用错误码
 
 | 错误码 | 产生层 | 含义 | UI 文案 |
@@ -73,6 +103,11 @@
 | `case_forbidden` | `ArrestSubmit` | 建案/开案需要 Sergeant+ | 创建案件需要 Sergeant+ |
 | `audit_unavailable` | 敏感 export | 审计写入失败，fail-closed | 审计不可用，请稍后重试 |
 | `db_error` | 所有写 export | 数据库写入/读取失败 | 数据库错误，请重试 |
+| `invalid_justice_case` | `RecordVerdict` | justice case id 为空或超 32 字符 | 案件编号无效 |
+| `invalid_verdict` | `RecordVerdict` | 判决 JSON 为空/非字符串/超过 65535 字节 | 判决内容无效 |
+| `invalid_topic` | `Outbox.Enqueue` | outbox topic 不在白名单 | 服务端队列主题无效 |
+| `invalid_payload` | `Outbox.Enqueue` | 通知 payload 不是表 | 通知内容无效 |
+| `encode_failed` | `Outbox.Enqueue` | payload JSON 编码失败 | 通知内容无法序列化 |
 | `export_error` | action 层 | pcall 捕获的 export 异常 | 服务端处理异常，请稍后重试 |
 | `rejected` | action 层 | export 返回失败但没有错误码 | 服务端拒绝：请检查权限与参数 |
 | `action_rejected` | `PhoneApps.Action` | 旧 action 返回裸 `false`（兼容路径） | 服务端拒绝：请检查权限与状态 |
@@ -158,6 +193,21 @@ function errorText(code: unknown): string {
 
 敏感读（`GetCitations`/`GetReports`/`GetEvidence`/`GetCases`/`GetAudit` 等）
 在审计失败时返回 `audit_unavailable` 并拒绝返回数据（FIT-05）。
+
+读导出的审计动作与写路径分开登记，避免“读也算写”混淆：
+
+| 读 export | 审计动作 | 说明 |
+|---|---|---|
+| `GetUnits` | `units.view` | 含 citizenid + 姓名；先审计后 SELECT |
+| `GetIncidents` | `incident.view` | 含 description/坐标；先审计后 SELECT |
+| `GetCaseDetail` | `case.detail` | 案件聚合（报告/证据/逮捕），审计在首条 SELECT 之前 |
+| `LookupCitizen` | `lookup.citizen` + `lookup.citizen.result` | 经 `lookupAllowed` fail-closed |
+| `LookupVehicle` | `lookup.vehicle` + `lookup.vehicle.result` | 同上 |
+| `GetCitations` / `GetReports` / `GetEvidence` / `GetEvidenceChain` / `GetCases` / `GetBolos` / `GetWarrants` / `GetAudit` | `<capability>.view` / `.chain` | 均在查询前写审计 |
+
+`GetMyCitations`（公民自有）、`GetCharges` / `GetNpcCalloutTemplates`（静态目录）、
+`GetActiveNpcCallouts`（无 PII 诊断读）、`GetNpcBudget`（热路径内部读）不写警察审计，
+原因与到期日见 `tests/architecture/export_allowlist.json`。
 
 ## 6. 已知动态码 / 边界
 
