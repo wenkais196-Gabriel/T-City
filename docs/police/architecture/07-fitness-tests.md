@@ -19,8 +19,8 @@
 | FIT-03 | 每个 net event 必须有来源/权限校验 | 安全 | ✅ PASS（3e720bf；13 强鉴权 + 35 登记例外，0 未登记） | blocking |
 | FIT-04 | 每个 export / app action 必须有稳定错误码 + 审计 | 契约 | ✅ PASS（46/46 export 扫描通过；11 条登记例外，0 未登记） | blocking |
 | FIT-05 | 审计不可写时敏感路径必须 fail-closed | 取证 | ✅ PASS（3e720bf；11 个敏感读，0 丢弃） | blocking |
-| FIT-06 | 迁移幂等 + fixture 覆盖 + 可重复执行 | 数据 | ⚠️ PARTIAL | blocking |
-| FIT-07 | NPC 生成必须走预算接口（唯一入口 + 冷却 + 上限 + 审计） | 资源预算 | ⚠️ PARTIAL | blocking |
+| FIT-06 | 迁移幂等 + fixture 覆盖 + 可重复执行 | 数据 | ✅ PASS（静态；`test_fixture_schema.py` 覆盖 38 表/34 列；连续导入由 DB job 验证） | blocking |
+| FIT-07 | NPC 生成必须走预算接口（唯一入口 + 冷却 + 上限 + 审计） | 资源预算 | ✅ PASS（`test_npc_budget.py`；全局 6 / 每人 2 / TTL 10min） | blocking |
 | FIT-08 | 生成物/注册表一致（`agent_tools --check` + 禁止手改） | 工具链 | ✅ PASS | blocking（已存在） |
 | FIT-09 | 查询纪律：禁 `SELECT *`、必须 `LIMIT`、字段白名单 | 性能/PII | ✅ PASS（dec840f；23 处通配投影清零，2 条 allowlist） | blocking |
 | FIT-10 | 资源接线：cfg ↔ manifest ↔ 文件 ↔ 导出消费者 | 可启动性 | ✅ PASS（`test_resource_wiring.py`；82 个启动资源 / 598 个字面条目 / 424 处导出引用，0 未登记） | blocking |
@@ -378,15 +378,15 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 | Job（现有） | 新增 step | 覆盖规则 | 门禁 | 预算 |
 |---|---|---|---|---|
-| `Config & dependency checks` | `Architecture fitness (static)` | FIT-01 02 03 04 05 06(静态) 07 10 11(adv) 12 | blocking（11 advisory） | <10 s |
+| `Config & dependency checks` | `Architecture fitness (static)` | FIT-01 02 03 04 05 06(静态) 07 10 11 12 | blocking（0 advisory） | <10 s |
 | `Config & dependency checks` | `Agent tool registry drift`（**已有**） | FIT-08 | blocking | <2 s |
-| `Python unit tests` | `pytest -q tests/architecture` | FIT-04 契约词表、FIT-05 形状、`error_codes.json` ↔ md 同步 | blocking | <5 s |
+| `Python unit tests` | `pytest -q tests/architecture` | FIT-01/02/03/04/05/09/10/11/12/13 扫描器（含 FIT-13 number budget） | blocking | <8 s（当前 124 用例，单文件 <1.1 s） |
 | `DB schema tests` | `Import schema fixture twice` + police 表存在性断言 | FIT-06（③④） | blocking | +20 s（MariaDB 已在） |
 | `DB schema tests` | `pytest -q tests/unit` （已有，fixture 补齐后不再 skip police 用例） | FIT-06 的收益 | blocking | 现状 |
-| `Docs links (advisory)` | `Number budget drift` | FIT-13 | advisory | <2 s |
+| `Python unit tests` | `Number budget drift`（已并入 pytest） | FIT-13 | blocking | <0.2 s |
 | `Lua syntax (changed files)` | 无改动 | — | — | — |
 
-**post-baseline 落地状态（`3bbcab3`）**：上表在 `3bbcab3` 时仍是**建议接线**，仓库里没有 `T-CityLite.base/tests/architecture/`。**本轮已落地** `test_duty_writer.py`（FIT-01）与既有 FIT-02/03/05/09/12 扫描器；`pytest -q tests/architecture` 即可运行。CI 里若尚未加 step，仍以本地 pytest 输出为准。
+**落地状态**：`3bbcab3` 时上表还是**建议接线**，仓库里没有 `T-CityLite.base/tests/architecture/`。现在该目录已有 FIT-01/02/03/04/05/09/10/11/12/13 的扫描器，`pytest -q tests/architecture` 本地 124 用例全绿（FIT-10/11/13 本轮新增 27 个）；FIT-06 的 fixture/重复 import 仍走 DB job。CI 里若尚未加 step，仍以本地 pytest 输出为准。
 
 **为什么不新建 job**：6 个 job 的并行度已经足够，单条规则 <10 s 放进 `static-checks` 不拖慢反馈；新建 job 会让"必过检查"列表变长，反而降低执行力。
 
