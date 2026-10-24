@@ -17,7 +17,7 @@
 | FIT-01 | `job.onduty` 只有一个写者（duty 服务） | 状态一致性 | ⚠️ PARTIAL | advisory → blocking |
 | FIT-02 | 禁止跨资源写别人拥有的表 | 边界 | ✅ PASS（`test_cross_resource_writes.py`；0 处未登记跨写） | blocking |
 | FIT-03 | 每个 net event 必须有来源/权限校验 | 安全 | ✅ PASS（3e720bf；13 强鉴权 + 35 登记例外，0 未登记） | blocking |
-| FIT-04 | 每个 export / app action 必须有稳定错误码 + 审计 | 契约 | ⚠️ PARTIAL | blocking |
+| FIT-04 | 每个 export / app action 必须有稳定错误码 + 审计 | 契约 | ⚠️ PARTIAL（aea205c：17/17 action 结构化，export 审计仍不齐） | blocking |
 | FIT-05 | 审计不可写时敏感路径必须 fail-closed | 取证 | ✅ PASS（3e720bf；11 个敏感读，0 丢弃） | blocking |
 | FIT-06 | 迁移幂等 + fixture 覆盖 + 可重复执行 | 数据 | ⚠️ PARTIAL | blocking |
 | FIT-07 | NPC 生成必须走预算接口（唯一入口 + 冷却 + 上限 + 审计） | 资源预算 | ⚠️ PARTIAL | blocking |
