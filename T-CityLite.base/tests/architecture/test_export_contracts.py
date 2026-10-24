@@ -12,6 +12,9 @@ must satisfy three rules:
   (``row.citizenid ~= actor.citizenid``). Purely internal exports whose caller
   is an owner resource or the scheduler must be registered as ``system_only``
   (or one of the other explicit kinds) in ``export_allowlist.json``;
+* **write audit** — an export whose body mutates (``INSERT`` / ``UPDATE`` /
+  ``DELETE``) must call ``audit()``; a write path without a forensic row is a
+  violation even when the error codes are correct;
 * **error code** — every failure return carries a stable ``snake_case`` string:
   ``return false, '<code>'`` / ``return nil, '<code>'`` / ``fail('<code>')``.
   A bare ``return false`` / ``return nil`` (including the ``then return false
@@ -86,7 +89,7 @@ GATE_HELPER_RE = re.compile(r"\blookupAllowed\s*\(")
 # distinguishes the legal ``return false, 'code'`` from ``return false end``.
 FAILURE_RETURN_RE = re.compile(r"\breturn\s+(?P<value>false|nil)\b(?P<rest>[^\n]*)")
 
-VALID_EXCEPTIONS = {"auth", "error_code", "sensitive_read_audit"}
+VALID_EXCEPTIONS = {"auth", "write_audit", "error_code", "sensitive_read_audit"}
 VALID_KINDS = {
     "system_only",
     "civilian_entry",
@@ -285,6 +288,10 @@ def contract_violations(export: Export) -> list[Violation]:
 
     if not has_auth_gate(body):
         violations.append(Violation(export, "auth", "no permission/source gate"))
+
+    if SQL_WRITE_RE.search(body) and not AUDIT_CALL_RE.search(body):
+        violations.append(Violation(
+            export, "write_audit", "write path does not call audit()"))
 
     bare = bad_failure_returns(body)
     if bare:
@@ -525,6 +532,14 @@ def test_scanner_detects_the_three_violation_shapes():
     bare = export("DoWrite", "if bad then return false end\nreturn true")
     codes = {violation.code for violation in contract_violations(bare)}
     assert "error_code" in codes, codes
+
+    unaudited_write = export(
+        "WriteThing",
+        "PolicePolicy.Can(actor, 'case.create')\n"
+        "MySQL.update.await('UPDATE police_reports SET status = ?', { status })",
+    )
+    codes = {violation.code for violation in contract_violations(unaudited_write)}
+    assert "write_audit" in codes, codes
 
     late_audit = export(
         "GetDetail",

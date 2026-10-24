@@ -59,9 +59,11 @@
 1. **门禁**：`PolicePolicy.Can/Check/IsPolice`、`isPolice`、`hasCapability`、
    `IsPlayerAceAllowed`、`lookupAllowed`，或显式 ownership 比较；无玩家 source 的内部
    export 必须登记为 `system_only` / `static_catalog` / `internal_read` 等显式类别。
-2. **错误码**：失败路径必须 `false, '<code>'` / `nil, '<code>'` / `fail('<code>')` /
+2. **写审计**：函数体出现 `INSERT|UPDATE|DELETE` 时必须调用 `audit(` / `auditPlayer(`；
+   写路径没有取证行直接 FAIL（`RecordVerdict` 的 `justice.verdict` 系统审计也在此列）。
+3. **错误码**：失败路径必须 `false, '<code>'` / `nil, '<code>'` / `fail('<code>')` /
    `{ ok = false, error = '<code>' }`；裸 `return false` / `return nil` 直接 FAIL。
-3. **敏感读**：capability 以 `.view/.detail/.chain` 结尾，或返回 citizenid/姓名/
+4. **敏感读**：capability 以 `.view/.detail/.chain` 结尾，或返回 citizenid/姓名/
    description 等 PII 的读，必须**先写审计再查询**，审计失败返回
    `false, 'audit_unavailable'`（fail-closed）。
 

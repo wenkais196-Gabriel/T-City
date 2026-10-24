@@ -17,7 +17,7 @@ cp T-CityLite.base/server.cfg.template T-CityLite.base/server.cfg   # 填 licens
 
 # 离线测试
 python3 -m pytest -q tests/tools
-cd T-CityLite.base && python3 -m pytest -q tests/unit && cd ..
+cd T-CityLite.base && python3 -m pytest -q tests/unit tests/architecture && cd ..
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
 python3 tools/agent_tools.py --check
 ```
@@ -32,6 +32,26 @@ python3 tools/agent_tools.py --check
 | `T-CityLite.base/tests/agent/` | Lua golden harness（效果/动作/实时/手机） |
 | `docs/` | 项目级文档、审计、清理提案与归档 |
 | `.github/` | CI（Config/Python/Lua/Docs/Sonar/DB/NUI） |
+
+## 架构适应度（FIT）
+
+警察架构 13 条 fitness 规则由 `T-CityLite.base/tests/architecture/` 的 pytest 扫描器保护（离线、无 FXServer/DB/网络）。当前 **94 / 100**（22.5/24；11 PASS / 2 PARTIAL / 0 FAIL）；评分口径、证据与 allowlist 数量见 [`07-fitness-tests.md`](docs/police/architecture/07-fitness-tests.md)。
+
+| # | 规则 | 状态 | 检查器 |
+|---|---|---|---|
+| FIT-01 | `job.onduty` 单一写者 | ✅ PASS | `test_duty_writer.py` |
+| FIT-02 | 禁止跨资源写别人拥有的表 | ✅ PASS | `test_cross_resource_writes.py` |
+| FIT-03 | net event 鉴权 | ✅ PASS | `test_net_event_auth.py` |
+| FIT-04 | export/action 错误码 + 审计 | ✅ PASS | `test_export_contracts.py` |
+| FIT-05 | 审计 fail-closed | ✅ PASS | `test_audit_fail_closed.py` |
+| FIT-06 | 迁移幂等 + fixture 覆盖 | ⚠️ PARTIAL | `test_fixture_schema.py` |
+| FIT-07 | NPC 生成走预算接口 | ⚠️ PARTIAL | `test_npc_budget.py` |
+| FIT-08 | 生成物/注册表一致 | ✅ PASS | `agent_tools.py --check` |
+| FIT-09 | 查询纪律（禁 `SELECT *` / 需 LIMIT） | ✅ PASS | `test_query_discipline.py` |
+| FIT-10 | 资源接线（cfg ↔ manifest ↔ 文件 ↔ 导出） | ✅ PASS | `test_resource_wiring.py` |
+| FIT-11 | 状态机列只允许登记写者 | ✅ PASS | `test_state_writers.py` |
+| FIT-12 | 弃用登记 | ✅ PASS | `test_deprecations.py` |
+| FIT-13 | 文档数字与代码常量一致 | ✅ PASS | `test_number_budget.py` |
 
 ## 约定
 
