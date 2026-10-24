@@ -75,7 +75,12 @@ function JusticeService.ReleaseInmate(citizenid)
     local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
     if Player then
         local src = Player.PlayerData.source
-        TriggerClientEvent('justice:client:released', src)
+        if inmate.qbPrison then
+            Player.Functions.SetMetaData('injail', 0)
+            TriggerClientEvent('prison:client:UnjailPerson', src)
+        else
+            TriggerClientEvent('justice:client:released', src)
+        end
     end
     return true
 end

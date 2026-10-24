@@ -20,7 +20,7 @@
 
 ## 未完成
 
-1. **P3 真监狱**：`JusticeService.Imprison` 仍使用 custom-justice 自己的传送/计时，没有把 `injail` 元数据与 `prison:client:Enter` 交给 qb-prison；双监狱仍然存在。
+1. ~~P3 真监狱~~：已接入 qb-prison（`injail` 元数据 + `prison:client:Enter`，离线判决上线恢复，提前释放走 `prison:client:UnjailPerson`）；仅在 qb-prison 未启动时回退到 justice 监狱。
 2. **P2 案件详情页**：报告/证据/逮捕尚未按 `case_id` 聚合。
 3. **P4 agent 调度**：没有面向警察的 agent 工具/动作（当前 31 个工具均与警察无关）。
 4. 罚单收据/邮件、BOLO 清除按钮、搜查令执行/过期流转。
