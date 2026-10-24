@@ -54,6 +54,18 @@
   let arrestError = $state('');
   let arrestResult = $state<any>(null);
 
+  const formatCharges = (raw: unknown): string => {
+    if (Array.isArray(raw)) return raw.map((c: any) => c?.label ?? c?.id ?? '').filter(Boolean).join('、');
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map((c: any) => c?.label ?? c?.id ?? '').filter(Boolean).join('、');
+      } catch { /* plain text */ }
+      return raw;
+    }
+    return String(raw ?? '');
+  };
+
   const statusLabel: Record<string, string> = {
     off_duty: '10-7 下班', available: '10-8 在勤', busy: '10-6 忙碌',
     assigned: '已派单', enroute: '前往中', on_scene: '现场', unavailable: '不可用',
@@ -637,7 +649,7 @@
       <h3>最近逮捕</h3>
       {#if arrestRows.length === 0}<p class="empty">暂无</p>{/if}
       {#each arrestRows as row}
-        <p class="line">#{String(row.id)} · {String(row.citizenid)} · {String(row.charges)} <span class="muted">{String(row.officer_citizenid)}</span></p>
+        <p class="line">#{String(row.id)} · {String(row.citizenid)} · {formatCharges(row.charges)} <span class="muted">{String(row.officer_citizenid)}</span></p>
       {/each}
     </section>
 
