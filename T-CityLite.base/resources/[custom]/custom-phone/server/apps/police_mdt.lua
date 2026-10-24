@@ -206,6 +206,15 @@ PhoneApps.Register({
             if not ok or type(res) ~= 'table' then return false end
             return res
         end,
+        -- Server-authoritative NPC backup: custom-police owns the permission,
+        -- cooldown, two-unit cap and audit; the phone only forwards the result.
+        -- Rejections ({ ok = false, error = ... }) are passed through so the
+        -- MDT can localise cooldown/limit/not_police instead of "action_failed".
+        request_backup = function(source, _params)
+            local ok, res = pcall(function() return exports['custom-police']:RequestBackup(source) end)
+            if not ok or type(res) ~= 'table' then return false end
+            return res
+        end,
         register_evidence = function(source, params)
             local ok, res = pcall(function() return exports['custom-police']:RegisterEvidence(source, params) end)
             return ok and res ~= false

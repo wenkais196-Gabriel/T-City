@@ -74,6 +74,10 @@
   let loading = $state(false);
   let error = $state('');
   let notice = $state('');
+  let backupBusy = $state(false);
+  let backupCooldown = $state(0);
+  let backupError = $state('');
+  let backupTimer: ReturnType<typeof setInterval> | undefined;
 
   let citizenQuery = $state('');
   let vehicleQuery = $state('');
@@ -309,6 +313,48 @@
     const res = await appAction(DB, 'clear', { incident_id: incident.id, status: 'cleared' });
     notice = res?.success ? `警情 #${incident.id} 已清场` : `清场失败：${res?.error ?? 'unknown'}`;
     await refresh();
+  }
+
+  // 调度页「请求支援」：服务端裁决权限/冷却/上限，前端只做展示与本地冷却倒计时。
+  function backupErrorFor(code: unknown): string {
+    const reasons: Record<string, string> = {
+      cooldown: '支援请求冷却中（60 秒），请稍后再试',
+      limit: '同时最多 2 个 NPC 支援单位，请等待现有单位结束',
+      not_police: '仅限在勤警察（grade ≥ 1）请求支援',
+      not_on_duty: '请先上班（10-8 在勤）',
+      rank_too_low: '职级不足，需 grade ≥ 1',
+      action_rejected: '服务端拒绝：请检查权限与状态',
+      action_failed: '服务端处理失败，请稍后重试',
+      action_not_found: 'MDT 未注册请求支援动作',
+    };
+    return reasons[String(code)] ?? `请求失败：${String(code ?? 'unknown')}`;
+  }
+
+  function startBackupCooldown() {
+    backupCooldown = 60;
+    if (backupTimer) clearInterval(backupTimer);
+    backupTimer = setInterval(() => {
+      backupCooldown = Math.max(0, backupCooldown - 1);
+      if (backupCooldown === 0 && backupTimer) {
+        clearInterval(backupTimer);
+        backupTimer = undefined;
+      }
+    }, 1000);
+  }
+
+  async function requestBackup() {
+    if (backupBusy || backupCooldown > 0) return;
+    backupBusy = true;
+    backupError = '';
+    const res = await appAction(DB, 'request_backup', {});
+    backupBusy = false;
+    if (!res?.success) {
+      backupError = backupErrorFor(res?.error ?? 'action_failed');
+      return;
+    }
+    const requestId = res.data?.request_id ?? '—';
+    notice = `支援已派出（#${requestId}）`;
+    startBackupCooldown();
   }
 
   async function lookup(kind: 'citizen' | 'vehicle') {
@@ -637,7 +683,10 @@
     await refresh();
   }
 
-  onMount(() => { void openPage('dispatch'); });
+  onMount(() => {
+    void openPage('dispatch');
+    return () => { if (backupTimer) clearInterval(backupTimer); };
+  });
 </script>
 
 <div class="mdt">
@@ -659,6 +708,19 @@
   {#if notice}<p class="notice">{notice}</p>{/if}
 
   {#if page === 'dispatch'}
+    <section class="card">
+      <div class="row">
+        <div>
+          <h3>请求支援</h3>
+          <p class="muted">派出 1 辆警车 + 2 名 NPC 警员；同时最多 2 个单位。</p>
+        </div>
+        <button class="submit" onclick={requestBackup} disabled={backupBusy || backupCooldown > 0}>
+          {backupBusy ? '请求中…' : backupCooldown > 0 ? `冷却 ${backupCooldown}s` : '请求支援'}
+        </button>
+      </div>
+      {#if backupError}<p class="err">{backupError}</p>{/if}
+    </section>
+
     <nav class="tabs sub-tabs">
       <button class:active={dispatchSeg === 'units'} onclick={() => openDispatchSeg('units')}>单位</button>
       <button class:active={dispatchSeg === 'incidents'} onclick={() => openDispatchSeg('incidents')}>接警</button>

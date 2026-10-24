@@ -3,7 +3,7 @@ game 'gta5'
 lua54 'yes'
 author 'Kakarot'
 description 'Provides police tools, evidence, job and more functionality for players to use as a cop'
-version '1.4.0'
+version '1.5.0'
 
 shared_scripts {
 	'config.lua',
@@ -30,6 +30,7 @@ client_scripts {
 	'client/tracker.lua',
 	'client/stolen_radar.lua',
 	'client/p0.lua',
+	'client/backup.lua',
 }
 
 dependencies {
