@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { playerData } from '../stores/phone';
   import { fetchNui, isBrowser } from '../utils/nui';
 
@@ -13,6 +14,26 @@
   let showScanner = $state(false);
   let scannerLoading = $state(false);
   let scannerResults = $state<any[]>([]);
+
+  // Citation ledger. Status is owned by custom-police; the client only
+  // renders what getMyCitations returned and re-reads after a payment.
+  type Citation = {
+    id: number;
+    amount: number;
+    reason?: string;
+    status?: string;
+    plate?: string;
+  };
+
+  let citations = $state<Citation[]>([]);
+  let citationsLoading = $state(false);
+  let citationsError = $state('');
+  let citationsNotice = $state('');
+  let payingCitationId = $state<number | null>(null);
+
+  const unpaidCitationCount = $derived(
+    citations.filter(c => c.status === 'unpaid').length
+  );
 
   const clearMessages = () => {
     errorMsg = '';
@@ -93,6 +114,56 @@
   const formatMoney = (val: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
   };
+
+  const citationReasonText = (code?: string) => {
+    switch (code) {
+      case 'insufficient_funds': return '银行余额不足 (Insufficient bank funds)';
+      case 'not_owner': return '这不是你的罚单 (Not your citation)';
+      case 'not_found': return '罚单不存在 (Citation not found)';
+      case 'unavailable': return '罚单服务暂不可用 (Service unavailable)';
+      default: return code ? code.replace(/_/g, ' ') : '未知错误 (Unknown error)';
+    }
+  };
+
+  const loadCitations = async () => {
+    citationsLoading = true;
+    citationsError = '';
+    try {
+      const res = await fetchNui<any>('getMyCitations');
+      if (res && res.success) {
+        citations = Array.isArray(res.rows) ? res.rows : [];
+      } else {
+        citations = [];
+        citationsError = citationReasonText(res && res.error);
+      }
+    } catch (err) {
+      citations = [];
+      citationsError = '无法加载罚单 (Failed to load citations)';
+    } finally {
+      citationsLoading = false;
+    }
+  };
+
+  const payCitation = async (citation: Citation) => {
+    citationsNotice = '';
+    citationsError = '';
+    payingCitationId = citation.id;
+    try {
+      const res = await fetchNui<any>('payCitation', { citationId: citation.id });
+      if (res && res.success) {
+        citationsNotice = `罚单 #${res.id ?? citation.id} 已支付 ${formatMoney(Number(res.amount ?? citation.amount) || 0)}`;
+        await loadCitations();
+      } else {
+        citationsError = `支付失败：${citationReasonText(res && res.error)}`;
+      }
+    } catch (err) {
+      citationsError = '支付失败：网络错误 (Network error)';
+    } finally {
+      payingCitationId = null;
+    }
+  };
+
+  onMount(loadCitations);
 </script>
 
 <div class="banking-app app-transition">
@@ -126,6 +197,57 @@
     <div class="cash-card glass-card">
       <span class="cash-lbl">💵 Cash in Pocket</span>
       <span class="cash-val">{formatMoney($playerData.money.cash || 0)}</span>
+    </div>
+
+    <!-- My Citations (罚单) -->
+    <div class="citations-card glass-card">
+      <div class="form-header-title citations-title">
+        <span>我的罚单 (MY CITATIONS)</span>
+        {#if unpaidCitationCount > 0}
+          <span class="citations-count">{unpaidCitationCount} 未支付</span>
+        {/if}
+      </div>
+
+      {#if citationsNotice}
+        <div class="success-banner">{citationsNotice}</div>
+      {/if}
+      {#if citationsError}
+        <div class="err-banner">{citationsError}</div>
+      {/if}
+
+      {#if citationsLoading}
+        <div class="citations-empty">加载中… (Loading citations)</div>
+      {:else if citations.length === 0}
+        <div class="citations-empty">没有罚单记录 (No citations on file)</div>
+      {:else}
+        <div class="citation-list">
+          {#each citations as citation (citation.id)}
+            <div class="citation-item">
+              <div class="citation-info">
+                <div class="citation-line">
+                  <span class="citation-id">#{citation.id}</span>
+                  <span class="citation-amount">{formatMoney(Number(citation.amount) || 0)}</span>
+                </div>
+                <span class="citation-reason">{citation.reason || '未提供原因 (No reason provided)'}</span>
+              </div>
+              <div class="citation-actions">
+                <span class="citation-status {citation.status || 'unknown'}">
+                  {citation.status === 'unpaid' ? 'UNPAID' : (citation.status || 'UNKNOWN')}
+                </span>
+                {#if citation.status === 'unpaid'}
+                  <button
+                    class="phone-btn citation-pay-btn"
+                    onclick={() => payCitation(citation)}
+                    disabled={payingCitationId === citation.id}
+                  >
+                    {payingCitationId === citation.id ? '支付中…' : '支付'}
+                  </button>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <!-- Quick Payment Scan Row -->
@@ -332,6 +454,129 @@
     font-size: 15px;
     font-weight: 700;
     color: #22c55e;
+  }
+
+  /* My Citations */
+  .citations-card {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .citations-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0;
+  }
+
+  .citations-count {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 8px;
+    padding: 2px 8px;
+    letter-spacing: 0.3px;
+  }
+
+  .citations-empty {
+    font-size: 12px;
+    color: #71717a;
+    text-align: center;
+    padding: 8px 0;
+  }
+
+  .citation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .citation-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+
+  .citation-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .citation-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .citation-id {
+    font-size: 13px;
+    font-weight: 800;
+    color: hsl(var(--phone-accent));
+  }
+
+  .citation-amount {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fbbf24;
+  }
+
+  .citation-reason {
+    font-size: 11px;
+    color: #a1a1aa;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .citation-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .citation-status {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    color: #a1a1aa;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .citation-status.unpaid {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  .citation-status.paid {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+
+  .citation-pay-btn {
+    padding: 6px 14px;
+    font-size: 11.5px;
+  }
+
+  .citation-pay-btn:disabled {
+    opacity: 0.55;
+    cursor: wait;
   }
 
   .scan-btn {

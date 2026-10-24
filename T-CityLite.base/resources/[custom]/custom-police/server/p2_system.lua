@@ -162,6 +162,31 @@ local function updateRow(sql, values)
     return pcall(function() return MySQL.update.await(sql, values) end)
 end
 
+--- Best-effort notification for the citation created by an arrest. The arrest
+--- is already committed when this runs, so a failing notification is only
+--- logged and never rolls the arrest back.
+local function notifyCitation(citizenid, citationId, amount, reason, source)
+    local title = '你收到一张罚单'
+    local content = utf8Sub(
+        ('你收到一张罚单 #%d，金额 $%d，罪名 %s'):format(citationId, amount, reason), 500)
+    local ok, err = pcall(function()
+        local result = MySQL.insert.await(
+            'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
+            { citizenid, title, content, 'banking' })
+        local notificationId = InsertId(result)
+        local src = tonumber(source)
+        if not src or src <= 0 then return end
+        TriggerClientEvent('phone:client:newNotification', src, {
+            id = notificationId, title = title, content = content,
+            timestamp = os.date('%Y-%m-%d %H:%M:%S'), is_read = false, app_id = 'banking',
+        })
+    end)
+    if not ok then
+        print(('[custom-police] citation notification failed for %s (citation #%s): %s'):format(
+            tostring(citizenid), tostring(citationId), tostring(err)))
+    end
+end
+
 local function encodeCharges(ids)
     local rows = {}
     for i, id in ipairs(ids) do
@@ -394,6 +419,7 @@ function ArrestSubmit(source, params)
             return fail('db_error')
         end
         created.citation = citationId
+        created.citationReason = citationReason
     end
 
     if createEvidence then
@@ -441,6 +467,13 @@ function ArrestSubmit(source, params)
         -- report the failed sentence, leaving no half-written arrest behind.
         rollback()
         return fail('jail_failed')
+    end
+
+    -- The sentence is applied and the citation row exists: tell the suspect.
+    -- Kept after the rollback point so a failed arrest never notifies anyone,
+    -- and inside a pcall so a phone/DB hiccup cannot undo the arrest.
+    if created.citation then
+        notifyCitation(target, created.citation, amount, created.citationReason, targetSrc)
     end
 
     -- Audit only once the sentence is actually applied. If an audit write fails

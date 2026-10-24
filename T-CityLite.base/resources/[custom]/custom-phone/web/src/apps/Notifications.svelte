@@ -19,7 +19,8 @@
 
   const openTarget = (notif: any) => {
     if (notif && typeof notif.app_id === 'string' && notif.app_id.length > 0) {
-      activeApp.set(`dyn:${notif.app_id}`);
+      if (notif.app_id === 'banking') activeApp.set('banking');
+      else activeApp.set(`dyn:${notif.app_id}`);
     }
     if (notif && !notif.is_read) {
       notif.is_read = true;

@@ -19,16 +19,17 @@ local function audit(cid, action, target, detail)
     end)
 end
 
-local function notifyCitizen(citizenid, title, content)
-    MySQL.insert.await(
-        'INSERT INTO phone_notifications (citizenid, title, content) VALUES (?, ?, ?)',
-        { citizenid, title:sub(1, 200), content:sub(1, 500) })
+local function notifyCitizen(citizenid, title, content, appId)
+    local result = MySQL.insert.await(
+        'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
+        { citizenid, title:sub(1, 200), content:sub(1, 500), appId })
+    local notificationId = InsertId(result)
     for _, src in ipairs(QBCore.Functions.GetPlayers()) do
         local d = pd(src)
         if d and d.citizenid == citizenid then
             TriggerClientEvent('phone:client:newNotification', src, {
-                id = 0, title = title:sub(1, 200), content = content:sub(1, 500),
-                timestamp = os.date('%Y-%m-%d %H:%M:%S'), is_read = false,
+                id = notificationId, title = title:sub(1, 200), content = content:sub(1, 500),
+                timestamp = os.date('%Y-%m-%d %H:%M:%S'), is_read = false, app_id = appId,
             })
         end
     end
@@ -55,8 +56,24 @@ function P1.IssueCitation(source, params)
     id = InsertId(id)
     if not id or id == 0 then return false, 'db_error' end
     audit(actor.citizenid, 'citation.issue', target, ('$%d %s'):format(amount, text))
-    notifyCitizen(target, '你收到一张罚单', ('$%d — %s（警官 %s）'):format(amount, text, actor.citizenid))
+    notifyCitizen(target, '你收到一张罚单',
+        ('$%d — %s（罚单 #%d，警官 %s）'):format(
+            math.floor(amount), text, tonumber(id), actor.citizenid),
+        'banking')
     return { id = tonumber(id), amount = math.floor(amount), status = 'unpaid' }
+end
+
+--- Citizen-side read: any online player may list their own citations. There is
+--- deliberately no police capability check here; ownership is the caller's
+--- citizenid, so a player can never read somebody else's tickets.
+function P1.GetMyCitations(source)
+    local actor = pd(source)
+    if not actor or not actor.citizenid then return { rows = {}, count = 0 } end
+    local rows = MySQL.query.await(
+        'SELECT id, amount, reason, status, plate, incident_id, created_at FROM police_citations WHERE citizenid = ? ORDER BY id DESC LIMIT 50',
+        { actor.citizenid })
+    rows = rows or {}
+    return { rows = rows, count = #rows }
 end
 
 function P1.GetCitations(source, params)
@@ -141,6 +158,7 @@ end
 exports('IssueCitation', P1.IssueCitation)
 exports('PayCitation', P1.PayCitation)
 exports('GetCitations', P1.GetCitations)
+exports('GetMyCitations', P1.GetMyCitations)
 exports('CreateReport', P1.CreateReport)
 exports('GetReports', P1.GetReports)
 print('[custom-police] P1 citations/reports loaded')

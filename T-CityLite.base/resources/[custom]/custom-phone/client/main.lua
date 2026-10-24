@@ -878,3 +878,19 @@ RegisterCommand('paycitation', function(_, args)
         end
     end, id)
 end, false)
+
+
+-- P2 citation payment bridges (Banking 我的罚单)
+RegisterNUICallback('getMyCitations', function(_, cb)
+    QBCore.Functions.TriggerCallback('phone:server:getMyCitations', function(res)
+        cb(res or { success = false, error = 'no_response' })
+    end)
+end)
+
+RegisterNUICallback('payCitation', function(data, cb)
+    local id = tonumber(data and data.citationId)
+    if not id then return cb({ success = false, error = 'invalid_citation' }) end
+    QBCore.Functions.TriggerCallback('phone:server:payCitation', function(res)
+        cb(res or { success = false, error = 'no_response' })
+    end, id)
+end)
