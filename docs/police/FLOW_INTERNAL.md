@@ -1,7 +1,7 @@
 # T-City 警察 / 罪犯 / 律师 流程审计（FLOW_INTERNAL）
 
 > 内部流程审计，**只读**。基线 `master @ 4603d4b`（2026-10-24），代码未改动。
-> 证据统一写作 `路径:行号`（相对 `T-CityLite.base/resources/`）。运行期旁证取自 `/tmp/fxserver.log`（30120 在跑，在线 1 人）。
+> 证据统一写作 `路径:行号`（相对 `T-CityLite.base/resources/`）；未写资源前缀的 `server/*.lua`、`client/*.lua`、`shared/*.lua` 均指 `custom-police/`。运行期旁证取自 `/tmp/fxserver.log`（30120 在跑，在线 1 人）。
 > 相关文档：[STATUS.md](STATUS.md)（已交付能力）、[DESIGN.md](DESIGN.md)（目标态）、[audit-current.md](audit-current.md)（**历史审计，早于 P0–P3，结论已过期，勿引用其"零持久化"结论**）。
 
 **计数口径**：一步 = 一次点击 / 一条命令 / 一次表单提交；不含跑图、等待、RP 对话。共用的"上勤 + 开手机"计入每条流程。
@@ -13,7 +13,7 @@
 | # | 结论 | 证据 |
 |---|---|---|
 | 1 | 三条流程里**只有"警察→监狱"能端到端跑通**；罚单收不到钱，法庭/律师零入口 | §3 B1、B2 |
-| 2 | 一次逮捕要**录 3 遍**：`/jail` 手输刑期、MDT 逮捕登记、`/arrest` 注册案件，三处互不链接 | `server/interactions.lua:131`、`server/p3_cases.lua:145`、`server/arrest.lua:11` |
+| 2 | 一次逮捕要**录 3 遍**：`/jail` 手输刑期、MDT 逮捕登记、`/arrest` 注册案件，三处互不链接 | `custom-police/server/interactions.lua:131`、`custom-police/server/p3_cases.lua:145`、`custom-justice/server/arrest.lua:11` |
 | 3 | 罚单通知里**没有罚单号**，手机**没有付款页**，唯一入口 `/paycitation <id>` —— 平民不知道 id，等于死路 | `server/p1.lua:58`、`custom-phone/client/main.lua:870` |
 | 4 | 出狱后职业被强制改成 `unemployed`，**无任何恢复路径**（只有管理员 `police_release`） | `qb-prison/server/main.lua:11-14`、`server/p2_system.lua:114` |
 | 5 | 警察**不能自己建警情**：手机 911 只发通知，MDT 没有"建单"动作，唯一写入口是平民 `/911` | `custom-phone/server/main.lua:953-978`、`server/apps/police_mdt.lua:130-221` |
@@ -82,13 +82,13 @@ flowchart LR
 | # | 谁操作 | UI / 命令 | 数据表 | 能跳过？ | 强扮演？ | 依据 |
 |---|---|---|---|---|---|---|
 | 1 | 律师 | 上线（该职业无 onduty 概念） | `players.job` | — | — | `custom-justice/server/arrest.lua:59-65` |
-| 2 | 系统 | 警察跑 `/arrest` 后收到 notify + 地图标到法院 | justice 内存 `activeCases` | 是（警察不跑就没有） | 中 | `custom-justice/server/arrest.lua:66-78`、`client/main.lua:23-36` |
-| 3 | 律师 / 法官 | `/cases` 列内存案件（重启即失） | 无（纯内存） | 是 | 弱 | `custom-justice/server/trial.lua:118-155`、`server/main.lua:25-41` |
+| 2 | 系统 | 警察跑 `/arrest` 后收到 notify + 地图标到法院 | justice 内存 `activeCases` | 是（警察不跑就没有） | 中 | `custom-justice/server/arrest.lua:66-78`、`custom-justice/client/main.lua:23-36` |
+| 3 | 律师 / 法官 | `/cases` 列内存案件（重启即失） | 无（纯内存） | 是 | 弱 | `custom-justice/server/trial.lua:118-155`、`custom-justice/server/main.lua:25-41` |
 | 4 | 律师 | **接案：无任何入口**（`lawyerAcceptCase` 全仓库零调用方） | 无 | **断** | — | `custom-justice/server/arrest.lua:98` |
 | 5 | 法官 | **开庭：无任何入口**（`startTrial` 全仓库零调用方；无 `/trial`、无法院交互） | 无 | **断** | — | `custom-justice/server/trial.lua:9` |
 | 6 | 警察/法官 | `/paylawyer <id>` 手动给律师 500（无出庭、无计费规则） | `players.money` | 是 | 弱 | `custom-police/server/commands.lua:511-528` |
 
-**→ 律师与法官目前只是两条 `/cases` 的读者**：没有接案、没有开庭、没有报酬闭环。`Config.Justice.Lawyer.feeBase/feePerMinute` 与 `Reductions.lawyer_defense` 都在配置里躺着，从未被读取（`custom-justice/config.lua:36,46-51`）。
+**→ 律师与法官目前只是 `/cases` 的读者**：没有接案、没有开庭、没有报酬闭环。`Config.Justice.Lawyer.feeBase/feePerMinute/cooldownMinutes` 从未被任何代码读取（`custom-justice/config.lua:46-51`）；`Reductions.lawyer_defense` 只在 `trial.lua:48` 被读，而 `trial.lua` 的开庭事件没有任何调用方 —— 30% 减刑永远不会发生。
 
 ### 1.4 两条日常支线：罚单（6 步）与报告（4 步）
 
@@ -118,7 +118,7 @@ flowchart LR
 
 | ID | 摩擦点 | 证据 | 玩家感受 | 修复成本 |
 |---|---|---|---|---|
-| F1 | 现场查人必须先手抄 `citizenid` | `server/commands.lua:354-394`（只把 CID 打到聊天栏）、`server/p0.lua:192-197`（只按 citizenid 查）、`PoliceMDT.svelte:333` | "人就在我面前，我得切聊天栏抄 8 位码，抄错就查不到" | 低 |
+| F1 | 现场查人必须先手抄 `citizenid` | `server/commands.lua:354-394`（只把 CID 打到聊天栏）、`server/p0.lua:192-197`（只按 citizenid 查）、`PoliceMDT.svelte:333` | "人就在我面前，我得切聊天栏抄一串 citizenid，抄错一位就查不到" | 低 |
 | F2 | 一次逮捕录 3 遍（刑期 / 逮捕表 / 案件） | `server/interactions.lua:131-155`、`server/p3_cases.lua:145-162`、`custom-justice/server/arrest.lua:11-92` | "抓一个人要打两条命令再切手机填一次表，还得先停车" | 中 |
 | F3 | 刑期手输，且标签写 "Time in Months" 实为分钟 | `client/interactions.lua:144-157`、`locales/en.lua:81-83` | "填 30 以为是 30 个月；没人知道该填多少，全看警员心情" | 低 |
 | F4 | 罚单全靠手填，金额无白名单 | `PoliceMDT.svelte:27,355-369`、`server/p1.lua:41-46`（1–50000 任意数） | "同样的超速，老警开 200，我开 2000；每次都要问 CID" | 低 |
@@ -144,7 +144,7 @@ flowchart LR
 | B2 | **律师接案 / 开庭零入口** | `custom-justice/server/arrest.lua:98`、`custom-justice/server/trial.lua:9`（全仓库无客户端触发） | 司法线止步于"通知"，法庭/辩护/量刑整套配置死代码 | **P0**（对重扮演方案） |
 | B3 | **出狱失业**：`SetJailStatus` 强改 `unemployed`，释放链无恢复 | `qb-prison/server/main.lua:11-14`、`qb-prison/client/main.lua:277-309`；唯一恢复是控制台/ACE `police_release`（`server/p2_system.lua:114-133`） | 警察坐一次牢就失去职业与等级，需管理员手动救 | **P0** |
 | B4 | **`/arrest` 与 `/jail` 分离**：案件 ≠ 服刑 ≠ 逮捕记录 | `custom-justice/server/arrest.lua:11-92`（只建内存案件）、`server/interactions.lua:131-155`（只写 metadata）、`server/p3_cases.lua:145-162`（只写表） | 有案底的人可能没坐牢，坐牢的人可能没有案底 | **P0** |
-| B5 | **报告/证据无法挂案件**（表单无 `case_id`）→ 案件是空壳 | `PoliceMDT.svelte:29-30,371-383`；API 支持但 UI 不传（`server/p0.lua` 的 `case_id` 校验 `server/p1.lua:85-89`） | `police_cases` 只是一行标题，`GetCaseDetail` 永远 0 报告 0 证据 | P1 |
+| B5 | **报告/证据无法挂案件**（表单无 `case_id`）→ 案件是空壳 | `PoliceMDT.svelte:29-30,371-383`（表单无 `case_id` 字段）；API 本身支持（`server/p1.lua:85-89`），只是 UI 从不传 | `police_cases` 只是一行标题，`GetCaseDetail` 永远 0 报告 0 证据 | P1 |
 | B6 | **两套监狱 + 重连双入口** | `custom-justice/server/main.lua:138-151`（任何 inmate 都发 `justice:client:enterPrison`）与 `custom-justice/server/prison.lua:75-87`（再发 `prison:client:Enter`）同时命中 | 重连时可能被传到 justice 假坐标（`1685,2500,45`）并出现两套倒计时 | P1 |
 | B7 | **接线入口断**：911 通话不建单、MDT 无建单、`autoAlert` 不入库 | 同 F5/F6 | `police_incidents` 只能由平民 `/911` 或 agent 创建，警察无法补录 | P1 |
 | B8 | **通缉无单一事实源** | 同 F10 | 令状/通缉/BOLO 互相看不见，无法做"拦截即显示" | P1 |
@@ -189,7 +189,7 @@ flowchart LR
 |---|---|---|---|
 | A 的全部，加：罚单、报告、证据（保管链）、案件（含详情聚合）、BOLO；审计 tab 保留 grade≥3 | `/jail` 手输（降级为内部实现）、`/fine`、`/911p`、`/arrest` 命令（转导出）、justice 内置监狱与 E 键减刑、`metadata.wanted` 写入 | ① 逮捕一键（罪名白名单 → 自动刑期 → `police_arrests` + 送监 + 律师通知）② 案件上下文（报告/证据/逮捕自动挂 `case_id`）③ 罚单模板 + 通知带 id + 手机付款页 ④ 出狱恢复职业 ⑤ 911/autoAlert → 建单 ⑥ 单位过滤 + 派单校验 | `police_arrests` 需加 `minutes/reason/status` 字段（迁移）；律师仍未闭环（只通知，不接案）——是可接受的中间态 |
 
-改动文件 ≈ **13**：上面 9 个 + `custom-police/server/p1.lua`、`custom-phone/server/main.lua`、`custom-phone/web/src/App.svelte`、1 个新 Svelte 页（我的罚单）+ 1 个迁移（合计 13–14）。
+改动文件 ≈ **13**：A 的 9 个 + `custom-police/server/p1.lua`、`custom-phone/server/main.lua`、`custom-phone/web/src/App.svelte`、新建 `custom-phone/web/src/apps/MyFines.svelte`（迁移复用 A 的那一条，不新增）。
 
 ### 方案 C — 重扮演（B + 法庭 / 律师 / 专精）
 
@@ -197,7 +197,7 @@ flowchart LR
 |---|---|---|---|
 | B 的全部，加：律师 App（接案/阅卷/收费）、法官量刑页（`startTrial` 入口）、保释、社区服务/减刑、搜查令执行流转、部门专精（SWAT/CID/TRAFFIC 视图） | 内存 `activeCases`（改落库）、`/paylawyer` 手发钱 | ① `justice_cases` / `justice_inmates` 持久化表 ② 律师接案 + 出庭 + 计费（`feeBase + feePerMinute`）③ 法院内交互点触发开庭 ④ 判词与减刑规则落地 ⑤ 令状执行状态机 | 需要法官/律师同时在线才有戏，小服务器排班难；表与状态机翻倍；与 `police_cases` 的编号必须统一（否则 B11 恶化） |
 
-改动文件 ≈ **24**：B 的 13 + `custom-justice/server/{main,trial,arrest,prison}.lua`、`custom-justice/client/main.lua`、`custom-justice/config.lua`、律师/法官 App（2 个 Svelte + App 路由）、`custom-police/server/{p0,p2_system}.lua`、2–3 个迁移与对应测试。
+改动文件 ≈ **25**：B 的 13 + `custom-justice/server/{main,trial,arrest,prison}.lua`、`custom-justice/client/main.lua`、`custom-justice/config.lua`、`custom-phone/web/src/apps/{LawyerApp,JudgePanel}.svelte`（+ App 路由）、`custom-police/server/{p0,p2_system}.lua`、2 个迁移与对应测试。
 
 **取舍建议**：现在三条流程的真实使用频率是 **接警 ≫ 逮捕 ≫ 罚单 ≫ 案件 ≫ 法庭**。A 会让警察"抓人没有产出"，C 会在没人当法官时变成空转。B 把 90% 的日常动作收敛到"一次逮捕 + 一张罚单 + 一份报告"，同时给 C 留好接口（`police_arrests.case_id`、律师通知已存在）。
 
@@ -255,4 +255,4 @@ flowchart LR
 - 最大断点：**罚单收款闭环断**（通知无 id、无付款入口；结构性断点是开庭/律师零入口）
 - 最值得合并的两步：**MDT 逮捕登记 + `/jail` 手输刑期** → 一次「逮捕并送监」；其次 **报告/证据手填 incident_id/case_id** → 「当前案件上下文」
 - 推荐方案：**B**
-- 预计改动文件数：**13**（方案 B，含 1 迁移 + 1 新前端页）
+- 预计改动文件数：**13**（方案 B：9 个存量文件 + 4 个新增/改动文件，复用 1 条迁移）
