@@ -294,6 +294,42 @@ function P.AssignUnit(source, incidentId, targetCitizenId)
     return { id = id, unit = target, status = 'assigned' }
 end
 
+--- System/agent assignment path (no player source). Kept next to
+--- P.AssignUnit so agent actions cannot bypass the SM-01/SM-02 write helpers.
+function P.AssignUnitSystem(incidentId, targetCitizenId, actorCitizenId)
+    local id = tonumber(incidentId)
+    if not id then return false, 'invalid_incident' end
+    local target = tostring(targetCitizenId or ''):sub(1, 50)
+    if target == '' then return false, 'invalid_unit' end
+    local incident = MySQL.single.await(
+        'SELECT id, status FROM police_incidents WHERE id = ? LIMIT 1', { id })
+    if not incident then return false, 'incident_not_found' end
+    if incident.status ~= 'open' and incident.status ~= 'assigned' then
+        return false, 'invalid_transition'
+    end
+    local currentAssignment = MySQL.single.await(
+        'SELECT status, incident_id FROM police_units WHERE citizenid = ? LIMIT 1', { target })
+    if not currentAssignment then return false, 'unit_not_found' end
+    if currentAssignment.status == 'off_duty' then return false, 'unit_off_duty' end
+    if tonumber(currentAssignment.incident_id) == id
+        and (currentAssignment.status == 'assigned' or currentAssignment.status == 'enroute'
+             or currentAssignment.status == 'on_scene') then
+        return { id = id, unit = target, status = 'assigned', idempotent = true }
+    end
+    MySQL.insert.await([[
+        INSERT INTO police_incident_units (incident_id, citizenid) VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE joined_at = joined_at
+    ]], { id, target })
+    assignUnitRow(target, id)
+    MySQL.update.await(
+        "UPDATE police_incidents SET status = 'assigned', last_activity_at = NOW(), updated_at = NOW() WHERE id = ?",
+        { id })
+    if not audit(actorCitizenId or 'system', 'incident.assign', tostring(id), target) then
+        print(('[custom-police] incident.assign audit failed for #%s'):format(tostring(id)))
+    end
+    return { id = id, unit = target, status = 'assigned' }
+end
+
 function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
     local actor = pd(source)
     local allowed, policyReason = PolicePolicy.Can(actor, 'incident.update')
@@ -725,6 +761,7 @@ exports('GetUnits', P.GetUnits)
 exports('CreateIncident', P.CreateIncident)
 exports('GetIncidents', P.GetIncidents)
 exports('AssignUnit', P.AssignUnit)
+exports('AssignUnitSystemForAgent', P.AssignUnitSystem)
 exports('SetIncidentStatus', P.SetIncidentStatus)
 exports('SweepStaleIncidents', SweepStaleIncidents)
 exports('LookupCitizen', P.LookupCitizen)

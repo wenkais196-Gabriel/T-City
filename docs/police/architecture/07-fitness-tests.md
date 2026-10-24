@@ -24,7 +24,7 @@
 | FIT-08 | 生成物/注册表一致（`agent_tools --check` + 禁止手改） | 工具链 | ✅ PASS | blocking（已存在） |
 | FIT-09 | 查询纪律：禁 `SELECT *`、必须 `LIMIT`、字段白名单 | 性能/PII | ✅ PASS（dec840f；23 处通配投影清零，2 条 allowlist） | blocking |
 | FIT-10 | 资源接线：cfg ↔ manifest ↔ 文件 ↔ 导出消费者 | 可启动性 | ✅ PASS（`test_resource_wiring.py`；82 个启动资源 / 598 个字面条目 / 424 处导出引用，0 未登记） | blocking |
-| FIT-11 | 状态机列只允许登记过的写者 | 一致性 | ✅ PASS（`test_state_writers.py`；22 个写点 / 7 条规则 / 2 条精确例外，0 未登记） | blocking |
+| FIT-11 | 状态机列只允许登记过的写者 | 一致性 | ✅ PASS（`test_state_writers.py`；22 个写点 / 0 例外） | blocking |
 | FIT-12 | 弃用登记：deprecated 写路径为 0 或未过期豁免 | 演进 | ✅ PASS（`test_deprecations.py`；6 条已知债务，2026-12-31 到期） | blocking |
 | FIT-13 | 文档数字与代码常量一致（05 的预算不得漂移） | 文档 | ✅ PASS（`test_number_budget.py`；11 个数字 / 31 处文档引用，10 implemented + 1 proposed） | blocking |
 
@@ -413,7 +413,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 | FIT-08 | 注册表/生成物一致 | 1 | ✅ PASS | 1 | 1 | `agent_tools.py --check` 已进 CI |
 | FIT-09 | 查询纪律 | 2 | ✅ PASS | 1 | 2 | 23 处通配投影清零，2 条 allowlist |
 | FIT-10 | 资源接线 | 1 | ✅ PASS | 1 | 1 | `test_resource_wiring.py` |
-| FIT-11 | 状态机写者登记 | 2 | ✅ PASS | 1 | 2 | `test_state_writers.py` + allowlist |
+| FIT-11 | 状态机写者登记 | 2 | ✅ PASS | 1 | 2 | `test_state_writers.py`；Sys.AssignUnit 已改为委托 p0，0 例外 |
 | FIT-12 | 弃用登记 | 1 | ✅ PASS | 1 | 1 | 6 条债务，2026-12-31 到期 |
 | FIT-13 | 文档数字漂移 | 1 | ✅ PASS | 1 | 1 | `number_budget.json` + 扫描器 |
 

@@ -8,7 +8,9 @@
       "file": "custom-police/server/p0.lua",
       "export": "SweepStaleIncidents",
       "kind": "system_only",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "staleSweepLoop 定时器直接调用，不接收玩家 source；每关闭一条滞留警情都写 incident.stale 审计（actor_kind=system），导出只为离线测试保留。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -19,7 +21,10 @@
       "file": "custom-police/server/p1.lua",
       "export": "GetMyCitations",
       "kind": "citizen_owned",
-      "exceptions": ["auth", "sensitive_read_audit"],
+      "exceptions": [
+        "auth",
+        "sensitive_read_audit"
+      ],
       "reason": "公民读取自己的罚单，SQL 以 actor.citizenid 绑定，不暴露他人数据；这不是警察敏感读，不写入 police_audit（否则每个市民查账都会污染警察取证面）。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -30,7 +35,9 @@
       "file": "custom-police/server/p2_system.lua",
       "export": "EnqueueOutbox",
       "kind": "system_only",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "内部 outbox 写入口，供 custom-police 其他模块与测试 harness 调用；topic 白名单 + payload 表校验，不接收玩家 source 也不返回 PII。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -41,7 +48,9 @@
       "file": "custom-police/server/p2_system.lua",
       "export": "GetCharges",
       "kind": "static_catalog",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "静态罪名目录（shared/charges.lua），无 DB 查询、无 PII、无写路径，因此不需要权限门与审计；MDT 只渲染 label/minutes/fine。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -52,7 +61,9 @@
       "file": "custom-police/server/p2_system.lua",
       "export": "CreateIncidentSystem",
       "kind": "system_only",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "custom-director agent 桥接调用，actorId 是 action 标识而非玩家 source；写路径先写 incident.create 审计，失败返回 audit_unavailable。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -63,7 +74,9 @@
       "file": "custom-police/server/p2_system.lua",
       "export": "AssignUnitSystem",
       "kind": "system_only",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "custom-director agent 桥接调用，actorId 是 action 标识而非玩家 source；写路径先写 incident.assign 审计，失败返回 audit_unavailable。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -74,7 +87,9 @@
       "file": "custom-police/server/p2_system.lua",
       "export": "JailSystem",
       "kind": "system_only",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "custom-director agent 桥接调用，actorId 是 action 标识而非玩家 source；送监后写 arrest.register 审计（写失败打印，arrest 行已提交，不静默丢弃）。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -85,7 +100,9 @@
       "file": "custom-police/server/p3_cases.lua",
       "export": "RecordVerdict",
       "kind": "system_only",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "custom-justice 的 owner 写路径（trial.lua pcall 调用），没有玩家 source；本轮补齐 invalid_justice_case / invalid_verdict / invalid_status / db_error 稳定错误码。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -96,7 +113,9 @@
       "file": "custom-police/server/p4_npc.lua",
       "export": "GetActiveNpcCallouts",
       "kind": "diagnostic_read",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "测试/诊断用只读快照，只含 incident 元数据与坐标，不含 citizenid/玩家名；无敏感 PII，不进入审计面。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -107,7 +126,9 @@
       "file": "custom-police/server/p4_npc.lua",
       "export": "GetNpcCalloutTemplates",
       "kind": "static_catalog",
-      "exceptions": ["auth"],
+      "exceptions": [
+        "auth"
+      ],
       "reason": "返回 shared/npc_callouts.lua 的静态模板 id，无 DB 查询、无 PII、无写路径。",
       "owner": "custom-police",
       "added": "2026-10-24",
@@ -118,11 +139,27 @@
       "file": "custom-police/server/npc_budget.lua",
       "export": "GetNpcBudget",
       "kind": "internal_read",
-      "exceptions": ["auth", "sensitive_read_audit"],
+      "exceptions": [
+        "auth",
+        "sensitive_read_audit"
+      ],
       "reason": "RequestBackup/CreateNpcCallout 的预算记账在热路径上反复调用同一 accessor；在 accessor 内加审计会把每次 NPC 动作变成额外审计写（读放大）。快照 entries 含 citizenid，若对外暴露给 MDT/agent，需先加带 source 的审计包装；到期前处理。",
       "owner": "custom-police",
       "added": "2026-10-24",
       "expires": "2026-12-31"
+    },
+    {
+      "id": "p0-assign-unit-system-for-agent",
+      "file": "custom-police/server/p0.lua",
+      "export": "AssignUnitSystemForAgent",
+      "kind": "system_only",
+      "exceptions": [
+        "auth"
+      ],
+      "reason": "custom-polic p2_system.Sys.AssignUnit 的 agent 桥接入口，无玩家 source；复用 p0 的 assignUnitRow/markIncidentUnits 并写 incident.assign 审计，返回结构化错误码。",
+      "owner": "custom-police",
+      "added": "2026-10-24",
+      "expires": "2027-03-31"
     }
   ]
 }
