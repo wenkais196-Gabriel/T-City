@@ -148,8 +148,9 @@ def test_manifest_loads_charge_catalog_and_version_is_bumped():
     manifest = read(POLICE / "fxmanifest.lua")
     assert "shared/charges.lua" in manifest
     assert manifest.index("shared/charges.lua") < manifest.index("server/p2_system.lua")
-    assert "version '1.5.0'" in manifest
+    assert "version '1.6.0'" in manifest
     assert "version '1.4.0'" not in manifest
+    assert "version '1.5.0'" not in manifest
 
 
 # ---------------------------------------------------------------------------
@@ -1085,8 +1086,9 @@ def backup_drop_block() -> str:
 def test_backup_manifest_ships_client_and_bumps_version():
     manifest = read(POLICE / "fxmanifest.lua")
     assert "client/backup.lua" in manifest
-    assert "version '1.5.0'" in manifest
+    assert "version '1.6.0'" in manifest
     assert "version '1.4.0'" not in manifest
+    assert "version '1.5.0'" not in manifest
 
 
 def test_request_backup_is_exported_gated_and_notifies_only_the_caller():
@@ -1796,3 +1798,249 @@ def test_pay_citation_claims_before_charging_and_rolls_back_on_failure():
     assert "return false, 'insufficient_funds'" in block
     # Only the successful payer writes the audit.
     assert "audit(actor.citizenid, 'citation.pay', tostring(id)" in block
+
+
+# ---------------------------------------------------------------------------
+# NPC callouts: server-owned templates/scenes/settlement, client presentation
+# ---------------------------------------------------------------------------
+
+NPC_SHARED = POLICE / "shared/npc_callouts.lua"
+NPC_SERVER = POLICE / "server/p4_npc.lua"
+NPC_CLIENT = POLICE / "client/npc_callouts.lua"
+MIGRATION_V311 = BASE / "migrations" / "v3.11_police_npc_callout.sql"
+NPC_TEMPLATES = (
+    "traffic_accident",
+    "suspicious_vehicle",
+    "store_robbery",
+    "armed_person",
+)
+
+
+def npc_create_block() -> str:
+    src = read(NPC_SERVER)
+    start = src.index("function NPC.CreateNpcCallout(")
+    end = src.index("\n-- In-memory map", start)
+    return src[start:end]
+
+
+def npc_result_block() -> str:
+    src = read(NPC_SERVER)
+    start = src.index("function NPC.SubmitResult(")
+    end = src.index("\n-- ---------------------------------------------------------------------------\n-- Scene push", start)
+    return src[start:end]
+
+
+def npc_template_block(template_id: str) -> str:
+    src = read(NPC_SHARED)
+    start = src.index(f"    {template_id} = {{")
+    if template_id == NPC_TEMPLATES[-1]:
+        end = src.index("NPCCallouts.TEMPLATES", start)
+    else:
+        next_id = NPC_TEMPLATES[NPC_TEMPLATES.index(template_id) + 1]
+        end = src.index(f"    {next_id} = {{", start)
+    return src[start:end]
+
+
+def test_v311_migration_adds_npc_template_and_index_idempotently():
+    sql = read(MIGRATION_V311)
+    assert "ALTER TABLE police_incidents ADD COLUMN npc_template VARCHAR(32)" in sql
+    assert "information_schema.COLUMNS" in sql
+    assert "information_schema.STATISTICS" in sql
+    assert "idx_npc_template_status" in sql
+    assert "ADD KEY idx_npc_template_status (npc_template, status)" in sql
+    # Both the column and the index are conditional, and every statement is
+    # deallocated so the migration can be re-run safely.
+    assert "IF(@has_npc_template = 0" in sql
+    assert "IF(@has_idx_npc_template = 0" in sql
+    prepared = len(re.findall(r"^PREPARE ", sql, re.M))
+    assert prepared == 2
+    assert prepared == sql.count("DEALLOCATE PREPARE")
+
+
+def test_npc_templates_are_the_four_mvp_templates_with_locations():
+    src = read(NPC_SHARED)
+    ids = re.findall(
+        r"^    (traffic_accident|suspicious_vehicle|store_robbery|armed_person) = \{",
+        src,
+        re.M,
+    )
+    assert ids == list(NPC_TEMPLATES)
+    assert "NPCCallouts.MAX_ACTIVE = 1" in src
+    assert "NPCCallouts.INTERVAL_MS = 8 * 60 * 1000" in src
+    assert "NPCCallouts.SPAWN_CHANCE = 0.30" in src
+    assert "NPCCallouts.START_DELAY_MS = 30000" in src
+    assert "NPCCallouts.REWARD = 500" in src
+
+    for template_id in NPC_TEMPLATES:
+        block = npc_template_block(template_id)
+        assert f"id = '{template_id}'" in block
+        spots = re.findall(
+            r"\{ x = [-\d.]+, y = [-\d.]+, z = [-\d.]+, heading = [-\d.]+, +label = '[^']+' \}",
+            block,
+        )
+        assert 2 <= len(spots) <= 3, f"{template_id}: expected 2-3 locations, got {spots}"
+
+
+def test_npc_templates_carry_per_template_scene_content():
+    traffic = npc_template_block("traffic_accident")
+    assert "vehicles = {" in traffic and "victims = {" in traffic
+    assert "suspects = {}" in traffic
+    assert traffic.count("damaged = true") == 2
+
+    suspicious = npc_template_block("suspicious_vehicle")
+    assert "vehicles = {" in suspicious and "suspects = {" in suspicious
+    assert "behavior = 'flee_or_fight'" in suspicious
+    assert "weapon = " in suspicious and "armour = " in suspicious
+
+    store = npc_template_block("store_robbery")
+    assert store.count("behavior = 'hostile'") == 2
+    assert "bystanders = {" in store and "WORLD_HUMAN_HANDS_UP" in store
+
+    armed = npc_template_block("armed_person")
+    assert "suspects = {" in armed and "weapon = " in armed
+    assert armed.count("behavior = 'hostile'") == 1
+
+    src = read(NPC_SHARED)
+    assert src.count("assault") == 0  # no K9/SWAT/air units in this MVP
+
+
+def test_npc_create_is_gated_inserts_and_notifies():
+    block = npc_create_block()
+    assert "NPCCallouts.Get(templateId)" in block
+    assert "if not template then return false, 'invalid_template' end" in block
+    assert "PolicePolicy.IsPolice(data)" in block
+    assert "data.job.onduty ~= true" in block
+    assert "activeNpcCount() >= NPCCallouts.MAX_ACTIVE" in block
+    assert "template.locations[math.random(1, #template.locations)]" in block
+    assert "INSERT INTO police_incidents" in block
+    assert "npc_template)" in block
+    assert "'npc.callout.create'" in block
+    assert "notifyOfficers(template, location, coords)" in block
+
+    src = read(NPC_SERVER)
+    assert "INSERT INTO phone_notifications" in src
+    assert "TriggerClientEvent('phone:client:newNotification'" in src
+    assert "TriggerClientEvent('police:client:policeAlert'" in src
+    assert "exports('CreateNpcCallout', NPC.CreateNpcCallout)" in src
+
+
+def test_npc_scheduler_delay_interval_chance_and_cap():
+    src = read(NPC_SERVER)
+    assert "local function autoLoop()" in src
+    assert "Wait(NPCCallouts.START_DELAY_MS)" in src
+    assert "Wait(NPCCallouts.INTERVAL_MS)" in src
+    assert "if onDutyCount() < 1 then return end" in src
+    assert "if activeNpcCount() >= NPCCallouts.MAX_ACTIVE then return end" in src
+    assert "if math.random() >= NPCCallouts.SPAWN_CHANCE then return end" in src
+    assert "NPCCallouts.RandomId()" in src
+    # Cap is enforced in the writer too, so the console command cannot bypass it.
+    assert "activeNpcCount() >= NPCCallouts.MAX_ACTIVE" in npc_create_block()
+
+
+def test_npc_console_command_requires_ace():
+    src = read(NPC_SERVER)
+    assert "RegisterCommand('npc_callout'" in src
+    assert "IsPlayerAceAllowed(source, 'police.release')" in src
+    assert "local result, reason = NPC.CreateNpcCallout(templateId, source)" in src
+    assert "exports('GetNpcCalloutTemplates'" in src
+
+
+def test_npc_result_validates_close_reward_and_audit():
+    block = npc_result_block()
+    src = read(NPC_SERVER)
+    assert "police:server:NpcCalloutResult" in src
+    assert "RegisterNetEvent('police:server:NpcCalloutResult'" in src
+    for outcome in ("resolved", "arrest", "failed", "false_alarm"):
+        assert outcome in src
+    assert "if not OUTCOMES[result] then return false, 'invalid_outcome' end" in block
+    assert "if not incident.npc_template" in block
+    assert "if tostring(incident.status) == 'closed' then" in block
+    assert "PolicePolicy.Grade(actor) < 2 and not assigned" in block
+    assert "exports['custom-police']:SetIncidentStatus(" in block
+    assert "if not callOk or type(closed) ~= 'table' then" in block
+    assert "return false, 'close_failed'" in block
+    # A concurrent second report is idempotent and must not pay twice.
+    assert "if closed.idempotent == true then" in block
+    assert "player.Functions.AddMoney('bank', 500, 'npc_callout')" in block
+    assert "audit(actor.citizenid, 'npc.callout.resolve', tostring(id), result, 'player')" in block
+    assert "broadcastEnd(id)" in block
+    assert "TriggerClientEvent('police:client:NpcCalloutEnd'" in src
+    # Disposition mapping is restricted to the existing close vocabulary.
+    assert "resolved = 'cleared'" in src
+    assert "arrest = 'arrest'" in src
+    assert "false_alarm = 'false_alarm'" in src
+
+
+def test_npc_scene_watcher_pushes_after_arrival_and_cleans_closed_calls():
+    src = read(NPC_SERVER)
+    assert "local function sceneWatcher()" in src
+    assert "TriggerClientEvent('police:client:NpcCallout'" in src
+    assert "NPCCallouts.SPAWN_RADIUS" in src
+    assert "status <> 'closed'" in src
+    assert "for incidentId, entry in pairs(spawned) do" in src
+    assert "AddEventHandler('playerDropped'" in src
+    assert "exports('SubmitNpcCalloutResult', NPC.SubmitResult)" in src
+
+
+def test_npc_client_registers_events_and_reports_with_e():
+    src = read(NPC_CLIENT)
+    assert "RegisterNetEvent('police:client:NpcCallout'" in src
+    assert "RegisterNetEvent('police:client:NpcCalloutEnd'" in src
+    assert "TriggerServerEvent('police:server:NpcCalloutResult'" in src
+    assert "IsControlJustReleased(0, CONTROL_E)" in src
+    assert "REPORT_DEBOUNCE_MS = 500" in src
+    assert "local CONTROL_E = 38" in src
+    assert "if now - state.lastKeyAt < REPORT_DEBOUNCE_MS then return end" in src
+    assert "if not state.controlled or distance > REPORT_RADIUS then return end" in src
+    # Arrest when every suspect is down; otherwise a normal clear.
+    assert "if #state.suspects > 0 and suspectsNeutralised(state) then outcome = 'arrest' end" in src
+    assert "IsPedDeadOrDying" in src
+
+
+def test_npc_client_builds_every_scene_element():
+    src = read(NPC_CLIENT)
+    assert "CreateVehicle(" in src
+    assert "CreatePed(" in src
+    assert "if config.damaged then damageVehicle(vehicle) end" in src
+    assert "local severity = math.random()" in src
+    assert "configureVictim(ped, config, state)" in src
+    assert "configureBystander(ped, config)" in src
+    assert "configureSuspect(ped, config, state)" in src
+    assert "GiveWeaponToPed" in src
+    assert "SetPedArmour" in src
+    assert "safe(SetPedRelationshipGroupHash, ped, HOSTILE_GROUP)" in src
+    assert "TaskCombatPed" in src and "TaskSmartFleePed" in src
+    for key in ("sceneCfg.vehicles", "sceneCfg.victims", "sceneCfg.bystanders", "sceneCfg.suspects"):
+        assert key in src
+    assert "buildBlip(coords, template.title)" in src
+    assert "drawText3D" in src
+    assert "GetHashKey(" in src
+    assert "IsModelInCdimage" in src
+    assert "local function safe(fn, ...)" in src
+
+
+def test_npc_client_cleanup_on_end_distance_and_resource_stop():
+    src = read(NPC_CLIENT)
+    assert "cleanupScene('server_end')" in src
+    assert "cleanupScene('distance')" in src
+    assert "cleanupScene('resource_stop')" in src
+    assert "LEAVE_RADIUS = (NPCCallouts and NPCCallouts.DESPAWN_RADIUS) or 300.0" in src
+    assert "LEAVE_GRACE_MS = (NPCCallouts and NPCCallouts.DESPAWN_GRACE_MS) or 60000" in src
+    assert "if now - state.awayAt >= LEAVE_GRACE_MS then" in src
+    assert "AddEventHandler('onResourceStop'" in src
+    assert "if spawning then spawning.cancelled = true end" in src
+    # Single local scene: a new incident replaces the old one and duplicates
+    # for the same incident are ignored.
+    assert "if scene.incidentId == id then return end" in src
+    assert "cleanupScene('replaced')" in src
+
+
+def test_npc_manifest_loads_shared_client_and_server_and_bumps_version():
+    manifest = read(POLICE / "fxmanifest.lua")
+    assert "shared/npc_callouts.lua" in manifest
+    assert "client/npc_callouts.lua" in manifest
+    assert "server/p4_npc.lua" in manifest
+    assert manifest.index("shared/npc_callouts.lua") < manifest.index("client/npc_callouts.lua")
+    assert manifest.index("server/p0.lua") < manifest.index("server/p4_npc.lua")
+    assert "version '1.6.0'" in manifest
+    assert "version '1.5.0'" not in manifest

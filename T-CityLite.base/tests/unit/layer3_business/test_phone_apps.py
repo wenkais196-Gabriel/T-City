@@ -643,3 +643,30 @@ def test_built_bundle_ships_idempotent_submits():
     )
     for token in ("idempotency_key", "randomUUID"):
         assert token in bundle, token
+
+
+def test_police_mdt_tags_npc_callouts():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    # npc_template is the source of truth; the [NPC] title prefix is the
+    # fallback because GetIncidents predates the new column.
+    assert "npc_template?: string | null" in ui
+    assert "function isNpcIncident" in ui
+    assert "incident.npc_template" in ui
+    assert "startsWith('[NPC]')" in ui
+    assert "function incidentTitle" in ui
+    assert "incidentTitle(incident)" in ui
+    assert '<span class="tag npc">NPC</span>' in ui
+    assert ".tag.npc" in ui
+    # The dispatch row still offers the same three actions (no new UI).
+    assert "updateIncident(incident, 'enroute')" in ui
+    assert "updateIncident(incident, 'on_scene')" in ui
+    assert "clearIncident(incident)" in ui
+
+
+def test_built_bundle_ships_npc_callout_tag():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    assert "npc_template" in bundle
+    assert "NPC" in bundle
