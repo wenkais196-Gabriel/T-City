@@ -129,6 +129,8 @@ AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
     local wasInJail = (tonumber(metadata.injail) or 0) > 0
     local remainingSeconds = math.max(0, math.floor(tonumber(seconds) or 0))
     local remainingMinutes = math.ceil(remainingSeconds / 60)
+    print(('[justice-prison] PlayerLoaded %s remaining=%s wasInJail=%s'):format(
+        tostring(cid), tostring(remainingSeconds), tostring(wasInJail)))
 
     if remainingMinutes <= 0 then
         JusticeService.Inmates[cid] = nil
