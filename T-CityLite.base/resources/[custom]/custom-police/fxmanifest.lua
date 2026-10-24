@@ -3,13 +3,14 @@ game 'gta5'
 lua54 'yes'
 author 'Kakarot'
 description 'Provides police tools, evidence, job and more functionality for players to use as a cop'
-version '1.6.0'
+version '1.7.0'
 
 shared_scripts {
 	'config.lua',
 	'shared/policy.lua',
 	'shared/charges.lua',
 	'shared/insert_id.lua',
+	'shared/npc_budget.lua',
 	'shared/npc_callouts.lua',
 	'@qb-core/shared/locale.lua',
 	'locales/en.lua',
@@ -47,6 +48,7 @@ dependencies {
 server_scripts {
 	'@oxmysql/lib/MySQL.lua',
 	'server/main.lua',
+	'server/npc_budget.lua',
 	'server/p0.lua',
 	'server/p1.lua',
 	'server/p2_evidence.lua',

@@ -46,6 +46,133 @@ EXPECTED_SCHEMA = {
         "fields": ["id", "caller", "receiver", "duration", "status", "timestamp"],
         "indexes": ["PRIMARY", "idx_caller", "idx_receiver"],
     },
+    # ── Police domain (migrations v2.8–v3.12) ──────────────────────────
+    "police_units": {
+        "fields": ["citizenid", "callsign", "dept", "status", "incident_id",
+                    "updated_at", "created_at"],
+        "indexes": ["PRIMARY", "idx_status", "idx_incident"],
+    },
+    "police_incidents": {
+        "fields": ["id", "code", "title", "description", "priority", "status",
+                    "x", "y", "z", "created_by", "created_at", "updated_at",
+                    "closed_at", "disposition", "npc_template", "closed_by",
+                    "closed_reason", "last_activity_at"],
+        "indexes": ["PRIMARY", "idx_status_created", "idx_priority",
+                     "idx_npc_template_status"],
+    },
+    "police_incident_units": {
+        "fields": ["incident_id", "citizenid", "role", "joined_at"],
+        "indexes": ["PRIMARY", "idx_citizenid"],
+    },
+    "police_audit": {
+        "fields": ["id", "actor_citizenid", "actor_kind", "action", "target",
+                    "detail", "created_at"],
+        "indexes": ["PRIMARY", "idx_actor_created", "idx_action_created"],
+    },
+    "police_citations": {
+        "fields": ["id", "citizenid", "officer_citizenid", "plate", "amount",
+                    "charge_id", "base_amount", "reason", "status",
+                    "incident_id", "report_id", "created_at", "paid_at"],
+        "indexes": ["PRIMARY", "idx_citizen_status", "idx_officer_created",
+                     "idx_report"],
+    },
+    "police_reports": {
+        "fields": ["id", "incident_id", "case_id", "justice_case_id",
+                    "justice_verdict", "justice_status", "charges",
+                    "author_citizenid", "title", "body", "status", "kind",
+                    "is_bolo", "bolo_kind", "bolo_target", "location",
+                    "officer_citizenid", "subject_citizenid", "created_at",
+                    "updated_at"],
+        "indexes": ["PRIMARY", "idx_incident", "idx_author_created", "idx_case",
+                     "idx_kind_created", "idx_subject_kind_created",
+                     "idx_justice_case"],
+    },
+    "police_evidence": {
+        "fields": ["id", "exhibit_no", "incident_id", "report_id", "case_id",
+                    "label", "description", "location", "collected_by",
+                    "status", "created_at", "updated_at"],
+        "indexes": ["PRIMARY", "uniq_exhibit", "idx_incident", "idx_report",
+                     "idx_case", "idx_status_created"],
+    },
+    "police_evidence_chain": {
+        "fields": ["id", "evidence_id", "action", "actor_citizenid", "note",
+                    "created_at"],
+        "indexes": ["PRIMARY", "idx_evidence_created"],
+    },
+    "police_cases": {
+        "fields": ["id", "case_no", "title", "summary", "status",
+                    "lead_citizenid", "created_by", "created_at", "updated_at"],
+        "indexes": ["PRIMARY", "uniq_case_no", "idx_status_created"],
+    },
+    "police_bolos": {
+        "fields": ["id", "kind", "target", "reason", "status", "created_by",
+                    "created_at", "cleared_at"],
+        "indexes": ["PRIMARY", "idx_kind_status", "idx_target"],
+    },
+    "police_warrants": {
+        "fields": ["id", "citizenid", "reason", "status", "requested_by",
+                    "approved_by", "created_at", "decided_at"],
+        "indexes": ["PRIMARY", "idx_citizen_status", "idx_status_created"],
+    },
+    "police_arrests": {
+        "fields": ["id", "citizenid", "officer_citizenid", "charges",
+                    "incident_id", "case_id", "created_at"],
+        "indexes": ["PRIMARY", "idx_citizen_created", "idx_case"],
+    },
+    # ── Justice / police write paths (v3.8–v3.12) ──────────────────────
+    "justice_sentences": {
+        "fields": ["id", "citizenid", "case_id", "minutes", "reason", "status",
+                    "started_at", "ends_at", "released_at", "created_by"],
+        "indexes": ["PRIMARY", "idx_citizen_status", "idx_status_ends"],
+    },
+    "police_write_intents": {
+        "fields": ["idem_key", "action", "actor_citizenid", "status",
+                    "result_json", "expires_at", "completed_at", "created_at",
+                    "updated_at"],
+        "indexes": ["PRIMARY", "idx_actor_created", "idx_created"],
+    },
+    "police_outbox": {
+        "fields": ["id", "topic", "payload", "status", "attempts",
+                    "next_attempt_at", "created_at", "updated_at"],
+        "indexes": ["PRIMARY", "idx_status_next"],
+    },
+    # ── Agent domain (v2.2–v2.6) ───────────────────────────────────────
+    "agent_events": {
+        "fields": ["id", "event_type", "citizenid", "payload",
+                    "schema_version", "created_at"],
+        "indexes": ["PRIMARY", "idx_agent_events_type_id",
+                     "idx_agent_events_citizen_id", "idx_agent_events_created_at"],
+    },
+    "agent_actions": {
+        "fields": ["id", "agent_id", "action_type", "params", "status",
+                    "idempotency_key", "preview", "result", "error",
+                    "requested_at", "approved_by", "approved_at",
+                    "executed_at", "expires_at"],
+        "indexes": ["PRIMARY", "uq_idem", "idx_status_requested",
+                     "idx_agent_requested"],
+    },
+    "agent_denials": {
+        "fields": ["id", "agent_id", "action_type", "code", "message",
+                    "param_keys", "params_hash", "dry_run", "created_at"],
+        "indexes": ["PRIMARY", "idx_agent_created", "idx_code_created",
+                     "idx_action_created"],
+    },
+    "agent_effects": {
+        "fields": ["id", "request_id", "agent_id", "target_source", "action",
+                    "status", "error_code", "latency_ms", "created_at"],
+        "indexes": ["PRIMARY", "idx_created", "idx_agent_created",
+                     "idx_action_created", "idx_status_created"],
+    },
+    "agent_director_state": {
+        "fields": ["name", "cursor", "updated_at", "last_event_at"],
+        "indexes": ["PRIMARY"],
+    },
+    # ── Quest event stream (v0.7, read by the agent views) ─────────────
+    "quest_event_log": {
+        "fields": ["id", "citizenid", "quest_id", "step_id", "event_type",
+                    "metadata", "created_at"],
+        "indexes": ["PRIMARY", "idx_citizenid", "idx_quest", "idx_created"],
+    },
 }
 
 

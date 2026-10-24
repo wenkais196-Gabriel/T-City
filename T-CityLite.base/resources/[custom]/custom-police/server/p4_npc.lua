@@ -30,6 +30,39 @@ local DISPOSITIONS = {
 
 local CLOSE_STATUS = 'cleared'
 
+-- FIT-07: every callout scene is charged to the unified NPC budget as two
+-- slots (vehicle + suspect). The incident id only exists after the INSERT, so
+-- the budget gets its own server-generated id and this map connects the two
+-- for every close path (result, watcher, stale sweep fallback).
+local calloutBudget = {} -- [incidentId] = budget id
+local calloutSeq = 0
+
+local function nextCalloutBudgetId(source)
+    calloutSeq = calloutSeq + 1
+    return ('CALL-%d-%d-%d'):format(source, os.time(), calloutSeq)
+end
+
+local function releaseCalloutBudget(incidentId, reason)
+    local id = tonumber(incidentId)
+    if not id then return false end
+    local budgetId = calloutBudget[id]
+    if not budgetId then return false end
+    calloutBudget[id] = nil
+    return NPCBudget.Release(budgetId, reason)
+end
+
+--- A second callout in the same tick can pass the DB count before either
+--- INSERT lands. The budget entry is reserved before the yielding audit, so
+--- the first acquired callout wins that race.
+local function otherCalloutActive(exceptBudgetId)
+    for _, entry in ipairs(GetNpcBudget().entries) do
+        if entry.kind == 'callout' and entry.id ~= exceptBudgetId then
+            return true
+        end
+    end
+    return false
+end
+
 local function pd(source)
     local player = QBCore.Functions.GetPlayer(source)
     if not player or type(player.PlayerData) ~= 'table' then return nil end
@@ -116,8 +149,21 @@ function NPC.CreateNpcCallout(templateId, officerSrc)
 
     if activeNpcCount() >= NPCCallouts.MAX_ACTIVE then return false, 'limit_reached' end
 
+    -- Reserve the scene before any DB write; every early exit below releases
+    -- it again so a validation/database failure cannot leak a slot.
+    local budgetId = nextCalloutBudgetId(source)
+    local admitted, budgetError = NPCBudget.Acquire('callout', budgetId, actorCid)
+    if not admitted then return false, budgetError end
+    if otherCalloutActive(budgetId) then
+        NPCBudget.Release(budgetId, 'callout_limit')
+        return false, 'limit_reached'
+    end
+
     local location = template.locations[math.random(1, #template.locations)]
-    if not location then return false, 'no_location' end
+    if not location then
+        NPCBudget.Release(budgetId, 'no_location')
+        return false, 'no_location'
+    end
     local coords = { x = location.x, y = location.y, z = location.z }
     local title = ('[NPC] %s'):format(template.title):sub(1, 120)
     local description = (template.description:gsub('{location}', location.label)):sub(1, 1000)
@@ -129,8 +175,12 @@ function NPC.CreateNpcCallout(templateId, officerSrc)
     ]], { template.code, title, description, template.priority,
           coords.x, coords.y, coords.z, actorCid, template.id })
     local id = InsertId(inserted)
-    if not id or id == 0 then return false, 'db_error' end
+    if not id or id == 0 then
+        NPCBudget.Release(budgetId, 'db_error')
+        return false, 'db_error'
+    end
     id = tonumber(id)
+    calloutBudget[id] = budgetId
 
     if not audit(actorCid, 'npc.callout.create', tostring(id), template.id, actorKind) then
         print(('[custom-police] npc.callout.create audit failed for #%s'):format(tostring(id)))
@@ -193,6 +243,7 @@ function NPC.SubmitResult(source, incidentId, outcome, notes)
     -- payout, no second audit row).
     if tostring(incident.status) == 'closed' then
         spawned[id] = nil
+        releaseCalloutBudget(id, 'callout_already_closed')
         TriggerClientEvent('police:client:NpcCalloutEnd', source, id)
         return { id = id, status = 'closed', idempotent = true }
     end
@@ -222,6 +273,7 @@ function NPC.SubmitResult(source, incidentId, outcome, notes)
     -- transition. P0 reports that as idempotent success; do not pay twice.
     if closed.idempotent == true then
         spawned[id] = nil
+        releaseCalloutBudget(id, 'callout_already_closed')
         TriggerClientEvent('police:client:NpcCalloutEnd', source, id)
         return { id = id, status = 'closed', idempotent = true }
     end
@@ -239,6 +291,8 @@ function NPC.SubmitResult(source, incidentId, outcome, notes)
     end
 
     broadcastEnd(id)
+    -- The scene is settled: return the two slots to the global budget.
+    releaseCalloutBudget(id, 'callout_result')
     -- broadcastEnd only reaches on-duty officers; the responder may have gone
     -- 10-7 in the same tick, so clean their scene explicitly too.
     TriggerClientEvent('police:client:NpcCalloutEnd', source, id)
@@ -261,7 +315,8 @@ local function sceneWatcher()
               FROM police_incidents
              WHERE npc_template IS NOT NULL AND status <> 'closed'
              LIMIT 10
-        ]]) or {}
+        ]])
+        if not rows then return end
 
         local active = {}
         for _, row in ipairs(rows) do
@@ -274,6 +329,14 @@ local function sceneWatcher()
             if not active[incidentId] then
                 TriggerClientEvent('police:client:NpcCalloutEnd', entry.source, incidentId)
                 spawned[incidentId] = nil
+                releaseCalloutBudget(incidentId, 'callout_watcher')
+            end
+        end
+        -- A callout may be closed through the MDT before any client scene was
+        -- pushed, so the budget map has to be swept against the DB as well.
+        for incidentId in pairs(calloutBudget) do
+            if not active[incidentId] then
+                releaseCalloutBudget(incidentId, 'callout_watcher')
             end
         end
 
