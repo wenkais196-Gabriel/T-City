@@ -6,9 +6,10 @@
 --   * five server exports for custom-director / custom-agent-client;
 --   * console-only `/agent ...` commands guarded by source 0 or `agent.ops`.
 --
--- This resource never writes to a police/justice table. It only SELECTs. The
--- single file it may write is its own JSONL log, and every field is sanitised
--- and truncated before it reaches the ring or the file.
+-- This resource itself never writes to a police/justice table. It only SELECTs.
+-- The single file it may write is its own JSONL log, and every field is sanitised
+-- and truncated before it reaches the ring or the file. `RunTest` only proxies
+-- to custom-testing; that test resource owns its `E2E_*` writes and cleanup.
 --
 -- No client script, no net event and no NUI surface is registered here.
 
