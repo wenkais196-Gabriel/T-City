@@ -514,15 +514,16 @@ def test_arrest_submit_notifies_the_subject_about_the_citation_best_effort():
 def test_pay_citation_keeps_status_so_get_my_citations_shows_paid():
     src = p1_src()
     assert "exports('PayCitation', P1.PayCitation)" in src
-    assert (
-        "UPDATE police_citations SET status = 'paid', paid_at = NOW() "
-        "WHERE id = ? AND status = 'unpaid'"
-    ) in src
+    # The transition is a conditional claim: only an unpaid row owned by the
+    # caller can be moved to paid.
+    assert "SET status = 'paid', paid_at = NOW()" in src
+    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in src
 
     start = src.index("function P1.GetMyCitations(")
     block = src[start:src.index("function P1.GetCitations(", start)]
     # status is part of the projection, so a paid row is observable afterwards.
     assert "status" in block
+
 
 
 # ---------------------------------------------------------------------------
@@ -1468,13 +1469,21 @@ def test_qb_prison_jail_item_events_require_an_active_sentence_and_give_once():
     reset = src[src.index("RegisterNetEvent('prison:server:ResetJailItems'"):
                 src.index("RegisterNetEvent('prison:server:SecurityLockdown'")]
 
-    for block in (save, give, reset):
-        assert "(metadata.injail or 0) <= 0" in block
+    assert "(metadata.injail or 0) <= 0" in save
+    assert "(metadata.injail or 0) <= 0" in reset
+    # Give is the mirror image: it must only run after the sentence projection
+    # was cleared (release), otherwise Give -> Save cycles farm the $80 stipend.
+    assert "(metadata.injail or 0) > 0" in give
 
     # Save/Give cannot be looped to re-earn the $80 stipend: Save only snapshots
-    # while jailed, Give consumes the snapshot exactly once.
+    # once per sentence, Reset cannot re-open it, Give consumes it exactly once.
+    assert "JailItemsSeized[src] = nil" in set_jail_status_block()
+    assert "if JailItemsSeized[src] then return end" in save
+    assert "JailItemsSeized[src] = true" in save
+    assert "JailItemsSeized[src] = nil" not in reset
     assert "JailItemsRestored[src] = nil" in save
-    assert "if JailItemsRestored[src] or not hasSeizedItems then return end" in give
+    assert "if not hasSeizedItems then return end" in give
+    assert "if JailItemsRestored[src] then return end" in give
     assert give.index("JailItemsRestored[src] = true") < give.index("for _, v in pairs(jailItems)")
     assert "Player.Functions.SetMetaData('jailitems', {})" in give
 
@@ -1511,3 +1520,139 @@ def test_justice_manifest_loads_sentence_before_prison_and_release_uses_the_db()
     assert "pcall(JusticeSentences.Release" in block
     assert "Player.Functions.SetMetaData('injail', 0)" in block
     assert "TriggerClientEvent('prison:client:UnjailPerson'" in block
+
+
+# ---------------------------------------------------------------------------
+# SM-03: idempotent police write intents (v3.9)
+# ---------------------------------------------------------------------------
+
+MIGRATION_V39 = BASE / "migrations" / "v3.9_police_write_intents.sql"
+
+
+def with_intent_block() -> str:
+    src = read(POLICE / "server/p2_system.lua")
+    start = src.index("local function withIntent(")
+    end = src.index("\nlocal function auditPlayer(", start)
+    return src[start:end]
+
+
+def test_v39_migration_creates_the_write_intent_ledger_idempotently():
+    sql = read(MIGRATION_V39)
+    assert "police_write_intents" in sql
+    assert "idem_key VARCHAR(128) NOT NULL" in sql
+    assert "action VARCHAR(32) NOT NULL" in sql
+    assert "actor_citizenid VARCHAR(50) NOT NULL" in sql
+    assert "status ENUM(''pending'',''done'',''failed'') NOT NULL DEFAULT ''pending''" in sql
+    assert "result_json TEXT NULL" in sql
+    assert "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP" in sql
+    assert "updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" in sql
+    assert "PRIMARY KEY (idem_key)" in sql
+    assert "KEY idx_actor_created (actor_citizenid, created_at)" in sql
+    assert "KEY idx_created (created_at)" in sql
+
+    # Re-runnable: the table and both indexes are guarded and prepared once.
+    assert sql.count("information_schema.TABLES") == 1
+    assert sql.count("information_schema.STATISTICS") == 2
+    assert sql.count("CREATE TABLE IF NOT EXISTS") == 1
+    assert len(re.findall(r"^PREPARE stmt_", sql, re.M)) == 3
+    assert sql.count("DEALLOCATE PREPARE") == 3
+
+
+def test_with_intent_replays_done_and_releases_pending_and_failed():
+    src = read(POLICE / "server/p2_system.lua")
+    assert "local INTENT_KEY_MIN = 8" in src
+    assert "local INTENT_KEY_MAX = 128" in src
+    assert "INTENT_KEY_PATTERN = '^[A-Za-z0-9_%-]+$'" in src
+    assert "invalid_idempotency_key" in src
+
+    block = with_intent_block()
+    # No key: fully backward compatible, no ledger traffic.
+    assert "if key == nil or key == '' then return fn() end" in block
+    # Claim first, then cache the committed result as JSON.
+    assert "INSERT INTO police_write_intents (idem_key, action, actor_citizenid)" in block
+    assert "SET status = 'done', result_json = ?" in block
+    assert "json.encode" in block and "json.decode" in src
+    # done → replay the cached result.
+    assert "elseif existing.status == 'done' then" in block
+    assert "local cached = decodeIntentResult(existing)" in block
+    assert "return cached" in block
+    # pending → a concurrent/duplicate submit is in flight.
+    assert "elseif existing.status == 'pending' then" in block
+    assert "return fail('in_progress')" in block
+    # failed (and every business/exception failure) frees the key.
+    assert "deleteIntent(key)" in block
+    assert "result.ok ~= true" in block
+    assert "if not ok then" in block
+    # Lazy sweep before the claim, bounded so it stays cheap.
+    sweep = "DELETE FROM police_write_intents WHERE created_at < NOW() - INTERVAL 1 DAY LIMIT 200"
+    assert sweep in block
+    assert block.index(sweep) < block.index("INSERT INTO police_write_intents")
+
+
+def test_arrest_submit_claims_an_intent_before_any_write():
+    block = arrest_block()
+    wrapper = "withIntent('arrest', actor.citizenid, params.idempotency_key, function()"
+    assert wrapper in block
+    # The claim wraps the target lookup: a replay returns the cached result
+    # before the physical checks, so a second submit of an already-jailed
+    # suspect is not rejected as already_jailed.
+    assert block.index(wrapper) < block.index("QBCore.Functions.GetPlayerByCitizenId(target)")
+    assert block.index(wrapper) < block.index("already_jailed")
+    assert block.index(wrapper) < block.index("INSERT INTO police_reports")
+    assert "params.idempotency_key" in block
+
+
+def test_report_submit_claims_an_intent_before_any_write():
+    block = report_submit_block()
+    wrapper = "withIntent('report', actor.citizenid, params.idempotency_key, function()"
+    assert wrapper in block
+    assert block.index(wrapper) < block.index("INSERT INTO police_reports")
+    assert block.index(wrapper) < block.index("INSERT INTO police_evidence")
+
+
+def test_open_case_requires_case_capability():
+    block = arrest_block()
+    start = block.index("local openCase = params.open_case == true")
+    open_block = block[start:block.index("local bolo = params.bolo", start)]
+    assert "PolicePolicy.Can(actor, 'case.create')" in open_block
+    assert "return fail('case_forbidden')" in open_block
+
+
+def test_arrest_audits_citation_and_evidence_children():
+    block = arrest_block()
+    # The child rows are audited independently, after their inserts.
+    assert "created.exhibitNo = exhibitNo" in block
+    assert "auditPlayer(actor.citizenid, 'citation.issue', tostring(created.citation)" in block
+    assert "('$%d'):format(amount)" in block
+    assert "auditPlayer(actor.citizenid, 'evidence.register', created.exhibitNo" in block
+    assert block.index("INSERT INTO police_citations") < block.index("citation.issue")
+    assert block.index("INSERT INTO police_evidence") < block.index("'evidence.register'")
+    # The arrest audit is still written once the sentence is applied.
+    assert "auditPlayer(actor.citizenid, 'arrest.register', target, auditDetail)" in block
+
+
+def test_pay_citation_claims_before_charging_and_rolls_back_on_failure():
+    src = p1_src()
+    # Bundled oxmysql returns { affectedRows = n }; stock builds return n.
+    assert "local function affectedRows(result)" in src
+    assert "if type(result) == 'number' then return result end" in src
+    assert "tonumber(result.affectedRows)" in src
+
+    start = src.index("function P1.PayCitation(")
+    block = src[start:]
+    assert "affectedRows(claim) == 0" in block
+    # The conditional claim must run before any money moves.
+    claim = block.index("SET status = 'paid', paid_at = NOW()")
+    remove = block.index("RemoveMoney('bank'")
+    assert claim < remove
+    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in block
+    # Losing the claim is reported with the reason, never charged.
+    for code in ("'not_found'", "'not_owner'", "'already_'"):
+        assert code in block
+    # A failed RemoveMoney puts the row back so the owner can retry.
+    rollback = block.index("SET status = 'unpaid', paid_at = NULL")
+    assert remove < rollback
+    assert "WHERE id = ? AND status = 'paid'" in block
+    assert "return false, 'insufficient_funds'" in block
+    # Only the successful payer writes the audit.
+    assert "audit(actor.citizenid, 'citation.pay', tostring(id)" in block

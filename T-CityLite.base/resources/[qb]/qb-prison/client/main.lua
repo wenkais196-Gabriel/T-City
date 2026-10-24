@@ -222,6 +222,16 @@ RegisterCommand('prison', function()
 	SetNewWaypoint(Config.Locations.freedom.x, Config.Locations.freedom.y)
 end, false)
 
+RegisterNetEvent('prison:client:WorkReductionAck', function(remaining)
+    remaining = math.max(0, math.floor(tonumber(remaining) or 0))
+    jailTime = remaining
+    QBCore.Functions.Notify(('完成工作：减刑 2 分钟，剩余 %d 分钟'):format(remaining), 'success', 8000)
+    if remaining <= 0 and inJail then
+        Wait(1500)
+        if inJail then TriggerEvent('prison:client:Leave') end
+    end
+end)
+
 RegisterNetEvent('prison:client:Enter', function(time)
 	local invokingResource = GetInvokingResource()
 	if invokingResource and invokingResource ~= 'qb-policejob' and invokingResource ~= 'custom-police' and invokingResource ~= 'custom-justice' and invokingResource ~= 'qb-ambulancejob' and invokingResource ~= GetCurrentResourceName() then
@@ -390,13 +400,9 @@ CreateThread(function()
 								disableMovement = true, disableCarMovement = true,
 								disableMouse = false, disableCombat = true,
 							}, {}, {}, {}, function()
-								jailTime = math.max(0, jailTime - 2)
-								TriggerServerEvent('prison:server:SetJailStatus', jailTime)
-								QBCore.Functions.Notify(('完成工作：减刑 2 分钟，剩余 %d 分钟'):format(jailTime), 'success', 8000)
-								if jailTime <= 0 then
-									Wait(1500)
-									if inJail then TriggerEvent('prison:client:Leave') end
-								end
+								-- The server owns the clock; it confirms the remaining
+								-- time after applying the reduction to ends_at.
+								TriggerServerEvent('prison:server:WorkReduction', 2)
 							end, function() end)
 						end
 					end

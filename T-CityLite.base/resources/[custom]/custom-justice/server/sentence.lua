@@ -153,6 +153,30 @@ function JusticeSentences.Release(citizenid, reason, status)
     return true
 end
 
+
+--- Adjust the remaining time by `deltaMinutes` (negative = reduction). The
+--- floor is NOW(), so a work reduction can finish a sentence early. Returns
+--- remaining seconds after the adjustment.
+function JusticeSentences.Adjust(citizenid, deltaMinutes, reason)
+    local ok, cid = validCitizenid(citizenid)
+    if not ok then return 0 end
+    deltaMinutes = math.floor(tonumber(deltaMinutes) or 0)
+    if deltaMinutes == 0 then return JusticeSentences.RemainingSeconds(cid) end
+
+    local affected = MySQL.update.await(
+        [[UPDATE justice_sentences
+          SET ends_at = GREATEST(NOW(), DATE_ADD(ends_at, INTERVAL ? MINUTE))
+          WHERE citizenid = ? AND status = 'active']],
+        { deltaMinutes, cid })
+    if affectedRows(affected) == 0 then return 0 end
+
+    local remaining = JusticeSentences.RemainingSeconds(cid)
+    if remaining <= 0 then
+        JusticeSentences.Release(cid, reason or 'served', 'expired')
+    end
+    return remaining
+end
+
 --- Expire every sentence whose server-side clock ran out, then push the
 --- online inmates out of the cell and clear their metadata projection.
 --- Returns the number of expired rows.
@@ -232,6 +256,10 @@ end)
 
 exports('ApplySentence', function(citizenid, minutes, caseId, reason, mode, createdBy)
     return JusticeSentences.Apply(citizenid, minutes, caseId, reason, mode, createdBy)
+end)
+
+exports('AdjustSentence', function(citizenid, deltaMinutes, reason)
+    return JusticeSentences.Adjust(citizenid, deltaMinutes, reason)
 end)
 
 exports('ReleaseSentence', function(citizenid, reason, status)
