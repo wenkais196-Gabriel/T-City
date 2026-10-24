@@ -135,6 +135,9 @@ function PhoneApps.Action(source, appId, actionName, params)
         print(('[custom-phone][apps] action %s:%s failed: %s'):format(appId, actionName, tostring(result)))
         return false, 'action_failed'
     end
+    if type(result) == 'table' and result.ok == false then
+        return false, tostring(result.error or 'rejected')
+    end
     if result == false then return false, 'action_rejected' end
     return true, type(result) == 'table' and result or {}
 end
