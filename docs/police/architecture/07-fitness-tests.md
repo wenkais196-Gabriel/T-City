@@ -109,7 +109,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
   所有**警察**写路径（10-8/10-7、`custom-main` 的 `/duty` 快速指令与通缉锁、`custom-director` 的 `set_job_duty`）必须先调该导出，不得直接调 `SetJobDuty`。非警察（ambulance/mechanic/taxi）保留 qb-core 原生 `SetJobDuty`，语义不变。
 - **为什么**：TD-01 的根因。4 个写者（qb-core 定义、`custom-main/server/dispatch.lua`、`custom-director/server/main.lua`、qb-core `QBCore:ToggleDuty`）曾让 `onduty=true` + `police_units=off_duty` 这类组合合法存在；权限、MDT、派单各读一套（`TECH_DEBT.md` TD-01）。没有这条规则之前，"单一状态机"永远只是文档里的一句话。
 - **检查方式**（`tests/architecture/test_duty_writer.py` + `duty_writers_allowlist.json`）：
-  - 扫描范围：`custom-police/server/**`、`custom-main/server/**`、`custom-director/server/**`，外加 primitive 文件 `qb-core/server/player.lua`；先 mask 注释/长字符串，注释掉的调用不算。
+  - 扫描范围：`resources/*/*/server/**/*.lua`（排除 `custom-testing/`；qb-core 的 `server/events.lua` 是框架 vendor 代码，按约束不改 qb-core，其 `QBCore:ToggleDuty` 投影由 `p0.lua` 的 `OnJobUpdate → syncDuty` 兜底）；先 mask 注释/长字符串，注释掉的调用不算。
   - 正则（写入）：`SetJobDuty\s*\(`。除 allowlist 外任何文件出现即 FAIL，输出 `file:line`。
   - allowlist 只登记 4 条：`qb-core/server/player.lua`（primitive）、`custom-police/server/p0.lua`（服务实现）、`custom-main/server/dispatch.lua` 与 `custom-director/server/main.lua` 的**非警察分支**（reason 写明“非 leo / ambulance/mechanic/taxi”）。
   - `custom-main`/`custom-director` 的每条调用还必须静态验证：同一函数体内、调用之前出现 `jobName == 'police'` 或 `type == 'leo'`、函数内出现 `SetDutyForSource`、且 guard 与调用之间有 `else`/`elseif`。否则报 `not_in_non_police_branch` / `no_police_guard_before_call` / `no_duty_service_in_function`。
@@ -118,7 +118,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 - **失败信息**：`FIT-01 FAIL 1 unregistered SetJobDuty writer(s)` / `custom-main/server/dispatch.lua:289 Player.Functions.SetJobDuty(false)  not_in_non_police_branch`。
 - **CI**：`pytest -q tests/architecture`（blocking）；`test_duty_writer.py` 离线、确定性，单次 <1 s。
 - **现状（本轮）**：✅ **PASS**。`P.SetDutyForSource` 落地并导出；10-8/10-7 与 `SetUnitStatus` 的 off_duty 路径改调服务（离线 citizen 只写 unit 行）；`/duty` 警察分支、通缉锁、director 警察目标均先调 export。allowlist 4 条、0 处未登记；`p0.lua` 仅服务内 1 处 primitive 调用。
-- **例外**：`custom-main`/`custom-director` 的非警察分支是 allowlist 的“非 leo / ambulance/mechanic/taxi”条目；警察分支**不得**回退直写。qb-core 的 `server/events.lua`（`QBCore:ToggleDuty`）是框架 vendor 代码，按约束不改 qb-core，其投影由 `p0.lua` 的 `OnJobUpdate → syncDuty` 兜底，因此不在自定义写者扫描范围。
+- **例外**：`custom-main`/`custom-director` 的非警察分支是 allowlist 的“非 leo / ambulance/mechanic/taxi”条目；警察分支**不得**回退直写。qb-core 的 `server/events.lua`（`QBCore:ToggleDuty`）是框架 vendor 代码，按约束不改 qb-core，因此作为 `FRAMEWORK_INTERNAL_FILES` 排除在 allowlist 之外，其投影由 `p0.lua` 的 `OnJobUpdate → syncDuty` 兜底。
 
 ### FIT-02 · 禁止跨资源写别人拥有的表
 
@@ -322,7 +322,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
   ```
 - **失败信息**：`FIT-11: custom-police/server/p0.lua:175 updates police_units.status outside the registered state functions — register it in allowlists/state_writers.json or route it through SetUnitStatus`。
 - **CI**：`Config & dependency checks`，**advisory**（等 FIT-01/duty 状态机落地后再转 blocking，否则会在重构期持续红）。
-- **现状**：⚠️ **PARTIAL**。8 个写者全在同一资源内、逻辑自洽；但没有登记表，也就没有"谁是新来的"这一判断。**注意**：`syncDuty`（`server/p0.lua:262-270`）是"从 onduty 投影到 units"的唯一合法入口，FIT-01 收敛后它应当是唯一写者。
+- **现状**：⚠️ **PARTIAL**。8 个写者全在同一资源内、逻辑自洽；但没有登记表，也就没有"谁是新来的"这一判断。**注意**：`syncDuty`（`server/p0.lua:433-452`）是"从 onduty 投影到 units"的唯一合法入口；FIT-01 已收敛，警察 duty 写路径统一经 `SetDutyForSource` 再进 `syncDuty`。
 - **例外**：登记现有 8 个（路径 + 函数名），到期 `2027-03-31`。
 
 ### FIT-12 · 弃用登记（deprecated 写路径为 0 或未过期豁免）
