@@ -14,7 +14,7 @@
 | 04 | [data-ownership](04-data-ownership.md) | 13 张 `police_*` + `justice_sentences` 谁写谁读、单一事实源、一致性等级 |
 | 05 | [nfr](05-nfr.md) | 48 人、NPC 预算、延迟、可靠性、安全、可观测 |
 | 06 | [adr](06-adr/) | 关键决策记录（为什么这样选） |
-| 07 | [fitness-tests](07-fitness-tests.md) | 13 条架构约束的自动检查与评分卡（当前 94/100；FIT-10/11/13 本轮转 PASS） |
+| 07 | [fitness-tests](07-fitness-tests.md) | 13 条架构约束的自动检查与评分卡（当前 100/100；13 条全部 PASS） |
 | 08 | [scenarios](08-scenarios.md) | 6 条端到端场景走查（含失败、权限、NPC 警情） |
 | 09 | [outbox](09-outbox.md) | SM-03 残留：intent TTL（done 7 天 / pending 10 分钟）+ `police_outbox` 投递语义 |
 | — | [deprecations](deprecations.md) | FIT-12 人读弃用登记（机器可读源是 `tests/architecture/deprecations.json`） |
@@ -51,9 +51,9 @@
 
 1. 写入口边界不变；custody 的权威已从 qb-prison 客户端迁到 `justice_sentences`（`2ae3da4`）。
 2. 最大风险从“双状态 + 内存判决”变为“**仍无事务** + **justice 案件仍内存** + **backup 无 TTL**”；duty 双源已由 `bb64d87` 收敛。
-3. 契约面扩大（46→56 export、22→27 事件），错误码仍不统一：arrest/report 已结构化，14/17 MDT action 仍压平。
+3. 契约面扩大（46→56 export、22→27 事件），错误码已统一：arrest/report 与 17/17 MDT action 均返回结构化错误码。
 4. 数据所有权新增 2 张表（`police_write_intents`、`justice_sentences`）；`phone_notifications` 写者从 5 处增到 6 处。
-5. fitness 评分本轮统一重算为 **94/100**（22.5/24；11 PASS / 2 PARTIAL / 0 FAIL）：duty 投影、incident 关闭/幂等、custody 服务端计时、迁移覆盖、查询纪律与 export 契约此前已转 PASS；本轮 FIT-10（资源接线）、FIT-11（状态写者登记）、FIT-13（数字预算）也转 PASS。历史快照为 21/100 → 27/100；仍 PARTIAL 的是 FIT-06（fixture）与 FIT-07（NPC 警情生成）。
+5. fitness 评分本轮统一重算为 **100/100**（24/24；13 PASS / 0 PARTIAL / 0 FAIL）：duty 投影、incident 关闭/幂等、custody 服务端计时、迁移覆盖、查询纪律与 export 契约此前已转 PASS；本轮 FIT-10（资源接线）、FIT-11（状态写者登记）、FIT-13（数字预算）完成，FIT-06（fixture 静态覆盖）与 FIT-07（NPC 预算接口）也补齐。历史快照为 21/100 → 27/100。
 
 
 ## 基线校正（以代码为准）
