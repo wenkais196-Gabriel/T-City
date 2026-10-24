@@ -33,7 +33,8 @@ function C.CreateCase(source, params)
     local id = MySQL.insert.await(
         'INSERT INTO police_cases (title, summary, lead_citizenid, created_by) VALUES (?, ?, ?, ?)',
         { title, summary, trim(params and params.lead_citizenid):sub(1, 50), actor.citizenid })
-    if not id then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     local no = caseNo(tonumber(id))
     MySQL.update.await('UPDATE police_cases SET case_no = ? WHERE id = ?', { no, id })
     audit(actor.citizenid, 'case.create', no, title)
@@ -63,7 +64,8 @@ function C.CreateBolo(source, params)
     local id = MySQL.insert.await(
         'INSERT INTO police_bolos (kind, target, reason, created_by) VALUES (?, ?, ?, ?)',
         { kind, target, why, actor.citizenid })
-    if not id then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     audit(actor.citizenid, 'bolo.create', target, why)
     return { id = tonumber(id), kind = kind, target = target, status = 'active' }
 end
@@ -102,7 +104,8 @@ function C.RequestWarrant(source, params)
     local id = MySQL.insert.await(
         'INSERT INTO police_warrants (citizenid, reason, requested_by) VALUES (?, ?, ?)',
         { target, why, actor.citizenid })
-    if not id then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     audit(actor.citizenid, 'warrant.request', target, why)
     return { id = tonumber(id), citizenid = target, status = 'requested' }
 end
@@ -152,7 +155,8 @@ function C.RegisterArrest(source, params)
         VALUES (?, ?, ?, ?, ?)
     ]], { target, actor.citizenid, charges,
           tonumber(params and params.incident_id), tonumber(params and params.case_id) })
-    if not id then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     audit(actor.citizenid, 'arrest.register', target, charges)
     return { id = tonumber(id), citizenid = target, status = 'registered' }
 end

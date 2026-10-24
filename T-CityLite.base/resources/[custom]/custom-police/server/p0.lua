@@ -89,7 +89,8 @@ function P.CreateIncident(source, data)
         INSERT INTO police_incidents (code, title, description, priority, x, y, z, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ]], { code, title, description, priority, x, y, z, creator.citizenid })
-    if not id or tonumber(id) == 0 then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     audit(creator.citizenid, 'incident.create', tostring(id), title)
 
     local notification = {

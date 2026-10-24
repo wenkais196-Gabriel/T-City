@@ -52,7 +52,8 @@ function P1.IssueCitation(source, params)
         VALUES (?, ?, ?, ?, ?, ?)
     ]], { target, actor.citizenid, plate ~= '' and plate or nil, math.floor(amount), text,
           tonumber(params and params.incident_id) })
-    if not id then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     audit(actor.citizenid, 'citation.issue', target, ('$%d %s'):format(amount, text))
     notifyCitizen(target, '你收到一张罚单', ('$%d — %s（警官 %s）'):format(amount, text, actor.citizenid))
     return { id = tonumber(id), amount = math.floor(amount), status = 'unpaid' }
@@ -89,7 +90,8 @@ function P1.CreateReport(source, params)
     local id = MySQL.insert.await(
         'INSERT INTO police_reports (incident_id, case_id, author_citizenid, title, body) VALUES (?, ?, ?, ?, ?)',
         { tonumber(params and params.incident_id), caseId, actor.citizenid, title, body })
-    if not id then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     audit(actor.citizenid, 'report.create', tostring(id), title)
     return { id = tonumber(id), status = 'submitted' }
 end

@@ -48,7 +48,8 @@ function Sys.CreateIncident(actorId, data)
         INSERT INTO police_incidents (code, title, description, priority, created_by)
         VALUES (?, ?, ?, ?, ?)
     ]], { code, title, details, priority, ('agent:%s'):format(tostring(actorId):sub(1, 40)) })
-    if not id then return false, 'db_error' end
+    id = InsertId(id)
+    if not id or id == 0 then return false, 'db_error' end
     broadcast(('%s: %s'):format(code, title), details)
     return { id = tonumber(id), status = 'open' }
 end

@@ -197,3 +197,11 @@ def test_agent_system_entry_points_are_audited():
     assert "police_audit" in sys
     justice = (PHONE.parent / "custom-justice/server/main.lua").read_text(encoding="utf-8")
     assert "exports('Imprison'" in justice
+
+
+def test_insert_ids_are_normalized():
+    shared = read(PHONE.parent / "custom-police/shared/insert_id.lua")
+    assert "function InsertId" in shared and "insertId" in shared
+    for f in ("p0.lua", "p1.lua", "p2_evidence.lua", "p2_system.lua", "p3_cases.lua"):
+        src = read(PHONE.parent / "custom-police/server" / f)
+        assert "InsertId(id)" in src, f
