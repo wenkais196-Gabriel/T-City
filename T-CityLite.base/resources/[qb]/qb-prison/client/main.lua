@@ -3,6 +3,7 @@ inJail = false
 jailTime = 0
 currentJob = nil
 CellsBlip = nil
+GuideBlip = nil
 TimeBlip = nil
 ShopBlip = nil
 local insidecanteen = false
@@ -171,6 +172,33 @@ RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
 	RemoveBlip(currentBlip)
 end)
 
+
+--- 自由门指引 blip：让囚犯一眼看到出狱点
+local function CreateGuideBlip()
+	if GuideBlip then RemoveBlip(GuideBlip) end
+	local c = Config.Locations.freedom
+	GuideBlip = AddBlipForCoord(c.x, c.y, c.z)
+	SetBlipSprite(GuideBlip, 1)
+	SetBlipDisplay(GuideBlip, 4)
+	SetBlipScale(GuideBlip, 1.0)
+	SetBlipColour(GuideBlip, 3)
+	SetBlipAsShortRange(GuideBlip, false)
+	SetBlipRoute(GuideBlip, true)
+	SetBlipRouteColour(GuideBlip, 3)
+	BeginTextCommandSetBlipName('STRING')
+	AddTextComponentSubstringPlayerName('出狱点（刑满后按 E）')
+	EndTextCommandSetBlipName(GuideBlip)
+end
+
+RegisterCommand('prison', function()
+	if not inJail then
+		QBCore.Functions.Notify('你不在监狱中', 'error')
+		return
+	end
+	QBCore.Functions.Notify(('剩余刑期：%d 分钟。刑满后到自由门按 E 出狱。'):format(jailTime), 'primary', 8000)
+	SetNewWaypoint(Config.Locations.freedom.x, Config.Locations.freedom.y)
+end, false)
+
 RegisterNetEvent('prison:client:Enter', function(time)
 	local invokingResource = GetInvokingResource()
 	if invokingResource and invokingResource ~= 'qb-policejob' and invokingResource ~= 'custom-police' and invokingResource ~= 'custom-justice' and invokingResource ~= 'qb-ambulancejob' and invokingResource ~= GetCurrentResourceName() then
@@ -210,6 +238,14 @@ RegisterNetEvent('prison:client:Enter', function(time)
 	TriggerServerEvent('prison:server:SaveJailItems', jailTime)
 	TriggerServerEvent('InteractSound_SV:PlayOnSource', 'jail', 0.5)
 	CreateCellsBlip()
+	CreateGuideBlip()
+	SetNewWaypoint(Config.Locations.freedom.x, Config.Locations.freedom.y)
+	TriggerEvent('chat:addMessage', {
+		color = { 3, 132, 252 },
+		multiline = true,
+		args = { 'SYSTEM', ('你已被收监，刑期 %d 分钟。地图蓝色标记 = 自由门；刑满后走到那里按 E 出狱，刑满 5 秒后也会自动释放。/prison 可随时查看剩余刑期。'):format(time) }
+	})
+	QBCore.Functions.Notify('刑满后到自由门按 E，或等待自动释放', 'primary', 12000)
 	Wait(2000)
 	DoScreenFadeIn(1000)
 	QBCore.Functions.Notify(Lang:t('error.do_some_work', { currentjob = Config.Jobs[currentJob] }), 'error')
@@ -235,6 +271,7 @@ RegisterNetEvent('prison:client:Leave', function()
 		TimeBlip = nil
 		RemoveBlip(ShopBlip)
 		ShopBlip = nil
+		if GuideBlip then RemoveBlip(GuideBlip) GuideBlip = nil end
 		QBCore.Functions.Notify(Lang:t('success.free_'))
 		DoScreenFadeOut(500)
 		while not IsScreenFadedOut() do
@@ -258,6 +295,7 @@ RegisterNetEvent('prison:client:UnjailPerson', function()
 			args = { 'SYSTEM', Lang:t('info.received_property') }
 		})
 		inJail = false
+		if GuideBlip then RemoveBlip(GuideBlip) GuideBlip = nil end
 		RemoveBlip(currentBlip)
 		RemoveBlip(CellsBlip)
 		CellsBlip = nil
@@ -291,9 +329,16 @@ CreateThread(function()
 				jailTime -= 1
 				if jailTime <= 0 then
 					jailTime = 0
-					QBCore.Functions.Notify(Lang:t('success.timesup'), 'success', 10000)
+					QBCore.Functions.Notify('刑期已满，5 秒后自动释放（也可走到自由门按 E）', 'success', 10000)
+					TriggerServerEvent('prison:server:SetJailStatus', 0)
+					Wait(5000)
+					if inJail and jailTime <= 0 then
+						TriggerEvent('prison:client:Leave')
+					end
+				else
+					QBCore.Functions.Notify(('剩余刑期 %d 分钟 — 自由门按 E 出狱'):format(jailTime), 'primary', 6000)
+					TriggerServerEvent('prison:server:SetJailStatus', jailTime)
 				end
-				TriggerServerEvent('prison:server:SetJailStatus', jailTime)
 			end
 		end
 		Wait(sleep)
