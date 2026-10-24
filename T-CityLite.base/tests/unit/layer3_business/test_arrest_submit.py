@@ -148,8 +148,8 @@ def test_manifest_loads_charge_catalog_and_version_is_bumped():
     manifest = read(POLICE / "fxmanifest.lua")
     assert "shared/charges.lua" in manifest
     assert manifest.index("shared/charges.lua") < manifest.index("server/p2_system.lua")
-    assert "version '1.4.0'" in manifest
-    assert "version '1.3.5'" not in manifest
+    assert "version '1.5.0'" in manifest
+    assert "version '1.4.0'" not in manifest
 
 
 # ---------------------------------------------------------------------------
@@ -1035,3 +1035,146 @@ def test_lookup_citizen_returns_separate_wanted_sources():
     assert block.count("{ row.citizenid }") == 2
     # The lookup audit is unchanged.
     assert "audit(actor.citizenid, 'lookup.citizen.result', tostring(row.citizenid), nil)" in block
+
+
+# ---------------------------------------------------------------------------
+# NPC backup ("请求支援"): server authority + client presentation
+# ---------------------------------------------------------------------------
+
+BACKUP_CLIENT = POLICE / "client/backup.lua"
+
+
+def backup_request_block() -> str:
+    src = read(POLICE / "server/p2_system.lua")
+    start = src.index("function RequestBackup(")
+    end = src.index("\nRegisterNetEvent('police:server:backupEnded'", start)
+    return src[start:end]
+
+
+def backup_end_block() -> str:
+    src = read(POLICE / "server/p2_system.lua")
+    start = src.index("RegisterNetEvent('police:server:backupEnded'")
+    end = src.index("\nAddEventHandler('playerDropped'", start)
+    return src[start:end]
+
+
+def backup_drop_block() -> str:
+    src = read(POLICE / "server/p2_system.lua")
+    start = src.index("AddEventHandler('playerDropped'")
+    end = src.index("\n--- Best-effort notification", start)
+    return src[start:end]
+
+
+def test_backup_manifest_ships_client_and_bumps_version():
+    manifest = read(POLICE / "fxmanifest.lua")
+    assert "client/backup.lua" in manifest
+    assert "version '1.5.0'" in manifest
+    assert "version '1.4.0'" not in manifest
+
+
+def test_request_backup_is_exported_gated_and_notifies_only_the_caller():
+    src = read(POLICE / "server/p2_system.lua")
+    block = backup_request_block()
+    assert "exports('RequestBackup', RequestBackup)" in src
+    assert "PolicePolicy.Can(actor, 'incident.update')" in block
+    assert "return fail('not_police')" in block
+    assert "QBCore.Functions.GetPlayer(src)" in block
+    assert "TriggerClientEvent('police:client:SpawnBackup', src, requestId)" in block
+    assert "return { ok = true, request_id = requestId }" in block
+    # The request id is generated server-side, never accepted from the client.
+    assert "local requestId = ('BU-%d-%d-%d'):format(src, now, backupSeq)" in block
+
+
+def test_request_backup_enforces_cooldown_and_two_unit_cap():
+    src = read(POLICE / "server/p2_system.lua")
+    block = backup_request_block()
+    assert "BACKUP_COOLDOWN = 60" in src
+    assert "BACKUP_MAX_UNITS = 2" in src
+    assert "if now - last < BACKUP_COOLDOWN then return fail('cooldown') end" in block
+    assert "if backupUnitCount(cid) >= BACKUP_MAX_UNITS then return fail('limit') end" in block
+    # The slot is reserved before the yielding audit insert and rolled back if
+    # the audit cannot be written or the player left while it was in flight.
+    assert "local units = backupUnits[cid] or {}" in block
+    assert "units[requestId] = true" in block
+    assert "local function releaseReservation()" in block
+    assert "units[requestId] = nil" in block
+    assert "backupCooldown[cid] = previousCooldown" in block
+    assert "stillThere.PlayerData.citizenid ~= cid" in block
+
+
+def test_request_backup_audits_with_citizenid_and_unit_id():
+    block = backup_request_block()
+    assert "auditPlayer(cid, 'backup.request', cid, requestId)" in block
+    assert "return fail('audit_unavailable')" in block
+
+
+def test_backup_does_not_create_player_units_or_sentence_anyone():
+    block = backup_request_block()
+    assert "INSERT INTO police_units" not in block
+    assert "UPDATE police_units" not in block
+    assert "police_arrests" not in block
+    assert "Jail" not in block
+
+
+def test_backup_end_decrements_only_the_callers_owned_unit():
+    block = backup_end_block()
+    assert "local units = backupUnits[cid]" in block
+    assert "units[requestId] ~= true then return end" in block
+    assert "units[requestId] = nil" in block
+    assert "if next(units) == nil then backupUnits[cid] = nil end" in block
+    # A dropped client releases its pending units so the cap cannot stay locked.
+    drop = backup_drop_block()
+    assert "local cid = backupSource[src]" in drop
+    assert "backupSource[src] = nil" in drop
+    assert "backupUnits[cid] = nil" in drop
+
+
+def test_backup_client_spawns_one_car_and_two_officers():
+    src = read(BACKUP_CLIENT)
+    assert "RegisterNetEvent('police:client:SpawnBackup'" in src
+    assert "BACKUP_VEHICLES = { 'police', 'police2' }" in src
+    assert "IsModelInCdimage" in src
+    assert "CreateVehicle(vehicleHash" in src
+    assert "CreatePedInsideVehicle(vehicle, 4, pedHash, -1, true, true)" in src
+    assert "CreatePedInsideVehicle(vehicle, 4, pedHash, 0, true, true)" in src
+    assert "if #peds ~= 2 then" in src
+    # Never let native cop AI take over the wanted system.
+    assert "SetPedAsCop" not in src
+
+
+def test_backup_client_uses_friendly_group_weapons_and_ai_tasks():
+    src = read(BACKUP_CLIENT)
+    for token in (
+        "SetPedFleeAttributes(ped, 0, false)",
+        "SetBlockingOfNonTemporaryEvents(ped, true)",
+        "SetPedRelationshipGroupHash(ped, BACKUP_GROUP)",
+        "GiveWeaponToPed(ped, PISTOL",
+        "SetRelationshipBetweenGroups(0, BACKUP_GROUP, PLAYER_GROUP)",
+        "SetRelationshipBetweenGroups(0, PLAYER_GROUP, BACKUP_GROUP)",
+        "TaskVehicleDriveToCoord(",
+        "TaskGoToEntity(ped, playerPed, -1, FOLLOW_STOP_RADIUS",
+        "TaskCombatPed(ped, target, 0, 16)",
+        "IsPedInCombat",
+        "IsPedAPlayer(ped)",
+        "SetBlipColour(blip, 38)",
+    ):
+        assert token in src, token
+
+
+def test_backup_client_cleans_up_on_timeout_leave_death_and_restart():
+    src = read(BACKUP_CLIENT)
+    for token in (
+        "ESCORT_TIMEOUT_MS = 30000",
+        "UNIT_LIFETIME_MS = 300000",
+        "LEAVE_RADIUS = 150.0",
+        "LEAVE_GRACE_MS = 30000",
+        "TriggerServerEvent('police:server:backupEnded', requestId)",
+        "RemoveBlip(state.blip)",
+        "DeleteEntity(entity)",
+        "DeleteVehicle(state.vehicle)",
+        "AddEventHandler('onResourceStop'",
+        "if resourceName ~= GetCurrentResourceName() then return end",
+    ):
+        assert token in src, token
+    # Unit handles are only used behind existence checks.
+    assert src.count("DoesEntityExist(") >= 8

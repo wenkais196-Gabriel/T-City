@@ -162,6 +162,112 @@ local function updateRow(sql, values)
     return pcall(function() return MySQL.update.await(sql, values) end)
 end
 
+-- ---------------------------------------------------------------------------
+-- NPC backup support ("请求支援"). The server is the authority for who may
+-- request, how often, how many units may exist per officer, and the audit
+-- trail. The requesting client only spawns/animates the car and officers.
+-- Each request is one car + two NPC officers; pending units are tracked by
+-- citizenid so reconnects and misattributed end events cannot corrupt counts.
+-- ---------------------------------------------------------------------------
+local BACKUP_COOLDOWN = 60
+local BACKUP_MAX_UNITS = 2
+local backupCooldown = {} -- [citizenid] = os.time() of the last accepted request
+local backupUnits = {}    -- [citizenid] = { [requestId] = true }
+local backupSource = {}   -- [source] = citizenid
+local backupSeq = 0
+
+local function backupUnitCount(citizenid)
+    local units = backupUnits[citizenid]
+    if type(units) ~= 'table' then return 0 end
+    local count = 0
+    for _ in pairs(units) do count = count + 1 end
+    return count
+end
+
+--- Ask for one NPC backup unit. Returns the request id the client must send
+--- back through `police:server:backupEnded` when it cleans the unit up.
+---@param source number
+---@return table { ok=true, request_id } | { ok=false, error }
+function RequestBackup(source)
+    local src = tonumber(source) or 0
+    local actorPlayer = QBCore.Functions.GetPlayer(src)
+    local actor = actorPlayer and actorPlayer.PlayerData
+    -- Permission failures are reported as not_police so the MDT has one
+    -- stable code for "you are not an on-duty officer of sufficient rank".
+    if not PolicePolicy.Can(actor, 'incident.update') then return fail('not_police') end
+    local cid = type(actor.citizenid) == 'string' and actor.citizenid or ''
+    if cid == '' then return fail('not_police') end
+
+    local now = os.time()
+    local last = tonumber(backupCooldown[cid]) or 0
+    if now - last < BACKUP_COOLDOWN then return fail('cooldown') end
+    if backupUnitCount(cid) >= BACKUP_MAX_UNITS then return fail('limit') end
+
+    backupSeq = backupSeq + 1
+    local requestId = ('BU-%d-%d-%d'):format(src, now, backupSeq)
+
+    -- Reserve the slot before the yielding audit insert, otherwise two
+    -- requests arriving in the same tick could both pass the limit check.
+    -- Keep a local reference: playerDropped may nil `backupUnits[cid]` while
+    -- the audit insert is suspended.
+    local units = backupUnits[cid] or {}
+    backupUnits[cid] = units
+    units[requestId] = true
+    backupSource[src] = cid
+    local previousCooldown = backupCooldown[cid]
+    backupCooldown[cid] = now
+
+    local function releaseReservation()
+        units[requestId] = nil
+        if next(units) == nil and backupUnits[cid] == units then backupUnits[cid] = nil end
+    end
+
+    if not auditPlayer(cid, 'backup.request', cid, requestId) then
+        releaseReservation()
+        backupCooldown[cid] = previousCooldown
+        return fail('audit_unavailable')
+    end
+
+    -- The audit insert yields; do not spawn for a player who left meanwhile
+    -- (or whose server id was reused by someone else in the meantime).
+    local stillThere = QBCore.Functions.GetPlayer(src)
+    if not stillThere or stillThere.PlayerData.citizenid ~= cid then
+        releaseReservation()
+        backupSource[src] = nil
+        backupCooldown[cid] = previousCooldown
+        return fail('not_police')
+    end
+
+    TriggerClientEvent('police:client:SpawnBackup', src, requestId)
+    return { ok = true, request_id = requestId }
+end
+
+--- Client finished (or failed) a backup unit: release exactly that unit.
+--- Unknown / foreign request ids are ignored so a client cannot free another
+--- officer's slot.
+RegisterNetEvent('police:server:backupEnded', function(requestId)
+    local src = tonumber(source) or 0
+    local player = QBCore.Functions.GetPlayer(src)
+    local actor = player and player.PlayerData
+    local cid = actor and actor.citizenid
+    if type(cid) ~= 'string' or cid == '' then return end
+    if type(requestId) ~= 'string' or #requestId < 1 or #requestId > 64 then return end
+    local units = backupUnits[cid]
+    if type(units) ~= 'table' or units[requestId] ~= true then return end
+    units[requestId] = nil
+    if next(units) == nil then backupUnits[cid] = nil end
+end)
+
+-- A dropped client never gets to send backupEnded; release every pending unit
+-- for that session so the per-officer limit cannot stay locked forever.
+AddEventHandler('playerDropped', function()
+    local src = tonumber(source) or 0
+    local cid = backupSource[src]
+    if not cid then return end
+    backupSource[src] = nil
+    backupUnits[cid] = nil
+end)
+
 --- Best-effort notification for the citation created by an arrest. The arrest
 --- is already committed when this runs, so a failing notification is only
 --- logged and never rolls the arrest back.
@@ -692,6 +798,7 @@ exports('AssignUnitSystem', Sys.AssignUnit)
 exports('JailSystem', Sys.Jail)
 exports('ArrestSubmit', ArrestSubmit)
 exports('ReportSubmit', ReportSubmit)
+exports('RequestBackup', RequestBackup)
 exports('GetCharges', function()
     local charges = {}
     for i, charge in ipairs(PoliceCharges.List()) do

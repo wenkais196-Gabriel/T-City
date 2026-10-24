@@ -533,3 +533,47 @@ def test_built_bundle_ships_justice_wanted_sources_and_templates():
         assert token in bundle, token
     # the retired merged `wants` field is filtered, never dumped into the UI
     assert "row.wants" not in bundle
+
+
+def test_police_mdt_request_backup_action_forwards_the_server_result():
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    assert "request_backup = function(source, _params)" in app
+    assert "exports['custom-police']:RequestBackup(source)" in app
+    assert "if not ok or type(res) ~= 'table' then return false end" in app
+    # Success and rejection tables are both returned for the registry to wrap;
+    # PhoneApps.Action turns { ok=false, error } into success=false/error.
+    assert "return res" in app
+
+
+def test_dispatch_page_has_request_backup_button_and_localised_errors():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for token in (
+        "request_backup",
+        "请求支援",
+        "支援已派出（#",
+        "backupCooldown",
+        "startBackupCooldown",
+        "onclick={requestBackup}",
+        "disabled={backupBusy || backupCooldown > 0}",
+        "cooldown",
+        "limit",
+        "not_police",
+        "60 秒",
+    ):
+        assert token in ui, token
+    # The button lives on the dispatch page, before the units/incidents tabs.
+    dispatch = ui[ui.index("{#if page === 'dispatch'}"):ui.index("{:else if page === 'person'}")]
+    assert "请求支援" in dispatch
+    assert "onclick={requestBackup}" in dispatch
+    # Local cooldown is presentation only; the server owns the real 60s window.
+    assert "backupCooldown = 60" in ui
+    assert "appAction(DB, 'request_backup', {})" in ui
+
+
+def test_built_bundle_ships_request_backup():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    for token in ("request_backup", "请求支援", "支援已派出（#", "冷却"):
+        assert token in bundle, token
