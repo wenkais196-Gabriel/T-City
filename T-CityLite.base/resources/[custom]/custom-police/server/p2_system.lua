@@ -29,12 +29,14 @@ local function utf8Sub(s, limit)
 end
 
 local function audit(actorId, action, target, detail)
-    return pcall(function()
+    local ok, err = pcall(function()
         MySQL.insert.await(
             'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, "agent", ?, ?, ?)',
             { ('agent:%s'):format(utf8Sub(tostring(actorId or 'unknown'), 40)), action, target,
               detail and utf8Sub(tostring(detail), 500) or nil })
     end)
+    if not ok then print(('[custom-police] p2 audit failed %s: %s'):format(action, tostring(err))) end
+    return ok
 end
 
 -- ---------------------------------------------------------------------------
