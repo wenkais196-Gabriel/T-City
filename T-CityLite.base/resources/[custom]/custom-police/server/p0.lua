@@ -767,7 +767,10 @@ exports('GetUnits', P.GetUnits)
 exports('CreateIncident', P.CreateIncident)
 exports('GetIncidents', P.GetIncidents)
 exports('WriteAudit', function(actorCid, actorKind, action, target, detail)
-    return audit(actorCid, action, target, detail, actorKind)
+    local ok = audit(actorCid, action, target, detail, actorKind)
+    print(('[custom-police] WriteAudit %s actor=%s kind=%s -> %s'):format(
+        tostring(action), tostring(actorCid), tostring(actorKind), tostring(ok)))
+    return ok
 end)
 exports('AssignUnit', P.AssignUnit)
 exports('AssignUnitSystemForAgent', P.AssignUnitSystem)
