@@ -6,7 +6,7 @@
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
   type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; created_at: string; x?: number; y?: number; z?: number };
   type Charge = { id: number | string; label: string; minutes: number; fine: number };
-  type Me = { citizenid: string; callsign: string; grade: number };
+  type Me = { citizenid: string; callsign: string; grade: number; status?: string };
 
   // Five pages. Sub-segments live inside each page; only the active one renders.
   type Page = 'dispatch' | 'person' | 'report' | 'case' | 'me';
@@ -194,7 +194,7 @@
   };
 
   const me = $derived(units.find((u) => u.citizenid === $playerData.citizenid));
-  const myStatus = $derived(me?.status ?? 'off_duty');
+  const myStatus = $derived(me?.status ?? meInfo?.status ?? 'off_duty');
   const openIncidents = $derived(incidents.filter((i) => i.status !== 'closed' && i.status !== 'cleared').length);
   const isLieutenant = $derived(Number(meInfo?.grade ?? 0) >= 3);
   const selectedCharges = $derived(chargeRows.filter((c) => selectedChargeIds.includes(String(c.id))));
@@ -295,6 +295,7 @@
   async function setStatus(status: string) {
     const res = await appAction(DB, 'set_status', { status });
     notice = res?.success ? `状态已切换：${statusLabel[status] ?? status}` : `失败：${res?.error ?? 'unknown'}`;
+    if (res?.success && meInfo) meInfo = { ...meInfo, status };
     await refresh();
   }
 

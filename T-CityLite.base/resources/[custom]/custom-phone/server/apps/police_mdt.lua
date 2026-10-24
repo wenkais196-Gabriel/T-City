@@ -45,11 +45,19 @@ PhoneApps.Register({
             if type(job.grade) == 'table' then grade = tonumber(job.grade.level) or 0
             else grade = tonumber(job.grade) or 0 end
             local metadata = type(data.metadata) == 'table' and data.metadata or {}
+            local status = (job.onduty == true) and 'available' or 'off_duty'
+            local okUnits, unitRes = pcall(function() return exports['custom-police']:GetUnits() end)
+            if okUnits and type(unitRes) == 'table' then
+                for _, unit in ipairs(unitRes.units or {}) do
+                    if unit.citizenid == data.citizenid then status = unit.status break end
+                end
+            end
             return {
                 rows = { {
                     citizenid = data.citizenid,
                     callsign = tostring(metadata.callsign or ''),
                     grade = grade,
+                    status = status,
                 } },
                 count = 1,
             }
