@@ -309,3 +309,63 @@ def test_built_bundle_ships_the_citation_flow():
     )
     for token in ("getMyCitations", "payCitation", "我的罚单"):
         assert token in bundle, token
+
+
+def test_mdt_report_submit_forwards_the_server_result():
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    assert "report_submit = function(source, params)" in app
+    assert "exports['custom-police']:ReportSubmit(source, params)" in app
+    assert "if not ok or type(res) ~= 'table' then return false end" in app
+    assert "return res" in app
+
+
+def test_report_page_collects_incident_evidence_and_bolo_fields():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for token in (
+        "report_submit",
+        "关联警情",
+        "对象 citizenid",
+        "案件 id",
+        "地点",
+        "reportForm.incident_id",
+        "evidence_label",
+        "evidence_description",
+        "bolo_kind",
+        "bolo_target",
+        "bolo_reason",
+        "reportOpts.evidence",
+        "reportOpts.bolo",
+        'type="checkbox"',
+        "createReport",
+        "loadBolos",
+        "报告 #",
+    ):
+        assert token in ui, token
+
+
+def test_report_page_localises_server_rejections():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for token in (
+        "bolo_forbidden",
+        "case_not_found",
+        "incident_not_found",
+        "action_rejected",
+        "Sergeant+",
+    ):
+        assert token in ui, token
+
+
+def test_legacy_evidence_and_bolo_tabs_stay_available():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "['evidence','证据']" in ui
+    assert "['bolos','BOLO']" in ui
+    assert "registerEvidence" in ui and "createBolo" in ui
+
+
+def test_built_bundle_ships_the_report_flow():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    for token in ("report_submit", "evidence_label", "bolo_kind"):
+        assert token in bundle, token

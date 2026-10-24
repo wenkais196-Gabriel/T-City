@@ -172,6 +172,11 @@ PhoneApps.Register({
             if not ok or type(res) ~= 'table' or res.ok ~= true then return false end
             return res
         end,
+        report_submit = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:ReportSubmit(source, params) end)
+            if not ok or type(res) ~= 'table' then return false end
+            return res
+        end,
         register_evidence = function(source, params)
             local ok, res = pcall(function() return exports['custom-police']:RegisterEvidence(source, params) end)
             return ok and res ~= false
