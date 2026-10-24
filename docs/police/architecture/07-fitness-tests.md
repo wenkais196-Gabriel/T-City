@@ -22,13 +22,13 @@
 | FIT-06 | 迁移幂等 + fixture 覆盖 + 可重复执行 | 数据 | ⚠️ PARTIAL | blocking |
 | FIT-07 | NPC 生成必须走预算接口（唯一入口 + 冷却 + 上限 + 审计） | 资源预算 | ⚠️ PARTIAL | blocking |
 | FIT-08 | 生成物/注册表一致（`agent_tools --check` + 禁止手改） | 工具链 | ✅ PASS | blocking（已存在） |
-| FIT-09 | 查询纪律：禁 `SELECT *`、必须 `LIMIT`、字段白名单 | 性能/PII | ❌ FAIL | blocking |
+| FIT-09 | 查询纪律：禁 `SELECT *`、必须 `LIMIT`、字段白名单 | 性能/PII | ✅ PASS（dec840f；23 处通配投影清零，2 条 allowlist） | blocking |
 | FIT-10 | 资源接线：cfg ↔ manifest ↔ 文件 ↔ 导出消费者 | 可启动性 | ⚠️ PARTIAL | blocking |
 | FIT-11 | 状态机列只允许登记过的写者 | 一致性 | ⚠️ PARTIAL | advisory |
 | FIT-12 | 弃用登记：deprecated 写路径为 0 或未过期豁免 | 演进 | ❌ FAIL | blocking |
 | FIT-13 | 文档数字与代码常量一致（05 的预算不得漂移） | 文档 | ❓ UNKNOWN | advisory |
 
-加权得分 **27 / 100**（见 §5；基线 21/100；以 `3bbcab3` 提交为准）。**post-baseline `3e720bf` 已把 FIT-03/FIT-05 转 PASS**，权重分待下一轮统一重算；其余红项（FIT-02/09/12）仍在。
+加权得分 **27 / 100**（见 §5；基线 21/100；以 `3bbcab3` 提交为准）。**post-baseline `3e720bf` 已把 FIT-03/FIT-05 转 PASS，`dec840f` 把 FIT-09 转 PASS**；权重分待下一轮统一重算；其余红项（FIT-02/12）仍在。
 
 > **post-baseline `3e720bf`**：FIT-03/FIT-05 扫描器、evidence 鉴权、敏感读 fail-closed 已提交；`tests/architecture/` 已加入 CI。上表状态已更新，评分数字待重算。
 
