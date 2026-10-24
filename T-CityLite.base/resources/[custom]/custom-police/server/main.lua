@@ -197,20 +197,27 @@ end)
 -- 系统自动警报 (车辆盗窃等) — 仅限在勤警察调用 + 每 source 10 秒 1 次
 RegisterNetEvent('police:server:autoAlert', function(coords, text)
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player or not PolicePolicy.Can(Player.PlayerData, 'incident.create') then return end
+    -- source 0 means a trusted server-side resource (e.g. custom-vehicles
+    -- hotwire alarms) used TriggerEvent; client-originated calls must still be
+    -- on-duty police.
+    local isSystem = src == 0
+    if not isSystem then
+        local Player = QBCore.Functions.GetPlayer(src)
+        if not Player or not PolicePolicy.Can(Player.PlayerData, 'incident.create') then return end
+    end
+    local cooldownKey = isSystem and 'system' or src
 
     local now = os.time()
     for otherSrc, lastAt in pairs(autoAlertCooldown) do
         if now - lastAt > 60 then autoAlertCooldown[otherSrc] = nil end
     end
-    local last = autoAlertCooldown[src]
+    local last = autoAlertCooldown[cooldownKey]
     if last and now - last < AUTO_ALERT_COOLDOWN then return end
 
     local alertCoords = sanitizeAlertCoords(coords)
     local message = sanitizeAlertText(text)
     if not alertCoords or not message then return end
-    autoAlertCooldown[src] = now
+    autoAlertCooldown[cooldownKey] = now
 
     local sent = 0
     local players = QBCore.Functions.GetQBPlayers()

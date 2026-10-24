@@ -897,7 +897,9 @@ def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
     assert "local autoAlertCooldown = {}" in src
     assert "local AUTO_ALERT_COOLDOWN = 10" in src
     assert "if last and now - last < AUTO_ALERT_COOLDOWN then return end" in block
-    assert "autoAlertCooldown[src] = now" in block
+    assert "local isSystem = src == 0" in block
+    assert "local cooldownKey = isSystem and 'system' or src" in block
+    assert "autoAlertCooldown[cooldownKey] = now" in block
 
     assert "local function sanitizeAlertCoords(coords)" in src
     assert "local function sanitizeAlertText(text)" in src
