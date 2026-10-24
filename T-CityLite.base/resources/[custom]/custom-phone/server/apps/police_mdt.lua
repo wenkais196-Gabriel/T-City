@@ -1,4 +1,6 @@
--- server/apps/police_mdt.lua — first registry app (police only, on duty).
+-- server/apps/police_mdt.lua — first registry app (police only).
+-- The app stays visible off duty so a 10-7 officer can open the MDT and go
+-- 10-8 again; every query/action still re-authorises through PolicePolicy.
 local function core()
     if type(_G.QBCore) == 'table' then return _G.QBCore end
     local ok, value = pcall(function() return exports['qb-core']:GetCoreObject() end)
@@ -31,7 +33,7 @@ PhoneApps.Register({
     id = 'police_mdt',
     label = 'MDT',
     icon = '🛡️',
-    audience = { jobs = { 'police' }, onduty = true },
+    audience = { jobs = { 'police' } },
     queries = {
         -- Identity of the caller for the "Me" page. The audit section is
         -- rendered from this grade (Lieutenant+ = grade >= 3).

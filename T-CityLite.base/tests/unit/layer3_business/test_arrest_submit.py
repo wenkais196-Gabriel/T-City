@@ -1180,3 +1180,134 @@ def test_backup_client_cleans_up_on_timeout_leave_death_and_restart():
         assert token in src, token
     # Unit handles are only used behind existence checks.
     assert src.count("DoesEntityExist(") >= 8
+
+
+# ---------------------------------------------------------------------------
+# SM-01 duty / unit state machine
+# ---------------------------------------------------------------------------
+
+P0 = POLICE / "server/p0.lua"
+
+
+def p0_src() -> str:
+    return read(P0)
+
+
+def p0_block(start_marker: str, end_marker: str) -> str:
+    src = p0_src()
+    start = src.index(start_marker)
+    end = src.index(end_marker, start)
+    return src[start:end]
+
+
+def test_set_unit_status_for_source_owns_the_onduty_projection():
+    block = p0_block("function P.SetUnitStatusForSource(", "\nexports('SetUnitStatus'")
+    off_branch = block[block.index("if status == 'off_duty' then"):block.index("if status == 'available' then")]
+    available_branch = block[block.index("if status == 'available' then"):block.index("-- busy/assigned/enroute/on_scene")]
+    busy_branch = block[block.index("-- busy/assigned/enroute/on_scene"):]
+
+    # 10-7 and 10-8 are the only statuses that touch qb-core's projection.
+    assert "pcall(function() player.Functions.SetJobDuty(false) end)" in off_branch
+    assert "upsertUnit(data.citizenid, callsign, 'off_duty')" in off_branch
+    assert "pcall(function() player.Functions.SetJobDuty(true) end)" in available_branch
+    assert "upsertUnit(data.citizenid, callsign, 'available')" in available_branch
+    assert "SetJobDuty" not in busy_branch
+    assert "if data.job.onduty ~= true then return false, 'not_on_duty' end" in busy_branch
+    assert "upsertUnit(data.citizenid, callsign, status)" in busy_branch
+
+    # The 10-8/10-7 client commands use the same source-authoritative entry.
+    event = p0_block("RegisterNetEvent('custom-police:server:setStatus'", "RegisterNetEvent('custom-police:server:911'")
+    assert "P.SetUnitStatusForSource(source, tostring(status or ''))" in event
+
+
+def test_set_unit_status_rejects_offline_non_offduty_writes():
+    block = p0_block("function P.SetUnitStatus(", "function P.GetUnits(")
+    assert "QBCore.Functions.GetPlayerByCitizenId(cid)" in block
+    assert "elseif not player then" in block
+    assert "return false, 'not_on_duty'" in block
+    assert "player.PlayerData.job.onduty ~= true" in block
+    assert "pcall(function() player.Functions.SetJobDuty(false) end)" in block
+    assert "upsertUnit(cid, callsign, status)" in block
+
+
+def test_on_job_update_preserves_busy_and_task_states():
+    block = p0_block("local function syncDuty(data)", "RegisterNetEvent('QBCore:Server:OnJobUpdate'")
+    assert "if not isPolice(data) then" in block
+    assert "takeUnitOffDuty(data.citizenid)" in block
+    assert "upsertUnit(data.citizenid, callsign, 'off_duty')" in block
+    assert "SELECT status FROM police_units WHERE citizenid = ? LIMIT 1" in block
+    assert "if not current or current.status == 'off_duty' then" in block
+
+    available_write = block.index("upsertUnit(data.citizenid, callsign, 'available')")
+    assert block.index("if not current or current.status == 'off_duty' then") < available_write
+    # No code path writes busy/assigned/enroute/on_scene back from a job update.
+    for status in ("'busy'", "'assigned'", "'enroute'", "'on_scene'"):
+        assert status not in block
+
+
+def test_player_dropped_releases_unit_and_reopens_orphaned_incident():
+    block = p0_block("local function releaseDroppedUnit(citizenid)", "local function onPlayerDropped")
+    assert "SELECT incident_id FROM police_units WHERE citizenid = ? LIMIT 1" in block
+    assert "takeUnitOffDuty(citizenid)" in block
+    assert "SELECT 1 AS ok FROM police_units WHERE incident_id = ? LIMIT 1" in block
+    assert "if not other then" in block
+    assert "UPDATE police_incidents SET status = 'open'" in block
+    assert "status IN ('assigned','enroute','on_scene')" in block
+    # qb-core can drop its Player object before the raw event reaches us.
+    src = p0_src()
+    assert "AddEventHandler('playerDropped'" in src
+    assert "AddEventHandler('QBCore:Server:PlayerDropped'" in src
+
+
+def test_startup_sweep_parks_offline_units_without_deleting_rows():
+    block = p0_block("local function sweepOfflineUnits()", "AddEventHandler('onResourceStart'")
+    assert "online[data.citizenid] = true" in block
+    assert "SELECT citizenid FROM police_units" in block
+    assert "not online[cid]" in block
+    assert "takeUnitOffDuty(cid)" in block
+    assert "audit(cid, 'unit.stale'" in block
+    assert "DELETE FROM police_units" not in block
+
+    handler = p0_src()[p0_src().index("AddEventHandler('onResourceStart'"):]
+    assert "Wait(10000)" in handler
+    assert "sweepOfflineUnits" in handler
+
+
+def test_grade1_officers_may_only_self_claim_open_or_assigned_incidents():
+    block = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
+    assert "reason == 'rank_too_low' and grade(actor) < 2 and actor.job.onduty == true" in block
+    assert "if target ~= actor.citizenid then return false, 'rank_too_low' end" in block
+    assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then return false, 'rank_too_low' end" in block
+    assert "INSERT INTO police_incident_units" in block
+    assert "assignUnitRow(target, id)" in block
+    assert "UPDATE police_incidents SET status = 'assigned'" in block
+
+
+def test_clearing_an_incident_closes_it_and_releases_only_task_units():
+    block = p0_block("function P.SetIncidentStatus(", "local function lookupAllowed")
+    assert "local storedStatus = (status == 'cleared') and 'closed' or status" in block
+    assert "local closed = (storedStatus == 'closed')" in block
+    assert "{ storedStatus, closed and 1 or 0, id }" in block
+    assert "releaseIncidentUnits(id)" in block
+    assert "return { id = id, status = storedStatus }" in block
+
+    release = p0_block("local function releaseIncidentUnits(", "function P.SetUnitStatus(")
+    assert "SET status = 'available', incident_id = NULL" in release
+    assert "status IN ('assigned','enroute','on_scene')" in release
+    assert "SET incident_id = NULL" in release
+    assert "status = 'busy'" in release
+    # A manually busy unit is never flipped back to available.
+    assert "status = 'available' WHERE incident_id = ? AND status = 'busy'" not in release
+
+
+def test_unit_writes_are_confined_to_p0_helpers():
+    # Task-derived writes and incident clearing go through helpers instead of
+    # new direct UPDATEs in AssignUnit/SetIncidentStatus.
+    assign = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
+    assert "UPDATE police_units" not in assign
+    assert "assignUnitRow(target, id)" in assign
+
+    status = p0_block("function P.SetIncidentStatus(", "local function lookupAllowed")
+    assert "UPDATE police_units" not in status
+    assert "markIncidentUnits(id, status)" in status
+    assert "releaseIncidentUnits(id)" in status
