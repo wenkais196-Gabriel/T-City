@@ -78,6 +78,11 @@ PhoneApps.Register({
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
             return { rows = res.rows or {}, count = res.count or 0 }
         end,
+        case_detail = function(source, params)
+            local ok, res = pcall(function() return exports['custom-police']:GetCaseDetail(source, params and params.case_id) end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = { res }, count = 1 }
+        end,
         cases = function(source, params)
             local ok, res = pcall(function() return exports['custom-police']:GetCases(source, params) end)
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end

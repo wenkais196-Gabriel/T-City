@@ -173,7 +173,35 @@ function C.GetArrests(source, params)
     return { rows = rows or {}, count = #(rows or {}) }
 end
 
+--- Aggregate a case and everything linked to it. Sensitive: audited, and the
+--- audit write must succeed or the read is refused.
+function C.GetCaseDetail(source, caseId)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'case.view')
+    if not allowed then return false, reason end
+    local id = tonumber(caseId)
+    if not id then return false, 'invalid_case' end
+    local caseRow = MySQL.single.await('SELECT * FROM police_cases WHERE id = ? LIMIT 1', { id })
+    if not caseRow then return false, 'not_found' end
+    if not audit(actor.citizenid, 'case.detail', tostring(id), nil) then
+        return false, 'audit_unavailable'
+    end
+    local reports = MySQL.query.await(
+        'SELECT id, title, author_citizenid, status, created_at FROM police_reports WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
+    local evidence = MySQL.query.await(
+        'SELECT id, exhibit_no, label, status, created_at FROM police_evidence WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
+    local arrests = MySQL.query.await(
+        'SELECT id, citizenid, charges, officer_citizenid, created_at FROM police_arrests WHERE case_id = ? ORDER BY id DESC LIMIT 50', { id }) or {}
+    return {
+        case = { id = tonumber(caseRow.id), case_no = caseRow.case_no, title = caseRow.title,
+                 summary = caseRow.summary, status = caseRow.status,
+                 lead_citizenid = caseRow.lead_citizenid, created_at = tostring(caseRow.created_at) },
+        reports = reports, evidence = evidence, arrests = arrests,
+    }
+end
+
 exports('CreateCase', C.CreateCase)
+exports('GetCaseDetail', C.GetCaseDetail)
 exports('GetCases', C.GetCases)
 exports('CreateBolo', C.CreateBolo)
 exports('GetBolos', C.GetBolos)

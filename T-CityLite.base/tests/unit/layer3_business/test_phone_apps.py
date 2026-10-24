@@ -174,3 +174,16 @@ def test_sentences_use_qb_prison_when_available():
     assert "QBCore:Server:PlayerLoaded" in prison
     main = (justice / "server/main.lua").read_text(encoding="utf-8")
     assert "prison:client:UnjailPerson" in main
+
+
+def test_case_detail_aggregates_linked_records():
+    p3 = read(PHONE.parent / "custom-police/server/p3_cases.lua")
+    assert "function C.GetCaseDetail" in p3
+    assert "exports('GetCaseDetail'" in p3
+    assert "police_reports WHERE case_id" in p3
+    assert "police_evidence WHERE case_id" in p3
+    assert "police_arrests WHERE case_id" in p3
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    assert "case_detail" in app
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "openCase" in ui and "caseDetail" in ui
