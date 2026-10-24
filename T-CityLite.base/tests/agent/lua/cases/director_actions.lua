@@ -1597,6 +1597,53 @@ return {
             assert(tostring(err):match('duty channel down'), tostring(err))
         end)
 
+        check('set_job_duty_police_uses_police_service', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.job = {
+                name = 'police', type = 'leo', onduty = false,
+                grade = { level = 2, name = 'Officer' },
+            }
+            local seen
+            env.export_overrides['custom-police'] = {
+                SetDutyForSource = function(source, onduty, reason)
+                    seen = { source = source, onduty = onduty, reason = reason }
+                    player.PlayerData.job.onduty = onduty
+                    return true
+                end,
+            }
+
+            local ok, err, result = setJobDuty(env, 'ABC12345', true)
+            assert(ok == true, tostring(err))
+            assert(seen and seen.source == 7, 'police export must receive the player source')
+            assert(seen.onduty == true, 'police export must receive the requested onduty value')
+            assert(seen.reason == 'director', 'police export reason must be director')
+            assert(player.PlayerData.job.onduty == true, 'export owns the duty projection')
+            assert(result.verify_result == true and result.onduty == true, 'verification result mismatch')
+            for _, entry in ipairs(env.log) do
+                assert(entry.set_job_duty == nil,
+                    'director must not call qb-core SetJobDuty for a police target')
+            end
+        end)
+
+        check('set_job_duty_police_service_failure_is_execution_failed', function()
+            local env = newEnv()
+            local player = newPlayer(env, 'ABC12345')
+            player.PlayerData.job = {
+                name = 'police', type = 'leo', onduty = false,
+                grade = { level = 2, name = 'Officer' },
+            }
+            env.export_overrides['custom-police'] = {
+                SetDutyForSource = function() return false, 'duty_failed' end,
+            }
+
+            local ok, err = setJobDuty(env, 'ABC12345', true)
+            assert(ok == false, 'a rejected police service must fail the action')
+            assert(tostring(err):match('^execution_failed'), tostring(err))
+            assert(tostring(err):match('duty_failed'), tostring(err))
+            assert(player.PlayerData.job.onduty == false, 'failed service must not change onduty')
+        end)
+
         -- set_metadata -----------------------------------------------------------
 
         check('set_metadata_normalize_rejects_unknown_key', function()

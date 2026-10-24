@@ -1,0 +1,43 @@
+{
+  "$comment": "FIT-01 job.onduty writer registry. This is an ownership registry, not a debt register: every entry is a writer the architecture allows. qb-core/server/player.lua is the primitive; custom-police/server/p0.lua is the service implementation; custom-main and custom-director may only keep their non-police branches. Expiry is null for those architectural owners. The scanner (tests/architecture/test_duty_writer.py) still validates every custom-main/custom-director occurrence is inside the non-police branch of a function that guards police and calls SetDutyForSource. qb-core/server/events.lua (QBCore:ToggleDuty) is framework vendor code and out of this scanner's scope because qb-core must not be modified; custom-police's OnJobUpdate projection covers it.",
+  "version": 1,
+  "rule": "FIT-01",
+  "entries": [
+    {
+      "id": "qb-core-setjobduty-primitive",
+      "file": "qb-core/server/player.lua",
+      "kind": "primitive",
+      "owner": "qb-core",
+      "reason": "qb-core 的 SetJobDuty 是 job.onduty 唯一底层 primitive，保留不动；所有业务写者必须经 custom-police 的 duty 服务调用它。",
+      "added": "2026-10-24",
+      "expires": null
+    },
+    {
+      "id": "police-duty-service",
+      "file": "custom-police/server/p0.lua",
+      "kind": "service",
+      "owner": "custom-police",
+      "reason": "唯一警察 duty 服务 P.SetDutyForSource 的实现：校验 police、pcall(SetJobDuty)、回读 PlayerData.job.onduty、syncDuty 投影、审计 duty.set。该文件内只允许这一处 SetJobDuty 调用。",
+      "added": "2026-10-24",
+      "expires": null
+    },
+    {
+      "id": "custom-main-non-police-duty",
+      "file": "custom-main/server/dispatch.lua",
+      "kind": "non_police_branch",
+      "guard": "jobName == 'police'",
+      "reason": "FIT-01 allowlist：仅非 leo / ambulance/mechanic/taxi 的 /duty 与通缉锁保留 qb-core SetJobDuty；jobName == 'police' 分支必须先走 exports['custom-police']:SetDutyForSource。",
+      "added": "2026-10-24",
+      "expires": null
+    },
+    {
+      "id": "custom-director-non-police-duty",
+      "file": "custom-director/server/main.lua",
+      "kind": "non_police_branch",
+      "guard": "currentJob.type == 'leo'",
+      "reason": "FIT-01 allowlist：仅非 leo / ambulance/mechanic/taxi 的 set_job_duty 目标保留 qb-core SetJobDuty；currentJob.type == 'leo' 或 name == 'police' 分支必须先走 custom-police:SetDutyForSource。",
+      "added": "2026-10-24",
+      "expires": null
+    }
+  ]
+}

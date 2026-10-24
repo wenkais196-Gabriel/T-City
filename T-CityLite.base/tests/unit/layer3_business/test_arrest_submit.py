@@ -1237,12 +1237,13 @@ def test_set_unit_status_for_source_owns_the_onduty_projection():
     available_branch = block[block.index("if status == 'available' then"):block.index("-- busy/assigned/enroute/on_scene")]
     busy_branch = block[block.index("-- busy/assigned/enroute/on_scene"):]
 
-    # 10-7 and 10-8 are the only statuses that touch qb-core's projection.
-    assert "pcall(function() player.Functions.SetJobDuty(false) end)" in off_branch
+    # 10-7 and 10-8 are the only statuses that touch qb-core's projection, and
+    # both delegate to the single police duty writer (FIT-01).
+    assert "P.SetDutyForSource(source, false, 'unit_status')" in off_branch
     assert "upsertUnit(data.citizenid, callsign, 'off_duty')" in off_branch
-    assert "pcall(function() player.Functions.SetJobDuty(true) end)" in available_branch
+    assert "P.SetDutyForSource(source, true, 'unit_status')" in available_branch
     assert "upsertUnit(data.citizenid, callsign, 'available')" in available_branch
-    assert "SetJobDuty" not in busy_branch
+    assert "SetJobDuty" not in block, "10-8/10-7 must use the duty service, not the primitive"
     assert "if data.job.onduty ~= true then return false, 'not_on_duty' end" in busy_branch
     assert "upsertUnit(data.citizenid, callsign, status)" in busy_branch
 
@@ -1257,7 +1258,8 @@ def test_set_unit_status_rejects_offline_non_offduty_writes():
     assert "elseif not player then" in block
     assert "return false, 'not_on_duty'" in block
     assert "player.PlayerData.job.onduty ~= true" in block
-    assert "pcall(function() player.Functions.SetJobDuty(false) end)" in block
+    assert "P.SetDutyForSource(player.PlayerData.source, false, 'unit_status')" in block
+    assert "player.Functions.SetJobDuty" not in block
     assert "upsertUnit(cid, callsign, status)" in block
 
 
