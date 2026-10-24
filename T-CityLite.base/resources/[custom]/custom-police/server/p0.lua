@@ -47,6 +47,20 @@ local function grade(data)
     return PolicePolicy.Grade(data)
 end
 
+--- Notifications are owned by custom-phone (FIT-02). Enqueue through the outbox
+--- in p2_system (loaded later, so the global is resolved at call time); fall
+--- back to the owner export only if that layer is missing.
+local function notifyOfficer(citizenid, title, content, appId)
+    local payload = { citizenid = citizenid, title = title, content = content, app_id = appId }
+    if type(Outbox) == 'table' and type(Outbox.Enqueue) == 'function' then
+        return Outbox.Enqueue('notification', payload)
+    end
+    pcall(function()
+        exports['custom-phone']:Notify(citizenid, title, content, appId)
+    end)
+    return false
+end
+
 local function audit(actorCid, action, target, detail, actorKind)
     local ok = pcall(function()
         MySQL.insert.await(
@@ -173,15 +187,7 @@ function P.CreateIncident(source, data)
         local p = QBCore.Functions.GetPlayer(src)
         local d = p and p.PlayerData
         if isPolice(d) and d.job.onduty == true then
-            MySQL.insert.await(
-                'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
-                { d.citizenid, notification.title, notification.content, 'police_mdt' }
-            )
-            TriggerClientEvent('phone:client:newNotification', src, {
-                id = 0, title = notification.title, content = notification.content,
-                timestamp = os.date('%Y-%m-%d %H:%M:%S'), is_read = false,
-                app_id = 'police_mdt',
-            })
+            notifyOfficer(d.citizenid, notification.title, notification.content, 'police_mdt')
         end
     end
     return { id = tonumber(id), status = 'open' }

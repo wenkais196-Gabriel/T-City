@@ -291,6 +291,36 @@ function C.GetCaseDetail(source, caseId)
     }
 end
 
+--- Owner write path for the justice verdict projection (FIT-02). custom-justice
+--- keeps verdicts in memory and used to UPDATE police_reports directly; it now
+--- calls this export instead, so `police_reports` has a single writer.
+---
+--- `justiceCaseId` is the string id stored in v3.6's VARCHAR(32); the verdict is
+--- the JSON blob from the justice verdict (TEXT, so 65535 bytes max); `status`
+--- is the v3.7 closed state ('sentenced' is accepted for callers that persist
+--- before closing the in-memory case).
+---@param justiceCaseId string|number
+---@param verdictJson string
+---@param status string
+---@return boolean ok
+function C.RecordVerdict(justiceCaseId, verdictJson, status)
+    local caseId = type(justiceCaseId) == 'string' and justiceCaseId
+        or (type(justiceCaseId) == 'number' and tostring(justiceCaseId) or '')
+    if caseId == '' or #caseId > 32 then return false end
+    if type(verdictJson) ~= 'string' or verdictJson == '' or #verdictJson > 65535 then return false end
+    if status ~= 'sentenced' and status ~= 'closed' then return false end
+
+    local ok = pcall(function()
+        MySQL.update.await(
+            'UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?',
+            { verdictJson, status, caseId })
+    end)
+    if not ok then
+        print(('[custom-police] justice verdict write failed for %s'):format(tostring(caseId)))
+    end
+    return ok
+end
+
 exports('CreateCase', C.CreateCase)
 exports('GetCaseDetail', C.GetCaseDetail)
 exports('GetCases', C.GetCases)
@@ -302,4 +332,5 @@ exports('DecideWarrant', C.DecideWarrant)
 exports('GetWarrants', C.GetWarrants)
 exports('RegisterArrest', C.RegisterArrest)
 exports('GetArrests', C.GetArrests)
+exports('RecordVerdict', C.RecordVerdict)
 print('[custom-police] P2 cases/bolos/warrants/arrests loaded')

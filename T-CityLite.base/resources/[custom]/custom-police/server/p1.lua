@@ -28,20 +28,23 @@ local function audit(cid, action, target, detail)
     end)
 end
 
+--- Notifications belong to custom-phone (FIT-02). Enqueue through the outbox in
+--- p2_system (loaded later, so the global is resolved at call time); fall back
+--- to the owner export only if that layer is missing.
 local function notifyCitizen(citizenid, title, content, appId)
-    local result = MySQL.insert.await(
-        'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
-        { citizenid, title:sub(1, 200), content:sub(1, 500), appId })
-    local notificationId = InsertId(result)
-    for _, src in ipairs(QBCore.Functions.GetPlayers()) do
-        local d = pd(src)
-        if d and d.citizenid == citizenid then
-            TriggerClientEvent('phone:client:newNotification', src, {
-                id = notificationId, title = title:sub(1, 200), content = content:sub(1, 500),
-                timestamp = os.date('%Y-%m-%d %H:%M:%S'), is_read = false, app_id = appId,
-            })
-        end
+    local payload = {
+        citizenid = citizenid,
+        title = title:sub(1, 200),
+        content = content:sub(1, 500),
+        app_id = appId,
+    }
+    if type(Outbox) == 'table' and type(Outbox.Enqueue) == 'function' then
+        return Outbox.Enqueue('notification', payload)
     end
+    pcall(function()
+        exports['custom-phone']:Notify(citizenid, payload.title, payload.content, appId)
+    end)
+    return false
 end
 
 function P1.IssueCitation(source, params)

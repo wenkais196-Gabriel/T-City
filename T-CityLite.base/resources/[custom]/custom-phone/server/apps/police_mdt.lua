@@ -265,19 +265,15 @@ PhoneApps.Register({
             local title = ('MDT Alert — %s'):format(senderName:sub(1, 40))
             local sent = 0
             for _, officer in ipairs(onDutyPolice()) do
-                MySQL.Async.insert(
-                    'INSERT INTO phone_notifications (citizenid, title, content) VALUES (?, ?, ?)',
-                    { officer.citizenid, title:sub(1, 200), message },
-                    function() end
-                )
-                TriggerClientEvent('phone:client:newNotification', officer.source, {
-                    id = 0,
-                    title = title:sub(1, 200),
-                    content = message,
-                    timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-                    is_read = false,
-                })
-                sent = sent + 1
+                -- Same-resource owner export: persistence + push + app_id
+                -- allowlist live in server/main.lua (FIT-02). `source` skips
+                -- the citizenid lookup because the officer is online here.
+                local called, delivered = pcall(function()
+                    return exports['custom-phone']:Notify(officer.citizenid, title, message, nil, {
+                        source = officer.source,
+                    })
+                end)
+                if called and delivered then sent = sent + 1 end
             end
             return { sent = sent }
         end,

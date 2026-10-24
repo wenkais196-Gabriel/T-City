@@ -24,7 +24,7 @@
 |---|---|---|---|---|
 | SM-01 | Officer Duty / Unit | `police_units.status` 单写入口 + `job.onduty` 投影 | `police_units`、`police_audit` | **已实施（`bb64d87`）**：10-8/10-7 经 `SetJobDuty` 投影、OnJobUpdate 保留任务态、掉线释放、启动 sweep、grade1 自派、`cleared→closed`、MDT 下班可见。基线“6 种非法组合”不再可达 |
 | SM-02 | Incident | `police_incidents.status` + transition 表 + `disposition` | `police_incidents`、`police_incident_units` | **已实施（`5c2d3ca`/`9481074`）**：from/to 守卫、`closed` 可达、5 种 disposition、45min stale sweep（60s 周期）、`GetIncidents` 排除 `closed` |
-| SM-03 | Arrest / Report / Citation / Evidence | `police_reports` 为锚点 + `police_write_intents` 幂等账本 | `police_reports`、`police_citations`、`police_evidence`、`police_write_intents` | **部分实施（`f690230`）**：`idempotency_key`/`done`/`pending`、`open_case` cap、citation/evidence 独立审计、支付抢占；仍缺事务、`done` 无 TTL、`open_case` 孤儿不可回滚 |
+| SM-03 | Arrest / Report / Citation / Evidence | `police_reports` 为锚点 + `police_write_intents` 幂等账本 + `police_outbox` 补偿 | `police_reports`、`police_citations`、`police_evidence`、`police_write_intents`、`police_outbox` | **部分实施（`f690230` + v3.12）**：`idempotency_key`/`done`/`pending`、`open_case` cap、citation/evidence 独立审计、支付抢占；v3.12 补 `done` 7 天 TTL / `pending` 10 分钟可重试 / outbox 通知重试；仍缺事务、`open_case` 孤儿不可回滚 |
 | SM-04 | Justice Case | **custom-justice 内存**（+ v3.7 投影） | 无（判决 best-effort 回写 `police_reports.justice_verdict`） | **未动**：重启即丢；`CASE-0001` 回绕；`27c2619` 只补 `justice_case_id` / v3.7 投影，不构成持久化 |
 | SM-05 | Custody | **`justice_sentences.ends_at`（DB 时钟）** | `justice_sentences`、`players.metadata.injail`（投影） | **已实施（`2ae3da4` + `f690230`）**：服务端计时/离线计刑、15s sweep、`SetJailStatus` 不信客户端、trial `replace`、工作减刑服务端化 |
 | SM-06 | NPC Backup Unit | 服务端只记“占位 ID”（每警员 ≤2） | 无（仅 `police_audit` 一条 request） | **部分实施**（MVP 保留）：掉线释放已补；服务端仍无状态机/TTL/结束审计/全局 cap |
@@ -498,17 +498,17 @@ Incident.Sweep()
 |---|---|---|---|
 | 幂等键 | 无；双击写第二份 report/citation | `ArrestSubmit`/`ReportSubmit` 接受 `params.idempotency_key`（`^[A-Za-z0-9_-]{8,128}$`）；先 claim 再写，异常/业务失败删键，成功写 `done` + `result_json` | `custom-police/server/p2_system.lua:154-267,469,828`、`migrations/v3.9_police_write_intents.sql` |
 | 重复调用语义 | 无 | `done` 重放首次结果；`pending` 返回 `in_progress`；格式错返回 `invalid_idempotency_key`；同键不同参不会重新执行（仍返回首次结果，**没有** `idempotency_conflict`） | `p2_system.lua:179-266` |
-| 幂等账本 | 无表 | `police_write_intents(idem_key PK, action, status pending/done/failed, result_json, created_at)`；索引 `idx_actor_created`、`idx_created` | v3.9 |
+| 幂等账本 | 无表 | `police_write_intents(idem_key PK, action, status pending/done/failed, result_json, expires_at, completed_at, created_at)`；索引 `idx_actor_created`、`idx_created` | v3.9 + v3.12 |
 | `open_case` 权限 | 服务端完全不查 grade | 与 `create_case` 同门槛：`PolicePolicy.Can(actor,'case.create')`（≥2），失败 `case_forbidden` | `p2_system.lua:531-537` |
 | 审计补齐 | kind=arrest 不写 `report.create`/`citation.issue`/`evidence.register` | 送监成功后统一补 `citation.issue`/`evidence.register`/`arrest.register`（+ 可选 `bolo.create`/`case.create`），任一失败返回 `audit_unavailable` + `jailed=true` | `p2_system.lua:766-797` |
 | 支付抢占 | 先扣钱再条件 UPDATE，不检查 affectedRows；并发双扣 | 先 `UPDATE ... WHERE status='unpaid'` 抢占（affectedRows=1 才继续），再 `RemoveMoney`；扣款失败回滚 `paid→unpaid` | `custom-police/server/p1.lua:146-193` |
 | 事务 | 无（oxmysql 无 `transaction`），靠反向 DELETE | **仍无**；`rollback()` 仍是反向 DELETE（chain→evidence→citation→case→report） | `p2_system.lua:127-136,591-614` |
 | `open_case` 回滚 | 内存案件无法删 | **仍无**；`OpenCase` 在 report 之后、送监之前，`jail_failed` 时孤儿案件留给法官关闭 | `p2_system.lua:694-712,749-757` |
-| `done` 账本 TTL | — | **有风险**：`done` 行永不过期，只有 `created_at < NOW()-1 DAY` 的**全部状态**行被惰性删 200 条/次；删除后同键重放会重新执行（失去幂等），而 `done` 无 `result_json` 时直接 `db_error` | `p2_system.lua:196-201,253-258` |
+| `done` 账本 TTL | — | **v3.12 已补**：done 的 `expires_at = NOW() + INTERVAL 7 DAY`，过期后扫描删除、同键可重新执行；`pending` 超过 10 分钟视为崩溃并删除；`failed` 立即清；扫描在资源启动 + 每次 claim 前，`LIMIT 200`。7 天内仍回放首次结果 | `p2_system.lua` 的 `withIntent`/`sweepIntents`、`migrations/v3.12_police_outbox.sql`、[09-outbox.md](09-outbox.md) |
 | 金额校验 | `deriveCitationAmount` 静默 clamp | **仍静默 clamp**（`base×0.8~1.2`）；`IssueCitation` 独立路径仍接受 1..50000 任意金额 | `p2_system.lua:436-451`、`p1.lua:40-72` |
 | `/fine` 旁路 | 扣钱不写表、不审计 | **未修** | `custom-police/server/commands.lua:259-311` |
 
-**结论**：可重试性从“无”变成“按键去重 + 结果重放”，但**不是事务**；崩溃窗口仍可能留下半写，`open_case` 孤儿与账本 TTL 是两个明确的剩余风险（FIT-04/FIT-05/04 D-16 跟踪）。
+**结论**：可重试性从“无”变成“按键去重 + 结果重放（7 天）+ 过期可重试”，但**不是事务**；崩溃窗口仍可能留下半写，`open_case` 孤儿是明确剩余风险（FIT-04/FIT-05/04 D-16 跟踪）。非事务型副作用（通知）改由 `police_outbox` 至少一次投递 + 退避重试，见 [09-outbox.md](09-outbox.md)。
 
 ---
 
@@ -876,7 +876,7 @@ justice_sentences (
 
 1. **SM-01（P0）**：`PoliceDuty` 单写入口 + `Release` 掉线/失业/入狱 + `Sweep`；把 `syncDuty` 改成投影/清理。→ **已落地 `bb64d87`**（未抽独立 service，逻辑集中在 `p0.lua`；仍缺 `AssignUnit` 的目标在勤校验）。
 2. **SM-05（P0）**：`justice_sentences` + 服务端时钟 + `ReleaseSentence`；把 qb-prison 客户端降级为 UI。→ **已落地 `2ae3da4`（+`f690230` work/release）**。
-3. **SM-03（P0/P1）**：幂等键 + 事务/outbox + 补齐 citation/evidence/report 审计 + `open_case` 权限。→ **部分落地 `f690230`**：幂等键/审计/`open_case` cap 已做；**事务/outbox 未做**，`done` TTL、`open_case` 孤儿仍是风险。
+3. **SM-03（P0/P1）**：幂等键 + 事务/outbox + 补齐 citation/evidence/report 审计 + `open_case` 权限。→ **部分落地 `f690230` + v3.12**：幂等键/审计/`open_case` cap 已做；outbox（通知）与 intent TTL 已补；**事务仍无**，`open_case` 孤儿仍是风险。
 4. **SM-02（P1）**：from/to 守卫 + `closed` + 掉线释放 + stale。→ **已落地 `5c2d3ca`/`9481074`**。
 5. **SM-04（P1）**：`justice_cases`/`justice_verdicts` 落库 + 案件号不自增回绕 + 判决接 `AdjustSentence`。→ **判决已接 `replace`，但案件仍内存**；下一步只剩持久化。
 6. **SM-06（P1/P2）**：服务端状态 + ack + TTL + 结束审计。→ **未做**。

@@ -1,0 +1,80 @@
+{
+  "$comment": "FIT-12 deprecation register. Every entry names a legacy write path (table / command / net event), its owner, the replacement and how many occurrences are tolerated until `expires`. The scanner (tests/architecture/test_deprecations.py) fails when a path grows past `expected_writes` (new debt), when an expired entry still exists, or when an entry matches nothing (stale). Entries may only shrink; retiring a path means deleting its entry in the same change.",
+  "version": 1,
+  "rule": "FIT-12",
+  "entries": [
+    {
+      "id": "police-arrests-table",
+      "kind": "table",
+      "target": "police_arrests",
+      "owner": "custom-police",
+      "reason": "v3.4 起逮捕以 police_reports(kind='arrest') 为准，police_arrests 只保留历史；但 RegisterArrest（p3_cases.lua）与 agent 的 Sys.Jail（p2_system.lua）仍在写。",
+      "replacement": "police_reports kind='arrest' via ArrestSubmit",
+      "expected_writes": 2,
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "police-bolos-table",
+      "kind": "table",
+      "target": "police_bolos",
+      "owner": "custom-police",
+      "reason": "B_PLAN §2 已宣布停止新写入，GetBolos 也已优先读 police_reports 的 is_bolo 标记；CreateBolo/ClearBolo 仍写 legacy 表，写读不一致。",
+      "replacement": "police_reports.is_bolo (+ bolo_kind/bolo_target)",
+      "expected_writes": 2,
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "fine-command",
+      "kind": "command",
+      "target": "/fine",
+      "owner": "custom-police",
+      "reason": "legacy /fine 直接扣现金、无 police_citations 记录、无审计，现金不足时还直写 phone_invoices；新路径是 PayCitation（罚单状态机 + 审计）。",
+      "replacement": "PayCitation / phone banking fine payment",
+      "expected_writes": 1,
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "911p-command",
+      "kind": "command",
+      "target": "/911p",
+      "owner": "custom-police",
+      "reason": "legacy 平民报警命令直接扇出 qb-phone:client:addPoliceAlert + police:client:policeAlert，绕过 dispatch/incident 队列；新路径是 custom-police:server:911。",
+      "replacement": "custom-police:server:911 (incident dispatch)",
+      "expected_writes": 1,
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "jail-player-event",
+      "kind": "event",
+      "target": "police:server:JailPlayer",
+      "owner": "custom-police",
+      "reason": "P6 已退役 /jail 与客户端直调；保留该 handler 只为 source=0 的内部/兼容调用，新逮捕必须走 ArrestSubmit。",
+      "replacement": "ArrestSubmit / JailSystem",
+      "guard": "src ~= 0",
+      "expected_writes": 1,
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "police-alert-event",
+      "kind": "event",
+      "target": "police:server:policeAlert",
+      "owner": "custom-police",
+      "reason": "旧 qb-phone 报警扇出路径，仍被 qb-drugs/qb-storerobbery/qb-houserobbery 热接线使用；新路径是 custom-police:server:911 + dispatch 队列。",
+      "replacement": "custom-police:server:911 + dispatch board",
+      "expected_writes": 1,
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    }
+  ]
+}

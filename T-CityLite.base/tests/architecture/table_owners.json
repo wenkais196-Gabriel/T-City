@@ -1,0 +1,149 @@
+{
+  "$comment": "FIT-02 table ownership. A table has exactly one owning resource; a write (INSERT/REPLACE/UPDATE ... SET/DELETE FROM) from another resource is a boundary violation unless it is registered in `entries` with a reason, owner and expiry. The scanner (tests/architecture/test_cross_resource_writes.py) only judges tables declared here, so adding a new owned table is a one-line change. The entries may only shrink: an expired or stale entry fails the suite.",
+  "version": 1,
+  "rule": "FIT-02",
+  "scan": [
+    "custom-police",
+    "custom-phone",
+    "custom-justice",
+    "qb-prison",
+    "custom-director",
+    "custom-main",
+    "custom-career",
+    "custom-agent-client",
+    "story-engine",
+    "tcity-dashboard"
+  ],
+  "owners": [
+    {
+      "owner": "custom-police",
+      "tables": ["police_*"]
+    },
+    {
+      "owner": "custom-phone",
+      "tables": ["phone_*"]
+    },
+    {
+      "owner": "custom-justice",
+      "tables": ["justice_*"]
+    },
+    {
+      "owner": "qb-core",
+      "tables": ["players", "player_vehicles", "bans", "player_warns"]
+    },
+    {
+      "owner": "qb-inventory",
+      "tables": ["inventories"]
+    },
+    {
+      "owner": "custom-director",
+      "tables": ["agent_*"]
+    },
+    {
+      "owner": "custom-quest",
+      "tables": ["player_quests", "quest_*"]
+    },
+    {
+      "owner": "qb-houses",
+      "tables": ["player_houses", "houselocations"]
+    },
+    {
+      "owner": "tcity-dashboard",
+      "tables": ["plate_flags"]
+    },
+    {
+      "owner": "story-engine",
+      "tables": ["player_choices"]
+    }
+  ],
+  "entries": [
+    {
+      "id": "police-fine-phone-invoice",
+      "writer": "custom-police",
+      "table": "phone_invoices",
+      "owner": "custom-phone",
+      "file": "custom-police/server/commands.lua",
+      "reason": "/fine 在现金不足时给目标开一张 phone_invoices 兜底票据；自研手机不读该表，退役 /fine 时一起删除。写点归 phone owner 之前先保留，避免改票据结构时静默破坏。",
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "police-confiscate-inventory",
+      "writer": "custom-police",
+      "table": "inventories",
+      "owner": "qb-inventory",
+      "file": "custom-police/server/main.lua",
+      "reason": "旧 qb-policejob 的 /confiscate 直接删 inventories 行（缴获武器/物品）。目标改走 qb-inventory 导出；在此之前保留并到期复查。",
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "police-impound-player-vehicles",
+      "writer": "custom-police",
+      "table": "player_vehicles",
+      "owner": "qb-core",
+      "file": "custom-police/server/vehicle.lua",
+      "reason": "扣车/释放状态直接写 player_vehicles（state=2 等），沿用 qb-policejob 的老实现；改经 qb-garages/qb-core 导出前先登记。",
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "career-player-columns",
+      "writer": "custom-career",
+      "table": "players",
+      "owner": "qb-core",
+      "file": "custom-career/server/main.lua",
+      "reason": "职业系统直接 UPDATE players SET rank_tier/department/district/certs，绕过 Player.Functions 且无审计；目标改 qb-core API，属于独立技术债。",
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-09"
+    },
+    {
+      "id": "main-player-metadata",
+      "writer": "custom-main",
+      "table": "players",
+      "owner": "qb-core",
+      "file": "custom-main/server/security.lua",
+      "reason": "custom-main 直写 players.metadata（wanted/criminalrecord 持久化），是 wanted 三源之一；统一到 qb-core/Player.Functions 前保留。",
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-06"
+    },
+    {
+      "id": "phone-banking-player-money",
+      "writer": "custom-phone",
+      "table": "players",
+      "owner": "qb-core",
+      "file": "custom-phone/server/banking.lua",
+      "reason": "银行 App 的转账直接写 players.money 列；目标改经 qb-core 账号 API（或经济服务），在改造前属于已知债务。",
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-09"
+    },
+    {
+      "id": "agent-client-effect-audit",
+      "writer": "custom-agent-client",
+      "table": "agent_effects",
+      "owner": "custom-director",
+      "file": "custom-agent-client/server/main.lua",
+      "reason": "效果通道把 agent_effects 审计直接写进 director 的表；表结构由 director 维护，拆分审计 ownership 前登记。",
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-10"
+    },
+    {
+      "id": "story-engine-agent-events",
+      "writer": "story-engine",
+      "table": "agent_events",
+      "owner": "custom-director",
+      "file": "story-engine/server/main.lua",
+      "reason": "剧情引擎把事件写进 director 的 agent_events；事件总线归 director，改走事件导出前登记。",
+      "added": "2026-10-24",
+      "expires": "2026-12-31",
+      "ticket": "TD-10"
+    }
+  ]
+}
