@@ -31,7 +31,7 @@ end
 local function audit(actorId, action, target, detail)
     local ok, err = pcall(function()
         MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, 'agent', ?, ?, ?)',
+            "INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, 'agent', ?, ?, ?)",
             { ('agent:%s'):format(utf8Sub(tostring(actorId or 'unknown'), 40)), action, target,
               detail and utf8Sub(tostring(detail), 500) or nil })
     end)
