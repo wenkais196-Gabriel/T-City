@@ -232,6 +232,14 @@ RegisterNetEvent('prison:client:WorkReductionAck', function(remaining)
     end
 end)
 
+RegisterNetEvent('prison:client:SyncJailTime', function(remaining)
+    remaining = math.max(0, math.floor(tonumber(remaining) or 0))
+    jailTime = remaining
+    if remaining <= 0 and inJail then
+        TriggerEvent('prison:client:Leave')
+    end
+end)
+
 RegisterNetEvent('prison:client:Enter', function(time)
 	local invokingResource = GetInvokingResource()
 	if invokingResource and invokingResource ~= 'qb-policejob' and invokingResource ~= 'custom-police' and invokingResource ~= 'custom-justice' and invokingResource ~= 'qb-ambulancejob' and invokingResource ~= GetCurrentResourceName() then
@@ -286,7 +294,10 @@ end)
 
 RegisterNetEvent('prison:client:Leave', function()
 	if jailTime > 0 then
-		QBCore.Functions.Notify(Lang:t('info.timeleft', { JAILTIME = jailTime }))
+		-- The local minute tick can lag behind the DB clock (work reduction,
+		-- restart, sweep). Ask the authority before refusing the exit.
+		TriggerServerEvent('prison:server:RequestRelease')
+		QBCore.Functions.Notify('正在核对刑期…', 'primary', 3000)
 	else
 		jailTime = 0
 		TriggerServerEvent('prison:server:SetJailStatus', 0)
@@ -319,7 +330,9 @@ RegisterNetEvent('prison:client:Leave', function()
 end)
 
 RegisterNetEvent('prison:client:UnjailPerson', function()
-	if jailTime > 0 then
+	-- Server authority may expire/reduce the sentence before the local
+	-- countdown does; release whenever the player is still flagged in jail.
+	if inJail or jailTime > 0 then
 		TriggerServerEvent('prison:server:SetJailStatus', 0)
 		TriggerServerEvent('prison:server:GiveJailItems')
 		TriggerEvent('chat:addMessage', {
