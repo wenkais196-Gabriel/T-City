@@ -203,6 +203,7 @@ function JusticeSentences.ExpireSweep()
             local src = Player.PlayerData.source
             pcall(function() Player.Functions.SetMetaData('injail', 0) end)
             if GetResourceState('qb-prison') == 'started' then
+                TriggerClientEvent('prison:client:SyncJailTime', src, 0)
                 TriggerClientEvent('prison:client:UnjailPerson', src)
             else
                 TriggerClientEvent('justice:client:released', src)

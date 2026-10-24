@@ -38,3 +38,16 @@
   3. 首次失败可能来自资源重启后 phone app 注册/回调竞态；第二次打开或刷新才恢复（与 L1 同源）。
 - **建议修法**：`refresh()` 用 `try/finally` 复位 `loading`；handler 返回 `{ok=false,error}`；首次查询失败自动重试一次；911/NPC 创建后推事件刷新。
 - **临时绕行**：关闭手机重新打开 MDT，或先点其他页再回调度；仍可能空白。
+
+### L5 刑满后无法在自由门按 E 退出（已修，待复测）
+
+- **现象**：sentence 到期/减刑后，走到自由门按 E 不出去，只提示剩余时间。
+- **原因**：
+  1. `prison:client:Leave` 只看本地 `jailTime`，而本地按分钟递减，落后于服务端 `ends_at`；
+  2. `prison:client:UnjailPerson` 只在 `jailTime > 0` 时执行，本地已到 0 时 sweep 释放变成空操作；
+  3. sweep 只发 `UnjailPerson`，没有把服务端剩余同步给客户端。
+- **修复**：
+  - 客户端 `UnjailPerson` 改为 `inJail or jailTime > 0`；
+  - 新增 `prison:client:SyncJailTime`，WorkReduction 与 sweep 都推送服务端剩余；
+  - 自由门按 E 时新增 `prison:server:RequestRelease`，服务端复核 `RemainingSeconds` 后强制释放/提示。
+- **复测**：入狱 → 减刑/等 sweep → 自由门按 E。

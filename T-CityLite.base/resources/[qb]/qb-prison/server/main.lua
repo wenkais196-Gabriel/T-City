@@ -210,4 +210,29 @@ RegisterNetEvent('prison:server:WorkReduction', function(minutes)
     local remainingMinutes = math.ceil(math.max(0, remainingSeconds) / 60)
     Player.Functions.SetMetaData('injail', remainingMinutes)
     TriggerClientEvent('prison:client:WorkReductionAck', src, remainingMinutes)
+    TriggerClientEvent('prison:client:SyncJailTime', src, remainingMinutes)
+end)
+
+
+-- The client clock is only a display. When the player presses E at the gate,
+-- re-check the durable sentence so a work reduction/sweep that happened early
+-- can never strand them inside with a stale local counter.
+RegisterNetEvent('prison:server:RequestRelease', function()
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    local cid = Player.PlayerData.citizenid
+    local ok, remainingSeconds = pcall(function()
+        return exports['custom-justice']:RemainingSeconds(cid)
+    end)
+    if ok and type(remainingSeconds) == 'number' and remainingSeconds <= 0 then
+        Player.Functions.SetMetaData('injail', 0)
+        TriggerClientEvent('prison:client:UnjailPerson', src)
+        return
+    end
+    local remaining = ok and type(remainingSeconds) == 'number'
+        and math.max(1, math.ceil(remainingSeconds / 60)) or 0
+    TriggerClientEvent('QBCore:Notify', src,
+        remaining > 0 and ('刑期未满，剩余约 %d 分钟'):format(remaining) or '刑期核对失败，请稍后重试',
+        'error', 6000)
 end)
