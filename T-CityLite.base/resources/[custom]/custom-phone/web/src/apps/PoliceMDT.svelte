@@ -349,6 +349,7 @@
     const res = await appAction(DB, 'request_backup', {});
     backupBusy = false;
     if (!res?.success) {
+      notice = '';
       backupError = backupErrorFor(res?.error ?? 'action_failed');
       return;
     }
