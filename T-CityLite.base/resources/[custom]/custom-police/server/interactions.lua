@@ -1,3 +1,11 @@
+local function audit(cid, action, target, detail)
+    return pcall(function()
+        MySQL.insert.await(
+            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, "player", ?, ?, ?)',
+            { cid, action, target, detail and tostring(detail):sub(1, 500) or nil })
+    end)
+end
+
 RegisterNetEvent('police:server:SearchPlayer', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
@@ -138,20 +146,37 @@ RegisterNetEvent('police:server:JailPlayer', function(playerId, time)
 
     local Player = QBCore.Functions.GetPlayer(src)
     local OtherPlayer = QBCore.Functions.GetPlayer(playerId)
-    if not Player or not OtherPlayer or Player.PlayerData.job.type ~= 'leo' then return end
+    if not Player or not OtherPlayer then return end
+
+    -- Legacy manual jail entry point. It now uses the same capability table as
+    -- the arrest submit path, rejects a missing/non-positive sentence instead
+    -- of silently converting it to one minute, and is audited.
+    local allowed = PolicePolicy.Can(Player.PlayerData, 'arrest.create')
+    if not allowed then return end
+
+    local jailTime = tonumber(time)
+    if not jailTime or jailTime <= 0 then return end
+    jailTime = math.floor(jailTime)
+    if jailTime < 1 then return end
+    if jailTime > 120 then jailTime = 120 end
+
+    if not audit(Player.PlayerData.citizenid, 'arrest.register', OtherPlayer.PlayerData.citizenid,
+            ('legacy /jail %d min'):format(jailTime)) then
+        return
+    end
 
     local currentDate = os.date('*t')
     if currentDate.day == 31 then
         currentDate.day = 30
     end
 
-    OtherPlayer.Functions.SetMetaData('injail', time)
+    OtherPlayer.Functions.SetMetaData('injail', jailTime)
     OtherPlayer.Functions.SetMetaData('criminalrecord', {
         ['hasRecord'] = true,
         ['date'] = currentDate
     })
-    TriggerClientEvent('police:client:SendToJail', OtherPlayer.PlayerData.source, time)
-    TriggerClientEvent('QBCore:Notify', src, Lang:t('info.sent_jail_for', { time = time }))
+    TriggerClientEvent('police:client:SendToJail', OtherPlayer.PlayerData.source, jailTime)
+    TriggerClientEvent('QBCore:Notify', src, Lang:t('info.sent_jail_for', { time = jailTime }))
 end)
 
 RegisterNetEvent('police:server:SeizeCash', function(playerId)

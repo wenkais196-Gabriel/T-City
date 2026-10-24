@@ -205,3 +205,50 @@ def test_insert_ids_are_normalized():
     for f in ("p0.lua", "p1.lua", "p2_evidence.lua", "p2_system.lua", "p3_cases.lua"):
         src = read(PHONE.parent / "custom-police/server" / f)
         assert "InsertId(id)" in src, f
+
+
+def test_mdt_charges_query_reads_the_police_catalogue():
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    assert "charges = function(_source)" in app
+    assert "exports['custom-police']:GetCharges()" in app
+    assert "rows = res.charges" in app
+    assert "count = #res.charges" in app
+
+
+def test_mdt_arrest_submit_forwards_the_server_result():
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    assert "arrest_submit = function(source, params)" in app
+    assert "exports['custom-police']:ArrestSubmit(source, params)" in app
+    assert "res.ok ~= true" in app
+    assert "return res" in app
+
+
+def test_arrest_page_has_multiselect_slider_and_submit():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for token in (
+        "一次逮捕提交",
+        "loadCharges",
+        "selectedChargeIds",
+        "charge_ids",
+        'type="range"',
+        "citation_amount",
+        "citationAmount",
+        "create_citation",
+        "create_evidence",
+        "evidence_label",
+        "bolo_kind",
+        "bolo_target",
+        "create_case",
+        "arrest_submit",
+        "onclick={submitArrest}",
+        "arrestResult",
+    ):
+        assert token in ui, token
+    assert "arrestForm.incident_id" in ui and "arrestForm.location" in ui
+
+
+def test_legacy_arrest_registration_form_is_no_longer_rendered():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "onclick={registerArrest}" not in ui
+    assert "bind:value={arrestForm.charges}" not in ui
+    assert "['arrests','逮捕']" in ui
