@@ -20,17 +20,24 @@
 
 ## 未完成
 
-1. **P4 L2/L3 实机执行**：只读看板、L1、L2、L3 均已实现（35 工具 / 21 动作）。L1 已实机 `executed`；L2/L3 的审批端点在无加载玩家时按 `player_not_found` 拒绝（409），system 执行路径由 Lua 测试覆盖，**尚缺一次在线玩家下 approve→executed 的实机记录**。
+1. **P4 L2/L3 实机执行**：只读看板、L1、L2、L3 均已实现（**36 工具 / 22 动作**）。L1 已实机 `executed`；L2/L3 的审批端点在无加载玩家时按 `player_not_found` 拒绝（409），system 执行路径由 Lua 测试覆盖，**尚缺一次在线玩家下 approve→executed 的实机记录**。
 2. **产品化收尾**：罚单收据/邮件、BOLO 清除按钮、搜查令执行/过期流转、案件详情导出。
 3. `qb-policejob` 事件名保留 `qb-policejob:*` 兼容，未重命名（刻意）。
 
 ## 验证命令
 
 ```bash
-cd T-CityLite.base && python3 -m pytest -q tests/unit      # 327 passed
-cd .. && python3 -m pytest -q tests/tools                  # 203 passed
+cd T-CityLite.base && python3 -m pytest -q tests/unit tests/architecture   # 630 passed
+cd .. && python3 -m pytest -q tests/tools                                  # 205 passed
+python3 tools/agent_tools.py --check                                      # 36 tools / 22 actions
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
-python3 tools/agent_tools.py --check
+
+# 真实服务端 E2E（控制台）
+test run police_e2e        # 10 PASS / 0 FAIL / 2 SKIP（离线时）
+agent test police_e2e      # 同上，输出结构化 JSON
+
+# MDT 浏览器测试
+cd T-CityLite.base/resources/[custom]/custom-phone/web && npm run test:nui  # 4/4
 ```
 
 > 改 `fxmanifest` 或新增 server 文件后必须整服重启（或删 `cache/files/custom-police`），只 `restart` 不会加载新文件。
@@ -46,3 +53,32 @@ python3 tools/agent_tools.py --check
 
 按用户决定：**不做“出狱恢复职业”**。
 已知限制：justice 案件号是字符串，`police_reports.case_id` 仍是 BIGINT，`justice_case_id` 仅返回+审计；`open_case` 失败会回滚警察侧记录。
+
+
+## 自动化与 Agent Ops（2026-10-24）
+
+### 真实 E2E
+
+- `custom-testing/suites/10_police_e2e.lua`：不走 mock，直接调 export + 查 MySQL。
+- 覆盖：NPC budget、incident 创建/派单、outbox 投递、sentence apply/adjust/release、审计、清理。
+- 控制台 `test run police_e2e`；agent 可 `agent test police_e2e` 或 director 工具 `run_police_e2e`。
+- 结果：**10 PASS / 0 FAIL / 2 SKIP**（`incident.close`、`duty.probe` 需在线且上班的玩家）。
+
+### MDT 浏览器测试
+
+- `custom-phone/web/tests/nui`：缓存 chromium + mock NUI bridge，加载真实 built bundle。
+- 覆盖：首轮 500/断连、loading 复位、911 刷新、错误码映射、挂起 appQuery 超时恢复。
+- `npm run test:nui`：**4 passed / 0 failed**。
+
+### Agent Ops
+
+- `custom-agent-ops`：`/agent status|events|tail|health|test`，JSONL 事件日志。
+- 导出：`GetAgentSnapshot` / `GetAgentEvents` / `PushAgentEvent` / `HealthSnapshot` / `RunTest`。
+- `run_police_e2e` 已接入 `custom-director`（L1、test-only）。
+
+### 本轮修复的真实 bug
+
+- 审计 INSERT 参数中间 nil 导致 oxmysql 截断占位符、MariaDB 语法错误；改为显式 `NULL` 分支后审计才真正落库。
+- `prison` 工作点读取 `vector4` 的 `coords` 字段错误，电工减刑从未执行。
+- 刑满后本地 `jailTime` 落后服务端 `ends_at`，自由门按 E 无法退出；新增 `SyncJailTime` / `RequestRelease`。
+- `fetchNui` 无超时会永久 loading；加 6 秒 AbortController 超时。
