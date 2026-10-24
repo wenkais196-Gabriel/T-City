@@ -19,7 +19,7 @@
 | FIT-03 | 每个 net event 必须有来源/权限校验 | 安全 | ✅ PASS（3e720bf；13 强鉴权 + 35 登记例外，0 未登记） | blocking |
 | FIT-04 | 每个 export / app action 必须有稳定错误码 + 审计 | 契约 | ✅ PASS（46/46 export 扫描通过；11 条登记例外，0 未登记） | blocking |
 | FIT-05 | 审计不可写时敏感路径必须 fail-closed | 取证 | ✅ PASS（3e720bf；11 个敏感读，0 丢弃） | blocking |
-| FIT-06 | 迁移幂等 + fixture 覆盖 + 可重复执行 | 数据 | ✅ PASS（静态；`test_fixture_schema.py` 覆盖 38 表/34 列；连续导入由 DB job 验证） | blocking |
+| FIT-06 | 迁移幂等 + fixture 覆盖 + 可重复执行 | 数据 | ✅ PASS（真实 DB：fixture 连续导入 2 次、68 表/14 police 表；DB 用例 743 passed） | blocking | blocking |
 | FIT-07 | NPC 生成必须走预算接口（唯一入口 + 冷却 + 上限 + 审计） | 资源预算 | ✅ PASS（`test_npc_budget.py`；全局 6 / 每人 2 / TTL 10min） | blocking |
 | FIT-08 | 生成物/注册表一致（`agent_tools --check` + 禁止手改） | 工具链 | ✅ PASS | blocking（已存在） |
 | FIT-09 | 查询纪律：禁 `SELECT *`、必须 `LIMIT`、字段白名单 | 性能/PII | ✅ PASS（dec840f；23 处通配投影清零，2 条 allowlist） | blocking |
@@ -419,7 +419,7 @@ FIT-03 net-event-auth  FAIL  37/43 unguarded
 
 **加权得分：24 / 24 = 100 / 100（基线 21/100 → 27/100 → 当前）。
 
-> 13 条规则已全部做成 `tests/architecture/` 的可执行检查；FIT-06 的“连续导入两次”仍需 DB job 实跑。分数表示架构约束是否被自动化保护，不等于功能覆盖率。
+> 13 条规则已全部做成 `tests/architecture/` 的可执行检查；FIT-06 已在 `tcity_fit6_test` 临时库连续导入两次并跑通全部 DB 用例。分数表示架构约束是否被自动化保护，不等于功能覆盖率。
 
 ---
 
