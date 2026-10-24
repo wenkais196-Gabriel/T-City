@@ -35,7 +35,7 @@ local function audit(actorId, action, target, detail)
             { ('agent:%s'):format(utf8Sub(tostring(actorId or 'unknown'), 40)), action, target,
               detail and utf8Sub(tostring(detail), 500) or nil })
     end)
-    if not ok then print(('[custom-police] p2 audit failed %s: %s'):format(action, tostring(err))) end
+    print(('[custom-police] p2 audit %s actor=%s ok=%s err=%s'):format(tostring(action), tostring(actorId), tostring(ok), tostring(err)))
     return ok
 end
 
