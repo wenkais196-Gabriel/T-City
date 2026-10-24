@@ -1121,7 +1121,9 @@ def test_backup_end_decrements_only_the_callers_owned_unit():
     assert "local units = backupUnits[cid]" in block
     assert "units[requestId] ~= true then return end" in block
     assert "units[requestId] = nil" in block
-    assert "if next(units) == nil then backupUnits[cid] = nil end" in block
+    assert "if next(units) == nil then" in block
+    assert "backupUnits[cid] = nil" in block
+    assert "if backupSource[src] == cid then backupSource[src] = nil end" in block
     # A dropped client releases its pending units so the cap cannot stay locked.
     drop = backup_drop_block()
     assert "local cid = backupSource[src]" in drop

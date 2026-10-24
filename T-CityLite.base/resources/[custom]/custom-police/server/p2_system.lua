@@ -255,7 +255,10 @@ RegisterNetEvent('police:server:backupEnded', function(requestId)
     local units = backupUnits[cid]
     if type(units) ~= 'table' or units[requestId] ~= true then return end
     units[requestId] = nil
-    if next(units) == nil then backupUnits[cid] = nil end
+    if next(units) == nil then
+        backupUnits[cid] = nil
+        if backupSource[src] == cid then backupSource[src] = nil end
+    end
 end)
 
 -- A dropped client never gets to send backupEnded; release every pending unit

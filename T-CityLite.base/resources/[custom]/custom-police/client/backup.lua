@@ -151,7 +151,6 @@ local function createBlip(vehicle, coords)
 end
 
 local function spawnPoint(playerPed)
-    local coords = GetEntityCoords(playerPed)
     local offset = GetOffsetFromEntityInWorldCoords(
         playerPed, SPAWN_SIDE, SPAWN_FORWARD, 0.0)
     local x, y, z = offset.x, offset.y, offset.z
@@ -162,7 +161,7 @@ local function spawnPoint(playerPed)
         local ok, found, groundZ = pcall(GetGroundZFor_3dCoord, x, y, z + 100.0, false)
         if ok and found == true and groundZ then z = groundZ end
     end
-    return vector3(x, y, z), coords
+    return vector3(x, y, z)
 end
 
 local function configureOfficer(ped, veh)
@@ -192,13 +191,15 @@ local function spawnBackup(requestId)
     local vehicleHash = loadFirstModel(BACKUP_VEHICLES)
     local pedHash = loadFirstModel(BACKUP_PED_MODELS)
     if not vehicleHash or not pedHash then
+        if vehicleHash then SetModelAsNoLongerNeeded(vehicleHash) end
+        if pedHash then SetModelAsNoLongerNeeded(pedHash) end
         pending[requestId] = nil
         notifyServerEnded(requestId)
         print(('[custom-police] backup %s: no usable vehicle/ped model'):format(tostring(requestId)))
         return
     end
 
-    local spawn, playerCoords = spawnPoint(playerPed)
+    local spawn = spawnPoint(playerPed)
     local heading = (GetEntityHeading(playerPed) + 180.0) % 360.0
     local vehicle = CreateVehicle(vehicleHash, spawn.x, spawn.y, spawn.z + 0.5, heading, true, true)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
@@ -235,7 +236,7 @@ local function spawnBackup(requestId)
 
     for _, ped in ipairs(peds) do configureOfficer(ped, vehicle) end
 
-    local blip = createBlip(vehicle, playerCoords)
+    local blip = createBlip(vehicle, spawn)
     local state = {
         requestId = requestId,
         vehicle = vehicle,
@@ -508,5 +509,11 @@ AddEventHandler('onResourceStop', function(resourceName)
     for requestId in pairs(active) do ids[#ids + 1] = requestId end
     for _, requestId in ipairs(ids) do
         cleanup(requestId, true)
+    end
+    -- Requests still loading models have no entities yet, but the server slot
+    -- must still be released.
+    for requestId in pairs(pending) do
+        pending[requestId] = nil
+        notifyServerEnded(requestId)
     end
 end)
