@@ -1,5 +1,10 @@
 """Static contract for the server-authoritative phone app registry."""
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
+
+import pytest
 
 BASE = Path(__file__).resolve().parents[3]
 PHONE = BASE / "resources" / "[custom]" / "custom-phone"
@@ -278,8 +283,10 @@ def test_mdt_arrest_submit_forwards_the_server_result():
     app = read(PHONE / "server/apps/police_mdt.lua")
     assert "arrest_submit = function(source, params)" in app
     assert "exports['custom-police']:ArrestSubmit(source, params)" in app
-    assert "res.ok ~= true" in app
-    assert "return res" in app
+    # The structured wrapper forwards both success and { ok=false, error }
+    # tables; PhoneApps.Action turns the failure into success=false/error.
+    assert "structured('arrest_submit'" in app
+    assert "return structured(" in app
 
 
 def test_arrest_page_has_multiselect_slider_and_submit():
@@ -377,8 +384,8 @@ def test_mdt_report_submit_forwards_the_server_result():
     app = read(PHONE / "server/apps/police_mdt.lua")
     assert "report_submit = function(source, params)" in app
     assert "exports['custom-police']:ReportSubmit(source, params)" in app
-    assert "if not ok or type(res) ~= 'table' then return false end" in app
-    assert "return res" in app
+    assert "structured('report_submit'" in app
+    assert "return structured(" in app
 
 
 def test_report_page_collects_incident_evidence_and_bolo_fields():
@@ -551,10 +558,8 @@ def test_police_mdt_request_backup_action_forwards_the_server_result():
     app = read(PHONE / "server/apps/police_mdt.lua")
     assert "request_backup = function(source, _params)" in app
     assert "exports['custom-police']:RequestBackup(source)" in app
-    assert "if not ok or type(res) ~= 'table' then return false end" in app
-    # Success and rejection tables are both returned for the registry to wrap;
-    # PhoneApps.Action turns { ok=false, error } into success=false/error.
-    assert "return res" in app
+    assert "structured('request_backup'" in app
+    assert "return structured(" in app
 
 
 def test_dispatch_page_has_request_backup_button_and_localised_errors():
@@ -670,3 +675,303 @@ def test_built_bundle_ships_npc_callout_tag():
     )
     assert "npc_template" in bundle
     assert "NPC" in bundle
+
+
+# ---------------------------------------------------------------------------
+# FIT-04: stable action error codes.
+# ---------------------------------------------------------------------------
+
+REGISTRY_LUA = PHONE / "server" / "phone_apps.lua"
+POLICE_MDT_LUA = PHONE / "server" / "apps" / "police_mdt.lua"
+
+
+def run_lua(source: str) -> subprocess.CompletedProcess:
+    """Run a throwaway Lua 5.4 chunk; skip when the interpreter is absent."""
+    if not shutil.which("lua5.4"):
+        pytest.skip("lua5.4 is not installed")
+    with tempfile.NamedTemporaryFile("w", suffix=".lua", delete=False) as f:
+        f.write(source)
+        path = f.name
+    try:
+        return subprocess.run(
+            ["lua5.4", path], capture_output=True, text=True, timeout=15
+        )
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def _lua_path(path: Path) -> str:
+    return f"[[{path}]]"
+
+
+def _fake_core_lua() -> str:
+    return f"""
+_G.QBCore = {{
+  Functions = {{
+    GetPlayer = function(source)
+      return {{ PlayerData = {{
+        source = source, citizenid = 'CID001',
+        job = {{ name = 'police', onduty = true, grade = {{ level = 3 }} }},
+        charinfo = {{ firstname = 'Jane', lastname = 'Doe' }},
+        metadata = {{ callsign = 'A-1' }},
+      }} }}
+    end,
+    GetPlayers = function() return {{ 1 }} end,
+  }},
+}}
+"""
+
+
+def test_phone_apps_action_flattens_every_handler_shape():
+    result = run_lua(
+        _fake_core_lua()
+        + f"""
+assert(loadfile({_lua_path(REGISTRY_LUA)}))()
+PhoneApps.Register({{
+  id = 'contract', label = 'Contract', icon = 'x',
+  audience = {{ jobs = {{ 'police' }} }},
+  actions = {{
+    -- fail table with code + detail
+    fail_table = function() return {{ ok = false, error = 'cooldown', detail = 'wait 60s' }} end,
+    -- fail table without an error still gets a stable fallback
+    fail_table_no_error = function() return {{ ok = false }} end,
+    -- true -> success
+    ok_true = function() return true end,
+    -- ok table keeps its data
+    ok_table = function() return {{ ok = true, data = {{ id = 9 }} }} end,
+    -- legacy naked false/nil -> action_rejected
+    bare_false = function() return false end,
+    bare_nil = function() return nil end,
+    -- legacy table without `ok` is still a success
+    plain_table = function() return {{ id = 7, case_no = 'CASE-1' }} end,
+    -- handler exceptions -> action_failed
+    explodes = function() error('boom') end,
+  }},
+}})
+
+local ok, res, detail = PhoneApps.Action(1, 'contract', 'fail_table', {{}})
+assert(ok == false and res == 'cooldown' and detail == 'wait 60s', tostring(res))
+ok, res = PhoneApps.Action(1, 'contract', 'fail_table_no_error', {{}})
+assert(ok == false and res == 'rejected', tostring(res))
+ok, res = PhoneApps.Action(1, 'contract', 'ok_true', {{}})
+assert(ok == true and type(res) == 'table', tostring(ok))
+ok, res = PhoneApps.Action(1, 'contract', 'ok_table', {{}})
+assert(ok == true and res.ok == true and res.data.id == 9, tostring(ok))
+ok, res = PhoneApps.Action(1, 'contract', 'bare_false', {{}})
+assert(ok == false and res == 'action_rejected', tostring(res))
+ok, res = PhoneApps.Action(1, 'contract', 'bare_nil', {{}})
+assert(ok == false and res == 'action_rejected', tostring(res))
+ok, res = PhoneApps.Action(1, 'contract', 'plain_table', {{}})
+assert(ok == true and res.id == 7, tostring(ok))
+ok, res = PhoneApps.Action(1, 'contract', 'explodes', {{}})
+assert(ok == false and res == 'action_failed', tostring(res))
+ok, res = PhoneApps.Action(1, 'contract', 'missing_action', {{}})
+assert(ok == false and res == 'action_not_found', tostring(res))
+print('ACTION_OK')
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ACTION_OK" in result.stdout
+
+
+POLICE_ACTIONS = (
+    "set_status", "assign", "enroute", "on_scene", "clear",
+    "issue_citation", "create_report", "register_evidence",
+    "create_case", "create_bolo", "request_warrant", "decide_warrant",
+    "register_arrest", "arrest_submit", "report_submit", "request_backup",
+)
+
+
+def _lua_action_list() -> str:
+    return ", ".join(f"'{name}'" for name in POLICE_ACTIONS)
+
+
+def test_police_mdt_actions_return_structured_errors():
+    result = run_lua(
+        _fake_core_lua()
+        + f"""
+local police = {{}}
+setmetatable(police, {{ __index = function()
+  return function() return false, 'not_on_duty' end
+end }})
+_G.exports = {{
+  ['custom-police'] = police,
+  ['custom-phone'] = {{ Notify = function() return true end }},
+}}
+assert(loadfile({_lua_path(REGISTRY_LUA)}))()
+assert(loadfile({_lua_path(POLICE_MDT_LUA)}))()
+for _, name in ipairs({{ {_lua_action_list()} }}) do
+  local ok, err = PhoneApps.Action(1, 'police_mdt', name, {{}})
+  assert(ok == false, name .. ' must fail')
+  assert(err == 'not_on_duty', name .. ' error=' .. tostring(err))
+end
+print('STRUCTURED_OK')
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert "STRUCTURED_OK" in result.stdout
+
+
+def test_police_mdt_passes_through_specific_error_codes():
+    result = run_lua(
+        _fake_core_lua()
+        + f"""
+local police = {{}}
+setmetatable(police, {{ __index = function()
+  return function() return false, 'not_on_duty' end
+end }})
+_G.exports = {{
+  ['custom-police'] = police,
+  ['custom-phone'] = {{ Notify = function() return true end }},
+}}
+assert(loadfile({_lua_path(REGISTRY_LUA)}))()
+assert(loadfile({_lua_path(POLICE_MDT_LUA)}))()
+
+police.SetIncidentStatus = function() return false, 'invalid_transition' end
+local ok, err = PhoneApps.Action(1, 'police_mdt', 'enroute', {{}})
+assert(not ok and err == 'invalid_transition', tostring(err))
+
+police.ArrestSubmit = function()
+  return {{ ok = false, error = 'in_progress', detail = 'already running' }}
+end
+local detail
+ok, err, detail = PhoneApps.Action(1, 'police_mdt', 'arrest_submit', {{}})
+assert(not ok and err == 'in_progress' and detail == 'already running',
+  tostring(err) .. '/' .. tostring(detail))
+
+police.ReportSubmit = function() return {{ ok = false, error = 'audit_unavailable' }} end
+ok, err = PhoneApps.Action(1, 'police_mdt', 'report_submit', {{}})
+assert(not ok and err == 'audit_unavailable', tostring(err))
+
+police.RequestBackup = function() return {{ ok = false, error = 'cooldown' }} end
+ok, err = PhoneApps.Action(1, 'police_mdt', 'request_backup', {{}})
+assert(not ok and err == 'cooldown', tostring(err))
+print('PASSTHROUGH_OK')
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert "PASSTHROUGH_OK" in result.stdout
+
+
+def test_police_mdt_maps_unknown_capability_and_export_errors():
+    result = run_lua(
+        _fake_core_lua()
+        + f"""
+local police = {{}}
+setmetatable(police, {{ __index = function()
+  return function() return false, 'not_on_duty' end
+end }})
+_G.exports = {{
+  ['custom-police'] = police,
+  ['custom-phone'] = {{ Notify = function() return true end }},
+}}
+assert(loadfile({_lua_path(REGISTRY_LUA)}))()
+assert(loadfile({_lua_path(POLICE_MDT_LUA)}))()
+
+police.CreateCase = function() return false, 'unknown_capability' end
+local ok, err = PhoneApps.Action(1, 'police_mdt', 'create_case', {{}})
+assert(not ok and err == 'forbidden', tostring(err))
+
+police.CreateBolo = function() error('export blew up') end
+ok, err = PhoneApps.Action(1, 'police_mdt', 'create_bolo', {{}})
+assert(not ok and err == 'export_error', tostring(err))
+
+police.CreateCase = function() return {{ id = 7, case_no = 'CASE-000007' }} end
+local res
+ok, res = PhoneApps.Action(1, 'police_mdt', 'create_case', {{}})
+assert(ok and res.ok == true and res.id == 7, tostring(ok))
+
+police.SetUnitStatusForSource = function() return true end
+ok, res = PhoneApps.Action(1, 'police_mdt', 'set_status', {{ status = 'available' }})
+assert(ok and res.ok == true, tostring(ok))
+print('NORMALISE_OK')
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert "NORMALISE_OK" in result.stdout
+
+
+def test_police_mdt_alert_is_structured_and_still_fans_out():
+    result = run_lua(
+        _fake_core_lua()
+        + f"""
+local police = {{}}
+setmetatable(police, {{ __index = function()
+  return function() return false, 'not_on_duty' end
+end }})
+_G.exports = {{
+  ['custom-police'] = police,
+  ['custom-phone'] = {{ Notify = function() return true end }},
+}}
+assert(loadfile({_lua_path(REGISTRY_LUA)}))()
+assert(loadfile({_lua_path(POLICE_MDT_LUA)}))()
+
+local ok, res = PhoneApps.Action(1, 'police_mdt', 'alert', {{ message = 'All units respond' }})
+assert(ok and res.ok == true and res.sent == 1, tostring(ok) .. '/' .. tostring(res and res.sent))
+
+local err
+ok, err = PhoneApps.Action(1, 'police_mdt', 'alert', {{ message = '   ' }})
+assert(not ok and err == 'invalid_message', tostring(err))
+print('ALERT_OK')
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ALERT_OK" in result.stdout
+
+
+def test_police_mdt_no_longer_collapses_errors_to_booleans():
+    src = read(POLICE_MDT_LUA)
+    for name in POLICE_ACTIONS:
+        assert f"{name} = function" in src, name
+    assert src.count("structured('") == 17
+    assert "return ok and res" not in src
+    assert "error = 'export_error'" in src
+    assert "unknown_capability" in src and "'forbidden'" in src
+
+
+def test_mdt_localises_the_contract_error_codes():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "const ERROR_TEXT: Record<string, string>" in ui
+    assert "function errorText(code: unknown): string" in ui
+    # Unknown codes fall back to the raw code, never to a generic "失败".
+    assert "ERROR_TEXT[key] ?? (key || '提交失败')" in ui
+    for code in (
+        "not_police", "not_on_duty", "rank_too_low", "cooldown", "limit",
+        "global_limit", "in_progress", "invalid_idempotency_key",
+        "invalid_transition", "incident_not_found", "not_assigned",
+        "already_jailed", "too_far", "not_handcuffed", "case_forbidden",
+        "audit_unavailable", "db_error", "export_error",
+    ):
+        assert f"{code}:" in ui, code
+    # One shared table, not one inline map per action.
+    assert ui.count("const reasons: Record<string, string>") == 0
+
+
+def test_built_bundle_ships_the_error_code_map():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    for token in (
+        "invalid_idempotency_key", "in_progress", "invalid_transition",
+        "not_on_duty", "export_error", "cooldown", "global_limit",
+        "职级不足", "服务端处理异常", "审计不可用",
+    ):
+        assert token in bundle, token
+
+
+def test_error_code_doc_lists_every_action_and_required_code():
+    doc = BASE.parent / "docs" / "police" / "ARCHITECTURE_ERRORS.md"
+    assert doc.exists(), doc
+    text = doc.read_text(encoding="utf-8")
+    for name in POLICE_ACTIONS:
+        assert f"`{name}`" in text, name
+    for code in (
+        "not_police", "not_on_duty", "rank_too_low", "cooldown", "limit",
+        "global_limit", "in_progress", "invalid_idempotency_key",
+        "invalid_transition", "incident_not_found", "not_assigned",
+        "already_jailed", "too_far", "not_handcuffed", "case_forbidden",
+        "audit_unavailable", "db_error", "export_error",
+    ):
+        assert f"`{code}`" in text, code
+    assert "unknown_capability" in text and "forbidden" in text

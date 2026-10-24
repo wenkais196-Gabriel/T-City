@@ -124,7 +124,22 @@ function PhoneApps.Query(source, appId, queryName, params)
     return true, result
 end
 
----@return boolean ok, table|string result
+local function errorCode(value)
+    if type(value) == 'string' and value ~= '' then return value end
+    if type(value) == 'number' then return tostring(value) end
+    return 'rejected'
+end
+
+--- Run one app action and flatten its structured result into the
+--- `ok, result|error` contract used by `phone:server:appAction`.
+---
+--- Handler result shapes:
+---   true                        -> true, {}
+---   { ok = true, ... }          -> true, result (data preserved)
+---   { ok = false, error, detail } -> false, error, detail
+---   false / nil                 -> false, 'action_rejected' (legacy)
+---   { ... } without `ok`        -> true, result (legacy table success)
+---@return boolean ok, table|string result, string|nil detail
 function PhoneApps.Action(source, appId, actionName, params)
     local app, _, err = resolve(source, appId)
     if not app then return false, err end
@@ -136,9 +151,15 @@ function PhoneApps.Action(source, appId, actionName, params)
         return false, 'action_failed'
     end
     if type(result) == 'table' and result.ok == false then
-        return false, tostring(result.error or 'rejected')
+        local code = errorCode(result.error)
+        if result.detail ~= nil then
+            print(('[custom-phone][apps] action %s:%s rejected (%s): %s')
+                :format(appId, actionName, code, tostring(result.detail)))
+            return false, code, tostring(result.detail)
+        end
+        return false, code
     end
-    if result == false then return false, 'action_rejected' end
+    if result == false or result == nil then return false, 'action_rejected' end
     return true, type(result) == 'table' and result or {}
 end
 

@@ -29,6 +29,44 @@ local function onDutyPolice()
     return result
 end
 
+-- Action results are normalised here instead of being collapsed to a boolean.
+-- custom-police owns the business decision; this layer only flattens its
+-- `true` / `false, code` / `{ ok, error }` shapes into the stable contract used
+-- by `PhoneApps.Action`, which turns { ok = false, error } into
+-- success=false/error for the MDT. `unknown_capability` is an internal policy
+-- table bug, so it is folded into the user-facing `forbidden` code.
+local function errorCode(value)
+    if type(value) ~= 'string' or value == '' then return 'rejected' end
+    if value == 'unknown_capability' then return 'forbidden' end
+    return value
+end
+
+---@param name string action name, for the server log
+---@param fn function export call returning true | false, code | table
+---@return table { ok = true, ... } | { ok = false, error = code, detail? }
+local function structured(name, fn)
+    local ok, res, reason, detail = pcall(fn)
+    if not ok then
+        print(('[custom-phone][apps] police_mdt %s export failed: %s'):format(name, tostring(res)))
+        return { ok = false, error = 'export_error' }
+    end
+    if res == true then return { ok = true } end
+    if res == false or res == nil then
+        local result = { ok = false, error = errorCode(reason) }
+        if detail ~= nil then result.detail = tostring(detail) end
+        return result
+    end
+    if type(res) == 'table' then
+        if res.ok == false then
+            res.error = errorCode(res.error)
+            return res
+        end
+        if res.ok == nil then res.ok = true end
+        return res
+    end
+    return { ok = true, data = res }
+end
+
 PhoneApps.Register({
     id = 'police_mdt',
     label = 'MDT',
@@ -167,115 +205,126 @@ PhoneApps.Register({
     },
     actions = {
         set_status = function(source, params)
-            local ok, res = pcall(function()
+            return structured('set_status', function()
                 return exports['custom-police']:SetUnitStatusForSource(source, params.status)
             end)
-            return ok and res == true
         end,
         assign = function(source, params)
-            local ok, res = pcall(function()
+            return structured('assign', function()
                 return exports['custom-police']:AssignUnit(source, params.incident_id, params.citizenid)
             end)
-            return ok and res ~= false
+        end,
+        enroute = function(source, params)
+            return structured('enroute', function()
+                return exports['custom-police']:SetIncidentStatus(source, params.incident_id, 'enroute')
+            end)
+        end,
+        on_scene = function(source, params)
+            return structured('on_scene', function()
+                return exports['custom-police']:SetIncidentStatus(source, params.incident_id, 'on_scene')
+            end)
+        end,
+        clear = function(source, params)
+            return structured('clear', function()
+                return exports['custom-police']:SetIncidentStatus(
+                    source, params.incident_id, params.status or 'cleared')
+            end)
+        end,
+
+        -- No export backs the alert: the MDT fans it out to every on-duty
+        -- officer through the phone's own Notify export. Empty text is a local
+        -- validation failure, not a permission decision.
+        alert = function(source, params)
+            return structured('alert', function()
+                local message = type(params.message) == 'string' and params.message:sub(1, 200) or ''
+                if not message:match('%S') then return false, 'invalid_message' end
+                local qb = core()
+                local sender = qb and qb.Functions.GetPlayer(source)
+                local senderName = 'Dispatch'
+                if sender and type(sender.PlayerData.charinfo) == 'table' then
+                    local info = sender.PlayerData.charinfo
+                    senderName = ('%s %s'):format(tostring(info.firstname or ''), tostring(info.lastname or ''))
+                end
+                local title = ('MDT Alert — %s'):format(senderName:sub(1, 40))
+                local sent = 0
+                for _, officer in ipairs(onDutyPolice()) do
+                    -- Same-resource owner export: persistence + push + app_id
+                    -- allowlist live in server/main.lua (FIT-02). `source` skips
+                    -- the citizenid lookup because the officer is online here.
+                    local called, delivered = pcall(function()
+                        return exports['custom-phone']:Notify(officer.citizenid, title, message, nil, {
+                            source = officer.source,
+                        })
+                    end)
+                    if called and delivered then sent = sent + 1 end
+                end
+                return { ok = true, sent = sent }
+            end)
+        end,
+
+        issue_citation = function(source, params)
+            return structured('issue_citation', function()
+                return exports['custom-police']:IssueCitation(source, params)
+            end)
+        end,
+        create_report = function(source, params)
+            return structured('create_report', function()
+                return exports['custom-police']:CreateReport(source, params)
+            end)
+        end,
+        register_evidence = function(source, params)
+            return structured('register_evidence', function()
+                return exports['custom-police']:RegisterEvidence(source, params)
+            end)
         end,
         create_case = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:CreateCase(source, params) end)
-            return ok and res ~= false
+            return structured('create_case', function()
+                return exports['custom-police']:CreateCase(source, params)
+            end)
         end,
         create_bolo = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:CreateBolo(source, params) end)
-            return ok and res ~= false
+            return structured('create_bolo', function()
+                return exports['custom-police']:CreateBolo(source, params)
+            end)
         end,
         request_warrant = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:RequestWarrant(source, params) end)
-            return ok and res ~= false
+            return structured('request_warrant', function()
+                return exports['custom-police']:RequestWarrant(source, params)
+            end)
         end,
         decide_warrant = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:DecideWarrant(source, params) end)
-            return ok and res ~= false
+            return structured('decide_warrant', function()
+                return exports['custom-police']:DecideWarrant(source, params)
+            end)
         end,
         register_arrest = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:RegisterArrest(source, params) end)
-            return ok and res ~= false
+            return structured('register_arrest', function()
+                return exports['custom-police']:RegisterArrest(source, params)
+            end)
         end,
+
         -- params (including idempotency_key) is forwarded untouched; the
         -- police resource owns key validation and the replay cache.
         arrest_submit = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:ArrestSubmit(source, params) end)
-            if not ok or type(res) ~= 'table' or res.ok ~= true then return false end
-            return res
+            return structured('arrest_submit', function()
+                return exports['custom-police']:ArrestSubmit(source, params)
+            end)
         end,
 
         -- Same pass-through as arrest_submit: idempotency_key reaches the
         -- server so a retried report does not create a second row.
         report_submit = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:ReportSubmit(source, params) end)
-            if not ok or type(res) ~= 'table' then return false end
-            return res
+            return structured('report_submit', function()
+                return exports['custom-police']:ReportSubmit(source, params)
+            end)
         end,
 
         -- Server-authoritative NPC backup: custom-police owns the permission,
         -- cooldown, two-unit cap and audit; the phone only forwards the result.
-        -- Rejections ({ ok = false, error = ... }) are passed through so the
-        -- MDT can localise cooldown/limit/not_police instead of "action_failed".
         request_backup = function(source, _params)
-            local ok, res = pcall(function() return exports['custom-police']:RequestBackup(source) end)
-            if not ok or type(res) ~= 'table' then return false end
-            return res
-        end,
-        register_evidence = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:RegisterEvidence(source, params) end)
-            return ok and res ~= false
-        end,
-        issue_citation = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:IssueCitation(source, params) end)
-            return ok and res ~= false
-        end,
-        create_report = function(source, params)
-            local ok, res = pcall(function() return exports['custom-police']:CreateReport(source, params) end)
-            return ok and res ~= false
-        end,
-        enroute = function(source, params)
-            local ok, res = pcall(function()
-                return exports['custom-police']:SetIncidentStatus(source, params.incident_id, 'enroute')
+            return structured('request_backup', function()
+                return exports['custom-police']:RequestBackup(source)
             end)
-            return ok and res ~= false
-        end,
-        on_scene = function(source, params)
-            local ok, res = pcall(function()
-                return exports['custom-police']:SetIncidentStatus(source, params.incident_id, 'on_scene')
-            end)
-            return ok and res ~= false
-        end,
-        clear = function(source, params)
-            local ok, res = pcall(function()
-                return exports['custom-police']:SetIncidentStatus(source, params.incident_id, params.status or 'cleared')
-            end)
-            return ok and res ~= false
-        end,
-        alert = function(source, params)
-            local message = type(params.message) == 'string' and params.message:sub(1, 200) or ''
-            if not message:match('%S') then return false end
-            local sender = core().Functions.GetPlayer(source)
-            local senderName = 'Dispatch'
-            if sender and type(sender.PlayerData.charinfo) == 'table' then
-                local info = sender.PlayerData.charinfo
-                senderName = ('%s %s'):format(tostring(info.firstname or ''), tostring(info.lastname or ''))
-            end
-            local title = ('MDT Alert — %s'):format(senderName:sub(1, 40))
-            local sent = 0
-            for _, officer in ipairs(onDutyPolice()) do
-                -- Same-resource owner export: persistence + push + app_id
-                -- allowlist live in server/main.lua (FIT-02). `source` skips
-                -- the citizenid lookup because the officer is online here.
-                local called, delivered = pcall(function()
-                    return exports['custom-phone']:Notify(officer.citizenid, title, message, nil, {
-                        source = officer.source,
-                    })
-                end)
-                if called and delivered then sent = sent + 1 end
-            end
-            return { sent = sent }
         end,
     },
 })
