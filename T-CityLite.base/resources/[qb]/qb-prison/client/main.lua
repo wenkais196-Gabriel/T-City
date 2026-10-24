@@ -183,7 +183,8 @@ local function CreateJobBlip(create)
 	local positions = Config.Locations.jobs[currentJob]
 	if not positions then return end
 	for _, pos in ipairs(positions) do
-		local blip = AddBlipForCoord(pos.x, pos.y, pos.z)
+		local entry = pos.coords or pos
+		local blip = AddBlipForCoord(entry.x, entry.y, entry.z)
 		SetBlipSprite(blip, 566)
 		SetBlipDisplay(blip, 4)
 		SetBlipScale(blip, 0.7)
@@ -400,7 +401,8 @@ CreateThread(function()
 		if inJail and currentJob then
 			local coords = GetEntityCoords(PlayerPedId())
 			for _, pos in ipairs(Config.Locations.jobs[currentJob] or {}) do
-				local target = vector3(pos.x, pos.y, pos.z)
+				local entry = pos.coords or pos
+				local target = vector3(entry.x, entry.y, entry.z)
 				if #(coords - target) < 2.2 then
 					sleep = 0
 					DrawMarker(1, target.x, target.y, target.z - 0.9, 0, 0, 0, 0, 0, 0, 1.2, 1.2, 0.6, 0, 200, 0, 120, false, true, 2, false, nil, nil, false)
