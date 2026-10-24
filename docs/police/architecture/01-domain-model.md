@@ -1,7 +1,7 @@
 # 警察系统领域模型（01 Domain Model）
 
 > **性质**：as-built 领域模型（读代码得出），面向**后续重构与新增玩法**，不是理想设计。
-> **基线**：`master @ 568acd2`（2026-10-24）。证据口径同 [00-overview.md](00-overview.md)：
+> **基线**：`568acd2`（2026-10-24）；**复评 HEAD `3bbcab3`**（post-baseline 标在 §1.1/§5/§7.3/§10）。证据口径同 [00-overview.md](00-overview.md)：
 > 未写前缀的 `server/*.lua` 指 `T-CityLite.base/resources/[custom]/custom-police/`；
 > `migrations/` 指 `T-CityLite.base/migrations/`。
 > **不重复** [DESIGN.md](../DESIGN.md) 的表定义与功能清单；DESIGN 是目标态，本稿是现状。
@@ -55,10 +55,11 @@ flowchart LR
 |---|---|---|---|---|
 | **Duty & Dispatch** | `Unit`、`Incident` | `police_units`、`police_incidents`、`police_incident_units`、`police_audit` | `server/p0.lua`、`client/p0.lua`、`client/job.lua` | MDT、director、所有执法动作的前置 |
 | **Records** | `Citation`、`Report`、`Evidence`、`Case`、`Warrant`（+ legacy `Bolo`） | `police_citations`、`police_reports`、`police_evidence(_chain)`、`police_cases`、`police_warrants`、`police_bolos`、`police_arrests`(legacy) | `server/p1.lua`、`server/p2_evidence.lua`、`server/p3_cases.lua` | MDT 四页、justice（只读语义）、审计 |
-| **Justice** | `JusticeCase`、`Inmate` | **内存**（`activeCases` / `inmates`）+ `police_reports.justice_verdict` 镜像 | `custom-justice/server/{main,trial,prison,arrest}.lua` | 法官、律师、qb-prison |
-| **Custody** | `Sentence`（由 qb-prison 持有） | `players.metadata.injail` / `jailitems` / `criminalrecord` | `qb-prison/{server,client}/main.lua` | 囚犯、出狱、物品收还 |
+| **Justice** | `JusticeCase`、`Verdict` | **内存**（`activeCases`）+ `police_reports.justice_verdict` 镜像；**判决不再直接等于刑期** | `custom-justice/server/{main,trial,prison,arrest}.lua` | 法官、律师 |
+| **Custody** | `Sentence`（**`justice_sentences` 行**） | `justice_sentences`（权威）+ `players.metadata.injail` / `jailitems`（投影/物品） | `custom-justice/server/sentence.lua`、`qb-prison/{server,client}/main.lua` | 囚犯、出狱、物品收还 |
 | **Fleet** | **无**（见 §6） | `player_vehicles.state`（外部表）+ 内存 `Plates` | `server/vehicle.lua`、`client/job.lua` | 警察本人 |
-| **NPC Backup** | `BackupRequest` | **无**（内存，按会话） | `server/p2_system.lua:172-272`、`client/backup.lua` | 请求者客户端 |
+| **NPC Backup** | `BackupRequest` | **无**（内存，按会话） | `server/p2_system.lua:295-395`、`client/backup.lua` | 请求者客户端 |
+| **NPC Callout**（新增） | `NpcCallout` = `Incident` + `npc_template` | `police_incidents.npc_template`（服务端）+ 客户端场景（内存） | `server/p4_npc.lua`、`client/npc_callouts.lua`、`shared/npc_callouts.lua` | 在勤警员、调度器 |
 | **Agent** | `AgentAction`（director） | `agent_actions` + `police_audit` 副本 | `custom-director/server/{policy,main,live_api}.lua`、`server/p2_system.lua` | LLM/MCP |
 
 ### 1.2 上下文映射关系
@@ -68,8 +69,9 @@ flowchart LR
 | custom-phone（MDT） | Duty/Records | 服务端 export（进程内） | 玩家 source + 参数 | **强一致**（同 tick 返回） | `custom-phone/server/apps/police_mdt.lua:65-276` |
 | custom-director（agent） | Duty/Records/Custody | export `*System(actorId, …)` | agent id + 参数 | **强一致** | `custom-director/server/main.lua:1189-1220` |
 | Duty/Dispatch | Records | 进程内函数调用 | 逮捕上下文（incident/case/罪名） | **强一致**（但用补偿删除代替事务） | `server/p2_system.lua:126-136,458-481` |
-| Records | Justice | export `Imprison` / `OpenCase` | citizenid、分钟、罪名 id | 强一致调用，**结果易失**（内存） | `server/p2_system.lua:566,605` |
-| Justice | Custody（qb-prison） | 客户端事件往返 | src + 分钟 | **最终一致**，可被客户端重放/篡改 | `custom-justice/server/prison.lua:43-47` → `qb-prison/client/main.lua:225-261` |
+| Records | Justice | export `Imprison` / `OpenCase` | citizenid、分钟、罪名 id | 强一致调用；**刑期已落库**，案件仍内存 | `server/p2_system.lua:699-704,738-757` |
+| Justice | Custody（`justice_sentences`） | 同进程 SQL | citizenid、`minutes`、`mode`、`case_id` | **强一致**（单行条件 UPDATE，`ends_at` 由 DB 时钟） | `sentence.lua:91-135` |
+| Custody | qb-prison（UI） | `SetJailStatus` 投影 + 客户端事件 | src + 剩余分钟 | **最终一致**（客户端值不被信任） | `qb-prison/server/main.lua:14-50` |
 | Records | Custody | 客户端事件（fallback）+ `UnjailPerson` | src + 分钟 | 最终一致 | `server/p2_system.lua:610-613,827` |
 | Justice | Records | 异步 `UPDATE police_reports … WHERE justice_case_id` | verdict JSON + status | **最终一致**（best-effort，失败只打日志） | `custom-justice/server/trial.lua:39-49` |
 | Duty/Records | custom-phone | `INSERT phone_notifications` + 客户端事件 | 标题/正文/`app_id` | 最终一致（推送失败不回滚） | `server/p0.lua:100-114`、`server/p1.lua:22-36` |
@@ -160,7 +162,7 @@ flowchart LR
 | INV-R12 | 金额由服务端计算 | ❌（独立路径） | 客户端直接传 `amount`（`server/p1.lua:43`） | 任意金额罚单（F4） |
 | INV-R13 | 所有记录写操作留审计 | ✅ | 每个写函数均 `audit(...)`（`p1:58,112`、`p2_evidence:63`、`p3:58,87,153,169,204`） | — |
 | INV-R14 | 所有敏感读留审计 | ❌ | **9 个写审计**（lookup.citizen/vehicle、case.detail、case.view、evidence.view、evidence.chain、bolo.view、warrant.view、arrest.view；仅前 3 个 fail-closed，其余忽略返回值）；**5 个完全不写**（`GetUnits/GetIncidents/GetAudit/GetCitations/GetReports`） | 批量翻档案无痕（A-13） |
-| INV-R15 | 幂等：重复提交返回同一 id | ❌ | `police_*` 全表无幂等键（对比 `agent_actions.idempotency_key`） | 重复点按生成多条记录 |
+| INV-R15 | 幂等：重复提交返回同一 id | ⚠️（post-baseline） | 业务表仍无幂等列；`ArrestSubmit`/`ReportSubmit` 用 `police_write_intents` 做应用层去重（无键仍重复） | 无键重复点按仍生成多条记录 |
 
 ---
 
@@ -201,25 +203,26 @@ flowchart LR
 
 | 类型 | 名称 | 标识 | 关键属性 | 存储 | 证据 |
 |---|---|---|---|---|---|
-| **AR** | `Sentence`（刑期执行） | `source`（在线）/ `citizenid` | 剩余分钟、开始时间、来源（judge/arrest） | `players.metadata.injail` + 客户端 `jailTime` | `qb-prison/server/main.lua:5-18`、`qb-prison/client/main.lua:225-275` |
+| **AR** | `Sentence`（刑期执行） | `justice_sentences.id`（每公民至多一条 active） | `minutes`、`started_at`、`ends_at`、`status`、`reason`、`case_id` | **`justice_sentences`**（权威）；`players.metadata.injail` 是投影 | `custom-justice/server/sentence.lua:91-135`、`migrations/v3.8_justice_sentences.sql` |
 | **E** | `SeizedItems` | `source` | 入狱前背包快照 | `players.metadata.jailitems` | `qb-prison/server/main.lua:20-44` |
 | **VO** | `CriminalRecord` | — | `{ hasRecord, date }` | `players.metadata.criminalrecord` | `server/interactions.lua:177-182` |
 | **VO** | `Minutes` | — | 1..120 | 各处 clamp | `custom-justice/server/prison.lua:17-18`、`server/p2_system.lua:104,137-138`、`server/interactions.lua:166` |
 | **VO** | `CustodyEntry` | — | 白名单资源 | `prison:client:Enter` | `qb-prison/client/main.lua:227` |
+| **E** | `Projection` | `citizenid` | `metadata.injail` + 客户端 `jailTime` | 派生自 `ends_at`，不是事实源 | `prison.lua:52-84`、`qb-prison/server/main.lua:14-50` |
 
 ### 5.2 不变量
 
 | 编号 | 不变量 | 现状 | 证据 | 违反后果 |
 |---|---|---|---|---|
-| INV-C1 | 入狱只能由受信资源/服务端发起 | ❌ | `prison:client:Enter` 有白名单（`qb-prison/client/main.lua:227`），但 `prison:server:SetJailStatus` **无来源校验**（`qb-prison/server/main.lua:5-18`） | 任意客户端可改自己 `injail` |
+| INV-C1 | 入狱只能由受信资源/服务端发起 | ✅（post-baseline） | `prison:client:Enter` 有白名单；`SetJailStatus` 只投影 `justice_sentences` 剩余，客户端值仅在 justice 不可用时 clamp（`qb-prison/server/main.lua:14-50`） | 无法再伪造刑期 |
 | INV-C2 | 入狱即失去职业 | ✅（有意，但是债） | `qb-prison/server/main.lua:11-14` | 出狱后无业（B3） |
 | INV-C3 | 刑期 ∈ [1,120] | ✅ | 四个入口都 clamp（见上表） | — |
 | INV-C4 | 已在服刑时不重置刑期 | ✅ | `custom-justice/server/prison.lua:32-35` + `server/p2_system.lua:360` | 洗刑期 |
 | INV-C5 | 入狱只在 `jailitems` 为空时清空背包 | ✅ | `qb-prison/server/main.lua:24-29` | 重复清包 |
 | INV-C6 | 释放归还全部物品 | ✅ | `qb-prison/server/main.lua:32-44` | 丢物品 |
 | INV-C7 | 释放恢复入狱前职业 | ❌ | 释放链无恢复（`qb-prison/client/main.lua:277-320`）；唯一恢复是 `police_release`（`server/p2_system.lua:820-839`） | 警察永久失业 |
-| INV-C8 | 服刑状态只有一个事实源 | ❌ | 三份：`metadata.injail`、justice `Inmates`、客户端 `jailTime` | 双计时/双入口（B6） |
-| INV-C9 | 判决与服刑可对账 | ❌ | 无 `justice_sentences` 类表；`police_reports.justice_verdict` 只是镜像 | 无法回答"这人为何在押" |
+| INV-C8 | 服刑状态只有一个事实源 | ✅（post-baseline） | `justice_sentences.ends_at` 为唯一权威；`metadata.injail`/`Inmates`/`jailTime` 都是投影或缓存 | 只剩投影落后 1 分钟的可能 |
+| INV-C9 | 判决与服刑可对账 | ⚠️（post-baseline） | 有 `justice_sentences.reason/case_id`；但 `case_id` 只是展示号、无外键，`justice_verdict` 仍是 report 镜像 | 可回答“剩余多久/为何”，仍不能稳定 join 到判决 |
 
 ---
 
@@ -275,6 +278,25 @@ flowchart LR
 | INV-B6 | 状态不持久化（重启即空） | ✅（有意） | 内存表，无 SQL |
 | INV-B7 | 每请求固定 1 车 2 人 | ⚠️ 客户端实现，服务端不校验 | `client/backup.lua:204-221` |
 
+### 7.3 NPC Callout（新增聚合，SM-09）
+
+| 类型 | 名称 | 标识 | 关键属性 | 存储 | 证据 |
+|---|---|---|---|---|---|
+| **AR**（复用） | `NpcCallout` | `police_incidents.id` | `npc_template`、固定坐标、priority、code、status | `police_incidents` | `p4_npc.lua:124-146`、`v3.11` |
+| **VO** | `Template` | `traffic_accident` 等 4 个 | `code/title/priority/locations/scene` | `shared/npc_callouts.lua`（代码常量） | `shared/npc_callouts.lua:31-160` |
+| **E**（投影） | `Scene` | `incidentId` | 车/ped/blip、构建状态 | 客户端内存 | `client/npc_callouts.lua:528-575` |
+| **VO** | `Outcome` | — | `resolved/arrest/failed/false_alarm` → disposition | 事件参数 | `p4_npc.lua:15-29` |
+
+| 编号 | 不变量 | 现状 | 说明 | 证据 |
+|---|---|---|---|---|
+| INV-N1 | 只有服务端能创建 NPC 警情 | ✅ | `CreateNpcCallout` 只由调度器/命令/export 调用；客户端无建单事件 | `p4_npc.lua:100-146,371-390` |
+| INV-N2 | 同一时间最多 1 个活动 NPC 警情 | ✅ | `activeNpcCount() >= MAX_ACTIVE(1)` → `limit_reached` | `p4_npc.lua:67-71,116`、`shared/npc_callouts.lua:22` |
+| INV-N3 | 场景只在有警员到场时创建 | ✅ | `on_scene` 或距离 ≤80m 才推事件 | `p4_npc.lua:316-350`、`shared/npc_callouts.lua:27` |
+| INV-N4 | 结算必须复用 SM-02 的关闭守卫与单位释放 | ✅ | 调 `SetIncidentStatus('cleared', disposition)` | `p4_npc.lua:209-217` |
+| INV-N5 | 奖励只发一次 | ✅ | 关闭幂等时直接返回，不重复 `AddMoney` | `p4_npc.lua:191-195,220-233` |
+| INV-N6 | 场景可被外部关闭并清理 | ⚠️ | watcher 3s 内检测并推 `NpcCalloutEnd`；客户端 300m/60s 也会自清 | `p4_npc.lua:266-273`、`client/npc_callouts.lua:493-503` |
+| INV-N7 | 场景推送失败可重试 | ❌ | `spawned[id]` 置位后不再推；无 ack | `p4_npc.lua:345-350` |
+
 ---
 
 ## 8. Agent（自动化）
@@ -323,7 +345,7 @@ flowchart LR
 
 | 关系 | 强度 | 保障手段 | 缺口 |
 |---|---|---|---|
-| MDT action → police 写 | **强一致** | 同步 export，先校验后写 | 无幂等键，重复提交生成重复记录 |
+| MDT action → police 写 | **强一致** | 同步 export，先校验后写 | 无键重复提交仍生成重复记录；带 `idempotency_key` 可重放 |
 | `ArrestSubmit` 内部（report + citation + evidence + case） | **强一致（补偿式）** | 先写 report，后续失败逐条 `DELETE`（`server/p2_system.lua:458-481`） | oxmysql 无 `transaction`，不是真事务（同文件 `126-136` 注释自承） |
 | police → justice 送监 | 强一致调用 | `pcall` + 返回值判定 | justice 状态内存化，失败即漂移 |
 | justice → qb-prison | **最终一致** | 客户端事件 + `metadata.injail` | 客户端可重放；服务端 `SetJailStatus` 无鉴权 |
@@ -341,20 +363,20 @@ flowchart LR
 
 | 编号 | 不变量 | 现状 | 权威位置 | 若被破坏 |
 |---|---|---|---|---|
-| **INV-01** | 单位状态非 `off_duty` 时，`job.onduty` 必须为 true；反之 `onduty=false` 必须落到 `off_duty` | ❌ | 应唯一在 `PoliceDuty.SetState`（当前分散：`server/p0.lua:45-54,262-298`） | 派单给下班的人；MDT 花名册不可信（TD-01） |
-| **INV-02** | 派单目标必须 `available`（或主管强制 + 理由 + 审计） | ⚠️ 仅系统路径 | `server/p2_system.lua:84-86` | 警情卡在"已派单"（F9） |
-| **INV-03** | 入狱必须有一份 `kind='arrest'` 的报告作为凭证 | ❌ | `server/p2_system.lua:448-455`（唯一合规路径） | 无案底服刑、有案底不服刑（B4） |
+| **INV-01** | 单位状态非 `off_duty` 时，`job.onduty` 必须为 true；反之 `onduty=false` 必须落到 `off_duty` | ✅（post-baseline） | `server/p0.lua:102-121,406-425,567-599`（未抽独立 service） | 派单给下班的人（`AssignUnit` 仍可指定任意目标） |
+| **INV-02** | 派单目标必须 `available`（或主管强制 + 理由 + 审计） | ⚠️ 仅系统路径 | `server/p2_system.lua:82-86` | 警情卡在"已派单"（F9）；玩家路径仍不校验 |
+| **INV-03** | 入狱必须有一份 `kind='arrest'` 的报告作为凭证 | ⚠️（post-baseline） | `server/p2_system.lua:581-587`（ArrestSubmit）是合规路径；agent `JailSystem` 仍可无 report 直接送监（`p2_system.lua:99-121`） | agent 判刑无 report 凭证 |
 | **INV-04** | 判决（`justice_verdict` / `justice_status`）只能由 justice 写 | ✅ | `custom-justice/server/trial.lua:30-49` | 判决被执法侧改写 |
 | **INV-05** | 刑期 ∈ [1,120] 分钟，由服务端按罪名目录计算 | ✅ | `shared/charges.lua` + `server/p2_system.lua:378-380` | 任意刑期（B9 已修） |
 | **INV-06** | 罪名 id 必须来自目录（`police` 与 `justice` 同值） | ⚠️ | `shared/charges.lua:13-31`、`custom-justice/config.lua:9-30` | 双份目录漂移后静默丢罪 |
-| **INV-07** | 罚单金额由服务端算，且在目录价的 ±20% 内 | ❌ | `server/p2_system.lua:313-328`（只覆盖逮捕路径） | 任意金额（F4） |
+| **INV-07** | 罚单金额由服务端算，且在目录价的 ±20% 内 | ⚠️ 仍只覆盖逮捕路径 | `server/p2_system.lua:436-451`（clamp）；`p1.lua:40-72` 独立罚单仍 1..50000 | 任意金额（F4） |
 | **INV-08** | 证据必须至少挂 incident/report/case 之一，并产生首条保管链 | ⚠️ | `server/p2_evidence.lua:44,62` | 孤立证据/断链 |
 | **INV-09** | 保管链只追加 | ⚠️ | `police_evidence_chain`（无 UPDATE），补偿删除例外 | 证据链被篡改 |
-| **INV-10** | 敏感读必须写审计；写失败则拒绝返回 | ⚠️ 仅 `lookup.*` / `case.detail` | `server/p0.lua:183-190`、`server/p3_cases.lua:242-244` | 无声翻档案（A-13） |
+| **INV-10** | 敏感读必须写审计；写失败则拒绝返回 | ⚠️ 仍仅 `lookup.*` / `case.detail`（逮捕写路径补了 citation/evidence 审计） | `server/p0.lua:331-333`、`server/p3_cases.lua:242-244`、`p2_system.lua:766-797` | 无声翻档案（A-13） |
 | **INV-11** | 拒绝/越权行为也要留痕 | ❌ | 无处落库（`police_audit` 无 `result` 列） | 无法事后追责（A-11） |
-| **INV-12** | 入狱/出狱由服务端与白名单资源控制 | ⚠️ | `qb-prison/client/main.lua:227`（进入）vs `qb-prison/server/main.lua:5-18`（无校验） | 任意改 `injail` |
+| **INV-12** | 入狱/出狱由服务端与白名单资源控制 | ✅（post-baseline） | `qb-prison/server/main.lua:14-50`（只投影 `justice_sentences`） | 客户端无法再改剩余刑期 |
 | **INV-13** | 通缉只有一个事实源 | ❌ | 应唯一在 `police_warrants`（`status='approved'`） | 三套状态互相看不见（F10/B8） |
-| **INV-14** | agent 不能审批、不能拿 PII、每次写入留 `actor_kind='agent'` | ⚠️ | `custom-director/server/policy.lua`、`server/p2_system.lua:31-38` | agent 越权（`Sys.Jail` 不 fail-closed） |
+| **INV-14** | agent 不能审批、不能拿 PII、每次写入留 `actor_kind='agent'` | ⚠️ 未变 | `custom-director/server/policy.lua`、`server/p2_system.lua:31-38` | agent 越权（`Sys.Jail` 不 fail-closed） |
 
 ---
 
@@ -421,7 +443,7 @@ flowchart LR
 
 | # | 偏差 | 对建模的影响 |
 |---|---|---|
-| 1 | DESIGN 假设 `idem_key` 幂等键，代码零实现 | 所有"创建型"聚合都缺幂等不变量（INV-R15），重构时要么补列，要么在应用层做去重 |
+| 1 | DESIGN 假设业务表带 `idem_key` 幂等键 | 现在有 `police_write_intents` 应用层账本（不是业务表列）；创建型聚合的幂等仍依赖调用方传键（INV-R15 只部分成立） |
 | 2 | DESIGN 的 `police_warrants` 有 `type/scope/expires_at`，实际只有 `citizenid` | **搜查令在当前模型里无处安放**；令状上下文只能表达"人身逮捕令" |
 | 3 | DESIGN 把 `police_arrests` 当事实源，实际 `report(kind='arrest')` 才是 | 逮捕聚合的根是 `Report`，`police_arrests` 只能作为历史兼容视图 |
 | 4 | DESIGN 的 agent 权限等级（建单 L2 / 派单 L3）与实际（L1 / L2 / L3）不同 | Agent 上下文的 `RiskLevel` 以 `custom-director/server/policy.lua` 为准 |

@@ -1,6 +1,6 @@
 # ADR-0007 custody 服务端计时
 
-- 状态：Proposed
+- 状态：Accepted（已实施 `2ae3da4` + `f690230` work/release）
 - 日期：2026-10-24
 - 相关：SM-05、SM-04、TD-02、ADR-0002
 
