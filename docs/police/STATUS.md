@@ -34,3 +34,15 @@ python3 tools/agent_tools.py --check
 ```
 
 > 改 `fxmanifest` 或新增 server 文件后必须整服重启（或删 `cache/files/custom-police`），只 `restart` 不会加载新文件。
+
+
+## 方案 B 落地状态（2026-10-24）
+
+- P1 一次逮捕：`ArrestSubmit`（手铐/5m/未服刑校验，report=arrest，可选案件/罚单/证据，失败回滚）
+- P2 罚单闭环：罪名目录 + ±20% 滑轨、通知带罚单号 + `app_id='banking'`、Banking「我的罚单」支付
+- P3 报告合并：`ReportSubmit`（证据附件 + 首条保管链、BOLO 报告标签），`GetBolos` 双源合并
+- P4 法庭/安全：`/trial`（法官）、`/plea`（Sergeant+，无法官时 0.6 系数）、`OpenCase`、服刑去重、`autoAlert` 鉴权/限流（系统 source=0 放行）
+- P5 MDT 五页：调度 / 人车 / 文书 / 案件 / 我的；审计仅 Lieutenant+ 渲染
+
+按用户决定：**不做“出狱恢复职业”**。
+已知限制：justice 案件号是字符串，`police_reports.case_id` 仍是 BIGINT，`justice_case_id` 仅返回+审计；`open_case` 失败会回滚警察侧记录。
