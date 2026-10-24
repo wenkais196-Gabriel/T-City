@@ -63,10 +63,11 @@ end
 
 local function audit(actorCid, action, target, detail, actorKind)
     local ok = pcall(function()
-        MySQL.insert.await(
+        local result = MySQL.insert.await(
             'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
             { actorCid, actorKind or 'player', action, target, detail and tostring(detail):sub(1, 500) or nil }
         )
+        if type(result) == 'string' then error(result, 0) end
     end)
     return ok
 end
