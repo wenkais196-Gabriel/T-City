@@ -198,16 +198,22 @@ PhoneApps.Register({
             local ok, res = pcall(function() return exports['custom-police']:RegisterArrest(source, params) end)
             return ok and res ~= false
         end,
+        -- params (including idempotency_key) is forwarded untouched; the
+        -- police resource owns key validation and the replay cache.
         arrest_submit = function(source, params)
             local ok, res = pcall(function() return exports['custom-police']:ArrestSubmit(source, params) end)
             if not ok or type(res) ~= 'table' or res.ok ~= true then return false end
             return res
         end,
+
+        -- Same pass-through as arrest_submit: idempotency_key reaches the
+        -- server so a retried report does not create a second row.
         report_submit = function(source, params)
             local ok, res = pcall(function() return exports['custom-police']:ReportSubmit(source, params) end)
             if not ok or type(res) ~= 'table' then return false end
             return res
         end,
+
         -- Server-authoritative NPC backup: custom-police owns the permission,
         -- cooldown, two-unit cap and audit; the phone only forwards the result.
         -- Rejections ({ ok = false, error = ... }) are passed through so the

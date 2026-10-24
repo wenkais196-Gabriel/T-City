@@ -230,6 +230,17 @@ QBCore.Commands.Add('unjail', Lang:t('commands.unjail_player'), { { name = 'id',
     local Player = QBCore.Functions.GetPlayer(src)
     if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.onduty then
         local targetId = tonumber(args[1])
+        local targetPlayer = targetId and QBCore.Functions.GetPlayer(targetId)
+        if not targetPlayer then
+            return TriggerClientEvent('QBCore:Notify', src, '目标不在线', 'error')
+        end
+        -- DB sentence must be closed too: qb-prison ignores the client's
+        -- SetJailStatus(0) once justice is authoritative.
+        pcall(function()
+            return exports['custom-justice']:ReleaseSentence(
+                targetPlayer.PlayerData.citizenid, 'police_unjail')
+        end)
+        targetPlayer.Functions.SetMetaData('injail', 0)
         TriggerClientEvent('prison:client:UnjailPerson', targetId)
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.on_duty_police_only'), 'error')

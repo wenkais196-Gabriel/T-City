@@ -580,3 +580,57 @@ def test_built_bundle_ships_request_backup():
     )
     for token in ("request_backup", "请求支援", "支援已派出（#", "冷却"):
         assert token in bundle, token
+
+
+def test_police_mdt_forwards_idempotency_key_untouched():
+    app = read(PHONE / "server/apps/police_mdt.lua")
+    # Both submits pass the client params straight to the police resource; the
+    # registry only unwraps { success, data }.
+    assert "arrest_submit = function(source, params)" in app
+    assert "report_submit = function(source, params)" in app
+    assert "ArrestSubmit(source, params)" in app
+    assert "ReportSubmit(source, params)" in app
+    assert "idempotency_key" in app
+
+    registry = read(PHONE / "server/phone_apps.lua")
+    assert "local handler = app.actions[actionName]" in registry
+    assert "pcall(handler, source, type(params) == 'table' and params or {})" in registry
+
+
+def test_police_mdt_generates_and_resets_idempotency_keys_per_submit():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    # Component state, one key per form.
+    assert "let reportIdempotencyKey = $state('')" in ui
+    assert "let arrestIdempotencyKey = $state('')" in ui
+    assert "crypto.randomUUID?.()" in ui
+    assert "${Date.now()}-${Math.random().toString(36).slice(2)}" in ui
+
+    # The key is created before the action call and sent as idempotency_key.
+    report_key = ui.index("if (!reportIdempotencyKey) reportIdempotencyKey = newIdempotencyKey()")
+    report_action = ui.index("appAction(DB, 'report_submit'", report_key)
+    assert report_key < report_action
+    assert "idempotency_key: reportIdempotencyKey" in ui
+    arrest_key = ui.index("if (!arrestIdempotencyKey) arrestIdempotencyKey = newIdempotencyKey()")
+    arrest_action = ui.index("appAction(DB, 'arrest_submit'", arrest_key)
+    assert arrest_key < arrest_action
+    assert "idempotency_key: arrestIdempotencyKey" in ui
+
+    # Failure keeps the key (the return happens before the reset); success
+    # clears it after the server has answered.
+    report_fail = ui.index("reportError = reportErrorFor(res?.error)", report_action)
+    report_reset = ui.index("reportIdempotencyKey = ''", report_action)
+    assert report_fail < report_reset
+    arrest_fail = ui.index("if (!res?.success) {", arrest_action)
+    arrest_reset = ui.index("arrestIdempotencyKey = ''", arrest_action)
+    assert arrest_fail < arrest_reset
+    assert "reportResult = res.data ?? {}" in ui
+    assert "arrestResult = res.data ?? {}" in ui
+
+
+def test_built_bundle_ships_idempotent_submits():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    for token in ("idempotency_key", "randomUUID"):
+        assert token in bundle, token

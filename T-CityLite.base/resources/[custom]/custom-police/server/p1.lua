@@ -11,6 +11,15 @@ local function trim(v)
     return type(v) == 'string' and v:match('^%s*(.-)%s*$') or ''
 end
 
+--- The bundled oxmysql build returns `{ affectedRows = n }` for update; stock
+--- builds return a number. Normalise both so the conditional claim below can
+--- tell "this caller transitioned the row" from "somebody else already did".
+local function affectedRows(result)
+    if type(result) == 'number' then return result end
+    if type(result) == 'table' then return math.floor(tonumber(result.affectedRows) or 0) end
+    return 0
+end
+
 local function audit(cid, action, target, detail)
     return pcall(function()
         MySQL.insert.await(
@@ -146,11 +155,38 @@ function P1.PayCitation(source, citationId)
     if row.citizenid ~= actor.citizenid then return false, 'not_owner' end
     if row.status ~= 'unpaid' then return false, 'already_' .. tostring(row.status) end
     local amount = tonumber(row.amount) or 0
+
+    -- Claim the row before moving money. Two concurrent payers can both pass
+    -- the SELECT above, but only one conditional UPDATE matches `unpaid`; the
+    -- loser never reaches RemoveMoney, so a double tap cannot double-charge.
+    local claimOk, claim = pcall(function()
+        return MySQL.update.await(
+            "UPDATE police_citations SET status = 'paid', paid_at = NOW() WHERE id = ? AND citizenid = ? AND status = 'unpaid'",
+            { id, actor.citizenid })
+    end)
+    if not claimOk or affectedRows(claim) == 0 then
+        -- Re-read to tell "gone", "not yours" and "already paid/void" apart.
+        local current = MySQL.single.await(
+            'SELECT id, citizenid, status FROM police_citations WHERE id = ? LIMIT 1', { id })
+        if not current then return false, 'not_found' end
+        if current.citizenid ~= actor.citizenid then return false, 'not_owner' end
+        if current.status ~= 'unpaid' then return false, 'already_' .. tostring(current.status) end
+        return false, claimOk and 'not_found' or 'db_error'
+    end
+
     local ok, removed = pcall(function()
         return player.Functions.RemoveMoney('bank', amount, 'police-citation')
     end)
-    if not ok or not removed then return false, 'insufficient_funds' end
-    MySQL.update.await("UPDATE police_citations SET status = 'paid', paid_at = NOW() WHERE id = ? AND status = 'unpaid'", { id })
+    if not ok or not removed then
+        -- The claim did not charge anyone yet: put the citation back so the
+        -- owner can retry after topping up the bank account.
+        pcall(function()
+            MySQL.update.await(
+                "UPDATE police_citations SET status = 'unpaid', paid_at = NULL WHERE id = ? AND status = 'paid'",
+                { id })
+        end)
+        return false, 'insufficient_funds'
+    end
     audit(actor.citizenid, 'citation.pay', tostring(id), ('$%d'):format(amount))
     return { id = id, amount = amount, status = 'paid' }
 end

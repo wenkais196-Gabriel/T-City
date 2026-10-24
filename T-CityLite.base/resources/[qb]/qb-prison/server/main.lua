@@ -2,9 +2,11 @@ local QBCore = exports['qb-core']:GetCoreObject()
 local GotItems = {}
 local AlarmActivated = false
 
--- One-shot restore marker for seized items. Reset when a new custodial
--- sentence starts, consumed by the first GiveJailItems after release.
+-- One-shot markers for seized items. Both are reset when a new custodial
+-- sentence starts; Restored is consumed by the first GiveJailItems and Seized
+-- stops Reset -> Save from re-snapshotting (and re-paying the $80) mid-term.
 local JailItemsRestored = {}
+local JailItemsSeized = {}
 
 -- qb-prison no longer owns the clock. custom-justice's `justice_sentences` row
 -- is authoritative; this event only projects the server-side remaining time
@@ -13,7 +15,6 @@ RegisterNetEvent('prison:server:SetJailStatus', function(jailTime)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    local metadata = Player.PlayerData.metadata or {}
     local cid = Player.PlayerData.citizenid
 
     local lookedUp, remainingSeconds = pcall(function()
@@ -40,6 +41,7 @@ RegisterNetEvent('prison:server:SetJailStatus', function(jailTime)
 
     Player.Functions.SetMetaData('injail', remainingMinutes)
     JailItemsRestored[src] = nil
+    JailItemsSeized[src] = nil
 
     if Player.PlayerData.job.name ~= 'unemployed' then
         Player.Functions.SetJob('unemployed')
@@ -55,6 +57,10 @@ RegisterNetEvent('prison:server:SaveJailItems', function()
     -- Items can only be seized while a sentence is active. Previously a free
     -- player could loop Save/Give to farm the $80 jail stipend.
     if (metadata.injail or 0) <= 0 then return end
+    -- Only one seizure per sentence: ResetJailItems must not enable a second
+    -- snapshot (and a second $80 stipend).
+    if JailItemsSeized[src] then return end
+    JailItemsSeized[src] = true
     if not Player.PlayerData.metadata['jailitems'] or table.type(Player.PlayerData.metadata['jailitems']) == 'empty' then
         Player.Functions.SetMetaData('jailitems', Player.PlayerData.items)
         Player.Functions.AddMoney('cash', 80, 'jail money')
@@ -73,11 +79,13 @@ RegisterNetEvent('prison:server:GiveJailItems', function(escaped)
     local jailItems = metadata['jailitems']
     local hasSeizedItems = type(jailItems) == 'table' and next(jailItems) ~= nil
 
-    -- On release metadata.injail is already 0 when the client asks for its
-    -- items back. Allow exactly one restoration of a non-empty snapshot and
-    -- never while free with nothing to restore.
-    if (metadata.injail or 0) <= 0 and not hasSeizedItems then return end
-    if JailItemsRestored[src] or not hasSeizedItems then return end
+    -- Only a released inmate gets their snapshot back. The client asks after
+    -- SetJailStatus(0), so metadata is already 0 on a legitimate release; a
+    -- still-active sentence (cheat or client timer running early) must not be
+    -- able to cycle Give -> Save to farm the $80 stipend.
+    if (metadata.injail or 0) > 0 then return end
+    if not hasSeizedItems then return end
+    if JailItemsRestored[src] then return end
     JailItemsRestored[src] = true
 
     if escaped then
@@ -96,6 +104,8 @@ RegisterNetEvent('prison:server:ResetJailItems', function()
     if not Player then return end
     local metadata = Player.PlayerData.metadata or {}
     if (metadata.injail or 0) <= 0 then return end
+    -- Deliberately keep JailItemsSeized set: Reset may not open a second
+    -- SaveJailItems stipend snapshot in the same sentence.
     Player.Functions.SetMetaData('jailitems', {})
 end)
 
@@ -171,4 +181,33 @@ end)
 
 QBCore.Functions.CreateCallback('prison:server:IsAlarmActive', function(_, cb)
     cb(AlarmActivated)
+end)
+
+
+-- Prison work: the client only asks; the server owns `ends_at`. A short
+-- cooldown mirrors the client-side 60s work cycle and prevents event spam.
+local WorkReductionAt = {}
+RegisterNetEvent('prison:server:WorkReduction', function(minutes)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    local cid = Player.PlayerData.citizenid
+    local metadata = Player.PlayerData.metadata or {}
+    if (metadata.injail or 0) <= 0 then return end
+    minutes = math.floor(tonumber(minutes) or 0)
+    if minutes < 1 or minutes > 5 then return end
+    local now = os.time()
+    if WorkReductionAt[cid] and now - WorkReductionAt[cid] < 55 then return end
+    WorkReductionAt[cid] = now
+
+    local ok, remainingSeconds = pcall(function()
+        return exports['custom-justice']:AdjustSentence(cid, -minutes, 'prison_work')
+    end)
+    if not ok or type(remainingSeconds) ~= 'number' then
+        TriggerClientEvent('QBCore:Notify', src, '减刑失败，请稍后再试', 'error')
+        return
+    end
+    local remainingMinutes = math.ceil(math.max(0, remainingSeconds) / 60)
+    Player.Functions.SetMetaData('injail', remainingMinutes)
+    TriggerClientEvent('prison:client:WorkReductionAck', src, remainingMinutes)
 end)

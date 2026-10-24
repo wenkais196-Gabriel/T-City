@@ -143,7 +143,8 @@ RegisterNetEvent('QBCore:Server:PlayerLoaded', function(Player)
         return
     end
 
-    local sentence = JusticeSentences.Get(cid)
+    local sentenceOk, sentence = pcall(JusticeSentences.Get, cid)
+    if not sentenceOk then sentence = nil end
     local totalMinutes = sentence and tonumber(sentence.minutes) or remainingMinutes
     totalMinutes = math.max(remainingMinutes, math.floor(totalMinutes))
     local startedAt = os.time() - math.max(0, totalMinutes * 60 - remainingSeconds)

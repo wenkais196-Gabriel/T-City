@@ -98,6 +98,12 @@
   let reportError = $state('');
   let reportListError = $state('');
   let reportResult = $state<any>(null);
+  // One key per open form. It is created before the first submit attempt and
+  // only cleared after the server confirms success, so a double tap (or a
+  // retry after a timeout) replays the same server-side intent instead of
+  // creating a second report/citation. A failure keeps the key for the retry.
+  let reportIdempotencyKey = $state('');
+
   let evidenceRows = $state<Record<string, unknown>[]>([]);
   let evidenceForm = $state({ label: '', description: '', incident_id: '', location: '' });
   let caseRows = $state<Record<string, unknown>[]>([]);
@@ -128,6 +134,14 @@
   let arrestSubmitting = $state(false);
   let arrestError = $state('');
   let arrestResult = $state<any>(null);
+  let arrestIdempotencyKey = $state('');
+
+  function newIdempotencyKey(): string {
+    return (
+      crypto.randomUUID?.() ??
+      `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+  }
 
   const formatCharges = (raw: unknown): string => {
     if (Array.isArray(raw)) return raw.map((c: any) => c?.label ?? c?.id ?? '').filter(Boolean).join('、');
@@ -415,6 +429,8 @@
       invalid_bolo_target: 'BOLO 目标不能为空',
       db_error: '数据库错误，请重试',
       audit_unavailable: '审计不可用，请稍后重试',
+      invalid_idempotency_key: '提交标识无效，请刷新后重试',
+      in_progress: '该提交正在处理中，请勿重复点击',
       unavailable: '服务暂不可用，请稍后重试',
     };
     const key = String(code ?? '');
@@ -472,6 +488,7 @@
     if (reportOpts.bolo && !reportOpts.bolo_target.trim()) {
       reportError = 'BOLO 目标不能为空'; return;
     }
+    if (!reportIdempotencyKey) reportIdempotencyKey = newIdempotencyKey();
     reportSubmitting = true;
     const res = await appAction(DB, 'report_submit', {
       title,
@@ -487,6 +504,7 @@
       bolo_kind: reportOpts.bolo ? reportOpts.bolo_kind : undefined,
       bolo_target: reportOpts.bolo ? reportOpts.bolo_target.trim() : undefined,
       bolo_reason: reportOpts.bolo ? reportOpts.bolo_reason.trim() : undefined,
+      idempotency_key: reportIdempotencyKey,
     });
     reportSubmitting = false;
     if (!res?.success) {
@@ -494,6 +512,7 @@
       return;
     }
     reportResult = res.data ?? {};
+    reportIdempotencyKey = '';
     notice = `报告 #${reportResult.report_id ?? '—'}`;
     reportForm = { title: '', incident_id: '', case_id: '', citizenid: '', location: '', body: '' };
     reportOpts = {
@@ -559,6 +578,7 @@
     arrestResult = null;
     if (!arrestForm.citizenid.trim()) { arrestError = '请填写目标 citizenid'; return; }
     if (selectedChargeIds.length === 0) { arrestError = '请至少选择一条罪名'; return; }
+    if (!arrestIdempotencyKey) arrestIdempotencyKey = newIdempotencyKey();
     arrestSubmitting = true;
     const res = await appAction(DB, 'arrest_submit', {
       citizenid: arrestForm.citizenid.trim(),
@@ -576,6 +596,7 @@
       bolo_target: arrestOpts.bolo ? arrestOpts.bolo_target.trim() : undefined,
       create_case: arrestOpts.create_case,
       open_case: arrestOpts.open_case,
+      idempotency_key: arrestIdempotencyKey,
     });
     arrestSubmitting = false;
     if (!res?.success) {
@@ -590,11 +611,14 @@
         case_forbidden: '创建案件需要 Sergeant+',
         invalid_charges: '罪名无效或超过 8 条',
         jail_failed: '送监失败，已回滚记录',
+        invalid_idempotency_key: '提交标识无效，请刷新后重试',
+        in_progress: '该提交正在处理中，请勿重复点击',
       };
       arrestError = reasons[String(res?.error)] ?? (res?.error ?? 'arrest_failed');
       return;
     }
     arrestResult = res.data ?? {};
+    arrestIdempotencyKey = '';
     notice = `逮捕已提交：报告 #${arrestResult.report_id ?? '—'}`;
     selectedChargeIds = [];
     arrestForm.citizenid = '';
