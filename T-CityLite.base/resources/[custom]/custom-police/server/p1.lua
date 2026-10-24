@@ -64,7 +64,9 @@ function P1.IssueCitation(source, params)
           tonumber(params and params.incident_id) })
     id = InsertId(id)
     if not id or id == 0 then return false, 'db_error' end
-    audit(actor.citizenid, 'citation.issue', target, ('$%d %s'):format(amount, text))
+    if not audit(actor.citizenid, 'citation.issue', target, ('$%d %s'):format(amount, text)) then
+        print(('[custom-police] citation.issue audit failed for #%s'):format(tostring(id)))
+    end
     notifyCitizen(target, '你收到一张罚单',
         ('$%d — %s（罚单 #%d，警官 %s）'):format(
             math.floor(amount), text, tonumber(id), actor.citizenid),
@@ -89,11 +91,19 @@ function P1.GetCitations(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'citation.view')
     if not allowed then return false, reason end
+    local target = params and params.citizenid and params.citizenid ~= ''
+        and tostring(params.citizenid):sub(1, 50) or nil
+    -- FIT-05: citations are a sensitive read, so the forensic row is written
+    -- before the query. If audit is unavailable the read is refused rather than
+    -- silently unaudited.
+    if not audit(actor.citizenid, 'citation.view', target or 'all', nil) then
+        return false, 'audit_unavailable'
+    end
     local rows
-    if params and params.citizenid and params.citizenid ~= '' then
+    if target then
         rows = MySQL.query.await(
             'SELECT * FROM police_citations WHERE citizenid = ? ORDER BY id DESC LIMIT 50',
-            { tostring(params.citizenid):sub(1, 50) })
+            { target })
     else
         rows = MySQL.query.await('SELECT * FROM police_citations ORDER BY id DESC LIMIT 50')
     end
@@ -118,7 +128,9 @@ function P1.CreateReport(source, params)
         { tonumber(params and params.incident_id), caseId, actor.citizenid, title, body })
     id = InsertId(id)
     if not id or id == 0 then return false, 'db_error' end
-    audit(actor.citizenid, 'report.create', tostring(id), title)
+    if not audit(actor.citizenid, 'report.create', tostring(id), title) then
+        print(('[custom-police] report.create audit failed for #%s'):format(tostring(id)))
+    end
     return { id = tonumber(id), status = 'submitted' }
 end
 
@@ -126,15 +138,27 @@ function P1.GetReports(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'report.view')
     if not allowed then return false, reason end
+    local byCase = params and params.case_id
+    local byIncident = params and params.incident_id
+    local target = 'all'
+    if byCase then
+        target = ('case:%s'):format(tostring(byCase))
+    elseif byIncident then
+        target = ('incident:%s'):format(tostring(byIncident))
+    end
+    -- FIT-05: same fail-closed contract as GetCitations.
+    if not audit(actor.citizenid, 'report.view', target:sub(1, 64), nil) then
+        return false, 'audit_unavailable'
+    end
     local rows
-    if params and params.case_id then
+    if byCase then
         rows = MySQL.query.await(
             'SELECT * FROM police_reports WHERE case_id = ? ORDER BY id DESC LIMIT 50',
-            { tonumber(params.case_id) })
-    elseif params and params.incident_id then
+            { tonumber(byCase) })
+    elseif byIncident then
         rows = MySQL.query.await(
             'SELECT * FROM police_reports WHERE incident_id = ? ORDER BY id DESC LIMIT 50',
-            { tonumber(params.incident_id) })
+            { tonumber(byIncident) })
     else
         rows = MySQL.query.await('SELECT * FROM police_reports ORDER BY id DESC LIMIT 50')
     end
@@ -187,7 +211,10 @@ function P1.PayCitation(source, citationId)
         end)
         return false, 'insufficient_funds'
     end
-    audit(actor.citizenid, 'citation.pay', tostring(id), ('$%d'):format(amount))
+    if not audit(actor.citizenid, 'citation.pay', tostring(id), ('$%d'):format(amount)) then
+        -- The money already moved; a missing audit row is logged, not rolled back.
+        print(('[custom-police] citation.pay audit failed for #%d'):format(id))
+    end
     return { id = id, amount = amount, status = 'paid' }
 end
 

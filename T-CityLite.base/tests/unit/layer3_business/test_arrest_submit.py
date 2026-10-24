@@ -723,7 +723,7 @@ def imprison_block() -> str:
 
 def prison_player_loaded_block() -> str:
     src = read(JUSTICE / "server/prison.lua")
-    start = src.index("RegisterNetEvent('QBCore:Server:PlayerLoaded'")
+    start = src.index("AddEventHandler('QBCore:Server:PlayerLoaded'")
     end = src.index("-- 减刑请求", start)
     return src[start:end]
 
@@ -1250,7 +1250,7 @@ def test_set_unit_status_rejects_offline_non_offduty_writes():
 
 
 def test_on_job_update_preserves_busy_and_task_states():
-    block = p0_block("local function syncDuty(data)", "RegisterNetEvent('QBCore:Server:OnJobUpdate'")
+    block = p0_block("local function syncDuty(data)", "AddEventHandler('QBCore:Server:OnJobUpdate'")
     assert "if not isPolice(data) then" in block
     assert "takeUnitOffDuty(data.citizenid)" in block
     assert "upsertUnit(data.citizenid, callsign, 'off_duty')" in block
@@ -2044,3 +2044,63 @@ def test_npc_manifest_loads_shared_client_and_server_and_bumps_version():
     assert manifest.index("server/p0.lua") < manifest.index("server/p4_npc.lua")
     assert "version '1.6.0'" in manifest
     assert "version '1.5.0'" not in manifest
+
+
+# ---------------------------------------------------------------------------
+# FIT-05: a failed audit write must never release a sensitive read
+# ---------------------------------------------------------------------------
+# The full rule lives in tests/architecture/test_audit_fail_closed.py (FIT-05).
+# These assertions repeat the two cheapest parts here so the regression is also
+# caught by the CI job that runs tests/unit today.
+
+def _police_function_block(src: str, start_marker: str) -> str:
+    start = src.index(start_marker)
+    ends = [
+        position
+        for position in (
+            src.find("\nfunction ", start + len(start_marker)),
+            src.find("\nlocal function ", start + len(start_marker)),
+            src.find("\nRegisterNetEvent", start + len(start_marker)),
+            src.find("\nexports(", start + len(start_marker)),
+        )
+        if position != -1
+    ]
+    return src[start:min(ends) if ends else len(src)]
+
+
+def test_fit05_no_audit_call_discards_its_result():
+    import re as _re
+
+    discarded = []
+    for path in sorted((POLICE / "server").glob("*.lua")):
+        for number, line in enumerate(read(path).splitlines(), start=1):
+            if _re.match(r"^\s*(?:audit|auditPlayer)\s*\(", line):
+                discarded.append(f"{path.name}:{number} {line.strip()}")
+    assert discarded == [], (
+        "audit() result ignored — a DB hiccup would silently lose the forensic "
+        "row. Use `if not audit(...) then return false, 'audit_unavailable' end` "
+        "for sensitive reads, or `if not audit(...) then print(...) end` for "
+        "best-effort writes:\n  " + "\n  ".join(discarded)
+    )
+
+
+def test_fit05_citation_report_and_audit_reads_fail_closed_before_the_query():
+    p1 = p1_src()
+    for name, action in (("GetCitations", "citation.view"), ("GetReports", "report.view")):
+        block = _police_function_block(p1, f"function P1.{name}(")
+        assert f"audit(actor.citizenid, '{action}'" in block, (
+            f"{name} must write a {action} audit row"
+        )
+        assert block.index("audit(") < block.index("MySQL."), (
+            f"{name} must audit before the query"
+        )
+        assert "return false, 'audit_unavailable'" in block, (
+            f"{name} must refuse the listing when the audit write fails"
+        )
+
+    audit_block = _police_function_block(read(POLICE / "server/p0.lua"), "function P.GetAudit(")
+    # Exactly one occurrence: the definition itself. A second one would be the
+    # self-audit recursing through GetAudit instead of the direct INSERT.
+    assert audit_block.count("GetAudit(") == 1, "P.GetAudit must not call itself (recursion)"
+    assert "audit(actor.citizenid, 'audit.view'" in audit_block
+    assert "return false, 'audit_unavailable'" in audit_block

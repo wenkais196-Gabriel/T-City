@@ -212,7 +212,9 @@ RegisterNetEvent('police:server:SeizeDriverLicense', function(playerId)
     if #(playerCoords - targetCoords) > 2.5 then return DropPlayer(src, 'Attempted exploit abuse') end
 
     local SearchedPlayer = QBCore.Functions.GetPlayer(playerId)
-    if not QBCore.Functions.GetPlayer(src) or not SearchedPlayer then return end
+    local Player = QBCore.Functions.GetPlayer(src)
+    -- 吊销驾照是警察强制措施：只有拿到 arrest.create（在勤 + grade≥1）的警官能做
+    if not Player or not SearchedPlayer or not PolicePolicy.Can(Player.PlayerData, 'arrest.create') then return end
 
     -- 🔄 委托给 custom-certificates 统一管理（含实体证件移除 + cert_status 同步）
     local success, msg = exports['custom-certificates']:RevokeLicense(playerId, 'driver')
@@ -233,7 +235,9 @@ RegisterNetEvent('police:server:RobPlayer', function(playerId)
 
     local Player = QBCore.Functions.GetPlayer(src)
     local SearchedPlayer = QBCore.Functions.GetPlayer(playerId)
-    if not Player or not SearchedPlayer then return end
+    -- 搜身取现是警察动作。此前只校验了 2.5m 距离，任何玩家都能掏空身边玩家
+    -- 的现金；现在要求 arrest.create（在勤 + grade≥1）。
+    if not Player or not SearchedPlayer or not PolicePolicy.Can(Player.PlayerData, 'arrest.create') then return end
 
     local money = SearchedPlayer.PlayerData.money['cash']
     Player.Functions.AddMoney('cash', money, 'police-player-robbed')

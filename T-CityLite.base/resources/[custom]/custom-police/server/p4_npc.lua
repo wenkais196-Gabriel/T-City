@@ -131,7 +131,9 @@ function NPC.CreateNpcCallout(templateId, officerSrc)
     if not id or id == 0 then return false, 'db_error' end
     id = tonumber(id)
 
-    audit(actorCid, 'npc.callout.create', tostring(id), template.id, actorKind)
+    if not audit(actorCid, 'npc.callout.create', tostring(id), template.id, actorKind) then
+        print(('[custom-police] npc.callout.create audit failed for #%s'):format(tostring(id)))
+    end
     notifyOfficers(template, location, coords)
 
     return {
@@ -231,7 +233,9 @@ function NPC.SubmitResult(source, incidentId, outcome, notes)
             player.Functions.AddMoney('bank', 500, 'npc_callout')
         end)
     end
-    audit(actor.citizenid, 'npc.callout.resolve', tostring(id), result, 'player')
+    if not audit(actor.citizenid, 'npc.callout.resolve', tostring(id), result, 'player') then
+        print(('[custom-police] npc.callout.resolve audit failed for #%s'):format(tostring(id)))
+    end
 
     broadcastEnd(id)
     -- broadcastEnd only reaches on-duty officers; the responder may have gone

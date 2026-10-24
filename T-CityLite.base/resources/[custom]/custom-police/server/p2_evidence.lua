@@ -60,7 +60,9 @@ function EV.Register(source, params)
     local number = exhibitNo(tonumber(id))
     MySQL.update.await('UPDATE police_evidence SET exhibit_no = ? WHERE id = ?', { number, id })
     chain(tonumber(id), 'collected', actor.citizenid, label)
-    audit(actor.citizenid, 'evidence.register', number, label)
+    if not audit(actor.citizenid, 'evidence.register', number, label) then
+        print(('[custom-police] evidence.register audit failed for %s'):format(tostring(number)))
+    end
     return { id = tonumber(id), exhibit_no = number, status = 'collected' }
 end
 
@@ -68,6 +70,10 @@ function EV.Get(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'evidence.view')
     if not allowed then return false, reason end
+    -- FIT-05: audit before the read; a failed audit refuses the listing.
+    if not audit(actor.citizenid, 'evidence.view', nil, params and tostring(params.incident_id or '') or '') then
+        return false, 'audit_unavailable'
+    end
     local rows
     if params and params.incident_id then
         rows = MySQL.query.await(
@@ -76,7 +82,6 @@ function EV.Get(source, params)
     else
         rows = MySQL.query.await('SELECT * FROM police_evidence ORDER BY id DESC LIMIT 50')
     end
-    audit(actor.citizenid, 'evidence.view', nil, params and tostring(params.incident_id or '') or '')
     return { rows = rows or {}, count = #(rows or {}) }
 end
 
@@ -86,10 +91,13 @@ function EV.GetChain(source, evidenceId)
     if not allowed then return false, reason end
     local id = tonumber(evidenceId)
     if not id then return false, 'invalid_evidence' end
+    -- FIT-05: the custody chain is evidence too; fail closed on audit.
+    if not audit(actor.citizenid, 'evidence.chain', tostring(id), nil) then
+        return false, 'audit_unavailable'
+    end
     local rows = MySQL.query.await(
         'SELECT action, actor_citizenid, note, created_at FROM police_evidence_chain WHERE evidence_id = ? ORDER BY id ASC LIMIT 100',
         { id })
-    audit(actor.citizenid, 'evidence.chain', tostring(id), nil)
     return { rows = rows or {}, count = #(rows or {}) }
 end
 

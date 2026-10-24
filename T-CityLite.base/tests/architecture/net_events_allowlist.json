@@ -1,0 +1,329 @@
+{
+  "$comment": "FIT-03 net-event allowlist — every RegisterNetEvent in custom-police/server and custom-phone/server that does NOT contain a unified auth token (PolicePolicy.Can / a verified auth helper) must be registered here. Checked by tests/architecture/test_net_event_auth.py. Adding a new net event without auth fails CI; the fix is to add PolicePolicy.Can(...) instead of another entry.",
+  "version": 1,
+  "rule": "FIT-03",
+  "categories": {
+    "already_checked": "handler does a manual permission check (job.type / PolicePolicy.IsPolice / onduty / item) that is NOT the capability table; the evidence field names it",
+    "civilian": "must stay reachable by non-police players; validated and/or rate limited inside the handler instead of capability-gated",
+    "session": "handler is bound to the caller's own session/ownership (own phone number, own job board row, own tracker, own backup request) — no cross-player write",
+    "diagnostic": "telemetry-only channel (server log); table-typed, whitelisted fields, rate limited per source",
+    "unchecked_debt": "known missing check, registered so it cannot silently grow; must be fixed or re-justified before expires"
+  },
+  "entries": [
+    {
+      "name": "evidence:server:UpdateStatus",
+      "file": "custom-police/server/evidence.lua",
+      "category": "civilian",
+      "reason": "玩家自己身上的状态列表（红手、火药味、醉酒…）由本人客户端上报，不能要求警察身份；服务端只接受 table 并重建白名单副本（键数 ≤13、text ≤64、time ≤3600）。",
+      "evidence": "evidence.lua:216 evidence:server:UpdateStatus — type/tonumber/长度校验后写 PlayerStatus[src]",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "evidence:server:CreateBloodDrop",
+      "file": "custom-police/server/evidence.lua",
+      "category": "civilian",
+      "reason": "流血掉落由受伤玩家自己的客户端上报（qb-ambulancejob/client/wounding.lua:212），限制为警察会直接让血迹证据消失；改为服务端用调用者自己的 citizenid/bloodtype 覆盖客户端值，且坐标必须距调用者 ped ≤25m。",
+      "evidence": "evidence.lua:239 CreateBloodDrop — dna := player.PlayerData.citizenid, coordsNearSource(src, coords), trackDrop 上限 500/TTL 1800s",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "evidence:server:CreateFingerDrop",
+      "file": "custom-police/server/evidence.lua",
+      "category": "civilian",
+      "reason": "指纹由案发现场的玩家客户端留下（qb-storerobbery / qb-houserobbery）。指纹值只取调用者自己的 metadata.fingerprint，坐标 ≤25m，表结构有上限，无法伪造他人身份。",
+      "evidence": "evidence.lua:259 CreateFingerDrop — fingerprint := player.PlayerData.metadata['fingerprint'], coordsNearSource, trackDrop",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "evidence:server:CreateCasing",
+      "file": "custom-police/server/evidence.lua",
+      "category": "civilian",
+      "reason": "弹壳由任何开枪的玩家产生（client/evidence.lua DropBulletCasing），限警察会让犯罪现场没有弹壳。weapon 必须是 number，serie 只从调用者自己的背包读，坐标 ≤25m，服务端表有上限。",
+      "evidence": "evidence.lua:330 CreateCasing — type(weapon)=='number', GetItemByName on the caller, coordsNearSource, trackDrop",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SearchPlayer",
+      "file": "custom-police/server/interactions.lua",
+      "category": "already_checked",
+      "reason": "搜身要求 job.type == 'leo' + 2.5m 距离；打开的是对方背包（qb-inventory 自身再做权限）。",
+      "evidence": "interactions.lua:9 SearchPlayer — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:CuffPlayer",
+      "file": "custom-police/server/interactions.lua",
+      "category": "already_checked",
+      "reason": "上铐需要 handcuffs 物品或 LEO 身份，并且双方距离 ≤2.5m（超距直接 DropPlayer）；这是平民也能用的 RP 动作，不能只限警察。",
+      "evidence": "interactions.lua:27 CuffPlayer — GetItemByName('handcuffs') or job.type == 'leo', #(coords) > 2.5 → DropPlayer",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:EscortPlayer",
+      "file": "custom-police/server/interactions.lua",
+      "category": "already_checked",
+      "reason": "押送要求 LEO/救护身份，或目标已被铐/倒地/濒死；距离 ≤2.5m。",
+      "evidence": "interactions.lua:42 EscortPlayer — job.type == 'leo' or job.name == 'ambulance' or target ishandcuffed/isdead/inlaststand",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:KidnapPlayer",
+      "file": "custom-police/server/interactions.lua",
+      "category": "civilian",
+      "reason": "绑架是罪犯玩法（qb-kidnapping 桥接），不能要求警察身份；服务端只做 2.5m 距离 + 目标必须已铐/倒地/濒死，且仅触发客户端拖拽动画，不移动物品或钱。",
+      "evidence": "interactions.lua:61 KidnapPlayer — 2.5m guard + metadata['ishandcuffed']/['isdead']/['inlaststand']",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SetPlayerOutVehicle",
+      "file": "custom-police/server/interactions.lua",
+      "category": "civilian",
+      "reason": "把被铐/倒地的目标从车里拉出来，是警察与绑架双方都会用的动作；要求目标 metadata 处于 ishandcuffed/isdead 且距离 ≤2.5m。",
+      "evidence": "interactions.lua:81 SetPlayerOutVehicle — metadata['ishandcuffed'] or metadata['isdead'] + 2.5m guard",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:PutPlayerInVehicle",
+      "file": "custom-police/server/interactions.lua",
+      "category": "civilian",
+      "reason": "把被铐/倒地目标放进车里，同上：只改客户端姿态，要求目标状态和 2.5m 距离。",
+      "evidence": "interactions.lua:99 PutPlayerInVehicle — metadata['ishandcuffed'] or metadata['isdead'] + 2.5m guard",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:BillPlayer",
+      "file": "custom-police/server/interactions.lua",
+      "category": "already_checked",
+      "reason": "开罚单要求 job.type == 'leo'，金额服务端夹在 1..50000，且距离 ≤2.5m。",
+      "evidence": "interactions.lua:117 BillPlayer — job.type ~= 'leo' → return, fineAmount clamp",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SeizeCash",
+      "file": "custom-police/server/interactions.lua",
+      "category": "already_checked",
+      "reason": "没收现金要求 job.type == 'leo' + 2.5m；现金经 RemoveMoney/AddItem 走框架接口。",
+      "evidence": "interactions.lua:187 SeizeCash — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-policejob:server:stash",
+      "file": "custom-police/server/main.lua",
+      "category": "already_checked",
+      "reason": "打开警察个人仓库要求 job.type == 'leo'；仓库名由服务端用 citizenid 拼接，客户端无法指定。",
+      "evidence": "main.lua:162 stash — PlayerData.job.type ~= 'leo' → return, stashName = 'policestash_' .. citizenId",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-policejob:server:trash",
+      "file": "custom-police/server/main.lua",
+      "category": "already_checked",
+      "reason": "打开警局垃圾桶要求 job.type == 'leo'。",
+      "evidence": "main.lua:172 trash — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-policejob:server:evidence",
+      "file": "custom-police/server/main.lua",
+      "category": "already_checked",
+      "reason": "打开证物柜要求 job.type == 'leo'（柜名仍由客户端给，但只对警察生效）。",
+      "evidence": "main.lua:183 evidence — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:policeAlert",
+      "file": "custom-police/server/main.lua",
+      "category": "civilian",
+      "reason": "平民报警入口：qb-drugs / qb-storerobbery / qb-houserobbery / custom-vehicles 的报警都调它，限警察会让这些玩法不再通知警察（旧代码的 LEO-only 判断其实是 bug）。现在：坐标只取服务端 ped、文本去控制字符并截 200 字符、每 source 15 秒 1 条。",
+      "evidence": "main.lua:198 policeAlert — sanitizeAlertText + POLICE_ALERT_COOLDOWN=15 + 全部收件人为在勤警察",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:UpdateCurrentCops",
+      "file": "custom-police/server/main.lua",
+      "category": "civilian",
+      "reason": "只广播“在勤警力数量”给全体客户端（police:SetCopCount），没有写操作、没有玩家数据；客户端刷新 HUD 时会调它，updatingCops 防重入。",
+      "evidence": "main.lua:270 UpdateCurrentCops — 只读 GetQBPlayers 计数 + updatingCops 重入保护",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SetHandcuffStatus",
+      "file": "custom-police/server/main.lua",
+      "category": "already_checked",
+      "reason": "true 分支是被铐玩家自己的客户端在 police:client:GetCuffed 里上报（必须允许平民），只写自己的 metadata；false（解铐）分支要求 LEO 或 EMS，并且 isHandcuffed 必须是 boolean。",
+      "evidence": "main.lua:284 SetHandcuffStatus — type(isHandcuffed) ~= 'boolean' → return; false 分支 job.type ~= 'leo' and job.name ~= 'ambulance' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SendTrackerLocation",
+      "file": "custom-police/server/main.lua",
+      "category": "session",
+      "reason": "只有 metadata.tracker == true 的人（电子脚镣佩戴者）能上报自己的位置；坐标经 sanitizeAlertCoords 清洗，requestId 必须是存在的服务器 id，不能拿它当任意广播目标。",
+      "evidence": "main.lua:348 SendTrackerLocation — metadata['tracker'] ~= true → return, sanitizeAlertCoords(coords), tonumber(requestId) + GetPlayer",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:spawnObject",
+      "file": "custom-police/server/objects.lua",
+      "category": "already_checked",
+      "reason": "生成警用道具（路障/钉刺带）要求 job.type == 'leo'；对象 id 由服务端生成。",
+      "evidence": "objects.lua:16 spawnObject — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:deleteObject",
+      "file": "custom-police/server/objects.lua",
+      "category": "already_checked",
+      "reason": "删除道具要求 job.type == 'leo'，且对象必须存在。",
+      "evidence": "objects.lua:27 deleteObject — job.type ~= 'leo' → return, Objects[objectId] check",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SyncSpikes",
+      "file": "custom-police/server/objects.lua",
+      "category": "already_checked",
+      "reason": "钉刺带同步要求 job.type == 'leo'。",
+      "evidence": "objects.lua:38 SyncSpikes — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-police:server:setStatus",
+      "file": "custom-police/server/p0.lua",
+      "category": "already_checked",
+      "reason": "只允许警察改自己的 10-x 状态；事件体先 isPolice(data)，随后 SetUnitStatusForSource 再查状态白名单、onduty 和 duty_failed。",
+      "evidence": "p0.lua:590 setStatus — isPolice(data) → P.SetUnitStatusForSource（内含 VALID_STATUS + onduty 校验）",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-police:server:911",
+      "file": "custom-police/server/p0.lua",
+      "category": "civilian",
+      "reason": "平民 911 必须对所有人开放；事件只接受 table + 在线玩家、每 source 5 秒 1 条，长度/priority 在 CreateIncident 里夹取。",
+      "evidence": "p0.lua:601 911 — type(payload) ~= 'table' → return, pd(src) check, CALL_911_COOLDOWN=5",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:backupEnded",
+      "file": "custom-police/server/p2_system.lua",
+      "category": "session",
+      "reason": "只释放调用者自己那条 backup 预留：requestId 必须存在于 backupUnits[caller citizenid]，别人的 requestId 不会命中。",
+      "evidence": "p2_system.lua:371 backupEnded — units[requestId] ~= true → return（units = backupUnits[cid]）",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "heli:server:spotlight",
+      "file": "custom-police/server/vehicle.lua",
+      "category": "unchecked_debt",
+      "reason": "警用直升机探照灯是纯视觉同步（TriggerClientEvent -1），不动钱/物品/状态；目前没有职业校验，任何客户端可切换全服探照灯。下一次摸 vehicle.lua 时补 PolicePolicy。",
+      "evidence": "vehicle.lua:32 spotlight — 仅 TriggerClientEvent('heli:client:spotlight', -1, serverID, state)",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:Impound",
+      "file": "custom-police/server/vehicle.lua",
+      "category": "already_checked",
+      "reason": "扣押/没收要求 job.type == 'leo' 且 onduty；非法调用写 custom-logs 安全日志后 return。",
+      "evidence": "vehicle.lua:37 Impound — job.type ~= 'leo' or not job.onduty → LogSecurity + return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:TakeOutImpound",
+      "file": "custom-police/server/vehicle.lua",
+      "category": "already_checked",
+      "reason": "取回扣押车要求 LEO + onduty + 距扣押点 ≤10m（超距 DropPlayer）。",
+      "evidence": "vehicle.lua:63 TakeOutImpound — job.type ~= 'leo' or not job.onduty → return; Config.Locations['impound'] 距离校验",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:FlaggedPlateTriggered",
+      "file": "custom-police/server/vehicle.lua",
+      "category": "unchecked_debt",
+      "reason": "ANPR 命中报警：客户端可伪造车牌/坐标给全体在勤警察发“被标记车辆”提示（骚扰/误导），但不动钱/物品。补 PolicePolicy.Can(actor,'incident.create') 前先登记。",
+      "evidence": "vehicle.lua:85 FlaggedPlateTriggered — 只遍历在勤警察发 police:client:policeAlert，调用方无鉴权",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:completeJob",
+      "file": "custom-phone/server/jobboard.lua",
+      "category": "session",
+      "reason": "只能完成自己接的单：job.status == 'taken' 且 job.taken_by == 调用者 citizenid；另外做 25m 服务端距离校验和原子 UPDATE 领取。",
+      "evidence": "jobboard.lua:198 completeJob — job.taken_by ~= citizenid → return, dist > 25.0 拦截, UPDATE ... WHERE taken_by = ?",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:markMessagesRead",
+      "file": "custom-phone/server/main.lua",
+      "category": "session",
+      "reason": "已读范围固定为调用者自己的号码：receiver_number = Player.PlayerData.charinfo.phone，SQL 也按该号码过滤。",
+      "evidence": "main.lua:529 markMessagesRead — WHERE sender_number = ? AND receiver_number = ? with my_number",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:storeNotification",
+      "file": "custom-phone/server/main.lua",
+      "category": "session",
+      "reason": "只写调用者自己的通知托盘（StoreNotification(source, ...) 内部 GetPlayer(source)），并丢弃 origin='server' 的回显以防存储回环。",
+      "evidence": "main.lua:686 storeNotification — GetPlayer(targetSrc=source)，title/content 截断、app_id 白名单",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:focusState",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "NUI 焦点调试通道，不涉及玩家数据；只接受 table、phase 必须在白名单、每 source 5 秒 1 条，且所有字段去控制字符后截断（防止伪造服务器日志）。",
+      "evidence": "main.lua:1412 focusState — FOCUS_PHASES whitelist + FOCUS_COOLDOWN=5 + diagField sanitize",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:clientError",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "NUI 报错上报，只有 message/stack 两个字段被读取，其余丢弃；每 source 10 秒 1 条，字段截断到 300/500 并去控制字符。",
+      "evidence": "main.lua:1432 clientError — CLIENT_ERROR_COOLDOWN=10 + diagField(data.message,300)/diagField(data.stack,500)",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-phone:server:sendNewMail",
+      "file": "custom-phone/server/qb_phone_compat.lua",
+      "category": "session",
+      "reason": "兼容层只把邮件写进调用者自己的托盘：ResolveSource(source) 解析玩家，DeliverToPlayer 再逐字段校验/截断，不按客户端给的 citizenid 选人。",
+      "evidence": "qb_phone_compat.lua:266 sendNewMail — ResolveSource(source) + Compat.DeliverToPlayer(Player, citizenid, mail)",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    }
+  ]
+}

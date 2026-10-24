@@ -118,7 +118,11 @@ function Sys.Jail(actorId, citizenid, minutes, reason)
     MySQL.insert.await([[
         INSERT INTO police_arrests (citizenid, officer_citizenid, charges) VALUES (?, ?, ?)
     ]], { target, ('agent:%s'):format(tostring(actorId):sub(1, 40)), text })
-    audit(actorId, 'arrest.register', target, ('%d min: %s'):format(mins, text))
+    if not audit(actorId, 'arrest.register', target, ('%d min: %s'):format(mins, text)) then
+        -- The arrest row is already written; the missing audit row is reported,
+        -- never silently dropped (FIT-05: best-effort writes must be logged).
+        print(('[custom-police] arrest.register audit failed for %s'):format(tostring(target)))
+    end
     return { citizenid = target, minutes = mins, status = 'jailed' }
 end
 
