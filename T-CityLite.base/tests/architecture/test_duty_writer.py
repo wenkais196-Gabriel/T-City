@@ -34,12 +34,13 @@ BASE = Path(__file__).resolve().parents[2]  # T-CityLite.base/
 RESOURCES = BASE / "resources"
 REGISTRY = Path(__file__).with_name("duty_writers_allowlist.json")
 
-SCAN_SPECS = (
-    ("[custom]/custom-police/server", "dir"),
-    ("[custom]/custom-main/server", "dir"),
-    ("[custom]/custom-director/server", "dir"),
-    ("[qb]/qb-core/server/player.lua", "file"),
-)
+SCAN_ROOT_GLOB = "*/*/server"
+# qb-core is framework vendor code (the task forbids editing it). QBCore:ToggleDuty
+# calls the primitive internally; its projection is covered by custom-police's
+# OnJobUpdate handler, so it is not a custom writer and not in the allowlist.
+FRAMEWORK_INTERNAL_FILES = {"qb-core/server/events.lua"}
+# Test-fixture / archived resources are not product writers.
+SKIP_RESOURCE_PREFIXES = ("custom-testing/",)
 CALL_RE = re.compile(r"\bSetJobDuty\s*\(")
 SERVICE_CALL_RE = re.compile(r"\bSetDutyForSource\s*\(")
 POLICE_GUARD_RE = re.compile(
@@ -192,15 +193,13 @@ def scan(root: Path = RESOURCES) -> tuple[list[Call], list[Violation]]:
     entries = {entry["file"]: entry for entry in registry["entries"]}
     calls: list[Call] = []
 
-    for rel, kind in SCAN_SPECS:
-        target = root / rel
-        paths = sorted(target.rglob("*.lua")) if kind == "dir" else [target]
-        for path in paths:
-            if not path.is_file():
+    for server_dir in sorted(item for item in root.glob(SCAN_ROOT_GLOB) if item.is_dir()):
+        for path in sorted(server_dir.rglob("*.lua")):
+            key = rel_key(path, root)
+            if key in FRAMEWORK_INTERNAL_FILES or key.startswith(SKIP_RESOURCE_PREFIXES):
                 continue
             text = path.read_text(encoding="utf-8")
             code = mask_lua(text, blank_strings=True)
-            key = rel_key(path, root)
             raw_lines = text.splitlines()
             for match in CALL_RE.finditer(code):
                 line = code.count("\n", 0, match.start()) + 1
@@ -348,11 +347,11 @@ def test_reverse_adding_setjobduty_inside_police_branch_fails(tmp_path: Path) ->
 def test_reverse_unregistered_file_fails(tmp_path: Path) -> None:
     root = write_fixture(
         tmp_path / "resources",
-        {"[custom]/custom-main/server/rogue.lua": "Player.Functions.SetJobDuty(true)\n"},
+        {"[custom]/custom-career/server/rogue.lua": "Player.Functions.SetJobDuty(true)\n"},
     )
     _, violations = scan(root)
     assert violations, "an unregistered writer file must fail"
-    assert violations[0].where == "custom-main/server/rogue.lua:1"
+    assert violations[0].where == "custom-career/server/rogue.lua:1"
     assert violations[0].reason == "unregistered_writer", format_violations(violations)
 
 
