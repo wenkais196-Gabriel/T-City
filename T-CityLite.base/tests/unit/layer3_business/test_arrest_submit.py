@@ -523,3 +523,147 @@ def test_pay_citation_keeps_status_so_get_my_citations_shows_paid():
     block = src[start:src.index("function P1.GetCitations(", start)]
     # status is part of the projection, so a paid row is observable afterwards.
     assert "status" in block
+
+
+# ---------------------------------------------------------------------------
+# P3: written report + optional evidence + BOLO tag on the report
+# ---------------------------------------------------------------------------
+
+def report_submit_block() -> str:
+    src = read(POLICE / "server/p2_system.lua")
+    start = src.index("function ReportSubmit(")
+    end = src.index("\nexports('CreateIncidentSystem'", start)
+    return src[start:end]
+
+
+def get_bolos_block() -> str:
+    src = read(POLICE / "server/p3_cases.lua")
+    start = src.index("function C.GetBolos(")
+    end = src.index("function C.ClearBolo(", start)
+    return src[start:end]
+
+
+def test_report_submit_is_exported_and_gated_by_report_create():
+    src = read(POLICE / "server/p2_system.lua")
+    block = report_submit_block()
+    assert "function ReportSubmit(source, params)" in src
+    assert "exports('ReportSubmit', ReportSubmit)" in src
+    assert "PolicePolicy.Can(actor, 'report.create')" in block
+    assert "if not allowed then return fail(reason or 'forbidden') end" in block
+    assert "if type(params) ~= 'table' then return fail('invalid_params') end" in block
+
+
+def test_report_submit_validates_title_body_and_existing_links():
+    block = report_submit_block()
+    assert "local title = utf8Sub(trim(params.title), 160)" in block
+    assert "if #title < 3 then return fail('invalid_title') end" in block
+    assert "local body = utf8Sub(trim(params.body), 4000)" in block
+    assert "if #body < 10 then return fail('invalid_body') end" in block
+
+    # Optional subject and context columns, both UTF-8 truncated.
+    assert "local subject = trim(params.citizenid)" in block
+    assert "subject = utf8Sub(subject, 50)" in block
+    assert "utf8Sub(trim(params.location), 120)" in block
+
+    assert "if params.incident_id ~= nil and not incidentId then return fail('invalid_incident') end" in block
+    assert "SELECT id FROM police_incidents WHERE id = ? LIMIT 1" in block
+    assert "if not incident then return fail('incident_not_found') end" in block
+
+    assert "if params.case_id ~= nil and not caseId then return fail('invalid_case') end" in block
+    assert "SELECT id FROM police_cases WHERE id = ? LIMIT 1" in block
+    assert "if not caseRow then return fail('case_not_found') end" in block
+
+
+def test_report_submit_bolo_tag_requires_bolo_create_and_rides_on_the_report():
+    block = report_submit_block()
+    assert "local bolo = params.bolo == true" in block
+    assert "local canBolo = PolicePolicy.Can(actor, 'bolo.create')" in block
+    assert "if not canBolo then return fail('bolo_forbidden') end" in block
+    assert "if boloKind ~= 'person' and boloKind ~= 'vehicle' then return fail('invalid_bolo_kind') end" in block
+    assert "if boloTarget == '' then return fail('invalid_bolo_target') end" in block
+
+    assert "INSERT INTO police_reports" in block
+    assert "(kind, incident_id, case_id, subject_citizenid, author_citizenid, title, body," in block
+    assert "location, officer_citizenid, is_bolo, bolo_kind, bolo_target)" in block
+    assert "VALUES ('report', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" in block
+    assert "bolo and 1 or 0" in block
+
+
+def test_report_submit_writes_evidence_with_report_link_and_first_chain_entry():
+    block = report_submit_block()
+    assert "local createEvidence = params.evidence == true" in block
+    assert "utf8Sub(trim(params.evidence_label), 120)" in block
+    assert "utf8Sub(trim(params.evidence_description), 1000)" in block
+    assert "invalid_evidence_label" in block
+
+    assert "INSERT INTO police_evidence" in block
+    evidence_insert = block[block.index("INSERT INTO police_evidence"):]
+    assert (
+        "(exhibit_no, report_id, case_id, incident_id, label, description, location, collected_by)"
+        in evidence_insert
+    )
+    assert "VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)" in evidence_insert
+    assert "EX-%06d" in block
+
+    assert "INSERT INTO police_evidence_chain" in block
+    assert "'collected'" in block
+
+
+def test_report_submit_rolls_the_report_back_when_a_child_write_fails():
+    block = report_submit_block()
+    assert "DELETE FROM police_evidence_chain WHERE evidence_id = ?" in block
+    assert "DELETE FROM police_evidence WHERE id = ?" in block
+    assert "DELETE FROM police_reports WHERE id = ?" in block
+    assert "rollback()" in block
+    # The report is inserted before its evidence, so a child failure can delete it.
+    assert block.index("INSERT INTO police_reports") < block.index("INSERT INTO police_evidence")
+
+
+def test_report_submit_audits_report_evidence_and_bolo():
+    block = report_submit_block()
+    assert "auditPlayer(actor.citizenid, 'report.create', tostring(reportId), title)" in block
+    assert "auditPlayer(actor.citizenid, 'evidence.register', exhibitNo, evidenceLabel)" in block
+    assert "auditPlayer(actor.citizenid, 'bolo.create', boloTarget, boloKind .. ':' .. boloReason)" in block
+    assert "if not auditsOk then" in block
+    assert "return fail('audit_unavailable')" in block
+
+    # Success shape stays table-based, like ArrestSubmit.
+    assert "return { ok = true, report_id = reportId, evidence_id = evidenceId, bolo = bolo }" in block
+
+
+def test_report_submit_utf8_truncates_all_user_text():
+    block = report_submit_block()
+    for call in (
+        "utf8Sub(trim(params.title), 160)",
+        "utf8Sub(trim(params.body), 4000)",
+        "utf8Sub(trim(params.location), 120)",
+        "utf8Sub(trim(params.evidence_label), 120)",
+        "utf8Sub(trim(params.evidence_description), 1000)",
+        "utf8Sub(trim(params.bolo_target), 50)",
+        "utf8Sub(trim(params.bolo_reason), 500)",
+    ):
+        assert call in block, call
+    assert "trim(params.title):sub(" not in block
+    assert "trim(params.body):sub(" not in block
+
+
+def test_get_bolos_merges_report_tagged_bolos_with_the_legacy_table():
+    block = get_bolos_block()
+    assert "PolicePolicy.Can(actor, 'bolo.view')" in block
+
+    # Report-side BOLOs: same read shape as police_bolos, tagged by source.
+    assert "bolo_kind AS kind" in block
+    assert "bolo_target AS target" in block
+    assert "SUBSTRING(title, 1, 160) AS reason" in block
+    assert "'report' AS source" in block
+    assert "WHERE is_bolo=1 AND kind IN ('report','arrest')" in block
+    assert "ORDER BY id DESC LIMIT 50" in block
+
+    # Legacy table is still read and merged in Lua, not dropped.
+    assert "FROM police_bolos WHERE status = 'active' ORDER BY id DESC LIMIT 50" in block
+    assert "row.source = 'legacy'" in block
+    assert "table.sort" in block
+    assert "#rows > 50" in block
+
+    assert "return { rows = rows, count = #rows }" in block
+    assert "audit(actor.citizenid, 'bolo.view', nil, nil)" in block

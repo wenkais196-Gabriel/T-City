@@ -92,8 +92,34 @@ function C.GetBolos(source)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'bolo.view')
     if not allowed then return false, reason end
-    local rows = MySQL.query.await(
+    -- P3: BOLOs are tagged on reports; police_bolos is the legacy table. Read
+    -- both and merge here so old rows keep showing until they are cleared.
+    local reportRows = MySQL.query.await([[
+        SELECT id, bolo_kind AS kind, bolo_target AS target,
+               SUBSTRING(title, 1, 160) AS reason, created_at, 'report' AS source
+          FROM police_reports
+         WHERE is_bolo=1 AND kind IN ('report','arrest')
+         ORDER BY id DESC LIMIT 50
+    ]]) or {}
+    local legacyRows = MySQL.query.await(
         "SELECT * FROM police_bolos WHERE status = 'active' ORDER BY id DESC LIMIT 50") or {}
+    local rows = {}
+    for _, row in ipairs(reportRows) do rows[#rows + 1] = row end
+    for _, row in ipairs(legacyRows) do
+        row.source = 'legacy'
+        rows[#rows + 1] = row
+    end
+    table.sort(rows, function(a, b)
+        local at = tostring(a.created_at or '')
+        local bt = tostring(b.created_at or '')
+        if at ~= bt then return at > bt end
+        return (tonumber(a.id) or 0) > (tonumber(b.id) or 0)
+    end)
+    if #rows > 50 then
+        local kept = {}
+        for i = 1, 50 do kept[i] = rows[i] end
+        rows = kept
+    end
     audit(actor.citizenid, 'bolo.view', nil, nil)
     return { rows = rows, count = #rows }
 end

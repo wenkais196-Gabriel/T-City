@@ -507,10 +507,146 @@ function ArrestSubmit(source, params)
     return result
 end
 
+--- Submit a written report (P3): body + optional evidence + optional BOLO tag.
+--- The report is the anchor row: evidence/BOLO preconditions are validated
+--- before the insert where possible, but any failure after the insert rolls the
+--- report (and its evidence) back. The bundled oxmysql has no transaction
+--- export (see the note above ArrestSubmit), hence the compensating deletes.
+---@param source number
+---@param params table
+---@return table { ok=true, report_id, evidence_id?, bolo=boolean } | { ok=false, error }
+function ReportSubmit(source, params)
+    local actorPlayer = QBCore.Functions.GetPlayer(tonumber(source) or 0)
+    local actor = actorPlayer and actorPlayer.PlayerData
+    local allowed, reason = PolicePolicy.Can(actor, 'report.create')
+    if not allowed then return fail(reason or 'forbidden') end
+    if type(params) ~= 'table' then return fail('invalid_params') end
+
+    local title = utf8Sub(trim(params.title), 160)
+    if #title < 3 then return fail('invalid_title') end
+    local body = utf8Sub(trim(params.body), 4000)
+    if #body < 10 then return fail('invalid_body') end
+
+    local subject = trim(params.citizenid)
+    if subject ~= '' then subject = utf8Sub(subject, 50) else subject = nil end
+
+    local incidentId = tonumber(params.incident_id)
+    if params.incident_id ~= nil and not incidentId then return fail('invalid_incident') end
+    if incidentId then
+        local incident = MySQL.single.await(
+            'SELECT id FROM police_incidents WHERE id = ? LIMIT 1', { incidentId })
+        if not incident then return fail('incident_not_found') end
+    end
+
+    local caseId = tonumber(params.case_id)
+    if params.case_id ~= nil and not caseId then return fail('invalid_case') end
+    if caseId then
+        local caseRow = MySQL.single.await(
+            'SELECT id FROM police_cases WHERE id = ? LIMIT 1', { caseId })
+        if not caseRow then return fail('case_not_found') end
+    end
+
+    local location = utf8Sub(trim(params.location), 120)
+    if location == '' then location = nil end
+
+    local createEvidence = params.evidence == true
+    local evidenceLabel = utf8Sub(trim(params.evidence_label), 120)
+    if createEvidence and params.evidence_label ~= nil and #evidenceLabel < 3 then
+        return fail('invalid_evidence_label')
+    end
+    if createEvidence and evidenceLabel == '' then
+        evidenceLabel = utf8Sub(('报告证据：%s'):format(title), 120)
+    end
+    local evidenceDescription = utf8Sub(trim(params.evidence_description), 1000)
+    if createEvidence and evidenceDescription == '' then evidenceDescription = body end
+
+    local bolo = params.bolo == true
+    local boloKind, boloTarget, boloReason
+    if bolo then
+        -- Tagging a BOLO is a higher rank than filing the report itself.
+        local canBolo = PolicePolicy.Can(actor, 'bolo.create')
+        if not canBolo then return fail('bolo_forbidden') end
+        boloKind = trim(params.bolo_kind)
+        if boloKind == '' then boloKind = 'person' end
+        if boloKind ~= 'person' and boloKind ~= 'vehicle' then return fail('invalid_bolo_kind') end
+        boloTarget = utf8Sub(trim(params.bolo_target), 50)
+        if boloTarget == '' and boloKind == 'person' and subject then boloTarget = subject end
+        if boloTarget == '' then return fail('invalid_bolo_target') end
+        boloReason = utf8Sub(trim(params.bolo_reason), 500)
+        if boloReason == '' then boloReason = title end
+    end
+
+    local reportId = insertRow([[
+        INSERT INTO police_reports
+            (kind, incident_id, case_id, subject_citizenid, author_citizenid, title, body,
+             location, officer_citizenid, is_bolo, bolo_kind, bolo_target)
+        VALUES ('report', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ]], { incidentId, caseId, subject, actor.citizenid, title, body, location,
+          actor.citizenid, bolo and 1 or 0, boloKind, boloTarget })
+    if not reportId then return fail('db_error') end
+
+    local evidenceId, exhibitNo
+    local function rollback()
+        if evidenceId then
+            pcall(function()
+                MySQL.update.await(
+                    'DELETE FROM police_evidence_chain WHERE evidence_id = ?', { evidenceId })
+                MySQL.update.await('DELETE FROM police_evidence WHERE id = ?', { evidenceId })
+            end)
+        end
+        pcall(function()
+            MySQL.update.await('DELETE FROM police_reports WHERE id = ?', { reportId })
+        end)
+    end
+
+    if createEvidence then
+        evidenceId = insertRow([[
+            INSERT INTO police_evidence
+                (exhibit_no, report_id, case_id, incident_id, label, description, location, collected_by)
+            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
+        ]], { reportId, caseId, incidentId, evidenceLabel, evidenceDescription, location,
+              actor.citizenid })
+        if not evidenceId then
+            rollback()
+            return fail('db_error')
+        end
+        exhibitNo = ('EX-%06d'):format(evidenceId)
+        local marked = updateRow(
+            'UPDATE police_evidence SET exhibit_no = ? WHERE id = ?', { exhibitNo, evidenceId })
+        local chained = marked and pcall(function()
+            MySQL.insert.await(
+                'INSERT INTO police_evidence_chain (evidence_id, action, actor_citizenid, note) VALUES (?, ?, ?, ?)',
+                { evidenceId, 'collected', actor.citizenid, evidenceLabel })
+        end)
+        if not chained then
+            rollback()
+            return fail('db_error')
+        end
+    end
+
+    local auditsOk = true
+    if not auditPlayer(actor.citizenid, 'report.create', tostring(reportId), title) then
+        auditsOk = false
+    end
+    if evidenceId and not auditPlayer(actor.citizenid, 'evidence.register', exhibitNo, evidenceLabel) then
+        auditsOk = false
+    end
+    if bolo and not auditPlayer(actor.citizenid, 'bolo.create', boloTarget, boloKind .. ':' .. boloReason) then
+        auditsOk = false
+    end
+    if not auditsOk then
+        rollback()
+        return fail('audit_unavailable')
+    end
+
+    return { ok = true, report_id = reportId, evidence_id = evidenceId, bolo = bolo }
+end
+
 exports('CreateIncidentSystem', Sys.CreateIncident)
 exports('AssignUnitSystem', Sys.AssignUnit)
 exports('JailSystem', Sys.Jail)
 exports('ArrestSubmit', ArrestSubmit)
+exports('ReportSubmit', ReportSubmit)
 exports('GetCharges', function()
     local charges = {}
     for i, charge in ipairs(PoliceCharges.List()) do

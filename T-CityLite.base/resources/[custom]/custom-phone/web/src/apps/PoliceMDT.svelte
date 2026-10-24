@@ -26,7 +26,15 @@
   let reportRows = $state<Record<string, unknown>[]>([]);
   let citationError = $state('');
   let citationForm = $state({ citizenid: '', amount: '500', reason: '', plate: '' });
-  let reportForm = $state({ title: '', incident_id: '', body: '' });
+  let reportForm = $state({ title: '', incident_id: '', case_id: '', citizenid: '', location: '', body: '' });
+  let reportOpts = $state({
+    evidence: false, evidence_label: '', evidence_description: '',
+    bolo: false, bolo_kind: 'person', bolo_target: '', bolo_reason: '',
+  });
+  let reportSubmitting = $state(false);
+  let reportError = $state('');
+  let reportListError = $state('');
+  let reportResult = $state<any>(null);
   let evidenceRows = $state<Record<string, unknown>[]>([]);
   let evidenceForm = $state({ label: '', description: '', incident_id: '', location: '' });
   let caseRows = $state<Record<string, unknown>[]>([]);
@@ -144,20 +152,93 @@
   }
 
   async function loadReports() {
+    reportListError = '';
     const res = await queryApp('police_mdt', 'reports', {});
     if (res?.success) reportRows = res.data?.rows ?? [];
-    else citationError = res?.error ?? 'report_view_denied';
+    else reportListError = reportErrorFor(res?.error ?? 'report_view_denied');
+  }
+
+  function reportErrorFor(code: unknown): string {
+    const reasons: Record<string, string> = {
+      action_rejected: '服务端拒绝：请检查权限与参数',
+      action_failed: '服务端处理失败，请稍后重试',
+      app_forbidden: '无权限使用 MDT（需在勤警察）',
+      player_not_found: '角色尚未加载',
+      not_police: '仅限警察使用',
+      not_on_duty: '请先上班（10-8 在勤）',
+      rank_too_low: '职级不足',
+      bolo_forbidden: 'BOLO 需要 Sergeant+（警长及以上）',
+      case_not_found: '案件不存在',
+      incident_not_found: '警情不存在',
+      invalid_params: '参数无效',
+      invalid_incident: '警情 id 无效',
+      invalid_case: '案件 id 无效',
+      invalid_title: '标题至少 3 字（≤160 字）',
+      invalid_body: '正文至少 10 字（≤4000 字）',
+      invalid_evidence_label: '证据名称至少 3 字',
+      invalid_bolo_kind: 'BOLO 类型无效',
+      invalid_bolo_target: 'BOLO 目标不能为空',
+      db_error: '数据库错误，请重试',
+      audit_unavailable: '审计不可用，请稍后重试',
+      unavailable: '服务暂不可用，请稍后重试',
+    };
+    const key = String(code ?? '');
+    return reasons[key] ?? (key || '提交失败');
+  }
+
+  function applyReportIncident(incidentId: string) {
+    reportForm.incident_id = incidentId;
+    if (!incidentId || reportForm.location.trim()) return;
+    const incident = incidents.find((i) => String(i.id) === incidentId);
+    const coords = [incident?.x, incident?.y, incident?.z].map(Number);
+    if (coords.every((n) => Number.isFinite(n))) {
+      reportForm.location = coords.map((n) => n.toFixed(1)).join(', ');
+    }
   }
 
   async function createReport() {
-    const res = await appAction('police_mdt', 'create_report', {
-      title: reportForm.title.trim(),
-      body: reportForm.body.trim(),
+    reportError = '';
+    reportResult = null;
+    const title = reportForm.title.trim();
+    const body = reportForm.body.trim();
+    if (!title) { reportError = '请填写标题'; return; }
+    if (title.length < 3) { reportError = '标题至少 3 字'; return; }
+    if (body.length < 10) { reportError = '正文至少 10 字'; return; }
+    if (reportOpts.evidence && reportOpts.evidence_label.trim().length < 3) {
+      reportError = '证据名称至少 3 字'; return;
+    }
+    if (reportOpts.bolo && !reportOpts.bolo_target.trim()) {
+      reportError = 'BOLO 目标不能为空'; return;
+    }
+    reportSubmitting = true;
+    const res = await appAction('police_mdt', 'report_submit', {
+      title,
+      body,
+      citizenid: reportForm.citizenid.trim() || undefined,
       incident_id: reportForm.incident_id ? Number(reportForm.incident_id) : undefined,
+      case_id: reportForm.case_id ? Number(reportForm.case_id) : undefined,
+      location: reportForm.location.trim() || undefined,
+      evidence: reportOpts.evidence,
+      evidence_label: reportOpts.evidence ? reportOpts.evidence_label.trim() : undefined,
+      evidence_description: reportOpts.evidence ? reportOpts.evidence_description.trim() : undefined,
+      bolo: reportOpts.bolo,
+      bolo_kind: reportOpts.bolo ? reportOpts.bolo_kind : undefined,
+      bolo_target: reportOpts.bolo ? reportOpts.bolo_target.trim() : undefined,
+      bolo_reason: reportOpts.bolo ? reportOpts.bolo_reason.trim() : undefined,
     });
-    notice = res?.success ? '报告已提交' : `提交失败：${res?.error ?? 'unknown'}`;
-    if (res?.success) { reportForm.title = ''; reportForm.body = ''; }
-    await loadReports();
+    reportSubmitting = false;
+    if (!res?.success) {
+      reportError = reportErrorFor(res?.error);
+      return;
+    }
+    reportResult = res.data ?? {};
+    notice = `报告 #${reportResult.report_id ?? '—'}`;
+    reportForm = { title: '', incident_id: '', case_id: '', citizenid: '', location: '', body: '' };
+    reportOpts = {
+      evidence: false, evidence_label: '', evidence_description: '',
+      bolo: false, bolo_kind: 'person', bolo_target: '', bolo_reason: '',
+    };
+    await Promise.all([loadReports(), loadBolos()]);
   }
 
   async function loadWarrants() {
@@ -452,7 +533,7 @@
       {/each}
     </section>
 
-  {:else}
+  {:else if tab === 'vehicle'}
     <section class="card">
       <h3>车辆查询</h3>
       <div class="lookup">
@@ -485,11 +566,66 @@
     <section class="card">
       <h3>提交报告</h3>
       <div class="form">
-        <input bind:value={reportForm.title} placeholder="标题" />
-        <input bind:value={reportForm.incident_id} placeholder="警情 id(可选)" />
-        <textarea bind:value={reportForm.body} rows="3" placeholder="报告正文（至少 10 字）"></textarea>
-        <button onclick={createReport}>提交</button>
+        <input bind:value={reportForm.title} placeholder="标题（必填）" />
+        <textarea class="wide" bind:value={reportForm.body} rows="4" placeholder="报告正文（必填，至少 10 字）"></textarea>
       </div>
+      <div class="form">
+        <select bind:value={reportForm.incident_id} onchange={(e) => applyReportIncident((e.currentTarget as HTMLSelectElement).value)}>
+          <option value="">关联警情（可选）</option>
+          {#each incidents as incident}
+            <option value={String(incident.id)}>#{incident.id} [{incident.code}] {incident.title}</option>
+          {/each}
+        </select>
+        <input bind:value={reportForm.case_id} placeholder="案件 id（可选）" />
+        <input bind:value={reportForm.citizenid} placeholder="对象 citizenid（可选）" />
+        <input bind:value={reportForm.location} placeholder="地点（可选）" />
+      </div>
+
+      <div class="opts">
+        <label class="opt">
+          <input type="checkbox" bind:checked={reportOpts.evidence} />
+          <span>附证据</span>
+        </label>
+        {#if reportOpts.evidence}
+          <div class="form">
+            <input bind:value={reportOpts.evidence_label} placeholder="证据名称（≥3 字）" />
+            <textarea class="wide" bind:value={reportOpts.evidence_description} rows="2" placeholder="证据描述（可选）"></textarea>
+          </div>
+        {/if}
+
+        <label class="opt">
+          <input type="checkbox" bind:checked={reportOpts.bolo} />
+          <span>标记 BOLO</span>
+        </label>
+        {#if reportOpts.bolo}
+          <p class="muted">BOLO 需要 Sergeant+ 权限，服务端最终裁定。</p>
+          <div class="opt-row">
+            <select bind:value={reportOpts.bolo_kind}>
+              <option value="person">人员</option>
+              <option value="vehicle">车辆</option>
+            </select>
+            <input bind:value={reportOpts.bolo_target} placeholder="citizenid / 车牌" />
+          </div>
+          <div class="opt-row">
+            <input bind:value={reportOpts.bolo_reason} placeholder="BOLO 原因（可选）" />
+          </div>
+        {/if}
+      </div>
+      <p class="muted">证据 / BOLO 也可在此随报告一并附上，无需切换旧 tab。</p>
+
+      <button class="submit" onclick={createReport} disabled={reportSubmitting}>
+        {reportSubmitting ? '提交中…' : '提交报告'}
+      </button>
+      {#if reportError}<p class="err">提交失败：{reportError}</p>{/if}
+      {#if reportResult}
+        <p class="notice">
+          报告 #{reportResult.report_id}{#if reportResult.evidence_id} · 证据 #{reportResult.evidence_id}{/if}{#if reportResult.bolo} · BOLO 已发布{/if}
+        </p>
+      {/if}
+
+      <h3>最近报告</h3>
+      {#if reportListError}<p class="err">{reportListError}</p>{/if}
+      {#if reportRows.length === 0}<p class="empty">暂无报告</p>{/if}
       {#each reportRows as row}
         <p class="line">#{String(row.id)} · {String(row.title)} · {String(row.author_citizenid)}</p>
       {/each}
@@ -707,6 +843,7 @@
   .clear { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #b91c1c; color: #fff; }
   .lookup, .form { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   .form input, .form textarea, .form select { flex: 1 1 45%; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
+  .form textarea.wide { flex-basis: 100%; }
   .form button { border: 0; border-radius: 8px; padding: 6px 10px; background: #2563eb; color: #fff; font-size: 11px; }
   .charge-list { max-height: 200px; overflow-y: auto; margin-bottom: 6px; }
   .charge { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
