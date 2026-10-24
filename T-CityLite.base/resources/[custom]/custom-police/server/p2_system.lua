@@ -30,10 +30,13 @@ end
 
 local function audit(actorId, action, target, detail)
     local ok, err = pcall(function()
-        MySQL.insert.await(
+        local result = MySQL.insert.await(
             'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
             { ('agent:%s'):format(utf8Sub(tostring(actorId or 'unknown'), 40)), 'agent', action, target,
               detail and utf8Sub(tostring(detail), 500) or nil })
+        -- oxmysql returns the driver error as a string instead of throwing, so
+        -- a bare pcall would treat a failed insert as success.
+        if type(result) == 'string' then error(result, 0) end
     end)
     if not ok then print(('[custom-police] p2 audit failed %s: %s'):format(tostring(action), tostring(err))) end
     return ok
