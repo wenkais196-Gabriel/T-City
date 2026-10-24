@@ -23,6 +23,7 @@ LiveApi.VERSION = 1
 local LIVE_PREFIX = '/agent/v1/live/'
 local PLAYERS_PATH = '/agent/v1/live/players'
 local EVENTS_PATH = '/agent/v1/live/events'
+local POLICE_BOARD_PATH = '/agent/v1/live/police/board'
 
 local function convarString(name, default)
     if type(GetConvar) == 'function' then
@@ -476,6 +477,30 @@ function LiveApi._ResetRateLimit()
     liveBuckets = {}
 end
 
+-- GET /agent/v1/live/police/board — dispatch board without PII: callsign,
+-- department and status only for on-duty units; incident id/code/title/
+-- priority/status only. No citizenid, names, positions or narratives.
+local function handlePoliceBoard()
+    local units = MySQL.query.await([[
+        SELECT callsign, dept, status FROM police_units
+        WHERE status <> 'off_duty' AND status <> 'unavailable'
+        ORDER BY callsign ASC LIMIT 100
+    ]]) or {}
+    local incidents = MySQL.query.await([[
+        SELECT id, code, title, priority, status, created_at FROM police_incidents
+        WHERE status NOT IN ('closed') ORDER BY priority ASC, id DESC LIMIT 50
+    ]]) or {}
+    return {
+        status = 200,
+        body = {
+            schema_version = 1,
+            units = jsonArray(units),
+            incidents = jsonArray(incidents),
+            generated_at = os.time(),
+        },
+    }
+end
+
 function LiveApi.TryHandle(request, cfg)
     if type(request) ~= 'table' then return nil end
     local rawPath = tostring(request.path or '/')
@@ -502,6 +527,7 @@ function LiveApi.TryHandle(request, cfg)
     local path = parseQuery(request)
     if path == PLAYERS_PATH then return handlePlayers(request, live) end
     if path == EVENTS_PATH then return handleEvents(request) end
+    if path == POLICE_BOARD_PATH then return handlePoliceBoard() end
 
     local citizenid = path:match('^' .. PLAYERS_PATH .. '/([^/]+)$')
     if citizenid and citizenid ~= '' then
