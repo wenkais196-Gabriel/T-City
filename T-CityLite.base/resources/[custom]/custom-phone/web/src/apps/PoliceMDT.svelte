@@ -31,6 +31,8 @@
   let caseRows: Record<string, unknown>[] = [];
   let boloRows: Record<string, unknown>[] = [];
   let caseForm = { title: '', summary: '' };
+  let caseDetail: any = null;
+  let caseDetailError = '';
   let boloForm = { kind: 'person', target: '', reason: '' };
   let warrantRows: Record<string, unknown>[] = [];
   let arrestRows: Record<string, unknown>[] = [];
@@ -165,6 +167,14 @@
   async function loadCases() {
     const res = await queryApp('police_mdt', 'cases', {});
     if (res?.success) caseRows = res.data?.rows ?? [];
+  }
+
+  async function openCase(id: number) {
+    caseDetail = null;
+    caseDetailError = '';
+    const res = await queryApp('police_mdt', 'case_detail', { case_id: id });
+    if (res?.success && res.data?.rows?.length) caseDetail = res.data.rows[0];
+    else caseDetailError = res?.error ?? 'not_found';
   }
 
   async function createCase() {
@@ -402,8 +412,31 @@
         <button onclick={createCase}>建档</button>
       </div>
       {#each caseRows as row}
-        <p class="line"><b>{String(row.case_no ?? '')}</b> · {String(row.title)} <span class="muted">{String(row.status)}</span></p>
+        <div class="row">
+          <p class="line"><b>{String(row.case_no ?? '')}</b> · {String(row.title)} <span class="muted">{String(row.status)}</span></p>
+          <button class="step" onclick={() => openCase(Number(row.id))}>打开</button>
+        </div>
       {/each}
+      {#if caseDetailError}<p class="err">{caseDetailError}</p>{/if}
+      {#if caseDetail}
+        <div class="detail">
+          <div class="row">
+            <h3>{caseDetail.case.case_no} · {caseDetail.case.title}</h3>
+            <button class="refresh" onclick={() => (caseDetail = null)}>关闭</button>
+          </div>
+          <p class="muted">{caseDetail.case.summary}</p>
+          <p class="line">报告 {caseDetail.reports.length} · 证据 {caseDetail.evidence.length} · 逮捕 {caseDetail.arrests.length}</p>
+          {#each caseDetail.reports as r}
+            <p class="line">📄 #{String(r.id)} {String(r.title)}</p>
+          {/each}
+          {#each caseDetail.evidence as e}
+            <p class="line">🧾 {String(e.exhibit_no ?? '')} {String(e.label)}</p>
+          {/each}
+          {#each caseDetail.arrests as a}
+            <p class="line">🚔 {String(a.citizenid)} · {String(a.charges)}</p>
+          {/each}
+        </div>
+      {/if}
     </section>
 
   {:else if tab === 'bolos'}
@@ -497,6 +530,7 @@
   .assign-row { display: flex; gap: 6px; margin-top: 6px; }
   .assign-row select, .lookup input { flex: 1; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
   .assign-row button, .lookup button { font-size: 11px; border: 0; border-radius: 8px; padding: 6px 10px; background: #2563eb; color: #fff; }
+  .detail { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.15); }
   .actions { display: flex; gap: 4px; }
   .step { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #f59e0b; color: #111; }
   .clear { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #b91c1c; color: #fff; }

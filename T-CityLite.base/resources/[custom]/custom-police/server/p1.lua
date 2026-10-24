@@ -81,9 +81,14 @@ function P1.CreateReport(source, params)
     local body = trim(params and params.body):sub(1, 4000)
     if #title < 3 then return false, 'invalid_title' end
     if #body < 10 then return false, 'invalid_body' end
+    local caseId = tonumber(params and params.case_id)
+    if caseId then
+        local caseRow = MySQL.single.await('SELECT id FROM police_cases WHERE id = ? LIMIT 1', { caseId })
+        if not caseRow then return false, 'case_not_found' end
+    end
     local id = MySQL.insert.await(
-        'INSERT INTO police_reports (incident_id, author_citizenid, title, body) VALUES (?, ?, ?, ?)',
-        { tonumber(params and params.incident_id), actor.citizenid, title, body })
+        'INSERT INTO police_reports (incident_id, case_id, author_citizenid, title, body) VALUES (?, ?, ?, ?, ?)',
+        { tonumber(params and params.incident_id), caseId, actor.citizenid, title, body })
     if not id then return false, 'db_error' end
     audit(actor.citizenid, 'report.create', tostring(id), title)
     return { id = tonumber(id), status = 'submitted' }
@@ -94,7 +99,11 @@ function P1.GetReports(source, params)
     local allowed, reason = PolicePolicy.Can(actor, 'report.view')
     if not allowed then return false, reason end
     local rows
-    if params and params.incident_id then
+    if params and params.case_id then
+        rows = MySQL.query.await(
+            'SELECT * FROM police_reports WHERE case_id = ? ORDER BY id DESC LIMIT 50',
+            { tonumber(params.case_id) })
+    elseif params and params.incident_id then
         rows = MySQL.query.await(
             'SELECT * FROM police_reports WHERE incident_id = ? ORDER BY id DESC LIMIT 50',
             { tonumber(params.incident_id) })

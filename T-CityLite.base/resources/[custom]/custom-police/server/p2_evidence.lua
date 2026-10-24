@@ -40,15 +40,20 @@ function EV.Register(source, params)
     local description = trim(params and params.description):sub(1, 1000)
     local incidentId = tonumber(params and params.incident_id)
     local reportId = tonumber(params and params.report_id)
-    if not incidentId and not reportId then return false, 'missing_case' end
+    local caseId = tonumber(params and params.case_id)
+    if not incidentId and not reportId and not caseId then return false, 'missing_case' end
+    if caseId then
+        local caseRow = MySQL.single.await('SELECT id FROM police_cases WHERE id = ? LIMIT 1', { caseId })
+        if not caseRow then return false, 'case_not_found' end
+    end
     if incidentId then
         local inc = MySQL.single.await('SELECT id FROM police_incidents WHERE id = ? LIMIT 1', { incidentId })
         if not inc then return false, 'incident_not_found' end
     end
     local id = MySQL.insert.await([[
-        INSERT INTO police_evidence (exhibit_no, incident_id, report_id, label, description, location, collected_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ]], { nil, incidentId, reportId, label, description,
+        INSERT INTO police_evidence (exhibit_no, incident_id, report_id, case_id, label, description, location, collected_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ]], { nil, incidentId, reportId, caseId, label, description,
           trim(params and params.location):sub(1, 120), actor.citizenid })
     if not id then return false, 'db_error' end
     local number = exhibitNo(tonumber(id))
