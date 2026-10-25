@@ -138,7 +138,6 @@ CONVAR_CALLERS = [
     "resources/[custom]/custom-economy/config.lua",
     "resources/[custom]/custom-main/config/config.lua",
     "resources/[custom]/custom-crime/server/crime.lua",
-    "resources/[custom]/custom-main/server/crime.lua",
     "resources/[custom]/custom-director/server/main.lua",
     "resources/[custom]/custom-director/server/director.lua",
     "resources/[custom]/custom-director/server/live_api.lua",

@@ -37,17 +37,6 @@
       "expires": "2027-03-31"
     },
     {
-      "id": "vehicles-dead-dashboard-client",
-      "check": "dead_nui_client_file",
-      "resource": "custom-vehicles",
-      "file": "client/dashboard.lua",
-      "name": "",
-      "owner": "custom-vehicles",
-      "reason": "fxmanifest 已注释掉 client/dashboard.lua（迁移到 [system]/tcity-dashboard），但文件仍在：15 个 RegisterNUICallback 与 SetNuiFocus 永不注册，html/dashboard.{html,js,css} 成为孤儿。最危险的是有人把文件加回 manifest 时会出现两套中控屏（policeRadar/closeDashboard 与 tcity-dashboard 重名）。审计 Medium O-05，建议直接删除。",
-      "added": "2026-10-25",
-      "expires": "2027-03-31"
-    },
-    {
       "id": "story-origin-hardcoded",
       "check": "nui_origin_hardcoded",
       "resource": "story-engine",

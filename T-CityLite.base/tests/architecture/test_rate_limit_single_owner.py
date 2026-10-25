@@ -41,7 +41,6 @@ CALLERS = [
     RESOURCES / "[system]" / "tcity-dashboard" / "server" / "police_api.lua",
     RESOURCES / "[custom]" / "custom-vehicles" / "server" / "main.lua",
     RESOURCES / "[custom]" / "custom-security" / "server" / "security.lua",
-    RESOURCES / "[custom]" / "custom-main" / "server" / "security.lua",
     RESOURCES / "[custom]" / "custom-vehicles" / "server" / "dashboard_api.lua",
 ]
 

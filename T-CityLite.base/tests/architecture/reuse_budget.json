@@ -3,7 +3,7 @@
   "min_count": 4,
   "budgets": {
     "DebugPrint": {
-      "max": 14,
+      "max": 11,
       "reason": "同名不同语义：各自带本资源的调试开关与前缀，合并会改变行为——有意重复"
     },
     "loadModel": {
