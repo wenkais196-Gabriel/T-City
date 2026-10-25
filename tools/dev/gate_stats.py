@@ -340,4 +340,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except BrokenPipeError:          # `| head` 之类的下游提前关闭管道
+        raise SystemExit(0)
