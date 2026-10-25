@@ -325,7 +325,7 @@ docs/
 
 | 文件 | 说明 |
 |:---|:---|
-| `T-CityLite.base/server.cfg` | 主配置文件 |
+| T-CityLite.base/server.cfg（不入库，含凭据；从 server.cfg.template 复制） | 主配置文件 |
 | `T-CityLite.base/configs/modules/*.cfg` | 16 个模块配置 |
 | `T-CityLite.base/resources/[qb]/qb-core/` | QBCore 框架 |
 | `T-CityLite.base/resources/[standalone]/core-framework/` | 核心服务框架 |
