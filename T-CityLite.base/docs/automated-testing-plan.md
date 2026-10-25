@@ -32,8 +32,8 @@
 | `docs/v0.2-wanted-handover-test-guide.md` | 手动测试指南 | ✅ 已存在 | 警星移交 7 深度用例 |
 | `docs/v0.3-test-manual.md` | 手动测试验收手册 | ✅ 已存在 | 267 行，基础设施层详细用例 |
 | `docs/v0.3-test-checklist.md` | 手动测试清单 | ✅ 已存在 | v0.3 模块清单 |
-| `logs/v0.1-startup-test.md` | 测试报告 | ✅ 已记录 | 9 项玩家流程检查 PASS |
-| `logs/v0.2-status-persistence-test-report.md` | 测试报告 | ✅ 已记录 | 5 用例全部 PASS |
+| logs/v0.1-startup-test.md（报告未入库） | 测试报告 | ✅ 已记录 | 9 项玩家流程检查 PASS |
+| logs/v0.2-status-persistence-test-report.md（报告未入库） | 测试报告 | ✅ 已记录 | 5 用例全部 PASS |
 
 ### 关键结论
 

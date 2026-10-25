@@ -2,13 +2,13 @@
 
 ## 变更概述
 
-移除 `qb-phone/server/main.lua` 中的 `escape_sqli` 手动转义函数，将 `FetchResult` 和 `GetVehicleSearchResults` 的查询构建改为全参数化查询模式。消除字符串拼接引入的 SQL 注入风险。
+移除 `T-CityLite.base/resources/[compat]/qb-phone/server/main.lua` 中的 `escape_sqli` 手动转义函数，将 `FetchResult` 和 `GetVehicleSearchResults` 的查询构建改为全参数化查询模式。消除字符串拼接引入的 SQL 注入风险。
 
 ## 变更文件
 
 | 文件 | 行数变化 | 说明 |
 |------|---------|------|
-| `resources/[qb]/qb-phone/server/main.lua` | 1120→1113 (-7行) | 删除函数+重写查询构建 |
+| `T-CityLite.base/resources/[compat]/qb-phone/server/main.lua` | 1120→1113 (-7行) | 删除函数+重写查询构建 |
 
 ## 变更详情
 

@@ -13,27 +13,27 @@
 | qb-mechanicjob | 修车工职业 — 修理/改装。车辆状态管理已迁至 custom-vehicles |
 
 ### qb-management 功能
-- `server/sv_boss.lua` — Boss 操作：雇佣/解雇/升降级/职业账户存取
-- `server/sv_gang.lua` — 帮派管理
-- `server/sv_org.lua` — 组织管理
+- `T-CityLite.base/resources/[qb]/qb-management/server/sv_boss.lua` — Boss 操作：雇佣/解雇/升降级/职业账户存取
+- `T-CityLite.base/resources/[qb]/qb-management/server/sv_gang.lua` — 帮派管理
+- `T-CityLite.base/resources/[qb]/qb-management/server/sv_org.lua` — 组织管理
 
 ---
 
 ## 5.2 police.cfg — 警察系统
 
-**资源**: qb-policejob
+**资源**: custom-police（qb-policejob 已并入）
 
 ### T-City 安全加固 (vs 原版)
 
 | 加固 | 位置 |
 |:---|:---|
-| Impound + onduty 检查 + 审计 | `server/vehicle.lua:42-48` |
-| TakeOutImpound + onduty + 10m 距离 + DropPlayer | `server/vehicle.lua` |
-| BillPlayer 罚款上限 $50K | `server/main.lua` |
-| SetHandcuffStatus 解铐限制 (仅 LEO/EMS) | `server/main.lua` |
-| License 命令委托 custom-certificates | `server/commands.lua` |
-| /checkid 委托 custom-documents (3.5m 距离) | `server/commands.lua` |
-| Department/District 委托 custom-career | `server/commands.lua` |
+| Impound + onduty 检查 + 审计 | `T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:42-48` |
+| TakeOutImpound + onduty + 10m 距离 + DropPlayer | `T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua` |
+| BillPlayer 罚款上限 $50K | `T-CityLite.base/resources/[custom]/custom-police/server/main.lua` |
+| SetHandcuffStatus 解铐限制 (仅 LEO/EMS) | `T-CityLite.base/resources/[custom]/custom-police/server/main.lua` |
+| License 命令委托 custom-certificates | `T-CityLite.base/resources/[custom]/custom-police/server/commands.lua` |
+| /checkid 委托 custom-documents (3.5m 距离) | `T-CityLite.base/resources/[custom]/custom-police/server/commands.lua` |
+| Department/District 委托 custom-career | `T-CityLite.base/resources/[custom]/custom-police/server/commands.lua` |
 
 ### 交叉依赖
 ```

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""全仓文档断链**报告**（不阻断）。
+"""文档断链报告（不阻断）：区分**活跃层**与**历史归档**。
 
-闸门 ``tests/architecture/test_docs_links.py`` 只管"会被 agent 执行的那一层"
-（所有 ``AGENTS.md`` + ``docs/engineering/**``）。其余历史文档先出报告、逐步收编——
-一次性全量收紧只会逼人加几百条豁免，然后所有人都学会忽略闸门。
+闸门 ``tests/architecture/test_docs_links.py`` 要求全仓活跃文档零断链；唯一例外是带
+``LEGACY.md`` 且登记在 ``tests/architecture/legacy_docs.json`` 的历史归档目录。
+那个目录里的路径反映的是当时的状态，不修是有意的（改了就伪造历史）。
+
+所以这个报告必须把两类分开算，否则"414 处断链"这种数字会让人误以为闸门失守。
 
 用法::
 
@@ -72,6 +74,18 @@ def scan(paths: list[Path]) -> dict[str, list[str]]:
     return out
 
 
+def legacy_dirs() -> set[Path]:
+    registry = Path(__file__).resolve().parent.parent.parent / "T-CityLite.base" / "tests" / "architecture" / "legacy_docs.json"
+    if not registry.is_file():
+        return set()
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    return {REPO / rel for rel in data.get("dirs", {})}
+
+
+def is_legacy(path: Path, dirs: set[Path]) -> bool:
+    return any(path == d or d in path.parents for d in dirs)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--file", action="append", help="只检查指定文件（可重复）")
@@ -86,22 +100,36 @@ def main() -> int:
                    if p.is_file() and not (IGNORED_DIRS & set(p.parts))]
 
     result = scan(targets)
-    total = sum(len(v) for v in result.values())
-    counts = Counter({k: len(v) for k, v in result.items()})
+    dirs = legacy_dirs()
+    active = {k: v for k, v in result.items() if not is_legacy(REPO / k, dirs)}
+    legacy = {k: v for k, v in result.items() if is_legacy(REPO / k, dirs)}
+    total = sum(len(v) for v in active.values())
+    counts = Counter({k: len(v) for k, v in active.items()})
 
     if args.json:
-        print(json.dumps({"files": len(targets), "broken": total, "detail": result},
-                         ensure_ascii=False, indent=2))
+        print(json.dumps({
+            "files": len(targets),
+            "broken": total,
+            "detail": active,
+            "legacy_broken": sum(len(v) for v in legacy.values()),
+            "legacy_files": len(legacy),
+        }, ensure_ascii=False, indent=2))
         return 0
 
-    print(f"[docs_links_report] 检查 {len(targets)} 份文档，断链 {total} 处，涉及 {len(result)} 个文件")
+    print(f"[docs_links_report] 检查 {len(targets)} 份文档")
+    print(f"  活跃层: 断链 {total} 处 / {len(active)} 个文件  ← 闸门要求为 0")
+    print(f"  历史归档: 断链 {sum(len(v) for v in legacy.values())} 处 / {len(legacy)} 个文件  ← 已登记豁免，不修")
     for path, hits in counts.most_common(args.limit):
         print(f"\n{path}  ({hits} 处)")
         for token in result[path][:5]:
             print(f"    - {token}")
         if hits > 5:
             print(f"    …还有 {hits - 5} 处")
-    print("\n（仅报告，不阻断。收编路径：先把目标目录加进 test_docs_links.py 的范围，再逐条修。）")
+    if total:
+        print("\n（仅报告，不阻断。修法：指向新位置；文件已删除就改成不带反引号的叙述；"
+              "确实是历史文档就移进已登记的归档目录。）")
+    else:
+        print("\n（活跃层已零断链。）")
     return 0
 
 

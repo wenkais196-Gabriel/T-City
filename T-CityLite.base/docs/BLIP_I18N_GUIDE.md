@@ -79,18 +79,18 @@
 
 | 文件 | Locale Key |
 |------|-----------|
-| `qb-drugs/client/cornerselling.lua` | `blip_drugs_buyer` |
-| `qb-jewelery/client/main.lua` | `blip_vangelico_jewelry` |
-| `qb-recyclejob/client/main.lua` | `blip_recycle_center` |
-| `qb-smallresources/client/carwash.lua` | `blip_carwash` |
-| `qb-storerobbery/client/main.lua` | `blip_surrender` |
-| `qb-truckrobbery/client/main.lua` | `blip_truckrobbery_assault` / `_10_90` / `_van` |
-| `qb-vineyard/client.lua` | `blip_vineyard_dropoff` |
-| `custom-quest/client/main.lua` | `blip_quest_target` |
-| `atom_nodes/client/main.lua` | `blip_atom_target` |
-| `custom-justice/client/main.lua` | `blip_courthouse` / `blip_state_prison` |
-| `custom-mining/client/main.lua` | `blip_quarry` / `blip_mountain` / `blip_desert` / `blip_coast` / `blip_smelter` |
-| `custom-main/client/dispatch.lua` | `blip_wanted_suspect` |
+| `resources/[qb]/qb-drugs/client/cornerselling.lua` | `blip_drugs_buyer` |
+| `archive/qb/qb-jewelery/client/main.lua` | `blip_vangelico_jewelry` |
+| `archive/qb/qb-recyclejob/client/main.lua` | `blip_recycle_center` |
+| `archive/qb/qb-smallresources/client/carwash.lua` | `blip_carwash` |
+| `resources/[qb]/qb-storerobbery/client/main.lua` | `blip_surrender` |
+| `archive/qb/qb-truckrobbery/client/main.lua` | `blip_truckrobbery_assault` / `_10_90` / `_van` |
+| `archive/qb/qb-vineyard/client.lua` | `blip_vineyard_dropoff` |
+| `resources/[custom]/custom-quest/client/main.lua` | `blip_quest_target` |
+| `resources/[system]/atom_nodes/client/main.lua` | `blip_atom_target` |
+| `resources/[custom]/custom-justice/client/main.lua` | `blip_courthouse` / `blip_state_prison` |
+| `resources/[custom]/custom-mining/client/main.lua` | `blip_quarry` / `blip_mountain` / `blip_desert` / `blip_coast` / `blip_smelter` |
+| `resources/[custom]/custom-main/client/dispatch.lua` | `blip_wanted_suspect` |
 
 ---
 
@@ -181,7 +181,7 @@ blip_<实体名>            — 子项名称 (如 blip_cartel_hq)
 
 ### 添加步骤
 
-1. 打开 `[system]/production-freeze/locales/locales.lua`
+1. 打开 `resources/[system]/production-freeze/locales/locales.lua`
 2. 在 `-- ── blip 分类标签 ──` 段或对应子段末尾追加
 3. 格式: `key_name = { zh = '中文', en = 'English' },`
 4. 缩进 4 空格，与已有键对齐
@@ -432,7 +432,7 @@ SetBlipDisplay(blip, 4)
 SetBlipAsShortRange(blip, true)
 ```
 
-**已修复的文件**: `custom-justice/client/main.lua`（法院 + 监狱，2025-07）
+**已修复的文件**: `resources/[custom]/custom-justice/client/main.lua`（法院 + 监狱，2025-07）
 
 ### 8.5 Config 中预留 display 字段
 
@@ -458,7 +458,7 @@ blip = { sprite = 458, color = 1, scale = 1.0, display = 2 }
 | `[blip_xxx]` 显示在 UI 上 | locales.lua 缺少该键 | `search_content "blip_xxx"` 检查是否存在 |
 | 侧边栏不显示 | qb-mapsidebar 未启动 | `ensure qb-mapsidebar` 或在 server.cfg 中确认 |
 | 中英文玩家看到相同文字 | `_L()` 未正确调用 | 确认调用的是 `_L('key')` 而非硬编码字符串 |
-| 新加的分类不出现 | config_blips.lua 未加载 | 确认 `qb-core/fxmanifest.lua` 的 shared_scripts 包含 `config_blips.lua` |
+| 新加的分类不出现 | config_blips.lua 未加载 | 确认 `resources/[qb]/qb-core/fxmanifest.lua` 的 shared_scripts 包含 `config_blips.lua` |
 | Blip 始终卡在小地图边缘 | 缺少 `SetBlipDisplay(4)` + `SetBlipAsShortRange(true)` | 参考 [§8.4](#84-排查blip-始终卡在地图边缘)，在 `AddBlipForCoord` 后补上两行 |
 
 ---

@@ -44,7 +44,7 @@ Grade 4 = Boss 👑        ← 最高领导，拥有全部管理权限
 
 ### 步骤 1：定义职业数据
 
-编辑 `qb-core/shared/jobs.lua`，在 `QBShared.Jobs` 表中添加：
+编辑 `T-CityLite.base/resources/[qb]/qb-core/shared/jobs.lua`，在 `QBShared.Jobs` 表中添加：
 
 ```lua
 -- === 示例：新建安保公司 / Security ===
@@ -65,7 +65,7 @@ security = {
 
 ### 步骤 2：配置 Boss 菜单坐标
 
-编辑 `qb-management/config.lua`，在 `Config.BossMenus` 中添加：
+编辑 `T-CityLite.base/resources/[qb]/qb-management/config.lua`，在 `Config.BossMenus` 中添加：
 
 ```lua
 Config.BossMenus = {
@@ -80,7 +80,7 @@ Config.BossMenus = {
 
 ### 步骤 3：配置默认数据
 
-编辑 `qb-core/config.lua`，确认 `PlayerDefaults` 中 job 默认值无误（通常无需修改）：
+编辑 `T-CityLite.base/resources/[qb]/qb-core/config.lua`，确认 `PlayerDefaults` 中 job 默认值无误（通常无需修改）：
 
 ```lua
 job = {
@@ -93,7 +93,7 @@ job = {
 
 ### 步骤 4：可选 — 添加 Tier 角色映射
 
-如果你的职业需要出现在 `custom-career` 的层级系统中，编辑 `custom-career/configs.lua`：
+如果你的职业需要出现在 `custom-career` 的层级系统中，编辑 `T-CityLite.base/resources/[custom]/custom-career/configs.lua`：
 
 ```lua
 QBConfig.Career.Roles = {
@@ -106,7 +106,7 @@ QBConfig.Career.Roles = {
 
 ### 步骤 5：可选 — 配置服装
 
-编辑 `qb-clothing/config.lua`，在对应职业下添加 0→4 级的服装：
+编辑 `T-CityLite.base/resources/[qb]/qb-clothing/config.lua`，在对应职业下添加 0→4 级的服装：
 
 ```lua
 ['security'] = {
@@ -127,7 +127,7 @@ QBConfig.Career.Roles = {
 
 ### 步骤 6：可选 — 配置载具授权
 
-在你的职业脚本 `config.lua` 中（或 `qb-core/shared/vehicles.lua`）：
+在你的职业脚本 `config.lua` 中（或 `T-CityLite.base/resources/[qb]/qb-core/shared/vehicles.lua`）：
 
 ```lua
 Config.AuthorizedVehicles = {
@@ -163,7 +163,7 @@ Config.AuthorizedVehicles = {
 
 ### 步骤 1：定义帮派数据
 
-编辑 `qb-core/shared/gangs.lua`，在 `QBShared.Gangs` 表中添加：
+编辑 `T-CityLite.base/resources/[qb]/qb-core/shared/gangs.lua`，在 `QBShared.Gangs` 表中添加：
 
 ```lua
 -- === 示例：新建雅库扎 / Yakuza ===
@@ -181,7 +181,7 @@ yakuza = {
 
 ### 步骤 2：配置帮派 Boss 菜单坐标
 
-编辑 `qb-management/config.lua`，在 `Config.GangMenus` 中添加：
+编辑 `T-CityLite.base/resources/[qb]/qb-management/config.lua`，在 `Config.GangMenus` 中添加：
 
 ```lua
 Config.GangMenus = {
@@ -194,7 +194,7 @@ Config.GangMenus = {
 
 ### 步骤 3：配置 Tier 映射
 
-编辑 `custom-career/configs.lua`，确认 `gang` 角色已定义且包含 `"boss"` 层级：
+编辑 `T-CityLite.base/resources/[custom]/custom-career/configs.lua`，确认 `gang` 角色已定义且包含 `"boss"` 层级：
 
 ```lua
 QBConfig.Career.Roles = {
@@ -317,7 +317,7 @@ print(identity.rank_tier)  -- "boss", "leader", "mid", "entry"
 
 ### 自动注册
 
-所有在 `shared/jobs.lua` 和 `shared/gangs.lua` 中定义的职业/帮派，只要其 Grade 4 标记了 `isboss = true`，即可自动接入 Boss 管理系统。无需额外注册。
+所有在 `T-CityLite.base/resources/[qb]/qb-core/shared/jobs.lua` 和 `T-CityLite.base/resources/[qb]/qb-core/shared/gangs.lua` 中定义的职业/帮派，只要其 Grade 4 标记了 `isboss = true`，即可自动接入 Boss 管理系统。无需额外注册。
 
 ### 菜单系统
 
@@ -366,7 +366,7 @@ exports['qb-management']:RemoveOrgMenuItem(menuId)
 
 ### 服装系统
 
-`qb-clothing/config.lua` 中按 `[jobName][gender][grade]` 组织：
+`T-CityLite.base/resources/[qb]/qb-clothing/config.lua` 中按 `[jobName][gender][grade]` 组织：
 
 ```lua
 Config.Outfits = {
@@ -496,7 +496,7 @@ Boss 打开菜单 → 🔑 Transfer Ownership
 
 ### ☐ 数据定义
 
-- [ ] `shared/jobs.lua` 或 `shared/gangs.lua` 中添加组织定义
+- [ ] `T-CityLite.base/resources/[qb]/qb-core/shared/jobs.lua` 或 `T-CityLite.base/resources/[qb]/qb-core/shared/gangs.lua` 中添加组织定义
 - [ ] Grade 0-4 五个等级全部定义
 - [ ] Grade 4 标记 `isboss = true`
 - [ ] Grade 4 标记 `payment = <最高工资>`
@@ -505,18 +505,18 @@ Boss 打开菜单 → 🔑 Transfer Ownership
 
 ### ☐ Tier 映射
 
-- [ ] 如果是帮派：确认 `gang` 角色在 `custom-career/configs.lua` 中包含 `"boss"` 层级
-- [ ] 如果是新角色类型（非 gang 非现有 role）：在 `custom-career/configs.lua` 的 `Roles` 中添加
+- [ ] 如果是帮派：确认 `gang` 角色在 `T-CityLite.base/resources/[custom]/custom-career/configs.lua` 中包含 `"boss"` 层级
+- [ ] 如果是新角色类型（非 gang 非现有 role）：在 `T-CityLite.base/resources/[custom]/custom-career/configs.lua` 的 `Roles` 中添加
 
 ### ☐ Boss 菜单
 
-- [ ] 在 `qb-management/config.lua` 的 `Config.BossMenus` 或 `Config.GangMenus` 中添加坐标
+- [ ] 在 `T-CityLite.base/resources/[qb]/qb-management/config.lua` 的 `Config.BossMenus` 或 `Config.GangMenus` 中添加坐标
 - [ ] 坐标指向实际场景中的 Boss 办公室/据点位置
 - [ ] 测试：以 Grade 4 Boss 身份走到坐标点，确认菜单可交互
 
 ### ☐ 服装（可选）
 
-- [ ] 在 `qb-clothing/config.lua` 中添加 `[male]` 和 `[female]` 各 5 套服装
+- [ ] 在 `T-CityLite.base/resources/[qb]/qb-clothing/config.lua` 中添加 `[male]` 和 `[female]` 各 5 套服装
 - [ ] 测试：Boss 菜单 → 更衣室，确认所有等级均可正常换装
 
 ### ☐ 载具（可选）
@@ -583,14 +583,14 @@ Boss 打开菜单 → 🔑 Transfer Ownership
 
 | 要做什么 | 改哪个文件 |
 |----------|-----------|
-| 新增/修改职业等级 | `qb-core/shared/jobs.lua` |
-| 新增/修改帮派等级 | `qb-core/shared/gangs.lua` |
-| 新增 Boss 菜单坐标 | `qb-management/config.lua` |
-| 新增/修改服装 | `qb-clothing/config.lua` |
+| 新增/修改职业等级 | `T-CityLite.base/resources/[qb]/qb-core/shared/jobs.lua` |
+| 新增/修改帮派等级 | `T-CityLite.base/resources/[qb]/qb-core/shared/gangs.lua` |
+| 新增 Boss 菜单坐标 | `T-CityLite.base/resources/[qb]/qb-management/config.lua` |
+| 新增/修改服装 | `T-CityLite.base/resources/[qb]/qb-clothing/config.lua` |
 | 新增/修改载具授权 | 对应职业脚本的 `config.lua` |
-| Tier 角色/权限定义 | `custom-career/configs.lua` |
-| Tier 自动映射逻辑 | `custom-career/server/main.lua` |
-| Boss 管理服务端 | `qb-management/server/sv_org.lua`（新）或 `sv_boss.lua`/`sv_gang.lua`（旧） |
-| Boss 管理客户端 | `qb-management/client/cl_org.lua`（新）或 `cl_boss.lua`/`cl_gang.lua`（旧） |
+| Tier 角色/权限定义 | `T-CityLite.base/resources/[custom]/custom-career/configs.lua` |
+| Tier 自动映射逻辑 | `T-CityLite.base/resources/[custom]/custom-career/server/main.lua` |
+| Boss 管理服务端 | `T-CityLite.base/resources/[qb]/qb-management/server/sv_org.lua`（新）或 `sv_boss.lua`/`sv_gang.lua`（旧） |
+| Boss 管理客户端 | `T-CityLite.base/resources/[qb]/qb-management/client/cl_org.lua`（新）或 `cl_boss.lua`/`cl_gang.lua`（旧） |
 | 门禁权限 | `qb-doorlock` 配置 |
 | 商店购买权限 | `qb-shops` 配置 |

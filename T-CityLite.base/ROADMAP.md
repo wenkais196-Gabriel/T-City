@@ -44,8 +44,8 @@
 |------|------|------|
 | `custom-storage` | config.lua / server/main.lua / fxmanifest.lua | 通用组织仓库：Job/Gang 双轨、差异化容量、权限校验、Bus.StorageService |
 | `custom-market` | config.lua / server/main.lua / fxmanifest.lua | 动态交易市场：22商品 OrderBook、供需驱动价格、均值回归、Bus.MarketService |
-| `qb-core/shared/items.lua` | 修改 | +22 种新物品（矿业12 + 毒品5 + 化学品2 + 工具3） |
-| `qb-core/shared/jobs.lua` | 修改 | +miner 职业（5级） |
+| `resources/[qb]/qb-core/shared/items.lua` | 修改 | +22 种新物品（矿业12 + 毒品5 + 化学品2 + 工具3） |
+| `resources/[qb]/qb-core/shared/jobs.lua` | 修改 | +miner 职业（5级） |
 | `configs/modules/custom.cfg` | 修改 | 启用 storage + market |
 | `configs/modules/crime.cfg` | 修改 | 启用 drugs + qb-drugs |
 
