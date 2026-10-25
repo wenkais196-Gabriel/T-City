@@ -70,7 +70,10 @@ local function DropBulletCasing(weapon, ped)
     local randX = math.random() + math.random(-1, 1)
     local randY = math.random() + math.random(-1, 1)
     local coords = GetOffsetFromEntityInWorldCoords(ped, randX, randY, 0)
-    TriggerServerEvent('evidence:server:CreateCasing', weapon, coords)
+    -- 发**普通表**，不发 vector3：对面 sanitizeCoords 只接受 {x,y,z} 表，vector3 到了服务端
+    -- 是原生类型，会被判成"坐标非法"。之前每一枪都因此被静默丢弃（日志只有 rejected）。
+    local drop = { x = coords.x, y = coords.y, z = coords.z }
+    TriggerServerEvent('evidence:server:CreateCasing', weapon, drop)
     reportDebug(('casing sent weapon=%s onduty=%s'):format(
         weaponLabel(weapon), tostring(type(PlayerJob) == 'table' and PlayerJob.onduty)))
     if GetConvarInt('tcity_evidence_debug', 0) == 1 then
