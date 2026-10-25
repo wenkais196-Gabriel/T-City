@@ -94,3 +94,28 @@
 - `verify` always references an existing read tool; `undo` (when present) references an existing tool with `undo_supported=true` and risk no higher than the caller.
 - `L4` compensation is always `manual`: money and permanent assets are never silently rolled back.
 - Regenerate with `python3 tools/agent_tools.py --write`; CI runs `--check` and fails on drift.
+
+## 驱动服务器控制台（`tcity-cmd`）
+
+这个 FXServer build **没有 RCON**（30120 只有 HTTP，Source-RCON 的 auth 包会被直接断开），
+所以命令只能通过 `screen` 会话注入到控制台 stdin：
+
+```bash
+tcity-cmd -w 6 "restart custom-phone"     # 执行并等待 6 秒再读输出
+tcity-cmd --page                          # 只看当前控制台页
+```
+
+三条必须知道的坑（都实测踩过）：
+
+1. **回显不可信。** 控制台会把同时段写到 stdout 的日志片段混进输入行的显示，于是你会看到
+   `vector2version`、`saystatus`、`randomitemsrestart custom-director`。**但真正执行的命令是对的**
+   （`version` 照样打出完整输出）。不要拿回显校验，**要看效果**——`Started resource X`、
+   期望的那行 `print`、或 `No such export` 是否消失。
+2. **输入行不清空。** 退格（`\177`）、Ctrl+U、空回车都清不掉残留字符；唯一有效的是
+   先发一个回车把残留当成一条命令丢掉，再发真命令（`tcity-cmd` 内部就是这么做的）。
+3. **混淆的代价是真的。** 曾有一次 `restart custom-director` 被拼成
+   `randomitemsrestart custom-director`，资源被停掉且没有任何报错提示——所以每次 restart
+   之后都要确认目标资源真的出现在 `Started resource` 里，而不是假设它起来了。
+
+另外：**新增脚本文件必须 `refresh` 才会交付给已连接的客户端**（`restart` 只重读清单里已有的
+文件）。症状是"文件在、就是不执行"，或者跨资源导出在首次调用时炸 `No such export`。
