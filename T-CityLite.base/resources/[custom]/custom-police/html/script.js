@@ -125,7 +125,8 @@ Fingerprint.Update = function (data) {
 };
 
 $(document).on("click", ".take-fingerprint", function () {
-    $.post("https://custom-police/doFingerScan");
+    var resource = (typeof GetParentResourceName === "function") ? GetParentResourceName() : "custom-police";
+    $.post("https://" + resource + "/doFingerScan", JSON.stringify({}), function () {}, "json");
 });
 
 document.onreadystatechange = () => {
