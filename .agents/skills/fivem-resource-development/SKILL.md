@@ -152,7 +152,7 @@ request pairs, load order.
 - **Consolidate only code you own.** Upstream/vendored copies (`qb-*`, third-party `standalone/`)
   stay duplicated: pointing them at your core forks upstream and breaks their next sync. Record
   retained copies with a written reason and a ratchet budget instead of a cleanup sprint.
-- **Content-hash the NUI build artifacts.** CEF caches per iframe, so a fixed `assets/index.js` keeps
+- **Content-hash the NUI build artifacts.** CEF caches per iframe, so a fixed web 构建产物 assets/index.js keeps
   running yesterday's JS after `restart` while Lua runs new code — a *specific* feature fails while
   the handshake still works. Emit `assets/[name]-[hash].js|css`.
 - **A shared audit/log helper written for the online path throws for an offline actor.** It formats

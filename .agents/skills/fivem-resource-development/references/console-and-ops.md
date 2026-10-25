@@ -12,7 +12,7 @@ scripts/fxserver_console.py -w 8 "restart custom-phone"
 scripts/fxserver_console.py --page                              # current console page
 ```
 
-`scripts/fxserver_console.py` (env `FXSERVER_SCREEN`, `FXSERVER_ENV_FILE`) wraps the three raw
+scripts 目录下的 fxserver_console.py (env `FXSERVER_SCREEN`, `FXSERVER_ENV_FILE`) wraps the three raw
 calls — `stuff $'cmd\r'`, sleep, `hardcopy`, strip ANSI, return only the lines after the echoed
 command:
 
@@ -46,13 +46,13 @@ screen -S fivem -X hardcopy /tmp/console.txt                   # visible page on
   outcome with `SaveResourceFile` (see `verification.md`).
 - **`TriggerClientEvent(..., source = 0, ...)` from a console call throws `native ...: Argument at
   index 1 was null`.** qb-core's own command wrapper does this for `missing_args` / permission
-  failures, so an error naming `@qb-core/server/commands.lua` right after a console command is
+  failures, so an error naming qb-core 的 server/commands.lua right after a console command is
   usually the framework notifying a non-existent player — fix your handler's nil guard, but do not
   chase the framework path as part of that fix.
 - `hardcopy` captures the current screen, not scrollback — grep it right after the action you
   care about. `-X logfile` / `-X log on` applied to an already-created session can capture
   nothing (and a manual `log off` may not resume); treat the log file as a bonus, not the plan.
-- **Probe a command channel before building on it.** A 200 from `/info.json` on the game TCP port
+- **Probe a command channel before building on it.** A 200 from HTTP 的 info.json on the game TCP port
   proves only that an HTTP listener is there; send one real protocol packet
   (`--probe-rcon HOST PORT PASS`) and see whether it answers or closes. If it closes, drive the
   console through `screen` as above instead of writing an RCON client.
