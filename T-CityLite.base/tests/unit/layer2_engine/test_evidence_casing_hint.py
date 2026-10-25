@@ -77,7 +77,9 @@ function DrawMarker(...) __markers[#__markers + 1] = { ... } end
 
 LocalPlayer = { state = { isLoggedIn = true } }
 PlayerJob = { type = 'leo', onduty = true }
-Lang = { t = function(key, _params) return key end }
+-- 注意：文件里用的是冒号调用 Lang:t(key)，桩必须把 self 放在第一位，
+-- 否则会返回整个 Lang 表（第一版就这样，三条提示全变成了 table: 0x...）
+Lang = { t = function(_self, key, _params) return key end }
 Config = { AmmoLabels = {} }
 QBCore = {
     Shared = { Weapons = {}, Items = {} },
@@ -115,60 +117,76 @@ def run(body: str) -> dict:
     return out
 
 
-ADD_CASING = """
-        -- 直接往客户端的 Casings 表里塞一条（等价于服务端广播过来的 evidence:client:AddCasing）
-        Casings['abc'] = { type = 12345, serie = 'S1', coords = { x = %s, y = 0.0, z = 0.0 } }
+def three_drops(distance: float, prefix: str = "") -> str:
+    """三种地面证据各塞一条（等价于服务端广播过来的 Add* 事件）。"""
+    d = float(distance)
+    tag = prefix
+    return f"""
+        Casings['{tag}c1'] = {{ type = 12345, serie = 'S1', coords = {{ x = {d}, y = 0.0, z = 0.0 }} }}
+        Blooddrops['{tag}b1'] = {{ citizenid = 'CIT', bloodtype = 'AB-', coords = {{ x = {d}, y = 0.0, z = 0.0 }} }}
+        Fingerprints['{tag}f1'] = {{ fingerprint = 'F', coords = {{ x = {d}, y = 0.0, z = 0.0 }} }}
 """
 
 
-def test_on_duty_officer_sees_an_arrow_with_a_distance():
-    out = run(ADD_CASING % "8.0" + """
-        __say = function(s) io.write(tostring(s) .. string.char(10)) end
-        local drawn = EvidenceHints.DrawCasings(vector3(0.0, 0.0, 0.0))
+def test_all_three_kinds_get_their_own_marker_and_label():
+    out = run(three_drops(8.0) + """
+        local drawn = EvidenceHints.DrawDrops(vector3(0.0, 0.0, 0.0))
         __say('drawn=' .. tostring(drawn))
         __say('markers=' .. tostring(#__markers))
-        __say('marker_type=' .. tostring(__markers[1] and __markers[1][1]))
+        __say('marker_type=' .. tostring(__markers[1][1]))
         __say('texts=' .. tostring(#__texts))
-        __say('has_arrow=' .. tostring(__texts[1] and __texts[1].text:find('▼') ~= nil))
-        __say('has_distance=' .. tostring(__texts[1] and __texts[1].text:find('8%.0m') ~= nil))
-        __say('above_ground=' .. tostring(__texts[1] and __texts[1].z > 0.0))
+
+        local colours = {}
+        for i = 1, #__markers do
+            colours[i] = __markers[i][14] .. '/' .. __markers[i][15] .. '/' .. __markers[i][16]
+        end
+        __say('colours=' .. table.concat(colours, ','))
+
+        local labels = {}
+        for i = 1, #__texts do labels[i] = __texts[i].text end
+        __say('labels=' .. table.concat(labels, ' ; '))
+        __say('near=1')
     """)
-    assert out["drawn"] == "1"
-    assert out["markers"] == "1" and out["marker_type"] == "1", "地面要有一个细柱标记"
-    assert out["texts"] == "1"
-    assert out["has_arrow"] == "true", "箭头符号丢了就只是柱子，玩家仍然不知道那是什么"
-    assert out["has_distance"] == "true", "带上距离才知道还要走多远"
-    assert out["above_ground"] == "true", "文字要浮在落点上方，不能埋进地面"
+    assert out["drawn"] == "3", "弹壳、血迹、指纹三种都要画"
+    assert out["markers"] == "3" and out["texts"] == "3"
+    assert out["marker_type"] == "1", "地面要有一根细柱标记"
+    # 三种颜色必须互不相同，否则玩家分不清地上那摊是什么
+    assert out["colours"] == "255/70/70,150/25/25,90/200/255", out["colours"]
+    assert "info.casing" in out["labels"]
+    assert "info.blood" in out["labels"]
+    assert "info.fingerprint" in out["labels"]
+    assert out["labels"].count("▼") == 3, "每条提示都要带箭头，否则只是柱子"
+    assert "8.0m" in out["labels"], "带上距离才知道还要走多远"
 
 
 def test_civilian_and_off_duty_see_nothing_and_far_ones_are_skipped():
-    far = (ADD_CASING % "400.0").replace("'abc'", "'far'")
-    out = run((ADD_CASING % "8.0") + far + """
-        __say = function(s) io.write(tostring(s) .. string.char(10)) end
+    far = three_drops(400.0, prefix="far_")
+    out = run(three_drops(8.0) + far + """
         local pos = vector3(0.0, 0.0, 0.0)
 
-        __say('leo=' .. tostring(EvidenceHints.DrawCasings(pos)))
+        __say('leo=' .. tostring(EvidenceHints.DrawDrops(pos)))
         __say('leo_markers=' .. tostring(#__markers))
 
         -- 平民
         _G.__markers, _G.__texts = {}, {}
         PlayerJob = { type = 'none', onduty = true }
-        __say('civilian=' .. tostring(EvidenceHints.DrawCasings(pos)))
+        __say('civilian=' .. tostring(EvidenceHints.DrawDrops(pos)))
         __say('civilian_markers=' .. tostring(#__markers))
 
         -- 下班警察
         PlayerJob = { type = 'leo', onduty = false }
-        __say('offduty=' .. tostring(EvidenceHints.DrawCasings(pos)))
+        __say('offduty=' .. tostring(EvidenceHints.DrawDrops(pos)))
         __say('offduty_markers=' .. tostring(#__markers))
 
-        -- 重新值班：400 米外那颗不该被画
+        -- 重新值班：400 米外那三颗不该被画
         PlayerJob = { type = 'leo', onduty = true }
-        __say('onduty_again=' .. tostring(EvidenceHints.DrawCasings(pos)))
+        __say('onduty_again=' .. tostring(EvidenceHints.DrawDrops(pos)))
     """)
-    assert out["leo"] == "1", "8 米那颗要画"
+    assert out["leo"] == "3", "8 米那三颗都要画"
+    assert out["leo_markers"] == "3"
     assert out["civilian"] == "0" and out["civilian_markers"] == "0", "平民不该看到证据位置"
     assert out["offduty"] == "0" and out["offduty_markers"] == "0", "下班状态也不该看到"
-    assert out["onduty_again"] == "1", "400 米外那颗必须跳过（否则遍历和绘制都变成热点）"
+    assert out["onduty_again"] == "3", "400 米外那三颗必须跳过（否则遍历和绘制都变成热点）"
 
 
 def test_the_pickup_prompt_names_the_real_key_and_the_bag():
