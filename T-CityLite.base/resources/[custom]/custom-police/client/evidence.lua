@@ -54,6 +54,10 @@ local function DropBulletCasing(weapon, ped)
     local randY = math.random() + math.random(-1, 1)
     local coords = GetOffsetFromEntityInWorldCoords(ped, randX, randY, 0)
     TriggerServerEvent('evidence:server:CreateCasing', weapon, coords)
+    if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+        print(('[custom-police] casing sent weapon=%s at %.2f,%.2f,%.2f')
+            :format(tostring(weapon), coords.x, coords.y, coords.z))
+    end
     Wait(300)
 end
 

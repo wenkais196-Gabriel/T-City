@@ -348,6 +348,13 @@ RegisterNetEvent('evidence:server:CreateCasing', function(weapon, coords)
     end
     if type(serieNumber) ~= 'string' then serieNumber = nil end
     if not trackDrop(Casings, casingId, { weapon = weapon, serie = serieNumber }) then return end
+    -- 诊断开关（默认关）：`set tcity_evidence_debug 1` 打开后，每颗弹壳在服务端落一行。
+    -- 这个开关的用途是**把"看不到弹壳"拆成两半**：服务端有行 = 客户端发了、问题只在客户端显示；
+    -- 没行 = 客户端根本没发（枪不在白名单外、或 IsPedShooting 没触发）。
+    if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+        print(('[evidence] casing %s weapon=%s src=%s serie=%s')
+            :format(tostring(casingId), tostring(weapon), tostring(src), tostring(serieNumber)))
+    end
     TriggerClientEvent('evidence:client:AddCasing', -1, casingId, weapon, where, serieNumber)
 end)
 

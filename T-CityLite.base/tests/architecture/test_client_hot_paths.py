@@ -53,9 +53,11 @@ def loop_blocks(path: Path) -> list[tuple[int, str]]:
 
 #: 逐帧轮询但**不该**并入 helper 的地方：文件 → (行号, 为什么不一样)
 #: 例外要带痕迹校验：痕迹（该文件仍有 IsControlJustReleased）消失就该删掉这一行。
+# 登记的是**允许的处数**，不是行号：行号会被上面任何一次无关编辑推走，
+# 于是闸门开始报"第 230 行逐帧轮询按键"这种假红（加四行日志就红一次）。
 EXCEPTIONS: dict[str, tuple[int, str]] = {
     "evidence.lua": (
-        226,
+        1,
         "这不是\"站在区域里按 E\"：三个目标（弹壳/血迹/指纹）各自带就近判定、"
         "DrawText3D 提示与不同的按键副作用，由 Wait(1) 驱动绘制；并发按键会互相吞掉，"
         "合并成单区域 helper 会改变行为。已把每帧的 ped 坐标取值提到循环外（一次/帧）。",
@@ -65,13 +67,16 @@ EXCEPTIONS: dict[str, tuple[int, str]] = {
 
 def violations() -> list[str]:
     found: list[str] = []
+    polls_by_file: dict[str, list[int]] = {}
     for path in sorted(CLIENT.glob("*.lua")):
         for line_no, body in loop_blocks(path):
             if path == OWNER:
                 continue
             if PER_FRAME.search(body) and CONTROL_POLL.search(body):
                 excused = EXCEPTIONS.get(path.name)
-                if not (excused and excused[0] == line_no):
+                polls_in_file = polls_by_file.setdefault(path.name, [])
+                polls_in_file.append(line_no)
+                if not excused or len(polls_in_file) > excused[0]:
                     found.append(
                         f"{path.name}:{line_no} 逐帧轮询按键 —— 用 PoliceInteract.Watch()")
             ped_calls = len(PED_COORDS.findall(body))
@@ -141,7 +146,7 @@ def test_scanner_reverse_check(tmp_path: Path):
 def test_exceptions_still_describe_the_truth():
     """例外不是永久豁免：痕迹消失（循环没了 / 文件删了）就该把这一行删掉。"""
     stale = []
-    for name, (line_no, reason) in EXCEPTIONS.items():
+    for name, (allowed_count, reason) in EXCEPTIONS.items():
         path = CLIENT / name
         if not path.is_file():
             stale.append(f"{name}: 文件不存在")
