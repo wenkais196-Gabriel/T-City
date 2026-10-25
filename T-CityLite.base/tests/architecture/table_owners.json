@@ -127,17 +127,6 @@
       "ticket": "TD-09"
     },
     {
-      "id": "main-player-metadata",
-      "writer": "custom-main",
-      "table": "players",
-      "owner": "qb-core",
-      "file": "custom-main/server/security.lua",
-      "reason": "custom-main 直写 players.metadata（wanted/criminalrecord 持久化），是 wanted 三源之一；统一到 qb-core/Player.Functions 前保留。",
-      "added": "2026-10-24",
-      "expires": "2026-12-31",
-      "ticket": "TD-06"
-    },
-    {
       "id": "agent-client-effect-audit",
       "writer": "custom-agent-client",
       "table": "agent_effects",

@@ -235,7 +235,7 @@ police NUI vendor 化）作为 **`88ed2c1`** 合入。为保持问题可复核�
 
 有 NUI（`ui_page`）的：`custom-phone`、`custom-police`、`custom-debug`、`hud-position-tool`、
 `story-engine`。
-用 `SendNUIMessage` 但**没有** `ui_page` 的：仅 `resources/[custom]/custom-vehicles/client/dashboard.lua`（已死，见 O-05）。
+用 `SendNUIMessage` 但**没有** `ui_page` 的：仅 custom-vehicles 的旧中控屏客户端（已于 2026-10-25 删除，见 O-05）。
 
 | ID | 严重度 | 问题 | 位置（HEAD） | 修复建议 |
 |---|---|---|---|---|
@@ -243,9 +243,9 @@ police NUI vendor 化）作为 **`88ed2c1`** 合入。为保持问题可复核�
 | O-02 | Medium | story-engine 的重复决策 telemetry 引用了**尚未声明的局部变量**：`:28` 使用 `questId`/`stepId`，而 `local` 声明在 `:35-36`，实际取到全局 nil。duplicate 事件永远上报 `{nil}`，排障时看不到是哪个决策重复。 | `story-engine/client/main.lua:25-36`（`:28` vs `:35-36`） | 把取值移到守卫之前，或 duplicate 分支直接用 `data.questId/data.stepId`。 |
 | O-03 | Medium | 决策弹窗 NUI 的 `nuiPost` 无超时（fetch 不会因丢回调 reject，`.catch` 不触发）；origin 硬编码 `https://cfx-nui-story-engine/`。回调丢失时玩家点选项无反应、面板不关，只能等 300s watchdog。 | `story-engine/client/decision_nui.html:148-170`（`:149`、`:161`） | `AbortController` 8s + `GetParentResourceName()`；失败时显示"回调失败，按 ESC 关闭"并解除焦点。 |
 | O-04 | Medium | story-engine 打开决策框 `SetNuiFocus(true,true)`，但没有 `onResourceStop`；300s watchdog 只覆盖运行期卡死，不覆盖资源重启（restart 时若弹窗开着，焦点由引擎/其他资源竞争，可能残留）。 | `story-engine/client/main.lua:66-89`、`:249-261` | 加 `onResourceStop` 释放焦点与 keepInput，并 `SendNUIMessage({type='closeDecision'})`。 |
-| O-05 | Medium | `resources/[custom]/custom-vehicles/client/dashboard.lua` 已从 manifest 移除（注释"已迁移至 tcity-dashboard"），但文件仍在：15 个 `RegisterNUICallback`、`SetNuiFocus`、`html/dashboard.{html,js,css}` 全是孤儿。有人把文件加回 manifest 就会出现两套中控屏（`policeRadar`/`closeDashboard` 与 `[system]/tcity-dashboard` 重名）。 | `custom-vehicles/fxmanifest.lua:46`；`custom-vehicles/client/dashboard.lua:288-472`；`custom-vehicles/html/dashboard.*` | 删除该文件与 `html/dashboard.*`；中控屏唯一实现放 `[system]/tcity-dashboard`（本次范围外，建议纳入下一轮客户端扫描）。 |
+| O-05 ✅ | 已处理 | 旧中控屏客户端（已删除） 已从 manifest 移除（注释"已迁移至 tcity-dashboard"），但文件仍在：15 个 `RegisterNUICallback`、`SetNuiFocus`、`html/dashboard.{html,js,css}` 全是孤儿。有人把文件加回 manifest 就会出现两套中控屏（`policeRadar`/`closeDashboard` 与 `[system]/tcity-dashboard` 重名）。 | `custom-vehicles/fxmanifest.lua:46`；旧中控屏客户端（已删除）；`custom-vehicles/html/` 下的旧中控屏页面 | 删除该文件与 `html/dashboard.*`；中控屏唯一实现放 `[system]/tcity-dashboard`（本次范围外，建议纳入下一轮客户端扫描）。**2026-10-25 已删文件 + 孤儿闸门钉住。** |
 | O-06 | Low | 调试浮层 `fetch('https://custom-debug/closeDebug')` 硬编码资源名、无 catch/超时；`/nuioff` 会全局 `SetNuiFocusKeepInput(false)`，打断手机的 keepInput 约定（调试工具可接受，但应注明副作用）。 | `custom-debug/html/index.html:131-138`；`custom-debug/client/debug.lua:86-110`（`:97-98`） | 调试工具也统一 `GetParentResourceName()`；`/nuioff` 输出提示"已同时复位 keepInput，手机可能需重开"。 |
-| O-07 | Low | `resources/[custom]/custom-admin/client/menu.lua`（38 行，`OpenAdminMenu`/`ForceOpenMenu`/`clearWanted` 桥接）**不在** `client_scripts` 里，整个文件不执行；`admin_panel.lua` 才是唯一加载的客户端脚本。 | `custom-admin/fxmanifest.lua:10-12`；`custom-admin/client/menu.lua:1-38` | 要么加入 manifest，要么删除；当前是"看着有、实际没有"的隐形缺口。 |
+| O-07 ✅ | 已处理 | 旧 admin 菜单客户端（已删除）（38 行，`OpenAdminMenu`/`ForceOpenMenu`/`clearWanted` 桥接）**不在** `client_scripts` 里，整个文件不执行；`admin_panel.lua` 才是唯一加载的客户端脚本。 | `custom-admin/fxmanifest.lua:10-12`；旧 admin 菜单客户端（已删除） | 要么加入 manifest，要么删除；当前是"看着有、实际没有"的隐形缺口。 |
 | O-08 | Low | `resources/[custom]/custom-main/client/dispatch.lua` 在循环线程里创建通缉 blip，资源重启/玩家卸载不清理（blip 是全局对象，不会随资源停止消失）。 | `custom-main/client/dispatch.lua:92`；无 `onResourceStop` | 保存 blip 句柄，`onResourceStop`/`OnPlayerUnload` 里 `RemoveBlip`。 |
 | O-09 | Low | `custom-mining` 为矿点/冶炼厂创建 blip，无 `onResourceStop`/`OnPlayerUnload` 清理 → 重登后重复 blip。 | `custom-mining/client/main.lua:30`、`:62`；无清理钩子 | 同上。 |
 | O-10 | Low | `custom-quest` 的拖车监控 (`trailerMonitor`) 只在任务结束路径 `RemoveBlip/DeleteEntity`；资源重启/玩家死亡丢弃时线程继续跑（`:399` 起），可能留下孤儿拖车与 blip。 | `custom-quest/client/quest_logistics_client.lua:273-275`、`:391-402`；资源无 `onResourceStop` | 加资源停止/卸载清理；线程内检测 `DoesEntityExist` 与玩家距离。 |
