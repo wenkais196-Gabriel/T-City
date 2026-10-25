@@ -40,6 +40,8 @@ class Mutation:
     path: str          # 注入文件（相对 T-CityLite.base）
     content: str | None  # 注入内容；None = 就地篡改 path 指向的已有文件
     what: str          # 这条注入代表什么错误形状
+    replace_from: str | None = None  # 就地篡改时的原文片段（None = 旧的追加式篡改）
+    replace_to: str = ""             # 用它替换 replace_from
 
     @property
     def target(self) -> Path:
@@ -47,6 +49,15 @@ class Mutation:
 
 
 MUTATIONS: list[Mutation] = [
+    Mutation(
+        gate="tests/architecture/test_client_observability.py::test_include_rule_detects_a_missing_helper",
+        path="resources/[custom]/custom-quest/fxmanifest.lua",
+        content=None,
+        replace_from="    '@core-framework/client/shared.lua',\n",
+        replace_to="",
+        what="自有客户端资源删掉了客户端共享助手（错误上行通道断掉）",
+    ),
+
     Mutation(
         gate="tests/architecture/test_economy_single_owner.py::test_only_the_owner_writes_players_money",
         path="resources/[custom]/custom-phone/server/__mutant_money.lua",
@@ -243,7 +254,13 @@ def run_once(mutation: Mutation) -> dict:
                 "detail": f"要篡改的文件不存在：{target.relative_to(REPO)}"}
 
     backup = None
-    if mutation.content is None:            # 就地篡改已有文件
+    if mutation.content is None and mutation.replace_from:   # 就地替换片段
+        backup = target.read_text(encoding="utf-8")
+        if mutation.replace_from not in backup:
+            return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
+                    "detail": f"要替换的片段在 {target.relative_to(REPO)} 里找不到（代码变了，更新用例）"}
+        target.write_text(backup.replace(mutation.replace_from, mutation.replace_to, 1), encoding="utf-8")
+    elif mutation.content is None:          # 就地追加（历史形状）
         backup = target.read_text(encoding="utf-8")
         target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n", encoding="utf-8")
     else:
