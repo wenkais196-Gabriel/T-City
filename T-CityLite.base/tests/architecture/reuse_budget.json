@@ -6,13 +6,9 @@
       "max": 11,
       "reason": "同名不同语义：各自带本资源的调试开关与前缀，合并会改变行为——有意重复"
     },
-    "loadModel": {
-      "max": 4,
-      "reason": "阻塞式模型加载，与 loadAnimDict 同类；[custom] 两处可合并，qb/standalone 不迁——下一批"
-    },
     "DrawText3D": {
-      "max": 5,
-      "reason": "3D 文字绘制，各份 scale/color/参数顺序不一致，合并要先统一签名"
+      "max": 4,
+      "reason": "3D 文字。[custom] 已合并到 core-framework/client/shared.lua 的 CFShared.DrawText3D（走 @resource 加载期包含，不进 exports——逐帧调用不能过运行时边界）；qb-* 三份属上游，不迁"
     },
     "GetClosestPlayer": {
       "max": 6,
@@ -32,11 +28,11 @@
     },
     "_initDebug": {
       "max": 5,
-      "reason": "资源私有调试初始化，不跨资源复用"
+      "reason": "PolyZone 内部调试初始化，不迁"
     },
     "isPointInside": {
       "max": 5,
-      "reason": "纯几何判断，语义一致；属小工具，收益低于文字族"
+      "reason": "PolyZone 内部实现（随 vendored 资源发布），不迁"
     }
   }
 }

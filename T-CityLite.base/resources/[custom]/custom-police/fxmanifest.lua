@@ -18,6 +18,7 @@ shared_scripts {
 }
 
 client_scripts {
+    '@core-framework/client/shared.lua',  -- 客户端共享助手（加载期包含，零调用开销）
 	'@PolyZone/client.lua',
 	'@PolyZone/BoxZone.lua',
 	'@PolyZone/ComboZone.lua',
@@ -42,6 +43,7 @@ dependencies {
 	'custom-career',
 	'custom-certificates',
 	'custom-documents',
+	'core-framework',
 }
 
 server_scripts {

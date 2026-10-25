@@ -86,7 +86,7 @@ MUTATIONS: list[Mutation] = [
         what="又抄一份 loadAnimDict",
     ),
     Mutation(
-        gate="tests/architecture/test_docs_links.py::test_constraint_docs_have_no_broken_paths",
+        gate="tests/architecture/test_docs_links.py::test_active_docs_have_no_broken_paths",
         path="../docs/engineering/__mutant_link.md",
         content="# 变异注入\n\n参见 `docs/engineering/does-not-exist-42.md`。\n",
         what="约束区文档里的断链",
