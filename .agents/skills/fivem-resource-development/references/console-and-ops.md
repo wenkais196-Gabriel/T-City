@@ -99,3 +99,20 @@ qb-mechanicjob），它们**再也没自己起来**——于是：
    不要热重启；热重启只适用于叶子资源（custom-phone、custom-ui 这类没人依赖的）。
 2. 如果已经热重启了，先 `grep -c "Stopping resource"` 看那次操作停了多少，再逐个 `ensure`/整机重启，
    不要假设“只动了一个资源”。
+
+## 运维工具化之后的三条硬经验（P0 落地时踩到的）
+
+1. **systemd 单元文件必须是模板，不能写死本机绝对路径**。第一次把 `tcity.service` 推上去 CI 就红了：
+   校验器在 runner 上找不到开发机路径下的 `start.sh`。做法是文件里用 `@REPO@` 占位，安装时
+   由安装脚本渲染；校验时先渲染再判断，这样同一份文件在任何检出路径下结论一致。
+2. **`systemd-analyze verify` 不检查 ExecStart 的可执行文件是否存在**。实测指向
+   `/nope/not-a-real-binary` 仍然返回 0（它只做语法/依赖检查）。所以"脚本路径存在吗"必须自己校验，
+   否则会得到一个"验证通过但根本起不来"的单元。
+3. **玩家背包不在 `inventories` 表**。qb-inventory 把玩家背包存进 `players.inventory`（JSON）：
+   `inventories(identifier, items)` 装的是后备箱/公寓/组织仓库，键是 `glovebox-XXX`、`apartment…`、
+   `<job>_stash` 之类，**不是 citizenid**。做数据一致性检查时按直觉写 `SELECT ... FROM inventories
+   WHERE identifier = <citizenid>` 会得到"什么都没丢"的假绿。
+
+配套工具与手册：`tools/ops/healthcheck.py`（启动自检）、`tools/ops/backup_db.py`（每日备份+恢复验证）、
+`tools/ops/persistence_check.py`（重启前后快照对比）、`tools/ops/install_service.py`（单元校验与安装），
+说明写在 `docs/ops/RUNBOOK.md`。
