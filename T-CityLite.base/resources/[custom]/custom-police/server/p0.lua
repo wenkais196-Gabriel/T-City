@@ -542,7 +542,10 @@ function P.SetDutyForSource(source, onDuty, reason)
     local player = QBCore.Functions.GetPlayer(source)
     if not player then return false, 'not_police' end
 
-    local ok = pcall(function() player.Functions.SetJobDuty(onDuty) end)
+    local ok = pcall(function()
+        print(('[custom-police] SetJobDuty arg=%s type=%s'):format(tostring(onDuty), type(onDuty)))
+        player.Functions.SetJobDuty(onDuty)
+    end)
     if not ok or data.job.onduty ~= onDuty then
         print(('[custom-police] duty mismatch data=%s player=%s expected=%s'):format(
             tostring(data.job.onduty), tostring(player.PlayerData.job.onduty), tostring(onDuty)))
