@@ -37,7 +37,7 @@ server_scripts {
     'server/main.lua',
     'server/banking.lua',
     'server/jobboard.lua',
-    'server/faction.lua'
+    'server/faction.lua',
 }
 
 ui_page 'html/index.html'
@@ -50,5 +50,6 @@ files {
 
 dependencies {
     'qb-core',
-    'oxmysql'
+    'oxmysql',
+    'core-framework',
 }

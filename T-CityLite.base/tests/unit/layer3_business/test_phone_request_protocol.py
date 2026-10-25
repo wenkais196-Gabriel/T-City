@@ -26,6 +26,29 @@ CLIENT = PHONE / "client" / "main.lua"
 BRIDGE = PHONE / "client" / "core" / "bridge.lua"
 SERVER = PHONE / "server" / "main.lua"
 RATE_LIMIT = PHONE / "server" / "core" / "rate_limit.lua"
+# 限流实现已搬到 core-framework；这里要把实现装进沙箱，并伪造 CfxLua 的 `exports`
+#（既是可注册的函数，又能 exports['res']:Method(...) 调用，且必须吞掉 self）。
+OWNER_RATE_LIMIT = (Path(__file__).resolve().parents[3] / 'resources' / '[standalone]'
+                    / 'core-framework' / 'server' / 'rate_limit.lua')
+
+EXPORTS_SHIM = """
+local __registry = {}
+exports = setmetatable({}, {
+    __call = function(_, name, fn) __registry[name] = fn end,
+    __index = function(_, resource)
+        return setmetatable({}, {
+            __index = function(_, method)
+                return function(_, ...)
+                    local fn = __registry[method]
+                    if type(fn) ~= 'function' then return nil end
+                    return fn(...)
+                end
+            end,
+        })
+    end,
+})
+GetGameTimer = GetGameTimer or function() return os.time() * 1000 end
+"""
 NUI = PHONE / "web" / "src" / "utils" / "nui.ts"
 
 LUA_BIN = shutil.which("lua5.4")
@@ -143,6 +166,8 @@ def server_harness(body: str) -> str:
     return (
         SERVER_STUBS
         + "\n"
+        + EXPORTS_SHIM + "\n"
+        + f"dofile([[{OWNER_RATE_LIMIT}]])\n"
         + f"dofile([[{RATE_LIMIT}]])"
         + "\n"
         + _protocol_block(SERVER)
