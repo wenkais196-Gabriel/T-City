@@ -116,3 +116,21 @@ qb-mechanicjob），它们**再也没自己起来**——于是：
 配套工具与手册：`tools/ops/healthcheck.py`（启动自检）、`tools/ops/backup_db.py`（每日备份+恢复验证）、
 `tools/ops/persistence_check.py`（重启前后快照对比）、`tools/ops/install_service.py`（单元校验与安装），
 说明写在 `docs/ops/RUNBOOK.md`。
+
+## 重启次数本身就是一种资源：Cfx.re 会对 license 校验限流
+
+同一天内反复重启（尤其是每次都在起资源阶段失败再重试）会撞上
+`An error occurred while checking server license key: HTTP 429`，此时服务器**根本不会启动**，
+日志里只有 license 一行，看起来像"卡住了"。两条经验：
+
+- 一次重启要等服务**真正起来**（`Started resource` 数到基线）再做下一步；不要 10 秒内连开两次，
+  第二次往往会撞 `EADDRINUSE`（前一个实例还在关）或者直接把 429 的窗口拉长。
+- 撞上 429 只能等（几十分钟量级）。这段时间去写测试/文档，不要反复试——每试一次都在续命限流。
+
+## `-> Quitting: SIGHUP received` 不是崩溃
+
+日志末尾出现 `-> Quitting: SIGHUP received`，随后是 `node::ResetStdio` 的 assert，说明进程是被
+**终端/screen 会话回收**的（控制终端消失 → SIGHUP），不是代码崩的。两种正确做法：
+
+1. 用 systemd 部署（仓库已有 `tools/ops/tcity.service` + `install_service.py`），会话关闭不影响服务；
+2. 非要用 screen，至少不要把 screen 挂在会被关掉/回收的终端会话里，并且定期确认 `screen -ls` 还在。
