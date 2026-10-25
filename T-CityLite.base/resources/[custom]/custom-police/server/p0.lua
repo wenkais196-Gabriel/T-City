@@ -542,6 +542,10 @@ function P.SetDutyForSource(source, onDuty, reason)
     local player = QBCore.Functions.GetPlayer(source)
     if not player then return false, 'not_police' end
 
+    local before = player.PlayerData.job.onduty
+    local info = debug.getinfo(player.Functions.SetJobDuty, 'S')
+    print(('[custom-police] duty call on=%s before=%s src=%s:%s'):format(
+        tostring(onDuty), tostring(before), tostring(info and info.source), tostring(info and info.linedefined)))
     local ok, err = pcall(function() player.Functions.SetJobDuty(onDuty) end)
     if not ok or data.job.onduty ~= onDuty then
         print(('[custom-police] duty_failed ok=%s err=%s data=%s player=%s same=%s expected=%s'):format(
