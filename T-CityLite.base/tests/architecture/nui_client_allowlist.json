@@ -4,17 +4,6 @@
   "rule": "NUI-CLIENT-01",
   "entries": [
     {
-      "id": "police-origin-hardcoded",
-      "check": "nui_origin_hardcoded",
-      "resource": "custom-police",
-      "file": "html/script.js",
-      "name": "custom-police",
-      "owner": "custom-police",
-      "reason": "3 处 $.post('https://custom-police/...') 硬编码资源名，没有 GetParentResourceName()。资源改名/复制一份测试服后全部失效，也绕过了 https://cfx-nui-<res>/ 作用域约定。审计 High P-03。",
-      "added": "2026-10-25",
-      "expires": "2027-03-31"
-    },
-    {
       "id": "police-nui-request-timeout",
       "check": "nui_request_timeout",
       "resource": "custom-police",
