@@ -257,4 +257,4 @@ as attacker-controlled strings server-side (per-source cooldown, charset + lengt
    string assertions, so a refactor cannot silently drop one half.
 
 Depth (Lua/TS sketches, diag phase table, harness shape):
-`references/nui-delivery-and-focus.md`.
+本文件（references 下的 nui-delivery-and-focus）.

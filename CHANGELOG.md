@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **P0 运维基础设施：服务器现在会自己起来、自己备份、自己体检**（见 `docs/ops/RUNBOOK.md`）
+  - `tools/ops/healthcheck.py`：把「84 资源 / 0 SCRIPT ERROR / 三条启动标记 / 74 张表」从人眼判断变成一条命令的退出码，`--json` 供 agent 消费；失败项每句都能照着修，而不是只说 failed
+  - `tools/ops/backup_db.py`：每日 `mysqldump` + 保留策略。口令从 `server.cfg` 读、经 `MYSQL_PWD` 传给子进程（不进命令行，`ps` 看不到）；`mysqldump` 非 0 或产出 0 字节都判失败并删掉半截文件，避免 cron 里静默成功；已装 `0 4 * * *` 定时任务，并用「导入临时库」验证过 74 张表可恢复
+  - `tools/ops/persistence_check.py`：重启前后快照对比。**实测纠正了一个认知错误**：玩家背包在 `players.inventory`，不在 `inventories` 表里（后者存的是后备箱/公寓/组织仓库，键是 `glovebox-XXX` 而不是 citizenid）
+  - `tools/ops/install_service.py` + `tools/ops/tcity.service`：systemd 守护，`Restart=always`、控制台进 `/var/log/tcity/console.log`；安装前先校验（缺 `[Install]`、`Restart=no`、`ExecStart` 指向不存在脚本、`User=root` 都会被拒）
+  - 四个工具各配架构闸门：`tests/architecture/test_ops_healthcheck.py`、`tests/architecture/test_ops_backup.py`、`tests/architecture/test_ops_persistence.py`、`tests/architecture/test_ops_service_unit.py`，**每条规则都带反向校验**（抽掉标记 / 破坏单元文件 / 伪造空 dump 都必须被抓到）
+- **`docs/ops/RUNBOOK.md`**：启停（systemd 与 screen 两种）、自检、备份与恢复、持久化回归、排障速查、工具一览
 - 值班警察在 25 米内能看到**地面证据**落点提示：弹壳（红）/ 血迹（暗红）/ 指纹（青）各一根细柱 + `▼ 标签 · 8.0m` 浮字（平民与下班看不到；拾取流程不变，仍是 1.5 米内按 ~g~G~s~ 且要有空证据袋）。原生玩法只有手电照到才浮出文字，实测结果是「地上有东西但没人发现」；三种证据的发现门槛完全一样，所以一起加
 - 客户端 MCP 测试 harness：Windows FiveM Legacy + `fivem-mcp-server`，经 FXServer 30120 HTTP 轮询桥接；提供 `client_command` / `screenshot` / `read_client_log` / `nuitest` 测试钩子
 - Agent 接管栈：统一工具契约（`tools/agent_tools.json`，30 工具）、MCP 路由层、`custom-director` 17 个动作（L1–L4 分级 + 人审 + 执行后回读）、`custom-agent-client` 客户端效果通道

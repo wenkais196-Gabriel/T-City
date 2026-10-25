@@ -15,7 +15,7 @@
   `SetNuiFocus(false,false)` → `Wait(100)` → `SetNuiFocus(true,true)`, samples
   `IsNuiFocused()`/`IsNuiFocusKeepingInput()` every ~100 ms for ~2 s, then always `Reset()`s
   (so input is never left locked), separates "the natives do nothing on this client" from "a
-  resource steals focus right after us". Recipe in `references/nui-delivery-and-focus.md`.
+  resource steals focus right after us". Recipe in references 下的 nui-delivery-and-focus.
 - **A retrying test helper proves "eventually works", not the single-shot path the player takes.**
   Read the helper before citing its pass as verification of the user-visible flow.
 - **Cross-resource exports fail inside `pcall` when the target is only loaded by a dev cfg.** On a
