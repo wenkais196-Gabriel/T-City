@@ -155,9 +155,20 @@ function Bus.Plugin.Publish(eventName, ...)
 end
 
 --- 获取经济服务引用 (安全桥接)
+---
+--- **只返回原语层**（qb-core 的 EconomyService：AddMoney/RemoveMoney/SetMoney，内存优先）。
+--- 之前这里返回 `Bus.economy or Bus.EconomyService`——两个不同实现共用一条链，谁先注册
+--- 谁生效，而两者的方法集不一样（分层那份没有 RemoveMoney/SetMoney）。那等于让调用方
+--- 猜自己拿到的是哪套。分层便利方法请用 GetEconomyTools()。
 ---@return table|nil
 function Bus.Plugin.GetEconomy()
-    return Bus.economy or Bus.EconomyService or _G.EconomyService
+    return (Bus and Bus.EconomyService) or (_G.Bus and _G.Bus.EconomyService) or _G.EconomyService
+end
+
+--- 获取经济**便利层**（core-framework 的 AddScaled/Transfer，内部仍走原语写钱）
+---@return table|nil
+function Bus.Plugin.GetEconomyTools()
+    return Bus and Bus.economy
 end
 
 --- 获取安全服务引用 (安全桥接)

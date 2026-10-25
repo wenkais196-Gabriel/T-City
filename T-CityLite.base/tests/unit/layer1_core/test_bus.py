@@ -350,12 +350,36 @@ assert(Bus.Plugin.GetSchema("never_registered") == nil)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
     def test_plugin_get_economy(self):
-        """Plugin.GetEconomy 桥接 — 返回 Bus.economy"""
+        """Plugin.GetEconomy 桥接 — **只返回原语层**（Bus.EconomyService）。
+
+        契约变更：原来返回 `Bus.economy or Bus.EconomyService`，而这两者方法集不同
+        （分层便利层没有 RemoveMoney/SetMoney），调用方等于在猜自己拿到了哪套。
+        现在原语层优先，便利层走 GetEconomyTools()。
+        """
         result = run_lua_test("""
-Bus.economy = { GetBalance = function() return 999 end }
+Bus.EconomyService = { RemoveMoney = function() return true end, GetBalance = function() return 999 end }
+Bus.economy = { AddScaled = function() return 1 end }
 local econ = Bus.Plugin.GetEconomy()
 assert(econ ~= nil, "GetEconomy returned nil")
 assert(econ.GetBalance() == 999, "wrong economy ref")
+assert(econ.RemoveMoney ~= nil, "GetEconomy 必须给出可写钱的层（RemoveMoney）")
+
+local tools = Bus.Plugin.GetEconomyTools()
+assert(tools ~= nil and tools.AddScaled ~= nil, "GetEconomyTools 应返回便利层")
+""")
+        assert result['ok'], f"Lua error: {result['stderr']}"
+
+    def test_plugin_get_economy_ignores_the_tools_layer(self):
+        """只有便利层注册时，GetEconomy 不能拿它冒充原语层。"""
+        result = run_lua_test("""
+Bus.EconomyService = nil
+_G.Bus.EconomyService = nil
+_G.EconomyService = nil
+Bus.economy = { AddScaled = function() return 1 end }
+local econ = Bus.Plugin.GetEconomy()
+assert(econ == nil, "便利层不能被 GetEconomy 返回（它没有 RemoveMoney）")
+local tools = Bus.Plugin.GetEconomyTools()
+assert(tools ~= nil and tools.AddScaled() == 1, "GetEconomyTools 才应该拿到便利层")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 

@@ -251,6 +251,58 @@ function EconomyService.TransferMoney(fromCitizenId, toCitizenId, moneytype, amo
     return true
 end
 
+-- ── 离线入账（唯一允许直接写 players.money 的入口） ──────────────────
+--
+-- 为什么必须收口在这里：在线玩家的钱只存在于内存 (QBCore.Players[src].PlayerData.money)，
+-- 由 PersistenceManager 异步刷盘；但收款人离线时内存里没有对象，只能改 DB。历史上
+-- 这个"改 DB"被抄了三份（core-framework 的 Transfer、custom-phone 的汇款、qb-crypto 的
+-- 转账），其中一份用 `SET money = ?` 整块覆盖——先 SELECT 再 UPDATE，中间任何人动过
+-- bank/cash 都会被无声回滚，属于丢钱/凭空生钱那一类。
+--
+-- 这里用 JSON_SET + 算术，行级锁保证并发安全；不发内存事件（对方不在线，没人听）。
+
+---@param citizenid string 收款人
+---@param moneytype string 'cash'|'bank'|'crypto'
+---@param amount number 必须 > 0
+---@param reason string
+---@param cb function|nil cb(ok:boolean)
+local VALID_MONEY_TYPES = { cash = true, bank = true, crypto = true }
+
+function EconomyService.AddMoneyOffline(citizenid, moneytype, amount, reason, cb)
+    cb = cb or function() end
+    moneytype = type(moneytype) == 'string' and moneytype:lower() or ''
+    amount = tonumber(amount)
+
+    if type(citizenid) ~= 'string' or citizenid == '' then return cb(false) end
+    if not VALID_MONEY_TYPES[moneytype] then
+        print(('[EconomyService] ❌ AddMoneyOffline 拒绝未知货币类型: %s'):format(tostring(moneytype)))
+        return cb(false)
+    end
+    if not amount or amount <= 0 or amount ~= amount then return cb(false) end
+
+    MySQL.update(
+        ('UPDATE players SET money = JSON_SET(money, "$.%s", ' ..
+         'COALESCE(CAST(JSON_EXTRACT(money, "$.%s") AS DECIMAL(20,2)), 0) + ?) WHERE citizenid = ?'):format(
+            moneytype, moneytype),
+        { amount, citizenid },
+        function(affectedRows)
+            local changed = type(affectedRows) == 'table' and (affectedRows.affectedRows or 0) or tonumber(affectedRows) or 0
+            if changed <= 0 then
+                print(('[EconomyService] ❌ AddMoneyOffline 未命中行: %s %s %s'):format(citizenid, moneytype, reason or '-'))
+                return cb(false)
+            end
+            TriggerEvent('QBCore:Server:OnMoneyChange', -1, moneytype, amount, 'add', reason or 'offline')
+            -- 不能复用 fireAuditLog：它要 GetPlayerName(source) 和数值型 newBalance，
+            -- 离线玩家两者都没有（source=-1 → nil → %s/%d 直接抛错）。这里单独写一行审计。
+            TriggerEvent('qb-log:server:CreateLog', 'playermoney', 'AddMoneyOffline', 'lightgreen',
+                ('**离线入账** (citizenid: %s) $%d (%s) added. reason: %s'):format(
+                    citizenid, math.floor(amount), moneytype, reason or '-'),
+                amount > 100000)
+            cb(true)
+        end
+    )
+end
+
 -- ── 自注册 ────────────────────────────────────────────────────────────
 
 AddEventHandler('onResourceStart', function(resourceName)
@@ -264,3 +316,7 @@ end)
 -- 立即可用
 if not _G.Bus then _G.Bus = {} end
 _G.Bus.EconomyService = EconomyService
+
+exports('EconomyAddMoneyOffline', function(citizenid, moneytype, amount, reason, cb)
+    return EconomyService.AddMoneyOffline(citizenid, moneytype, amount, reason, cb)
+end)
