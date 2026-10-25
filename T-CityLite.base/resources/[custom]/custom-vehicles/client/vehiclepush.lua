@@ -5,13 +5,10 @@
 
 local isInFront = false
 
-local function loadAnimDict(dict)
-    if HasAnimDictLoaded(dict) then return end
-    RequestAnimDict(dict)
-    while not HasAnimDictLoaded(dict) do
-        Wait(10)
-    end
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份同样的阻塞等待循环）。
+-- 用 function 包一层而不是直接赋值 exports：导出在"调用时"解析，
+-- 这样不把核心资源变成加载期硬依赖，资源启动顺序也不影响。
+local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDict(dict) end
 
 RegisterNetEvent('custom-vehicles:client:pushVehicle', function(veh)
     if not veh or veh == 0 then return end

@@ -1,0 +1,66 @@
+{
+  "generated_at": "2026-10-25",
+  "min_count": 4,
+  "budgets": {
+    "DebugPrint": {
+      "max": 14,
+      "reason": "同名不同语义：各自带本资源的调试开关与前缀，合并会改变行为——有意重复"
+    },
+    "convarString": {
+      "max": 5,
+      "reason": "同上（convar 助手族）"
+    },
+    "GetBoolConvar": {
+      "max": 5,
+      "reason": "同上（convar 助手族）"
+    },
+    "GetIntConvar": {
+      "max": 7,
+      "reason": "convar 读取助手（GetInt/GetBool/convarString 一族共 20+ 份）。合并前提是核心侧先有双端导出的公共 lib；记入下一批"
+    },
+    "loadModel": {
+      "max": 4,
+      "reason": "基线：尚未评估合并收益（下一轮复核）"
+    },
+    "DrawText3D": {
+      "max": 5,
+      "reason": "3D 文字绘制，但各份的 scale/color/参数顺序不一致，合并要先统一签名——下一批"
+    },
+    "GetClosestPlayer": {
+      "max": 6,
+      "reason": "框架级查询，行为依赖各自的距离/过滤参数，暂不合并；语义收敛后再统一"
+    },
+    "checkRateLimit": {
+      "max": 4,
+      "reason": "基线：尚未评估合并收益（下一轮复核）"
+    },
+    "loadAnimDict": {
+      "max": 12,
+      "reason": "语义一致；[custom] 5 处已合并到 core-framework/shared/util.lua。qb-*（10）与 standalone（2）保留：避免与上游/第三方分叉"
+    },
+    "CloseMenuFull": {
+      "max": 4,
+      "reason": "基线：尚未评估合并收益（下一轮复核）"
+    },
+    "AddMoney": {
+      "max": 4,
+      "reason": "基线：尚未评估合并收益（下一轮复核）"
+    },
+    "HasItem": {
+      "max": 5,
+      "reason": "物品查询，分属不同资源（qb-inventory / custom-*），真正的 owner 是 qb-inventory"
+    },
+    "DrawText3Ds": {
+      "max": 5,
+      "reason": "同上（3D 文字族）"
+    },
+    "_initDebug": {
+      "max": 5,
+      "reason": "资源私有调试初始化，不跨资源复用"
+    },
+    "isPointInside": {
+      "max": 5,
+      "reason": "纯几何判断，语义一致；但属小工具类，合并收益低于 convar/绘制两族，排在后面"
+    }
+  }
+}

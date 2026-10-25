@@ -10,12 +10,10 @@ local inImpound = false
 local inGarage = false
 local inEvidence = false
 
-local function loadAnimDict(dict) -- interactions, job,
-    while (not HasAnimDictLoaded(dict)) do
-        RequestAnimDict(dict)
-        Wait(10)
-    end
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份同样的阻塞等待循环）。
+-- 用 function 包一层而不是直接赋值 exports：导出在"调用时"解析，
+-- 这样不把核心资源变成加载期硬依赖，资源启动顺序也不影响。
+local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDict(dict) end
 
 local function GetClosestPlayer() -- interactions, job, tracker
     local closestPlayers = QBCore.Functions.GetPlayersFromCoords()

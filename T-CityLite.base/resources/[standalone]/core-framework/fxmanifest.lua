@@ -8,6 +8,7 @@ description 'Core service framework: unified data access layer, cache engine, di
 version '0.6.0'
 
 shared_scripts {
+    'shared/util.lua',
     'bus.lua',
     'events/event_types.lua',
 }

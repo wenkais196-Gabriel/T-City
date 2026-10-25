@@ -21,16 +21,10 @@ local function handleNotify(payload)
     return 'ok'
 end
 
-local function loadAnimDict(dict)
-    if HasAnimDictLoaded(dict) then return true end
-    RequestAnimDict(dict)
-    local deadline = GetGameTimer() + ANIM_LOAD_TIMEOUT_MS
-    while not HasAnimDictLoaded(dict) do
-        if GetGameTimer() >= deadline then return false end
-        Wait(0)
-    end
-    return true
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份同样的阻塞等待循环）。
+-- 用 function 包一层而不是直接赋值 exports：导出在"调用时"解析，
+-- 这样不把核心资源变成加载期硬依赖，资源启动顺序也不影响。
+local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDict(dict) end
 
 local function handlePlayAnim(payload)
     local ped = PlayerPedId()
