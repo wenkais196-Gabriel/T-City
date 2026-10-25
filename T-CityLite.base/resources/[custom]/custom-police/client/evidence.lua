@@ -300,11 +300,12 @@ CreateThread(function()
         local playerPed = PlayerPedId()
         local pos = GetEntityCoords(playerPed)
         EvidenceHints.DrawDrops(pos)
-        if CurrentCasing and CurrentCasing ~= 0 then
-            if #(pos - vector3(Casings[CurrentCasing].coords.x, Casings[CurrentCasing].coords.y, Casings[CurrentCasing].coords.z)) < 1.5 then
-                DrawText3D(Casings[CurrentCasing].coords.x, Casings[CurrentCasing].coords.y, Casings[CurrentCasing].coords.z, Lang:t('info.bullet_casing', { value = Casings[CurrentCasing].type }))
+        local casing = CurrentCasing and Casings[CurrentCasing]
+        if casing then
+            if #(pos - vector3(casing.coords.x, casing.coords.y, casing.coords.z)) < 1.5 then
+                DrawText3D(casing.coords.x, casing.coords.y, casing.coords.z, Lang:t('info.bullet_casing', { value = casing.type }))
                 if IsControlJustReleased(0, 47) then
-                    local s1, s2 = GetStreetNameAtCoord(Casings[CurrentCasing].coords.x, Casings[CurrentCasing].coords.y, Casings[CurrentCasing].coords.z)
+                    local s1, s2 = GetStreetNameAtCoord(casing.coords.x, casing.coords.y, casing.coords.z)
                     local street1 = GetStreetNameFromHashKey(s1)
                     local street2 = GetStreetNameFromHashKey(s2)
                     local streetLabel = street1
@@ -315,21 +316,22 @@ CreateThread(function()
                         label = Lang:t('info.casing'),
                         type = 'casing',
                         street = streetLabel:gsub("%'", ''),
-                        ammolabel = Config.AmmoLabels[QBCore.Shared.Weapons[Casings[CurrentCasing].type]['ammotype']],
-                        ammotype = Casings[CurrentCasing].type,
-                        serie = Casings[CurrentCasing].serie
+                        ammolabel = Config.AmmoLabels[QBCore.Shared.Weapons[casing.type]['ammotype']],
+                        ammotype = casing.type,
+                        serie = casing.serie
                     }
                     TriggerServerEvent('evidence:server:AddCasingToInventory', CurrentCasing, info)
                 end
             end
         end
 
-        if CurrentBlooddrop and CurrentBlooddrop ~= 0 then
-            if #(pos - vector3(Blooddrops[CurrentBlooddrop].coords.x, Blooddrops[CurrentBlooddrop].coords.y,
-                    Blooddrops[CurrentBlooddrop].coords.z)) < 1.5 then
-                DrawText3D(Blooddrops[CurrentBlooddrop].coords.x, Blooddrops[CurrentBlooddrop].coords.y, Blooddrops[CurrentBlooddrop].coords.z, Lang:t('info.blood_text', { value = DnaHash(Blooddrops[CurrentBlooddrop].citizenid) }))
+        local blooddrop = CurrentBlooddrop and Blooddrops[CurrentBlooddrop]
+        if blooddrop then
+            if #(pos - vector3(blooddrop.coords.x, blooddrop.coords.y,
+                    blooddrop.coords.z)) < 1.5 then
+                DrawText3D(blooddrop.coords.x, blooddrop.coords.y, blooddrop.coords.z, Lang:t('info.blood_text', { value = DnaHash(blooddrop.citizenid) }))
                 if IsControlJustReleased(0, 47) then
-                    local s1, s2 = GetStreetNameAtCoord(Blooddrops[CurrentBlooddrop].coords.x, Blooddrops[CurrentBlooddrop].coords.y, Blooddrops[CurrentBlooddrop].coords.z)
+                    local s1, s2 = GetStreetNameAtCoord(blooddrop.coords.x, blooddrop.coords.y, blooddrop.coords.z)
                     local street1 = GetStreetNameFromHashKey(s1)
                     local street2 = GetStreetNameFromHashKey(s2)
                     local streetLabel = street1
@@ -340,20 +342,21 @@ CreateThread(function()
                         label = Lang:t('info.blood'),
                         type = 'blood',
                         street = streetLabel:gsub("%'", ''),
-                        dnalabel = DnaHash(Blooddrops[CurrentBlooddrop].citizenid),
-                        bloodtype = Blooddrops[CurrentBlooddrop].bloodtype
+                        dnalabel = DnaHash(blooddrop.citizenid),
+                        bloodtype = blooddrop.bloodtype
                     }
                     TriggerServerEvent('evidence:server:AddBlooddropToInventory', CurrentBlooddrop, info)
                 end
             end
         end
 
-        if CurrentFingerprint and CurrentFingerprint ~= 0 then
-            if #(pos - vector3(Fingerprints[CurrentFingerprint].coords.x, Fingerprints[CurrentFingerprint].coords.y,
-                    Fingerprints[CurrentFingerprint].coords.z)) < 1.5 then
-                DrawText3D(Fingerprints[CurrentFingerprint].coords.x, Fingerprints[CurrentFingerprint].coords.y, Fingerprints[CurrentFingerprint].coords.z, Lang:t('info.fingerprint_text'))
+        local fingerprint = CurrentFingerprint and Fingerprints[CurrentFingerprint]
+        if fingerprint then
+            if #(pos - vector3(fingerprint.coords.x, fingerprint.coords.y,
+                    fingerprint.coords.z)) < 1.5 then
+                DrawText3D(fingerprint.coords.x, fingerprint.coords.y, fingerprint.coords.z, Lang:t('info.fingerprint_text'))
                 if IsControlJustReleased(0, 47) then
-                    local s1, s2 = GetStreetNameAtCoord(Fingerprints[CurrentFingerprint].coords.x, Fingerprints[CurrentFingerprint].coords.y, Fingerprints[CurrentFingerprint].coords.z)
+                    local s1, s2 = GetStreetNameAtCoord(fingerprint.coords.x, fingerprint.coords.y, fingerprint.coords.z)
                     local street1 = GetStreetNameFromHashKey(s1)
                     local street2 = GetStreetNameFromHashKey(s2)
                     local streetLabel = street1
@@ -364,7 +367,7 @@ CreateThread(function()
                         label = Lang:t('info.fingerprint'),
                         type = 'fingerprint',
                         street = streetLabel:gsub("%'", ''),
-                        fingerprint = Fingerprints[CurrentFingerprint].fingerprint
+                        fingerprint = fingerprint.fingerprint
                     }
                     TriggerServerEvent('evidence:server:AddFingerprintToInventory', CurrentFingerprint, info)
                 end

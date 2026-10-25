@@ -334,3 +334,68 @@ def test_fingerprint_bag_uses_the_server_fingerprint():
     assert out["adds"] == "1"
     assert out["bag_fingerprint"] == "FP-SERVER", "指纹必须来自服务端记录"
     assert out["bag_street"] == "Mirror Park"
+
+
+def test_expired_drops_are_swept_and_clients_are_told():
+    """TTL 必须真的生效，而且要广播——否则客户端屏幕上留着幽灵箭头。
+
+    以前的 TTL 只在"表满 500"时才顺手跑一次，等于没到上限就整局不清；而且清的时候
+    一声不响，客户端那条 Remove* 永远收不到，箭头会一直挂在原地（按 G 也换不到东西）。
+    """
+    out = run("""
+        __convars['tcity_evidence_debug'] = 1
+
+        -- 一颗新鲜弹壳：清扫不能动它
+        fire(453432689, { x = 0.0, y = 0.0, z = 0.0 })
+        local freshId = __lastDropId
+        __clientEvents = {}
+        __say('fresh_removed=' .. tostring(EvidenceMaintenance.PruneExpired()))
+        __say('fresh_broadcast=' .. tostring(#__clientEvents))
+
+        -- 把 TTL 调成 -1，任何一行都算过期
+        __convars['tcity_evidence_ttl'] = -1
+        __clientEvents = {}
+        __say('expired_removed=' .. tostring(EvidenceMaintenance.PruneExpired()))
+        __say('expired_broadcast=' .. tostring(#__clientEvents))
+        if __clientEvents[1] then
+            __say('broadcast_event=' .. tostring(__clientEvents[1].name))
+            __say('broadcast_id=' .. tostring(__clientEvents[1].args[1]))
+            __say('broadcast_id_matches=' .. tostring(__clientEvents[1].args[1] == freshId))
+        end
+
+        -- 清掉之后，客户端那个 id 再来拾取必须被拒
+        pickup('evidence:server:AddCasingToInventory', freshId, { street = 'St' })
+    """)
+    assert out["fresh_removed"] == "0", "默认 30 分钟，刚生成的不能清"
+    assert out["fresh_broadcast"] == "0", "没清就不该广播"
+    assert out["expired_removed"] == "1", "过期了必须清掉"
+    assert out["expired_broadcast"] == "1", "清掉必须广播，否则客户端留着幽灵箭头"
+    assert out["broadcast_event"] == "evidence:client:RemoveCasing"
+    assert out["broadcast_id_matches"] == "true", "广播的必须是那一颗的 id"
+    assert out["adds"] == "0", "清掉之后不能再换出证据袋"
+
+
+def test_the_sweep_covers_blood_and_fingerprints_too():
+    out = run("""
+        freshPlayerWithBlood()
+        source = 1
+        __clientEvents = {}
+        __events['evidence:server:CreateBloodDrop']('CIT1', 'AB-', { x = 0.0, y = 0.0, z = 0.0 })
+        local bloodId = __clientEvents[1].args[1]
+        __clientEvents = {}
+        __events['evidence:server:CreateFingerDrop']({ x = 0.0, y = 0.0, z = 0.0 })
+        local fingerId = __clientEvents[1].args[1]
+
+        __convars['tcity_evidence_ttl'] = -1
+        __clientEvents = {}
+        __say('removed=' .. tostring(EvidenceMaintenance.PruneExpired()))
+        local names = {}
+        for i = 1, #__clientEvents do names[i] = __clientEvents[i].name end
+        __say('events=' .. table.concat(names, ','))
+        __say('blood_id=' .. tostring(bloodId))
+        __say('finger_id=' .. tostring(fingerId))
+    """)
+    assert out["removed"] == "2"
+    events = out["events"].split(",")
+    assert "evidence:client:RemoveBlooddrop" in events, out
+    assert "evidence:client:RemoveFingerprint" in events, out

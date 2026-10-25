@@ -210,3 +210,40 @@ def test_the_pickup_prompt_names_the_real_key_and_the_bag():
     assert "RemoveItem(src, 'empty_evidence_bag'" in server
     assert "'filled_evidence_bag'" in server
     assert "error.have_evidence_bag" in server, "没有空袋子时必须给出可读的错误提示，而不是静默失败"
+
+
+# ── 拾取块的空值守卫 ─────────────────────────────────────────────────────────
+# 服务端现在会定期清扫过期痕迹并广播 Remove*，客户端可能在**任意时刻**丢掉一条记录。
+# 如果拾取块仍然直接 `Casings[CurrentCasing].coords`，那一刻就是
+# "attempt to index a nil value" —— 玩家手上的脚本直接报错。
+# 这条是形状钉（不是行为证明）：真实路径在 while true 线程里，线程没法在单测里直接驱动。
+
+_PICKUP_BLOCKS = {
+    "CurrentCasing": "Casings",
+    "CurrentBlooddrop": "Blooddrops",
+    "CurrentFingerprint": "Fingerprints",
+}
+
+
+def unguarded_pickup_blocks(source: str) -> list[str]:
+    """找出"直接索引 Current* 对应表"而没有先取局部变量判空的块。"""
+    problems = []
+    for current, store in _PICKUP_BLOCKS.items():
+        guarded = f"local {'casing' if current == 'CurrentCasing' else ('blooddrop' if current == 'CurrentBlooddrop' else 'fingerprint')} = {current} and {store}[{current}]"
+        if guarded not in source:
+            problems.append(f"{current}: 少了 `{guarded}` 这层守卫")
+        if f"if {current} and {current} ~= 0 then" in source:
+            problems.append(f"{current}: 还是旧的 `if ... ~= 0 then` 形状（没有判空）")
+    # 旧形状：任何 Current* 作为下标的直接用法
+    for match in re.finditer(r"\w+\[(Current\w+)\]\.", source):
+        problems.append(f"{match.group(1)}: 直接索引后取字段，可能踩到已删除的记录")
+    return problems
+
+
+def test_pickup_blocks_survive_a_record_that_was_swept_away():
+    source = EVIDENCE.read_text(encoding="utf-8")
+    assert unguarded_pickup_blocks(source) == [], "\n".join(unguarded_pickup_blocks(source))
+
+    # 反向：旧写法必须被抓到
+    bad = "        if CurrentCasing and CurrentCasing ~= 0 then\n            DrawText3D(Casings[CurrentCasing].coords.x)\n"
+    assert unguarded_pickup_blocks(bad), "扫描器抓不住没有守卫的拾取块"
