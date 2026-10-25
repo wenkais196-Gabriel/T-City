@@ -18,4 +18,5 @@ server_scripts {
 
 dependencies {
     'qb-core'
+    'core-framework',
 }

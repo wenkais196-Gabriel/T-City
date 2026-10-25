@@ -33,17 +33,11 @@ local thresholdTracker = {}
 -- Convar 读取辅助
 -- ==============================================================
 
-local function GetIntConvar(name, default)
-    local val = GetConvar(name, "")
-    if val ~= "" then return math.floor(tonumber(val) or default) end
-    return default
-end
+-- 收敛到 shared/util.lua 的 ConvarInt（同资源，直接引用全局）
+local GetIntConvar = function(...) return ConvarInt(...) end
 
-local function GetNumConvar(name, default)
-    local val = GetConvar(name, "")
-    if val ~= "" then return tonumber(val) or default end
-    return default
-end
+-- 收敛到 shared/util.lua 的 ConvarFloat（同资源直接引用全局）
+local GetNumConvar = function(...) return ConvarFloat(...) end
 
 -- ==============================================================
 -- 1. 输入清理器 (Sanitizer)

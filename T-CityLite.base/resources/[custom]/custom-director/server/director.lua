@@ -43,21 +43,12 @@ _G.Director = Director
 -- Convar configuration (read per tick so the kill switch is live)
 -- ---------------------------------------------------------------------------
 
-local function convarString(name, default)
-    local value = GetConvar(name, default)
-    if type(value) ~= 'string' then return default end
-    return value
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份相同的解析）：
+-- 用函数包一层，导出在调用时解析；资源启动顺序由 fxmanifest 的 dependencies 保证。
+local convarString = function(...) return exports['core-framework']:ConvarString(...) end
 
-local function convarInt(name, default, minimum, maximum)
-    local raw = convarString(name, tostring(default))
-    local value = tonumber(raw)
-    if not value or value ~= value then value = default end
-    value = math.floor(value)
-    if value < minimum then value = minimum end
-    if maximum and value > maximum then value = maximum end
-    return value
-end
+-- 统一走 core-framework 的公共实现（Clamp 语义已包含在内）
+local convarInt = function(...) return exports['core-framework']:ConvarInt(...) end
 
 local function Config()
     return {

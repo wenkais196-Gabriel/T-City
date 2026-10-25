@@ -132,3 +132,52 @@ def test_callers_resolve_the_export_at_call_time():
             problems.append(f"{path.relative_to(BASE)}: 还留着自己的循环实现")
     assert not problems, "\n".join(problems)
 
+
+CONVAR_CALLERS = [
+    "resources/[custom]/custom-security/config.lua",
+    "resources/[custom]/custom-economy/config.lua",
+    "resources/[custom]/custom-main/config/config.lua",
+    "resources/[custom]/custom-crime/server/crime.lua",
+    "resources/[custom]/custom-main/server/crime.lua",
+    "resources/[custom]/custom-director/server/main.lua",
+    "resources/[custom]/custom-director/server/director.lua",
+    "resources/[custom]/custom-director/server/live_api.lua",
+    "resources/[custom]/custom-director/server/live_events.lua",
+    "resources/[custom]/custom-agent-client/server/main.lua",
+]
+
+
+def test_convar_helpers_come_from_the_shared_library():
+    problems = []
+    for rel in CONVAR_CALLERS:
+        src = (BASE / rel).read_text(encoding="utf-8")
+        if "exports['core-framework']:Convar" not in src:
+            problems.append(f"{rel}: 没走共享的 Convar* 实现")
+        # 还留着自己解析 GetConvar 的私货就说明没迁干净
+        if "GetConvar(name" in src or "GetConvar(convar" in src:
+            problems.append(f"{rel}: 还留着自己解析 convar 的代码")
+    assert not problems, "\n".join(problems)
+
+
+def test_load_time_callers_declare_the_core_dependency():
+    """在 `config.lua` 顶层（加载期）就调用核心导出的资源，必须声明 dependencies。
+
+    这是 convar 族和 loadAnimDict 的关键差别：后者只在玩家触发时调用，前者在资源
+    加载那一刻就要值。没有 dependencies 兜底，启动顺序一变就是 `No such export`
+    ——而且是整个资源加载失败，不是动画不播。
+    """
+    problems = []
+    for rel in CONVAR_CALLERS:
+        path = BASE / rel
+        # 找到所属资源根（resources/<bracket>/<res>）
+        parts = path.parts
+        idx = parts.index("resources")
+        root = Path(*parts[: idx + 3])
+        manifest = root / "fxmanifest.lua"
+        text = manifest.read_text(encoding="utf-8")
+        if idx + 2 >= len(parts):
+            continue
+        if "core-framework" not in text:
+            problems.append(f"{root.name}: 没在 fxmanifest 的 dependencies 里声明 core-framework")
+    assert not problems, "\n".join(problems)
+

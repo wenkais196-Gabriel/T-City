@@ -14,4 +14,5 @@ server_scripts {
 dependencies {
     'qb-core',
     'custom-logs'
+    'core-framework',
 }
