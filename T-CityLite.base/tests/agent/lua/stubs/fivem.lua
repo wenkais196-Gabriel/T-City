@@ -52,6 +52,14 @@ return function(env)
                     if type(overrides) == 'table' and type(overrides[functionName]) == 'function' then
                         return overrides[functionName](...)
                     end
+                    -- 本 env 里真的注册过的导出要被调用，而不是一律返回 true：
+                    -- 之前 core-framework 的 ConvarString/ConvarInt 也走这条兜底，
+                    -- 于是每个读 convar 的开关都拿到 true，`== '1'` 永远为假 →
+                    -- 功能被当成关闭（HTTP 适配器全 503），测试却"没报错"。
+                    local registered = env.exports[functionName]
+                    if type(registered) == 'function' then
+                        return registered(...)
+                    end
                     env.log[#env.log + 1] = {
                         export = tostring(resource) .. ':' .. tostring(functionName),
                         args = { ... },

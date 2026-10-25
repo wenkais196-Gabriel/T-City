@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `start_server.bat` 一键启动脚本（UTF-8 编码，自动切换工作目录）
 - `tests/architecture/test_nui_baseline.py` + `test_command_guards.py`：把「MDT 永远查询失败」与「控制台 /status 崩溃」两次教训钉成 CI —— 禁 NUI 回调里的 `type(cb) ~= 'function'` 守卫、要求 `PhoneBridge.AnswerFn` 覆盖三种应答通道、禁 `GetConvarInt` 判 diag 门禁、client/server trace 相位表必须同序、判定只用可观测槽位、诊断投影不带业务字段、NUI 产物必须内容哈希、`_diag` 只在边界三处出现、命令处理器索引 `PlayerData` 前必须判空（各含反向校验）
 - 新增三条架构闸门：`test_agent_docs.py`（根索引必须登记分区文件、固定小节、`CLAUDE.md` 只能是指针）、`test_plane_boundaries.py`（client 不碰 DB / server 不调 NUI 原生 / shared 不注册事件 / manifest 不把 server 代码列进 client）、`test_docs_links.py`（约束区文档的路径引用必须存在）；三条都带反向校验；新增 `tools/dev/release_check.py`（凭据 + 债务到期 + CHANGELOG）与 `tools/dev/reuse_scan.py`（同名实现复用报告）
+- **CI 转绿：五处"本地绿、流水线红"的根因**。GitHub Actions 从 `chore(tools)` 起就一直是红的，原因不是某一个提交，而是**测试依赖了本地独有的东西**：
+  1. 脚本根的 docs_links_report.py 多一个右括号 —— `compileall` 直接失败（这个文件与 T-CityLite.base 下那份是两份拷贝，我改错了那份）。
+  2. 干净克隆里没有 server.cfg（含凭据，gitignored），于是 FIT-10 的"谁是导出消费者"扫描看到的是**模板链**，而模板链漏了 `ensure custom-director` —— CI 与生产看到两个不同的启动集合。补进 quest.cfg（它依赖 custom-quest，必须排在之后）。
+  3. agent 的 Lua harness 从来没加载 core-framework 的 shared/util.lua，  而 director 读 convar 走的是 `exports['core-framework']:ConvarString`；更糟的是 harness 的 exports 桩对任何未注册的方法**一律返回 true**，所以 `enabled` 永远是 false → HTTP 适配器全 503，10 个用例里 9 个红。修法是两份：harness 先加载 util.lua，且 exports 桩优先调用本 env 里真正注册过的导出。
+  4. integration harness 缺 ConvarInt 等全局（同样的 util.lua 缺失），以及 qb-core 的导出代理只提供了 GetCoreObject，离线入账走的 EconomyAddMoneyOffline 拿到 nil 直接炸。
+  5. 两处文档指向 gitignored 的文件（运行时的 admins.json、含凭据的 server.cfg）—— 改成不带反引号的叙述。
+  验证方式也换了：**在干净克隆里跑 CI 的四条命令**（`compileall`、tests/unit、tests/architecture、tests/agent、tests/integration），而不是只跑本地那两条目录。结果 920 passed / 132 skipped。
 - **警察模块收口（第三步完成）：案卷 / 逮捕 / 报告，例外表清零**。`police_cases` 有两个写者（p2 的逮捕建卷、p3 的玩家建卷，两段几乎逐字相同）、`police_arrests` 两个且**列集合不同**（p2 的 Sys.Jail 三列、p3 的 RegisterArrest 五列）、`police_reports` 三处 INSERT 加两处 UPDATE（p1 五列、p2 十四列/十二列、p3 只更新判决字段）。
   又碰到同一个 bug 家族：`case_id`/`incident_id` 位于参数数组**中间**，调用方常传 nil，数组出洞 → oxmysql 截断 → 参数少于占位符 → MariaDB 语法错 → `InsertId()` 拿到错误字符串。真库对照确认：旧形状 `ok=true` 但结果是错误字符串 —— 也就是说**不带案卷/事件建报告这条路是坏的**，而报告创建是逮捕与录入流程的必经环节。
   新增 custom-police 的 records.lua 作为三张表的唯一写者：`InsertCase`（案号 CASE-年-六位，插入后补写）、`InsertArrest`（incident/case 只在提供时出现）、`InsertReport`（kind/status/BOLO/charges 按需拼接）、`LinkReport`（case_id 数字、justice_case_id 字符串，只更新实际给的列）、`RecordVerdict`（返回 ok 与 affected，保留"写失败"与"没匹配到行"的区别）。p1/p2/p3 的 9 处写入全部改为委派。
