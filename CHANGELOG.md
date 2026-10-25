@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `custom-testing` 移出生产 cfg，改由 `configs/modules/dev.cfg` 按需启用
 
 ### Fixed
+- `custom-phone`: `phone:open` 是 fire-and-forget，CEF 加载期间（每次 `restart custom-phone` 后）帧被静默丢弃，Lua 侧 `isPhoneOpen=true` 但屏幕上没有界面；改为 `PhoneBridge.AwaitAck` 每 250ms 重发、NUI 回 `phoneOpenAck` 才停，2.5s 无回执则复位半开状态并提示
+- `custom-phone`: `focusState` 诊断按来源 5s 限流，同一次打开的 `open-nui-sent`/`open-ack` 互相吞掉，无法区分「NUI 未应答」和「焦点未生效」；改为按 phase 单独限流
+- `custom-phone`: appQuery/appAction 预算拆成 120/min burst 40 与 30/min burst 10 后，单元测试仍按 burst 10 断言；测试对齐真实预算并覆盖 action 桶独立耗尽
+- `custom-phone`: 移除 appQuery 逐请求调试 `print`，handoff 追踪改由 `appQuery-hit`/`appAction-hit` 诊断阶段承担
+- `custom-director`: `police_run_e2e` 调用的 `custom-agent-ops` 只在 `configs/modules/dev.cfg` 启动，FIT-10 导出门禁红；登记为 deferred repo 资源（未启动时动作返回 `execution_failed`，不影响正常流程）
 - `custom-quest`: 服务端重启后 `QuestCache` 未从 DB 预加载，`step_decision` 重连不弹窗；改为 `QBCore:Server:PlayerLoaded` 预加载 + `/questrestore`
 - `story-engine`: decision NUI 增加焦点/`keepInput` 遥测、300s 看门狗、`SetNuiFocusKeepInput(false)`，避免重连软锁与手机 UI 抢焦点
 - `core-framework` 引用了不存在的 `cache/*.lua`，导致自身及 9 个下游资源无法启动
