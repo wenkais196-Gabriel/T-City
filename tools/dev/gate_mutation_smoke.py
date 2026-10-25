@@ -73,6 +73,15 @@ MUTATIONS: list[Mutation] = [
     ),
 
     Mutation(
+        gate="tests/architecture/test_evidence_authority.py::test_identity_fields_come_from_the_server_record",
+        path="resources/[custom]/custom-police/server/evidence.lua",
+        content=None,
+        replace_from="        ammotype = drop.weapon,\n        serie = drop.serie,\n",
+        replace_to="        ammotype = casingInfo.ammotype,\n        serie = casingInfo.serie,\n",
+        what="弹壳拾取又变回采信客户端声称的 weapon/serie（改过的客户端可伪造证据）",
+    ),
+
+    Mutation(
         gate="tests/architecture/test_economy_single_owner.py::test_only_the_owner_writes_players_money",
         path="resources/[custom]/custom-phone/server/__mutant_money.lua",
         content=("-- 变异注入：在 owner 之外直接改 players.money\n"

@@ -180,6 +180,22 @@ local function evidenceInfo(info, keys)
     return clean
 end
 
+--- 客户端唯一被允许提供的字段是**街道名**：只有客户端拿得到原生街道名。
+--- 其余（weapon / serie / dna / bloodtype / fingerprint）一律用服务端自己的掉落记录，
+--- 否则改过的客户端可以凭空造一个证据袋，或者把别人的 DNA 写进去。
+---@return string|nil
+local function streetFromClient(info)
+    local clean = evidenceInfo(info, { 'street' })
+    return clean and clean.street or nil
+end
+
+--- 与客户端 DnaHash 一致：把 citizenid 逐字节转成十六进制（只用于展示，不做校验）。
+local function dnaHash(value)
+    return (tostring(value or ''):gsub('.', function(c)
+        return string.format('%02x', string.byte(c))
+    end))
+end
+
 --- Validate an id list before touching it. A malformed element rejects the
 --- request (no partial apply); a list longer than the cap is truncated, since
 --- the list only ever comes from the caller's own client cache.
@@ -301,8 +317,20 @@ RegisterNetEvent('evidence:server:AddBlooddropToInventory', function(bloodId, bl
     if pickupRateLimited(src) then return end
     local id = tonumber(bloodId)
     if not id then return end
-    local info = evidenceInfo(bloodInfo, { 'label', 'type', 'street', 'dnalabel', 'bloodtype' })
-    if not info then return end
+    local drop = BloodDrops[id]
+    if type(drop) ~= 'table' then
+        if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+            print(('[evidence] pickup refused: blood %s is not tracked here'):format(tostring(id)))
+        end
+        return
+    end
+    local info = {
+        label = Lang:t('info.blood'),
+        type = 'blood',
+        street = streetFromClient(bloodInfo),
+        dnalabel = dnaHash(drop.dna),
+        bloodtype = drop.bloodtype,
+    }
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddBlooddropToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddBlooddropToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
@@ -320,8 +348,19 @@ RegisterNetEvent('evidence:server:AddFingerprintToInventory', function(fingerId,
     if pickupRateLimited(src) then return end
     local id = tonumber(fingerId)
     if not id then return end
-    local info = evidenceInfo(fingerInfo, { 'label', 'type', 'street', 'fingerprint' })
-    if not info then return end
+    local drop = FingerDrops[id]
+    if type(drop) ~= 'table' then
+        if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+            print(('[evidence] pickup refused: fingerprint %s is not tracked here'):format(tostring(id)))
+        end
+        return
+    end
+    local info = {
+        label = Lang:t('info.fingerprint'),
+        type = 'fingerprint',
+        street = streetFromClient(fingerInfo),
+        fingerprint = drop.fingerprint,
+    }
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddFingerprintToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddFingerprintToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
@@ -398,8 +437,25 @@ RegisterNetEvent('evidence:server:AddCasingToInventory', function(casingId, casi
     if pickupRateLimited(src) then return end
     local id = tonumber(casingId)
     if not id then return end
-    local info = evidenceInfo(casingInfo, { 'label', 'type', 'street', 'ammolabel', 'ammotype', 'serie' })
-    if not info then return end
+    local drop = Casings[id]
+    if type(drop) ~= 'table' then
+        -- 服务端已经不记得这颗弹壳（清场 / 上限淘汰 / 资源重启）：客户端屏幕上可能还留着
+        -- 一个幽灵标记，绝不能凭它发证据袋。
+        if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+            print(('[evidence] pickup refused: casing %s is not tracked here'):format(tostring(id)))
+        end
+        return
+    end
+    local weaponInfo = QBCore.Shared.Weapons[drop.weapon]
+    local ammotype = type(weaponInfo) == 'table' and weaponInfo.ammotype or nil
+    local info = {
+        label = Lang:t('info.casing'),
+        type = 'casing',
+        street = streetFromClient(casingInfo),
+        ammolabel = ammotype and Config.AmmoLabels[ammotype] or nil,
+        ammotype = drop.weapon,
+        serie = drop.serie,
+    }
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddCasingToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddCasingToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
