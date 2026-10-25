@@ -1363,6 +1363,7 @@ end
 
 RegisterNetEvent('phone:server:appQueryRequest', function(requestId, data)
     local src = source
+    print(('[custom-phone][server] appQueryRequest src=%s id=%s'):format(tostring(src), tostring(requestId)))
     if not validAppRequestId(requestId) then return end
     if type(data) ~= 'table' then
         replyAppRequest('phone:client:appQueryResponse', src, requestId,
