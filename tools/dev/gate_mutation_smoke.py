@@ -106,6 +106,82 @@ MUTATIONS: list[Mutation] = [
 ]
 
 
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_net_event_auth.py::test_every_net_event_is_authenticated_or_registered",
+        path="resources/[custom]/custom-police/server/__mutant_netevent.lua",
+        content=("-- 变异注入：注册一个没有鉴权 token 的 net event\n"
+                 "RegisterNetEvent('probe:server:evil', function(amount)\n"
+                 "    print(amount)\n"
+                 "end)\n"),
+        what="无鉴权的 net event",
+    ),
+    Mutation(
+        gate="tests/architecture/test_state_writers.py::test_no_unregistered_state_writer",
+        path="resources/[custom]/custom-police/server/__mutant_statewrite.lua",
+        # 必须是规则跟踪的列（police_incidents.status）；写别的列会被 classify() 判为"不归它管"，
+        # 于是注入不触发——第一版就是用 title 写的，跑出"没红"。
+        content=("-- 变异注入：绕过 service 直接写别人拥有的状态表\n"
+                 "CreateThread(function()\n"
+                 "    MySQL.update('UPDATE police_incidents SET status = ? WHERE id = ?', { 'x', 1 })\n"
+                 "end)\n"),
+        what="未登记的状态写路径（规则跟踪的列）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_query_discipline.py::test_no_query_discipline_violations",
+        path="resources/[custom]/custom-police/server/__mutant_selectstar.lua",
+        content=("-- 变异注入：SELECT * 与无 LIMIT 的全表拉取\n"
+                 "CreateThread(function()\n"
+                 "    MySQL.query.await('SELECT * FROM players')\n"
+                 "end)\n"),
+        what="SELECT * / 无 LIMIT",
+    ),
+    Mutation(
+        gate="tests/architecture/test_command_guards.py::test_command_handlers_guard_missing_player",
+        path="resources/[custom]/custom-police/server/__mutant_command.lua",
+        content=("-- 变异注入：命令处理函数直接索引玩家，不判空\n"
+                 "QBCore.Commands.Add('probeunguarded', 'probe', {}, false, function(source)\n"
+                 "    local Player = QBCore.Functions.GetPlayer(source)\n"
+                 "    print(Player.PlayerData.citizenid)\n"
+                 "end)\n"),
+        what="命令处理器没守 source == 0 / 离线玩家",
+    ),
+    Mutation(
+        gate="tests/architecture/test_duty_writer.py::test_scan_passes_with_zero_unregistered_writers",
+        path="resources/[custom]/custom-police/server/__mutant_duty.lua",
+        content=("-- 变异注入：模块作用域直接写值勤状态\n"
+                 "CreateThread(function()\n"
+                 "    local Player = QBCore.Functions.GetPlayer(1)\n"
+                 "    if Player then Player.Functions.SetJobDuty(true) end\n"
+                 "end)\n"),
+        what="未经 owner 的 SetJobDuty 写路径",
+    ),
+]
+
+
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_cross_resource_writes.py::test_no_unregistered_cross_resource_writes",
+        path="resources/[custom]/custom-police/server/__mutant_crosswrite.lua",
+        # 用 player_houses（owner=qb-houses）：custom-police 对 player_vehicles 有已登记的
+        # 豁免（拖车），写那张表是合规的——第一版就是撞在这条豁免上，跑出"没红"。
+        content=("-- 变异注入：直接写别的资源拥有的表（player_houses 归 qb-houses）\n"
+                 "CreateThread(function()\n"
+                 "    MySQL.update('UPDATE player_houses SET owned = ? WHERE house = ?', { 1, 'x' })\n"
+                 "end)\n"),
+        what="跨资源直接写别人的表",
+    ),
+    Mutation(
+        gate="tests/architecture/test_agent_docs.py::test_area_docs_keep_the_fixed_sections",
+        path="resources/[custom]/custom-police/client/AGENTS.md",
+        content=("# 分区说明（缺章节）\n\n随便写点东西，四节一个都没有。\n"),
+        what="分区 AGENTS.md 缺固定章节",
+    ),
+]
+
+
 def run_gate(nodeid: str) -> tuple[bool, str]:
     """返回 (passed, 最后一行输出)。passed=True 表示这条闸门**没红**。"""
     proc = subprocess.run(

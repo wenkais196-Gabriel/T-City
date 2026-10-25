@@ -184,6 +184,11 @@ fitness function 的定义是"对必须保持的架构特性给出客观、持�
 | **Batch 2 闸门** | `test_plane_boundaries.py`（4 条平面规则）、`test_docs_links.py`（约束区路径必须存在）、`test_agent_docs.py` | 四条注入全部变红：client 直连 DB、文档断链、新增未登记 `AGENTS.md`、宪法条款落点不存在 |
 | **Batch 3 流程自动化** | `tools/dev/release_check.py`（凭据 + 债务到期 + CHANGELOG）、`tools/dev/reuse_scan.py`（同名实现复用报告）、PR 模板挂级别/阶段/发布检查 | `release_check.py` 通过；`reuse_scan.py` 首轮报告：`loadAnimDict` 17 份、`DebugPrint` 14 份 —— 正是"组件碎片化"的量化入口 |
 
+**闸门覆盖率（`tools/dev/gate_coverage.py`）**：把"这条规则有没有被检验过"变成一个数字。
+一条规则算已证明，当且仅当它在 `gate_history` 里失败过、是变异冒烟用例、或本身是反向校验；
+其余算未证明（技术债）。未证明数写进 `tests/architecture/gate_coverage_budget.json`，
+超过上限红，明显低于上限也红（逼着收紧）——和复用预算是同一套棘轮。
+
 **闸门自身的可信度**：`tools/dev/gate_mutation_smoke.py` 会把"该被拦住的形状"真的注入仓库、
 跑对应闸门、确认变红、再撤回，8 条核心闸门实测 7 条全部"注入后红、撤掉后绿"。
 理由是 `gate_stats` 的另一半：205 条规则里长期 0 命中的那些，要么该删，要么从未被检验过——
