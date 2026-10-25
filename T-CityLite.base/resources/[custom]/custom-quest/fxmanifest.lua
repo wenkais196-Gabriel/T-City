@@ -90,6 +90,8 @@ server_scripts {
 }
 
 client_scripts {
+    -- 客户端共享助手（加载期包含，零调用开销；必须排在其它 client 脚本之前）
+    '@core-framework/client/shared.lua',
     'client/main.lua',
     'client/quest_checkpoint.lua',            -- v0.11: Native Checkpoint 管理器
     'client/quest_pos_collector.lua',         -- v0.11: 航空坐标采集工具

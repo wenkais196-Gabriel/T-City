@@ -35,6 +35,8 @@ server_scripts {
 }
 
 client_scripts {
+    -- 客户端共享助手（加载期包含，零调用开销；必须排在其它 client 脚本之前）
+    '@core-framework/client/shared.lua',
     'client/main.lua',
     'client/vehicle_degradation.lua', -- v0.9: 里程/引擎损耗/磨损部件 (修复帧级扣血 Bug)
     'client/vehicle_nitrous.lua',     -- v0.9: 氮气加速系统

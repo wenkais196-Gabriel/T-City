@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4. integration harness 缺 ConvarInt 等全局（同样的 util.lua 缺失），以及 qb-core 的导出代理只提供了 GetCoreObject，离线入账走的 EconomyAddMoneyOffline 拿到 nil 直接炸。
   5. 两处文档指向 gitignored 的文件（运行时的 admins.json、含凭据的 server.cfg）—— 改成不带反引号的叙述。
   验证方式也换了：**在干净克隆里跑 CI 的四条命令**（`compileall`、tests/unit、tests/architecture、tests/agent、tests/integration），而不是只跑本地那两条目录。结果 920 passed / 132 skipped。
+- **客户端可观测性真的接上了（22 个资源）**：`CFShared.Report` + 就绪信标的文档写了很久，但只有 custom-phone / custom-police 真接上——其余二十多个自有资源的客户端错误没有任何上行通道。现在 `[custom]`/`[system]` 里已 ensure 的资源全部把 @core-framework/client/shared.lua 放进 client_scripts 第一位，并声明 `dependencies { 'core-framework' }`。
+  过程中挖出两个真问题：①**启动顺序**：production-freeze、hud-position-tool、custom-career 原本都在core-framework 之前启动，`@` 包含会在加载期找不到文件——把 `ensure core-framework` 从 custom.cfg 挪到 core.cfg 的 production-freeze 之后（core-framework 依赖它加载 `_L` i18n）、hud-position-tool 之前。②**环**：production-freeze 与 core-framework 互相依赖，所以它反向包含会成环——撤回并登记为例外。
+  闸门 CLI-01（tests/architecture/test_client_observability.py）：缺包含点名、不在第一位点名、豁免双向校验、上游目录与 vendored 库也要校验没被注入；每条规则先构造坏形状证明能红。顺带修好解析盲点：`client_script 'x.lua'`（单数写法）此前完全不在扫描范围内，改成单数就能绕过。
+  验证：全量 927 passed / 132 skipped；整机重启 84 资源 Started、0 SCRIPT ERROR、无 could not find / failed to load。
 - **CI 全绿（6/6 job）**：最后两个 job 也是同一类毛病——**测试桩与它测的代码脱节**。
   agent 工具注册表：TOOLS.md 是 `tools/agent_tools.py --write` 的生成物，但有人在末尾手写了一段控制台驱动手册（tcity-cmd），`--check` 于是永远报 drift。那段内容本身有价值，搬到 T-CityLite.base/docs/agent/CONSOLE.md（并从 agent/README.md 索引），生成物恢复纯生成。
   NUI 冒烟：Playwright 的 fetch 桩返回**空正文**（`text: async () => ''`），而 custom-phone 现在把 `await resp.text()` 交给 JSON.parse（web/src/utils/nui.ts），于是每个回调都抛 "NUI <event> replied HTTP 200: "，这些 console error 把用例判红。桩改成按事件名返回非空 JSON（nuiReady/phoneOpenAck/closePhone/getPhoneData/getPhoneApps/getCallHistory）。

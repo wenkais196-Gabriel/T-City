@@ -63,6 +63,30 @@ kind 只接受 `error` / `warn` / `info`（其它值降级成 `info`）。
 **事件名必须写字面量**：架构闸门按字面量扫描，`RegisterNetEvent(EVENT_NAME, ...)`
 会让整条事件对闸门不可见——这条规则由 `test_net_event_registration_uses_a_literal_name` 钉住。
 
+## 覆盖范围（谁真的接上了）
+
+这条通道此前只有 `custom-phone` 与 `custom-police` 接上，其余二十多个自有资源的客户端
+错误根本没有上行通道——文档在写，代码没接。现在按资源类别划清：
+
+| 范围 | 状态 |
+|---|---|
+| 自有客户端资源（`[custom]`、`[system]`，且已 ensure） | 全部接入，包含必须是 client_scripts 第一项 |
+| `atom_nodes`、`aaa_silence` | 启动早于 `core-framework`，`@` 包含会在加载期找不到文件 |
+| `production-freeze` | 与 `core-framework` 成环（`core-framework` 依赖它加载 `_L` i18n），不能反向包含 |
+| `monitor`、`notify-test` | 不在启动链里（手动 `ensure`），没有运行时就不需要信标 |
+| `[qb]`、`[cfx-default]`、`[voice]`、`[defaultmaps]` | 上游/默认资源，不迁移 |
+| `PolyZone`、`oxmysql`、`menuv`、`bob74_ipl`、`safecracker`、`progressbar`、`interact-sound`、`cartel-gates` | vendored 第三方，不注入自家代码 |
+
+**启动顺序是硬约束**：`@resource/file` 只在对方资源已启动时才解析成功，所以
+`core-framework` 必须排在所有接入者之前。它在 `core.cfg` 里排在 `production-freeze`
+之后（对方先加载 `_L`）、`hud-position-tool` 之前。这条由接线闸门
+（`test_existing_cfg_and_dependency_parsers_agree`）钉住，不要只靠人记。
+
+闸门：`tests/architecture/test_client_observability.py`（CLI-01）。它做四件事——缺包含要点名、
+包含不在第一位要点名、豁免双向校验（已接入还登记 / 登记的资源没了都红）、结构性豁免
+（上游目录与 vendored 库）也要校验仍存在且没被注入。每条规则都先构造坏形状证明自己能红，
+再看真实仓库。名单镜像在 `client_observability.json`。
+
 ## 边界（这套东西管不到的情况）
 
 - **客户端在 `shared.lua` 加载之前就崩了**：信标发不出去。这种情况只能靠 F8。
