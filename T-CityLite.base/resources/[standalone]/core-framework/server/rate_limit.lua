@@ -6,8 +6,8 @@
 --   3. 令牌桶 + 突发：custom-phone 自己的 core/rate_limit.lua
 -- 安全原语各写一份 = 7 种边界行为，其中任何一份的 off-by-one 都是可利用的。
 --
--- 这里提供前两类（第 3 类的令牌桶请继续用 custom-phone 的实现：它带 diag 钩子和
--- 独立的单测，合并会改变已测试的语义）。
+-- 这里提供全部三类。唯一的例外是 custom-phone 自己那份令牌桶：它带 diag 钩子与独立单测，
+-- 合并会改变已测试的语义，因此登记为例外而不是硬并。
 --
 -- 用法：
 --   RateLimit.Cooldown(('%s:%s'):format(src, 'cash'), 1000)            -- 冷却
@@ -96,8 +96,9 @@ function RateLimit.TokenBucket(key, ratePerMinute, burst, now)
     local refillPerMs = ratePerMinute / 60000
     local bucket = windows[key]                      -- 与窗口计数共用一张表，键空间已带前缀
     if not bucket or bucket.tokens == nil then
-        bucket = { tokens = burst, updatedAt = now }
-        windows[key] = bucket
+        -- 首次请求也要消耗一个令牌：曾经这里给满 tokens 却不扣，导致 burst=2 能连续放过 3 次
+        -- （真实调用探针抓到的 off-by-one —— 静态闸门永远看不见这种错）。
+        windows[key] = { tokens = burst - 1, updatedAt = now }
         return true, 0
     end
 
@@ -128,6 +129,15 @@ function RateLimit.Sweep(maxAgeMs)
     end
 end
 
+--- 仅用于测试/诊断：总条目数
+---@return number
+function RateLimit.Size()
+    local n = 0
+    for _ in pairs(cooldowns) do n = n + 1 end
+    for _ in pairs(windows) do n = n + 1 end
+    return n
+end
+
 --- 仅用于测试/诊断：当前表大小
 function RateLimit.Stats()
     local c, w = 0, 0
@@ -150,4 +160,4 @@ if Bus and Bus.RegisterService then
     })
 end
 
-print('[core-framework] rate limit ready (exports: RateLimitCooldown, RateLimitWindow, RateLimitReset)')
+print('[core-framework] rate limit ready (exports: RateLimitCooldown, RateLimitWindow, RateLimitReset, RateLimitTokenBucket)')
