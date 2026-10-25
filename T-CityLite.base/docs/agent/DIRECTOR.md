@@ -50,7 +50,7 @@ Invariants:
 
 1. **Server-side only.** No client script, NUI or HTTP input is involved in the
    poll loop. The existing HTTP API is unchanged and still requires tokens.
-2. **Propose only.** `server/director.lua` calls `AgentActions.Propose`. It has
+2. **Propose only.** `resources/[custom]/custom-director/server/director.lua` calls `AgentActions.Propose`. It has
    no approval or execution path, and it never calls `AgentActions.Approve`.
 3. **Human approval for L3.** The broker's policy marks `start_quest` as L3
    with `requires_approval = true`; `dryRun = false` therefore persists
@@ -58,8 +58,9 @@ Invariants:
 4. **No LLM.** The target quest comes from a static allowlist. The same input
    always produces the same proposal.
 5. **No policy duplication.** Validation, preview, online-player checks, quest
-   catalog checks, idempotency and TTL all stay in `server/policy.lua` +
-   `server/main.lua`.
+   catalog checks, idempotency and TTL all stay in
+   `resources/[custom]/custom-director/server/policy.lua` +
+   `resources/[custom]/custom-director/server/main.lua`.
 6. **Bounded work.** Batch size, proposal count per tick and poll interval are
    clamped by convars.
 
@@ -67,10 +68,10 @@ Invariants:
 
 | File | Role |
 |:---|:---|
-| `server/director_rules.lua` | Pure Lua rule table, payload extraction and idempotency-key format. No FiveM/DB dependency. |
-| `server/director.lua` | Cursor, poll loop, `Propose` calls, `RunOnce`/`GetState`/`Reset` exports. |
-| `server/main.lua` | Reused unchanged as the action broker. |
-| `server/policy.lua` | Reused unchanged as the policy/preview engine. |
+| `resources/[custom]/custom-director/server/director_rules.lua` | Pure Lua rule table, payload extraction and idempotency-key format. No FiveM/DB dependency. |
+| `resources/[custom]/custom-director/server/director.lua` | Cursor, poll loop, `Propose` calls, `RunOnce`/`GetState`/`Reset` exports. |
+| `resources/[custom]/custom-director/server/main.lua` | Reused unchanged as the action broker. |
+| `resources/[custom]/custom-director/server/policy.lua` | Reused unchanged as the policy/preview engine. |
 | `tests/agent/test_director_rules.lua` | Standalone Lua tests. |
 | `tests/unit/layer3_business/test_director_rules.py` | Pytest wrapper + static contract checks. |
 | `resources/[custom]/tcity-e2e/config/scenarios/director_bridge.json` | Live observe -> propose scenario with a 120 s human window. |
@@ -93,7 +94,8 @@ Additional notes:
 - Only `quest.completed` participates. `quest.started`, `quest.step`,
   `quest.failed`, `story.choice`, `economy.*` and `vehicle.*` are skipped.
 - The chapter-1 completion does **not** complete the story arc: `story-engine`
-  marks an arc complete only on the chapter-4 finale (`config/arc_finales.lua`).
+  marks an arc complete only on the chapter-4 finale
+  (`resources/[custom]/story-engine/config/arc_finales.lua`).
   Therefore `story_arc` one-time gating does not reject the chapter-2 target.
 - `police_ch2_corruption_web` cannot be blocked by a chapter-2 cooldown on a
   first playthrough; cooldowns are per quest and the target has never completed.

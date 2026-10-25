@@ -2,7 +2,7 @@
 
 - **评审对象**：`fe76857 feat(agent): add in-memory live perception endpoints (M1)`
 - **基线**：`7008611`（父提交）→ `fe76857`；分支 `feat/agent-takeover-v2`
-- **范围**：`server/live_rules.lua`、`live_store.lua`、`live_events.lua`、`live_api.lua`、`http_api.lua` 的 live 拦截（+19 行）、`main.lua` 的 `live = _G.LiveApi`（+1 行）、`tests/agent/lua/cases/live_*.lua`、`tests/agent/lua/{bootstrap,runner}.lua`、`fxmanifest.lua` 加载顺序
+- **范围**：`resources/[custom]/custom-director/server/live_rules.lua`、`live_store.lua`、`live_events.lua`、`live_api.lua`、`http_api.lua` 的 live 拦截（+19 行）、`main.lua` 的 `live = _G.LiveApi`（+1 行）、`tests/agent/lua/cases/live_*.lua`、`tests/agent/lua/{bootstrap,runner}.lua`、`fxmanifest.lua` 加载顺序
 - **环境**：Lua 5.4（`lua5.4`）、Python 3、Linux；`TCITY_ROOT` 指向仓库或 `/tmp` 变异根
 - **约束遵守**：未修改任何被 git 跟踪的文件；未执行 `git add/commit/checkout`；本文件是唯一新增文件。复现脚本在 `/tmp/review04/`（不入库），关键代码已内联。
 - **方法**：逐行代码审计 + 恶意 `PlayerData`/恶意 convar/恶意 cursor 构造 + 18 个变异体（`/tmp` 副本）+ 48 人基准 + 真实调用链（`custom-phone` → `EconomyService` → `OnMoneyChange`）追踪

@@ -174,7 +174,7 @@ emoji 文本也会出现分歧。
 | F-10 | P2 | `T-CityLite.base/docs/agent/API.md:410-418`、`:476-477` | API.md 仍说 MCP 只有 5 个 read 工具、无写端点；实际 registry 有 13 个 active（含 `send_notify`/`add_player_money`/`start_player_quest`）和 7 个 planned。与 `TOOLS.md` 直接矛盾。 | `sed -n 410,418p API.md`；与 `TOOLS.md` 表格对照。 | 更新 API.md §5.1/§6.5：列出 10 个 read + 3 个 write/effect，说明写通道走 director、需审批；或把 API.md 中 MCP 段整体替换为指向 `TOOLS.md`。 |
 | F-11 | P2 | `.github/workflows/ci.yml:60-64` | CI 只跑 `tests/unit` 和 `../tests/agent`；`T-CityLite.base/tests/agent/test_lua_harness.py` 不在任一收集路径，因此 `http_adapter` 用例（GET/404/405 同步响应回归）从不执行。 | 本地 `cd T-CityLite.base && python3 -m pytest -q tests/agent/test_lua_harness.py` → 3 passed；但 CI 没有这一行。 | 在 `unit-tests` 增加 `python3 -m pytest -q tests/agent`（工作目录 `T-CityLite.base`）；或显式跑 `lua5.4 tests/agent/lua/runner.lua --case http_adapter`。 |
 | F-12 | P2 | `.github/workflows/ci.yml:28-30`、`:60-64` | 没有显式的 `python3 tools/agent_tools.py --check` step；虽然 `test_committed_artifacts_pass_check` 间接调用了 `main(["--check"])`，但依赖测试收集；`compileall -q tests` 只覆盖 `T-CityLite.base/tests`，不覆盖根 `tools/` 与 `tests/agent/`。 | `grep -n "agent_tools.py" .github/workflows/ci.yml` 无结果；`grep -n "compileall" ci.yml` 只有 `tests`。 | 在 repo root 增加 fail-fast step：`python3 tools/agent_tools.py --check`；增加 `python3 -m compileall -q tools tests/agent`。 |
-| F-13 | P2 | `T-CityLite.base/resources/[custom]/custom-director/server/policy.lua:15-31`、`fxmanifest.lua:12` | `shared/agent_tools.lua` 被 fxmanifest 加载，但 `policy.lua` 仍硬编码 3 个 action，没有读取 `AgentTools`；设计 §3.1/D7 的“`AgentPolicy.ACTIONS` 由 registry 派生”尚未发生。当前“单一事实源”只覆盖 Python MCP 和文档，不覆盖 director。 | `grep -n "AgentTools" policy.lua` 无结果；`grep -n "agent_tools" fxmanifest.lua` 只有 `shared/agent_tools.lua`。 | 明确这是 D7 未完成项，不要在 PR 中宣称 Lua 已是权威；D7 时让 `policy.lua` 从 `AgentTools.TOOLS` 派生并保留 3 个 legacy 等价断言。 |
+| F-13 | P2 | `T-CityLite.base/resources/[custom]/custom-director/server/policy.lua:15-31`、`fxmanifest.lua:12` | `resources/[custom]/custom-director/shared/agent_tools.lua` 被 fxmanifest 加载，但 `policy.lua` 仍硬编码 3 个 action，没有读取 `AgentTools`；设计 §3.1/D7 的“`AgentPolicy.ACTIONS` 由 registry 派生”尚未发生。当前“单一事实源”只覆盖 Python MCP 和文档，不覆盖 director。 | `grep -n "AgentTools" policy.lua` 无结果；`grep -n "agent_tools" fxmanifest.lua` 只有 `resources/[custom]/custom-director/shared/agent_tools.lua`。 | 明确这是 D7 未完成项，不要在 PR 中宣称 Lua 已是权威；D7 时让 `policy.lua` 从 `AgentTools.TOOLS` 派生并保留 3 个 legacy 等价断言。 |
 | F-14 | P2 | `tools/agent_mcp.py:209-222`、`:942-990`；设计 `03-tool-contract.md:252-262` | registry 的 `rate_limit`、`verify`、`undo` 在运行期只是元数据/`_meta`：MCP 没有令牌桶，`_handle_tools_call` 不执行 verify，也不安排 undo；设计 §8.3 的读 60/写 10/效果 2 限流未实现。 | `grep -n "rate_limit\|undo" tools/agent_mcp.py` 无结果；`verify` 只出现在 `_tool_descriptor()` 的 `_meta`（`agent_mcp.py:212-222`），`_handle_tools_call` 从 942 行直接进入 `_call_*`，没有 rate/verify/undo 逻辑。 | 要么在 MCP 实现令牌桶 + verify/undo 调度并加测试；要么在设计与 `TOOLS.md` 明确标注“M0 仅为元数据，director 负责验证/回滚”，避免把字段当已实现能力。 |
 | F-15 | P2 | `tools/agent_tools.json:790`、`:795` | `send_announce` 描述是“to all players / World-scoped”，但 `blast_radius` 是 `single`。它当前 approval=true 所以不构成自动执行，但 blast_radius 是审批矩阵的输入，数据本身不一致。 | `sed -n 788,800p tools/agent_tools.json`。 | 改为 `world`（并保留/强化审批），或在描述中明确“单区域广播”；给 blast_radius 与描述的一致性加人工 review checklist。 |
 | F-16 | P2 | `tools/agent_tools.py:895-935` | `validate_arguments`（MCP 运行期）不校验 array 的 `maxItems/minItems/uniqueItems/items`、`const`、`default`；只有 registry 校验器检查。当前 registry 没有 array 参数，因此是潜在缺口。 | 给任一工具加 `foo_ids:{type:array,maxItems:1,...}`，MCP 传 2 个元素：`validate_arguments` 不报错；Lua 也不消费 `max_items`。 | 在 `validate_arguments` 补 array 约束；或在设计里明确 v1 不支持 array 并让 validator 拒绝，避免“schema 有、runtime 不执行”。 |
@@ -242,8 +242,8 @@ emoji 文本也会出现分歧。
    和 `test_agent_actions_policy.lua`；当前它从未被 CI 调用（`tests/unit` 只覆盖
    policy，不覆盖 `http_adapter`）。
 
-4. **Lua/Python 契约对照测试**（新增 `tests/agent/test_agent_tools_lua_parity.py`
-   或放进 `test_agent_tools.py`）：
+4. **Lua/Python 契约对照测试**（新增 Lua/Python 对照用例 `test_agent_tools_lua_parity.py`，
+   或并入 `test_agent_tools.py`（两者均待建））：
    ```bash
    lua5.4 -e 'local A=dofile(".../agent_tools.lua"); assert(not A.validate("get_player_snapshot",{citizenid=""}))'
    ```
@@ -251,7 +251,7 @@ emoji 文本也会出现分歧。
    `citizenid`、`idempotency_key`、`text`、`limit`、`amount`。
 
 5. **负例覆盖**：把 §1.2 的 A1/A2/A3/A4/A5/A6/A7/A9 固化进
-   `tests/agent/test_agent_tools.py`，避免本次的 4 个 P1 再次回归。
+   `test_agent_tools.py`（待建），避免本次的 4 个 P1 再次回归。
 
 6. **docs 硬约束**（可选，先修既有 2 条缺失）：
    ```yaml
@@ -285,7 +285,7 @@ CI 已安装 `lua5.4`，本地可跑通；`tests/agent/lua` 的 `http_contract` 
 | `TOOLS.md` | 未被 `README.md`/`API.md`/`ACTIONS.md` 链接；设计 D9 未完成。 | F-18 |
 | `API.md` | `:410-418` 只列 5 个 read 工具；`:476-477` 说“MCP exposes only the five read tools / No write endpoints”。与 `TOOLS.md` 的 13 active（含 3 个写）直接冲突。 | F-10 |
 | `ACTIONS.md` | `:18-24` 只列 `notify/add_money/start_quest`，`:288` 的 action_type 也只有 3 个；`:409` 仍把 L2+ 列为 out of scope。`TOOLS.md` 有 7 个 planned（含 L2/L3/L4）。严格说不是“已实现”的矛盾，但文档没有说明“planned 尚未进 policy.lua”，容易误读。 | F-13 |
-| `design/03-tool-contract.md` | `:15`（L2 默认审批）与 `:144`/`:153`（effect⇒L3/L4）互相矛盾；`:245` 要求 `http.query`，registry 实际隐式映射；`:284-296` 的 untrusted 未实现。 | D2/D3/D4 |
+| `docs/agent/design/03-tool-contract.md` | `:15`（L2 默认审批）与 `:144`/`:153`（effect⇒L3/L4）互相矛盾；`:245` 要求 `http.query`，registry 实际隐式映射；`:284-296` 的 untrusted 未实现。 | D2/D3/D4 |
 | docs-check | 当前 2 条既有缺失：`PROJECT_PROGRESS.md: ./quest-system-design.md`、`docs/archive/QBCore_Lite_versions/README.md: ../quest-system-design.md`；脚本只打印、不 exit 1，所以不会因为新文件变红。 | F-18 |
 
 ## 7. 复现命令（最小集）

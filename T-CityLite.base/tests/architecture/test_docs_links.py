@@ -1,7 +1,7 @@
 """DOCS-02 — 约束区文档里引用的路径必须真实存在。
 
-范围**刻意收窄**：只检查 agent 真正会照着做的文档——根/分区 ``AGENTS.md`` 与
-``docs/engineering/**``。全仓 351 份 md、2862 处路径引用里有大量历史文档，一次全量
+范围**刻意收窄**：只检查 agent 真正会照着做的文档——根/分区 ``AGENTS.md``、
+``docs/engineering/**`` 与 ``T-CityLite.base/docs/agent/**``。全仓 351 份 md、2862 处路径引用里有大量历史文档，一次全量
 收紧只会逼人加几百条豁免；先把"会被执行的那一层"钉死，其余用
 ``tools/dev/docs_links_report.py`` 出报告、逐步收编。
 
@@ -19,7 +19,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[2]
 REPO = BASE.parent
 IGNORED_DIRS = {"node_modules", ".git", "alpine", "txData", "cache"}
-CONSTRAINT_DIRS = [REPO / "docs" / "engineering"]
+CONSTRAINT_DIRS = [REPO / "docs" / "engineering", BASE / "docs" / "agent"]
 
 PATH_TOKEN = re.compile(r"`([^`\s]+)`")
 PATH_SUFFIXES = (".md", ".lua", ".py", ".json", ".sql", ".ts", ".svelte", ".cfg", ".sh", ".mjs", ".js", ".html")
@@ -54,7 +54,7 @@ def broken_links(text: str, doc: Path) -> list[str]:
 
 
 def constraint_docs() -> list[Path]:
-    """范围 = 所有 AGENTS.md（动态发现）+ docs/engineering/**。"""
+    """范围 = 所有 AGENTS.md（动态发现）+ 各 CONSTRAINT_DIRS 下的全部 md。"""
     docs = [
         p for p in REPO.rglob("AGENTS.md")
         if p.is_file() and not (IGNORED_DIRS & set(p.parts))

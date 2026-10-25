@@ -364,7 +364,7 @@ UpdateProfilePicture, track-vehicle
 | **P7 发票/车辆 N+1** | `server.lua:162-186`、`:440-498` | 发票 I 条 → I+1 查询；车辆 V 条 → V+1 查询 | 用 `JOIN` 或 `WHERE citizenid IN (...)` 一次取；返回 DTO 而不是 `SELECT *` |
 | **P8 短信靠全表 `LIKE` 找人** | `server.lua:907-948`（`:910-911`） | 每发一条短信全表扫 `players`；`charinfo` 是 JSON 文本，前导 `%` 无法索引；号码重复/格式变化会找错人 | 用 `phone_numbers(number)` 唯一索引直接查 citizenid；消息只写**单条行**，不写 JSON blob |
 | **P9 聊天整段回写（写放大）** | `server.lua:918-920`、`:925-927`；表结构 `qb-phone.sql:24-32` | 1000 条历史、按每条 100B 粗估时，每条新消息写 ~100KB × 2 行；并发覆盖丢消息；TEXT 无上限 | 改成 `phone_messages(id, sender_number, receiver_number, message, type, meta, is_read, created_at)` 单条行；发送只 INSERT 一条；读取 `LIMIT` 分页 |
-| **P10 单页 70KB + 18 个 App 容器全量 DOM + CDN** | `html/index.html` 70,359B；`:7-36` 外链 CDN；`:1117-1135` 全量 JS；`html/js/app.js:111-230` | 首次开屏解析/执行成本高；CDN 失败则 UI 不可用；新增 App 继续膨胀 | Svelte 按路由 **动态 import**；首屏只加载 shell + 当前 App；所有依赖本地打包（custom-phone 已本地化，保持）；App 清单化 |
+| **P10 单页 70KB + 18 个 App 容器全量 DOM + CDN** | qb-phone 的 `index.html` 单页 70,359B；`:7-36` 外链 CDN；`:1117-1135` 全量 JS；`html/js/app.js:111-230` | 首次开屏解析/执行成本高；CDN 失败则 UI 不可用；新增 App 继续膨胀 | Svelte 按路由 **动态 import**；首屏只加载 shell + 当前 App；所有依赖本地打包（custom-phone 已本地化，保持）；App 清单化 |
 | **P11 开屏每帧控键约 18 个** | `client.lua:337-342` + `:210-229` | 开屏期间每秒约 1,100 次 native；低端机可能掉帧；与相机 `Wait(0)` 叠加更明显 | 保留**一个** `Wait(0)` 线程，只 disable 必要控制（鼠标/攻击/武器轮盘）；用 `SetNuiFocusKeepInput` + 最小集合；不要为每个功能再起线程 |
 | **P12 服务端内存无清理** | `server.lua:4-13`、`:43-77`、`:472-530`；无 `playerDropped` 处理 | `AppAlerts`、`MentionedTweets`、`Calls`、`GeneratedPlates` 随在线/查询增长；长开服内存缓慢上涨 | 所有 per-citizenid map 在 `playerDropped` 清理；`GeneratedPlates` 加 LRU/上限；广告/ Hashtag 加 TTL |
 
@@ -423,10 +423,10 @@ UpdateProfilePicture, track-vehicle
 | # | 文件 | 改什么 | 是否可避免 |
 |---|---|---|---|
 | 1 | `config.lua` | 加 `Config.PhoneApplications['taxi'] = {app='taxi', job='taxi', slot=...}` | 配置化可以，但仍要手工 |
-| 2 | `html/index.html` | 加 `<div class="taxi-app">...</div>` 整页标记；加 `<script src="./js/taxi.js">` | 用组件/注册机制可避免 |
+| 2 | qb-phone 的 `index.html` 单页 | 加 `<div class="taxi-app">...</div>` 整页标记；加 `<script src="./js/taxi.js">` | 用组件/注册机制可避免 |
 | 3 | `html/css/taxi.css` | 新样式 | 组件内样式可避免 |
-| 4 | `html/js/taxi.js` | App 逻辑、`$.post` 调 NUI callback | 用通用 schema 渲染可避免 |
-| 5 | `html/js/app.js` | `if/else` 链加 `else if (PressedApplication == "taxi") { ... }` | 注册表可避免 |
+| 4 | qb-phone 的 `taxi.js` | App 逻辑、`$.post` 调 NUI callback | 用通用 schema 渲染可避免 |
+| 5 | qb-phone 的 `app.js` | `if/else` 链加 `else if (PressedApplication == "taxi") { ... }` | 注册表可避免 |
 | 6 | `client.lua` | 加 `RegisterNUICallback('taxiXxx')` 转发 | 通用 `appQuery/appAction` 可避免 |
 | 7 | `server.lua` | 加 callback/event + SQL | 通用 dispatch + 职业 provider 可避免 |
 | 8 | `fxmanifest.lua` | 若文件不在 `html/*` glob 内要补 `files` | 按目录 glob 可避免 |
@@ -439,7 +439,7 @@ UpdateProfilePicture, track-vehicle
 | 项目 | 架构 | 职业 App 扩展 | 对我们的意义 |
 |---|---|---|---|
 | **qb-phone** | 原生 HTML/JS + jQuery；单页 18 个 App 容器；84 NUI callback | 改 7~9 个文件；无注册；客户端门控 | 产品形态可抄，架构不可抄 |
-| **qbx_phone** | qb-phone 的 Qbox 移植；仍是同一套 `html/index.html` + `app.js` `if/else`（`app.js:123-223`），`MaxSlots` 仍是 16 | 同样硬编码；只是底层换成 `ox_lib`/`qbx_core` | **不是解法**；换框架不等于换架构 |
+| **qbx_phone** | qb-phone 的 Qbox 移植；仍是同一套 qb-phone 的 `index.html` 单页 + `app.js` `if/else`（`app.js:123-223`），`MaxSlots` 仍是 16 | 同样硬编码；只是底层换成 `ox_lib`/`qbx_core` | **不是解法**；换框架不等于换架构 |
 | **npwd** | React + TypeScript；前端/游戏脚本 monorepo；外部 App 用 **Module Federation** 从 `https://cfx-nui-<resource>/web/dist/remoteEntry.js` 加载，导出 `config`，App 列表来自配置（`useExternalApps.tsx`） | 真正的插件式：独立仓库/构建、运行时加载；但工具链重、需要 Vite federation、对 48 人服偏重 | 方向可借鉴（manifest + 独立 bundle），但**MVP 不要上 Module Federation**；先用 schema 渲染覆盖 80% 职业 App |
 
 > npwd README 宣称 “0.01 ms on idle and 0.05 while in use”，这是其自述指标，未在我们环境复测；但“React + 按需加载 + 外部 App”确实比 qb-phone 的静态大 DOM 更接近我们的目标。
@@ -471,7 +471,7 @@ UpdateProfilePicture, track-vehicle
 
 | # | 做法 | qb-phone 证据 | 为什么适合我们 |
 |---|---|---|---|
-| B1 | **职业 App 注册协议 + 服务端权限中间件**：manifest 注册，通用 `appQuery/appAction`，服务端按 job/role/org/tier/duty 校验 | qb-phone 反例：`config.lua` + `app.js:111-230` + 无鉴权 MDT（`server.lua:392-536`） | 这是本次调研的核心产出；没有它，每加一个职业就多一套漏洞。48 人下不需要微服务，一个 `server/apps.lua` 足够。 |
+| B1 | **职业 App 注册协议 + 服务端权限中间件**：manifest 注册，通用 `appQuery/appAction`，服务端按 job/role/org/tier/duty 校验 | qb-phone 反例：`config.lua` + `app.js:111-230` + 无鉴权 MDT（`server.lua:392-536`） | 这是本次调研的核心产出；没有它，每加一个职业就多一套漏洞。48 人下不需要微服务，一个服务端 App 注册模块足够。 |
 | B2 | **事件推送 + 缓存失效，替代 60s 全量轮询**：写操作只推“哪个 key 变了”，客户端按需增量拉 | 反例：`client.lua:2218-2233` 每 60s 全量 `GetPhoneData` | custom-phone 已有 30s TTL + 消息 push；把“联系人/设置/角标”也改成失效事件，关屏即零请求，符合 Phone-First 目标。 |
 | B3 | **所有列表分页 + 索引 + 只取需要的列**：消息/邮件/相册/推文 cursor 分页；补 `date`、`(citizenid,date)`、`number` 索引；禁止 `SELECT *` | 反例：`server.lua:239/256/263/282` 无 LIMIT；`qb-phone.sql:85-102` 无索引；`GetPhoneData` 全列 | 48 人现在能跑，但历史数据线性增长；分页是一次性改造，之后容量可预测。custom-phone 的 `getPhoneData` 已有 `LIMIT 100`，继续把邮件/相册/通知也分页。 |
 | B4 | **媒体走对象存储 + 缩略图 + 域名/大小白名单**：DB 存 object key，不存第三方临时 URL | 反例：`phone_gallery.image` 存 Discord `proxy_url`（`client.lua:1478-1490`、`server.lua:611-635`）；无索引（`qb-phone.sql:85-89`） | 警察截图/事故照片/出租车行车记录会长期使用；Discord URL 可能过期，必须自有存储（S3/R2/MinIO）+ 缩略图，否则相册半年后全是裂图。 |
@@ -842,9 +842,9 @@ fetchNui<PhoneAppResult<unknown>>('appAction', { appId, action, payload });
 ### 本地对照
 
 - custom-phone 服务端：`T-CityLite.base/resources/[custom]/custom-phone/server/main.lua`（`getPhoneData` [:123-256](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L123-L256)、30s cache [:120-134](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L120-L134)、`SendSystemMessage` [:387-428](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/server/main.lua#L387-L428)）
-- custom-phone 客户端：`.../client/main.lua`（开屏 focus [:25-46](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/client/main.lua#L25-L46)、开屏循环 [:88-151](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/client/main.lua#L88-L151)）
-- custom-phone NUI：`.../web/src/App.svelte`（领袖 App 硬编码 [:147-158](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/App.svelte#L147-L158)、App 路由 [:274-298](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/App.svelte#L274-L298)）
-- custom-phone 数据层：`.../web/src/stores/phone.ts`（`loadPhoneData` [:106-120](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/stores/phone.ts#L106-L120)）
+- custom-phone 客户端：`T-CityLite.base/resources/[custom]/custom-phone/client/main.lua`（开屏 focus [:25-46](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/client/main.lua#L25-L46)、开屏循环 [:88-151](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/client/main.lua#L88-L151)）
+- custom-phone NUI：`T-CityLite.base/resources/[custom]/custom-phone/web/src/App.svelte`（领袖 App 硬编码 [:147-158](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/App.svelte#L147-L158)、App 路由 [:274-298](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/App.svelte#L274-L298)）
+- custom-phone 数据层：`T-CityLite.base/resources/[custom]/custom-phone/web/src/stores/phone.ts`（`loadPhoneData` [:106-120](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-phone/web/src/stores/phone.ts#L106-L120)）
 - custom-career identity 字段：[`custom-career/server/main.lua:135-151`](../../../../T-CityLite.base/resources/%5Bcustom%5D/custom-career/server/main.lua#L135-L151)
 
 ---
