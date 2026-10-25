@@ -143,7 +143,12 @@ function SetInventory(identifier, items, reason)
     local player = QBCore.Functions.GetPlayer(identifier)
 
     -- 🔒 Security: identifier 脱敏
-    local maskedId = #identifier > 8 and (identifier:sub(1,4) .. '...' .. identifier:sub(-4)) or '***'
+    -- identifier 有两种形态：**source（数字）**——Player.Functions.SetInventory 走这条；
+    -- **citizenid（字符串）**——离线库存与跨资源调用走这条。脱敏不能假设它是字符串：
+    -- 数字上做 `#` 会直接抛错，而这段 print 在 SetPlayerData **之前**，于是整次写入被中断
+    -- （服务端日志里就是成片的 functions.lua:146 + qb-weapons 的 "error object is not a string"）。
+    local idText = tostring(identifier)
+    local maskedId = #idText > 8 and (idText:sub(1, 4) .. '...' .. idText:sub(-4)) or '***'
     print('Setting inventory for ' .. maskedId)
 
     if not player and not Inventories[identifier] and not Drops[identifier] then
@@ -154,7 +159,11 @@ function SetInventory(identifier, items, reason)
     if player then
         player.Functions.SetPlayerData('items', items)
         if not player.Offline then
-            local logMessage = string.format('**%s (citizenid: %s | id: %s)** items set: %s', GetPlayerName(identifier), player.PlayerData.citizenid, identifier, json.encode(items))
+            -- GetPlayerName 只接受 source：identifier 可能是 citizenid，直接传进去会拿到 nil，
+            -- 然后 string.format('%s', nil) 再抛一次错。用玩家自己的 source。
+            local logMessage = string.format('**%s (citizenid: %s | id: %s)** items set: %s',
+                GetPlayerName(player.PlayerData.source) or player.PlayerData.name or '?',
+                tostring(player.PlayerData.citizenid), idText, json.encode(items))
             TriggerEvent('qb-log:server:CreateLog', 'playerinventory', 'SetInventory', 'blue', logMessage)
         end
     elseif Drops[identifier] then
@@ -163,7 +172,7 @@ function SetInventory(identifier, items, reason)
         Inventories[identifier].items = items
     end
 
-    local invName = player and GetPlayerName(identifier) .. ' (' .. identifier .. ')' or identifier
+    local invName = player and ((GetPlayerName(player.PlayerData.source) or '?') .. ' (' .. idText .. ')') or idText
     local setReason = reason or 'No reason specified'
     local resourceName = GetInvokingResource() or 'qb-inventory'
     TriggerEvent(
@@ -785,7 +794,7 @@ function AddItem(identifier, item, amount, slot, info, reason)
     end
 
     if player then player.Functions.SetPlayerData('items', inventory) end
-    local invName = player and GetPlayerName(identifier) .. ' (' .. identifier .. ')' or identifier
+    local invName = player and ((GetPlayerName(player.PlayerData.source) or '?') .. ' (' .. idText .. ')') or idText
     local addReason = reason or 'No reason specified'
     local resourceName = GetInvokingResource() or 'qb-inventory'
     TriggerEvent(
@@ -871,7 +880,7 @@ function RemoveItem(identifier, item, amount, slot, reason)
 
     if player then player.Functions.SetPlayerData('items', inventory) end
 
-    local invName = player and GetPlayerName(identifier) .. ' (' .. identifier .. ')' or identifier
+    local invName = player and ((GetPlayerName(player.PlayerData.source) or '?') .. ' (' .. idText .. ')') or idText
     local removeReason = reason or 'No reason specified'
     local resourceName = GetInvokingResource() or 'qb-inventory'
 
