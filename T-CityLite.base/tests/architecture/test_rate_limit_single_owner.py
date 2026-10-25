@@ -5,8 +5,7 @@
 
 * `tcity-atmosphere` 的计数存在每个玩家的 state 结构里（`requestCount` /
   `requestWindowStart`），和它自己的场景状态机绑在一起，挪出来反而要重构状态机；
-* `custom-phone` 的 `server/core/rate_limit.lua` 是带 diag 钩子的令牌桶，
-  有独立单测，语义与"冷却/窗口"不同。
+* （原本还有 `custom-phone` 自己那份令牌桶，现已改为委派 owner 的门面。）
 
 所以规则不是"全仓只许有一个函数"，而是：**新的限流逻辑不许再长出来**，且已知的
 例外必须显式登记（下面两张表），登记项如果消失也要报出来（否则例外会永远留着）。
@@ -30,9 +29,7 @@ EXCEPTIONS = {
     RESOURCES / "[system]" / "tcity-atmosphere" / "server" / "atmosphere_service.lua":
         ("限流计数是每玩家 state（requestCount/requestWindowStart），与场景状态机耦合",
          "requestWindowStart"),
-    RESOURCES / "[custom]" / "custom-phone" / "server" / "core" / "rate_limit.lua":
-        ("带 diag 钩子的令牌桶（突发预算），语义不同于冷却/窗口，且有独立单测",
-         "buckets"),
+
 }
 
 # 已经迁到 owner、必须提到它的调用方
@@ -42,6 +39,7 @@ CALLERS = [
     RESOURCES / "[custom]" / "custom-vehicles" / "server" / "main.lua",
     RESOURCES / "[custom]" / "custom-security" / "server" / "security.lua",
     RESOURCES / "[custom]" / "custom-vehicles" / "server" / "dashboard_api.lua",
+    RESOURCES / "[custom]" / "custom-phone" / "server" / "core" / "rate_limit.lua",
 ]
 
 # 自建限流表/循环的典型痕迹 —— 出现即视为"又写了一份限流"
@@ -98,9 +96,21 @@ def test_migrated_callers_use_the_owner():
     for path in CALLERS:
         assert path.is_file(), f"缺少 {label(path)}"
         text = path.read_text(encoding="utf-8")
-        if "RateLimitCooldown" not in text and "RateLimit.Window" not in text:
+        if not any(k in text for k in ("RateLimitCooldown", "RateLimitWindow", "RateLimit.Window", "RateLimitTokenBucket")):
             problems.append(label(path))
     assert not problems, "这些调用方没走限流 owner：" + ", ".join(problems)
+
+
+def test_phone_facade_delegates_instead_of_reimplementing():
+    """手机侧的 `PhoneRateLimit.Allow` 是门面：4 个调用点 + diag 都依赖它，
+    但实现必须来自 owner（它曾经是 94 行的独立令牌桶）。"""
+    facade = RESOURCES / "[custom]" / "custom-phone" / "server" / "core" / "rate_limit.lua"
+    text = strip_comments(facade.read_text(encoding="utf-8"))
+    assert "RateLimitTokenBucket" in text, "门面必须委派给 owner 的 TokenBucket"
+    assert "bucket.tokens" not in text, "门面里不许再有桶的实现细节"
+    # 手机内部可以走门面，但门面自己必须真的指向 owner
+    diag = (RESOURCES / "[custom]" / "custom-phone" / "server" / "core" / "diag.lua").read_text(encoding="utf-8")
+    assert "PhoneRateLimit" in diag, "diag 应当继续通过门面访问限流"
 
 
 def test_exceptions_are_still_needed():

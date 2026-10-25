@@ -30,6 +30,31 @@ IDENTITY = CORE / "identity.lua"
 NOTIFY = CORE / "notify.lua"
 EVENTS = CORE / "events.lua"
 RATE_LIMIT = CORE / "rate_limit.lua"
+# 限流实现已搬到 core-framework；手机侧只剩门面。测试要同时把实现装进沙箱，
+# 并伪造 CfxLua 的 `exports`（既是函数可注册、又能 exports['res']:Method(...) 调用）。
+OWNER_RATE_LIMIT = (Path(__file__).resolve().parents[3] / 'resources' / '[standalone]'
+                    / 'core-framework' / 'server' / 'rate_limit.lua')
+
+EXPORTS_SHIM = """
+local __registry = {}
+exports = setmetatable({}, {
+    __call = function(_, name, fn) __registry[name] = fn end,
+    __index = function(_, resource)
+        return setmetatable({}, {
+            -- 注意：exports['res']:Method(a, b) 会把代理表当 self 传进来，
+            -- 必须在这里把 self 吞掉，否则参数整体错位（key 变成表 → 静默放行）。
+            __index = function(_, method)
+                return function(_, ...)
+                    local fn = __registry[method]
+                    if type(fn) ~= 'function' then return nil end
+                    return fn(...)
+                end
+            end,
+        })
+    end,
+})
+GetGameTimer = GetGameTimer or function() return os.time() * 1000 end
+"""
 MAIN = PHONE / "server" / "main.lua"
 MANIFEST = PHONE / "fxmanifest.lua"
 SMS = PHONE / "server" / "sms.lua"
@@ -348,6 +373,8 @@ assert(#pushes == 1, 'invalid pushes must not reach the client')
 
 def test_rate_limit_allows_burst_then_denies():
     assert_lua(f"""
+{EXPORTS_SHIM}
+dofile([[{OWNER_RATE_LIMIT}]])
 dofile([[{RATE_LIMIT}]])
 
 for i = 1, 10 do
@@ -393,6 +420,8 @@ function PhoneApps.Action(src, appId, actionName, params)
     return true, {{ ok = true }}
 end
 
+{EXPORTS_SHIM}
+dofile([[{OWNER_RATE_LIMIT}]])
 dofile([[{RATE_LIMIT}]])
 {_protocol_block()}
 
