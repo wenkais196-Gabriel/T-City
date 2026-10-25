@@ -114,7 +114,11 @@ const NUI_TIMEOUT_MS = 6000;
 const APP_REQUEST_TIMEOUT_MS = 9000;
 
 // NUI fetch function (sends requests to Lua)
-export async function fetchNui<T = any>(eventName: string, data?: any): Promise<T> {
+export async function fetchNui<T = any>(
+  eventName: string,
+  data?: any,
+  requestOptions: { timeoutMs?: number } = {},
+): Promise<T> {
   const options = {
     method: 'POST',
     headers: {
@@ -128,9 +132,10 @@ export async function fetchNui<T = any>(eventName: string, data?: any): Promise<
     // CEF can lose a NUI callback (resource restart, busy client) and leave the
     // fetch pending forever. Bound it so callers can reset their loading state.
     const controller = new AbortController();
-    const timeoutMs = eventName === 'appQuery' || eventName === 'appAction'
-      ? APP_REQUEST_TIMEOUT_MS
-      : NUI_TIMEOUT_MS;
+    const timeoutMs = requestOptions.timeoutMs
+      ?? (eventName === 'appQuery' || eventName === 'appAction'
+        ? APP_REQUEST_TIMEOUT_MS
+        : NUI_TIMEOUT_MS);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const resourceName = (window as any).GetParentResourceName();

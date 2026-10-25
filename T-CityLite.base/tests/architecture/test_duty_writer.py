@@ -284,12 +284,11 @@ def test_allowlist_is_well_formed() -> None:
     assert registry["version"] == 1
     assert registry["rule"] == "FIT-01"
     entries = registry["entries"]
-    assert len(entries) == 4, "allowlist must register exactly the four FIT-01 writers"
+    assert len(entries) == 3, "allowlist must register the remaining FIT-01 writers"
     files = [entry["file"] for entry in entries]
     assert sorted(files) == [
         "custom-director/server/main.lua",
         "custom-main/server/dispatch.lua",
-        "custom-police/server/p0.lua",
         "qb-core/server/player.lua",
     ]
     for entry in entries:
@@ -389,22 +388,20 @@ def test_police_service_is_the_only_p0_writer() -> None:
     structured = mask_lua(source, blank_strings=True)
     ranges = function_ranges(structured)
     calls = [code.count("\n", 0, match.start()) + 1 for match in CALL_RE.finditer(code)]
-    assert len(calls) == 1, f"p0.lua must keep exactly one SetJobDuty call, got lines {calls}"
-    funcs = enclosing_functions(ranges, calls[0])
-    assert funcs, "SetJobDuty call is outside any function"
-    headers = [source.splitlines()[func.start - 1] for func in funcs]
-    assert any("function P.SetDutyForSource(" in header for header in headers), headers
+    assert calls == [], f"the service owns the projection, no direct SetJobDuty in p0: {calls}"
 
     body = body_of("custom-police/server/p0.lua", "function P.SetDutyForSource(")
     assert "local data = pd(source)" in body
     assert "if not isPolice(data) then return false, 'not_police' end" in body
     assert "if onDuty ~= true and onDuty ~= false then return false, 'duty_failed' end" in body
-    assert "player.Functions.SetJobDuty(onDuty)" in body
-    assert "data.job.onduty ~= onDuty" in body, "SetJobDuty returns nothing; read the field back"
-    assert "return false, 'duty_failed'" in body
-    assert "syncDuty(data)" in body
+    assert "player.PlayerData.job.onduty = onDuty" in body
+    assert "TriggerEvent('QBCore:Server:OnJobUpdate'" in body
+    assert "TriggerClientEvent('QBCore:Client:OnJobUpdate'" in body
+    assert "syncDuty(live)" in body
+    assert "takeUnitOffDuty(live.citizenid)" in body
+    assert "live.job.onduty ~= onDuty" in body
     assert "onDuty and 'on' or 'off'" in body
-    assert "audit(data.citizenid, 'duty.set', data.citizenid, detail)" in body
+    assert "audit(live.citizenid, 'duty.set'" in body
     assert "return true" in body
     assert "exports('SetDutyForSource', P.SetDutyForSource)" in source
 

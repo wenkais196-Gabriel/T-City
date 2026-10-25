@@ -807,10 +807,7 @@ exports('GetUnits', P.GetUnits)
 exports('CreateIncident', P.CreateIncident)
 exports('GetIncidents', P.GetIncidents)
 exports('WriteAudit', function(actorCid, actorKind, action, target, detail)
-    local ok = audit(actorCid, action, target, detail, actorKind)
-    print(('[custom-police] WriteAudit %s actor=%s kind=%s -> %s'):format(
-        tostring(action), tostring(actorCid), tostring(actorKind), tostring(ok)))
-    return ok
+    return audit(actorCid, action, target, detail, actorKind)
 end)
 exports('AssignUnit', P.AssignUnit)
 exports('AssignUnitSystemForAgent', P.AssignUnitSystem)
@@ -823,36 +820,10 @@ exports('GetAudit', P.GetAudit)
 print('[custom-police] P0 dispatch layer loaded')
 
 
--- Dev probe: run the single duty service for a target source and print the
--- exact result so live tests can tell duty_failed from not_police.
-RegisterCommand('police_dutytest', function(source, args)
-    local target = tonumber(args and args[1]) or tonumber(source)
-    local on = tostring(args and args[2] or ''):lower() == 'on'
-    if not target or target <= 0 then return print('usage: police_dutytest <serverId> on|off') end
-    local ok, err = P.SetDutyForSource(target, on, 'cmdtest')
-    print(('[police_dutytest] target=%s on=%s -> %s %s'):format(
-        tostring(target), tostring(on), tostring(ok), tostring(err)))
-end, true)
 
 
--- Dev probe: teleport a player to the Mission Row fingerprint scanner.
-RegisterCommand('police_tp_fingerprint', function(_, args)
-    local target = tonumber(args and args[1])
-    local player = target and QBCore.Functions.GetPlayer(target)
-    if not player then return print('usage: police_tp_fingerprint <serverId>') end
-    local coords = Config.Locations['fingerprint'] and Config.Locations['fingerprint'][1]
-    if not coords then return print('fingerprint coords missing') end
-    TriggerClientEvent('police:client:DevTeleport', target, coords.x, coords.y, coords.z)
-    print(('[police_tp_fingerprint] %s -> %.1f,%.1f,%.1f'):format(
-        tostring(target), coords.x, coords.y, coords.z))
-end, true)
 
 
-RegisterCommand('police_open_fingerprint', function(_, args)
-    local target = tonumber(args and args[1])
-    if not target or not QBCore.Functions.GetPlayer(target) then
-        return print('usage: police_open_fingerprint <serverId>')
-    end
-    TriggerClientEvent('police:client:DevOpenFingerprint', target)
-    print(('[police_open_fingerprint] %s'):format(tostring(target)))
-end, true)
+
+
+

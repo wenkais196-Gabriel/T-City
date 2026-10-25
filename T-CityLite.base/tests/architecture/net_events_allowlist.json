@@ -293,8 +293,8 @@
       "name": "phone:server:storeNotification",
       "file": "custom-phone/server/main.lua",
       "category": "session",
-      "reason": "只写调用者自己的通知托盘（StoreNotification(source, ...) 内部 GetPlayer(source)），并丢弃 origin='server' 的回显以防存储回环。",
-      "evidence": "main.lua:686 storeNotification — GetPlayer(targetSrc=source)，title/content 截断、app_id 白名单",
+      "reason": "只写调用者自己的通知托盘（PhoneNotify.Store(source, ...) 内部 GetPlayer(source)），并丢弃 origin='server' 的回显以防存储回环。",
+      "evidence": "main.lua:578 storeNotification — PhoneNotify.Store(source, notification, 'client')，notify core 内 GetPlayer(source)，title/content 截断、app_id 白名单",
       "owner": "custom-phone",
       "expires": "2027-03-31"
     },
@@ -329,8 +329,8 @@
       "name": "phone:server:appQueryRequest",
       "file": "custom-phone/server/main.lua",
       "category": "civilian",
-      "reason": "职业 App 查询入口：任何玩家都可以请求，但 PhoneApps.Query 会按 app_id 注册的 audience（job/onduty）拒绝未授权玩家；handler 只接受 3–64 字符 request_id 与 table，响应只回传 request_id 和结果，不回显参数。",
-      "evidence": "main.lua:1532 appQueryRequest — validAppRequestId + type(data)=='table' + PhoneApps.Query(src, ...) audience check, unicast to src",
+      "reason": "职业 App 查询入口：任何玩家都可以请求，但 PhoneApps.Query 会按 app_id 注册的 audience（job/onduty）拒绝未授权玩家；handler 只接受 3–64 字符 request_id 与 table，每玩家 token bucket（app:<cid>:query）限流，响应只回传 request_id 和结果，不回显参数。",
+      "evidence": "main.lua:1364 appQueryRequest — validAppRequestId + type(data)=='table' + PhoneRateLimit.Allow(appRateKey) + PhoneApps.Query(src, ...) audience check, unicast to src",
       "owner": "custom-phone",
       "expires": "2027-03-31"
     },
@@ -338,10 +338,20 @@
       "name": "phone:server:appActionRequest",
       "file": "custom-phone/server/main.lua",
       "category": "civilian",
-      "reason": "职业 App 动作入口：PhoneApps.Action 同样在注册表内按 audience 复验权限/在勤，handler 只接受 3–64 字符 request_id 与 table，结果按调用者 source 单播回传。",
-      "evidence": "main.lua:1548 appActionRequest — validAppRequestId + type(data)=='table' + PhoneApps.Action(src, ...) audience check, unicast to src",
+      "reason": "职业 App 动作入口：PhoneApps.Action 同样在注册表内按 audience 复验权限/在勤，handler 只接受 3–64 字符 request_id 与 table，每玩家 token bucket（app:<cid>:action）限流，结果按调用者 source 单播回传。",
+      "evidence": "main.lua:1385 appActionRequest — validAppRequestId + type(data)=='table' + PhoneRateLimit.Allow(appRateKey) + PhoneApps.Action(src, ...) audience check, unicast to src",
       "owner": "custom-phone",
       "expires": "2027-03-31"
+    },
+    {
+      "file": "custom-police/server/p0.lua",
+      "category": "already_checked",
+      "reason": "duty point toggle: handler rejects non-police via isPolice(pd(src)); the state write goes through P.SetDutyForSource (FIT-01).",
+      "owner": "custom-police",
+      "added": "2026-10-25",
+      "expires": "2027-03-31",
+      "name": "custom-police:server:toggleDuty",
+      "evidence": "p0.lua:734 handler: isPolice(pd(src)) then P.SetDutyForSource"
     }
   ]
 }

@@ -23,8 +23,8 @@
 --     `players`), so foreign keys cannot be fabricated.
 --
 -- Loaded before server/main.lua on purpose: the event is registered before
--- the main script starts. Sms (server/sms.lua, loaded just before this file)
--- and PhoneNotify (server/main.lua, loaded after) are resolved at call time.
+-- the main script starts. Sms (server/sms.lua) and PhoneNotify
+-- (server/core/notify.lua, both loaded earlier) are resolved at call time.
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
@@ -32,7 +32,7 @@ local Compat = {}
 
 -- Upper bounds. qb-phone itself performs no validation; these are the limits
 -- the notification tray can hold (phone_notifications.title is VARCHAR(200)
--- and StoreNotification caps content at 1000 characters).
+-- and the notify core caps content at 1000 characters).
 Compat.MAX_SENDER = 64
 Compat.MAX_SUBJECT = 120
 Compat.MAX_MESSAGE = 2000
@@ -148,7 +148,7 @@ end
 --------------------------------------------------------------------------
 
 --- Insert a tray row for a player who is not necessarily online. Mirrors
---- StoreNotification's SQL/columns so both paths write the same shape.
+--- the notify core's SQL/columns so both paths write the same shape.
 ---@param citizenid string
 ---@param notification table
 local function InsertOfflineNotification(citizenid, notification)
@@ -196,9 +196,9 @@ local function ResolveSource(src)
 end
 
 --- Persist + push one notification to an online player.
---- PhoneNotify is defined by server/main.lua (same table, same single push,
---- same cache invalidation). It is looked up at call time because this file
---- loads first; the fallback keeps mails working if that ever changes.
+--- PhoneNotify is the notify core (same single push, same cache invalidation).
+--- It is looked up at call time; the function form is kept for the offline
+--- compat harness, the table form is what the loaded resource provides.
 ---@param Player table
 ---@param citizenid string
 ---@param mail table
@@ -209,9 +209,12 @@ function Compat.DeliverToPlayer(Player, citizenid, mail)
 
     local notification = Compat.MailToNotification(mail)
     local src = Player.PlayerData.source
+    local notify = PhoneNotify
 
-    if src and type(PhoneNotify) == 'function' then
-        PhoneNotify(src, notification)
+    if src and type(notify) == 'function' then
+        notify(src, notification)
+    elseif src and type(notify) == 'table' and type(notify.Store) == 'function' then
+        notify.Store(src, notification, 'server')
     else
         InsertOfflineNotification(citizenid, notification)
     end

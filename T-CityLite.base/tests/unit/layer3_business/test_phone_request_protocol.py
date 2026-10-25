@@ -7,8 +7,9 @@ NUI fetch pending forever. The NUI bridges now carry a client-generated
 ``request_id`` over dedicated net events, correlate the response by that id, and
 time out after 8 s.
 
-These tests execute the real protocol blocks extracted from client/main.lua and
-server/main.lua against a deterministic CitizenFX stub (no engine, no network).
+These tests execute the real protocol blocks extracted from
+client/core/bridge.lua, client/main.lua and server/main.lua against a
+deterministic CitizenFX stub (no engine, no network).
 """
 
 import shutil
@@ -21,11 +22,14 @@ import pytest
 BASE = Path(__file__).resolve().parents[3]
 PHONE = BASE / "resources" / "[custom]" / "custom-phone"
 CLIENT = PHONE / "client" / "main.lua"
+BRIDGE = PHONE / "client" / "core" / "bridge.lua"
 SERVER = PHONE / "server" / "main.lua"
+RATE_LIMIT = PHONE / "server" / "core" / "rate_limit.lua"
 NUI = PHONE / "web" / "src" / "utils" / "nui.ts"
 
 LUA_BIN = shutil.which("lua5.4")
 MARKER = "phone-app-protocol"
+READER_MARKER = "phone-app-readers"
 
 CLIENT_STUBS = r"""
 -- CitizenFX stubs: deterministic timer queue, captured callbacks/events.
@@ -71,6 +75,8 @@ SERVER_STUBS = r"""
 local appevents, replies = {}, {}
 local queryCalls, actionCalls = {}, {}
 local source = 7
+-- appRateKey() resolves the citizenid from the getPhoneData cache.
+playerCitizen = { [7] = 'CID7', [8] = 'CID8' }
 
 function RegisterNetEvent(name, fn) appevents[name] = fn end
 function TriggerClientEvent(name, target, ...)
@@ -94,11 +100,11 @@ end
 """
 
 
-def _protocol_block(path: Path) -> str:
+def _protocol_block(path: Path, marker: str = MARKER) -> str:
     src = path.read_text(encoding="utf-8")
-    start = src.index(f"-- [{MARKER}] begin")
-    end = src.index(f"-- [{MARKER}] end", start)
-    return src[start:end + len(f"-- [{MARKER}] end")]
+    start = src.index(f"-- [{marker}] begin")
+    end = src.index(f"-- [{marker}] end", start)
+    return src[start:end + len(f"-- [{marker}] end")]
 
 
 def run_lua(source: str) -> subprocess.CompletedProcess:
@@ -121,26 +127,43 @@ def assert_lua(source: str) -> None:
 
 
 def client_harness(body: str) -> str:
-    return CLIENT_STUBS + "\n" + _protocol_block(CLIENT) + "\n" + body
+    return (
+        CLIENT_STUBS
+        + "\n"
+        + _protocol_block(BRIDGE)
+        + "\n"
+        + _protocol_block(CLIENT, READER_MARKER)
+        + "\n"
+        + body
+    )
 
 
 def server_harness(body: str) -> str:
-    return SERVER_STUBS + "\n" + _protocol_block(SERVER) + "\n" + body
+    return (
+        SERVER_STUBS
+        + "\n"
+        + f"dofile([[{RATE_LIMIT}]])"
+        + "\n"
+        + _protocol_block(SERVER)
+        + "\n"
+        + body
+    )
 
 
 def test_client_protocol_uses_dedicated_events():
     client = CLIENT.read_text(encoding="utf-8")
+    bridge = BRIDGE.read_text(encoding="utf-8")
     for token in (
         "phone:server:appQueryRequest",
         "phone:client:appQueryResponse",
         "phone:server:appActionRequest",
         "phone:client:appActionResponse",
     ):
-        assert token in client, token
-    assert "APP_REQUEST_TIMEOUT_MS = 8000" in client
-    assert "error = 'timeout'" in client
-    assert "error = 'resource_stopped'" in client
-    assert "error = 'no_response'" in client
+        assert token in client or token in bridge, token
+    assert "APP_REQUEST_TIMEOUT_MS = 8000" in bridge
+    assert "error = 'timeout'" in bridge
+    assert "resource_stopped" in bridge
+    assert "error = 'no_response'" in bridge
 
 
 def test_client_concurrent_queries_resolve_out_of_order():
@@ -366,6 +389,7 @@ def test_get_phone_data_is_single_flight():
 
 def test_phone_app_protocol_uses_dedicated_events():
     client = CLIENT.read_text(encoding="utf-8")
+    bridge = BRIDGE.read_text(encoding="utf-8")
     server = SERVER.read_text(encoding="utf-8")
     for token in (
         "phone:server:appQueryRequest",
@@ -373,4 +397,4 @@ def test_phone_app_protocol_uses_dedicated_events():
         "phone:server:appActionRequest",
         "phone:client:appActionResponse",
     ):
-        assert token in client or token in server, token
+        assert token in client or token in bridge or token in server, token

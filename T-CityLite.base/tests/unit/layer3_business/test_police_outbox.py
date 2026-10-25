@@ -32,7 +32,7 @@ P2 = BASE / "resources" / "[custom]" / "custom-police" / "server" / "p2_system.l
 P0 = BASE / "resources" / "[custom]" / "custom-police" / "server" / "p0.lua"
 P1 = BASE / "resources" / "[custom]" / "custom-police" / "server" / "p1.lua"
 P4 = BASE / "resources" / "[custom]" / "custom-police" / "server" / "p4_npc.lua"
-PHONE = BASE / "resources" / "[custom]" / "custom-phone" / "server" / "main.lua"
+PHONE = BASE / "resources" / "[custom]" / "custom-phone" / "server" / "core" / "notify.lua"
 PHONE_MDT = BASE / "resources" / "[custom]" / "custom-phone" / "server" / "apps" / "police_mdt.lua"
 MIGRATION = BASE / "migrations" / "v3.12_police_outbox.sql"
 LUA_BIN = shutil.which("lua5.4")
@@ -200,7 +200,7 @@ def test_phone_owner_export_validates_and_pushes():
     assert "banking = true" in src and "police_mdt = true" in src
     assert "Sms.TruncateBytes(title, 200)" in src
     assert "Sms.TruncateChars(content, 1000)" in src
-    assert "phoneDataCache[citizenid] = nil" in block
+    assert "invalidateCache(citizenid)" in block
     assert "PushStoredNotification(targetSrc, normalised, id)" in block
     assert "MySQL.insert.await(" in block
     assert "PhoneDb.InsertId(result)" in block

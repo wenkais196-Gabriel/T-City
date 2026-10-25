@@ -1,3 +1,7 @@
+-- client/main.lua — wiring only. NUI registration/request_id timeouts live in
+-- client/core/bridge.lua, focus ownership in client/core/focus.lua and the
+-- unified phone:client:event channel in client/core/events.lua. The manifest
+-- must load those three before this file.
 local QBCore = exports['qb-core']:GetCoreObject()
 local isPhoneOpen = false
 
@@ -5,35 +9,47 @@ local isPhoneOpen = false
 -- NUI focus/cursor stuck: never inherit that state.
 AddEventHandler('onClientResourceStart', function(resource)
     if resource ~= GetCurrentResourceName() then return end
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
+    PhoneFocus.Reset()
 end)
+
+-- Additive unified event channel; the legacy phone:client:* handlers below stay
+-- registered unchanged during the migration.
+PhoneEvents.Start()
 
 -- Close Phone Function (must be defined before OpenPhone — CreateThread closure)
 local function ClosePhone()
     if not isPhoneOpen then return end
     isPhoneOpen = false
     TriggerServerEvent('phone:server:focusState', { phase = 'close-start' })
-    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
-    if not ok then
-        SetNuiFocus(false, false)
-        -- Keep keepInput untouched (qb-phone style): movement must resume.
+    -- custom-ui owns the phone menu/focus by default. When another focus owner
+    -- (fingerprint/story/vehicle) is on top, closing the phone must not clear
+    -- that UI's focus; just pop the phone from the stack below it.
+    local owner = PhoneFocus.State().owner
+    if owner == nil or owner == 'phone' then
+        pcall(function() exports['custom-ui']:CloseMenu() end)
     end
+    -- Release drops NUI focus even when custom-ui.CloseMenu is missing or
+    -- throws. It deliberately leaves keepInput for the next phone open: the
+    -- project's real-client contract is qb-phone style (see AGENTS.md).
+    PhoneFocus.Release('phone')
     SendNUIMessage({
         action = 'phone:close'
     })
     -- Verify the release actually stuck; if any resource re-grabbed focus in
-    -- the same frame, force it off and report the state.
+    -- the same frame, clear the leak and report the state. A different focus
+    -- owner is left alone: it may legitimately have opened on top of the phone.
     CreateThread(function()
         Wait(80)
-        if IsNuiFocused() then
-            SetNuiFocus(false, false)
-            SetNuiFocusKeepInput(false)
+        local focus = PhoneFocus.State()
+        if focus.owner == nil and IsNuiFocused() then
+            PhoneFocus.Reset()
+            focus = PhoneFocus.State()
         end
         TriggerServerEvent('phone:server:focusState', {
             phase = 'close',
             focused = IsNuiFocused(),
             keepInput = IsNuiFocusKeepingInput(),
+            owner = focus.owner or 'none',
         })
     end)
     -- Stop phone animation
@@ -52,9 +68,8 @@ local function OpenPhone()
     -- real client (NUI focused, no usable cursor). Menus that need movement
     -- can opt in later, but a phone must be clickable.
     -- qb-phone never turns keepInput off, so movement survives while the phone
-    -- is open. Grant focus, then explicitly keep game input on.
-    SetNuiFocus(true, true)
-    SetNuiFocusKeepInput(true)
+    -- is open. The focus stack grants focus, then explicitly keeps game input.
+    PhoneFocus.Acquire('phone', { cursor = true, keepInput = true })
     
     TriggerServerEvent('phone:server:focusState', { phase = 'open-start' })
 
@@ -90,9 +105,13 @@ local function OpenPhone()
         for attempt = 1, 5 do
             Wait(attempt == 1 and 50 or 150)
             if not isPhoneOpen then return end
+            -- Another owner (fingerprint/story/vehicle) may legitimately sit on
+            -- top of the stack. Do not steal focus from it; when it releases,
+            -- the stack re-applies the phone automatically.
+            if not PhoneFocus.IsOwner('phone') then return end
             -- Re-assert the cursor flag every time, not only when focus is
             -- reported lost: focused=true with no cursor is the failure we saw.
-            SetNuiFocus(true, true)
+            PhoneFocus.Acquire('phone', { cursor = true, keepInput = true })
             TriggerServerEvent('phone:server:focusState', {
                 phase = 'reassert', attempt = attempt,
                 focused = IsNuiFocused(),
@@ -229,7 +248,7 @@ RegisterCommand('phone', function()
             ClosePhone()
         else
             isPhoneOpen = false
-            SetNuiFocus(false, false)
+            PhoneFocus.Release('phone')
             Wait(50)
             OpenPhone()
         end
@@ -241,8 +260,7 @@ end, false)
 -- Manual recovery: release focus, reset state, close any stale NUI.
 RegisterCommand('phonefix', function()
     isPhoneOpen = false
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
+    PhoneFocus.Reset()
     SendNUIMessage({ action = 'phone:close' })
     TriggerEvent('chat:addMessage', { args = { 'SYSTEM', '手机状态已重置' } })
     TriggerServerEvent('phone:server:focusState', { phase = 'phonefix', focused = IsNuiFocused() })
@@ -762,8 +780,7 @@ RegisterCommand('focusprobe', function()
             })
         end
         -- Always release, otherwise the probe leaves the game without input.
-        SetNuiFocus(false, false)
-        SetNuiFocusKeepInput(false)
+        PhoneFocus.Reset()
         TriggerServerEvent('phone:server:focusState', { phase = 'probe-end', focused = IsNuiFocused() })
     end)
 end, false)
@@ -772,8 +789,18 @@ end, false)
 -- phone (or a probe) still holds NUI focus.
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
+    PhoneFocus.Reset()
+    -- Defensive: even if client/core/focus.lua somehow failed to load, the
+    -- engine flags must be cleared. Reset already records this state.
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
+end)
+
+-- onResourceStop is the server-side event; the client also has its own stop
+-- notification, so cover both without duplicating the defensive natives.
+AddEventHandler('onClientResourceStop', function(resource)
+    if resource ~= GetCurrentResourceName() then return end
+    PhoneFocus.Reset()
 end)
 
 
@@ -876,78 +903,23 @@ end)
 -- qb-core stores exactly ONE pending callback per callback name
 -- (QBCore.ServerCallbacks[name]) and the response clears it, so two concurrent
 -- appQuery calls — PoliceMDT refresh() does Promise.all([units, incidents]) —
--- overwrite each other and the first NUI fetch never resolves. Both bridges
--- therefore use a dedicated request/response event pair and correlate by
--- request_id. The legacy QBCore callbacks stay registered server-side for
--- other callers.
--- [phone-app-protocol] begin (extracted by test_phone_request_protocol.py)
-local APP_REQUEST_TIMEOUT_MS = 8000
-local appRequestSeq = 0
-local pendingAppQuery = {}  -- [request_id] = cb
-local pendingAppAction = {} -- [request_id] = cb
-
-local function nextAppRequestId()
-    appRequestSeq = appRequestSeq + 1
-    return ('%d:%d'):format(GetGameTimer(), appRequestSeq)
-end
-
---- Answer a pending request exactly once. Unknown, duplicate or late responses
---- are ignored instead of resolving a newer request.
-local function resolveAppRequest(pending, id, res)
-    local cb = pending[id]
-    if not cb then return end
-    pending[id] = nil
-    if type(res) ~= 'table' then res = { success = false, error = 'no_response' } end
-    cb(res)
-end
-
-local function startAppRequest(pending, eventName, data, cb)
-    local id = nextAppRequestId()
-    pending[id] = cb
-    TriggerServerEvent(eventName, id, data)
-    SetTimeout(APP_REQUEST_TIMEOUT_MS, function()
-        -- A response (or resource stop) clears the slot first, so this timer
-        -- can never answer twice or resolve a newer request.
-        if pending[id] ~= cb then return end
-        pending[id] = nil
-        cb({ success = false, error = 'timeout' })
-    end)
-end
-
-RegisterNUICallback('appQuery', function(data, cb)
+-- overwrite each other and the first NUI fetch never resolves. The dedicated
+-- request/response event pair with a client-generated request_id now lives in
+-- client/core/bridge.lua; only these two app readers stay here. The legacy
+-- QBCore callbacks stay registered server-side for other callers.
+-- [phone-app-readers] begin (extracted by test_phone_request_protocol.py)
+PhoneBridge.RegisterNui('appQuery', function(data, cb)
     if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
     TriggerServerEvent('phone:server:focusState', { phase = 'appQuery-hit' })
-    startAppRequest(pendingAppQuery, 'phone:server:appQueryRequest', data, cb)
+    PhoneBridge.Request('phone:server:appQueryRequest', data, cb)
 end)
 
-RegisterNUICallback('appAction', function(data, cb)
+PhoneBridge.RegisterNui('appAction', function(data, cb)
     if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
     TriggerServerEvent('phone:server:focusState', { phase = 'appAction-hit' })
-    startAppRequest(pendingAppAction, 'phone:server:appActionRequest', data, cb)
+    PhoneBridge.Request('phone:server:appActionRequest', data, cb)
 end)
-
-RegisterNetEvent('phone:client:appQueryResponse', function(id, res)
-    if type(id) ~= 'string' then return end
-    resolveAppRequest(pendingAppQuery, id, res)
-end)
-
-RegisterNetEvent('phone:client:appActionResponse', function(id, res)
-    if type(id) ~= 'string' then return end
-    resolveAppRequest(pendingAppAction, id, res)
-end)
-
--- A resource stop drops the Lua state; answer outstanding NUI callbacks first
--- so CEF is not left with fetches that can only end in their own timeout.
-AddEventHandler('onResourceStop', function(resource)
-    if resource ~= GetCurrentResourceName() then return end
-    for _, pending in ipairs({ pendingAppQuery, pendingAppAction }) do
-        for id, cb in pairs(pending) do
-            pending[id] = nil
-            pcall(cb, { success = false, error = 'resource_stopped' })
-        end
-    end
-end)
--- [phone-app-protocol] end
+-- [phone-app-readers] end
 
 
 RegisterNUICallback('clientError', function(data, cb)

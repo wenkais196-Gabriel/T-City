@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { playerData } from '../stores/phone';
-  import { queryApp, appAction } from '../stores/apps';
+  import { requestAppQuery as queryApp, requestAppAction as appAction } from '../core/request';
 
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
   type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; disposition?: string | null; npc_template?: string | null; created_at: string; x?: number; y?: number; z?: number };

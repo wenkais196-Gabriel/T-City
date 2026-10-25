@@ -13,12 +13,20 @@ shared_scripts {
 }
 
 client_scripts {
+    'client/core/bridge.lua',
+    'client/core/focus.lua',
+    'client/core/events.lua',
     'client/main.lua'
 }
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/sms.lua',
+    -- core must load before the registry and main.lua
+    'server/core/identity.lua',
+    'server/core/rate_limit.lua',
+    'server/core/events.lua',
+    'server/core/notify.lua',
     'server/phone_apps.lua',
     'server/apps/police_mdt.lua',
     'server/qb_phone_compat.lua',
