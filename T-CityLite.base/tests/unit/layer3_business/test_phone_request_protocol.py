@@ -345,3 +345,32 @@ def test_nui_timeout_outlives_the_client_deadline():
     assert "eventName === 'appAction'" in nui
     # The generic NUI budget stays smaller than the app protocol budget.
     assert "NUI_TIMEOUT_MS = 6000" in nui
+
+
+# ---------------------------------------------------------------------------
+# P-02: getPhoneData is single-flight (qb-core keeps one callback slot per name)
+# ---------------------------------------------------------------------------
+
+def test_get_phone_data_is_single_flight():
+    src = read(PHONE / "client/main.lua")
+    assert "local phoneDataBusy = false" in src
+    assert "local phoneDataWaiters = {}" in src
+    assert "fetchPhoneData" in src
+    # The NUI open, OnMoneyChange and RemoveBankMoney paths must all go through
+    # the coalescing helper; only the helper itself may call the raw callback.
+    assert src.count("TriggerCallback('phone:server:getPhoneData'") == 1
+    assert "fetchPhoneData(cb)" not in src, "NUI callback must wrap cb explicitly"
+    assert "fetchPhoneData(function(data)" in src
+    assert "SetTimeout(8000" in src
+
+
+def test_phone_app_protocol_uses_dedicated_events():
+    client = read(PHONE / "client/main.lua")
+    server = read(PHONE / "server/main.lua")
+    for token in (
+        "phone:server:appQueryRequest",
+        "phone:client:appQueryResponse",
+        "phone:server:appActionRequest",
+        "phone:client:appActionResponse",
+    ):
+        assert token in client or token in server, token
