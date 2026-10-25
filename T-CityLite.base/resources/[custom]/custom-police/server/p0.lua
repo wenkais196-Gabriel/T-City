@@ -543,7 +543,11 @@ function P.SetDutyForSource(source, onDuty, reason)
     if not player then return false, 'not_police' end
 
     local ok = pcall(function() player.Functions.SetJobDuty(onDuty) end)
-    if not ok or data.job.onduty ~= onDuty then return false, 'duty_failed' end
+    if not ok or data.job.onduty ~= onDuty then
+        print(('[custom-police] duty mismatch data=%s player=%s expected=%s'):format(
+            tostring(data.job.onduty), tostring(player.PlayerData.job.onduty), tostring(onDuty)))
+        return false, 'duty_failed'
+    end
 
     -- SetJobDuty raises OnJobUpdate synchronously, whose handler already calls
     -- syncDuty. Calling it again is an idempotent safety net for builds that
