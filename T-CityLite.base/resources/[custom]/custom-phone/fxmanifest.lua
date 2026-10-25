@@ -13,6 +13,8 @@ shared_scripts {
 }
 
 client_scripts {
+    -- 客户端共享助手（加载期包含）：CFShared.Report 上报、就绪信标、LoadModel/DrawText3D
+    '@core-framework/client/shared.lua',
     'client/core/bridge.lua',
     'client/core/focus.lua',
     'client/core/events.lua',

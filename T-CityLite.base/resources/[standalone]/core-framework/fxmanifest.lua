@@ -30,6 +30,7 @@ server_scripts {
     'services/world_state_service.lua',
     'services/patron_service.lua',
     'services/persistence_manager.lua',
+    'server/client_reports.lua',
 }
 
 dependencies {
