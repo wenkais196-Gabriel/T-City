@@ -50,6 +50,7 @@ end, 'admin')
 
 QBCore.Commands.Add('randomitems', 'Receive random items', {}, false, function(source)
     local player = QBCore.Functions.GetPlayer(source)
+    if not player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     local playerInventory = player.PlayerData.items
     local filteredItems = {}
     for k, v in pairs(QBCore.Shared.Items) do

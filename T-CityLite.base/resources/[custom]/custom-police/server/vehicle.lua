@@ -101,6 +101,7 @@ end)
 QBCore.Commands.Add('flagplate', Lang:t('commands.flagplate'), { { name = 'plate', help = Lang:t('info.plate_number') }, { name = 'reason', help = Lang:t('info.flag_reason') } }, true, function(source, args)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.onduty then
         local reason = {}
         for i = 2, #args, 1 do
@@ -119,6 +120,7 @@ end)
 QBCore.Commands.Add('unflagplate', Lang:t('commands.unflagplate'), { { name = 'plate', help = Lang:t('info.plate_number') } }, true, function(source, args)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.onduty then
         if Plates and Plates[args[1]:upper()] then
             if Plates[args[1]:upper()].isflagged then
@@ -138,6 +140,7 @@ end)
 QBCore.Commands.Add('plateinfo', Lang:t('commands.plateinfo'), { { name = 'plate', help = Lang:t('info.plate_number') } }, true, function(source, args)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.onduty then
         if Plates and Plates[args[1]:upper()] then
             if Plates[args[1]:upper()].isflagged then

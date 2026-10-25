@@ -528,6 +528,7 @@ end)
 
 QBCore.Commands.Add("cancelrace", "Cancel going race..", {}, false, function(source, args)
     local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
 
     if IsWhitelisted(Player.PlayerData.citizenid) then
         local RaceName = table.concat(args, " ")
@@ -559,6 +560,7 @@ end)
 
 QBCore.Commands.Add("togglesetup", "Turn on / off racing setup", {}, false, function(source, _)
     local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
 
     if IsWhitelisted(Player.PlayerData.citizenid) then
         Config.RaceSetupAllowed = not Config.RaceSetupAllowed
