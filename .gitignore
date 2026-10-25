@@ -111,7 +111,11 @@ T-CityLite.base/txData/
 QBCore_CDB34E.base/
 
 # 技能 / AI 辅助文件（开发端本地配置）
+# 注意：这里的 skills/ 是"开发端本地草稿目录"，但 .agents/skills/ 是**入库**的
+# （见 .agents/README.md）—— 所以下面要显式把它救回来，否则 `skills/` 会连它一起吞掉。
 skills/
+!.agents/skills/
+!.agents/skills/**
 AI_SYNC_MEMO.md
 
 # ═════════════════════════════════════════════════════════
