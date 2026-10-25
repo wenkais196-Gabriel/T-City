@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `start_server.bat` 一键启动脚本（UTF-8 编码，自动切换工作目录）
 - `tests/architecture/test_nui_baseline.py` + `test_command_guards.py`：把「MDT 永远查询失败」与「控制台 /status 崩溃」两次教训钉成 CI —— 禁 NUI 回调里的 `type(cb) ~= 'function'` 守卫、要求 `PhoneBridge.AnswerFn` 覆盖三种应答通道、禁 `GetConvarInt` 判 diag 门禁、client/server trace 相位表必须同序、判定只用可观测槽位、诊断投影不带业务字段、NUI 产物必须内容哈希、`_diag` 只在边界三处出现、命令处理器索引 `PlayerData` 前必须判空（各含反向校验）
 - 新增三条架构闸门：`test_agent_docs.py`（根索引必须登记分区文件、固定小节、`CLAUDE.md` 只能是指针）、`test_plane_boundaries.py`（client 不碰 DB / server 不调 NUI 原生 / shared 不注册事件 / manifest 不把 server 代码列进 client）、`test_docs_links.py`（约束区文档的路径引用必须存在）；三条都带反向校验；新增 `tools/dev/release_check.py`（凭据 + 债务到期 + CHANGELOG）与 `tools/dev/reuse_scan.py`（同名实现复用报告）
+- **组件复用第一轮收敛**：新增 `core-framework/shared/util.lua`（客户端侧 `exports('LoadAnimDict')`，比原实现多 5s 超时，避免字典缺失把客户端脚本线程卡死）；`[custom]` 的 5 处重复实现（custom-police ×2、custom-vehicles ×2、custom-agent-client）改为惰性包装调用，`loadAnimDict` 17 → 12 份；`qb-*` 与 `standalone` 按「不迁上游」保留并写进预算理由；新增 `docs/engineering/REUSE.md` 与棘轮闸门 `test_reuse_budget.py` + `reuse_budget.json`（预算只许往下调，新增 ≥4 份同名必须登记决策）
+- **文档断链闸门扩到 `docs/agent/**`**：该目录 17 份文档的 107 处相对路径改为可解析路径（`T-CityLite.base/docs/agent/**` 现为 0 断链），规则本身未放宽、未新增豁免
+- **规则命中率可采集**：新增 `tools/dev/gate_stats.py`（`--record` 把整套架构闸门的结果追加进 `gate_history.jsonl`，`--report` 输出每条规则的最近结果/通过失败次数/长期 0 命中清单）与 `test_gate_stats.py`；首份基线 205 条规则全绿
 - **Agent 运行模型（L0–L5）**：`docs/engineering/CONSTITUTION.md`（十条不变量，每条带可执行落点）、`docs/engineering/ARCHITECTURE.md`（四平面 + 依赖方向矩阵 + 唯一通道表）、`docs/engineering/agent-operating-model.md`（六层模型与落地路线）；根 `AGENTS.md` 瘦身为索引（88 行）+ 四份分区 `AGENTS.md`（`[custom]` / `[qb]` / `tests` / `custom-phone/web`）；`CLAUDE.md` 改为指针（避免与 `AGENTS.md` 分叉），原通用准则归档为 `docs/engineering/llm-craft.md`；五份流程模板 `docs/engineering/templates/*.md`（R/P/D/V/S）
 
 ### Security
