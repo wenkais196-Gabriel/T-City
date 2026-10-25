@@ -41,7 +41,9 @@ def _load_module():
     [
         (lambda t: t.replace("[Install]", "[Installx]"), "Install"),
         (lambda t: t.replace("Restart=always", "Restart=no"), "Restart"),
-        (lambda t: t.replace("RestartSec=5", "RestartSec=600"), "RestartSec"),
+        (lambda t: t.replace("RestartSec=10", "RestartSec=600"), "RestartSec"),
+        (lambda t: t.replace("StartLimitBurst=5\n", ""), "StartLimitBurst"),
+        (lambda t: t.replace("StartLimitBurst=5", "StartLimitBurst=1"), "StartLimitBurst"),
         (lambda t: t.replace("@REPO@/start.sh", "/nope/start.sh"), "ExecStart"),
         (lambda t: t.replace("User=swk", "User=root"), "root"),
     ],

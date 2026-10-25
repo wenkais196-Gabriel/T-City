@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **systemd 单元会让崩溃循环无限重试，把自己锁死在外部限流里**。实测：一次 Cfx.re license 429 之后，`Restart=always` + `RestartSec=5` 在半小时内重启了 **323 次**，每次都去打一次 license 校验——"等一会儿就好"的限流被续成了死锁。现在单元文件带 `StartLimitIntervalSec=300` + `StartLimitBurst=5`（5 次 / 5 分钟后 systemd 放弃并进入 failed，等人来看），`RestartSec` 放宽到 10 秒；`install_service.py` 的校验器把"缺启动限流"和"限流额度太小"都判为坏单元（反向用例：删掉 `StartLimitBurst`、改成 `StartLimitBurst=1` 都必须被拒）。
+
 ### Added
 - **任务 App：30 个任务模板第一次有了玩家入口**。此前 `custom-quest` 的 14,903 行与 `config/quests/` 下 30 个模板（平民/警察/卡特尔/物流/矿业…）只有 `custom-director` 的 agent 动作和 e2e 测试能触发，玩家在游戏里根本接不到任务。
   - custom-quest/server/quest_availability.lua：只读的「这个玩家现在能接什么」计算层，同步检查职业标签 / 在勤警力 / 执照 / 重复接取 / 冷却，五种原因码可区分；依赖资源缺失时与 `TriggerQuest` 同样采取宽松策略，不会把全部任务藏起来。**接取权威仍在 `quest_manager.TriggerQuest`**，这里算错最多是显示错，不会让玩家凭空接到任务。

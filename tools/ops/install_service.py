@@ -81,6 +81,29 @@ def validate_unit(text: str, repo_root: Path) -> list[str]:
             f"Restart={restart or '(未设置)'}，必须是 always（FXServer 被 SIGKILL 时 on-failure 不一定拉起）"
         )
 
+    unit = sections.get("Unit", {})
+    burst = unit.get("StartLimitBurst", "")
+    interval = unit.get("StartLimitIntervalSec", "")
+    if not burst or not interval:
+        problems.append(
+            "缺少 StartLimitBurst / StartLimitIntervalSec：崩溃循环会无限重启"
+            "（实测半小时 319 次，把 license 的 429 续成了死锁）"
+        )
+    else:
+        try:
+            burst_n, interval_n = int(burst), int(interval)
+        except ValueError:
+            burst_n = interval_n = None
+        if burst_n is None or burst_n < 3:
+            problems.append(f"StartLimitBurst={burst}，至少 3（否则一次抖动就永久 failed）")
+        if interval_n is None or interval_n < 60:
+            problems.append(f"StartLimitIntervalSec={interval}，至少 60 秒才算得上一段时间")
+        if burst_n and interval_n and interval_n // max(burst_n, 1) < 10:
+            problems.append(
+                f"StartLimitIntervalSec/StartLimitBurst = {interval_n // burst_n}s，"
+                "两次重启间隔太短，等于没限流"
+            )
+
     restarts_sec = service.get("RestartSec", "")
     try:
         delay = int(restarts_sec)
