@@ -549,16 +549,16 @@ function P.SetDutyForSource(source, onDuty, reason)
     TriggerEvent('QBCore:Server:OnJobUpdate', player.PlayerData.source, player.PlayerData.job)
     TriggerClientEvent('QBCore:Client:OnJobUpdate', player.PlayerData.source, player.PlayerData.job)
     player.Functions.UpdatePlayerData()
-    if data.job.onduty ~= onDuty then
-        print(('[custom-police] duty mismatch data=%s expected=%s'):format(
-            tostring(data.job.onduty), tostring(onDuty)))
+    if player.PlayerData.job.onduty ~= onDuty then
+        print(('[custom-police] duty mismatch player=%s expected=%s'):format(
+            tostring(player.PlayerData.job.onduty), tostring(onDuty)))
         return false, 'duty_failed'
     end
 
     -- SetJobDuty raises OnJobUpdate synchronously, whose handler already calls
     -- syncDuty. Calling it again is an idempotent safety net for builds that
     -- do not raise the event; syncDuty never calls SetJobDuty, so no recursion.
-    syncDuty(data)
+    syncDuty(player.PlayerData)
 
     local detail = ('%s:%s'):format(
         onDuty and 'on' or 'off', tostring(reason or 'unspecified'):sub(1, 100))
