@@ -71,7 +71,7 @@ python3 tools/ops/healthcheck.py --json /tmp/health.json  # 机器可读
 |---|---|---|
 | 启动资源数 | ≥ 84 | 有资源没起来：看日志 `Failed to start` / `Couldn't find resource` |
 | SCRIPT ERROR | 0 条 | 先修脚本错误，再谈功能 |
-| 启动标记 | `剧情引擎已启动` / `P0 dispatch layer loaded` / `任务注册器已加载` | 对应系统的服务端代码没跑起来 |
+| 启动标记（5 条） | `剧情引擎已启动` / `P0 dispatch layer loaded` / `任务注册器已加载` / `手机任务入口已就绪` / `quests app registered` | 对应系统的服务端代码没跑起来；后两条断了就是「玩家接不到任务」 |
 | HTTP | 30120 的 /info.json 返回 JSON | 端口没监听或被防火墙拦 |
 | 数据库表 | 74 张 | 迁移没跑全，或连错库 |
 

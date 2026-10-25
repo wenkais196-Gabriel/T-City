@@ -34,6 +34,9 @@ MARKERS = {
     "story-engine": "剧情引擎已启动",
     "police-p0": "P0 dispatch layer loaded",
     "quest-registry": "任务注册器已加载",
+    # 玩家能接到任务 = quest 导出就绪 + 手机 App 注册成功，缺一条这条链路就断了
+    "quest-entry": "手机任务入口已就绪",
+    "quest-app": "quests app registered",
 }
 
 # 实测基线：85 条 ensure / 84 个 Started（[cfx-default] 里有几个不带脚本的资源）。
