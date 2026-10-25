@@ -32,6 +32,15 @@ SERVICE_USER = "swk"
 MAX_RESTART_SEC = 30
 
 
+def render(text: str, repo_root: Path) -> str:
+    """把模板里的 @REPO@ 换成本仓库绝对路径。
+
+    单元文件里必须写绝对路径（systemd 不认相对路径），但仓库在不同机器/CI 上的位置不同，
+    所以文件本身是模板，安装时才落地真实路径。
+    """
+    return text.replace("@REPO@", str(repo_root))
+
+
 def _parse(text: str) -> dict[str, dict[str, str]]:
     """极简 ini 解析：只处理 systemd 需要的 key=value 与 [section]。"""
     sections: dict[str, dict[str, str]] = {}
@@ -51,9 +60,13 @@ def _parse(text: str) -> dict[str, dict[str, str]]:
 
 
 def validate_unit(text: str, repo_root: Path) -> list[str]:
-    """返回问题列表；空列表表示这份单元可以装。"""
+    """返回问题列表；空列表表示这份单元可以装。
+
+    传入模板或已渲染的文本都行：这里统一先渲染成 repo_root 下的绝对路径再判断，
+    这样同一份文件在开发机和 CI 上校验结论一致。
+    """
     problems: list[str] = []
-    sections = _parse(text)
+    sections = _parse(render(text, repo_root))
 
     for required in ("Unit", "Service", "Install"):
         if required not in sections:
@@ -144,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         print("[service] 本机没有 systemctl", file=sys.stderr)
         return 2
 
-    shutil.copyfile(unit_path, UNIT_DST)
+    UNIT_DST.write_text(render(unit_path.read_text(encoding="utf-8"), REPO), encoding="utf-8")
     os.chmod(UNIT_DST, 0o644)
     for cmd in (
         ["systemctl", "daemon-reload"],

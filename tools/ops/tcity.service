@@ -1,17 +1,17 @@
 [Unit]
-# T-City Lite FXServer — 由 tools/ops/install_service.py 安装
+# T-City Lite FXServer — 模板文件，由 tools/ops/install_service.py 渲染并安装
 # 校验: python3 tools/ops/install_service.py --check-only
 Description=T-City Lite FXServer
-Documentation=file:/home/swk/Documents/deepseek-harness/default-workspace/T-City/docs/ops/RUNBOOK.md
+Documentation=file:@REPO@/docs/ops/RUNBOOK.md
 After=network-online.target mysql.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=swk
-WorkingDirectory=/home/swk/Documents/deepseek-harness/default-workspace/T-City
+WorkingDirectory=@REPO@
 # start.sh 末尾是 exec，进程不会多一层 shell，systemctl stop 能直接送到 FXServer
-ExecStart=/bin/bash /home/swk/Documents/deepseek-harness/default-workspace/T-City/start.sh
+ExecStart=/bin/bash @REPO@/start.sh
 Restart=always
 RestartSec=5
 # 控制台输出进文件：tools/ops/healthcheck.py 默认读这个路径
