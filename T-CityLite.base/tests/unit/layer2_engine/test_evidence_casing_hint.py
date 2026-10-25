@@ -56,6 +56,8 @@ vmt.__sub = function(a, b)
 end
 function vector3(x, y, z) return setmetatable({ x = x, y = y, z = z }, vmt) end
 
+__now = 1000
+function GetGameTimer() return __now end
 function PlayerPedId() return 1 end
 function PlayerId() return 0 end
 function GetEntityCoords(_ped) return vector3(0.0, 0.0, 0.0) end

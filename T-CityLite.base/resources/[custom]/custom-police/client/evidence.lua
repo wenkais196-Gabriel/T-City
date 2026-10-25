@@ -40,6 +40,23 @@ if not DrawText3D then
     DrawText3D = function() end
 end
 
+-- 诊断（也是这个文件"真的在客户端跑起来了"的唯一证据：就绪信标只能证明 shared.lua 被包含）。
+-- 服务端限流 10 条/分钟，所以这里只有进服一次 + 每次异常路径（节流 5 秒）才会说话。
+local lastDiag = 0
+local function reportDebug(message)
+    if not (CFShared and CFShared.Report) then return end
+    local now = GetGameTimer()
+    if now - lastDiag < 5000 then return end
+    lastDiag = now
+    CFShared.Report('info', message)
+end
+reportDebug('evidence client loaded')
+
+--- 这层用途单一：把"看不到弹壳"拆成三段——没检测到开枪 / 看到了但没发 / 发了服务端没建。
+local function weaponLabel(weapon)
+    return tostring(weapon)
+end
+
 local function WhitelistedWeapon(weapon)
     for i = 1, #WhitelistedWeapons do
         if WhitelistedWeapons[i] == weapon then
@@ -54,6 +71,8 @@ local function DropBulletCasing(weapon, ped)
     local randY = math.random() + math.random(-1, 1)
     local coords = GetOffsetFromEntityInWorldCoords(ped, randX, randY, 0)
     TriggerServerEvent('evidence:server:CreateCasing', weapon, coords)
+    reportDebug(('casing sent weapon=%s onduty=%s'):format(
+        weaponLabel(weapon), tostring(type(PlayerJob) == 'table' and PlayerJob.onduty)))
     if GetConvarInt('tcity_evidence_debug', 0) == 1 then
         print(('[custom-police] casing sent weapon=%s at %.2f,%.2f,%.2f')
             :format(tostring(weapon), coords.x, coords.y, coords.z))
@@ -243,7 +262,11 @@ CreateThread(function() -- Gunpowder Status when shooting
         local ped = PlayerPedId()
         if IsPedShooting(ped) then
             local weapon = GetSelectedPedWeapon(ped)
-            if not WhitelistedWeapon(weapon) then
+            if WhitelistedWeapon(weapon) then
+                -- 这些是"本来就不该掉弹壳"的武器（徒手/雪球/电击枪/油桶…），
+                -- 但如果玩家以为自己在开枪却什么都没发生，这里必须留痕。
+                reportDebug(('shot with non-casing weapon=%s'):format(weaponLabel(weapon)))
+            else
                 shotAmount = shotAmount + 1
                 if shotAmount > 5 and (CurrentStatusList == nil or CurrentStatusList['gunpowder'] == nil) then
                     if math.random(1, 10) <= 7 then

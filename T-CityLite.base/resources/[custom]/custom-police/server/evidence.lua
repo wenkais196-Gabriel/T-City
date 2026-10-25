@@ -330,11 +330,23 @@ end)
 --- inventory, never from the payload.
 RegisterNetEvent('evidence:server:CreateCasing', function(weapon, coords)
     local src = source
+    -- 诊断开关（默认关）：把每条**拒绝**路径也打出来。否则"日志里没有 [evidence] 行"
+    -- 既可能是客户端没发，也可能是服务端在下面某个 return 上静默丢掉了。
+    local debug = GetConvarInt('tcity_evidence_debug', 0) == 1
     local Player = onlinePlayer(src)
-    if not Player then return end
-    if type(weapon) ~= 'number' then return end
+    if not Player then
+        if debug then print(('[evidence] rejected: no player src=%s'):format(tostring(src))) end
+        return
+    end
+    if type(weapon) ~= 'number' then
+        if debug then print(('[evidence] rejected: weapon not a number src=%s'):format(tostring(src))) end
+        return
+    end
     local where = coordsNearSource(src, coords)
-    if not where then return end
+    if not where then
+        if debug then print(('[evidence] rejected: coords too far src=%s'):format(tostring(src))) end
+        return
+    end
     local casingId = CreateCasingId()
     local weaponInfo = QBCore.Shared.Weapons[weapon]
     local serieNumber = nil
@@ -347,7 +359,10 @@ RegisterNetEvent('evidence:server:CreateCasing', function(weapon, coords)
         end
     end
     if type(serieNumber) ~= 'string' then serieNumber = nil end
-    if not trackDrop(Casings, casingId, { weapon = weapon, serie = serieNumber }) then return end
+    if not trackDrop(Casings, casingId, { weapon = weapon, serie = serieNumber }) then
+        if debug then print(('[evidence] rejected: casing table full src=%s'):format(tostring(src))) end
+        return
+    end
     -- 诊断开关（默认关）：`set tcity_evidence_debug 1` 打开后，每颗弹壳在服务端落一行。
     -- 这个开关的用途是**把"看不到弹壳"拆成两半**：服务端有行 = 客户端发了、问题只在客户端显示；
     -- 没行 = 客户端根本没发（枪不在白名单外、或 IsPedShooting 没触发）。
