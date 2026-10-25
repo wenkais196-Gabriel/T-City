@@ -1369,7 +1369,7 @@ RegisterNetEvent('phone:server:appQueryRequest', function(requestId, data)
             { success = false, error = 'bad_request' })
         return
     end
-    if not PhoneRateLimit.Allow(appRateKey(src, 'query')) then
+    if not PhoneRateLimit.Allow(appRateKey(src, 'query'), 120, 40) then
         replyAppRequest('phone:client:appQueryResponse', src, requestId,
             { success = false, error = 'rate_limited' })
         return
@@ -1390,7 +1390,7 @@ RegisterNetEvent('phone:server:appActionRequest', function(requestId, data)
             { success = false, error = 'bad_request' })
         return
     end
-    if not PhoneRateLimit.Allow(appRateKey(src, 'action')) then
+    if not PhoneRateLimit.Allow(appRateKey(src, 'action'), 30, 10) then
         replyAppRequest('phone:client:appActionResponse', src, requestId,
             { success = false, error = 'rate_limited' })
         return
@@ -1413,7 +1413,7 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneApps', function(source, cb
 end)
 
 QBCore.Functions.CreateCallback('phone:server:appQuery', function(source, cb, appId, queryName, params)
-    if not PhoneRateLimit.Allow(appRateKey(source, 'query')) then
+    if not PhoneRateLimit.Allow(appRateKey(source, 'query'), 120, 40) then
         return cb({ success = false, error = 'rate_limited' })
     end
     local ok, result = PhoneApps.Query(source, tostring(appId or ''), tostring(queryName or ''), params)
@@ -1422,7 +1422,7 @@ QBCore.Functions.CreateCallback('phone:server:appQuery', function(source, cb, ap
 end)
 
 QBCore.Functions.CreateCallback('phone:server:appAction', function(source, cb, appId, actionName, params)
-    if not PhoneRateLimit.Allow(appRateKey(source, 'action')) then
+    if not PhoneRateLimit.Allow(appRateKey(source, 'action'), 30, 10) then
         return cb({ success = false, error = 'rate_limited' })
     end
     local ok, result = PhoneApps.Action(source, tostring(appId or ''), tostring(actionName or ''), params)
