@@ -29,7 +29,7 @@ FUNCTIONS = BASE / "resources" / "[qb]" / "qb-inventory" / "server" / "functions
 STUBS = """
 -- ── 环境桩 ──────────────────────────────────────────────
 Inventories, Drops = {}, {}
-Config = { StashSize = { maxweight = 100000, slots = 50 } }
+Config = { StashSize = { maxweight = 100000, slots = 50 }, MaxWeight = 100000, MaxSlots = 50 }
 __logs = {}
 __prints = {}
 __exports = {}
@@ -80,7 +80,13 @@ QBCore = {
             return nil
         end,
     },
-    Shared = { Items = {}, Weapons = {} },
+    Shared = {
+        Items = {
+            pistol_ammo = { name = 'pistol_ammo', label = 'Ammo', weight = 1, unique = true, image = '' },
+            water = { name = 'water', label = 'Water', weight = 1, unique = true, image = '' },
+        },
+        Weapons = {},
+    },
 }
 """
 
@@ -140,3 +146,40 @@ def test_set_inventory_accepts_a_numeric_source_and_a_citizenid(tmp_path):
     assert out["string_ok"] == "true", f"citizenid 路径报错：{out['string_err']}"
     assert out["string_set_calls"] == "1"
     assert int(out["logs"]) >= 2, "两条日志（items set + Inventory Set）都要发出去"
+
+
+def test_add_item_and_remove_item_do_not_read_a_global_that_is_not_there():
+    """giveitem 走的是 AddItem，不是 SetInventory。
+
+    这一条是补的：改 SetInventory 的 `invName` 那一行时，同一行模板在文件里出现三次
+    （SetInventory / AddItem / RemoveItem），一次无差别替换就让后两个函数去读一个只存在于
+    SetInventory 里的局部变量 `idText`——Lua 把它当全局读成 nil，于是
+    `local invName = ... .. idText` 在 giveitem 时直接报
+    "attempt to concatenate a nil value (global 'idText')"。
+
+    SetInventory 的测试当时是绿的，因为坏的是另外两个函数。
+    """
+    out = run("""
+        __say = function(s) io.write(tostring(s) .. string.char(10)) end
+        local add, remove = __exports['AddItem'], __exports['RemoveItem']
+
+        -- ① giveitem 路径（数字 source）
+        local ok, err = pcall(add, 7, 'pistol_ammo', 2, nil, nil, 'giveitem')
+        __say('add_ok=' .. tostring(ok))
+        __say('add_err=' .. tostring(err))
+        __say('add_set=' .. tostring(__setCalls))
+        __say('add_returned=' .. tostring(__setCalls > 0))
+        __say('global_idText=' .. tostring(rawget(_G, 'idText')))
+
+        -- ② RemoveItem 路径
+        __setCalls = 0
+        local ok2, err2 = pcall(remove, 7, 'pistol_ammo', 1, nil, 'test')
+        __say('remove_ok=' .. tostring(ok2))
+        __say('remove_err=' .. tostring(err2))
+        __say('remove_set=' .. tostring(__setCalls))
+    """)
+    assert out["add_ok"] == "true", f"AddItem 报错：{out['add_err']}"
+    assert out["add_set"] == "1", "AddItem 必须真的写回玩家物品表"
+    assert out["global_idText"] == "nil", "AddItem 不能依赖只存在于别的函数里的局部变量"
+    assert out["remove_ok"] == "true", f"RemoveItem 报错：{out['remove_err']}"
+    assert out["remove_set"] == "1"

@@ -794,6 +794,7 @@ function AddItem(identifier, item, amount, slot, info, reason)
     end
 
     if player then player.Functions.SetPlayerData('items', inventory) end
+    local idText = tostring(identifier)  -- 这个函数里 identifier 可能是 source 数字
     local invName = player and ((GetPlayerName(player.PlayerData.source) or '?') .. ' (' .. idText .. ')') or idText
     local addReason = reason or 'No reason specified'
     local resourceName = GetInvokingResource() or 'qb-inventory'
@@ -880,6 +881,7 @@ function RemoveItem(identifier, item, amount, slot, reason)
 
     if player then player.Functions.SetPlayerData('items', inventory) end
 
+    local idText = tostring(identifier)  -- 这个函数里 identifier 可能是 source 数字
     local invName = player and ((GetPlayerName(player.PlayerData.source) or '?') .. ' (' .. idText .. ')') or idText
     local removeReason = reason or 'No reason specified'
     local resourceName = GetInvokingResource() or 'qb-inventory'
