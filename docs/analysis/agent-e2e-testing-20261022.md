@@ -137,7 +137,7 @@ T-City 现在有 `layer0_db / layer0_js / layer1_core / layer2_services / layer3
 
 一个只给 dev 环境用的资源，服务端 + 客户端两半，职责是**把状态变成 JSON**。
 
-`resources/[dev]/tc_test_probe/server/main.lua`：
+探针资源的服务端入口（计划放在 `resources/[dev]/` 下新建的 `tc_test_probe` 资源）：
 
 ```lua
 local RUNS = {}
@@ -181,7 +181,7 @@ AddEventHandler('tc:test:track', function(name) RUNS[name] = (RUNS[name] or 0) +
 
 > 上面 `?.` 是伪代码示意，实际按 qb-core 的取法写。生产环境请把 `tc_assert` 限制在 `sv_devMode` 或独立 convar 下。
 
-`client/main.lua`：
+同一资源的客户端脚本（放在 `resources/[dev]/` 下新建资源的 `client/` 目录）：
 
 ```lua
 local function snapshot()

@@ -21,7 +21,7 @@
 
 ## 1. 现状：为什么只能看到 `query_failed` / `timeout`
 
-真实链路（`client/core/bridge.lua`、`client/main.lua:937-948`、`server/main.lua:1370-1410`）：
+真实链路（`resources/[custom]/custom-phone/client/core/bridge.lua`、`client/main.lua:937-948`、`server/main.lua:1370-1410`）：
 
 ```
 NUI fetchNui('appQuery')
@@ -196,7 +196,7 @@ client RegisterNetEvent(derived) → PhoneBridge.Resolve    bridge.lua:62
 
 | 步 | 动作 | 验收 | 回滚 |
 |---|---|---|---|
-| **0** | 新增 `server/core/diag.lua`、`client/core/diag.lua`；注册 `phone:server:diag`。不动任何调用点 | `pytest tests/unit/layer3_business/test_phone_diag_protocol.py` 全绿 | 删文件 |
+| **0** | 新增 `resources/[custom]/custom-phone/server/core/diag.lua`、`resources/[custom]/custom-phone/client/core/diag.lua`；注册 `phone:server:diag`。不动任何调用点 | `pytest tests/unit/layer3_business/test_phone_diag_protocol.py` 全绿 | 删文件 |
 | **1** | `focusState` handler 体改为委托 `PhoneDiag.LegacyFocus`，日志格式不变 | 真机开/关手机一次，`grep '\[focus\]'` 输出与旧版逐行一致 | 恢复旧 handler（git revert 单文件） |
 | **2** | 客户端 15 个 `TriggerServerEvent('phone:server:focusState', …)` 调用点改为 `PhoneDiag.Emit('ui.<旧名>', {…})`；`phone_diag_dual=1` 时**同时**发旧事件 | 日志里同一 phase 出现 `[diag]`+`[focus]` 各一行，字段一致 | `phone_diag_dual=0` |
 | **3** | 请求链路接 trace：`PhoneBridge.Request` 读 `_diag.tid` 并剥离；`Resolve` 发 `req.cli.resp`；NUI 侧发 `req.nui.*`；服务端发 `req.srv.*` 并入内存环 | `npm run test:nui` + 新增 `diag.spec.mjs` | `phone_diag=0` |
@@ -450,7 +450,7 @@ end
 
 复用仓库既有模式（`tests/unit/layer3_business/test_phone_request_protocol.py:34-151`）：从源码里按 marker 抽块，用确定性 stub 跑真代码。
 
-新增 `tests/unit/layer3_business/test_phone_diag_protocol.py`，在 `client/core/diag.lua` 与 `server/core/diag.lua` 里放 `-- [phone-diag] begin/end` 标记（与 `[phone-app-protocol]` 同风格），抽取器可复用 `_protocol_block()`。
+新增 `tests/unit/layer3_business/test_phone_diag_protocol.py`，在 `resources/[custom]/custom-phone/client/core/diag.lua` 与 `resources/[custom]/custom-phone/server/core/diag.lua` 里放 `-- [phone-diag] begin/end` 标记（与 `[phone-app-protocol]` 同风格），抽取器可复用 `_protocol_block()`。
 
 ```python
 DIAG_STUBS = r"""
@@ -500,7 +500,7 @@ local function diagMsgs() local out={} for _,e in ipairs(sent) do
 
 ### 8.2 Playwright NUI（`web/tests/nui/`）
 
-现有 harness 已在网络边界拦截 `https://custom-phone/**`（`harness.mjs:1-14`），所以断言"前端发出了什么诊断"不需要改架构，只需记录 POST body。新增 `tests/nui/diag.spec.mjs`，在 `run.mjs:22` 的 `scenarios` 里并入。
+现有 harness 已在网络边界拦截 `https://custom-phone/**`（`harness.mjs:1-14`），所以断言"前端发出了什么诊断"不需要改架构，只需记录 POST body。新增 `diag.spec.mjs`（放在现有 NUI spec 同目录），在 `run.mjs:22` 的 `scenarios` 里并入。
 
 ```js
 // diag.spec.mjs — 断言前端发出的诊断（不是断言 UI）
@@ -564,7 +564,7 @@ def test_diag_channel_is_shared_by_client_and_server():
 
 ## 9. 落地接口签名
 
-### 9.1 Lua（客户端 `client/core/diag.lua`）
+### 9.1 Lua（客户端 `resources/[custom]/custom-phone/client/core/diag.lua`）
 
 ```lua
 -- [phone-diag] begin (extracted by test_phone_diag_protocol.py)
@@ -637,7 +637,7 @@ PhoneBridge.RegisterNui('appQuery', function(data, cb)
 end)
 ```
 
-### 9.2 Lua（服务端 `server/core/diag.lua`）
+### 9.2 Lua（服务端 `resources/[custom]/custom-phone/server/core/diag.lua`）
 
 ```lua
 -- [phone-diag] begin
@@ -715,7 +715,7 @@ RegisterNetEvent('phone:server:appQueryRequest', function(requestId, data)
 end)
 ```
 
-### 9.3 TypeScript（`web/src/core/diag.ts`）
+### 9.3 TypeScript（NUI 侧；未单独落地诊断模块，`_diag` 头由 `resources/[custom]/custom-phone/web/src/core/request.ts` 透传）
 
 ```ts
 export type DiagLevel = 0 | 1 | 2;
@@ -775,7 +775,7 @@ export function finishTrace(code: string, opts?: { abort?: boolean }): void;
 export function emitDiag(batch: DiagBatch): void;
 ```
 
-使用点（`core/request.ts` 内，不改 App SDK 契约）：
+使用点（`resources/[custom]/custom-phone/web/src/core/request.ts` 内，不改 App SDK 契约）：
 
 ```ts
 export async function phoneRequest<T>(event, payload = {}, { timeoutMs = 9000 } = {}) {

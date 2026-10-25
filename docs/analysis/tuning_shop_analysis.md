@@ -54,7 +54,7 @@ qb-core (基座)
 
 | # | 问题 | 证据 | 影响 |
 |:---|:---|:---|:---|
-| 1 | **改装完全免费** | `cosmetic.lua` / `performance.lua` / `server/main.lua` 中搜索 `AddMoney\|RemoveMoney\|payment\|charge\|price\|bill` — **0 matches** | 经济循环断裂，改装店无收入 |
+| 1 | **改装完全免费** | `cosmetic.lua` / `performance.lua` / `resources/[qb]/qb-mechanicjob/server/main.lua` 中搜索 `AddMoney\|RemoveMoney\|payment\|charge\|price\|bill` — **0 matches** | 经济循环断裂，改装店无收入 |
 | 2 | **无机修工佣金** | 同上，无 commission 逻辑 | 机修工只有固定工资，无绩效激励 |
 | 3 | **无发票系统** | `qb-mechanicjob/server/` 仅 `main.lua`，无 billing 模块 | 无交易记录，无审计追踪 |
 
@@ -242,33 +242,35 @@ local result = exports['tcity-mechanic']:InstallPart(plate, {
 
 ### P0 — 经济闭环 (本周, ~200 LOC)
 
+> 路径约定：已存在的文件给完整仓库路径；标 **新建** 的文件尚未创建，只写文件名（目录见括号）。
+
 | 文件 | 动作 | 内容 |
 |:---|:---|:---|
-| `services/mechanic_service.lua` | **新建** | 计价引擎 + 发票生成 + InstallPart |
-| `server/billing.lua` | **新建** | 佣金分配 + 营收记录 |
-| `server/main.lua` | 修改 | 注册 `mechanic:charge` 事件 + 安全校验 |
-| `client/cosmetic.lua` | 修改 | 外观改装后 `TriggerServerEvent('mechanic:charge', ...)` |
-| `client/performance.lua` | 修改 | 性能安装后扣款 |
-| `config/config.lua` | 修改 | 新增 `Config.Pricing` 定价表 |
+| `mechanic_service.lua`（`services/`） | **新建** | 计价引擎 + 发票生成 + InstallPart |
+| `billing.lua`（`server/`） | **新建** | 佣金分配 + 营收记录 |
+| `resources/[qb]/qb-mechanicjob/server/main.lua` | 修改 | 注册 `mechanic:charge` 事件 + 安全校验 |
+| `resources/[qb]/qb-mechanicjob/client/cosmetic.lua` | 修改 | 外观改装后 `TriggerServerEvent('mechanic:charge', ...)` |
+| `resources/[qb]/qb-mechanicjob/client/performance.lua` | 修改 | 性能安装后扣款 |
+| `resources/[qb]/qb-mechanicjob/config/config.lua` | 修改 | 新增 `Config.Pricing` 定价表 |
 
 ### P1 — RP 深度 (两周, ~500 LOC)
 
 | 文件 | 动作 | 内容 |
 |:---|:---|:---|
-| `client/inspection.lua` | **新建** | OBD诊断 → 部件健康 → 检测报告 |
-| `config/skills.lua` | **新建** | 技师等级表 (学徒→大师, 5级) |
-| `client/performance.lua` | 修改 | 改装前后性能对比面板 |
-| `services/mechanic_service.lua` | 修改 | 技能等级检查 + 解锁逻辑 |
-| `client/engine_swap.lua` | **新建** | 引擎更换 (大师级解锁) |
-| `client/stance.lua` | **新建** | camber/track width/height 独立调节 |
+| `inspection.lua`（`client/`） | **新建** | OBD诊断 → 部件健康 → 检测报告 |
+| `skills.lua`（`config/`） | **新建** | 技师等级表 (学徒→大师, 5级) |
+| `resources/[qb]/qb-mechanicjob/client/performance.lua` | 修改 | 改装前后性能对比面板 |
+| `mechanic_service.lua`（`services/`） | 修改 | 技能等级检查 + 解锁逻辑 |
+| `engine_swap.lua`（`client/`） | **新建** | 引擎更换 (大师级解锁) |
+| `stance.lua`（`client/`） | **新建** | camber/track width/height 独立调节 |
 
 ### P2 — 非法玩法 (一月, ~800 LOC)
 
 | 文件 | 动作 | 内容 |
 |:---|:---|:---|
-| `server/chopshop.lua` | **新建** | 盗车拆解 → 黑市零件入库 |
-| `config/illegal.lua` | **新建** | 黑市零件定义 (性能+15%, 警察识别率30%) |
-| `server/heat.lua` | **新建** | 热度系统 (改装店+个人) |
+| `chopshop.lua`（`server/`） | **新建** | 盗车拆解 → 黑市零件入库 |
+| `illegal.lua`（`config/`） | **新建** | 黑市零件定义 (性能+15%, 警察识别率30%) |
+| `heat.lua`（`server/`） | **新建** | 热度系统 (改装店+个人) |
 | 对接 `custom-crime` | 修改 | 非法改装收入 → 洗钱管道 |
 | 对接街头赛车 | 修改 | 改装后赛车 → 验证性能 → 声望 |
 
