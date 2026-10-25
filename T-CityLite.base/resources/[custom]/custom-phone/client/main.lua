@@ -258,7 +258,22 @@ end
 -- Command & Keybind to toggle phone.
 -- Recovery: if a previous open left isPhoneOpen=true without NUI focus (hung
 -- anim/open), M should reset and reopen instead of being swallowed forever.
+--
+-- 防重复触发：一次按 M 实测会进来两次（RegisterKeyMapping 在资源重启时会再注册
+-- 一次，同一次按键派发两条命令）。第二次进来时 isPhoneOpen 已经是 true 且
+-- IsNuiFocused() 已为 true → 立刻 ClosePhone，表现就是"按 M 没反应"（界面被
+-- 叫出来又秒关）。所以对 300ms 内的重复调用只处理第一次。
+local TOGGLE_DEBOUNCE_MS = 300
+local lastToggleAt = 0
+
 RegisterCommand('phone', function()
+    local now = GetGameTimer()
+    if now - lastToggleAt < TOGGLE_DEBOUNCE_MS then
+        TriggerServerEvent('phone:server:focusState', { phase = 'toggle-debounced', focused = IsNuiFocused() })
+        return
+    end
+    lastToggleAt = now
+
     if isPhoneOpen then
         if IsNuiFocused() then
             ClosePhone()
@@ -284,8 +299,13 @@ end, false)
 
 
 -- Register key binding on resource start
+-- 只注册一次：资源重启会重跑本文件，重复 RegisterKeyMapping 会让同一次按键
+-- 派发多条命令（命令入口的 300ms 防抖是最后一道保险）。
+local keyMappingRegistered = false
 AddEventHandler('onClientResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
+    if keyMappingRegistered then return end
+    keyMappingRegistered = true
     RegisterKeyMapping('phone', 'Open Mobile Phone', 'keyboard', Config.OpenKey)
 end)
 
