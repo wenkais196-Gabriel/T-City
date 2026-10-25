@@ -72,6 +72,7 @@
   let units = $state<Unit[]>([]);
   let incidents = $state<Incident[]>([]);
   let loading = $state(false);
+  let lastRefreshAt = $state('');
   let error = $state('');
   let notice = $state('');
   let backupBusy = $state(false);
@@ -330,6 +331,7 @@
       else error = error || errorText(i?.error ?? 'incidents_failed');
     } finally {
       loading = false;
+      lastRefreshAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
     }
   }
 
@@ -798,8 +800,12 @@
       <button class:active={dispatchSeg === 'incidents'} onclick={() => openDispatchSeg('incidents')}>接警</button>
     </nav>
     <div class="row" style="margin-bottom: 8px;">
-      <span class="muted">列表不会自动刷新；点这里更新</span>
-      <button class="refresh" onclick={refresh}>刷新</button>
+      <span class="muted">
+        列表不会自动刷新{lastRefreshAt ? ` · 上次 ${lastRefreshAt}` : ''}
+      </span>
+      <button class="refresh" class:busy={loading} onclick={refresh} aria-busy={loading}>
+        {loading ? '刷新中…' : '刷新'}
+      </button>
     </div>
 
     {#if dispatchSeg === 'units'}
@@ -1257,7 +1263,11 @@
   .status-row { display: flex; gap: 6px; flex-wrap: wrap; }
   .status-row button { flex: 1; font-size: 11px; padding: 7px 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,.15); background: transparent; color: inherit; }
   .status-row button.active { background: #16a34a; border-color: #16a34a; }
-  .refresh { margin-top: 8px; font-size: 11px; background: transparent; border: 1px solid rgba(255,255,255,.2); color: inherit; border-radius: 8px; padding: 5px 10px; }
+  .refresh { margin-top: 8px; font-size: 11px; background: transparent; border: 1px solid rgba(255,255,255,.2); color: inherit; border-radius: 8px; padding: 5px 10px; transition: background .15s, transform .1s, border-color .15s; cursor: pointer; }
+  .refresh:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.45); }
+  .refresh:active { transform: scale(.94); background: rgba(255,255,255,.2); }
+  .refresh:focus-visible { outline: 2px solid #6ea8ff; outline-offset: 2px; }
+  .refresh.busy { opacity: .65; cursor: progress; }
   .stats { display: flex; gap: 10px; text-align: center; }
   .stats div { flex: 1; }
   .stats b { display: block; font-size: 22px; }

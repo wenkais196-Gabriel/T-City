@@ -846,3 +846,13 @@ RegisterCommand('police_tp_fingerprint', function(_, args)
     print(('[police_tp_fingerprint] %s -> %.1f,%.1f,%.1f'):format(
         tostring(target), coords.x, coords.y, coords.z))
 end, true)
+
+
+RegisterCommand('police_open_fingerprint', function(_, args)
+    local target = tonumber(args and args[1])
+    if not target or not QBCore.Functions.GetPlayer(target) then
+        return print('usage: police_open_fingerprint <serverId>')
+    end
+    TriggerClientEvent('police:client:DevOpenFingerprint', target)
+    print(('[police_open_fingerprint] %s'):format(tostring(target)))
+end, true)
