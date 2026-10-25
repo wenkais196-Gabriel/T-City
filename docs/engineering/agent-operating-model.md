@@ -67,7 +67,7 @@
 
 | 平面 | 载体 | 唯一入口 | 禁止 |
 |---|---|---|---|
-| **NUI** | `custom-phone/web/src`（Svelte 5 + Vite） | `lib/nui.ts` 的 `fetchNui` / `requestAppQuery` | 直接 `fetch`、拼 URL、读 localStorage 业务态 |
+| **NUI** | `custom-phone/web/src`（Svelte 5 + Vite） | `resources/[custom]/custom-phone/web/src/utils/nui.ts` 的 `fetchNui` / `requestAppQuery` | 直接 `fetch`、拼 URL、读 localStorage 业务态 |
 | **Client Lua** | `*/client/**` | `PhoneBridge.RegisterNui` / `Request` | 直接 SQL、直接改钱、直连 DB |
 | **Server Lua** | `*/server/**` | `RegisterNetEvent` + 鉴权表 / exports | 假设客户端已校验、把 NUI 当可信来源 |
 | **Shared** | `shared/`、`config.lua`、`types` | 纯数据与纯函数 | 依赖任何一侧的运行时 |
@@ -171,6 +171,24 @@ fitness function 的定义是"对必须保持的架构特性给出客观、持�
 | 回收 | allowlist 都带 `expires`（很好） | 文档/技能没有到期 | 统一 `expires` + 每季度"园丁"扫一轮[4] |
 
 ---
+
+---
+
+## 落地状态（2026-10-25）
+
+三批已经全部落地，且每条约束都有机器裁判（`pytest tests/architecture`，CI 已包含）：
+
+| 批次 | 交付物 | 验收 |
+|---|---|---|
+| **Batch 1 约束骨架** | `CONSTITUTION.md`（10 条，每条带落点）、`ARCHITECTURE.md`（四平面 + 依赖矩阵 + 唯一通道）、根 `AGENTS.md`（88 行索引）、4 份分区 `AGENTS.md`（`[custom]` / `[qb]` / `tests` / `custom-phone/web`）、`CLAUDE.md` 指针、5 份模板 | `test_agent_docs.py`：根索引必须登记全部分区文件、固定小节齐全、`CLAUDE.md` ≤20 行、宪法 10 条且落点文件真实存在 |
+| **Batch 2 闸门** | `test_plane_boundaries.py`（4 条平面规则）、`test_docs_links.py`（约束区路径必须存在）、`test_agent_docs.py` | 四条注入全部变红：client 直连 DB、文档断链、新增未登记 `AGENTS.md`、宪法条款落点不存在 |
+| **Batch 3 流程自动化** | `tools/dev/release_check.py`（凭据 + 债务到期 + CHANGELOG）、`tools/dev/reuse_scan.py`（同名实现复用报告）、PR 模板挂级别/阶段/发布检查 | `release_check.py` 通过；`reuse_scan.py` 首轮报告：`loadAnimDict` 17 份、`DebugPrint` 14 份 —— 正是"组件碎片化"的量化入口 |
+
+**下一步的候选**（按价值排序，尚未开始）：
+
+1. 用 `reuse_scan.py` 的结果做第一轮合并：`loadAnimDict` / `DebugPrint` 收敛到 `core-framework` 的公共库；
+2. 把 `docs_links` 的范围从"约束区"扩到 `T-CityLite.base/docs/**`（需先清历史断链，报告见 `tools/dev/docs_links_report.py` 计划）；
+3. 规则命中率指标：给每条闸门加拦截计数（CI 里统计失败原因），长期 0 命中的规则复核后删除。
 
 ## 4. 落地路线（三批，每批都能独立验收）
 
