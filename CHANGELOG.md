@@ -25,9 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `start_server.bat` 一键启动脚本（UTF-8 编码，自动切换工作目录）
 - `tests/architecture/test_nui_baseline.py` + `test_command_guards.py`：把「MDT 永远查询失败」与「控制台 /status 崩溃」两次教训钉成 CI —— 禁 NUI 回调里的 `type(cb) ~= 'function'` 守卫、要求 `PhoneBridge.AnswerFn` 覆盖三种应答通道、禁 `GetConvarInt` 判 diag 门禁、client/server trace 相位表必须同序、判定只用可观测槽位、诊断投影不带业务字段、NUI 产物必须内容哈希、`_diag` 只在边界三处出现、命令处理器索引 `PlayerData` 前必须判空（各含反向校验）
 - 新增三条架构闸门：`test_agent_docs.py`（根索引必须登记分区文件、固定小节、`CLAUDE.md` 只能是指针）、`test_plane_boundaries.py`（client 不碰 DB / server 不调 NUI 原生 / shared 不注册事件 / manifest 不把 server 代码列进 client）、`test_docs_links.py`（约束区文档的路径引用必须存在）；三条都带反向校验；新增 `tools/dev/release_check.py`（凭据 + 债务到期 + CHANGELOG）与 `tools/dev/reuse_scan.py`（同名实现复用报告）
-- **客户端热路径：8 段逐帧轮询收成一个（可测的）实现**。`custom-police/client/job.lua` 里有 8 段几乎一样的循环（值班、储物柜、垃圾桶、直升机、拖车场、车库、指纹、证据），每段 14~17 行，差别只有"哪个 flag""要不要在车里""按下做什么"；其中 6 段还带着 `if PlayerJob.onduty then sleep = 5 end` —— `sleep` 全局从未被读取，纯拷贝残留。
-  新增 `client/interact.lua` 的 `PoliceInteract.Watch{active, allowed, requireVehicle, onPress, after}`：退出条件写成显式的 `active`（离开区域即退出，不再藏在 else 分支里），可选的车内/职业/拒绝重试都在一处。job.lua 的 8 处调用点改为一行配置，`Wait(0)` 与手写按键轮询在该文件里归零（980 行，少 67 行）。
-  `client/evidence.lua` 的弹壳/血迹/指纹提示循环原本每个分支各自 `GetEntityCoords(PlayerPedId())`，改为循环开头取一次复用；这个循环保留手写形态（三个目标各有就近判定与不同副作用，硬合并会改变行为），在闸门里以带理由的例外登记。
+- **客户端热路径：8 段逐帧轮询收成一个（可测的）实现**。custom-police 的 job.lua 里有 8 段几乎一样的循环（值班、储物柜、垃圾桶、直升机、拖车场、车库、指纹、证据），每段 14~17 行，差别只有"哪个 flag""要不要在车里""按下做什么"；其中 6 段还带着 `if PlayerJob.onduty then sleep = 5 end` —— `sleep` 全局从未被读取，纯拷贝残留。
+  新增 interact.lua 的 `PoliceInteract.Watch{active, allowed, requireVehicle, onPress, after}`：退出条件写成显式的 `active`（离开区域即退出，不再藏在 else 分支里），可选的车内/职业/拒绝重试都在一处。job.lua 的 8 处调用点改为一行配置，`Wait(0)` 与手写按键轮询在该文件里归零（980 行，少 67 行）。
+  evidence.lua 的弹壳/血迹/指纹提示循环原本每个分支各自 `GetEntityCoords(PlayerPedId())`，改为循环开头取一次复用；这个循环保留手写形态（三个目标各有就近判定与不同副作用，硬合并会改变行为），在闸门里以带理由的例外登记。
   新增闸门 `test_client_hot_paths.py`：逐帧循环里同时出现 `IsControlJustReleased` 与 `Wait(0|1)` 即红（唯一实现是 `PoliceInteract.Watch`）、每帧循环体内 `GetEntityCoords(PlayerPedId())` 最多一次，带反向校验、例外痕迹校验与变异冒烟（注入手写轮询 → 红）。
   验证：861 passed / 132 skipped；job.lua、interact.lua、fxmanifest 过 luac；84 资源零错误。
   诚实边界：客户端脚本的运行时行为要真客户端才能验，本轮证到的是"结构正确 + 语义单测"（`test_police_interact.py` 6 例：按下只触发一次、离开区域不按键、职业不符即退、车内门槛、onPress 可拒绝重试）
