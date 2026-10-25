@@ -13,6 +13,17 @@ server_scripts {
 }
 client_script 'client/main.lua'
 
-dependencies { 'qb-core', 'oxmysql'
+
+dependencies {
+
+
+    'qb-core',
+
+
+    'oxmysql',
+
+
     'core-framework',
+
+
 }

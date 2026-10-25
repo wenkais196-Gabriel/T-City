@@ -53,15 +53,10 @@ end
 -- Rate Limit (1000ms 操作冷却)
 -- ==============================================================
 
-local opCooldowns = {}
 
 local function checkRateLimit(src, action)
-    local now = os.clock() * 1000
-    if not opCooldowns[src] then opCooldowns[src] = {} end
-    local last = opCooldowns[src][action]
-    if last and now - last < 1000 then return false end
-    opCooldowns[src][action] = now
-    return true
+    -- 走 core-framework 的限流 owner（原来是每个 action 1000ms 的本地冷却表）
+    return exports['core-framework']:RateLimitCooldown(('dash:%s:%s'):format(src, action), 1000)
 end
 
 -- ==============================================================
@@ -113,7 +108,7 @@ local PLATE_FLAG_COOLDOWN_MS = 2000
 
 AddEventHandler('playerDropped', function()
     local src = source
-    opCooldowns[src] = nil
+    exports['core-framework']:RateLimitReset(('dash:%s:'):format(src))
     plateFlagCooldowns[src] = nil
 end)
 

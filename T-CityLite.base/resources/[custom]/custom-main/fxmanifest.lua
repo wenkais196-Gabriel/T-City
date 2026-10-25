@@ -23,10 +23,21 @@ server_scripts {
     'server/dispatch.lua'
 }
 
+
 dependencies {
+
+
     'qb-core',
+
+
     'custom-logs',
-    'production-freeze'
+
+
+    'production-freeze',
+
+
     'core-framework',
+
+
 }
 

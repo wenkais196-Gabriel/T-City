@@ -21,8 +21,17 @@ server_scripts {
     'server/security.lua'
 }
 
+
 dependencies {
+
+
     'qb-core',
-    'custom-logs'
+
+
+    'custom-logs',
+
+
     'core-framework',
+
+
 }
