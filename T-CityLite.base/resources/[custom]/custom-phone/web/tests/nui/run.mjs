@@ -19,7 +19,10 @@ import {
   startStaticServer,
   createWorld,
 } from './harness.mjs';
-import { scenarios } from './mdt.spec.mjs';
+import { scenarios as mdtScenarios } from './mdt.spec.mjs';
+import { questScenarios } from './quests.spec.mjs';
+
+const scenarios = [...mdtScenarios, ...questScenarios];
 
 const HTML_DIR = path.resolve(fileURLToPath(new URL('../../../html', import.meta.url)));
 

@@ -86,6 +86,7 @@ server_scripts {
     'server/quest_mutex.lua',
     'server/quest_group.lua',
     'server/quest_manager.lua',
+    'server/quest_availability.lua',      -- 只读：手机任务列表的数据源（TriggerQuest 仍是接取权威）
     'server/main.lua',
 }
 

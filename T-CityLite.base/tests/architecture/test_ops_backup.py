@@ -23,9 +23,11 @@ import pytest
 REPO = Path(__file__).resolve().parents[3]
 TOOL = REPO / "tools" / "ops" / "backup_db.py"
 
+PW = "YOUR_PASSWORD"  # 明显占位符：凭据扫描不会把它当成真口令
+
 CFG = """\
 # 假配置，口令是占位符
-set mysql_connection_string "mysql://swk:S3cretPw@localhost/TCityLite?charset=utf8mb4"
+set mysql_connection_string "mysql://swk:YOUR_PASSWORD@localhost/TCityLite?charset=utf8mb4"
 sv_endpointPrivacy true
 """
 
@@ -49,19 +51,19 @@ def test_backup_rejects_password_in_argv_and_masks_it_in_logs(tmp_path):
     conn = mod.parse_mysql_url(url)
     assert (conn["user"], conn["password"], conn["host"], conn["database"]) == (
         "swk",
-        "S3cretPw",
+        PW,
         "localhost",
         "TCityLite",
     )
 
     masked = mod.mask_url(url)
-    assert "S3cretPw" not in masked, "日志里不能出现口令"
+    assert PW not in masked, "日志里不能出现口令"
     assert "swk" in masked and "TCityLite" in masked
 
     argv = mod.build_dump_argv(conn, tmp_path / "tcity.sql")
     assert isinstance(argv, list), "必须是 argv 列表，不能是拼起来的 shell 字符串"
     joined = " ".join(argv)
-    assert "S3cretPw" not in joined, "口令不许出现在 argv（ps 可见）"
+    assert PW not in joined, "口令不许出现在 argv（ps 可见）"
     assert "--single-transaction" in argv, "InnoDB 要有一致性快照，不能锁表"
     assert "TCityLite" in joined and str(tmp_path / "tcity.sql") in joined
 
