@@ -1,7 +1,7 @@
 """NUI-CLIENT-01 — static NUI/client contracts for the FiveM client layer.
 
 Offline, deterministic, no FXServer / no DB / no network. Exercises the rules in
-``docs/client/CLIENT_AUDIT.md`` and ``.dsh/skills/fivem-client`` against every
+``docs/client/CLIENT_AUDIT.md`` and `仓库里的 .agents/skills/fivem-client（尚未建立，见 docs/engineering/agent-operating-model.md 的缺口说明）` against every
 ``[custom]`` resource:
 
   ===========================  ===============================================
