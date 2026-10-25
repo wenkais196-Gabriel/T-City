@@ -7,7 +7,8 @@ Offline, deterministic, no FXServer / no DB / no network. Exercises the rules in
   ===========================  ===============================================
   check                        contract
   ===========================  ===============================================
-  ``callback_cb``              every ``RegisterNUICallback`` body calls ``cb(...)``
+  ``callback_cb``              every ``RegisterNUICallback`` / ``PhoneBridge.RegisterNui``
+                               handler body calls ``cb(...)``
   ``callback_early_return``    no ``return`` / ``error()`` / ``assert()`` before the
                                first ``cb(...)`` (that branch would leave CEF
                                pending forever)
@@ -105,7 +106,12 @@ KNOWN_CHECKS = {
     "dead_nui_client_file",
 }
 
-CALLBACK_SIG_RE = re.compile(r"RegisterNUICallback\s*\(\s*(['\"])(?P<name>[^'\"]+)\1\s*,\s*")
+# ``PhoneBridge.RegisterNui`` is the client-core wrapper around
+# ``RegisterNUICallback``; it is scanned exactly like a direct registration so
+# moving a callback into client/core does not hide it from the contract.
+CALLBACK_SIG_RE = re.compile(
+    r"(?:RegisterNUICallback|PhoneBridge\.RegisterNui)\s*\(\s*(['\"])(?P<name>[^'\"]+)\1\s*,\s*"
+)
 NUIFOCUS_TRUE_RE = re.compile(r"\bSetNuiFocus\s*\(\s*true\b")
 NUIFOCUS_FALSE_RE = re.compile(r"\bSetNuiFocus\s*\(\s*false\b")
 KEEPINPUT_TRUE_RE = re.compile(r"\bSetNuiFocusKeepInput\s*\(\s*true\b")

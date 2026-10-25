@@ -111,8 +111,9 @@ MySQL = {
     },
 }
 
--- Production path: server/main.lua defines this after qb_phone_compat.lua
--- loads, so it is resolved at call time.
+-- Production path: server/core/notify.lua defines the callable PhoneNotify
+-- table before qb_phone_compat.lua loads; this harness keeps the legacy
+-- function shape to prove the compat layer still accepts it.
 function PhoneNotify(src, notification)
     State.pushes[#State.pushes + 1] = { src = src, notification = notification }
 end

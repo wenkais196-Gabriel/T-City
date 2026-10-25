@@ -46,8 +46,10 @@ def test_manifest_loads_registry_before_main():
 
 def test_client_exposes_app_bridges():
     src = read(PHONE / "client/main.lua")
-    for callback in ("getPhoneApps", "appQuery", "appAction"):
-        assert f"RegisterNUICallback('{callback}'" in src
+    assert "RegisterNUICallback('getPhoneApps'" in src
+    # appQuery/appAction moved through the shared client-core wrapper.
+    for callback in ("appQuery", "appAction"):
+        assert f"PhoneBridge.RegisterNui('{callback}'" in src
 
 
 def test_nui_has_dynamic_renderer():
@@ -55,7 +57,7 @@ def test_nui_has_dynamic_renderer():
     assert "DynamicApp" in app
     assert "dyn:" in app
     assert "loadDynamicApps" in app
-    assert "appQuery" in read(PHONE / "web/src/stores/apps.ts")
+    assert "appQuery" in read(PHONE / "web/src/core/request.ts")
     main = read(PHONE / "server/main.lua")
     assert "phone:server:appQuery" in main
     assert "phone:server:appAction" in main
@@ -67,7 +69,7 @@ def test_police_mdt_has_dedicated_pages():
     src = page.read_text(encoding="utf-8")
     for name in ("units", "incidents", "citizen", "vehicle", "set_status", "assign", "clear"):
         assert f"'{name}'" in src or f'"{name}"' in src
-    assert "PoliceMDT" in read(PHONE / "web/src/App.svelte")
+    assert "PoliceMDT" in read(PHONE / "web/src/core/appRegistry.ts")
 
 
 def test_police_mdt_has_exactly_five_pages():
@@ -220,9 +222,9 @@ def test_p2_warrant_and_arrest_ui():
 
 
 def test_notifications_can_deeplink_into_mdt():
-    server = read(PHONE / "server/main.lua")
-    assert "phone_notifications (citizenid, title, content, app_id)" in server
-    assert "app_id = appId" in server
+    notify = read(PHONE / "server/core/notify.lua")
+    assert "phone_notifications (citizenid, title, content, app_id)" in notify
+    assert "app_id = appId" in notify
     p0 = read(PHONE.parent / "custom-police/server/p0.lua")
     assert "app_id" in p0 and "police_mdt" in p0
     ui = read(PHONE / "web/src/apps/Notifications.svelte")
@@ -986,29 +988,32 @@ def test_error_code_doc_lists_every_action_and_required_code():
 # legacy QBCore callbacks stay for other callers.
 def test_client_app_bridges_use_the_request_id_protocol():
     client = read(PHONE / "client/main.lua")
+    bridge = read(PHONE / "client/core/bridge.lua")
     for token in (
         "phone:server:appQueryRequest",
         "phone:client:appQueryResponse",
         "phone:server:appActionRequest",
         "phone:client:appActionResponse",
     ):
-        assert token in client, token
-    assert "pendingAppQuery" in client and "pendingAppAction" in client
-    assert "APP_REQUEST_TIMEOUT_MS = 8000" in client
-    assert "error = 'timeout'" in client
-    assert "error = 'resource_stopped'" in client
+        assert token in client or token in bridge, token
+    assert "pending" in bridge and "pending[id]" in bridge
+    assert "APP_REQUEST_TIMEOUT_MS = 8000" in bridge
+    assert "error = 'timeout'" in bridge
+    assert "resource_stopped" in bridge
 
 
 def test_nui_app_query_no_longer_uses_the_single_slot_callback():
     client = read(PHONE / "client/main.lua")
-    start = client.index("RegisterNUICallback('appQuery'")
-    end = client.index("RegisterNUICallback('appAction'", start)
+    start = client.index("PhoneBridge.RegisterNui('appQuery'")
+    end = client.index("PhoneBridge.RegisterNui('appAction'", start)
     block = client[start:end]
     assert "phone:server:appQueryRequest" in block
+    assert "PhoneBridge.Request" in block
     assert "TriggerCallback" not in block
-    action = client[client.index("RegisterNUICallback('appAction'"):]
-    action = action[:action.index("RegisterNetEvent('phone:client:appQueryResponse'")]
+    action = client[client.index("PhoneBridge.RegisterNui('appAction'"):]
+    action = action[:action.index("-- [phone-app-readers] end")]
     assert "phone:server:appActionRequest" in action
+    assert "PhoneBridge.Request" in action
     assert "TriggerCallback" not in action
 
 

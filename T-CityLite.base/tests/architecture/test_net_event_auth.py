@@ -70,7 +70,8 @@ CIVILIAN_GUARD = re.compile(
     r"metadata\[|evidenceInfo|diff\("
 )
 SESSION_BIND = re.compile(
-    r"metadata|taken_by|receiver_number|units\[requestId\]|StoreNotification\(source|"
+    r"metadata|taken_by|receiver_number|units\[requestId\]|"
+    r"(?:StoreNotification|PhoneNotify\.Store)\(source|"
     r"ResolveSource\(source\)|GetPlayer\(targetSrc"
 )
 DIAGNOSTIC_GUARD = re.compile(r"COOLDOWN|cooldown|diagRateLimited|PHASES")

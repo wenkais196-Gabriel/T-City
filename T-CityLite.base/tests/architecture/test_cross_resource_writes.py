@@ -321,7 +321,7 @@ def test_domain_tables_are_owner_only_in_every_resource():
 
 
 def test_notification_and_verdict_use_owner_exports():
-    phone = (CUSTOM / "custom-phone" / "server" / "main.lua").read_text(encoding="utf-8")
+    phone = (CUSTOM / "custom-phone" / "server" / "core" / "notify.lua").read_text(encoding="utf-8")
     assert "exports('Notify'" in phone
     assert "'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)'" in phone
 

@@ -1,76 +1,6 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
--- ----------------------------------------------------
--- Career identity -> phone role resolution
--- ----------------------------------------------------
--- custom-career v2 returns job_name/job_label/org_id/rank_tier/certs and no
--- primary_role. This is the single place custom-phone maps that identity onto
--- the roles the NUI/faction/hotline code expects, so no caller can end up
--- indexing a table with nil.
-PhoneIdentity = {}
-
-local JOB_ROLE = {
-    police = 'police',
-    ambulance = 'medic',
-    doctor = 'medic',
-    ems = 'medic',
-    mayor = 'mayor',
-    judge = 'justice',
-    lawyer = 'justice',
-    mechanic = 'mechanic',
-    taxi = 'taxi',
-    bus = 'bus',
-}
-
---- Normalise an identity table. `job_name` wins; legacy `primary_role` is
---- honoured when the career data has no usable job. A missing identity
---- resolves to the 'none' role instead of nil.
----@param identity table|nil
----@return table
-function PhoneIdentity.From(identity)
-    identity = type(identity) == 'table' and identity or {}
-
-    local job = type(identity.job_name) == 'string' and identity.job_name:lower() or nil
-    if job == '' or job == 'none' then job = nil end
-
-    local role
-    if job and job ~= 'unemployed' then
-        role = JOB_ROLE[job] or job
-    elseif type(identity.primary_role) == 'string' and identity.primary_role ~= '' then
-        role = identity.primary_role
-    end
-
-    local gang = identity.gang_name
-    if (not role or role == 'civilian')
-        and type(gang) == 'string' and gang ~= '' and gang ~= 'none' then
-        role = 'gang'
-    end
-
-    identity.primary_role = role or 'none'
-    identity.job_name = identity.job_name or 'unemployed'
-    identity.rank_tier = identity.rank_tier or 'entry'
-    identity.certs = type(identity.certs) == 'table' and identity.certs or {}
-    return identity
-end
-
---- Career tier for a leader. custom-career uses 'leader' for jobs and 'boss'
---- for gangs, so both count.
----@param identity table|nil
----@return boolean
-function PhoneIdentity.IsLeader(identity)
-    local tier = type(identity) == 'table' and identity.rank_tier or nil
-    return tier == 'leader' or tier == 'boss'
-end
-
----@param source number
----@return table
-function PhoneIdentity.Resolve(source)
-    local ok, identity = pcall(function()
-        return exports['custom-career']:GetPlayerIdentity(source)
-    end)
-    if not ok then identity = nil end
-    return PhoneIdentity.From(identity)
-end
+-- PhoneIdentity lives in server/core/identity.lua (loaded before this file).
 
 -- Create phone_numbers table if it does not exist
 MySQL.ready(function()
@@ -192,6 +122,12 @@ end
 local phoneDataCache = {} -- { [citizenid] = { data, expires } }
 local playerCitizen = {}  -- { [source] = citizenid } for playerDropped cleanup
 
+-- Notification writes live in server/core/notify.lua; give that module the
+-- one cache-eviction behaviour it needs without exposing the whole cache.
+PhoneNotify.SetCacheInvalidator(function(citizenid)
+    phoneDataCache[citizenid] = nil
+end)
+
 -- Job board cache shared by the open callback and the refresh thread. Declared
 -- before getPhoneData on purpose: a later `local` would make the function read
 -- a different (global) variable than the thread writes.
@@ -211,127 +147,7 @@ function PhoneInvalidateJobBoardCache()
     phoneDataCache = {}
 end
 
--- ----------------------------------------------------
--- Notification persistence
--- ----------------------------------------------------
--- Only app ids that the notification tray can deep-link into are persisted.
--- An unknown value becomes NULL instead of creating a broken dynamic-app
--- target, and every caller goes through the same allowlist (FIT-02).
-local NOTIFY_APP_IDS = {
-    banking = true,
-    police_mdt = true,
-}
-
---- Normalise the persisted part of a notification once, so StoreNotification,
---- the Notify export and the push all use the same truncation + app_id rules.
----@param notification table
----@return table
-local function NormaliseNotification(notification)
-    notification = type(notification) == 'table' and notification or {}
-    local title = type(notification.title) == 'string' and notification.title or 'Notification'
-    local content = type(notification.content) == 'string' and notification.content or ''
-    local appId = type(notification.app_id) == 'string' and notification.app_id:match('^[a-z0-9_]+$') or nil
-    if appId and (not NOTIFY_APP_IDS[appId] or #appId > 32) then appId = nil end
-    return {
-        title = Sms.TruncateBytes(title, 200),
-        content = Sms.TruncateChars(content, 1000),
-        app_id = appId,
-    }
-end
-
---- Push a persisted row to an online target exactly once.
-local function PushStoredNotification(targetSrc, notification, id)
-    TriggerClientEvent('phone:client:newNotification', targetSrc, {
-        id = id,
-        title = notification.title,
-        content = notification.content,
-        timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-        is_read = false,
-        origin = 'server',
-        app_id = notification.app_id,
-    })
-end
-
--- Server-originated notifications are persisted here and pushed exactly once.
--- Client-originated storeNotification requests are persisted without pushing
--- back to the sender, which is what breaks the
--- phone:client:newNotification -> phone:server:storeNotification loop.
-local function StoreNotification(targetSrc, notification, origin)
-    if type(notification) ~= 'table' then return end
-
-    local Player = QBCore.Functions.GetPlayer(targetSrc)
-    if not Player then return end
-
-    local citizenid = Player.PlayerData.citizenid
-    local normalised = NormaliseNotification(notification)
-    MySQL.Async.insert('INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)', {
-        citizenid, normalised.title, normalised.content, normalised.app_id
-    }, function(result)
-        local id = PhoneDb.InsertId(result)
-        if id <= 0 then return end
-
-        phoneDataCache[citizenid] = nil
-
-        -- A client-originated row came from that client's own notification
-        -- tray. Pushing it back would make the client persist it again.
-        if origin == 'client' then return end
-
-        PushStoredNotification(targetSrc, normalised, id)
-    end)
-end
-
---- Persist a server-originated notification and push it to the target once.
----@param targetSrc number
----@param notification table
-function PhoneNotify(targetSrc, notification)
-    StoreNotification(targetSrc, notification, 'server')
-end
-
---- owner export for `phone_notifications` (FIT-02).
----
---- Persist a notification for a citizen (online or offline) and push it once
---- when they are online. This is the only write path other resources may use;
---- it reuses the same normalisation/allowlist as StoreNotification so a caller
---- cannot bypass the truncation or the cache invalidation.
----
---- `meta` is optional: `source` skips the citizenid lookup when the caller
---- already knows the online player, `app_id` is used when `appId` is nil.
----@param citizenid string
----@param title string
----@param content string
----@param appId string|nil
----@param meta table|nil
----@return boolean ok, number|nil id
-exports('Notify', function(citizenid, title, content, appId, meta)
-    if type(citizenid) ~= 'string' or citizenid == '' or #citizenid > 50 then return false end
-    if title ~= nil and type(title) ~= 'string' then return false end
-    if content ~= nil and type(content) ~= 'string' then return false end
-    meta = type(meta) == 'table' and meta or {}
-    if appId == nil and type(meta.app_id) == 'string' then appId = meta.app_id end
-
-    local normalised = NormaliseNotification({ title = title, content = content, app_id = appId })
-    local targetSrc = tonumber(meta.source)
-    if not targetSrc then
-        local Player = QBCore.Functions.GetPlayerByCitizenId(citizenid)
-        targetSrc = Player and Player.PlayerData.source or nil
-    end
-
-    -- await (not Async) so the outbox worker can tell a failed insert from a
-    -- persisted one; the caller is always inside a thread/coroutine.
-    local wrote, id = pcall(function()
-        local result = MySQL.insert.await(
-            'INSERT INTO phone_notifications (citizenid, title, content, app_id) VALUES (?, ?, ?, ?)',
-            { citizenid, normalised.title, normalised.content, normalised.app_id })
-        return PhoneDb.InsertId(result)
-    end)
-    if not wrote or not id or id <= 0 then return false end
-
-    phoneDataCache[citizenid] = nil
-    if targetSrc and targetSrc > 0 then
-        PushStoredNotification(targetSrc, normalised, id)
-    end
-    return true, id
-end)
+-- Notifications live in server/core/notify.lua (loaded before this file).
 
 --- Decode the extra SMS columns the NUI expects (gps object, status alias).
 --- Shared by getPhoneData and getMessages so paginated rows look identical.
@@ -582,6 +398,9 @@ QBCore.Functions.CreateCallback('phone:server:sendMessage', function(source, cb,
             local targetPlayer = GetPlayerByPhone(receiver_number)
             if targetPlayer then
                 TriggerClientEvent('phone:client:newMessage', targetPlayer.PlayerData.source, msgData)
+                -- Transition period: the legacy event above stays, the unified
+                -- channel is additive until every app subscribes to it.
+                PhoneEvents.Push(targetPlayer.PlayerData.source, 'message.new', msgData)
                 -- Server-originated: persisted and pushed once. The client echo
                 -- of this event is dropped by phone:server:storeNotification.
                 PhoneNotify(targetPlayer.PlayerData.source, {
@@ -731,14 +550,16 @@ exports('SendSystemMessage', function(receiverNumber, message, senderLabel)
     local targetPlayer = GetPlayerByPhone(receiverNumber)
     if targetPlayer then
         local timestamp = os.date('%Y-%m-%d %H:%M:%S')
-        TriggerClientEvent('phone:client:newMessage', targetPlayer.PlayerData.source, {
+        local msgData = {
             id = insertId,
             sender_number = sender,
             receiver_number = receiverNumber,
             message = message,
             timestamp = timestamp,
             is_read = false,
-        })
+        }
+        TriggerClientEvent('phone:client:newMessage', targetPlayer.PlayerData.source, msgData)
+        PhoneEvents.Push(targetPlayer.PlayerData.source, 'message.new', msgData)
         PhoneNotify(targetPlayer.PlayerData.source, {
             title = sender,
             content = Sms.TruncateChars(message, 200),
@@ -752,7 +573,7 @@ end)
 -- Notification Persistence (DB-backed)
 -- ----------------------------------------------------
 -- Notifications created by server code are persisted and pushed by
--- PhoneNotify() above. The only notification that can arrive here is a
+-- server/core/notify.lua. The only notification that can arrive here is a
 -- client-originated one, which is stored without being echoed back.
 RegisterNetEvent('phone:server:storeNotification', function(notification, origin)
     if type(notification) ~= 'table' then return end
@@ -762,7 +583,7 @@ RegisterNetEvent('phone:server:storeNotification', function(notification, origin
     -- that echo breaks the store -> push -> store loop and keeps one row.
     if origin == 'server' or notification.origin == 'server' then return end
 
-    StoreNotification(source, notification, 'client')
+    PhoneNotify.Store(source, notification, 'client')
 end)
 
 QBCore.Functions.CreateCallback('phone:server:markNotificationsRead', function(source, cb)
@@ -1529,12 +1350,28 @@ local function replyAppRequest(eventName, src, requestId, response)
     TriggerClientEvent(eventName, src, requestId, response)
 end
 
+--- Per-player token-bucket key. playerCitizen is the getPhoneData cache; the
+--- QBCore lookup is only a fallback for a request that races the first open.
+local function appRateKey(src, kind)
+    local citizenid = playerCitizen[src]
+    if not citizenid and QBCore and QBCore.Functions then
+        local Player = QBCore.Functions.GetPlayer(src)
+        if Player and Player.PlayerData then citizenid = Player.PlayerData.citizenid end
+    end
+    return ('app:%s:%s'):format(tostring(citizenid or src), kind)
+end
+
 RegisterNetEvent('phone:server:appQueryRequest', function(requestId, data)
     local src = source
     if not validAppRequestId(requestId) then return end
     if type(data) ~= 'table' then
         replyAppRequest('phone:client:appQueryResponse', src, requestId,
             { success = false, error = 'bad_request' })
+        return
+    end
+    if not PhoneRateLimit.Allow(appRateKey(src, 'query')) then
+        replyAppRequest('phone:client:appQueryResponse', src, requestId,
+            { success = false, error = 'rate_limited' })
         return
     end
     local ok, result = PhoneApps.Query(src, tostring(data.app_id or ''), tostring(data.query or ''), data.params)
@@ -1551,6 +1388,11 @@ RegisterNetEvent('phone:server:appActionRequest', function(requestId, data)
     if type(data) ~= 'table' then
         replyAppRequest('phone:client:appActionResponse', src, requestId,
             { success = false, error = 'bad_request' })
+        return
+    end
+    if not PhoneRateLimit.Allow(appRateKey(src, 'action')) then
+        replyAppRequest('phone:client:appActionResponse', src, requestId,
+            { success = false, error = 'rate_limited' })
         return
     end
     local ok, result = PhoneApps.Action(src, tostring(data.app_id or ''), tostring(data.action or ''), data.params)
@@ -1571,12 +1413,18 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneApps', function(source, cb
 end)
 
 QBCore.Functions.CreateCallback('phone:server:appQuery', function(source, cb, appId, queryName, params)
+    if not PhoneRateLimit.Allow(appRateKey(source, 'query')) then
+        return cb({ success = false, error = 'rate_limited' })
+    end
     local ok, result = PhoneApps.Query(source, tostring(appId or ''), tostring(queryName or ''), params)
     if ok then cb({ success = true, data = result })
     else cb({ success = false, error = tostring(result) }) end
 end)
 
 QBCore.Functions.CreateCallback('phone:server:appAction', function(source, cb, appId, actionName, params)
+    if not PhoneRateLimit.Allow(appRateKey(source, 'action')) then
+        return cb({ success = false, error = 'rate_limited' })
+    end
     local ok, result = PhoneApps.Action(source, tostring(appId or ''), tostring(actionName or ''), params)
     if ok then cb({ success = true, data = result })
     else cb({ success = false, error = tostring(result) }) end

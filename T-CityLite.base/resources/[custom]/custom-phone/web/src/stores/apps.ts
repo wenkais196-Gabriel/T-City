@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { fetchNui } from '../utils/nui';
+import { requestAppAction, requestAppQuery } from '../core/request';
 
 export interface DynamicAppMeta {
   id: string;
@@ -23,19 +24,9 @@ export async function loadDynamicApps() {
 }
 
 export async function queryApp(appId: string, query: string, params: Record<string, unknown> = {}) {
-  try {
-    return await fetchNui<any>('appQuery', { app_id: appId, query, params });
-  } catch (err) {
-    console.error('App query failed', err);
-    return { success: false, error: 'query_failed' };
-  }
+  return requestAppQuery(appId, query, params);
 }
 
 export async function appAction(appId: string, action: string, params: Record<string, unknown> = {}) {
-  try {
-    return await fetchNui<any>('appAction', { app_id: appId, action, params });
-  } catch (err) {
-    console.error('App action failed', err);
-    return { success: false, error: 'action_failed' };
-  }
+  return requestAppAction(appId, action, params);
 }

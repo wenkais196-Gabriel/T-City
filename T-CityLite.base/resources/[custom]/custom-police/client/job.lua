@@ -47,10 +47,7 @@ local function openFingerprintUI()
     SetNuiFocus(true, true)
 end
 
--- Dev probe: open the fingerprint NUI without a nearby target player.
-RegisterNetEvent('police:client:DevOpenFingerprint', function()
-    openFingerprintUI()
-end)
+
 
 local function SetCarItemsInfo()
     local items = {}

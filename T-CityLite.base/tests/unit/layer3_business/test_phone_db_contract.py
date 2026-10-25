@@ -21,6 +21,7 @@ import pytest
 BASE = Path(__file__).resolve().parents[3]
 SMS_LUA = BASE / 'resources' / '[custom]' / 'custom-phone' / 'server' / 'sms.lua'
 MAIN_LUA = BASE / 'resources' / '[custom]' / 'custom-phone' / 'server' / 'main.lua'
+IDENTITY_LUA = BASE / 'resources' / '[custom]' / 'custom-phone' / 'server' / 'core' / 'identity.lua'
 SCHEMA = BASE / 'tests' / 'fixtures' / 'tcity_schema.sql'
 MIGRATION = BASE / 'migrations' / 'v2.7_phone_messages.sql'
 
@@ -117,11 +118,8 @@ def test_phone_messages_columns_match_fixture():
 
 
 def _identity_block() -> str:
-    """Extract the pure identity resolver from main.lua (stops before MySQL)."""
-    text = MAIN_LUA.read_text()
-    start = text.index('PhoneIdentity = {}')
-    end = text.index('-- Create phone_numbers table')
-    return text[start:end]
+    """Load the pure identity module (no FiveM globals at load time)."""
+    return IDENTITY_LUA.read_text()
 
 
 class TestPhoneIdentity:

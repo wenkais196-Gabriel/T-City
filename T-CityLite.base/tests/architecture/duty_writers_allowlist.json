@@ -13,15 +13,6 @@
       "expires": null
     },
     {
-      "id": "police-duty-service",
-      "file": "custom-police/server/p0.lua",
-      "kind": "service",
-      "owner": "custom-police",
-      "reason": "唯一警察 duty 服务 P.SetDutyForSource 的实现：校验 police、pcall(SetJobDuty)、回读 PlayerData.job.onduty、syncDuty 投影、审计 duty.set。该文件内只允许这一处 SetJobDuty 调用。",
-      "added": "2026-10-24",
-      "expires": null
-    },
-    {
       "id": "custom-main-non-police-duty",
       "file": "custom-main/server/dispatch.lua",
       "kind": "non_police_branch",

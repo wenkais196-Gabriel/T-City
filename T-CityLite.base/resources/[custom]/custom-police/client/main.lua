@@ -225,10 +225,4 @@ CreateThread(function()
 end)
 
 
--- Dev probe: only reachable from the server console command above.
-RegisterNetEvent('police:client:DevTeleport', function(x, y, z)
-    if type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return end
-    SetEntityCoords(PlayerPedId(), x, y, z, false, false, false, false)
-    SetEntityHeading(PlayerPedId(), 0.0)
-    QBCore.Functions.Notify('已传送到指纹点', 'success', 3000)
-end)
+
