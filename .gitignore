@@ -23,6 +23,10 @@ server.cfg
 default/data/
 default/logs/
 
+# txData/ — 从旧服 /home/swk/server_archive 拷来的存档（playersDB.json 含真实玩家
+# 数据、admins.json 含管理员标识、logs 含对局记录）。只作为行为参考，不进版本库。
+txData/
+
 # 备份配置 (包含与 server.cfg 相同的敏感数据)
 T-CityLite.base/server.cfg.bkp
 T-CityLite.base/server.cfg.full-backup

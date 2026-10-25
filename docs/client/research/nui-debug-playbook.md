@@ -212,6 +212,27 @@ grep -o "appQuery" html/assets/index.js | wc -l
 env，只有普通读取才走 `__index` 回退到共享表）。跨文件取模块请用 `local d = X; if type(d)…`
 而不是 `rawget(_G, 'X')`。
 
+### 3.0b 新增脚本文件"明明在、就是不执行"（`restart` 不重读 fxmanifest）
+
+**签名**
+- 文件存在、`luac -p` 通过、`fxmanifest.lua` 里也确实写了，但运行时完全看不到它的
+  任何痕迹（连加载时第一行 `print`/事件都没有）。
+- 同一个资源的**已有**脚本改动却生效正常。
+- 之前有人只用过 `restart <resource>`。
+
+**根因**：服务端缓存解析后的资源元数据（含脚本清单）。`restart` 用缓存清单重跑脚本，
+所以**新加进清单的文件不会被加载**；只有 `refresh`（或重启服务器）才会重新解析
+fxmanifest。客户端同理：客户端缓存整份资源，`refresh` + 资源重启后才能拿到新清单。
+
+**60 秒证实/排除**
+1. `refresh` → `restart <resource>`；
+2. 在该文件**第一行**（`PhoneDiag = ...` 之前）放一行 `print('[x] file loaded')`；
+3. 仍然没有 ⇒ 才是真的没加载；有 ⇒ 说明之前是清单缓存，不是代码问题。
+
+**修复/预防**：模块文件自己带一行启动自证
+（`print('[custom-phone][diag] server trace core loaded (level=N)')`），
+以后任何"模块没生效"的怀疑都能用一行日志排除。
+
 ### 3.1 CEF 缓存了旧 bundle（本项目概率最高）
 
 **为什么这里高发**：`vite.config.ts` 把产物固定成 `assets/index.js`、`assets/index.css`

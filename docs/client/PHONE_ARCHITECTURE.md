@@ -153,10 +153,23 @@ interface PhoneApp {
 NUI 传 `_diag.tid`（没有则由客户端生成），trace 的 tid **就是 request_id**，
 服务端内存环记录 `Recv/Done` 作为 SR/SD 的唯一事实源，链尾按
 `level2 / ≥400ms / 失败 / 前 3 次` 采样上报，服务端打印
-`path=NS|CR|CF|SR|SD|CP|CA|ND break=segX`。默认开启，`setr phone_diag 0` 关闭。
 
-> 注意：**新增脚本文件后客户端必须重连一次**——客户端会缓存 fxmanifest，
-> `restart` 只更新已有文件的脚本内容，不会加载新加进清单的文件。
+```
+[custom-phone][diag] src=4 tid=c00065e22664 kind=query app=police_mdt code=ok why=ok
+  path=CR|CF|SR|SD|CP|CA break=none dt=0,0,134,134
+```
+
+6 个槽位对应 `NUI→Lua 回调`(CR) → `转发服务端`(CF) → `服务端收到`(SR) →
+`服务端回包`(SD) → `回包命中 pending`(CP) → `调用 NUI cb`(CA)。默认开启，
+`setr phone_diag 0` 关闭。
+
+> 设计稿里的 NS（NUI 即将 fetch）/ND（NUI 已 resolve）两槽**没有实现**：NUI 只把
+> tid 带下来，CEF 侧 resolve 不通知 Lua，这两段在 Lua 侧不可观测。硬留在判定里会把
+> 正常请求误报成 `seg4`（实测踩过）。它们由 `nuiProbe` 自证代替。
+
+> 注意：**新增脚本文件必须 `refresh`（不是 `restart`）才会进清单**——`restart` 复用
+> 服务端缓存的 fxmanifest，只重跑已有文件；漏了 `refresh` 的表现是"文件明明在、代码
+> 明明没错、日志里就是没有它"，非常容易误判成缓存或加载错误。
 
 ## 4. 性能预算
 
