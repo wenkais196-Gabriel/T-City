@@ -677,20 +677,8 @@ local function encodeCharges(ids)
 end
 
 local function deriveCitationAmount(base, requested)
-    local low = math.ceil(base * CITATION_LOW)
-    local high = math.floor(base * CITATION_HIGH)
-    if high < low then high = low end
-    local value
-    if requested == nil then
-        value = base
-    else
-        value = tonumber(requested)
-        if not value then return nil, 'invalid_amount' end
-        value = math.floor(value)
-    end
-    if value < low then value = low end
-    if value > high then value = high end
-    return value
+    -- 公式只有一份：server/citations.lua 的 PoliceCitations.PolicyAmount
+    return PoliceCitations.PolicyAmount(base, requested)
 end
 
 --- Submit one arrest as a report: report + optional citation/evidence/case,
@@ -893,18 +881,23 @@ function ArrestSubmit(source, params)
             local citationReason = utf8Sub(table.concat(sum.labels, '、'), 240)
             local chargeId = table.concat(ids, ',')
             if #chargeId > 32 then chargeId = ids[1] end
-            local citationId = insertRow([[
-                INSERT INTO police_citations
-                    (citizenid, officer_citizenid, amount, reason, incident_id,
-                     charge_id, base_amount, report_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ]], { target, actor.citizenid, amount, citationReason, incidentId,
-                  chargeId, sum.fine, reportId })
+            -- 罚单行由唯一写者（server/citations.lua）写入：金额政策、列集合、审计都在那边，
+            -- 这里只负责把它纳入本次提交的回滚范围。
+            local citationId, citationReason2, citationAudited = PoliceCitations.Insert(actor.citizenid, {
+                citizenid = target,
+                amount = amount,
+                base_amount = sum.fine,
+                reason = citationReason,
+                incident_id = incidentId,
+                charge_id = chargeId,
+                report_id = reportId,
+            })
             if not citationId then
                 rollback()
-                return fail('db_error')
+                return fail(citationReason2 == 'invalid_amount' and 'invalid_amount' or 'db_error')
             end
             created.citation = citationId
+            created.citationAudited = citationAudited
             created.citationReason = citationReason
         end
 
@@ -1020,11 +1013,10 @@ function ArrestSubmit(source, params)
                 auditsOk = false
             end
         end
-        if created.citation then
-            if not auditPlayer(actor.citizenid, 'citation.issue', tostring(created.citation),
-                    ('$%d'):format(amount)) then
-                auditsOk = false
-            end
+        -- 罚单的 citation.issue 审计由唯一写者写下（行插入时），这里只继承它的结果，
+        -- 不再重复记一条；写失败仍然让整次提交报告 audit_unavailable。
+        if created.citation and created.citationAudited == false then
+            auditsOk = false
         end
         if created.evidence then
             if not auditPlayer(actor.citizenid, 'evidence.register', created.exhibitNo,
