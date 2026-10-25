@@ -49,7 +49,10 @@ end
 function PhoneBridge.Resolve(id, res)
     if type(id) ~= 'string' then return false end
     local entry = pending[id]
-    if not entry then return false end
+    if not entry then
+        print(('[custom-phone][bridge] unknown/duplicate id=%s'):format(id))
+        return false
+    end
     pending[id] = nil
     if type(res) ~= 'table' then res = { success = false, error = 'no_response' } end
     entry.cb(res)
@@ -85,6 +88,7 @@ function PhoneBridge.Request(event, payload, cb, timeoutMs, responseEvent)
     ensureResponseHandler(resolvedEvent)
 
     pending[id] = { cb = cb, response_event = resolvedEvent }
+    print(('[custom-phone][bridge] request %s id=%s resp=%s'):format(event, id, resolvedEvent))
     TriggerServerEvent(event, id, payload)
     SetTimeout(timeoutMs, function()
         -- A response (or Clear) removes the slot first, so this timer can never
