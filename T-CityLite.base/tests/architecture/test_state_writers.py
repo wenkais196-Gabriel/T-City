@@ -345,12 +345,12 @@ def test_units_and_incidents_are_p0_only_plus_the_registered_legacy_branch():
 def test_report_and_citation_writers_match_the_registry():
     writes, _ = scan_state_writes()
     for table, expected in {
-        "police_reports": {
-            "server/p1.lua", "server/p2_system.lua", "server/p3_cases.lua",
-        },
+        # 2026-10-25: 三张记录表收口到 server/records.lua
+        "police_reports": {"server/records.lua"},
+        "police_cases": {"server/records.lua"},
+        "police_arrests": {"server/records.lua"},
         # 2026-10-25: 罚单收口到 server/citations.lua（p1 只做前置检查与通知）
         "police_citations": {"server/citations.lua"},
-        "police_cases": {"server/p2_system.lua", "server/p3_cases.lua"},
     }.items():
         actual = {write.file for write in writes if write.table == table}
         assert actual <= expected, f"{table} written by {sorted(actual)}"

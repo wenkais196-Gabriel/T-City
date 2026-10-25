@@ -269,7 +269,8 @@ def test_insert_ids_are_normalized():
     shared = read(PHONE.parent / "custom-police/shared/insert_id.lua")
     assert "function InsertId" in shared and "insertId" in shared
     # p2_system 不再自己建单（走 p0 的唯一写者，归一化也在那里做），所以它不在这份名单里。
-    for f in ("p0.lua", "p1.lua", "p2_evidence.lua", "p3_cases.lua"):
+    # p1 的报告写入已委派给 records.lua，不再自己拿 InsertId
+    for f in ("p0.lua", "p2_evidence.lua", "p3_cases.lua"):
         src = read(PHONE.parent / "custom-police/server" / f)
         assert "InsertId(" in src, f
     sys_src = read(PHONE.parent / "custom-police/server/p2_system.lua")

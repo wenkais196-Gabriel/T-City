@@ -286,9 +286,9 @@ function Sys.Jail(actorId, citizenid, minutes, reason)
             TriggerClientEvent('prison:client:Enter', player.PlayerData.source, mins)
         end)
     end
-    MySQL.insert.await([[
-        INSERT INTO police_arrests (citizenid, officer_citizenid, charges) VALUES (?, ?, ?)
-    ]], { target, ('agent:%s'):format(tostring(actorId):sub(1, 40)), text })
+    -- 逮捕记录由唯一写者写；没有 incident/case 时那两列根本不出现
+    PoliceRecords.InsertArrest(('agent:%s'):format(tostring(actorId):sub(1, 40)),
+        { citizenid = target, charges = text })
     if not audit(actorId, 'arrest.register', target, ('%d min: %s'):format(mins, text)) then
         -- The arrest row is already written; the missing audit row is reported,
         -- never silently dropped (FIT-05: best-effort writes must be logged).
@@ -809,13 +809,21 @@ function ArrestSubmit(source, params)
                 table.concat(sum.labels, '、'), minutes), 1000)
         end
 
-        local reportId = insertRow([[
-            INSERT INTO police_reports
-                (incident_id, case_id, author_citizenid, title, body, status, kind, charges,
-                 is_bolo, bolo_kind, bolo_target, location, officer_citizenid, subject_citizenid)
-            VALUES (?, ?, ?, ?, ?, 'submitted', 'arrest', ?, ?, ?, ?, ?, ?, ?)
-        ]], { incidentId, caseId, actor.citizenid, title, body, encodeCharges(ids),
-              bolo and 1 or 0, boloKind, boloTarget, location, actor.citizenid, target })
+        -- 报告行由唯一写者（server/records.lua）写：列集合按需拼接，caseId 为 nil 也不会留参数洞
+        local reportId = PoliceRecords.InsertReport(actor.citizenid, {
+            title = title,
+            body = body,
+            kind = 'arrest',
+            status = 'submitted',
+            incident_id = incidentId,
+            case_id = caseId,
+            charges = encodeCharges(ids),
+            is_bolo = bolo and 1 or 0,
+            bolo_kind = boloKind,
+            bolo_target = boloTarget,
+            location = location,
+            subject_citizenid = target,
+        })
         if not reportId then return fail('db_error') end
 
         local created = { report = reportId, case = nil, citation = nil, evidence = nil }
@@ -850,27 +858,23 @@ function ArrestSubmit(source, params)
                 target, table.concat(sum.labels, '、'), minutes, actor.citizenid), 2000)
             -- The lead is the officer who made the arrest; the suspect goes in the
             -- summary so case lists never show the arrested person as the owner.
-            local newCaseId = insertRow(
-                'INSERT INTO police_cases (title, summary, lead_citizenid, created_by) VALUES (?, ?, ?, ?)',
-                { caseTitle, summary, actor.citizenid, actor.citizenid })
+            local newCaseId, caseNo = PoliceRecords.InsertCase(actor.citizenid, {
+                title = caseTitle,
+                summary = summary,
+                lead_citizenid = actor.citizenid,
+            })
             if not newCaseId then
                 rollback()
                 return fail('case_create_failed')
             end
             created.case = newCaseId
-            local caseNo = ('CASE-%s-%06d'):format(os.date('%Y'), newCaseId)
-            if not updateRow('UPDATE police_cases SET case_no = ? WHERE id = ?', { caseNo, newCaseId }) then
-                rollback()
-                return fail('db_error')
-            end
             created.caseNo = caseNo
             created.caseTitle = caseTitle
             caseId = newCaseId
         end
 
         if caseId then
-            local linked = updateRow(
-                'UPDATE police_reports SET case_id = ? WHERE id = ?', { caseId, reportId })
+            local linked = PoliceRecords.LinkReport(reportId, { case_id = caseId })
             if not linked then
                 rollback()
                 return fail('db_error')
@@ -936,8 +940,7 @@ function ArrestSubmit(source, params)
                 return fail('open_case_failed')
             end
             created.justiceCaseId = tostring(justiceCaseId)
-            if not updateRow('UPDATE police_reports SET justice_case_id = ? WHERE id = ?',
-                    { created.justiceCaseId, reportId }) then
+            if not PoliceRecords.LinkReport(reportId, { justice_case_id = created.justiceCaseId }) then
                 rollback()
                 return fail('db_error')
             end
@@ -952,8 +955,7 @@ function ArrestSubmit(source, params)
         if created.justiceCaseId and not caseId then
             local numericJusticeId = tonumber(created.justiceCaseId)
             if numericJusticeId then
-                if not updateRow('UPDATE police_reports SET case_id = ? WHERE id = ?',
-                        { numericJusticeId, reportId }) then
+                if not PoliceRecords.LinkReport(reportId, { case_id = numericJusticeId }) then
                     rollback()
                     return fail('db_error')
                 end
@@ -1111,13 +1113,18 @@ function ReportSubmit(source, params)
             if boloReason == '' then boloReason = title end
         end
 
-        local reportId = insertRow([[
-            INSERT INTO police_reports
-                (kind, incident_id, case_id, subject_citizenid, author_citizenid, title, body,
-                 location, officer_citizenid, is_bolo, bolo_kind, bolo_target)
-            VALUES ('report', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ]], { incidentId, caseId, subject, actor.citizenid, title, body, location,
-              actor.citizenid, bolo and 1 or 0, boloKind, boloTarget })
+        local reportId = PoliceRecords.InsertReport(actor.citizenid, {
+            title = title,
+            body = body,
+            kind = 'report',
+            incident_id = incidentId,
+            case_id = caseId,
+            subject_citizenid = subject,
+            location = location,
+            is_bolo = bolo and 1 or 0,
+            bolo_kind = boloKind,
+            bolo_target = boloTarget,
+        })
         if not reportId then return fail('db_error') end
 
         local evidenceId, exhibitNo

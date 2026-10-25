@@ -206,11 +206,12 @@ def test_target_must_be_restrained_in_range_and_not_jailed():
 
 def test_report_is_the_anchor_and_children_are_linked():
     block = arrest_block()
-    assert "INSERT INTO police_reports" in block
+    assert "PoliceRecords.InsertReport(" in block
     assert "'arrest'" in block
     assert "charges" in block and "encodeCharges(ids)" in block
     assert "is_bolo" in block and "bolo_kind" in block and "bolo_target" in block
-    assert "officer_citizenid" in block
+    # officer_citizenid 由唯一写者补齐（缺省等于作者）
+    assert "officer_citizenid" in (POLICE / "server/records.lua").read_text(encoding="utf-8")
     assert "subject_citizenid" in block
 
     # 罚单行由唯一写者（server/citations.lua）写入，p2 只传字段
@@ -228,9 +229,11 @@ def test_report_is_the_anchor_and_children_are_linked():
     assert "chain(tonumber(id), 'collected', actorCid, label)" in evidence_owner
 
     # Case linkage is written back onto the report.
-    assert "UPDATE police_reports SET case_id = ? WHERE id = ?" in block
-    assert "INSERT INTO police_cases" in block
-    assert "CASE-%s-%06d" in block
+    assert "PoliceRecords.LinkReport(" in block
+    # 案卷行与案号格式都在唯一写者里
+    owner = (POLICE / "server/records.lua").read_text(encoding="utf-8")
+    assert "INSERT INTO police_cases" in owner
+    assert "CASE-%s-%06d" in owner
 
     # police_arrests is retired for new arrests.
     assert "INSERT INTO police_arrests" not in block
@@ -288,8 +291,9 @@ def test_case_creation_requires_case_capability_and_uses_officer_as_lead():
     assert "local createCase = params.create_case == true" in block
 
     # The lead is the arresting officer; the suspect is named in the summary.
-    assert "'INSERT INTO police_cases (title, summary, lead_citizenid, created_by) VALUES (?, ?, ?, ?)'" in block
-    assert "{ caseTitle, summary, actor.citizenid, actor.citizenid }" in block
+    # 案卷行由唯一写者写（server/records.lua）；主办人仍是抓人的警官
+    assert "PoliceRecords.InsertCase(actor.citizenid, {" in block
+    assert "lead_citizenid = actor.citizenid" in block
     assert "('%s 因 %s 被捕（%d 分钟），主办警员 %s。')" in block
     assert "target, table.concat(sum.labels, '、'), minutes, actor.citizenid" in block
     assert "auditPlayer(actor.citizenid, 'case.create', created.caseNo, created.caseTitle)" in block
@@ -586,11 +590,13 @@ def test_report_submit_bolo_tag_requires_bolo_create_and_rides_on_the_report():
     assert "if boloKind ~= 'person' and boloKind ~= 'vehicle' then return fail('invalid_bolo_kind') end" in block
     assert "if boloTarget == '' then return fail('invalid_bolo_target') end" in block
 
-    assert "INSERT INTO police_reports" in block
-    assert "(kind, incident_id, case_id, subject_citizenid, author_citizenid, title, body," in block
-    assert "location, officer_citizenid, is_bolo, bolo_kind, bolo_target)" in block
-    assert "VALUES ('report', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" in block
+    assert "PoliceRecords.InsertReport(" in block
+    assert "kind = 'report'" in block
     assert "bolo and 1 or 0" in block
+    # BOLO 标记必须挂在报告行上（写者负责落库）
+    owner = (POLICE / "server/records.lua").read_text(encoding="utf-8")
+    for column in ("is_bolo", "bolo_kind", "bolo_target"):
+        assert f"{{ '{column}'" in owner
 
 
 def test_report_submit_writes_evidence_with_report_link_and_first_chain_entry():
@@ -616,7 +622,7 @@ def test_report_submit_rolls_the_report_back_when_a_child_write_fails():
     assert "DELETE FROM police_reports WHERE id = ?" in block
     assert "rollback()" in block
     # The report is inserted before its evidence, so a child failure can delete it.
-    assert block.index("INSERT INTO police_reports") < block.index("PoliceEvidenceWriter.Register(")
+    assert block.index("PoliceRecords.InsertReport(") < block.index("PoliceEvidenceWriter.Register(")
 
 
 def test_report_submit_audits_report_evidence_and_bolo():
@@ -845,7 +851,7 @@ def test_arrest_submit_open_case_opens_a_justice_case_before_jailing():
     assert "result.justice_case_id = created.justiceCaseId" in block
     assert "justice:%s" in block  # audit detail keeps the link
 
-    report = block.index("INSERT INTO police_reports")
+    report = block.index("PoliceRecords.InsertReport(")
     open_call = block.index("exports['custom-justice']:OpenCase(")
     imprison = block.index("custom-justice']:Imprison")
     assert report < open_call < imprison, "open_case must run after the report and before jailing"
@@ -854,7 +860,7 @@ def test_arrest_submit_open_case_opens_a_justice_case_before_jailing():
     # police_cases, while justice ids are strings.
     assert "if created.justiceCaseId and not caseId then" in block
     assert "local numericJusticeId = tonumber(created.justiceCaseId)" in block
-    assert "UPDATE police_reports SET case_id = ? WHERE id = ?" in block
+    assert "PoliceRecords.LinkReport(" in block
 
     # The justice case is in-memory and cannot be rolled back with the police rows.
     jail_failed = block.index("return fail('jail_failed')")
@@ -937,7 +943,8 @@ def test_justice_case_id_is_persisted():
     migration = read(POLICE.parents[2] / "migrations/v3.6_police_justice_case.sql")
     assert "justice_case_id" in migration and "information_schema" in migration
     p2 = read(POLICE / "server/p2_system.lua")
-    assert "UPDATE police_reports SET justice_case_id" in p2
+    # 回写走唯一写者的 LinkReport（justice_case_id 是 VARCHAR，字符串 id 原样传）
+    assert "PoliceRecords.LinkReport(reportId, { justice_case_id = created.justiceCaseId })" in p2
     assert "justice_case_id" in p2 and "result.justice_case_id" in p2
     p3 = read(POLICE / "server/p3_cases.lua")
     assert "justice_case_id" in p3
@@ -994,8 +1001,10 @@ def test_resolve_case_persists_the_verdict_through_the_police_owner():
     # The owner export validates every argument before the UPDATE.
     p3 = read(POLICE / "server/p3_cases.lua")
     assert "function C.RecordVerdict(justiceCaseId, verdictJson, status)" in p3
-    assert "UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?" in p3
-    assert "{ verdictJson, status, caseId }" in p3
+    # 判决 SQL 在唯一写者里；p3 只做参数校验与委派
+    owner = read(POLICE / "server/records.lua")
+    assert "UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?" in owner
+    assert "PoliceRecords.RecordVerdict(caseId, verdictJson, status)" in p3
     assert "exports('RecordVerdict', C.RecordVerdict)" in p3
     assert "#caseId > 32" in p3
     assert "#verdictJson > 65535" in p3
@@ -1775,7 +1784,7 @@ def test_arrest_submit_claims_an_intent_before_any_write():
     # suspect is not rejected as already_jailed.
     assert block.index(wrapper) < block.index("QBCore.Functions.GetPlayerByCitizenId(target)")
     assert block.index(wrapper) < block.index("already_jailed")
-    assert block.index(wrapper) < block.index("INSERT INTO police_reports")
+    assert block.index(wrapper) < block.index("PoliceRecords.InsertReport(")
     assert "params.idempotency_key" in block
 
 
@@ -1783,7 +1792,7 @@ def test_report_submit_claims_an_intent_before_any_write():
     block = report_submit_block()
     wrapper = "withIntent('report', actor.citizenid, params.idempotency_key, function()"
     assert wrapper in block
-    assert block.index(wrapper) < block.index("INSERT INTO police_reports")
+    assert block.index(wrapper) < block.index("PoliceRecords.InsertReport(")
     assert block.index(wrapper) < block.index("PoliceEvidenceWriter.Register(")
 
 

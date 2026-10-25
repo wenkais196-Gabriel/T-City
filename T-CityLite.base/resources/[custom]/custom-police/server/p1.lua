@@ -116,11 +116,14 @@ function P1.CreateReport(source, params)
         local caseRow = MySQL.single.await('SELECT id FROM police_cases WHERE id = ? LIMIT 1', { caseId })
         if not caseRow then return false, 'case_not_found' end
     end
-    local id = MySQL.insert.await(
-        'INSERT INTO police_reports (incident_id, case_id, author_citizenid, title, body) VALUES (?, ?, ?, ?, ?)',
-        { tonumber(params and params.incident_id), caseId, actor.citizenid, title, body })
-    id = InsertId(id)
-    if not id or id == 0 then return false, 'db_error' end
+    -- 报告行由唯一写者写（server/records.lua）：case_id 为空时那一列不出现，参数数组不留洞
+    local id, writeReason = PoliceRecords.InsertReport(actor.citizenid, {
+        title = title,
+        body = body,
+        incident_id = params and params.incident_id,
+        case_id = caseId,
+    })
+    if not id then return false, writeReason or 'db_error' end
     if not audit(actor.citizenid, 'report.create', tostring(id), title) then
         print(('[custom-police] report.create audit failed for #%s'):format(tostring(id)))
     end
