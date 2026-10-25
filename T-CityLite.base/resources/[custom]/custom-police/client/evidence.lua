@@ -225,8 +225,10 @@ end)
 CreateThread(function()
     while true do
         Wait(1)
+        -- 每帧只取一次 ped 与坐标：三个分支各自 GetEntityCoords(PlayerPedId()) 是白跑的
+        local playerPed = PlayerPedId()
+        local pos = GetEntityCoords(playerPed)
         if CurrentCasing and CurrentCasing ~= 0 then
-            local pos = GetEntityCoords(PlayerPedId())
             if #(pos - vector3(Casings[CurrentCasing].coords.x, Casings[CurrentCasing].coords.y, Casings[CurrentCasing].coords.z)) < 1.5 then
                 DrawText3D(Casings[CurrentCasing].coords.x, Casings[CurrentCasing].coords.y, Casings[CurrentCasing].coords.z, Lang:t('info.bullet_casing', { value = Casings[CurrentCasing].type }))
                 if IsControlJustReleased(0, 47) then
@@ -251,7 +253,6 @@ CreateThread(function()
         end
 
         if CurrentBlooddrop and CurrentBlooddrop ~= 0 then
-            local pos = GetEntityCoords(PlayerPedId())
             if #(pos - vector3(Blooddrops[CurrentBlooddrop].coords.x, Blooddrops[CurrentBlooddrop].coords.y,
                     Blooddrops[CurrentBlooddrop].coords.z)) < 1.5 then
                 DrawText3D(Blooddrops[CurrentBlooddrop].coords.x, Blooddrops[CurrentBlooddrop].coords.y, Blooddrops[CurrentBlooddrop].coords.z, Lang:t('info.blood_text', { value = DnaHash(Blooddrops[CurrentBlooddrop].citizenid) }))
@@ -276,7 +277,6 @@ CreateThread(function()
         end
 
         if CurrentFingerprint and CurrentFingerprint ~= 0 then
-            local pos = GetEntityCoords(PlayerPedId())
             if #(pos - vector3(Fingerprints[CurrentFingerprint].coords.x, Fingerprints[CurrentFingerprint].coords.y,
                     Fingerprints[CurrentFingerprint].coords.z)) < 1.5 then
                 DrawText3D(Fingerprints[CurrentFingerprint].coords.x, Fingerprints[CurrentFingerprint].coords.y, Fingerprints[CurrentFingerprint].coords.z, Lang:t('info.fingerprint_text'))
