@@ -833,3 +833,16 @@ RegisterCommand('police_dutytest', function(source, args)
     print(('[police_dutytest] target=%s on=%s -> %s %s'):format(
         tostring(target), tostring(on), tostring(ok), tostring(err)))
 end, true)
+
+
+-- Dev probe: teleport a player to the Mission Row fingerprint scanner.
+RegisterCommand('police_tp_fingerprint', function(_, args)
+    local target = tonumber(args and args[1])
+    local player = target and QBCore.Functions.GetPlayer(target)
+    if not player then return print('usage: police_tp_fingerprint <serverId>') end
+    local coords = Config.Locations['fingerprint'] and Config.Locations['fingerprint'][1]
+    if not coords then return print('fingerprint coords missing') end
+    TriggerClientEvent('police:client:DevTeleport', target, coords.x, coords.y, coords.z)
+    print(('[police_tp_fingerprint] %s -> %.1f,%.1f,%.1f'):format(
+        tostring(target), coords.x, coords.y, coords.z))
+end, true)
