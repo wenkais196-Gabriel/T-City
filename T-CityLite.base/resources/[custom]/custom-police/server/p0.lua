@@ -726,6 +726,13 @@ end)
 -- ---------------------------------------------------------------
 -- Events/commands
 -- ---------------------------------------------------------------
+RegisterNetEvent('custom-police:server:toggleDuty', function()
+    local src = source
+    local data = pd(src)
+    if not isPolice(data) then return end
+    P.SetDutyForSource(src, data.job.onduty ~= true, 'duty_point')
+end)
+
 RegisterNetEvent('custom-police:server:setStatus', function(status)
     local data = pd(source)
     if not isPolice(data) then return end

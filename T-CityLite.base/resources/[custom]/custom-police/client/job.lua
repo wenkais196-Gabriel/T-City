@@ -468,7 +468,7 @@ RegisterNetEvent('police:client:EvidenceStashDrawer', function()
 end)
 
 RegisterNetEvent('qb-policejob:ToggleDuty', function()
-    TriggerServerEvent('QBCore:ToggleDuty')
+    TriggerServerEvent('custom-police:server:toggleDuty')
     TriggerServerEvent('police:server:UpdateCurrentCops')
     TriggerServerEvent('police:server:UpdateBlips')
 end)
@@ -519,7 +519,7 @@ local function dutylistener()
         while dutylisten do
             if PlayerJob.type == 'leo' then
                 if IsControlJustReleased(0, 38) then
-                    TriggerServerEvent('QBCore:ToggleDuty')
+                    TriggerServerEvent('custom-police:server:toggleDuty')
                     TriggerServerEvent('police:server:UpdateCurrentCops')
                     TriggerServerEvent('police:server:UpdateBlips')
                     dutylisten = false
