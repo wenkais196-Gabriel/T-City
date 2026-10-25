@@ -245,7 +245,6 @@
     action_failed: '操作失败，请重试',
     export_error: '服务端处理异常，请稍后重试',
     action_rejected: '服务端拒绝：请检查权限与状态',
-    action_failed: '服务端处理失败，请稍后重试',
     action_not_found: 'MDT 未注册该动作',
     app_forbidden: '无权限使用 MDT（需在勤警察）',
     player_not_found: '角色尚未加载',
