@@ -1,6 +1,10 @@
 -- fxmanifest.lua — T-City Lite 核心服务框架
 
 fx_version 'cerulean'
+
+client_scripts {
+    'client/shared.lua',
+}
 game 'gta5'
 lua54 'yes'
 author 'T-City Lite'

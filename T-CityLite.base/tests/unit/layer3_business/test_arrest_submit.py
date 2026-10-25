@@ -1177,7 +1177,7 @@ def test_backup_client_spawns_one_car_and_two_officers():
     src = read(BACKUP_CLIENT)
     assert "RegisterNetEvent('police:client:SpawnBackup'" in src
     assert "BACKUP_VEHICLES = { 'police', 'police2' }" in src
-    assert "IsModelInCdimage" in src
+    assert "CFShared" in src, "模型加载应走 core-framework/client/shared.lua 的共享实现"
     assert "CreateVehicle(vehicleHash" in src
     assert "CreatePedInsideVehicle(vehicle, 4, pedHash, -1, true, true)" in src
     assert "CreatePedInsideVehicle(vehicle, 4, pedHash, 0, true, true)" in src
@@ -2062,7 +2062,7 @@ def test_npc_client_builds_every_scene_element():
     assert "buildBlip(coords, template.title)" in src
     assert "drawText3D" in src
     assert "GetHashKey(" in src
-    assert "IsModelInCdimage" in src
+    assert "CFShared" in src, "模型加载应走 core-framework/client/shared.lua 的共享实现"
     assert "local function safe(fn, ...)" in src
 
 
@@ -2156,3 +2156,17 @@ def test_fit05_citation_report_and_audit_reads_fail_closed_before_the_query():
     assert audit_block.count("GetAudit(") == 1, "P.GetAudit must not call itself (recursion)"
     assert "audit(actor.citizenid, 'audit.view'" in audit_block
     assert "return false, 'audit_unavailable'" in audit_block
+
+
+def test_shared_model_loader_keeps_the_cdimage_guard():
+    """IsModelInCdimage 守卫搬进了 core-framework 的共享实现，必须还在那里。
+
+    没有它会怎样：服务器没有自定义警车/NPC 模型时，RequestModel 一个不存在的哈希会一直
+    等 HasModelLoaded 到超时，NPC 与后备车全都不刷——而日志里只有一条超时，看不出根因。
+    """
+    shared = (Path(__file__).resolve().parents[3] / 'resources' / '[standalone]'
+              / 'core-framework' / 'client' / 'shared.lua')
+    text = shared.read_text(encoding='utf-8')
+    assert 'function CFShared.LoadModel' in text
+    assert 'IsModelInCdimage' in text
+    assert 'GetGameTimer() + (timeoutMs or 10000)' in text, "必须有超时，否则加载失败会永久卡住线程"
