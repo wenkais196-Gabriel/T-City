@@ -3,8 +3,8 @@
 背景：仓库里曾有 7 份限流，语义分三类（每键冷却 / 固定窗口计数 / 令牌桶+突发）。
 其中 5 份已收敛到 `core-framework/server/rate_limit.lua`；剩下两处是**刻意的**：
 
-* `tcity-atmosphere` 的计数存在每个玩家的 state 结构里（`requestCount` /
-  `requestWindowStart`），和它自己的场景状态机绑在一起，挪出来反而要重构状态机；
+* `tcity-atmosphere` 的计数原本存在每个玩家的 state 里，后来确认这两个字段没有任何
+  外部读者，已改为 `RateLimit.Window`（见 `atmosphere_service.lua` 的 checkRateLimit）。
 * （原本还有 `custom-phone` 自己那份令牌桶，现已改为委派 owner 的门面。）
 
 所以规则不是"全仓只许有一个函数"，而是：**新的限流逻辑不许再长出来**，且已知的
@@ -25,12 +25,7 @@ OWNER = RESOURCES / "[standalone]" / "core-framework" / "server" / "rate_limit.l
 # 允许保留自己实现的文件（必须写理由）
 # 值 = (理由, 该文件自己那份实现的识别痕迹)。痕迹用于判断例外是否已失效：
 # 合并掉之后痕迹会消失，这条例外就必须从表里删掉，否则例外会永远留着。
-EXCEPTIONS = {
-    RESOURCES / "[system]" / "tcity-atmosphere" / "server" / "atmosphere_service.lua":
-        ("限流计数是每玩家 state（requestCount/requestWindowStart），与场景状态机耦合",
-         "requestWindowStart"),
-
-}
+EXCEPTIONS: dict = {}   # 2026-10-25: atmosphere 也收掉了，现在没有任何例外
 
 # 已经迁到 owner、必须提到它的调用方
 CALLERS = [
