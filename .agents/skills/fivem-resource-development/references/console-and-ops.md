@@ -80,3 +80,22 @@ screen -S fivem -X hardcopy /tmp/console.txt                   # visible page on
   Scope it to the binaries the work actually needs (`/usr/sbin/ufw`, a specific `systemctl` unit) —
   an `ALL=(ALL) NOPASSWD: ALL` line is the whole machine for the sake of one firewall rule. While
   waiting for the user, keep working on the parts that need no privilege instead of idling.
+
+## 重启“被依赖的资源”会连带停掉依赖者，而且不会把它们带回来
+
+`restart qb-inventory` 看着只是一条命令，实际发生的是：FiveM 先停下**依赖它的每一个资源**，
+再只重启它自己。实测一次 `restart qb-inventory` 停掉了 12 个资源（custom-cartel、
+custom-justice、tcity-dashboard、custom-police、qb-ambulancejob、qb-cityhall、
+custom-certificates、custom-mining、custom-market、custom-storage、qb-management、
+qb-mechanicjob），它们**再也没自己起来**——于是：
+
+- `custom-police` 的导出全部消失 → 手机 MDT 切上下班报
+  `No such export SetUnitStatusForSource in resource custom-police`，界面显示“服务端处理异常”；
+- `custom-police` 的服务端事件也没了 → 开枪不再产生弹壳数据（客户端一切正常，只是服务端不接）。
+
+两条规矩：
+
+1. 改的是被依赖的资源（qb-core / qb-inventory / core-framework / custom-police）→ **整机重启**，
+   不要热重启；热重启只适用于叶子资源（custom-phone、custom-ui 这类没人依赖的）。
+2. 如果已经热重启了，先 `grep -c "Stopping resource"` 看那次操作停了多少，再逐个 `ensure`/整机重启，
+   不要假设“只动了一个资源”。

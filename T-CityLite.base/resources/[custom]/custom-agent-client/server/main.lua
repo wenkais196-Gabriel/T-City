@@ -353,7 +353,9 @@ AddEventHandler('playerDropped', function()
     pending[src] = nil
     inflight[src] = nil
     sessions[src] = nil
-    buckets[src] = nil
+    -- 这里原来还有一行 buckets[src] = nil：限流改成 core-framework 的令牌桶 owner 之后
+    -- buckets 已经不存在了，那行就成了"每次玩家掉线报一次 attempt to index a nil value (global 'buckets')"。
+    -- 令牌桶按 'agent:<src>' 键在 owner 里，过期自然清掉，不需要在这里回收。
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)
