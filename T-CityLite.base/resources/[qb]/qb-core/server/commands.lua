@@ -22,6 +22,12 @@ function QBCore.Commands.Add(name, help, arguments, argsrequired, callback, perm
 
     RegisterCommand(name, function(source, args, rawCommand) -- Register command within fivem
         if argsrequired and #args < #arguments then
+            -- 控制台执行时 source = 0，TriggerClientEvent 传 0 会抛
+            -- "native ...: Argument at index 1 was null"；控制台直接打用法即可。
+            if not source or source < 1 then
+                print(('[qb-core] /%s 需要 %d 个参数'):format(name, #arguments))
+                return
+            end
             return TriggerClientEvent('chat:addMessage', source, {
                 color = { 255, 0, 0 },
                 multiline = true,
