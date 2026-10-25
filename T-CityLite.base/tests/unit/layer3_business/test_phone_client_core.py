@@ -248,6 +248,65 @@ assert(#results == 2, 'response answered after cleanup')
 """))
 
 
+def test_bridge_await_ack_resends_until_the_nui_answers():
+    assert_lua(harness(BRIDGE, body=r"""
+local sends, timedOut = 0, false
+PhoneBridge.AwaitAck('phone:open', function() sends = sends + 1 end, {
+    intervalMs = 250,
+    timeoutMs = 2000,
+    onTimeout = function() timedOut = true end,
+})
+assert(sends == 1, 'the first phone:open must be sent immediately')
+
+runTimers() -- 250 ms
+assert(sends == 2, 'an unacked phone:open must be resent')
+runTimers() -- 500 ms
+assert(sends == 3)
+
+assert(PhoneBridge.Ack('phone:open') == true)
+runTimers()
+runTimers()
+runTimers()
+assert(sends == 3, 'the ack must stop the resend loop')
+assert(timedOut == false, 'a timely ack must not fire onTimeout')
+"""))
+
+
+def test_bridge_await_ack_timeout_calls_back_once():
+    assert_lua(harness(BRIDGE, body=r"""
+local sends, timeouts = 0, 0
+PhoneBridge.AwaitAck('phone:open', function() sends = sends + 1 end, {
+    intervalMs = 250, timeoutMs = 750,
+    onTimeout = function() timeouts = timeouts + 1 end,
+})
+for _ = 1, 8 do runTimers() end
+assert(timeouts == 1, 'the deadline must fire onTimeout exactly once')
+local sentAtTimeout = sends
+for _ = 1, 8 do runTimers() end
+assert(sends == sentAtTimeout, 'resending must stop after the deadline')
+assert(PhoneBridge.Ack('phone:open') == false, 'a late ack after the deadline is not ours')
+"""))
+
+
+def test_bridge_await_ack_is_replaced_by_a_second_attempt():
+    assert_lua(harness(BRIDGE, body=r"""
+local first, second = 0, 0
+local fired = {}
+PhoneBridge.AwaitAck('phone:open', function() first = first + 1 end, {
+    intervalMs = 250, timeoutMs = 2000, onTimeout = function() fired[#fired + 1] = 'first' end,
+})
+PhoneBridge.AwaitAck('phone:open', function() second = second + 1 end, {
+    intervalMs = 250, timeoutMs = 2000, onTimeout = function() fired[#fired + 1] = 'second' end,
+})
+assert(PhoneBridge.Ack('phone:open') == true)
+for _ = 1, 6 do runTimers() end
+assert(first == 1, 'the superseded attempt must not keep resending')
+assert(second == 1, 'the new attempt stops on its own ack')
+assert(#fired == 0, 'superseding a waiter must not fire its timeout')
+assert(PhoneBridge.Ack('phone:open') == false, 'a second ack has nothing to clear')
+"""))
+
+
 # ---------------------------------------------------------------------------
 # focus
 # ---------------------------------------------------------------------------
@@ -436,6 +495,20 @@ def test_main_uses_bridge_for_the_app_callbacks():
     assert "pendingAppQuery" not in main
     assert "RegisterNetEvent('phone:client:appQueryResponse'" not in main
     assert "RegisterNetEvent('phone:client:appActionResponse'" not in main
+
+
+def test_main_opens_the_ui_through_the_ack_handshake():
+    main = read(CLIENT)
+    # OpenPhone must not trust a single fire-and-forget SendNUIMessage.
+    assert "PhoneBridge.AwaitAck('phone:open'" in main
+    assert "RegisterNUICallback('phoneOpenAck'" in main
+    assert "PhoneBridge.Ack('phone:open')" in main
+    # A half-open phone (no NUI) must reset itself instead of swallowing keys.
+    assert "phase = 'open-ack-timeout'" in main
+    assert "isPhoneOpen = false" in main
+
+    app = read(PHONE / "web" / "src" / "App.svelte")
+    assert "fetchNui('phoneOpenAck')" in app
 
 
 def test_main_uses_focus_for_open_close_and_cleanup():

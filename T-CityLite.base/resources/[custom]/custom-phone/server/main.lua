@@ -1258,6 +1258,8 @@ local FOCUS_PHASES = {
     ['probe-end'] = true,
     ['appQuery-hit'] = true,
     ['appAction-hit'] = true,
+    ['open-ack'] = true,
+    ['open-ack-timeout'] = true,
 }
 local FOCUS_COOLDOWN = 5         -- seconds between logged focus events per source
 local CLIENT_ERROR_COOLDOWN = 10 -- seconds between logged NUI errors per source
@@ -1306,7 +1308,11 @@ RegisterNetEvent('phone:server:focusState', function(state)
     if type(state) ~= 'table' then return end
     local phase = state.phase
     if type(phase) ~= 'string' or not FOCUS_PHASES[phase] then return end
-    if diagRateLimited('focus', src, FOCUS_COOLDOWN) then return end
+    -- One cooldown per PHASE, not per source: a single open emits
+    -- open-nui-sent -> open-start -> open-ack in a few frames, and a per-source
+    -- window silently swallowed every event after the first — exactly the
+    -- evidence needed to tell "NUI never answered" from "focus never applied".
+    if diagRateLimited('focus:' .. phase, src, FOCUS_COOLDOWN) then return end
     local attempt = math.floor(tonumber(state.attempt) or 0)
     if attempt ~= attempt then attempt = 0 end
     if attempt < 0 then attempt = 0 end
@@ -1363,7 +1369,6 @@ end
 
 RegisterNetEvent('phone:server:appQueryRequest', function(requestId, data)
     local src = source
-    print(('[custom-phone][server] appQueryRequest src=%s id=%s'):format(tostring(src), tostring(requestId)))
     if not validAppRequestId(requestId) then return end
     if type(data) ~= 'table' then
         replyAppRequest('phone:client:appQueryResponse', src, requestId,

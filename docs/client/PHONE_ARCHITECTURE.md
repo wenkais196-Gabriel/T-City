@@ -76,6 +76,24 @@ type PhoneResponse<T> =
 - 所有 handler 必须返回，不返回视为协议错误；
 - 错误码稳定、可本地化。
 
+### 打开握手（open ack）
+
+`SendNUIMessage` 是「发了就走」的：CEF 正在加载（`restart custom-phone` 之后必然发生）时帧被静默丢弃，Lua 侧以为手机已打开，屏幕上却没有界面。
+
+```
+OpenPhone() ─ SendNUIMessage(phone:open) ─┬─ 250ms 重发 ─┬─ ... 最多 2500ms
+              (PhoneBridge.AwaitAck)      │              │
+                                          │              └─ 超时：isPhoneOpen=false
+                                          │                 + PhoneFocus.Release('phone')
+                                          │                 + 聊天提示「界面无响应」
+                                          └─ NUI 收到后 fetchNui('phoneOpenAck')
+                                             → PhoneBridge.Ack('phone:open') 停止重发
+```
+
+- `phoneOpenAck` 是「界面真的存在」的唯一证据；没收到就复位半开状态，避免下一次按 M 被 `isPhoneOpen` 吞掉。
+- 同一 name 再次 `AwaitAck` 会顶掉上一个循环（不会两个循环同时跑）；`ClosePhone` 里也 `Ack` 一次收尾。
+- 诊断：`phone:server:focusState` 的 `open-nui-sent` / `open-ack` / `open-ack-timeout` 三个阶段按阶段单独限流（`FOCUS_COOLDOWN`），能区分「NUI 没应答」和「焦点没生效」。
+
 ### 统一事件
 
 ```lua
