@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 值班警察在 25 米内能看到弹壳落点提示：地面细红柱 + `▼ 弹壳 · 8.0m` 浮字（平民与下班看不到；拾取流程不变，仍是 1.5 米内按 ~g~G~s~）。原生玩法只有手电照到才浮出文字，实测结果是「地上有东西但没人发现」
 - 客户端 MCP 测试 harness：Windows FiveM Legacy + `fivem-mcp-server`，经 FXServer 30120 HTTP 轮询桥接；提供 `client_command` / `screenshot` / `read_client_log` / `nuitest` 测试钩子
 - Agent 接管栈：统一工具契约（`tools/agent_tools.json`，30 工具）、MCP 路由层、`custom-director` 17 个动作（L1–L4 分级 + 人审 + 执行后回读）、`custom-agent-client` 客户端效果通道
 - 实时感知接口 `/agent/v1/live/*`（内存采样、25m 位置量化、独立 token）
@@ -108,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `custom-testing` 移出生产 cfg，改由 `configs/modules/dev.cfg` 按需启用
 
 ### Fixed
+- **弹壳从上线起就没有成功生成过一次**：客户端把 `GetOffsetFromEntityInWorldCoords` 返回的原生 vector3 直接丢给服务端，而 `sanitizeCoords` 要求 `type(coords) == 'table'`，于是每一枪都在第一步被判非法并静默丢弃（日志里只有一句笼统的 coords too far）。现在客户端发 `{ x, y, z }` 普通表，服务端也兼容 vector3，校验函数把 nil 拆成带原因的返回值（不是表 / 超距 / 无 ped），`tcity_evidence_debug` 打开后每条拒绝都会写明原因
 - `custom-phone`: 一次按 M 会派发**两条** `phone` 命令（`RegisterKeyMapping` 在资源重启时重复注册），第二条看到 `isPhoneOpen=true` 且 `IsNuiFocused()=true` 立刻走 `ClosePhone` —— 界面被叫出来又秒关，玩家看到的是「按 M 没反应」。命令入口加 300ms 防抖（重复调用打 `phase=toggle-debounced`），`RegisterKeyMapping` 改为只注册一次
 - `custom-phone`: **MDT「查询失败/操作失败」的真正根因**——本 build 的 `RegisterNUICallback` 把应答通道交成**可调用表**（`{ __cfx_functionReference = ... }` 带 `__call` 元方法），而 `PhoneBridge.RegisterNui` 的守卫 `if type(cb) ~= 'function' then return end` 会静默丢弃每一次应答：handler 跑了、服务端也回包了，CEF 的 fetch 却一直挂到 9s abort，前端只能报 `query_failed`/`action_failed`。新增 `PhoneBridge.AnswerFn`，兼容 function / 可调用表 / 裸函数引用（`Citizen.InvokeFunctionReference`），无法应答时直接不执行 handler，避免跑一半留副作用
 - `qb-ambulancejob`: `/status`、`/heal`、`/revivep` 未判 `QBCore.Functions.GetPlayer(src)` 为 nil；同一形状的命令处理器共 39 处（`qb-hud` `/cash` `/bank`、`custom-police` 24 处、`qb-houses`、`qb-lapraces`、`qb-adminmenu`、`qb-inventory`、`qb-crypto`、`qb-cityhall`、`qb-vehicleshop`）一并加上判空，并新增 `tests/architecture/test_command_guards.py` 钉住该规则（事件处理器不在范围内：那里的 `source` 一定是真实玩家），从控制台（`source=0`）或玩家刚掉线时执行会抛 `attempt to index a nil value (local 'Player')`；现改为先判空（控制台没有可通知的客户端，`TriggerClientEvent` 传 0 会触发 native 参数 null 错误）
