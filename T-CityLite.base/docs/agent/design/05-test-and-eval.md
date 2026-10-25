@@ -9,7 +9,7 @@
 
 1. `policy.lua`（489 行）与 `director_rules.lua` 已零依赖，`dofile` 即可测；**唯一阻塞点是 HTTP 面**：
    `main.lua:942-1292` 的路由/鉴权/校验全部长在 `req`/`res` 上，`readJsonBody` 还是 `setDataHandler` 回调式，无法同步断言。
-2. **最小重构**：新增 `server/http_api.lua`，导出 `AgentHttp.Handle(request, deps) -> {status, body, headers}`（同步、无 `req`/`res`）；
+2. **最小重构**：新增 `resources/[custom]/custom-director/server/http_api.lua`，导出 `AgentHttp.Handle(request, deps) -> {status, body, headers}`（同步、无 `req`/`res`）；
    `main.lua` 只留约 15 行适配器。这是本设计**唯一要改的生产代码**。
 3. 断言只认结构化 JSON：pytest 用 `lua5.4` 子进程，请求/响应走临时文件，不解析 console。
    现有 `test_agent_actions.py` 的 `assertNotIn(...FAIL...)` 只保留为 smoke。
@@ -21,8 +21,8 @@
 
 | 文件 | 事实 | 对测试的含义 |
 |:---|:---|:---|
-| `server/policy.lua` | 无 FiveM/MySQL/QBCore 依赖，`Normalize`/`Preview`/`CheckPolicy`/`DeepEqual` 全纯，末尾 `return AgentPolicy` | 直接 `dofile`，无需 stub（`tests/agent/test_agent_actions_policy.lua` 已如此） |
-| `server/director_rules.lua` | `followUpQuest`/`extractCompletedQuest`/`idempotencyKey` 纯函数 | 同上 |
+| `resources/[custom]/custom-director/server/policy.lua` | 无 FiveM/MySQL/QBCore 依赖，`Normalize`/`Preview`/`CheckPolicy`/`DeepEqual` 全纯，末尾 `return AgentPolicy` | 直接 `dofile`，无需 stub（`tests/agent/test_agent_actions_policy.lua` 已如此） |
+| `resources/[custom]/custom-director/server/director_rules.lua` | `followUpQuest`/`extractCompletedQuest`/`idempotencyKey` 纯函数 | 同上 |
 | `server/main.lua:942-1292` | 11 个 HTTP 辅助函数全是 `local`，签名带 `req,res,respond`；`SetHttpHandler` 包 `pcall` + 单次响应保护 | **必须抽取**才能从 Python 驱动；适配器要保留 pcall/`sent` 语义 |
 | `tools/agent_mcp.py` | `TOOLS` 硬编码 5 个工具 | 与 `tools.json` 双向校验 |
 | `.github/workflows/ci.yml` | 4 job，**无 path filter**；`lua-syntax` 只 `luac -p` 改动文件并跳过含反引号文件 | 增量 job 必须新加 |
@@ -86,7 +86,7 @@ end
 return Bootstrap
 ```
 
-`main.lua` 顶层没有 DB/玩家调用（已确认），`load_main=true` 在 stub 下安全。`cases/policy.lua` 不依赖 §4 重构，
+`main.lua` 顶层没有 DB/玩家调用（已确认），`load_main=true` 在 stub 下安全。`tests/agent/test_agent_actions_policy.lua` 不依赖 §4 重构，
 可当天跑通、证明 harness 可用：`assert(P.Normalize('add_money', {citizenid='ABC12345',account='bank',amount=1001}) == nil)`、
 `assert(P.Normalize('notify', {citizenid='ABC12345', text=string.rep('你',300)}).text ~= nil)`，返回 `{ok=true}`。
 
@@ -166,7 +166,7 @@ end)
 
 ### 5.1 单一来源
 
-新增 `docs/agent/tools.json`（MCP + HTTP 共用），现阶段 `agent_mcp.TOOLS` 是它的投影：
+新增 `tools/agent_tools.json`（MCP + HTTP 共用），现阶段 `agent_mcp.TOOLS` 是它的投影：
 
 ```json
 { "tools_version": 1, "actions_api_version": 1,
@@ -175,7 +175,7 @@ end)
     "result": { "schema_ref": "schema.json#/views" } }] }
 ```
 
-三向校验（`tests/agent/test_contracts.py`）：工具名集合 == `agent_mcp.TOOLS` 名字集合；`input_schema` 深比较相等；
+三向校验（契约 pytest 用例）：工具名集合 == `agent_mcp.TOOLS` 名字集合；`input_schema` 深比较相等；
 每个 `schema_ref` 可解析；`get_schema` 返回体 `schema_version == schema.json.schema_version`。
 
 ### 5.2 golden 与版本闸门
@@ -188,7 +188,7 @@ tests/agent/contract/http/<case>.json
 
 比较**解析后的结构**，绝不比字符串（Lua 表序列化顺序不稳）；`id` 用固定伪数据（fake store 恒返 1），无时间戳。
 12 条基线：act 缺 agent id / 缺 body / 非法 JSON / 超限 / 未知路径 / 方法错 / 无 token / agent token 打 approve / admin token 打 act / list 边界 / policy 成功。
-`contract/.baseline.json` 存 `{file: {version, sha256(normalized json)}}`，`check_contracts.py --check` 做两件事：
+契约基线（`baseline.json`）存 `{file: {version, sha256(normalized json)}}`，`check_contracts.py --check` 做两件事：
 
 ```python
 if sha256(json.dumps(doc, sort_keys=True, separators=(",", ":"))) != meta["sha256"] and version == meta["version"]:
@@ -202,7 +202,7 @@ for g in (REPO / "tests/agent/contract/http").glob("*.json"):
 
 ## 6. 负向 / 模糊测试
 
-### 6.1 用例表（`test_negative.py` + `cases/http_request.lua`）
+### 6.1 用例表（`test_negative.py` + HTTP 用例脚本 `http_contract.lua`）
 
 | ID | 输入 | 期望 | 备注 |
 |:---|:---|:---|:---|
@@ -236,7 +236,7 @@ for g in (REPO / "tests/agent/contract/http").glob("*.json"):
 
 ### 6.2 fuzz
 
-`cases/fuzz_http.lua`：`math.randomseed(1337)`，500 条随机请求（随机 path/method/header 大小写、`0..20000` 字节 body、
+seeded fuzz 脚本（计划中，尚未落地）：`math.randomseed(1337)`，500 条随机请求（随机 path/method/header 大小写、`0..20000` 字节 body、
 随机 0–255 字节含控制字符），断言 `pcall` 不抛、`status ∈ {200,202,400,401,404,405,409,410,413,500,503}`、
 `status>=400` 时 body 必有 `error`+`code`、fake store 行数不增，5 秒预算。失败时写回 seed 与最小输入，必须可复现。
 
@@ -255,7 +255,7 @@ for g in (REPO / "tests/agent/contract/http").glob("*.json"):
 | 令牌桶 | 1 秒窗口 | 第 26 次拒绝 | burst 25, rate 10/s |
 
 计时：Lua `os.clock()` 单次采样 → 排序取 `t[floor(0.95*n)]`；Python `time.perf_counter()`。
-PR 上 advisory（`TCITY_PERF_STRICT=0` 只打印）；nightly 硬门，且与 `perf/baseline.json` 相对比较，退化 >20% 才红。
+PR 上 advisory（`TCITY_PERF_STRICT=0` 只打印）；nightly 硬门，且与性能基线文件相对比较，退化 >20% 才红。
 报告必须写明：**离线数字只证明"我们的 CPU 不是瓶颈"**；真 P95 由 T5 采集。
 
 ## 8. Python ↔ Lua 驱动
@@ -265,7 +265,7 @@ PR 上 advisory（`TCITY_PERF_STRICT=0` 只打印）；nightly 硬门，且与 `
 3. stdout 仅用于人类诊断（失败消息里附带），断言只看解析后的 `data`。
 4. `cwd=REPO_ROOT`、显式 `TCITY_ROOT`、`TZ=UTC`、`timeout=30`，避免路径/时区漂移。
 
-`cases/http_request.lua` 是**唯一**通用入口：读 input、构造 fake actions + cfg、调 `Handle`、返回
+HTTP 通用入口（`tests/agent/lua/cases/http_contract.lua`）是**唯一**入口：读 input、构造 fake actions + cfg、调 `Handle`、返回
 `{ok=true, data={status, body, headers}}`。新增 HTTP 用例只写 Python，不再碰 Lua。
 
 ## 9. CI 增量
@@ -338,7 +338,7 @@ FROM agent_actions
 WHERE requested_at >= CURDATE() - INTERVAL 1 DAY AND agent_id LIKE 'eval:%';
 ```
 
-`approved_at - requested_at` 是**审批时延**不是 agent 时延，P95 只从 run log 取。`eval/run_eval.py` 读 run log、
+`approved_at - requested_at` 是**审批时延**不是 agent 时延，P95 只从 run log 取。eval runner（`run_eval.py`，计划中）读 run log、
 按本表算 8 个指标，写 `reports/agent_eval/<date>.json`；红线触发时退出码 1（nightly 告警，不阻断 PR）。
 
 ## 11. 目录结构（最终态）
@@ -381,7 +381,7 @@ if not ok then
 end
 ```
 
-### 12.2 `cases/http_request.lua`（唯一通用入口）
+### 12.2 `tests/agent/lua/cases/http_contract.lua`（唯一通用入口）
 
 ```lua
 return { run = function(ctx)
@@ -468,15 +468,15 @@ def test_act_requires_agent_id(handle):
 
 | # | 任务 | 验收方式 | 依赖 |
 |:---|:---|:---|:---|
-| 1 | 抽 `server/http_api.lua` + `main.lua` 适配器 + manifest 顺序 | `luac5.4 -p` 通过；12 条 golden 全绿 | 无（**阻塞其他项**） |
+| 1 | 抽 `resources/[custom]/custom-director/server/http_api.lua` + `main.lua` 适配器 + manifest 顺序 | `luac5.4 -p` 通过；12 条 golden 全绿 | 无（**阻塞其他项**） |
 | 2 | vendor `rxi_json.lua` + `json_shim.lua` + `stubs/{fivem,qbcore,mysql}.lua` + `bootstrap.lua` | `lua5.4 runner.lua --case policy` 退出 0；三类 stub 各有自测 | 无 |
-| 3 | `runner.lua` + `cases/http_request.lua` + pytest `conftest.py` | `pytest tests/agent/test_http_contract.py -q` 通过；改 golden 会红 | 1, 2 |
+| 3 | `runner.lua` + `tests/agent/lua/cases/http_contract.lua` + pytest `conftest.py` | `pytest tests/agent/test_http_contract.py -q` 通过；改 golden 会红 | 1, 2 |
 | 4 | `idempotency_race.lua`（INSERT 失败→重查命中） | 断言 1 行、`idempotent=true`、无重复执行 | 2 |
-| 5 | `docs/agent/tools.json` + `agent_mcp.py` 对齐 + `test_tools_contract.py` | 名字/`input_schema` 深比较相等；`schema_ref` 可解析 | 无 |
-| 6 | `contract/.baseline.json` + `check_contracts.py --check/--update` | 改字段不改版本 → 红；bump → 绿（写进 PR 说明） | 5 |
+| 5 | `tools/agent_tools.json` + `agent_mcp.py` 对齐 + 契约用例 | 名字/`input_schema` 深比较相等；`schema_ref` 可解析 | 无 |
+| 6 | 契约基线文件 + `check_contracts.py --check/--update` | 改字段不改版本 → 红；bump → 绿（写进 PR 说明） | 5 |
 | 7 | 28 条负向 + `fuzz_http.lua`（seed 固定） | 全绿；500 条 fuzz 无 crash、无 5xx 泄漏 | 1, 3 |
-| 8 | `bench_http.lua` + `perf/baseline.json` + 48 行快照基准 | 本地 P95 在预算内；报告 JSON 可解析 | 3 |
-| 9 | `eval/run_eval.py` + run log schema + 指标 SQL | 20 条样例 log 产出报告；红线退出码 1 | 5 |
+| 8 | `bench_http.lua` + 性能基线文件 + 48 行快照基准 | 本地 P95 在预算内；报告 JSON 可解析 | 3 |
+| 9 | eval runner（`run_eval.py`）+ run log schema + 指标 SQL | 20 条样例 log 产出报告；红线退出码 1 | 5 |
 | 10 | `ci.yml`：`changes` + `lua-unit` + `agent-contract` + `agent-negative` + nightly perf/eval | 只改文档 → Lua job skip；只改 Lua → 全跑 | 1–9 |
 | 11 | 文档收尾：`ACTIONS.md` 补"可测性"、`tests/README.md` 补命令 | 链接可点、命令可复制执行 | 3 |
 

@@ -119,7 +119,7 @@ PhoneApps.Register({
 ## 5. 验收与测试
 
 - Lua：`PhoneApps.CanUse` 单测（job/onduty/未知 App 默认拒绝）、`clamp_limit` 边界；
-- Python：迁移幂等、insert 契约、registry schema（参考 `tools/agent_contract_parity.py` 的做法，钉死 App 清单）；
+- Python：迁移幂等、insert 契约、registry schema（参考 `tools/agent_contract.py` 的做法，钉死 App 清单）；
 - 实机：无警察 job 的玩家打 `/phone police_mdt` 必须被服务端拒绝；有 job 的玩家分页/指派成功；
 - 性能：开手机查询数 ≤3、消息列表首屏 ≤30 条、NUI 首包 ≤30KB（用 FiveM NUI devtools/日志计时）。
 
