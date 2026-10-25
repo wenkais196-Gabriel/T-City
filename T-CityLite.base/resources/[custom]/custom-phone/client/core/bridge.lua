@@ -49,10 +49,7 @@ end
 function PhoneBridge.Resolve(id, res)
     if type(id) ~= 'string' then return false end
     local entry = pending[id]
-    if not entry then
-        print(('[custom-phone][bridge] unknown/duplicate id=%s'):format(id))
-        return false
-    end
+    if not entry then return false end
     pending[id] = nil
     if type(res) ~= 'table' then res = { success = false, error = 'no_response' } end
     entry.cb(res)
@@ -88,7 +85,6 @@ function PhoneBridge.Request(event, payload, cb, timeoutMs, responseEvent)
     ensureResponseHandler(resolvedEvent)
 
     pending[id] = { cb = cb, response_event = resolvedEvent }
-    print(('[custom-phone][bridge] request %s id=%s resp=%s'):format(event, id, resolvedEvent))
     TriggerServerEvent(event, id, payload)
     SetTimeout(timeoutMs, function()
         -- A response (or Clear) removes the slot first, so this timer can never
@@ -118,6 +114,67 @@ function PhoneBridge.Clear(reason)
         end
     end
     return answered
+end
+
+-- SendNUIMessage has no acknowledgement. A message sent while CEF is (re)loading
+-- the page is silently dropped, which leaves the phone "open" in Lua with no UI
+-- on screen — the failure we hit after every `restart custom-phone`. AwaitAck
+-- resends until the NUI answers Ack(name); that answer is the only proof the
+-- interface actually exists.
+local ackWaiters = {} -- [name] = entry
+
+--- Send now, then keep resending until Ack(name) or the deadline.
+--- A second call for the same name supersedes the first without firing its
+--- timeout, so reopening the phone cannot leave two loops running.
+---@param name string ack channel, e.g. 'phone:open'
+---@param resend fun() sends one copy of the payload
+---@param opts table|nil { intervalMs = 250, timeoutMs = 2500, onTimeout = fun() }
+---@return table|nil waiter handle
+function PhoneBridge.AwaitAck(name, resend, opts)
+    if type(name) ~= 'string' or name == '' or type(resend) ~= 'function' then
+        return nil
+    end
+    opts = opts or {}
+    local interval = tonumber(opts.intervalMs) or 250
+    if interval <= 0 then interval = 250 end
+    local deadline = tonumber(opts.timeoutMs) or 2500
+
+    local entry = { name = name }
+    ackWaiters[name] = entry -- supersedes a previous attempt; its tick self-cancels
+    resend()
+
+    local elapsed = 0
+    local function tick()
+        if ackWaiters[name] ~= entry then return end -- acked, replaced or expired
+        elapsed = elapsed + interval
+        if elapsed >= deadline then
+            ackWaiters[name] = nil
+            print(('[custom-phone][bridge] %s unacked after %dms'):format(name, elapsed))
+            if type(opts.onTimeout) == 'function' then pcall(opts.onTimeout) end
+            return
+        end
+        resend()
+        SetTimeout(interval, tick)
+    end
+    SetTimeout(interval, tick)
+    return entry
+end
+
+--- Mark `name` as acknowledged by the NUI.
+---@param name string
+---@return boolean consumed false when nothing was waiting (late or forged ack)
+function PhoneBridge.Ack(name)
+    if type(name) ~= 'string' then return false end
+    if not ackWaiters[name] then return false end
+    ackWaiters[name] = nil
+    return true
+end
+
+--- Diagnóstico: is `name` still waiting for its NUI ack?
+---@param name string
+---@return boolean
+function PhoneBridge.IsAwaitingAck(name)
+    return ackWaiters[name] ~= nil
 end
 
 --- Wrap a callback so a handler that calls cb twice cannot corrupt CEF state.

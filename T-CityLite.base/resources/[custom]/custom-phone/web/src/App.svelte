@@ -73,6 +73,10 @@
       activeApp.set(get(callPhase) === 'idle' ? 'home' : 'phonecall');
       loadPhoneData();
       void loadDynamicApps();
+      // Prove to the client that this frame exists: it resends phone:open until
+      // this answer arrives, because SendNUIMessage into a loading CEF page is
+      // silently dropped.
+      void fetchNui('phoneOpenAck').catch(() => {});
     });
 
     // Dispatch / agent voice line: CEF speaks it locally, subtitle mirrors it.

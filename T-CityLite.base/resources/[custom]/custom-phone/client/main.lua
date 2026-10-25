@@ -31,6 +31,7 @@ local function ClosePhone()
     -- Release drops NUI focus even when custom-ui.CloseMenu is missing or
     -- throws. It deliberately leaves keepInput for the next phone open: the
     -- project's real-client contract is qb-phone style (see AGENTS.md).
+    PhoneBridge.Ack('phone:open') -- stop any open-ack resend loop
     PhoneFocus.Release('phone')
     SendNUIMessage({
         action = 'phone:close'
@@ -64,10 +65,27 @@ end
 local function OpenPhone()
     if isPhoneOpen then return end
     isPhoneOpen = true
-    -- Tell CEF first: even if a focus native fails, the player still sees the
-    -- phone and can close it with ESC instead of being stuck with no UI.
-    SendNUIMessage({
-        action = 'phone:open'
+    -- SendNUIMessage is fire-and-forget: while CEF is still loading (every
+    -- `restart custom-phone`) the frame is dropped and the phone stays "open"
+    -- in Lua with nothing on screen. Resend until the NUI acknowledges the
+    -- open, which is the only proof the interface exists.
+    PhoneBridge.AwaitAck('phone:open', function()
+        SendNUIMessage({
+            action = 'phone:open'
+        })
+    end, {
+        intervalMs = 250,
+        timeoutMs = 2500,
+        onTimeout = function()
+            -- The UI never answered: drop the half-open state so the next key
+            -- press starts clean instead of being swallowed by isPhoneOpen.
+            isPhoneOpen = false
+            PhoneFocus.Release('phone')
+            TriggerServerEvent('phone:server:focusState', { phase = 'open-ack-timeout' })
+            TriggerEvent('chat:addMessage', {
+                args = { 'SYSTEM', '手机界面没有响应（NUI 未就绪），状态已重置，请再按一次 M' }
+            })
+        end,
     })
     TriggerServerEvent('phone:server:focusState', { phase = 'open-nui-sent', focused = IsNuiFocused() })
 
@@ -277,6 +295,16 @@ end)
 RegisterNUICallback('closePhone', function(_, cb)
     ClosePhone()
     cb({ success = true })
+end)
+
+-- The UI answers every phone:open with this callback once the frame is on
+-- screen. PhoneBridge.AwaitAck stops resending on it; without the answer the
+-- client resets the half-open state after 2.5 s instead of hanging.
+RegisterNUICallback('phoneOpenAck', function(_, cb)
+    if PhoneBridge.Ack('phone:open') then
+        TriggerServerEvent('phone:server:focusState', { phase = 'open-ack', focused = IsNuiFocused() })
+    end
+    cb({ ok = true })
 end)
 
 -- Keyboard mode callbacks (no-op: always in SetNuiFocus(true,true) mode)
