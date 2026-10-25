@@ -797,6 +797,10 @@
       <button class:active={dispatchSeg === 'units'} onclick={() => openDispatchSeg('units')}>单位</button>
       <button class:active={dispatchSeg === 'incidents'} onclick={() => openDispatchSeg('incidents')}>接警</button>
     </nav>
+    <div class="row" style="margin-bottom: 8px;">
+      <span class="muted">列表不会自动刷新；点这里更新</span>
+      <button class="refresh" onclick={refresh}>刷新</button>
+    </div>
 
     {#if dispatchSeg === 'units'}
       <section class="card">
