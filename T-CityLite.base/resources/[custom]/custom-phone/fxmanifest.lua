@@ -16,6 +16,8 @@ client_scripts {
     'client/core/bridge.lua',
     'client/core/focus.lua',
     'client/core/events.lua',
+    -- diag owns the request-trace + ui-event channel; must load before main.lua
+    'client/core/diag.lua',
     'client/main.lua'
 }
 
@@ -25,6 +27,8 @@ server_scripts {
     -- core must load before the registry and main.lua
     'server/core/identity.lua',
     'server/core/rate_limit.lua',
+    -- diag depends on PhoneRateLimit (trace bucket); loads before main.lua
+    'server/core/diag.lua',
     'server/core/events.lua',
     'server/core/notify.lua',
     'server/phone_apps.lua',
