@@ -57,7 +57,7 @@ end)
 - `fetch` 没有内建超时；CEF 丢回调/资源重启时就是永久 pending。
 - 参考：[NUI Callbacks](https://docs.fivem.net/docs/scripting-manual/nui-development/nui-callbacks/)。
 
-我们在 P1 已加 `AbortController` 6 秒超时；这是所有 NUI fetch 的基线要求。
+我们在 P1 已加 `AbortController` 6 秒超时；这是所有 NUI fetch 的基线要求。`appQuery`/`appAction` 走客户端 request_id 协议，客户端自己的截止时间是 8 秒，所以它们的 fetch 超时放宽到 9 秒，让 Lua 先把结构化 `timeout` 返回给 UI（`web/src/utils/nui.ts`）。
 
 ### 2.3 焦点（Focus）是全局栈
 
@@ -133,6 +133,22 @@ end)
 3. **禁止**：`Promise.all` 直接打同一个 QBCore callback name。
 
 > 这条应写进所有 future client 代码 review checklist。
+
+**已落地（方案 1 + 3）**：`custom-phone` 的 NUI `appQuery`/`appAction` 不再调用 QBCore callback，而是：
+
+```
+NUI fetch /appQuery
+  → client: pendingAppQuery[id] = cb; TriggerServerEvent('phone:server:appQueryRequest', id, data)
+  → server: 校验 id(3–64)/data(table) → PhoneApps.Query(source, ...)
+  → server: TriggerClientEvent('phone:client:appQueryResponse', source, id, res)
+  → client: 按 id resolve 对应 cb（未知/重复/迟到 id 直接忽略）
+  → 8s 未响应：cb({ success=false, error='timeout' })，资源停止：error='resource_stopped'
+```
+
+- `id = GetGameTimer() .. ':' .. seq`，服务端原样回传，且只单播给调用者 `source`。
+- `appQuery` 与 `appAction` 使用独立的 pending 表/响应事件，互不覆盖。
+- 旧 `phone:server:appQuery`/`appAction` QBCore callbacks **保留**给其他调用方（例如中控屏），但 NUI 不再使用；新代码禁止再加同名并发 callback。
+- 回归：`tests/unit/layer3_business/test_phone_request_protocol.py` 用 Lua stub 跑真实协议块（乱序响应、8s 单次超时、未知 id、资源停止），静态契约在 `test_phone_apps.py`。
 
 ### 3.3 客户端事件/回调 vs 网络事件
 

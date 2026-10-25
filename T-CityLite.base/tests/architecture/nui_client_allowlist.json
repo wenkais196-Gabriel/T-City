@@ -1,0 +1,128 @@
+{
+  "$comment": "NUI-CLIENT-01 debt register for tests/architecture/test_nui_client_contracts.py. Every entry is a violation of docs/client/CLIENT_AUDIT.md that is registered instead of fixed, because this pass is audit-only (no business-code edits). Keys are (check, resource, file[, name]); line numbers are never stored. An expired entry fails the suite, and an entry that no longer matches a real violation fails as stale — delete it in the same commit that fixes the code. `owner` is the module that owns the fix, `added` is the audit date (HEAD 1cf25ae, 2026-10-25).",
+  "version": 1,
+  "rule": "NUI-CLIENT-01",
+  "entries": [
+    {
+      "id": "police-origin-hardcoded",
+      "check": "nui_origin_hardcoded",
+      "resource": "custom-police",
+      "file": "html/script.js",
+      "name": "custom-police",
+      "owner": "custom-police",
+      "reason": "3 处 $.post('https://custom-police/...') 硬编码资源名，没有 GetParentResourceName()。资源改名/复制一份测试服后全部失效，也绕过了 https://cfx-nui-<res>/ 作用域约定。审计 High P-03。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "police-nui-request-timeout",
+      "check": "nui_request_timeout",
+      "resource": "custom-police",
+      "file": "html/script.js",
+      "name": "",
+      "owner": "custom-police",
+      "reason": "$.post 没有任何超时（jQuery 可用 $.ajax({timeout})），回调丢失时静默失败、UI 无反馈。改为 fetch+AbortController 或 $.ajax timeout，并在 UI 显示失败状态。审计 High P-03。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "police-focus-no-stop-cleanup",
+      "check": "focus_no_resource_stop",
+      "resource": "custom-police",
+      "file": "client/job.lua",
+      "name": "SetNuiFocus",
+      "owner": "custom-police",
+      "reason": "指纹 UI 在 client/job.lua:46 SetNuiFocus(true,true)，但 custom-police 的 onResourceStop（client/backup.lua:506、client/npc_callouts.lua:571）只清理 NPC/载具，从不释放焦点。restart 时若指纹框开着，光标/焦点可能残留；需加统一 onResourceStop 释放 SetNuiFocus(false,false)+SetNuiFocusKeepInput(false)。审计 Medium P-04。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "custom-ui-keepinput-not-reset",
+      "check": "focus_keepinput_unpaired",
+      "resource": "custom-ui",
+      "file": "client/main.lua",
+      "name": "SetNuiFocusKeepInput",
+      "owner": "custom-ui",
+      "reason": "OpenMenu() 只在 opts.keepInput 时 SetNuiFocusKeepInput(true)，从不清 false。手机（按项目约定）关闭后保留 keepInput=true，于是任何随后用 custom-ui 打开的菜单都继承“游戏输入仍开启”：人物可移动、WASD 穿透 UI。正确写法是 SetNuiFocusKeepInput(opts.keepInput == true) 再 SetNuiFocus(true,true)（story-engine 已这样写）。审计 High O-01。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "vehicles-dead-dashboard-client",
+      "check": "dead_nui_client_file",
+      "resource": "custom-vehicles",
+      "file": "client/dashboard.lua",
+      "name": "",
+      "owner": "custom-vehicles",
+      "reason": "fxmanifest 已注释掉 client/dashboard.lua（迁移到 [system]/tcity-dashboard），但文件仍在：15 个 RegisterNUICallback 与 SetNuiFocus 永不注册，html/dashboard.{html,js,css} 成为孤儿。最危险的是有人把文件加回 manifest 时会出现两套中控屏（policeRadar/closeDashboard 与 tcity-dashboard 重名）。审计 Medium O-05，建议直接删除。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "story-origin-hardcoded",
+      "check": "nui_origin_hardcoded",
+      "resource": "story-engine",
+      "file": "client/decision_nui.html",
+      "name": "cfx-nui-story-engine",
+      "owner": "story-engine",
+      "reason": "2 处 fetch('https://cfx-nui-story-engine/...') 硬编码资源名，应用 GetParentResourceName()（模板串）。改名后决策弹窗所有回调 404。审计 Medium O-03。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "story-nui-request-timeout",
+      "check": "nui_request_timeout",
+      "resource": "story-engine",
+      "file": "client/decision_nui.html",
+      "name": "",
+      "owner": "story-engine",
+      "reason": "nuiPost 的 fetch 没有 AbortController：NUI 回调被丢（资源 restart/客户端忙）时 Promise 永久 pending，chooseOption 不隐藏面板也不报错；虽然有 .catch，但 fetch 不会 reject。审计 Medium O-03。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "story-focus-no-stop-cleanup",
+      "check": "focus_no_resource_stop",
+      "resource": "story-engine",
+      "file": "client/main.lua",
+      "name": "SetNuiFocus",
+      "owner": "story-engine",
+      "reason": "决策弹窗 SetNuiFocus(true,true)（client/main.lua:69），但资源没有 onResourceStop；300s watchdog（client/main.lua:249-261）只覆盖运行中卡死，不覆盖 restart。需在 onResourceStop 里 SetNuiFocus(false,false)+SetNuiFocusKeepInput(false)。审计 Medium O-04。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "debug-origin-hardcoded",
+      "check": "nui_origin_hardcoded",
+      "resource": "custom-debug",
+      "file": "html/index.html",
+      "name": "custom-debug",
+      "owner": "custom-debug",
+      "reason": "调试浮层 fetch('https://custom-debug/closeDebug') 硬编码资源名。工具资源、影响面小，但同一条规则不应开例外。审计 Low O-06。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "debug-nui-request-timeout",
+      "check": "nui_request_timeout",
+      "resource": "custom-debug",
+      "file": "html/index.html",
+      "name": "",
+      "owner": "custom-debug",
+      "reason": "closeDebug 的 fetch 没有 catch/超时（fire-and-forget），失败时浮层仍关闭——行为可接受，但回调挂起时不会有人知道。加 AbortController 或 .catch 即可。审计 Low O-06。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "phone-favicon-not-in-files",
+      "check": "ui_page_asset_unlisted",
+      "resource": "custom-phone",
+      "file": "html/index.html",
+      "name": "./favicon.svg",
+      "owner": "custom-phone",
+      "reason": "构建产物 html/favicon.svg 被 index.html 引用，但 fxmanifest 的 files{} 只列了 html/index.html、html/assets/*、html/assets/audio/*。CEF 里 favicon 404（不致命，但每次加载都在控制台报错）。修法：files 加 'html/favicon.svg'，或把 favicon 放进 assets/。审计 Low P-08。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    }
+  ]
+}

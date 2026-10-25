@@ -270,10 +270,35 @@ RegisterNUICallback('disableKeyboard', function(_, cb)
     cb({ success = true })
 end)
 
-RegisterNUICallback('getPhoneData', function(_, cb)
-    QBCore.Functions.TriggerCallback('phone:server:getPhoneData', function(data)
-        cb(data)
+-- qb-core keeps ONE callback slot per name. Opening the phone, OnMoneyChange
+-- and RemoveBankMoney can all request getPhoneData in the same frame; coalesce
+-- them into a single in-flight request so none of the callers is overwritten.
+local phoneDataBusy = false
+local phoneDataWaiters = {}
+local function fetchPhoneData(cb)
+    phoneDataWaiters[#phoneDataWaiters + 1] = cb
+    if phoneDataBusy then return end
+    phoneDataBusy = true
+    local settled = false
+    local function finish(data)
+        if settled then return end
+        settled = true
+        phoneDataBusy = false
+        local waiters = phoneDataWaiters
+        phoneDataWaiters = {}
+        data = data or { success = false, error = 'no_response' }
+        for _, waiter in ipairs(waiters) do
+            pcall(waiter, data)
+        end
+    end
+    QBCore.Functions.TriggerCallback('phone:server:getPhoneData', finish)
+    SetTimeout(8000, function()
+        finish({ success = false, error = 'timeout' })
     end)
+end
+
+RegisterNUICallback('getPhoneData', function(_, cb)
+    fetchPhoneData(function(data) cb(data) end)
 end)
 
 -- Contact CRUD Callbacks
@@ -669,7 +694,7 @@ end)
 -- Real-time Money Sync Listener
 RegisterNetEvent('QBCore:Client:OnMoneyChange', function(type, amount, operation)
     if not isPhoneOpen then return end
-    QBCore.Functions.TriggerCallback('phone:server:getPhoneData', function(data)
+    fetchPhoneData(function(data)
         if data and data.success then
             SendNUIMessage({
                 action = 'phone:updateMoney',
@@ -786,7 +811,7 @@ end)
 -- and nothing here changes money.
 RegisterNetEvent('qb-phone:client:RemoveBankMoney', function()
     if not isPhoneOpen then return end
-    QBCore.Functions.TriggerCallback('phone:server:getPhoneData', function(data)
+    fetchPhoneData(function(data)
         if data and data.success and data.playerData then
             SendNUIMessage({
                 action = 'phone:updateMoney',
@@ -846,21 +871,81 @@ RegisterNUICallback('getPhoneApps', function(_, cb)
     end)
 end)
 
+-- qb-core stores exactly ONE pending callback per callback name
+-- (QBCore.ServerCallbacks[name]) and the response clears it, so two concurrent
+-- appQuery calls — PoliceMDT refresh() does Promise.all([units, incidents]) —
+-- overwrite each other and the first NUI fetch never resolves. Both bridges
+-- therefore use a dedicated request/response event pair and correlate by
+-- request_id. The legacy QBCore callbacks stay registered server-side for
+-- other callers.
+-- [phone-app-protocol] begin (extracted by test_phone_request_protocol.py)
+local APP_REQUEST_TIMEOUT_MS = 8000
+local appRequestSeq = 0
+local pendingAppQuery = {}  -- [request_id] = cb
+local pendingAppAction = {} -- [request_id] = cb
+
+local function nextAppRequestId()
+    appRequestSeq = appRequestSeq + 1
+    return ('%d:%d'):format(GetGameTimer(), appRequestSeq)
+end
+
+--- Answer a pending request exactly once. Unknown, duplicate or late responses
+--- are ignored instead of resolving a newer request.
+local function resolveAppRequest(pending, id, res)
+    local cb = pending[id]
+    if not cb then return end
+    pending[id] = nil
+    if type(res) ~= 'table' then res = { success = false, error = 'no_response' } end
+    cb(res)
+end
+
+local function startAppRequest(pending, eventName, data, cb)
+    local id = nextAppRequestId()
+    pending[id] = cb
+    TriggerServerEvent(eventName, id, data)
+    SetTimeout(APP_REQUEST_TIMEOUT_MS, function()
+        -- A response (or resource stop) clears the slot first, so this timer
+        -- can never answer twice or resolve a newer request.
+        if pending[id] ~= cb then return end
+        pending[id] = nil
+        cb({ success = false, error = 'timeout' })
+    end)
+end
+
 RegisterNUICallback('appQuery', function(data, cb)
-    TriggerServerEvent('phone:server:focusState', { phase = 'appQuery-hit' })
     if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
-    QBCore.Functions.TriggerCallback('phone:server:appQuery', function(res)
-        cb(res or { success = false, error = 'no_response' })
-    end, data.app_id, data.query, data.params)
+    TriggerServerEvent('phone:server:focusState', { phase = 'appQuery-hit' })
+    startAppRequest(pendingAppQuery, 'phone:server:appQueryRequest', data, cb)
 end)
 
 RegisterNUICallback('appAction', function(data, cb)
-    TriggerServerEvent('phone:server:focusState', { phase = 'appAction-hit' })
     if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
-    QBCore.Functions.TriggerCallback('phone:server:appAction', function(res)
-        cb(res or { success = false, error = 'no_response' })
-    end, data.app_id, data.action, data.params)
+    TriggerServerEvent('phone:server:focusState', { phase = 'appAction-hit' })
+    startAppRequest(pendingAppAction, 'phone:server:appActionRequest', data, cb)
 end)
+
+RegisterNetEvent('phone:client:appQueryResponse', function(id, res)
+    if type(id) ~= 'string' then return end
+    resolveAppRequest(pendingAppQuery, id, res)
+end)
+
+RegisterNetEvent('phone:client:appActionResponse', function(id, res)
+    if type(id) ~= 'string' then return end
+    resolveAppRequest(pendingAppAction, id, res)
+end)
+
+-- A resource stop drops the Lua state; answer outstanding NUI callbacks first
+-- so CEF is not left with fetches that can only end in their own timeout.
+AddEventHandler('onResourceStop', function(resource)
+    if resource ~= GetCurrentResourceName() then return end
+    for _, pending in ipairs({ pendingAppQuery, pendingAppAction }) do
+        for id, cb in pairs(pending) do
+            pending[id] = nil
+            pcall(cb, { success = false, error = 'resource_stopped' })
+        end
+    end
+end)
+-- [phone-app-protocol] end
 
 
 RegisterNUICallback('clientError', function(data, cb)

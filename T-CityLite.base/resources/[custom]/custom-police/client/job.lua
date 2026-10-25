@@ -43,6 +43,7 @@ local function openFingerprintUI()
         type = 'fingerprintOpen'
     })
     inFingerprint = true
+    SetNuiFocusKeepInput(false)
     SetNuiFocus(true, true)
 end
 
@@ -248,8 +249,15 @@ end
 --NUI Callbacks
 RegisterNUICallback('closeFingerprint', function(_, cb)
     SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
     inFingerprint = false
     cb('ok')
+end)
+
+RegisterNUICallback('closeDatabank', function(_, cb)
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    cb({ ok = true })
 end)
 
 --Events
