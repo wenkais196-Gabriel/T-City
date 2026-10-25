@@ -30,6 +30,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[2]  # T-CityLite.base/
 RESOURCES = BASE / "resources"
 CUSTOM = RESOURCES / "[custom]"
+DIAG_MODULE = CUSTOM / "custom-phone" / "server" / "core" / "diag.lua"
 SCAN_DIRS = (
     ("custom-police", CUSTOM / "custom-police" / "server"),
     ("custom-phone", CUSTOM / "custom-phone" / "server"),
@@ -74,7 +75,9 @@ SESSION_BIND = re.compile(
     r"(?:StoreNotification|PhoneNotify\.Store)\(source|"
     r"ResolveSource\(source\)|GetPlayer\(targetSrc"
 )
-DIAGNOSTIC_GUARD = re.compile(r"COOLDOWN|cooldown|diagRateLimited|PHASES")
+DIAGNOSTIC_GUARD = re.compile(
+    r"COOLDOWN|cooldown|diagRateLimited|PHASES|PhoneDiag\.Accept"
+)
 
 REQUIRED_FIELDS = ("name", "file", "category", "reason", "evidence", "owner", "expires")
 DEBT_CATEGORIES = {"unchecked_debt"}
@@ -289,6 +292,24 @@ def test_allowlisted_events_really_show_the_claim_in_their_body():
                 f"{name}: registered as diagnostic but no rate limit / field whitelist"
             )
         # unchecked_debt carries no claim beyond the reason + expiry.
+
+
+def test_diag_helper_really_limits_and_sanitizes():
+    """`PhoneDiag.Accept` satisfies the diagnostic guard by delegation, so the
+    claim has to hold where the delegation lands — same idea as AUTH_HELPERS."""
+    source = read(DIAG_MODULE)
+    for token in (
+        "function PhoneDiag.Accept",
+        "PhoneDiag.Sanitize",
+        "allowTrace",
+        "allowUi",
+        "printBudgetOk",
+        "TRACE_PER_MIN = ",
+        "TRACE_BURST = ",
+        "UI_COOLDOWN_MS = ",
+        "PRINT_BUDGET_PER_SEC = ",
+    ):
+        assert token in source, f"doc claims {token!r} but it is gone from {DIAG_MODULE.name}"
 
 
 def test_auth_helpers_really_enforce_policypolicy():

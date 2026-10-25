@@ -352,6 +352,15 @@
       "expires": "2027-03-31",
       "name": "custom-police:server:toggleDuty",
       "evidence": "p0.lua:734 handler: isPolice(pd(src)) then P.SetDutyForSource"
+    },
+    {
+      "name": "phone:server:diag",
+      "file": "custom-phone/server/core/diag.lua",
+      "category": "diagnostic",
+      "reason": "四段往返诊断通道：只写服务端日志，不写库、不回包、不构成 RPC 面。payload 经 Sanitize 白名单投影（tid 3..64+字符集校验、kind/app/code 字符集与长度收敛、phases 最多 8 且序号 1..8、ui phase 必须在 13 项白名单内），trace 批次走 PhoneRateLimit 令牌桶 20/min burst 5，ui 事件按 (phase, src) 5s 冷却，另有全局每秒钟 50 行打印预算与 dropped 计数，客户端无法刷屏或注入。",
+      "evidence": "server/core/diag.lua:387 PhoneDiag.Accept — Sanitize + allowTrace(PhoneRateLimit 20/5) + allowUi(5s) + printBudgetOk(50/s)",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
     }
   ]
 }
