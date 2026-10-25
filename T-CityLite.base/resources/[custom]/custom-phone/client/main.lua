@@ -58,29 +58,31 @@ local function OpenPhone()
     
     TriggerServerEvent('phone:server:focusState', { phase = 'open-start' })
 
-    -- Play GTA V native phone-out animation. Bounded: a missing/unloadable
-    -- anim dict used to hang this thread forever with isPhoneOpen already
-    -- true, so every later M press was swallowed.
-    local ped = PlayerPedId()
-    if DoesEntityExist(ped) then
+    -- Open the UI first. The phone-out animation is cosmetic and must never
+    -- block the NUI message (a stalled anim/stream used to leave isPhoneOpen
+    -- true with no visible phone, so every later M press was swallowed).
+    SendNUIMessage({
+        action = 'phone:open'
+    })
+    TriggerServerEvent('phone:server:focusState', { phase = 'open-nui-sent', focused = IsNuiFocused() })
+
+    CreateThread(function()
+        local ped = PlayerPedId()
+        if not DoesEntityExist(ped) then return end
         RequestAnimDict('cellphone@')
         local loaded = false
         for _ = 1, 50 do
             if HasAnimDictLoaded('cellphone@') then loaded = true break end
             Wait(10)
         end
-        if loaded then
-            TaskPlayAnim(ped, 'cellphone@', 'cellphone_text_in', 8.0, -8.0, 800, 49, 0, false, false, false)
-        else
+        if not loaded then
             TriggerServerEvent('phone:server:focusState', { phase = 'anim-timeout' })
+            return
         end
-    end
-    
-    -- Tell NUI to open phone
-    SendNUIMessage({
-        action = 'phone:open'
-    })
-    TriggerServerEvent('phone:server:focusState', { phase = 'open-nui-sent', focused = IsNuiFocused() })
+        if isPhoneOpen then
+            TaskPlayAnim(ped, 'cellphone@', 'cellphone_text_in', 8.0, -8.0, 800, 49, 0, false, false, false)
+        end
+    end)
     
     -- Focus watchdog: if something steals NUI focus, re-apply it instead of
     -- leaving the phone visible with the mouse still driving the camera.
