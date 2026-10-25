@@ -64,22 +64,20 @@ end
 local function OpenPhone()
     if isPhoneOpen then return end
     isPhoneOpen = true
+    -- Tell CEF first: even if a focus native fails, the player still sees the
+    -- phone and can close it with ESC instead of being stuck with no UI.
+    SendNUIMessage({
+        action = 'phone:open'
+    })
+    TriggerServerEvent('phone:server:focusState', { phase = 'open-nui-sent', focused = IsNuiFocused() })
+
     -- Cursor first: keepInput=true left the mouse bound to camera look on a
     -- real client (NUI focused, no usable cursor). Menus that need movement
     -- can opt in later, but a phone must be clickable.
     -- qb-phone never turns keepInput off, so movement survives while the phone
     -- is open. The focus stack grants focus, then explicitly keeps game input.
     PhoneFocus.Acquire('phone', { cursor = true, keepInput = true })
-    
     TriggerServerEvent('phone:server:focusState', { phase = 'open-start' })
-
-    -- Open the UI first. The phone-out animation is cosmetic and must never
-    -- block the NUI message (a stalled anim/stream used to leave isPhoneOpen
-    -- true with no visible phone, so every later M press was swallowed).
-    SendNUIMessage({
-        action = 'phone:open'
-    })
-    TriggerServerEvent('phone:server:focusState', { phase = 'open-nui-sent', focused = IsNuiFocused() })
 
     CreateThread(function()
         local ped = PlayerPedId()
