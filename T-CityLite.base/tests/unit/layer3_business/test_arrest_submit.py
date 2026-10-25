@@ -220,13 +220,12 @@ def test_report_is_the_anchor_and_children_are_linked():
     assert "base_amount" in citation_insert
     assert "charge_id" in citation_insert
 
-    assert "INSERT INTO police_evidence" in block
-    evidence_insert = block[block.index("INSERT INTO police_evidence"):]
+    # 证据行 + 展品号 + 首条链记录都在唯一写者里（server/p2_evidence.lua）
+    assert "PoliceEvidenceWriter.Register(" in block
+    evidence_insert = block[block.index("PoliceEvidenceWriter.Register("):]
     assert "report_id" in evidence_insert
-
-    # Evidence always gets a first custody-chain entry.
-    assert "INSERT INTO police_evidence_chain" in block
-    assert "'collected'" in block
+    evidence_owner = (POLICE / "server/p2_evidence.lua").read_text(encoding="utf-8")
+    assert "chain(tonumber(id), 'collected', actorCid, label)" in evidence_owner
 
     # Case linkage is written back onto the report.
     assert "UPDATE police_reports SET case_id = ? WHERE id = ?" in block
@@ -601,17 +600,13 @@ def test_report_submit_writes_evidence_with_report_link_and_first_chain_entry():
     assert "utf8Sub(trim(params.evidence_description), 1000)" in block
     assert "invalid_evidence_label" in block
 
-    assert "INSERT INTO police_evidence" in block
-    evidence_insert = block[block.index("INSERT INTO police_evidence"):]
-    assert (
-        "(exhibit_no, report_id, case_id, incident_id, label, description, location, collected_by)"
-        in evidence_insert
-    )
-    assert "VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)" in evidence_insert
-    assert "EX-%06d" in block
-
-    assert "INSERT INTO police_evidence_chain" in block
-    assert "'collected'" in block
+    # 列集合由唯一写者按需拼接（不再靠"NULL 占位 + 定长列表"），这里只断言委派与关联字段
+    assert "PoliceEvidenceWriter.Register(" in block
+    evidence_insert = block[block.index("PoliceEvidenceWriter.Register("):]
+    assert "report_id" in evidence_insert and "case_id" in evidence_insert
+    evidence_owner = (POLICE / "server/p2_evidence.lua").read_text(encoding="utf-8")
+    assert "('EX-%06d'):format(id)" in evidence_owner
+    assert "chain(tonumber(id), 'collected', actorCid, label)" in evidence_owner
 
 
 def test_report_submit_rolls_the_report_back_when_a_child_write_fails():
@@ -621,7 +616,7 @@ def test_report_submit_rolls_the_report_back_when_a_child_write_fails():
     assert "DELETE FROM police_reports WHERE id = ?" in block
     assert "rollback()" in block
     # The report is inserted before its evidence, so a child failure can delete it.
-    assert block.index("INSERT INTO police_reports") < block.index("INSERT INTO police_evidence")
+    assert block.index("INSERT INTO police_reports") < block.index("PoliceEvidenceWriter.Register(")
 
 
 def test_report_submit_audits_report_evidence_and_bolo():
@@ -1789,7 +1784,7 @@ def test_report_submit_claims_an_intent_before_any_write():
     wrapper = "withIntent('report', actor.citizenid, params.idempotency_key, function()"
     assert wrapper in block
     assert block.index(wrapper) < block.index("INSERT INTO police_reports")
-    assert block.index(wrapper) < block.index("INSERT INTO police_evidence")
+    assert block.index(wrapper) < block.index("PoliceEvidenceWriter.Register(")
 
 
 def test_open_case_requires_case_capability():
@@ -1803,7 +1798,7 @@ def test_open_case_requires_case_capability():
 def test_arrest_audits_citation_and_evidence_children():
     block = arrest_block()
     # The child rows are audited independently, after their inserts.
-    assert "created.exhibitNo = exhibitNo" in block
+    assert "created.exhibitNo = evidenceRow.exhibit_no" in block
     # 罚单审计在唯一写者里记（'$金额 原因'），p2 不再重复记一条
     owner = (POLICE / "server/citations.lua").read_text(encoding="utf-8")
     assert "PoliceAudit.Write(actorCid, 'citation.issue'" in owner
@@ -1811,7 +1806,7 @@ def test_arrest_audits_citation_and_evidence_children():
     assert "auditPlayer(actor.citizenid, 'citation.issue'" not in block
     assert "auditPlayer(actor.citizenid, 'evidence.register', created.exhibitNo" in block
     assert block.index("PoliceCitations.Insert(") < block.index("notifyCitation(target, created.citation")
-    assert block.index("INSERT INTO police_evidence") < block.index("'evidence.register'")
+    assert block.index("PoliceEvidenceWriter.Register(") < block.index("'evidence.register'")
     # The arrest audit is still written once the sentence is applied.
     assert "auditPlayer(actor.citizenid, 'arrest.register', target, auditDetail)" in block
 

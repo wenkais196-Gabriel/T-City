@@ -40,6 +40,10 @@ OWNERS = {
     # 2026-10-25: 罚单收口。金额政策与列集合都进了写者，
     # p1 那个"不带车牌就开不出罚单"的洞随之消失
     "police_citations": "citations.lua",
+    # 2026-10-25: 证据 + 链收口。收口时发现登记路径本身是坏的（参数数组前导 nil → 语法错），
+    # 修好后 agent 的两条 child 路径也改走同一个写者
+    "police_evidence": "p2_evidence.lua",
+    "police_evidence_chain": "p2_evidence.lua",
 }
 
 #: 还没收口的表：表名 → (为什么还不能收口, 仍在多写的证据痕迹)
@@ -52,14 +56,6 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
     "police_arrests": (
         "逮捕记录 p2_system（agent）与 p3_cases（玩家）双写，审计动作名也尚未统一",
         "INSERT INTO police_arrests",
-    ),
-    "police_evidence": (
-        "证据 p2_evidence（玩家采集）与 p2_system（agent 登记）双写，链式表还要一起动",
-        "INSERT INTO police_evidence ",
-    ),
-    "police_evidence_chain": (
-        "证据链随 police_evidence 一起双写，收口要在同一次改动里完成",
-        "INSERT INTO police_evidence_chain",
     ),
     "police_reports": (
         "报告 p1（玩家）、p2_system（agent）、p3_cases（案卷归档）三写，"

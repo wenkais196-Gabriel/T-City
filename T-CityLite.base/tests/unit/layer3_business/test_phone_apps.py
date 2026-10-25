@@ -271,7 +271,7 @@ def test_insert_ids_are_normalized():
     # p2_system 不再自己建单（走 p0 的唯一写者，归一化也在那里做），所以它不在这份名单里。
     for f in ("p0.lua", "p1.lua", "p2_evidence.lua", "p3_cases.lua"):
         src = read(PHONE.parent / "custom-police/server" / f)
-        assert "InsertId(id)" in src, f
+        assert "InsertId(" in src, f
     sys_src = read(PHONE.parent / "custom-police/server/p2_system.lua")
     assert "PoliceIncidents.InsertRow(" in sys_src, "p2 必须委派给 police_incidents 的唯一写者"
 

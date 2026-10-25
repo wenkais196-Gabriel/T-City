@@ -902,26 +902,22 @@ function ArrestSubmit(source, params)
         end
 
         if createEvidence then
-            local evidenceId = insertRow([[
-                INSERT INTO police_evidence
-                    (exhibit_no, incident_id, report_id, case_id, label, description, location, collected_by)
-                VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
-            ]], { incidentId, reportId, caseId, evidenceLabel, details, location, actor.citizenid })
-            if not evidenceId then
+            -- 证据行 + 展品号 + 链记录都由唯一写者完成（server/p2_evidence.lua）
+            local evidenceRow = PoliceEvidenceWriter.Register(actor.citizenid, {
+                label = evidenceLabel,
+                description = details,
+                location = location,
+                incident_id = incidentId,
+                report_id = reportId,
+                case_id = caseId,
+            })
+            if not evidenceRow then
                 rollback()
                 return fail('db_error')
             end
-            created.evidence = evidenceId
-            local exhibitNo = ('EX-%06d'):format(evidenceId)
-            created.exhibitNo = exhibitNo
-            local marked = updateRow(
-                'UPDATE police_evidence SET exhibit_no = ? WHERE id = ?', { exhibitNo, evidenceId })
-            local chained = marked and pcall(function()
-                MySQL.insert.await(
-                    'INSERT INTO police_evidence_chain (evidence_id, action, actor_citizenid, note) VALUES (?, ?, ?, ?)',
-                    { evidenceId, 'collected', actor.citizenid, evidenceLabel })
-            end)
-            if not chained then
+            created.evidence = evidenceRow.id
+            created.exhibitNo = evidenceRow.exhibit_no
+            if evidenceRow.chain_ok == false then
                 rollback()
                 return fail('db_error')
             end
@@ -1139,25 +1135,21 @@ function ReportSubmit(source, params)
         end
 
         if createEvidence then
-            evidenceId = insertRow([[
-                INSERT INTO police_evidence
-                    (exhibit_no, report_id, case_id, incident_id, label, description, location, collected_by)
-                VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
-            ]], { reportId, caseId, incidentId, evidenceLabel, evidenceDescription, location,
-                  actor.citizenid })
-            if not evidenceId then
+            local evidenceRow = PoliceEvidenceWriter.Register(actor.citizenid, {
+                label = evidenceLabel,
+                description = evidenceDescription,
+                location = location,
+                incident_id = incidentId,
+                report_id = reportId,
+                case_id = caseId,
+            })
+            if not evidenceRow then
                 rollback()
                 return fail('db_error')
             end
-            exhibitNo = ('EX-%06d'):format(evidenceId)
-            local marked = updateRow(
-                'UPDATE police_evidence SET exhibit_no = ? WHERE id = ?', { exhibitNo, evidenceId })
-            local chained = marked and pcall(function()
-                MySQL.insert.await(
-                    'INSERT INTO police_evidence_chain (evidence_id, action, actor_citizenid, note) VALUES (?, ?, ?, ?)',
-                    { evidenceId, 'collected', actor.citizenid, evidenceLabel })
-            end)
-            if not chained then
+            evidenceId = evidenceRow.id
+            exhibitNo = evidenceRow.exhibit_no
+            if evidenceRow.chain_ok == false then
                 rollback()
                 return fail('db_error')
             end
