@@ -26,7 +26,10 @@ BASE = Path(__file__).resolve().parents[2]
 REPO = BASE.parent
 REGISTRY = Path(__file__).resolve().parent / "legacy_docs.json"
 MARKER = "LEGACY.md"
-IGNORED_DIRS = {"node_modules", ".git", "alpine", "txData", "cache", ".venv"}
+IGNORED_DIRS = {"node_modules", ".git", "alpine", "txData", "cache", ".venv",
+                 # 技能里的路径按"安装到 Hermes 之后的位置"写（技能自己的目录、资源内相对路径），
+                 # 拿仓库根去解析必然全是断链 —— 它们不是给这个仓库读的。
+                 ".agents"}
 
 PATH_TOKEN = re.compile(r"`([^`\s]+)`")
 PATH_SUFFIXES = (".md", ".lua", ".py", ".json", ".sql", ".ts", ".svelte", ".cfg", ".sh", ".mjs", ".js", ".html")
