@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- 值班警察在 25 米内能看到弹壳落点提示：地面细红柱 + `▼ 弹壳 · 8.0m` 浮字（平民与下班看不到；拾取流程不变，仍是 1.5 米内按 ~g~G~s~）。原生玩法只有手电照到才浮出文字，实测结果是「地上有东西但没人发现」
+- 值班警察在 25 米内能看到**地面证据**落点提示：弹壳（红）/ 血迹（暗红）/ 指纹（青）各一根细柱 + `▼ 标签 · 8.0m` 浮字（平民与下班看不到；拾取流程不变，仍是 1.5 米内按 ~g~G~s~ 且要有空证据袋）。原生玩法只有手电照到才浮出文字，实测结果是「地上有东西但没人发现」；三种证据的发现门槛完全一样，所以一起加
 - 客户端 MCP 测试 harness：Windows FiveM Legacy + `fivem-mcp-server`，经 FXServer 30120 HTTP 轮询桥接；提供 `client_command` / `screenshot` / `read_client_log` / `nuitest` 测试钩子
 - Agent 接管栈：统一工具契约（`tools/agent_tools.json`，30 工具）、MCP 路由层、`custom-director` 17 个动作（L1–L4 分级 + 人审 + 执行后回读）、`custom-agent-client` 客户端效果通道
 - 实时感知接口 `/agent/v1/live/*`（内存采样、25m 位置量化、独立 token）
