@@ -1,7 +1,8 @@
 """DOCS-02 — 约束区文档里引用的路径必须真实存在。
 
 范围**刻意收窄**：只检查 agent 真正会照着做的文档——根/分区 ``AGENTS.md``、
-``docs/engineering/**`` 与 ``T-CityLite.base/docs/agent/**``。全仓 351 份 md、2862 处路径引用里有大量历史文档，一次全量
+``docs/engineering/**``、``docs/client/**``、``docs/analysis/**``、``docs/server-design/**``
+与 ``T-CityLite.base/docs/agent/**``。全仓 351 份 md、2862 处路径引用里有大量历史文档，一次全量
 收紧只会逼人加几百条豁免；先把"会被执行的那一层"钉死，其余用
 ``tools/dev/docs_links_report.py`` 出报告、逐步收编。
 
@@ -19,7 +20,13 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[2]
 REPO = BASE.parent
 IGNORED_DIRS = {"node_modules", ".git", "alpine", "txData", "cache"}
-CONSTRAINT_DIRS = [REPO / "docs" / "engineering", BASE / "docs" / "agent"]
+CONSTRAINT_DIRS = [
+    REPO / "docs" / "engineering",
+    REPO / "docs" / "client",
+    REPO / "docs" / "analysis",
+    REPO / "docs" / "server-design",
+    BASE / "docs" / "agent",
+]
 
 PATH_TOKEN = re.compile(r"`([^`\s]+)`")
 PATH_SUFFIXES = (".md", ".lua", ".py", ".json", ".sql", ".ts", ".svelte", ".cfg", ".sh", ".mjs", ".js", ".html")

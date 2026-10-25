@@ -36,7 +36,7 @@
 - 协议前缀由 manifest 版本决定：`cerulean`（2020-05）起 NUI 在**安全上下文**中加载，回调必须用 `https://` 而不是 `http://`；源码里 `nui://` vs `https://cfx-nui-` 的分支也按 manifest 版本切换。[官方 manifest 版本说明](https://docs.fivem.net/docs/scripting-reference/resource-manifest/resource-manifest/)、[源码](https://github.com/citizenfx/fivem/blob/master/code/components/nui-resources/src/ResourceUI.cpp)
 - 文件服务行为（源码）：路径经 VFS 解析，找不到 → **404**；找到 → 200，MIME 按扩展名；响应头带 `access-control-allow-origin: *`；非内部 `/ui/app/` 资源带 `cache-control: no-cache, must-revalidate`。[源码 NUISchemeHandler.cpp](https://github.com/citizenfx/fivem/blob/master/code/components/nui-core/src/NUISchemeHandler.cpp)
 - 工程含义：`files` 必须"逐文件覆盖"，不要赌通配符递归语义。本项目 `html/assets/*` + `html/assets/audio/*` 是显式列子目录的写法，新增目录时**必须同步加一行**。
-- Vite 必须 `base: './'`，否则产物里的 `/assets/index.js` 会解析到 `https://cfx-nui-<res>/assets/...`（丢掉 `html/` 前缀）。本项目 `html/index.html` 已是 `./assets/index.js`，符合要求。
+- Vite 必须 `base: './'`，否则产物里的绝对路径 `/assets/…` 会解析到 `https://cfx-nui-<res>/assets/...`（丢掉 `html/` 前缀）。本项目 `resources/[custom]/custom-phone/html/index.html` 已是 `./assets/index-<hash>.js` 形式的相对引用，符合要求。
 
 ### 2.3 CEF 缓存与 `restart` 语义
 
@@ -106,7 +106,7 @@
 - 官方定义：`SET_NUI_FOCUS(BOOL hasFocus, BOOL hasCursor)`，把**当前资源**推到焦点栈，分别控制键盘焦点与鼠标光标；最近获得焦点的资源在最上层；资源是 full-screen iframe，**无点击穿透**。[官方](https://docs.fivem.net/docs/scripting-manual/nui-development/full-screen-nui/)、[native 声明](https://github.com/citizenfx/fivem/blob/master/ext/native-decls/SetNuiFocus.md)
 - 社区实测的参数语义：`(true,true)` 有焦点有光标但不能动；`(true,false)` 有焦点**没有光标**（想"只锁键盘"可以，但没法点）；`(false,true)` 等同 `(false,false)`——**hasCursor 依附于 hasFocus**。[社区](https://forum.cfx.re/t/how-can-i-use-nui-focus-exclusively-with-the-mouse/5128416)
 - `SET_NUI_FOCUS_KEEP_INPUT(keepInput)`：让游戏继续接收输入（角色能动能开枪），通常与 `SetNuiFocus(true,true)` 组合使用，然后**自己**用 `DisableControlAction` 屏蔽会冲突的键（否则按 M/Esc/鼠标左键会同时打到游戏）。[native 声明](https://github.com/citizenfx/fivem/blob/master/ext/native-decls/SetNuiFocusKeepInput.md)、[社区](https://forum.cfx.re/t/allow-player-to-move-when-setnuifocus-is-set-to-true/181285)
-- `IS_NUI_FOCUSED()`：文档只说"返回此前用 `SET_NUI_FOCUS` 设置的状态"。**不要**把它当"我的资源是否在栈顶/是否该处理按键"的所有权判据；多 UI 场景下用它做断言会产生假阳性。可靠做法是自己维护 focus owner（本项目 `client/core/focus.lua` 的 owner 模型）。[native 声明](https://github.com/citizenfx/fivem/blob/master/ext/native-decls/IsNuiFocused.md)
+- `IS_NUI_FOCUSED()`：文档只说"返回此前用 `SET_NUI_FOCUS` 设置的状态"。**不要**把它当"我的资源是否在栈顶/是否该处理按键"的所有权判据；多 UI 场景下用它做断言会产生假阳性。可靠做法是自己维护 focus owner（本项目 `resources/[custom]/custom-phone/client/core/focus.lua` 的 owner 模型）。[native 声明](https://github.com/citizenfx/fivem/blob/master/ext/native-decls/IsNuiFocused.md)
 - 关闭必须成对：`SetNuiFocus(false,false)` **且** `SetNuiFocusKeepInput(false)`；资源 stop / 玩家卸载 / 打开失败（ack 超时）都要清理，否则"鼠标还在、键盘没反应/角色被冻"会跨会话残留。
 - 常见的"多 UI 抢焦点"症状：鼠标能点但键盘无效、或按键穿透到游戏；根因是栈顶不是你以为的那个资源。[官方](https://docs.fivem.net/docs/scripting-manual/nui-development/full-screen-nui/)
 
@@ -122,7 +122,7 @@
 - developer 模式的开启方式（官方）：启动参数加 `+set moo 31337`（任何通道都行），或使用非 production 通道（Beta/Latest）。否则 `resmon` / `profiler` / `nui_devtools` 会报 `Access denied`。[官方 Console Commands](https://docs.fivem.net/docs/client-manual/console-commands/)、[社区](https://forum.cfx.re/t/command-profiler-nui-devtools-access-denied/2623709)
 - devtools 里的资源页面**不是顶层条目**：先选 CitizenFX root UI，再在其 iframe 树里找 `cfx-nui-<resource>`；找不到通常意味着 frame 还没创建（没 preload + 没打开过）。[社区](https://forum.cfx.re/t/nui-callback-issues/5414273)
 - 官方 `SendNUIMessage` 示例注释写 `console.log` 会"print in the console (F8)"——**这是文档瑕疵**；以 devtools 的 Console 为准。[官方函数页](https://docs.fivem.net/docs/scripting-reference/runtimes/lua/functions/SendNUIMessage/)
-- 玩家机器上一般没有 developer 模式，所以**生产诊断必须走"前端把错误回传 Lua → 服务端"**：捕获 `fetch` 的 `!resp.ok`、`AbortError`、`window.onerror`、`unhandledrejection`，带 `event/status/reason/message` 上报。本项目 `web/src/utils/nui.ts` + `clientError` 已是该形态；服务端做白名单字段 + 限流是必须的（客户端可控内容会污染日志）。
+- 玩家机器上一般没有 developer 模式，所以**生产诊断必须走"前端把错误回传 Lua → 服务端"**：捕获 `fetch` 的 `!resp.ok`、`AbortError`、`window.onerror`、`unhandledrejection`，带 `event/status/reason/message` 上报。本项目 `resources/[custom]/custom-phone/web/src/utils/nui.ts` + `clientError` 已是该形态；服务端做白名单字段 + 限流是必须的（客户端可控内容会污染日志）。
 - 兼容性排查：`nui_useInProcessGpu <true|false>`（官方 convar，改后需重启）用于 CEF 渲染兼容问题，不是性能优化开关。[官方 Console Commands](https://docs.fivem.net/docs/client-manual/console-commands/)
 
 ### 2.9 客户端 Lua 与 NUI 的时序
@@ -161,7 +161,7 @@
 
 先固定三条事实：
 
-1. **"查询失败"这个文案只对应 `query_failed`**（`web/src/apps/PoliceMDT.svelte` 的错误码表）。而 `query_failed` 同时是 `web/src/core/request.ts` 里**传输层异常的兜底码**——即"fetch 被 reject 或 abort"。业务错误（`app_forbidden`、`query_not_found`、`rate_limited`…）会显示各自的文案。⇒ 现象指向**传输层**，不是服务端业务拒绝。
+1. **"查询失败"这个文案只对应 `query_failed`**（`resources/[custom]/custom-phone/web/src/apps/PoliceMDT.svelte` 的错误码表）。而 `query_failed` 同时是 `resources/[custom]/custom-phone/web/src/core/request.ts` 里**传输层异常的兜底码**——即"fetch 被 reject 或 abort"。业务错误（`app_forbidden`、`query_not_found`、`rate_limited`…）会显示各自的文案。⇒ 现象指向**传输层**，不是服务端业务拒绝。
 2. **服务端本来就没有专门的 appQuery 日志**：`phone:server:appQueryRequest` 只在 `PhoneApps.Query` 抛错时 `print`；唯一的"请求到达"痕迹是客户端在 NUI 回调里发的 `phone:server:focusState { phase='appQuery-hit' }`，而它走 `diagRateLimited(..., 5s)`——**开手机的同一窗口内 `open-start` / `open-nui-sent` / `open-ack` 已经消耗了该 source 的配额**，`appQuery-hit` 极易被丢弃且不会补打。⇒ **"日志里没有 appQuery"不能证明请求没到客户端 Lua**。
 3. 三种传输层失败（404 空 body / 永久 pending / 资源重启丢弃）在 UI 上都表现为 `query_failed`，在服务端都**零痕迹**（见 2.5 表）。
 
@@ -187,9 +187,9 @@
 
 ### 清单与构建
 
-1. `fxmanifest.lua` 里 `ui_page` 只能有一条，且指向真实存在的构建产物 `html/index.html`。
+1. `fxmanifest.lua` 里 `ui_page` 只能有一条，且指向真实存在的构建产物 `resources/[custom]/custom-phone/html/index.html`。
 2. `files` 必须逐条覆盖 `html/` 下所有被引用的文件与子目录（新增 `html/assets/xxx/` 时同步加一行）。
-3. 构建后检查 `html/index.html` 的 script/link 都是 `./assets/...` 相对路径（Vite `base: './'`）。
+3. 构建后检查 `resources/[custom]/custom-phone/html/index.html` 的 script/link 都是 `./assets/...` 相对路径（Vite `base: './'`）。
 4. 需要"首次打开零等待"的常驻 UI 才加 `ui_page_preload`（值任意，源码只看键是否存在）；手机这类首开敏感的界面应先测量内存再决定。
 5. 不要在 `ui_page` 里用外部 URL，除非明确接受 `GetParentResourceName()`/Origin 语义变化。
 

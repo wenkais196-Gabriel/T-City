@@ -18,9 +18,9 @@
 |---|---|---|
 | F1 | 手机能打开，NUI 页面与 JS 正常运行 | `phase=open-ack` 到达服务端（`phoneOpenAck` 回执） |
 | F2 | `focused=false` / `keepInput=false` 但这不影响界面可见 | `focus` 诊断 4 连（open-nui-sent → open-start → open-ack → reassert），真机上界面可见 |
-| F3 | MDT 显示"查询失败" | `PoliceMDT.svelte` 的 `query_failed` 文案；该文案只由 `core/request.ts` 的 catch 分支产生 = **fetch 层失败**，不是服务端错误码 |
+| F3 | MDT 显示"查询失败" | `PoliceMDT.svelte` 的 `query_failed` 文案；该文案只由 `resources/[custom]/custom-phone/web/src/core/request.ts` 的 catch 分支产生 = **fetch 层失败**，不是服务端错误码 |
 | F4 | 服务端日志里没有 `phase=appQuery-hit` | 该 phase 由客户端 `appQuery` NUI 回调的第一行触发；缺失有两种可能：回调没跑，或诊断被限流/日志没捕获（假阴性） |
-| F5 | NUI 产物此前是 `assets/index.js`（无内容哈希） | `vite.config.ts` 旧配置 + `html/index.html` 实测引用 |
+| F5 | NUI 产物此前是无内容哈希的固定名 `index.js` | `vite.config.ts` 旧配置 + `resources/[custom]/custom-phone/html/index.html` 实测引用 |
 
 ---
 
@@ -35,7 +35,7 @@
 三条被采纳的关键结论：
 
 1. **`query_failed` 是纯传输层信号**（fetch 拒绝 / 非 JSON / 404），业务错误一定带结构化错误码 —— 所以排查必须从路由和注册抓起，不要先怀疑 SQL。
-2. **CEF 会按 iframe 缓存 NUI 页面，固定文件名 `assets/index.js` 是最常见的"改了没生效"元凶**，且它不会破坏 `phone:open` 之类的握手（旧 bundle 一样会 ack），症状表现为"界面能开、某个功能悄悄用旧代码"。
+2. **CEF 会按 iframe 缓存 NUI 页面，固定文件名 `index.js` 是最常见的"改了没生效"元凶**，且它不会破坏 `phone:open` 之类的握手（旧 bundle 一样会 ack），症状表现为"界面能开、某个功能悄悄用旧代码"。
 3. **诊断通道本身会撒谎**：`focusState` 按 phase 5 秒冷却 + 日志前缀右对齐，足以让"没有日志"变成假阴性。诊断必须先自证（探针成对出现、以及显式的 dropped 汇总）。
 
 ---
@@ -51,9 +51,9 @@
   3. 回调在，但 `cb` 从未调用（抛错被吞/资源重启打断）→ 9s AbortError → `query_failed`。
   4. 时序：资源 restart 后页面先于 Lua 注册完成就发首帧查询（100–500ms 窗口）。
 - **已落地的取证改进**（本轮）
-  - `web/src/utils/nui.ts`：`fetchNui` 失败（非 2xx 且 body 非 JSON / fetch 抛错）上报 `clientError`，带 `source/event/status/message`，同 event+reason 10s 去重；结构化 JSON 响应即使非 2xx 仍按成功路径返回（不破坏既有语义）。
-  - `server/main.lua`：`phone:server:clientError` 只打印白名单字段并截断（`src/source/event/status/message/stack`），保证反查得到、又不会被客户端刷屏或注入。
-  - `web/vite.config.ts`：产物改内容哈希 `assets/[name]-[hash].js`，从根上排除假设 1。
+  - `resources/[custom]/custom-phone/web/src/utils/nui.ts`：`fetchNui` 失败（非 2xx 且 body 非 JSON / fetch 抛错）上报 `clientError`，带 `source/event/status/message`，同 event+reason 10s 去重；结构化 JSON 响应即使非 2xx 仍按成功路径返回（不破坏既有语义）。
+  - `resources/[custom]/custom-phone/server/main.lua`：`phone:server:clientError` 只打印白名单字段并截断（`src/source/event/status/message/stack`），保证反查得到、又不会被客户端刷屏或注入。
+  - `resources/[custom]/custom-phone/web/vite.config.ts`：产物改内容哈希 `assets/[name]-[hash].js`，从根上排除假设 1。
 - **判定方式**：真机按 M 进 MDT，看服务端日志落点——
   | 日志 | 结论 | 下一步 |
   |---|---|---|
@@ -74,7 +74,7 @@
 - **不做**：不引入新依赖、不改 `PhoneBridge` 的对外契约、不动 `appQuery/appAction` 语义。
 - **交付标准**
   - 新增 `tests/unit/layer3_business/test_phone_diag_protocol.py`（lua5.4 沙箱断言 8 phase 配对、零计时器泄漏、限流生效）。
-  - 新增 `web/tests/nui/diag.spec.mjs`（断言请求体 `_diag` 字段存在且不含 PII）。
+  - 新增 `diag.spec.mjs`（放在现有 NUI spec 同目录；断言请求体 `_diag` 字段存在且不含 PII）。
   - 真机：一次正常查询 0 条诊断日志；一次注入故障（drop.cli_fwd）必须打印 `break=seg2`。
   - 审查：PII 白名单投影 + 全局打印预算 + 可一键关闭的 convar。
 
@@ -128,4 +128,4 @@ P1-2 规则测试化 → 审查 → 并入 CI
 |---|---|---|
 | 真机复验依赖用户在场 | P0-1 可能停在"等一次点击" | 诊断先落地，一次点击即可定案；文档化 SOP 让任何人可复现 |
 | 诊断日志污染生产日志 | 性能与信噪比 | 采样 + 打印预算 + convar 关闭 |
-| 内容哈希改变产物名 | 部署脚本/文档引用旧名失效 | `files{}` 用通配、文档只引用 `html/index.html` |
+| 内容哈希改变产物名 | 部署脚本/文档引用旧名失效 | `files{}` 用通配、文档只引用 `resources/[custom]/custom-phone/html/index.html` 这类入口文件 |

@@ -16,14 +16,14 @@
 
 | 事实 | 出处 | 诊断含义 |
 |---|---|---|
-| `fetchNui` 打 `POST https://${GetParentResourceName()}/${event}`，`appQuery` 超时 9000ms | `web/src/utils/nui.ts` 110-152 | 事件名、host、超时都可从 Console 直接读到 |
-| 前端把 fetch 抛错统一归一成 `query_failed` | `web/src/core/request.ts` 46-52 | **只要 UI 显示 `query_failed`，就说明 fetch 层失败了**，不是服务端业务错误、也不是 Lua 的 8s `timeout` |
-| Lua 侧 `appQuery` 由 `PhoneBridge.RegisterNui('appQuery', …)` 注册，进入后第一句就是 `TriggerServerEvent('phone:server:focusState', { phase='appQuery-hit' })` | `client/main.lua` 937-943 | “没有 `appQuery-hit`” = 回调函数体**一行都没执行** |
-| `PhoneBridge.RegisterNui` 用 `pcall` 包住 handler，抛错会打印 `[custom-phone][bridge] NUI appQuery failed:` 并 `cb({success=false,error='handler_error'})` | `client/core/bridge.lua` 194-208 | 若有这条 print，说明**进过**回调且抛错；若没有，说明连 `pcall` 都没执行到 |
-| `PhoneBridge.Request` 8s 到点回 `{success=false,error='timeout'}` | `client/core/bridge.lua` 89-96 | 若 UI 显示的是 `timeout` 而不是 `query_failed`，那回调**已经命中**，问题在服务端/PhoneApps |
-| 服务端 `focusState` 只接受白名单 phase，且**按 phase 5 秒限流** | `server/main.lua` 1244-1310 | 两次并发查询（`Promise.all([units, incidents])`）只会打印一条；日志“没有”也可能是被限流吞了 |
-| `clientError` 回调已存在，服务端会打印 `[custom-phone][nui-error] src=… source=… event=… status=…`，按 source 10 秒限流 | `client/main.lua` 951-954、`server/main.lua` 1330-1350 | 这是现成的“探针回调”：一个 POST 就能同时验证路由、注册、Lua、服务端日志四段链路 |
-| 构建产物文件名固定为 `assets/index.js`（无 content hash） | `web/vite.config.ts` `entryFileNames: 'assets/[name].js'` | CEF HTTP 缓存容易命中旧 bundle，必须实测而不是假设 |
+| `fetchNui` 打 `POST https://${GetParentResourceName()}/${event}`，`appQuery` 超时 9000ms | `resources/[custom]/custom-phone/web/src/utils/nui.ts` 110-152 | 事件名、host、超时都可从 Console 直接读到 |
+| 前端把 fetch 抛错统一归一成 `query_failed` | `resources/[custom]/custom-phone/web/src/core/request.ts` 46-52 | **只要 UI 显示 `query_failed`，就说明 fetch 层失败了**，不是服务端业务错误、也不是 Lua 的 8s `timeout` |
+| Lua 侧 `appQuery` 由 `PhoneBridge.RegisterNui('appQuery', …)` 注册，进入后第一句就是 `TriggerServerEvent('phone:server:focusState', { phase='appQuery-hit' })` | `resources/[custom]/custom-phone/client/main.lua` 937-943 | “没有 `appQuery-hit`” = 回调函数体**一行都没执行** |
+| `PhoneBridge.RegisterNui` 用 `pcall` 包住 handler，抛错会打印 `[custom-phone][bridge] NUI appQuery failed:` 并 `cb({success=false,error='handler_error'})` | `resources/[custom]/custom-phone/client/core/bridge.lua` 194-208 | 若有这条 print，说明**进过**回调且抛错；若没有，说明连 `pcall` 都没执行到 |
+| `PhoneBridge.Request` 8s 到点回 `{success=false,error='timeout'}` | `resources/[custom]/custom-phone/client/core/bridge.lua` 89-96 | 若 UI 显示的是 `timeout` 而不是 `query_failed`，那回调**已经命中**，问题在服务端/PhoneApps |
+| 服务端 `focusState` 只接受白名单 phase，且**按 phase 5 秒限流** | `resources/[custom]/custom-phone/server/main.lua` 1244-1310 | 两次并发查询（`Promise.all([units, incidents])`）只会打印一条；日志“没有”也可能是被限流吞了 |
+| `clientError` 回调已存在，服务端会打印 `[custom-phone][nui-error] src=… source=… event=… status=…`，按 source 10 秒限流 | `resources/[custom]/custom-phone/client/main.lua` 951-954、`resources/[custom]/custom-phone/server/main.lua` 1330-1350 | 这是现成的“探针回调”：一个 POST 就能同时验证路由、注册、Lua、服务端日志四段链路 |
+| 构建产物文件名曾固定为 `index.js`（无 content hash；现已改为 `assets/[name]-[hash].js`） | `resources/[custom]/custom-phone/web/vite.config.ts` 的 `entryFileNames` | CEF HTTP 缓存容易命中旧 bundle，必须实测而不是假设 |
 
 **推论链（很重要，先记住）**：
 
@@ -199,7 +199,7 @@ grep -o "appQuery" html/assets/index.js | wc -l
 
 **根因**：任何形如 `if type(cb) ~= 'function' then return end` 的守卫，在拿到函数引用表时
 会**静默 return**，`cb` 永不调用 ⇒ CEF 的 fetch 永久 pending ⇒ 前端只能报
-`query_failed` / `action_failed`（`core/request.ts` 的传输层兜底码）。
+`query_failed` / `action_failed`（`resources/[custom]/custom-phone/web/src/core/request.ts` 的传输层兜底码）。
 
 **修复**：用统一的适配层（`PhoneBridge.AnswerFn`），顺序为
 1. `type == 'function'` → 直接用；
@@ -235,8 +235,8 @@ fxmanifest。客户端同理：客户端缓存整份资源，`refresh` + 资源�
 
 ### 3.1 CEF 缓存了旧 bundle（本项目概率最高）
 
-**为什么这里高发**：`vite.config.ts` 把产物固定成 `assets/index.js`、`assets/index.css`
-（`entryFileNames`/`assetFileNames` 无 hash），`html/index.html` 里也是
+**为什么这里高发**：`vite.config.ts` 曾把产物固定成 `index.js`、`index.css`（无 hash；本仓库 2026-10-25 起已改为带内容哈希）
+（旧配置的 `entryFileNames`/`assetFileNames` 无 hash，故旧包名恒定），`resources/[custom]/custom-phone/html/index.html` 里也是
 `<script type="module" crossorigin src="./assets/index.js">`。URL 恒定 + CEF 有 HTTP 缓存
 ⇒ `restart custom-phone` 重建了页面，但**不保证重新拉取 JS**。旧 bundle 照样会 ack `phone:open`
 （这个回调一直存在），也照样会显示“查询失败”，但发的事件名/host/超时逻辑可能是旧的。
@@ -312,7 +312,7 @@ console.log('parent =', GetParentResourceName(), '| host =', location.host, '| h
 - 探针 3 得到 404（Network 可见，JS 侧多为 `TypeError`/`SyntaxError`），探针 2 正常。
 - F8 里**没有** `[custom-phone][bridge] NUI appQuery failed:`（说明 handler 没进），
   也**没有** `phase=appQuery-hit`。
-- 资源启动时若 `client/core/bridge.lua` 没先加载，`PhoneBridge` 为 nil，`main.lua` 会在
+- 资源启动时若 `resources/[custom]/custom-phone/client/core/bridge.lua` 没先加载，`PhoneBridge` 为 nil，`main.lua` 会在
   第 937 行直接报错并**中断该文件后续注册**（包括 `clientError`）——这时探针 2 也会失败。
 
 **60 秒证实/排除**
@@ -354,7 +354,7 @@ ls -l html/index.html html/assets/index.js html/assets/index.css
 // DevTools
 console.log(location.href, document.title);
 ```
-- `ui_page` = `html/index.html`，`files{}` 覆盖 `html/index.html` + `html/assets/*`，文件都在
+- `ui_page` = `resources/[custom]/custom-phone/html/index.html`，`files{}` 覆盖 `resources/[custom]/custom-phone/html/index.html` + `html/assets/*`，文件都在
   → 排除。本仓库当前满足。
 - `location.href` 指向别的资源 → 打开逻辑/焦点栈里另一个 UI 抢先（`custom-ui` 只管焦点、无 ui_page，
   但第三方 UI 可能自带 `ui_page`）。
@@ -445,7 +445,7 @@ restart custom-phone
 **60 秒证实/排除**
 - DevTools → Network → 该请求 → Status 列显示 `(failed)` / `(blocked:csp)`；点开看 `Provisional headers`。
 - Console 过滤器：`CSP`、`Mixed Content`、`ERR_`。
-- 检查 `html/index.html` 是否被加了 `<meta http-equiv="Content-Security-Policy">`（当前没有）。
+- 检查 `resources/[custom]/custom-phone/html/index.html` 是否被加了 `<meta http-equiv="Content-Security-Policy">`（当前没有）。
 - 检查 `ui_page` 是否被改成了外部 `https://…`（外部页面既没有 `GetParentResourceName`，
   也过不了 CORS/CSP）。
 
@@ -467,7 +467,7 @@ restart custom-phone
 - 一旦你绕开 NUI 路由（`http://`、`localhost:13172`、错误 host、外部页面、`file://`），
   就会退化成真正的 CORS 失败，且**浏览器会隐藏真实状态码**（JS 只看到 `TypeError: Failed to fetch`，
   Network 里才能看到 404/403）。
-- `html/index.html` 上 `<script crossorigin>` 是**同源**加载，安全，不是嫌疑对象（省得白查）。
+- `resources/[custom]/custom-phone/html/index.html` 上 `<script crossorigin>` 是**同源**加载，安全，不是嫌疑对象（省得白查）。
 
 **60 秒证实/排除**
 ```js
@@ -578,7 +578,7 @@ tail -f txData/default/logs/fxserver.log | grep --line-buffered -E "custom-phone
 
 ### 4.4 把 CEF 错误回传服务端（推荐做法）
 
-现状：`web/src/App.svelte` 已挂 `window.addEventListener('error'|'unhandledrejection')` →
+现状：`resources/[custom]/custom-phone/web/src/App.svelte` 已挂 `window.addEventListener('error'|'unhandledrejection')` →
 `fetchNui('clientError', { message, stack })`；服务端 `phone:server:clientError`
 已按 source 10 秒限流、剥控制字符、截断字段，并会打印 `status`/`source`/`event`——
 **但前端目前没传这三个字段**，所以服务端日志里它们常年是 `-`。

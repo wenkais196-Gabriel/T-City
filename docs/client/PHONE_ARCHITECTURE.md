@@ -26,38 +26,38 @@
 
 | 模块 | 职责 | 不做什么 |
 |---|---|---|
-| `core/identity.lua` | `PhoneIdentity.Resolve/From/IsLeader` | 不查业务表 |
-| `core/notify.lua` | 通知规范化、落库、单播推送 | 不决定业务 |
-| `core/events.lua` | 统一 `phone:client:event` 通道 | 不写业务表 |
-| `core/rate_limit.lua` | 通用 token bucket（NUI app/action/短信） | 不鉴权 |
+| `resources/[custom]/custom-phone/server/core/identity.lua` | `PhoneIdentity.Resolve/From/IsLeader` | 不查业务表 |
+| `resources/[custom]/custom-phone/server/core/notify.lua` | 通知规范化、落库、单播推送 | 不决定业务 |
+| `resources/[custom]/custom-phone/server/core/events.lua` | 统一 `phone:client:event` 通道 | 不写业务表 |
+| `resources/[custom]/custom-phone/server/core/rate_limit.lua` | 通用 token bucket（NUI app/action/短信） | 不鉴权 |
 | `main.lua` | 只做 wiring：回调注册、领域调用 | 不写大段 SQL |
 
 ### Server domains
 
-`domains/contacts.lua`、`messages.lua`、`notifications.lua`、`calls.lua`、`cityfeed.lua`、`hotlines.lua`、`vehicles.lua`。
+服务端 domains 层（目标态）：contacts / messages / notifications / calls / cityfeed / hotlines / vehicles 各一个 domain 模块。
 每个 domain 暴露函数（`List/Send/MarkRead...`），SQL 只在本域；main 只转发。
 
 ### Server apps
 
-`apps/registry.lua`（现 `phone_apps.lua`）+ `apps/police_mdt.lua`。
+目标态的 registry（现为 `resources/[custom]/custom-phone/server/phone_apps.lua`）+ `resources/[custom]/custom-phone/server/apps/police_mdt.lua`。
 App 只通过 registry 暴露 query/action；不直接注册 NUI 回调。
 
 ### Client
 
 | 模块 | 职责 |
 |---|---|
-| `core/bridge.lua` | 注册 NUI callback、request_id、超时、错误归一 |
-| `core/focus.lua` | 焦点栈 owner：phone / fingerprint / story / vehicle |
-| `core/events.lua` | 订阅 `phone:client:event`，分发到 NUI |
-| `core/phone.lua` | 打开/关闭/动画/按键，调用 bridge/focus |
+| `resources/[custom]/custom-phone/client/core/bridge.lua` | 注册 NUI callback、request_id、超时、错误归一 |
+| `resources/[custom]/custom-phone/client/core/focus.lua` | 焦点栈 owner：phone / fingerprint / story / vehicle |
+| `resources/[custom]/custom-phone/client/core/events.lua` | 订阅 `phone:client:event`，分发到 NUI |
+| `phone` 模块（目标态） | 打开/关闭/动画/按键，调用 bridge/focus；当前实现在 `resources/[custom]/custom-phone/client/main.lua` |
 | `main.lua` | 只做 wiring |
 
 ### Frontend
 
 | 模块 | 职责 |
 |---|---|
-| `core/appRegistry.ts` | App manifest：id/label/icon/component/audience/schemaVersion |
-| `core/request.ts` | 统一 `phoneRequest`：超时、错误码、schema 校验 |
+| `resources/[custom]/custom-phone/web/src/core/appRegistry.ts` | App manifest：id/label/icon/component/audience/schemaVersion |
+| `resources/[custom]/custom-phone/web/src/core/request.ts` | 统一 `phoneRequest`：超时、错误码、schema 校验 |
 | `App.svelte` | 只渲染 shell + 查 registry |
 | `apps/*` | 只依赖 App SDK，不直接碰 window/fetch |
 
@@ -136,7 +136,7 @@ interface PhoneApp {
 
 ### 自证握手（每次页面加载一次）
 
-`web/src/main.ts` 在挂载前做两件事，结果都投到服务端日志：
+`resources/[custom]/custom-phone/web/src/main.ts` 在挂载前做两件事，结果都投到服务端日志：
 
 1. `nuiReady { build, host, href, parent }` —— 证明**跑的是哪个 bundle**、宿主名是否
    为 `custom-phone`、路由是否通。日志格式：`[custom-phone][nui-ready] src=.. build=.. host=.. parent=..`
@@ -149,7 +149,7 @@ interface PhoneApp {
 
 ### 请求追踪（stage 0/3）
 
-`client/core/diag.lua` + `server/core/diag.lua` 提供 `phone:server:diag` 通道：
+`resources/[custom]/custom-phone/client/core/diag.lua` + `resources/[custom]/custom-phone/server/core/diag.lua` 提供 `phone:server:diag` 通道：
 NUI 传 `_diag.tid`（没有则由客户端生成），trace 的 tid **就是 request_id**，
 服务端内存环记录 `Recv/Done` 作为 SR/SD 的唯一事实源，链尾按
 `level2 / ≥400ms / 失败 / 前 3 次` 采样上报，服务端打印
