@@ -37,6 +37,8 @@ GOOD_LOG = """\
 [ script:story-engine] ✅ 剧情引擎已启动 (v0.7.0)
 [ script:custom-police] [dispatch] P0 dispatch layer loaded
 [ script:custom-quest] [quest-registry] ✅ 任务注册器已加载 (v0.7.0)
+[ script:custom-quest] [quest] ✅ 手机任务入口已就绪 (GetAvailableQuests / GetQuestDetail)
+[ script:custom-phone] [phone-apps] ✅ quests app registered (audience = all jobs)
 """
 
 

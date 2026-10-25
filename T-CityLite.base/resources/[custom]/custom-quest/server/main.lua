@@ -511,6 +511,10 @@ exports('GetQuestDetail', function(source, questId)
     return QuestAvailability.Detail(source, questId)
 end)
 
+-- 启动自证：健康自检按这一行确认「玩家能接到任务」这条链路已就绪。
+-- 没有它，任务入口挂了和任务入口没写，从日志上看起来完全一样。
+print('[quest] ✅ 手机任务入口已就绪 (GetAvailableQuests / GetQuestDetail)')
+
 -- 10. v0.7.0: 检查指定任务是否活跃
 exports('IsQuestActive', function(source, questId)
     return QuestManager.IsQuestActive(source, questId)

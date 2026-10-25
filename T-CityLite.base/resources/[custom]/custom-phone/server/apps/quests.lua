@@ -74,3 +74,5 @@ PhoneApps.Register({
         end,
     },
 })
+
+print('[phone-apps] ✅ quests app registered (audience = all jobs)')
