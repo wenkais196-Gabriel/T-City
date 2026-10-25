@@ -139,19 +139,16 @@ function EconomyService.Transfer(fromSource, toCitizenId, amount, reason)
         return true, 'Transferred to online player'
     end
 
-    -- ⚡ 接收方离线 → 异步写 DB（不阻塞回调线程）
-    MySQL.update(
-        'UPDATE players SET money = JSON_SET(money, "$.bank", JSON_EXTRACT(money, "$.bank") + ?) WHERE citizenid = ?',
-        { amount, toCitizenId },
-        function(affectedRows)
-            if not affectedRows or affectedRows == 0 then
-                -- 回滚
-                fromPlayer.Functions.AddMoney('bank', amount, 'Transfer rollback: ' .. (reason or 'unknown'))
-                print(('[economy_service] ❌ Offline transfer rollback for %s → %s: $%d'):format(
-                    fromPlayer.PlayerData.citizenid, toCitizenId, amount))
-            end
+    -- 接收方离线 → 交给 owner 的离线入账（唯一允许写 players.money 的地方）。
+    -- 原来这里自己拼了一条 JSON_SET SQL 并手写回滚，属于第二条写路径。
+    exports['qb-core']:EconomyAddMoneyOffline(toCitizenId, 'bank', amount,
+        'Transfer received: ' .. (reason or 'unknown'), function(ok)
+        if not ok then
+            fromPlayer.Functions.AddMoney('bank', amount, 'Transfer rollback: offline credit failed')
+            print(('[economy_service] ❌ Offline transfer rollback for %s -> %s: $%s'):format(
+                fromPlayer.PlayerData.citizenid, toCitizenId, tostring(amount)))
         end
-    )
+    end)
 
     return true, 'Transferred to offline player (async DB)'
 end

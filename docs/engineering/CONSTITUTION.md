@@ -10,7 +10,7 @@
 | # | 条款 | 违反的表现 | 落点（可执行） |
 |---|---|---|---|
 | 1 | **服务端权威**：客户端传来的任何数据都要在服务端复验；NUI 里看不见 ≠ 没有权限 | 前端隐藏按钮当成权限校验 | `tests/architecture/test_net_event_auth.py` |
-| 2 | **写路径唯一**：钱 / 物品只走 `Player.Functions.*`、`core_economy:TriggerReward`，禁止直接 SQL 改账 | 出现 `UPDATE player_... SET money` | `test_query_discipline.py` + `test_state_writers.py` |
+| 2 | **写路径唯一**：钱 / 物品只走 `Player.Functions.*`、`core_economy:TriggerReward`，禁止直接 SQL 改账 | 出现 `UPDATE player_... SET money` | `test_economy_single_owner.py`、`test_query_discipline.py` + `test_state_writers.py` |
 | 3 | **SQL 必须参数化**：列白名单、`LIMIT`、禁止 `SELECT *` 全表拉取 | 拼接 SQL、`SELECT *` | `test_query_discipline.py` |
 | 4 | **每个 net event 要么鉴权，要么登记为 `diagnostic`**，并给出投影 / 限流 / 预算 | 新增事件直接 `RegisterNetEvent` | `test_net_event_auth.py` + `net_events_allowlist.json` |
 | 5 | **幂等**：动作可重试、迁移可重复执行、回调可重放 | 重连/重试后状态翻倍 | 迁移必须 `information_schema` 判断；动作测试 |
