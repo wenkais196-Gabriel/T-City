@@ -407,3 +407,30 @@ def test_phone_app_protocol_uses_dedicated_events():
         "phone:client:appActionResponse",
     ):
         assert token in client or token in bridge or token in server, token
+
+
+def test_phone_toggle_ignores_duplicate_key_events():
+    """一次按 M 会派发两条命令（RegisterKeyMapping 在资源重启时重复注册）。
+
+    实测症状：第二条命令看到 isPhoneOpen=true 且 IsNuiFocused()=true，立刻走
+    ClosePhone → 界面被叫出来又秒关，玩家看到的是"按 M 没反应"。
+    """
+    src = CLIENT.read_text(encoding="utf-8")
+
+    assert "TOGGLE_DEBOUNCE_MS" in src, "toggle needs a debounce window"
+    debounce = re.search(r"TOGGLE_DEBOUNCE_MS\s*=\s*(\d+)", src)
+    assert debounce and 100 <= int(debounce.group(1)) <= 1000, "debounce must be 100..1000ms"
+
+    # 防抖必须在命令体里的任何状态检查之前（`isPhoneOpen = true` 在 OpenPhone 里
+    # 也出现一次，所以只在命令块内比较顺序）
+    block = src[src.index("RegisterCommand('phone', function()"):]
+    block = block[:block.index("end, false)")]
+    guard = block.index("now - lastToggleAt < TOGGLE_DEBOUNCE_MS")
+    assert guard < block.index("if isPhoneOpen then"), "debounce must precede the toggle branch"
+    assert block.index("lastToggleAt = now") < block.index("if isPhoneOpen then")
+
+    # keymapping 只注册一次（否则防抖只是兜底，根因还在）
+    assert "keyMappingRegistered" in src, "key mapping must be registered at most once"
+    mapping = src[src.index("onClientResourceStart"):]
+    assert mapping.index("if keyMappingRegistered then return end") < mapping.index("RegisterKeyMapping("), \
+        "the once-guard must precede RegisterKeyMapping"
