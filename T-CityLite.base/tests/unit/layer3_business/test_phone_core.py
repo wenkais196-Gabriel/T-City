@@ -369,6 +369,9 @@ assert(PhoneRateLimit.Allow('') == false)
 
 
 def test_app_query_returns_rate_limited_after_burst():
+    # Budgets live in server/main.lua: query 120/min burst 40, action 30/min
+    # burst 10. A tight harness loop refills almost nothing (120/min = 2/s), so
+    # the accepted counts are exact.
     assert_lua(f"""
 local appevents, replies = {{}}, {{}}
 local queryCalls, actionCalls = 0, 0
@@ -393,32 +396,43 @@ end
 dofile([[{RATE_LIMIT}]])
 {_protocol_block()}
 
+local QUERY_BURST, ACTION_BURST = 40, 10
+
 local query = assert(appevents['phone:server:appQueryRequest'])
-for i = 1, 10 do
+for i = 1, QUERY_BURST do
     query(('%d:1'):format(i), {{ app_id = 'police_mdt', query = 'units', params = {{}} }})
 end
-assert(queryCalls == 10, 'first burst must reach PhoneApps')
-assert(#replies == 10)
+assert(queryCalls == QUERY_BURST, 'the whole burst must reach PhoneApps')
+assert(#replies == QUERY_BURST)
 
 local before = #replies
-query('11:1', {{ app_id = 'police_mdt', query = 'units', params = {{}} }})
-assert(queryCalls == 10, 'rate-limited request must not reach PhoneApps')
+query('41:1', {{ app_id = 'police_mdt', query = 'units', params = {{}} }})
+assert(queryCalls == QUERY_BURST, 'rate-limited request must not reach PhoneApps')
 assert(#replies == before + 1)
 local last = replies[#replies]
 assert(last.name == 'phone:client:appQueryResponse')
 assert(last.target == 7, 'rate_limited response must unicast to the caller')
-assert(last.args[1] == '11:1')
+assert(last.args[1] == '41:1')
 assert(last.args[2].success == false)
 assert(last.args[2].error == 'rate_limited')
 
 -- The action bucket is independent, so the query burst does not block it.
 local action = assert(appevents['phone:server:appActionRequest'])
-action('12:1', {{ app_id = 'police_mdt', action = 'set_status', params = {{}} }})
-assert(actionCalls == 1)
+for i = 1, ACTION_BURST do
+    action(('%d:2'):format(i), {{ app_id = 'police_mdt', action = 'set_status', params = {{}} }})
+end
+assert(actionCalls == ACTION_BURST, 'the action burst has its own budget')
 assert(replies[#replies].args[2].success == true)
 
--- A malformed payload still gets bad_request and burns no token.
-action('13:1', 'not-a-table')
+local actionBefore = #replies
+action('11:2', {{ app_id = 'police_mdt', action = 'set_status', params = {{}} }})
+assert(actionCalls == ACTION_BURST, 'exhausted action bucket must not reach PhoneApps')
+assert(replies[#replies].args[2].error == 'rate_limited')
+
+-- A malformed payload is rejected before the bucket is consulted, so it still
+-- answers bad_request (not rate_limited) and burns no token.
+action('12:2', 'not-a-table')
 assert(replies[#replies].args[2].error == 'bad_request')
-assert(actionCalls == 1)
+assert(actionCalls == ACTION_BURST)
+assert(#replies == actionBefore + 2)
 """)
