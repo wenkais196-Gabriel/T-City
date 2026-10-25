@@ -27,5 +27,6 @@ dependencies {
     'qb-core',
     'custom-logs',
     'production-freeze'
+    'core-framework',
 }
 

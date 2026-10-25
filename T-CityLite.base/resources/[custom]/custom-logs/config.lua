@@ -2,11 +2,8 @@ QBConfig = QBConfig or {}
 QBConfig.Custom = QBConfig.Custom or {}
 
 -- 实用工具函数：从系统 Convars 中读取配置，支持后备默认值
-local function GetStrConvar(name, default)
-    local val = GetConvar(name, "")
-    if val ~= "" then return val end
-    return default
-end
+-- 统一走 core-framework 的公共实现
+local GetStrConvar = function(...) return exports['core-framework']:ConvarString(...) end
 
 -- 通用常规配置
 QBConfig.Custom.General = {

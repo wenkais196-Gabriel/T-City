@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 
+CORE_UTIL = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'shared' / 'util.lua')
 PERSISTENCE_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'services' / 'persistence_manager.lua')
 
 
@@ -81,6 +82,7 @@ end
 GetCurrentResourceName = function() return "test-resource" end
 GetPlayerName = function(src) return "Test Player" end
 LoadResourceFile = function() return "" end
+IsDuplicityVersion = function() return true end
 CreateThread = function(fn)
     -- Don't actually run threads in unit tests (would infinite-loop on tick timers)
     -- API tests verify that StartFlushTick/StartHealthReport don't crash on call
@@ -111,6 +113,9 @@ function Bus.GetService(name)
 end
 '''
 
+    with open(CORE_UTIL, 'r') as f:
+        util_code = f.read()
+
     with open(PERSISTENCE_LUA, 'r') as f:
         persistence_code = f.read()
 
@@ -138,7 +143,7 @@ end
     # 把测试用的 _DirtyFlushData 重新指向真实脏数据表，保证测试观察/修改的是同一实例。
     bridge = '\n_DirtyFlushData = DirtyFlush._dirty\n'
 
-    full_script = mock + '\n' + persistence_code + bridge + test_code
+    full_script = mock + '\n' + util_code + '\n' + persistence_code + bridge + test_code
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False) as f:
         f.write(full_script)

@@ -52,14 +52,22 @@ local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDic
 
 ## 5. 当前状态（2026-10-25）
 
-- `loadAnimDict`：**17 → 12**。`[custom]` 的 5 处（custom-police ×2、custom-vehicles ×2、
-  custom-agent-client）已合并到 `resources/[standalone]/core-framework/shared/util.lua`；qb/standalone 的 12 处按
-  "不迁上游"保留。
-- 合并时顺手修掉一个隐患：原实现是 `while not HasAnimDictLoaded do Wait(n) end` 无上限，
-  字典缺失会把整个客户端脚本线程卡死；共享实现加了 5s 上限并返回 `loaded`。
-- 下一批候选（按收益排序）：`GetIntConvar`/`GetBoolConvar`/`convarString`（convar 助手族，
-  20+ 份 → 核心侧双端导出）→ `DrawText3D` 族（先统一签名）→ `checkRateLimit`（与
-  `rate_limit.lua` 合并）。
+| 能力 | 之前 | 现在 | 说明 |
+|---|---|---|---|
+| `loadAnimDict` | 17 | 12 | `[custom]` 5 处合并；qb/standalone 保留（不迁上游） |
+| convar 助手族（`GetIntConvar` / `GetBoolConvar` / `GetFloatConvar` / `GetStrConvar` / `GetNumConvar` / `convarInt` / `convarString`） | 23 | 0（全部走 `ConvarString/Int/Float/Bool`） | 12 个文件迁移；**这批是在加载期调用的**，所以顺带给 6 个资源补了 `dependencies { 'core-framework' }` |
+| 合计同名 ≥4 的能力组 | 15 组 | 12 组 | `reuse_budget.json` 同步收紧 |
+
+顺带修掉的两个真隐患：
+
+- `loadAnimDict` 原实现无上限（`while … Wait(n)`），字典缺失会把客户端脚本线程卡死 → 共享版有 5s 上限；
+- convar 助手在 `config.lua` **顶层**就被调用（`RewardScale = GetFloatConvar(...)`），这类调用对启动
+  顺序敏感。所以迁移必须同时补 `dependencies`，否则某个资源先起就会 `No such export` 整个加载失败。
+  闸门 `test_load_time_callers_declare_the_core_dependency` 把这条钉住了。
+
+下一批候选（按收益排序）：`loadModel`（阻塞循环，与 loadAnimDict 同类，需加超时）→
+`checkRateLimit`（与 `core-framework` 的 `rate_limit.lua` 职责重叠）→ `DrawText3D` 族（先统一签名）→
+`AddMoney`（重复本身可能是宪法②的违反，要单独审）。
 
 ## 6. 怎么加一个新的共享工具
 
@@ -67,4 +75,32 @@ local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDic
 2. 写清注释：**语义、返回值、超时/失败行为**；
 3. 迁移至少一个调用点作为样板，其余留在预算里逐步收；
 4. `reuse_scan` 里对应的计数应下降 → 同提交把 `reuse_budget.json` 调低；
-5. 重启资源后确认没有 `No such export`（这是唯一的运行时失败模式）。
+5. 验证真实调用（**必做**，静态检查救不了这一步）。这是本仓库踩过的真实故障：
+   前 4 步全绿、`restart` 后也没有任何报错，但客户端根本没拿到 `resources/[standalone]/core-framework/shared/util.lua`，
+   要等玩家触发动画时才炸 `No such export LoadAnimDict in resource core-framework`。
+
+   ```bash
+   # a. 共享库改过/新增文件 → 必须先 refresh：`restart` 只重读清单里"已存在"的文件，
+   #    新增文件不会交付给已经连接的客户端。
+   tcity-cmd -w 8 "refresh" && tcity-cmd -w 8 "restart core-framework"
+   tcity-cmd -w 8 "restart <调用方资源>"
+
+   # b. 客户端 F8 里应出现自证行（只有客户端能看到，服务端日志没有）：
+   #    [core-framework] client util ready (exports: LoadAnimDict)
+   ```
+
+   ```lua
+   -- c. 服务端可见的端到端证明：临时探针（验完删掉）
+   CreateThread(function()
+       Wait(4000)
+       local ok, res = pcall(function() return exports['core-framework']:LoadAnimDict('mini@repair') end)
+       TriggerServerEvent('phone:server:clientError', {   -- 现成的诊断通道，白名单字段
+           source = 'anim-probe', event = 'LoadAnimDict',
+           message = ('ok=%s returned=%s loaded=%s'):format(tostring(ok), tostring(res),
+               tostring(ok and HasAnimDictLoaded('mini@repair'))),
+       })
+   end)
+   -- 期望：[custom-phone][nui-error] src=N source=anim-probe ... ok=true returned=true loaded=1
+   ```
+
+   三条都要看：自证行（脚本到了）、`ok=true`（导出存在）、`loaded=1`（真的加载出字典）。

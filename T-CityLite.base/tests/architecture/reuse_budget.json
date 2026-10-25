@@ -6,25 +6,13 @@
       "max": 14,
       "reason": "同名不同语义：各自带本资源的调试开关与前缀，合并会改变行为——有意重复"
     },
-    "convarString": {
-      "max": 5,
-      "reason": "同上（convar 助手族）"
-    },
-    "GetBoolConvar": {
-      "max": 5,
-      "reason": "同上（convar 助手族）"
-    },
-    "GetIntConvar": {
-      "max": 7,
-      "reason": "convar 读取助手（GetInt/GetBool/convarString 一族共 20+ 份）。合并前提是核心侧先有双端导出的公共 lib；记入下一批"
-    },
     "loadModel": {
       "max": 4,
-      "reason": "基线：尚未评估合并收益（下一轮复核）"
+      "reason": "模型加载阻塞循环，与 loadAnimDict 同类；下一批候选（同样需要超时上限）"
     },
     "DrawText3D": {
       "max": 5,
-      "reason": "3D 文字绘制，但各份的 scale/color/参数顺序不一致，合并要先统一签名——下一批"
+      "reason": "3D 文字绘制，各份的 scale/color/参数顺序不一致，合并要先统一签名——下一批候选"
     },
     "GetClosestPlayer": {
       "max": 6,
@@ -32,23 +20,23 @@
     },
     "checkRateLimit": {
       "max": 4,
-      "reason": "基线：尚未评估合并收益（下一轮复核）"
+      "reason": "与 core-framework 的 rate_limit 职责重叠，应合并到那边而不是各资源自持"
     },
     "loadAnimDict": {
       "max": 12,
-      "reason": "语义一致；[custom] 5 处已合并到 core-framework/shared/util.lua。qb-*（10）与 standalone（2）保留：避免与上游/第三方分叉"
+      "reason": "语义一致。[custom] 5 处已合并到 core-framework/shared/util.lua；qb-*（10）与 standalone（2）保留：避免与上游/第三方分叉"
     },
     "CloseMenuFull": {
       "max": 4,
-      "reason": "基线：尚未评估合并收益（下一轮复核）"
+      "reason": "菜单关闭，各资源菜单实现不同（qb-menu / 自定义），合并要先统一菜单层"
     },
     "AddMoney": {
       "max": 4,
-      "reason": "基线：尚未评估合并收益（下一轮复核）"
+      "reason": "经济写入必须走 Player.Functions / core_economy，这份重复本身就是宪法②的违反候选——单独审"
     },
     "HasItem": {
       "max": 5,
-      "reason": "物品查询，分属不同资源（qb-inventory / custom-*），真正的 owner 是 qb-inventory"
+      "reason": "物品查询，真正的 owner 是 qb-inventory；重复的应该是「调用 owner」而不是「再写一份」"
     },
     "DrawText3Ds": {
       "max": 5,
@@ -60,7 +48,7 @@
     },
     "isPointInside": {
       "max": 5,
-      "reason": "纯几何判断，语义一致；但属小工具类，合并收益低于 convar/绘制两族，排在后面"
+      "reason": "纯几何判断，语义一致；属小工具类，收益低于文字/绘制族，排后面"
     }
   }
 }
