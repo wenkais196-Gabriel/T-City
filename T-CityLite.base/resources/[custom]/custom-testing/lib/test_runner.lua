@@ -178,10 +178,11 @@ function Test._runAsync(definition, source)
         return false, "[ASYNC] 异步用例必须在 CreateThread/协程中运行"
     end
 
-    local done, ok, err = false, nil, nil
+    local done, ok, err, value = false, nil, nil, nil
     CreateThread(function()
         local success, failure = pcall(definition.fn, source)
         ok, err = success, failure
+        if success and type(failure) == 'table' then value = failure end
         done = true
     end)
 
@@ -195,7 +196,7 @@ function Test._runAsync(definition, source)
         end
         Wait(25)
     end
-    return ok, err
+    return ok, err, value
 end
 
 --- 运行指定套件
@@ -232,8 +233,9 @@ function Test.run(suite_name, source)
     for test_name, test_fn in pairs(suite.tests) do
         Test._current_test = test_name
         local ok, err
+        local asyncValue
         if type(test_fn) == 'table' and test_fn.__async then
-            ok, err = Test._runAsync(test_fn, source or -1)
+            ok, err, asyncValue = Test._runAsync(test_fn, source or -1)
         else
             ok, err = pcall(test_fn, source or -1)
         end
@@ -253,6 +255,13 @@ function Test.run(suite_name, source)
                     status = "PASS",
                     reason = "通过",
                 }
+            end
+            -- An async scenario may aggregate its own steps (police_e2e). Use
+            -- its counters instead of the single outer test slot.
+            if type(asyncValue) == 'table' then
+                Test._stats.pass = Test._stats.pass + (tonumber(asyncValue.pass) or 0)
+                Test._stats.fail = Test._stats.fail + (tonumber(asyncValue.fail) or 0)
+                Test._stats.skip = Test._stats.skip + (tonumber(asyncValue.skip) or 0)
             end
         end
         suite_run = suite_run + 1

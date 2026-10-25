@@ -3,27 +3,46 @@
 > 规则：**只读排查，不修改业务代码**。本文登记问题；修复由各模块 owner 在后续 PR 完成。
 > 审计范围：`T-CityLite.base/resources/[custom]/**` 的全部客户端代码与 NUI 前端，重点
 > `custom-phone` / `custom-police` / `custom-justice` / `custom-agent-client` / `custom-main`。
-> 快照：**HEAD `1cf25ae`**（2026-10-25）。行号以该提交为准。
+> 基线快照：**`1cf25ae`**（2026-10-25），表格行号以该提交为准。审计期间 phone/police 的修复已作为
+> **`88ed2c1`**（`fix(client): request-id phone bridge, coalesced phone data and local police NUI assets`）
+> 与 **`c554eba`**（`fix(police): use the runtime resource name for doFingerScan`）合入；
+> 相对基线的变化记在 §1.4 / §2.3，问题表保持基线可复核。
 > 静态扫描器：`tests/architecture/test_nui_client_contracts.py`（规则 `NUI-CLIENT-01`），
 > 债务登记：`tests/architecture/nui_client_allowlist.json`。
 
 ## 0. 摘要
 
+**基线 `1cf25ae`**（本文问题表的口径）：
+
 | 模块 | Block | High | Medium | Low | 合计 |
 |---|---:|---:|---:|---:|---:|
-| phone | 0 | 2 | 5 | 4 | 11 |
-| police | 0 | 1 | 3 | 3 | 7 |
+| phone | 2 | 2 | 5 | 4 | 13 |
+| police | 1 | 2 | 3 | 3 | 9 |
 | justice | 0 | 0 | 4 | 1 | 5 |
 | agent | 0 | 0 | 0 | 4 | 4 |
 | other | 0 | 1 | 4 | 5 | 10 |
-| **合计** | **0** | **4** | **16** | **17** | **37** |
+| **合计** | **3** | **5** | **16** | **17** | **41** |
 
-- **3 个 Block 已修复**（2026-10-25）：P-01（手机 appQuery/appAction 改 request_id）、
-  P-02（getPhoneData 合并单飞）、D-01（jQuery/Bootstrap/Popper vendor 到本地）。
-  修复后 Block 为 0；剩余 High 见 §1/§2。
-- 静态扫描器当前命中 **15 条**结构性违规，全部登记在 allowlist（带 owner/expires），
-  `pytest -q tests/architecture/test_nui_client_contracts.py` **15 passed / <1s**；`nui_client_allowlist.json` 11 条。
-- 全量测试：`pytest -q tests/unit tests/architecture` → **660 passed, 132 skipped, 51 subtests, ~7s**。
+**当前 HEAD `c554eba`（修复后）**：
+
+| 模块 | Block | High | Medium | Low | 合计 | 已关闭 |
+|---|---:|---:|---:|---:|---:|---|
+| phone | 0 | 2 | 5 | 4 | 11 | P-01、P-02 |
+| police | 0 | 1 | 3 | 3 | 7 | D-01、D-03 |
+| justice | 0 | 0 | 4 | 1 | 5 | — |
+| agent | 0 | 0 | 0 | 4 | 4 | — |
+| other | 0 | 1 | 4 | 5 | 10 | — |
+| **合计** | **0** | **4** | **16** | **17** | **37** | 4 |
+
+- **3 个 Block（基线）全部已修**：P-01（appQuery/appAction → request_id 单播）、
+  P-02（`getPhoneData` → `fetchPhoneData` 合并单飞）、D-01（jQuery/Bootstrap/Popper vendor 到本地）。
+  合入提交 `88ed2c1` / `c554eba`，**待真机回归后关闭**（见 §1.4 / §2.3）。
+- 修复后仍剩的 High：P-03（其余 NUI bridge 无超时）、P-04（`getPhoneData` 失败时前端静默空白）、
+  D-02（NUI 请求无超时 + Databank 死 UI）、O-01（custom-ui 继承 keepInput）。
+- 静态扫描器：基线 `1cf25ae` 命中 **15 条**结构性违规，当前 HEAD `c554eba` 为 **10 条**；
+  allowlist 10 条（均带 owner/expires）。
+  `pytest -q tests/architecture/test_nui_client_contracts.py` → **15 passed / <1s**。
+- 全量测试：`pytest -q tests/unit tests/architecture` → **660 passed, 132 skipped, 51 subtests**（本机 ≈8s）。
 
 ### 严重度定义
 
@@ -38,7 +57,7 @@
 
 1. 逐行通读重点模块客户端 Lua 与 NUI 前端；
 2. 用 `RegisterNUICallback` / `SetNuiFocus*` / `fetch(` / `ui_page` / `files` / `client_scripts`
-   的静态扫描做全量覆盖（15 条结构性违规，见各节 `NUI-CLIENT-01` 标记）；
+   的静态扫描做全量覆盖（基线 15 条、当前 HEAD 10 条结构性违规，见各节 `NUI-CLIENT-01` 标记）；
 3. 对照 qb-core 实际实现验证调用契约：
    - `[qb]/qb-core/client/functions.lua:9-29`：`TriggerCallback` 以 **name 为唯一键**存槽
      （`QBCore.ServerCallbacks[name] = { callback, promise }`），**没有 request id、没有超时**；
@@ -47,13 +66,12 @@
 4. Playwright 现有 `custom-phone/web/tests/nui/mdt.spec.mjs` 的 mock 会分别响应每一次
    `appQuery`，所以**浏览器层测试无法暴露 P-01**；这类问题只能靠静态契约 + 真机复测。
 
-### 工作区并发说明（重要）
+### 审计基线与并发修改（重要）
 
-审计期间另一个 agent 正在同一工作区修改 `custom-phone`（`client/main.lua`、`server/main.lua`、
-`web/src/utils/nui.ts`、`web/src/apps/PoliceMDT.svelte`、两个测试文件，均未提交）。
-本文所有结论与行号都基于 **HEAD `1cf25ae`**；工作区中已出现的 `request_id` 协议修复
-（`phone:server:appQueryRequest` / `phone:client:appQueryResponse`）**不计入已修复**，
-在 §1.4 单独说明。若该修复合入，P-01 关闭，P-02（`getPhoneData`）仍需单独处理。
+审计开始时 HEAD 是 `1cf25ae`，本文所有结论与行号都以它为基线。审计期间另一个 agent 在同一工作区
+修改 `custom-phone` / `custom-police`，随后这些改动（含 `request_id` 协议、`fetchPhoneData` 合并、
+police NUI vendor 化）作为 **`88ed2c1`** 合入。为保持问题可复核，问题表仍按 `1cf25ae` 记录；
+相对基线的修复合入情况集中在 §1.4 / §2.3，扫描器计数同时给出两个提交的结果。
 
 ---
 
@@ -100,9 +118,9 @@
 - 唯一缺口是 favicon（P-11）。
 - `html/assets/audio/*` 已单独列出（铃声），构建产物存在。
 
-### 1.4 已知的进行中修复（工作区未提交，不计入已修复）
+### 1.4 已在 `88ed2c1` 合入的修复（相对 `1cf25ae` 基线）
 
-另一 agent 在 `git diff` 中增加了：
+`88ed2c1` 中增加了：
 
 - 服务端 `server/main.lua`：`phone:server:appQueryRequest` / `appActionRequest` +
   `phone:client:appQueryResponse` / `appActionResponse`，按 `request_id` **单播**回源；
@@ -111,8 +129,17 @@
 - `web/src/utils/nui.ts`、`PoliceMDT.svelte` 配合改动；新增
   `tests/unit/layer3_business/test_phone_request_protocol.py`。
 
-评估：方向正确（协议级 request_id，彻底支持并发）。合入并补真机复测后关闭 **P-01**；
-**P-02 不受该修复影响**（`getPhoneData` 仍是 QBCore callback）。
+评估：方向正确（协议级 request_id，彻底支持并发），**P-01 待真机复测后关闭**。
+
+同一提交还加了 **`fetchPhoneData` + `phoneDataWaiters`**（`client/main.lua`）：
+`getPhoneData` 的三个调用点合并为一个 in-flight 请求并带 8s 兜底，所有等待者一起返回——这正是
+**P-02** 的修法，**P-02 待真机复测后关闭**（服务端仍可保留 callback，因为并发已在客户端合并）。
+
+对本文其它条目的影响（截至 `88ed2c1`）：
+
+- **P-03 保留**：`getPhoneData` 有了 8s 兜底，但其余约 35 个 NUI bridge 仍无超时；
+- **P-04 保留（High）**：服务端 `cb(nil)` 现在会被 `finish` 转成 `{success=false,error='no_response'}`，
+  但 `web/src/stores/phone.ts:113-128` 仍然只处理 `res.success`，错误被静默丢弃 → 手机打开依旧空白。
 
 ---
 
@@ -126,7 +153,7 @@
 
 | ID | 严重度 | 问题 | 位置（HEAD） | 修复建议 |
 |---|---|---|---|---|
-| D-01 | **Block** | `ui_page` 从公网 CDN 加载 jQuery / Bootstrap / Popper。CEF 离线、被墙或证书失败时 `$` 未定义：`script.js` 在顶层 `$(document).on(...)` 抛错中断，**后续 `window.message` 监听与 ESC 处理都不会注册**。后果：相机/指纹 NUI 收不到消息；指纹仍被 Lua `SetNuiFocus(true,true)` 抓住，玩家看到"不可见 UI + 光标锁死"，只能 `/phonefix` 或重启资源。 | `custom-police/html/index.html:4`（bootstrap css）、`:5`（jquery）、`:236`（popper）、`:237`（bootstrap js）；`custom-police/html/script.js:125-127`（首个 `$` 顶层调用） | 把 jquery/bootstrap/popper **vendor 进 `html/`** 用相对路径引用（`vue.min.js` 已是本地）；或去掉 jQuery，用原生 `fetch` + `GetParentResourceName()`。 |
+| D-01 | **Block** | `ui_page` 从公网 CDN 加载 jQuery / Bootstrap / Popper。CEF 离线、被墙或证书失败时 `$` 未定义：`script.js` 在顶层 `$(document).on(...)` 抛错中断，**后续 `window.message` 监听与 ESC 处理都不会注册**。后果：相机/指纹 NUI 收不到消息；指纹仍被 Lua `SetNuiFocus(true,true)` 抓住，玩家看到"不可见 UI + 光标锁死"，只能 `/phonefix` 或重启资源。 | `custom-police/html/index.html:4`（bootstrap css）、`:5`（jquery）、`:236`（popper）、`:237`（bootstrap js）；`custom-police/html/script.js:125-127`（首个 `$` 顶层调用） | 把 jquery/bootstrap/popper **vendor 进 `html/`** 用相对路径引用（`vue.min.js` 已是本地）；或去掉 jQuery，用原生 `fetch` + `GetParentResourceName()`。另：内联 CSS 的 `fonts.googleapis.com` `@import`（`index.html:7`）也应去掉，否则离线时仍有网络等待。 |
 | D-02 | High | `Databank.Close()` POST 到 `closeDatabank`，但全资源**没有** `RegisterNUICallback('closeDatabank')`；同时硬编码 `https://custom-police/`、`$.post` 无超时无错误处理。每次关闭（含 ESC）都是 404。databank 的打开消息也无人发送——整段为死 UI。 | `custom-police/html/script.js:103-109`、`:116-119`、`:125-127`；`custom-police/client/` 无对应注册 | 要么补 `RegisterNUICallback('closeDatabank')` 并接上打开路径；要么删除 Databank 这一段死代码。顺手把 origin 改成 `GetParentResourceName()`、请求加超时。 |
 | D-03 | High | 指纹 UI `SetNuiFocus(true,true)` 前没有复位 `SetNuiFocusKeepInput(false)`。玩家先用过手机（keepInput=true 全局残留）再开指纹，**人物仍能走动/攻击**，UI 不是排他的；配合 D-01 还会出现"看不见的 UI 抓着焦点"。 | `custom-police/client/job.lua:42-47` | 与 story-engine 一致：`SetNuiFocusKeepInput(false)` → `SetNuiFocus(true,true)`；关闭时 `SetNuiFocus(false,false)` + `SetNuiFocusKeepInput(false)`。 |
 | D-04 | Medium | `inFingerprint` 一个变量承担两种语义：①指纹 UI 是否打开（`:45`、`:251`）②玩家是否站在指纹 PolyZone 内（`:866`、`:872`）。关闭 UI 会把 zone 状态清成 false，玩家不离开区域就再也看不到 E 提示/扫描逻辑错乱。 | `custom-police/client/job.lua:3`、`:42-47`、`:249-253`、`:864-875` | 拆成 `fingerprintUiOpen` 与 `inFingerprintZone` 两个变量。 |
@@ -142,6 +169,26 @@
   （`:500-519`），可复制到 phone/police 的取车。
 - `client/npc_callouts.lua` 在 `onResourceStop` 里清理 NPC/载具并释放服务端配额（`:571-578`）。
 - 客户端没有写权威状态（金额/刑期/罚单），符合 FIT-11；`Config` 只读。
+
+### 2.3 已在 `88ed2c1` / `c554eba` 合入的修复（相对 `1cf25ae` 基线；行号为当前 HEAD）
+
+两个提交在 `custom-police` 上的变化：
+
+- **D-01**：`html/vendor/` 落地 jquery/bootstrap/popper，`index.html` 改为相对路径，
+  `files{}` 增加 `html/vendor/*.js|*.css`（`fxmanifest.lua:75-76`）→ CDN 依赖消除。
+  残余：内联 CSS 仍有 `fonts.googleapis.com` 的 `@import`（仅字体，不阻断页面；扫描器不覆盖 CSS `url()`）。
+- **D-02（部分）**：补了 `RegisterNUICallback('closeDatabank')`（`client/job.lua:257-262`），
+  `Databank.Close` / `Fingerprint.Close` 改用 `GetParentResourceName()`。
+  `c554eba` 把最后一处 `take-fingerprint` 的 `$.post` 也改成运行时资源名。
+  **仍未修**：三处 `$.post` 都没有 timeout（`police-nui-request-timeout`，`script.js:109`）；
+  Databank 仍是无人打开的旧 UI。
+- **D-03**：`openFingerprintUI` 先 `SetNuiFocusKeepInput(false)` 再取焦点，
+  `closeFingerprint` 也复位（`client/job.lua:46`、`:252`）。
+- **未修**：D-04（`inFingerprint` 双语义）、D-05（统一 `onResourceStop`）、D-06~D-09。
+
+结果：扫描器在 police 的命中从基线 7 条降到当前 HEAD 的 2 条（timeout / focus_no_resource_stop）。
+对应 allowlist 的 5 条（3 个 CDN host + `closeDatabank` + origin）已随两个提交同批删除；
+后续修复也必须同批删除对应条目，否则 stale 失败。
 
 ---
 
@@ -220,7 +267,7 @@
 
 ### 6.1 覆盖的 16 条规则
 
-| check | 内容 | 当前命中 |
+| check | 内容 | HEAD 命中 |
 |---|---|---|
 | `callback_cb` | callback 体内必须有 `cb(...)` | 0 |
 | `callback_early_return` | 首次 `cb` 之前不得 `return`/`error()`/`assert()` | 0 |
@@ -239,7 +286,8 @@
 | `ui_page_asset_absolute` | 不出现 `/assets/...` 绝对路径 | 0 |
 | `dead_nui_client_file` | 注册 NUI/抢焦点的 client 文件必须在 `client_scripts` | 1（vehicles dashboard） |
 
-合计 **15 条**（去重后），全部对应本文的 P-11、D-01/D-02/D-05、O-01/O-03/O-04/O-05/O-06。
+基线 `1cf25ae` 合计 **15 条**（去重后），对应本文的 P-11、D-01/D-02/D-05、O-01/O-03/O-04/O-05/O-06。
+当前 HEAD `c554eba` 为 **10 条**（police 的 CDN/closeDatabank/origin 共 5 条已随修复移除，见 §2.3）。
 运行：**15 passed，<1s**（离线、无 FXServer/DB/网络）。
 
 ### 6.2 设计约定（避免误报/腐烂）
@@ -249,7 +297,9 @@
 - Lua 注释/字符串先掩码；回调体按块配对提取；遇到内联嵌套函数后的早退不再猜测（宁可漏报）。
 - 不存行号：allowlist key 是 `(check, resource, file[, name])`，无关编辑不会让登记抖动。
 - allowlist 是**债务账本**：过期 → 失败；修好后没删 → "stale" → 失败。每条都有
-  `reason` / `owner` / `added` / `expires`（2027-03-31）。
+  `reason` / `owner` / `added` / `expires`（2027-03-31）。修复与 allowlist 删除必须同批提交
+  （police 的 5 条已随 `88ed2c1`/`c554eba` 的修复一起删除；若只提交 allowlist 而不提交修复，
+  基线 `1cf25ae` 上会重新出现 5 条未登记违规）。
 - 反向注入：15 个测试里 9 个是反向/对照注入（早退、漏 cb、keepInput 不成对、缺 stop 清理、
   裸 fetch、硬编码 origin、未注册回调、未列资源、CDN、死文件），1 个"修正后必须全绿"的对照资源。
 - 静态无法判断的（命名 handler、嵌套闭包后的早退、CSS `url()` 资源覆盖、`[system]` 资源）
@@ -280,7 +330,7 @@
 
 | # | ID | 严重度 | 一句话 | 验证方式 |
 |---|---|---|---|---|
-| 1 | P-01 | **Block** | MDT `Promise.all` 并发同名 QBCore callback，响应错投/超时 | 真机：MDT 调度页刷新 20 次，`units/incidents` 不串、无 6s loading；工作区 request_id 修复合入后回归 |
+| 1 | P-01 | **Block** | MDT `Promise.all` 并发同名 QBCore callback，响应错投/超时 | 真机：MDT 调度页刷新 20 次，`units/incidents` 不串、无 6s loading（`88ed2c1` 已修，待回归） |
 | 2 | P-02 | **Block** | `getPhoneData` 三处并发同名 callback | 开手机同时触发一次转账/收款，金额与联系人列表正确、无超时 |
 | 3 | D-01 | **Block** | 警用 NUI 依赖公网 CDN，离线整页失效并可能锁死焦点 | 断网（或 hosts 屏蔽 CDN）启动，打开指纹 UI：应正常渲染且 ESC 可关 |
 | 4 | P-03 | High | 所有 NUI bridge 无超时/兜底 cb | 服务端 `getPhoneData` 人为延迟 10s，UI 应在 6s 显示可重试错误 |
@@ -290,6 +340,10 @@
 | 8 | P-04 | High | `getPhoneData` 返回 nil 时 UI 静默空白 | 登录动画期间开手机：应显示错误/重试而非空白 |
 | 9 | D-05 | Medium | police 无统一 `onResourceStop`（焦点/DutyBlips） | 指纹框开着 `restart custom-police`，焦点应释放、blip 应消失 |
 | 10 | P-09 | Medium | 监听了不存在的 `QBCore:Client:SetPlayerData` | 管理脚本直改余额后，手机余额应经服务端推送刷新（或删除该死监听） |
+
+> 已在 `88ed2c1` / `c554eba` 合入：P-01（request_id 协议）、P-02（`fetchPhoneData` 合并）、
+> D-01（vendor 化）、D-03（keepInput 复位）、D-02 的 closeDatabank/origin；
+> **D-02 仍剩** NUI 请求无超时与 Databank 死 UI。其余仍按上表处理。
 
 ---
 

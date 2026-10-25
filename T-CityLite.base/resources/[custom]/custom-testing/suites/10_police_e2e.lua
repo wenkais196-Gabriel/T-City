@@ -740,6 +740,7 @@ Test.describe("police_e2e", function()
             :format(counts.pass, counts.fail, counts.skip))
         print('E2E_RESULT ' .. encoded)
         print(('E2E_EXIT %d'):format(ok and 0 or 1))
+        return payload
     end, TEST_TIMEOUT_SECONDS)
 
 end)
