@@ -542,28 +542,33 @@ function P.SetDutyForSource(source, onDuty, reason)
     local player = QBCore.Functions.GetPlayer(source)
     if not player then return false, 'not_police' end
 
-    -- qb-core's SetJobDuty is the documented primitive, but some runtimes have
-    -- shipped a toggle-style implementation. Set the projection explicitly and
-    -- raise the same events qb-core would, so on/off is deterministic.
+    -- Some qb-core runtimes/events replace PlayerData or hand back a stale job
+    -- table. Set the live table, raise the same events, then write the
+    -- projection from the live value so police_units can never disagree.
     player.PlayerData.job.onduty = onDuty
     TriggerEvent('QBCore:Server:OnJobUpdate', player.PlayerData.source, player.PlayerData.job)
     TriggerClientEvent('QBCore:Client:OnJobUpdate', player.PlayerData.source, player.PlayerData.job)
     player.Functions.UpdatePlayerData()
-    if player.PlayerData.job.onduty ~= onDuty then
+
+    player.PlayerData.job.onduty = onDuty
+    local live = player.PlayerData
+    local callsign = type(live.metadata) == 'table' and live.metadata.callsign or nil
+    if onDuty then
+        syncDuty(live)
+    else
+        takeUnitOffDuty(live.citizenid)
+    end
+
+    if live.job.onduty ~= onDuty then
         print(('[custom-police] duty mismatch player=%s expected=%s'):format(
-            tostring(player.PlayerData.job.onduty), tostring(onDuty)))
+            tostring(live.job.onduty), tostring(onDuty)))
         return false, 'duty_failed'
     end
 
-    -- SetJobDuty raises OnJobUpdate synchronously, whose handler already calls
-    -- syncDuty. Calling it again is an idempotent safety net for builds that
-    -- do not raise the event; syncDuty never calls SetJobDuty, so no recursion.
-    syncDuty(player.PlayerData)
-
     local detail = ('%s:%s'):format(
         onDuty and 'on' or 'off', tostring(reason or 'unspecified'):sub(1, 100))
-    if not audit(data.citizenid, 'duty.set', data.citizenid, detail) then
-        print(('[custom-police] duty.set audit failed for %s'):format(tostring(data.citizenid)))
+    if not audit(live.citizenid, 'duty.set', live.citizenid, detail) then
+        print(('[custom-police] duty.set audit failed for %s'):format(tostring(live.citizenid)))
     end
     return true
 end
