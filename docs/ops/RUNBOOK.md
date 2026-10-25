@@ -144,7 +144,8 @@ python3 tools/ops/persistence_check.py --compare /tmp/persist-before.json
 | 备份文件 0 字节 | 磁盘满或权限；看 `~/backups/tcity/backup.log` |
 | 重启后钱/物品没了 | 跑第 4 节回归；先看 `persistence_manager` 的 tick 与 `qb-inventory` 的 SaveInventory 触发点 |
 | 服务器突然没了，日志末尾 `-> Quitting: SIGHUP received` | 它是被**终端/screen 会话回收**的，不是自己崩的（随后的 `node::ResetStdio` assert 只是关停噪音）。用 systemd 部署就不会再被会话带走；systemd 之外不要把服务器挂在会被关掉的终端里 |
-| 启动即退出，日志 `checking server license key: HTTP 429` | Cfx.re 对同一 license 的启动做了限流（短时间反复重启就会撞上）。等几分钟再起，别在这段时间里连续试 |
+| 启动即退出，日志 `checking server license key: HTTP 429` | Cfx.re 对同一 license 的启动做了限流。**先把守护停掉**（`sudo systemctl stop tcity`）：`Restart=always` 会在 10 秒内再来一次，把限流续成死锁（实测半小时 323 次）。停掉后等 20–30 分钟再手动起 |
+| `systemctl status` 显示 `failed`，原因是 `start-limit-hit` | 单元自带的启动限流触发了（5 次 / 5 分钟）。处理完根因后 `sudo systemctl reset-failed tcity && sudo systemctl start tcity` |
 
 日志位置：
 
