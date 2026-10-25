@@ -80,13 +80,13 @@
 
 | 文件 | 角色 | 新增/修改 |
 |------|------|-----------|
-| `server/main.lua` | 服务端主逻辑 | 修改 |
-| `client/main.lua` | 客户端主逻辑 | 修改 |
+| `T-CityLite.base/resources/[qb]/qb-storerobbery/server/main.lua` | 服务端主逻辑 | 修改 |
+| `T-CityLite.base/resources/[qb]/qb-storerobbery/client/main.lua` | 客户端主逻辑 | 修改 |
 | `config.lua` | 配置文件 | 修改 |
-| `html/index.html` | UI结构 | 修改 |
+| `T-CityLite.base/resources/[qb]/qb-storerobbery/html/index.html` | UI结构 | 修改 |
 | `html/style.css` | UI样式 | 修改 |
-| `html/script.js` | UI逻辑 | 修改 |
-| `locales/en.lua` | 本地化 | 修改 |
+| `T-CityLite.base/resources/[qb]/qb-storerobbery/html/script.js` | UI逻辑 | 修改 |
+| `T-CityLite.base/resources/[qb]/qb-storerobbery/locales/en.lua` | 本地化 | 修改 |
 
 ### 新增事件
 

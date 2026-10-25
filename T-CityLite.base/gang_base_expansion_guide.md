@@ -35,7 +35,7 @@
 当要在新帮派基地建立可控的安全大门时，必须让 **Spawner 创生端**与 **Doorlock 控制端**完美配合：
 
 ### A. 门体流式创生 (Spawner Setup)
-1. **新建 Spawner 脚本**（例如 `resources/[standalone]/lost-gates/client.lua`）：
+1. **新建 Spawner 脚本**（放在 `resources/[standalone]/`，示例名 lost-gates/client.lua）：
    * **清理默认地图门板**：使用 `CreateModelHide` 抹除默认地图的静态门以防穿模。
      ```lua
      CreateModelHide(x, y, z, radius, modelHash, true)
@@ -59,7 +59,7 @@
      * *示例（右门 Heading 288.62）*：$\text{dir} = \text{vector3}(0.32, -0.95, 0.0)$
 
 ### B. 锁门注册 (`qb-doorlock` config)
-在新帮派基地建立配置文件 `qb-doorlock/configs/gangname.lua`：
+在 qb-doorlock 的 configs 下新建配置文件（示例名 gangname.lua）：
 ```lua
 Config.DoorList['gangname_gate'] = {
     textCoords = vec3(x, y, z), -- 交互文本悬浮点（双门设在中心）
@@ -115,7 +115,7 @@ Config.DoorList['gangname_gate'] = {
    ```
 
 > [!TIP]
-> **原生滑门修复**：我们在 `qb-doorlock/client/main.lua` 中的 `updateDoors` 函数中打上了修复补丁。现已完备，任何在 `qb-doorlock` 里配置为 `sliding` 或 `doublesliding` 的大门，在流式加载进玩家视野时就会**自动激活 30.0 米的原生感应雷达**，解锁后玩家及所有非帮派人员无需 any 多余操作均可丝滑靠近、滑开、通过！
+> **原生滑门修复**：我们在 `resources/[qb]/qb-doorlock/client/main.lua` 中的 `updateDoors` 函数中打上了修复补丁。现已完备，任何在 `qb-doorlock` 里配置为 `sliding` 或 `doublesliding` 的大门，在流式加载进玩家视野时就会**自动激活 30.0 米的原生感应雷达**，解锁后玩家及所有非帮派人员无需 any 多余操作均可丝滑靠近、滑开、通过！
 
 ---
 
@@ -124,7 +124,7 @@ Config.DoorList['gangname_gate'] = {
 当要为新帮派配置专属 Gang 车库时：
 
 ### A. 车库数据库与配置注册
-在 `qb-garages/config.lua` 中声明新车库：
+在 `resources/[qb]/qb-garages/config.lua` 中声明新车库：
 ```lua
 Config.Garages["gangname_hq"] = {
     showBlip = false, -- 帮派车库通常对外保密
@@ -140,7 +140,7 @@ Config.Garages["gangname_hq"] = {
 ```
 
 ### B. 取车防叠车防爆安全哨兵 (Overlap Protection)
-我们已经在 `qb-garages/client/main.lua` 的取车逻辑中重构了出车安全哨兵。每次玩家从帮派车库提车时，系统会强制执行 `IsPositionOccupied`（空间占用）检测：
+我们已经在 `resources/[qb]/qb-garages/client/main.lua` 的取车逻辑中重构了出车安全哨兵。每次玩家从帮派车库提车时，系统会强制执行 `IsPositionOccupied`（空间占用）检测：
 ```lua
 -- 检测出车位周围 3.0 米范围内是否有其他物体占用
 if IsPositionOccupied(spawnPoint.x, spawnPoint.y, spawnPoint.z, 3.0, false, true, true, false, false, 0, false) then
@@ -156,7 +156,7 @@ end
 当要在帮派基地放置驻防守卫 NPC 并保证他们对自家帮众 and 卧底警匪绝对友好，甚至开枪不反击：
 
 ### A. 全民同盟关系覆盖 (Companion Override)
-在你的核心帮派资源（如 `custom-main/client/dispatch.lua`）中，监听玩家刷新的事件，动态建立同盟组：
+在你的核心帮派资源（如 `resources/[custom]/custom-main/client/dispatch.lua`）中，监听玩家刷新的事件，动态建立同盟组：
 ```lua
 local relationshipGroups = {
     "AMBIENT_GANG_MEXICAN", -- 墨西哥黑帮 (马德拉索庄园守卫)
@@ -202,7 +202,7 @@ end
 帮派的大脑是 Boss 菜单，用于管理帮派资金、招募成员、升降职等：
 
 ### A. 定义帮派数据
-在 `qb-core/shared/gangs.lua` 中声明新帮派及其职级：
+在 `resources/[qb]/qb-core/shared/gangs.lua` 中声明新帮派及其职级：
 ```lua
 ['lostmc'] = {
     label = 'Lost MC',
@@ -217,7 +217,7 @@ end
 ```
 
 ### B. 在 `qb-management` 中建立 Boss Menu 浮空标识
-1. 打开 `qb-management/config.lua`，在 `Config.GangMenus` 下添加你的帮派基地 Boss 房桌案中心的 Vector3 坐标：
+1. 打开 `resources/[qb]/qb-management/config.lua`，在 `Config.GangMenus` 下添加你的帮派基地 Boss 房桌案中心的 Vector3 坐标：
    ```lua
    Config.GangMenus = {
        lostmc = {
@@ -237,7 +237,7 @@ end
 非 Boss 成员共享大仓库 (Stash)、更衣室 (Cloakroom) 与武装特色商店 (Armory) 的配置与写法如下：
 
 ### A. 成员功能区域结构化配置
-创建一个简单的 `resources/[standalone]/gang-facilities/client.lua`：
+创建一个简单的新资源，放在 `resources/[standalone]/`（示例名 gang-facilities/client.lua）：
 ```lua
 local QBCore = exports['qb-core']:GetCoreObject()
 local PlayerGang = {}

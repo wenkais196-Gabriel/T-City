@@ -3,7 +3,7 @@
 > **版本**: v1.0  
 > **日期**: 2026-06-18  
 > **状态**: 设计完成，待 Phase 3 施工  
-> **前置依赖**: `economy-dashboard` (已运行), `core_economy` (已运行), `core-framework/bus.lua` (已运行)
+> **前置依赖**: `economy-dashboard` (已运行), `core_economy` (已运行), `resources/[standalone]/core-framework/bus.lua` (已运行)
 
 ---
 
