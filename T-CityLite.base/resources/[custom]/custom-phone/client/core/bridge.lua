@@ -44,6 +44,16 @@ local function defaultResponseEvent(event)
     return name
 end
 
+--- Trace hooks are optional: bridge.lua must keep working when the diag module is
+--- absent (tests, older clients), so every call is a lazy guarded lookup.
+local function diagPhase(trace, phase, code)
+    if not trace then return end
+    local diag = PhoneDiag
+    if type(diag) == 'table' and type(diag.Phase) == 'function' then
+        diag.Phase(trace, phase, code)
+    end
+end
+
 --- Resolve one pending request. Unknown ids (forged, duplicated or already
 --- timed out) are ignored so a late response can never answer a newer request.
 function PhoneBridge.Resolve(id, res)
@@ -52,6 +62,7 @@ function PhoneBridge.Resolve(id, res)
     if not entry then return false end
     pending[id] = nil
     if type(res) ~= 'table' then res = { success = false, error = 'no_response' } end
+    diagPhase(entry.trace, 'req.cli.resp', res.error or 'ok')
     entry.cb(res)
     return true
 end
@@ -71,8 +82,9 @@ end
 ---@param cb fun(response: table)
 ---@param timeoutMs number|nil defaults to 8000
 ---@param responseEvent string|nil override the derived response event
+---@param trace table|nil 诊断 trace；有它时 tid 就是 request_id，服务端ring 才能拼上
 ---@return string|nil request_id, string|nil response_event
-function PhoneBridge.Request(event, payload, cb, timeoutMs, responseEvent)
+function PhoneBridge.Request(event, payload, cb, timeoutMs, responseEvent, trace)
     if type(event) ~= 'string' or event == '' or type(cb) ~= 'function' then
         if type(cb) == 'function' then cb({ success = false, error = 'bad_request' }) end
         return nil
@@ -80,11 +92,11 @@ function PhoneBridge.Request(event, payload, cb, timeoutMs, responseEvent)
     timeoutMs = tonumber(timeoutMs)
     if not timeoutMs or timeoutMs <= 0 then timeoutMs = APP_REQUEST_TIMEOUT_MS end
 
-    local id = nextRequestId()
+    local id = (trace and trace.tid) or nextRequestId()
     local resolvedEvent = responseEvent or defaultResponseEvent(event)
     ensureResponseHandler(resolvedEvent)
 
-    pending[id] = { cb = cb, response_event = resolvedEvent }
+    pending[id] = { cb = cb, response_event = resolvedEvent, trace = trace }
     TriggerServerEvent(event, id, payload)
     SetTimeout(timeoutMs, function()
         -- A response (or Clear) removes the slot first, so this timer can never
@@ -187,6 +199,39 @@ local function answerOnce(cb)
     end
 end
 
+--- Normalise the NUI answer channel.
+---
+--- Some FXServer builds hand RegisterNUICallback's `cb` over as a CFX *function
+--- reference* (`{ __cfx_functionReference = '<ref>' }`) instead of a plain
+--- function. Calling such a table raises "attempt to call a table value", and
+--- bailing out without answering leaves the NUI fetch pending until its abort
+--- deadline — exactly the 9s `AbortError` that made appQuery/appAction look
+--- "查询失败" while the plain callbacks (which call cb directly) kept working.
+---@param cb any
+---@return fun(response: any)|nil answer nil when the channel cannot be answered
+function PhoneBridge.AnswerFn(cb)
+    local kind = type(cb)
+    if kind == 'function' then return cb end
+    if kind == 'table' then
+        -- 首选 __call 元方法：CFX 的函数引用对象是可调用的表，直接调用就是
+        -- 官方语义，NUI 侧才会真的收到响应。
+        local mt = getmetatable(cb)
+        if mt and type(rawget(mt, '__call')) == 'function' then
+            return function(response) return cb(response) end
+        end
+        local ref = rawget(cb, '__cfx_functionReference')
+        if type(ref) == 'string' and ref ~= '' then
+            local citizen = Citizen
+            if type(citizen) == 'table' and type(citizen.InvokeFunctionReference) == 'function' then
+                return function(response)
+                    citizen.InvokeFunctionReference(ref, response)
+                end
+            end
+        end
+    end
+    return nil
+end
+
 --- Register a NUI callback through the shared guard.
 ---@param name string callback name used by the NUI fetchNui()
 ---@param handler fun(data: any, cb: fun(response: table))
@@ -196,12 +241,17 @@ function PhoneBridge.RegisterNui(name, handler)
         return false
     end
     RegisterNUICallback(name, function(data, cb)
-        if type(cb) ~= 'function' then return end
-        local answer = answerOnce(cb)
-        local ok, err = pcall(handler, data, answer)
+        local answer = PhoneBridge.AnswerFn(cb)
+        if not answer then
+            print(('[custom-phone][bridge] NUI %s: unanswerable callback (%s)'):format(
+                tostring(name), type(cb)))
+            return
+        end
+        local once = answerOnce(answer)
+        local ok, err = pcall(handler, data, once)
         if not ok then
             print(('[custom-phone][bridge] NUI %s failed: %s'):format(name, tostring(err)))
-            answer({ success = false, error = 'handler_error' })
+            once({ success = false, error = 'handler_error' })
         end
     end)
     return true

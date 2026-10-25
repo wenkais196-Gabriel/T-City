@@ -207,8 +207,14 @@ export async function fetchNui<T = any>(
       });
       throw new Error(`NUI ${eventName} replied HTTP ${resp.status}: ${text.slice(0, 200)}`);
     } catch (error) {
+      // Aborts are reported too: a 9s abort means the Lua callback never
+      // answered, which is exactly the "request vanished" case we need to see
+      // from the server side. `reason` separates it from a hard fetch failure.
       const aborted = (error as any)?.name === 'AbortError';
-      if (!aborted) reportNuiFailure(eventName, { reason: 'fetch_error', message: String(error) });
+      reportNuiFailure(eventName, {
+        reason: aborted ? 'abort' : 'fetch_error',
+        message: String(error),
+      });
       console.error(`Failed to fetch NUI event: ${eventName}`, error);
       throw error;
     } finally {

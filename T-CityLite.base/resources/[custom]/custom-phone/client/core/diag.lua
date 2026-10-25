@@ -51,8 +51,7 @@ local openTraces = 0
 --- 单调毫秒。FiveM 里用 GetGameTimer（受 pause 影响但足够），离线 harness 用 os.clock。
 ---@return number
 local function nowMs()
-    local timer = rawget(_G, 'GetGameTimer')
-    if type(timer) == 'function' then return timer() end
+    if type(GetGameTimer) == 'function' then return GetGameTimer() end
     return math.floor(os.clock() * 1000)
 end
 
@@ -63,14 +62,15 @@ function PhoneDiag.Level()
     if levelCache.value ~= nil and stamp - levelCache.at < LEVEL_CACHE_MS then
         return levelCache.value
     end
+    -- 默认 1（开启）。注意不能用 GetConvarInt 判断"有没有设"：convar 未定义时
+    -- 它返回 0，会把"没配置"误判成"显式关闭"，整条 trace 静默失效。
     local value = 1
-    local getInt = rawget(_G, 'GetConvarInt')
-    local getConvar = rawget(_G, 'GetConvar')
-    if type(getInt) == 'function' then
-        local parsed = tonumber(getInt('phone_diag'))
-        if parsed then value = parsed end
-    elseif type(getConvar) == 'function' then
-        local parsed = tonumber(getConvar('phone_diag'))
+    local raw
+    if type(GetConvar) == 'function' then
+        raw = GetConvar('phone_diag')
+    end
+    if type(raw) == 'string' and raw ~= '' then
+        local parsed = tonumber(raw)
         if parsed then value = parsed end
     end
     if value < 0 then value = 0 elseif value > 2 then value = 2 end
@@ -234,6 +234,14 @@ function PhoneDiag.Sanitize(msg)
         out.owner = type(msg.owner) == 'string' and msg.owner:sub(1, 16) or nil
     end
     return out
+end
+
+--- 服务端/客户端的 request_id 与 trace id 同一个值：这样内存环里的记录能和客户端
+--- 批次拼上。没有 NUI 传入的 tid 时用它兜底（阶段 3 的过渡形态）。
+---@return string
+function PhoneDiag.NewTraceId()
+    local stamp = math.floor(nowMs()) % 0xFFFFFFFF
+    return ('c%08x%03d'):format(stamp, math.random(0, 999))
 end
 
 --- 四段探针 id（NUI 侧发起 phoneProbe 时使用）。

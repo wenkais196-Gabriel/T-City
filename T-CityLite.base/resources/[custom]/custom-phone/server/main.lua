@@ -1364,6 +1364,18 @@ local function replyAppRequest(eventName, src, requestId, response)
     TriggerClientEvent(eventName, src, requestId, response)
 end
 
+-- 诊断挂钩是可选依赖：diag 模块不在时（单元测试沙箱）退化为 no-op。
+-- RecordRecv/RecordDone 写入服务端内存环，成为 SR/SD 两槽的唯一事实来源。
+local function diagRecv(src, requestId, kind)
+    local diag = PhoneDiag
+    if type(diag) == 'table' then diag.RecordRecv(src, requestId, kind) end
+end
+
+local function diagDone(src, requestId, code)
+    local diag = PhoneDiag
+    if type(diag) == 'table' then diag.RecordDone(src, requestId, code) end
+end
+
 --- Per-player token-bucket key. playerCitizen is the getPhoneData cache; the
 --- QBCore lookup is only a fallback for a request that races the first open.
 local function appRateKey(src, kind)
@@ -1375,20 +1387,64 @@ local function appRateKey(src, kind)
     return ('app:%s:%s'):format(tostring(citizenid or src), kind)
 end
 
+-- NUI 自证握手：页面加载时上报 build id / location.host / GetParentResourceName()。
+-- 有这条 = 页面跑的是新 bundle 且 NUI→Lua 路由通；完全没有 = 旧包或路由不通。
+local NUI_READY_COOLDOWN_MS = 5000
+local nuiReadyAt = {}
+
+RegisterNetEvent('phone:server:nuiReady', function(info)
+    local src = source
+    local stamp = GetGameTimer()
+    if nuiReadyAt[src] and stamp - nuiReadyAt[src] < NUI_READY_COOLDOWN_MS then return end
+    nuiReadyAt[src] = stamp
+    if type(info) ~= 'table' then return end
+    local function field(value, maxLength)
+        if type(value) ~= 'string' then return '-' end
+        return value:gsub('[^%w%-_%.:/%?=&]', ''):sub(1, maxLength)
+    end
+    print(('[custom-phone][nui-ready] src=%s build=%s host=%s parent=%s href=%s'):format(
+        tostring(src), field(info.build, 16), field(info.host, 48),
+        field(info.parent, 48), field(info.href, 96)))
+end)
+
+-- 四段探针：页面用一次真实 appQuery 走完整条链路后回报终态码与耗时。
+local PROBE_COOLDOWN_MS = 3000
+local probeAt = {}
+
+RegisterNetEvent('phone:server:nuiProbe', function(info)
+    local src = source
+    local stamp = GetGameTimer()
+    if probeAt[src] and stamp - probeAt[src] < PROBE_COOLDOWN_MS then return end
+    probeAt[src] = stamp
+    if type(info) ~= 'table' then return end
+    local code = type(info.code) == 'string' and info.code:gsub('[^%w%-_%.]', ''):sub(1, 32) or '-'
+    local build = type(info.build) == 'string' and info.build:gsub('[^%w%-_.]', ''):sub(1, 16) or '-'
+    local dur = math.floor(tonumber(info.dur) or 0)
+    print(('[custom-phone][probe] src=%s build=%s code=%s dur=%dms'):format(
+        tostring(src), build, code, dur))
+end)
+
 RegisterNetEvent('phone:server:appQueryRequest', function(requestId, data)
     local src = source
-    if not validAppRequestId(requestId) then return end
+    diagRecv(src, requestId, 'query')
+    if not validAppRequestId(requestId) then
+        diagDone(src, requestId, 'bad_id')
+        return
+    end
     if type(data) ~= 'table' then
+        diagDone(src, requestId, 'bad_request')
         replyAppRequest('phone:client:appQueryResponse', src, requestId,
             { success = false, error = 'bad_request' })
         return
     end
     if not PhoneRateLimit.Allow(appRateKey(src, 'query'), 120, 40) then
+        diagDone(src, requestId, 'rate_limited')
         replyAppRequest('phone:client:appQueryResponse', src, requestId,
             { success = false, error = 'rate_limited' })
         return
     end
     local ok, result = PhoneApps.Query(src, tostring(data.app_id or ''), tostring(data.query or ''), data.params)
+    diagDone(src, requestId, ok and 'ok' or 'app_error')
     if ok then
         replyAppRequest('phone:client:appQueryResponse', src, requestId, { success = true, data = result })
     else
@@ -1398,18 +1454,25 @@ end)
 
 RegisterNetEvent('phone:server:appActionRequest', function(requestId, data)
     local src = source
-    if not validAppRequestId(requestId) then return end
+    diagRecv(src, requestId, 'action')
+    if not validAppRequestId(requestId) then
+        diagDone(src, requestId, 'bad_id')
+        return
+    end
     if type(data) ~= 'table' then
+        diagDone(src, requestId, 'bad_request')
         replyAppRequest('phone:client:appActionResponse', src, requestId,
             { success = false, error = 'bad_request' })
         return
     end
     if not PhoneRateLimit.Allow(appRateKey(src, 'action'), 30, 10) then
+        diagDone(src, requestId, 'rate_limited')
         replyAppRequest('phone:client:appActionResponse', src, requestId,
             { success = false, error = 'rate_limited' })
         return
     end
     local ok, result = PhoneApps.Action(src, tostring(data.app_id or ''), tostring(data.action or ''), data.params)
+    diagDone(src, requestId, ok and 'ok' or 'app_error')
     if ok then
         replyAppRequest('phone:client:appActionResponse', src, requestId, { success = true, data = result })
     else

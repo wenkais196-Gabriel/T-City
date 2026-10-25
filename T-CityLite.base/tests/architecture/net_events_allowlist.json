@@ -361,6 +361,24 @@
       "evidence": "server/core/diag.lua:387 PhoneDiag.Accept — Sanitize + allowTrace(PhoneRateLimit 20/5) + allowUi(5s) + printBudgetOk(50/s)",
       "owner": "custom-phone",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:nuiReady",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "NUI 自证握手：页面加载时把自己跑的是哪个 build、location.host 与 GetParentResourceName() 报给服务端，用于判定'改完不生效'是旧 bundle 缓存还是路由不通。只读取 build/host/parent/href 四个字符串字段，逐字符集收敛并截断；每 source 5s 一条，不写库、不回包、不涉及玩家数据。",
+      "evidence": "main.lua phone:server:nuiReady — NUI_READY_COOLDOWN_MS=5000 + field() gsub 收敛并截断",
+      "owner": "custom-phone",
+      "expires": "2026-11-30"
+    },
+    {
+      "name": "phone:server:nuiProbe",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "四段探针结果回报：NUI 用一次真实 appQuery 走完 NUI→client→server→回包→NUI 后把终态码与耗时报给服务端，作为每次资源重启的端到端自检。只读取 code/build 两个字符串（字符集收敛 + 截断）与 dur 数字；每 source 3s 一条，不写库、不回包、不涉及玩家数据。",
+      "evidence": "main.lua phone:server:nuiProbe — PROBE_COOLDOWN_MS=3000 + code/build gsub 收敛 + dur 取整",
+      "owner": "custom-phone",
+      "expires": "2026-11-30"
     }
   ]
 }

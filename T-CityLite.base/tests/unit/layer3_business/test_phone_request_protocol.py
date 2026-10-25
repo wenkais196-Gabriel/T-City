@@ -12,6 +12,7 @@ client/core/bridge.lua, client/main.lua and server/main.lua against a
 deterministic CitizenFX stub (no engine, no network).
 """
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -384,7 +385,15 @@ def test_get_phone_data_is_single_flight():
     assert src.count("TriggerCallback('phone:server:getPhoneData'") == 1
     assert "    fetchPhoneData(cb)" not in src, "NUI callback must wrap cb explicitly"
     assert "fetchPhoneData(function(data)" in src
-    assert "SetTimeout(8000" in src
+    # 客户端兜底必须早于 NUI 侧的 abort（否则前端只会看到 AbortError 而不是
+    # 结构化的 timeout 码）。NUI_TIMEOUT_MS = 6000，所以这里必须是 4000。
+    assert "SetTimeout(4000" in src, "client fallback must fire before the NUI abort"
+    assert "SetTimeout(8000" not in src
+
+    nui_ts = (PHONE / "web" / "src" / "utils" / "nui.ts").read_text(encoding="utf-8")
+    nui_timeout = re.search(r"NUI_TIMEOUT_MS\s*=\s*(\d+)", nui_ts)
+    assert nui_timeout, "NUI_TIMEOUT_MS must stay explicit"
+    assert int(nui_timeout.group(1)) > 4000, "NUI abort must stay after the client fallback"
 
 
 def test_phone_app_protocol_uses_dedicated_events():
