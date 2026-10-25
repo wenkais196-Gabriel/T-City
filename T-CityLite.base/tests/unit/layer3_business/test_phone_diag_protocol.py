@@ -314,22 +314,28 @@ assert(PhoneDiag.Sanitize({ mode = 'event', phase = 'ui.open-ack' }).phase == 'u
 
 
 def test_server_verdict_priority_uses_ring_as_truth():
+    """判定只覆盖 Lua 侧可观测的 6 个槽位。
+
+    NS/ND 两槽（NUI 即将 fetch / NUI 已 resolve）无法在 Lua 侧证实——NUI 只把 tid
+    带下来，CEF 的 resolve 没有任何回调。把它们留在判定里会把"一切正常"误判成
+    seg4（实测踩过：code=ok 却 break=seg4 reason=nui-never-settled）。
+    """
     assert_server(r"""
 -- 1) 环里没有该 tid → seg2（客户端批次里没有 srv.* 是正常的，不能据此下结论）
-assert(PhoneDiag.Verdict({ NS = true, CR = true, CF = true }, nil) == 'seg2')
+assert(PhoneDiag.Verdict({ CR = true, CF = true }, nil) == 'seg2')
 
 -- 2) 有 tid 但没有 doneAt → seg3-produce
-assert(PhoneDiag.Verdict({ NS = true, CR = true, CF = true }, { recvAt = 1 }) == 'seg3-produce')
+assert(PhoneDiag.Verdict({ CR = true, CF = true }, { recvAt = 1 }) == 'seg3-produce')
 
 local entry = { recvAt = 1, doneAt = 2 }
 -- 3) 之后才看其余槽位
-local segment = PhoneDiag.Verdict({ NS = true }, entry)
-assert(segment == 'seg1')
-assert(PhoneDiag.Verdict({ NS = true, CR = true }, entry) == 'seg1.5')
-assert(PhoneDiag.Verdict({ NS = true, CR = true, CF = true, CP = true, CA = true, ND = true }, entry) == nil)
-assert(PhoneDiag.Verdict({ NS = true, CR = true, CF = true, CA = true, ND = true }, entry) == 'seg3-deliver')
-assert(PhoneDiag.Verdict({ NS = true, CR = true, CF = true, CP = true, ND = true }, entry) == 'seg3.5')
-assert(PhoneDiag.Verdict({ NS = true, CR = true, CF = true, CP = true, CA = true }, entry) == 'seg4')
+assert(PhoneDiag.Verdict({ CR = true }, entry) == 'seg1.5')
+assert(PhoneDiag.Verdict({ CR = true, CF = true, CP = true, CA = true }, entry) == nil)
+assert(PhoneDiag.Verdict({ CR = true, CF = true, CA = true }, entry) == 'seg3-deliver')
+assert(PhoneDiag.Verdict({ CR = true, CF = true, CP = true }, entry) == 'seg3.5')
+
+-- 4) 只有 CR/CF 缺失才算断；NUI 侧两段不参与判定
+assert(PhoneDiag.Verdict({}, entry) == nil, 'no client marks must not be accused as seg1/seg4')
 """)
 
 
@@ -347,7 +353,7 @@ fireDiag(7, {
 })
 local line = lastPrint()
 assert(line, 'a trace must print one line')
-assert(line:find('path=NS|CR|CF|SR|SD|CP|CA|ND', 1, true), 'SR/SD must come from the ring: ' .. line)
+assert(line:find('path=CR|CF|SR|SD|CP|CA', 1, true), 'SR/SD must come from the ring: ' .. line)
 assert(line:find('break=none', 1, true), line)
 assert(line:find('code=ok', 1, true) and line:find('dur', 1, true) == nil)
 """)

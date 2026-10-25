@@ -24,16 +24,20 @@ PhoneDiag.TRACE_BURST = 5
 PhoneDiag.UI_COOLDOWN_MS = 5000
 PhoneDiag.PRINT_BUDGET_PER_SEC = 50
 
-local SLOT_ORDER = { 'NS', 'CR', 'CF', 'SR', 'SD', 'CP', 'CA', 'ND' }
+-- 只保留从 Lua 侧真正可观测的 6 个槽位。
+--
+-- 设计稿里的 NS（NUI 即将 fetch）和 ND（NUI fetch 已 resolve）无法在 Lua 侧证实：
+-- NUI 只把 tid 带下来，之后 CEF 的 resolve 没有任何回调通知 Lua。把这两槽留在判定里
+-- 会把"一切正常"误判成 seg4（实测踩过：code=ok 却 break=seg4）。
+-- 这两段改由 NUI 侧探针（main.ts 的 nuiProbe）自证。
+local SLOT_ORDER = { 'CR', 'CF', 'SR', 'SD', 'CP', 'CA' }
 local PHASE_SLOT = {
-    ['req.nui.send'] = 'NS',
     ['req.cli.recv'] = 'CR',
     ['req.cli.fwd'] = 'CF',
     ['req.srv.recv'] = 'SR',
     ['req.srv.done'] = 'SD',
     ['req.cli.resp'] = 'CP',
     ['req.cli.answer'] = 'CA',
-    ['req.nui.done'] = 'ND',
 }
 local UI_PHASES = {
     ['ui.close-start'] = true, ['ui.close'] = true,
@@ -241,13 +245,13 @@ function PhoneDiag.Verdict(slots, entry)
     if not entry.doneAt then return 'seg3-produce', 'server-no-reply' end
 
     slots = slots or {}
-    if not slots.CR and slots.NS then return 'seg1', 'nui-fetch-lost' end
     if slots.CR and not slots.CF then return 'seg1.5', 'handler-abort' end
     if slots.CF and not entry.recvAt then return 'seg2', 'no-server-recv' end
     if entry.recvAt and not entry.doneAt then return 'seg3-produce', 'server-no-reply' end
-    if entry.doneAt and not slots.CP then return 'seg3-deliver', 'response-lost' end
-    if slots.CP and not slots.CA then return 'seg3.5', 'answered-locally' end
-    if slots.CA and not slots.ND then return 'seg4', 'nui-never-settled' end
+    -- 回程两段必须以"客户端确实转发过"为前提：没有 CF 的批次属于旧客户端或
+    -- 未埋点批次，不能据此指控 response 丢了。
+    if slots.CF and entry.doneAt and not slots.CP then return 'seg3-deliver', 'response-lost' end
+    if slots.CF and slots.CP and not slots.CA then return 'seg3.5', 'answered-locally' end
     return nil, nil
 end
 
@@ -266,7 +270,7 @@ local function slotsFromBatch(batch, entry)
         local slot = PHASE_SLOT[({
             'req.nui.send', 'req.cli.recv', 'req.cli.fwd', 'req.srv.recv',
             'req.srv.done', 'req.cli.resp', 'req.cli.answer', 'req.nui.done',
-        })[mark[1]]]
+        })[mark[1]]]  -- order 1..8 与客户端一致；NS/ND 在这里天然落空
         if slot then slots[slot] = true end
     end
     return slots
@@ -392,3 +396,6 @@ if type(RegisterNetEvent) == 'function' then
 end
 
 -- [phone-diag-server] end
+
+-- 启动自证：确认清单确实加载了本模块（新脚本文件需要 refresh 才会进清单）。
+print(('[custom-phone][diag] server trace core loaded (level=%d)'):format(PhoneDiag.Level()))
