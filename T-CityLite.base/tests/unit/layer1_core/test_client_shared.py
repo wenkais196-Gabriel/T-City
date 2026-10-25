@@ -152,3 +152,52 @@ def test_draw_text_releases_draw_origin():
     body = src[src.index("function CFShared.DrawText3D"):]
     body = body[:body.index("\nend\n")]
     assert "ClearDrawOrigin()" in body
+
+
+def test_failed_model_loads_are_reported_once_each():
+    """加载失败以前只有 debugLog（默认关）→ 客户端静默降级，服务端一片空白。
+
+    现在每次不同的失败原因上报一次；**同一个原因只报一次**，否则每帧调用会把通道刷爆
+    （服务端还有限流，真正的新错误反而被丢掉）。
+    """
+    out = run("""
+        __say = function(s) io.write(tostring(s) .. string.char(10)) end
+        -- ① 不在 cdimage 里
+        CFShared.LoadModel(12345)
+        -- ② 同一个原因再来两次 → 不应重复上报
+        CFShared.LoadModel(12345)
+        CFShared.LoadModel(12345)
+        __say('after_cdimage=' .. #__events)
+        __say('kind1=' .. tostring(__events[1] and __events[1].args[1]))
+        __say('has_reason=' .. tostring((__events[1] and tostring(__events[1].args[2]):find('cdimage') ~= nil)))
+
+        -- ③ 超时（桩里的 RequestModel 会把模型标成已加载，这里要让它"永远加载不出来"）
+        __modelInCdimage[888] = true
+        RequestModel = function() end
+        __now = 1000
+        Citizen.Wait = function() __now = __now + 100 end
+        CFShared.LoadModel(888, 500)
+        __say('after_timeout=' .. #__events)
+        __say('timeout_kind=' .. tostring(__events[2] and __events[2].args[1]))
+        __say('timeout_reason=' .. tostring((__events[2] and tostring(__events[2].args[2]):find('超时') ~= nil)))
+
+        -- ④ 成功加载不该产生任何上报
+        __modelInCdimage[999] = true
+        __loaded[999] = true
+        CFShared.LoadModel(999)
+        __say('after_success=' .. #__events)
+
+        -- ⑤ 参数非法（调用方 bug）也要看得见
+        CFShared.LoadModel(nil)
+        __say('after_bad_arg=' .. #__events)
+        __say('event_name=' .. tostring(__events[3] and __events[3].name))
+    """)
+    assert out["after_cdimage"] == "1", "同一原因重复失败只应上报一次"
+    assert out["kind1"] == "warn", "加载失败是 warn，不是 error（不中断流程）"
+    assert out["has_reason"] == "true"
+    assert out["after_timeout"] == "2", "超时是另一个原因，要单独上报"
+    assert out["timeout_kind"] == "warn"
+    assert out["timeout_reason"] == "true"
+    assert out["after_success"] == "2", "成功加载不该产生上报"
+    assert out["after_bad_arg"] == "3", "参数非法（客户端 bug）也必须可见"
+    assert out["event_name"] == "core-framework:server:clientReport"
