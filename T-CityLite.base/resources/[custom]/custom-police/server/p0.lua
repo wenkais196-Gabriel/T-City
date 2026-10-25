@@ -542,8 +542,12 @@ function P.SetDutyForSource(source, onDuty, reason)
     local player = QBCore.Functions.GetPlayer(source)
     if not player then return false, 'not_police' end
 
-    local ok = pcall(function() player.Functions.SetJobDuty(onDuty) end)
-    if not ok or data.job.onduty ~= onDuty then return false, 'duty_failed' end
+    local ok, err = pcall(function() player.Functions.SetJobDuty(onDuty) end)
+    if not ok or data.job.onduty ~= onDuty then
+        print(('[custom-police] duty_failed ok=%s err=%s actual=%s expected=%s'):format(
+            tostring(ok), tostring(err), tostring(data.job.onduty), tostring(onDuty)))
+        return false, 'duty_failed'
+    end
 
     -- SetJobDuty raises OnJobUpdate synchronously, whose handler already calls
     -- syncDuty. Calling it again is an idempotent safety net for builds that
