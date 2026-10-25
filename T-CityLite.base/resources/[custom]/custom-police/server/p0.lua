@@ -544,8 +544,9 @@ function P.SetDutyForSource(source, onDuty, reason)
 
     local ok, err = pcall(function() player.Functions.SetJobDuty(onDuty) end)
     if not ok or data.job.onduty ~= onDuty then
-        print(('[custom-police] duty_failed ok=%s err=%s actual=%s expected=%s'):format(
-            tostring(ok), tostring(err), tostring(data.job.onduty), tostring(onDuty)))
+        print(('[custom-police] duty_failed ok=%s err=%s data=%s player=%s same=%s expected=%s'):format(
+            tostring(ok), tostring(err), tostring(data.job.onduty),
+            tostring(player.PlayerData.job.onduty), tostring(player.PlayerData == data), tostring(onDuty)))
         return false, 'duty_failed'
     end
 
