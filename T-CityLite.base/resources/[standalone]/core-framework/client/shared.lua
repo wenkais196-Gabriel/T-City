@@ -51,13 +51,32 @@ end
 ---@param modelHash number
 ---@param timeoutMs number|nil 默认 10000
 ---@return boolean loaded
+-- 失败上报：同一个原因只报一次（每进程），上限 50 条。
+-- 为什么需要：LoadModel 失败以前只有 debugLog（默认关闭）→ 客户端静默降级，
+-- 服务端什么也看不见，只能靠玩家说"NPC 没出来"。去重是必要的，否则一个缺失的
+-- 模型会在每帧调用里刷爆通道（服务端还会因限流丢掉后面的真实错误）。
+local __reportedFailures, __reportedCount = {}, 0
+local function reportFailure(kind, message)
+    if __reportedFailures[message] or __reportedCount >= 50 then return end
+    __reportedFailures[message] = true
+    __reportedCount = __reportedCount + 1
+    CFShared.Report(kind, message)
+end
+
 function CFShared.LoadModel(modelHash, timeoutMs)
-    if type(modelHash) ~= 'number' or modelHash == 0 then return false end
-    if type(IsModelInCdimage) ~= 'function' or not IsModelInCdimage(modelHash) then
-        debugLog(('model %s 不在 cdimage 里，跳过'):format(tostring(modelHash)))
+    if type(modelHash) ~= 'number' or modelHash == 0 then
+        reportFailure('warn', ('LoadModel 参数非法: %s'):format(tostring(modelHash)))
         return false
     end
-    if type(HasModelLoaded) ~= 'function' or type(RequestModel) ~= 'function' then return false end
+    if type(IsModelInCdimage) ~= 'function' or not IsModelInCdimage(modelHash) then
+        debugLog(('model %s 不在 cdimage 里，跳过'):format(tostring(modelHash)))
+        reportFailure('warn', ('模型不在 cdimage: %s'):format(tostring(modelHash)))
+        return false
+    end
+    if type(HasModelLoaded) ~= 'function' or type(RequestModel) ~= 'function' then
+        reportFailure('warn', 'LoadModel 缺少原生函数（客户端版本不符？）')
+        return false
+    end
     if HasModelLoaded(modelHash) then return true end
 
     RequestModel(modelHash)
@@ -65,6 +84,7 @@ function CFShared.LoadModel(modelHash, timeoutMs)
     while not HasModelLoaded(modelHash) do
         if GetGameTimer() > deadline then
             debugLog(('model %s 加载超时'):format(tostring(modelHash)))
+            reportFailure('warn', ('模型加载超时: %s（%dms）'):format(tostring(modelHash), timeoutMs or 10000))
             return false
         end
         Citizen.Wait(10)

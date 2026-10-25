@@ -50,6 +50,20 @@ class Mutation:
 
 MUTATIONS: list[Mutation] = [
     Mutation(
+        gate="tests/architecture/test_export_contracts.py::test_every_export_has_a_permission_or_source_gate",
+        path="resources/[custom]/custom-police/server/__mutant_export.lua",
+        content=(
+            "-- 变异注入：一个不做任何权限判定的导出\n"
+            "local function probeNoGate(actor)\n"
+            "    return { ok = true, citizenid = actor.citizenid }\n"
+            "end\n"
+            "exports('ProbeNoGate', probeNoGate)\n"
+        ),
+        what="没有权限判定的导出（谁都能调，且直接回显公民 ID）",
+    ),
+
+
+    Mutation(
         gate="tests/architecture/test_client_observability.py::test_include_rule_detects_a_missing_helper",
         path="resources/[custom]/custom-quest/fxmanifest.lua",
         content=None,
