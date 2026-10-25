@@ -58,3 +58,14 @@ def test_list_marks_availability_and_keeps_phone_shape():
         f"不可接时要给出原因码供 UI 显示: {got['list_contains_cop']}"
     )
     assert got["list_row_shape"]["ok"], "手机端依赖 id/title/category/level 这几个字段"
+
+def test_export_arguments_are_not_shifted():
+    """跨资源导出的调用约定：exports['res']:Method(a) 的第一个参数是 proxy 自己。
+
+    写错成 dot 调用（少传 self）会静默把 source 当成 tags、把 tags 丢成 nil，
+    真实环境里就变成"所有带标签的任务都被判为不满足"，而测试如果只看返回值仍然全绿。
+    这里直接检查自定义导出收到的两个参数是否各就各位。
+    """
+    got = run()
+    assert got["tag_args"]["code"] == "table", f"第三方导出收到的 tags 不是 table：{got['tag_args']}"
+    assert got["tag_args"]["msg"] == "1", f"第三方导出收到的 source 不是玩家 source：{got['tag_args']}"
