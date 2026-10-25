@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4. integration harness 缺 ConvarInt 等全局（同样的 util.lua 缺失），以及 qb-core 的导出代理只提供了 GetCoreObject，离线入账走的 EconomyAddMoneyOffline 拿到 nil 直接炸。
   5. 两处文档指向 gitignored 的文件（运行时的 admins.json、含凭据的 server.cfg）—— 改成不带反引号的叙述。
   验证方式也换了：**在干净克隆里跑 CI 的四条命令**（`compileall`、tests/unit、tests/architecture、tests/agent、tests/integration），而不是只跑本地那两条目录。结果 920 passed / 132 skipped。
+- **CI 全绿（6/6 job）**：最后两个 job 也是同一类毛病——**测试桩与它测的代码脱节**。
+  agent 工具注册表：TOOLS.md 是 `tools/agent_tools.py --write` 的生成物，但有人在末尾手写了一段控制台驱动手册（tcity-cmd），`--check` 于是永远报 drift。那段内容本身有价值，搬到 T-CityLite.base/docs/agent/CONSOLE.md（并从 agent/README.md 索引），生成物恢复纯生成。
+  NUI 冒烟：Playwright 的 fetch 桩返回**空正文**（`text: async () => ''`），而 custom-phone 现在把 `await resp.text()` 交给 JSON.parse（web/src/utils/nui.ts），于是每个回调都抛 "NUI <event> replied HTTP 200: "，这些 console error 把用例判红。桩改成按事件名返回非空 JSON（nuiReady/phoneOpenAck/closePhone/getPhoneData/getPhoneApps/getCallHistory）。
+  验证：`python tests/nui/run_ui_tests.py` 4/4（截图是真渲染的手机主屏，不是空壳）、agent_tools --check OK、全量 920 passed / 132 skipped，GitHub Actions 六个 job 全 success。
 - **警察模块收口（第三步完成）：案卷 / 逮捕 / 报告，例外表清零**。`police_cases` 有两个写者（p2 的逮捕建卷、p3 的玩家建卷，两段几乎逐字相同）、`police_arrests` 两个且**列集合不同**（p2 的 Sys.Jail 三列、p3 的 RegisterArrest 五列）、`police_reports` 三处 INSERT 加两处 UPDATE（p1 五列、p2 十四列/十二列、p3 只更新判决字段）。
   又碰到同一个 bug 家族：`case_id`/`incident_id` 位于参数数组**中间**，调用方常传 nil，数组出洞 → oxmysql 截断 → 参数少于占位符 → MariaDB 语法错 → `InsertId()` 拿到错误字符串。真库对照确认：旧形状 `ok=true` 但结果是错误字符串 —— 也就是说**不带案卷/事件建报告这条路是坏的**，而报告创建是逮捕与录入流程的必经环节。
   新增 custom-police 的 records.lua 作为三张表的唯一写者：`InsertCase`（案号 CASE-年-六位，插入后补写）、`InsertArrest`（incident/case 只在提供时出现）、`InsertReport`（kind/status/BOLO/charges 按需拼接）、`LinkReport`（case_id 数字、justice_case_id 字符串，只更新实际给的列）、`RecordVerdict`（返回 ok 与 affected，保留"写失败"与"没匹配到行"的区别）。p1/p2/p3 的 9 处写入全部改为委派。
