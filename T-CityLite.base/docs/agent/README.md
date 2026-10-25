@@ -21,6 +21,9 @@ views, `agent_ro`, PII).
 
 > **Client harness:** Windows FiveM Legacy + MCP bridge, NUI test hooks and
 > known input limitations are documented in [`CLIENT_HARNESS.md`](CLIENT_HARNESS.md).
+>
+> **Console driving:** this FXServer build has no RCON; `tcity-cmd` (screen stdin
+> injection) and its four hard-won pitfalls are documented in [`CONSOLE.md`](CONSOLE.md).
 
 Agents read through a small, stable set of views instead of joining 20+ game
 tables. All access goes directly to MariaDB; it does not touch the FXServer
