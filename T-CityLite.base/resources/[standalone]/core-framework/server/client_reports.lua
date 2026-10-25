@@ -48,16 +48,26 @@ end
 RegisterNetEvent('core-framework:server:clientReady', function(resourceName, version)
     local src = source
     if not src or src == 0 then return end
-    -- 一次客户端加载一条；3/60s 容得下重连抖动，又挡住循环刷屏
-    local ok, allowed = pcall(function()
-        return exports['core-framework']:RateLimitWindow(('cf:ready:%s'):format(src), 3, 60000)
-    end)
-    if not ok or not allowed then return end
 
     local res = clean(resourceName, 64, '[^%w%[%]_%-%./]')
+    if not res then return end
     local ver = clean(version, 32, '[^%w%._%-]')
-    print(('[client-ready] %s %s %s'):format(
-        res or '?', ver and ('v' .. ver) or '', who(src)))
+
+    -- 两道限流，缺一不可：
+    --   ① 同一资源每 60s 记一条。一次登录会有**每个接入了共享助手的资源各发一条**
+    --      （现在是 20 个），而旧的 3 条/分钟直接把它们丢了 —— 于是"接上了"却只看得见 3 个。
+    --   ② 每玩家总量 40 条/60s。资源名是客户端给的，只有 ① 的话，伪造 1000 个名字就能刷屏。
+    local okDedup, firstSeen = pcall(function()
+        return exports['core-framework']:RateLimitWindow(('cf:ready:res:%s:%s'):format(src, res), 1, 60000)
+    end)
+    if not okDedup or not firstSeen then return end
+
+    local okBudget, allowed = pcall(function()
+        return exports['core-framework']:RateLimitWindow(('cf:ready:all:%s'):format(src), 40, 60000)
+    end)
+    if not okBudget or not allowed then return end
+
+    print(('[client-ready] %s %s %s'):format(res, ver and ('v' .. ver) or '', who(src)))
 end)
 
 RegisterNetEvent('core-framework:server:clientReport', function(kind, message)

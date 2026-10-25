@@ -142,3 +142,42 @@ def test_source_zero_is_ignored():
         __say('lines=' .. #__printed)
     """)
     assert out["lines"] == "0", "source=0 是服务端来源，不该被当成玩家上报"
+
+
+def test_twenty_resources_all_get_a_line_and_the_cap_still_bounds_the_log():
+    """真正的形状：一次登录有 20 个资源各发一条信标。
+
+    旧限流是 3 条/分钟 —— 把后 17 个直接丢了，"接上了"却只看得见 3 个。
+    现在：同一资源 60s 内只记一条；每玩家总量 40 条/60s 挡住伪造资源名刷屏。
+    """
+    out = run("""
+        __say = function(s) io.write(tostring(s) .. string.char(10)) end
+        source = 1
+        local ready = __handlers['core-framework:server:clientReady']
+        -- ① 20 个不同资源（同时刻，和真登录一样）
+        for i = 1, 20 do ready('res' .. i, '1.0.0')
+        end
+        __say('after20=' .. #__printed)
+
+        -- ② 同一个资源再来两次 → 不该重复记
+        ready('res1', '1.0.0')
+        ready('res1', '1.0.0')
+        __say('after_dup=' .. #__printed)
+
+        -- ③ 继续伪造资源名，总量封顶 40
+        for i = 21, 60 do ready('res' .. i, '1.0.0')
+        end
+        __say('after_flood=' .. #__printed)
+
+        -- ④ 换一个玩家，额度独立
+        local before = #__printed
+        _G.source = 2
+        ready('other', '1.0.0')
+        __say('other_player=' .. (#__printed - before))
+        __say('first_line=' .. tostring(__printed[1]))
+    """)
+    assert out["after20"] == "20", "20 个资源必须各记一条（旧限流会只留 3 条）"
+    assert out["after_dup"] == "20", "同一资源不应重复记"
+    assert out["after_flood"] == "40", "每玩家总量必须封顶在 40，否则伪造资源名能刷屏"
+    assert out["other_player"] == "1", "限流按玩家隔离"
+    assert "v1.0.0" in out["first_line"] and "Tester1" in out["first_line"]
