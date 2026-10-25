@@ -42,7 +42,6 @@ dependencies {
 	'custom-career',
 	'custom-certificates',
 	'custom-documents',
-	'custom-phone',
 }
 
 server_scripts {
