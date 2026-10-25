@@ -91,7 +91,13 @@ let mockJobBoard = [
   }
 ];
 
-let mockFactionMessages = {
+interface MockFactionMessage {
+  sender: string;
+  content: string;
+  time: number;
+}
+
+let mockFactionMessages: Record<string, MockFactionMessage[]> = {
   police: [
     { sender: 'Sheriff Miller', content: 'All units prioritize highway patrol today. High speeding reports.', time: Math.floor(Date.now() / 1000) - 1800 },
     { sender: 'Officer Adams', content: 'Copy that, setting up radar near Vinewood Hills.', time: Math.floor(Date.now() / 1000) - 900 }
@@ -112,6 +118,40 @@ const NUI_TIMEOUT_MS = 6000;
 // whose deadline is 8000 ms. Let it answer with a structured error instead of
 // aborting the fetch first.
 const APP_REQUEST_TIMEOUT_MS = 9000;
+
+// --- transport failure reporting -------------------------------------------
+// A rejected fetch / non-JSON body / 404 callback is invisible from the server:
+// Lua never ran, so the server log stays empty and the only evidence is a
+// CEF console line nobody reads. Forward the failure to the client's
+// `clientError` callback (which prints it server-side) so a dual-end trace
+// exists without opening DevTools on the game machine.
+const REPORT_WINDOW_MS = 10000;
+const recentReports = new Map<string, number>();
+
+function reportNuiFailure(eventName: string, detail: Record<string, unknown>): void {
+  if (isBrowser()) return; // browser preview: nothing to report to
+  const key = `${eventName}:${String(detail.reason ?? '')}`;
+  const now = Date.now();
+  const last = recentReports.get(key) ?? 0;
+  if (now - last < REPORT_WINDOW_MS) return; // one report per event+reason per window
+  recentReports.set(key, now);
+  if (recentReports.size > 50) recentReports.clear();
+  const scope = detail.status ? ` ${String(detail.status)}` : '';
+  const payload = {
+    source: 'nui',
+    event: eventName,
+    message: `nui ${eventName} ${String(detail.reason ?? 'failed')}${scope}: ${String(
+      detail.message ?? detail.body ?? '',
+    ).slice(0, 200)}`,
+    ...detail,
+  };
+  // Raw fetch on purpose: going through fetchNui() would recurse on failure.
+  void fetch(`https://${(window as any).GetParentResourceName()}/clientError`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
 
 // NUI fetch function (sends requests to Lua)
 export async function fetchNui<T = any>(
@@ -143,8 +183,32 @@ export async function fetchNui<T = any>(
         ...options,
         signal: controller.signal,
       });
-      return await resp.json();
+      // A missing RegisterNUICallback answers 404 with an empty body, and
+      // resp.json() then throws a SyntaxError that looks like a network error.
+      // Parse first: a structured JSON answer wins even on a non-2xx status,
+      // because the NUI harness and proxies can attach a real error code.
+      // Only an unparseable body is reported as a callback/transport failure.
+      const text = await resp.text();
+      let parsed: unknown;
+      let parseFailed = false;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parseFailed = true;
+      }
+      if (!parseFailed && parsed && typeof parsed === 'object') {
+        return parsed as T;
+      }
+      reportNuiFailure(eventName, {
+        reason: 'http_status',
+        status: resp.status,
+        body: text.slice(0, 200),
+        message: `HTTP ${resp.status} ${text.slice(0, 120) || '(empty body)'}`,
+      });
+      throw new Error(`NUI ${eventName} replied HTTP ${resp.status}: ${text.slice(0, 200)}`);
     } catch (error) {
+      const aborted = (error as any)?.name === 'AbortError';
+      if (!aborted) reportNuiFailure(eventName, { reason: 'fetch_error', message: String(error) });
       console.error(`Failed to fetch NUI event: ${eventName}`, error);
       throw error;
     } finally {

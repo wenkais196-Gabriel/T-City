@@ -1331,10 +1331,18 @@ RegisterNetEvent('phone:server:clientError', function(data)
     local src = source
     if type(data) ~= 'table' then return end
     if diagRateLimited('nui-error', src, CLIENT_ERROR_COOLDOWN) then return end
-    -- Only message/stack are read; every unknown field is dropped and both are
-    -- truncated so a client cannot flood or forge the log.
-    print(('[custom-phone][nui-error] src=%s | %s | %s'):format(
-        tostring(src), diagField(data.message, 300), diagField(data.stack, 500)))
+    -- Whitelisted fields only, each truncated: a client can neither flood the log
+    -- nor forge arbitrary content into it. `event`/`status`/`source` are what
+    -- make a NUI transport failure (404 callback, abort, bad JSON) traceable
+    -- from the server side without DevTools on the game machine.
+    local status = tonumber(data.status)
+    print(('[custom-phone][nui-error] src=%s source=%s event=%s status=%s | %s | %s'):format(
+        tostring(src),
+        diagField(data.source, 32),
+        diagField(data.event, 48),
+        status and tostring(math.floor(status)) or '-',
+        diagField(data.message, 300),
+        diagField(data.stack, 500)))
 end)
 
 
