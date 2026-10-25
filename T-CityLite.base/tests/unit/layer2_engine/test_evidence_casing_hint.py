@@ -169,3 +169,26 @@ def test_civilian_and_off_duty_see_nothing_and_far_ones_are_skipped():
     assert out["civilian"] == "0" and out["civilian_markers"] == "0", "平民不该看到证据位置"
     assert out["offduty"] == "0" and out["offduty_markers"] == "0", "下班状态也不该看到"
     assert out["onduty_again"] == "1", "400 米外那颗必须跳过（否则遍历和绘制都变成热点）"
+
+
+def test_the_pickup_prompt_names_the_real_key_and_the_bag():
+    """采集键是 G（控制位 47），不是 E；而且必须先有一颗空证据袋。
+
+    这条规则来自实机：我给的说明书写了"按 E"，玩家照着按没反应，真实答案是 G + 空袋子。
+    键位这种东西一旦写错，代码没错也会浪费一轮排查，所以钉死：
+    控制位必须是 47，而且提示文案里必须出现 G（locales 里用 ~g~G~s~ 上色）。
+    """
+    client = EVIDENCE.read_text(encoding="utf-8")
+    assert "IsControlJustReleased(0, 47)" in client, "弹壳/血迹/指纹的采集键是 G（47），改了就得同步改文档"
+
+    locale = (BASE / "resources" / "[custom]" / "custom-police" / "locales" / "en.lua").read_text(encoding="utf-8")
+    prompt_line = next(
+        (line for line in locale.splitlines() if "bullet_casing = " in line and "~g~G~s~" in line), None)
+    assert prompt_line, "找不到弹壳提示文案"
+    assert "~g~G~s~" in prompt_line, "提示里必须告诉玩家按 G"
+
+    # 服务端才是"要空证据袋"的判定点：没有空袋子就只发一条错误提示，不给证据
+    server = (EVIDENCE.parents[1] / "server" / "evidence.lua").read_text(encoding="utf-8")
+    assert "RemoveItem(src, 'empty_evidence_bag'" in server
+    assert "'filled_evidence_bag'" in server
+    assert "error.have_evidence_bag" in server, "没有空袋子时必须给出可读的错误提示，而不是静默失败"
