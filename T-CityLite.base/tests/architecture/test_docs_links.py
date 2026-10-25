@@ -76,7 +76,7 @@ def marked_dirs() -> set[Path]:
     """仓库里所有带 LEGACY.md 的目录（含被标记目录的子目录也会命中，取父目录去重后判断）。"""
     found = set()
     for marker in REPO.rglob(MARKER):
-        if IGNORED_DIRS & set(marker.parts):
+        if IGNORED_DIRS & set(marker.relative_to(REPO).parts):
             continue
         found.add(marker.parent)
     return found
@@ -86,7 +86,10 @@ def active_docs() -> list[Path]:
     dirs = legacy_dirs()
     return sorted(
         p for p in REPO.rglob("*.md")
-        if p.is_file() and not (IGNORED_DIRS & set(p.parts)) and not is_legacy(p, dirs)
+        # 只看仓库内的目录名（相对 REPO）：用绝对路径的 parts 会把上层目录（如 ~/cache/...）误判成忽略项
+        if p.is_file()
+        and not (IGNORED_DIRS & set(p.relative_to(REPO).parts))
+        and not is_legacy(p, dirs)
     )
 
 
@@ -137,7 +140,9 @@ def test_legacy_dirs_are_not_the_majority():
     """归档可以存在，但不能变成默认——活跃文档要远多于归档文档。"""
     dirs = legacy_dirs()
     archived = [p for p in REPO.rglob("*.md")
-                if p.is_file() and not (IGNORED_DIRS & set(p.parts)) and is_legacy(p, dirs)]
+                if p.is_file()
+                and not (IGNORED_DIRS & set(p.relative_to(REPO).parts))
+                and is_legacy(p, dirs)]
     active = active_docs()
     assert len(archived) < len(active), (
         f"归档 {len(archived)} 份 ≥ 活跃 {len(active)} 份——归档正在变成默认，" 

@@ -36,7 +36,7 @@ def area_docs() -> list[Path]:
     """
     docs = []
     for path in REPO.rglob("AGENTS.md"):
-        if path == ROOT_DOC or IGNORED_DIRS & set(path.parts):
+        if path == ROOT_DOC or IGNORED_DIRS & set(path.relative_to(REPO).parts):
             continue
         docs.append(path)
     return sorted(docs)
