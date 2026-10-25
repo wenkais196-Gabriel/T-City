@@ -52,9 +52,9 @@
       "table": "police_citations",
       "columns": [],
       "allowed_files": [
-        "custom-police/server/p1.lua"
+        "custom-police/server/citations.lua"
       ],
-      "reason": "罚单状态 unpaid→paid 与支付回滚只在 p1.PayCitation；其他资源只能读或用 phone 的罚单接口。"
+      "reason": "罚单状态 unpaid→paid 与支付回滚只在 p1.PayCitation；其他资源只能读或用 phone 的罚单接口。 2026-10-25: 罚单收口——行写入与状态流转（付款抢占/回滚）都在 server/citations.lua，p1 只保留玩家路径的前置检查与通知。"
     },
     {
       "id": "police_warrants.status",

@@ -37,6 +37,9 @@ OWNERS = {
     "police_warrants": "p3_cases.lua",
     "police_outbox": "p2_system.lua",
     "police_write_intents": "p2_system.lua",
+    # 2026-10-25: 罚单收口。金额政策与列集合都进了写者，
+    # p1 那个"不带车牌就开不出罚单"的洞随之消失
+    "police_citations": "citations.lua",
 }
 
 #: 还没收口的表：表名 → (为什么还不能收口, 仍在多写的证据痕迹)
@@ -49,10 +52,6 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
     "police_arrests": (
         "逮捕记录 p2_system（agent）与 p3_cases（玩家）双写，审计动作名也尚未统一",
         "INSERT INTO police_arrests",
-    ),
-    "police_citations": (
-        "罚单 p1（玩家开单）与 p2_system（agent 开单）双写，金额推导在 p2 侧重复实现",
-        "INSERT INTO police_citations",
     ),
     "police_evidence": (
         "证据 p2_evidence（玩家采集）与 p2_system（agent 登记）双写，链式表还要一起动",

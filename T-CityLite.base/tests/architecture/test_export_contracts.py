@@ -221,7 +221,22 @@ def is_read(export: Export) -> bool:
     body = strip_comments(export.body)
     if READ_NAME_RE.match(export.name):
         return True
-    return bool(SQL_SELECT_RE.search(body)) and not SQL_WRITE_RE.search(body)
+    if SQL_WRITE_RE.search(body):
+        return False
+    # 写被委派给 owner 之后，函数体外只剩 SELECT —— 但它在语义上仍是"动作"，
+    # 不是"读导出"。不判这一条，PayCitation 会被误判成敏感读。
+    if delegated_write(export):
+        return False
+    return bool(SQL_SELECT_RE.search(body))
+
+
+def delegated_write(export: Export) -> bool:
+    """函数体里没有写 SQL，但它调用的同资源函数有。"""
+    for callee in set(re.findall(r"\b([A-Za-z_][\w.:]*)\s*\(", strip_comments(export.body))):
+        resolved = named_functions().get(callee)
+        if resolved and SQL_WRITE_RE.search(strip_comments(resolved[2])):
+            return True
+    return False
 
 
 def is_sensitive_read(export: Export) -> bool:
@@ -238,7 +253,17 @@ def is_sensitive_read(export: Export) -> bool:
     # hide behind a one-line wrapper.
     for callee in set(re.findall(r"\b([A-Za-z_][\w.:]*)\s*\(", body)):
         resolved = named_functions().get(callee)
-        if resolved and PII_RE.search(strip_comments(resolved[2])):
+        if not resolved:
+            continue
+        callee_body = strip_comments(resolved[2])
+        # 只跟随"读"的委派。一个 UPDATE 助手（例如 PoliceCitations.ClaimPaid）里的
+        # citizenid 说明不了导出本身在读 PII —— 2026-10-25 就因为把写路径挪进 owner
+        # 而把 PayCitation 误判成敏感读。
+        # 跳过"纯写"助手（有 UPDATE/INSERT 且没有 SELECT，例如 ClaimPaid）：
+        # 它里面的 citizenid 说明不了导出本身在读 PII。不写 SQL 的纯计算助手要照跟。
+        if SQL_WRITE_RE.search(callee_body) and not SQL_SELECT_RE.search(callee_body):
+            continue
+        if PII_RE.search(callee_body):
             return True
     return False
 
@@ -282,6 +307,26 @@ def audit_before_read(body: str) -> bool:
     return min(positions) < query_at.start()
 
 
+
+def delegated_write_audit(export: Export) -> bool:
+    """导出的写和审计一起交给 owner 时，审计不在这段函数体里。
+
+    例：`IssueCitation` 现在只做玩家路径的前置检查，行写入与 `citation.issue` 审计在
+    `server/citations.lua` 的 `PoliceCitations.Insert` 里。沿着"这段函数调用到的同资源函数"
+    找一层：被调用者必须真的写下审计（`audit(` 或 `PoliceAudit.Write(`），否则仍然算违约——
+    委派不是豁免，只是把承诺换个地方兑现。
+    """
+    body = strip_comments(export.body)
+    for callee in set(re.findall(r"\b([A-Za-z_][\w.:]*)\s*\(", body)):
+        resolved = named_functions().get(callee)
+        if not resolved:
+            continue
+        callee_body = strip_comments(resolved[2])
+        if AUDIT_CALL_RE.search(callee_body) or "PoliceAudit.Write" in callee_body:
+            return True
+    return False
+
+
 def contract_violations(export: Export) -> list[Violation]:
     body = strip_comments(export.body)
     violations: list[Violation] = []
@@ -289,9 +334,10 @@ def contract_violations(export: Export) -> list[Violation]:
     if not has_auth_gate(body):
         violations.append(Violation(export, "auth", "no permission/source gate"))
 
-    if SQL_WRITE_RE.search(body) and not AUDIT_CALL_RE.search(body):
+    if (SQL_WRITE_RE.search(body) and not AUDIT_CALL_RE.search(body)
+            and not delegated_write_audit(export)):
         violations.append(Violation(
-            export, "write_audit", "write path does not call audit()"))
+            export, "write_audit", "write path does not call audit() (nor delegate it to an owner)"))
 
     bare = bad_failure_returns(body)
     if bare:

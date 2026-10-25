@@ -213,8 +213,9 @@ def test_report_is_the_anchor_and_children_are_linked():
     assert "officer_citizenid" in block
     assert "subject_citizenid" in block
 
-    assert "INSERT INTO police_citations" in block
-    citation_insert = block[block.index("INSERT INTO police_citations"):]
+    # 罚单行由唯一写者（server/citations.lua）写入，p2 只传字段
+    assert "PoliceCitations.Insert(" in block
+    citation_insert = block[block.index("PoliceCitations.Insert("):]
     assert "report_id" in citation_insert
     assert "base_amount" in citation_insert
     assert "charge_id" in citation_insert
@@ -465,7 +466,7 @@ def test_issue_citation_notification_goes_through_the_phone_owner():
     block = src[start:src.index("--- Citizen-side read", start)]
     assert "notifyCitizen(target, '你收到一张罚单'" in block
     assert "('$%d — %s（罚单 #%d，警官 %s）'):format(" in block
-    assert "math.floor(amount), text, tonumber(id), actor.citizenid" in block
+    assert "math.floor(settled), text, tonumber(id), actor.citizenid" in block
     assert "'banking'" in block
 
     # FIT-02: custom-police never writes phone_notifications. The helper only
@@ -489,7 +490,7 @@ def test_arrest_submit_notifies_the_subject_about_the_citation_best_effort():
 
     # Only after the citation insert, and after the jail-failed rollback point,
     # so a rolled-back arrest never sends a notification.
-    citation_insert = block.index("INSERT INTO police_citations")
+    citation_insert = block.index("PoliceCitations.Insert(")
     jail_failed = block.index("return fail('jail_failed')")
     notify_call = block.index("notifyCitation(target, created.citation")
     assert citation_insert < notify_call
@@ -516,8 +517,11 @@ def test_pay_citation_keeps_status_so_get_my_citations_shows_paid():
     assert "exports('PayCitation', P1.PayCitation)" in src
     # The transition is a conditional claim: only an unpaid row owned by the
     # caller can be moved to paid.
-    assert "SET status = 'paid', paid_at = NOW()" in src
-    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in src
+    # 条件抢占的 SQL 现在在唯一写者里（server/citations.lua 的 ClaimPaid）
+    owner = (POLICE / "server/citations.lua").read_text(encoding="utf-8")
+    assert "SET status = 'paid', paid_at = NOW()" in owner
+    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in owner
+    assert "PoliceCitations.ClaimPaid(id, actor.citizenid)" in src
 
     start = src.index("function P1.GetMyCitations(")
     block = src[start:src.index("function P1.GetCitations(", start)]
@@ -1800,10 +1804,13 @@ def test_arrest_audits_citation_and_evidence_children():
     block = arrest_block()
     # The child rows are audited independently, after their inserts.
     assert "created.exhibitNo = exhibitNo" in block
-    assert "auditPlayer(actor.citizenid, 'citation.issue', tostring(created.citation)" in block
-    assert "('$%d'):format(amount)" in block
+    # 罚单审计在唯一写者里记（'$金额 原因'），p2 不再重复记一条
+    owner = (POLICE / "server/citations.lua").read_text(encoding="utf-8")
+    assert "PoliceAudit.Write(actorCid, 'citation.issue'" in owner
+    assert "('$%d %s'):format(amount, reason)" in owner
+    assert "auditPlayer(actor.citizenid, 'citation.issue'" not in block
     assert "auditPlayer(actor.citizenid, 'evidence.register', created.exhibitNo" in block
-    assert block.index("INSERT INTO police_citations") < block.index("citation.issue")
+    assert block.index("PoliceCitations.Insert(") < block.index("notifyCitation(target, created.citation")
     assert block.index("INSERT INTO police_evidence") < block.index("'evidence.register'")
     # The arrest audit is still written once the sentence is applied.
     assert "auditPlayer(actor.citizenid, 'arrest.register', target, auditDetail)" in block
@@ -1812,25 +1819,28 @@ def test_arrest_audits_citation_and_evidence_children():
 def test_pay_citation_claims_before_charging_and_rolls_back_on_failure():
     src = p1_src()
     # Bundled oxmysql returns { affectedRows = n }; stock builds return n.
-    assert "local function affectedRows(result)" in src
-    assert "if type(result) == 'number' then return result end" in src
-    assert "tonumber(result.affectedRows)" in src
+    # 这段归一化随抢占一起进了唯一写者（server/citations.lua 的 ClaimPaid）。
+    owner = (POLICE / "server/citations.lua").read_text(encoding="utf-8")
+    assert "function PoliceCitations.ClaimPaid(" in owner
+    assert "result.affectedRows" in owner and "result.affected_rows" in owner
 
     start = src.index("function P1.PayCitation(")
     block = src[start:]
-    assert "affectedRows(claim) == 0" in block
+    assert "local claimed, claimOk = PoliceCitations.ClaimPaid(id, actor.citizenid)" in block
     # The conditional claim must run before any money moves.
-    claim = block.index("SET status = 'paid', paid_at = NOW()")
+    claim = block.index("PoliceCitations.ClaimPaid(id, actor.citizenid)")
     remove = block.index("RemoveMoney('bank'")
     assert claim < remove
-    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in block
+    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in owner
     # Losing the claim is reported with the reason, never charged.
     for code in ("'not_found'", "'not_owner'", "'already_'"):
         assert code in block
     # A failed RemoveMoney puts the row back so the owner can retry.
-    rollback = block.index("SET status = 'unpaid', paid_at = NULL")
+    # 回滚 SQL 也在唯一写者里（RevertPaid）；p1 只发一次调用，且必须在扣款失败之后
+    assert "SET status = 'unpaid', paid_at = NULL" in owner
+    assert "WHERE id = ? AND status = 'paid'" in owner
+    rollback = block.index("PoliceCitations.RevertPaid(id)")
     assert remove < rollback
-    assert "WHERE id = ? AND status = 'paid'" in block
     assert "return false, 'insufficient_funds'" in block
     # Only the successful payer writes the audit.
     assert "audit(actor.citizenid, 'citation.pay', tostring(id)" in block

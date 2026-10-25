@@ -348,7 +348,8 @@ def test_report_and_citation_writers_match_the_registry():
         "police_reports": {
             "server/p1.lua", "server/p2_system.lua", "server/p3_cases.lua",
         },
-        "police_citations": {"server/p1.lua"},
+        # 2026-10-25: 罚单收口到 server/citations.lua（p1 只做前置检查与通知）
+        "police_citations": {"server/citations.lua"},
         "police_cases": {"server/p2_system.lua", "server/p3_cases.lua"},
     }.items():
         actual = {write.file for write in writes if write.table == table}
