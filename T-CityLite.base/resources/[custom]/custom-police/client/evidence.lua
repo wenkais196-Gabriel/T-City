@@ -184,6 +184,36 @@ RegisterNetEvent('evidence:client:ClearCasingsInArea', function()
     end)
 end)
 
+-- ── 落点提示（执法特权） ────────────────────────────────────────────────────
+-- 原生玩法只有"手电照着 + 1.5 米内"才浮出文字，实测结果就是：**地上有东西，没人发现**。
+-- 这一层只负责"指位置"——值班执法人员在 25 米内能看到一枚小箭头 + 距离；
+-- 拾取流程一点没变（仍然要走到 1.5 米内按 E）。平民和下班状态看不到，证据位置不对外暴露。
+EvidenceHints = EvidenceHints or {}
+local HINT_RANGE = 25.0
+
+--- 画当前所有落在范围内的弹壳提示，返回画了几个。
+--- 抽成函数是为了能被单测直接调用（线程里的 while true 没法测）。
+---@param pos vector3 玩家坐标
+---@return number drawn
+function EvidenceHints.DrawCasings(pos)
+    if type(PlayerJob) ~= 'table' or PlayerJob.type ~= 'leo' or PlayerJob.onduty ~= true then
+        return 0
+    end
+    local drawn = 0
+    for _, casing in pairs(Casings) do
+        local c = casing.coords
+        local dist = #(pos - vector3(c.x, c.y, c.z))
+        if dist <= HINT_RANGE then
+            -- 细柱标出地面位置（DrawMarker 1 = 圆柱），上面再挂一个向下的箭头文字
+            DrawMarker(1, c.x, c.y, c.z + 0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.3, 0.3, 0.6, 255, 70, 70, 150, false, true, 2, false)
+            DrawText3D(c.x, c.y, c.z + 1.1, ('▼ %s · %.1fm'):format(Lang:t('info.casing'), dist))
+            drawn = drawn + 1
+        end
+    end
+    return drawn
+end
+
 -- Threads
 
 CreateThread(function()
@@ -232,6 +262,7 @@ CreateThread(function()
         -- 每帧只取一次 ped 与坐标：三个分支各自 GetEntityCoords(PlayerPedId()) 是白跑的
         local playerPed = PlayerPedId()
         local pos = GetEntityCoords(playerPed)
+        EvidenceHints.DrawCasings(pos)
         if CurrentCasing and CurrentCasing ~= 0 then
             if #(pos - vector3(Casings[CurrentCasing].coords.x, Casings[CurrentCasing].coords.y, Casings[CurrentCasing].coords.z)) < 1.5 then
                 DrawText3D(Casings[CurrentCasing].coords.x, Casings[CurrentCasing].coords.y, Casings[CurrentCasing].coords.z, Lang:t('info.bullet_casing', { value = Casings[CurrentCasing].type }))
