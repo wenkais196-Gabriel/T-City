@@ -78,6 +78,11 @@ end
 
 --- A client may only report a drop where its own ped actually stands.
 local function sanitizeCoords(coords)
+    -- vector3 在 CfxLua 里是原生类型，不是 table：旧客户端（以及任何沿用原生 vector3
+    -- 的调用者）会因为 type ~= 'table' 被整枪丢掉，所以这里两种形状都收。
+    if type(coords) == 'vector3' then
+        return { x = coords.x, y = coords.y, z = coords.z }
+    end
     if type(coords) ~= 'table' then return nil end
     local x, y, z = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
     if not x or not y or not z then return nil end
@@ -89,14 +94,17 @@ local function sanitizeCoords(coords)
     return { x = x, y = y, z = z }
 end
 
+---@return table|nil clean, string|nil reason
 local function coordsNearSource(src, coords)
     local clean = sanitizeCoords(coords)
-    if not clean then return nil end
+    if not clean then return nil, 'coords are not a {x,y,z} table' end
     local ped = GetPlayerPed(src)
-    if not ped or ped == 0 then return nil end
+    if not ped or ped == 0 then return nil, 'no ped for source' end
     local origin = GetEntityCoords(ped)
-    if #(vector3(clean.x, clean.y, clean.z) - origin) > MAX_COORDS_DRIFT then return nil end
-    return clean
+    if #(vector3(clean.x, clean.y, clean.z) - origin) > MAX_COORDS_DRIFT then
+        return nil, 'coords too far from ped'
+    end
+    return clean, nil
 end
 
 local function onlinePlayer(src)
@@ -342,9 +350,9 @@ RegisterNetEvent('evidence:server:CreateCasing', function(weapon, coords)
         if debug then print(('[evidence] rejected: weapon not a number src=%s'):format(tostring(src))) end
         return
     end
-    local where = coordsNearSource(src, coords)
+    local where, why = coordsNearSource(src, coords)
     if not where then
-        if debug then print(('[evidence] rejected: coords too far src=%s'):format(tostring(src))) end
+        if debug then print(('[evidence] rejected casing: %s src=%s'):format(why, tostring(src))) end
         return
     end
     local casingId = CreateCasingId()

@@ -111,3 +111,19 @@ nil，于是 `giveitem` 直接报 `attempt to concatenate a nil value (global 'i
 - 改共享行模板前先 `grep -c` 数出现次数；出现多次就要么带 `count=1` 加唯一上下文，要么一次改干净并给每个函数补上依赖；
 - **测试要覆盖所有调用同一模板的函数**。SetInventory 的测试当时是绿的，坏的是 AddItem/RemoveItem，
   而 giveitem 走的正是 AddItem。现在 INV-01 会分别用数字和 citizenid 各调一次这三个入口。
+
+## 跨资源事件不要直接发 vector3
+
+`vector3` 在 CfxLua 里是原生类型（`type(v) == 'vector3'`），不是 table。服务端如果照
+"客户端不受信任"的规矩写了 `if type(coords) ~= 'table' then return end`，那么每一个
+`TriggerServerEvent('...', coords)` 都会被静默丢掉——而且只留一句含糊的日志。
+
+实战症状：客户端日志确认 `casing sent weapon=453432689`，服务端每次都有
+`[evidence] rejected: coords too far`，玩家看到的就是"弹壳永远不出现"。真实原因是
+坐标在 `sanitizeCoords` 第一步就被判非法，根本没走到距离比较。
+
+两条规矩：
+
+1. 线上契约写清楚：**传普通表 `{ x = ..., y = ..., z = ... }`**，不发原生 vector3；
+2. 校验函数把 nil 拆成**带原因的返回值**（`return nil, 'coords are not a {x,y,z} table'`），
+   一个 `return nil` 配一句"coords too far"的日志等于没日志——这次就是靠分档才定位到形状问题。
