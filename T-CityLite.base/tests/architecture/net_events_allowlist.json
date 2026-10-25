@@ -379,6 +379,24 @@
       "evidence": "main.lua phone:server:nuiProbe — PROBE_COOLDOWN_MS=3000 + code/build gsub 收敛 + dur 取整",
       "owner": "custom-phone",
       "expires": "2026-11-30"
+    },
+    {
+      "name": "core-framework:server:clientReady",
+      "file": "[standalone]/core-framework/server/client_reports.lua",
+      "category": "diagnostic",
+      "reason": "客户端资源加载完成信标。客户端 print 只进 F8、服务端看不到，这个通道让\"新客户端代码到底有没有加载\"能从服务端日志回答。不含业务数据，只写一行日志。",
+      "evidence": "client_reports.lua:clientReady — allow() 走 RateLimitWindow 3/60s + clean(resourceName,64) + clean(version,32) 白名单字符集",
+      "owner": "core-framework",
+      "expires": "2027-06-30"
+    },
+    {
+      "name": "core-framework:server:clientReport",
+      "file": "[standalone]/core-framework/server/client_reports.lua",
+      "category": "diagnostic",
+      "reason": "客户端错误/降级上报（CFShared.Report）。只接 kind 白名单与一条 message，去控制字符后截断到 400 字，防止客户端伪造多行服务端日志；每玩家 10 条/分钟。",
+      "evidence": "client_reports.lua:clientReport — KINDS 白名单 + clean(message,400) 去 %c + allow() RateLimitWindow 10/60s",
+      "owner": "core-framework",
+      "expires": "2027-06-30"
     }
   ]
 }

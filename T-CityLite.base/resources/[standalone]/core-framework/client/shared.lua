@@ -80,5 +80,26 @@ function CFShared.ReleaseModel(modelHash)
     end
 end
 
--- 启动自证：F8 里能看到这一行，说明包含生效（服务端日志看不到客户端 print）
+--- 往服务端日志上报一条（客户端 print 只进 F8，服务端永远看不到）。
+--- 用途：客户端分支里的异常、降级、拿不到导出的地方。
+---@param kind string 'error' | 'warn' | 'info'
+---@param message string
+function CFShared.Report(kind, message)
+    if type(message) ~= 'string' or message == '' then return end
+    if kind ~= 'error' and kind ~= 'warn' and kind ~= 'info' then kind = 'info' end
+    TriggerServerEvent('core-framework:server:clientReport', kind, message)
+end
+
+-- 启动自证 + 就绪信标
+-- F8 里能看到这一行，说明包含生效；同时往服务端发一条，让"客户端到底有没有加载到新代码"
+-- 从服务端日志就能回答（服务端看不到客户端 print）。
 print('[core-framework] client shared ready (CFShared.DrawText3D, CFShared.LoadModel)')
+
+CFShared.HostResource = GetCurrentResourceName()
+
+CreateThread(function()
+    -- 等一小会儿：资源刚加载完时触发事件偶尔会落在注册之前（服务端那边也可能还没起完）
+    Wait(1500)
+    local version = GetResourceMetadata(CFShared.HostResource, 'version', 0) or '0'
+    TriggerServerEvent('core-framework:server:clientReady', CFShared.HostResource, version)
+end)
