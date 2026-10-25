@@ -153,6 +153,15 @@ def test_get_economy_returns_the_primitive_first():
     assert "function Bus.Plugin.GetEconomyTools()" in text, "分层便利层要有独立访问器"
 
 
+def test_offline_credit_rounds_to_cents():
+    """真实调用发现的：@amount 以 DOUBLE 绑定，DECIMAL + 浮点会漂成 100.5499999999999545。"""
+    text = (BASE / "resources/[qb]/qb-core/server/services/economy_service.lua").read_text(encoding="utf-8")
+    block = text[text.index("function EconomyService.AddMoneyOffline"):]
+    block = block[:block.index("\nend\n")]
+    assert "ROUND(" in block, "离线入账的 JSON_SET 必须 ROUND(..., 2)，否则金额会被浮点漂移污染"
+    assert "ROUND(COALESCE(CAST(JSON_EXTRACT" in block, "ROUND 必须包住整个算术表达式"
+
+
 # ---------------------------------------------------------------------------
 # 反向校验：规则必须真的会红
 # ---------------------------------------------------------------------------

@@ -281,8 +281,10 @@ function EconomyService.AddMoneyOffline(citizenid, moneytype, amount, reason, cb
     if not amount or amount <= 0 or amount ~= amount then return cb(false) end
 
     MySQL.update(
+        -- ROUND(..., 2)：参数以 DOUBLE 绑定，DECIMAL + 浮点会漂成 100.5499999999999545。
+        -- 钱一旦存成这种值，前端显示和后续加总都会带垃圾。
         ('UPDATE players SET money = JSON_SET(money, "$.%s", ' ..
-         'COALESCE(CAST(JSON_EXTRACT(money, "$.%s") AS DECIMAL(20,2)), 0) + ?) WHERE citizenid = ?'):format(
+         'ROUND(COALESCE(CAST(JSON_EXTRACT(money, "$.%s") AS DECIMAL(20,2)), 0) + ?, 2)) WHERE citizenid = ?'):format(
             moneytype, moneytype),
         { amount, citizenid },
         function(affectedRows)
