@@ -47,9 +47,9 @@
 | 9 | **车辆查询** (Garage) | `Garage.svelte` | `client/main.lua` | `server/main.lua` | `player_vehicles` |
 | 10 | **拨号面板** (PhoneCall) | `PhoneCall.svelte` | 纯 UI | — | — |
 | 11 | **通知中心** (Notifications) | `Notifications.svelte` | `client/main.lua` | 推送来源 | 内存 (瞬态) |
-| 12 | **市长面板** (MayorApp) | `leader/MayorApp.svelte` | `client/main.lua` | `server/jobboard.lua` | `phone_jobboard` |
-| 13 | **警长指挥** (SheriffApp) | `leader/SheriffApp.svelte` | `client/main.lua` | `server/faction.lua` | 内存 (`GlobalState`) |
-| 14 | **黑帮老大** (GangBossApp) | `leader/GangBossApp.svelte` | `client/main.lua` | `server/faction.lua` | 内存 (`GlobalState`) |
+| 12 | **市长面板** (MayorApp) | `web/src/apps/leader/MayorApp.svelte` | `client/main.lua` | `server/jobboard.lua` | `phone_jobboard` |
+| 13 | **警长指挥** (SheriffApp) | `web/src/apps/leader/SheriffApp.svelte` | `client/main.lua` | `server/faction.lua` | 内存 (`GlobalState`) |
+| 14 | **黑帮老大** (GangBossApp) | `web/src/apps/leader/GangBossApp.svelte` | `client/main.lua` | `server/faction.lua` | 内存 (`GlobalState`) |
 
 ---
 
