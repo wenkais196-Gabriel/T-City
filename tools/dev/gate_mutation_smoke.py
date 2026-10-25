@@ -206,6 +206,23 @@ MUTATIONS += [
 ]
 
 
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_client_hot_paths.py::test_no_duplicate_per_frame_control_polling",
+        path="resources/[custom]/custom-police/client/__mutant_poll.lua",
+        content=("-- 变异注入：手写逐帧按键轮询（该走 PoliceInteract.Watch）\n"
+                 "CreateThread(function()\n"
+                 "    while true do\n"
+                 "        Wait(0)\n"
+                 "        if IsControlJustReleased(0, 38) then TriggerEvent('x') end\n"
+                 "    end\n"
+                 "end)\n"),
+        what="手写逐帧按键轮询",
+    ),
+]
+
+
 def run_gate(nodeid: str) -> tuple[bool, str]:
     """返回 (passed, 最后一行输出)。passed=True 表示这条闸门**没红**。"""
     proc = subprocess.run(
