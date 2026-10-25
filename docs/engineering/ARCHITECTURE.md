@@ -71,6 +71,9 @@
 - `table_owners.json`：表 → owner 资源，跨资源写必须走 owner；
 - `resource_wiring_allowlist.json`：资源级引用（`exports` / 资源名硬编码）的豁免登记。
 
+组件的复用规则（共享代码放哪、什么不该合并、棘轮怎么收敛）见 `docs/engineering/REUSE.md`，
+闸门是 `tests/architecture/test_reuse_budget.py`。
+
 新增任何一条跨越这三个边界的调用，必须在同一 PR 里更新对应登记表，并写清楚
 "投影 / 限流 / 预算"或"为什么不需要"。这不是形式主义：登记表的 `expires` 是债务回收的钩子。
 

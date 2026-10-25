@@ -26,10 +26,18 @@ RESOURCES = REPO / "T-CityLite.base" / "resources"
 
 DEF_RE = re.compile(r"^\s*(?:local\s+)?function\s+([A-Za-z_][\w.:]*)\s*\(", re.M)
 NOISE_PREFIXES = ("__", "test", "on", "On")
+# 通用动词 / 方法的同名定义不构成"碎片化"信号：`Get`、`Register`、`trim` 这类
+# 名字在不同模块里各有一份是正常设计。把它们算进来只会让预算表变成垃圾场，
+# 然后所有人都学会忽略这个指标。
 NOISE_NAMES = {
-    "init", "main", "setup", "start", "stop", "draw", "loop", "think",
-    "handler", "callback", "run", "update", "tick", "new", "create", "destroy",
+    "init", "main", "setup", "start", "stop", "draw", "loop", "think", "run", "update",
+    "tick", "new", "create", "destroy", "handler", "callback",
+    "get", "set", "register", "unregister", "stats", "trim", "audit", "load", "save",
+    "send", "notify", "log", "print", "add", "remove", "clear", "reset", "apply",
+    "build", "parse", "format", "convert", "validate", "spawn", "delete", "refresh",
+    "reload", "enable", "disable", "wait", "drawtext", "help", "usage",
 }
+MIN_NAME_LEN = 6
 
 
 def definitions(root: Path) -> dict[str, list[str]]:
@@ -44,6 +52,8 @@ def definitions(root: Path) -> dict[str, list[str]]:
         for name in DEF_RE.findall(text):
             tail = name.split(":")[-1].split(".")[-1]
             if tail.lower() in NOISE_NAMES or tail.startswith(NOISE_PREFIXES):
+                continue
+            if len(tail) < MIN_NAME_LEN:      # 短名几乎都是方法/回调，不是能力
                 continue
             found[tail].append(str(lua.relative_to(REPO)))
     return found

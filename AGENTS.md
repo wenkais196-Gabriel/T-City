@@ -19,6 +19,7 @@
 | 写/改测试 | `T-CityLite.base/tests/AGENTS.md` | 现有同类测试就是一个模板 |
 | 改手机前端（Svelte/Vite） | `resources/[custom]/custom-phone/web/AGENTS.md` | `docs/client/research/nui-debug-playbook.md` |
 | 新增 net event / 表 / 跨资源调用 | `ARCHITECTURE.md §4` | `tests/architecture/*.json` 三份登记表 |
+| 想复用 / 合并重复实现 | `docs/engineering/REUSE.md` | `python3 tools/dev/reuse_scan.py --min 3` |
 | 交付 / 发版 | `docs/engineering/templates/delivery.md` | `tools/dev/release_check.py` |
 
 ## 2. 十条红线（违反 = 打回，全文见 CONSTITUTION）
