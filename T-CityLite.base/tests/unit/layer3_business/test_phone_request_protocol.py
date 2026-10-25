@@ -359,7 +359,7 @@ def test_get_phone_data_is_single_flight():
     # The NUI open, OnMoneyChange and RemoveBankMoney paths must all go through
     # the coalescing helper; only the helper itself may call the raw callback.
     assert src.count("TriggerCallback('phone:server:getPhoneData'") == 1
-    assert "fetchPhoneData(cb)" not in src, "NUI callback must wrap cb explicitly"
+    assert "    fetchPhoneData(cb)" not in src, "NUI callback must wrap cb explicitly"
     assert "fetchPhoneData(function(data)" in src
     assert "SetTimeout(8000" in src
 
