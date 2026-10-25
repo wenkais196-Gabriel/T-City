@@ -237,6 +237,7 @@
     audit_unavailable: '审计不可用，请稍后重试',
     db_error: '数据库错误，请重试',
     timeout: '请求超时，请重试',
+    rate_limited: '请求过于频繁，请稍后重试',
     no_response: '服务端无响应，请重试',
     bad_request: '请求参数无效，请刷新后重试',
     resource_stopped: '手机资源已重启，请重新打开',
