@@ -13,7 +13,9 @@ server_scripts {
     'server/main.lua',
     'server/smelter.lua',
 }
-client_scripts { 'client/main.lua' }
+client_scripts {     -- 客户端共享助手（加载期包含，零调用开销；必须排在其它 client 脚本之前）
+    '@core-framework/client/shared.lua',
+'client/main.lua' }
 
 dependencies {
     'oxmysql', 'qb-core', 'qb-inventory', 'qb-target', 'qb-menu',

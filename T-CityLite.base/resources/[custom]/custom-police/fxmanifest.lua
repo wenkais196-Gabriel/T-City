@@ -18,9 +18,11 @@ shared_scripts {
 }
 
 client_scripts {
+    -- 客户端共享助手（加载期包含，零调用开销；必须排在其它 client 脚本之前）
+    '@core-framework/client/shared.lua',
+
     -- 区域内按 E 的唯一实现（job.lua 等 6 处循环都用它）
     'client/interact.lua',
-    '@core-framework/client/shared.lua',  -- 客户端共享助手（加载期包含，零调用开销）
 	'@PolyZone/client.lua',
 	'@PolyZone/BoxZone.lua',
 	'@PolyZone/ComboZone.lua',

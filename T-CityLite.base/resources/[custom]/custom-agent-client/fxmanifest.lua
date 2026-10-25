@@ -11,6 +11,7 @@ server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/main.lua',
 }
+client_script '@core-framework/client/shared.lua'
 client_script 'client/main.lua'
 
 

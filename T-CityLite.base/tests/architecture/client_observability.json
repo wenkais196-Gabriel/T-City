@@ -1,0 +1,28 @@
+{
+  "helper": "@core-framework/client/shared.lua",
+  "provider": "core-framework",
+  "upstream_dirs": [
+    "[qb]",
+    "[cfx-default]",
+    "[voice]",
+    "[defaultmaps]"
+  ],
+  "vendored": [
+    "PolyZone",
+    "bob74_ipl",
+    "menuv",
+    "safecracker",
+    "oxmysql",
+    "progressbar",
+    "interact-sound",
+    "cartel-gates"
+  ],
+  "exceptions": {
+    "atom_nodes": "启动早于 core-framework（cfg 第 2 位），@ 包含会在加载期找不到文件；要接入得先调整启动顺序",
+    "aaa_silence": "启动早于 core-framework（cfg 第 1 位），同上",
+    "monitor": "不在启动链里（运维用，手动 ensure），没有运行时就不需要就绪信标",
+    "notify-test": "不在启动链里（压测/联调用，手动 ensure）",
+    "production-freeze": "与 core-framework 成环：core-framework 依赖它（_L i18n 必须先于 bus.lua 加载），它不能反向包含 core-framework 的客户端文件"
+  },
+  "reason": "CLI-01：客户端错误上报 + 就绪信标靠加载期包含接入，这份是给人/工具读的镜像"
+}
