@@ -30,12 +30,8 @@ local function utf8Sub(s, limit)
 end
 
 local function audit(cid, action, target, detail, actorKind)
-    return pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
-            { cid, actorKind or 'player', action, target,
-              detail and utf8Sub(tostring(detail), 500) or nil })
-    end)
+    -- 唯一写者见 server/audit.lua（这里只保留同名包装，调用点不用改）
+    return PoliceAudit.Write(cid, action, target, detail, actorKind)
 end
 
 local function caseNo(id)

@@ -259,7 +259,8 @@ def test_agent_system_entry_points_are_audited():
     sys = read(PHONE.parent / "custom-police/server/p2_system.lua")
     for export in ("CreateIncidentSystem", "AssignUnitSystem", "JailSystem"):
         assert f"exports('{export}'" in sys
-    assert "WriteAudit" in sys and "'agent'" in sys
+    # 审计只走唯一写者（server/audit.lua）；agent 路径用 WriteAgent 标 actor_kind='agent'
+    assert "PoliceAudit.WriteAgent" in sys and "'agent'" in sys
     justice = (PHONE.parent / "custom-justice/server/main.lua").read_text(encoding="utf-8")
     assert "exports('Imprison'" in justice
 
@@ -267,9 +268,12 @@ def test_agent_system_entry_points_are_audited():
 def test_insert_ids_are_normalized():
     shared = read(PHONE.parent / "custom-police/shared/insert_id.lua")
     assert "function InsertId" in shared and "insertId" in shared
-    for f in ("p0.lua", "p1.lua", "p2_evidence.lua", "p2_system.lua", "p3_cases.lua"):
+    # p2_system 不再自己建单（走 p0 的唯一写者，归一化也在那里做），所以它不在这份名单里。
+    for f in ("p0.lua", "p1.lua", "p2_evidence.lua", "p3_cases.lua"):
         src = read(PHONE.parent / "custom-police/server" / f)
         assert "InsertId(id)" in src, f
+    sys_src = read(PHONE.parent / "custom-police/server/p2_system.lua")
+    assert "PoliceIncidents.InsertRow(" in sys_src, "p2 必须委派给 police_incidents 的唯一写者"
 
 
 def test_mdt_charges_query_reads_the_police_catalogue():

@@ -47,7 +47,10 @@ dependencies {
 }
 
 server_scripts {
+
 	'@oxmysql/lib/MySQL.lua',
+    -- 审计的唯一写者：必须排在所有调用它的文件之前
+    'server/audit.lua',
 	'server/main.lua',
 	'server/npc_budget.lua',
 	'server/p0.lua',

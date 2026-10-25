@@ -62,31 +62,8 @@ local function notifyOfficer(citizenid, title, content, appId)
 end
 
 local function audit(actorCid, action, target, detail, actorKind)
-    -- Build the statement without nil holes in the parameter array: a nil
-    -- target/detail in the middle makes oxmysql truncate the list and sends
-    -- bare placeholders to MariaDB ("syntax error near '?, ?...'").
-    local values = { actorCid, actorKind or 'player', action }
-    local sql = 'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?'
-    if target ~= nil then
-        sql = sql .. ', ?'
-        values[#values + 1] = tostring(target):sub(1, 64)
-    else
-        sql = sql .. ', NULL'
-    end
-    if detail ~= nil then
-        sql = sql .. ', ?'
-        values[#values + 1] = tostring(detail):sub(1, 500)
-    else
-        sql = sql .. ', NULL'
-    end
-    sql = sql .. ')'
-
-    local ok, err = pcall(function()
-        local result = MySQL.query.await(sql, values)
-        if type(result) == 'string' then error(result, 0) end
-    end)
-    if not ok then print(('[custom-police] audit %s failed: %s'):format(tostring(action), tostring(err))) end
-    return ok
+    -- 唯一写者见 server/audit.lua（这里只保留同名包装，调用点不用改）
+    return PoliceAudit.Write(actorCid, action, target, detail, actorKind)
 end
 
 local function trim(v)
@@ -189,30 +166,68 @@ function P.GetUnits(source)
     return { units = out, count = #out }
 end
 
+--- police_incidents 的**唯一写入点**（玩家路径、agent 路径、NPC 路径都走这里）。
+--- 列集合按需拼接：npc_template 只有 NPC callout 才有，NULL 写进 SQL 而不是传 nil 参数
+--- （参数数组里的洞会被 oxmysql 截断，police_audit 那边踩过同一个坑）。
+---@param createdBy string 写入者标识：citizenid / 'agent:<id>' / 'npc:<template>'
+---@param data table { code, title, description|details, priority, x, y, z, npc_template }
+---@param opts table|nil { audit = false } 调用方已自行审计时跳过
+---@return table|nil result { id, status }, string|nil reason
+local function insertIncidentRow(createdBy, data, opts)
+    if type(data) ~= 'table' then return nil, 'invalid_params' end
+    local title = trim(data.title):sub(1, 120)
+    if title == '' then return nil, 'invalid_title' end
+    local code = trim(data.code):sub(1, 16)
+    if code == '' then code = '911' end
+    local priority = tonumber(data.priority) or 2
+    priority = math.max(1, math.min(3, math.floor(priority)))
+    local description = trim(data.description or data.details):sub(1, 1000)
+    local npcTemplate = data.npc_template and tostring(data.npc_template):sub(1, 32) or nil
+
+    local columns = { 'code', 'title', 'description', 'priority', 'created_by' }
+    local placeholders = { '?', '?', '?', '?', '?' }
+    local values = { code, title, description, priority, createdBy }
+    local function add(column, value)          -- 只为非 nil 值追加，数组里不留洞
+        if value == nil then return end
+        columns[#columns + 1] = column
+        placeholders[#placeholders + 1] = '?'
+        values[#values + 1] = value
+    end
+    add('x', tonumber(data.x))
+    add('y', tonumber(data.y))
+    add('z', tonumber(data.z))
+    add('npc_template', npcTemplate)
+
+    local id = MySQL.insert.await(
+        ('INSERT INTO police_incidents (%s) VALUES (%s)'):format(
+            table.concat(columns, ', '), table.concat(placeholders, ', ')),
+        values)
+    id = InsertId(id)
+    if not id or id == 0 then return nil, 'db_error' end
+
+    -- opts.audit == false 表示调用方已经自己写过审计（例如 agent 路径要 fail-closed：
+    -- 审计写不进去就不许建单），这里不再重复记一条。
+    if not (opts and opts.audit == false) then
+        if not audit(createdBy, 'incident.create', tostring(id), title) then
+            print(('[custom-police] incident.create audit failed for #%s'):format(tostring(id)))
+        end
+    end
+    return { id = tonumber(id), status = 'open', code = code, title = title }
+end
+
+--- 同资源内的唯一写者句柄（p2_system 的 agent 路径、p4_npc 的 NPC 路径都用它）。
+--- 不对外 exports：外部只能走 CreateIncident（带玩家身份校验）。
+PoliceIncidents = { InsertRow = insertIncidentRow }
+
 function P.CreateIncident(source, data)
     local creator = pd(source)
     if not creator then return false, 'player_not_found' end
-    local title = trim(data and data.title):sub(1, 120)
-    if title == '' then return false, 'invalid_title' end
-    local code = trim(data and data.code):sub(1, 16)
-    if code == '' then code = '911' end
-    local priority = tonumber(data and data.priority) or 2
-    priority = math.max(1, math.min(3, math.floor(priority)))
-    local description = trim(data and data.description):sub(1, 1000)
-    local x, y, z = tonumber(data and data.x), tonumber(data and data.y), tonumber(data and data.z)
-    local id = MySQL.insert.await([[
-        INSERT INTO police_incidents (code, title, description, priority, x, y, z, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ]], { code, title, description, priority, x, y, z, creator.citizenid })
-    id = InsertId(id)
-    if not id or id == 0 then return false, 'db_error' end
-    if not audit(creator.citizenid, 'incident.create', tostring(id), title) then
-        print(('[custom-police] incident.create audit failed for #%s'):format(tostring(id)))
-    end
+    local result, reason = insertIncidentRow(creator.citizenid, data)
+    if not result then return false, reason end
 
     local notification = {
-        title = ('%s: %s'):format(code, title):sub(1, 200),
-        content = description:sub(1, 500),
+        title = ('%s: %s'):format(result.code, result.title):sub(1, 200),
+        content = trim(data and (data.description or data.details)):sub(1, 500),
     }
     for _, src in ipairs(QBCore.Functions.GetPlayers()) do
         local p = QBCore.Functions.GetPlayer(src)
@@ -221,15 +236,9 @@ function P.CreateIncident(source, data)
             notifyOfficer(d.citizenid, notification.title, notification.content, 'police_mdt')
         end
     end
-    return { id = tonumber(id), status = 'open' }
+    return result
 end
 
---- Live incident queue. Descriptions/locations are sensitive operational data,
---- so the read requires `incident.update` (the existing board capability; the
---- policy table has no incident.view) and writes an `incident.view` audit row
---- before the SELECT. A failed audit refuses the listing.
----@param source number requesting officer source
----@param status string|nil optional active-status filter
 function P.GetIncidents(source, status)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'incident.update')

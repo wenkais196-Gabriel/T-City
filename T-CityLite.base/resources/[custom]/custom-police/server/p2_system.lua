@@ -29,18 +29,8 @@ local function utf8Sub(s, limit)
 end
 
 local function audit(actorId, action, target, detail)
-    -- Reuse p0's proven writer; the duplicate INSERT here hit an oxmysql
-    -- prepared-statement quirk and returned an error string without throwing.
-    local ok, result = pcall(function()
-        return exports['custom-police']:WriteAudit(
-            ('agent:%s'):format(utf8Sub(tostring(actorId or 'unknown'), 40)),
-            'agent', action, target, detail)
-    end)
-    if not ok or result ~= true then
-        print(('[custom-police] p2 audit failed %s: %s'):format(tostring(action), tostring(result)))
-        return false
-    end
-    return ok and result == true
+    -- 唯一写者见 server/audit.lua（这里只保留同名包装，调用点不用改）
+    return PoliceAudit.WriteAgent(actorId, action, target, detail)
 end
 
 -- ---------------------------------------------------------------------------
@@ -248,19 +238,17 @@ function Sys.CreateIncident(actorId, data)
     if type(data) ~= 'table' then return false, 'invalid_params' end
     local title = utf8Sub(trim(data.title), 120)
     if #title < 3 then return false, 'invalid_title' end
-    local code = trim(data.code):sub(1, 16)
-    if code == '' then code = '911' end
-    local priority = math.max(1, math.min(3, math.floor(tonumber(data.priority) or 2)))
-    local details = utf8Sub(trim(data.details or data.description), 1000)
+    -- agent 路径要求 fail-closed：审计写不进去就不许建单（玩家 911 不这么做——
+    -- 不能因为审计失败就让报警失效）。所以这里预审计，然后让写者跳过它自己那条。
     if not audit(actorId, 'incident.create', nil, title) then return false, 'audit_unavailable' end
-    local id = MySQL.insert.await([[
-        INSERT INTO police_incidents (code, title, description, priority, created_by)
-        VALUES (?, ?, ?, ?, ?)
-    ]], { code, title, details, priority, ('agent:%s'):format(utf8Sub(tostring(actorId), 40)) })
-    id = InsertId(id)
-    if not id or id == 0 then return false, 'db_error' end
-    broadcast(('%s: %s'):format(code, title), details)
-    return { id = tonumber(id), status = 'open' }
+
+    local createdBy = ('agent:%s'):format(utf8Sub(tostring(actorId), 40))
+    local result, reason = PoliceIncidents.InsertRow(createdBy, data, { audit = false })
+    if not result then return false, reason end
+
+    broadcast(('%s: %s'):format(result.code, result.title),
+              utf8Sub(trim(data.details or data.description), 1000))
+    return { id = result.id, status = result.status }
 end
 
 --- L2: assign a unit to an incident as an agent.
@@ -507,11 +495,8 @@ local function withIntent(action, actorCid, key, fn)
 end
 
 local function auditPlayer(cid, action, target, detail)
-    return pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, "player", ?, ?, ?)',
-            { cid, action, target, detail and utf8Sub(tostring(detail), 500) or nil })
-    end)
+    -- 唯一写者见 server/audit.lua
+    return PoliceAudit.Write(cid, action, target, detail)
 end
 
 local function insertRow(sql, values)

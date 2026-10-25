@@ -74,12 +74,8 @@ local function trim(value)
 end
 
 local function audit(actorCid, action, target, detail, actorKind)
-    return pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
-            { actorCid, actorKind or 'player', action, target,
-              detail and tostring(detail):sub(1, 500) or nil })
-    end)
+    -- 唯一写者见 server/audit.lua（这里只保留同名包装，调用点不用改）
+    return PoliceAudit.Write(actorCid, action, target, detail, actorKind)
 end
 
 local function onDutyOfficers()
@@ -168,18 +164,20 @@ function NPC.CreateNpcCallout(templateId, officerSrc)
     local title = ('[NPC] %s'):format(template.title):sub(1, 120)
     local description = (template.description:gsub('{location}', location.label)):sub(1, 1000)
 
-    local inserted = MySQL.insert.await([[
-        INSERT INTO police_incidents
-            (code, title, description, priority, x, y, z, created_by, npc_template)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ]], { template.code, title, description, template.priority,
-          coords.x, coords.y, coords.z, actorCid, template.id })
-    local id = InsertId(inserted)
-    if not id or id == 0 then
-        NPCBudget.Release(budgetId, 'db_error')
-        return false, 'db_error'
+    -- 走 police_incidents 的唯一写者（server/p0.lua 的 PoliceIncidents.InsertRow）。
+    -- 审计在本函数末尾单独记（npc.callout.create，actor_kind 可能是 player），
+    -- 所以让写者跳过它自己那条 incident.create，避免一次建单两条审计。
+    local inserted, insertReason = PoliceIncidents.InsertRow(actorCid, {
+        code = template.code, title = title, description = description,
+        priority = template.priority,
+        x = coords.x, y = coords.y, z = coords.z,
+        npc_template = template.id,
+    }, { audit = false })
+    if not inserted then
+        NPCBudget.Release(budgetId, insertReason or 'db_error')
+        return false, insertReason or 'db_error'
     end
-    id = tonumber(id)
+    local id = tonumber(inserted.id)
     calloutBudget[id] = budgetId
 
     if not audit(actorCid, 'npc.callout.create', tostring(id), template.id, actorKind) then
