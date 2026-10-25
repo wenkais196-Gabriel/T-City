@@ -184,6 +184,34 @@ grep -o "appQuery" html/assets/index.js | wc -l
 
 每条格式：**签名 → 60 秒证实/排除 → 修复**。
 
+### 3.0 NUI 应答通道是可调用表，被 `type(cb) ~= 'function'` 丢掉（2026-10-25 实测命中）
+
+**已证实的事实**（本 build）：`RegisterNUICallback(name, function(data, cb) ... end)` 的
+`cb` **不一定是 `function`**。经探针打印，此 FXServer build 交下来的是
+`type(cb) == 'table'`，内容为 `{ __cfx_functionReference = '<ref>' }` 且 **有 `__call` 元方法**。
+
+**签名**（三条同时成立，几乎可以直接定案）
+- NUI 侧 fetch **挂到超时**才失败：`AbortError: The user aborted a request`，`status=-`，
+  不是 404 空 body、不是 `TypeError: Failed to fetch`。
+- 服务端**能收到**请求（`[arrived]`/`appQuery-hit` 有日志），甚至已经回包，但前端永远拿不到。
+- 同一资源的**普通回调**（如 `getPhoneData`）却工作正常——因为它们直接 `cb(...)`，
+  没有经过任何 `type(cb)` 守卫。
+
+**根因**：任何形如 `if type(cb) ~= 'function' then return end` 的守卫，在拿到函数引用表时
+会**静默 return**，`cb` 永不调用 ⇒ CEF 的 fetch 永久 pending ⇒ 前端只能报
+`query_failed` / `action_failed`（`core/request.ts` 的传输层兜底码）。
+
+**修复**：用统一的适配层（`PhoneBridge.AnswerFn`），顺序为
+1. `type == 'function'` → 直接用；
+2. 表且有 `__call` → `return function(r) return cb(r) end`（官方语义，实测可用）；
+3. 表且只有 `__cfx_functionReference` → `Citizen.InvokeFunctionReference(ref, r)`；
+4. 都不成立 → **返回 nil 并拒绝执行 handler**（宁可让前端拿到确定的超时码，也不要
+   跑一半留副作用）。
+
+**顺带教训**：`rawget(_G, 'X')` 在 FiveM 里拿不到**其他脚本**定义的全局（每个脚本有独立
+env，只有普通读取才走 `__index` 回退到共享表）。跨文件取模块请用 `local d = X; if type(d)…`
+而不是 `rawget(_G, 'X')`。
+
 ### 3.1 CEF 缓存了旧 bundle（本项目概率最高）
 
 **为什么这里高发**：`vite.config.ts` 把产物固定成 `assets/index.js`、`assets/index.css`

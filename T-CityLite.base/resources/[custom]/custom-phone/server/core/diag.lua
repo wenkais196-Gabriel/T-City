@@ -54,8 +54,7 @@ local counters = { traces = 0, slow = 0, fail = 0, dropped = 0, breaks = {}, las
 local printWindow = { second = nil, count = 0 }
 
 local function nowMs()
-    local timer = rawget(_G, 'GetGameTimer')
-    if type(timer) == 'function' then return timer() end
+    if type(GetGameTimer) == 'function' then return GetGameTimer() end
     return math.floor(os.clock() * 1000)
 end
 
@@ -66,14 +65,15 @@ function PhoneDiag.Level()
     if levelCache.value ~= nil and stamp - levelCache.at < LEVEL_CACHE_MS then
         return levelCache.value
     end
+    -- 默认 1（开启）。注意不能用 GetConvarInt 判断"有没有设"：convar 未定义时
+    -- 它返回 0，会把"没配置"误判成"显式关闭"，整条 trace 静默失效。
     local value = 1
-    local getInt = rawget(_G, 'GetConvarInt')
-    local getConvar = rawget(_G, 'GetConvar')
-    if type(getInt) == 'function' then
-        local parsed = tonumber(getInt('phone_diag'))
-        if parsed then value = parsed end
-    elseif type(getConvar) == 'function' then
-        local parsed = tonumber(getConvar('phone_diag'))
+    local raw
+    if type(GetConvar) == 'function' then
+        raw = GetConvar('phone_diag')
+    end
+    if type(raw) == 'string' and raw ~= '' then
+        local parsed = tonumber(raw)
         if parsed then value = parsed end
     end
     if value < 0 then value = 0 elseif value > 2 then value = 2 end
@@ -138,7 +138,7 @@ function PhoneDiag.Sanitize(msg)
 end
 
 local function allowTrace(src)
-    local limiter = rawget(_G, 'PhoneRateLimit')
+    local limiter = PhoneRateLimit
     if type(limiter) == 'table' and type(limiter.Allow) == 'function' then
         return limiter.Allow(('diag:%s'):format(tostring(src)), PhoneDiag.TRACE_PER_MIN, PhoneDiag.TRACE_BURST)
     end

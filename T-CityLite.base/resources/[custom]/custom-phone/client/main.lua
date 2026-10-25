@@ -338,7 +338,9 @@ local function fetchPhoneData(cb)
         end
     end
     QBCore.Functions.TriggerCallback('phone:server:getPhoneData', finish)
-    SetTimeout(8000, function()
+    -- NUI 侧 getPhoneData 的 abort 是 6s（NUI_TIMEOUT_MS）；这里的兜底必须更早，
+    -- 否则前端只会看到 AbortError，拿不到结构化的 timeout。
+    SetTimeout(4000, function()
         finish({ success = false, error = 'timeout' })
     end)
 end
@@ -926,6 +928,19 @@ RegisterNUICallback('getPhoneApps', function(_, cb)
     end)
 end)
 
+-- NUI 自证握手：页面加载时报告 build id 与宿主名（见 web/src/main.ts）。
+-- 服务端有这条日志 = 页面跑的是新 bundle 且 NUI→Lua 路由通。
+RegisterNUICallback('nuiReady', function(data, cb)
+    TriggerServerEvent('phone:server:nuiReady', data)
+    cb({ ok = true })
+end)
+
+-- 四段探针结果：页面用真实 appQuery 走完整条链路后回报终态码。
+RegisterNUICallback('nuiProbe', function(data, cb)
+    TriggerServerEvent('phone:server:nuiProbe', data)
+    cb({ ok = true })
+end)
+
 -- qb-core stores exactly ONE pending callback per callback name
 -- (QBCore.ServerCallbacks[name]) and the response clears it, so two concurrent
 -- appQuery calls — PoliceMDT refresh() does Promise.all([units, incidents]) —
@@ -934,16 +949,44 @@ end)
 -- client/core/bridge.lua; only these two app readers stay here. The legacy
 -- QBCore callbacks stay registered server-side for other callers.
 -- [phone-app-readers] begin (extracted by test_phone_request_protocol.py)
+-- 诊断挂钩是可选依赖：diag 模块不存在时（单元测试里的裸 bridge、老客户端）
+-- 这些函数退化成 nil / no-op，读请求的行为与之前逐字节等价。
+local function startRequestTrace(payload, kind)
+    local diag = PhoneDiag
+    if type(diag) ~= 'table' then return nil end
+    local tid = diag.TakeTraceId(payload) or diag.NewTraceId()
+    local trace = diag.StartTrace(tid, kind, type(payload) == 'table' and payload.app_id or nil)
+    diag.Phase(trace, 'req.cli.recv')
+    diag.Phase(trace, 'req.cli.fwd')
+    return trace
+end
+
+local function finishRequestTrace(trace, res)
+    if not trace then return end
+    local diag = PhoneDiag
+    if type(diag) ~= 'table' then return end
+    local code = 'no_response'
+    if type(res) == 'table' then code = res.error or 'ok' end
+    diag.Phase(trace, 'req.cli.answer', code)
+    diag.Finish(trace, code, { answered = type(res) == 'table' })
+end
+
 PhoneBridge.RegisterNui('appQuery', function(data, cb)
     if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
-    TriggerServerEvent('phone:server:focusState', { phase = 'appQuery-hit' })
-    PhoneBridge.Request('phone:server:appQueryRequest', data, cb)
+    local trace = startRequestTrace(data, 'query')
+    PhoneBridge.Request('phone:server:appQueryRequest', data, function(res)
+        finishRequestTrace(trace, res)
+        cb(res)
+    end, nil, nil, trace)
 end)
 
 PhoneBridge.RegisterNui('appAction', function(data, cb)
     if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
-    TriggerServerEvent('phone:server:focusState', { phase = 'appAction-hit' })
-    PhoneBridge.Request('phone:server:appActionRequest', data, cb)
+    local trace = startRequestTrace(data, 'action')
+    PhoneBridge.Request('phone:server:appActionRequest', data, function(res)
+        finishRequestTrace(trace, res)
+        cb(res)
+    end, nil, nil, trace)
 end)
 -- [phone-app-readers] end
 

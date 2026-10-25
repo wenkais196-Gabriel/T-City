@@ -120,6 +120,44 @@ interface PhoneApp {
 }
 ```
 
+## 3.5 NUI 应答通道与自证握手
+
+### 应答通道不一定是 function
+
+`RegisterNUICallback(name, function(data, cb) ... end)` 里的 `cb` 在本 build 上是
+**可调用表**（`{ __cfx_functionReference = '<ref>' }` + `__call`）。所以：
+
+- 禁止写 `if type(cb) ~= 'function' then return end` —— 那是静默丢弃应答，
+  前端只会看到 9s 后的 `AbortError` → `query_failed` / `action_failed`；
+- 所有回调统一走 `PhoneBridge.AnswerFn(cb)`，它按 function → `__call` 表 →
+  `Citizen.InvokeFunctionReference` 的顺序取应答通道，取不到时返回 nil，
+  `RegisterNui` 直接**不执行 handler**（宁可不跑，也不要跑一半）；
+- 直连 `RegisterNUICallback` 的地方（`getPhoneData` 等）也要用同一套适配。
+
+### 自证握手（每次页面加载一次）
+
+`web/src/main.ts` 在挂载前做两件事，结果都投到服务端日志：
+
+1. `nuiReady { build, host, href, parent }` —— 证明**跑的是哪个 bundle**、宿主名是否
+   为 `custom-phone`、路由是否通。日志格式：`[custom-phone][nui-ready] src=.. build=.. host=.. parent=..`
+2. **四段探针**：用一次真实 `appQuery`（`police_mdt/units`）走完整条链路，再回报
+   `[custom-phone][probe] src=.. build=.. code=.. dur=..ms`。
+
+判定：`code=ok` 且 `dur` 在百毫秒级 = 整条链路健康；`code=query_failed` + `dur≈9000ms`
+= 应答没回到 CEF；只有 `nui-ready` 没有 `probe` = 探针请求自身卡住。这样
+`restart custom-phone` 之后不需要人点，就能判断"改的东西到底生效没有"。
+
+### 请求追踪（stage 0/3）
+
+`client/core/diag.lua` + `server/core/diag.lua` 提供 `phone:server:diag` 通道：
+NUI 传 `_diag.tid`（没有则由客户端生成），trace 的 tid **就是 request_id**，
+服务端内存环记录 `Recv/Done` 作为 SR/SD 的唯一事实源，链尾按
+`level2 / ≥400ms / 失败 / 前 3 次` 采样上报，服务端打印
+`path=NS|CR|CF|SR|SD|CP|CA|ND break=segX`。默认开启，`setr phone_diag 0` 关闭。
+
+> 注意：**新增脚本文件后客户端必须重连一次**——客户端会缓存 fxmanifest，
+> `restart` 只更新已有文件的脚本内容，不会加载新加进清单的文件。
+
 ## 4. 性能预算
 
 | 指标 | 目标 |

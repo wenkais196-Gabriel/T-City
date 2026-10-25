@@ -45,6 +45,7 @@ local convar = { phone_diag = '1' }
 local events = {}
 function GetGameTimer() return NOW end
 function advance(ms) NOW = NOW + ms end
+function GetConvar(name) return convar[name] or '' end
 function GetConvarInt(name) return tonumber(convar[name] or '') or 0 end
 function setConvar(name, value) convar[name] = value end
 function TriggerServerEvent(name, payload) events[#events + 1] = { name = name, payload = payload } end
@@ -65,6 +66,7 @@ local netEvents = {}
 local buckets = {}
 function GetGameTimer() return NOW end
 function advance(ms) NOW = NOW + ms end
+function GetConvar(name) return convar[name] or '' end
 function GetConvarInt(name) return tonumber(convar[name] or '') or 0 end
 function setConvar(name, value) convar[name] = value end
 function print(...)

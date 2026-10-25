@@ -31,6 +31,7 @@ CORE = PHONE / "client" / "core"
 BRIDGE = CORE / "bridge.lua"
 FOCUS = CORE / "focus.lua"
 EVENTS = CORE / "events.lua"
+DIAG = CORE / "diag.lua"
 
 LUA_BIN = shutil.which("lua5.4")
 
@@ -40,6 +41,11 @@ local nuicallbacks, netevents, handlers, timers, sent, messages = {}, {}, {}, {}
 local focusCalls, keepCalls = {}, {}
 local currentFocus, currentCursor, currentKeep = false, false, false
 local clock = 1000
+local convars = {}
+
+function GetConvar(name) return convars[name] or '' end
+function GetConvarInt(name) return tonumber(convars[name] or '') or 0 end
+function setConvar(name, value) convars[name] = value end
 
 function GetGameTimer() return clock end
 function GetCurrentResourceName() return 'custom-phone' end
@@ -150,6 +156,77 @@ assert(errors[1].response.success == false and errors[1].response.error == 'hand
 
 assert(PhoneBridge.RegisterNui('', function() end) == false)
 assert(PhoneBridge.RegisterNui('x', nil) == false)
+"""))
+
+
+def test_bridge_answers_a_callable_callback_table():
+    """FXServer 把 NUI 应答通道交成"可调用表"（CFX 函数引用），不是 function。
+
+    旧实现的 `if type(cb) ~= 'function' then return end` 会把这类应答静默丢弃：
+    handler 跑了、服务端也回包了，CEF 的 fetch 却一直挂到 9 秒 abort，前端只能
+    报查询失败/操作失败。这条回归测试钉住"表也要能应答"。
+    """
+    assert_lua(harness(BRIDGE, body=r"""
+local answerCalls = {}
+local callableMeta = { __call = function(self, response)
+    answerCalls[#answerCalls + 1] = { ref = rawget(self, '__cfx_functionReference'), response = response }
+end }
+
+PhoneBridge.RegisterNui('callable', function(data, cb)
+    cb({ success = true, n = 7 })
+end)
+
+local cb = setmetatable({ __cfx_functionReference = 'ref-callable' }, callableMeta)
+nuicallbacks.callable({ x = 1 }, cb)
+assert(#answerCalls == 1, 'a callable table must receive the answer')
+assert(answerCalls[1].ref == 'ref-callable')
+assert(answerCalls[1].response.success == true and answerCalls[1].response.n == 7)
+"""))
+
+
+def test_bridge_answers_a_cfx_function_reference_table():
+    assert_lua(harness(BRIDGE, body=r"""
+local answerCalls = {}
+Citizen = { InvokeFunctionReference = function(ref, response)
+    answerCalls[#answerCalls + 1] = { ref = ref, response = response }
+end }
+
+PhoneBridge.RegisterNui('refonly', function(data, cb)
+    cb({ success = false, error = 'app_forbidden' })
+end)
+
+-- 没有 __call 元方法时退回 Citizen.InvokeFunctionReference
+nuicallbacks.refonly({}, { __cfx_functionReference = 'ref-plain' })
+assert(#answerCalls == 1, 'a bare function reference must still be answered')
+assert(answerCalls[1].ref == 'ref-plain')
+assert(answerCalls[1].response.error == 'app_forbidden')
+"""))
+
+
+def test_bridge_does_not_run_a_handler_it_cannot_answer():
+    assert_lua(harness(BRIDGE, body=r"""
+local ran = false
+PhoneBridge.RegisterNui('broken', function(data, cb)
+    ran = true
+    cb({ success = true })
+end)
+
+-- 既不是 function 也不是可调用表：宁可不应答（NUI 侧会拿到确定的超时码），
+-- 也不要把 handler 跑一半留下副作用。
+nuicallbacks.broken({}, 42)
+assert(ran == false, 'a handler with no answer channel must not run')
+nuicallbacks.broken({}, nil)
+assert(ran == false)
+"""))
+
+
+def test_bridge_level_defaults_on_when_the_convar_is_unset():
+    """convar 未定义时 GetConvarInt 返回 0，不能据此判定"关闭"。"""
+    assert_lua(harness(BRIDGE, DIAG, body=r"""
+assert(GetConvar('phone_diag') == '', 'stub must start with the convar unset')
+assert(PhoneDiag.Level() == 1, 'unset phone_diag must default to 1, got ' .. tostring(PhoneDiag.Level()))
+local trace = PhoneDiag.StartTrace('k3f9a2b1', 'query', 'police_mdt')
+assert(trace ~= nil, 'tracing must be on by default')
 """))
 
 
