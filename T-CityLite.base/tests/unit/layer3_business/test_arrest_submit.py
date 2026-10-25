@@ -166,7 +166,9 @@ def test_arrest_submit_is_gated_and_audited():
     assert "QBCore.Functions.GetPlayerByCitizenId(target)" in block
     assert "citizen_offline" in block
     assert "auditPlayer(actor.citizenid, 'arrest.register', target, auditDetail)" in block
-    assert 'actor_kind, action, target, detail) VALUES (?, "player", ?, ?, ?)' in src
+    # 审计不再在 p2 里手写 INSERT：委派给唯一写者（server/audit.lua），
+    # 那条 INSERT 的正确性由 test_police_single_writer.py 与单测钉住。
+    assert "PoliceAudit.Write" in src
     assert "audit_unavailable" in block
     assert "function fail(error)" in src
 
@@ -1948,11 +1950,11 @@ def test_npc_create_is_gated_inserts_and_notifies():
     # FIT-07: the scene must acquire its two budget slots before any DB write.
     assert "NPCBudget.Acquire('callout', budgetId, actorCid)" in block
     assert "if otherCalloutActive(budgetId) then" in block
-    assert "NPCBudget.Release(budgetId, 'db_error')" in block
+    assert "NPCBudget.Release(budgetId, insertReason or 'db_error')" in block
     assert "calloutBudget[id] = budgetId" in block
     assert "template.locations[math.random(1, #template.locations)]" in block
-    assert "INSERT INTO police_incidents" in block
-    assert "npc_template)" in block
+    assert "PoliceIncidents.InsertRow(" in block, "NPC 建单必须走 police_incidents 的唯一写者"
+    assert "npc_template = template.id" in block, "NPC 建单必须把模板 id 一起写进去"
     assert "'npc.callout.create'" in block
     assert "notifyOfficers(template, location, coords)" in block
 

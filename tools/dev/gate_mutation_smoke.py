@@ -182,6 +182,30 @@ MUTATIONS += [
 ]
 
 
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_police_single_writer.py::test_owned_tables_have_exactly_one_writer",
+        path="resources/[custom]/custom-police/server/__mutant_incident_writer.lua",
+        content=("-- 变异注入：绕过 p0 的唯一写者，直接建单\n"
+                 "CreateThread(function()\n"
+                 "    MySQL.insert.await('INSERT INTO police_incidents (code, title) VALUES (?, ?)', { 'X', 'y' })\n"
+                 "end)\n"),
+        what="police_incidents 出现第二个写者",
+    ),
+    Mutation(
+        gate="tests/architecture/test_police_single_writer.py::test_owned_tables_have_exactly_one_writer",
+        path="resources/[custom]/custom-police/server/__mutant_audit.lua",
+        content=("-- 变异注入：绕过审计的唯一写者，自己 INSERT 审计行（旧写法：参数数组带洞）\n"
+                 "local function rogueAudit(cid, action, target, detail)\n"
+                 "    MySQL.insert.await('INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail)'\n"
+                 "        .. ' VALUES (?, \"player\", ?, ?, ?)', { cid, action, target, detail })\n"
+                 "end\n"),
+        what="police_audit 出现第二个写者",
+    ),
+]
+
+
 def run_gate(nodeid: str) -> tuple[bool, str]:
     """返回 (passed, 最后一行输出)。passed=True 表示这条闸门**没红**。"""
     proc = subprocess.run(

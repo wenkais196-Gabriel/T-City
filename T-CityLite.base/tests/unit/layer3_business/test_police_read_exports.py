@@ -161,6 +161,7 @@ function GetCurrentResourceName() return 'custom-police' end
 function TriggerClientEvent() end
 
 dofile(__POLICY__)
+dofile(__AUDIT__)   -- 审计唯一写者（p0 的 audit() 包装委派给它）
 dofile(__P0__)
 
 local function expect(condition, message)
@@ -234,7 +235,8 @@ print('police read export harness ok')
 
 @pytest.mark.skipif(LUA_BIN is None, reason="lua5.4 is not installed")
 def test_board_reads_fail_closed_under_lua(tmp_path: Path) -> None:
-    script = HARNESS.replace("__POLICY__", json.dumps(str(POLICY))).replace(
+    script = HARNESS.replace("__AUDIT__", json.dumps(str(P0.parent / "audit.lua"))).replace(
+        "__POLICY__", json.dumps(str(POLICY))).replace(
         "__P0__", json.dumps(str(P0))
     )
     harness = tmp_path / "police_read_export_harness.lua"

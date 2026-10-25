@@ -25,17 +25,8 @@ local function now()
 end
 
 local function auditNpc(action, target, detail, citizenid)
-    local ok, err = pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, "system", ?, ?, ?)',
-            { citizenid, action, tostring(target):sub(1, 64),
-              detail ~= nil and tostring(detail):sub(1, 500) or nil })
-    end)
-    if not ok then
-        print(('[custom-police] %s audit failed for %s: %s'):format(
-            action, tostring(target), tostring(err)))
-    end
-    return ok
+    -- 唯一写者见 server/audit.lua；actor_kind 保持 'system'
+    return PoliceAudit.Write(citizenid, action, target, detail, 'system')
 end
 
 --- Reserve `kind` for `id` against `citizenid`.
