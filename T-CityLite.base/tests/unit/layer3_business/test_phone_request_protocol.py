@@ -352,7 +352,7 @@ def test_nui_timeout_outlives_the_client_deadline():
 # ---------------------------------------------------------------------------
 
 def test_get_phone_data_is_single_flight():
-    src = read(PHONE / "client/main.lua")
+    src = CLIENT.read_text(encoding="utf-8")
     assert "local phoneDataBusy = false" in src
     assert "local phoneDataWaiters = {}" in src
     assert "fetchPhoneData" in src
@@ -365,8 +365,8 @@ def test_get_phone_data_is_single_flight():
 
 
 def test_phone_app_protocol_uses_dedicated_events():
-    client = read(PHONE / "client/main.lua")
-    server = read(PHONE / "server/main.lua")
+    client = CLIENT.read_text(encoding="utf-8")
+    server = SERVER.read_text(encoding="utf-8")
     for token in (
         "phone:server:appQueryRequest",
         "phone:client:appQueryResponse",
