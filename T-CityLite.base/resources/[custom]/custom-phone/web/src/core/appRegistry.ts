@@ -6,6 +6,7 @@
 // which tiles a player receives.
 import type { Component } from 'svelte';
 import PoliceMDT from '../apps/PoliceMDT.svelte';
+import Quests from '../apps/Quests.svelte';
 
 export interface PhoneAppAudience {
   jobs?: string[];
@@ -45,5 +46,18 @@ registerApp({
   icon: '🛡️',
   component: PoliceMDT,
   audience: { jobs: ['police'] },
+  schemaVersion: 1,
+});
+
+// 任务 App：服务端注册表（server/apps/quests.lua）决定谁看得到这块瓦片，
+// 这里只负责给它一个真正的界面（而不是 DynamicApp 的调试式列表）。
+export const QUESTS_APP_ID = 'quests';
+
+registerApp({
+  id: QUESTS_APP_ID,
+  label: '任务',
+  icon: '📜',
+  component: Quests,
+  audience: {},
   schemaVersion: 1,
 });

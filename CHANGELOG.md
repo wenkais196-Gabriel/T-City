@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **任务 App：30 个任务模板第一次有了玩家入口**。此前 `custom-quest` 的 14,903 行与 `config/quests/` 下 30 个模板（平民/警察/卡特尔/物流/矿业…）只有 `custom-director` 的 agent 动作和 e2e 测试能触发，玩家在游戏里根本接不到任务。
+  - custom-quest/server/quest_availability.lua：只读的「这个玩家现在能接什么」计算层，同步检查职业标签 / 在勤警力 / 执照 / 重复接取 / 冷却，五种原因码可区分；依赖资源缺失时与 `TriggerQuest` 同样采取宽松策略，不会把全部任务藏起来。**接取权威仍在 `quest_manager.TriggerQuest`**，这里算错最多是显示错，不会让玩家凭空接到任务。
+  - 新增导出 `GetAvailableQuests(source)` / `GetQuestDetail(source, questId)`；详情只给步骤标题与类型，不暴露坐标等执行细节。
+  - custom-phone/server/apps/quests.lua：注册 `quests` App（对所有职业可见，平民也有平民线）。`quest_id` 由客户端提供，所以在这一层先清洗（≤64 字符、`[A-Za-z0-9_]`），非法 id **不会**下沉到 custom-quest；接取/放弃走 `TriggerQuest`/`AbandonQuest`，被拒时把下游给玩家的原句带回 UI。
+  - web/src/apps/Quests.svelte + core/appRegistry.ts：可接/进行中两个页签；不可接的任务**照样显示**并写明原因（"Not enough officers on duty"），而不是从列表里消失。没有专属组件的 App 仍然回退到 `DynamicApp`。
+  - 测试：`test_quest_availability.py`（lua5.4 真跑模块，5 种不满足条件逐个要求被拒）、`test_quest_phone_app.py`（注册契约 + 边界清洗，非法 id 时下游调用计数必须为 0）、`test_quest_entrypoint.py`（接线闸门，反向禁止手机层出现 `MySQL`/`QuestDB`/`QuestManager` 等旁路）、NUI 2 个新场景（列表渲染 + 点接取真的发 `appAction` 并显示下游拒绝原因）
 - **P0 运维基础设施：服务器现在会自己起来、自己备份、自己体检**（见 `docs/ops/RUNBOOK.md`）
   - `tools/ops/healthcheck.py`：把「84 资源 / 0 SCRIPT ERROR / 三条启动标记 / 74 张表」从人眼判断变成一条命令的退出码，`--json` 供 agent 消费；失败项每句都能照着修，而不是只说 failed
   - `tools/ops/backup_db.py`：每日 `mysqldump` + 保留策略。口令从 `server.cfg` 读、经 `MYSQL_PWD` 传给子进程（不进命令行，`ps` 看不到）；`mysqldump` 非 0 或产出 0 字节都判失败并删掉半截文件，避免 cron 里静默成功；已装 `0 4 * * *` 定时任务，并用「导入临时库」验证过 74 张表可恢复

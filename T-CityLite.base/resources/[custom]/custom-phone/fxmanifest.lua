@@ -35,6 +35,7 @@ server_scripts {
     'server/core/notify.lua',
     'server/phone_apps.lua',
     'server/apps/police_mdt.lua',
+    'server/apps/quests.lua',
     'server/qb_phone_compat.lua',
     'server/main.lua',
     'server/banking.lua',

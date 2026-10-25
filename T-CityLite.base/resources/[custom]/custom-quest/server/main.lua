@@ -498,6 +498,19 @@ exports('GetQuestCatalog', function()
     return QuestRegistry.GetCategorizedList()
 end)
 
+-- 9b. 手机任务 App：这个玩家现在能接哪些（只读，不落库、不发事件）
+-- 判定逻辑在 quest_availability.lua；接取仍然只能走 TriggerQuest（它会重新校验）。
+exports('GetAvailableQuests', function(source)
+    if not QuestAvailability then return {} end
+    return QuestAvailability.List(source)
+end)
+
+-- 9c. 手机任务详情：步骤只给标题与类型，不暴露坐标等执行细节
+exports('GetQuestDetail', function(source, questId)
+    if not QuestAvailability then return nil, 'unavailable' end
+    return QuestAvailability.Detail(source, questId)
+end)
+
 -- 10. v0.7.0: 检查指定任务是否活跃
 exports('IsQuestActive', function(source, questId)
     return QuestManager.IsQuestActive(source, questId)

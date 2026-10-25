@@ -296,6 +296,9 @@ export function createWorld() {
       { citizenid: 'COP002', name: 'Bob Brown', callsign: UNIT_BRAVO, dept: 'LSPD', status: 'busy', incident_id: 6 },
     ],
     incidents: [],
+    /** 任务 App 的假数据：list 里刻意混入一条不可接的，验证 UI 会摆出原因。 */
+    quests: [],
+    questActive: [],
     /** One-shot query failures; consumed so the next refresh succeeds. */
     failQueries: new Set(),
     failStatus: 500,
@@ -330,6 +333,18 @@ function queryData(world, query) {
   }
 }
 
+/** 任务 App 的假后端。按 app_id 分流，避免和 MDT 的 query 名撞车。 */
+function questData(world, query) {
+  switch (query) {
+    case 'list':
+      return { rows: world.quests, count: world.quests.length };
+    case 'active':
+      return { rows: world.questActive, count: world.questActive.length };
+    default:
+      return { rows: [], count: 0 };
+  }
+}
+
 export function handleNui(world, callback, payload) {
   world.calls.push({ callback, payload });
 
@@ -353,6 +368,9 @@ export function handleNui(world, callback, payload) {
       return ok({ ok: true });
     case 'appQuery': {
       const query = payload?.query;
+      if (payload?.app_id === 'quests') {
+        return ok({ success: true, data: questData(world, query) });
+      }
       if (world.failQueries.has(query)) {
         world.failQueries.delete(query);
         return { status: world.failStatus, body: { success: false, error: world.failError } };
@@ -471,6 +489,29 @@ export async function openMdt(page) {
     throw new CheckError('点击 MDT 图标后没有进入 MDT', {
       期望: '出现 .mdt 根节点',
       实际: '5s 内 .mdt 不可见',
+    });
+  }
+}
+
+/** 打开手机里的「任务」瓦片（服务端注册的 quests app）。 */
+export async function openQuests(page) {
+  await openPhone(page);
+  const tile = page.locator('button[aria-label="任务"]');
+  try {
+    await tile.waitFor({ state: 'visible', timeout: 5000 });
+  } catch {
+    throw new CheckError('手机主页没有任务图标', {
+      期望: 'getPhoneApps 返回 quests 后渲染一个 aria-label="任务" 的按钮',
+      实际: '5s 内没有找到 button[aria-label="任务"]',
+    });
+  }
+  await tile.click();
+  try {
+    await page.locator('.quests-app').waitFor({ state: 'visible', timeout: 5000 });
+  } catch {
+    throw new CheckError('点击任务图标后没有进入任务页', {
+      期望: '出现 .quests-app（appRegistry 里 quests → Quests.svelte）',
+      实际: '5s 内 .quests-app 不可见（DynamicApp 兜底？组件没注册？）',
     });
   }
 }

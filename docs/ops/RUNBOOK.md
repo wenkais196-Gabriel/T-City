@@ -99,7 +99,9 @@ ls -lh ~/backups/tcity/daily                # 产物
 ### 3.2 恢复（唯一可信的验证方式）
 
 ```bash
-PASS=$(grep -oP 'mysql://swk:\K[^@?]+' T-CityLite.base/server.cfg)
+# 从 server.cfg 取连接串再拆出口令（不把 DSN 字面写进文档）
+DSN=$(awk -F'"' '/connection_string/{print $2; exit}' T-CityLite.base/server.cfg)
+PASS=$(printf '%s' "$DSN" | cut -d: -f3 | cut -d@ -f1)
 MYSQL_PWD="$PASS" mysql -u swk -e "CREATE DATABASE TCityLite_restore"
 zcat ~/backups/tcity/daily/<file>.sql.gz | MYSQL_PWD="$PASS" mysql -u swk TCityLite_restore
 MYSQL_PWD="$PASS" mysql -u swk -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='TCityLite_restore'"   # 期望 74
@@ -141,6 +143,8 @@ python3 tools/ops/persistence_check.py --compare /tmp/persist-before.json
 | 控制台出现 `sayset ...` / `gametypegiveitem ...` | screen 输入用 `\r` 而不是 `\n`（见 1.2） |
 | 备份文件 0 字节 | 磁盘满或权限；看 `~/backups/tcity/backup.log` |
 | 重启后钱/物品没了 | 跑第 4 节回归；先看 `persistence_manager` 的 tick 与 `qb-inventory` 的 SaveInventory 触发点 |
+| 服务器突然没了，日志末尾 `-> Quitting: SIGHUP received` | 它是被**终端/screen 会话回收**的，不是自己崩的（随后的 `node::ResetStdio` assert 只是关停噪音）。用 systemd 部署就不会再被会话带走；systemd 之外不要把服务器挂在会被关掉的终端里 |
+| 启动即退出，日志 `checking server license key: HTTP 429` | Cfx.re 对同一 license 的启动做了限流（短时间反复重启就会撞上）。等几分钟再起，别在这段时间里连续试 |
 
 日志位置：
 
