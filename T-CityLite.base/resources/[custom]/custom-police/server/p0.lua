@@ -799,3 +799,15 @@ exports('LookupVehicle', P.LookupVehicle)
 exports('GetAudit', P.GetAudit)
 
 print('[custom-police] P0 dispatch layer loaded')
+
+
+-- Dev probe: run the single duty service for a target source and print the
+-- exact result so live tests can tell duty_failed from not_police.
+RegisterCommand('police_dutytest', function(source, args)
+    local target = tonumber(args and args[1]) or tonumber(source)
+    local on = tostring(args and args[2] or ''):lower() == 'on'
+    if not target or target <= 0 then return print('usage: police_dutytest <serverId> on|off') end
+    local ok, err = P.SetDutyForSource(target, on, 'cmdtest')
+    print(('[police_dutytest] target=%s on=%s -> %s %s'):format(
+        tostring(target), tostring(on), tostring(ok), tostring(err)))
+end, true)
