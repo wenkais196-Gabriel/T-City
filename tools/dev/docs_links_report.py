@@ -134,4 +134,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        code = main())
+    except BrokenPipeError:      # `| head` 之类的下游提前关闭
+        code = 0
+    sys.exit(code)

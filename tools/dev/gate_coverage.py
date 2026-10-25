@@ -143,4 +143,7 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    try:
+        sys.exit(main(sys.argv))
+    except BrokenPipeError:          # `| head` 之类的下游提前关闭管道
+        sys.exit(0)
