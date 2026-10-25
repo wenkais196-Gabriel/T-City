@@ -165,6 +165,7 @@ end)
 QBCore.Commands.Add('crypto', '', {}, false, function(source)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     local MyPocket = math.ceil(Player.PlayerData.money.crypto * Crypto.Worth['qbit'])
 
     TriggerClientEvent('QBCore:Notify', src, Lang:t('text.you_have_with_a_value_of', { playerPlayerDataMoneyCrypto = Player.PlayerData.money.crypto, mypocket = MyPocket }))

@@ -284,6 +284,7 @@ end)
 -- 🔧 自愈修复: /drivinglicense 教练指令 → 委托 custom-certificates
 QBCore.Commands.Add('drivinglicense', 'Give a drivers license to someone', { { 'id', 'ID of a person' } }, true, function(source, args)
     local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     local targetId = tonumber(args[1])
     local SearchedPlayer = QBCore.Functions.GetPlayer(targetId)
     if SearchedPlayer then

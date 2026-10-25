@@ -2,12 +2,14 @@ local QBCore = exports['qb-core']:GetCoreObject()
 
 QBCore.Commands.Add('cash', 'Check Cash Balance', {}, false, function(source, _)
     local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     local cashamount = Player.PlayerData.money.cash
     TriggerClientEvent('hud:client:ShowAccounts', source, 'cash', cashamount)
 end)
 
 QBCore.Commands.Add('bank', 'Check Bank Balance', {}, false, function(source, _)
     local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     local bankamount = Player.PlayerData.money.bank
     TriggerClientEvent('hud:client:ShowAccounts', source, 'bank', bankamount)
 end)

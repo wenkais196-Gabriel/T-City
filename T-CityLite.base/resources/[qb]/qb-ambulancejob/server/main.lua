@@ -439,6 +439,7 @@ end)
 QBCore.Commands.Add('setemsdept', '分配医护科室 (EMERGENCY/SURGERY/AIR_RESCUE)', { { name = 'id', help = Lang:t('info.player_id') }, { name = 'dept', help = 'EMERGENCY / SURGERY / AIR_RESCUE' } }, true, function(source, args)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
 	local targetId = tonumber(args[1])
 	local dept = args[2] and args[2]:upper()
 	-- 仅院长/外科主任 (grade >= 3) 可分配科室
