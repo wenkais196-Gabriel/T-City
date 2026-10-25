@@ -188,7 +188,7 @@ fitness function 的定义是"对必须保持的架构特性给出客观、持�
 
 1. 用 `reuse_scan.py` 的结果做第一轮合并：`loadAnimDict` / `DebugPrint` 收敛到 `core-framework` 的公共库；
 2. 把 `docs_links` 的范围从"约束区"扩到 `T-CityLite.base/docs/**`（需先清历史断链，报告见 `tools/dev/docs_links_report.py` 计划）；
-3. 规则命中率指标：给每条闸门加拦截计数（CI 里统计失败原因），长期 0 命中的规则复核后删除。
+3. ~~规则命中率指标~~ —— **已落地**：`tools/dev/gate_stats.py` 采集。`python3 tools/dev/gate_stats.py --record` 跑整套 `tests/architecture`，把每个用例的 PASSED/FAILED 连同时刻与 `git rev-parse --short HEAD` 追加成一行到 `T-CityLite.base/tests/architecture/gate_history.jsonl`；`python3 tools/dev/gate_stats.py --report`（默认，加 `--json` 给 CI）输出每条规则的最近一次结果、最近 20 次通过/失败，并单列「连续 0 命中」的规则 —— 那张清单就是季度复核的输入：删掉，或者补一条 `test_reverse_check_detects_*` 证明它会红。历史缺失/损坏都不报错（损坏行跳过并计数），工具本身永远不因「有规则从未失败」而退出非 0。
 
 ## 4. 落地路线（三批，每批都能独立验收）
 
@@ -246,3 +246,4 @@ fitness function 的定义是"对必须保持的架构特性给出客观、持�
 [6] https://martinfowler.com/articles/exploring-gen-ai/context-engineering-coding-agents.html — martinfowler.com — Context Engineering for Coding Agents
 [7] https://github.com/bmad-code-org/BMAD-METHOD — BMAD-METHOD
 [8] https://www.continuous-architecture.org/practices/fitness-functions — Continuous Architecture — Fitness Functions
+   （历史文件按运行追加：本地跑 `--record` 入库；CI 里跑一次作为工件上传，不自动提交，避免仓库被数据膨胀。）
