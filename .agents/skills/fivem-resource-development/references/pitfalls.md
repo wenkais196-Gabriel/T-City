@@ -97,3 +97,17 @@
 - **A duplicated helper is often a hidden hang.** `while not HasAnimDictLoaded(dict) do Wait(5) end`
   copied 17 times blocks the client thread forever on a wrong dict; the shared version needs a
   deadline (`GetGameTimer() + timeout`) and a boolean return so callers can log instead of freezing.
+
+## 无差别字符串替换会污染同一文件里的其它函数
+
+`str.replace(old, new)` 不带计数时，只要那段代码在文件里出现多次，就会**全部**被替换。
+qb-inventory 里 `local invName = player and GetPlayerName(identifier) .. ' (' .. identifier .. ')' or identifier`
+这一行在 SetInventory / AddItem / RemoveItem 三个函数里各有一份。改 SetInventory 时顺手
+把它换成用局部变量 `idText` 的版本，另外两个函数并没有 `idText` —— Lua 把它当**全局**读成
+nil，于是 `giveitem` 直接报 `attempt to concatenate a nil value (global 'idText')`。
+
+两个教训：
+
+- 改共享行模板前先 `grep -c` 数出现次数；出现多次就要么带 `count=1` 加唯一上下文，要么一次改干净并给每个函数补上依赖；
+- **测试要覆盖所有调用同一模板的函数**。SetInventory 的测试当时是绿的，坏的是 AddItem/RemoveItem，
+  而 giveitem 走的正是 AddItem。现在 INV-01 会分别用数字和 citizenid 各调一次这三个入口。
