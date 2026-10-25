@@ -100,3 +100,49 @@ end)
     # 另外两段是合规写法，不该被点名
     assert not any("AddBlooddropToInventory" in item for item in found), found
     assert not any("AddFingerprintToInventory" in item for item in found), found
+
+
+# ── POL-EVD-02：清扫过期痕迹必须广播 ─────────────────────────────────────────
+
+def prune_body(source: str) -> str:
+    start = source.index("local function pruneExpired(")
+    end = source.index("end\n", source.index("return removed", start))
+    return source[start:end]
+
+
+def missing_broadcast(source: str) -> list[str]:
+    body = prune_body(source)
+    problems = []
+    if "store[id] = nil" not in body:
+        problems.append("pruneExpired 没删任何东西")
+    if "TriggerClientEvent(removeEvent, -1, id)" not in body:
+        problems.append("删了但没广播 Remove*：客户端会留着一个换不出东西的幽灵标记")
+    return problems
+
+
+def test_expiring_a_drop_tells_the_clients():
+    source = SERVER.read_text(encoding="utf-8")
+    assert missing_broadcast(source) == [], "\n".join(missing_broadcast(source))
+
+    # 反向：只删不广播必须被抓到
+    bad = """
+local function pruneExpired(store, removeEvent, now)
+    local removed = 0
+    for id, row in pairs(store) do
+        store[id] = nil
+        removed = removed + 1
+    end
+    return removed
+end
+"""
+    assert missing_broadcast(bad), "扫描器抓不住「只删不广播」"
+
+
+def test_the_sweep_runs_on_a_timer_not_only_when_the_table_fills():
+    """TTL 必须由定时器驱动，不能只在表满 500 时才顺手清一次（那样等于不清）。"""
+    source = SERVER.read_text(encoding="utf-8")
+    assert "TTL_SWEEP_INTERVAL" in source, "清扫周期常量不见了"
+    assert "CreateThread(function()" in source
+    sweep = source[source.index("CreateThread(function()", source.index("EvidenceMaintenance")):]
+    assert "Wait(TTL_SWEEP_INTERVAL * 1000)" in sweep, "清扫线程没有按周期等待"
+    assert "pruneExpiredDrops()" in sweep, "清扫线程没有真的调用清扫"

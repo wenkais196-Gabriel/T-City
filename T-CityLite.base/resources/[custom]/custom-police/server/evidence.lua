@@ -20,7 +20,11 @@ local FingerDrops = {}
 local PlayerStatus = {}
 
 local MAX_TRACKED_DROPS = 500      -- per table, bounds a spamming client's memory
-local TRACKED_TTL = 1800           -- seconds a server-side drop row is kept
+-- 掉落行保留多久（秒）。默认 30 分钟；运维/测试可用 convar 覆盖：
+--   set tcity_evidence_ttl 60      -- 一分钟就清，方便现场验证
+-- 每次清扫时才读 convar：这样改完不用重启资源，单测也能直接改。
+local DEFAULT_TRACKED_TTL = 1800
+local TTL_SWEEP_INTERVAL = 60      -- 清扫周期（秒）
 local MAX_CLEAR_LIST = 200        -- ids accepted per Clear* request
 local MAX_COORDS_DRIFT = 25.0      -- metres between the caller's ped and the drop
 local PICKUP_COOLDOWN = 1          -- seconds between Add*ToInventory per source
@@ -126,14 +130,37 @@ end
 
 --- Remember a drop server-side. The TTL sweep keeps the table self-limiting;
 --- the hard cap stops a burst before the sweep can run.
-local function trackDrop(store, id, row)
-    if countKeys(store) >= MAX_TRACKED_DROPS then
-        local now = os.time()
-        for key, value in pairs(store) do
-            if type(value) == 'table' and value.at and now - value.at > TRACKED_TTL then
-                store[key] = nil
-            end
+--- 清掉老于 TTL 的行，并**广播**给所有客户端让它们删掉屏幕上的标记。
+--- 只删本地表不广播 = 客户端留着一个"幽灵"标记，玩家走过去按 G 什么也换不到。
+---@return number removed
+local function pruneExpired(store, removeEvent, now)
+    local ttl = GetConvarInt('tcity_evidence_ttl', DEFAULT_TRACKED_TTL)
+    local removed = 0
+    for id, row in pairs(store) do
+        if type(row) == 'table' and row.at and now - row.at > ttl then
+            store[id] = nil
+            TriggerClientEvent(removeEvent, -1, id)
+            removed = removed + 1
         end
+    end
+    return removed
+end
+
+local function pruneExpiredDrops()
+    local now = os.time()
+    local removed = 0
+    removed = removed + pruneExpired(Casings, 'evidence:client:RemoveCasing', now)
+    removed = removed + pruneExpired(BloodDrops, 'evidence:client:RemoveBlooddrop', now)
+    removed = removed + pruneExpired(FingerDrops, 'evidence:client:RemoveFingerprint', now)
+    if removed > 0 and GetConvarInt('tcity_evidence_debug', 0) == 1 then
+        print(('[evidence] expired %d drops'):format(removed))
+    end
+    return removed
+end
+
+local function trackDrop(store, id, row, removeEvent)
+    if countKeys(store) >= MAX_TRACKED_DROPS then
+        pruneExpired(store, removeEvent, os.time())
         if countKeys(store) >= MAX_TRACKED_DROPS then return false end
     end
     row.at = os.time()
@@ -276,7 +303,7 @@ RegisterNetEvent('evidence:server:CreateBloodDrop', function(citizenid, bloodtyp
     end
     if not blood or blood == '' then return end
     local bloodId = CreateBloodId()
-    if not trackDrop(BloodDrops, bloodId, { dna = dna, bloodtype = blood }) then return end
+    if not trackDrop(BloodDrops, bloodId, { dna = dna, bloodtype = blood }, 'evidence:client:RemoveBlooddrop') then return end
     TriggerClientEvent('evidence:client:AddBlooddrop', -1, bloodId, dna, blood, where)
 end)
 
@@ -291,7 +318,7 @@ RegisterNetEvent('evidence:server:CreateFingerDrop', function(coords)
     local where = coordsNearSource(src, coords)
     if not where then return end
     local fingerId = CreateFingerId()
-    if not trackDrop(FingerDrops, fingerId, { fingerprint = fingerprint }) then return end
+    if not trackDrop(FingerDrops, fingerId, { fingerprint = fingerprint }, 'evidence:client:RemoveFingerprint') then return end
     TriggerClientEvent('evidence:client:AddFingerPrint', -1, fingerId, fingerprint, where)
 end)
 
@@ -406,7 +433,7 @@ RegisterNetEvent('evidence:server:CreateCasing', function(weapon, coords)
         end
     end
     if type(serieNumber) ~= 'string' then serieNumber = nil end
-    if not trackDrop(Casings, casingId, { weapon = weapon, serie = serieNumber }) then
+    if not trackDrop(Casings, casingId, { weapon = weapon, serie = serieNumber }, 'evidence:client:RemoveCasing') then
         if debug then print(('[evidence] rejected: casing table full src=%s'):format(tostring(src))) end
         return
     end
@@ -464,5 +491,22 @@ RegisterNetEvent('evidence:server:AddCasingToInventory', function(casingId, casi
         end
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.have_evidence_bag'), 'error')
+    end
+end)
+
+-- ── 定时清扫 ─────────────────────────────────────────────────────────────────
+-- 之前 TTL 只在"表满 500"时才顺手跑一次，于是没到上限的地面证据整局都不会消失：
+-- 地上越积越多，而且客户端连一条移除消息都收不到。这里改成每分钟扫一次，
+-- 过期就删并广播 Remove*，客户端屏幕上的箭头才会跟着消失。
+--
+-- 抽成 EvidenceMaintenance 是为了单测能直接驱动一次清扫（不用等线程/改系统时间）。
+EvidenceMaintenance = {
+    PruneExpired = pruneExpiredDrops,
+}
+
+CreateThread(function()
+    while true do
+        Wait(TTL_SWEEP_INTERVAL * 1000)
+        pruneExpiredDrops()
     end
 end)
