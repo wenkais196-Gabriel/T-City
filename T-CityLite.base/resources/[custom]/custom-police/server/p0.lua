@@ -542,13 +542,16 @@ function P.SetDutyForSource(source, onDuty, reason)
     local player = QBCore.Functions.GetPlayer(source)
     if not player then return false, 'not_police' end
 
-    local ok = pcall(function()
-        print(('[custom-police] SetJobDuty arg=%s type=%s'):format(tostring(onDuty), type(onDuty)))
-        player.Functions.SetJobDuty(onDuty)
-    end)
-    if not ok or data.job.onduty ~= onDuty then
-        print(('[custom-police] duty mismatch data=%s player=%s expected=%s'):format(
-            tostring(data.job.onduty), tostring(player.PlayerData.job.onduty), tostring(onDuty)))
+    -- qb-core's SetJobDuty is the documented primitive, but some runtimes have
+    -- shipped a toggle-style implementation. Set the projection explicitly and
+    -- raise the same events qb-core would, so on/off is deterministic.
+    player.PlayerData.job.onduty = onDuty
+    TriggerEvent('QBCore:Server:OnJobUpdate', player.PlayerData.source, player.PlayerData.job)
+    TriggerClientEvent('QBCore:Client:OnJobUpdate', player.PlayerData.source, player.PlayerData.job)
+    player.Functions.UpdatePlayerData()
+    if data.job.onduty ~= onDuty then
+        print(('[custom-police] duty mismatch data=%s expected=%s'):format(
+            tostring(data.job.onduty), tostring(onDuty)))
         return false, 'duty_failed'
     end
 
