@@ -1,0 +1,135 @@
+# 手机架构（目标态 v2）
+
+> 原则：**模块化 / 高性能 / 可扩展 / 安全**。本文是目标架构与迁移边界；现有 UI 行为不变。
+
+## 1. 分层
+
+```
+┌─────────────────────────────────────────────┐
+│ UI Shell    路由 / 焦点 / 设计系统 / 全局 store │
+├─────────────────────────────────────────────┤
+│ App SDK     manifest + component + lifecycle  │
+├─────────────────────────────────────────────┤
+│ Transport   request_id / timeout / schema     │
+├─────────────────────────────────────────────┤
+│ Client Lua  bridge / focus / events / phone   │
+├─────────────────────────────────────────────┤
+│ Server      core (identity/notify/events/rl)  │
+│             domains (contacts/messages/calls) │
+│             apps (registry + MDT service)     │
+└─────────────────────────────────────────────┘
+```
+
+## 2. 模块与职责
+
+### Server core
+
+| 模块 | 职责 | 不做什么 |
+|---|---|---|
+| `core/identity.lua` | `PhoneIdentity.Resolve/From/IsLeader` | 不查业务表 |
+| `core/notify.lua` | 通知规范化、落库、单播推送 | 不决定业务 |
+| `core/events.lua` | 统一 `phone:client:event` 通道 | 不写业务表 |
+| `core/rate_limit.lua` | 通用 token bucket（NUI app/action/短信） | 不鉴权 |
+| `main.lua` | 只做 wiring：回调注册、领域调用 | 不写大段 SQL |
+
+### Server domains
+
+`domains/contacts.lua`、`messages.lua`、`notifications.lua`、`calls.lua`、`cityfeed.lua`、`hotlines.lua`、`vehicles.lua`。
+每个 domain 暴露函数（`List/Send/MarkRead...`），SQL 只在本域；main 只转发。
+
+### Server apps
+
+`apps/registry.lua`（现 `phone_apps.lua`）+ `apps/police_mdt.lua`。
+App 只通过 registry 暴露 query/action；不直接注册 NUI 回调。
+
+### Client
+
+| 模块 | 职责 |
+|---|---|
+| `core/bridge.lua` | 注册 NUI callback、request_id、超时、错误归一 |
+| `core/focus.lua` | 焦点栈 owner：phone / fingerprint / story / vehicle |
+| `core/events.lua` | 订阅 `phone:client:event`，分发到 NUI |
+| `core/phone.lua` | 打开/关闭/动画/按键，调用 bridge/focus |
+| `main.lua` | 只做 wiring |
+
+### Frontend
+
+| 模块 | 职责 |
+|---|---|
+| `core/appRegistry.ts` | App manifest：id/label/icon/component/audience/schemaVersion |
+| `core/request.ts` | 统一 `phoneRequest`：超时、错误码、schema 校验 |
+| `App.svelte` | 只渲染 shell + 查 registry |
+| `apps/*` | 只依赖 App SDK，不直接碰 window/fetch |
+
+## 3. 关键契约
+
+### NUI 请求
+
+```ts
+type PhoneResponse<T> =
+  | { success: true; data: T }
+  | { success: false; error: string; detail?: string };
+```
+
+- 每个请求带 `request_id`（客户端生成，服务端回传）；
+- 默认 8s 超时；
+- 所有 handler 必须返回，不返回视为协议错误；
+- 错误码稳定、可本地化。
+
+### 统一事件
+
+```lua
+TriggerClientEvent('phone:client:event', src, {
+  type = 'notification.new' | 'message.new' | 'money.update' | 'call.incoming' | ...,
+  app_id = 'police_mdt' | nil,
+  payload = {...},
+  ts = os.time(),
+})
+```
+
+过渡期同时发旧事件；App 迁移后删除旧事件。
+
+### App manifest
+
+```ts
+interface PhoneApp {
+  id: string;
+  label: string;
+  icon: string;
+  component: Component;
+  audience?: { jobs?: string[]; onduty?: boolean };
+  schemaVersion: number;
+}
+```
+
+## 4. 性能预算
+
+| 指标 | 目标 |
+|---|---|
+| 首屏 bootstrap（bootstrap 查询） | ≤150ms P95 |
+| appQuery/action | ≤250ms P95 |
+| bundle（gzip） | ≤80KB（当前约 56KB） |
+| 每帧 `SendNUIMessage` | 0（只事件驱动） |
+| 缓存 | 每个 domain 有 TTL + 事件失效 |
+
+## 5. 安全
+
+- NUI 输入不可信：每个 action 做类型/范围/权限校验；
+- `PhoneApps` audience 是唯一可见性来源；NUI 隐藏不是权限；
+- 所有 app query/action 限流（token bucket）；
+- 不把密码/token/其他玩家 PII 发到 NUI；
+- 服务端日志不打印敏感字段。
+
+## 6. 迁移顺序
+
+1. **core 基础设施**：identity/notify/events/rate_limit + client bridge/focus/events；行为不变。
+2. **domain 拆分**：contacts/messages/calls/cityfeed 从 main.lua 抽出，SQL 收口。
+3. **App SDK**：manifest 注册 MDT/leader；App.svelte 去掉硬编码分支。
+4. **统一事件 + bootstrap 拆分**：getPhoneData 拆 bootstrap + 按需。
+5. **删除旧桥/旧事件**，跑 NUI + E2E + 真机回归。
+
+## 7. 验收
+
+- 现有 NUI callback/事件名不变；
+- `npm run test:nui`、`pytest tests/unit tests/architecture`、`agent test police_e2e` 全绿；
+- 真机：M 打开、MDT 五页、刷新、电话、通知、指纹焦点。
