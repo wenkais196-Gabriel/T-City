@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4. integration harness 缺 ConvarInt 等全局（同样的 util.lua 缺失），以及 qb-core 的导出代理只提供了 GetCoreObject，离线入账走的 EconomyAddMoneyOffline 拿到 nil 直接炸。
   5. 两处文档指向 gitignored 的文件（运行时的 admins.json、含凭据的 server.cfg）—— 改成不带反引号的叙述。
   验证方式也换了：**在干净克隆里跑 CI 的四条命令**（`compileall`、tests/unit、tests/architecture、tests/agent、tests/integration），而不是只跑本地那两条目录。结果 920 passed / 132 skipped。
+- **端口暴露面收口（有证据，不是看起来）**：ufw 里 40120/tcp+udp 是直连模式下不存在的服务留下的残留规则，已删；现在只剩 30120 tcp/udp（v4+v6）。3306 一直有争议：mysqld 仍监听 0.0.0.0:3306（改 bind-address 需要 root），但 ufw 默认 deny incoming 且没有任何 3306 放行规则——外部连不进来。本机直连自己的局域网 IP 能通是因为走回环接口（lo 默认放行），不能当成外部可达的证据；这条判断已写进总领手册的端口与暴露面一节，并给出从另一台机器验证的命令。
 - **客户端可观测性真的接上了（22 个资源）**：`CFShared.Report` + 就绪信标的文档写了很久，但只有 custom-phone / custom-police 真接上——其余二十多个自有资源的客户端错误没有任何上行通道。现在 `[custom]`/`[system]` 里已 ensure 的资源全部把 @core-framework/client/shared.lua 放进 client_scripts 第一位，并声明 `dependencies { 'core-framework' }`。
   过程中挖出两个真问题：①**启动顺序**：production-freeze、hud-position-tool、custom-career 原本都在core-framework 之前启动，`@` 包含会在加载期找不到文件——把 `ensure core-framework` 从 custom.cfg 挪到 core.cfg 的 production-freeze 之后（core-framework 依赖它加载 `_L` i18n）、hud-position-tool 之前。②**环**：production-freeze 与 core-framework 互相依赖，所以它反向包含会成环——撤回并登记为例外。
   闸门 CLI-01（tests/architecture/test_client_observability.py）：缺包含点名、不在第一位点名、豁免双向校验、上游目录与 vendored 库也要校验没被注入；每条规则先构造坏形状证明能红。顺带修好解析盲点：`client_script 'x.lua'`（单数写法）此前完全不在扫描范围内，改成单数就能绕过。
