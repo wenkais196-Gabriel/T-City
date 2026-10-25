@@ -11,8 +11,17 @@ server_scripts {
     'server/crime.lua'
 }
 
+
 dependencies {
+
+
     'qb-core',
-    'custom-logs'
+
+
+    'custom-logs',
+
+
     'core-framework',
+
+
 }

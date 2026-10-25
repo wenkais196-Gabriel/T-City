@@ -16,7 +16,14 @@ server_scripts {
     'server/logs.lua'
 }
 
+
 dependencies {
-    'qb-core'
+
+
+    'qb-core',
+
+
     'core-framework',
+
+
 }

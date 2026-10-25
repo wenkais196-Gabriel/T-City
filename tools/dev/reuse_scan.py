@@ -39,6 +39,33 @@ NOISE_NAMES = {
 }
 MIN_NAME_LEN = 6
 
+# 「同名定义 N 份」原本把"一行转调共享实现"的包装也算成碎片化。那会让合并永远显示不出来
+# （5 个 1 行包装仍然算 5 份），于是没人愿意做第二批复用。判据：函数体短、且体内只出现
+# 对共享实现的调用（exports[...]/Convar*/RateLimit*/LoadAnimDict/LoadModel/Bus.）。
+ADAPTER_RE = re.compile(
+    r"exports\[|\bConvar(?:String|Int|Float|Bool)\b|\bRateLimit\w*\b|\bLoadAnimDict\b|\bLoadModel\b|\bBus\.",
+)
+ADAPTER_MAX_LINES = 10
+
+
+def is_adapter(src: str, start: int) -> bool:
+    """函数体短、且只转调共享实现 → 是包装，不是重复逻辑。"""
+    lines = src[start:].splitlines()
+    if not lines:
+        return False
+    head = lines[0]
+    indent = len(head) - len(head.lstrip())
+    block = [head]
+    for line in lines[1:]:
+        if line.strip() == "end" and (len(line) - len(line.lstrip())) == indent:
+            block.append(line)
+            break
+        block.append(line)
+        if len(block) > ADAPTER_MAX_LINES:
+            return False
+    text = "\n".join(block)
+    return len(block) <= ADAPTER_MAX_LINES and bool(ADAPTER_RE.search(text))
+
 
 def definitions(root: Path) -> dict[str, list[str]]:
     found: dict[str, list[str]] = defaultdict(list)
@@ -49,11 +76,14 @@ def definitions(root: Path) -> dict[str, list[str]]:
             text = lua.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        for name in DEF_RE.findall(text):
+        for match in DEF_RE.finditer(text):
+            name = match.group(1)
             tail = name.split(":")[-1].split(".")[-1]
             if tail.lower() in NOISE_NAMES or tail.startswith(NOISE_PREFIXES):
                 continue
             if len(tail) < MIN_NAME_LEN:      # 短名几乎都是方法/回调，不是能力
+                continue
+            if is_adapter(text, match.start()):
                 continue
             found[tail].append(str(lua.relative_to(REPO)))
     return found

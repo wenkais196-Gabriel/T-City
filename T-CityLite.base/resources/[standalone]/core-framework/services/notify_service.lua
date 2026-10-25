@@ -12,46 +12,21 @@
 -- ═══════════════════════════════════════════════════════════
 -- 防刷限流: 每 source 每 windowMs 内最多 maxRequests 条通知
 -- ═══════════════════════════════════════════════════════════
-local rateLimiter = {}
 local RATE_WINDOW_MS = 200        -- 限流窗口 200ms
 local RATE_MAX_REQUESTS = 1       -- 窗口内最多 1 条
 
 ---@param source number
 ---@return boolean allowed
 local function checkRateLimit(source)
-    local now = GetGameTimer and GetGameTimer() or os.time() * 1000
-    local entry = rateLimiter[source]
-
-    if not entry then
-        rateLimiter[source] = { count = 1, windowStart = now }
-        return true
-    end
-
-    if now - entry.windowStart > RATE_WINDOW_MS then
-        -- 窗口过期，重置
-        entry.count = 1
-        entry.windowStart = now
-        return true
-    end
-
-    if entry.count >= RATE_MAX_REQUESTS then
-        return false  -- 限流拒绝
-    end
-
-    entry.count = entry.count + 1
-    return true
+    -- 统一走 core-framework 的限流 owner（原来这里自己维护 rateLimiter 表）
+    return RateLimit.Window('notify:' .. tostring(source), RATE_MAX_REQUESTS, RATE_WINDOW_MS)
 end
 
--- 定时清理过期限流记录
+-- 定时清理过期记录（表在限流 owner 里，这里只负责触发清理）
 CreateThread(function()
     while true do
-        Wait(60000)  -- 每分钟清理一次
-        local now = GetGameTimer and GetGameTimer() or os.time() * 1000
-        for source, entry in pairs(rateLimiter) do
-            if now - entry.windowStart > 60000 then
-                rateLimiter[source] = nil
-            end
-        end
+        Wait(60000)
+        RateLimit.Sweep(60000)
     end
 end)
 

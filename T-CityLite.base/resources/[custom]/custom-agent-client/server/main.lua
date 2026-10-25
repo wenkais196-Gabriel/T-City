@@ -18,7 +18,6 @@ end
 local sessions = {}   -- sessions[src] = { token = 16 hex, seq = number }
 local pending = {}    -- pending[src][rid] = entry
 local inflight = {}   -- inflight[src] = number
-local buckets = {}    -- buckets[src] = { tokens, updatedAt }
 local droppedAcks = 0
 
 -- ---------------------------------------------------------------------------
@@ -164,24 +163,12 @@ local function settle(src, rid, status, result, err)
 end
 
 local function rateGate(src, cfg)
-    local now = GetGameTimer()
-    local bucket = buckets[src]
-    if not bucket then
-        bucket = { tokens = cfg.burst, updatedAt = now }
-        buckets[src] = bucket
-    end
-    local elapsed = math.max(0, now - bucket.updatedAt)
-    if elapsed > 0 then
-        bucket.tokens = math.min(cfg.burst, bucket.tokens + elapsed * (cfg.rate_per_min / 60000))
-        bucket.updatedAt = now
-    end
-    if bucket.tokens < 1 then
-        local retryAfter = math.ceil((1 - bucket.tokens) / (cfg.rate_per_min / 60000))
-        return mkerr('rate_limited', 'too many effects for this player',
-            { retry_after_ms = retryAfter })
-    end
-    bucket.tokens = bucket.tokens - 1
-    return nil
+    -- 走 core-framework 的限流 owner（原来这里自己维护 buckets 令牌桶）
+    local allowed, retryAfter = exports['core-framework']:RateLimitTokenBucket(
+        'agent:' .. tostring(src), cfg.rate_per_min, cfg.burst)
+    if allowed then return nil end
+    return mkerr('rate_limited', 'too many effects for this player',
+        { retry_after_ms = retryAfter })
 end
 
 -- ---------------------------------------------------------------------------

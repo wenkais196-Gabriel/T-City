@@ -8,35 +8,23 @@
     },
     "loadModel": {
       "max": 4,
-      "reason": "模型加载阻塞循环，与 loadAnimDict 同类；下一批候选（同样需要超时上限）"
+      "reason": "阻塞式模型加载，与 loadAnimDict 同类；[custom] 两处可合并，qb/standalone 不迁——下一批"
     },
     "DrawText3D": {
       "max": 5,
-      "reason": "3D 文字绘制，各份的 scale/color/参数顺序不一致，合并要先统一签名——下一批候选"
+      "reason": "3D 文字绘制，各份 scale/color/参数顺序不一致，合并要先统一签名"
     },
     "GetClosestPlayer": {
       "max": 6,
-      "reason": "框架级查询，行为依赖各自的距离/过滤参数，暂不合并；语义收敛后再统一"
-    },
-    "checkRateLimit": {
-      "max": 4,
-      "reason": "与 core-framework 的 rate_limit 职责重叠，应合并到那边而不是各资源自持"
+      "reason": "框架级查询，行为依赖各自的距离/过滤参数，暂不合并"
     },
     "loadAnimDict": {
       "max": 12,
-      "reason": "语义一致。[custom] 5 处已合并到 core-framework/shared/util.lua；qb-*（10）与 standalone（2）保留：避免与上游/第三方分叉"
-    },
-    "CloseMenuFull": {
-      "max": 4,
-      "reason": "菜单关闭，各资源菜单实现不同（qb-menu / 自定义），合并要先统一菜单层"
+      "reason": "语义一致。[custom] 已合并到 core-framework/shared/util.lua；qb-*（10）与 standalone（2）保留：避免与上游/第三方分叉"
     },
     "AddMoney": {
       "max": 4,
-      "reason": "经济写入必须走 Player.Functions / core_economy，这份重复本身就是宪法②的违反候选——单独审"
-    },
-    "HasItem": {
-      "max": 5,
-      "reason": "物品查询，真正的 owner 是 qb-inventory；重复的应该是「调用 owner」而不是「再写一份」"
+      "reason": "qb-core 两份属同资源持久化层；core-framework 那份是**便利层**（加倍率/转账），内部仍走原语；分层是有意的，不是重复"
     },
     "DrawText3Ds": {
       "max": 5,
@@ -48,7 +36,7 @@
     },
     "isPointInside": {
       "max": 5,
-      "reason": "纯几何判断，语义一致；属小工具类，收益低于文字/绘制族，排后面"
+      "reason": "纯几何判断，语义一致；属小工具，收益低于文字族"
     }
   }
 }
