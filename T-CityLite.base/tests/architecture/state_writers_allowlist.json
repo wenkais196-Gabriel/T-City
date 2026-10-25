@@ -31,21 +31,18 @@
       "table": "police_reports",
       "columns": [],
       "allowed_files": [
-        "custom-police/server/p1.lua",
-        "custom-police/server/p2_system.lua",
-        "custom-police/server/p3_cases.lua"
+        "custom-police/server/records.lua"
       ],
-      "reason": "报告锚点由 p1（CreateReport）、p2_system（ArrestSubmit 链接与回滚）和 p3_cases（RecordVerdict 判决投影）维护。"
+      "reason": "报告锚点由 p1（CreateReport）、p2_system（ArrestSubmit 链接与回滚）和 p3_cases（RecordVerdict 判决投影）维护。 2026-10-25: 收口到 server/records.lua（p1/p2/p3 只做委派）。"
     },
     {
       "id": "police_cases",
       "table": "police_cases",
       "columns": [],
       "allowed_files": [
-        "custom-police/server/p2_system.lua",
-        "custom-police/server/p3_cases.lua"
+        "custom-police/server/records.lua"
       ],
-      "reason": "案件号回填只在 CreateCase（p3）与 ArrestSubmit 的补偿路径（p2_system）。"
+      "reason": "案件号回填只在 CreateCase（p3）与 ArrestSubmit 的补偿路径（p2_system）。 2026-10-25: 收口到 server/records.lua（p1/p2/p3 只做委派）。"
     },
     {
       "id": "police_citations",

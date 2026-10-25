@@ -44,24 +44,15 @@ OWNERS = {
     # 修好后 agent 的两条 child 路径也改走同一个写者
     "police_evidence": "p2_evidence.lua",
     "police_evidence_chain": "p2_evidence.lua",
+    # 2026-10-25: 案卷/逮捕/报告收口。三张表的写入点原本散在 p1（报告）、
+    # p2_system（案卷 + 报告 + 逮捕）、p3_cases（案卷 + 逮捕 + 判决）
+    "police_cases": "records.lua",
+    "police_arrests": "records.lua",
+    "police_reports": "records.lua",
 }
 
 #: 还没收口的表：表名 → (为什么还不能收口, 仍在多写的证据痕迹)
 EXCEPTIONS: dict[str, tuple[str, str]] = {
-    "police_cases": (
-        "案卷由 p2_system（agent 写意图路径）与 p3_cases（玩家案卷）各自写入，"
-        "两条路径的列集合还没对齐（p2 走 write_intents 幂等表）",
-        "INSERT INTO police_cases",
-    ),
-    "police_arrests": (
-        "逮捕记录 p2_system（agent）与 p3_cases（玩家）双写，审计动作名也尚未统一",
-        "INSERT INTO police_arrests",
-    ),
-    "police_reports": (
-        "报告 p1（玩家）、p2_system（agent）、p3_cases（案卷归档）三写，"
-        "p3 只 UPDATE 归档状态、p1/p2 负责 INSERT，语义不同需先定义状态机",
-        "UPDATE police_reports",
-    ),
 }
 
 #: 正则的假阳性词（SQL 片段里出现的普通英文单词，不是表名）
