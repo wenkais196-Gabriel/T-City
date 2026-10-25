@@ -201,7 +201,7 @@ class TestStaticContracts:
 
     def test_client_money_bridge_refetches_server_balance(self):
         block = _client_bridge_block()
-        assert "'phone:server:getPhoneData'" in block, \
+        assert "fetchPhoneData(" in block, \
             'money bridge must re-read the authoritative balance'
         assert "action = 'phone:updateMoney'" in block
 

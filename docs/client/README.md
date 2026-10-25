@@ -3,8 +3,12 @@
 | 文档 | 内容 |
 |---|---|
 | `FIVEM_CLIENT_RESEARCH.md` | FiveM/QBCore 客户端四层模型、NUI/CEF、QBCore callback 并发、故障矩阵 |
+| `CLIENT_AUDIT.md` | 客户端模块审计（phone/police/justice/agent/other）+ 优先修复 Top 10 + 扫描器说明 |
 | `skills/fivem-client/SKILL.md` | 客户端开发 skill（规则、流程、验证） |
 | `skills/fivem-nui-review/SKILL.md` | NUI/Client review 清单 |
+
+静态契约：`T-CityLite.base/tests/architecture/test_nui_client_contracts.py`（规则
+`NUI-CLIENT-01`，债务登记 `tests/architecture/nui_client_allowlist.json`）。
 
 ## 关键结论
 

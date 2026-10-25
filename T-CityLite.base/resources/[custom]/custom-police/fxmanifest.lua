@@ -71,5 +71,7 @@ files {
 	'html/tablet-frame.png',
 	'html/fingerprint.png',
 	'html/main.css',
-	'html/vcr-ocd.ttf'
+	'html/vcr-ocd.ttf',
+	'html/vendor/*.js',
+	'html/vendor/*.css'
 }

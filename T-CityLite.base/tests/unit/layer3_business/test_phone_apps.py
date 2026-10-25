@@ -974,3 +974,64 @@ def test_error_code_doc_lists_every_action_and_required_code():
     ):
         assert f"`{code}`" in text, code
     assert "unknown_capability" in text and "forbidden" in text
+
+
+# ----------------------------------------------------
+# appQuery/appAction request_id protocol
+# ----------------------------------------------------
+# qb-core keeps one pending callback per name, so the old
+# QBCore.Functions.TriggerCallback('phone:server:appQuery') path could not run
+# two queries concurrently (PoliceMDT refresh does Promise.all). The NUI
+# bridges now use dedicated net events plus a client-generated request_id; the
+# legacy QBCore callbacks stay for other callers.
+def test_client_app_bridges_use_the_request_id_protocol():
+    client = read(PHONE / "client/main.lua")
+    for token in (
+        "phone:server:appQueryRequest",
+        "phone:client:appQueryResponse",
+        "phone:server:appActionRequest",
+        "phone:client:appActionResponse",
+    ):
+        assert token in client, token
+    assert "pendingAppQuery" in client and "pendingAppAction" in client
+    assert "APP_REQUEST_TIMEOUT_MS = 8000" in client
+    assert "error = 'timeout'" in client
+    assert "error = 'resource_stopped'" in client
+
+
+def test_nui_app_query_no_longer_uses_the_single_slot_callback():
+    client = read(PHONE / "client/main.lua")
+    start = client.index("RegisterNUICallback('appQuery'")
+    end = client.index("RegisterNUICallback('appAction'", start)
+    block = client[start:end]
+    assert "phone:server:appQueryRequest" in block
+    assert "TriggerCallback" not in block
+    action = client[client.index("RegisterNUICallback('appAction'"):]
+    action = action[:action.index("RegisterNetEvent('phone:client:appQueryResponse'")]
+    assert "phone:server:appActionRequest" in action
+    assert "TriggerCallback" not in action
+
+
+def test_server_echoes_request_ids_only_to_the_calling_source():
+    server = read(PHONE / "server/main.lua")
+    assert "RegisterNetEvent('phone:server:appQueryRequest'" in server
+    assert "RegisterNetEvent('phone:server:appActionRequest'" in server
+    assert "#requestId >= 3 and #requestId <= 64" in server
+    assert "TriggerClientEvent(eventName, src, requestId, response)" in server
+    for event in ("appQueryResponse", "appActionResponse"):
+        assert f"TriggerClientEvent('phone:client:{event}', -1" not in server
+    # Legacy callbacks remain for other callers even though the NUI dropped them.
+    assert "CreateCallback('phone:server:appQuery'" in server
+    assert "CreateCallback('phone:server:appAction'" in server
+
+
+def test_nui_app_fetch_outlives_the_client_deadline():
+    nui = read(PHONE / "web/src/utils/nui.ts")
+    assert "APP_REQUEST_TIMEOUT_MS = 9000" in nui
+    assert "eventName === 'appQuery'" in nui and "eventName === 'appAction'" in nui
+
+
+def test_mdt_translates_protocol_errors():
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    for code in ("timeout", "no_response", "bad_request", "resource_stopped"):
+        assert f"{code}:" in ui, code

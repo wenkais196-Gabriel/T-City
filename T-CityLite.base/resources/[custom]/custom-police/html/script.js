@@ -105,7 +105,8 @@ Databank.Close = function () {
     $(".databank-container").css("display", "none");
     $(".tablet-frame").css("display", "none");
     $(".databank-bg").css("display", "none");
-    $.post("https://custom-police/closeDatabank", JSON.stringify({}));
+    var resource = (typeof GetParentResourceName === "function") ? GetParentResourceName() : "custom-police";
+    $.post("https://" + resource + "/closeDatabank", JSON.stringify({}), function () {}, "json");
 };
 
 Fingerprint.Open = function () {
@@ -115,7 +116,8 @@ Fingerprint.Open = function () {
 
 Fingerprint.Close = function () {
     $(".fingerprint-container").fadeOut(150);
-    $.post("https://custom-police/closeFingerprint");
+    var resource = (typeof GetParentResourceName === "function") ? GetParentResourceName() : "custom-police";
+    $.post("https://" + resource + "/closeFingerprint", JSON.stringify({}), function () {}, "json");
 };
 
 Fingerprint.Update = function (data) {

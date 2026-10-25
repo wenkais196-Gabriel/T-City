@@ -108,6 +108,10 @@ let mockCityFeed = [
 ];
 
 const NUI_TIMEOUT_MS = 6000;
+// appQuery/appAction resolve through the client-side request_id protocol,
+// whose deadline is 8000 ms. Let it answer with a structured error instead of
+// aborting the fetch first.
+const APP_REQUEST_TIMEOUT_MS = 9000;
 
 // NUI fetch function (sends requests to Lua)
 export async function fetchNui<T = any>(eventName: string, data?: any): Promise<T> {
@@ -124,7 +128,10 @@ export async function fetchNui<T = any>(eventName: string, data?: any): Promise<
     // CEF can lose a NUI callback (resource restart, busy client) and leave the
     // fetch pending forever. Bound it so callers can reset their loading state.
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), NUI_TIMEOUT_MS);
+    const timeoutMs = eventName === 'appQuery' || eventName === 'appAction'
+      ? APP_REQUEST_TIMEOUT_MS
+      : NUI_TIMEOUT_MS;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const resourceName = (window as any).GetParentResourceName();
       const resp = await fetch(`https://${resourceName}/${eventName}`, {

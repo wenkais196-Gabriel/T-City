@@ -324,6 +324,24 @@
       "evidence": "qb_phone_compat.lua:266 sendNewMail — ResolveSource(source) + Compat.DeliverToPlayer(Player, citizenid, mail)",
       "owner": "custom-phone",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:appQueryRequest",
+      "file": "custom-phone/server/main.lua",
+      "category": "civilian",
+      "reason": "职业 App 查询入口：任何玩家都可以请求，但 PhoneApps.Query 会按 app_id 注册的 audience（job/onduty）拒绝未授权玩家；handler 只接受 3–64 字符 request_id 与 table，响应只回传 request_id 和结果，不回显参数。",
+      "evidence": "main.lua:1532 appQueryRequest — validAppRequestId + type(data)=='table' + PhoneApps.Query(src, ...) audience check, unicast to src",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:appActionRequest",
+      "file": "custom-phone/server/main.lua",
+      "category": "civilian",
+      "reason": "职业 App 动作入口：PhoneApps.Action 同样在注册表内按 audience 复验权限/在勤，handler 只接受 3–64 字符 request_id 与 table，结果按调用者 source 单播回传。",
+      "evidence": "main.lua:1548 appActionRequest — validAppRequestId + type(data)=='table' + PhoneApps.Action(src, ...) audience check, unicast to src",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
     }
   ]
 }
