@@ -22,7 +22,14 @@ exports = setmetatable({}, {
     __index = function(_, resource)
         if resource == 'custom-career' then
             if __state.career_missing then return nil end
-            return { PlayerMatchesTags = function(_, _, _) return __state.tags_match end }
+            -- 记下真实收到的参数：callExport 走的是 
+            -- exports['res']:Method(...) 的约定（第一个参数是 proxy 自己，必须被吃掉），
+            -- 参数一旦错位，真实环境里会把 source 当成 tags、把 tags 丢掉。
+            return { PlayerMatchesTags = function(_, src, tags)
+                __state.last_src = src
+                __state.last_tags = tags
+                return __state.tags_match
+            end }
         elseif resource == 'custom-certificates' then
             if __state.cert_missing then return nil end
             return { HasLicense = function(_, _, _) return __state.has_license end }
@@ -86,6 +93,9 @@ emit('tags_mismatch', ok2, code2)
 reset()
 local ok3 = QuestAvailability.Check(1, tmplTags)
 emit('tags_match', ok3 == true, nil)
+
+-- 3b. 参数不许错位：导出必须收到 (source, tags)，不是 (tags, nil)
+emit('tag_args', __state.last_tags ~= nil, type(__state.last_tags), tostring(__state.last_src))
 
 -- 4. not enough police
 reset(); __state.police_on_duty = 1
