@@ -451,8 +451,8 @@ def test_phone_toggle_ignores_duplicate_key_events():
     block = src[src.index("RegisterCommand('phone', function()"):]
     block = block[:block.index("end, false)")]
     guard = block.index("now - lastToggleAt < TOGGLE_DEBOUNCE_MS")
-    assert guard < block.index("if isPhoneOpen then"), "debounce must precede the toggle branch"
-    assert block.index("lastToggleAt = now") < block.index("if isPhoneOpen then")
+    assert guard < block.index("if Surface.IsOpen() then"), "debounce must precede the toggle branch"
+    assert block.index("lastToggleAt = now") < block.index("if Surface.IsOpen() then")
 
     # keymapping 只注册一次（否则防抖只是兜底，根因还在）
     assert "keyMappingRegistered" in src, "key mapping must be registered at most once"

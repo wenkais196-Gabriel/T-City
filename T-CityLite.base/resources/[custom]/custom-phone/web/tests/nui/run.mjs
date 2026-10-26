@@ -23,8 +23,9 @@ import { scenarios as mdtScenarios } from './mdt.spec.mjs';
 import { questScenarios } from './quests.spec.mjs';
 import { notifyScenarios } from './notify.spec.mjs';
 import { emergencyScenarios } from './emergency.spec.mjs';
+import { surfaceScenarios } from './surface.spec.mjs';
 
-const scenarios = [...mdtScenarios, ...questScenarios, ...notifyScenarios, ...emergencyScenarios];
+const scenarios = [...surfaceScenarios, ...mdtScenarios, ...questScenarios, ...notifyScenarios, ...emergencyScenarios];
 
 const HTML_DIR = path.resolve(fileURLToPath(new URL('../../../html', import.meta.url)));
 

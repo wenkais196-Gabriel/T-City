@@ -1,10 +1,14 @@
 import { writable, derived } from 'svelte/store';
 import { fetchNui } from '../utils/nui';
+import { SURFACE_PHONE, type Surface } from '../core/surface';
 
 // ----------------------------------------------------
 // Global Stores
 // ----------------------------------------------------
 export const isPhoneOpen = writable<boolean>(false);
+// 形态由客户端 Lua 决定（surface_rules.lua），这里只存 Lua 告诉我们的那一个值。
+// 不要在前端按窗口大小自己算——那样手机壳在窄窗口里会变成平板布局。
+export const surface = writable<Surface>(SURFACE_PHONE);
 export const activeApp = writable<string>('home'); // home, messages, contacts, banking, notifications, jobboard, faction, cityfeed, leader_mayor, leader_sheriff, leader_gangboss
 
 // Game clock (GTA V native time) — status bar and home widget share this

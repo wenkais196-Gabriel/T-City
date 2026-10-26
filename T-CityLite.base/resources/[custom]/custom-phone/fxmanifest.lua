@@ -17,6 +17,10 @@ client_scripts {
     '@core-framework/client/shared.lua',
     'client/core/bridge.lua',
     'client/core/focus.lua',
+    -- 形态：判定（纯函数）→ 移动锁 → 状态。必须都在 main.lua 之前
+    'client/core/surface_rules.lua',
+    'client/core/device_lock.lua',
+    'client/core/surface.lua',
     'client/core/events.lua',
     -- diag owns the request-trace + ui-event channel; must load before main.lua
     'client/core/diag.lua',

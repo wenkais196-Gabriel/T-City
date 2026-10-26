@@ -471,9 +471,10 @@ export async function installGameGlobals(page) {
 // Interaction helpers
 // ---------------------------------------------------------------------------
 
-export async function openPhone(page) {
+export async function openPhone(page, surface = 'phone') {
+  // surface 是宿主（Lua）决定的形态；测试里直接指定它，模拟 SurfaceRules 的结论。
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    await page.evaluate(() => window.postMessage({ action: 'phone:open' }, '*'));
+    await page.evaluate((id) => window.postMessage({ action: 'phone:open', surface: id }, '*'), surface);
     if (await page.locator('.phone-wrapper').isVisible().catch(() => false)) return;
     await page.waitForTimeout(50);
   }
