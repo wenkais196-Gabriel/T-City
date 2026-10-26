@@ -1374,6 +1374,8 @@ def test_unit_writes_are_confined_to_p0_helpers():
     assign = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
     assert "UPDATE police_units" not in assign
     assert "assignUnitRow(target, id)" in assign
+    # 指派即出发：enroute 也必须走 helper，不在调用点写裸 SQL
+    assert "enrouteUnitRow(target, id)" in assign
 
     status = p0_block("function P.SetIncidentStatus(", "local function lookupAllowed")
     assert "UPDATE police_units" not in status

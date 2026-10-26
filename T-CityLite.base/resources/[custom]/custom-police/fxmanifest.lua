@@ -27,6 +27,7 @@ client_scripts {
 	'@PolyZone/BoxZone.lua',
 	'@PolyZone/ComboZone.lua',
 	'client/main.lua',
+	'client/incident_guidance.lua',
 	'client/camera.lua',
 	'client/interactions.lua',
 	'client/job.lua',

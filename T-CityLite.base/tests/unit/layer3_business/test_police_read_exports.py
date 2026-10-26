@@ -211,8 +211,12 @@ reset()
 local incidents = registry.GetIncidents(1, nil)
 expect(type(incidents) == 'table' and incidents.count == 1, 'GetIncidents success shape')
 expect(incidents.incidents[1].id == 7, 'incident id missing')
-expect(#events == 2 and events[1] == 'audit' and events[2] == 'query',
-    'GetIncidents must audit before the SELECT')
+-- 板上还要下发"谁在这张单上"（primary/units/actions），所以 SELECT 之后
+-- 还有一次批量单位查询；不变量是：**任何 SELECT 之前必须先有 audit**。
+expect(events[1] == 'audit', 'GetIncidents must audit before the SELECT')
+for i = 2, #events do
+    expect(events[i] == 'query', 'only reads may follow the audit, got ' .. tostring(events[i]))
+end
 
 -- Invalid status is a stable error and never queries.
 reset()

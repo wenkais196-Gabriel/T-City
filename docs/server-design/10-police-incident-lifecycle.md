@@ -3,7 +3,7 @@
 > **核心命题**: 警情的大部分状态变化**不该由人点按钮**。派单即出发、到场即结算、处理完才清场——
 > 人只需要做两个决定：**接不接这张单**，和**案子结束了没有**。
 > **适用范围**: custom-police 的 P0 派单层、MDT 调度页、police_cases 归档、45 分钟 stale 清扫。
-> **状态**: 设计稿 v2（2026-10-26），实现排入 P5。前端 demo：
+> **状态**: v2 设计已定，**P5-1 已实现**（2026-10-26）。前端 demo：
 > docs/server-design/assets/10-mdt-lifecycle-demo.html
 
 ---
@@ -300,7 +300,7 @@ sequenceDiagram
 
 | 阶段 | 内容 | 时间盒 | 验收标准 |
 |---|---|---|---|
-| P5-1 | 申领一体化（assign+enroute+路线）+ 自动到场（检测/nonce/裁定）+ 两按钮门控 | 1–1.5 天 | 单人点「前往」一次到位；开到 30m 内自动变「现场」；不在现场时清场按钮置灰并说明原因 |
+| P5-1 ✅ | 申领一体化（assign+enroute+路线）+ 自动到场（检测/nonce/裁定）+ 两按钮门控 | 1–1.5 天 | 单人点「前往」一次到位；开到 30m 内自动变「现场」；不在现场时清场按钮置灰并说明原因 |
 | P5-2 | 单位模型 primary/support + 事件状态派生 + 废 markIncidentUnits | 1 天 | 两单位分别 enroute/on_scene 时事件取最大进度；support 不能清场 |
 | P5-3 | 清场归档：disposition 五选一、case_id、case_no、模板摘要、first_arrived_at、stale 同路径 | 1 天 | 逮捕清场后案件页查到 INC- 案卷；误报不建档但进统计 |
 | P5-4 | override / transfer / 增援单位 | 0.5 天 | 接管留痕；移交后原 primary 变 support |
@@ -325,14 +325,16 @@ docs/server-design/assets/10-mdt-lifecycle-demo.html —— 单文件、无依�
 
 ---
 
-## 8. 仍需拍板
+## 8. 已拍板（2026-10-26，全部按建议执行）
 
-1. **到场半径 30 m / 停留 2 s / 重置 45 m** 是否合适（跑车路过 vs 停在门口的距离感）。
-2. **是否保留"到了但没识别"的手动补录**（建议保留，菜单内，≤100 m，审计标 manual）。
-3. **清场权限**：只有 primary 能清场，还是本单任何单位都能？（建议只有 primary，support 需先移交）
-4. **disposition 五选一是否够**（arrest / cleared / false_alarm / cancelled / stale）。
-5. **误报要不要留案卷**（建议不建，只进统计，避免案件库被误报灌满）。
-6. **自动到场是否也给提示音**（建议给，但比报警音轻）。
+| # | 决定 | 结论 |
+|---|---|---|
+| 1 | 到场几何 | 半径 30 m（3D）、垂直 15 m、连续 2 次命中、离开 45 m 重置、服务端宽容 35 m |
+| 2 | 手动补录 | 保留：单位详情菜单里「补录到场」，服务端仍校验 ≤100 m，审计标 manual |
+| 3 | 清场权限 | 只有本单 primary 能清场；grade≥2 可跨单；support 需先移交（P5-4） |
+| 4 | disposition | 五选一：arrest / cleared / false_alarm / cancelled / stale |
+| 5 | 误报案卷 | 不建档，只写 disposition 进统计 |
+| 6 | 到场提示音 | 给，但比报警音轻（P5-1 先只做文字提示，音效随 P5-3 一起） |
 
 ---
 
