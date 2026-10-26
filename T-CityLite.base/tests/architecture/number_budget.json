@@ -150,7 +150,7 @@
       "value": 45,
       "unit": "minutes",
       "code": {
-        "file": "T-CityLite.base/resources/[custom]/custom-police/server/p0.lua",
+        "file": "T-CityLite.base/resources/[custom]/custom-police/server/p0_incidents.lua",
         "pattern": "COALESCE\\(last_activity_at, created_at\\) < NOW\\(\\) - INTERVAL (\\d+) MINUTE"
       },
       "docs": [

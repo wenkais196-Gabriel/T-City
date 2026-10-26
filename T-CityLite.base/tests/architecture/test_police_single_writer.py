@@ -26,29 +26,30 @@ SERVER = BASE / "resources" / "[custom]" / "custom-police" / "server"
 
 WRITE = re.compile(r"\b(INSERT\s+INTO|UPDATE)\s+`?([a-z_]+)`?", re.I)
 
-#: 已收口的表 → 唯一允许写它的文件。
-OWNERS = {
-    "police_audit": "audit.lua",
-    "police_incidents": "p0.lua",
-    "police_units": "p0.lua",
-    "police_incident_units": "p0.lua",
+#: 已收口的表 → 允许写它的文件（单一写者；p0 拆成五个模块后，
+#: 警情/单位那三张表由 p0 家族共同拥有——家族之外的写入照旧红）。
+OWNERS: dict[str, tuple[str, ...]] = {
+    "police_audit": ("audit.lua",),
+    "police_incidents": ("p0_incidents.lua", "p0_lifecycle.lua", "p0_units.lua"),
+    "police_units": ("p0_units.lua",),
+    "police_incident_units": ("p0_units.lua", "p0_lifecycle.lua"),
     # 下面四张本来就是单写者，闸门把它们钉住，防止以后又长出第二个写者
-    "police_bolos": "p3_cases.lua",
-    "police_warrants": "p3_cases.lua",
-    "police_outbox": "p2_system.lua",
-    "police_write_intents": "p2_system.lua",
+    "police_bolos": ("p3_cases.lua",),
+    "police_warrants": ("p3_cases.lua",),
+    "police_outbox": ("p2_system.lua",),
+    "police_write_intents": ("p2_system.lua",),
     # 2026-10-25: 罚单收口。金额政策与列集合都进了写者，
     # p1 那个"不带车牌就开不出罚单"的洞随之消失
-    "police_citations": "citations.lua",
+    "police_citations": ("citations.lua",),
     # 2026-10-25: 证据 + 链收口。收口时发现登记路径本身是坏的（参数数组前导 nil → 语法错），
     # 修好后 agent 的两条 child 路径也改走同一个写者
-    "police_evidence": "p2_evidence.lua",
-    "police_evidence_chain": "p2_evidence.lua",
+    "police_evidence": ("p2_evidence.lua",),
+    "police_evidence_chain": ("p2_evidence.lua",),
     # 2026-10-25: 案卷/逮捕/报告收口。三张表的写入点原本散在 p1（报告）、
     # p2_system（案卷 + 报告 + 逮捕）、p3_cases（案卷 + 逮捕 + 判决）
-    "police_cases": "records.lua",
-    "police_arrests": "records.lua",
-    "police_reports": "records.lua",
+    "police_cases": ("records.lua",),
+    "police_arrests": ("records.lua",),
+    "police_reports": ("records.lua",),
 }
 
 #: 还没收口的表：表名 → (为什么还不能收口, 仍在多写的证据痕迹)
@@ -77,10 +78,11 @@ def writers() -> dict[str, set[str]]:
 def test_owned_tables_have_exactly_one_writer():
     found = writers()
     offenders = []
-    for table, owner in OWNERS.items():
+    for table, owners in OWNERS.items():
         actual = found.get(table, set())
-        if actual != {owner}:
-            offenders.append(f"{table}: 期望只有 {owner}，实际 {sorted(actual) or '无人写入'}")
+        if actual != set(owners):
+            offenders.append(
+                f"{table}: 期望只有 {sorted(owners)}，实际 {sorted(actual) or '无人写入'}")
     assert not offenders, "\n".join(offenders)
 
 
@@ -121,7 +123,8 @@ def test_exception_trace_is_still_visible_in_the_code():
 
 def test_owner_files_are_loaded_by_the_manifest():
     manifest = (SERVER.parent / "fxmanifest.lua").read_text(encoding="utf-8")
-    missing = [owner for owner in set(OWNERS.values()) if f"server/{owner}" not in manifest]
+    missing = [owner for owners in OWNERS.values() for owner in owners
+               if f"server/{owner}" not in manifest]
     assert not missing, f"owner 文件没被 fxmanifest 加载：{missing}"
 
 
@@ -143,9 +146,9 @@ def test_scanner_reverse_check(tmp_path: Path):
         (tmp_path / "rogue.lua").write_text("INSERT INTO police_incidents (code) VALUES (?)", encoding="utf-8")
         found = writers()
         assert found["police_incidents"] == {"p0.lua", "rogue.lua"}
-        assert found["police_incidents"] != {OWNERS["police_incidents"]}, "多写者必须与 owner 判定不符"
+        assert found["police_incidents"] != set(OWNERS["police_incidents"]), "多写者必须与 owner 判定不符"
 
         (tmp_path / "rogue.lua").unlink()
-        assert writers()["police_incidents"] == {OWNERS["police_incidents"]}
+        assert writers()["police_incidents"] == {"p0.lua"}
     finally:
         SERVER = original

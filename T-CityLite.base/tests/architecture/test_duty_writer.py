@@ -383,14 +383,14 @@ def body_of(rel: str, marker: str) -> str:
 
 
 def test_police_service_is_the_only_p0_writer() -> None:
-    source = real_file("custom-police/server/p0.lua")
+    source = real_file("custom-police/server/p0_units.lua")
     code = mask_lua(source, blank_strings=True)
     structured = mask_lua(source, blank_strings=True)
     ranges = function_ranges(structured)
     calls = [code.count("\n", 0, match.start()) + 1 for match in CALL_RE.finditer(code)]
     assert calls == [], f"the service owns the projection, no direct SetJobDuty in p0: {calls}"
 
-    body = body_of("custom-police/server/p0.lua", "function P.SetDutyForSource(")
+    body = body_of("custom-police/server/p0_units.lua", "function P.SetDutyForSource(")
     assert "local data = pd(source)" in body
     assert "if not isPolice(data) then return false, 'not_police' end" in body
     assert "if onDuty ~= true and onDuty ~= false then return false, 'duty_failed' end" in body
@@ -407,7 +407,7 @@ def test_police_service_is_the_only_p0_writer() -> None:
 
 
 def test_10_8_and_10_7_call_the_duty_service() -> None:
-    body = body_of("custom-police/server/p0.lua", "function P.SetUnitStatusForSource(")
+    body = body_of("custom-police/server/p0_units.lua", "function P.SetUnitStatusForSource(")
     assert "P.SetDutyForSource(source, false, 'unit_status')" in body
     assert "P.SetDutyForSource(source, true, 'unit_status')" in body
     assert "player.Functions.SetJobDuty" not in body
@@ -416,7 +416,7 @@ def test_10_8_and_10_7_call_the_duty_service() -> None:
 
 
 def test_set_unit_status_off_duty_calls_the_service_and_keeps_offline_path() -> None:
-    body = body_of("custom-police/server/p0.lua", "function P.SetUnitStatus(")
+    body = body_of("custom-police/server/p0_units.lua", "function P.SetUnitStatus(")
     assert "P.SetDutyForSource(player.PlayerData.source, false, 'unit_status')" in body
     assert "player.Functions.SetJobDuty" not in body
     assert "elseif not player then" in body, "offline citizen may only park the unit row"

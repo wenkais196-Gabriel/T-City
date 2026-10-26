@@ -12,6 +12,7 @@ runtime and run in CI alongside the other layer3_business contracts.
     python3 -m pytest -q T-CityLite.base/tests/unit/layer3_business/test_arrest_submit.py
 """
 from __future__ import annotations
+from p0_sources import p0_block as _p0_block, p0_text
 
 import re
 from pathlib import Path
@@ -968,7 +969,7 @@ MIGRATION_V37 = BASE / "migrations" / "v3.7_police_justice_verdict.sql"
 
 
 def lookup_citizen_block() -> str:
-    src = read(POLICE / "server/p0.lua")
+    src = p0_text()
     start = src.index("function P.LookupCitizen(")
     end = src.index("function P.LookupVehicle(", start)
     return src[start:end]
@@ -1246,18 +1247,16 @@ def test_backup_client_cleans_up_on_timeout_leave_death_and_restart():
 # SM-01 duty / unit state machine
 # ---------------------------------------------------------------------------
 
-P0 = POLICE / "server/p0.lua"
+P0_TEXT = p0_text()
 
 
 def p0_src() -> str:
-    return read(P0)
+    return P0_TEXT
 
 
 def p0_block(start_marker: str, end_marker: str) -> str:
-    src = p0_src()
-    start = src.index(start_marker)
-    end = src.index(end_marker, start)
-    return src[start:end]
+    # 块不能跨模块（拆分后 end marker 常在另一个文件里）
+    return _p0_block(start_marker, end_marker)
 
 
 def test_set_unit_status_for_source_owns_the_onduty_projection():
@@ -1336,7 +1335,9 @@ def test_startup_sweep_parks_offline_units_without_deleting_rows():
 
 
 def test_grade1_officers_may_only_self_claim_open_or_assigned_incidents():
-    block = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
+    # 拆分后 AssignUnit 与 AssignUnitSystem 各自成段（中间只隔一条注释），
+    # 这条测试原本覆盖的是「两条指派路径」，所以两段都算上。
+    block = _p0_block("function P.AssignUnit(") + _p0_block("function P.AssignUnitSystem(")
     assert "reason == 'rank_too_low' and grade(actor) < 2 and actor.job.onduty == true" in block
     assert "if selfClaim and target ~= actor.citizenid then return false, 'rank_too_low' end" in block
     assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then" in block
@@ -1473,7 +1474,9 @@ def test_sm02_non_close_moves_bump_last_activity():
 
 
 def test_sm02_assign_checks_state_and_bumps_last_activity():
-    block = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
+    # 拆分后 AssignUnit 与 AssignUnitSystem 各自成段（中间只隔一条注释），
+    # 这条测试原本覆盖的是「两条指派路径」，所以两段都算上。
+    block = _p0_block("function P.AssignUnit(") + _p0_block("function P.AssignUnitSystem(")
     assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then" in block
     assert "return false, 'invalid_transition'" in block
     assert "SET status = 'assigned', last_activity_at = NOW()" in block
@@ -2178,7 +2181,7 @@ def test_fit05_citation_report_and_audit_reads_fail_closed_before_the_query():
             f"{name} must refuse the listing when the audit write fails"
         )
 
-    audit_block = _police_function_block(read(POLICE / "server/p0.lua"), "function P.GetAudit(")
+    audit_block = _police_function_block(p0_text(), "function P.GetAudit(")
     # Exactly one occurrence: the definition itself. A second one would be the
     # self-audit recursing through GetAudit instead of the direct INSERT.
     assert audit_block.count("GetAudit(") == 1, "P.GetAudit must not call itself (recursion)"

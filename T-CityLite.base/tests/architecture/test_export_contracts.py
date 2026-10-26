@@ -155,11 +155,20 @@ def named_functions() -> dict[str, tuple[Path, int, str]]:
             if not match:
                 continue
             body: list[str] = []
-            cursor = index + 1
-            while cursor < len(lines) and not TOP_END_RE.match(lines[cursor]):
-                body.append(lines[cursor])
-                cursor += 1
-            found.setdefault(match.group("name"), (path, index + 1, "\n".join(body)))
+            # 单行函数（`local function x() return I.x() end`）没有后续行可吞：
+            # 不判这一条，body 会一路吃到下一个 `end`，把别人的 SQL 记到它头上。
+            if not re.search(r"\bend\s*$", line):
+                cursor = index + 1
+                while cursor < len(lines) and not TOP_END_RE.match(lines[cursor]):
+                    body.append(lines[cursor])
+                    cursor += 1
+            candidate = (path, index + 1, "\n".join(body))
+            existing = found.get(match.group("name"))
+            # 拆模块后同一个名字会出现两次：实现（p0_units.lua）和按需解析的转发壳
+            # （`return I.foo(...)`）。空壳不能覆盖实现，否则"这个导出委派给了写者"
+            # 会被判成"它自己什么都没写"，导出契约闸门就开始误报。
+            if existing is None or (not existing[2].strip() and candidate[2].strip()):
+                found[match.group("name")] = candidate
     return found
 
 

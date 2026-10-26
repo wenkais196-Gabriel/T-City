@@ -1,5 +1,6 @@
 """Static contract for the server-authoritative phone app registry."""
 import shutil
+from p0_sources import p0_files, p0_text
 import subprocess
 import tempfile
 from pathlib import Path
@@ -123,7 +124,7 @@ def test_police_capabilities_are_centralised():
     policy = read(PHONE.parent / "custom-police/shared/policy.lua")
     assert "PolicePolicy.Can" in policy
     assert "incident.assign" in policy and "minGrade = 2" in policy
-    p0 = read(PHONE.parent / "custom-police/server/p0.lua")
+    p0 = p0_text()
     assert "PolicePolicy.Can" in p0
     assert "audit_unavailable" in p0
 
@@ -225,7 +226,7 @@ def test_notifications_can_deeplink_into_mdt():
     notify = read(PHONE / "server/core/notify.lua")
     assert "phone_notifications (citizenid, title, content, app_id)" in notify
     assert "app_id = appId" in notify
-    p0 = read(PHONE.parent / "custom-police/server/p0.lua")
+    p0 = p0_text()
     assert "app_id" in p0 and "police_mdt" in p0
     ui = read(PHONE / "web/src/apps/Notifications.svelte")
     assert "openTarget" in ui and "dyn:" in ui
@@ -270,7 +271,9 @@ def test_insert_ids_are_normalized():
     assert "function InsertId" in shared and "insertId" in shared
     # p2_system 不再自己建单（走 p0 的唯一写者，归一化也在那里做），所以它不在这份名单里。
     # p1 的报告写入已委派给 records.lua，不再自己拿 InsertId
-    for f in ("p0.lua", "p2_evidence.lua", "p3_cases.lua"):
+    # p0 拆成五个模块后，InsertId 归一化落在 p0_incidents.lua 的写入点里
+    assert any("InsertId(" in src for src in p0_files().values()), "p0 家族必须经 InsertId 归一化"
+    for f in ("p2_evidence.lua", "p3_cases.lua"):
         src = read(PHONE.parent / "custom-police/server" / f)
         assert "InsertId(" in src, f
     sys_src = read(PHONE.parent / "custom-police/server/p2_system.lua")

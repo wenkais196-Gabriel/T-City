@@ -328,7 +328,10 @@ def test_units_and_incidents_are_p0_only_plus_the_registered_legacy_branch():
     assert not violations
     for rule_id in ("police_units.status", "police_incidents.status"):
         rule = next(rule for rule in registry["rules"] if rule["id"] == rule_id)
-        assert rule["allowed_files"] == ["custom-police/server/p0.lua"]
+        # 拆分后允许的文件是 p0 家族的一个固定集合（登记在 registry 里，不在测试里写死）
+        assert rule["allowed_files"], f"{rule_id}: 必须登记允许的写者文件"
+        assert all(f.startswith("custom-police/server/p0") for f in rule["allowed_files"]), (
+            f"{rule_id}: 只允许 p0 家族写，实际登记 {rule['allowed_files']}")
         writers = {
             (write.resource, write.file, write.function)
             for write in writes
@@ -336,10 +339,11 @@ def test_units_and_incidents_are_p0_only_plus_the_registered_legacy_branch():
         }
         # Every unit/incident state write now goes through p0 helpers.
         assert {writer[0] for writer in writers} == {"custom-police"}
+        allowed = {f.removeprefix("custom-police/") for f in rule["allowed_files"]}
         non_p0 = {
-            writer for writer in writers if writer[1] != "server/p0.lua"
+            writer for writer in writers if writer[1] not in allowed
         }
-        assert non_p0 == set()
+        assert non_p0 == set(), f"{rule_id}: 家族之外的写入者 {sorted(non_p0)}"
 
 
 def test_report_and_citation_writers_match_the_registry():

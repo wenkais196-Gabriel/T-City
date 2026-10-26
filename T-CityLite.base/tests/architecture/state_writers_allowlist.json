@@ -11,9 +11,9 @@
         "incident_id"
       ],
       "allowed_files": [
-        "custom-police/server/p0.lua"
+        "custom-police/server/p0_units.lua"
       ],
-      "reason": "police_units.status/incident_id 是 SM-01 单位状态机；唯一写入口是 p0 的 duty/incident helper（syncDuty、assignUnitRow、markIncidentUnits、releaseIncidentUnits、takeUnitOffDuty）。"
+      "reason": "police_units.status/incident_id 是 SM-01 单位状态机；唯一写入口是 p0_units.lua 的 duty/incident helper（syncDuty、assignUnitRow、enrouteUnitRow、markIncidentUnits、releaseIncidentUnits、takeUnitOffDuty）。"
     },
     {
       "id": "police_incidents.status",
@@ -22,9 +22,11 @@
         "status"
       ],
       "allowed_files": [
-        "custom-police/server/p0.lua"
+        "custom-police/server/p0_incidents.lua",
+        "custom-police/server/p0_lifecycle.lua",
+        "custom-police/server/p0_units.lua"
       ],
-      "reason": "police_incidents.status 是 SM-02 警情状态机；唯一写入口是 p0 的 AssignUnit / SetIncidentStatus / releaseDroppedUnit / SweepStaleIncidents。"
+      "reason": "police_incidents.status 是 SM-02 警情状态机；写它的是 p0 家族的三处：p0_incidents.SetIncidentStatus/SweepStaleIncidents、p0_lifecycle.ClaimIncident、p0_units.recomputeIncidentProgress（状态是单位进度的派生值）。家族之外照旧为 0。"
     },
     {
       "id": "police_reports",
