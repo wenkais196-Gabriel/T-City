@@ -365,6 +365,11 @@ export function handleNui(world, callback, payload) {
       return ok({ success: true, apps: world.apps });
     case 'getCallHistory':
       return ok({ success: true, calls: [] });
+    case 'mdtNavigate':
+      // 警情路线：记下来，让测试能断言"点前往真的画了路线"
+      if (payload?.clear) world.mdtRoute = null;
+      else world.mdtRoute = payload ?? null;
+      return ok({ success: true });
     case 'report911':
       // 报警入口的假后端：返回单号，UI 要把它显示出来
       world.reported911 = payload ?? null;
