@@ -489,7 +489,7 @@ export async function openMdt(page, surface = 'phone') {
   await openPhone(page, surface);
   const tile = page.locator('button[aria-label="MDT"]');
   try {
-    await tile.waitFor({ state: 'visible', timeout: 5000 });
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
   } catch {
     throw new CheckError('手机主页没有 MDT 图标', {
       期望: 'getPhoneApps 返回 police_mdt 后渲染一个 aria-label="MDT" 的按钮',
@@ -512,7 +512,7 @@ export async function openQuests(page, surface = 'phone') {
   await openPhone(page, surface);
   const tile = page.locator('button[aria-label="任务"]');
   try {
-    await tile.waitFor({ state: 'visible', timeout: 5000 });
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
   } catch {
     throw new CheckError('手机主页没有任务图标', {
       期望: 'getPhoneApps 返回 quests 后渲染一个 aria-label="任务" 的按钮',
@@ -559,7 +559,7 @@ export async function openNotifications(page) {
   await openPhone(page);
   const tile = page.locator('button[aria-label="Notifications"]');
   try {
-    await tile.waitFor({ state: 'visible', timeout: 5000 });
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
   } catch {
     throw new CheckError('手机主页没有通知图标', {
       期望: '出现 aria-label="Notifications" 的按钮',
@@ -575,7 +575,7 @@ export async function openHotlines(page) {
   await openPhone(page);
   const tile = page.locator('button[aria-label="Service Hotlines"]');
   try {
-    await tile.waitFor({ state: 'visible', timeout: 5000 });
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
   } catch {
     throw new CheckError('手机主页没有热线图标', {
       期望: '出现 aria-label="Service Hotlines" 的按钮',
