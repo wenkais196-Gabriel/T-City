@@ -12,6 +12,10 @@ const QUEST_FREE = {
   category: 'logistics',
   level: 1,
   available: true,
+  requirements: [
+    { kind: 'tags', text: '身份：平民', met: true },
+    { kind: 'cooldown', text: '冷却 2 小时', met: true },
+  ],
 };
 
 const QUEST_BLOCKED = {
@@ -22,7 +26,11 @@ const QUEST_BLOCKED = {
   level: 3,
   available: false,
   reason: 'police',
-  reason_text: 'Not enough officers on duty',
+  reason_text: '在勤警力 ≥ 2（当前 0）',
+  requirements: [
+    { kind: 'tags', text: '职业：警察', met: false },
+    { kind: 'police', text: '在勤警力 ≥ 2（当前 0）', met: false },
+  ],
 };
 
 const QUESTS_APP = {
@@ -42,14 +50,21 @@ export const questScenarios = [
       world.questActive = [];
 
       await openQuests(page);
-      await waitFor(async () => (await page.locator('.list li').count()) === 2, 5000, '应渲染两条任务');
+      await waitFor(async () => (await page.locator('.list > li').count()) === 2, 5000, '应渲染两条任务');
 
-      checkEqual('不可接的任务也要显示出来（只是标记 blocked）', await page.locator('.list li.blocked').count(), 1);
-      checkEqual('只给可接的任务一个接取按钮', await page.locator('.list li button.primary').count(), 1);
+      checkEqual('不可接的任务也要显示出来（只是标记 blocked）', await page.locator('.list > li.blocked').count(), 1);
+      checkEqual('只给可接的任务一个接取按钮', await page.locator('.list > li button.primary').count(), 1);
 
       const text = (await page.locator('.quests-app').textContent()) ?? '';
-      checkIncludes('不可接原因要摆给玩家看', text, 'Not enough officers on duty');
+      checkIncludes('不可接原因要摆给玩家看', text, '在勤警力 ≥ 2（当前 0）');
       checkIncludes('可接任务的标题要渲染', text, QUEST_FREE.title);
+
+      // 需求要逐条摆出来，未满足的那条必须单独标红（不然玩家还是不知道缺什么）
+      const unmet = page.locator('.reqs .req.unmet');
+      await waitFor(async () => (await unmet.count()) === 2, 5000, '不可接任务的两条需求都该标红');
+      const met = page.locator('.reqs .req:not(.unmet)');
+      await waitFor(async () => (await met.count()) === 2, 5000, '可接任务的两条需求应显示为满足');
+      checkIncludes('需求文案要能读', text, '职业：警察');
     },
   },
   {
@@ -61,7 +76,7 @@ export const questScenarios = [
       world.actionErrors = { accept: 'rejected' };
 
       await openQuests(page);
-      await page.locator('.list li button.primary').first().click();
+      await page.locator('.list > li button.primary').first().click();
 
       await waitFor(
         () => world.calls.some((c) => c.callback === 'appAction' && c.payload?.action === 'accept'),

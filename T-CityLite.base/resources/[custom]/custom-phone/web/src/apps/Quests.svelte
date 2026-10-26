@@ -16,6 +16,8 @@
     reason?: string;
     reason_text?: string;
     remaining_minutes?: number;
+    /** 服务端算好的需求清单：每一条都带"满足没有"，UI 只负责显示 */
+    requirements?: { kind?: string; text?: string; met?: boolean }[];
   };
   type ActiveRow = {
     quest_id: string;
@@ -123,6 +125,15 @@
               <span class="chip">{row.category ?? 'misc'} · L{row.level ?? 1}</span>
             </div>
             {#if row.description}<p class="desc">{row.description}</p>{/if}
+            {#if row.requirements && row.requirements.length > 0}
+              <ul class="reqs">
+                {#each row.requirements as req}
+                  <li class="req" class:unmet={req.met === false}>
+                    {req.met === false ? '✗' : '✓'} {req.text ?? req.kind}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
             {#if canAccept(row)}
               <button class="primary" onclick={() => accept(row.id)} disabled={busyId === row.id}>
                 {busyId === row.id ? '接取中…' : '接取'}
@@ -172,6 +183,9 @@
   .chip { margin-left: auto; font-size: 10px; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,.12); }
   .desc { font-size: 11px; opacity: 0.75; margin: 6px 0 8px; line-height: 1.45; }
   .reason { font-size: 11px; color: #fbbf24; margin: 6px 0 0; }
+  .reqs { list-style: none; margin: 6px 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+  .req { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: rgba(34,197,94,.14); color: #86efac; }
+  .req.unmet { background: rgba(239,68,68,.16); color: #fca5a5; }
   .primary { border: 0; border-radius: 9px; padding: 7px 14px; background: #2563eb; color: #fff; font-size: 12px; }
   .primary:disabled { opacity: 0.55; }
   .ghost { border: 1px solid rgba(255,255,255,.2); border-radius: 9px; padding: 6px 12px; background: transparent; color: inherit; font-size: 12px; }
