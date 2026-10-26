@@ -44,12 +44,12 @@ const QUESTS_APP = {
 export const questScenarios = [
   {
     name: '任务列表：只摆能接的，不可接的不出现',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.apps = [...world.apps, QUESTS_APP];
       world.quests = [QUEST_FREE, QUEST_BLOCKED];
       world.questActive = [];
 
-      await openQuests(page);
+      await openQuests(page, surface);
       await waitFor(async () => (await page.locator('.list > li').count()) === 1, 5000, '只该渲染可接的那一条');
 
       checkEqual('不可接的任务不出现', await page.locator('.list > li.blocked').count(), 0);
@@ -64,20 +64,20 @@ export const questScenarios = [
       if (text.includes('在勤警力 ≥ 2（当前 0）')) throw new Error('不可接任务的拒绝原因不该出现');
 
       // 可接任务的需求仍要逐条摊开（绿勾 = 这条线要什么，你满足了吗）
-      const met = page.locator('.reqs .req:not(.unmet)');
+      const met = page.locator('[data-pane="list"] .reqs .req:not(.unmet)');
       await waitFor(async () => (await met.count()) === 2, 5000, '可接任务的两条需求应显示为满足');
       checkIncludes('需求文案要能读', text, '身份：平民');
     },
   },
   {
     name: '点接取会真的发 appAction，失败原因显示在页面上',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.apps = [...world.apps, QUESTS_APP];
       world.quests = [QUEST_FREE];
       world.questActive = [];
       world.actionErrors = { accept: 'rejected' };
 
-      await openQuests(page);
+      await openQuests(page, surface);
       await page.locator('.list > li button.primary').first().click();
 
       await waitFor(

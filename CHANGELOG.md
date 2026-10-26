@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **手机 / 平板统一为一台设备的两种形态**。手机和平板不再是两台设备：一个 `DeviceShell(surface)`、一份 app 清单、一套权限。形态由客户端 Lua 的 `SurfaceRules.Decide()` 决定（入口 > 来电 > 载具 > 玩家偏好 > 窗口 ≥900×560 且横向 > 默认手机），因为 `keepInput` 属于 focus，必须在打开那一刻定下来；UI 只照做，不自己嗅探窗口。同一时刻只有一个面在前台（`Surface` 里一个 `current`，不是两个布尔）。**平板锁移动**用逐帧 `DisableControlAction`（30–35），不用 `SetPlayerControl`/`FreezeEntityPosition` 那种粘性状态——粘性状态加一次异常就是永久钉在原地。关闭路径（用户、M 键、切换、ack 超时、`/phonefix`、资源停止）统一走 `Surface.Reset() + DeviceLock.End()`。
 
-- **pane 契约：一个 app 一个组件，两种排布**。`core/panes.ts` 的 `definePanes` + `AppSurface`（ResizeObserver 测容器宽度）+ `Pane`，排布只由**宽度**决定，不读 surface 身份。首批三个：警用终端（三栏，详情栏只在平板渲染，行内「前往/清场」保留——巡逻时一击不能变两击）、Messages（drill，手机二选一/平板并存，且不自动选会话，因为那会 `markMessagesRead` 把未读清掉）、任务（flow，手机不动、平板加详情栏并收窄列表）。其余 12 个 app 有意不加栏。
+- **pane 契约：一个 app 一个组件，两种排布**。`panes.ts` 的 `definePanes` + `AppSurface`（ResizeObserver 测容器宽度）+ `Pane`，排布只由**宽度**决定，不读 surface 身份。首批三个：警用终端（三栏，详情栏只在平板渲染，行内「前往/清场」保留——巡逻时一击不能变两击）、Messages（drill，手机二选一/平板并存，且不自动选会话，因为那会 `markMessagesRead` 把未读清掉）、任务（flow，手机不动、平板加详情栏并收窄列表）。其余 12 个 app 有意不加栏。
 
 - **三道闸门守住"不慢慢长成两个产品"**：① 禁止分叉组件（`*Tablet.svelte` 或相似度 ≥0.9 的改名副本）② 用 `AppSurface` 的 app 必须有 pane 契约且与 DOM 的 `data-pane` 双向相等、`TABLET_GRANTS` 必须为空 ③ 服务端不许读 `surface`、app 不许自己判断形态。三条各自带反向注入（往 tmp 目录写坏形状 → 必须红），所以没有推高未证明预算。NUI 另加 6 个场景，含 parity：同一交互在两种形态下发出的 `appQuery/appAction` 集合必须完全相等。
 

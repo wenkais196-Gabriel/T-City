@@ -25,6 +25,7 @@ async function box(page) {
 
 export const surfaceScenarios = [
   {
+    surfaces: ['phone'],
     name: '手机形态：右下角 375x780，有刘海和手势条',
     async run({ page }) {
       await openPhone(page, 'phone');
@@ -42,6 +43,7 @@ export const surfaceScenarios = [
     },
   },
   {
+    surfaces: ['phone'],
     name: '平板形态：居中 1034x676，无刘海无手势条但有关闭按钮',
     async run({ page }) {
       await openPhone(page, 'tablet');
@@ -58,6 +60,7 @@ export const surfaceScenarios = [
     },
   },
   {
+    surfaces: ['phone'],
     name: '平板：警用终端并出三栏；手机同一页只有一栏',
     async run({ page, world }) {
       world.units = [
@@ -93,7 +96,9 @@ export const surfaceScenarios = [
       checkTruthy('详情栏显示的是那张单',
         (await page.locator('[data-pane="detail"] h3').first().textContent()).includes('#40'));
 
-      // 同一页在手机上只能看到一栏
+      // 同一页在手机上只能看到一栏（先关掉平板，否则 openPhone 会因为"已经开着"立刻返回）
+      await page.locator('[data-device-close]').click();
+      await page.waitForFunction(() => !document.querySelector('.phone-wrapper'), null, { timeout: 5000 });
       await openMdt(page, 'phone');
       const phoneSurface = page.locator('.mdt .app-surface');
       checkEqual('手机用 stack 排布', await phoneSurface.getAttribute('data-mode'), 'stack');
@@ -103,9 +108,10 @@ export const surfaceScenarios = [
   },
 
   {
+    surfaces: ['phone'],
     name: '同一交互在两种形态下发出同一组 app 请求（parity）',
     async run({ page, world }) {
-      const keys = () => [...new Set(world.calls
+      const keysSince = (from) => [...new Set(world.calls.slice(from)
         .filter((call) => call.callback === 'appQuery' || call.callback === 'appAction')
         .map((call) => `${call.callback}:${call.payload?.app_id}:${call.payload?.query ?? call.payload?.action}`))]
         .sort();
@@ -118,20 +124,23 @@ export const surfaceScenarios = [
       }];
 
       await openMdt(page, 'phone');
+      const phoneStart = world.calls.length;
       await page.locator('.mdt button.refresh:visible').first().click();
       await waitFor(async () => (await page.locator('.mdt .incident').count()) > 0, 5000, '手机端应渲染警情');
-      const phoneKeys = keys();
+      const phoneKeys = keysSince(phoneStart);
 
       // 换形态 = 同一台设备换个窗口，不是换一个 app
       await openMdt(page, 'tablet');
+      const tabletStart = world.calls.length;
       await page.locator('.mdt button.refresh:visible').first().click();
       await waitFor(async () => (await page.locator('.mdt .incident').count()) > 0, 5000, '平板端应渲染警情');
-      const tabletKeys = keys();
+      const tabletKeys = keysSince(tabletStart);
 
       checkListEquals('两种形态的 app 请求集合必须相等（平板不许偷偷多拉数据）', tabletKeys, phoneKeys);
     },
   },
   {
+    surfaces: ['phone'],
     name: '任务：手机内联，平板并出详情栏',
     async run({ page, world }) {
       world.apps = [...world.apps, { id: 'quests', label: '任务', icon: '📜', queries: ['list', 'active'], actions: ['accept', 'abandon'] }];
@@ -159,6 +168,7 @@ export const surfaceScenarios = [
     },
   },
   {
+    surfaces: ['phone'],
     name: '两种形态都能关，且关闭只发一次 closePhone',
     async run({ page, world }) {
       await openPhone(page, 'tablet');

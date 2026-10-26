@@ -229,7 +229,8 @@
   .quest-detail { padding: 12px 4px; }
   .list li.sel { outline: 1px solid rgba(59,130,246,.6); }
   /* 平板：列表收窄成"标题 + 状态"，详情在右栏，避免同一段文字渲染两遍 */
-  .list li.compact .desc, .list li.compact .reqs, .list li.compact .primary, .list li.compact .reason { display: none; }
+  .list li.compact .desc, .list li.compact .reqs, .list li.compact .reason { display: none; }
+  /* 「接取」不隐藏：平板上一击能做的事，不该因为多了一栏就变成三击 */
   .quests-app { padding: 16px; color: #e8edf5; height: 100%; overflow-y: auto; }
   .quests-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .quests-icon { font-size: 26px; }
