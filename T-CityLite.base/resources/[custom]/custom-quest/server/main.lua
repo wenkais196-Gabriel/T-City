@@ -1004,6 +1004,19 @@ end, true) -- restricted
 
 RegisterCommand('listquests', function(source)
     local src = source
+    -- 控制台里 source == 0：没有客户端能收 chat:addMessage，直接 print 出来。
+    -- 否则运维在服务器上想确认"模板到底加载了几个"时会拿到一句 native 报错。
+    local function say(text, color)
+        if src == 0 then
+            print(text)
+            return
+        end
+        TriggerClientEvent('chat:addMessage', src, {
+            color = color,
+            multiline = true,
+            args = { text }
+        })
+    end
     local catalog = QuestRegistry.GetCategorizedList()
     local lines = {}
     for category, quests in pairs(catalog) do
@@ -1013,17 +1026,11 @@ RegisterCommand('listquests', function(source)
         end
     end
     if #lines == 0 then
-        TriggerClientEvent('chat:addMessage', src, {
-            color = { 255, 100, 100 },
-            args = { '⚠️ 无已注册的任务模板！检查 quest_registry 日志' }
-        })
+        say('⚠️ 无已注册的任务模板！检查 quest_registry 日志', { 255, 100, 100 })
         return
     end
-    TriggerClientEvent('chat:addMessage', src, {
-        color = { 100, 200, 255 },
-        multiline = true,
-        args = { '📋 可用任务:\n' .. table.concat(lines, '\n') }
-    })
+    table.sort(lines)
+    say('📋 可用任务 (共 ' .. #lines .. ' 条):\n' .. table.concat(lines, '\n'), { 100, 200, 255 })
 end, true) -- restricted
 
 -- ==============================================================
