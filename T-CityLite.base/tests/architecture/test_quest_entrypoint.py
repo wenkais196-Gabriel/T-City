@@ -68,3 +68,9 @@ def test_quest_entrypoint_wiring_detects_bypasses_and_missing_links():
     assert "queryApp('quests', 'list')" in quests_svelte
     assert "appAction('quests', 'accept'" in quests_svelte
     assert "row.available" in quests_svelte, "UI 要按服务端给的 available 决定按钮"
+
+    # 7. 运维视角：/listquests 从控制台调用时 source == 0，没有客户端能收 chat 消息，
+    #    必须直接 print；否则运维想确认"模板加载了几个"只会拿到一句 native 报错。
+    assert "src == 0" in main_lua and "print(text)" in main_lua, (
+        "/listquests 缺少控制台分支：控制台调用会 TriggerClientEvent(0, ...) 并抛 native 错误"
+    )

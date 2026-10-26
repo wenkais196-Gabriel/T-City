@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 新增导出 `GetAvailableQuests(source)` / `GetQuestDetail(source, questId)`；详情只给步骤标题与类型，不暴露坐标等执行细节。
   - custom-phone/server/apps/quests.lua：注册 `quests` App（对所有职业可见，平民也有平民线）。`quest_id` 由客户端提供，所以在这一层先清洗（≤64 字符、`[A-Za-z0-9_]`），非法 id **不会**下沉到 custom-quest；接取/放弃走 `TriggerQuest`/`AbandonQuest`，被拒时把下游给玩家的原句带回 UI。
   - web/src/apps/Quests.svelte + core/appRegistry.ts：可接/进行中两个页签；不可接的任务**照样显示**并写明原因（"Not enough officers on duty"），而不是从列表里消失。没有专属组件的 App 仍然回退到 `DynamicApp`。
+  - `/listquests` 支持控制台调用（`source == 0` 时直接 print）：运维在服务器上就能确认模板加载了多少条，而不是拿到 `native Argument at index 1 was null`
   - 启动自证：`custom-quest` 导出注册后打印「手机任务入口已就绪」，手机 App 注册后打印「quests app registered」；`tools/ops/healthcheck.py` 的启动标记从 3 条扩到 5 条 —— 否则「入口挂了」和「入口没写」在日志上长得一模一样
   - 一条**跨资源导出调用约定**的回归：`exports['res']:Method(a)` 的第一个参数是 proxy 自己，少传 self 会静默把 `source` 当成 tags、把 tags 丢成 nil（真实表现是"所有带标签的任务都不可接"，而只看返回值的测试仍然全绿）。现已断言导出收到的参数各就各位，并做过去掉 self 必须变红的反向校验
   - 测试：`test_quest_availability.py`（lua5.4 真跑模块，5 种不满足条件逐个要求被拒）、`test_quest_phone_app.py`（注册契约 + 边界清洗，非法 id 时下游调用计数必须为 0）、`test_quest_entrypoint.py`（接线闸门，反向禁止手机层出现 `MySQL`/`QuestDB`/`QuestManager` 等旁路）、NUI 2 个新场景（列表渲染 + 点接取真的发 `appAction` 并显示下游拒绝原因）
