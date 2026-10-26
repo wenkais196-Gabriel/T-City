@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock } from '../utils/time';
   import { factionMessages, playerData } from '../stores/phone';
   import { fetchNui } from '../utils/nui';
   import { onMount, tick } from 'svelte';
@@ -29,10 +30,8 @@
     }
   };
 
-  const formatTime = (epoch: number) => {
-    const d = new Date(epoch * 1000);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  };
+  // 服务端这里给的是 epoch 秒，formatClock 会自动识别秒/毫秒
+  const formatTime = (epoch: unknown) => formatClock(epoch, 'faction');
 
   onMount(() => {
     scrollToBottom();

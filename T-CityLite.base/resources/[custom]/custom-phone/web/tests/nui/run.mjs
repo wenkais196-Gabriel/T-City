@@ -21,8 +21,9 @@ import {
 } from './harness.mjs';
 import { scenarios as mdtScenarios } from './mdt.spec.mjs';
 import { questScenarios } from './quests.spec.mjs';
+import { notifyScenarios } from './notify.spec.mjs';
 
-const scenarios = [...mdtScenarios, ...questScenarios];
+const scenarios = [...mdtScenarios, ...questScenarios, ...notifyScenarios];
 
 const HTML_DIR = path.resolve(fileURLToPath(new URL('../../../html', import.meta.url)));
 

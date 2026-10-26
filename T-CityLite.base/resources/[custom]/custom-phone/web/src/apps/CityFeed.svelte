@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock } from '../utils/time';
   import { playerData } from '../stores/phone';
   import { fetchNui } from '../utils/nui';
   import { onMount } from 'svelte';
@@ -52,10 +53,7 @@
     }
   };
 
-  const formatTime = (timeStr: string) => {
-    const d = new Date(timeStr);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  };
+  const formatTime = (value: unknown) => formatClock(value, 'cityfeed');
 
   onMount(() => {
     loadFeed();

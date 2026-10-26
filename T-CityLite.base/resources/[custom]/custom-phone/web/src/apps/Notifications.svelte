@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock } from '../utils/time';
   import { notificationsList, activeApp } from '../stores/phone';
   import { fetchNui } from '../utils/nui';
 
@@ -29,10 +30,8 @@
     }
   };
 
-  const formatTime = (timeStr: string) => {
-    const d = new Date(timeStr);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  };
+  // 时间格式化统一走 utils/time：坏值回退成 --:--，绝不显示 NaN:NaN
+  const formatTime = (value: unknown) => formatClock(value, 'notifications');
 </script>
 
 <div class="notifications-app app-transition">
