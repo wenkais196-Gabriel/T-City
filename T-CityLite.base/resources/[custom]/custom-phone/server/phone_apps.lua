@@ -102,7 +102,9 @@ end
 
 local function resolve(source, appId)
     local data = playerData(source)
-    if not data then return nil, nil, 'player_not_found' end
+    -- 调用方一定是玩家，所以"拿不到数据"几乎只有一种原因：角色还在加载。
+    -- 用 player_not_ready 而不是 player_not_found，前端才好区分"稍后重试"和"根本不存在"。
+    if not data then return nil, nil, 'player_not_ready' end
     local app = apps[appId]
     if not app then return nil, nil, 'app_not_found' end
     if not audienceAllows(app, data) then return nil, nil, 'app_forbidden' end

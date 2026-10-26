@@ -1073,3 +1073,25 @@ def test_route_is_drawn_by_the_police_client_not_the_phone_ui():
     # 到场检测也在同一个文件里：命中 → nonce → 服务端裁定
     assert "requestArriveNonce" in guidance
     assert "TriggerServerEvent('police:server:arriveIncident'" in guidance
+
+
+def test_queries_distinguish_not_loaded_from_not_found() -> None:
+    """玩家刚进服时服务端还没有这个玩家：那是"还没加载"，不是"查无此人"。
+
+    前端据此重试一次；如果两者共用 player_not_found，界面就只能报错了。
+    """
+    import pathlib
+
+    phone = pathlib.Path(__file__).resolve().parents[3] / "resources/[custom]/custom-phone"
+    server = (phone / "server/phone_apps.lua").read_text(encoding="utf-8")
+    assert "return nil, nil, 'player_not_ready'" in server, "服务端必须区分未加载与不存在"
+    assert "return nil, nil, 'player_not_found'" not in server.split("local function resolve")[1][:400], (
+        "resolve 不能再把未加载报成 player_not_found")
+
+    request = (phone / "web/src/core/request.ts").read_text(encoding="utf-8")
+    assert "RETRYABLE = new Set(['player_not_ready'])" in request
+    assert "RETRY_DELAY_MS" in request
+    assert request.count("sendOnce<T>(") >= 3, "phoneRequest 必须先发一次、失败后再重试一次"
+
+    mdt = (phone / "web/src/apps/PoliceMDT.svelte").read_text(encoding="utf-8")
+    assert "player_not_ready: '角色还在加载，稍等一下'" in mdt
