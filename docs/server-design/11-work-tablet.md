@@ -1,7 +1,8 @@
 # 11 · 工作平板：一台设备的两种形态
 
-> **状态**：P1–P4 已落地（2026-10-26）。可点 demo 已出：`assets/11-tablet-demo.html`，
-> 截图 `assets/11-tablet-home.png` / `11-tablet-mdt.png` / `11-tablet-mechanic.png`。
+> **状态**：P1–P4 已落地并通过线上重启（2026-10-26）。
+> 设计 demo（可点）：`assets/11-tablet-demo.html`，截图 `11-tablet-home.png` / `11-tablet-mdt.png` / `11-tablet-mechanic.png`。
+> **实现截图**：`assets/11-tablet-impl.png`（真实构建产物，平板形态三栏：单位 300 / 接警 348 / 详情 344）。
 
 ## 1. 命题
 
