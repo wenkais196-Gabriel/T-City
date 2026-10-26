@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock } from '../utils/time';
   import { smsThreads, messagesList, playerData, contactsList, loadMessages, MESSAGE_PAGE_SIZE } from '../stores/phone';
   import { fetchNui } from '../utils/nui';
   import { onMount, tick } from 'svelte';
@@ -135,10 +136,7 @@
   };
 
   // Format time helper
-  const formatTime = (timeStr: string) => {
-    const d = new Date(timeStr);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  };
+  const formatTime = (value: unknown) => formatClock(value, 'messages');
 
   // Auto-scroll only when the newest message changes (send/receive). Prepending
   // an older page leaves the newest id untouched, so it does not jump to the

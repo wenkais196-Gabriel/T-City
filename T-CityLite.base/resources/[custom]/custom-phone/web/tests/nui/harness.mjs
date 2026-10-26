@@ -296,6 +296,8 @@ export function createWorld() {
       { citizenid: 'COP002', name: 'Bob Brown', callsign: UNIT_BRAVO, dept: 'LSPD', status: 'busy', incident_id: 6 },
     ],
     incidents: [],
+    /** 通知托盘：测试里注入坏时间戳，验证界面不会渲染 NaN。 */
+    notifications: [],
     /** 任务 App 的假数据：list 里刻意混入一条不可接的，验证 UI 会摆出原因。 */
     quests: [],
     questActive: [],
@@ -355,7 +357,7 @@ export function handleNui(world, callback, payload) {
         playerData: world.player,
         contacts: [],
         messages: [],
-        notifications: [],
+        notifications: world.notifications ?? [],
         jobBoard: [],
         factionMessages: [],
       });
@@ -535,4 +537,20 @@ export function requestLog(world) {
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return [...counts.entries()].map(([key, count]) => `${key}×${count}`);
+}
+
+/** 打开手机里的「通知」托盘（Home 上的喇叭图标）。 */
+export async function openNotifications(page) {
+  await openPhone(page);
+  const tile = page.locator('button[aria-label="Notifications"]');
+  try {
+    await tile.waitFor({ state: 'visible', timeout: 5000 });
+  } catch {
+    throw new CheckError('手机主页没有通知图标', {
+      期望: '出现 aria-label="Notifications" 的按钮',
+      实际: '5s 内找不到该按钮',
+    });
+  }
+  await tile.click();
+  await page.locator('.notifications-app').waitFor({ state: 'visible', timeout: 5000 });
 }
