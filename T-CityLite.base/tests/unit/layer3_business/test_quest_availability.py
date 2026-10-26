@@ -87,3 +87,9 @@ def test_blocked_quests_explain_what_is_missing():
     assert got["req_police_unmet"]["ok"], "缺警力那条需求必须标成未满足"
     assert got["req_police_unmet"]["code"] == "has_text", "需求必须有可读文案"
     assert got["req_reason_is_human"]["ok"], f"拒绝原因要是人话: {got['req_reason_is_human']}"
+
+    # 剧情线一次性：通关后必须从"可接"里消失（每轮只能玩一遍）
+    assert got["arc_already_done"]["code"] == "arc_done", f"已通关的剧情线必须被拒: {got['arc_already_done']}"
+    assert got["arc_done_text"]["ok"], f"要说明每轮只能玩一遍: {got['arc_done_text']}"
+    # min_police = 0 不是约束，不许变成"在勤警力 ≥ 0（当前 0）"这种噪音
+    assert got["zero_police_is_noise"]["ok"], "min_police = 0 不该产生需求项"
