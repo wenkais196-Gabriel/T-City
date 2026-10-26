@@ -137,3 +137,42 @@ def test_cli_json_report_detects_the_same_verdict(tmp_path):
     )
     report = json.loads(out.read_text(encoding="utf-8"))
     assert code == 1 and report["ok"] is False and report["failures"]
+
+def test_only_the_last_boot_counts():
+    """systemd 的日志是追加的：上一次崩溃的 SCRIPT ERROR 不许把这次自检染红，反之亦然。"""
+    mod = _load_module()
+    good_tail = (
+        "T-City Lite 开发服务器\n"
+        + GOOD_LOG
+    )
+    stale = "[ script:old] SCRIPT ERROR: something from the previous boot\n" + good_tail
+    stats = mod.parse_console(stale)
+    assert stats["script_errors"] == 0, "上次启动留下的报错不该算到这次头上"
+
+    fresh = good_tail + "[ script:new] SCRIPT ERROR: this boot is broken\n"
+    stats = mod.parse_console(fresh)
+    assert stats["script_errors"] == 1, "本次启动之后的报错必须抓到"
+
+def test_license_rate_limit_is_reported_in_plain_words():
+    """429 不是"资源没起来"，而是一个会自己续命的限流：必须直接说清楚，并给出等多久。"""
+    mod = _load_module()
+    log = (
+        "T-City Lite 开发服务器\n"
+        "[          svadhesive] Authenticating server license key...\n"
+        "An error occurred while checking server license key: HTTP 429: Too Many Requests\n"
+    )
+    stats = mod.parse_console(log)
+    assert stats["license_429"] is True
+
+    failures = mod.evaluate(stats, http_ok=False, db_ok=True, tables=None)
+    joined = " ".join(failures)
+    assert "429" in joined, f"必须点名 429，实际: {failures}"
+    assert "20-30 分钟" in joined, f"要给出等待建议，实际: {failures}"
+
+
+def test_start_script_refuses_a_second_instance():
+    """两个实例同时起时，第二个在 licence 校验之后才发现端口被占 —— 那次校验是白花的配额。"""
+    start = REPO / "start.sh"
+    text = start.read_text(encoding="utf-8")
+    assert "flock -n 9" in text, "start.sh 缺少单实例锁：重复启动会烧掉 licence 配额"
+    assert text.index("flock -n 9") < text.index("ld-musl-x86_64.so.1"), "锁必须在启动二进制之前"

@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **重复启动的代价是一次 licence 配额：`start.sh` 现在有单实例锁**。今天修 systemd 时留下过一个 screen 残留进程，之后 systemd 的四次启动全部先通过 licence 校验、再在绑定 30120 时失败——那四次校验把 429 限流重新打了回来，服务被启动限流判 `failed`。现在 `start.sh` 用 `flock` 抢锁，第二个实例在启动二进制之前就被挡住并告诉你去停谁。
+- **自检把 429 说成人话**：日志里出现 `HTTP 429` 时，`healthcheck.py` 直接报"Cfx.re 的 license 校验返回了 429（启动太快太多次）：停机等 20-30 分钟再起，期间每次尝试都会续命限流"，而不是只报"资源 0 个 / 标记缺失"让人去猜。
+
+### Added
+- **自检只看最后一次启动**：systemd 的日志是追加的，上一次崩溃留下的 `SCRIPT ERROR` 会让之后每次自检都红，人就开始忽略它。现在从最后一条启动横幅开始解析（上次的报错不算，这次的必须算）。
+
+
+### Fixed
 - **systemd 单元会让崩溃循环无限重试，把自己锁死在外部限流里**。实测：一次 Cfx.re license 429 之后，`Restart=always` + `RestartSec=5` 在半小时内重启了 **323 次**，每次都去打一次 license 校验——"等一会儿就好"的限流被续成了死锁。现在单元文件带 `StartLimitIntervalSec=300` + `StartLimitBurst=5`（5 次 / 5 分钟后 systemd 放弃并进入 failed，等人来看），`RestartSec` 放宽到 10 秒；`install_service.py` 的校验器把"缺启动限流"和"限流额度太小"都判为坏单元（反向用例：删掉 `StartLimitBurst`、改成 `StartLimitBurst=1` 都必须被拒）。
 
 ### Added
