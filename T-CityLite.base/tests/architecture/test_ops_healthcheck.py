@@ -138,7 +138,7 @@ def test_cli_json_report_detects_the_same_verdict(tmp_path):
     report = json.loads(out.read_text(encoding="utf-8"))
     assert code == 1 and report["ok"] is False and report["failures"]
 
-def test_only_the_last_boot_counts():
+def test_healthcheck_ignores_stale_errors_and_detects_new_ones():
     """systemd 的日志是追加的：上一次崩溃的 SCRIPT ERROR 不许把这次自检染红，反之亦然。"""
     mod = _load_module()
     good_tail = (
@@ -153,7 +153,7 @@ def test_only_the_last_boot_counts():
     stats = mod.parse_console(fresh)
     assert stats["script_errors"] == 1, "本次启动之后的报错必须抓到"
 
-def test_license_rate_limit_is_reported_in_plain_words():
+def test_healthcheck_detects_license_rate_limit_and_says_how_long_to_wait():
     """429 不是"资源没起来"，而是一个会自己续命的限流：必须直接说清楚，并给出等多久。"""
     mod = _load_module()
     log = (
@@ -170,7 +170,7 @@ def test_license_rate_limit_is_reported_in_plain_words():
     assert "20-30 分钟" in joined, f"要给出等待建议，实际: {failures}"
 
 
-def test_start_script_refuses_a_second_instance():
+def test_start_script_rejects_a_second_instance_before_burning_a_licence_check():
     """两个实例同时起时，第二个在 licence 校验之后才发现端口被占 —— 那次校验是白花的配额。"""
     start = REPO / "start.sh"
     text = start.read_text(encoding="utf-8")
