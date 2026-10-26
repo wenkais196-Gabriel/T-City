@@ -73,7 +73,12 @@ AddEventHandler = function() end
 GetLogisticsBinding = nil
 CalculateCargoDamagePenalty = nil
 CalculateTimeBonus = nil
-print = function() end
+__printed = {}
+print = function(...)
+    local parts = {}
+    for i = 1, select('#', ...) do parts[i] = tostring((select(i, ...))) end
+    table.insert(__printed, table.concat(parts, ' '))
+end
 '''
 
 
@@ -112,5 +117,19 @@ assert(#__gatewayCalls == 0, 'gateway should be unavailable')
 assert(#__moneyCalls == 1, 'fallback AddMoney should run once')
 assert(__moneyCalls[1].account == 'cash', 'fallback account wrong')
 assert(__moneyCalls[1].amount == 2500, 'fallback amount wrong')
+""")
+    assert result['ok'], f"Lua error: {result['stderr']}"
+
+
+def test_payout_audit_catches_a_run_that_cannot_be_verified():
+    """发奖必须留一行控制台审计：奖励只往 Discord webhook 走，没配 webhook 时
+    本地根本没法核对"给玩家发了多少"。"""
+    result = run_rewards_test("""
+QuestRewards.GrantRewards(1, { money = { min = 1000, max = 1000, type = 'bank' } }, 'quest_test')
+local found = false
+for _, line in ipairs(__printed) do
+    if line:find('quest_test', 1, true) and line:find('1000', 1, true) then found = true end
+end
+assert(found, 'payout must be logged with quest id and amount')
 """)
     assert result['ok'], f"Lua error: {result['stderr']}"
