@@ -65,37 +65,33 @@ kind, why = SurfaceRules.Decide({
 })
 expect(kind == 'phone' and why == 'in_vehicle', '载具中必须小窗: ' .. tostring(kind))
 
--- 4) 玩家偏好能压过窗口（不静默推翻玩家）
+-- 4) 玩家偏好 tablet：窗口装得下才给平板，装不下降回手机
 kind, why = SurfaceRules.Decide({
-    preference = 'tablet', viewport = { width = 500, height = 400 }, limits = TABLET_MIN,
+    preference = 'tablet', viewport = { width = 1600, height = 900 }, limits = TABLET_MIN,
 })
-expect(kind == 'tablet' and why == 'preference', '偏好应压过窗口: ' .. tostring(kind))
+expect(kind == 'tablet' and why == 'preference', '偏好 tablet + 大窗口应给平板: ' .. tostring(kind))
 
 kind, why = SurfaceRules.Decide({
-    preference = 'phone', viewport = { width = 1600, height = 900 }, limits = TABLET_MIN,
+    preference = 'tablet', viewport = { width = 800, height = 500 }, limits = TABLET_MIN,
 })
+expect(kind == 'phone' and why == 'preference_too_small', '偏好 tablet 但窗口太小应降级: ' .. tostring(kind))
+
+-- 视口未知（CEF 还没上报）时按玩家说的来，不擅自降级
+kind, why = SurfaceRules.Decide({ preference = 'tablet', limits = TABLET_MIN })
+expect(kind == 'tablet', '视口未知时应尊重偏好: ' .. tostring(kind))
+
+kind, why = SurfaceRules.Decide({ preference = 'phone', viewport = { width = 1600, height = 900 } })
 expect(kind == 'phone' and why == 'preference', '显式选手机就该是手机: ' .. tostring(kind))
 
--- 5) 阈值：宽 ≥ 900 且 高 ≥ 560 且横向
-local cases = {
-    { w = 900,  h = 560,  want = 'tablet', tag = '正好达标' },
-    { w = 899,  h = 900,  want = 'phone',  tag = '宽度差 1px' },
-    { w = 1600, h = 559,  want = 'phone',  tag = '高度差 1px' },
-    { w = 800,  h = 1200, want = 'phone',  tag = '竖屏不切平板' },
-    { w = 1034, h = 676,  want = 'tablet', tag = '平板设计尺寸' },
-}
-for _, c in ipairs(cases) do
-    kind, why = SurfaceRules.Decide({ viewport = { width = c.w, height = c.h }, limits = TABLET_MIN })
-    expect(kind == c.want, c.tag .. ' 期望 ' .. c.want .. ' 实际 ' .. tostring(kind) .. ' (' .. tostring(why) .. ')')
+-- 5) 关键回归：窗口大 ≠ 要平板。
+-- FiveM 的 NUI 视口永远是整个游戏窗口，按视口升级等于"每次按 M 都锁住移动"。
+for _, size in ipairs({ { 1920, 1080 }, { 2560, 1440 }, { 1600, 900 } }) do
+    kind, why = SurfaceRules.Decide({
+        preference = 'auto', viewport = { width = size[1], height = size[2] }, limits = TABLET_MIN,
+    })
+    expect(kind == 'phone' and why == 'default',
+        string.format('%dx%d 无明确意图时应是手机，实际 %s/%s', size[1], size[2], tostring(kind), tostring(why)))
 end
-
--- 6) 什么都没有 → 手机（退错方向无害：小壳而不是锁死）
-kind, why = SurfaceRules.Decide({})
-expect(kind == 'phone' and why == 'default', '空输入应回退手机')
-
--- 7) 非法输入不炸
-kind = SurfaceRules.Decide({ viewport = { width = 'x', height = {} }, preference = 'nope', entry_surface = 'tv' })
-expect(kind == 'phone', '非法输入必须回退手机而不是报错')
 
 -- 8) 与 TS 的字面量一致
 local expected = { 'phone', 'tablet' }

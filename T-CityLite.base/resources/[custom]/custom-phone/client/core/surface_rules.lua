@@ -10,9 +10,12 @@
 --   1. 入口强制        —— "在平板上打开"这种显式意图不能被窗口尺寸推翻
 --   2. 来电            —— 来电必须是小窗，否则弹一个锁移动的整屏面板
 --   3. 载具中          —— 行驶中不适合整屏面板（车载入口另算）
---   4. 玩家偏好        —— 玩家选了 tablet 就照办，不静默推翻
---   5. 视口阈值        —— 宽 ≥ 900 且 高 ≥ 560 且 横向
---   6. 兜底            —— phone（退错方向无害：小壳而不是锁死）
+--   4. 玩家偏好        —— 选了 tablet 就照办，但窗口装不下时降回手机
+--   5. 兜底            —— phone
+--
+-- **窗口大不等于要平板。** FiveM 的 NUI 视口永远是整个游戏窗口（1920×1080 起步），
+-- 早先那版"窗口够大就上平板"的规则等于"每次按 M 都锁住移动"，这是拿阈值当意图。
+-- 现在平板只能由**意图**触发（入口/偏好），视口只做一件事：显式要平板但窗口真的装不下时降级。
 --
 -- 这个文件可以被 tests 直接 dofile 断言，不需要 FXServer。
 
@@ -48,17 +51,20 @@ function SurfaceRules.Decide(input)
     if input.in_vehicle then
         return SurfaceRules.PHONE, 'in_vehicle'
     end
-    if valid(input.preference) then
-        return input.preference, 'preference'
+    if input.preference == SurfaceRules.PHONE then
+        return SurfaceRules.PHONE, 'preference'
     end
-
-    local limits = input.limits or {}
-    local minW = tonumber(limits.min_width) or 900
-    local minH = tonumber(limits.min_height) or 560
-    local vp = input.viewport or {}
-    local w, h = tonumber(vp.width) or 0, tonumber(vp.height) or 0
-    if w >= minW and h >= minH and w > h then
-        return SurfaceRules.TABLET, 'viewport'
+    if input.preference == SurfaceRules.TABLET then
+        local limits = input.limits or {}
+        local minW = tonumber(limits.min_width) or 900
+        local minH = tonumber(limits.min_height) or 560
+        local vp = input.viewport or {}
+        local w, h = tonumber(vp.width) or 0, tonumber(vp.height) or 0
+        -- 视口未知（CEF 还没上报）时不做判断：宁可按玩家说的来
+        if w == 0 or h == 0 or (w >= minW and h >= minH) then
+            return SurfaceRules.TABLET, 'preference'
+        end
+        return SurfaceRules.PHONE, 'preference_too_small'
     end
     return SurfaceRules.PHONE, 'default'
 end

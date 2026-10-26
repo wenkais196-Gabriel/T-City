@@ -307,6 +307,26 @@ RegisterCommand('phone', function()
 end, false)
 
 -- Manual recovery: release focus, reset state, close any stale NUI.
+-- 平板的入口：形态要有"意图"，不能靠窗口大小猜。
+-- /tablet 直接在平板形态打开；/phone 强制手机；已经开着就换形态（先关后开）。
+local function OpenDeviceAs(kind)
+    CreateThread(function()
+        if Surface.IsOpen() then
+            if Surface.Current() == kind then return end
+            ClosePhone('switch')
+            Wait(60)
+        end
+        OpenPhone(kind, 'command')
+    end)
+end
+
+RegisterCommand('tablet', function()
+    OpenDeviceAs('tablet')
+end, false)
+RegisterCommand('phone', function()
+    OpenDeviceAs('phone')
+end, false)
+
 RegisterCommand('phonefix', function()
     Surface.Reset()
     DeviceLock.End()
