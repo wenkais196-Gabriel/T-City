@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fetchNui } from '../utils/nui';
   import { formatClock, formatAgo } from '../utils/time';
   import { onMount } from 'svelte';
   import { playerData } from '../stores/phone';
@@ -763,7 +764,24 @@
   async function updateIncident(incident: Incident, action: 'enroute' | 'on_scene') {
     const res = await appAction(DB, action, { incident_id: incident.id });
     notice = res?.success ? `#${incident.id} ${action === 'enroute' ? '前往中' : '已到场'}` : `失败：${errorText(res?.error ?? 'unknown')}`;
+    if (res?.success) {
+      // 前往：把现场画成一条导航路线（同任务引导），不只是改个状态字。
+      // 到场：路已经走完，把路线收掉，别让旧路线留在小地图上。
+      if (action === 'enroute') await setRoute(incident);
+      else await fetchNui('mdtNavigate', { clear: true });
+    }
     await refresh();
+  }
+
+  async function setRoute(incident: Incident) {
+    // 老数据（NPC callout 之前的单）可能没有坐标：那就不领路，只改状态。
+    if (typeof incident.x !== 'number' || typeof incident.y !== 'number') return;
+    await fetchNui('mdtNavigate', {
+      x: incident.x,
+      y: incident.y,
+      z: typeof incident.z === 'number' ? incident.z : 0,
+      label: `#${incident.id} ${incident.title}`,
+    });
   }
 
   onMount(() => {

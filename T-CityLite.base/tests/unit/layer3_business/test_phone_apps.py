@@ -1045,3 +1045,35 @@ def test_mdt_translates_protocol_errors():
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
     for code in ("timeout", "no_response", "bad_request", "resource_stopped"):
         assert f"{code}:" in ui, code
+
+
+def test_mdt_enroute_draws_a_route_and_arrival_clears_it():
+    """点「前往」只改状态字是不够的：警员得知道往哪开。
+
+    路线画法跟 custom-quest 的 SetNewBlip 一致（route blip + 距离），但自己的 blip
+    自己管——不能让任务的路线和警情的路线互相清掉。
+    """
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "fetchNui('mdtNavigate'" in ui, "MDT 必须把目的地交给客户端画路线"
+    enroute = ui[ui.index("if (action === 'enroute')"):]
+    assert "setRoute(incident)" in enroute
+    # 到场之后路线要收掉，否则旧路线一直留在小地图上
+    assert "clear: true" in ui
+
+    client = read(PHONE / "client/main.lua")
+    # 从路线那一段读到底：clearMdtRoute 就在回调旁边，切 1600 字符会把它切掉
+    block = client[client.index("警情路线引导"):]
+    assert "SetBlipRoute(" in block, "要有路线（不然只是一闪而过的圆点）"
+    assert "SetBlipDisplay(mdtRouteBlip, 2)" in block, "要显示距离"
+    assert "SetNewWaypoint(" in block, "小地图上的线也要有"
+    assert "RemoveBlip(mdtRouteBlip)" in block
+    # 换目标前必须真的调用清理（只看函数体里有没有 RemoveBlip 会被"定义了但没人调"混过去）
+    # 只看"函数体里有没有 RemoveBlip"会被"定义了但没人调"混过去，所以钉住调用顺序：
+    # 新建 blip 之前必须先清掉上一条（"clearMdtRoute()" 也出现在定义行里，不能直接比 index）。
+    add_at = block.index("mdtRouteBlip = AddBlipForCoord(")
+    assert "clearMdtRoute()" in block[max(0, add_at - 200):add_at], (
+        "换目标前必须收掉上一条路线"
+    )
+    assert "DoesBlipExist" in block, "删之前先确认 blip 还在"
+    # 标签来自服务端数据，进游戏前先清洗：换行能伪造地图上的文字
+    assert "[%c]" in block

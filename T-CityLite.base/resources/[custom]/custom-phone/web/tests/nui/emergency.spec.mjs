@@ -61,4 +61,31 @@ export const emergencyScenarios = [
       checkIncludes('相对时间要能读', text, '分钟前');
     },
   },
+  {
+    name: 'MDT 前往：把现场画成路线；到场后收掉',
+    async run({ page, world }) {
+      world.incidents = [
+        {
+          id: 78, code: '10-31', title: '持械抢劫', description: '好麦坞大道',
+          priority: 1, status: 'open', created_at: new Date().toISOString(),
+          x: 111.5, y: 222.5, z: 33,
+        },
+      ];
+      await openMdt(page);
+      await openDispatchTab(page, '接警');
+
+      const card = page.locator('.incident', { hasText: '#78' });
+      await card.locator('button', { hasText: '前往' }).click();
+
+      await waitFor(async () => world.mdtRoute !== null, 5000, '点前往应画出一条路线');
+      const route = world.mdtRoute;
+      if (route.x !== 111.5 || route.y !== 222.5) {
+        throw new Error(`路线坐标不对：${JSON.stringify(route)}`);
+      }
+      checkIncludes('路线标签要带单号', String(route.label), '#78');
+
+      await card.locator('button', { hasText: '到场' }).click();
+      await waitFor(async () => world.mdtRoute === null, 5000, '到场地后路线应收掉');
+    },
+  },
 ];
