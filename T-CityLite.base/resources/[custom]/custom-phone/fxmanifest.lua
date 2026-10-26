@@ -41,6 +41,7 @@ server_scripts {
     'server/banking.lua',
     'server/jobboard.lua',
     'server/faction.lua',
+    'server/emergency.lua',
 }
 
 ui_page 'html/index.html'

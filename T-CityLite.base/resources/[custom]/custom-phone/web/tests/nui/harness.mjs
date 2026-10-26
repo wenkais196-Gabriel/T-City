@@ -365,6 +365,10 @@ export function handleNui(world, callback, payload) {
       return ok({ success: true, apps: world.apps });
     case 'getCallHistory':
       return ok({ success: true, calls: [] });
+    case 'report911':
+      // 报警入口的假后端：返回单号，UI 要把它显示出来
+      world.reported911 = payload ?? null;
+      return ok({ success: true, incident_id: 42, merged: false });
     case 'clientError':
       world.clientErrors.push(payload);
       return ok({ ok: true });
@@ -553,4 +557,20 @@ export async function openNotifications(page) {
   }
   await tile.click();
   await page.locator('.notifications-app').waitFor({ state: 'visible', timeout: 5000 });
+}
+
+/** 打开手机里的「热线」页（报警入口在那儿）。 */
+export async function openHotlines(page) {
+  await openPhone(page);
+  const tile = page.locator('button[aria-label="Service Hotlines"]');
+  try {
+    await tile.waitFor({ state: 'visible', timeout: 5000 });
+  } catch {
+    throw new CheckError('手机主页没有热线图标', {
+      期望: '出现 aria-label="Service Hotlines" 的按钮',
+      实际: '5s 内找不到该按钮',
+    });
+  }
+  await tile.click();
+  await page.locator('.report911').waitFor({ state: 'visible', timeout: 5000 });
 }

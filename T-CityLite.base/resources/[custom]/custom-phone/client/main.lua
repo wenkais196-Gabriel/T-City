@@ -1044,3 +1044,11 @@ RegisterNUICallback('payCitation', function(data, cb)
         cb(res or { success = false, error = 'no_response' })
     end, id)
 end)
+
+-- 手机里的报警入口：客户端只转交一句原因，位置由警察侧从 ped 上取。
+RegisterNUICallback('report911', function(data, cb)
+    if type(data) ~= 'table' then return cb({ success = false, error = 'bad_request' }) end
+    QBCore.Functions.TriggerCallback('phone:server:report911', function(res)
+        cb(res or { success = false, error = 'no_response' })
+    end, { reason = data.reason })
+end)

@@ -934,8 +934,13 @@ def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
     assert "math.abs(x) > 10000.0" in src
     assert "local alertCoords = sanitizeAlertCoords(coords)" in block
     assert "local message = sanitizeAlertText(text)" in block
-    assert "coords = alertCoords" in block
-    assert "description = message" in block
+    # 报警现在走建单：服务端从 ped 上取到的坐标必须出现在 createIncidentForAlert 调用里，
+    # 而不是旧的 alertData 表（那条表已经不发了，通知由建单负责）。
+    assert "createIncidentForAlert(src, message, alertCoords" in block
+    # 载荷字段搬进了共享助手 createIncidentForAlert：标题与描述都来自清洗后的 message
+    helper = block and src[src.index("local function createIncidentForAlert"):src.index(
+        "RegisterNetEvent('police:server:policeAlert'")]
+    assert "description = message" in helper
     assert "coords = { x = coords.x" not in block
 
 

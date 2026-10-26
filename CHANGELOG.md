@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **报警终于会变成一条警情**。`police:server:policeAlert`（qb-drugs / storerobbery / houserobbery / custom-vehicles 的热接线报警）与 `police:server:autoAlert`（系统警报）以前只给在勤警察发一条通知、在地图上插个旗就结束了——MDT 的警情板上什么都没有，于是"被抢了报警"在系统里等于没发生：不能派单、不能清场、不留记录、进不了统计。两条路径现在都走 `PoliceDispatch.CreateIncident`（系统来源走 `CreateIncidentFromSystem`），通知由建单统一发出，地图插旗与提示音仍然保留。
+- **通知标题带警情单号**（`#38 911: 有人持枪抢店`）。以前手机上的"有人报警"和板上哪一行对不上，只能靠猜。
+- **重复报警会并进同一单**：同 code、同地点 60 米内、5 分钟内的报警不再新建行，只刷新 `last_activity_at`，并且不再二次通知——一次抢劫被五个人报警不该变成五条单、响五遍。
+- **手机里的 911 是真的入口了**。以前「热线」页的 911 只是一段拨号动画，真正的报警只有聊天命令 `/911`，新玩家不可能知道。现在热线页有报警卡片（输入一句原因 → 拨 911），服务端 `phone:server:report911` 做限流与清洗后调用 custom-police 建单，并把警情单号回显给玩家。
+- **MDT 不再直接印 ISO 原文**：警情时间统一成 `HH:MM · 3 分钟前`（`created_at` 是 DB 的 `2026-10-26T09:43:42.000Z`，以前原样贴在板上）。
+
+### Added
+- `custom-police` 新增导出 `CreateIncidentFromSystem(createdBy, data)`：给没有玩家 source 的系统来源建单，与玩家路径共用去重、审计与通知。`CreateIncident` 在导出契约里登记为 civilian_entry（平民 911 必须人人可调）。
+
+
+### Fixed
 - **通知的时间不再显示成 NaN:NaN**。`new Date(v).getHours()` 这种写法被复制了四份（通知托盘 / 城市动态 / 短信 / 帮派频道），只要字段缺失或是对象就直接印出 "NaN:NaN"——玩家会以为手机坏了。现在统一走 `utils/time.formatClock`：接受 Date、秒/毫秒时间戳、ISO、MySQL 的 "YYYY-MM-DD HH:MM:SS"，解析不出来回退成 `--:--`，并**只在第一次**遇到坏值时打一条带原始值的 warn（下次再出现，控制台会直接点名是谁）。NUI 新增一条场景守住它：一条有效时间戳 + 一条缺失时间戳，界面必须出现 HH:MM、出现 `--:--`、且整页不含 NaN。
 
 

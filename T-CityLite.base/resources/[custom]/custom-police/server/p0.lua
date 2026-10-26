@@ -166,6 +166,53 @@ function P.GetUnits(source)
     return { units = out, count = #out }
 end
 
+--- 同一类、同一地点、5 分钟内的重复报警并到同一单。
+---
+--- 为什么需要：一次抢劫被 5 个人先后报警，警情板就会出现 5 条一模一样的单，
+--- 警员分不清哪条是真事件，派单/清场/统计全被稀释。限流（15 秒/人）只是
+--- 不让一个人连刷，挡不住"很多人同时报同一件事"。
+local MERGE_WINDOW_MINUTES = 5
+local MERGE_RADIUS_METERS = 60.0
+
+--- 找一个可以合并的开放单：同 code、同区域、窗口内还有人动过。
+---@return table|nil row { id, title, status }
+local function findMergeableIncident(code, coords)
+    if type(coords) ~= 'table' then return nil end
+    local x, y = tonumber(coords.x), tonumber(coords.y)
+    if not x or not y then return nil end
+    local rows = MySQL.query.await(([[
+        SELECT id, title, status,
+               SQRT(POW(COALESCE(x, 0) - ?, 2) + POW(COALESCE(y, 0) - ?, 2)) AS distance
+          FROM police_incidents
+         WHERE status IN ('open','assigned','enroute','on_scene')
+           AND code = ?
+           AND x IS NOT NULL
+           AND COALESCE(last_activity_at, created_at) > NOW() - INTERVAL %d MINUTE
+         ORDER BY id DESC
+         LIMIT 1
+    ]]):format(MERGE_WINDOW_MINUTES), { x, y, code }) or {}
+    local row = rows[1]
+    if not row then return nil end
+    if (tonumber(row.distance) or 0) > MERGE_RADIUS_METERS then return nil end
+    return row
+end
+
+--- 通知在勤警察。标题带单号：手机通知和 MDT 里的同一条能对上，
+--- 否则"有人报警"这句话在板上对应哪一行全靠猜。
+local function notifyOnDutyIncident(incident, content)
+    local title = ('#%s %s: %s'):format(
+        tostring(incident.id), tostring(incident.code or '911'), tostring(incident.title or ''))
+    title = title:sub(1, 200)
+    local body = tostring(content or ''):sub(1, 500)
+    for _, src in ipairs(QBCore.Functions.GetPlayers()) do
+        local p = QBCore.Functions.GetPlayer(src)
+        local d = p and p.PlayerData
+        if isPolice(d) and d.job.onduty == true then
+            notifyOfficer(d.citizenid, title, body, 'police_mdt')
+        end
+    end
+end
+
 --- police_incidents 的**唯一写入点**（玩家路径、agent 路径、NPC 路径都走这里）。
 --- 列集合按需拼接：npc_template 只有 NPC callout 才有，NULL 写进 SQL 而不是传 nil 参数
 --- （参数数组里的洞会被 oxmysql 截断，police_audit 那边踩过同一个坑）。
@@ -183,6 +230,23 @@ local function insertIncidentRow(createdBy, data, opts)
     priority = math.max(1, math.min(3, math.floor(priority)))
     local description = trim(data.description or data.details):sub(1, 1000)
     local npcTemplate = data.npc_template and tostring(data.npc_template):sub(1, 32) or nil
+
+    -- 合并优先于插入：重复报警不该在板上多出一行。
+    -- 只处理带坐标的报警——NPC 刷新点固定，靠"同点同码"合并会误吞两个独立事件。
+    local coords = { x = tonumber(data.x), y = tonumber(data.y) }
+    local mergeable = findMergeableIncident(code, coords)
+    if mergeable then
+        MySQL.update.await([[
+            UPDATE police_incidents SET last_activity_at = NOW(), updated_at = NOW() WHERE id = ?
+        ]], { mergeable.id })
+        return {
+            id = tonumber(mergeable.id),
+            status = tostring(mergeable.status or 'open'),
+            code = code,
+            title = tostring(mergeable.title or title),
+            merged = true,
+        }
+    end
 
     local columns = { 'code', 'title', 'description', 'priority', 'created_by' }
     local placeholders = { '?', '?', '?', '?', '?' }
@@ -219,22 +283,30 @@ end
 --- 不对外 exports：外部只能走 CreateIncident（带玩家身份校验）。
 PoliceIncidents = { InsertRow = insertIncidentRow }
 
+--- server/main.lua 比本文件先加载，所以它只能在**运行时**通过这个全局拿到派单 API。
+--- （locals 在 main.lua 里根本看不到，exports 自调用虽然可行但会把内部路径变成公共契约。）
+PoliceDispatch = P
+
 function P.CreateIncident(source, data)
     local creator = pd(source)
     if not creator then return false, 'player_not_found' end
     local result, reason = insertIncidentRow(creator.citizenid, data)
     if not result then return false, reason end
+    -- 合并进已有单的情况不再二次通知：同一条警情响五遍等于没有警情。
+    if not result.merged then
+        notifyOnDutyIncident(result, trim(data and (data.description or data.details)))
+    end
+    return result
+end
 
-    local notification = {
-        title = ('%s: %s'):format(result.code, result.title):sub(1, 200),
-        content = trim(data and (data.description or data.details)):sub(1, 500),
-    }
-    for _, src in ipairs(QBCore.Functions.GetPlayers()) do
-        local p = QBCore.Functions.GetPlayer(src)
-        local d = p and p.PlayerData
-        if isPolice(d) and d.job.onduty == true then
-            notifyOfficer(d.citizenid, notification.title, notification.content, 'police_mdt')
-        end
+--- 系统来源（车辆防盗、脚本事件）建单：没有玩家可校验，调用方必须自带标识。
+--- 与玩家路径共用去重与通知，区别只在于 created_by 写的是资源名。
+function P.CreateIncidentSystem(createdBy, data)
+    if type(createdBy) ~= 'string' or createdBy == '' then return false, 'bad_creator' end
+    local result, reason = insertIncidentRow(createdBy:sub(1, 50), data)
+    if not result then return false, reason end
+    if not result.merged then
+        notifyOnDutyIncident(result, trim(data and (data.description or data.details)))
     end
     return result
 end
@@ -814,6 +886,7 @@ exports('SetUnitStatusForSource', P.SetUnitStatusForSource)
 exports('SetDutyForSource', P.SetDutyForSource)
 exports('GetUnits', P.GetUnits)
 exports('CreateIncident', P.CreateIncident)
+exports('CreateIncidentFromSystem', P.CreateIncidentSystem)
 exports('GetIncidents', P.GetIncidents)
 exports('WriteAudit', function(actorCid, actorKind, action, target, detail)
     return audit(actorCid, action, target, detail, actorKind)
