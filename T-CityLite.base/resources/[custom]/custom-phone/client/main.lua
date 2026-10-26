@@ -5,6 +5,19 @@
 -- 形态与开关的唯一真值是 client/core/surface.lua；这里不再持有布尔。
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- 角色加载标记：加载完成前开设备，服务端拿不到玩家数据，
+-- MDT 会回 player_not_found（界面显示"角色尚未加载"），看起来像 bug 其实是时序。
+-- 这里直接挡住并给人话提示，别让人对着一个错误横幅猜。
+local playerLoaded = false
+
+local function markPlayerLoaded()
+    local data = QBCore.Functions.GetPlayerData()
+    if data and type(data.citizenid) == 'string' and data.citizenid ~= '' then
+        playerLoaded = true
+    end
+    return playerLoaded
+end
+
 -- A resource (re)start is also the recovery path when a previous client left
 -- NUI focus/cursor stuck: never inherit that state.
 AddEventHandler('onClientResourceStart', function(resource)
@@ -69,6 +82,10 @@ end
 -- Open Phone Function
 local function OpenPhone(forcedKind, reason)
     if Surface.IsOpen() then return end
+    if not playerLoaded and not markPlayerLoaded() then
+        QBCore.Functions.Notify('角色还在加载，稍等一下再打开', 'error')
+        return
+    end
     -- 形态在打开这一刻定下来：entry > 来电/载具 > 玩家偏好 > 窗口 > 默认
     local kind = Surface.Decide({ entry_surface = forcedKind, reason = reason })
     Surface.Bind(kind)
@@ -798,8 +815,22 @@ local function CheckLeaderApp()
 end
 
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
+    markPlayerLoaded()
     Wait(2000)
     CheckLeaderApp()
+end)
+
+-- 资源在玩家已登录后才启动的情况：等数据到齐再放行
+AddEventHandler('QBCore:Player:SetPlayerData', function(value)
+    if value and type(value.citizenid) == 'string' and value.citizenid ~= '' then
+        playerLoaded = true
+    end
+end)
+CreateThread(function()
+    for _ = 1, 10 do
+        if markPlayerLoaded() then return end
+        Wait(1000)
+    end
 end)
 
 RegisterNetEvent('custom-career:client:tierChanged', function(newTier)

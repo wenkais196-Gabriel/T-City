@@ -215,3 +215,20 @@ def test_nui_reports_viewport_and_reads_surface_from_lua() -> None:
     assert "RegisterNUICallback('surfaceInfo'" in main, "NUI 契约：fetchNui 必须有对应回调"
     # 换形态不等于退出：close 带 reason=switch 时不能把当前 app 清回桌面
     assert "data?.reason !== 'switch'" in app
+
+
+def test_device_refuses_to_open_before_the_character_is_loaded() -> None:
+    """加载完成前开设备 → 服务端 player_not_found → MDT 显示"角色尚未加载"。
+
+    这是时序而不是 bug，但玩家只看到一条红字。设备必须在加载完成前挡住。
+    """
+    main = read(MAIN)
+    start = main.index("local function OpenPhone")
+    open_block = main[start:start + 2500]
+    assert "if not playerLoaded and not markPlayerLoaded() then" in open_block, (
+        "开设备前必须确认角色已加载，否则 MDT 会拿到 player_not_found")
+    assert "角色还在加载" in open_block, "挡下来要给人话提示，不能静默失败"
+    # 两种来源都要能置位：登录事件 + 资源晚于登录启动时的兜底轮询
+    assert "RegisterNetEvent('QBCore:Client:OnPlayerLoaded'" in main
+    assert "QBCore:Player:SetPlayerData" in main
+    assert "if markPlayerLoaded() then return end" in main, "资源晚于登录启动时必须能自愈"
