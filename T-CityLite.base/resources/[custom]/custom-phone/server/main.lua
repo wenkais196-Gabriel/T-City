@@ -1378,6 +1378,12 @@ end
 
 --- Per-player token-bucket key. playerCitizen is the getPhoneData cache; the
 --- QBCore lookup is only a fallback for a request that races the first open.
+-- App request budgets. Queries are polled (an MDT refreshes its lists every few
+-- seconds), so the query bucket is deliberately much wider than the action one:
+-- actions mutate state and stay on the limiter defaults (30/min, burst 10).
+local APP_QUERY_RATE, APP_QUERY_BURST = 120, 40
+local APP_ACTION_RATE, APP_ACTION_BURST = 30, 10
+
 local function appRateKey(src, kind)
     local citizenid = playerCitizen[src]
     if not citizenid and QBCore and QBCore.Functions then
@@ -1437,7 +1443,7 @@ RegisterNetEvent('phone:server:appQueryRequest', function(requestId, data)
             { success = false, error = 'bad_request' })
         return
     end
-    if not PhoneRateLimit.Allow(appRateKey(src, 'query'), 120, 40) then
+    if not PhoneRateLimit.Allow(appRateKey(src, 'query'), APP_QUERY_RATE, APP_QUERY_BURST) then
         diagDone(src, requestId, 'rate_limited')
         replyAppRequest('phone:client:appQueryResponse', src, requestId,
             { success = false, error = 'rate_limited' })
@@ -1465,7 +1471,7 @@ RegisterNetEvent('phone:server:appActionRequest', function(requestId, data)
             { success = false, error = 'bad_request' })
         return
     end
-    if not PhoneRateLimit.Allow(appRateKey(src, 'action'), 30, 10) then
+    if not PhoneRateLimit.Allow(appRateKey(src, 'action'), APP_ACTION_RATE, APP_ACTION_BURST) then
         diagDone(src, requestId, 'rate_limited')
         replyAppRequest('phone:client:appActionResponse', src, requestId,
             { success = false, error = 'rate_limited' })
@@ -1490,7 +1496,7 @@ QBCore.Functions.CreateCallback('phone:server:getPhoneApps', function(source, cb
 end)
 
 QBCore.Functions.CreateCallback('phone:server:appQuery', function(source, cb, appId, queryName, params)
-    if not PhoneRateLimit.Allow(appRateKey(source, 'query'), 120, 40) then
+    if not PhoneRateLimit.Allow(appRateKey(source, 'query'), APP_QUERY_RATE, APP_QUERY_BURST) then
         return cb({ success = false, error = 'rate_limited' })
     end
     local ok, result = PhoneApps.Query(source, tostring(appId or ''), tostring(queryName or ''), params)
@@ -1499,7 +1505,7 @@ QBCore.Functions.CreateCallback('phone:server:appQuery', function(source, cb, ap
 end)
 
 QBCore.Functions.CreateCallback('phone:server:appAction', function(source, cb, appId, actionName, params)
-    if not PhoneRateLimit.Allow(appRateKey(source, 'action'), 30, 10) then
+    if not PhoneRateLimit.Allow(appRateKey(source, 'action'), APP_ACTION_RATE, APP_ACTION_BURST) then
         return cb({ success = false, error = 'rate_limited' })
     end
     local ok, result = PhoneApps.Action(source, tostring(appId or ''), tostring(actionName or ''), params)
