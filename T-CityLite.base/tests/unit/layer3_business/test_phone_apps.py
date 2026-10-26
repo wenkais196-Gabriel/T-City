@@ -669,8 +669,12 @@ def test_police_mdt_tags_npc_callouts():
     assert '<span class="tag npc">NPC</span>' in ui
     assert ".tag.npc" in ui
     # The dispatch row still offers the same three actions (no new UI).
-    assert "updateIncident(incident, 'enroute')" in ui
-    assert "updateIncident(incident, 'on_scene')" in ui
+    # 三个按钮 → 两个：申领（claim）与清场（clear），到场由引擎自动结算
+    assert "claimIncident(incident)" in ui
+    assert "updateIncident(incident, 'enroute')" not in ui
+    # 「到场」按钮已删除：到场由客户端检测 + 服务端裁定自动结算
+    assert "updateIncident(incident, 'on_scene')" not in ui
+    assert ">到场<" not in ui
     assert "clearIncident(incident)" in ui
 
 
@@ -929,7 +933,7 @@ def test_police_mdt_no_longer_collapses_errors_to_booleans():
     src = read(POLICE_MDT_LUA)
     for name in POLICE_ACTIONS:
         assert f"{name} = function" in src, name
-    assert src.count("structured('") == 17
+    assert src.count("structured('") == 19
     assert "return ok and res" not in src
     assert "error = 'export_error'" in src
     assert "unknown_capability" in src and "'forbidden'" in src
@@ -1047,33 +1051,22 @@ def test_mdt_translates_protocol_errors():
         assert f"{code}:" in ui, code
 
 
-def test_mdt_enroute_draws_a_route_and_arrival_clears_it():
-    """点「前往」只改状态字是不够的：警员得知道往哪开。
+def test_route_is_drawn_by_the_police_client_not_the_phone_ui():
+    """路线不再由 MDT 点击触发：被派到就出现，所以绘制点是 custom-police 客户端。
 
-    路线画法跟 custom-quest 的 SetNewBlip 一致（route blip + 距离），但自己的 blip
-    自己管——不能让任务的路线和警情的路线互相清掉。
+    手机侧原来那个 mdtNavigate 回调已经没有调用者——同一件事留两份实现就是两个 bug。
     """
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
-    assert "fetchNui('mdtNavigate'" in ui, "MDT 必须把目的地交给客户端画路线"
-    enroute = ui[ui.index("if (action === 'enroute')"):]
-    assert "setRoute(incident)" in enroute
-    # 到场之后路线要收掉，否则旧路线一直留在小地图上
-    assert "clear: true" in ui
+    assert "fetchNui('mdtNavigate'" not in ui, "MDT 不该自己画路线（服务端会推）"
 
-    client = read(PHONE / "client/main.lua")
-    # 从路线那一段读到底：clearMdtRoute 就在回调旁边，切 1600 字符会把它切掉
-    block = client[client.index("警情路线引导"):]
-    assert "SetBlipRoute(" in block, "要有路线（不然只是一闪而过的圆点）"
-    assert "SetBlipDisplay(mdtRouteBlip, 2)" in block, "要显示距离"
-    assert "SetNewWaypoint(" in block, "小地图上的线也要有"
-    assert "RemoveBlip(mdtRouteBlip)" in block
-    # 换目标前必须真的调用清理（只看函数体里有没有 RemoveBlip 会被"定义了但没人调"混过去）
-    # 只看"函数体里有没有 RemoveBlip"会被"定义了但没人调"混过去，所以钉住调用顺序：
-    # 新建 blip 之前必须先清掉上一条（"clearMdtRoute()" 也出现在定义行里，不能直接比 index）。
-    add_at = block.index("mdtRouteBlip = AddBlipForCoord(")
-    assert "clearMdtRoute()" in block[max(0, add_at - 200):add_at], (
-        "换目标前必须收掉上一条路线"
-    )
-    assert "DoesBlipExist" in block, "删之前先确认 blip 还在"
-    # 标签来自服务端数据，进游戏前先清洗：换行能伪造地图上的文字
-    assert "[%c]" in block
+    phone_client = read(PHONE / "client/main.lua")
+    assert "mdtNavigate" not in phone_client, "旧的手机路线回调应删除（死代码）"
+
+    guidance = read(PHONE.parent / "custom-police/client/incident_guidance.lua")
+    assert "police:client:routeToIncident" in guidance, "要接收服务端推来的路线"
+    assert "SetBlipRoute(" in guidance, "要有路线（不然只是一闪而过的圆点）"
+    assert "SetBlipDisplay(blip, 2)" in guidance, "要显示距离"
+    assert "RemoveBlip" in guidance, "换目标/到达时必须收掉上一条"
+    # 到场检测也在同一个文件里：命中 → nonce → 服务端裁定
+    assert "requestArriveNonce" in guidance
+    assert "TriggerServerEvent('police:server:arriveIncident'" in guidance

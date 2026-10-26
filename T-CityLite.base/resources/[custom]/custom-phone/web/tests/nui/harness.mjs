@@ -254,6 +254,13 @@ export const UNIT_BRAVO = '2-LINCOLN-7';
 
 export const INCIDENT_911 = {
   id: 6,
+  // 服务端 IncidentActionState() 的下发结果：UI 只渲染，不自己算规则
+  actions: {
+    claim: { allowed: false, reason: 'already_joined' },
+    clear: { allowed: true, reason: null },
+  },
+  primary: 'CID_ME',
+  units: [{ citizenid: 'CID_ME', role: 'primary' }],
   code: '911',
   title: '测试警情一号',
   description: 'Vinewood 珠宝店报案',
@@ -365,11 +372,6 @@ export function handleNui(world, callback, payload) {
       return ok({ success: true, apps: world.apps });
     case 'getCallHistory':
       return ok({ success: true, calls: [] });
-    case 'mdtNavigate':
-      // 警情路线：记下来，让测试能断言"点前往真的画了路线"
-      if (payload?.clear) world.mdtRoute = null;
-      else world.mdtRoute = payload ?? null;
-      return ok({ success: true });
     case 'report911':
       // 报警入口的假后端：返回单号，UI 要把它显示出来
       world.reported911 = payload ?? null;

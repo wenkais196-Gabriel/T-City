@@ -4,7 +4,7 @@
 // 1. 手机「热线」里的 911 只是个拨号动画，玩家没有真正能用的报警入口；
 // 2. MDT 把 DB 的 created_at 原文（2026-10-26T09:43:42.000Z）直接印在板上。
 
-import { checkIncludes, openDispatchTab, openHotlines, openMdt, waitFor } from './harness.mjs';
+import { checkEqual, checkIncludes, openDispatchTab, openHotlines, openMdt, waitFor } from './harness.mjs';
 
 export const emergencyScenarios = [
   {
@@ -62,30 +62,42 @@ export const emergencyScenarios = [
     },
   },
   {
-    name: 'MDT 前往：把现场画成路线；到场后收掉',
+    name: 'MDT 申领：点前往发的是 claim，路线由服务端推',
     async run({ page, world }) {
       world.incidents = [
         {
           id: 78, code: '10-31', title: '持械抢劫', description: '好麦坞大道',
           priority: 1, status: 'open', created_at: new Date().toISOString(),
-          x: 111.5, y: 222.5, z: 33,
+          x: 111.5, y: 222.5, z: 33, units: [], primary: null,
+          // 未申领：可申领，未到场：不能清场
+          actions: {
+            claim: { allowed: true, reason: null, label: 'claim' },
+            clear: { allowed: false, reason: 'not_on_scene' },
+          },
         },
       ];
       await openMdt(page);
       await openDispatchTab(page, '接警');
 
       const card = page.locator('.incident', { hasText: '#78' });
-      await card.locator('button', { hasText: '前往' }).click();
-
-      await waitFor(async () => world.mdtRoute !== null, 5000, '点前往应画出一条路线');
-      const route = world.mdtRoute;
-      if (route.x !== 111.5 || route.y !== 222.5) {
-        throw new Error(`路线坐标不对：${JSON.stringify(route)}`);
+      const clearBtn = card.locator('button', { hasText: '清场' });
+      if (!(await clearBtn.isDisabled())) {
+        throw new Error('没到场时清场按钮必须是灰的（服务端 reason=not_on_scene）');
       }
-      checkIncludes('路线标签要带单号', String(route.label), '#78');
+      checkIncludes('置灰要给出原因', await clearBtn.getAttribute('title'), '到场后才能清场');
 
-      await card.locator('button', { hasText: '到场' }).click();
-      await waitFor(async () => world.mdtRoute === null, 5000, '到场地后路线应收掉');
+      await card.locator('button', { hasText: '前往' }).click();
+      await waitFor(
+        async () => world.calls.some((c) => c.callback === 'appAction' && c.payload?.action === 'claim'),
+        5000,
+        '点前往应发出 claim（申领 = assign + enroute + 推路线）',
+      );
+      const call = world.calls.filter((c) => c.callback === 'appAction' && c.payload?.action === 'claim').pop();
+      checkEqual('申领要带 incident_id', call.payload.params?.incident_id, 78);
+      // 界面不该再自己调导航：路线由服务端推送
+      if (world.calls.some((c) => c.callback === 'mdtNavigate')) {
+        throw new Error('申领后不该由 UI 自己画路线（服务端会推）');
+      }
     },
   },
 ];

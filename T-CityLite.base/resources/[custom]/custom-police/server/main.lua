@@ -423,3 +423,43 @@ QBCore.Functions.CreateUseableItem('moneybag', function(source, item)
     if not exports['qb-inventory']:RemoveItem(src, 'moneybag', 1, item.slot, 'qb-policejob:moneybag') then return end
     Player.Functions.AddMoney('cash', tonumber(item.info.cash), 'qb-policejob:moneybag')
 end)
+
+-- ==============================================================
+-- 警情自动结算：申领 / 到场
+-- ==============================================================
+-- 到场检测在客户端跑（每秒一次距离），但裁定在这里：服务端用自己的 ped 坐标复算，
+-- 客户端坐标一概不采信；nonce 一次性，防止重放"我又到了"。
+
+QBCore.Functions.CreateCallback('police:server:requestArriveNonce', function(source, cb, incidentId)
+    if type(PoliceDispatch) ~= 'table' then return cb(nil) end
+    local ok, token = pcall(PoliceDispatch.RequestArriveNonce, source, incidentId)
+    cb(ok and token or nil)
+end)
+
+RegisterNetEvent('police:server:arriveIncident', function(incidentId, token, manual)
+    local src = source
+    if src == 0 then return end
+    if type(PoliceDispatch) ~= 'table' then return end
+    local ok, res = pcall(PoliceDispatch.ArriveIncident, src, incidentId, token,
+        { manual = manual == true })
+    if not ok then
+        print(('[police] arrive error src=%s inc=%s %s'):format(
+            tostring(src), tostring(incidentId), tostring(res)))
+        return
+    end
+    if res then
+        TriggerClientEvent('police:client:arriveResult', src, res)
+    end
+end)
+
+RegisterNetEvent('police:server:claimIncident', function(incidentId)
+    local src = source
+    if src == 0 then return end
+    if type(PoliceDispatch) ~= 'table' then return end
+    local ok, res, reason = pcall(PoliceDispatch.ClaimIncident, src, incidentId)
+    if not ok or not res then
+        TriggerClientEvent('police:client:claimResult', src, { ok = false, error = tostring(reason or res) })
+        return
+    end
+    TriggerClientEvent('police:client:claimResult', src, { ok = true, result = res })
+end)

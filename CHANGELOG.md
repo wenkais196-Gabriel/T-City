@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **警情生命周期设计改成「自动结算 + 两个按钮」**（docs/server-design/10 v2）：到场不该由人点——坐标就在引擎里，让玩家汇报"我到了"既多一步又能造假。现在「前往」= 单人申领（assign + enroute + 自动领路一步到位），「到场」删除、改为客户端检测 30 米 + nonce + 服务端用 ped 坐标复算后自动结算，「清场」只在到场后出现并归档成案卷。文档补了状态机 / 时序 / ER 三张 UML 与端到端流程表，另附单文件前端 demo（docs/server-design/assets/10-mdt-lifecycle-demo.html），申领→自动路线→自动到场→清场归档全流程可点。
 
+- **P5-1 落地：警情到场不再由玩家点按钮**。「前往」现在是一次申领（assign + enroute + 服务端推路线，一步到位），「到场」按钮删除——客户端每秒检测 30 米内（垂直 15 米、连续 2 次、离开 45 米重置），命中后申请一次性 nonce，服务端用 ped 坐标复算（35 米）才结算；自动检测失灵时菜单里有「补录到场」（≤100 米，审计标 manual）。GetIncidents 现在每行下发 units / primary / allowed_actions，MDT 的按钮由服务端判定渲染（不可点时置灰并给中文原因），前端不再复制状态机。新增能力位 incident.claim / incident.arrive / incident.clear，几何参数集中在 shared/policy.lua 的 PoliceIncidentRules（客户端与服务端同一份）。
+
 ### Added
 - `custom-police` 新增导出 `CreateIncidentFromSystem(createdBy, data)`：给没有玩家 source 的系统来源建单，与玩家路径共用去重、审计与通知。`CreateIncident` 在导出契约里登记为 civilian_entry（平民 911 必须人人可调）。
 

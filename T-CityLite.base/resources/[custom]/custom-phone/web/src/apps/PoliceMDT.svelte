@@ -1,12 +1,20 @@
 <script lang="ts">
-  import { fetchNui } from '../utils/nui';
   import { formatClock, formatAgo } from '../utils/time';
   import { onMount } from 'svelte';
   import { playerData } from '../stores/phone';
   import { requestAppQuery as queryApp, requestAppAction as appAction } from '../core/request';
 
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
-  type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; disposition?: string | null; npc_template?: string | null; created_at: string; x?: number; y?: number; z?: number };
+  type AllowedAction = { allowed: boolean; reason?: string | null; label?: string | null };
+  type Incident = {
+    id: number; code: string; title: string; description: string; priority: number; status: string;
+    disposition?: string | null; npc_template?: string | null; created_at: string;
+    x?: number; y?: number; z?: number;
+    // 服务端下发的判定结果（IncidentActionState 的投影）：前端只渲染，不自己算规则
+    units?: { citizenid: string; role?: string }[];
+    primary?: string | null;
+    actions?: { claim?: AllowedAction; clear?: AllowedAction };
+  };
   type Charge = { id: number | string; label: string; minutes: number; fine: number };
   type Me = { citizenid: string; callsign: string; grade: number; status?: string };
 
@@ -239,6 +247,14 @@
     invalid_transition: '警情状态已变化，请刷新后重试',
     incident_not_found: '警情不存在或已归档',
     not_assigned: '你尚未被分配到该警情（需先派单/到场）',
+    not_on_scene: '到场后才能清场',
+    not_primary: '由现场负责人清场',
+    already_joined: '你已经在这张单上',
+    incident_closed: '该警情已归档',
+    too_far: '距离现场太远，无法记录到场',
+    bad_nonce: '到场凭证失效，请稍后自动重试',
+    incident_has_no_coords: '该警情没有坐标，无法领路',
+    invalid_incident: '警情编号无效',
     already_jailed: '目标已在服刑',
     too_far: '目标距离超过 5 米',
     not_handcuffed: '目标没有上铐/倒地，先 /cuff',
@@ -761,27 +777,21 @@
     else auditError = errorText(res?.error ?? 'audit_forbidden');
   }
 
-  async function updateIncident(incident: Incident, action: 'enroute' | 'on_scene') {
-    const res = await appAction(DB, action, { incident_id: incident.id });
-    notice = res?.success ? `#${incident.id} ${action === 'enroute' ? '前往中' : '已到场'}` : `失败：${errorText(res?.error ?? 'unknown')}`;
-    if (res?.success) {
-      // 前往：把现场画成一条导航路线（同任务引导），不只是改个状态字。
-      // 到场：路已经走完，把路线收掉，别让旧路线留在小地图上。
-      if (action === 'enroute') await setRoute(incident);
-      else await fetchNui('mdtNavigate', { clear: true });
-    }
+  // 申领：服务端 assign + enroute + 推路线，一步到位。客户端不自己画路线，
+  // 因为"被派到就出发"的路线由服务端推（同一份逻辑覆盖手机、控制台、NPC 派单）。
+  async function claimIncident(incident: Incident) {
+    const res = await appAction(DB, 'claim', { incident_id: incident.id });
+    notice = res?.success
+      ? `#${incident.id} 已接手（${res?.data?.role === 'support' ? '支援' : '负责'}）· 路线自动规划`
+      : `申领失败：${errorText(res?.error ?? 'unknown')}`;
     await refresh();
   }
 
-  async function setRoute(incident: Incident) {
-    // 老数据（NPC callout 之前的单）可能没有坐标：那就不领路，只改状态。
-    if (typeof incident.x !== 'number' || typeof incident.y !== 'number') return;
-    await fetchNui('mdtNavigate', {
-      x: incident.x,
-      y: incident.y,
-      z: typeof incident.z === 'number' ? incident.z : 0,
-      label: `#${incident.id} ${incident.title}`,
-    });
+  // 自动检测失灵时的人工补录：服务端仍按 ped 坐标校验
+  async function manualArrive(incident: Incident) {
+    const res = await appAction(DB, 'arrive_manual', { incident_id: incident.id });
+    notice = res?.success ? `#${incident.id} 已补录到场` : `补录失败：${errorText(res?.error ?? 'unknown')}`;
+    await refresh();
   }
 
   onMount(() => {
@@ -863,9 +873,22 @@
                 <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status}{incident.disposition ? ` · ${dispositionLabel[incident.disposition] ?? incident.disposition}` : ''} · {incidentTime(incident.created_at)}</p>
               </div>
               <div class="actions">
-                <button class="step" onclick={() => updateIncident(incident, 'enroute')}>前往</button>
-                <button class="step" onclick={() => updateIncident(incident, 'on_scene')}>到场</button>
-                <button class="clear" onclick={() => clearIncident(incident)}>清场</button>
+                {#if incident.actions?.claim?.allowed}
+                  <button class="step" onclick={() => claimIncident(incident)}>
+                    {incident.actions.claim.label === 'join' ? '加入' : '前往'}
+                  </button>
+                {:else if incident.actions?.claim?.reason}
+                  <button class="step" disabled title={errorText(incident.actions.claim.reason)}>前往</button>
+                {/if}
+                {#if incident.actions?.clear?.allowed}
+                  <button class="clear" onclick={() => clearIncident(incident)}>清场</button>
+                {:else if incident.actions?.clear?.reason}
+                  <button class="clear" disabled title={errorText(incident.actions.clear.reason)}>清场</button>
+                {/if}
+                {#if incident.status === 'enroute' && incident.primary === $playerData.citizenid}
+                  <button class="ghost" title="自动检测失灵时用，服务端仍会校验距离"
+                    onclick={() => manualArrive(incident)}>补录到场</button>
+                {/if}
               </div>
             </div>
             {#if incident.description}<p class="desc">{incident.description}</p>{/if}
@@ -1311,6 +1334,9 @@
   .actions { display: flex; gap: 4px; }
   .step { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #f59e0b; color: #111; }
   .clear { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #b91c1c; color: #fff; }
+  .actions .ghost { font-size: 10px; border: 1px solid rgba(255,255,255,.22); border-radius: 8px; padding: 4px 8px; background: transparent; color: #9aa6c4; }
+  /* 置灰要看得出来是"现在不能点"，而不是加载中 */
+  .actions button:disabled { opacity: .4; cursor: not-allowed; }
   .lookup, .form { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   .form input, .form textarea, .form select { flex: 1 1 45%; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
   .form textarea.wide, .form select.wide { flex-basis: 100%; }
