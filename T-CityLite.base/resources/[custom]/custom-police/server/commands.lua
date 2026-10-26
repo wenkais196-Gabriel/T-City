@@ -558,12 +558,15 @@ QBCore.Commands.Add('911p', Lang:t('commands.police_report'), { { name = 'messag
     if args[1] then message = table.concat(args, ' ') else message = Lang:t('commands.civilian_call') end
     local ped = GetPlayerPed(src)
     local coords = GetEntityCoords(ped)
-    local players = QBCore.Functions.GetQBPlayers()
-    for _, v in pairs(players) do
-        if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            local alertData = { title = Lang:t('commands.emergency_call'), coords = { x = coords.x, y = coords.y, z = coords.z }, description = message }
-            TriggerClientEvent('qb-phone:client:addPoliceAlert', v.PlayerData.source, alertData)
-            TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, coords, message)
-        end
+    -- 与 /911、policeAlert 走同一个入口：先有单，才有通知和地图标记。
+    -- （以前这里只发通知+插旗，警情板上什么都没有。）
+    local incident, reason = PoliceDispatch.CreateIncident(src, {
+        code = '911', title = message, description = message, priority = 2,
+        x = coords.x, y = coords.y, z = coords.z,
+    })
+    if not incident then
+        TriggerClientEvent('QBCore:Notify', src, ('报警失败：%s'):format(tostring(reason)), 'error')
+        return
     end
+    TriggerClientEvent('QBCore:Notify', src, ('已受理（警情 #%s）'):format(tostring(incident.id)), 'success')
 end)
