@@ -90,6 +90,12 @@
   let incidents = $state<Incident[]>([]);
 
   // 右栏显示哪一单：默认第一张（打开详情无副作用，不像 Messages 会自动清未读）
+  const callsignOf = (citizenid: string | null | undefined) => {
+    if (!citizenid) return null;
+    const unit = units.find((item) => item.citizenid === citizenid);
+    return unit?.callsign || unit?.name || citizenid;
+  };
+
   const selectedIncident = $derived(
     incidents.find((item) => item.id === activeIncidentId) ?? incidents[0] ?? null,
   );
@@ -946,8 +952,10 @@
               <p class="muted">P{selectedIncident.priority} · {statusLabel[selectedIncident.status] ?? selectedIncident.status} · {incidentTime(selectedIncident.created_at)}</p>
               {#if selectedIncident.description}<p class="desc">{selectedIncident.description}</p>{/if}
               <div class="actions detail-actions">{@render incidentActions(selectedIncident)}</div>
-              <p class="line"><span class="muted">负责人</span> {selectedIncident.primary || '未申领'}</p>
-              <p class="line"><span class="muted">单位</span> {selectedIncident.units?.length ? selectedIncident.units.map((u) => u.citizenid).join(', ') : '无'}</p>
+              <p class="line"><span class="muted">负责人</span> {callsignOf(selectedIncident.primary) ?? '未申领'}</p>
+              <p class="line"><span class="muted">单位</span> {selectedIncident.units?.length
+                ? selectedIncident.units.map((u) => callsignOf(u.citizenid)).join('、')
+                : '无'}</p>
               {#if typeof selectedIncident.x === 'number' && typeof selectedIncident.y === 'number'}
                 <p class="line"><span class="muted">坐标</span> {Math.round(selectedIncident.x)}, {Math.round(selectedIncident.y)}</p>
               {/if}
