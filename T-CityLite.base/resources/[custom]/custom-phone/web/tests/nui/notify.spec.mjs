@@ -23,8 +23,9 @@ const NO_TS = {
 
 export const notifyScenarios = [
   {
+    surfaces: ['phone'],
     name: '通知时间：坏时间戳不许渲染成 NaN',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.notifications = [ISO_OK, NO_TS];
       await openNotifications(page);
 

@@ -532,6 +532,8 @@ export async function openQuests(page, surface = 'phone') {
 
 export async function openDispatchTab(page, label) {
   const tab = page.locator('.mdt .tabs.sub-tabs button', { hasText: label });
+  // 平板（grid）上两栏并排，分段切换没有意义也不渲染 —— 这时"切页"是空操作
+  if (!(await tab.isVisible().catch(() => false))) return;
   await tab.click();
   await page.waitForTimeout(80);
 }

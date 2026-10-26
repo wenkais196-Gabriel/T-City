@@ -8,8 +8,9 @@ import { checkEqual, checkIncludes, openDispatchTab, openHotlines, openMdt, wait
 
 export const emergencyScenarios = [
   {
+    surfaces: ['phone'],
     name: '手机报警：真的提交，并把单号显示出来',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       await openHotlines(page);
 
       const box = page.locator('.report911 .report-input');
@@ -36,8 +37,9 @@ export const emergencyScenarios = [
     },
   },
   {
+    surfaces: ['phone'],
     name: 'MDT 警情时间：ISO 原文必须变成 HH:MM + 相对时间',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.incidents = [
         {
           id: 77,
@@ -49,7 +51,7 @@ export const emergencyScenarios = [
           created_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
         },
       ];
-      await openMdt(page);
+      await openMdt(page, surface);
       await openDispatchTab(page, '接警');
 
       const text = (await page.locator('.mdt').textContent()) ?? '';
@@ -62,8 +64,9 @@ export const emergencyScenarios = [
     },
   },
   {
+    surfaces: ['phone'],
     name: 'MDT 申领：点前往发的是 claim，路线由服务端推',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.incidents = [
         {
           id: 78, code: '10-31', title: '持械抢劫', description: '好麦坞大道',
@@ -76,7 +79,7 @@ export const emergencyScenarios = [
           },
         },
       ];
-      await openMdt(page);
+      await openMdt(page, surface);
       await openDispatchTab(page, '接警');
 
       const card = page.locator('.incident', { hasText: '#78' });

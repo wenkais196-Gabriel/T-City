@@ -89,7 +89,7 @@
 | P1 | `surface_rules.lua` / `surface.lua` / `device_lock.lua` + 优先级 + 锁 + 失败出口 | ✅ 已落地 |
 | P1 | NUI 上报视口、读 Lua 下发的 surface、`reason=switch` 不丢当前 app | ✅ 已落地 |
 | P1 | 双形态 NUI 场景（几何、刘海/手势条差异、关闭只发一次） | ✅ 13/13 |
-| P2 | pane 契约 + `PoliceMDT` dispatch 三栏（pilot） | ✅ 已落地：`contracts/police_mdt.panes.ts`，units/incidents/detail 三栏，详情栏只在 grid 渲染；行内「前往/清场」保留（巡逻时一击不变两击） |
+| P2 | pane 契约 + `PoliceMDT` dispatch 三栏（pilot） | ✅ 已落地：`police_mdt.panes.ts` 契约，units/incidents/detail 三栏，详情栏只在 grid 渲染；行内「前往/清场」保留（巡逻时一击不变两击） |
 | P3 | `Messages` 两栏、`Quests` 两栏 | ✅ 已落地：Messages 用 drill（手机二选一、平板并存，且**不自动选会话**——那会清未读）；Quests 用 flow（手机不动、平板加详情栏，列表收窄） |
 | P4 | 三个架构闸门（分叉 / 契约 / 权限）+ 双视口参数化 | ✅ 已落地：`tests/architecture/test_surface_contracts.py` 三条，各自带反向注入；NUI 16 场景含 parity（两种形态 app 请求集合必须相等） |
 
@@ -102,6 +102,7 @@
 | 一致性 | parity 场景：同一交互在 375 与 1034 下发出的 `appQuery/appAction` 集合**完全相等** |
 | 权限不放大 | `TABLET_GRANTS` 三个契约全为空；闸门禁止服务端读 `surface`、禁止 app 自己判断形态 |
 | 单组件 | 闸门 A：出现 `*Tablet.svelte` 或相似度 ≥0.9 的改名副本即红 |
+| 双视口参数化 | NUI runner 对每个场景在手机和平板各跑一遍；与 pane 无关的 app（通知/急救）显式声明 `surfaces: ['phone']`，其余跑两遍 |
 | 全部测试 | 1019 passed / 132 skipped；架构规则 261（已证明 96 / 未证明 165 不变） |
 
 未做（有意）：
