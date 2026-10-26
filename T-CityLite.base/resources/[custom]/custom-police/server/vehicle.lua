@@ -83,15 +83,14 @@ RegisterNetEvent('police:server:TakeOutImpound', function(plate, garage)
 end)
 
 RegisterNetEvent('police:server:FlaggedPlateTriggered', function(coords, plate)
-    for _, Player in pairs(QBCore.Functions.GetQBPlayers()) do
-        if Player then
-            if (Player.PlayerData.job.name == 'police' and Player.PlayerData.job.onduty) then
-                local veh_plate = plate:upper()
-                local message = Lang:t('info.flagged_vehicle_radar', { plate = veh_plate })
-                TriggerClientEvent('police:client:policeAlert', Player.PlayerData.source, coords, message)
-            end
-        end
-    end
+    -- 车牌雷达是系统来源：同样先建单（在勤警察自动收到通知与地图标记），
+    -- 否则这条警报在警情板上查不到、也统计不到。
+    local veh_plate = plate and tostring(plate):upper() or '????'
+    local message = Lang:t('info.flagged_vehicle_radar', { plate = veh_plate })
+    PoliceDispatch.CreateIncidentFromSystem('system:plate_radar', {
+        code = '10-38', title = message, description = message, priority = 2,
+        x = coords and coords.x, y = coords and coords.y, z = coords and coords.z,
+    })
     -- 🌐 Atmosphere: chase scene on flagged vehicle pursuit
     if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', source, 'chase') end
 end)

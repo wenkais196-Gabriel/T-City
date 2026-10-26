@@ -213,6 +213,42 @@ local function notifyOnDutyIncident(incident, content)
     end
 end
 
+--- 建单的投影：在勤警察收到的东西都从这里发。
+--- 以前地图标记是报警处理器自己广播的，所以"控制台派单"和"系统建单"没有标记——
+--- 板上看得见、地图上找不到。现在建单是唯一入口，投影也跟着收口：
+--- 任何来源建出一张单，在勤警察都会同时收到手机通知 + 屏幕一句话 + 提示音 + 临时标记。
+---@param incident table 建单结果（含 id / code / title / x / y / z）
+---@return number 收到提示的警察数
+local function broadcastIncidentAlert(incident)
+    local x, y, z = tonumber(incident.x), tonumber(incident.y), tonumber(incident.z)
+    if not (x and y and z) then return 0 end
+    local text = ('#%s %s'):format(tostring(incident.id), tostring(incident.code or '911'))
+    -- 跨资源事件不发裸 vector3：客户端按 {x,y,z} 读，避免 "type(coords) ~= 'table'" 那种静默丢弃。
+    local coords = { x = x, y = y, z = z }
+    local sent = 0
+    for _, src in ipairs(QBCore.Functions.GetPlayers()) do
+        local p = QBCore.Functions.GetPlayer(src)
+        local d = p and p.PlayerData
+        if isPolice(d) and d.job and d.job.onduty == true then
+            TriggerClientEvent('police:client:policeAlert', d.source, coords, text)
+            sent = sent + 1
+        end
+    end
+    return sent
+end
+
+--- 合并进已有单时什么都不发：同一条警情响五遍等于没有警情。
+local function projectIncident(incident, data)
+    if not incident or incident.merged then return incident end
+    notifyOnDutyIncident(incident, trim(data and (data.description or data.details)))
+    incident.alerted = broadcastIncidentAlert(incident)
+    return incident
+end
+
+--- 同资源内其它模块（NPC callout）复用同一条投影：通知带单号、地图标记只发一次。
+--- 内容可以由调用方给（NPC 的台词要带地点名），但"发给谁、发什么形状"只有这一处。
+function P.ProjectIncident(incident, data) return projectIncident(incident, data) end
+
 --- police_incidents 的**唯一写入点**（玩家路径、agent 路径、NPC 路径都走这里）。
 --- 列集合按需拼接：npc_template 只有 NPC callout 才有，NULL 写进 SQL 而不是传 nil 参数
 --- （参数数组里的洞会被 oxmysql 截断，police_audit 那边踩过同一个坑）。
@@ -276,7 +312,13 @@ local function insertIncidentRow(createdBy, data, opts)
             print(('[custom-police] incident.create audit failed for #%s'):format(tostring(id)))
         end
     end
-    return { id = tonumber(id), status = 'open', code = code, title = title }
+    return {
+        id = tonumber(id), status = 'open', code = code, title = title,
+        description = description,
+        -- 坐标必须跟着单子走：建单的人可能是控制台、系统事件或者玩家，
+        -- 但在勤警察要的是"去哪"。
+        x = tonumber(data.x), y = tonumber(data.y), z = tonumber(data.z),
+    }
 end
 
 --- 同资源内的唯一写者句柄（p2_system 的 agent 路径、p4_npc 的 NPC 路径都用它）。
@@ -292,11 +334,7 @@ function P.CreateIncident(source, data)
     if not creator then return false, 'player_not_found' end
     local result, reason = insertIncidentRow(creator.citizenid, data)
     if not result then return false, reason end
-    -- 合并进已有单的情况不再二次通知：同一条警情响五遍等于没有警情。
-    if not result.merged then
-        notifyOnDutyIncident(result, trim(data and (data.description or data.details)))
-    end
-    return result
+    return projectIncident(result, data)
 end
 
 --- 系统来源（车辆防盗、脚本事件）建单：没有玩家可校验，调用方必须自带标识。
@@ -305,10 +343,7 @@ function P.CreateIncidentSystem(createdBy, data)
     if type(createdBy) ~= 'string' or createdBy == '' then return false, 'bad_creator' end
     local result, reason = insertIncidentRow(createdBy:sub(1, 50), data)
     if not result then return false, reason end
-    if not result.merged then
-        notifyOnDutyIncident(result, trim(data and (data.description or data.details)))
-    end
-    return result
+    return projectIncident(result, data)
 end
 
 function P.GetIncidents(source, status)

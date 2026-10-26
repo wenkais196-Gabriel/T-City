@@ -39,7 +39,7 @@ def read(path: Path) -> str:
 HARNESS = r"""
 -- 警情建单 / 合并 / 通知 harness
 local registry = {}
-local inserts, updates, notifies, queries = {}, {}, {}, {}
+local inserts, updates, notifies, queries, clientEvents = {}, {}, {}, {}, {}
 local mergeRow = nil          -- 合并查询返回什么
 local nextId = 41
 
@@ -105,7 +105,9 @@ function RegisterNetEvent() end
 function CreateThread() end
 function Wait() end
 function GetCurrentResourceName() return 'custom-police' end
-function TriggerClientEvent() end
+function TriggerClientEvent(name, target, ...)
+    clientEvents[#clientEvents + 1] = { name = name, target = target, args = { ... } }
+end
 function GetPlayerName() return 'Bob Civil' end
 function Lang_t(key) return key end
 Lang = { t = function(_, key) return key end }
@@ -119,7 +121,7 @@ local function expect(cond, msg)
 end
 
 local function reset()
-    inserts, updates, notifies, queries = {}, {}, {}, {}
+    inserts, updates, notifies, queries, clientEvents = {}, {}, {}, {}, {}
     mergeRow = nil
 end
 
@@ -138,6 +140,15 @@ expect(title:find('#41', 1, true) ~= nil, '通知标题必须带警情单号: ' 
 expect(title:find('911', 1, true) ~= nil, '通知标题必须带 code: ' .. title)
 expect(tostring(notifies[1].app_id) == 'police_mdt', '通知应落在 police_mdt app')
 
+-- 地图标记：建单必须同时给在勤警察广播一次现场提示（否则板上看得见、地图上找不到）
+expect(#clientEvents == 1, ('应该只给 1 个在勤警察发地图标记，实际 %d'):format(#clientEvents))
+expect(clientEvents[1].name == 'police:client:policeAlert', '标记应走 police:client:policeAlert')
+local blipCoords = clientEvents[1].args[1]
+expect(type(blipCoords) == 'table' and blipCoords.x and blipCoords.y and blipCoords.z,
+    '跨资源事件不许发裸 vector3，必须是 {x,y,z} 表')
+expect(tostring(clientEvents[1].args[2]):find('#41', 1, true) ~= nil, '标记文案要带单号')
+expect(result.alerted == 1, '建单结果应记录提示了几个警察')
+
 -- 2. 去重：同码同地 5 分钟内的第二条报警并进原来那单，不插入、不二次通知
 reset()
 mergeRow = { id = 41, title = '有人持枪抢店', status = 'open', distance = 12.5 }
@@ -150,6 +161,7 @@ expect(merged.id == 41, '合并后应返回原来那单的 id')
 expect(#inserts == 0, '合并时不该插入新行')
 expect(#updates == 1, '合并时应刷新 last_activity_at')
 expect(#notifies == 0, '合并时不该再通知一遍（同一条警情响五遍等于没有警情）')
+expect(#clientEvents == 0, '合并时也不该再插一次地图标记')
 
 -- 3. 距离太远不合并
 reset()
@@ -161,6 +173,7 @@ local far = registry.CreateIncident(1, {
 expect(type(far) == 'table' and far.merged ~= true, '超出半径的报警不该合并')
 expect(#inserts == 1, '超出半径应插入新行')
 expect(#notifies == 1, '新的单要通知')
+expect(#clientEvents == 1, '新的单要在图上插旗')
 
 -- 4. 系统来源（没有玩家可校验）：走 CreateIncidentSystem 并记录来源
 reset()
@@ -171,6 +184,7 @@ local sysResult = registry.CreateIncidentFromSystem('resource:system', {
 expect(type(sysResult) == 'table' and sysResult.id == nextId, '系统建单应成功')
 expect(#inserts == 1 and inserts[1].params[5] == 'resource:system',
     '系统建单应把 created_by 写成来源标识')
+expect(#clientEvents == 1, '系统来源（控制台派单 / 车辆警报）同样要在图上插旗')
 
 print('police alert dispatch harness ok')
 """
@@ -225,3 +239,36 @@ def test_phone_911_bypassing_the_police_authority_is_rejected() -> None:
     assert "CreateIncident" in source, "手机 911 必须调用 custom-police 的建单导出"
     assert "INSERT INTO police_incidents" not in source, "手机层不许直接写警情表"
     assert "[%c]" in source, "玩家输入必须清掉控制字符（会被写进通知与日志）"
+
+
+def test_no_alert_path_broadcasts_its_own_blip() -> None:
+    """投影只能在建单里做一次，否则同一条警情会插两面旗。"""
+    main = read(MAIN)
+    assert "police:client:policeAlert" not in main, (
+        "main.lua 又自己广播地图标记了——标记属于建单（projectIncident），不是报警处理器"
+    )
+    p0 = read(P0)
+    assert "local function broadcastIncidentAlert" in p0
+    assert p0.count("TriggerClientEvent('police:client:policeAlert'") == 1, (
+        "地图标记只允许有一个广播点"
+    )
+
+
+def test_police_report_command_is_also_a_record() -> None:
+    """/911p 以前只发通知+插旗，警情板上什么都没有。"""
+    source = read(MAIN.parent / "commands.lua")
+    start = source.index("QBCore.Commands.Add('911p'")
+    block = source[start:start + 1600]
+    assert "PoliceDispatch.CreateIncident(" in block, "/911p 必须建单"
+    assert "qb-phone:client:addPoliceAlert" not in block, "/911p 不该再自己推一条手机警报到板外"
+    assert "addPoliceAlert" not in block
+
+
+def test_flagged_plate_radar_reaches_the_board() -> None:
+    source = read(MAIN.parent / "vehicle.lua")
+    start = source.index("police:server:FlaggedPlateTriggered")
+    block = source[start:start + 900]
+    assert "CreateIncidentFromSystem" in block, "车牌雷达必须进警情板"
+    assert "TriggerClientEvent('police:client:policeAlert'" not in block, (
+        "车牌雷达不该自己插旗——建单会负责"
+    )

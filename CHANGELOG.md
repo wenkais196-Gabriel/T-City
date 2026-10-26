@@ -9,12 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
 ### Fixed
 - **报警终于会变成一条警情**。`police:server:policeAlert`（qb-drugs / storerobbery / houserobbery / custom-vehicles 的热接线报警）与 `police:server:autoAlert`（系统警报）以前只给在勤警察发一条通知、在地图上插个旗就结束了——MDT 的警情板上什么都没有，于是"被抢了报警"在系统里等于没发生：不能派单、不能清场、不留记录、进不了统计。两条路径现在都走 `PoliceDispatch.CreateIncident`（系统来源走 `CreateIncidentFromSystem`），通知由建单统一发出，地图插旗与提示音仍然保留。
 - **通知标题带警情单号**（`#38 911: 有人持枪抢店`）。以前手机上的"有人报警"和板上哪一行对不上，只能靠猜。
 - **重复报警会并进同一单**：同 code、同地点 60 米内、5 分钟内的报警不再新建行，只刷新 `last_activity_at`，并且不再二次通知——一次抢劫被五个人报警不该变成五条单、响五遍。
 - **手机里的 911 是真的入口了**。以前「热线」页的 911 只是一段拨号动画，真正的报警只有聊天命令 `/911`，新玩家不可能知道。现在热线页有报警卡片（输入一句原因 → 拨 911），服务端 `phone:server:report911` 做限流与清洗后调用 custom-police 建单，并把警情单号回显给玩家。
 - **MDT 不再直接印 ISO 原文**：警情时间统一成 `HH:MM · 3 分钟前`（`created_at` 是 DB 的 `2026-10-26T09:43:42.000Z`，以前原样贴在板上）。
+
+- **建单即投影：地图标记现在由建单统一发出**。以前地图插旗是各个报警处理器自己广播的，于是控制台派单、系统建单（`/911p`、车牌雷达）在板上看得见、地图上找不到。现在 `projectIncident` 是唯一发送点：任何来源建出一张单，在勤警察同时收到手机通知（带单号）+ 屏幕一句话 + 提示音 + 临时地图标记，合并的重复报警则一次都不响。`/911p` 和车牌雷达也一并改成建单（以前完全进不了警情板），NPC callout 复用同一条投影，通知也开始带单号。
 
 ### Added
 - `custom-police` 新增导出 `CreateIncidentFromSystem(createdBy, data)`：给没有玩家 source 的系统来源建单，与玩家路径共用去重、审计与通知。`CreateIncident` 在导出契约里登记为 civilian_entry（平民 911 必须人人可调）。

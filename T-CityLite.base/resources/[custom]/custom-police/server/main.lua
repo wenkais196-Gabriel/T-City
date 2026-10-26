@@ -243,17 +243,10 @@ RegisterNetEvent('police:server:policeAlert', function(text)
     -- 等于没发生：不能派单、不能清场、不留记录、进不了统计。
     local incident = createIncidentForAlert(src, message, alertCoords, 2)
 
-    local sent = 0
-    local players = QBCore.Functions.GetQBPlayers()
-    for _, v in pairs(players) do
-        if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            -- 手机托盘的通知由建单负责（带单号），这里只负责地图插旗、提示音和屏幕上的一句话。
-            TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, alertCoords, message)
-            sent = sent + 1
-        end
-    end
+    -- 通知与地图标记都由建单负责（projectIncident），这里只留日志。
     print(('[policeAlert] src=%s | #%s | %s | 值班警察: %d 人'):format(
-        tostring(src), tostring(incident and incident.id or '-'), message, sent))
+        tostring(src), tostring(incident and incident.id or '-'), message,
+        tonumber(incident and incident.alerted) or 0))
 end)
 
 -- 系统自动警报 (车辆盗窃等) — 仅限在勤警察调用 + 每 source 10 秒 1 次
@@ -290,16 +283,9 @@ RegisterNetEvent('police:server:autoAlert', function(coords, text)
         incident = createIncidentForAlert(src, message, alertCoords, 2)
     end
 
-    local sent = 0
-    local players = QBCore.Functions.GetQBPlayers()
-    for _, v in pairs(players) do
-        if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, alertCoords, message)
-            sent = sent + 1
-        end
-    end
     print(('[autoAlert] #%s | %s | 值班警察: %d 人'):format(
-        tostring(incident and incident.id or '-'), message, sent))
+        tostring(incident and incident.id or '-'), message,
+        tonumber(incident and incident.alerted) or 0))
 end)
 
 RegisterNetEvent('police:server:UpdateCurrentCops', function()

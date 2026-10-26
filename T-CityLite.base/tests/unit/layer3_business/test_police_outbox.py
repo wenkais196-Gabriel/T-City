@@ -184,6 +184,12 @@ def test_police_notification_sites_never_write_the_phone_table():
         src = read(path)
         assert "INSERT INTO phone_notifications" not in src, path
         assert "phone:client:newNotification" not in src, path
+        if path == P4:
+            # NPC callout 不再自己入队/插旗：它把台词交给建单投影，投影内部才是
+            # 通知的唯一发送点（通知带单号、地图标记只发一次）。
+            assert "PoliceDispatch.ProjectIncident(" in src, path
+            assert "TriggerClientEvent('police:client:policeAlert'" not in src, path
+            continue
         if path != P2:
             assert "Outbox.Enqueue('notification'" in src, path
             # Degraded fallback still goes through the owner export.

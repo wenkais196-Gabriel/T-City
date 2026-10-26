@@ -919,7 +919,10 @@ def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
     block = auto_alert_block()
     assert "local Player = QBCore.Functions.GetPlayer(src)" in block
     assert "if not Player or not PolicePolicy.Can(Player.PlayerData, 'incident.create') then return end" in block
-    assert block.index("PolicePolicy.Can") < block.index("GetQBPlayers()")
+    # 迭代在勤警察搬进了建单的投影（p0.lua projectIncident），处理器只做校验 + 建单。
+    # 所以这里钉住的是"权限检查发生在建单之前"——权限在 GetQBPlayers 之前的旧约束已经被
+    # 单一投影取代（同一个检查现在只在一处发生）。
+    assert block.index("PolicePolicy.Can") < block.index("createIncidentForAlert(")
 
     assert "local autoAlertCooldown = {}" in src
     assert "local AUTO_ALERT_COOLDOWN = 10" in src
@@ -1975,14 +1978,16 @@ def test_npc_create_is_gated_inserts_and_notifies():
     assert "PoliceIncidents.InsertRow(" in block, "NPC 建单必须走 police_incidents 的唯一写者"
     assert "npc_template = template.id" in block, "NPC 建单必须把模板 id 一起写进去"
     assert "'npc.callout.create'" in block
-    assert "notifyOfficers(template, location, coords)" in block
+    # 通知与插旗收口到建单投影（PoliceDispatch.ProjectIncident），NPC 只提供台词
+    assert "notifyOfficers(inserted, template, location)" in block
 
     src = read(NPC_SERVER)
-    # FIT-02: the phone owns phone_notifications; the callout only enqueues.
+    # FIT-02: 手机拥有 phone_notifications，NPC 层一行都不许写。
     assert "INSERT INTO phone_notifications" not in src
-    assert "Outbox.Enqueue('notification'" in src
-    assert "exports['custom-phone']:Notify(" in src
-    assert "TriggerClientEvent('police:client:policeAlert'" in src
+    # 通知与地图标记统一由建单投影发出（带单号、只发一次），NPC 层不自建发送通道。
+    assert "PoliceDispatch.ProjectIncident(" in src
+    assert "Outbox.Enqueue(" not in src
+    assert "TriggerClientEvent('police:client:policeAlert'" not in src
     assert "exports('CreateNpcCallout', NPC.CreateNpcCallout)" in src
 
 

@@ -99,27 +99,16 @@ local function activeNpcCount()
     return math.floor(tonumber(count) or 0)
 end
 
-local function notifyOfficers(template, location, coords)
-    local subject = ('%s: %s'):format(template.code, template.title):sub(1, 200)
+local function notifyOfficers(incident, template, location)
     local content = ('%s（%s）'):format(
         (template.description:gsub('{location}', location.label)), location.label):sub(1, 500)
-    for _, officer in ipairs(onDutyOfficers()) do
-        -- Persistence belongs to custom-phone (FIT-02): enqueue through the
-        -- outbox so a phone restart retries instead of dropping the callout.
-        local payload = {
-            citizenid = officer.data.citizenid,
-            title = subject, content = content, app_id = 'police_mdt',
-        }
-        if type(Outbox) == 'table' and type(Outbox.Enqueue) == 'function' then
-            Outbox.Enqueue('notification', payload)
-        else
-            pcall(function()
-                exports['custom-phone']:Notify(
-                    payload.citizenid, payload.title, payload.content, payload.app_id)
-            end)
-        end
-        TriggerClientEvent('police:client:policeAlert', officer.source, coords, subject)
+    -- 与玩家报警、系统警报、控制台派单共用一条投影：标题带单号、地图标记只发一次。
+    -- （以前这里自己发一条不带单号的通知再插一次旗，手机上的"店被人抢了"和板上哪一行对不上。）
+    if type(PoliceDispatch) ~= 'table' or type(PoliceDispatch.ProjectIncident) ~= 'function' then
+        return false
     end
+    PoliceDispatch.ProjectIncident(incident, { description = content })
+    return true
 end
 
 --- Create one NPC callout.
@@ -183,7 +172,7 @@ function NPC.CreateNpcCallout(templateId, officerSrc)
     if not audit(actorCid, 'npc.callout.create', tostring(id), template.id, actorKind) then
         print(('[custom-police] npc.callout.create audit failed for #%s'):format(tostring(id)))
     end
-    notifyOfficers(template, location, coords)
+    notifyOfficers(inserted, template, location)
 
     return {
         id = id,
