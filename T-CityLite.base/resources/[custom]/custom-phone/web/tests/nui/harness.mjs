@@ -485,8 +485,8 @@ export async function openPhone(page, surface = 'phone') {
 }
 
 /** Open the phone, then the MDT tile that `getPhoneApps` advertised. */
-export async function openMdt(page) {
-  await openPhone(page);
+export async function openMdt(page, surface = 'phone') {
+  await openPhone(page, surface);
   const tile = page.locator('button[aria-label="MDT"]');
   try {
     await tile.waitFor({ state: 'visible', timeout: 5000 });
@@ -508,8 +508,8 @@ export async function openMdt(page) {
 }
 
 /** 打开手机里的「任务」瓦片（服务端注册的 quests app）。 */
-export async function openQuests(page) {
-  await openPhone(page);
+export async function openQuests(page, surface = 'phone') {
+  await openPhone(page, surface);
   const tile = page.locator('button[aria-label="任务"]');
   try {
     await tile.waitFor({ state: 'visible', timeout: 5000 });
@@ -537,7 +537,8 @@ export async function openDispatchTab(page, label) {
 }
 
 export async function refreshButton(page) {
-  return page.locator('.mdt button.refresh').first();
+  // 调度页拆成 pane 之后，"刷新"在单位栏和接警栏各有一颗：取当前可见的那颗。
+  return page.locator('.mdt button.refresh:visible').first();
 }
 
 export function requestLog(world) {

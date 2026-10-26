@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **p0 拆分（纯搬迁，零行为变化）**。1224 行 → 5 个模块：`p0.lua`（常量 + SM-02 转移表 + 共享助手）、`p0_units.lua`（值班/状态/指派/进度派生）、`p0_lifecycle.lua`（申领/到场/判定表/路线）、`p0_incidents.lua`（建单/合并/投影/状态机/清扫/911）、`p0_read.lua`（警情板/公民/车辆/审计）。模块之间不共享 local：共享名挂 `P.internal`，各模块按名字绑定、调用时解析，跨模块调用写成同名懒包装，所以函数体一字未改。每个模块自己登记自己的 exports（谁实现谁登记），否则 FIT-04 查不到实现体会变成装饰。附带把 `ArriveIncident` 里那条裸 `UPDATE police_units` 收进 `arriveUnitRow`（单位表现在只在 `p0_units.lua` 写）。闸门同步跟上：单写者规则从"单个文件"改成"p0 家族的固定文件集合"，导出/网络事件/number-budget 白名单路径更新，导出契约扫描器修了两个真 bug（单行函数体会吞掉后面的行；同名转发壳会覆盖实现，导致"委派给写者"被误判成"什么都没写"）。测试侧新增 `tests/p0_sources.py`，块查找不再跨模块。
 
+- **手机 / 平板统一为一台设备的两种形态**。手机和平板不再是两台设备：一个 `DeviceShell(surface)`、一份 app 清单、一套权限。形态由客户端 Lua 的 `SurfaceRules.Decide()` 决定（入口 > 来电 > 载具 > 玩家偏好 > 窗口 ≥900×560 且横向 > 默认手机），因为 `keepInput` 属于 focus，必须在打开那一刻定下来；UI 只照做，不自己嗅探窗口。同一时刻只有一个面在前台（`Surface` 里一个 `current`，不是两个布尔）。**平板锁移动**用逐帧 `DisableControlAction`（30–35），不用 `SetPlayerControl`/`FreezeEntityPosition` 那种粘性状态——粘性状态加一次异常就是永久钉在原地。关闭路径（用户、M 键、切换、ack 超时、`/phonefix`、资源停止）统一走 `Surface.Reset() + DeviceLock.End()`。
+
+- **pane 契约：一个 app 一个组件，两种排布**。`core/panes.ts` 的 `definePanes` + `AppSurface`（ResizeObserver 测容器宽度）+ `Pane`，排布只由**宽度**决定，不读 surface 身份。首批三个：警用终端（三栏，详情栏只在平板渲染，行内「前往/清场」保留——巡逻时一击不能变两击）、Messages（drill，手机二选一/平板并存，且不自动选会话，因为那会 `markMessagesRead` 把未读清掉）、任务（flow，手机不动、平板加详情栏并收窄列表）。其余 12 个 app 有意不加栏。
+
+- **三道闸门守住"不慢慢长成两个产品"**：① 禁止分叉组件（`*Tablet.svelte` 或相似度 ≥0.9 的改名副本）② 用 `AppSurface` 的 app 必须有 pane 契约且与 DOM 的 `data-pane` 双向相等、`TABLET_GRANTS` 必须为空 ③ 服务端不许读 `surface`、app 不许自己判断形态。三条各自带反向注入（往 tmp 目录写坏形状 → 必须红），所以没有推高未证明预算。NUI 另加 6 个场景，含 parity：同一交互在两种形态下发出的 `appQuery/appAction` 集合必须完全相等。
+
 ### Added
 - `custom-police` 新增导出 `CreateIncidentFromSystem(createdBy, data)`：给没有玩家 source 的系统来源建单，与玩家路径共用去重、审计与通知。`CreateIncident` 在导出契约里登记为 civilian_entry（平民 911 必须人人可调）。
 
