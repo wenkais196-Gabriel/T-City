@@ -42,7 +42,7 @@ SENSITIVE_PREFIXES = ("lookup.",)
 # Gate helpers that perform the fail-closed audit on behalf of the caller.
 # Verified in test_gate_helpers_are_really_fail_closed.
 GATE_HELPERS = {
-    "lookupAllowed": (POLICE_SERVER / "p0.lua", "local ok = audit("),
+    "lookupAllowed": (POLICE_SERVER / "p0_read.lua", "local ok = audit("),
 }
 
 FAIL_CLOSED_RE = re.compile(
@@ -285,7 +285,9 @@ def test_get_audit_audits_itself_without_recursing():
     # The write goes through the file's audit() wrapper → the single writer
     # (server/audit.lua), never through GetAudit itself.
     source = read(func.path)
-    assert "PoliceAudit.Write" in source or "local function audit(" in source, (
+    # 拆分后 audit() 这个包装在 p0.lua（核心），读面模块按名字绑进来（I.audit）
+    assert ("PoliceAudit.Write" in source or "local function audit(" in source
+            or "I.audit" in source), (
         "P.GetAudit 的自审计必须经 audit() 包装 → PoliceAudit.Write")
 
 

@@ -11,6 +11,7 @@
 并且每条断言都带反向校验——把服务端距离检查删掉、把 nonce 复用放开，测试必须红。
 """
 from __future__ import annotations
+from p0_sources import p0_block, p0_dofiles, p0_text
 
 import json
 import shutil
@@ -157,8 +158,9 @@ MySQL = {
             return { affectedRows = 1 }
         end
         if sql:find("UPDATE police_units SET status = 'on_scene'", 1, true) then
-            unitRows[params[1]] = unitRows[params[1]] or {}
-            unitRows[params[1]].status = 'on_scene'
+            local cid = params[1]          -- arriveUnitRow(citizenid, incidentId)
+            unitRows[cid] = unitRows[cid] or {}
+            unitRows[cid].status = 'on_scene'
             return { affectedRows = 1 }
         end
         if sql:find('UPDATE police_incidents', 1, true) then
@@ -194,7 +196,7 @@ Lang = { t = function(_, k) return k end }
 
 dofile(__POLICY__)
 dofile(__AUDIT__)
-dofile(__P0__)
+__P0_DOFILES__
 
 local function expect(cond, msg)
     if not cond then error(msg, 2) end
@@ -323,7 +325,7 @@ def test_claim_and_auto_arrival(tmp_path: Path) -> None:
     script = (
         HARNESS.replace("__POLICY__", json.dumps(str(POLICY)))
         .replace("__AUDIT__", json.dumps(str(AUDIT)))
-        .replace("__P0__", json.dumps(str(P0)))
+        .replace("__P0_DOFILES__", p0_dofiles(json.dumps))
     )
     harness = tmp_path / "police_claim_harness.lua"
     harness.write_text(script, encoding="utf-8")
@@ -346,8 +348,8 @@ def test_arrival_is_detected_by_the_client_not_typed_in() -> None:
 
 
 def test_server_recomputes_distance_and_consumes_the_nonce() -> None:
-    source = read(P0)
-    block = source[source.index("function P.ArriveIncident"):]
+    source = p0_text()
+    block = p0_block("function P.ArriveIncident(")   # 单模块内切片（不能跨文件）
     assert "GetEntityCoords" in block, "服务端必须自己取 ped 坐标"
     assert "SERVER_RADIUS_GRACE" in block or "PoliceIncidentRules" in block, "距离阈值来自共享规则"
     assert "incident_has_no_coords" in block, "没有坐标的单要拒绝，不能默认到场"
@@ -357,9 +359,8 @@ def test_server_recomputes_distance_and_consumes_the_nonce() -> None:
 
 
 def test_claim_is_one_click_and_assigns_plus_pushes_the_route() -> None:
-    source = read(P0)
-    start = source.index("function P.ClaimIncident")
-    block = source[start:source.index("function P.RequestArriveNonce")]
+    source = p0_text()
+    block = p0_block("function P.ClaimIncident(", "function P.RequestArriveNonce(")
     assert "enrouteUnitRow" in block, "申领要写单位（assign + enroute 一步）"
     assert "'enroute'" in block, "申领即出发"
     assert "pushIncidentRoute" in block, "申领成功要推路线"
@@ -375,8 +376,8 @@ def test_policy_has_separate_capabilities() -> None:
 
 
 def test_incidents_carry_allowed_actions_to_the_ui() -> None:
-    source = read(P0)
-    block = source[source.index("function P.GetIncidents"):source.index("function P.ClaimIncident")]
+    source = p0_text()
+    block = p0_block("function P.GetIncidents(")
     assert "P.ActionState(" in block, "GetIncidents 必须下发判定结果"
     assert "inc.primary" in block and "inc.units" in block, "板上要知道谁负责、有谁"
     # 一次查完，不做 N+1

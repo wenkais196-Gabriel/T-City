@@ -5,7 +5,7 @@
   "entries": [
     {
       "id": "p0-sweep-stale-incidents",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_incidents.lua",
       "export": "SweepStaleIncidents",
       "kind": "system_only",
       "exceptions": [
@@ -150,7 +150,7 @@
     },
     {
       "id": "p0-assign-unit-system-for-agent",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_units.lua",
       "export": "AssignUnitSystemForAgent",
       "kind": "system_only",
       "exceptions": [
@@ -163,7 +163,7 @@
     },
     {
       "id": "p0-write-audit",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_incidents.lua",
       "export": "WriteAudit",
       "kind": "system_only",
       "exceptions": [
@@ -176,7 +176,7 @@
     },
     {
       "id": "p0-create-incident-civilian",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_incidents.lua",
       "export": "CreateIncident",
       "kind": "civilian_entry",
       "exceptions": [
@@ -189,7 +189,7 @@
     },
     {
       "id": "p0-create-incident-from-system",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_incidents.lua",
       "export": "CreateIncidentFromSystem",
       "kind": "system_only",
       "exceptions": [

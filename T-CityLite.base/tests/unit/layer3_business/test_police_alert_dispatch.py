@@ -14,6 +14,7 @@
 这里用 lua5.4 驱动真实的 p0.lua（MySQL/QBCore 桩），验证插入、合并、通知三件事。
 """
 from __future__ import annotations
+from p0_sources import p0_dofiles, p0_text
 
 import json
 import shutil
@@ -114,7 +115,7 @@ Lang = { t = function(_, key) return key end }
 
 dofile(__POLICY__)
 dofile(__AUDIT__)
-dofile(__P0__)
+__P0_DOFILES__
 
 local function expect(cond, msg)
     if not cond then error(msg, 2) end
@@ -195,7 +196,7 @@ def test_alert_paths_detect_duplicates_and_create_incidents(tmp_path: Path) -> N
     script = (
         HARNESS.replace("__POLICY__", json.dumps(str(POLICY)))
         .replace("__AUDIT__", json.dumps(str(AUDIT)))
-        .replace("__P0__", json.dumps(str(P0)))
+        .replace("__P0_DOFILES__", p0_dofiles(json.dumps))
     )
     harness = tmp_path / "police_alert_dispatch_harness.lua"
     harness.write_text(script, encoding="utf-8")
@@ -219,14 +220,14 @@ def test_missing_incident_creation_is_rejected_in_both_alert_paths() -> None:
 
 
 def test_notification_without_an_incident_id_is_rejected() -> None:
-    source = read(P0)
+    source = p0_text()
     block_start = source.index("local function notifyOnDutyIncident")
     block = source[block_start:block_start + 700]
     assert "'#%s %s: %s'" in block, "通知标题必须带单号，否则手机通知和警情板对不上"
 
 
 def test_unbounded_merge_window_is_rejected() -> None:
-    source = read(P0)
+    source = p0_text()
     assert "MERGE_WINDOW_MINUTES = 5" in source
     assert "MERGE_RADIUS_METERS = 60" in source, "合并半径必须是有限值，不能无限吞并"
     assert "distance" in source, "合并必须按距离判断，不能只看 code"
@@ -247,7 +248,7 @@ def test_no_alert_path_broadcasts_its_own_blip() -> None:
     assert "police:client:policeAlert" not in main, (
         "main.lua 又自己广播地图标记了——标记属于建单（projectIncident），不是报警处理器"
     )
-    p0 = read(P0)
+    p0 = p0_text()
     assert "local function broadcastIncidentAlert" in p0
     assert p0.count("TriggerClientEvent('police:client:policeAlert'") == 1, (
         "地图标记只允许有一个广播点"

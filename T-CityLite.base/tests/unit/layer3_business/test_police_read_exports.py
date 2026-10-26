@@ -16,6 +16,7 @@ fail-closed branch at runtime.
     python3 -m pytest -q tests/unit/layer3_business/test_police_read_exports.py
 """
 from __future__ import annotations
+from p0_sources import p0_block as _p0_block, p0_dofiles, p0_text
 
 import json
 import shutil
@@ -37,10 +38,8 @@ def read(path: Path) -> str:
 
 
 def p0_block(start_marker: str, end_marker: str) -> str:
-    source = read(P0)
-    start = source.index(start_marker)
-    end = source.index(end_marker, start)
-    return source[start:end]
+    # 块不能跨模块（拆分后 end marker 常在另一个文件里）
+    return _p0_block(start_marker, end_marker)
 
 
 def test_get_units_requires_units_view_and_audits_before_the_query():
@@ -162,7 +161,7 @@ function TriggerClientEvent() end
 
 dofile(__POLICY__)
 dofile(__AUDIT__)   -- 审计唯一写者（p0 的 audit() 包装委派给它）
-dofile(__P0__)
+__P0_DOFILES__
 
 local function expect(condition, message)
     if not condition then error(message, 2) end
@@ -241,7 +240,7 @@ print('police read export harness ok')
 def test_board_reads_fail_closed_under_lua(tmp_path: Path) -> None:
     script = HARNESS.replace("__AUDIT__", json.dumps(str(P0.parent / "audit.lua"))).replace(
         "__POLICY__", json.dumps(str(POLICY))).replace(
-        "__P0__", json.dumps(str(P0))
+        "__P0_DOFILES__", p0_dofiles(json.dumps)
     )
     harness = tmp_path / "police_read_export_harness.lua"
     harness.write_text(script, encoding="utf-8")

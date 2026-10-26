@@ -210,19 +210,19 @@
     },
     {
       "name": "custom-police:server:setStatus",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_units.lua",
       "category": "already_checked",
       "reason": "只允许警察改自己的 10-x 状态；事件体先 isPolice(data)，随后 SetUnitStatusForSource 再查状态白名单、onduty 和 duty_failed。",
-      "evidence": "p0.lua:590 setStatus — isPolice(data) → P.SetUnitStatusForSource（内含 VALID_STATUS + onduty 校验）",
+      "evidence": "p0_units.lua:590 setStatus — isPolice(data) → P.SetUnitStatusForSource（内含 VALID_STATUS + onduty 校验）",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
     {
       "name": "custom-police:server:911",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_incidents.lua",
       "category": "civilian",
       "reason": "平民 911 必须对所有人开放；事件只接受 table + 在线玩家、每 source 5 秒 1 条，长度/priority 在 CreateIncident 里夹取。",
-      "evidence": "p0.lua:601 911 — type(payload) ~= 'table' → return, pd(src) check, CALL_911_COOLDOWN=5",
+      "evidence": "p0_incidents.lua:601 911 — type(payload) ~= 'table' → return, pd(src) check, CALL_911_COOLDOWN=5",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
@@ -344,14 +344,14 @@
       "expires": "2027-03-31"
     },
     {
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_units.lua",
       "category": "already_checked",
       "reason": "duty point toggle: handler rejects non-police via isPolice(pd(src)); the state write goes through P.SetDutyForSource (FIT-01).",
       "owner": "custom-police",
       "added": "2026-10-25",
       "expires": "2027-03-31",
       "name": "custom-police:server:toggleDuty",
-      "evidence": "p0.lua:734 handler: isPolice(pd(src)) then P.SetDutyForSource"
+      "evidence": "p0_units.lua:734 handler: isPolice(pd(src)) then P.SetDutyForSource"
     },
     {
       "name": "phone:server:diag",
