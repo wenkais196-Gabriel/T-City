@@ -54,6 +54,7 @@ if str(TOOLS_DIR) not in sys.path:
 
 import agent_contract  # noqa: E402
 import agent_data  # noqa: E402
+import agent_harness  # noqa: E402
 import agent_tools  # noqa: E402
 
 SERVER_NAME = "t-city-agent"
@@ -264,6 +265,10 @@ def _tool_descriptor(tool: dict[str, Any]) -> dict[str, Any]:
 def _route_available(tool: dict[str, Any]) -> bool:
     if tool.get("auth") == "live":
         return _live_config() is not None
+    if tool.get("route") == "harness":
+        # Harness tools only exist on an operator's machine with TCITY_HARNESS=1
+        # and a log source; they are never served over HTTP (design 07).
+        return agent_harness.enabled()
     if tool.get("route") == "gateway":
         return _gateway_config() is not None or _standalone_mode()
     return _director_config() is not None
@@ -271,6 +276,7 @@ def _route_available(tool: dict[str, Any]) -> bool:
 
 def _visible_tools() -> list[dict[str, Any]]:
     toolset = _toolset()
+    harness_on = agent_harness.enabled()
     visible: list[dict[str, Any]] = []
     for tool in _active_tools():
         if toolset == "read" and tool.get("channel") != "read":
@@ -278,6 +284,10 @@ def _visible_tools() -> list[dict[str, Any]]:
         # A live tool is never advertised without its credential, not even in
         # the AGENT_TOOLSET=all debug mode: the live token is a separate grant.
         if tool.get("auth") == "live" and _live_config() is None:
+            continue
+        # Harness tools are local-only: hide them unless explicitly enabled,
+        # even under toolset=all.
+        if tool.get("route") == "harness" and not harness_on:
             continue
         if toolset != "all" and not _route_available(tool):
             continue
@@ -658,6 +668,61 @@ def _call_local(tool: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:
             code="unauthorized",
         )
     return reader(args)
+
+
+# ---------------------------------------------------------------------------
+# Harness channel (design 07): local, read-only console observation
+# ---------------------------------------------------------------------------
+_HARNESS_RETRYABLE = frozenset({"timeout", "log_not_found"})
+
+
+def _call_harness(tool: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:
+    """Run a harness tool in-process.  Never takes a path from the caller."""
+    if not agent_harness.enabled():
+        raise ToolCallError(
+            "harness channel is not enabled; set TCITY_HARNESS=1 and the log paths",
+            code="harness_unconfigured",
+        )
+    name = str(tool.get("name"))
+    try:
+        if name == "get_console_lines":
+            data = agent_harness.observe(
+                str(args.get("target") or ""),
+                limit=args.get("limit"),
+                after_seq=args.get("after_seq"),
+                contains=args.get("contains"),
+                pattern=args.get("pattern"),
+            )
+        elif name == "get_console_match":
+            data = agent_harness.wait(
+                str(args.get("target") or ""),
+                pattern=args.get("pattern"),
+                timeout_ms=args.get("timeout_ms"),
+                after_seq=args.get("after_seq"),
+                contains=args.get("contains"),
+            )
+        elif name == "get_client_log":
+            data = agent_harness.observe(
+                "client",
+                limit=args.get("limit"),
+                after_seq=args.get("after_seq"),
+                contains=args.get("contains"),
+                pattern=args.get("pattern"),
+            )
+        else:
+            raise ToolCallError(f"harness has no handler for {name}", code="unauthorized")
+    except agent_harness.HarnessError as exc:
+        raise ToolCallError(
+            exc.message,
+            code=exc.code,
+            retryable=exc.code in _HARNESS_RETRYABLE,
+            kind="timeout" if exc.code == "timeout" else None,
+        ) from exc
+    return _local_envelope(
+        data,
+        next_cursor=data.get("next_seq"),
+        meta={"target": data.get("target"), "file": data.get("file")},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1090,6 +1155,8 @@ def _handle_tools_call(request_id: Any, params: Any) -> dict[str, Any]:
     try:
         if tool.get("route") == "gateway":
             raw = _call_gateway(tool, call_args, timeout_s=timeout_s)
+        elif tool.get("route") == "harness":
+            raw = _call_harness(tool, call_args)
         else:
             raw = _call_director(
                 tool,
