@@ -56,6 +56,20 @@ export function formatClock(value: unknown, tag = 'clock'): string {
   return `${hh}:${mm}`;
 }
 
+/** 相对时间：3 分钟前 / 2 小时前 / 昨天。解析不出来返回空串（调用方自己决定要不要拼）。 */
+export function formatAgo(value: unknown): string {
+  const date = toDate(value);
+  if (!date) return '';
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return '刚刚';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  return `${days} 天前`;
+}
+
 /** 给测试用：清掉"已经警告过"的记录。 */
 export function resetClockWarnings(): void {
   warned.clear();

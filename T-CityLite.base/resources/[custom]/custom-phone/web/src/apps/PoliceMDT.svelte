@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock, formatAgo } from '../utils/time';
   import { onMount } from 'svelte';
   import { playerData } from '../stores/phone';
   import { requestAppQuery as queryApp, requestAppAction as appAction } from '../core/request';
@@ -101,6 +102,14 @@
   let reportResult = $state<any>(null);
   // One key per open form. It is created before the first submit attempt and
   // only cleared after the server confirms success, so a double tap (or a
+  // 警情时间：DB 给的是 ISO 原文（2026-10-26T09:43:42.000Z），直接把整串印在板上
+  // 玩家/警员都读不出来。统一成"HH:MM · 3 分钟前"。
+  function incidentTime(value: unknown): string {
+    const clock = formatClock(value, 'mdt');
+    const ago = formatAgo(value);
+    return ago ? `${clock} · ${ago}` : clock;
+  }
+
   // retry after a timeout) replays the same server-side intent instead of
   // creating a second report/citation. A failure keeps the key for the retry.
   let reportIdempotencyKey = $state('');
@@ -833,7 +842,7 @@
               <div>
                 <b>#{incident.id} [{incident.code}] {incidentTitle(incident)}</b>
                 {#if isNpcIncident(incident)}<span class="tag npc">NPC</span>{/if}
-                <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status}{incident.disposition ? ` · ${dispositionLabel[incident.disposition] ?? incident.disposition}` : ''} · {incident.created_at}</p>
+                <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status}{incident.disposition ? ` · ${dispositionLabel[incident.disposition] ?? incident.disposition}` : ''} · {incidentTime(incident.created_at)}</p>
               </div>
               <div class="actions">
                 <button class="step" onclick={() => updateIncident(incident, 'enroute')}>前往</button>

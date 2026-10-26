@@ -191,6 +191,32 @@ RegisterNetEvent('qb-policejob:server:evidence', function(currentEvidence)
     })
 end)
 
+--- 把一条警报变成警情单，返回建单结果（合并时 merged = true）。
+--- PoliceDispatch 由 server/p0.lua 在加载时挂到全局；本文件先加载，所以只能运行时取。
+---@return table|nil incident
+local function createIncidentForAlert(creatorOrSource, message, coords, priority)
+    if type(PoliceDispatch) ~= 'table' then return nil end
+    local payload = {
+        code = '911',
+        title = message,
+        description = message,
+        priority = priority or 2,
+        x = coords.x, y = coords.y, z = coords.z,
+    }
+    local ok, result
+    if type(creatorOrSource) == 'string' then
+        ok, result = pcall(PoliceDispatch.CreateIncidentSystem, creatorOrSource, payload)
+    else
+        ok, result = pcall(PoliceDispatch.CreateIncident, creatorOrSource, payload)
+    end
+    if not ok then
+        print(('[policeAlert] 建单失败: %s'):format(tostring(result)))
+        return nil
+    end
+    if type(result) ~= 'table' then return nil end
+    return result
+end
+
 -- 平民报警：qb-drugs / qb-storerobbery / qb-houserobbery / custom-vehicles 的
 -- 热接线报警都从这里进来，所以**不能**只限警察。安全性靠三件事保证：
 -- 坐标完全由服务端从报警者 ped 上取（客户端不发坐标）、文本清洗截断、
@@ -212,17 +238,22 @@ RegisterNetEvent('police:server:policeAlert', function(text)
     local coords = GetEntityCoords(ped)
     local alertCoords = { x = coords.x, y = coords.y, z = coords.z }
     policeAlertCooldown[src] = now
+
+    -- 报警必须进警情板。以前这里只发通知 + 插旗，于是"被抢了报警"在 MDT 里
+    -- 等于没发生：不能派单、不能清场、不留记录、进不了统计。
+    local incident = createIncidentForAlert(src, message, alertCoords, 2)
+
     local sent = 0
     local players = QBCore.Functions.GetQBPlayers()
     for _, v in pairs(players) do
         if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            local alertData = { title = Lang:t('info.new_call'), coords = alertCoords, description = message }
-            TriggerClientEvent('qb-phone:client:addPoliceAlert', v.PlayerData.source, alertData)
+            -- 手机托盘的通知由建单负责（带单号），这里只负责地图插旗、提示音和屏幕上的一句话。
             TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, alertCoords, message)
             sent = sent + 1
         end
     end
-    print(('[policeAlert] src=%s | %s | 值班警察: %d 人'):format(tostring(src), message, sent))
+    print(('[policeAlert] src=%s | #%s | %s | 值班警察: %d 人'):format(
+        tostring(src), tostring(incident and incident.id or '-'), message, sent))
 end)
 
 -- 系统自动警报 (车辆盗窃等) — 仅限在勤警察调用 + 每 source 10 秒 1 次
@@ -250,21 +281,25 @@ RegisterNetEvent('police:server:autoAlert', function(coords, text)
     if not alertCoords or not message then return end
     autoAlertCooldown[cooldownKey] = now
 
+    -- 系统警报同样进警情板：车辆防盗、脚本事件都从这里来。
+    -- src == 0 没有玩家可校验，所以走系统路径并标明来源。
+    local incident
+    if isSystem then
+        incident = createIncidentForAlert('resource:system', message, alertCoords, 2)
+    else
+        incident = createIncidentForAlert(src, message, alertCoords, 2)
+    end
+
     local sent = 0
     local players = QBCore.Functions.GetQBPlayers()
     for _, v in pairs(players) do
         if v and v.PlayerData.job.type == 'leo' and v.PlayerData.job.onduty then
-            local alertData = {
-                title = Lang:t('info.new_call'),
-                coords = alertCoords,
-                description = message,
-            }
-            TriggerClientEvent('qb-phone:client:addPoliceAlert', v.PlayerData.source, alertData)
             TriggerClientEvent('police:client:policeAlert', v.PlayerData.source, alertCoords, message)
             sent = sent + 1
         end
     end
-    print(('[autoAlert] %s | 值班警察: %d 人'):format(message, sent))
+    print(('[autoAlert] #%s | %s | 值班警察: %d 人'):format(
+        tostring(incident and incident.id or '-'), message, sent))
 end)
 
 RegisterNetEvent('police:server:UpdateCurrentCops', function()

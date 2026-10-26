@@ -23,6 +23,39 @@
   let ivrContent = $state('Fetching service details...');
   let isLoadingIvr = $state(false);
 
+  // 报警：手机是玩家真正的 911 入口（聊天命令 /911 只有老玩家知道）
+  let reportReason = $state('');
+  let reportBusy = $state(false);
+  let reportMsg = $state('');
+
+  async function submit911() {
+    const reason = reportReason.trim();
+    if (reason.length < 2) { reportMsg = '说清楚一点（至少两个字）'; return; }
+    reportBusy = true;
+    reportMsg = '';
+    try {
+      const res = await fetchNui<any>('report911', { reason });
+      if (res && res.success) {
+        const id = res.incident_id;
+        reportMsg = res.merged ? `调度中心已记录（并入警情 #${id}）` : `调度中心已接单（警情 #${id}）`;
+        reportReason = '';
+      } else {
+        const map: Record<string, string> = {
+          rate_limited: '别急，刚报过一次，几秒后再试',
+          too_short: '说清楚一点（至少两个字）',
+          dispatch_offline: '调度中心暂时离线',
+          dispatch_failed: '调度中心没有接住这条报警',
+        };
+        reportMsg = map[res?.error] ?? `报警失败：${res?.error ?? 'unknown'}`;
+      }
+    } catch (err) {
+      console.error(err);
+      reportMsg = '网络错误，请重试';
+    } finally {
+      reportBusy = false;
+    }
+  }
+
   onMount(async () => {
     // Batch fetch all hotline statuses in one call
     if (isBrowser()) {
@@ -152,6 +185,25 @@
 
   <div class="app-content phone-scrollable">
     {#if !isCalling}
+      <!-- 911 报警：玩家真正能用的入口，位置由手机自动上报 -->
+      <div class="report911">
+        <div class="report-head">
+          <span class="report-icon">🚨</span>
+          <div>
+            <strong>报警</strong>
+            <p class="report-sub">一句话说清发生了什么、在哪。位置由手机自动上报。</p>
+          </div>
+        </div>
+        <textarea class="report-input" rows="2" maxlength="200" bind:value={reportReason}
+          placeholder="例：好麦坞大道有人持枪抢店"></textarea>
+        <div class="report-actions">
+          <span class="report-msg">{reportMsg}</span>
+          <button class="report-btn" onclick={submit911} disabled={reportBusy}>
+            {reportBusy ? '接通中…' : '拨 911'}
+          </button>
+        </div>
+      </div>
+
       <!-- Directory List -->
       <div class="directory-list">
         {#each hotlineDirectories as dir}
@@ -452,4 +504,14 @@
     width: 80%;
     padding: 12px 0;
   }
+
+  .report911 { margin: 0 0 12px; padding: 12px; border-radius: 14px; background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); }
+  .report-head { display: flex; gap: 8px; align-items: flex-start; }
+  .report-icon { font-size: 20px; }
+  .report-sub { margin: 2px 0 0; font-size: 11px; opacity: .75; }
+  .report-input { width: 100%; margin-top: 8px; padding: 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.25); color: inherit; font-size: 12px; resize: vertical; }
+  .report-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .report-msg { font-size: 11px; color: #fca5a5; flex: 1; }
+  .report-btn { border: 0; border-radius: 9px; padding: 8px 16px; background: #dc2626; color: #fff; font-size: 12px; }
+  .report-btn:disabled { opacity: .6; }
 </style>

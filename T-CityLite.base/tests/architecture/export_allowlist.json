@@ -173,6 +173,32 @@
       "owner": "custom-police",
       "added": "2026-10-24",
       "expires": "2027-03-31"
+    },
+    {
+      "id": "p0-create-incident-civilian",
+      "file": "custom-police/server/p0.lua",
+      "export": "CreateIncident",
+      "kind": "civilian_entry",
+      "exceptions": [
+        "auth"
+      ],
+      "reason": "平民 911 报警入口：任何玩家都必须能调用，所以没有身份门槛。安全边界在别处——坐标由服务端从报警者 ped 上取（客户端不发坐标），标题走 sanitizeAlertText 清洗，调用方按 source 限流，失败返回结构化错误码。",
+      "owner": "custom-police",
+      "added": "2026-10-26",
+      "expires": "2027-03-31"
+    },
+    {
+      "id": "p0-create-incident-from-system",
+      "file": "custom-police/server/p0.lua",
+      "export": "CreateIncidentFromSystem",
+      "kind": "system_only",
+      "exceptions": [
+        "auth"
+      ],
+      "reason": "系统来源建单（车辆防盗、脚本事件）：没有玩家 source 可校验，createdBy 是资源标识并写进 police_incidents.created_by；与玩家路径共用去重、审计与通知。",
+      "owner": "custom-police",
+      "added": "2026-10-26",
+      "expires": "2027-03-31"
     }
   ]
 }
