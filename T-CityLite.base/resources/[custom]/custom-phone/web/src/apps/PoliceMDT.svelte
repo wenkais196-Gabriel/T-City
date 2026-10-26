@@ -292,6 +292,7 @@
     action_not_found: 'MDT 未注册该动作',
     app_forbidden: '无权限使用 MDT（需在勤警察）',
     player_not_found: '角色尚未加载',
+    player_not_ready: '角色还在加载，稍等一下',
     invalid_message: '请填写警情通报内容',
     invalid_status: '状态无效',
     invalid_disposition: '清场处置无效',
