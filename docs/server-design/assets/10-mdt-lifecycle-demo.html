@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MDT 警情生命周期 demo — 自动结算 / 两个按钮</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #151b2e;
+    --panel-2: #1c2440;
+    --line: rgba(255,255,255,.10);
+    --text: #e8ecf7;
+    --muted: #9aa6c4;
+    --red: #dc2626;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --blue: #3b82f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: radial-gradient(1200px 700px at 20% -10%, #1a2342 0%, var(--bg) 55%);
+    color: var(--text); font: 14px/1.55 "Noto Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; gap: 28px; padding: 28px; align-items: flex-start; justify-content: center; flex-wrap: wrap;
+  }
+  h1 { font-size: 19px; margin: 0 0 6px; }
+  h2 { font-size: 13px; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  p { margin: 0 0 10px; }
+  .doc { width: 430px; }
+  .doc .lead { color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .kv { display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; font-size: 13px; }
+  .kv b { color: var(--muted); font-weight: 500; }
+  code { background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  .auto { color: var(--green); }
+  .manual { color: var(--amber); }
+  ol.flow { margin: 0; padding-left: 20px; color: var(--muted); }
+  ol.flow li { margin-bottom: 5px; }
+  ol.flow b { color: var(--text); font-weight: 600; }
+
+  /* ---------------- phone ---------------- */
+  .phone {
+    width: 372px; height: 760px; border-radius: 34px; background: #05070f; border: 1px solid rgba(255,255,255,.14);
+    box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 0 0 8px #0a0d18; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .ph-top { padding: 12px 16px 8px; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  .ph-head { padding: 0 16px 10px; display: flex; align-items: center; justify-content: space-between; }
+  .ph-head h3 { margin: 0; font-size: 16px; }
+  .ph-head .sub { font-size: 11px; color: var(--muted); }
+  .pill { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: rgba(34,197,94,.15); color: #86efac; border: 1px solid rgba(34,197,94,.35); }
+  .tabs { display: flex; gap: 6px; padding: 0 16px 10px; border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; background: transparent; border: 0; color: var(--muted); padding: 7px 0; border-radius: 9px; font-size: 12px; cursor: pointer; }
+  .tabs button.on { background: var(--panel-2); color: var(--text); }
+  .body { flex: 1; overflow-y: auto; padding: 12px 14px 16px; }
+  .body::-webkit-scrollbar { width: 6px; }
+  .body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 3px; }
+
+  .inc { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; margin-bottom: 10px; }
+  .inc.archived { opacity: .55; }
+  .inc .head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .inc .title { font-size: 13px; font-weight: 600; }
+  .inc .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .chip { font-size: 10px; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+  .s-open { background: rgba(59,130,246,.16); color: #93c5fd; }
+  .s-enroute { background: rgba(245,158,11,.16); color: #fcd34d; }
+  .s-on_scene { background: rgba(220,38,38,.18); color: #fca5a5; }
+  .s-closed { background: rgba(148,163,184,.16); color: #cbd5e1; }
+  .actions { display: flex; gap: 8px; margin-top: 9px; align-items: center; }
+  .btn { border: 0; border-radius: 8px; padding: 7px 14px; font-size: 12px; cursor: pointer; color: #fff; background: var(--red); }
+  .btn.ghost { background: rgba(255,255,255,.08); color: var(--text); }
+  .btn:disabled { background: rgba(255,255,255,.06); color: #6b7794; cursor: not-allowed; }
+  .why { font-size: 11px; color: #6b7794; }
+  .route { margin-top: 8px; font-size: 11.5px; color: #a7f3d0; background: rgba(34,197,94,.10);
+           border: 1px solid rgba(34,197,94,.28); border-radius: 9px; padding: 6px 9px; }
+  .route b { color: #d1fae5; }
+  .log { margin-top: 8px; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #7f8bb0; }
+  .log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log .ok { color: #86efac; }
+  .foot { padding: 8px 16px 14px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--muted); }
+  .foot .btn { padding: 6px 12px; }
+
+  /* modal */
+  .mask { position: fixed; inset: 0; background: rgba(3,6,14,.72); display: none; align-items: center; justify-content: center; }
+  .mask.on { display: flex; }
+  .sheet { width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  .sheet h4 { margin: 0 0 4px; font-size: 14px; }
+  .sheet .hint { font-size: 11.5px; color: var(--muted); margin-bottom: 12px; }
+  .disp { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+  .disp label { display: flex; gap: 6px; align-items: center; font-size: 12px; background: rgba(255,255,255,.05);
+                border: 1px solid var(--line); border-radius: 9px; padding: 7px 9px; cursor: pointer; }
+  .disp input { accent-color: var(--red); }
+  textarea { width: 100%; min-height: 62px; background: rgba(0,0,0,.25); color: var(--text); border: 1px solid var(--line);
+             border-radius: 9px; padding: 8px; font: 12px/1.5 inherit; resize: vertical; }
+  .sheet .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); opacity: 0;
+           background: #0f2a1c; border: 1px solid rgba(34,197,94,.5); color: #bbf7d0; padding: 10px 16px;
+           border-radius: 10px; font-size: 12.5px; transition: .22s; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ========================= 说明面板 ========================= -->
+<div class="doc">
+  <h1>警情生命周期 demo <span style="font-size:12px;color:var(--muted)">v2 · 自动结算 + 两个按钮</span></h1>
+  <p class="lead">派单即出发、到场即结算、处理完才清场。人只做两个决定：接不接这张单、案子结没结束。</p>
+
+  <div class="card">
+    <div class="kv">
+      <b>自动</b><span class="auto">被派单 → 出发 + 规划路线；进入 30 米 → 自动记「到场」</span>
+      <b>手动</b><span class="manual">申领（前往）· 清场（选 disposition 并归档）</span>
+      <b>已删除</b><span>「到场」按钮——引擎已经知道你在哪</span>
+      <b>判定源</b><span>服务端 IncidentActionState() 下发 allowed_actions，前端只渲染</span>
+    </div>
+  </div>
+
+  <h2>整体流程</h2>
+  <div class="card">
+    <ol class="flow">
+      <li><b>报警</b> — 手机 / 系统 / 控制台 / NPC，同码 60 米 5 分钟内合并</li>
+      <li><b>派单</b> — 调度指派或本人申领，服务端立刻推路线</li>
+      <li><b>到场</b> — 客户端每 1 秒算距离，命中后申请 nonce，服务端用 ped 坐标复算（≤35 米）</li>
+      <li><b>处置</b> — 逮捕 / 取证 / 罚单，走各自子系统</li>
+      <li><b>清场</b> — 必须已到场；选 disposition，写案卷 INC- 号</li>
+      <li><b>统计</b> — 出警时长 = 首次到场 − 建单</li>
+    </ol>
+  </div>
+
+  <h2>试一下</h2>
+  <div class="card">
+    <p style="margin:0;color:var(--muted);font-size:12.5px">
+      右侧手机里：#40 未申领 → 点「前往」看自动路线；再用「模拟抵达（演示）」触发自动到场；
+      到场后「清场」才亮，选 disposition 归档。#43 被别的警员申领，按钮置灰并给原因。
+    </p>
+  </div>
+</div>
+
+<!-- ========================= 手机 ========================= -->
+<div class="phone">
+  <div class="ph-top"><span>12:41</span><span>LSPD · 4G</span></div>
+  <div class="ph-head">
+    <div>
+      <h3>🛡️ Police MDT</h3>
+      <div class="sub">1-ADAM-12 · LSPD</div>
+    </div>
+    <span class="pill">在勤</span>
+  </div>
+  <div class="tabs">
+    <button class="on">调度</button>
+    <button>人车</button>
+    <button>文书</button>
+    <button>案件</button>
+  </div>
+
+  <div class="body" id="list"></div>
+
+  <div class="foot">
+    <span id="footHint">列表不会自动刷新 · 上次 12:41:02</span>
+    <button class="btn ghost">刷新</button>
+  </div>
+</div>
+
+<!-- ========================= 清场单 ========================= -->
+<div class="mask" id="mask">
+  <div class="sheet">
+    <h4 id="sheetTitle">清场 #40</h4>
+    <p class="hint">必须选处置结果。除误报/取消外都会生成案卷。</p>
+    <div class="disp" id="disp"></div>
+    <textarea id="summary" placeholder="处置摘要（可选，5 分钟不填用模板）：到场后嫌疑人已逃离，调取监控并在周边搜索。"></textarea>
+    <div class="row">
+      <button class="btn ghost" onclick="closeSheet()">取消</button>
+      <button class="btn" onclick="confirmClear()">清场并归档</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------------------------------------------------------------
+// 假数据：和真实服务端 GetIncidents 的字段对齐
+// ---------------------------------------------------------------
+const ME = { citizenid: 'IYY39878', callsign: '1-ADAM-12' };
+
+let incidents = [
+  {
+    id: 40, code: '10-31', title: '持械抢劫 — 便利店', priority: 1,
+    status: 'open', primary: null, units: [], created_at: 0,
+    x: 2258, y: 4833, distance: 2300, eta: '约 4 分钟',
+  },
+  {
+    id: 42, code: '10-90', title: '入室盗窃进行中', priority: 2,
+    status: 'open', primary: null, units: [], created_at: 0,
+    x: 2107, y: 4793, distance: 620, eta: '约 1 分钟',
+  },
+  {
+    id: 43, code: '211', title: '[NPC] 商店抢劫', priority: 2,
+    status: 'enroute', primary: 'WWP94619', units: ['WWP94619'], created_at: 0,
+    x: 410, y: -980, distance: 3100, eta: '约 6 分钟',
+  },
+];
+
+const DISPOSITIONS = [
+  ['arrest', '已逮捕', '必建档'],
+  ['cleared', '已处理', '默认建档'],
+  ['false_alarm', '误报', '不建档'],
+  ['cancelled', '取消', '不建档'],
+  ['stale', '超时', '不建档'],
+];
+
+const logs = [];
+let logSeq = 0;
+let pendingClear = null;
+
+// ---------------------------------------------------------------
+// 判定：这就是服务端 IncidentActionState(actor, incident) 的投影。
+// 前端只读它，不自己写规则。
+// ---------------------------------------------------------------
+function IncidentActionState(actor, inc) {
+  const mine = inc.units.includes(actor.citizenid);
+  const isPrimary = inc.primary === actor.citizenid;
+  const active = ['open', 'assigned', 'enroute', 'on_scene'].includes(inc.status);
+  // 没人在处理 → 「前往」= 申领；已有负责人而我不在单上 → 「加入」= support
+  const claim = active && !mine
+    ? { allowed: true, reason: null, label: inc.primary ? '加入' : '前往' }
+    : { allowed: false, reason: isPrimary ? '你在处理这张单' : '已在处理中' };
+  // 清场只有现场负责人能做，而且必须已经到场
+  const clear = inc.status === 'on_scene' && isPrimary
+    ? { allowed: true, reason: null }
+    : { allowed: false, reason: inc.status === 'on_scene' ? '由现场负责人清场' : '到场后才能清场' };
+  return { claim, clear };
+}
+
+// ---------------------------------------------------------------
+// 事件日志（真实服务端会打成一行 [police] inc=.. action=..）
+// ---------------------------------------------------------------
+function log(line, ok = false) {
+  logs.unshift({ line, ok, at: new Date().toISOString().slice(11, 19) });
+  if (logs.length > 6) logs.pop();
+}
+
+// ---------------------------------------------------------------
+// 交互
+// ---------------------------------------------------------------
+function claim(id) {
+  const inc = incidents.find((i) => i.id === id);
+  inc.primary = ME.citizenid;
+  inc.units = [...new Set([...inc.units, ME.citizenid])];
+  inc.status = 'enroute';           // 服务端：assign + enroute 一步完成
+  inc.routeAt = '12:41:07';
+  log(`[police] inc=#${id} claim by=${ME.citizenid} open->assigned primary=me`, true);
+  log(`[police] inc=#${id} route pushed -> src=3 (auto)`, true);
+  render();
+  // 演示：3 秒后自动"到达"（真实实现是客户端 1 秒轮询距离）
+  setTimeout(() => simulateArrive(id), 3000);
+}
+
+function simulateArrive(id) {
+  const inc = incidents.find((i) => i.id === id);
+  if (!inc || inc.status !== 'enroute') return;
+  inc.status = 'on_scene';
+  inc.arrivedAt = '12:42:43';
+  inc.responseTime = '01:36';
+  log(`[police] inc=#${id} arrive by=${ME.citizenid} dist=12.4m after=96s (auto)`, true);
+  render();
+  toast(`已自动记录到场 · 用时 ${inc.responseTime}`);
+}
+
+function openClear(id) {
+  pendingClear = id;
+  const inc = incidents.find((i) => i.id === id);
+  document.getElementById('sheetTitle').textContent =
+    `清场 #${id} · ${inc.title}`;
+  document.getElementById('disp').innerHTML = DISPOSITIONS
+    .map(([v, label, note], i) => `
+      <label><input type="radio" name="disp" value="${v}" ${i === 0 ? 'checked' : ''}>
+        <span>${label}<br><span style="font-size:10px;color:var(--muted)">${note}</span></span>
+      </label>`)
+    .join('');
+  document.getElementById('mask').classList.add('on');
+}
+
+function closeSheet() {
+  document.getElementById('mask').classList.remove('on');
+  pendingClear = null;
+}
+
+function confirmClear() {
+  const id = pendingClear;
+  const inc = incidents.find((i) => i.id === id);
+  const disp = document.querySelector('input[name="disp"]:checked').value;
+  const summary = document.getElementById('summary').value.trim();
+  inc.status = 'closed';
+  inc.disposition = disp;
+  inc.summary = summary;
+  const archives = disp !== 'false_alarm' && disp !== 'cancelled' && disp !== 'stale';
+  inc.caseNo = archives ? `INC-20261026-${id}` : null;
+  inc.units = [];
+  inc.primary = null;
+  log(`[police] inc=#${id} clear by=${ME.citizenid} disp=${disp} case=${archives ? inc.caseNo : '-'}`, true);
+  if (archives) log(`[police] case ${inc.caseNo} created (lead=${ME.citizenid})`, true);
+  closeSheet();
+  render();
+  toast(archives ? `已归档：${inc.caseNo}` : '已清场（不建档）');
+}
+
+// ---------------------------------------------------------------
+// 渲染
+// ---------------------------------------------------------------
+const LABEL = { open: '待申领', assigned: '已派单', enroute: '前往中', on_scene: '现场', closed: '已归档' };
+
+function render() {
+  const list = document.getElementById('list');
+  list.innerHTML = incidents.map((inc) => {
+    const acts = IncidentActionState(ME, inc);
+    const claimedByOther = inc.primary && inc.primary !== ME.citizenid;
+    const body = [];
+
+    if (inc.status === 'enroute') {
+      body.push(`<div class="route">🧭 <b>已自动规划路线</b> · ${(inc.distance / 1000).toFixed(1)} km · ${inc.eta}
+        <div style="color:#6ee7b7;font-size:10.5px;margin-top:2px">进入 30 米内会自动记为「到场」，不用点按钮</div></div>`);
+      body.push(`<div class="actions">
+        <button class="btn ghost" onclick="simulateArrive(${inc.id})">模拟抵达（演示）</button>
+        <span class="why">真实实现由客户端每秒检测 + 服务端裁定</span>
+      </div>`);
+    } else if (inc.status === 'on_scene') {
+      body.push(`<div class="route">📍 已到场 ${inc.arrivedAt} · 用时 <b>${inc.responseTime}</b> · 路线已自动收起</div>`);
+    } else if (inc.status === 'closed') {
+      body.push(`<div class="route" style="border-color:rgba(148,163,184,.3);background:rgba(148,163,184,.08);color:#cbd5e1">
+        ${inc.caseNo ? `🗂 已归档 <b>${inc.caseNo}</b>` : '🗂 已清场（' + inc.disposition + '，不建档）'}
+        ${inc.responseTime ? ` · 出警用时 ${inc.responseTime}` : ''}</div>`);
+    }
+
+    return `
+      <div class="inc ${inc.status === 'closed' ? 'archived' : ''}">
+        <div class="head">
+          <div>
+            <div class="title">#${inc.id} [${inc.code}] ${inc.title}</div>
+            <div class="meta">P${inc.priority}${claimedByOther ? ' · 负责 ' + inc.primary : ''}${inc.primary === ME.citizenid ? ' · 你负责' : ''}</div>
+          </div>
+          <span class="chip s-${inc.status}">${LABEL[inc.status]}</span>
+        </div>
+        <div class="actions">
+          ${acts.claim.allowed
+            ? `<button class="btn" onclick="claim(${inc.id})">${acts.claim.label}</button>`
+            : inc.status === 'closed' ? '' : `<button class="btn" disabled>前往</button><span class="why">${acts.claim.reason ?? ''}</span>`}
+          ${acts.clear.allowed
+            ? `<button class="btn" onclick="openClear(${inc.id})">清场</button>`
+            : inc.status === 'closed' ? ''
+              : `<button class="btn" disabled>清场</button><span class="why">${acts.clear.reason}</span>`}
+        </div>
+        ${body.join('')}
+      </div>`;
+  }).join('');
+
+  const logBox = logs.length
+    ? `<div class="log">${logs.map((l) => `<div class="${l.ok ? 'ok' : ''}">${l.at} ${l.line}</div>`).join('')}</div>`
+    : '';
+  list.insertAdjacentHTML('beforeend', logBox);
+}
+
+function toast(text) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.classList.add('on');
+  setTimeout(() => el.classList.remove('on'), 2400);
+}
+
+render();
+</script>
+</body>
+</html>
