@@ -74,3 +74,10 @@ def test_quest_entrypoint_wiring_detects_bypasses_and_missing_links():
     assert "src == 0" in main_lua and "print(text)" in main_lua, (
         "/listquests 缺少控制台分支：控制台调用会 TriggerClientEvent(0, ...) 并抛 native 错误"
     )
+
+    # 8. 需求清单必须真的渲染出来：玩家要看到"缺哪一条"，
+    #    只给一句 reason_text 等于没说（role=gang_member 这种原始标签更是没法看）。
+    assert "row.requirements" in quests_svelte, "Quests.svelte 没消费服务端的 requirements"
+    assert ".reqs" in quests_svelte and "req.met === false" in quests_svelte, (
+        "未满足的需求必须与满足的区分开（否则玩家看不出差在哪）"
+    )

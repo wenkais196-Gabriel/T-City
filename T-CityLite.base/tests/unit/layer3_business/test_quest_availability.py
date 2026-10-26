@@ -69,3 +69,21 @@ def test_export_arguments_are_not_shifted():
     got = run()
     assert got["tag_args"]["code"] == "table", f"第三方导出收到的 tags 不是 table：{got['tag_args']}"
     assert got["tag_args"]["msg"] == "1", f"第三方导出收到的 source 不是玩家 source：{got['tag_args']}"
+
+def test_blocked_quests_explain_what_is_missing():
+    """玩家看到的不能只是一句 "You do not meet the requirements"。
+
+    TriggerQuest 除了职业/警力/执照，还会拒"剧情线没完成"和"剧情抉择没做"——这两项以前
+    availability 层完全没检查，等于手机上说"可接"、点下去被拒。现在两项都要检查，
+    而且要把缺的那一条用人话列出来。
+    """
+    got = run()
+    assert got["arc_locked"]["code"] == "arc", f"剧情线未完成必须被拒: {got['arc_locked']}"
+    assert got["arc_text"]["ok"], f"要求里应写明是哪条剧情线: {got['arc_text']}"
+    assert got["choice_locked"]["code"] == "choice", f"剧情抉择未做必须被拒: {got['choice_locked']}"
+    assert got["choice_text"]["ok"], f"要求里应写明需要哪次选择: {got['choice_text']}"
+    assert got["choice_ok"]["ok"], "抉择满足后应放行"
+
+    assert got["req_police_unmet"]["ok"], "缺警力那条需求必须标成未满足"
+    assert got["req_police_unmet"]["code"] == "has_text", "需求必须有可读文案"
+    assert got["req_reason_is_human"]["ok"], f"拒绝原因要是人话: {got['req_reason_is_human']}"

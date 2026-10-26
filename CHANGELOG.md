@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **任务需求逐条摆出来了，不再是一句 "You do not meet the requirements"**。手机里每条任务现在带一份 `requirements`：身份/职业/资历、在勤警力（含当前人数）、执照、剧情线前置、剧情抉择、冷却，每条都标注是否满足；未满足的单独标红，被拒原因取"第一条不满足的"那句人话。
+- **补上两个以前完全没检查的准入条件**：`conditions.prerequisite_arc`（要先走完某条剧情线）和 `conditions.player_choices`（要先做出某个剧情选择）。TriggerQuest 会拒这两类，但 availability 层之前不查——于是在手机上看是"可接"、点下去被拒。涉及 9 条任务（cartel/police/civilian 的第四章分支）。
+
+
+### Added
 - **任务奖励发放现在有一行可核对的控制台审计**。`QuestRewards.GrantRewards` 成功后只往 `custom-logs`（Discord webhook）发一条审计；没配 webhook 时，玩家说"奖励没到"本地完全无从核对——日志里只有失败会打印。现在成功也打一行 `[quest-rewards] 💰 玩家 (citizenid) quest=... → $6000 (bank), item xN, rep +80`，一次任务测试结束就能对着日志确认发了什么。
 
 

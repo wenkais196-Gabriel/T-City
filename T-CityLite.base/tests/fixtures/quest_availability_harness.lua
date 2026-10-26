@@ -16,6 +16,9 @@ __state = {
     remaining = 0,
     career_missing = false,
     cert_missing = false,
+    arc_completed = true,
+    story_missing = false,
+    metadata = {},
 }
 
 exports = setmetatable({}, {
@@ -33,6 +36,9 @@ exports = setmetatable({}, {
         elseif resource == 'custom-certificates' then
             if __state.cert_missing then return nil end
             return { HasLicense = function(_, _, _) return __state.has_license end }
+        elseif resource == 'story-engine' then
+            if __state.story_missing then return nil end
+            return { IsArcCompleted = function(_, _, _) return __state.arc_completed end }
         end
         return nil
     end,
@@ -41,7 +47,9 @@ exports = setmetatable({}, {
 QBCore = {
     Functions = {
         GetDutyCount = function(_) return __state.police_on_duty end,
-        GetPlayer = function(_) return { PlayerData = { citizenid = 'CID1' } } end,
+        GetPlayer = function(_)
+            return { PlayerData = { citizenid = 'CID1', metadata = __state.metadata } }
+        end,
     },
 }
 
@@ -76,6 +84,9 @@ local function reset()
     __state.remaining = 0
     __state.career_missing = false
     __state.cert_missing = false
+    __state.arc_completed = true
+    __state.story_missing = false
+    __state.metadata = {}
 end
 
 -- 1. all conditions met
@@ -132,5 +143,48 @@ for _, row in ipairs(list) do byId[row.id] = row end
 emit('list_contains_free', byId['q_free'] ~= nil and byId['q_free'].available == true, nil)
 emit('list_contains_cop', byId['q_cop'] ~= nil and byId['q_cop'].available == false, byId['q_cop'] and byId['q_cop'].reason)
 emit('list_row_shape', byId['q_free'] ~= nil and byId['q_free'].category == 'civilian' and byId['q_free'].level == 1, nil)
+
+-- 10. 剧情线前置没完成 → 必须被拒（TriggerQuest 会拒，列表就不能说"可接"）
+reset(); __state.arc_completed = false
+local tmplArc = { id = 't4', conditions = { prerequisite_arc = 'police' } }
+local ok10, code10, _, req10 = QuestAvailability.Evaluate(1, tmplArc)
+emit('arc_locked', ok10, code10)
+local arcText = ''
+for _, req in ipairs(req10 or {}) do
+    if req.kind == 'arc' then arcText = req.text end
+end
+emit('arc_text', arcText:find('蓝墙内外', 1, true) ~= nil, arcText)
+
+-- 11. 剧情抉择未做出 → 必须被拒
+reset(); __state.metadata = {}
+local tmplChoice = { id = 't5', conditions = { player_choices = { { flag = 'civ_defiant' }, { flag = 'civ_cautious' } } } }
+local ok11, code11, _, req11 = QuestAvailability.Evaluate(1, tmplChoice)
+emit('choice_locked', ok11, code11)
+local choiceText = ''
+for _, req in ipairs(req11 or {}) do
+    if req.kind == 'choice' then choiceText = req.text end
+end
+emit('choice_text', choiceText:find('拒绝交保护费', 1, true) ~= nil, choiceText)
+
+-- 12. 抉择满足后放行
+reset(); __state.metadata = { story_flag_civ_defiant = true, story_flag_civ_cautious = true }
+local ok12 = QuestAvailability.Check(1, tmplChoice)
+emit('choice_ok', ok12 == true, nil)
+
+-- 13. 需求清单：可接的任务也要列出"需要什么"，且警察任务缺警力时那条必须标成未满足
+reset(); __state.police_on_duty = 0
+local listAll = QuestAvailability.List(1)
+local copRow
+for _, row in ipairs(listAll) do if row.id == 'q_cop' then copRow = row end end
+local copReq = copRow and copRow.requirements or {}
+local policeUnmet, hasText = false, false
+for _, req in ipairs(copReq) do
+    if req.kind == 'police' then
+        policeUnmet = (req.met == false)
+        hasText = type(req.text) == 'string' and #req.text > 0
+    end
+end
+emit('req_police_unmet', policeUnmet, hasText and 'has_text' or 'no_text')
+emit('req_reason_is_human', copRow ~= nil and (copRow.reason_text or ''):find('在勤警力', 1, true) ~= nil, copRow and copRow.reason_text)
 
 print(table.concat(__cases, "\n"))
