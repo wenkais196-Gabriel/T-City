@@ -149,3 +149,15 @@ licence 校验发生在**绑定端口之前**，所以一次"起来就失败"的
 - 起之前先确认端口没人占（`ss -tln | grep 30120`）和 MySQL 在跑，别把配额花在能提前发现的问题上。
 - `start.sh` 的 `flock` 已经挡住了"两个实例同时起"，但挡不住"通过 systemd 反复起"——那要靠人（或等 StartLimit 触发）。
 - 判断是否真是限流：`tools/ops/healthcheck.py` 会直接点名 429 并给出等待建议，不用去翻日志里那一长串 HTML。
+
+
+### 新增文件后 `restart` 不够，必须先 `refresh`
+
+给 fxmanifest 加一个**新文件**（新 server 脚本、新 lua）之后，直接
+`restart <resource>` 用的是旧的清单缓存：文件不加载、启动标记不打印，而
+`restart` 本身看起来"成功"，`Started resource` 也照常出现。判断依据就是那条
+启动自证 print 缺失。
+
+正确顺序：`refresh`（重新扫描清单）→ `restart <resource>` → 确认自证行出现。
+实测：custom-phone 加了 server/emergency.lua 之后，restart 一遍没有
+`[phone][911] ✅ 报警入口已就绪`，加 refresh 再 restart 就有。
