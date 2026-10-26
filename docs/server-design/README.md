@@ -22,6 +22,7 @@
 | 07 | [架构集成](07-architecture-integration.md) | 以上所有系统如何嵌入 T-City Phase 0-3 架构？ | 工程层 |
 | 08 | [Agent 中枢游戏导演](08-agent-director.md) | 如何让 AI/Agent 以可审计、可预算、可回滚的方式介入叙事？ | 工程层（设计稿） |
 | 09 | [任务的三种入口](09-quest-pre-start-and-kinds.md) | 日常是货架、剧情是剧本、奇遇是天气：预开始四阶段与奇遇样板 | 系统层（待排期） |
+| 10 | [警情全生命周期](10-police-incident-lifecycle.md) | 三个按钮、一个判定源、一条归档线：警情从报警到案卷 | 系统层（待排期） |
 
 ---
 
