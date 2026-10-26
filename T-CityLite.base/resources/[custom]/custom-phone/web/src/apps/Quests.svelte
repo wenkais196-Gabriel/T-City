@@ -35,6 +35,9 @@
   let busyId: string | null = $state(null);
 
   const canAccept = (row: Row) => row.available !== false;
+  // 不可接的任务不再摆出来：玩家要的是"我现在能做什么"，不是一张吃不到菜单。
+  // 需求仍然逐条显示在可接的任务上（绿勾 = 这条线要身份/执照/警力，你满足了）。
+  const acceptable = $derived(rows.filter(canAccept));
 
   function reasonText(row: Row): string {
     if (row.available !== false) return '';
@@ -94,7 +97,7 @@
     <span class="quests-icon">📜</span>
     <div>
       <h2>任务</h2>
-      <p class="quests-sub">{rows.filter(canAccept).length} 条可接 · {active.length} 条进行中</p>
+      <p class="quests-sub">{acceptable.length} 条可接 · {active.length} 条进行中</p>
     </div>
     <button class="refresh-btn" onclick={refresh} disabled={loading}>刷新</button>
   </header>
@@ -114,11 +117,11 @@
   {#if loading}
     <p class="empty">加载中…</p>
   {:else if tab === 'available'}
-    {#if rows.length === 0}
-      <p class="empty">暂时没有任务线</p>
+    {#if acceptable.length === 0}
+      <p class="empty">现在没有能接的任务 —— 换个身份、换个时间段再来看看</p>
     {:else}
       <ul class="list">
-        {#each rows as row (row.id)}
+        {#each acceptable as row (row.id)}
           <li class:blocked={!canAccept(row)}>
             <div class="row-head">
               <strong>{row.title ?? row.id}</strong>

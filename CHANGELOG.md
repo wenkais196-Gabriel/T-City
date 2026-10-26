@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **手机任务列表只摆"现在能接的"**。需求清单摊开之后反而变成噪音：一张吃不到的菜单对玩家没价值。不可接的任务不再出现在列表里（数据仍在服务端，`/listquests` 与控制台诊断照旧能看到全部）。
+- **需求清单只显示真正有约束力的项**。`min_police = 0`、`cooldown_hours = 0` 这类"没门槛"的声明不再渲染成"在勤警力 ≥ 0（当前 0）"——之前 18 条剧情任务就是靠这种废话凑出一行。
+
+### Fixed
+- **已通关的剧情线仍显示"可接"**。`TriggerQuest` 的 4c 门控一直拦着"已完成的剧情线"（每轮只能玩一遍），但列表层不查，于是 18 条带 `story_arc` 的任务通关后照样出现在可接列表里、点下去才被拒。现在通关即从列表消失，需求文案写明"每轮只能玩一遍"；arc 被 DLC 开关关掉时也会如实显示"暂未开放"。
+
+
 ### Added
 - **任务需求逐条摆出来了，不再是一句 "You do not meet the requirements"**。手机里每条任务现在带一份 `requirements`：身份/职业/资历、在勤警力（含当前人数）、执照、剧情线前置、剧情抉择、冷却，每条都标注是否满足；未满足的单独标红，被拒原因取"第一条不满足的"那句人话。
 - **补上两个以前完全没检查的准入条件**：`conditions.prerequisite_arc`（要先走完某条剧情线）和 `conditions.player_choices`（要先做出某个剧情选择）。TriggerQuest 会拒这两类，但 availability 层之前不查——于是在手机上看是"可接"、点下去被拒。涉及 9 条任务（cartel/police/civilian 的第四章分支）。

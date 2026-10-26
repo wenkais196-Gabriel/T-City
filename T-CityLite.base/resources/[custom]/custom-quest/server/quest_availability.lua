@@ -25,6 +25,8 @@ local REASONS = {
     cooldown = 'Quest is on cooldown',
     arc = 'You must finish an earlier story arc first',
     choice = 'You must make a story choice first',
+    arc_done = 'You already played this story arc',
+    arc_disabled = 'This story arc is not available',
 }
 
 -- 手机是中文界面：需求也要说人话，别把 role=gang_member 原样丢给玩家
@@ -146,8 +148,8 @@ function QuestAvailability.Evaluate(source, template)
 
     local conditions = type(template.conditions) == 'table' and template.conditions or {}
 
-    -- 2. 在勤警力
-    if conditions.min_police then
+    -- 2. 在勤警力（min_police = 0 不是约束，别拿"≥ 0（当前 0）"这种废话占玩家的眼睛）
+    if conditions.min_police and tonumber(conditions.min_police) > 0 then
         local onDuty, known = 0, false
         if type(QBCore) == 'table' and QBCore.Functions and QBCore.Functions.GetDutyCount then
             onDuty = tonumber(QBCore.Functions.GetDutyCount('police')) or 0
@@ -181,6 +183,24 @@ function QuestAvailability.Evaluate(source, template)
             text = ('先完成剧情线「%s」'):format(ARC_LABELS[arc] or tostring(arc)),
             met = completed ~= false,
         })
+    end
+
+    -- 4b. 剧情线一次性门控：TriggerQuest 的 4c 会拒"已完成的剧情线"，
+    --     列表这边以前不查 —— 于是 18 条剧情任务在通关后仍然显示"可接"，点下去才被拒。
+    if conditions.story_arc then
+        local arc = conditions.story_arc
+        local arcName = ARC_LABELS[arc] or tostring(arc)
+        local enabled = callExport('story-engine', 'IsArcEnabled', arc)
+        if enabled == false then
+            add({ kind = 'arc_disabled', text = ('剧情线「%s」暂未开放'):format(arcName), met = false })
+        else
+            local completed = callExport('story-engine', 'IsArcCompleted', source, arc)
+            add({
+                kind = 'arc_done',
+                text = ('剧情线「%s」未通关（每轮只能玩一遍）'):format(arcName),
+                met = completed ~= true,
+            })
+        end
     end
 
     -- 5. 剧情抉择前置
@@ -218,7 +238,7 @@ function QuestAvailability.Evaluate(source, template)
     end
 
     -- 第二遍：按需求顺序给出"最早失败的那一项"作为 reason
-    for _, kind in ipairs({ 'tags', 'police', 'license', 'arc', 'choice', 'active', 'cooldown' }) do
+    for _, kind in ipairs({ 'tags', 'police', 'license', 'arc', 'arc_disabled', 'arc_done', 'choice', 'active', 'cooldown' }) do
         for _, req in ipairs(requirements) do
             if req.kind == kind and not req.met then
                 return false, kind, kind == 'license' and conditions.min_license or nil, requirements

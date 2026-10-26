@@ -43,28 +43,30 @@ const QUESTS_APP = {
 
 export const questScenarios = [
   {
-    name: '任务列表：可接的能点，不可接的显示原因而不是消失',
+    name: '任务列表：只摆能接的，不可接的不出现',
     async run({ page, world }) {
       world.apps = [...world.apps, QUESTS_APP];
       world.quests = [QUEST_FREE, QUEST_BLOCKED];
       world.questActive = [];
 
       await openQuests(page);
-      await waitFor(async () => (await page.locator('.list > li').count()) === 2, 5000, '应渲染两条任务');
+      await waitFor(async () => (await page.locator('.list > li').count()) === 1, 5000, '只该渲染可接的那一条');
 
-      checkEqual('不可接的任务也要显示出来（只是标记 blocked）', await page.locator('.list > li.blocked').count(), 1);
-      checkEqual('只给可接的任务一个接取按钮', await page.locator('.list > li button.primary').count(), 1);
+      checkEqual('不可接的任务不出现', await page.locator('.list > li.blocked').count(), 0);
+      checkEqual('可接的任务有接取按钮', await page.locator('.list > li button.primary').count(), 1);
 
       const text = (await page.locator('.quests-app').textContent()) ?? '';
-      checkIncludes('不可接原因要摆给玩家看', text, '在勤警力 ≥ 2（当前 0）');
       checkIncludes('可接任务的标题要渲染', text, QUEST_FREE.title);
 
-      // 需求要逐条摆出来，未满足的那条必须单独标红（不然玩家还是不知道缺什么）
-      const unmet = page.locator('.reqs .req.unmet');
-      await waitFor(async () => (await unmet.count()) === 2, 5000, '不可接任务的两条需求都该标红');
+      // 不可接的任务整体不出现（玩家只该看到"我现在能做什么"）
+      const blockedRows = await page.locator('.list > li', { hasText: QUEST_BLOCKED.title }).count();
+      if (blockedRows !== 0) throw new Error('不可接的任务不该出现在列表里');
+      if (text.includes('在勤警力 ≥ 2（当前 0）')) throw new Error('不可接任务的拒绝原因不该出现');
+
+      // 可接任务的需求仍要逐条摊开（绿勾 = 这条线要什么，你满足了吗）
       const met = page.locator('.reqs .req:not(.unmet)');
       await waitFor(async () => (await met.count()) === 2, 5000, '可接任务的两条需求应显示为满足');
-      checkIncludes('需求文案要能读', text, '职业：警察');
+      checkIncludes('需求文案要能读', text, '身份：平民');
     },
   },
   {

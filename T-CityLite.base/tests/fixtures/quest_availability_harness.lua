@@ -16,7 +16,9 @@ __state = {
     remaining = 0,
     career_missing = false,
     cert_missing = false,
-    arc_completed = true,
+    arc_completed = true,      -- prerequisite_arc 用的"前置线是否完成"
+    arc_done = false,          -- story_arc：这条线自己是否已通关
+    arc_enabled = true,
     story_missing = false,
     metadata = {},
 }
@@ -38,7 +40,14 @@ exports = setmetatable({}, {
             return { HasLicense = function(_, _, _) return __state.has_license end }
         elseif resource == 'story-engine' then
             if __state.story_missing then return nil end
-            return { IsArcCompleted = function(_, _, _) return __state.arc_completed end }
+            return {
+                -- IsArcCompleted 有两个用途：查"前置线"和查"这条线自己通关没有"
+                IsArcCompleted = function(_, _, id)
+                    if id == 'police' then return __state.arc_completed or __state.arc_done end
+                    return __state.arc_done
+                end,
+                IsArcEnabled = function(_, _) return __state.arc_enabled end,
+            }
         end
         return nil
     end,
@@ -85,6 +94,8 @@ local function reset()
     __state.career_missing = false
     __state.cert_missing = false
     __state.arc_completed = true
+    __state.arc_done = false
+    __state.arc_enabled = true
     __state.story_missing = false
     __state.metadata = {}
 end
@@ -186,5 +197,21 @@ for _, req in ipairs(copReq) do
 end
 emit('req_police_unmet', policeUnmet, hasText and 'has_text' or 'no_text')
 emit('req_reason_is_human', copRow ~= nil and (copRow.reason_text or ''):find('在勤警力', 1, true) ~= nil, copRow and copRow.reason_text)
+
+-- 14. 剧情线已通关 → 必须被拒（"每轮只能玩一遍"，TriggerQuest 的 4c 一直有这道门）
+reset(); __state.arc_done = true
+local tmplArcDone = { id = 't6', conditions = { story_arc = 'police' } }
+local ok14, code14, _, req14 = QuestAvailability.Evaluate(1, tmplArcDone)
+emit('arc_already_done', ok14, code14)
+local doneText = ''
+for _, req in ipairs(req14 or {}) do
+    if req.kind == 'arc_done' then doneText = req.text end
+end
+emit('arc_done_text', doneText:find('每轮只能玩一遍', 1, true) ~= nil, doneText)
+
+-- 15. min_police = 0 不是约束：不许出现在需求清单里（否则就是"≥ 0（当前 0）"这种废话）
+reset()
+local _, _, _, req15 = QuestAvailability.Evaluate(1, { id = 't7', conditions = { min_police = 0, cooldown_hours = 0 } })
+emit('zero_police_is_noise', #(req15 or {}) == 0, tostring(#(req15 or {})))
 
 print(table.concat(__cases, "\n"))
