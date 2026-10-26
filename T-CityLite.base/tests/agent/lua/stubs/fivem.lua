@@ -76,6 +76,10 @@ return function(env)
         if resource == 'qb-core' then
             return {
                 GetCoreObject = function()
+                    -- A real server hands out an independent object per call
+                    -- (see cases/live_roster_refresh.lua); qb_provider lets a
+                    -- case reproduce that instead of a single shared table.
+                    if env.qb_provider then return env.qb_provider() end
                     return env.qb
                 end,
             }
