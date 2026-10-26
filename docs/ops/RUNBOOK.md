@@ -132,6 +132,35 @@ python3 tools/ops/persistence_check.py --compare /tmp/persist-before.json
 
 ---
 
+## 4b. 让运维脚本（或 AI 助手）自己管守护进程
+
+无人值守的修复要求"能停、能起、能看状态"，但**不应该给密码**。用一条最小权限的 sudoers
+drop-in，把权限限定在 `tcity` 这一个单元和仓库里那个安装脚本上：
+
+```bash
+sudo tee /etc/sudoers.d/tcity-ops-systemd >/dev/null <<'EOF'
+# T-City 运维：只允许管 tcity 这一个单元，外加仓库里的安装脚本
+swk ALL=(root) NOPASSWD: /usr/bin/systemctl start tcity, /usr/bin/systemctl stop tcity, /usr/bin/systemctl restart tcity, /usr/bin/systemctl reset-failed tcity, /usr/bin/systemctl enable tcity, /usr/bin/systemctl disable tcity, /usr/bin/systemctl is-active tcity, /usr/bin/systemctl is-enabled tcity, /usr/bin/systemctl daemon-reload
+swk ALL=(root) NOPASSWD: /usr/bin/python3 @REPO@/tools/ops/install_service.py
+EOF
+sudo chmod 0440 /etc/sudoers.d/tcity-ops-systemd
+sudo visudo -c
+```
+
+注意三点：
+
+1. **不要用 `systemctl *` 通配**——那等于把 root 交出去（`systemctl` 可以拉起任意单元）。
+2. sudoers 按命令行**逐字**匹配：命令里写成 `tcity.service` 就不匹配 `tcity`，统一用 `tcity`。
+3. `journalctl -u tcity` 不需要 root（`swk` 在 `adm` 组），日志文件 `/var/log/tcity/console.log` 是
+   root 所有但 `644`，读取也不需要 sudo。
+
+验证（应列出上述规则，而不是要求密码）：
+
+```bash
+sudo -n -l | grep -A2 tcity
+sudo -n systemctl is-active tcity
+```
+
 ## 5. 排障速查
 
 | 症状 | 先查什么 |
