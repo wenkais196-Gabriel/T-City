@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MDT 点「前往」现在会画导航路线**：以前只把状态改成「前往中」，坐标得自己从板子上抄。现在按下「前往」就把现场画成一条带距离的 GPS 路线（画法与任务引导一致：route blip + 距离 + 路点），点「到场」时自动收掉，换目标时先清上一条，资源停止时也清。没有坐标的老单据（NPC 之前的单）只改状态、不领路。
 - **警情全生命周期设计稿**（docs/server-design/10）：复核确认「前往/到场/清场只有下一个能点、只有被派遣者能点」三条约束一条都没落地——open 状态点「前往」必然 invalid_transition、清场不建档（police_cases 一直没被写过）、disposition 前端硬编码、多单位状态被 markIncidentUnits 一把刷。设计给出：allowed_actions 由服务端下发（判定与执行同源）、primary/support 单位模型与进度派生、清场 = 清场命令 + 归档（disposition 四选一 + case_id），并排入 P5-1..P5-4。
 
+- **警情生命周期设计改成「自动结算 + 两个按钮」**（docs/server-design/10 v2）：到场不该由人点——坐标就在引擎里，让玩家汇报"我到了"既多一步又能造假。现在「前往」= 单人申领（assign + enroute + 自动领路一步到位），「到场」删除、改为客户端检测 30 米 + nonce + 服务端用 ped 坐标复算后自动结算，「清场」只在到场后出现并归档成案卷。文档补了状态机 / 时序 / ER 三张 UML 与端到端流程表，另附单文件前端 demo（docs/server-design/assets/10-mdt-lifecycle-demo.html），申领→自动路线→自动到场→清场归档全流程可点。
+
 ### Added
 - `custom-police` 新增导出 `CreateIncidentFromSystem(createdBy, data)`：给没有玩家 source 的系统来源建单，与玩家路径共用去重、审计与通知。`CreateIncident` 在导出契约里登记为 civilian_entry（平民 911 必须人人可调）。
 
