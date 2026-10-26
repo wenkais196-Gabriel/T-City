@@ -23,11 +23,11 @@ import {
 const CLEAR_TRANSITION_TEXT = '清场失败：警情状态已变化，请刷新后重试';
 
 function unitCallsigns(page) {
-  return page.locator('.mdt section.card .row b').allTextContents();
+  return page.locator('.mdt [data-pane="units"] section.card .row b').allTextContents();
 }
 
 async function waitUnitCallsigns(page, timeoutMs) {
-  const locator = page.locator('.mdt section.card .row b');
+  const locator = page.locator('.mdt [data-pane="units"] section.card .row b');
   await waitFor(async () => (await locator.count()) > 0, timeoutMs, '刷新后应出现在勤单位行');
   return locator.allTextContents();
 }

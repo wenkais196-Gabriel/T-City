@@ -19,9 +19,7 @@
   data-surface={surface}
   style:background={preset.mask}
   onclick={close}
-  onkeydown={(e) => e.key === 'Escape' && close()}
-  role="button"
-  tabindex="0"
+  role="presentation"
 >
   <div
     class="phone-wrapper device-shell"

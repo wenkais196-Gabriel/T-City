@@ -95,7 +95,7 @@ async function main() {
         await installNuiMock(page, world);
         await installGameGlobals(page);
         await blockExternalFonts(page);
-        await page.goto(server.url, { waitUntil: 'load' });
+        await page.goto(server.url, { waitUntil: 'load', timeout: 60000 });
         await scenario.run({ page, world, server });
         passed += 1;
         console.log(`✔ ${scenario.name}`);

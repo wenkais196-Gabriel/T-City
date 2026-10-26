@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { fetchNui } from '../utils/nui';
 import { SURFACE_PHONE, type Surface } from '../core/surface';
 
@@ -191,6 +191,8 @@ export async function loadCallHistory() {
 }
 
 export async function closePhone() {
+  // 幂等：ESC/遮罩/双监听同时触发时，只让第一次真的发请求
+  if (!get(isPhoneOpen)) return;
   try {
     await fetchNui('closePhone');
     isPhoneOpen.set(false);

@@ -2,18 +2,16 @@
 //
 // 这里证明的是"外壳按形态换"，不证明 Lua 的判定（那在 test_phone_surface.py 的 lua harness）。
 
-import { checkEqual, checkTruthy, createWorld, openPhone } from './harness.mjs';
+import { checkEqual, checkListEquals, checkTruthy, openMdt, openPhone, openQuests, waitFor } from './harness.mjs';
 
 const CLOSED = () => !document.querySelector('.phone-wrapper');
 
 async function box(page) {
   // 入场动画（手机 0.55s 下滑 + 8° 旋转）期间 boundingBox 是变换后的包围盒，
   // 量出来会比 375 宽 —— 必须等动画结束，否则断言测的是动画而不是布局。
-  await page.waitForFunction(() => {
-    const el = document.querySelector('.phone-wrapper');
-    if (!el) return false;
-    return el.getAnimations().every((a) => a.playState === 'finished');
-  }, null, { timeout: 3000 });
+  // 入场动画（手机 0.55s 下滑 + 8° 旋转）期间 boundingBox 是变换后的包围盒。
+  // 不用 getAnimations（CEF 里不保证可用），直接等一个大于动画时长的固定时间。
+  await page.waitForTimeout(700);
   const el = page.locator('.phone-wrapper');
   const b = await el.boundingBox();
   const surface = await el.getAttribute('data-surface');
@@ -60,6 +58,107 @@ export const surfaceScenarios = [
     },
   },
   {
+    name: '平板：警用终端并出三栏；手机同一页只有一栏',
+    async run({ page, world }) {
+      world.units = [
+        { citizenid: 'COP001', name: 'Alice Adams', callsign: '1-Adam-12', dept: 'LSPD', status: 'available', incident_id: null },
+      ];
+      world.incidents = [
+        {
+          id: 40, code: '10-31', title: '持械抢劫 — 便利店', description: '两人持械进入',
+          priority: 1, status: 'open', created_at: new Date().toISOString(),
+          units: [], primary: null,
+          actions: { claim: { allowed: true, label: 'claim' }, clear: { allowed: false, reason: '你还没申领这张单' } },
+        },
+      ];
+
+      await openMdt(page, 'tablet');
+      const surfaceEl = page.locator('.mdt .app-surface');
+      checkEqual('平板用 grid 排布', await surfaceEl.getAttribute('data-mode'), 'grid');
+
+      const visiblePanes = await page.locator('.mdt [data-pane]:visible').evaluateAll(
+        (nodes) => nodes.map((n) => n.getAttribute('data-pane')),
+      );
+      checkEqual('三栏都在同一个屏幕上', visiblePanes.sort().join(','), 'detail,incidents,units');
+
+      const columns = await surfaceEl.evaluate((node) => getComputedStyle(node).gridTemplateColumns);
+      checkEqual('三列轨道', columns.split(' ').length, 3);
+
+      // 右栏自动选中第一张单（打开详情无副作用，不像 Messages 会清未读）
+      await waitFor(
+        async () => (await page.locator('[data-pane="detail"] h3').count()) > 0,
+        3000,
+        '详情栏应显示选中的警情',
+      );
+      checkTruthy('详情栏显示的是那张单',
+        (await page.locator('[data-pane="detail"] h3').first().textContent()).includes('#40'));
+
+      // 同一页在手机上只能看到一栏
+      await openMdt(page, 'phone');
+      const phoneSurface = page.locator('.mdt .app-surface');
+      checkEqual('手机用 stack 排布', await phoneSurface.getAttribute('data-mode'), 'stack');
+      const phonePanes = await page.locator('.mdt [data-pane]:visible').count();
+      checkEqual('手机一次只显示一个 pane', phonePanes, 1);
+    },
+  },
+
+  {
+    name: '同一交互在两种形态下发出同一组 app 请求（parity）',
+    async run({ page, world }) {
+      const keys = () => [...new Set(world.calls
+        .filter((call) => call.callback === 'appQuery' || call.callback === 'appAction')
+        .map((call) => `${call.callback}:${call.payload?.app_id}:${call.payload?.query ?? call.payload?.action}`))]
+        .sort();
+
+      world.incidents = [{
+        id: 41, code: '10-90', title: '入室盗窃', description: '后院有人翻墙',
+        priority: 2, status: 'open', created_at: new Date().toISOString(),
+        units: [], primary: null,
+        actions: { claim: { allowed: true, label: 'claim' }, clear: { allowed: false, reason: '你还没申领这张单' } },
+      }];
+
+      await openMdt(page, 'phone');
+      await page.locator('.mdt button.refresh:visible').first().click();
+      await waitFor(async () => (await page.locator('.mdt .incident').count()) > 0, 5000, '手机端应渲染警情');
+      const phoneKeys = keys();
+
+      // 换形态 = 同一台设备换个窗口，不是换一个 app
+      await openMdt(page, 'tablet');
+      await page.locator('.mdt button.refresh:visible').first().click();
+      await waitFor(async () => (await page.locator('.mdt .incident').count()) > 0, 5000, '平板端应渲染警情');
+      const tabletKeys = keys();
+
+      checkListEquals('两种形态的 app 请求集合必须相等（平板不许偷偷多拉数据）', tabletKeys, phoneKeys);
+    },
+  },
+  {
+    name: '任务：手机内联，平板并出详情栏',
+    async run({ page, world }) {
+      world.apps = [...world.apps, { id: 'quests', label: '任务', icon: '📜', queries: ['list', 'active'], actions: ['accept', 'abandon'] }];
+      world.quests = [{
+        id: 'euro_trucking_steel', title: '工业钢材配送', description: '使用重载货车配送钢板。',
+        category: 'logistics', level: 1, available: true,
+        requirements: [{ kind: 'tags', text: '身份：平民', met: true }],
+      }];
+      world.questActive = [];
+
+      await openQuests(page, 'phone');
+      checkEqual('手机：只显示一栏', await page.locator('.quests-app [data-pane]:visible').count(), 1);
+      checkTruthy('手机：描述内联在列表里',
+        (await page.locator('.list > li .desc').count()) > 0);
+
+      await openQuests(page, 'tablet');
+      const panes = await page.locator('.quests-app [data-pane]:visible').evaluateAll(
+        (nodes) => nodes.map((node) => node.getAttribute('data-pane')).sort(),
+      );
+      checkEqual('平板：列表 + 详情并排', panes.join(','), 'list,quest');
+      checkTruthy('平板：详情栏显示同一条任务',
+        (await page.locator('[data-pane="quest"] .quest-detail').count()) === 1);
+      checkEqual('平板：列表里不再重复描述（收窄成标题+状态）',
+        await page.locator('.list > li .desc:visible').count(), 0);
+    },
+  },
+  {
     name: '两种形态都能关，且关闭只发一次 closePhone',
     async run({ page, world }) {
       await openPhone(page, 'tablet');
@@ -68,8 +167,9 @@ export const surfaceScenarios = [
       const closes = world.calls.filter((c) => c.callback === 'closePhone').length;
       checkEqual('closePhone 调用次数', closes, 1);
 
-      // 手机用 ESC 关
+      // 手机用 ESC 关（先把焦点放到遮罩上：headless 里按键发给 document.activeElement）
       await openPhone(page, 'phone');
+      await page.locator('.phone-backdrop-mask').focus();
       await page.keyboard.press('Escape');
       await page.waitForFunction(() => !document.querySelector('.phone-wrapper'), null, { timeout: 5000 });
       checkEqual('手机 ESC 关闭后仍只多一次 closePhone',

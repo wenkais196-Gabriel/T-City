@@ -5,6 +5,9 @@
   // 让玩家知道内容存在、以及差在哪，而不是面对一片空白。
   import { onMount } from 'svelte';
   import { queryApp, appAction } from '../stores/apps';
+  import AppSurface from '../components/AppSurface.svelte';
+  import Pane from '../components/Pane.svelte';
+  import { PANE_CONTRACT as QUESTS_PANES } from './contracts/quests.panes';
 
   type Row = {
     id: string;
@@ -27,6 +30,10 @@
   };
 
   let tab: 'available' | 'active' = $state('available');
+  // 'stack'=单列（手机，行为与改造前一致）；'grid'=两栏（平板）
+  let mode = $state<'stack' | 'grid'>('stack');
+  // 平板上右栏看哪一条。手机不存在右栏，所以不影响手机的那一套。
+  let selectedId = $state<string | null>(null);
   let rows: Row[] = $state([]);
   let active: ActiveRow[] = $state([]);
   let loading = $state(false);
@@ -89,6 +96,12 @@
     busyId = null;
   }
 
+  // 选中行：默认第一条（只看描述，没有副作用——不像接取会真的写库）
+  const selectedRow = $derived(
+    [...acceptable, ...active].find((item) => (item.id ?? item.quest_id) === selectedId)
+      ?? acceptable[0] ?? null,
+  );
+
   onMount(refresh);
 </script>
 
@@ -114,61 +127,109 @@
     <p class="feedback">{feedback}</p>
   {/if}
 
-  {#if loading}
-    <p class="empty">加载中…</p>
-  {:else if tab === 'available'}
-    {#if acceptable.length === 0}
-      <p class="empty">现在没有能接的任务 —— 换个身份、换个时间段再来看看</p>
-    {:else}
-      <ul class="list">
-        {#each acceptable as row (row.id)}
-          <li class:blocked={!canAccept(row)}>
-            <div class="row-head">
-              <strong>{row.title ?? row.id}</strong>
-              <span class="chip">{row.category ?? 'misc'} · L{row.level ?? 1}</span>
-            </div>
-            {#if row.description}<p class="desc">{row.description}</p>{/if}
-            {#if row.requirements && row.requirements.length > 0}
-              <ul class="reqs">
-                {#each row.requirements as req}
-                  <li class="req" class:unmet={req.met === false}>
-                    {req.met === false ? '✗' : '✓'} {req.text ?? req.kind}
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-            {#if canAccept(row)}
-              <button class="primary" onclick={() => accept(row.id)} disabled={busyId === row.id}>
-                {busyId === row.id ? '接取中…' : '接取'}
-              </button>
-            {:else}
-              <p class="reason">{reasonText(row)}</p>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  {:else if active.length === 0}
-    <p class="empty">没有进行中的任务</p>
-  {:else}
-    <ul class="list">
-      {#each active as row (row.quest_id)}
-        <li>
+  <AppSurface spec={QUESTS_PANES} activePane="list" bind:mode>
+    <Pane id="list">
+        {#if loading}
+          <p class="empty">加载中…</p>
+        {:else if tab === 'available'}
+          {#if acceptable.length === 0}
+            <p class="empty">现在没有能接的任务 —— 换个身份、换个时间段再来看看</p>
+          {:else}
+            <ul class="list">
+              {#each acceptable as row (row.id)}
+                <li class:blocked={!canAccept(row)} class:sel={selectedRow?.id === row.id}
+            class:compact={mode === 'grid'}
+            onclick={() => (selectedId = row.id)}>
+                  <div class="row-head">
+                    <strong>{row.title ?? row.id}</strong>
+                    <span class="chip">{row.category ?? 'misc'} · L{row.level ?? 1}</span>
+                  </div>
+                  {#if row.description}<p class="desc">{row.description}</p>{/if}
+                  {#if row.requirements && row.requirements.length > 0}
+                    <ul class="reqs">
+                      {#each row.requirements as req}
+                        <li class="req" class:unmet={req.met === false}>
+                          {req.met === false ? '✗' : '✓'} {req.text ?? req.kind}
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                  {#if canAccept(row)}
+                    <button class="primary" onclick={() => accept(row.id)} disabled={busyId === row.id}>
+                      {busyId === row.id ? '接取中…' : '接取'}
+                    </button>
+                  {:else}
+                    <p class="reason">{reasonText(row)}</p>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        {:else if active.length === 0}
+          <p class="empty">没有进行中的任务</p>
+        {:else}
+          <ul class="list">
+            {#each active as row (row.quest_id)}
+              <li>
+                <div class="row-head">
+                  <strong>{row.title ?? row.quest_id}</strong>
+                  <span class="chip">{row.status ?? 'active'}</span>
+                </div>
+                {#if row.current_step}<p class="desc">当前步骤：{row.current_step}</p>{/if}
+                <button class="ghost" onclick={() => abandon(row.quest_id)} disabled={busyId === row.quest_id}>
+                  {busyId === row.quest_id ? '处理中…' : '放弃'}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+    </Pane>
+
+    <Pane id="quest">
+      <!-- 只在平板（grid）渲染：手机上这一栏不存在，DOM 里也不该留一份重复的需求列表 -->
+      {#if mode === 'grid' && selectedRow}
+        <div class="quest-detail">
           <div class="row-head">
-            <strong>{row.title ?? row.quest_id}</strong>
-            <span class="chip">{row.status ?? 'active'}</span>
+            <strong>{selectedRow.title ?? selectedRow.id}</strong>
+            <span class="chip">{selectedRow.category ?? 'misc'} · L{selectedRow.level ?? 1}</span>
           </div>
-          {#if row.current_step}<p class="desc">当前步骤：{row.current_step}</p>{/if}
-          <button class="ghost" onclick={() => abandon(row.quest_id)} disabled={busyId === row.quest_id}>
-            {busyId === row.quest_id ? '处理中…' : '放弃'}
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+          {#if selectedRow.description}<p class="desc">{selectedRow.description}</p>{/if}
+          {#if selectedRow.requirements && selectedRow.requirements.length > 0}
+            <ul class="reqs">
+              {#each selectedRow.requirements as req}
+                <li class="req" class:unmet={req.met === false}>
+                  {req.met === false ? '✗' : '✓'} {req.text ?? req.kind}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if canAccept(selectedRow)}
+            <button class="primary"
+              onclick={() => accept((selectedRow as any).id ?? (selectedRow as any).quest_id)}
+              disabled={busyId === (selectedRow as any).id}>
+              {busyId === selectedRow.id ? '接取中…' : '接取'}
+            </button>
+          {:else}
+            <p class="reason">{reasonText(selectedRow)}</p>
+          {/if}
+          {#if selectedRow.remaining_minutes}
+            <p class="desc">约 {selectedRow.remaining_minutes} 分钟</p>
+          {/if}
+        </div>
+      {:else if mode === 'grid'}
+        <p class="empty">左边选一个任务看详情</p>
+      {/if}
+    </Pane>
+  </AppSurface>
 </div>
 
 <style>
+  .quests-app { display: flex; flex-direction: column; overflow: hidden; }
+  .quests-app :global(.app-surface) { padding: 0; }
+  .quest-detail { padding: 12px 4px; }
+  .list li.sel { outline: 1px solid rgba(59,130,246,.6); }
+  /* 平板：列表收窄成"标题 + 状态"，详情在右栏，避免同一段文字渲染两遍 */
+  .list li.compact .desc, .list li.compact .reqs, .list li.compact .primary, .list li.compact .reason { display: none; }
   .quests-app { padding: 16px; color: #e8edf5; height: 100%; overflow-y: auto; }
   .quests-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .quests-icon { font-size: 26px; }

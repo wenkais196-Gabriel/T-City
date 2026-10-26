@@ -1,6 +1,6 @@
 # 11 · 工作平板：一台设备的两种形态
 
-> **状态**：方案细化中（2026-10-26）。可点 demo 已出：`assets/11-tablet-demo.html`，
+> **状态**：P1–P4 已落地（2026-10-26）。可点 demo 已出：`assets/11-tablet-demo.html`，
 > 截图 `assets/11-tablet-home.png` / `11-tablet-mdt.png` / `11-tablet-mechanic.png`。
 
 ## 1. 命题
@@ -55,7 +55,7 @@
 | 决定 | 结论 | 理由 |
 |---|---|---|
 | 组件 | 一个 `DeviceShell.svelte`，`surface` 是 prop | 唯一挂载点（`App.svelte:242`），context 会给同一个值开第二条投递路径且 Svelte 5 不自动响应 |
-| 类型 | `web/src/core/surface.ts`（零依赖叶子） | 放 store 会让 settings 反向依赖数据 store |
+| 类型 | `surface.ts`（custom-phone 的 web/src/core 下，零依赖叶子） | 放 store 会让 settings 反向依赖数据 store |
 | 谁决定 | **Lua 纯函数** `SurfaceRules.Decide()` | keepInput 是 focus 的一部分，必须在打开这一刻定；NUI 在 CEF 加载期还收不到消息 |
 | 优先级 | 入口 > 来电 > 载具 > 玩家偏好 > 窗口(≥900×560 且横向) > 默认 phone | 来电/载具强制小窗：整屏+锁移动不能边开车边接电话 |
 | 互斥 | `Surface` 里一个 `current`，切换先 `Release` 再 `Acquire` | focus 栈按 owner 名去重；两个不同 owner 会同时留在栈里，出现"关不掉" |
@@ -89,11 +89,28 @@
 | P1 | `surface_rules.lua` / `surface.lua` / `device_lock.lua` + 优先级 + 锁 + 失败出口 | ✅ 已落地 |
 | P1 | NUI 上报视口、读 Lua 下发的 surface、`reason=switch` 不丢当前 app | ✅ 已落地 |
 | P1 | 双形态 NUI 场景（几何、刘海/手势条差异、关闭只发一次） | ✅ 13/13 |
-| P2 | pane 契约 + `PoliceMDT` dispatch 三栏（pilot） | 待做 |
-| P3 | `Messages` 两栏、`Quests` 两栏 | 待做 |
-| P4 | 三个架构闸门（分叉 / 契约 / 权限）+ 双视口参数化跑全量 | 待做 |
+| P2 | pane 契约 + `PoliceMDT` dispatch 三栏（pilot） | ✅ 已落地：`contracts/police_mdt.panes.ts`，units/incidents/detail 三栏，详情栏只在 grid 渲染；行内「前往/清场」保留（巡逻时一击不变两击） |
+| P3 | `Messages` 两栏、`Quests` 两栏 | ✅ 已落地：Messages 用 drill（手机二选一、平板并存，且**不自动选会话**——那会清未读）；Quests 用 flow（手机不动、平板加详情栏，列表收窄） |
+| P4 | 三个架构闸门（分叉 / 契约 / 权限）+ 双视口参数化 | ✅ 已落地：`tests/architecture/test_surface_contracts.py` 三条，各自带反向注入；NUI 16 场景含 parity（两种形态 app 请求集合必须相等） |
 
-## 7. 不做什么
+## 7. 已验证
+
+| 项 | 证据 |
+|---|---|
+| 两种形态同屏行为 | NUI 16/16：手机右下角 375×780 有刘海/手势条；平板居中 1034×676 无刘海、有关闭按钮；MDT 平板三栏 + 三列轨道；手机一次只显示一栏 |
+| 形态切换不丢上下文 | `phone:close` 带 `reason='switch'` 时不清 `activeApp` |
+| 一致性 | parity 场景：同一交互在 375 与 1034 下发出的 `appQuery/appAction` 集合**完全相等** |
+| 权限不放大 | `TABLET_GRANTS` 三个契约全为空；闸门禁止服务端读 `surface`、禁止 app 自己判断形态 |
+| 单组件 | 闸门 A：出现 `*Tablet.svelte` 或相似度 ≥0.9 的改名副本即红 |
+| 全部测试 | 1019 passed / 132 skipped；架构规则 261（已证明 96 / 未证明 165 不变） |
+
+未做（有意）：
+- 其余 12 个 app 不加栏（内容多靠滚动与分组，不构成加栏理由）；
+- 设置页的"形态偏好"入口（`Surface.SetPreference` 已就绪，UI 留到需要时）；
+- 平板的中控/物品入口（demo 里标为未决，属玩法决策）；
+- 锁定移动的真机验收（离线只能测结构，必须在客户端跑一次）。
+
+## 8. 不做什么
 
 - 不做"第二套 app 清单"。`audience` 是唯一真值源。
 - 不做"平板专属功能"。平板只是更大的窗口。
