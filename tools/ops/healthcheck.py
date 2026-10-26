@@ -48,6 +48,11 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 STARTED_RE = re.compile(r"Started resource\s+(\S+)")
 ERROR_RE = re.compile(r"SCRIPT ERROR")
 
+# start.sh 每次启动都会打这一行；systemd 的日志是**追加**的，所以"上一次崩溃留下的
+# SCRIPT ERROR"会和这次启动混在同一个文件里。自检只看最后一次启动之后的部分，
+# 否则一条历史报错会让之后每次自检都红，人就开始忽略它了。
+BOOT_RE = re.compile(r"T-City Lite 开发服务器")
+
 
 def strip_ansi(text: str) -> str:
     """去掉 FiveM 控制台的 ANSI 颜色码（原始 console.log 里全是这些）。"""
@@ -61,11 +66,17 @@ def parse_console(text: str) -> dict:
     但 ``SCRIPT ERROR`` 是逐条累加的，重复的行也必须算进去。
     """
     clean = strip_ansi(text)
+    boot = None
+    for boot in BOOT_RE.finditer(clean):
+        pass
+    if boot is not None:
+        clean = clean[boot.start():]
     started = set(STARTED_RE.findall(clean))
     stats = {
         "started": sorted(started),
         "started_count": len(started),
         "script_errors": len(ERROR_RE.findall(clean)),
+        "license_429": "HTTP 429" in clean,
         "markers": {key: (needle in clean) for key, needle in MARKERS.items()},
     }
     return stats
@@ -78,9 +89,18 @@ def evaluate(
     tables: int | None,
     min_resources: int = DEFAULT_MIN_RESOURCES,
     expected_tables: int = DEFAULT_EXPECTED_TABLES,
+    license_429: bool | None = None,
 ) -> list[str]:
     """把一份快照判成「失败原因列表」。空列表 = 健康。"""
     failures: list[str] = []
+    if license_429 is None:
+        license_429 = bool(stats.get("license_429"))
+    if license_429:
+        failures.append(
+            "Cfx.re 的 license 校验返回了 429（启动太快太多次）：停机等 20-30 分钟再起，"  
+            "期间每次尝试都会续命限流"
+        )
+
 
     if stats.get("started_count", 0) < min_resources:
         failures.append(
@@ -197,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         stats,
         http_ok=http_ok,
         db_ok=db_ok,
+        license_429=stats.get("license_429", False),
         tables=tables,
         min_resources=args.min_resources,
         expected_tables=args.expected_tables,
