@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **任务奖励发放现在有一行可核对的控制台审计**。`QuestRewards.GrantRewards` 成功后只往 `custom-logs`（Discord webhook）发一条审计；没配 webhook 时，玩家说"奖励没到"本地完全无从核对——日志里只有失败会打印。现在成功也打一行 `[quest-rewards] 💰 玩家 (citizenid) quest=... → $6000 (bank), item xN, rep +80`，一次任务测试结束就能对着日志确认发了什么。
+
+
 ### Fixed
 - **重复启动的代价是一次 licence 配额：`start.sh` 现在有单实例锁**。今天修 systemd 时留下过一个 screen 残留进程，之后 systemd 的四次启动全部先通过 licence 校验、再在绑定 30120 时失败——那四次校验把 429 限流重新打了回来，服务被启动限流判 `failed`。现在 `start.sh` 用 `flock` 抢锁，第二个实例在启动二进制之前就被挡住并告诉你去停谁。
 - **自检把 429 说成人话**：日志里出现 `HTTP 429` 时，`healthcheck.py` 直接报"Cfx.re 的 license 校验返回了 429（启动太快太多次）：停机等 20-30 分钟再起，期间每次尝试都会续命限流"，而不是只报"资源 0 个 / 标记缺失"让人去猜。

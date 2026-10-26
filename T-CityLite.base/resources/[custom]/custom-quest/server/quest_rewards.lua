@@ -141,6 +141,10 @@ function QuestRewards.GrantRewards(source, rewards, questId)
 
     -- 4. 审计日志
     if #granted > 0 then
+        -- 控制台留一行：奖励只发去 Discord webhook，没配 webhook 时"到底发了多少"在本地
+        -- 完全不可核对 —— 玩家说没收到钱，运维只能翻 memory 猜。
+        print(('[quest-rewards] 💰 %s (%s) quest=%s → %s'):format(
+            GetPlayerName(source), citizenid, questId, table.concat(granted, ', ')))
         local logText = ('**%s** (%s) | Quest: %s | Rewards: %s'):format(
             GetPlayerName(source), citizenid, questId,
             table.concat(granted, ', ')
