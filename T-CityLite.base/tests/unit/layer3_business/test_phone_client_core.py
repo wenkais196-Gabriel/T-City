@@ -581,8 +581,12 @@ def test_main_opens_the_ui_through_the_ack_handshake():
     assert "RegisterNUICallback('phoneOpenAck'" in main
     assert "PhoneBridge.Ack('phone:open')" in main
     # A half-open phone (no NUI) must reset itself instead of swallowing keys.
+    # 设备开关只有一个真值（Surface），所以"复位"就是 Surface.Reset()；
+    # 形态一旦可能锁移动，超时路径还必须同时解锁。
     assert "phase = 'open-ack-timeout'" in main
-    assert "isPhoneOpen = false" in main
+    timeout_block = main[main.index('phase = \'open-ack-timeout\'') - 400:main.index('phase = \'open-ack-timeout\'')]
+    assert "Surface.Reset()" in timeout_block
+    assert "DeviceLock.End()" in timeout_block
 
     app = read(PHONE / "web" / "src" / "App.svelte")
     assert "fetchNui('phoneOpenAck')" in app
@@ -590,10 +594,14 @@ def test_main_opens_the_ui_through_the_ack_handshake():
 
 def test_main_uses_focus_for_open_close_and_cleanup():
     main = read(CLIENT)
-    assert "PhoneFocus.Acquire('phone', { cursor = true, keepInput = true })" in main
-    assert "PhoneFocus.Release('phone')" in main
+    # 焦点 owner 与 keepInput 现在跟形态绑定：手机 keepInput=true（能边跑边看），
+    # 平板 false（站定才能用）。不再有写死的 'phone' + true。
+    assert "PhoneFocus.Acquire(kind, { cursor = true, keepInput = (kind == 'phone') })" in main
+    # 释放的是"当前形态"的 owner（phone 或 tablet），不再写死 'phone'
+    assert "PhoneFocus.Release(kind)" in main
     assert "PhoneFocus.Reset()" in main
-    assert "PhoneFocus.IsOwner('phone')" in main
+    # watchdog 只对"自己这一面"的 owner 重新抢焦点，别偷别的 UI 的焦点
+    assert "PhoneFocus.IsOwner(kind)" in main
     assert "PhoneFocus.State()" in main
     # The defensive stop handler still clears the engine flags directly.
     assert "SetNuiFocus(false, false)" in main

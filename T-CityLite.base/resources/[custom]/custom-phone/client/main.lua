@@ -2,8 +2,8 @@
 -- client/core/bridge.lua, focus ownership in client/core/focus.lua and the
 -- unified phone:client:event channel in client/core/events.lua. The manifest
 -- must load those three before this file.
+-- 形态与开关的唯一真值是 client/core/surface.lua；这里不再持有布尔。
 local QBCore = exports['qb-core']:GetCoreObject()
-local isPhoneOpen = false
 
 -- A resource (re)start is also the recovery path when a previous client left
 -- NUI focus/cursor stuck: never inherit that state.
@@ -17,24 +17,29 @@ end)
 PhoneEvents.Start()
 
 -- Close Phone Function (must be defined before OpenPhone — CreateThread closure)
-local function ClosePhone()
-    if not isPhoneOpen then return end
-    isPhoneOpen = false
-    TriggerServerEvent('phone:server:focusState', { phase = 'close-start' })
+local function ClosePhone(reason)
+    local kind = Surface.Current()
+    if not kind then return end
+    Surface.Reset()
+    -- 任何关闭路径都必须解锁：焦点没了但人还钉在原地是最难查的故障。
+    DeviceLock.End()
+    TriggerServerEvent('phone:server:focusState', { phase = 'close-start', surface = kind })
     -- custom-ui owns the phone menu/focus by default. When another focus owner
     -- (fingerprint/story/vehicle) is on top, closing the phone must not clear
     -- that UI's focus; just pop the phone from the stack below it.
     local owner = PhoneFocus.State().owner
-    if owner == nil or owner == 'phone' then
+    if owner == nil or owner == 'phone' or owner == 'tablet' then
         pcall(function() exports['custom-ui']:CloseMenu() end)
     end
     -- Release drops NUI focus even when custom-ui.CloseMenu is missing or
     -- throws. It deliberately leaves keepInput for the next phone open: the
     -- project's real-client contract is qb-phone style (see AGENTS.md).
     PhoneBridge.Ack('phone:open') -- stop any open-ack resend loop
-    PhoneFocus.Release('phone')
+    PhoneFocus.Release(kind)
     SendNUIMessage({
-        action = 'phone:close'
+        action = 'phone:close',
+        -- switch = 换形态不是退出：NUI 会保留当前 app，别把人踢回桌面
+        reason = reason or 'user'
     })
     -- Verify the release actually stuck; if any resource re-grabbed focus in
     -- the same frame, clear the leak and report the state. A different focus
@@ -62,16 +67,20 @@ local function ClosePhone()
 end
 
 -- Open Phone Function
-local function OpenPhone()
-    if isPhoneOpen then return end
-    isPhoneOpen = true
+local function OpenPhone(forcedKind, reason)
+    if Surface.IsOpen() then return end
+    -- 形态在打开这一刻定下来：entry > 来电/载具 > 玩家偏好 > 窗口 > 默认
+    local kind = Surface.Decide({ entry_surface = forcedKind, reason = reason })
+    Surface.Bind(kind)
     -- SendNUIMessage is fire-and-forget: while CEF is still loading (every
     -- `restart custom-phone`) the frame is dropped and the phone stays "open"
     -- in Lua with nothing on screen. Resend until the NUI acknowledges the
     -- open, which is the only proof the interface exists.
     PhoneBridge.AwaitAck('phone:open', function()
         SendNUIMessage({
-            action = 'phone:open'
+            action = 'phone:open',
+            surface = kind,
+            reason = reason or 'open'
         })
     end, {
         intervalMs = 250,
@@ -79,8 +88,9 @@ local function OpenPhone()
         onTimeout = function()
             -- The UI never answered: drop the half-open state so the next key
             -- press starts clean instead of being swallowed by isPhoneOpen.
-            isPhoneOpen = false
-            PhoneFocus.Release('phone')
+            Surface.Reset()
+            DeviceLock.End()
+            PhoneFocus.Release(kind)
             TriggerServerEvent('phone:server:focusState', { phase = 'open-ack-timeout' })
             TriggerEvent('chat:addMessage', {
                 args = { 'SYSTEM', '手机界面没有响应（NUI 未就绪），状态已重置，请再按一次 M' }
@@ -94,10 +104,14 @@ local function OpenPhone()
     -- can opt in later, but a phone must be clickable.
     -- qb-phone never turns keepInput off, so movement survives while the phone
     -- is open. The focus stack grants focus, then explicitly keeps game input.
-    PhoneFocus.Acquire('phone', { cursor = true, keepInput = true })
-    TriggerServerEvent('phone:server:focusState', { phase = 'open-start' })
+    -- keepInput 是形态的一部分：手机要能边跑边看，平板要站定。
+    PhoneFocus.Acquire(kind, { cursor = true, keepInput = (kind == 'phone') })
+    DeviceLock.Begin(kind)
+    TriggerServerEvent('phone:server:focusState', { phase = 'open-start', surface = kind, reason = reason or 'open' })
 
     CreateThread(function()
+        -- 平板不播手机动画：手里举着板子却做"看短信"动作很出戏
+        if kind ~= 'phone' then return end
         local ped = PlayerPedId()
         if not DoesEntityExist(ped) then return end
         RequestAnimDict('cellphone@')
@@ -110,7 +124,7 @@ local function OpenPhone()
             TriggerServerEvent('phone:server:focusState', { phase = 'anim-timeout' })
             return
         end
-        if isPhoneOpen then
+        if Surface.IsOpen() and Surface.Current() == 'phone' then
             TaskPlayAnim(ped, 'cellphone@', 'cellphone_text_in', 8.0, -8.0, 800, 49, 0, false, false, false)
         end
     end)
@@ -120,16 +134,16 @@ local function OpenPhone()
     CreateThread(function()
         for attempt = 1, 5 do
             Wait(attempt == 1 and 50 or 150)
-            if not isPhoneOpen then return end
+            if not Surface.IsOpen() or Surface.Current() ~= kind then return end
             -- Another owner (fingerprint/story/vehicle) may legitimately sit on
             -- top of the stack. Do not steal focus from it; when it releases,
             -- the stack re-applies the phone automatically.
-            if not PhoneFocus.IsOwner('phone') then return end
+            if not PhoneFocus.IsOwner(kind) then return end
             -- Re-assert the cursor flag every time, not only when focus is
             -- reported lost: focused=true with no cursor is the failure we saw.
-            PhoneFocus.Acquire('phone', { cursor = true, keepInput = true })
+            PhoneFocus.Acquire(kind, { cursor = true, keepInput = (kind == 'phone') })
             TriggerServerEvent('phone:server:focusState', {
-                phase = 'reassert', attempt = attempt,
+                phase = 'reassert', attempt = attempt, surface = kind,
                 focused = IsNuiFocused(),
                 keepInput = IsNuiFocusKeepingInput(),
             })
@@ -188,7 +202,7 @@ local function OpenPhone()
             weatherIcon = wIcon, weatherLabel = wLabel })
         local lastHour, lastMinute = h, m
 
-        while isPhoneOpen do
+        while Surface.IsOpen() do
             -- Keep phone animation looping after entry
             if not IsEntityPlayingAnim(GetPlayerPed(-1), 'cellphone@', 'cellphone_text_read_base', 3) then
                 TaskPlayAnim(GetPlayerPed(-1), 'cellphone@', 'cellphone_text_read_base', 8.0, -8.0, -1, 49, 0, false, false, false)
@@ -225,8 +239,9 @@ local function OpenPhone()
 
             -- ESC key closes phone — handled by NUI JS (window keydown listener)
             -- Right mouse button closes phone (AIM input, already disabled above)
-            if IsDisabledControlJustPressed(0, 25) then  -- INPUT_AIM
-                ClosePhone()
+            -- 右键只关手机（平板居中还拿右键关面板会误触）；平板用状态栏的关闭按钮
+            if kind == 'phone' and IsDisabledControlJustPressed(0, 25) then  -- INPUT_AIM
+                ClosePhone('right_click')
             end
 
             -- 每 ~1 秒检查一次游戏内时间，但只在分钟真正变化时才推送，
@@ -274,25 +289,29 @@ RegisterCommand('phone', function()
     end
     lastToggleAt = now
 
-    if isPhoneOpen then
+    if Surface.IsOpen() then
         if IsNuiFocused() then
-            ClosePhone()
+            ClosePhone('key')
         else
-            isPhoneOpen = false
-            PhoneFocus.Release('phone')
+            -- 界面在但焦点丢了：先彻底复位再重开，避免半开状态被当成"按了没反应"
+            local kind = Surface.Current() or 'phone'
+            Surface.Reset()
+            DeviceLock.End()
+            PhoneFocus.Release(kind)
             Wait(50)
-            OpenPhone()
+            OpenPhone(kind, 'recover')
         end
     else
-        OpenPhone()
+        OpenPhone(nil, 'key')
     end
 end, false)
 
 -- Manual recovery: release focus, reset state, close any stale NUI.
 RegisterCommand('phonefix', function()
-    isPhoneOpen = false
+    Surface.Reset()
+    DeviceLock.End()
     PhoneFocus.Reset()
-    SendNUIMessage({ action = 'phone:close' })
+    SendNUIMessage({ action = 'phone:close', reason = 'phonefix' })
     TriggerEvent('chat:addMessage', { args = { 'SYSTEM', '手机状态已重置' } })
     TriggerServerEvent('phone:server:focusState', { phase = 'phonefix', focused = IsNuiFocused() })
 end, false)
@@ -313,8 +332,15 @@ end)
 -- NUI Callbacks
 -- ----------------------------------------------------
 RegisterNUICallback('closePhone', function(_, cb)
-    ClosePhone()
+    ClosePhone('user')
     cb({ success = true })
+end)
+
+-- CEF 上报真实 CSS px：surface 阈值判定在 Lua，但只有页面知道窗口多大。
+-- 回调名拼错会让 NUI 契约闸门直接红，所以这里必须与 fetchNui('surfaceInfo') 对齐。
+RegisterNUICallback('surfaceInfo', function(data, cb)
+    local ok = Surface.SetViewport(data and data.width, data and data.height)
+    cb({ success = ok, surface = Surface.Current() })
 end)
 
 -- The UI answers every phone:open with this callback once the frame is on
@@ -617,9 +643,10 @@ end)
 
 -- Phone Call Events (real-time push from server)
 RegisterNetEvent('phone:client:incomingCall', function(callData)
-    -- 手机未打开（关闭/锁屏）时自动弹出，确保来电一定能被看到（审计 B04）
-    if not isPhoneOpen then
-        OpenPhone()
+    -- 手机未打开（关闭/锁屏）时自动弹出，确保来电一定能被看到（审计 B04）。
+    -- 来电强制手机形态：整屏平板会锁住移动，不能边开车边接电话。
+    if not Surface.IsOpen() then
+        OpenPhone('phone', 'incoming_call')
     end
     SendNUIMessage({
         action = 'phone:incomingCall',
@@ -761,7 +788,7 @@ end)
 
 -- Real-time Money Sync Listener
 RegisterNetEvent('QBCore:Client:OnMoneyChange', function(type, amount, operation)
-    if not isPhoneOpen then return end
+    if not Surface.IsOpen() then return end
     fetchPhoneData(function(data)
         if data and data.success then
             SendNUIMessage({
@@ -773,7 +800,7 @@ RegisterNetEvent('QBCore:Client:OnMoneyChange', function(type, amount, operation
 end)
 
 RegisterNetEvent('QBCore:Client:SetPlayerData', function(val)
-    if not isPhoneOpen or not val or not val.money then return end
+    if not Surface.IsOpen() or not val or not val.money then return end
     SendNUIMessage({
         action = 'phone:updateMoney',
         money = val.money
@@ -887,7 +914,7 @@ end)
 -- authoritative server balance instead of trusting a client-delivered number,
 -- and nothing here changes money.
 RegisterNetEvent('qb-phone:client:RemoveBankMoney', function()
-    if not isPhoneOpen then return end
+    if not Surface.IsOpen() then return end
     fetchPhoneData(function(data)
         if data and data.success and data.playerData then
             SendNUIMessage({
