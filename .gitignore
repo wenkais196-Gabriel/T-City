@@ -162,3 +162,6 @@ coverage/
 *.log
 *.sql.gz
 *.dump
+
+# MCP host config（本机路径/token，只提交 .mcp.json.example）
+.mcp.json
