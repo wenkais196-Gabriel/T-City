@@ -134,3 +134,18 @@ qb-mechanicjob），它们**再也没自己起来**——于是：
 
 1. 用 systemd 部署（仓库已有 `tools/ops/tcity.service` + `install_service.py`），会话关闭不影响服务；
 2. 非要用 screen，至少不要把 screen 挂在会被关掉/回收的终端会话里，并且定期确认 `screen -ls` 还在。
+
+
+### 429 的真实代价：一次 `systemctl start` 可能花掉两次配额
+
+licence 校验发生在**绑定端口之前**，所以一次"起来就失败"的尝试同样消耗配额。更糟的是
+`Restart=always` 会在失败后立刻再试一次——`systemctl start` 一次，日志里经常出现两次
+`Started`。实测：08:26 正常启动一次，08:36–08:40 的 5 次失败尝试（都卡在 EADDRINUSE），
+到 09:09 再试仍然是 429。
+
+所以规则是：
+
+- **一小时一次**，不要 20 分钟一次（实测 25 分钟不够）。
+- 起之前先确认端口没人占（`ss -tln | grep 30120`）和 MySQL 在跑，别把配额花在能提前发现的问题上。
+- `start.sh` 的 `flock` 已经挡住了"两个实例同时起"，但挡不住"通过 systemd 反复起"——那要靠人（或等 StartLimit 触发）。
+- 判断是否真是限流：`tools/ops/healthcheck.py` 会直接点名 429 并给出等待建议，不用去翻日志里那一长串 HTML。
