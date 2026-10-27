@@ -181,6 +181,7 @@ local function phoneState()
             -- 是否走了共享栈（false = 退化路径，keepInput 会是 true → 游标不可见）
             delegated = state.delegated == true,
             custom_ui_state = type(state.custom_ui_state) == 'string' and state.custom_ui_state or nil,
+            focus_trace = type(state.focus_trace) == 'table' and state.focus_trace or nil,
             app = type(state.app) == 'table' and {
                 id = state.app.id,
                 tab = state.app.tab,

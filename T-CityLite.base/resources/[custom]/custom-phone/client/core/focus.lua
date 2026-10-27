@@ -133,6 +133,11 @@ function PhoneFocus.Acquire(owner, opts)
                 cursor = entry.cursor,
                 keepInput = keep,
                 allow = keep and ALLOW_WHILE_OPEN or nil,
+                -- 按焦点必须由**拥有 NUI 页面的资源**来做：在 custom-ui 里调
+                -- SetNuiFocus 等于把焦点交给一个不存在的页面（真机表现：手机能显示，
+                -- 但收不到鼠标键盘、也没有游标；背包和目标盘却正常）。
+                -- 跨资源不能传函数，所以只报资源名，由 custom-ui 回调本资源的 ApplyFocus。
+                owner = GetCurrentResourceName(),
             })
         end)
         if ok then
@@ -165,7 +170,13 @@ function PhoneFocus.PushFrame(id)
     local layer = inputLayer()
     if not layer or type(id) ~= 'string' or id == '' then return false end
     local ok = pcall(function()
-        layer:Push({ id = id, cursor = true, keepInput = true, allow = ALLOW_WHILE_OPEN })
+        layer:Push({
+            id = id,
+            cursor = true,
+            keepInput = GetConvar('phone_keep_input', '0') == '1',
+            allow = GetConvar('phone_keep_input', '0') == '1' and ALLOW_WHILE_OPEN or nil,
+            owner = GetCurrentResourceName(),
+        })
     end)
     return ok
 end
@@ -216,6 +227,26 @@ function PhoneFocus.Release(owner)
     -- (or the empty stack) needs a native call.
     if wasTop or #stack == 0 then applyTop() end
     return true
+end
+
+--- 由 custom-ui 回调：只有拥有 NUI 页面的资源才能真的把焦点按到页面上。
+---@param hasFocus boolean
+---@param hasCursor boolean
+---@param keepInput boolean
+function PhoneFocus.ApplyFocus(hasFocus, hasCursor, keepInput)
+    if hasFocus then
+        SetNuiFocusKeepInput(keepInput == true)
+        SetNuiFocus(true, hasCursor ~= false)
+        state.focus = true
+        state.cursor = hasCursor ~= false
+        state.keepInput = keepInput == true
+    else
+        if state.keepInput then SetNuiFocusKeepInput(false) end
+        SetNuiFocus(false, false)
+        state.focus = false
+        state.cursor = false
+        state.keepInput = false
+    end
 end
 
 --- 重新把焦点按下去（页面加载完成后调用，见 ack 处理）。
