@@ -46,6 +46,35 @@ function incidentsRequestCount(world) {
 
 export const scenarios = [
   {
+    name: 'MDT 把「哪一页、哪条警情」回吐给 agent',
+    async run({ page, world, surface }) {
+      world.units = [];
+      world.incidents = [INCIDENT_911];
+      await openMdt(page, surface);
+      // 手机上调度页默认停在「单位」段，警情列表在「接警」段里
+      await openDispatchTab(page, '接警');
+      await waitIncidentVisible(page, 8000);
+
+      const appStates = () => world.calls.filter((call) => call.callback === 'appState');
+      const last = () => appStates().at(-1)?.payload ?? {};
+
+      checkEqual('app id', last().app, 'police_mdt');
+      checkEqual('初始页', last().tab, 'dispatch');
+      checkEqual('未选中时 selected 为空', last().selected ?? null, null);
+
+      // 警情行有入场动画，Playwright 会一直等“稳定”；这里只要事件派发
+      await page.locator('.mdt .incident').first().click({ force: true });
+      await page.waitForTimeout(250);
+      checkEqual('选了警情后 selected 是它的 id', last().selected, String(INCIDENT_911.id));
+
+      await page.locator('.mdt nav.tabs button', { hasText: '人车' }).click({ force: true });
+      await page.waitForTimeout(250);
+      checkEqual('切到人车页后 tab 变化', last().tab, 'person');
+      // 警情 id 在人车页没有意义：继续报会让人以为他还在看那条警情
+      checkEqual('离开调度页后 selected 清空', last().selected ?? null, null);
+    },
+  },
+  {
     name: '首轮 500 + 断连：错误可见、loading 复位、刷新后渲染单位与 911 警情',
     async run({ page, world, surface }) {
       world.units = [
