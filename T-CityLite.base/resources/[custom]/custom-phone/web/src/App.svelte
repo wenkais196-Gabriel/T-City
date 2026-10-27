@@ -45,7 +45,8 @@
     unreadNotificationsCount,
     gameTime,
     loadPhoneData,
-    closePhone
+    closePhone,
+    pendingNavTab
   } from './stores/phone';
   import { showSubtitle, clearSubtitle } from './stores/callSpeech';
   import { speakDispatch, stopDispatchSpeech } from './utils/tts';
@@ -104,6 +105,8 @@
       // 服务端下发的动态 App（任务/MDT 等）在 activeApp 里是 `dyn:<id>`，
       // 所以调用方只要报 id（"quests"），这里负责补前缀；内置页照原样用。
       const dynamic = get(dynamicApps).some((entry) => entry.id === app);
+      // 页码要留给目标 App：它此刻还没挂载，收不到这条消息
+      pendingNavTab.set(typeof data?.tab === 'string' ? data.tab : null);
       activeApp.set(dynamic ? `dyn:${app}` : app);
     });
 
