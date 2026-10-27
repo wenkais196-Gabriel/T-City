@@ -383,6 +383,14 @@ local function shortToken(value)
     return value
 end
 
+-- 选中的对象 id 可以更长（任务 id 就是 euro_trucking_steel 这种），
+-- 但仍然只允许安全字符，且必须有上限。
+local function selectedToken(value)
+    if type(value) ~= 'string' then return nil end
+    if value == '' or #value > 48 or not value:match('^[a-z0-9_:%-]+$') then return nil end
+    return value
+end
+
 local function sanitizeState(raw)
     if type(raw) ~= 'table' then return nil end
     -- 版本守卫：没有 v=1 的报文一律不认。否则一个空表就能注册出"全默认"的快照，
@@ -401,6 +409,15 @@ local function sanitizeState(raw)
             keep_input = flag(phone.keep_input),
             -- 引擎原生的原话，和上面的记账分开放：两者不一致正是"原生在撒谎"的证据。
             nui_focus_native = flag(phone.nui_focus_native),
+            -- 单 App 状态：只放行三个短 token；id 缺失就整块丢掉。
+            -- 它属于手机，所以挂在 phone 下面（消费方读 phone.app），不是顶层。
+            app = (function()
+                local app = type(phone.app) == 'table' and phone.app or nil
+                if not app then return nil end
+                local id = shortToken(app.id)
+                if not id then return nil end
+                return { id = id, tab = shortToken(app.tab), selected = selectedToken(app.selected) }
+            end)(),
             focus_owner = shortToken(phone.focus_owner),
         } or nil,
         ped = {
@@ -409,14 +426,6 @@ local function sanitizeState(raw)
             health = clampInt(ped and ped.health, 0, 1000, 0),
             dead = flag(ped and ped.dead),
         },
-        -- 单 App 状态：只放行三个短 token，缺任何一个就整块丢掉。
-        app = (function()
-            local app = type(raw.app) == 'table' and raw.app or nil
-            if not app then return nil end
-            local id = shortToken(app.id)
-            if not id then return nil end
-            return { id = id, tab = shortToken(app.tab), selected = shortToken(app.selected) }
-        end)(),
         screen = {
             w = clampInt(screen and screen.w, 320, 8192, 0),
             h = clampInt(screen and screen.h, 320, 8192, 0),

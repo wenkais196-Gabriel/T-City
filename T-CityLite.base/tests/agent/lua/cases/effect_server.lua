@@ -548,6 +548,32 @@ return {
             assert(data.logged_in == false, 'a push 250ms later must be accepted')
         end)
 
+        check('client_state_keeps_the_app_page_it_was_given', function()
+            -- app 在 phone 里（客户端 phoneState() 的形状），不是顶层。
+            -- 读错层级过去不会报错，只会永远返回 nil —— 所以要有这条。
+            local env = newEnv(enabled())
+            emitState(env, 1, {
+                v = 1,
+                logged_in = true,
+                phone = {
+                    open = true, surface = 'phone',
+                    app = { id = 'quests', tab = 'active', selected = 'euro_trucking_steel' },
+                },
+            })
+            local data = env.exports.ClientState(1)
+            local app = data.phone.app
+            assert(type(app) == 'table', 'the app block must survive sanitising')
+            assert(app.id == 'quests' and app.tab == 'active', 'id/tab must round-trip')
+            assert(app.selected == 'euro_trucking_steel', 'selected must round-trip')
+        end)
+
+        check('client_state_drops_an_app_block_without_an_id', function()
+            local env = newEnv(enabled())
+            emitState(env, 1, { v = 1, logged_in = true, phone = { app = { tab = 'active' } } })
+            local data = env.exports.ClientState(1)
+            assert(data.phone.app == nil, 'an app without an id is not an app')
+        end)
+
         check('client_state_is_cleared_when_the_player_drops', function()
             local env = newEnv(enabled())
             emitState(env, 1, { v = 1, logged_in = true })
