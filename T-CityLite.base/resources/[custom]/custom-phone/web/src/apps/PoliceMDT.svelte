@@ -1,7 +1,9 @@
 <script lang="ts">
   import { formatClock, formatAgo } from '../utils/time';
   import { onMount } from 'svelte';
-  import { reportAppState } from '../utils/nui';
+  import { registerNuiEvent, reportAppState } from '../utils/nui';
+  import { get } from 'svelte/store';
+  import { pendingNavTab } from '../stores/phone';
   import { playerData } from '../stores/phone';
   import { requestAppQuery as queryApp, requestAppAction as appAction } from '../core/request';
   import AppSurface from '../components/AppSurface.svelte';
@@ -280,12 +282,11 @@
     not_primary: '由现场负责人清场',
     already_joined: '你已经在这张单上',
     incident_closed: '该警情已归档',
-    too_far: '距离现场太远，无法记录到场',
+    too_far: '距离太远，无法执行（到场需靠近现场，上铐/拘捕需 5 米内）',
     bad_nonce: '到场凭证失效，请稍后自动重试',
     incident_has_no_coords: '该警情没有坐标，无法领路',
     invalid_incident: '警情编号无效',
     already_jailed: '目标已在服刑',
-    too_far: '目标距离超过 5 米',
     not_handcuffed: '目标没有上铐/倒地，先 /cuff',
     target_not_cuffed: '目标没有上铐/倒地，先 /cuff',
     case_forbidden: '创建案件需要 Sergeant+',
@@ -308,7 +309,6 @@
     invalid_status: '状态无效',
     invalid_disposition: '清场处置无效',
     invalid_params: '参数无效',
-    invalid_incident: '警情 id 无效',
     invalid_case: '案件 id 无效',
     invalid_unit: '单位无效',
     invalid_citizen: '目标 citizenid 无效',
@@ -402,6 +402,34 @@
       inflight.delete(key);
     }
   }
+
+  // agent / 调试用的确定性跳页：/phoneui police_mdt case → phone:navigate{app,tab}
+  // 打开时先看有没有人点名叫我去哪一页（导航消息在挂载前就发了）
+  onMount(() => {
+    const wanted = get(pendingNavTab);
+    if (!wanted) return;
+    pendingNavTab.set(null);
+    if (wanted === 'units' || wanted === 'incidents') {
+      void openPage('dispatch').then(() => openDispatchSeg(wanted));
+      return;
+    }
+    if (wanted === 'dispatch' || wanted === 'person' || wanted === 'report' || wanted === 'case' || wanted === 'me') {
+      void openPage(wanted);
+    }
+  });
+
+  registerNuiEvent('phone:navigate', (data) => {
+    if (data?.app !== 'police_mdt') return;
+    const target = data?.tab;
+    // 两个段名单独放行：agent 想看的往往是"接警列表"而不是"单位"那一屏。
+    if (target === 'units' || target === 'incidents') {
+      void openPage('dispatch').then(() => openDispatchSeg(target));
+      return;
+    }
+    if (target === 'dispatch' || target === 'person' || target === 'report' || target === 'case' || target === 'me') {
+      void openPage(target);
+    }
+  });
 
   async function openPage(next: Page) {
     page = next;

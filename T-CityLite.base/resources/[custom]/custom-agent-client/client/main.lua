@@ -212,6 +212,7 @@ end
 -- ---------------------------------------------------------------------------
 local DEVCMD_ALLOWED = {
     '^phoneui [a-z0-9_:-]+$',
+    '^phoneui [a-z0-9_:-]+ [a-z0-9_:-]+$', -- 带页码：/phoneui police_mdt case
     '^tablet$',
     '^phone$',
     '^phonefix$',

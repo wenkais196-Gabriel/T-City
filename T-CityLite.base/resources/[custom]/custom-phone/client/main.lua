@@ -410,11 +410,14 @@ end, false)
 
 -- /phoneui <app>：让 agent 或调试者确定性地切到某个 App（不依赖鼠标坐标）。
 -- 生产默认关闭（phone_ui_nav 必须为 "1"，用 setr 才会复制到客户端）。
+-- /phoneui <app> [tab]：第二个参数是 App 内部的页（如 MDT 的 dispatch/person/report/case/me）。
 RegisterCommand('phoneui', function(_, args)
     if GetConvar('phone_ui_nav', '0') ~= '1' then return end
     local app = type(args) == 'table' and args[1] or nil
+    local tab = type(args) == 'table' and args[2] or nil
     if type(app) ~= 'string' or not app:match('^[%w_:%-]+$') or #app > 32 then return end
-    SendNUIMessage({ action = 'phone:navigate', app = app })
+    if tab ~= nil and (type(tab) ~= 'string' or not tab:match('^[%w_:%-]+$') or #tab > 24) then return end
+    SendNUIMessage({ action = 'phone:navigate', app = app, tab = tab })
 end, false)
 
 RegisterCommand('phonefix', function()

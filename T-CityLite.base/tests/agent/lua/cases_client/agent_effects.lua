@@ -178,6 +178,47 @@ return {
                 .. tostring(pushes() - afterFirst))
         end)
 
+        check('devcmd_bridge_is_gated_and_allowlisted', function()
+            -- devcon 握手不通、合成鼠标又被 GTA 锁光标，所以给 agent 留了一条
+            -- "服务端替客户端敲一行命令"的通道；必须默认关、只认白名单。
+            -- （这条用例在 #65 的重写里被误删过一次，别再让它消失。）
+            local function execs(handle)
+                return handle.executed_commands or {}
+            end
+
+            local off = ctx.bootstrap.Load({
+                resource = '[custom]/custom-agent-client',
+                files = { 'client/main.lua' },
+            })
+            off.Emit('tcity:agent:devcmd', 'phoneui quests')
+            off.Step(20)
+            assert(#execs(off) == 0, 'default: the bridge must not execute anything')
+
+            local on = ctx.bootstrap.Load({
+                resource = '[custom]/custom-agent-client',
+                files = { 'client/main.lua' },
+                convars = { agent_devcmd_enabled = '1' },
+            })
+            on.Emit('tcity:agent:devcmd', 'phoneui quests')
+            on.Step(20)
+            assert(#execs(on) == 1, 'allowed command must run, ran ' .. tostring(#execs(on)))
+            assert(execs(on)[1] == 'phoneui quests', 'the command must be passed through verbatim')
+
+            -- 带页码也要放行：MDT 逐页验收靠它
+            on.Emit('tcity:agent:devcmd', 'phoneui police_mdt case')
+            on.Step(20)
+            assert(#execs(on) == 2, 'phoneui with a page must be allowed, ran ' .. tostring(#execs(on)))
+            assert(execs(on)[2] == 'phoneui police_mdt case')
+
+            on.Emit('tcity:agent:devcmd', 'quit')
+            on.Emit('tcity:agent:devcmd', 'phoneui quests; quit')
+            on.Emit('tcity:agent:devcmd', 'connect 1.2.3.4')
+            on.Emit('tcity:agent:devcmd', ('x'):rep(80))
+            on.Step(20)
+            assert(#execs(on) == 2, 'anything outside the allowlist must be refused, ran '
+                .. tostring(#execs(on)))
+        end)
+
         return {
             ok = failed == 0,
             data = { total = #results, failed = failed, cases = results },

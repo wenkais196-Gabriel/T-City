@@ -9,7 +9,10 @@ export const isPhoneOpen = writable<boolean>(false);
 // 形态由客户端 Lua 决定（surface_rules.lua），这里只存 Lua 告诉我们的那一个值。
 // 不要在前端按窗口大小自己算——那样手机壳在窄窗口里会变成平板布局。
 export const surface = writable<Surface>(SURFACE_PHONE);
-export const activeApp = writable<string>('home'); // home, messages, contacts, banking, notifications, jobboard, faction, cityfeed, leader_mayor, leader_sheriff, leader_gangboss
+export const activeApp = writable<string>('home');
+// 导航时带的页码：App 收到 phone:navigate 时先写这里，目标 App 挂载后再读走。
+// 直接在消息里给 App 是没用的 —— 那一刻它还没挂载，监听器不存在。
+export const pendingNavTab = writable<string | null>(null); // home, messages, contacts, banking, notifications, jobboard, faction, cityfeed, leader_mayor, leader_sheriff, leader_gangboss
 
 // Game clock (GTA V native time) — status bar and home widget share this
 export const gameTime = writable<{ hour: number; minute: number }>({ hour: 0, minute: 0 });
