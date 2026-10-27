@@ -80,6 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Changed
+- **手机改成"鼠标优先"的焦点模型**：开屏与换 App 都不预设键盘焦点（无蓝框/无标签/无键位提示），
+  第一次按方向键或 Tab 才出现焦点，且不论方向都从第一个 App（Phone Dialer）开始；
+  无焦点时 Enter 不做任何事。焦点标签与键位提示抬到 Dock 上方，不再压住图标。
 - **手机输入修复（真机四连）**：方向键一次挪两格（CEF 与 Lua 双处理 → 开屏消息带 `lua_owns_keys`，
   键盘只留一个主人）、按 M 要两次才开（开屏那一帧已按住的键被当成新边沿）、
   点一下手机就关机（遮罩点击不再关闭 + 3px 侧键不再可点可聚焦）、界面很卡
