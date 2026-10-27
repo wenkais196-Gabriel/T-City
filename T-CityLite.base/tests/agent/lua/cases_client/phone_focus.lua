@@ -18,7 +18,12 @@ return {
                 'config.lua',
                 'client/core/bridge.lua',
                 'client/core/focus.lua',
+                -- 形态判定 → 移动锁 → 状态（fxmanifest 里也必须在 main.lua 之前）
+                'client/core/surface_rules.lua',
+                'client/core/device_lock.lua',
+                'client/core/surface.lua',
                 'client/core/events.lua',
+                'client/core/diag.lua',
                 'client/main.lua',
             },
             export_overrides = {

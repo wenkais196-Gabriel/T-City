@@ -414,6 +414,13 @@ return function(env)
     _G.vector3 = function(x, y, z) return makeVector(x, y, z) end
     _G.vec3 = _G.vector3
 
+    -- surface.lua reads the viewport to decide whether the tablet even fits.
+    _G.GetActiveScreenResolution = function() return 1920, 1080 end
+    _G.GetScreenResolution = function() return 1920, 1080 end
+    -- surface.lua treats 'in a vehicle' as one of the intent signals.
+    -- Default: on foot; a case can override env.ped_vehicle to flip it.
+    _G.IsPedInAnyVehicle = function() return env.ped_vehicle == true end
+
     -- ----------------------------------------------------------------------
     -- exports / QBCore / LocalPlayer
     -- ----------------------------------------------------------------------
@@ -426,6 +433,20 @@ return function(env)
                 return function(_, ...)
                     if resource == 'qb-core' and functionName == 'GetCoreObject' then
                         return env.qb
+                    end
+                    if resource == 'core-framework' and functionName == 'LoadAnimDict' then
+                        -- 复刻 core-framework/shared/util.lua：RequestAnimDict + 等到超时。
+                        -- 桩不实现它，默认兜底会直接回 true，动画超时用例就永远看不到 failed。
+                        local dict, timeoutMs = ...
+                        if type(dict) ~= 'string' or dict == '' then return false end
+                        if HasAnimDictLoaded(dict) then return true end
+                        RequestAnimDict(dict)
+                        local deadline = GetGameTimer() + (tonumber(timeoutMs) or 5000)
+                        while not HasAnimDictLoaded(dict) do
+                            if GetGameTimer() > deadline then return false end
+                            Wait(10)
+                        end
+                        return true
                     end
                     local overrides = env.export_overrides[resource]
                     if type(overrides) == 'table' and type(overrides[functionName]) == 'function' then
@@ -472,8 +493,16 @@ return function(env)
                 end
                 cb(result)
             end,
+            -- main.lua gates opening the phone on a loaded character (citizenid),
+            -- so the stub must expose both the call and a resolved character.
+            GetPlayerData = function() return env.qb.PlayerData end,
         },
-        PlayerData = { money = { cash = 0, bank = 0 }, metadata = {} },
+        PlayerData = {
+            citizenid = 'CID00001',
+            money = { cash = 0, bank = 0 },
+            metadata = {},
+            job = { name = 'unemployed', grade = { level = 0 }, onduty = false },
+        },
         Config = {},
         Shared = {},
     }

@@ -24,7 +24,11 @@ end
 -- 统一走 core-framework 的公共实现（原先这里有一份同样的阻塞等待循环）。
 -- 用 function 包一层而不是直接赋值 exports：导出在"调用时"解析，
 -- 这样不把核心资源变成加载期硬依赖，资源启动顺序也不影响。
-local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDict(dict) end
+local loadAnimDict = function(dict)
+    -- 必须带上本资源的超时：导出默认是 5000ms，直接用会把 effect 超时从 1s 拖到 5s，
+    -- 而 ack 文案仍然写着 ANIM_LOAD_TIMEOUT_MS（无头用例抓到的漂移）。
+    return exports['core-framework']:LoadAnimDict(dict, ANIM_LOAD_TIMEOUT_MS)
+end
 
 local function handlePlayAnim(payload)
     local ped = PlayerPedId()
