@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
-- **`/phoneui <app> [tab]` 可以带页码**：`phoneui police_mdt incidents` 直接打开接警列表，`case`/`person`/`report`/`me` 同理；页码通过 `pendingNavTab` 传给目标 App（消息在它挂载前就发了，直接塞进消息里没用）。agent 因此能逐页验收 MDT，而不需要点像素。
 - **MDT 也回吐页状态**：警用终端在调度/人车/文书/案件/我的之间切换、以及选中某条警情时上报 `{app:'police_mdt', tab:<page>, selected:<警情 id>}`。只报 id，不报搜索词与案卷正文；离开调度页后 selected 自动清空，免得让人以为他还在看那条警情。
 - **agent 能确定性地打开手机里的某个 App**：`/phoneui <app>`（`setr phone_ui_nav "1"` 才生效，生产默认关）→ `phone:navigate` 消息 → NUI 切页。起因是真机上 OS 光标被 GTA 锁在屏幕右下角（`SetCursorPos` 被每帧覆盖，`GetCursorPos` 恒为 2559,1439），合成点击永远落在手机外——这条通道是鼠标点不进去时的替代路径。
 - **agent 能读客户端 UI 状态了**。`custom-phone` 导出 `GetUiState()`（`open` / `surface` / `focused` / `keep_input` / `focus_owner` / `nui_focus_native`，只回枚举与布尔），`custom-agent-client` 每 5s 推一份快照，服务端白名单 + 夹紧 + 1s/源限流 + 15s 过期 + 掉线清理，`custom-director` 暴露 `GET /agent/v1/live/clients[/{citizenid}]` 与 `/live/server`，配两个只读工具 `get_client_state` / `get_server_state`（registry 1.7.0，41 tools）。快照是自述，永不作为权限或策略输入。
@@ -22,8 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`/tablet` 与 `/phone` 命令**（带控制台 `tcity_tablet <id>` 分支）。以前平板只有设计稿，没有任何入口；已经打开时切换会以 `reason=switch` 关闭再重开，当前 app 不丢。
 
 ### Fixed
-- **MDT 的两条错误提示串了**：`too_far` 与 `invalid_incident` 在错误码表里各定义两次（后者覆盖前者），到场距离报的是上铐那套文案。合并成一句通用提示，`svelte-check` 从 2 errors 归零。
-- **本地栈迁移失败不再静默**：`tools/dev/local_stack.sh` 以前把迁移错误吞掉、继续往下跑，结果这次真的出现 `police_units`/`police_incidents` 缺表、board 端点 500、MDT 列表全空。现在会打印错误并在缺表时直接退出。
+- **平板偶尔只剩一栏**：`AppSurface` 的 `width` 初始为 0、布局据此退回 `stack`，要等 `ResizeObserver` 第一次回调才切成两栏——快机器看不出来，慢机器（CI）上就是「平板只有列表」。现在 `onMount` 里先用 `getBoundingClientRect()` 同步量一次，之后仍由 observer 跟踪变化。
 - **读到的状态总是慢半拍**：状态快照以前只有 5s 心跳，按完 M 立刻去查还是旧值。现在 `custom-phone` 在开/关/换页/`/phonefix` 时广播 `phone:client:stateChanged`，`custom-agent-client` 收到就立刻采一份推给服务端，心跳降级为兜底（15s 过期仍生效）；服务端每源限流从 1s 放宽到 250ms，否则事件推送会被心跳挤掉。真机：按 M 后 ~1s 内 `open` 翻转，之前最多要等 5s。
 - **按 M 有时开、有时不开**：`keepInput=true` 让同一次按键同时到达游戏与 CEF —— 游戏（`RegisterKeyMapping`）打开手机，同一帧 NUI 的 `window.keydown('m')` 又把它关掉。密钥只有一个主人：`m/M` 归 Lua，NUI 只留 `Escape` 与自己独占的鼠标手势。真机复验：开→（4.5s 后按）关，`/live/clients` 的 `open` 与截图一致。
 - **按 M 关不掉手机**（真机症状：点一次闪一下、再点也关不掉）。两个原因叠在一起：① `RegisterCommand('phone')` 被注册了两次，后一个（`/phone` 强制形态，已经开着就直接 `return`）覆盖了前一个 toggle——同名命令后注册者胜；② 剩下那条 toggle 用 `IsNuiFocused()` 判断"焦点还在不在"，而这个原生在本 build **恒 false**（61 条 focus 遥测里 0 条 true），于是每次"关闭"都走进"复位重开"分支。现在开关只看 `Surface.IsOpen()`、焦点只看 `PhoneFocus.State()`，原生降级为诊断字段 `nui_focus_native`；`/phone [phone|tablet]` 保留强制形态语义，去抖初值改为 `-300ms` 以免资源刚起第一下被吞。无头用例复现了原生撒谎的场景（`env.nui.focus_native_lies`）。
