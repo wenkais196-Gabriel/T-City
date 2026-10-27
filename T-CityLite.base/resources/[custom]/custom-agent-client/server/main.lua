@@ -385,6 +385,9 @@ end
 
 local function sanitizeState(raw)
     if type(raw) ~= 'table' then return nil end
+    -- 版本守卫：没有 v=1 的报文一律不认。否则一个空表就能注册出"全默认"的快照，
+    -- 让 /clients 报一个 logged_in=false 的假客户端。
+    if tonumber(raw.v) ~= 1 then return nil end
     local phone = type(raw.phone) == 'table' and raw.phone or nil
     local ped = type(raw.ped) == 'table' and raw.ped or nil
     local screen = type(raw.screen) == 'table' and raw.screen or nil
