@@ -111,6 +111,32 @@ local function topFrame()
 end
 
 --- 重算焦点与控制屏蔽：只有栈顶说了算。
+-- 一层 UI 打开时要压住的输入（定点黑名单，别再 DisableAllControlActions：
+-- 每帧遍历全部控制是实机掉帧的主因之一）。
+local BLOCKED_CONTROLS = {
+    1, 2, 3, 4, 5, 6,          -- 视角
+    24, 257, 263,              -- 攻击
+    25,                        -- 瞄准
+    37, 44, 45, 47,            -- 选枪/掩体/换弹/交互
+    14, 15, 16, 17,            -- 武器轮盘
+    81, 82, 83,                -- 车载电台
+    140, 141, 142, 143,        -- 近战
+    172, 173, 174, 175,        -- 手机菜单组（方向键）
+    176, 177,                  -- 手机确认/返回
+    186, 187, 188, 189,        -- 前端菜单组
+    199, 200,                  -- 暂停菜单（Esc 由层自己处理）
+    21, 22,                    -- 冲刺 / 跳跃（默认完全接管：手机开着不能动）
+    30, 31, 32, 33, 34, 35,    -- 走路四向（在 allow 里时不挡，见 inList）
+}
+
+local function inList(list, value)
+    if not list then return false end
+    for _, item in ipairs(list) do
+        if item == value then return true end
+    end
+    return false
+end
+
 local function apply()
     local frame = topFrame()
     if not frame then
@@ -149,10 +175,12 @@ local function apply()
     CreateThread(function()
         while topFrame() do
             local current = topFrame()
-            DisableAllControlActions(0)
-            if current and current.allow then
-                for _, control in ipairs(current.allow) do
-                    EnableControlAction(0, control, true)
+            local allow = current and current.allow
+            for _, control in ipairs(BLOCKED_CONTROLS) do
+                -- 允许穿透的控制（走路等）不屏蔽：比"全禁再放开"省得多，
+                -- DisableAllControlActions 每帧要遍历几百个控制，实机会卡。
+                if not inList(allow, control) then
+                    DisableControlAction(0, control, true)
                 end
             end
             Wait(0)

@@ -225,16 +225,3 @@ body {
   z-index: 2;
 }
 
-/* 自绘光标：引擎游标不可见时至少能看到自己指哪 */
-.nav-cursor {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  margin-left: -5px;
-  margin-top: -5px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 10px rgba(110, 168, 255, 0.8);
-  pointer-events: none;
-  z-index: 3;
-}

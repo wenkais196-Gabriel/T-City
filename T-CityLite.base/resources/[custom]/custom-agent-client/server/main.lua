@@ -421,6 +421,22 @@ local function sanitizeState(raw)
             -- 它属于手机，所以挂在 phone 下面（消费方读 phone.app），不是顶层。
             -- 焦点提示（哪个按钮/输入框被键盘或手柄选中）
             focus = labelText(phone.focus, 24),
+            delegated = phone.delegated == true,
+            custom_ui_state = labelText(phone.custom_ui_state, 16),
+            -- 交互路径（最多 3 层，给诊断用：关屏后应为空）
+            frames = (function()
+                if type(phone.frames) ~= 'table' then return nil end
+                local out, count = {}, 0
+                for _, item in ipairs(phone.frames) do
+                    local token = labelText(item, 32)
+                    if token then
+                        count = count + 1
+                        if count > 3 then break end
+                        out[count] = token
+                    end
+                end
+                return count > 0 and out or nil
+            end)(),
             app = (function()
                 local app = type(phone.app) == 'table' and phone.app or nil
                 if not app then return nil end

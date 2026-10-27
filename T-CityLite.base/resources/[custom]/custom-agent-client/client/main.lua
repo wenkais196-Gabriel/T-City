@@ -176,6 +176,11 @@ local function phoneState()
             -- 焦点落在哪个控件上（NUI 侧 nav 回吐；空 = 没有焦点）
             focus = type(state.focus) == 'string' and state.focus or nil,
             focus_owner = state.focus_owner,
+            -- 交互路径（诊断用：关屏后必须为空，否则说明"没释放"）
+            frames = type(state.frames) == 'table' and state.frames or nil,
+            -- 是否走了共享栈（false = 退化路径，keepInput 会是 true → 游标不可见）
+            delegated = state.delegated == true,
+            custom_ui_state = type(state.custom_ui_state) == 'string' and state.custom_ui_state or nil,
             app = type(state.app) == 'table' and {
                 id = state.app.id,
                 tab = state.app.tab,
