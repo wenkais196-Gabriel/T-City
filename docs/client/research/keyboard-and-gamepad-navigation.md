@@ -131,6 +131,33 @@ paint(el) → fetchNui('uiFocus', {label}) → Lua focusHint → GetUiState().fo
 实测（NUI harness，24 条任务）：滚动容器是 `.pane`（不是 `.quests-app`）——
 焦点走 14 步 `scrollTop` 从 0 到 3014/3024，焦点元素始终留在可视区内，往回走能回到顶部。
 
+## 4.5 为什么"agent 能按、人不能按"
+
+真机发现的差别，这条最要命：
+
+| 谁在按 | 结果 |
+|---|---|
+| agent 注入的按键（SendInput / PostMessage） | 进得了 CEF，`keydown` 能收到 |
+| **玩家真按方向键** | CEF 收不到；轮询控制号 172-175 也读不到 |
+
+原因：手机开着是 `SetNuiFocus(true, true)` + `KeepInput(true)` —— 游戏仍在处理输入。
+硬件按键先过游戏的输入管线，被 keepInput 吃掉/改写成别的控制，
+而 172-175 那组只在"游戏自己的手机菜单"上下文里成立。注入的按键绕过了这条管线，
+所以 agent 一直能用、玩家一直不能用。
+
+**修法：键盘读原始按键，不读控制号。**
+
+```lua
+IsRawKeyDown(0x28)  -- ArrowDown，Windows VK，跟 GTA 的控制映射无关
+```
+
+边沿自己算（原生只有 IsRawKeyDown），一帧一次；同一个键这一帧既有原始按键又有控制
+轮询时只走原始按键，避免一次按键挪两格。手柄继续走 172-177 的控制轮询。
+
+**怎么证明原始按键那条路真的在跑**：Tab。Tab 在 GTA 里被吃掉、CEF 从来收不到
+（§1 的第一次实验就是它），所以 Tab 现在能让焦点移动，只可能是 Lua 原始按键在工作。
+实测：Settings 页按 Tab，焦点 `Close Phone → Ringtone volume → 🌙 Dark`。
+
 ## 9. 待验证
 
 1. 真手柄：d-pad 是否映射到 172-175 / 186-189；A/B 对应 176/177 还是 191/194。

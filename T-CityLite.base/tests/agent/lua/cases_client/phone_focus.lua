@@ -174,6 +174,59 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('keyboard_uses_raw_keys_not_control_ids', function()
+            -- 玩家真按方向键时 GTA 不会把它落到 172-175 那组手机控制上（keepInput 下轮询
+            -- 不到），只有 agent 注入的按键才会进 CEF —— 不读原始按键就是"agent 能用
+            -- 键盘、人不能用"。
+            env.Command('phonefix')
+            env.Step(100)
+            env.Command('phone')
+            env.Step(200)
+
+            local function navs()
+                local out = {}
+                for _, record in ipairs(env.nui_messages) do
+                    local msg = record.msg or {}
+                    if msg.action == 'phone:nav' then out[#out + 1] = msg end
+                end
+                return out
+            end
+
+            local function press(vk)
+                env.raw_keys[vk] = true
+                env.Step(16)
+                env.raw_keys[vk] = nil
+                env.Step(16)
+            end
+
+            press(0x28) -- ArrowDown
+            local moves = 0
+            for _, msg in ipairs(navs()) do
+                if msg.kind == 'move' and msg.dir == 'down' then moves = moves + 1 end
+            end
+            assert(moves == 1, 'one hardware press emits exactly one move, got ' .. tostring(moves))
+
+            press(0x0D) -- Enter
+            press(0x08) -- Backspace
+            press(0x22) -- PageDown
+            press(0x23) -- End
+
+            local acts, backs, paged, edge = 0, 0, false, false
+            for _, msg in ipairs(navs()) do
+                if msg.kind == 'activate' then acts = acts + 1 end
+                if msg.kind == 'back' then backs = backs + 1 end
+                if msg.kind == 'page' and msg.dir == 'down' then paged = true end
+                if msg.kind == 'edge' and msg.dir == 'last' then edge = true end
+            end
+            assert(acts == 1, 'Enter emits one activate, got ' .. tostring(acts))
+            assert(backs == 1, 'Backspace emits one back, got ' .. tostring(backs))
+            assert(paged, 'PageDown emits page/down')
+            assert(edge, 'End emits edge/last')
+
+            -- 下一条用例断言"任何输入之前没有 nav 消息"，这里把记录清干净
+            env.nui_messages = {}
+        end)
+
         check('focus_hint_tells_the_agent_what_is_selected', function()
             -- agent 看不见 DOM：没有这条只能盲按方向键（真机踩过：Tab 直接落在
             -- "分享"上，想输的样子完全对不上）。

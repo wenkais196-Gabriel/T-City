@@ -23,6 +23,30 @@ local DIR_CONTROLS = {
 local ACCEPT = { 176 }  -- CELLPHONE_SELECT（Enter / 空格）
 local CANCEL = { 177 }  -- CELLPHONE_CANCEL（Backspace）
 
+-- 键盘单独走**原始按键**（Windows VK）：靠控制号读键盘有一个致命前提 ——
+-- 游戏得把方向键映射到 172-175 那组手机控制上。实测在保持输入（keepInput）的情况下，
+-- 玩家真按方向键时**轮询不到**（agent 注入的按键反而能到 CEF），于是"人打不动、
+-- agent 能打"。IsRawKeyDown 不经过控制映射，硬件按了就为真。
+local RAW = {
+    up = 0x26, down = 0x28, left = 0x25, right = 0x27,
+    accept = 0x0D, cancel = 0x08,
+    tab = 0x09, shift = 0x10,
+    pageup = 0x21, pagedown = 0x22,
+    home = 0x24, ['end'] = 0x23,
+}
+local rawPrev = {}
+
+--- 每帧算出"这一帧刚按下的键"（原生只有 IsRawKeyDown，边沿自己算）。
+local function rawEdges()
+    local edges = {}
+    for kind, vk in pairs(RAW) do
+        local down = IsRawKeyDown ~= nil and IsRawKeyDown(vk) or false
+        if down and not rawPrev[kind] then edges[kind] = true end
+        rawPrev[kind] = down
+    end
+    return edges
+end
+
 local running = false
 
 local function anyJustPressed(controls)
@@ -57,11 +81,36 @@ function PhoneNav.Tick()
         return
     end
     disableAll()
-    for dir, controls in pairs(DIR_CONTROLS) do
-        if anyJustPressed(controls) then emit('move', dir) end
+
+    -- 1) 键盘：原始按键优先。同一个键这一帧既被原始按键抓到、又出现在控制轮询里时，
+    --    只走原始按键那条（否则一次按键会挪两格）。
+    local edges = rawEdges()
+    local moved = false
+    for dir in pairs(DIR_CONTROLS) do
+        if edges[dir] then
+            emit('move', dir)
+            moved = true
+        end
     end
-    if anyJustPressed(ACCEPT) then emit('activate') end
-    if anyJustPressed(CANCEL) then emit('back') end
+    if edges.tab then
+        emit('move', edges.shift and 'up' or 'down')
+        moved = true
+    end
+    if edges.pageup then emit('page', 'up') end
+    if edges.pagedown then emit('page', 'down') end
+    if edges.home then emit('edge', 'first') end
+    if edges['end'] then emit('edge', 'last') end
+    if edges.accept then emit('activate') end
+    if edges.cancel then emit('back') end
+
+    -- 2) 手柄（以及没被原始按键接住的键盘）：控制轮询兜底
+    if not moved then
+        for dir, controls in pairs(DIR_CONTROLS) do
+            if anyJustPressed(controls) then emit('move', dir) end
+        end
+    end
+    if not edges.accept and anyJustPressed(ACCEPT) then emit('activate') end
+    if not edges.cancel and anyJustPressed(CANCEL) then emit('back') end
 end
 
 --- 开屏后调用：允许 Tick 工作。重复调用是安全的。
