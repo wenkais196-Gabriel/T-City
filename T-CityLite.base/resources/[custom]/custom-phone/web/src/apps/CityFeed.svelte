@@ -11,7 +11,7 @@
   const loadFeed = async () => {
     try {
       const res = await fetchNui('getCityFeed');
-      if (res.success) {
+      if (res?.success && Array.isArray(res.feed)) {
         feedList = res.feed;
       }
     } catch (err) {

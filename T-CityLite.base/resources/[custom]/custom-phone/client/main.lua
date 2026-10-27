@@ -212,7 +212,10 @@ local function OpenPhone(forcedKind, reason)
         SendNUIMessage({
             action = 'phone:open',
             surface = kind,
-            reason = reason or 'open'
+            reason = reason or 'open',
+            -- 键盘归谁：keepInput=1 时硬件按键进的是 Lua（IsRawKeyDown），CEF 也会收到一份。
+            -- 两边都处理就会"一次按方向键挪两格"，所以明确告诉 NUI 别自己接管。
+            lua_owns_keys = GetConvar('phone_keep_input', '1') == '1'
         })
     end, {
         intervalMs = 250,
