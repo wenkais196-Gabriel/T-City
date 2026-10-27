@@ -420,6 +420,15 @@ return function(env)
     -- 玩家真按方向键时轮询不到控制号，只能靠这个（真机踩过）。
     function _G.IsRawKeyDown(vk) return env.raw_keys[vk] == true end
 
+    -- 整组屏蔽 + 白名单放行（custom-ui 的输入层就用这两个）
+    function _G.DisableAllControlActions()
+        env.controls_disabled_all = (env.controls_disabled_all or 0) + 1
+    end
+    function _G.EnableControlAction(_, control)
+        env.re_enabled_controls = env.re_enabled_controls or {}
+        env.re_enabled_controls[control] = true
+    end
+
     function _G.IsDisabledControlJustPressed(_, control)
         if env.controls_pressed[control] then
             env.controls_pressed[control] = nil
