@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **agent 能确定性地打开手机里的某个 App**：`/phoneui <app>`（`setr phone_ui_nav "1"` 才生效，生产默认关）→ `phone:navigate` 消息 → NUI 切页。起因是真机上 OS 光标被 GTA 锁在屏幕右下角（`SetCursorPos` 被每帧覆盖，`GetCursorPos` 恒为 2559,1439），合成点击永远落在手机外——这条通道是鼠标点不进去时的替代路径。
 - **agent 能读客户端 UI 状态了**。`custom-phone` 导出 `GetUiState()`（`open` / `surface` / `focused` / `keep_input` / `focus_owner` / `nui_focus_native`，只回枚举与布尔），`custom-agent-client` 每 5s 推一份快照，服务端白名单 + 夹紧 + 1s/源限流 + 15s 过期 + 掉线清理，`custom-director` 暴露 `GET /agent/v1/live/clients[/{citizenid}]` 与 `/live/server`，配两个只读工具 `get_client_state` / `get_server_state`（registry 1.7.0，41 tools）。快照是自述，永不作为权限或策略输入。
 - **App 停在哪一页也能问到了**。任务 App 通过 `fetchNui('appState')` 回吐 `{app, tab, selected}`（三个短 token，白名单校验），手机侧存起来放进 `GetUiState().app`，服务端再消毒一次。MDT/银行尚未接，`app` 是可选字段。
 - **手机和平板是同一台设备的两个 surface**。`PhoneShell` 换成 `DeviceShell`，`surface` 只是一个 prop：外壳差异（尺寸/圆角/刘海/状态栏）全部由 `presetOf()` 驱动，业务组件不知道自己长在什么设备上。形态判定唯一源在客户端 Lua（客户端 core/surface_rules.lua 的纯函数 Decide()，优先级为入口 > 来电 > 载具 > 玩家偏好 > 默认手机）——判定不放 NUI，因为 `keepInput` 是 focus 的一部分，必须在打开这一刻定下来。平板打开时逐帧 `DisableControlAction(30–35)` 锁移动（不用 `FreezeEntityPosition`/`SetPlayerControl(false)` 这类粘性状态），六条失败出口统一收敛到 `Surface.Reset() + DeviceLock.End()`。
