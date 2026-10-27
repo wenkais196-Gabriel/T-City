@@ -45,8 +45,9 @@
              "focused": false, "keep_input": false, "focus_owner": "phone"|null },
   "ped":   { "in_vehicle": false, "vehicle_class": 0, "health": 200, "dead": false },
   "screen":{ "w": 1920, "h": 1080 }
-  // 车机/任务 UI 的开关状态留到下一版：需要 tcity-dashboard 先导出自己的状态，
-  // 本次不写"恒为 false"的字段充数。
+  // 只答"壳"的状态：手机开着吗、哪一面、焦点归谁。
+  // 单个 App（任务、MDT、银行）内部停在哪一页还没有导出点——那要各自的
+  // Svelte 组件把状态回吐给 Lua，不是这一层能猜的，故 v1 不给这个字段。
 }
 ```
 
