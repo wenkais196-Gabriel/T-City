@@ -53,6 +53,7 @@
   import {
     activate as navActivate,
     focusFirst as navFocusFirst,
+    reset as resetNavFocus,
     jump as navJump,
     move as navMove,
     moveSteps as navMoveSteps,
@@ -120,11 +121,9 @@
       lastReportedApp = plain;
       reportAppState(id === 'home' ? '' : plain);
     }
-    if (get(isPhoneOpen)) {
-      setTimeout(() => {
-        if (get(isPhoneOpen)) navFocusFirst();
-      }, 0);
-    }
+    // 换页也不预设焦点：鼠标点进 App 之后不该凭空冒出一个焦点框。
+    // 键盘用户下一次按方向键时，焦点自然落在新页面的第一个可聚焦元素上（nav.move 处理）。
+    if (get(isPhoneOpen)) setTimeout(() => resetNavFocus(), 0);
   });
   import { speakDispatch, stopDispatchSpeech } from './utils/tts';
   import {
@@ -169,8 +168,9 @@
       }
       loadPhoneData();
       void loadDynamicApps();
-      // 键盘/手柄导航：开屏就把焦点放到第一个可聚焦元素（等一帧让 DOM 就位）
-      setTimeout(() => navFocusFirst(), 0);
+      // 开屏**不**预设键盘焦点：默认是鼠标模式（没有焦点框、没有底部标签），
+      // 玩家按方向键 / Tab 之后焦点才出现，并且从第一个 App（Phone Dialer）开始。
+      resetNavFocus();
       // 入场动画（下滑 + 8° 旋转）跑完再量一次：动画期间量到的 rect 是变换后的包围盒，
       // 焦点框会画偏一格，而标签来自 store —— 用户看到的就是"框住 A、标签写 B"。
       setTimeout(() => remeasure(), 620);

@@ -209,7 +209,7 @@ body {
 /* 焦点标签：让人一眼知道"现在选中的是什么" */
 .nav-chip {
   position: absolute;
-  bottom: 14px;
+  bottom: 104px;
   left: 50%;
   transform: translateX(-50%);
   max-width: 70vw;
@@ -244,7 +244,7 @@ body {
 /* 键位提示：鼠标在这台机器上不可用，键盘怎么用要写在脸上 */
 .nav-hint {
   position: absolute;
-  bottom: 40px;
+  bottom: 132px;
   left: 50%;
   transform: translateX(-50%);
   padding: 2px 8px;
