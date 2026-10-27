@@ -351,7 +351,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local STATE_TTL_MS = 15000
-local STATE_MIN_INTERVAL_MS = 1000
+local STATE_MIN_INTERVAL_MS = 250 -- 4/s：事件推送常与 5s 心跳撞车，1s 窗口会把"刚按完"的那一份丢掉
 
 local stateBySrc = {} -- [src] = { at = gameTimerMs, data = table, dropped = n }
 
