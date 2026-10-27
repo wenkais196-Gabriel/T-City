@@ -26,7 +26,7 @@ async function box(page) {
 export const surfaceScenarios = [
   {
     surfaces: ['phone'],
-    name: '切到不报状态的 App：页面 id 会跟着换，焦点落在新页面',
+    name: '切到不报状态的 App：页面 id 会跟着换，键盘焦点不凭空出现',
     async run({ page, world }) {
       await openPhone(page, 'phone');
       await page.evaluate(() => window.postMessage({ action: 'phone:navigate', app: 'settings' }, '*'));
@@ -34,7 +34,13 @@ export const surfaceScenarios = [
 
       const lastApp = () => world.calls.filter((c) => c.callback === 'appState').at(-1)?.payload ?? null;
       checkEqual('切到 Settings 后回吐的 id 是 settings', lastApp()?.app, 'settings');
-      checkEqual('焦点落在新页面的第一个控件上',
+      // 鼠标模式：换页不预设焦点（否则一点鼠标就冒出一个框）
+      checkEqual('换页后没有键盘焦点',
+        await page.locator('.phone-wrapper [data-nav-focus="true"]').count(), 0);
+      // 键盘用户按第一下方向键，才落到新页面的第一个控件
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(250);
+      checkEqual('按方向键后焦点落在新页面的第一个控件上',
         await page.locator('.phone-wrapper [data-nav-focus="true"]').count(), 1);
 
       await page.evaluate(() => window.postMessage({ action: 'phone:navigate', app: 'home' }, '*'));
@@ -72,6 +78,11 @@ export const surfaceScenarios = [
       const ring = page.locator('.nav-ring');
       const chip = page.locator('.nav-chip');
 
+      // 鼠标模式：开屏没有焦点框
+      await page.waitForTimeout(500);
+      checkEqual('开屏没有焦点框', await ring.count(), 0);
+
+      await page.keyboard.press('ArrowDown');
       await ring.waitFor({ state: 'visible', timeout: 5000 });
       const first = await ring.boundingBox();
       checkTruthy('焦点框有实际大小', first && first.width > 4 && first.height > 4);
@@ -129,15 +140,21 @@ export const surfaceScenarios = [
   },
   {
     surfaces: ['phone'],
-    name: '键盘/手柄导航：开屏即有焦点、方向键移动、确认打开 App、返回回桌面',
+    name: '键盘/手柄导航：开屏无焦点、第一次按键落到第一个 App、方向键移动、确认打开、返回回桌面',
     async run({ page }) {
       const focused = () => page.locator('[data-nav-focus="true"]');
       const gridTiles = () => page.locator('.app-icon-wrapper').count();
 
       await openPhone(page, 'phone');
       await page.waitForTimeout(200);
-      checkEqual('开屏后恰好一个焦点', await focused().count(), 1);
+      checkEqual('开屏（鼠标模式）没有焦点', await focused().count(), 0);
+
+      // 第一次移动才建立焦点，并且落在第一个 App（Phone Dialer）
+      await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
+      await page.waitForTimeout(150);
+      checkEqual('第一次按键后恰好一个焦点', await focused().count(), 1);
       checkTruthy('焦点在手机里（不是 body）', (await page.locator('.phone-wrapper [data-nav-focus="true"]').count()) === 1);
+      checkEqual('默认从第一个 App 开始', await focused().first().getAttribute('aria-label'), 'Phone Dialer');
 
       const first = await focused().first().getAttribute('aria-label');
       await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
@@ -340,12 +357,15 @@ export const surfaceScenarios = [
       await openPhone(page, 'phone');
       await page.waitForTimeout(800);
 
-      // 真机：默认焦点停在"关机键"上，鼠标点任意位置都被当成关机 ——
-      // 关机键（3px 贴边）必须不可聚焦、不可点，焦点要落在第一个 App 图标上。
+      // 真机：开屏默认焦点曾停在"关机键"上，鼠标点任意位置都被当成关机。
+      // 现在开屏根本没有键盘焦点（鼠标模式），按第一下方向键才出现，且是第一个 App。
+      checkEqual('开屏没有焦点框', await page.locator('.nav-ring').count(), 0);
+
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(250);
       const chip = (await page.locator('.nav-chip').textContent())?.trim() ?? '';
-      checkIncludes('开屏焦点标签是第一个 App 而不是关机键', chip, 'Phone Dialer');
-      checkEqual('焦点标签里不应出现关机键',
-        chip.includes('Close Phone'), false);
+      checkIncludes('键盘焦点从第一个 App 开始', chip, 'Phone Dialer');
+      checkEqual('焦点标签里不应出现关机键', chip.includes('Close Phone'), false);
 
       // 遮罩占满手机以外的视野，点它不该关机（关闭只走 M / Esc / 平板状态栏按钮）
       await page.locator('.phone-backdrop-mask').click({ position: { x: 10, y: 10 } });
@@ -371,18 +391,18 @@ export const surfaceScenarios = [
         { action: 'phone:open', surface: 'phone', reason: 'switch', lua_owns_keys: true }, '*'));
       await page.waitForTimeout(700);
 
-      const chip = () => page.locator('.nav-chip').textContent();
-      const before = await chip();
+      const chipCount = () => page.locator('.nav-chip').count();
 
-      // CEF 收到方向键必须**不动**（否则一次按键挪两格：CEF 一格 + Lua 一格）
+      // CEF 收到方向键必须**不处理**（否则一次按键挪两格：CEF 一格 + Lua 一格）。
+      // 当前还没有焦点，所以"没处理"的表现是：仍然没有焦点。
       await page.keyboard.press('ArrowDown');
       await page.waitForTimeout(250);
-      checkEqual('Lua 接管时 CEF 不响应方向键', await chip(), before);
+      checkEqual('Lua 接管时 CEF 不响应方向键', await chipCount(), 0);
 
       // 同一动作走 Lua 通道仍然有效
       await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
       await page.waitForTimeout(250);
-      checkTruthy('Lua 送来的 move 仍然生效', (await chip()) !== before);
+      checkEqual('Lua 送来的 move 建立焦点', await chipCount(), 1);
     },
   },
   {

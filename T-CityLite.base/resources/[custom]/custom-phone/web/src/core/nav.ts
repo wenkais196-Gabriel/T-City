@@ -138,12 +138,16 @@ const ORDER: Record<string, number> = { up: -1, down: 1, left: -1, right: 1 };
 export function move(dir: string): void {
   const items = focusables();
   if (items.length === 0) return;
-  const step = ORDER[dir] ?? 1;
-  let index = current ? items.indexOf(current) : -1;
-  if (index === -1) {
-    index = step < 0 ? 0 : -1;
+  // 还没有焦点（鼠标模式 → 玩家第一次按键）：不论按哪个方向都先落到第一个，
+  // 而不是"按上就跳到最后" —— 手机桌面默认从 Phone Dialer 开始。
+  if (!current) {
+    paint(items[0]);
+    return;
   }
-  const next = (index + step + items.length) % items.length;
+  const step = ORDER[dir] ?? 1;
+  const index = items.indexOf(current);
+  const base = index === -1 ? 0 : index;
+  const next = (base + step + items.length) % items.length;
   paint(items[next]);
 }
 
@@ -178,10 +182,8 @@ export function jump(edge: 'first' | 'last'): void {
 
 /** 确认：焦点在输入框上就保持原样（让人继续打字），否则点一下。 */
 export function activate(): void {
-  if (!current) {
-    focusFirst();
-    return;
-  }
+  // 鼠标模式下没有焦点：Enter 不做任何事（不乱点、也不"选中第一个再点"）。
+  if (!current) return;
   const tag = current.tagName.toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select') {
     current.focus();

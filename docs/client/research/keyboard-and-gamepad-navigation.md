@@ -175,3 +175,25 @@ IsRawKeyDown(0x28)  -- ArrowDown，Windows VK，跟 GTA 的控制映射无关
 
 焦点框和标签对不上（框住 A、标签写 B）也是同一批问题里的：入场动画（下滑 + 8° 旋转）
 期间量到的是变换后的包围盒，开屏 620ms 后必须再量一次。
+
+## 6. 鼠标优先的焦点模型（2026-10-27 定稿）
+
+手机上**默认没有键盘焦点**：开屏、换 App 都不设焦点，桌面看起来是干净的（没有蓝框、
+没有底部标签、没有键位提示）。原因很实际——只要有焦点，就会有人用鼠标去点，
+而真机上"点一下被当成确认焦点元素"的体验比没有焦点更糟。
+
+规则：
+
+| 动作 | 结果 |
+|---|---|
+| 开屏 / 换 App | 无焦点（`navFocus = null`） |
+| 第一次按方向键 / Tab | 焦点出现在**第一个**可聚焦元素（手机桌面是 Phone Dialer），不论按的是哪个方向 |
+| 之后的方向键 | 正常在可聚焦元素之间移动 |
+| 没有焦点时按 Enter | 什么都不做（不乱点） |
+| 关闭手机 | 焦点清空，`uiFocus` 回吐空标签 → 服务端 `phone.focus` 变 null |
+| 输入框里打字 | 不受影响（`isEditableTarget` 守卫） |
+
+焦点标签与键位提示抬到了 Dock 上方（`bottom: 104px / 132px`）——原来压在 Dock 图标上。
+
+实现落点：T-CityLite.base/resources/[custom]/custom-phone/web/src/core/nav.ts 的 move()（无焦点先落第一个）
+与 reset()，以及 App.svelte 里 phone:open 与 activeApp 的订阅（都改成 reset 而不是 focusFirst）。
