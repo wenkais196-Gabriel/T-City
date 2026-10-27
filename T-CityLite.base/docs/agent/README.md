@@ -419,12 +419,12 @@ above was performed with the normal `.env` credentials.
 
 | 文档 | 内容 |
 |---|---|
-| [`STATUS.md`](STATUS.md) | **先看这个**：分层现状、17 个动作覆盖、设计差异、上手顺序、未验证项 |
+| [`STATUS.md`](STATUS.md) | **先看这个**：分层现状、21 个动作覆盖、设计差异、上手顺序、未验证项 |
 | [`ACTIONS.md`](ACTIONS.md) | 动作契约：风险分级、参数规范化、审批、执行与回读、错误码、`agent_denials` |
 | [`TOOLS.md`](TOOLS.md) | 41 个工具的路由与风险表（由 `tools/agent_tools.json` 生成，勿手改） |
 | [`EVAL.md`](EVAL.md) | 评测：导出、指标定义（含 denial_rate）、已知盲区 |
 | [`SMOKE.md`](SMOKE.md) | 实机冒烟：三段式检查与常见失败 |
 | [`MCP_WIRING.md`](MCP_WIRING.md) | **把 MCP 接到真实服务器上**：DB / gateway / director 三路拓扑、env 对照、验证命令与常见断点 |
-| [`design/`](design/) | 六份设计（实时感知 / 效果通道 / 工具契约 / 写操作 / 测试评测 / 本地 console harness，即 07） |
+| [`design/`](design/) | 八份设计（实时感知 / 效果通道 / 工具契约 / 写操作 / 测试评测 / 客户端模型 / console harness 07 / 客户端状态探针 08） |
 | [`FIVEM_MCP_LIVE_TEST.md`](FIVEM_MCP_LIVE_TEST.md) | 第三方 fivem-mcp 0.6.0 的逐工具实测：23 个工具哪些能用、四个必踩的坑 |
 实机验证顺序：建表（`v2.3`、`v2.5`）→ 开 convar → `tools/agent_smoke.py` → 导出审计 → `tools/agent_eval.py`。
