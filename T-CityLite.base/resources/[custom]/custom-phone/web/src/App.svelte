@@ -65,6 +65,31 @@
   //  2. 焦点从新页面的第一个元素重新开始 —— 旧元素已经不在 DOM 里。
   let lastReportedApp = '';
   let navOverlay: any = $state(null);
+  // 引擎游标在这台机器上不画（引擎层问题），我们自己在 NUI 里画一个。
+  // 必须挂在 .nav-overlay 里 —— 之前那版在壳外面，被手机整个盖住，看起来像"没有事件"。
+  let cursor: { x: number; y: number } | null = $state(null);
+  let cursorQueued = false;
+  let pendingCursor: { x: number; y: number } | null = null;
+
+  const trackPointer = (event: PointerEvent | MouseEvent) => {
+    const target = navOverlay as HTMLElement | null;
+    if (!target) return;
+    // 直接换算成"相对手机壳"的坐标：模板里不要再调 getBoundingClientRect，
+    // 那会在壳还没挂上时炸掉整个组件（表现为手机打不开）。
+    const box = target.getBoundingClientRect();
+    pendingCursor = { x: event.clientX - box.left, y: event.clientY - box.top };
+    if (cursorQueued) return;
+    cursorQueued = true;
+    requestAnimationFrame(() => {
+      cursorQueued = false;
+      const next = pendingCursor;
+      if (!next) return;
+      if (cursor && Math.abs(cursor.x - next.x) < 2 && Math.abs(cursor.y - next.y) < 2) return;
+      cursor = next;
+    });
+  };
+  window.addEventListener('mousemove', trackPointer);
+  window.addEventListener('pointermove', trackPointer);
   $effect(() => {
     if (navOverlay) setNavOrigin(navOverlay as HTMLElement);
   });
@@ -407,12 +432,16 @@
     <!-- 焦点反馈叠加层：挂在手机壳里面，坐标相对壳算 —— 用 fixed + 高 z-index
          那一版在真机上被外壳的 transform/层叠上下文整个盖住了（看不见框） -->
     <div class="nav-overlay" bind:this={navOverlay}>
+      {#if cursor}
+        <div class="nav-cursor" style={`left:${cursor.x}px;top:${cursor.y}px`}></div>
+      {/if}
       {#if $navFocus}
         <div
           class="nav-ring"
           style={`left:${$navFocus.x}px;top:${$navFocus.y}px;width:${$navFocus.width}px;height:${$navFocus.height}px`}
         ></div>
         <div class="nav-chip">▸ {$navFocus.label}</div>
+        <div class="nav-hint">↑↓ 选择 · Enter 确认 · Tab 下一个 · Esc 返回</div>
       {/if}
     </div>
     <!-- Background Wallpaper -->
