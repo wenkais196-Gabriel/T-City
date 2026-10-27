@@ -296,8 +296,15 @@ end)
 
 -- Commands
 
+-- T-City: 本 build 的 IsNuiFocused() 恒 false，挡不住"手机开着还能开背包"。
+-- 问输入仲裁者（custom-ui 的交互路径栈），它才知道现在谁占着键盘。
+local function tcityUiHasInput()
+    local ok, taken = pcall(function() return exports['custom-ui']:IsTaken() end)
+    return ok and taken == true
+end
+
 RegisterCommand('openInv', function()
-    if IsNuiFocused() or IsPauseMenuActive() then return end
+    if tcityUiHasInput() or IsNuiFocused() or IsPauseMenuActive() then return end
     if not PlayerData or not PlayerData.metadata or PlayerData.metadata['isdead'] or PlayerData.metadata['inlaststand'] then return end
     ExecuteCommand('inventory')
 end, false)

@@ -26,17 +26,6 @@
       "expires": "2027-03-31"
     },
     {
-      "id": "custom-ui-keepinput-not-reset",
-      "check": "focus_keepinput_unpaired",
-      "resource": "custom-ui",
-      "file": "client/main.lua",
-      "name": "SetNuiFocusKeepInput",
-      "owner": "custom-ui",
-      "reason": "OpenMenu() 只在 opts.keepInput 时 SetNuiFocusKeepInput(true)，从不清 false。手机（按项目约定）关闭后保留 keepInput=true，于是任何随后用 custom-ui 打开的菜单都继承“游戏输入仍开启”：人物可移动、WASD 穿透 UI。正确写法是 SetNuiFocusKeepInput(opts.keepInput == true) 再 SetNuiFocus(true,true)（story-engine 已这样写）。审计 High O-01。",
-      "added": "2026-10-25",
-      "expires": "2027-03-31"
-    },
-    {
       "id": "story-origin-hardcoded",
       "check": "nui_origin_hardcoded",
       "resource": "story-engine",
