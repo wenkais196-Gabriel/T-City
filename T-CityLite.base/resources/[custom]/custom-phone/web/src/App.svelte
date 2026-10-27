@@ -22,7 +22,7 @@
   import SheriffApp from './apps/leader/SheriffApp.svelte';
   import GangBossApp from './apps/leader/GangBossApp.svelte';
 
-  import { registerNuiEvent, isBrowser, fetchNui } from './utils/nui';
+  import { registerNuiEvent, isBrowser, fetchNui, reportAppState } from './utils/nui';
   if (typeof window !== 'undefined') {
     window.addEventListener('error', (event) => {
       void fetchNui('clientError', { message: String(event.message), stack: String(event.error?.stack ?? '') }).catch(() => {});
@@ -49,7 +49,34 @@
     pendingNavTab
   } from './stores/phone';
   import { showSubtitle, clearSubtitle } from './stores/callSpeech';
-  import { activate as navActivate, focusFirst as navFocusFirst, move as navMove, reset as navReset } from './core/nav';
+  import {
+    activate as navActivate,
+    focusFirst as navFocusFirst,
+    jump as navJump,
+    move as navMove,
+    moveSteps as navMoveSteps,
+    reset as navReset,
+  } from './core/nav';
+
+  // 换页（进 App / 换 App / 回桌面）时必须做两件事：
+  //  1. 立刻把页面 id 回吐 —— 否则切到"不报状态"的 App（Settings、Banking 等），
+  //     agent 读到的还是上一个 App（真机踩过：屏幕是 Settings，状态里是 police_mdt）；
+  //  2. 焦点从新页面的第一个元素重新开始 —— 旧元素已经不在 DOM 里。
+  let lastReportedApp = '';
+  activeApp.subscribe((id) => {
+    const plain = id.startsWith('dyn:') ? id.slice(4) : id;
+    // 只在"真的换了一页"时回吐 id：App 自己稍后还会带上 tab/selected 报一次，
+    // 这里每次都报会把那份覆盖成 tab=null。
+    if (plain !== lastReportedApp) {
+      lastReportedApp = plain;
+      reportAppState(id === 'home' ? '' : plain);
+    }
+    if (get(isPhoneOpen)) {
+      setTimeout(() => {
+        if (get(isPhoneOpen)) navFocusFirst();
+      }, 0);
+    }
+  });
   import { speakDispatch, stopDispatchSpeech } from './utils/tts';
   import {
     callPhase,
@@ -267,6 +294,21 @@
         e.preventDefault();
         navMove(e.shiftKey ? 'up' : 'down');
         return;
+      }
+      // 翻页键：PageDown/PageUp 一次挪 7 格（约一屏），Home/End 跳到首尾。
+      // 输入框里这些键有自己的含义（Home/End 移光标），所以只在不编辑时拦。
+      if (!isEditableTarget(e.target)) {
+        const pageKeys: Record<string, () => void> = {
+          PageDown: () => navMoveSteps('down', 7),
+          PageUp: () => navMoveSteps('up', 7),
+          Home: () => navJump('first'),
+          End: () => navJump('last'),
+        };
+        if (pageKeys[e.key]) {
+          e.preventDefault();
+          pageKeys[e.key]();
+          return;
+        }
       }
       if (navKeys[e.key]) {
         // 输入框里方向键要能移动光标，Enter 要能提交表单

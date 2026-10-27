@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **键盘导航补翻页与滚动**：`PageUp`/`PageDown` 一次 7 格、`Home`/`End` 跳首尾；`End` 会留在焦点所在的可滚容器里（真机在 MDT 列表按 End 会跳到壳层「回桌面」）。输入框里这些键仍归输入框自己。滚动容器实测是 `T-CityLite.base/resources/[custom]/custom-phone/web/src` 下的 `.pane`。
+- **修 `adc` 的 911 白名单永远不匹配**：Lua 的 pattern 没有 `{n,m}`，`'^911 [^%c;]{1,80}$'` 写成了正则的形状，结果 911 全部被拒（只回 `not_allowed`）。改成 `+` 并在代码里限长 96。
+- **切 App 时回吐页面 id**：切到不报状态的 App（Settings、Banking 等）时状态里还挂着上一个 App（真机：屏幕是 Settings，`/live/clients` 说 police_mdt）。现在 `activeApp` 一变就报，回桌面报空。
 - **键盘/手柄操作补完：Tab 进出输入框 + 焦点可读**。方向键和 Enter 在输入框里属于输入框自己（移光标 / 提交），所以 Tab = 下一个、Shift+Tab = 上一个，且在处理可编辑元素之前拦截；每次焦点变化都把标签回吐给 Lua（`aria-label` → 文字 → 标签名），`/live/clients` 的 `phone.focus` 现在能读到「焦点停在哪个控件」，agent 不用再盲按方向键（真机第一次盲按 Enter 落到的是"分享"）。
 - **手机/平板可以用键盘和手柄操作了**：方向键移焦点、Enter 确认、Backspace 返回上一级；焦点环 + 开屏自动聚焦。键盘走 NUI 的 `keydown`（Tab 被 GTA 占了、方向键有效），手柄走 Lua 轮询 GTA 控制后发 `phone:nav` —— 两条腿落到同一组动作（`T-CityLite.base/resources/[custom]/custom-phone/web/src/core/nav.ts`），为手柄正式适配留好了底层。真机：Down×2 + Enter 打开 Contacts。
 - **MDT 也回吐页状态**：警用终端在调度/人车/文书/案件/我的之间切换、以及选中某条警情时上报 `{app:'police_mdt', tab:<page>, selected:<警情 id>}`。只报 id，不报搜索词与案卷正文；离开调度页后 selected 自动清空，免得让人以为他还在看那条警情。

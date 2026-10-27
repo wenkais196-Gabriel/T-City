@@ -221,10 +221,17 @@ local DEVCMD_ALLOWED = {
     -- 警用：值班状态与 911。这两个是 custom-police 的客户端命令，值班会把单位写进
     -- police_units（MDT「单位」页与 /live/police/board 都读它），911 会建一条警情。
     '^10%-[678]$',
-    '^911 [^%c;]{1,80}$',
+    -- 注意：Lua 的 pattern **没有** {n,m} 计数（那是正则的写法）。
+    -- 这里原来写 '^911 [^%c;]{1,80}$'，永远匹配不上 —— 911 全部被拒，
+    -- 而 devcmd 只回 not_allowed，看不出"是格式写错了"。长度改在下面判。
+    '^911 [^%c;]+$',
 }
 
+-- 一条 devcmd 最多这么长：手机命令都短，超长的要么是误用，要么是想塞别的
+local DEVCMD_MAX_LEN = 96
+
 local function devcmdAllowed(cmd)
+    if #cmd > DEVCMD_MAX_LEN then return false end
     for _, pattern in ipairs(DEVCMD_ALLOWED) do
         if cmd:match(pattern) then return true end
     end
