@@ -166,6 +166,46 @@ return {
             assert(after == before + 1, ('expected one immediate push, saw %d'):format(after - before))
         end)
 
+        check('devcmd_bridge_is_gated_and_allowlisted', function()
+            -- devcon 握手不通、合成鼠标又被 GTA 锁光标，所以给 agent 留了一条
+            -- "服务端替客户端敲一行命令"的通道；必须默认关、只认白名单。
+            local function execs(handle)
+                return handle.executed_commands or {}
+            end
+
+            -- ① 默认（convar 未设）：一条都不许执行
+            local off = ctx.bootstrap.Load({
+                resource = '[custom]/custom-agent-client',
+                files = { 'client/main.lua' },
+            })
+            off.Emit('tcity:agent:devcmd', 'phoneui quests')
+            off.Step(20)
+            assert(#execs(off) == 0, 'default: the bridge must not execute anything')
+
+            -- ② 打开：白名单内放过，白名单外（含分号拼接）一律拒绝
+            local on = ctx.bootstrap.Load({
+                resource = '[custom]/custom-agent-client',
+                files = { 'client/main.lua' },
+                convars = { agent_devcmd_enabled = '1' },
+            })
+            on.Emit('tcity:agent:devcmd', 'phoneui quests')
+            on.Step(20)
+            local handlers = on.net_handlers and on.net_handlers['tcity:agent:devcmd'] or {}
+            assert(#execs(on) == 1, ('allowed command must run, ran %d (handlers=%d convars=%s err=%s)'):format(
+                #execs(on), #handlers,
+                tostring(on.convars and on.convars['agent_devcmd_enabled']),
+                tostring(on.thread_errors and on.thread_errors[1])))
+            assert(execs(on)[1] == 'phoneui quests', 'the command must be passed through verbatim')
+
+            on.Emit('tcity:agent:devcmd', 'quit')
+            on.Emit('tcity:agent:devcmd', 'phoneui quests; quit')
+            on.Emit('tcity:agent:devcmd', 'connect 1.2.3.4')
+            on.Emit('tcity:agent:devcmd', ('x'):rep(80))
+            on.Step(20)
+            assert(#execs(on) == 1, 'anything outside the allowlist must be refused, ran '
+                .. tostring(#execs(on)))
+        end)
+
         return {
             ok = failed == 0,
             data = { total = #results, failed = failed, cases = results },

@@ -203,6 +203,40 @@ local function collectState()
     }
 end
 
+-- ---------------------------------------------------------------------------
+-- 开发用：让服务端（RCON / director）替 agent 敲一行客户端控制台命令。
+-- 为什么需要：devcon 的 29200 端口在监听，但握手不成（遥控台默认关），
+-- 而合成鼠标点击又因为 GTA 锁光标而无效 —— 客户端侧的"动作"没有别的入口。
+-- 安全：convar agent_devcmd_enabled 默认关；命令必须匹配白名单；只接受
+-- 服务端下发的事件（客户端无法自触发）；不接受分号/换行，防止一次塞多条。
+-- ---------------------------------------------------------------------------
+local DEVCMD_ALLOWED = {
+    '^phoneui [a-z0-9_:-]+$',
+    '^tablet$',
+    '^phone$',
+    '^phonefix$',
+}
+
+local function devcmdAllowed(cmd)
+    for _, pattern in ipairs(DEVCMD_ALLOWED) do
+        if cmd:match(pattern) then return true end
+    end
+    return false
+end
+
+RegisterNetEvent('tcity:agent:devcmd', function(raw)
+    if GetConvar('agent_devcmd_enabled', '0') ~= '1' then return end
+    if type(raw) ~= 'string' or #raw > 64 then return end
+    local cmd = raw:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
+    if cmd:find('[;%c]') then return end -- 分号/控制字符：一次只许一条命令
+    if not devcmdAllowed(cmd) then
+        TriggerServerEvent('tcity:agent:devcmd_result', raw, 'not_allowed')
+        return
+    end
+    ExecuteCommand(cmd)
+    TriggerServerEvent('tcity:agent:devcmd_result', cmd, 'ok')
+end)
+
 local function pushState()
     local ok, snapshot = pcall(collectState)
     if ok and type(snapshot) == 'table' then
