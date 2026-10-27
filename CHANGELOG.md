@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`/tablet` 与 `/phone` 命令**（带控制台 `tcity_tablet <id>` 分支）。以前平板只有设计稿，没有任何入口；已经打开时切换会以 `reason=switch` 关闭再重开，当前 app 不丢。
 
 ### Fixed
+- **读到的状态总是慢半拍**：状态快照以前只有 5s 心跳，按完 M 立刻去查还是旧值。现在 `custom-phone` 在开/关/换页/`/phonefix` 时广播 `phone:client:stateChanged`，`custom-agent-client` 收到就立刻采一份推给服务端，心跳降级为兜底（15s 过期仍生效）。真机：按 M 后 ~1s 内 `open` 翻转，之前最多要等 5s。
 - **按 M 有时开、有时不开**：`keepInput=true` 让同一次按键同时到达游戏与 CEF —— 游戏（`RegisterKeyMapping`）打开手机，同一帧 NUI 的 `window.keydown('m')` 又把它关掉。密钥只有一个主人：`m/M` 归 Lua，NUI 只留 `Escape` 与自己独占的鼠标手势。真机复验：开→（4.5s 后按）关，`/live/clients` 的 `open` 与截图一致。
 - **按 M 关不掉手机**（真机症状：点一次闪一下、再点也关不掉）。两个原因叠在一起：① `RegisterCommand('phone')` 被注册了两次，后一个（`/phone` 强制形态，已经开着就直接 `return`）覆盖了前一个 toggle——同名命令后注册者胜；② 剩下那条 toggle 用 `IsNuiFocused()` 判断"焦点还在不在"，而这个原生在本 build **恒 false**（61 条 focus 遥测里 0 条 true），于是每次"关闭"都走进"复位重开"分支。现在开关只看 `Surface.IsOpen()`、焦点只看 `PhoneFocus.State()`，原生降级为诊断字段 `nui_focus_native`；`/phone [phone|tablet]` 保留强制形态语义，去抖初值改为 `-300ms` 以免资源刚起第一下被吞。无头用例复现了原生撒谎的场景（`env.nui.focus_native_lies`）。
 - **窗口大不等于要平板**。旧规则「宽 ≥ 900 且横向 → 平板」在 FiveM 里等于「每次按 M 都锁住移动」，因为 NUI 视口永远是整个游戏窗口（1080p 起）。已删除该规则：平板由意图（入口/偏好）触发，视口只保留一个降级作用——玩家要平板但窗口真装不下时退回手机。

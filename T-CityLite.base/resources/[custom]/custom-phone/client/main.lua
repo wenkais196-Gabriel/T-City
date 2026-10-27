@@ -29,6 +29,13 @@ end)
 -- registered unchanged during the migration.
 PhoneEvents.Start()
 
+-- 状态一变就喊一声：消费方（custom-agent-client 的状态探针）本来靠 5s 心跳，
+-- 结果按完 M 最多 5 秒内读到的还是旧值。事件只是"去看看"，不带任何参数，
+-- 所以它既不泄露内容，也不可能被别人拿来伪造状态。
+local function announceUiState()
+    TriggerEvent('phone:client:stateChanged')
+end
+
 -- ---------------------------------------------------------------
 -- 单 App 状态：Svelte 侧把"停在哪一页"回吐给 Lua。
 -- agent 只能答"手机开着、哪一面"是不够的（08-client-state-probe §边界）；
@@ -53,6 +60,7 @@ RegisterNUICallback('appState', function(data, cb)
     end
     -- 统一应答通道：本 build 的 cb 可能是可调用表，所以不允许对 cb 做类型守卫。
     PhoneBridge.AnswerFn(cb)({ ok = true })
+    announceUiState()
 end)
 
 -- Close Phone Function (must be defined before OpenPhone — CreateThread closure)
@@ -127,6 +135,7 @@ local function ClosePhone(reason)
         StopAnimTask(ped, 'cellphone@', 'cellphone_text_read_base', 1.0)
         ClearPedTasks(ped)
     end
+    announceUiState()
 end
 
 -- Open Phone Function
@@ -174,6 +183,7 @@ local function OpenPhone(forcedKind, reason)
     -- keepInput 是形态的一部分：手机要能边跑边看，平板要站定。
     PhoneFocus.Acquire(kind, { cursor = true, keepInput = (kind == 'phone') })
     DeviceLock.Begin(kind)
+    announceUiState()
     TriggerServerEvent('phone:server:focusState', { phase = 'open-start', surface = kind, reason = reason or 'open' })
 
     CreateThread(function()
@@ -401,6 +411,7 @@ RegisterCommand('phonefix', function()
     DeviceLock.End()
     PhoneFocus.Reset()
     SendNUIMessage({ action = 'phone:close', reason = 'phonefix' })
+    announceUiState()
     TriggerEvent('chat:addMessage', { args = { 'SYSTEM', '手机状态已重置' } })
     TriggerServerEvent('phone:server:focusState', { phase = 'phonefix', focused = IsNuiFocused() })
 end, false)
