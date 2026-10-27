@@ -83,6 +83,134 @@ function IsMenuOpen()
     return isOpen
 end
 
+-- ==============================================================================
+-- 交互路径（栈）—— 像 GTA 暂停菜单那样"打开即接管、逐层返回"
+-- ==============================================================================
+--
+-- 世界 → 手机 → App → 输入框，每一层是一"帧"。规则只有一条：
+-- **栈顶那一帧拥有键盘**，栈空时把输入还给游戏（于是 Esc 能呼出原生暂停菜单）。
+--
+--   Input.Push({ id='phone', close=ClosePhone })
+--   Input.Push({ id='phone:mdt', close=... })      -- 进 App
+--   Input.Push({ id='phone:mdt/search', kind='text' })
+--   Input.Pop('phone:mdt/search')                  -- Esc 退出输入框
+--   Input.Pop('phone:mdt')                          -- Esc 回桌面
+--   Input.Pop('phone')                              -- Esc 关手机 → 下一层是游戏本身
+--
+-- 为什么不是纯布尔计数器：Esc 链要求"返回一层"，没有栈就不知道返回哪。
+-- 为什么不用 IsNuiFocused()：本 build 上它恒为 false（见 nui-debug-playbook）。
+Input = Input or {}
+
+local path = {}
+local captureThread = false
+
+local function topFrame()
+    return path[#path]
+end
+
+--- 重算焦点与控制屏蔽：只有栈顶说了算。
+local function apply()
+    local frame = topFrame()
+    if not frame then
+        SetNuiFocus(false, false)
+        -- 栈空 = 输入还给游戏。Esc/暂停菜单要能在这一层工作。
+        return
+    end
+    -- 栈顶是文本输入时，游戏不能吃键盘（否则打字和移动同时发生）
+    SetNuiFocus(true, frame.keepInput == true)
+    if captureThread then return end
+    captureThread = true
+    CreateThread(function()
+        while topFrame() do
+            local current = topFrame()
+            DisableAllControlActions(0)
+            if current and current.allow then
+                for _, control in ipairs(current.allow) do
+                    EnableControlAction(0, control, true)
+                end
+            end
+            Wait(0)
+        end
+        captureThread = false
+    end)
+end
+
+--- 压入一帧
+---@param frame table { id = string, kind = 'modal'|'text'|nil, allow = table|nil, keepInput = boolean|nil, close = function|nil }
+---@return boolean ok, string|nil err
+function Input.Push(frame)
+    if type(frame) ~= 'table' or type(frame.id) ~= 'string' or frame.id == '' then
+        return false, 'frame id required'
+    end
+    if #path > 0 and topFrame().id == frame.id then
+        return true -- 幂等：同一帧重复打开不算新层
+    end
+    -- 已经在这条路径上（比如重复打开手机）就先弹到它，避免套娃
+    for index = #path, 1, -1 do
+        if path[index].id == frame.id then
+            for _ = #path, index + 1, -1 do table.remove(path) end
+            path[index] = frame
+            apply()
+            return true
+        end
+    end
+    path[#path + 1] = frame
+    apply()
+    return true
+end
+
+--- 弹出指定帧（以及它上面的所有帧）；不给 id 就弹栈顶
+---@param id string|nil
+---@return string|nil poppedId
+function Input.Pop(id)
+    if #path == 0 then return nil end
+    if id == nil then
+        local removed = table.remove(path)
+        apply()
+        return removed and removed.id or nil
+    end
+    for index = #path, 1, -1 do
+        if path[index].id == id then
+            local removed = path[index]
+            for _ = #path, index, -1 do table.remove(path) end
+            apply()
+            return removed.id
+        end
+    end
+    return nil
+end
+
+--- 栈顶帧（nil = 没有 UI 占用）
+function Input.Top()
+    local frame = topFrame()
+    if not frame then return nil end
+    return { id = frame.id, kind = frame.kind, allow = frame.allow }
+end
+
+--- 当前路径，底 → 顶，如 { 'phone', 'phone:mdt', 'phone:mdt/search' }
+function Input.Path()
+    local out = {}
+    for index, frame in ipairs(path) do out[index] = frame.id end
+    return out
+end
+
+--- 有没有任何 UI 占着输入（玩法脚本用它做门卫）
+function Input.IsTaken()
+    return #path > 0
+end
+
+--- 栈顶是不是这一帧
+function Input.Owns(id)
+    local frame = topFrame()
+    return frame ~= nil and frame.id == id
+end
+
+--- 强制清空（资源停止、/phonefix 这类硬复位）
+function Input.Reset()
+    path = {}
+    apply()
+end
+
 --- 玩家与坐标的距离
 function DistanceToCoords(coords, maxDistance)
     if not coords then return false, 9999.0 end
@@ -97,6 +225,13 @@ exports('OpenMenu', OpenMenu)
 exports('CloseMenu', CloseMenu)
 exports('GuardControls', GuardControls)
 exports('IsMenuOpen', IsMenuOpen)
+exports('Push', Input.Push)
+exports('Pop', Input.Pop)
+exports('Top', Input.Top)
+exports('Path', Input.Path)
+exports('IsTaken', Input.IsTaken)
+exports('Owns', Input.Owns)
+exports('ResetInput', Input.Reset)
 exports('DistanceToCoords', DistanceToCoords)
 
 print('[custom-ui] ✅ menu focus/guard/distance helpers ready')
