@@ -123,10 +123,11 @@ function PhoneFocus.Acquire(owner, opts)
     }
     local layer = inputLayer()
     if layer then
-        -- 默认**完全接管**（像 GTA 暂停菜单）：keepInput=false 时游戏把鼠标交出来，
-        -- 引擎游标才看得见（真机实测：keepInput=true 时 OS 游标被钉在屏幕角落，看不见也动不了）。
-        -- 想让手机开着还能走路：setr phone_keep_input 1（代价是游标又没了）。
-        local keep = entry.keepInput and GetConvar('phone_keep_input', '0') == '1'
+        -- 两种模式（真机都验过，二选一，不能同时）：
+        --   1（默认，边走边看）：游戏继续处理输入 → 手机开着能走路，键盘走 Lua 原始按键；
+        --                        代价：引擎把 OS 游标钉在屏幕角落，没有鼠标指针。
+        --   0（完全接管）：交出鼠标 → 有游标、能点，但手机开着走不了路。
+        local keep = entry.keepInput and GetConvar('phone_keep_input', '1') == '1'
         local ok = pcall(function()
             layer:Push({
                 id = frameId(owner),
@@ -173,8 +174,8 @@ function PhoneFocus.PushFrame(id)
         layer:Push({
             id = id,
             cursor = true,
-            keepInput = GetConvar('phone_keep_input', '0') == '1',
-            allow = GetConvar('phone_keep_input', '0') == '1' and ALLOW_WHILE_OPEN or nil,
+            keepInput = GetConvar('phone_keep_input', '1') == '1',
+            allow = GetConvar('phone_keep_input', '1') == '1' and ALLOW_WHILE_OPEN or nil,
             owner = GetCurrentResourceName(),
         })
     end)
