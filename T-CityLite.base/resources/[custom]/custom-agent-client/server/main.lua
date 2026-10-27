@@ -391,6 +391,14 @@ local function selectedToken(value)
     return value
 end
 
+-- 焦点标签是给 agent 看的短文本：允许中文/空格，剥控制字符，限长。
+local function labelText(value, maxLen)
+    if type(value) ~= 'string' then return nil end
+    local cleaned = value:gsub('%c', ' '):gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', '')
+    if cleaned == '' then return nil end
+    return cleaned:sub(1, maxLen)
+end
+
 local function sanitizeState(raw)
     if type(raw) ~= 'table' then return nil end
     -- 版本守卫：没有 v=1 的报文一律不认。否则一个空表就能注册出"全默认"的快照，
@@ -411,6 +419,8 @@ local function sanitizeState(raw)
             nui_focus_native = flag(phone.nui_focus_native),
             -- 单 App 状态：只放行三个短 token；id 缺失就整块丢掉。
             -- 它属于手机，所以挂在 phone 下面（消费方读 phone.app），不是顶层。
+            -- 焦点提示（哪个按钮/输入框被键盘或手柄选中）
+            focus = labelText(phone.focus, 24),
             app = (function()
                 local app = type(phone.app) == 'table' and phone.app or nil
                 if not app then return nil end

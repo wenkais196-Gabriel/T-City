@@ -4,6 +4,8 @@
 // 浏览器原生 Tab 在游戏里拿不到键（GTA 占了），所以焦点模型放在这里，
 // 输入统一从 Lua 来 —— 同一套动作既能被键盘触发，也能被手柄触发。
 
+import { fetchNui } from '../utils/nui';
+
 const FOCUSABLE = 'button, [href], input, select, textarea, [data-nav]';
 
 let current: HTMLElement | null = null;
@@ -21,12 +23,27 @@ export function focusables(root: ParentNode = document): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(visible);
 }
 
+function labelOf(el: HTMLElement): string {
+  const aria = el.getAttribute('aria-label');
+  if (aria) return aria.trim().slice(0, 40);
+  const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+  if (text) return text.slice(0, 40);
+  return el.tagName.toLowerCase();
+}
+
+function report(el: HTMLElement | null): void {
+  // 把"现在焦点在哪个控件上"回吐给 Lua：agent 看不见 DOM，没有这条只能盲按方向键。
+  const label = el ? labelOf(el) : '';
+  void fetchNui('uiFocus', { label }).catch(() => {});
+}
+
 function paint(el: HTMLElement | null): void {
   if (current && current !== el) {
     current.removeAttribute('data-nav-focus');
     current.classList.remove('nav-focus');
   }
   current = el;
+  report(el);
   if (!el) return;
   el.setAttribute('data-nav-focus', 'true');
   el.classList.add('nav-focus');
