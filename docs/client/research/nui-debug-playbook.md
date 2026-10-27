@@ -283,6 +283,63 @@ NUI 只保留自己也独占的键（`Escape`）与鼠标动作（右键 = conte
 
 **教训**：凡是 `keepInput=true` 的 NUI，都要问一句"这个键谁来处理"，否则就是双重处理。
 
+### 3.0e 资源被 SRI 整块拦掉：`$ is not defined`（2026-10-27 实测命中）
+
+**签名**（F8 里四行连着出现，界面全白）
+```
+Failed to find a valid digest in the 'integrity' attribute for resource
+  'https://cfx-nui-custom-police/html/vendor/jquery-3.6.0.min.js' with computed SHA-256 integrity '...'
+The resource has been blocked.
+Uncaught ReferenceError: $ is not defined (@custom-police/html/script.js:127)
+```
+
+**根因**：`index.html` 给**仓库内的本地** vendor 文件写了 `integrity`（那是 CDN 的用法）。
+本地文件的哈希会随 git 的 LF/CRLF 转换变化，换台机器/换个 checkout 就对不上，CEF 直接
+blocked，后面所有脚本因为没有 jQuery 而连环报错。
+
+**修复**：本地资源一律不写 `integrity`/`crossorigin`。闸门
+`tests/architecture/test_no_sri_on_local_vendor.py` 守着，配 `tools/dev/gate_mutation_smoke.py`
+的变异用例证明它会红。
+
+### 3.0f 手机/面板"很卡"，还在拖慢整个游戏（2026-10-27 实测命中）
+
+**签名**：界面不报错，但一开就掉帧；鼠标移动、焦点切换时尤其明显。
+
+**根因**：`.glass-effect` 用了 `backdrop-filter: blur(20px)`。CEF 里每个毛玻璃元素都要在
+自己的整块区域重算模糊，界面上一多（挂件、Dock、列表卡片），任何一次重绘都会把它们全部
+重算一遍。
+
+**修复**：改成半透明渐变 + 内高光（观感基本一致），浏览器里量帧率从"移动时抖动"回到稳定。
+**排查方法**：先用 Playwright 量 rAF 帧率（静止 / 鼠标移动 / 焦点移动三档），确认是不是渲染
+侧的问题；浏览器里帧率正常而游戏里卡，再去查 `backdrop-filter`、大 `box-shadow`、常驻动画。
+
+### 3.0g 时间字段显示 `--:--`，值看着完全正常（2026-10-27 实测命中）
+
+**签名**
+```
+[phone] notifications: 时间字段无法解析，已回退为 --:-- "2026-10-27T18:15:16.000Z"
+```
+
+**根因**：字符串里混了不可见字符（BOM / 零宽空格 / 方向标记 / NBSP）。`trim()` 只吃普通
+空白，`new Date()` 随即得到 `NaN`。控制台把这种串打出来时会**带引号**——那正是"里面有
+看不见的字符"的提示。
+
+**修复**：解析前先剥 `[​-‏‪-‮⁠﻿ ]`，再 trim、再解析；
+NUI 用例放一条 BOM 前缀 + 一条零宽后缀，断言"只有真的缺时间那条才显示占位符"。
+
+### 3.0h 一开就关 / 点一下手机就关机：关闭入口太多（2026-10-27 实测命中）
+
+三个独立的"关闭"入口叠在一起，用户每次点鼠标都命中其中一个：
+
+1. **遮罩铺满手机以外的视野且绑了 `onclick=close`** —— 点击坐标稍微偏一点就落到遮罩上。
+2. **侧键关机键是 3px 的可聚焦 `<button>`**，还是 DOM 里第一个 button —— 开屏 `focusFirst()`
+   正好选中它（焦点标签就写着 `Close Phone`），于是"确认键/点击"直接变成关机。
+3. **右键 = `contextmenu` → close**：游戏里右键本来就有别的用途。
+
+**修复**：遮罩不再响应点击；侧键 `pointer-events:none` + `aria-hidden` + `tabindex="-1"`；
+关闭只留明确入口（M / Esc / 平板状态栏按钮）。**教训**：装饰性控件必须同时从
+"可点"和"可聚焦"里摘掉，否则它既是鼠标陷阱又是键盘默认目标。
+
 ### 3.0b 新增脚本文件"明明在、就是不执行"（`restart` 不重读 fxmanifest）
 
 **签名**
