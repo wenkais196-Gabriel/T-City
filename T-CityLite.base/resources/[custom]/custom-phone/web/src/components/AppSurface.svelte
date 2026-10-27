@@ -34,6 +34,9 @@
   });
 
   onMount(() => {
+    // 先同步量一次：width 初始是 0，layout 会退回 stack；等 ResizeObserver 的第一次
+    // 回调才切两栏的话，快机器上看不出来，慢机器上就是"平板只剩一栏"（CI 上偶发）。
+    if (host) width = host.getBoundingClientRect().width;
     const observer = new ResizeObserver(([entry]) => {
       width = entry.contentRect.width;
     });
