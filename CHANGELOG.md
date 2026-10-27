@@ -80,6 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Changed
+- **手机默认改为「边走边看」**（`phone_keep_input` 默认 1）：手机开着也能走路，键盘走 Lua 原始按键（方向/Tab/Enter/Backspace/Esc/M）。
+  代价是引擎会把 OS 游标钉在屏幕角落，默认模式下没有鼠标指针；想要游标就 `setr phone_keep_input 0`（完全接管）。
 - **手机任务列表只摆"现在能接的"**。需求清单摊开之后反而变成噪音：一张吃不到的菜单对玩家没价值。不可接的任务不再出现在列表里（数据仍在服务端，`/listquests` 与控制台诊断照旧能看到全部）。
 - **需求清单只显示真正有约束力的项**。`min_police = 0`、`cooldown_hours = 0` 这类"没门槛"的声明不再渲染成"在勤警力 ≥ 0（当前 0）"——之前 18 条剧情任务就是靠这种废话凑出一行。
 
