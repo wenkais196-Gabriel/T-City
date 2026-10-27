@@ -52,7 +52,8 @@
   // 两者不一致 ≠ 手机没焦点，只是原生在撒谎；判定永不读它。
   // 壳的状态（open/surface/focus）由 Lua 自己知道；app 块只能由 App 回吐：
   // Svelte 侧 reportAppState(app, tab, selected) → fetchNui('appState') → Lua 存三个
-  // 短 token。任务 App 已接；MDT/银行还没有，所以 app 是可选字段，缺了不代表出错。
+  // 短 token。任务 App（tab）与 MDT（tab + 选中的警情 id）已接；银行/Garage 还没有，
+  // 所以 app 是可选字段，缺了不代表出错。
 }
 ```
 
