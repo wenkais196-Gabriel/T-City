@@ -24,6 +24,8 @@ Environment (all optional; a check whose variables are missing is skipped):
     AGENT_ADMIN_TOKEN                          optional approve credential
     AGENT_AGENT_ID                             default "smoke.local"
     AGENT_SMOKE_CITIZENID                      online player for write probes
+    TCITY_HARNESS_SERVER_LOG                   FXServer stdout log (--harness)
+    TCITY_HARNESS_CLIENT_LOG_DIR / _LOG         FiveM client logs (--harness)
 
 Usage:
 
@@ -31,6 +33,7 @@ Usage:
     python3 tools/agent_smoke.py --allow-write   # + notify proposal
     python3 tools/agent_smoke.py --allow-approve # + approve (needs admin token)
     python3 tools/agent_smoke.py --json          # machine-readable report
+    python3 tools/agent_smoke.py --harness         --expect-server "Started resource custom-phone"   # console assertions
 
 Exit codes: 0 = every check passed or was skipped, 1 = at least one failed,
 2 = invalid arguments.
@@ -44,13 +47,22 @@ import http.client
 import json
 import os
 import secrets
+import sys
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, Sequence
+
+TOOLS_DIR = Path(__file__).resolve().parent
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+import agent_harness  # noqa: E402
 
 DEFAULT_TIMEOUT_MS = 5000
+DEFAULT_HARNESS_TIMEOUT_MS = 8000
 DEFAULT_AGENT_ID = "smoke.local"
 DEFAULT_CITIZENID = "SMOKE0001"
 SMOKE_KEY_PREFIX = "smoke:"
@@ -66,6 +78,9 @@ ENV_VARS = (
     "AGENT_ADMIN_TOKEN",
     "AGENT_AGENT_ID",
     "AGENT_SMOKE_CITIZENID",
+    "TCITY_HARNESS_SERVER_LOG",
+    "TCITY_HARNESS_CLIENT_LOG_DIR",
+    "TCITY_HARNESS_CLIENT_LOG",
 )
 TOKEN_VARS = (
     "AGENT_GATEWAY_TOKEN",
@@ -74,6 +89,8 @@ TOKEN_VARS = (
     "AGENT_ADMIN_TOKEN",
 )
 CHECK_NAMES = (
+    "harness_server",
+    "harness_client",
     "gateway_health",
     "gateway_schema",
     "director_policy",
@@ -83,6 +100,7 @@ CHECK_NAMES = (
     "notify_propose",
     "notify_get",
     "notify_approve",
+    "harness_expect",
     "cleanup",
 )
 
@@ -236,12 +254,37 @@ class Smoke:
         allow_write: bool = False,
         allow_approve: bool = False,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
+        harness: bool = False,
+        expect_server: "Sequence[str]" = (),
+        expect_client: "Sequence[str]" = (),
+        harness_timeout_ms: int = DEFAULT_HARNESS_TIMEOUT_MS,
     ) -> None:
         source = os.environ if env is None else env
         self.values = {name: (source.get(name) or "").strip() for name in ENV_VARS}
         self.allow_write = bool(allow_write or allow_approve)
         self.allow_approve = bool(allow_approve)
         self.timeout_ms = timeout_ms
+        self.harness = bool(harness)
+        self.expect_server = [item for item in expect_server if item]
+        self.expect_client = [item for item in expect_client if item]
+        self.harness_timeout_ms = harness_timeout_ms
+        self.sources = agent_harness.Sources(
+            server_log=(
+                Path(self.values["TCITY_HARNESS_SERVER_LOG"])
+                if self.values["TCITY_HARNESS_SERVER_LOG"]
+                else None
+            ),
+            client_log_dir=(
+                Path(self.values["TCITY_HARNESS_CLIENT_LOG_DIR"])
+                if self.values["TCITY_HARNESS_CLIENT_LOG_DIR"]
+                else None
+            ),
+            client_log=(
+                Path(self.values["TCITY_HARNESS_CLIENT_LOG"])
+                if self.values["TCITY_HARNESS_CLIENT_LOG"]
+                else None
+            ),
+        )
         self.agent_id = self.values["AGENT_AGENT_ID"] or DEFAULT_AGENT_ID
         self.citizenid = self.values["AGENT_SMOKE_CITIZENID"]
         self.run_id = (
@@ -705,6 +748,77 @@ class Smoke:
                 "smoke rows remain in agent_actions (idempotency_key prefix 'smoke:')",
             )
 
+    # -- console harness (design 07) ----------------------------------------
+    def _harness_disabled(self, name: str) -> bool:
+        if self.harness:
+            return False
+        self._add(name, "skip", "harness disabled (--harness not set)")
+        return True
+
+    def _harness_target(self, name: str, target: str) -> None:
+        if self._harness_disabled(name):
+            return
+        started = time.monotonic()
+        entry = agent_harness.status(self.sources)["targets"].get(target, {})
+        elapsed = int((time.monotonic() - started) * 1000)
+        if entry.get("configured"):
+            self._add(
+                name,
+                "pass",
+                f"{target}: {entry.get('file')} ({entry.get('bytes', '?')} bytes)",
+                None,
+                elapsed,
+            )
+            return
+        # An unset path is a legitimate "this machine has no such log"; a path
+        # that is set but missing is a real failure.
+        status = "skip" if entry.get("code") == "harness_unconfigured" else "fail"
+        detail = entry.get("error", "unreadable")
+        if status == "fail":
+            detail = _with_hint(detail, "start the runtime or fix the TCITY_HARNESS_* path")
+        self._add(name, status, detail, None, elapsed)
+
+    def check_harness_server(self) -> None:
+        self._harness_target("harness_server", "server")
+
+    def check_harness_client(self) -> None:
+        self._harness_target("harness_client", "client")
+
+    def check_harness_expect(self) -> None:
+        if self._harness_disabled("harness_expect"):
+            return
+        pairs = [("server", pattern) for pattern in self.expect_server]
+        pairs += [("client", pattern) for pattern in self.expect_client]
+        if not pairs:
+            self._add("harness_expect", "skip", "no --expect-server/--expect-client pattern")
+            return
+        for target, pattern in pairs:
+            name = f"harness_expect_{target}"
+            started = time.monotonic()
+            try:
+                result = agent_harness.wait(
+                    target,
+                    pattern=pattern,
+                    timeout_ms=self.harness_timeout_ms,
+                    sources=self.sources,
+                )
+            except agent_harness.HarnessError as exc:
+                elapsed = int((time.monotonic() - started) * 1000)
+                status = (
+                    "skip" if exc.code in ("harness_unconfigured", "log_not_found") else "fail"
+                )
+                self._add(name, status, f"{pattern!r}: {exc.message}", None, elapsed)
+                continue
+            elapsed = int((time.monotonic() - started) * 1000)
+            matched = result["matched"]
+            self._add(
+                name,
+                "pass",
+                f"{pattern!r} -> [{matched['channel']}] {matched['message']}",
+                None,
+                elapsed,
+            )
+
     # -- execution ----------------------------------------------------------
     def run(self) -> dict[str, Any]:
         for name in CHECK_NAMES:
@@ -773,6 +887,32 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="MS",
         help=f"per-request timeout in milliseconds (default {DEFAULT_TIMEOUT_MS})",
     )
+    parser.add_argument(
+        "--harness",
+        action="store_true",
+        help="also assert against the local FXServer/FiveM console logs (design 07)",
+    )
+    parser.add_argument(
+        "--expect-server",
+        action="append",
+        default=[],
+        metavar="REGEX",
+        help="wait for this regex in the server console after the write probes (repeatable)",
+    )
+    parser.add_argument(
+        "--expect-client",
+        action="append",
+        default=[],
+        metavar="REGEX",
+        help="wait for this regex in the newest FiveM client log (repeatable)",
+    )
+    parser.add_argument(
+        "--harness-timeout-ms",
+        type=int,
+        default=DEFAULT_HARNESS_TIMEOUT_MS,
+        metavar="MS",
+        help=f"how long each console assertion waits (default {DEFAULT_HARNESS_TIMEOUT_MS})",
+    )
     return parser
 
 
@@ -806,6 +946,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.timeout_ms <= 0:
         parser.error("--timeout-ms must be a positive integer")
+    if args.harness_timeout_ms <= 0:
+        parser.error("--harness-timeout-ms must be a positive integer")
+    if (args.expect_server or args.expect_client) and not args.harness:
+        parser.error("--expect-server/--expect-client require --harness")
     if args.read_only and (args.allow_write or args.allow_approve):
         parser.error("--read-only cannot be combined with --allow-write/--allow-approve")
 
@@ -813,6 +957,10 @@ def main(argv: list[str] | None = None) -> int:
         allow_write=args.allow_write,
         allow_approve=args.allow_approve,
         timeout_ms=args.timeout_ms,
+        harness=args.harness,
+        expect_server=args.expect_server,
+        expect_client=args.expect_client,
+        harness_timeout_ms=args.harness_timeout_ms,
     )
     report = smoke.run()
     if args.json:

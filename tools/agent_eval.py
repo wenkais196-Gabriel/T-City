@@ -122,7 +122,9 @@ def _read_text(path: str) -> str:
         return sys.stdin.read()
     # ``/dev/null`` is the conventional "empty export" argument (see EVAL.md).
     # It carries no data, so accepting it does not widen the root guard.
-    if Path(path).is_absolute() and Path(path) == Path(os.devnull):
+    # Windows spells the same device ``nul`` (``os.devnull``), and ``Path("nul")``
+    # is not absolute there, so both spellings are matched explicitly.
+    if Path(path) == Path(os.devnull) or path.lower() in ("/dev/null", "nul"):
         return ""
     return _contained(path).read_text(encoding="utf-8-sig", errors="replace")
 
