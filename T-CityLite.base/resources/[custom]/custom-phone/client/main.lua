@@ -30,6 +30,22 @@ end)
 PhoneEvents.Start()
 
 -- Close Phone Function (must be defined before OpenPhone — CreateThread closure)
+-- 只读状态快照：给 agent 的状态探测用（custom-agent-client 每 5s 取一次）。
+-- 只回枚举/布尔/数字，不回任何 UI 内容、消息正文或玩家输入。
+exports('GetUiState', function()
+    local focus = PhoneFocus.State()
+    -- 形态就是开着的证据：Surface.Bind() 在打开时写入，ClosePhone 里 Reset 清空。
+    -- （#48 之后 isPhoneOpen 已经不存在，只有注释里还留着旧名字。）
+    local kind = Surface.Current()
+    return {
+        open = kind ~= nil,
+        surface = kind,
+        focused = IsNuiFocused() == true,
+        keep_input = IsNuiFocusKeepingInput() == true,
+        focus_owner = type(focus) == 'table' and focus.owner or nil,
+    }
+end)
+
 local function ClosePhone(reason)
     local kind = Surface.Current()
     if not kind then return end

@@ -39,7 +39,7 @@ LUA_PATH = (
 )
 
 SCHEMA_VERSION = 1
-MAX_TOOLS = 40
+MAX_TOOLS = 48  # 40 条时加两个状态探测工具就撞上限了；留出余量
 
 # Design 03 §4 whitelists these broad-but-static verbs.
 VERBS = (

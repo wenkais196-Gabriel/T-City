@@ -42,10 +42,10 @@
 ## 4. 验证现状
 
 ```
-lua5.4 tests/agent/lua/runner.lua       13 suites / 243 checks
+lua5.4 tests/agent/lua/runner.lua       13 suites / 252 checks
 python3 -m pytest -q tests/tools          203 passed
 cd T-CityLite.base && pytest -q tests/unit   262 passed
-python3 tools/agent_tools.py --check     39 tools, no drift
+python3 tools/agent_tools.py --check     41 tools, no drift
 # harness（本地只读）需 TCITY_HARNESS=1 + TCITY_HARNESS_SERVER_LOG 才出现在 tools/list
 ```
 

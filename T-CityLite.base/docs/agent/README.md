@@ -421,7 +421,7 @@ above was performed with the normal `.env` credentials.
 |---|---|
 | [`STATUS.md`](STATUS.md) | **先看这个**：分层现状、17 个动作覆盖、设计差异、上手顺序、未验证项 |
 | [`ACTIONS.md`](ACTIONS.md) | 动作契约：风险分级、参数规范化、审批、执行与回读、错误码、`agent_denials` |
-| [`TOOLS.md`](TOOLS.md) | 39 个工具的路由与风险表（由 `tools/agent_tools.json` 生成，勿手改） |
+| [`TOOLS.md`](TOOLS.md) | 41 个工具的路由与风险表（由 `tools/agent_tools.json` 生成，勿手改） |
 | [`EVAL.md`](EVAL.md) | 评测：导出、指标定义（含 denial_rate）、已知盲区 |
 | [`SMOKE.md`](SMOKE.md) | 实机冒烟：三段式检查与常见失败 |
 | [`MCP_WIRING.md`](MCP_WIRING.md) | **把 MCP 接到真实服务器上**：DB / gateway / director 三路拓扑、env 对照、验证命令与常见断点 |

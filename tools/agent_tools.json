@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema_version": 1,
-  "registry_version": "1.6.0",
+  "registry_version": "1.7.0",
   "generated": "2026-10-26T20:17:39Z",
   "tools": [
     {
@@ -489,6 +489,90 @@
         "untrusted_fields": [
           "name"
         ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_client_state",
+      "title": "Read one player's client state (UI, ped, screen)",
+      "description": "Read the client snapshot custom-agent-client pushes when it changes: phone/tablet open, bound surface, NUI focus and owner, ped vitals and vehicle class, screen size. Self-report only; the server stamps age_ms and 404s past 15s. No UI text, no input.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.7.0",
+      "auth": "live",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/live/clients/{citizenid}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$",
+            "description": "QBCore citizen id of an online player."
+          }
+        },
+        "required": [
+          "citizenid"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_server_state",
+      "title": "Read process-level server state",
+      "description": "Read process-level server state: uptime, resources started out of total, loaded characters, and current weather when qb-weathersync runs. Tells 'server is fine' from 'one resource is down' before blaming a feature.",
+      "channel": "read",
+      "route": "director",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.7.0",
+      "auth": "live",
+      "rate_limit": {
+        "per_minute": 30,
+        "burst": 5
+      },
+      "http": {
+        "method": "GET",
+        "path": "/agent/v1/live/server"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": []
       },
       "verify": null,
       "undo": null,
