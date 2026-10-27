@@ -61,7 +61,7 @@ cd T-CityLite.base/resources/[custom]/custom-phone/web && npm run build   # 输�
 # Lua 语法（qb-core 例外：它用 CfxLua 扩展 `+=`，luac 无法解析）
 luac5.4 -p <file.lua>
 
-# Lua golden（13 suites，252 checks）
+# Lua golden（13 suites，253 checks）
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
 
 # 服务器（screen 会话 tcity；控制台用 tcity-cmd，见 ~/.local/bin）
