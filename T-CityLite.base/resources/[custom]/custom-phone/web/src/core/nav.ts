@@ -36,8 +36,11 @@ function labelOf(el: HTMLElement): string {
 
 function report(el: HTMLElement | null): void {
   // 把"现在焦点在哪个控件上"回吐给 Lua：agent 看不见 DOM，没有这条只能盲按方向键。
+  // kind='text' 时 Lua 会压一层 text 帧 —— Esc 先退出输入框，再退出 App。
   const label = el ? labelOf(el) : '';
-  void fetchNui('uiFocus', { label }).catch(() => {});
+  const tag = el?.tagName ?? '';
+  const kind = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ? 'text' : 'control';
+  void fetchNui('uiFocus', { label, kind }).catch(() => {});
 }
 
 function paint(el: HTMLElement | null): void {

@@ -146,6 +146,18 @@ world ─ M ─▶ phone ─ Enter ─▶ phone:mdt ─ Enter ─▶ phone:mdt/s
 
 实现见 PR #76：custom-ui 的 `Push/Pop/Top/Path/IsTaken/Owns/ResetInput`（S1，只加 API 不迁资源）。
 
+## 6.6 进度（2026-10-27）
+
+| 步 | 状态 | 落点 |
+|---|---|---|
+| S1 栈本体 | ✅ | custom-ui：`Push/Pop/Top/Path/IsTaken/Owns/ResetInput`；用例 `T-CityLite.base/tests/agent/lua/cases_client/input_path.lua` |
+| S2 手机接入 | ✅（待真机复验） | `focus.lua` 变成栈的外壳（Acquire/Release/Reset 转成 Push/Pop，`GetResourceState('custom-ui')` 变化时退化为老行为）；`main.lua` 在 App 换页时 Push `phone:<app>`、聚焦输入框时 Push `phone:text`；`nav.lua` **不再禁用任何控制**；Esc 与 Backspace 一样发 `back` |
+| S3 玩法门卫 | ✅（待真机复验） | `indicators.lua`、`cruise.lua` 先问 `IsTaken()` |
+| S4 qb-* 接入 | ⬜ | 背包/菜单/目标盘/中控屏 |
+| S5 键位闸门 | ⬜ | 同一键不许两个资源注册 |
+
+闸门：`T-CityLite.base/tests/architecture/test_input_layer_contracts.py`（四条，每条都能证明自己会红）。
+
 ## 7. 需要拍板的点
 
 1. **层数**：我提议 3 层（overlay/modal/text）。要不要再加一层 `hud-input`（比如地图、雷达那种只吃少量键的）？
