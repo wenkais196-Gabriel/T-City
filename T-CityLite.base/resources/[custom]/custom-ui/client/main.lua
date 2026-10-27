@@ -103,6 +103,43 @@ Input = Input or {}
 
 local path = {}
 local captureThread = false
+-- 最近几次 SetNuiFocus 的记录：游标不出现时先看"到底谁在什么时候改了焦点"
+local focusTrace = {}
+
+local function setFocus(hasFocus, hasCursor, from)
+    SetNuiFocus(hasFocus, hasCursor)
+    focusTrace[#focusTrace + 1] = ('%s:%s,%s'):format(
+        from or '?', hasFocus and '1' or '0', hasCursor and '1' or '0')
+    if #focusTrace > 8 then table.remove(focusTrace, 1) end
+end
+
+-- 关键：SetNuiFocus 是**按资源**的。custom-ui 自己没有 ui_page，
+-- 从这里调用等于把焦点给了一个不存在的页面 —— 手机页面永远拿不到焦点，
+-- 表现就是"界面能显示、但收不到任何鼠标/键盘事件、也没有游标"。
+-- 所以栈只负责"决定"，真正按焦点必须由**拥有页面的那个资源**来做。
+local lastOwner = nil
+
+-- 跨资源 exports **不能传函数**（每个资源有自己的 Lua 状态，函数会被丢掉），
+-- 所以帧里只放资源名，按下焦点时反过来调那个资源的 ApplyFocus 导出。
+local function ownerApply(owner, hasFocus, hasCursor, keepInput)
+    if type(owner) ~= 'string' or owner == '' then return false end
+    local ok = pcall(function()
+        exports[owner]:ApplyFocus(hasFocus, hasCursor, keepInput)
+    end)
+    return ok
+end
+
+local function applyFocusToTop(frame, cursor, keepInput)
+    local owner = frame and frame.owner
+    if ownerApply(owner, true, cursor, keepInput) then
+        lastOwner = owner
+        focusTrace[#focusTrace + 1] = ('owner(%s/%s):1,%s'):format(
+            tostring(owner), tostring(frame and frame.id), cursor and '1' or '0')
+        if #focusTrace > 8 then table.remove(focusTrace, 1) end
+        return
+    end
+    setFocus(true, cursor, 'push:' .. tostring(frame and frame.id))
+end
 -- 记住 keepInput：与 PhoneFocus 一样，关闭时**不要**把它关掉（那会让下次开手机冻住 WASD）
 local state = { keepInput = false }
 
@@ -147,27 +184,35 @@ local function apply()
             SetNuiFocusKeepInput(false)
             state.keepInput = false
         end
-        SetNuiFocus(false, false)
+        if lastOwner then
+            ownerApply(lastOwner, false, false, false)
+            lastOwner = nil
+            focusTrace[#focusTrace + 1] = 'owner:0,0'
+            if #focusTrace > 8 then table.remove(focusTrace, 1) end
+        else
+            setFocus(false, false, 'empty')
+        end
         -- 栈空 = 输入还给游戏。Esc/暂停菜单要能在这一层工作。
         return
     end
     local keepInput = frame.keepInput == true
-    -- keepInput 必须在 SetNuiFocus **之前**设：之后调用会把光标弄丢
-    -- （真机现象："手机开着但看不到游标，还能点进 App"）。
-    if state.keepInput ~= keepInput then
-        SetNuiFocusKeepInput(keepInput)
-        state.keepInput = keepInput
-    end
+    -- keepInput 必须在 SetNuiFocus **之前**设：之后调用会把光标弄丢。
+    -- 而且**每次都调**：这个 build 上 keepInput 一旦被设成 true 就会粘住
+    -- （citizenfx#3593），只在"变化时"调会让后来的 UI 继承"仍然吃输入"，游标就再也不出现。
+    SetNuiFocusKeepInput(keepInput)
+    state.keepInput = keepInput
     -- 第二个参数是**光标**，不是 keepInput —— 这两个搞混过一次。
     local cursor = frame.cursor ~= false
-    SetNuiFocus(true, cursor)
+    applyFocusToTop(frame, cursor, keepInput)
     if cursor then
         -- 有些 build 在同一帧给焦点会把光标标志吃掉，和 OpenMenu 一样补两帧
         CreateThread(function()
             Wait(0)
-            if topFrame() then SetNuiFocus(true, true) end
+            local again0 = topFrame()
+            if again0 then applyFocusToTop(again0, true, again0.keepInput == true) end
             Wait(100)
-            if topFrame() then SetNuiFocus(true, true) end
+            local again1 = topFrame()
+            if again1 then applyFocusToTop(again1, true, again1.keepInput == true) end
         end)
     end
     if captureThread then return end
@@ -190,7 +235,8 @@ local function apply()
 end
 
 --- 压入一帧
----@param frame table { id = string, kind = 'modal'|'text'|nil, allow = table|nil, keepInput = boolean|nil, close = function|nil }
+---@param frame table { id = string, kind = 'modal'|'text'|nil, allow = table|nil, keepInput = boolean|nil, close = function|nil,
+---                      applyFocus = fun(hasFocus:boolean, hasCursor:boolean, keepInput:boolean)|nil }
 ---@return boolean ok, string|nil err
 function Input.Push(frame)
     if type(frame) ~= 'table' or type(frame.id) ~= 'string' or frame.id == '' then
@@ -294,6 +340,12 @@ exports('IsTaken', Input.IsTaken)
 exports('Owns', Input.Owns)
 exports('ResetInput', Input.Reset)
 exports('RefreshFocus', Input.Refresh)
+exports('FocusTrace', function() return focusTrace end)
 exports('DistanceToCoords', DistanceToCoords)
+
+-- 资源启动先硬复位一次：上一次运行可能留下 keepInput=true 的粘住状态，
+-- 那会让之后所有 UI 都拿不到光标（真机现象：背包/目标盘有游标，手机没有）。
+SetNuiFocus(false, false)
+SetNuiFocusKeepInput(false)
 
 print('[custom-ui] ✅ menu focus/guard/distance helpers ready')

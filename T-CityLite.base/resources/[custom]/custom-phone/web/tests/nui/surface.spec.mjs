@@ -44,6 +44,28 @@ export const surfaceScenarios = [
   },
   {
     surfaces: ['phone'],
+    name: '鼠标移动会画出自绘光标（NUI 收得到 mousemove 时就该出现）',
+    async run({ page }) {
+      await openPhone(page, 'phone');
+      const dot = page.locator('.nav-cursor');
+      checkEqual('一开始没有光标点', await dot.count(), 0);
+
+      // 走真实事件链：渲染进程收到的 mousemove
+      await page.mouse.move(120, 200);
+      await page.waitForTimeout(200);
+      checkTruthy('移动后出现光标点', (await dot.count()) === 1);
+      const box = await dot.boundingBox();
+      checkTruthy('光标点有大小', box && box.width > 4);
+
+      await page.mouse.move(220, 260);
+      await page.waitForTimeout(200);
+      const moved = await dot.boundingBox();
+      checkTruthy('光标点跟着鼠标走',
+        Boolean(box && moved) && (Math.abs(moved.x - box.x) > 10 || Math.abs(moved.y - box.y) > 10));
+    },
+  },
+  {
+    surfaces: ['phone'],
     name: '焦点反馈：叠加层框住当前元素，标签写着它是什么，换焦点会跟着走',
     async run({ page }) {
       await openPhone(page, 'phone');
