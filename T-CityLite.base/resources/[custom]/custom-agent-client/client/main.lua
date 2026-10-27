@@ -149,3 +149,61 @@ RegisterNetEvent('tcity:agent:cancel', function(msg)
         v = 1, request_id = rid, session = session, status = 'cancelled',
     })
 end)
+
+-- ---------------------------------------------------------------------------
+-- State probe (read-only)
+--
+-- custom-agent-client is the only resource that may talk to the director, so the
+-- client-side snapshot lives here. It carries enums/booleans/numbers only: no UI
+-- text, no player input, no identifiers. The server re-sanitises everything and
+-- expires it after 15 s, so a stale snapshot can never look like current truth.
+-- ---------------------------------------------------------------------------
+local PROBE_INTERVAL_MS = 5000
+
+local function phoneState()
+    -- Cross-resource client exports are a runtime contract (06-client-model P10):
+    -- the phone may be stopped, so treat a missing export as "unknown", not fatal.
+    local ok, state = pcall(function() return exports['custom-phone']:GetUiState() end)
+    if ok and type(state) == 'table' then
+        return {
+            open = state.open == true,
+            surface = state.surface,
+            focused = state.focused == true,
+            keep_input = state.keep_input == true,
+            focus_owner = state.focus_owner,
+        }
+    end
+    return nil
+end
+
+local function collectState()
+    local data = QBCore and QBCore.Functions.GetPlayerData and QBCore.Functions.GetPlayerData()
+    local ped = PlayerPedId()
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    local w, h = GetActiveScreenResolution()
+    return {
+        v = 1,
+        logged_in = type(data) == 'table' and type(data.citizenid) == 'string' and data.citizenid ~= '',
+        phone = phoneState(),
+        ped = {
+            in_vehicle = vehicle ~= 0,
+            vehicle_class = vehicle ~= 0 and GetVehicleClass(vehicle) or 0,
+            health = GetEntityHealth(ped),
+            dead = IsEntityDead(ped) == true,
+        },
+        screen = { w = w, h = h },
+    }
+end
+
+CreateThread(function()
+    while true do
+        local ok, snapshot = pcall(collectState)
+        if ok and type(snapshot) == 'table' then
+            -- Always send: the server expires a snapshot after 15 s, so an
+            -- idle-but-fine client must keep beating or the probe goes dark
+            -- exactly when nothing is happening (the interesting case).
+            TriggerServerEvent('tcity:agent:state', snapshot)
+        end
+        Wait(PROBE_INTERVAL_MS)
+    end
+end)

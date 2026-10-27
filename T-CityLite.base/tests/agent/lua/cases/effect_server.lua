@@ -470,6 +470,75 @@ return {
             assert(idle.pending == 0 and idle.inflight == 0)
         end)
 
+        -- ------------------------------------------------------------------
+        -- Client state probe
+        -- ------------------------------------------------------------------
+        local function emitState(env, src, snapshot)
+            _G.source = src
+            TriggerEvent('tcity:agent:state', snapshot)
+        end
+
+        check('client_state_keeps_only_whitelisted_keys_and_clamps', function()
+            local env = newEnv(enabled())
+            emitState(env, 1, {
+                v = 1,
+                logged_in = true,
+                phone = {
+                    open = true, surface = 'tablet', focused = true, keep_input = true,
+                    focus_owner = 'phone', secret = 'should not survive',
+                },
+                ped = { in_vehicle = true, vehicle_class = 99, health = 99999, dead = false },
+                screen = { w = 99999, h = 10 },
+                junk = { nested = true },
+            })
+            local data = env.exports.ClientState(1)
+            assert(type(data) == 'table', 'the snapshot must be readable')
+            assert(data.junk == nil and data.phone.secret == nil, 'unknown keys must be dropped')
+            assert(data.phone.surface == 'tablet' and data.phone.open == true)
+            assert(data.phone.focus_owner == 'phone')
+            assert(data.ped.vehicle_class == 23, 'vehicle class clamps to 23')
+            assert(data.ped.health == 1000, 'health clamps to 1000')
+            assert(data.screen.w == 8192 and data.screen.h == 320, 'screen clamps both ways')
+        end)
+
+        check('client_state_rejects_unknown_surface_and_bad_owner', function()
+            local env = newEnv(enabled())
+            emitState(env, 1, { v = 1, phone = { surface = 'desktop', focus_owner = 'BAD OWNER!' } })
+            local data = env.exports.ClientState(1)
+            assert(data.phone.surface == nil, 'unknown surface must be nil, not echoed')
+            assert(data.phone.focus_owner == nil, 'owner must match [a-z0-9_]{1,16}')
+        end)
+
+        check('client_state_expires_after_15s', function()
+            local env = newEnv(enabled())
+            env.now = 1000
+            emitState(env, 1, { v = 1, logged_in = true })
+            assert(env.exports.ClientState(1) ~= nil)
+            env.now = 1000 + 15001
+            local data, code = env.exports.ClientState(1)
+            assert(data == nil and code == 'client_state_unavailable', 'stale snapshots must not be served')
+        end)
+
+        check('client_state_is_rate_limited_per_source', function()
+            local env = newEnv(enabled())
+            env.now = 1000
+            emitState(env, 1, { v = 1, logged_in = true })
+            env.now = 1100 -- 100ms later: inside the 1s window
+            emitState(env, 1, { v = 1, logged_in = false })
+            local data = env.exports.ClientState(1)
+            assert(data.logged_in == true, 'the second push inside 1s must be dropped')
+        end)
+
+        check('client_state_is_cleared_when_the_player_drops', function()
+            local env = newEnv(enabled())
+            emitState(env, 1, { v = 1, logged_in = true })
+            assert(env.exports.ClientState(1) ~= nil)
+            _G.source = 1
+            TriggerEvent('playerDropped')
+            local data = env.exports.ClientState(1)
+            assert(data == nil, 'a dropped player must not leave a snapshot behind')
+        end)
+
         return {
             ok = failed == 0,
             error = failed == 0 and nil or ('%d effect server case(s) failed'):format(failed),

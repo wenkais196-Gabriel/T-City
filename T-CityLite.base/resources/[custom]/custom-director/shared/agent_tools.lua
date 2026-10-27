@@ -5,7 +5,7 @@
 local AgentTools = {}
 
 AgentTools.SCHEMA_VERSION = 1
-AgentTools.REGISTRY_VERSION = "1.6.0"
+AgentTools.REGISTRY_VERSION = "1.7.0"
 
 AgentTools.TOOLS = {
   ["add_player_money"] = {
@@ -179,6 +179,44 @@ AgentTools.TOOLS = {
       ["limit"] = { type = "integer", minimum = 1, maximum = 48 },
       ["job"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 64 },
     },
+  },
+  ["get_client_state"] = {
+    name = "get_client_state",
+    title = "Read one player's client state (UI, ped, screen)",
+    channel = "read",
+    route = "director",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    auth = "live",
+    params = { "citizenid" },
+    required = { "citizenid" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+    },
+  },
+  ["get_server_state"] = {
+    name = "get_server_state",
+    title = "Read process-level server state",
+    channel = "read",
+    route = "director",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    auth = "live",
+    params = { },
+    required = { },
+    schema = {},
   },
   ["get_player_snapshot"] = {
     name = "get_player_snapshot",

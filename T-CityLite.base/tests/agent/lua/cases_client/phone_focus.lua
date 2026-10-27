@@ -173,6 +173,29 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('ui_state_export_reports_what_the_agent_needs', function()
+            -- agent 的客户端状态探测先取这个导出：它只能回答"开着吗/哪一面/焦点归谁"，
+            -- 不能带任何正文或玩家输入。
+            local state = env.registered_exports and env.registered_exports.GetUiState
+            assert(type(state) == 'function', 'custom-phone must export GetUiState')
+            -- 前面的用例可能已经把手机开着：先 hard reset，再按一次，避免测到"关闭"。
+            env.Command('phonefix')
+            env.Step(100)
+            env.Command('phone')
+            env.Step(200)
+            local snapshot = state()
+            assert(type(snapshot) == 'table', 'GetUiState must return a table')
+            assert(snapshot.open == true, 'an open phone must report open=true')
+            assert(snapshot.surface == 'phone', 'surface must be the bound one, got ' .. tostring(snapshot.surface))
+            assert(snapshot.focus_owner == 'phone', 'focus owner must be the phone, got ' .. tostring(snapshot.focus_owner))
+            -- 关闭走 phonefix：它一定会 Release + Reset，不依赖 toggle 时的焦点判定
+            env.Command('phonefix')
+            env.Step(100)
+            local after = state()
+            assert(after.open == false, 'a closed phone must report open=false')
+            assert(after.surface == nil, 'surface must clear on close, got ' .. tostring(after.surface))
+        end)
+
         return {
             ok = failed == 0,
             data = { total = #results, failed = failed, cases = results, resumes = env.resumes },

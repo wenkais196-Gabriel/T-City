@@ -468,6 +468,13 @@ return function(env)
             rawset(_, resource, object)
             return object
         end,
+        -- 真 FiveM 的 exports 是可调用的：exports('Name', fn) 注册、exports['res']:Name() 调用。
+        -- 桩原来只实现了后者，于是任何 `exports('X', fn)` 都会 'attempt to call a table value'。
+        __call = function(_, name, fn)
+            if type(name) ~= 'string' or type(fn) ~= 'function' then return end
+            env.registered_exports = env.registered_exports or {}
+            env.registered_exports[name] = fn
+        end,
     })
 
     env.qb = env.qb or {
