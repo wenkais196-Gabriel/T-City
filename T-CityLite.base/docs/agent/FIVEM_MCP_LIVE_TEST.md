@@ -11,7 +11,7 @@
 |---|---|
 | FXServer | artifact **37872**（`E:\FXServer\FXServer.exe`），数据目录 = `T-CityLite.base`（cwd） |
 | 端口 | **30130**（TCP+UDP）——30120 被 `vmnat.exe`（VMware NAT，pid 4140）占用 |
-| server.cfg | 最小开发配置（`T-CityLite.base/server.cfg`，gitignored）：onesync、`set rcon_password`、8 槽、9 个 Cfx 自带资源 + 一次性诊断资源 `zz-mcp-diag` |
+| server.cfg | 最小开发配置（本地 server.cfg，gitignored，不在仓库里）：onesync、`set rcon_password`、8 槽、9 个 Cfx 自带资源 + 一次性诊断资源 `zz-mcp-diag` |
 | 客户端 | FiveM build **3258**（`%LOCALAPPDATA%\FiveM`），GTA V `E:\GTAV`，devcon 监听 `127.0.0.1:29200` |
 | MCP server | `fivem-mcp-server@0.6.0`，stdio，协议 `2025-06-18` |
 | 探测脚本 | `%LOCALAPPDATA%\hermes\cache\scratch\mcp_probe.py`（标准库 JSON-RPC stdio 客户端，未入库） |
@@ -100,5 +100,5 @@ python mcp_probe.py --cmd "C:/Program Files/nodejs/npx.cmd -y fivem-mcp-server" 
 ## 6. 清理
 
 - `resources/[custom]/zz-mcp-diag/`：一次性诊断资源（server/client 心跳 + 两个命令），验证完可删；未入库。
-- `T-CityLite.base/server.cfg`：含 license key / rcon 密码，**已在 .gitignore**，永不提交。
+- 本地 server.cfg（`server.cfg` 这一层目录下的文件）：含 license key / rcon 密码，**已在 .gitignore**，永不提交。
 - `E:\FXServer\`：运行时目录，在仓库外。
