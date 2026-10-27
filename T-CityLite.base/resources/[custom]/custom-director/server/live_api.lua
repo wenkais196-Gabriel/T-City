@@ -468,13 +468,29 @@ local function handleClient(citizenid)
     }
 end
 
+-- 未启动资源最多报这么多条：一个 117 资源的服务器全挂时，把 117 个名字塞进响应
+-- 既没用又会被限流器当成大包。名字本身也是玩家可控之外的常量，但仍然过一遍消毒。
+local NOT_STARTED_LIMIT = 40
+
 local function handleServerState()
     local total, started = 0, 0
+    local notStarted, stopped = {}, 0
     if type(GetNumResources) == 'function' then
         total = GetNumResources() or 0
         for index = 0, total - 1 do
             local name = GetResourceByFindIndex(index)
-            if name and GetResourceState(name) == 'started' then started = started + 1 end
+            if name then
+                -- "started" 之外还有 stopping/stopped/uninitialized/missing，
+                -- 对排查来说它们是同一件事：这个资源现在没在跑。
+                if GetResourceState(name) == 'started' then
+                    started = started + 1
+                else
+                    stopped = stopped + 1
+                    if #notStarted < NOT_STARTED_LIMIT then
+                        notStarted[#notStarted + 1] = LiveRules.sanitize_text(name, 64)
+                    end
+                end
+            end
         end
     end
     local players = 0
@@ -491,7 +507,13 @@ local function handleServerState()
             sampled_at = LiveRules.now_ms(),
             uptime_s = math.floor((tonumber(GetGameTimer()) or 0) / 1000),
             players = players,
-            resources = { started = started, total = total },
+            resources = {
+                started = started,
+                total = total,
+                -- 名单比数字有用："83/117" 不告诉你是哪 34 个没起。
+                not_started = notStarted,
+                not_started_truncated = stopped > NOT_STARTED_LIMIT,
+            },
             weather = weather,
         },
     }
