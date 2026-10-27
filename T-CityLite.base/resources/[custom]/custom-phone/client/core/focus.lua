@@ -19,6 +19,10 @@
 --   * the default owner is 'phone', so Acquire()/Release()/IsOwner() without an
 --     argument operate on the phone.
 --
+-- 现在它**只是外壳**：真正决定"谁拥有输入"的是 custom-ui 的交互路径栈
+-- （见 docs/client/plans/2026-10-27-input-layering.md）。这里把 Acquire/Release
+-- 翻译成 Push/Pop，并保留 State() 给诊断用；没有 custom-ui 时退化为老行为。
+--
 -- This file must load before client/main.lua.
 
 PhoneFocus = PhoneFocus or {}
@@ -71,8 +75,26 @@ local function stackSnapshot()
     return owners
 end
 
---- Take (or re-take) focus for `owner`. Re-acquiring an existing owner moves it
---- to the top instead of stacking duplicates.
+-- 手机开着时允许穿透给游戏的控制：走路/冲刺。别的都归栈顶。
+-- 30-35 是 MOVE_*，21 是 SPRINT —— 手机是"边走边看"，不是 GTA 暂停菜单。
+local ALLOW_WHILE_OPEN = { 21, 30, 31, 32, 33, 34, 35 }
+
+local function inputLayer()
+    -- 用资源状态当门闩，而不是猜 exports 里有没有那个方法：
+    -- 测试桩的 exports 会把任意键都返回成"可调用对象"，光看 Push 是否存在会误判。
+    if GetResourceState == nil or GetResourceState('custom-ui') ~= 'started' then return nil end
+    local ok, layer = pcall(function() return exports['custom-ui'] end)
+    if not ok or not layer then return nil end
+    return layer
+end
+
+local delegatedLogged = false
+
+local function frameId(owner)
+    return owner == 'phone' and 'phone' or ('phone:' .. owner)
+end
+
+--- Take (or re-take) focus for `owner` — 委托给 custom-ui 的栈。
 ---@param owner string|nil defaults to 'phone'
 ---@param opts table|nil { cursor = boolean (default true), keepInput = boolean (default false) }
 ---@return boolean acquired
@@ -85,12 +107,56 @@ function PhoneFocus.Acquire(owner, opts)
         cursor = opts.cursor ~= false,
         keepInput = opts.keepInput == true,
     }
+    local layer = inputLayer()
+    if layer then
+        local ok = pcall(function()
+            layer:Push({
+                id = frameId(owner),
+                cursor = entry.cursor,
+                keepInput = entry.keepInput,
+                allow = entry.keepInput and ALLOW_WHILE_OPEN or nil,
+            })
+        end)
+        if ok then
+            state.owner = owner
+            state.focus = true
+            state.cursor = entry.cursor
+            state.keepInput = entry.keepInput
+            if not delegatedLogged then
+                delegatedLogged = true
+                print('[custom-phone][focus] delegated to custom-ui input path')
+            end
+            return true
+        end
+    end
+    -- 退化：没有 custom-ui（比如单独测这个资源）时按老办法自己设焦点
     for index = #stack, 1, -1 do
         if stack[index].owner == owner then table.remove(stack, index) end
     end
     stack[#stack + 1] = entry
     applyTop()
     return true
+end
+
+--- 压入一个子帧（App / 输入框）。父帧已经在栈上；没有 custom-ui 时什么都不做。
+---@param id string 例如 'phone:mdt'、'phone:text'
+---@return boolean
+function PhoneFocus.PushFrame(id)
+    local layer = inputLayer()
+    if not layer or type(id) ~= 'string' or id == '' then return false end
+    local ok = pcall(function()
+        layer:Push({ id = id, cursor = true, keepInput = true, allow = ALLOW_WHILE_OPEN })
+    end)
+    return ok
+end
+
+--- 弹掉一个子帧（连同它上面的层）。
+---@param id string
+---@return boolean
+function PhoneFocus.PopFrame(id)
+    local layer = inputLayer()
+    if not layer then return false end
+    return pcall(function() return layer:Pop(id) end)
 end
 
 --- Release one owner. The next owner in the stack (if any) becomes active; if
@@ -110,6 +176,10 @@ function PhoneFocus.Release(owner)
         end
     end
     if not removed then return false end
+    local layer = inputLayer()
+    if layer then
+        pcall(function() layer:Pop(frameId(owner)) end)
+    end
     -- Removing a non-top owner does not change the active window; only the top
     -- (or the empty stack) needs a native call.
     if wasTop or #stack == 0 then applyTop() end
@@ -121,8 +191,16 @@ end
 ---@return boolean
 function PhoneFocus.Reset()
     stack = {}
-    setFocus(false, false)
-    SetNuiFocusKeepInput(false)
+    local handled = false
+    local layer = inputLayer()
+    if layer then
+        handled = pcall(function() layer:ResetInput() end)
+    end
+    -- 栈自己会把焦点放掉；再调一次原生就是重复（也会让"手机不碰 SetNuiFocus"失效）
+    if not handled then
+        setFocus(false, false)
+        SetNuiFocusKeepInput(false)
+    end
     state.owner = nil
     state.keepInput = false
     return true
@@ -140,6 +218,12 @@ end
 --- Immutable-enough snapshot for diagnostics/logs.
 ---@return table { owner, focus, cursor, keepInput, depth, stack }
 function PhoneFocus.State()
+    local path
+    local layer = inputLayer()
+    if layer then
+        local ok, value = pcall(function() return layer:Path() end)
+        if ok and type(value) == 'table' then path = value end
+    end
     return {
         owner = state.owner,
         focus = state.focus,
@@ -147,6 +231,7 @@ function PhoneFocus.State()
         keepInput = state.keepInput,
         depth = #stack,
         stack = stackSnapshot(),
+        path = path,
     }
 end
 
