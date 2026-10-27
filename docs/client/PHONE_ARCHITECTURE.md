@@ -171,6 +171,29 @@ NUI 传 `_diag.tid`（没有则由客户端生成），trace 的 tid **就是 re
 > 服务端缓存的 fxmanifest，只重跑已有文件；漏了 `refresh` 的表现是"文件明明在、代码
 > 明明没错、日志里就是没有它"，非常容易误判成缓存或加载错误。
 
+### 输入归属（谁拿键盘/鼠标）
+
+手机开着时输入归谁，完全由 `SetNuiFocus(hasFocus, hasCursor)` 与
+`SetNuiFocusKeepInput(keep)` 这两个原生决定。默认是"边走边看"：
+
+| 模式 | convar | 能走路 | 键盘谁收 | 鼠标指针 |
+|---|---|---|---|---|
+| 边走边看（**默认**） | `phone_keep_input 1` | ✅ | Lua 原始按键（T-CityLite.base/resources/[custom]/custom-phone/client/core/nav.lua，`IsRawKeyDown`） | 可见（焦点归页面后引擎会用） |
+| 完全接管 | `phone_keep_input 0` | ❌ | CEF `keydown`（Svelte） | 可见 |
+
+三条必须记住的硬约束：
+
+1. **`SetNuiFocus` 是按资源的** —— 必须由**拥有 ui_page 的资源**调用。在 `custom-ui`
+   （无页面）里调用等于把焦点交给不存在的页面：界面能显示，但收不到任何鼠标事件，
+   也没有游标。输入栈因此只做决定，按焦点通过 `exports[owner]:ApplyFocus(...)` 回调。
+2. **跨资源 exports 不能传函数** —— 帧里只放资源名（字符串），函数字段会被丢掉。
+3. **`keepInput` 决定键盘归谁**：`false` 时游戏不再处理输入，`IsRawKeyDown` 和
+   `RegisterKeyMapping` 都读不到键（M 键曾因此完全失效）；`true` 时按键走 Lua 原始按键，
+   CEF 也可能同时收到（NUI 侧有 120ms 去重，避免一次按键挪两格）。
+
+诊断：`/live/clients` 的 `phone` 里看 `keep_input` / `frames`（交互路径，关屏后必须为空）/
+`focus_trace` / `nav_edges`（Lua 最近收到的原始按键边沿）。
+
 ## 4. 性能预算
 
 | 指标 | 目标 |
