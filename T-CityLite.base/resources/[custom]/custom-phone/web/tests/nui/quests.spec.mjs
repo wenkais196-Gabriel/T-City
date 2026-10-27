@@ -177,6 +177,9 @@ export const questScenarios = [
       }];
 
       await openQuests(page, 'tablet');
+      // 两栏取决于量出来的宽度：开屏那一帧可能还是手机宽度，等它稳定再数
+      await waitFor(async () => (await page.locator('.quests-app [data-pane]:visible').count()) === 2,
+        5000, '平板应并出两栏');
       checkTruthy('平板：两栏都在', (await page.locator('.quests-app [data-pane]:visible').count()) === 2);
 
       // 默认在「可接」tab，右栏是那条可接任务
