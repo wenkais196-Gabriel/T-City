@@ -41,6 +41,9 @@
 
 - 换形态（手机↔平板）时 `ClosePhone('switch')` → `OpenPhone(kind, 'switch')`：**reason 必须是
   switch**，NUI 靠它决定"留在当前页还是回桌面"；传别的值会出现"画面回桌面但状态仍报旧 App"。
+- NUI 的键盘导航：**Tab 在游戏里拿不到**（GTA 占），方向键/Enter/Backspace 能到 CEF；
+  手柄走 Lua 轮询控制再发 `phone:nav`。两条腿都落到 T-CityLite.base/resources/[custom]/custom-phone/web/src/core/nav.ts，别在 app 里
+  各自监听方向键（见 docs/client/research/keyboard-and-gamepad-navigation.md）。
 - 真机 OS 光标被 GTA 锁在屏幕角（`SetCursorPos` 无效），合成鼠标点击进不了 NUI；驱动 UI 走
   `/phoneui <app>`（`setr phone_ui_nav "1"`）或 `adc <src> <cmd>`（`setr agent_devcmd_enabled "1"`）。
 - `IsNuiFocused()` / `IsNuiFocusKeepingInput()` 在本 build **恒 false**：判定开关/焦点一律用

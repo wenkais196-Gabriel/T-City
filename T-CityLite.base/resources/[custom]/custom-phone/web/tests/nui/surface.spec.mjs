@@ -206,6 +206,9 @@ export const surfaceScenarios = [
 
       await openQuests(page, 'phone');
       checkEqual('手机：只显示一栏', await page.locator('.quests-app [data-pane]:visible').count(), 1);
+      // 列表数据是 openQuests 之后异步拉的：等渲染完再数，别和加载赛跑
+      await waitFor(async () => (await page.locator('.list > li .desc').count()) > 0, 5000,
+        '手机列表应内联任务描述');
       checkTruthy('手机：描述内联在列表里',
         (await page.locator('.list > li .desc').count()) > 0);
 
@@ -214,6 +217,8 @@ export const surfaceScenarios = [
         (nodes) => nodes.map((node) => node.getAttribute('data-pane')).sort(),
       );
       checkEqual('平板：列表 + 详情并排', panes.join(','), 'list,quest');
+      await waitFor(async () => (await page.locator('[data-pane="quest"] .quest-detail').count()) === 1,
+        5000, '平板详情栏应渲染选中的任务');
       checkTruthy('平板：详情栏显示同一条任务',
         (await page.locator('[data-pane="quest"] .quest-detail').count()) === 1);
       checkEqual('平板：列表里不再重复描述（收窄成标题+状态）',
