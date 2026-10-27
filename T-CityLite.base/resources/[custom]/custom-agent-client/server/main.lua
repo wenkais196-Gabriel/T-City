@@ -423,6 +423,19 @@ local function sanitizeState(raw)
             focus = labelText(phone.focus, 24),
             delegated = phone.delegated == true,
             custom_ui_state = labelText(phone.custom_ui_state, 16),
+            nav_edges = (function()
+                if type(phone.nav_edges) ~= 'table' then return nil end
+                local out, count = {}, 0
+                for _, item in ipairs(phone.nav_edges) do
+                    local token = labelText(item, 12)
+                    if token then
+                        count = count + 1
+                        if count > 6 then break end
+                        out[count] = token
+                    end
+                end
+                return count > 0 and out or nil
+            end)(),
             focus_trace = (function()
                 if type(phone.focus_trace) ~= 'table' then return nil end
                 local out, count = {}, 0
