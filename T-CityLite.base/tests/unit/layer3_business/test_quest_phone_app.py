@@ -21,7 +21,9 @@ HARNESS = BASE / "tests/fixtures/quest_app_harness.lua"
 
 def run() -> dict[str, str]:
     assert APP.is_file(), f"缺少手机 App: {APP}"
-    script = HARNESS.read_text(encoding="utf-8").replace("__APP__", str(APP))
+    # Lua 里这个路径是字面量：Windows 的反斜杠会被当成非法转义（stdin:40），
+    # 所以统一换成 POSIX 分隔符（lua5.4 在 Windows 上同样接受）。
+    script = HARNESS.read_text(encoding="utf-8").replace("__APP__", str(APP).replace("\\", "/"))
     proc = subprocess.run(["lua5.4", "-"], input=script, capture_output=True, text=True, timeout=30)
     if proc.returncode != 0:
         raise AssertionError(f"Lua 执行失败:\n{proc.stdout}\n{proc.stderr}")

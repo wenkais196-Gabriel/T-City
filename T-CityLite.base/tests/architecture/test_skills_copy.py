@@ -11,6 +11,14 @@
 from __future__ import annotations
 
 import os
+
+import pytest
+
+pytestmark = pytest.mark.skipif(os.name != "posix",
+                               reason="Linux ops tooling: systemd units, root checks and POSIX modes")
+
+
+import os
 import shutil
 import subprocess
 from pathlib import Path

@@ -18,7 +18,8 @@ HARNESS = BASE / "tests/fixtures/quest_availability_harness.lua"
 
 def run() -> dict[str, dict]:
     assert MODULE.is_file(), f"缺少服务端模块: {MODULE}"
-    script = HARNESS.read_text(encoding="utf-8").replace("__MODULE__", str(MODULE))
+    # Windows 路径含反斜杠，注入 Lua 字面量会变成非法转义；统一用 POSIX 分隔符。
+    script = HARNESS.read_text(encoding="utf-8").replace("__MODULE__", str(MODULE).replace("\\", "/"))
     proc = subprocess.run(["lua5.4", "-"], input=script, capture_output=True, text=True, timeout=30)
     if proc.returncode != 0:
         raise AssertionError(f"Lua 执行失败:\n{proc.stdout}\n{proc.stderr}")

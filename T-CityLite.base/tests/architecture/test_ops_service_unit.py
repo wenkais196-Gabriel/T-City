@@ -13,6 +13,14 @@ systemd 只在启动那一刻报错——而 `systemd-analyze verify` **不检�
 """
 from __future__ import annotations
 
+import os
+
+import pytest
+
+pytestmark = pytest.mark.skipif(os.name != "posix",
+                               reason="Linux ops tooling: systemd units, root checks and POSIX modes")
+
+
 import importlib.util
 import shutil
 import subprocess

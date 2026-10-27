@@ -12,6 +12,14 @@
 """
 from __future__ import annotations
 
+import os
+
+import pytest
+
+pytestmark = pytest.mark.skipif(os.name != "posix",
+                               reason="Linux ops tooling: systemd units, root checks and POSIX modes")
+
+
 import importlib.util
 import os
 import sys
