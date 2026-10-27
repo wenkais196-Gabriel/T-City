@@ -158,6 +158,29 @@ world ─ M ─▶ phone ─ Enter ─▶ phone:mdt ─ Enter ─▶ phone:mdt/s
 
 闸门：`T-CityLite.base/tests/architecture/test_input_layer_contracts.py`（四条，每条都能证明自己会红）。
 
+## 6.7 致命细节：`SetNuiFocus` 是"按资源"的
+
+S2 第一版把 `SetNuiFocus` 挪进了 custom-ui，结果真机上出现：手机能显示、**收不到任何鼠标键盘、也没有游标**，
+而背包（QB）和目标盘（tab）的游标一切正常。
+
+原因：`SetNuiFocus` 把焦点交给**调用它的那个资源的 NUI 页面**。custom-ui 没有 `ui_page`，
+于是焦点被给了一个不存在的页面 —— 我们的页面永远拿不到输入。
+
+修法：栈只负责**决定**，真正按焦点由**拥有页面的资源**执行：
+
+```lua
+-- custom-phone 侧
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput) ... SetNuiFocus(...) ... end)
+
+-- custom-ui 侧
+exports[frame.owner]:ApplyFocus(true, cursor, keepInput)   -- owner = 'custom-phone'
+```
+
+注意跨资源 exports **不能传函数**（每个资源独立 Lua 状态，函数字段会被丢掉），
+所以帧里只放资源名（字符串）。
+
+修完真机验证：鼠标移动出现自绘点、点击 App 图标真的能进（此前点击一律无效）。
+
 ## 7. 需要拍板的点
 
 1. **层数**：我提议 3 层（overlay/modal/text）。要不要再加一层 `hud-input`（比如地图、雷达那种只吃少量键的）？

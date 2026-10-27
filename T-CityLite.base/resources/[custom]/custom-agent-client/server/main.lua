@@ -423,6 +423,19 @@ local function sanitizeState(raw)
             focus = labelText(phone.focus, 24),
             delegated = phone.delegated == true,
             custom_ui_state = labelText(phone.custom_ui_state, 16),
+            focus_trace = (function()
+                if type(phone.focus_trace) ~= 'table' then return nil end
+                local out, count = {}, 0
+                for _, item in ipairs(phone.focus_trace) do
+                    local token = labelText(item, 32)
+                    if token then
+                        count = count + 1
+                        if count > 8 then break end
+                        out[count] = token
+                    end
+                end
+                return count > 0 and out or nil
+            end)(),
             -- 交互路径（最多 3 层，给诊断用：关屏后应为空）
             frames = (function()
                 if type(phone.frames) ~= 'table' then return nil end

@@ -100,6 +100,11 @@ end)
 -- Close Phone Function (must be defined before OpenPhone — CreateThread closure)
 -- 只读状态快照：给 agent 的状态探测用（custom-agent-client 每 5s 取一次）。
 -- 只回枚举/布尔/数字，不回任何 UI 内容、消息正文或玩家输入。
+-- custom-ui 的交互路径栈通过这个导出把焦点按到本资源的页面上
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    PhoneFocus.ApplyFocus(hasFocus, hasCursor, keepInput)
+end)
+
 exports('GetUiState', function()
     local focus = PhoneFocus.State()
     -- 形态就是开着的证据：Surface.Bind() 在打开时写入，ClosePhone 里 Reset 清空。
@@ -126,6 +131,11 @@ exports('GetUiState', function()
         delegated = focus.delegated == true,
         -- 仅诊断用；测试桩里没有这个原生，所以判一下
         custom_ui_state = type(GetResourceState) == 'function' and GetResourceState('custom-ui') or nil,
+        focus_trace = (function()
+            local ok, log = pcall(function() return exports['custom-ui']:FocusTrace() end)
+            if ok and type(log) == 'table' then return log end
+            return nil
+        end)(),
     }
 end)
 

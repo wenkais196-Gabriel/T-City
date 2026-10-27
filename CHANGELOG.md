@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **修「手机开着没有游标、点不动」**：`SetNuiFocus` 是**按资源**的 —— 在 custom-ui（没有 ui_page）里调用，
+  等于把焦点交给一个不存在的页面，手机页面因此收不到任何鼠标事件（背包/目标盘却正常）。
+  现在栈只做决定，按焦点通过 `exports[owner]:ApplyFocus(...)` 回调**拥有页面的资源**。
+  真机验证：自绘光标跟着鼠标走、点击 App 图标能进入。
 - **手机默认改为完全接管输入**（`phone_keep_input` 默认 0）：真机实测 keepInput=true 时 OS 游标被钉在屏幕角落、既看不见也动不了；关掉后 GTA 把鼠标交出来，游标恢复、键盘导航照常（原始按键不受影响）。代价是手机开着不能走路；想边走边看就 `setr phone_keep_input 1`。
 - **输入分层落地（S2+S3）**：手机不再自己 `SetNuiFocus`，焦点与控制屏蔽交给 custom-ui 的交互路径栈；打开 App 压一层 `phone:<app>`、聚焦输入框再压一层 `phone:text`，Esc/Backspace 逐层退出，退到底再按 Esc 就是 GTA 原生暂停菜单。`nav.lua` **不再禁用 172-175**（那正好会点亮转向灯），`indicators.lua` / `cruise.lua` 改为先问 `IsTaken()`。
 - **`custom-ui` 增加交互路径栈**（`Push/Pop/Top/Path/IsTaken/Owns/ResetInput`）：世界 → 手机 → App → 输入框每一层是一帧，**只有栈顶拥有键盘**；栈顶声明 `allow` 白名单（放行走路等），其余控制整组屏蔽；栈空时立刻把输入还给游戏 —— 所以 Esc 每次退一层，退到底再按一次就是 GTA 原生暂停菜单。这是把“每处各自 SetNuiFocus + IsNuiFocused()”换成单一仲裁者的第一步（仅新增 API，未迁移资源）。
