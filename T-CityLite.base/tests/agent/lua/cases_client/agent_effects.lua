@@ -210,12 +210,27 @@ return {
             assert(#execs(on) == 2, 'phoneui with a page must be allowed, ran ' .. tostring(#execs(on)))
             assert(execs(on)[2] == 'phoneui police_mdt case')
 
+            -- 警用两条：值班（写 police_units）与 911（建警情）。中文文本必须能过 ——
+            -- 这里曾经用 {1,80} 写长度上限，而 Lua 的 pattern 根本没有 {n,m}，
+            -- 结果 911 全被拒、只回 not_allowed。
+            on.Emit('tcity:agent:devcmd', '10-8')
+            on.Step(20)
+            assert(#execs(on) == 3, 'duty status must be allowed, ran ' .. tostring(#execs(on)))
+            assert(execs(on)[3] == '10-8', 'duty status passed verbatim')
+
+            on.Emit('tcity:agent:devcmd', '911 巷子里有人打起来了')
+            on.Step(20)
+            assert(#execs(on) == 4, '911 with CJK text must be allowed, ran ' .. tostring(#execs(on)))
+            assert(execs(on)[4] == '911 巷子里有人打起来了', '911 text passed verbatim')
+
             on.Emit('tcity:agent:devcmd', 'quit')
             on.Emit('tcity:agent:devcmd', 'phoneui quests; quit')
             on.Emit('tcity:agent:devcmd', 'connect 1.2.3.4')
             on.Emit('tcity:agent:devcmd', ('x'):rep(80))
+            -- 超长（>96）也要拒：长度是代码判的，不是 pattern 判的
+            on.Emit('tcity:agent:devcmd', '911 ' .. ('长'):rep(100))
             on.Step(20)
-            assert(#execs(on) == 2, 'anything outside the allowlist must be refused, ran '
+            assert(#execs(on) == 4, 'anything outside the allowlist must be refused, ran '
                 .. tostring(#execs(on)))
         end)
 

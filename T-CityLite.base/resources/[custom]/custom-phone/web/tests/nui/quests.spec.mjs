@@ -44,6 +44,109 @@ const QUESTS_APP = {
 export const questScenarios = [
   {
     surfaces: ['phone'],
+    name: '长列表：焦点往下走会把列表带着滚，且焦点始终留在可视区',
+    async run({ page, world }) {
+      world.apps = [...world.apps, QUESTS_APP];
+      // 24 条，肯定超过一屏（一屏大约 6-7 条）
+      world.quests = Array.from({ length: 24 }, (_, i) => ({
+        ...QUEST_FREE,
+        id: `bulk_q${i}`,
+        title: `批量任务 ${i}`,
+      }));
+
+      await openQuests(page, 'phone');
+
+      // 真正滚动的是焦点元素所在的可滚祖先（单栏是 .pane，不是 .quests-app）
+      const scrollerTop = () => page.evaluate(() => {
+        let el = document.querySelector('[data-nav-focus="true"]');
+        while (el) {
+          if (el.scrollHeight > el.clientHeight + 1) return el.scrollTop;
+          el = el.parentElement;
+        }
+        return -1;
+      });
+
+      // 开屏焦点在壳层（关闭键/标题栏），不在列表里，所以这时还量不到滚动容器；
+      // 先走两步进入列表再当基线。
+      for (let i = 0; i < 2; i += 1) {
+        await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
+        await page.waitForTimeout(60);
+      }
+      checkEqual('进入列表时还在顶部', await scrollerTop(), 0);
+
+      for (let i = 0; i < 14; i += 1) {
+        await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
+        await page.waitForTimeout(60);
+      }
+
+      const after = await scrollerTop();
+      checkTruthy('焦点往下走会把列表滚下去', after > 0);
+
+      const staysInView = await page.evaluate(() => {
+        const focused = document.querySelector('[data-nav-focus="true"]');
+        if (!focused) return false;
+        let box = focused.parentElement;
+        while (box && box.scrollHeight <= box.clientHeight + 1) box = box.parentElement;
+        if (!box) return false;
+        const ring = focused.getBoundingClientRect();
+        const view = box.getBoundingClientRect();
+        return ring.top >= view.top - 2 && ring.bottom <= view.bottom + 2;
+      });
+      checkTruthy('焦点元素停在可视区内', staysInView);
+
+      for (let i = 0; i < 16; i += 1) {
+        await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'up' }, '*'));
+        await page.waitForTimeout(60);
+      }
+      // 焦点回到壳层时量不到滚动容器（-1），也算"回到顶部"
+      const back = await scrollerTop();
+      checkTruthy('走回顶部时列表也回到顶部', back <= 0);
+
+      // 翻页键：两次 PageDown 应该走得更远，End 直接落到最后一个
+      const focusLabel = () => page.evaluate(
+        () => document.querySelector('[data-nav-focus="true"]')?.textContent?.trim() ?? '',
+      );
+      await page.keyboard.press('PageDown');
+      await page.waitForTimeout(150);
+      const afterPage = await scrollerTop();
+      // 滚动用 block:'nearest'（最小滚动），所以判"明显比一步远"而不是"整屏"
+      checkTruthy('PageDown 一次走的位置比一步远得多', afterPage > 80);
+
+      // End：焦点已经在列表里，所以只在列表里跳 —— 落到底部那条的按钮上
+      await page.keyboard.press('End');
+      await page.waitForTimeout(250);
+      const bottom = await page.evaluate(() => {
+        let el = document.querySelector('[data-nav-focus="true"]');
+        const inside = Boolean(el?.closest('.quests-app'));
+        while (el && el.scrollHeight <= el.clientHeight + 1) el = el.parentElement;
+        return {
+          inside,
+          top: el?.scrollTop ?? -1,
+          max: el ? el.scrollHeight - el.clientHeight : -1,
+          // 容器有内边距，'nearest' 滚动不会贴到 0 误差
+          atBottom: el ? el.scrollTop >= el.scrollHeight - el.clientHeight - 24 : false,
+        };
+      });
+      checkTruthy('End 之后焦点还在列表里', bottom.inside);
+      checkTruthy('End 把列表带到底部', bottom.atBottom);
+
+      // Home：回到列表第一个可聚焦元素（不是壳层的关闭键）
+      await page.keyboard.press('Home');
+      await page.waitForTimeout(250);
+      const topBack = await page.evaluate(() => {
+        const el = document.querySelector('[data-nav-focus="true"]');
+        const inside = Boolean(el?.closest('.quests-app'));
+        let box = el?.parentElement ?? null;
+        while (box && box.scrollHeight <= box.clientHeight + 1) box = box.parentElement;
+        return { inside, top: box?.scrollTop ?? -1 };
+      });
+      checkTruthy('Home 之后焦点还在列表里', topBack.inside);
+      // 列表容器上面还有页头，所以"顶部"是接近 0 而不是严格 0
+      checkTruthy('Home 把列表带回顶部', topBack.top >= 0 && topBack.top <= 120);
+    },
+  },
+  {
+    surfaces: ['phone'],
     name: '可以用 phone:navigate 确定性地打开任务 App（真机鼠标点不到时 agent 走这条）',
     async run({ page, world }) {
       world.apps = [...world.apps, QUESTS_APP];

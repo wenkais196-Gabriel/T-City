@@ -26,6 +26,24 @@ async function box(page) {
 export const surfaceScenarios = [
   {
     surfaces: ['phone'],
+    name: '切到不报状态的 App：页面 id 会跟着换，焦点落在新页面',
+    async run({ page, world }) {
+      await openPhone(page, 'phone');
+      await page.evaluate(() => window.postMessage({ action: 'phone:navigate', app: 'settings' }, '*'));
+      await page.waitForTimeout(500);
+
+      const lastApp = () => world.calls.filter((c) => c.callback === 'appState').at(-1)?.payload ?? null;
+      checkEqual('切到 Settings 后回吐的 id 是 settings', lastApp()?.app, 'settings');
+      checkEqual('焦点落在新页面的第一个控件上',
+        await page.locator('.phone-wrapper [data-nav-focus="true"]').count(), 1);
+
+      await page.evaluate(() => window.postMessage({ action: 'phone:navigate', app: 'home' }, '*'));
+      await page.waitForTimeout(400);
+      checkEqual('回桌面时清空页面 id', lastApp()?.app, '');
+    },
+  },
+  {
+    surfaces: ['phone'],
     name: '键盘能从输入框进出：Tab 离开输入框，输入框里方向键不被抢',
     async run({ page }) {
       await openPhone(page, 'phone');
