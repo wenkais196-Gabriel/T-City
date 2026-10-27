@@ -334,6 +334,9 @@ local function OpenPhone(forcedKind, reason)
             -- "attempt to call a nil value" and killed the phone loop on a real
             -- client). Keep the effect only when it exists.
             if DisableDisplayControlActions then DisableDisplayControlActions() end
+            -- 委托给 custom-ui 的交互路径栈之后，屏蔽由它统一做（它每帧只碰定点黑名单）。
+            -- 这里再禁一遍就是每帧多二十几次原生调用 —— 纯浪费，实机会掉帧。
+            if not PhoneFocus.Delegated() then
             -- While phone is open, disable standard game control keys that interfere with UI typing
             -- NOTE: Do NOT disable INPUT_CHAT (T key/245) so players can still chat
             -- qb-phone disables 1-6 (look), not movement 30-35.
@@ -359,6 +362,7 @@ local function OpenPhone(forcedKind, reason)
             DisableControlAction(0, 140, true) -- Light Attack
             DisableControlAction(0, 141, true) -- Heavy Attack
             DisableControlAction(0, 142, true) -- Melee Attack Alternate
+            end -- 委托时这块整体跳过（custom-ui 的黑名单更窄更便宜）
 
             -- ESC key closes phone — handled by NUI JS (window keydown listener)
             -- Right mouse button closes phone (AIM input, already disabled above)
@@ -513,6 +517,19 @@ RegisterNUICallback('phoneOpenAck', function(_, cb)
     if PhoneBridge.Ack('phone:open') then
         TriggerServerEvent('phone:server:focusState', { phase = 'open-ack', focused = IsNuiFocused() })
     end
+    -- 页面能应答 = CEF 真的起来了，这时再按一次焦点才有意义：
+    -- 本 build 在页面未就绪时调用 SetNuiFocus 会被吞掉，
+    -- 结果就是"手机显示正常、但收不到任何鼠标/键盘事件"（游标也没有）。
+    PhoneFocus.Refresh()
+    CreateThread(function()
+        Wait(400)
+        PhoneFocus.Refresh()
+        Wait(800)
+        PhoneFocus.Refresh()
+        Wait(1500)
+        PhoneFocus.Refresh()
+        TriggerServerEvent('phone:server:focusState', { phase = 'refocus-done', focused = IsNuiFocused() })
+    end)
     cb({ ok = true })
 end)
 

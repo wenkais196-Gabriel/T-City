@@ -230,6 +230,8 @@ local DEVCMD_ALLOWED = {
     -- 这里原来写 '^911 [^%c;]{1,80}$'，永远匹配不上 —— 911 全部被拒，
     -- 而 devcmd 只回 not_allowed，看不出"是格式写错了"。长度改在下面判。
     '^911 [^%c;]+$',
+    -- 临时诊断：手机自带的 /focusprobe（不经过输入栈，直接 SetNuiFocus 两次）
+    '^focusprobe$',
 }
 
 -- 一条 devcmd 最多这么长：手机命令都短，超长的要么是误用，要么是想塞别的

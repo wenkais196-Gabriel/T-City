@@ -259,6 +259,13 @@ function Input.Owns(id)
     return frame ~= nil and frame.id == id
 end
 
+--- 重新施加栈顶的焦点与屏蔽（幂等）。
+--- 用途：SetNuiFocus 在页面还没加载完时会被本 build 忽略 —— 页面发来 ack
+--- 之后必须再按一次，否则 NUI 收不到任何键鼠事件（游标不显示、点不动）。
+function Input.Refresh()
+    apply()
+end
+
 --- 强制清空（资源停止、/phonefix 这类硬复位）
 function Input.Reset()
     path = {}
@@ -286,6 +293,7 @@ exports('Path', Input.Path)
 exports('IsTaken', Input.IsTaken)
 exports('Owns', Input.Owns)
 exports('ResetInput', Input.Reset)
+exports('RefreshFocus', Input.Refresh)
 exports('DistanceToCoords', DistanceToCoords)
 
 print('[custom-ui] ✅ menu focus/guard/distance helpers ready')
