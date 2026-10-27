@@ -10,7 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+### Added
+- **手机和平板是同一台设备的两个 surface**。`PhoneShell` 换成 `DeviceShell`，`surface` 只是一个 prop：外壳差异（尺寸/圆角/刘海/状态栏）全部由 `presetOf()` 驱动，业务组件不知道自己长在什么设备上。形态判定唯一源在客户端 Lua（客户端 core/surface_rules.lua 的纯函数 Decide()，优先级为入口 > 来电 > 载具 > 玩家偏好 > 默认手机）——判定不放 NUI，因为 `keepInput` 是 focus 的一部分，必须在打开这一刻定下来。平板打开时逐帧 `DisableControlAction(30–35)` 锁移动（不用 `FreezeEntityPosition`/`SetPlayerControl(false)` 这类粘性状态），六条失败出口统一收敛到 `Surface.Reset() + DeviceLock.End()`。
+- **平板的排布靠 pane 契约，不靠 surface 身份**。新增 core/panes.ts + AppSurface.svelte + Pane.svelte：按容器宽度决定单栏还是分栏，窄了就按 `drill`/`flow` 降级。PoliceMDT 三栏（单位 300 / 接警 348 / 详情 344），Messages 用 drill、Quests 用 flow；手机形态保持原有单屏，详情栏只在 grid 渲染——手机上不该在 DOM 里多留一份重复按钮。
+- **三道架构闸门**（`tests/architecture/test_surface_contracts.py`）：禁止 `Tablet*/Phone*App.svelte` 这类分叉组件（含改名克隆的相似度检查）、用了 AppSurface 的 app 必须有 `contracts/<id>.panes.ts` 且 pane id 与 `<Pane id="...">` 双向相等、`TABLET_GRANTS` 必须为空（平板不许新增任何查询/动作/字段）、服务端脚本不许读 `surface`。每条闸门自带反向注入：先扫真仓库要求干净，再往 tmp 写坏形状断言变红。
+- **`/tablet` 与 `/phone` 命令**（带控制台 `tcity_tablet <id>` 分支）。以前平板只有设计稿，没有任何入口；已经打开时切换会以 `reason=switch` 关闭再重开，当前 app 不丢。
+
 ### Fixed
+- **窗口大不等于要平板**。旧规则「宽 ≥ 900 且横向 → 平板」在 FiveM 里等于「每次按 M 都锁住移动」，因为 NUI 视口永远是整个游戏窗口（1080p 起）。已删除该规则：平板由意图（入口/偏好）触发，视口只保留一个降级作用——玩家要平板但窗口真装不下时退回手机。
+- **`player_not_found` 曾经是时序，不是事实**。手机的 NUI 早于服务端加载玩家就绪，MDT 在这个空窗期查询会拿到"查无此人"，界面显示"角色尚未加载"。现在服务端回 `player_not_ready`，传输层只对这一码重试一次（1.2 秒），设备在角色加载完成前不打开（登录事件 / `SetPlayerData` / 每秒轮询三路判定）。
+- **ESC 关闭触发两次 `closePhone`**：`DeviceShell` 与 `App.svelte` 各有一份 keydown。删掉外壳的监听，`closePhone()` 改为幂等。
+- **MDT 详情栏显示 citizenid**（`COP002`）：新增 `callsignOf()`，显示呼号 `2-Lincoln-30`，无映射时回退 id 保证老数据可读。
+- **NUI 首屏瓦片等待 5 秒不够**：慢机器上首次 `getPhoneApps` 会 `AbortError`，首页短暂为空。瓦片等待改 10 秒。
+
 - **报警终于会变成一条警情**。`police:server:policeAlert`（qb-drugs / storerobbery / houserobbery / custom-vehicles 的热接线报警）与 `police:server:autoAlert`（系统警报）以前只给在勤警察发一条通知、在地图上插个旗就结束了——MDT 的警情板上什么都没有，于是"被抢了报警"在系统里等于没发生：不能派单、不能清场、不留记录、进不了统计。两条路径现在都走 `PoliceDispatch.CreateIncident`（系统来源走 `CreateIncidentFromSystem`），通知由建单统一发出，地图插旗与提示音仍然保留。
 - **通知标题带警情单号**（`#38 911: 有人持枪抢店`）。以前手机上的"有人报警"和板上哪一行对不上，只能靠猜。
 - **重复报警会并进同一单**：同 code、同地点 60 米内、5 分钟内的报警不再新建行，只刷新 `last_activity_at`，并且不再二次通知——一次抢劫被五个人报警不该变成五条单、响五遍。
