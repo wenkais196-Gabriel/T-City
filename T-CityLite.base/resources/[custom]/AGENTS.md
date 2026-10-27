@@ -39,6 +39,10 @@
 
 ## 已知坑
 
+- 换形态（手机↔平板）时 `ClosePhone('switch')` → `OpenPhone(kind, 'switch')`：**reason 必须是
+  switch**，NUI 靠它决定"留在当前页还是回桌面"；传别的值会出现"画面回桌面但状态仍报旧 App"。
+- 真机 OS 光标被 GTA 锁在屏幕角（`SetCursorPos` 无效），合成鼠标点击进不了 NUI；驱动 UI 走
+  `/phoneui <app>`（`setr phone_ui_nav "1"`）或 `adc <src> <cmd>`（`setr agent_devcmd_enabled "1"`）。
 - `IsNuiFocused()` / `IsNuiFocusKeepingInput()` 在本 build **恒 false**：判定开关/焦点一律用
   自己的账（`Surface.IsOpen()` / `PhoneFocus.State()`），原生只当诊断字段，见
   `docs/client/research/nui-debug-playbook.md` §3.0a。同名 `RegisterCommand` 后注册者覆盖先注册者。
