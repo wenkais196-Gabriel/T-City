@@ -2,7 +2,7 @@
 //
 // 这里证明的是"外壳按形态换"，不证明 Lua 的判定（那在 test_phone_surface.py 的 lua harness）。
 
-import { checkEqual, checkListEquals, checkTruthy, openMdt, openPhone, openQuests, waitFor } from './harness.mjs';
+import { checkEqual, checkIncludes, checkListEquals, checkTruthy, openMdt, openPhone, openQuests, waitFor } from './harness.mjs';
 
 const CLOSED = () => !document.querySelector('.phone-wrapper');
 
@@ -331,6 +331,58 @@ export const surfaceScenarios = [
         (await page.locator('[data-pane="quest"] .quest-detail').count()) === 1);
       checkEqual('平板：列表里不再重复描述（收窄成标题+状态）',
         await page.locator('.list > li .desc:visible').count(), 0);
+    },
+  },
+  {
+    surfaces: ['phone'],
+    name: '开屏焦点不落在关机键上，点遮罩也不关手机',
+    async run({ page, world }) {
+      await openPhone(page, 'phone');
+      await page.waitForTimeout(800);
+
+      // 真机：默认焦点停在"关机键"上，鼠标点任意位置都被当成关机 ——
+      // 关机键（3px 贴边）必须不可聚焦、不可点，焦点要落在第一个 App 图标上。
+      const chip = (await page.locator('.nav-chip').textContent())?.trim() ?? '';
+      checkIncludes('开屏焦点标签是第一个 App 而不是关机键', chip, 'Phone Dialer');
+      checkEqual('焦点标签里不应出现关机键',
+        chip.includes('Close Phone'), false);
+
+      // 遮罩占满手机以外的视野，点它不该关机（关闭只走 M / Esc / 平板状态栏按钮）
+      await page.locator('.phone-backdrop-mask').click({ position: { x: 10, y: 10 } });
+      await page.waitForTimeout(200);
+      checkTruthy('点遮罩后手机仍开着', await page.locator('.phone-wrapper').isVisible());
+      checkEqual('点遮罩不发 closePhone',
+        world.calls.filter((c) => c.callback === 'closePhone').length, 0);
+
+      // 明确的关闭入口仍然有效
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !document.querySelector('.phone-wrapper'), null, { timeout: 5000 });
+      checkEqual('Esc 仍然能关',
+        world.calls.filter((c) => c.callback === 'closePhone').length, 1);
+    },
+  },
+  {
+    surfaces: ['phone'],
+    name: '键盘只有一个主人：Lua 接管时 CEF 不再重复处理方向键',
+    async run({ page }) {
+      await openPhone(page, 'phone');
+      // 模拟 keep_input=1 的开屏消息：键盘归 Lua
+      await page.evaluate(() => window.postMessage(
+        { action: 'phone:open', surface: 'phone', reason: 'switch', lua_owns_keys: true }, '*'));
+      await page.waitForTimeout(700);
+
+      const chip = () => page.locator('.nav-chip').textContent();
+      const before = await chip();
+
+      // CEF 收到方向键必须**不动**（否则一次按键挪两格：CEF 一格 + Lua 一格）
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(250);
+      checkEqual('Lua 接管时 CEF 不响应方向键', await chip(), before);
+
+      // 同一动作走 Lua 通道仍然有效
+      await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
+      await page.waitForTimeout(250);
+      checkTruthy('Lua 送来的 move 仍然生效', (await chip()) !== before);
     },
   },
   {

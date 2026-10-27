@@ -80,6 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Changed
+- **手机输入修复（真机四连）**：方向键一次挪两格（CEF 与 Lua 双处理 → 开屏消息带 `lua_owns_keys`，
+  键盘只留一个主人）、按 M 要两次才开（开屏那一帧已按住的键被当成新边沿）、
+  点一下手机就关机（遮罩点击不再关闭 + 3px 侧键不再可点可聚焦）、界面很卡
+  （`.glass-effect` 去掉 `backdrop-filter: blur(20px)`，改半透明渐变）。
+  另修 City Feed 在 `feed` 缺失时 `feedList.length` 抛错导致白屏。
 - **手机默认改为「边走边看」**（`phone_keep_input` 默认 1）：手机开着也能走路，键盘走 Lua 原始按键（方向/Tab/Enter/Backspace/Esc/M）。
   代价是引擎会把 OS 游标钉在屏幕角落，默认模式下没有鼠标指针；想要游标就 `setr phone_keep_input 0`（完全接管）。
 - **手机任务列表只摆"现在能接的"**。需求清单摊开之后反而变成噪音：一张吃不到的菜单对玩家没价值。不可接的任务不再出现在列表里（数据仍在服务端，`/listquests` 与控制台诊断照旧能看到全部）。
