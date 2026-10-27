@@ -3,7 +3,7 @@
 // 这套断言回答两个问题：
 //   1. 30 个任务模板真的能从手机里看到吗（列表渲染、不可接的原因摆出来）；
 //   2. 点「接取」是不是真的发出 appAction（而不是只在本地把状态改了）。
-import { checkEqual, checkIncludes, openQuests, waitFor } from './harness.mjs';
+import { checkEqual, checkIncludes, checkTruthy, openQuests, waitFor } from './harness.mjs';
 
 const QUEST_FREE = {
   id: 'euro_trucking_steel',
@@ -94,6 +94,76 @@ export const questScenarios = [
         5000,
         '下游拒绝要在页面上可见，不能静默',
       );
+    },
+  },
+
+  {
+    // 4615b03 之后不可接的任务整行不进列表；但它们"存在"这件事必须能被看到，
+    // 否则新玩家只看到一片空白，会以为任务 App 坏了。
+    surfaces: ['phone'],
+    name: '任务计数：说清还有多少任务存在，只是条件没满足',
+    async run({ page, world }) {
+      world.apps = [...world.apps, QUESTS_APP];
+      world.quests = [QUEST_FREE, QUEST_BLOCKED];
+      world.questActive = [];
+
+      await openQuests(page, 'phone');
+      await waitFor(async () => (await page.locator('.list > li').count()) === 1, 5000, '只该渲染可接的那一条');
+
+      const head = (await page.locator('.quests-sub').textContent()) ?? '';
+      checkIncludes('计数要说清可接数量', head, '1 条可接');
+      checkIncludes('计数要说清还有多少条件未满足', head, '1 条条件未满足');
+      checkEqual('不可接的任务仍然不进列表', await page.locator('.list > li', { hasText: QUEST_BLOCKED.title }).count(), 0);
+    },
+  },
+  {
+    // 平板右栏原来对「进行中」的任务也渲染「接取」（进行中的行没有 available 字段，
+    // 旧的 row.available !== false 判成了可接），点了必然被 TriggerQuest 拒绝。
+    surfaces: ['phone'],
+    name: '平板：进行中给放弃，切 tab 不残留上一个 tab 的选中',
+    async run({ page, world }) {
+      world.apps = [...world.apps, QUESTS_APP];
+      world.quests = [QUEST_FREE];
+      world.questActive = [{
+        quest_id: 'police_ch1', title: '蓝墙内外', status: 'active', current_step: '去警局报到',
+      }];
+
+      await openQuests(page, 'tablet');
+      checkTruthy('平板：两栏都在', (await page.locator('.quests-app [data-pane]:visible').count()) === 2);
+
+      // 默认在「可接」tab，右栏是那条可接任务
+      checkTruthy('默认右栏是可接任务的详情',
+        ((await page.locator('[data-pane="quest"]').textContent()) ?? '').includes(QUEST_FREE.title));
+
+      // 切到「进行中」：右栏必须换成进行中的任务，并且动作是「放弃」而不是「接取」
+      await page.locator('.tabs button', { hasText: '进行中' }).click();
+      await waitFor(
+        async () => ((await page.locator('[data-pane="quest"]').textContent()) ?? '').includes('蓝墙内外'),
+        5000,
+        '切到进行中后右栏要跟着换',
+      );
+      checkEqual('右栏不该再出现接取按钮', await page.locator('[data-pane="quest"] button.primary').count(), 0);
+      const abandonBtn = page.locator('[data-pane="quest"] button.ghost');
+      await waitFor(async () => (await abandonBtn.count()) === 1, 5000, '进行中的任务右栏要给放弃');
+
+      await abandonBtn.click();
+      await waitFor(
+        () => world.calls.some((c) => c.callback === 'appAction' && c.payload?.action === 'abandon'),
+        5000,
+        '点放弃必须发出 appAction(abandon)',
+      );
+      const call = world.calls.find((c) => c.callback === 'appAction' && c.payload?.action === 'abandon');
+      checkEqual('放弃要带上 quest_id', call.payload.params?.quest_id, 'police_ch1');
+
+      // 切回「可接」：右栏不能还挂着进行中那条（旧实现的 selectedId 会残留）
+      await page.locator('.tabs button', { hasText: '可接' }).click();
+      await waitFor(
+        async () => ((await page.locator('[data-pane="quest"]').textContent()) ?? '').includes(QUEST_FREE.title),
+        5000,
+        '切回可接后右栏要回到可接任务',
+      );
+      checkTruthy('右栏不该残留进行中的任务',
+        !((await page.locator('[data-pane="quest"]').textContent()) ?? '').includes('蓝墙内外'));
     },
   },
 ];
