@@ -170,6 +170,9 @@ local function phoneState()
             surface = state.surface,
             focused = state.focused == true,
             keep_input = state.keep_input == true,
+            -- 引擎原生的原话，与上面的记账分开：两者不一致 = 原生在撒谎
+            -- （本 build 恒 false，见 nui-debug-playbook）。
+            nui_focus_native = state.nui_focus_native == true,
             focus_owner = state.focus_owner,
         }
     end

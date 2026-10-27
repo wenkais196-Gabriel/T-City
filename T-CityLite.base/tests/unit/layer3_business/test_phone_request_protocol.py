@@ -448,11 +448,24 @@ def test_phone_toggle_ignores_duplicate_key_events():
 
     # 防抖必须在命令体里的任何状态检查之前（`isPhoneOpen = true` 在 OpenPhone 里
     # 也出现一次，所以只在命令块内比较顺序）
-    block = src[src.index("RegisterCommand('phone', function()"):]
+    block_start = src.index("RegisterCommand('phone'")
+    block = src[block_start:]
     block = block[:block.index("end, false)")]
     guard = block.index("now - lastToggleAt < TOGGLE_DEBOUNCE_MS")
-    assert guard < block.index("if Surface.IsOpen() then"), "debounce must precede the toggle branch"
-    assert block.index("lastToggleAt = now") < block.index("if Surface.IsOpen() then")
+    assert guard < block.index("OpenOrToggle("), "debounce must precede the toggle branch"
+    assert block.index("lastToggleAt = now") < block.index("OpenOrToggle(")
+
+    # 同名命令只能注册一次：FiveM 后注册者覆盖先注册者，曾经因此把 toggle 换成了
+    # "只开不关" 的 /phone 强制形态，M 键再也关不掉手机。
+    declarations = re.findall(r"^RegisterCommand\('phone'", src, re.MULTILINE)
+    assert len(declarations) == 1, (
+        "RegisterCommand('phone') must be declared exactly once (later ones silently win)"
+    )
+
+    # 开关判定不许再问引擎原生：IsNuiFocused() 在本 build 恒 false（nui-debug-playbook §3.0a）。
+    assert "IsNuiFocused()" not in block, (
+        "the toggle must not consult IsNuiFocused(): it is always false on this build"
+    )
 
     # keymapping 只注册一次（否则防抖只是兜底，根因还在）
     assert "keyMappingRegistered" in src, "key mapping must be registered at most once"

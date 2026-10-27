@@ -11,12 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **agent 能读客户端 UI 状态了**。`custom-phone` 导出 `GetUiState()`（`open` / `surface` / `focused` / `keep_input` / `focus_owner` / `nui_focus_native`，只回枚举与布尔），`custom-agent-client` 每 5s 推一份快照，服务端白名单 + 夹紧 + 1s/源限流 + 15s 过期 + 掉线清理，`custom-director` 暴露 `GET /agent/v1/live/clients[/{citizenid}]` 与 `/live/server`，配两个只读工具 `get_client_state` / `get_server_state`（registry 1.7.0，41 tools）。快照是自述，永不作为权限或策略输入。
 - **手机和平板是同一台设备的两个 surface**。`PhoneShell` 换成 `DeviceShell`，`surface` 只是一个 prop：外壳差异（尺寸/圆角/刘海/状态栏）全部由 `presetOf()` 驱动，业务组件不知道自己长在什么设备上。形态判定唯一源在客户端 Lua（客户端 core/surface_rules.lua 的纯函数 Decide()，优先级为入口 > 来电 > 载具 > 玩家偏好 > 默认手机）——判定不放 NUI，因为 `keepInput` 是 focus 的一部分，必须在打开这一刻定下来。平板打开时逐帧 `DisableControlAction(30–35)` 锁移动（不用 `FreezeEntityPosition`/`SetPlayerControl(false)` 这类粘性状态），六条失败出口统一收敛到 `Surface.Reset() + DeviceLock.End()`。
 - **平板的排布靠 pane 契约，不靠 surface 身份**。新增 core/panes.ts + AppSurface.svelte + Pane.svelte：按容器宽度决定单栏还是分栏，窄了就按 `drill`/`flow` 降级。PoliceMDT 三栏（单位 300 / 接警 348 / 详情 344），Messages 用 drill、Quests 用 flow；手机形态保持原有单屏，详情栏只在 grid 渲染——手机上不该在 DOM 里多留一份重复按钮。
 - **三道架构闸门**（`tests/architecture/test_surface_contracts.py`）：禁止 `Tablet*/Phone*App.svelte` 这类分叉组件（含改名克隆的相似度检查）、用了 AppSurface 的 app 必须有 `contracts/<id>.panes.ts` 且 pane id 与 `<Pane id="...">` 双向相等、`TABLET_GRANTS` 必须为空（平板不许新增任何查询/动作/字段）、服务端脚本不许读 `surface`。每条闸门自带反向注入：先扫真仓库要求干净，再往 tmp 写坏形状断言变红。
 - **`/tablet` 与 `/phone` 命令**（带控制台 `tcity_tablet <id>` 分支）。以前平板只有设计稿，没有任何入口；已经打开时切换会以 `reason=switch` 关闭再重开，当前 app 不丢。
 
 ### Fixed
+- **按 M 关不掉手机**（真机症状：点一次闪一下、再点也关不掉）。两个原因叠在一起：① `RegisterCommand('phone')` 被注册了两次，后一个（`/phone` 强制形态，已经开着就直接 `return`）覆盖了前一个 toggle——同名命令后注册者胜；② 剩下那条 toggle 用 `IsNuiFocused()` 判断"焦点还在不在"，而这个原生在本 build **恒 false**（61 条 focus 遥测里 0 条 true），于是每次"关闭"都走进"复位重开"分支。现在开关只看 `Surface.IsOpen()`、焦点只看 `PhoneFocus.State()`，原生降级为诊断字段 `nui_focus_native`；`/phone [phone|tablet]` 保留强制形态语义，去抖初值改为 `-300ms` 以免资源刚起第一下被吞。无头用例复现了原生撒谎的场景（`env.nui.focus_native_lies`）。
 - **窗口大不等于要平板**。旧规则「宽 ≥ 900 且横向 → 平板」在 FiveM 里等于「每次按 M 都锁住移动」，因为 NUI 视口永远是整个游戏窗口（1080p 起）。已删除该规则：平板由意图（入口/偏好）触发，视口只保留一个降级作用——玩家要平板但窗口真装不下时退回手机。
 - **`player_not_found` 曾经是时序，不是事实**。手机的 NUI 早于服务端加载玩家就绪，MDT 在这个空窗期查询会拿到"查无此人"，界面显示"角色尚未加载"。现在服务端回 `player_not_ready`，传输层只对这一码重试一次（1.2 秒），设备在角色加载完成前不打开（登录事件 / `SetPlayerData` / 每秒轮询三路判定）。
 - **ESC 关闭触发两次 `closePhone`**：`DeviceShell` 与 `App.svelte` 各有一份 keydown。删掉外壳的监听，`closePhone()` 改为幂等。
