@@ -151,6 +151,21 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('phone_change_event_pushes_a_snapshot_immediately', function()
+            -- 手机只广播"变了"；快照由本资源自己采集后推给服务端。
+            local before = 0
+            for _, record in ipairs(env.server_events) do
+                if record.name == 'tcity:agent:state' then before = before + 1 end
+            end
+            env.Emit('phone:client:stateChanged')
+            env.Step(20)
+            local after = 0
+            for _, record in ipairs(env.server_events) do
+                if record.name == 'tcity:agent:state' then after = after + 1 end
+            end
+            assert(after == before + 1, ('expected one immediate push, saw %d'):format(after - before))
+        end)
+
         return {
             ok = failed == 0,
             data = { total = #results, failed = failed, cases = results },
