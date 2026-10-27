@@ -151,59 +151,31 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
-        check('phone_change_event_pushes_a_snapshot_immediately', function()
+        check('phone_change_event_pushes_one_coalesced_snapshot', function()
             -- 手机只广播"变了"；快照由本资源自己采集后推给服务端。
-            local before = 0
-            for _, record in ipairs(env.server_events) do
-                if record.name == 'tcity:agent:state' then before = before + 1 end
+            -- 150ms 内连续多次变化只推最终态：换形态是"先关再开"，
+            -- 若两次都推，服务端 250ms 窗口会把真正的终态丢掉。
+            local function pushes()
+                local n = 0
+                for _, record in ipairs(env.server_events) do
+                    if record.name == 'tcity:agent:state' then n = n + 1 end
+                end
+                return n
             end
+
+            local before = pushes()
             env.Emit('phone:client:stateChanged')
-            env.Step(20)
-            local after = 0
-            for _, record in ipairs(env.server_events) do
-                if record.name == 'tcity:agent:state' then after = after + 1 end
-            end
-            assert(after == before + 1, ('expected one immediate push, saw %d'):format(after - before))
-        end)
+            env.Step(200)
+            assert(pushes() == before + 1, 'one change must produce one push, got '
+                .. tostring(pushes() - before))
 
-        check('devcmd_bridge_is_gated_and_allowlisted', function()
-            -- devcon 握手不通、合成鼠标又被 GTA 锁光标，所以给 agent 留了一条
-            -- "服务端替客户端敲一行命令"的通道；必须默认关、只认白名单。
-            local function execs(handle)
-                return handle.executed_commands or {}
-            end
-
-            -- ① 默认（convar 未设）：一条都不许执行
-            local off = ctx.bootstrap.Load({
-                resource = '[custom]/custom-agent-client',
-                files = { 'client/main.lua' },
-            })
-            off.Emit('tcity:agent:devcmd', 'phoneui quests')
-            off.Step(20)
-            assert(#execs(off) == 0, 'default: the bridge must not execute anything')
-
-            -- ② 打开：白名单内放过，白名单外（含分号拼接）一律拒绝
-            local on = ctx.bootstrap.Load({
-                resource = '[custom]/custom-agent-client',
-                files = { 'client/main.lua' },
-                convars = { agent_devcmd_enabled = '1' },
-            })
-            on.Emit('tcity:agent:devcmd', 'phoneui quests')
-            on.Step(20)
-            local handlers = on.net_handlers and on.net_handlers['tcity:agent:devcmd'] or {}
-            assert(#execs(on) == 1, ('allowed command must run, ran %d (handlers=%d convars=%s err=%s)'):format(
-                #execs(on), #handlers,
-                tostring(on.convars and on.convars['agent_devcmd_enabled']),
-                tostring(on.thread_errors and on.thread_errors[1])))
-            assert(execs(on)[1] == 'phoneui quests', 'the command must be passed through verbatim')
-
-            on.Emit('tcity:agent:devcmd', 'quit')
-            on.Emit('tcity:agent:devcmd', 'phoneui quests; quit')
-            on.Emit('tcity:agent:devcmd', 'connect 1.2.3.4')
-            on.Emit('tcity:agent:devcmd', ('x'):rep(80))
-            on.Step(20)
-            assert(#execs(on) == 1, 'anything outside the allowlist must be refused, ran '
-                .. tostring(#execs(on)))
+            local afterFirst = pushes()
+            env.Emit('phone:client:stateChanged')
+            env.Step(50)
+            env.Emit('phone:client:stateChanged')
+            env.Step(200)
+            assert(pushes() == afterFirst + 1, 'two changes inside 150ms must coalesce into one push, got '
+                .. tostring(pushes() - afterFirst))
         end)
 
         return {

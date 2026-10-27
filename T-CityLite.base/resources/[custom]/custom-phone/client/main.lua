@@ -376,7 +376,9 @@ local function OpenOrToggle(kind)
         end
         ClosePhone('switch')
         Wait(60)
-        OpenPhone(kind, 'command')
+        -- reason 必须是 switch：NUI 靠它决定"回桌面还是留在当前页"。
+        -- 这里传 'command' 会让状态说 app=quests、画面却是主屏——比不报更糟。
+        OpenPhone(kind, 'switch')
         return
     end
     OpenPhone(kind, kind and 'command' or 'key')
