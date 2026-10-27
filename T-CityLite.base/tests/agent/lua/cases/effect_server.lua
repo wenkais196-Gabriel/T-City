@@ -509,6 +509,14 @@ return {
             assert(data.phone.focus_owner == nil, 'owner must match [a-z0-9_]{1,16}')
         end)
 
+        check('client_state_rejects_a_payload_without_v1', function()
+            local env = newEnv(enabled())
+            emitState(env, 1, { logged_in = true })
+            assert(env.exports.ClientState(1) == nil, 'a payload without v=1 must not register a snapshot')
+            emitState(env, 1, { v = 2, logged_in = true })
+            assert(env.exports.ClientState(1) == nil, 'future versions are not guessed at')
+        end)
+
         check('client_state_expires_after_15s', function()
             local env = newEnv(enabled())
             env.now = 1000
