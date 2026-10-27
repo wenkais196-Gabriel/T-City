@@ -41,6 +41,9 @@
 
 - 换形态（手机↔平板）时 `ClosePhone('switch')` → `OpenPhone(kind, 'switch')`：**reason 必须是
   switch**，NUI 靠它决定"留在当前页还是回桌面"；传别的值会出现"画面回桌面但状态仍报旧 App"。
+- **手机开着时（keepInput）玩家硬件按键进不了 CEF，控制号 172-175 也轮询不到** ——
+  键盘必须用 `IsRawKeyDown(VK)` 读原始按键（见 client/core/nav.lua），控制号只留给手柄。
+  症状很有迷惑性：agent 注入的按键能用、玩家自己按没反应。
 - NUI 的键盘导航：**Tab 在游戏里拿不到**（GTA 占），方向键/Enter/Backspace 能到 CEF；
   手柄走 Lua 轮询控制再发 `phone:nav`。两条腿都落到 T-CityLite.base/resources/[custom]/custom-phone/web/src/core/nav.ts，别在 app 里
   各自监听方向键（见 docs/client/research/keyboard-and-gamepad-navigation.md）。
