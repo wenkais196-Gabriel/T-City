@@ -173,6 +173,31 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('switching_surface_keeps_the_page', function()
+            -- 换形态不是退出：人还看着同一页，appState 不该被清掉，
+            -- 否则 agent 在 /tablet 之后立刻读成 app=nil（真机踩过）。
+            local state = env.registered_exports.GetUiState
+            env.Command('phonefix')
+            env.Step(100)
+            env.Command('phone')
+            env.Step(200)
+            env.NuiCallback('appState', { app = 'quests', tab = 'active', selected = 'cold_chain_delivery' })
+            env.Step(20)
+
+            env.Command('tablet')
+            env.Step(400)
+            local after = state()
+            assert(after.surface == 'tablet', 'surface must switch, got ' .. tostring(after.surface))
+            assert(type(after.app) == 'table', 'the app page must survive a surface switch')
+            assert(after.app.id == 'quests' and after.app.tab == 'active',
+                'id/tab must survive, got ' .. tostring(after.app.id) .. '/' .. tostring(after.app.tab))
+
+            -- 真正的关闭仍然清空
+            env.Command('phonefix')
+            env.Step(100)
+            assert(state().app == nil, 'a hard reset must clear the page')
+        end)
+
         check('phoneui_is_off_by_default', function()
             -- 真机 OS 光标被 GTA 锁在屏幕角上（SetCursorPos 无效），合成点击进不了手机，
             -- 所以 agent 用消息导航；但这条命令必须在生产默认关闭。
