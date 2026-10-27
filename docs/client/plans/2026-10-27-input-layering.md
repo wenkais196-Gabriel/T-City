@@ -189,10 +189,14 @@ exports[frame.owner]:ApplyFocus(true, cursor, keepInput)   -- owner = 'custom-ph
 
 所以两种模式分工不同：
 
-| 模式 | 键盘谁收 | 手柄谁收 | M 键谁管 |
-|---|---|---|---|
-| `phone_keep_input 0`（默认，完全接管） | CEF（Svelte keydown） | Lua 控制轮询（拿不到键，但手柄控制仍可读） | NUI（`m` → closePhone） |
-| `phone_keep_input 1`（边走边看） | Lua 原始按键 + CEF 都可能收到（120ms 去重） | Lua 控制轮询 | 两边都行 |
+| 模式 | 键盘谁收 | 手柄谁收 | M 键谁管 | 能走路 | 有游标 |
+|---|---|---|---|---|---|
+| `phone_keep_input 1`（**默认**，边走边看） | Lua 原始按键（CEF 也可能收到，120ms 去重） | Lua 控制轮询 | 两边都行 | ✅ | ❌ |
+| `phone_keep_input 0`（完全接管） | CEF（Svelte keydown） | Lua 控制轮询（拿不到键） | NUI（`m` → closePhone） | ❌ | ✅ |
+
+> 2026-10-27 拍板：**默认走"边走边看"**（能走路优先），完全接管作为可选项保留
+> （`setr phone_keep_input 0`）。鼠标指针在默认模式下不可用是引擎限制，
+> 不是实现缺陷 —— 真要两者兼得就得自绘虚拟光标（方案 C，未做）。
 
 教训：**"M 键不关手机"看着像键位问题，实际是"手机没关掉"**——手机开着就接管输入，
 玩家以为关了、于是反馈"WASD 不动"。这类"关不掉"的 bug 一定要先验 `open`，
