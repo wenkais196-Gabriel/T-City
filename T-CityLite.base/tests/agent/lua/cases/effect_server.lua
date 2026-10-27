@@ -567,6 +567,30 @@ return {
             assert(app.selected == 'euro_trucking_steel', 'selected must round-trip')
         end)
 
+        check('client_state_keeps_a_readable_focus_label', function()
+            local env = newEnv(enabled())
+            emitState(env, 1, {
+                v = 1,
+                logged_in = true,
+                phone = { focus = "  Search   contacts...  " },
+            })
+            local data = env.exports.ClientState(1)
+            assert(data.phone.focus == 'Search contacts...', 'whitespace collapses, got '
+                .. tostring(data.phone.focus))
+
+            -- 每源 250ms 窗口：不推时钟的话第二份会被限流掉，测到的还是第一份
+            env.now = env.now + 300
+            emitState(env, 1, { v = 1, logged_in = true,
+                phone = { focus = 'a' .. string.char(9) .. 'b' .. string.char(10) .. 'c' } })
+            local second = env.exports.ClientState(1)
+            assert(second.phone.focus == 'a b c', 'control chars become spaces, got '
+                .. tostring(second.phone.focus))
+
+            env.now = env.now + 300
+            emitState(env, 1, { v = 1, logged_in = true, phone = { focus = '   ' } })
+            assert(env.exports.ClientState(1).phone.focus == nil, 'blank is not a focus')
+        end)
+
         check('client_state_drops_an_app_block_without_an_id', function()
             local env = newEnv(enabled())
             emitState(env, 1, { v = 1, logged_in = true, phone = { app = { tab = 'active' } } })

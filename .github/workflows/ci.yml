@@ -215,7 +215,9 @@ jobs:
         timeout-minutes: 8
         run: |
           python -m pip install --upgrade pip playwright
-          python -m playwright install --with-deps chromium
+          # 不用 --with-deps：它要跑 apt，在这台 runner 上挂过两次（8 分钟超时）。
+          # GitHub 的 ubuntu-latest 已经带 chromium 需要的系统库。
+          python -m playwright install chromium
 
       - name: Run NUI smoke tests
         run: python tests/nui/run_ui_tests.py
