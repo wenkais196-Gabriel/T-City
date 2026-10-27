@@ -174,6 +174,31 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('focus_hint_tells_the_agent_what_is_selected', function()
+            -- agent 看不见 DOM：没有这条只能盲按方向键（真机踩过：Tab 直接落在
+            -- "分享"上，想输的样子完全对不上）。
+            local state = env.registered_exports.GetUiState
+            env.Command('phonefix')
+            env.Step(100)
+            env.Command('phone')
+            env.Step(200)
+            env.NuiCallback('uiFocus', { label = 'Search contacts...' })
+            env.Step(20)
+            assert(state().focus == 'Search contacts...', 'focus label must round-trip')
+
+            env.NuiCallback('uiFocus', { label = '   ' })
+            env.Step(20)
+            assert(state().focus == nil, 'blank labels are not a focus')
+
+            env.NuiCallback('uiFocus', { label = '任务' })
+            env.Step(20)
+            assert(state().focus == '任务', 'CJK labels must survive')
+
+            env.Command('phonefix')
+            env.Step(100)
+            assert(state().focus == nil, 'closing must clear the focus hint')
+        end)
+
         check('switching_surface_keeps_the_page', function()
             -- 换形态不是退出：人还看着同一页，appState 不该被清掉，
             -- 否则 agent 在 /tablet 之后立刻读成 app=nil（真机踩过）。

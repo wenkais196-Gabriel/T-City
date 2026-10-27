@@ -26,6 +26,44 @@ async function box(page) {
 export const surfaceScenarios = [
   {
     surfaces: ['phone'],
+    name: '键盘能从输入框进出：Tab 离开输入框，输入框里方向键不被抢',
+    async run({ page }) {
+      await openPhone(page, 'phone');
+      // 打开 Contacts（有搜索框）
+      await page.locator('button[aria-label="Contacts"]').click();
+      await page.waitForTimeout(300);
+      const input = page.locator('input[placeholder*="Search"], input[type="text"]').first();
+      await input.waitFor({ state: 'visible', timeout: 5000 });
+
+      // 用导航走到输入框（DOM 顺序在后半段，最多绕一圈）
+      for (let i = 0; i < 30; i += 1) {
+        const tag = await page.evaluate(() => document.querySelector('[data-nav-focus="true"]')?.tagName);
+        if (tag === 'INPUT') break;
+        await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
+        await page.waitForTimeout(50);
+      }
+      checkEqual('焦点落在输入框上', await page.evaluate(() => document.querySelector('[data-nav-focus="true"]')?.tagName), 'INPUT');
+
+      // 确认键把 DOM 焦点给输入框，然后输入
+      await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'activate' }, '*'));
+      await page.waitForTimeout(120);
+      await page.keyboard.type('alice');
+      checkEqual('输入框收到了字符', await input.inputValue(), 'alice');
+
+      // 输入框里按方向键不能把焦点挪走（要能移动光标）
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(80);
+      checkEqual('输入框里方向键不抢焦点', await page.evaluate(() => document.querySelector('[data-nav-focus="true"]')?.tagName), 'INPUT');
+
+      // Tab 是唯一的出口：必须能把焦点挪出输入框
+      await page.keyboard.press('Tab');
+      await page.waitForTimeout(120);
+      const afterTab = await page.evaluate(() => document.querySelector('[data-nav-focus="true"]')?.tagName);
+      checkTruthy('Tab 把焦点移出了输入框', afterTab !== 'INPUT');
+    },
+  },
+  {
+    surfaces: ['phone'],
     name: '键盘/手柄导航：开屏即有焦点、方向键移动、确认打开 App、返回回桌面',
     async run({ page }) {
       const focused = () => page.locator('[data-nav-focus="true"]');

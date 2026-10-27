@@ -134,7 +134,8 @@ python3 tools/agent_eval.py --input actions.jsonl --denials denials.jsonl --out 
 | 能看见 | 手段 |
 |---|---|
 | 手机壳：开着吗 / 哪一面 / 焦点归谁 / keepInput | 5s 快照 → `GetUiState()` → `/live/clients` |
-| 用键盘操作手机 UI（方向键移焦点、Enter 确认、Backspace 返回） | NUI `keydown` → `T-CityLite.base/resources/[custom]/custom-phone/web/src/core/nav.ts`；真机已验证 Down×2+Enter 打开 Contacts |
+| 用键盘操作手机 UI（方向键移焦点、Enter 确认、Backspace 返回、Tab 进出输入框） | NUI `keydown` → `T-CityLite.base/resources/[custom]/custom-phone/web/src/core/nav.ts`；真机已验证 Down×2+Enter 打开 Contacts |
+| 现在焦点停在哪个控件上 | 每次移动焦点 NUI 回吐标签 → `phone.focus`（`aria-label` 优先，限 24 字） |
 | 某个 App 停在哪一页（任务、MDT） | App 的 `appState` 回吐（`tab` + 选中项 id） |
 | ped 血量/死亡/载具类型、屏幕分辨率、登录态 | 同一份快照 |
 | 客户端错误 | `phone:server:clientError`、`story-engine` 遥测心跳 |
