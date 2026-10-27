@@ -62,11 +62,16 @@ web/tests/nui/run.mjs --surface=phone|tablet 18 / 6 passed
   证明引擎原生会撒谎、判定必须走自己的账；
 - `/live/clients` 快照：citizenid、2560×1440、ped 血量/载具、app 页状态；
 - `/live/server`：83/117 起，34 个未启动资源**具名**（`custom-agent-ops` 等）；
-- gateway `/agent/v1/players` 读到真实行（`DEV00001`）。
+- gateway `/agent/v1/players` 读到真实行（`DEV00001`）；
+- **截图可用**：窗口模式下 `PrintWindow` 返回真实画面（亮度 96–99%），手机/平板、任务页、
+  MDT 都靠它对账；独占全屏才是全黑（§7.3）；
+- **平板两栏**：`/tablet` 后任务页左列表 + 右详情并排（1000×676 居中），换形态不丢当前页；
+- **客户端驱动**：devcon 的 29200 在监听但握手不完成，改用 `adc <src> <cmd>`（RCON → 客户端
+  白名单命令），agent 可以自己开屏/换形态/切 App，不再需要人敲 F8；
+- **App 页状态**：任务（`tab`）与 MDT（`tab` + 选中的警情 id）都回吐到 `phone.app`。
 
-**仍未在真机验证**：平板形态下的真实点击（任务 App 修复只在 NUI 层验证）、NUI 截图
-（独占全屏下全黑）、客户端动作 ack 的端到端（动画/传送落点）、单个 App 的页状态
-（只有任务 App 接了 `appState`）。
+**仍未在真机验证**：客户端动作 ack 的端到端（动画/传送落点）、银行/ Garage 等其余 App 的
+`appState`、真实平板上的像素点击（做不到，见 playbook §3.0d）。
 
 ## 5. 上手（按顺序）
 
@@ -96,7 +101,7 @@ python3 tools/agent_eval.py --input actions.jsonl --denials denials.jsonl --out 
 
 ## 6. 仍然缺的
 
-1. **每个 App 的页状态**：只有任务 App 回吐 `appState`；MDT/银行还没接，agent 仍答不了"他在看哪个案子"。
+1. **每个 App 的页状态**：任务与 MDT 已接；银行/Garage/联系人还没接，agent 答不了"他在看哪张卡/哪辆车"。
 2. **客户端的焦点真值**：`IsNuiFocused()` 恒 false，只有 NUI 侧的 `document.hasFocus()` 能作准，尚未上报。
 3. **gateway / director 没有进程守护**：都要手工起（`tools/dev/local_stack.sh` 打印的命令）；
    凭据不一致时只报 `database_auth`，不看日志很难定位。
@@ -129,11 +134,17 @@ python3 tools/agent_eval.py --input actions.jsonl --denials denials.jsonl --out 
 | 能看见 | 手段 |
 |---|---|
 | 手机壳：开着吗 / 哪一面 / 焦点归谁 / keepInput | 5s 快照 → `GetUiState()` → `/live/clients` |
-| 某个 App 停在哪一页（目前只有任务） | App 的 `appState` 回吐 |
+| 某个 App 停在哪一页（任务、MDT） | App 的 `appState` 回吐（`tab` + 选中项 id） |
 | ped 血量/死亡/载具类型、屏幕分辨率、登录态 | 同一份快照 |
 | 客户端错误 | `phone:server:clientError`、`story-engine` 遥测心跳 |
 | 客户端日志文件 | harness `get_client_log`（需 env 路径） |
 
-看不见：屏幕内容（独占全屏下截图全黑）、CEF DOM 内部（只有 NUI 自愿上报的部分）、
+### 7.3 看画面
+
+窗口模式下 `screenshot` 抓的是真实画面（`PrintWindow`，亮度 96–99%），但有两个前提：
+**必须窗口模式**（独占全屏只有黑帧），且**截图前先 `focus_window`**（窗口不在前台时
+`PrintWindow` 返回 2% 亮度的黑图，重新聚焦后恢复）。
+
+看不见：独占全屏下的画面、CEF DOM 内部（只有 NUI 自愿上报的部分）、
 焦点真值（`IsNuiFocused()` 恒 false，需要 NUI 侧 `document.hasFocus()`）、
 `custom-police`/`custom-economy` 等非手机资源的客户端状态（没有导出点）。
