@@ -168,12 +168,19 @@ end
 -- silently return zero players on a real server (the harness set it, so tests
 -- never caught it).
 local function qbCore()
-    if type(_G.QBCore) == 'table' then return _G.QBCore end
+    -- Resolve from the export on every call. Caching the object on _G was how
+    -- live_api ended up sampling a stale QBCore: whichever table it saw first
+    -- was frozen, so players who joined after that call stayed invisible until
+    -- the resource was restarted (count=0 with a live roster of 1, observed on
+    -- a real server). The global is still refreshed for live_events.lua, but it
+    -- is only a fallback for when qb-core is stopped mid-request.
     local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
     if ok and type(core) == 'table' then
         _G.QBCore = core
         return core
     end
+    local cached = _G.QBCore
+    if type(cached) == 'table' then return cached end
     return nil
 end
 
