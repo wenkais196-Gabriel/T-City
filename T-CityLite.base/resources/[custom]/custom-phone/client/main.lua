@@ -50,6 +50,23 @@ local function stateToken(value, maxLen)
     return value
 end
 
+-- 焦点提示：NUI 每次移动焦点都报一次标签（aria-label 或文字），
+-- agent 才能知道"现在停在哪个按钮上"，而不是盲按方向键。
+local focusHint = ''
+
+RegisterNUICallback('uiFocus', function(data, cb)
+    local label = type(data) == 'table' and data.label or nil
+    if type(label) == 'string' then
+        -- 折叠空白再**去掉首尾**：只 gsub 不 trim 会把 "   " 变成 " "，被当成有焦点
+        label = label:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', ''):sub(1, 40)
+    else
+        label = ''
+    end
+    focusHint = label
+    PhoneBridge.AnswerFn(cb)({ ok = true })
+    announceUiState()
+end)
+
 RegisterNUICallback('appState', function(data, cb)
     if type(data) == 'table' then
         appState = {
@@ -84,6 +101,8 @@ exports('GetUiState', function()
         focus_owner = focus.owner,
         -- 哪个 App 停在哪一页（App 自己回吐；没回吐就是 nil）
         app = appState.id and { id = appState.id, tab = appState.tab, selected = appState.selected } or nil,
+        -- 键盘/手柄焦点停在哪个控件上（空字符串 = 没有焦点）
+        focus = focusHint ~= '' and focusHint or nil,
     }
 end)
 
@@ -92,6 +111,7 @@ local function ClosePhone(reason)
     if not kind then return end
     Surface.Reset()
     PhoneNav.Stop()
+    focusHint = ''
     -- 换形态不是退出：人还看着同一页，清掉 appState 会让 agent 立刻读成 app=nil。
     if reason ~= 'switch' then appState = {} end
     -- 任何关闭路径都必须解锁：焦点没了但人还钉在原地是最难查的故障。
@@ -426,6 +446,7 @@ end, false)
 RegisterCommand('phonefix', function()
     Surface.Reset()
     appState = {} -- 硬复位连"停在哪一页"一起清，别让下一次打开继承旧 tab
+    focusHint = '' -- 焦点提示同理：复位后没有焦点
     DeviceLock.End()
     PhoneFocus.Reset()
     SendNUIMessage({ action = 'phone:close', reason = 'phonefix' })

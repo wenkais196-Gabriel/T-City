@@ -173,6 +173,8 @@ local function phoneState()
             -- 引擎原生的原话，与上面的记账分开：两者不一致 = 原生在撒谎
             -- （本 build 恒 false，见 nui-debug-playbook）。
             nui_focus_native = state.nui_focus_native == true,
+            -- 焦点落在哪个控件上（NUI 侧 nav 回吐；空 = 没有焦点）
+            focus = type(state.focus) == 'string' and state.focus or nil,
             focus_owner = state.focus_owner,
             app = type(state.app) == 'table' and {
                 id = state.app.id,

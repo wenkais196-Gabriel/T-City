@@ -260,6 +260,14 @@
           else void closePhone();
         },
       };
+      // Tab / Shift+Tab：在可聚焦元素之间前后走。
+      // 必须放在 isEditableTarget 判断之前 —— 否则焦点一旦落进搜索框就再也出不来
+      // （方向键属于输入框、Enter 属于提交，Tab 是唯一的出口）。
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        navMove(e.shiftKey ? 'up' : 'down');
+        return;
+      }
       if (navKeys[e.key]) {
         // 输入框里方向键要能移动光标，Enter 要能提交表单
         if (!isEditableTarget(e.target)) {
