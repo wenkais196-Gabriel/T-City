@@ -52,6 +52,11 @@
 - `IsNuiFocused()` / `IsNuiFocusKeepingInput()` 在本 build **恒 false**：判定开关/焦点一律用
   自己的账（`Surface.IsOpen()` / `PhoneFocus.State()`），原生只当诊断字段，见
   `docs/client/research/nui-debug-playbook.md` §3.0a。同名 `RegisterCommand` 后注册者覆盖先注册者。
+- **`restart <资源>` 会连带停掉所有依赖它的资源，而且不会自动拉回来** —— 例如
+  `restart qb-inventory` 一次停掉 custom-police / qb-ambulancejob / qb-cityhall 等 12 个，
+  之后 `/revive` 之类的功能就静默失效（资源不在，命令根本不存在）。改完要
+  `exec configs/modules/<module>.cfg` 把依赖者重新拉起来，或直接用
+  tools/dev/resync_modules.sh。
 - **Lua 的 pattern 没有 `{n,m}`**（那是正则的写法）。写 `'^911 [^%c;]{1,80}$'` 永远不会匹配，
   而且失败得很安静：命令只回 `not_allowed`，看起来像"白名单没加"。长度用 `#cmd` 判。
 - `_G.QBCore` 在资源内不保证存在：用 `exports['qb-core']:GetCoreObject()` 惰性解析并缓存。
