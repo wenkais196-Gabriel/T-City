@@ -59,7 +59,7 @@ def missing_sections(text: str, required=REQUIRED_SECTIONS) -> list[str]:
 
 def unregistered_docs(root_text: str, docs=None) -> list[str]:
     """`docs` 不能写成默认生成器：生成器只能被消费一次，第二次调用会静默返回空（假绿）。"""
-    docs = [str(p.relative_to(REPO)) for p in area_docs()] if docs is None else list(docs)
+    docs = [p.relative_to(REPO).as_posix() for p in area_docs()] if docs is None else list(docs)
     missing = []
     for rel in docs:
         tail = rel.split("resources/")[-1] if "resources/" in rel else rel
@@ -110,8 +110,8 @@ def test_every_area_doc_is_registered_in_the_root_index():
 def test_no_orphan_agents_doc_exists():
     """仓库里任何 AGENTS.md 都必须在根索引登记——包括以后新增的那些。"""
     root = ROOT_DOC.read_text(encoding="utf-8")
-    orphans = [str(p.relative_to(REPO)) for p in area_docs()
-               if str(p.relative_to(REPO)) not in root and str(p.relative_to(BASE)) not in root]
+    orphans = [p.relative_to(REPO).as_posix() for p in area_docs()
+               if p.relative_to(REPO).as_posix() not in root and p.relative_to(BASE).as_posix() not in root]
     assert not orphans, "这些 AGENTS.md 没有在根索引登记（agent 不会读到）：\n" + "\n".join(orphans)
 
 
@@ -171,7 +171,7 @@ def test_rules_fire_on_bad_shapes():
     # 1) 未登记的分区文件
     assert unregistered_docs("根索引只有这一句话")
     assert not unregistered_docs(
-        "\n".join(str(p.relative_to(REPO)) for p in area_docs())
+        "\n".join(p.relative_to(REPO).as_posix() for p in area_docs())
     )
 
     # 2) 缺小节
