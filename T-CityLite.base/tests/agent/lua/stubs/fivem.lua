@@ -216,6 +216,21 @@ return function(env)
         return env.resource_name or 'custom-director'
     end
 
+    -- 资源枚举：env.resource_list 是名字数组（按引擎的 find-index 顺序），
+    -- 起没起仍由 env.resource_states 决定。
+    function _G.GetNumResources()
+        local list = env.resource_list
+        if type(list) ~= 'table' then return 0 end
+        return #list
+    end
+
+    function _G.GetResourceByFindIndex(index)
+        local list = env.resource_list
+        if type(list) ~= 'table' then return nil end
+        local position = (tonumber(index) or -1) + 1
+        return list[position]
+    end
+
     function _G.GetResourceState(name)
         return env.resource_states[name] or 'missing'
     end

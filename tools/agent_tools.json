@@ -543,7 +543,7 @@
     {
       "name": "get_server_state",
       "title": "Read process-level server state",
-      "description": "Read process-level server state: uptime, resources started out of total, loaded characters, and current weather when qb-weathersync runs. Tells 'server is fine' from 'one resource is down' before blaming a feature.",
+      "description": "Read process-level server state: uptime, resources started out of total with the names of the ones that are not running, loaded characters, and current weather when qb-weathersync runs. Turns '83/117' into 'these are down'.",
       "channel": "read",
       "route": "director",
       "director_action": null,
