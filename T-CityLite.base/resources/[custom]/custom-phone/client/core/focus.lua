@@ -109,12 +109,15 @@ function PhoneFocus.Acquire(owner, opts)
     }
     local layer = inputLayer()
     if layer then
+        -- 真机对比用开关：keepInput=false 时游戏完全让位（像 GTA 暂停菜单，引擎游标会回来），
+        -- true 时还能边走边看。默认保持 1，想试"完全接管"就 setr phone_keep_input 0。
+        local keep = entry.keepInput and GetConvar('phone_keep_input', '1') ~= '0'
         local ok = pcall(function()
             layer:Push({
                 id = frameId(owner),
                 cursor = entry.cursor,
-                keepInput = entry.keepInput,
-                allow = entry.keepInput and ALLOW_WHILE_OPEN or nil,
+                keepInput = keep,
+                allow = keep and ALLOW_WHILE_OPEN or nil,
             })
         end)
         if ok then

@@ -4,7 +4,21 @@
 // 浏览器原生 Tab 在游戏里拿不到键（GTA 占了），所以焦点模型放在这里，
 // 输入统一从 Lua 来 —— 同一套动作既能被键盘触发，也能被手柄触发。
 
+import { writable } from 'svelte/store';
 import { fetchNui } from '../utils/nui';
+
+/**
+ * 当前焦点框（视口坐标）+ 标签。用 store 暴露给 App.svelte 画一个**叠加层**，
+ * 而不是只给元素加 class：Svelte 一重渲染就把命令式加的 class 冲掉了，
+ * 结果就是"焦点其实在动，但人看不见"（真机反馈）。
+ */
+export const navFocus = writable<{
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} | null>(null);
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [data-nav]';
 
@@ -43,6 +57,21 @@ function report(el: HTMLElement | null): void {
   void fetchNui('uiFocus', { label, kind }).catch(() => {});
 }
 
+function measure(el: HTMLElement | null): void {
+  if (!el) {
+    navFocus.set(null);
+    return;
+  }
+  const rect = el.getBoundingClientRect();
+  navFocus.set({
+    label: labelOf(el),
+    x: rect.left,
+    y: rect.top,
+    width: rect.width,
+    height: rect.height,
+  });
+}
+
 function paint(el: HTMLElement | null): void {
   if (current && current !== el) {
     current.removeAttribute('data-nav-focus');
@@ -50,10 +79,22 @@ function paint(el: HTMLElement | null): void {
   }
   current = el;
   report(el);
-  if (!el) return;
+  if (!el) {
+    navFocus.set(null);
+    return;
+  }
   el.setAttribute('data-nav-focus', 'true');
   el.classList.add('nav-focus');
   el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  // scrollIntoView 之后坐标才准
+  requestAnimationFrame(() => {
+    if (current === el) measure(el);
+  });
+}
+
+/** 列表滚动/窗口变化后重新贴住焦点（叠加层不跟随 DOM，必须自己重算）。 */
+export function remeasure(): void {
+  if (current) measure(current);
 }
 
 /** 把焦点放到第一个可聚焦元素（开屏、切 app 时用）。 */
