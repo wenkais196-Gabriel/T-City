@@ -23,6 +23,8 @@ LiveApi.VERSION = 1
 local LIVE_PREFIX = '/agent/v1/live/'
 local PLAYERS_PATH = '/agent/v1/live/players'
 local EVENTS_PATH = '/agent/v1/live/events'
+local CLIENTS_PATH = '/agent/v1/live/clients'
+local SERVER_PATH = '/agent/v1/live/server'
 local POLICE_BOARD_PATH = '/agent/v1/live/police/board'
 
 -- 统一走 core-framework 的公共实现（原先这里有一份相同的解析）：
@@ -386,6 +388,116 @@ local function findPlayer(citizenid)
     return nil
 end
 
+-- ---------------------------------------------------------------------------
+-- Client / server state probes (read-only)
+--
+-- The snapshot starts on the client (custom-agent-client pushes it when it
+-- changes) and is only ever a self-report: never a permission or policy input.
+-- age_ms is stamped here, so a consumer can tell "now" from "stale".
+-- ---------------------------------------------------------------------------
+
+local CLIENT_EXECUTOR_RESOURCE = 'custom-agent-client'
+
+local function clientSnapshot(source)
+    if GetResourceState(CLIENT_EXECUTOR_RESOURCE) ~= 'started' then
+        return nil, 'probe_unavailable'
+    end
+    local ok, data, errCode, age = pcall(function()
+        return exports[CLIENT_EXECUTOR_RESOURCE]:ClientState(source)
+    end)
+    if not ok or type(data) ~= 'table' then
+        return nil, type(errCode) == 'string' and errCode or 'client_state_unavailable'
+    end
+    return data, nil, tonumber(age) or 0
+end
+
+local function handleClients()
+    local sourceTable = playersTable() or {}
+    local collected = {}
+    local count = 0
+    for sourceKey, player in pairs(sourceTable) do
+        local data = playerData(player)
+        local citizenid = data and type(data.citizenid) == 'string' and data.citizenid or nil
+        if citizenid and citizenid ~= '' then
+            local snapshot, _, age = clientSnapshot(tonumber(sourceKey) or 0)
+            if snapshot then
+                count = count + 1
+                collected[count] = {
+                    citizenid = LiveRules.sanitize_text(citizenid, 32),
+                    source = tonumber(sourceKey) or 0,
+                    age_ms = age,
+                    state = snapshot,
+                }
+            end
+        end
+    end
+    table.sort(collected, function(a, b) return a.citizenid < b.citizenid end)
+    return {
+        status = 200,
+        body = {
+            schema_version = 1,
+            sampled_at = LiveRules.now_ms(),
+            count = count,
+            clients = jsonArray(collected),
+        },
+    }
+end
+
+local function handleClient(citizenid)
+    local player, source = findPlayer(citizenid)
+    if not player or not source then
+        return failure(404, 'player_not_found', 'player_not_found')
+    end
+    local snapshot, errCode, age = clientSnapshot(source)
+    if not snapshot then
+        return failure(404, errCode or 'client_state_unavailable', 'client state is unavailable')
+    end
+    local data = playerData(player)
+    return {
+        status = 200,
+        body = {
+            schema_version = 1,
+            sampled_at = LiveRules.now_ms(),
+            client = {
+                citizenid = LiveRules.sanitize_text(tostring(data and data.citizenid or citizenid), 32),
+                source = source,
+                age_ms = age,
+                state = snapshot,
+            },
+        },
+    }
+end
+
+local function handleServerState()
+    local total, started = 0, 0
+    if type(GetNumResources) == 'function' then
+        total = GetNumResources() or 0
+        for index = 0, total - 1 do
+            local name = GetResourceByFindIndex(index)
+            if name and GetResourceState(name) == 'started' then started = started + 1 end
+        end
+    end
+    local players = 0
+    for _ in pairs(playersTable() or {}) do players = players + 1 end
+    local weather = nil
+    if GetResourceState('qb-weathersync') == 'started' then
+        local ok, value = pcall(function() return exports['qb-weathersync']:getWeatherState() end)
+        if ok and type(value) == 'string' then weather = LiveRules.sanitize_text(value, 32) end
+    end
+    return {
+        status = 200,
+        body = {
+            schema_version = 1,
+            sampled_at = LiveRules.now_ms(),
+            uptime_s = math.floor((tonumber(GetGameTimer()) or 0) / 1000),
+            players = players,
+            resources = { started = started, total = total },
+            weather = weather,
+        },
+    }
+end
+
+
 local function handlePlayers(request, live)
     local _, query = parseQuery(request)
     local limit = LiveRules.clamp_limit(query.limit, LiveRules.DEFAULT_LIST_LIMIT, 1, LiveRules.MAX_LIST_LIMIT)
@@ -529,6 +641,14 @@ function LiveApi.TryHandle(request, cfg)
 
     local path = parseQuery(request)
     if path == PLAYERS_PATH then return handlePlayers(request, live) end
+    if path == CLIENTS_PATH then return handleClients() end
+    if path == SERVER_PATH then return handleServerState() end
+
+    local clientCitizenid = path:match('^' .. CLIENTS_PATH .. '/([^/]+)$')
+    if clientCitizenid and clientCitizenid ~= '' then
+        return handleClient(clientCitizenid)
+    end
+
     if path == EVENTS_PATH then return handleEvents(request) end
     if path == POLICE_BOARD_PATH then return handlePoliceBoard() end
 
