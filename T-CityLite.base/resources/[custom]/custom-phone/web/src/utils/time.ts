@@ -26,7 +26,12 @@ function toDate(value: unknown): Date | null {
     return Number.isNaN(d.getTime()) ? null : d;
   }
   if (typeof value === 'string') {
-    const raw = value.trim();
+    // 真机踩过：服务端发来的 ISO 串里混了不可见字符（BOM / 零宽空格 / 方向标记 /
+    // NBSP），trim() 只吃普通空白 → new Date() 直接 NaN，界面上弹出 "时间字段无法
+    // 解析" 而值是 ""2026-10-27T18:15:16.000Z""（看着完全正常）。
+    const raw = value
+      .replace(/[\u200B-\u200F\u202A-\u202E\u2060\uFEFF\u00A0]/g, '')
+      .trim();
     if (raw === '') return null;
     // MySQL DATETIME 在某些驱动下会带空格而不是 'T'；Safari/旧 CEF 不认，补成 ISO。
     const normalised = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(raw)
