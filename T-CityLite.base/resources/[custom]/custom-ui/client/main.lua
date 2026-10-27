@@ -114,16 +114,35 @@ end
 local function apply()
     local frame = topFrame()
     if not frame then
+        -- 顺序很关键：**先摘 keepInput，再放焦点**。
+        -- 反过来的话游戏以为 NUI 还在吃输入，鼠标视角被锁死
+        -- （真机现象："手机收起来了，但视角转不动"）。
+        if state.keepInput then
+            SetNuiFocusKeepInput(false)
+            state.keepInput = false
+        end
         SetNuiFocus(false, false)
         -- 栈空 = 输入还给游戏。Esc/暂停菜单要能在这一层工作。
         return
     end
-    -- 第二个参数是**光标**，不是 keepInput —— 这两个搞混过一次。
-    SetNuiFocus(true, frame.cursor ~= false)
     local keepInput = frame.keepInput == true
+    -- keepInput 必须在 SetNuiFocus **之前**设：之后调用会把光标弄丢
+    -- （真机现象："手机开着但看不到游标，还能点进 App"）。
     if state.keepInput ~= keepInput then
         SetNuiFocusKeepInput(keepInput)
         state.keepInput = keepInput
+    end
+    -- 第二个参数是**光标**，不是 keepInput —— 这两个搞混过一次。
+    local cursor = frame.cursor ~= false
+    SetNuiFocus(true, cursor)
+    if cursor then
+        -- 有些 build 在同一帧给焦点会把光标标志吃掉，和 OpenMenu 一样补两帧
+        CreateThread(function()
+            Wait(0)
+            if topFrame() then SetNuiFocus(true, true) end
+            Wait(100)
+            if topFrame() then SetNuiFocus(true, true) end
+        end)
     end
     if captureThread then return end
     captureThread = true
