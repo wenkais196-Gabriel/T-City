@@ -1,6 +1,6 @@
 # Agent 接管 · 实现状态
 
-> 快照：2026-10-22 · 分支 `feat/agent-takeover-v2` · PR #42
+> 快照：2026-10-27 · master（#48/#50–#57 已合并）· 真机已联调（FXServer 37872 @30130 + FiveM 3258）
 > 目的：一页说明"设计里要求什么、现在实际有什么、还缺什么"，避免从 30 个工具和几万行 diff 里自己拼全貌。
 
 ## 1. 分层总览
@@ -11,14 +11,16 @@
 | 实时感知层 | `custom-director` `/agent/v1/live/*` | 已实现，48 人 ≈2.2ms，默认关闭 |
 | 动作代理（写） | `custom-director` `/agent/v1/act` | 18 个动作，L1–L4 分级 + 人审 |
 | 效果通道（client） | `custom-agent-client` | 6 个客户端动作 + 服务端 `give_vehicle_keys`（未接）；终态落 `agent_effects` |
-| 工具面 | `tools/agent_tools.json` → MCP / TOOLS.md / Lua 表 | 31 工具 / 31 active |
+| 客户端状态探针 | `custom-phone` 的 `GetUiState` + `custom-agent-client` 每 5s 快照 → `/agent/v1/live/clients` | 已实现；15s TTL、1s/源限流、掉线清理、原生焦点值单列 |
+| 客户端无头 harness | `tests/agent/lua/runner_client.lua` | 2 suites / 26 checks（焦点、M 键、appState） |
+| 工具面 | `tools/agent_tools.json` → MCP / TOOLS.md / Lua 表 | 41 工具 / 41 active（另 3 个 harness 工具需 `TCITY_HARNESS=1`） |
 | MCP 路由 | `tools/agent_mcp.py` | 读→gateway、写→director、live 独立 token |
 | 评测 | `tools/agent_eval.py` + `agent_denials` | 成功/审批/拒绝/时延/幂等 |
 | 实机冒烟 | `tools/agent_smoke.py` | 10 项三段式检查 |
 
 ## 2. 动作覆盖
 
-已实现 18 个：`notify`、`add_money`、`start_quest`、`set_job`、`set_job_duty`、`set_metadata`、`teleport`、`spawn_vehicle`、`grant_item`、`remove_item`、`set_bucket`、`kick`、`announce`、`set_weather`、`set_time_of_day`、`revive`、`delete_vehicle`、`send_phone_message`。
+已实现 21 个（另 `run_police_e2e` 是测试用写动作，不对玩家生效）：`notify`、`add_money`、`start_quest`、`set_job`、`set_job_duty`、`set_metadata`、`teleport`、`spawn_vehicle`、`grant_item`、`remove_item`、`set_bucket`、`kick`、`announce`、`set_weather`、`set_time_of_day`、`revive`、`delete_vehicle`、`send_phone_message`、`police_incident`、`police_assignment`、`police_jail`。
 
 与设计 04 的差异：
 
@@ -42,14 +44,29 @@
 ## 4. 验证现状
 
 ```
-lua5.4 tests/agent/lua/runner.lua       13 suites / 253 checks
-python3 -m pytest -q tests/tools          203 passed
-cd T-CityLite.base && pytest -q tests/unit   262 passed
-python3 tools/agent_tools.py --check     41 tools, no drift
+lua5.4 tests/agent/lua/runner.lua            13 suites / 253 checks
+lua5.4 tests/agent/lua/runner_client.lua      2 suites /  26 checks
+python3 -m pytest -q tests/tools             227 passed
+cd T-CityLite.base && pytest -q tests/unit   679 passed / 132 skipped
+cd T-CityLite.base && pytest -q tests/architecture  286 passed / 15 skipped
+python3 tools/agent_tools.py --check         41 tools, no drift
+web/tests/nui/run.mjs --surface=phone|tablet 18 / 6 passed
 # harness（本地只读）需 TCITY_HARNESS=1 + TCITY_HARNESS_SERVER_LOG 才出现在 tools/list
 ```
 
-**没有做过的**：真实 FXServer + GTA 客户端联调。所有 Lua 断言都在 stub 下；`DropPlayer` 异步、`DoesEntityExist` 延迟、`SetEntityCoords` 的 OneSync 时序均未在真机验证。
+**已在真机验证**（2026-10-27，30130 + 真客户端 `DXI50064` / 角色 `DEV00001`）：
+
+- live roster 跟随加入/离开（修复了 QBCore 导出被缓存导致的冻结）；
+- `set_weather` 走完 审批 → 执行 → 回读（`verify_result=true`，before/after 都对）；
+- M 键开关：`open=true/surface=phone/focused=true` 与 `nui_focus_native=false` 并存，
+  证明引擎原生会撒谎、判定必须走自己的账；
+- `/live/clients` 快照：citizenid、2560×1440、ped 血量/载具、app 页状态；
+- `/live/server`：83/117 起，34 个未启动资源**具名**（`custom-agent-ops` 等）；
+- gateway `/agent/v1/players` 读到真实行（`DEV00001`）。
+
+**仍未在真机验证**：平板形态下的真实点击（任务 App 修复只在 NUI 层验证）、NUI 截图
+（独占全屏下全黑）、客户端动作 ack 的端到端（动画/传送落点）、单个 App 的页状态
+（只有任务 App 接了 `appState`）。
 
 ## 5. 上手（按顺序）
 
@@ -79,7 +96,44 @@ python3 tools/agent_eval.py --input actions.jsonl --denials denials.jsonl --out 
 
 ## 6. 仍然缺的
 
-1. 真机联调（最高优先级，见上）。
-2. `custom-phone:SendSystemMessage` 只有临时冒烟脚本，尚无仓内单测。
-3. 客户端 ack 的端到端验证（NUI、动画、传送落点）。
-4. 越权拒绝率只覆盖 normalization 之后的拒绝；token/资源开关层失败仍需 HTTP 日志。
+1. **每个 App 的页状态**：只有任务 App 回吐 `appState`；MDT/银行还没接，agent 仍答不了"他在看哪个案子"。
+2. **客户端的焦点真值**：`IsNuiFocused()` 恒 false，只有 NUI 侧的 `document.hasFocus()` 能作准，尚未上报。
+3. **gateway / director 没有进程守护**：都要手工起（`tools/dev/local_stack.sh` 打印的命令）；
+   凭据不一致时只报 `database_auth`，不看日志很难定位。
+4. **SonarCloud 把提交进仓库的压缩产物当新代码**（Security D / Maintainability C）；
+   仓库用自动分析，排除项只能在 SonarCloud UI 加 `**/html/**`。
+5. `custom-phone:SendSystemMessage` 只有临时冒烟脚本，尚无仓内单测。
+6. 客户端动作 ack 的端到端验证（NUI、动画、传送落点）。
+7. 越权拒绝率只覆盖 normalization 之后的拒绝；token/资源开关层失败仍需 HTTP 日志。
+
+## 7. agent 现在能看见什么（双端）
+
+一句话：**壳层看得清，App 内部看不清；写路径全，读路径偏服务端。**
+
+### 7.1 服务端
+
+| 能看见 | 手段 |
+|---|---|
+| 什么在跑、谁没起（具名） | `GET /agent/v1/live/server` → `resources.not_started` |
+| 谁在线、坐标、职位、血量 | `GET /agent/v1/live/players[/{src}]` |
+| 实时事件流 | `GET /agent/v1/live/events` |
+| 控制台输出（按行 / 按正则） | harness `get_console_lines` / `get_console_match`（需 `TCITY_HARNESS=1` + 日志路径） |
+| DB 里的既成事实 | gateway `/players`、`/world_state`、`/metrics`、`/timeline`（只读账号） |
+| 动作是否真的生效 | `/act` 执行 + 回读；`agent_actions` / `agent_effects` / `agent_denials` |
+
+看不见：单个资源的内部状态（只有"起/没起"）、异步任务与队列进度、RCON（本栈没有，
+只有 `screen` 注入，且要先发 DEL 清行防命令拼接）。
+
+### 7.2 客户端
+
+| 能看见 | 手段 |
+|---|---|
+| 手机壳：开着吗 / 哪一面 / 焦点归谁 / keepInput | 5s 快照 → `GetUiState()` → `/live/clients` |
+| 某个 App 停在哪一页（目前只有任务） | App 的 `appState` 回吐 |
+| ped 血量/死亡/载具类型、屏幕分辨率、登录态 | 同一份快照 |
+| 客户端错误 | `phone:server:clientError`、`story-engine` 遥测心跳 |
+| 客户端日志文件 | harness `get_client_log`（需 env 路径） |
+
+看不见：屏幕内容（独占全屏下截图全黑）、CEF DOM 内部（只有 NUI 自愿上报的部分）、
+焦点真值（`IsNuiFocused()` 恒 false，需要 NUI 侧 `document.hasFocus()`）、
+`custom-police`/`custom-economy` 等非手机资源的客户端状态（没有导出点）。
