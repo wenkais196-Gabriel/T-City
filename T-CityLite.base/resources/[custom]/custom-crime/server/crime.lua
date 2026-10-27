@@ -22,17 +22,13 @@ end
 --                  配 置 获 取
 -- ==========================================
 
-local function GetBoolConvar(name, default)
-    local val = GetConvar(name, "")
-    if val ~= "" then return val == "true" or val == "1" end
-    return default
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份相同的解析）：
+-- 用函数包一层，导出在调用时解析；资源启动顺序由 fxmanifest 的 dependencies 保证。
+local GetBoolConvar = function(...) return exports['core-framework']:ConvarBool(...) end
 
-local function GetIntConvar(name, default)
-    local val = GetConvar(name, "")
-    if val ~= "" then return math.floor(tonumber(val) or default) end
-    return default
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份相同的解析）：
+-- 用函数包一层，导出在调用时解析；资源启动顺序由 fxmanifest 的 dependencies 保证。
+local GetIntConvar = function(...) return exports['core-framework']:ConvarInt(...) end
 
 -- ==========================================
 --                  商 店 抢 劫 校验

@@ -1,7 +1,7 @@
 """NUI-CLIENT-01 — static NUI/client contracts for the FiveM client layer.
 
 Offline, deterministic, no FXServer / no DB / no network. Exercises the rules in
-``docs/client/CLIENT_AUDIT.md`` and ``.dsh/skills/fivem-client`` against every
+``docs/client/CLIENT_AUDIT.md`` and `仓库里的 .agents/skills/fivem-client（尚未建立，见 docs/engineering/agent-operating-model.md 的缺口说明）` against every
 ``[custom]`` resource:
 
   ===========================  ===============================================
@@ -799,7 +799,8 @@ def test_scanner_covers_the_client_layer():
             callbacks += len(CALLBACK_SIG_RE.findall(
                 mask_lua(path.read_text(encoding="utf-8", errors="ignore"))
             ))
-    assert callbacks >= 60, f"only {callbacks} RegisterNUICallback blocks found"
+    # 2026-10-25: 删掉 custom-vehicles 那份从未注册的死中控屏（15 个回调），下限随真实值落到 53。
+    assert callbacks >= 53, f"only {callbacks} RegisterNUICallback blocks found"
     page_resources = [name for name, _path, manifest in iter_resources(RESOURCES.parent) if manifest.ui_page]
     assert len(page_resources) >= 5, f"only {len(page_resources)} resources with ui_page"
 

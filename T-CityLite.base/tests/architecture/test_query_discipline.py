@@ -510,7 +510,8 @@ def test_scanned_resources_exist_and_the_scanner_is_not_vacuous():
     assert len(statements) >= 80, f"only {len(statements)} SQL statements parsed — parser drifted"
     parsed = {statement.path.as_posix() for statement in statements}
     for expected in (
-        "custom-police/server/p0.lua",
+        "custom-police/server/p0_incidents.lua",
+        "custom-police/server/p0_units.lua",
         "custom-police/server/p1.lua",
         "custom-police/server/p2_evidence.lua",
         "custom-police/server/p3_cases.lua",

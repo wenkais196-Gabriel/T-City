@@ -141,7 +141,7 @@ qb-streetraces/server/main.lua:5      → AddMoney 分散在 5 处
 ... 共 24 个文件
 ```
 
-**破坏解耦原则的典型案例** (`qb-hotdogjob/server/main.lua`):
+**破坏解耦原则的典型案例** (`archive/qb/qb-hotdogjob/server/main.lua`):
 ```lua
 -- 旧代码: 价格硬编码在 Config.Stock['common'].Price[level].min/max 中
 -- 管理员要改全局收益 → 需要逐个修改每个等级的价格范围
@@ -230,7 +230,7 @@ economy_global_multiplier    economy_reward_scale
 
 ### 3.1 ❌ 重构前: 死循环轮询 (性能黑洞)
 
-**文件**: `qb-hotdogjob/client/main.lua` (8 个 `while true do` 死循环)
+**文件**: `archive/qb/qb-hotdogjob/client/main.lua` (8 个 `while true do` 死循环)
 
 ```lua
 -- 旧代码模式 (实际代码抽取)
@@ -350,15 +350,15 @@ SinkService.TakeSnapshot()  → 返回本周回收总额 + 重置计数器 (供�
 
 | 消耗口 | 文件 | 触发时机 | 费率 |
 |--------|------|----------|------|
-| **房产税** | `custom-taxes/server/property_tax.lua` | 玩家登录 (懒加载) | 0.3%~5% × 地段系数 0.8~2.0 × 间隔72h |
-| **车辆购置税** | `custom-taxes/server/vehicle_lifecycle.lua` | 购车成功 | 车价 × 8% |
+| **房产税** | `resources/[custom]/custom-taxes/server/property_tax.lua` | 玩家登录 (懒加载) | 0.3%~5% × 地段系数 0.8~2.0 × 间隔72h |
+| **车辆购置税** | `resources/[custom]/custom-taxes/server/main.lua` | 购车成功 | 车价 × 8% |
 | **车辆过户税** | 同上 | 玩家间转卖 | 成交价 × 5% (双方各担一半) |
 | **车辆保险** | 同上 | 呼出车辆 (懒加载) | $500 + 车价×0.1% / 48h |
 | **引擎大修** | 同上 | 里程达 1000km | $1500 + 车价×0.2% |
 | **ATM 手续费** | sink_service.lua | 存取款 | 金额 × 2% |
-| **大额转账税** | `custom-taxes/server/transaction_monitor.lua` | 银行转入 $100k+ | 5% |
+| **大额转账税** | `resources/[custom]/custom-taxes/server/transaction_monitor.lua` | 银行转入 $100k+ | 5% |
 | **跨组织转账税** | 同上 | 组织间转入 $50k+ | 3% |
-| **武器维修** | `custom-taxes/server/item_durability.lua` | 武器耐久不足 | 按武器类别 $500~2000 |
+| **武器维修** | `resources/[custom]/custom-taxes/server/item_durability.lua` | 武器耐久不足 | 按武器类别 $500~2000 |
 | **物品耐久销毁** | 同上 | 耐久归零 | 物品永久移除 |
 | **保释金** | sink_service.lua | 监狱释放 | 原保释金 × 1.0 |
 | **扣押取回费** | sink_service.lua | 车辆被扣押 | $2500 |

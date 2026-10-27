@@ -25,16 +25,16 @@ Date: 2026-06
 ### 📝 修改文件清单
 | 文件 | 改动 |
 |------|------|
-| `qb-management/server/sv_boss.lua` | SQL 注入修复 |
-| `qb-management/server/sv_gang.lua` | SQL 注入修复 |
-| `qb-houses/server/main.lua` | 死循环消除 |
-| `qb-core/server/events.lua` | 弃用事件硬拒绝 |
-| `qb-core/server/player.lua` | DirtyFlush + SecurityService + hunger 优化 |
-| `core-framework/cache/dirty_flush.lua` | ForceFlush 去循环 |
-| `core-framework/compat.lua` | GetPlayer 活性校验 |
-| `qb-vehicleshop/server.lua` | 异步化 |
-| `qb-banking/server.lua` | Rate Limit |
-| `qb-phone/server/main.lua` | PhoneCache + 异步化 |
+| `resources/[qb]/qb-management/server/sv_boss.lua` | SQL 注入修复 |
+| `resources/[qb]/qb-management/server/sv_gang.lua` | SQL 注入修复 |
+| `resources/[qb]/qb-houses/server/main.lua` | 死循环消除 |
+| `resources/[qb]/qb-core/server/events.lua` | 弃用事件硬拒绝 |
+| `resources/[qb]/qb-core/server/player.lua` | DirtyFlush + SecurityService + hunger 优化 |
+| `resources/[standalone]/core-framework/services/persistence_manager.lua` | ForceFlush 去循环 |
+| `resources/[standalone]/core-framework/compat.lua` | GetPlayer 活性校验 |
+| `resources/[qb]/qb-vehicleshop/server/main.lua` | 异步化 |
+| `resources/[qb]/qb-banking/server.lua` | Rate Limit |
+| `resources/[compat]/qb-phone/server/main.lua` | PhoneCache + 异步化 |
 | `docs/bus-api-reference.md` | 新建 |
 
 ---

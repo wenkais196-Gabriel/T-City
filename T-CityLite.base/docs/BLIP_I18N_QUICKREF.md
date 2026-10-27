@@ -105,7 +105,7 @@ F8 控制台输入:
 
 | 文件 | 路径关键字 |
 |------|-----------|
-| 语言包 | `production-freeze/locales/locales.lua` |
-| Blip 配置 | `qb-core/config_blips.lua` |
+| 语言包 | `resources/[system]/production-freeze/locales/locales.lua` |
+| Blip 配置 | `resources/[qb]/qb-core/config_blips.lua` |
 | 侧边栏样式 | `qb-mapsidebar/html/css/map_sidebar.css` |
-| 侧边栏逻辑 | `qb-mapsidebar/html/js/map_sidebar.js` |
+| 侧边栏逻辑 | `archive/qb/qb-mapsidebar/html/js/map_sidebar.js` |

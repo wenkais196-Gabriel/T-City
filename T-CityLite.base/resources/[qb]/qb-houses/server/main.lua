@@ -61,6 +61,7 @@ end)
 QBCore.Commands.Add('createhouse', Lang:t('info.create_house'), { { name = 'price', help = Lang:t('info.price_of_house') }, { name = 'tier', help = Lang:t('info.tier_number') } }, true, function(source, args)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     local price = tonumber(args[1])
     local tier = tonumber(args[2])
     if Player.PlayerData.job.name == 'realestate' then
@@ -73,6 +74,7 @@ end)
 QBCore.Commands.Add('addgarage', Lang:t('info.add_garage'), {}, false, function(source)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     if Player.PlayerData.job.name == 'realestate' then
         TriggerClientEvent('qb-houses:client:addGarage', src)
     else

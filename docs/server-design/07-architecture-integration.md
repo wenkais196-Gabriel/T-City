@@ -22,7 +22,7 @@ Phase 3 (扩展):  共治系统 + 漏斗引擎 + 赛季编年史 + 商城 UI
 
 ### 2.1 Player Metadata Schema 预留
 
-**文件**: `tcity-core/player/schema.lua` (新建)
+**文件**: `resources/[standalone]/core-framework/player/schema.lua`（已落地）
 
 ```lua
 -- Player metadata 完整 Schema 定义
@@ -53,7 +53,7 @@ return PlayerSchema
 
 ### 2.2 数据库表创建（DDL）
 
-**文件**: `tcity-core/db/migrations/002_ownership_tables.sql`
+**文件**: `T-CityLite.base/migrations/v0.8_ownership_engine.sql`（原设计名 `002_ownership_tables.sql`，DDL 已落地为此迁移）
 
 ```sql
 -- Phase 0: 创建所有权系统的核心表（空表，后续填充）
@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS organization_rules (
 
 ### 2.3 Bus Service Contract 注册
 
-**文件**: `tcity-framework/bus/contracts.lua` (扩展)
+**文件**: `resources/[standalone]/core-framework/contracts.lua` (扩展)
 
 ```lua
 -- Phase 0: 定义所有未来服务的契约接口
@@ -244,7 +244,7 @@ Bus.Contracts = {
 
 ### 2.4 EventBus 事件类型枚举
 
-**文件**: `tcity-framework/events/event_types.lua` (新建)
+**文件**: `resources/[standalone]/core-framework/events/event_types.lua` (新建)
 
 ```lua
 -- 所有权引擎事件类型定义
@@ -488,10 +488,10 @@ end
 
 | 文件 | 操作 | 说明 |
 |:---|:---|:---|
-| `tcity-core/player/schema.lua` | 新建 | Player metadata 完整 Schema |
-| `tcity-core/db/migrations/002_ownership_tables.sql` | 新建 | 所有权系统全部 DDL |
-| `tcity-framework/bus/contracts.lua` | 扩展 | 新增 7 个 Service Contract |
-| `tcity-framework/events/event_types.lua` | 新建 | 事件类型枚举 |
+| `resources/[standalone]/core-framework/player/schema.lua` | 已落地 | Player metadata 完整 Schema |
+| `T-CityLite.base/migrations/v0.8_ownership_engine.sql` | 已落地 | 所有权系统全部 DDL |
+| `resources/[standalone]/core-framework/contracts.lua` | 扩展 | 新增 7 个 Service Contract |
+| `resources/[standalone]/core-framework/events/event_types.lua` | 新建 | 事件类型枚举 |
 | `docs/server-design/README.md` | 新建 | 本手册索引 |
 | `docs/server-design/00-07` | 新建 | 8 篇设计文档 |
 
@@ -499,19 +499,19 @@ end
 
 | 文件 | 操作 | 说明 |
 |:---|:---|:---|
-| `tcity-core/services/world_state_service.lua` | 新建 | 世界状态读写 + 缓存 |
-| `tcity-core/services/patron_service.lua` | 新建 | Patron 等级读写 |
-| `systems/gang/server/main.lua` | 修改 | 帮派战结算处插入事件发射 |
-| `systems/economy/server/main.lua` | 修改 | 经济异常处插入事件发射 |
+| `resources/[standalone]/core-framework/services/world_state_service.lua` | 新建 | 世界状态读写 + 缓存 |
+| `resources/[standalone]/core-framework/services/patron_service.lua` | 新建 | Patron 等级读写 |
+| 帮派战结算代码（当前无独立 gang 资源，按实际结算处接） | 修改 | 帮派战结算处插入事件发射 |
+| `resources/[system]/core_economy/server/main.lua` | 修改 | 经济异常处插入事件发射 |
 
 ### Phase 2 (4 个文件)
 
 | 文件 | 操作 | 说明 |
 |:---|:---|:---|
-| `tcity-core/services/reputation_service.lua` | 新建 | 信任图 CRUD |
-| `tcity-core/services/chronicle_service.lua` | 新建 | 事件记录 + 上线通知 |
-| `systems/patron/server/webhook.lua` | 新建 | 支付 Webhook 处理 |
-| `systems/patron/client/display.lua` | 新建 | 客户端名字颜色/称号渲染 |
+| `reputation_service.lua`（`services/`） | 新建 | 信任图 CRUD |
+| `chronicle_service.lua`（`services/`） | 新建 | 事件记录 + 上线通知 |
+| Patron 服务端 `webhook.lua`（`systems/patron` 资源尚未创建） | 新建 | 支付 Webhook 处理 |
+| Patron 客户端 `display.lua`（同上） | 新建 | 客户端名字颜色/称号渲染 |
 
 ### Phase 3 (待规划)
 

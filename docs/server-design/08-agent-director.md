@@ -311,7 +311,7 @@ relationships: 对玩家/组织的信任与态度
 | 经济 | 异常波动次数/周 | 0 |
 | 成本 | 每在线小时 LLM 成本 | 设硬上限 |
 
-**A/B 方法**：按玩家/时段分流；导演关闭组只保留世界级事件。所有 beat 与结果落库，供离线回放（复用 `tools/sandbox_simulator.py`）。
+**A/B 方法**：按玩家/时段分流；导演关闭组只保留世界级事件。所有 beat 与结果落库，供离线回放（复用 `tools/oneoff/sandbox_simulator.py`）。
 
 ---
 

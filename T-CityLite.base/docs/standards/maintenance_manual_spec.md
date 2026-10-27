@@ -29,8 +29,8 @@
 
 | 资源/文件夹名 | 文件相对路径 | 修改目的与说明 |
 | :--- | :--- | :--- |
-| `qb-storerobbery` | `server/main.lua` | 重构结算逻辑，接入服务端计时引擎防止作弊 |
-| `configs` | `modules/crime.cfg` | 新增 `crime_min_police_storerobbery` Convar 变量 |
+| `qb-storerobbery` | `resources/[qb]/qb-storerobbery/server/main.lua` | 重构结算逻辑，接入服务端计时引擎防止作弊 |
+| `configs` | `configs/modules/crime.cfg` | 新增 `crime_min_police_storerobbery` Convar 变量 |
 
 ---
 
@@ -67,7 +67,7 @@
 ## 💾 5. 灾备机制与脏数据自愈 (Disaster Recovery & Dirty Flush)
 [详细记录发生突发宕机、断电、大吞吐写入失败时，如何通过内置工具强制刷盘、保障数据绝对不丢失。]
 
-*   **冷启动自愈**：如何解析 JSON 数据快照（如 `data/economy_state.json`）并恢复之前的宏观调控数值。
+*   **冷启动自愈**：如何解析 JSON 数据快照（如 `resources/[custom]/custom-economy/data/economy_state.json`）并恢复之前的宏观调控数值。
 *   **紧急数据保存机制**：当玩家异常断线，本模块如何响应 `ForceFlush`，自动重试将脏数据写回 MariaDB。
 ```
 

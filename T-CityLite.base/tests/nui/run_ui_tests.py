@@ -56,17 +56,50 @@ class StaticServer:
 
 
 def nui_init_script(resource: str) -> str:
+    """注入 NUI 桩：GetParentResourceName / fetch / __nuiCalls。
+
+    `fetch` 必须返回**非空 JSON 正文**。前端（custom-phone 的 utils/nui.ts）把
+    `await resp.text()` 交给 JSON.parse 解析，正文为空就会抛
+    "NUI <event> replied HTTP 200: "，而这条 error 会被 collect_errors 记成失败。
+    空 body 的桩是历史遗留（早期前端用 resp.json()），所以这里按事件名给一份
+    最小可用的 payload。
+    """
     return f"""
 window.__resourceName = {json.dumps(resource)};
 window.__nuiCalls = [];
 window.GetParentResourceName = () => window.__resourceName;
 window.fetch = async (url, opts) => {{
+  const key = String(url);
   window.__nuiCalls.push({{
-    url: String(url),
+    url: key,
     method: (opts && opts.method) || 'GET',
     body: (opts && opts.body) || null,
   }});
-  return {{ ok: true, status: 200, json: async () => ({{}}), text: async () => '' }};
+  const event = key.split('/').pop().split('?')[0];
+  const emptyPlayer = {{
+    citizenid: 'SMOKE0001', name: 'Smoke Test', phone: '0000000000',
+    money: {{ cash: 0, bank: 0 }},
+    career: {{ primary_role: 'civilian', rank_tier: 'entry', department: '', certs: [] }},
+  }};
+  const payloads = {{
+    nuiReady: {{ success: true }},
+    phoneOpenAck: {{ success: true }},
+    closePhone: {{ success: true }},
+    getPhoneData: {{
+      success: true, playerData: emptyPlayer,
+      contacts: [], messages: [], notifications: [], jobBoard: [], factionMessages: [],
+    }},
+    getPhoneApps: {{ success: true, apps: [] }},
+    getCallHistory: {{ success: true, calls: [] }},
+  }};
+  const body = payloads[event] || {{ success: true }};
+  const text = JSON.stringify(body);
+  return {{
+    ok: true, status: 200,
+    json: async () => body,
+    text: async () => text,
+    headers: {{ get: () => 'application/json' }},
+  }};
 }};
 """
 

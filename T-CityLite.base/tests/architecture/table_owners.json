@@ -17,43 +17,68 @@
   "owners": [
     {
       "owner": "custom-police",
-      "tables": ["police_*"]
+      "tables": [
+        "police_*"
+      ]
     },
     {
       "owner": "custom-phone",
-      "tables": ["phone_*"]
+      "tables": [
+        "phone_*"
+      ]
     },
     {
       "owner": "custom-justice",
-      "tables": ["justice_*"]
+      "tables": [
+        "justice_*"
+      ]
     },
     {
       "owner": "qb-core",
-      "tables": ["players", "player_vehicles", "bans", "player_warns"]
+      "tables": [
+        "players",
+        "player_vehicles",
+        "bans",
+        "player_warns"
+      ]
     },
     {
       "owner": "qb-inventory",
-      "tables": ["inventories"]
+      "tables": [
+        "inventories"
+      ]
     },
     {
       "owner": "custom-director",
-      "tables": ["agent_*"]
+      "tables": [
+        "agent_*"
+      ]
     },
     {
       "owner": "custom-quest",
-      "tables": ["player_quests", "quest_*"]
+      "tables": [
+        "player_quests",
+        "quest_*"
+      ]
     },
     {
       "owner": "qb-houses",
-      "tables": ["player_houses", "houselocations"]
+      "tables": [
+        "player_houses",
+        "houselocations"
+      ]
     },
     {
       "owner": "tcity-dashboard",
-      "tables": ["plate_flags"]
+      "tables": [
+        "plate_flags"
+      ]
     },
     {
       "owner": "story-engine",
-      "tables": ["player_choices"]
+      "tables": [
+        "player_choices"
+      ]
     }
   ],
   "entries": [
@@ -97,28 +122,6 @@
       "owner": "qb-core",
       "file": "custom-career/server/main.lua",
       "reason": "职业系统直接 UPDATE players SET rank_tier/department/district/certs，绕过 Player.Functions 且无审计；目标改 qb-core API，属于独立技术债。",
-      "added": "2026-10-24",
-      "expires": "2026-12-31",
-      "ticket": "TD-09"
-    },
-    {
-      "id": "main-player-metadata",
-      "writer": "custom-main",
-      "table": "players",
-      "owner": "qb-core",
-      "file": "custom-main/server/security.lua",
-      "reason": "custom-main 直写 players.metadata（wanted/criminalrecord 持久化），是 wanted 三源之一；统一到 qb-core/Player.Functions 前保留。",
-      "added": "2026-10-24",
-      "expires": "2026-12-31",
-      "ticket": "TD-06"
-    },
-    {
-      "id": "phone-banking-player-money",
-      "writer": "custom-phone",
-      "table": "players",
-      "owner": "qb-core",
-      "file": "custom-phone/server/banking.lua",
-      "reason": "银行 App 的转账直接写 players.money 列；目标改经 qb-core 账号 API（或经济服务），在改造前属于已知债务。",
       "added": "2026-10-24",
       "expires": "2026-12-31",
       "ticket": "TD-09"

@@ -165,6 +165,7 @@ end)
 QBCore.Commands.Add('crypto', '', {}, false, function(source)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
     local MyPocket = math.ceil(Player.PlayerData.money.crypto * Crypto.Worth['qbit'])
 
     TriggerClientEvent('QBCore:Notify', src, Lang:t('text.you_have_with_a_value_of', { playerPlayerDataMoneyCrypto = Player.PlayerData.money.crypto, mypocket = MyPocket }))
@@ -325,9 +326,15 @@ QBCore.Functions.CreateCallback('qb-crypto:server:TransferCrypto', function(sour
                 Target.Functions.AddMoney('crypto', tonumber(data.Coins), 'transfer crypto')
                 TriggerClientEvent('qb-phone:client:AddTransaction', Target.PlayerData.source, Player, data, 'There are ' .. tonumber(data.Coins) .. " Qbit('s) credited!", 'Credit')
             else
-                local MoneyData = json.decode(result[1].money)
-                MoneyData.crypto = MoneyData.crypto + tonumber(data.Coins)
-                MySQL.update('UPDATE players SET money = ? WHERE citizenid = ?', { json.encode(MoneyData), result[1].citizenid })
+                -- 原来是 `SET money = ?` 整块覆盖：先读快照再写回，中间任何人动过 bank/cash
+                -- 都会被无声回滚（丢更新）。改走 owner 的离线入账（JSON_SET 算术）。
+                exports['qb-core']:EconomyAddMoneyOffline(result[1].citizenid, 'crypto', tonumber(data.Coins),
+                    'crypto transfer (offline)', function(ok)
+                    if not ok then
+                        Player.Functions.AddMoney('crypto', tonumber(data.Coins), 'crypto transfer rollback')
+                        TriggerClientEvent('QBCore:Notify', source, '转账失败：对方账户入账失败，已退款', 'error')
+                    end
+                end)
             end
             cb(CryptoData)
         else

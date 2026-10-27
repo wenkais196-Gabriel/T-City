@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PhoneShell from './components/PhoneShell.svelte';
+  import DeviceShell from './components/DeviceShell.svelte';
   import Contacts from './apps/Contacts.svelte';
   import Messages from './apps/Messages.svelte';
   import Banking from './apps/Banking.svelte';
@@ -34,6 +34,7 @@
 
   import {
     isPhoneOpen,
+    surface,
     activeApp,
     playerData,
     messagesList,
@@ -56,6 +57,7 @@
     endActiveCall
   } from './stores/call';
   import { get } from 'svelte/store';
+  import { isSurface } from './core/surface';
   import { onMount } from 'svelte';
 
   // Background Wallpaper: a themed CSS gradient defined in app.css (no remote
@@ -66,13 +68,26 @@
   let gameDate = $state('May 31');
 
   onMount(() => {
+    // 视口上报：surface 的阈值判定在 Lua，但只有 CEF 知道真实 CSS px。
+    const reportViewport = () => {
+      void fetchNui('surfaceInfo', { width: window.innerWidth, height: window.innerHeight }).catch(() => {});
+    };
+    reportViewport();
+    window.addEventListener('resize', reportViewport);
+
     // 1. Listen for Phone Open signal from Lua
     registerNuiEvent('phone:open', (data) => {
+      // 外壳形态由 Lua 决定；UI 只是照做。非法值一律退回手机，绝不猜。
+      surface.set(isSurface(data?.surface) ? data.surface : 'phone');
       isPhoneOpen.set(true);
       // Keep the call screen if a call is still ringing/ongoing when reopened.
       activeApp.set(get(callPhase) === 'idle' ? 'home' : 'phonecall');
       loadPhoneData();
       void loadDynamicApps();
+      // Prove to the client that this frame exists: it resends phone:open until
+      // this answer arrives, because SendNUIMessage into a loading CEF page is
+      // silently dropped.
+      void fetchNui('phoneOpenAck').catch(() => {});
     });
 
     // Dispatch / agent voice line: CEF speaks it locally, subtitle mirrors it.
@@ -84,9 +99,10 @@
     });
 
     // 2. Listen for Phone Close signal
-    registerNuiEvent('phone:close', () => {
+    registerNuiEvent('phone:close', (data) => {
       isPhoneOpen.set(false);
-      activeApp.set('home');
+      // reason='switch' 是"换形态"而不是"退出"：别把玩家从 MDT 里踢回桌面。
+      if (data?.reason !== 'switch') activeApp.set('home');
       stopDispatchSpeech();
       clearSubtitle();
       // The screen is gone, so end/decline any active call instead of leaving a
@@ -236,7 +252,7 @@
 </script>
 
 {#if $isPhoneOpen}
-  <PhoneShell>
+  <DeviceShell surface={$surface}>
     <!-- Background Wallpaper -->
     <div class="phone-wallpaper">
       <div class="wallpaper-dim"></div>
@@ -398,7 +414,7 @@
         {/if}
       </div>
     {/if}
-  </PhoneShell>
+  </DeviceShell>
 {/if}
 
 <!-- Browser development quick trigger tools (hidden in game) -->

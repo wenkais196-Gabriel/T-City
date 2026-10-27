@@ -86,10 +86,13 @@ server_scripts {
     'server/quest_mutex.lua',
     'server/quest_group.lua',
     'server/quest_manager.lua',
+    'server/quest_availability.lua',      -- 只读：手机任务列表的数据源（TriggerQuest 仍是接取权威）
     'server/main.lua',
 }
 
 client_scripts {
+    -- 客户端共享助手（加载期包含，零调用开销；必须排在其它 client 脚本之前）
+    '@core-framework/client/shared.lua',
     'client/main.lua',
     'client/quest_checkpoint.lua',            -- v0.11: Native Checkpoint 管理器
     'client/quest_pos_collector.lua',         -- v0.11: 航空坐标采集工具

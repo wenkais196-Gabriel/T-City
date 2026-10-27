@@ -15,13 +15,9 @@ local QBCore = exports['qb-core']:GetCoreObject()
 local rateLimits = {} -- [src] = { hotwire = timestamp, lockpick = timestamp }
 
 local function checkRateLimit(src, action)
-    local now = os.clock() * 1000
-    if not rateLimits[src] then rateLimits[src] = {} end
-    local last = rateLimits[src][action] or 0
-    local limit = Config.Vehicles.Security.RateLimitMs
-    if now - last < limit then return false end
-    rateLimits[src][action] = now
-    return true
+    -- 走 core-framework 的限流 owner，冷却时长仍由 Config 决定
+    return exports['core-framework']:RateLimitCooldown(
+        ('veh:%s:%s'):format(src, action), Config.Vehicles.Security.RateLimitMs)
 end
 
 -- ==============================================================

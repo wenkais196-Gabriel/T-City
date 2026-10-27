@@ -30,7 +30,7 @@ Browser (CEF)  <-- fetch / postMessage -->  Client Lua (CitizenFX)
 
 - `ui_page 'html/index.html'` 指定入口；`files` 必须列出所有资源（可用 `html/**`）。
 - NUI 资源通过 `https://cfx-nui-<resource>/` 协议作用域提供；旧 `nui://` 已不是安全上下文。
-- **Vite 必须 `base: './'`**，否则构建产物 `/assets/index.js` 会解析到 `https://cfx-nui-<res>/assets/...`（少了 `html/`），页面空白。
+- **Vite 必须 `base: './'`**，否则构建产物里的绝对路径 `/assets/…` 会解析到 `https://cfx-nui-<res>/assets/...`（少了 `html/`），页面空白。
 - 我们的 `custom-phone` 已经用 `base: './'` + `./assets/...`，这一项是对的；但任何新 NUI 项目都必须先检查。
 - `ui_page` 只有一个入口；多页面用前端路由/状态，不要指望多 HTML。
 
@@ -57,7 +57,7 @@ end)
 - `fetch` 没有内建超时；CEF 丢回调/资源重启时就是永久 pending。
 - 参考：[NUI Callbacks](https://docs.fivem.net/docs/scripting-manual/nui-development/nui-callbacks/)。
 
-我们在 P1 已加 `AbortController` 6 秒超时；这是所有 NUI fetch 的基线要求。`appQuery`/`appAction` 走客户端 request_id 协议，客户端自己的截止时间是 8 秒，所以它们的 fetch 超时放宽到 9 秒，让 Lua 先把结构化 `timeout` 返回给 UI（`web/src/utils/nui.ts`）。
+我们在 P1 已加 `AbortController` 6 秒超时；这是所有 NUI fetch 的基线要求。`appQuery`/`appAction` 走客户端 request_id 协议，客户端自己的截止时间是 8 秒，所以它们的 fetch 超时放宽到 9 秒，让 Lua 先把结构化 `timeout` 返回给 UI（`resources/[custom]/custom-phone/web/src/utils/nui.ts`）。
 
 ### 2.3 焦点（Focus）是全局栈
 

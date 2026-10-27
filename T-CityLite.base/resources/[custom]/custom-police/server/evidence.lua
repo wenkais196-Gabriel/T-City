@@ -20,7 +20,11 @@ local FingerDrops = {}
 local PlayerStatus = {}
 
 local MAX_TRACKED_DROPS = 500      -- per table, bounds a spamming client's memory
-local TRACKED_TTL = 1800           -- seconds a server-side drop row is kept
+-- 掉落行保留多久（秒）。默认 30 分钟；运维/测试可用 convar 覆盖：
+--   set tcity_evidence_ttl 60      -- 一分钟就清，方便现场验证
+-- 每次清扫时才读 convar：这样改完不用重启资源，单测也能直接改。
+local DEFAULT_TRACKED_TTL = 1800
+local TTL_SWEEP_INTERVAL = 60      -- 清扫周期（秒）
 local MAX_CLEAR_LIST = 200        -- ids accepted per Clear* request
 local MAX_COORDS_DRIFT = 25.0      -- metres between the caller's ped and the drop
 local PICKUP_COOLDOWN = 1          -- seconds between Add*ToInventory per source
@@ -78,6 +82,11 @@ end
 
 --- A client may only report a drop where its own ped actually stands.
 local function sanitizeCoords(coords)
+    -- vector3 在 CfxLua 里是原生类型，不是 table：旧客户端（以及任何沿用原生 vector3
+    -- 的调用者）会因为 type ~= 'table' 被整枪丢掉，所以这里两种形状都收。
+    if type(coords) == 'vector3' then
+        return { x = coords.x, y = coords.y, z = coords.z }
+    end
     if type(coords) ~= 'table' then return nil end
     local x, y, z = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
     if not x or not y or not z then return nil end
@@ -89,14 +98,17 @@ local function sanitizeCoords(coords)
     return { x = x, y = y, z = z }
 end
 
+---@return table|nil clean, string|nil reason
 local function coordsNearSource(src, coords)
     local clean = sanitizeCoords(coords)
-    if not clean then return nil end
+    if not clean then return nil, 'coords are not a {x,y,z} table' end
     local ped = GetPlayerPed(src)
-    if not ped or ped == 0 then return nil end
+    if not ped or ped == 0 then return nil, 'no ped for source' end
     local origin = GetEntityCoords(ped)
-    if #(vector3(clean.x, clean.y, clean.z) - origin) > MAX_COORDS_DRIFT then return nil end
-    return clean
+    if #(vector3(clean.x, clean.y, clean.z) - origin) > MAX_COORDS_DRIFT then
+        return nil, 'coords too far from ped'
+    end
+    return clean, nil
 end
 
 local function onlinePlayer(src)
@@ -118,14 +130,37 @@ end
 
 --- Remember a drop server-side. The TTL sweep keeps the table self-limiting;
 --- the hard cap stops a burst before the sweep can run.
-local function trackDrop(store, id, row)
-    if countKeys(store) >= MAX_TRACKED_DROPS then
-        local now = os.time()
-        for key, value in pairs(store) do
-            if type(value) == 'table' and value.at and now - value.at > TRACKED_TTL then
-                store[key] = nil
-            end
+--- 清掉老于 TTL 的行，并**广播**给所有客户端让它们删掉屏幕上的标记。
+--- 只删本地表不广播 = 客户端留着一个"幽灵"标记，玩家走过去按 G 什么也换不到。
+---@return number removed
+local function pruneExpired(store, removeEvent, now)
+    local ttl = GetConvarInt('tcity_evidence_ttl', DEFAULT_TRACKED_TTL)
+    local removed = 0
+    for id, row in pairs(store) do
+        if type(row) == 'table' and row.at and now - row.at > ttl then
+            store[id] = nil
+            TriggerClientEvent(removeEvent, -1, id)
+            removed = removed + 1
         end
+    end
+    return removed
+end
+
+local function pruneExpiredDrops()
+    local now = os.time()
+    local removed = 0
+    removed = removed + pruneExpired(Casings, 'evidence:client:RemoveCasing', now)
+    removed = removed + pruneExpired(BloodDrops, 'evidence:client:RemoveBlooddrop', now)
+    removed = removed + pruneExpired(FingerDrops, 'evidence:client:RemoveFingerprint', now)
+    if removed > 0 and GetConvarInt('tcity_evidence_debug', 0) == 1 then
+        print(('[evidence] expired %d drops'):format(removed))
+    end
+    return removed
+end
+
+local function trackDrop(store, id, row, removeEvent)
+    if countKeys(store) >= MAX_TRACKED_DROPS then
+        pruneExpired(store, removeEvent, os.time())
         if countKeys(store) >= MAX_TRACKED_DROPS then return false end
     end
     row.at = os.time()
@@ -170,6 +205,22 @@ local function evidenceInfo(info, keys)
     end
     if kept == 0 then return nil end
     return clean
+end
+
+--- 客户端唯一被允许提供的字段是**街道名**：只有客户端拿得到原生街道名。
+--- 其余（weapon / serie / dna / bloodtype / fingerprint）一律用服务端自己的掉落记录，
+--- 否则改过的客户端可以凭空造一个证据袋，或者把别人的 DNA 写进去。
+---@return string|nil
+local function streetFromClient(info)
+    local clean = evidenceInfo(info, { 'street' })
+    return clean and clean.street or nil
+end
+
+--- 与客户端 DnaHash 一致：把 citizenid 逐字节转成十六进制（只用于展示，不做校验）。
+local function dnaHash(value)
+    return (tostring(value or ''):gsub('.', function(c)
+        return string.format('%02x', string.byte(c))
+    end))
 end
 
 --- Validate an id list before touching it. A malformed element rejects the
@@ -252,7 +303,7 @@ RegisterNetEvent('evidence:server:CreateBloodDrop', function(citizenid, bloodtyp
     end
     if not blood or blood == '' then return end
     local bloodId = CreateBloodId()
-    if not trackDrop(BloodDrops, bloodId, { dna = dna, bloodtype = blood }) then return end
+    if not trackDrop(BloodDrops, bloodId, { dna = dna, bloodtype = blood }, 'evidence:client:RemoveBlooddrop') then return end
     TriggerClientEvent('evidence:client:AddBlooddrop', -1, bloodId, dna, blood, where)
 end)
 
@@ -267,7 +318,7 @@ RegisterNetEvent('evidence:server:CreateFingerDrop', function(coords)
     local where = coordsNearSource(src, coords)
     if not where then return end
     local fingerId = CreateFingerId()
-    if not trackDrop(FingerDrops, fingerId, { fingerprint = fingerprint }) then return end
+    if not trackDrop(FingerDrops, fingerId, { fingerprint = fingerprint }, 'evidence:client:RemoveFingerprint') then return end
     TriggerClientEvent('evidence:client:AddFingerPrint', -1, fingerId, fingerprint, where)
 end)
 
@@ -293,8 +344,20 @@ RegisterNetEvent('evidence:server:AddBlooddropToInventory', function(bloodId, bl
     if pickupRateLimited(src) then return end
     local id = tonumber(bloodId)
     if not id then return end
-    local info = evidenceInfo(bloodInfo, { 'label', 'type', 'street', 'dnalabel', 'bloodtype' })
-    if not info then return end
+    local drop = BloodDrops[id]
+    if type(drop) ~= 'table' then
+        if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+            print(('[evidence] pickup refused: blood %s is not tracked here'):format(tostring(id)))
+        end
+        return
+    end
+    local info = {
+        label = Lang:t('info.blood'),
+        type = 'blood',
+        street = streetFromClient(bloodInfo),
+        dnalabel = dnaHash(drop.dna),
+        bloodtype = drop.bloodtype,
+    }
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddBlooddropToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddBlooddropToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
@@ -312,8 +375,19 @@ RegisterNetEvent('evidence:server:AddFingerprintToInventory', function(fingerId,
     if pickupRateLimited(src) then return end
     local id = tonumber(fingerId)
     if not id then return end
-    local info = evidenceInfo(fingerInfo, { 'label', 'type', 'street', 'fingerprint' })
-    if not info then return end
+    local drop = FingerDrops[id]
+    if type(drop) ~= 'table' then
+        if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+            print(('[evidence] pickup refused: fingerprint %s is not tracked here'):format(tostring(id)))
+        end
+        return
+    end
+    local info = {
+        label = Lang:t('info.fingerprint'),
+        type = 'fingerprint',
+        street = streetFromClient(fingerInfo),
+        fingerprint = drop.fingerprint,
+    }
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddFingerprintToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddFingerprintToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
@@ -330,11 +404,23 @@ end)
 --- inventory, never from the payload.
 RegisterNetEvent('evidence:server:CreateCasing', function(weapon, coords)
     local src = source
+    -- 诊断开关（默认关）：把每条**拒绝**路径也打出来。否则"日志里没有 [evidence] 行"
+    -- 既可能是客户端没发，也可能是服务端在下面某个 return 上静默丢掉了。
+    local debug = GetConvarInt('tcity_evidence_debug', 0) == 1
     local Player = onlinePlayer(src)
-    if not Player then return end
-    if type(weapon) ~= 'number' then return end
-    local where = coordsNearSource(src, coords)
-    if not where then return end
+    if not Player then
+        if debug then print(('[evidence] rejected: no player src=%s'):format(tostring(src))) end
+        return
+    end
+    if type(weapon) ~= 'number' then
+        if debug then print(('[evidence] rejected: weapon not a number src=%s'):format(tostring(src))) end
+        return
+    end
+    local where, why = coordsNearSource(src, coords)
+    if not where then
+        if debug then print(('[evidence] rejected casing: %s src=%s'):format(why, tostring(src))) end
+        return
+    end
     local casingId = CreateCasingId()
     local weaponInfo = QBCore.Shared.Weapons[weapon]
     local serieNumber = nil
@@ -347,7 +433,17 @@ RegisterNetEvent('evidence:server:CreateCasing', function(weapon, coords)
         end
     end
     if type(serieNumber) ~= 'string' then serieNumber = nil end
-    if not trackDrop(Casings, casingId, { weapon = weapon, serie = serieNumber }) then return end
+    if not trackDrop(Casings, casingId, { weapon = weapon, serie = serieNumber }, 'evidence:client:RemoveCasing') then
+        if debug then print(('[evidence] rejected: casing table full src=%s'):format(tostring(src))) end
+        return
+    end
+    -- 诊断开关（默认关）：`set tcity_evidence_debug 1` 打开后，每颗弹壳在服务端落一行。
+    -- 这个开关的用途是**把"看不到弹壳"拆成两半**：服务端有行 = 客户端发了、问题只在客户端显示；
+    -- 没行 = 客户端根本没发（枪不在白名单外、或 IsPedShooting 没触发）。
+    if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+        print(('[evidence] casing %s weapon=%s src=%s serie=%s')
+            :format(tostring(casingId), tostring(weapon), tostring(src), tostring(serieNumber)))
+    end
     TriggerClientEvent('evidence:client:AddCasing', -1, casingId, weapon, where, serieNumber)
 end)
 
@@ -368,8 +464,25 @@ RegisterNetEvent('evidence:server:AddCasingToInventory', function(casingId, casi
     if pickupRateLimited(src) then return end
     local id = tonumber(casingId)
     if not id then return end
-    local info = evidenceInfo(casingInfo, { 'label', 'type', 'street', 'ammolabel', 'ammotype', 'serie' })
-    if not info then return end
+    local drop = Casings[id]
+    if type(drop) ~= 'table' then
+        -- 服务端已经不记得这颗弹壳（清场 / 上限淘汰 / 资源重启）：客户端屏幕上可能还留着
+        -- 一个幽灵标记，绝不能凭它发证据袋。
+        if GetConvarInt('tcity_evidence_debug', 0) == 1 then
+            print(('[evidence] pickup refused: casing %s is not tracked here'):format(tostring(id)))
+        end
+        return
+    end
+    local weaponInfo = QBCore.Shared.Weapons[drop.weapon]
+    local ammotype = type(weaponInfo) == 'table' and weaponInfo.ammotype or nil
+    local info = {
+        label = Lang:t('info.casing'),
+        type = 'casing',
+        street = streetFromClient(casingInfo),
+        ammolabel = ammotype and Config.AmmoLabels[ammotype] or nil,
+        ammotype = drop.weapon,
+        serie = drop.serie,
+    }
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddCasingToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddCasingToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
@@ -378,5 +491,22 @@ RegisterNetEvent('evidence:server:AddCasingToInventory', function(casingId, casi
         end
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.have_evidence_bag'), 'error')
+    end
+end)
+
+-- ── 定时清扫 ─────────────────────────────────────────────────────────────────
+-- 之前 TTL 只在"表满 500"时才顺手跑一次，于是没到上限的地面证据整局都不会消失：
+-- 地上越积越多，而且客户端连一条移除消息都收不到。这里改成每分钟扫一次，
+-- 过期就删并广播 Remove*，客户端屏幕上的箭头才会跟着消失。
+--
+-- 抽成 EvidenceMaintenance 是为了单测能直接驱动一次清扫（不用等线程/改系统时间）。
+EvidenceMaintenance = {
+    PruneExpired = pruneExpiredDrops,
+}
+
+CreateThread(function()
+    while true do
+        Wait(TTL_SWEEP_INTERVAL * 1000)
+        pruneExpiredDrops()
     end
 end)

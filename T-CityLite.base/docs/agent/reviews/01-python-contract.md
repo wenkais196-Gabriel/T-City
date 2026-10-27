@@ -452,7 +452,7 @@ PY
 - `test_agent_contract.CODE_TABLE` 没有覆盖 `idempotency_conflict`、`method_not_allowed`、`director_unreachable`、`registry_unavailable` 这 4 个已映射 code（`test_agent_contract.py:23-62` 对比 `agent_contract.py:46-101`）。
 - 没有“显式 idempotency_key + dry_run”的用例；`test_dry_run_gets_the_dry_suffix`（`:270-275`）只测派生键。
 - 没有任何测试把 `sanitize_untrusted` 接到 facade 上，也没有 `untrusted:true`/`meta.untrusted_fields` 的断言——所以 R2 对测试完全不可见。
-- `tests/agent/test_agent_mcp.py` 不用 `mock.patch.dict(clear=True)`；如果开发者 shell 里有 `AGENT_GATEWAY_URL/TOKEN`，`test_tool_result_uses_content_wrapper` 会走真实网络。
+- MCP 契约测试文件（`test_agent_mcp.py`，尚未入库）不用 `mock.patch.dict(clear=True)`；如果开发者 shell 里有 `AGENT_GATEWAY_URL/TOKEN`，`test_tool_result_uses_content_wrapper` 会走真实网络。
 
 ---
 

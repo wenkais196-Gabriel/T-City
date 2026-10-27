@@ -18,10 +18,16 @@ shared_scripts {
 }
 
 client_scripts {
+    -- 客户端共享助手（加载期包含，零调用开销；必须排在其它 client 脚本之前）
+    '@core-framework/client/shared.lua',
+
+    -- 区域内按 E 的唯一实现（job.lua 等 6 处循环都用它）
+    'client/interact.lua',
 	'@PolyZone/client.lua',
 	'@PolyZone/BoxZone.lua',
 	'@PolyZone/ComboZone.lua',
 	'client/main.lua',
+	'client/incident_guidance.lua',
 	'client/camera.lua',
 	'client/interactions.lua',
 	'client/job.lua',
@@ -42,13 +48,23 @@ dependencies {
 	'custom-career',
 	'custom-certificates',
 	'custom-documents',
+	'core-framework',
 }
 
 server_scripts {
+
 	'@oxmysql/lib/MySQL.lua',
+    -- 审计的唯一写者：必须排在所有调用它的文件之前
+    'server/audit.lua',
+    'server/citations.lua',
+    'server/records.lua',
 	'server/main.lua',
 	'server/npc_budget.lua',
 	'server/p0.lua',
+	'server/p0_units.lua',
+	'server/p0_lifecycle.lua',
+	'server/p0_incidents.lua',
+	'server/p0_read.lua',
 	'server/p1.lua',
 	'server/p2_evidence.lua',
 	'server/p3_cases.lua',

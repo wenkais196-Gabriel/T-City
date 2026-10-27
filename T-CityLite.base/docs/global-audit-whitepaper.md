@@ -29,18 +29,18 @@
 
 | 排名 | 文件 | 调用次数 | 主要子调用 |
 |------|------|---------|-----------|
-| 1 | `[custom]/custom-phone/server/main.lua` | 32 | `GetPlayer`, `GetPlayers`, `CreateCallback` |
-| 2 | `[qb]/qb-adminmenu/server/server.lua` | 46 | `HasPermission`, `GetIdentifier`, `GetQBPlayers` |
-| 3 | `[qb]/qb-ambulancejob/server/main.lua` | 45 | `GetPlayer`, `GetQBPlayers`, `CreateCallback` |
-| 4 | `[qb]/qb-houses/server/main.lua` | 38 | `GetPlayer`, `CreateCallback`, `GetPlayers` |
-| 5 | `[qb]/qb-policejob/server/commands.lua` | 30 | `GetPlayer`, `HasPermission`, `GetPlayers` |
-| 6 | `[custom]/custom-phone/client/main.lua` | 21 | 100% `TriggerCallback` |
-| 7 | `[qb]/qb-mechanicjob/server/main.lua` | 25 | `GetPlayer`, `CreateCallback` |
-| 8 | `[qb]/qb-garbagejob/client/main.lua` | 28 | `TriggerCallback`, `Notify` |
-| 9 | `[qb]/qb-vehiclekeys/client/main.lua` | 38 | `GetPlayerData`, `GetVehicleProperties` |
-| 10 | `[qb]/qb-policejob/client/interactions.lua` | 39 | `GetPlayerData`, `TriggerCallback` |
+| 1 | `resources/[custom]/custom-phone/server/main.lua` | 32 | `GetPlayer`, `GetPlayers`, `CreateCallback` |
+| 2 | `resources/[qb]/qb-adminmenu/server/server.lua` | 46 | `HasPermission`, `GetIdentifier`, `GetQBPlayers` |
+| 3 | `resources/[qb]/qb-ambulancejob/server/main.lua` | 45 | `GetPlayer`, `GetQBPlayers`, `CreateCallback` |
+| 4 | `resources/[qb]/qb-houses/server/main.lua` | 38 | `GetPlayer`, `CreateCallback`, `GetPlayers` |
+| 5 | qb-policejob/server/commands.lua（已并入 custom-police） | 30 | `GetPlayer`, `HasPermission`, `GetPlayers` |
+| 6 | `resources/[custom]/custom-phone/client/main.lua` | 21 | 100% `TriggerCallback` |
+| 7 | `resources/[qb]/qb-mechanicjob/server/main.lua` | 25 | `GetPlayer`, `CreateCallback` |
+| 8 | qb-garbagejob/client/main.lua（已归档到 archive/） | 28 | `TriggerCallback`, `Notify` |
+| 9 | qb-vehiclekeys/client/main.lua（资源已下线） | 38 | `GetPlayerData`, `GetVehicleProperties` |
+| 10 | qb-policejob/client/interactions.lua（已并入 custom-police） | 39 | `GetPlayerData`, `TriggerCallback` |
 
-**关键发现**: `custom-phone/client/main.lua` 的 21 次 `QBCore.Functions` 调用 **100% 是 `TriggerCallback`** — 每个 NUI 交互都走 callback 通道，是项目中对 qb-core callback 系统耦合最深的自研模块。
+**关键发现**: `resources/[custom]/custom-phone/client/main.lua` 的 21 次 `QBCore.Functions` 调用 **100% 是 `TriggerCallback`** — 每个 NUI 交互都走 callback 通道，是项目中对 qb-core callback 系统耦合最深的自研模块。
 
 #### 1.1.2 跨资源事件依赖链（核心链路）
 
@@ -105,8 +105,8 @@ custom-phone 的依赖链（最复杂的依赖图）:
 | 位置 | 频率 | 问题 |
 |------|------|------|
 | `qb-hud/client.lua:222-309` | 50ms (20fps) | HUD 线程每秒比对 31+ 个字段，每次变化发 `SendNUIMessage` |
-| `qb-phone/client/main.lua` 全文件 | 各处 | 总计 **75 个 `SendNUIMessage`** 调用点 |
-| `custom-phone/client/main.lua` | 各事件 | 实现了**事件驱动推送**（非轮询），优于 qb-phone ✅ |
+| qb-phone 的 client/main.lua（客户端已迁到 custom-phone），全文件 | 各处 | 总计 **75 个 `SendNUIMessage`** 调用点 |
+| `resources/[custom]/custom-phone/client/main.lua` | 各事件 | 实现了**事件驱动推送**（非轮询），优于 qb-phone ✅ |
 
 #### 🟡 P2 — 缺失索引
 
@@ -536,7 +536,7 @@ Day 10:  Step 7 — 测试增强 (P2)           🟢 低优先级
 
 ### 3.4 第一个动刀的文件
 
-**`qb-phone/server/main.lua`** — 第 845 行的 `qb-phone:server:TransferMoney` 事件。
+**`resources/[compat]/qb-phone/server/main.lua`** — 第 845 行的 `qb-phone:server:TransferMoney` 事件。
 
 这是整个代码库中风险最高的单点：
 1. 先加后扣的资金流逻辑缺陷

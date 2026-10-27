@@ -498,6 +498,23 @@ exports('GetQuestCatalog', function()
     return QuestRegistry.GetCategorizedList()
 end)
 
+-- 9b. 手机任务 App：这个玩家现在能接哪些（只读，不落库、不发事件）
+-- 判定逻辑在 quest_availability.lua；接取仍然只能走 TriggerQuest（它会重新校验）。
+exports('GetAvailableQuests', function(source)
+    if not QuestAvailability then return {} end
+    return QuestAvailability.List(source)
+end)
+
+-- 9c. 手机任务详情：步骤只给标题与类型，不暴露坐标等执行细节
+exports('GetQuestDetail', function(source, questId)
+    if not QuestAvailability then return nil, 'unavailable' end
+    return QuestAvailability.Detail(source, questId)
+end)
+
+-- 启动自证：健康自检按这一行确认「玩家能接到任务」这条链路已就绪。
+-- 没有它，任务入口挂了和任务入口没写，从日志上看起来完全一样。
+print('[quest] ✅ 手机任务入口已就绪 (GetAvailableQuests / GetQuestDetail)')
+
 -- 10. v0.7.0: 检查指定任务是否活跃
 exports('IsQuestActive', function(source, questId)
     return QuestManager.IsQuestActive(source, questId)
@@ -987,6 +1004,19 @@ end, true) -- restricted
 
 RegisterCommand('listquests', function(source)
     local src = source
+    -- 控制台里 source == 0：没有客户端能收 chat:addMessage，直接 print 出来。
+    -- 否则运维在服务器上想确认"模板到底加载了几个"时会拿到一句 native 报错。
+    local function say(text, color)
+        if src == 0 then
+            print(text)
+            return
+        end
+        TriggerClientEvent('chat:addMessage', src, {
+            color = color,
+            multiline = true,
+            args = { text }
+        })
+    end
     local catalog = QuestRegistry.GetCategorizedList()
     local lines = {}
     for category, quests in pairs(catalog) do
@@ -996,17 +1026,11 @@ RegisterCommand('listquests', function(source)
         end
     end
     if #lines == 0 then
-        TriggerClientEvent('chat:addMessage', src, {
-            color = { 255, 100, 100 },
-            args = { '⚠️ 无已注册的任务模板！检查 quest_registry 日志' }
-        })
+        say('⚠️ 无已注册的任务模板！检查 quest_registry 日志', { 255, 100, 100 })
         return
     end
-    TriggerClientEvent('chat:addMessage', src, {
-        color = { 100, 200, 255 },
-        multiline = true,
-        args = { '📋 可用任务:\n' .. table.concat(lines, '\n') }
-    })
+    table.sort(lines)
+    say('📋 可用任务 (共 ' .. #lines .. ' 条):\n' .. table.concat(lines, '\n'), { 100, 200, 255 })
 end, true) -- restricted
 
 -- ==============================================================

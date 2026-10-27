@@ -1,6 +1,10 @@
 -- fxmanifest.lua — T-City Lite 核心服务框架
 
 fx_version 'cerulean'
+
+client_scripts {
+    'client/shared.lua',
+}
 game 'gta5'
 lua54 'yes'
 author 'T-City Lite'
@@ -8,12 +12,14 @@ description 'Core service framework: unified data access layer, cache engine, di
 version '0.6.0'
 
 shared_scripts {
+    'shared/util.lua',
     'bus.lua',
     'events/event_types.lua',
 }
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    'server/rate_limit.lua',
     'compat.lua',
     'contracts.lua',
     'services/economy_service.lua',
@@ -24,6 +30,7 @@ server_scripts {
     'services/world_state_service.lua',
     'services/patron_service.lua',
     'services/persistence_manager.lua',
+    'server/client_reports.lua',
 }
 
 dependencies {

@@ -1,7 +1,7 @@
 # 05 — Live tools / `auth` / 游标对抗性评审（`e8df70a`）
 
 - **评审对象**：`feat/agent-takeover-v2` @ `e8df70a`（`feat(agent): expose live perception as three MCP read tools`）
-- **基线**：`fe76857`（M1 live endpoints）；范围 `tools/agent_tools.json`、`tools/agent_tools.py`、`tools/agent_mcp.py`、`tests/agent/test_agent_*.py`、`shared/agent_tools.lua`、`docs/agent/TOOLS.md`
+- **基线**：`fe76857`（M1 live endpoints）；范围 `tools/agent_tools.json`、`tools/agent_tools.py`、`tools/agent_mcp.py`、`tests/agent/test_agent_*.py`、`resources/[custom]/custom-director/shared/agent_tools.lua`、`docs/agent/TOOLS.md`
 - **评审日期**：2026-10-22
 - **结论**：**需修（needs fix）** — 0×P0、2×P1、8×P2。没有鉴权绕过，但在“只读凭证与写凭证分离”和“契约版本”两处声称与实现不一致；当前状态**不建议合并**。
 - **行号**：全部以 `e8df70a` 为准。评审期间没有修改任何被 git 跟踪的文件（只新增本文件）；`--write` 后 `git status` 仍只有本 review 一个未跟踪文件。
@@ -39,7 +39,7 @@ python3 -m pytest -q tests/agent/test_agent_tools.py tests/agent/test_agent_cont
 # 107 passed, 331 subtests passed
 ```
 
-> 说明：最小副本缺少 DB fixture，`tests/agent/test_agent_data.py` / `test_agent_mcp.py` 各有一条与本提交无关的失败；变异只跑上面三个文件。评审期间 `/tmp` 一度触发 EDQUOT（`/tmp` 只有 1.7G，整仓副本太大），已删除所有副本，最终环境干净。
+> 说明：最小副本缺少 DB fixture，`test_agent_data.py` / `test_agent_mcp.py` 各有一条与本提交无关的失败；变异只跑上面三个文件。评审期间 `/tmp` 一度触发 EDQUOT（`/tmp` 只有 1.7G，整仓副本太大），已删除所有副本，最终环境干净。
 
 ---
 

@@ -1,7 +1,7 @@
 # 02 · Lua HTTP 抽取重构对抗性评审（`ccdd61e`）
 
 - **评审对象**：`ccdd61e refactor(director): extract testable HTTP API and add Lua harness`
-- **基线**：`9bd57d7`（旧 `server/main.lua`）→ `ccdd61e`（新 `server/http_api.lua` + 适配器 + harness）
+- **基线**：`9bd57d7`（旧 `resources/[custom]/custom-director/server/main.lua`）→ `ccdd61e`（新 `resources/[custom]/custom-director/server/http_api.lua` + 适配器 + harness）
 - **范围**：`T-CityLite.base/resources/[custom]/custom-director/`、`T-CityLite.base/tests/agent/lua/`
 - **方法**：逐函数文本对比 + 旧实现重建差分（定向矩阵 + 360 条随机请求）+ 变异测试 + 现有 pytest/Lua 套件
 - **环境**：Lua 5.4.8、pytest 9.0.2、Linux；`TCITY_ROOT=<repo>`

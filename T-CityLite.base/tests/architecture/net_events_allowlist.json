@@ -210,19 +210,19 @@
     },
     {
       "name": "custom-police:server:setStatus",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_units.lua",
       "category": "already_checked",
       "reason": "只允许警察改自己的 10-x 状态；事件体先 isPolice(data)，随后 SetUnitStatusForSource 再查状态白名单、onduty 和 duty_failed。",
-      "evidence": "p0.lua:590 setStatus — isPolice(data) → P.SetUnitStatusForSource（内含 VALID_STATUS + onduty 校验）",
+      "evidence": "p0_units.lua:590 setStatus — isPolice(data) → P.SetUnitStatusForSource（内含 VALID_STATUS + onduty 校验）",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
     {
       "name": "custom-police:server:911",
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_incidents.lua",
       "category": "civilian",
       "reason": "平民 911 必须对所有人开放；事件只接受 table + 在线玩家、每 source 5 秒 1 条，长度/priority 在 CreateIncident 里夹取。",
-      "evidence": "p0.lua:601 911 — type(payload) ~= 'table' → return, pd(src) check, CALL_911_COOLDOWN=5",
+      "evidence": "p0_incidents.lua:601 911 — type(payload) ~= 'table' → return, pd(src) check, CALL_911_COOLDOWN=5",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
@@ -344,14 +344,59 @@
       "expires": "2027-03-31"
     },
     {
-      "file": "custom-police/server/p0.lua",
+      "file": "custom-police/server/p0_units.lua",
       "category": "already_checked",
       "reason": "duty point toggle: handler rejects non-police via isPolice(pd(src)); the state write goes through P.SetDutyForSource (FIT-01).",
       "owner": "custom-police",
       "added": "2026-10-25",
       "expires": "2027-03-31",
       "name": "custom-police:server:toggleDuty",
-      "evidence": "p0.lua:734 handler: isPolice(pd(src)) then P.SetDutyForSource"
+      "evidence": "p0_units.lua:734 handler: isPolice(pd(src)) then P.SetDutyForSource"
+    },
+    {
+      "name": "phone:server:diag",
+      "file": "custom-phone/server/core/diag.lua",
+      "category": "diagnostic",
+      "reason": "四段往返诊断通道：只写服务端日志，不写库、不回包、不构成 RPC 面。payload 经 Sanitize 白名单投影（tid 3..64+字符集校验、kind/app/code 字符集与长度收敛、phases 最多 8 且序号 1..8、ui phase 必须在 13 项白名单内），trace 批次走 PhoneRateLimit 令牌桶 20/min burst 5，ui 事件按 (phase, src) 5s 冷却，另有全局每秒钟 50 行打印预算与 dropped 计数，客户端无法刷屏或注入。",
+      "evidence": "server/core/diag.lua:387 PhoneDiag.Accept — Sanitize + allowTrace(PhoneRateLimit 20/5) + allowUi(5s) + printBudgetOk(50/s)",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:nuiReady",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "NUI 自证握手：页面加载时把自己跑的是哪个 build、location.host 与 GetParentResourceName() 报给服务端，用于判定'改完不生效'是旧 bundle 缓存还是路由不通。只读取 build/host/parent/href 四个字符串字段，逐字符集收敛并截断；每 source 5s 一条，不写库、不回包、不涉及玩家数据。",
+      "evidence": "main.lua phone:server:nuiReady — NUI_READY_COOLDOWN_MS=5000 + field() gsub 收敛并截断",
+      "owner": "custom-phone",
+      "expires": "2026-11-30"
+    },
+    {
+      "name": "phone:server:nuiProbe",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "四段探针结果回报：NUI 用一次真实 appQuery 走完 NUI→client→server→回包→NUI 后把终态码与耗时报给服务端，作为每次资源重启的端到端自检。只读取 code/build 两个字符串（字符集收敛 + 截断）与 dur 数字；每 source 3s 一条，不写库、不回包、不涉及玩家数据。",
+      "evidence": "main.lua phone:server:nuiProbe — PROBE_COOLDOWN_MS=3000 + code/build gsub 收敛 + dur 取整",
+      "owner": "custom-phone",
+      "expires": "2026-11-30"
+    },
+    {
+      "name": "core-framework:server:clientReady",
+      "file": "[standalone]/core-framework/server/client_reports.lua",
+      "category": "diagnostic",
+      "reason": "客户端资源加载完成信标。客户端 print 只进 F8、服务端看不到，这个通道让\"新客户端代码到底有没有加载\"能从服务端日志回答。不含业务数据，只写一行日志。",
+      "evidence": "client_reports.lua:clientReady — allow() 走 RateLimitWindow 3/60s + clean(resourceName,64) + clean(version,32) 白名单字符集",
+      "owner": "core-framework",
+      "expires": "2027-06-30"
+    },
+    {
+      "name": "core-framework:server:clientReport",
+      "file": "[standalone]/core-framework/server/client_reports.lua",
+      "category": "diagnostic",
+      "reason": "客户端错误/降级上报（CFShared.Report）。只接 kind 白名单与一条 message，去控制字符后截断到 400 字，防止客户端伪造多行服务端日志；每玩家 10 条/分钟。",
+      "evidence": "client_reports.lua:clientReport — KINDS 白名单 + clean(message,400) 去 %c + allow() RateLimitWindow 10/60s",
+      "owner": "core-framework",
+      "expires": "2027-06-30"
     }
   ]
 }

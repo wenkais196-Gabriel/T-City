@@ -214,6 +214,19 @@ PhoneApps.Register({
                 return exports['custom-police']:AssignUnit(source, params.incident_id, params.citizenid)
             end)
         end,
+        -- 申领：assign + enroute + 推路线，一步到位（服务端唯一入口）
+        claim = function(source, params)
+            return structured('claim', function()
+                return exports['custom-police']:ClaimIncident(source, params.incident_id)
+            end)
+        end,
+        -- 自动检测失灵时的人工补录：服务端仍按 ped 坐标校验（宽容 100m）
+        arrive_manual = function(source, params)
+            return structured('arrive_manual', function()
+                return exports['custom-police']:ArriveIncident(
+                    source, params.incident_id, nil, { manual = true })
+            end)
+        end,
         enroute = function(source, params)
             return structured('enroute', function()
                 return exports['custom-police']:SetIncidentStatus(source, params.incident_id, 'enroute')

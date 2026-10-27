@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 
+CORE_UTIL = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'shared' / 'util.lua')
 SECURITY_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'services' / 'security_service.lua')
 
 
@@ -81,6 +82,7 @@ GetConvarInt = function(name, default)
     return tonumber(GetConvar(name, tostring(default or 0))) or default
 end
 GetCurrentResourceName = function() return "test" end
+IsDuplicityVersion = function() return true end
 GetPlayerName = function(src) return "Player" .. tostring(src) end
 LoadResourceFile = function() return "" end
 CreateThread = function(fn) end
@@ -106,12 +108,15 @@ function Bus.RegisterService(name, methods)
 end
 '''
 
+    with open(CORE_UTIL, 'r') as f:
+        util_code = f.read()
+
     with open(SECURITY_LUA, 'r') as f:
         security_code = f.read()
 
     security_code = security_code.replace("exports['qb-core']:GetCoreObject()", "QBCore")
 
-    full_script = mock + '\n' + security_code + '\n' + test_code
+    full_script = mock + '\n' + util_code + '\n' + security_code + '\n' + test_code
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False) as f:
         f.write(full_script)

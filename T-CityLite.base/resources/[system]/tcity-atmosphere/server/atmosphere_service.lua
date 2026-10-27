@@ -15,7 +15,7 @@ local Scenes = ok and result or {
     ['complete'] = { track = 'last_call_reprise',     volume = 0.10, loop = false, fadeInMs = 1500 },
 }
 
--- Per-player state: { scene, volume, lastRequestAt, requestCount, requestWindowStart }
+-- Per-player state: { scene, volume, lastRequestAt }
 local playerState = {}
 
 -- Cooldowns per scene (ms) — prevents rapid scene switching
@@ -55,8 +55,6 @@ local function getPlayerState(src)
             scene              = 'default',
             volume             = nil,
             lastRequestAt      = 0,
-            requestCount       = 0,
-            requestWindowStart = 0,
             sceneTimeout       = nil,
             silenceTimer       = nil,  -- flag for silence-gap scheduling
         }
@@ -227,19 +225,11 @@ end
 -- ─── Layer 5: Rate Limit ─────────────────────────────────
 
 local function checkRateLimit(src, now)
-    local st = getPlayerState(src)
-
-    -- Reset window if expired
-    if now - st.requestWindowStart > RATE_LIMIT_WINDOW then
-        st.requestCount = 0
-        st.requestWindowStart = now
-    end
-
-    st.requestCount = st.requestCount + 1
-
-    if st.requestCount > RATE_LIMIT_MAX then
-        return false, 'rate_limited'
-    end
+    -- 走 core-framework 的限流 owner（原来在 per-player state 里自己数窗口：
+    -- requestCount / requestWindowStart 两个字段，除了本文件没有任何读者）
+    local allowed = exports['core-framework']:RateLimitWindow(
+        ('atm:%s'):format(tostring(src)), RATE_LIMIT_MAX, RATE_LIMIT_WINDOW, now)
+    if not allowed then return false, 'rate_limited' end
     return true
 end
 
@@ -479,6 +469,8 @@ end)
 -- Cleanup on player drop
 AddEventHandler('playerDropped', function(reason)
     local src = source
+    -- 限流键在 core-framework 的表里，玩家下线要显式清（原来是随 state 一起丢的）
+    exports['core-framework']:RateLimitReset(('atm:%s:'):format(tostring(src)))
     if playerState[src] then
         playerState[src] = nil
     end

@@ -74,12 +74,8 @@ local function trim(value)
 end
 
 local function audit(actorCid, action, target, detail, actorKind)
-    return pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
-            { actorCid, actorKind or 'player', action, target,
-              detail and tostring(detail):sub(1, 500) or nil })
-    end)
+    -- 唯一写者见 server/audit.lua（这里只保留同名包装，调用点不用改）
+    return PoliceAudit.Write(actorCid, action, target, detail, actorKind)
 end
 
 local function onDutyOfficers()
@@ -103,27 +99,16 @@ local function activeNpcCount()
     return math.floor(tonumber(count) or 0)
 end
 
-local function notifyOfficers(template, location, coords)
-    local subject = ('%s: %s'):format(template.code, template.title):sub(1, 200)
+local function notifyOfficers(incident, template, location)
     local content = ('%s（%s）'):format(
         (template.description:gsub('{location}', location.label)), location.label):sub(1, 500)
-    for _, officer in ipairs(onDutyOfficers()) do
-        -- Persistence belongs to custom-phone (FIT-02): enqueue through the
-        -- outbox so a phone restart retries instead of dropping the callout.
-        local payload = {
-            citizenid = officer.data.citizenid,
-            title = subject, content = content, app_id = 'police_mdt',
-        }
-        if type(Outbox) == 'table' and type(Outbox.Enqueue) == 'function' then
-            Outbox.Enqueue('notification', payload)
-        else
-            pcall(function()
-                exports['custom-phone']:Notify(
-                    payload.citizenid, payload.title, payload.content, payload.app_id)
-            end)
-        end
-        TriggerClientEvent('police:client:policeAlert', officer.source, coords, subject)
+    -- 与玩家报警、系统警报、控制台派单共用一条投影：标题带单号、地图标记只发一次。
+    -- （以前这里自己发一条不带单号的通知再插一次旗，手机上的"店被人抢了"和板上哪一行对不上。）
+    if type(PoliceDispatch) ~= 'table' or type(PoliceDispatch.ProjectIncident) ~= 'function' then
+        return false
     end
+    PoliceDispatch.ProjectIncident(incident, { description = content })
+    return true
 end
 
 --- Create one NPC callout.
@@ -168,24 +153,26 @@ function NPC.CreateNpcCallout(templateId, officerSrc)
     local title = ('[NPC] %s'):format(template.title):sub(1, 120)
     local description = (template.description:gsub('{location}', location.label)):sub(1, 1000)
 
-    local inserted = MySQL.insert.await([[
-        INSERT INTO police_incidents
-            (code, title, description, priority, x, y, z, created_by, npc_template)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ]], { template.code, title, description, template.priority,
-          coords.x, coords.y, coords.z, actorCid, template.id })
-    local id = InsertId(inserted)
-    if not id or id == 0 then
-        NPCBudget.Release(budgetId, 'db_error')
-        return false, 'db_error'
+    -- 走 police_incidents 的唯一写者（server/p0.lua 的 PoliceIncidents.InsertRow）。
+    -- 审计在本函数末尾单独记（npc.callout.create，actor_kind 可能是 player），
+    -- 所以让写者跳过它自己那条 incident.create，避免一次建单两条审计。
+    local inserted, insertReason = PoliceIncidents.InsertRow(actorCid, {
+        code = template.code, title = title, description = description,
+        priority = template.priority,
+        x = coords.x, y = coords.y, z = coords.z,
+        npc_template = template.id,
+    }, { audit = false })
+    if not inserted then
+        NPCBudget.Release(budgetId, insertReason or 'db_error')
+        return false, insertReason or 'db_error'
     end
-    id = tonumber(id)
+    local id = tonumber(inserted.id)
     calloutBudget[id] = budgetId
 
     if not audit(actorCid, 'npc.callout.create', tostring(id), template.id, actorKind) then
         print(('[custom-police] npc.callout.create audit failed for #%s'):format(tostring(id)))
     end
-    notifyOfficers(template, location, coords)
+    notifyOfficers(inserted, template, location)
 
     return {
         id = id,

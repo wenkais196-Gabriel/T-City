@@ -73,6 +73,20 @@ function Bootstrap.Load(options)
     require('mysql')(env, options.db)
     require('json')
 
+    -- core-framework 的 convar 助手族（ConvarString/ConvarInt/...）是**全局**函数，
+    -- 资源里写的是 `exports['core-framework']:ConvarString(...)`。不加载这一份，
+    -- 所有读 convar 的开关都会读成空 → 功能被当成关闭（HTTP 适配器就返回 503）。
+    -- util.lua 的客户端分支用 IsDuplicityVersion 判侧别；服务端 harness 报 true。
+    _G.IsDuplicityVersion = _G.IsDuplicityVersion or function() return true end
+    local coreUtil = findRepoRoot() .. '/T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua'
+    dofile(coreUtil)
+    -- 每次 Load 都会新建 env（和新的 exports 表），所以要把 convar 助手按名重新绑进本次 env，
+    -- 否则第二次 Load 之后 `exports['core-framework']:ConvarString` 找不到函数，
+    -- 读 convar 的开关全被当成关闭（HTTP 适配器就 503）。
+    for _, helper in ipairs({ 'ConvarString', 'ConvarInt', 'ConvarFloat', 'ConvarBool' }) do
+        if type(_G[helper]) == 'function' then env.exports[helper] = _G[helper] end
+    end
+
     local resourceDir = findRepoRoot()
         .. '/T-CityLite.base/resources/[custom]/custom-director'
 

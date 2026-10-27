@@ -1,7 +1,6 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
 -- 冷却时间管理状态表
-local UserCooldowns = {}
 
 -- 辅助调试打印
 local function DebugPrint(msg)
@@ -20,25 +19,15 @@ end
 -- @param cooldownMs number 冷却毫秒数
 -- @return boolean 是否允许操作 (true: 允许; false: 被限流拦截)
 local function CheckRateLimit(src, action, cooldownMs)
-    local now = os.time() * 1000 + math.floor((os.clock() % 1) * 1000)
-    
-    if not UserCooldowns[src] then
-        UserCooldowns[src] = {}
-    end
-
-    local lastTrigger = UserCooldowns[src][action] or 0
-    local diff = now - lastTrigger
-
-    if diff < cooldownMs then
-        -- 触发限流，拒绝操作
-        DebugPrint(("RateLimit Triggered: Player=%s, Action=%s, Interval=%dms (Limit=%dms)"):format(
-            GetPlayerName(src) or "unknown", action, diff, cooldownMs
+    -- 冷却表收敛到 core-framework 的限流 owner；日志与返回值语义保持不变
+    local allowed = exports['core-framework']:RateLimitCooldown(
+        ('sec:%s:%s'):format(src, action), cooldownMs)
+    if not allowed then
+        DebugPrint(("RateLimit Triggered: Player=%s, Action=%s (Limit=%dms)"):format(
+            GetPlayerName(src) or "unknown", action, cooldownMs
         ))
-        return false
     end
-
-    UserCooldowns[src][action] = now
-    return true
+    return allowed
 end
 
 exports('CheckRateLimit', CheckRateLimit)
@@ -48,9 +37,8 @@ AddEventHandler('playerDropped', function(reason)
     local src = source
     
     -- 1. 清除冷却缓存
-    if UserCooldowns[src] then
-        UserCooldowns[src] = nil
-    end
+    -- 冷却表在 core-framework 的限流 owner 里，按 `sec:<src>:` 前缀清干净
+    exports['core-framework']:RateLimitReset(('sec:%s:'):format(src))
 
     -- 2. 检查 Combat Logging
     local Player = QBCore.Functions.GetPlayer(src)

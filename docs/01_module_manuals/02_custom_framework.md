@@ -64,7 +64,7 @@
 
 ### custom-main — 中央逻辑入口
 - 警察通缉分发系统（GPS 三角定位 8s 脉冲 + 雷达 blip）
-- **代码重复**: `server/security.lua` 和 `server/crime.lua` 是 custom-security/custom-crime 的副本
+- **代码重复（已清理）**: server/security.lua 和 server/crime.lua 曾是 custom-security/custom-crime 的副本
 
 > 📄 详见: `../02_script_index/custom-security-crime-main.md`
 

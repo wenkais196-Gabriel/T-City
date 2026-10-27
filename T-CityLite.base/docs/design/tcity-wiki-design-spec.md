@@ -507,7 +507,7 @@ set wiki_nui_enabled "true"
 
 ### 7.1 模块化 (Modularity)
 
-- ✅ 独立资源 `tcity-wiki`，在 `configs/modules/wiki.cfg` 白名单注册
+- ✅ 独立资源 `tcity-wiki`，在 configs/modules 下的 wiki.cfg（尚未创建）中白名单注册
 - ✅ 所有跨资源交互通过 `core-framework` Bus，零直调 exports
 - ✅ 内容源（Markdown）与消费端（MkDocs / NUI）解耦，各自独立构建
 
@@ -572,7 +572,7 @@ set wiki_nui_enabled "true"
 | 3.1 | 填充首批人物小传（模板 × N） | 城市档案有血肉 |
 | 3.2 | 填充首批阵营页面（LSPD、EMS、主要帮派） | 阵营档案就位 |
 | 3.3 | 搜索功能、页面内锚点导航 | 用户体验提升 |
-| 3.4 | `configs/modules/wiki.cfg` 注册到模块白名单 | 正式上线 |
+| 3.4 | configs/modules 下的 wiki.cfg（尚未创建）注册到模块白名单 | 正式上线 |
 
 ---
 
