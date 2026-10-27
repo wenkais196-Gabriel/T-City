@@ -495,3 +495,28 @@ exports('Stats', stats)
 
 print(('[custom-agent-client] loaded (enabled=%s). Exports: Execute, Cancel, Stats, ClientState'):format(
     tostring(Config().enabled)))
+
+-- ---------------------------------------------------------------------------
+-- 开发用：把一行客户端控制台命令转给某个在线玩家（agent 的手替身）。
+-- 只在 convar 打开时生效，且必须从服务端控制台/RCON 发起（restricted=true），
+-- 玩家自己敲 adc 无效。执行结果由客户端回报，落一行日志便于核对。
+-- ---------------------------------------------------------------------------
+RegisterCommand('adc', function(source, args)
+    if GetConvar('agent_devcmd_enabled', '0') ~= '1' then return end
+    if source ~= 0 then return end -- 只允许控制台/RCON
+    local target = tonumber(args and args[1])
+    local command = table.concat(args or {}, ' ', 2, #(args or {}))
+    if not target or command == '' then
+        print('[agent-client][devcmd] usage: adc <serverId> <client command>')
+        return
+    end
+    TriggerClientEvent('tcity:agent:devcmd', math.floor(target), command)
+    print(('[agent-client][devcmd] src=%d cmd=%s'):format(math.floor(target), command))
+end, true)
+
+RegisterNetEvent('tcity:agent:devcmd_result', function(command, status)
+    local src = source
+    print(('[agent-client][devcmd-result] src=%s status=%s cmd=%s'):format(
+        tostring(src), tostring(status), tostring(command)))
+end)
+
