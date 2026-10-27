@@ -43,6 +43,7 @@
         </div>
         <input
           type="range"
+          aria-label="Ringtone volume"
           min="0"
           max="100"
           step="1"
@@ -58,6 +59,7 @@
         </div>
         <input
           type="range"
+          aria-label="Call volume"
           min="0"
           max="100"
           step="1"

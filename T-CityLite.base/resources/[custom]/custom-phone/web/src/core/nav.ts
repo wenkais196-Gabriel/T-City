@@ -26,6 +26,9 @@ export function focusables(root: ParentNode = document): HTMLElement[] {
 function labelOf(el: HTMLElement): string {
   const aria = el.getAttribute('aria-label');
   if (aria) return aria.trim().slice(0, 40);
+  // 输入框没有文字，placeholder 才是有意义的名字（否则只会看到 "input"）
+  const placeholder = (el as HTMLInputElement).placeholder;
+  if (typeof placeholder === 'string' && placeholder.trim()) return placeholder.trim().slice(0, 40);
   const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
   if (text) return text.slice(0, 40);
   return el.tagName.toLowerCase();
@@ -76,6 +79,35 @@ export function move(dir: string): void {
   }
   const next = (index + step + items.length) % items.length;
   paint(items[next]);
+}
+
+/** PageUp/PageDown：一次挪 n 格。长列表按 24 次方向键太蠢。 */
+export function moveSteps(dir: string, steps: number): void {
+  for (let i = 0; i < Math.max(1, steps); i += 1) move(dir);
+}
+
+/** 焦点所在的可滚容器（没有就是 null）。 */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null;
+  while (node) {
+    if (node.scrollHeight > node.clientHeight + 1) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Home / End：跳到第一个 / 最后一个可聚焦元素。
+ * 焦点已经在某个可滚容器里时，只在那个容器里跳 —— 否则会跳到壳层的
+ * "回桌面"键（真机实测：MDT 列表里按 End 直接跳出了列表，一点用没有）。
+ */
+export function jump(edge: 'first' | 'last'): void {
+  const items = focusables();
+  if (items.length === 0) return;
+  const box = scrollParent(current);
+  const pool = box ? items.filter((el) => box.contains(el)) : items;
+  const list = pool.length > 0 ? pool : items;
+  paint(edge === 'first' ? list[0] : list[list.length - 1]);
 }
 
 /** 确认：焦点在输入框上就保持原样（让人继续打字），否则点一下。 */

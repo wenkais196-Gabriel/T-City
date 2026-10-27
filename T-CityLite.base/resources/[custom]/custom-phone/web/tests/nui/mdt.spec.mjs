@@ -66,12 +66,18 @@ export const scenarios = [
         checkEqual(`跳到 ${tab} 后 appState.tab`, lastTab(), tab);
       }
 
-      // 不属于自己的导航消息必须忽略
+      // 跳到别的 App：页面真的换了（以前这里靠 appState 不更新"假装"没换），
+      // 但 MDT 自己的页码不能被别人带偏 —— 回来还是 dispatch。
       await page.evaluate(() =>
         window.postMessage({ action: 'phone:navigate', app: 'quests', tab: 'me' }, '*'),
       );
-      await page.waitForTimeout(200);
-      checkEqual('别的 App 的跳页消息不影响 MDT', lastTab(), 'dispatch');
+      await page.waitForTimeout(300);
+      checkEqual('跳到任务 App 后回吐的 id 是 quests',
+        world.calls.filter((c) => c.callback === 'appState').at(-1)?.payload?.app, 'quests');
+
+      await page.evaluate(() => window.postMessage({ action: 'phone:navigate', app: 'police_mdt' }, '*'));
+      await page.waitForTimeout(300);
+      checkEqual('回到 MDT 时页码还是 dispatch', lastTab(), 'dispatch');
     },
   },
   {
