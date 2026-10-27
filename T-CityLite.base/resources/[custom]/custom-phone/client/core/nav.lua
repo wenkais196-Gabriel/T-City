@@ -63,6 +63,7 @@ local function rawEdges()
 end
 
 local running = false
+local ignoreToggleUntil = 0
 
 local function anyJustPressed(controls)
     for _, control in ipairs(controls) do
@@ -114,7 +115,7 @@ function PhoneNav.Tick()
     if edges.cancel or edges.escape then emit('back') end
     -- M：交给 NUI 走正常的关闭流程（closePhone → Lua ClosePhone）。
     -- 不用全局函数回调：nav.lua 比 main.lua 先加载，跨脚本全局在本 build 不可靠。
-    if edges.toggle then emit('toggle') end
+    if edges.toggle and GetGameTimer() >= ignoreToggleUntil then emit('toggle') end
 
     -- 2) 手柄（以及没被原始按键接住的键盘）：控制轮询兜底
     if not moved then
@@ -127,8 +128,17 @@ function PhoneNav.Tick()
 end
 
 --- 开屏后调用：允许 Tick 工作。重复调用是安全的。
+---
+--- 必须在这里把 rawPrev 按**当前**按键状态垫一遍：开手机的那一下 M 还按着，
+--- 不垫的话第一次 Tick 会把它当成"新按下的边沿"，刚打开就被关掉 —— 真机表现
+--- 就是"要按两次 M 才能打开"（第一次开 + 立刻被自己的边沿关掉）。
 function PhoneNav.Start()
     running = true
+    for kind, vk in pairs(RAW) do
+        rawPrev[kind] = IsRawKeyDown ~= nil and IsRawKeyDown(vk) or false
+    end
+    -- 再留一小段宽限：垫过的键要等玩家真松开再按才算边沿。
+    ignoreToggleUntil = GetGameTimer() + 250
 end
 
 --- 关屏时调用：停掉循环。

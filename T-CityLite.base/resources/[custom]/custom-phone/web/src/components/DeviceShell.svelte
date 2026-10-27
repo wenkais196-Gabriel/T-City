@@ -14,12 +14,15 @@
   const close = () => void closePhone();
 </script>
 
+<!-- 遮罩**不再**点击关闭：手机贴在屏幕右下角，遮罩占满其余视野，
+     真机上鼠标坐标一偏就落到遮罩上 → 玩家以为"点一下手机就关机"。
+     关闭只走三种明确入口：M / Esc / 平板状态栏的关闭按钮。 -->
 <div
   class="phone-backdrop-mask"
   data-surface={surface}
   style:background={preset.mask}
-  onclick={close}
   role="presentation"
+  tabindex="-1"
 >
   <div
     class="phone-wrapper device-shell"
@@ -40,8 +43,8 @@
       {/if}
 
       {#if preset.sideButtons}
-        <!-- Power Button -->
-        <button class="bezel-btn power-btn" aria-label="Close Phone" onclick={close}></button>
+        <!-- Power Button（装饰件：3px 宽、贴在壳外沿，鼠标点击会误触，不承担关闭职责） -->
+        <button class="bezel-btn power-btn" aria-label="Close Phone" aria-hidden="true" tabindex="-1"></button>
         <!-- Volume Keys -->
         <div class="bezel-btn vol-up"></div>
         <div class="bezel-btn vol-down"></div>
@@ -191,6 +194,7 @@
   /* Side Buttons */
   .bezel-btn {
     position: absolute;
+    pointer-events: none;
     background: #2c2c2e;
     border: none;
     border-radius: 2px;

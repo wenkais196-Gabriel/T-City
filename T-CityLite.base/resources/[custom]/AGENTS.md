@@ -52,6 +52,8 @@
 - `IsNuiFocused()` / `IsNuiFocusKeepingInput()` 在本 build **恒 false**：判定开关/焦点一律用
   自己的账（`Surface.IsOpen()` / `PhoneFocus.State()`），原生只当诊断字段，见
   `docs/client/research/nui-debug-playbook.md` §3.0a。同名 `RegisterCommand` 后注册者覆盖先注册者。
+- **CEF 里别用 `backdrop-filter: blur()`**：每个毛玻璃元素都会在整块区域重算模糊，
+  手机桌面/列表一多就会让整个游戏掉帧（真机表现是"手机很卡"）。要观感用半透明渐变 + 内高光。
 - **`restart <资源>` 会连带停掉所有依赖它的资源，而且不会自动拉回来** —— 例如
   `restart qb-inventory` 一次停掉 custom-police / qb-ambulancejob / qb-cityhall 等 12 个，
   之后 `/revive` 之类的功能就静默失效（资源不在，命令根本不存在）。改完要
