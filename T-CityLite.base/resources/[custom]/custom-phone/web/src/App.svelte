@@ -23,7 +23,7 @@
   import GangBossApp from './apps/leader/GangBossApp.svelte';
 
   import { registerNuiEvent, isBrowser, fetchNui, reportAppState } from './utils/nui';
-  import { navFocus, remeasure } from './core/nav';
+  import { navFocus, remeasure, setNavOrigin } from './core/nav';
   if (typeof window !== 'undefined') {
     window.addEventListener('error', (event) => {
       void fetchNui('clientError', { message: String(event.message), stack: String(event.error?.stack ?? '') }).catch(() => {});
@@ -66,6 +66,10 @@
   let lastReportedApp = '';
   // 自绘光标：GTA 的引擎游标在某些配置下不可见，NUI 自己画一个至少让人知道指哪
   const cursorDot = writable<{ x: number; y: number } | null>(null);
+  let navOverlay: any = $state(null);
+  $effect(() => {
+    if (navOverlay) setNavOrigin(navOverlay as HTMLElement);
+  });
   // Lua 每送来一条 phone:nav 就记一次时间：说明键盘/手柄由 Lua 接管。
   // 同一帧里 CEF 若也收到了这个按键（注入的按键能到 CEF，玩家硬件按键通常到不了），
   // 120ms 内不再自己处理一次，避免一次按键挪两格。
@@ -395,18 +399,21 @@
 </script>
 
 {#if $isPhoneOpen}
-  <!-- 焦点反馈叠加层：位置由 core/nav.ts 量出来，不受 Svelte 重渲染影响 -->
-  {#if $navFocus}
-    <div
-      class="nav-ring"
-      style={`left:${$navFocus.x}px;top:${$navFocus.y}px;width:${$navFocus.width}px;height:${$navFocus.height}px`}
-    ></div>
-    <div class="nav-chip">▸ {$navFocus.label}</div>
-  {/if}
-  {#if $cursorDot}
-    <div class="nav-cursor" style={`left:${$cursorDot.x}px;top:${$cursorDot.y}px`}></div>
-  {/if}
   <DeviceShell surface={$surface}>
+    <!-- 焦点反馈叠加层：挂在手机壳里面，坐标相对壳算 —— 用 fixed + 高 z-index
+         那一版在真机上被外壳的 transform/层叠上下文整个盖住了（看不见框） -->
+    <div class="nav-overlay" bind:this={navOverlay}>
+      {#if $navFocus}
+        <div
+          class="nav-ring"
+          style={`left:${$navFocus.x}px;top:${$navFocus.y}px;width:${$navFocus.width}px;height:${$navFocus.height}px`}
+        ></div>
+        <div class="nav-chip">▸ {$navFocus.label}</div>
+      {/if}
+      {#if $cursorDot}
+        <div class="nav-cursor" style={`left:${$cursorDot.x}px;top:${$cursorDot.y}px`}></div>
+      {/if}
+    </div>
     <!-- Background Wallpaper -->
     <div class="phone-wallpaper">
       <div class="wallpaper-dim"></div>
