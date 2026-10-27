@@ -537,6 +537,17 @@ return {
             assert(data.logged_in == true, 'the second push inside 1s must be dropped')
         end)
 
+        check('client_state_accepts_a_push_250ms_later', function()
+            -- 4/s 的窗口：事件推送和 5s 心跳会撞车，1s 会把"刚按完"那份丢掉。
+            local env = newEnv(enabled())
+            env.now = 1000
+            emitState(env, 1, { v = 1, logged_in = true })
+            env.now = 1250
+            emitState(env, 1, { v = 1, logged_in = false })
+            local data = env.exports.ClientState(1)
+            assert(data.logged_in == false, 'a push 250ms later must be accepted')
+        end)
+
         check('client_state_is_cleared_when_the_player_drops', function()
             local env = newEnv(enabled())
             emitState(env, 1, { v = 1, logged_in = true })
