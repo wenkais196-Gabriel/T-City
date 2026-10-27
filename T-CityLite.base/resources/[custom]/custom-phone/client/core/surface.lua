@@ -55,7 +55,7 @@ function Surface.Decide(opts)
         local x, y = GetActiveScreenResolution()
         if tonumber(x) and tonumber(y) then vp = { width = x, height = y } end
     end
-    return SurfaceRules.Resolve({
+    return SurfaceRules.Decide({
         entry_surface = opts.entry_surface,
         preference = preference,
         viewport = vp,
