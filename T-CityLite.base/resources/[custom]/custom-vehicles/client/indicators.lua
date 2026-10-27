@@ -27,6 +27,12 @@ local function applyLights(veh)
     SetVehicleIndicatorLights(veh, 0, rightOn or hazardOn)
 end
 
+-- 上层（手机/背包/菜单）是否让输入归它：custom-ui 的交互路径栈说了算。
+local function uiTookInput()
+    local ok, taken = pcall(function() return exports['custom-ui']:IsTaken() end)
+    return ok and taken == true
+end
+
 -- ==============================================================
 -- ← → toggle
 -- ==============================================================
@@ -36,6 +42,11 @@ Citizen.CreateThread(function()
         Wait(0)
         local ped = PlayerPedId()
         local veh = GetVehiclePedIsIn(ped, false)
+
+        -- 有 UI 占着输入（手机/背包/菜单）时，方向键归那一层。
+        -- 我们读的是 IsDisabledControlJustPressed —— 上层屏蔽控制正好会点亮它，
+        -- 所以这道门必须有，否则"手机里按方向键"= "替他打转向灯"（真机实测）。
+        if uiTookInput() then goto cont end
 
         if not veh or veh == 0 then
             -- 下车不灭双闪

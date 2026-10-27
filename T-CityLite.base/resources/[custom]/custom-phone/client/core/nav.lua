@@ -29,7 +29,7 @@ local CANCEL = { 177 }  -- CELLPHONE_CANCEL（Backspace）
 -- agent 能打"。IsRawKeyDown 不经过控制映射，硬件按了就为真。
 local RAW = {
     up = 0x26, down = 0x28, left = 0x25, right = 0x27,
-    accept = 0x0D, cancel = 0x08,
+    accept = 0x0D, cancel = 0x08, escape = 0x1B,
     tab = 0x09, shift = 0x10,
     pageup = 0x21, pagedown = 0x22,
     home = 0x24, ['end'] = 0x23,
@@ -58,15 +58,10 @@ local function anyJustPressed(controls)
     return false
 end
 
-local function disableAll()
-    for _, controls in pairs(DIR_CONTROLS) do
-        for _, control in ipairs(controls) do
-            DisableControlAction(0, control, true)
-        end
-    end
-    for _, control in ipairs(ACCEPT) do DisableControlAction(0, control, true) end
-    for _, control in ipairs(CANCEL) do DisableControlAction(0, control, true) end
-end
+-- 这里**不再** DisableControlAction。
+-- 原因：indicators.lua 读的是 IsDisabledControlJustPressed(174/175/187)，我们一禁
+-- 172-175 就等于替他按了转向灯（真机实测：手机里按方向键，车上灯乱闪）。
+-- 屏蔽归 custom-ui 的交互路径栈，它只放行走路那几个控制。
 
 local function emit(kind, dir)
     SendNUIMessage({ action = 'phone:nav', kind = kind, dir = dir })
@@ -80,7 +75,6 @@ function PhoneNav.Tick()
         running = false
         return
     end
-    disableAll()
 
     -- 1) 键盘：原始按键优先。同一个键这一帧既被原始按键抓到、又出现在控制轮询里时，
     --    只走原始按键那条（否则一次按键会挪两格）。
@@ -101,7 +95,7 @@ function PhoneNav.Tick()
     if edges.home then emit('edge', 'first') end
     if edges['end'] then emit('edge', 'last') end
     if edges.accept then emit('activate') end
-    if edges.cancel then emit('back') end
+    if edges.cancel or edges.escape then emit('back') end
 
     -- 2) 手柄（以及没被原始按键接住的键盘）：控制轮询兜底
     if not moved then

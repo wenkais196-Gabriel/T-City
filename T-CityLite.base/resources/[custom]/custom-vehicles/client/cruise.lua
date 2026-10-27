@@ -259,7 +259,14 @@ local function _runMaintenanceLoop(veh, mode)
             end
 
             -- ── Lock 模式: ↑↓ 微调 (±5 km/h ≈ 1.39 m/s) ──
-            if mode == MODE_LOCK then
+            -- 手机/菜单占着输入时不改巡航：上层会屏蔽控制，屏蔽态正好能被
+            -- IsControlJustPressed 读到，不挡就等于"开着手机改巡航"。
+            local uiTaken = false
+            do
+                local ok, taken = pcall(function() return exports['custom-ui']:IsTaken() end)
+                uiTaken = ok and taken == true
+            end
+            if mode == MODE_LOCK and not uiTaken then
                 if IsControlJustPressed(2, 172) then  -- ↑
                     cruiseTarget = cruiseTarget + 1.39
                     _broadcast(true, cruiseTarget, MODE_LOCK, 0)

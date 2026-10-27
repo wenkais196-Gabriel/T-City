@@ -103,6 +103,8 @@ Input = Input or {}
 
 local path = {}
 local captureThread = false
+-- 记住 keepInput：与 PhoneFocus 一样，关闭时**不要**把它关掉（那会让下次开手机冻住 WASD）
+local state = { keepInput = false }
 
 local function topFrame()
     return path[#path]
@@ -116,8 +118,13 @@ local function apply()
         -- 栈空 = 输入还给游戏。Esc/暂停菜单要能在这一层工作。
         return
     end
-    -- 栈顶是文本输入时，游戏不能吃键盘（否则打字和移动同时发生）
-    SetNuiFocus(true, frame.keepInput == true)
+    -- 第二个参数是**光标**，不是 keepInput —— 这两个搞混过一次。
+    SetNuiFocus(true, frame.cursor ~= false)
+    local keepInput = frame.keepInput == true
+    if state.keepInput ~= keepInput then
+        SetNuiFocusKeepInput(keepInput)
+        state.keepInput = keepInput
+    end
     if captureThread then return end
     captureThread = true
     CreateThread(function()
