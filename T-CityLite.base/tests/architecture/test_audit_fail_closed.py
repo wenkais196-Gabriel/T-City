@@ -42,7 +42,7 @@ SENSITIVE_PREFIXES = ("lookup.",)
 # Gate helpers that perform the fail-closed audit on behalf of the caller.
 # Verified in test_gate_helpers_are_really_fail_closed.
 GATE_HELPERS = {
-    "lookupAllowed": (POLICE_SERVER / "p0.lua", "local ok = audit("),
+    "lookupAllowed": (POLICE_SERVER / "p0_read.lua", "local ok = audit("),
 }
 
 FAIL_CLOSED_RE = re.compile(
@@ -183,24 +183,35 @@ def test_no_audit_call_discards_its_result():
     )
 
 
-def test_audit_helpers_return_the_pcall_result():
-    """`if not audit(...)` only works because the helpers return pcall()."""
+def test_audit_helpers_delegate_to_the_single_writer():
+    """审计只有一份实现（server/audit.lua），各文件的同名包装必须委派给它。
+
+    历史：这里原本要求每个 helper 自己 `return pcall(...)`。那个形状正是 bug 的来源——
+    oxmysql 把 SQL 错误当**返回值**（字符串）给，pcall 仍然返回 true，于是
+    `if not audit(...)` 把失败当成功、审计行静默丢失。唯一写者改为检查返回类型后，
+    这条规则就变成"包装必须委派 + 写者必须严格返回布尔"。
+    """
     checked = 0
     for path in lua_files():
+        if path.name == "audit.lua":
+            continue                      # 写者本身，由 test_police_single_writer 检查
         source = read(path)
         for match in re.finditer(
-            r"^(?:local )?function audit(?:Player)?\(.*?\n(.*?)^end\s*$",
+            r"^(?:local )?function (audit|auditPlayer|auditNpc)\(.*?\n(.*?)^end\s*$",
             source,
             re.DOTALL | re.MULTILINE,
         ):
-            body = match.group(1)
-            # Either `return pcall(...)` or `local ok = pcall(...) ... return ok`.
-            assert "pcall(" in body and re.search(r"return\s+(?:ok|pcall\()", body), (
-                f"{path.name}: audit() must return the pcall() result so callers "
-                f"can fail closed"
-            )
+            body = match.group(2)
+            assert "PoliceAudit.Write(" in body or "PoliceAudit.WriteAgent(" in body, (
+                f"{path.name}: {match.group(1)}() 必须委派给 PoliceAudit（审计的唯一写者），"
+                f"不要在本地重写 INSERT")
             checked += 1
-    assert checked >= 4, f"only {checked} audit helpers found — scanner regression?"
+    assert checked >= 7, f"只有 {checked} 个审计包装被检查到 —— 扫描器坏了？"
+
+    owner = read(POLICE_SERVER / "audit.lua")
+    assert "type(result) == 'string'" in owner, (
+        "写者必须把数据库返回的错误字符串判为失败，否则审计仍然可以静默丢失")
+    assert "return true" in owner and "return false" in owner
 
 
 # ---------------------------------------------------------------------------
@@ -271,10 +282,13 @@ def test_get_audit_audits_itself_without_recursing():
     assert "'audit_unavailable'" in func.body, (
         "P.GetAudit must fail closed when the audit write fails"
     )
-    # The INSERT itself lives in the file's audit() helper (direct SQL), which
-    # is what keeps the self-audit from going through GetAudit.
+    # The write goes through the file's audit() wrapper → the single writer
+    # (server/audit.lua), never through GetAudit itself.
     source = read(func.path)
-    assert "INSERT INTO police_audit" in source
+    # 拆分后 audit() 这个包装在 p0.lua（核心），读面模块按名字绑进来（I.audit）
+    assert ("PoliceAudit.Write" in source or "local function audit(" in source
+            or "I.audit" in source), (
+        "P.GetAudit 的自审计必须经 audit() 包装 → PoliceAudit.Write")
 
 
 def test_evidence_and_case_views_use_the_same_contract():

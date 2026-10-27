@@ -18,27 +18,18 @@ end
 local sessions = {}   -- sessions[src] = { token = 16 hex, seq = number }
 local pending = {}    -- pending[src][rid] = entry
 local inflight = {}   -- inflight[src] = number
-local buckets = {}    -- buckets[src] = { tokens, updatedAt }
 local droppedAcks = 0
 
 -- ---------------------------------------------------------------------------
 -- Configuration (read per call so the kill switch is live)
 -- ---------------------------------------------------------------------------
 
-local function convarString(name, default)
-    local value = GetConvar(name, default)
-    if type(value) ~= 'string' then return default end
-    return value
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份相同的解析）：
+-- 用函数包一层，导出在调用时解析；资源启动顺序由 fxmanifest 的 dependencies 保证。
+local convarString = function(...) return exports['core-framework']:ConvarString(...) end
 
-local function convarInt(name, default, minimum, maximum)
-    local value = tonumber(convarString(name, tostring(default)))
-    if not value or value ~= value then value = default end
-    value = math.floor(value)
-    if value < minimum then value = minimum end
-    if value > maximum then value = maximum end
-    return value
-end
+-- 统一走 core-framework 的公共实现（Clamp 语义已包含在内）
+local convarInt = function(...) return exports['core-framework']:ConvarInt(...) end
 
 local function Config()
     return {
@@ -172,24 +163,12 @@ local function settle(src, rid, status, result, err)
 end
 
 local function rateGate(src, cfg)
-    local now = GetGameTimer()
-    local bucket = buckets[src]
-    if not bucket then
-        bucket = { tokens = cfg.burst, updatedAt = now }
-        buckets[src] = bucket
-    end
-    local elapsed = math.max(0, now - bucket.updatedAt)
-    if elapsed > 0 then
-        bucket.tokens = math.min(cfg.burst, bucket.tokens + elapsed * (cfg.rate_per_min / 60000))
-        bucket.updatedAt = now
-    end
-    if bucket.tokens < 1 then
-        local retryAfter = math.ceil((1 - bucket.tokens) / (cfg.rate_per_min / 60000))
-        return mkerr('rate_limited', 'too many effects for this player',
-            { retry_after_ms = retryAfter })
-    end
-    bucket.tokens = bucket.tokens - 1
-    return nil
+    -- 走 core-framework 的限流 owner（原来这里自己维护 buckets 令牌桶）
+    local allowed, retryAfter = exports['core-framework']:RateLimitTokenBucket(
+        'agent:' .. tostring(src), cfg.rate_per_min, cfg.burst)
+    if allowed then return nil end
+    return mkerr('rate_limited', 'too many effects for this player',
+        { retry_after_ms = retryAfter })
 end
 
 -- ---------------------------------------------------------------------------
@@ -374,7 +353,9 @@ AddEventHandler('playerDropped', function()
     pending[src] = nil
     inflight[src] = nil
     sessions[src] = nil
-    buckets[src] = nil
+    -- 这里原来还有一行 buckets[src] = nil：限流改成 core-framework 的令牌桶 owner 之后
+    -- buckets 已经不存在了，那行就成了"每次玩家掉线报一次 attempt to index a nil value (global 'buckets')"。
+    -- 令牌桶按 'agent:<src>' 键在 owner 里，过期自然清掉，不需要在这里回收。
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)

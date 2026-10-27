@@ -25,6 +25,14 @@
       "expires": "2027-03-31"
     },
     {
+      "id": "custom-agent-ops-deferred",
+      "resource": "custom-agent-ops",
+      "kind": "deferred_repo_resource",
+      "reason": "custom-agent-ops 在 resources/ 里但不在精简启动链 server.cfg 中，只在 configs/modules/dev.cfg（开发/测试环境）里 ensure。custom-director 的 police_run_e2e L1 工具调用它的 RunTest 导出，资源未启动时该调用在 pcall 里失败并返回 execution_failed，不影响正常游戏流程。需要跑 E2E 时先 exec dev.cfg。",
+      "added": "2026-10-25",
+      "expires": "2027-03-31"
+    },
+    {
       "id": "qb-houses-deferred",
       "resource": "qb-houses",
       "kind": "deferred_repo_resource",

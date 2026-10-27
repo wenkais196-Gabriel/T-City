@@ -1,6 +1,6 @@
 # custom-agent-ops runtime logs
 
-`server/main.lua` appends critical events to `agent-events.jsonl` here.
+`../server/main.lua` appends critical events to `agent-events.jsonl` here.
 
 The directory is tracked so a fresh checkout already has a writable target; the
 `*.jsonl` files are ignored by the repository-level `**/logs/` rule and must

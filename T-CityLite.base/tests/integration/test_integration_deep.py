@@ -24,6 +24,9 @@ BUS_LUA = f'{BASE}/bus.lua'
 ECONOMY_LUA = f'{BASE}/services/economy_service.lua'
 SECURITY_LUA = f'{BASE}/services/security_service.lua'
 PERSISTENCE_LUA = f'{BASE}/services/persistence_manager.lua'
+# util.lua 定义 convar 助手族（ConvarInt 等）的**全局**函数；
+# 生产里它由 shared_scripts 先加载，harness 也得先加载它。
+UTIL_LUA = f'{BASE}/shared/util.lua'
 CONTRACTS_LUA = f'{BASE}/contracts.lua'
 DECISION_LUA = str(_ROOT / 'resources' / '[custom]' / 'story-engine' / 'server' / 'decision_engine.lua')
 QUEST_LUA = str(_ROOT / 'resources' / '[custom]' / 'custom-quest' / 'server' / 'quest_manager.lua')
@@ -91,7 +94,19 @@ _G.QBCore = {
 exports = setmetatable({}, {
     __index = function(t, k)
         if k == "qb-core" then
-            return { GetCoreObject = function() return _G.QBCore end }
+            -- qb-core 的导出不止 GetCoreObject（离线入账走 EconomyAddMoneyOffline）：
+            -- 固定的小表会让"未列出的导出"变成 nil 并炸在调用点，所以给一层兜底。
+            return setmetatable({
+                GetCoreObject = function() return _G.QBCore end,
+            }, {
+                __index = function(_, method)
+                    return function(...)
+                        __test.qb_exports = __test.qb_exports or {}
+                        __test.qb_exports[#__test.qb_exports + 1] = { name = method, args = { ... } }
+                        return true
+                    end
+                end,
+            })
         end
         -- Return a proxy table that supports :method() calls
         return setmetatable({}, {
@@ -136,6 +151,7 @@ __convar_values = {
     quest_debug = "true",
 }
 GetConvar = function(name, default) return __convar_values[name] or default or "" end
+IsDuplicityVersion = function() return true end
 GetConvarInt = function(name, default) return tonumber(GetConvar(name, tostring(default or 0))) or default end
 
 -- Quest/Decision mocks
@@ -225,7 +241,7 @@ def load_and_patch(path: str) -> str:
 
 
 def run_deep_integration(services: list, test_code: str) -> dict:
-    full = SHARED_MOCK + '\n'
+    full = SHARED_MOCK + '\n' + Path(UTIL_LUA).read_text(encoding='utf-8') + '\n'
     for svc_path in services:
         full += '\n-- === ' + os.path.basename(svc_path) + ' ===\n'
         code = load_and_patch(svc_path)

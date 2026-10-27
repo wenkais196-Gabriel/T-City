@@ -657,7 +657,7 @@ ufw enable
 - ✅ 三个常驻容器独立配置、独立重启、独立升级
 - ✅ Wiki 构建器是短生命周期容器，与运行时解耦
 - ✅ 每个服务有独立的健康检查，依赖链清晰
-- ✅ `configs/modules/wiki.cfg` 注册游戏内 NUI Wiki，遵循模块白名单规范
+- ✅ 在 configs/modules 下的 wiki.cfg（尚未创建）中注册游戏内 NUI Wiki，遵循模块白名单规范
 
 ### 8.2 高性能 (High Performance)
 

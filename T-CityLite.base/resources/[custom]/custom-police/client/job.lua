@@ -10,12 +10,10 @@ local inImpound = false
 local inGarage = false
 local inEvidence = false
 
-local function loadAnimDict(dict) -- interactions, job,
-    while (not HasAnimDictLoaded(dict)) do
-        RequestAnimDict(dict)
-        Wait(10)
-    end
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份同样的阻塞等待循环）。
+-- 用 function 包一层而不是直接赋值 exports：导出在"调用时"解析，
+-- 这样不把核心资源变成加载期硬依赖，资源启动顺序也不影响。
+local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDict(dict) end
 
 local function GetClosestPlayer() -- interactions, job, tracker
     local closestPlayers = QBCore.Functions.GetPlayersFromCoords()
@@ -517,152 +515,85 @@ end)
 local dutylisten = false
 local function dutylistener()
     dutylisten = true
-    CreateThread(function()
-        while dutylisten do
-            if PlayerJob.type == 'leo' then
-                if IsControlJustReleased(0, 38) then
-                    TriggerServerEvent('custom-police:server:toggleDuty')
-                    TriggerServerEvent('police:server:UpdateCurrentCops')
-                    TriggerServerEvent('police:server:UpdateBlips')
-                    dutylisten = false
-                    break
-                end
-            else
-                break
-            end
-            Wait(0)
-        end
-    end)
+    PoliceInteract.Watch({
+        active = function() return dutylisten end,
+        allowed = function() return PlayerJob.type == 'leo' end,
+        onPress = function()
+            TriggerServerEvent('custom-police:server:toggleDuty')
+            TriggerServerEvent('police:server:UpdateCurrentCops')
+            TriggerServerEvent('police:server:UpdateBlips')
+        end,
+        after = function() dutylisten = false end,
+    })
 end
 
 -- Personal Stash Thread
 local function stash()
-    CreateThread(function()
-        while true do
-            Wait(0)
-            if inStash and PlayerJob.type == 'leo' then
-                if PlayerJob.onduty then sleep = 5 end
-                if IsControlJustReleased(0, 38) then
-                    TriggerServerEvent('qb-policejob:server:stash')
-                    break
-                end
-            else
-                break
-            end
-        end
-    end)
+    PoliceInteract.Watch({
+        active = function() return inStash end,
+        allowed = function() return PlayerJob.type == 'leo' end,
+        onPress = function() TriggerServerEvent('qb-policejob:server:stash') end,
+    })
 end
 
 -- Police Trash Thread
 local function trash()
-    CreateThread(function()
-        while true do
-            Wait(0)
-            if inTrash and PlayerJob.type == 'leo' then
-                if PlayerJob.onduty then sleep = 5 end
-                if IsControlJustReleased(0, 38) then
-                    TriggerServerEvent('qb-policejob:server:trash')
-                    break
-                end
-            else
-                break
-            end
-        end
-    end)
+    PoliceInteract.Watch({
+        active = function() return inTrash end,
+        allowed = function() return PlayerJob.type == 'leo' end,
+        onPress = function() TriggerServerEvent('qb-policejob:server:trash') end,
+    })
 end
 
 -- Fingerprint Thread
 local function fingerprint()
-    CreateThread(function()
-        while true do
-            Wait(0)
-            if inFingerprint and PlayerJob.type == 'leo' then
-                if PlayerJob.onduty then sleep = 5 end
-                if IsControlJustReleased(0, 38) then
-                    TriggerEvent('qb-police:client:scanFingerPrint')
-                    break
-                end
-            else
-                break
-            end
-        end
-    end)
+    PoliceInteract.Watch({
+        active = function() return inFingerprint end,
+        allowed = function() return PlayerJob.type == 'leo' end,
+        onPress = function() TriggerEvent('qb-police:client:scanFingerPrint') end,
+    })
 end
 
 -- Evidence Thread
 local function evidence()
-    CreateThread(function()
-        while true do
-            Wait(0)
-            if inEvidence and PlayerJob.type == 'leo' then
-                if PlayerJob.onduty then sleep = 5 end
-                if IsControlJustReleased(0, 38) then
-                    TriggerEvent('police:client:EvidenceStashDrawer')
-                    break
-                end
-            else
-                break
-            end
-        end
-    end)
+    PoliceInteract.Watch({
+        active = function() return inEvidence end,
+        allowed = function() return PlayerJob.type == 'leo' end,
+        onPress = function() TriggerEvent('police:client:EvidenceStashDrawer') end,
+    })
 end
 
 -- Helicopter Thread
 local function heli()
-    CreateThread(function()
-        while true do
-            Wait(0)
-            if inHelicopter and PlayerJob.type == 'leo' then
-                if PlayerJob.onduty then sleep = 5 end
-                if IsControlJustReleased(0, 38) then
-                    TriggerEvent('qb-police:client:spawnHelicopter')
-                    break
-                end
-            else
-                break
-            end
-        end
-    end)
+    PoliceInteract.Watch({
+        active = function() return inHelicopter end,
+        allowed = function() return PlayerJob.type == 'leo' end,
+        onPress = function() TriggerEvent('qb-police:client:spawnHelicopter') end,
+    })
 end
 
 -- Police Impound Thread
 local function impound()
-    CreateThread(function()
-        while true do
-            Wait(0)
-            if inImpound and PlayerJob.type == 'leo' then
-                if PlayerJob.onduty then sleep = 5 end
-                if IsPedInAnyVehicle(PlayerPedId(), false) then
-                    if IsControlJustReleased(0, 38) then
-                        QBCore.Functions.DeleteVehicle(GetVehiclePedIsIn(PlayerPedId()))
-                        break
-                    end
-                end
-            else
-                break
-            end
-        end
-    end)
+    PoliceInteract.Watch({
+        active = function() return inImpound end,
+        allowed = function() return PlayerJob.type == 'leo' end,
+        requireVehicle = true,
+        onPress = function()
+            QBCore.Functions.DeleteVehicle(GetVehiclePedIsIn(PlayerPedId()))
+        end,
+    })
 end
 
 -- Police Garage Thread
 local function garage()
-    CreateThread(function()
-        while true do
-            Wait(0)
-            if inGarage and PlayerJob.type == 'leo' then
-                if PlayerJob.onduty then sleep = 5 end
-                if IsPedInAnyVehicle(PlayerPedId(), false) then
-                    if IsControlJustReleased(0, 38) then
-                        QBCore.Functions.DeleteVehicle(GetVehiclePedIsIn(PlayerPedId()))
-                        break
-                    end
-                end
-            else
-                break
-            end
-        end
-    end)
+    PoliceInteract.Watch({
+        active = function() return inGarage end,
+        allowed = function() return PlayerJob.type == 'leo' end,
+        requireVehicle = true,
+        onPress = function()
+            QBCore.Functions.DeleteVehicle(GetVehiclePedIsIn(PlayerPedId()))
+        end,
+    })
 end
 
 if Config.UseTarget then

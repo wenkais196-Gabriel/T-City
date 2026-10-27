@@ -97,35 +97,22 @@ QBCore.Functions.CreateCallback('phone:server:bankTransfer', function(source, cb
 
             -- Debit the online sender via EconomyService bridge (ensures audit trail + events)
             if Player.Functions.RemoveMoney('bank', amount, "Transfer to " .. toPhoneNumber) then
-                -- Atomic credit to offline recipient (JSON_SET + arithmetic = no race condition)
-                -- MySQL row-level lock ensures concurrent transfers don't overwrite each other
-                MySQL.Async.execute([[
-                    UPDATE players 
-                    SET money = JSON_SET(
-                        money, 
-                        '$.bank', 
-                        CAST(JSON_EXTRACT(money, '$.bank') AS DECIMAL(10,2)) + ?
-                    ) 
-                    WHERE citizenid = ?
-                ]], { amount, foundCitizen }, function(rowsChanged)
-                    if PhoneDb.AffectedRows(rowsChanged) > 0 then
-                        -- Trigger audit event for offline receiver (manual, since no in-memory Player)
-                        TriggerEvent('QBCore:Server:OnMoneyChange', -1, 'bank', amount, 'add',
-                            'phone-transfer-offline-to-' .. foundCitizen)
-
-                        -- Audit Logs
+                -- 离线收款人不在内存里，只能改 DB —— 但这条 SQL 只允许 owner 写。
+                exports['qb-core']:EconomyAddMoneyOffline(foundCitizen, 'bank', amount,
+                    'phone-transfer-offline-to-' .. foundCitizen, function(ok)
+                    if ok then
                         local auditText = ("**[离线] 汇款人**: %s (%s)\n**离线收款人**: %s %s (%s)\n**金额**: $%d\n**说明**: %s"):format(
                             GetPlayerName(source), Player.PlayerData.citizenid,
                             dbChar.firstname, dbChar.lastname, foundCitizen,
                             amount, reason or "None"
                         )
                         exports['custom-main']:LogEconomy("手机银行转账", auditText, 65535)
-                        
-                        cb({ success = true, newBalances = Player.PlayerData.money, message = ('Successfully wired $%d to %s (Offline)!'):format(amount, dbChar.firstname) })
+                        cb({ success = true, newBalances = Player.PlayerData.money,
+                            message = ('Successfully wired $%d to %s (Offline)!'):format(amount, dbChar.firstname) })
                     else
-                        -- Rollback sender's debit in case of database update failure
-                        Player.Functions.AddMoney('bank', amount, "Transfer Rollback")
-                        cb({ success = false, message = 'Database sync failed. Rollback triggered.' })
+                        -- 没入账 → 把发送方刚扣掉的钱退回去，绝不能吞掉
+                        Player.Functions.AddMoney('bank', amount, "Transfer Rollback (offline credit failed)")
+                        cb({ success = false, message = 'Offline credit failed. Rollback triggered.' })
                     end
                 end)
             else

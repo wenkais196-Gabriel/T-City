@@ -11,21 +11,9 @@ local function trim(v)
     return type(v) == 'string' and v:match('^%s*(.-)%s*$') or ''
 end
 
---- The bundled oxmysql build returns `{ affectedRows = n }` for update; stock
---- builds return a number. Normalise both so the conditional claim below can
---- tell "this caller transitioned the row" from "somebody else already did".
-local function affectedRows(result)
-    if type(result) == 'number' then return result end
-    if type(result) == 'table' then return math.floor(tonumber(result.affectedRows) or 0) end
-    return 0
-end
-
 local function audit(cid, action, target, detail)
-    return pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, "player", ?, ?, ?)',
-            { cid, action, target, detail and tostring(detail):sub(1, 500) or nil })
-    end)
+    -- 唯一写者见 server/audit.lua（这里只保留同名包装，调用点不用改）
+    return PoliceAudit.Write(cid, action, target, detail)
 end
 
 --- Notifications belong to custom-phone (FIT-02). Enqueue through the outbox in
@@ -51,30 +39,31 @@ function P1.IssueCitation(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'citation.issue')
     if not allowed then return false, reason end
+
     local target = tostring(params and params.citizenid or ''):sub(1, 50)
-    local amount = tonumber(params and params.amount)
-    local text = trim(params and params.reason):sub(1, 240)
     if target == '' then return false, 'invalid_citizen' end
-    if not amount or amount < 1 or amount > 50000 then return false, 'invalid_amount' end
-    if #text < 3 then return false, 'invalid_reason' end
+
     local exists = MySQL.single.await('SELECT citizenid FROM players WHERE citizenid = ? LIMIT 1', { target })
     if not exists then return false, 'citizen_not_found' end
-    local plate = trim(params and params.plate):upper():sub(1, 12)
-    local id = MySQL.insert.await([[
-        INSERT INTO police_citations (citizenid, officer_citizenid, plate, amount, reason, incident_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ]], { target, actor.citizenid, plate ~= '' and plate or nil, math.floor(amount), text,
-          tonumber(params and params.incident_id) })
-    id = InsertId(id)
-    if not id or id == 0 then return false, 'db_error' end
-    if not audit(actor.citizenid, 'citation.issue', target, ('$%d %s'):format(amount, text)) then
-        print(('[custom-police] citation.issue audit failed for #%s'):format(tostring(id)))
-    end
+
+    -- 校验、金额政策、审计都在唯一写者里（server/citations.lua）；
+    -- 这里只保留玩家路径特有的前置检查与送达通知。
+    local id, settledOrReason = PoliceCitations.Insert(actor.citizenid, {
+        citizenid = target,
+        amount = params and params.amount,
+        reason = params and params.reason,
+        plate = params and params.plate,
+        incident_id = params and params.incident_id,
+    })
+    if not id then return false, settledOrReason or 'db_error' end
+
+    local settled = tonumber(settledOrReason) or 0
+    local text = trim(params and params.reason):sub(1, 240)
     notifyCitizen(target, '你收到一张罚单',
         ('$%d — %s（罚单 #%d，警官 %s）'):format(
-            math.floor(amount), text, tonumber(id), actor.citizenid),
+            math.floor(settled), text, tonumber(id), actor.citizenid),
         'banking')
-    return { id = tonumber(id), amount = math.floor(amount), status = 'unpaid' }
+    return { id = tonumber(id), amount = math.floor(settled), status = 'unpaid' }
 end
 
 --- Citizen-side read: any online player may list their own citations. There is
@@ -127,11 +116,14 @@ function P1.CreateReport(source, params)
         local caseRow = MySQL.single.await('SELECT id FROM police_cases WHERE id = ? LIMIT 1', { caseId })
         if not caseRow then return false, 'case_not_found' end
     end
-    local id = MySQL.insert.await(
-        'INSERT INTO police_reports (incident_id, case_id, author_citizenid, title, body) VALUES (?, ?, ?, ?, ?)',
-        { tonumber(params and params.incident_id), caseId, actor.citizenid, title, body })
-    id = InsertId(id)
-    if not id or id == 0 then return false, 'db_error' end
+    -- 报告行由唯一写者写（server/records.lua）：case_id 为空时那一列不出现，参数数组不留洞
+    local id, writeReason = PoliceRecords.InsertReport(actor.citizenid, {
+        title = title,
+        body = body,
+        incident_id = params and params.incident_id,
+        case_id = caseId,
+    })
+    if not id then return false, writeReason or 'db_error' end
     if not audit(actor.citizenid, 'report.create', tostring(id), title) then
         print(('[custom-police] report.create audit failed for #%s'):format(tostring(id)))
     end
@@ -188,12 +180,8 @@ function P1.PayCitation(source, citationId)
     -- Claim the row before moving money. Two concurrent payers can both pass
     -- the SELECT above, but only one conditional UPDATE matches `unpaid`; the
     -- loser never reaches RemoveMoney, so a double tap cannot double-charge.
-    local claimOk, claim = pcall(function()
-        return MySQL.update.await(
-            "UPDATE police_citations SET status = 'paid', paid_at = NOW() WHERE id = ? AND citizenid = ? AND status = 'unpaid'",
-            { id, actor.citizenid })
-    end)
-    if not claimOk or affectedRows(claim) == 0 then
+    local claimed, claimOk = PoliceCitations.ClaimPaid(id, actor.citizenid)
+    if not claimed then
         -- Re-read to tell "gone", "not yours" and "already paid/void" apart.
         local current = MySQL.single.await(
             'SELECT id, citizenid, status FROM police_citations WHERE id = ? LIMIT 1', { id })
@@ -209,11 +197,7 @@ function P1.PayCitation(source, citationId)
     if not ok or not removed then
         -- The claim did not charge anyone yet: put the citation back so the
         -- owner can retry after topping up the bank account.
-        pcall(function()
-            MySQL.update.await(
-                "UPDATE police_citations SET status = 'unpaid', paid_at = NULL WHERE id = ? AND status = 'paid'",
-                { id })
-        end)
+        PoliceCitations.RevertPaid(id)
         return false, 'insufficient_funds'
     end
     if not audit(actor.citizenid, 'citation.pay', tostring(id), ('$%d'):format(amount)) then

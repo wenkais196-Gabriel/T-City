@@ -26,38 +26,38 @@
 
 | 模块 | 职责 | 不做什么 |
 |---|---|---|
-| `core/identity.lua` | `PhoneIdentity.Resolve/From/IsLeader` | 不查业务表 |
-| `core/notify.lua` | 通知规范化、落库、单播推送 | 不决定业务 |
-| `core/events.lua` | 统一 `phone:client:event` 通道 | 不写业务表 |
-| `core/rate_limit.lua` | 通用 token bucket（NUI app/action/短信） | 不鉴权 |
+| `resources/[custom]/custom-phone/server/core/identity.lua` | `PhoneIdentity.Resolve/From/IsLeader` | 不查业务表 |
+| `resources/[custom]/custom-phone/server/core/notify.lua` | 通知规范化、落库、单播推送 | 不决定业务 |
+| `resources/[custom]/custom-phone/server/core/events.lua` | 统一 `phone:client:event` 通道 | 不写业务表 |
+| `resources/[custom]/custom-phone/server/core/rate_limit.lua` | 通用 token bucket（NUI app/action/短信） | 不鉴权 |
 | `main.lua` | 只做 wiring：回调注册、领域调用 | 不写大段 SQL |
 
 ### Server domains
 
-`domains/contacts.lua`、`messages.lua`、`notifications.lua`、`calls.lua`、`cityfeed.lua`、`hotlines.lua`、`vehicles.lua`。
+服务端 domains 层（目标态）：contacts / messages / notifications / calls / cityfeed / hotlines / vehicles 各一个 domain 模块。
 每个 domain 暴露函数（`List/Send/MarkRead...`），SQL 只在本域；main 只转发。
 
 ### Server apps
 
-`apps/registry.lua`（现 `phone_apps.lua`）+ `apps/police_mdt.lua`。
+目标态的 registry（现为 `resources/[custom]/custom-phone/server/phone_apps.lua`）+ `resources/[custom]/custom-phone/server/apps/police_mdt.lua`。
 App 只通过 registry 暴露 query/action；不直接注册 NUI 回调。
 
 ### Client
 
 | 模块 | 职责 |
 |---|---|
-| `core/bridge.lua` | 注册 NUI callback、request_id、超时、错误归一 |
-| `core/focus.lua` | 焦点栈 owner：phone / fingerprint / story / vehicle |
-| `core/events.lua` | 订阅 `phone:client:event`，分发到 NUI |
-| `core/phone.lua` | 打开/关闭/动画/按键，调用 bridge/focus |
+| `resources/[custom]/custom-phone/client/core/bridge.lua` | 注册 NUI callback、request_id、超时、错误归一 |
+| `resources/[custom]/custom-phone/client/core/focus.lua` | 焦点栈 owner：phone / fingerprint / story / vehicle |
+| `resources/[custom]/custom-phone/client/core/events.lua` | 订阅 `phone:client:event`，分发到 NUI |
+| `phone` 模块（目标态） | 打开/关闭/动画/按键，调用 bridge/focus；当前实现在 `resources/[custom]/custom-phone/client/main.lua` |
 | `main.lua` | 只做 wiring |
 
 ### Frontend
 
 | 模块 | 职责 |
 |---|---|
-| `core/appRegistry.ts` | App manifest：id/label/icon/component/audience/schemaVersion |
-| `core/request.ts` | 统一 `phoneRequest`：超时、错误码、schema 校验 |
+| `resources/[custom]/custom-phone/web/src/core/appRegistry.ts` | App manifest：id/label/icon/component/audience/schemaVersion |
+| `resources/[custom]/custom-phone/web/src/core/request.ts` | 统一 `phoneRequest`：超时、错误码、schema 校验 |
 | `App.svelte` | 只渲染 shell + 查 registry |
 | `apps/*` | 只依赖 App SDK，不直接碰 window/fetch |
 
@@ -75,6 +75,24 @@ type PhoneResponse<T> =
 - 默认 8s 超时；
 - 所有 handler 必须返回，不返回视为协议错误；
 - 错误码稳定、可本地化。
+
+### 打开握手（open ack）
+
+`SendNUIMessage` 是「发了就走」的：CEF 正在加载（`restart custom-phone` 之后必然发生）时帧被静默丢弃，Lua 侧以为手机已打开，屏幕上却没有界面。
+
+```
+OpenPhone() ─ SendNUIMessage(phone:open) ─┬─ 250ms 重发 ─┬─ ... 最多 2500ms
+              (PhoneBridge.AwaitAck)      │              │
+                                          │              └─ 超时：isPhoneOpen=false
+                                          │                 + PhoneFocus.Release('phone')
+                                          │                 + 聊天提示「界面无响应」
+                                          └─ NUI 收到后 fetchNui('phoneOpenAck')
+                                             → PhoneBridge.Ack('phone:open') 停止重发
+```
+
+- `phoneOpenAck` 是「界面真的存在」的唯一证据；没收到就复位半开状态，避免下一次按 M 被 `isPhoneOpen` 吞掉。
+- 同一 name 再次 `AwaitAck` 会顶掉上一个循环（不会两个循环同时跑）；`ClosePhone` 里也 `Ack` 一次收尾。
+- 诊断：`phone:server:focusState` 的 `open-nui-sent` / `open-ack` / `open-ack-timeout` 三个阶段按阶段单独限流（`FOCUS_COOLDOWN`），能区分「NUI 没应答」和「焦点没生效」。
 
 ### 统一事件
 
@@ -101,6 +119,57 @@ interface PhoneApp {
   schemaVersion: number;
 }
 ```
+
+## 3.5 NUI 应答通道与自证握手
+
+### 应答通道不一定是 function
+
+`RegisterNUICallback(name, function(data, cb) ... end)` 里的 `cb` 在本 build 上是
+**可调用表**（`{ __cfx_functionReference = '<ref>' }` + `__call`）。所以：
+
+- 禁止写 `if type(cb) ~= 'function' then return end` —— 那是静默丢弃应答，
+  前端只会看到 9s 后的 `AbortError` → `query_failed` / `action_failed`；
+- 所有回调统一走 `PhoneBridge.AnswerFn(cb)`，它按 function → `__call` 表 →
+  `Citizen.InvokeFunctionReference` 的顺序取应答通道，取不到时返回 nil，
+  `RegisterNui` 直接**不执行 handler**（宁可不跑，也不要跑一半）；
+- 直连 `RegisterNUICallback` 的地方（`getPhoneData` 等）也要用同一套适配。
+
+### 自证握手（每次页面加载一次）
+
+`resources/[custom]/custom-phone/web/src/main.ts` 在挂载前做两件事，结果都投到服务端日志：
+
+1. `nuiReady { build, host, href, parent }` —— 证明**跑的是哪个 bundle**、宿主名是否
+   为 `custom-phone`、路由是否通。日志格式：`[custom-phone][nui-ready] src=.. build=.. host=.. parent=..`
+2. **四段探针**：用一次真实 `appQuery`（`police_mdt/units`）走完整条链路，再回报
+   `[custom-phone][probe] src=.. build=.. code=.. dur=..ms`。
+
+判定：`code=ok` 且 `dur` 在百毫秒级 = 整条链路健康；`code=query_failed` + `dur≈9000ms`
+= 应答没回到 CEF；只有 `nui-ready` 没有 `probe` = 探针请求自身卡住。这样
+`restart custom-phone` 之后不需要人点，就能判断"改的东西到底生效没有"。
+
+### 请求追踪（stage 0/3）
+
+`resources/[custom]/custom-phone/client/core/diag.lua` + `resources/[custom]/custom-phone/server/core/diag.lua` 提供 `phone:server:diag` 通道：
+NUI 传 `_diag.tid`（没有则由客户端生成），trace 的 tid **就是 request_id**，
+服务端内存环记录 `Recv/Done` 作为 SR/SD 的唯一事实源，链尾按
+`level2 / ≥400ms / 失败 / 前 3 次` 采样上报，服务端打印
+
+```
+[custom-phone][diag] src=4 tid=c00065e22664 kind=query app=police_mdt code=ok why=ok
+  path=CR|CF|SR|SD|CP|CA break=none dt=0,0,134,134
+```
+
+6 个槽位对应 `NUI→Lua 回调`(CR) → `转发服务端`(CF) → `服务端收到`(SR) →
+`服务端回包`(SD) → `回包命中 pending`(CP) → `调用 NUI cb`(CA)。默认开启，
+`setr phone_diag 0` 关闭。
+
+> 设计稿里的 NS（NUI 即将 fetch）/ND（NUI 已 resolve）两槽**没有实现**：NUI 只把
+> tid 带下来，CEF 侧 resolve 不通知 Lua，这两段在 Lua 侧不可观测。硬留在判定里会把
+> 正常请求误报成 `seg4`（实测踩过）。它们由 `nuiProbe` 自证代替。
+
+> 注意：**新增脚本文件必须 `refresh`（不是 `restart`）才会进清单**——`restart` 复用
+> 服务端缓存的 fxmanifest，只重跑已有文件；漏了 `refresh` 的表现是"文件明明在、代码
+> 明明没错、日志里就是没有它"，非常容易误判成缓存或加载错误。
 
 ## 4. 性能预算
 

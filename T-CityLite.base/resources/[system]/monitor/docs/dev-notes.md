@@ -65,7 +65,7 @@ Legend:
     - [x] implement changelog
     - [x] implement the refreshConfig() stuff
     - [x] migrate the old uses of refreshConfig to new config watcher
-    - [x] update `./core/boot/setup.ts` to use `public static ConfigStore.getEmptyConfigFile()`
+    - [x] update ./core/boot/setup.ts to use `public static ConfigStore.getEmptyConfigFile()`
     - [x] migrate setup webroute
     - [x] migrate deployer webroute
     - [x] migrate masterActions->reset webroute
@@ -88,13 +88,13 @@ Legend:
             - [x] check if all text fields and selects have the `htmlFor`
             - [x] check if all textarea fields are auto-sized
             - [x] If shutdownNoticeDelayMs & restartSpawnDelayMs are really ms, and being migrated from secs for the case of shutdownNoticeDelay
-    - [x] remove `settings.ejs` and `core/routes/settings/get-old.ts`
+    - [x] remove `settings.ejs` and core/routes/settings/get-old.ts
     - [x] migrate discord bot `refreshConfig()` and settings save
-    - [x] remove `./core/configMapping.tmp.ts` (was committed)
+    - [x] remove ./core/configMapping.tmp.ts (was committed)
     - [x] test `txConfig.server.startupArgs`
         - [x] test if `server.startupArgs = ['+set']`, breaks the next 2 args 
     - [x] check all ConfigStore methods (including txCore.configStore.getRawFile())
-    - [x] remap configs in `core/routes/diagnostics/sendReport.ts` and test it
+    - [x] remap configs in core/routes/diagnostics/sendReport.ts and test it
     - [x] change setup & deployer page to suggest relative `server.cfg`
     - [x] check all modules to remove their
         - [x] config validation at constructor

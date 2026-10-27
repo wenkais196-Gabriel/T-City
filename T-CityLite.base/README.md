@@ -79,7 +79,7 @@ T-CityLite.base/resources/[standalone]/menuv/dist/
 T-CityLite.base/resources/[system]/tcity-dashboard/nui/dist/
 ```
 
-- `oxmysql/dist/build.js` 是 FXServer 实际加载的服务端脚本，缺失会导致 `oxmysql` 启动失败。
+- `resources/[standalone]/oxmysql/dist/build.js` 是 FXServer 实际加载的服务端脚本，缺失会导致 `oxmysql` 启动失败。
 - 这些文件被各自上游 `.gitignore` 忽略，但部署必须存在，因此用 `git add -f` 跟踪；更新后同样需要 `git add -f`。
 - CI 的 `Verify runtime build artifacts` 步骤会校验它们存在。
 

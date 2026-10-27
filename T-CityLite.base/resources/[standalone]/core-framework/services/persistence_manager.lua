@@ -83,11 +83,8 @@ end
 -- 配置（可通过 Convar 动态调整）
 -- ==============================================================
 
-local function GetIntConvar(name, default)
-    local val = GetConvar(name, "")
-    if val ~= "" then return math.floor(tonumber(val) or default) end
-    return default
-end
+-- 收敛到 shared/util.lua 的 ConvarInt（同资源，直接引用全局）
+local GetIntConvar = function(...) return ConvarInt(...) end
 
 -- ==============================================================
 -- 统计信息

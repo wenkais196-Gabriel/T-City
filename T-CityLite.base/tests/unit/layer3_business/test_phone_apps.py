@@ -1,5 +1,6 @@
 """Static contract for the server-authoritative phone app registry."""
 import shutil
+from p0_sources import p0_files, p0_text
 import subprocess
 import tempfile
 from pathlib import Path
@@ -123,7 +124,7 @@ def test_police_capabilities_are_centralised():
     policy = read(PHONE.parent / "custom-police/shared/policy.lua")
     assert "PolicePolicy.Can" in policy
     assert "incident.assign" in policy and "minGrade = 2" in policy
-    p0 = read(PHONE.parent / "custom-police/server/p0.lua")
+    p0 = p0_text()
     assert "PolicePolicy.Can" in p0
     assert "audit_unavailable" in p0
 
@@ -225,7 +226,7 @@ def test_notifications_can_deeplink_into_mdt():
     notify = read(PHONE / "server/core/notify.lua")
     assert "phone_notifications (citizenid, title, content, app_id)" in notify
     assert "app_id = appId" in notify
-    p0 = read(PHONE.parent / "custom-police/server/p0.lua")
+    p0 = p0_text()
     assert "app_id" in p0 and "police_mdt" in p0
     ui = read(PHONE / "web/src/apps/Notifications.svelte")
     assert "openTarget" in ui and "dyn:" in ui
@@ -259,7 +260,8 @@ def test_agent_system_entry_points_are_audited():
     sys = read(PHONE.parent / "custom-police/server/p2_system.lua")
     for export in ("CreateIncidentSystem", "AssignUnitSystem", "JailSystem"):
         assert f"exports('{export}'" in sys
-    assert "WriteAudit" in sys and "'agent'" in sys
+    # 审计只走唯一写者（server/audit.lua）；agent 路径用 WriteAgent 标 actor_kind='agent'
+    assert "PoliceAudit.WriteAgent" in sys and "'agent'" in sys
     justice = (PHONE.parent / "custom-justice/server/main.lua").read_text(encoding="utf-8")
     assert "exports('Imprison'" in justice
 
@@ -267,9 +269,15 @@ def test_agent_system_entry_points_are_audited():
 def test_insert_ids_are_normalized():
     shared = read(PHONE.parent / "custom-police/shared/insert_id.lua")
     assert "function InsertId" in shared and "insertId" in shared
-    for f in ("p0.lua", "p1.lua", "p2_evidence.lua", "p2_system.lua", "p3_cases.lua"):
+    # p2_system 不再自己建单（走 p0 的唯一写者，归一化也在那里做），所以它不在这份名单里。
+    # p1 的报告写入已委派给 records.lua，不再自己拿 InsertId
+    # p0 拆成五个模块后，InsertId 归一化落在 p0_incidents.lua 的写入点里
+    assert any("InsertId(" in src for src in p0_files().values()), "p0 家族必须经 InsertId 归一化"
+    for f in ("p2_evidence.lua", "p3_cases.lua"):
         src = read(PHONE.parent / "custom-police/server" / f)
-        assert "InsertId(id)" in src, f
+        assert "InsertId(" in src, f
+    sys_src = read(PHONE.parent / "custom-police/server/p2_system.lua")
+    assert "PoliceIncidents.InsertRow(" in sys_src, "p2 必须委派给 police_incidents 的唯一写者"
 
 
 def test_mdt_charges_query_reads_the_police_catalogue():
@@ -664,8 +672,12 @@ def test_police_mdt_tags_npc_callouts():
     assert '<span class="tag npc">NPC</span>' in ui
     assert ".tag.npc" in ui
     # The dispatch row still offers the same three actions (no new UI).
-    assert "updateIncident(incident, 'enroute')" in ui
-    assert "updateIncident(incident, 'on_scene')" in ui
+    # 三个按钮 → 两个：申领（claim）与清场（clear），到场由引擎自动结算
+    assert "claimIncident(incident)" in ui
+    assert "updateIncident(incident, 'enroute')" not in ui
+    # 「到场」按钮已删除：到场由客户端检测 + 服务端裁定自动结算
+    assert "updateIncident(incident, 'on_scene')" not in ui
+    assert ">到场<" not in ui
     assert "clearIncident(incident)" in ui
 
 
@@ -924,7 +936,7 @@ def test_police_mdt_no_longer_collapses_errors_to_booleans():
     src = read(POLICE_MDT_LUA)
     for name in POLICE_ACTIONS:
         assert f"{name} = function" in src, name
-    assert src.count("structured('") == 17
+    assert src.count("structured('") == 19
     assert "return ok and res" not in src
     assert "error = 'export_error'" in src
     assert "unknown_capability" in src and "'forbidden'" in src
@@ -1040,3 +1052,46 @@ def test_mdt_translates_protocol_errors():
     ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
     for code in ("timeout", "no_response", "bad_request", "resource_stopped"):
         assert f"{code}:" in ui, code
+
+
+def test_route_is_drawn_by_the_police_client_not_the_phone_ui():
+    """路线不再由 MDT 点击触发：被派到就出现，所以绘制点是 custom-police 客户端。
+
+    手机侧原来那个 mdtNavigate 回调已经没有调用者——同一件事留两份实现就是两个 bug。
+    """
+    ui = read(PHONE / "web/src/apps/PoliceMDT.svelte")
+    assert "fetchNui('mdtNavigate'" not in ui, "MDT 不该自己画路线（服务端会推）"
+
+    phone_client = read(PHONE / "client/main.lua")
+    assert "mdtNavigate" not in phone_client, "旧的手机路线回调应删除（死代码）"
+
+    guidance = read(PHONE.parent / "custom-police/client/incident_guidance.lua")
+    assert "police:client:routeToIncident" in guidance, "要接收服务端推来的路线"
+    assert "SetBlipRoute(" in guidance, "要有路线（不然只是一闪而过的圆点）"
+    assert "SetBlipDisplay(blip, 2)" in guidance, "要显示距离"
+    assert "RemoveBlip" in guidance, "换目标/到达时必须收掉上一条"
+    # 到场检测也在同一个文件里：命中 → nonce → 服务端裁定
+    assert "requestArriveNonce" in guidance
+    assert "TriggerServerEvent('police:server:arriveIncident'" in guidance
+
+
+def test_queries_distinguish_not_loaded_from_not_found() -> None:
+    """玩家刚进服时服务端还没有这个玩家：那是"还没加载"，不是"查无此人"。
+
+    前端据此重试一次；如果两者共用 player_not_found，界面就只能报错了。
+    """
+    import pathlib
+
+    phone = pathlib.Path(__file__).resolve().parents[3] / "resources/[custom]/custom-phone"
+    server = (phone / "server/phone_apps.lua").read_text(encoding="utf-8")
+    assert "return nil, nil, 'player_not_ready'" in server, "服务端必须区分未加载与不存在"
+    assert "return nil, nil, 'player_not_found'" not in server.split("local function resolve")[1][:400], (
+        "resolve 不能再把未加载报成 player_not_found")
+
+    request = (phone / "web/src/core/request.ts").read_text(encoding="utf-8")
+    assert "RETRYABLE = new Set(['player_not_ready'])" in request
+    assert "RETRY_DELAY_MS" in request
+    assert request.count("sendOnce<T>(") >= 3, "phoneRequest 必须先发一次、失败后再重试一次"
+
+    mdt = (phone / "web/src/apps/PoliceMDT.svelte").read_text(encoding="utf-8")
+    assert "player_not_ready: '角色还在加载，稍等一下'" in mdt

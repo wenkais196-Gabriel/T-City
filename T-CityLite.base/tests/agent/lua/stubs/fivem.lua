@@ -38,6 +38,41 @@ return function(env)
     env.export_overrides = env.export_overrides or {}
 
     local function exportObject(resource)
+        if resource == 'core-framework' then
+            -- 限流 owner 迁到 core-framework 之后，效果通道每次派发都要过这个导出。
+            -- 忠实复刻 core-framework/server/rate_limit.lua：首次调用就扣一个令牌，
+            -- 拒绝时回 retry_after_ms（毫秒）。返回 true 的空壳会让 retry_after 断言
+            -- 永远通过、限流本身不可测；直接挂在代理表上则要吞掉冒号调用传进来的 self。
+            env.rate_buckets = env.rate_buckets or {}
+            local core = exportObject('__core_framework_defaults')
+            local function tokenBucket(...)
+                local args = { ... }
+                if type(args[1]) == 'table' then table.remove(args, 1) end
+                local key, ratePerMinute, burst = args[1], args[2], args[3]
+                if type(key) ~= 'string' or key == '' then return true, 0 end
+                ratePerMinute = math.max(tonumber(ratePerMinute) or 0, 1)
+                burst = math.max(tonumber(burst) or 1, 1)
+                local now = type(env.now) == 'number' and env.now or 0
+                local refillPerMs = ratePerMinute / 60000
+                local bucket = env.rate_buckets[key]
+                if not bucket then
+                    env.rate_buckets[key] = { tokens = burst - 1, updatedAt = now }
+                    return true, 0
+                end
+                local elapsed = math.max(0, now - (bucket.updatedAt or now))
+                if elapsed > 0 then
+                    bucket.tokens = math.min(burst, bucket.tokens + elapsed * refillPerMs)
+                    bucket.updatedAt = now
+                end
+                if bucket.tokens < 1 then
+                    return false, math.ceil((1 - bucket.tokens) / refillPerMs)
+                end
+                bucket.tokens = bucket.tokens - 1
+                return true, 0
+            end
+            core.RateLimitTokenBucket = tokenBucket
+            return core
+        end
         if resource == 'qb-core' then
             return {
                 GetCoreObject = function()
@@ -51,6 +86,14 @@ return function(env)
                     local overrides = env.export_overrides[resource]
                     if type(overrides) == 'table' and type(overrides[functionName]) == 'function' then
                         return overrides[functionName](...)
+                    end
+                    -- 本 env 里真的注册过的导出要被调用，而不是一律返回 true：
+                    -- 之前 core-framework 的 ConvarString/ConvarInt 也走这条兜底，
+                    -- 于是每个读 convar 的开关都拿到 true，`== '1'` 永远为假 →
+                    -- 功能被当成关闭（HTTP 适配器全 503），测试却"没报错"。
+                    local registered = env.exports[functionName]
+                    if type(registered) == 'function' then
+                        return registered(...)
                     end
                     env.log[#env.log + 1] = {
                         export = tostring(resource) .. ':' .. tostring(functionName),

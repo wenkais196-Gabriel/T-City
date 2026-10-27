@@ -8,7 +8,7 @@
 ## 0. 结论（施工口径）
 
 1. **15 个在册动作**（含 v1 的 `notify`/`add_money`/`start_quest`），`teleport` 只登记不实现。
-2. `policy.lua` 从 if-chain 改为 **per-action 声明**（`risk/approval/channel/compensation/normalize/check`）；副作用 `execute/verify/inverse` 放 `server/executors.lua`，保持 policy 纯函数、可 `lua5.4` 单测。
+2. `policy.lua` 从 if-chain 改为 **per-action 声明**（`risk/approval/channel/compensation/normalize/check`）；副作用 `execute/verify/inverse` 放独立的执行器模块（server 侧），保持 policy 纯函数、可 `lua5.4` 单测。
 3. **inverse 在执行时捕获**（不是提案时），存 `inverse_params`；L4 一律 `manual`，不自动回滚钱（对齐 03 §6）。
 4. 批量只支持 `saga`/`best_effort`，**明确拒绝 `all_or_nothing`**；部分失败返回 `partial_success` + 补偿明细。
 5. 预算升级为 `agent_action_limits`；熔断落 `agent_circuit_breaker`；审计同时写 `agent_actions` 与 `agent_events`。
@@ -328,7 +328,7 @@ end
 
 ## 9. 经济安全
 
-### 9.1 `MoneyGuard`（`server/money_guard.lua`）
+### 9.1 `MoneyGuard`（server 侧资金守卫，设计稿）
 
 ```lua
 -- 返回 ok, err, verifyTable
@@ -532,7 +532,7 @@ TTL 线程 30s tick：过期 → `delete_vehicle(temp=true)`；玩家在车内�
 |:-:|:---|:---|:---|
 | 1 | `v2.4_agent_write_actions.sql`：ALTER `agent_actions` + `agent_batches`/`agent_action_limits`/`agent_action_approvals`/`agent_circuit_breaker` | 空库与 v2.3 库各跑一次；`SHOW CREATE TABLE` 对比；重跑不报错（`IF NOT EXISTS`；`MODIFY` 有守卫） | v2.3 |
 | 2 | `policy.lua` v2 声明式 registry + 公共 Normalize 助手 + `RequiresApproval/RequiredApprovals/StatusFor` 兼容 | `lua5.4 tests/agent/test_agent_actions_policy.lua` 全绿；旧 selftest 不改也过 | 1 |
-| 3 | `server/executors.lua` 注册表 + `MoneyGuard` 抽取（add_money 行为不变） | 现有 add_money live smoke 通过；`luac5.4 -p`；失败注入返回 `delta_mismatch` | 2 |
+| 3 | 执行器注册表（server 侧）+ `MoneyGuard` 抽取（add_money 行为不变） | 现有 add_money live smoke 通过；`luac5.4 -p`；失败注入返回 `delta_mismatch` | 2 |
 | 4 | 审批 v2：`approval_count/required_approvals`、双人、60s 过期 worker、审计事件 | 单审/双审/过期/自批 4 用例；`agent.action.rejected` 仅对已落库行产生 | 1,3 |
 | 5 | 批量：`agent_batches` + saga 补偿 + `partial_success` + 补偿行 | 强制第 2 步失败：第 1 步 inverse 执行、状态 `compensated`/`partial_success`、`inverse_of` 正确 | 1,3,4 |
 | 6 | 额度表 + 查询 + `/policy` 暴露 `limits_source`/`quota_used` | pending 预占、reject 释放、补偿不占额；`EXPLAIN` 走索引 | 1 |

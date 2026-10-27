@@ -1,10 +1,23 @@
 <script lang="ts">
+  import { formatClock, formatAgo } from '../utils/time';
   import { onMount } from 'svelte';
   import { playerData } from '../stores/phone';
   import { requestAppQuery as queryApp, requestAppAction as appAction } from '../core/request';
+  import AppSurface from '../components/AppSurface.svelte';
+  import Pane from '../components/Pane.svelte';
+  import { PANE_CONTRACT as DISPATCH_PANES } from './contracts/police_mdt.panes';
 
   type Unit = { citizenid: string; name: string; callsign: string; dept: string; status: string; incident_id: number | null };
-  type Incident = { id: number; code: string; title: string; description: string; priority: number; status: string; disposition?: string | null; npc_template?: string | null; created_at: string; x?: number; y?: number; z?: number };
+  type AllowedAction = { allowed: boolean; reason?: string | null; label?: string | null };
+  type Incident = {
+    id: number; code: string; title: string; description: string; priority: number; status: string;
+    disposition?: string | null; npc_template?: string | null; created_at: string;
+    x?: number; y?: number; z?: number;
+    // 服务端下发的判定结果（IncidentActionState 的投影）：前端只渲染，不自己算规则
+    units?: { citizenid: string; role?: string }[];
+    primary?: string | null;
+    actions?: { claim?: AllowedAction; clear?: AllowedAction };
+  };
   type Charge = { id: number | string; label: string; minutes: number; fine: number };
   type Me = { citizenid: string; callsign: string; grade: number; status?: string };
 
@@ -59,6 +72,10 @@
   ];
 
   let page = $state<Page>('dispatch');
+  // 由 AppSurface 回写：'stack'=单列（手机），'grid'=并排（平板）
+  let mode = $state<'stack' | 'grid'>('stack');
+  // 右边那一栏选中的警情。手机不存在这一栏，所以它不影响手机的交互。
+  let activeIncidentId = $state<number | null>(null);
   let dispatchSeg = $state<'units' | 'incidents'>('units');
   let personSeg = $state<'citizen' | 'vehicle'>('citizen');
   let reportSeg = $state<'arrest' | 'report' | 'citation' | 'evidence'>('arrest');
@@ -71,6 +88,17 @@
 
   let units = $state<Unit[]>([]);
   let incidents = $state<Incident[]>([]);
+
+  // 右栏显示哪一单：默认第一张（打开详情无副作用，不像 Messages 会自动清未读）
+  const callsignOf = (citizenid: string | null | undefined) => {
+    if (!citizenid) return null;
+    const unit = units.find((item) => item.citizenid === citizenid);
+    return unit?.callsign || unit?.name || citizenid;
+  };
+
+  const selectedIncident = $derived(
+    incidents.find((item) => item.id === activeIncidentId) ?? incidents[0] ?? null,
+  );
   let loading = $state(false);
   let lastRefreshAt = $state('');
   let error = $state('');
@@ -101,6 +129,14 @@
   let reportResult = $state<any>(null);
   // One key per open form. It is created before the first submit attempt and
   // only cleared after the server confirms success, so a double tap (or a
+  // 警情时间：DB 给的是 ISO 原文（2026-10-26T09:43:42.000Z），直接把整串印在板上
+  // 玩家/警员都读不出来。统一成"HH:MM · 3 分钟前"。
+  function incidentTime(value: unknown): string {
+    const clock = formatClock(value, 'mdt');
+    const ago = formatAgo(value);
+    return ago ? `${clock} · ${ago}` : clock;
+  }
+
   // retry after a timeout) replays the same server-side intent instead of
   // creating a second report/citation. A failure keeps the key for the retry.
   let reportIdempotencyKey = $state('');
@@ -229,6 +265,14 @@
     invalid_transition: '警情状态已变化，请刷新后重试',
     incident_not_found: '警情不存在或已归档',
     not_assigned: '你尚未被分配到该警情（需先派单/到场）',
+    not_on_scene: '到场后才能清场',
+    not_primary: '由现场负责人清场',
+    already_joined: '你已经在这张单上',
+    incident_closed: '该警情已归档',
+    too_far: '距离现场太远，无法记录到场',
+    bad_nonce: '到场凭证失效，请稍后自动重试',
+    incident_has_no_coords: '该警情没有坐标，无法领路',
+    invalid_incident: '警情编号无效',
     already_jailed: '目标已在服刑',
     too_far: '目标距离超过 5 米',
     not_handcuffed: '目标没有上铐/倒地，先 /cuff',
@@ -245,10 +289,10 @@
     action_failed: '操作失败，请重试',
     export_error: '服务端处理异常，请稍后重试',
     action_rejected: '服务端拒绝：请检查权限与状态',
-    action_failed: '服务端处理失败，请稍后重试',
     action_not_found: 'MDT 未注册该动作',
     app_forbidden: '无权限使用 MDT（需在勤警察）',
     player_not_found: '角色尚未加载',
+    player_not_ready: '角色还在加载，稍等一下',
     invalid_message: '请填写警情通报内容',
     invalid_status: '状态无效',
     invalid_disposition: '清场处置无效',
@@ -752,9 +796,20 @@
     else auditError = errorText(res?.error ?? 'audit_forbidden');
   }
 
-  async function updateIncident(incident: Incident, action: 'enroute' | 'on_scene') {
-    const res = await appAction(DB, action, { incident_id: incident.id });
-    notice = res?.success ? `#${incident.id} ${action === 'enroute' ? '前往中' : '已到场'}` : `失败：${errorText(res?.error ?? 'unknown')}`;
+  // 申领：服务端 assign + enroute + 推路线，一步到位。客户端不自己画路线，
+  // 因为"被派到就出发"的路线由服务端推（同一份逻辑覆盖手机、控制台、NPC 派单）。
+  async function claimIncident(incident: Incident) {
+    const res = await appAction(DB, 'claim', { incident_id: incident.id });
+    notice = res?.success
+      ? `#${incident.id} 已接手（${res?.data?.role === 'support' ? '支援' : '负责'}）· 路线自动规划`
+      : `申领失败：${errorText(res?.error ?? 'unknown')}`;
+    await refresh();
+  }
+
+  // 自动检测失灵时的人工补录：服务端仍按 ped 坐标校验
+  async function manualArrive(incident: Incident) {
+    const res = await appAction(DB, 'arrive_manual', { incident_id: incident.id });
+    notice = res?.success ? `#${incident.id} 已补录到场` : `补录失败：${errorText(res?.error ?? 'unknown')}`;
     await refresh();
   }
 
@@ -764,7 +819,26 @@
   });
 </script>
 
-<div class="mdt">
+{#snippet incidentActions(incident: Incident)}
+  {#if incident.actions?.claim?.allowed}
+    <button class="step" onclick={() => claimIncident(incident)}>
+      {incident.actions.claim.label === 'join' ? '加入' : '前往'}
+    </button>
+  {:else if incident.actions?.claim?.reason}
+    <button class="step" disabled title={errorText(incident.actions.claim.reason)}>前往</button>
+  {/if}
+  {#if incident.actions?.clear?.allowed}
+    <button class="clear" onclick={() => clearIncident(incident)}>清场</button>
+  {:else if incident.actions?.clear?.reason}
+    <button class="clear" disabled title={errorText(incident.actions.clear.reason)}>清场</button>
+  {/if}
+  {#if incident.status === 'enroute' && incident.primary === $playerData.citizenid}
+    <button class="ghost" title="自动检测失灵时用，服务端仍会校验距离"
+      onclick={() => manualArrive(incident)}>补录到场</button>
+  {/if}
+{/snippet}
+
+<div class="mdt" class:mdt-split={page === 'dispatch'}>
   <header class="mdt-head">
     <div>
       <h2>🛡️ Police MDT</h2>
@@ -783,81 +857,116 @@
   {#if notice}<p class="notice">{notice}</p>{/if}
 
   {#if page === 'dispatch'}
-    <section class="card">
-      <div class="row">
-        <div>
-          <h3>请求支援</h3>
-          <p class="muted">派出 1 辆警车 + 2 名 NPC 警员；同时最多 2 个单位。</p>
-        </div>
-        <button class="submit" onclick={requestBackup} disabled={backupBusy || backupCooldown > 0}>
-          {backupBusy ? '请求中…' : backupCooldown > 0 ? `冷却 ${backupCooldown}s` : '请求支援'}
-        </button>
-      </div>
-      {#if backupError}<p class="err">{backupError}</p>{/if}
-    </section>
+    <div class="dispatch">
+      <!-- 手机上这两颗是「切换 pane」，平板上两栏已经并排，切换没有意义 -->
+      {#if mode !== 'grid'}
+        <nav class="tabs sub-tabs">
+          <button class:active={dispatchSeg === 'units'} onclick={() => openDispatchSeg('units')}>单位</button>
+          <button class:active={dispatchSeg === 'incidents'} onclick={() => openDispatchSeg('incidents')}>接警</button>
+        </nav>
+      {/if}
 
-    <nav class="tabs sub-tabs">
-      <button class:active={dispatchSeg === 'units'} onclick={() => openDispatchSeg('units')}>单位</button>
-      <button class:active={dispatchSeg === 'incidents'} onclick={() => openDispatchSeg('incidents')}>接警</button>
-    </nav>
-    <div class="row" style="margin-bottom: 8px;">
-      <span class="muted">
-        列表不会自动刷新{lastRefreshAt ? ` · 上次 ${lastRefreshAt}` : ''}
-      </span>
-      <button class="refresh" class:busy={loading} onclick={refresh} aria-busy={loading}>
-        {loading ? '刷新中…' : '刷新'}
-      </button>
-    </div>
-
-    {#if dispatchSeg === 'units'}
-      <section class="card">
-        <h3>在勤单位</h3>
-        {#if units.length === 0}<p class="empty">暂无在勤单位</p>{/if}
-        {#each units as unit}
-          <div class="row">
-            <div>
-              <b>{unit.callsign || unit.name || unit.citizenid}</b>
-              <p class="muted">{unit.name} · {unit.dept}</p>
-            </div>
-            <span class="tag">{statusLabel[unit.status] ?? unit.status}</span>
-          </div>
-        {/each}
-        <button class="refresh" onclick={refresh} disabled={loading}>刷新</button>
-      </section>
-    {:else}
-      <section class="card">
-        <h3>接警</h3>
-        {#if incidents.length === 0}<p class="empty">暂无警情</p>{/if}
-        {#each incidents as incident}
-          <div class="incident">
+      <AppSurface
+        spec={DISPATCH_PANES}
+        activePane={dispatchSeg === 'units' ? 'units' : 'incidents'}
+        bind:mode
+      >
+        <Pane id="units">
+          <section class="card">
             <div class="row">
               <div>
-                <b>#{incident.id} [{incident.code}] {incidentTitle(incident)}</b>
-                {#if isNpcIncident(incident)}<span class="tag npc">NPC</span>{/if}
-                <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status}{incident.disposition ? ` · ${dispositionLabel[incident.disposition] ?? incident.disposition}` : ''} · {incident.created_at}</p>
+                <h3>请求支援</h3>
+                <p class="muted">派出 1 辆警车 + 2 名 NPC 警员；同时最多 2 个单位。</p>
               </div>
-              <div class="actions">
-                <button class="step" onclick={() => updateIncident(incident, 'enroute')}>前往</button>
-                <button class="step" onclick={() => updateIncident(incident, 'on_scene')}>到场</button>
-                <button class="clear" onclick={() => clearIncident(incident)}>清场</button>
+              <button class="submit" onclick={requestBackup} disabled={backupBusy || backupCooldown > 0}>
+                {backupBusy ? '请求中…' : backupCooldown > 0 ? `冷却 ${backupCooldown}s` : '请求支援'}
+              </button>
+            </div>
+            {#if backupError}<p class="err">{backupError}</p>{/if}
+          </section>
+
+          <section class="card">
+            <h3>在勤单位</h3>
+            {#if units.length === 0}<p class="empty">暂无在勤单位</p>{/if}
+            {#each units as unit}
+              <div class="row">
+                <div>
+                  <b>{unit.callsign || unit.name || unit.citizenid}</b>
+                  <p class="muted">{unit.name} · {unit.dept}</p>
+                </div>
+                <span class="tag">{statusLabel[unit.status] ?? unit.status}</span>
               </div>
-            </div>
-            {#if incident.description}<p class="desc">{incident.description}</p>{/if}
-            <div class="assign-row">
-              <select id={`unit-${incident.id}`}>
-                {#each units as unit}<option value={unit.citizenid}>{unit.callsign || unit.name || unit.citizenid}</option>{/each}
-              </select>
-              <button onclick={() => {
-                const el = document.getElementById(`unit-${incident.id}`) as HTMLSelectElement;
-                const unit = units.find((u) => u.citizenid === el?.value);
-                if (unit) assign(incident, unit);
-              }}>派单</button>
-            </div>
+            {/each}
+            <button class="refresh" onclick={refresh} disabled={loading}>刷新</button>
+          </section>
+        </Pane>
+
+        <Pane id="incidents">
+          <div class="row" style="margin-bottom: 8px;">
+            <span class="muted">
+              列表不会自动刷新{lastRefreshAt ? ` · 上次 ${lastRefreshAt}` : ''}
+            </span>
+            <button class="refresh" class:busy={loading} onclick={refresh} aria-busy={loading}>
+              {loading ? '刷新中…' : '刷新'}
+            </button>
           </div>
-        {/each}
-        <button class="refresh" onclick={refresh} disabled={loading}>刷新</button>
-      </section>
-    {/if}
+
+          <section class="card">
+            <h3>接警</h3>
+            {#if incidents.length === 0}<p class="empty">暂无警情</p>{/if}
+            {#each incidents as incident}
+              <div
+                class="incident"
+                class:sel={incident.id === selectedIncident?.id}
+                onclick={() => (activeIncidentId = incident.id)}
+              >
+                <div class="row">
+                  <div>
+                    <b>#{incident.id} [{incident.code}] {incidentTitle(incident)}</b>
+                    {#if isNpcIncident(incident)}<span class="tag npc">NPC</span>{/if}
+                    <p class="muted">P{incident.priority} · {statusLabel[incident.status] ?? incident.status}{incident.disposition ? ` · ${dispositionLabel[incident.disposition] ?? incident.disposition}` : ''} · {incidentTime(incident.created_at)}</p>
+                  </div>
+                  <div class="actions">{@render incidentActions(incident)}</div>
+                </div>
+                {#if incident.description}<p class="desc">{incident.description}</p>{/if}
+                <div class="assign-row">
+                  <select id={`unit-${incident.id}`}>
+                    {#each units as unit}<option value={unit.citizenid}>{unit.callsign || unit.name || unit.citizenid}</option>{/each}
+                  </select>
+                  <button onclick={() => {
+                    const el = document.getElementById(`unit-${incident.id}`) as HTMLSelectElement;
+                    const unit = units.find((u) => u.citizenid === el?.value);
+                    if (unit) assign(incident, unit);
+                  }}>派单</button>
+                </div>
+              </div>
+            {/each}
+            <button class="refresh" onclick={refresh} disabled={loading}>刷新</button>
+          </section>
+        </Pane>
+
+        <Pane id="detail">
+          <!-- 只在平板渲染：手机上没有右栏，也不该在 DOM 里多一份按钮 -->
+          {#if mode === 'grid' && selectedIncident}
+            <section class="card">
+              <h3>#{selectedIncident.id} [{selectedIncident.code}] {incidentTitle(selectedIncident)}</h3>
+              <p class="muted">P{selectedIncident.priority} · {statusLabel[selectedIncident.status] ?? selectedIncident.status} · {incidentTime(selectedIncident.created_at)}</p>
+              {#if selectedIncident.description}<p class="desc">{selectedIncident.description}</p>{/if}
+              <div class="actions detail-actions">{@render incidentActions(selectedIncident)}</div>
+              <p class="line"><span class="muted">负责人</span> {callsignOf(selectedIncident.primary) ?? '未申领'}</p>
+              <p class="line"><span class="muted">单位</span> {selectedIncident.units?.length
+                ? selectedIncident.units.map((u) => callsignOf(u.citizenid)).join('、')
+                : '无'}</p>
+              {#if typeof selectedIncident.x === 'number' && typeof selectedIncident.y === 'number'}
+                <p class="line"><span class="muted">坐标</span> {Math.round(selectedIncident.x)}, {Math.round(selectedIncident.y)}</p>
+              {/if}
+            </section>
+          {:else if mode === 'grid'}
+            <p class="empty">左边选一张警情</p>
+          {/if}
+        </Pane>
+      </AppSurface>
+    </div>
 
   {:else if page === 'person'}
     <nav class="tabs sub-tabs">
@@ -1248,6 +1357,15 @@
 
 <style>
   .mdt { padding: 14px; height: 100%; overflow-y: auto; color: #e8edf5; font-size: 12px; }
+  /* 调度页改成三栏：整页不再滚动，滚动交给每个 pane（否则右栏永远被列表撑长） */
+  .mdt-split { display: flex; flex-direction: column; overflow: hidden; }
+  .mdt-split .dispatch { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .mdt-split :global(.pane) { padding: 0 8px; }
+  .mdt-split :global(.pane:first-child) { padding-left: 0; }
+  .mdt-split :global(.pane:last-child) { padding-right: 0; }
+  .mdt-split :global(.pane + .pane) { border-left: 1px solid rgba(255,255,255,.07); }
+  .incident.sel { background: rgba(37,99,235,.12); border-radius: 10px; }
+  .detail-actions { margin: 8px 0; flex-wrap: wrap; }
   .mdt-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .mdt-head h2 { margin: 0; font-size: 16px; }
   .sub, .muted { margin: 2px 0 0; opacity: 0.6; font-size: 11px; }
@@ -1285,6 +1403,9 @@
   .actions { display: flex; gap: 4px; }
   .step { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #f59e0b; color: #111; }
   .clear { font-size: 10px; border: 0; border-radius: 8px; padding: 5px 8px; background: #b91c1c; color: #fff; }
+  .actions .ghost { font-size: 10px; border: 1px solid rgba(255,255,255,.22); border-radius: 8px; padding: 4px 8px; background: transparent; color: #9aa6c4; }
+  /* 置灰要看得出来是"现在不能点"，而不是加载中 */
+  .actions button:disabled { opacity: .4; cursor: not-allowed; }
   .lookup, .form { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   .form input, .form textarea, .form select { flex: 1 1 45%; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px; font-size: 11px; }
   .form textarea.wide, .form select.wide { flex-basis: 100%; }

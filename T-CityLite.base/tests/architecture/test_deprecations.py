@@ -83,6 +83,25 @@ def _event_body(text: str, start: int) -> str:
     return text[start: (len(text) if end < 0 else end + len("end)"))]
 
 
+
+def _strip_comments(text: str) -> str:
+    """把 `--` 注释抹成空格（保留换行，行号不变）。
+
+    不剥注释时，文档里写的示例（`'INSERT INTO police_arrests'`）会被当成一次真实写入，
+    "这张表有几个写者"的预算就被散文污染了 —— 2026-10-25 收口 records.lua 时正是这样。
+    """
+    out: list[str] = []
+    for line in text.splitlines(keepends=True):
+        index = line.find("--")
+        if index < 0:
+            out.append(line)
+            continue
+        head = line[:index]
+        tail = line[index:]
+        out.append(head + " " * len(tail.rstrip("\n")) + ("\n" if tail.endswith("\n") else ""))
+    return "".join(out)
+
+
 def hits_for(entry: dict) -> list[Hit]:
     """Find the real occurrences of one deprecation target."""
     target = str(entry.get("target") or "")
@@ -107,8 +126,9 @@ def hits_for(entry: dict) -> list[Hit]:
         else:
             continue
 
+        code = _strip_comments(text) if kind == "table" else text
         for pattern in patterns:
-            for match in pattern.finditer(text):
+            for match in pattern.finditer(code):
                 line = text.count("\n", 0, match.start()) + 1
                 body = _event_body(text, match.start()) if kind == "event" else text
                 hits.append(Hit(path=path, line=line, body=body))
@@ -200,10 +220,11 @@ def test_deprecated_paths_do_not_grow():
 
 def test_table_budget_counts_every_write_statement():
     entries = {entry["id"]: entry for entry in load_entries()}
+    # 2026-10-25: 两条写路径已收口到 records.lua，写入点 2 → 1（表仍是历史包袱，登记不删）
     arrests = hits_for(entries["police-arrests-table"])
-    assert len(arrests) == entries["police-arrests-table"]["expected_writes"] == 2
-    assert any("p2_system.lua" in hit.where for hit in arrests)
-    assert any("p3_cases.lua" in hit.where for hit in arrests)
+    assert len(arrests) == entries["police-arrests-table"]["expected_writes"] == 1
+    assert all("records.lua" in hit.where for hit in arrests), (
+        "police_arrests 只该由 records.lua 写")
 
     bolos = hits_for(entries["police-bolos-table"])
     assert len(bolos) == entries["police-bolos-table"]["expected_writes"] == 2
@@ -235,7 +256,8 @@ def test_reverse_check_rejects_new_debt():
         "owner": "custom-police",
         "reason": "synthetic",
         "replacement": "none",
-        "expected_writes": 1,
+        # 真实写入点是 1（records.lua）；登记成 0 就是"比预算多写了一处" = new debt
+        "expected_writes": 0,
         "added": "2026-10-24",
         "expires": "2026-12-31",
     }
@@ -267,7 +289,8 @@ def test_reverse_check_rejects_stale_entry():
         "owner": "custom-police",
         "reason": "synthetic",
         "replacement": "none",
-        "expected_writes": 1,
+        # 真实写入点是 1（records.lua）；登记成 0 就是"比预算多写了一处" = new debt
+        "expected_writes": 0,
         "added": "2026-10-24",
         "expires": "2099-01-01",
     }

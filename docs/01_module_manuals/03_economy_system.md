@@ -63,7 +63,7 @@ Convars: `economy_high_inflation_net_per_hour` / `economy_low_activity_net_per_h
 
 - 被动监听 `QBCore:Server:OnMoneyChange`
 - 管理员命令：`/econ` `/hotrank` `/assets` `/econreport`
-- 周报导出：`data/telemetry_weekly.json`
+- 周报导出：custom-economy 的 data/telemetry_weekly.json（产物未入库）
 - 只读 — 不处理金钱，零安全风险
 
 ---
@@ -81,7 +81,7 @@ Convars: `economy_high_inflation_net_per_hour` / `economy_low_activity_net_per_h
 
 ## 3.5 custom-economy (壳) + custom-taxes (虹吸)
 
-- **custom-economy**: 已废弃 — `server/economy.lua` 已移除，被 core_economy 替代。配置通过 Convars 生效。
+- **custom-economy**: 已废弃 — server/economy.lua 已移除，被 core_economy 替代。配置通过 Convars 生效。
 - **custom-taxes**: 经济虹吸管道 — 房产税、车辆周期费、NPC 定价、物品耐久度消耗、交易监控。
 
 ---
@@ -118,7 +118,7 @@ Convars: `economy_high_inflation_net_per_hour` / `economy_low_activity_net_per_h
 
 ## 3.8 已知问题
 
-1. **两套 EconomyService**: `qb-core/server/services/economy_service.lua` (citizenid 凭证) 与 `core-framework/services/economy_service.lua` (source 凭证) — 需要合并为一套
+1. **两套 EconomyService**: `T-CityLite.base/resources/[qb]/qb-core/server/services/economy_service.lua` (citizenid 凭证) 与 `T-CityLite.base/resources/[standalone]/core-framework/services/economy_service.lua` (source 凭证) — 需要合并为一套
 2. **AddScaledMoney 实现**: 项目备忘录 `economy-refactor-memo` 标记为 P0 — `exports['custom-main']:AddScaledMoney()` 函数不存在，需实现全局统一出口
 3. **经济倍率未生效**: 部分调用方直接调用 `Player.Functions.AddMoney` 绕过了 `economy_wage_multiplier` 缩放
 4. **custom-phone 独立路径**: 不走 Bus 也不走 core_economy — 直接 `oxmysql` + `qb-core` exports

@@ -1,0 +1,26 @@
+{
+  "since": "2026-10-25",
+  "note": "LEGACY.md 是标记文件；登记项与标记必须一一对应（双向校验）。",
+  "dirs": {
+    "docs/archive": {
+      "reason": "早期设计与交付记录",
+      "broken_at_marking": 27
+    },
+    "docs/cleanup": {
+      "reason": "清理行动的清单与日志",
+      "broken_at_marking": 45
+    },
+    "docs/02_script_index": {
+      "reason": "旧的脚本索引（目录结构已变）",
+      "broken_at_marking": 82
+    },
+    "docs/police": {
+      "reason": "警务系统的历史方案与讨论",
+      "broken_at_marking": 172
+    },
+    "T-CityLite.base/docs/audit": {
+      "reason": "阶段性审计报告快照",
+      "broken_at_marking": 88
+    }
+  }
+}

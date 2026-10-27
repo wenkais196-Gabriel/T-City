@@ -230,6 +230,7 @@ QBCore.Commands.Add('transfervehicle',
         end
 
         local player = QBCore.Functions.GetPlayer(src)
+        if not player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
         local target = QBCore.Functions.GetPlayer(buyerId)
         if not target then
             return TriggerClientEvent('QBCore:Notify', src, Lang:t('error.buyerinfo'), 'error')

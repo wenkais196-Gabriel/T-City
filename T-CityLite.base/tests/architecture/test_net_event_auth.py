@@ -30,9 +30,12 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[2]  # T-CityLite.base/
 RESOURCES = BASE / "resources"
 CUSTOM = RESOURCES / "[custom]"
+DIAG_MODULE = CUSTOM / "custom-phone" / "server" / "core" / "diag.lua"
 SCAN_DIRS = (
     ("custom-police", CUSTOM / "custom-police" / "server"),
     ("custom-phone", CUSTOM / "custom-phone" / "server"),
+    # 2026-10-25: 框架自己也有 net event（客户端诊断通道等），之前完全没被扫过
+    ("core-framework", BASE / "resources" / "[standalone]" / "core-framework" / "server"),
 )
 ALLOWLIST = Path(__file__).with_name("net_events_allowlist.json")
 
@@ -74,7 +77,11 @@ SESSION_BIND = re.compile(
     r"(?:StoreNotification|PhoneNotify\.Store)\(source|"
     r"ResolveSource\(source\)|GetPlayer\(targetSrc"
 )
-DIAGNOSTIC_GUARD = re.compile(r"COOLDOWN|cooldown|diagRateLimited|PHASES")
+DIAGNOSTIC_GUARD = re.compile(
+    # 2026-10-25: 框架的诊断通道走限流 owner，不叫 COOLDOWN 也不叫 PhoneDiag.Accept
+    r"COOLDOWN|cooldown|diagRateLimited|PHASES|PhoneDiag\.Accept|"
+    r"RateLimitWindow|RateLimitCooldown|RateLimitTokenBucket"
+)
 
 REQUIRED_FIELDS = ("name", "file", "category", "reason", "evidence", "owner", "expires")
 DEBT_CATEGORIES = {"unchecked_debt"}
@@ -201,7 +208,8 @@ def test_scanner_covers_both_resources_and_every_handler_terminates():
     # A broken terminator heuristic would silently skip handlers, so pin the
     # shape: 40+ handlers across the two resources.
     assert len(events) >= 40, f"only {len(events)} net events found — scanner regression?"
-    assert {event.resource for event in events} == {"custom-police", "custom-phone"}
+    # 2026-10-25: 范围加了 core-framework（框架自己的 net event 之前没被扫过）
+    assert {event.resource for event in events} == {"custom-police", "custom-phone", "core-framework"}
     assert all(event.name for event in events)
     assert all(len(event.body) > 0 for event in events)
     names = [event.name for event in events]
@@ -249,9 +257,8 @@ def test_allowlist_entries_carry_a_reason_owner_and_expiry():
         assert entry["category"] in known_categories, (
             f"{name}: unknown category {entry['category']!r}"
         )
-        assert entry["owner"] in {"custom-police", "custom-phone"}, (
-            f"{name}: owner must be the owning resource"
-        )
+        # owner 的"必须是所属资源"由 test_allowlisted_events_* 里对 path/resource 的
+        # 一致性检查覆盖（2026-10-25: 原来这里写死两个资源名，框架加进扫描范围后就登不了了）
         expires = date.fromisoformat(entry["expires"])
         assert expires >= today, (
             f"{name}: allowlist entry expired on {entry['expires']} — re-review the "
@@ -260,12 +267,23 @@ def test_allowlist_entries_carry_a_reason_owner_and_expiry():
         )
 
 
+
+def allowlist_path(file_field: str) -> Path:
+    """allowlist 里的 ``file`` 到真实路径。
+
+    约定：[custom] 下的资源省略括号目录（``custom-police/server/x.lua``），
+    其它分组必须带前缀（``[standalone]/core-framework/server/x.lua``）。
+    2026-10-25 之前这里写死 ``CUSTOM / file``，于是框架资源没法登记。
+    """
+    return RESOURCES / file_field if file_field.startswith("[") else CUSTOM / file_field
+
+
 def test_allowlisted_events_really_show_the_claim_in_their_body():
     """A category is a promise; check the handler still keeps it."""
     events = {event.name: event for event in scan_events()[0]}
     for name, entry in allowlist_entries().items():
         event = events[name]
-        assert event.path == CUSTOM / entry["file"], (
+        assert event.path == allowlist_path(entry["file"]), (
             f"{name}: allowlist says {entry['file']} but the handler is at {event.where}"
         )
         category = entry["category"]
@@ -289,6 +307,24 @@ def test_allowlisted_events_really_show_the_claim_in_their_body():
                 f"{name}: registered as diagnostic but no rate limit / field whitelist"
             )
         # unchecked_debt carries no claim beyond the reason + expiry.
+
+
+def test_diag_helper_really_limits_and_sanitizes():
+    """`PhoneDiag.Accept` satisfies the diagnostic guard by delegation, so the
+    claim has to hold where the delegation lands — same idea as AUTH_HELPERS."""
+    source = read(DIAG_MODULE)
+    for token in (
+        "function PhoneDiag.Accept",
+        "PhoneDiag.Sanitize",
+        "allowTrace",
+        "allowUi",
+        "printBudgetOk",
+        "TRACE_PER_MIN = ",
+        "TRACE_BURST = ",
+        "UI_COOLDOWN_MS = ",
+        "PRINT_BUDGET_PER_SEC = ",
+    ):
+        assert token in source, f"doc claims {token!r} but it is gone from {DIAG_MODULE.name}"
 
 
 def test_auth_helpers_really_enforce_policypolicy():
@@ -341,3 +377,55 @@ def test_no_auth_token_is_smuggled_in_via_a_comment():
 
 if __name__ == "__main__":  # pragma: no cover - manual runner
     print(report())
+
+
+# ---------------------------------------------------------------------------
+# 注册形式本身也是一条规则：必须写字面量
+# ---------------------------------------------------------------------------
+
+REGISTER_ANY = re.compile(r"RegisterNetEvent\s*\(\s*(?P<arg>[^,\n)]+)")
+
+
+def non_literal_registrations() -> list[str]:
+    """返回"第一个参数不是字符串字面量"的注册点。
+
+    为什么必须钉这条：扫描器按字面量取事件名，`RegisterNetEvent(EVENT_NAME, ...)`
+    会让整条事件对闸门不可见——而诊断类事件能往服务端日志写字，看不见就等于没管。
+    实证：框架的客户端诊断通道第一版就是这么写的，加进 SCAN_DIRS 后依然"8 passed"。
+    """
+    offenders = []
+    for _resource, directory in SCAN_DIRS:
+        for path in sorted(directory.rglob("*.lua")):
+            for index, line in enumerate(read(path).splitlines(), 1):
+                match = REGISTER_ANY.match(line.strip())
+                if not match:
+                    continue
+                arg = match.group("arg").strip()
+                if arg[:1] in ("'", '"'):
+                    continue
+                try:
+                    where = path.relative_to(RESOURCES).as_posix()
+                except ValueError:          # 反向校验用的是临时目录
+                    where = path.as_posix()
+                offenders.append(f"{where}:{index}  RegisterNetEvent({arg} ...)")
+    return offenders
+
+
+def test_net_event_registration_uses_a_literal_name():
+    offenders = non_literal_registrations()
+    assert not offenders, (
+        "这些 net event 用变量名注册，架构闸门看不见它们（等于没管）：\n  " + "\n  ".join(offenders))
+
+
+def test_literal_rule_fires_on_the_variable_form(tmp_path: Path):
+    """反向校验：把变量形式喂给判定函数，必须被抓到。"""
+    spike = tmp_path / "spike.lua"
+    spike.write_text("RegisterNetEvent(EVENT_NAME, function() end)\n", encoding="utf-8")
+    original = globals()["SCAN_DIRS"]
+    try:
+        globals()["SCAN_DIRS"] = (("spike", tmp_path),)
+        assert non_literal_registrations(), "变量名注册必须被判为违规"
+        spike.write_text("RegisterNetEvent('x:server:y', function() end)\n", encoding="utf-8")
+        assert not non_literal_registrations(), "字面量注册不该被误报"
+    finally:
+        globals()["SCAN_DIRS"] = original

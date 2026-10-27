@@ -1,9 +1,6 @@
 local function audit(cid, action, target, detail)
-    return pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, "player", ?, ?, ?)',
-            { cid, action, target, detail and tostring(detail):sub(1, 500) or nil })
-    end)
+    -- 唯一写者见 server/audit.lua（这里只保留同名包装，调用点不用改）
+    return PoliceAudit.Write(cid, action, target, detail)
 end
 
 RegisterNetEvent('police:server:SearchPlayer', function()

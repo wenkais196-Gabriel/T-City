@@ -62,15 +62,11 @@ end)
 -- Rate Limit (1000ms 操作冷却)
 -- ==============================================================
 
-local opCooldowns = {} -- [src] = { [action] = timestamp }
+
 
 local function checkOpRateLimit(src, action)
-    local now = os.clock() * 1000
-    if not opCooldowns[src] then opCooldowns[src] = {} end
-    local last = opCooldowns[src][action] or 0
-    if now - last < 1000 then return false end
-    opCooldowns[src][action] = now
-    return true
+    -- 走 core-framework 的限流 owner（原来这里自己维护 opCooldowns 表，1000ms 冷却）
+    return exports['core-framework']:RateLimitCooldown(('dash:%s:%s'):format(src, action), 1000)
 end
 
 -- ==============================================================

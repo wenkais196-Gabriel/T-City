@@ -23,11 +23,11 @@ import {
 const CLEAR_TRANSITION_TEXT = '清场失败：警情状态已变化，请刷新后重试';
 
 function unitCallsigns(page) {
-  return page.locator('.mdt section.card .row b').allTextContents();
+  return page.locator('.mdt [data-pane="units"] section.card .row b').allTextContents();
 }
 
 async function waitUnitCallsigns(page, timeoutMs) {
-  const locator = page.locator('.mdt section.card .row b');
+  const locator = page.locator('.mdt [data-pane="units"] section.card .row b');
   await waitFor(async () => (await locator.count()) > 0, timeoutMs, '刷新后应出现在勤单位行');
   return locator.allTextContents();
 }
@@ -47,7 +47,7 @@ function incidentsRequestCount(world) {
 export const scenarios = [
   {
     name: '首轮 500 + 断连：错误可见、loading 复位、刷新后渲染单位与 911 警情',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.units = [
         { citizenid: 'COP001', name: 'Alice Adams', callsign: UNIT_ALPHA, dept: 'LSPD', status: 'available', incident_id: null },
         { citizenid: 'COP002', name: 'Bob Brown', callsign: UNIT_BRAVO, dept: 'LSPD', status: 'busy', incident_id: 6 },
@@ -58,7 +58,7 @@ export const scenarios = [
       world.failQueries = new Set(['units']);
       world.abortQueries = new Set(['incidents']);
 
-      await openMdt(page);
+      await openMdt(page, surface);
 
       // This is the regression guard for "永久 loading": if loading never
       // resets, the refresh button stays disabled until the timeout below.
@@ -107,9 +107,9 @@ export const scenarios = [
 
   {
     name: '911 新建警情：页面不自动刷新，手动刷新后出现在接警列表',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.incidents = [];
-      await openMdt(page);
+      await openMdt(page, surface);
       await waitEnabled(await refreshButton(page), 5000, '首轮加载应结束');
       await openDispatchTab(page, '接警');
       checkEqual('初始接警列表应为空', await page.locator('.mdt .incident').count(), 0);
@@ -138,10 +138,10 @@ export const scenarios = [
 
   {
     name: '错误码映射：invalid_transition 显示中文，未知码原样回退',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.incidents = [INCIDENT_911];
       world.actionErrors = {};
-      await openMdt(page);
+      await openMdt(page, surface);
       await waitEnabled(await refreshButton(page), 5000, '首轮加载应结束');
       await openDispatchTab(page, '接警');
       await waitIncidentVisible(page, 3000);
@@ -178,16 +178,16 @@ export const scenarios = [
 
   {
     name: '挂起的 appQuery 在超时后恢复，刷新按钮可再次使用',
-    async run({ page, world }) {
+    async run({ page, world, surface }) {
       world.units = [];
       world.incidents = [];
       // Both requests never settle; the 6s AbortController timeout must turn
       // them into query_failed and let refresh() leave loading=false.
       world.hangQueries = new Set(['units', 'incidents']);
-      await openMdt(page);
+      await openMdt(page, surface);
       await waitEnabled(
         await refreshButton(page),
-        9000,
+        15000, // 6s AbortController 超时之后才会复位；慢机器/双形态并行时 9s 会误报
         '挂起的查询超时后刷新按钮应恢复可点击',
       );
       const text = await waitText(

@@ -19,7 +19,23 @@ import {
   startStaticServer,
   createWorld,
 } from './harness.mjs';
-import { scenarios } from './mdt.spec.mjs';
+import { scenarios as mdtScenarios } from './mdt.spec.mjs';
+import { questScenarios } from './quests.spec.mjs';
+import { notifyScenarios } from './notify.spec.mjs';
+import { emergencyScenarios } from './emergency.spec.mjs';
+import { surfaceScenarios } from './surface.spec.mjs';
+
+const scenarios = [...surfaceScenarios, ...mdtScenarios, ...questScenarios, ...notifyScenarios, ...emergencyScenarios];
+
+// 默认只跑手机形态：这台机器（3.3GB）跑 26 个浏览器场景会 OOM。
+// 平板形态用显式开关跑：
+//   node tests/nui/run.mjs --surface=tablet   # 平板一遍
+//   node tests/nui/run.mjs --surface=both     # 两种都跑（慢，CI 用）
+// 与形态无关的布局断言在 surface.spec.mjs 里自管两种形态，不受这个开关影响。
+const BOTH = process.argv.includes('--surface=both');
+const ONLY = (process.argv.find((arg) => arg.startsWith('--surface=') && arg !== '--surface=both') ?? '').split('=')[1];
+const SURFACES = BOTH ? ['phone', 'tablet'] : [ONLY || 'phone'];
+if (ONLY && ONLY !== 'phone' && ONLY !== 'tablet') throw new Error(`未知 surface: ${ONLY}`);
 
 const HTML_DIR = path.resolve(fileURLToPath(new URL('../../../html', import.meta.url)));
 
@@ -65,43 +81,49 @@ async function main() {
 
   try {
     for (const scenario of scenarios) {
+      const surfaces = (scenario.surfaces ?? SURFACES).filter((id) => !ONLY || id === ONLY);
+      if (surfaces.length === 0) continue;
+
       if (scenario.skip) {
         skipped += 1;
         console.log(`↷ SKIP ${scenario.name}\n  ${scenario.skip}\n`);
         continue;
       }
 
-      const context = await browser.newContext({
-        locale: 'zh-CN',
-        viewport: { width: 1280, height: 900 },
-      });
-      const page = await context.newPage();
-      const world = createWorld();
-      const pageErrors = [];
-      const consoleErrors = [];
-      page.on('pageerror', (error) => pageErrors.push(String(error)));
-      page.on('console', (message) => {
-        if (message.type() === 'error') consoleErrors.push(message.text());
-      });
-
-      try {
-        // Route + init script must be installed before the first navigation.
-        await installNuiMock(page, world);
-        await installGameGlobals(page);
-        await blockExternalFonts(page);
-        await page.goto(server.url, { waitUntil: 'load' });
-        await scenario.run({ page, world, server });
-        passed += 1;
-        console.log(`✔ ${scenario.name}`);
-      } catch (error) {
-        failed += 1;
-        renderFailure(scenario.name, error, {
-          pageErrors,
-          consoleErrors,
-          requests: requestLog(world).join(', ') || '(none)',
+      for (const surface of surfaces) {
+        const label = surfaces.length > 1 ? `${scenario.name} · ${surface}` : scenario.name;
+        const context = await browser.newContext({
+          locale: 'zh-CN',
+          viewport: { width: 1280, height: 900 },
         });
-      } finally {
-        await context.close().catch(() => {});
+        const page = await context.newPage();
+        const world = createWorld();
+        const pageErrors = [];
+        const consoleErrors = [];
+        page.on('pageerror', (error) => pageErrors.push(String(error)));
+        page.on('console', (message) => {
+          if (message.type() === 'error') consoleErrors.push(message.text());
+        });
+
+        try {
+          // Route + init script must be installed before the first navigation.
+          await installNuiMock(page, world);
+          await installGameGlobals(page);
+          await blockExternalFonts(page);
+          await page.goto(server.url, { waitUntil: 'load', timeout: 60000 });
+          await scenario.run({ page, world, server, surface });
+          passed += 1;
+          console.log(`✔ ${label}`);
+        } catch (error) {
+          failed += 1;
+          renderFailure(label, error, {
+            pageErrors,
+            consoleErrors,
+            requests: requestLog(world).join(', ') || '(none)',
+          });
+        } finally {
+          await context.close().catch(() => {});
+        }
       }
     }
   } finally {

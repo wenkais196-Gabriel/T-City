@@ -8,9 +8,9 @@
       "kind": "table",
       "target": "police_arrests",
       "owner": "custom-police",
-      "reason": "v3.4 起逮捕以 police_reports(kind='arrest') 为准，police_arrests 只保留历史；但 RegisterArrest（p3_cases.lua）与 agent 的 Sys.Jail（p2_system.lua）仍在写。",
+      "reason": "v3.4 起逮捕以 police_reports(kind='arrest') 为准，police_arrests 只保留历史。2026-10-25 起两条写路径（RegisterArrest 与 agent 的 Sys.Jail）已收口到 server/records.lua，所以写入点从 2 降到 1；表本身仍是历史包袱，等迁移完成再删登记。",
       "replacement": "police_reports kind='arrest' via ArrestSubmit",
-      "expected_writes": 2,
+      "expected_writes": 1,
       "added": "2026-10-24",
       "expires": "2026-12-31",
       "ticket": "TD-06"

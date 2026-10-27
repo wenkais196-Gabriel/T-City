@@ -22,10 +22,14 @@ export interface PhoneResponse<T = any> {
 /** Errors produced by this transport wrapper (server codes pass through). */
 export type PhoneRequestError = 'timeout' | 'query_failed' | 'action_failed' | 'no_response';
 
-export async function phoneRequest<T = any>(
+/** 服务端还没加载完角色时回这个码。它是时序，不是失败，值得再等一次。 */
+const RETRYABLE = new Set(['player_not_ready']);
+const RETRY_DELAY_MS = 1200;
+
+async function sendOnce<T>(
   event: string,
-  payload: Record<string, unknown> = {},
-  { timeoutMs = 9000 }: PhoneRequestOptions = {},
+  payload: Record<string, unknown>,
+  timeoutMs: number,
 ): Promise<PhoneResponse<T>> {
   // Preserve the historical per-callback fallback codes.
   const fallbackError = event === 'appAction' ? 'action_failed' : 'query_failed';
@@ -50,6 +54,18 @@ export async function phoneRequest<T = any>(
     console.error(`Phone request failed: ${event}`, err);
     return { success: false, error: fallbackError };
   }
+}
+
+export async function phoneRequest<T = any>(
+  event: string,
+  payload: Record<string, unknown> = {},
+  { timeoutMs = 9000 }: PhoneRequestOptions = {},
+): Promise<PhoneResponse<T>> {
+  const first = await sendOnce<T>(event, payload, timeoutMs);
+  // 玩家刚进服的那一两秒，服务端还没有这个玩家：重试一次，别把时序当失败报给玩家
+  if (first.success || !first.error || !RETRYABLE.has(first.error)) return first;
+  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  return sendOnce<T>(event, payload, timeoutMs);
 }
 
 export function requestAppQuery<T = any>(

@@ -123,7 +123,9 @@ def test_backup_binds_source_before_the_yielding_acquire():
 def test_callout_acquires_and_releases_through_the_budget():
     src = read(P4)
     assert "NPCBudget.Acquire('callout', budgetId, actorCid)" in src
-    assert "NPCBudget.Release(budgetId, 'db_error')" in src
+    # 唯一写者把失败原因透传出来（可能是 db_error，也可能是 invalid_title 之类），
+    # 但"写库失败必须释放预算"这条不能变。
+    assert "NPCBudget.Release(budgetId, insertReason or 'db_error')" in src
     assert "NPCBudget.Release(budgetId, 'no_location')" in src
     assert "NPCBudget.Release(budgetId, 'callout_limit')" in src
     assert "releaseCalloutBudget(id, 'callout_already_closed')" in src
@@ -150,6 +152,12 @@ MySQL = {
             return 1
         end,
     },
+    query = {                       -- 审计唯一写者用 query.await
+        await = function(sql, params)
+            audit[#audit + 1] = { sql = sql, params = params }
+            return { affectedRows = 1 }
+        end,
+    },
 }
 AddEventHandler = function(_name, _fn) end
 CreateThread = function(_fn) end
@@ -157,6 +165,7 @@ Wait = function(_ms) end
 GetCurrentResourceName = function() return 'custom-police' end
 exports = function(name, fn) exported[name] = fn end
 
+dofile(__AUDIT__)   -- 审计唯一写者（npc_budget 的 auditNpc 委派给它）
 dofile(__SHARED__)
 dofile(__SERVER__)
 
@@ -164,17 +173,26 @@ local function expect(condition, message)
     if not condition then error(message, 2) end
 end
 
+-- 参数布局现在由 server/audit.lua 决定：{ actor, actor_kind, action, target?, detail? }
+-- （actor_kind 是真实参数，不再是 SQL 里的字面量），所以按值找 action 而不是按下标猜。
+local function params_contain(row, value)
+    for _, v in ipairs(row.params) do
+        if v == value then return true end
+    end
+    return false
+end
+
 local function audit_rows(action)
     local rows = {}
     for _, row in ipairs(audit) do
-        if row.params[2] == action then rows[#rows + 1] = row end
+        if params_contain(row, action) then rows[#rows + 1] = row end
     end
     return rows
 end
 
 local function find_audit(action, target)
     for _, row in ipairs(audit) do
-        if row.params[2] == action and row.params[3] == target then return row end
+        if params_contain(row, action) and params_contain(row, target) then return row end
     end
     return nil
 end
@@ -204,7 +222,8 @@ expect(NPCBudget.Release('missing', 'nope') == false, 'unknown id is false')
 local despawn = find_audit('npc.despawn', 'b1')
 expect(despawn ~= nil, 'npc.despawn audited')
 expect(despawn.params[1] == 'cidA', 'despawn owner')
-expect(despawn.params[4] == 'test_release', 'despawn reason')
+-- 参数布局 { actor, actor_kind, action, target, detail }：reason 在第 5 位
+expect(despawn.params[5] == 'test_release', 'despawn reason')
 expect(#audit_rows('npc.despawn') == 1, 'one despawn audit')
 
 -- Global cap: b2(1) + b4(1) + callout c1(2) + b5(1) + b6(1) = 6.
@@ -232,9 +251,9 @@ expect(ok == false and err == 'invalid_citizenid', 'invalid citizenid')
 local spawn = find_audit('npc.spawn', 'b1')
 expect(spawn ~= nil, 'npc.spawn audited')
 expect(spawn.params[1] == 'cidA', 'spawn owner')
-expect(spawn.params[4] == 'backup:1', 'backup cost detail')
+expect(spawn.params[5] == 'backup:1', 'backup cost detail')   -- detail 在第 5 位
 spawn = find_audit('npc.spawn', 'c1')
-expect(spawn ~= nil and spawn.params[4] == 'callout:2', 'callout cost detail')
+expect(spawn ~= nil and spawn.params[5] == 'callout:2', 'callout cost detail')
 
 -- TTL: exactly 10 minutes is still alive, one second more is stale.
 clock = clock + NPCBudget.TTL_SECONDS
@@ -257,7 +276,8 @@ print('npc_budget harness ok')
 @pytest.mark.skipif(LUA_BIN is None, reason="lua5.4 is not installed")
 def test_budget_behaviour_under_lua(tmp_path: Path) -> None:
     harness = tmp_path / "npc_budget_harness.lua"
-    script = HARNESS.replace("__SHARED__", json.dumps(str(SHARED))).replace(
+    script = HARNESS.replace("__AUDIT__", json.dumps(str(POLICE / "server" / "audit.lua"))).replace(
+        "__SHARED__", json.dumps(str(SHARED))).replace(
         "__SERVER__", json.dumps(str(SERVER))
     )
     harness.write_text(script, encoding="utf-8")

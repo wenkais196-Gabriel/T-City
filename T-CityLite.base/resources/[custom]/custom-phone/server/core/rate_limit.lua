@@ -1,10 +1,17 @@
--- server/core/rate_limit.lua — generic per-key token bucket.
+-- server/core/rate_limit.lua — 手机端的限流门面（实现在 core-framework）
 --
--- No QBCore dependency: the caller supplies the key (custom-phone uses
--- `app:<citizenid>:<query|action>`) and the bucket is pure Lua state. The
--- defaults are 30 tokens/minute with a burst of 10, overridable by the
--- `phone_app_rate_per_minute` / `phone_app_rate_burst` convars or by
--- `Config.AppRateLimitPerMinute` / `Config.AppRateLimitBurst` when present.
+-- 历史：这里曾经是一份独立的令牌桶（94 行）。它的语义与 `core-framework/server/rate_limit.lua`
+-- 的 `RateLimit.TokenBucket` 完全一致（tokens per minute + burst，按毫秒回填），
+-- 两处各写一份意味着两个边界行为——而限流的 off-by-one 就是"多放过一次"。
+--
+-- 现在这里只保留**手机自己的东西**：默认速率/突发的来源（convar 与 Config），以及对外的
+-- `PhoneRateLimit.Allow(key, rate, burst)` 门面。手机里 4 个调用点与 `core/diag.lua`
+-- 都依赖这个名字，所以 API 不变，换掉的是实现。
+--
+-- 为什么失败时拒绝（fail-closed）而不是放行：这是安全控制。如果 core-framework 不在
+-- （依赖缺失、加载失败），放行等于把所有频控一次性关掉且没有任何信号；
+-- 拒绝会让手机功能报 `rate_limited`，故障可见、可修。前提是 custom-phone 声明了
+-- `dependencies { 'core-framework' }`，正常运行时这个分支不该走到。
 
 PhoneRateLimit = {}
 
@@ -33,32 +40,9 @@ PhoneRateLimit.DefaultRate = setting(
 PhoneRateLimit.DefaultBurst = setting(
     'AppRateLimitBurst', 'phone_app_rate_burst', DEFAULTS.burst)
 
---- Monotonic-ish seconds. GetGameTimer is millisecond wall time under FiveM;
---- os.clock keeps the module usable in the offline Lua test harness.
----@return number
-local function nowSeconds()
-    local timer = rawget(_G, 'GetGameTimer')
-    if type(timer) == 'function' then return timer() / 1000.0 end
-    return os.clock()
-end
+local warned = false
 
-local buckets = {}
-local lastSweep = nowSeconds()
-local SWEEP_INTERVAL = 60 -- seconds between stale-bucket sweeps
-local BUCKET_IDLE = 300  -- drop a bucket after 5 minutes of inactivity
-
----@param nowTs number
-local function sweep(nowTs)
-    if nowTs - lastSweep < SWEEP_INTERVAL then return end
-    for key, bucket in pairs(buckets) do
-        if nowTs - bucket.last > BUCKET_IDLE then buckets[key] = nil end
-    end
-    lastSweep = nowTs
-end
-
---- Consume one token. `rate` is tokens per minute; defaults come from the
---- module settings above. Returns false when the bucket is empty so the caller
---- can answer `rate_limited` instead of doing the work.
+--- Consume one token. `rate` is tokens per minute.
 ---@param key string
 ---@param rate number|nil
 ---@param burst number|nil
@@ -72,23 +56,14 @@ function PhoneRateLimit.Allow(key, rate, burst)
         rate, burst = DEFAULTS.rate, DEFAULTS.burst
     end
 
-    local nowTs = nowSeconds()
-    sweep(nowTs)
-
-    local bucket = buckets[key]
-    if not bucket then
-        bucket = { tokens = burst, last = nowTs }
-        buckets[key] = bucket
-    else
-        local elapsed = nowTs - bucket.last
-        if elapsed > 0 then
-            bucket.tokens = math.min(burst, bucket.tokens + elapsed * (rate / 60))
-            bucket.last = nowTs
+    local exporter = rawget(_G, 'exports')
+    if type(exporter) ~= 'table' then
+        if not warned then
+            warned = true
+            print('[custom-phone] ❌ exports 不可用，限流无法委派到 core-framework（按拒绝处理）')
         end
-        if bucket.tokens > burst then bucket.tokens = burst end
+        return false
     end
 
-    if bucket.tokens < 1 then return false end
-    bucket.tokens = bucket.tokens - 1
-    return true
+    return exporter['core-framework']:RateLimitTokenBucket(key, rate, burst) == true
 end

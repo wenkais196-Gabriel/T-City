@@ -28,7 +28,7 @@
 
 ## 1. Bus.Economy — 经济服务
 
-**位置**: `services/economy_service.lua`
+**位置**: `resources/[standalone]/core-framework/services/economy_service.lua`
 
 ### 方法
 
@@ -61,7 +61,7 @@ local ok, msg = Bus.Economy.Transfer(source, 'ABC123XYZ', 10000, 'loan repayment
 
 ## 2. Bus.JobService — 职业/帮派服务
 
-**位置**: `services/job_service.lua`
+**位置**: `resources/[standalone]/core-framework/services/job_service.lua`
 
 ### 方法
 
@@ -112,7 +112,7 @@ local sources = Bus.JobService.GetOnlinePlayersByJob('mechanic')
 
 ## 3. Bus.SecurityService — 安全防火墙
 
-**位置**: `services/security_service.lua`
+**位置**: `resources/[standalone]/core-framework/services/security_service.lua`
 
 ### 方法
 
@@ -160,7 +160,7 @@ local str, err = Bus.SecurityService.SanitizeString('  hello  ', { maxLength=10,
 
 ## 4. Bus.PersistenceService — 持久化管理器
 
-**位置**: `services/persistence_manager.lua`
+**位置**: `resources/[standalone]/core-framework/services/persistence_manager.lua`
 
 ### 方法
 
@@ -190,7 +190,7 @@ local stats = Bus.PersistenceService.Stats()
 
 ## 5. DirtyFlush — 脏数据管道（底层）
 
-**位置**: `cache/dirty_flush.lua`
+**位置**: `resources/[standalone]/core-framework/services/persistence_manager.lua`（LocalDirtyFlush 段）
 
 ### 方法
 
@@ -214,7 +214,7 @@ DirtyFlush.MarkDirty('ABC123XYZ', 'money')
 
 ## 6. Bus.Notify — 通知服务
 
-**位置**: `services/notify_service.lua`  
+**位置**: `resources/[standalone]/core-framework/services/notify_service.lua`  
 **新增**: v2.1 — 双轨制通知 (原生 GTA The Feed + NUI 高级通知)
 
 ### 架构

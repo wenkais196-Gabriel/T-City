@@ -186,7 +186,7 @@ status  200 100
 
 ## 4. 已验证不可利用（含前提说明）
 
-1. **无 token 不能走 HTTP 写面**：`custom-director/http_api.lua` 先检查 `cfg.enabled`，再检查 `cfg.token == ''` → 503；所有 action/live 路由都在 token 之后。`agent_gateway.py` 启动时 `AGENT_TOKEN` 为空直接拒绝启动（exit 2），没有 unauthenticated 模式。
+1. **无 token 不能走 HTTP 写面**：`resources/[custom]/custom-director/server/http_api.lua` 先检查 `cfg.enabled`，再检查 `cfg.token == ''` → 503；所有 action/live 路由都在 token 之后。`agent_gateway.py` 启动时 `AGENT_TOKEN` 为空直接拒绝启动（exit 2），没有 unauthenticated 模式。
 2. **四条 token 互不越权**（`/tmp/cred_matrix.lua`）：
    - `POST /act` + actions token：鉴权通过（400 仅因为我没带 body/content-length；带 body 会正常进入 Propose）；
    - `/act` + live token → 401；`/act` + admin token → 401；

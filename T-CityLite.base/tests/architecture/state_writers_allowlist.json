@@ -11,9 +11,9 @@
         "incident_id"
       ],
       "allowed_files": [
-        "custom-police/server/p0.lua"
+        "custom-police/server/p0_units.lua"
       ],
-      "reason": "police_units.status/incident_id 是 SM-01 单位状态机；唯一写入口是 p0 的 duty/incident helper（syncDuty、assignUnitRow、markIncidentUnits、releaseIncidentUnits、takeUnitOffDuty）。"
+      "reason": "police_units.status/incident_id 是 SM-01 单位状态机；唯一写入口是 p0_units.lua 的 duty/incident helper（syncDuty、assignUnitRow、enrouteUnitRow、markIncidentUnits、releaseIncidentUnits、takeUnitOffDuty）。"
     },
     {
       "id": "police_incidents.status",
@@ -22,39 +22,38 @@
         "status"
       ],
       "allowed_files": [
-        "custom-police/server/p0.lua"
+        "custom-police/server/p0_incidents.lua",
+        "custom-police/server/p0_lifecycle.lua",
+        "custom-police/server/p0_units.lua"
       ],
-      "reason": "police_incidents.status 是 SM-02 警情状态机；唯一写入口是 p0 的 AssignUnit / SetIncidentStatus / releaseDroppedUnit / SweepStaleIncidents。"
+      "reason": "police_incidents.status 是 SM-02 警情状态机；写它的是 p0 家族的三处：p0_incidents.SetIncidentStatus/SweepStaleIncidents、p0_lifecycle.ClaimIncident、p0_units.recomputeIncidentProgress（状态是单位进度的派生值）。家族之外照旧为 0。"
     },
     {
       "id": "police_reports",
       "table": "police_reports",
       "columns": [],
       "allowed_files": [
-        "custom-police/server/p1.lua",
-        "custom-police/server/p2_system.lua",
-        "custom-police/server/p3_cases.lua"
+        "custom-police/server/records.lua"
       ],
-      "reason": "报告锚点由 p1（CreateReport）、p2_system（ArrestSubmit 链接与回滚）和 p3_cases（RecordVerdict 判决投影）维护。"
+      "reason": "报告锚点由 p1（CreateReport）、p2_system（ArrestSubmit 链接与回滚）和 p3_cases（RecordVerdict 判决投影）维护。 2026-10-25: 收口到 server/records.lua（p1/p2/p3 只做委派）。"
     },
     {
       "id": "police_cases",
       "table": "police_cases",
       "columns": [],
       "allowed_files": [
-        "custom-police/server/p2_system.lua",
-        "custom-police/server/p3_cases.lua"
+        "custom-police/server/records.lua"
       ],
-      "reason": "案件号回填只在 CreateCase（p3）与 ArrestSubmit 的补偿路径（p2_system）。"
+      "reason": "案件号回填只在 CreateCase（p3）与 ArrestSubmit 的补偿路径（p2_system）。 2026-10-25: 收口到 server/records.lua（p1/p2/p3 只做委派）。"
     },
     {
       "id": "police_citations",
       "table": "police_citations",
       "columns": [],
       "allowed_files": [
-        "custom-police/server/p1.lua"
+        "custom-police/server/citations.lua"
       ],
-      "reason": "罚单状态 unpaid→paid 与支付回滚只在 p1.PayCitation；其他资源只能读或用 phone 的罚单接口。"
+      "reason": "罚单状态 unpaid→paid 与支付回滚只在 p1.PayCitation；其他资源只能读或用 phone 的罚单接口。 2026-10-25: 罚单收口——行写入与状态流转（付款抢占/回滚）都在 server/citations.lua，p1 只保留玩家路径的前置检查与通知。"
     },
     {
       "id": "police_warrants.status",

@@ -25,13 +25,9 @@ local PLAYERS_PATH = '/agent/v1/live/players'
 local EVENTS_PATH = '/agent/v1/live/events'
 local POLICE_BOARD_PATH = '/agent/v1/live/police/board'
 
-local function convarString(name, default)
-    if type(GetConvar) == 'function' then
-        local value = GetConvar(name, default)
-        if type(value) == 'string' then return value end
-    end
-    return default
-end
+-- 统一走 core-framework 的公共实现（原先这里有一份相同的解析）：
+-- 用函数包一层，导出在调用时解析；资源启动顺序由 fxmanifest 的 dependencies 保证。
+local convarString = function(...) return exports['core-framework']:ConvarString(...) end
 
 local function trim(value)
     if type(value) ~= 'string' then return '' end

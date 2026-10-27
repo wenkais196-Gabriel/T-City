@@ -31,6 +31,7 @@ CORE = PHONE / "client" / "core"
 BRIDGE = CORE / "bridge.lua"
 FOCUS = CORE / "focus.lua"
 EVENTS = CORE / "events.lua"
+DIAG = CORE / "diag.lua"
 
 LUA_BIN = shutil.which("lua5.4")
 
@@ -40,6 +41,11 @@ local nuicallbacks, netevents, handlers, timers, sent, messages = {}, {}, {}, {}
 local focusCalls, keepCalls = {}, {}
 local currentFocus, currentCursor, currentKeep = false, false, false
 local clock = 1000
+local convars = {}
+
+function GetConvar(name) return convars[name] or '' end
+function GetConvarInt(name) return tonumber(convars[name] or '') or 0 end
+function setConvar(name, value) convars[name] = value end
 
 function GetGameTimer() return clock end
 function GetCurrentResourceName() return 'custom-phone' end
@@ -153,6 +159,77 @@ assert(PhoneBridge.RegisterNui('x', nil) == false)
 """))
 
 
+def test_bridge_answers_a_callable_callback_table():
+    """FXServer 把 NUI 应答通道交成"可调用表"（CFX 函数引用），不是 function。
+
+    旧实现的 `if type(cb) ~= 'function' then return end` 会把这类应答静默丢弃：
+    handler 跑了、服务端也回包了，CEF 的 fetch 却一直挂到 9 秒 abort，前端只能
+    报查询失败/操作失败。这条回归测试钉住"表也要能应答"。
+    """
+    assert_lua(harness(BRIDGE, body=r"""
+local answerCalls = {}
+local callableMeta = { __call = function(self, response)
+    answerCalls[#answerCalls + 1] = { ref = rawget(self, '__cfx_functionReference'), response = response }
+end }
+
+PhoneBridge.RegisterNui('callable', function(data, cb)
+    cb({ success = true, n = 7 })
+end)
+
+local cb = setmetatable({ __cfx_functionReference = 'ref-callable' }, callableMeta)
+nuicallbacks.callable({ x = 1 }, cb)
+assert(#answerCalls == 1, 'a callable table must receive the answer')
+assert(answerCalls[1].ref == 'ref-callable')
+assert(answerCalls[1].response.success == true and answerCalls[1].response.n == 7)
+"""))
+
+
+def test_bridge_answers_a_cfx_function_reference_table():
+    assert_lua(harness(BRIDGE, body=r"""
+local answerCalls = {}
+Citizen = { InvokeFunctionReference = function(ref, response)
+    answerCalls[#answerCalls + 1] = { ref = ref, response = response }
+end }
+
+PhoneBridge.RegisterNui('refonly', function(data, cb)
+    cb({ success = false, error = 'app_forbidden' })
+end)
+
+-- 没有 __call 元方法时退回 Citizen.InvokeFunctionReference
+nuicallbacks.refonly({}, { __cfx_functionReference = 'ref-plain' })
+assert(#answerCalls == 1, 'a bare function reference must still be answered')
+assert(answerCalls[1].ref == 'ref-plain')
+assert(answerCalls[1].response.error == 'app_forbidden')
+"""))
+
+
+def test_bridge_does_not_run_a_handler_it_cannot_answer():
+    assert_lua(harness(BRIDGE, body=r"""
+local ran = false
+PhoneBridge.RegisterNui('broken', function(data, cb)
+    ran = true
+    cb({ success = true })
+end)
+
+-- 既不是 function 也不是可调用表：宁可不应答（NUI 侧会拿到确定的超时码），
+-- 也不要把 handler 跑一半留下副作用。
+nuicallbacks.broken({}, 42)
+assert(ran == false, 'a handler with no answer channel must not run')
+nuicallbacks.broken({}, nil)
+assert(ran == false)
+"""))
+
+
+def test_bridge_level_defaults_on_when_the_convar_is_unset():
+    """convar 未定义时 GetConvarInt 返回 0，不能据此判定"关闭"。"""
+    assert_lua(harness(BRIDGE, DIAG, body=r"""
+assert(GetConvar('phone_diag') == '', 'stub must start with the convar unset')
+assert(PhoneDiag.Level() == 1, 'unset phone_diag must default to 1, got ' .. tostring(PhoneDiag.Level()))
+local trace = PhoneDiag.StartTrace('k3f9a2b1', 'query', 'police_mdt')
+assert(trace ~= nil, 'tracing must be on by default')
+"""))
+
+
 def test_bridge_request_timeout_and_late_response():
     assert_lua(harness(BRIDGE, body=r"""
 PhoneBridge.RegisterNui('query', function(data, cb)
@@ -245,6 +322,65 @@ runTimers()
 assert(#results == 2, 'timeout answered after cleanup')
 netevents['phone:client:aResponse'](sentFor('phone:server:aRequest')[1].args[1], { success = true })
 assert(#results == 2, 'response answered after cleanup')
+"""))
+
+
+def test_bridge_await_ack_resends_until_the_nui_answers():
+    assert_lua(harness(BRIDGE, body=r"""
+local sends, timedOut = 0, false
+PhoneBridge.AwaitAck('phone:open', function() sends = sends + 1 end, {
+    intervalMs = 250,
+    timeoutMs = 2000,
+    onTimeout = function() timedOut = true end,
+})
+assert(sends == 1, 'the first phone:open must be sent immediately')
+
+runTimers() -- 250 ms
+assert(sends == 2, 'an unacked phone:open must be resent')
+runTimers() -- 500 ms
+assert(sends == 3)
+
+assert(PhoneBridge.Ack('phone:open') == true)
+runTimers()
+runTimers()
+runTimers()
+assert(sends == 3, 'the ack must stop the resend loop')
+assert(timedOut == false, 'a timely ack must not fire onTimeout')
+"""))
+
+
+def test_bridge_await_ack_timeout_calls_back_once():
+    assert_lua(harness(BRIDGE, body=r"""
+local sends, timeouts = 0, 0
+PhoneBridge.AwaitAck('phone:open', function() sends = sends + 1 end, {
+    intervalMs = 250, timeoutMs = 750,
+    onTimeout = function() timeouts = timeouts + 1 end,
+})
+for _ = 1, 8 do runTimers() end
+assert(timeouts == 1, 'the deadline must fire onTimeout exactly once')
+local sentAtTimeout = sends
+for _ = 1, 8 do runTimers() end
+assert(sends == sentAtTimeout, 'resending must stop after the deadline')
+assert(PhoneBridge.Ack('phone:open') == false, 'a late ack after the deadline is not ours')
+"""))
+
+
+def test_bridge_await_ack_is_replaced_by_a_second_attempt():
+    assert_lua(harness(BRIDGE, body=r"""
+local first, second = 0, 0
+local fired = {}
+PhoneBridge.AwaitAck('phone:open', function() first = first + 1 end, {
+    intervalMs = 250, timeoutMs = 2000, onTimeout = function() fired[#fired + 1] = 'first' end,
+})
+PhoneBridge.AwaitAck('phone:open', function() second = second + 1 end, {
+    intervalMs = 250, timeoutMs = 2000, onTimeout = function() fired[#fired + 1] = 'second' end,
+})
+assert(PhoneBridge.Ack('phone:open') == true)
+for _ = 1, 6 do runTimers() end
+assert(first == 1, 'the superseded attempt must not keep resending')
+assert(second == 1, 'the new attempt stops on its own ack')
+assert(#fired == 0, 'superseding a waiter must not fire its timeout')
+assert(PhoneBridge.Ack('phone:open') == false, 'a second ack has nothing to clear')
 """))
 
 
@@ -438,12 +574,34 @@ def test_main_uses_bridge_for_the_app_callbacks():
     assert "RegisterNetEvent('phone:client:appActionResponse'" not in main
 
 
+def test_main_opens_the_ui_through_the_ack_handshake():
+    main = read(CLIENT)
+    # OpenPhone must not trust a single fire-and-forget SendNUIMessage.
+    assert "PhoneBridge.AwaitAck('phone:open'" in main
+    assert "RegisterNUICallback('phoneOpenAck'" in main
+    assert "PhoneBridge.Ack('phone:open')" in main
+    # A half-open phone (no NUI) must reset itself instead of swallowing keys.
+    # 设备开关只有一个真值（Surface），所以"复位"就是 Surface.Reset()；
+    # 形态一旦可能锁移动，超时路径还必须同时解锁。
+    assert "phase = 'open-ack-timeout'" in main
+    timeout_block = main[main.index('phase = \'open-ack-timeout\'') - 400:main.index('phase = \'open-ack-timeout\'')]
+    assert "Surface.Reset()" in timeout_block
+    assert "DeviceLock.End()" in timeout_block
+
+    app = read(PHONE / "web" / "src" / "App.svelte")
+    assert "fetchNui('phoneOpenAck')" in app
+
+
 def test_main_uses_focus_for_open_close_and_cleanup():
     main = read(CLIENT)
-    assert "PhoneFocus.Acquire('phone', { cursor = true, keepInput = true })" in main
-    assert "PhoneFocus.Release('phone')" in main
+    # 焦点 owner 与 keepInput 现在跟形态绑定：手机 keepInput=true（能边跑边看），
+    # 平板 false（站定才能用）。不再有写死的 'phone' + true。
+    assert "PhoneFocus.Acquire(kind, { cursor = true, keepInput = (kind == 'phone') })" in main
+    # 释放的是"当前形态"的 owner（phone 或 tablet），不再写死 'phone'
+    assert "PhoneFocus.Release(kind)" in main
     assert "PhoneFocus.Reset()" in main
-    assert "PhoneFocus.IsOwner('phone')" in main
+    # watchdog 只对"自己这一面"的 owner 重新抢焦点，别偷别的 UI 的焦点
+    assert "PhoneFocus.IsOwner(kind)" in main
     assert "PhoneFocus.State()" in main
     # The defensive stop handler still clears the engine flags directly.
     assert "SetNuiFocus(false, false)" in main

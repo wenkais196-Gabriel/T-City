@@ -254,6 +254,13 @@ export const UNIT_BRAVO = '2-LINCOLN-7';
 
 export const INCIDENT_911 = {
   id: 6,
+  // 服务端 IncidentActionState() 的下发结果：UI 只渲染，不自己算规则
+  actions: {
+    claim: { allowed: false, reason: 'already_joined' },
+    clear: { allowed: true, reason: null },
+  },
+  primary: 'CID_ME',
+  units: [{ citizenid: 'CID_ME', role: 'primary' }],
   code: '911',
   title: '测试警情一号',
   description: 'Vinewood 珠宝店报案',
@@ -296,6 +303,11 @@ export function createWorld() {
       { citizenid: 'COP002', name: 'Bob Brown', callsign: UNIT_BRAVO, dept: 'LSPD', status: 'busy', incident_id: 6 },
     ],
     incidents: [],
+    /** 通知托盘：测试里注入坏时间戳，验证界面不会渲染 NaN。 */
+    notifications: [],
+    /** 任务 App 的假数据：list 里刻意混入一条不可接的，验证 UI 会摆出原因。 */
+    quests: [],
+    questActive: [],
     /** One-shot query failures; consumed so the next refresh succeeds. */
     failQueries: new Set(),
     failStatus: 500,
@@ -330,6 +342,18 @@ function queryData(world, query) {
   }
 }
 
+/** 任务 App 的假后端。按 app_id 分流，避免和 MDT 的 query 名撞车。 */
+function questData(world, query) {
+  switch (query) {
+    case 'list':
+      return { rows: world.quests, count: world.quests.length };
+    case 'active':
+      return { rows: world.questActive, count: world.questActive.length };
+    default:
+      return { rows: [], count: 0 };
+  }
+}
+
 export function handleNui(world, callback, payload) {
   world.calls.push({ callback, payload });
 
@@ -340,7 +364,7 @@ export function handleNui(world, callback, payload) {
         playerData: world.player,
         contacts: [],
         messages: [],
-        notifications: [],
+        notifications: world.notifications ?? [],
         jobBoard: [],
         factionMessages: [],
       });
@@ -348,11 +372,18 @@ export function handleNui(world, callback, payload) {
       return ok({ success: true, apps: world.apps });
     case 'getCallHistory':
       return ok({ success: true, calls: [] });
+    case 'report911':
+      // 报警入口的假后端：返回单号，UI 要把它显示出来
+      world.reported911 = payload ?? null;
+      return ok({ success: true, incident_id: 42, merged: false });
     case 'clientError':
       world.clientErrors.push(payload);
       return ok({ ok: true });
     case 'appQuery': {
       const query = payload?.query;
+      if (payload?.app_id === 'quests') {
+        return ok({ success: true, data: questData(world, query) });
+      }
       if (world.failQueries.has(query)) {
         world.failQueries.delete(query);
         return { status: world.failStatus, body: { success: false, error: world.failError } };
@@ -440,9 +471,10 @@ export async function installGameGlobals(page) {
 // Interaction helpers
 // ---------------------------------------------------------------------------
 
-export async function openPhone(page) {
+export async function openPhone(page, surface = 'phone') {
+  // surface 是宿主（Lua）决定的形态；测试里直接指定它，模拟 SurfaceRules 的结论。
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    await page.evaluate(() => window.postMessage({ action: 'phone:open' }, '*'));
+    await page.evaluate((id) => window.postMessage({ action: 'phone:open', surface: id }, '*'), surface);
     if (await page.locator('.phone-wrapper').isVisible().catch(() => false)) return;
     await page.waitForTimeout(50);
   }
@@ -453,11 +485,11 @@ export async function openPhone(page) {
 }
 
 /** Open the phone, then the MDT tile that `getPhoneApps` advertised. */
-export async function openMdt(page) {
-  await openPhone(page);
+export async function openMdt(page, surface = 'phone') {
+  await openPhone(page, surface);
   const tile = page.locator('button[aria-label="MDT"]');
   try {
-    await tile.waitFor({ state: 'visible', timeout: 5000 });
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
   } catch {
     throw new CheckError('手机主页没有 MDT 图标', {
       期望: 'getPhoneApps 返回 police_mdt 后渲染一个 aria-label="MDT" 的按钮',
@@ -475,14 +507,40 @@ export async function openMdt(page) {
   }
 }
 
+/** 打开手机里的「任务」瓦片（服务端注册的 quests app）。 */
+export async function openQuests(page, surface = 'phone') {
+  await openPhone(page, surface);
+  const tile = page.locator('button[aria-label="任务"]');
+  try {
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
+  } catch {
+    throw new CheckError('手机主页没有任务图标', {
+      期望: 'getPhoneApps 返回 quests 后渲染一个 aria-label="任务" 的按钮',
+      实际: '5s 内没有找到 button[aria-label="任务"]',
+    });
+  }
+  await tile.click();
+  try {
+    await page.locator('.quests-app').waitFor({ state: 'visible', timeout: 5000 });
+  } catch {
+    throw new CheckError('点击任务图标后没有进入任务页', {
+      期望: '出现 .quests-app（appRegistry 里 quests → Quests.svelte）',
+      实际: '5s 内 .quests-app 不可见（DynamicApp 兜底？组件没注册？）',
+    });
+  }
+}
+
 export async function openDispatchTab(page, label) {
   const tab = page.locator('.mdt .tabs.sub-tabs button', { hasText: label });
+  // 平板（grid）上两栏并排，分段切换没有意义也不渲染 —— 这时"切页"是空操作
+  if (!(await tab.isVisible().catch(() => false))) return;
   await tab.click();
   await page.waitForTimeout(80);
 }
 
 export async function refreshButton(page) {
-  return page.locator('.mdt button.refresh').first();
+  // 调度页拆成 pane 之后，"刷新"在单位栏和接警栏各有一颗：取当前可见的那颗。
+  return page.locator('.mdt button.refresh:visible').first();
 }
 
 export function requestLog(world) {
@@ -494,4 +552,36 @@ export function requestLog(world) {
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return [...counts.entries()].map(([key, count]) => `${key}×${count}`);
+}
+
+/** 打开手机里的「通知」托盘（Home 上的喇叭图标）。 */
+export async function openNotifications(page) {
+  await openPhone(page);
+  const tile = page.locator('button[aria-label="Notifications"]');
+  try {
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
+  } catch {
+    throw new CheckError('手机主页没有通知图标', {
+      期望: '出现 aria-label="Notifications" 的按钮',
+      实际: '5s 内找不到该按钮',
+    });
+  }
+  await tile.click();
+  await page.locator('.notifications-app').waitFor({ state: 'visible', timeout: 5000 });
+}
+
+/** 打开手机里的「热线」页（报警入口在那儿）。 */
+export async function openHotlines(page) {
+  await openPhone(page);
+  const tile = page.locator('button[aria-label="Service Hotlines"]');
+  try {
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
+  } catch {
+    throw new CheckError('手机主页没有热线图标', {
+      期望: '出现 aria-label="Service Hotlines" 的按钮',
+      实际: '5s 内找不到该按钮',
+    });
+  }
+  await tile.click();
+  await page.locator('.report911').waitFor({ state: 'visible', timeout: 5000 });
 }

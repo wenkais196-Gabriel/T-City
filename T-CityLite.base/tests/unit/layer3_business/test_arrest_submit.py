@@ -12,6 +12,7 @@ runtime and run in CI alongside the other layer3_business contracts.
     python3 -m pytest -q T-CityLite.base/tests/unit/layer3_business/test_arrest_submit.py
 """
 from __future__ import annotations
+from p0_sources import p0_block as _p0_block, p0_text
 
 import re
 from pathlib import Path
@@ -166,7 +167,9 @@ def test_arrest_submit_is_gated_and_audited():
     assert "QBCore.Functions.GetPlayerByCitizenId(target)" in block
     assert "citizen_offline" in block
     assert "auditPlayer(actor.citizenid, 'arrest.register', target, auditDetail)" in block
-    assert 'actor_kind, action, target, detail) VALUES (?, "player", ?, ?, ?)' in src
+    # 审计不再在 p2 里手写 INSERT：委派给唯一写者（server/audit.lua），
+    # 那条 INSERT 的正确性由 test_police_single_writer.py 与单测钉住。
+    assert "PoliceAudit.Write" in src
     assert "audit_unavailable" in block
     assert "function fail(error)" in src
 
@@ -204,31 +207,34 @@ def test_target_must_be_restrained_in_range_and_not_jailed():
 
 def test_report_is_the_anchor_and_children_are_linked():
     block = arrest_block()
-    assert "INSERT INTO police_reports" in block
+    assert "PoliceRecords.InsertReport(" in block
     assert "'arrest'" in block
     assert "charges" in block and "encodeCharges(ids)" in block
     assert "is_bolo" in block and "bolo_kind" in block and "bolo_target" in block
-    assert "officer_citizenid" in block
+    # officer_citizenid 由唯一写者补齐（缺省等于作者）
+    assert "officer_citizenid" in (POLICE / "server/records.lua").read_text(encoding="utf-8")
     assert "subject_citizenid" in block
 
-    assert "INSERT INTO police_citations" in block
-    citation_insert = block[block.index("INSERT INTO police_citations"):]
+    # 罚单行由唯一写者（server/citations.lua）写入，p2 只传字段
+    assert "PoliceCitations.Insert(" in block
+    citation_insert = block[block.index("PoliceCitations.Insert("):]
     assert "report_id" in citation_insert
     assert "base_amount" in citation_insert
     assert "charge_id" in citation_insert
 
-    assert "INSERT INTO police_evidence" in block
-    evidence_insert = block[block.index("INSERT INTO police_evidence"):]
+    # 证据行 + 展品号 + 首条链记录都在唯一写者里（server/p2_evidence.lua）
+    assert "PoliceEvidenceWriter.Register(" in block
+    evidence_insert = block[block.index("PoliceEvidenceWriter.Register("):]
     assert "report_id" in evidence_insert
-
-    # Evidence always gets a first custody-chain entry.
-    assert "INSERT INTO police_evidence_chain" in block
-    assert "'collected'" in block
+    evidence_owner = (POLICE / "server/p2_evidence.lua").read_text(encoding="utf-8")
+    assert "chain(tonumber(id), 'collected', actorCid, label)" in evidence_owner
 
     # Case linkage is written back onto the report.
-    assert "UPDATE police_reports SET case_id = ? WHERE id = ?" in block
-    assert "INSERT INTO police_cases" in block
-    assert "CASE-%s-%06d" in block
+    assert "PoliceRecords.LinkReport(" in block
+    # 案卷行与案号格式都在唯一写者里
+    owner = (POLICE / "server/records.lua").read_text(encoding="utf-8")
+    assert "INSERT INTO police_cases" in owner
+    assert "CASE-%s-%06d" in owner
 
     # police_arrests is retired for new arrests.
     assert "INSERT INTO police_arrests" not in block
@@ -286,8 +292,9 @@ def test_case_creation_requires_case_capability_and_uses_officer_as_lead():
     assert "local createCase = params.create_case == true" in block
 
     # The lead is the arresting officer; the suspect is named in the summary.
-    assert "'INSERT INTO police_cases (title, summary, lead_citizenid, created_by) VALUES (?, ?, ?, ?)'" in block
-    assert "{ caseTitle, summary, actor.citizenid, actor.citizenid }" in block
+    # 案卷行由唯一写者写（server/records.lua）；主办人仍是抓人的警官
+    assert "PoliceRecords.InsertCase(actor.citizenid, {" in block
+    assert "lead_citizenid = actor.citizenid" in block
     assert "('%s 因 %s 被捕（%d 分钟），主办警员 %s。')" in block
     assert "target, table.concat(sum.labels, '、'), minutes, actor.citizenid" in block
     assert "auditPlayer(actor.citizenid, 'case.create', created.caseNo, created.caseTitle)" in block
@@ -463,7 +470,7 @@ def test_issue_citation_notification_goes_through_the_phone_owner():
     block = src[start:src.index("--- Citizen-side read", start)]
     assert "notifyCitizen(target, '你收到一张罚单'" in block
     assert "('$%d — %s（罚单 #%d，警官 %s）'):format(" in block
-    assert "math.floor(amount), text, tonumber(id), actor.citizenid" in block
+    assert "math.floor(settled), text, tonumber(id), actor.citizenid" in block
     assert "'banking'" in block
 
     # FIT-02: custom-police never writes phone_notifications. The helper only
@@ -487,7 +494,7 @@ def test_arrest_submit_notifies_the_subject_about_the_citation_best_effort():
 
     # Only after the citation insert, and after the jail-failed rollback point,
     # so a rolled-back arrest never sends a notification.
-    citation_insert = block.index("INSERT INTO police_citations")
+    citation_insert = block.index("PoliceCitations.Insert(")
     jail_failed = block.index("return fail('jail_failed')")
     notify_call = block.index("notifyCitation(target, created.citation")
     assert citation_insert < notify_call
@@ -514,8 +521,11 @@ def test_pay_citation_keeps_status_so_get_my_citations_shows_paid():
     assert "exports('PayCitation', P1.PayCitation)" in src
     # The transition is a conditional claim: only an unpaid row owned by the
     # caller can be moved to paid.
-    assert "SET status = 'paid', paid_at = NOW()" in src
-    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in src
+    # 条件抢占的 SQL 现在在唯一写者里（server/citations.lua 的 ClaimPaid）
+    owner = (POLICE / "server/citations.lua").read_text(encoding="utf-8")
+    assert "SET status = 'paid', paid_at = NOW()" in owner
+    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in owner
+    assert "PoliceCitations.ClaimPaid(id, actor.citizenid)" in src
 
     start = src.index("function P1.GetMyCitations(")
     block = src[start:src.index("function P1.GetCitations(", start)]
@@ -581,11 +591,13 @@ def test_report_submit_bolo_tag_requires_bolo_create_and_rides_on_the_report():
     assert "if boloKind ~= 'person' and boloKind ~= 'vehicle' then return fail('invalid_bolo_kind') end" in block
     assert "if boloTarget == '' then return fail('invalid_bolo_target') end" in block
 
-    assert "INSERT INTO police_reports" in block
-    assert "(kind, incident_id, case_id, subject_citizenid, author_citizenid, title, body," in block
-    assert "location, officer_citizenid, is_bolo, bolo_kind, bolo_target)" in block
-    assert "VALUES ('report', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)" in block
+    assert "PoliceRecords.InsertReport(" in block
+    assert "kind = 'report'" in block
     assert "bolo and 1 or 0" in block
+    # BOLO 标记必须挂在报告行上（写者负责落库）
+    owner = (POLICE / "server/records.lua").read_text(encoding="utf-8")
+    for column in ("is_bolo", "bolo_kind", "bolo_target"):
+        assert f"{{ '{column}'" in owner
 
 
 def test_report_submit_writes_evidence_with_report_link_and_first_chain_entry():
@@ -595,17 +607,13 @@ def test_report_submit_writes_evidence_with_report_link_and_first_chain_entry():
     assert "utf8Sub(trim(params.evidence_description), 1000)" in block
     assert "invalid_evidence_label" in block
 
-    assert "INSERT INTO police_evidence" in block
-    evidence_insert = block[block.index("INSERT INTO police_evidence"):]
-    assert (
-        "(exhibit_no, report_id, case_id, incident_id, label, description, location, collected_by)"
-        in evidence_insert
-    )
-    assert "VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)" in evidence_insert
-    assert "EX-%06d" in block
-
-    assert "INSERT INTO police_evidence_chain" in block
-    assert "'collected'" in block
+    # 列集合由唯一写者按需拼接（不再靠"NULL 占位 + 定长列表"），这里只断言委派与关联字段
+    assert "PoliceEvidenceWriter.Register(" in block
+    evidence_insert = block[block.index("PoliceEvidenceWriter.Register("):]
+    assert "report_id" in evidence_insert and "case_id" in evidence_insert
+    evidence_owner = (POLICE / "server/p2_evidence.lua").read_text(encoding="utf-8")
+    assert "('EX-%06d'):format(id)" in evidence_owner
+    assert "chain(tonumber(id), 'collected', actorCid, label)" in evidence_owner
 
 
 def test_report_submit_rolls_the_report_back_when_a_child_write_fails():
@@ -615,7 +623,7 @@ def test_report_submit_rolls_the_report_back_when_a_child_write_fails():
     assert "DELETE FROM police_reports WHERE id = ?" in block
     assert "rollback()" in block
     # The report is inserted before its evidence, so a child failure can delete it.
-    assert block.index("INSERT INTO police_reports") < block.index("INSERT INTO police_evidence")
+    assert block.index("PoliceRecords.InsertReport(") < block.index("PoliceEvidenceWriter.Register(")
 
 
 def test_report_submit_audits_report_evidence_and_bolo():
@@ -844,7 +852,7 @@ def test_arrest_submit_open_case_opens_a_justice_case_before_jailing():
     assert "result.justice_case_id = created.justiceCaseId" in block
     assert "justice:%s" in block  # audit detail keeps the link
 
-    report = block.index("INSERT INTO police_reports")
+    report = block.index("PoliceRecords.InsertReport(")
     open_call = block.index("exports['custom-justice']:OpenCase(")
     imprison = block.index("custom-justice']:Imprison")
     assert report < open_call < imprison, "open_case must run after the report and before jailing"
@@ -853,7 +861,7 @@ def test_arrest_submit_open_case_opens_a_justice_case_before_jailing():
     # police_cases, while justice ids are strings.
     assert "if created.justiceCaseId and not caseId then" in block
     assert "local numericJusticeId = tonumber(created.justiceCaseId)" in block
-    assert "UPDATE police_reports SET case_id = ? WHERE id = ?" in block
+    assert "PoliceRecords.LinkReport(" in block
 
     # The justice case is in-memory and cannot be rolled back with the police rows.
     jail_failed = block.index("return fail('jail_failed')")
@@ -912,7 +920,10 @@ def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
     block = auto_alert_block()
     assert "local Player = QBCore.Functions.GetPlayer(src)" in block
     assert "if not Player or not PolicePolicy.Can(Player.PlayerData, 'incident.create') then return end" in block
-    assert block.index("PolicePolicy.Can") < block.index("GetQBPlayers()")
+    # 迭代在勤警察搬进了建单的投影（p0.lua projectIncident），处理器只做校验 + 建单。
+    # 所以这里钉住的是"权限检查发生在建单之前"——权限在 GetQBPlayers 之前的旧约束已经被
+    # 单一投影取代（同一个检查现在只在一处发生）。
+    assert block.index("PolicePolicy.Can") < block.index("createIncidentForAlert(")
 
     assert "local autoAlertCooldown = {}" in src
     assert "local AUTO_ALERT_COOLDOWN = 10" in src
@@ -927,8 +938,13 @@ def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
     assert "math.abs(x) > 10000.0" in src
     assert "local alertCoords = sanitizeAlertCoords(coords)" in block
     assert "local message = sanitizeAlertText(text)" in block
-    assert "coords = alertCoords" in block
-    assert "description = message" in block
+    # 报警现在走建单：服务端从 ped 上取到的坐标必须出现在 createIncidentForAlert 调用里，
+    # 而不是旧的 alertData 表（那条表已经不发了，通知由建单负责）。
+    assert "createIncidentForAlert(src, message, alertCoords" in block
+    # 载荷字段搬进了共享助手 createIncidentForAlert：标题与描述都来自清洗后的 message
+    helper = block and src[src.index("local function createIncidentForAlert"):src.index(
+        "RegisterNetEvent('police:server:policeAlert'")]
+    assert "description = message" in helper
     assert "coords = { x = coords.x" not in block
 
 
@@ -936,7 +952,8 @@ def test_justice_case_id_is_persisted():
     migration = read(POLICE.parents[2] / "migrations/v3.6_police_justice_case.sql")
     assert "justice_case_id" in migration and "information_schema" in migration
     p2 = read(POLICE / "server/p2_system.lua")
-    assert "UPDATE police_reports SET justice_case_id" in p2
+    # 回写走唯一写者的 LinkReport（justice_case_id 是 VARCHAR，字符串 id 原样传）
+    assert "PoliceRecords.LinkReport(reportId, { justice_case_id = created.justiceCaseId })" in p2
     assert "justice_case_id" in p2 and "result.justice_case_id" in p2
     p3 = read(POLICE / "server/p3_cases.lua")
     assert "justice_case_id" in p3
@@ -952,7 +969,7 @@ MIGRATION_V37 = BASE / "migrations" / "v3.7_police_justice_verdict.sql"
 
 
 def lookup_citizen_block() -> str:
-    src = read(POLICE / "server/p0.lua")
+    src = p0_text()
     start = src.index("function P.LookupCitizen(")
     end = src.index("function P.LookupVehicle(", start)
     return src[start:end]
@@ -993,8 +1010,10 @@ def test_resolve_case_persists_the_verdict_through_the_police_owner():
     # The owner export validates every argument before the UPDATE.
     p3 = read(POLICE / "server/p3_cases.lua")
     assert "function C.RecordVerdict(justiceCaseId, verdictJson, status)" in p3
-    assert "UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?" in p3
-    assert "{ verdictJson, status, caseId }" in p3
+    # 判决 SQL 在唯一写者里；p3 只做参数校验与委派
+    owner = read(POLICE / "server/records.lua")
+    assert "UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?" in owner
+    assert "PoliceRecords.RecordVerdict(caseId, verdictJson, status)" in p3
     assert "exports('RecordVerdict', C.RecordVerdict)" in p3
     assert "#caseId > 32" in p3
     assert "#verdictJson > 65535" in p3
@@ -1177,7 +1196,7 @@ def test_backup_client_spawns_one_car_and_two_officers():
     src = read(BACKUP_CLIENT)
     assert "RegisterNetEvent('police:client:SpawnBackup'" in src
     assert "BACKUP_VEHICLES = { 'police', 'police2' }" in src
-    assert "IsModelInCdimage" in src
+    assert "CFShared" in src, "模型加载应走 core-framework/client/shared.lua 的共享实现"
     assert "CreateVehicle(vehicleHash" in src
     assert "CreatePedInsideVehicle(vehicle, 4, pedHash, -1, true, true)" in src
     assert "CreatePedInsideVehicle(vehicle, 4, pedHash, 0, true, true)" in src
@@ -1228,18 +1247,16 @@ def test_backup_client_cleans_up_on_timeout_leave_death_and_restart():
 # SM-01 duty / unit state machine
 # ---------------------------------------------------------------------------
 
-P0 = POLICE / "server/p0.lua"
+P0_TEXT = p0_text()
 
 
 def p0_src() -> str:
-    return read(P0)
+    return P0_TEXT
 
 
 def p0_block(start_marker: str, end_marker: str) -> str:
-    src = p0_src()
-    start = src.index(start_marker)
-    end = src.index(end_marker, start)
-    return src[start:end]
+    # 块不能跨模块（拆分后 end marker 常在另一个文件里）
+    return _p0_block(start_marker, end_marker)
 
 
 def test_set_unit_status_for_source_owns_the_onduty_projection():
@@ -1318,7 +1335,9 @@ def test_startup_sweep_parks_offline_units_without_deleting_rows():
 
 
 def test_grade1_officers_may_only_self_claim_open_or_assigned_incidents():
-    block = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
+    # 拆分后 AssignUnit 与 AssignUnitSystem 各自成段（中间只隔一条注释），
+    # 这条测试原本覆盖的是「两条指派路径」，所以两段都算上。
+    block = _p0_block("function P.AssignUnit(") + _p0_block("function P.AssignUnitSystem(")
     assert "reason == 'rank_too_low' and grade(actor) < 2 and actor.job.onduty == true" in block
     assert "if selfClaim and target ~= actor.citizenid then return false, 'rank_too_low' end" in block
     assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then" in block
@@ -1356,6 +1375,8 @@ def test_unit_writes_are_confined_to_p0_helpers():
     assign = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
     assert "UPDATE police_units" not in assign
     assert "assignUnitRow(target, id)" in assign
+    # 指派即出发：enroute 也必须走 helper，不在调用点写裸 SQL
+    assert "enrouteUnitRow(target, id)" in assign
 
     status = p0_block("function P.SetIncidentStatus(", "local function lookupAllowed")
     assert "UPDATE police_units" not in status
@@ -1453,7 +1474,9 @@ def test_sm02_non_close_moves_bump_last_activity():
 
 
 def test_sm02_assign_checks_state_and_bumps_last_activity():
-    block = p0_block("function P.AssignUnit(", "function P.SetIncidentStatus(")
+    # 拆分后 AssignUnit 与 AssignUnitSystem 各自成段（中间只隔一条注释），
+    # 这条测试原本覆盖的是「两条指派路径」，所以两段都算上。
+    block = _p0_block("function P.AssignUnit(") + _p0_block("function P.AssignUnitSystem(")
     assert "if incident.status ~= 'open' and incident.status ~= 'assigned' then" in block
     assert "return false, 'invalid_transition'" in block
     assert "SET status = 'assigned', last_activity_at = NOW()" in block
@@ -1774,7 +1797,7 @@ def test_arrest_submit_claims_an_intent_before_any_write():
     # suspect is not rejected as already_jailed.
     assert block.index(wrapper) < block.index("QBCore.Functions.GetPlayerByCitizenId(target)")
     assert block.index(wrapper) < block.index("already_jailed")
-    assert block.index(wrapper) < block.index("INSERT INTO police_reports")
+    assert block.index(wrapper) < block.index("PoliceRecords.InsertReport(")
     assert "params.idempotency_key" in block
 
 
@@ -1782,8 +1805,8 @@ def test_report_submit_claims_an_intent_before_any_write():
     block = report_submit_block()
     wrapper = "withIntent('report', actor.citizenid, params.idempotency_key, function()"
     assert wrapper in block
-    assert block.index(wrapper) < block.index("INSERT INTO police_reports")
-    assert block.index(wrapper) < block.index("INSERT INTO police_evidence")
+    assert block.index(wrapper) < block.index("PoliceRecords.InsertReport(")
+    assert block.index(wrapper) < block.index("PoliceEvidenceWriter.Register(")
 
 
 def test_open_case_requires_case_capability():
@@ -1797,12 +1820,15 @@ def test_open_case_requires_case_capability():
 def test_arrest_audits_citation_and_evidence_children():
     block = arrest_block()
     # The child rows are audited independently, after their inserts.
-    assert "created.exhibitNo = exhibitNo" in block
-    assert "auditPlayer(actor.citizenid, 'citation.issue', tostring(created.citation)" in block
-    assert "('$%d'):format(amount)" in block
+    assert "created.exhibitNo = evidenceRow.exhibit_no" in block
+    # 罚单审计在唯一写者里记（'$金额 原因'），p2 不再重复记一条
+    owner = (POLICE / "server/citations.lua").read_text(encoding="utf-8")
+    assert "PoliceAudit.Write(actorCid, 'citation.issue'" in owner
+    assert "('$%d %s'):format(amount, reason)" in owner
+    assert "auditPlayer(actor.citizenid, 'citation.issue'" not in block
     assert "auditPlayer(actor.citizenid, 'evidence.register', created.exhibitNo" in block
-    assert block.index("INSERT INTO police_citations") < block.index("citation.issue")
-    assert block.index("INSERT INTO police_evidence") < block.index("'evidence.register'")
+    assert block.index("PoliceCitations.Insert(") < block.index("notifyCitation(target, created.citation")
+    assert block.index("PoliceEvidenceWriter.Register(") < block.index("'evidence.register'")
     # The arrest audit is still written once the sentence is applied.
     assert "auditPlayer(actor.citizenid, 'arrest.register', target, auditDetail)" in block
 
@@ -1810,25 +1836,28 @@ def test_arrest_audits_citation_and_evidence_children():
 def test_pay_citation_claims_before_charging_and_rolls_back_on_failure():
     src = p1_src()
     # Bundled oxmysql returns { affectedRows = n }; stock builds return n.
-    assert "local function affectedRows(result)" in src
-    assert "if type(result) == 'number' then return result end" in src
-    assert "tonumber(result.affectedRows)" in src
+    # 这段归一化随抢占一起进了唯一写者（server/citations.lua 的 ClaimPaid）。
+    owner = (POLICE / "server/citations.lua").read_text(encoding="utf-8")
+    assert "function PoliceCitations.ClaimPaid(" in owner
+    assert "result.affectedRows" in owner and "result.affected_rows" in owner
 
     start = src.index("function P1.PayCitation(")
     block = src[start:]
-    assert "affectedRows(claim) == 0" in block
+    assert "local claimed, claimOk = PoliceCitations.ClaimPaid(id, actor.citizenid)" in block
     # The conditional claim must run before any money moves.
-    claim = block.index("SET status = 'paid', paid_at = NOW()")
+    claim = block.index("PoliceCitations.ClaimPaid(id, actor.citizenid)")
     remove = block.index("RemoveMoney('bank'")
     assert claim < remove
-    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in block
+    assert "WHERE id = ? AND citizenid = ? AND status = 'unpaid'" in owner
     # Losing the claim is reported with the reason, never charged.
     for code in ("'not_found'", "'not_owner'", "'already_'"):
         assert code in block
     # A failed RemoveMoney puts the row back so the owner can retry.
-    rollback = block.index("SET status = 'unpaid', paid_at = NULL")
+    # 回滚 SQL 也在唯一写者里（RevertPaid）；p1 只发一次调用，且必须在扣款失败之后
+    assert "SET status = 'unpaid', paid_at = NULL" in owner
+    assert "WHERE id = ? AND status = 'paid'" in owner
+    rollback = block.index("PoliceCitations.RevertPaid(id)")
     assert remove < rollback
-    assert "WHERE id = ? AND status = 'paid'" in block
     assert "return false, 'insufficient_funds'" in block
     # Only the successful payer writes the audit.
     assert "audit(actor.citizenid, 'citation.pay', tostring(id)" in block
@@ -1948,20 +1977,22 @@ def test_npc_create_is_gated_inserts_and_notifies():
     # FIT-07: the scene must acquire its two budget slots before any DB write.
     assert "NPCBudget.Acquire('callout', budgetId, actorCid)" in block
     assert "if otherCalloutActive(budgetId) then" in block
-    assert "NPCBudget.Release(budgetId, 'db_error')" in block
+    assert "NPCBudget.Release(budgetId, insertReason or 'db_error')" in block
     assert "calloutBudget[id] = budgetId" in block
     assert "template.locations[math.random(1, #template.locations)]" in block
-    assert "INSERT INTO police_incidents" in block
-    assert "npc_template)" in block
+    assert "PoliceIncidents.InsertRow(" in block, "NPC 建单必须走 police_incidents 的唯一写者"
+    assert "npc_template = template.id" in block, "NPC 建单必须把模板 id 一起写进去"
     assert "'npc.callout.create'" in block
-    assert "notifyOfficers(template, location, coords)" in block
+    # 通知与插旗收口到建单投影（PoliceDispatch.ProjectIncident），NPC 只提供台词
+    assert "notifyOfficers(inserted, template, location)" in block
 
     src = read(NPC_SERVER)
-    # FIT-02: the phone owns phone_notifications; the callout only enqueues.
+    # FIT-02: 手机拥有 phone_notifications，NPC 层一行都不许写。
     assert "INSERT INTO phone_notifications" not in src
-    assert "Outbox.Enqueue('notification'" in src
-    assert "exports['custom-phone']:Notify(" in src
-    assert "TriggerClientEvent('police:client:policeAlert'" in src
+    # 通知与地图标记统一由建单投影发出（带单号、只发一次），NPC 层不自建发送通道。
+    assert "PoliceDispatch.ProjectIncident(" in src
+    assert "Outbox.Enqueue(" not in src
+    assert "TriggerClientEvent('police:client:policeAlert'" not in src
     assert "exports('CreateNpcCallout', NPC.CreateNpcCallout)" in src
 
 
@@ -2062,7 +2093,7 @@ def test_npc_client_builds_every_scene_element():
     assert "buildBlip(coords, template.title)" in src
     assert "drawText3D" in src
     assert "GetHashKey(" in src
-    assert "IsModelInCdimage" in src
+    assert "CFShared" in src, "模型加载应走 core-framework/client/shared.lua 的共享实现"
     assert "local function safe(fn, ...)" in src
 
 
@@ -2150,9 +2181,23 @@ def test_fit05_citation_report_and_audit_reads_fail_closed_before_the_query():
             f"{name} must refuse the listing when the audit write fails"
         )
 
-    audit_block = _police_function_block(read(POLICE / "server/p0.lua"), "function P.GetAudit(")
+    audit_block = _police_function_block(p0_text(), "function P.GetAudit(")
     # Exactly one occurrence: the definition itself. A second one would be the
     # self-audit recursing through GetAudit instead of the direct INSERT.
     assert audit_block.count("GetAudit(") == 1, "P.GetAudit must not call itself (recursion)"
     assert "audit(actor.citizenid, 'audit.view'" in audit_block
     assert "return false, 'audit_unavailable'" in audit_block
+
+
+def test_shared_model_loader_keeps_the_cdimage_guard():
+    """IsModelInCdimage 守卫搬进了 core-framework 的共享实现，必须还在那里。
+
+    没有它会怎样：服务器没有自定义警车/NPC 模型时，RequestModel 一个不存在的哈希会一直
+    等 HasModelLoaded 到超时，NPC 与后备车全都不刷——而日志里只有一条超时，看不出根因。
+    """
+    shared = (Path(__file__).resolve().parents[3] / 'resources' / '[standalone]'
+              / 'core-framework' / 'client' / 'shared.lua')
+    text = shared.read_text(encoding='utf-8')
+    assert 'function CFShared.LoadModel' in text
+    assert 'IsModelInCdimage' in text
+    assert 'GetGameTimer() + (timeoutMs or 10000)' in text, "必须有超时，否则加载失败会永久卡住线程"

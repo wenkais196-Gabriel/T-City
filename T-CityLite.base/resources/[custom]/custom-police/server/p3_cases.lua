@@ -30,12 +30,8 @@ local function utf8Sub(s, limit)
 end
 
 local function audit(cid, action, target, detail, actorKind)
-    return pcall(function()
-        MySQL.insert.await(
-            'INSERT INTO police_audit (actor_citizenid, actor_kind, action, target, detail) VALUES (?, ?, ?, ?, ?)',
-            { cid, actorKind or 'player', action, target,
-              detail and utf8Sub(tostring(detail), 500) or nil })
-    end)
+    -- 唯一写者见 server/audit.lua（这里只保留同名包装，调用点不用改）
+    return PoliceAudit.Write(cid, action, target, detail, actorKind)
 end
 
 local function caseNo(id)
@@ -49,16 +45,12 @@ function C.CreateCase(source, params)
     local title = utf8Sub(trim(params and params.title), 160)
     local summary = utf8Sub(trim(params and params.summary), 2000)
     if #title < 3 then return false, 'invalid_title' end
-    local id = MySQL.insert.await(
-        'INSERT INTO police_cases (title, summary, lead_citizenid, created_by) VALUES (?, ?, ?, ?)',
-        { title, summary, utf8Sub(trim(params and params.lead_citizenid), 50), actor.citizenid })
-    id = InsertId(id)
-    if not id or id == 0 then return false, 'db_error' end
-    local no = caseNo(tonumber(id))
-    MySQL.update.await('UPDATE police_cases SET case_no = ? WHERE id = ?', { no, id })
-    if not audit(actor.citizenid, 'case.create', no, title) then
-        print(('[custom-police] case.create audit failed for %s'):format(tostring(no)))
-    end
+    local id, no = PoliceRecords.InsertCase(actor.citizenid, {
+        title = title,
+        summary = summary,
+        lead_citizenid = params and params.lead_citizenid,
+    })
+    if not id then return false, 'db_error' end
     return { id = tonumber(id), case_no = no, status = 'open' }
 end
 
@@ -215,13 +207,13 @@ function C.RegisterArrest(source, params)
     local charges = utf8Sub(trim(params and params.charges), 1000)
     if target == '' then return false, 'invalid_citizen' end
     if #charges < 3 then return false, 'invalid_charges' end
-    local id = MySQL.insert.await([[
-        INSERT INTO police_arrests (citizenid, officer_citizenid, charges, incident_id, case_id)
-        VALUES (?, ?, ?, ?, ?)
-    ]], { target, actor.citizenid, charges,
-          tonumber(params and params.incident_id), tonumber(params and params.case_id) })
-    id = InsertId(id)
-    if not id or id == 0 then return false, 'db_error' end
+    local id = PoliceRecords.InsertArrest(actor.citizenid, {
+        citizenid = target,
+        charges = charges,
+        incident_id = params and params.incident_id,
+        case_id = params and params.case_id,
+    })
+    if not id then return false, 'db_error' end
     if not audit(actor.citizenid, 'arrest.register', target, charges) then
         print(('[custom-police] arrest.register audit failed for %s'):format(tostring(target)))
     end
@@ -315,11 +307,8 @@ function C.RecordVerdict(justiceCaseId, verdictJson, status)
     end
     if status ~= 'sentenced' and status ~= 'closed' then return false, 'invalid_status' end
 
-    local ok = pcall(function()
-        MySQL.update.await(
-            'UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?',
-            { verdictJson, status, caseId })
-    end)
+    -- 判决字段的写入也在唯一写者里（server/records.lua）
+    local ok = PoliceRecords.RecordVerdict(caseId, verdictJson, status)
     if not ok then
         print(('[custom-police] justice verdict write failed for %s'):format(tostring(caseId)))
         return false, 'db_error'

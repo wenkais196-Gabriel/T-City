@@ -61,26 +61,17 @@ end
 
 setupRelationshipGroups()
 
-local function loadModel(modelHash)
-    if type(modelHash) ~= 'number' or modelHash == 0 then return false end
-    if type(IsModelInCdimage) ~= 'function' or not IsModelInCdimage(modelHash) then return false end
-    if type(HasModelLoaded) ~= 'function' or type(RequestModel) ~= 'function' then return false end
-    if HasModelLoaded(modelHash) then return true end
-    RequestModel(modelHash)
-    local deadline = GetGameTimer() + 10000
-    while not HasModelLoaded(modelHash) do
-        if GetGameTimer() > deadline then return false end
-        if spawning and spawning.cancelled then return false end
-        Wait(10)
-    end
-    return true
+local LoadModel = CFShared and CFShared.LoadModel
+if not LoadModel then
+    print('[custom-police] ⚠ core-framework/client/shared.lua 未包含，模型加载不可用')
+    LoadModel = function() return false end
 end
 
 local function loadFirstModel(names)
     if type(names) ~= 'table' then return nil end
     for _, name in ipairs(names) do
         local hash = GetHashKey(name)
-        if loadModel(hash) then return hash end
+        if LoadModel(hash) then return hash end
     end
     return nil
 end

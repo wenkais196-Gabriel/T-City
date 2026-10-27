@@ -1,9 +1,15 @@
 <script lang="ts">
+  import { formatClock } from '../utils/time';
   import { smsThreads, messagesList, playerData, contactsList, loadMessages, MESSAGE_PAGE_SIZE } from '../stores/phone';
   import { fetchNui } from '../utils/nui';
   import { onMount, tick } from 'svelte';
+  import AppSurface from '../components/AppSurface.svelte';
+  import Pane from '../components/Pane.svelte';
+  import { PANE_CONTRACT as MESSAGES_PANES } from './contracts/messages.panes';
 
   let activeThreadNum = $state<string | null>(null);
+  // 由 AppSurface 回写：'stack'=单列（手机），'grid'=两栏（平板）
+  let mode = $state<'stack' | 'grid'>('stack');
   let activeThreadName = $state<string>('');
   let messageInput = $state('');
   let chatScrollEl = $state<HTMLDivElement | null>(null);
@@ -135,10 +141,7 @@
   };
 
   // Format time helper
-  const formatTime = (timeStr: string) => {
-    const d = new Date(timeStr);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  };
+  const formatTime = (value: unknown) => formatClock(value, 'messages');
 
   // Auto-scroll only when the newest message changes (send/receive). Prepending
   // an older page leaves the newest id untouched, so it does not jump to the
@@ -154,94 +157,115 @@
 </script>
 
 <div class="messages-app app-transition">
-  {#if activeThreadNum === null}
-    <!-- Thread List View -->
-    <div class="app-header">
-      <span class="app-title">💬 Messages</span>
-    </div>
-
-    <div class="app-content phone-scrollable">
-      {#if $smsThreads.length === 0}
-        <div class="empty-state">No conversations yet</div>
-      {:else}
-        <div class="threads-list">
-          {#each $smsThreads as thread (thread.number)}
-            <button class="thread-item glass-card" onclick={() => openThread(thread.number)}>
-              <div class="avatar">{thread.name.charAt(0).toUpperCase()}</div>
-              <div class="thread-details">
-                <div class="thread-row">
-                  <span class="thread-name">{thread.name}</span>
-                  <span class="thread-time">{formatTime(thread.latestTime)}</span>
-                </div>
-                <div class="thread-row">
-                  <span class="thread-snippet">{thread.latestMessage}</span>
-                  {#if thread.hasUnread}
-                    <span class="unread-dot"></span>
-                  {/if}
-                </div>
-              </div>
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  {:else}
-    <!-- Chat Thread View -->
-    <div class="app-header chat-header">
-      <button class="back-btn" onclick={closeThread} aria-label="Back">◀</button>
-      <div class="header-avatar">{activeThreadName.charAt(0).toUpperCase()}</div>
-      <div class="header-details">
-        <span class="chat-title">{activeThreadName}</span>
-        <span class="chat-status">{activeThreadNum}</span>
+  <AppSurface
+    spec={MESSAGES_PANES}
+    activePane={activeThreadNum ? 'chat' : 'threads'}
+    bind:mode
+  >
+    <Pane id="threads">
+      <div class="app-header">
+        <span class="app-title">💬 Messages</span>
       </div>
-    </div>
 
-    <div class="chat-body phone-scrollable" bind:this={chatScrollEl}>
-      {#if threadMessages.length === 0}
-        <div class="empty-chat">No messages yet. Send a greeting!</div>
-      {:else}
-        {#if hasMore && threadMessages.length >= MESSAGE_PAGE_SIZE}
-          <div class="load-earlier">
-            <button class="load-earlier-btn" onclick={loadEarlierMessages} disabled={loadingOlder}>
-              {loadingOlder ? '正在加载…' : '加载更早消息'}
-            </button>
+      <div class="app-content phone-scrollable">
+        {#if $smsThreads.length === 0}
+          <div class="empty-state">No conversations yet</div>
+        {:else}
+          <div class="threads-list">
+            {#each $smsThreads as thread (thread.number)}
+              <button
+                class="thread-item glass-card"
+                class:sel={activeThreadNum === thread.number}
+                onclick={() => openThread(thread.number)}
+              >
+                <div class="avatar">{thread.name.charAt(0).toUpperCase()}</div>
+                <div class="thread-details">
+                  <div class="thread-row">
+                    <span class="thread-name">{thread.name}</span>
+                    <span class="thread-time">{formatTime(thread.latestTime)}</span>
+                  </div>
+                  <div class="thread-row">
+                    <span class="thread-snippet">{thread.latestMessage}</span>
+                    {#if thread.hasUnread}
+                      <span class="unread-dot"></span>
+                    {/if}
+                  </div>
+                </div>
+              </button>
+            {/each}
           </div>
         {/if}
-        <div class="messages-bubble-container">
-          {#each threadMessages as msg (msg.id)}
-            {@const isMe = msg.sender_number === $playerData.phone}
-            <div class="message-bubble-wrapper {isMe ? 'me' : 'them'}">
-              <div class="message-bubble">
-                <p class="bubble-text">{msg.message}</p>
-                {#if msg.gps && msg.gps.x}
-                  {#if msg.status === 'active'}
-                    <button class="gps-btn gps-active"
-                      onclick={() => fetchNui('setGpsRoute', { x: msg.gps.x, y: msg.gps.y, label: msg.gps.label })}>
-                      📍 设置导航: {msg.gps.label || '目的地'}
-                    </button>
-                  {:else if msg.status === 'done' || msg.status === 'expired'}
-                    <span class="gps-done">📍 {msg.gps.label || '目的地'}（已完成）</span>
-                  {:else}
-                    <span class="gps-inactive">📍 {msg.gps.label || '目的地'}</span>
-                  {/if}
-                {/if}
-                <span class="bubble-time">{formatTime(msg.timestamp || msg.date)}</span>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
+      </div>
+    </Pane>
 
-    <!-- Message Input Bar -->
-    <form class="chat-input-bar" onsubmit={(e) => { e.preventDefault(); handleSendMessage(); }}>
-      <input type="text" class="phone-input chat-input" placeholder="Type a message..." bind:value={messageInput} />
-      <button type="submit" class="send-btn" aria-label="Send message">➔</button>
-    </form>
-  {/if}
+    <Pane id="chat" scroll="none">
+      {#if activeThreadNum}
+        <div class="app-header chat-header">
+          {#if mode === 'stack'}
+            <button class="back-btn" onclick={closeThread} aria-label="Back">◀</button>
+          {/if}
+          <div class="header-avatar">{activeThreadName.charAt(0).toUpperCase()}</div>
+          <div class="header-details">
+            <span class="chat-title">{activeThreadName}</span>
+            <span class="chat-status">{activeThreadNum}</span>
+          </div>
+        </div>
+
+        <div class="chat-body phone-scrollable" bind:this={chatScrollEl}>
+          {#if threadMessages.length === 0}
+            <div class="empty-chat">No messages yet. Send a greeting!</div>
+          {:else}
+            {#if hasMore && threadMessages.length >= MESSAGE_PAGE_SIZE}
+              <div class="load-earlier">
+                <button class="load-earlier-btn" onclick={loadEarlierMessages} disabled={loadingOlder}>
+                  {loadingOlder ? '正在加载…' : '加载更早消息'}
+                </button>
+              </div>
+            {/if}
+            <div class="messages-bubble-container">
+              {#each threadMessages as msg (msg.id)}
+                {@const isMe = msg.sender_number === $playerData.phone}
+                <div class="message-bubble-wrapper {isMe ? 'me' : 'them'}">
+                  <div class="message-bubble">
+                    <p class="bubble-text">{msg.message}</p>
+                    {#if msg.gps && msg.gps.x}
+                      {#if msg.status === 'active'}
+                        <button class="gps-btn gps-active"
+                          onclick={() => fetchNui('setGpsRoute', { x: msg.gps.x, y: msg.gps.y, label: msg.gps.label })}>
+                          📍 设置导航: {msg.gps.label || '目的地'}
+                        </button>
+                      {:else if msg.status === 'done' || msg.status === 'expired'}
+                        <span class="gps-done">📍 {msg.gps.label || '目的地'}（已完成）</span>
+                      {:else}
+                        <span class="gps-inactive">📍 {msg.gps.label || '目的地'}</span>
+                      {/if}
+                    {/if}
+                    <span class="bubble-time">{formatTime(msg.timestamp || msg.date)}</span>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <form class="chat-input-bar" onsubmit={(e) => { e.preventDefault(); handleSendMessage(); }}>
+          <input type="text" class="phone-input chat-input" placeholder="Type a message..." bind:value={messageInput} />
+          <button type="submit" class="send-btn" aria-label="Send message">➔</button>
+        </form>
+      {:else}
+        <!-- 平板：不自动选会话——openThread 会清未读，推开平板就清空未读是错的 -->
+        <div class="pane-empty">左边选一个会话</div>
+      {/if}
+    </Pane>
+  </AppSurface>
 </div>
 
 <style>
+  .thread-item.sel { background: rgba(59,130,246,.14); }
+  .pane-empty { padding: 24px 16px; color: #6b7794; font-size: 12.5px; text-align: center; }
+  /* 多栏时 chat-body 必须能收缩，否则输入栏会被消息列表顶出屏幕 */
+  .chat-body { min-height: 0; }
+  .app-content { min-height: 0; }
   .messages-app {
     display: flex;
     flex-direction: column;

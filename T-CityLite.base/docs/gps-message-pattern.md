@@ -55,7 +55,7 @@ end
 
 ## 🔒 客户端拦截规则
 
-`custom-phone/client/main.lua` 的 `setGpsRoute` 回调已内置：
+`resources/[custom]/custom-phone/client/main.lua` 的 `setGpsRoute` 回调已内置：
 
 | 场景 | 结果 |
 |------|------|
@@ -82,4 +82,4 @@ end
 
 ## 📋 参考实现
 
-`qb-drugs/server/deliveries.lua` — `successDelivery` + `sendDeliverySMS`
+`resources/[qb]/qb-drugs/server/deliveries.lua` — `successDelivery` + `sendDeliverySMS`

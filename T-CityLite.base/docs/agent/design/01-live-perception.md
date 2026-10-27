@@ -475,10 +475,10 @@ end
 
 | # | 任务 | 验收方式 | 依赖 |
 |:-:|:---|:---|:---|
-| ☐ T1 | `server/live_rules.lua` 纯函数模块 + `tests/agent/test_live_rules.lua`（含 PII 扫描：构造含 `license/identifiers/fingerprint/walletid/phone` 的 PlayerData，序列化后不得出现这些值） | `lua5.4 .../test_live_rules.lua` 退出码 0；敏感词只出现在排除名单常量 | 无 |
-| ☐ T3 | `server/live_cache.lua`：槽位/cid 索引/生命周期/热 tick | `/agentlive status` 槽位数正确；2 客户端上下线各 5 次无残留，`session` 单调 | T1 |
-| ☐ T4 | `server/live_events.lua`：12 类事件/环/合并/聚合限速 | `agent_live_event_buffer=8` 压 100 条 → `dropped_before>0` 且有 `live.overflow`；过期游标 410 | T1,T3 |
-| ☐ T5 | `server/live_http.lua`：4 路由/独立 token/限流/预算/错误码；`main.lua` 两处改动 + manifest 顺序 | 无 token→401、`enabled=0`→503、`precision=fine` 未开→403、`limit=999`→400、48 人响应 ≤32768B；ACTIONS.md 既有请求逐条回归 | T3,T4 |
+| ☐ T1 | `resources/[custom]/custom-director/server/live_rules.lua` 纯函数模块 + `tests/agent/lua/cases/live_rules.lua`（含 PII 扫描：构造含 `license/identifiers/fingerprint/walletid/phone` 的 PlayerData，序列化后不得出现这些值） | `lua5.4 .../test_live_rules.lua` 退出码 0；敏感词只出现在排除名单常量 | 无 |
+| ☐ T3 | 槽位/cid 索引/生命周期/热 tick（M1 落在 live 模块，与路由同文件 `live_api.lua`） | `/agentlive status` 槽位数正确；2 客户端上下线各 5 次无残留，`session` 单调 | T1 |
+| ☐ T4 | `resources/[custom]/custom-director/server/live_events.lua`：12 类事件/环/合并/聚合限速 | `agent_live_event_buffer=8` 压 100 条 → `dropped_before>0` 且有 `live.overflow`；过期游标 410 | T1,T3 |
+| ☐ T5 | `resources/[custom]/custom-director/server/live_api.lua`：4 路由/独立 token/限流/预算/错误码；`main.lua` 两处改动 + manifest 顺序 | 无 token→401、`enabled=0`→503、`precision=fine` 未开→403、`limit=999`→400、48 人响应 ≤32768B；ACTIONS.md 既有请求逐条回归 | T3,T4 |
 | ☐ T6 | `/agentlive status / probe / bench` | console 可跑、玩家身份被拒、`bench 1000` 输出 p50/p95 | T5 |
 | ☐ T7 | 48 假人（`tcity-e2e`）满载性能 | list P95 ≤15ms、tick P95 ≤3ms；`live_*.lua` 无 `MySQL`/`Wait(`/`PerformHttpRequest`；RSS 增量 <20MB | T5,T6 |
 | ☐ T8 | 实时性验收：移动 50m / 死亡 / 转账 / 完成任务 | `probe` 的 `hot_ms` ≤150；列表位置 ≤300ms 变化；四类事件 250ms 内可拉到（10Hz） | T7 |
@@ -492,7 +492,7 @@ end
 
 1. **D1 token 拆分**（推荐独立 `agent_live_token`）：Hub 要配两个凭证；不拆则须接受"只读泄漏 ⇒ 可写钱"。
 2. **D2 位置默认精度**（推荐 25m，`fine` 需 convar）：影响 agent 能否做精确距离判断，以及是否审计 `fine` 请求。
-3. **D3 metadata 事件取法**：`event` 需在 `qb-core/server/player.lua` 的 `UpdatePlayerData` 旁加一行 `TriggerEvent`（跨文件，需 owner 同意）；
+3. **D3 metadata 事件取法**：`event` 需在 `resources/[qb]/qb-core/server/player.lua` 的 `UpdatePlayerData` 旁加一行 `TriggerEvent`（跨文件，需 owner 同意）；
    `throttled` 零改动但每次 `SetPlayerData` 都复制整份 PlayerData（48 人 CPU/GC 成本待实测）。
 4. **D4 live 与 DB 的类型词表是否统一**：live 多出的 `player.*/money.change/job.change` 在 `agent_events` 无行。要么接受"DB 是子集"，要么后续补写 DB（不建议，会把实时路径绑回落盘）。
 5. **D5 合并位置与暴露面**：Hub 直连 live，还是由 `agent_gateway.py` 统一代理（MCP 只认一个 base URL + 一个 token，需给 gateway 配 live token 与网络路径）？以及是否已用防火墙把 `:30120/custom-director/*` 限制为 Hub 主机——未限制前不应开 `agent_live_enabled=1`。

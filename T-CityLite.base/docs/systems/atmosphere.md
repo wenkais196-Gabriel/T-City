@@ -127,6 +127,6 @@ configs/modules/atmosphere.cfg
 
 ## 扩展
 
-新增场景：`config/scenes.lua` 加一行 + `Bus.SafeCall('atmosphere', 'PlayScene', src, '新场景')`
+新增场景：`resources/[system]/tcity-atmosphere/config/scenes.lua` 加一行 + `Bus.SafeCall('atmosphere', 'PlayScene', src, '新场景')`
 
 新增曲目：放入 `assets/audio/`，config 中引用

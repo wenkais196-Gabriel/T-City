@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-10-25",
+  "min_count": 4,
+  "budgets": {
+    "DebugPrint": {
+      "max": 11,
+      "reason": "同名不同语义：各自带本资源的调试开关与前缀，合并会改变行为——有意重复"
+    },
+    "DrawText3D": {
+      "max": 4,
+      "reason": "3D 文字。[custom] 已合并到 core-framework/client/shared.lua 的 CFShared.DrawText3D（走 @resource 加载期包含，不进 exports——逐帧调用不能过运行时边界）；qb-* 三份属上游，不迁"
+    },
+    "GetClosestPlayer": {
+      "max": 6,
+      "reason": "框架级查询，行为依赖各自的距离/过滤参数，暂不合并"
+    },
+    "loadAnimDict": {
+      "max": 12,
+      "reason": "语义一致。[custom] 已合并到 core-framework/shared/util.lua；qb-*（10）与 standalone（2）保留：避免与上游/第三方分叉"
+    },
+    "AddMoney": {
+      "max": 4,
+      "reason": "qb-core 两份属同资源持久化层；core-framework 那份是**便利层**（加倍率/转账），内部仍走原语；分层是有意的，不是重复"
+    },
+    "DrawText3Ds": {
+      "max": 5,
+      "reason": "同上（3D 文字族）"
+    },
+    "_initDebug": {
+      "max": 5,
+      "reason": "PolyZone 内部调试初始化，不迁"
+    },
+    "isPointInside": {
+      "max": 5,
+      "reason": "PolyZone 内部实现（随 vendored 资源发布），不迁"
+    }
+  }
+}

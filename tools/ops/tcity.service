@@ -1,0 +1,28 @@
+[Unit]
+# T-City Lite FXServer — 模板文件，由 tools/ops/install_service.py 渲染并安装
+# 校验: python3 tools/ops/install_service.py --check-only
+Description=T-City Lite FXServer
+Documentation=file:@REPO@/docs/ops/RUNBOOK.md
+After=network-online.target mysql.service
+Wants=network-online.target
+# 崩溃循环必须自己停下来：实测一次 license 限流让这个单元在半小时里重启了 319 次，
+# 每 10 秒一次的启动请求把"等一会儿就好"的 429 续成了死锁。5 次 / 5 分钟后 systemd
+# 放弃并进入 failed，等人来看，而不是继续打外部接口。
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=swk
+WorkingDirectory=@REPO@
+# start.sh 末尾是 exec，进程不会多一层 shell，systemctl stop 能直接送到 FXServer
+ExecStart=/bin/bash @REPO@/start.sh
+Restart=always
+RestartSec=10
+# 控制台输出进文件：tools/ops/healthcheck.py 默认读这个路径
+StandardOutput=append:/var/log/tcity/console.log
+StandardError=append:/var/log/tcity/console.log
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -12,6 +12,7 @@ client/core/bridge.lua, client/main.lua and server/main.lua against a
 deterministic CitizenFX stub (no engine, no network).
 """
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -25,6 +26,29 @@ CLIENT = PHONE / "client" / "main.lua"
 BRIDGE = PHONE / "client" / "core" / "bridge.lua"
 SERVER = PHONE / "server" / "main.lua"
 RATE_LIMIT = PHONE / "server" / "core" / "rate_limit.lua"
+# 限流实现已搬到 core-framework；这里要把实现装进沙箱，并伪造 CfxLua 的 `exports`
+#（既是可注册的函数，又能 exports['res']:Method(...) 调用，且必须吞掉 self）。
+OWNER_RATE_LIMIT = (Path(__file__).resolve().parents[3] / 'resources' / '[standalone]'
+                    / 'core-framework' / 'server' / 'rate_limit.lua')
+
+EXPORTS_SHIM = """
+local __registry = {}
+exports = setmetatable({}, {
+    __call = function(_, name, fn) __registry[name] = fn end,
+    __index = function(_, resource)
+        return setmetatable({}, {
+            __index = function(_, method)
+                return function(_, ...)
+                    local fn = __registry[method]
+                    if type(fn) ~= 'function' then return nil end
+                    return fn(...)
+                end
+            end,
+        })
+    end,
+})
+GetGameTimer = GetGameTimer or function() return os.time() * 1000 end
+"""
 NUI = PHONE / "web" / "src" / "utils" / "nui.ts"
 
 LUA_BIN = shutil.which("lua5.4")
@@ -142,6 +166,8 @@ def server_harness(body: str) -> str:
     return (
         SERVER_STUBS
         + "\n"
+        + EXPORTS_SHIM + "\n"
+        + f"dofile([[{OWNER_RATE_LIMIT}]])\n"
         + f"dofile([[{RATE_LIMIT}]])"
         + "\n"
         + _protocol_block(SERVER)
@@ -384,7 +410,15 @@ def test_get_phone_data_is_single_flight():
     assert src.count("TriggerCallback('phone:server:getPhoneData'") == 1
     assert "    fetchPhoneData(cb)" not in src, "NUI callback must wrap cb explicitly"
     assert "fetchPhoneData(function(data)" in src
-    assert "SetTimeout(8000" in src
+    # 客户端兜底必须早于 NUI 侧的 abort（否则前端只会看到 AbortError 而不是
+    # 结构化的 timeout 码）。NUI_TIMEOUT_MS = 6000，所以这里必须是 4000。
+    assert "SetTimeout(4000" in src, "client fallback must fire before the NUI abort"
+    assert "SetTimeout(8000" not in src
+
+    nui_ts = (PHONE / "web" / "src" / "utils" / "nui.ts").read_text(encoding="utf-8")
+    nui_timeout = re.search(r"NUI_TIMEOUT_MS\s*=\s*(\d+)", nui_ts)
+    assert nui_timeout, "NUI_TIMEOUT_MS must stay explicit"
+    assert int(nui_timeout.group(1)) > 4000, "NUI abort must stay after the client fallback"
 
 
 def test_phone_app_protocol_uses_dedicated_events():
@@ -398,3 +432,30 @@ def test_phone_app_protocol_uses_dedicated_events():
         "phone:client:appActionResponse",
     ):
         assert token in client or token in bridge or token in server, token
+
+
+def test_phone_toggle_ignores_duplicate_key_events():
+    """一次按 M 会派发两条命令（RegisterKeyMapping 在资源重启时重复注册）。
+
+    实测症状：第二条命令看到 isPhoneOpen=true 且 IsNuiFocused()=true，立刻走
+    ClosePhone → 界面被叫出来又秒关，玩家看到的是"按 M 没反应"。
+    """
+    src = CLIENT.read_text(encoding="utf-8")
+
+    assert "TOGGLE_DEBOUNCE_MS" in src, "toggle needs a debounce window"
+    debounce = re.search(r"TOGGLE_DEBOUNCE_MS\s*=\s*(\d+)", src)
+    assert debounce and 100 <= int(debounce.group(1)) <= 1000, "debounce must be 100..1000ms"
+
+    # 防抖必须在命令体里的任何状态检查之前（`isPhoneOpen = true` 在 OpenPhone 里
+    # 也出现一次，所以只在命令块内比较顺序）
+    block = src[src.index("RegisterCommand('phone', function()"):]
+    block = block[:block.index("end, false)")]
+    guard = block.index("now - lastToggleAt < TOGGLE_DEBOUNCE_MS")
+    assert guard < block.index("if Surface.IsOpen() then"), "debounce must precede the toggle branch"
+    assert block.index("lastToggleAt = now") < block.index("if Surface.IsOpen() then")
+
+    # keymapping 只注册一次（否则防抖只是兜底，根因还在）
+    assert "keyMappingRegistered" in src, "key mapping must be registered at most once"
+    mapping = src[src.index("onClientResourceStart"):]
+    assert mapping.index("if keyMappingRegistered then return end") < mapping.index("RegisterKeyMapping("), \
+        "the once-guard must precede RegisterKeyMapping"

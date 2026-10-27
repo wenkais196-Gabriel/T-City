@@ -27,7 +27,7 @@
 | `TriggerClientCallback` 以 **name** 为键写全局表，`Await` 时再次按 name 取表 | `[qb]/qb-core/server/functions.lua:459-479` |
 | ack 处理按 name 解析，**不校验 source / 不校验请求** | `[qb]/qb-core/server/events.lua:118-128` |
 | client 端 ack 只回传 `name`，无 rid | `[qb]/qb-core/client/events.lua:237-243` |
-| director 是 `server_only 'yes'`，已有 `SetHttpHandler`/`respond`/错误码/`agent_actions` 审计 | `custom-director/fxmanifest.lua`；`server/main.lua:1006-1131,1294-1301` |
+| director 是 `server_only 'yes'`，已有 `SetHttpHandler`/`respond`/错误码/`agent_actions` 审计 | `resources/[custom]/custom-director/fxmanifest.lua`；`server/main.lua:1006-1131,1294-1301` |
 | director 执行是**字面量 if/elseif**；HTTP 映射 `disabled→503`、`execution_failed→409` | `server/main.lua:417-425,1116-1131` |
 | 钥匙权威在服务端，且服务端已主动推送 client 事件 | `custom-vehicles/server/compat.lua:82-137`；`client/main.lua:172` |
 | 连 txAdmin 的传送都在 client 侧执行（`SetPedCoordsKeepVehicle`） | `[system]/monitor/resource/menu/client/cl_main_page.lua:145,194` |
@@ -80,7 +80,7 @@ setr agent_effect_max_timeout_ms 10000
 ```
 
 `configs/modules/custom.cfg` 在 `custom-logs` 之后加 `ensure custom-agent-client`。
-`shared/actions.lua` 只放常量——校验函数必须留在 server，否则会被误当成校验层。
+`resources/[custom]/custom-agent-client/shared/effect_rules.lua` 只放常量——校验函数必须留在 server，否则会被误当成校验层。
 
 ---
 
@@ -149,7 +149,7 @@ pending ─ack ok & Verify≠false→ ok        ├─ack rejected/failed→ cli
         └playerDropped / onResourceStop → player_offline | executor_stopped
 ```
 
-### 4.1 server 骨架（`server/main.lua`，完整约 220 行）
+### 4.1 server 骨架（`resources/[custom]/custom-agent-client/server/main.lua`，完整约 220 行）
 
 ```lua
 local Actions, Audit = EffectActions, EffectAudit
@@ -262,7 +262,7 @@ exports('Ping', function() return { ok = true, version = 1, enabled = EffectConf
 
 `clientExec` 必须在协程内调用（HTTP handler / `CreateThread` / 事件回调都满足）；主线程直调返回
 `not_yieldable` 而不是崩溃。`handshake_missing`（client 尚未 `ready`）按可重试处理，客户端加载完成后重试一次。
-### 4.2 client 骨架（`client/main.lua`）
+### 4.2 client 骨架（`resources/[custom]/custom-agent-client/client/main.lua`）
 
 ```lua
 local Handlers = EffectHandlers            -- client/actions.lua，字面量表
@@ -547,11 +547,11 @@ end
 
 **A 骨架（无行为）**
 - [ ] **A1** 建 `custom-agent-client/{fxmanifest,shared/actions,server/config}` — 验收：`Ping()` 返回 `{ok=true,version=1,enabled=false}`。
-- [ ] **A2** `shared/actions.lua` 写 7 个动作、`ANIM_DICTS`（≥5 条，需真机确认存在）、`MAP_BOUNDS`、上限 — 验收：`tests/agent/test_effect_actions.lua` 纯 Lua 断言表结构。
+- [ ] **A2** `resources/[custom]/custom-agent-client/shared/effect_rules.lua` 写 7 个动作、`ANIM_DICTS`（≥5 条，需真机确认存在）、`MAP_BOUNDS`、上限 — 验收：`tests/agent/lua/cases/effect_rules.lua` 纯 Lua 断言表结构。
 
 **B RPC 核心**
-- [ ] **B1** `server/main.lua`：`ready/settle/clientExec/ack/playerDropped/onResourceStop` — 验收：无客户端时 `clientExec` 在 `timeout_ms+200ms` 内返回 `timeout`（不 hang）。
-- [ ] **B2** `client/main.lua`：hello/ready/exec/cancel/去重/pcall — 验收：F8 触发 `TriggerEvent('tcity:agent:exec',{v=1,session='x'})` 被丢弃，server 无审计行。
+- [ ] **B1** `resources/[custom]/custom-agent-client/server/main.lua`：`ready/settle/clientExec/ack/playerDropped/onResourceStop` — 验收：无客户端时 `clientExec` 在 `timeout_ms+200ms` 内返回 `timeout`（不 hang）。
+- [ ] **B2** `resources/[custom]/custom-agent-client/client/main.lua`：hello/ready/exec/cancel/去重/pcall — 验收：F8 触发 `TriggerEvent('tcity:agent:exec',{v=1,session='x'})` 被丢弃，server 无审计行。
 - [ ] **B3** `exports('Execute'/'Cancel'/'Ping')` — 验收：console 调试命令可列 pending。
 
 **C 动作（按风险递增）**
@@ -563,7 +563,7 @@ end
 
 **D 限流与审计**
 - [ ] **D1** 令牌桶 + 冷却 + 在飞/全局上限 — 验收：连发 30 次 `notify`，前 5 次 ok，其后 `rate_limited` 且 `retry_after_ms>0`。
-- [ ] **D2** migration + `server/audit.lua` — 验收：`GROUP BY status` 覆盖 ok/timeout/rejected；`request_id` 唯一；timeout 也有行。
+- [ ] **D2** migration + 审计写入（server 侧；M2 回填：审计走 `custom-logs`，不落库） — 验收：`GROUP BY status` 覆盖 ok/timeout/rejected；`request_id` 唯一；timeout 也有行。
 - [ ] **D3** console 摘要 — 验收：每次请求恰好一行 `[agent-effect]`。
 
 **E 安全回归**
@@ -573,7 +573,7 @@ end
 - [ ] **E4** executor/director 交叉重启 — 验收：director 返回 `executor_unavailable`；重启 director 不影响在飞请求。
 
 **F director 集成**
-- [ ] **F1** `custom-director/server/effects.lua`（§9 helper）
+- [ ] **F1** director 侧 executor helper（server，§9 代码块）
 - [ ] **F2** `executeAction` 增加 6 个 client 动作 + 1 个 server 动作（`src` 由 citizenid 解析）
 - [ ] **F3** `policy.lua` 动作条目与风险（`teleport` L2、`give_vehicle_keys` L3 需审批）
 - [ ] **F4** `httpStatusForResult` 增加 `executor_unavailable→503`、`rate_limited→429` — 验收：返回 `code/result.executor_code` 与 §9 表一致。

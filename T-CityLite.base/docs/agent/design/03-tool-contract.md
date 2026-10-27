@@ -473,12 +473,12 @@ def sanitize_untrusted(text: str, max_chars: int = 200) -> tuple[str, bool]
 |:--:|:---|:---|:---|:---|
 | D1 | registry：schema + 20 工具（M0 13 个 `active`，其余 `planned`） | `tools/agent_tools.json` | JSON 可解析；`--check` 无 drift | – |
 | D2 | 加载/校验/渲染 + CLI | `tools/agent_tools.py` | `--check` exit 0；负例（重名、L0 带审批、undo 指空、危险参数名）各自 exit 1 | D1 |
-| D3 | 生成物：路由文档 + Lua 表 | `docs/agent/TOOLS.md`、`custom-director/shared/agent_tools.lua`、`fxmanifest.lua`(+1 行) | `--write` 后 `--check` 幂等；`luac -p` 通过 | D2 |
+| D3 | 生成物：路由文档 + Lua 表 | `docs/agent/TOOLS.md`、`resources/[custom]/custom-director/shared/agent_tools.lua`、`fxmanifest.lua`(+1 行) | `--write` 后 `--check` 幂等；`luac -p` 通过 | D2 |
 | D4 | 共享契约层 | `tools/agent_contract.py` | `classify()` 覆盖 §5.2 全表（表驱动单测）；`envelope_*` key 集合快照 | D2 |
 | D5 | MCP 路由层 | `tools/agent_mcp.py` | 下方 D5 验收 | D3,D4 |
 | D6 | gateway 追加字段 + `GET /agent/v1/tools` | `tools/agent_gateway.py` | 旧 envelope fixture 逐 key 相等；新 key 存在且可忽略 | D4 |
 | D7 | director 接 registry：`Normalize` 表驱动、`citizenid` 按 schema 必填、`/act` 双 body、结果加 `kind` | `custom-director/server/{policy,main}.lua` | legacy 3 动作行为逐条不变（selftest 全绿）；未知 type → `unsupported_tool` | D3 |
-| D8 | 测试：registry 不变量、路由/超时/熔断/幂等、注入清洗、envelope 兼容 | `tests/agent/test_agent_tools.py`、`test_agent_mcp.py`(改集合断言) | `python3 -m unittest discover -s tests/agent -v` 全绿 | D5,D6 |
+| D8 | 测试：registry 不变量、路由/超时/熔断/幂等、注入清洗、envelope 兼容（pytest 用例，新增） | `tests/agent` 下的用例（待补，见 D5/D6 验收） | `python3 -m unittest discover -s tests/agent -v` 全绿 | D5,D6 |
 | D9 | 文档：本文件 + `TOOLS.md` 链入 `API.md`/`ACTIONS.md`/`README.md`；MCP `instructions` 更新 | 3 个 md + `agent_mcp.py` | 文档中每个工具名在 registry 存在（脚本校验） | D5 |
 
 **D5 验收（可执行）**
