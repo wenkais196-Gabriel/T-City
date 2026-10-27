@@ -209,3 +209,35 @@ jobs:
 
       - name: Run NUI smoke tests
         run: python tests/nui/run_ui_tests.py
+
+  nui-browser:
+    name: NUI browser scenarios (phone + tablet)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: T-CityLite.base/resources/[custom]/custom-phone/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: T-CityLite.base/resources/[custom]/custom-phone/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 产物必须和源码一致：先构建，再让 baseline 闸门检查 index.html 引用的是真实文件。
+      - name: Build the NUI bundle
+        run: npm run build
+
+      # web/tests/nui/run.mjs 覆盖的是 pane 契约、任务 App 双面行为、MDT 三栏这些
+      # 真实交互；tests/nui/run_ui_tests.py 只验证"打开消息能渲染壳"，两者不重叠。
+      - name: Run the browser scenarios on both surfaces
+        env:
+          # GitHub 托管的 ubuntu 镜像自带 Chrome；harness 不下载浏览器。
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
+        run: node tests/nui/run.mjs --surface=both
