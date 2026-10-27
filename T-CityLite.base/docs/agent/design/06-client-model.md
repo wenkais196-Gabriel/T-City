@@ -10,7 +10,7 @@
 > 行号已按 `custom-phone` 模块化（`client/core/*`）后的布局校准。
 >
 > 相关：[`07-harness-channel.md`](07-harness-channel.md)（把 §3 之外的部分变成 console 断言）、
-> [`../../../docs/qbcore-client-code-analysis.md`](../../../docs/qbcore-client-code-analysis.md)（上游 QBCore 客户端代码面盘点）。
+> [`docs/qbcore-client-code-analysis.md`](../../../docs/qbcore-client-code-analysis.md)（上游 QBCore 客户端代码面盘点）。
 
 ---
 
@@ -56,7 +56,7 @@
 ### P01 · 生命周期是 manifest 决定的一次性顺序
 
 - 定义：`client_scripts` 里的文件按声明顺序加载完，才会触发 `onClientResourceStart`；`onResourceStop` 是最后一次清理机会。**多文件不等于都会执行**。
-- 证据：`custom-phone/fxmanifest.lua` 现在按序挂 4 个客户端脚本（`core/bridge` → `core/focus` → `core/events` → `main`，多文件不等于都会执行，仍要看 manifest）；`client/main.lua:12`（启动即 `PhoneFocus.Reset()`）、`client/core/focus.lua:155-158`（`onClientResourceStop` 兜底）、`client/main.lua:799-801`（main 自己的 stop 清理）；`AGENTS.md` §5 记录的 `client/call_history.lua` 实机不执行、桥接被迫并入 `main.lua`。
+- 证据：`T-CityLite.base/resources/[custom]/custom-phone/fxmanifest.lua` 现在按序挂 4 个客户端脚本（`core/bridge` → `core/focus` → `core/events` → `main`，多文件不等于都会执行，仍要看 manifest）；`client/main.lua:12`（启动即 `PhoneFocus.Reset()`）、`client/core/focus.lua:155-158`（`onClientResourceStop` 兜底）、`client/main.lua:799-801`（main 自己的 stop 清理）；`AGENTS.md` §5 记录的 call_history.lua（该文件已不存在） 实机不执行、桥接被迫并入 `main.lua`。
 - 症状：注册了但永不触发的 NUI callback / net event；资源重启后残留焦点。
 - 验证：**无头**（`env.loaded_files`、`StartResource()`、`StopResource()`）+ **静态**（`tests/check_dependencies.py` 核对 cfg 与 manifest）。
 
@@ -153,7 +153,7 @@
 ### P13 · 客户端必须上报状态，而不是让人看屏幕
 
 - 定义：凡是"看不见的状态"（焦点、keepInput、打开的是哪个 UI、执行到哪一步），都要有一条到服务端的遥测；否则 agent 与 CI 都只能靠人眼。
-- 证据：`custom-phone/client/main.lua` 中 13 处 `phone:server:focusState`（close-start / close / reassert / loop-exit / probe-start / probe / probe-end）+ `server/main.lua:1348` 接收；`custom-agent-client` 的 `tcity:agent:ack`；`CLIENT_HARNESS.md` §5 的 `[client-telemetry]` 日志前缀。
+- 证据：`T-CityLite.base/resources/[custom]/custom-phone/client/main.lua` 中 13 处 `phone:server:focusState`（close-start / close / reassert / loop-exit / probe-start / probe / probe-end）+ `server/main.lua:1348` 接收；`custom-agent-client` 的 `tcity:agent:ack`；`CLIENT_HARNESS.md` §5 的 `[client-telemetry]` 日志前缀。
 - 症状：只能截图取证；回归无法自动判定。
 - 验证：**静态**（遥测覆盖率：每个 UI 资源是否都有 open/close 遥测）+ **实机**（日志）。
 
@@ -210,8 +210,8 @@
 
 | Suite | checks | 覆盖性质 |
 |:---|---:|:---|
-| `cases_client/phone_focus.lua` | 12 | P01 P02 P03 P04 P05 P06 P07 P10 P13 |
-| `cases_client/agent_effects.lua` | 11 | P06 P09 P12 P14 + 握手/ack 契约 |
+| `T-CityLite.base/tests/agent/lua/cases_client/phone_focus.lua` | 12 | P01 P02 P03 P04 P05 P06 P07 P10 P13 |
+| `T-CityLite.base/tests/agent/lua/cases_client/agent_effects.lua` | 11 | P06 P09 P12 P14 + 握手/ack 契约 |
 | 合计 | **23** | 0 failed |
 
 ### 4.3 变异测试（证明断言有牙，而不是恒绿）
@@ -250,7 +250,7 @@ exec    custom-agent-client        6 个客户端效果 + ack + 审计(agent_eff
 verify  ack 回读 + DB 回读          settled 去重、超时、拒绝留痕
 ```
 
-客户端一侧的契约（`custom-agent-client/client/main.lua`）值得原样保留：
+客户端一侧的契约（`T-CityLite.base/resources/[custom]/custom-agent-client/client/main.lua`）值得原样保留：
 
 | 约束 | 含义 |
 |:---|:---|
@@ -300,7 +300,7 @@ verify  ack 回读 + DB 回读          settled 去重、超时、拒绝留痕
 
 1. **`tests/client/quest_client_test.lua` 永远不会失败。** 它的 `assert(cond, label)` 只做 `print`，用例里大量 `assert(true, ...)`，还有 `assert(#cleanupPoints == 4, ...)` 这种对常量自证的断言；文件头写"在 F8 运行"，实际产出的 `passed` 数字没有任何验证力。要么改成 `error()`，要么删除并把有价值的数据流断言迁进 `cases_client/`。
 2. **`cancel` 与正在执行的 handler 有竞态。** `custom-agent-client/client/main.lua:142-153` 只清 `active[rid]` 并 `ClearPedTasks`，**不中断** handler；handler 到点后仍会补一个 `failed` ack。服务端 `settled` 兜住了（`:295-296`），但这是"靠对面容错"，客户端本可以持一个取消令牌。
-3. **`custom-main/client/main.lua:121-136` 在未登录时以 100 ms 轮询**（每轮 4 个 native），而 `qb-core/client/loops.lua` 的同类空闲轮询是 1 000 ms。进服/选角阶段是本机 CPU 最紧的时候，这条应降到 500–1 000 ms 或改为事件驱动。
+3. **`custom-main/client/main.lua:121-136` 在未登录时以 100 ms 轮询**（每轮 4 个 native），而 `T-CityLite.base/resources/[qb]/qb-core/client/loops.lua` 的同类空闲轮询是 1 000 ms。进服/选角阶段是本机 CPU 最紧的时候，这条应降到 500–1 000 ms 或改为事件驱动。
 
 ---
 
