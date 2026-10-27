@@ -97,6 +97,8 @@
   // 同一帧里 CEF 若也收到了这个按键（注入的按键能到 CEF，玩家硬件按键通常到不了），
   // 120ms 内不再自己处理一次，避免一次按键挪两格。
   let lastNavFromLua = 0;
+  // Lua 是否在替这一屏读键盘（keep_input=1）。为真时 CEF 不再自己处理导航键。
+  let luaOwnsNavKeys = false;
   // 列表滚动 / 窗口变化后把焦点框重新贴上去。
   // 节流到 ~10fps：scroll 事件很密，每次 store.set 都是一次 Svelte 重渲染。
   let remeasureTimer: ReturnType<typeof setTimeout> | null = null;
@@ -155,6 +157,9 @@
     registerNuiEvent('phone:open', (data) => {
       // 外壳形态由 Lua 决定；UI 只是照做。非法值一律退回手机，绝不猜。
       surface.set(isSurface(data?.surface) ? data.surface : 'phone');
+      // 键盘有没有 Lua 侧的主人：有的话这一屏的方向/确认/返回/M 全由 Lua 送
+      // phone:nav 过来，CEF 再处理一遍就是"一次按键挪两格"（真机现象）。
+      luaOwnsNavKeys = data?.lua_owns_keys === true;
       isPhoneOpen.set(true);
       // 换形态（手机↔平板）不是退出：Lua 侧关掉再以 reason=switch 重开，人还看着
       // 原来那一页。只有真正的"重新打开"才回桌面。
@@ -166,6 +171,9 @@
       void loadDynamicApps();
       // 键盘/手柄导航：开屏就把焦点放到第一个可聚焦元素（等一帧让 DOM 就位）
       setTimeout(() => navFocusFirst(), 0);
+      // 入场动画（下滑 + 8° 旋转）跑完再量一次：动画期间量到的 rect 是变换后的包围盒，
+      // 焦点框会画偏一格，而标签来自 store —— 用户看到的就是"框住 A、标签写 B"。
+      setTimeout(() => remeasure(), 620);
       // Prove to the client that this frame exists: it resends phone:open until
       // this answer arrives, because SendNUIMessage into a loading CEF page is
       // silently dropped.
@@ -338,6 +346,10 @@
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!get(isPhoneOpen)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // 键盘的主人在 Lua：方向/确认/返回/Esc/M 它都会送 phone:nav，这里再处理一次
+      // 就是双份（真机：按一次方向键挪两格、按一次 Esc 连退两层）。
+      // 输入框里的打字不受影响（那些键不会走导航）。
+      if (luaOwnsNavKeys && !isEditableTarget(e.target)) return;
       if (e.key === 'Escape') {
         closePhone();
         return;

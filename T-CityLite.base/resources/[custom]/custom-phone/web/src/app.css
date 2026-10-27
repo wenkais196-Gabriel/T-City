@@ -88,12 +88,14 @@ body {
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Glassmorphism templates */
+/* Glassmorphism templates
+   ⚠️ 不用 backdrop-filter：CEF 里每个毛玻璃元素都会在整块区域重算模糊，而手机界面
+   有多个（桌面挂件、Dock、列表卡片），鼠标一移动/焦点一换就全部重算 —— 真机表现是
+   "手机很卡、拖慢整个游戏"。这里用不透明度更高的半透明底 + 内高光模拟同样的观感。 */
 .glass-effect {
-  background: rgba(15, 15, 20, 0.65);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: linear-gradient(180deg, rgba(26, 29, 38, 0.82), rgba(15, 17, 24, 0.88));
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Glass card */

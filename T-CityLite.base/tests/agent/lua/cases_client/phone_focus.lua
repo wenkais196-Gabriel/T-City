@@ -227,6 +227,39 @@ return {
             env.nui_messages = {}
         end)
 
+        check('m_held_when_the_phone_opens_is_not_a_toggle_edge', function()
+            -- 真机现象：按 M 打开手机要按两次。原因不是命令没触发，而是开屏那一帧
+            -- PhoneNav 的 rawPrev 还是空的 —— 手还没松开的 M 被当成"新按下的边沿"，
+            -- 立刻 emit('toggle') 把刚打开的手机又关掉。Start() 必须先把当前按键状态垫进去。
+            env.Command('phonefix')
+            env.Step(100)
+            env.raw_keys[0x4D] = true -- M 还按着
+            env.Command('phone')      -- 打开手机（Start 在这里跑）
+            env.Step(16)
+            env.Step(16)
+
+            local function toggles()
+                local n = 0
+                for _, record in ipairs(env.nui_messages) do
+                    local msg = record.msg or {}
+                    if msg.action == 'phone:nav' and msg.kind == 'toggle' then n = n + 1 end
+                end
+                return n
+            end
+
+            assert(toggles() == 0, 'holding M while opening must not emit toggle, got ' .. tostring(toggles()))
+
+            env.raw_keys[0x4D] = nil -- 松开
+            env.Step(16)
+            env.Step(320)            -- 过掉 250ms 宽限窗口
+            env.raw_keys[0x4D] = true
+            env.Step(16)
+            env.raw_keys[0x4D] = nil
+            env.Step(16)
+            assert(toggles() == 1, 'a fresh M press must still close the phone, got ' .. tostring(toggles()))
+            env.nui_messages = {}
+        end)
+
         check('focus_hint_tells_the_agent_what_is_selected', function()
             -- agent 看不见 DOM：没有这条只能盲按方向键（真机踩过：Tab 直接落在
             -- "分享"上，想输的样子完全对不上）。
