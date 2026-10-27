@@ -42,9 +42,13 @@
   "v": 1,
   "logged_in": true,
   "phone": { "open": false, "surface": "phone"|"tablet"|null,
-             "focused": false, "keep_input": false, "focus_owner": "phone"|null },
+             "focused": false, "keep_input": false, "focus_owner": "phone"|null,
+             "nui_focus_native": false },
   "ped":   { "in_vehicle": false, "vehicle_class": 0, "health": 200, "dead": false },
   "screen":{ "w": 1920, "h": 1080 }
+  // focused/keep_input 报的是 PhoneFocus 的记账（我们申请到了什么）。
+  // nui_focus_native 是引擎原生的原话：本 build 恒 false（nui-debug-playbook §3.0a），
+  // 两者不一致 ≠ 手机没焦点，只是原生在撒谎；判定永不读它。
   // 只答"壳"的状态：手机开着吗、哪一面、焦点归谁。
   // 单个 App（任务、MDT、银行）内部停在哪一页还没有导出点——那要各自的
   // Svelte 组件把状态回吐给 Lua，不是这一层能猜的，故 v1 不给这个字段。

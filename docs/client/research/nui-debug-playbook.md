@@ -212,6 +212,32 @@ grep -o "appQuery" html/assets/index.js | wc -l
 env，只有普通读取才走 `__index` 回退到共享表）。跨文件取模块请用 `local d = X; if type(d)…`
 而不是 `rawget(_G, 'X')`。
 
+### 3.0a `IsNuiFocused()` 恒 false，拿它判断"焦点还在不在"会把关闭变成重开（2026-10-27 实测命中）
+
+**已证实的事实**（本 build，FXServer 37872）：`IsNuiFocused()` 与
+`IsNuiFocusKeepingInput()` **在游戏内恒返回 false**。取证：`[custom-phone][focus]` 的 61 条
+事件（open-nui-sent / reassert / close 等，全是 `SetNuiFocus` 之后打的）里
+`focused=true` **0 条**；而同一时刻通过 NUI 导出读到的 `PhoneFocus.State().focus` 是 true，
+手机也确实在屏幕上、可点。
+
+**签名**
+- 手机"打开了"但按 M 关不掉，或者按一次闪一下又回来。
+- 服务端 focus 遥测里 `focused=false` 是常量，`keepInput=false` 也是常量。
+- 同一个手机在无头 harness 里断言 `env.nui.focused == true` 通过——因为桩如实反映了
+  `SetNuiFocus` 的入参，而真机原生不反映。
+
+**根因**：把引擎原生当真相来源去驱动状态机。曾经的 toggle 是
+`if Surface.IsOpen() then if IsNuiFocused() then ClosePhone() else 复位重开 end`；
+原生恒 false ⇒ 每次"关闭"都走进"复位重开"，玩家看到的是关不掉的手机。
+
+**修复**（两条一起）
+1. 状态机只看自己的账：`Surface.IsOpen()` 决定开关，`PhoneFocus.State()` 决定谁持有焦点；
+   原生只作为**诊断字段**上报（`nui_focus_native`），不参与任何判定。
+2. 半开（NUI 没应答）交给 `OpenPhone` 的 `AwaitAck` 超时兜底，不要在 toggle 里再猜一次。
+
+**顺带教训**：`RegisterCommand` 同名后注册者覆盖先注册者。本项目曾同时注册两个 `phone`
+（toggle 与 `/phone` 强制形态），后者把前者覆盖成"只开不关"，M 键因此永远关不掉手机。
+
 ### 3.0b 新增脚本文件"明明在、就是不执行"（`restart` 不重读 fxmanifest）
 
 **签名**
