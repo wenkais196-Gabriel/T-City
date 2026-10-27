@@ -94,6 +94,33 @@ def violations_in_phone_focus(source: str) -> list[str]:
 # 反向校验：每一条都必须能指出"坏形状"
 # --------------------------------------------------------------------------- #
 
+def violations_in_focus_ownership(layer_source: str, phone_source: str) -> list[str]:
+    """SetNuiFocus 是按资源的：栈必须回调页面所属资源，不能自己按。
+
+    在 custom-ui 里按焦点等于把焦点交给一个不存在的页面 —— 手机页面就收不到
+    任何鼠标/键盘事件，也没有游标（真机排查了两轮才定位到）。
+    """
+    bad = []
+    if "ownerApply" not in layer_source:
+        bad.append("custom-ui applies focus itself instead of delegating to the page owner")
+    if "exports[owner]:ApplyFocus" not in layer_source:
+        bad.append("custom-ui never calls the owner's ApplyFocus export")
+    if "exports('ApplyFocus'" not in phone_source:
+        bad.append("the phone does not export ApplyFocus")
+    return bad
+
+
+def test_focus_ownership_gate_detects_a_layer_that_focuses_itself():
+    layer = read("custom-ui/client/main.lua")
+    phone = read("custom-phone/client/main.lua")
+    assert violations_in_focus_ownership(layer, phone) == []
+
+    broken_layer = "SetNuiFocus(true, true)"
+    caught = violations_in_focus_ownership(broken_layer, "GetUiState")
+    assert any("page owner" in item for item in caught), caught
+    assert any("ApplyFocus" in item for item in caught), caught
+
+
 def test_shared_layer_gate_detects_a_missing_path_api():
     real = read("custom-ui/client/main.lua")
     assert violations_in_shared_layer(real) == [], violations_in_shared_layer(real)
