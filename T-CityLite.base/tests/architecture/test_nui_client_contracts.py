@@ -116,7 +116,9 @@ NUIFOCUS_TRUE_RE = re.compile(r"\bSetNuiFocus\s*\(\s*true\b")
 NUIFOCUS_FALSE_RE = re.compile(r"\bSetNuiFocus\s*\(\s*false\b")
 KEEPINPUT_TRUE_RE = re.compile(r"\bSetNuiFocusKeepInput\s*\(\s*true\b")
 KEEPINPUT_FALSE_RE = re.compile(r"\bSetNuiFocusKeepInput\s*\(\s*false\b")
-CB_CALL_RE = re.compile(r"\bcb\s*\(")
+# 两种合法应答：直接 cb(...)，或走 PhoneBridge.AnswerFn(cb)(...) —— AGENTS.md 要求后者，
+# 因为本 build 的 cb 可能是可调用表，`type(cb) ~= 'function'` 守卫会把应答静默丢掉。
+CB_CALL_RE = re.compile(r"\bcb\s*\(|AnswerFn\s*\(\s*cb\s*\)")
 BLOCK_OPEN_RE = re.compile(r"\b(?:function|if|repeat|do)\b")
 BLOCK_CLOSE_RE = re.compile(r"\b(?:end|until)\b")
 LONG_COMMENT_RE = re.compile(r"\[(=*)\[")
