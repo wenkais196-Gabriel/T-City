@@ -119,6 +119,18 @@ paint(el) → fetchNui('uiFocus', {label}) → Lua focusHint → GetUiState().fo
 不处理 Tab 就会"焦点一旦落进搜索框就再也出不来"。现在 Tab = 下一个、Shift+Tab = 上一个，
 并且在 `isEditableTarget` 判断**之前**处理。
 
+## 4.4 翻页与滚动
+
+方向键是 `scrollIntoView({block:'nearest'})`（最小滚动），所以焦点走一步列表才动一点；
+24 条的任务列表要按十几次。补了 `PageUp/PageDown`（一次 7 格 ≈ 一屏）和
+`Home/End`（首尾）。
+
+**End 必须留在容器里**：真机在 MDT 列表按 End，焦点直接跳到壳层的"回桌面"，
+一点用没有。现在 `jump()` 先找焦点所在的可滚祖先，只在那个容器里跳。
+
+实测（NUI harness，24 条任务）：滚动容器是 `.pane`（不是 `.quests-app`）——
+焦点走 14 步 `scrollTop` 从 0 到 3014/3024，焦点元素始终留在可视区内，往回走能回到顶部。
+
 ## 9. 待验证
 
 1. 真手柄：d-pad 是否映射到 172-175 / 186-189；A/B 对应 176/177 还是 191/194。
