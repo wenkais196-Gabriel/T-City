@@ -28,6 +28,7 @@ local CASES = {
     'http_adapter',
     'live_rules',
     'live_api',
+    'live_roster_refresh',
     'effect_rules',
     'effect_server',
     'director_actions',
