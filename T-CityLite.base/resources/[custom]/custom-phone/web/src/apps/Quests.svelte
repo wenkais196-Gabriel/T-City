@@ -6,6 +6,7 @@
   // /listquests 与诊断保留完整画面。但"存在多少内容"必须可发现，所以头部保留一个计数：
   // 可操作性在列表里，可发现性在计数里，两件事分开。
   import { onMount } from 'svelte';
+  import { reportAppState } from '../utils/nui';
   import { queryApp, appAction } from '../stores/apps';
   import AppSurface from '../components/AppSurface.svelte';
   import Pane from '../components/Pane.svelte';
@@ -110,6 +111,11 @@
   }
 
   onMount(refresh);
+
+  // 停在哪一页也告诉 Lua：agent 只能问"手机开着吗"，问不到"他在看哪一栏"。
+  $effect(() => {
+    reportAppState('quests', tab, selectedId);
+  });
 </script>
 
 <div class="quests-app app-transition">

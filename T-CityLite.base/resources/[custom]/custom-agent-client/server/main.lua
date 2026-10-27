@@ -409,6 +409,14 @@ local function sanitizeState(raw)
             health = clampInt(ped and ped.health, 0, 1000, 0),
             dead = flag(ped and ped.dead),
         },
+        -- 单 App 状态：只放行三个短 token，缺任何一个就整块丢掉。
+        app = (function()
+            local app = type(raw.app) == 'table' and raw.app or nil
+            if not app then return nil end
+            local id = shortToken(app.id)
+            if not id then return nil end
+            return { id = id, tab = shortToken(app.tab), selected = shortToken(app.selected) }
+        end)(),
         screen = {
             w = clampInt(screen and screen.w, 320, 8192, 0),
             h = clampInt(screen and screen.h, 320, 8192, 0),

@@ -153,6 +153,20 @@ function reportNuiFailure(eventName: string, detail: Record<string, unknown>): v
   }).catch(() => {});
 }
 
+// 把"这个 App 停在哪一页"回吐给 Lua。agent 的客户端状态探测读它
+// （custom-phone 的 GetUiState().app），所以只报 id/tab/selected 三个短词。
+// 纯遥测：失败不影响 UI，吞掉即可；浏览器预览里没意义，直接跳过。
+export function reportAppState(
+  app: string,
+  tab?: string | null,
+  selected?: string | null,
+): void {
+  if (isBrowser()) return;
+  void fetchNui('appState', { app, tab: tab ?? undefined, selected: selected ?? undefined }).catch(
+    () => {},
+  );
+}
+
 // NUI fetch function (sends requests to Lua)
 export async function fetchNui<T = any>(
   eventName: string,

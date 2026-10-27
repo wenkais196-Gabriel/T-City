@@ -29,6 +29,32 @@ end)
 -- registered unchanged during the migration.
 PhoneEvents.Start()
 
+-- ---------------------------------------------------------------
+-- 单 App 状态：Svelte 侧把"停在哪一页"回吐给 Lua。
+-- agent 只能答"手机开着、哪一面"是不够的（08-client-state-probe §边界）；
+-- 任务/MDT 停在哪个 tab 得由 App 自己说。只收三个白名单短 token，
+-- 不收任何正文、搜索词或玩家输入。
+-- ---------------------------------------------------------------
+local appState = {}
+
+local function stateToken(value, maxLen)
+    if type(value) ~= 'string' or #value == 0 or #value > maxLen then return nil end
+    if not value:match('^[%w_%-:]+$') then return nil end
+    return value
+end
+
+RegisterNUICallback('appState', function(data, cb)
+    if type(data) == 'table' then
+        appState = {
+            id = stateToken(data.app, 24),
+            tab = stateToken(data.tab, 24),
+            selected = stateToken(data.selected, 48),
+        }
+    end
+    -- 统一应答通道：本 build 的 cb 可能是可调用表，所以不允许对 cb 做类型守卫。
+    PhoneBridge.AnswerFn(cb)({ ok = true })
+end)
+
 -- Close Phone Function (must be defined before OpenPhone — CreateThread closure)
 -- 只读状态快照：给 agent 的状态探测用（custom-agent-client 每 5s 取一次）。
 -- 只回枚举/布尔/数字，不回任何 UI 内容、消息正文或玩家输入。
@@ -48,6 +74,8 @@ exports('GetUiState', function()
         -- 原生原样上报，只作对照：true 说明引擎认可，false 可能只是它在撒谎。
         nui_focus_native = IsNuiFocused() == true,
         focus_owner = focus.owner,
+        -- 哪个 App 停在哪一页（App 自己回吐；没回吐就是 nil）
+        app = appState.id and { id = appState.id, tab = appState.tab, selected = appState.selected } or nil,
     }
 end)
 
@@ -55,6 +83,7 @@ local function ClosePhone(reason)
     local kind = Surface.Current()
     if not kind then return end
     Surface.Reset()
+    appState = {}
     -- 任何关闭路径都必须解锁：焦点没了但人还钉在原地是最难查的故障。
     DeviceLock.End()
     TriggerServerEvent('phone:server:focusState', { phase = 'close-start', surface = kind })
@@ -368,6 +397,7 @@ end, false)
 
 RegisterCommand('phonefix', function()
     Surface.Reset()
+    appState = {} -- 硬复位连"停在哪一页"一起清，别让下一次打开继承旧 tab
     DeviceLock.End()
     PhoneFocus.Reset()
     SendNUIMessage({ action = 'phone:close', reason = 'phonefix' })

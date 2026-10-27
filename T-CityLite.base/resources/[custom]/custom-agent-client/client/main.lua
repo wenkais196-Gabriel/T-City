@@ -174,6 +174,11 @@ local function phoneState()
             -- （本 build 恒 false，见 nui-debug-playbook）。
             nui_focus_native = state.nui_focus_native == true,
             focus_owner = state.focus_owner,
+            app = type(state.app) == 'table' and {
+                id = state.app.id,
+                tab = state.app.tab,
+                selected = state.app.selected,
+            } or nil,
         }
     end
     return nil
