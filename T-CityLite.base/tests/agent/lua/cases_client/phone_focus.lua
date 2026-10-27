@@ -173,6 +173,30 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('m_still_closes_when_the_focus_native_lies', function()
+            -- 实机现象：IsNuiFocused() 恒 false。旧的 toggle 拿它当"焦点还在吗"，
+            -- 于是第二次按 M 走的是"复位重开"分支 —— 手机永远关不掉、界面还闪。
+            local state = env.registered_exports.GetUiState
+            env.Command('phonefix')
+            env.Step(100)
+            env.nui.focus_native_lies = true
+
+            env.Command('phone')
+            env.Step(200)
+            local opened = state()
+            assert(opened.open == true, 'the first press must still open the phone')
+            assert(opened.focused == true, 'focused reports what the phone holds, not the native')
+            assert(opened.nui_focus_native == false, 'the lying native is reported as-is, separately')
+
+            env.Step(400) -- 越过 300ms 去抖
+            env.Command('phone')
+            env.Step(200)
+            local closed = state()
+            assert(closed.open == false, 'a second press must close the phone even when the native lies')
+            assert(closed.surface == nil, 'surface must clear on close')
+            assert(env.nui.focused == false, 'NUI focus must be released')
+        end)
+
         check('ui_state_export_reports_what_the_agent_needs', function()
             -- agent 的客户端状态探测先取这个导出：它只能回答"开着吗/哪一面/焦点归谁"，
             -- 不能带任何正文或玩家输入。
