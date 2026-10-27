@@ -1,8 +1,10 @@
 <script lang="ts">
   // 任务 App —— custom-quest 的 30 个任务模板第一次有了玩家入口。
-  // 数据全部来自服务端（quests:list / quests:active），本组件不做任何准入判断：
-  // 不可接的任务也照样显示，只是把 reason_text 摆出来（"缺警力""冷却中"），
-  // 让玩家知道内容存在、以及差在哪，而不是面对一片空白。
+  // 数据全部来自服务端（quests:list / quests:active），本组件不做任何准入判断。
+  //
+  // 列表只摆"现在能接的"（4615b03：菜单里点不了的菜不是内容）；服务端仍然返回全部行，
+  // /listquests 与诊断保留完整画面。但"存在多少内容"必须可发现，所以头部保留一个计数：
+  // 可操作性在列表里，可发现性在计数里，两件事分开。
   import { onMount } from 'svelte';
   import { queryApp, appAction } from '../stores/apps';
   import AppSurface from '../components/AppSurface.svelte';
@@ -41,16 +43,12 @@
   let feedback = $state('');
   let busyId: string | null = $state(null);
 
-  const canAccept = (row: Row) => row.available !== false;
-  // 不可接的任务不再摆出来：玩家要的是"我现在能做什么"，不是一张吃不到菜单。
-  // 需求仍然逐条显示在可接的任务上（绿勾 = 这条线要身份/执照/警力，你满足了）。
+  // 只认明确可接的：进行中的任务没有 available 字段，宽松判断会把它当可接（右栏就长出"接取"按钮）。
+  const canAccept = (row: Row) => row.available === true;
+  // 不可接的整行不摆出来（4615b03），但需求仍逐条摊在可接的任务上（绿勾 = 你满足了）。
   const acceptable = $derived(rows.filter(canAccept));
-
-  function reasonText(row: Row): string {
-    if (row.available !== false) return '';
-    if (row.reason === 'cooldown' && row.remaining_minutes) return `冷却中 · 还需 ${row.remaining_minutes} 分钟`;
-    return row.reason_text || '当前不可接';
-  }
+  // 可发现性：告诉玩家"还有内容，只是条件没满足"，而不是让他面对一片空白。
+  const blockedCount = $derived(rows.length - acceptable.length);
 
   async function refresh() {
     loading = true;
@@ -96,11 +94,20 @@
     busyId = null;
   }
 
-  // 选中行：默认第一条（只看描述，没有副作用——不像接取会真的写库）
-  const selectedRow = $derived(
-    [...acceptable, ...active].find((item) => (item.id ?? item.quest_id) === selectedId)
-      ?? acceptable[0] ?? null,
+  // 右栏只看当前 tab 的集合：切到「进行中」时不能还挂着上一个可接任务（左下右上是两个世界）。
+  const selectedAvailable = $derived(
+    acceptable.find((row) => row.id === selectedId) ?? acceptable[0] ?? null,
   );
+  const selectedActive = $derived(
+    active.find((row) => row.quest_id === selectedId) ?? active[0] ?? null,
+  );
+
+  function switchTab(next: 'available' | 'active') {
+    if (tab === next) return;
+    tab = next;
+    // 上一页的选中项在这一页并不存在，留着只会让右栏显示一条左栏没有的任务
+    selectedId = null;
+  }
 
   onMount(refresh);
 </script>
@@ -110,14 +117,17 @@
     <span class="quests-icon">📜</span>
     <div>
       <h2>任务</h2>
-      <p class="quests-sub">{acceptable.length} 条可接 · {active.length} 条进行中</p>
+      <p class="quests-sub">
+        {acceptable.length} 条可接{blockedCount > 0 ? ` · ${blockedCount} 条条件未满足` : ''} ·
+        {active.length} 条进行中
+      </p>
     </div>
     <button class="refresh-btn" onclick={refresh} disabled={loading}>刷新</button>
   </header>
 
   <div class="tabs">
-    <button class:active={tab === 'available'} onclick={() => (tab = 'available')}>可接</button>
-    <button class:active={tab === 'active'} onclick={() => (tab = 'active')}>进行中</button>
+    <button class:active={tab === 'available'} onclick={() => switchTab('available')}>可接</button>
+    <button class:active={tab === 'active'} onclick={() => switchTab('active')}>进行中</button>
   </div>
 
   {#if error}
@@ -137,7 +147,7 @@
           {:else}
             <ul class="list">
               {#each acceptable as row (row.id)}
-                <li class:blocked={!canAccept(row)} class:sel={selectedRow?.id === row.id}
+                <li class:sel={selectedAvailable?.id === row.id}
             class:compact={mode === 'grid'}
             onclick={() => (selectedId = row.id)}>
                   <div class="row-head">
@@ -154,13 +164,9 @@
                       {/each}
                     </ul>
                   {/if}
-                  {#if canAccept(row)}
-                    <button class="primary" onclick={() => accept(row.id)} disabled={busyId === row.id}>
-                      {busyId === row.id ? '接取中…' : '接取'}
-                    </button>
-                  {:else}
-                    <p class="reason">{reasonText(row)}</p>
-                  {/if}
+                  <button class="primary" onclick={() => accept(row.id)} disabled={busyId === row.id}>
+                    {busyId === row.id ? '接取中…' : '接取'}
+                  </button>
                 </li>
               {/each}
             </ul>
@@ -170,7 +176,8 @@
         {:else}
           <ul class="list">
             {#each active as row (row.quest_id)}
-              <li>
+              <li class:sel={selectedActive?.quest_id === row.quest_id}
+                  onclick={() => (selectedId = row.quest_id)}>
                 <div class="row-head">
                   <strong>{row.title ?? row.quest_id}</strong>
                   <span class="chip">{row.status ?? 'active'}</span>
@@ -187,34 +194,40 @@
 
     <Pane id="quest">
       <!-- 只在平板（grid）渲染：手机上这一栏不存在，DOM 里也不该留一份重复的需求列表 -->
-      {#if mode === 'grid' && selectedRow}
+      {#if mode === 'grid' && tab === 'available' && selectedAvailable}
         <div class="quest-detail">
           <div class="row-head">
-            <strong>{selectedRow.title ?? selectedRow.id}</strong>
-            <span class="chip">{selectedRow.category ?? 'misc'} · L{selectedRow.level ?? 1}</span>
+            <strong>{selectedAvailable.title ?? selectedAvailable.id}</strong>
+            <span class="chip">{selectedAvailable.category ?? 'misc'} · L{selectedAvailable.level ?? 1}</span>
           </div>
-          {#if selectedRow.description}<p class="desc">{selectedRow.description}</p>{/if}
-          {#if selectedRow.requirements && selectedRow.requirements.length > 0}
+          {#if selectedAvailable.description}<p class="desc">{selectedAvailable.description}</p>{/if}
+          {#if selectedAvailable.requirements && selectedAvailable.requirements.length > 0}
             <ul class="reqs">
-              {#each selectedRow.requirements as req}
+              {#each selectedAvailable.requirements as req}
                 <li class="req" class:unmet={req.met === false}>
                   {req.met === false ? '✗' : '✓'} {req.text ?? req.kind}
                 </li>
               {/each}
             </ul>
           {/if}
-          {#if canAccept(selectedRow)}
-            <button class="primary"
-              onclick={() => accept((selectedRow as any).id ?? (selectedRow as any).quest_id)}
-              disabled={busyId === (selectedRow as any).id}>
-              {busyId === selectedRow.id ? '接取中…' : '接取'}
-            </button>
-          {:else}
-            <p class="reason">{reasonText(selectedRow)}</p>
+          <button class="primary" onclick={() => accept(selectedAvailable.id)}
+                  disabled={busyId === selectedAvailable.id}>
+            {busyId === selectedAvailable.id ? '接取中…' : '接取'}
+          </button>
+        </div>
+      {:else if mode === 'grid' && tab === 'active' && selectedActive}
+        <div class="quest-detail">
+          <div class="row-head">
+            <strong>{selectedActive.title ?? selectedActive.quest_id}</strong>
+            <span class="chip">{selectedActive.status ?? 'active'}</span>
+          </div>
+          {#if selectedActive.current_step}
+            <p class="desc">当前步骤：{selectedActive.current_step}</p>
           {/if}
-          {#if selectedRow.remaining_minutes}
-            <p class="desc">约 {selectedRow.remaining_minutes} 分钟</p>
-          {/if}
+          <button class="ghost" onclick={() => abandon(selectedActive.quest_id)}
+                  disabled={busyId === selectedActive.quest_id}>
+            {busyId === selectedActive.quest_id ? '处理中…' : '放弃'}
+          </button>
         </div>
       {:else if mode === 'grid'}
         <p class="empty">左边选一个任务看详情</p>

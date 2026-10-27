@@ -9,7 +9,9 @@ export const PANE_CONTRACT = definePanes({
     { id: 'quest', role: 'detail', min: 340, grow: 1, scroll: 'self' },
   ],
   narrow: 'flow',
-  stackBelow: 660,
+  // 等于两栏 min 之和（300 + 340）：resolvePanes 先看 stackBelow 再看 fits，
+  // 写成 660 会在 640–659 这条带上明明装得下却挤成一栏。
+  stackBelow: 640,
 });
 
 export const TABLET_GRANTS = { queries: [], actions: [], fields: [] };
