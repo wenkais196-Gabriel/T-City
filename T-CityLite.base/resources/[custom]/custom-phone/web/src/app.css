@@ -225,3 +225,32 @@ body {
   z-index: 2;
 }
 
+/* 自绘光标：这台机器上引擎游标不显示，至少让人看得见自己指哪。 */
+.nav-cursor {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6), 0 0 12px rgba(110, 168, 255, 0.9);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 键位提示：鼠标在这台机器上不可用，键盘怎么用要写在脸上 */
+.nav-hint {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(12, 16, 24, 0.55);
+  color: rgba(219, 233, 255, 0.75);
+  font-size: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
