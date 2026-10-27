@@ -70,6 +70,13 @@ function Client.Load(options)
     _G.TCITY = env
     require('client')(env)
 
+    -- 客户端 convar（/phoneui、devcmd 桥都靠它门控）。以前 Load 不收这个选项，
+    -- 于是"convar 关闭时什么都不做"的用例其实是靠 GetConvar 为 nil 崩溃通过的。
+    env.convars = env.convars or {}
+    for name, value in pairs(options.convars or {}) do
+        env.convars[name] = tostring(value)
+    end
+
     -- Server callbacks the client expects to exist. A test registers only the
     -- ones it cares about; the rest land in env.missing_callbacks.
     for name, handler in pairs(options.server_callbacks or {}) do
