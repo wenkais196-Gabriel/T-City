@@ -173,6 +173,33 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('phoneui_is_off_by_default', function()
+            -- 真机 OS 光标被 GTA 锁在屏幕角上（SetCursorPos 无效），合成点击进不了手机，
+            -- 所以 agent 用消息导航；但这条命令必须在生产默认关闭。
+            -- 打开后的行为由 NUI 场景证明（phone:navigate → 任务 App）。
+            local function navigations()
+                local n = 0
+                for _, record in ipairs(env.nui_messages) do
+                    local msg = record.msg or {}
+                    if msg.action == 'phone:navigate' then n = n + 1 end
+                end
+                return n
+            end
+
+            env.Command('phonefix')
+            env.Step(100)
+            env.Command('phone')
+            env.Step(200)
+
+            env.Command('phoneui', 'quests')
+            env.Step(50)
+            assert(navigations() == 0, 'convar off: /phoneui must do nothing')
+
+            env.Command('phoneui', '../etc/passwd')
+            env.Step(50)
+            assert(navigations() == 0, 'convar off: nothing may reach NUI, whatever the argument')
+        end)
+
         check('every_ui_change_announces_itself', function()
             -- 探针以前只靠 5s 心跳，按完 M 读到的还是旧值；现在开关/换页都会广播一次
             -- （事件无参数，只表示"变了，来取一份"）。

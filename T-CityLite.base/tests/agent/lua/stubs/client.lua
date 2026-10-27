@@ -27,6 +27,7 @@ return function(env)
     env.key_mappings = env.key_mappings or {}
     env.server_events = env.server_events or {}
     env.local_events = env.local_events or {}
+    env.convars = env.convars or {}
     env.notifications = env.notifications or {}
     env.log = env.log or {}
     env.console = env.console or {}

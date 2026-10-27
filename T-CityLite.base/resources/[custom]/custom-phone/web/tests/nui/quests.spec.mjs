@@ -3,7 +3,7 @@
 // 这套断言回答两个问题：
 //   1. 30 个任务模板真的能从手机里看到吗（列表渲染、不可接的原因摆出来）；
 //   2. 点「接取」是不是真的发出 appAction（而不是只在本地把状态改了）。
-import { checkEqual, checkIncludes, checkTruthy, openQuests, waitFor } from './harness.mjs';
+import { checkEqual, checkIncludes, checkTruthy, openPhone, openQuests, waitFor } from './harness.mjs';
 
 const QUEST_FREE = {
   id: 'euro_trucking_steel',
@@ -42,6 +42,27 @@ const QUESTS_APP = {
 };
 
 export const questScenarios = [
+  {
+    surfaces: ['phone'],
+    name: '可以用 phone:navigate 确定性地打开任务 App（真机鼠标点不到时 agent 走这条）',
+    async run({ page, world }) {
+      world.apps = [...world.apps, QUESTS_APP];
+      world.quests = [QUEST_FREE];
+      world.questActive = [];
+      await openPhone(page, 'phone');
+      // 真机上 OS 光标被 GTA 锁在屏幕角上，SetCursorPos 无效，合成点击永远落在手机外，
+      // 所以自动化导航走消息，而不是坐标。
+      // 动态 App 列表是 open 之后异步拉回来的；等它到位再导航（agent 也一样：先看主页有没有那颗图标）
+      await page.locator('button[aria-label="任务"]').waitFor({ state: 'visible', timeout: 8000 });
+      await page.evaluate(() => window.postMessage({ action: 'phone:navigate', app: 'quests' }, '*'));
+      const opened = await page.locator('.quests-app').isVisible().catch(() => false);
+      checkTruthy('任务 App 已经打开', opened);
+      // 非法 app 名一律忽略，不许把任意字符串塞进 activeApp
+      await page.evaluate(() => window.postMessage({ action: 'phone:navigate', app: '../etc/passwd' }, '*'));
+      await page.waitForTimeout(200);
+      checkTruthy('非法 app 名被忽略（仍停在任务页）', await page.locator('.quests-app').isVisible());
+    },
+  },
   {
     name: '任务列表：只摆能接的，不可接的不出现',
     async run({ page, world, surface }) {
