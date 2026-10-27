@@ -22,6 +22,10 @@ lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
 python3 tools/agent_tools.py --check
 ```
 
+本机把 agent 接到真实服务器（DB + gateway + director）的步骤见
+[`T-CityLite.base/docs/agent/MCP_WIRING.md`](T-CityLite.base/docs/agent/MCP_WIRING.md)，一键依赖用
+`bash tools/dev/local_stack.sh`。
+
 ## 目录
 
 | 路径 | 内容 |

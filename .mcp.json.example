@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy to .mcp.json (gitignored) and adjust the path. Tokens stay in your shell env: the ${VAR} form is expanded by the host, so no secret is committed. See T-CityLite.base/docs/agent/MCP_WIRING.md.",
+  "mcpServers": {
+    "t-city": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["/absolute/path/to/T-City/tools/agent_mcp.py"],
+      "env": {
+        "AGENT_GATEWAY_URL": "${AGENT_GATEWAY_URL}",
+        "AGENT_GATEWAY_TOKEN": "${AGENT_GATEWAY_TOKEN}",
+        "AGENT_DIRECTOR_URL": "${AGENT_DIRECTOR_URL}",
+        "AGENT_DIRECTOR_TOKEN": "${AGENT_DIRECTOR_TOKEN}",
+        "AGENT_LIVE_TOKEN": "${AGENT_LIVE_TOKEN}",
+        "AGENT_AGENT_ID": "${AGENT_AGENT_ID}",
+        "AGENT_TOOLSET": "auto"
+      }
+    }
+  }
+}
