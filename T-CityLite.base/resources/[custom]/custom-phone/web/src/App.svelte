@@ -49,6 +49,7 @@
     pendingNavTab
   } from './stores/phone';
   import { showSubtitle, clearSubtitle } from './stores/callSpeech';
+  import { activate as navActivate, focusFirst as navFocusFirst, move as navMove, reset as navReset } from './core/nav';
   import { speakDispatch, stopDispatchSpeech } from './utils/tts';
   import {
     callPhase,
@@ -89,6 +90,8 @@
       }
       loadPhoneData();
       void loadDynamicApps();
+      // 键盘/手柄导航：开屏就把焦点放到第一个可聚焦元素（等一帧让 DOM 就位）
+      setTimeout(() => navFocusFirst(), 0);
       // Prove to the client that this frame exists: it resends phone:open until
       // this answer arrives, because SendNUIMessage into a loading CEF page is
       // silently dropped.
@@ -118,6 +121,24 @@
     });
 
     // 2. Listen for Phone Close signal
+    registerNuiEvent('phone:nav', (data) => {
+      // 键位由 Lua 轮询控制后送来（见 core/nav.lua）：键盘与手柄共用同一套动作。
+      const kind = data?.kind;
+      if (kind === 'move' && typeof data?.dir === 'string') {
+        navMove(data.dir);
+        return;
+      }
+      if (kind === 'activate') {
+        navActivate();
+        return;
+      }
+      if (kind === 'back') {
+        // 返回语义：在一个 app 里就回桌面，已经在桌面上就关屏。
+        if (get(activeApp) !== 'home') activeApp.set('home');
+        else void closePhone();
+      }
+    });
+
     registerNuiEvent('phone:close', (data) => {
       isPhoneOpen.set(false);
       // reason='switch' 是"换形态"而不是"退出"：别把玩家从 MDT 里踢回桌面。
@@ -127,6 +148,7 @@
       // The screen is gone, so end/decline any active call instead of leaving a
       // zombie call ringing until the timeout.
       if (get(callPhase) !== 'idle') void endActiveCall();
+      navReset();
     });
 
     // Money real-time updates
@@ -223,6 +245,27 @@
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'Escape') {
         closePhone();
+        return;
+      }
+      // 键盘导航：方向键移焦点、Enter 确认、Backspace 返回。
+      // 手柄走另一条路（Lua 轮询 GTA 控制 → phone:nav），两条最终都落到 core/nav.ts 的同一组动作。
+      const navKeys: Record<string, () => void> = {
+        ArrowUp: () => navMove('up'),
+        ArrowDown: () => navMove('down'),
+        ArrowLeft: () => navMove('left'),
+        ArrowRight: () => navMove('right'),
+        Enter: () => navActivate(),
+        Backspace: () => {
+          if (get(activeApp) !== 'home') activeApp.set('home');
+          else void closePhone();
+        },
+      };
+      if (navKeys[e.key]) {
+        // 输入框里方向键要能移动光标，Enter 要能提交表单
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          navKeys[e.key]();
+        }
         return;
       }
       // M 不在这里处理：它是 Lua 的 key mapping，开/关状态机归 Surface/PhoneFocus 保管。

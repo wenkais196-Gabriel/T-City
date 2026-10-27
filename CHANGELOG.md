@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **手机/平板可以用键盘和手柄操作了**：方向键移焦点、Enter 确认、Backspace 返回上一级；焦点环 + 开屏自动聚焦。键盘走 NUI 的 `keydown`（Tab 被 GTA 占了、方向键有效），手柄走 Lua 轮询 GTA 控制后发 `phone:nav` —— 两条腿落到同一组动作（`T-CityLite.base/resources/[custom]/custom-phone/web/src/core/nav.ts`），为手柄正式适配留好了底层。真机：Down×2 + Enter 打开 Contacts。
 - **MDT 也回吐页状态**：警用终端在调度/人车/文书/案件/我的之间切换、以及选中某条警情时上报 `{app:'police_mdt', tab:<page>, selected:<警情 id>}`。只报 id，不报搜索词与案卷正文；离开调度页后 selected 自动清空，免得让人以为他还在看那条警情。
 - **agent 能确定性地打开手机里的某个 App**：`/phoneui <app>`（`setr phone_ui_nav "1"` 才生效，生产默认关）→ `phone:navigate` 消息 → NUI 切页。起因是真机上 OS 光标被 GTA 锁在屏幕右下角（`SetCursorPos` 被每帧覆盖，`GetCursorPos` 恒为 2559,1439），合成点击永远落在手机外——这条通道是鼠标点不进去时的替代路径。
 - **agent 能读客户端 UI 状态了**。`custom-phone` 导出 `GetUiState()`（`open` / `surface` / `focused` / `keep_input` / `focus_owner` / `nui_focus_native`，只回枚举与布尔），`custom-agent-client` 每 5s 推一份快照，服务端白名单 + 夹紧 + 1s/源限流 + 15s 过期 + 掉线清理，`custom-director` 暴露 `GET /agent/v1/live/clients[/{citizenid}]` 与 `/live/server`，配两个只读工具 `get_client_state` / `get_server_state`（registry 1.7.0，41 tools）。快照是自述，永不作为权限或策略输入。
