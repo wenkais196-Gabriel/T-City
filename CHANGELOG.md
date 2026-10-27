@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **修「手机关不掉、WASD 不动」**：完全接管（`keepInput=false`）后游戏不再处理输入，
+  `IsRawKeyDown` 也读不到键 —— 键盘实际归 CEF。所以 **M 键改由 NUI 处理**（Esc 亦然），
+  Lua 的原始按键只在 `keepInput=1` 模式下生效。此前 M 关不掉 → 手机一直开着 → 输入一直被接管，
+  表现出来就是「WASD 不能动」。
 - **修「手机开着没有游标、点不动」**：`SetNuiFocus` 是**按资源**的 —— 在 custom-ui（没有 ui_page）里调用，
   等于把焦点交给一个不存在的页面，手机页面因此收不到任何鼠标事件（背包/目标盘却正常）。
   现在栈只做决定，按焦点通过 `exports[owner]:ApplyFocus(...)` 回调**拥有页面的资源**。

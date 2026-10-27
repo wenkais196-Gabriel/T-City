@@ -128,6 +128,7 @@ exports('GetUiState', function()
         -- 交互路径（底→顶）。关屏后必须是空的 —— 不为空就说明"没释放"，
         -- 那条线程会一直 DisableAllControlActions，表现就是卡/动不了。
         frames = focus.path,
+        nav_edges = (PhoneNav and PhoneNav.RecentEdges and PhoneNav.RecentEdges()) or nil,
         delegated = focus.delegated == true,
         -- 仅诊断用；测试桩里没有这个原生，所以判一下
         custom_ui_state = type(GetResourceState) == 'function' and GetResourceState('custom-ui') or nil,
@@ -419,6 +420,13 @@ end
 -- 防重复触发：一次按 M 实测会进来两次（RegisterKeyMapping 在资源重启时会再注册
 -- 一次，同一次按键派发两条命令）。300ms 内的重复调用只处理第一次。
 local TOGGLE_DEBOUNCE_MS = 300
+-- 开屏期间键盘归 NUI，M 键到不了 RegisterKeyMapping —— 由 nav.lua 读原始按键后调这个。
+PhoneNavToggle = function(reason)
+    local now = GetGameTimer()
+    if now - lastToggleAt < TOGGLE_DEBOUNCE_MS then return end
+    lastToggleAt = now
+    if Surface.IsOpen() then ClosePhone(reason or 'key') end
+end
 -- 从 -DEBOUNCE 起步：设 0 会让"资源刚起就按 M"落进去抖窗口（now - 0 < 300），
 -- 第一次按键被静默吞掉。
 local lastToggleAt = -TOGGLE_DEBOUNCE_MS
