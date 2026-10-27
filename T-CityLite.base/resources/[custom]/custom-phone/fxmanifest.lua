@@ -20,6 +20,7 @@ client_scripts {
     -- 形态：判定（纯函数）→ 移动锁 → 状态。必须都在 main.lua 之前
     'client/core/surface_rules.lua',
     'client/core/device_lock.lua',
+    'client/core/nav.lua',
     'client/core/surface.lua',
     'client/core/events.lua',
     -- diag owns the request-trace + ui-event channel; must load before main.lua
