@@ -50,6 +50,16 @@ class Mutation:
 
 MUTATIONS: list[Mutation] = [
     Mutation(
+        gate="tests/architecture/test_no_sri_on_local_vendor.py::test_custom_html_has_no_integrity_attributes",
+        path="resources/[custom]/custom-phone/html/__mutant_sri.html",
+        content=(
+            '<!-- 变异注入：对本地 vendor 文件写 integrity -->'
+            '<script src="vendor/x.js" integrity="sha384-deadbeef" crossorigin="anonymous"></script>'
+        ),
+        what="自定义资源对本地文件用 SRI（换行符一变哈希就错，CEF 直接拦掉脚本）",
+    ),
+
+    Mutation(
         gate="tests/architecture/test_export_contracts.py::test_every_export_has_a_permission_or_source_gate",
         path="resources/[custom]/custom-police/server/__mutant_export.lua",
         content=(
@@ -259,8 +269,11 @@ MUTATIONS += [
 
 def run_gate(nodeid: str) -> tuple[bool, str]:
     """返回 (passed, 最后一行输出)。passed=True 表示这条闸门**没红**。"""
+    # Linux 布局用 /usr/bin/python3；Windows 上没这个路径，退回当前解释器
+    # （否则整个工具在这台机器上直接 FileNotFoundError，连 --dry-run 都跑不通）。
+    interpreter = "/usr/bin/python3" if Path("/usr/bin/python3").exists() else sys.executable
     proc = subprocess.run(
-        ["/usr/bin/python3", "-m", "pytest", nodeid, "-q", "--tb=no", "-p", "no:cacheprovider"],
+        [interpreter, "-m", "pytest", nodeid, "-q", "--tb=no", "-p", "no:cacheprovider"],
         cwd=BASE, capture_output=True, text=True,
     )
     tail = (proc.stdout or proc.stderr).strip().splitlines()
