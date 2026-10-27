@@ -91,7 +91,8 @@ local function ClosePhone(reason)
     local kind = Surface.Current()
     if not kind then return end
     Surface.Reset()
-    appState = {}
+    -- 换形态不是退出：人还看着同一页，清掉 appState 会让 agent 立刻读成 app=nil。
+    if reason ~= 'switch' then appState = {} end
     -- 任何关闭路径都必须解锁：焦点没了但人还钉在原地是最难查的故障。
     DeviceLock.End()
     TriggerServerEvent('phone:server:focusState', { phase = 'close-start', surface = kind })
