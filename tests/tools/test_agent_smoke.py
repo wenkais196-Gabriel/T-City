@@ -224,7 +224,7 @@ class ReadOnlyTests(SmokeTestBase):
             self.assertEqual(self._check(report, name)["status"], "pass", name)
         for name in ("notify_propose", "notify_get", "notify_approve", "cleanup"):
             self.assertEqual(self._check(report, name)["status"], "skip", name)
-        self.assertEqual(report["summary"], {"pass": 6, "fail": 0, "skip": 4})
+        self.assertEqual(report["summary"], {"pass": 6, "fail": 0, "skip": 7})
 
     def test_json_report_shape_and_timing(self) -> None:
         report = self._report(_happy_server(), ("--json",), ALL_ENV)
@@ -246,7 +246,7 @@ class ReadOnlyTests(SmokeTestBase):
         self.assertEqual(code, 0)
         report = json.loads(out)
         self.assertEqual(server.calls, [], "no request may be sent without configuration")
-        self.assertEqual(report["summary"], {"pass": 0, "fail": 0, "skip": 10})
+        self.assertEqual(report["summary"], {"pass": 0, "fail": 0, "skip": 13})
         self.assertTrue(all(check["status"] == "skip" for check in report["checks"]))
 
     def test_health_500_fails_with_exit_1(self) -> None:
@@ -459,7 +459,7 @@ class ReportingAndSafetyTests(SmokeTestBase):
         self.assertEqual(code, 0)
         self.assertIn("STATUS", out)
         self.assertIn("gateway_health", out)
-        self.assertIn("summary: 6 pass, 0 fail, 4 skip", out)
+        self.assertIn("summary: 6 pass, 0 fail, 7 skip", out)
 
     def test_invalid_timeout_exits_2(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()):
@@ -490,3 +490,97 @@ class ReportingAndSafetyTests(SmokeTestBase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class HarnessTests(SmokeTestBase):
+    """``--harness``: console assertions on top of the HTTP probes (design 07)."""
+
+    def setUp(self) -> None:
+        import tempfile
+        import threading  # noqa: F401  (used by individual tests)
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.server_log = self.root / "fxserver.log"
+        self.server_log.write_text("[  script:dev] booted\n", encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _no_http(self, *args, **kwargs):  # pragma: no cover - must not be called
+        raise AssertionError("harness-only runs must not touch the network")
+
+    def _checks(self, report: dict, name: str) -> list[dict]:
+        return [check for check in report["checks"] if check["name"] == name]
+
+    def test_harness_checks_skip_without_the_flag(self) -> None:
+        code, out, _err = self._run(self._no_http, ("--json",), {})
+        self.assertEqual(code, 0, out)
+        report = json.loads(out)
+        for name in ("harness_server", "harness_client", "harness_expect"):
+            self.assertEqual(self._check(report, name)["status"], "skip")
+
+    def test_server_log_is_reported_as_pass(self) -> None:
+        env = {"TCITY_HARNESS_SERVER_LOG": str(self.server_log)}
+        code, out, _err = self._run(self._no_http, ("--json", "--harness"), env)
+        self.assertEqual(code, 0, out)
+        report = json.loads(out)
+        server = self._check(report, "harness_server")
+        self.assertEqual(server["status"], "pass")
+        self.assertIn("fxserver.log", server["detail"])
+        # The client log is not configured on this run, so it is a skip.
+        self.assertEqual(self._check(report, "harness_client")["status"], "skip")
+
+    def test_configured_but_missing_server_log_fails(self) -> None:
+        env = {"TCITY_HARNESS_SERVER_LOG": str(self.root / "nope.log")}
+        code, out, _err = self._run(self._no_http, ("--json", "--harness"), env)
+        self.assertEqual(code, 1, out)
+        report = json.loads(out)
+        check = self._check(report, "harness_server")
+        self.assertEqual(check["status"], "fail")
+        self.assertIn("not found", check["detail"])
+
+    def test_expect_matches_a_line_printed_after_the_wait_starts(self) -> None:
+        import threading
+
+        def append() -> None:
+            with self.server_log.open("a", encoding="utf-8") as handle:
+                handle.write("[  script:dev] smoke target settled\n")
+
+        env = {"TCITY_HARNESS_SERVER_LOG": str(self.server_log)}
+        timer = threading.Timer(0.3, append)
+        timer.start()
+        try:
+            code, out, _err = self._run(
+                self._no_http,
+                ("--json", "--harness", "--expect-server", "smoke target settled",
+                 "--harness-timeout-ms", "5000"),
+                env,
+            )
+        finally:
+            timer.cancel()
+        self.assertEqual(code, 0, out)
+        report = json.loads(out)
+        check = self._check(report, "harness_expect_server")
+        self.assertEqual(check["status"], "pass")
+        self.assertIn("smoke target settled", check["detail"])
+
+    def test_expect_timeout_is_a_failure(self) -> None:
+        env = {"TCITY_HARNESS_SERVER_LOG": str(self.server_log)}
+        code, out, _err = self._run(
+            self._no_http,
+            ("--json", "--harness", "--expect-server", "never-printed",
+             "--harness-timeout-ms", "500"),
+            env,
+        )
+        self.assertEqual(code, 1, out)
+        report = json.loads(out)
+        check = self._check(report, "harness_expect_server")
+        self.assertEqual(check["status"], "fail")
+        self.assertIn("no server console line matched", check["detail"])
+
+    def test_expect_without_harness_is_a_usage_error(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as raised:
+                agent_smoke.main(["--expect-server", "x"])
+        self.assertEqual(raised.exception.code, 2)

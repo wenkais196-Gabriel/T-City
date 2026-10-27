@@ -234,6 +234,28 @@ path to whichever base you provide.
 
 ---
 
+## 6.1 Console assertions (`--harness`)
+
+HTTP probes can only report a status code. `--harness` adds console assertions on
+top of them (design [`07-harness-channel.md`](design/07-harness-channel.md)), so
+"did the effect actually print" becomes a check instead of a guess.
+
+```bash
+export TCITY_HARNESS_SERVER_LOG=/path/to/fxserver.log
+export TCITY_HARNESS_CLIENT_LOG_DIR="$LOCALAPPDATA/FiveM/FiveM.app/logs"   # optional
+
+python3 tools/agent_smoke.py --harness   --expect-server "Started resource custom-phone"   --expect-client "focus" --harness-timeout-ms 8000 --json
+```
+
+| Check | Meaning |
+|---|---|
+| `harness_server` / `harness_client` | the log is readable; an unset path is `skip`, a set-but-missing path is `fail` |
+| `harness_expect_server[*]` / `harness_expect_client[*]` | one entry per `--expect-*` regex; `fail` on timeout |
+
+Rules that follow from the transport (measured, see design 07 §2): `wait` starts at
+the current end of the file, the client log rotates per launch, and history needs
+`get_console_lines(after_seq=0)` through MCP.
+
 ## 7. What this tool does not cover
 
 - Field-level assertions or the 189-case stub matrix; those stay in the offline

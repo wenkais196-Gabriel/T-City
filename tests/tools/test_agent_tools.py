@@ -61,6 +61,9 @@ ACTIVE_NAMES = {
     "send_notify",
     "add_player_money",
     "start_player_quest",
+    "get_console_lines",
+    "get_console_match",
+    "get_client_log",
 }
 PLANNED_NAMES = set()
 
@@ -89,10 +92,10 @@ class RegistryContentTests(unittest.TestCase):
         registry = _registry()
         self.assertEqual(registry["schema_version"], 1, "registry schema_version must be 1")
         self.assertRegex(registry["registry_version"], r"^\d+\.\d+\.\d+$")
-        self.assertEqual(len(registry["tools"]), 36, "v1 ships exactly 36 tools")
+        self.assertEqual(len(registry["tools"]), 39, "v1 ships exactly 39 tools")
         active = {tool["name"] for tool in registry["tools"] if tool["status"] == "active"}
         planned = {tool["name"] for tool in registry["tools"] if tool["status"] == "planned"}
-        self.assertEqual(active, ACTIVE_NAMES, "all 36 tools are active for v1")
+        self.assertEqual(active, ACTIVE_NAMES, "all 39 tools are active for v1")
         self.assertEqual(planned, PLANNED_NAMES, "no tool remains planned")
 
     def test_run_police_e2e_is_an_l1_test_only_action(self) -> None:
@@ -129,6 +132,10 @@ class RegistryContentTests(unittest.TestCase):
             for field in required:
                 with self.subTest(tool=tool["name"], field=field):
                     self.assertIn(field, tool)
+            if tool["route"] == "harness":
+                # Design 07: harness tools run in-process and have no HTTP route.
+                self.assertIsNone(tool["http"], f"{tool['name']} must not declare http")
+                continue
             for field in ("method", "path"):
                 self.assertIn(field, tool["http"])
 

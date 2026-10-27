@@ -45,7 +45,8 @@
 lua5.4 tests/agent/lua/runner.lua        9 suites / 234 checks
 python3 -m pytest -q tests/tools          203 passed
 cd T-CityLite.base && pytest -q tests/unit   262 passed
-python3 tools/agent_tools.py --check     30 tools, no drift
+python3 tools/agent_tools.py --check     39 tools, no drift
+# harness（本地只读）需 TCITY_HARNESS=1 + TCITY_HARNESS_SERVER_LOG 才出现在 tools/list
 ```
 
 **没有做过的**：真实 FXServer + GTA 客户端联调。所有 Lua 断言都在 stub 下；`DropPlayer` 异步、`DoesEntityExist` 延迟、`SetEntityCoords` 的 OneSync 时序均未在真机验证。
