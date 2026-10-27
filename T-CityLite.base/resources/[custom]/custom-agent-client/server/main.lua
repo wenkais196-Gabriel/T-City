@@ -399,6 +399,8 @@ local function sanitizeState(raw)
             surface = enum(phone.surface, { 'phone', 'tablet' }),
             focused = flag(phone.focused),
             keep_input = flag(phone.keep_input),
+            -- 引擎原生的原话，和上面的记账分开放：两者不一致正是"原生在撒谎"的证据。
+            nui_focus_native = flag(phone.nui_focus_native),
             focus_owner = shortToken(phone.focus_owner),
         } or nil,
         ped = {

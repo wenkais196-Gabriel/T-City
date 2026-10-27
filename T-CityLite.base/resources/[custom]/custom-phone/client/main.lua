@@ -40,9 +40,14 @@ exports('GetUiState', function()
     return {
         open = kind ~= nil,
         surface = kind,
-        focused = IsNuiFocused() == true,
-        keep_input = IsNuiFocusKeepingInput() == true,
-        focus_owner = type(focus) == 'table' and focus.owner or nil,
+        -- focused/keep_input 报"我们申请到了什么"（PhoneFocus 记账），不是问引擎：
+        -- IsNuiFocused()/IsNuiFocusKeepingInput() 在本 build 恒 false，拿它当真相
+        -- 会把"开着且焦点在手机上"报成"没焦点"。
+        focused = focus.focus == true,
+        keep_input = focus.keepInput == true,
+        -- 原生原样上报，只作对照：true 说明引擎认可，false 可能只是它在撒谎。
+        nui_focus_native = IsNuiFocused() == true,
+        focus_owner = focus.owner,
     }
 end)
 
@@ -304,60 +309,61 @@ local function OpenPhone(forcedKind, reason)
 end
 
 -- Command & Keybind to toggle phone.
--- Recovery: if a previous open left isPhoneOpen=true without NUI focus (hung
--- anim/open), M should reset and reopen instead of being swallowed forever.
+--
+-- 开关只看我们自己的账（Surface.IsOpen），不看 IsNuiFocused()：本 build 上这个
+-- 原生**恒为 false**（实测 61 条 focus 事件里 0 条 true，见 docs/client/research/
+-- nui-debug-playbook.md），于是"开着 + 原生说没焦点 → 复位重开"的分支会把每一次
+-- 关闭变成重开，表现就是按 M 关不掉手机、界面闪。半开（NUI 没应答）由
+-- OpenPhone 里的 AwaitAck 超时自己收拾，不需要这里再兜。
 --
 -- 防重复触发：一次按 M 实测会进来两次（RegisterKeyMapping 在资源重启时会再注册
--- 一次，同一次按键派发两条命令）。第二次进来时 isPhoneOpen 已经是 true 且
--- IsNuiFocused() 已为 true → 立刻 ClosePhone，表现就是"按 M 没反应"（界面被
--- 叫出来又秒关）。所以对 300ms 内的重复调用只处理第一次。
+-- 一次，同一次按键派发两条命令）。300ms 内的重复调用只处理第一次。
 local TOGGLE_DEBOUNCE_MS = 300
-local lastToggleAt = 0
+-- 从 -DEBOUNCE 起步：设 0 会让"资源刚起就按 M"落进去抖窗口（now - 0 < 300），
+-- 第一次按键被静默吞掉。
+local lastToggleAt = -TOGGLE_DEBOUNCE_MS
 
-RegisterCommand('phone', function()
+--- 同一个设备按两次 = 关；在另一个形态上按 = 换形态；没开就开。
+--- kind=nil 表示"让 Surface.Decide 决定"（M 键的默认行为）。
+--- 决定必须来自我们自己的账（Surface），不能来自 IsNuiFocused()：本 build 上那个
+--- 原生恒 false（见 nui-debug-playbook），拿它判断会让每次关闭变成重开。
+local function OpenOrToggle(kind)
+    if Surface.IsOpen() then
+        local current = Surface.Current()
+        if kind == nil or kind == current then
+            ClosePhone('key')
+            return
+        end
+        ClosePhone('switch')
+        Wait(60)
+        OpenPhone(kind, 'command')
+        return
+    end
+    OpenPhone(kind, kind and 'command' or 'key')
+end
+
+-- /phone          → 开关（形态由 Surface.Decide 决定，M 键走这条）
+-- /phone tablet   → 强制平板（开着手机就换形态）
+-- /phone phone    → 强制手机
+RegisterCommand('phone', function(_, args)
     local now = GetGameTimer()
     if now - lastToggleAt < TOGGLE_DEBOUNCE_MS then
-        TriggerServerEvent('phone:server:focusState', { phase = 'toggle-debounced', focused = IsNuiFocused() })
+        -- 这里不报 focused：该原生在本 build 恒 false，报了只会给遥测添一条假信号。
+        TriggerServerEvent('phone:server:focusState', { phase = 'toggle-debounced' })
         return
     end
     lastToggleAt = now
-
-    if Surface.IsOpen() then
-        if IsNuiFocused() then
-            ClosePhone('key')
-        else
-            -- 界面在但焦点丢了：先彻底复位再重开，避免半开状态被当成"按了没反应"
-            local kind = Surface.Current() or 'phone'
-            Surface.Reset()
-            DeviceLock.End()
-            PhoneFocus.Release(kind)
-            Wait(50)
-            OpenPhone(kind, 'recover')
-        end
-    else
-        OpenPhone(nil, 'key')
-    end
+    local want = type(args) == 'table' and args[1] or nil
+    if want ~= 'phone' and want ~= 'tablet' then want = nil end
+    OpenOrToggle(want)
 end, false)
 
--- Manual recovery: release focus, reset state, close any stale NUI.
 -- 平板的入口：形态要有"意图"，不能靠窗口大小猜。
 -- /tablet 直接在平板形态打开；/phone 强制手机；已经开着就换形态（先关后开）。
-local function OpenDeviceAs(kind)
-    CreateThread(function()
-        if Surface.IsOpen() then
-            if Surface.Current() == kind then return end
-            ClosePhone('switch')
-            Wait(60)
-        end
-        OpenPhone(kind, 'command')
-    end)
-end
-
+-- 注意：这里**不能**再 RegisterCommand('phone') —— FiveM 后注册者覆盖先注册者，
+-- 曾经因此把上面的 toggle 覆盖成"只开不关"，M 键就再也关不掉手机了。
 RegisterCommand('tablet', function()
-    OpenDeviceAs('tablet')
-end, false)
-RegisterCommand('phone', function()
-    OpenDeviceAs('phone')
+    OpenOrToggle('tablet')
 end, false)
 
 RegisterCommand('phonefix', function()

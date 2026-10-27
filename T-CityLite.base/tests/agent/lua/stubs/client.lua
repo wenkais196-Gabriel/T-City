@@ -233,8 +233,16 @@ return function(env)
         env.nui.keepInputCalls = (env.nui.keepInputCalls or 0) + 1
     end
 
-    function _G.IsNuiFocused() return env.nui.focused end
-    function _G.IsNuiFocusKeepingInput() return env.nui.keepInput end
+    -- 真机上这两个原生会撒谎（恒 false，见 nui-debug-playbook），桩要能复现：
+    -- 置 env.nui.focus_native_lies = true 后引擎口径与真实焦点脱钩。
+    function _G.IsNuiFocused()
+        if env.nui.focus_native_lies then return false end
+        return env.nui.focused
+    end
+    function _G.IsNuiFocusKeepingInput()
+        if env.nui.focus_native_lies then return false end
+        return env.nui.keepInput
+    end
 
     function _G.SendNUIMessage(message)
         env.nui_messages[#env.nui_messages + 1] = { at = env.now, msg = message }
