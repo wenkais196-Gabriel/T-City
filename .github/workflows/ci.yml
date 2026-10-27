@@ -225,7 +225,8 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: T-CityLite.base/resources/[custom]/custom-phone/web/package-lock.json
+          # 路径里的 [custom] 在 glob 里是字符类（会匹配 resources/c/...），所以用无括号的通配
+          cache-dependency-path: "**/custom-phone/web/package-lock.json"
 
       - name: Install dependencies
         run: npm ci
