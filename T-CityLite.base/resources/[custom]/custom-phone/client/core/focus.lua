@@ -88,7 +88,21 @@ local function inputLayer()
     return layer
 end
 
+local delegatedCache = { at = -1, value = false }
+--- 当前是否由共享栈接管（true = 屏蔽与焦点不归我们管）。
+---@return boolean
+function PhoneFocus.Delegated()
+    local now = GetGameTimer and GetGameTimer() or 0
+    if now - delegatedCache.at < 2000 and delegatedCache.at >= 0 then
+        return delegatedCache.value
+    end
+    delegatedCache.at = now
+    delegatedCache.value = inputLayer() ~= nil
+    return delegatedCache.value
+end
+
 local delegatedLogged = false
+-- 委托状态缓存：每帧问一次 GetResourceState + exports 也是白烧，缓存 2s
 
 local function frameId(owner)
     return owner == 'phone' and 'phone' or ('phone:' .. owner)
@@ -202,6 +216,19 @@ function PhoneFocus.Release(owner)
     -- (or the empty stack) needs a native call.
     if wasTop or #stack == 0 then applyTop() end
     return true
+end
+
+--- 重新把焦点按下去（页面加载完成后调用，见 ack 处理）。
+---@return boolean
+function PhoneFocus.Refresh()
+    local layer = inputLayer()
+    if layer then
+        local ok = pcall(function() layer:RefreshFocus() end)
+        if ok then return true end
+    end
+    local entry = stack[#stack]
+    if entry then setFocus(true, entry.cursor) end
+    return entry ~= nil
 end
 
 --- Hard cleanup: drop every owner and restore the pre-phone focus state.
