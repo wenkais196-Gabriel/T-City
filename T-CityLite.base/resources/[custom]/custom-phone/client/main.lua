@@ -405,6 +405,15 @@ RegisterCommand('tablet', function()
     OpenOrToggle('tablet')
 end, false)
 
+-- /phoneui <app>：让 agent 或调试者确定性地切到某个 App（不依赖鼠标坐标）。
+-- 生产默认关闭（phone_ui_nav 必须为 "1"，用 setr 才会复制到客户端）。
+RegisterCommand('phoneui', function(_, args)
+    if GetConvar('phone_ui_nav', '0') ~= '1' then return end
+    local app = type(args) == 'table' and args[1] or nil
+    if type(app) ~= 'string' or not app:match('^[%w_:%-]+$') or #app > 32 then return end
+    SendNUIMessage({ action = 'phone:navigate', app = app })
+end, false)
+
 RegisterCommand('phonefix', function()
     Surface.Reset()
     appState = {} -- 硬复位连"停在哪一页"一起清，别让下一次打开继承旧 tab

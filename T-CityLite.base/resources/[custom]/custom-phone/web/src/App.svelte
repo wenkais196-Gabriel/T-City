@@ -91,6 +91,18 @@
     });
 
     // Dispatch / agent voice line: CEF speaks it locally, subtitle mirrors it.
+    // 确定性导航（agent / 调试用）：不点像素，直接切 App。
+    // 真机上 OS 光标被 GTA 锁在屏幕角上（SetCursorPos 不生效，GetCursorPos 恒为 2559,1439），
+    // 合成点击永远落在手机外面，所以自动化不能靠鼠标。
+    registerNuiEvent('phone:navigate', (data) => {
+      const app = typeof data?.app === 'string' ? data.app.trim() : '';
+      if (!app || !/^[A-Za-z0-9_:-]{1,32}$/.test(app)) return;
+      // 服务端下发的动态 App（任务/MDT 等）在 activeApp 里是 `dyn:<id>`，
+      // 所以调用方只要报 id（"quests"），这里负责补前缀；内置页照原样用。
+      const dynamic = get(dynamicApps).some((entry) => entry.id === app);
+      activeApp.set(dynamic ? `dyn:${app}` : app);
+    });
+
     registerNuiEvent('phone:systemSpeech', (data) => {
       const text = data && typeof data.text === 'string' ? data.text : '';
       if (!text) return;

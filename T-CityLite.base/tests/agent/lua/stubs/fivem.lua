@@ -154,6 +154,8 @@ return function(env)
         }
     end
 
+    env.convars = env.convars or {}
+
     function _G.GetConvar(name, default)
         local value = env.convars[name]
         if value == nil then return default end

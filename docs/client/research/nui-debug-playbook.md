@@ -238,6 +238,33 @@ env，只有普通读取才走 `__index` 回退到共享表）。跨文件取模
 **顺带教训**：`RegisterCommand` 同名后注册者覆盖先注册者。本项目曾同时注册两个 `phone`
 （toggle 与 `/phone` 强制形态），后者把前者覆盖成"只开不关"，M 键因此永远关不掉手机。
 
+### 3.0d 真机上鼠标点不进 NUI：OS 光标被游戏锁在屏幕角（2026-10-27 实测）
+
+**已证实的事实**：窗口模式，手机开着（NUI 有焦点、键盘可用），调用
+`SetCursorPos(2382, 816)` 之后用 `GetCursorPos` 读回来是 **(2559, 1439)** ——
+就是 2560×1440 屏幕的右下角。`mouse_move` 报 "mouse -> (2382,816)" 是**请求**，不是结果。
+
+FiveM 侧的证据：`code/components/nui-core/src/CefInput.cpp` 用
+`GetCursorPos() + ScreenToClient()` 决定 CEF 的鼠标坐标，所以合成点击永远落在
+(2559,1439) —— 那是手机框外面 → 点击等于"点了背景"。
+
+**签名**
+- 键盘有效（`Escape` 能关手机），鼠标无效——说明焦点链是通的，坏的只是坐标。
+- 任何"点击"都表现为点同一个位置：点击图标、点图标间隙，结果完全一样。
+- 用 PowerShell `[System.Windows.Forms.Cursor]::Position` 读到的坐标恒定在屏幕角落。
+
+**为什么会被锁**：GTA 在窗口模式下用 ClipCursor + 每帧回写光标（raw input），
+`SetCursorPos` 的写入被游戏立刻覆盖。这是游戏侧行为，不是 NUI 的问题。
+
+**结论：自动化不要点像素。** 走消息导航（本项目已提供）：
+`/phoneui <app>`（需要 `setr phone_ui_nav "1"`，生产默认关）→
+`SendNUIMessage({action='phone:navigate', app='quests'})` → NUI 切页。
+动态 App（任务/MDT）在 `activeApp` 里是 `dyn:<id>`，消息里只报 id 即可。
+
+**仍然没解决的**：怎么在真机上"点任意坐标"（例如测一个 pure-click 的交互）。
+可能的路线：`SetCursorLocation(x, y)`（GTA 原生，0..1 归一化，给暂停菜单/NUI 用）
+或让资源自己加"可编程点击"的调试入口。在被证实之前，别把像素点击写进验收脚本。
+
 ### 3.0c keepInput 让按键同时到达游戏和 CEF，两边各关一次就是"按 M 没反应"（2026-10-27 实测命中）
 
 **已证实的事实**：手机开着时 `SetNuiFocusKeepInput(true)`，一次 M 按键会**同时**被
