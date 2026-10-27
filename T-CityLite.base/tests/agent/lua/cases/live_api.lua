@@ -23,6 +23,8 @@ return {
         local players = env.players
         env.qb.Players = players
         _G.QBCore = env.qb
+        -- 客户端状态探测要求执行器资源在跑（否则回答 probe_unavailable）
+        env.resource_states['custom-agent-client'] = 'started'
 
         -- Natives used by live_api.samplePlayer.  Position/heading/health are
         -- per source; only player 2 is in a vehicle.
@@ -502,6 +504,83 @@ return {
             assert(second.body.code == 'rate_limited', tostring(second.body.code))
             assert(second.headers and second.headers['Retry-After'],
                 'a 429 must tell the caller when to retry')
+        end)
+
+        -- 3. clients / server state probes -------------------------------------
+        -- 这一段的用例必须用一个新的 env：上面的 main-adapter / rate-limit 检查各自
+        -- 调过 ctx.bootstrap.Load，_G 上的 stub（GetResourceState / exports）已经被
+        -- 换成那个 env 的，沿用开头的 env 会读到"资源不存在、core 是另一个表"。
+        local probeEnv = ctx.bootstrap.Load({
+            convars = {
+                agent_live_enabled = '1',
+                agent_live_token = 'live-token',
+                agent_live_precision = '25',
+            },
+        })
+        probeEnv.resource_states['custom-agent-client'] = 'started'
+        probeEnv.qb.Players = players
+        _G.QBCore = probeEnv.qb
+
+        local probeLive = assert(_G.LiveApi)
+        local probeHttp = assert(_G.AgentHttp)
+        local function probeHandle(path)
+            local deps = {
+                Policy = function()
+                    return { schema_version = 1, enabled = true, actions = {}, limits = {} }
+                end,
+            }
+            return probeHttp.Handle({
+                method = 'GET',
+                path = path,
+                headers = { Authorization = 'Bearer live-token' },
+                body = '',
+            }, {
+                cfg = { enabled = false, token = 'agent-token', admin_token = 'admin-token' },
+                actions = deps,
+                policy = deps.Policy,
+                live = probeLive,
+            })
+        end
+
+        check('clients_list_serves_snapshots', function()
+            probeEnv.export_overrides['custom-agent-client'] = {
+                ClientState = function(src)
+                    if tonumber(src) == 1 then
+                        return { v = 1, logged_in = true, phone = { open = true, surface = 'phone' } }, nil, 120
+                    end
+                    return nil, 'client_state_unavailable'
+                end,
+            }
+            local response = probeHandle('/agent/v1/live/clients')
+            assert(response.status == 200, 'expected 200, got ' .. tostring(response.status))
+            assert(response.body.count == 1, 'only players with a snapshot are listed, got '
+                .. tostring(response.body.count))
+            local first = response.body.clients[1]
+            assert(first.citizenid == 'CID00001', tostring(first.citizenid))
+            assert(first.age_ms == 120, tostring(first.age_ms))
+            assert(first.state.phone.open == true)
+        end)
+
+        check('clients_detail_404_when_state_is_missing', function()
+            probeEnv.export_overrides['custom-agent-client'] = {
+                ClientState = function() return nil, 'client_state_unavailable' end,
+            }
+            local response = probeHandle('/agent/v1/live/clients/CID00001')
+            assert(response.status == 404, 'expected 404, got ' .. tostring(response.status))
+            assert(response.body.code == 'client_state_unavailable', tostring(response.body.code))
+        end)
+
+        check('clients_detail_404_for_unknown_player', function()
+            local response = probeHandle('/agent/v1/live/clients/NOPE999')
+            assert(response.status == 404)
+            assert(response.body.code == 'player_not_found', tostring(response.body.code))
+        end)
+
+        check('server_state_reports_counts', function()
+            local response = probeHandle('/agent/v1/live/server')
+            assert(response.status == 200, 'expected 200, got ' .. tostring(response.status))
+            assert(type(response.body.resources) == 'table', 'resources block must exist')
+            assert(response.body.players == 2, 'both fixture players count, got ' .. tostring(response.body.players))
         end)
 
         return {

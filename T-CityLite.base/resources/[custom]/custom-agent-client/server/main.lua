@@ -342,6 +342,103 @@ local function stats()
 end
 
 -- ---------------------------------------------------------------------------
+-- Client state probe (read-only)
+--
+-- The client pushes a snapshot when it changes; the server decides what may be
+-- kept. Everything below is a whitelist: unknown keys never reach the cache, and
+-- a value that is out of range is clamped instead of trusted. Snapshots expire,
+-- so a stale one reports "unavailable" rather than looking like live truth.
+-- ---------------------------------------------------------------------------
+
+local STATE_TTL_MS = 15000
+local STATE_MIN_INTERVAL_MS = 1000
+
+local stateBySrc = {} -- [src] = { at = gameTimerMs, data = table, dropped = n }
+
+local function clampInt(value, min, max, fallback)
+    local number = tonumber(value)
+    if not number then return fallback end
+    number = math.floor(number)
+    if number ~= number then return fallback end
+    if number < min then return min end
+    if number > max then return max end
+    return number
+end
+
+local function flag(value)
+    return value == true
+end
+
+local function enum(value, allowed)
+    if type(value) ~= 'string' then return nil end
+    for _, candidate in ipairs(allowed) do
+        if value == candidate then return candidate end
+    end
+    return nil
+end
+
+local function shortToken(value)
+    if type(value) ~= 'string' then return nil end
+    if value == '' or #value > 16 or not value:match('^[a-z0-9_]+$') then return nil end
+    return value
+end
+
+local function sanitizeState(raw)
+    if type(raw) ~= 'table' then return nil end
+    local phone = type(raw.phone) == 'table' and raw.phone or nil
+    local ped = type(raw.ped) == 'table' and raw.ped or nil
+    local screen = type(raw.screen) == 'table' and raw.screen or nil
+    return {
+        v = 1,
+        logged_in = flag(raw.logged_in),
+        phone = phone and {
+            open = flag(phone.open),
+            surface = enum(phone.surface, { 'phone', 'tablet' }),
+            focused = flag(phone.focused),
+            keep_input = flag(phone.keep_input),
+            focus_owner = shortToken(phone.focus_owner),
+        } or nil,
+        ped = {
+            in_vehicle = flag(ped and ped.in_vehicle),
+            vehicle_class = clampInt(ped and ped.vehicle_class, 0, 23, 0),
+            health = clampInt(ped and ped.health, 0, 1000, 0),
+            dead = flag(ped and ped.dead),
+        },
+        screen = {
+            w = clampInt(screen and screen.w, 320, 8192, 0),
+            h = clampInt(screen and screen.h, 320, 8192, 0),
+        },
+    }
+end
+
+RegisterNetEvent('tcity:agent:state', function(raw)
+    local src = source
+    if not src or src <= 0 then return end
+    local now = GetGameTimer() or 0
+    local previous = stateBySrc[src]
+    if previous and (now - previous.at) < STATE_MIN_INTERVAL_MS then
+        previous.dropped = (previous.dropped or 0) + 1
+        return
+    end
+    local clean = sanitizeState(raw)
+    if not clean then return end
+    stateBySrc[src] = { at = now, data = clean, dropped = previous and previous.dropped or 0 }
+end)
+
+--- Read one player's snapshot. Returns data, errCode, ageMs.
+local function clientState(src)
+    local entry = stateBySrc[src]
+    if not entry then return nil, 'client_state_unavailable' end
+    local now = GetGameTimer() or 0
+    local age = now - entry.at
+    if age > STATE_TTL_MS then
+        return nil, 'client_state_unavailable', age
+    end
+    return entry.data, nil, age
+end
+exports('ClientState', clientState)
+
+-- ---------------------------------------------------------------------------
 -- Lifecycle
 -- ---------------------------------------------------------------------------
 
@@ -353,6 +450,7 @@ AddEventHandler('playerDropped', function()
     pending[src] = nil
     inflight[src] = nil
     sessions[src] = nil
+    stateBySrc[src] = nil
     -- 这里原来还有一行 buckets[src] = nil：限流改成 core-framework 的令牌桶 owner 之后
     -- buckets 已经不存在了，那行就成了"每次玩家掉线报一次 attempt to index a nil value (global 'buckets')"。
     -- 令牌桶按 'agent:<src>' 键在 owner 里，过期自然清掉，不需要在这里回收。
@@ -360,6 +458,7 @@ end)
 
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
+    stateBySrc = {}
     for src in pairs(pending) do
         for rid in pairs(pending[src]) do
             settle(src, rid, 'executor_stopped', nil,
@@ -372,5 +471,5 @@ exports('Execute', clientExec)
 exports('Cancel', cancel)
 exports('Stats', stats)
 
-print(('[custom-agent-client] loaded (enabled=%s). Exports: Execute, Cancel, Stats'):format(
+print(('[custom-agent-client] loaded (enabled=%s). Exports: Execute, Cancel, Stats, ClientState'):format(
     tostring(Config().enabled)))
