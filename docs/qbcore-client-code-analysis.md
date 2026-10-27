@@ -12,19 +12,19 @@
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `client/functions.lua` | 1179 | 全部客户端 API：callback、Notify、Progressbar、载具属性读写、坐标/池查询、粒子/动画 |
-| `client/events.lua` | 306 | net 事件消费：登录、传送、刷车、PlayerData 同步、callback 回包、Shared 热更 |
-| `client/native_notify.lua` | 225 | **本仓库新增**：GTA 原生 The Feed / Award / HelpText 封装，`_G.NativeNotify` |
-| `client/drawtext.lua` | 60 | DrawText NUI（`SendNUIMessage`） |
-| `client/loops.lua` | 54 | 两个常驻线程：定期 `QBCore:UpdatePlayer`、饥饿/口渴掉血 |
-| `client/main.lua` | 50 | **本仓库新增**：构建 `QBCore` 全局壳 + `GetCoreObject`/`GetSharedItems` 等 exports |
+| `T-CityLite.base/resources/[qb]/qb-core/client/functions.lua` | 1179 | 全部客户端 API：callback、Notify、Progressbar、载具属性读写、坐标/池查询、粒子/动画 |
+| `T-CityLite.base/resources/[qb]/qb-core/client/events.lua` | 306 | net 事件消费：登录、传送、刷车、PlayerData 同步、callback 回包、Shared 热更 |
+| `T-CityLite.base/resources/[qb]/qb-core/client/native_notify.lua` | 225 | **本仓库新增**：GTA 原生 The Feed / Award / HelpText 封装，`_G.NativeNotify` |
+| `T-CityLite.base/resources/[qb]/qb-core/client/drawtext.lua` | 60 | DrawText NUI（`SendNUIMessage`） |
+| `T-CityLite.base/resources/[qb]/qb-core/client/loops.lua` | 54 | 两个常驻线程：定期 `QBCore:UpdatePlayer`、饥饿/口渴掉血 |
+| `T-CityLite.base/resources/[qb]/qb-core/client/main.lua` | 50 | **本仓库新增**：构建 `QBCore` 全局壳 + `GetCoreObject`/`GetSharedItems` 等 exports |
 | 合计 | **1874** | 上游同目录为 4 文件 / 1495 行（无 main、无 native_notify） |
 
 ### 1.2 与上游的结构差异
 
 | 项 | 上游 qb-core | 本仓库 |
 |---|---|---|
-| `QBCore` 全局在哪建 | `config.lua` 第 1 行 `QBCore = {}`（shared 脚本，先于一切加载） | `client/main.lua:1`（客户端）+ `shared/main.lua` 改用 `QBShared` 命名空间 |
+| `QBCore` 全局在哪建 | `config.lua` 第 1 行 `QBCore = {}`（shared 脚本，先于一切加载） | `T-CityLite.base/resources/[qb]/qb-core/client/main.lua:1`（客户端）+ `T-CityLite.base/resources/[qb]/qb-core/shared/main.lua` 改用 `QBShared` 命名空间 |
 | 客户端脚本数 | 4（functions/loops/events/drawtext） | 6（多 main + native_notify） |
 | 通知通道 | 单轨：全部 `SendNUIMessage` → Quasar toast | **三轨**：插件总线 → NUI → 原生 The Feed（失败回退 NUI） |
 | 心跳 | 固定 60s×`UpdateInterval` | 首登随机 1–30s 错峰 + 按静止/奔跑/射击/通缉计算 `multiplier` |
@@ -74,11 +74,11 @@
 |---|---|---|---|
 | 1 | **公共 callback 派发器无鉴权** | `server/events.lua:132`：任何客户端 `TriggerServerEvent('QBCore:Server:TriggerCallback', <任意名字>, ...)` 即可调用全部 173 个已注册 callback | 与 Qbox issue #771 同类；`QBCore:Server:SpawnVehicle`（`server/events.lua:290`）零权限校验，任何人可刷任意载具并 warp 入车 |
 | 2 | **同名 callback 覆盖竞态** | `functions.lua:18`：以 name 为键写单槽；并发两次同名调用，先挂起的 promise 永远不 resolve | 玩家连着点两次同类交互 → 客户端协程永久卡住（`Citizen.Await` 无超时） |
-| 3 | **客户端权威刷车** | `client/events.lua:121`：客户端 `CreateVehicle(..., true, ...)` 后自己注册钥匙 | 刷车/钥匙服务端无从校验，属于"UI 隐藏 ≠ 权限" |
+| 3 | **客户端权威刷车** | `T-CityLite.base/resources/[qb]/qb-core/client/events.lua:121`：客户端 `CreateVehicle(..., true, ...)` 后自己注册钥匙 | 刷车/钥匙服务端无从校验，属于"UI 隐藏 ≠ 权限" |
 | 4 | **资源加载忙等无超时** | `LoadModel`（`functions.lua:433`）、`RequestAnimDict`/`LoadAnimSet`/`LoadParticleDictionary` 全是 `while not loaded do Wait(0) end` | 模型损坏/资源缺失时该线程永久 spin；同文件 `PlayAnim` 有 5s 超时，说明是遗漏而非取舍 |
 | 5 | **池全遍历 + 每帧轮询** | `GetClosestVehicle/GetClosestPed/GetClosestObject` 遍历整个 game pool；152 处 `Wait(0)` | 人多车多时是客户端帧时间的主要抖动源；没有距离预筛/空间索引 |
 | 6 | **整表覆盖同步** | `events.lua:194`、`305` | 半更新（只改 job）会整体替换，订阅方拿不到 diff，容易读到中间态 |
-| 7 | **NUI 无 schema/无背压** | 246 处 `SendNUIMessage`，`html/js/app.js` 只按 `data.action` 分支 | 拼错字段静默失败；通知风暴时 CEF 端无节流 |
+| 7 | **NUI 无 schema/无背压** | 246 处 `SendNUIMessage`，`T-CityLite.base/resources/[qb]/qb-core/html/js/app.js` 只按 `data.action` 分支 | 拼错字段静默失败；通知风暴时 CEF 端无节流 |
 
 ### 4.3 与主流替代（Qbox / ox_lib）对照
 
@@ -97,7 +97,7 @@
 **P0（安全，1–2 天）**
 1. 给 `QBCore:Server:TriggerCallback` 加**服务端白名单**：只放行"客户端可以调用"的 callback 名（注册时带 `clientCallable = true` 标记），其余直接丢弃并写审计。
 2. 每个 callback 内做 source/距离/权限复验；`QBCore:Server:SpawnVehicle`、`qb-inventory:server:giveItem` 优先。
-3. 关掉 `client/events.lua:121` 的客户端刷车路径，改走服务端 spawn 回调。
+3. 关掉 `T-CityLite.base/resources/[qb]/qb-core/client/events.lua:121` 的客户端刷车路径，改走服务端 spawn 回调。
 
 **P1（稳定性，2–3 天）**
 4. callback 键改成 `name .. ':' .. requestId`，回包带 requestId；`Citizen.Await` 外套超时（`promise` + `SetTimeout` 5s 后 reject）。
