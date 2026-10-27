@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **手机默认改为完全接管输入**（`phone_keep_input` 默认 0）：真机实测 keepInput=true 时 OS 游标被钉在屏幕角落、既看不见也动不了；关掉后 GTA 把鼠标交出来，游标恢复、键盘导航照常（原始按键不受影响）。代价是手机开着不能走路；想边走边看就 `setr phone_keep_input 1`。
 - **输入分层落地（S2+S3）**：手机不再自己 `SetNuiFocus`，焦点与控制屏蔽交给 custom-ui 的交互路径栈；打开 App 压一层 `phone:<app>`、聚焦输入框再压一层 `phone:text`，Esc/Backspace 逐层退出，退到底再按 Esc 就是 GTA 原生暂停菜单。`nav.lua` **不再禁用 172-175**（那正好会点亮转向灯），`indicators.lua` / `cruise.lua` 改为先问 `IsTaken()`。
 - **`custom-ui` 增加交互路径栈**（`Push/Pop/Top/Path/IsTaken/Owns/ResetInput`）：世界 → 手机 → App → 输入框每一层是一帧，**只有栈顶拥有键盘**；栈顶声明 `allow` 白名单（放行走路等），其余控制整组屏蔽；栈空时立刻把输入还给游戏 —— 所以 Esc 每次退一层，退到底再按一次就是 GTA 原生暂停菜单。这是把“每处各自 SetNuiFocus + IsNuiFocused()”换成单一仲裁者的第一步（仅新增 API，未迁移资源）。
 - **修「键盘只有 agent 能用、玩家按没反应」**：手机开着时 `KeepInput(true)` 让游戏继续吃硬件按键，CEF 收不到、`IsControlJustPressed(172-175)` 也读不到（注入的按键反而能到 CEF，所以此前一直没发现）。键盘改读 `IsRawKeyDown(VK)`（跟 GTA 控制映射无关），手柄仍走控制轮询；同一帧两边都命中时只走原始按键，不会一次挪两格。Tab/PageUp/PageDown/Home/End 也一并纳管。
