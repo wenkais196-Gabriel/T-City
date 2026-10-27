@@ -216,6 +216,11 @@
         navActivate();
         return;
       }
+      if (kind === 'toggle') {
+        // M 键：完全接管时游戏收不 RegisterKeyMapping，由 Lua 读原始按键后送进来
+        void closePhone();
+        return;
+      }
       if (kind === 'back') {
         // 返回语义（交互路径）：焦点在输入框 → 先退出输入框；
         // 在 App 里 → 回桌面；已经在桌面上 → 关屏。再按一次就轮到游戏自己（Esc 开暂停菜单）。
@@ -356,6 +361,13 @@
       if (e.key === 'Tab') {
         e.preventDefault();
         navMove(e.shiftKey ? 'up' : 'down');
+        return;
+      }
+      // M / Esc：完全接管时键盘事件进的是 CEF（游戏的键位映射收不到），
+      // 所以在这里也要能关手机，否则玩家按 M 关不掉、还以为关了（WASD 又不能动）。
+      if (!isEditableTarget(e.target) && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault();
+        void closePhone();
         return;
       }
       // 翻页键：PageDown/PageUp 一次挪 7 格（约一屏），Home/End 跳到首尾。

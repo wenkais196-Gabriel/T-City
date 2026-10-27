@@ -181,6 +181,23 @@ exports[frame.owner]:ApplyFocus(true, cursor, keepInput)   -- owner = 'custom-ph
 
 修完真机验证：鼠标移动出现自绘点、点击 App 图标真的能进（此前点击一律无效）。
 
+## 6.8 完全接管之后，键盘归 CEF，不归 Lua
+
+`keepInput=false`（默认）意味着游戏不再处理输入，`IsRawKeyDown` 也就读不到按键 ——
+实测：开屏时按方向键，Lua 的 nav 一个边沿都没收到（`nav_edges` 一直是旧的），
+但焦点确实在动，因为**是 CEF 的 keydown 在处理**。
+
+所以两种模式分工不同：
+
+| 模式 | 键盘谁收 | 手柄谁收 | M 键谁管 |
+|---|---|---|---|
+| `phone_keep_input 0`（默认，完全接管） | CEF（Svelte keydown） | Lua 控制轮询（拿不到键，但手柄控制仍可读） | NUI（`m` → closePhone） |
+| `phone_keep_input 1`（边走边看） | Lua 原始按键 + CEF 都可能收到（120ms 去重） | Lua 控制轮询 | 两边都行 |
+
+教训：**"M 键不关手机"看着像键位问题，实际是"手机没关掉"**——手机开着就接管输入，
+玩家以为关了、于是反馈"WASD 不动"。这类"关不掉"的 bug 一定要先验 `open`，
+再去看键位。
+
 ## 7. 需要拍板的点
 
 1. **层数**：我提议 3 层（overlay/modal/text）。要不要再加一层 `hud-input`（比如地图、雷达那种只吃少量键的）？

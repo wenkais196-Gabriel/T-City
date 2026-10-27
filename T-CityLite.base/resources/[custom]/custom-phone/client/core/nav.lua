@@ -30,11 +30,26 @@ local CANCEL = { 177 }  -- CELLPHONE_CANCEL（Backspace）
 local RAW = {
     up = 0x26, down = 0x28, left = 0x25, right = 0x27,
     accept = 0x0D, cancel = 0x08, escape = 0x1B,
+    -- M 也要自己读：完全接管时键盘事件进的是 NUI，RegisterKeyMapping 收不到，
+    -- 玩家按 M 就关不掉手机（真机现象：关不掉 → 以为关了 → WASD 不能动）。
+    toggle = 0x4D,
     tab = 0x09, shift = 0x10,
     pageup = 0x21, pagedown = 0x22,
     home = 0x24, ['end'] = 0x23,
 }
 local rawPrev = {}
+
+-- 诊断：最近几次原始按键边沿（"键盘到底进没进 Lua"）
+local recentEdges = {}
+
+local function noteEdge(kind)
+    recentEdges[#recentEdges + 1] = kind
+    if #recentEdges > 6 then table.remove(recentEdges, 1) end
+end
+
+function PhoneNav.RecentEdges()
+    return recentEdges
+end
 
 --- 每帧算出"这一帧刚按下的键"（原生只有 IsRawKeyDown，边沿自己算）。
 local function rawEdges()
@@ -79,6 +94,7 @@ function PhoneNav.Tick()
     -- 1) 键盘：原始按键优先。同一个键这一帧既被原始按键抓到、又出现在控制轮询里时，
     --    只走原始按键那条（否则一次按键会挪两格）。
     local edges = rawEdges()
+    for kind in pairs(edges) do noteEdge(kind) end
     local moved = false
     for dir in pairs(DIR_CONTROLS) do
         if edges[dir] then
@@ -96,6 +112,9 @@ function PhoneNav.Tick()
     if edges['end'] then emit('edge', 'last') end
     if edges.accept then emit('activate') end
     if edges.cancel or edges.escape then emit('back') end
+    -- M：交给 NUI 走正常的关闭流程（closePhone → Lua ClosePhone）。
+    -- 不用全局函数回调：nav.lua 比 main.lua 先加载，跨脚本全局在本 build 不可靠。
+    if edges.toggle then emit('toggle') end
 
     -- 2) 手柄（以及没被原始按键接住的键盘）：控制轮询兜底
     if not moved then
