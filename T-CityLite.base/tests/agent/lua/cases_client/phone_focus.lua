@@ -173,6 +173,36 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('every_ui_change_announces_itself', function()
+            -- 探针以前只靠 5s 心跳，按完 M 读到的还是旧值；现在开关/换页都会广播一次
+            -- （事件无参数，只表示"变了，来取一份"）。
+            local function announcements()
+                local n = 0
+                for _, record in ipairs(env.local_events) do
+                    if record.name == 'phone:client:stateChanged' then n = n + 1 end
+                end
+                return n
+            end
+
+            env.Command('phonefix')
+            env.Step(100)
+            local base = announcements()
+
+            env.Command('phone')
+            env.Step(200)
+            assert(announcements() > base, 'opening the phone must announce the change')
+
+            local afterOpen = announcements()
+            env.NuiCallback('appState', { app = 'quests', tab = 'active' })
+            env.Step(20)
+            assert(announcements() > afterOpen, 'switching pages must announce the change')
+
+            local afterPage = announcements()
+            env.Command('phonefix')
+            env.Step(100)
+            assert(announcements() > afterPage, 'closing the phone must announce the change')
+        end)
+
         check('app_state_is_reported_and_sanitised', function()
             -- agent 问不到"他在看哪一栏"，除非 App 自己回吐。只收三个短 token。
             local state = env.registered_exports.GetUiState

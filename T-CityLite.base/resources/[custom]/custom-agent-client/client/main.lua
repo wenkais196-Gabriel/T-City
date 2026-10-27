@@ -203,15 +203,25 @@ local function collectState()
     }
 end
 
+local function pushState()
+    local ok, snapshot = pcall(collectState)
+    if ok and type(snapshot) == 'table' then
+        TriggerServerEvent('tcity:agent:state', snapshot)
+    end
+end
+
+-- 状态一变就推一份：5s 心跳能证明"还活着"，但读不到"刚按完 M 之后"的样子。
+-- 手机只广播"变了"，快照仍由本资源自己采集，所以对方拿不到也改不了这里的数据。
+AddEventHandler('phone:client:stateChanged', function()
+    pushState()
+end)
+
 CreateThread(function()
     while true do
-        local ok, snapshot = pcall(collectState)
-        if ok and type(snapshot) == 'table' then
-            -- Always send: the server expires a snapshot after 15 s, so an
-            -- idle-but-fine client must keep beating or the probe goes dark
-            -- exactly when nothing is happening (the interesting case).
-            TriggerServerEvent('tcity:agent:state', snapshot)
-        end
+        -- Always send: the server expires a snapshot after 15 s, so an
+        -- idle-but-fine client must keep beating or the probe goes dark
+        -- exactly when nothing is happening (the interesting case).
+        pushState()
         Wait(PROBE_INTERVAL_MS)
     end
 end)

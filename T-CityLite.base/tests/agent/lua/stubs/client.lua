@@ -132,6 +132,11 @@ return function(env)
         dispatchInto(env.net_handlers[name], args, 'net:' .. tostring(name))
         -- legacy shape: RegisterNetEvent(name) + AddEventHandler(name, fn)
         dispatchInto(env.event_handlers[name], args, 'net:' .. tostring(name))
+        -- 在一个线程里触发事件时不能重入调度：runDue() 会切走/切回当前协程，
+        -- 把 env.current_thread 清掉，随后外层线程调用 Wait 就会报
+        -- "Wait() called outside a client thread"。真机上事件是排队投递的，
+        -- 所以这里只入队，交给外层调度。
+        if env.current_thread then return end
         runDue()
     end
 
@@ -139,6 +144,7 @@ return function(env)
     function env.EmitLocal(name, ...)
         local args = table.pack(...)
         dispatchInto(env.event_handlers[name], args, 'local:' .. tostring(name))
+        if env.current_thread then return end
         runDue()
     end
 
@@ -314,6 +320,22 @@ return function(env)
     function _G.GetEntitySpeed() return 0.0 end
     function _G.GetEntityHeading() return 0.0 end
     function _G.GetVehiclePedIsIn() return env.vehicle or 0 end
+    -- 状态探针用到的原生（custom-agent-client 的 collectState）：
+    -- 以前没桩，pcall 吞掉错误 => 探针在 harness 里从来没被真正执行过。
+    if rawget(_G, 'GetVehicleClass') == nil then
+        function _G.GetVehicleClass() return env.vehicle_class or 0 end
+    end
+    if rawget(_G, 'GetEntityHealth') == nil then
+        function _G.GetEntityHealth() return env.ped_health or 200 end
+    end
+    if rawget(_G, 'IsEntityDead') == nil then
+        function _G.IsEntityDead() return env.ped_dead == true end
+    end
+    if rawget(_G, 'GetActiveScreenResolution') == nil then
+        function _G.GetActiveScreenResolution()
+            return env.screen_w or 1920, env.screen_h or 1080
+        end
+    end
 
     function _G.SetPedCoordsKeepVehicle(ped, x, y, z)
         env.coords_log[#env.coords_log + 1] = { mode = 'keep_vehicle', x = x, y = y, z = z }
