@@ -125,7 +125,9 @@ function PhoneFocus.Acquire(owner, opts)
             state.owner = owner
             state.focus = true
             state.cursor = entry.cursor
-            state.keepInput = entry.keepInput
+            -- 报"实际生效"的那个值：convar 可能把 keepInput 关掉，
+            -- 报请求值会让人以为 keepInput 还开着（诊断误导过一次）。
+            state.keepInput = keep
             if not delegatedLogged then
                 delegatedLogged = true
                 print('[custom-phone][focus] delegated to custom-ui input path')
@@ -171,6 +173,22 @@ end
 function PhoneFocus.Release(owner)
     owner = ownerName(owner)
     if not owner then return false end
+
+    -- 先问共享栈：委托之后本地 stack 是空的，若先跑本地那段就会"没删到东西 → return false"，
+    -- 结果是手机关了但帧还挂在栈上，屏蔽线程一直跑 —— 玩家动不了、还以为是卡
+    -- （真机就是这么表现的：open=false 但 frames 里还有 'phone'）。
+    local layer = inputLayer()
+    if layer then
+        local ok, popped = pcall(function() return layer:Pop(frameId(owner)) end)
+        if ok and popped then
+            if #stack == 0 or stack[#stack].owner == owner then
+                state.owner = nil
+                state.focus = false
+            end
+            return true
+        end
+    end
+
     local wasTop = #stack > 0 and stack[#stack].owner == owner
     local removed = false
     for index = #stack, 1, -1 do
@@ -180,10 +198,6 @@ function PhoneFocus.Release(owner)
         end
     end
     if not removed then return false end
-    local layer = inputLayer()
-    if layer then
-        pcall(function() layer:Pop(frameId(owner)) end)
-    end
     -- Removing a non-top owner does not change the active window; only the top
     -- (or the empty stack) needs a native call.
     if wasTop or #stack == 0 then applyTop() end
@@ -230,6 +244,9 @@ function PhoneFocus.State()
     end
     return {
         owner = state.owner,
+        -- 是否走了共享栈（false = 退化到自己 SetNuiFocus，那时 keepInput 会是真的，
+        -- 而 keepInput=true 会把鼠标扣在角落 → 看不到游标）
+        delegated = inputLayer() ~= nil,
         focus = state.focus,
         cursor = state.cursor,
         keepInput = state.keepInput,

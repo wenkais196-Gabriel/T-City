@@ -64,19 +64,24 @@ return {
         end)
 
         check('top_frame_decides_the_control_whitelist', function()
+            -- 定点黑名单：允许的控制根本不会被禁（比"全禁再放开"省，
+            -- DisableAllControlActions 每帧遍历几百个控制，实机会卡）。
             Input.Reset()
+            env.disabled_controls = {}
             Input.Push({ id = 'phone', allow = { 30, 31 } })
             env.Step(20)
             assert(Input.Top().id == 'phone', 'phone on top')
-            assert(env.re_enabled_controls and env.re_enabled_controls[30],
-                'walk controls are explicitly re-enabled')
-            assert((env.controls_disabled_all or 0) > 0, 'everything else is disabled')
+            assert(env.disabled_controls[30] == nil, 'walk controls must stay usable')
+            assert(env.disabled_controls[31] == nil, 'walk controls must stay usable')
+            assert(env.disabled_controls[24] == true, 'attack is blocked while the UI is up')
+            assert(env.disabled_controls[174] == true, 'the phone menu group is blocked')
 
             -- 上层换了，白名单也要跟着换
-            env.re_enabled_controls = {}
+            env.disabled_controls = {}
             Input.Push({ id = 'phone:mdt', allow = { 27 } })
             env.Step(20)
-            assert(env.re_enabled_controls[27], 'the new top frame brings its own allow list')
+            assert(env.disabled_controls[27] == nil, 'the new top frame brings its own allow list')
+            assert(env.disabled_controls[30] == true, 'walking is blocked when not allowed')
             Input.Reset()
         end)
 

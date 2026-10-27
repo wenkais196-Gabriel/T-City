@@ -24,15 +24,23 @@ def read(relative: str) -> str:
 # 纯检查：返回违规列表（空 = 合规）
 # --------------------------------------------------------------------------- #
 
+def code_only(source: str) -> str:
+    """去掉 Lua 注释：注释里提到某个 API 不算用了它。"""
+    return "\n".join(line.split("--", 1)[0] for line in source.splitlines())
+
+
 PATH_API_EXPORTS = ("Push", "Pop", "Top", "Path", "IsTaken", "Owns", "ResetInput")
 
 
 def violations_in_shared_layer(source: str) -> list[str]:
-    bad = [f"missing export {name}" for name in PATH_API_EXPORTS if f"exports('{name}'" not in source]
-    if "DisableAllControlActions" not in source:
-        bad.append("the top frame never disables the game's controls")
-    if "EnableControlAction" not in source:
-        bad.append("no allow list: walking would be blocked too")
+    code = code_only(source)
+    bad = [f"missing export {name}" for name in PATH_API_EXPORTS if f"exports('{name}'" not in code]
+    if "BLOCKED_CONTROLS" not in code:
+        bad.append("no curated block list: DisableAllControlActions per frame stutters")
+    if "DisableAllControlActions" in code:
+        bad.append("still disabling every control each frame")
+    if "inList(allow, control)" not in code:
+        bad.append("the allow list is not honoured while blocking")
     return bad
 
 
@@ -71,6 +79,14 @@ def violations_in_phone_focus(source: str) -> list[str]:
     # keepInput 归 custom-ui 的栈统一设置；手机侧只在退化路径里碰它
     if "SetNuiFocusKeepInput(keepInput)" in source:
         bad.append("focus.lua sets keepInput unconditionally instead of delegating")
+    # Release 必须先弹共享栈再看本地账：委托之后本地 stack 是空的，
+    # 顺序反了就会"手机关了但帧还挂着"，屏蔽线程继续跑 → 玩家动不了。
+    pop_at = source.find("layer:Pop(")
+    local_at = source.find("if not removed then return false end")
+    if pop_at == -1:
+        bad.append("Release never pops the shared stack")
+    elif local_at != -1 and pop_at > local_at:
+        bad.append("Release consults the local stack before popping the shared one")
     return bad
 
 
@@ -82,11 +98,11 @@ def test_shared_layer_gate_detects_a_missing_path_api():
     real = read("custom-ui/client/main.lua")
     assert violations_in_shared_layer(real) == [], violations_in_shared_layer(real)
 
-    broken = "exports('OpenMenu', OpenMenu)\nSetNuiFocus(true, true)"
+    broken = "exports('OpenMenu', OpenMenu)\nSetNuiFocus(true, true)\nDisableAllControlActions(0)"
     caught = violations_in_shared_layer(broken)
     assert any("IsTaken" in item for item in caught), caught
-    assert any("never disables" in item for item in caught), caught
-    assert any("allow list" in item for item in caught), caught
+    assert any("curated block list" in item for item in caught), caught
+    assert any("disabling every control" in item for item in caught), caught
 
 
 def test_gameplay_guard_gate_detects_a_script_that_reads_controls_directly():
@@ -120,6 +136,14 @@ def test_phone_frame_gate_detects_a_shell_without_app_or_text_frames():
 
     focus = violations_in_phone_focus("function PhoneFocus.Acquire() end")
     assert focus, "a focus module without delegation hooks must be caught"
+
+    # 顺序反例：先看本地账、后弹共享栈 —— 真机上就是"关了但没释放"
+    out_of_order = (
+        "GetResourceState('custom-ui')\n"
+        "function PhoneFocus.PushFrame() end\nfunction PhoneFocus.PopFrame() end\n"
+        "local function Release()\nif not removed then return false end\nlayer:Pop('phone')\n"
+    )
+    assert any("before popping" in item for item in violations_in_phone_focus(out_of_order))
 
     leaky = "SetNuiFocusKeepInput(keepInput)\nGetResourceState('custom-ui')\n"
     leaky += "function PhoneFocus.PushFrame() end\nfunction PhoneFocus.PopFrame() end\n"
