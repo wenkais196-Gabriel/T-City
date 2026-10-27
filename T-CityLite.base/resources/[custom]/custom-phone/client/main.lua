@@ -91,6 +91,7 @@ local function ClosePhone(reason)
     local kind = Surface.Current()
     if not kind then return end
     Surface.Reset()
+    PhoneNav.Stop()
     -- 换形态不是退出：人还看着同一页，清掉 appState 会让 agent 立刻读成 app=nil。
     if reason ~= 'switch' then appState = {} end
     -- 任何关闭路径都必须解锁：焦点没了但人还钉在原地是最难查的故障。
@@ -184,6 +185,7 @@ local function OpenPhone(forcedKind, reason)
     -- keepInput 是形态的一部分：手机要能边跑边看，平板要站定。
     PhoneFocus.Acquire(kind, { cursor = true, keepInput = (kind == 'phone') })
     DeviceLock.Begin(kind)
+    PhoneNav.Start() -- 键盘/手柄导航：开屏期间轮询方向/确认/返回
     announceUiState()
     TriggerServerEvent('phone:server:focusState', { phase = 'open-start', surface = kind, reason = reason or 'open' })
 
@@ -340,6 +342,7 @@ local function OpenPhone(forcedKind, reason)
                     })
                 end
             end
+            PhoneNav.Tick() -- 键盘/手柄导航（每帧一次，不自建线程）
             Wait(0)
         end
         -- Clear animation when phone closes

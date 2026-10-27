@@ -21,6 +21,7 @@ return {
                 -- 形态判定 → 移动锁 → 状态（fxmanifest 里也必须在 main.lua 之前）
                 'client/core/surface_rules.lua',
                 'client/core/device_lock.lua',
+                'client/core/nav.lua',
                 'client/core/surface.lua',
                 'client/core/events.lua',
                 'client/core/diag.lua',
@@ -209,6 +210,46 @@ return {
             env.Command('phonefix')
             env.Step(100)
             assert(state().app == nil, 'a hard reset must clear the page')
+        end)
+
+        check('keyboard_and_gamepad_navigation_reaches_the_nui', function()
+            -- 浏览器原生 Tab 在游戏里拿不到键（GTA 占了），所以方向/确认/返回由 Lua
+            -- 轮询控制后发给 NUI；同一套动作键盘与手柄共用。
+            local function navs()
+                local out = {}
+                for _, record in ipairs(env.nui_messages) do
+                    local msg = record.msg or {}
+                    if msg.action == 'phone:nav' then out[#out + 1] = msg end
+                end
+                return out
+            end
+
+            env.Command('phonefix')
+            env.Step(100)
+            env.Command('phone')
+            env.Step(200)
+            assert(#navs() == 0, 'no nav messages before any input')
+
+            env.controls_pressed[173] = true -- down
+            env.Step(40)
+            env.controls_pressed[176] = true -- accept
+            env.Step(40)
+            env.controls_pressed[177] = true -- cancel
+            env.Step(40)
+
+            local seen = navs()
+            assert(#seen == 3, 'expected move/activate/back, got ' .. tostring(#seen))
+            assert(seen[1].kind == 'move' and seen[1].dir == 'down', 'first is a down move')
+            assert(seen[2].kind == 'activate', 'second is activate')
+            assert(seen[3].kind == 'back', 'third is back')
+
+            -- 关屏后必须停止轮询：否则会继续吞方向键
+            env.Command('phonefix')
+            env.Step(100)
+            local before = #navs()
+            env.controls_pressed[173] = true
+            env.Step(60)
+            assert(#navs() == before, 'closed phone must not emit nav messages')
         end)
 
         check('phoneui_is_off_by_default', function()
