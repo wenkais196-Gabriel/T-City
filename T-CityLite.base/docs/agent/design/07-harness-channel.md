@@ -94,7 +94,7 @@ GPU/字体）。本 harness 覆盖**这三类之外的全部回归**：只要资
 
 | 层 | 证据 |
 |---|---|
-| 离线单测 | `tests/agent/test_harness.py`：16 checks + `test_agent_smoke.py` 的 `HarnessTests` 6 checks（解析/分页/过滤/半行/轮转/超时/缺文件/门控/信封/untrusted 标注） |
+| 离线单测 | `tests/tools/test_harness.py`：16 checks + `test_agent_smoke.py` 的 `HarnessTests` 6 checks（解析/分页/过滤/半行/轮转/超时/缺文件/门控/信封/untrusted 标注） |
 | 契约 | `python3 tools/agent_tools.py --check` → 34 tools OK；`--write` 生成 `TOOLS.md` + Lua 镜像 |
 | 实机（MCP stdio，2026-10-26） | `tools/list` 无 gate = 8 工具、`TCITY_HARNESS=1` = 11（+3 harness）；`get_console_match(server)` 命中 `[rcon] zdiag zz-harness-wait-ok-3`，用时 **2.9s**；`get_console_match(client)` 命中 `[MainThrd] heartbeat #22`，用时 **1.2s**；`target=bogus` → `bad_request` |
 | 实机（smoke） | `agent_smoke.py --harness --expect-server/--expect-client`：**4 pass / 0 fail / 10 skip**，server 断言 7.9s、client 断言 0.75s |
