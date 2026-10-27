@@ -46,6 +46,35 @@ function incidentsRequestCount(world) {
 
 export const scenarios = [
   {
+    name: 'phone:navigate 带页码跳转（agent 不用点也能逐页验收）',
+    async run({ page, world, surface }) {
+      world.units = [];
+      world.incidents = [INCIDENT_911];
+      await openMdt(page, surface);
+
+      const lastTab = () => {
+        const calls = world.calls.filter((call) => call.callback === 'appState');
+        return calls.at(-1)?.payload?.tab ?? null;
+      };
+
+      for (const tab of ['case', 'person', 'report', 'me', 'dispatch']) {
+        await page.evaluate(
+          (value) => window.postMessage({ action: 'phone:navigate', app: 'police_mdt', tab: value }, '*'),
+          tab,
+        );
+        await page.waitForTimeout(250);
+        checkEqual(`跳到 ${tab} 后 appState.tab`, lastTab(), tab);
+      }
+
+      // 不属于自己的导航消息必须忽略
+      await page.evaluate(() =>
+        window.postMessage({ action: 'phone:navigate', app: 'quests', tab: 'me' }, '*'),
+      );
+      await page.waitForTimeout(200);
+      checkEqual('别的 App 的跳页消息不影响 MDT', lastTab(), 'dispatch');
+    },
+  },
+  {
     name: 'MDT 把「哪一页、哪条警情」回吐给 agent',
     async run({ page, world, surface }) {
       world.units = [];

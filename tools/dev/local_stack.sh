@@ -71,11 +71,27 @@ if [ "$CHECK_ONLY" -eq 0 ]; then
     fi
 
     say "→ applying migrations"
+    failed=0
     for migration in $(ls "$BASE"/migrations/*.sql | sort -V); do
-        if ! docker exec -i "$CONTAINER" mariadb -uroot -p"$ROOT_PW" "$DB" < "$migration" >/dev/null 2>&1; then
-            say "  ! $(basename "$migration") failed"
+        err=$(docker exec -i "$CONTAINER" mariadb -uroot -p"$ROOT_PW" "$DB" < "$migration" 2>&1 >/dev/null | grep -v "Using a password" || true)
+        if [ -n "$err" ]; then
+            say "  ! $(basename "$migration"): $err"
+            failed=1
         fi
     done
+
+    # 迁移失败以前只是一行提示，脚本照样往下走 —— 结果警用终端起来后
+    # police_units/police_incidents 根本不存在，board 端点 500，MDT 列表全空。
+    say "→ verifying schema"
+    present=$(db_exec -N -e "SELECT table_name FROM information_schema.tables WHERE table_schema='$DB'" | tr -d '')
+    for table in police_units police_incidents police_cases player_quests agent_actions agent_effects; do
+        if ! printf '%s
+' "$present" | grep -qx "$table"; then
+            say "  ✗ missing table after migrations: $table"
+            exit 1
+        fi
+    done
+    [ "$failed" -eq 0 ] || { say "  ✗ some migrations reported errors"; exit 1; }
 
     say "→ ensuring $AGENT_USER (SELECT on the five agent views)"
     db_exec -e "
