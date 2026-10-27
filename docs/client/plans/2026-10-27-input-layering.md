@@ -119,6 +119,33 @@ exports['custom-ui']:Owns('custom-phone')
 | qb-* 是上游资源 | 改动会破坏合并 | 只加 3-5 行 `exports['custom-ui']` 调用并标注 `-- T-City:` |
 | 一次性迁 5 个资源风险大 | | 按 S1→S5 分 5 个 PR，每步都可回滚 |
 
+## 6.5 交互路径：Esc 是一条链，不是一个键
+
+A3 的计数器只要换成「栈」，就能表达层级。当前状态永远是一条路径（根 → 叶），
+不是树 —— 树是「可以往哪儿走」，路径是「现在在哪儿」：
+
+```
+world ─ M ─▶ phone ─ Enter ─▶ phone:mdt ─ Enter ─▶ phone:mdt/search (text)
+   ◀─ Esc ──      ◀─ Esc ──        ◀─ Esc ──
+   再按 Esc → 栈空 → 输入还给游戏 → GTA 原生暂停菜单
+```
+
+| 动作 | 语义 | 谁处理 |
+|---|---|---|
+| `M` | 压入 `phone` 帧 | custom-phone（键位映射） |
+| `Enter` | **对当前焦点执行动作**；动作本身可能压栈（打开 App / 聚焦输入框） | 栈顶帧自己 |
+| `Esc` | 弹出栈顶一帧；栈空时**不拦**，让游戏开暂停菜单 | 栈顶帧读原始按键 → `Pop()` |
+| 打字 | `kind='text'` 帧把键盘交给 DOM 输入框 | 栈顶帧 + `isEditableTarget` |
+
+两条实现约束：
+
+1. **`Enter` 不是「进下一层」的通用规则**。它只是「激活焦点」；是否压栈由那个动作决定
+   （打开 App = 压栈，切 tab = 同层内改状态）。
+2. **栈空必须停止 `DisableAllControlActions`**。否则最后一次 Esc 被我们吃掉，
+   玩家呼不出原生暂停菜单 —— 这是整条 Esc 链能走通的前提。
+
+实现见 PR #76：custom-ui 的 `Push/Pop/Top/Path/IsTaken/Owns/ResetInput`（S1，只加 API 不迁资源）。
+
 ## 7. 需要拍板的点
 
 1. **层数**：我提议 3 层（overlay/modal/text）。要不要再加一层 `hud-input`（比如地图、雷达那种只吃少量键的）？
