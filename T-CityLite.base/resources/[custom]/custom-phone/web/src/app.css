@@ -185,3 +185,49 @@ body {
   outline-offset: 2px;
   border-radius: 10px;
 }
+
+/* 叠加层版焦点框：命令式 class 会被 Svelte 重渲染冲掉，这一层永远不会。 */
+.nav-ring {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid rgba(110, 168, 255, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 0 0 3px rgba(110, 168, 255, 0.22), 0 0 14px rgba(110, 168, 255, 0.35);
+  z-index: 96;
+  transition: left 80ms ease, top 80ms ease, width 80ms ease, height 80ms ease;
+}
+
+/* 焦点标签：让人一眼知道"现在选中的是什么" */
+.nav-chip {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 70vw;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(12, 16, 24, 0.88);
+  border: 1px solid rgba(110, 168, 255, 0.5);
+  color: #dbe9ff;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 97;
+}
+
+/* 自绘光标：引擎游标不可见时至少能看到自己指哪 */
+.nav-cursor {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 10px rgba(110, 168, 255, 0.8);
+  pointer-events: none;
+  z-index: 98;
+}

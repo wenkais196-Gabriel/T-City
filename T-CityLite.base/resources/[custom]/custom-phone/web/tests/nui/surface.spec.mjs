@@ -44,6 +44,31 @@ export const surfaceScenarios = [
   },
   {
     surfaces: ['phone'],
+    name: '焦点反馈：叠加层框住当前元素，标签写着它是什么，换焦点会跟着走',
+    async run({ page }) {
+      await openPhone(page, 'phone');
+      const ring = page.locator('.nav-ring');
+      const chip = page.locator('.nav-chip');
+
+      await ring.waitFor({ state: 'visible', timeout: 5000 });
+      const first = await ring.boundingBox();
+      checkTruthy('焦点框有实际大小', first && first.width > 4 && first.height > 4);
+      const firstLabel = (await chip.textContent()) ?? '';
+      checkTruthy('标签写着当前选中项', firstLabel.trim().length > 1);
+
+      for (let i = 0; i < 3; i += 1) {
+        await page.keyboard.press('ArrowDown');
+        await page.waitForTimeout(120);
+      }
+      const moved = await ring.boundingBox();
+      const movedLabel = (await chip.textContent()) ?? '';
+      checkTruthy('焦点框跟着移动',
+        Boolean(first && moved) && (Math.abs(moved.y - first.y) > 2 || Math.abs(moved.x - first.x) > 2));
+      checkTruthy('标签跟着换', movedLabel !== firstLabel);
+    },
+  },
+  {
+    surfaces: ['phone'],
     name: '键盘能从输入框进出：Tab 离开输入框，输入框里方向键不被抢',
     async run({ page }) {
       await openPhone(page, 'phone');

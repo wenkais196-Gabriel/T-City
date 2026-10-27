@@ -23,6 +23,7 @@
   import GangBossApp from './apps/leader/GangBossApp.svelte';
 
   import { registerNuiEvent, isBrowser, fetchNui, reportAppState } from './utils/nui';
+  import { navFocus, remeasure } from './core/nav';
   if (typeof window !== 'undefined') {
     window.addEventListener('error', (event) => {
       void fetchNui('clientError', { message: String(event.message), stack: String(event.error?.stack ?? '') }).catch(() => {});
@@ -63,10 +64,18 @@
   //     agent 读到的还是上一个 App（真机踩过：屏幕是 Settings，状态里是 police_mdt）；
   //  2. 焦点从新页面的第一个元素重新开始 —— 旧元素已经不在 DOM 里。
   let lastReportedApp = '';
+  // 自绘光标：GTA 的引擎游标在某些配置下不可见，NUI 自己画一个至少让人知道指哪
+  const cursorDot = writable<{ x: number; y: number } | null>(null);
   // Lua 每送来一条 phone:nav 就记一次时间：说明键盘/手柄由 Lua 接管。
   // 同一帧里 CEF 若也收到了这个按键（注入的按键能到 CEF，玩家硬件按键通常到不了），
   // 120ms 内不再自己处理一次，避免一次按键挪两格。
   let lastNavFromLua = 0;
+  window.addEventListener('mousemove', (event) => {
+    cursorDot.set({ x: event.clientX, y: event.clientY });
+  });
+  // 列表滚动 / 窗口变化后把焦点框重新贴上去
+  window.addEventListener('scroll', () => remeasure(), true);
+  window.addEventListener('resize', () => remeasure());
   const luaOwnsKeys = () => Date.now() - lastNavFromLua < 120;
   activeApp.subscribe((id) => {
     const plain = id.startsWith('dyn:') ? id.slice(4) : id;
@@ -90,7 +99,7 @@
     handleCallEnded,
     endActiveCall
   } from './stores/call';
-  import { get } from 'svelte/store';
+  import { get, writable } from 'svelte/store';
   import { isSurface } from './core/surface';
   import { onMount } from 'svelte';
 
@@ -386,6 +395,17 @@
 </script>
 
 {#if $isPhoneOpen}
+  <!-- 焦点反馈叠加层：位置由 core/nav.ts 量出来，不受 Svelte 重渲染影响 -->
+  {#if $navFocus}
+    <div
+      class="nav-ring"
+      style={`left:${$navFocus.x}px;top:${$navFocus.y}px;width:${$navFocus.width}px;height:${$navFocus.height}px`}
+    ></div>
+    <div class="nav-chip">▸ {$navFocus.label}</div>
+  {/if}
+  {#if $cursorDot}
+    <div class="nav-cursor" style={`left:${$cursorDot.x}px;top:${$cursorDot.y}px`}></div>
+  {/if}
   <DeviceShell surface={$surface}>
     <!-- Background Wallpaper -->
     <div class="phone-wallpaper">
