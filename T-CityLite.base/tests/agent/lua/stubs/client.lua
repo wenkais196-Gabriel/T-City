@@ -38,6 +38,7 @@ return function(env)
     env.thread_errors = env.thread_errors or {}
     env.disabled_controls = env.disabled_controls or {}
     env.controls_pressed = env.controls_pressed or {}
+    env.raw_keys = env.raw_keys or {}
     env.anims_loaded = env.anims_loaded or {}
     env.effects = env.effects or {}
     env.help_text = env.help_text or {}
@@ -414,6 +415,10 @@ return function(env)
     function _G.SetWaypointOff() env.waypoint = nil end
 
     function _G.DisableControlAction(_, control) env.disabled_controls[control] = true end
+
+    -- 原始按键（键盘）：按 VK 码判断，和 GTA 的控制映射无关 ——
+    -- 玩家真按方向键时轮询不到控制号，只能靠这个（真机踩过）。
+    function _G.IsRawKeyDown(vk) return env.raw_keys[vk] == true end
 
     function _G.IsDisabledControlJustPressed(_, control)
         if env.controls_pressed[control] then

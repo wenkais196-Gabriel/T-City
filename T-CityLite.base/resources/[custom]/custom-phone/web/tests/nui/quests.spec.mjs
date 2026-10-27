@@ -106,6 +106,9 @@ export const questScenarios = [
       const focusLabel = () => page.evaluate(
         () => document.querySelector('[data-nav-focus="true"]')?.textContent?.trim() ?? '',
       );
+      // 上面的循环用的是 phone:nav 消息（模拟 Lua 在管键盘），CEF 侧 120ms 内会
+      // 主动让位去重；等一会儿再按键，模拟"人停了一下再按"
+      await page.waitForTimeout(200);
       await page.keyboard.press('PageDown');
       await page.waitForTimeout(150);
       const afterPage = await scrollerTop();
@@ -113,6 +116,7 @@ export const questScenarios = [
       checkTruthy('PageDown 一次走的位置比一步远得多', afterPage > 80);
 
       // End：焦点已经在列表里，所以只在列表里跳 —— 落到底部那条的按钮上
+      await page.waitForTimeout(200);
       await page.keyboard.press('End');
       await page.waitForTimeout(250);
       const bottom = await page.evaluate(() => {
@@ -131,6 +135,7 @@ export const questScenarios = [
       checkTruthy('End 把列表带到底部', bottom.atBottom);
 
       // Home：回到列表第一个可聚焦元素（不是壳层的关闭键）
+      await page.waitForTimeout(200);
       await page.keyboard.press('Home');
       await page.waitForTimeout(250);
       const topBack = await page.evaluate(() => {
