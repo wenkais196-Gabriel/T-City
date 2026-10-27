@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatClock, formatAgo } from '../utils/time';
   import { onMount } from 'svelte';
+  import { reportAppState } from '../utils/nui';
   import { playerData } from '../stores/phone';
   import { requestAppQuery as queryApp, requestAppAction as appAction } from '../core/request';
   import AppSurface from '../components/AppSurface.svelte';
@@ -80,6 +81,16 @@
   let personSeg = $state<'citizen' | 'vehicle'>('citizen');
   let reportSeg = $state<'arrest' | 'report' | 'citation' | 'evidence'>('arrest');
   let caseSeg = $state<'cases' | 'bolos' | 'warrants'>('cases');
+
+  // 停在哪一页、选中哪条警情 —— 回吐给 Lua，agent 才能答"他在看哪条"。
+  // 只报 page 与警情 id，不报搜索词、公民资料或案卷正文。
+  $effect(() => {
+    // 警情 id 只在调度页有意义：换到人车/文书页还报着它，会让人以为"他还在看那条警情"。
+    const selected = page === 'dispatch' && activeIncidentId != null
+      ? String(activeIncidentId)
+      : null;
+    reportAppState('police_mdt', page, selected);
+  });
 
   // Per-dataset lazily loaded flags: entering a segment loads once, switching
   // back never re-queries (explicit refresh buttons still do).
