@@ -173,6 +173,34 @@ return {
                 'client threads raised: ' .. table.concat(env.thread_errors, ' | '))
         end)
 
+        check('app_state_is_reported_and_sanitised', function()
+            -- agent 问不到"他在看哪一栏"，除非 App 自己回吐。只收三个短 token。
+            local state = env.registered_exports.GetUiState
+            env.Command('phonefix')
+            env.Step(100)
+            env.Command('phone')
+            env.Step(200)
+
+            env.NuiCallback('appState', { app = 'quests', tab = 'active', selected = 'euro_trucking_steel' })
+            env.Step(20)
+            local reported = state().app
+            assert(type(reported) == 'table', 'app state must reach the snapshot')
+            assert(reported.id == 'quests', tostring(reported.id))
+            assert(reported.tab == 'active', tostring(reported.tab))
+            assert(reported.selected == 'euro_trucking_steel', tostring(reported.selected))
+
+            env.NuiCallback('appState', { app = 'quests', tab = 'bad value!', selected = '<script>' })
+            env.Step(20)
+            local cleaned = state().app
+            assert(cleaned.id == 'quests', 'a valid app id survives')
+            assert(cleaned.tab == nil, 'a tab with spaces/punctuation is dropped, got ' .. tostring(cleaned.tab))
+            assert(cleaned.selected == nil, 'a selected id with markup is dropped')
+
+            env.Command('phonefix')
+            env.Step(100)
+            assert(state().app == nil, 'closing the phone must clear the app state')
+        end)
+
         check('m_still_closes_when_the_focus_native_lies', function()
             -- 实机现象：IsNuiFocused() 恒 false。旧的 toggle 拿它当"焦点还在吗"，
             -- 于是第二次按 M 走的是"复位重开"分支 —— 手机永远关不掉、界面还闪。
