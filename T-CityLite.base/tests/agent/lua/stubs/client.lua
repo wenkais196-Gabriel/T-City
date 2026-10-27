@@ -28,6 +28,7 @@ return function(env)
     env.server_events = env.server_events or {}
     env.local_events = env.local_events or {}
     env.convars = env.convars or {}
+    env.executed_commands = env.executed_commands or {}
     env.notifications = env.notifications or {}
     env.log = env.log or {}
     env.console = env.console or {}
@@ -249,6 +250,21 @@ return function(env)
     function _G.IsNuiFocusKeepingInput()
         if env.nui.focus_native_lies then return false end
         return env.nui.keepInput
+    end
+
+    -- 客户端也能读 convar（/phoneui、devcmd 桥都靠它门控）。
+    -- 以前客户端桩没有这个全局：调用即 nil，用例"convar 关闭时什么都不做"因此
+    -- 是靠崩溃通过的，看起来绿。
+    function _G.GetConvar(name, default)
+        local value = env.convars[name]
+        if value == nil then return default end
+        return tostring(value)
+    end
+
+    -- 客户端控制台命令（custom-agent-client 的 devcmd 桥用）
+    function _G.ExecuteCommand(command)
+        env.executed_commands = env.executed_commands or {}
+        env.executed_commands[#env.executed_commands + 1] = command
     end
 
     function _G.SendNUIMessage(message)
