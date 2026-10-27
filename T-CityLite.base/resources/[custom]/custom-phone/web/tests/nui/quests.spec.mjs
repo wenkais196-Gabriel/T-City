@@ -64,6 +64,33 @@ export const questScenarios = [
     },
   },
   {
+    surfaces: ['phone'],
+    name: '换形态不丢当前 App（Lua 用 reason=switch 关掉再重开）',
+    async run({ page, world }) {
+      world.apps = [...world.apps, QUESTS_APP];
+      world.quests = [QUEST_FREE];
+      world.questActive = [];
+      await openQuests(page, 'phone');
+      // Lua 的 ClosePhone('switch') → OpenPhone(kind, 'switch')：中间会推一次 close，
+      // 再推一次 phone:open 且 reason=switch。人还看着任务页，不能回桌面。
+      await page.evaluate(() =>
+        window.postMessage({ action: 'phone:close', reason: 'switch' }, '*'),
+      );
+      await page.waitForTimeout(100);
+      await page.evaluate(() =>
+        window.postMessage({ action: 'phone:open', surface: 'tablet', reason: 'switch' }, '*'),
+      );
+      await page.waitForTimeout(400);
+      checkTruthy('换形态后仍在任务页', await page.locator('.quests-app').isVisible());
+      // 对照：真正的重新打开（没有 reason=switch）应当回桌面
+      await page.evaluate(() =>
+        window.postMessage({ action: 'phone:open', surface: 'phone', reason: 'key' }, '*'),
+      );
+      await page.waitForTimeout(400);
+      checkEqual('普通打开回桌面', await page.locator('.quests-app').count(), 0);
+    },
+  },
+  {
     name: '任务列表：只摆能接的，不可接的不出现',
     async run({ page, world, surface }) {
       world.apps = [...world.apps, QUESTS_APP];
