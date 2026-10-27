@@ -80,8 +80,12 @@
       // 外壳形态由 Lua 决定；UI 只是照做。非法值一律退回手机，绝不猜。
       surface.set(isSurface(data?.surface) ? data.surface : 'phone');
       isPhoneOpen.set(true);
+      // 换形态（手机↔平板）不是退出：Lua 侧关掉再以 reason=switch 重开，人还看着
+      // 原来那一页。只有真正的"重新打开"才回桌面。
       // Keep the call screen if a call is still ringing/ongoing when reopened.
-      activeApp.set(get(callPhase) === 'idle' ? 'home' : 'phonecall');
+      if (data?.reason !== 'switch') {
+        activeApp.set(get(callPhase) === 'idle' ? 'home' : 'phonecall');
+      }
       loadPhoneData();
       void loadDynamicApps();
       // Prove to the client that this frame exists: it resends phone:open until
