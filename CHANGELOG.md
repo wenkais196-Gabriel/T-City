@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **`custom-ui` 增加交互路径栈**（`Push/Pop/Top/Path/IsTaken/Owns/ResetInput`）：世界 → 手机 → App → 输入框每一层是一帧，**只有栈顶拥有键盘**；栈顶声明 `allow` 白名单（放行走路等），其余控制整组屏蔽；栈空时立刻把输入还给游戏 —— 所以 Esc 每次退一层，退到底再按一次就是 GTA 原生暂停菜单。这是把“每处各自 SetNuiFocus + IsNuiFocused()”换成单一仲裁者的第一步（仅新增 API，未迁移资源）。
 - **修「键盘只有 agent 能用、玩家按没反应」**：手机开着时 `KeepInput(true)` 让游戏继续吃硬件按键，CEF 收不到、`IsControlJustPressed(172-175)` 也读不到（注入的按键反而能到 CEF，所以此前一直没发现）。键盘改读 `IsRawKeyDown(VK)`（跟 GTA 控制映射无关），手柄仍走控制轮询；同一帧两边都命中时只走原始按键，不会一次挪两格。Tab/PageUp/PageDown/Home/End 也一并纳管。
 - **键盘导航补翻页与滚动**：`PageUp`/`PageDown` 一次 7 格、`Home`/`End` 跳首尾；`End` 会留在焦点所在的可滚容器里（真机在 MDT 列表按 End 会跳到壳层「回桌面」）。输入框里这些键仍归输入框自己。滚动容器实测是 `T-CityLite.base/resources/[custom]/custom-phone/web/src` 下的 `.pane`。
 - **修 `adc` 的 911 白名单永远不匹配**：Lua 的 pattern 没有 `{n,m}`，`'^911 [^%c;]{1,80}$'` 写成了正则的形状，结果 911 全部被拒（只回 `not_allowed`）。改成 `+` 并在代码里限长 96。

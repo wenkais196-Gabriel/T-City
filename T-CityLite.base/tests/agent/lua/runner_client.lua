@@ -15,6 +15,7 @@ local json = require('json')
 local CASES = {
     'phone_focus',
     'agent_effects',
+    'input_path',
 }
 
 local function readAll(path)
