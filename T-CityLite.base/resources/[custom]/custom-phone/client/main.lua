@@ -120,6 +120,12 @@ exports('GetUiState', function()
         app = appState.id and { id = appState.id, tab = appState.tab, selected = appState.selected } or nil,
         -- 键盘/手柄焦点停在哪个控件上（空字符串 = 没有焦点）
         focus = focusHint ~= '' and focusHint or nil,
+        -- 交互路径（底→顶）。关屏后必须是空的 —— 不为空就说明"没释放"，
+        -- 那条线程会一直 DisableAllControlActions，表现就是卡/动不了。
+        frames = focus.path,
+        delegated = focus.delegated == true,
+        -- 仅诊断用；测试桩里没有这个原生，所以判一下
+        custom_ui_state = type(GetResourceState) == 'function' and GetResourceState('custom-ui') or nil,
     }
 end)
 
