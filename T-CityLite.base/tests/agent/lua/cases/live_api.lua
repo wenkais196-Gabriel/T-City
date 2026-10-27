@@ -577,10 +577,23 @@ return {
         end)
 
         check('server_state_reports_counts', function()
+            probeEnv.resource_list = { 'custom-phone', 'custom-director', 'custom-dead' }
+            probeEnv.resource_states['custom-phone'] = 'started'
+            probeEnv.resource_states['custom-director'] = 'started'
+            probeEnv.resource_states['custom-dead'] = 'stopped'
             local response = probeHandle('/agent/v1/live/server')
             assert(response.status == 200, 'expected 200, got ' .. tostring(response.status))
             assert(type(response.body.resources) == 'table', 'resources block must exist')
             assert(response.body.players == 2, 'both fixture players count, got ' .. tostring(response.body.players))
+            assert(response.body.resources.total == 3, 'all three resources count, got '
+                .. tostring(response.body.resources.total))
+            assert(response.body.resources.started == 2, 'two are running, got '
+                .. tostring(response.body.resources.started))
+            -- "83/117" 不告诉你是哪几个；名单才是能动手的东西。
+            local missing = response.body.resources.not_started
+            assert(type(missing) == 'table' and #missing == 1, 'one resource is down')
+            assert(missing[1] == 'custom-dead', 'the down resource is named, got ' .. tostring(missing[1]))
+            assert(response.body.resources.not_started_truncated == false)
         end)
 
         return {
