@@ -63,6 +63,11 @@
   //     agent 读到的还是上一个 App（真机踩过：屏幕是 Settings，状态里是 police_mdt）；
   //  2. 焦点从新页面的第一个元素重新开始 —— 旧元素已经不在 DOM 里。
   let lastReportedApp = '';
+  // Lua 每送来一条 phone:nav 就记一次时间：说明键盘/手柄由 Lua 接管。
+  // 同一帧里 CEF 若也收到了这个按键（注入的按键能到 CEF，玩家硬件按键通常到不了），
+  // 120ms 内不再自己处理一次，避免一次按键挪两格。
+  let lastNavFromLua = 0;
+  const luaOwnsKeys = () => Date.now() - lastNavFromLua < 120;
   activeApp.subscribe((id) => {
     const plain = id.startsWith('dyn:') ? id.slice(4) : id;
     // 只在"真的换了一页"时回吐 id：App 自己稍后还会带上 tab/selected 报一次，
@@ -149,10 +154,20 @@
 
     // 2. Listen for Phone Close signal
     registerNuiEvent('phone:nav', (data) => {
-      // 键位由 Lua 轮询控制后送来（见 core/nav.lua）：键盘与手柄共用同一套动作。
+      // 键位由 Lua 送来（见 client/core/nav.lua）：键盘走原始按键、手柄走控制轮询，
+      // 两者落到同一套动作上。
       const kind = data?.kind;
+      lastNavFromLua = Date.now();
       if (kind === 'move' && typeof data?.dir === 'string') {
         navMove(data.dir);
+        return;
+      }
+      if (kind === 'page' && typeof data?.dir === 'string') {
+        navMoveSteps(data.dir === 'up' ? 'up' : 'down', 7);
+        return;
+      }
+      if (kind === 'edge') {
+        navJump(data?.dir === 'last' ? 'last' : 'first');
         return;
       }
       if (kind === 'activate') {
@@ -297,7 +312,7 @@
       }
       // 翻页键：PageDown/PageUp 一次挪 7 格（约一屏），Home/End 跳到首尾。
       // 输入框里这些键有自己的含义（Home/End 移光标），所以只在不编辑时拦。
-      if (!isEditableTarget(e.target)) {
+      if (!isEditableTarget(e.target) && !luaOwnsKeys()) {
         const pageKeys: Record<string, () => void> = {
           PageDown: () => navMoveSteps('down', 7),
           PageUp: () => navMoveSteps('up', 7),
@@ -312,7 +327,7 @@
       }
       if (navKeys[e.key]) {
         // 输入框里方向键要能移动光标，Enter 要能提交表单
-        if (!isEditableTarget(e.target)) {
+        if (!isEditableTarget(e.target) && !luaOwnsKeys()) {
           e.preventDefault();
           navKeys[e.key]();
         }
