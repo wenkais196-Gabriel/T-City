@@ -246,8 +246,20 @@ end
 
 -- 状态一变就推一份：5s 心跳能证明"还活着"，但读不到"刚按完 M 之后"的样子。
 -- 手机只广播"变了"，快照仍由本资源自己采集，所以对方拿不到也改不了这里的数据。
+--
+-- 合并 150ms 内的连续变化：换形态是"先关再开"，两次广播相隔几十毫秒，
+-- 第一个推的是 open=false，第二个（真正的终态）会被服务端 250ms 窗口丢掉——
+-- 结果是刚换完形态 5 秒内，agent 读到的还是"关着"。
+local pendingPush = nil
 AddEventHandler('phone:client:stateChanged', function()
-    pushState()
+    if pendingPush then
+        ClearTimeout(pendingPush)
+        pendingPush = nil
+    end
+    pendingPush = SetTimeout(150, function()
+        pendingPush = nil
+        pushState()
+    end)
 end)
 
 CreateThread(function()
