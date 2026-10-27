@@ -184,9 +184,22 @@ return {
             env.NuiCallback('appState', { app = 'quests', tab = 'active', selected = 'cold_chain_delivery' })
             env.Step(20)
 
+            -- 换形态时重开必须带 reason='switch'：NUI 靠它决定回桌面还是留页。
+            local reopenReason = nil
+            for _, record in ipairs(env.nui_messages) do
+                local msg = record.msg or {}
+                if msg.action == 'phone:open' then reopenReason = msg.reason end
+            end
+            assert(reopenReason ~= 'command', 'the reopen after a switch must not look like a fresh command')
+
             env.Command('tablet')
             env.Step(400)
             local after = state()
+            for _, record in ipairs(env.nui_messages) do
+                local msg = record.msg or {}
+                if msg.action == 'phone:open' then reopenReason = msg.reason end
+            end
+            assert(reopenReason == 'switch', 'the reopen must carry reason=switch, got ' .. tostring(reopenReason))
             assert(after.surface == 'tablet', 'surface must switch, got ' .. tostring(after.surface))
             assert(type(after.app) == 'table', 'the app page must survive a surface switch')
             assert(after.app.id == 'quests' and after.app.tab == 'active',
