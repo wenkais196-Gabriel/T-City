@@ -26,6 +26,21 @@ async function box(page) {
 export const surfaceScenarios = [
   {
     surfaces: ['phone'],
+    name: '按 M 时 NUI 不自己关（M 归 Lua，CEF 只是同时收到了这个键）',
+    async run({ page }) {
+      await openPhone(page, 'phone');
+      await page.waitForTimeout(200);
+      await page.keyboard.press('m');
+      await page.waitForTimeout(300);
+      checkTruthy('手机仍然开着', (await page.locator('.phone-wrapper').count()) === 1);
+      // ESC 仍然归 NUI：Lua 没有绑定 ESC，不存在双重处理
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      checkEqual('ESC 仍然能关', await page.locator('.phone-wrapper').count(), 0);
+    },
+  },
+  {
+    surfaces: ['phone'],
     name: '手机形态：右下角 375x780，有刘海和手势条',
     async run({ page }) {
       await openPhone(page, 'phone');

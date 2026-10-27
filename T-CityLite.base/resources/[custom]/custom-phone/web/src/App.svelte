@@ -206,10 +206,11 @@
         closePhone();
         return;
       }
-      // M is the phone hotkey; inside inputs it must reach the field untouched.
-      if ((e.key === 'm' || e.key === 'M') && !isEditableTarget(e.target)) {
-        closePhone();
-      }
+      // M 不在这里处理：它是 Lua 的 key mapping，开/关状态机归 Surface/PhoneFocus 保管。
+      // keepInput=true 意味着这一下按键**同时**到达游戏和 CEF —— 两边都"关一次"的结果
+      // 是：开着的时候按 M，Lua 关、CFE 也关（幂等）；但刚打开的那一帧 CEF 已经挂好了，
+      // keydown 又把它关掉，表现就是"按 M 有时开有时不开"。实测 2026-10-27：真机按 M
+      // 出现 open-start → close-start 成对出现，手机闪一下就没。所以 M 只留给 Lua。
     };
     window.addEventListener('keydown', handleKeyDown);
 

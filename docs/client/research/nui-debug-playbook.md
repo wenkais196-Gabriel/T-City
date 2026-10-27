@@ -238,6 +238,24 @@ env，只有普通读取才走 `__index` 回退到共享表）。跨文件取模
 **顺带教训**：`RegisterCommand` 同名后注册者覆盖先注册者。本项目曾同时注册两个 `phone`
 （toggle 与 `/phone` 强制形态），后者把前者覆盖成"只开不关"，M 键因此永远关不掉手机。
 
+### 3.0c keepInput 让按键同时到达游戏和 CEF，两边各关一次就是"按 M 没反应"（2026-10-27 实测命中）
+
+**已证实的事实**：手机开着时 `SetNuiFocusKeepInput(true)`，一次 M 按键会**同时**被
+① 游戏的 `RegisterKeyMapping('phone')` 和 ② CEF 页面的 `window.keydown` 收到。
+Lua 那边 toggle 打开手机，同一帧 CEF 的旧处理器又 `closePhone()` ——
+服务端遥测里能看到成对的 `open-start` 紧跟 `close-start`，画面上就是闪一下没了。
+
+**签名**
+- `/live/clients` 的 `open` 在按下后 1s 还是 false，但 `[custom-phone][focus]` 日志里
+  `open-nui-sent → open-start → open-ack → close-start` 连着出现。
+- 同样的按键"有时开、有时不开"：取决于按键落下时 CEF 是否已经挂上（重启资源后最先几下常失败）。
+- 无头 NUI 测试全绿——因为测试里只有一个键盘监听者。
+
+**修复**：按键归属只能有一个主人。`m/M` 归 Lua（它管 Surface/PhoneFocus/DeviceLock），
+NUI 只保留自己也独占的键（`Escape`）与鼠标动作（右键 = contextmenu）。
+
+**教训**：凡是 `keepInput=true` 的 NUI，都要问一句"这个键谁来处理"，否则就是双重处理。
+
 ### 3.0b 新增脚本文件"明明在、就是不执行"（`restart` 不重读 fxmanifest）
 
 **签名**
