@@ -175,7 +175,13 @@
         return;
       }
       if (kind === 'back') {
-        // 返回语义：在一个 app 里就回桌面，已经在桌面上就关屏。
+        // 返回语义（交互路径）：焦点在输入框 → 先退出输入框；
+        // 在 App 里 → 回桌面；已经在桌面上 → 关屏。再按一次就轮到游戏自己（Esc 开暂停菜单）。
+        if (isEditableTarget(document.activeElement)) {
+          (document.activeElement as HTMLElement).blur();
+          navFocusFirst();
+          return;
+        }
         if (get(activeApp) !== 'home') activeApp.set('home');
         else void closePhone();
       }

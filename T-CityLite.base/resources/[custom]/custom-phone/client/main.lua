@@ -53,9 +53,12 @@ end
 -- 焦点提示：NUI 每次移动焦点都报一次标签（aria-label 或文字），
 -- agent 才能知道"现在停在哪个按钮上"，而不是盲按方向键。
 local focusHint = ''
+-- 当前 App 对应的栈帧 id（'phone:mdt' 之类），换页时用来弹旧的
+local currentAppFrame = nil
 
 RegisterNUICallback('uiFocus', function(data, cb)
     local label = type(data) == 'table' and data.label or nil
+    local kind = type(data) == 'table' and data.kind or nil
     if type(label) == 'string' then
         -- 折叠空白再**去掉首尾**：只 gsub 不 trim 会把 "   " 变成 " "，被当成有焦点
         label = label:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', ''):sub(1, 40)
@@ -63,6 +66,12 @@ RegisterNUICallback('uiFocus', function(data, cb)
         label = ''
     end
     focusHint = label
+    -- 输入框 = 一层 text 帧：Esc/返回 先退出它，再退出 App。见 interaction path 设计。
+    if kind == 'text' then
+        PhoneFocus.PushFrame('phone:text')
+    else
+        PhoneFocus.PopFrame('phone:text')
+    end
     PhoneBridge.AnswerFn(cb)({ ok = true })
     announceUiState()
 end)
@@ -74,6 +83,14 @@ RegisterNUICallback('appState', function(data, cb)
             tab = stateToken(data.tab, 24),
             selected = stateToken(data.selected, 48),
         }
+        -- 换 App = 换一层：先收掉输入框与上一个 App 的帧，再压入新的
+        local nextId = appState.id and ('phone:' .. appState.id) or nil
+        if nextId ~= currentAppFrame then
+            PhoneFocus.PopFrame('phone:text')
+            if currentAppFrame then PhoneFocus.PopFrame(currentAppFrame) end
+            if nextId then PhoneFocus.PushFrame(nextId) end
+            currentAppFrame = nextId
+        end
     end
     -- 统一应答通道：本 build 的 cb 可能是可调用表，所以不允许对 cb 做类型守卫。
     PhoneBridge.AnswerFn(cb)({ ok = true })
@@ -447,6 +464,7 @@ RegisterCommand('phonefix', function()
     Surface.Reset()
     appState = {} -- 硬复位连"停在哪一页"一起清，别让下一次打开继承旧 tab
     focusHint = '' -- 焦点提示同理：复位后没有焦点
+    currentAppFrame = nil
     DeviceLock.End()
     PhoneFocus.Reset()
     SendNUIMessage({ action = 'phone:close', reason = 'phonefix' })
