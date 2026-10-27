@@ -4,7 +4,21 @@
 // 浏览器原生 Tab 在游戏里拿不到键（GTA 占了），所以焦点模型放在这里，
 // 输入统一从 Lua 来 —— 同一套动作既能被键盘触发，也能被手柄触发。
 
+import { writable } from 'svelte/store';
 import { fetchNui } from '../utils/nui';
+
+/**
+ * 当前焦点框（视口坐标）+ 标签。用 store 暴露给 App.svelte 画一个**叠加层**，
+ * 而不是只给元素加 class：Svelte 一重渲染就把命令式加的 class 冲掉了，
+ * 结果就是"焦点其实在动，但人看不见"（真机反馈）。
+ */
+export const navFocus = writable<{
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} | null>(null);
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [data-nav]';
 
@@ -34,13 +48,47 @@ function labelOf(el: HTMLElement): string {
   return el.tagName.toLowerCase();
 }
 
-function report(el: HTMLElement | null): void {
+function report(el: HTMLElement | null, rect?: { x: number; y: number; w: number; h: number }): void {
   // 把"现在焦点在哪个控件上"回吐给 Lua：agent 看不见 DOM，没有这条只能盲按方向键。
   // kind='text' 时 Lua 会压一层 text 帧 —— Esc 先退出输入框，再退出 App。
   const label = el ? labelOf(el) : '';
   const tag = el?.tagName ?? '';
   const kind = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ? 'text' : 'control';
-  void fetchNui('uiFocus', { label, kind }).catch(() => {});
+  void fetchNui('uiFocus', { label, kind, rect }).catch(() => {});
+}
+
+// 叠加层的原点：坐标相对它来算，这样叠加层可以直接嵌在手机壳里，
+// 不受 fixed 定位 + 外壳 z-index/transform 的摆布（真机上 fixed 那版完全看不见）。
+let originEl: HTMLElement | null = null;
+
+/** 告诉 nav 叠加层挂在哪：坐标会变成相对它的偏移。 */
+export function setNavOrigin(el: HTMLElement | null): void {
+  originEl = el;
+  remeasureSoon();
+}
+
+function rectOf(el: HTMLElement): { x: number; y: number; w: number; h: number } {
+  const box = el.getBoundingClientRect();
+  const origin = originEl?.getBoundingClientRect();
+  return {
+    x: Math.round(box.left - (origin?.left ?? 0)),
+    y: Math.round(box.top - (origin?.top ?? 0)),
+    w: Math.round(box.width),
+    h: Math.round(box.height),
+  };
+}
+
+function remeasureSoon(): void {
+  setTimeout(() => remeasure(), 0);
+}
+
+function measure(el: HTMLElement | null): void {
+  if (!el) {
+    navFocus.set(null);
+    return;
+  }
+  const rect = rectOf(el);
+  navFocus.set({ label: labelOf(el), x: rect.x, y: rect.y, width: rect.w, height: rect.h });
 }
 
 function paint(el: HTMLElement | null): void {
@@ -49,11 +97,26 @@ function paint(el: HTMLElement | null): void {
     current.classList.remove('nav-focus');
   }
   current = el;
-  report(el);
-  if (!el) return;
+  report(el, el ? rectOf(el) : undefined);
+  if (!el) {
+    navFocus.set(null);
+    return;
+  }
   el.setAttribute('data-nav-focus', 'true');
   el.classList.add('nav-focus');
   el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  // 先立刻量一次，再在滚动落定后补一次。
+  // 不用 requestAnimationFrame：CEF 在窗口失焦时会把 rAF 节流到几乎不触发，
+  // 叠加层就永远画不出来（真机现象：只有元素自带的 outline，没有我们的框和标签）。
+  measure(el);
+  setTimeout(() => {
+    if (current === el) measure(el);
+  }, 0);
+}
+
+/** 列表滚动/窗口变化后重新贴住焦点（叠加层不跟随 DOM，必须自己重算）。 */
+export function remeasure(): void {
+  if (current) measure(current);
 }
 
 /** 把焦点放到第一个可聚焦元素（开屏、切 app 时用）。 */
