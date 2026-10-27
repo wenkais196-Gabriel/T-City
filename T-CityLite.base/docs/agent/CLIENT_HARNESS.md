@@ -5,6 +5,20 @@
 
 > 仅用于开发/测试环境。宿主 bridge 含 MCP token 和 RCON 密码，**不要提交**到仓库。
 
+## 0. 先确认这件事真的需要实机
+
+客户端逻辑的大部分性质**不需要**开游戏：`lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua`
+用 `tests/agent/lua/stubs/client.lua`（虚拟时钟 + 协程调度 + NUI 焦点/消息/回调 + 事件 + 原生桩）
+直接跑**未修改的**客户端 Lua，断言焦点三元组、控制禁用集合、忙循环预算、握手/ack 契约。
+
+必须先看真机的只有三类（详细矩阵见 [`design/06-client-model.md`](design/06-client-model.md) §3）：
+
+1. CEF 真实键鼠输入（本文 §1 的已知限制）；
+2. 原生渲染 / 物理 / 流式加载时序；
+3. GPU、编码、字体回退、TTS 语音包。
+
+换句话说：**先用无头桩把逻辑打绿，再来这里验证"看得见"的部分。**
+
 ## 1. 能力与边界
 
 | 能力 | 工具 | 说明 |
