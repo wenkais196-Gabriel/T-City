@@ -176,3 +176,12 @@ body {
     transform: scale(1) translateY(0);
   }
 }
+
+/* 键盘/手柄导航的焦点环（core/nav.ts 写 data-nav-focus + .nav-focus）。
+   以前只有 PoliceMDT 的刷新按钮自带 outline，其余按钮完全没有可见焦点。 */
+.nav-focus,
+[data-nav-focus='true'] {
+  outline: 2px solid var(--phone-accent, #6ea8ff);
+  outline-offset: 2px;
+  border-radius: 10px;
+}

@@ -26,6 +26,44 @@ async function box(page) {
 export const surfaceScenarios = [
   {
     surfaces: ['phone'],
+    name: '键盘/手柄导航：开屏即有焦点、方向键移动、确认打开 App、返回回桌面',
+    async run({ page }) {
+      const focused = () => page.locator('[data-nav-focus="true"]');
+      const gridTiles = () => page.locator('.app-icon-wrapper').count();
+
+      await openPhone(page, 'phone');
+      await page.waitForTimeout(200);
+      checkEqual('开屏后恰好一个焦点', await focused().count(), 1);
+      checkTruthy('焦点在手机里（不是 body）', (await page.locator('.phone-wrapper [data-nav-focus="true"]').count()) === 1);
+
+      const first = await focused().first().getAttribute('aria-label');
+      await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
+      await page.waitForTimeout(120);
+      const second = await focused().first().getAttribute('aria-label');
+      checkTruthy('方向键把焦点移到了另一个元素', first !== second);
+      checkEqual('移动后仍然只有一个焦点', await focused().count(), 1);
+
+      // 走到 Contacts 图标再确认；顺序由 DOM 决定，最多转一圈
+      for (let i = 0; i < 24; i += 1) {
+        const label = await focused().first().getAttribute('aria-label');
+        if (label === 'Contacts') break;
+        await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'move', dir: 'down' }, '*'));
+        await page.waitForTimeout(60);
+      }
+      checkEqual('焦点停在 Contacts 上', await focused().first().getAttribute('aria-label'), 'Contacts');
+      checkTruthy('确认前在桌面（有图标网格）', (await gridTiles()) > 0);
+
+      await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'activate' }, '*'));
+      await page.waitForTimeout(400);
+      checkEqual('确认键把 App 打开了（桌面网格消失）', await gridTiles(), 0);
+
+      await page.evaluate(() => window.postMessage({ action: 'phone:nav', kind: 'back' }, '*'));
+      await page.waitForTimeout(400);
+      checkTruthy('返回键回到桌面', (await gridTiles()) > 0);
+    },
+  },
+  {
+    surfaces: ['phone'],
     name: '按 M 时 NUI 不自己关（M 归 Lua，CEF 只是同时收到了这个键）',
     async run({ page }) {
       await openPhone(page, 'phone');

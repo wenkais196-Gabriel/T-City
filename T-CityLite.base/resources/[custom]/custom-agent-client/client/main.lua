@@ -216,6 +216,10 @@ local DEVCMD_ALLOWED = {
     '^tablet$',
     '^phone$',
     '^phonefix$',
+    -- 警用：值班状态与 911。这两个是 custom-police 的客户端命令，值班会把单位写进
+    -- police_units（MDT「单位」页与 /live/police/board 都读它），911 会建一条警情。
+    '^10%-[678]$',
+    '^911 [^%c;]{1,80}$',
 }
 
 local function devcmdAllowed(cmd)
