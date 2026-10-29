@@ -595,6 +595,83 @@ return {
                 'the officer-initiated dismissal must survive normalisation')
         end)
 
+            --- 清掉上一组用例留下的玩家：B4 的判定就是"还有几个在勤警察"，
+            --- 不隔离干净会把前一个用例的人一起数进去。
+            local function clearPlayers()
+                env.players = {}
+                env.peds = {}
+                env.entity_coords = {}
+            end
+
+        -- ------------------------------------------------------------------
+        -- B4：滥用防护（真人在场就不让 NPC 顶班）
+        -- ------------------------------------------------------------------
+
+        check('police_backup_min_real_cops refuses when enough officers are on duty', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            env.convars['police_backup_min_real_cops'] = '2'
+            clearPlayers()
+
+            local requester = env.makePlayer(61, 'BACKUP501', { cash = 0, bank = 0, crypto = 0 })
+            requester.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            for _, src in ipairs({ 62, 63 }) do
+                local other = env.makePlayer(src, 'BACKUP50' .. src, { cash = 0, bank = 0, crypto = 0 })
+                other.PlayerData.job = { name = 'police', onduty = true, grade = { level = 2 } }
+            end
+            env.mysql.push({ kind = 'query', result = {} })
+
+            local result = RequestBackup(61, 1)
+            assert(result.ok == false, 'two real officers on duty must block the NPC request')
+            assert(result.error == 'police_available',
+                'the error must be police_available, got ' .. tostring(result.error))
+            assert(budget.Get().used == 0, 'a refused request must not take a slot')
+            local row = lastAudit('backup.denied')
+            assert(row, 'the denial must be audited')
+            assert(tostring(row[5]):find('others=2', 1, true), 'detail must name the officer count')
+            env.convars['police_backup_min_real_cops'] = nil
+        end)
+
+        check('a lone officer may still call backup', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            env.convars['police_backup_min_real_cops'] = '2'
+            clearPlayers()
+
+            local requester = env.makePlayer(64, 'BACKUP502', { cash = 0, bank = 0, crypto = 0 })
+            requester.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            local other = env.makePlayer(65, 'BACKUP503', { cash = 0, bank = 0, crypto = 0 })
+            other.PlayerData.job = { name = 'police', onduty = true, grade = { level = 2 } }
+            env.mysql.push({ kind = 'query', result = {} })
+
+            local result = RequestBackup(64, 1)
+            assert(result.ok == true, 'one other officer is below the threshold, must be allowed')
+            assert(budget.Get().used == 1, 'an accepted request takes its slot')
+            env.convars['police_backup_min_real_cops'] = nil
+            budget.Release(result.request_id, 'test_cleanup')
+        end)
+
+        check('off-duty officers do not count as available', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            env.convars['police_backup_min_real_cops'] = '1'
+            clearPlayers()
+
+            local requester = env.makePlayer(66, 'BACKUP504', { cash = 0, bank = 0, crypto = 0 })
+            requester.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            local offDuty = env.makePlayer(67, 'BACKUP505', { cash = 0, bank = 0, crypto = 0 })
+            offDuty.PlayerData.job = { name = 'police', onduty = false, grade = { level = 3 } }
+            env.mysql.push({ kind = 'query', result = {} })
+
+            local result = RequestBackup(66, 1)
+            assert(result.ok == true, 'an off-duty officer must not block the request')
+            env.convars['police_backup_min_real_cops'] = nil
+            budget.Release(result.request_id, 'test_cleanup')
+        end)
+
         return { ok = failed == 0, data = { cases = results, failed = failed } }
     end,
 }
