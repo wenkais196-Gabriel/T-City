@@ -531,6 +531,28 @@ local backupPhases = {}
 -- ack_rejected 的采样窗口：同一条单 10 秒内最多记一条，避免伪造包把审计打爆。
 local ACK_REJECT_SAMPLE_MS = 10000
 
+-- 时间语义（S3）：服务端是唯一权威时钟 —— 客户端不再自己算寿命，只按
+-- `police:client:BackupEnd` 收尾。两套旧计时（客户端 5 分钟 / 预算 10 分钟）
+-- 互相不知道，是"名额被占着但没人管"的根源。
+local BACKUP_TTL_SECONDS = 300
+local BACKUP_ACK_TIMEOUT = { requested = 10, spawning = 15 } -- phase -> 秒
+local BACKUP_END_GRACE = 5
+local BACKUP_SWEEP_MS = 10000
+
+--- v2 开关（回滚用）：`setr police_backup_v2 0` 后 sweep 立即停手，客户端寿命照旧。
+local function backupV2Enabled()
+    return GetConvar('police_backup_v2', '1') == '1'
+end
+
+--- 寿命。`police_backup_ttl` 是**测试专用**覆盖（验收标准 4 要 20s 级别），
+--- 只接受 10–3600 的整数，其余一律回落到 300s —— 免得一条写错的 convar
+--- 把生产环境变成 1 秒回收。
+local function backupTtlSeconds()
+    local override = tonumber(GetConvar('police_backup_ttl', ''))
+    if override and override >= 10 and override <= 3600 then return math.floor(override) end
+    return BACKUP_TTL_SECONDS
+end
+
 --- Live backup budget entries owned by `citizenid` (at most two).
 local function backupSlots(citizenid)
     local owned = {}
@@ -644,6 +666,8 @@ function RequestBackup(source)
         cid = cid,
         source = src,
         at = now,
+        lastAck = now,
+        expiresAt = now + backupTtlSeconds(),
         entityCount = 0,
     }
 
@@ -736,6 +760,78 @@ RegisterNetEvent('police:server:backupAck', function(requestId, phase, entityCou
     end
 end)
 
+--- 释放一个被 sweep 判过期的单位：放名额、写 backup.expired、清阶段。
+--- 与 backupEnded 的区别是"谁发起的"：这里客户端可能已经卡死，所以审计里的
+--- phase/why/live 全部由服务端记，客户端不上报任何东西。
+local function expireBackupUnit(requestId, entry, why, now)
+    local cid = entry.cid
+    local phase = entry.phase
+    local source = entry.source
+    local live = now - (tonumber(entry.at) or now)
+
+    NPCBudget.Release(requestId, 'backup_expired')
+    backupPhases[requestId] = nil
+    if type(cid) == 'string' and backupSource[source] == cid and #backupSlots(cid) == 0 then
+        backupSource[source] = nil
+    end
+
+    if type(cid) ~= 'string' or cid == '' then return end
+    if not auditPlayer(cid, 'backup.expired', requestId,
+        ('phase=%s;why=%s;live=%d'):format(tostring(phase), tostring(why), live)) then
+        print(('[custom-police] backup.expired audit failed: %s (%s)'):format(
+            tostring(requestId), tostring(why)))
+    end
+end
+
+--- 一次 sweep（S3）。服务端是唯一权威时钟：到点先发 `BackupEnd` 让客户端收实体，
+--- 宽限 5 秒后再放名额 —— 这样"名额回收"不依赖客户端还活着，而"实体清理"
+--- 仍然由客户端完成（服务端拿不到实体句柄）。
+---
+--- 判过期的两个条件，任一命中就进入收尾：
+---   * `now >= expires_at`（寿命 300s，测试可用 `police_backup_ttl` 覆盖）
+---   * 当前阶段停太久：`requested` 10s（没等到 spawning）/ `spawning` 15s（没等到 enroute）
+---
+--- `now` 可注入，golden 用例用它伪造时钟；生产由 10 秒循环驱动。
+---@param now number|nil
+---@return number released 本次真正释放的单位数
+function BackupSweep(now)
+    if not backupV2Enabled() then return 0 end
+    now = tonumber(now) or os.time()
+    local ttl = backupTtlSeconds()
+    local released = 0
+
+    for requestId, entry in pairs(backupPhases) do
+        if entry.endingAt then
+            if now - entry.endingAt >= BACKUP_END_GRACE then
+                expireBackupUnit(requestId, entry, entry.expireWhy or 'expired', now)
+                released = released + 1
+            end
+        else
+            local expiresAt = tonumber(entry.expiresAt) or ((tonumber(entry.at) or now) + ttl)
+            local why
+            if now >= expiresAt then
+                why = 'ttl'
+            else
+                local limit = BACKUP_ACK_TIMEOUT[entry.phase]
+                if limit then
+                    local since = tonumber(entry.lastAck) or tonumber(entry.at) or now
+                    if now - since >= limit then
+                        why = 'ack_timeout:' .. tostring(entry.phase)
+                    end
+                end
+            end
+            if why then
+                entry.endingAt = now
+                entry.expireWhy = why
+                -- 先收再放：客户端收到 BackupEnd 才会删车删人。
+                TriggerClientEvent('police:client:BackupEnd', entry.source, requestId, 'expired')
+            end
+        end
+    end
+
+    return released
+end
+
 --- Live view of every backup unit the server is tracking (S6).
 --- Returns only what an operator/agent needs: no citizenid, no coordinates.
 function GetBackupState()
@@ -750,6 +846,7 @@ function GetBackupState()
             phase_age = now - (tonumber(entry.lastAck) or tonumber(entry.at) or now),
             entity_count = tonumber(entry.entityCount) or 0,
             rejected = tonumber(entry.rejectedCount) or 0,
+            ending = entry.endingAt ~= nil,
         }
     end
     table.sort(list, function(a, b) return (a.request_id or '') < (b.request_id or '') end)
@@ -816,6 +913,24 @@ AddEventHandler('playerDropped', function()
     for requestId, entry in pairs(backupPhases) do
         if entry.cid == cid then backupPhases[requestId] = nil end
     end
+end)
+
+-- Sweep 循环（S3）：10 秒一轮，`police_backup_v2 0` 时立刻停手（回滚开关）。
+-- 挂在 onResourceStart 上而不是加载期直接起：harness 会在加载后 Drain 线程，
+-- 加载期就起的死循环会撞上 `Wait() is not supported in the harness`（p0 的
+-- stale sweep 也是同样的写法）。
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    CreateThread(function()
+        Wait(BACKUP_SWEEP_MS)
+        while true do
+            local ok, err = pcall(BackupSweep)
+            if not ok then
+                print(('[custom-police] backup sweep failed: %s'):format(tostring(err)))
+            end
+            Wait(BACKUP_SWEEP_MS)
+        end
+    end)
 end)
 
 --- Best-effort notification for the citation created by an arrest. The arrest
@@ -1376,10 +1491,10 @@ RegisterCommand('police_backup_state', function(source)
         return
     end
     for _, unit in ipairs(units) do
-        print(('[custom-police] backup %s phase=%s src=%s age=%ss since_ack=%ss entities=%d rejected=%d'):format(
+        print(('[custom-police] backup %s phase=%s src=%s age=%ss since_ack=%ss entities=%d rejected=%d%s'):format(
             tostring(unit.request_id), tostring(unit.phase), tostring(unit.source),
             tostring(unit.age), tostring(unit.phase_age), tostring(unit.entity_count),
-            tostring(unit.rejected)))
+            tostring(unit.rejected), unit.ending and ' ending=true' or ''))
     end
 end, true)
 -- Outbox entry point for other police modules and the Lua harness. The caller
