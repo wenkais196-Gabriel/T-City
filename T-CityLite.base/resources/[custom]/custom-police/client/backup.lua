@@ -36,6 +36,16 @@ local function notifyServerEnded(requestId, reason)
     end)
 end
 
+--- 上报阶段（S2）：服务端只认"本 source 的活动单 + 阶段向前"，其余丢弃并采样。
+--- best-effort：ack 丢了只影响阶段指标与 S3 的超时判定，不能反过来让客户端停下
+--- 本地逻辑，更不能因为 pcall 失败把单位卡在 pending 里。
+local function ackPhase(requestId, phase, entityCount)
+    if type(requestId) ~= 'string' or requestId == '' then return end
+    pcall(function()
+        TriggerServerEvent('police:server:backupAck', requestId, phase, entityCount or 0, GetGameTimer())
+    end)
+end
+
 local function isDeadPed(ped)
     if not ped or ped == 0 or not DoesEntityExist(ped) then return true end
     if IsEntityDead(ped) then return true end
@@ -250,6 +260,9 @@ local function spawnBackup(requestId)
     }
     pending[requestId] = nil
     active[requestId] = state
+    -- 车 + 2 人都在手上才开始算"出发"：这是服务端 15s enroute 超时的锚点，
+    -- 也是生成成功率的分母/分子。
+    ackPhase(requestId, 'enroute', #state.peds + 1)
     CreateThread(function() runBackup(state) end)
 end
 
@@ -342,6 +355,8 @@ end
 local function beginFoot(state)
     state.phase = 'foot'
     state.footAt = GetGameTimer() + 1500
+    -- 到场：这是"平均到场时间"的唯一可信锚点（服务端看不到实体坐标）。
+    ackPhase(state.requestId, 'onscene', 0)
     local vehicle = state.vehicle
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return end
 
@@ -361,6 +376,11 @@ local function updateFoot(state, playerPed, now)
     local enemies = findEnemies(playerPed, state)
     if #enemies > 0 then
         state.combat = true
+        if not state.engagedAcked then
+            state.engagedAcked = true
+            -- 只报一次：engaged 是采样指标，不是状态机（它不影响权限）。
+            ackPhase(state.requestId, 'engaged', 0)
+        end
         for _, ped in ipairs(state.peds) do
             if validPed(ped) then
                 local target = closestEnemy(ped, enemies)
@@ -491,6 +511,9 @@ RegisterNetEvent('police:client:SpawnBackup', function(requestId)
     if type(requestId) ~= 'string' or requestId == '' or #requestId > 64 then return end
     if active[requestId] or pending[requestId] then return end
     pending[requestId] = true
+    -- 先报告"我收到了、开始生成"：服务端 10s 没等到这条就会判 expired（S3），
+    -- 所以它必须在任何模型加载/等待之前发出。
+    ackPhase(requestId, 'spawning', 0)
     CreateThread(function() spawnBackup(requestId) end)
 end)
 
