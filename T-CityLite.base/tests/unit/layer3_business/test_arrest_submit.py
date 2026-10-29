@@ -1132,7 +1132,8 @@ def test_request_backup_is_exported_gated_and_notifies_only_the_caller():
     assert "return fail('not_police')" in block
     assert "QBCore.Functions.GetPlayer(src)" in block
     # 响应级别落地后事件带整组 id，但仍然只发给调用者、id 仍然由服务端生成。
-    assert "TriggerClientEvent('police:client:SpawnBackup', src, requestIds[1], requestIds)" in block
+    # 事件带整组 id + "跟着谁"（B3），但目标仍然只有调用者。
+    assert "TriggerClientEvent('police:client:SpawnBackup', src, requestIds[1], requestIds, escortSource)" in block
     assert "return { ok = true, request_id = requestIds[1], request_ids = requestIds, tier = units }" in block
     # The request id is generated server-side, never accepted from the client.
     assert "local requestId = ('BU-%d-%d-%d'):format(src, now, backupSeq)" in block
