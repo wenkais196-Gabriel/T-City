@@ -237,14 +237,17 @@ return {
             end
 
             --- 造一个真正的警察玩家并发一次请求；返回 requestId。
-            local function requestBackup(source, citizenid)
+            local function requestBackup(source, citizenid, tier)
                 local player = env.makePlayer(source, citizenid, { cash = 0, bank = 0, crypto = 0 })
                 player.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
                 env.mysql.push({ kind = 'query', result = {} })
-                local result = RequestBackup(source)
+                if tier then
+                    for _ = 2, tier do env.mysql.push({ kind = 'query', result = {} }) end
+                end
+                local result = RequestBackup(source, tier)
                 assert(type(result) == 'table' and result.ok == true,
                     'request must be admitted, got ' .. tostring(result and result.error))
-                return result.request_id
+                return result.request_id, result
             end
 
             --- 清空客户端事件记录。
@@ -524,6 +527,63 @@ return {
             askTargets(49)
             assert(targetEvents() == 2, 'a later ask must be answered again')
             budget.Release('BU-49-1', 'test_cleanup')
+        end)
+
+        -- ------------------------------------------------------------------
+        -- B1：响应级别（一次叫几辆车）
+        -- ------------------------------------------------------------------
+
+        check('tier 2 spawns two units and charges two slots', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            local firstId, result = requestBackup(51, 'BACKUP401', 2)
+
+            assert(result.tier == 2, 'result must report the tier, got ' .. tostring(result.tier))
+            assert(#result.request_ids == 2, 'tier 2 must produce two request ids')
+            assert(firstId == result.request_ids[1], 'request_id must be the first unit')
+            assert(budget.Get().used == 2, 'two units must charge two slots, used=' .. tostring(budget.Get().used))
+
+            local ids = {}
+            for _, unit in ipairs(GetBackupState()) do ids[unit.request_id] = true end
+            assert(ids[result.request_ids[1]] and ids[result.request_ids[2]],
+                'both units must be tracked in the phase table')
+
+            local event = lastClientEvent('police:client:SpawnBackup')
+            assert(event, 'the client must be told to spawn')
+            assert(event.args[1] == result.request_ids[1], 'first arg must stay the primary id')
+            assert(type(event.args[2]) == 'table' and #event.args[2] == 2,
+                'the second arg must carry the whole group')
+        end)
+
+        check('an out-of-range tier is clamped to the slot cap', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            local _, result = requestBackup(52, 'BACKUP402', 9)
+            assert(result.tier == 2, 'tier must clamp to BACKUP_MAX_UNITS, got ' .. tostring(result.tier))
+            assert(budget.Get().used == 2, 'clamped tier still costs two slots')
+        end)
+
+        check('a half-filled squad is rolled back, not half-spawned', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            -- 先占掉一个槽（模拟同一名警官已经有一辆车在场）
+            local holder = env.makePlayer(53, 'BACKUP403', { cash = 0, bank = 0, crypto = 0 })
+            holder.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            assert(budget.Acquire('backup', 'BU-HOLD-1', 'BACKUP403') == true)
+            env.mysql.push({ kind = 'query', result = {} })
+
+            local result = RequestBackup(53, 2)
+            assert(result.ok == false, 'tier 2 with one slot free must fail')
+            assert(result.error == 'limit', 'the error must be limit, got ' .. tostring(result.error))
+            assert(budget.Get().used == 1, 'the held slot must be the only one left, used=' ..
+                tostring(budget.Get().used))
+            assert(#GetBackupState() == 0, 'no phase entry may survive a rollback')
+            assert(lastClientEvent('police:client:SpawnBackup') == nil,
+                'a rolled back request must not spawn anything')
+            budget.Release('BU-HOLD-1', 'test_cleanup')
         end)
 
         return { ok = failed == 0, data = { cases = results, failed = failed } }

@@ -1131,8 +1131,9 @@ def test_request_backup_is_exported_gated_and_notifies_only_the_caller():
     assert "PolicePolicy.Can(actor, 'incident.update')" in block
     assert "return fail('not_police')" in block
     assert "QBCore.Functions.GetPlayer(src)" in block
-    assert "TriggerClientEvent('police:client:SpawnBackup', src, requestId)" in block
-    assert "return { ok = true, request_id = requestId }" in block
+    # 响应级别落地后事件带整组 id，但仍然只发给调用者、id 仍然由服务端生成。
+    assert "TriggerClientEvent('police:client:SpawnBackup', src, requestIds[1], requestIds)" in block
+    assert "return { ok = true, request_id = requestIds[1], request_ids = requestIds, tier = units }" in block
     # The request id is generated server-side, never accepted from the client.
     assert "local requestId = ('BU-%d-%d-%d'):format(src, now, backupSeq)" in block
 
@@ -1141,17 +1142,23 @@ def test_request_backup_enforces_cooldown_and_unified_budget():
     src = read(POLICE / "server/p2_system.lua")
     block = backup_request_block()
     assert "BACKUP_COOLDOWN = 60" in src
-    assert "BACKUP_MAX_UNITS" not in src
+    # 响应级别用的夹取常量（一次最多两辆车 = 两个槽），不是每玩家计数器：
+    # 真正的上限仍然只由 NPCBudget 的 2 槽判定。
+    assert "local BACKUP_MAX_UNITS = 2" in src
+    assert "if units > BACKUP_MAX_UNITS then units = BACKUP_MAX_UNITS end" in block
     assert "backupUnitCount" not in src
     assert "if now - last < BACKUP_COOLDOWN then return fail('cooldown') end" in block
     # FIT-07: the per-citizen cap now comes from the shared budget (2 slots).
     assert "NPCBudget.Acquire('backup', requestId, cid)" in block
-    assert "if budgetError == 'player_limit' then return fail('limit') end" in block
-    assert "return fail(budgetError or 'limit')" in block
+    assert "if budgetError == 'player_limit' then return rollback('limit') end" in block
+    assert "return rollback(budgetError or 'limit')" in block
     # The budget entry is the reservation: it is released if the audit cannot
     # be written or the player left while the audit insert was in flight.
-    assert "NPCBudget.Release(requestId, 'audit_unavailable')" in block
-    assert "NPCBudget.Release(requestId, 'player_left')" in block
+    # 审计写不进 / 玩家中途离开：走 rollback，把这一组已经拿到的槽全部退回。
+    assert "local function rollback(errorCode)" in block
+    assert "NPCBudget.Release(id, 'request_rollback')" in block
+    assert "return rollback('audit_unavailable')" in block
+    assert "return rollback('not_police')" in block
     assert "backupCooldown[cid] = previousCooldown" in block
     assert "stillThere.PlayerData.citizenid ~= cid" in block
 
@@ -1159,7 +1166,7 @@ def test_request_backup_enforces_cooldown_and_unified_budget():
 def test_request_backup_audits_with_citizenid_and_unit_id():
     block = backup_request_block()
     assert "auditPlayer(cid, 'backup.request', cid, requestId)" in block
-    assert "return fail('audit_unavailable')" in block
+    assert "return rollback('audit_unavailable')" in block
 
 
 def test_backup_does_not_create_player_units_or_sentence_anyone():

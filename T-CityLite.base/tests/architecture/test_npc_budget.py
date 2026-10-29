@@ -100,24 +100,30 @@ def test_server_module_implements_acquire_release_sweep_get_and_audit():
 def test_backup_acquires_and_releases_through_the_budget():
     src = read(P2)
     assert "NPCBudget.Acquire('backup', requestId, cid)" in src
-    assert "NPCBudget.Release(requestId, 'audit_unavailable')" in src
-    assert "NPCBudget.Release(requestId, 'player_left')" in src
+    # 审计失败 / 玩家离开 / 半支队伍：rollback 必须把这一组槽全部退回。
+    assert "NPCBudget.Release(id, 'request_rollback')" in src
     assert "NPCBudget.Release(requestId, 'backup_ended')" in src
     assert "releaseBackupSlots(cid, 'player_dropped')" in src
     # The old per-citizen table is gone: the budget is the only counter.
     assert "backupUnits" not in src
-    assert "BACKUP_MAX_UNITS" not in src
+    # BACKUP_MAX_UNITS 只是"一次响应最多几辆车"的夹取常量（每车 1 槽），
+    # 真正的每人上限仍然只由预算判定，所以这里断言它是个常量而不是计数器。
+    assert "local BACKUP_MAX_UNITS = 2" in src
+    assert "if units > BACKUP_MAX_UNITS then units = BACKUP_MAX_UNITS end" in src
     assert "BACKUP_COOLDOWN = 60" in src
 
 
 def test_backup_binds_source_before_the_yielding_acquire():
     """A drop during the budget's audit insert must still find the reservation."""
     src = read(P2)
-    bind = src.index("backupSource[src] = cid\n\n    local admitted")
+    bind = src.index("backupSource[src] = cid")
     acquire = src.index("local admitted, budgetError = NPCBudget.Acquire('backup'")
     assert bind < acquire
-    # Restoring the previous mapping must not resurrect one playerDropped cleared.
-    assert src.count("if backupSource[src] == cid then backupSource[src] = previousSource end") == 3
+    # 恢复映射只允许出现在 rollback 里，且不能复活 playerDropped 已经清掉的映射。
+    rollback_at = src.index("local function rollback(errorCode)")
+    restore = "if backupSource[src] == cid then backupSource[src] = previousSource end"
+    restore_at = src.index(restore)
+    assert rollback_at < restore_at, "恢复映射只允许出现在 rollback 里"
 
 
 def test_callout_acquires_and_releases_through_the_budget():
