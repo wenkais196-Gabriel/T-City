@@ -90,7 +90,7 @@ FIT-07 规则原文要求「客户端实体创建只允许出现在 `T-CityLite.
 | 建单/表 | 只写自己的 `scenario_*` 表（运行记录/事件） | `police_incidents`/`police_incident_units` 归 `custom-police`（`tests/architecture/table_owners.json` 里 `custom-police` 拥有 `police_*`）；引擎通过 `owner_ref` 关联，不跨写 |
 | UI | 不碰 NUI/手机/看板。只给阶段告警事件 | MDT/手机/blip/3D 提示归 `custom-police`、`custom-phone`；引擎的客户端 runner 只负责实体与任务，不画任何 UI |
 | 权限 | 只校验「这个 source 是否拥有这条 pushed scene」（session 归属） | 业务权限（在勤、警衔、ACE、是否 cartel 成员）归调用方：`custom-police` 的 `PolicePolicy`，`custom-cartel` 的 `CartelService.IsMember`（`server/npc_manager.lua:21,51`） |
-| 寻路算法本身 | 不实现。只调用导航系统并做「可达性校验」（§4.6） | GTA 客户端导航（native 标 `[待核实]`） |
+| 寻路算法本身 | 不实现。只调用导航系统并做「可达性校验」（§4.6） | GTA 客户端导航（PATHFIND 全部 client-only） |
 | 静态 NPC | 不接常驻静态 NPC（结论见 §7） | `custom-cartel/client/main.lua:40-70` 维持现状 |
 
 ---
@@ -141,16 +141,20 @@ Edge = { from = 'suspect_1', to = 'flee_point', mode = 'run' }  -- mode ∈ walk
 
 ### 4.2 动作枚举（每项注明在哪端实现）
 
-| 动作 | 哪一端实现 | 说明 | 本地已有 / `[待核实]` |
+| 动作 | 哪一端实现 | 说明 | 本地已有 / 客户端 native |
 |---|---|---|---|
-| `walk` | P2 | 步行到下一节点。服务端只记阶段 | `TaskGoToCoordAnyMeans` `[待核实]`（本地无此名） |
-| `run` | P2 | 跑步到下一节点（追击/逃离） | 同上 `[待核实]` |
-| `drive` | P2 | 上车开往下一节点；需要场景里已有 vehicle | `TaskVehicleDriveToCoord` `[待核实]`（本地无此名） |
+| `walk` | P2 | 步行到下一节点。服务端只记阶段 | `TaskGoToCoordAnyMeans` （客户端；本地未用过） |
+| `run` | P2 | 跑步到下一节点（追击/逃离） | 同上 |
+| `drive` | P2 | 上车开往下一节点；需要场景里已有 vehicle | `TaskVehicleDriveToCoord` （客户端；本地未用过） |
 | `idle` | P2 | 原地停留 `duration_ms` 或 scenario 动画 | `TaskStartScenarioInPlace`（本地已有：`custom-police/client/npc_callouts.lua:222`） |
-| `aim` | P2 | 举枪瞄准某目标/方向 | `TaskAimGunAtEntity` / `TaskGunAimedAtCoord` `[待核实]`（本地无） |
-| `loot` | P2（动画）+ P3（效果） | 客户端只放动作，实际「拿了什么」是调用方服务端 effect，绝不让客户端写结果 | 动画 `TaskStartScenarioInPlace` `[待核实]`；效果走调用方导出 |
+| `aim` | P2 | 举枪瞄准某目标/方向 | `TaskAimGunAtEntity` / `TaskGunAimedAtCoord` （客户端；本地未用过） |
+| `loot` | P2（动画）+ P3（效果） | 客户端只放动作，实际「拿了什么」是调用方服务端 effect，绝不让客户端写结果 | 动画 `TaskStartScenarioInPlace`（本地已有）；效果走调用方导出 |
 | `flee` | P2 | 逃离玩家 | `TaskSmartFleePed`（本地已有：`client/npc_callouts.lua:367`） |
 | `despawn` | P2（删实体）+ P3（放预算 + 记结束） | 客户端删实体，服务端 `Release` + audit | `DeleteEntity`/`DeleteVehicle`（本地已有：`client/npc_callouts.lua:98-109`） |
+
+**这些动作一律由客户端执行**：服务端的 `Task*` 是 RPC，会转发给当前拥有该实体的客户端、**可能失败**，
+且实体在客户端之间迁移后任务会丢失（重发造成 rubber-band）。所以服务端只发"意图 + 阶段"，客户端自己
+task；重发由 `GetScriptTaskStatus`（1 执行中 / 3 空闲 / 7 完成或不存在）门控，而不是每次 tick 重发。
 
 `hostile`（战斗）不单列成一个动作，而是节点 `tags` 里的一个策略：客户端对带 `hostile` 的 ped 在玩家进入射程后套 `TaskCombatPed`（本地已有：`client/npc_callouts.lua:372`）。这样「动作 = 意图」与「战斗 = 策略」分开，避免枚举膨胀。
 
@@ -183,19 +187,23 @@ Edge = { from = 'suspect_1', to = 'flee_point', mode = 'run' }  -- mode ∈ walk
 
 双层拉回，阈值放 P0 常量（默认 `LEASH_SOFT=120.0m`、`LEASH_HARD=180.0m`、`LEASH_GRACE=10s`）：
 
-1. **软拉回**：客户端每 tick 取每个 ped 距锚点最大距离；超过 `LEASH_SOFT` → 重新下发「回最近在界节点」的移动任务（`TaskGoToCoord*` `[待核实]`）。
+1. **软拉回**：客户端每 tick 取每个 ped 距锚点最大距离；超过 `LEASH_SOFT` → 重新下发「回最近在界节点」的移动任务（`TaskGoToCoordAnyMeans`，客户端执行；重发由 `GetScriptTaskStatus` 门控）。
 2. **硬拉回**：软拉回 `LEASH_GRACE` 后仍超 `LEASH_HARD` → 把 ped 重定位到锚点/最近可行走节点（重定位用「删除重建」而非瞬时传送，避免瞬移穿墙；重建走 §4.6 的可达性探测）。
 
 同时修掉现状的一个 bug：场景放弃计时从「玩家离中心」改为「NPC 离中心」——`client/npc_callouts.lua:491-499` 现在只看玩家位置，`02-state-machines.md:852` 已记这个缺陷。
 
 ### 4.6 可达性（客户端生成模式下保证 NPC 真能走通）
 
-服务端没有 navmesh，只能做两件事：授权锚点 + 记录失败。真正保证可达的活全在客户端 `scene_ready` 之前完成。需要求导航系统做的事（**不臆造 native 名**，具体函数一律 `[待核实]`）：
+服务端没有 navmesh，只能做两件事：授权锚点 + 记录失败。真正保证可达的活全在客户端 `scene_ready` 之前完成。
+
+**已核实（2026-10-29）**：PATHFIND 命名空间的 59 个 native **全部是 client-only，服务端 0 个**
+（[cfxnatives 过滤](https://cfxnatives.dev/natives?namespace=PATHFIND&side=server)）。所以这一节不是
+"选哪个 native"，而是"这些判断只能在客户端做"，服务端只接收结论。具体函数：
 
 1. 给定 `(x, y)` 返回最近可行走面的 z（本地已有 `GetGroundZFor_3dCoord`，`client/npc_callouts.lua:80`；但它只给地面高度，不等于「可行走」）。
-2. 判断两点之间是否存在行人可行路径，返回布尔（`[待核实]`）。
-3. 把离路太远的节点吸附到最近道路/人行道点（`[待核实]`）。
-4. 对 `drive` 动作返回最近可通行车道点与朝向（`[待核实]`）。
+2. 判断两点之间是否存在行人可行路径：`CalculateTravelDistanceBetweenPoints`（客户端；近似值，失败时返回兜底值，只能当"明显不可达"的粗筛）。
+3. 把离路太远的节点吸附到最近道路/人行道点：`GetClosestVehicleNodeWithHeading` / `GetNthClosestVehicleNodeWithHeading`——**节点未 streamed 时直接返回 false**，所以必须先 `AddNavmeshRequiredRegion` 再查，且失败即视为不可达。
+4. 对 `drive` 动作返回最近可通行车道点与朝向：同上（`GetClosestVehicleNodeWithHeading` 的 `outHeading`），并配合 `IsPointOnRoad` 做二次确认。
 
 流程：客户端收到 `scenario:client:Push` → 对每个节点做「z 吸附 + 两点可行走校验」→ 全部通过才 `Ack(runId,'ready')` → 任一失败回 `Ack(runId,'reachability_failed', {node_id})`，服务端换锚点重推或置 `failed`。这样「真能走通」变成一次可观测的 ack，而不是寄希望于生成时运气。
 
