@@ -518,6 +518,7 @@ end
 -- FIT-07 NPC budget (server/npc_budget.lua): the budget enforces the global
 -- 6-slot cap and the per-citizen 2-slot cap that used to live in this file.
 -- ---------------------------------------------------------------------------
+local BACKUP_MAX_UNITS = 2 -- 每人两个槽；一次响应最多两辆车
 local BACKUP_COOLDOWN = 60
 local backupCooldown = {} -- [citizenid] = os.time() of the last accepted request
 local backupSource = {}   -- [source] = citizenid, kept while any slot remains
@@ -614,7 +615,7 @@ end
 --- back through `police:server:backupEnded` when it cleans the unit up.
 ---@param source number
 ---@return table { ok=true, request_id } | { ok=false, error }
-function RequestBackup(source)
+function RequestBackup(source, tier)
     local src = tonumber(source) or 0
     local actorPlayer = QBCore.Functions.GetPlayer(src)
     local actor = actorPlayer and actorPlayer.PlayerData
@@ -628,10 +629,15 @@ function RequestBackup(source)
     local last = tonumber(backupCooldown[cid]) or 0
     if now - last < BACKUP_COOLDOWN then return fail('cooldown') end
 
-    backupSeq = backupSeq + 1
-    local requestId = ('BU-%d-%d-%d'):format(src, now, backupSeq)
+    -- 响应级别（B1）：1 = 一辆车两人；2 = 两辆车四人（正好用满每人的 2 个槽）。
+    -- 调用方（MDT / agent）可以显式给 tier；没给就吃 convar 的默认值。
+    -- 一次请求 = tier 个独立单位，各有自己的 requestId / 预算槽 / 阶段条目。
+    local units = tonumber(tier) or tonumber(GetConvar('police_backup_default_tier', '1')) or 1
+    units = math.floor(units)
+    if units < 1 then units = 1 end
+    if units > BACKUP_MAX_UNITS then units = BACKUP_MAX_UNITS end
 
-    -- Reserve the budget slot before the yielding audit insert: the budget
+    -- Reserve the budget slots before the yielding audit insert: the budget
     -- itself is the reservation, so two requests in the same tick cannot both
     -- pass the limit check. Bind the source first: playerDropped can run while
     -- the budget audit suspends, and it must be able to find this reservation.
@@ -639,56 +645,68 @@ function RequestBackup(source)
     local previousCooldown = backupCooldown[cid]
     backupSource[src] = cid
 
-    local admitted, budgetError = NPCBudget.Acquire('backup', requestId, cid)
-    if not admitted then
-        -- Do not clear a mapping that belongs to an earlier live unit; do not
-        -- resurrect one that playerDropped already cleared.
+    local requestIds = {}
+
+    --- 半支队伍比没有更糟：任何一个单位抢不到槽/写不进审计，就把已经拿到的全部退回去。
+    local function rollback(errorCode)
+        for _, id in ipairs(requestIds) do
+            NPCBudget.Release(id, 'request_rollback')
+            backupPhases[id] = nil
+        end
         if backupSource[src] == cid then backupSource[src] = previousSource end
-        if budgetError == 'player_limit' then return fail('limit') end
-        return fail(budgetError or 'limit')
+        backupCooldown[cid] = previousCooldown
+        return fail(errorCode)
     end
+
+    for index = 1, units do
+        backupSeq = backupSeq + 1
+        local requestId = ('BU-%d-%d-%d'):format(src, now, backupSeq)
+
+        local admitted, budgetError = NPCBudget.Acquire('backup', requestId, cid)
+        if not admitted then
+            if budgetError == 'player_limit' then return rollback('limit') end
+            return rollback(budgetError or 'limit')
+        end
+        requestIds[#requestIds + 1] = requestId
+
+        if not auditPlayer(cid, 'backup.request', cid, requestId) then
+            return rollback('audit_unavailable')
+        end
+
+        -- The audit insert yields; do not spawn for a player who left meanwhile
+        -- (or whose server id was reused by someone else in the meantime).
+        local stillThere = QBCore.Functions.GetPlayer(src)
+        if not stillThere or stillThere.PlayerData.citizenid ~= cid then
+            return rollback('not_police')
+        end
+
+        -- Phase starts at `requested` on the server side before the client is
+        -- even told to spawn: that is the anchor S3's sweep measures the 10s ack
+        -- timeout against, and it must exist even if the client never answers.
+        backupPhases[requestId] = {
+            phase = 'requested',
+            cid = cid,
+            source = src,
+            at = now,
+            lastAck = now,
+            expiresAt = now + backupTtlSeconds(),
+            entityCount = 0,
+            -- 请求者当时所在的实例（routing bucket）。bucket 是"实例化"工具而不是
+            -- 可见性范围（官方 cookbook 原话），所以支援单位**不**做桶隔离：
+            -- 请求者在 0 号桶时，警车对所有人在同一个世界里，这才是 RP 该有的样子；
+            -- 请求者本身在私有桶里时，客户端建出来的实体天然只在那个桶里可见。
+            -- 这里记下来是为了让运维/agent 能分辨"这单在哪个实例里"。
+            bucket = playerBucket(src),
+            tier = units,
+            unit_index = index,
+        }
+    end
+
     backupCooldown[cid] = now
-
-    if not auditPlayer(cid, 'backup.request', cid, requestId) then
-        NPCBudget.Release(requestId, 'audit_unavailable')
-        if backupSource[src] == cid then backupSource[src] = previousSource end
-        backupCooldown[cid] = previousCooldown
-        return fail('audit_unavailable')
-    end
-
-    -- The audit insert yields; do not spawn for a player who left meanwhile
-    -- (or whose server id was reused by someone else in the meantime).
-    local stillThere = QBCore.Functions.GetPlayer(src)
-    if not stillThere or stillThere.PlayerData.citizenid ~= cid then
-        NPCBudget.Release(requestId, 'player_left')
-        if backupSource[src] == cid then backupSource[src] = previousSource end
-        backupCooldown[cid] = previousCooldown
-        return fail('not_police')
-    end
-
-    -- Phase starts at `requested` on the server side before the client is even
-    -- told to spawn: that is the anchor S3's sweep measures the 10s ack timeout
-    -- against, and it must exist even if the client never answers.
-    backupPhases[requestId] = {
-        phase = 'requested',
-        cid = cid,
-        source = src,
-        at = now,
-        lastAck = now,
-        expiresAt = now + backupTtlSeconds(),
-        entityCount = 0,
-        -- 请求者当时所在的实例（routing bucket）。bucket 是"实例化"工具而不是
-        -- 可见性范围（官方 cookbook 原话），所以支援单位**不**做桶隔离：
-        -- 请求者在 0 号桶时，警车对所有人在同一个世界里，这才是 RP 该有的样子；
-        -- 请求者本身在私有桶里时，客户端建出来的实体天然只在那个桶里可见。
-        -- 这里记下来是为了让运维/agent 能分辨"这单在哪个实例里"。
-        bucket = playerBucket(src),
-    }
-
-    TriggerClientEvent('police:client:SpawnBackup', src, requestId)
-    return { ok = true, request_id = requestId }
+    -- 只发一次事件，把整组 id 交给客户端；客户端依次生成并错开停车位。
+    TriggerClientEvent('police:client:SpawnBackup', src, requestIds[1], requestIds)
+    return { ok = true, request_id = requestIds[1], request_ids = requestIds, tier = units }
 end
-
 --- Client reports "how far I got" for one of its own units (S2).
 ---
 --- Contract: only the caller's own live unit, only a phase from the contract's
