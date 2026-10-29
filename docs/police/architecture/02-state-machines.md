@@ -719,7 +719,7 @@ justice_sentences (
 2. **TTL 与生命周期脱钩**（2026-10-29 修正：原先写的“无 TTL”已过时）：`NPCBudget` 有 `TTL_SECONDS = 600` 与 `Sweep()`（`server/npc_budget.lua:77-90`，超时释放并写 `npc.stale` 审计），名额不会永久泄漏。真正的缺口是**两套计时互不知道**：客户端 5 分钟（`client/backup.lua:22`）比预算 10 分钟短，Sweep 释放名额后**不会通知客户端清理实体**；反过来客户端卡死时名额要等满 10 分钟才回收。
 3. **无生成确认**：服务端 `TriggerClientEvent` 后立即认为成功；模型缺失/实体创建失败只靠客户端回报，服务端没有超时兜底。
 4. **无结束审计/指标**：只有 `backup.request`；无法算成功率、平均存活时长、战斗率、异常结束原因。
-5. ~~**上限是“每警员 2 个”，不是全局**，48 人可生成 96 个 NPC~~（2026-10-29 修正：已不成立）。`NPCBudget.MAX_GLOBAL = 6`，且 `CanAcquire` 超限返回 `global_limit`（`shared/npc_budget.lua:15,68-88`），backup 走同一个预算。剩下的是**计量口径**问题：预算按“实体槽位”计（backup=1、callout=2），不是“支队长眼里的一个单位”。
+5. ~~**上限是“每警员 2 个”，不是全局**，48 人可生成 96 个 NPC~~（2026-10-29 修正：已不成立）。`NPCBudget.MAX_GLOBAL = 6`，且 `CanAcquire` 超限返回 `global_limit`（`shared/npc_budget.lua:15,68-88`），backup 走同一个预算。全服目标 ≤6 已由 `MAX_GLOBAL` 强制，剩下的是**计量口径**问题：预算按“实体槽位”计（backup=1、callout=2），不是“支队长眼里的一个单位”。
 6. **实体只在请求者客户端生成**：其他玩家是否看到取决于 OneSync 实体所有权/范围，服务端没有校验；这是设计取舍，但必须在文档/UI 说明“支援是本地表现”，否则会被当成全服单位。
 7. **`request_id` 不落库**：MDT 只显示一个字符串（`PoliceMDT.svelte:349-367`），刷新/重进后无法追踪。
 
