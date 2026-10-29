@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 169,
+  "max_unproven": 170,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -37,6 +37,12 @@
       "max_unproven": 169,
       "previous": 168,
       "why": "新增撤离闸门（1 条规则：到点必须开走而不是原地删车）"
+    },
+    {
+      "date": "2026-10-29",
+      "max_unproven": 170,
+      "previous": 169,
+      "why": "新增指挥闸门（1 条：/backup 只作用于自己的单位、dismiss 必须回报原因）"
     }
   ]
 }

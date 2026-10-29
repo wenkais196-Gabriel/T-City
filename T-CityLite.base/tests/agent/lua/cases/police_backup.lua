@@ -586,6 +586,15 @@ return {
             budget.Release('BU-HOLD-1', 'test_cleanup')
         end)
 
+        -- ------------------------------------------------------------------
+        -- B2：指挥（dismiss 是白名单原因）
+        -- ------------------------------------------------------------------
+
+        check('dismissed is a client-reportable reason', function()
+            assert(BackupContract.NormalizeReason('dismissed') == 'dismissed',
+                'the officer-initiated dismissal must survive normalisation')
+        end)
+
         return { ok = failed == 0, data = { cases = results, failed = failed } }
     end,
 }
