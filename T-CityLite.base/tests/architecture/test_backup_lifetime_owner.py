@@ -90,3 +90,29 @@ def test_sweep_sends_backup_end_before_releasing(server_source: str) -> None:
     assert "NPCBudget.Release" not in branch and "expireBackupUnit(" not in branch, (
         "到点那一轮不能直接放名额：释放要等下一轮过了 BACKUP_END_GRACE"
     )
+
+def test_expiry_retreats_instead_of_deleting_in_place(client_source: str) -> None:
+    """到点不许在玩家眼前原地删车（S8）。
+
+    开源实现（Mooreiche/AIBackup 等）的通行做法是让单位开走再让引擎自然回收，
+    而不是 `DeleteEntity` —— 后者在真机上就是"警车凭空消失"。这里钉住三件事：
+    BackupEnd 必须走撤离、撤离必须用 wander + 交给引擎、撤离必须有硬上限
+    （否则实体可能永远不消失）。
+    """
+    handler_at = client_source.find("RegisterNetEvent('police:client:BackupEnd'")
+    assert handler_at != -1, "BackupEnd 处理器不见了"
+    handler = client_source[handler_at:handler_at + 1400]
+    assert "beginRetreat(state" in handler, "到点必须走撤离，而不是直接 cleanup"
+
+    begin_at = client_source.find("local function beginRetreat")
+    assert begin_at != -1, "找不到 beginRetreat"
+    end_at = client_source.find("local function updateRetreat", begin_at)
+    assert end_at != -1, "找不到 updateRetreat"
+    body = client_source[begin_at:end_at]
+    assert "TaskVehicleDriveWander" in body, "撤离必须真的把车开走"
+    assert "SetEntityAsNoLongerNeeded" in body, "撤离要把实体交回引擎回收"
+
+    update = client_source[end_at:client_source.find("local function createBlip", end_at)]
+    assert "RETREAT_TIMEOUT_MS" in update, "撤离必须有硬超时，否则实体可能永远不消失"
+    assert "RETREAT_DESPAWN_RADIUS" in update, "撤离要按距离判定（开远了才删）"
+    assert "cleanup(" in update, "撤离结束（车没了/开远了/超时）必须真的清理"
