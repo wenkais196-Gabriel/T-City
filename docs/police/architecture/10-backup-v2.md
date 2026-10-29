@@ -233,7 +233,7 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1、S2 已实施并真机验证**（2026-10-29）。S3–S5 未开始。证据见下方「S1 真机记录」与 S2 的补充读数。
+> 进度：**S1、S2、S3 已实施并真机验证**（2026-10-29）。S4–S5 未开始。证据见下方三段真机记录。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
@@ -245,6 +245,21 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 `live=301` 是服务端用预算条目的 `at` 算出来的存活秒数（5 分钟 + 1 秒轮询偏差），
 说明"原因 + 时长"这条路端到端通了；白名单外的原因由 golden 用例覆盖（记 `unknown`）。
+
+**S3 真机读数（2026-10-29，`police_backup_ttl 25` 把寿命压到 25s）**
+
+```
+191 backup.request  BU-1-1793299404-1                              18:43:24
+192 backup.spawned  BU-1-1793299404-1  entities=3;took=0           18:43:24
+194 backup.expired  BU-1-1793299404-1  phase=enroute;why=ttl;live=38  18:44:02
+```
+
+控制台逐 5 秒读数：`enroute`（age 7/14/21/28s）→ t+25s 出现 `ending=true`（BackupEnd 已发、宽限中、
+名额仍占着）→ t+30s `no live units`（宽限过、名额释放）。客户端日志同一单：
+`[custom-police] backup BU-1-1793299404-1 cleaned (reason=expired)` —— 实体确实是由客户端删的。
+
+`live=38` 而不是 25，是因为 sweep 每 10 秒一轮：过期在下一轮（≤+10s）被发现，宽限 5s 再等下一轮
+（≤+10s）才释放，所以实际释放在 `ttl … ttl+25s` 之间，这是设计内的抖动。
 
 **S2 真机读数（2026-10-29，同一次会话）**
 

@@ -24,6 +24,7 @@ return {
         local resource = 'T-CityLite.base/resources/[custom]/custom-police'
         dofile(resource .. '/shared/backup_contract.lua')
         dofile(resource .. '/shared/npc_budget.lua')
+        dofile(resource .. '/shared/policy.lua')
         dofile(resource .. '/server/npc_budget.lua')
         dofile(resource .. '/server/audit.lua')
         dofile(resource .. '/server/p2_system.lua')
@@ -218,6 +219,152 @@ return {
                         'GetBackupState must not expose ' .. forbidden)
                 end
                 budget.Release('BU-27-1', 'test_cleanup')
+            end)
+
+            -- ------------------------------------------------------------------
+            -- S3：服务端 sweep（寿命 / ack 超时 / 先收再放）
+            -- ------------------------------------------------------------------
+
+            --- 把上一组用例留下的名额与阶段清干净。
+            --- sweep 会把阶段表里的单走完宽限，剩下的"没有阶段条目"的残留名额
+            --- （例如"外单不能释放"那条故意不还的）再逐个释放。
+            local function drainAll()
+                BackupSweep(os.time() + 100000)
+                BackupSweep(os.time() + 100010)
+                for _, entry in ipairs(budget.Get().entries) do
+                    budget.Release(entry.id, 'test_drain')
+                end
+            end
+
+            --- 造一个真正的警察玩家并发一次请求；返回 requestId。
+            local function requestBackup(source, citizenid)
+                local player = env.makePlayer(source, citizenid, { cash = 0, bank = 0, crypto = 0 })
+                player.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+                env.mysql.push({ kind = 'query', result = {} })
+                local result = RequestBackup(source)
+                assert(type(result) == 'table' and result.ok == true,
+                    'request must be admitted, got ' .. tostring(result and result.error))
+                return result.request_id
+            end
+
+            --- 清空客户端事件记录。
+            local function resetClientEvents() env.client_events = {} end
+
+            local function lastClientEvent(name)
+                for index = #(env.client_events or {}), 1, -1 do
+                    local item = env.client_events[index]
+                    if item.event == name then return item end
+                end
+                return nil
+            end
+
+            check('the ttl asks the client to clean up first, then releases', function()
+                env.mysql.reset()
+                drainAll()
+                resetClientEvents()
+                local base = os.time()
+                local requestId = requestBackup(31, 'BACKUP201')
+                assert(budget.Get().used == 1, 'request must take a slot')
+
+                -- 到点：先发 BackupEnd，名额还不能放（客户端要有时间删实体）
+                local released = BackupSweep(base + 301)
+                assert(released == 0, 'nothing may be released during the grace window')
+                local event = lastClientEvent('police:client:BackupEnd')
+                assert(event, 'the sweep must tell the client to clean up')
+                assert(event.target == 31 and event.args[1] == requestId,
+                    'BackupEnd must target the requesting client with the right id')
+                assert(budget.Get().used == 1, 'the slot must survive the grace window')
+                local unit = phaseOf(requestId)
+                assert(unit and unit.ending == true, 'the unit must be marked as ending')
+
+                -- 宽限结束：放名额 + 写 expired 审计
+                env.mysql.push({ kind = 'query', result = {} })
+                released = BackupSweep(base + 307)
+                assert(released == 1, 'the slot must be released after the grace window')
+                assert(budget.Get().used == 0, 'the slot must be gone')
+                assert(phaseOf(requestId) == nil, 'the projection must drop the unit')
+                local row = lastAudit('backup.expired')
+                assert(row, 'expiry must be audited')
+                assert(tostring(row[5]):find('why=ttl', 1, true), 'detail must say ttl, got ' .. tostring(row[5]))
+                assert(tostring(row[5]):find('phase=requested', 1, true), 'detail must carry the last phase')
+            end)
+
+            check('a request that is never acked expires on the 10s timeout', function()
+                env.mysql.reset()
+                drainAll()
+                resetClientEvents()
+                local base = os.time()
+                local requestId = requestBackup(32, 'BACKUP202')
+
+                assert(BackupSweep(base + 5) == 0, 'no expiry before the ack timeout')
+                assert(lastClientEvent('police:client:BackupEnd') == nil, 'and no BackupEnd either')
+
+                BackupSweep(base + 11)
+                local event = lastClientEvent('police:client:BackupEnd')
+                assert(event and event.args[1] == requestId, 'the stalled unit must be ended')
+
+                env.mysql.push({ kind = 'query', result = {} })
+                assert(BackupSweep(base + 17) == 1, 'the slot must be released after the grace window')
+                local row = lastAudit('backup.expired')
+                assert(row and tostring(row[5]):find('why=ack_timeout:requested', 1, true),
+                    'the reason must name the stalled phase, got ' .. tostring(row and row[5]))
+                assert(budget.Get().used == 0)
+            end)
+
+            check('a spawning unit that never reaches enroute expires at 15s', function()
+                env.mysql.reset()
+                drainAll()
+                resetClientEvents()
+                local base = os.time()
+                env.makePlayer(33, 'BACKUP203', { cash = 0, bank = 0, crypto = 0 })
+                assert(budget.Acquire('backup', 'BU-33-1', 'BACKUP203') == true)
+                ack('BU-33-1', 'spawning', 0, 33)
+
+                assert(BackupSweep(base + 10) == 0, 'the spawning window is 15s')
+                assert(lastClientEvent('police:client:BackupEnd') == nil)
+
+                BackupSweep(base + 16)
+                assert(lastClientEvent('police:client:BackupEnd'), 'the stalled spawn must be ended')
+                env.mysql.push({ kind = 'query', result = {} })
+                BackupSweep(base + 22)
+                local row = lastAudit('backup.expired')
+                assert(row and tostring(row[5]):find('why=ack_timeout:spawning', 1, true),
+                    'the reason must name spawning, got ' .. tostring(row and row[5]))
+            end)
+
+            check('an enroute unit is only bounded by the ttl', function()
+                env.mysql.reset()
+                drainAll()
+                resetClientEvents()
+                local base = os.time()
+                env.makePlayer(34, 'BACKUP204', { cash = 0, bank = 0, crypto = 0 })
+                assert(budget.Acquire('backup', 'BU-34-1', 'BACKUP204') == true)
+                ack('BU-34-1', 'enroute', 3, 34)
+
+                local released = BackupSweep(base + 120)
+                assert(released == 0, 'a driving unit must not be swept by the ack timeouts')
+                assert(lastClientEvent('police:client:BackupEnd') == nil)
+                local unit = phaseOf('BU-34-1')
+                assert(unit and unit.phase == 'enroute', 'the unit must still be enroute')
+                budget.Release('BU-34-1', 'test_cleanup')
+            end)
+
+            check('police_backup_v2 0 turns the sweep off', function()
+                env.mysql.reset()
+                drainAll()
+                resetClientEvents()
+                local base = os.time()
+                local requestId = requestBackup(35, 'BACKUP205')
+
+                env.convars['police_backup_v2'] = '0'
+                local released = BackupSweep(base + 9999)
+                env.convars['police_backup_v2'] = '1'
+
+                assert(released == 0, 'the rollback switch must disable the sweep')
+                assert(lastClientEvent('police:client:BackupEnd') == nil, 'and send nothing')
+                assert(budget.Get().used == 1, 'the slot must stay (legacy behaviour)')
+                assert(phaseOf(requestId), 'the unit must still be tracked')
+                budget.Release(requestId, 'test_cleanup')
             end)
 
         return { ok = failed == 0, data = { cases = results, failed = failed } }
