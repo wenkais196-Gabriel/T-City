@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 168,
+  "max_unproven": 169,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -31,6 +31,12 @@
       "max_unproven": 168,
       "previous": 165,
       "why": "新增支援单位寿命所有权闸门（4 条规则：客户端自计时守卫、300s/5s/10s 数字、sweep 挂 onResourceStart、先收再放），其中 1 条已由变异冒烟证明"
+    },
+    {
+      "date": "2026-10-29",
+      "max_unproven": 169,
+      "previous": 168,
+      "why": "新增撤离闸门（1 条规则：到点必须开走而不是原地删车）"
     }
   ]
 }

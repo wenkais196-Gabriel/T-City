@@ -31,6 +31,15 @@ local DRIVE_SPEED = 22.0
 local DRIVE_RETASK_HEARTBEAT_MS = 5000
 local FOLLOW_RETASK_HEARTBEAT_MS = 6000
 
+-- 撤离（S8）：到点不再原地删车，而是让单位开走、走远了再消失。
+-- 开源实现里最普遍的做法就是 TaskVehicleDriveWander + SetEntityAsNoLongerNeeded
+-- （Mooreiche/AIBackup 的 cancel 分支就是这么写的），而不是在玩家眼前 DeleteEntity。
+local RETREAT_SPEED = 22.0
+local RETREAT_DRIVING_STYLE = 262315  -- 262315: 允许驶离道路、不理会交通灯
+local RETREAT_DESPAWN_RADIUS = 220.0
+local RETREAT_TIMEOUT_MS = 15000
+local RETREAT_BOARD_WAIT_MS = 8000
+
 local active = {}  -- [requestId] = state
 
 --- 服务端是否持有寿命（S3/S4）。为真时客户端不再自己算 5 分钟：到点由服务端发
@@ -178,6 +187,85 @@ local function cleanup(requestId, notifyServer, reason)
         DeleteVehicle(state.vehicle)
     end
     if notifyServer then notifyServerEnded(requestId, reason) end
+end
+
+--- 撤离（S8）：让单位开车离开，而不是在玩家眼前原地消失。
+---
+--- 只在"服务端到点/请求者还在旁边"时用；玩家已经跑远（>LEAVE_RADIUS）或实体已经没了
+--- 的情况仍然直接 cleanup —— 反正看不见，没必要多跑一段。
+---@param state table
+---@param reason string
+local function beginRetreat(state, reason)
+    if state.phase == 'leaving' then return end
+    state.phase = 'leaving'
+    state.retreatAt = GetGameTimer()
+    state.retreatReason = reason or 'expired'
+    -- 一行撤离日志：真机验收要能对比"开始撤离"与"清理完成"的间隔，
+    -- 间隔≈0 就说明又开始原地删车了。
+    print(('[custom-police] backup %s retreating (reason=%s)'):format(
+        tostring(state.requestId), tostring(state.retreatReason)))
+
+    if state.blip and state.blip ~= 0 and DoesBlipExist(state.blip) then
+        RemoveBlip(state.blip)
+    end
+    state.blip = nil
+
+    local vehicle = state.vehicle
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return end
+
+    SetVehicleSiren(vehicle, false)
+    local driver = state.peds[1]
+    if not validPed(driver) then return end
+
+    -- 刚打完架时两名警官还在车外，靠 AI 上车在真机上不可靠（25 秒都没上去，
+    -- 最后照样在原地被删）。撤离是"收尾动作"，不需要演：直接塞进座位再开走。
+    if state.peds[1] and GetVehiclePedIsIn(state.peds[1], false) ~= vehicle then
+        if type(SetPedIntoVehicle) == 'function' then
+            SetPedIntoVehicle(driver, vehicle, -1)
+            if validPed(state.peds[2]) then SetPedIntoVehicle(state.peds[2], vehicle, 0) end
+        else
+            TaskEnterVehicle(driver, vehicle, RETREAT_BOARD_WAIT_MS, -1, 2.0, 1, 0)
+            return
+        end
+    end
+
+    if not validPed(driver) then return end
+    SetVehicleEngineOn(vehicle, true, true, false)
+    SetVehicleSiren(vehicle, false)
+    TaskVehicleDriveWander(driver, vehicle, RETREAT_SPEED, RETREAT_DRIVING_STYLE)
+    state.retreatDriving = true
+    if type(SetEntityAsNoLongerNeeded) == 'function' then SetEntityAsNoLongerNeeded(vehicle) end
+    for _, ped in ipairs(state.peds) do
+        if type(SetPedAsNoLongerNeeded) == 'function' then SetPedAsNoLongerNeeded(ped) end
+    end
+end
+
+--- 撤离过程中的每帧判定：车没了 / 开得够远 / 超时 → 真的删掉。
+local function updateRetreat(state, playerPed, now)
+    local vehicle = state.vehicle
+    local elapsed = now - (state.retreatAt or now)
+
+    -- 上车阶段的兜底：司机一直上不去（被打死、被卡住）就直接发车。
+    if not state.retreatDriving and elapsed >= RETREAT_BOARD_WAIT_MS then
+        local driver = state.peds[1]
+        if validPed(driver) and vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+            TaskVehicleDriveWander(driver, vehicle, RETREAT_SPEED, RETREAT_DRIVING_STYLE)
+            state.retreatDriving = true
+        end
+    end
+
+    local exists = vehicle and vehicle ~= 0 and DoesEntityExist(vehicle)
+    local distance = exists and #(GetEntityCoords(vehicle) - GetEntityCoords(playerPed)) or 0.0
+    local far = exists and distance > RETREAT_DESPAWN_RADIUS
+    -- 开远了、或者已经不在画面里（背对/被建筑挡住）就删：玩家看不到"消失"。
+    local offscreen = false
+    if exists and distance > 60.0 and type(IsEntityOnScreen) == 'function' then
+        local ok, onScreen = pcall(IsEntityOnScreen, vehicle)
+        offscreen = ok and onScreen == false
+    end
+    if not exists or far or offscreen or elapsed >= RETREAT_TIMEOUT_MS then
+        cleanup(state.requestId, false, state.retreatReason or 'expired')
+    end
 end
 
 local function createBlip(vehicle, coords)
@@ -596,6 +684,8 @@ runBackup = function(state)
                     DRIVE_SPEED, 0, state.vehicleModel, 786603, ARRIVE_RADIUS, true)
                 state.lastDriveTask = now
             end
+        elseif state.phase == 'leaving' then
+            updateRetreat(state, playerPed, now)
         else
             -- 下车之后每 3 秒问一次"附近有没有通缉目标"；服务端默认关
             -- （police_backup_engage_wanted 0），关着时这条只是空转一次很小的请求。
@@ -623,10 +713,26 @@ end)
 --- 回报只会被当成"外单"丢掉，还会在日志里制造一次假失败。
 RegisterNetEvent('police:client:BackupEnd', function(requestId, reason)
     if type(requestId) ~= 'string' or requestId == '' or #requestId > 64 then return end
-    if active[requestId] then
-        cleanup(requestId, false, reason or 'expired')
-    else
+    local state = active[requestId]
+    if not state then
         pending[requestId] = nil
+        return
+    end
+    -- 玩家还在旁边就让它开走（S8）；已经跑远或车没了就直接散场，反正看不见。
+    local playerPed = PlayerPedId()
+    local anchor = state.vehicle
+    local visible = DoesEntityExist(playerPed) and anchor and anchor ~= 0 and DoesEntityExist(anchor)
+        and #(GetEntityCoords(anchor) - GetEntityCoords(playerPed)) <= LEAVE_RADIUS
+    if visible then
+        beginRetreat(state, reason or 'expired')
+    else
+        if GetConvar('police_backup_debug', '0') == '1' then
+            local exists = DoesEntityExist(playerPed) and anchor and anchor ~= 0 and DoesEntityExist(anchor)
+            print(('[custom-police][debug] backup %s ended without retreat: vehicle=%s distance=%s'):format(
+                tostring(requestId), tostring(anchor),
+                exists and ('%.1f'):format(#(GetEntityCoords(anchor) - GetEntityCoords(playerPed))) or 'n/a'))
+        end
+        cleanup(requestId, false, reason or 'expired')
     end
 end)
 
