@@ -334,9 +334,11 @@ PhoneApps.Register({
 
         -- Server-authoritative NPC backup: custom-police owns the permission,
         -- cooldown, two-unit cap and audit; the phone only forwards the result.
-        request_backup = function(source, _params)
+        request_backup = function(source, params)
+            -- params.tier：1 = 一辆车，2 = 两辆车（响应级别）。不给就用服务端 convar。
+            local tier = type(params) == 'table' and tonumber(params.tier) or nil
             return structured('request_backup', function()
-                return exports['custom-police']:RequestBackup(source)
+                return exports['custom-police']:RequestBackup(source, tier)
             end)
         end,
     },
