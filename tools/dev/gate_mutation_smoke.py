@@ -50,6 +50,15 @@ class Mutation:
 
 MUTATIONS: list[Mutation] = [
     Mutation(
+        gate=("tests/architecture/test_backup_lifetime_owner.py::"
+              "test_client_lifetime_requires_the_server_owner_guard"),
+        path="resources/[custom]/custom-police/client/backup.lua",
+        content=None,
+        replace_from="if not serverOwnsLifetime() and now - state.createdAt >= UNIT_LIFETIME_MS then",
+        replace_to="if now - state.createdAt >= UNIT_LIFETIME_MS then",
+        what="支援单位把客户端 5 分钟自计时加回去（寿命变成两个主人，服务端 sweep 白做）",
+    ),
+    Mutation(
         gate="tests/architecture/test_no_sri_on_local_vendor.py::test_custom_html_has_no_integrity_attributes",
         path="resources/[custom]/custom-phone/html/__mutant_sri.html",
         content=(
