@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **支援单位可以指挥了（B2）**：`/backup follow|hold|dismiss` —— 待命会刹停并停掉驾驶/跟随任务（战斗照旧），撤回会回报 `dismissed`（已加入白名单，审计不再记 `unknown`）并走 S8 的开走流程；三条命令只作用于自己名下的单位，服务端寿命与名额不动。agent 侧可走 `adc <src> backup hold`。真机：`order=hold applied=1` → `order=dismiss applied=1` → `retreating (reason=dismissed)` → 审计 `backup.ended | reason=dismissed;live=29`。
+- **修 devcmd 白名单的 Lua pattern 坑**：`'^backup (follow|hold|dismiss)$'` 永远匹配不上 —— Lua 的 pattern 没有 `|` 交替（和没有 `{n,m}` 是同一类）。改成三条独立 pattern。
 - **支援可按响应级别叫（B1）**：`RequestBackup(source, tier)` 支持 1（1 车 2 人）/ 2（2 车 4 人，用满每人 2 槽），一次请求拆成 `tier` 个独立单位（各自 `requestId`/槽/阶段），任一单位抢不到槽就整组回滚；`tier` 由服务端夹取到 1–2，MDT 可传 `params.tier`，缺省吃 `police_backup_default_tier`（默认 1）；客户端一次收到整组 id 并错开停车位生成。真机：两单 `BU-…-1`/`BU-…-2` 同时 `onscene`，各 `entities=3`。
 - **支援单位到点会开走，不再原地消失（S8）**：服务端 `BackupEnd` 到达后，如果请求者还在附近，单位改为 `SetPedIntoVehicle` 塞回座位 + `TaskVehicleDriveWander` 开走，交给引擎自然回收（`SetEntityAsNoLongerNeeded`）；车没了 / 距玩家 >220m / 已不在画面 / 15s 硬超时任一命中才真正删除。玩家跑远（>150m）时仍然即时散场。真机：`retreating` → `cleaned` 间隔 13.6s（S8 之前是 0）。
 - **支援单位知道自己在哪个实例、该打谁（S7）**：阶段投影新增 `bucket`（请求者当时的 routing bucket）——支援单位刻意**不做桶隔离**，因为 bucket 是实例化工具而非可见性范围，隔离会把请求者自己关进单人世界；请求者在私有实例时，客户端建出来的实体天然只在该实例可见。新增服务端权威的通缉目标投影 `GetBackupTargets` 与 `police:server:backupTargets`（必须持有自己的活动单位、每 source 3 秒限流、只回 `net_id/distance/stars`，无坐标无身份），客户端据此让 NPC 优先交战通缉玩家；开关 `police_backup_engage_wanted` 默认 0。

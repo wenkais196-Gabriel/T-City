@@ -116,3 +116,25 @@ def test_expiry_retreats_instead_of_deleting_in_place(client_source: str) -> Non
     assert "RETREAT_TIMEOUT_MS" in update, "撤离必须有硬超时，否则实体可能永远不消失"
     assert "RETREAT_DESPAWN_RADIUS" in update, "撤离要按距离判定（开远了才删）"
     assert "cleanup(" in update, "撤离结束（车没了/开远了/超时）必须真的清理"
+
+def test_orders_only_touch_the_callers_own_units(client_source: str) -> None:
+    """指挥（B2）：/backup follow|hold|dismiss 只能作用于自己名下的单位。
+
+    钉住三件事：命令有白名单、只遍历本地 active 表（服务端名额不动）、
+    dismiss 必须回报 dismissed 原因（否则服务端会当成 unknown）。
+    """
+    cmd_at = client_source.find("RegisterCommand('backup'")
+    assert cmd_at != -1, "找不到 /backup 命令"
+    block = client_source[cmd_at:cmd_at + 900]
+    assert "BACKUP_ORDERS[order]" in block, "参数必须在白名单里"
+    assert "follow = true, hold = true, dismiss = true" in client_source, "白名单缺项"
+
+    order_at = client_source.find("local function applyOrder")
+    order_block = client_source[order_at:client_source.find("RegisterCommand('backup'", order_at)]
+    assert "for requestId, state in pairs(active)" in order_block, (
+        "只能作用于本地 active 里的单位（服务端名额与寿命不归它管）"
+    )
+    assert "notifyServerEnded(requestId, 'dismissed')" in order_block, (
+        "主动撤离必须回报 dismissed，否则审计里只剩 unknown"
+    )
+    assert "beginRetreat(state, 'dismissed')" in order_block, "主动撤离也要开走，不能原地消失"

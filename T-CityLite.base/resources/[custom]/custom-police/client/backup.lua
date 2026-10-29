@@ -592,6 +592,8 @@ local function updateFoot(state, playerPed, now)
     end
 
     local playerCoords = GetEntityCoords(playerPed)
+    -- 待命（B2）：不追、不跟随，但战斗逻辑照旧（updateFoot 的战斗分支在上面已经跑过）。
+    if state.mode == 'hold' then return end
     for _, ped in ipairs(state.peds) do
         if validPed(ped) then
             local distance = #(GetEntityCoords(ped) - playerCoords)
@@ -676,7 +678,14 @@ runBackup = function(state)
             end
             local playerCoords = GetEntityCoords(playerPed)
             local vehicleCoords = GetEntityCoords(state.vehicle)
-            if #(vehicleCoords - playerCoords) <= ARRIVE_RADIUS
+            if state.mode == 'hold' then
+                -- 待命（B2）：刹停并停掉驾驶任务，不再继续开过来；到点/撤离照旧走服务端。
+                SetVehicleBrake(state.vehicle, true)
+                if not state.holdCleared then
+                    state.holdCleared = true
+                    ClearPedTasks(driver)
+                end
+            elseif #(vehicleCoords - playerCoords) <= ARRIVE_RADIUS
                 or now - state.createdAt >= ESCORT_TIMEOUT_MS then
                 beginFoot(state)
             elseif shouldRetask(driver, 'TASK_VEHICLE_DRIVE_TO_COORD',
@@ -727,6 +736,64 @@ RegisterNetEvent('police:client:SpawnBackup', function(requestId, requestIds)
         ::continue::
     end
 end)
+
+-- ---------------------------------------------------------------------------
+-- 指挥（B2）：/backup follow | hold | dismiss
+--
+-- 只影响调用者自己名下的单位；服务端逻辑一概不动（寿命仍归 sweep）。
+-- 三条命令都做成"幂等 + 有回执"：重复执行不会报错，玩家能看到当前状态。
+-- ---------------------------------------------------------------------------
+local BACKUP_ORDERS = { follow = true, hold = true, dismiss = true }
+
+--- 把一条命令应用到调用者名下的所有单位；返回生效数量。
+local function applyOrder(order)
+    if not BACKUP_ORDERS[order] then return 0 end
+    local applied = 0
+    for requestId, state in pairs(active) do
+        if order == 'dismiss' then
+            -- 先告诉服务端"这单我撤了"，让它立刻释放名额，再让车开走。
+            notifyServerEnded(requestId, 'dismissed')
+            beginRetreat(state, 'dismissed')
+        else
+            state.mode = order
+            if order == 'hold' then
+                -- 立刻停下正在跑的任务：否则"原地待命"的人还在往你这边挪。
+                for _, ped in ipairs(state.peds or {}) do
+                    if validPed(ped) then ClearPedTasks(ped) end
+                end
+                if state.vehicle and state.vehicle ~= 0 and DoesEntityExist(state.vehicle) then
+                    SetVehicleBrake(state.vehicle, true)
+                end
+                state.holdCleared = true
+            else
+                -- 恢复跟随：清掉待命标记并让驾驶/跟随任务下一次判定就能重发。
+                state.holdCleared = false
+                state.lastDriveTask = 0
+                state.lastFollow = {}
+            end
+        end
+        applied = applied + 1
+    end
+    return applied
+end
+
+RegisterCommand('backup', function(_, args)
+    local order = tostring((args and args[1]) or ''):lower()
+    if not BACKUP_ORDERS[order] then
+        TriggerEvent('chat:addMessage', {
+            args = { '支援', '用法：/backup follow|hold|dismiss' },
+        })
+        return
+    end
+    local applied = applyOrder(order)
+    -- 一行回执日志：真机验收靠它确认命令真的进了客户端。
+    print(('[custom-police] backup order=%s applied=%d'):format(order, applied))
+    TriggerEvent('chat:addMessage', {
+        args = { '支援', applied > 0
+            and ('已对 %d 个单位执行 %s'):format(applied, order)
+            or '你名下没有活动的支援单位' },
+    })
+end, false)
 
 --- 服务端收尾（S3）：寿命到点或阶段停太久，服务端先发这条再宽限 5 秒放名额。
 --- 客户端收到就删车删人，**不回报 backupEnded** —— 名额已经由服务端释放，
