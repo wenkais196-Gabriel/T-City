@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **真机验证工具化**：`tools/dev/fivem_console.py`（经 MCP→RCON 发控制台命令与按键，绕开本机"直连 RCON 被关连接 / Windows 控制台不吃管道输入 / PowerShell 注入到不了游戏"三个坑）与 `tools/dev/police_live_probe.py`（一次打印客户端 phone 状态、资源数与审计尾巴）。配套 `docs/engineering/LIVE_VERIFICATION.md` 写明起栈顺序、UI 驱动回路（adc + phoneui + press_key + 焦点读回）、三层断言与六条"别做"，并规定 Claude Code 只用于联网调研与有文件预算的评审。
 - **修「手机关不掉、WASD 不动」**：完全接管（`keepInput=false`）后游戏不再处理输入，
   `IsRawKeyDown` 也读不到键 —— 键盘实际归 CEF。所以 **M 键改由 NUI 处理**（Esc 亦然），
   Lua 的原始按键只在 `keepInput=1` 模式下生效。此前 M 关不掉 → 手机一直开着 → 输入一直被接管，
