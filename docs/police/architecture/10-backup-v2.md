@@ -91,6 +91,191 @@ AxNaash 版）**全部客户端生成、无服务端状态、且没有 `onResour
 
 ---
 
+## 3.5 实例与目标（S7）
+
+### 为什么支援单位**不做** routing bucket 隔离
+
+官方 cookbook 把 routing bucket 定义为「实例化」工具，并明确写着它的用途**不包括**把
+同一张地图切成可见范围：同一个桶里的人才互相可见，换个桶就意味着换一个世界（连人口、
+其他玩家都换掉）。所以：
+
+| 请求者所在桶 | 支援单位可见性 | 结论 |
+|---|---|---|
+| 0（主世界） | 所有人可见 | 正确：警车开在共享世界里，这才像 RP；隔离会让请求者自己变成"独自表演" |
+| 非 0（私有实例） | 只在那个桶里可见 | 客户端建出来的实体天然落在本地桶，无需额外处理 |
+
+因此 S7 只做一件事：**把请求者当时的桶记进阶段条目并在投影里暴露**（`bucket` 字段 +
+控制台 `police_backup_state` 的 `bucket=`），让运维/agent 能分辨"这单在哪个实例里"，
+而不是去实现一个会破坏共享世界的隔离。
+
+### 通缉目标：支援单位该打谁
+
+原先客户端只按关系组找"敌对 ped"，**被通缉的玩家完全不在候选里**——支援车开到场、下车、
+站着。S7 补服务端权威的嫌疑人来源：
+
+| 项 | 取值 |
+|---|---|
+| 数据源 | custom-main 写在 `PlayerData.metadata.wanted` 的星级（服务端读，不信客户端） |
+| 半径 / 上限 | 120m / 3 人（`truncated` 标记是否被截断） |
+| 投影字段 | `net_id`、`distance`、`stars`——**不含坐标、不含 citizenid** |
+| 通道 | `police:server:backupTargets`（client→server 问，server 答） |
+| 鉴权 | 必须持有自己的活动支援单位；每 source 3 秒限流 |
+| 开关 | `police_backup_engage_wanted` 默认 **0**（NPC 打玩家容易被投诉，先让服主验手感） |
+
+客户端拿 `net_id` 换本地 ped，只保留"活着且在 1.5×交战半径内"的，并入 `findEnemies` 的候选——
+通缉玩家优先于路上的普通敌对 ped。
+
+**S5 真机读数（2026-10-29，任务门控）**
+
+同一晚的单 `BU-1-1793300566-1`：`spawning → enroute → onscene` 在 7 秒内走完，
+此后 49 秒稳定停在 `onscene entities=3`；截图里警车已经停在玩家身边、手机停在 MDT 调度页。
+也就是说"只在任务不在跑时才重发"没有把护送弄坏——车照样开到、照样下车。
+
+门控的具体判定在 P0（`BackupContract.ShouldRetask`），golden 覆盖 1/3/7 与不可知四态；
+真机只能验证"行为没退"，重发次数的差异要靠代码阅读（驱动心跳 5s、跟随心跳 6s，
+原先是无条件 2.5s / 2s）。
+
+**S4 真机读数（2026-10-29，回滚开关双向验证）**
+
+同一张单 `BU-1-1793299992-1`（请求 18:53:12，`police_backup_ttl 20`）：
+
+| 时刻 | `police_backup_v2` | 读数 |
+|---|---|---|
+| t+10…40s | `0` | `phase=onscene age=49s` —— **超过 20s TTL 仍然活着**：sweep 停手，寿命回到旧行为 |
+| t+12s（切到 1 之后） | `1` | `ending=true`（BackupEnd 已发，宽限中） |
+| t+18s | `1` | `no live units`；审计 `backup.expired phase=onscene;why=ttl;live=74`；客户端日志 `cleaned (reason=expired)` |
+
+结论：寿命只有一个主人在 v2 打开时成立（客户端 `UNIT_LIFETIME_MS` 自计时被 `serverOwnsLifetime()`
+守卫住，只有回滚时才生效），而回滚开关两个方向都真的生效。
+
+**S3 真机读数（2026-10-29，`police_backup_ttl 25` 把寿命压到 25s）**
+
+```
+191 backup.request  BU-1-1793299404-1                              18:43:24
+192 backup.spawned  BU-1-1793299404-1  entities=3;took=0           18:43:24
+194 backup.expired  BU-1-1793299404-1  phase=enroute;why=ttl;live=38  18:44:02
+```
+
+控制台逐 5 秒读数：`enroute`（age 7/14/21/28s）→ t+25s 出现 `ending=true`（BackupEnd 已发、宽限中、
+名额仍占着）→ t+30s `no live units`（宽限过、名额释放）。客户端日志同一单：
+`[custom-police] backup BU-1-1793299404-1 cleaned (reason=expired)` —— 实体确实是由客户端删的。
+
+`live=38` 而不是 25，是因为 sweep 每 10 秒一轮：过期在下一轮（≤+10s）被发现，宽限 5s 再等下一轮
+（≤+10s）才释放，所以实际释放在 `ttl … ttl+25s` 之间，这是设计内的抖动。
+
+**S2 真机读数（2026-10-29，同一次会话）**
+
+```
+169 backup.request  BU-1-1793298020-1        18:20:20
+170 backup.spawned  BU-1-1793298020-1        entities=3;took=0
+174 backup.request  BU-1-1793298118-2        18:21:58
+175 backup.spawned  BU-1-1793298118-2        entities=3;took=0
+178 backup.ended    BU-1-1793298020-1        reason=timeout;live=300   18:25:20
+```
+
+`police_backup_state`（控制台）在 18:21:58 读到 `phase=enroute entities=3`，102 秒后同一单读到
+`phase=onscene`；18:25:20 该单以 `reason=timeout;live=300` 结束，**投影里立刻消失**，只剩另一单。
+也就是说：`requested → spawning → enroute → onscene` 全部真的有人上报，且 ended 会清阶段。
+
+**顺带发现的边界**：`resource_stop` 这个原因**无法在重启 `custom-police` 自身时留痕**——
+客户端 `onResourceStop` 发 `backup:server:backupEnded` 的那一刻，接收它的服务端正在重启，
+事件被丢掉（名额本身在内存里，随重启一起清空，不会泄漏）。所以 S3 的 sweep 才必须
+自己写 `expired` 审计；不要指望 `resource_stop` 出现在审计里。
+
+1. **只加审计** ✅：`backup.ended`（reason 白名单 `shared/backup_contract.lua` + 服务端归一 + 审计带 `live=` 存活秒数；`backup.spawned` 留给 S2，因为要等 ack 才有"已生成"的确切时刻）；
+2. **加 ack 与阶段**：服务端内存表 + `backupAck` 事件；不设超时（观察一周数据）；
+3. **开 ack 超时**：10s/15s 释放；`expires_at` 300s；
+4. **统一寿命**：删客户端的 `UNIT_LIFETIME_MS` 自计时，改由 `BackupEnd` 驱动；
+5. **任务门控**：`runBackup` 改 `GetScriptTaskStatus` 门控 + 降频。
+
+每一步都能回滚（1–2 纯新增，3–5 有 convar 开关 `police_backup_v2`）。
+
+---
+
+## 3.6 撤离（S8）：到点要"开走"，不是原地消失
+
+到点直接 `DeleteEntity` 在真机上就是"警车凭空消失"。开源实现（Mooreiche/AIBackup 的 cancel 分支）
+通行做法是 **`TaskVehicleDriveWander` + `SetEntityAsNoLongerNeeded`**，让单位开走、交给引擎自然回收。
+S8 照此实现，并补三条硬约束：
+
+| 项 | 值 | 为什么 |
+|---|---|---|
+| 触发 | 服务端 `BackupEnd`（到点/超时）且请求者在 `LEAVE_RADIUS` 内 | 玩家跑远时直接散场，看不见就不用演 |
+| 上车 | `SetPedIntoVehicle`（确定性塞座位） | 真机实测：`TaskEnterVehicle` 让 AI 自己上车 25 秒都没成功，最后照样原地被删 |
+| 回收条件 | 车没了 / 距玩家 > 220m / 已不在画面（>60m 且 `IsEntityOnScreen` 为假）/ 15s 硬超时 | 前两条保证"看不见了才删"，第三条兜住卡死 |
+
+真机（TTL 压到 20s 的单 `BU-1-1793302666-1`）：客户端日志 `retreating` → `cleaned` 间隔 **13.6 秒**，
+而 S8 之前这条间隔是 **0**（同一个 tick 删掉）。
+
+## 3.7 响应级别（B1）：一次叫几辆车
+
+| tier | 编成 | 预算成本 | 触发方式 |
+|---|---|---|---|
+| 1（默认） | 1 车 + 2 名警官 | 1 槽 | MDT 按钮 / `police_backup_default_tier` |
+| 2 | 2 车 + 4 名警官（错开停车位） | 2 槽（用满每人上限） | `params.tier=2` 或 convar 设 2 |
+
+规则：
+
+* 一次请求 = `tier` 个**独立单位**，各有自己的 `requestId` / 预算槽 / 阶段条目 —— 生命周期互不影响；
+* 任何一个单位抢不到槽就**整组回滚**（`request_rollback`）：半支队伍比没有更糟，玩家会以为叫了两车；
+* `tier` 由服务端夹取到 1–2（`BACKUP_MAX_UNITS`），客户端给什么都不信；
+* 客户端一次收到整组 id，第二辆车往侧后错开 11m / 7m 生成，避免两车叠在一起。
+
+真机（`police_backup_default_tier 2`）：`police_backup_state` 同时出现两行
+`BU-…-1` / `BU-…-2`，`entities=3`，两单都推进到 `onscene`。
+
+## 3.8 指挥（B2）：`/backup follow|hold|dismiss`
+
+| 命令 | 效果 | 边界 |
+|---|---|---|
+| `/backup follow` | 恢复跟随（默认行为） | 只作用于调用者 `active` 表里的单位 |
+| `/backup hold` | 原地待命：刹停、停掉驾驶/跟随任务，战斗照旧 | 服务端寿命与名额不动，到点照样收 |
+| `/backup dismiss` | 主动撤回：回报 `dismissed` → 服务端立刻放名额 → 客户端开走（S8 撤离） | 同上 |
+
+实现要点：
+
+* 命令只遍历本地 `active`，不碰服务端状态；`dismissed` 已加入 `BackupContract.CLIENT_REASONS`，
+  审计里不再是 `unknown`；
+* 真机验收要能确认命令进了客户端，所以 `applyOrder` 打一行 `backup order=<x> applied=<n>`；
+* agent 侧走 `adc <src> backup hold`：devcmd 白名单必须**逐条**写
+  （Lua 的 pattern 没有 `|` 交替，`'^backup (follow|hold|dismiss)$'` 永远匹配不上）。
+
+真机（单 `BU-1-1793304355-1`）：`order=hold applied=1` → `order=dismiss applied=1`
+→ 客户端 `retreating (reason=dismissed)` → 审计 `backup.ended | reason=dismissed;live=29`。
+
+## 3.9 滥用防护（B4）：真人有空就不让 NPC 顶班
+
+| 项 | 规则 |
+|---|---|
+| 开关 | `police_backup_min_real_cops`（默认 0 = 不限制） |
+| 判定 | **不含请求者自己**的在勤警察数 ≥ 阈值 → 拒绝，错误码 `police_available` |
+| 留痕 | 拒绝也写 `backup.denied`（`reason=police_available;others=N;threshold=M`） |
+| 语义 | 阈值 1 = "只要还有另一个在勤警官，就别叫 NPC" |
+
+为什么排除请求者：他本人就是"在现场的那个人"，把他算进去会让阈值 1 永远成立（等于关掉支援）。
+
+真机只能验"没触发"这一侧（本机只有一个客户端）：`police_backup_min_real_cops 1` 下
+在勤他人 0 → 请求照常通过、`backup.denied` 不出现。**拒绝侧**（有第二个在勤警官时）只有 golden
+覆盖（3 个用例：达到阈值拒绝并留痕、低于阈值放行、off-duty 不计入），需要第二个账号才能补真机。
+
+## 3.10 真警协同（B3）：跟着最近的警官
+
+`PickBackupEscort(src)` 在请求时刻算一次「这单跟着谁」：
+
+| 情况 | escort |
+|---|---|
+| 附近没有其它在勤警官 | 请求者自己 |
+| 有其它在勤警官 | 离请求者最近的那位（`job.onduty == true` 才算） |
+| off-duty 警官 / 平民 | 永不入选 |
+
+只算一次而不是每帧重算：位置会变，但「跟着谁」通常 5 分钟内不会变，每帧重算会让单位在两名
+警官之间反复横跳。escort 随阶段条目（`escort_source`）暴露给运维；客户端 `escortPed()`
+把它解成本地 ped，开车/跟随都以它为准，解析不到就回落到请求者。
+
+真机（单客户端）：`escort=1` —— 没有其它警官时就是请求者自己，行为与 B3 之前一致。
+多警官路径由 golden 4 个用例覆盖（无他人→自己、取最近、off-duty/平民不入选、投影字段），
+**需要第二个在勤账号才能补真机**。
+
 ## 4. 事件契约
 
 | 事件 | 方向 | 鉴权 | 负载（白名单） | 登记 |
@@ -247,7 +432,7 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1–S5、S7、S8（撤离）、B1（响应级别）、B2（指挥）、B4（滥用防护）、B5（指标面板）已实施**（2026-10-29）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
+> 进度：**S1–S5、S7、S8（撤离）、B1–B5 全部实施**（2026-10-29）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
@@ -259,173 +444,6 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 `live=301` 是服务端用预算条目的 `at` 算出来的存活秒数（5 分钟 + 1 秒轮询偏差），
 说明"原因 + 时长"这条路端到端通了；白名单外的原因由 golden 用例覆盖（记 `unknown`）。
-
-## 3.9 滥用防护（B4）：真人有空就不让 NPC 顶班
-
-| 项 | 规则 |
-|---|---|
-| 开关 | `police_backup_min_real_cops`（默认 0 = 不限制） |
-| 判定 | **不含请求者自己**的在勤警察数 ≥ 阈值 → 拒绝，错误码 `police_available` |
-| 留痕 | 拒绝也写 `backup.denied`（`reason=police_available;others=N;threshold=M`） |
-| 语义 | 阈值 1 = "只要还有另一个在勤警官，就别叫 NPC" |
-
-为什么排除请求者：他本人就是"在现场的那个人"，把他算进去会让阈值 1 永远成立（等于关掉支援）。
-
-真机只能验"没触发"这一侧（本机只有一个客户端）：`police_backup_min_real_cops 1` 下
-在勤他人 0 → 请求照常通过、`backup.denied` 不出现。**拒绝侧**（有第二个在勤警官时）只有 golden
-覆盖（3 个用例：达到阈值拒绝并留痕、低于阈值放行、off-duty 不计入），需要第二个账号才能补真机。
-
-## 3.8 指挥（B2）：`/backup follow|hold|dismiss`
-
-| 命令 | 效果 | 边界 |
-|---|---|---|
-| `/backup follow` | 恢复跟随（默认行为） | 只作用于调用者 `active` 表里的单位 |
-| `/backup hold` | 原地待命：刹停、停掉驾驶/跟随任务，战斗照旧 | 服务端寿命与名额不动，到点照样收 |
-| `/backup dismiss` | 主动撤回：回报 `dismissed` → 服务端立刻放名额 → 客户端开走（S8 撤离） | 同上 |
-
-实现要点：
-
-* 命令只遍历本地 `active`，不碰服务端状态；`dismissed` 已加入 `BackupContract.CLIENT_REASONS`，
-  审计里不再是 `unknown`；
-* 真机验收要能确认命令进了客户端，所以 `applyOrder` 打一行 `backup order=<x> applied=<n>`；
-* agent 侧走 `adc <src> backup hold`：devcmd 白名单必须**逐条**写
-  （Lua 的 pattern 没有 `|` 交替，`'^backup (follow|hold|dismiss)$'` 永远匹配不上）。
-
-真机（单 `BU-1-1793304355-1`）：`order=hold applied=1` → `order=dismiss applied=1`
-→ 客户端 `retreating (reason=dismissed)` → 审计 `backup.ended | reason=dismissed;live=29`。
-
-## 3.7 响应级别（B1）：一次叫几辆车
-
-| tier | 编成 | 预算成本 | 触发方式 |
-|---|---|---|---|
-| 1（默认） | 1 车 + 2 名警官 | 1 槽 | MDT 按钮 / `police_backup_default_tier` |
-| 2 | 2 车 + 4 名警官（错开停车位） | 2 槽（用满每人上限） | `params.tier=2` 或 convar 设 2 |
-
-规则：
-
-* 一次请求 = `tier` 个**独立单位**，各有自己的 `requestId` / 预算槽 / 阶段条目 —— 生命周期互不影响；
-* 任何一个单位抢不到槽就**整组回滚**（`request_rollback`）：半支队伍比没有更糟，玩家会以为叫了两车；
-* `tier` 由服务端夹取到 1–2（`BACKUP_MAX_UNITS`），客户端给什么都不信；
-* 客户端一次收到整组 id，第二辆车往侧后错开 11m / 7m 生成，避免两车叠在一起。
-
-真机（`police_backup_default_tier 2`）：`police_backup_state` 同时出现两行
-`BU-…-1` / `BU-…-2`，`entities=3`，两单都推进到 `onscene`。
-
-## 3.6 撤离（S8）：到点要"开走"，不是原地消失
-
-到点直接 `DeleteEntity` 在真机上就是"警车凭空消失"。开源实现（Mooreiche/AIBackup 的 cancel 分支）
-通行做法是 **`TaskVehicleDriveWander` + `SetEntityAsNoLongerNeeded`**，让单位开走、交给引擎自然回收。
-S8 照此实现，并补三条硬约束：
-
-| 项 | 值 | 为什么 |
-|---|---|---|
-| 触发 | 服务端 `BackupEnd`（到点/超时）且请求者在 `LEAVE_RADIUS` 内 | 玩家跑远时直接散场，看不见就不用演 |
-| 上车 | `SetPedIntoVehicle`（确定性塞座位） | 真机实测：`TaskEnterVehicle` 让 AI 自己上车 25 秒都没成功，最后照样原地被删 |
-| 回收条件 | 车没了 / 距玩家 > 220m / 已不在画面（>60m 且 `IsEntityOnScreen` 为假）/ 15s 硬超时 | 前两条保证"看不见了才删"，第三条兜住卡死 |
-
-真机（TTL 压到 20s 的单 `BU-1-1793302666-1`）：客户端日志 `retreating` → `cleaned` 间隔 **13.6 秒**，
-而 S8 之前这条间隔是 **0**（同一个 tick 删掉）。
-
-## 3.5 实例与目标（S7）
-
-### 为什么支援单位**不做** routing bucket 隔离
-
-官方 cookbook 把 routing bucket 定义为「实例化」工具，并明确写着它的用途**不包括**把
-同一张地图切成可见范围：同一个桶里的人才互相可见，换个桶就意味着换一个世界（连人口、
-其他玩家都换掉）。所以：
-
-| 请求者所在桶 | 支援单位可见性 | 结论 |
-|---|---|---|
-| 0（主世界） | 所有人可见 | 正确：警车开在共享世界里，这才像 RP；隔离会让请求者自己变成"独自表演" |
-| 非 0（私有实例） | 只在那个桶里可见 | 客户端建出来的实体天然落在本地桶，无需额外处理 |
-
-因此 S7 只做一件事：**把请求者当时的桶记进阶段条目并在投影里暴露**（`bucket` 字段 +
-控制台 `police_backup_state` 的 `bucket=`），让运维/agent 能分辨"这单在哪个实例里"，
-而不是去实现一个会破坏共享世界的隔离。
-
-### 通缉目标：支援单位该打谁
-
-原先客户端只按关系组找"敌对 ped"，**被通缉的玩家完全不在候选里**——支援车开到场、下车、
-站着。S7 补服务端权威的嫌疑人来源：
-
-| 项 | 取值 |
-|---|---|
-| 数据源 | custom-main 写在 `PlayerData.metadata.wanted` 的星级（服务端读，不信客户端） |
-| 半径 / 上限 | 120m / 3 人（`truncated` 标记是否被截断） |
-| 投影字段 | `net_id`、`distance`、`stars`——**不含坐标、不含 citizenid** |
-| 通道 | `police:server:backupTargets`（client→server 问，server 答） |
-| 鉴权 | 必须持有自己的活动支援单位；每 source 3 秒限流 |
-| 开关 | `police_backup_engage_wanted` 默认 **0**（NPC 打玩家容易被投诉，先让服主验手感） |
-
-客户端拿 `net_id` 换本地 ped，只保留"活着且在 1.5×交战半径内"的，并入 `findEnemies` 的候选——
-通缉玩家优先于路上的普通敌对 ped。
-
-**S5 真机读数（2026-10-29，任务门控）**
-
-同一晚的单 `BU-1-1793300566-1`：`spawning → enroute → onscene` 在 7 秒内走完，
-此后 49 秒稳定停在 `onscene entities=3`；截图里警车已经停在玩家身边、手机停在 MDT 调度页。
-也就是说"只在任务不在跑时才重发"没有把护送弄坏——车照样开到、照样下车。
-
-门控的具体判定在 P0（`BackupContract.ShouldRetask`），golden 覆盖 1/3/7 与不可知四态；
-真机只能验证"行为没退"，重发次数的差异要靠代码阅读（驱动心跳 5s、跟随心跳 6s，
-原先是无条件 2.5s / 2s）。
-
-**S4 真机读数（2026-10-29，回滚开关双向验证）**
-
-同一张单 `BU-1-1793299992-1`（请求 18:53:12，`police_backup_ttl 20`）：
-
-| 时刻 | `police_backup_v2` | 读数 |
-|---|---|---|
-| t+10…40s | `0` | `phase=onscene age=49s` —— **超过 20s TTL 仍然活着**：sweep 停手，寿命回到旧行为 |
-| t+12s（切到 1 之后） | `1` | `ending=true`（BackupEnd 已发，宽限中） |
-| t+18s | `1` | `no live units`；审计 `backup.expired phase=onscene;why=ttl;live=74`；客户端日志 `cleaned (reason=expired)` |
-
-结论：寿命只有一个主人在 v2 打开时成立（客户端 `UNIT_LIFETIME_MS` 自计时被 `serverOwnsLifetime()`
-守卫住，只有回滚时才生效），而回滚开关两个方向都真的生效。
-
-**S3 真机读数（2026-10-29，`police_backup_ttl 25` 把寿命压到 25s）**
-
-```
-191 backup.request  BU-1-1793299404-1                              18:43:24
-192 backup.spawned  BU-1-1793299404-1  entities=3;took=0           18:43:24
-194 backup.expired  BU-1-1793299404-1  phase=enroute;why=ttl;live=38  18:44:02
-```
-
-控制台逐 5 秒读数：`enroute`（age 7/14/21/28s）→ t+25s 出现 `ending=true`（BackupEnd 已发、宽限中、
-名额仍占着）→ t+30s `no live units`（宽限过、名额释放）。客户端日志同一单：
-`[custom-police] backup BU-1-1793299404-1 cleaned (reason=expired)` —— 实体确实是由客户端删的。
-
-`live=38` 而不是 25，是因为 sweep 每 10 秒一轮：过期在下一轮（≤+10s）被发现，宽限 5s 再等下一轮
-（≤+10s）才释放，所以实际释放在 `ttl … ttl+25s` 之间，这是设计内的抖动。
-
-**S2 真机读数（2026-10-29，同一次会话）**
-
-```
-169 backup.request  BU-1-1793298020-1        18:20:20
-170 backup.spawned  BU-1-1793298020-1        entities=3;took=0
-174 backup.request  BU-1-1793298118-2        18:21:58
-175 backup.spawned  BU-1-1793298118-2        entities=3;took=0
-178 backup.ended    BU-1-1793298020-1        reason=timeout;live=300   18:25:20
-```
-
-`police_backup_state`（控制台）在 18:21:58 读到 `phase=enroute entities=3`，102 秒后同一单读到
-`phase=onscene`；18:25:20 该单以 `reason=timeout;live=300` 结束，**投影里立刻消失**，只剩另一单。
-也就是说：`requested → spawning → enroute → onscene` 全部真的有人上报，且 ended 会清阶段。
-
-**顺带发现的边界**：`resource_stop` 这个原因**无法在重启 `custom-police` 自身时留痕**——
-客户端 `onResourceStop` 发 `backup:server:backupEnded` 的那一刻，接收它的服务端正在重启，
-事件被丢掉（名额本身在内存里，随重启一起清空，不会泄漏）。所以 S3 的 sweep 才必须
-自己写 `expired` 审计；不要指望 `resource_stop` 出现在审计里。
-
-1. **只加审计** ✅：`backup.ended`（reason 白名单 `shared/backup_contract.lua` + 服务端归一 + 审计带 `live=` 存活秒数；`backup.spawned` 留给 S2，因为要等 ack 才有"已生成"的确切时刻）；
-2. **加 ack 与阶段**：服务端内存表 + `backupAck` 事件；不设超时（观察一周数据）；
-3. **开 ack 超时**：10s/15s 释放；`expires_at` 300s；
-4. **统一寿命**：删客户端的 `UNIT_LIFETIME_MS` 自计时，改由 `BackupEnd` 驱动；
-5. **任务门控**：`runBackup` 改 `GetScriptTaskStatus` 门控 + 降频。
-
-每一步都能回滚（1–2 纯新增，3–5 有 convar 开关 `police_backup_v2`）。
-
----
 
 ## 12. 未采纳的方案与理由
 
