@@ -51,6 +51,7 @@ end
 
 local pending = {} -- [requestId] = true while models are loading
 local pendingLane = {} -- [requestId] = 0/1 —— 一次叫两车时错开停车位
+local pendingEscort = {} -- [requestId] = 跟着哪个 server id（B3：可能是另一位警官）
 
 -- ---------------------------------------------------------------------------
 -- 任务门控（S5）
@@ -396,8 +397,10 @@ local function spawnBackup(requestId)
         guard = {},
         lastFollow = {},
         outOfRangeAt = nil,
+        escortSource = tonumber(pendingEscort[requestId]),
     }
     pending[requestId] = nil
+    pendingEscort[requestId] = nil
     active[requestId] = state
     -- 车 + 2 人都在手上才开始算"出发"：这是服务端 15s enroute 超时的锚点，
     -- 也是生成成功率的分母/分子。
@@ -523,6 +526,22 @@ local function wantedPedsAround(playerPed)
     return peds
 end
 
+--- 这单应该跟着谁（B3）：服务端挑的警官在本地有时就用他，否则回落到请求者自己。
+local function escortPed(state, playerPed)
+    local source = state.escortSource
+    if not source or source <= 0 then return playerPed end
+    local mySource = GetPlayerServerId(PlayerId())
+    if source == mySource then return playerPed end
+    local ped = GetPlayerFromServerId(source)
+    if ped and ped ~= -1 then
+        local playerEntity = GetPlayerPed(ped)
+        if playerEntity and playerEntity ~= 0 and DoesEntityExist(playerEntity) then
+            return playerEntity
+        end
+    end
+    return playerPed
+end
+
 local function beginFoot(state)
     state.phase = 'foot'
     state.footAt = GetGameTimer() + 1500
@@ -591,7 +610,8 @@ local function updateFoot(state, playerPed, now)
         end
     end
 
-    local playerCoords = GetEntityCoords(playerPed)
+    local anchorPed = escortPed(state, playerPed)
+    local playerCoords = GetEntityCoords(anchorPed)
     -- 待命（B2）：不追、不跟随，但战斗逻辑照旧（updateFoot 的战斗分支在上面已经跑过）。
     if state.mode == 'hold' then return end
     for _, ped in ipairs(state.peds) do
@@ -676,7 +696,8 @@ runBackup = function(state)
                 cleanup(requestId, true, 'vehicle_lost')
                 break
             end
-            local playerCoords = GetEntityCoords(playerPed)
+            local anchorPed = escortPed(state, playerPed)
+            local playerCoords = GetEntityCoords(anchorPed)
             local vehicleCoords = GetEntityCoords(state.vehicle)
             if state.mode == 'hold' then
                 -- 待命（B2）：刹停并停掉驾驶任务，不再继续开过来；到点/撤离照旧走服务端。
@@ -711,7 +732,7 @@ runBackup = function(state)
     end
 end
 
-RegisterNetEvent('police:client:SpawnBackup', function(requestId, requestIds)
+RegisterNetEvent('police:client:SpawnBackup', function(requestId, requestIds, escortSource)
     -- 服务端可能一次给一组 id（响应级别 2 = 两辆车）。逐个校验后再生成，
     -- 任何一个 id 不合法都不影响其余的。
     local ids = {}
@@ -729,6 +750,7 @@ RegisterNetEvent('police:client:SpawnBackup', function(requestId, requestIds)
         if active[id] or pending[id] then goto continue end
         pending[id] = true
         pendingLane[id] = index - 1
+        pendingEscort[id] = tonumber(escortSource)
     -- 先报告"我收到了、开始生成"：服务端 10s 没等到这条就会判 expired（S3），
     -- 所以它必须在任何模型加载/等待之前发出。
         ackPhase(id, 'spawning', 0)

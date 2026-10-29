@@ -631,6 +631,50 @@ local function countOtherOnDutyPolice(src)
     return count
 end
 
+local function distanceBetween(a, b)
+    if not a or not b then return math.huge end
+    local dx = (tonumber(a.x) or 0) - (tonumber(b.x) or 0)
+    local dy = (tonumber(a.y) or 0) - (tonumber(b.y) or 0)
+    local dz = (tonumber(a.z) or 0) - (tonumber(b.z) or 0)
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+--- 这单支援应该"跟着谁"（B3）。
+---
+--- 默认跟着请求者；但如果附近有另一个在勤警官更靠近现场，就跟最近的警官 ——
+--- 真警联动时 NPC 跟上最先到场的那个人，而不是把请求者当唯一锚点。
+--- 只在请求时算一次：位置会变，但"跟着谁"通常不会在 5 分钟内变化，
+--- 每帧重算反而会在两人之间反复横跳。
+---@param src number 请求者
+---@return number, number escortSource, distance
+function PickBackupEscort(src)
+    local player = QBCore.Functions.GetPlayer(src)
+    local data = player and player.PlayerData
+    if not data then return src, 0 end
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return src, 0 end
+    local origin = GetEntityCoords(ped)
+
+    local bestSource, bestDistance = src, 0
+    for _, otherSrc in ipairs(QBCore.Functions.GetPlayers()) do
+        if otherSrc ~= src then
+            local other = QBCore.Functions.GetPlayer(otherSrc)
+            local otherData = other and other.PlayerData
+            if otherData and PolicePolicy.IsPolice(otherData) and otherData.job
+                and otherData.job.onduty == true then
+                local otherPed = GetPlayerPed(otherSrc)
+                if otherPed and otherPed ~= 0 then
+                    local distance = distanceBetween(GetEntityCoords(otherPed), origin)
+                    if bestSource == src or distance < bestDistance then
+                        bestSource, bestDistance = otherSrc, distance
+                    end
+                end
+            end
+        end
+    end
+    return bestSource, bestDistance
+end
+
 function RequestBackup(source, tier)
     local src = tonumber(source) or 0
     local actorPlayer = QBCore.Functions.GetPlayer(src)
@@ -677,6 +721,8 @@ function RequestBackup(source, tier)
     backupSource[src] = cid
 
     local requestIds = {}
+    -- 一次响应只认一个"跟着谁"，同一组里的两辆车跟同一个人。
+    local escortSource = PickBackupEscort(src)
 
     --- 半支队伍比没有更糟：任何一个单位抢不到槽/写不进审计，就把已经拿到的全部退回去。
     local function rollback(errorCode)
@@ -730,12 +776,13 @@ function RequestBackup(source, tier)
             bucket = playerBucket(src),
             tier = units,
             unit_index = index,
+            escort_source = escortSource,
         }
     end
 
     backupCooldown[cid] = now
-    -- 只发一次事件，把整组 id 交给客户端；客户端依次生成并错开停车位。
-    TriggerClientEvent('police:client:SpawnBackup', src, requestIds[1], requestIds)
+    -- 只发一次事件，把整组 id 与"跟着谁"交给客户端；客户端依次生成并错开停车位。
+    TriggerClientEvent('police:client:SpawnBackup', src, requestIds[1], requestIds, escortSource)
     return { ok = true, request_id = requestIds[1], request_ids = requestIds, tier = units }
 end
 --- Client reports "how far I got" for one of its own units (S2).
@@ -915,13 +962,6 @@ local function backupEngageWantedEnabled()
     return GetConvar('police_backup_engage_wanted', '0') == '1'
 end
 
-local function distanceBetween(a, b)
-    if not a or not b then return math.huge end
-    local dx = (tonumber(a.x) or 0) - (tonumber(b.x) or 0)
-    local dy = (tonumber(a.y) or 0) - (tonumber(b.y) or 0)
-    local dz = (tonumber(a.z) or 0) - (tonumber(b.z) or 0)
-    return math.sqrt(dx * dx + dy * dy + dz * dz)
-end
 
 --- 请求者附近的高星嫌疑人（只读投影）。
 ---@param source number
@@ -1017,6 +1057,7 @@ function GetBackupState()
             rejected = tonumber(entry.rejectedCount) or 0,
             ending = entry.endingAt ~= nil,
             bucket = tonumber(entry.bucket) or 0,
+            escort_source = tonumber(entry.escort_source) or nil,
         }
     end
     table.sort(list, function(a, b) return (a.request_id or '') < (b.request_id or '') end)
@@ -1662,9 +1703,9 @@ RegisterCommand('police_backup_state', function(source)
         return
     end
     for _, unit in ipairs(units) do
-        print(('[custom-police] backup %s phase=%s src=%s bucket=%d age=%ss since_ack=%ss entities=%d rejected=%d%s'):format(
+        print(('[custom-police] backup %s phase=%s src=%s escort=%s bucket=%d age=%ss since_ack=%ss entities=%d rejected=%d%s'):format(
             tostring(unit.request_id), tostring(unit.phase), tostring(unit.source),
-            tonumber(unit.bucket) or 0,
+            tostring(unit.escort_source), tonumber(unit.bucket) or 0,
             tostring(unit.age), tostring(unit.phase_age), tostring(unit.entity_count),
             tostring(unit.rejected), unit.ending and ' ending=true' or ''))
     end

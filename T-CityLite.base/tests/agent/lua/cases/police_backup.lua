@@ -672,6 +672,90 @@ return {
             budget.Release(result.request_id, 'test_cleanup')
         end)
 
+        -- ------------------------------------------------------------------
+        -- B3：真警协同（跟着最近的警官）
+        -- ------------------------------------------------------------------
+
+        check('with no other officers the escort is the caller', function()
+            env.mysql.reset()
+            drainAll()
+            clearPlayers()
+            local requester = env.makePlayer(71, 'BACKUP601', { cash = 0, bank = 0, crypto = 0 })
+            requester.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            env.peds[71] = 7001
+            env.entity_coords[7001] = { x = 0.0, y = 0.0, z = 0.0 }
+
+            local escort, distance = PickBackupEscort(71)
+            assert(escort == 71, 'a lone officer is their own escort, got ' .. tostring(escort))
+            assert(distance == 0, 'distance to self must be 0')
+        end)
+
+        check('the nearest on-duty officer becomes the escort', function()
+            env.mysql.reset()
+            drainAll()
+            clearPlayers()
+            local requester = env.makePlayer(72, 'BACKUP602', { cash = 0, bank = 0, crypto = 0 })
+            requester.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            env.peds[72] = 7002
+            env.entity_coords[7002] = { x = 0.0, y = 0.0, z = 0.0 }
+
+            -- 近的那位（30m）
+            local near = env.makePlayer(73, 'BACKUP603', { cash = 0, bank = 0, crypto = 0 })
+            near.PlayerData.job = { name = 'police', onduty = true, grade = { level = 2 } }
+            env.peds[73] = 7003
+            env.entity_coords[7003] = { x = 30.0, y = 0.0, z = 0.0 }
+
+            -- 远的那位（200m）
+            local far = env.makePlayer(74, 'BACKUP604', { cash = 0, bank = 0, crypto = 0 })
+            far.PlayerData.job = { name = 'police', onduty = true, grade = { level = 2 } }
+            env.peds[74] = 7004
+            env.entity_coords[7004] = { x = 200.0, y = 0.0, z = 0.0 }
+
+            local escort = PickBackupEscort(72)
+            assert(escort == 73, 'the closest officer must be picked, got ' .. tostring(escort))
+        end)
+
+        check('off-duty and non-police players are never the escort', function()
+            env.mysql.reset()
+            drainAll()
+            clearPlayers()
+            local requester = env.makePlayer(75, 'BACKUP605', { cash = 0, bank = 0, crypto = 0 })
+            requester.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            env.peds[75] = 7005
+            env.entity_coords[7005] = { x = 0.0, y = 0.0, z = 0.0 }
+
+            local offDuty = env.makePlayer(76, 'BACKUP606', { cash = 0, bank = 0, crypto = 0 })
+            offDuty.PlayerData.job = { name = 'police', onduty = false, grade = { level = 3 } }
+            env.peds[76] = 7006
+            env.entity_coords[7006] = { x = 5.0, y = 0.0, z = 0.0 }
+
+            local civilian = env.makePlayer(77, 'BACKUP607', { cash = 0, bank = 0, crypto = 0 })
+            civilian.PlayerData.job = { name = 'unemployed', onduty = false, grade = { level = 0 } }
+            env.peds[77] = 7007
+            env.entity_coords[7007] = { x = 6.0, y = 0.0, z = 0.0 }
+
+            local escort = PickBackupEscort(75)
+            assert(escort == 75, 'only on-duty police may be the escort, got ' .. tostring(escort))
+        end)
+
+        check('the projection exposes who the unit follows', function()
+            env.mysql.reset()
+            drainAll()
+            clearPlayers()
+            local requester = env.makePlayer(78, 'BACKUP608', { cash = 0, bank = 0, crypto = 0 })
+            requester.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            env.peds[78] = 7008
+            env.entity_coords[7008] = { x = 0.0, y = 0.0, z = 0.0 }
+            env.mysql.push({ kind = 'query', result = {} })
+
+            local result = RequestBackup(78, 1)
+            assert(result.ok == true, 'request must be admitted')
+            local unit = phaseOf(result.request_id)
+            assert(unit and unit.escort_source == 78,
+                'a lone officer escorts their own unit, got ' .. tostring(unit and unit.escort_source))
+            budget.Release(result.request_id, 'test_cleanup')
+        end)
+
         return { ok = failed == 0, data = { cases = results, failed = failed } }
     end,
 }
