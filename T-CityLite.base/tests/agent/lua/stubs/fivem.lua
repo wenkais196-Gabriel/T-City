@@ -252,6 +252,15 @@ return function(env)
         return true
     end
 
+    -- Network ids: the harness maps entity -> netId explicitly, defaulting to the
+    -- entity handle so tests can use small integers for both.
+    env.net_ids = env.net_ids or {}
+    function _G.NetworkGetNetworkIdFromEntity(entity)
+        local id = tonumber(entity) or entity
+        if not id then return 0 end
+        return env.net_ids[id] or id
+    end
+
     function _G.GetEntityCoords(ped)
         return env.entity_coords[tonumber(ped) or ped] or { x = 0.0, y = 0.0, z = 0.0 }
     end
