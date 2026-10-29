@@ -29,9 +29,10 @@ local active = {}  -- [requestId] = state
 local pending = {} -- [requestId] = true while models are loading
 local runBackup    -- forward declaration: spawnBackup starts this thread
 
-local function notifyServerEnded(requestId)
+local function notifyServerEnded(requestId, reason)
     pcall(function()
-        TriggerServerEvent('police:server:backupEnded', requestId)
+        -- reason 让服务端能回答"这个单位为什么结束"；v2 之前它只有 requestId。
+        TriggerServerEvent('police:server:backupEnded', requestId, reason or 'unknown')
     end)
 end
 
@@ -101,7 +102,7 @@ local function deleteEntity(entity)
     end
 end
 
-local function cleanup(requestId, notifyServer)
+local function cleanup(requestId, notifyServer, reason)
     local state = active[requestId]
     if not state then return end
     active[requestId] = nil
@@ -119,7 +120,7 @@ local function cleanup(requestId, notifyServer)
         end
         DeleteVehicle(state.vehicle)
     end
-    if notifyServer then notifyServerEnded(requestId) end
+    if notifyServer then notifyServerEnded(requestId, reason) end
 end
 
 local function createBlip(vehicle, coords)
@@ -176,7 +177,7 @@ local function spawnBackup(requestId)
     local playerPed = PlayerPedId()
     if not DoesEntityExist(playerPed) then
         pending[requestId] = nil
-        notifyServerEnded(requestId)
+        notifyServerEnded(requestId, 'dead')
         return
     end
 
@@ -186,7 +187,7 @@ local function spawnBackup(requestId)
         if vehicleHash then SetModelAsNoLongerNeeded(vehicleHash) end
         if pedHash then SetModelAsNoLongerNeeded(pedHash) end
         pending[requestId] = nil
-        notifyServerEnded(requestId)
+        notifyServerEnded(requestId, 'spawn_failed')
         print(('[custom-police] backup %s: no usable vehicle/ped model'):format(tostring(requestId)))
         return
     end
@@ -198,7 +199,7 @@ local function spawnBackup(requestId)
         pending[requestId] = nil
         SetModelAsNoLongerNeeded(vehicleHash)
         SetModelAsNoLongerNeeded(pedHash)
-        notifyServerEnded(requestId)
+        notifyServerEnded(requestId, 'spawn_failed')
         return
     end
     SetEntityAsMissionEntity(vehicle, true, true)
@@ -222,7 +223,7 @@ local function spawnBackup(requestId)
         for _, ped in ipairs(peds) do deleteEntity(ped) end
         if DoesEntityExist(vehicle) then DeleteVehicle(vehicle) end
         pending[requestId] = nil
-        notifyServerEnded(requestId)
+        notifyServerEnded(requestId, 'spawn_failed')
         return
     end
 
@@ -420,22 +421,22 @@ runBackup = function(state)
         Citizen.Wait(500)
         local playerPed = PlayerPedId()
         if not DoesEntityExist(playerPed) then
-            cleanup(requestId, true)
+            cleanup(requestId, true, 'dead')
             break
         end
 
         local now = GetGameTimer()
         if now - state.createdAt >= UNIT_LIFETIME_MS then
-            cleanup(requestId, true)
+            cleanup(requestId, true, 'timeout')
             break
         end
         if playerIsDead(playerPed) then
-            cleanup(requestId, true)
+            cleanup(requestId, true, 'dead')
             break
         end
         local alivePed = firstAlivePed(state)
         if not alivePed then
-            cleanup(requestId, true)
+            cleanup(requestId, true, 'no_alive_ped')
             break
         end
 
@@ -451,7 +452,7 @@ runBackup = function(state)
             if distance > LEAVE_RADIUS then
                 state.outOfRangeAt = state.outOfRangeAt or now
                 if now - state.outOfRangeAt >= LEAVE_GRACE_MS then
-                    cleanup(requestId, true)
+                    cleanup(requestId, true, 'left')
                     break
                 end
             else
@@ -461,12 +462,12 @@ runBackup = function(state)
 
         if state.phase == 'driving' then
             if not (state.vehicle and state.vehicle ~= 0 and DoesEntityExist(state.vehicle)) then
-                cleanup(requestId, true)
+                cleanup(requestId, true, 'vehicle_lost')
                 break
             end
             local driver = state.peds[1]
             if not validPed(driver) then
-                cleanup(requestId, true)
+                cleanup(requestId, true, 'vehicle_lost')
                 break
             end
             local playerCoords = GetEntityCoords(playerPed)
@@ -500,12 +501,12 @@ AddEventHandler('onResourceStop', function(resourceName)
     local ids = {}
     for requestId in pairs(active) do ids[#ids + 1] = requestId end
     for _, requestId in ipairs(ids) do
-        cleanup(requestId, true)
+        cleanup(requestId, true, 'resource_stop')
     end
     -- Requests still loading models have no entities yet, but the server slot
     -- must still be released.
     for requestId in pairs(pending) do
         pending[requestId] = nil
-        notifyServerEnded(requestId)
+        notifyServerEnded(requestId, 'resource_stop')
     end
 end)
