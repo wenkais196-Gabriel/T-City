@@ -19,11 +19,17 @@ local ARRIVE_RADIUS = 20.0
 local FOLLOW_STOP_RADIUS = 10.0
 local FOLLOW_RESUME_RADIUS = 14.0
 local ESCORT_TIMEOUT_MS = 30000
-local UNIT_LIFETIME_MS = 300000  -- 5 minutes
+local UNIT_LIFETIME_MS = 300000  -- 5 minutes（只在 police_backup_v2 回滚时生效）
 local LEAVE_RADIUS = 150.0
 local LEAVE_GRACE_MS = 30000
 local ENEMY_RADIUS = 50.0
 local DRIVE_SPEED = 22.0
+
+-- 任务重发的心跳（S5）：GetScriptTaskStatus 说"正在执行"时，仍然每 N 毫秒补一次，
+-- 因为任务可能被 ClearPedTasks / 上车 / 击倒从外部清掉，而 native 只反映"当前在跑"。
+-- 数值来自真机观感：车 5 秒、跟随 6 秒足够，再短就是白花帧。
+local DRIVE_RETASK_HEARTBEAT_MS = 5000
+local FOLLOW_RETASK_HEARTBEAT_MS = 6000
 
 local active = {}  -- [requestId] = state
 
@@ -33,7 +39,36 @@ local active = {}  -- [requestId] = state
 local function serverOwnsLifetime()
     return GetConvar('police_backup_v2', '1') == '1'
 end
+
 local pending = {} -- [requestId] = true while models are loading
+
+-- ---------------------------------------------------------------------------
+-- 任务门控（S5）
+-- ---------------------------------------------------------------------------
+local taskHashes = {}
+
+--- 任务名 → 哈希（GetScriptTaskStatus 要的是任务哈希，不是字符串）。
+local function taskHash(name)
+    local cached = taskHashes[name]
+    if cached then return cached end
+    local hash = type(GetHashKey) == 'function' and GetHashKey(name) or 0
+    taskHashes[name] = hash
+    return hash
+end
+
+--- 读一个 ped 当前任务的执行状态；缺 native 或未知哈希时回 0（= 不可知）。
+local function taskStatus(ped, name)
+    if type(GetScriptTaskStatus) ~= 'function' then return 0 end
+    local ok, status = pcall(GetScriptTaskStatus, ped, taskHash(name))
+    if ok and type(status) == 'number' then return status end
+    return 0
+end
+
+--- 该不该给这个 ped 重新下发任务（判定在 P0 的 backup_contract，便于 golden 覆盖）。
+local function shouldRetask(ped, name, sinceMs, nowMs, heartbeatMs)
+    local status = taskStatus(ped, name)
+    return BackupContract.ShouldRetask(status, sinceMs, nowMs, heartbeatMs)
+end
 local runBackup    -- forward declaration: spawnBackup starts this thread
 
 local function notifyServerEnded(requestId, reason)
@@ -429,7 +464,7 @@ local function updateFoot(state, playerPed, now)
             local distance = #(GetEntityCoords(ped) - playerCoords)
             if distance > FOLLOW_RESUME_RADIUS then
                 local last = state.lastFollow[ped] or 0
-                if now - last > 2000 then
+                if shouldRetask(ped, 'TASK_GO_TO_ENTITY', last, now, FOLLOW_RETASK_HEARTBEAT_MS) then
                     if state.guard[ped] then ClearPedTasks(ped) end
                     TaskGoToEntity(ped, playerPed, -1, FOLLOW_STOP_RADIUS, 2.0, 1073741824, 0)
                     if type(SetPedKeepTask) == 'function' then SetPedKeepTask(ped, true) end
@@ -450,7 +485,9 @@ end
 runBackup = function(state)
     local requestId = state.requestId
     while active[requestId] == state do
-        Citizen.Wait(500)
+        -- 500ms 在"开车/交战"这类要跟手的状态下用；下车后跟随是慢动作，1s 足够，
+        -- 把每帧的实体与距离采样砍一半。
+        Citizen.Wait(state.phase == 'driving' and 500 or 1000)
         local playerPed = PlayerPedId()
         if not DoesEntityExist(playerPed) then
             cleanup(requestId, true, 'dead')
@@ -509,7 +546,10 @@ runBackup = function(state)
             if #(vehicleCoords - playerCoords) <= ARRIVE_RADIUS
                 or now - state.createdAt >= ESCORT_TIMEOUT_MS then
                 beginFoot(state)
-            elseif now - state.lastDriveTask > 2500 then
+            elseif shouldRetask(driver, 'TASK_VEHICLE_DRIVE_TO_COORD',
+                    state.lastDriveTask, now, DRIVE_RETASK_HEARTBEAT_MS) then
+                -- 只在"任务不在跑"或心跳到点时才重发：正在开车的司机不必每 2.5 秒
+                -- 重建一次路径（真机上表现为车头一抖一抖、油耗和掉帧都白给）。
                 TaskVehicleDriveToCoord(
                     driver, state.vehicle, playerCoords.x, playerCoords.y, playerCoords.z,
                     DRIVE_SPEED, 0, state.vehicleModel, 786603, ARRIVE_RADIUS, true)

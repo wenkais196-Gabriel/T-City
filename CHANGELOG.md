@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **支援单位不再无条件重发任务（S5）**：改用 `GetScriptTaskStatus` 判定——正在执行（1）只按心跳兜底（车 5s / 跟随 6s），空闲（3）、已完成（7）与不可知（0/nil，含未知任务哈希）立刻重发；判定本身是 P0 纯函数 `BackupContract.ShouldRetask`，四态都有 golden 用例。主循环按状态自适应 500ms / 1000ms。真机：`spawning→enroute→onscene` 7 秒走完，之后 49 秒稳定停在 `onscene entities=3`，车与两名 NPC 正常到场。
 - **客户端不再自己算支援寿命（S4）**：`police_backup_v2` 打开时（默认）寿命由服务端持有，客户端 5 分钟自计时被 `serverOwnsLifetime()` 守卫；只有回滚（`0`）时才保留自清能力。新增闸门 `test_backup_lifetime_owner.py`（客户端守卫、300s/5s/10s 数字、sweep 挂 `onResourceStart`、先收再放），其中一条带变异冒烟用例。真机：TTL 压到 20s 时，`police_backup_v2 0` 下单位活到 49s 仍未收；切回 `1` 后 12s 内 `ending=true`、18s 内释放。
 - **支援单位由服务端统一收尾（S3）**：10 秒一轮的 `BackupSweep` 按 `expires_at`（默认 300s，`police_backup_ttl` 可覆盖用于测试）与阶段 ack 超时（`requested` 10s / `spawning` 15s）判过期；到点**先发 `police:client:BackupEnd` 让客户端删车删人，宽限 5 秒再释放名额**，并把 `backup.expired`（`phase`/`why`/`live`）写进审计。名额回收从此不依赖客户端是否还活着；`setr police_backup_v2 0` 可整体回滚。真机：`ending=true` → 释放，客户端日志 `cleaned (reason=expired)`，审计 `phase=enroute;why=ttl;live=38`。
 - **NPC 支援可见阶段（S2）**：服务端新增阶段表与 `police:server:backupAck`（三重校验：预算归属 / 阶段白名单 / 只向前，越权与倒退采样写 `backup.ack_rejected`）；客户端在收到事件、车与两人到手、下车到场、首次交战四处上报。`enroute` 写 `backup.spawned`（entities + 耗时）、首次 `engaged` 写 `backup.engaged`；`GetBackupState()` 导出与控制台`police_backup_state` 给出不含身份字段的只读投影。真机：`phase` 从 `requested` 推进到 `onscene`，5 分钟到点以 `reason=timeout;live=300` 结束并从投影消失。
