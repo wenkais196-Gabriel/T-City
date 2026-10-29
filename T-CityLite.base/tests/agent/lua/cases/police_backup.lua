@@ -397,6 +397,135 @@ return {
                 'heartbeat 0 means "always" (used when debugging)')
         end)
 
+        -- ------------------------------------------------------------------
+        -- S7：通缉目标（服务端权威的嫌疑人投影）
+        -- ------------------------------------------------------------------
+
+        --- 造一个通缉玩家并放到指定坐标；返回它的 ped 句柄。
+        local function wantedPlayer(source, citizenid, stars, x, y, z)
+            local player = env.makePlayer(source, citizenid, { cash = 0, bank = 0, crypto = 0 })
+            player.PlayerData.metadata = player.PlayerData.metadata or {}
+            player.PlayerData.metadata.wanted = stars
+            local ped = 9000 + source
+            env.peds[source] = ped
+            env.entity_coords[ped] = { x = x, y = y, z = z }
+            env.net_ids[ped] = 5000 + source
+            return ped
+        end
+
+        --- 触发一次 backupTargets 请求。
+        local function askTargets(source)
+            _G.source = source
+            local handlers = env.event_handlers['police:server:backupTargets'] or {}
+            assert(#handlers > 0, 'police:server:backupTargets is not registered')
+            for _, handler in ipairs(handlers) do handler() end
+            _G.source = nil
+        end
+
+        local function lastTargetsEvent()
+            for index = #(env.client_events or {}), 1, -1 do
+                local item = env.client_events[index]
+                if item.event == 'police:client:BackupTargets' then return item end
+            end
+            return nil
+        end
+
+        check('a wanted player near the unit becomes a target', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            env.convars['police_backup_engage_wanted'] = '1'
+
+            local officer = env.makePlayer(41, 'BACKUP301', { cash = 0, bank = 0, crypto = 0 })
+            officer.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            env.peds[41] = 8001
+            env.entity_coords[8001] = { x = 0.0, y = 0.0, z = 0.0 }
+            assert(budget.Acquire('backup', 'BU-41-1', 'BACKUP301') == true)
+
+            wantedPlayer(42, 'SUSPECT01', 3, 40.0, 0.0, 0.0)   -- 40m：命中
+            wantedPlayer(43, 'CLEAN001', 0, 10.0, 0.0, 0.0)    -- 没通缉：排除
+            wantedPlayer(44, 'SUSPECT02', 2, 900.0, 0.0, 0.0)  -- 900m：超半径
+
+            local projection = GetBackupTargets(41)
+            assert(#projection.targets == 1, ('expected one target, got %d'):format(#projection.targets))
+            local target = projection.targets[1]
+            assert(target.net_id == 5042, 'netId must come from the suspect ped')
+            assert(target.stars == 3, 'stars must come from metadata.wanted')
+            assert(target.distance == 40, 'distance must be measured from the caller')
+            for _, forbidden in ipairs({ 'citizenid', 'cid', 'coords', 'x', 'y', 'z', 'name' }) do
+                assert(target[forbidden] == nil, 'the target projection must not carry ' .. forbidden)
+            end
+            budget.Release('BU-41-1', 'test_cleanup')
+        end)
+
+        check('targets are only handed to a caller holding a live unit', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            env.convars['police_backup_engage_wanted'] = '1'
+            env.makePlayer(45, 'BACKUP302', { cash = 0, bank = 0, crypto = 0 })
+            env.peds[45] = 8005
+            env.entity_coords[8005] = { x = 0.0, y = 0.0, z = 0.0 }
+            wantedPlayer(46, 'SUSPECT03', 4, 30.0, 0.0, 0.0)
+
+            assert(#GetBackupTargets(45).targets == 0, 'no unit -> no targets')
+            askTargets(45)
+            assert(lastTargetsEvent() == nil, 'no unit -> no client event either')
+        end)
+
+        check('the switch is off by default', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            env.convars['police_backup_engage_wanted'] = nil
+
+            env.makePlayer(47, 'BACKUP303', { cash = 0, bank = 0, crypto = 0 })
+            env.peds[47] = 8007
+            env.entity_coords[8007] = { x = 0.0, y = 0.0, z = 0.0 }
+            assert(budget.Acquire('backup', 'BU-47-1', 'BACKUP303') == true)
+            wantedPlayer(48, 'SUSPECT04', 2, 20.0, 0.0, 0.0)
+
+            askTargets(47)
+            assert(lastTargetsEvent() == nil, 'default off: the handler must not answer')
+            budget.Release('BU-47-1', 'test_cleanup')
+        end)
+
+        check('answers are rate limited to one per window', function()
+            env.mysql.reset()
+            drainAll()
+            resetClientEvents()
+            env.convars['police_backup_engage_wanted'] = '1'
+
+            local officer = env.makePlayer(49, 'BACKUP304', { cash = 0, bank = 0, crypto = 0 })
+            officer.PlayerData.job = { name = 'police', onduty = true, grade = { level = 3 } }
+            env.peds[49] = 8009
+            env.entity_coords[8009] = { x = 0.0, y = 0.0, z = 0.0 }
+            assert(budget.Acquire('backup', 'BU-49-1', 'BACKUP304') == true)
+            wantedPlayer(50, 'SUSPECT05', 5, 25.0, 0.0, 0.0)
+
+            local function targetEvents()
+                local count = 0
+                for _, item in ipairs(env.client_events) do
+                    if item.event == 'police:client:BackupTargets' then count = count + 1 end
+                end
+                return count
+            end
+
+            env.now = 10000
+            askTargets(49)
+            assert(lastTargetsEvent(), 'the first ask must be answered')
+            assert(targetEvents() == 1, 'exactly one answer for the first ask')
+
+            env.now = 11000            -- 同一窗口内（1s < 3s）
+            askTargets(49)
+            assert(targetEvents() == 1, 'a second ask inside the 3s window must be dropped')
+
+            env.now = 14000            -- 窗口已过
+            askTargets(49)
+            assert(targetEvents() == 2, 'a later ask must be answered again')
+            budget.Release('BU-49-1', 'test_cleanup')
+        end)
+
         return { ok = failed == 0, data = { cases = results, failed = failed } }
     end,
 }

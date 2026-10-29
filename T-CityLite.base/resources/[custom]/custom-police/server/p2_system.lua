@@ -553,6 +553,14 @@ local function backupTtlSeconds()
     return BACKUP_TTL_SECONDS
 end
 
+--- 读一个玩家的实例号（routing bucket）；取不到就当 0（主世界/共享桶）。
+local function playerBucket(src)
+    if type(GetPlayerRoutingBucket) ~= 'function' then return 0 end
+    local ok, bucket = pcall(GetPlayerRoutingBucket, src)
+    if ok and type(bucket) == 'number' then return bucket end
+    return 0
+end
+
 --- Live backup budget entries owned by `citizenid` (at most two).
 local function backupSlots(citizenid)
     local owned = {}
@@ -669,6 +677,12 @@ function RequestBackup(source)
         lastAck = now,
         expiresAt = now + backupTtlSeconds(),
         entityCount = 0,
+        -- 请求者当时所在的实例（routing bucket）。bucket 是"实例化"工具而不是
+        -- 可见性范围（官方 cookbook 原话），所以支援单位**不**做桶隔离：
+        -- 请求者在 0 号桶时，警车对所有人在同一个世界里，这才是 RP 该有的样子；
+        -- 请求者本身在私有桶里时，客户端建出来的实体天然只在那个桶里可见。
+        -- 这里记下来是为了让运维/agent 能分辨"这单在哪个实例里"。
+        bucket = playerBucket(src),
     }
 
     TriggerClientEvent('police:client:SpawnBackup', src, requestId)
@@ -832,8 +846,114 @@ function BackupSweep(now)
     return released
 end
 
+--- 通缉目标（S7）：支援单位到场后该打谁。
+---
+--- 现在的客户端只看"关系组里的敌对 ped"，被通缉的**玩家**完全不在视野里 ——
+--- 支援车开到场、下车、站着，因为找不到"敌人"。这里补上服务端权威的嫌疑人来源：
+--- custom-main 把通缉星级写在 `PlayerData.metadata.wanted` 上，服务端直接读，
+--- 不信客户端上报的任何东西。
+---
+--- 投影只给 `net_id / distance / stars`：给坐标等于把嫌疑人的位置广播给客户端，
+--- 给 citizenid 会把身份带进日志。客户端拿 netId 自己 NetToPed 即可。
+local BACKUP_TARGET_RADIUS = 120.0
+local BACKUP_TARGET_LIMIT = 3
+local BACKUP_TARGET_COOLDOWN_MS = 3000
+local backupTargetAskedAt = {} -- [source] = GetGameTimer()
+
+--- 是否允许 NPC 支援对通缉玩家开火。默认关：NPC 打玩家是最容易被投诉的一类改动，
+--- 先让服主在真机上确认手感再打开（`setr police_backup_engage_wanted 1`）。
+local function backupEngageWantedEnabled()
+    return GetConvar('police_backup_engage_wanted', '0') == '1'
+end
+
+local function distanceBetween(a, b)
+    if not a or not b then return math.huge end
+    local dx = (tonumber(a.x) or 0) - (tonumber(b.x) or 0)
+    local dy = (tonumber(a.y) or 0) - (tonumber(b.y) or 0)
+    local dz = (tonumber(a.z) or 0) - (tonumber(b.z) or 0)
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+--- 请求者附近的高星嫌疑人（只读投影）。
+---@param source number
+---@return table { targets = {...}, truncated = boolean, radius = number }
+function GetBackupTargets(source)
+    local src = tonumber(source) or 0
+    local empty = { targets = {}, truncated = false, radius = BACKUP_TARGET_RADIUS }
+
+    local player = QBCore.Functions.GetPlayer(src)
+    local actor = player and player.PlayerData
+    if not actor or type(actor.citizenid) ~= 'string' or actor.citizenid == '' then return empty end
+
+    -- 只有"手里真有一单活的支援"才给目标：否则这条通道会变成一个免费的通缉雷达。
+    if #backupSlots(actor.citizenid) == 0 then return empty end
+
+    local originPed = GetPlayerPed(src)
+    if not originPed or originPed == 0 then return empty end
+    local origin = GetEntityCoords(originPed)
+
+    local targets = {}
+    local truncated = false
+    for _, otherSrc in ipairs(QBCore.Functions.GetPlayers()) do
+        if otherSrc ~= src then
+            local other = QBCore.Functions.GetPlayer(otherSrc)
+            local data = other and other.PlayerData
+            local stars = tonumber(data and data.metadata and data.metadata.wanted) or 0
+            if stars >= 1 then
+                local ped = GetPlayerPed(otherSrc)
+                if ped and ped ~= 0 then
+                    local coords = GetEntityCoords(ped)
+                    local distance = distanceBetween(coords, origin)
+                    if distance <= BACKUP_TARGET_RADIUS then
+                        if #targets >= BACKUP_TARGET_LIMIT then
+                            truncated = true
+                        else
+                            local netId = type(NetworkGetNetworkIdFromEntity) == 'function'
+                                and NetworkGetNetworkIdFromEntity(ped) or 0
+                            if netId and netId ~= 0 then
+                                targets[#targets + 1] = {
+                                    net_id = netId,
+                                    distance = math.floor(distance),
+                                    stars = math.floor(stars),
+                                }
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(targets, function(a, b) return (a.distance or 0) < (b.distance or 0) end)
+    return { targets = targets, truncated = truncated, radius = BACKUP_TARGET_RADIUS }
+end
+
+--- 客户端问"有没有通缉目标"。session-bound + 3 秒限流 + 必须有自己的活单。
+RegisterNetEvent('police:server:backupTargets', function()
+    local targetSrc = tonumber(source) or 0
+    if not backupEngageWantedEnabled() then return end
+
+    local player = QBCore.Functions.GetPlayer(targetSrc)
+    local actor = player and player.PlayerData
+    local cid = actor and actor.citizenid
+    if type(cid) ~= 'string' or cid == '' then return end
+    if #backupSlots(cid) == 0 then return end
+
+    local nowMs = GetGameTimer()
+    -- last == 0 是"从没问过"的哨兵：服务器刚起来时 GetGameTimer() 还很小，
+    -- 用 nowMs - last 会把第一次请求也当成限流窗口内。
+    local last = backupTargetAskedAt[targetSrc] or 0
+    if last ~= 0 and nowMs - last < BACKUP_TARGET_COOLDOWN_MS then return end
+    backupTargetAskedAt[targetSrc] = nowMs
+
+    TriggerClientEvent('police:client:BackupTargets', targetSrc, GetBackupTargets(targetSrc))
+end)
+
 --- Live view of every backup unit the server is tracking (S6).
---- Returns only what an operator/agent needs: no citizenid, no coordinates.
+--- 只给运维/agent 需要的东西：没有 citizenid、没有坐标。
+--- （S7）额外带 `bucket`：请求者当时的实例。支援单位刻意**不做桶隔离**
+--- —— 官方 cookbook 把 routing bucket 定为"实例化"工具而不是可见性范围；
+--- 请求者在主世界时，警车就该对其他人在同一个世界里。
 function GetBackupState()
     local now = os.time()
     local list = {}
@@ -847,6 +967,7 @@ function GetBackupState()
             entity_count = tonumber(entry.entityCount) or 0,
             rejected = tonumber(entry.rejectedCount) or 0,
             ending = entry.endingAt ~= nil,
+            bucket = tonumber(entry.bucket) or 0,
         }
     end
     table.sort(list, function(a, b) return (a.request_id or '') < (b.request_id or '') end)
@@ -908,6 +1029,7 @@ AddEventHandler('playerDropped', function()
     if not cid then return end
     backupSource[src] = nil
     releaseBackupSlots(cid, 'player_dropped')
+    backupTargetAskedAt[src] = nil
     -- 阶段表跟着名额一起清：留着会污染 GetBackupState()，也会挡住同 source 的
     -- 新单（阶段只允许向前，旧条目让新单从 requested 起步时被判"倒退"）。
     for requestId, entry in pairs(backupPhases) do
@@ -1491,8 +1613,9 @@ RegisterCommand('police_backup_state', function(source)
         return
     end
     for _, unit in ipairs(units) do
-        print(('[custom-police] backup %s phase=%s src=%s age=%ss since_ack=%ss entities=%d rejected=%d%s'):format(
+        print(('[custom-police] backup %s phase=%s src=%s bucket=%d age=%ss since_ack=%ss entities=%d rejected=%d%s'):format(
             tostring(unit.request_id), tostring(unit.phase), tostring(unit.source),
+            tonumber(unit.bucket) or 0,
             tostring(unit.age), tostring(unit.phase_age), tostring(unit.entity_count),
             tostring(unit.rejected), unit.ending and ' ending=true' or ''))
     end
