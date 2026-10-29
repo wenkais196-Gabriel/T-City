@@ -692,7 +692,7 @@ justice_sentences (
 
 | 层 | 谁拥有 | 状态 | 代码 |
 |---|---|---|---|
-| 服务端配额 | `custom-police` | `backupUnits[citizenid][requestId]=true`、`backupCooldown[cid]`、`backupSource[src]` | `p2_system.lua:172-272` |
+| 服务端配额 | `custom-police` | 名额在 `NPCBudget` 的 entries 里（`kind='backup'`，`backupSlots()` 按 citizenid 过滤），另有 `backupCooldown[cid]`、`backupSource[src]` 两个本地表 | `p2_system.lua:522-640` |
 | 客户端实体 | 请求者客户端 | `pending[requestId]` → `active[requestId] = {phase='driving'/'foot', combat, peds, vehicle, ...}` | `client/backup.lua:28-30,183-261,425-495` |
 | 持久化 | 无 | 仅 `police_audit` 一条 `backup.request` | `p2_system.lua:225` |
 
@@ -702,20 +702,20 @@ justice_sentences (
 
 | From | To | 触发者 / 入口 | 校验（当前 → 目标） | 写入 / 事件 | 审计 | 失败 / 回退 |
 |---|---|---|---|---|---|---|
-| ∅ | `requested` | MDT「请求支援」→ `request_backup` → `RequestBackup` | 当前：`incident.update`（grade≥1、在勤）；60s 冷却；每 citizenid 最多 2；先占位再 audit；audit 后重查玩家 | `backupUnits`、`backupCooldown`、`backupSource`；`TriggerClientEvent('police:client:SpawnBackup')` | `backup.request`（target=cid, detail=requestId） | 权限/冷却/上限返回 `not_police`/`cooldown`/`limit`；audit 失败释放占位并回滚冷却；玩家在 audit 期间离开 → 释放占位 |
+| ∅ | `requested` | MDT「请求支援」→ `request_backup` → `RequestBackup` | 当前：`incident.update`（grade≥1、在勤）；60s 冷却；每 citizenid 最多 2；先占位再 audit；audit 后重查玩家 | `NPCBudget.Acquire('backup', …)`、`backupCooldown`、`backupSource`；`TriggerClientEvent('police:client:SpawnBackup')` | `backup.request`（target=cid, detail=requestId） | 权限/冷却/上限返回 `not_police`/`cooldown`/`limit`；audit 失败释放占位并回滚冷却；玩家在 audit 期间离开 → 释放占位 |
 | `requested` | `spawning` | 客户端收到 `police:client:SpawnBackup` | 当前：客户端校验字符串、去重；服务端无 ack；目标：客户端 3s 内回 `backupAck(requestId,'spawning')`，否则服务端释放 | 客户端 `pending[requestId]=true` | 无 | 模型加载失败/车辆创建失败/2 ped 失败 → `notifyServerEnded` |
 | `spawning` | `enroute` | 车辆 + 2 名 NPC 生成成功 | 当前：客户端状态；服务端不感知；目标：ack `enroute` | 客户端 `active[requestId]`，phase=`driving` | 无 | 实体缺失 → cleanup + 结束 |
 | `enroute` | `onscene` | 距玩家 ≤20m 或 30s escort timeout | 当前：`beginFoot`（`backup.lua:349-363`）；目标：ack `onscene` | 客户端 `phase='foot'`；车停下、ped 下车 | 无 | 司机死亡/车消失 → cleanup |
 | `onscene` | `engaged` | 发现敌对 ped（`findEnemies`） | 当前：客户端判定；目标：ack `engaged`（只用于指标，不做权限） | 客户端 `combat=true`、`TaskCombatPed` | 无 | 敌人消失 → 回 `onscene` |
 | `engaged` | `onscene` | 敌人清空 | 当前：`updateFoot` 清任务 | 客户端 `combat=false` | 无 | — |
 | `onscene/engaged` | `returning` | 玩家离开 150m 持续 30s | 当前：直接 cleanup（没有 returning 状态）；目标：先 `returning`，再 cleanup | 客户端 `outOfRangeAt` | 无 | 玩家回来 → 取消计时 |
-| `任何` | `despawned` | 5 分钟寿命 / 玩家死亡 / 无存活 ped / 车辆丢失 / 资源 stop / 玩家掉线 | 当前：`cleanup(requestId, true)` 通知服务端；服务端 `backupEnded` 只释放自己的 requestId | 客户端删实体的 blip/vehicle/peds；服务端删占位 | **无结束审计** | 服务端 `playerDropped` 清 `backupUnits[cid]` 与 `backupSource[src]`（`p2_system.lua:266-272`） |
+| `任何` | `despawned` | 5 分钟寿命 / 玩家死亡 / 无存活 ped / 车辆丢失 / 资源 stop / 玩家掉线 | 当前：`cleanup(requestId, true)` 通知服务端；服务端 `backupEnded` 只释放自己的 requestId | 客户端删实体的 blip/vehicle/peds；服务端删占位 | **无结束审计** | 服务端 `playerDropped` 释放该 session 的全部 backup 槽位并清 `backupSource[src]`（`p2_system.lua:636-645`） |
 | `requested/spawning` | `despawned` | 玩家在 audit 期间离开；模型/实体失败 | 当前：`releaseReservation` + `notifyServerEnded` | 释放占位/冷却 | 仅 request 审计 | 无 TTL；客户端静默失败（Lua 错误/卡死）不会发 `backupEnded` → 占位直到掉线 |
 | 任何 | `despawned` | 目标：服务端 TTL / 心跳丢失 | 当前：无 | 目标：`expires_at` 到点强制释放 | 目标：`backup.expire` | 目标：Sweep 每 10–15s；释放前通知客户端清理 |
 
 ### 6.3 当前实现的硬缺口
 
-1. **服务端无生命周期**：`backupUnits` 只是一个 set，没有 `state/spawned_at/expires_at/last_ack`；服务端无法回答“这个单位在哪、是否到场、是否战斗”。
+1. **服务端无生命周期**：名额在 `NPCBudget` entries 里只是计数（`id/kind/citizenid/slots/at`），没有 `phase/spawned_at/expires_at/last_ack`；服务端无法回答“这个单位在哪、是否到场、是否战斗”。
 2. **TTL 与生命周期脱钩**（2026-10-29 修正：原先写的“无 TTL”已过时）：`NPCBudget` 有 `TTL_SECONDS = 600` 与 `Sweep()`（`server/npc_budget.lua:77-90`，超时释放并写 `npc.stale` 审计），名额不会永久泄漏。真正的缺口是**两套计时互不知道**：客户端 5 分钟（`client/backup.lua:22`）比预算 10 分钟短，Sweep 释放名额后**不会通知客户端清理实体**；反过来客户端卡死时名额要等满 10 分钟才回收。
 3. **无生成确认**：服务端 `TriggerClientEvent` 后立即认为成功；模型缺失/实体创建失败只靠客户端回报，服务端没有超时兜底。
 4. **无结束审计/指标**：只有 `backup.request`；无法算成功率、平均存活时长、战斗率、异常结束原因。
@@ -745,11 +745,11 @@ justice_sentences (
 
 | 项 | 基线时 | 现在（`3bbcab3`） | 证据 |
 |---|---|---|---|
-| 服务端状态 | 只有 `backupUnits[cid][requestId]=true` 的占位集合 | **仍是占位集合**；没有 `state/spawned_at/expires_at/last_ack` | `custom-police/server/p2_system.lua:295-300` |
+| 服务端状态 | 占位集合（本地表 `backupUnits`） | **改为** `NPCBudget` 的 entries 计数（连 `backupUnits` 这个本地表都已删除），仍没有 `phase/spawned_at/expires_at/last_ack` | `custom-police/server/npc_budget.lua` `NPCBudget.Get()`、`p2_system.lua:527-535` |
 | TTL | 无 | **预算侧已有**：`TTL_SECONDS=600` + `Sweep()`，超时释放并写 `npc.stale`；但与客户端 5 分钟寿命脱钩——Sweep 不通知客户端清理实体，客户端卡死时名额最多占满 10 分钟 | `server/npc_budget.lua:77-90`、`client/backup.lua:22` |
 
 | 生成确认 | 无 ack | **仍无**：`TriggerClientEvent('police:client:SpawnBackup')` 后即认为成功 | `p2_system.lua:364` |
-| 掉线释放 | `playerDropped` 清 `backupUnits[cid]` | 保留并加了来源校验（`backupSource`），按 session 释放 | `p2_system.lua:387-395` |
+| 掉线释放 | `playerDropped` 清光该 citizenid 的 backup 槽位 | 保留并加了来源校验（`backupSource`），按 session 释放 | `p2_system.lua:636-645` |
 | 结束审计 | 只有 `backup.request` | **仍只有 request**；无 `backup.ended`/`expired`/指标 | `p2_system.lua:348` |
 | 全局 cap | 无（只限每人 2） | **已有**：`NPCBudget.MAX_GLOBAL = 6`，超限回 `global_limit`（口径是实体槽位，不是单位） | `shared/npc_budget.lua:15,68-88` |
 
