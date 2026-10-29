@@ -233,7 +233,23 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1 已实施**（2026-10-29，pr/94 之后的实现 PR）。其余四步未开始。
+> 进度：**S1 已实施并真机验证**（2026-10-29，PR #97；证据见下方「S1 真机记录」）。其余四步未开始。
+
+### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
+
+```
+164  backup.request  DXI50064  BU-1-1793296922-3  18:02:02   ← 手机 MDT「请求支援」真的发出去
+148  backup.ended    BU-1-1793296384-1  reason=timeout;live=301  17:58:05  ← 客户端 5 分钟寿命 → cleanup → 服务端审计
+146  backup.request  DXI50064  BU-1-1793296384-1  17:53:04
+```
+
+`live=301` 是服务端用预算条目的 `at` 算出来的存活秒数（5 分钟 + 1 秒轮询偏差），
+说明"原因 + 时长"这条路端到端通了；白名单外的原因由 golden 用例覆盖（记 `unknown`）。
+
+**顺带发现的边界**：`resource_stop` 这个原因**无法在重启 `custom-police` 自身时留痕**——
+客户端 `onResourceStop` 发 `backup:server:backupEnded` 的那一刻，接收它的服务端正在重启，
+事件被丢掉（名额本身在内存里，随重启一起清空，不会泄漏）。所以 S3 的 sweep 才必须
+自己写 `expired` 审计；不要指望 `resource_stop` 出现在审计里。
 
 1. **只加审计** ✅：`backup.ended`（reason 白名单 `shared/backup_contract.lua` + 服务端归一 + 审计带 `live=` 存活秒数；`backup.spawned` 留给 S2，因为要等 ack 才有"已生成"的确切时刻）；
 2. **加 ack 与阶段**：服务端内存表 + `backupAck` 事件；不设超时（观察一周数据）；
