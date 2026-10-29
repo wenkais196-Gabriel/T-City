@@ -115,3 +115,50 @@ function BackupContract.CanAdvance(from, to)
     if not fromRank then return false end
     return toRank >= fromRank
 end
+
+-- ---------------------------------------------------------------------------
+-- 任务门控（S5）
+--
+-- 之前是"每 2.5 秒无条件重发一次 Task*"。两个问题：
+--   1. 任务正在执行时重发是白花帧（TaskVehicleDriveToCoord 每次都会重建路径）；
+--   2. 反过来，任务被别的系统（ClearPedTasks、上车、被击倒）清掉后，
+--      下一次重发最多要等 2.5 秒，表现是"支援车停在原地发呆"。
+-- GetScriptTaskStatus 让客户端能区分这两种情况：正在执行 → 只按心跳兜底重发；
+-- 空闲/已完成/不可知 → 立刻重发。
+-- ---------------------------------------------------------------------------
+
+--- GetScriptTaskStatus 的返回码（官方枚举：1 performing / 3 vacant / 7 finished）。
+BackupContract.TASK_STATUS = {
+    performing = 1,
+    vacant = 3,
+    finished = 7,
+}
+
+--- 是否需要重新下发任务。
+---
+--- 判定是纯函数，客户端只负责把 native 的返回值传进来 —— 这样 golden 用例
+--- 能覆盖三态（1/3/7）与"不可知"，不必去 stub 整车实体。
+---
+---@param status any GetScriptTaskStatus 的返回值（未知任务哈希会回 0）
+---@param sinceMs number|nil 上次下发时刻（GetGameTimer 口径）
+---@param nowMs number 当前时刻
+---@param heartbeatMs number 即使正在执行，超过这个时长也重发一次（任务可能被别处清掉）
+---@return boolean
+function BackupContract.ShouldRetask(status, sinceMs, nowMs, heartbeatMs)
+    local now = tonumber(nowMs) or 0
+    local since = tonumber(sinceMs) or 0
+    local heartbeat = tonumber(heartbeatMs) or 0
+
+    -- 不可知（缺 native、未知任务哈希、拿到 nil）：按"该重发"处理。
+    -- 重复下发一个同样的任务代价很小，卡在原地不动的代价很大。
+    local code = tonumber(status)
+    if not code or code == 0 then return true end
+
+    if code == BackupContract.TASK_STATUS.performing then
+        -- 正在执行：心跳兜底，别每帧重建路径。
+        return heartbeat <= 0 or (now - since) >= heartbeat
+    end
+
+    -- vacant / finished / 其它异常码：任务已经不在跑了，立刻补。
+    return true
+end
