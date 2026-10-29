@@ -302,6 +302,8 @@ owner 登记：`tests/architecture/table_owners.json` 增加一条 `{ "owner": "
 
 迁移文件名建议：迁移文件 migrations/v3.13_scenario_engine.sql（尚未创建）（幂等，仿 `migrations/v3.11_police_npc_callout.sql:16-38` 的 `information_schema` 判断）。
 
+**资源启动落位（FIT-10 要校的第三样）**：`scenario-engine` 必须在 T-CityLite.base/configs/modules/ 下有归属——新增一个 scenario.cfg 写 ensure scenario-engine，并在 server.cfg 的 exec 列表里接上（server.cfg 是机器本地文件、不入库）；否则资源进了 resources/ 也不会被 start，FIT-10 的 cfg ↔ manifest ↔ 文件三方核对同样会报未登记。**新增资源文件后要 refresh 再 ensure**（restart 不重读 fxmanifest）。
+
 ### 6.2 落库 vs 内存
 
 - **落库**：`scenario_runs`、`scenario_events`（场景运行记录，重启后可恢复/可对账）。
@@ -373,8 +375,8 @@ owner 登记：`tests/architecture/table_owners.json` 增加一条 `{ "owner": "
 
 | 阶段 | 内容 | 验收标准（全部是可观测事实） |
 |---|---|---|
-| P0 原语 | shared 原语 + 离线测试 | `pytest tests/unit` 绿；Lua 测试能加载 shared 模块并断言节点/边/动作/阶段枚举；`tools/dev/reuse_scan.py` 显示 NPC 生成路径仍为 3，不新增重复实现 |
-| P1 引擎骨架 | server/service.lua + client/runner.lua + demo 场景 | `restart scenario-engine` 后日志出现 `[scenario-engine] loaded`；demo 场景 Create→Push→Ack(ready)→Resolve 全链路；`test_npc_budget.py` 仍绿（无新旁路） |
+| P0 原语 | shared 原语 + 离线测试 | `pytest T-CityLite.base/tests/unit T-CityLite.base/tests/architecture` 绿（注意 `test_npc_budget.py` 在 architecture 层，不在 unit）；Lua 测试能加载 shared 模块并断言节点/边/动作/阶段枚举；`tools/dev/reuse_scan.py` 显示 NPC 生成路径仍为 3，不新增重复实现 |
+| P1 引擎骨架 | server/service.lua + client/runner.lua + demo 场景 | `restart scenario-engine` 后日志出现 `[scenario-engine] loaded`；demo 场景 Create→Push→Ack(ready)→Resolve 全链路；T-CityLite.base/tests/architecture/test_npc_budget.py 仍绿（无新旁路） |
 | P2 警察适配 | `custom-police` 双轨 + convar | `scenario_engine_enabled=1` 时 `police:server:NpcCalloutAck` 语义往返成功；`=0` 时旧路径不变；`net_events_allowlist.json`/`table_owners.json` 登记通过架构测试 |
 | P3 翻转收口 | 默认 on、删旧路径、更新 FIT-07 | `T-CityLite.base/resources/[custom]/custom-police/client/npc_callouts.lua` 的 `CreateVehicle`/`CreatePed` 生成代码被删除；`reuse_budget.json` 生成路径计数下降；FIT-07 更新后的规则 + `test_npc_budget.py` 双绿 |
 
