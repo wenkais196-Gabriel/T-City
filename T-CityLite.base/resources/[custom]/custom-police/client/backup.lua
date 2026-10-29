@@ -118,6 +118,11 @@ local function cleanup(requestId, notifyServer, reason)
     active[requestId] = nil
     pending[requestId] = nil
 
+    -- 一行收尾日志：真机验证"服务端发了 BackupEnd，客户端真的删了实体"时，
+    -- 服务端看不到实体，只能靠这条与 CitizenFX 客户端日志对账。
+    print(('[custom-police] backup %s cleaned (reason=%s)'):format(
+        tostring(requestId), tostring(reason or 'unknown')))
+
     if state.blip and state.blip ~= 0 and DoesBlipExist(state.blip) then
         RemoveBlip(state.blip)
     end
@@ -515,6 +520,18 @@ RegisterNetEvent('police:client:SpawnBackup', function(requestId)
     -- 所以它必须在任何模型加载/等待之前发出。
     ackPhase(requestId, 'spawning', 0)
     CreateThread(function() spawnBackup(requestId) end)
+end)
+
+--- 服务端收尾（S3）：寿命到点或阶段停太久，服务端先发这条再宽限 5 秒放名额。
+--- 客户端收到就删车删人，**不回报 backupEnded** —— 名额已经由服务端释放，
+--- 回报只会被当成"外单"丢掉，还会在日志里制造一次假失败。
+RegisterNetEvent('police:client:BackupEnd', function(requestId, reason)
+    if type(requestId) ~= 'string' or requestId == '' or #requestId > 64 then return end
+    if active[requestId] then
+        cleanup(requestId, false, reason or 'expired')
+    else
+        pending[requestId] = nil
+    end
 end)
 
 -- Never leave NPCs behind when the resource is restarted. Tell the server too
