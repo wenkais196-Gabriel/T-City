@@ -134,6 +134,20 @@ AxNaash 版）**全部客户端生成、无服务端状态、且没有 `onResour
 可算的指标（全部从审计聚合，不新增表）：请求成功率、生成成功率（`spawned/request`）、平均存活秒数、
 战斗单位占比、异常结束率（`spawn_failed|vehicle_lost|no_alive_ped`）。
 
+### 指标面板（B5）
+
+`tools/dev/police_backup_metrics.py` 直接把审计行折叠成四个问题的答案，不新增表、不加埋点：
+
+| 指标 | 口径 |
+|---|---|
+| 生成成功率 | `backup.spawned / backup.request` |
+| 平均生成耗时 | `backup.spawned` 的 `took=` |
+| 平均存活 | `backup.ended` 与 `backup.expired` 的 `live=` 合并平均 |
+| 异常率 | `spawn_failed \| vehicle_lost \| no_alive_ped \| unknown \| dead` 占请求数 |
+
+真机实测（最近 6 小时，21 单）：生成成功 18（85.7%），服务端过期 13（全部 `why=ttl`），
+正常结束 4（`timeout` 3 + `dismissed` 1），平均存活 133.9 秒，异常 0。
+
 **不新增表**：一次支援的生命周期在 5 分钟内闭环，审计行足够；等 scenario-engine P1 落地再由引擎的
 `scenario_runs` 接管长期记录（DESIGN.md §6.1）。
 
@@ -233,7 +247,7 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1–S5、S7、S8（撤离）、B1（响应级别）、B2（指挥）已实施**（2026-10-29）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
+> 进度：**S1–S5、S7、S8（撤离）、B1（响应级别）、B2（指挥）、B5（指标面板）已实施**（2026-10-29）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
