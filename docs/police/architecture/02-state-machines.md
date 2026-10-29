@@ -750,7 +750,7 @@ justice_sentences (
 
 | 生成确认 | 无 ack | **仍无**：`TriggerClientEvent('police:client:SpawnBackup')` 后即认为成功 | `p2_system.lua:364` |
 | 掉线释放 | `playerDropped` 清光该 citizenid 的 backup 槽位 | 保留并加了来源校验（`backupSource`），按 session 释放 | `p2_system.lua:636-645` |
-| 结束审计 | 只有 `backup.request` | **仍只有 request**；无 `backup.ended`/`expired`/指标 | `p2_system.lua:348` |
+| 结束审计 | 只有 `backup.request` | **已有 `backup.ended`**（reason 白名单 + `live=` 存活秒数，2026-10-29）；`expired` 仍在 S3 | `p2_system.lua` 的 `backupEnded`、`shared/backup_contract.lua` |
 | 全局 cap | 无（只限每人 2） | **已有**：`NPCBudget.MAX_GLOBAL = 6`，超限回 `global_limit`（口径是实体槽位，不是单位） | `shared/npc_budget.lua:15,68-88` |
 
 

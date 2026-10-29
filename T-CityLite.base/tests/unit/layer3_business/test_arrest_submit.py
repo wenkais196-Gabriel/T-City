@@ -1231,7 +1231,7 @@ def test_backup_client_cleans_up_on_timeout_leave_death_and_restart():
         "UNIT_LIFETIME_MS = 300000",
         "LEAVE_RADIUS = 150.0",
         "LEAVE_GRACE_MS = 30000",
-        "TriggerServerEvent('police:server:backupEnded', requestId)",
+        "TriggerServerEvent('police:server:backupEnded', requestId, reason or 'unknown')",
         "RemoveBlip(state.blip)",
         "DeleteEntity(entity)",
         "DeleteVehicle(state.vehicle)",
@@ -1241,6 +1241,13 @@ def test_backup_client_cleans_up_on_timeout_leave_death_and_restart():
         assert token in src, token
     # Unit handles are only used behind existence checks.
     assert src.count("DoesEntityExist(") >= 8
+    # 结束原因必须一路传到服务端（否则审计只能记 unknown）：
+    # 每个 cleanup/notifyServerEnded 调用点都要给 reason。
+    assert "cleanup(requestId, true)" not in src, "cleanup 调用缺少 reason"
+    assert "notifyServerEnded(requestId)" not in src, "notifyServerEnded 调用缺少 reason"
+    for reason in ("'timeout'", "'dead'", "'left'", "'resource_stop'", "'spawn_failed'",
+                   "'vehicle_lost'", "'no_alive_ped'"):
+        assert reason in src, "缺少结束原因 " + reason
 
 
 # ---------------------------------------------------------------------------

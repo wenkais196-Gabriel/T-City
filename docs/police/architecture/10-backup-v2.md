@@ -233,7 +233,9 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-1. **只加审计**：`backup.spawned/ended`（客户端已有清理点，先写审计，不改状态机）；
+> 进度：**S1 已实施**（2026-10-29，pr/94 之后的实现 PR）。其余四步未开始。
+
+1. **只加审计** ✅：`backup.ended`（reason 白名单 `shared/backup_contract.lua` + 服务端归一 + 审计带 `live=` 存活秒数；`backup.spawned` 留给 S2，因为要等 ack 才有"已生成"的确切时刻）；
 2. **加 ack 与阶段**：服务端内存表 + `backupAck` 事件；不设超时（观察一周数据）；
 3. **开 ack 超时**：10s/15s 释放；`expires_at` 300s；
 4. **统一寿命**：删客户端的 `UNIT_LIFETIME_MS` 自计时，改由 `BackupEnd` 驱动；

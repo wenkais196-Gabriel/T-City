@@ -35,6 +35,7 @@ local CASES = {
     'director_denials',
     'police_actions',
     'police_system',
+    'police_backup',
     'police_outbox',
     'phone_sms',
 }
@@ -117,11 +118,17 @@ local function main()
             record.ok = false
             record.error = tostring(result)
         elseif type(result) == 'table' then
+            -- `ok=false` 是显式失败；但有些用例只回 { results, failed }，没有 ok 字段。
+            -- 以前这种形状等于**永远通过**（检查在文件里写了，runner 不看），
+            -- 所以这里把 failed > 0 也当成失败，避免"闸门不咬人"。
             if result.ok == false then
                 record.ok = false
                 record.error = result.error or 'case reported failure'
+            elseif type(result.failed) == 'number' and result.failed > 0 then
+                record.ok = false
+                record.error = result.error or ('%d check(s) failed'):format(result.failed)
             end
-            record.data = result.data
+            record.data = result.data or (result.results and { cases = result.results, failed = result.failed } or nil)
         end
 
         if not record.ok then failed = failed + 1 end
