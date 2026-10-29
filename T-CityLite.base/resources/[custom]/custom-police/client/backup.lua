@@ -26,6 +26,13 @@ local ENEMY_RADIUS = 50.0
 local DRIVE_SPEED = 22.0
 
 local active = {}  -- [requestId] = state
+
+--- 服务端是否持有寿命（S3/S4）。为真时客户端不再自己算 5 分钟：到点由服务端发
+--- `police:client:BackupEnd`，客户端只负责删实体。留这个开关是为了 v2 回滚后
+--- 客户端仍能自清（否则一条扫描不到的服务端会让支援单位永远跟着玩家）。
+local function serverOwnsLifetime()
+    return GetConvar('police_backup_v2', '1') == '1'
+end
 local pending = {} -- [requestId] = true while models are loading
 local runBackup    -- forward declaration: spawnBackup starts this thread
 
@@ -451,7 +458,9 @@ runBackup = function(state)
         end
 
         local now = GetGameTimer()
-        if now - state.createdAt >= UNIT_LIFETIME_MS then
+        -- v2：寿命归服务端（sweep 到点发 BackupEnd）。只有回滚（police_backup_v2 0）
+        -- 时才保留客户端自计时，避免"服务端关了、客户端也不清"的双输。
+        if not serverOwnsLifetime() and now - state.createdAt >= UNIT_LIFETIME_MS then
             cleanup(requestId, true, 'timeout')
             break
         end

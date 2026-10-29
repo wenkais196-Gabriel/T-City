@@ -233,7 +233,7 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1、S2、S3 已实施并真机验证**（2026-10-29）。S4–S5 未开始。证据见下方三段真机记录。
+> 进度：**S1–S4 已实施并真机验证**（2026-10-29）。S5 未开始。证据见下方四段真机记录。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
@@ -245,6 +245,19 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 `live=301` 是服务端用预算条目的 `at` 算出来的存活秒数（5 分钟 + 1 秒轮询偏差），
 说明"原因 + 时长"这条路端到端通了；白名单外的原因由 golden 用例覆盖（记 `unknown`）。
+
+**S4 真机读数（2026-10-29，回滚开关双向验证）**
+
+同一张单 `BU-1-1793299992-1`（请求 18:53:12，`police_backup_ttl 20`）：
+
+| 时刻 | `police_backup_v2` | 读数 |
+|---|---|---|
+| t+10…40s | `0` | `phase=onscene age=49s` —— **超过 20s TTL 仍然活着**：sweep 停手，寿命回到旧行为 |
+| t+12s（切到 1 之后） | `1` | `ending=true`（BackupEnd 已发，宽限中） |
+| t+18s | `1` | `no live units`；审计 `backup.expired phase=onscene;why=ttl;live=74`；客户端日志 `cleaned (reason=expired)` |
+
+结论：寿命只有一个主人在 v2 打开时成立（客户端 `UNIT_LIFETIME_MS` 自计时被 `serverOwnsLifetime()`
+守卫住，只有回滚时才生效），而回滚开关两个方向都真的生效。
 
 **S3 真机读数（2026-10-29，`police_backup_ttl 25` 把寿命压到 25s）**
 
