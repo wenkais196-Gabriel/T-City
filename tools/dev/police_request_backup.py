@@ -45,7 +45,9 @@ def phone_state(token: str) -> dict:
 
 
 def console(*args: str) -> str:
-    result = subprocess.run([sys.executable, str(HERE / "fivem_console.py"), *args],
+    """发一条控制台命令。多个参数按空格拼成**一条**命令（fivem_console 只收一个位置参数）。"""
+    command = " ".join(part for part in args if part)
+    result = subprocess.run([sys.executable, str(HERE / "fivem_console.py"), command],
                             capture_output=True, text=True, timeout=180)
     return (result.stdout or result.stderr).strip()
 
@@ -88,9 +90,27 @@ def main() -> int:
         if not phone.get("open"):
             raise SystemExit("手机没打开（M 无效？）")
 
-    if (phone.get("app") or {}).get("id") != "police_mdt":
+    # 无条件重新定位到 MDT（phoneui 幂等）。convar 复制的滞后在真机上很常见，
+    # 所以这里重试 3 次、每次重设一次 convar。
+    for attempt in range(1, 4):
+        console("setr phone_ui_nav 1")
         console("adc", f"{source} phoneui police_mdt")
         time.sleep(2.5)
+        phone = phone_state(args.token)["phone"]
+        if (phone.get("app") or {}).get("id") == "police_mdt":
+            break
+        if attempt == 3:
+            raise SystemExit(
+                "phoneui 没把手机切到 MDT（app=%r frames=%r）；先确认 phone_ui_nav=1"
+                % ((phone.get("app") or {}).get("id"), phone.get("frames")))
+
+    # 按键必须发给游戏窗口：Hermes/终端抢走前台时，Down 会打到别处（真机踩过）。
+    if os.name == "nt":
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Add-Type -AssemblyName Microsoft.VisualBasic;"
+             "[Microsoft.VisualBasic.Interaction]::AppActivate('FiveM') | Out-Null"],
+            capture_output=True, timeout=30)
 
     reached = False
     focus = None

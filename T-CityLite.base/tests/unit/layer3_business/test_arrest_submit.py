@@ -1235,7 +1235,7 @@ def test_backup_client_uses_friendly_group_weapons_and_ai_tasks():
 def test_backup_client_cleans_up_on_timeout_leave_death_and_restart():
     src = read(BACKUP_CLIENT)
     for token in (
-        "ESCORT_TIMEOUT_MS = 30000",
+        "ESCORT_TIMEOUT_MS = 90000",
         "UNIT_LIFETIME_MS = 300000",
         "LEAVE_RADIUS = 150.0",
         "LEAVE_GRACE_MS = 30000",
@@ -1254,7 +1254,7 @@ def test_backup_client_cleans_up_on_timeout_leave_death_and_restart():
     assert "cleanup(requestId, true)" not in src, "cleanup 调用缺少 reason"
     assert "notifyServerEnded(requestId)" not in src, "notifyServerEnded 调用缺少 reason"
     for reason in ("'timeout'", "'dead'", "'left'", "'resource_stop'", "'spawn_failed'",
-                   "'vehicle_lost'", "'no_alive_ped'"):
+                   "'vehicle_lost'", "'no_alive_ped'", "'escort_timeout'"):
         assert reason in src, "缺少结束原因 " + reason
 
 

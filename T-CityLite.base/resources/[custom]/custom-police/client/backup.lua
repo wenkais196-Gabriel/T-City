@@ -18,7 +18,8 @@ local SPAWN_SIDE = 6.0           -- avoid spawning the car on top of the caller
 local ARRIVE_RADIUS = 20.0
 local FOLLOW_STOP_RADIUS = 10.0
 local FOLLOW_RESUME_RADIUS = 14.0
-local ESCORT_TIMEOUT_MS = 30000
+local ESCORT_TIMEOUT_MS = 90000  -- 到场硬上限（P3：不再用它触发下车）
+local ARRIVE_SPEED = 5.0         -- 到场下车要求车速 < 5 m/s，避免擦身而过时下车
 local UNIT_LIFETIME_MS = 300000  -- 5 minutes（只在 police_backup_v2 回滚时生效）
 local LEAVE_RADIUS = 150.0
 local LEAVE_GRACE_MS = 30000
@@ -542,8 +543,11 @@ local function escortPed(state, playerPed)
     return playerPed
 end
 
-local function beginFoot(state)
+local function beginFoot(state, distance)
     state.phase = 'foot'
+    -- 真机验收靠这行：下车距离必须 ≤ 25m（P3）
+    print(('[custom-police] backup %s dismount at %.1fm'):format(
+        tostring(state.requestId), tonumber(distance) or -1))
     state.footAt = GetGameTimer() + 1500
     -- 到场：这是"平均到场时间"的唯一可信锚点（服务端看不到实体坐标）。
     ackPhase(state.requestId, 'onscene', 0)
@@ -707,8 +711,14 @@ runBackup = function(state)
                     ClearPedTasks(driver)
                 end
             elseif #(vehicleCoords - playerCoords) <= ARRIVE_RADIUS
-                or now - state.createdAt >= ESCORT_TIMEOUT_MS then
-                beginFoot(state)
+                and GetEntitySpeed(state.vehicle) < ARRIVE_SPEED then
+                -- P3：必须在玩家身边**并且**慢下来才下车。以前这里是
+                -- "距离 ≤20m 或 到 30s"，于是车还在两百米外就把人放下来跑步。
+                beginFoot(state, #(vehicleCoords - playerCoords))
+            elseif now - state.createdAt >= ESCORT_TIMEOUT_MS then
+                -- 90 秒还没到：结束这一单（名额随之释放），而不是从远处跑过来。
+                cleanup(requestId, true, 'escort_timeout')
+                break
             elseif shouldRetask(driver, 'TASK_VEHICLE_DRIVE_TO_COORD',
                     state.lastDriveTask, now, DRIVE_RETASK_HEARTBEAT_MS) then
                 -- 只在"任务不在跑"或心跳到点时才重发：正在开车的司机不必每 2.5 秒
