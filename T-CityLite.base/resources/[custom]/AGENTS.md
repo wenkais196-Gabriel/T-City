@@ -59,6 +59,9 @@
   之后 `/revive` 之类的功能就静默失效（资源不在，命令根本不存在）。改完要
   `exec configs/modules/<module>.cfg` 把依赖者重新拉起来，或直接用
   tools/dev/resync_modules.sh。
+- **Lua 的 pattern 既没有 `{n,m}` 也没有 `|` 交替**：`'^backup (follow|hold|dismiss)$'` 这种写法
+  永远匹配不上，症状同样是"白名单没生效"（devcmd 只回 `not_allowed`）。枚举只能一条一条写：
+  `'^backup follow$'`、`'^backup hold$'`、`'^backup dismiss$'`。
 - **Lua 的 pattern 没有 `{n,m}`**（那是正则的写法）。写 `'^911 [^%c;]{1,80}$'` 永远不会匹配，
   而且失败得很安静：命令只回 `not_allowed`，看起来像"白名单没加"。长度用 `#cmd` 判。
 - `_G.QBCore` 在资源内不保证存在：用 `exports['qb-core']:GetCoreObject()` 惰性解析并缓存。

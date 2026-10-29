@@ -61,6 +61,12 @@ def main() -> int:
     if not args.token:
         raise SystemExit("缺少 TCITY_LIVE_TOKEN")
 
+    # 这两个 convar 会在资源重启/重连后失效（真机反复踩过）：
+    # 每次进来先垫一遍，否则 phoneui 静默被拒，焦点会在桌面图标间乱走。
+    console("setr agent_devcmd_enabled 1")
+    console("setr phone_ui_nav 1")
+    time.sleep(1.0)
+
     state = phone_state(args.token)
     source = state["source"]
     phone = state["phone"]

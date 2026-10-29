@@ -233,7 +233,7 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1–S5、S7、S8（撤离）、B1（响应级别）已实施**（2026-10-29）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
+> 进度：**S1–S5、S7、S8（撤离）、B1（响应级别）、B2（指挥）已实施**（2026-10-29）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
@@ -245,6 +245,25 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 `live=301` 是服务端用预算条目的 `at` 算出来的存活秒数（5 分钟 + 1 秒轮询偏差），
 说明"原因 + 时长"这条路端到端通了；白名单外的原因由 golden 用例覆盖（记 `unknown`）。
+
+## 3.8 指挥（B2）：`/backup follow|hold|dismiss`
+
+| 命令 | 效果 | 边界 |
+|---|---|---|
+| `/backup follow` | 恢复跟随（默认行为） | 只作用于调用者 `active` 表里的单位 |
+| `/backup hold` | 原地待命：刹停、停掉驾驶/跟随任务，战斗照旧 | 服务端寿命与名额不动，到点照样收 |
+| `/backup dismiss` | 主动撤回：回报 `dismissed` → 服务端立刻放名额 → 客户端开走（S8 撤离） | 同上 |
+
+实现要点：
+
+* 命令只遍历本地 `active`，不碰服务端状态；`dismissed` 已加入 `BackupContract.CLIENT_REASONS`，
+  审计里不再是 `unknown`；
+* 真机验收要能确认命令进了客户端，所以 `applyOrder` 打一行 `backup order=<x> applied=<n>`；
+* agent 侧走 `adc <src> backup hold`：devcmd 白名单必须**逐条**写
+  （Lua 的 pattern 没有 `|` 交替，`'^backup (follow|hold|dismiss)$'` 永远匹配不上）。
+
+真机（单 `BU-1-1793304355-1`）：`order=hold applied=1` → `order=dismiss applied=1`
+→ 客户端 `retreating (reason=dismissed)` → 审计 `backup.ended | reason=dismissed;live=29`。
 
 ## 3.7 响应级别（B1）：一次叫几辆车
 

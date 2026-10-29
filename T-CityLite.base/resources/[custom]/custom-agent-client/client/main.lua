@@ -234,6 +234,12 @@ local DEVCMD_ALLOWED = {
     '^911 [^%c;]+$',
     -- 临时诊断：手机自带的 /focusprobe（不经过输入栈，直接 SetNuiFocus 两次）
     '^focusprobe$',
+    -- 支援单位指挥（B2）：/backup follow|hold|dismiss。
+    -- 注意：Lua 的 pattern **没有 `|` 交替**（和没有 {n,m} 是同一类坑），
+    -- '^backup (follow|hold|dismiss)$' 永远匹配不上 —— 只能一条一条写。
+    '^backup follow$',
+    '^backup hold$',
+    '^backup dismiss$',
 }
 
 -- 一条 devcmd 最多这么长：手机命令都短，超长的要么是误用，要么是想塞别的
