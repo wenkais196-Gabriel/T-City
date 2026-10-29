@@ -1,11 +1,11 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 165,
+  "max_unproven": 168,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
-    "total": 255,
-    "proven_by_smoke": 20,
-    "proven_by_reverse_tests": 69
+    "total": 271,
+    "proven_by_smoke": 21,
+    "proven_by_reverse_tests": 82
   },
   "history": [
     {
@@ -25,6 +25,12 @@
       "max_unproven": 165,
       "previous": 162,
       "why": "新增客户端热路径闸门（5 条规则，其中 1 条已被变异冒烟证明）"
+    },
+    {
+      "date": "2026-10-29",
+      "max_unproven": 168,
+      "previous": 165,
+      "why": "新增支援单位寿命所有权闸门（4 条规则：客户端自计时守卫、300s/5s/10s 数字、sweep 挂 onResourceStart、先收再放），其中 1 条已由变异冒烟证明"
     }
   ]
 }
