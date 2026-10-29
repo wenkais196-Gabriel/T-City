@@ -18,10 +18,24 @@
 | 服务端建的 ped「**直到有玩家进入范围、在本地把它建出来之前，不会存在**」，此前 `NetworkGetEntityFromNetworkId` 返回 0 | [Cfx 论坛](https://forum.cfx.re/t/onesync-spawning-server-side-peds/5055919) | 「服务端生成 + 服务端 task」会给每次下发加不确定性 |
 | **PATHFIND 命名空间 0 个服务端 native**（59 个全是 client-only） | [cfxnatives](https://cfxnatives.dev/natives?namespace=PATHFIND&side=server) | 可达性校验只能在客户端做，服务端只能做静态规则（距离/锚点白名单） |
 
-另外两条生态事实：开源实现（[AIBackup2](https://github.com/blackfirefly000/AIBackup2)、
+另外三条生态事实：开源实现（[AIBackup2](https://github.com/blackfirefly000/AIBackup2)、
 AxNaash 版）**全部客户端生成、无服务端状态、且没有 `onResourceStop`**；生产级 AI 巡逻
 [gr_patrols](https://github.com/grouse-labs/gr_patrols) 用 `spawn=500 / despawn=1000` + 无人在场 dormant +
 **owner 变更后重新 task**。这三点分别对应我们要补的：生命周期、清理兜底、任务重发条件。
+
+**反例（2026-10-29 读代码确认）**：[Fenix-police](https://github.com/FenixPK/fenix-police) 确实在服务端生成——
+`CreateVehicleServerSetter(...)`（server.lua:314）、服务端 `CreatePed(...)`（server.lua:347，带重试循环），
+再把 `NetworkGetNetworkIdFromEntity` 得到的 netId 发给客户端（server.lua:423），客户端 `NetToVeh`/`NetToPed` 解析。
+但它的注释恰好证明我们 §0 的判断：
+
+- 客户端解析要**轮询重试**："one call isn't enough, and it can take multiple NetToVeh calls before it is not nil
+  or == 0 regardless of the time that has passed since spawn"（client.lua:300）；
+- 服务端 `CreatePedInsideVehicle` **不可靠**："This did NOT work, it fails far too often and gets stuck spawning
+  empty vehicles"（server.lua:340）→ 只好在 +20/+20 单独生成 ped 再重试；
+- **tasking 仍在客户端**：`SetPedAsCop`（client.lua:539）、`TaskVehicleDriveToCoord`（client.lua:556）。
+
+所以"服务端生成"是可做的，但它换来的代价正是我们要避的：解析重试、ped-in-vehicle 不可靠、任务依然得回到
+客户端。ADR-0003 的选择不因此改变，反而被这条反例佐证。
 
 ---
 
@@ -125,11 +139,14 @@ AxNaash 版）**全部客户端生成、无服务端状态、且没有 `onResour
 
 ---
 
-## 7. 客户端行为层（效率项）
+## 7. 客户端行为层
 
-现状是 `runBackup` 每 500ms 醒来一次，重算距离、必要时重复下发任务。改成：
+### 7.1 任务下发（效率）
 
-1. **任务下发一次**：`TaskVehicleDriveToCoordLongRange` / `TaskGoToCoordAnyMeans` 只在进入阶段时下发；
+现状是 `runBackup` 每 500ms 醒来一次（`Citizen.Wait(500)`），其中驾驶任务**每 2.5s 重发一次**
+（`state.lastDriveTask > 2500`）——不是每 500ms 重发。改成：
+
+1. **任务下发一次**：`TaskVehicleDriveToCoordLongrange` / `TaskGoToCoordAnyMeans` 只在进入阶段时下发；
 2. **用任务状态门控**：`GetScriptTaskStatus(ped, SCRIPT_TASK_ANY)` = 1 表示还在执行、3 表示空闲、
    7 表示完成/找不到——只有 3/7 才重发（这是官方语义，见
    [GetScriptTaskStatus](https://github.com/citizenfx/natives/blob/master/TASK/GetScriptTaskStatus.md)）；
@@ -139,6 +156,48 @@ AxNaash 版）**全部客户端生成、无服务端状态、且没有 `onResour
 
 > 这一条与 gr_patrols 的做法一致（owner 变更后重新 task、无人在场 dormant），也是生态里
 > 唯一被生产验证过的模式。
+
+### 7.2 通缉玩家当目标（v1 的功能缺口）
+
+v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
+（T-CityLite.base/resources/[custom]/custom-police/client/backup.lua:298），意思是：**支援只会打 NPC，
+永远不会对通缉玩家开火**。这不是 bug 而是保守取舍，但如果产品要求"支援协助抓捕通缉犯"，就必须补，且必须
+按下面的方向补：
+
+| 规则 | 做法 |
+|---|---|
+| 谁是疑犯**只能服务端说了算** | 服务端在 `SpawnBackup` 里附上一份已授权的 source 列表（来自 `custom-main` 的 `WantedPlayers` 缓存 + `metadata['wanted'] > 0`），客户端只认这份白名单 |
+| 客户端不得自行判定 | 客户端不许读 `metadata.wanted`、不许扫描 `GetActivePlayers()` 自己挑目标——否则就是"AI 警察见谁打谁"的外挂面 |
+| 距离与身份二次校验 | 服务端下发前校验：目标在线、非警察、非请求者本人、与请求者距离 ≤150m；客户端拿到后仍要 `IsPedAPlayer` + `GetPlayerServerId` 反查一致才 `TaskCombatPed` |
+| 误伤不变量 | 支援不得攻击：请求者本人、任何 police job 的玩家、白名单之外的平民。写成 golden 用例（喂一份伪造 suspects 列表，断言只对白名单内的 ped 下 `TaskCombatPed`） |
+| 滥用面 | 玩家可以 bait（自己通缉→叫支援→绕圈）→ 必须有冷却与人数上限；已有 60s 冷却 + 每人 2 单位，够用 |
+| 结束语义 | 疑犯被捕/死亡/星级清零后，支援回到 `onscene`，不能一直处于 `engaged` |
+
+### 7.3 AI 质量（现在只是"武装保镖"）
+
+`configureOfficer`（client/backup.lua:159-173）目前只设了 accuracy 50、armour 50、手枪、关系组、
+`SetPedFleeAttributes(0,false)`、`SetBlockingOfNonTemporaryEvents`。缺这些让它们"像警察"的属性：
+
+| native | 值 | 作用 |
+|---|---|---|
+| `SetPedAsCop(ped, true)` | — | 走警察行为（对通缉等级、掩体、喊话的反应都会变） |
+| `SetPedCombatAbility` | 2（professional） | 0 poor / 1 average / 2 professional |
+| `SetPedCombatRange` | 1 | 0 near / 1 medium / 2 far |
+| `SetPedCombatMovement` | 2 | 0 stationary / 1 defensive / 2 offensive |
+| `SetPedCombatAttributes(ped, 0/1/2/5, true)` | — | 用掩体 / 用车 / 车内射击 / always fight（部分构建编号不同，实机验一次） |
+| `SetPedAlertness` | 3 | 警觉度（影响先发现谁） |
+| `SetPedSeeingRange` / `SetPedHearingRange` | 60 / 40 | 感知半径，默认偏小，支援经常"看不到就在旁边开火的人" |
+| `SetDriverAbility` / `SetDriverAggressiveness` | 1.0 / 0.5 | 驾驶质量；结合下面的远近任务切换 |
+
+注意 `SetPedAsCop(true)` 会让 ped 与 GTA 原生通缉/警力系统产生互动，落地前要实机确认不会引出额外的原生警察
+（这与 `custom-main` 的高星接管逻辑有交叉，属于必须实测的项）。
+
+**驾驶任务按距离二选一**（现有代码一律用 `TaskVehicleDriveToCoord`）：
+
+- 远距离（>100m）：`TaskVehicleDriveToCoordLongrange(driver, veh, x, y, z, speed, drivingStyle, stopRange)`
+  ——**8 个参数**（没有 `p6`，也没有 `vehicleModel`）；
+- 近距离：`TaskVehicleDriveToCoord(driver, veh, x, y, z, speed, p6, vehicleModel, drivingStyle, stopRange, p10)`
+  ——11 个参数，现有调用（client/backup.lua:480）就是它，`p6=0`。
 
 ---
 
