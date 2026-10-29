@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **NPC 支援可见阶段（S2）**：服务端新增阶段表与 `police:server:backupAck`（三重校验：预算归属 / 阶段白名单 / 只向前，越权与倒退采样写 `backup.ack_rejected`）；客户端在收到事件、车与两人到手、下车到场、首次交战四处上报。`enroute` 写 `backup.spawned`（entities + 耗时）、首次 `engaged` 写 `backup.engaged`；`GetBackupState()` 导出与控制台`police_backup_state` 给出不含身份字段的只读投影。真机：`phase` 从 `requested` 推进到 `onscene`，5 分钟到点以 `reason=timeout;live=300` 结束并从投影消失。
 - **真机验证工具化**：`tools/dev/fivem_console.py`（经 MCP→RCON 发控制台命令与按键，绕开本机"直连 RCON 被关连接 / Windows 控制台不吃管道输入 / PowerShell 注入到不了游戏"三个坑）与 `tools/dev/police_live_probe.py`（一次打印客户端 phone 状态、资源数与审计尾巴）。配套 `docs/engineering/LIVE_VERIFICATION.md` 写明起栈顺序、UI 驱动回路（adc + phoneui + press_key + 焦点读回）、三层断言与六条"别做"，并规定 Claude Code 只用于联网调研与有文件预算的评审。
 - **修「手机关不掉、WASD 不动」**：完全接管（`keepInput=false`）后游戏不再处理输入，
   `IsRawKeyDown` 也读不到键 —— 键盘实际归 CEF。所以 **M 键改由 NUI 处理**（Esc 亦然），
