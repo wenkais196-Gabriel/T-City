@@ -522,6 +522,14 @@ local BACKUP_COOLDOWN = 60
 local backupCooldown = {} -- [citizenid] = os.time() of the last accepted request
 local backupSource = {}   -- [source] = citizenid, kept while any slot remains
 local backupSeq = 0
+-- 阶段表（S2）：[requestId] = { phase, cid, source, at, spawnedAt, enrouteAt,
+-- onsceneAt, engagedAt, entityCount, rejectedAt, rejectedCount }
+-- 名额仍然在 NPCBudget 的 entries 里 —— 阶段是"客户端到了哪一步"，预算条目是
+-- "还占不占名额"，两者生命周期不同（S3 的 sweep 会先收单位再放名额），塞在一起
+-- 会让释放顺序无从表达。
+local backupPhases = {}
+-- ack_rejected 的采样窗口：同一条单 10 秒内最多记一条，避免伪造包把审计打爆。
+local ACK_REJECT_SAMPLE_MS = 10000
 
 --- Live backup budget entries owned by `citizenid` (at most two).
 local function backupSlots(citizenid)
@@ -539,6 +547,36 @@ end
 local function releaseBackupSlots(citizenid, reason)
     for _, entry in ipairs(backupSlots(citizenid)) do
         NPCBudget.Release(entry.id, reason)
+    end
+end
+
+--- True when `requestId` is one of `citizenid`'s live budget slots. Ownership is
+--- always derived from the budget, never from a client-supplied id alone.
+local function ownsBackupUnit(citizenid, requestId)
+    for _, entry in ipairs(backupSlots(citizenid)) do
+        if entry.id == requestId then return true end
+    end
+    return false
+end
+
+--- 记一条"ack 被拒"，按单号采样：同一 requestId 10 秒内只写一条。
+--- 不可达/未知的单号没有 entry 可挂计数器，退化成按调用者采样一次。
+local function recordAckRejected(cid, requestId, phase, why)
+    local now = GetGameTimer()
+    local entry = backupPhases[requestId]
+    if entry then
+        if entry.rejectedAt and now - entry.rejectedAt < ACK_REJECT_SAMPLE_MS then
+            entry.rejectedCount = (entry.rejectedCount or 0) + 1
+            return
+        end
+        entry.rejectedAt = now
+        entry.rejectedCount = (entry.rejectedCount or 0) + 1
+    end
+    -- best-effort：拒绝计数是遥测，失败只打日志，不能影响 ack 的丢弃语义。
+    if not auditPlayer(cid, 'backup.ack_rejected', requestId,
+        ('phase=%s;why=%s'):format(tostring(phase), tostring(why))) then
+        print(('[custom-police] backup.ack_rejected audit failed: %s (%s)'):format(
+            tostring(requestId), tostring(why)))
     end
 end
 
@@ -598,8 +636,124 @@ function RequestBackup(source)
         return fail('not_police')
     end
 
+    -- Phase starts at `requested` on the server side before the client is even
+    -- told to spawn: that is the anchor S3's sweep measures the 10s ack timeout
+    -- against, and it must exist even if the client never answers.
+    backupPhases[requestId] = {
+        phase = 'requested',
+        cid = cid,
+        source = src,
+        at = now,
+        entityCount = 0,
+    }
+
     TriggerClientEvent('police:client:SpawnBackup', src, requestId)
     return { ok = true, request_id = requestId }
+end
+
+--- Client reports "how far I got" for one of its own units (S2).
+---
+--- Contract: only the caller's own live unit, only a phase from the contract's
+--- CLIENT_PHASES, and only forward (a repeated phase is an idempotent refresh).
+--- Everything else is dropped and sampled into `backup.ack_rejected` — a client
+--- must never be able to move another officer's unit, nor rewind one to make the
+--- 10s/15s ack timeouts look satisfied.
+RegisterNetEvent('police:server:backupAck', function(requestId, phase, entityCount, clientTick)
+    local targetSrc = tonumber(source) or 0
+    local player = QBCore.Functions.GetPlayer(targetSrc)
+    local actor = player and player.PlayerData
+    local cid = actor and actor.citizenid
+    if type(cid) ~= 'string' or cid == '' then return end
+    if type(requestId) ~= 'string' or #requestId < 1 or #requestId > 64 then return end
+
+    local normalized = type(BackupContract) == 'table'
+        and BackupContract.NormalizePhase(phase) or nil
+    if not normalized then
+        recordAckRejected(cid, requestId, phase, 'bad_phase')
+        return
+    end
+
+    -- Ownership comes from the budget, not from the phase table: a phase entry
+    -- could outlive its slot by a tick, and the budget is what the caps enforce.
+    if not ownsBackupUnit(cid, requestId) then
+        recordAckRejected(cid, requestId, normalized, 'not_owned')
+        return
+    end
+
+    local entry = backupPhases[requestId]
+    if not entry then
+        -- Slot exists but phases were lost (server restarted with slots kept?):
+        -- re-seed instead of rejecting, otherwise a legit client can never ack.
+        entry = { phase = 'requested', cid = cid, source = targetSrc, at = os.time(), entityCount = 0 }
+        backupPhases[requestId] = entry
+    end
+
+    if entry.cid ~= cid or entry.source ~= targetSrc then
+        recordAckRejected(cid, requestId, normalized, 'foreign_session')
+        return
+    end
+
+    if not BackupContract.CanAdvance(entry.phase, normalized) then
+        recordAckRejected(cid, requestId, normalized, 'backwards:' .. tostring(entry.phase))
+        return
+    end
+
+    local count = math.floor(tonumber(entityCount) or 0)
+    if count < 0 then count = 0 end
+    if count > BackupContract.MAX_ENTITY_COUNT then count = BackupContract.MAX_ENTITY_COUNT end
+
+    local advanced = BackupContract.PhaseRank(normalized) > BackupContract.PhaseRank(entry.phase)
+    entry.phase = normalized
+    entry.lastAck = os.time()
+    entry.clientTick = tonumber(clientTick)
+
+    if normalized == 'spawning' then
+        if not entry.spawnedAt then entry.spawnedAt = os.time() end
+    elseif normalized == 'enroute' then
+        if not advanced then return end
+        entry.enrouteAt = os.time()
+        entry.entityCount = count
+        -- 生成成功率的分子：只在第一次进 enroute 时写一条。
+        if not entry.spawnedAudited then
+            entry.spawnedAudited = true
+            local took = entry.spawnedAt and (entry.enrouteAt - entry.spawnedAt) or nil
+            if not auditPlayer(cid, 'backup.spawned', requestId,
+                ('entities=%d;took=%s'):format(count, took and tostring(took) or '?')) then
+                print(('[custom-police] backup.spawned audit failed: %s'):format(tostring(requestId)))
+            end
+        end
+    elseif normalized == 'onscene' then
+        if not advanced then return end
+        entry.onsceneAt = os.time()
+    elseif normalized == 'engaged' then
+        if not advanced then return end
+        if not entry.engagedAudited then
+            entry.engagedAudited = true
+            if not auditPlayer(cid, 'backup.engaged', requestId, '') then
+                print(('[custom-police] backup.engaged audit failed: %s'):format(tostring(requestId)))
+            end
+        end
+    end
+end)
+
+--- Live view of every backup unit the server is tracking (S6).
+--- Returns only what an operator/agent needs: no citizenid, no coordinates.
+function GetBackupState()
+    local now = os.time()
+    local list = {}
+    for requestId, entry in pairs(backupPhases) do
+        list[#list + 1] = {
+            request_id = requestId,
+            phase = entry.phase,
+            source = entry.source,
+            age = now - (tonumber(entry.at) or now),
+            phase_age = now - (tonumber(entry.lastAck) or tonumber(entry.at) or now),
+            entity_count = tonumber(entry.entityCount) or 0,
+            rejected = tonumber(entry.rejectedCount) or 0,
+        }
+    end
+    table.sort(list, function(a, b) return (a.request_id or '') < (b.request_id or '') end)
+    return list
 end
 
 --- Client finished (or failed) a backup unit: release exactly that unit.
@@ -628,6 +782,7 @@ RegisterNetEvent('police:server:backupEnded', function(requestId, reason)
     if not owned then return end
 
     NPCBudget.Release(requestId, 'backup_ended')
+    backupPhases[requestId] = nil
 
     -- 结束原因由客户端上报、服务端归一：白名单外的一律记 unknown，
     -- 这样"为什么结束"可聚合，而不会被自由文本污染。
@@ -656,6 +811,11 @@ AddEventHandler('playerDropped', function()
     if not cid then return end
     backupSource[src] = nil
     releaseBackupSlots(cid, 'player_dropped')
+    -- 阶段表跟着名额一起清：留着会污染 GetBackupState()，也会挡住同 source 的
+    -- 新单（阶段只允许向前，旧条目让新单从 requested 起步时被判"倒退"）。
+    for requestId, entry in pairs(backupPhases) do
+        if entry.cid == cid then backupPhases[requestId] = nil end
+    end
 end)
 
 --- Best-effort notification for the citation created by an arrest. The arrest
@@ -1204,6 +1364,24 @@ exports('JailSystem', Sys.Jail)
 exports('ArrestSubmit', ArrestSubmit)
 exports('ReportSubmit', ReportSubmit)
 exports('RequestBackup', RequestBackup)
+exports('GetBackupState', GetBackupState)
+
+--- 控制台查看一次支援的状态（S6 的验收手段）。
+--- 只允许控制台/RCON（source 0）：它是运维读数，不该成为玩家可触发的口子。
+RegisterCommand('police_backup_state', function(source)
+    if source ~= 0 then return end
+    local units = GetBackupState()
+    if #units == 0 then
+        print('[custom-police] backup: no live units')
+        return
+    end
+    for _, unit in ipairs(units) do
+        print(('[custom-police] backup %s phase=%s src=%s age=%ss since_ack=%ss entities=%d rejected=%d'):format(
+            tostring(unit.request_id), tostring(unit.phase), tostring(unit.source),
+            tostring(unit.age), tostring(unit.phase_age), tostring(unit.entity_count),
+            tostring(unit.rejected)))
+    end
+end, true)
 -- Outbox entry point for other police modules and the Lua harness. The caller
 -- gets false when the durable row could not be written; delivery itself is the
 -- worker's job (immediate Kick + 30s retry loop).

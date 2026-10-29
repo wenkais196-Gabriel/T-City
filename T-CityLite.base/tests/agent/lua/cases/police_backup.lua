@@ -87,12 +87,138 @@ return {
             assert(budget.Acquire('backup', 'BU-13-1', 'BACKUP003') == true)
 
             -- source 14 想释放 13 的单：既不能释放，也不能写审计
-            local before = #(env.mysql.log or {})
-            ended('BU-13-1', 'timeout', 14)
+                local before = #(env.mysql.log or {})
+                ended('BU-13-1', 'timeout', 14)
 
-            assert(budget.Get().used == 1, 'foreign request must not release the slot')
-            assert(lastAudit('backup.ended', before) == nil, 'foreign request must not write an audit row')
-        end)
+                assert(budget.Get().used == 1, 'foreign request must not release the slot')
+                assert(lastAudit('backup.ended', before) == nil, 'foreign request must not write an audit row')
+            end)
+
+            -- ------------------------------------------------------------------
+            -- S2：阶段 ack
+            -- ------------------------------------------------------------------
+
+            --- 触发一次 backupAck（source 同样是隐式全局）。
+            local function ack(requestId, phase, entityCount, source)
+                _G.source = source
+                local handlers = env.event_handlers['police:server:backupAck'] or {}
+                assert(#handlers > 0, 'police:server:backupAck is not registered')
+                for _, handler in ipairs(handlers) do
+                    handler(requestId, phase, entityCount, 1234)
+                end
+                _G.source = nil
+            end
+
+            --- 某条单当前阶段（GetBackupState 投影）。
+            local function phaseOf(requestId)
+                for _, unit in ipairs(GetBackupState()) do
+                    if unit.request_id == requestId then return unit end
+                end
+                return nil
+            end
+
+            check('ack advances the phase and records the entity count', function()
+                env.mysql.reset()
+                env.makePlayer(21, 'BACKUP101', { cash = 0, bank = 0, crypto = 0 })
+                assert(budget.Acquire('backup', 'BU-21-1', 'BACKUP101') == true)
+                env.mysql.push({ kind = 'query', result = {} })
+
+                ack('BU-21-1', 'spawning', 0, 21)
+                ack('BU-21-1', 'enroute', 3, 21)
+
+                local unit = phaseOf('BU-21-1')
+                assert(unit, 'unit must be tracked')
+                assert(unit.phase == 'enroute', 'phase must be enroute, got ' .. tostring(unit.phase))
+                assert(unit.entity_count == 3, 'entity_count must be 3, got ' .. tostring(unit.entity_count))
+                local row = lastAudit('backup.spawned')
+                assert(row, 'enroute must write a backup.spawned audit row')
+                assert(tostring(row[5]):find('entities=3', 1, true), 'detail must carry entity count')
+                budget.Release('BU-21-1', 'test_cleanup')
+            end)
+
+            check('a backwards phase is rejected and sampled', function()
+                env.mysql.reset()
+                env.makePlayer(22, 'BACKUP102', { cash = 0, bank = 0, crypto = 0 })
+                assert(budget.Acquire('backup', 'BU-22-1', 'BACKUP102') == true)
+
+                ack('BU-22-1', 'onscene', 0, 22)
+                env.mysql.push({ kind = 'query', result = {} })
+                ack('BU-22-1', 'enroute', 3, 22)
+
+                local unit = phaseOf('BU-22-1')
+                assert(unit.phase == 'onscene', 'phase must not rewind, got ' .. tostring(unit.phase))
+                local row = lastAudit('backup.ack_rejected')
+                assert(row, 'a rejected ack must be sampled into backup.ack_rejected')
+                assert(tostring(row[5]):find('backwards', 1, true),
+                    'detail must say why, got ' .. tostring(row[5]))
+                budget.Release('BU-22-1', 'test_cleanup')
+            end)
+
+            check('an unknown phase is rejected', function()
+                env.mysql.reset()
+                env.makePlayer(23, 'BACKUP103', { cash = 0, bank = 0, crypto = 0 })
+                assert(budget.Acquire('backup', 'BU-23-1', 'BACKUP103') == true)
+                env.mysql.push({ kind = 'query', result = {} })
+
+                ack('BU-23-1', 'teleported_to_scene', 1, 23)
+
+                local unit = phaseOf('BU-23-1')
+                assert(unit == nil or unit.phase == 'requested',
+                    'an unknown phase must not create or move an entry')
+                local row = lastAudit('backup.ack_rejected')
+                assert(row and tostring(row[5]):find('bad_phase', 1, true), 'must record bad_phase')
+                budget.Release('BU-23-1', 'test_cleanup')
+            end)
+
+            check("another officer's unit cannot be acked", function()
+                env.mysql.reset()
+                env.makePlayer(24, 'BACKUP104', { cash = 0, bank = 0, crypto = 0 })
+                env.makePlayer(25, 'BACKUP105', { cash = 0, bank = 0, crypto = 0 })
+                assert(budget.Acquire('backup', 'BU-24-1', 'BACKUP104') == true)
+                env.mysql.push({ kind = 'query', result = {} })
+
+                ack('BU-24-1', 'onscene', 0, 25)
+
+                local unit = phaseOf('BU-24-1')
+                assert(unit == nil or unit.phase == 'requested',
+                    'a foreign session must not move the unit')
+                local row = lastAudit('backup.ack_rejected')
+                assert(row and tostring(row[5]):find('not_owned', 1, true), 'must record not_owned')
+                budget.Release('BU-24-1', 'test_cleanup')
+            end)
+
+            check('ending a unit clears its phase projection', function()
+                env.mysql.reset()
+                env.makePlayer(26, 'BACKUP106', { cash = 0, bank = 0, crypto = 0 })
+                assert(budget.Acquire('backup', 'BU-26-1', 'BACKUP106') == true)
+                env.mysql.push({ kind = 'query', result = {} })
+
+                ack('BU-26-1', 'enroute', 3, 26)
+                assert(phaseOf('BU-26-1'), 'unit must be tracked before ending')
+                -- 前面的用例故意留了别的单（"外单不能释放"那条），所以这里比增量。
+                local usedBefore = budget.Get().used
+
+                ended('BU-26-1', 'timeout', 26)
+                assert(phaseOf('BU-26-1') == nil, 'phase entry must be dropped when the unit ends')
+                assert(budget.Get().used == usedBefore - 1,
+                    ('exactly this slot must be released (%d -> %d)'):format(
+                        usedBefore, budget.Get().used))
+            end)
+
+            check('the projection carries no identity fields', function()
+                env.mysql.reset()
+                env.makePlayer(27, 'BACKUP107', { cash = 0, bank = 0, crypto = 0 })
+                assert(budget.Acquire('backup', 'BU-27-1', 'BACKUP107') == true)
+                ack('BU-27-1', 'spawning', 0, 27)
+
+                local unit = phaseOf('BU-27-1')
+                assert(unit, 'unit must be tracked')
+                for _, forbidden in ipairs({ 'citizenid', 'cid', 'name', 'coords', 'x', 'y', 'z' }) do
+                    assert(unit[forbidden] == nil,
+                        'GetBackupState must not expose ' .. forbidden)
+                end
+                budget.Release('BU-27-1', 'test_cleanup')
+            end)
 
         return { ok = failed == 0, data = { cases = results, failed = failed } }
     end,

@@ -199,6 +199,19 @@
       "owner": "custom-police",
       "added": "2026-10-26",
       "expires": "2027-03-31"
+    },
+    {
+      "id": "npc-get-backup-state",
+      "file": "custom-police/server/p2_system.lua",
+      "export": "GetBackupState",
+      "kind": "internal_read",
+      "exceptions": [
+        "auth"
+      ],
+      "reason": "运维/agent 只读投影：每条只给 request_id、phase、source、age、phase_age、entity_count、rejected，**不含 citizenid、坐标、玩家名**，所以只声明 auth（无 source 参数、无玩家数据可泄露）。需要身份归属时走 GetNpcBudget 的审计包装，不要在这里补字段。",
+      "owner": "custom-police",
+      "added": "2026-10-29",
+      "expires": "2027-03-31"
     }
   ]
 }
