@@ -17,6 +17,7 @@
 | 07 | [fitness-tests](07-fitness-tests.md) | 13 条架构约束的自动检查与评分卡（当前 100/100；13 条全部 PASS） |
 | 08 | [scenarios](08-scenarios.md) | 6 条端到端场景走查（含失败、权限、NPC 警情） |
 | 09 | [outbox](09-outbox.md) | SM-03 残留：intent TTL（done 7 天 / pending 10 分钟）+ `police_outbox` 投递语义 |
+| 10 | [backup-v2](10-backup-v2.md) | SM-06 的生命周期契约（ack 阶段机、统一 TTL、结束审计、任务门控） |
 | — | [deprecations](deprecations.md) | FIT-12 人读弃用登记（机器可读源是 `tests/architecture/deprecations.json`） |
 
 ### ADR 索引
