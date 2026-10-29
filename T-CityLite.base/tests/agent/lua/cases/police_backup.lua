@@ -367,6 +367,36 @@ return {
                 budget.Release(requestId, 'test_cleanup')
             end)
 
+        -- ------------------------------------------------------------------
+        -- S5：任务重发门控（P0 纯函数）
+        -- ------------------------------------------------------------------
+
+        check('a performing task is not retasked inside the heartbeat', function()
+            assert(BackupContract.ShouldRetask(1, 1000, 3000, 5000) == false,
+                'performing + 2s < 5s heartbeat must not retask')
+        end)
+
+        check('a performing task is retasked once the heartbeat expires', function()
+            assert(BackupContract.ShouldRetask(1, 1000, 6500, 5000) == true,
+                'performing + 5.5s must retask (the task may have been cleared elsewhere)')
+        end)
+
+        check('vacant and finished tasks are retasked immediately', function()
+            assert(BackupContract.ShouldRetask(3, 1000, 1200, 5000) == true, 'vacant must retask')
+            assert(BackupContract.ShouldRetask(7, 1000, 1200, 5000) == true, 'finished must retask')
+        end)
+
+        check('an unknown task status is treated as retask', function()
+            assert(BackupContract.ShouldRetask(0, 1000, 1200, 5000) == true, 'status 0 must retask')
+            assert(BackupContract.ShouldRetask(nil, 1000, 1200, 5000) == true, 'nil must retask')
+            assert(BackupContract.ShouldRetask('nonsense', 1000, 1200, 5000) == true, 'garbage must retask')
+        end)
+
+        check('a zero heartbeat retasks every tick while performing', function()
+            assert(BackupContract.ShouldRetask(1, 1000, 1000, 0) == true,
+                'heartbeat 0 means "always" (used when debugging)')
+        end)
+
         return { ok = failed == 0, data = { cases = results, failed = failed } }
     end,
 }
