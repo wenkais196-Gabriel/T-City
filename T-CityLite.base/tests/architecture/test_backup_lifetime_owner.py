@@ -138,3 +138,28 @@ def test_orders_only_touch_the_callers_own_units(client_source: str) -> None:
         "主动撤离必须回报 dismissed，否则审计里只剩 unknown"
     )
     assert "beginRetreat(state, 'dismissed')" in order_block, "主动撤离也要开走，不能原地消失"
+
+def test_units_only_dismount_next_to_the_caller(client_source: str) -> None:
+    """P3：不许在远处下车。
+
+    以前的到场判定是 `距离 <= 20m OR 超过 30s`——30 秒一到，两百米外也把两名警官放下来
+    跑步。这里钉住：下车必须同时满足"在 20m 内"和"车慢下来"，超时只能结束这一单。
+    """
+    drive_at = client_source.find("elseif #(vehicleCoords - playerCoords) <= ARRIVE_RADIUS")
+    assert drive_at != -1, "找不到到场判定"
+    block = client_source[drive_at:drive_at + 700]
+    assert "and GetEntitySpeed(state.vehicle) < ARRIVE_SPEED then" in block, (
+        "下车必须同时要求距离与车速"
+    )
+    assert "beginFoot(state, " in block, "beginFoot 必须带上距离，便于日志验收"
+    assert "or now - state.createdAt >= ESCORT_TIMEOUT_MS" not in block, (
+        "超时不许再触发下车"
+    )
+    assert "cleanup(requestId, true, 'escort_timeout')" in block, (
+        "超时必须结束这一单并释放名额"
+    )
+    assert "local ESCORT_TIMEOUT_MS = 90000" in client_source, "硬上限应为 90s"
+
+    contract = (REPO / "resources" / "[custom]" / "custom-police" / "shared" / "backup_contract.lua")
+    text = contract.read_text(encoding="utf-8")
+    assert "escort_timeout = true" in text, "escort_timeout 必须进客户端可上报白名单"
