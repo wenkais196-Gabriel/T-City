@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **支援的滥用防护（B4）**：`police_backup_min_real_cops`（默认 0 关闭）——在勤的**其它**警官数达到阈值时拒绝 NPC 支援（错误码 `police_available`），并写 `backup.denied`（`others`/`threshold`）留痕；off-duty 不计入、请求者自己不计入。golden 3 个用例；真机验了不触发的一侧（单客户端环境），拒绝侧需第二个在勤账号补验。
 - **支援指标面板（B5）**：`tools/dev/police_backup_metrics.py` 从 `police_audit` 聚合生成成功率、平均生成耗时、平均存活、异常结束率与结束原因分布，不新增表、不加埋点。真机（6 小时 21 单）：成功率 85.7%、13 单服务端过期（全 `ttl`）、4 单正常结束（`timeout` 3 + `dismissed` 1）、平均存活 133.9 秒、异常 0。
 - **支援单位可以指挥了（B2）**：`/backup follow|hold|dismiss` —— 待命会刹停并停掉驾驶/跟随任务（战斗照旧），撤回会回报 `dismissed`（已加入白名单，审计不再记 `unknown`）并走 S8 的开走流程；三条命令只作用于自己名下的单位，服务端寿命与名额不动。agent 侧可走 `adc <src> backup hold`。真机：`order=hold applied=1` → `order=dismiss applied=1` → `retreating (reason=dismissed)` → 审计 `backup.ended | reason=dismissed;live=29`。
 - **修 devcmd 白名单的 Lua pattern 坑**：`'^backup (follow|hold|dismiss)$'` 永远匹配不上 —— Lua 的 pattern 没有 `|` 交替（和没有 `{n,m}` 是同一类）。改成三条独立 pattern。

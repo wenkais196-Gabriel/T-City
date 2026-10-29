@@ -615,6 +615,22 @@ end
 --- back through `police:server:backupEnded` when it cleans the unit up.
 ---@param source number
 ---@return table { ok=true, request_id } | { ok=false, error }
+--- 在勤的**其它**警官数量（不含请求者自己）。
+--- 用来回答"真人有空的话还要不要 NPC 支援"（B4 滥用防护）。
+local function countOtherOnDutyPolice(src)
+    local count = 0
+    for _, otherSrc in ipairs(QBCore.Functions.GetPlayers()) do
+        if otherSrc ~= src then
+            local other = QBCore.Functions.GetPlayer(otherSrc)
+            local data = other and other.PlayerData
+            if data and PolicePolicy.IsPolice(data) and data.job and data.job.onduty == true then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
 function RequestBackup(source, tier)
     local src = tonumber(source) or 0
     local actorPlayer = QBCore.Functions.GetPlayer(src)
@@ -624,6 +640,21 @@ function RequestBackup(source, tier)
     if not PolicePolicy.Can(actor, 'incident.update') then return fail('not_police') end
     local cid = type(actor.citizenid) == 'string' and actor.citizenid or ''
     if cid == '' then return fail('not_police') end
+
+    -- 滥用防护（B4）：真人警察够多时不让 NPC 顶班。默认 0 = 不限制。
+    -- 计数不含请求者自己 —— 他本来就该算"在现场的那个人"。
+    local minRealCops = tonumber(GetConvar('police_backup_min_real_cops', '0')) or 0
+    if minRealCops > 0 then
+        local others = countOtherOnDutyPolice(src)
+        if others >= minRealCops then
+            -- 拒绝也要留痕：否则"为什么今天没人叫到支援"无从解释。
+            if not auditPlayer(cid, 'backup.denied', cid,
+                ('reason=police_available;others=%d;threshold=%d'):format(others, minRealCops)) then
+                print(('[custom-police] backup.denied audit failed for %s'):format(tostring(cid)))
+            end
+            return fail('police_available')
+        end
+    end
 
     local now = os.time()
     local last = tonumber(backupCooldown[cid]) or 0
