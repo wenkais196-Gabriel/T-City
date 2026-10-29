@@ -80,6 +80,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Changed
+- **警察 NPC 支援：结束原因与结束审计（SM-06 v2 切片 S1）**：客户端 8 处清理与 5 处生成失败路径
+  现在都带原因（`timeout/dead/left/resource_stop/spawn_failed/vehicle_lost/no_alive_ped`），
+  服务端用 T-CityLite.base/resources/[custom]/custom-police/shared/backup_contract.lua 的白名单归一（白名单外记 `unknown`），并写
+  `backup.ended` 审计（含 `live=` 存活秒数）。之前只有 `backup.request`，"支援为什么结束"无从统计。
+- **golden runner 修正**：用例只回 `{ results, failed }` 时 runner 以前不看 `failed`，
+  这类文件里的检查**永远通过**。现在 `failed > 0` 也算红，并因此暴露并修掉了
+  `police_system` 的 3 条失效检查（缺 `PoliceAudit`、两条对已重构 `AssignUnit` 的 SQL 断言）。
 - **手机改成"鼠标优先"的焦点模型**：开屏与换 App 都不预设键盘焦点（无蓝框/无标签/无键位提示），
   第一次按方向键或 Tab 才出现焦点，且不论方向都从第一个 App（Phone Dialer）开始；
   无焦点时 Enter 不做任何事。焦点标签与键位提示抬到 Dock 上方，不再压住图标。

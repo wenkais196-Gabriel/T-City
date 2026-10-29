@@ -11,6 +11,7 @@ shared_scripts {
 	'shared/charges.lua',
 	'shared/insert_id.lua',
 	'shared/npc_budget.lua',
+	'shared/backup_contract.lua',
 	'shared/npc_callouts.lua',
 	'@qb-core/shared/locale.lua',
 	'locales/en.lua',

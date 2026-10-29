@@ -606,7 +606,7 @@ end
 --- Unknown / foreign request ids are ignored so a client cannot free another
 --- officer's slot. The source is captured locally so the ownership check is
 --- bound to the caller's session, never to a client-supplied citizenid.
-RegisterNetEvent('police:server:backupEnded', function(requestId)
+RegisterNetEvent('police:server:backupEnded', function(requestId, reason)
     local targetSrc = tonumber(source) or 0
     local player = QBCore.Functions.GetPlayer(targetSrc)
     local actor = player and player.PlayerData
@@ -615,15 +615,32 @@ RegisterNetEvent('police:server:backupEnded', function(requestId)
     if type(requestId) ~= 'string' or #requestId < 1 or #requestId > 64 then return end
 
     local owned = false
+    local startedAt = nil
     for _, entry in ipairs(backupSlots(cid)) do
         if entry.id == requestId then
             owned = true
+            startedAt = tonumber(entry.at)
             break
         end
     end
+    -- 不属于调用者的 requestId 一律忽略：既不放名额，也不写审计
+    -- （否则任何人都能伪造别人的单号往审计里写垃圾）。
     if not owned then return end
 
     NPCBudget.Release(requestId, 'backup_ended')
+
+    -- 结束原因由客户端上报、服务端归一：白名单外的一律记 unknown，
+    -- 这样"为什么结束"可聚合，而不会被自由文本污染。
+    local normalized = type(BackupContract) == 'table'
+        and BackupContract.NormalizeReason(reason) or 'unknown'
+    local live = startedAt and math.max(0, os.time() - startedAt) or nil
+    -- 名额已经释放，这一步是 best-effort：审计失败不能把已经结束的单位再"复活"，
+    -- 但也不能静默丢——FIT-05 要求显式处理返回值。
+    if not auditPlayer(cid, 'backup.ended', requestId,
+        ('reason=%s;live=%s'):format(normalized, live and tostring(live) or '?')) then
+        print(('[custom-police] backup.ended audit failed: %s (%s)'):format(
+            tostring(requestId), tostring(normalized)))
+    end
     -- Keep the session -> citizenid binding until the last unit ends, otherwise
     -- a later playerDropped would not know which slots still need releasing.
     if #backupSlots(cid) == 0 and backupSource[targetSrc] == cid then
