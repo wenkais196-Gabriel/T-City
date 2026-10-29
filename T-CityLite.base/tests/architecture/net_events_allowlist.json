@@ -230,8 +230,8 @@
       "name": "police:server:backupEnded",
       "file": "custom-police/server/p2_system.lua",
       "category": "session",
-      "reason": "只释放调用者自己那条 backup 预留：requestId 必须存在于 backupUnits[caller citizenid]，别人的 requestId 不会命中。",
-      "evidence": "p2_system.lua:371 backupEnded — units[requestId] ~= true → return（units = backupUnits[cid]）",
+      "reason": "只释放调用者自己那条 backup 预留：requestId 必须命中调用者 citizenid 名下的 NPCBudget 条目（kind=backup），别人的单号既不放名额也不写审计。",
+      "evidence": "p2_system.lua ownsBackupUnit + backupEnded — 遍历 backupSlots(cid) 命中 requestId 才 Release；阶段表条目随之清除",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
@@ -397,6 +397,15 @@
       "evidence": "client_reports.lua:clientReport — KINDS 白名单 + clean(message,400) 去 %c + allow() RateLimitWindow 10/60s",
       "owner": "core-framework",
       "expires": "2027-06-30"
+    },
+    {
+      "name": "police:server:backupAck",
+      "file": "custom-police/server/p2_system.lua",
+      "category": "session",
+      "reason": "阶段上报只对自己名下的活动单位生效：requestId 必须命中调用者 citizenid 的预算条目、entry.cid/entry.source 必须与调用者一致、阶段必须在 backup_contract 的白名单里且只能向前。其余一律丢弃并采样写 backup.ack_rejected（同单 10 秒一条），客户端无法推进/回退别人的单位。",
+      "evidence": "p2_system.lua backupAck — ownsBackupUnit(cid, requestId) + BackupContract.NormalizePhase + CanAdvance(entry.phase, phase) 三重校验，失败走 recordAckRejected",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
     }
   ]
 }

@@ -53,3 +53,65 @@ function BackupContract.NormalizeServerReason(reason)
     if type(reason) == 'string' and BackupContract.SERVER_REASONS[reason] then return reason end
     return 'unknown'
 end
+
+-- ---------------------------------------------------------------------------
+-- 阶段（S2）
+--
+-- 阶段是**服务端记录的状态**，客户端只上报"我这边到了哪一步"。所以阶段序必须
+-- 在服务端与 golden 测试共用同一份表：两边各写一份，迟早会一边加了 engaged
+-- 另一边还停在 onscene，然后 ack 被当成"倒退"丢掉，看起来像客户端没发。
+--
+-- requested 是服务端入口阶段（客户端不会上报它），ended 由 backupEnded 走，
+-- 都不在客户端可上报的集合里。
+-- ---------------------------------------------------------------------------
+
+--- 阶段序；数值只用于比较先后，不要持久化。
+BackupContract.PHASES = {
+    requested = 1,
+    spawning = 2,
+    enroute = 3,
+    onscene = 4,
+    engaged = 5,
+    ended = 6,
+}
+
+--- 客户端可以随 backupAck 上报的阶段（requested / ended 不在其中）。
+BackupContract.CLIENT_PHASES = {
+    spawning = true,
+    enroute = true,
+    onscene = true,
+    engaged = true,
+}
+
+--- 上报的实体数上限：一次支援就是 1 车 + 2 人，留一点余量给将来的变体。
+BackupContract.MAX_ENTITY_COUNT = 8
+
+--- 归一化客户端上报的阶段：不在 CLIENT_PHASES 里的一律 nil（调用方丢弃并计数）。
+---@param phase any
+---@return string|nil
+function BackupContract.NormalizePhase(phase)
+    if type(phase) ~= 'string' or #phase > 16 then return nil end
+    if BackupContract.CLIENT_PHASES[phase] then return phase end
+    return nil
+end
+
+--- 阶段序数值；未知阶段返回 nil。
+---@param phase any
+---@return number|nil
+function BackupContract.PhaseRank(phase)
+    if type(phase) ~= 'string' then return nil end
+    return BackupContract.PHASES[phase]
+end
+
+--- 只允许"同一阶段重复上报"或"向前推进"：倒退（onscene → enroute）一律 false。
+--- 重复上报要为真，因为客户端可能重连后重新报一次当前阶段，服务端当成幂等刷新。
+---@param from string|nil
+---@param to string|nil
+---@return boolean
+function BackupContract.CanAdvance(from, to)
+    local toRank = BackupContract.PhaseRank(to)
+    if not toRank then return false end
+    local fromRank = BackupContract.PhaseRank(from)
+    if not fromRank then return false end
+    return toRank >= fromRank
+end

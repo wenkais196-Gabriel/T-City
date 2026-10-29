@@ -233,7 +233,7 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1 已实施并真机验证**（2026-10-29，PR #97；证据见下方「S1 真机记录」）。其余四步未开始。
+> 进度：**S1、S2 已实施并真机验证**（2026-10-29）。S3–S5 未开始。证据见下方「S1 真机记录」与 S2 的补充读数。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
@@ -245,6 +245,20 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 `live=301` 是服务端用预算条目的 `at` 算出来的存活秒数（5 分钟 + 1 秒轮询偏差），
 说明"原因 + 时长"这条路端到端通了；白名单外的原因由 golden 用例覆盖（记 `unknown`）。
+
+**S2 真机读数（2026-10-29，同一次会话）**
+
+```
+169 backup.request  BU-1-1793298020-1        18:20:20
+170 backup.spawned  BU-1-1793298020-1        entities=3;took=0
+174 backup.request  BU-1-1793298118-2        18:21:58
+175 backup.spawned  BU-1-1793298118-2        entities=3;took=0
+178 backup.ended    BU-1-1793298020-1        reason=timeout;live=300   18:25:20
+```
+
+`police_backup_state`（控制台）在 18:21:58 读到 `phase=enroute entities=3`，102 秒后同一单读到
+`phase=onscene`；18:25:20 该单以 `reason=timeout;live=300` 结束，**投影里立刻消失**，只剩另一单。
+也就是说：`requested → spawning → enroute → onscene` 全部真的有人上报，且 ended 会清阶段。
 
 **顺带发现的边界**：`resource_stop` 这个原因**无法在重启 `custom-police` 自身时留痕**——
 客户端 `onResourceStop` 发 `backup:server:backupEnded` 的那一刻，接收它的服务端正在重启，
