@@ -399,6 +399,38 @@ local function closestEnemy(ped, enemies)
     return target
 end
 
+--- 通缉目标（S7）：服务端告诉我们"附近有哪些通缉玩家"（只有 netId/距离/星级）。
+--- 客户端不自己扫玩家：玩家列表、通缉星级、距离判定全在服务端，这里只负责拿 netId
+--- 换成本地 ped 再下发战斗任务。
+local suspectNetIds = {}
+
+RegisterNetEvent('police:client:BackupTargets', function(payload)
+    suspectNetIds = {}
+    if type(payload) ~= 'table' or type(payload.targets) ~= 'table' then return end
+    for _, target in ipairs(payload.targets) do
+        local netId = tonumber(target and target.net_id)
+        if netId and netId > 0 and #suspectNetIds < 8 then
+            suspectNetIds[#suspectNetIds + 1] = netId
+        end
+    end
+end)
+
+--- 把服务端给的通缉 netId 解成本地 ped，并只保留"活着且在交战半径内"的。
+local function wantedPedsAround(playerPed)
+    if #suspectNetIds == 0 then return {} end
+    local playerCoords = GetEntityCoords(playerPed)
+    local peds = {}
+    for _, netId in ipairs(suspectNetIds) do
+        local ped = NetworkGetEntityFromNetworkId(netId)
+        if ped and ped ~= 0 and DoesEntityExist(ped) and not IsEntityDead(ped) then
+            if #(GetEntityCoords(ped) - playerCoords) <= ENEMY_RADIUS * 1.5 then
+                peds[#peds + 1] = ped
+            end
+        end
+    end
+    return peds
+end
+
 local function beginFoot(state)
     state.phase = 'foot'
     state.footAt = GetGameTimer() + 1500
@@ -421,6 +453,15 @@ local function updateFoot(state, playerPed, now)
     if state.footAt and now < state.footAt then return end
 
     local enemies = findEnemies(playerPed, state)
+    -- 通缉玩家优先并入候选：他们是"这单支援的目标"，普通敌对 ped 只是路上的麻烦。
+    local wanted = wantedPedsAround(playerPed)
+    for _, suspect in ipairs(wanted) do
+        local seen = false
+        for _, existing in ipairs(enemies) do
+            if existing == suspect then seen = true break end
+        end
+        if not seen then enemies[#enemies + 1] = suspect end
+    end
     if #enemies > 0 then
         state.combat = true
         if not state.engagedAcked then
@@ -556,6 +597,12 @@ runBackup = function(state)
                 state.lastDriveTask = now
             end
         else
+            -- 下车之后每 3 秒问一次"附近有没有通缉目标"；服务端默认关
+            -- （police_backup_engage_wanted 0），关着时这条只是空转一次很小的请求。
+            if now - (state.lastTargetAsk or 0) >= 3000 then
+                state.lastTargetAsk = now
+                TriggerServerEvent('police:server:backupTargets')
+            end
             updateFoot(state, playerPed, now)
         end
     end

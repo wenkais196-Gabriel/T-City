@@ -406,6 +406,15 @@
       "evidence": "p2_system.lua backupAck — ownsBackupUnit(cid, requestId) + BackupContract.NormalizePhase + CanAdvance(entry.phase, phase) 三重校验，失败走 recordAckRejected",
       "owner": "custom-police",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:backupTargets",
+      "file": "custom-police/server/p2_system.lua",
+      "category": "session",
+      "reason": "只回答'我名下这一单附近有哪些通缉玩家'：调用者必须持有自己的活动支援单位，否则整条通道就是免费通缉雷达；每 source 3 秒限流；投影只有 net_id/distance/stars（无坐标、无 citizenid）。默认 convar police_backup_engage_wanted=0 关闭。",
+      "evidence": "p2_system.lua backupTargets — backupSlots(cid) 非空 + backupTargetAskedAt 3s 窗口 + GetBackupTargets 只读 PlayerData.metadata.wanted",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
     }
   ]
 }
