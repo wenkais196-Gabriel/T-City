@@ -21,6 +21,7 @@
 | 新增 net event / 表 / 跨资源调用 | `ARCHITECTURE.md §4` | `tests/architecture/*.json` 三份登记表 |
 | 想复用 / 合并重复实现 | `docs/engineering/REUSE.md` | `python3 tools/dev/reuse_scan.py --min 3` |
 | 交付 / 发版 | `docs/engineering/templates/delivery.md` | `tools/dev/release_check.py` |
+| **要上真机验证**（NUI / 输入 / 实体 / 时序） | `docs/engineering/LIVE_VERIFICATION.md` | `tools/dev/police_live_probe.py` + `tools/dev/fivem_console.py` |
 
 ## 2. 十条红线（违反 = 打回，全文见 CONSTITUTION）
 
@@ -69,6 +70,13 @@ screen -dmS tcity bash -c 'cd <repo> && ./start.sh > /tmp/tcity_console.log 2>&1
 tcity-cmd -w 8 "restart custom-phone"
 tcity-cmd --page                                        # 当前控制台页
 tail -40 /tmp/tcity_console.log                         # 服务端日志
+
+# 真机（起栈顺序：Docker → FXServer → 客户端）
+docker start tcity-mariadb
+python3 tools/dev/police_live_probe.py --audit 5                 # 客户端 phone 状态 + 资源数 + 审计尾巴
+python3 tools/dev/fivem_console.py "restart custom-police"       # 控制台命令（经 MCP→RCON）
+python3 tools/dev/fivem_console.py --key Down                    # 真机按键（只有这条路径能进游戏）
+python3 tools/dev/fivem_console.py "adc 1 phoneui police_mdt"    # devcmd 直达 App（需 setr phone_ui_nav 1）
 
 # 交付前
 python3 tools/dev/release_check.py
