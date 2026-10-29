@@ -716,10 +716,10 @@ justice_sentences (
 ### 6.3 当前实现的硬缺口
 
 1. **服务端无生命周期**：`backupUnits` 只是一个 set，没有 `state/spawned_at/expires_at/last_ack`；服务端无法回答“这个单位在哪、是否到场、是否战斗”。
-2. **无 TTL**：客户端 5 分钟寿命只在客户端；如果客户端 Lua 卡死/异常，`backupEnded` 永不发送，服务端名额一直占着，直到 `playerDropped`（`p2_system.lua:266-272`）。玩家挂机在线时上限永久 -1。
+2. **TTL 与生命周期脱钩**（2026-10-29 修正：原先写的“无 TTL”已过时）：`NPCBudget` 有 `TTL_SECONDS = 600` 与 `Sweep()`（`server/npc_budget.lua:77-90`，超时释放并写 `npc.stale` 审计），名额不会永久泄漏。真正的缺口是**两套计时互不知道**：客户端 5 分钟（`client/backup.lua:22`）比预算 10 分钟短，Sweep 释放名额后**不会通知客户端清理实体**；反过来客户端卡死时名额要等满 10 分钟才回收。
 3. **无生成确认**：服务端 `TriggerClientEvent` 后立即认为成功；模型缺失/实体创建失败只靠客户端回报，服务端没有超时兜底。
 4. **无结束审计/指标**：只有 `backup.request`；无法算成功率、平均存活时长、战斗率、异常结束原因。
-5. **上限是“每警员 2 个”，不是全局**：48 人同时请求可生成 96 个 NPC；GTA_MOD_RESEARCH 建议“同时 2 个 NPC 单位”是全局/场景级，当前没有全局 cap（目标 ≤6，见 §6.4）。
+5. ~~**上限是“每警员 2 个”，不是全局**，48 人可生成 96 个 NPC~~（2026-10-29 修正：已不成立）。`NPCBudget.MAX_GLOBAL = 6`，且 `CanAcquire` 超限返回 `global_limit`（`shared/npc_budget.lua:15,68-88`），backup 走同一个预算。全服目标 ≤6 已由 `MAX_GLOBAL` 强制，剩下的是**计量口径**问题：预算按“实体槽位”计（backup=1、callout=2），不是“支队长眼里的一个单位”。
 6. **实体只在请求者客户端生成**：其他玩家是否看到取决于 OneSync 实体所有权/范围，服务端没有校验；这是设计取舍，但必须在文档/UI 说明“支援是本地表现”，否则会被当成全服单位。
 7. **`request_id` 不落库**：MDT 只显示一个字符串（`PoliceMDT.svelte:349-367`），刷新/重进后无法追踪。
 
@@ -746,11 +746,15 @@ justice_sentences (
 | 项 | 基线时 | 现在（`3bbcab3`） | 证据 |
 |---|---|---|---|
 | 服务端状态 | 只有 `backupUnits[cid][requestId]=true` 的占位集合 | **仍是占位集合**；没有 `state/spawned_at/expires_at/last_ack` | `custom-police/server/p2_system.lua:295-300` |
-| TTL | 无 | **仍无**；只有客户端 5 分钟寿命 + `playerDropped` 释放 | `p2_system.lua:371-395`、`client/backup.lua:436-468` |
+| TTL | 无 | **预算侧已有**：`TTL_SECONDS=600` + `Sweep()`，超时释放并写 `npc.stale`；但与客户端 5 分钟寿命脱钩——Sweep 不通知客户端清理实体，客户端卡死时名额最多占满 10 分钟 | `server/npc_budget.lua:77-90`、`client/backup.lua:22` |
+
 | 生成确认 | 无 ack | **仍无**：`TriggerClientEvent('police:client:SpawnBackup')` 后即认为成功 | `p2_system.lua:364` |
 | 掉线释放 | `playerDropped` 清 `backupUnits[cid]` | 保留并加了来源校验（`backupSource`），按 session 释放 | `p2_system.lua:387-395` |
 | 结束审计 | 只有 `backup.request` | **仍只有 request**；无 `backup.ended`/`expired`/指标 | `p2_system.lua:348` |
-| 全局 cap | 无（只限每人 2） | **仍无**；48 人满编理论上限 96 单位 | `p2_system.lua:296-327` |
+| 全局 cap | 无（只限每人 2） | **已有**：`NPCBudget.MAX_GLOBAL = 6`，超限回 `global_limit`（口径是实体槽位，不是单位） | `shared/npc_budget.lua:15,68-88` |
+
+
+> 本表 2026-10-29 核对过代码：预算侧的全局 cap 与 TTL 已经落地，别按“无 TTL/无全局 cap”做取舍。
 
 **结论**：SM-06 仍是 **MVP**——服务端管权限/冷却/每人上限/requestId 归属，客户端管实体与生命周期。FIT-07 的“走预算接口”对 backup 成立，但新增的 NPC 警情在 `client/npc_callouts.lua` 里另开了一条 `CreateVehicle`/`CreatePed` 路径（见 SM-09），所以 07 把 FIT-07 降为 PARTIAL。
 

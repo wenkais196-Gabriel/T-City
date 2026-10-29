@@ -290,7 +290,14 @@ export const questScenarios = [
         5000, '平板应并出两栏');
       checkTruthy('平板：两栏都在', (await page.locator('.quests-app [data-pane]:visible').count()) === 2);
 
-      // 默认在「可接」tab，右栏是那条可接任务
+      // 默认在「可接」tab，右栏是那条可接任务。
+      // 右栏内容是异步拉回来的：CI 上「两栏都在」成立的那一刻详情可能还没渲染，
+      // 同步读一次就红（这块换着地方红过两次）。所以要等文本出现再断言。
+      await waitFor(
+        async () => ((await page.locator('[data-pane="quest"]').textContent()) ?? '').includes(QUEST_FREE.title),
+        5000,
+        '默认右栏要显示可接任务的标题',
+      );
       checkTruthy('默认右栏是可接任务的详情',
         ((await page.locator('[data-pane="quest"]').textContent()) ?? '').includes(QUEST_FREE.title));
 

@@ -40,7 +40,7 @@
 | 生成方 | 客户端 `CreatePed`（`custom-cartel/client/main.lua:53`） | 请求者客户端（`docs/police/architecture/02-state-machines.md:695-697` 记录的 `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua` 实体层） | 被推场景的客户端 `CreateVehicle`/`CreatePed`（`custom-police/client/npc_callouts.lua:183,201`） |
 | 预算走不走 | 不走 | 走（`backup=1` slot，`shared/npc_budget.lua:19-22`） | 走（`callout=2` slot，`server/p4_npc.lua:140`） |
 | 行为表达方式 | 单一 scenario 动画（`client/main.lua:61-63`） | 客户端驾驶/步行/战斗阶段（`02-state-machines.md:708-712`） | 模板里一个字符串 `behavior='hostile'|'flee_or_fight'`（`shared/npc_callouts.lua:82,112,154`），客户端 `configureSuspect` 解释（`client/npc_callouts.lua:249-253`） |
-| 生命周期 | login → resource_stop | 服务端占位 set，客户端 5 分钟寿命 | 服务端内存 `spawned` map + `police_incidents` 状态；客户端 300m/60s/End 清理 |
+| 生命周期 | login → resource_stop | 服务端占位 set + 预算 TTL 10 分钟（`Sweep` 释放，不通知客户端），客户端 5 分钟寿命 | 服务端内存 `spawned` map + `police_incidents` 状态；客户端 300m/60s/End 清理 |
 | 谁清理 | 客户端 `onResourceStop`（`client/main.lua:394-403`） | 客户端 cleanup → `police:server:backupEnded`；服务端 `playerDropped`（`02-state-machines.md:712-714`） | 客户端 `cleanupScene`（`client/npc_callouts.lua:112-130`）+ 服务端 `broadcastEnd`/`releaseCalloutBudget`（`server/p4_npc.lua:193-207,282`） |
 
 ### 1.2 `npc_budget.lua` 已经提供了什么（真实签名）
