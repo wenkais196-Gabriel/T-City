@@ -565,8 +565,10 @@ def test_built_bundle_ships_justice_wanted_sources_and_templates():
 
 def test_police_mdt_request_backup_action_forwards_the_server_result():
     app = read(PHONE / "server/apps/police_mdt.lua")
-    assert "request_backup = function(source, _params)" in app
-    assert "exports['custom-police']:RequestBackup(source)" in app
+    assert "request_backup = function(source, params)" in app
+    assert "exports['custom-police']:RequestBackup(source, tier)" in app
+    # 响应级别由 UI 的 params.tier 决定，没给则留空让服务端吃 convar 默认值。
+    assert "local tier = type(params) == 'table' and tonumber(params.tier) or nil" in app
     assert "structured('request_backup'" in app
     assert "return structured(" in app
 

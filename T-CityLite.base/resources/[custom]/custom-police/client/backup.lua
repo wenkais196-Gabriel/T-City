@@ -50,6 +50,7 @@ local function serverOwnsLifetime()
 end
 
 local pending = {} -- [requestId] = true while models are loading
+local pendingLane = {} -- [requestId] = 0/1 —— 一次叫两车时错开停车位
 
 -- ---------------------------------------------------------------------------
 -- 任务门控（S5）
@@ -288,9 +289,11 @@ local function createBlip(vehicle, coords)
     return blip
 end
 
-local function spawnPoint(playerPed)
+local function spawnPoint(playerPed, lane)
+    -- 一次响应可能是两辆车：第二辆往侧后错开，避免两车生成在同一个点互相顶。
+    local shift = (tonumber(lane) or 0)
     local offset = GetOffsetFromEntityInWorldCoords(
-        playerPed, SPAWN_SIDE, SPAWN_FORWARD, 0.0)
+        playerPed, SPAWN_SIDE + shift * 11.0, SPAWN_FORWARD - shift * 7.0, 0.0)
     local x, y, z = offset.x, offset.y, offset.z
 
     -- Ground the spawn so the car does not fall from the caller's z when the
@@ -337,7 +340,8 @@ local function spawnBackup(requestId)
         return
     end
 
-    local spawn = spawnPoint(playerPed)
+    local spawn = spawnPoint(playerPed, pendingLane[requestId] or 0)
+    pendingLane[requestId] = nil
     local heading = (GetEntityHeading(playerPed) + 180.0) % 360.0
     local vehicle = CreateVehicle(vehicleHash, spawn.x, spawn.y, spawn.z + 0.5, heading, true, true)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
@@ -698,14 +702,30 @@ runBackup = function(state)
     end
 end
 
-RegisterNetEvent('police:client:SpawnBackup', function(requestId)
-    if type(requestId) ~= 'string' or requestId == '' or #requestId > 64 then return end
-    if active[requestId] or pending[requestId] then return end
-    pending[requestId] = true
+RegisterNetEvent('police:client:SpawnBackup', function(requestId, requestIds)
+    -- 服务端可能一次给一组 id（响应级别 2 = 两辆车）。逐个校验后再生成，
+    -- 任何一个 id 不合法都不影响其余的。
+    local ids = {}
+    if type(requestIds) == 'table' then
+        for _, id in ipairs(requestIds) do
+            if type(id) == 'string' and id ~= '' and #id <= 64 then ids[#ids + 1] = id end
+            if #ids >= 2 then break end
+        end
+    end
+    if #ids == 0 and type(requestId) == 'string' and requestId ~= '' and #requestId <= 64 then
+        ids[1] = requestId
+    end
+
+    for index, id in ipairs(ids) do
+        if active[id] or pending[id] then goto continue end
+        pending[id] = true
+        pendingLane[id] = index - 1
     -- 先报告"我收到了、开始生成"：服务端 10s 没等到这条就会判 expired（S3），
     -- 所以它必须在任何模型加载/等待之前发出。
-    ackPhase(requestId, 'spawning', 0)
-    CreateThread(function() spawnBackup(requestId) end)
+        ackPhase(id, 'spawning', 0)
+        CreateThread(function() spawnBackup(id) end)
+        ::continue::
+    end
 end)
 
 --- 服务端收尾（S3）：寿命到点或阶段停太久，服务端先发这条再宽限 5 秒放名额。
