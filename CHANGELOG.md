@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **支援单位只在玩家身边下车（spawn v3 · P3）**：到场判定从「距离 ≤20m **或** 超过 30s」改成「距离 ≤20m **且** 车速 <5 m/s」；硬上限提到 90s，到点仍未到就记 `escort_timeout` 结束并释放名额，不再让两名警官从两百米外穿过车流跑过来。客户端日志新增 `dismount at %.1fm` 供验收。真机：`dismount at 14.8m`。
 - **支援单位会跟着最近的警官（B3）**：`PickBackupEscort` 在请求时算一次「跟着谁」——优先离请求者最近的
   在勤警官（off-duty 与平民永不入选），没有别人就是请求者自己；结果随阶段条目 `escort_source` 暴露，
   客户端开车与跟随都以它为准、解析不到才回落到请求者。真机单警官 `escort=1`；多警官路径有 4 个 golden 用例，

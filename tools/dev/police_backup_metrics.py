@@ -28,7 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-ABNORMAL_REASONS = {"spawn_failed", "vehicle_lost", "no_alive_ped", "unknown", "dead"}
+ABNORMAL_REASONS = {"spawn_failed", "vehicle_lost", "no_alive_ped", "unknown", "dead", "escort_timeout"}
 
 
 def mysql_dsn() -> tuple[str, str, str]:
