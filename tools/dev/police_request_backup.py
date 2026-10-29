@@ -133,10 +133,36 @@ def main() -> int:
         print("dry-run：不按 Enter")
         return 0
 
-    console("--key", "Enter")
-    time.sleep(3)
-    print(console("police_backup_state"))
-    return 0
+    # Enter 也可能因为窗口失焦而丢：按一次 → 看状态 → 最多重试 3 次。
+    for attempt in range(1, 4):
+        focus_game_window()
+        console("--key", "Enter")
+        time.sleep(3)
+        state = console("police_backup_state")
+        if "no live units" not in state:
+            print(state)
+            return 0
+        print(f"第 {attempt} 次 Enter 没触发请求，重试")
+        time.sleep(2)
+    print("三次 Enter 都没触发请求：检查焦点是否还在「请求支援」上")
+    return 1
+
+
+def focus_game_window() -> None:
+    """点一下游戏窗口中心把它切到前台（SetForegroundWindow 常被系统拒绝）。"""
+    if os.name != "nt":
+        return
+    subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         "Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;"
+         "public class M{[DllImport(\"user32.dll\")]public static extern bool SetCursorPos(int x,int y);"
+         "[DllImport(\"user32.dll\")]public static extern void mouse_event(uint f,uint dx,uint dy,uint d,"
+         "System.UIntPtr e);}';"
+         "[M]::SetCursorPos(1280,700)|Out-Null;"
+         "[M]::mouse_event(0x0002,0,0,0,[System.UIntPtr]::Zero);"
+         "Start-Sleep -Milliseconds 80;"
+         "[M]::mouse_event(0x0004,0,0,0,[System.UIntPtr]::Zero)"],
+        capture_output=True, timeout=30)
 
 
 if __name__ == "__main__":
