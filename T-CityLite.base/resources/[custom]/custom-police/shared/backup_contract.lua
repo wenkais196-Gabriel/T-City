@@ -25,6 +25,7 @@ BackupContract.CLIENT_REASONS = {
     vehicle_lost = true,   -- 载具丢失或司机无效
     no_alive_ped = true,   -- 两名 NPC 都没了
     dismissed = true,      -- 警官主动撤掉（/backup dismiss）
+    escort_timeout = true, -- 90s 内没能开到请求者身边（P3）
 }
 
 --- 只允许服务端产生的原因（客户端自报会被归一成 unknown）。
