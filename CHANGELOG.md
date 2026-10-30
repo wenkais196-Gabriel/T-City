@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **L0 无线电层（蓝图 §6.2）**：支援单位派出/到场/撤离时给所有在岗警察播一句 10-code。走手机已有的 `phone:client:systemSpeech`（字幕 + TTS），呼号取 metadata 的 `callsign`（没有则由 citizenid 稳定派生），单人 3s / 全局 2s 双重限流，文案 ≤160 字符且不含坐标/车牌/citizenid；`police_radio_voice` 默认开、可一键关掉。真机三句全响：`radio dispatch → onscene → clear`。
 - **警察模块蓝图入库**：`docs/agent/police/BLUEPRINT.md`（施工图）+ `RESEARCH-2026-10.md`（调研定稿）+ v1 存档。蓝图补了 §0.3 实现进度表，并把基线命令从老路径改成本仓库现路径（1221 passed / 14 suites 149 checks）。
 - **NPC 支援对齐蓝图 §6.3 配方**：司机加 `SetDriverAbility(0.9)` / `SetDriverAggressiveness(0.1)`；驾驶风格默认改回 `786603`（StopForVehicles/StopAtTrafficLights，可 `police_backup_drive_style 2883621` 回滚抢行档）；新增到场停留上限 `police_backup_onscene_ttl`（默认 120s，交战 `engaged` 即撤销倒计时）；新增「车停稳在 35m 内 2.5 秒就下车」的第三种到场出口，解决玩家在院内/屋内时被看门狗误判 `vehicle_lost`。`SetPedAsCop` 明确不调（原生警察 AI 会绕过「NPC 不打玩家」的默认关），差异记在 `docs/police/architecture/10-backup-v2.md` §3.13。
 - **支援单位从路网上开过来了（spawn v3 · P1/P2）**：生成点改为在玩家**后方** 50m 的搜索中心取路网节点，扫 `nth ∈ {1,3,5,8,12,20}` 挑朝向最顺的候选，并用 `CalculateTravelDistanceBetweenPoints` 过滤掉高架/隧道另一侧那种「直线很近、开车不可达」的节点（不可达时驾驶任务会立刻 finished，车原地不动）；生成用节点坐标与节点朝向并 `LoadAllPathNodes(true)`，取不到则回落到旧偏移（`police_backup_spawn_mode=offset` 回滚）。行驶改 >150m 用 `TaskVehicleDriveToCoordLongrange`，驾驶风格切 `2883621`（不闯红灯停），并加「生成后 10s 宽限 + 每 20s 无进展记一次 + 连续 3 次判 `vehicle_lost`」的看门狗。真机四单：节点 43–137m、朝向点积 0.33–1.00，到场 ~10s，`dismount at 17–18m`。
