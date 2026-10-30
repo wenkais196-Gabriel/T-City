@@ -299,13 +299,13 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 | 项 | 做法 |
 |---|---|
-| 入口 | 服务端事件 `police:server:coronerRequest`（客户端带 corpse netId）；只有 `PolicePolicy.Can(..., 'incident.update')` 且在岗的警察能叫 |
+| 入口 | 玩家命令 `/coroner`（自动找 30m 内最近一具尸体）；服务端事件 `police:server:coronerRequest` 复验 `PolicePolicy.Can(..., 'incident.update')` 与在岗。qb-target 菜单暂未接（长按 G 的情境菜单在 P3 里统一做） |
 | 名额 | `NPCBudget` 的 `kind='coroner'`，1 个 slot；满了直接拒（不排队） |
 | 冷却 / 寿命 | 每人 60s 冷却；单 180s 未完成，服务端发 `police:client:CoronerEnd` 并放名额；玩家掉线立即回收 |
 | 生成 | **复用支援单位的路网取点**（`BackupFindRoadNode`，四档降级）；取不到路网就 `no_road` 结束，不在沙滩上生成 |
 | 动作 | 开到 12m 内停稳 → 医生下车 → 走到尸体旁 → 跪 6 秒 → **删除尸体** → 回车上 → 开走（12s 后回收） |
 | 审计 | `coroner.request` / `coroner.ended(reason=…)` / `coroner.rejected` |
-| 调试 | `police_coroner_dev <serverId>`（`police_coroner_dev_enabled` 默认 0，只接受控制台）：造一具尸体并走同一条链路 |
+| 调试 | `police_coroner_dev <serverId>`（convar 默认 0，只接受控制台）：**只造尸体**，叫单由测试者按 `/coroner` |
 
 真机（2026-10-30）：`CR-1793389434-1` —— 尸体生成 → 车在 **84m** 外的路网生成
 （`van spawned 84m from the body`）→ 33 秒后 `coroner.ended reason=done;live=33` → 客户端 `cleaned (left)`。

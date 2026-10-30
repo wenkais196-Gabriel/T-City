@@ -240,6 +240,8 @@ local DEVCMD_ALLOWED = {
     '^backup follow$',
     '^backup hold$',
     '^backup dismiss$',
+    -- L2 后勤：叫验尸官（真机验证用；服务端仍会复验在岗与名额）
+    '^coroner$',
 }
 
 -- 一条 devcmd 最多这么长：手机命令都短，超长的要么是误用，要么是想塞别的

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **`/coroner` 命令**：自动找 30m 内最近一具尸体并叫验尸官（附近没尸体时给一条 feed 提示）。调试入口 `police_coroner_dev` 改为只造尸体，叫单必须走正式命令，两条路径不再混在一起。
 - **L2 后勤层·验尸官（蓝图 §6.2）**：在岗警察可叫一次验尸官，面包车从**路网**开来（复用支援单位的四档取点），停稳后医生下车、跪 6 秒、**删除尸体**、再开走。名额走 `NPCBudget(kind='coroner')`，每人 60s 冷却，单 180s 未完成由服务端收车并放名额，掉线立即回收；审计三态 `coroner.request / .ended / .rejected`。调试入口 `police_coroner_dev <src>`（convar 默认关、仅控制台）造尸体并走同一条链路。真机：`CR-1793389434-1` 车在 84m 外路网生成，33 秒完成，`reason=done`。
 
 ### Changed
