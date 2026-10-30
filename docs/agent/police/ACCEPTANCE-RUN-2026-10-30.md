@@ -154,3 +154,20 @@ audit: coroner.request  → coroner.ended reason=done;live=32（+ npc.spawn / np
 1. `v3.11_police_case_verdict.sql`：给 `police_cases` 加 `court_status VARCHAR(24)` 与 `sentence_minutes INT`（用 v3.6 那套 `information_schema` 判断保证幂等）；
 2. 司法侧建案时**同时**调 owner 的 `CreateCase`，把两个 id 记下来（justice 的 `CASE-0001` ↔ police 的 `CASE-2026-00000N`）；
 3. `RecordVerdict` 再按这个映射回写 `police_cases.court_status` + `sentence_minutes`。
+
+
+## 10. L2 后勤层验收（2026-10-30，新增 AC-L2-01…08）
+
+| AC | 结果 | 证据 |
+|---|---|---|
+| AC-L2-01 只接受在岗警察 | **PASS** | 三个 server 文件都先过 `PolicePolicy.Can(..., 'incident.update'/'evidence.register')` 再判 `onduty`；平民/离岗由闸门与同一入口保证（本轮未用平民号实测，见备注） |
+| AC-L2-02 只在路网生成 | **PASS** | 验尸官 `van spawned 84m from the body`（`BackupFindRoadNode`）；拖车 `flatbed spawned 118m`；取不到时 `no_road` |
+| AC-L2-03 同一套生命周期 | **PASS** | `NPCBudget.SLOT_COST` 含 `coroner=1`/`tow=1`；三者都有 `*_TTL_SECONDS` + `playerDropped` + sweep |
+| AC-L2-04 拒绝玩家车 | **PASS**（代码 + 闸门） | `SELECT plate FROM player_vehicles WHERE plate = ? LIMIT 1` 命中即 `tow.rejected`；本轮只用 NPC 车牌 `61NJN687` 跑通，玩家车实测待补 |
+| AC-L2-05 拖走后残骸消失 | **PASS** | `tow.ended reason=done;live=90` + `cleaned (left)` + `npc.despawn(tow_done)` |
+| AC-L2-06 尸体真的被删除 | **PASS** | `coroner.ended reason=done;live=32`（`pickUpBody` 成功路径内含 `deleteEntity(corpse)`） |
+| AC-L2-07 化验 append-only | **PASS** | `EX-000001`（已送检）+ `EX-000002`（结果：阴性，样本 EX-000001）；0 处 `UPDATE police_evidence` |
+| AC-L2-08 审计三态 + 后门 | **PASS** | `coroner.request/.ended/.rejected`、`tow.request/.ended/.rejected`；两个 dev 命令 convar 默认 0 且只造场景 |
+
+**欠账（写进 debt）**：AC-L2-01 与 AC-L2-04 的"反向实测"（平民号 / 玩家车牌）还没做，
+需要第二个客户端；代码路径与闸门都已就位。
