@@ -299,7 +299,7 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 | 项 | 做法 |
 |---|---|
-| 入口 | 玩家命令 `/coroner`（自动找 30m 内最近一具尸体）；服务端事件 `police:server:coronerRequest` 复验 `PolicePolicy.Can(..., 'incident.update')` 与在岗。qb-target 菜单暂未接（长按 G 的情境菜单在 P3 里统一做） |
+| 入口 | ①玩家命令 `/coroner`（自动找 30m 内最近一具尸体）；②`Config.UseTarget` 开启时，对准尸体有「叫验尸官」选项（尸体消失后自动摘掉 target）。服务端事件 `police:server:coronerRequest` 复验 `PolicePolicy.Can(..., 'incident.update')` 与在岗 |
 | 名额 | `NPCBudget` 的 `kind='coroner'`，1 个 slot；满了直接拒（不排队） |
 | 冷却 / 寿命 | 每人 60s 冷却；单 180s 未完成，服务端发 `police:client:CoronerEnd` 并放名额；玩家掉线立即回收 |
 | 生成 | **复用支援单位的路网取点**（`BackupFindRoadNode`，四档降级）；取不到路网就 `no_road` 结束，不在沙滩上生成 |

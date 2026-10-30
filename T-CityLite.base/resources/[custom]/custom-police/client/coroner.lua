@@ -217,3 +217,57 @@ RegisterNetEvent('police:client:CoronerDevCorpse', function()
     SetEntityHealth(ped, 0)
     print('[custom-police] coroner dev: corpse spawned (now run /coroner)')
 end)
+
+-- ----------------------------------------------------
+-- qb-target：对准尸体就有「叫验尸官」选项（Config.UseTarget 开启时）
+-- ----------------------------------------------------
+local targetBodies = {}
+
+local function watchBodies()
+    if not Config or not Config.UseTarget then return end
+    if type(exports) ~= 'table' then return end
+    local ok = pcall(function() return exports['qb-target'] end)
+    if not ok then return end
+
+    while true do
+        Wait(2000)
+        local playerPed = PlayerPedId()
+        if DoesEntityExist(playerPed) then
+            local origin = GetEntityCoords(playerPed)
+            local seen = {}
+            for _, ped in ipairs(GetGamePool('CPed')) do
+                if ped ~= playerPed and DoesEntityExist(ped) and IsEntityDead(ped)
+                    and #(GetEntityCoords(ped) - origin) <= 30.0 then
+                    seen[ped] = true
+                    if not targetBodies[ped] then
+                        targetBodies[ped] = true
+                        pcall(function()
+                            exports['qb-target']:AddTargetEntity(ped, {
+                                options = {
+                                    {
+                                        label = '叫验尸官',
+                                        icon = 'fas fa-ambulance',
+                                        action = function()
+                                            local netId = NetworkGetNetworkIdFromEntity(ped)
+                                            TriggerServerEvent('police:server:coronerRequest', netId)
+                                        end,
+                                    },
+                                },
+                                distance = 2.5,
+                            })
+                        end)
+                    end
+                end
+            end
+            -- 尸体被收走/刷掉后，把 target 摘掉，别留成幽灵选项。
+            for ped in pairs(targetBodies) do
+                if not seen[ped] or not DoesEntityExist(ped) then
+                    targetBodies[ped] = nil
+                    pcall(function() exports['qb-target']:RemoveTargetEntity(ped) end)
+                end
+            end
+        end
+    end
+end
+
+CreateThread(watchBodies)
