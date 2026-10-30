@@ -212,6 +212,19 @@
       "owner": "custom-police",
       "added": "2026-10-29",
       "expires": "2027-03-31"
+    },
+    {
+      "id": "p3-record-case-verdict",
+      "file": "custom-police/server/p3_cases.lua",
+      "export": "RecordCaseVerdict",
+      "kind": "system_only",
+      "exceptions": [
+        "auth"
+      ],
+      "reason": "司法侧（custom-justice）在庭审判决时服务端调用，不接收玩家 source；写入只走 PoliceRecords.RecordCaseVerdict（案卷唯一写者），并按 case 主键定位。",
+      "owner": "police",
+      "expires": "2027-03-31",
+      "added": "2026-10-30"
     }
   ]
 }

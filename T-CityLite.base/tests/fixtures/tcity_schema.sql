@@ -947,6 +947,8 @@ CREATE TABLE IF NOT EXISTS `police_cases` (
   `title` varchar(160) NOT NULL,
   `summary` varchar(2000) NOT NULL DEFAULT '',
   `status` enum('open','closed','archived') NOT NULL DEFAULT 'open',
+  `court_status` varchar(24) DEFAULT NULL,
+  `sentence_minutes` int DEFAULT NULL,
   `lead_citizenid` varchar(50) DEFAULT NULL,
   `created_by` varchar(50) NOT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
