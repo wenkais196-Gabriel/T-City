@@ -139,3 +139,18 @@ audit: coroner.request  → coroner.ended reason=done;live=32（+ npc.spawn / np
 | AC-P1-05 刑期截断 | 未验 | 走 `Imprison`，需要服刑链路 |
 | AC-P1-06 非警察调用被拒 | 未验 | 需要伪造 source 的用例 |
 | AC-P1-01 罪名 2 行 | 部分 | 现有模型把罪名存成 `police_arrests.charges` 的 CSV，不是每罪一行；蓝图里的 `police_case_charges` 不该新建 |
+
+
+## 9. 主办人修复 + 两个 P1 阻塞点
+
+| 项 | 结果 |
+|---|---|
+| `police_cases.lead_citizenid` | **已修**：owner 的 `CreateCase` 在调用方没传时默认落**立案人自己**。真机：`CASE-2026-000003 lead=DXI50064 created_by=DXI50064`（修复前两行都是 NULL） |
+| AC-P1-02 律师通知 | **阻塞**：需要第二个在线 lawyer 号 |
+| AC-P1-03 判决回写 | **阻塞（结构性）**：`police_cases` 没有 `court_status` / `sentence_minutes` 两列，`RecordVerdict` 只能更新 `police_reports.justice_case_id` 命中的报告行，而**没有任何代码写入 `justice_case_id`** —— 也就是说这条 AC 在当前 schema 下无法成立 |
+
+### AC-P1-03 需要的最小改动（待 owner 确认，动表结构属于 L4）
+
+1. `v3.11_police_case_verdict.sql`：给 `police_cases` 加 `court_status VARCHAR(24)` 与 `sentence_minutes INT`（用 v3.6 那套 `information_schema` 判断保证幂等）；
+2. 司法侧建案时**同时**调 owner 的 `CreateCase`，把两个 id 记下来（justice 的 `CASE-0001` ↔ police 的 `CASE-2026-00000N`）；
+3. `RecordVerdict` 再按这个映射回写 `police_cases.court_status` + `sentence_minutes`。
