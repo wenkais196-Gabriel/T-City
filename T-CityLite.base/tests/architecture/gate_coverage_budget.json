@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 171,
+  "max_unproven": 173,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -49,6 +49,12 @@
       "max_unproven": 171,
       "previous": 170,
       "why": "新增到场闸门（1 条：只在 20m 内且慢速时下车，超时结束而不是跑步）"
+    },
+    {
+      "date": "2026-10-30",
+      "max_unproven": 173,
+      "previous": 172,
+      "why": "新增开发后门闸门（1 条：convar 默认关 + 仅控制台 + 复用 RequestBackup）"
     }
   ]
 }

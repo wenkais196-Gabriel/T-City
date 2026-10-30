@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **开发期后门 `police_backup_dev <serverId> [tier]`**：控制台一行叫一单支援，走同一个 `RequestBackup`（权限/冷却/预算/审计都不跳过），`police_backup_dev_enabled` 默认 0、只接受 source 0。为真机迭代服务：UI 路径要过「开手机 → 直达 App → 逐格走焦点 → Enter」四层，任何一层窗口失焦都会静默失败。真机用它跑出第二单采样 `dismount at 16.9m`。
 - **支援单位只在玩家身边下车（spawn v3 · P3）**：到场判定从「距离 ≤20m **或** 超过 30s」改成「距离 ≤20m **且** 车速 <5 m/s」；硬上限提到 90s，到点仍未到就记 `escort_timeout` 结束并释放名额，不再让两名警官从两百米外穿过车流跑过来。客户端日志新增 `dismount at %.1fm` 供验收。真机：`dismount at 14.8m`。
 - **支援单位会跟着最近的警官（B3）**：`PickBackupEscort` 在请求时算一次「跟着谁」——优先离请求者最近的
   在勤警官（off-duty 与平民永不入选），没有别人就是请求者自己；结果随阶段条目 `escort_source` 暴露，
