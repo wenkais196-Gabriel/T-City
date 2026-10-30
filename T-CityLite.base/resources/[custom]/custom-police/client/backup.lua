@@ -14,11 +14,13 @@ local COP_GROUP = GetHashKey('COP')
 local PISTOL = GetHashKey('WEAPON_PISTOL')
 
 local SPAWN_FORWARD = 50.0       -- metres in front of the caller (40–70m band)
+-- 兜底（取不到合规路网节点时）：退到玩家**后方** 90m，既不在视野里，也满足 AC-P5-01 的 80m 下限。
+local SPAWN_FALLBACK_BACK = 90.0
 -- spawn v3 · P1：优先在**路网**上生成，并要求"开车能到"（路径距离合理）。
 local SPAWN_NODE_FORWARD = -50.0  -- 在玩家**后方**找节点：那里通常不在视野里，且车头天然朝向玩家
 local SPAWN_NODE_SIDE = 50.0
 local SPAWN_NODE_CANDIDATES = { 1, 3, 5, 8, 12, 20 }
-local SPAWN_MIN_DISTANCE = 25.0
+local SPAWN_MIN_DISTANCE = 80.0  -- 验收 AC-P5-01：距 call ≥80m 出生
 local SPAWN_MAX_DISTANCE = 150.0
 local SPAWN_MAX_TRAVEL_RATIO = 3.0   -- 路径距离 / 直线距离 的上限，超过就当不可达
 -- spawn v3 · P2：远距离 longrange + 无进展看门狗
@@ -194,6 +196,21 @@ local function deleteEntity(entity)
     end
 end
 
+--- 玩家周围 250m 内的车辆数（AC-P5-06 的"遗留实体"判据用）。
+local function vehiclesNear(coords, radius)
+    if type(GetGamePool) ~= 'function' then return -1 end
+    local ok, pool = pcall(GetGamePool, 'CVehicle')
+    if not ok or type(pool) ~= 'table' then return -1 end
+    local count = 0
+    for i = 1, #pool do
+        local veh = pool[i]
+        if DoesEntityExist(veh) and #(GetEntityCoords(veh) - coords) <= radius then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 local function cleanup(requestId, notifyServer, reason)
     local state = active[requestId]
     if not state then return end
@@ -211,6 +228,28 @@ local function cleanup(requestId, notifyServer, reason)
     for _, ped in ipairs(state.peds or {}) do
         deleteEntity(ped)
     end
+    -- AC-P5-06：清理前后的实体池对比（2 秒后再数一次，给引擎时间回收）。
+    if GetConvar('police_backup_debug', '0') == '1' then
+        local anchor = GetEntityCoords(PlayerPedId())
+        local before = vehiclesNear(anchor, 250.0)
+        local hits = state.hits or 0
+        SetTimeout(2000, function()
+            -- 确定性的判据：单位自己的句柄是否还活着（车池总数会被路人车流干扰）。
+            local leftover = 0
+            if state.vehicle and state.vehicle ~= 0 and DoesEntityExist(state.vehicle) then
+                leftover = leftover + 1
+            end
+            for _, ped in ipairs(state.peds or {}) do
+                if ped and ped ~= 0 and DoesEntityExist(ped) then leftover = leftover + 1 end
+            end
+            print(('[custom-police][debug] backup %s leftover=%d'):format(
+                tostring(requestId), leftover))
+            print(('[custom-police][debug] backup %s pool before=%s after=%s hits=%d'):format(
+                tostring(requestId), tostring(before),
+                tostring(vehiclesNear(anchor, 250.0)), hits))
+        end)
+    end
+
     if state.vehicle and state.vehicle ~= 0 and DoesEntityExist(state.vehicle) then
         if type(SetEntityAsMissionEntity) == 'function' then
             SetEntityAsMissionEntity(state.vehicle, false, true)
@@ -403,11 +442,12 @@ local function findSpawnNode(playerPed, lane)
     return vector3(nodePos.x, nodePos.y, nodePos.z), heading
 end
 
-local function spawnPoint(playerPed, lane)
+local function spawnPoint(playerPed, lane, backDistance)
+    local back = tonumber(backDistance) or SPAWN_FORWARD
     -- 一次响应可能是两辆车：第二辆往侧后错开，避免两车生成在同一个点互相顶。
     local shift = (tonumber(lane) or 0)
     local offset = GetOffsetFromEntityInWorldCoords(
-        playerPed, SPAWN_SIDE + shift * 11.0, SPAWN_FORWARD - shift * 7.0, 0.0)
+        playerPed, SPAWN_SIDE + shift * 11.0, back - shift * 7.0, 0.0)
     local x, y, z = offset.x, offset.y, offset.z
 
     -- Ground the spawn so the car does not fall from the caller's z when the
@@ -468,7 +508,8 @@ local function spawnBackup(requestId)
     pendingLane[requestId] = nil
     local spawn, spawnHeading = findSpawnNode(playerPed, lane)
     if not spawn then
-        spawn = spawnPoint(playerPed, lane)
+        -- 注意符号：spawnPoint 的 y 是"沿玩家朝向的正向"，退到后方要取负。
+        spawn = spawnPoint(playerPed, lane, -SPAWN_FALLBACK_BACK)
         spawnHeading = (GetEntityHeading(playerPed) + 180.0) % 360.0
         print('[custom-police] backup spawn fell back to offset placement')
     end
@@ -485,7 +526,9 @@ local function spawnBackup(requestId)
     SetEntityAsMissionEntity(vehicle, true, true)
     if type(SetVehicleOnGroundProperly) == 'function' then SetVehicleOnGroundProperly(vehicle) end
     SetVehicleEngineOn(vehicle, true, true, false)
-    SetVehicleSiren(vehicle, true)
+    -- 验收实验 A（AC-P5-04）：`police_backup_siren 0` 时关笛，用来对比"被不让行的车流撞"。
+    local sirenOn = GetConvar('police_backup_siren', '1') == '1'
+    SetVehicleSiren(vehicle, sirenOn)
     if type(SetVehicleHasMutedSirens) == 'function' then
         SetVehicleHasMutedSirens(vehicle, false)
     end
@@ -505,6 +548,25 @@ local function spawnBackup(requestId)
         pending[requestId] = nil
         notifyServerEnded(requestId, 'spawn_failed')
         return
+    end
+
+    -- 验收自检（AC-P5-01/02）：出生距离、与玩家朝向的夹角、警笛是否真的开了。
+    -- 只在 police_backup_debug=1 时打，验收时把这几行贴进 PR 当证据。
+    if GetConvar('police_backup_debug', '0') == '1' then
+        local playerAt = GetEntityCoords(playerPed)
+        local vehicleAt = GetEntityCoords(vehicle)
+        local delta = vehicleAt - playerAt
+        local dist = #delta
+        local angle = -1
+        if dist > 0.01 then
+            local forward = GetEntityForwardVector(playerPed)
+            local dot = (forward.x * delta.x + forward.y * delta.y + forward.z * delta.z) / dist
+            dot = math.max(-1.0, math.min(1.0, dot))
+            angle = math.deg(math.acos(dot))
+        end
+        local siren = type(IsVehicleSirenOn) == 'function' and IsVehicleSirenOn(vehicle) or nil
+        print(('[custom-police][debug] spawn check dist=%.1fm angle=%.0fdeg siren=%s'):format(
+            dist, angle, tostring(siren)))
     end
 
     configureOfficer(driver, vehicle, true)
@@ -867,6 +929,20 @@ runBackup = function(state)
                 -- spawn v3 · P2：无进展看门狗（NPC 会先朝反方向开再掉头，光靠规划救不了）。
                 local distanceToPlayer = #(vehicleCoords - playerCoords)
                 local driveStyle = backupDriveStyle()
+
+                -- 验收计数（AC-P5-05）：被环境车撞了几次。HasEntityCollidedWithAnything
+                -- 每帧都可能为真，所以同一辆车 2 秒内只记一次。
+                if type(HasEntityCollidedWithAnything) == 'function'
+                    and HasEntityCollidedWithAnything(state.vehicle) then
+                    if not state.lastHitAt or now - state.lastHitAt > 2000 then
+                        state.lastHitAt = now
+                        state.hits = (state.hits or 0) + 1
+                        if GetConvar('police_backup_debug', '0') == '1' then
+                            print(('[custom-police][debug] backup %s collision #%d at %.0fm'):format(
+                                tostring(requestId), state.hits, distanceToPlayer))
+                        end
+                    end
+                end
                 if not state.progressDistance
                     or distanceToPlayer < state.progressDistance - STUCK_PROGRESS_M then
                     state.progressDistance = distanceToPlayer
