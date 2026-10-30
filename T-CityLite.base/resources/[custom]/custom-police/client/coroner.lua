@@ -58,6 +58,19 @@ local function resolveCorpse(corpseNet)
     return best
 end
 
+--- 找最近的一具尸体并叫单。`/coroner` 与调试入口都走它。
+---@return boolean ok, string|nil reason
+local function requestCoroner()
+    local playerPed = PlayerPedId()
+    local corpse = resolveCorpse(nil)
+    if not corpse then return false, 'no_body' end
+    if type(NetworkGetNetworkIdFromEntity) ~= 'function' then return false, 'no_net' end
+    local netId = NetworkGetNetworkIdFromEntity(corpse)
+    if not netId or netId == 0 then return false, 'no_net' end
+    TriggerServerEvent('police:server:coronerRequest', netId)
+    return true
+end
+
 --- 抬尸体的全套动作：下车 → 走到尸体旁 → 跪下 6 秒 → 尸体消失 → 回车上。
 local function pickUpBody(state, corpse)
     local doctor = state.peds[1]
@@ -178,7 +191,17 @@ RegisterNetEvent('police:client:CoronerEnd', function(requestId)
     cleanup(requestId, 'expired')
 end)
 
---- 真机自测：在玩家面前摆一具尸体，然后走正常的"叫验尸官"链路。
+--- 正式入口：`/coroner`。服务端复验在岗与名额，这里只负责"找到那具尸体"。
+RegisterCommand('coroner', function()
+    local ok, reason = requestCoroner()
+    if ok then return end
+    local message = reason == 'no_body' and '附近没有尸体' or '这具尸体不在网络同步范围内'
+    BeginTextCommandThefeedPost('STRING')
+    AddTextComponentSubstringPlayerName(message)
+    EndTextCommandThefeedPostTicker(false, true)
+end, false)
+
+--- 真机自测：在玩家面前摆一具尸体（只造场景，叫单由测试者自己按 /coroner）。
 RegisterNetEvent('police:client:CoronerDevCorpse', function()
     local playerPed = PlayerPedId()
     local forward = GetEntityForwardVector(playerPed)
@@ -192,7 +215,5 @@ RegisterNetEvent('police:client:CoronerDevCorpse', function()
     SetEntityInvincible(ped, false)
     -- 直接判死：这一条只为造场景，不进入任何正式逻辑。
     SetEntityHealth(ped, 0)
-    Wait(1200)
-    TriggerServerEvent('police:server:coronerRequest', NetworkGetNetworkIdFromEntity(ped))
-    print('[custom-police] coroner dev: corpse spawned and requested')
+    print('[custom-police] coroner dev: corpse spawned (now run /coroner)')
 end)
