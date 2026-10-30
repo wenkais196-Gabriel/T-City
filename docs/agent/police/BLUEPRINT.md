@@ -54,10 +54,12 @@ lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua
 | §6.2 L2 后勤（验尸官） | 🟡 验尸官已通（请求→路网生成→抬尸→开走→审计）；拖车/法医采样未做 | `T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua` |
 | §6.2 L1 布景 | ⬜ 未开始 | — |
 
+| Phase 1 司法链 | 🟡 **代码早已存在，但从未跑过**：`police_cases`/`police_reports`/`police_arrests`/`justice_sentences` 四张表都在，`CreateCase`/`RegisterArrest`/`RecordVerdict` 三个导出也接好了（MDT App 在调），但四张表全是 **0 行** | `T-CityLite.base/resources/[custom]/custom-police/server/p3_cases.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/records.lua`、`custom-justice/server/trial.lua:43` |
+| Phase 0/2/3/4/6（其余） | ⬜ 未开始 | — |
+
 **P5 验收状态**（详见 [`ACCEPTANCE-RUN-2026-10-30.md`](ACCEPTANCE-RUN-2026-10-30.md)）：
 PASS = 01/02/05/06/08/12；部分 = 03（#4 判据建议改 20s×3）；未完成 = 04（实验 A 只做了本场景）；
 阻塞 = 07（等 Phase 2）、03#5；待第二客户端 = 09/10。
-| Phase 0–4 / 6（记录、司法、调度、文书、证据、agent） | ⬜ 未开始 | — |
 
 ---
 
