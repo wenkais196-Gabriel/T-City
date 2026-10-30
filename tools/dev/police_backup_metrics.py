@@ -28,7 +28,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-ABNORMAL_REASONS = {"spawn_failed", "vehicle_lost", "no_alive_ped", "unknown", "dead", "escort_timeout"}
+# 「异常」只统计"单位本身没干成事"：生成失败、车丢了、NPC 全灭、未知原因、开不到人身边。
+# dead / left / timeout / dismissed 是玩家侧的正常收尾（玩家死了、走远了、到点、主动撤回），
+# 混进来会让异常率永远虚高。
+ABNORMAL_REASONS = {"spawn_failed", "vehicle_lost", "no_alive_ped", "unknown", "escort_timeout"}
 
 
 def mysql_dsn() -> tuple[str, str, str]:
