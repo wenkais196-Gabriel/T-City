@@ -294,7 +294,7 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 ## 3.13 与蓝图 §6.3 的对齐（NPC 支援配方）
 
-蓝图（主工作树 docs/agent/police 下的 BLUEPRINT.md，尚未入库）§6.3 给出六条出生配方与五条硬约束。逐条核对：
+蓝图（`docs/agent/police/BLUEPRINT.md`）§6.3 给出六条出生配方与五条硬约束。逐条核对：
 
 | 蓝图条目 | 现状 | 位置 |
 |---|---|---|
@@ -513,7 +513,7 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 ## 11. 分步上线（每步可独立部署）
 
 > 进度：**S1–S5、S7、S8、B1–B5、spawn v3（P1 生成点 / P2 行驶 / P3 到场）全部实施**（2026-10-30）。
-> NPC 支援的引擎配方按主工作树 docs/agent/police 下的 BLUEPRINT.md §6.3（尚未入库）对齐，差异见 §3.13。
+> NPC 支援的引擎配方按`docs/agent/police/BLUEPRINT.md` §6.3对齐，差异见 §3.13。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
