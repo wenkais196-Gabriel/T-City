@@ -79,3 +79,14 @@ def test_coroner_has_a_real_entry_point() -> None:
     at = src.find("police:client:CoronerDevCorpse")
     block = src[at:at + 1200]
     assert "coronerRequest" not in block, "调试入口不该代替玩家按 /coroner"
+
+
+def test_coroner_target_option_is_opt_in_and_cleans_up() -> None:
+    """qb-target 选项是可选交互（`Config.UseTarget` 默认关），且必须能撤掉。
+
+    尸体被收走后如果 target 还挂着，玩家会对着空气按出"叫验尸官"。
+    """
+    src = _read(CLIENT)
+    assert "Config.UseTarget" in src, "qb-target 选项必须跟 UseTarget 开关走"
+    assert "AddTargetEntity" in src and "RemoveTargetEntity" in src, "注册了就要能撤销"
+    assert "叫验尸官" in src
