@@ -14,6 +14,19 @@ local COP_GROUP = GetHashKey('COP')
 local PISTOL = GetHashKey('WEAPON_PISTOL')
 
 local SPAWN_FORWARD = 50.0       -- metres in front of the caller (40–70m band)
+-- spawn v3 · P1：优先在**路网**上生成，并要求"开车能到"（路径距离合理）。
+local SPAWN_NODE_FORWARD = -50.0  -- 在玩家**后方**找节点：那里通常不在视野里，且车头天然朝向玩家
+local SPAWN_NODE_SIDE = 50.0
+local SPAWN_NODE_CANDIDATES = { 1, 3, 5, 8, 12, 20 }
+local SPAWN_MIN_DISTANCE = 25.0
+local SPAWN_MAX_DISTANCE = 150.0
+local SPAWN_MAX_TRAVEL_RATIO = 3.0   -- 路径距离 / 直线距离 的上限，超过就当不可达
+-- spawn v3 · P2：远距离 longrange + 无进展看门狗
+local LONG_RANGE_THRESHOLD = 150.0
+local DRIVE_STYLE_IGNORE_LIGHTS = 2883621
+local STUCK_WINDOW_MS = 20000  -- 真机上合法掉头就要十几秒
+local SPAWN_GRACE_MS = 10000       -- 生成后前 10 秒不计"没进展"（起步/掉头）
+local STUCK_PROGRESS_M = 5.0
 local SPAWN_SIDE = 6.0           -- avoid spawning the car on top of the caller
 local ARRIVE_RADIUS = 20.0
 local FOLLOW_STOP_RADIUS = 10.0
@@ -291,6 +304,90 @@ local function createBlip(vehicle, coords)
     return blip
 end
 
+local function debugSpawnNode(message)
+    if GetConvar('police_backup_debug', '0') == '1' then
+        print(('[custom-police][debug] spawn node: %s'):format(tostring(message)))
+    end
+end
+
+--- 在玩家斜前方的**路网**上找一个落点（spawn v3 · P1）。
+--- 四个条件：距离窗口、不在视野里、朝向大致指向玩家、**开车能到**（路径距离合理）。
+--- 最后一条是真机换来的：纯看直线距离会挑到高架/隧道另一侧，驾驶任务会立刻 finished。
+---@return vector3|nil, number|nil
+local function findSpawnNode(playerPed, lane)
+    if GetConvar('police_backup_spawn_mode', 'node') == 'offset' then return nil end
+    if type(GetNthClosestVehicleNodeFavourDirection) ~= 'function' then
+        debugSpawnNode('native missing')
+        return nil
+    end
+
+    local shift = tonumber(lane) or 0
+    local target = GetOffsetFromEntityInWorldCoords(
+        playerPed, SPAWN_NODE_SIDE + shift * 15.0, SPAWN_NODE_FORWARD - shift * 10.0, 0.0)
+    local playerCoords = GetEntityCoords(playerPed)
+
+    -- 一条 nth 只给一个节点，而它可能是"背对玩家"的那一侧（真机 dot=-0.89，车得先开出去掉头）。
+    -- 所以扫一圈候选，挑朝向最顺的那个。
+    local best, bestDot = nil, -2.0
+    for _, nth in ipairs(SPAWN_NODE_CANDIDATES) do
+        local ok, heading, nodePos = pcall(GetNthClosestVehicleNodeFavourDirection,
+            target.x, target.y, target.z,
+            playerCoords.x, playerCoords.y, playerCoords.z,
+            nth, 1, 3.0, 0)
+        if ok and type(heading) == 'number' and nodePos then
+            local rad = math.rad(heading)
+            local dx, dy = playerCoords.x - nodePos.x, playerCoords.y - nodePos.y
+            local length = math.sqrt(dx * dx + dy * dy)
+            local dot = length > 0.01
+                and ((math.sin(rad) * dx / length) + (math.cos(rad) * dy / length)) or 0
+            if dot > bestDot then best, bestDot = { heading = heading, pos = nodePos, nth = nth }, dot end
+        end
+    end
+    if not best then
+        debugSpawnNode('no candidate from any nth')
+        return nil
+    end
+
+    local heading = best.heading
+    local nodePos = best.pos
+    local distance = #(nodePos - playerCoords)
+    if distance < SPAWN_MIN_DISTANCE or distance > SPAWN_MAX_DISTANCE then
+        debugSpawnNode(('distance %.1fm outside window'):format(distance))
+        return nil
+    end
+
+    -- 可达性：路径距离必须存在且不能离谱（高架/河对岸会给出 -1 或数倍直线距离）。
+    if type(CalculateTravelDistanceBetweenPoints) == 'function' then
+        local okT, travel = pcall(CalculateTravelDistanceBetweenPoints,
+            nodePos.x, nodePos.y, nodePos.z, playerCoords.x, playerCoords.y, playerCoords.z)
+        if okT and type(travel) == 'number' then
+            if travel <= 0 or travel > distance * SPAWN_MAX_TRAVEL_RATIO then
+                debugSpawnNode(('unreachable: travel=%.0fm straight=%.0fm'):format(travel, distance))
+                return nil
+            end
+        end
+    end
+
+    -- 视野：两个判据任一为真都算被看见。
+    local visible = false
+    if type(IsSphereVisible) == 'function' then
+        local okv, value = pcall(IsSphereVisible, nodePos.x, nodePos.y, nodePos.z + 1.0, 8.0)
+        visible = okv and value == true
+    end
+    if not visible and type(IsPointOnScreen) == 'function' then
+        local okp, value = pcall(IsPointOnScreen, nodePos.x, nodePos.y, nodePos.z + 1.0, 1.0)
+        visible = okp and value == true
+    end
+    if visible then
+        debugSpawnNode('candidate is visible to the caller')
+        return nil
+    end
+
+    print(('[custom-police] backup spawn node dist=%.1fm heading=%.0f dot=%.2f nth=%d'):format(
+        distance, heading, bestDot, best.nth))
+    return vector3(nodePos.x, nodePos.y, nodePos.z), heading
+end
+
 local function spawnPoint(playerPed, lane)
     -- 一次响应可能是两辆车：第二辆往侧后错开，避免两车生成在同一个点互相顶。
     local shift = (tonumber(lane) or 0)
@@ -342,9 +439,16 @@ local function spawnBackup(requestId)
         return
     end
 
-    local spawn = spawnPoint(playerPed, pendingLane[requestId] or 0)
+    local lane = pendingLane[requestId] or 0
     pendingLane[requestId] = nil
-    local heading = (GetEntityHeading(playerPed) + 180.0) % 360.0
+    local spawn, spawnHeading = findSpawnNode(playerPed, lane)
+    if not spawn then
+        spawn = spawnPoint(playerPed, lane)
+        spawnHeading = (GetEntityHeading(playerPed) + 180.0) % 360.0
+        print('[custom-police] backup spawn fell back to offset placement')
+    end
+    local heading = spawnHeading
+    if type(LoadAllPathNodes) == 'function' then pcall(LoadAllPathNodes, true) end
     local vehicle = CreateVehicle(vehicleHash, spawn.x, spawn.y, spawn.z + 0.5, heading, true, true)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         pending[requestId] = nil
@@ -719,14 +823,49 @@ runBackup = function(state)
                 -- 90 秒还没到：结束这一单（名额随之释放），而不是从远处跑过来。
                 cleanup(requestId, true, 'escort_timeout')
                 break
-            elseif shouldRetask(driver, 'TASK_VEHICLE_DRIVE_TO_COORD',
-                    state.lastDriveTask, now, DRIVE_RETASK_HEARTBEAT_MS) then
-                -- 只在"任务不在跑"或心跳到点时才重发：正在开车的司机不必每 2.5 秒
-                -- 重建一次路径（真机上表现为车头一抖一抖、油耗和掉帧都白给）。
-                TaskVehicleDriveToCoord(
-                    driver, state.vehicle, playerCoords.x, playerCoords.y, playerCoords.z,
-                    DRIVE_SPEED, 0, state.vehicleModel, 786603, ARRIVE_RADIUS, true)
-                state.lastDriveTask = now
+            else
+                -- spawn v3 · P2：无进展看门狗（NPC 会先朝反方向开再掉头，光靠规划救不了）。
+                local distanceToPlayer = #(vehicleCoords - playerCoords)
+                if not state.progressDistance
+                    or distanceToPlayer < state.progressDistance - STUCK_PROGRESS_M then
+                    state.progressDistance = distanceToPlayer
+                    state.progressAt = now
+                    state.stalls = 0
+                end
+                if not state.progressAt then state.progressAt = now end
+                -- 刚生成的 10 秒是起步/掉头时间，不能算"没进展"。
+                if now - state.createdAt < SPAWN_GRACE_MS then
+                    state.progressAt = now
+                end
+
+                if now - state.progressAt > STUCK_WINDOW_MS then
+                    state.stalls = (state.stalls or 0) + 1
+                    local speed = GetEntitySpeed(state.vehicle) or -1
+                    print(('[custom-police] backup %s stalled #%d at %.0fm speed=%.1f'):format(
+                        tostring(requestId), state.stalls, distanceToPlayer, speed))
+                    if state.stalls >= 3 then
+                        cleanup(requestId, true, 'vehicle_lost')
+                        break
+                    end
+                    state.lastDriveTask = 0
+                    state.progressAt = now
+                end
+
+                if shouldRetask(driver, 'TASK_VEHICLE_DRIVE_TO_COORD',
+                        state.lastDriveTask, now, DRIVE_RETASK_HEARTBEAT_MS) then
+                    if distanceToPlayer > LONG_RANGE_THRESHOLD
+                        and type(TaskVehicleDriveToCoordLongrange) == 'function' then
+                        TaskVehicleDriveToCoordLongrange(
+                            driver, state.vehicle, playerCoords.x, playerCoords.y, playerCoords.z,
+                            DRIVE_SPEED, DRIVE_STYLE_IGNORE_LIGHTS, ARRIVE_RADIUS)
+                    else
+                        TaskVehicleDriveToCoord(
+                            driver, state.vehicle, playerCoords.x, playerCoords.y, playerCoords.z,
+                            DRIVE_SPEED, 0, state.vehicleModel, DRIVE_STYLE_IGNORE_LIGHTS,
+                            ARRIVE_RADIUS, true)
+                    end
+                    state.lastDriveTask = now
+                end
             end
         elseif state.phase == 'leaving' then
             updateRetreat(state, playerPed, now)

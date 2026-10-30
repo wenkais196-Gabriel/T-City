@@ -258,6 +258,40 @@ S8 照此实现，并补三条硬约束：
 在勤他人 0 → 请求照常通过、`backup.denied` 不出现。**拒绝侧**（有第二个在勤警官时）只有 golden
 覆盖（3 个用例：达到阈值拒绝并留痕、低于阈值放行、off-duty 不计入），需要第二个账号才能补真机。
 
+## 3.12 生成点与行驶（spawn v3 · P1 / P2）
+
+### 生成点
+
+| 步 | 做法 |
+|---|---|
+| 取点 | 玩家**后方** 50m、侧偏 50m 处为搜索中心，交给 `GetNthClosestVehicleNodeFavourDirection` |
+| 候选 | 扫 `nth ∈ {1,3,5,8,12,20}`，按"节点朝向 vs 指向玩家"的点积挑最顺的一个（实测 native 常给背对的一侧） |
+| 可达 | `CalculateTravelDistanceBetweenPoints` 必须成功且 ≤ 直线距离 × 3 —— 高架/隧道另一侧会给出 `-1` 或数倍距离 |
+| 可见 | `IsSphereVisible` 与 `IsPointOnScreen` 都为假（任一为真就换下一个） |
+| 生成 | 用节点坐标与**节点朝向**建车，`LoadAllPathNodes(true)` 保证路网已就绪 |
+| 兜底 | 任一条件不满足 → 回落旧的偏移生成，日志 `fell back to offset placement`；`police_backup_spawn_mode=offset` 整体回滚 |
+
+### 行驶
+
+| 项 | 做法 |
+|---|---|
+| 远距离 | >150m 用 `TaskVehicleDriveToCoordLongrange`（自带跨街区规划） |
+| 近距离 | ≤150m 用 `TaskVehicleDriveToCoord` |
+| 驾驶风格 | `2883621`（Ignore Lights）：保留让车/让行人，但不吃红灯 |
+| 卡住判定 | 生成后 10s 宽限；之后每 20s 若到玩家距离没减少 5m 记一次 stalled，连续 3 次 → `vehicle_lost` 结束 |
+| 重发 | 沿用 S5 的 `ShouldRetask`（任务不在跑或心跳到点） |
+
+真机四单（`police_backup_dev 1 1`，每次重启资源清冷却）：
+
+```
+spawn node dist=43.1m  heading=1 dot=1.00 nth=3    → onscene ~10s, dismount at 18.2m
+spawn node dist=83.6m  heading=1 dot=0.85 nth=12
+spawn node dist=51.3m  heading=1 dot=0.33 nth=20   → dismount at 17.2m
+spawn node dist=136.8m heading=1 dot=0.97 nth=12
+```
+
+对比改动前：固定偏移 50m 正前方、车头朝玩家但与道路方向无关，20–35 秒到场且经常先开远掉头。
+
 ## 3.11 到场规则（spawn v3 · P3）：只在人身边下车
 
 改动前的判定是 `距离 ≤ 20m` **或** `超过 30s` → 下车：车还在两百米外，两名警官就被放下来
@@ -447,7 +481,7 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1–S5、S7、S8（撤离）、B1–B5 全部实施；spawn v3 的 P3（到场规则）已完成**（2026-10-29）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
+> 进度：**S1–S5、S7、S8、B1–B5、spawn v3（P1 生成点 / P2 行驶 / P3 到场）全部实施**（2026-10-30）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
