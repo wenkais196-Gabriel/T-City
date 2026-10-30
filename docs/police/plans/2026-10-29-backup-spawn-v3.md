@@ -80,6 +80,6 @@
 | # | 任务 | 文件 | 状态 |
 |---|---|---|---|
 | 1 | P3：下车规则 + `escort_timeout` | `client/backup.lua`、`shared/backup_contract.lua` | ☐ |
-| 2 | P1：节点生成 + 视锥外 + 顺向 + 兜底 | `client/backup.lua` | ☐ |
-| 3 | P2：longrange + 驾驶风格 + 看门狗 | `client/backup.lua` | ☐ |
+| 2 | P1：节点生成 + 视锥外 + 顺向 + 兜底 | `client/backup.lua` | ☑ 2026-10-30 |
+| 3 | P2：longrange + 驾驶风格 + 看门狗 | `client/backup.lua` | ☑ 2026-10-30 |
 | 4 | 文档与指标：`10-backup-v2.md`、CHANGELOG、metrics 的 `escort_timeout` 归类 | 文档 + `tools/dev/police_backup_metrics.py` | ☐ |

@@ -179,3 +179,34 @@ def test_dev_backup_command_is_gated_and_console_only(server_source: str) -> Non
     assert "RequestBackup(src, tier)" in block and "NPCBudget" not in block, (
         "后门不得自己碰预算"
     )
+
+def test_spawn_uses_reachable_road_nodes(client_source: str) -> None:
+    """spawn v3 · P1/P2：在路网上取点、要求可达、能兜底，远距离走 longrange 且识别卡住。
+
+    真机换来的三条教训都钉在这里：
+    * 一条 nth 只给一个节点，可能是"背对玩家"那一侧 → 必须扫候选挑朝向最顺的；
+    * 纯看直线距离会挑到高架/隧道另一侧，驾驶任务立刻 finished → 必须用路径距离过滤；
+    * 挑不到合适节点要能干净回落到偏移生成。
+    """
+    at = client_source.find("local function findSpawnNode")
+    assert at != -1, "找不到 findSpawnNode"
+    body = client_source[at:client_source.find("local function spawnPoint", at)]
+    assert "GetNthClosestVehicleNodeFavourDirection" in body, "必须在路网上取点"
+    assert "SPAWN_NODE_CANDIDATES" in body, "必须扫多个 nth 候选"
+    assert "CalculateTravelDistanceBetweenPoints" in body, "必须做路径可达性过滤"
+    assert "SPAWN_MAX_TRAVEL_RATIO" in body, "可达性要有倍数上限"
+    assert "IsSphereVisible" in body and "IsPointOnScreen" in body, "必须做可见性过滤"
+    assert "police_backup_spawn_mode" in body, "需要回滚开关"
+
+    spawn_at = client_source.find("local spawn, spawnHeading = findSpawnNode")
+    assert spawn_at != -1, "生成必须优先用节点"
+    spawn_block = client_source[spawn_at:spawn_at + 700]
+    assert "spawnPoint(playerPed, lane)" in spawn_block, "取不到节点必须回落到偏移生成"
+    assert "LoadAllPathNodes" in spawn_block, "生成后必须确保路网已加载"
+
+    assert "LONG_RANGE_THRESHOLD" in client_source, "远距离要切 longrange"
+    assert "TaskVehicleDriveToCoordLongrange(" in client_source
+    assert "STUCK_WINDOW_MS" in client_source and "SPAWN_GRACE_MS" in client_source, (
+        "卡住判定必须带生成宽限，否则正常掉头会被判失败"
+    )
+    assert "cleanup(requestId, true, 'vehicle_lost')" in client_source
