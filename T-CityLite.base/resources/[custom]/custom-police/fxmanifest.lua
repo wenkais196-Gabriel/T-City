@@ -42,7 +42,9 @@ client_scripts {
 	'client/p0.lua',
 	'client/backup.lua',
 	'client/npc_callouts.lua',
+	'client/entity_util.lua',
 	'client/coroner.lua',
+	'client/tow.lua',
 }
 
 dependencies {
@@ -65,6 +67,7 @@ server_scripts {
 	'server/npc_budget.lua',
 	'server/radio.lua',
 	'server/coroner.lua',
+	'server/tow.lua',
 	'server/seed_dev.lua',
 	'server/p0.lua',
 	'server/p0_units.lua',

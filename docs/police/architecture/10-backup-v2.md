@@ -293,6 +293,22 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 对比改动前：固定偏移 50m 正前方、车头朝玩家但与道路方向无关，20–35 秒到场且经常先开远掉头。
 
+## 3.16 L2 后勤层 · 拖车（蓝图 §6.2，方案 A）
+
+只拖 **NPC 残骸**：玩家自己的车有归属和扣押流程，不归这一片管。
+
+| 项 | 做法 |
+|---|---|
+| 入口 | `/tow`：找 40m 内「没人 + 引擎报废（<=350）」的车；服务端 `police:server:towRequest` 复验在岗与名额 |
+| 归属 | **服务端查 `player_vehicles`**：这块牌是玩家的就拒（`tow.rejected` + 客户端提示「走扣押流程」），不信客户端 |
+| 名额 / 寿命 | `NPCBudget(kind='tow')` 1 slot、每人 60s 冷却、单 180s 由服务端收车、掉线回收 |
+| 表现 | 平板车从路网开来（复用 `BackupFindRoadNode`）→ 10m 内停稳 → `AttachEntityToEntity` 把残骸挂到平板床 → 开走 20s → 连残骸一起回收 |
+| 审计 | `tow.request` / `tow.ended(reason)` / `tow.rejected` |
+| 调试 | `police_tow_dev <serverId>`（convar 默认 0、仅控制台）**只造残骸**，叫车由测试者按 `/tow` |
+
+真机：`TW-1793394142-1` —— 平板车在 **118m** 外生成 → 90 秒后 `tow.ended reason=done;live=90`，
+`npc.spawn` / `npc.despawn` 成对，客户端 `cleaned (left)`；残骸随之删除。
+
 ## 3.15 L2 后勤层 · 验尸官（蓝图 §6.2）
 
 第一个"办完就走"的服务：现场有尸体时叫一次，面包车从路网开过来，抬走尸体，再开走。
