@@ -45,3 +45,32 @@ RegisterCommand('police_case_seed', function(source, args)
         tostring(caseResult.id), tostring(caseResult.case_no),
         okArrest and tostring(arrestResult and arrestResult.id or '?') or tostring(arrestResult)))
 end, true)
+
+--- 司法链的另一半：走 custom-justice 自己的 registerArrest（律师通知/内存案卷都在那边）。
+--- 用法：police_justice_seed <suspectSrc> <officerSrc> <charges>
+RegisterCommand('police_justice_seed', function(source, args)
+    if source ~= 0 then return end
+    if GetConvar('police_seed_dev_enabled', '0') ~= '1' then
+        print('[custom-police] police_justice_seed 已关闭（setr police_seed_dev_enabled 1 打开）')
+        return
+    end
+    local suspectSrc = tonumber(args and args[1])
+    local officerSrc = tonumber(args and args[2])
+    local charges = tostring(args and args[3] or 'robbery')
+    if not suspectSrc or not officerSrc then
+        print('[custom-police] 用法: police_justice_seed <suspectSrc> <officerSrc> <charges>')
+        return
+    end
+    local crimes = {}
+    for id in charges:gmatch('[^,]+') do crimes[#crimes + 1] = id end
+    -- 先走 justice 的导出，拿得到 caseId 才是"真的建了案卷"；事件那条只负责通知。
+    local suspect = QBCore.Functions.GetPlayer(suspectSrc)
+    local suspectCid = suspect and suspect.PlayerData and suspect.PlayerData.citizenid
+    local ok, caseId = pcall(function()
+        return exports['custom-justice']:OpenCase(suspectCid, officerSrc, crimes)
+    end)
+    TriggerEvent('justice:server:registerArrest', suspectSrc, crimes, officerSrc)
+    print(('[custom-police] justice seed: suspect=%s officer=%s charges=%s openCase=%s (%s)'):format(
+        tostring(suspectCid), tostring(officerSrc), charges,
+        tostring(ok and caseId or 'error'), tostring(ok and 'ok' or caseId)))
+end, true)
