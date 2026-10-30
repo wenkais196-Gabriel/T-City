@@ -45,10 +45,14 @@ function C.CreateCase(source, params)
     local title = utf8Sub(trim(params and params.title), 160)
     local summary = utf8Sub(trim(params and params.summary), 2000)
     if #title < 3 then return false, 'invalid_title' end
+    -- 主办人：调用方给了就用它（允许指派别人），没给就默认**立案人自己**。
+    -- 之前这里是 NULL —— MDT 那条路径从来不传，于是案卷永远查不出"谁负责"。
+    local lead = utf8Sub(trim(params and params.lead_citizenid), 50)
+    if lead == '' then lead = actor.citizenid end
     local id, no = PoliceRecords.InsertCase(actor.citizenid, {
         title = title,
         summary = summary,
-        lead_citizenid = params and params.lead_citizenid,
+        lead_citizenid = lead,
     })
     if not id then return false, 'db_error' end
     return { id = tonumber(id), case_no = no, status = 'open' }
