@@ -689,6 +689,18 @@ function PickBackupEscort(src)
     return bestSource, bestDistance
 end
 
+--- 呼号与播报的小门面：radio 模块没加载时静默降级（播报永远不是关键路径）。
+local function radioCallsign(citizenid, metadata)
+    if not PoliceRadioText then return nil end
+    local ok, value = pcall(PoliceRadioText.Callsign, citizenid, metadata)
+    return ok and value or nil
+end
+
+local function radioSay(kind, callsign)
+    if not PoliceRadio or not callsign then return end
+    pcall(PoliceRadio.Say, kind, callsign)
+end
+
 function RequestBackup(source, tier)
     local src = tonumber(source) or 0
     local actorPlayer = QBCore.Functions.GetPlayer(src)
@@ -763,6 +775,9 @@ function RequestBackup(source, tier)
         if not auditPlayer(cid, 'backup.request', cid, requestId) then
             return rollback('audit_unavailable')
         end
+
+        -- L0：无线电里先听到"某单位已出动"，比车出现在街角更重要。
+        radioSay('dispatch', radioCallsign(cid, actor.metadata))
 
         -- The audit insert yields; do not spawn for a player who left meanwhile
         -- (or whose server id was reused by someone else in the meantime).
@@ -875,6 +890,10 @@ RegisterNetEvent('police:server:backupAck', function(requestId, phase, entityCou
         entry.onsceneAt = os.time()
         local stay = backupOnsceneTtl()
         if stay > 0 then entry.onsceneExpiresAt = entry.onsceneAt + stay end
+        local owner = QBCore.Functions.GetPlayerByCitizenId
+            and QBCore.Functions.GetPlayerByCitizenId(entry.cid)
+        radioSay('onscene', radioCallsign(entry.cid,
+            owner and owner.PlayerData and owner.PlayerData.metadata))
     elseif normalized == 'engaged' then
         if not advanced then return end
         -- 打起来了就没有"到场没接管"这句话了（§6.3 #3 的撤销条件）。
@@ -904,6 +923,9 @@ local function expireBackupUnit(requestId, entry, why, now)
     end
 
     if type(cid) ~= 'string' or cid == '' then return end
+    local rbOwner = QBCore.Functions.GetPlayerByCitizenId
+        and QBCore.Functions.GetPlayerByCitizenId(cid)
+    radioSay('clear', radioCallsign(cid, rbOwner and rbOwner.PlayerData and rbOwner.PlayerData.metadata))
     if not auditPlayer(cid, 'backup.expired', requestId,
         ('phase=%s;why=%s;live=%d'):format(tostring(phase), tostring(why), live)) then
         print(('[custom-police] backup.expired audit failed: %s (%s)'):format(
@@ -1124,6 +1146,12 @@ RegisterNetEvent('police:server:backupEnded', function(requestId, reason)
         print(('[custom-police] backup.ended audit failed: %s (%s)'):format(
             tostring(requestId), tostring(normalized)))
     end
+    -- L0：玩家自己撤回/单位阵亡时也要在无线电里报一句"恢复可用"。
+    -- `expired` 是服务端 sweep 发起的（那边已经播过），这里跳过以免重复。
+    if normalized ~= 'expired' then
+        radioSay('clear', radioCallsign(cid, actor.metadata))
+    end
+
     -- Keep the session -> citizenid binding until the last unit ends, otherwise
     -- a later playerDropped would not know which slots still need releasing.
     if #backupSlots(cid) == 0 and backupSource[targetSrc] == cid then
