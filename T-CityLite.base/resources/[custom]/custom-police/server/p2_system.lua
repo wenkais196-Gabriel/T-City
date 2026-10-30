@@ -1695,6 +1695,39 @@ exports('GetBackupState', GetBackupState)
 
 --- 控制台查看一次支援的状态（S6 的验收手段）。
 --- 只允许控制台/RCON（source 0）：它是运维读数，不该成为玩家可触发的口子。
+--- 开发期专用：直接从控制台叫一单支援（真机迭代用）。
+---
+--- 为什么需要它：手机上点「请求支援」是 NUI → app action 的路径，自动化要过三层
+--- （开手机、直达 App、走到按钮、按 Enter），每一层都可能因为窗口焦点丢失而静默失败。
+--- 这条命令把"叫一单"压缩成一行控制台输入，专门服务于真机回归（生成点、到场、撤离）。
+---
+--- 门控：`police_backup_dev_enabled` 默认 0；只接受控制台/RCON（source 0）；
+--- 走的是同一个 RequestBackup，所以权限/冷却/预算/审计一条都不跳过。
+RegisterCommand('police_backup_dev', function(source, args)
+    if source ~= 0 then return end
+    if GetConvar('police_backup_dev_enabled', '0') ~= '1' then
+        print('[custom-police] police_backup_dev 已关闭（setr police_backup_dev_enabled 1 打开）')
+        return
+    end
+    local src = tonumber(args and args[1])
+    local tier = tonumber(args and args[2]) or 1
+    if not src then
+        print('[custom-police] 用法: police_backup_dev <serverId> [tier 1..2]')
+        return
+    end
+    local result = RequestBackup(src, tier)
+    if type(result) ~= 'table' then
+        print('[custom-police] police_backup_dev: 没有返回值')
+        return
+    end
+    if result.ok then
+        print(('[custom-police] police_backup_dev: ok tier=%s ids=%s'):format(
+            tostring(result.tier), table.concat(result.request_ids or {}, ',')))
+    else
+        print(('[custom-police] police_backup_dev: failed %s'):format(tostring(result.error)))
+    end
+end, true)
+
 RegisterCommand('police_backup_state', function(source)
     if source ~= 0 then return end
     local units = GetBackupState()

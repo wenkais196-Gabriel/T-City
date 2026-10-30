@@ -163,3 +163,19 @@ def test_units_only_dismount_next_to_the_caller(client_source: str) -> None:
     contract = (REPO / "resources" / "[custom]" / "custom-police" / "shared" / "backup_contract.lua")
     text = contract.read_text(encoding="utf-8")
     assert "escort_timeout = true" in text, "escort_timeout 必须进客户端可上报白名单"
+
+def test_dev_backup_command_is_gated_and_console_only(server_source: str) -> None:
+    """开发期后门的两条底线：默认关（convar）、只接受控制台。
+
+    真机迭代需要"一行命令叫一单"，但这条后门绝不能对玩家开放，也不能绕过
+    权限/冷却/预算——它必须调用同一个 RequestBackup。
+    """
+    at = server_source.find("RegisterCommand('police_backup_dev'")
+    assert at != -1, "找不到 police_backup_dev"
+    block = server_source[at:at + 1400]
+    assert "GetConvar('police_backup_dev_enabled', '0')" in block, "必须默认关闭"
+    assert "if source ~= 0 then return end" in block, "只允许控制台/RCON"
+    assert "RequestBackup(src, tier)" in block, "必须复用同一个入口，不能绕过权限与预算"
+    assert "RequestBackup(src, tier)" in block and "NPCBudget" not in block, (
+        "后门不得自己碰预算"
+    )
