@@ -13,23 +13,8 @@ local CORONER_LEAVE_MS = 12000
 
 local coroners = {}   -- [requestId] = state
 
-local function loadModel(hash)
-    if not IsModelInCdimage(hash) then return false end
-    RequestModel(hash)
-    local deadline = GetGameTimer() + 5000
-    while not HasModelLoaded(hash) do
-        if GetGameTimer() > deadline then return false end
-        Wait(10)
-    end
-    return true
-end
-
-local function deleteEntity(entity)
-    if entity and entity ~= 0 and DoesEntityExist(entity) then
-        SetEntityAsMissionEntity(entity, false, true)
-        DeleteEntity(entity)
-    end
-end
+local loadModel = EntityUtil.LoadModel
+local deleteEntity = EntityUtil.Delete
 
 local function cleanup(requestId, reason)
     local state = coroners[requestId]
