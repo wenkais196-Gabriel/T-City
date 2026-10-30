@@ -34,6 +34,25 @@ function JusticeService.CreateCase(suspectSrc, officerSrc, crimes)
         createdAt = os.time(),
     }
 
+    -- 同时让 owner 记一条正式案卷（police_cases），并记住两套 id 的映射。
+    -- 没有映射的话，判决只能落在报告上；而报告不一定存在，案卷维度就永远查不到判决。
+    local officerSource = tonumber(officerSrc) or 0
+    if officerSource > 0 and GetResourceState('custom-police') == 'started' then
+        local ok, created = pcall(function()
+            return exports['custom-police']:CreateCase(officerSource, {
+                title = ('逮捕登记 · %s'):format(caseId),
+                summary = ('司法案卷 %s（嫌疑人 %s）'):format(caseId,
+                    tostring(activeCases[caseId].suspect.citizenid or 'unknown')),
+            })
+        end)
+        if ok and type(created) == 'table' and created.id then
+            activeCases[caseId].police_case_id = tonumber(created.id)
+        else
+            print(('[custom-justice] police case not created for %s (%s)'):format(
+                caseId, tostring(created)))
+        end
+    end
+
     return caseId
 end
 
@@ -50,11 +69,22 @@ function JusticeService.AssignLawyer(caseId, lawyerSrc)
     return true
 end
 
-function JusticeService.SetVerdict(caseId, verdict)
+function JusticeService.SetVerdict(caseId, verdict, minutes)
     local c = activeCases[caseId]
     if not c then return false end
     c.verdict = verdict
     c.status = 'sentenced'
+    c.court_status = tostring(verdict)
+    -- 案卷维度也要记住判决（v3.11 的 court_status / sentence_minutes）。
+    if c.police_case_id and GetResourceState('custom-police') == 'started' then
+        local ok, result = pcall(function()
+            return exports['custom-police']:RecordCaseVerdict(c.police_case_id, tostring(verdict), minutes)
+        end)
+        if not ok or type(result) ~= 'table' or not result.ok then
+            print(('[custom-justice] case verdict not written for %s (%s)'):format(
+                tostring(caseId), tostring(result)))
+        end
+    end
     return true
 end
 

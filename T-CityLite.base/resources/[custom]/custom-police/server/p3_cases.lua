@@ -336,5 +336,12 @@ exports('DecideWarrant', C.DecideWarrant)
 exports('GetWarrants', C.GetWarrants)
 exports('RegisterArrest', C.RegisterArrest)
 exports('GetArrests', C.GetArrests)
+-- 案卷维度的判决回写（v3.11 加的两列）；报告维度仍是 RecordVerdict。
+exports('RecordCaseVerdict', function(caseId, courtStatus, minutes)
+    local ok, affected = PoliceRecords.RecordCaseVerdict(caseId, courtStatus, minutes)
+    if not ok then return false, 'db_error' end
+    return { ok = true, affected_rows = affected }
+end)
+
 exports('RecordVerdict', C.RecordVerdict)
 print('[custom-police] P2 cases/bolos/warrants/arrests loaded')
