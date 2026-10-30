@@ -67,6 +67,23 @@ def test_abnormal_rate_uses_a_fixed_denominator():
 
     # spawn_failed + vehicle_lost 算异常；timeout / dismissed 不算。
     assert result["abnormal_rate"] == 0.5
+
+
+def test_player_side_endings_are_not_abnormal():
+    metrics = load("police_backup_metrics")
+    rows = [
+        row("backup.request"),
+        row("backup.request"),
+        row("backup.request"),
+        row("backup.request"),
+        row("backup.ended", detail="reason=dead;live=20"),
+        row("backup.ended", detail="reason=left;live=30"),
+        row("backup.ended", detail="reason=dismissed;live=12"),
+        row("backup.ended", detail="reason=escort_timeout;live=90"),
+    ]
+    result = metrics.summarize(rows)
+    # 只有 escort_timeout 算"单位没干成事"；dead/left/dismissed 是玩家侧收尾。
+    assert result["abnormal_rate"] == 0.25
     assert result["end_reasons"]["dismissed"] == 1
 
 
