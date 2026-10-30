@@ -532,6 +532,10 @@ local function findSpawnNode(playerPed, lane)
     return best.pos, best.heading
 end
 
+-- 其他服务（验尸官等）要复用同一套路网取点规则：函数在文件内是 local，
+-- 这里挂一个全局给同资源的其它 client 脚本用（FiveM 的跨脚本全局按名字直接读）。
+BackupFindRoadNode = findSpawnNode
+
 --- 调试用的偏移生成（只在 `police_backup_spawn_mode=offset` 时才会被调用）。
 --- 生产路径**不用**它：玩家明确要求"必须从路网上来"。
 local function spawnPoint(playerPed, lane)

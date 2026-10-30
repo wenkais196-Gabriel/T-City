@@ -19,6 +19,7 @@ NPCBudget.SWEEP_INTERVAL_MS = 60 * 1000
 NPCBudget.SLOT_COST = {
     backup = 1,
     callout = 2,
+    coroner = 1,
 }
 
 --- Normalize the id used as the slot key (backup request id / callout id).

@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 181,
+  "max_unproven": 184,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -85,6 +85,12 @@
       "max_unproven": 181,
       "previous": 180,
       "why": "水面闸门（1 条：干地判定 + 水面拒绝 + 干净失败）"
+    },
+    {
+      "date": "2026-10-30",
+      "max_unproven": 184,
+      "previous": 181,
+      "why": "验尸官闸门（3 条：在岗+预算+寿命、复用路网取点+收尸、backup 导出取点）"
     }
   ]
 }
