@@ -269,7 +269,8 @@ S8 照此实现，并补三条硬约束：
 | 可达 | `CalculateTravelDistanceBetweenPoints` 必须成功且 ≤ 直线距离 × 3 —— 高架/隧道另一侧会给出 `-1` 或数倍距离 |
 | 可见 | `IsSphereVisible` 与 `IsPointOnScreen` 都为假（任一为真就换下一个） |
 | 生成 | 用节点坐标与**节点朝向**建车，`LoadAllPathNodes(true)` 保证路网已就绪 |
-| 兜底 | 任一条件不满足 → 回落旧的偏移生成，日志 `fell back to offset placement`；`police_backup_spawn_mode=offset` 整体回滚 |
+| 只在路网 | **2026-10-30 起不再回落偏移点**：候选全不合格就按 `spawn_failed` 结束（宁可让玩家重按，也不在草地/沙滩/海面变出警车）。`police_backup_spawn_mode=offset` 只剩调试用 |
+| 降级四档 | `strict`（80–150m、路径 ≤3×、不可见）→ `relaxed`（80–200m、≤6×）→ `last`（80–250m、≤10×、允许被看见）→ `closest`（≥40m，环境给不出 80m 时用），日志带 `tier=` |
 
 ### 行驶
 
@@ -338,6 +339,17 @@ PLAYER/COP/BACKUP 都当友军），既有闸门 `test_backup_client_spawns_one_
 #3 到场 120s 无人接管 → 撤退（`police_backup_onscene_ttl`，交战即撤销倒计时）/
 #4 卡住 → 重派（20s×3，比蓝图的 10s 宽，真机上合法掉头要十几秒）/
 #5 不结案（还没有 call 卡，等 dispatch 落地）。
+
+### 水上 / 车流 / BOOL 三个坑（真机 2026-10-30 追加）
+
+| 症状 | 根因 | 修法 |
+|---|---|---|
+| 玩家背对大海时支援生成在海里 | 旧的偏移兜底不看地形 | 生成只走路网；`GetWaterHeight` 判该点是否在水面以下 |
+| 在山地（玩家 2193,4696,35）**一个节点都过不了** | `GetGroundZFor_3dCoord` 在该地形恒返回 false，被当成"没地面" | 水面判定为主，地面探测只用来校正高度；探不到就沿用节点 z |
+| 同位置 37 个节点全被判"被占用" | `IsPositionOccupied` 的 p8/p9 参数语义按版本变 | 换 `GetClosestVehicle(..., 4.5, 0, 70)`：4.5m 内有车才换点 |
+| 静音时 `IsVehicleSirenOn` 返回 nil 不是 false | 引擎 BOOL | 判真统一走 `isTrue(v)`（`v == true or v == 1`） |
+
+修完真机：`spawn node dist=82.2m heading=1 dot=0.33 nth=3 tier=strict` → `spawn check dist=82.2m angle=121deg siren=1` → 16 秒 `onscene`。
 
 ### 到场判定的第三种出口（真机新增）
 

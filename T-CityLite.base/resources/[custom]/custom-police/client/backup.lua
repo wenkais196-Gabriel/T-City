@@ -358,54 +358,44 @@ local function createBlip(vehicle, coords)
     return blip
 end
 
+--- FiveM 的 BOOL native 有时返回 1/0 而不是 true/false（本机实测 GetGroundZFor_3dCoord
+--- 的 found 就是数字）。判真一律走这里，否则会出现"地面探测永远失败"这种沉默故障。
+local function isTrue(value)
+    return value == true or value == 1
+end
+
 local function debugSpawnNode(message)
     if GetConvar('police_backup_debug', '0') == '1' then
         print(('[custom-police][debug] spawn node: %s'):format(tostring(message)))
     end
 end
 
---- 在玩家斜前方的**路网**上找一个落点（spawn v3 · P1）。
---- 四个条件：距离窗口、不在视野里、朝向大致指向玩家、**开车能到**（路径距离合理）。
---- 最后一条是真机换来的：纯看直线距离会挑到高架/隧道另一侧，驾驶任务会立刻 finished。
----@return vector3|nil, number|nil
-local function findSpawnNode(playerPed, lane)
-    if GetConvar('police_backup_spawn_mode', 'node') == 'offset' then return nil end
-    if type(GetNthClosestVehicleNodeFavourDirection) ~= 'function' then
-        debugSpawnNode('native missing')
-        return nil
-    end
-
-    local shift = tonumber(lane) or 0
-    local target = GetOffsetFromEntityInWorldCoords(
-        playerPed, SPAWN_NODE_SIDE + shift * 15.0, SPAWN_NODE_FORWARD - shift * 10.0, 0.0)
-    local playerCoords = GetEntityCoords(playerPed)
-
-    -- 一条 nth 只给一个节点，而它可能是"背对玩家"的那一侧（真机 dot=-0.89，车得先开出去掉头）。
-    -- 所以扫一圈候选，挑朝向最顺的那个。
-    local best, bestDot = nil, -2.0
-    for _, nth in ipairs(SPAWN_NODE_CANDIDATES) do
-        local ok, heading, nodePos = pcall(GetNthClosestVehicleNodeFavourDirection,
-            target.x, target.y, target.z,
-            playerCoords.x, playerCoords.y, playerCoords.z,
-            nth, 1, 3.0, 0)
-        if ok and type(heading) == 'number' and nodePos then
-            local rad = math.rad(heading)
-            local dx, dy = playerCoords.x - nodePos.x, playerCoords.y - nodePos.y
-            local length = math.sqrt(dx * dx + dy * dy)
-            local dot = length > 0.01
-                and ((math.sin(rad) * dx / length) + (math.cos(rad) * dy / length)) or 0
-            if dot > bestDot then best, bestDot = { heading = heading, pos = nodePos, nth = nth }, dot end
+--- 干地判定：这个点是不是在水里。
+---
+--- 之前要求"必须探到地面"，结果在山地/码头这种地方 `GetGroundZFor_3dCoord` 一直返回 false，
+--- 把所有候选都拒掉（玩家在 (2193,4696,35) 时支援直接失败）。现在改成：
+---   1) 用 `GetWaterHeight` 判这个点是否在水面以下 —— 这才是"生成在海里"的直接判据；
+---   2) 探到地面就用地面高度校正，探不到就沿用路网节点自带的高度（节点本来就在路面上）。
+---@return number|nil groundZ  nil = 水里，不能用
+local function dryGroundZ(x, y, z)
+    if type(GetWaterHeight) == 'function' then
+        local okW, hasWater, waterZ = pcall(GetWaterHeight, x, y, z)
+        if okW and isTrue(hasWater) and type(waterZ) == 'number' and z <= waterZ + 1.0 then
+            return nil
         end
     end
-    if not best then
-        debugSpawnNode('no candidate from any nth')
-        return nil
+    if type(GetGroundZFor_3dCoord) == 'function' then
+        local ok, found, groundZ = pcall(GetGroundZFor_3dCoord, x, y, z + 3.0, false)
+        if ok and isTrue(found) and type(groundZ) == 'number' then return groundZ end
     end
+    return z
+end
 
-    local heading = best.heading
-    local nodePos = best.pos
+--- 一个候选节点是否满足全部出生规则；返回 groundZ（nil = 不合格）。
+local function nodeIsUsable(nodePos, playerCoords, rules)
     local distance = #(nodePos - playerCoords)
-    if distance < SPAWN_MIN_DISTANCE or distance > SPAWN_MAX_DISTANCE then
+    local minDistance = rules.minDistance or SPAWN_MIN_DISTANCE
+    if distance < minDistance or distance > (rules.maxDistance or SPAWN_MAX_DISTANCE) then
         debugSpawnNode(('distance %.1fm outside window'):format(distance))
         return nil
     end
@@ -414,11 +404,10 @@ local function findSpawnNode(playerPed, lane)
     if type(CalculateTravelDistanceBetweenPoints) == 'function' then
         local okT, travel = pcall(CalculateTravelDistanceBetweenPoints,
             nodePos.x, nodePos.y, nodePos.z, playerCoords.x, playerCoords.y, playerCoords.z)
-        if okT and type(travel) == 'number' then
-            if travel <= 0 or travel > distance * SPAWN_MAX_TRAVEL_RATIO then
-                debugSpawnNode(('unreachable: travel=%.0fm straight=%.0fm'):format(travel, distance))
-                return nil
-            end
+        if okT and type(travel) == 'number'
+            and (travel <= 0 or travel > distance * (rules.maxTravelRatio or SPAWN_MAX_TRAVEL_RATIO)) then
+            debugSpawnNode(('unreachable: travel=%.0fm straight=%.0fm'):format(travel, distance))
+            return nil
         end
     end
 
@@ -426,65 +415,132 @@ local function findSpawnNode(playerPed, lane)
     local visible = false
     if type(IsSphereVisible) == 'function' then
         local okv, value = pcall(IsSphereVisible, nodePos.x, nodePos.y, nodePos.z + 1.0, 8.0)
-        visible = okv and value == true
+        visible = okv and isTrue(value)
     end
     if not visible and type(IsPointOnScreen) == 'function' then
         local okp, value = pcall(IsPointOnScreen, nodePos.x, nodePos.y, nodePos.z + 1.0, 1.0)
-        visible = okp and value == true
+        visible = okp and isTrue(value)
     end
-    if visible then
+    if visible and rules.requireInvisible ~= false then
         debugSpawnNode('candidate is visible to the caller')
         return nil
     end
 
-    -- 出生点被占（车流/行人/另一辆车）时换候选：真机日志里两次碰撞都发生在
-    -- 出生瞬间 88–91m 处，说明问题是"生成在第 0 秒的车流里"，不是让行规则。
-    if type(IsPositionOccupied) == 'function' then
-        local okO, occupied = pcall(IsPositionOccupied,
-            nodePos.x, nodePos.y, nodePos.z, 4.0, true, true, false, true, 0, false)
-        if okO and occupied == true then
-            debugSpawnNode('candidate is occupied by traffic or peds')
+    -- 被车流占着的点不能生成（真机碰撞全部发生在出生瞬间）。
+    --
+    -- 这里原来用 `IsPositionOccupied(..., 4.0, true, true, ...)`，实测 37 个节点全被判"被占"
+    -- ——那个 native 的参数语义按版本变（p8/p9 不同含义），结果就是永远生不出来。
+    -- 改成 `GetClosestVehicle`：语义单一，只要 4.5m 内有车就换点。
+    if type(GetClosestVehicle) == 'function' then
+        local okV, blocker = pcall(GetClosestVehicle, nodePos.x, nodePos.y, nodePos.z, 4.5, 0, 70)
+        if okV and type(blocker) == 'number' and blocker ~= 0 and DoesEntityExist(blocker) then
+            debugSpawnNode('candidate is occupied by another vehicle')
             return nil
         end
     end
 
-    print(('[custom-police] backup spawn node dist=%.1fm heading=%.0f dot=%.2f nth=%d'):format(
-        distance, heading, bestDot, best.nth))
-    return vector3(nodePos.x, nodePos.y, nodePos.z), heading
+    -- 路网节点也可能贴着海/河（码头、海滩路）。
+    local groundZ = dryGroundZ(nodePos.x, nodePos.y, nodePos.z)
+    if not groundZ then
+        debugSpawnNode(('candidate is in water or has no ground at %.0f,%.0f,%.0f (%.0fm)'):format(
+            nodePos.x, nodePos.y, nodePos.z, #(nodePos - playerCoords)))
+        return nil
+    end
+    return groundZ
 end
 
-local function spawnPoint(playerPed, lane, backDistance)
-    local back = tonumber(backDistance) or SPAWN_FORWARD
-    -- 一次响应可能是两辆车：第二辆往侧后错开，避免两车生成在同一个点互相顶。
-    local shift = (tonumber(lane) or 0)
-    local offset = GetOffsetFromEntityInWorldCoords(
-        playerPed, SPAWN_SIDE + shift * 11.0, back - shift * 7.0, 0.0)
-    local x, y, z = offset.x, offset.y, offset.z
-
-    -- Ground the spawn so the car does not fall from the caller's z when the
-    -- road is lower/higher. If the probe fails we keep the offset z.
-    if type(GetGroundZFor_3dCoord) == 'function' then
-        local ok, found, groundZ = pcall(GetGroundZFor_3dCoord, x, y, z + 100.0, false)
-        if ok and found == true and groundZ then z = groundZ end
+--- 在**路网**上找一个合规落点（spawn v3 · P1；2026-10-30 起不再退回偏移点）。
+---
+--- 玩家反馈定下来的硬规则：支援车必须从路上来。所以这个函数是唯一入口，
+--- 找不到合规节点就让这一单失败，绝不在草地/沙滩/海面上变出一辆警车。
+--- 搜索中心扫四个（正后、更后、左侧后、右侧后），每个中心再扫 6 个 nth 候选，
+--- 按"朝向顺不顺"挑最好的一个。
+---@return vector3|nil spawn, number|nil heading
+local function findSpawnNode(playerPed, lane)
+    if GetConvar('police_backup_spawn_mode', 'node') == 'offset' then return nil end
+    if type(GetNthClosestVehicleNodeFavourDirection) ~= 'function' then
+        debugSpawnNode('native missing')
+        return nil
     end
 
-    -- 兜底点也要躲车流：被占就再往后退 12m 重试，最多 3 次（坐标只增不减，仍在后方）。
-    if type(IsPositionOccupied) == 'function' then
-        for attempt = 1, 3 do
-            local okO, occupied = pcall(IsPositionOccupied,
-                x, y, z, 4.0, true, true, false, true, 0, false)
-            if not okO or occupied ~= true then break end
-            local further = GetOffsetFromEntityInWorldCoords(
-                playerPed, SPAWN_SIDE + shift * 11.0, back - shift * 7.0 - attempt * 12.0, 0.0)
-            x, y, z = further.x, further.y, further.z
-            if type(GetGroundZFor_3dCoord) == 'function' then
-                local ok2, found2, groundZ2 = pcall(GetGroundZFor_3dCoord, x, y, z + 100.0, false)
-                if ok2 and found2 == true and groundZ2 then z = groundZ2 end
+    local playerCoords = GetEntityCoords(playerPed)
+    local shift = tonumber(lane) or 0
+    local centers = {
+        { SPAWN_NODE_SIDE, SPAWN_NODE_FORWARD },
+        { SPAWN_NODE_SIDE, SPAWN_NODE_FORWARD - 30.0 },
+        { SPAWN_NODE_SIDE + 20.0, SPAWN_NODE_FORWARD },
+        { SPAWN_NODE_SIDE - 20.0, SPAWN_NODE_FORWARD },
+    }
+
+    -- 三档递进（玩家的硬规则是"必须在路网上"；在此基础上尽量满足距离与视角）：
+    --   1) 理想：80–150m、路径 ≤3×直线、不可见、不被占、干地
+    --   2) 放宽：80–200m、路径 ≤6×直线（河/高架绕行很常见）
+    --   3) 兜底：80–250m、路径 ≤10×直线，允许被看见（总比没有支援好）
+    local tiers = {
+        { name = 'strict', maxDistance = 150.0, maxTravelRatio = 3.0, requireInvisible = true },
+        { name = 'relaxed', maxDistance = 200.0, maxTravelRatio = 6.0, requireInvisible = true },
+        { name = 'last', maxDistance = 250.0, maxTravelRatio = 10.0, requireInvisible = false },
+        -- 4) 环境实在给不出 80m 的路（码头、海岛、水边一站周围全是水）：退到最近的一条
+        --    仍然合规的路（≥40m，仍是干地/未被占），因为"必须在路网上"是硬规则，
+        --    距离只是尽量满足。日志里 tier=closest 便于验收统计降级次数。
+        { name = 'closest', minDistance = 40.0, maxDistance = 250.0,
+          maxTravelRatio = 12.0, requireInvisible = false },
+    }
+
+    for _, rules in ipairs(tiers) do
+        local best, bestDot = nil, -2.0
+        for _, center in ipairs(centers) do
+            local target = GetOffsetFromEntityInWorldCoords(
+                playerPed, center[1] + shift * 15.0, center[2] - shift * 10.0, 0.0)
+            for _, nth in ipairs(SPAWN_NODE_CANDIDATES) do
+                local ok, heading, nodePos = pcall(GetNthClosestVehicleNodeFavourDirection,
+                    target.x, target.y, target.z,
+                    playerCoords.x, playerCoords.y, playerCoords.z,
+                    nth, 1, 3.0, 0)
+                if ok and type(heading) == 'number' and nodePos then
+                    local groundZ = nodeIsUsable(nodePos, playerCoords, rules)
+                    if groundZ then
+                        local rad = math.rad(heading)
+                        local dx, dy = playerCoords.x - nodePos.x, playerCoords.y - nodePos.y
+                        local length = math.sqrt(dx * dx + dy * dy)
+                        local dot = length > 0.01
+                            and ((math.sin(rad) * dx / length) + (math.cos(rad) * dy / length)) or 0
+                        if dot > bestDot then
+                            bestDot = dot
+                            best = { heading = heading, nth = nth,
+                                pos = vector3(nodePos.x, nodePos.y, groundZ),
+                                distance = #(nodePos - playerCoords) }
+                        end
+                    end
+                end
             end
-            print('[custom-police] backup fallback spawn shifted back to avoid traffic')
+        end
+        if best then
+            print(('[custom-police] backup spawn node dist=%.1fm heading=%.0f dot=%.2f nth=%d tier=%s'):format(
+                best.distance, best.heading, bestDot, best.nth, rules.name))
+            return best.pos, best.heading
         end
     end
-    return vector3(x, y, z)
+
+    if not best then
+        debugSpawnNode('no candidate node passed the rules')
+        return nil, nil
+    end
+
+    print(('[custom-police] backup spawn node dist=%.1fm heading=%.0f dot=%.2f nth=%d'):format(
+        best.distance, best.heading, bestDot, best.nth))
+    return best.pos, best.heading
+end
+
+--- 调试用的偏移生成（只在 `police_backup_spawn_mode=offset` 时才会被调用）。
+--- 生产路径**不用**它：玩家明确要求"必须从路网上来"。
+local function spawnPoint(playerPed, lane)
+    local shift = (tonumber(lane) or 0)
+    local offset = GetOffsetFromEntityInWorldCoords(
+        playerPed, SPAWN_SIDE + shift * 11.0, -SPAWN_FALLBACK_BACK - shift * 7.0, 0.0)
+    local groundZ = dryGroundZ(offset.x, offset.y, offset.z)
+    if not groundZ then return nil end
+    return vector3(offset.x, offset.y, groundZ)
 end
 
 --- 支援单位配方（蓝图 §6.3 #5）。**故意不调原生"标记成警察"的那一个 native**：
@@ -534,12 +590,24 @@ local function spawnBackup(requestId)
 
     local lane = pendingLane[requestId] or 0
     pendingLane[requestId] = nil
+
+    -- 唯一生成路径：路网节点。取不到合规节点就让这一单失败——
+    -- 宁可让玩家重按一次，也不要在草地/沙滩/海面上变出一辆警车。
     local spawn, spawnHeading = findSpawnNode(playerPed, lane)
-    if not spawn then
-        -- 注意符号：spawnPoint 的 y 是"沿玩家朝向的正向"，退到后方要取负。
-        spawn = spawnPoint(playerPed, lane, -SPAWN_FALLBACK_BACK)
+    if not spawn and GetConvar('police_backup_spawn_mode', 'node') == 'offset' then
+        spawn = spawnPoint(playerPed, lane)
         spawnHeading = (GetEntityHeading(playerPed) + 180.0) % 360.0
-        print('[custom-police] backup spawn fell back to offset placement')
+        if spawn then print('[custom-police] backup spawn fell back to offset placement (debug mode)') end
+    end
+    if not spawn then
+        pending[requestId] = nil
+        SetModelAsNoLongerNeeded(vehicleHash)
+        SetModelAsNoLongerNeeded(pedHash)
+        local at = GetEntityCoords(playerPed)
+        print(('[custom-police] backup spawn failed: no road node matches the spawn rules (player at %.0f,%.0f,%.0f)'):format(
+            at.x, at.y, at.z))
+        notifyServerEnded(requestId, 'spawn_failed')
+        return
     end
     local heading = spawnHeading
     if type(LoadAllPathNodes) == 'function' then pcall(LoadAllPathNodes, true) end

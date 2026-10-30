@@ -186,25 +186,29 @@ def test_spawn_uses_reachable_road_nodes(client_source: str) -> None:
     真机换来的三条教训都钉在这里：
     * 一条 nth 只给一个节点，可能是"背对玩家"那一侧 → 必须扫候选挑朝向最顺的；
     * 纯看直线距离会挑到高架/隧道另一侧，驾驶任务立刻 finished → 必须用路径距离过滤；
-    * 挑不到合适节点要能干净回落到偏移生成。
+    * 2026-10-30 起：生产路径只走路网节点，取不到就按 spawn_failed 干净失败。
     """
     at = client_source.find("local function findSpawnNode")
     assert at != -1, "找不到 findSpawnNode"
     body = client_source[at:client_source.find("local function spawnPoint", at)]
     assert "GetNthClosestVehicleNodeFavourDirection" in body, "必须在路网上取点"
     assert "SPAWN_NODE_CANDIDATES" in body, "必须扫多个 nth 候选"
-    assert "CalculateTravelDistanceBetweenPoints" in body, "必须做路径可达性过滤"
-    assert "SPAWN_MAX_TRAVEL_RATIO" in body, "可达性要有倍数上限"
-    assert "IsSphereVisible" in body and "IsPointOnScreen" in body, "必须做可见性过滤"
+    # 可达性与占用判定在 nodeIsUsable 里（findSpawnNode 只负责扫候选）
+    usable_at = client_source.find("local function nodeIsUsable")
+    usable = client_source[usable_at:usable_at + 3000]
+    assert "CalculateTravelDistanceBetweenPoints" in usable, "必须做路径可达性过滤"
+    assert "maxTravelRatio" in usable or "SPAWN_MAX_TRAVEL_RATIO" in usable, "可达性要有倍数上限"
+    assert "IsSphereVisible" in usable and "IsPointOnScreen" in usable, "必须做可见性过滤"
     assert "police_backup_spawn_mode" in body, "需要回滚开关"
 
     spawn_at = client_source.find("local spawn, spawnHeading = findSpawnNode")
     assert spawn_at != -1, "生成必须优先用节点"
-    spawn_block = client_source[spawn_at:spawn_at + 700]
-    assert "spawnPoint(playerPed, lane" in spawn_block, "取不到节点必须回落到偏移生成"
-    assert "-SPAWN_FALLBACK_BACK" in spawn_block, (
-        "兜底点必须在玩家后方（取正号会生成在正前方视野里，实测夹角 4°）"
-    )
+    spawn_block = client_source[spawn_at:spawn_at + 900]
+    # 2026-10-30 起：生产路径**只有**路网节点。偏移生成只在 debug 的 offset 模式里存在。
+    assert "no road node matches the spawn rules" in spawn_block, "取不到节点必须干净失败"
+    assert "notifyServerEnded(requestId, 'spawn_failed')" in spawn_block, "失败要回报服务端"
+    assert "spawnPoint(playerPed, lane)" in spawn_block, "偏移生成只能出现在 offset 调试分支"
+    assert "police_backup_spawn_mode" in spawn_block, "偏移分支必须被 convar 门控"
     assert "LoadAllPathNodes" in spawn_block, "生成后必须确保路网已加载"
 
     assert "LONG_RANGE_THRESHOLD" in client_source, "远距离要切 longrange"
@@ -260,11 +264,32 @@ def test_spawn_avoids_occupied_points(client_source: str) -> None:
     所以节点与兜底点都必须做占用检查（`IsPositionOccupied`）；
     兜底点被占时要往后退，而不是硬塞进车道。
     """
-    assert "IsPositionOccupied" in client_source, "出生点必须做占用检查"
-    at = client_source.find("local function findSpawnNode")
-    node_block = client_source[at:at + 4000]
-    assert "candidate is occupied" in node_block, "节点候选要能因占用被拒"
+    # 用 GetClosestVehicle 而不是 IsPositionOccupied：后者的参数语义按版本变，
+    # 实测把 37 个节点全判成"被占"，支援直接生不出来。
+    at = client_source.find("local function nodeIsUsable")
+    assert at != -1, "找不到 nodeIsUsable"
+    node_block = client_source[at:at + 3000]
+    assert "GetClosestVehicle" in node_block, "出生点必须做占用检查"
+    assert "candidate is occupied by another vehicle" in node_block
 
-    fb = client_source.find("local function spawnPoint")
-    fb_block = client_source[fb:fb + 1800]
-    assert "shifted back to avoid traffic" in fb_block, "兜底点被占时要后退重试"
+def test_spawn_refuses_water(client_source: str) -> None:
+    """玩家背对大海时，支援不能生成在海里（真机反馈）。
+
+    两道防线：节点/兜底点都必须过干地判定；候选全在水里就按 spawn_failed 结束，
+    而不是把车塞进海里。
+    """
+    assert "dryGroundZ" in client_source, "必须有干地判定"
+    assert "GetWaterHeight" in client_source, "要用水面高度判水面"
+    # 地面探测在某些地形（山地/码头）会一直 false，所以水判据不能以它为必要条件
+    at = client_source.find("local function dryGroundZ")
+    body = client_source[at:at + 900]
+    assert "return z" in body, "探不到地面时应沿用路网节点高度，而不是拒掉"
+    # 四档递进：strict → relaxed → last → closest
+    for tier in ("'strict'", "'relaxed'", "'last'", "'closest'"):
+        assert tier in client_source, "缺少降级档 " + tier
+    assert "candidate is in water or has no ground" in client_source, "节点候选要能因水面被拒"
+    assert "no road node matches the spawn rules" in client_source, "全部候选在水里时要干净失败"
+    # 失败路径必须回报服务端，而不是留在本地 pending 里占着名额
+    at = client_source.find("no road node matches the spawn rules")
+    after = client_source[at:at + 400]
+    assert "notifyServerEnded(requestId, 'spawn_failed')" in after
