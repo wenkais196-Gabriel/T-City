@@ -51,7 +51,7 @@ lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua
 | §6.2 L3 反应层 | 🟡 已有"接警到场/护送/撤离/指挥"，缺包围与喊话 | `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua` |
 | §6.2 L0 无线层 | ✅ 派出/到场/撤离三句 10-code，在岗限定 + 双限流 + 可一键关 | `T-CityLite.base/resources/[custom]/custom-police/server/radio.lua`、`T-CityLite.base/resources/[custom]/custom-police/shared/radio_text.lua` |
 | §6.3 出生点（2026-10-30 追加） | ✅ **只走路网**：四档递进 `strict→relaxed→last→closest`，取不到就 `spawn_failed`，不再有偏移兜底 | `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua` |
-| §6.2 L2 后勤 | 🟡 **验尸官 + 拖车都通了**（在岗 + 名额 + 寿命 + 审计，生成复用路网取点）；法医采样未做 | `T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua` |
+| §6.2 L2 后勤 | ✅ **验尸官 + 拖车 + 现场化验全部落地**（在岗 + 名额 + 寿命 + 审计；生成复用路网取点；化验走 append-only 两条证据） | `T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua` |
 | §6.2 L1 布景 | ⬜ 未开始 | — |
 
 | Phase 1 司法链 | 🟡 **代码早已存在，但从未跑过**：`police_cases`/`police_reports`/`police_arrests`/`justice_sentences` 四张表都在，`CreateCase`/`RegisterArrest`/`RecordVerdict` 三个导出也接好了（MDT App 在调），但四张表全是 **0 行** | `T-CityLite.base/resources/[custom]/custom-police/server/p3_cases.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/records.lua`、`custom-justice/server/trial.lua:43` |
