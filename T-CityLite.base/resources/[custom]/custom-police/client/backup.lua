@@ -437,6 +437,17 @@ local function findSpawnNode(playerPed, lane)
         return nil
     end
 
+    -- 出生点被占（车流/行人/另一辆车）时换候选：真机日志里两次碰撞都发生在
+    -- 出生瞬间 88–91m 处，说明问题是"生成在第 0 秒的车流里"，不是让行规则。
+    if type(IsPositionOccupied) == 'function' then
+        local okO, occupied = pcall(IsPositionOccupied,
+            nodePos.x, nodePos.y, nodePos.z, 4.0, true, true, false, true, 0, false)
+        if okO and occupied == true then
+            debugSpawnNode('candidate is occupied by traffic or peds')
+            return nil
+        end
+    end
+
     print(('[custom-police] backup spawn node dist=%.1fm heading=%.0f dot=%.2f nth=%d'):format(
         distance, heading, bestDot, best.nth))
     return vector3(nodePos.x, nodePos.y, nodePos.z), heading
@@ -455,6 +466,23 @@ local function spawnPoint(playerPed, lane, backDistance)
     if type(GetGroundZFor_3dCoord) == 'function' then
         local ok, found, groundZ = pcall(GetGroundZFor_3dCoord, x, y, z + 100.0, false)
         if ok and found == true and groundZ then z = groundZ end
+    end
+
+    -- 兜底点也要躲车流：被占就再往后退 12m 重试，最多 3 次（坐标只增不减，仍在后方）。
+    if type(IsPositionOccupied) == 'function' then
+        for attempt = 1, 3 do
+            local okO, occupied = pcall(IsPositionOccupied,
+                x, y, z, 4.0, true, true, false, true, 0, false)
+            if not okO or occupied ~= true then break end
+            local further = GetOffsetFromEntityInWorldCoords(
+                playerPed, SPAWN_SIDE + shift * 11.0, back - shift * 7.0 - attempt * 12.0, 0.0)
+            x, y, z = further.x, further.y, further.z
+            if type(GetGroundZFor_3dCoord) == 'function' then
+                local ok2, found2, groundZ2 = pcall(GetGroundZFor_3dCoord, x, y, z + 100.0, false)
+                if ok2 and found2 == true and groundZ2 then z = groundZ2 end
+            end
+            print('[custom-police] backup fallback spawn shifted back to avoid traffic')
+        end
     end
     return vector3(x, y, z)
 end

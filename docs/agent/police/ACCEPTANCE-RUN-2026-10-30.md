@@ -59,3 +59,24 @@
 | §2 D-3 | 9 suites / 236 checks | **15 suites / 149 checks / 0 failed** |
 | §2 D-5 | 34 tools | **41 tools** |
 | AC-P0-01 | migrations/v2.8_police_module.sql（该文件并不存在，见 §5） | 迁移目录最新已是 **v3.9**，新迁移应从 v3.10 起 |
+
+
+## 6. 实验 A（警笛开/关）与随访修复
+
+`police_backup_siren` 开关跑了两轮对照（每轮 50 秒驾驶段）：
+
+| 组 | 出生 | 碰撞计数 | 备注 |
+|---|---|---|---|
+| 警笛开 ×2 | `dist=90.1m angle=176deg siren=1` | 0 | 修复占用检查之后 |
+| 警笛关 ×2 | `dist=88.8m angle=176deg siren=nil` | 0 | `IsVehicleSirenOn` 在静音时返回 nil，不是 false（判定要按"≠true 视为关"） |
+
+**修复前后的关键差异**：修复前 6 次里有 2 次记到 `collision #1 at 88–91m`——全部发生在**出生瞬间**，不是路上。
+说明"被打车"不是让行规则的问题，而是**生成点落在车流里**。因此加了出生占用检查：
+
+* 节点候选：`IsPositionOccupied(x,y,z,4.0, checkVehicles, checkPeds, ...)` 为真则换下一个；
+* 兜底点：被占就往后退 12m 重试，最多 3 次（只增不减，仍在玩家后方）。
+
+修复后两轮：`spawn check dist=90.1m angle=176deg siren=1`，碰撞 0，`leftover=0`。
+
+> 样本量小（每组 2 次），结论按"方向性"记：出生点占用会立刻产生碰撞，这一点已由修复前日志证实；
+> 警笛开/关在**本场景**未观察到差异，因为碰撞发生在出生瞬间而非行驶中——这条要换到车流更密的路口再测一次才算完（AC-P5-04 仍记 debt）。
