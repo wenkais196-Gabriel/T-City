@@ -23,12 +23,27 @@ local SPAWN_MAX_DISTANCE = 150.0
 local SPAWN_MAX_TRAVEL_RATIO = 3.0   -- 路径距离 / 直线距离 的上限，超过就当不可达
 -- spawn v3 · P2：远距离 longrange + 无进展看门狗
 local LONG_RANGE_THRESHOLD = 150.0
-local DRIVE_STYLE_IGNORE_LIGHTS = 2883621
+-- 蓝图 §6.3 #6：驾驶风格固定 786603（StopBeforeVehicles + StopBeforePeds +
+-- SteerAroundStationaryVehicles + SteerAroundObjects + StopAtTrafficLights），
+-- 这是"车流不会撞上来"的配套条件之一。
+-- 之前的 2883621 是"抢行"档（不含 StopBeforePeds / 不等红灯），到场更快但也更容易
+-- 在路口被别车；发现手感不对可以 `setr police_backup_drive_style 2883621` 回滚。
+local DRIVE_STYLE_NORMAL = 786603
+local DRIVE_STYLE_RUSH = 2883621
+local function backupDriveStyle()
+    local raw = tonumber(GetConvar('police_backup_drive_style', ''))
+    if raw and raw > 0 then return raw end
+    return DRIVE_STYLE_NORMAL
+end
 local STUCK_WINDOW_MS = 20000  -- 真机上合法掉头就要十几秒
 local SPAWN_GRACE_MS = 10000       -- 生成后前 10 秒不计"没进展"（起步/掉头）
 local STUCK_PROGRESS_M = 5.0
 local SPAWN_SIDE = 6.0           -- avoid spawning the car on top of the caller
 local ARRIVE_RADIUS = 20.0
+-- 车停稳了但就是进不去（玩家在屋内 / 院子里 / 被护栏隔开）：到这个宽度内停 2.5 秒就下车，
+-- 而不是干等看门狗把它判成 vehicle_lost。
+local BLOCKED_RADIUS_GRACE = 15.0
+local BLOCKED_WAIT_MS = 2500
 local FOLLOW_STOP_RADIUS = 10.0
 local FOLLOW_RESUME_RADIUS = 14.0
 local ESCORT_TIMEOUT_MS = 90000  -- 到场硬上限（P3：不再用它触发下车）
@@ -404,8 +419,18 @@ local function spawnPoint(playerPed, lane)
     return vector3(x, y, z)
 end
 
-local function configureOfficer(ped, veh)
+--- 支援单位配方（蓝图 §6.3 #5）。**故意不调原生"标记成警察"的那一个 native**：
+--- 它会把 ped 交给原生警察 AI，原生 AI 会自己去"处理"通缉玩家，绕过
+--- `police_backup_engage_wanted`（默认 0，NPC 不打玩家）与 findEnemies 的玩家排除。
+--- 「被当成执法人员」这件事已经由 `SetPedRelationshipGroupHash(ped, BACKUP_GROUP)` 承担，
+--- `isFriendlyGroup` 把 PLAYER/COP/BACKUP 三个组都当友军。
+--- 司机能力/攻击性照蓝图给（0.9 / 0.1）：攻击性 0.1 = 不主动挑事。
+local function configureOfficer(ped, veh, isDriver)
     SetEntityAsMissionEntity(ped, true, true)
+    if isDriver then
+        if type(SetDriverAbility) == 'function' then SetDriverAbility(ped, 0.9) end
+        if type(SetDriverAggressiveness) == 'function' then SetDriverAggressiveness(ped, 0.1) end
+    end
     SetPedFleeAttributes(ped, 0, false)
     SetBlockingOfNonTemporaryEvents(ped, true)
     SetPedRelationshipGroupHash(ped, BACKUP_GROUP)
@@ -482,7 +507,10 @@ local function spawnBackup(requestId)
         return
     end
 
-    for _, ped in ipairs(peds) do configureOfficer(ped, vehicle) end
+    configureOfficer(driver, vehicle, true)
+    if passenger and passenger ~= 0 and DoesEntityExist(passenger) then
+        configureOfficer(passenger, vehicle, false)
+    end
 
     local blip = createBlip(vehicle, spawn)
     local state = {
@@ -814,6 +842,18 @@ runBackup = function(state)
                     state.holdCleared = true
                     ClearPedTasks(driver)
                 end
+            elseif (function()
+                local dist = #(vehicleCoords - playerCoords)
+                if dist <= ARRIVE_RADIUS + BLOCKED_RADIUS_GRACE
+                    and GetEntitySpeed(state.vehicle) < 1.0 then
+                    state.stoppedAt = state.stoppedAt or now
+                    return (now - state.stoppedAt) >= BLOCKED_WAIT_MS
+                end
+                state.stoppedAt = nil
+                return false
+            end)() then
+                -- 到不了跟前（目标点在屋内/院内）：停稳两秒半就下车走过去。
+                beginFoot(state, #(vehicleCoords - playerCoords))
             elseif #(vehicleCoords - playerCoords) <= ARRIVE_RADIUS
                 and GetEntitySpeed(state.vehicle) < ARRIVE_SPEED then
                 -- P3：必须在玩家身边**并且**慢下来才下车。以前这里是
@@ -826,6 +866,7 @@ runBackup = function(state)
             else
                 -- spawn v3 · P2：无进展看门狗（NPC 会先朝反方向开再掉头，光靠规划救不了）。
                 local distanceToPlayer = #(vehicleCoords - playerCoords)
+                local driveStyle = backupDriveStyle()
                 if not state.progressDistance
                     or distanceToPlayer < state.progressDistance - STUCK_PROGRESS_M then
                     state.progressDistance = distanceToPlayer
@@ -857,11 +898,11 @@ runBackup = function(state)
                         and type(TaskVehicleDriveToCoordLongrange) == 'function' then
                         TaskVehicleDriveToCoordLongrange(
                             driver, state.vehicle, playerCoords.x, playerCoords.y, playerCoords.z,
-                            DRIVE_SPEED, DRIVE_STYLE_IGNORE_LIGHTS, ARRIVE_RADIUS)
+                            DRIVE_SPEED, driveStyle, ARRIVE_RADIUS)
                     else
                         TaskVehicleDriveToCoord(
                             driver, state.vehicle, playerCoords.x, playerCoords.y, playerCoords.z,
-                            DRIVE_SPEED, 0, state.vehicleModel, DRIVE_STYLE_IGNORE_LIGHTS,
+                            DRIVE_SPEED, 0, state.vehicleModel, driveStyle,
                             ARRIVE_RADIUS, true)
                     end
                     state.lastDriveTask = now

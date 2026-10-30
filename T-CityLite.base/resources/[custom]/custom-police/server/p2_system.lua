@@ -554,6 +554,20 @@ local function backupTtlSeconds()
     return BACKUP_TTL_SECONDS
 end
 
+--- 到场后的停留上限（蓝图 §6.3 #3：「到场 120 秒无人类警员接管 → 自动撤退」）。
+---
+--- 我们的世界里请求者本身就是人类警员，所以"接管"只能解释成"进入了交战/处置"：
+--- 一旦客户端上报 `engaged`，这条上限就作废（战斗中不该有倒计时）。
+--- 默认 120 秒（蓝图口径），`setr police_backup_onscene_ttl 0` 关掉，退化成 300s 总寿命。
+local function backupOnsceneTtl()
+    local raw = tonumber(GetConvar('police_backup_onscene_ttl', '120'))
+    if not raw then return 120 end
+    if raw <= 0 then return 0 end
+    if raw > 3600 then return 3600 end
+    return math.floor(raw)
+end
+
+
 --- 读一个玩家的实例号（routing bucket）；取不到就当 0（主世界/共享桶）。
 local function playerBucket(src)
     if type(GetPlayerRoutingBucket) ~= 'function' then return 0 end
@@ -859,8 +873,12 @@ RegisterNetEvent('police:server:backupAck', function(requestId, phase, entityCou
     elseif normalized == 'onscene' then
         if not advanced then return end
         entry.onsceneAt = os.time()
+        local stay = backupOnsceneTtl()
+        if stay > 0 then entry.onsceneExpiresAt = entry.onsceneAt + stay end
     elseif normalized == 'engaged' then
         if not advanced then return end
+        -- 打起来了就没有"到场没接管"这句话了（§6.3 #3 的撤销条件）。
+        entry.onsceneExpiresAt = nil
         if not entry.engagedAudited then
             entry.engagedAudited = true
             if not auditPlayer(cid, 'backup.engaged', requestId, '') then
@@ -921,6 +939,8 @@ function BackupSweep(now)
             local why
             if now >= expiresAt then
                 why = 'ttl'
+            elseif entry.onsceneExpiresAt and now >= entry.onsceneExpiresAt then
+                why = 'onscene_timeout'
             else
                 local limit = BACKUP_ACK_TIMEOUT[entry.phase]
                 if limit then
