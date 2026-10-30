@@ -253,3 +253,18 @@ def test_onscene_stay_limit_is_the_blueprint_rule(server_source: str) -> None:
     assert at != -1
     block = server_source[at:at + 400]
     assert "entry.onsceneExpiresAt = nil" in block, "engaged 必须撤销 onscene 倒计时"
+
+def test_spawn_avoids_occupied_points(client_source: str) -> None:
+    """真机两次碰撞都发生在出生瞬间（88–91m）：问题在"生成进车流"，不是让行规则。
+
+    所以节点与兜底点都必须做占用检查（`IsPositionOccupied`）；
+    兜底点被占时要往后退，而不是硬塞进车道。
+    """
+    assert "IsPositionOccupied" in client_source, "出生点必须做占用检查"
+    at = client_source.find("local function findSpawnNode")
+    node_block = client_source[at:at + 4000]
+    assert "candidate is occupied" in node_block, "节点候选要能因占用被拒"
+
+    fb = client_source.find("local function spawnPoint")
+    fb_block = client_source[fb:fb + 1800]
+    assert "shifted back to avoid traffic" in fb_block, "兜底点被占时要后退重试"
