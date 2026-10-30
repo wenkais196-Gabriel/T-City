@@ -65,6 +65,7 @@ server_scripts {
 	'server/npc_budget.lua',
 	'server/radio.lua',
 	'server/coroner.lua',
+	'server/seed_dev.lua',
 	'server/p0.lua',
 	'server/p0_units.lua',
 	'server/p0_lifecycle.lua',
