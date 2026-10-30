@@ -51,7 +51,8 @@ lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua
 | §6.2 L3 反应层 | 🟡 已有"接警到场/护送/撤离/指挥"，缺包围与喊话 | `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua` |
 | §6.2 L0 无线层 | ✅ 派出/到场/撤离三句 10-code，在岗限定 + 双限流 + 可一键关 | `T-CityLite.base/resources/[custom]/custom-police/server/radio.lua`、`T-CityLite.base/resources/[custom]/custom-police/shared/radio_text.lua` |
 | §6.3 出生点（2026-10-30 追加） | ✅ **只走路网**：四档递进 `strict→relaxed→last→closest`，取不到就 `spawn_failed`，不再有偏移兜底 | `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua` |
-| §6.2 L1 / L2 | ⬜ 未开始（下一步：L2 后勤，先做验尸官） | — |
+| §6.2 L2 后勤（验尸官） | 🟡 验尸官已通（请求→路网生成→抬尸→开走→审计）；拖车/法医采样未做 | `T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua` |
+| §6.2 L1 布景 | ⬜ 未开始 | — |
 
 **P5 验收状态**（详见 [`ACCEPTANCE-RUN-2026-10-30.md`](ACCEPTANCE-RUN-2026-10-30.md)）：
 PASS = 01/02/05/06/08/12；部分 = 03（#4 判据建议改 20s×3）；未完成 = 04（实验 A 只做了本场景）；

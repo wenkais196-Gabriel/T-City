@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+### Added
+- **L2 后勤层·验尸官（蓝图 §6.2）**：在岗警察可叫一次验尸官，面包车从**路网**开来（复用支援单位的四档取点），停稳后医生下车、跪 6 秒、**删除尸体**、再开走。名额走 `NPCBudget(kind='coroner')`，每人 60s 冷却，单 180s 未完成由服务端收车并放名额，掉线立即回收；审计三态 `coroner.request / .ended / .rejected`。调试入口 `police_coroner_dev <src>`（convar 默认关、仅控制台）造尸体并走同一条链路。真机：`CR-1793389434-1` 车在 84m 外路网生成，33 秒完成，`reason=done`。
+
 ### Changed
 - **支援单位只在路网上生成**（玩家反馈「背对大海时会生成在海里」）：去掉偏移回落，候选不合格就按 `spawn_failed` 结束；搜索改为 `strict → relaxed → last → closest` 四档递进（日志带 `tier=`），守住「必须在路网」的硬规则，同时在山地/码头这类地形仍能给支援。顺带修掉三个沉默故障：`GetGroundZFor_3dCoord` 在部分地形恒 false 导致候选全灭、`IsPositionOccupied` 参数语义不一致把 37 个节点全判「被占」（改用 `GetClosestVehicle`）、BOOL 返回 1/0 时被判成假。
 
