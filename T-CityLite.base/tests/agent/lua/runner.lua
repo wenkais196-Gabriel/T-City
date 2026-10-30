@@ -36,6 +36,7 @@ local CASES = {
     'police_actions',
     'police_system',
     'police_backup',
+    'police_radio',
     'police_outbox',
     'phone_sms',
 }

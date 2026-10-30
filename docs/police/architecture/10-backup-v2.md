@@ -292,6 +292,28 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 对比改动前：固定偏移 50m 正前方、车头朝玩家但与道路方向无关，20–35 秒到场且经常先开远掉头。
 
+## 3.14 L0 无线电层（蓝图 §6.2）
+
+空场时"有没有警力"取决于**听得到什么**。这一层只做播报，不做任何实体：
+
+| 项 | 做法 |
+|---|---|
+| 时机 | 派出（`dispatch`）/ 到场（`onscene`）/ 撤离或撤回（`clear`） |
+| 出口 | 复用手机的 `phone:client:systemSpeech`（字幕 + 浏览器 TTS），不自建音频通道 |
+| 收件人 | 只发给 `job=police` 且 `onduty=true` 的玩家；手机资源没起来时整层静默 |
+| 呼号 | 优先 QBCore metadata 的 `callsign`（剥控制字符、限 16 字），否则由 citizenid 稳定派生三位数 |
+| 预算 | 单人 3 秒一句、全局 2 秒一句；超预算就丢，不排队 |
+| 文案 | 10-code 短句，≤160 字符，**不含坐标/车牌/citizenid** |
+| 开关 | `police_radio_voice`（默认 1）、`police_radio_debug`（默认 0，只打收件人数与字数） |
+
+真机（`police_backup_dev 1 1` → `adc 1 backup dismiss`）：
+
+```
+[custom-police] radio dispatch -> 1 unit(s), 33 chars
+[custom-police] radio onscene  -> 1 unit(s), 31 chars
+[custom-police] radio clear    -> 1 unit(s), 31 chars
+```
+
 ## 3.13 与蓝图 §6.3 的对齐（NPC 支援配方）
 
 蓝图（`docs/agent/police/BLUEPRINT.md`）§6.3 给出六条出生配方与五条硬约束。逐条核对：
