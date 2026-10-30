@@ -57,6 +57,17 @@ python3 tools/dev/police_live_probe.py               # 读 phone.focus 确认落
 python3 tools/dev/fivem_console.py --key Enter       # 激活
 ```
 
+**更稳的一条路**：需要"叫一单支援"这种业务动作时，别去点 UI —— 用资源自己的开发后门：
+
+```bash
+python3 tools/dev/fivem_console.py "setr police_backup_dev_enabled 1"
+python3 tools/dev/fivem_console.py "police_backup_dev 1 1"    # serverId, tier
+```
+
+它走的是同一个 `RequestBackup`（权限/冷却/预算/审计都不跳过），但把"开手机 → 直达 App →
+逐格走焦点 → Enter"四步压成一行。按键注入在窗口焦点被抢时会**静默不发键**，UI 路径仍要留着，
+但回归迭代优先用后门。
+
 要点：**每按一次键就读一次 `phone.focus`**，焦点标签（"请求支援"、"调度"）是唯一可靠的定位手段；
 盲按 N 次然后祈祷必定失败。
 
