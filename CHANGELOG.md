@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **L2 后勤·拖车（方案 A：只拖 NPC 残骸）**：`/tow` 找 40m 内报废的空车，平板车从路网开来、`AttachEntityToEntity` 挂上后拖走并回收。**玩家自己的车由服务端查 `player_vehicles` 拒绝**（`tow.rejected` + 「走扣押流程」提示），不信客户端。名额 `NPCBudget(kind='tow')`、60s 冷却、180s 服务端收车、掉线回收。真机 `TW-1793394142-1`：118m 外生成，90 秒完成，`reason=done`。
 - **验尸官的 qb-target 选项**（`Config.UseTarget` 开启时生效）：30 m 内的尸体自动挂上「叫验尸官」，尸体被收走/刷掉后自动 `RemoveTargetEntity`，不会留下对着空气能按的幽灵选项。
 - **`/coroner` 命令**：自动找 30m 内最近一具尸体并叫验尸官（附近没尸体时给一条 feed 提示）。调试入口 `police_coroner_dev` 改为只造尸体，叫单必须走正式命令，两条路径不再混在一起。
 - **L2 后勤层·验尸官（蓝图 §6.2）**：在岗警察可叫一次验尸官，面包车从**路网**开来（复用支援单位的四档取点），停稳后医生下车、跪 6 秒、**删除尸体**、再开走。名额走 `NPCBudget(kind='coroner')`，每人 60s 冷却，单 180s 未完成由服务端收车并放名额，掉线立即回收；审计三态 `coroner.request / .ended / .rejected`。调试入口 `police_coroner_dev <src>`（convar 默认关、仅控制台）造尸体并走同一条链路。真机：`CR-1793389434-1` 车在 84m 外路网生成，33 秒完成，`reason=done`。
