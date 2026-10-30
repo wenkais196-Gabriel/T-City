@@ -186,6 +186,21 @@ ISO/IEC 25010 给了九个产品质量特性（2023 版：功能适合性、性�
 | AC-P5-07 | AI 到场时奖励 MUST 砍到 40% 或改为人类接管才结算 | 单测金额 | 40% ± 0 |
 | AC-P5-08 | 代码中 MUST NOT 存在 AI 逮捕/击杀玩家路径 | grep + 评审记录 | 0 命中 |
 
+### 3.6.1 L2 后勤层（验尸官 / 拖车 / 现场化验）
+
+> 这一层是 2026-10-30 新做的，原表里没有对应条款 —— 补在这里，编号 `AC-L2-xx`。
+
+| ID | 判据 | 判定方式 | 证据 |
+|---|---|---|---|
+| AC-L2-01 | 三项服务都 MUST 只接受在岗警察 | 用平民号 / 离岗状态各触发 1 次 | 拒绝且无实体生成；`coroner.rejected` / `tow.rejected` 有行 |
+| AC-L2-02 | 生成 MUST 只在路网节点；取不到就干净失败 | 在水边/山地各叫 1 次 | 日志 `spawn node … tier=` 或 `no_road` / `no road node`，**不得**出现在沙滩/海面 |
+| AC-L2-03 | 三项共用同一套生命周期：`NPCBudget` 名额 + 冷却 + 服务端寿命 + 掉线回收 | 读 `SLOT_COST` 与三个 server 文件 | `backup/coroner/tow` 都在预算表；三者都有 `*_TTL_SECONDS` 与 `playerDropped` |
+| AC-L2-04 | 拖车 MUST 拒绝玩家自己的车（服务端查归属，不信客户端） | 对一块属于 `player_vehicles` 的车牌调 `/tow` | `tow.rejected`（`player_owned`）+ 客户端提示「走扣押流程」 |
+| AC-L2-05 | 拖车只挂「没人 + 报废」的 NPC 车，拖走后残骸 MUST 被删除 | `/tow` 一次 | `tow.ended reason=done`；客户端 `cleaned (left)`；残骸句柄消失 |
+| AC-L2-06 | 验尸官 MUST 真的删除尸体 | 叫一次验尸官 | 客户端 `coroner.ended reason=done`；尸体句柄消失 |
+| AC-L2-07 | 化验 MUST append-only：结果不得 UPDATE 已有证据行 | grep + 一次采样 | 0 处 `UPDATE police_evidence`；`EX-000001`/`EX-000002` 两行 |
+| AC-L2-08 | 三项都 MUST 有审计三态；调试后门默认关且**只造场景** | grep + 控制台 | `*.request/.ended/.rejected`；`police_coroner_dev`/`police_tow_dev` 的 convar 默认 0，且入口不代按命令 |
+
 ### 3.7 P6 Agent 动作
 
 | ID | 判据 | 判定方式 | 证据 |
