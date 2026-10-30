@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+### Changed
+- **支援单位只在路网上生成**（玩家反馈「背对大海时会生成在海里」）：去掉偏移回落，候选不合格就按 `spawn_failed` 结束；搜索改为 `strict → relaxed → last → closest` 四档递进（日志带 `tier=`），守住「必须在路网」的硬规则，同时在山地/码头这类地形仍能给支援。顺带修掉三个沉默故障：`GetGroundZFor_3dCoord` 在部分地形恒 false 导致候选全灭、`IsPositionOccupied` 参数语义不一致把 37 个节点全判「被占」（改用 `GetClosestVehicle`）、BOOL 返回 1/0 时被判成假。
+
 ### Added
 - **L0 无线电层（蓝图 §6.2）**：支援单位派出/到场/撤离时给所有在岗警察播一句 10-code。走手机已有的 `phone:client:systemSpeech`（字幕 + TTS），呼号取 metadata 的 `callsign`（没有则由 citizenid 稳定派生），单人 3s / 全局 2s 双重限流，文案 ≤160 字符且不含坐标/车牌/citizenid；`police_radio_voice` 默认开、可一键关掉。真机三句全响：`radio dispatch → onscene → clear`。
 - **警察模块蓝图入库**：`docs/agent/police/BLUEPRINT.md`（施工图）+ `RESEARCH-2026-10.md`（调研定稿）+ v1 存档。蓝图补了 §0.3 实现进度表，并把基线命令从老路径改成本仓库现路径（1221 passed / 14 suites 149 checks）。
