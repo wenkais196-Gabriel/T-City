@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 179,
+  "max_unproven": 180,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -73,6 +73,12 @@
       "max_unproven": 179,
       "previous": 176,
       "why": "L0 无线电层闸门（3 条：门控/预算/只发在岗、文案不含身份坐标、三个播报点走同一门面）"
+    },
+    {
+      "date": "2026-10-30",
+      "max_unproven": 180,
+      "previous": 179,
+      "why": "出生点占用闸门（1 条：节点与兜底点都要做 IsPositionOccupied）"
     }
   ]
 }
