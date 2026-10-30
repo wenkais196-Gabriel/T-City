@@ -110,3 +110,32 @@ audit: coroner.request  → coroner.ended reason=done;live=32（+ npc.spawn / np
 **AC-P5-01 判据建议同步**：阈值仍是「≥80 m 且夹角 >60°」，但要补一句
 「环境给不出 80 m 时允许降到 `closest` 档（≥40 m），且必须记 `tier=closest` 日志」——
 否则"水上/山地不生成"与"必须生成"两条会互相打架。
+
+
+## 8. P1 司法链：第一次真机跑通（2026-10-30 晚）
+
+结论先行：**这条链一直在，但从没跑过**。四张表初始都是 0 行；用 `police_case_seed` / `police_justice_seed`
+（`police_seed_dev_enabled` 默认 0、只接受控制台）分别压了两端，现在都有数据了。
+
+| 动作 | 结果 |
+|---|---|
+| `police_case_seed 2 DXI50064 robbery,evasion` | `police_cases` +1（`CASE-2026-000001`，open）、`police_arrests` +1（charges=`robbery,evasion`，`case_id=1`） |
+| `restart custom-police` → `police_case_seed 2 DXI50064 drugs` | 案子仍在；新单号 **`CASE-2026-000002`** —— 说明号段是从库里取的，不是内存计数器（AC-P1-04 的实质） |
+| `police_justice_seed 2 2 robbery,evasion` | `openCase=CASE-0001 (ok)` —— justice 侧第一次真的建出案卷 |
+
+顺带确认的两个运行事实：
+
+* `restart custom-police` 会停掉依赖它的 `custom-justice`（`ensure` + `restore_declared.py` 才能拉回来），
+  这也是"司法链看起来没生效"的一种常见假象；
+* `police_cases.lead_citizenid` 目前是 NULL：owner 的 `CreateCase` 只在传 `lead_citizenid` 时才填，
+  MDT 那条路径没有传。要么补上（推荐，主办人本来就该记），要么在 AC 里明确它可空。
+
+### P1 还没验的部分
+
+| AC | 状态 | 原因 |
+|---|---|---|
+| AC-P1-02 律师通知 1 次 | 未验 | 需要在线 lawyer 号 |
+| AC-P1-03 判决回写 court_status | 未验 | 需要一条 `police_reports`（`justice_case_id` 才连得上） |
+| AC-P1-05 刑期截断 | 未验 | 走 `Imprison`，需要服刑链路 |
+| AC-P1-06 非警察调用被拒 | 未验 | 需要伪造 source 的用例 |
+| AC-P1-01 罪名 2 行 | 部分 | 现有模型把罪名存成 `police_arrests.charges` 的 CSV，不是每罪一行；蓝图里的 `police_case_charges` 不该新建 |
