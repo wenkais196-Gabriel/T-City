@@ -293,6 +293,27 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 对比改动前：固定偏移 50m 正前方、车头朝玩家但与道路方向无关，20–35 秒到场且经常先开远掉头。
 
+## 3.17 L2 后勤层 · 现场化验（蓝图 §6.2）
+
+`/sample gsr|drug|blood <案卷ID>`：采样立刻入卷，60 秒后**再写一条**结果证据。
+
+| 项 | 做法 |
+|---|---|
+| 为什么不做 UPDATE | 采样与结果是两条独立证据行（`已送检` → `结果：阴性（样本 EX-…）`）。appendix-only 的时间线天然可读，也**不需要给 `police_evidence` 加列**（动 schema 属 L4） |
+| 挂载 | 必须带 `caseId`：owner 的插入校验要求 `case_id`/`incident_id`/`report_id` 之一，没有案卷的化验没有意义 |
+| 权限 | `PolicePolicy.Can(..., 'evidence.register')` + 在岗；每人 20 秒冷却 |
+| 结果 | GSR / 毒品：阳性 / 阴性；血迹：`样本已入库，DNA 待比对` |
+| 离线 | 60 秒后警官已下线 → 只写 `forensic.result_skipped` 审计，不留没有主人的证据 |
+| 审计 | `forensic.sample` / `forensic.result` / `forensic.result_skipped` / `forensic.result_failed` |
+
+真机（案卷 3）：
+
+```
+EX-000001  枪击残留（GSR）采样          已送检，约 60 秒出结果   case 3
+EX-000002  枪击残留（GSR）采样 · 结果   阴性（样本 EX-000001）   case 3
+audit: forensic.sample(EX-000001) → forensic.result(EX-000002)
+```
+
 ## 3.16 L2 后勤层 · 拖车（蓝图 §6.2，方案 A）
 
 只拖 **NPC 残骸**：玩家自己的车有归属和扣押流程，不归这一片管。
