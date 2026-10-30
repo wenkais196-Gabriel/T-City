@@ -201,7 +201,10 @@ def test_spawn_uses_reachable_road_nodes(client_source: str) -> None:
     spawn_at = client_source.find("local spawn, spawnHeading = findSpawnNode")
     assert spawn_at != -1, "生成必须优先用节点"
     spawn_block = client_source[spawn_at:spawn_at + 700]
-    assert "spawnPoint(playerPed, lane)" in spawn_block, "取不到节点必须回落到偏移生成"
+    assert "spawnPoint(playerPed, lane" in spawn_block, "取不到节点必须回落到偏移生成"
+    assert "-SPAWN_FALLBACK_BACK" in spawn_block, (
+        "兜底点必须在玩家后方（取正号会生成在正前方视野里，实测夹角 4°）"
+    )
     assert "LoadAllPathNodes" in spawn_block, "生成后必须确保路网已加载"
 
     assert "LONG_RANGE_THRESHOLD" in client_source, "远距离要切 longrange"
