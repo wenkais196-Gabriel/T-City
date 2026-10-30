@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **L2 后勤·现场化验**：`/sample gsr|drug|blood <案卷ID>` —— 采样立刻写一条证据（`EX-…` 已送检），60 秒后再写**第二条**结果（阳性/阴性，血迹为「DNA 待比对」）。append-only、不动 schema；警官离线只写审计不留孤儿证据。真机 `EX-000001 → EX-000002（阴性）`，审计 `forensic.sample/result`。至此蓝图 §6.2 的 L2 后勤三项（验尸官 / 拖车 / 化验）全部落地。
 - **L2 后勤·拖车（方案 A：只拖 NPC 残骸）**：`/tow` 找 40m 内报废的空车，平板车从路网开来、`AttachEntityToEntity` 挂上后拖走并回收。**玩家自己的车由服务端查 `player_vehicles` 拒绝**（`tow.rejected` + 「走扣押流程」提示），不信客户端。名额 `NPCBudget(kind='tow')`、60s 冷却、180s 服务端收车、掉线回收。真机 `TW-1793394142-1`：118m 外生成，90 秒完成，`reason=done`。
 - **验尸官的 qb-target 选项**（`Config.UseTarget` 开启时生效）：30 m 内的尸体自动挂上「叫验尸官」，尸体被收走/刷掉后自动 `RemoveTargetEntity`，不会留下对着空气能按的幽灵选项。
 - **`/coroner` 命令**：自动找 30m 内最近一具尸体并叫验尸官（附近没尸体时给一条 feed 提示）。调试入口 `police_coroner_dev` 改为只造尸体，叫单必须走正式命令，两条路径不再混在一起。

@@ -45,6 +45,7 @@ client_scripts {
 	'client/entity_util.lua',
 	'client/coroner.lua',
 	'client/tow.lua',
+	'client/forensics.lua',
 }
 
 dependencies {
@@ -68,6 +69,7 @@ server_scripts {
 	'server/radio.lua',
 	'server/coroner.lua',
 	'server/tow.lua',
+	'server/forensics.lua',
 	'server/seed_dev.lua',
 	'server/p0.lua',
 	'server/p0_units.lua',

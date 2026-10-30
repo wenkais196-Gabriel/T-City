@@ -244,6 +244,10 @@ local DEVCMD_ALLOWED = {
     '^coroner$',
     -- L2 后勤：叫拖车（只拖 NPC 残骸；玩家车由服务端查归属拒绝）
     '^tow$',
+    -- L2 后勤：现场采样（Lua pattern 没有 | 交替，只能一条一条写）
+    '^sample gsr %d+$',
+    '^sample drug %d+$',
+    '^sample blood %d+$',
 }
 
 -- 一条 devcmd 最多这么长：手机命令都短，超长的要么是误用，要么是想塞别的
