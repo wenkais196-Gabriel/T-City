@@ -210,3 +210,43 @@ def test_spawn_uses_reachable_road_nodes(client_source: str) -> None:
         "卡住判定必须带生成宽限，否则正常掉头会被判失败"
     )
     assert "cleanup(requestId, true, 'vehicle_lost')" in client_source
+    # 到不了跟前（玩家在屋内/院内）也要能下车，而不是干等看门狗判失败。
+    assert "BLOCKED_RADIUS_GRACE" in client_source and "BLOCKED_WAIT_MS" in client_source
+
+def test_officer_recipe_matches_the_blueprint(client_source: str) -> None:
+    """蓝图 §6.3 的出生配方：缺一条就会被打车/被误判。
+
+    已核实（本仓库实现）：警笛开、MutedSirens 关、MissionEntity、OnGroundProperly、
+    CreatePedInsideVehicle 都已有；这条闸门钉住**曾经缺的三项**，防止回归时又被删掉。
+    """
+    # 蓝图 §6.3#5 要求 SetPedAsCop，但我们**故意不调**：它会把 ped 交给原生警察 AI，
+    # 原生 AI 会自行对通缉玩家开火，绕过 police_backup_engage_wanted=0 与 findEnemies 的玩家排除
+    # （蓝图 §6.3#2「永不对玩家开火」优先级更高）。执法人员身份由关系组承担。
+    assert "SetPedAsCop(ped, true)" not in client_source, (
+        "不要调 SetPedAsCop：原生警察 AI 会接管对玩家的攻击"
+    )
+    assert "SetPedRelationshipGroupHash(ped, BACKUP_GROUP)" in client_source, "身份走关系组"
+    assert "SetDriverAbility(ped, 0.9)" in client_source, "司机能力固定 0.9"
+    assert "SetDriverAggressiveness(ped, 0.1)" in client_source, "攻击性固定 0.1（不主动挑事）"
+    assert "police_backup_drive_style" in client_source, "驾驶风格要能被 convar 覆盖"
+    assert "DRIVE_STYLE_NORMAL = 786603" in client_source, "默认按蓝图用 786603"
+
+    at = client_source.find("local function configureOfficer")
+    body = client_source[at:at + 900]  # 整段函数体（按首个 end 切会被 if...end 截断）
+    for native in ("SetEntityAsMissionEntity", "SetPedRelationshipGroupHash", "SetDriverAbility"):
+        assert native in body, ("configureOfficer 必须包含 " + native)
+
+    spawn_at = client_source.find("configureOfficer(driver, vehicle, true)")
+    assert spawn_at != -1, "司机必须单独配置（能力/攻击性只给司机）"
+
+
+def test_onscene_stay_limit_is_the_blueprint_rule(server_source: str) -> None:
+    """蓝图 §6.3 #3：到场 120 秒无人接管 → 撤退，且交战时不倒计时。"""
+    assert "police_backup_onscene_ttl" in server_source
+    assert "onsceneExpiresAt" in server_source
+    assert "why = 'onscene_timeout'" in server_source
+    # 交战必须撤销倒计时，否则打着打着车自己开走。
+    at = server_source.find("elseif normalized == 'engaged' then")
+    assert at != -1
+    block = server_source[at:at + 400]
+    assert "entry.onsceneExpiresAt = nil" in block, "engaged 必须撤销 onscene 倒计时"
