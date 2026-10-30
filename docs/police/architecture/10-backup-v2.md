@@ -292,6 +292,37 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 对比改动前：固定偏移 50m 正前方、车头朝玩家但与道路方向无关，20–35 秒到场且经常先开远掉头。
 
+## 3.13 与蓝图 §6.3 的对齐（NPC 支援配方）
+
+蓝图（主工作树 docs/agent/police 下的 BLUEPRINT.md，尚未入库）§6.3 给出六条出生配方与五条硬约束。逐条核对：
+
+| 蓝图条目 | 现状 | 位置 |
+|---|---|---|
+| ① 80–150m 路口出生、不进视野锥 | ✅ 后方 50m 搜索中心、25–150m 窗口、`IsSphereVisible`/`IsPointOnScreen` 过滤 | `client/backup.lua` `findSpawnNode` |
+| ② `SetEntityAsMissionEntity` + `SetVehicleOnGroundProperly` | ✅ | 同上（生成段） |
+| ③ `SetVehicleSiren(veh, true)`（触发车流让行） | ✅ 出发即开，且 `MutedSirens=false`；撤离时关笛 | 同上 |
+| ④ `CreatePedInsideVehicle` | ✅ 车在人在，没有"先建人再 warp" | 同上 |
+| ⑤ `SetPedAsCop` + `SetDriverAbility(0.9)` + `SetDriverAggressiveness(0.1)` | ⚠️ **能力/攻击性已加；`SetPedAsCop` 故意不调** | `configureOfficer` |
+| ⑥ 驾驶风格固定 786603 | ✅ 默认值；`police_backup_drive_style` 可覆盖回 `2883621`（抢行档） | `backupDriveStyle()` |
+
+**为什么不做 ⑤ 里的 `SetPedAsCop`**：它把 ped 交给原生警察 AI，原生 AI 会自行"处理"通缉玩家，
+绕过 `police_backup_engage_wanted`（默认 `0`，NPC 不打玩家）和 `findEnemies` 的玩家排除。
+蓝图 §6.3 硬约束 #2「永不对玩家开火，除非记录到该玩家先开火」优先级更高。
+执法人员身份由 `SetPedRelationshipGroupHash(ped, BACKUP_GROUP)` 承担（`isFriendlyGroup` 把
+PLAYER/COP/BACKUP 都当友军），既有闸门 `test_backup_client_spawns_one_car_and_two_officers`
+也钉着"不许出现这个 native"。
+
+硬约束核对：#1 不逮捕玩家（无相关代码）/ #2 不对玩家开火（`findEnemies` 排除 `IsPedAPlayer`）/
+#3 到场 120s 无人接管 → 撤退（`police_backup_onscene_ttl`，交战即撤销倒计时）/
+#4 卡住 → 重派（20s×3，比蓝图的 10s 宽，真机上合法掉头要十几秒）/
+#5 不结案（还没有 call 卡，等 dispatch 落地）。
+
+### 到场判定的第三种出口（真机新增）
+
+`dismount at 21.3m` 这一次暴露的问题：玩家在院子/屋内时，车能开到 20m 外却**再也进不去**，
+然后被看门狗判成 `vehicle_lost`。现在加了一条：距离 ≤ `ARRIVE_RADIUS + 15m` 且车速 < 1 m/s
+持续 2.5 秒 → 直接下车走过去。
+
 ## 3.11 到场规则（spawn v3 · P3）：只在人身边下车
 
 改动前的判定是 `距离 ≤ 20m` **或** `超过 30s` → 下车：车还在两百米外，两名警官就被放下来
@@ -481,7 +512,8 @@ v1 的 `findEnemies` 里有一句 `and not IsPedAPlayer(ped)`
 
 ## 11. 分步上线（每步可独立部署）
 
-> 进度：**S1–S5、S7、S8、B1–B5、spawn v3（P1 生成点 / P2 行驶 / P3 到场）全部实施**（2026-10-30）。证据见下方真机记录；S7 的战斗落地还需要第二个客户端才能验完。
+> 进度：**S1–S5、S7、S8、B1–B5、spawn v3（P1 生成点 / P2 行驶 / P3 到场）全部实施**（2026-10-30）。
+> NPC 支援的引擎配方按主工作树 docs/agent/police 下的 BLUEPRINT.md §6.3（尚未入库）对齐，差异见 §3.13。
 
 ### S1 真机记录（2026-10-29，真实客户端 `src=1 / DXI50064`）
 
