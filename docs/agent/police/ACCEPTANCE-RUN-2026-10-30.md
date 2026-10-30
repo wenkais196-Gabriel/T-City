@@ -98,6 +98,15 @@
 2. `IsPositionOccupied` 的 p8/p9 语义按版本变 → 37 个节点全判"被占"（改用 `GetClosestVehicle`）；
 3. BOOL native 返回 1/0 而不是 true/false（`IsVehicleSirenOn` 静音时甚至是 nil）。
 
+### L2 验尸官的第一次真机闭环（`/coroner` 入口）
+
+```
+coroner dev: corpse spawned (now run /coroner)
+coroner CR-1793390393-1 van spawned 84m from the body
+coroner CR-1793390393-1 cleaned (left)
+audit: coroner.request  → coroner.ended reason=done;live=32（+ npc.spawn / npc.despawn 一对）
+```
+
 **AC-P5-01 判据建议同步**：阈值仍是「≥80 m 且夹角 >60°」，但要补一句
 「环境给不出 80 m 时允许降到 `closest` 档（≥40 m），且必须记 `tier=closest` 日志」——
 否则"水上/山地不生成"与"必须生成"两条会互相打架。

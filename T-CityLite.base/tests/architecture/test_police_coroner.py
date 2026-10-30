@@ -64,3 +64,18 @@ def test_backup_exposes_the_road_spawn_helper() -> None:
     assert "BackupFindRoadNode = findSpawnNode" in src, (
         "验尸官要复用同一套取点规则，必须把它挂成全局"
     )
+
+def test_coroner_has_a_real_entry_point() -> None:
+    """除了调试后门，必须有一条玩家能按的正式入口。
+
+    调试后门（`police_coroner_dev`）默认关，不能当作玩法入口；
+    `/coroner` 自己只负责"找到那具尸体"，在岗与名额仍由服务端复验。
+    """
+    src = _read(CLIENT)
+    assert "RegisterCommand('coroner'" in src, "缺少 /coroner 命令"
+    assert "police:server:coronerRequest" in src, "命令必须走服务端那条事件"
+    assert "no_body" in src, "附近没尸体要给明确反馈"
+    # 调试事件只许造场景，不许替玩家叫单
+    at = src.find("police:client:CoronerDevCorpse")
+    block = src[at:at + 1200]
+    assert "coronerRequest" not in block, "调试入口不该代替玩家按 /coroner"
