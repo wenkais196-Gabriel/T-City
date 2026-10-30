@@ -74,3 +74,26 @@ RegisterCommand('police_justice_seed', function(source, args)
         tostring(suspectCid), tostring(officerSrc), charges,
         tostring(ok and caseId or 'error'), tostring(ok and 'ok' or caseId)))
 end, true)
+
+--- 判决回写的验证入口：police_verdict_seed <caseId> <guilty|acquitted> [minutes]
+--- 走的是司法侧同一条导出（RecordCaseVerdict），不是另一条写库路径。
+RegisterCommand('police_verdict_seed', function(source, args)
+    if source ~= 0 then return end
+    if GetConvar('police_seed_dev_enabled', '0') ~= '1' then
+        print('[custom-police] police_verdict_seed 已关闭（setr police_seed_dev_enabled 1 打开）')
+        return
+    end
+    local caseId = tonumber(args and args[1])
+    local verdict = tostring(args and args[2] or 'guilty')
+    local minutes = tonumber(args and args[3]) or 0
+    if not caseId then
+        print('[custom-police] 用法: police_verdict_seed <caseId> <guilty|acquitted> [minutes]')
+        return
+    end
+    local ok, result = pcall(function()
+        return exports['custom-police']:RecordCaseVerdict(caseId, verdict, minutes)
+    end)
+    print(('[custom-police] verdict seed: case=%s verdict=%s minutes=%s -> %s'):format(
+        tostring(caseId), verdict, tostring(minutes),
+        ok and tostring(result and result.affected_rows or '?') or tostring(result)))
+end, true)

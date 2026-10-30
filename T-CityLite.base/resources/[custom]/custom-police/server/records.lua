@@ -170,6 +170,33 @@ function PoliceRecords.LinkReport(reportId, params)
     return ok and type(result) ~= 'string'
 end
 
+--- 把判决写到案卷本身（court_status + sentence_minutes）。
+--- 与 `RecordVerdict`（按 justice_case_id 更报告）互补：报告可能不存在，案卷一定在。
+---@param caseId number|string
+---@param courtStatus string
+---@param minutes number|nil
+---@return boolean ok, number affectedRows
+function PoliceRecords.RecordCaseVerdict(caseId, courtStatus, minutes)
+    local id = tonumber(caseId)
+    if not id then return false, 0 end
+    local status = type(courtStatus) == 'string' and courtStatus:sub(1, 24) or ''
+    if status == '' then return false, 0 end
+    local minutesValue = tonumber(minutes)
+    if minutesValue then
+        minutesValue = math.max(0, math.floor(minutesValue))
+    end
+    local ok, result = pcall(function()
+        return MySQL.update.await(
+            'UPDATE police_cases SET court_status = ?, sentence_minutes = ? WHERE id = ?',
+            { status, minutesValue, id })
+    end)
+    if not ok or type(result) == 'string' then return false, 0 end
+    if type(result) == 'table' then
+        return true, tonumber(result.affectedRows) or tonumber(result.affected_rows) or 0
+    end
+    return true, tonumber(result) or 0
+end
+
 --- 记录司法判决（只更新判决字段，不动报告正文）。
 ---@param justiceCaseId number
 ---@param verdict string

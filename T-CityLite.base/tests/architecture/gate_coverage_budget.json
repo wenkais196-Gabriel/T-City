@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 193,
+  "max_unproven": 195,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -127,6 +127,12 @@
       "max_unproven": 193,
       "previous": 191,
       "why": "现场化验闸门（2 条：append-only + 命令入口）"
+    },
+    {
+      "date": "2026-10-30",
+      "max_unproven": 195,
+      "previous": 193,
+      "why": "案卷判决回写闸门（2 条：迁移幂等+fixture、判决走 owner 导出）"
     }
   ]
 }
