@@ -171,3 +171,39 @@ audit: coroner.request  → coroner.ended reason=done;live=32（+ npc.spawn / np
 
 **欠账（写进 debt）**：AC-L2-01 与 AC-L2-04 的"反向实测"（平民号 / 玩家车牌）还没做，
 需要第二个客户端；代码路径与闸门都已就位。
+
+
+## 11. P1 收尾：三条 AC 用桩测试验完（2026-10-31）
+
+不再依赖第二客户端 —— 三条 AC 考的都是代码行为，桩测试能重跑、能造反例。
+新增 golden 套件 `justice_chain`（7 个 case，全绿）：
+
+| AC | 结果 | 证据（case 名） |
+|---|---|---|
+| **AC-P1-02** 每个在线律师恰好 1 次通知 | **PASS** | `every online lawyer is notified exactly once`（2 名律师 → 2 次）、`a repeated arrest does not stack notifications`（再登记一次 → 只 +2）、`no lawyer online still registers the case`（0 通知但案卷照建） |
+| **AC-P1-05** 刑期被 `MaxSentence` 截断 | **PASS** | `sentence is clamped to MaxSentence`（99999 → 上限，且 DB 里绝不出现 99999）、`a non-positive sentence is rejected`（0 分钟 → `invalid_sentence`） |
+| **AC-P1-06** 越权被拒 | **PASS** | `a civilian source cannot register an arrest`（taxi 号 → 不建案、不发通知）、`off-duty police are rejected too`（离岗警员同样被拒） |
+
+### 桩测试抓到一个真 bug（已修）
+
+`T-CityLite.base/resources/[custom]/custom-justice/server/arrest.lua` 原来只判 `job.name == 'police'`，**不判在岗** ——
+离岗警员也能立案，而且这条路径上还会给律师发通知。已补 `onduty == true`：
+
+```lua
+local OfficerJob = Officer.PlayerData.job
+if not OfficerJob or OfficerJob.name ~= 'police' or OfficerJob.onduty ~= true then return end
+```
+
+这也正是"桩比看一眼强"的地方：真机上没人会离岗去试立案，所以这个洞会一直躺着。
+
+### P1 现在的状态
+
+| 能力 | 证据 |
+|---|---|
+| 案卷落库 / 重启号段续 | §8（`CASE-2026-000001/2`） |
+| justice 侧建案 | §8（`openCase=CASE-0001`） |
+| 主办人默认立案人 | §9（`lead=DXI50064`） |
+| 判决回写 `court_status` / `sentence_minutes` | §9 + v3.11（`guilty/180`） |
+| 律师通知 / 刑期截断 / 越权拒绝 | §11（本轮 7 个 case） |
+
+P1 的验收项**全部有证据**；仍属 debt 的只有"律师在手机上看得到通知"这种 UI 层观感（需要第二客户端，且不属于本 AC）。
