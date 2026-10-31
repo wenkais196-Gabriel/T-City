@@ -46,6 +46,7 @@ client_scripts {
 	'client/coroner.lua',
 	'client/tow.lua',
 	'client/forensics.lua',
+	'client/pa.lua',
 }
 
 dependencies {
@@ -70,6 +71,7 @@ server_scripts {
 	'server/coroner.lua',
 	'server/tow.lua',
 	'server/forensics.lua',
+	'server/pa.lua',
 	'server/seed_dev.lua',
 	'server/p0.lua',
 	'server/p0_units.lua',
