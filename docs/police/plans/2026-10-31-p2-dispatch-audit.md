@@ -160,3 +160,45 @@ Vite 前端（`nui/`）。所以 P2-4 **不是从零做一个终端**，而是�
 
 车机页的**视觉**没在现场确认过 —— `/dashboard` 要求玩家坐在载具里，这一步需要业主亲自看一次
 （数据链路已由上面的控制台证据证明）。这是 P2 唯一需要人工过目的地方。
+
+
+---
+
+## 9. P2-1 收尾：7 个发案来源逐个对账
+
+蓝图 §P2 要求"每个发案来源都要能产卡"。代码层面逐个核对的结果（全部落在两个 handler 上，
+而这两个 handler 都已建单）：
+
+| # | 来源 | 调用点 | 事件 | 坐标来源 |
+|---|---|---|---|---|
+| 1 | qb-drugs 街头交易 | `qb-drugs/client/cornerselling.lua:33` | `policeAlert('Drug sale in progress')` | 服务端按 `src` 取 ped 坐标 |
+| 2 | qb-drugs 送货 | `qb-drugs/client/deliveries.lua:144` | `policeAlert('Suspicous activity')` | 同上 |
+| 3 | qb-houserobbery | `qb-houserobbery/client/main.lua:74` | `policeAlert(Lang palert)` | 同上 |
+| 4 | qb-storerobbery | `qb-storerobbery/client/main.lua:598` | `policeAlert(email storerobbery_progress)` | 同上 |
+| 5 | custom-vehicles 抢车 | `custom-vehicles/client/main.lua:764` | `policeAlert('车辆抢夺')` | 同上 |
+| 6 | custom-vehicles 热线 | `custom-vehicles/server/main.lua:198/206` | `autoAlert(vehCoords, '🚨 热线发动…')` | 服务端已有坐标（`source 0` 视为系统来源） |
+| 7 | NPC callout | `custom-police` 内部 | `CreateIncidentFromSystem` | 服务端 |
+
+**真机已证实的路径**（本次会话）：
+
+| 路径 | 证据 |
+|---|---|
+| 手机 911 | `police_incidents` #30、#32 |
+| NPC callout | #28 `10-37 可疑车辆`、#29 `10-32 持械人员`、#31 `10-50 交通事故`、#33 `10-32` |
+| 控制台可读投影 | `police_incidents_public 1 3` → #33/#32/#30（坐标已偏移） |
+
+**还差**：1–6 需要真实游戏动作（卖药、送货、刷房、抢店、抢车、热线）才能触发；本轮没有逐一做，
+留给业主下次在线时顺手验证——它们的调用点与 handler 都已确认，风险是"文案/坐标不对"，不是"不产卡"。
+
+## 10. P2 完成度
+
+| 项 | 状态 |
+|---|---|
+| 建单 / 状态机 / 单位附着 / 合并 | ✅ 早已存在（§2） |
+| legacy `policeAlert` shim + `autoAlert` | ✅ |
+| 手机 911 入口 | ✅ 真机 |
+| 通知预算层（90 s 合并 / 5 s 3 条 / 紧急穿透） | ✅ P2-2 真机 + golden 8 case |
+| 车机警情页 + 一键导航 | ✅ P2-4（数据链路真机、视觉待人工） |
+| 坐标脱敏（D5） | ✅ 真机对比（偏移 56–68 m） |
+| 7 个来源真机逐个触发 | ⏳ 待业主在线顺手验 |
+| 车机页视觉确认 | ⏳ 待业主在载具里看一次 |
