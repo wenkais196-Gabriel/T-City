@@ -354,9 +354,7 @@ QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, 
         source_note = 'swab'
     end
 
-    -- 结果先落审计。**不进证据链**：evidence 表要求必须挂 case/incident/report
-    -- （insertEvidence 的 missing_case），而盘查发生在立案之前。
-    -- 绑定证据是 P3-3 的事：盘查 → 立案 → 把读数作为一条 evidence 挂上去。
+    -- 先落审计（无论能不能挂证据）。
     PoliceAudit.Write(Officer.PlayerData.citizenid,
         ('fieldtest.%s'):format(kind), Target.PlayerData.citizenid,
         ('%.2f %s'):format(value, label))
@@ -364,7 +362,37 @@ QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, 
         [kind] = { value = value, label = label },
     })
 
-    cb({ ok = true, kind = kind, value = value, label = label, evidence = false })
+    -- 能挂到现场就挂：evidence 表要求必须挂 case/incident/report（insertEvidence 的
+    -- missing_case），所以找"这名警员当前正在处理的、还没结的警情"。没有就只留审计，
+    -- 等立案后由 MDT 带入（P3-3 的 GetLastInspection 就是干这个的）。
+    local attached, exhibitNo = false, nil
+    local activeIncident = MySQL.single.await([[
+        SELECT u.incident_id AS id
+          FROM police_incident_units u
+          JOIN police_incidents i ON i.id = u.incident_id
+         WHERE u.citizenid = ?
+           AND i.status IN ('open','assigned','enroute','on_scene')
+         ORDER BY u.joined_at DESC
+         LIMIT 1
+    ]], { Officer.PlayerData.citizenid })
+    if activeIncident and activeIncident.id then
+        local label = ('%s：%s %.2f（%s）'):format(
+            kind == 'alcohol' and '酒测' or '药检',
+            Target.PlayerData.citizenid, value, label)
+        local ok, result = pcall(function()
+            return exports['custom-police']:RegisterEvidence(source, {
+                label = label:sub(1, 120),
+                incident_id = tonumber(activeIncident.id),
+                location = ('%.0f,%.0f'):format(GetEntityCoords(b).x, GetEntityCoords(b).y),
+            })
+        end)
+        if ok and type(result) == 'table' then
+            attached = true
+            exhibitNo = result.exhibit_no
+        end
+    end
+
+    cb({ ok = true, kind = kind, value = value, label = label, evidence = attached, exhibit_no = exhibitNo })
 end)
 
 
