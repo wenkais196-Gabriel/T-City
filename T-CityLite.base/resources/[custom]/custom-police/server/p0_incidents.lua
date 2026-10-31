@@ -31,7 +31,21 @@ local MERGE_RADIUS_METERS = 60.0
 
 --- 找一个可以合并的开放单：同 code、同区域、窗口内还有人动过。
 ---@return table|nil row { id, title, status }
-local function findMergeableIncident(code, coords)
+local function findMergeableIncident(code, coords, ref)
+    -- 有 ref 就按 ref 合并（同一个报警源的多个阶段坐标会漂），
+    -- 没有 ref 才退回「同 code + 半径内」—— 蓝图 AC-P2-05 要的就是前者。
+    if type(ref) == 'string' and ref ~= '' then
+        local row = MySQL.single.await(([[
+            SELECT id, title, status, merge_count
+              FROM police_incidents
+             WHERE status IN ('open','assigned','enroute','on_scene')
+               AND ref = ?
+               AND COALESCE(last_activity_at, created_at) > NOW() - INTERVAL %d MINUTE
+             ORDER BY id DESC
+             LIMIT 1
+        ]]):format(MERGE_WINDOW_MINUTES), { ref })
+        return row
+    end
     if type(coords) ~= 'table' then return nil end
     local x, y = tonumber(coords.x), tonumber(coords.y)
     if not x or not y then return nil end
@@ -142,16 +156,22 @@ local function insertIncidentRow(createdBy, data, opts)
     -- 合并优先于插入：重复报警不该在板上多出一行。
     -- 只处理带坐标的报警——NPC 刷新点固定，靠"同点同码"合并会误吞两个独立事件。
     local coords = { x = tonumber(data.x), y = tonumber(data.y) }
-    local mergeable = findMergeableIncident(code, coords)
+    local ref = trim(data.ref):sub(1, 64)
+    if ref == '' then ref = nil end
+    local mergeable = findMergeableIncident(code, coords, ref)
     if mergeable then
         MySQL.update.await([[
-            UPDATE police_incidents SET last_activity_at = NOW(), updated_at = NOW() WHERE id = ?
+            UPDATE police_incidents
+               SET last_activity_at = NOW(), updated_at = NOW(),
+                   merge_count = COALESCE(merge_count, 1) + 1
+             WHERE id = ?
         ]], { mergeable.id })
         return {
             id = tonumber(mergeable.id),
             status = tostring(mergeable.status or 'open'),
             code = code,
             title = tostring(mergeable.title or title),
+            merge_count = (tonumber(mergeable.merge_count) or 1) + 1,
             merged = true,
         }
     end
@@ -169,6 +189,7 @@ local function insertIncidentRow(createdBy, data, opts)
     add('y', tonumber(data.y))
     add('z', tonumber(data.z))
     add('npc_template', npcTemplate)
+    add('ref', ref)
 
     local id = MySQL.insert.await(
         ('INSERT INTO police_incidents (%s) VALUES (%s)'):format(
@@ -242,6 +263,19 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
         'SELECT 1 AS ok FROM police_incident_units WHERE incident_id = ? AND citizenid = ? LIMIT 1',
         { id, actor.citizenid })
     if grade(actor) < 2 and not assigned then return false, 'not_assigned' end
+
+    -- AC-P2-09：结案只能由这张单的 lead（role='primary'）来做。
+    -- 没有 lead（没人接手过的单）时，够级别的警员仍然可以结掉 —— 否则调度遗忘的单
+    -- 永远关不掉，会一直挂在板上。
+    if targetStatus == 'closed' then
+        local lead = MySQL.single.await(
+            "SELECT citizenid FROM police_incident_units WHERE incident_id = ? AND role = 'primary' ORDER BY joined_at ASC LIMIT 1",
+            { id })
+        local leadCid = lead and tostring(lead.citizenid or '') or ''
+        if leadCid ~= '' and leadCid ~= tostring(actor.citizenid) then
+            return false, 'lead_only'
+        end
+    end
 
     -- A retried request that already landed is a success, not a transition.
     local currentStatus = tostring(incident.status or '')
