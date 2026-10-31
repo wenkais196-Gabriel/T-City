@@ -27,6 +27,10 @@ local basePositions = {
 }
 
 -- ━━━ 状态 ━━━
+-- T-City: 这个工具会按「圆形 + 87.5% + 自定义偏移」重排小地图组件，
+-- 一旦开着就和原生不一致。默认关掉（hud_position_tool=1 才生效）。
+local HUD_TOOL_ENABLED = GetConvar('hud_position_tool', '0') == '1'
+
 local mapScale = 87.5
 local mapShape = 'circle'
 local ringX = '50%'
@@ -70,6 +74,8 @@ end
 
 -- ━━━ 应用地图 (统一入口) ━━━
 local function applyMap()
+    -- 关闭时不碰任何小地图组件：保持原生尺寸/位置/形状
+    if not HUD_TOOL_ENABLED then return end
     recalcOffset()
     if not currentPositions or not next(currentPositions) then
         resetCurrentPositions()
