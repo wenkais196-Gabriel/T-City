@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
 
 ### Fixed
+- **车机中控改走交互路径栈**（`custom-ui` 的 `Input.Push/Pop`）：原来是 2025 年的旧写法，自己 `SetNuiFocus`，绕过了焦点仲裁 —— 于是栈非空时那条**每帧屏蔽视角控制**的线程不启动（视角还能转）、keepInput 沿用手机上粘住的 `true`、页面就绪后也不再施一次焦点（游标时有时无）。顺带让 `custom-ui:OpenMenu` 区分「没传 keepInput」与「显式 false」。审查记录见 `docs/client/plans/2026-10-31-dashboard-input-pipeline.md`。
 - `tcity-dashboard` 的 `DriveTab.vue` 未使用的 `ref` 导入导致 `vue-tsc` 失败、`npm run build` 过不去。
 - **警情通知预算层（P2-2）**：同 `code` 90 秒合并成「（×N）」（第 2、5 条播报，之后每 10 条），非紧急每人 5 秒最多 3 条，`priority ≤ 1` 穿透频率上限，`police_alert_budget 0` 一键回滚。限流原语委托 `core-framework` 的 `RateLimit`（RATE-01），本模块只管业务判断；golden `police_alert_budget` 8 个 case + 闸门 `test_police_alert_budget`。
 - **P2 调度总线的现状核对**：`police_incidents` / `police_incident_units` 与建单、状态机、单位附着、同案合并、legacy `policeAlert` shim、手机 911 **都已存在**（蓝图里的 `police_calls` 不该新建）；真正的缺口是车机终端、`custom-crime` 接入、通知预算层、以及 7 个发案来源从未逐个验证。核对文档见 `docs/police/plans/2026-10-31-p2-dispatch-audit.md`。
