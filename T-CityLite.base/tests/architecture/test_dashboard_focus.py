@@ -1,10 +1,10 @@
-"""车机中控必须走**交互路径栈**（custom-ui 的 Input.Push），不能自己 SetNuiFocus。
+"""车机中控必须走**交互路径栈**，并且自己做焦点的最终施加者。
 
-2026-10-31 真机：面板打开了、没有游标、视角还能转。
-根因是车机绕过了焦点仲裁：
-  * 栈非空时 apply() 才会起"每帧屏蔽视角控制"的线程，绕过去就没屏蔽；
-  * keepInput 是客户端全局且会粘住（手机开过一次一直是 true）；
-  * 页面没加载完时 SetNuiFocus 会被忽略，需要 RefreshFocus 再施一次。
+2026-10-31 真机两轮：
+  1) 面板打开、无游标、视角还能转 —— 车机自己 SetNuiFocus，绕过了焦点仲裁；
+  2) 改走 Input.Push 之后视角锁住了、还是没有游标 —— 因为 **SetNuiFocus 是按资源的**，
+     栈只能决定"谁该有焦点"，真正施加必须由拥有页面的资源来做（帧里的 owner +
+     该资源导出的 ApplyFocus），否则焦点给到了没有 ui_page 的 custom-ui。
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import pathlib
 REPO = pathlib.Path(__file__).resolve().parents[3]
 CUSTOM_UI = REPO / "T-CityLite.base/resources/[custom]/custom-ui/client/main.lua"
 DASH = REPO / "T-CityLite.base/resources/[system]/tcity-dashboard/client/main.lua"
+APP = REPO / "T-CityLite.base/resources/[system]/tcity-dashboard/nui/src/App.vue"
 
 
 def test_focus_owner_honours_an_explicit_keepinput_false() -> None:
@@ -25,17 +26,34 @@ def test_focus_owner_honours_an_explicit_keepinput_false() -> None:
     assert "SetNuiFocusKeepInput(false)" in block
 
 
-def test_dashboard_pushes_frames_instead_of_setting_focus_directly() -> None:
+def test_dashboard_pushes_frames_owned_by_itself() -> None:
     src = DASH.read_text(encoding="utf-8")
-    assert "exports['custom-ui']:Push({ id = 'dashboard'" in src, "主面板要压栈"
-    assert "exports['custom-ui']:Pop('dashboard')" in src, "关闭要弹自己这一帧"
-    assert "Push({ id = 'dashboard:seats'" in src, "换座浮层也要压栈"
-    assert "Pop('dashboard:seats')" in src
-    assert "OpenMenu(" not in src and "CloseMenu(" not in src, (
-        "OpenMenu/CloseMenu 是绕过栈的旧 API，车机不该再用"
-    )
+    assert "Push({ id = 'dashboard'" in src and "owner = 'tcity-dashboard'" in src
+    assert "Push({ id = 'dashboard:seats'" in src
+    assert "Pop('dashboard')" in src and "Pop('dashboard:seats')" in src
+    assert "OpenMenu(" not in src and "CloseMenu(" not in src
+    # 关键：SetNuiFocus 是按资源的，必须由拥有页面的资源自己施
+    assert "exports('ApplyFocus'" in src
+    assert "SetNuiFocus(hasFocus == true, hasCursor == true)" in src
 
 
-def test_dashboard_refreshes_focus_after_the_page_is_ready() -> None:
+def test_dashboard_asks_for_a_refresh_once_the_page_is_ready() -> None:
     src = DASH.read_text(encoding="utf-8")
-    assert "RefreshFocus()" in src, "页面就绪后必须再施一次焦点，否则收不到键鼠"
+    app = APP.read_text(encoding="utf-8")
+    assert "RegisterNUICallback('dashboardReady'" in src
+    assert "RefreshFocus()" in src
+    assert "sendNui('dashboardReady'" in app, "NUI 挂载/打开后要主动上报就绪"
+
+
+def test_dashboard_toggles_once_per_keypress() -> None:
+    src = DASH.read_text(encoding="utf-8")
+    assert "TOGGLE_DEBOUNCE_MS" in src, "反复 restart 会让 RegisterKeyMapping 重复注册"
+
+
+def test_dashboard_has_keyboard_navigation() -> None:
+    app = APP.read_text(encoding="utf-8")
+    assert "onKeydown" in app and "ArrowLeft" in app and "ArrowRight" in app
+    assert "Escape" in app, "Esc/Backspace 要能关"
+    console = (REPO / "T-CityLite.base/resources/[system]/tcity-dashboard/nui"
+               / "src/components/tabs/PoliceConsole.vue").read_text(encoding="utf-8")
+    assert "ArrowDown" in console and "ArrowUp" in console, "警情列表要能上下选"
