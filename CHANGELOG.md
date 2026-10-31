@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **P4 第一步：盘查读数挂到现场**（还 P3 的债）。`fieldTest` 现在查这名警员当前未结的警情，有就调 `RegisterEvidence` 挂证物并把 `exhibit_no` 回给客户端；没有就只留审计，等立案后由 MDT 带入。bodycam 方案与三条约束（只 panic 自动 / 7 天保留 / 磁盘+路径）写进 `docs/police/plans/2026-10-31-p4-audit.md`。
 - **警察系统现状与缺口盘点**（`docs/agent/police/STATUS-2026-10-31.md`）：P0/P1/P2/P3/P5 完成，P4 部分（表与链在、缺 bodycam/延迟化验/盘查读数绑定），P6 全缺（三个 agent 动作 0 命中）；另列指纹/DNA、保释/假释与多机验收清单。
 - **P3 收尾**：蓝图 Phase 3 标记为完成（P3-1 玩家盘查面板、P3-2 酒测/药检、P3-3 盘查带入逮捕表单、P3-4 BOLO 推送），遗留两项（证据延迟绑定属 P4、多机验收待第二客户端）写进核对文档。
 - **P3-4 BOLO 发布即推送**：以前 BOLO 只是 `police_reports` 上的标记，街上没人知道；现在 `broadcastBolo` 走 custom-phone 的 Outbox 推给所有**在勤且非本人**的警员（`BOLO · 标题` / `人员|车辆 · 目标 · 地点`），逮捕提交与报告提交两条路径都接。
