@@ -55,6 +55,11 @@ function C.CreateCase(source, params)
         lead_citizenid = lead,
     })
     if not id then return false, 'db_error' end
+    -- P4 收口：立案后把这个公民的"待挂载读数"挂上来（例如盘查时的酒测/药检）。
+    -- 失败不阻断立案：证据晚点还能手工绑。
+    pcall(function()
+        exports['custom-police']:BindPendingFor(tonumber(id), actor.citizenid)
+    end)
     return { id = tonumber(id), case_no = no, status = 'open' }
 end
 
