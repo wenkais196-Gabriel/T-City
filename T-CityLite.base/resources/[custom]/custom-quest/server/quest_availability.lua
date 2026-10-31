@@ -61,11 +61,16 @@ local CHOICE_LABELS = {
 }
 
 --- 安全调用另一个资源的导出：资源不存在就返回 nil（表示"跳过这项检查"）。
+--- 注意：`exports[resource]` 是个代理表，**取一个不存在的导出会直接抛错**
+--- （"No such export X in resource Y"），所以连索引本身都要包 pcall ——
+--- 资源没启动时 `type(target[method])` 这一行就是崩溃点（真机踩过）。
 local function callExport(resource, method, ...)
     if type(exports) ~= 'table' then return nil end
-    local target = exports[resource]
-    if target == nil or type(target[method]) ~= 'function' then return nil end
-    local ok, result = pcall(target[method], target, ...)
+    local okTarget, target = pcall(function() return exports[resource] end)
+    if not okTarget or target == nil then return nil end
+    local okFn, fn = pcall(function() return target[method] end)
+    if not okFn or type(fn) ~= 'function' then return nil end
+    local ok, result = pcall(fn, target, ...)
     if not ok then return nil end
     return result
 end
