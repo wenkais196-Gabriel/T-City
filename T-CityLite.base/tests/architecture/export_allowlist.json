@@ -225,6 +225,19 @@
       "owner": "police",
       "expires": "2027-03-31",
       "added": "2026-10-30"
+    },
+    {
+      "id": "p6-draft-report-system",
+      "file": "custom-police/server/p2_system.lua",
+      "export": "DraftReportSystem",
+      "kind": "system_only",
+      "exceptions": [
+        "auth"
+      ],
+      "reason": "custom-director agent 桥接调用（L2 审批后执行）；actorId 是 action 标识而非玩家 source；写路径委托唯一写者 PoliceRecords.InsertReport 并固定 status=draft，随后写 report.draft 审计，失败返回 audit_unavailable。",
+      "owner": "custom-police",
+      "added": "2026-10-31",
+      "expires": "2027-03-31"
     }
   ]
 }

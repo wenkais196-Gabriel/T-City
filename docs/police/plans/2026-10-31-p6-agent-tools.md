@@ -30,7 +30,22 @@
 
 `P6-4`（AI 调度员：文本报案 → call 卡草稿）依赖 P6-1/2，放在最后。
 
-## 3. P6-1 设计细节（本轮施工）
+## 2.1 实施记录
+
+| 步 | 状态 | 说明 |
+|---|---|---|
+| P6-1 | ✅ 已合并（PR #156，`6e9b474`） | `get_police_case` 走 live GET |
+| P6-2 | ✅ 本轮 | 动作 `police_draft_report` + 工具 `apply_police_report`；**注意**：工具名必须在动词白名单（`apply_`），且 `police_reports` 只有一个写者，所以委托 `PoliceRecords.InsertReport` |
+| P6-3 | ⬜ | `police_warrant_request` 需新建 `police_warrants` 表（L4，动表结构要先获批） |
+
+### 2.2 P6-2 的两条硬约束（实测踩到）
+
+1. **工具名白名单**：`draft_police_report` 被注册表校验器拒绝，只接受
+   `get|list|query|count|send|apply|set|start|grant|revoke|spawn|teleport|cancel|remove|kick|revive` 前缀。
+2. **单一写者**：`police_reports` 已有唯一写者 `PoliceRecords.InsertReport`
+   （`custom-police/server/records.lua`），任何新入口都必须调用它，不得复制 `INSERT`。
+
+## 3. P6-1 设计细节
 
 ### 3.1 路由
 
