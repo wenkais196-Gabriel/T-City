@@ -56,7 +56,8 @@ lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua
 
 | Phase 1 司法链 | 🟡 **代码早已存在，但从未跑过**：`police_cases`/`police_reports`/`police_arrests`/`justice_sentences` 四张表都在，`CreateCase`/`RegisterArrest`/`RecordVerdict` 三个导出也接好了（MDT App 在调），但四张表全是 **0 行** | `T-CityLite.base/resources/[custom]/custom-police/server/p3_cases.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/records.lua`、`custom-justice/server/trial.lua:43` |
 | Phase 2 调度总线 | ✅ **完成**（服务器侧本就存在 + 本轮补齐）：坐标脱敏（D5）、通知预算层、车机警情页、7 个来源对账。剩余只是真机逐个触发与车机视觉确认 | `docs/police/plans/2026-10-31-p2-dispatch-audit.md` |
-| Phase 0/3/4/6（其余） | ⬜ 未开始 | — |
+| Phase 3 盘查与文书 | 🟡 **三块已存在**（逮捕/报告/罚单/证据四个子页、BOLO、搜身与押送事件），缺的是**玩家 qb-target 交互面板**（查证件/搜身/酒测/药检）与酒测药检本身 | `docs/police/plans/2026-10-31-p3-audit.md` |
+| Phase 0/4/6（其余） | ⬜ 未开始 | — |
 
 **P5 验收状态**（详见 [`ACCEPTANCE-RUN-2026-10-30.md`](ACCEPTANCE-RUN-2026-10-30.md)）：
 PASS = 01/02/05/06/08/12；部分 = 03（#4 判据建议改 20s×3）；未完成 = 04（实验 A 只做了本场景）；
