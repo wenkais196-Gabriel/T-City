@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **P6-2 agent 起草报告**：动作 `police_draft_report`（L2，审批后执行），工具名 `apply_police_report`；写路径委托唯一写者 `PoliceRecords.InsertReport`，固定 `status='draft'`、`kind='report'`，不提交/不罚款/不带 BOLO/不生成证据，随后写 `report.draft` 审计。
 - **P6-1 agent 只读案卷**：`GET /agent/v1/live/police/cases/{case_id}`（live token，L0），返回案卷号/状态/判决/刑期/主办，**不含姓名、坐标、正文**；注册为 `get_police_case`（读类工具必须是 GET、`director_action=null`、`compensation=none`，这是第一次把它做成 action 被校验器否掉的原因）。研究与施工图见 `docs/police/plans/2026-10-31-p6-agent-tools.md`。
 - **P4 第一步：盘查读数挂到现场**（还 P3 的债）。`fieldTest` 现在查这名警员当前未结的警情，有就调 `RegisterEvidence` 挂证物并把 `exhibit_no` 回给客户端；没有就只留审计，等立案后由 MDT 带入。bodycam 方案与三条约束（只 panic 自动 / 7 天保留 / 磁盘+路径）写进 `docs/police/plans/2026-10-31-p4-audit.md`。
 - **警察系统现状与缺口盘点**（`docs/agent/police/STATUS-2026-10-31.md`）：P0/P1/P2/P3/P5 完成，P4 部分（表与链在、缺 bodycam/延迟化验/盘查读数绑定），P6 全缺（三个 agent 动作 0 命中）；另列指纹/DNA、保释/假释与多机验收清单。

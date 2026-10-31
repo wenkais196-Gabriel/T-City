@@ -1220,6 +1220,20 @@ local function executePoliceJailPlayer(actionId, params)
     return true, nil, { citizenid = result.citizenid, minutes = result.minutes, status = result.status }
 end
 
+--- L2 写动作：agent 起草报告（草稿）。审批通过才执行；不提交、不罚款、不生成证据。
+local function executePoliceDraftReport(actionId, params)
+    local called, result, reason = pcall(function()
+        return exports['custom-police']:DraftReportSystem(('action:%s'):format(tostring(actionId)), params)
+    end)
+    if not called then
+        return false, ('police_unavailable: %s'):format(truncate(result, 150)), nil
+    end
+    if type(result) ~= 'table' then
+        return false, tostring(reason or 'draft_rejected'), nil
+    end
+    return true, nil, { report_id = result.report_id, status = result.status }
+end
+
 local function executePoliceIncidentCreate(actionId, params)
     local ok, result = pcall(function()
         return exports['custom-police']:CreateIncidentSystem(('action:%s'):format(tostring(actionId)), params)
@@ -1304,6 +1318,8 @@ local function executeAction(actionId, actionType, params)
         return executePoliceAssignUnit(actionId, params)
     elseif actionType == 'police_jail_player' then
         return executePoliceJailPlayer(actionId, params)
+    elseif actionType == 'police_draft_report' then
+        return executePoliceDraftReport(actionId, params)
     elseif actionType == 'police_incident_create' then
         return executePoliceIncidentCreate(actionId, params)
     elseif actionType == 'police_run_e2e' then
@@ -1332,6 +1348,7 @@ AgentActions._Execute = {
     revive = executeRevive,
     delete_vehicle = executeDeleteVehicle,
     send_phone_message = executeSendPhoneMessage,
+    police_draft_report = executePoliceDraftReport,
     police_incident_create = executePoliceIncidentCreate,
     police_assign_unit = executePoliceAssignUnit,
     police_jail_player = executePoliceJailPlayer,
