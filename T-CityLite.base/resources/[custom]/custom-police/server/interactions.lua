@@ -365,7 +365,7 @@ QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, 
     -- 能挂到现场就挂：evidence 表要求必须挂 case/incident/report（insertEvidence 的
     -- missing_case），所以找"这名警员当前正在处理的、还没结的警情"。没有就只留审计，
     -- 等立案后由 MDT 带入（P3-3 的 GetLastInspection 就是干这个的）。
-    local attached, exhibitNo = false, nil
+    local attached, pending, exhibitNo = false, false, nil
     local activeIncident = MySQL.single.await([[
         SELECT u.incident_id AS id
           FROM police_incident_units u
@@ -375,24 +375,32 @@ QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, 
          ORDER BY u.joined_at DESC
          LIMIT 1
     ]], { Officer.PlayerData.citizenid })
+    -- 一次组好 label，两条路径（挂当前警情 / 挂待绑定）共用，避免复制粘贴
+    local exhibitLabel = ('%s：%s %.2f（%s）'):format(
+        kind == 'alcohol' and '酒测' or '药检',
+        Target.PlayerData.citizenid, value, label):sub(1, 120)
+    local exhibitParams = { label = exhibitLabel,
+        location = ('%.0f,%.0f'):format(GetEntityCoords(b).x, GetEntityCoords(b).y) }
     if activeIncident and activeIncident.id then
-        local label = ('%s：%s %.2f（%s）'):format(
-            kind == 'alcohol' and '酒测' or '药检',
-            Target.PlayerData.citizenid, value, label)
-        local ok, result = pcall(function()
-            return exports['custom-police']:RegisterEvidence(source, {
-                label = label:sub(1, 120),
-                incident_id = tonumber(activeIncident.id),
-                location = ('%.0f,%.0f'):format(GetEntityCoords(b).x, GetEntityCoords(b).y),
-            })
-        end)
-        if ok and type(result) == 'table' then
-            attached = true
-            exhibitNo = result.exhibit_no
-        end
+        exhibitParams.incident_id = tonumber(activeIncident.id)
+    else
+        -- 没有在办的警情：读数也是证据，先落成"待挂载"（subject 有、case 空），
+        -- 立案后由 BindPendingFor 自动挂到案卷上（P4 收口）。
+        exhibitParams.subject_citizenid = Target.PlayerData.citizenid
     end
+    local attachedOrPending = false
+    local ok, result = pcall(function()
+        return exports['custom-police']:RegisterEvidence(source, exhibitParams)
+    end)
+    if ok and type(result) == 'table' then
+        exhibitNo = result.exhibit_no
+        attachedOrPending = activeIncident and activeIncident.id and true or false
+        pending = not attachedOrPending
+    end
+    local attached = attachedOrPending
 
-    cb({ ok = true, kind = kind, value = value, label = label, evidence = attached, exhibit_no = exhibitNo })
+    cb({ ok = true, kind = kind, value = value, label = label,
+         evidence = attached, pending = pending, exhibit_no = exhibitNo })
 end)
 
 

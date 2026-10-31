@@ -920,6 +920,7 @@ CREATE TABLE IF NOT EXISTS `police_evidence` (
   `label` varchar(120) NOT NULL,
   `description` varchar(1000) NOT NULL DEFAULT '',
   `location` varchar(120) DEFAULT NULL,
+  `subject_citizenid` varchar(50) DEFAULT NULL,
   `collected_by` varchar(50) NOT NULL,
   `status` enum('collected','stored','released','destroyed') NOT NULL DEFAULT 'collected',
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -929,6 +930,7 @@ CREATE TABLE IF NOT EXISTS `police_evidence` (
   KEY `idx_incident` (`incident_id`),
   KEY `idx_report` (`report_id`),
   KEY `idx_case` (`case_id`),
+  KEY `idx_subject` (`subject_citizenid`,`case_id`),
   KEY `idx_status_created` (`status`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
