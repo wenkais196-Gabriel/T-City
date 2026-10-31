@@ -17,6 +17,18 @@ local function log(msg)
     end
 end
 
+--- A 方案的几何：**显式写回原生三件套**。
+-- CC 的评审意见（2026-10-31）：组件状态在客户端会话内持续生效，
+-- 所以"什么都不写"并不等于原生 —— 上一次 square 的残留会留着。
+-- 原生三者尺寸本来就不一样：mask 是内缩的裁剪窗，blur 是外扩的底衬。
+local function applyNative()
+    SetMinimapClipType(1)
+    SetMinimapComponentPosition('minimap', 'L', 'B', -0.0045, 0.002, 0.150, 0.188888)
+    SetMinimapComponentPosition('minimap_mask', 'L', 'B', 0.020, 0.032, 0.111, 0.159)
+    SetMinimapComponentPosition('minimap_blur', 'L', 'B', -0.03, 0.022, 0.266, 0.237)
+    log('native written back')
+end
+
 --- B 方案的几何：整块雷达沿用原生位置与尺寸，遮罩/模糊与地图同尺寸（关键就在"同尺寸"）
 local function applySquare()
     local resolutionX, resolutionY = GetActiveScreenResolution()
@@ -59,7 +71,7 @@ CreateThread(function()
     if STYLE == 'square' then
         applySquare()
     else
-        log('native (no override)')
+        applyNative()
     end
     watchRadar()
 end)

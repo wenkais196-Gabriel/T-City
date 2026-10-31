@@ -77,7 +77,10 @@ function CheckpointManager.Create(questId, stepId, stepType, stepData)
     local cpCfg = stepData.checkpoint or {}
     local cpTypeName = cpCfg.type or DEFAULT_CHECKPOINT_TYPE[stepType] or 'cylinder'
     local nativeType = CP_NATIVE_ID[cpTypeName] or CP_TYPE_CYLINDER
-    local radius = cpCfg.radius or DEFAULT_RADIUS[cpTypeName] or 15.0
+    -- 半径必须和**模板里写的**一致：服务端是按 step.data.radius 复验距离的
+    -- （真机 security_block: required=15.0, distance=28.78），
+    -- 这里原来优先用 cpType 的默认值（ring=30），于是"客户端触发了、服务端判太远"。
+    local radius = cpCfg.radius or stepData.radius or DEFAULT_RADIUS[cpTypeName] or 15.0
     local ht = cpCfg.height_tolerance or heightTolerance
     local color = cpCfg.color or { 0, 255, 0 }  -- 默认绿色
     local label = cpCfg.label or (stepData.label or stepData.title or 'Checkpoint')
