@@ -53,7 +53,12 @@ local function insertEvidence(actorCid, params)
     local incidentId = tonumber(params.incident_id)
     local reportId = tonumber(params.report_id)
     local caseId = tonumber(params.case_id)
-    if not incidentId and not reportId and not caseId then return nil, 'missing_case' end
+    -- 待挂载证据：盘查读数发生在立案之前，有 subject 就先收着，等立案再绑。
+    -- 只有系统路径（fieldTest）能走这里；普通采集仍然必须带父级。
+    local subject = trim(params.subject_citizenid):sub(1, 50)
+    if not incidentId and not reportId and not caseId and subject == '' then
+        return nil, 'missing_case'
+    end
 
     if caseId then
         local caseRow = MySQL.single.await('SELECT id FROM police_cases WHERE id = ? LIMIT 1', { caseId })
@@ -77,6 +82,7 @@ local function insertEvidence(actorCid, params)
     add('description', description ~= '' and description:sub(1, 1000) or nil)
     local location = trim(params.location)
     add('location', location ~= '' and location:sub(1, 120) or nil)
+    add('subject_citizenid', subject ~= '' and subject or nil)
     add('incident_id', incidentId)
     add('report_id', reportId)
     add('case_id', caseId)
@@ -155,6 +161,82 @@ function EV.GetChain(source, evidenceId)
     return { rows = rows or {}, count = #(rows or {}) }
 end
 
+--- 把一条待挂载证据绑到案卷上（AC-P4-07/08/09/10）。
+--- 证据行只改 case_id；保管链走 append-only 的新行，不改旧行（AC-P4-02）。
+---@param actor table 警察 actor（来自 pd(source)）
+---@param evidenceId number
+---@param caseId number
+---@param opts table|nil { force?: boolean }
+---@return table|nil result { id, case_id }
+---@return string|nil reason
+function EV.BindEvidence(actor, evidenceId, caseId, opts)
+    local allowed, why = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return nil, why end
+    local id = tonumber(evidenceId)
+    local cid = tonumber(caseId)
+    if not id then return nil, 'invalid_evidence' end
+    if not cid then return nil, 'invalid_case' end
+
+    local row = MySQL.single.await(
+        'SELECT id, case_id, subject_citizenid FROM police_evidence WHERE id = ? LIMIT 1', { id })
+    if not row then return nil, 'evidence_not_found' end
+    if row.case_id ~= nil then return nil, 'already_bound' end
+
+    local caseRow = MySQL.single.await(
+        'SELECT id, lead_citizenid FROM police_cases WHERE id = ? LIMIT 1', { cid })
+    if not caseRow then return nil, 'case_not_found' end
+
+    local subject = tostring(row.subject_citizenid or '')
+    local lead = tostring(caseRow.lead_citizenid or '')
+    local force = type(opts) == 'table' and opts.force == true
+    if subject ~= '' and lead ~= '' and subject ~= lead and not force then
+        return nil, 'subject_mismatch'
+    end
+
+    MySQL.update.await('UPDATE police_evidence SET case_id = ? WHERE id = ? AND case_id IS NULL', { cid, id })
+    if not audit(actor.citizenid, force and 'evidence.bind_forced' or 'evidence.bind',
+            tostring(id), tostring(cid)) then
+        return nil, 'audit_unavailable'
+    end
+    return { id = id, case_id = cid }
+end
+
+--- 立案后自动把该公民的待挂载读数挂上去（AC-P4-08）。
+--- 只按精确 citizenid 匹配；不匹配就留着等人工。
+---@param caseId number
+---@param actorCid string
+---@return number bound
+function EV.BindPendingFor(caseId, actorCid)
+    local cid = tonumber(caseId)
+    if not cid then return 0 end
+    local caseRow = MySQL.single.await(
+        'SELECT id, lead_citizenid FROM police_cases WHERE id = ? LIMIT 1', { cid })
+    if not caseRow then return 0 end
+    local subject = tostring(caseRow.lead_citizenid or '')
+    if subject == '' then return 0 end
+    local rows = MySQL.query.await(
+        'SELECT id FROM police_evidence WHERE subject_citizenid = ? AND case_id IS NULL LIMIT 20',
+        { subject }) or {}
+    local bound = 0
+    for _, row in ipairs(rows) do
+        local changed = MySQL.update.await(
+            'UPDATE police_evidence SET case_id = ? WHERE id = ? AND case_id IS NULL', { cid, row.id })
+        if type(changed) == 'table' then changed = changed.affectedRows or changed[1] end
+        if changed and changed ~= 0 then
+            chain(row.id, 'auto_bound', tostring(actorCid or 'system'), ('case:%s'):format(tostring(cid)))
+            bound = bound + 1
+        end
+    end
+    return bound
+end
+
+exports('BindEvidence', function(source, evidenceId, caseId, force)
+    local actor = pd(source)
+    local allowed, why = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return nil, why end
+    return EV.BindEvidence(actor, evidenceId, caseId, { force = force == true })
+end)
+exports('BindPendingFor', EV.BindPendingFor)
 exports('RegisterEvidence', EV.Register)
 exports('GetEvidence', EV.Get)
 exports('GetEvidenceChain', EV.GetChain)

@@ -278,3 +278,63 @@ def test_mdt_ui_has_two_lanes_and_a_discard_confirmation() -> None:
     assert "confirmDiscard" in ui, "丢弃必须二次确认"
     assert "adopt_draft" in ui and "discard_draft" in ui
     assert "暂无待采纳草稿" in ui
+
+
+# ══════════════════════════════════════════════════════════════════
+# §5 P4 证据收口：盘查读数延迟绑定（AC-P4-07..11）
+# ══════════════════════════════════════════════════════════════════
+
+EVIDENCE = POLICE / "p2_evidence.lua"
+FIELD = POLICE / "interactions.lua"
+MIG14 = MIGRATIONS / "v3.14_police_evidence_subject.sql"
+
+
+def test_pending_reading_needs_a_subject_but_no_case() -> None:
+    """AC-P4-07：有 subject 才允许没有父级；普通采集不能借这条路绕过。"""
+    part = block(read(EVIDENCE), "local function insertEvidence", 1400)
+    assert "subject_citizenid" in part
+    assert "'missing_case'" in part, "没有 subject 时仍然必须带父级"
+    assert "subject == ''" in part
+
+
+def test_bind_is_one_update_plus_an_append_only_chain_row() -> None:
+    """AC-P4-08：绑定只改 case_id；保管链只追加，绝不 UPDATE。"""
+    src = read(EVIDENCE)
+    part = block(src, "function EV.BindEvidence", 1600)
+    assert "UPDATE police_evidence SET case_id = ?" in part
+    assert "WHERE id = ? AND case_id IS NULL" in part, "已绑定的不能再绑"
+    assert "evidence.bind" in part and "audit_unavailable" in part
+    assert "UPDATE police_evidence_chain" not in src, "链只能 append"
+
+
+def test_already_bound_and_subject_mismatch_are_rejected() -> None:
+    """AC-P4-09/10：重复绑定与主体不符都要拒；force 需留审计。"""
+    part = block(read(EVIDENCE), "function EV.BindEvidence", 1600)
+    assert "'already_bound'" in part
+    assert "'subject_mismatch'" in part
+    assert "force" in part and "evidence.bind_forced" in part
+
+
+def test_case_creation_auto_binds_pending_readings() -> None:
+    """AC-P4-08：立案后自动把该公民的待挂载读数挂上（失败不阻断立案）。"""
+    part = block(read(CASES), "function C.CreateCase", 2000)
+    assert "BindPendingFor" in part
+    assert "pcall" in part, "绑定失败不能挡住立案"
+    binder = block(read(EVIDENCE), "function EV.BindPendingFor", 1400)
+    assert "subject_citizenid = ? AND case_id IS NULL" in binder
+    assert "'auto_bound'" in binder
+
+
+def test_field_test_writes_a_pending_row_without_an_incident() -> None:
+    """AC-P4-07：没有在办警情时也要留证据（此前只写审计）。"""
+    part = block(read(FIELD), "police:server:fieldTest", 6000)
+    assert "subject_citizenid" in part
+    assert "pending = pending" in part
+    assert "RegisterEvidence" in part
+
+
+def test_migration_14_is_additive_and_idempotent() -> None:
+    sql = read(MIG14)
+    assert "subject_citizenid" in sql
+    assert "information_schema.COLUMNS" in sql
+    assert "PREPARE stmt" in sql
