@@ -48,6 +48,12 @@ AgentPolicy.ACTIONS = {
         requires_approval = true,
         auto_execute = false,
     },
+    police_call_draft = {
+        risk = 'L2',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+    },
     police_warrant_request = {
         risk = 'L3',
         requires_approval = true,
@@ -179,6 +185,8 @@ AgentPolicy.ACTIONS = {
 -- them must stay usable without a citizenid.
 AgentPolicy.WORLD_ACTIONS = {
     announce = true,
+    -- 文本报案没有目标玩家（报案人可能根本不是玩家），与 incident_create 同理
+    police_call_draft = true,
     police_incident_create = true,
     police_run_e2e = true,
     set_weather = true,
@@ -188,6 +196,13 @@ AgentPolicy.WORLD_ACTIONS = {
 -- 目标玩家**可以离线**的动作：它们是文书动作，不是对在线玩家的即时操作。
 -- 与 WORLD_ACTIONS 的区别是语义：这里 blast_radius 仍是 single（有具体对象），
 -- 只是不要求那个对象此刻在线；citizenid 仍然必填（warrant）或可选（report）。
+-- 已知调度码：LLM 只能在这些码里选，认不出来就降到 911。
+AgentPolicy.KNOWN_CODES = {
+    ['911'] = true, ['10-31'] = true, ['10-32'] = true, ['10-50'] = true,
+    ['10-52'] = true, ['10-15'] = true, ['10-80'] = true, ['10-97'] = true,
+    ['10-8'] = true, ['10-6'] = true, ['10-23'] = true, ['10-70'] = true,
+}
+
 AgentPolicy.OFFLINE_TARGET_ACTIONS = {
     police_draft_report = true,
     police_warrant_request = true,
@@ -443,6 +458,44 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         if type(key) ~= 'string' then
             return fail('invalid_params', 'args must be a JSON object, not an array')
         end
+    end
+
+    if actionType == 'police_call_draft' then
+        local unknownErr = rejectUnknownFields(params,
+            { title = true, details = true, code = true, priority = true,
+              raw_text = true, x = true, y = true, z = true }, 'police_call_draft')
+        if unknownErr then return nil, unknownErr end
+        if type(params.title) ~= 'string' or #params.title < 3 or #params.title > 120 then
+            return fail('invalid_params', 'title must be 3-120 chars')
+        end
+        if params.details ~= nil
+            and (type(params.details) ~= 'string' or #params.details > 1000) then
+            return fail('invalid_params', 'details must be <= 1000 chars')
+        end
+        if params.raw_text ~= nil
+            and (type(params.raw_text) ~= 'string' or #params.raw_text > 1000) then
+            return fail('invalid_params', 'raw_text must be <= 1000 chars')
+        end
+        -- 只认已知调度码；不认识的降到 911，不让 LLM 发明新码
+        local code = params.code
+        if code == nil then
+            code = '911'
+        else
+            if type(code) ~= 'string' or not AgentPolicy.KNOWN_CODES[code] then
+                code = '911'
+            end
+        end
+        local priority = tonumber(params.priority) or 2
+        priority = math.floor(priority)
+        if priority < 1 then priority = 1 end
+        if priority > 3 then priority = 3 end
+        local normalized = { title = params.title, code = code, priority = priority }
+        if params.details then normalized.details = params.details end
+        if params.raw_text then normalized.raw_text = params.raw_text end
+        if params.x ~= nil and params.y ~= nil and params.z ~= nil then
+            normalized.x, normalized.y, normalized.z = tonumber(params.x), tonumber(params.y), tonumber(params.z)
+        end
+        return normalized
     end
 
     if actionType == 'police_warrant_request' then
@@ -1208,6 +1261,16 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'police_call_draft' then
+        preview.code = params.code
+        preview.priority = params.priority
+        preview.title = params.title
+        preview.details_length = AgentPolicy.TextLength(params.details)
+        preview.raw_text_length = AgentPolicy.TextLength(params.raw_text)
+        preview.status_after_execution = 'draft'
+        return preview
+    end
+
     if actionType == 'police_warrant_request' then
         preview.warrant = { citizenid = params.citizenid, reason_length = #params.reason }
         preview.status_after_execution = 'requested'
@@ -1450,6 +1513,17 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
     if actionType == 'police_jail_player' then
         if type(params.minutes) ~= 'number' or params.minutes < 1 or params.minutes > 120 then
             return failBool('invalid_params', 'invalid minutes')
+        end
+        return true
+    end
+
+    if actionType == 'police_call_draft' then
+        if type(params.title) ~= 'string' or #AgentPolicy.Trim(params.title) < 3 then
+            return failBool('invalid_params', 'title is required')
+        end
+        if params.priority ~= nil
+            and (type(params.priority) ~= 'number' or params.priority < 1 or params.priority > 3) then
+            return failBool('invalid_params', 'priority must be 1..3')
         end
         return true
     end

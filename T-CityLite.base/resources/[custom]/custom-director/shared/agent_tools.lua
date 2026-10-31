@@ -5,7 +5,7 @@
 local AgentTools = {}
 
 AgentTools.SCHEMA_VERSION = 1
-AgentTools.REGISTRY_VERSION = "1.8.0"
+AgentTools.REGISTRY_VERSION = "1.9.0"
 
 AgentTools.TOOLS = {
   ["add_player_money"] = {
@@ -966,6 +966,33 @@ AgentTools.TOOLS = {
     schema = {
       ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["reason"] = { type = "string", min_length = 3, max_length = 128 },
+    },
+  },
+  ["apply_police_call_draft"] = {
+    name = "apply_police_call_draft",
+    title = "Draft a call card from free text (L2)",
+    channel = "write",
+    route = "director",
+    risk = "L2",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "police_call_draft",
+    auth = "default",
+    params = { "title", "code", "priority", "raw_text", "x", "y", "z", "details" },
+    required = { "title" },
+    schema = {
+      ["title"] = { type = "string", min_length = 3, max_length = 120 },
+      ["code"] = { type = "string", max_length = 16 },
+      ["priority"] = { type = "integer", minimum = 1, maximum = 3 },
+      ["raw_text"] = { type = "string", max_length = 1000 },
+      ["x"] = { type = "number" },
+      ["y"] = { type = "number" },
+      ["z"] = { type = "number" },
+      ["details"] = { type = "string", max_length = 1000 },
     },
   },
 }

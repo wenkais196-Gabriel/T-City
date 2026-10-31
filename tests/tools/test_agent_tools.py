@@ -25,6 +25,7 @@ if str(TOOLS_DIR) not in sys.path:
 import agent_tools  # noqa: E402
 
 ACTIVE_NAMES = {
+    "apply_police_call_draft",
     "apply_police_report",
     "apply_police_warrant",
     "get_police_case",
@@ -97,10 +98,10 @@ class RegistryContentTests(unittest.TestCase):
         registry = _registry()
         self.assertEqual(registry["schema_version"], 1, "registry schema_version must be 1")
         self.assertRegex(registry["registry_version"], r"^\d+\.\d+\.\d+$")
-        self.assertEqual(len(registry["tools"]), 44, "v1 ships exactly 44 tools")
+        self.assertEqual(len(registry["tools"]), 45, "v1 ships exactly 45 tools")
         active = {tool["name"] for tool in registry["tools"] if tool["status"] == "active"}
         planned = {tool["name"] for tool in registry["tools"] if tool["status"] == "planned"}
-        self.assertEqual(active, ACTIVE_NAMES, "all 44 tools are active for v1")
+        self.assertEqual(active, ACTIVE_NAMES, "all 45 tools are active for v1")
         self.assertEqual(planned, PLANNED_NAMES, "no tool remains planned")
 
     def test_run_police_e2e_is_an_l1_test_only_action(self) -> None:

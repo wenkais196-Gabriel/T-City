@@ -816,7 +816,7 @@ CREATE TABLE IF NOT EXISTS `police_incidents` (
   `ref` varchar(64) DEFAULT NULL,
   `merge_count` int NOT NULL DEFAULT 1,
   `priority` tinyint unsigned NOT NULL DEFAULT 2,
-  `status` enum('open','assigned','enroute','on_scene','cleared','closed') NOT NULL DEFAULT 'open',
+  `status` enum('draft','open','assigned','enroute','on_scene','cleared','closed') NOT NULL DEFAULT 'open',
   `x` double DEFAULT NULL,
   `y` double DEFAULT NULL,
   `z` double DEFAULT NULL,
