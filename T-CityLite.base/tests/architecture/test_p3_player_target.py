@@ -89,3 +89,15 @@ def test_last_inspection_feeds_the_arrest_form() -> None:
     vue = (REPO / "T-CityLite.base/resources/[custom]/custom-phone/web/src/apps/PoliceMDT.svelte").read_text(encoding="utf-8")
     assert "fillFromInspection" in vue
     assert "从最近盘查带入" in vue
+
+
+def test_bolo_is_pushed_to_on_duty_officers() -> None:
+    """P3-4：BOLO 以前只是 reports 表上的一个标记，发布完街上没别人知道。"""
+    src = (POLICE / "server/p2_system.lua").read_text(encoding="utf-8")
+    assert "local function broadcastBolo" in src
+    at = src.find("local function broadcastBolo")
+    block = src[at:at + 1400]
+    assert "job.name == 'police'" in block and "onduty == true" in block
+    assert "Outbox.Enqueue" in src, "通知必须走 custom-phone 的 outbox（FIT-02）"
+    # 两条 BOLO 路径都要推：逮捕提交 + 报告提交
+    assert src.count("broadcastBolo(actor.citizenid") == 2
