@@ -100,12 +100,28 @@ RegisterNetEvent('story:client:offerDecision', function(data)
             open = true, option_count = #options, decisionId = decisionId,
             focused = IsNuiFocused(), keepInput = IsNuiFocusKeepingInput(),
         })
-        SendNUIMessage({
+        local payload = {
             type = 'openDecision',
             prompt = prompt,
             options = options,
             timeout = timeout,
-        })
+        }
+        pendingNuiPayload = payload
+        if nuiReady then
+            SendNUIMessage(payload)
+            pendingNuiPayload = nil
+        else
+            -- CEF 还在加载：先缓存，等 nuiReady 再发（否则消息被丢、焦点却已锁死）
+            print('[story-engine] ⏳ NUI 未就绪，决策面板等握手后补发')
+            SetTimeout(3000, function()
+                if pendingNuiPayload == payload then
+                    -- 3 秒还没握手：视为 NUI 不可用，把控制还回去并让服务端按超时结算
+                    print('[story-engine] ❌ NUI 3s 内未握手，交还控制')
+                    closeDecisionSurface('nui_not_ready')
+                    TriggerServerEvent('story:server:makeDecision', questId, stepId, decisionId, 'timeout')
+                end
+            end)
+        end
     else
         -- fallback: 仅有 decision_id，需要从服务端获取
         -- 此路径暂不实现（v0.8），序章 quest 模板直接在 step.data.options 中提供
@@ -118,6 +134,18 @@ end)
 -- ==============================================================
 -- NUI 回调: 玩家点击选项
 -- ==============================================================
+
+RegisterNUICallback('nuiReady', function(_, cb)
+    cb('ok')
+    nuiReady = true
+    telemetry('nui.ready', {})
+    if pendingNuiPayload then
+        local payload = pendingNuiPayload
+        pendingNuiPayload = nil
+        SendNUIMessage(payload)
+        print('[story-engine] ✅ NUI 握手完成，已补发决策面板')
+    end
+end)
 
 RegisterNUICallback('makeChoice', function(data, cb)
     telemetry('nui.makeChoice', { optionId = data and data.optionId or nil })
