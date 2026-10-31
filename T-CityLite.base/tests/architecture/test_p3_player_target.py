@@ -59,8 +59,8 @@ def test_field_tests_have_a_real_data_source_and_server_gates() -> None:
     assert "onduty ~= true" in block and "too_far" in block
     assert "RateLimitCooldown" in block, "同类读数要冷却"
     assert "PoliceAudit.Write" in block
-    # evidence 表要求挂 case/incident，盘查阶段没有 → 不该假装写了
-    assert "evidence = false" in block
+    # 证据绑定的规则见 test_field_test_evidence_attaches_to_the_active_incident
+    assert "evidence = attached" in src
 
 
 def test_player_target_has_six_verbs() -> None:
@@ -101,3 +101,19 @@ def test_bolo_is_pushed_to_on_duty_officers() -> None:
     assert "Outbox.Enqueue" in src, "通知必须走 custom-phone 的 outbox（FIT-02）"
     # 两条 BOLO 路径都要推：逮捕提交 + 报告提交
     assert src.count("broadcastBolo(actor.citizenid") == 2
+
+
+def test_field_test_evidence_attaches_to_the_active_incident() -> None:
+    """P3 遗留的债：酒测/药检读数以前读完就散，案卷里没有。
+
+    `police_evidence` 要求必须挂 case/incident/report（insertEvidence 的 missing_case），
+    所以找"这名警员当前正在处理的、还没结的警情"挂上去；没有就只留审计，
+    等立案后由 MDT 带入。
+    """
+    src = INTERACTIONS.read_text(encoding="utf-8")
+    at = src.find("police:server:fieldTest")
+    block = src[at:at + 6000]
+    assert "police_incident_units" in block and "on_scene" in block, "要查当前处理的警情"
+    assert "RegisterEvidence" in block, "有现场就挂证物"
+    assert "evidence = attached" in block
+    assert "exhibit_no" in block

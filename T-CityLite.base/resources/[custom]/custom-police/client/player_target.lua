@@ -88,7 +88,8 @@ CreateThread(function()
                                 notify(('酒测失败：%s'):format(tostring(res and res.reason or 'unknown')), 'error')
                                 return
                             end
-                            notify(('酒测读数 %.2f（%s）'):format(res.value, res.label), 'primary')
+                            notify(('酒测读数 %.2f（%s）%s'):format(res.value, res.label,
+                                res.exhibit_no and (' · 证物 ' .. res.exhibit_no) or ''), 'primary')
                         end, target, 'alcohol')
                     end,
                 },
@@ -105,7 +106,8 @@ CreateThread(function()
                                 notify(('药检失败：%s'):format(tostring(res and res.reason or 'unknown')), 'error')
                                 return
                             end
-                            notify(('药检结果 %s（%.2f）'):format(res.label, res.value), 'primary')
+                            notify(('药检结果 %s（%.2f）%s'):format(res.label, res.value,
+                                res.exhibit_no and (' · 证物 ' .. res.exhibit_no) or ''), 'primary')
                         end, target, 'drug')
                     end,
                 },

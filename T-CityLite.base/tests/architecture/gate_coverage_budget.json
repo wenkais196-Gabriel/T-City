@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 231,
+  "max_unproven": 232,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -229,6 +229,12 @@
       "max_unproven": 231,
       "previous": 230,
       "why": "P3-4 BOLO 推送（1 条）"
+    },
+    {
+      "date": "2026-10-31",
+      "max_unproven": 232,
+      "previous": 231,
+      "why": "P4 证据收口：盘查读数挂现场（1 条）"
     }
   ]
 }
