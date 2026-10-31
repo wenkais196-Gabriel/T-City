@@ -452,6 +452,40 @@ RegisterNetEvent('police:server:arriveIncident', function(incidentId, token, man
     end
 end)
 
+-- P6-4 草稿箱：agent 解析出的 call 卡草稿（status='draft'）由警员采纳后才上板。
+RegisterNetEvent('police:server:draftList', function()
+    local src = source
+    if src == 0 then return end
+    local ok, res = pcall(function() return exports['custom-police']:ListDrafts(src) end)
+    if not ok or not res then
+        TriggerClientEvent('police:client:draftList', src, { ok = false })
+        return
+    end
+    TriggerClientEvent('police:client:draftList', src, { ok = true, rows = res.rows, count = res.count })
+end)
+
+RegisterNetEvent('police:server:adoptDraft', function(incidentId)
+    local src = source
+    if src == 0 then return end
+    -- 采纳是低风险但需要人点的动作：给自己 3 秒冷却，防止连点把整箱草稿一次性发布
+    local allowed = true
+    if RateLimit and RateLimit.Cooldown then
+        allowed = RateLimit.Cooldown(('draft:adopt:%s'):format(src), 3000)
+    end
+    if not allowed then
+        TriggerClientEvent('police:client:draftResult', src, { ok = false, error = 'rate_limited' })
+        return
+    end
+    local ok, res, reason = pcall(function()
+        return exports['custom-police']:AdoptDraft(src, incidentId)
+    end)
+    if not ok or not res then
+        TriggerClientEvent('police:client:draftResult', src, { ok = false, error = tostring(reason or res) })
+        return
+    end
+    TriggerClientEvent('police:client:draftResult', src, { ok = true, result = res })
+end)
+
 RegisterNetEvent('police:server:claimIncident', function(incidentId)
     local src = source
     if src == 0 then return end

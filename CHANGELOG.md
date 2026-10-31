@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **P6-4 草稿箱（服务端闭环）**：`police:server:draftList` / `police:server:adoptDraft` + 导出 `ListDrafts` / `AdoptDraft`；列表只给在勤警察且**先审计后查询、审计失败不给看**（FIT-05，因为草稿带标题与描述）；采纳复用既有状态机 `draft → open` 并写 `incident.adopt`，带 3 秒冷却防止连点把整箱草稿一次发出去。
 - **P6-4 AI 调度员（call 卡草稿）**：动作 `police_call_draft`（L2 审批）+ 工具 `apply_police_call_draft`；文本报案解析成结构化 call 卡后写 `police_incidents.status='draft'`（迁移 v3.13 给 enum 加 `draft`，纯增量幂等），**不广播、不派 NPC、不上在勤看板**，由警员采纳后变 `open`。未知 code 降级为 `911`（`AgentPolicy.KNOWN_CODES`），priority 夹到 1..3（与存储层一致）。
 - **P6-3 agent 申请逮捕令**：动作 `police_warrant_request`（L3，审批后执行），工具 `apply_police_warrant`；入口与 `RequestWarrant` 同处 custom-police 的 p3_cases 模块（police_warrants 的唯一写者），共用同一条 INSERT，只写 `status='requested'`、审计 `actor_kind='agent'`、审计失败返回 `audit_unavailable`；不批准、不 BOLO、不入狱。
 - **P6-2 agent 起草报告**：动作 `police_draft_report`（L2，审批后执行），工具名 `apply_police_report`；写路径委托唯一写者 `PoliceRecords.InsertReport`，固定 `status='draft'`、`kind='report'`，不提交/不罚款/不带 BOLO/不生成证据，随后写 `report.draft` 审计。
