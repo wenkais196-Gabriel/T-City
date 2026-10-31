@@ -48,7 +48,7 @@ lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua
 | §6.3 支援单位出生配方（六条） | ✅ 五条落地，`SetPedAsCop` 故意不做（理由见 §6.3 注） | `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua` |
 | §6.3 硬约束 #1/#2/#3/#4 | ✅（#3 由 `police_backup_onscene_ttl` 承担） | custom-police/{client,server} |
 | §6.3 硬约束 #5（不结案） | ⏸ 等 §3 的 call 卡（Phase 2 调度总线） | — |
-| §6.2 L3 反应层 | 🟡 已有"接警到场/护送/撤离/指挥"，缺包围与喊话 | `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua` |
+| §6.2 L3 反应层 | ✅ 到场/护送/撤离/指挥 + **包围（surround）+ 扩音器喊话（/pa）**；只剩「不结案」等 P2 的 call 卡 | `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua` |
 | §6.2 L0 无线层 | ✅ 派出/到场/撤离三句 10-code，在岗限定 + 双限流 + 可一键关 | `T-CityLite.base/resources/[custom]/custom-police/server/radio.lua`、`T-CityLite.base/resources/[custom]/custom-police/shared/radio_text.lua` |
 | §6.3 出生点（2026-10-30 追加） | ✅ **只走路网**：四档递进 `strict→relaxed→last→closest`，取不到就 `spawn_failed`，不再有偏移兜底 | `T-CityLite.base/resources/[custom]/custom-police/client/backup.lua` |
 | §6.2 L2 后勤 | ✅ **验尸官 + 拖车 + 现场化验全部落地**（在岗 + 名额 + 寿命 + 审计；生成复用路网取点；化验走 append-only 两条证据） | `T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua` |
