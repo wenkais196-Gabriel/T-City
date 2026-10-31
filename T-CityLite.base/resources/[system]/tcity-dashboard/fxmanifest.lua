@@ -51,5 +51,8 @@ client_scripts {
 dependencies {
     'qb-core',
     'core-framework',
-    'custom-police',       -- v2.1: 警车功能 (police:client:ActiveCamera 等)
+    -- 不再硬依赖 custom-police：对它的唯一用法是服务端 pcall 调 GetIncidentsPublic，
+    -- 而硬依赖意味着 `restart custom-police` 会把车机整个停掉还不拉回来
+    -- （2026-10-31 真机：警情页"又坏了"，其实是资源根本没起）。
+    -- 资源不在时查询返回 upstream_unavailable，界面照常打开。
 }

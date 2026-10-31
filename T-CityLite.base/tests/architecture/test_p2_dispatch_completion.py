@@ -43,3 +43,17 @@ def test_arrival_requires_the_vehicle_to_stop() -> None:
     assert "ARRIVE_MAX_SPEED" in policy, "速度上限要放在共享规则里"
     guide = GUIDE.read_text(encoding="utf-8")
     assert "slowEnough" in guide and "GetEntitySpeed" in guide, "到场判定要带速度"
+
+
+def test_car_terminal_does_not_hard_depend_on_custom_police() -> None:
+    """`restart custom-police` 会连带停掉所有依赖它的资源，而且不会拉回来。
+
+    车机对 custom-police 的唯一用法是运行时 pcall 一个 export（不在就返回
+    upstream_unavailable），所以不该声明成硬依赖 —— 否则每次重启警务资源，
+    车机就静默消失（2026-10-31 真机：警情页"又坏了"）。
+    """
+    manifest = (REPO / "T-CityLite.base/resources/[system]/tcity-dashboard/fxmanifest.lua").read_text(encoding="utf-8")
+    at = manifest.find("dependencies")
+    assert at != -1
+    block = manifest[at:at + 400]
+    assert "'custom-police'" not in block, "车机不该硬依赖 custom-police"
