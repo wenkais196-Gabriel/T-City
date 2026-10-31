@@ -446,7 +446,11 @@ def test_minimap_tool_is_off_by_default() -> None:
     src = read(HUD_TOOL)
     assert "GetConvar('hud_position_tool', '0')" in src
     part = block(src, "local function applyMap()", 400)
-    assert "if not HUD_TOOL_ENABLED then return end" in part
+    assert "if not HUD_TOOL_ENABLED then" in part
+    # 关键：关掉时必须**写回原生值**，否则上一次的自定义尺寸会残留（地图溢出边框）
+    assert "applyNativeMinimap()" in part
+    for native in ("-0.0045, 0.002, 0.150, 0.188888", "0.020,  0.032, 0.111, 0.159", "-0.03,   0.022, 0.266, 0.237"):
+        assert native in src, f"原生值缺失: {native}"
 
 
 def test_radar_follows_the_vehicle_at_file_scope() -> None:

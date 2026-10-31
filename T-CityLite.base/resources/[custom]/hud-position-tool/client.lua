@@ -15,9 +15,10 @@
 -- ━━━ 基础 minimap 参数 (从 qb-hud client.lua 提取) ━━━
 local basePositions = {
     square = {
-        minimap      = { posX = 0.0,    posY = -0.047, sizeX = 0.164,  sizeY = 0.183 },
-        minimap_mask = { posX = -0.01,  posY = 0.025,  sizeX = 0.262,  sizeY = 0.300 },
-        minimap_blur = { posX = -0.01,  posY = 0.025,  sizeX = 0.262,  sizeY = 0.300 },
+        -- 预设改成原生值；要挪位置就在这组数上叠加偏移，别再单独放大 mask
+        minimap      = { posX = -0.0045, posY = 0.002, sizeX = 0.150, sizeY = 0.188888 },
+        minimap_mask = { posX = 0.020,   posY = 0.032, sizeX = 0.111, sizeY = 0.159 },
+        minimap_blur = { posX = -0.03,   posY = 0.022, sizeX = 0.266, sizeY = 0.237 },
     },
     circle = {
         minimap      = { posX = -0.01, posY = -0.030, sizeX = 0.180,  sizeY = 0.258 },
@@ -73,9 +74,33 @@ local function resetCurrentPositions()
 end
 
 -- ━━━ 应用地图 (统一入口) ━━━
+-- GTA 原生默认值（common:/data/ui/frontend.xml）。资源重启不会复位组件，
+-- 所以「不动」= 继续用上一次工具写进去的值，必须显式写回原生。
+local NATIVE = {
+    { 'minimap',      'L', 'B', -0.0045, 0.002, 0.150, 0.188888 },
+    { 'minimap_mask', 'L', 'B',  0.020,  0.032, 0.111, 0.159    },
+    { 'minimap_blur', 'L', 'B', -0.03,   0.022, 0.266, 0.237    },
+}
+
+local function applyNativeMinimap()
+    for _, row in ipairs(NATIVE) do
+        SetMinimapComponentPosition(row[1], row[2], row[3], row[4], row[5], row[6], row[7])
+    end
+    -- minimap 组件不会立即重绘：Cfx 官方 workaround 是踢一次 bigmap。
+    -- Wait 必须在线程里（applyMap 也可能被事件回调直接调到）。
+    CreateThread(function()
+        SetRadarBigmapEnabled(true, false)
+        Wait(150)
+        SetRadarBigmapEnabled(false, false)
+    end)
+end
+
 local function applyMap()
-    -- 关闭时不碰任何小地图组件：保持原生尺寸/位置/形状
-    if not HUD_TOOL_ENABLED then return end
+    -- 关闭工具：显式恢复原生（否则残留上一次的自定义尺寸 → 地图溢出边框）
+    if not HUD_TOOL_ENABLED then
+        applyNativeMinimap()
+        return
+    end
     recalcOffset()
     if not currentPositions or not next(currentPositions) then
         resetCurrentPositions()
