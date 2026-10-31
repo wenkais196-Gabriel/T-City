@@ -33,12 +33,12 @@ def test_mysql_dsn_parses_server_cfg(tmp_path, monkeypatch):
     fake_base.mkdir()
     (fake_base / "server.cfg").write_text(
         'set mysql_connection_string '
-        '"mysql://tcity:secret@127.0.0.1:3307/TCityLite?charset=utf8mb4"\n',
+        '"mysql://tcity:***@127.0.0.1:3307/TCityLite?charset=utf8mb4"\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(probe, "BASE", fake_base)
 
-    assert probe.mysql_dsn() == ("tcity", "secret", "127.0.0.1:3307", "TCityLite")
+    assert probe.mysql_dsn() == ("tcity", "***", "127.0.0.1:3307", "TCityLite")
 
 
 def test_mysql_dsn_refuses_to_guess(tmp_path, monkeypatch):
