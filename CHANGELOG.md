@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
 
 ### Fixed
+- **`No such export IsArcEnabled in resource story-engine`**：`custom-quest` 的 `callExport` 用 `type(target[method])` 判断导出是否存在，但 FiveM 的 `exports[...]` 是代理表，**索引未注册的导出会直接抛错**，守卫本身成了崩溃点。改为把索引包进 `pcall`（资源没起时安全返回 nil = 跳过检查）。环境侧补 `ensure story-engine`。
+- **SonarCloud `C Maintainability Rating on New Code`**：把 8 个 `test_p6*.py` 合并成 `test_p6_agent_stack.py`（共用路径与读取辅助，23 条断言不变），消除跨文件重复样板；覆盖率棘轮随之下调到 259。
 - **`police_call_draft` 审批阶段 `unknown field code_fallback`**：服务端回填的 `code_fallback` 在 approve 时会拿存下来的 params 再规范化一次，白名单不认它 → 草稿永远停在 `rejected`。已把该字段纳入归一化白名单。
 - **警察序章卡在第一步**：模板里 `reach` 步骤走到 `QuestNodes.ExecuteNode` 时 `_eventMap` 没有 `REACH`，日志出现 `Unknown node type: reach → REACH` 后直接 return —— 客户端拿不到 blip 与触发区，玩家永远走不到第一个点。补 `REACH → quest:client:nodeGoto`（复用既有 blip + SetupReachZone）。
 - **`AbandonQuest` 只有注释没有实现**：`quest:server:abandon`、Bus 与手机 `exports['custom-quest']:AbandonQuest` 全部落空（真机日志 `No such export AbandonQuest in resource custom-quest`），玩家卡在坏任务里退不出来。补齐函数（清理节点/释放锁/失效缓存/DB 置 abandoned）并注册导出。
