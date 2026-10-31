@@ -46,6 +46,9 @@ QuestNodes = {
     --- 节点类型 → 客户端事件名映射
     _eventMap = {
         GOTO      = 'quest:client:nodeGoto',
+        -- 模板里的 reach 步骤（序章「前往 Davis 警署」等）必须走同一条下发路径，
+        -- 否则 _eventMap 查不到 → 客户端拿不到 blip/触发区 → 玩家永远卡在第一步。
+        REACH     = 'quest:client:nodeGoto',
         INTERACT  = 'quest:client:nodeInteract',
         VALIDATOR = 'quest:client:nodeValidator',
         DELIVER   = 'quest:client:nodeDeliver',
@@ -55,11 +58,23 @@ QuestNodes = {
         DECISION  = 'story:client:offerDecision', -- v0.7 story-engine: 决策弹窗
     },
 
+    --- 服务端自洽、不需要客户端节点的步骤类型。
+    --- collect 由 quest:server:collect 驱动（玩家交物品），custom_event 由外部事件驱动，
+    --- 两者都没有客户端指引可下发 —— 这里显式登记，避免日志里出现吓人的 "Unknown node type"。
+    _serverOnly = {
+        COLLECT      = true,
+        CUSTOM_EVENT = true,
+    },
+
     --- 向客户端下发原子节点
     ExecuteNode = function(source, questId, stepId, nodeType, payload)
         -- 规范化: 模板中使用小写 (validator/interact)，映射表使用大写
         local normalizedType = nodeType and string.upper(tostring(nodeType))
         local eventName = QuestNodes._eventMap[normalizedType]
+        if not eventName and QuestNodes._serverOnly[normalizedType] then
+            -- 这类步骤没有客户端表现，静默跳过（别当成错误）
+            return
+        end
         if not eventName then
             print(('[quest-nodes] ⚠️ Unknown node type: %s → %s (quest=%s, step=%s)'):format(
                 tostring(nodeType), normalizedType, questId, stepId))
@@ -997,6 +1012,50 @@ end
 ---@param reason string
 ---@return boolean success
 ---@return string message
+--- 放弃任务（v1.2 补：这个函数之前只出现在注释和调用点，实际没定义，
+--- 导致 quest:server:abandon、Bus.AbandonQuest 和手机的 exports['custom-quest']:AbandonQuest
+--- 全部落空——玩家卡在坏掉的任务里还没法退出）。
+---@param source number
+---@param questId string
+---@return boolean success
+---@return string message
+function QuestManager.AbandonQuest(source, questId)
+    local citizenid = getCidFromSource(source)
+    if not citizenid then
+        return false, 'Player not found'
+    end
+    if type(questId) ~= 'string' or questId == '' then
+        return false, 'Invalid quest'
+    end
+    if not QuestManager.IsQuestActive(source, questId) then
+        return false, 'Quest is not active'
+    end
+
+    QuestDB.AbandonQuest(citizenid, questId)
+    QuestDB.LogEvent(citizenid, questId, 'abandon', nil, {})
+
+    -- 释放排他锁 + 收起节点（与 FailQuest 同一条清理链）
+    local template = QuestRegistry.GetTemplate(questId)
+    if template then
+        if template.mode == 'competitive' or template.mode == 'group' then
+            QuestMutex.ReleaseLock(questId, source)
+        end
+        QuestNodes.CancelAllNodes(source, questId)
+    end
+
+    QuestCache.UnindexEvent(citizenid, questId)
+    QuestCache.InvalidateActive(citizenid)
+    QuestManager._resolvedTemplates[citizenid .. '_' .. questId] = nil
+    QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
+    QuestManager._completing[citizenid .. '_' .. questId] = nil
+
+    local src = getSourceFromCid(citizenid)
+    if src then
+        TriggerClientEvent(Config.Quest.Events.QUEST_ABANDONED, src, { quest_id = questId })
+    end
+    return true, 'Quest abandoned'
+end
+
 function QuestManager.FailQuest(source, questId, reason)
     local citizenid = getCidFromSource(source)
     if not citizenid then
