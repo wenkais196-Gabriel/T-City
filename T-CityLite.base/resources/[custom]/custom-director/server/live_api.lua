@@ -26,6 +26,7 @@ local EVENTS_PATH = '/agent/v1/live/events'
 local CLIENTS_PATH = '/agent/v1/live/clients'
 local SERVER_PATH = '/agent/v1/live/server'
 local POLICE_BOARD_PATH = '/agent/v1/live/police/board'
+local POLICE_CASES_PATH = '/agent/v1/live/police/cases'
 
 -- 统一走 core-framework 的公共实现（原先这里有一份相同的解析）：
 -- 用函数包一层，导出在调用时解析；资源启动顺序由 fxmanifest 的 dependencies 保证。
@@ -614,6 +615,48 @@ function LiveApi._ResetRateLimit()
     liveBuckets = {}
 end
 
+-- GET /agent/v1/live/police/cases/{case_id} — 一张案卷的摘要（P6-1）。
+-- 只回案情：编号 / 状态 / 判决 / 罪名清单 / 主办与嫌疑人 citizenid。
+-- **不回**姓名、坐标、案卷正文与证据内容 —— 那些属于 MDT 与 P4 的证据视图。
+local function handlePoliceCase(caseId)
+    local id = tonumber(caseId)
+    if not id or id < 1 then
+        return failure(400, 'invalid_case', 'case id must be a positive integer')
+    end
+    -- 列名以 police_cases 的真实 schema 为准：lead_citizenid / created_by；
+    -- 没有 suspect 列，也没有 closed_at（结案靠 status）。
+    local rows = MySQL.query.await([[
+        SELECT id, case_no, title, status, court_status, sentence_minutes,
+               lead_citizenid, created_by, created_at
+          FROM police_cases WHERE id = ? LIMIT 1
+    ]], { id }) or {}
+    local row = rows[1]
+    if not row then
+        return failure(404, 'case_not_found', 'case not found')
+    end
+    return {
+        status = 200,
+        body = {
+            schema_version = 1,
+            case = {
+                case_no = row.case_no,
+                title = row.title,
+                status = row.status,
+                court_status = row.court_status,
+                sentence_minutes = tonumber(row.sentence_minutes),
+                lead_citizenid = row.lead_citizenid,
+                created_by = row.created_by,
+                -- oxmysql 有时把 datetime 读成带引号的 ISO 字符串，剥掉外层引号
+                opened_at = tostring(row.created_at):gsub('^"', ''):gsub('"$', ''),
+                -- 罪名不在这张表上：它们在 police_arrests / police_reports 的 charges 文本列里。
+                charges = jsonArray({}),
+                charges_note = 'charges live on police_arrests/police_reports',
+            },
+            generated_at = os.time(),
+        },
+    }
+end
+
 -- GET /agent/v1/live/police/board — dispatch board without PII: callsign,
 -- department and status only for on-duty units; incident id/code/title/
 -- priority/status only. No citizenid, names, positions or narratives.
@@ -673,6 +716,11 @@ function LiveApi.TryHandle(request, cfg)
 
     if path == EVENTS_PATH then return handleEvents(request) end
     if path == POLICE_BOARD_PATH then return handlePoliceBoard() end
+
+    local caseId = path:match('^' .. POLICE_CASES_PATH .. '/([^/]+)$')
+    if caseId and caseId ~= '' then
+        return handlePoliceCase(caseId)
+    end
 
     local citizenid = path:match('^' .. PLAYERS_PATH .. '/([^/]+)$')
     if citizenid and citizenid ~= '' then

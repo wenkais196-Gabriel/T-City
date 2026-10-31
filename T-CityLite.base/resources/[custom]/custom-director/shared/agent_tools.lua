@@ -5,7 +5,7 @@
 local AgentTools = {}
 
 AgentTools.SCHEMA_VERSION = 1
-AgentTools.REGISTRY_VERSION = "1.7.0"
+AgentTools.REGISTRY_VERSION = "1.8.0"
 
 AgentTools.TOOLS = {
   ["add_player_money"] = {
@@ -901,6 +901,26 @@ AgentTools.TOOLS = {
       ["after_seq"] = { type = "integer", minimum = 0 },
       ["contains"] = { type = "string", max_length = 200 },
       ["pattern"] = { type = "string", max_length = 200 },
+    },
+  },
+  ["get_police_case"] = {
+    name = "get_police_case",
+    title = "Read one police case (live)",
+    channel = "read",
+    route = "director",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    auth = "live",
+    params = { "case_id" },
+    required = { "case_id" },
+    schema = {
+      ["case_id"] = { type = "integer", minimum = 1 },
     },
   },
 }
