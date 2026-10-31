@@ -11,14 +11,20 @@ CLIENT = REPO / "T-CityLite.base/resources/[custom]/story-engine/client/main.lua
 HTML = REPO / "T-CityLite.base/resources/[custom]/story-engine/client/decision_nui.html"
 
 
-def test_decision_panel_rejects_sending_before_the_nui_handshake() -> None:
-    html = HTML.read_text(encoding="utf-8")
-    assert "nuiPost('nuiReady'" in html, "NUI 必须自证已加载"
+def test_decision_panel_rejects_depending_on_the_nui_handshake() -> None:
+    """CEF 不回 nuiReady 时不能让面板彻底消失（真机：3s 看门狗直接把任务结算了）。
 
+    现在的契约：立即发送 + 1s 补发 + 聊天兜底 + 20s 只放焦点不替玩家结算。
+    """
     client = CLIENT.read_text(encoding="utf-8")
-    assert "RegisterNUICallback('nuiReady'" in client
-    assert "pendingNuiPayload" in client, "未握手时要缓存而不是丢弃"
-    assert "closeDecisionSurface('nui_not_ready')" in client, "握手超时必须交还控制"
+    offer = client[client.index("pendingNuiPayload = payload"): client.index("TriggerEvent('chat:addMessage'")]
+    assert "SendNUIMessage(payload)" in offer, "必须立即发送，不能等握手"
+    assert "SetTimeout(1000" in offer, "丢包要补发一次"
+
+    assert "RegisterCommand('story_choose'" in client, "必须有聊天兜底"
+    watchdog = client[client.index("20s 无操作"): client.index("20s 无操作") + 400]
+    assert "closeDecisionSurface('watchdog')" in watchdog
+    assert "makeDecision" not in watchdog, "看门狗只放焦点，不替玩家结算"
 
 
 def test_decision_payload_rejects_missing_options() -> None:
