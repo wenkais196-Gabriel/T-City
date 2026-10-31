@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **`custom-consumables`（新资源）**：本服没有 qb-smallresources，`qb-core` 只**读** `metadata.hunger/thirst` 判断饿死扣血，全仓没有写者 —— 食物不顶饿、HUD 永远 100、酒测没有数据源。现在由它做**唯一写者**：饥渴/酒精/药物读数、60 s 衰减线程（−1.0 / −1.2）、物品使用入口（`GetItemByName` 归属校验 + 每物品冷却）。文档 `docs/engineering/CONSUMABLES.md`；警用酒测改为优先读它的 `GetAlcohol`。
 - **P3-2 酒测 / 药检**：新增 `T-CityLite.base/resources/[custom]/custom-police/server/sobriety.lua` 作为酒精数据源（`beer +0.25` / `vodka +0.50`、每秒 -0.01 衰减、三档读数），物品使用带 `GetItemByName` 归属校验；`police:server:fieldTest` 服务端复算距离、离岗拒绝、60 s 冷却、写审计。盘查结果**不写** `police_evidence`（该表要求挂 case/incident，盘查发生在立案之前），绑定留到 P3-3。
 - **P3-1 玩家盘查入口**：`qb-target` 的 `AddGlobalPlayer` 提供「查证件 / 搜身 / 铐起 / 押送」四个动作（仅在岗警察可见）；查证件走 `police:server:showId`，服务端复算距离（>3.5 m 拒绝）、离岗拒绝、写审计，只回公开资料。
 - **P3 现状核对**：逮捕/报告/罚单/证据四个 MDT 子页、BOLO、搜身与押送事件**都已存在**；真正缺的是玩家 qb-target 交互面板（查证件/搜身/酒测/药检）与酒测药检本身。核对文档 `docs/police/plans/2026-10-31-p3-audit.md`。
