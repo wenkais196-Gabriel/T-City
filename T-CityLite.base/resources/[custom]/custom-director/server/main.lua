@@ -1232,6 +1232,32 @@ end
 
 --- L2 写动作：agent 起草报告（草稿）。审批通过才执行；不提交、不罚款、不生成证据。
 --- L3 写动作：agent 申请逮捕令。审批通过也只到 requested，批准仍由人/法院做。
+--- L2 写动作：agent 解析出的 call 卡草稿。上板但不响铃，采纳由警员做。
+local function executePoliceCallDraft(actionId, params)
+    local payload = {
+        title = params.title,
+        description = params.details,
+        code = params.code,
+        priority = params.priority,
+        x = params.x, y = params.y, z = params.z,
+    }
+    if params.raw_text then
+        -- 原文留在 description 尾部，方便警员核对 agent 有没有听错
+        payload.description = (params.details or '') .. ' [raw] ' .. params.raw_text
+        payload.description = payload.description:sub(1, 1000)
+    end
+    local called, result, reason = pcall(function()
+        return exports['custom-police']:DraftCallSystem(('action:%s'):format(tostring(actionId)), payload)
+    end)
+    if not called then
+        return false, ('police_unavailable: %s'):format(truncate(result, 150)), nil
+    end
+    if type(result) ~= 'table' then
+        return false, tostring(reason or 'draft_rejected'), nil
+    end
+    return true, nil, { incident_id = result.id, status = result.status, code = result.code }
+end
+
 local function executePoliceWarrantRequest(actionId, params)
     local called, result, reason = pcall(function()
         return exports['custom-police']:RequestWarrantSystem(('action:%s'):format(tostring(actionId)), params)
@@ -1342,6 +1368,8 @@ local function executeAction(actionId, actionType, params)
         return executePoliceAssignUnit(actionId, params)
     elseif actionType == 'police_jail_player' then
         return executePoliceJailPlayer(actionId, params)
+    elseif actionType == 'police_call_draft' then
+        return executePoliceCallDraft(actionId, params)
     elseif actionType == 'police_warrant_request' then
         return executePoliceWarrantRequest(actionId, params)
     elseif actionType == 'police_draft_report' then
@@ -1374,6 +1402,7 @@ AgentActions._Execute = {
     revive = executeRevive,
     delete_vehicle = executeDeleteVehicle,
     send_phone_message = executeSendPhoneMessage,
+    police_call_draft = executePoliceCallDraft,
     police_warrant_request = executePoliceWarrantRequest,
     police_draft_report = executePoliceDraftReport,
     police_incident_create = executePoliceIncidentCreate,

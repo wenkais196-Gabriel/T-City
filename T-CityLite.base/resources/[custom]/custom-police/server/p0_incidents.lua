@@ -185,6 +185,7 @@ local function insertIncidentRow(createdBy, data, opts)
         placeholders[#placeholders + 1] = '?'
         values[#values + 1] = value
     end
+    add('status', opts and opts.status)
     add('x', tonumber(data.x))
     add('y', tonumber(data.y))
     add('z', tonumber(data.z))
@@ -233,6 +234,24 @@ function P.CreateIncidentSystem(createdBy, data)
     local result, reason = insertIncidentRow(createdBy:sub(1, 50), data)
     if not result then return false, reason end
     return projectIncident(result, data)
+end
+
+--- P6-4：agent 解析出的 call 卡草稿。上板可见，但**不广播、不派 NPC**。
+--- 与 CreateIncidentSystem 共用同一个写者（insertIncidentRow），只把 status 固定成 draft。
+---@param actorCid string 'action:<id>'
+---@param data table { title, description?, code?, priority?, x?, y?, z?, raw_text? }
+---@return table|nil result
+---@return string|nil reason
+function P.DraftCallSystem(actorCid, data)
+    if type(actorCid) ~= 'string' or actorCid == '' then return nil, 'bad_creator' end
+    if type(data) ~= 'table' then return nil, 'invalid_params' end
+    local result, reason = insertIncidentRow(actorCid:sub(1, 50), data, { status = 'draft', audit = false })
+    if not result then return nil, reason end
+    -- 草稿必须留审计：写不进去就当没写（fail-closed）
+    if not audit(actorCid, 'incident.draft', tostring(result.id), result.title, 'agent') then
+        return nil, 'audit_unavailable'
+    end
+    return { id = result.id, status = 'draft', code = result.code, title = result.title }
 end
 
 function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
@@ -402,6 +421,7 @@ I.projectIncident, I.insertIncidentRow = projectIncident, insertIncidentRow
 -- 导出面：本模块拥有的东西在这里登记；外资源只能用这些名字
 exports('CreateIncident', P.CreateIncident)
 exports('CreateIncidentFromSystem', P.CreateIncidentSystem)
+exports('DraftCallSystem', P.DraftCallSystem)
 exports('WriteAudit', function(actorCid, actorKind, action, target, detail)
     return audit(actorCid, action, target, detail, actorKind)
 end)

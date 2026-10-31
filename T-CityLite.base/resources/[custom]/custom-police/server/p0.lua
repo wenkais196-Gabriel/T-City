@@ -28,6 +28,8 @@ local VALID_STATUS = {
 }
 
 local INCIDENT_STATUS = {
+    -- draft 是 agent 解析出来的 call 卡草稿：上板但不响铃、不指派，等警员采纳
+    draft = true,
     open = true, assigned = true, enroute = true, on_scene = true,
     cleared = true, closed = true,
 }
@@ -36,6 +38,8 @@ local INCIDENT_STATUS = {
 -- guard landed; new closes store `closed` directly, so it can only move on to
 -- `closed`. A same-status call is an idempotent retry, not a transition.
 local INCIDENT_TRANSITIONS = {
+    -- 草稿只有两条出路：采纳（open）或丢弃（closed）。不能直接被指派。
+    draft = { open = true, closed = true },
     open = { assigned = true, closed = true },
     assigned = { enroute = true, open = true, closed = true },
     enroute = { on_scene = true, assigned = true, closed = true },
