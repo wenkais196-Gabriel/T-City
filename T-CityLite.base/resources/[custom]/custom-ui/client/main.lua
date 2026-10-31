@@ -36,6 +36,14 @@ function GuardControls(durationMs)
             for _, control in ipairs(GUARD_CONTROLS) do
                 DisableControlAction(0, control, true)
             end
+            -- Esc 关闭：只有显式声明 esc = true 的帧才接管。
+            -- keepInput 模式下 Esc 会同时被游戏看到（暂停菜单弹出），所以必须由栈
+            -- 用 IsDisabledControlJustPressed 读（控制已被屏蔽但仍可读）并主动调 close。
+            if current and current.esc == true then
+                if IsDisabledControlJustPressed(0, 199) or IsDisabledControlJustPressed(0, 200) then
+                    if type(current.close) == 'function' then current.close() end
+                end
+            end
             Wait(0)
         end
     end)

@@ -70,3 +70,30 @@ def test_dashboard_keeps_driving_input_while_open() -> None:
     block = src[src.index("local DRIVE_CONTROLS"):src.index("}", src.index("local DRIVE_CONTROLS"))]
     ids = {int(n) for n in re.findall(r"\d+", block.split("=", 1)[1])}
     assert not ids & set(range(1, 7)), "视角控制 1-6 不能放进 allow"
+
+
+def test_escape_is_owned_by_the_stack_not_by_the_page() -> None:
+    """keepInput 下游戏也会看到 Esc：在 NUI 里关会变成「界面关了、游戏菜单弹出来」。"""
+    ui = CUSTOM_UI.read_text(encoding="utf-8")
+    assert "current.esc == true" in ui
+    assert "IsDisabledControlJustPressed(0, 200)" in ui
+    dash = DASH.read_text(encoding="utf-8")
+    assert "esc = true" in dash, "车机的帧要声明由栈接管 Esc"
+    app = APP.read_text(encoding="utf-8")
+    assert "key === 'Escape'" not in app, "NUI 不该再自己处理 Escape"
+
+
+def test_only_one_ui_can_own_the_screen() -> None:
+    """手机与车机互相拒绝叠加：两套 NUI 同时「有焦点」，Esc/方向键归谁说不清。"""
+    phone = (REPO / "T-CityLite.base/resources/[custom]/custom-phone/client/main.lua").read_text(encoding="utf-8")
+    at = phone.find("local function OpenPhone(")
+    assert at != -1
+    block = phone[at:at + 900]
+    assert "exports['custom-ui']:Top()" in block, "打开手机前先问栈顶是谁"
+    assert "先关闭当前界面" in block
+
+    dash = DASH.read_text(encoding="utf-8")
+    at2 = dash.find("RegisterCommand('dashboard'")
+    block2 = dash[at2:at2 + 900]
+    assert "exports['custom-ui']:Top()" in block2
+    assert "先关闭当前界面" in block2
