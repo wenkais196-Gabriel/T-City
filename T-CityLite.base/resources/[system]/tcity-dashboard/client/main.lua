@@ -342,10 +342,25 @@ RegisterCommand('dashboard', function()
         return
     end
 
+    -- 状态自愈：_isDashboardOpen 可能是"界面已被 Esc 关掉但标志没清"的残留。
+    -- 只有栈顶确实是 dashboard 帧才算真的开着。
+    if _isDashboardOpen then
+        local onTop = false
+        pcall(function()
+            local top = exports['custom-ui']:Top()
+            onTop = top ~= nil and tostring(top.id or ''):find('^dashboard', 1) ~= nil
+        end)
+        if not onTop then
+            dbg('state:stale_open_flag_cleared')
+            _isDashboardOpen = false
+        end
+    end
+
     -- 后排乘客按 I → 换座浮层 (Plan C)
     if not _isDashboardOpen then
         for seatIdx = 1, 10 do
             if GetPedInVehicleSeat(veh, seatIdx) == ped then
+                dbg('blocked:seat_picker:' .. tostring(seatIdx))
                 _openSeatPicker(veh, seatIdx)
                 return
             end
@@ -354,14 +369,22 @@ RegisterCommand('dashboard', function()
 
     -- 驾驶/副驾 → 完整中控屏
     if _isDashboardOpen then
+        dbg('toggle:close')
         _closeNui()
     else
+        dbg('toggle:open')
         _openNui(veh)
     end
 end, false)
 
 -- 按键绑定 (I)
-RegisterKeyMapping('dashboard', '智能中控屏', 'keyboard', 'I')
+-- 每次资源重启都会重新注册；同名命令后注册者覆盖先注册者，
+-- 但**按键映射**会叠加成两份 → 一次按键进两次命令（日志里 enter 成对出现）。
+-- 用 convar 记住"已经绑过"，避免叠加。
+if GetConvar('dashboard_keybound', '0') ~= '1' then
+    RegisterKeyMapping('dashboard', '智能中控屏', 'keyboard', 'I')
+    SetConvar('dashboard_keybound', '1')   -- 客户端 convar，仅本会话有效
+end
 
 -- ==============================================================
 -- NUI 回调: 关闭
