@@ -20,6 +20,11 @@ def test_budget_module_keeps_the_documented_windows() -> None:
     assert "BURST_WINDOW_MS = 5 * 1000" in src, "突发窗口必须 5 秒"
     assert "BURST_MAX = 3" in src, "非紧急每窗口最多 3 条"
     assert "priority <= 1" in src, "紧急警情要穿透频率上限"
+    # 跨资源拿不到别人资源的全局：生产必须走 export。2026-10-31 真机就是因为只认
+    # `_G.RateLimit` 拿到 nil，合并窗口静默失效（golden 里 dofile 了 owner 所以全绿）。
+    assert "RateLimitCooldown" in src and "RateLimitWindow" in src, (
+        "必须通过 core-framework 的 export 限流，不能只读 _G.RateLimit"
+    )
 
 
 def test_incident_notifications_go_through_the_budget() -> None:
