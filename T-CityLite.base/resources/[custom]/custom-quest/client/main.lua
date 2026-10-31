@@ -73,7 +73,35 @@ function SetupReachZone(stepData, questId, stepId)
 
     local radius = stepData.radius or 25.0
 
-    -- 使用 PolyZone 创建球形检测区
+    -- T-City: PolyZone 是**它自己资源内的全局**（`PolyZone = {}` 写在 PolyZone/client.lua），
+    -- 跨资源取不到 → 这里的 `if PolyZone then` 永远是 false，检测区从来没被创建过。
+    -- 所以以纯距离轮询为准（不依赖任何外部资源）；PolyZone 分支保留给将来手动挂 lib 的情况。
+    local target = vector3(coords.x, coords.y, coords.z)
+    local fired = false
+    CreateThread(function()
+        while activeZone == nil and activeQuest and activeQuest.current_step == stepId do
+            Wait(500)
+            local ped = PlayerPedId()
+            if ped ~= 0 then
+                local dist = #(GetEntityCoords(ped) - target)
+                if dist <= radius and not fired then
+                    fired = true
+                    print(('[quest-reach] triggered quest=%s step=%s dist=%.1f'):format(tostring(questId), tostring(stepId), dist))
+                    QBCore.Functions.TriggerCallback(
+                        Config.Quest.Events.QUEST_REQUEST_NONCE,
+                        function(nonce)
+                            if nonce then
+                                TriggerServerEvent(Config.Quest.Events.QUEST_REACH, questId, stepId, nonce)
+                            end
+                        end
+                    )
+                elseif dist > radius * 1.5 and fired then
+                    fired = false
+                end
+            end
+        end
+    end)
+
     if PolyZone then
         activeZone = PolyZone:Create(vector3(coords.x, coords.y, coords.z), {
             name = ('quest_reach_%s_%s'):format(questId, stepId),
