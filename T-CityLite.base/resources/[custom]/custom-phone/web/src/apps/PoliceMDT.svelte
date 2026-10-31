@@ -938,6 +938,28 @@
 {/snippet}
 
 <div class="mdt" class:mdt-split={page === 'dispatch'}>
+
+{#snippet draftRow(draft: Draft, review: boolean)}
+  <div class="draft" class:review>
+    <div class="row">
+      <div class="dmain">
+        <b>#{draft.id} [{draft.code}] {draft.title}</b>
+        <p class="muted">P{draft.priority} · {draft.age_minutes} 分钟前 · 未上板</p>
+      </div>
+      <span class="conf" class:ok={!review} class:warn={review}>{review ? '需核对' : '可采纳'}</span>
+    </div>
+    {#if draft.description}<p class="desc">{draft.description}</p>{/if}
+    <div class="btns">
+      <button class:primary={!review} disabled={draftBusy === draft.id} onclick={() => adoptDraft(draft)}>
+        {draftBusy === draft.id ? '采纳中…' : review ? '仍然采纳' : '采纳'}
+      </button>
+      <button class="ghost" disabled={draftBusy === draft.id} onclick={() => discardDraft(draft)}>
+        {confirmDiscard === draft.id ? '确认丢弃？' : '丢弃'}
+      </button>
+    </div>
+  </div>
+{/snippet}
+
   <header class="mdt-head">
     <div>
       <h2>🛡️ Police MDT</h2>
@@ -1010,58 +1032,21 @@
             </button>
           </div>
 
+
           {#if drafts.length > 0 || loaded['dispatch']}
             <section class="card drafts">
               <h3>📝 草稿箱 <span class="tag">{drafts.length} 待采纳</span></h3>
               <p class="hint">agent 解析结果，未上板、不响铃；采纳后才进入接警。</p>
 
-              {#if drafts.filter((d) => !d.review).length > 0}
-                <div class="lane"><span>可采纳</span><span>{drafts.filter((d) => !d.review).length}</span></div>
-                {#each drafts.filter((d) => !d.review) as draft (draft.id)}
-                  <div class="draft">
-                    <div class="row">
-                      <div class="dmain">
-                        <b>#{draft.id} [{draft.code}] {draft.title}</b>
-                        <p class="muted">P{draft.priority} · {draft.age_minutes} 分钟前 · 未上板</p>
-                      </div>
-                      <span class="conf ok">可采纳</span>
-                    </div>
-                    {#if draft.description}<p class="desc">{draft.description}</p>{/if}
-                    <div class="btns">
-                      <button class="primary" disabled={draftBusy === draft.id} onclick={() => adoptDraft(draft)}>
-                        {draftBusy === draft.id ? '采纳中…' : '采纳'}
-                      </button>
-                      <button class="ghost" disabled={draftBusy === draft.id} onclick={() => discardDraft(draft)}>
-                        {confirmDiscard === draft.id ? '确认丢弃？' : '丢弃'}
-                      </button>
-                    </div>
-                  </div>
-                {/each}
-              {/if}
-
-              {#if drafts.filter((d) => d.review).length > 0}
-                <div class="lane"><span>需核对</span><span>{drafts.filter((d) => d.review).length}</span></div>
-                {#each drafts.filter((d) => d.review) as draft (draft.id)}
-                  <div class="draft review">
-                    <div class="row">
-                      <div class="dmain">
-                        <b>#{draft.id} [{draft.code}] {draft.title}</b>
-                        <p class="muted">P{draft.priority} · {draft.age_minutes} 分钟前 · 未上板</p>
-                      </div>
-                      <span class="conf warn">需核对</span>
-                    </div>
-                    {#if draft.description}<p class="desc">{draft.description}</p>{/if}
-                    <div class="btns">
-                      <button disabled={draftBusy === draft.id} onclick={() => adoptDraft(draft)}>
-                        {draftBusy === draft.id ? '采纳中…' : '仍然采纳'}
-                      </button>
-                      <button class="ghost" disabled={draftBusy === draft.id} onclick={() => discardDraft(draft)}>
-                        {confirmDiscard === draft.id ? '确认丢弃？' : '丢弃'}
-                      </button>
-                    </div>
-                  </div>
-                {/each}
-              {/if}
+              {#each [{ key: 'ok', review: false, label: '可采纳' }, { key: 'warn', review: true, label: '需核对' }] as lane (lane.key)}
+                {@const rows = drafts.filter((d) => d.review === lane.review)}
+                {#if rows.length > 0}
+                  <div class="lane"><span>{lane.label}</span><span>{rows.length}</span></div>
+                  {#each rows as draft (draft.id)}
+                    {@render draftRow(draft, lane.review)}
+                  {/each}
+                {/if}
+              {/each}
 
               {#if drafts.length === 0}
                 <p class="empty">暂无待采纳草稿</p>
