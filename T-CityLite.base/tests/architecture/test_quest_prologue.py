@@ -78,3 +78,28 @@ def test_every_template_step_type_is_mapped_or_server_only() -> None:
 
     missing = {t: sorted(v) for t, v in used.items() if t not in mapped | server_only}
     assert not missing, f"这些步骤类型既没客户端节点也没登记为 server-only：{missing}"
+
+
+def _radius_line_is_safe(src: str) -> bool:
+    """半径解析必须"模板优先、类型默认值兜底"（纯函数，便于构造坏形状）。"""
+    line = next(l for l in src.splitlines() if "local radius =" in l)
+    if "stepData.radius" not in line:
+        return False
+    return (
+        line.index("cpCfg.radius") < line.index("stepData.radius")
+        and line.index("stepData.radius") < line.index("DEFAULT_RADIUS")
+    )
+
+
+def test_checkpoint_radius_rejects_type_default_first() -> None:
+    """真机证据：security_block step_report_station required=15.0 distance=28.78。
+
+    客户端按 cpType 默认值（ring=30）触发、服务端按模板 15 复验 → 静默丢弃，
+    表现就是"走到圈里了，任务不动"。
+    """
+    cp = REPO / "T-CityLite.base/resources/[custom]/custom-quest/client/quest_checkpoint.lua"
+    assert _radius_line_is_safe(cp.read_text(encoding="utf-8"))
+
+    # 反向校验：只有类型默认值时必须判红（否则客户端触发、服务端判太远）
+    bad = "local radius = DEFAULT_RADIUS[cpTypeName] or 15.0"
+    assert not _radius_line_is_safe(bad)
