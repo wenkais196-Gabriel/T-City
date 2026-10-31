@@ -264,6 +264,20 @@
       "owner": "custom-police",
       "added": "2026-10-31",
       "expires": "2027-03-31"
+    },
+    {
+      "id": "p4-bind-pending-for",
+      "file": "custom-police/server/p2_evidence.lua",
+      "export": "BindPendingFor",
+      "kind": "system_only",
+      "exceptions": [
+        "auth",
+        "write_audit"
+      ],
+      "reason": "立案后自动把该公民的待挂载读数（盘查酒测/药检）挂到新案卷；由 custom-police 内部 CreateCase 调用，第二参数是创建者的 citizenid 而不是 source，按精确 citizenid 匹配且只绑 case_id 为空的行。（写路径不额外记 police_audit：每条绑定都会在 police_evidence_chain 里留一行 auto_bound，那就是责任链）",
+      "owner": "custom-police",
+      "added": "2026-10-31",
+      "expires": "2027-03-31"
     }
   ]
 }

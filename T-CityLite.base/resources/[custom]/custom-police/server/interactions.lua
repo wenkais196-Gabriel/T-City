@@ -365,7 +365,7 @@ QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, 
     -- 能挂到现场就挂：evidence 表要求必须挂 case/incident/report（insertEvidence 的
     -- missing_case），所以找"这名警员当前正在处理的、还没结的警情"。没有就只留审计，
     -- 等立案后由 MDT 带入（P3-3 的 GetLastInspection 就是干这个的）。
-    local attached, exhibitNo = false, nil
+    local attached, pending, exhibitNo = false, false, nil
     local activeIncident = MySQL.single.await([[
         SELECT u.incident_id AS id
           FROM police_incident_units u
@@ -390,9 +390,26 @@ QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, 
             attached = true
             exhibitNo = result.exhibit_no
         end
+    else
+        -- 没有在办的警情：读数也是证据，先落成"待挂载"（subject 有、case 空），
+        -- 立案后由 BindPendingFor 自动挂到案卷上（P4 收口）。
+        local ok, result = pcall(function()
+            return exports['custom-police']:RegisterEvidence(source, {
+                label = ('%s：%s %.2f（%s）'):format(
+                    kind == 'alcohol' and '酒测' or '药检',
+                    Target.PlayerData.citizenid, value, label):sub(1, 120),
+                subject_citizenid = Target.PlayerData.citizenid,
+                location = ('%.0f,%.0f'):format(GetEntityCoords(b).x, GetEntityCoords(b).y),
+            })
+        end)
+        if ok and type(result) == 'table' then
+            pending = true
+            exhibitNo = result.exhibit_no
+        end
     end
 
-    cb({ ok = true, kind = kind, value = value, label = label, evidence = attached, exhibit_no = exhibitNo })
+    cb({ ok = true, kind = kind, value = value, label = label,
+         evidence = attached, pending = pending, exhibit_no = exhibitNo })
 end)
 
 
