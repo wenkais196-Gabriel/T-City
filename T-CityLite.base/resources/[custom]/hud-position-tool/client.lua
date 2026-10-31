@@ -98,11 +98,9 @@ local function applyNativeMinimap()
 end
 
 local function applyMap()
-    -- 关闭工具：显式恢复原生（否则残留上一次的自定义尺寸 → 地图溢出边框）
-    if not HUD_TOOL_ENABLED then
-        applyNativeMinimap()
-        return
-    end
+    -- 关闭工具：什么都不做。小地图的原生由 qb-hud 的 hud_native_map 保证，
+    -- 两个资源都去写组件会互相覆盖（谁后执行谁生效），反而更难排查。
+    if not HUD_TOOL_ENABLED then return end
     recalcOffset()
     if not currentPositions or not next(currentPositions) then
         resetCurrentPositions()

@@ -400,6 +400,12 @@ RegisterNetEvent('hud:client:LoadMap', function()
     if aspectRatio > defaultAspectRatio then
         minimapOffset = ((defaultAspectRatio - aspectRatio) / 3.6) - 0.008
     end
+    -- T-City: 这里会把小地图换成 87.5% 方形 + 替换 radarmask 贴图 + 踢 bigmap，
+    -- 与原生（0.150×0.188888 / mask 0.111×0.159）完全不同，也是"内容溢出边框、离屏"的根因。
+    -- 默认走原生：只有显式 setr hud_native_map 0 才应用自定义形状。
+    if GetConvar('hud_native_map', '1') == '1' then
+        return
+    end
     if Menu.isToggleMapShapeChecked == 'square' then
         RequestStreamedTextureDict('squaremap', false)
         if not HasStreamedTextureDictLoaded('squaremap') then
