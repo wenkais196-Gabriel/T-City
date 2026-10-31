@@ -85,3 +85,35 @@ Vite 前端（`nui/`）。所以 P2-4 **不是从零做一个终端**，而是�
 | 7 个发案来源逐个触发 | 未做（qb-storerobbery / qb-houserobbery / qb-drugs ×2 / custom-vehicles / custom-police 自身） |
 | legacy `policeAlert` shim 真机触发 | 未做（代码路径与 911 共用同一建单函数） |
 | NPC callout → 警情 | **已顺带证实**：#28 `10-37 [NPC] 可疑车辆`、#29 `10-32 [NPC] 持械人员` 都是 NPC 路径产的单 |
+
+
+---
+
+## 7. P2-2 通知预算层（已完成）
+
+### 7.1 规则
+
+| 规则 | 值 | 原因 |
+|---|---|---|
+| 同 `code` 合并窗口 | **90 s** | 同一张单的后续事件（增援、二次报警）不该再响一遍 |
+| 合并播报点 | 第 2 / 5 条，之后每 10 条 | 「×2」提醒一次、「×5」再提醒一次，中间静默 |
+| 非紧急频率上限 | 每人 **3 条 / 5 s** | 连锁事件（NPC callout 刷屏）不应该糊满通知栏 |
+| 紧急穿透 | `priority ≤ 1` 不受频率上限约束 | 银行劫案不能因为前面三条小单被丢 |
+| 回滚开关 | `police_alert_budget 0` | 一键回到逐条发 |
+
+### 7.2 一个闸门踩到的坑（RATE-01）
+
+第一版 `alert_budget.lua` 自己用 `buckets` 做冷却与窗口 → `test_rate_limit_single_owner`
+直接红：**全仓只允许一份限流实现**（`core-framework/server/rate_limit.lua`）。
+改成委托 `RateLimit.Cooldown` / `RateLimit.Window` 之后，
+本文件只剩"发不发、标题带不带 ×N"的业务判断，闸门转绿。
+
+这条很值得记：安全原语的重复实现会让边界行为各说各话，而这类 bug 最容易在"合并窗口 90 秒"这种地方出现。
+
+### 7.3 证据
+
+* golden `police_alert_budget`：8 个 case（含 90 s 边界、第 3/4 条静默、第 5 条播报、紧急穿透、按人隔离）
+* 闸门 `test_police_alert_budget.py`：窗口常量 / 接线 / 清单加载顺序
+* 真机：`/911 预算测试A` → `police_incidents` #32 落库，重启后 **SCRIPT ERROR 0**
+* 真机顺带发现：同一玩家连续两次 `/911`，第二次**没有进系统** —— phone 侧本就有 911 冷却，
+  不是预算层丢的（预算层只影响通知，不影响建单）
