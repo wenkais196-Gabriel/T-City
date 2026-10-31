@@ -97,17 +97,18 @@ local function HandlePriceChance()
         ['history'] = history,
         ['crypto'] = coin
     }
-    MySQL.update(
-        'UPDATE crypto set worth = :worth, history = :history where crypto = :crypto',
-        props,
-        function(affectedRows)
-            if affectedRows < 1 then
-                print('Crypto not found, inserting new record for ' .. coin)
-                MySQL.insert('INSERT INTO crypto (crypto, worth, history) VALUES (:crypto, :worth, :history)', props)
-            end
-            RefreshCrypto()
-        end
-    )
+    -- T-City: 本服 oxmysql 的 update 回表（{affectedRows=…}），直接 < 1 会炸；
+    -- 而且回调里再 await（RefreshCrypto）会触发 nested ref call。
+    -- 改成同步写法：先 update，再按归一化后的行数决定是否 insert，最后刷新。
+    local updated = MySQL.update.await(
+        'UPDATE crypto set worth = :worth, history = :history where crypto = :crypto', props)
+    if type(updated) == 'table' then updated = updated.affectedRows or updated[1] or 0 end
+    updated = tonumber(updated) or 0
+    if updated < 1 then
+        print('Crypto not found, inserting new record for ' .. coin)
+        MySQL.insert.await('INSERT INTO crypto (crypto, worth, history) VALUES (:crypto, :worth, :history)', props)
+    end
+    RefreshCrypto()
 end
 
 -- Commands
@@ -139,7 +140,12 @@ QBCore.Commands.Add('setcryptoworth', 'Set crypto value', { { name = 'crypto', h
                     NewWorth = NewWorth
                 }
 
-                TriggerClientEvent('QBCore:Notify', src, 'You have changed the value of ' .. Crypto.Labels[crypto] .. ' from: $' .. Crypto.Worth[crypto] .. ' to: $' .. NewWorth .. ' (' .. ChangeLabel .. ' ' .. PercentageChange .. '%)')
+                -- T-City: 控制台执行时 source=0，TriggerClientEvent 会因 null player 抛错
+                if src and src ~= 0 then
+                    TriggerClientEvent('QBCore:Notify', src, 'You have changed the value of ' .. Crypto.Labels[crypto] .. ' from: $' .. Crypto.Worth[crypto] .. ' to: $' .. NewWorth .. ' (' .. ChangeLabel .. ' ' .. PercentageChange .. '%)')
+                else
+                    print(('[qb-crypto] setcryptoworth %s -> %s (from console)'):format(tostring(crypto), tostring(NewWorth)))
+                end
                 Crypto.Worth[crypto] = NewWorth
                 TriggerClientEvent('qb-crypto:client:UpdateCryptoWorth', -1, crypto, NewWorth)
                 MySQL.insert('INSERT INTO crypto (worth, history) VALUES (:worth, :history) ON DUPLICATE KEY UPDATE worth = :worth, history = :history', {
