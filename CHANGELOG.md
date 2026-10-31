@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **P2 调度总线的现状核对**：`police_incidents` / `police_incident_units` 与建单、状态机、单位附着、同案合并、legacy `policeAlert` shim、手机 911 **都已存在**（蓝图里的 `police_calls` 不该新建）；真正的缺口是车机终端、`custom-crime` 接入、通知预算层、以及 7 个发案来源从未逐个验证。核对文档见 `docs/police/plans/2026-10-31-p2-dispatch-audit.md`。
 - **司法链桩测试 `justice_chain`（7 个 case）**：律师通知恰好一次/不叠加/无律师仍建案、刑期被 `MaxSentence` 截断（DB 里绝不出现原始大数）、平民与**离岗警员**立案被拒。
 
 ### Fixed
