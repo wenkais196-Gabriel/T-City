@@ -86,12 +86,14 @@ local function applyNativeMinimap()
     for _, row in ipairs(NATIVE) do
         SetMinimapComponentPosition(row[1], row[2], row[3], row[4], row[5], row[6], row[7])
     end
-    -- minimap 组件不会立即重绘：Cfx 官方 workaround 是踢一次 bigmap。
-    -- Wait 必须在线程里（applyMap 也可能被事件回调直接调到）。
+    -- 刷新别用 bigmap 踢：SetRadarBigmapEnabled(true) 会把雷达切到**俯视巨图**，
+    -- 若中途被打断就停在"倾斜+无边框"的状态（真机截图就是这个样子）。
+    -- 改成「关掉 bigmap + 闪一下雷达」，既能让组件重读，又不会留下副作用。
+    SetRadarBigmapEnabled(false, false)
     CreateThread(function()
-        SetRadarBigmapEnabled(true, false)
-        Wait(150)
-        SetRadarBigmapEnabled(false, false)
+        DisplayRadar(false)
+        Wait(0)
+        DisplayRadar(true)
     end)
 end
 

@@ -37,6 +37,7 @@ local function _openNui(veh)
 
     -- 锁请求 (使用 custom-vehicles 现有排他锁系统)
     local plate = GetVehicleNumberPlateText(veh):gsub('^%s+', ''):gsub('%s+$', ''):upper()
+    if DASH_DEBUG then print(('[dashboard] request_lock plate=%s veh=%s'):format(tostring(plate), tostring(veh))) end
     TriggerServerEvent('custom-vehicles:server:requestDashboard', plate)
 end
 
@@ -120,13 +121,19 @@ end
 
 -- 监听旧 custom-vehicles 排他锁回调 (复用现有锁系统)
 RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted, errMsg)
+    if DASH_DEBUG then
+        print(('[dashboard] lock_result granted=%s err=%s'):format(tostring(granted), tostring(errMsg)))
+    end
     if not granted then
         QBCore.Functions.Notify(errMsg or '无法打开中控屏', 'error')
         return
     end
 
     local veh = GetVehiclePedIsIn(PlayerPedId(), false)
-    if not veh or veh == 0 then return end
+    if not veh or veh == 0 then
+        if DASH_DEBUG then print('[dashboard] lock_ok_but_no_vehicle') end
+        return
+    end
 
     -- 确定模板
     local vclass = GetVehicleClass(veh)
