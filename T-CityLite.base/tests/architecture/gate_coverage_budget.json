@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 271,
+  "max_unproven": 272,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -313,6 +313,12 @@
       "max_unproven": 271,
       "previous": 269,
       "why": "日志清理：crypto 归一化/去嵌套 + quests fail-soft（2 条）"
+    },
+    {
+      "date": "2026-10-31",
+      "max_unproven": 272,
+      "previous": 271,
+      "why": "客户端网络事件必须 RegisterNetEvent（1 条）"
     }
   ]
 }

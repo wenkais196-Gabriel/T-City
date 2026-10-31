@@ -995,8 +995,11 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     CheckLeaderApp()
 end)
 
--- 资源在玩家已登录后才启动的情况：等数据到齐再放行
-AddEventHandler('QBCore:Player:SetPlayerData', function(value)
+-- 资源在玩家已登录后才启动的情况：等数据到齐再放行。
+-- 必须用 RegisterNetEvent：这是服务端 TriggerClientEvent 下发的**网络事件**，
+-- 只用 AddEventHandler 会让客户端把它当成"未声明为 net-safe"，每次推送都刷
+-- 「event QBCore:Player:SetPlayerData was not safe for net」（真机 280 次）。
+RegisterNetEvent('QBCore:Player:SetPlayerData', function(value)
     if value and type(value.citizenid) == 'string' and value.citizenid ~= '' then
         playerLoaded = true
     end

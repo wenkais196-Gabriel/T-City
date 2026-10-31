@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
 
 ### Fixed
+- **客户端刷屏 `event QBCore:Player:SetPlayerData was not safe for net`（280 次）**：custom-phone 的客户端脚本用 `AddEventHandler` 监听这个**服务端下发**的事件，没有声明为 net-safe；全仓其它 5 处（qb-core / qb-hud / qb-inventory / qb-fuel / custom-certificates）都是 `RegisterNetEvent`，只有手机这一处写错。已改，并加闸门禁止客户端再用 `AddEventHandler` 监听 `QBCore:Player:*`（服务端内部事件 `QBCore:Server:*` 不受影响，那本来就该用本地监听）。
 - **qb-crypto:104 `attempt to compare table with number`（47 次）**：本服 oxmysql 的 `update` 回调回表，而代码按数字比较；且回调里再调 `MySQL.query.await`（`RefreshCrypto`）会触发 `nested ref call`。改成同步 `update.await` + 行数归一化（table/number 都吃）后再 insert + 刷新。真机：`crypto` 表本来**一直是空的**（因为 insert 分支永远走不到），修完 `qbit` 落库 `worth=5200`，重启后 `104` / `nested ref` / `SCRIPT ERROR` 新增 **0 / 0 / 0**。
 - **`qb-crypto` 的 `setcryptoworth` 控制台执行报 null player**：`source=0` 时仍 `TriggerClientEvent`。已加控制台分支（改为打日志），控制台改价可用。
 - **`custom-phone → custom-quest:GetAvailableQuests` export 异常**：手机任务列表是读路径，异常直接穿透会让整页空白且刷日志。改为 `pcall` fail-soft（失败返回空列表），真实错误在 `quest_debug=1` 时打印一次。
