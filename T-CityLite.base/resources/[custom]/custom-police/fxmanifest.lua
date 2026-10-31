@@ -88,6 +88,7 @@ server_scripts {
 	'server/p3_cases.lua',
 	'server/p2_system.lua',
 	'server/commands.lua',
+	'server/sobriety.lua',
 	'server/interactions.lua',
 	'server/evidence.lua',
 	'server/objects.lua',
