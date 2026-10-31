@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
 
 ### Fixed
+- **qb-crypto:104 `attempt to compare table with number`（47 次）**：本服 oxmysql 的 `update` 回调回表，而代码按数字比较；且回调里再调 `MySQL.query.await`（`RefreshCrypto`）会触发 `nested ref call`。改成同步 `update.await` + 行数归一化（table/number 都吃）后再 insert + 刷新。真机：`crypto` 表本来**一直是空的**（因为 insert 分支永远走不到），修完 `qbit` 落库 `worth=5200`，重启后 `104` / `nested ref` / `SCRIPT ERROR` 新增 **0 / 0 / 0**。
+- **`qb-crypto` 的 `setcryptoworth` 控制台执行报 null player**：`source=0` 时仍 `TriggerClientEvent`。已加控制台分支（改为打日志），控制台改价可用。
+- **`custom-phone → custom-quest:GetAvailableQuests` export 异常**：手机任务列表是读路径，异常直接穿透会让整页空白且刷日志。改为 `pcall` fail-soft（失败返回空列表），真实错误在 `quest_debug=1` 时打印一次。
 - **`No such export IsArcEnabled in resource story-engine`**：`custom-quest` 的 `callExport` 用 `type(target[method])` 判断导出是否存在，但 FiveM 的 `exports[...]` 是代理表，**索引未注册的导出会直接抛错**，守卫本身成了崩溃点。改为把索引包进 `pcall`（资源没起时安全返回 nil = 跳过检查）。环境侧补 `ensure story-engine`。
 - **SonarCloud `C Maintainability Rating on New Code`**：把 8 个 `test_p6*.py` 合并成 `test_p6_agent_stack.py`（共用路径与读取辅助，23 条断言不变），消除跨文件重复样板；覆盖率棘轮随之下调到 259。
 - **`police_call_draft` 审批阶段 `unknown field code_fallback`**：服务端回填的 `code_fallback` 在 approve 时会拿存下来的 params 再规范化一次，白名单不认它 → 草稿永远停在 `rejected`。已把该字段纳入归一化白名单。
