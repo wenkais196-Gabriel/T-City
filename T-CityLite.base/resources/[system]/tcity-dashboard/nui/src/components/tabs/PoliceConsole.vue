@@ -8,7 +8,7 @@
 //
 // 数据流: Lua PoliceModule → SendNUIMessage('policeRadar') → App.vue → store → 本组件
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDashboardStore } from '../../stores/dashboard'
 import { sendNui } from '../../composables/useNui'
 import { useThrottle } from '../../composables/useThrottle'
@@ -77,9 +77,28 @@ async function loadDispatch() {
   }
 }
 
+const selectedRow = ref(-1)
+
 function gotoIncident(item: DispatchIncident) {
   sendNui('dispatchWaypoint', { x: item.x, y: item.y })
 }
+
+function onDispatchKey(e: KeyboardEvent) {
+  if (!incidents.value.length) return
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    selectedRow.value = Math.min(selectedRow.value + 1, incidents.value.length - 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    selectedRow.value = Math.max(selectedRow.value - 1, 0)
+  } else if (e.key === 'Enter' && selectedRow.value >= 0) {
+    e.preventDefault()
+    gotoIncident(incidents.value[selectedRow.value])
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onDispatchKey))
+onUnmounted(() => window.removeEventListener('keydown', onDispatchKey))
 
 // 挂载时触发一次初始扫描
 onMounted(() => {
@@ -134,8 +153,9 @@ function speedClass(speed: number): string {
       </div>
 
       <div v-if="incidents.length > 0" class="dispatch-list">
-        <div v-for="item in incidents" :key="item.id" class="dispatch-row"
-          :class="{ urgent: item.priority <= 1 }" @click="gotoIncident(item)">
+        <div v-for="(item, i) in incidents" :key="item.id" class="dispatch-row"
+          :class="{ urgent: item.priority <= 1, selected: i === selectedRow }"
+          @click="gotoIncident(item)">
           <span class="dispatch-id">#{{ item.id }}</span>
           <span class="dispatch-code">{{ item.code }}</span>
           <span class="dispatch-title">{{ item.title }}</span>
@@ -401,6 +421,7 @@ tr.stolen { background: rgba(255,170,0,0.10); }
 }
 .dispatch-row:hover { background: rgba(80, 170, 255, 0.18); }
 .dispatch-row.urgent { border-left: 2px solid #ff4d4f; }
+.dispatch-row.selected { background: rgba(80, 170, 255, 0.28); }
 .dispatch-id { color: #8fb3d9; }
 .dispatch-code { color: #ffd166; }
 .dispatch-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

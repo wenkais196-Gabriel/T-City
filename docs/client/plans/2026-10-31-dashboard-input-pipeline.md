@@ -48,7 +48,49 @@ if not ok then SetNuiFocus(true, true) end
 [dashboard][debug] dispatchList ok=true n=15
 ```
 
-## 4. 还没同步的部分（下一轮）
+## 3b. 第二轮：游标为什么还是没有（2026-10-31）
+
+第一轮改完，视角锁住了、**游标仍不出现**。根因比第一轮更靠底：
+
+> **`SetNuiFocus` 是按资源的。** 栈（`custom-ui`）只能决定"谁该拥有输入"，
+> 真正按下去必须由**拥有页面的那个资源**来做 —— `custom-ui` 自己没有 `ui_page`，
+> 它按焦点等于把焦点给了一个不存在的页面：页面收不到键鼠、也没有游标。
+
+custom-ui 早就在注释里写了这一点，机制是：帧里带 `owner = '<资源名>'`，
+`apply()` 反过来调该资源的 `ApplyFocus(hasFocus, hasCursor, keepInput)`（跨资源不能传函数）。
+
+所以车机补两处：
+
+```lua
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    SetNuiFocusKeepInput(keepInput == true)     -- 顺序：先 keepInput，再焦点
+    SetNuiFocus(hasFocus == true, hasCursor == true)
+end)
+-- 帧里：
+exports['custom-ui']:Push({ id = 'dashboard', kind = 'modal',
+    owner = 'tcity-dashboard', keepInput = false, close = _closeNui })
+```
+
+真机（车钥匙 69FYX311）：
+
+```
+[dashboard][debug] open veh=46594 class=18 job=police duty=true input=dashboard
+[dashboard][debug] NUI ready -> focus refreshed
+[dashboard][debug] dispatchList ok=true n=1
+```
+
+然后方向键**真的切了页签**（诊断 → 驾驶 → 职业），说明键盘已经进到 NUI —— 焦点这条链路通了。
+
+## 4. 四个缺口（本轮全部补上）
+
+| 缺口 | 做法 | 真机 |
+|---|---|---|
+| 键盘导航 | NUI `keydown`：←/→ 换页签；警情列表 ↑/↓ 选行、Enter 设导航 | 方向键切页签 ✅ |
+| Esc / Backspace 关闭 | NUI `keydown` → `closeDashboard` | Esc 关闭 ✅（`frames=None`） |
+| NUI 就绪握手 | 打开时 NUI 主动 `dashboardReady` → Lua `RefreshFocus()` | 日志确认 ✅ |
+| 一次按键两条命令 | `TOGGLE_DEBOUNCE_MS = 250` 去抖 | `open` 只打一次 ✅ |
+
+## 5. 旧的「还没同步」清单（留档）
 
 | 缺口 | 手机有 | 车机 | 影响 |
 |---|---|---|---|
