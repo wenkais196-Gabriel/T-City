@@ -293,6 +293,23 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 对比改动前：固定偏移 50m 正前方、车头朝玩家但与道路方向无关，20–35 秒到场且经常先开远掉头。
 
+## 3.19 L1 布景层 · 站点守卫 / 巡逻车 / 封锁线（蓝图 §6.2）
+
+空场时「警局像有人在值班」。这一层只做观感，**不参与任何任务**。
+
+| 件 | 做法 | 边界 |
+|---|---|---|
+| 站点守卫 | 玩家进到 `Config.Locations.duty` 120 m 内时，在门口生成 2 名警员做 `WORLD_HUMAN_COP_IDLES` | 无敌、不持枪、`SetPedCanRagdoll(false)`；离站点 260 m 自动收 |
+| 巡逻车 | 同一圈里生成 1 辆 `police`，司机沿 4 点小环线跑 | 只 `TaskVehicleDriveToCoordLongrange`，不追人、不响应警情 |
+| 封锁线 | `/lockdown` 摆 6 个锥桶 + 2 个路障（`/lockdown clear` 收） | 服务端复验在岗后才放；一次一组；5 分钟自动收 |
+
+**为什么布景在前端而不是服务端**：`TaskStartScenarioInPlace` / `TaskVehicleDriveToCoord*`
+这些行为 native 只在客户端存在；服务端建出来的 NPC 不会动，`SetEntityAsMissionEntity`
+在服务端还会直接报 nil（真机踩过：`scenery.lua:47: attempt to call a nil value`）。
+代价是布景只在本地可见 —— 对「站点有人值班」这个观感目标可以接受。
+
+真机：`lockdown placed=8`；`police_scenery_debug 1` 时打印 `scenery: peds=2 car=true`（需站在站点 120 m 内）。
+
 ## 3.18 L3 反应层 · 扩音器喊话与包围（蓝图 §6.2）
 
 | 能力 | 做法 |
