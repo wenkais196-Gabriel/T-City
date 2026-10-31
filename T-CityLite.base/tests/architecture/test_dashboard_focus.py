@@ -28,8 +28,8 @@ def test_focus_owner_honours_an_explicit_keepinput_false() -> None:
 
 def test_dashboard_pushes_frames_owned_by_itself() -> None:
     src = DASH.read_text(encoding="utf-8")
-    assert "Push({ id = 'dashboard'" in src and "owner = 'tcity-dashboard'" in src
-    assert "Push({ id = 'dashboard:seats'" in src
+    assert "id = 'dashboard'" in src and "owner = 'tcity-dashboard'" in src
+    assert "id = 'dashboard:seats'" in src
     assert "Pop('dashboard')" in src and "Pop('dashboard:seats')" in src
     assert "OpenMenu(" not in src and "CloseMenu(" not in src
     # 关键：SetNuiFocus 是按资源的，必须由拥有页面的资源自己施
@@ -57,3 +57,16 @@ def test_dashboard_has_keyboard_navigation() -> None:
     console = (REPO / "T-CityLite.base/resources/[system]/tcity-dashboard/nui"
                / "src/components/tabs/PoliceConsole.vue").read_text(encoding="utf-8")
     assert "ArrowDown" in console and "ArrowUp" in console, "警情列表要能上下选"
+
+
+def test_dashboard_keeps_driving_input_while_open() -> None:
+    """中控是「边开边看」的终端：默认保留游戏输入，但视角仍被栈屏蔽。"""
+    src = DASH.read_text(encoding="utf-8")
+    assert "dashboard_drive_while_open" in src, "必须能一键回滚成独占输入"
+    assert "keepInput = driveWhileOpen()" in src
+    assert "DRIVE_CONTROLS" in src and "allow = DRIVE_CONTROLS" in src
+    # 视角控制 1-6 绝不能放进 allow，否则鼠标一动镜头就转、游标没法用
+    import re
+    block = src[src.index("local DRIVE_CONTROLS"):src.index("}", src.index("local DRIVE_CONTROLS"))]
+    ids = {int(n) for n in re.findall(r"\d+", block.split("=", 1)[1])}
+    assert not ids & set(range(1, 7)), "视角控制 1-6 不能放进 allow"
