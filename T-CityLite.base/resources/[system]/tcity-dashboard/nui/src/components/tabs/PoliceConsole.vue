@@ -45,7 +45,8 @@ interface DispatchIncident {
   y: number
 }
 
-const incidents = ref<DispatchIncident[]>([])
+// 数据来自 store（App.vue 在打开中控时已预载），本组件只负责渲染与手动刷新
+const incidents = computed<DispatchIncident[]>(() => store.dispatchIncidents as DispatchIncident[])
 const dispatchNotice = ref('')
 const dispatchLoading = ref(false)
 
@@ -63,10 +64,10 @@ async function loadDispatch() {
   try {
     const result: any = await sendNui('dispatchList', {})
     if (result && result.ok) {
-      incidents.value = result.incidents || []
-      dispatchNotice.value = incidents.value.length ? '' : '当前没有警情'
+      store.setDispatch(result.incidents || [])
+      dispatchNotice.value = (result.incidents || []).length ? '' : '当前没有警情'
     } else {
-      incidents.value = []
+      store.setDispatch([], 'error')
       dispatchNotice.value = result?.reason === 'not_police'
         ? '仅限值班警察'
         : '警情不可用'
@@ -83,7 +84,8 @@ function gotoIncident(item: DispatchIncident) {
 // 挂载时触发一次初始扫描
 onMounted(() => {
   sendNui('policeRadar', {})
-  loadDispatch()
+  // App.vue 已经在打开中控时预载过，这里只补一次（避免两次查询互相把对方挤掉）
+  if (store.dispatchState === 'idle') loadDispatch()
 })
 
 // ── 动作分发 ──

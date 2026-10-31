@@ -2,7 +2,7 @@
 // App.vue — 中控屏根组件
 // 职责: 监听 NUI 消息 → Pinia Store → 动态渲染模板
 
-import { useNui, closeDashboard } from './composables/useNui'
+import { useNui, closeDashboard, sendNui } from './composables/useNui'
 import { useDashboardStore } from './stores/dashboard'
 import DashboardShell from './components/DashboardShell.vue'
 import TabBar from './components/TabBar.vue'
@@ -18,6 +18,14 @@ useNui((msg) => {
   switch (msg.type) {
     case 'open':
       store.handleOpen(msg)
+      // 出警时第一眼就该看到警情：打开即预载，不要求先切到职业页
+      if ((msg as any).job === 'police') {
+        store.dispatchState = 'loading'
+        sendNui('dispatchList', {}).then((res: any) => {
+          if (res && res.ok) store.setDispatch(res.incidents || [])
+          else store.setDispatch([], 'error')
+        }).catch(() => store.setDispatch([], 'error'))
+      }
       break
     case 'close':
       store.handleClose()

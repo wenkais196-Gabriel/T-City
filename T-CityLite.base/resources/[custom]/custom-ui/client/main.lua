@@ -53,7 +53,15 @@ function OpenMenu(opts)
     -- qb-phone never calls SetNuiFocusKeepInput(false): movement keeps working
     -- while the phone is open and only look/attack are disabled per frame. An
     -- explicit false here was what froze WASD, so only opt in when asked.
-    if opts.keepInput then SetNuiFocusKeepInput(true) end
+    --
+    -- 但 `keepInput = false` 是**显式请求独占输入**（车机中控这类全屏终端）：
+    -- 这个标志是客户端全局的，手机开过一次之后它会一直留着 true，于是车机
+    -- 打开面板、光标也出来了，视角却还能转（2026-10-31 真机现象）。
+    if opts.keepInput then
+        SetNuiFocusKeepInput(true)
+    elseif opts.keepInput == false then
+        SetNuiFocusKeepInput(false)
+    end
     isOpen = true
     -- Some builds ignore the cursor flag when focus is granted in the same
     -- frame as the reset. Re-assert it after one frame and again after 100ms;

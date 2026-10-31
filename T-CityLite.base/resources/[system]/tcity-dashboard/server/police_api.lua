@@ -330,7 +330,11 @@ QBCore.Functions.CreateCallback('tcity-dashboard:server:dispatchList', function(
         cb({ ok = false, reason = 'not_police', incidents = {} })
         return
     end
-    if not checkRateLimit(source, 'dispatchList') then
+    -- 打开中控时 NUI 会问不止一次（预载 + 页签挂载），1 秒单发会把正常刷新也拒掉。
+    -- 这个查询只读 20 行，10 次 / 10 秒足够，又能挡住刷屏。
+    local allowed = exports['core-framework']:RateLimitWindow(
+        ('dash:dispatch:%s'):format(source), 10, 10000)
+    if not allowed then
         cb({ ok = false, reason = 'rate_limited', incidents = {} })
         return
     end
