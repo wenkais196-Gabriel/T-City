@@ -696,6 +696,25 @@
     if (res?.success) arrestRows = res.data?.rows ?? [];
   }
 
+  // P3-3：把刚才盘过的那个人直接带进逮捕表单
+  async function fillFromInspection() {
+    const res = await queryApp(DB, 'last_inspection', {});
+    if (!res?.success) {
+      notice = `取盘查记录失败：${errorText(res?.error ?? 'unknown')}`;
+      return;
+    }
+    const data = res.data ?? {};
+    if (data.empty || !data.citizenid) {
+      notice = '最近没有盘查记录（先用靶心查证件 / 酒测 / 药检）';
+      return;
+    }
+    arrestForm.citizenid = data.citizenid;
+    const bits: string[] = [];
+    if (data.alcohol) bits.push(`酒精 ${Number(data.alcohol.value ?? 0).toFixed(2)}`);
+    if (data.drug) bits.push(`药检 ${String(data.drug.label ?? '-')}`);
+    notice = `已带入 ${data.name || data.citizenid}${bits.length ? '｜' + bits.join(' · ') : ''}`;
+  }
+
   async function loadCharges() {
     chargesError = '';
     const res = await queryApp(DB, 'charges');
@@ -1063,6 +1082,7 @@
         <h3>一次逮捕提交</h3>
         <div class="form">
           <input bind:value={arrestForm.citizenid} placeholder="目标 citizenid" />
+          <button onclick={fillFromInspection}>从最近盘查带入</button>
           <select value={arrestPick} onchange={(e) => { arrestPick = (e.currentTarget as HTMLSelectElement).value; applyIncidentPick(); }}>
             <option value="">从最近警情带入…</option>
             {#each incidents as incident}

@@ -67,3 +67,25 @@ def test_player_target_has_six_verbs() -> None:
     src = TARGET.read_text(encoding="utf-8")
     for label in ("查证件", "搜身", "铐起", "押送", "酒测", "药检"):
         assert label in src, f"缺动作：{label}"
+
+
+def test_last_inspection_feeds_the_arrest_form() -> None:
+    """P3-3：盘查 → 立案的桥。
+
+    盘查结果按**警员**记在内存里（不需要历史），MDT 用一个 `last_inspection` 查询带走；
+    该 export 属于敏感读取（谁被盘过、读数多少），必须带策略门与审计失败关闭。
+    """
+    src = INTERACTIONS.read_text(encoding="utf-8")
+    at = src.find("exports('GetLastInspection'")
+    assert at != -1
+    block = src[at:at + 900]
+    assert "PolicePolicy.Can" in block
+    assert "'audit_unavailable'" in block, "审计写不进去要失败关闭"
+
+    mdt = (REPO / "T-CityLite.base/resources/[custom]/custom-phone/server/apps/police_mdt.lua").read_text(encoding="utf-8")
+    assert "last_inspection = function" in mdt, "查询名必须 snake_case（注册表只认小写）"
+    assert "GetLastInspection" in mdt
+
+    vue = (REPO / "T-CityLite.base/resources/[custom]/custom-phone/web/src/apps/PoliceMDT.svelte").read_text(encoding="utf-8")
+    assert "fillFromInspection" in vue
+    assert "从最近盘查带入" in vue
