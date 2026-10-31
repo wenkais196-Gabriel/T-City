@@ -338,3 +338,49 @@ def test_migration_14_is_additive_and_idempotent() -> None:
     assert "subject_citizenid" in sql
     assert "information_schema.COLUMNS" in sql
     assert "PREPARE stmt" in sql
+
+
+# ══════════════════════════════════════════════════════════════════
+# §6 AI 调度员 MVP（agent 侧解析）+ 指纹/DNA 采样比对
+# ══════════════════════════════════════════════════════════════════
+
+MVP = REPO / "tools/agent/dispatch_mvp.py"
+FORENSICS = POLICE / "forensics.lua"
+
+
+def test_mvp_separates_fetching_from_parsing() -> None:
+    """脚本只取内容与提交；解析交给 agent（不在脚本里猜）。"""
+    src = read(MVP)
+    assert "def cmd_fetch" in src and "def cmd_submit" in src
+    assert "phone_messages" in src
+    assert "police_call_draft" in src
+    # 不许在脚本里做"关键词 → 代码"的伪解析
+    assert "if '抢' in" not in src and "if \"抢\" in" not in src
+
+
+def test_mvp_is_idempotent_and_does_not_print_tokens() -> None:
+    src = read(MVP)
+    assert "idempotency_key" in src
+    assert "dispatch_mvp/" in src, "幂等键要按来源 id 生成"
+    assert "print(token" not in src and "print(agent" not in src
+
+
+def test_forensics_collects_fingerprint_and_dna_samples() -> None:
+    src = read(FORENSICS)
+    assert "fingerprint = " in src and "dna = " in src
+    assert "MATCH_KINDS" in src
+    assert "snapshotCandidates" in src
+    assert "<= 30.0" in src, "候选只认采样时 30 m 内的人"
+
+
+def test_compare_matches_only_the_scene_candidates() -> None:
+    # 比对逻辑在 owner（p2_evidence），入口在 forensics —— 不要在两处各写一遍
+    part = block(read(EVIDENCE), "function EV.CompareSample", 1800)
+    assert "already_matched" in part
+    assert "not_a_sample" in part
+    assert "chain(id, 'matched'" in part, "命中要追加保管链"
+    assert "return { match = false }" in part, "名单外的人要明确 no_match"
+
+    entry = block(read(FORENSICS), "police:server:compareSample", 1600)
+    assert "CompareSample" in entry, "入口必须委托 owner"
+    assert "forensic.compare" in entry
