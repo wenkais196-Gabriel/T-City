@@ -77,6 +77,40 @@ CreateThread(function()
                 },
                 {
                     num = 4,
+                    icon = 'fa-solid fa-wine-glass',
+                    label = '酒测',
+                    canInteract = function() return isOnDutyOfficer() end,
+                    action = function(entity)
+                        local target = playerServerIdOf(entity)
+                        if not target then return end
+                        QBCore.Functions.TriggerCallback('police:server:fieldTest', function(res)
+                            if not res or not res.ok then
+                                notify(('酒测失败：%s'):format(tostring(res and res.reason or 'unknown')), 'error')
+                                return
+                            end
+                            notify(('酒测读数 %.2f（%s）'):format(res.value, res.label), 'primary')
+                        end, target, 'alcohol')
+                    end,
+                },
+                {
+                    num = 5,
+                    icon = 'fa-solid fa-flask',
+                    label = '药检',
+                    canInteract = function() return isOnDutyOfficer() end,
+                    action = function(entity)
+                        local target = playerServerIdOf(entity)
+                        if not target then return end
+                        QBCore.Functions.TriggerCallback('police:server:fieldTest', function(res)
+                            if not res or not res.ok then
+                                notify(('药检失败：%s'):format(tostring(res and res.reason or 'unknown')), 'error')
+                                return
+                            end
+                            notify(('药检结果 %s（%.2f）'):format(res.label, res.value), 'primary')
+                        end, target, 'drug')
+                    end,
+                },
+                {
+                    num = 6,
                     icon = 'fa-solid fa-person-walking-arrow-right',
                     label = '押送',
                     canInteract = function() return isOnDutyOfficer() end,

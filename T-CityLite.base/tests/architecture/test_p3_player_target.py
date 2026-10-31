@@ -39,3 +39,31 @@ def test_id_check_is_verified_on_the_server() -> None:
 def test_manifest_loads_the_target_panel() -> None:
     src = MANIFEST.read_text(encoding="utf-8")
     assert "client/player_target.lua" in src
+
+
+def test_field_tests_have_a_real_data_source_and_server_gates() -> None:
+    """酒测/药检（P3-2）。
+
+    本服没有 qb-smallresources，也就没有任何"喝醉"状态：酒测如果没有数据源，
+    只能编随机数——那比没有更糟。所以补一个最小 Sobriety（喝酒 → 读数 → 随时间衰减）。
+    """
+    sob = (POLICE / "server/sobriety.lua").read_text(encoding="utf-8")
+    assert "DECAY_PER_SECOND" in sob, "读数必须会衰减"
+    assert "beer" in sob and "vodka" in sob, "数据源接在真实物品上"
+    assert "qb-inventory:server:UseItem" in sob, "要用既有物品使用事件"
+
+    src = INTERACTIONS.read_text(encoding="utf-8")
+    at = src.find("police:server:fieldTest")
+    assert at != -1
+    block = src[at:at + 3000]
+    assert "onduty ~= true" in block and "too_far" in block
+    assert "RateLimitCooldown" in block, "同类读数要冷却"
+    assert "PoliceAudit.Write" in block
+    # evidence 表要求挂 case/incident，盘查阶段没有 → 不该假装写了
+    assert "evidence = false" in block
+
+
+def test_player_target_has_six_verbs() -> None:
+    src = TARGET.read_text(encoding="utf-8")
+    for label in ("查证件", "搜身", "铐起", "押送", "酒测", "药检"):
+        assert label in src, f"缺动作：{label}"

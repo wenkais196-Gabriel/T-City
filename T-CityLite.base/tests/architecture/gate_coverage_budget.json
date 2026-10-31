@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 222,
+  "max_unproven": 224,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -205,6 +205,12 @@
       "max_unproven": 222,
       "previous": 219,
       "why": "P3-1 玩家盘查入口（3 条）"
+    },
+    {
+      "date": "2026-10-31",
+      "max_unproven": 224,
+      "previous": 222,
+      "why": "P3-2 酒测/药检（2 条：数据源与门控、六个动作）"
     }
   ]
 }
