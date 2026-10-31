@@ -1126,12 +1126,40 @@ RegisterNetEvent('police:client:SpawnBackup', function(requestId, requestIds, es
 end)
 
 -- ---------------------------------------------------------------------------
--- 指挥（B2）：/backup follow | hold | dismiss
+-- 指挥（B2）：/backup follow | hold | dismiss | surround
 --
 -- 只影响调用者自己名下的单位；服务端逻辑一概不动（寿命仍归 sweep）。
 -- 三条命令都做成"幂等 + 有回执"：重复执行不会报错，玩家能看到当前状态。
 -- ---------------------------------------------------------------------------
-local BACKUP_ORDERS = { follow = true, hold = true, dismiss = true }
+local BACKUP_ORDERS = { follow = true, hold = true, dismiss = true, surround = true }
+
+-- 包围（L3）：两名警员各自站到请求者的两侧 8m 处，背对人群朝外。
+-- 只用 TaskGoToCoordAnyMeans + 转身，不碰战斗逻辑（开火仍由 findEnemies 决定）。
+local SURROUND_RADIUS = 8.0
+local function surroundPeds(state, anchorPed)
+    local anchor = GetEntityCoords(anchorPed)
+    local heading = math.rad(GetEntityHeading(anchorPed))
+    local forward = vector3(-math.sin(heading), math.cos(heading), 0.0)
+    local right = vector3(forward.y, -forward.x, 0.0)
+    for index, ped in ipairs(state.peds or {}) do
+        if validPed(ped) then
+            -- 两个警员分左右；多于两个时按奇偶往前后错开。
+            local side = (index % 2 == 1) and right or (right * -1.0)
+            local forwardOffset = (index > 2) and 1.5 or 0.0
+            local target = anchor + side * SURROUND_RADIUS + forward * forwardOffset
+            ClearPedTasks(ped)
+            TaskGoToCoordAnyMeans(ped, target.x, target.y, target.z, 1.0, 0, false, 786603, 0)
+            -- 到位后朝外：站岗的观感全在这一下。
+            SetTimeout(4000, function()
+                if validPed(ped) then
+                    local outward = anchor - target
+                    local face = math.deg(math.atan(outward.x, outward.y)) % 360.0
+                    SetEntityHeading(ped, face)
+                end
+            end)
+        end
+    end
+end
 
 --- 把一条命令应用到调用者名下的所有单位；返回生效数量。
 local function applyOrder(order)
@@ -1153,6 +1181,15 @@ local function applyOrder(order)
                     SetVehicleBrake(state.vehicle, true)
                 end
                 state.holdCleared = true
+            elseif order == 'surround' then
+                -- 包围：人先下车再站位；车留在原地（刹住），免得踩油门撞人。
+                state.mode = 'surround'
+                state.holdCleared = true
+                if state.vehicle and state.vehicle ~= 0 and DoesEntityExist(state.vehicle) then
+                    SetVehicleBrake(state.vehicle, true)
+                end
+                local anchorPed = escortPed(state, PlayerPedId())
+                surroundPeds(state, anchorPed)
             else
                 -- 恢复跟随：清掉待命标记并让驾驶/跟随任务下一次判定就能重发。
                 state.holdCleared = false
@@ -1169,7 +1206,7 @@ RegisterCommand('backup', function(_, args)
     local order = tostring((args and args[1]) or ''):lower()
     if not BACKUP_ORDERS[order] then
         TriggerEvent('chat:addMessage', {
-            args = { '支援', '用法：/backup follow|hold|dismiss' },
+            args = { '支援', '用法：/backup follow|hold|dismiss|surround' },
         })
         return
     end

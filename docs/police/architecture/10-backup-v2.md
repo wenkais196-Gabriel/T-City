@@ -293,6 +293,23 @@ spawn node dist=136.8m heading=1 dot=0.97 nth=12
 
 对比改动前：固定偏移 50m 正前方、车头朝玩家但与道路方向无关，20–35 秒到场且经常先开远掉头。
 
+## 3.18 L3 反应层 · 扩音器喊话与包围（蓝图 §6.2）
+
+| 能力 | 做法 |
+|---|---|
+| 喊话 `/pa <文本>` | 只有在岗警察；文本 3–120 字符、剥控制字符；每人 8 s 冷却；按**距离**（40 m）广播给附近玩家，走手机已有的 `phone:client:systemSpeech`（字幕 + TTS）—— 我们还没有 3D 音频管线 |
+| 包围 `/backup surround` | 两名警员各自站到请求者两侧 8 m、到位后转身朝外；车刹住不动；**不碰战斗逻辑**（开火仍由 `findEnemies` 决定） |
+| 审计 | `police.pa` 只记 `len=…;heard=…`，**不记正文**（宪法 §7） |
+
+真机：
+```
+[agent-client][devcmd] src=1 cmd=pa 放下武器 双手抱头
+audit: police.pa  pa  len=25;heard=1
+
+backup spawn node dist=95.4m heading=1 dot=0.97 nth=20 tier=strict
+backup order=surround applied=1
+```
+
 ## 3.17 L2 后勤层 · 现场化验（蓝图 §6.2）
 
 `/sample gsr|drug|blood <案卷ID>`：采样立刻入卷，60 秒后**再写一条**结果证据。
