@@ -40,6 +40,16 @@ local function _openNui(veh)
     TriggerServerEvent('custom-vehicles:server:requestDashboard', plate)
 end
 
+-- 面板开着时允许穿透的车辆控制（59/60 移动、63/64 转向、71 油门、72 刹车、
+-- 73/74/75 视角切换与头灯、76 手刹、80 后视）。视角 1-6 不在里面：那是游标的对头。
+local DRIVE_CONTROLS = { 59, 60, 63, 64, 71, 72, 73, 74, 75, 76, 80 }
+
+--- 面板打开时是否还能开车（默认开）。
+--- `dashboard_drive_while_open 0` 回滚成"独占输入"的旧行为。
+local function driveWhileOpen()
+    return GetConvar('dashboard_drive_while_open', '1') ~= '0'
+end
+
 local function _closeNui()
     if not _isDashboardOpen then return end
     if _currentVehicle and DoesEntityExist(_currentVehicle) then
@@ -191,7 +201,17 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
     --   * 栈非空时每帧屏蔽视角/攻击等控制 → 视角不会再跟着鼠标转
     -- 直接 SetNuiFocus 绕过了这条管线：没有屏蔽线程，keepInput 还是手机上残留的 true。
     local ok = pcall(function()
-        exports['custom-ui']:Push({ id = 'dashboard', kind = 'modal', owner = 'tcity-dashboard', keepInput = false, close = _closeNui })
+        exports['custom-ui']:Push({
+            id = 'dashboard',
+            kind = 'modal',
+            owner = 'tcity-dashboard',
+            -- 中控是"边开边看"的终端，不是暂停菜单：默认保留游戏输入（和手机同一条语义），
+            -- 这样 W/S/A/D、手刹、灯光都还能用；视角(1-6)仍由栈每帧屏蔽，
+            -- 否则鼠标一动镜头就转、游标就没法用。
+            keepInput = driveWhileOpen(),
+            allow = DRIVE_CONTROLS,
+            close = _closeNui,
+        })
     end)
     if not ok then
         SetNuiFocusKeepInput(false)
@@ -206,8 +226,9 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
     if GetConvar('dashboard_debug', '0') == '1' then
         local path = 'n/a'
         pcall(function() path = table.concat(exports['custom-ui']:Path() or {}, '>') end)
-        print(('[dashboard][debug] open veh=%s class=%s job=%s duty=%s input=%s'):format(
-            tostring(veh), tostring(vclass), tostring(jobName), tostring(job and job.onduty), tostring(path)))
+        print(('[dashboard][debug] open veh=%s class=%s job=%s duty=%s input=%s drive=%s'):format(
+            tostring(veh), tostring(vclass), tostring(jobName), tostring(job and job.onduty),
+            tostring(path), driveWhileOpen() and 'yes' or 'no'))
     end
     _currentVehicle = veh
     _currentTemplate = template
@@ -275,6 +296,7 @@ exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
     SetNuiFocusKeepInput(keepInput == true)
     SetNuiFocus(hasFocus == true, hasCursor == true)
 end)
+
 
 -- 反复 restart 之后 RegisterKeyMapping 会重复注册，一次按 I 会触发两条命令
 -- （日志里 open 打两遍就是这个）。加去抖，语义上"一次按键开/关一次"。

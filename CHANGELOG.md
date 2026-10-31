@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **车机中控开面板时仍可驾驶**：帧 `keepInput = true` + `allow` 放行车辆控制（油门/刹车/转向/手刹/灯光），视角 1–6 仍被栈屏蔽（否则鼠标一动镜头就转、游标没法用），攻击类照旧挡；`dashboard_drive_while_open 0` 可回滚成独占输入。
 - **P2 调度总线收尾**：7 个发案来源逐个对账（qb-drugs ×2 / qb-houserobbery / qb-storerobbery / custom-vehicles ×2 / NPC callout），全部落在两个 handler 上；真机已证手机 911、NPC callout、控制台投影三条路径。蓝图 Phase 2 标记为完成。
 - **车机终端的警情页（P2-4）**：`tcity-dashboard` 的 police 模块新增「📞 警情」——当前未结警情列表 + 一键设导航 + 刷新。链路四层各自把关（NUI → client 在岗 → server 在岗+限流 → `custom-police` 的 `GetIncidentsPublic` 策略+审计），坐标统一走 `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua` 投影（D5）。
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
