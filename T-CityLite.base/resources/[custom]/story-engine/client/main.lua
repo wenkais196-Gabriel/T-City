@@ -22,11 +22,26 @@ end
 -- 事件: quest 步骤 decision 触发 → 打开 NUI
 -- ==============================================================
 
+-- 关闭决策弹窗的唯一出口：释放焦点 + 恢复 keepInput + 清状态
+function closeDecisionSurface(reason)
+    if not isNuiOpen and not pendingDecision then return end
+    SetNuiFocus(false, false)
+    -- 恢复进入前的 keepInput（手机开着时是 true），否则玩家控制/视角被锁
+    SetNuiFocusKeepInput(keepInputBefore == true)
+    isNuiOpen = false
+    nuiOpenedAt = 0
+    pendingDecision = nil
+    openToken = (openToken or 0) + 1
+    telemetry('nui.closeSurface', { reason = reason })
+end
+
 RegisterNetEvent('story:client:offerDecision', function(data)
+    -- 重复下发不能静默丢弃：上一次弹窗若已失效（CEF 掉了/没收到 close），
+    -- 玩家看到的是旧内容、点了没反应，而服务端还在等 —— 表现为"选了没释放"。
     if isNuiOpen then
-        print('[story-engine] ⚠️ NUI already open, ignoring duplicate decision')
-        telemetry('decision.duplicate', { questId = questId, stepId = stepId })
-        return
+        print('[story-engine] ♻️ 收到重复决策，先回收旧弹窗再重开')
+        telemetry('decision.duplicate', { questId = data and data.questId, stepId = data and data.stepId })
+        closeDecisionSurface('duplicate')
     end
 
     -- data 结构: { questId, stepId, decision_id, ... }
@@ -64,10 +79,22 @@ RegisterNetEvent('story:client:offerDecision', function(data)
     })
 
     if data.options and #data.options > 0 then
-        -- 防止其他 NUI（如手机）留下的 KeepInput=true 抢走键盘/鼠标
+        -- 防止其他 NUI（如手机）留下的 KeepInput=true 抢走键盘/鼠标；
+        -- 但**必须记住原值**，否则关闭后玩家控制回不来（手机那套 keepInput 语义）。
+        keepInputBefore = IsNuiFocusKeepingInput()
         SetNuiFocusKeepInput(false)
         SetNuiFocus(true, true)
         isNuiOpen = true
+        openToken = (openToken or 0) + 1
+        local myToken = openToken
+        -- 看门狗：CEF 不回调 makeChoice 时也必须把焦点还回去
+        SetTimeout(math.floor((timeout + 5) * 1000), function()
+            if isNuiOpen and openToken == myToken then
+                print('[story-engine] ⏱️ 决策弹窗超时未响应，强制关闭并交还控制')
+                closeDecisionSurface('watchdog')
+                TriggerServerEvent('story:server:makeDecision', questId, stepId, decisionId, 'timeout')
+            end
+        end)
         nuiOpenedAt = GetGameTimer()
         telemetry('nui.focus', {
             open = true, option_count = #options, decisionId = decisionId,
@@ -96,9 +123,7 @@ RegisterNUICallback('makeChoice', function(data, cb)
     telemetry('nui.makeChoice', { optionId = data and data.optionId or nil })
     cb('ok') -- 先确认收到
 
-    SetNuiFocus(false, false)
-    isNuiOpen = false
-    nuiOpenedAt = 0
+    closeDecisionSurface('makeChoice')
 
     if not pendingDecision then
         print('[story-engine] ⚠️ makeChoice but no pending decision')
@@ -129,10 +154,7 @@ end)
 RegisterNUICallback('closeDecision', function(_, cb)
     telemetry('nui.closeDecision', {})
     cb('ok')
-    SetNuiFocus(false, false)
-    isNuiOpen = false
-    nuiOpenedAt = 0
-    pendingDecision = nil
+    closeDecisionSurface('nui.closeDecision')
 end)
 
 -- NUI 端 JS 错误/ fetch 失败的专用回传通道。
@@ -173,7 +195,7 @@ end)
 RegisterNetEvent('story:client:closeDecision', function()
     telemetry('nui.serverClose', { wasOpen = isNuiOpen })
     if isNuiOpen then
-        SetNuiFocus(false, false)
+        closeDecisionSurface('server.close')
         isNuiOpen = false
         nuiOpenedAt = 0
         pendingDecision = nil
