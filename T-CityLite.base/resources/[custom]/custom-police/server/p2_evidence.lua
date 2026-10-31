@@ -230,6 +230,45 @@ function EV.BindPendingFor(caseId, actorCid)
     return bound
 end
 
+--- 指纹 / DNA 比对（police_evidence 的唯一写者在这儿，所以比对也在这儿做）。
+--- 只认采样时写进 description 的"现场候选"名单：命中就给证据补 subject，
+--- 链上追加 matched；不在名单上就是 no_match，不做任何修改。
+function EV.CompareSample(actor, evidenceId, subjectCid)
+    local allowed, why = PolicePolicy.Can(actor, 'evidence.register')
+    if not allowed then return nil, why end
+    local id = tonumber(evidenceId)
+    local subject = tostring(subjectCid or ''):sub(1, 50)
+    if not id then return nil, 'invalid_evidence' end
+    if subject == '' then return nil, 'invalid_subject' end
+
+    local row = MySQL.single.await(
+        'SELECT id, label, description, subject_citizenid FROM police_evidence WHERE id = ? LIMIT 1', { id })
+    if not row then return nil, 'evidence_not_found' end
+    if row.subject_citizenid ~= nil then return nil, 'already_matched' end
+    local label = tostring(row.label or '')
+    if not (label:find('指纹', 1, true) or label:find('DNA', 1, true)) then
+        return nil, 'not_a_sample'
+    end
+
+    local haystack = ',' .. tostring(row.description or '') .. ','
+    if not haystack:find(',' .. subject .. ',', 1, true) then
+        return { match = false }
+    end
+
+    MySQL.update.await(
+        'UPDATE police_evidence SET subject_citizenid = ? WHERE id = ? AND subject_citizenid IS NULL',
+        { subject, id })
+    chain(id, 'matched', actor.citizenid, subject)
+    return { match = true, subject_citizenid = subject }
+end
+
+exports('CompareSample', function(source, evidenceId, citizenid)
+    local actor = pd(source)
+    local allowed, why = PolicePolicy.Can(actor, 'evidence.register')
+    if not allowed then return nil, why end
+    return EV.CompareSample(actor, evidenceId, citizenid)
+end)
+
 exports('BindEvidence', function(source, evidenceId, caseId, force)
     local actor = pd(source)
     local allowed, why = PolicePolicy.Can(actor, 'incident.update')

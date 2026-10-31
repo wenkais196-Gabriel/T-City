@@ -11,7 +11,35 @@ local KIND_LABEL = {
     gsr = '枪击残留（GSR）采样',
     drug = '毒品快检采样',
     blood = '血迹采样',
+    -- 指纹 / DNA 不靠"阳性阴性"判断，靠比对现场在场的人
+    fingerprint = '现场指纹样本',
+    dna = '现场 DNA 样本',
 }
+
+--- 需要比对而不是化验的类型
+local MATCH_KINDS = { fingerprint = true, dna = true }
+
+--- 采样时把 30 m 内在场玩家记成候选（比对只认这些人）。
+--- 这不是"猜"：比对结果就是"样本对得上现场某人"。
+local function snapshotCandidates(officerSrc)
+    local out = {}
+    local ped = GetPlayerPed(officerSrc)
+    if not ped or ped == 0 then return out end
+    local origin = GetEntityCoords(ped)
+    for _, src in ipairs(GetPlayers()) do
+        local p = tonumber(src)
+        local other = GetPlayerPed(p)
+        if other and other ~= 0 then
+            local Player = QBCore.Functions.GetPlayer(p)
+            local cid = Player and Player.PlayerData and Player.PlayerData.citizenid
+            if type(cid) == 'string' and cid ~= '' and #(GetEntityCoords(other) - origin) <= 30.0 then
+                out[#out + 1] = cid
+                if #out >= 10 then break end
+            end
+        end
+    end
+    return out
+end
 
 local COOLDOWN_SECONDS = 20
 local LAB_DELAY_MS = 60000
@@ -32,6 +60,7 @@ end
 --- 化验结果：GSR/毒品是阳性/阴性，血迹是"待比对"。
 local function labResult(kind)
     if kind == 'blood' then return '样本已入库，DNA 待比对' end
+    if MATCH_KINDS[kind] then return '样本已入库，等待与嫌疑人比对' end
     return (math.random() < 0.5) and '阳性' or '阴性'
 end
 
@@ -51,9 +80,16 @@ RegisterNetEvent('police:server:forensicSample', function(kind, caseId)
     cooldown[cid] = os.time()
 
     local label = KIND_LABEL[kind]
+    local description = '已送检，约 60 秒出结果'
+    if MATCH_KINDS[kind] then
+        local candidates = snapshotCandidates(src)
+        -- 候选名单就在证据描述里：比对时只认这张名单上的人，不认"警员说的名字"
+        description = ('现场候选 %d 人：%s'):format(#candidates, table.concat(candidates, ','))
+        if #candidates == 0 then description = '现场候选 0 人（采集时无人靠近）' end
+    end
     local sample = exports['custom-police']:RegisterEvidence(src, {
         label = label,
-        description = '已送检，约 60 秒出结果',
+        description = description,
         case_id = case,
     })
     if type(sample) ~= 'table' or not sample.exhibit_no then
@@ -90,4 +126,29 @@ RegisterNetEvent('police:server:forensicSample', function(kind, caseId)
             end
         end
     end)
+
+
+end)
+
+--- 指纹 / DNA 比对入口：真正的比对在 p2_evidence（police_evidence 的唯一写者）。
+QBCore.Functions.CreateCallback('police:server:compareSample', function(source, cb, evidenceId, citizenid)
+    local src = tonumber(source) or 0
+    local Player = QBCore.Functions.GetPlayer(src)
+    local data = Player and Player.PlayerData
+    if not data or not PolicePolicy.Can(data, 'evidence.register') then
+        cb({ ok = false, reason = 'off_duty' }); return
+    end
+    if not data.job or data.job.onduty ~= true then
+        cb({ ok = false, reason = 'off_duty' }); return
+    end
+    local ok, result, why = pcall(function()
+        return exports['custom-police']:CompareSample(src, evidenceId, citizenid)
+    end)
+    if not ok then cb({ ok = false, reason = 'compare_failed' }); return end
+    if type(result) ~= 'table' then cb({ ok = false, reason = tostring(why or 'compare_failed') }); return end
+    if not audit(data.citizenid, 'forensic.compare', tostring(evidenceId),
+            result.match and ('match:' .. tostring(citizenid)) or 'no_match') then
+        cb({ ok = false, reason = 'audit_unavailable' }); return
+    end
+    cb({ ok = true, match = result.match == true, subject_citizenid = result.subject_citizenid })
 end)
