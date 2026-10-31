@@ -84,7 +84,12 @@ local function _openSeatPicker(veh, currentSeat)
     })
 
     local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
-    if not ok then SetNuiFocus(true, true) end
+    if not ok then
+        -- 退化路径也要独占输入：keepInput 是客户端全局标志，
+        -- 手机开过一次之后会一直是 true（视角还能转）。
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(true, true)
+    end
     _isSeatPickerOpen = true
 end
 
@@ -180,8 +185,17 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
 
     -- 启动 NUI focus
     local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
-    if not ok then SetNuiFocus(true, true) end
+    if not ok then
+        -- 退化路径也要独占输入：keepInput 是客户端全局标志，
+        -- 手机开过一次之后会一直是 true（视角还能转）。
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(true, true)
+    end
     _isDashboardOpen = true
+    if GetConvar('dashboard_debug', '0') == '1' then
+        print(('[dashboard][debug] open veh=%s class=%s job=%s duty=%s'):format(
+            tostring(veh), tostring(vclass), tostring(jobName), tostring(job and job.onduty)))
+    end
     _currentVehicle = veh
     _currentTemplate = template
     _currentPollInterval = pollInterval

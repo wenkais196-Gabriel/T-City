@@ -78,6 +78,15 @@ export const useDashboardStore = defineStore('dashboard', () => {
     applyTheme(data.theme)
   }
 
+  // ── v2.3 警情（P2-4）：打开中控就预载，不必先切到职业页 ──
+  const dispatchIncidents = ref<any[]>([])
+  const dispatchState = ref<'idle' | 'loading' | 'ok' | 'error'>('idle')
+
+  function setDispatch(list: any[], state: 'ok' | 'error' = 'ok') {
+    dispatchIncidents.value = list || []
+    dispatchState.value = state
+  }
+
   function handleClose() {
     visible.value = false
     seatPickerVisible.value = false
@@ -155,6 +164,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     driveMode, nightMode, activeTab, policeData, scanLog,
     seatPickerVisible, pickerSeats, pickerCurrentSeat,
     isEmergency, isAircraft, isBoat, isCommercial,
+    dispatchIncidents, dispatchState, setDispatch,
     hasFeature, templateComponent,
     handleOpen, handleClose, handleDiag, handleCruise, handleDriveMode,
     handleSeatPicker, closeSeatPicker,
