@@ -117,3 +117,46 @@ Vite 前端（`nui/`）。所以 P2-4 **不是从零做一个终端**，而是�
 * 真机：`/911 预算测试A` → `police_incidents` #32 落库，重启后 **SCRIPT ERROR 0**
 * 真机顺带发现：同一玩家连续两次 `/911`，第二次**没有进系统** —— phone 侧本就有 911 冷却，
   不是预算层丢的（预算层只影响通知，不影响建单）
+
+
+---
+
+## 8. P2-4 车机警情页（已完成）
+
+### 8.1 做了什么
+
+车机终端（`[system]/tcity-dashboard` 的 police 模块）里加了一段 **📞 警情**：
+当前未结警情列表（单号 / code / 标题 / 状态），点一行就把导航点设到那条警情上，右上角可刷新。
+
+数据链路（每一层都各自把关）：
+
+| 层 | 做什么 |
+|---|---|
+| NUI（`PoliceConsole.vue`） | `sendNui('dispatchList')` 拉列表；点行 → `dispatchWaypoint` |
+| client（`client/police.lua`） | 本地先判在岗，再 `TriggerCallback`；`SetNewWaypoint` 设点 |
+| server（`server/police_api.lua`） | 再判一次在岗 + `checkRateLimit` + `GetIncidentsPublic(source, 20)` |
+| custom-police（`server/p0_read.lua`） | export 自带 `PolicePolicy.Can` + `audit` 失败关闭，再走共享只读查询 |
+| 投影（`shared/dispatch_view.lua`） | 坐标按单号稳定偏移 60–95% 半径（D5），**唯一实现** |
+
+### 8.2 真机证据（2026-10-31）
+
+`police_incidents_public 1 3`（控制台，走的就是车机同一份 export）：
+
+```
+#33 10-32 p1 open @ 376.2,-1541.6      DB: 430.0,-1500.0   → 偏移 ≈ 68 m
+#32 911   p1 open @ 216.9,-852.9       DB: 206.1,-916.0    → 偏移 ≈ 64 m
+#30 911   p1 open @ 1808.6,4952.7      DB: 1862.8,4938.4   → 偏移 ≈ 56 m
+```
+
+库里的精确坐标与客户端拿到的点**不是同一个**，且偏移量都落在 48–76 m 的窗口里。
+
+### 8.3 顺带修掉的
+
+* `broadcastIncidentAlert` 的偏移逻辑收进 `shared/dispatch_view.lua`（REUSE：只留一处实现）
+* `DriveTab.vue` 有个未使用的 `ref` 导入，`vue-tsc` 直接报错、**整个 `npm run build` 过不去** —— 删掉
+* `GetIncidents` 拆成 `readIncidents`（纯查询）+ 鉴权/审计包装，车机的 export 复用同一份查询
+
+### 8.4 还差的（需要人在车里看）
+
+车机页的**视觉**没在现场确认过 —— `/dashboard` 要求玩家坐在载具里，这一步需要业主亲自看一次
+（数据链路已由上面的控制台证据证明）。这是 P2 唯一需要人工过目的地方。

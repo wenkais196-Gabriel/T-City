@@ -14,6 +14,7 @@ shared_scripts {
 	'shared/backup_contract.lua',
 	'shared/radio_text.lua',
 	'shared/alert_budget.lua',
+	'shared/dispatch_view.lua',
 	'shared/npc_callouts.lua',
 	'@qb-core/shared/locale.lua',
 	'locales/en.lua',

@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 203,
+  "max_unproven": 208,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -157,6 +157,12 @@
       "max_unproven": 203,
       "previous": 200,
       "why": "P2-2 通知预算层（3 条：窗口常量/接线/清单顺序）"
+    },
+    {
+      "date": "2026-10-31",
+      "max_unproven": 208,
+      "previous": 203,
+      "why": "P2-4 车机警情页（5 条：导出投影/服务端守卫/客户端回调/UI/清单顺序）"
     }
   ]
 }
