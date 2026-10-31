@@ -25,6 +25,8 @@ local GUARD_CONTROLS = {
     81,  -- INPUT_VEH_RADIO_WHEEL
     82,  -- INPUT_VEH_NEXT_RADIO
     83,  -- INPUT_VEH_PREV_RADIO
+    199, -- INPUT_FRONTEND_PAUSE_ALTERNATE（Esc）
+    200, -- INPUT_FRONTEND_PAUSE（Esc → 游戏暂停菜单）
 }
 
 --- 短时间屏蔽会误触的攻击/武器轮盘控制
@@ -35,14 +37,6 @@ function GuardControls(durationMs)
         while GetGameTimer() < untilMs do
             for _, control in ipairs(GUARD_CONTROLS) do
                 DisableControlAction(0, control, true)
-            end
-            -- Esc 关闭：只有显式声明 esc = true 的帧才接管。
-            -- keepInput 模式下 Esc 会同时被游戏看到（暂停菜单弹出），所以必须由栈
-            -- 用 IsDisabledControlJustPressed 读（控制已被屏蔽但仍可读）并主动调 close。
-            if current and current.esc == true then
-                if IsDisabledControlJustPressed(0, 199) or IsDisabledControlJustPressed(0, 200) then
-                    if type(current.close) == 'function' then current.close() end
-                end
             end
             Wait(0)
         end
@@ -242,6 +236,13 @@ local function apply()
                 -- DisableAllControlActions 每帧要遍历几百个控制，实机会卡。
                 if not inList(allow, control) then
                     DisableControlAction(0, control, true)
+                end
+            end
+            -- Esc 关闭：只有显式声明 esc = true 的帧才接管（车机中控）。
+            -- 控制已经被上面屏蔽，但仍能用 IsDisabledControlJustPressed 读到。
+            if current and current.esc == true then
+                if IsDisabledControlJustPressed(0, 199) or IsDisabledControlJustPressed(0, 200) then
+                    if type(current.close) == 'function' then current.close() end
                 end
             end
             Wait(0)
