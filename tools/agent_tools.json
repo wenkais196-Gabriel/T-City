@@ -2831,6 +2831,69 @@
       },
       "undo": null,
       "compensation": "none"
+    },
+    {
+      "name": "apply_police_warrant",
+      "title": "Request an arrest warrant (L3)",
+      "description": "Request an arrest warrant for a citizen. Always requires human approval; execution only reaches status=requested, so a human (or the court) must still approve it. No BOLO, no jail, no money.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "police_warrant_request",
+      "risk": "L3",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.8.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "citizenid",
+          "reason"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": [
+          "reason"
+        ]
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none"
     }
   ]
 }

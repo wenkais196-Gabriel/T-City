@@ -3,7 +3,7 @@
 
 **Generated file — DO NOT EDIT.** Source: `tools/agent_tools.json` (registry_version `1.8.0`, schema_version `1`).
 
-43 tools: 43 active, 0 planned, 0 deprecated. Only `active` tools are advertised to agents.
+44 tools: 44 active, 0 planned, 0 deprecated. Only `active` tools are advertised to agents.
 
 ## Routing table
 
@@ -52,6 +52,7 @@
 | 41 | `get_client_log` | active | read | harness | default | — (in-process) | L0 | no | none | not_applicable | — | — |
 | 42 | `get_police_case` | active | read | director | live | GET `/agent/v1/live/police/cases/{case_id}` | L0 | no | none | not_applicable | — | — |
 | 43 | `apply_police_report` | active | write | director | default | POST `/agent/v1/act` | L2 | yes | required | supported | get_action | — |
+| 44 | `apply_police_warrant` | active | write | director | default | POST `/agent/v1/act` | L3 | yes | required | supported | get_action | — |
 
 ## Risk and approval table
 
@@ -100,6 +101,7 @@
 | `get_client_log` | L0 | single | no | none | 60/min burst 10 |
 | `get_police_case` | L0 | single | no | none | 60/min burst 10 |
 | `apply_police_report` | L2 | single | yes | none | — |
+| `apply_police_warrant` | L3 | single | yes | none | — |
 
 ## Contract notes
 

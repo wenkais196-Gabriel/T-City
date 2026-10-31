@@ -36,7 +36,7 @@
 |---|---|---|
 | P6-1 | ✅ 已合并（PR #156，`6e9b474`） | `get_police_case` 走 live GET |
 | P6-2 | ✅ 本轮 | 动作 `police_draft_report` + 工具 `apply_police_report`；**注意**：工具名必须在动词白名单（`apply_`），且 `police_reports` 只有一个写者，所以委托 `PoliceRecords.InsertReport` |
-| P6-3 | ⬜ | `police_warrant_request` 需新建 `police_warrants` 表（L4，动表结构要先获批） |
+| P6-3 | ✅ 本轮 | 动作 `police_warrant_request` + 工具 `apply_police_warrant`；**表已存在**（`police_warrants`），写者 `p3_cases.lua`，系统入口就放在同一文件、共用同一条 INSERT，只到 `requested` |
 
 ### 2.2 P6-2 的两条硬约束（实测踩到）
 

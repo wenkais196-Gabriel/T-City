@@ -63,4 +63,4 @@ def test_registry_tool_name_is_inside_the_verb_whitelist() -> None:
 def test_actions_doc_lists_it() -> None:
     doc = ACTIONS_DOC.read_text(encoding="utf-8")
     assert "`police_draft_report`" in doc
-    assert "twenty-three actions" in doc
+    assert "twenty-four actions" in doc

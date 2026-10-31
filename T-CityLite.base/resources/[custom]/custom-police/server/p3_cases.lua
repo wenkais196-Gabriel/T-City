@@ -165,6 +165,33 @@ function C.RequestWarrant(source, params)
     return { id = tonumber(id), citizenid = target, status = 'requested' }
 end
 
+--- P6-3：agent 申请逮捕令（**只到 requested**，仍需人/法院批准）。
+--- 与 C.RequestWarrant 共用同一条 INSERT（本模块是 police_warrants 的唯一写者），
+--- 区别只在 actor 不是玩家 source，审计记 actor_kind='agent'。
+---@param actorCid string 'action:<id>'
+---@param params table { citizenid, reason }
+---@return table|nil result { id, citizenid, status }
+---@return string|nil reason
+function C.RequestWarrantSystem(actorCid, params)
+    if type(params) ~= 'table' then return nil, 'invalid_params' end
+    local target = utf8Sub(trim(params.citizenid), 50)
+    local why = utf8Sub(trim(params.reason), 128)
+    if target == '' then return nil, 'invalid_citizen' end
+    if #why < 3 then return nil, 'invalid_reason' end
+    local exists = MySQL.query.await('SELECT citizenid FROM players WHERE citizenid = ? LIMIT 1', { target }) or {}
+    if not exists[1] then return nil, 'citizen_not_found' end
+    local inserted = MySQL.insert.await(
+        'INSERT INTO police_warrants (citizenid, reason, requested_by) VALUES (?, ?, ?)',
+        { target, why, tostring(actorCid or 'agent') })
+    local id = InsertId(inserted)
+    if not id or id == 0 then return nil, 'db_error' end
+    -- 审计失败要让调用方看见：逮捕令没有审计等于没有责任链
+    if not audit(tostring(actorCid or 'agent'), 'warrant.request', target, why, 'agent') then
+        return nil, 'audit_unavailable'
+    end
+    return { id = tonumber(id), citizenid = target, status = 'requested' }
+end
+
 function C.DecideWarrant(source, params)
     local actor = pd(source)
     local allowed, reason = PolicePolicy.Can(actor, 'warrant.approve')
@@ -332,6 +359,7 @@ exports('CreateBolo', C.CreateBolo)
 exports('GetBolos', C.GetBolos)
 exports('ClearBolo', C.ClearBolo)
 exports('RequestWarrant', C.RequestWarrant)
+exports('RequestWarrantSystem', C.RequestWarrantSystem)
 exports('DecideWarrant', C.DecideWarrant)
 exports('GetWarrants', C.GetWarrants)
 exports('RegisterArrest', C.RegisterArrest)

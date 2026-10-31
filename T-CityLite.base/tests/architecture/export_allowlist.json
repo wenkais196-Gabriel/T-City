@@ -238,6 +238,19 @@
       "owner": "custom-police",
       "added": "2026-10-31",
       "expires": "2027-03-31"
+    },
+    {
+      "id": "p6-request-warrant-system",
+      "file": "custom-police/server/p3_cases.lua",
+      "export": "RequestWarrantSystem",
+      "kind": "system_only",
+      "exceptions": [
+        "auth"
+      ],
+      "reason": "custom-director agent 桥接调用（L3 审批后执行）；actorId 是 action 标识而非玩家 source；与 RequestWarrant 共用同一条 police_warrants INSERT，只到 status=requested，审计 actor_kind='agent'，失败返回 audit_unavailable。",
+      "owner": "custom-police",
+      "added": "2026-10-31",
+      "expires": "2027-03-31"
     }
   ]
 }

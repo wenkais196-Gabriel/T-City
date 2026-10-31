@@ -48,6 +48,12 @@ AgentPolicy.ACTIONS = {
         requires_approval = true,
         auto_execute = false,
     },
+    police_warrant_request = {
+        risk = 'L3',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+    },
     police_draft_report = {
         risk = 'L2',
         requires_approval = true,
@@ -429,6 +435,19 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         if type(key) ~= 'string' then
             return fail('invalid_params', 'args must be a JSON object, not an array')
         end
+    end
+
+    if actionType == 'police_warrant_request' then
+        local unknownErr = rejectUnknownFields(params, { citizenid = true, reason = true },
+            'police_warrant_request')
+        if unknownErr then return nil, unknownErr end
+        if type(params.citizenid) ~= 'string' or not params.citizenid:match('^[A-Za-z0-9_%-]{1,11}$') then
+            return fail('invalid_params', 'citizenid is invalid')
+        end
+        if type(params.reason) ~= 'string' or #params.reason < 3 or #params.reason > 128 then
+            return fail('invalid_params', 'reason must be 3-500 chars')
+        end
+        return { citizenid = params.citizenid, reason = params.reason }
     end
 
     if actionType == 'police_draft_report' then
