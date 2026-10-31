@@ -1773,6 +1773,40 @@ function ReportSubmit(source, params)
     end)
 end
 
+
+--- P6-2：agent 起草一份报告（**草稿**）。
+--- 行由唯一写者 PoliceRecords.InsertReport 写（records.lua），本函数只做校验与语义约束：
+--- status 固定 draft、kind 固定 report、不带 BOLO、不带罚款 —— 提交仍需人在 MDT 里做。
+---@param actorCid string 'action:<id>'
+---@param params table { title, body, citizenid?, incident_id?, case_id? }
+---@return table|nil result { report_id, status }
+---@return string|nil reason
+function Sys.DraftReport(actorCid, params)
+    if type(params) ~= 'table' then return nil, 'invalid_params' end
+    local title = trim(params.title)
+    local body = trim(params.body)
+    if #title < 3 or #title > 160 then return nil, 'invalid_title' end
+    if #body < 3 or #body > 4000 then return nil, 'invalid_body' end
+
+    local id, why = PoliceRecords.InsertReport(tostring(actorCid or 'agent'), {
+        title = title,
+        body = body,
+        status = 'draft',
+        kind = 'report',
+        subject_citizenid = trim(params.citizenid) ~= '' and trim(params.citizenid) or nil,
+        incident_id = tonumber(params.incident_id),
+        case_id = tonumber(params.case_id),
+    })
+    if not id then return nil, why or 'db_error' end
+
+    if not PoliceAudit.Write(tostring(actorCid or 'agent'), 'report.draft', tostring(id),
+            'draft', 'agent') then
+        return nil, 'audit_unavailable'
+    end
+    return { report_id = id, status = 'draft' }
+end
+
+exports('DraftReportSystem', Sys.DraftReport)
 exports('CreateIncidentSystem', Sys.CreateIncident)
 exports('AssignUnitSystem', Sys.AssignUnit)
 exports('JailSystem', Sys.Jail)

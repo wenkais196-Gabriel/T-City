@@ -2754,6 +2754,83 @@
       "verify": null,
       "undo": null,
       "compensation": "none"
+    },
+    {
+      "name": "apply_police_report",
+      "title": "Draft a police report (L2)",
+      "description": "Draft a police report on the board. Always requires human approval; the row is written with status=draft through the single owner writer and is never auto-submitted, fined, BOLO-flagged or attached as evidence.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "police_draft_report",
+      "risk": "L2",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.8.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 160
+          },
+          "body": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 4000
+          },
+          "citizenid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,11}$"
+          },
+          "incident_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "case_id": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": [
+          "title",
+          "body"
+        ]
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none"
     }
   ]
 }

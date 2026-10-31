@@ -923,6 +923,30 @@ AgentTools.TOOLS = {
       ["case_id"] = { type = "integer", minimum = 1 },
     },
   },
+  ["apply_police_report"] = {
+    name = "apply_police_report",
+    title = "Draft a police report (L2)",
+    channel = "write",
+    route = "director",
+    risk = "L2",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "police_draft_report",
+    auth = "default",
+    params = { "title", "body", "citizenid", "incident_id", "case_id" },
+    required = { "title", "body" },
+    schema = {
+      ["title"] = { type = "string", min_length = 3, max_length = 160 },
+      ["body"] = { type = "string", min_length = 3, max_length = 4000 },
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["incident_id"] = { type = "integer", minimum = 1 },
+      ["case_id"] = { type = "integer", minimum = 1 },
+    },
+  },
 }
 
 function AgentTools.get(name)

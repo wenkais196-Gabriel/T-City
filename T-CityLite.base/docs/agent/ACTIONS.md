@@ -2,7 +2,7 @@
 
 Server-side contract for agent-proposed game actions. This is a safe slice of
 issues **#30 / #32**: proposals, previews, policy/budget, human approval for
-risky actions and an audit row. Scope covers twenty-two actions: player-scoped
+risky actions and an audit row. Scope covers twenty-three actions: player-scoped
 actions, three L2 world/presentation actions, the police dispatch/judicial
 actions, and the test-only `police_run_e2e`. There is no LLM integration.
 Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
@@ -43,6 +43,7 @@ Adding the L2 actions, `teleport`, `spawn_vehicle`, `remove_item`,
 | `set_bucket` | L3 会话 | `citizenid`, `bucket` | `pending_approval` | **always** | `QBCore.Functions.SetPlayerBucket(source, bucket)` + `GetPlayerRoutingBucket` read-back; session-scoped |
 | `police_assign_unit` | L2 调度 | `incident_id`, `citizenid` | `pending_approval` | **always** | `exports['custom-police']:AssignUnitSystem('action:<id>', incident_id, citizenid)`：写 `police_incident_units`、单位置为 `assigned`、审计 `actor_kind='agent'` |
 | `police_jail_player` | L3 司法 | `citizenid`, `minutes`(1–120), `reason` | `pending_approval` | **always** | `exports['custom-police']:JailSystem(...)` → `custom-justice:Imprison` / qb-prison；写逮捕记录 + 审计 |
+| `police_draft_report` | L2 文书 | `title`(3–160), `body`(3–4000), `citizenid?`, `incident_id?`, `case_id?` | `pending_approval` | **always** | `exports['custom-police']:DraftReportSystem('action:<id>', params)`：委托唯一写者 `PoliceRecords.InsertReport` 写一行 `status='draft'`、`kind='report'` 的报告，审计 `report.draft`；**不提交、不罚款、不带 BOLO、不生成证据** |
 | `police_incident_create` | L1 调度 | `title`, `code?`, `priority?`, `details?` | `executed`（免审） | 否 | `exports['custom-police']:CreateIncidentSystem('action:<id>', params)`：写 `police_incidents`、审计 `actor_kind='agent'`、推送给在勤警员；`blast_radius = "single"`（无目标玩家） |
 | `police_run_e2e` | L1 测试 | `suite?`（仅 `police_e2e`）, `timeout_s?` (30–180) | `executed`（免审） | 否 | `exports['custom-agent-ops']:RunTest(suite)` → `exports['custom-testing']:RunTestSuite` → `Test.run`；返回结构化 `{ok, suite, result}`，测试写/清 `E2E_*` 命名空间 |
 | `kick` | L4 惩罚 | `citizenid`, `reason` | `pending_approval` | **always** | `QBCore.Functions.Kick(source, reason)` inside `pcall`; no offline read-back; `compensation = "manual"`, no undo |
@@ -120,7 +121,7 @@ Unknown keys inside `args` are dropped for `notify`, `add_money` and
 `start_quest`, but rejected with `invalid_params` for `set_job`, `grant_item`,
 `remove_item`, `set_bucket`, `kick`, `announce`, `set_weather`,
 `set_time_of_day`, `teleport`, `spawn_vehicle`, `revive`, `delete_vehicle`,
-`set_job_duty`, `set_metadata`, `send_phone_message` and `police_run_e2e`.
+`set_job_duty`, `set_metadata`, `send_phone_message`, `police_draft_report` and `police_run_e2e`.
 Unknown action types are rejected. There is no client-side validation path.
 
 ---
@@ -937,7 +938,7 @@ executes.
 |:---|:---|
 | `id` | Action id used by approve/reject/get/list |
 | `agent_id` | Caller identity from `X-Agent-Id` / export argument |
-| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `set_job_duty` \| `set_metadata` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` \| `send_phone_message` \| `police_assign_unit` \| `police_jail_player` \| `police_incident_create` \| `police_run_e2e` |
+| `action_type` | `notify` \| `announce` \| `set_weather` \| `set_time_of_day` \| `add_money` \| `start_quest` \| `set_job` \| `set_job_duty` \| `set_metadata` \| `teleport` \| `spawn_vehicle` \| `revive` \| `delete_vehicle` \| `grant_item` \| `remove_item` \| `set_bucket` \| `kick` \| `send_phone_message` \| `police_assign_unit` \| `police_jail_player` \| `police_draft_report` \| `police_incident_create` \| `police_run_e2e` |
 | `params` | Normalized JSON args (unknown fields dropped for legacy actions, rejected for the strict actions) |
 | `status` | See §4 |
 | `idempotency_key` | Caller key, unique |
