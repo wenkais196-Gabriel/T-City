@@ -60,6 +60,8 @@ local function _closeNui()
     PoliceModule.Deactivate()
     local ok = pcall(function() exports['custom-ui']:Pop('dashboard') end)
     if not ok then SetNuiFocus(false, false) end
+    -- Esc 关闭的同一帧，游戏也会收到 Esc：关完再挡 400ms，否则会弹出暂停菜单
+    pcall(function() exports['custom-ui']:GuardControls(400) end)
     SendNUIMessage({ type = 'close' })
     _isDashboardOpen = false
     _currentVehicle = nil
@@ -210,6 +212,7 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
             -- 否则鼠标一动镜头就转、游标就没法用。
             keepInput = driveWhileOpen(),
             allow = DRIVE_CONTROLS,
+            esc = true,       -- 由栈每帧读 Esc 并调 _closeNui（keepInput 下游戏也会看到 Esc）
             close = _closeNui,
         })
     end)
@@ -304,6 +307,19 @@ local TOGGLE_DEBOUNCE_MS = 250
 local _lastToggleAt = 0
 
 RegisterCommand('dashboard', function()
+    -- 别的 UI（手机/平板）占着输入时不开中控：两套界面叠在一起，Esc/方向键归谁说不清
+    if not _isDashboardOpen then
+        local taken = false
+        pcall(function()
+            local top = exports['custom-ui']:Top()
+            taken = top ~= nil and top.id ~= nil and not tostring(top.id):find('^dashboard', 1)
+        end)
+        if taken then
+            QBCore.Functions.Notify('先关闭当前界面再打开中控屏', 'error')
+            return
+        end
+    end
+
     local now = GetGameTimer()
     if now - _lastToggleAt < TOGGLE_DEBOUNCE_MS then return end
     _lastToggleAt = now

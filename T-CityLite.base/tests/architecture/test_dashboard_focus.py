@@ -70,3 +70,40 @@ def test_dashboard_keeps_driving_input_while_open() -> None:
     block = src[src.index("local DRIVE_CONTROLS"):src.index("}", src.index("local DRIVE_CONTROLS"))]
     ids = {int(n) for n in re.findall(r"\d+", block.split("=", 1)[1])}
     assert not ids & set(range(1, 7)), "视角控制 1-6 不能放进 allow"
+
+
+def test_escape_closes_the_terminal_without_opening_the_pause_menu() -> None:
+    """真机两轮：
+
+    * 在第一轮（NUI 自己关）Esc 关掉面板的同时，游戏把暂停菜单放了出来；
+    * 在第二轮（栈用 IsDisabledControlJustPressed 读）**读不到** —— 面板有焦点时
+      键盘归 CEF，Lua 侧轮询看不到按键。
+
+    所以最终形态是：NUI 处理 Esc → Lua 关闭 → `GuardControls(400)` 继续挡住
+    `INPUT_FRONTEND_PAUSE`，让同一帧的 Esc 不会转成暂停菜单。
+    """
+    ui = CUSTOM_UI.read_text(encoding="utf-8")
+    assert "199, -- INPUT_FRONTEND_PAUSE_ALTERNATE" in ui
+    assert "200, -- INPUT_FRONTEND_PAUSE" in ui, "GuardControls 必须挡暂停菜单"
+
+    dash = DASH.read_text(encoding="utf-8")
+    assert "GuardControls(400)" in dash, "关闭后要挡 Esc 400ms"
+
+    app = APP.read_text(encoding="utf-8")
+    assert "Escape" in app, "面板有焦点时 Esc 只能在 NUI 处理"
+
+
+def test_only_one_ui_can_own_the_screen() -> None:
+    """手机与车机互相拒绝叠加：两套 NUI 同时「有焦点」，Esc/方向键归谁说不清。"""
+    phone = (REPO / "T-CityLite.base/resources/[custom]/custom-phone/client/main.lua").read_text(encoding="utf-8")
+    at = phone.find("local function OpenPhone(")
+    assert at != -1
+    block = phone[at:at + 900]
+    assert "exports['custom-ui']:Top()" in block, "打开手机前先问栈顶是谁"
+    assert "先关闭当前界面" in block
+
+    dash = DASH.read_text(encoding="utf-8")
+    at2 = dash.find("RegisterCommand('dashboard'")
+    block2 = dash[at2:at2 + 900]
+    assert "exports['custom-ui']:Top()" in block2
+    assert "先关闭当前界面" in block2
