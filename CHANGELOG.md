@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
 
 ### Fixed
+- **警察序章卡在第一步**：模板里 `reach` 步骤走到 `QuestNodes.ExecuteNode` 时 `_eventMap` 没有 `REACH`，日志出现 `Unknown node type: reach → REACH` 后直接 return —— 客户端拿不到 blip 与触发区，玩家永远走不到第一个点。补 `REACH → quest:client:nodeGoto`（复用既有 blip + SetupReachZone）。
+- **`AbandonQuest` 只有注释没有实现**：`quest:server:abandon`、Bus 与手机 `exports['custom-quest']:AbandonQuest` 全部落空（真机日志 `No such export AbandonQuest in resource custom-quest`），玩家卡在坏任务里退不出来。补齐函数（清理节点/释放锁/失效缓存/DB 置 abandoned）并注册导出。
+- **步骤类型全覆盖**：`collect` / `custom_event` 登记为 server-only（由 `quest:server:collect` 与外部事件驱动），不再在日志里出现假告警；新增闸门扫全部任务模板，任何未映射类型都会红。
 - **文书类动作允许离线目标**：新增 `AgentPolicy.OFFLINE_TARGET_ACTIONS`（`police_warrant_request`、`police_draft_report`），不再要求目标在线（逮捕令本来就是给不在场的人开的）；但 propose 阶段会查 `players` 表，不存在的 citizenid 直接 `citizen_not_found`，不会进审批队列。
 - **policy.lua 的 Lua pattern 量化词**：`^[A-Za-z0-9_%-]{1,11}$` 在 Lua 里永远不匹配（pattern 没有 `{n,m}`），导致合法 citizenid 被判非法；改为 `#s` 判长度 + `+` 判字符集。新增闸门禁止 policy 里再出现 `{n,m}`。
 - **新增 agent 动作必须接满 policy.lua 四处**（ACTIONS / Normalize / Preview / CheckPolicy）：只接两处会在 propose 阶段静默返回 `unsupported_action`。新增闸门逐动作核对四处。

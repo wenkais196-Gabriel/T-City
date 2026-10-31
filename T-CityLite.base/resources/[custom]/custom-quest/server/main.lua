@@ -474,6 +474,7 @@ exports('RegisterStepValidator', function(validatorId, validatorFn)
 end)
 
 -- 5. 强制失败
+exports('AbandonQuest', QuestManager.AbandonQuest)
 exports('FailQuest', function(source, questId, reason)
     return QuestManager.FailQuest(source, questId, reason or 'unknown')
 end)
@@ -1221,6 +1222,6 @@ RegisterNetEvent('quest:server:savePosCollection', function(collection)
 end)
 
 print('[custom-quest] ✅ 通用任务系统已启动 (v0.7.2)')
-print('[custom-quest]   11 exports: TriggerQuest, OnCustomEvent, CompleteStep, RegisterStepValidator, FailQuest, GetActiveQuests, GetQuestProgress, GenerateNonce, GetQuestCatalog, IsQuestActive, GetQuestStep')
+print('[custom-quest]   12 exports: TriggerQuest, OnCustomEvent, CompleteStep, RegisterStepValidator, FailQuest, AbandonQuest, GetActiveQuests, GetQuestProgress, GenerateNonce, GetQuestCatalog, IsQuestActive, GetQuestStep')
 print('[custom-quest]   Bus: service_quest_* 可用')
 print('[custom-quest]   事件: accept, abandon, reach, collect, dashboardStampDelivery, requestState, requestNonce')

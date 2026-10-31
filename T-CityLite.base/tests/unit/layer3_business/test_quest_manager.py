@@ -245,11 +245,13 @@ assert(QuestNodes._eventMap.DECISION == "story:client:offerDecision",
         assert result['ok'], f"Lua error: {result['stderr']}"
 
     def test_event_map_count(self):
-        """Verify exactly 8 node types are mapped"""
+        """Verify exactly 9 node types are mapped (GOTO/REACH/INTERACT/VALIDATOR/DELIVER/COMBAT/WAIT/PLACEMENT/DECISION)"""
         result = run_lua_test("""
 local count = 0
 for _ in pairs(QuestNodes._eventMap) do count = count + 1 end
-assert(count == 8, "expected 8 node types, got " .. tostring(count))
+assert(count == 9, "expected 9 node types, got " .. tostring(count))
+-- reach 是模板里最常见的步骤类型，必须和 GOTO 走同一条下发路径
+assert(QuestNodes._eventMap.REACH == QuestNodes._eventMap.GOTO, "reach must reuse the goto node")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
