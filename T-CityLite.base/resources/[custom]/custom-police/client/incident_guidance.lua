@@ -64,7 +64,12 @@ local function startWatcher(payload)
             local coords = GetEntityCoords(ped)
             local flat = #(vector2(coords.x, coords.y) - vector2(target.x, target.y))
             local vertical = math.abs(coords.z - target.z)
-            local inside = flat <= RULES.ARRIVE_RADIUS and vertical <= RULES.ARRIVE_VERTICAL
+            -- AC-P2-04：进入半径**且停稳**才算到场。只判距离的话开车路过也会翻成 on_scene，
+            -- 而 2 次轮询（2 s）只是"停留时间"，不是"停住"。
+            local veh = GetVehiclePedIsIn(ped, false)
+            local speed = (veh ~= 0) and GetEntitySpeed(veh) or GetEntitySpeed(ped)
+            local slowEnough = speed <= (RULES.ARRIVE_MAX_SPEED or 2.0)
+            local inside = flat <= RULES.ARRIVE_RADIUS and vertical <= RULES.ARRIVE_VERTICAL and slowEnough
 
             if inside then
                 hits = hits + 1

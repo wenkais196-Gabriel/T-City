@@ -207,3 +207,36 @@ if not OfficerJob or OfficerJob.name ~= 'police' or OfficerJob.onduty ~= true th
 | 律师通知 / 刑期截断 / 越权拒绝 | §11（本轮 7 个 case） |
 
 P1 的验收项**全部有证据**；仍属 debt 的只有"律师在手机上看得到通知"这种 UI 层观感（需要第二客户端，且不属于本 AC）。
+
+
+## 12. P2 调度总线收尾（2026-10-31）
+
+### 12.1 补齐的两个真缺口
+
+| AC | 原来 | 现在 |
+|---|---|---|
+| **P2-05** 同 `ref` 5 分钟内 3 次合并成 1 张、`merge_count=3` | 表里没有 `ref` / `merge_count`，只能按 code+坐标合并 | 迁移 `v3.12` 加两列 + 索引；`findMergeableIncident(code, coords, ref)` **ref 优先**；合并时 `merge_count = merge_count + 1` |
+| **P2-09** 只有 lead 能结案 | `SetIncidentStatus` 没有任何 lead 校验 | 结案前查 `police_incident_units.role='primary'`：有 lead 且不是本人 → `return false, 'lead_only'`；没有 lead 的单仍允许够级别的人结掉（否则没人接的单永远关不掉） |
+
+顺带补 **AC-P2-04**：到场判定原来只判距离 + 2 次轮询（2 s），开车路过也会翻 `on_scene`。
+现在共享规则加 `ARRIVE_MAX_SPEED = 2.0`，客户端要求「进半径 **且** 速度 ≤2 m/s 持续 2 s」。
+
+### 12.2 真机证据
+
+| AC | 证据 |
+|---|---|
+| P2-05 | `police_incident_seed 10-77 3 合并ref测试 ref-abc` → `created=3 merged=2 last=49 merge_count=3`（1 张单，次数 3） |
+| P2-10 | `police_incident_bench 50` → `p50=11ms p95=29ms max=32ms`（判据 <50 ms） |
+| P2-11 | 离岗（`/10-8`）后连建 3 起 → `SCRIPT ERROR 新增 0` |
+| P2-02 | 三条警情客户端坐标与库内真实点相差 56/64/68 m（§8） |
+| P2-08 | 6 条同 code：`sent → merged → suppressed → suppressed → merged → suppressed` |
+
+### 12.3 仍然没有真机证据的（记 debt）
+
+| AC | 缺什么 | 怎么补 |
+|---|---|---|
+| P2-01 手机与车机同一 `call.id` | 两端读的是同一个 `GetIncidentsPublic`，但没有并排对比过 | 下次在线：车机开面板截图 + 手机 MDT 警情页截图对比 |
+| P2-04 停稳判定 | 改完只在代码层验证 | 下次在线：开车冲过现场（不应翻转）→ 停稳 2 s（应翻转） |
+| P2-06 7 个来源 | 只证了 911 与 NPC callout | 需要真实动作（卖药/送货/刷房/抢店/抢车/热线） |
+| P2-07 `custom-crime` 抢案 | `custom-crime` 只是策略层，不自己发案；产卡来自 `qb-storerobbery` 的 emit | 与 P2-06 一并验 |
+| P2-09 lead 拒绝 | 单客户端无法造出"别人是 lead" | 需要第二个号，或用 SQL 造 lead 行再调 MDT |
