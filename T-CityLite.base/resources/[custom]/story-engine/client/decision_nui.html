@@ -221,6 +221,11 @@
         });
 
         // 监听 Lua 端消息
+        // 自证握手：客户端只有在收到这条之后才 SendNUIMessage。
+        // 真机事故：资源刚重启、CEF 还没加载完就发 openDecision → 消息被丢，
+        // 但 SetNuiFocus(true,true) 已经生效 → 画面没有面板、鼠标被锁、什么都点不了。
+        nuiPost('nuiReady', { ua: navigator.userAgent });
+
         window.addEventListener('message', function(event) {
             var data = event.data;
             if (!data || !data.type) return;
