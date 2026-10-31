@@ -19,3 +19,18 @@ def test_decision_panel_rejects_sending_before_the_nui_handshake() -> None:
     assert "RegisterNUICallback('nuiReady'" in client
     assert "pendingNuiPayload" in client, "未握手时要缓存而不是丢弃"
     assert "closeDecisionSurface('nui_not_ready')" in client, "握手超时必须交还控制"
+
+
+def test_decision_payload_rejects_missing_options() -> None:
+    """模板只写 decision_id；prompt/options 必须从 OfferDecision 的返回值并进 payload。
+
+    真机 telemetry：`decision.offer` 紧跟一条 `decision.no_options` —— 客户端拿不到
+    options 就只能发 skip，玩家永远看不到按钮。
+    """
+    src = (REPO / "T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua").read_text(
+        encoding="utf-8"
+    )
+    block = src[src.index("if normalizedType == 'DECISION'"): src.index("TriggerClientEvent(eventName, source, data)")]
+    assert "type(result) == 'table'" in block
+    assert "data.options = result.options" in block
+    assert "data.prompt = result.prompt" in block

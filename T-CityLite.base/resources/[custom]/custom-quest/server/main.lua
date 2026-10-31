@@ -323,6 +323,39 @@ RegisterNetEvent(Config.Quest.Events.QUEST_REQUEST_STATE, function()
 end)
 
 -- ==============================================================
+-- ==============================================================
+-- 开发期：重放当前步骤的节点（真机验证决策面板 / NUI 握手用）
+-- 默认关闭，`setr quest_debug_cmds 1` 才可用；只接受控制台且目标玩家在线
+-- ==============================================================
+RegisterCommand('quest_reenode', function(source, args)
+    if GetConvar('quest_debug_cmds', '0') ~= '1' then
+        print('[quest-dev] quest_reenode 未启用（setr quest_debug_cmds 1）')
+        return
+    end
+    if source ~= 0 then return end
+    local target = tonumber(args and args[1])
+    if not target then
+        print('[quest-dev] 用法: quest_reenode <serverId>')
+        return
+    end
+    local Player = QBCore.Functions.GetPlayer(target)
+    if not Player then print('[quest-dev] 玩家不在线') return end
+    QuestDB.GetActiveQuests(Player.PlayerData.citizenid, function(quests)
+        local q = quests and quests[1]
+        if not q then print('[quest-dev] 没有进行中的任务') return end
+        local template = QuestRegistry.GetTemplate(q.quest_id)
+        if not template then print('[quest-dev] 模板缺失') return end
+        local step
+        for _, s in ipairs(template.steps or {}) do
+            if s.id == q.current_step then step = s break end
+        end
+        if not step then print('[quest-dev] 当前步骤不在模板里') return end
+        print(('[quest-dev] 重放 node: quest=%s step=%s type=%s')
+            :format(q.quest_id, step.id, tostring(step.type)))
+        QuestNodes.ExecuteNode(target, q.quest_id, step.id, step.type, step.data)
+    end)
+end, true)
+
 -- v0.7.0: 回调: 请求 Nonce Token（客户端用）
 -- ==============================================================
 
