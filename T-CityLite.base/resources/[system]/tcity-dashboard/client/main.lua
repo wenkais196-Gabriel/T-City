@@ -5,6 +5,9 @@ local function dbg(msg)
     if DASH_DEBUG then print(('[dashboard] %s'):format(msg)) end
 end
 
+-- 锁请求的序号/在途标记：超时提醒用（见 _openNui 的 900ms 兜底）
+local lockSeq, lockPending = 0, false
+
 -- client/main.lua — 入车/下车状态机 (v2.0)
 --
 -- 核心流程:
@@ -44,8 +47,23 @@ local function _openNui(veh)
 
     -- 锁请求 (使用 custom-vehicles 现有排他锁系统)
     local plate = GetVehicleNumberPlateText(veh):gsub('^%s+', ''):gsub('%s+$', ''):upper()
+    lockPending = true
     if DASH_DEBUG then print(('[dashboard] request_lock plate=%s veh=%s'):format(tostring(plate), tostring(veh))) end
     TriggerServerEvent('custom-vehicles:server:requestDashboard', plate)
+    -- 真机事故：custom-vehicles 被 restart 连坐停掉后，请求石沉大海，
+    -- 玩家看到的是"按 I 没反应"。900ms 无回执就说清楚缺的是什么。
+    local seq = (lockSeq or 0) + 1
+    lockSeq = seq
+    SetTimeout(900, function()
+        if lockSeq ~= seq or lockPending ~= true then return end
+        lockPending = false
+        local state = GetResourceState('custom-vehicles')
+        if DASH_DEBUG then
+            print(('[dashboard] lock_timeout veh_state=%s'):format(tostring(state)))
+        end
+        TriggerEvent('QBCore:Notify',
+            ('车机服务未就绪（custom-vehicles: %s）'):format(tostring(state)), 'error', 6000)
+    end)
 end
 
 -- 面板开着时允许穿透的车辆控制（59/60 移动、63/64 转向、71 油门、72 刹车、
@@ -128,6 +146,7 @@ end
 
 -- 监听旧 custom-vehicles 排他锁回调 (复用现有锁系统)
 RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted, errMsg)
+    lockPending = false
     if DASH_DEBUG then
         print(('[dashboard] lock_result granted=%s err=%s'):format(tostring(granted), tostring(errMsg)))
     end

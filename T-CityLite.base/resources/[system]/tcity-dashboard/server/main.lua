@@ -1,3 +1,21 @@
+-- 自愈：车机唯一的锁服务是 custom-vehicles。它经常被 `restart <别的资源>`
+-- 连坐停掉且不会自动回来（2026-10-31 真机两次），结果就是"按 I 毫无反应"。
+-- 车机自己负责把它拉起来，比在 AGENTS.md 里写十条注意事项有用。
+AddEventHandler('onResourceStart', function(resource)
+    if resource ~= GetCurrentResourceName() then return end
+    CreateThread(function()
+        Wait(3000)
+        local state = GetResourceState('custom-vehicles')
+        if state ~= 'started' then
+            print(('[dashboard][server] custom-vehicles=%s，自动拉起'):format(tostring(state)))
+            local ok, err = pcall(function() StartResource('custom-vehicles') end)
+            if not ok then
+                print(('[dashboard][server] ❌ 拉起失败: %s'):format(tostring(err)))
+            end
+        end
+    end)
+end)
+
 -- server/main.lua — 服务端入口 (v2.0)
 --
 -- 职责:
