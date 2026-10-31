@@ -114,6 +114,12 @@ PhoneApps.Register({
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
             return { rows = res.incidents or {}, count = res.count or 0 }
         end,
+        -- P6-4 草稿箱：agent 解析出的 call 卡（status='draft'），服务端已做 TTL 与审计
+        drafts = function(source)
+            local ok, res = pcall(function() return exports['custom-police']:ListDrafts(source) end)
+            if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
+            return { rows = res.rows or {}, count = res.count or 0 }
+        end,
         citizen = function(_source, params)
             local ok, res = pcall(function()
                 return exports['custom-police']:LookupCitizen(_source, params and params.citizenid)
@@ -213,6 +219,16 @@ PhoneApps.Register({
         set_status = function(source, params)
             return structured('set_status', function()
                 return exports['custom-police']:SetUnitStatusForSource(source, params.status)
+            end)
+        end,
+        adopt_draft = function(source, params)
+            return structured('adopt_draft', function()
+                return exports['custom-police']:AdoptDraft(source, params.incident_id)
+            end)
+        end,
+        discard_draft = function(source, params)
+            return structured('discard_draft', function()
+                return exports['custom-police']:DiscardDraft(source, params.incident_id)
             end)
         end,
         assign = function(source, params)

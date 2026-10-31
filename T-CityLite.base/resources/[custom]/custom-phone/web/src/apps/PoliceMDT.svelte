@@ -22,6 +22,12 @@
     actions?: { claim?: AllowedAction; clear?: AllowedAction };
   };
   type Charge = { id: number | string; label: string; minutes: number; fine: number };
+  // P6-4 草稿箱：agent 解析出的 call 卡（status='draft'），未上板。
+  // review = 服务端判定 agent 没把握（码位被降级 / 描述过短），前端只负责分道。
+  type Draft = {
+    id: number; code: string; title: string; description: string;
+    priority: number; review: boolean; age_minutes: number; created_by?: string;
+  };
   type Me = { citizenid: string; callsign: string; grade: number; status?: string };
 
   // Five pages. Sub-segments live inside each page; only the active one renders.
@@ -101,6 +107,9 @@
 
   let units = $state<Unit[]>([]);
   let incidents = $state<Incident[]>([]);
+  let drafts = $state<Draft[]>([]);
+  let draftBusy = $state<number | null>(null);
+  let confirmDiscard = $state<number | null>(null);
 
   // 右栏显示哪一单：默认第一张（打开详情无副作用，不像 Messages 会自动清未读）
   const callsignOf = (citizenid: string | null | undefined) => {
@@ -377,14 +386,17 @@
     loading = true;
     error = '';
     try {
-      const [u, i] = await Promise.all([
+      const [u, i, d] = await Promise.all([
         queryApp(DB, 'units'),
         queryApp(DB, 'incidents'),
+        queryApp(DB, 'drafts'),
       ]);
       if (u?.success) units = u.data?.rows ?? [];
       else error = errorText(u?.error ?? 'units_failed');
       if (i?.success) incidents = i.data?.rows ?? [];
       else error = error || errorText(i?.error ?? 'incidents_failed');
+      // 草稿箱读失败不覆盖主列表的错误：它只是辅助面
+      if (d?.success) drafts = d.data?.rows ?? [];
     } finally {
       loading = false;
       lastRefreshAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -502,6 +514,35 @@
     const res = await appAction(DB, 'assign', { incident_id: incident.id, citizenid: unit.citizenid });
     notice = res?.success ? `已派 ${unit.callsign || unit.name} → #${incident.id}` : `派单失败：${errorText(res?.error ?? 'unknown')}`;
     await refresh();
+  }
+
+  // 采纳 = draft → open：服务端裁决（状态机 + 审计），前端只刷新
+  async function adoptDraft(draft: Draft) {
+    if (draftBusy !== null) return;
+    draftBusy = draft.id;
+    try {
+      const res = await appAction(DB, 'adopt_draft', { incident_id: draft.id });
+      notice = res?.success ? `草稿 #${draft.id} 已上板` : `采纳失败：${errorText(res?.error ?? 'unknown')}`;
+      confirmDiscard = null;
+      await refresh();
+    } finally {
+      draftBusy = null;
+    }
+  }
+
+  // 丢弃不可逆：先要一次确认再发（服务端还要求 grade >= 2）
+  async function discardDraft(draft: Draft) {
+    if (confirmDiscard !== draft.id) { confirmDiscard = draft.id; return; }
+    if (draftBusy !== null) return;
+    draftBusy = draft.id;
+    try {
+      const res = await appAction(DB, 'discard_draft', { incident_id: draft.id });
+      notice = res?.success ? `草稿 #${draft.id} 已丢弃` : `丢弃失败：${errorText(res?.error ?? 'unknown')}`;
+      confirmDiscard = null;
+      await refresh();
+    } finally {
+      draftBusy = null;
+    }
   }
 
   async function clearIncident(incident: Incident) {
@@ -897,6 +938,28 @@
 {/snippet}
 
 <div class="mdt" class:mdt-split={page === 'dispatch'}>
+
+{#snippet draftRow(draft: Draft, review: boolean)}
+  <div class="draft" class:review>
+    <div class="row">
+      <div class="dmain">
+        <b>#{draft.id} [{draft.code}] {draft.title}</b>
+        <p class="muted">P{draft.priority} · {draft.age_minutes} 分钟前 · 未上板</p>
+      </div>
+      <span class="conf" class:ok={!review} class:warn={review}>{review ? '需核对' : '可采纳'}</span>
+    </div>
+    {#if draft.description}<p class="desc">{draft.description}</p>{/if}
+    <div class="btns">
+      <button class:primary={!review} disabled={draftBusy === draft.id} onclick={() => adoptDraft(draft)}>
+        {draftBusy === draft.id ? '采纳中…' : review ? '仍然采纳' : '采纳'}
+      </button>
+      <button class="ghost" disabled={draftBusy === draft.id} onclick={() => discardDraft(draft)}>
+        {confirmDiscard === draft.id ? '确认丢弃？' : '丢弃'}
+      </button>
+    </div>
+  </div>
+{/snippet}
+
   <header class="mdt-head">
     <div>
       <h2>🛡️ Police MDT</h2>
@@ -968,6 +1031,28 @@
               {loading ? '刷新中…' : '刷新'}
             </button>
           </div>
+
+
+          {#if drafts.length > 0 || loaded['dispatch']}
+            <section class="card drafts">
+              <h3>📝 草稿箱 <span class="tag">{drafts.length} 待采纳</span></h3>
+              <p class="hint">agent 解析结果，未上板、不响铃；采纳后才进入接警。</p>
+
+              {#each [{ key: 'ok', review: false, label: '可采纳' }, { key: 'warn', review: true, label: '需核对' }] as lane (lane.key)}
+                {@const rows = drafts.filter((d) => d.review === lane.review)}
+                {#if rows.length > 0}
+                  <div class="lane"><span>{lane.label}</span><span>{rows.length}</span></div>
+                  {#each rows as draft (draft.id)}
+                    {@render draftRow(draft, lane.review)}
+                  {/each}
+                {/if}
+              {/each}
+
+              {#if drafts.length === 0}
+                <p class="empty">暂无待采纳草稿</p>
+              {/if}
+            </section>
+          {/if}
 
           <section class="card">
             <h3>接警</h3>
@@ -1438,6 +1523,24 @@
   .tabs.sub-tabs button.active { background: rgba(37,99,235,.55); border-color: rgba(37,99,235,.8); }
   .card { background: rgba(255,255,255,.05); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
   .card h3 { margin: 0 0 8px; font-size: 12px; opacity: 0.8; }
+  .drafts .hint { margin: 0 0 8px; font-size: 10.5px; opacity: .6; line-height: 1.5; }
+  .lane { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: .6px;
+    text-transform: uppercase; opacity: .55; margin: 10px 0 2px; }
+  .draft { padding: 8px 0; border-top: 1px solid rgba(255,255,255,.06); }
+  .draft:first-of-type { border-top: 0; }
+  .dmain { min-width: 0; }
+  .dmain b { font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .draft .desc { margin: 5px 0 0; font-size: 11px; opacity: .75; line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .conf { font-size: 10px; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+  .conf.ok { color: #86efac; background: rgba(22,163,74,.15); border: 1px solid rgba(22,163,74,.4); }
+  .conf.warn { color: #fdba74; background: rgba(249,115,22,.15); border: 1px solid rgba(249,115,22,.4); }
+  .btns { display: flex; gap: 6px; margin-top: 8px; }
+  .btns button { font-family: inherit; font-size: 11px; padding: 6px 12px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.15); background: transparent; color: inherit; cursor: pointer; }
+  .btns button.primary { background: #7c3aed; border-color: #7c3aed; color: #fff; font-weight: 600; }
+  .btns button.ghost { color: rgba(255,255,255,.6); }
+  .btns button:disabled { opacity: .5; cursor: default; }
   .status-row { display: flex; gap: 6px; flex-wrap: wrap; }
   .status-row button { flex: 1; font-size: 11px; padding: 7px 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,.15); background: transparent; color: inherit; }
   .status-row button.active { background: #16a34a; border-color: #16a34a; }

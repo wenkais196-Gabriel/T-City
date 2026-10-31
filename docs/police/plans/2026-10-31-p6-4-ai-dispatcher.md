@@ -144,3 +144,29 @@ exports('DraftCallSystem', P.DraftCallSystem)
 真机：`restart custom-police` 后 SCRIPT ERROR 新增 0；闸门覆盖「只列草稿 / 审计 fail-closed / 采纳走状态机 / 事件限流 + 拒绝控制台」。
 
 **未做**：MDT/车机里的草稿箱界面（下一步，需要先定视觉）。
+
+## 8. 界面施工记录（手机 / 平板 MDT）
+
+| 项 | 决策 |
+|---|---|
+| 版式 | **C 分信度车道**（可采纳 / 需核对），落在 MDT **调度 → 接警**页顶部，车机不做 |
+| 分档依据 | **不建列**：`needs_review` 写进草稿行的 `disposition`；判据 = 码位被降级成 911，或 `details` 短于 20 字 |
+| 丢弃 | 前端二次确认（点一次变「确认丢弃？」），服务端要求 **grade ≥ 2**，写 `incident.discard` |
+| 过期 | 30 分钟无人处理 → `closed` + `disposition='stale'`，在 `ListDrafts` 的读路径上惰性清理 |
+| 空态 | 「暂无待采纳草稿」 |
+| 采纳后 | 行消失 + notice「草稿 #68 已上板」，随即出现在接警列表 |
+
+### 8.1 真机证据（2026-10-31）
+
+| 用例 | 结果 |
+|---|---|
+| 高置信草稿（`10-31` + 详细描述） | `#68` `status=draft`、`disposition=NULL` |
+| 低置信草稿（`details='听不清'`） | `#69` `status=draft`、`disposition=needs_review` |
+| 重启 3 个资源 | SCRIPT ERROR 新增 **0** |
+| MDT 打开 | `[custom-phone][diag] app=police_mdt code=ok` |
+
+### 8.2 施工中修掉的问题
+
+`police_call_draft` 审批阶段报 `unknown field code_fallback for police_call_draft`：
+`code_fallback` 是服务端回填给执行器的标记，approve 时会拿存的 params **再规范化一次**，
+白名单里没有它 → 草稿永远停在 `rejected`。已纳入白名单（并保留回放时的原判）。
