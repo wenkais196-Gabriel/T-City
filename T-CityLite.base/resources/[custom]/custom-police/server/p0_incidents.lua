@@ -63,7 +63,17 @@ local function notifyOnDutyIncident(incident, content)
         local p = QBCore.Functions.GetPlayer(src)
         local d = p and p.PlayerData
         if isPolice(d) and d.job.onduty == true then
-            notifyOfficer(d.citizenid, title, body, 'police_mdt')
+            -- P2-2 预算层：同 code 90 s 合并成「×N」，非紧急每 5 s 最多 3 条。
+            -- police_alert_budget 0 可一键关掉（回滚到逐条发）。
+            local action, count = 'sent', 1
+            if PoliceAlertBudget and GetConvarInt('police_alert_budget', 1) ~= 0 then
+                action, count = PoliceAlertBudget.Decide(
+                    d.citizenid, incident.code, incident.priority, os.time() * 1000)
+            end
+            if action == 'sent' or action == 'merged' then
+                local shown = PoliceAlertBudget and PoliceAlertBudget.Decorate(title, count) or title
+                notifyOfficer(d.citizenid, shown, body, 'police_mdt')
+            end
         end
     end
 end
