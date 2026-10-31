@@ -411,3 +411,21 @@ def test_quest_phone_reads_fail_soft() -> None:
     assert "phoneReadFailSoft" in part
     detail = block(src, "exports('GetQuestDetail'", 600)
     assert "phoneReadFailSoft" in detail
+
+
+def test_client_net_events_are_registered_as_net_events() -> None:
+    """服务端 TriggerClientEvent 下发的事件，客户端必须 RegisterNetEvent。
+
+    真机证据：`custom-phone/client/main.lua` 用 AddEventHandler 监听
+    `QBCore:Player:SetPlayerData`，客户端日志刷了 **280 次**
+    「event QBCore:Player:SetPlayerData was not safe for net」。
+    服务端内部事件（`QBCore:Server:*`）用 AddEventHandler 是对的，不在此列。
+    """
+    offenders = []
+    for path in ROOT.rglob("*.lua"):
+        if "/client/" not in str(path).replace("\\", "/"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for match in re.finditer(r"AddEventHandler\('(QBCore:Player:[^']+)'", text):
+            offenders.append(f"{path.name}:{match.group(1)}")
+    assert not offenders, f"客户端把网络事件当成本地事件监听：{offenders}"
