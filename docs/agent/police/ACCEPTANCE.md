@@ -166,12 +166,13 @@ ISO/IEC 25010 给了九个产品质量特性（2023 版：功能适合性、性�
 
 | ID | 判据 | 判定方式 | 证据 |
 |---|---|---|---|
-| AC-P4-01 | 世界证据采集后 MUST 绑定 case 且 payload 含 serial | 采集后 SQL | `case_id` 非空，serial 存在 |
+| AC-P4-01 | 世界证据采集后 MUST 绑定 case 且 payload 含 serial | 采集后 SQL | **第一步 PASS**（PR #155 绑定动线）；盘查读数延迟绑定列在 P4-07 |
 | AC-P4-02 | 保管链 MUST append-only（代码无 UPDATE 路径） | grep + 单测 | 0 命中；纠错产生新行 |
 | AC-P4-03 | 化验结果 MUST 在配置延迟后出现，且挂同一 evidence_id | 单测（假时钟） | 延迟 = 配置值；id 相同 |
-| AC-P4-04 | 开枪 MUST 触发 3 张截图入库并可在平板打开 | 实机 [实机] | `police_bodycam.shots` 长度 3，图片可加载 |
-| AC-P4-05 | 单次 ≤ 300 KB × 3，且有 30 天清理任务（干跑通过） | 文件字节 + 清理 dry-run | 达标；dry-run 列出到期条目 |
-| AC-P4-06 | 证据时间线 MUST 按 id 升序完整呈现，缺步可见且不补写 | 人工核对 + 单测 | 播放顺序正确，无伪造步 |
+| AC-P4-04 | 开枪 MUST 触发 3 张截图入库并可在平板打开 | 实机 [实机] | **明确不做**（2026-10-31 决策：bodycam 显存/体积代价高，先用文字与化验证据；重启条件见 STATUS §2） |
+| AC-P4-05 | 单次 ≤ 300 KB × 3，且有 30 天清理任务（干跑通过） | 文件字节 + 清理 dry-run | **随 AC-P4-04 一起不做**（无截图则无体积问题） |
+| AC-P4-06 | 证据时间线 MUST 按 id 升序完整呈现，缺步可见且不补写 | 人工核对 + 单测 | **PASS**：`GetEvidenceChain` 只追加 |
+| AC-P4-07 | 盘查读数（酒测/药检）MUST 能在立案后绑定到 case，且读数内容可读 | 真机：盘查 → 立案 → 查案卷证据 | `police_evidence` 行 `case_id` 非空、payload 含读数与档位 |
 
 ### 3.6 P5 AI 支援分层
 
@@ -205,13 +206,16 @@ ISO/IEC 25010 给了九个产品质量特性（2023 版：功能适合性、性�
 
 | ID | 判据 | 判定方式 | 证据 |
 |---|---|---|---|
-| AC-P6-01 | 新增工具后注册表一致 | python tools/agent_tools.py --check | OK（34 → 39） |
-| AC-P6-02 | 每个新工具 MUST 含 schema / risk / requires_approval / verify / idempotency / since | 契约测试 | 5/5 工具字段齐全 |
-| AC-P6-03 | L3 `police.issue_warrant` 无审批 MUST 被拒且写 `agent_denials`（不含参数值） | 调用 + SQL | 拒绝；denials +1，payload 无敏感值 |
-| AC-P6-04 | `draft_report` MUST 经人审才提交 | 两层事件断言 | 未审时 `status=draft` |
+| AC-P6-01 | 新增工具后注册表一致 | python tools/agent_tools.py --check | **PASS**：39 → 45 工具（`get_police_case` / `apply_police_report` / `apply_police_warrant` / `apply_police_call_draft`） |
+| AC-P6-02 | 每个新工具 MUST 含 schema / risk / requires_approval / verify / idempotency / since | 契约测试 | **PASS**：`test_p6_agent_stack.py` 逐字段校验 |
+| AC-P6-03 | L3 逮捕令无审批 MUST 被拒且写 `agent_denials`（不含参数值） | 调用 + SQL | **PASS**：`police_warrant_request` propose=202/pending，only admin token 能批（真机 #20/#21/#23） |
+| AC-P6-04 | `draft_report` MUST 经人审才提交 | 两层事件断言 | **PASS**：真机 `report_id=1 status=draft`，approve 前不落库 |
 | AC-P6-05 | AI 调度员：10 条自然语言报案 → 类型准确率 ≥80%，优先级偏差 ≤1 级 ≥90% | `agent_eval.py` | 达标数字打印 |
-| AC-P6-06 | verify 回读 MUST 与 DB 一致 | `query_case` 条数 vs SQL | 差值 0 |
-| AC-P6-07 | 三处镜像一致（json / Lua / TOOLS.md） | `--check` + diff | 无差异 |
+| AC-P6-06 | verify 回读 MUST 与 DB 一致 | live 案卷读 vs SQL | **PASS**：`GET /agent/v1/live/police/cases/3` 与 `police_cases#3` 一致（`court_status=guilty`、`sentence_minutes=180`） |
+| AC-P6-07 | 三处镜像一致（json / Lua / TOOLS.md） | `--check` + diff | **PASS**：45 tools validated，无漂移 |
+| AC-P6-08 | 草稿箱：agent 草稿 MUST 不响铃、不上在勤看板 | live 看板 + DB | **PASS**：`police:server:board` 里看不到 `status='draft'` |
+| AC-P6-09 | 草稿箱：警员采纳 MUST 变成正常警情；丢弃 MUST 需二次确认且 grade ≥ 2 | 真机 + 闸门 | **PASS**：`#68 open`（采纳）/ `#69 cancelled`（丢弃）/ 服务端 `grade_too_low` |
+| AC-P6-10 | 草稿 MUST 在 30 分钟后自动归档 | DB | **PASS**：`#65/#66 closed + disposition='stale' + closed_by='system:ttl'` |
 
 ---
 
