@@ -425,6 +425,43 @@ exports('DraftCallSystem', P.DraftCallSystem)
 exports('WriteAudit', function(actorCid, actorKind, action, target, detail)
     return audit(actorCid, action, target, detail, actorKind)
 end)
+--- P6-4 草稿箱：列出 status='draft' 的 call 卡（只给在勤警察）。
+function P.ListDrafts(source)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return false, reason end
+    -- FIT-05：草稿带标题/描述（敏感读），先写审计再查，写不进去就不给看
+    if not audit(actor.citizenid, 'incident.draft.view', nil, nil) then
+        return false, 'audit_unavailable'
+    end
+    local rows = MySQL.query.await([[
+        SELECT id, code, title, LEFT(description, 200) AS description, priority, created_by, created_at
+          FROM police_incidents
+         WHERE status = 'draft'
+         ORDER BY created_at DESC
+         LIMIT 20
+    ]]) or {}
+    return { rows = rows, count = #rows }
+end
+
+--- P6-4 草稿箱：警员采纳一张草稿 —— 复用既有状态机（draft → open），
+--- 之后它就按正常警情出现在板上，可以被指派/响应。
+function P.AdoptDraft(source, incidentId)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return false, reason end
+    local id = tonumber(incidentId)
+    if not id then return false, 'invalid_incident' end
+    local ok, reason2 = P.SetIncidentStatus(source, id, 'open')
+    if not ok then return false, reason2 or 'adopt_failed' end
+    if not audit(actor.citizenid, 'incident.adopt', tostring(id), nil) then
+        return false, 'audit_unavailable'
+    end
+    return { id = id, status = 'open' }
+end
+
+exports('ListDrafts', P.ListDrafts)
+exports('AdoptDraft', P.AdoptDraft)
 exports('SetIncidentStatus', P.SetIncidentStatus)
 exports('SweepStaleIncidents', SweepStaleIncidents)
 
