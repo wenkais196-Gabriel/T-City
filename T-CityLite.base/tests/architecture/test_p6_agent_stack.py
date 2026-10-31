@@ -429,3 +429,45 @@ def test_client_net_events_are_registered_as_net_events() -> None:
         for match in re.finditer(r"AddEventHandler\('(QBCore:Player:[^']+)'", text):
             offenders.append(f"{path.name}:{match.group(1)}")
     assert not offenders, f"客户端把网络事件当成本地事件监听：{offenders}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# §8 体感修复：小地图 / 车载面板诊断 / 序章 reach
+# ══════════════════════════════════════════════════════════════════
+
+HUD_TOOL = ROOT / "hud-position-tool/client.lua"
+CUSTOM_UI = ROOT / "custom-ui/client/main.lua"
+DASH = REPO / "T-CityLite.base/resources/[system]/tcity-dashboard/client/main.lua"
+QUEST_CLIENT = ROOT / "custom-quest/client/main.lua"
+
+
+def test_minimap_tool_is_off_by_default() -> None:
+    """改小地图组件的工具默认关：开着就必然和原生不一致。"""
+    src = read(HUD_TOOL)
+    assert "GetConvar('hud_position_tool', '0')" in src
+    part = block(src, "local function applyMap()", 400)
+    assert "if not HUD_TOOL_ENABLED then return end" in part
+
+
+def test_radar_follows_the_vehicle_at_file_scope() -> None:
+    """步行无雷达、上车交回原生；线程必须在文件顶层（插进函数里等于不跑）。"""
+    src = read(CUSTOM_UI)
+    assert "IsPedInAnyVehicle(ped, false)" in src
+    assert "DisplayRadar(shouldShow)" in src
+    at = src.index("-- T-City: 小地图只给载具")
+    assert "GuardControls" not in src[max(0, at - 200):at], "不许再插进 GuardControls"
+
+
+def test_dashboard_reports_why_it_refused() -> None:
+    src = read(DASH)
+    for marker in ("blocked:taken", "blocked:no_vehicle", "blocked:debounce", "dbg('enter')"):
+        assert marker in src, marker
+
+
+def test_reach_zone_does_not_depend_on_polyzone() -> None:
+    """PolyZone 是它自己资源内的全局，跨资源取不到 —— reach 必须有自己的轮询。"""
+    src = read(QUEST_CLIENT)
+    part = block(src, "function SetupReachZone", 2000)
+    assert "quest-reach" in part, "触发时要留可见日志"
+    assert "GetEntityCoords(ped) - target" in part
+    assert "if PolyZone then" in part, "旧分支保留但不作为唯一路径"

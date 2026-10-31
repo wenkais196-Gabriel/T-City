@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
 
 ### Fixed
+- **小地图被改成非原生**：`hud-position-tool` 启动即按「圆形 + 87.5% + 自定义偏移」重排小地图组件。改为受 `hud_position_tool` 开关控制（默认 `0` = 不动原生）；同时 `custom-ui` 顶层新增雷达可见性线程：**步行不显示雷达、上车交回原生**（不碰尺寸/位置/形状）。
+- **`I` 键唤不出车载面板**：命令里三个早退分支（被别的界面占用 / 不在载具 / 250ms 去抖）只弹提示不留证据。新增 `dashboard_debug` 诊断，按一次键即可在客户端日志看到 `enter` 与 `blocked:*` 的确切原因。
+- **警察序章仍推进不了**：`SetupReachZone` 的检测区只写在 `if PolyZone then` 里，而 `PolyZone` 是它自己资源内的全局（`PolyZone = {}`），跨资源恒为 nil → **检测区从未被创建**。改为纯距离轮询（500ms）+ 触发日志 `[quest-reach]`，PolyZone 分支保留给将来手动挂库。
 - **客户端刷屏 `event QBCore:Player:SetPlayerData was not safe for net`（280 次）**：custom-phone 的客户端脚本用 `AddEventHandler` 监听这个**服务端下发**的事件，没有声明为 net-safe；全仓其它 5 处（qb-core / qb-hud / qb-inventory / qb-fuel / custom-certificates）都是 `RegisterNetEvent`，只有手机这一处写错。已改，并加闸门禁止客户端再用 `AddEventHandler` 监听 `QBCore:Player:*`（服务端内部事件 `QBCore:Server:*` 不受影响，那本来就该用本地监听）。
 - **qb-crypto:104 `attempt to compare table with number`（47 次）**：本服 oxmysql 的 `update` 回调回表，而代码按数字比较；且回调里再调 `MySQL.query.await`（`RefreshCrypto`）会触发 `nested ref call`。改成同步 `update.await` + 行数归一化（table/number 都吃）后再 insert + 刷新。真机：`crypto` 表本来**一直是空的**（因为 insert 分支永远走不到），修完 `qbit` 落库 `worth=5200`，重启后 `104` / `nested ref` / `SCRIPT ERROR` 新增 **0 / 0 / 0**。
 - **`qb-crypto` 的 `setcryptoworth` 控制台执行报 null player**：`source=0` 时仍 `TriggerClientEvent`。已加控制台分支（改为打日志），控制台改价可用。

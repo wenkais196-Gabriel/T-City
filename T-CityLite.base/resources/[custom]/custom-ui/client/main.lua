@@ -33,6 +33,7 @@ local GUARD_CONTROLS = {
 ---@param durationMs number|nil 默认 300ms
 function GuardControls(durationMs)
     local untilMs = GetGameTimer() + (durationMs or 300)
+
     CreateThread(function()
         while GetGameTimer() < untilMs do
             for _, control in ipairs(GUARD_CONTROLS) do
@@ -366,3 +367,18 @@ SetNuiFocus(false, false)
 SetNuiFocusKeepInput(false)
 
 print('[custom-ui] ✅ menu focus/guard/distance helpers ready')
+
+-- T-City: 小地图只给载具。步行不显示雷达；上车后交回原生（不碰尺寸/位置/形状）。
+-- 放在文件顶层：早先误插进 GuardControls 里，只有屏蔽控制时才会执行。
+CreateThread(function()
+    local last = nil
+    while true do
+        local ped = PlayerPedId()
+        local shouldShow = IsPedInAnyVehicle(ped, false) and true or false
+        if shouldShow ~= last then
+            last = shouldShow
+            DisplayRadar(shouldShow)
+        end
+        Wait(1000)
+    end
+end)
