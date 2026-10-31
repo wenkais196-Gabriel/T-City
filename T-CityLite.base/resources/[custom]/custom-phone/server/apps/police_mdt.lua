@@ -167,6 +167,12 @@ PhoneApps.Register({
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end
             return { rows = res.rows or {}, count = res.count or 0 }
         end,
+        -- P3-3：把"刚才盘过谁"带进逮捕表单
+        last_inspection = function(source)
+            local ok, res = pcall(function() return exports['custom-police']:GetLastInspection(source) end)
+            if not ok or type(res) ~= 'table' then return { empty = true } end
+            return res
+        end,
         arrests = function(source, params)
             local ok, res = pcall(function() return exports['custom-police']:GetArrests(source, params) end)
             if not ok or type(res) ~= 'table' then return { rows = {}, count = 0 } end

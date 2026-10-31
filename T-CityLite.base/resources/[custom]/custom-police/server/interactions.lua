@@ -244,6 +244,18 @@ RegisterNetEvent('police:server:RobPlayer', function(playerId)
     TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.stolen_money', { stolen = money }))
 end)
 
+--- 最近一次盘查（P3-3）：MDT 的逮捕表单可以一键带进来。
+--- 按**警员**记，只存在内存里：盘查是当下的动作，不需要历史。
+local lastInspection = {}
+
+local function rememberInspection(officerCid, targetCid, patchTable)
+    local record = lastInspection[officerCid] or { at = os.time() }
+    record.citizenid = targetCid
+    record.at = os.time()
+    for k, v in pairs(patchTable or {}) do record[k] = v end
+    lastInspection[officerCid] = record
+end
+
 --- 查证件（P3-1）：对准的那个人是谁、有没有驾照。
 --- 只回公开资料 —— 钱包、背包、案底都不在这里（那些要立案/搜查的依据）。
 QBCore.Functions.CreateCallback('police:server:showId', function(source, cb, targetSrc)
@@ -276,9 +288,11 @@ QBCore.Functions.CreateCallback('police:server:showId', function(source, cb, tar
     local info = Target.PlayerData.charinfo or {}
     PoliceAudit.Write(Officer.PlayerData.citizenid, 'id.check', Target.PlayerData.citizenid,
         ('dist=%.1f'):format(dist))
+    local displayName = ('%s %s'):format(tostring(info.firstname or ''), tostring(info.lastname or ''))
+    rememberInspection(Officer.PlayerData.citizenid, Target.PlayerData.citizenid, { name = displayName })
     cb({
         ok = true,
-        name = ('%s %s'):format(tostring(info.firstname or ''), tostring(info.lastname or '')),
+        name = displayName,
         citizenid = Target.PlayerData.citizenid,
         job = Target.PlayerData.job and Target.PlayerData.job.label or '无业',
         license = Target.PlayerData.metadata and Target.PlayerData.metadata.licences
@@ -346,7 +360,31 @@ QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, 
     PoliceAudit.Write(Officer.PlayerData.citizenid,
         ('fieldtest.%s'):format(kind), Target.PlayerData.citizenid,
         ('%.2f %s'):format(value, label))
+    rememberInspection(Officer.PlayerData.citizenid, Target.PlayerData.citizenid, {
+        [kind] = { value = value, label = label },
+    })
 
     cb({ ok = true, kind = kind, value = value, label = label, evidence = false })
 end)
 
+
+--- 最近一次盘查（P3-3）。只回给在岗警察，内容就是"刚才盘过谁、读数多少"。
+exports('GetLastInspection', function(source)
+    local actor = QBCore.Functions.GetPlayer(source)
+    local data = actor and actor.PlayerData
+    local allowed, why = PolicePolicy.Can(data, 'incident.update')
+    if not allowed then return false, why or 'off_duty' end
+    -- 读的是"谁被盘过、读数多少"：属于敏感读取，审计写不进去就失败关闭
+    if not audit(data.citizenid, 'inspection.view', 'last', nil) then
+        return false, 'audit_unavailable'
+    end
+    local record = lastInspection[data.citizenid]
+    if not record then return { empty = true } end
+    return {
+        citizenid = record.citizenid,
+        name = record.name,
+        alcohol = record.alcohol,
+        drug = record.drug,
+        at = record.at,
+    }
+end)
