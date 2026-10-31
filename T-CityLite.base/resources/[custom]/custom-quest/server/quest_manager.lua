@@ -120,6 +120,14 @@ QuestNodes = {
                 return exports['story-engine']:OfferDecision(
                     source, questId, stepId, data.decision_id, data.timeout)
             end)
+            -- 决策定义里的 prompt/options/timeout 必须并进 payload：
+            -- 模板里只写了 decision_id，客户端拿不到 options 就只能走 skip 兜底
+            -- （真机 telemetry: decision.offer 之后紧跟 decision.no_options）。
+            if ok and type(result) == 'table' then
+                data.prompt = result.prompt or data.prompt
+                data.options = result.options or data.options
+                data.timeout = result.timeout or data.timeout
+            end
             if not ok or result == false then
                 -- 真机事故：restart custom-quest 会连带停掉 story-engine（依赖方向是
                 -- story-engine -> custom-quest），restart 不会把它们拉回来，
