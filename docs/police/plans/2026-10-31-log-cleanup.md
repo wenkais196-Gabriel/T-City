@@ -85,3 +85,44 @@ end)
 
 `Server list query returned an error: Cfx failed to reach the server`（31 次）——
 本机没有外网，是 FXServer 上报主列表的正常噪音，不属于代码缺陷。
+
+## 8. 第三类：客户端「not safe for net」（2026-10-31 追加）
+
+### 8.1 溯源
+
+| 观察 | 证据 |
+|---|---|
+| 客户端日志里 **280 次** `event QBCore:Player:SetPlayerData was not safe for net` | `FiveM.app/logs/CitizenFX_log_2026-10-31T160256.log`，且**只有这一种** net 相关告警 |
+| 服务端日志里没有这条 | 说明是**客户端**接收侧的问题，不是服务端发包错 |
+| 该事件由服务端 `TriggerClientEvent` 下发 | `[qb]/qb-core/server/player.lua:185` |
+| 全仓 6 处监听里，5 处用 `RegisterNetEvent`，**只有 `custom-phone` 用 `AddEventHandler`** | `custom-certificates` / `qb-cityhall` / `qb-core/client` / `qb-doorlock` / `qb-fuel` / `qb-hud` / `qb-inventory` vs `custom-phone/client/main.lua` |
+
+原因：FiveM 里 `RegisterNetEvent` 才是"这个事件可以从网络进来"的声明；`AddEventHandler` 只挂本地处理器。
+手机资源把网络事件当本地事件听，于是每次玩家数据推送都刷一条告警。
+
+### 8.2 修法
+
+`custom-phone/client/main.lua`：`AddEventHandler` → `RegisterNetEvent`（语义不变，只补声明）。
+
+区分：**服务端**那些 `AddEventHandler('QBCore:Server:PlayerLoaded', …)` 是对的 ——
+那是 qb-core 用本地 `TriggerEvent` 发的内部事件，`custom-career` / `custom-cartel` / `custom-director` 都不用改。
+
+### 8.3 闸门
+
+`test_client_net_events_are_registered_as_net_events`：扫所有 `client/**.lua`，
+出现 `AddEventHandler('QBCore:Player:*` 就红。
+
+### 8.4 验证状态
+
+| 项 | 结果 |
+|---|---|
+| 代码 | 已改（`RegisterNetEvent`） |
+| pytest | 1319 passed |
+| 真机 | 改完重启 `custom-phone` 成功；**但当时服务器上无人在线**（`players.json = []`），"
+无法触发玩家数据推送，所以"计数不再增长"这一条要等有人上线后复核 |
+| 佐证 | 该告警与手机资源高度对应：全仓唯一一处漏声明的监听点已被改掉 |
+
+### 8.5 附带观察（未修）
+
+客户端日志里另有 14 条 `[mumble] MUMBLE_ADD_VOICE_CHANNEL_LISTEN` 告警；
+我们的资源里**没有**任何 `MumbleSetVoiceChannel` 调用，属引擎/语音层噪音，不作为本轮目标。
