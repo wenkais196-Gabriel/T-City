@@ -85,7 +85,7 @@ local function _openSeatPicker(veh, currentSeat)
 
     -- 换座浮层也是交互路径里的一帧：游标与视角屏蔽都交给栈
     local ok = pcall(function()
-        exports['custom-ui']:Push({ id = 'dashboard:seats', kind = 'modal', keepInput = false, close = _closeSeatPicker })
+        exports['custom-ui']:Push({ id = 'dashboard:seats', kind = 'modal', owner = 'tcity-dashboard', keepInput = false, close = _closeSeatPicker })
     end)
     if not ok then
         SetNuiFocusKeepInput(false)
@@ -191,7 +191,7 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
     --   * 栈非空时每帧屏蔽视角/攻击等控制 → 视角不会再跟着鼠标转
     -- 直接 SetNuiFocus 绕过了这条管线：没有屏蔽线程，keepInput 还是手机上残留的 true。
     local ok = pcall(function()
-        exports['custom-ui']:Push({ id = 'dashboard', kind = 'modal', keepInput = false, close = _closeNui })
+        exports['custom-ui']:Push({ id = 'dashboard', kind = 'modal', owner = 'tcity-dashboard', keepInput = false, close = _closeNui })
     end)
     if not ok then
         SetNuiFocusKeepInput(false)
@@ -267,7 +267,25 @@ end)
 -- 按键: I 打开中控屏
 -- ==============================================================
 
+--- custom-ui 的交互路径栈按下焦点时会反过来调帧 owner 的 ApplyFocus。
+--- **SetNuiFocus 是按资源的**：栈自己调只能给 custom-ui（没有 ui_page）→ 车机页面
+--- 拿不到任何键鼠事件、也没有游标（2026-10-31 真机）。
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    -- 顺序：先 keepInput 再焦点（本 build 反过来会把光标弄丢）
+    SetNuiFocusKeepInput(keepInput == true)
+    SetNuiFocus(hasFocus == true, hasCursor == true)
+end)
+
+-- 反复 restart 之后 RegisterKeyMapping 会重复注册，一次按 I 会触发两条命令
+-- （日志里 open 打两遍就是这个）。加去抖，语义上"一次按键开/关一次"。
+local TOGGLE_DEBOUNCE_MS = 250
+local _lastToggleAt = 0
+
 RegisterCommand('dashboard', function()
+    local now = GetGameTimer()
+    if now - _lastToggleAt < TOGGLE_DEBOUNCE_MS then return end
+    _lastToggleAt = now
+
     local ped = PlayerPedId()
     local veh = GetVehiclePedIsIn(ped, false)
     if not veh or veh == 0 then
@@ -299,6 +317,17 @@ RegisterKeyMapping('dashboard', '智能中控屏', 'keyboard', 'I')
 -- ==============================================================
 -- NUI 回调: 关闭
 -- ==============================================================
+
+--- 页面挂载完成后由 NUI 主动上报：这时再施一次焦点才有效。
+RegisterNUICallback('dashboardReady', function(_, cb)
+    if _isDashboardOpen then
+        pcall(function() exports['custom-ui']:RefreshFocus() end)
+        if GetConvar('dashboard_debug', '0') == '1' then
+            print('[dashboard][debug] NUI ready -> focus refreshed')
+        end
+    end
+    cb({ ok = true })
+end)
 
 RegisterNUICallback('closeDashboard', function(_, cb)
     if _isDashboardOpen then _closeNui() end

@@ -1,6 +1,6 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 211,
+  "max_unproven": 213,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
     "total": 271,
@@ -175,6 +175,12 @@
       "max_unproven": 211,
       "previous": 210,
       "why": "车机改走交互路径栈（3 条：栈帧/关闭弹栈/就绪后刷新）"
+    },
+    {
+      "date": "2026-10-31",
+      "max_unproven": 213,
+      "previous": 211,
+      "why": "车机焦点 owner + 键盘导航（3 条新增：ApplyFocus/就绪握手/去抖与导航）"
     }
   ]
 }
