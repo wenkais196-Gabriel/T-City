@@ -243,3 +243,46 @@ RegisterNetEvent('police:server:RobPlayer', function(playerId)
     TriggerClientEvent('QBCore:Notify', SearchedPlayer.PlayerData.source, Lang:t('info.cash_robbed', { money = money }))
     TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.stolen_money', { stolen = money }))
 end)
+
+--- 查证件（P3-1）：对准的那个人是谁、有没有驾照。
+--- 只回公开资料 —— 钱包、背包、案底都不在这里（那些要立案/搜查的依据）。
+QBCore.Functions.CreateCallback('police:server:showId', function(source, cb, targetSrc)
+    local src = source
+    local Officer = QBCore.Functions.GetPlayer(src)
+    if not Officer or Officer.PlayerData.job.name ~= 'police' or Officer.PlayerData.job.onduty ~= true then
+        cb({ ok = false, reason = 'off_duty' })
+        return
+    end
+    local target = tonumber(targetSrc)
+    local Target = target and QBCore.Functions.GetPlayer(target)
+    if not Target then
+        cb({ ok = false, reason = 'target_offline' })
+        return
+    end
+    -- 服务端自己量距离：客户端说"我在他对面"不算
+    local a, b = GetPlayerPed(src), GetPlayerPed(target)
+    if not a or a == 0 or not b or b == 0 then
+        cb({ ok = false, reason = 'target_offline' })
+        return
+    end
+    local dist = #(GetEntityCoords(a) - GetEntityCoords(b))
+    if dist > 3.5 then
+        PoliceAudit.Write(Officer.PlayerData.citizenid, 'id.check', Target.PlayerData.citizenid,
+            ('too_far dist=%.1f'):format(dist))
+        cb({ ok = false, reason = 'too_far' })
+        return
+    end
+
+    local info = Target.PlayerData.charinfo or {}
+    PoliceAudit.Write(Officer.PlayerData.citizenid, 'id.check', Target.PlayerData.citizenid,
+        ('dist=%.1f'):format(dist))
+    cb({
+        ok = true,
+        name = ('%s %s'):format(tostring(info.firstname or ''), tostring(info.lastname or '')),
+        citizenid = Target.PlayerData.citizenid,
+        job = Target.PlayerData.job and Target.PlayerData.job.label or '无业',
+        license = Target.PlayerData.metadata and Target.PlayerData.metadata.licences
+            and Target.PlayerData.metadata.licences.driver == true or false,
+    })
+end)
+
