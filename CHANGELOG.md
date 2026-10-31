@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **L1 布景层**：站点 120 m 内自动生成 2 名站岗警员（无敌、不持枪）+ 1 辆巡逻车（固定小环线），离站点 260 m 自动收；`/lockdown` 摆 6 锥桶 + 2 路障（服务端复验在岗、一次一组、5 分钟自清）。布景放在客户端：行为 native 只在客户端存在（服务端建 NPC 不会动，`SetEntityAsMissionEntity` 会 nil）。
+- **凭据清理**：`MCP_WIRING.md` 的 MySQL 连接串换成掩码；`tools/dev/release_check.py` 重新通过。
 - **L3 反应层补齐**：`/pa <文本>` 扩音器喊话（在岗限定、40 m 半径、8 s 冷却、审计只记长度与人次、`police_pa` 可一键关）与 `/backup surround` 包围（两名警员分左右 8 m 站位、转身朝外、车刹住、不碰战斗逻辑）。真机：`police.pa len=25;heard=1`、`backup order=surround applied=1`。
 - **L2 后勤·现场化验**：`/sample gsr|drug|blood <案卷ID>` —— 采样立刻写一条证据（`EX-…` 已送检），60 秒后再写**第二条**结果（阳性/阴性，血迹为「DNA 待比对」）。append-only、不动 schema；警官离线只写审计不留孤儿证据。真机 `EX-000001 → EX-000002（阴性）`，审计 `forensic.sample/result`。至此蓝图 §6.2 的 L2 后勤三项（验尸官 / 拖车 / 化验）全部落地。
 - **L2 后勤·拖车（方案 A：只拖 NPC 残骸）**：`/tow` 找 40m 内报废的空车，平板车从路网开来、`AttachEntityToEntity` 挂上后拖走并回收。**玩家自己的车由服务端查 `player_vehicles` 拒绝**（`tow.rejected` + 「走扣押流程」提示），不信客户端。名额 `NPCBudget(kind='tow')`、60s 冷却、180s 服务端收车、掉线回收。真机 `TW-1793394142-1`：118m 外生成，90 秒完成，`reason=done`。

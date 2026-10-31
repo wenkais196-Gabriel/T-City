@@ -47,6 +47,8 @@ client_scripts {
 	'client/tow.lua',
 	'client/forensics.lua',
 	'client/pa.lua',
+	'client/lockdown.lua',
+	'client/scenery.lua',
 }
 
 dependencies {

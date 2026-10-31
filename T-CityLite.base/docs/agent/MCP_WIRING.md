@@ -41,7 +41,7 @@ set agent_actions_admin_token "dev-admin-token"
 set agent_live_enabled 1
 set agent_live_token "dev-live-token"
 set agent_actions_agent_id "mcp.local"
-set mysql_connection_string "mysql://root:tcityroot@127.0.0.1:3307/TCityLite?charset=utf8mb4"
+set mysql_connection_string "mysql://root:***@127.0.0.1:3307/TCityLite?charset=utf8mb4"
 ensure custom-director          # 它不在 configs/modules/*.cfg 里，必须单独 ensure
 ```
 

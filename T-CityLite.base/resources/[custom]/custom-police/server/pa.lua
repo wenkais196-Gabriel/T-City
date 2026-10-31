@@ -75,3 +75,13 @@ RegisterNetEvent('police:server:pa', function(text)
         print('[custom-police] police.pa audit failed')
     end
 end)
+
+--- 封锁线授权：`/lockdown` 只放锥桶，但"谁能放"必须服务端说了算。
+RegisterNetEvent('police:server:lockdownRequest', function()
+    local src = tonumber(source) or 0
+    local player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(src)
+    local data = player and player.PlayerData
+    if not data or not PolicePolicy.Can(data, 'incident.update') then return end
+    if not data.job or data.job.onduty ~= true then return end
+    TriggerClientEvent('police:client:LockdownPlace', src)
+end)
