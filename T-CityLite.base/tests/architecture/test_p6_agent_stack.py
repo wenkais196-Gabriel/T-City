@@ -384,3 +384,30 @@ def test_compare_matches_only_the_scene_candidates() -> None:
     entry = block(read(FORENSICS), "police:server:compareSample", 1600)
     assert "CompareSample" in entry, "入口必须委托 owner"
     assert "forensic.compare" in entry
+
+
+# ══════════════════════════════════════════════════════════════════
+# §7 日志清理（2026-10-31）
+# ══════════════════════════════════════════════════════════════════
+
+CRYPTO = REPO / "T-CityLite.base/resources/[qb]/qb-crypto/server/main.lua"
+QUEST_MAIN = ROOT / "custom-quest/server/main.lua"
+
+
+def test_crypto_normalises_affected_rows_and_avoids_nested_await() -> None:
+    """104 行崩溃：本服 update 回表，且回调里再 await 会 nested ref。"""
+    src = read(CRYPTO)
+    part = block(src, "local history = json.encode", 1200)
+    assert "MySQL.update.await" in part
+    assert "function(affectedRows)" not in part, "不要再走回调形态"
+    assert "affectedRows or updated[1]" in part, "table/number 都要吃"
+
+
+def test_quest_phone_reads_fail_soft() -> None:
+    """手机任务列表是读路径：内部出错不能穿透成 export 异常。"""
+    src = read(QUEST_MAIN)
+    part = block(src, "local function phoneReadFailSoft", 1500)
+    assert "pcall" in part
+    assert "phoneReadFailSoft" in part
+    detail = block(src, "exports('GetQuestDetail'", 600)
+    assert "phoneReadFailSoft" in detail

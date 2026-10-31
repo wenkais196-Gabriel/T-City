@@ -501,15 +501,37 @@ end)
 
 -- 9b. 手机任务 App：这个玩家现在能接哪些（只读，不落库、不发事件）
 -- 判定逻辑在 quest_availability.lua；接取仍然只能走 TriggerQuest（它会重新校验）。
+-- T-City: 这是手机端的**读路径**，出错不该让异常穿透（否则任务列表整页空白 + 日志刷屏）。
+-- 失败返回空列表；把真实错误留在 quest_debug=1 的诊断里（每条只打一次）。
+local questPhoneErrLogged = false
+local function phoneReadFailSoft(what, fn)
+    local ok, result = pcall(fn)
+    if ok then return result end
+    if not questPhoneErrLogged then
+        questPhoneErrLogged = true
+        print(('[quest] %s failed (soft): %s'):format(what, tostring(result)))
+        if GetConvar('quest_debug', 'false') == 'true' then
+            print(('[quest] %s stack: %s'):format(what, tostring(debug.traceback())))
+        end
+    end
+    return nil
+end
+
 exports('GetAvailableQuests', function(source)
     if not QuestAvailability then return {} end
-    return QuestAvailability.List(source)
+    return phoneReadFailSoft('GetAvailableQuests', function()
+        return QuestAvailability.List(source)
+    end) or {}
 end)
 
 -- 9c. 手机任务详情：步骤只给标题与类型，不暴露坐标等执行细节
 exports('GetQuestDetail', function(source, questId)
     if not QuestAvailability then return nil, 'unavailable' end
-    return QuestAvailability.Detail(source, questId)
+    local detail, why = phoneReadFailSoft('GetQuestDetail', function()
+        return QuestAvailability.Detail(source, questId)
+    end)
+    if detail == nil then return nil, why or 'unavailable' end
+    return detail, why
 end)
 
 -- 启动自证：健康自检按这一行确认「玩家能接到任务」这条链路已就绪。
