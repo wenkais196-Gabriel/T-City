@@ -11,6 +11,7 @@ PoliceIncidentRules = {
     MANUAL_RADIUS = 100.0,       -- 手动补录的宽容（自动检测失灵时的出口）
     RESET_MULTIPLIER = 1.5,      -- 离开 45 米才重置（滞回，边界不抖动）
     DWELL_TICKS = 2,             -- 连续命中 2 次才算（开车路过不算）
+    ARRIVE_MAX_SPEED = 2.0,      -- 到场时速度上限（m/s）：开过去不算到场（AC-P2-04）
     POLL_INTERVAL = 1000,        -- 轮询间隔（毫秒，与任务 checkpoint 一致）
     NONCE_TTL_MS = 30000,        -- 到场 nonce 有效期
 }

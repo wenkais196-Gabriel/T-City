@@ -813,6 +813,8 @@ CREATE TABLE IF NOT EXISTS `police_incidents` (
   `code` varchar(16) NOT NULL DEFAULT '911',
   `title` varchar(120) NOT NULL,
   `description` varchar(1000) NOT NULL DEFAULT '',
+  `ref` varchar(64) DEFAULT NULL,
+  `merge_count` int NOT NULL DEFAULT 1,
   `priority` tinyint unsigned NOT NULL DEFAULT 2,
   `status` enum('open','assigned','enroute','on_scene','cleared','closed') NOT NULL DEFAULT 'open',
   `x` double DEFAULT NULL,
@@ -830,7 +832,8 @@ CREATE TABLE IF NOT EXISTS `police_incidents` (
   PRIMARY KEY (`id`),
   KEY `idx_status_created` (`status`,`created_at`),
   KEY `idx_priority` (`priority`),
-  KEY `idx_npc_template_status` (`npc_template`,`status`)
+  KEY `idx_npc_template_status` (`npc_template`,`status`),
+  KEY `idx_ref_activity` (`ref`,`last_activity_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `police_incident_units` (

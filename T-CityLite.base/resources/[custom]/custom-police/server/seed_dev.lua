@@ -129,15 +129,57 @@ RegisterCommand('police_incident_seed', function(src, args)
     local times = math.min(tonumber(args and args[2]) or 1, 10)
     local title = (args and args[3]) or '种子警情'
     local created = 0
+    -- 第 4 个参数是 ref：给了 ref 就按 ref 合并（AC-P2-05），坐标怎么漂都合到一张单
+    local ref = (args and args[4]) or nil
+    local lastId, lastCount, merged = nil, nil, 0
     for i = 1, times do
         local ok, incident = pcall(function()
-            -- 每张单坐标错开 120 m：否则会被 p0 的"同 code + 同地点"合并成一张，
+            -- 没有 ref 时每张单坐标错开 120 m：否则会被 p0 的"同 code + 同地点"合并掉，
             -- 那样测不到通知预算层（那是"多张单、同一个 code"才走的分支）。
             return exports['custom-police']:CreateIncidentFromSystem('seed', {
-                code = code, title = title, x = 100.0 + i * 120.0, y = 200.0, z = 30.0, priority = 1,
+                code = code,
+                title = title,
+                ref = ref,
+                x = ref and (100.0 + i * 15.0) or (100.0 + i * 120.0),
+                y = 200.0, z = 30.0, priority = 1,
             })
         end)
-        if ok and incident then created = created + 1 end
+        if ok and incident then
+            created = created + 1
+            lastId = incident.id
+            lastCount = incident.merge_count
+            if incident.merged then merged = merged + 1 end
+        end
     end
-    print(('[custom-police] police_incident_seed code=%s created=%d'):format(code, created))
+    print(('[custom-police] police_incident_seed code=%s ref=%s created=%d merged=%d last=%s merge_count=%s'):format(
+        tostring(code), tostring(ref or '-'), created, merged, tostring(lastId), tostring(lastCount)))
+end, false)
+
+-- AC-P2-10：建单延迟。50 起并存时 P95 要 < 50 ms。
+-- 只读计时，不改任何别的东西；用同一个 code 且坐标全散开，避免走合并分支。
+RegisterCommand('police_incident_bench', function(src, args)
+    if src ~= 0 then return end
+    if GetConvar('police_seed_dev_enabled', '0') ~= '1' then
+        print('[custom-police] police_incident_bench 已关闭（setr police_seed_dev_enabled 1 打开）')
+        return
+    end
+    local n = math.min(tonumber(args and args[1]) or 50, 200)
+    local samples = {}
+    for i = 1, n do
+        local started = GetGameTimer()
+        pcall(function()
+            return exports['custom-police']:CreateIncidentFromSystem('bench', {
+                code = '10-98', title = ('bench #%d'):format(i),
+                x = 500.0 + i * 7.0, y = -800.0 - i * 3.0, z = 30.0, priority = 2,
+            })
+        end)
+        samples[#samples + 1] = GetGameTimer() - started
+    end
+    table.sort(samples)
+    local function pct(p)
+        local index = math.max(1, math.ceil(#samples * p))
+        return samples[math.min(index, #samples)] or 0
+    end
+    print(('[custom-police] incident_bench n=%d p50=%dms p95=%dms max=%dms'):format(
+        #samples, pct(0.50), pct(0.95), samples[#samples] or 0))
 end, false)
