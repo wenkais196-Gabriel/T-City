@@ -103,3 +103,28 @@ def test_checkpoint_radius_rejects_type_default_first() -> None:
     # 反向校验：只有类型默认值时必须判红（否则客户端触发、服务端判太远）
     bad = "local radius = DEFAULT_RADIUS[cpTypeName] or 15.0"
     assert not _radius_line_is_safe(bad)
+
+
+def test_decision_offer_failure_fires_a_retry_not_a_silent_softlock() -> None:
+    """story-engine 被 restart 连坐停掉时，决策步骤必须重试并告知玩家。
+
+    真机事故：restart custom-quest → story-engine 一起停 → 决策 export 不存在 →
+    任务永久停在 step_decision，日志只有一行 warning。
+    """
+    src = (REPO / "T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua").read_text(
+        encoding="utf-8"
+    )
+    assert "offerWithRetry" in src, "决策失败必须重试，不能只打日志"
+    assert "SetTimeout(5000" in src
+    assert "QBCore:Notify" in src, "重试耗尽要告诉玩家，不能静默软锁"
+    assert src.count("offerWithRetry") >= 3
+
+
+def test_reaccepting_a_quest_rejects_a_second_in_progress_row() -> None:
+    """同一玩家同一任务只能有一条 in_progress（真机出现过 3 条）。"""
+    src = (REPO / "T-CityLite.base/resources/[custom]/custom-quest/server/quest_db.lua").read_text(
+        encoding="utf-8"
+    )
+    create = src[src.index("function QuestDB.CreateQuest") : src.index("function QuestDB.GetActiveQuests")]
+    assert "status = ?" in create and "'in_progress'" in create, "必须先查有没有进行中的记录"
+    assert create.index("fetchScalar") < create.index("INSERT INTO player_quests")
