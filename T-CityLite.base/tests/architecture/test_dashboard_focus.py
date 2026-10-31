@@ -72,15 +72,25 @@ def test_dashboard_keeps_driving_input_while_open() -> None:
     assert not ids & set(range(1, 7)), "视角控制 1-6 不能放进 allow"
 
 
-def test_escape_is_owned_by_the_stack_not_by_the_page() -> None:
-    """keepInput 下游戏也会看到 Esc：在 NUI 里关会变成「界面关了、游戏菜单弹出来」。"""
+def test_escape_closes_the_terminal_without_opening_the_pause_menu() -> None:
+    """真机两轮：
+
+    * 在第一轮（NUI 自己关）Esc 关掉面板的同时，游戏把暂停菜单放了出来；
+    * 在第二轮（栈用 IsDisabledControlJustPressed 读）**读不到** —— 面板有焦点时
+      键盘归 CEF，Lua 侧轮询看不到按键。
+
+    所以最终形态是：NUI 处理 Esc → Lua 关闭 → `GuardControls(400)` 继续挡住
+    `INPUT_FRONTEND_PAUSE`，让同一帧的 Esc 不会转成暂停菜单。
+    """
     ui = CUSTOM_UI.read_text(encoding="utf-8")
-    assert "current.esc == true" in ui
-    assert "IsDisabledControlJustPressed(0, 200)" in ui
+    assert "199, -- INPUT_FRONTEND_PAUSE_ALTERNATE" in ui
+    assert "200, -- INPUT_FRONTEND_PAUSE" in ui, "GuardControls 必须挡暂停菜单"
+
     dash = DASH.read_text(encoding="utf-8")
-    assert "esc = true" in dash, "车机的帧要声明由栈接管 Esc"
+    assert "GuardControls(400)" in dash, "关闭后要挡 Esc 400ms"
+
     app = APP.read_text(encoding="utf-8")
-    assert "key === 'Escape'" not in app, "NUI 不该再自己处理 Escape"
+    assert "Escape" in app, "面板有焦点时 Esc 只能在 NUI 处理"
 
 
 def test_only_one_ui_can_own_the_screen() -> None:

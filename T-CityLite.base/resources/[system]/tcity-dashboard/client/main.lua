@@ -60,6 +60,8 @@ local function _closeNui()
     PoliceModule.Deactivate()
     local ok = pcall(function() exports['custom-ui']:Pop('dashboard') end)
     if not ok then SetNuiFocus(false, false) end
+    -- Esc 关闭的同一帧，游戏也会收到 Esc：关完再挡 400ms，否则会弹出暂停菜单
+    pcall(function() exports['custom-ui']:GuardControls(400) end)
     SendNUIMessage({ type = 'close' })
     _isDashboardOpen = false
     _currentVehicle = nil

@@ -21,9 +21,9 @@ const TAB_ORDER = ['diag', 'ctrl', 'drive', 'prof']
 function onKeydown(e: KeyboardEvent) {
   if (!store.visible) return
   const key = e.key
-  // Esc 由 Lua 侧的交互路径栈统一处理（keepInput 下游戏也会看到 Esc，
-  // 在 NUI 里关会变成"界面关了、游戏菜单弹出来"）。这里只留 Backspace。
-  if (key === 'Backspace') {
+  // Esc 必须在这里处理：面板有焦点时键盘归 CEF，Lua 侧的 IsDisabledControlJustPressed
+  // 读不到（真机验证）。关闭时 Lua 会 GuardControls(400) 挡住暂停菜单。
+  if (key === 'Escape' || key === 'Backspace') {
     e.preventDefault()
     closeDashboard()
     return
@@ -90,7 +90,7 @@ useNui((msg) => {
 // NUI 先关会让帧提前弹出、屏蔽线程停掉，同一帧游戏就把暂停菜单打开了。
 // Esc 由 custom-ui 的交互路径栈在屏蔽状态下读取并调 close（帧里 esc = true）。
 function onKeyDown(e: KeyboardEvent) {
-  if (e.key === 'i' || e.key === 'I' || e.key === 'Backspace') {
+  if (e.key === 'i' || e.key === 'I' || e.key === 'Escape' || e.key === 'Backspace') {
     if (store.seatPickerVisible) {
       store.closeSeatPicker()
       closeDashboard()
