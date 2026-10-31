@@ -116,3 +116,28 @@ RegisterCommand('police_incidents_public', function(src, args)
             tostring(row.status), tonumber(row.x) or 0, tonumber(row.y) or 0))
     end
 end, false)
+
+-- 批量造同一 code 的警情：用来验证通知预算层的合并（真机 911 有冷却，连发不了）。
+-- 门控同 police_case_seed：police_seed_dev_enabled=1 且只接受控制台。
+RegisterCommand('police_incident_seed', function(src, args)
+    if src ~= 0 then return end
+    if GetConvar('police_seed_dev_enabled', '0') ~= '1' then
+        print('[custom-police] police_incident_seed 已关闭（setr police_seed_dev_enabled 1 打开）')
+        return
+    end
+    local code = (args and args[1]) or '10-31'
+    local times = math.min(tonumber(args and args[2]) or 1, 10)
+    local title = (args and args[3]) or '种子警情'
+    local created = 0
+    for i = 1, times do
+        local ok, incident = pcall(function()
+            -- 每张单坐标错开 120 m：否则会被 p0 的"同 code + 同地点"合并成一张，
+            -- 那样测不到通知预算层（那是"多张单、同一个 code"才走的分支）。
+            return exports['custom-police']:CreateIncidentFromSystem('seed', {
+                code = code, title = title, x = 100.0 + i * 120.0, y = 200.0, z = 30.0, priority = 1,
+            })
+        end)
+        if ok and incident then created = created + 1 end
+    end
+    print(('[custom-police] police_incident_seed code=%s created=%d'):format(code, created))
+end, false)
