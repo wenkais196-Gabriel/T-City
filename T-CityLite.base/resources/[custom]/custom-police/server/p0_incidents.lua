@@ -78,8 +78,20 @@ local function broadcastIncidentAlert(incident)
     local x, y, z = tonumber(incident.x), tonumber(incident.y), tonumber(incident.z)
     if not (x and y and z) then return 0 end
     local text = ('#%s %s'):format(tostring(incident.id), tostring(incident.code or '911'))
-    -- 跨资源事件不发裸 vector3：客户端按 {x,y,z} 读，避免 "type(coords) ~= 'table'" 那种静默丢弃。
-    local coords = { x = x, y = y, z = z }
+
+    -- D5：精确坐标**永不下发客户端**。原来这里直接把 x/y/z 广播给每个在勤警员，
+    -- 等于给任何开图/透视的人一个"比调度还准"的位置。现在按单号稳定地偏移到
+    -- 半径 60–95% 的一个点：地图上仍能看出大致在哪，但拿不到真实点。
+    local radius = 80.0
+    local seed = tonumber(incident.id) or 1
+    local angle = (seed * 137.508) % 360.0          -- 黄金角：相邻单号的偏移不扎堆
+    local spread = radius * (0.6 + ((seed % 7) / 7) * 0.35)
+    local rad = math.rad(angle)
+    local coords = {
+        x = x + math.cos(rad) * spread,
+        y = y + math.sin(rad) * spread,
+        z = z,
+    }
     local sent = 0
     for _, src in ipairs(QBCore.Functions.GetPlayers()) do
         local p = QBCore.Functions.GetPlayer(src)
