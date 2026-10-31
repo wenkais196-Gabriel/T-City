@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **司法链桩测试 `justice_chain`（7 个 case）**：律师通知恰好一次/不叠加/无律师仍建案、刑期被 `MaxSentence` 截断（DB 里绝不出现原始大数）、平民与**离岗警员**立案被拒。
+
+### Fixed
+- `T-CityLite.base/resources/[custom]/custom-justice/server/arrest.lua` 只判 `job.name == 'police'`、**不判在岗** —— 离岗警员也能立案并触发律师通知；已补 `onduty == true`（桩测试抓到的真 bug）。
+
+### Added
 - **L1 布景层**：站点 120 m 内自动生成 2 名站岗警员（无敌、不持枪）+ 1 辆巡逻车（固定小环线），离站点 260 m 自动收；`/lockdown` 摆 6 锥桶 + 2 路障（服务端复验在岗、一次一组、5 分钟自清）。布景放在客户端：行为 native 只在客户端存在（服务端建 NPC 不会动，`SetEntityAsMissionEntity` 会 nil）。
 - **凭据清理**：`MCP_WIRING.md` 的 MySQL 连接串换成掩码；`tools/dev/release_check.py` 重新通过。
 - **L3 反应层补齐**：`/pa <文本>` 扩音器喊话（在岗限定、40 m 半径、8 s 冷却、审计只记长度与人次、`police_pa` 可一键关）与 `/backup surround` 包围（两名警员分左右 8 m 站位、转身朝外、车刹住、不碰战斗逻辑）。真机：`police.pa len=25;heard=1`、`backup order=surround applied=1`。

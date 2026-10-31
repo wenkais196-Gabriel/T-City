@@ -11,9 +11,12 @@ local QBCore = exports['qb-core']:GetCoreObject()
 RegisterNetEvent('justice:server:registerArrest', function(suspectSrc, crimes, officerSrc)
     local src = officerSrc or source
 
-    -- 1. 权限校验: 必须是警察
+    -- 1. 权限校验: 必须是**在岗**警察。
+    -- 原来只判 job.name，结果离岗警员也能立案（桩测试 AC-P1-06 抓到的）。
     local Officer = QBCore.Functions.GetPlayer(src)
-    if not Officer or Officer.PlayerData.job.name ~= 'police' then return end
+    if not Officer then return end
+    local OfficerJob = Officer.PlayerData.job
+    if not OfficerJob or OfficerJob.name ~= 'police' or OfficerJob.onduty ~= true then return end
 
     -- 2. 嫌疑人校验
     local Suspect = QBCore.Functions.GetPlayer(suspectSrc)
