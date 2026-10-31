@@ -294,12 +294,20 @@ end)
 
 --- 车机警情页：拉当前警情（坐标已脱敏），并支持一键把导航点设过去。
 RegisterNUICallback('dispatchList', function(_, cb)
+    if GetConvar('dashboard_debug', '0') == '1' then
+        print('[dashboard][debug] NUI asked for dispatchList')
+    end
     local PlayerData = QBCore.Functions.GetPlayerData()
     if not PlayerData or not PlayerData.job or PlayerData.job.name ~= 'police' or not PlayerData.job.onduty then
         cb({ ok = false, reason = 'not_police', incidents = {} })
         return
     end
     QBCore.Functions.TriggerCallback('tcity-dashboard:server:dispatchList', function(result)
+        if GetConvar('dashboard_debug', '0') == '1' then
+            local n = (result and result.incidents and #result.incidents) or 0
+            print(('[dashboard][debug] dispatchList ok=%s n=%d reason=%s'):format(
+                tostring(result and result.ok), n, tostring(result and result.reason)))
+        end
         cb(result or { ok = false, incidents = {} })
     end)
 end)
