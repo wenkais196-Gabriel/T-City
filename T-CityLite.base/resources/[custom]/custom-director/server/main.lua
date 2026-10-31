@@ -1240,6 +1240,8 @@ local function executePoliceCallDraft(actionId, params)
         code = params.code,
         priority = params.priority,
         x = params.x, y = params.y, z = params.z,
+        -- 置信度不建列：码位被降级、或描述过短，都算 agent 没把握 → 草稿箱进"需核对"车道
+        review = (params.code_fallback == true) or #tostring(params.details or '') < 20,
     }
     if params.raw_text then
         -- 原文留在 description 尾部，方便警员核对 agent 有没有听错

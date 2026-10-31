@@ -938,7 +938,8 @@ def test_police_mdt_no_longer_collapses_errors_to_booleans():
     src = read(POLICE_MDT_LUA)
     for name in POLICE_ACTIONS:
         assert f"{name} = function" in src, name
-    assert src.count("structured('") == 19
+    # P6-4 加了 adopt_draft / discard_draft 两条动作
+    assert src.count("structured('") == 21
     assert "return ok and res" not in src
     assert "error = 'export_error'" in src
     assert "unknown_capability" in src and "'forbidden'" in src
