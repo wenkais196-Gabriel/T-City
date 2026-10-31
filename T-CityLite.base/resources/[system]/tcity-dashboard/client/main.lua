@@ -1,3 +1,10 @@
+-- T-City: 诊断开关必须定义在**所有用它的函数之前**（原先放在 316 行，
+-- 而 _openNui 在 28 行就引用它 → 早退分支的日志永远打不出来）。
+local DASH_DEBUG = GetConvar('dashboard_debug', '0') == '1'
+local function dbg(msg)
+    if DASH_DEBUG then print(('[dashboard] %s'):format(msg)) end
+end
+
 -- client/main.lua — 入车/下车状态机 (v2.0)
 --
 -- 核心流程:
@@ -313,11 +320,6 @@ end)
 local TOGGLE_DEBOUNCE_MS = 250
 local _lastToggleAt = 0
 
-local DASH_DEBUG = GetConvar('dashboard_debug', '0') == '1'
-local function dbg(msg)
-    if DASH_DEBUG then print(('[dashboard] %s'):format(msg)) end
-end
-
 RegisterCommand('dashboard', function()
     dbg('enter')
     -- 别的 UI（手机/平板）占着输入时不开中控：两套界面叠在一起，Esc/方向键归谁说不清
@@ -384,14 +386,9 @@ RegisterCommand('dashboard', function()
     end
 end, false)
 
--- 按键绑定 (I)
--- 每次资源重启都会重新注册；同名命令后注册者覆盖先注册者，
--- 但**按键映射**会叠加成两份 → 一次按键进两次命令（日志里 enter 成对出现）。
--- 用 convar 记住"已经绑过"，避免叠加。
-if GetConvar('dashboard_keybound', '0') ~= '1' then
-    RegisterKeyMapping('dashboard', '智能中控屏', 'keyboard', 'I')
-    SetConvar('dashboard_keybound', '1')   -- 客户端 convar，仅本会话有效
-end
+-- 按键绑定 (I)。客户端没有 SetConvar（真机报 nil），所以不做 convar 记忆：
+-- 重复绑定由命令内的 250ms 去抖兜住，日志里成对的 enter 已被去抖吃掉了。
+RegisterKeyMapping('dashboard', '智能中控屏', 'keyboard', 'I')
 
 -- ==============================================================
 -- NUI 回调: 关闭
