@@ -125,11 +125,11 @@ ISO/IEC 25010 给了九个产品质量特性（2023 版：功能适合性、性�
 | ID | 判据 | 判定方式 | 证据 |
 |---|---|---|---|
 | AC-P1-01 | Given 玩家被手铐并勾选 2 项罪名，When 提交逮捕登记，Then `police_cases` +1 行、`police_case_charges` +2 行 | 实机 [实机] + SQL | 行数与勾选一致 |
-| AC-P1-02 | 在线的 lawyer MUST 收到 1 条通知（重复触发不叠加） | 测试桩断言事件次数 | 1 次 |
+| AC-P1-02 | 在线的 lawyer MUST 收到 1 条通知（重复触发不叠加） | 测试桩断言事件次数 | **PASS**：golden `justice_chain` 3 个 case |
 | AC-P1-03 | Given 庭审 verdict=guilty，Then `court_status='guilty'` 且 `sentence_minutes` = config 计算值 | 单测 + SQL | 差值为 0 |
 | AC-P1-04 | **重启 FXServer 后按 case_id 仍查得到同一案卷** | 重启前后各查一次 | 记录完全相同 |
-| AC-P1-05 | 刑期 MUST 被 `Config.Justice.MaxSentence` 截断 | 传入 10 倍上限 | 落库 = 上限 |
-| AC-P1-06 | 非 police/judge 调 `justice:server:imprison` MUST 被拒并留审计 | 伪造 source 调用 | 拒绝 + 1 条审计 |
+| AC-P1-05 | 刑期 MUST 被 `Config.Justice.MaxSentence` 截断 | 传入 10 倍上限 | **PASS**：99999 → 上限，DB 无 99999 |
+| AC-P1-06 | 非 police/judge 调 `justice:server:imprison` MUST 被拒并留审计 | 伪造 source 调用 | **PASS**：平民/离岗警员都拒绝（golden `justice_chain`） |
 | AC-P1-07 | 同一次逮捕重复触发 MUST NOT 产生第二份案卷 | 连续触发 2 次同幂等键 | `police_cases` 仍 1 行 |
 | AC-P1-08 | 回退开关可用：`UseDb=false` 时行为与今日一致 | 关闭开关跑一遍流程 | 内存实现正常，庭审可开 |
 
