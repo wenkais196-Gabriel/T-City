@@ -48,7 +48,7 @@ local function _closeNui()
     end
     Poller.Stop()
     PoliceModule.Deactivate()
-    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    local ok = pcall(function() exports['custom-ui']:Pop('dashboard') end)
     if not ok then SetNuiFocus(false, false) end
     SendNUIMessage({ type = 'close' })
     _isDashboardOpen = false
@@ -83,10 +83,11 @@ local function _openSeatPicker(veh, currentSeat)
         currentSeat = currentSeat,
     })
 
-    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    -- 换座浮层也是交互路径里的一帧：游标与视角屏蔽都交给栈
+    local ok = pcall(function()
+        exports['custom-ui']:Push({ id = 'dashboard:seats', kind = 'modal', keepInput = false, close = _closeSeatPicker })
+    end)
     if not ok then
-        -- 退化路径也要独占输入：keepInput 是客户端全局标志，
-        -- 手机开过一次之后会一直是 true（视角还能转）。
         SetNuiFocusKeepInput(false)
         SetNuiFocus(true, true)
     end
@@ -95,7 +96,7 @@ end
 
 local function _closeSeatPicker()
     if not _isSeatPickerOpen then return end
-    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    local ok = pcall(function() exports['custom-ui']:Pop('dashboard:seats') end)
     if not ok then SetNuiFocus(false, false) end
     SendNUIMessage({ type = 'close' })
     _isSeatPickerOpen = false
@@ -184,17 +185,29 @@ RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted,
     })
 
     -- 启动 NUI focus
-    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    -- 走交互路径栈（custom-ui 的 Input.Push）——全客户端唯一的焦点仲裁：
+    --   * cursor 默认 true      → 出光标
+    --   * keepInput = false     → 独占输入，且**先**设 keepInput 再给焦点
+    --   * 栈非空时每帧屏蔽视角/攻击等控制 → 视角不会再跟着鼠标转
+    -- 直接 SetNuiFocus 绕过了这条管线：没有屏蔽线程，keepInput 还是手机上残留的 true。
+    local ok = pcall(function()
+        exports['custom-ui']:Push({ id = 'dashboard', kind = 'modal', keepInput = false, close = _closeNui })
+    end)
     if not ok then
-        -- 退化路径也要独占输入：keepInput 是客户端全局标志，
-        -- 手机开过一次之后会一直是 true（视角还能转）。
         SetNuiFocusKeepInput(false)
         SetNuiFocus(true, true)
     end
+    -- 页面没加载完时 SetNuiFocus 会被本 build 忽略；NUI 起来后再施一次
+    CreateThread(function()
+        Wait(150)
+        pcall(function() exports['custom-ui']:RefreshFocus() end)
+    end)
     _isDashboardOpen = true
     if GetConvar('dashboard_debug', '0') == '1' then
-        print(('[dashboard][debug] open veh=%s class=%s job=%s duty=%s'):format(
-            tostring(veh), tostring(vclass), tostring(jobName), tostring(job and job.onduty)))
+        local path = 'n/a'
+        pcall(function() path = table.concat(exports['custom-ui']:Path() or {}, '>') end)
+        print(('[dashboard][debug] open veh=%s class=%s job=%s duty=%s input=%s'):format(
+            tostring(veh), tostring(vclass), tostring(jobName), tostring(job and job.onduty), tostring(path)))
     end
     _currentVehicle = veh
     _currentTemplate = template
