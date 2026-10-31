@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **警察系统文档沉淀**：新增 `docs/agent/police/README.md`（入口索引 + 现状一页表 + 踩坑清单 + 常驻/多机待办）与 `docs/agent/police/ATOOLS-DISCIPLINE.md`（加/改 agent 动作的九步检查清单：四处策略接点、工具名白名单、单一写者、fail-closed 审计、闸门命令）。
 - **AI 调度员 MVP**：`tools/agent/dispatch_mvp.py` 只做两件确定性的事 —— 从 `phone_messages` 增量取内容、把解析结果提交成 `police_call_draft` 草稿（幂等键按来源 id，令牌不落盘不打印）；**解析由 agent 完成**，脚本里没有关键词映射表。真机：3 条报案短信 → 草稿 `#71/#72/#73`（`10-31` / `911` / `10-52`），系统消息被跳过。
 - **指纹 / DNA 采样**：`forensics.lua` 新增 `fingerprint` / `dna` 样本；采样时把 30 m 内在场玩家记成候选写进证据描述，`police:server:compareSample` 只认这张名单 —— 命中给证据补 `subject_citizenid` 并追加 `matched` 链，名单外明确 `no_match`。比对逻辑在 `p2_evidence`（唯一写者），`forensics` 只做入口。
 - **P4 证据收口**：盘查读数（酒测/药检）在**没有在办警情**时不再读完就散 —— 落成「待挂载证据」（`police_evidence.subject_citizenid` 有值、`case_id` 为空，迁移 v3.14 纯增量幂等）；立案后 `BindPendingFor` 按精确 citizenid 自动绑定到新案卷，保管链追加 `auto_bound`（不 UPDATE 旧行）；新增 `BindEvidence(source, evidence_id, case_id, force)` 供人工兜底，重复绑定返回 `already_bound`、主体不符返回 `subject_mismatch`（`force=true` 会写 `evidence.bind_forced` 审计）。
