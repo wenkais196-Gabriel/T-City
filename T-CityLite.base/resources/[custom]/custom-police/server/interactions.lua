@@ -317,7 +317,20 @@ QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, 
 
     local value, label, source_note
     if kind == 'alcohol' then
-        value = Sobriety and Sobriety.Level(Target.PlayerData.citizenid) or 0.0
+        -- 优先读 custom-consumables（饥渴/酒精的唯一写者）；它不在时才回退本地 Sobriety
+        local read = false
+        if GetResourceState('custom-consumables') == 'started' then
+            local ok, level = pcall(function()
+                return exports['custom-consumables']:GetAlcohol(Target.PlayerData.citizenid)
+            end)
+            if ok and type(level) == 'number' then
+                value = level
+                read = true
+            end
+        end
+        if not read then
+            value = Sobriety and Sobriety.Level(Target.PlayerData.citizenid) or 0.0
+        end
         label = Sobriety and Sobriety.Label(value) or 'sober'
         source_note = 'breath'
     else
