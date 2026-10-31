@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **P3-1 玩家盘查入口**：`qb-target` 的 `AddGlobalPlayer` 提供「查证件 / 搜身 / 铐起 / 押送」四个动作（仅在岗警察可见）；查证件走 `police:server:showId`，服务端复算距离（>3.5 m 拒绝）、离岗拒绝、写审计，只回公开资料。
+- **P3 现状核对**：逮捕/报告/罚单/证据四个 MDT 子页、BOLO、搜身与押送事件**都已存在**；真正缺的是玩家 qb-target 交互面板（查证件/搜身/酒测/药检）与酒测药检本身。核对文档 `docs/police/plans/2026-10-31-p3-audit.md`。
 - **P2 收尾（AC-P2-05 / 09 / 04）**：迁移 `v3.12` 给 `police_incidents` 加 `ref` + `merge_count`，合并改为 **ref 优先**、并在合并时累加次数；结案改为**只有 lead 能关**（无 lead 的单仍可由够级别的人关掉，否则没人接的单永远关不掉）；到场判定补 `ARRIVE_MAX_SPEED = 2.0` —— 进半径还要停稳，开车路过不再翻 `on_scene`。
 - **车机中控开面板时仍可驾驶**：帧 `keepInput = true` + `allow` 放行车辆控制（油门/刹车/转向/手刹/灯光），视角 1–6 仍被栈屏蔽（否则鼠标一动镜头就转、游标没法用），攻击类照旧挡；`dashboard_drive_while_open 0` 可回滚成独占输入。
 - **P2 调度总线收尾**：7 个发案来源逐个对账（qb-drugs ×2 / qb-houserobbery / qb-storerobbery / custom-vehicles ×2 / NPC callout），全部落在两个 handler 上；真机已证手机 911、NPC callout、控制台投影三条路径。蓝图 Phase 2 标记为完成。
