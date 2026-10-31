@@ -38,6 +38,7 @@ local CASES = {
     'police_backup',
     'police_radio',
     'justice_chain',
+    'police_alert_budget',
     'police_outbox',
     'phone_sms',
 }
