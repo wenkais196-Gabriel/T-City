@@ -197,6 +197,17 @@ end
 -- Open Phone Function
 local function OpenPhone(forcedKind, reason)
     if Surface.IsOpen() then return end
+    -- 桌上已经摆着别人的界面（车机中控等）就别再叠一层：两套 NUI 同时"有焦点"，
+    -- Esc/方向键到底归谁完全说不清（2026-10-31 真机：中控开着还能开手机）。
+    local taken = false
+    pcall(function()
+        local top = exports['custom-ui']:Top()
+        taken = top ~= nil and top.id ~= nil and not tostring(top.id):find('^phone', 1)
+    end)
+    if taken then
+        QBCore.Functions.Notify('先关闭当前界面再打开手机', 'error')
+        return
+    end
     if not playerLoaded and not markPlayerLoaded() then
         QBCore.Functions.Notify('角色还在加载，稍等一下再打开', 'error')
         return
