@@ -55,7 +55,7 @@ lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua
 | §6.2 L1 布景 | ✅ 站点守卫 + 巡逻车（客户端布景，站点 120m 内生成/260m 外收）+ `/lockdown` 封锁线（服务端授权、5 分钟自清） | `T-CityLite.base/resources/[custom]/custom-police/client/scenery.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/lockdown.lua` |
 
 | Phase 1 司法链 | 🟡 **代码早已存在，但从未跑过**：`police_cases`/`police_reports`/`police_arrests`/`justice_sentences` 四张表都在，`CreateCase`/`RegisterArrest`/`RecordVerdict` 三个导出也接好了（MDT App 在调），但四张表全是 **0 行** | `T-CityLite.base/resources/[custom]/custom-police/server/p3_cases.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/records.lua`、`custom-justice/server/trial.lua:43` |
-| Phase 2 调度总线 | 🟡 **服务器侧已存在**：`police_incidents` + `police_incident_units` + 建单/状态机/单位附着/合并/legacy shim/911 全在（蓝图里的 `police_calls` 不该新建）。缺：车机终端、`custom-crime` 接入、通知预算层、7 个来源逐个真机验证 —— 见核对文档 | `docs/police/plans/2026-10-31-p2-dispatch-audit.md` |
+| Phase 2 调度总线 | ✅ **完成**（服务器侧本就存在 + 本轮补齐）：坐标脱敏（D5）、通知预算层、车机警情页、7 个来源对账。剩余只是真机逐个触发与车机视觉确认 | `docs/police/plans/2026-10-31-p2-dispatch-audit.md` |
 | Phase 0/3/4/6（其余） | ⬜ 未开始 | — |
 
 **P5 验收状态**（详见 [`ACCEPTANCE-RUN-2026-10-30.md`](ACCEPTANCE-RUN-2026-10-30.md)）：
