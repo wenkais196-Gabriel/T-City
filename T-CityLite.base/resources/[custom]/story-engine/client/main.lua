@@ -87,12 +87,11 @@ RegisterNetEvent('story:client:offerDecision', function(data)
         isNuiOpen = true
         openToken = (openToken or 0) + 1
         local myToken = openToken
-        -- 看门狗：CEF 不回调 makeChoice 时也必须把焦点还回去
-        SetTimeout(math.floor((timeout + 5) * 1000), function()
+        -- 看门狗：CEF 不回调时把焦点还回去（不替玩家结算，聊天兜底仍可用）
+        SetTimeout(20000, function()
             if isNuiOpen and openToken == myToken then
-                print('[story-engine] ⏱️ 决策弹窗超时未响应，强制关闭并交还控制')
+                print('[story-engine] ⏱️ 20s 无操作，交还控制（/story_choose 仍可继续）')
                 closeDecisionSurface('watchdog')
-                TriggerServerEvent('story:server:makeDecision', questId, stepId, decisionId, 'timeout')
             end
         end)
         nuiOpenedAt = GetGameTimer()
@@ -106,22 +105,23 @@ RegisterNetEvent('story:client:offerDecision', function(data)
             options = options,
             timeout = timeout,
         }
+        -- 不再等握手才发：CEF 有时不回 nuiReady，等它就等于"永远没面板"。
+        -- 直接发 + 1s 后补发一次（丢包兜底）；握手到了只是多一条日志。
         pendingNuiPayload = payload
-        if nuiReady then
-            SendNUIMessage(payload)
-            pendingNuiPayload = nil
-        else
-            -- CEF 还在加载：先缓存，等 nuiReady 再发（否则消息被丢、焦点却已锁死）
-            print('[story-engine] ⏳ NUI 未就绪，决策面板等握手后补发')
-            SetTimeout(3000, function()
-                if pendingNuiPayload == payload then
-                    -- 3 秒还没握手：视为 NUI 不可用，把控制还回去并让服务端按超时结算
-                    print('[story-engine] ❌ NUI 3s 内未握手，交还控制')
-                    closeDecisionSurface('nui_not_ready')
-                    TriggerServerEvent('story:server:makeDecision', questId, stepId, decisionId, 'timeout')
-                end
-            end)
-        end
+        SendNUIMessage(payload)
+        SetTimeout(1000, function()
+            if pendingNuiPayload == payload then SendNUIMessage(payload) end
+        end)
+
+        -- 玩家必须有第二条路：聊天里直接选，不依赖 CEF
+        TriggerEvent('chat:addMessage', {
+            color = { 255, 200, 60 },
+            multiline = true,
+            args = { '[纸条]', prompt .. '  →  输入 /story_choose ' ..
+                table.concat(collectOptionKeys(options, 1), ' 或 ') },
+        })
+        print(('[story-engine] 📜 决策可选: %s（也可 /story_choose <选项id>）')
+            :format(table.concat(collectOptionKeys(options, 2), ', ')))
     else
         -- fallback: 仅有 decision_id，需要从服务端获取
         -- 此路径暂不实现（v0.8），序章 quest 模板直接在 step.data.options 中提供
@@ -134,6 +134,38 @@ end)
 -- ==============================================================
 -- NUI 回调: 玩家点击选项
 -- ==============================================================
+
+--- 选项的短键（a/b/c…）与 id，聊天兜底用
+function collectOptionKeys(options, mode)
+    local out = {}
+    local labels = { 'a', 'b', 'c', 'd', 'e', 'f' }
+    for i, opt in ipairs(options or {}) do
+        out[#out + 1] = (mode == 1) and (labels[i] or tostring(i)) or tostring(opt.id)
+    end
+    return out
+end
+
+-- 聊天兜底：/story_choose a|b|c（或直接给选项 id）
+RegisterCommand('story_choose', function(_, args)
+    if not pendingDecision then
+        print('[story-engine] 当前没有待决策的事项')
+        return
+    end
+    local key = tostring(args[1] or ''):lower()
+    local picked = nil
+    local labels = { 'a', 'b', 'c', 'd', 'e', 'f' }
+    for i, opt in ipairs(pendingDecision.options or {}) do
+        if key == labels[i] or key == tostring(opt.id):lower() then picked = opt.id break end
+    end
+    if not picked then
+        print('[story-engine] 无效选项: ' .. key)
+        return
+    end
+    local pd = pendingDecision
+    closeDecisionSurface('chat_choice')
+    TriggerServerEvent('story:server:makeDecision', pd.questId, pd.stepId, pd.decisionId, picked)
+    print('[story-engine] 已提交选择: ' .. tostring(picked))
+end, false)
 
 RegisterNUICallback('nuiReady', function(_, cb)
     cb('ok')
