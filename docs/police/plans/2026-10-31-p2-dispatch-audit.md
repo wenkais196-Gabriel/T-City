@@ -54,3 +54,34 @@ AC 需要的字段真相（P2-2 的预算和 P2-4 的终端都要靠它）。
 | AC-P2-02 payload 不含 x/y/z | 待核（P2-1） | 先看 `broadcastIncidentAlert` 的字段列表 |
 | AC-P2-05 同 `ref` 5 分钟 3 次合并成 1 张、`merge_count=3` | 实现是 `code+coords` 合并 | AC 改成「同 code 且同 200 m 内合并」，或给表加 `ref` 列（L4） |
 | AC-P2-06/07 7 个来源 + custom-crime 产卡 | 未验 / custom-crime 0 | P2-1 + P2-3 |
+
+
+---
+
+## 6. 施工方案（2026-10-31 修订）
+
+### 6.1 车机终端早已存在（纠正）
+
+`[system]/tcity-dashboard` 就是车机：有 `client/police.lua` 的警用模块（ANPR + 测速雷达）与
+Vite 前端（`nui/`）。所以 P2-4 **不是从零做一个终端**，而是给它的 police 模块**加一页警情视图**：
+
+| 原计划 | 修订后 |
+|---|---|
+| 新建车机终端（2–3 天） | 在 `tcity-dashboard` 的 police 模块加 dispatch 页：当前 call 列表 + 一键导航 + 单位列表（1–1.5 天，含 `npm run build`） |
+
+### 6.2 P2-1 已完成的部分（本轮）
+
+| 项 | 结果 |
+|---|---|
+| `broadcastIncidentAlert` 字段核对 | 原来**直接广播精确 x/y/z** → 违反 D5（精确坐标永不下发） |
+| 修复 | 按单号稳定偏移到半径 60–95% 的点（黄金角，相邻单号不扎堆）；运维侧仍能在库里查到精确坐标 |
+| 闸门 | `test_dispatch_coords.py`：payload 里不得出现原始 `x`,`y` |
+| 真机 | `/911 测试警情 请求支援` → `police_incidents` **#30**（code=911、priority=1、open）落库 |
+
+### 6.3 还没验的（P2-1 剩余）
+
+| 项 | 状态 |
+|---|---|
+| 7 个发案来源逐个触发 | 未做（qb-storerobbery / qb-houserobbery / qb-drugs ×2 / custom-vehicles / custom-police 自身） |
+| legacy `policeAlert` shim 真机触发 | 未做（代码路径与 911 共用同一建单函数） |
+| NPC callout → 警情 | **已顺带证实**：#28 `10-37 [NPC] 可疑车辆`、#29 `10-32 [NPC] 持械人员` 都是 NPC 路径产的单 |

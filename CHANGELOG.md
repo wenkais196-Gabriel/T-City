@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **司法链桩测试 `justice_chain`（7 个 case）**：律师通知恰好一次/不叠加/无律师仍建案、刑期被 `MaxSentence` 截断（DB 里绝不出现原始大数）、平民与**离岗警员**立案被拒。
 
 ### Fixed
+- **调度下发坐标脱敏（AC-P2-02 / D5）**：`broadcastIncidentAlert` 原来把精确 x/y/z 广播给每个在勤警员，等于给开图玩家一个比调度还准的位置；现在按单号稳定偏移到半径 60–95% 的点（黄金角散布），库里仍保留精确坐标。闸门 `test_dispatch_coords` 钉住 payload 不得含原始坐标。
 - `T-CityLite.base/resources/[custom]/custom-justice/server/arrest.lua` 只判 `job.name == 'police'`、**不判在岗** —— 离岗警员也能立案并触发律师通知；已补 `onduty == true`（桩测试抓到的真 bug）。
 
 ### Added
