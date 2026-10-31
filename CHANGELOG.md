@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
 
 ### Fixed
+- **policy.lua 的 Lua pattern 量化词**：`^[A-Za-z0-9_%-]{1,11}$` 在 Lua 里永远不匹配（pattern 没有 `{n,m}`），导致合法 citizenid 被判非法；改为 `#s` 判长度 + `+` 判字符集。新增闸门禁止 policy 里再出现 `{n,m}`。
+- **新增 agent 动作必须接满 policy.lua 四处**（ACTIONS / Normalize / Preview / CheckPolicy）：只接两处会在 propose 阶段静默返回 `unsupported_action`。新增闸门逐动作核对四处。
 - **车机游标不出现**：`SetNuiFocus` 是按资源的 —— 栈只能决定谁该有输入，真正按下去必须由拥有页面的资源做。车机的帧现在带 `owner = 'tcity-dashboard'` 并导出 `ApplyFocus`，焦点回到车机页面本身（此前被 set 到了没有 ui_page 的 custom-ui）。
 - **车机补齐手机那套输入能力**：方向键换页签、警情列表 ↑↓ 选行 + Enter 设导航、Esc/Backspace 关闭、NUI 就绪后 `RefreshFocus` 握手、以及 250 ms 去抖（反复 restart 后 `RegisterKeyMapping` 重复注册会让一次按键触发两条命令）。
 - **车机中控改走交互路径栈**（`custom-ui` 的 `Input.Push/Pop`）：原来是 2025 年的旧写法，自己 `SetNuiFocus`，绕过了焦点仲裁 —— 于是栈非空时那条**每帧屏蔽视角控制**的线程不启动（视角还能转）、keepInput 沿用手机上粘住的 `true`、页面就绪后也不再施一次焦点（游标时有时无）。顺带让 `custom-ui:OpenMenu` 区分「没传 keepInput」与「显式 false」。审查记录见 `docs/client/plans/2026-10-31-dashboard-input-pipeline.md`。

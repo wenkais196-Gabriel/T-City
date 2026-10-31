@@ -441,11 +441,11 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         local unknownErr = rejectUnknownFields(params, { citizenid = true, reason = true },
             'police_warrant_request')
         if unknownErr then return nil, unknownErr end
-        if type(params.citizenid) ~= 'string' or not params.citizenid:match('^[A-Za-z0-9_%-]{1,11}$') then
+        if type(params.citizenid) ~= 'string' or (#params.citizenid > 11 or not params.citizenid:match('^[A-Za-z0-9_%-]+$')) then
             return fail('invalid_params', 'citizenid is invalid')
         end
         if type(params.reason) ~= 'string' or #params.reason < 3 or #params.reason > 128 then
-            return fail('invalid_params', 'reason must be 3-500 chars')
+            return fail('invalid_params', 'reason must be 3-128 chars')
         end
         return { citizenid = params.citizenid, reason = params.reason }
     end
@@ -463,7 +463,7 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         end
         local normalized = { title = params.title, body = params.body }
         if params.citizenid ~= nil then
-            if type(params.citizenid) ~= 'string' or not params.citizenid:match('^[A-Za-z0-9_%-]{1,11}$') then
+            if type(params.citizenid) ~= 'string' or (#params.citizenid > 11 or not params.citizenid:match('^[A-Za-z0-9_%-]+$')) then
                 return fail('invalid_params', 'citizenid is invalid')
             end
             normalized.citizenid = params.citizenid
@@ -1200,6 +1200,21 @@ function AgentPolicy.Preview(actionType, params, ctx, cfg)
         return preview
     end
 
+    if actionType == 'police_warrant_request' then
+        preview.warrant = { citizenid = params.citizenid, reason_length = #params.reason }
+        preview.status_after_execution = 'requested'
+        return preview
+    end
+
+    if actionType == 'police_draft_report' then
+        preview.title = params.title
+        preview.body_length = #params.body
+        preview.incident_id = params.incident_id
+        preview.case_id = params.case_id
+        preview.status_after_execution = 'draft'
+        return preview
+    end
+
     if actionType == 'police_incident_create' then
         preview.title = params.title
         preview.code = params.code
@@ -1419,6 +1434,26 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
     if actionType == 'police_jail_player' then
         if type(params.minutes) ~= 'number' or params.minutes < 1 or params.minutes > 120 then
             return failBool('invalid_params', 'invalid minutes')
+        end
+        return true
+    end
+
+    if actionType == 'police_warrant_request' then
+        if type(params.citizenid) ~= 'string' or #AgentPolicy.Trim(params.citizenid) < 1 then
+            return failBool('invalid_params', 'citizenid is required')
+        end
+        if type(params.reason) ~= 'string' or #AgentPolicy.Trim(params.reason) < 3 then
+            return failBool('invalid_params', 'reason is required')
+        end
+        return true
+    end
+
+    if actionType == 'police_draft_report' then
+        if type(params.title) ~= 'string' or #AgentPolicy.Trim(params.title) < 3 then
+            return failBool('invalid_params', 'title is required')
+        end
+        if type(params.body) ~= 'string' or #AgentPolicy.Trim(params.body) < 3 then
+            return failBool('invalid_params', 'body is required')
         end
         return true
     end

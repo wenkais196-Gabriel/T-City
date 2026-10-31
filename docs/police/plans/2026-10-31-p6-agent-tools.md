@@ -108,3 +108,28 @@ Authorization: Bearer <live token>
 | AC-P6-03 | 不存在的 id → 404 `case_not_found`；非数字 → 400 `invalid_case` |
 | AC-P6-04 | 返回体里**没有**姓名、坐标、描述正文 |
 | AC-P6-05 | `tools/agent_tools.py --check` 通过（TOOLS.md 与 registry 无漂移） |
+
+## 4. 实机端到端（2026-10-31，本机 FXServer @30130）
+
+令牌用本地 server.cfg 里的 `agent_actions_token` / `agent_actions_admin_token`（脚本不打印）。
+目标玩家取在线角色 `DXI50064`（策略要求目标在线）。
+
+| 步 | 结果 |
+|---|---|
+| P6-2 propose | `202 pending_approval`，`id=19` |
+| P6-2 幂等 | 同 key 再提 → `idempotent=true`、同一个 `id=19` |
+| P6-2 approve | `200 executed`，`result={"report_id":1,"status":"draft"}` |
+| P6-2 DB | `police_reports#1`：`status=draft`、`kind=report`、`author=action:19`、`subject=DXI50064` |
+| P6-3 propose | `202 pending_approval`，`id=20` |
+| P6-3 approve | `200 executed`，`result={"warrant_id":1,"status":"requested"}` |
+| P6-3 DB | `police_warrants#1`：`status=requested`、`requested_by=action:20`、`approved_by=NULL` |
+| 审计 | `warrant.request`（target DXI50064）与 `report.draft`（target 1）`actor_kind=agent` |
+| 动作表 | `agent_actions#19/#20` 均 `executed`、`approved_by=dev:live` |
+
+### 4.1 联调中暴露的三件事（都已修）
+
+| 现象 | 根因 | 修法 |
+|---|---|---|
+| `citizenid is invalid`，合法 ID 也被拒 | Lua pattern **没有 `{n,m}`**，`^[A-Za-z0-9_%-]{1,11}$` 永不匹配 | 长度用 `#s > 11` 判，字符集用 `+` |
+| propose 阶段 `unsupported_action` | policy.lua 有**四处**要接：ACTIONS / Normalize / Preview / CheckPolicy，我只接了两处 | 四处补齐；新增 `test_p6_policy_touch_points.py` 守住 |
+| `player_not_found`（目标离线） | 运行期闸门要求目标在线（`WORLD_ACTIONS` 之外的都要求） | 先用在线角色验证；**逮捕令针对离线公民的诉求登记为待办**（不能简单塞进 `WORLD_ACTIONS`，那会把 blast_radius 变成 world） |
