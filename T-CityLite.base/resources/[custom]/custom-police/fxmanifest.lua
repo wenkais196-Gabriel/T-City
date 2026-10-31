@@ -34,6 +34,7 @@ client_scripts {
 	'client/incident_guidance.lua',
 	'client/camera.lua',
 	'client/interactions.lua',
+	'client/player_target.lua',
 	'client/job.lua',
 	'client/heli.lua',
 	'client/anpr.lua',
