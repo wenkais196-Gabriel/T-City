@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema_version": 1,
-  "registry_version": "1.8.0",
+  "registry_version": "1.9.0",
   "generated": "2026-10-26T20:17:39Z",
   "tools": [
     {
@@ -2875,6 +2875,92 @@
         "returns_pii": false,
         "untrusted_fields": [
           "reason"
+        ]
+      },
+      "verify": {
+        "tool": "get_action",
+        "args": {
+          "action_id": "$action_id"
+        },
+        "assert": [
+          {
+            "field": "status",
+            "op": "eq",
+            "value": "executed"
+          }
+        ],
+        "within_seconds": 10,
+        "on_mismatch": "failed"
+      },
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "apply_police_call_draft",
+      "title": "Draft a call card from free text (L2)",
+      "description": "Turn a free-text report into a structured call card and store it as status=draft. Visible on the board but never rings, never dispatches and never spawns NPCs; an officer must adopt it. Unknown codes fall back to 911 and priority is clamped to 1..4.",
+      "channel": "write",
+      "route": "director",
+      "director_action": "police_call_draft",
+      "risk": "L2",
+      "blast_radius": "single",
+      "requires_approval": true,
+      "idempotency": "required",
+      "dry_run": "supported",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.9.0",
+      "http": {
+        "method": "POST",
+        "path": "/agent/v1/act",
+        "external_path": "/custom-director/agent/v1/act"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "raw_text": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "z": {
+            "type": "number"
+          },
+          "details": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": [
+          "title",
+          "details",
+          "raw_text"
         ]
       },
       "verify": {
