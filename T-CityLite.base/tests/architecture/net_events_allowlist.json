@@ -415,6 +415,15 @@
       "evidence": "p2_system.lua backupTargets — backupSlots(cid) 非空 + backupTargetAskedAt 3s 窗口 + GetBackupTargets 只读 PlayerData.metadata.wanted",
       "owner": "custom-police",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-inventory:server:UseItem",
+      "file": "custom-police/server/sobriety.lua",
+      "category": "already_checked",
+      "reason": "qb-inventory 的物品使用广播，任何玩家都能触发；处理函数只认 beer/vodka 两种并校验玩家真的持有该物品（GetItemByName），其他人身上没有任何影响。",
+      "evidence": "sobriety.lua qb-inventory:server:UseItem — DRINKS 白名单 + GetItemByName 归属校验",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
     }
   ]
 }

@@ -286,3 +286,54 @@ QBCore.Functions.CreateCallback('police:server:showId', function(source, cb, tar
     })
 end)
 
+
+--- 酒测 / 药检（P3-2）。
+--- 距离、在岗、目标在线全在服务端判；读数来自 Sobriety（酒）或目标 metadata（药）。
+QBCore.Functions.CreateCallback('police:server:fieldTest', function(source, cb, targetSrc, kind)
+    local src = source
+    local Officer = QBCore.Functions.GetPlayer(src)
+    if not Officer or Officer.PlayerData.job.name ~= 'police' or Officer.PlayerData.job.onduty ~= true then
+        cb({ ok = false, reason = 'off_duty' })
+        return
+    end
+    kind = tostring(kind or '')
+    if kind ~= 'alcohol' and kind ~= 'drug' then
+        cb({ ok = false, reason = 'invalid_kind' })
+        return
+    end
+    local target = tonumber(targetSrc)
+    local Target = target and QBCore.Functions.GetPlayer(target)
+    if not Target then cb({ ok = false, reason = 'target_offline' }); return end
+
+    local a, b = GetPlayerPed(src), GetPlayerPed(target)
+    if not a or a == 0 or not b or b == 0 then cb({ ok = false, reason = 'target_offline' }); return end
+    local dist = #(GetEntityCoords(a) - GetEntityCoords(b))
+    if dist > 3.5 then cb({ ok = false, reason = 'too_far' }); return end
+
+    -- 每人每类 60 秒一次：连续点不会刷出一排读数
+    local allowed = exports['core-framework']:RateLimitCooldown(
+        ('police:test:%s:%s:%s'):format(Officer.PlayerData.citizenid, Target.PlayerData.citizenid, kind), 60000)
+    if not allowed then cb({ ok = false, reason = 'cooldown' }); return end
+
+    local value, label, source_note
+    if kind == 'alcohol' then
+        value = Sobriety and Sobriety.Level(Target.PlayerData.citizenid) or 0.0
+        label = Sobriety and Sobriety.Label(value) or 'sober'
+        source_note = 'breath'
+    else
+        local meta = Target.PlayerData.metadata or {}
+        value = tonumber(meta.drug_level) or 0.0
+        label = value >= 0.5 and 'positive' or (value >= 0.2 and 'trace' or 'negative')
+        source_note = 'swab'
+    end
+
+    -- 结果先落审计。**不进证据链**：evidence 表要求必须挂 case/incident/report
+    -- （insertEvidence 的 missing_case），而盘查发生在立案之前。
+    -- 绑定证据是 P3-3 的事：盘查 → 立案 → 把读数作为一条 evidence 挂上去。
+    PoliceAudit.Write(Officer.PlayerData.citizenid,
+        ('fieldtest.%s'):format(kind), Target.PlayerData.citizenid,
+        ('%.2f %s'):format(value, label))
+
+    cb({ ok = true, kind = kind, value = value, label = label, evidence = false })
+end)
+
