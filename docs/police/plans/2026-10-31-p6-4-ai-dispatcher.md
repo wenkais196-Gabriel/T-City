@@ -132,3 +132,15 @@ exports('DraftCallSystem', P.DraftCallSystem)
 |---|---|
 | AC-P6-4-06 警员「采纳」`draft → open` | 需要警员在 MDT 里点采纳；状态机层面已由闸门覆盖（`draft` 只有 `open`/`closed` 两条出路） |
 | 草稿在 MDT 里的可见性/样式 | 需要前端补「草稿箱」视图（当前看板刻意不列 draft） |
+
+## 7. 草稿箱（服务端）
+
+| 入口 | 行为 |
+|---|---|
+| `police:server:draftList` → `ListDrafts` | 在勤警察才可读；**先写 `incident.draft.view` 审计再查询**，审计失败返回 `audit_unavailable`；只列 `status='draft'`，`LIMIT 20` |
+| `police:server:adoptDraft` → `AdoptDraft` | 复用 `SetIncidentStatus(source, id, 'open')`（状态机只允许 draft→open/closed），成功后写 `incident.adopt`；3 秒冷却 |
+| 客户端事件 | `police:client:draftList` / `police:client:draftResult`（UI 接这两个） |
+
+真机：`restart custom-police` 后 SCRIPT ERROR 新增 0；闸门覆盖「只列草稿 / 审计 fail-closed / 采纳走状态机 / 事件限流 + 拒绝控制台」。
+
+**未做**：MDT/车机里的草稿箱界面（下一步，需要先定视觉）。
