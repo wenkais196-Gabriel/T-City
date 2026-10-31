@@ -251,6 +251,8 @@ local DEVCMD_ALLOWED = {
     -- L3 反应层：扩音器喊话（长度由服务端判，pattern 里不要写 {n,m}）
     '^pa [^%c]+$',
     '^backup surround$',
+    '^lockdown$',
+    '^lockdown clear$',
 }
 
 -- 一条 devcmd 最多这么长：手机命令都短，超长的要么是误用，要么是想塞别的
