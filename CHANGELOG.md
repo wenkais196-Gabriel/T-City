@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **P6-3 agent 申请逮捕令**：动作 `police_warrant_request`（L3，审批后执行），工具 `apply_police_warrant`；入口与 `RequestWarrant` 同处 custom-police 的 p3_cases 模块（police_warrants 的唯一写者），共用同一条 INSERT，只写 `status='requested'`、审计 `actor_kind='agent'`、审计失败返回 `audit_unavailable`；不批准、不 BOLO、不入狱。
 - **P6-2 agent 起草报告**：动作 `police_draft_report`（L2，审批后执行），工具名 `apply_police_report`；写路径委托唯一写者 `PoliceRecords.InsertReport`，固定 `status='draft'`、`kind='report'`，不提交/不罚款/不带 BOLO/不生成证据，随后写 `report.draft` 审计。
 - **P6-1 agent 只读案卷**：`GET /agent/v1/live/police/cases/{case_id}`（live token，L0），返回案卷号/状态/判决/刑期/主办，**不含姓名、坐标、正文**；注册为 `get_police_case`（读类工具必须是 GET、`director_action=null`、`compensation=none`，这是第一次把它做成 action 被校验器否掉的原因）。研究与施工图见 `docs/police/plans/2026-10-31-p6-agent-tools.md`。
 - **P4 第一步：盘查读数挂到现场**（还 P3 的债）。`fieldTest` 现在查这名警员当前未结的警情，有就调 `RegisterEvidence` 挂证物并把 `exhibit_no` 回给客户端；没有就只留审计，等立案后由 MDT 带入。bodycam 方案与三条约束（只 panic 自动 / 7 天保留 / 磁盘+路径）写进 `docs/police/plans/2026-10-31-p4-audit.md`。
