@@ -23,15 +23,39 @@ local MERGE_ANNOUNCE = { [2] = true, [5] = true }
 -- 合并计数：key:code -> 当前合并窗口内的条数（纯业务状态，不是限流器）
 local counters = {}
 
-local function rl()
-    return _G.RateLimit
+-- 限流原语在 core-framework 里是**那个资源的全局**，跨资源拿不到 `_G.RateLimit`：
+-- 生产必须走 export，golden 里才直接 dofile owner（于是 `_G.RateLimit` 存在）。
+-- 2026-10-31 真机就是栽在这里：只认 `_G.RateLimit`，于是取到 nil、每条都 'sent'，
+-- 合并窗口形同不存在（golden 却全绿，因为测试环境里全局确实有）。
+local function cooldown(key, ms, now)
+    local owner = _G.RateLimit
+    if owner and owner.Cooldown then return owner.Cooldown(key, ms, now) end
+    local ok, result = pcall(function()
+        return exports['core-framework']:RateLimitCooldown(key, ms, now)
+    end)
+    if ok and result ~= nil then return result end
+    return true
+end
+
+local function window(key, limit, ms, now)
+    local owner = _G.RateLimit
+    if owner and owner.Window then return owner.Window(key, limit, ms, now) end
+    local ok, result = pcall(function()
+        return exports['core-framework']:RateLimitWindow(key, limit, ms, now)
+    end)
+    if ok and result ~= nil then return result end
+    return true
 end
 
 --- 清空状态（测试与资源重启时用）。
 function PoliceAlertBudget.Reset()
     counters = {}
-    local owner = rl()
-    if owner and owner.Reset then owner.Reset('alert:') end
+    local owner = _G.RateLimit
+    if owner and owner.Reset then
+        owner.Reset('alert:')
+    else
+        pcall(function() exports['core-framework']:RateLimitReset('alert:') end)
+    end
 end
 
 --- 决定这一条通知该怎么办。
@@ -47,14 +71,10 @@ function PoliceAlertBudget.Decide(key, code, priority, now)
     priority = tonumber(priority) or 2
     now = tonumber(now) or 0
 
-    local owner = rl()
     local slot = key .. ':' .. code
 
-    -- 同 code 的合并窗口用 owner 的冷却原语表达：冷却期内 = 还在同一张单里。
-    local fresh = true
-    if owner and owner.Cooldown then
-        fresh = owner.Cooldown('alert:merge:' .. slot, MERGE_WINDOW_MS, now)
-    end
+    -- 同 code 的合并窗口：冷却期内 = 还在同一批里（同一张单或同一次事件连发）。
+    local fresh = cooldown('alert:merge:' .. slot, MERGE_WINDOW_MS, now)
 
     if not fresh then
         counters[slot] = (counters[slot] or 1) + 1
@@ -72,9 +92,8 @@ function PoliceAlertBudget.Decide(key, code, priority, now)
         return 'sent', 1
     end
 
-    if owner and owner.Window then
-        local allowed = owner.Window('alert:burst:' .. key, BURST_MAX, BURST_WINDOW_MS, now)
-        if not allowed then return 'throttled', 1 end
+    if not window('alert:burst:' .. key, BURST_MAX, BURST_WINDOW_MS, now) then
+        return 'throttled', 1
     end
 
     return 'sent', 1

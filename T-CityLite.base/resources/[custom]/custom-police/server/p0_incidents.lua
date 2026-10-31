@@ -70,6 +70,10 @@ local function notifyOnDutyIncident(incident, content)
                 action, count = PoliceAlertBudget.Decide(
                     d.citizenid, incident.code, incident.priority, os.time() * 1000)
             end
+            if GetConvarInt and GetConvarInt('police_alert_debug', 0) == 1 then
+                print(('[alert-budget] cid=%s code=%s action=%s count=%d'):format(
+                    tostring(d.citizenid), tostring(incident.code), tostring(action), tonumber(count) or 0))
+            end
             if action == 'sent' or action == 'merged' then
                 local shown = PoliceAlertBudget and PoliceAlertBudget.Decorate(title, count) or title
                 notifyOfficer(d.citizenid, shown, body, 'police_mdt')
