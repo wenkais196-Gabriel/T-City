@@ -15,11 +15,11 @@
 
 | # | 文件 | 改什么 | 漏了会怎样 |
 |---|---|---|---|
-| 1 | `custom-director/server/policy.lua` → `AgentPolicy.ACTIONS` | 加动作定义（`risk` / `requires_approval` / `auto_execute` / `blast_radius`） | propose 直接 `unsupported_action` |
+| 1 | custom-director 的 policy 模块 → `AgentPolicy.ACTIONS` | 加动作定义（`risk` / `requires_approval` / `auto_execute` / `blast_radius`） | propose 直接 `unsupported_action` |
 | 2 | 同文件 → `AgentPolicy.Normalize` | 参数白名单 + 类型/长度校验 | 参数被丢或 `unknown field` |
 | 3 | 同文件 → `AgentPolicy.Preview` | 审批人看到的投影 | propose 阶段 400 |
 | 4 | 同文件 → `AgentPolicy.CheckPolicy` | 运行时闸门 | approve 前被拒 |
-| 5 | `custom-director/server/main.lua` | 执行器 + 加到分发表 | 执行时 `unsupported_action` |
+| 5 | custom-director 的 main 模块 | 执行器 + 加到分发表 | 执行时 `unsupported_action` |
 | 6 | `tools/agent_tools.json` | 工具定义（名字必须在动词白名单里） | `--write` 校验失败 |
 | 7 | `python tools/agent_tools.py --write` | 重新生成 `TOOLS.md` 与 Lua 镜像 | `--check` 漂移 |
 | 8 | `docs/agent/ACTIONS.md` | 动作矩阵 + 计数 | 文档闸门红 |

@@ -41,7 +41,7 @@
 | **`{#snippet}` 位置** | 写在组件子节点里会被当成组件的 snippet prop | 放顶层普通元素内 |
 | **Sonar 新代码重复** | 多个测试文件复制样板 → Maintainability 掉到 C/B | 合并成一个 `test_p6_agent_stack.py`，共用 `read()/block()` |
 | **`restart <资源>` 连坐** | 依赖它的资源被停掉（`custom-director` 就这么消失过） | 改完补 `ensure`；或 `tools/dev/resync_modules.sh` |
-| **文档路径反引号** | 资源内相对路径写成 `` `server/x.lua` `` 会被断链闸门判错 | 相对路径不加反引号 |
+| **文档路径反引号** | 资源内相对路径（例如 server 下的 Lua 文件）写成反引号会被断链闸门当成仓库路径判错 | 相对路径改成不加反引号的叙述 |
 
 ## 4. 常用命令
 
