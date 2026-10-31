@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **AI 调度员 MVP**：`tools/agent/dispatch_mvp.py` 只做两件确定性的事 —— 从 `phone_messages` 增量取内容、把解析结果提交成 `police_call_draft` 草稿（幂等键按来源 id，令牌不落盘不打印）；**解析由 agent 完成**，脚本里没有关键词映射表。真机：3 条报案短信 → 草稿 `#71/#72/#73`（`10-31` / `911` / `10-52`），系统消息被跳过。
+- **指纹 / DNA 采样**：`forensics.lua` 新增 `fingerprint` / `dna` 样本；采样时把 30 m 内在场玩家记成候选写进证据描述，`police:server:compareSample` 只认这张名单 —— 命中给证据补 `subject_citizenid` 并追加 `matched` 链，名单外明确 `no_match`。比对逻辑在 `p2_evidence`（唯一写者），`forensics` 只做入口。
 - **P4 证据收口**：盘查读数（酒测/药检）在**没有在办警情**时不再读完就散 —— 落成「待挂载证据」（`police_evidence.subject_citizenid` 有值、`case_id` 为空，迁移 v3.14 纯增量幂等）；立案后 `BindPendingFor` 按精确 citizenid 自动绑定到新案卷，保管链追加 `auto_bound`（不 UPDATE 旧行）；新增 `BindEvidence(source, evidence_id, case_id, force)` 供人工兜底，重复绑定返回 `already_bound`、主体不符返回 `subject_mismatch`（`force=true` 会写 `evidence.bind_forced` 审计）。
 - **P6-4 草稿箱 UI（手机 / 平板 MDT）**：`PoliceMDT` 调度→接警页顶部新增「📝 草稿箱」，两条车道（可采纳 / 需核对）；采纳走 `draft → open`，丢弃需二次确认且服务端要求 grade ≥ 2。置信度**不建列**：`needs_review` 落在草稿行的 `disposition`，判据是「码位被降级成 911」或「描述短于 20 字」。草稿 30 分钟无人处理会自动归档（`disposition='stale'`，读路径惰性清理）。
 - **P6-4 草稿箱（服务端闭环）**：`police:server:draftList` / `police:server:adoptDraft` + 导出 `ListDrafts` / `AdoptDraft`；列表只给在勤警察且**先审计后查询、审计失败不给看**（FIT-05，因为草稿带标题与描述）；采纳复用既有状态机 `draft → open` 并写 `incident.adopt`，带 3 秒冷却防止连点把整箱草稿一次发出去。
