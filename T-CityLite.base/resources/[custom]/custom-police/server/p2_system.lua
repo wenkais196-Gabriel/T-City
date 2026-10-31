@@ -5,6 +5,39 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local Sys = {}
 
+
+--- BOLO 发布后推给所有在勤警察（P3-4）。
+--- 以前 BOLO 只是 reports 表上的一个标记：发布完，街上没别人知道。
+--- 走 custom-phone 的 outbox（FIT-02：通知的唯一所有者），不在时才直连 export。
+local function broadcastBolo(actorCid, boloKind, boloTarget, title, location)
+    local body = ('%s · %s'):format(
+        boloKind == 'vehicle' and '车辆' or '人员', tostring(boloTarget or ''))
+    if location and location ~= '' then body = body .. ' · ' .. tostring(location) end
+    local sent = 0
+    for _, src in ipairs(QBCore.Functions.GetPlayers()) do
+        local Player = QBCore.Functions.GetPlayer(src)
+        local data = Player and Player.PlayerData
+        if data and data.job and data.job.name == 'police'
+            and data.job.onduty == true and data.citizenid ~= actorCid then
+            local payload = {
+                citizenid = data.citizenid,
+                title = ('BOLO · %s'):format(tostring(title or '通缉')),
+                content = body:sub(1, 200),
+                app_id = 'police_mdt',
+            }
+            local ok = pcall(function()
+                if type(Outbox) == 'table' and type(Outbox.Enqueue) == 'function' then
+                    Outbox.Enqueue('notification', payload)
+                else
+                    exports['custom-phone']:Notify(payload.citizenid, payload.title, payload.content, payload.app_id)
+                end
+            end)
+            if ok then sent = sent + 1 end
+        end
+    end
+    return sent
+end
+
 local function trim(v)
     return type(v) == 'string' and v:match('^%s*(.-)%s*$') or ''
 end
@@ -1557,6 +1590,8 @@ function ArrestSubmit(source, params)
             if not auditPlayer(actor.citizenid, 'bolo.create', boloTarget, boloKind .. boloTarget) then
                 auditsOk = false
             end
+            -- 发布即通知：BOLO 的意义就是让别人知道
+            broadcastBolo(actor.citizenid, boloKind, boloTarget, created.caseTitle, location)
         end
         if created.caseNo then
             if not auditPlayer(actor.citizenid, 'case.create', created.caseNo, created.caseTitle) then
@@ -1727,6 +1762,11 @@ function ReportSubmit(source, params)
         if not auditsOk then
             rollback()
             return fail('audit_unavailable')
+        end
+
+        -- 发布即通知（P3-4）：报告提交路径的 BOLO 同样要推给在勤警察
+        if bolo then
+            broadcastBolo(actor.citizenid, boloKind, boloTarget, title, location)
         end
 
         return { ok = true, report_id = reportId, evidence_id = evidenceId, bolo = bolo }

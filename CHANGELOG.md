@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **P3-4 BOLO 发布即推送**：以前 BOLO 只是 `police_reports` 上的标记，街上没人知道；现在 `broadcastBolo` 走 custom-phone 的 Outbox 推给所有**在勤且非本人**的警员（`BOLO · 标题` / `人员|车辆 · 目标 · 地点`），逮捕提交与报告提交两条路径都接。
 - **P3-3 盘查 → 立案**：`custom-police` 按警员记录最近一次盘查（查证件 / 酒测 / 药检），`GetLastInspection` 带策略门与审计失败关闭；手机 MDT 新增 `last_inspection` 查询与「从最近盘查带入」按钮，一键把 citizenid 填进逮捕表单并显示读数。
 - **`custom-consumables`（新资源）**：本服没有 qb-smallresources，`qb-core` 只**读** `metadata.hunger/thirst` 判断饿死扣血，全仓没有写者 —— 食物不顶饿、HUD 永远 100、酒测没有数据源。现在由它做**唯一写者**：饥渴/酒精/药物读数、60 s 衰减线程（−1.0 / −1.2）、物品使用入口（`GetItemByName` 归属校验 + 每物品冷却）。文档 `docs/engineering/CONSUMABLES.md`；警用酒测改为优先读它的 `GetAlcohol`。
 - **P3-2 酒测 / 药检**：新增 `T-CityLite.base/resources/[custom]/custom-police/server/sobriety.lua` 作为酒精数据源（`beer +0.25` / `vodka +0.50`、每秒 -0.01 衰减、三档读数），物品使用带 `GetItemByName` 归属校验；`police:server:fieldTest` 服务端复算距离、离岗拒绝、60 s 冷却、写审计。盘查结果**不写** `police_evidence`（该表要求挂 case/incident，盘查发生在立案之前），绑定留到 P3-3。
