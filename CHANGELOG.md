@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **警察系统现状与缺口盘点**（`docs/agent/police/STATUS-2026-10-31.md`）：P0/P1/P2/P3/P5 完成，P4 部分（表与链在、缺 bodycam/延迟化验/盘查读数绑定），P6 全缺（三个 agent 动作 0 命中）；另列指纹/DNA、保释/假释与多机验收清单。
 - **P3 收尾**：蓝图 Phase 3 标记为完成（P3-1 玩家盘查面板、P3-2 酒测/药检、P3-3 盘查带入逮捕表单、P3-4 BOLO 推送），遗留两项（证据延迟绑定属 P4、多机验收待第二客户端）写进核对文档。
 - **P3-4 BOLO 发布即推送**：以前 BOLO 只是 `police_reports` 上的标记，街上没人知道；现在 `broadcastBolo` 走 custom-phone 的 Outbox 推给所有**在勤且非本人**的警员（`BOLO · 标题` / `人员|车辆 · 目标 · 地点`），逮捕提交与报告提交两条路径都接。
 - **P3-3 盘查 → 立案**：`custom-police` 按警员记录最近一次盘查（查证件 / 酒测 / 药检），`GetLastInspection` 带策略门与审计失败关闭；手机 MDT 新增 `last_inspection` 查询与「从最近盘查带入」按钮，一键把 citizenid 填进逮捕表单并显示读数。
