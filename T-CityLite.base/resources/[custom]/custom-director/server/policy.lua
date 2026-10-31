@@ -185,6 +185,14 @@ AgentPolicy.WORLD_ACTIONS = {
     set_time_of_day = true,
 }
 
+-- 目标玩家**可以离线**的动作：它们是文书动作，不是对在线玩家的即时操作。
+-- 与 WORLD_ACTIONS 的区别是语义：这里 blast_radius 仍是 single（有具体对象），
+-- 只是不要求那个对象此刻在线；citizenid 仍然必填（warrant）或可选（report）。
+AgentPolicy.OFFLINE_TARGET_ACTIONS = {
+    police_draft_report = true,
+    police_warrant_request = true,
+}
+
 AgentPolicy.STATUSES = {
     proposed = true,
     pending_approval = true,
@@ -1420,8 +1428,16 @@ function AgentPolicy.CheckPolicy(actionType, params, cfg, ctx)
     cfg = cfg or {}
     ctx = ctx or {}
 
-    if not AgentPolicy.WORLD_ACTIONS[actionType] and not ctx.player then
+    if not AgentPolicy.WORLD_ACTIONS[actionType]
+        and not AgentPolicy.OFFLINE_TARGET_ACTIONS[actionType]
+        and not ctx.player then
         return failBool('player_not_found', 'target player is not online')
+    end
+    -- 离线目标：在线与否不重要，但这个人必须还在 players 表里
+    if AgentPolicy.OFFLINE_TARGET_ACTIONS[actionType]
+        and type(params.citizenid) == 'string'
+        and ctx.citizen_exists == false then
+        return failBool('citizen_not_found', 'citizen does not exist')
     end
 
     if actionType == 'police_assign_unit' then

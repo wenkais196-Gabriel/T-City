@@ -132,4 +132,11 @@ Authorization: Bearer <live token>
 |---|---|---|
 | `citizenid is invalid`，合法 ID 也被拒 | Lua pattern **没有 `{n,m}`**，`^[A-Za-z0-9_%-]{1,11}$` 永不匹配 | 长度用 `#s > 11` 判，字符集用 `+` |
 | propose 阶段 `unsupported_action` | policy.lua 有**四处**要接：ACTIONS / Normalize / Preview / CheckPolicy，我只接了两处 | 四处补齐；新增 `test_p6_policy_touch_points.py` 守住 |
-| `player_not_found`（目标离线） | 运行期闸门要求目标在线（`WORLD_ACTIONS` 之外的都要求） | 先用在线角色验证；**逮捕令针对离线公民的诉求登记为待办**（不能简单塞进 `WORLD_ACTIONS`，那会把 blast_radius 变成 world） |
+| `player_not_found`（目标离线） | 运行期闸门要求目标在线（`WORLD_ACTIONS` 之外的都要求） | ✅ 已修：单独一张 `OFFLINE_TARGET_ACTIONS`（warrant/report），不要求在线但要求 `players` 表里存在，且存在性在 **propose** 阶段就判 |
+
+### 4.2 离线目标实机证据
+
+| 用例 | 结果 |
+|---|---|
+| 离线公民 `DEV00001` 申请逮捕令 | `202 pending_approval` → `approve` `200 executed`，`warrant_id=2/3`，`status=requested` |
+| 不存在的 `NOPE0001` | `400 citizen_not_found`（**propose 阶段**就拒，不进审批队列） |
