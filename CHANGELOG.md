@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **P6-4 草稿箱 UI（手机 / 平板 MDT）**：`PoliceMDT` 调度→接警页顶部新增「📝 草稿箱」，两条车道（可采纳 / 需核对）；采纳走 `draft → open`，丢弃需二次确认且服务端要求 grade ≥ 2。置信度**不建列**：`needs_review` 落在草稿行的 `disposition`，判据是「码位被降级成 911」或「描述短于 20 字」。草稿 30 分钟无人处理会自动归档（`disposition='stale'`，读路径惰性清理）。
 - **P6-4 草稿箱（服务端闭环）**：`police:server:draftList` / `police:server:adoptDraft` + 导出 `ListDrafts` / `AdoptDraft`；列表只给在勤警察且**先审计后查询、审计失败不给看**（FIT-05，因为草稿带标题与描述）；采纳复用既有状态机 `draft → open` 并写 `incident.adopt`，带 3 秒冷却防止连点把整箱草稿一次发出去。
 - **P6-4 AI 调度员（call 卡草稿）**：动作 `police_call_draft`（L2 审批）+ 工具 `apply_police_call_draft`；文本报案解析成结构化 call 卡后写 `police_incidents.status='draft'`（迁移 v3.13 给 enum 加 `draft`，纯增量幂等），**不广播、不派 NPC、不上在勤看板**，由警员采纳后变 `open`。未知 code 降级为 `911`（`AgentPolicy.KNOWN_CODES`），priority 夹到 1..3（与存储层一致）。
 - **P6-3 agent 申请逮捕令**：动作 `police_warrant_request`（L3，审批后执行），工具 `apply_police_warrant`；入口与 `RequestWarrant` 同处 custom-police 的 p3_cases 模块（police_warrants 的唯一写者），共用同一条 INSERT，只写 `status='requested'`、审计 `actor_kind='agent'`、审计失败返回 `audit_unavailable`；不批准、不 BOLO、不入狱。
@@ -32,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
 
 ### Fixed
+- **`police_call_draft` 审批阶段 `unknown field code_fallback`**：服务端回填的 `code_fallback` 在 approve 时会拿存下来的 params 再规范化一次，白名单不认它 → 草稿永远停在 `rejected`。已把该字段纳入归一化白名单。
 - **警察序章卡在第一步**：模板里 `reach` 步骤走到 `QuestNodes.ExecuteNode` 时 `_eventMap` 没有 `REACH`，日志出现 `Unknown node type: reach → REACH` 后直接 return —— 客户端拿不到 blip 与触发区，玩家永远走不到第一个点。补 `REACH → quest:client:nodeGoto`（复用既有 blip + SetupReachZone）。
 - **`AbandonQuest` 只有注释没有实现**：`quest:server:abandon`、Bus 与手机 `exports['custom-quest']:AbandonQuest` 全部落空（真机日志 `No such export AbandonQuest in resource custom-quest`），玩家卡在坏任务里退不出来。补齐函数（清理节点/释放锁/失效缓存/DB 置 abandoned）并注册导出。
 - **步骤类型全覆盖**：`collect` / `custom_event` 登记为 server-only（由 `quest:server:collect` 与外部事件驱动），不再在日志里出现假告警；新增闸门扫全部任务模板，任何未映射类型都会红。

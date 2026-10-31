@@ -58,7 +58,7 @@ def test_policy_l2_and_all_four_touch_points() -> None:
 def test_unknown_codes_fall_back_and_priority_is_clamped() -> None:
     src = POLICY.read_text(encoding="utf-8")
     at = src.index("if actionType == 'police_call_draft' then")
-    block = src[at:at + 1500]
+    block = src[at:at + 2400]
     assert "AgentPolicy.KNOWN_CODES" in block
     assert "code = '911'" in block
     assert "if priority > 3 then priority = 3 end" in block

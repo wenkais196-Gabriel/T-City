@@ -462,8 +462,11 @@ function AgentPolicy.Normalize(actionType, params, cfg)
 
     if actionType == 'police_call_draft' then
         local unknownErr = rejectUnknownFields(params,
+            -- code_fallback 是服务端自己回填的标记：approve 时会拿存的 params 再规范化一次，
+            -- 不认它就会在审批阶段报 unknown field（真机踩过）
             { title = true, details = true, code = true, priority = true,
-              raw_text = true, x = true, y = true, z = true }, 'police_call_draft')
+              raw_text = true, x = true, y = true, z = true, code_fallback = true },
+            'police_call_draft')
         if unknownErr then return nil, unknownErr end
         if type(params.title) ~= 'string' or #params.title < 3 or #params.title > 120 then
             return fail('invalid_params', 'title must be 3-120 chars')
@@ -478,10 +481,12 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         end
         -- 只认已知调度码；不认识的降到 911，不让 LLM 发明新码
         local code = params.code
+        local codeFallback = false
         if code == nil then
             code = '911'
         else
             if type(code) ~= 'string' or not AgentPolicy.KNOWN_CODES[code] then
+                codeFallback = true           -- agent 给了个不认识的码 → 记下来当"需核对"信号
                 code = '911'
             end
         end
@@ -489,7 +494,10 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         priority = math.floor(priority)
         if priority < 1 then priority = 1 end
         if priority > 3 then priority = 3 end
-        local normalized = { title = params.title, code = code, priority = priority }
+        local normalized = { title = params.title, code = code, priority = priority, code_fallback = codeFallback }
+        if params.code_fallback == true then
+            normalized.code_fallback = true   -- 幂等回放时保留原判
+        end
         if params.details then normalized.details = params.details end
         if params.raw_text then normalized.raw_text = params.raw_text end
         if params.x ~= nil and params.y ~= nil and params.z ~= nil then
