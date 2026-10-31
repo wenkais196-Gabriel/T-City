@@ -48,6 +48,12 @@ AgentPolicy.ACTIONS = {
         requires_approval = true,
         auto_execute = false,
     },
+    police_draft_report = {
+        risk = 'L2',
+        requires_approval = true,
+        auto_execute = false,
+        blast_radius = 'single',
+    },
     police_assign_unit = {
         risk = 'L2',
         requires_approval = true,
@@ -423,6 +429,41 @@ function AgentPolicy.Normalize(actionType, params, cfg)
         if type(key) ~= 'string' then
             return fail('invalid_params', 'args must be a JSON object, not an array')
         end
+    end
+
+    if actionType == 'police_draft_report' then
+        local unknownErr = rejectUnknownFields(params,
+            { title = true, body = true, citizenid = true, incident_id = true, case_id = true },
+            'police_draft_report')
+        if unknownErr then return nil, unknownErr end
+        if type(params.title) ~= 'string' or #params.title < 3 or #params.title > 160 then
+            return fail('invalid_params', 'title must be 3-160 chars')
+        end
+        if type(params.body) ~= 'string' or #params.body < 3 or #params.body > 4000 then
+            return fail('invalid_params', 'body must be 3-4000 chars')
+        end
+        local normalized = { title = params.title, body = params.body }
+        if params.citizenid ~= nil then
+            if type(params.citizenid) ~= 'string' or not params.citizenid:match('^[A-Za-z0-9_%-]{1,11}$') then
+                return fail('invalid_params', 'citizenid is invalid')
+            end
+            normalized.citizenid = params.citizenid
+        end
+        if params.incident_id ~= nil then
+            local incidentId = tonumber(params.incident_id)
+            if not incidentId or incidentId ~= math.floor(incidentId) or incidentId < 1 then
+                return fail('invalid_params', 'incident_id must be a positive integer')
+            end
+            normalized.incident_id = incidentId
+        end
+        if params.case_id ~= nil then
+            local caseId = tonumber(params.case_id)
+            if not caseId or caseId ~= math.floor(caseId) or caseId < 1 then
+                return fail('invalid_params', 'case_id must be a positive integer')
+            end
+            normalized.case_id = caseId
+        end
+        return normalized
     end
 
     if actionType == 'police_assign_unit' then
