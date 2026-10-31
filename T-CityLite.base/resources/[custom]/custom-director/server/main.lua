@@ -390,6 +390,16 @@ local function buildContext(actionType, params)
         executor_ready = GetResourceState('custom-agent-client') == 'started',
     }
 
+    -- 文书类动作的目标可以离线：这里改成查 DB 确认这个人存在，
+    -- 免得把「根本不存在的 citizenid」放进审批队列（执行时才发现）。
+    if not AgentPolicy.WORLD_ACTIONS[actionType]
+        and AgentPolicy.OFFLINE_TARGET_ACTIONS[actionType]
+        and type(params.citizenid) == 'string' then
+        local rows = MySQL.query.await('SELECT citizenid FROM players WHERE citizenid = ? LIMIT 1',
+            { params.citizenid }) or {}
+        context.citizen_exists = rows[1] ~= nil
+    end
+
     -- World actions have no target player; everything below is per-player.
     if not AgentPolicy.WORLD_ACTIONS[actionType] then
         local player = getPlayerByCitizenId(params.citizenid)
