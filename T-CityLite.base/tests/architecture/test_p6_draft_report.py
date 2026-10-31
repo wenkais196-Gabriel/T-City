@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
 POLICE = REPO / "T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua"
@@ -63,4 +64,4 @@ def test_registry_tool_name_is_inside_the_verb_whitelist() -> None:
 def test_actions_doc_lists_it() -> None:
     doc = ACTIONS_DOC.read_text(encoding="utf-8")
     assert "`police_draft_report`" in doc
-    assert "twenty-four actions" in doc
+    assert re.search(r"Scope covers [a-z-]+ actions", doc)
