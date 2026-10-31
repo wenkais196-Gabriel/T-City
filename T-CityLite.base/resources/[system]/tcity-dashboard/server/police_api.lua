@@ -320,6 +320,30 @@ end)
 -- v2.2: 公民/车辆查询回调
 -- ==============================================================
 
+-- 车机终端的警情列表（P2-4）。
+-- 坐标来自 custom-police 的 GetIncidentsPublic —— 那里已经按 D5 偏移过，
+-- 车机拿到的和手机/屏幕提示是同一个"大致位置"，不会互相矛盾。
+QBCore.Functions.CreateCallback('tcity-dashboard:server:dispatchList', function(source, cb)
+    local Player = QBCore.Functions.GetPlayer(source)
+    local data = Player and Player.PlayerData
+    if not data or not data.job or data.job.name ~= 'police' or data.job.onduty ~= true then
+        cb({ ok = false, reason = 'not_police', incidents = {} })
+        return
+    end
+    if not checkRateLimit(source, 'dispatchList') then
+        cb({ ok = false, reason = 'rate_limited', incidents = {} })
+        return
+    end
+    local ok, list = pcall(function()
+        return exports['custom-police']:GetIncidentsPublic(source, 20)
+    end)
+    if not ok then
+        cb({ ok = false, reason = 'upstream_unavailable', incidents = {} })
+        return
+    end
+    cb({ ok = true, incidents = list or {} })
+end)
+
 QBCore.Functions.CreateCallback('tcity-dashboard:server:lookupCitizen', function(source, cb, query)
     local src = source
     if not isOnDutyLeo(src) then cb(nil); return end

@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- **车机终端的警情页（P2-4）**：`tcity-dashboard` 的 police 模块新增「📞 警情」——当前未结警情列表 + 一键设导航 + 刷新。链路四层各自把关（NUI → client 在岗 → server 在岗+限流 → `custom-police` 的 `GetIncidentsPublic` 策略+审计），坐标统一走 `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua` 投影（D5）。
+- `T-CityLite.base/resources/[custom]/custom-police/shared/dispatch_view.lua`：警情对外投影的唯一实现（按单号稳定偏移 60–95% 半径，黄金角散布）。
+
+### Fixed
+- `tcity-dashboard` 的 `DriveTab.vue` 未使用的 `ref` 导入导致 `vue-tsc` 失败、`npm run build` 过不去。
 - **警情通知预算层（P2-2）**：同 `code` 90 秒合并成「（×N）」（第 2、5 条播报，之后每 10 条），非紧急每人 5 秒最多 3 条，`priority ≤ 1` 穿透频率上限，`police_alert_budget 0` 一键回滚。限流原语委托 `core-framework` 的 `RateLimit`（RATE-01），本模块只管业务判断；golden `police_alert_budget` 8 个 case + 闸门 `test_police_alert_budget`。
 - **P2 调度总线的现状核对**：`police_incidents` / `police_incident_units` 与建单、状态机、单位附着、同案合并、legacy `policeAlert` shim、手机 911 **都已存在**（蓝图里的 `police_calls` 不该新建）；真正的缺口是车机终端、`custom-crime` 接入、通知预算层、以及 7 个发案来源从未逐个验证。核对文档见 `docs/police/plans/2026-10-31-p2-dispatch-audit.md`。
 - **司法链桩测试 `justice_chain`（7 个 case）**：律师通知恰好一次/不叠加/无律师仍建案、刑期被 `MaxSentence` 截断（DB 里绝不出现原始大数）、平民与**离岗警员**立案被拒。
