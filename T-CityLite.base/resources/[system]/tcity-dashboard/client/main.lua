@@ -306,7 +306,13 @@ end)
 local TOGGLE_DEBOUNCE_MS = 250
 local _lastToggleAt = 0
 
+local DASH_DEBUG = GetConvar('dashboard_debug', '0') == '1'
+local function dbg(msg)
+    if DASH_DEBUG then print(('[dashboard] %s'):format(msg)) end
+end
+
 RegisterCommand('dashboard', function()
+    dbg('enter')
     -- 别的 UI（手机/平板）占着输入时不开中控：两套界面叠在一起，Esc/方向键归谁说不清
     if not _isDashboardOpen then
         local taken = false
@@ -315,18 +321,23 @@ RegisterCommand('dashboard', function()
             taken = top ~= nil and top.id ~= nil and not tostring(top.id):find('^dashboard', 1)
         end)
         if taken then
+            dbg('blocked:taken')
             QBCore.Functions.Notify('先关闭当前界面再打开中控屏', 'error')
             return
         end
     end
 
     local now = GetGameTimer()
-    if now - _lastToggleAt < TOGGLE_DEBOUNCE_MS then return end
+    if now - _lastToggleAt < TOGGLE_DEBOUNCE_MS then
+        dbg('blocked:debounce')
+        return
+    end
     _lastToggleAt = now
 
     local ped = PlayerPedId()
     local veh = GetVehiclePedIsIn(ped, false)
     if not veh or veh == 0 then
+        dbg('blocked:no_vehicle')
         QBCore.Functions.Notify('你必须坐在载具中才能打开中控屏', 'error')
         return
     end
