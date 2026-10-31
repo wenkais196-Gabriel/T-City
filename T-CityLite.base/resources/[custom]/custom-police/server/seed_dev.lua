@@ -97,3 +97,22 @@ RegisterCommand('police_verdict_seed', function(source, args)
         tostring(caseId), verdict, tostring(minutes),
         ok and tostring(result and result.affected_rows or '?') or tostring(result)))
 end, true)
+
+-- 车机/手机读的是 GetIncidentsPublic（坐标已按 D5 偏移）。
+-- 这个命令让控制台能直接看到"客户端会拿到什么"，验证投影与 D5 不需要进游戏。
+RegisterCommand('police_incidents_public', function(src, args)
+    if src ~= 0 then return end
+    if GetConvar('police_seed_dev_enabled', '0') ~= '1' then
+        print('[custom-police] police_incidents_public 已关闭（setr police_seed_dev_enabled 1 打开）')
+        return
+    end
+    local target = tonumber(args and args[1]) or 1
+    local limit = tonumber(args and args[2]) or 3
+    local list = exports['custom-police']:GetIncidentsPublic(target, limit) or {}
+    print(('[custom-police] public incidents: %d'):format(#list))
+    for _, row in ipairs(list) do
+        print(('  #%s %s p%s %s @ %.1f,%.1f'):format(
+            tostring(row.id), tostring(row.code), tostring(row.priority),
+            tostring(row.status), tonumber(row.x) or 0, tonumber(row.y) or 0))
+    end
+end, false)

@@ -292,6 +292,25 @@ end)
 -- v2.2: 公民/车辆查询 NUI 回调
 -- ==============================================================
 
+--- 车机警情页：拉当前警情（坐标已脱敏），并支持一键把导航点设过去。
+RegisterNUICallback('dispatchList', function(_, cb)
+    local PlayerData = QBCore.Functions.GetPlayerData()
+    if not PlayerData or not PlayerData.job or PlayerData.job.name ~= 'police' or not PlayerData.job.onduty then
+        cb({ ok = false, reason = 'not_police', incidents = {} })
+        return
+    end
+    QBCore.Functions.TriggerCallback('tcity-dashboard:server:dispatchList', function(result)
+        cb(result or { ok = false, incidents = {} })
+    end)
+end)
+
+RegisterNUICallback('dispatchWaypoint', function(data, cb)
+    local x, y = tonumber(data and data.x), tonumber(data and data.y)
+    if not (x and y) then cb({ ok = false }); return end
+    SetNewWaypoint(x, y)
+    cb({ ok = true })
+end)
+
 RegisterNUICallback('policeLookup', function(data, cb)
     local queryType = data and data.type
     local query = data and data.query

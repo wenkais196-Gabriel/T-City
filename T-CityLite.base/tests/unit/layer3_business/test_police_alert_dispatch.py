@@ -114,6 +114,7 @@ function Lang_t(key) return key end
 Lang = { t = function(_, key) return key end }
 
 dofile(__POLICY__)
+dofile(__DISPATCH_VIEW__)   -- p0_incidents 的坐标投影（D5）
 dofile(__AUDIT__)
 __P0_DOFILES__
 
@@ -196,6 +197,7 @@ def test_alert_paths_detect_duplicates_and_create_incidents(tmp_path: Path) -> N
     script = (
         HARNESS.replace("__POLICY__", json.dumps(str(POLICY)))
         .replace("__AUDIT__", json.dumps(str(AUDIT)))
+        .replace("__DISPATCH_VIEW__", json.dumps(str(POLICE / "shared/dispatch_view.lua")))
         .replace("__P0_DOFILES__", p0_dofiles(json.dumps))
     )
     harness = tmp_path / "police_alert_dispatch_harness.lua"

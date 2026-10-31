@@ -1529,10 +1529,15 @@ def test_sm02_get_incidents_excludes_closed_and_returns_disposition():
     assert "closed = true" not in live
     assert "cleared = true" not in live
 
-    block = p0_block("function P.GetIncidents(", "function P.AssignUnit(")
+    # 查询本体在 readIncidents（GetIncidents 与车机的 GetIncidentsPublic 共用），
+    # 鉴权/审计/状态校验在 P.GetIncidents。
+    block = p0_block("local function readIncidents(", "function P.GetIncidents(")
     assert "WHERE status NOT IN ('closed')" in block
     assert "disposition = row.disposition" in block
-    assert "if not INCIDENT_LIST_STATUS[status] then return false, 'invalid_status' end" in block
+
+    guard = p0_block("function P.GetIncidents(", "function P.AssignUnit(")
+    assert "if not INCIDENT_LIST_STATUS[status] then return false, 'invalid_status' end" in guard
+    assert "local incidents = readIncidents(status)" in guard
 
 
 # ---------------------------------------------------------------------------

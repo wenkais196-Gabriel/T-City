@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // tabs/DriveTab.vue — 驾驶模式 + 双模巡航信息面板 (v2.0)
 
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useDashboardStore } from '../../stores/dashboard'
 import { sendNui } from '../../composables/useNui'
 

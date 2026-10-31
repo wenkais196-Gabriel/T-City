@@ -14,18 +14,9 @@ local INCIDENT_LIST_STATUS = I.INCIDENT_LIST_STATUS
 
 local function primaryOf(units) return I.primaryOf(units) end
 
-function P.GetIncidents(source, status)
-    local actor = pd(source)
-    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
-    if not allowed then return false, reason end
-    if status ~= nil and status ~= '' then
-        if not INCIDENT_LIST_STATUS[status] then return false, 'invalid_status' end
-    else
-        status = nil
-    end
-    if not audit(actor.citizenid, 'incident.view', tostring(status or 'active'), nil) then
-        return false, 'audit_unavailable'
-    end
+--- 纯查询：不带鉴权、不写审计（由调用方负责）。
+---@param status string|nil
+local function readIncidents(status)
     local rows
     if status then
         rows = MySQL.query.await(
@@ -45,6 +36,23 @@ function P.GetIncidents(source, status)
             units = {}, primary = nil,
         }
     end
+
+    return incidents
+end
+
+function P.GetIncidents(source, status)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return false, reason end
+    if status ~= nil and status ~= '' then
+        if not INCIDENT_LIST_STATUS[status] then return false, 'invalid_status' end
+    else
+        status = nil
+    end
+    if not audit(actor.citizenid, 'incident.view', tostring(status or 'active'), nil) then
+        return false, 'audit_unavailable'
+    end
+    local incidents = readIncidents(status)
 
     -- 一次查完这张板上的所有单位（不做 N+1），然后把"这个人能点什么"算出来。
     -- UI 只渲染 allowed_actions：前端不许复制一套状态机。
@@ -160,6 +168,32 @@ end
 
 -- 导出面：本模块拥有的东西在这里登记；外资源只能用这些名字
 exports('GetIncidents', P.GetIncidents)
+
+--- 给其他资源（车机终端 / 手机）用的投影版：坐标已按 D5 偏移。
+--- 车机终端 / 手机的警情入口（P2-4）。
+---
+--- 与 `GetIncidents` 的区别：这里只回**投影后**的字段（坐标按 D5 偏移、不含
+--- description / disposition / 单位），并且自己带鉴权与审计 —— 调用方是别的资源，
+--- 不能指望它替我们做前置检查。
+---@param source number 发起查询的玩家
+---@param limit number 最多返回几张（默认 20）
+exports('GetIncidentsPublic', function(source, limit)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return false, reason or 'not_allowed' end
+    if not audit(actor.citizenid, 'incident.view', 'public', nil) then
+        return false, 'audit_unavailable'
+    end
+    local rows = readIncidents(nil)
+    local out = {}
+    local cap = tonumber(limit) or 20
+    for _, incident in ipairs(rows or {}) do
+        if #out >= cap then break end
+        local projected = PoliceDispatchView and PoliceDispatchView.Public(incident)
+        if projected then out[#out + 1] = projected end
+    end
+    return out
+end)
 exports('LookupCitizen', P.LookupCitizen)
 exports('LookupVehicle', P.LookupVehicle)
 exports('GetAudit', P.GetAudit)

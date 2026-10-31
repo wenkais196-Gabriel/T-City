@@ -34,9 +34,56 @@ async function doSearch() {
   searchResult.value = result
 }
 
+// ── v2.3: 警情（P2-4）—— 坐标已在服务端按 D5 脱敏 ──
+interface DispatchIncident {
+  id: number
+  code: string
+  title: string
+  priority: number
+  status: string
+  x: number
+  y: number
+}
+
+const incidents = ref<DispatchIncident[]>([])
+const dispatchNotice = ref('')
+const dispatchLoading = ref(false)
+
+const STATUS_LABEL: Record<string, string> = {
+  open: '未接',
+  assigned: '已派',
+  enroute: '前往',
+  on_scene: '在场',
+  cleared: '已清',
+  closed: '结案',
+}
+
+async function loadDispatch() {
+  dispatchLoading.value = true
+  try {
+    const result: any = await sendNui('dispatchList', {})
+    if (result && result.ok) {
+      incidents.value = result.incidents || []
+      dispatchNotice.value = incidents.value.length ? '' : '当前没有警情'
+    } else {
+      incidents.value = []
+      dispatchNotice.value = result?.reason === 'not_police'
+        ? '仅限值班警察'
+        : '警情不可用'
+    }
+  } finally {
+    dispatchLoading.value = false
+  }
+}
+
+function gotoIncident(item: DispatchIncident) {
+  sendNui('dispatchWaypoint', { x: item.x, y: item.y })
+}
+
 // 挂载时触发一次初始扫描
 onMounted(() => {
   sendNui('policeRadar', {})
+  loadDispatch()
 })
 
 // ── 动作分发 ──
@@ -75,6 +122,27 @@ function speedClass(speed: number): string {
 
 <template>
   <div class="police-console">
+    <!-- ═══ 警情（P2-4）：当前 call，一键设导航 ═══ -->
+    <div class="section">
+      <div class="section-title">
+        <span>📞 警情 ({{ incidents.length }})</span>
+        <span style="cursor:pointer;font-size:10px" @click="loadDispatch">
+          {{ dispatchLoading ? '刷新中…' : '↻ 刷新' }}
+        </span>
+      </div>
+
+      <div v-if="incidents.length > 0" class="dispatch-list">
+        <div v-for="item in incidents" :key="item.id" class="dispatch-row"
+          :class="{ urgent: item.priority <= 1 }" @click="gotoIncident(item)">
+          <span class="dispatch-id">#{{ item.id }}</span>
+          <span class="dispatch-code">{{ item.code }}</span>
+          <span class="dispatch-title">{{ item.title }}</span>
+          <span class="dispatch-status">{{ STATUS_LABEL[item.status] || item.status }}</span>
+        </div>
+      </div>
+      <div v-else-if="dispatchNotice" class="dispatch-empty">{{ dispatchNotice }}</div>
+    </div>
+
     <!-- ═══ 上段: 雷达扫描 ═══ -->
     <div class="section">
       <div class="section-title">
@@ -315,4 +383,25 @@ tr.stolen { background: rgba(255,170,0,0.10); }
 .result-card { font-size: 11px; }
 .result-row { padding: 3px 0; color: var(--tcity-text-dim); border-bottom: 1px solid rgba(255,255,255,0.03); }
 .result-row:first-child { color: var(--tcity-text-primary); }
+
+/* v2.3 警情列表 */
+.dispatch-list { display: flex; flex-direction: column; gap: 2px; }
+.dispatch-row {
+  display: grid;
+  grid-template-columns: 42px 58px 1fr 48px;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+.dispatch-row:hover { background: rgba(80, 170, 255, 0.18); }
+.dispatch-row.urgent { border-left: 2px solid #ff4d4f; }
+.dispatch-id { color: #8fb3d9; }
+.dispatch-code { color: #ffd166; }
+.dispatch-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dispatch-status { color: #9aa7b5; text-align: right; }
+.dispatch-empty { font-size: 11px; color: #7d8794; padding: 4px 2px; }
 </style>
