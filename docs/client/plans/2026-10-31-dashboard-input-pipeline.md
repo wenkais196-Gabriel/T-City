@@ -105,3 +105,28 @@ exports['custom-ui']:Push({ id = 'dashboard', kind = 'modal',
 2. 方向键能在页签与列表间移动，Enter 选中，Backspace 关闭
 3. `input=dashboard` 只出现一次（重复绑定修掉）
 4. 关闭后：游标消失、视角恢复、手机能正常打开（栈没有残留帧）
+
+
+## 6. 边开边看：面板打开时仍然能开车（2026-10-31）
+
+需求：中控是车上终端，不是 GTA 暂停菜单 —— 开着面板也得能踩油门、打方向。
+
+做法：帧的 `keepInput = true`（与手机同一条语义），并用 `allow` 显式放行车辆控制：
+
+```lua
+local DRIVE_CONTROLS = { 59, 60, 63, 64, 71, 72, 73, 74, 75, 76, 80 }
+exports['custom-ui']:Push({ id='dashboard', owner='tcity-dashboard',
+    keepInput = driveWhileOpen(), allow = DRIVE_CONTROLS, ... })
+```
+
+* **视角 1–6 坚决不放行**：那是游标的对头（鼠标一动镜头就转，游标就没法用）；
+* 栈的控制屏蔽线程仍然生效 —— 攻击/瞄准/武器轮盘照旧被挡，边开边看不会误开枪；
+* `dashboard_drive_while_open 0` 一键回滚成"独占输入"（面板一开就停住）。
+
+真机（Sultan 警车 83UOB146）：面板开着、光标可见，按 W 车真的往前开了，
+车速为 0 是因为撞到墙 —— 驱动链路是通的。
+
+### 已知小坑
+
+`keepInput = true` 时 Esc 有时会被游戏先吃掉（面板得按 I 关）。
+Esc 关闭在独占模式下稳定；两种模式都保留 I 作为可靠出口。
