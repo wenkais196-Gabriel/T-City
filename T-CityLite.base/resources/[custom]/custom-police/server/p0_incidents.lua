@@ -186,6 +186,7 @@ local function insertIncidentRow(createdBy, data, opts)
         values[#values + 1] = value
     end
     add('status', opts and opts.status)
+    add('disposition', opts and opts.disposition)
     add('x', tonumber(data.x))
     add('y', tonumber(data.y))
     add('z', tonumber(data.z))
@@ -245,7 +246,11 @@ end
 function P.DraftCallSystem(actorCid, data)
     if type(actorCid) ~= 'string' or actorCid == '' then return nil, 'bad_creator' end
     if type(data) ~= 'table' then return nil, 'invalid_params' end
-    local result, reason = insertIncidentRow(actorCid:sub(1, 50), data, { status = 'draft', audit = false })
+    -- 「需核对」不新增列：草稿行的 disposition 本来空着，用它承载 review 标记。
+    -- 判据由调用方（director）给：码位被降级、描述过短，都属于"agent 没把握"。
+    local disposition = data.review and 'needs_review' or nil
+    local result, reason = insertIncidentRow(actorCid:sub(1, 50), data,
+        { status = 'draft', audit = false, disposition = disposition })
     if not result then return nil, reason end
     -- 草稿必须留审计：写不进去就当没写（fail-closed）
     if not audit(actorCid, 'incident.draft', tostring(result.id), result.title, 'agent') then
@@ -434,14 +439,56 @@ function P.ListDrafts(source)
     if not audit(actor.citizenid, 'incident.draft.view', nil, nil) then
         return false, 'audit_unavailable'
     end
+    -- 惰性 TTL：草稿箱不是垃圾场，30 分钟没人管就自动归档（stale），
+    -- 放在读路径上做，省掉一个后台线程；失败不影响读。
+    pcall(function()
+        MySQL.update.await([[
+            UPDATE police_incidents
+               SET status = 'closed', disposition = 'stale', closed_at = NOW(),
+                   closed_by = 'system:ttl', closed_reason = 'draft_expired'
+             WHERE status = 'draft' AND created_at < (NOW() - INTERVAL 30 MINUTE)
+        ]])
+    end)
     local rows = MySQL.query.await([[
-        SELECT id, code, title, LEFT(description, 200) AS description, priority, created_by, created_at
+        SELECT id, code, title, LEFT(description, 200) AS description, priority,
+               created_by, created_at, disposition,
+               TIMESTAMPDIFF(MINUTE, created_at, NOW()) AS age_minutes
           FROM police_incidents
          WHERE status = 'draft'
          ORDER BY created_at DESC
          LIMIT 20
     ]]) or {}
+    -- 归一化给前端：review 来自 disposition，age 便于显示"放了多久"
+    for _, row in ipairs(rows) do
+        row.review = (tostring(row.disposition or '') == 'needs_review')
+        row.age_minutes = tonumber(row.age_minutes) or 0
+        row.disposition = nil
+    end
     return { rows = rows, count = #rows }
+end
+
+--- P6-4 草稿箱：丢弃一张草稿（不可逆 → 要求 grade ≥ 2）。
+function P.DiscardDraft(source, incidentId)
+    local actor = pd(source)
+    local allowed, reason = PolicePolicy.Can(actor, 'incident.update')
+    if not allowed then return false, reason end
+    if grade(actor) < 2 then return false, 'grade_too_low' end
+    local id = tonumber(incidentId)
+    if not id then return false, 'invalid_incident' end
+    local changed = MySQL.update.await([[
+        UPDATE police_incidents
+           SET status = 'closed', disposition = 'cancelled', closed_at = NOW(),
+               closed_by = ?, closed_reason = 'draft_discarded'
+         WHERE id = ? AND status = 'draft'
+    ]], { tostring(actor.citizenid), id })
+    if type(changed) == 'table' then changed = changed.affectedRows or changed[1] end
+    if not changed or changed == 0 then
+        return false, 'not_draft'
+    end
+    if not audit(actor.citizenid, 'incident.discard', tostring(id), nil) then
+        return false, 'audit_unavailable'
+    end
+    return { id = id, status = 'closed' }
 end
 
 --- P6-4 草稿箱：警员采纳一张草稿 —— 复用既有状态机（draft → open），
@@ -462,6 +509,7 @@ end
 
 exports('ListDrafts', P.ListDrafts)
 exports('AdoptDraft', P.AdoptDraft)
+exports('DiscardDraft', P.DiscardDraft)
 exports('SetIncidentStatus', P.SetIncidentStatus)
 exports('SweepStaleIncidents', SweepStaleIncidents)
 
