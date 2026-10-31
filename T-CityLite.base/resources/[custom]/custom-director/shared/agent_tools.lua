@@ -947,6 +947,27 @@ AgentTools.TOOLS = {
       ["case_id"] = { type = "integer", minimum = 1 },
     },
   },
+  ["apply_police_warrant"] = {
+    name = "apply_police_warrant",
+    title = "Request an arrest warrant (L3)",
+    channel = "write",
+    route = "director",
+    risk = "L3",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "required",
+    dry_run = "supported",
+    requires_approval = true,
+    undo_supported = false,
+    director_action = "police_warrant_request",
+    auth = "default",
+    params = { "citizenid", "reason" },
+    required = { "citizenid", "reason" },
+    schema = {
+      ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
+      ["reason"] = { type = "string", min_length = 3, max_length = 128 },
+    },
+  },
 }
 
 function AgentTools.get(name)

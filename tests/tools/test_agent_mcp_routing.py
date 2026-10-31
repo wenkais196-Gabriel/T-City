@@ -569,7 +569,7 @@ class VisibilityTests(RoutingTestBase):
         }
         with mock.patch.dict(os.environ, env, clear=True):
             names = {tool["name"] for tool in _tools()}
-        self.assertEqual(len(names), 40, "AGENT_TOOLSET=all lists the 40 non-harness active tools")
+        self.assertEqual(len(names), 41, "AGENT_TOOLSET=all lists the 41 non-harness active tools")
         self.assertIn("add_player_money", names, "debug mode lists writes but calls still need a token")
 
     def test_live_tools_need_the_live_token_to_be_advertised(self) -> None:
