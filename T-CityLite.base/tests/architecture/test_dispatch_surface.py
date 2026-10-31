@@ -32,7 +32,7 @@ def test_dashboard_server_callback_guards_duty_and_rate() -> None:
     assert at != -1, "车机要有自己的警情回调"
     block = src[at:at + 900]
     assert "onduty" in block, "服务端必须再判一次在岗"
-    assert "checkRateLimit(source, 'dispatchList')" in block, "必须限流"
+    assert "RateLimitWindow" in block and "dash:dispatch:" in block, "必须走 owner 的窗口限流"
     assert "GetIncidentsPublic(source, 20)" in block, "必须把 source 透传下去"
 
 
