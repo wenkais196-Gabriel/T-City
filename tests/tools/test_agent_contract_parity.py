@@ -103,7 +103,7 @@ class RegistryPolicyParityTests(unittest.TestCase):
         # If this fails, update the number on purpose in the same commit that
         # adds/removes an action; silent growth is what this test prevents.
         self.assertEqual(len(self.actions), 22)
-        self.assertEqual(len(self.tools), 41)
+        self.assertEqual(len(self.tools), 42)
 
     def test_police_run_e2e_is_l1_test_only(self) -> None:
         definition = self.actions["police_run_e2e"]
