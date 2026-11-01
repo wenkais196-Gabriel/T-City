@@ -52,7 +52,7 @@ GetPlayerPing = function() return 1 end
 
 PROBE = r"""
 -- 一张"玩家表"：AddMoney 是**标记函数**，包装层一旦替换它，引用就变了
-local function markerAddMoney(self, moneytype, amount, reason) return 'marker' end
+local function markerAddMoney(moneytype, amount, reason) return 'marker' end
 local player = {
     PlayerData = { source = 1, citizenid = 'CID1', money = { cash = 0, bank = 0 } },
     Functions = { AddMoney = markerAddMoney },
@@ -65,7 +65,8 @@ for _, fn in ipairs(_handlers['QBCore:Server:PlayerLoaded'] or {}) do
 end
 
 local same = player.Functions.AddMoney == markerAddMoney
-local result = player.Functions.AddMoney(player, 'cash', 100, 'probe')
+-- 生产调用形态就是这行：3 参 dot 调用（旧包装的形参是 self，会在这里炸）
+local result = player.Functions.AddMoney('cash', 100, 'probe')
 
 print('RESULT ' .. string.format(
     '{"sameFunction":%s,"callResult":"%s"}',
