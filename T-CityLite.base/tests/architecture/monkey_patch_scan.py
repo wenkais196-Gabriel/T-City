@@ -6,8 +6,8 @@
 约定（改了这里等于改规则，必须同时改负向用例 `test_no_monkey_patch.py`）：
 
 * 前缀固定为 `QBCore` / `QBCore.Functions` / `Player.Functions`——
-  只有这四个是"别人的对象"，往上面写东西就是猴补。
-* 四种形态都要认：
+  只有这三个是"别人的对象"，往上面写东西就是猴补。
+* 三种写法（`QBCore.<Name> =` 由第一种前缀的 assign 形态覆盖，不再单列）：
     1. `function QBCore.Functions.GetPlayer(`  ← compat 现存的两处正是这种，只写 `=` 会漏
     2. `QBCore.Functions.GetPlayer =`
     3. `QBCore.Functions['GetPlayer'] =` / `QBCore.Functions["GetPlayer"] =`
@@ -46,7 +46,7 @@ class Patch:
     file: str      # 相对 T-CityLite.base 的 POSIX 路径
     symbol: str    # 例：QBCore.Functions.GetPlayer
     line: int
-    kind: str      # function / assign / bracket / bare
+    kind: str      # function / assign / bracket
 
     def where(self) -> str:
         return f"{self.file}:{self.line}"
