@@ -1,3 +1,12 @@
+---
+id: police-architecture-06-adr-0006-contract-errors
+type: adr
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # ADR-0006 跨资源契约统一错误码与版本
 
 - 状态：Partially accepted（`f690230`：arrest/report 结构化 + 幂等键；14/17 action 仍压平）

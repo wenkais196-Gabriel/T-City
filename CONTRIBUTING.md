@@ -1,3 +1,13 @@
+---
+id: contributing
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-21
+review_by: 2027-04-30
+---
+
 # Contributing to T-City Lite
 
 感谢参与。这个仓库是一个 FiveM/QBCore Lite 服务器，改动会直接影响线上玩家，请先读：

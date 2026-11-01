@@ -1,3 +1,12 @@
+---
+id: archive-design-notes-refactor-escape-sqli-20260601
+type: audit
+status: archived
+system: infra
+owner: hermes
+updated: 2026-10-23
+---
+
 # 设计文档: 移除 escape_sqli 手动转义，改为全参数化查询
 
 ## 目标与验收标准

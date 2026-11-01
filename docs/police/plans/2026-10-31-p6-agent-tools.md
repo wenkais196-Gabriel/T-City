@@ -1,3 +1,13 @@
+---
+id: police-plans-2026-10-31-p6-agent-tools
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # P6 Agent 动作 · 研究与施工图（2026-10-31）
 
 > 第一次尝试把 `police_query_case` 做成 **director action**，被注册表校验器当场否掉。

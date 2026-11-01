@@ -1,3 +1,13 @@
+---
+id: client-research-keyboard-and-gamepad-navigation
+type: research
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-01-30
+---
+
 # 手机/平板 NUI 的键盘与手柄导航（研究 + 设计）
 
 > 2026-10-27。起因：agent 的合成鼠标进不了 NUI（GTA 把 OS 光标锁在屏幕角，见

@@ -1,3 +1,13 @@
+---
+id: engineering-constitution
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # CONSTITUTION — T-City 的十条不变量
 
 > 这份文件只写**不可协商**的东西。每条都能推出「违反 = 打回」，并且都有一个可执行的落点。

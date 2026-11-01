@@ -1,3 +1,12 @@
+---
+id: base-audit-2026-10-21-review-and-three-phase-plan
+type: audit
+status: final
+system: delivery
+owner: hermes
+updated: 2026-10-21
+---
+
 # T-City Lite — 全局审查、修复与三阶段路线图
 
 > **审计日期**: 2026-10-21

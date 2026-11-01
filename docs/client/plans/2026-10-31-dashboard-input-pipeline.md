@@ -1,3 +1,13 @@
+---
+id: client-plans-2026-10-31-dashboard-input-pipeline
+type: plan
+status: archived
+system: ux
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # 车机中控的输入管线审查（2026-10-31）
 
 > 起因：面板能打开，**没有游标、视角还在转**，职业页点不到。

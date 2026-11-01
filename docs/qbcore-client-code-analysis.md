@@ -1,3 +1,13 @@
+---
+id: qbcore-client-code-analysis
+type: research
+status: final
+system: ux
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-01-30
+---
+
 # QBCore 客户端代码面分析（T-City 实测 + 上游对照）
 
 > 口径：本仓库 `T-CityLite.base/resources`（HEAD 时点）+ 上游 `qbcore-framework/qb-core@main` + 官方文档。

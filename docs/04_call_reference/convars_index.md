@@ -1,3 +1,13 @@
+---
+id: 04-call-reference-convars-index
+type: manual
+status: active
+system: infra
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # Convars 全集索引
 
 > 覆盖所有模块 CFG 中定义的服务器变量

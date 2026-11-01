@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-careers-que-c37dfe16
+type: manual
+status: archived
+system: quest
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-01-30
+---
+
 # T-City 职业与组织任务情景建立手册 (Batch 1, Batch 2, Batch 3 & Batch 4)
 
 本手册是 T-City 任务系统在职业角色扮演情景设计上的最高指导性技术与策划文档。我们遵循“四原则”（模块化、高性能、安全、可拓展），以提升玩家角色扮演的沉浸感与成就感为核心，对任务场景进行深度规范。
@@ -1311,7 +1321,7 @@
 
 ## 📊 14. 沙盒经济标定与数值平衡设计
 
-为确保任务配置中的数值不会导致通货膨胀或物价崩溃，所有任务金钱产出必须基于 [economy_baseline.json](file:///e:/T-City/T-CityLite.base/economy_baseline.json) 与 [simulation_report.json](file:///e:/T-City/simulation_report.json) 进行标定。
+为确保任务配置中的数值不会导致通货膨胀或物价崩溃，所有任务金钱产出必须基于 [economy_baseline.json](T-CityLite.base/economy_baseline.json) 与 [simulation_report.json](simulation_report.json) 进行标定。
 
 ### 14.1 任务奖金权威推导算法
 任何新任务的 `rewards.money` 必须通过以下数学公式推导：

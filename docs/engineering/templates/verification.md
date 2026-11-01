@@ -1,3 +1,13 @@
+---
+id: engineering-templates-verification
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 验证：<主题>
 
 > 阶段 V。**只放证据，不放结论**。评审时对照这里，而不是对照描述。

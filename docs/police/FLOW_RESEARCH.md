@@ -1,3 +1,13 @@
+---
+id: police-flow-research
+type: research
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-01-30
+---
+
 # 警察扮演流程调研（FLOW_RESEARCH）
 
 > **问题**：FiveM（QBCore / ESX）警察扮演里，怎样在「功能精简」的同时保证扮演质量？

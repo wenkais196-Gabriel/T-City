@@ -1,3 +1,12 @@
+---
+id: base-test-report-v0-1-v0-4
+type: audit
+status: final
+system: delivery
+owner: hermes
+updated: 2026-06-21
+---
+
 # 🧪 T-City Lite v0.1~v0.4 自动化测试报告
 
 > **报告编号**: TCR-20260601-001

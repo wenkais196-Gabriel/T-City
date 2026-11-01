@@ -1,3 +1,13 @@
+---
+id: police-architecture-04-data-ownership
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 04 — 数据所有权（Data Ownership）
 
 > 架构基线 agent C ｜ 只读 + 文档 ｜ **基线快照 `568acd2` + post-baseline 注记，当前 HEAD `3bbcab3`**（2026-10-24）｜ 未改代码、未 commit、未触碰 FXServer。

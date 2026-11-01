@@ -1,3 +1,12 @@
+---
+id: police-architecture-06-adr-0008-npc-callout
+type: adr
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # ADR-0008 NPC 警情：服务端调度 + 客户端场景
 
 - 状态：Accepted（MVP，`a52d2ca` / `3bbcab3`）

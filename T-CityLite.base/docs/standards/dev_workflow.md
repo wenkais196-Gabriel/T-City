@@ -1,3 +1,13 @@
+---
+id: base-standards-dev-workflow
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 🚀 T-City Lite 开发与维护工作流规范 (dev_workflow.md)
 
 > **修订日期**: 2026-06-04  

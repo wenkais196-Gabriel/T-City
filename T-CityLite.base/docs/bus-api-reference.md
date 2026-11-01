@@ -1,3 +1,13 @@
+---
+id: base-bus-api-reference
+type: manual
+status: active
+system: infra
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # T-City Lite — Bus API 插件开发手册
 
 > **版本**: v1.0  

@@ -1,3 +1,13 @@
+---
+id: 02-script-index-qb-core
+type: manual
+status: archived
+system: infra
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # qb-core — QBCore 核心框架
 
 > **路径**: `resources/[qb]/qb-core/` | **状态**: ✅ ENABLED | **CFG 模块**: core.cfg

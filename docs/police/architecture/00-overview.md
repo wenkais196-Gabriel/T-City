@@ -1,3 +1,13 @@
+---
+id: police-architecture-00-overview
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 警察系统架构总览（00 Overview）
 
 > **性质**：架构基线（as-built，读代码得出），不是目标态。

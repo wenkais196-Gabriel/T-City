@@ -1,3 +1,12 @@
+---
+id: base-agent-reviews-02-lua-refactor
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # 02 · Lua HTTP 抽取重构对抗性评审（`ccdd61e`）
 
 - **评审对象**：`ccdd61e refactor(director): extract testable HTTP API and add Lua harness`

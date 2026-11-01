@@ -1,3 +1,12 @@
+---
+id: client-client-audit
+type: audit
+status: final
+system: ux
+owner: hermes
+updated: 2026-10-25
+---
+
 # T-City 客户端（FiveM / QBCore / NUI）审计
 
 > 规则：**只读排查，不修改业务代码**。本文登记问题；修复由各模块 owner 在后续 PR 完成。

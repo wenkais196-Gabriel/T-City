@@ -1,3 +1,12 @@
+---
+id: base-audit-2026-10-21-test-report
+type: audit
+status: final
+system: delivery
+owner: hermes
+updated: 2026-10-22
+---
+
 # 测试报告 — 2026-10-21
 
 > **分支**: `fix/test-credentials`

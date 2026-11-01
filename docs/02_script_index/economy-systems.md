@@ -1,3 +1,13 @@
+---
+id: 02-script-index-economy-systems
+type: manual
+status: archived
+system: economy
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # core_economy + economy-dashboard — 经济网关与仪表盘
 
 > **路径**: `resources/[system]/core_economy/` `economy-dashboard/`

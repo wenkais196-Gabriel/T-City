@@ -1,3 +1,13 @@
+---
+id: server-design-01-preset-to-emergent-funnel
+type: spec
+status: active
+system: world
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 01 — 预设→涌现漏斗：如何让预设任务成为涌现式玩法的入口
 
 > **核心命题**: 预设内容和涌现式玩法不是二选一，是漏斗关系——预设内容保底，把玩家推进涌现式系统，涌现式系统培养所有权感。  

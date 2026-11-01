@@ -1,3 +1,13 @@
+---
+id: police-architecture-readme
+type: meta
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-29
+review_by: 2027-04-30
+---
+
 # 警察系统架构基线
 
 > 基线：**基线快照 `master @ 568acd2`，当前复评 HEAD `3bbcab3`**（2026-10-24）。这是 **as-built（现状）** 基线，不是目标态；各文档保留基线快照，并用 `post-baseline` 小节记录之后落地的行为。

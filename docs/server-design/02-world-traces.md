@@ -1,3 +1,13 @@
+---
+id: server-design-02-world-traces
+type: spec
+status: active
+system: world
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 02 — 世界痕迹系统：让玩家行为留下可见、持久的世界后果
 
 > **核心命题**: "我上次下线前做的事，这次上线还能看到后果"——这是所有权感最直接的来源。  

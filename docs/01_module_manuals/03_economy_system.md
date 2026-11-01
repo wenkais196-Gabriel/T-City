@@ -1,3 +1,13 @@
+---
+id: 01-module-manuals-03-economy-system
+type: manual
+status: active
+system: economy
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # Module 3: 经济系统 (economy.cfg / banking.cfg / security.cfg)
 
 > **CFG 文件**: `configs/modules/economy.cfg` `banking.cfg` `security.cfg`

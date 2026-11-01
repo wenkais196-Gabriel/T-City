@@ -1,3 +1,13 @@
+---
+id: client-research-client-observability-design
+type: spec
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 手机四段往返可观测设计（`phone:server:diag`）
 
 > 状态：**设计稿**，不含实现。生产代码未改动。

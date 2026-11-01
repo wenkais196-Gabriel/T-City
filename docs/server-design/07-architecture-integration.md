@@ -1,3 +1,13 @@
+---
+id: server-design-07-architecture-integration
+type: spec
+status: active
+system: infra
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 07 — 架构集成：如何嵌入 T-City Phase 0-3
 
 > **核心命题**: 前6篇设计的系统不能"以后再说"——Phase 0-1 的架构决策将决定它们是"轻松叠加"还是"重构第二次"。  

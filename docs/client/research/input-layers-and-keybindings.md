@@ -1,3 +1,13 @@
+---
+id: client-research-input-layers-and-keybindings
+type: research
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-01-30
+---
+
 # 输入层与键位冲突（调研）
 
 > 起因：手机上用方向键导航时，**车上的转向灯跟着乱闪**（左/右/下三个方向键）。

@@ -1,3 +1,13 @@
+---
+id: engineering-live-verification
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-30
+review_by: 2027-04-30
+---
+
 # 真机验证工作流（Live verification）
 
 > 适用：改动涉及 **NUI / 输入 / 实体 / 事件时序 / 客户端生命周期** 时。

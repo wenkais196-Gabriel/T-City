@@ -1,3 +1,13 @@
+---
+id: police-optimization-plan
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 优化批次（P6）调研与方案
 
 范围（用户指定五项）：

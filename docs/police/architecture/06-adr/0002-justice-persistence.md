@@ -1,3 +1,12 @@
+---
+id: police-architecture-06-adr-0002-justice-persistence
+type: adr
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # ADR-0002 justice 案件与判决持久化
 
 - 状态：Proposed

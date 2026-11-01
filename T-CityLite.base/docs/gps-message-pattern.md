@@ -1,3 +1,13 @@
+---
+id: base-gps-message-pattern
+type: manual
+status: active
+system: comms
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # GPS 任务消息模式 — 模板文档
 
 任何需要"手机短信 + 地图导航 + 完成后拦截"的任务系统，遵循此模板。

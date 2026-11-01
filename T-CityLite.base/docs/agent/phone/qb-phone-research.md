@@ -1,3 +1,13 @@
+---
+id: base-agent-phone-qb-phone-research
+type: research
+status: final
+system: comms
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # qb-phone 调研报告
 
 > **调研对象**：`qbcore-framework/qb-phone`（该 URL 301 到 `qbcore-fivem/qb-phone`），`main` @ `333e8132359b1c50c31c2bc6db8e8a64db6c93f6`，`fxmanifest.lua` version `1.5.0`。

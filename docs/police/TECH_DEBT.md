@@ -1,3 +1,13 @@
+---
+id: police-tech-debt
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 警察系统技术债
 
 > 记录已知架构债，不立即修；后续按优先级处理。

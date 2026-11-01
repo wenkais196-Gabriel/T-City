@@ -1,3 +1,13 @@
+---
+id: client-plans-2026-10-27-input-layering
+type: plan
+status: archived
+system: ux
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-04-30
+---
+
 # 输入分层提案：让 UI 像 GTA 暂停菜单那样接管输入
 
 > 现状：每次加玩法就撞键（转向灯 ← → ↓、巡航 ↑ ↓、背包 TAB、记分板 HOME、中控 I、电台 Alt）。

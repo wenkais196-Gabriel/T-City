@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-driver-plan
+type: plan
+status: archived
+system: jobs
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # 🚗 T-City Lite 驾驶员与驾考系统 (Driver) 细化规划
 
 > **适用版本**: v0.7a - v0.8  
@@ -10,13 +20,13 @@
 经对市政厅和驾驶执照模块进行扫描，发现目前的驾照获取和执法拦截逻辑存在以下特点：
 
 1. **线下教练考试模型 (Legacy & Hard to Play)**：
-   * 在 [server/main.lua:L249-L270](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-cityhall/server/main.lua#L249-L270) 中，玩家在驾校 NPC 处报名后，系统会给数据库配置的“驾校教练 (Instructors)”发送邮件。
-   * 然后由在线教练上车测试，并由教练手动运行 `/drivinglicense [id]` 指令（[L314-L336](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-cityhall/server/main.lua#L314-L336)）批准考试，玩家再去市政厅打印实体驾照。
+   * 在 [server/main.lua:L249-L270](T-CityLite.base/resources/[qb]/qb-cityhall/server/main.lua#L249-L270) 中，玩家在驾校 NPC 处报名后，系统会给数据库配置的“驾校教练 (Instructors)”发送邮件。
+   * 然后由在线教练上车测试，并由教练手动运行 `/drivinglicense [id]` 指令（[L314-L336](T-CityLite.base/resources/[qb]/qb-cityhall/server/main.lua#L314-L336)）批准考试，玩家再去市政厅打印实体驾照。
    * **痛点**：这是一个高度依赖“在线教练”人工处理的流程。在半夜或教练不在线时，新玩家根本无法考取驾照。
 2. **市政厅手写元数据绕过**：
-   * 在 [server/main.lua:L140-L165](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-cityhall/server/main.lua#L140-L165) 中，玩家花 $150 购买驾照时，市政厅依然是直接修改 `Player.PlayerData.metadata['licences']` 的布尔值，没有调用 `custom-certificates` 提供的标准导出 API。
+   * 在 [server/main.lua:L140-L165](T-CityLite.base/resources/[qb]/qb-cityhall/server/main.lua#L140-L165) 中，玩家花 $150 购买驾照时，市政厅依然是直接修改 `Player.PlayerData.metadata['licences']` 的布尔值，没有调用 `custom-certificates` 提供的标准导出 API。
 3. **无证驾驶与司法执法的平衡**：
-   * 在 [custom-certificates/client/main.lua:L78-L80](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-certificates/client/main.lua#L78-L80) 中，平民驾驶常规车辆（class 0~9）时，`CanDriveVehicleClass` 返回 `true`。
+   * 在 [custom-certificates/client/main.lua:L78-L80](T-CityLite.base/resources/[custom]/custom-certificates/client/main.lua#L78-L80) 中，平民驾驶常规车辆（class 0~9）时，`CanDriveVehicleClass` 返回 `true`。
    * **RP 设计点**：这是合理的设计。允许无证驾驶以方便警察抓现行；但对于“重型载具 (heavy)”或“民航物流”，应当在任务触发时强制校验有无执照。
 
 ---
@@ -45,7 +55,7 @@
 ### 3) 规范市政厅购买接口 (Standardize Cityhall Purchase API)
 重构市政厅的购买和补办流程，拒绝手写 metadata。
 
-* **修改文件**：[qb-cityhall/server/main.lua](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-cityhall/server/main.lua)
+* **修改文件**：[qb-cityhall/server/main.lua](T-CityLite.base/resources/[qb]/qb-cityhall/server/main.lua)
 * **具体做法**：
   * 当玩家在市政厅申领或补办证件时，替换为：
     * `exports['custom-certificates']:IssueCertificate(src, licenseType)`
@@ -54,7 +64,7 @@
     * 如果玩家选择**前往驾校通过自动化考试**，费用仅需 **$100**，鼓励玩家体验驾考任务。
 
 ### 4) 规范警用暂扣与吊销命令 (Police License Enforcement)
-* **修改文件**：[qb-policejob/server/commands.lua](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-policejob/server/commands.lua)
+* **修改文件**：[qb-policejob/server/commands.lua](T-CityLite.base/resources/[qb]/qb-policejob/server/commands.lua)
 * **具体做法**：
   * 重构警察的暂扣驾照指令 `/takedrivinglicense [id]`：
     调用 `exports['custom-certificates']:SuspendLicense(targetId, 'driver')`。

@@ -1,3 +1,13 @@
+---
+id: base-standards-script-templates
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 📦 T-City Lite 脚本模板规范 (script_templates.md)
 
 > **修订日期**: 2026-06-04  

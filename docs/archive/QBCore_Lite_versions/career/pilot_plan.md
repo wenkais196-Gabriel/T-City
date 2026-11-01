@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-pilot-plan
+type: plan
+status: archived
+system: vehicle
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # ✈️ T-City Lite 飞行员与航空系统 (Pilot) 细化规划
 
 > **适用版本**: v0.7a - v0.8  
@@ -10,13 +20,13 @@
 通过对航空器及飞行员相关的脚本与配置文件进行扫描，我们发现以下特点和架构缺陷：
 
 1. **航空执照存在，但物理驾驶控制失效 (Core Loop Hole)**：
-   * 在 [custom-certificates/client/main.lua:L65-L81](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-certificates/client/main.lua#L65-L81) 中，`CanDriveVehicleClass` 始终直接返回 `true`，并附带注释：“允许无证驾驶以方便警察扮演”。
+   * 在 [custom-certificates/client/main.lua:L65-L81](T-CityLite.base/resources/[custom]/custom-certificates/client/main.lua#L65-L81) 中，`CanDriveVehicleClass` 始终直接返回 `true`，并附带注释：“允许无证驾驶以方便警察扮演”。
    * **问题**：这导致游戏内对直升机（15级）和飞机（16级）的驾驶限制成了“摆设”。任何平民玩家无论有没有飞行执照（`pilot`），都可以任意开走机场的飞机和直升机，驾驶权限没有得到物理闭环。
 2. **缺乏合法的航空培训与考核流程 (Aviation Exam)**：
    * 目前玩家获取飞行执照只有两种非 RP 途径：去市政厅直接花钱买、或者由管理员/警察使用指令赠送。
    * **痛点**：缺乏一个身临其境的“飞行学校”培训与考核流程（如起飞、空中过圈、平稳降落），导致飞行员扮演缺乏仪式感和技术门槛。
 3. **已有的飞行器监控与任务链**：
-   * [quest_logistics.lua:L245-L358](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_logistics.lua#L245-L358) 中已经设计了走私飞行任务（`aviation_smuggling_flight`），并利用 [quest_logistics_client.lua:L14-L121](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/client/quest_logistics_client.lua#L14-L121) 实现了高精度的“海平面低空飞行监控雷达（低于 150m 保持 45s 闪红警告）”，技术底座非常扎实。
+   * [quest_logistics.lua:L245-L358](T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_logistics.lua#L245-L358) 中已经设计了走私飞行任务（`aviation_smuggling_flight`），并利用 [quest_logistics_client.lua:L14-L121](T-CityLite.base/resources/[custom]/custom-quest/client/quest_logistics_client.lua#L14-L121) 实现了高精度的“海平面低空飞行监控雷达（低于 150m 保持 45s 闪红警告）”，技术底座非常扎实。
 
 ---
 
@@ -25,7 +35,7 @@
 ### 1) 强效物理驾驶限制 (Enforce Vehicle Class Restrictions)
 收紧 `custom-certificates` 客户端的驾驶权判定，对无证强行开动航空器的行为实施拦截。
 
-* **修改文件**：[custom-certificates/client/main.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-certificates/client/main.lua)
+* **修改文件**：[custom-certificates/client/main.lua](T-CityLite.base/resources/[custom]/custom-certificates/client/main.lua)
 * **具体做法**：
   * 在 `CanDriveVehicleClass` 中恢复真实校验，拦截 15（直升机）和 16（飞机）的驾驶权：
     ```lua
@@ -92,7 +102,7 @@
   * **考评发放**：完成最后一步时，任务奖励中配置 `script_trigger` 执行 `custom-certificates:GrantLicense`，永久将该玩家的飞行执照变更为 `held`，并发放实体证件。
 
 ### 3) 扩充合法民航物流任务 (Add Legal Air Transport Quests)
-* 在 [quest_logistics.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_logistics.lua) 中，除了走私飞行，新增一条合法的民航空运路线（例如：LSIA 港口空运医药箱 ➔ Grapeseed 跑道）。
+* 在 [quest_logistics.lua](T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_logistics.lua) 中，除了走私飞行，新增一条合法的民航空运路线（例如：LSIA 港口空运医药箱 ➔ Grapeseed 跑道）。
 * 该任务要求飞行高度**必须高于**海平面 250 米以保持民航线高度。低于 250 米会触发空域警告。
 
 ### 4) 紧急服务 (LEO/EMS) 空中力量联动

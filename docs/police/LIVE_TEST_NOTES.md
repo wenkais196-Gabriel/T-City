@@ -1,3 +1,12 @@
+---
+id: police-live-test-notes
+type: audit
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # 进服测试问题记录
 
 > 测试人：玩家 1（IYY39878）。先记录，全部测完统一修。

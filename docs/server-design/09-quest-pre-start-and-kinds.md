@@ -1,3 +1,13 @@
+---
+id: server-design-09-quest-pre-start-and-kinds
+type: spec
+status: active
+system: quest
+owner: hermes
+updated: 2026-10-26
+review_by: 2027-04-30
+---
+
 # 09 — 任务的三种入口：日常是货架、剧情是剧本、奇遇是天气
 
 > **核心命题**: 任务系统的差别不在内容多少，而在**谁发起、玩家怎么被叫到现场、他能反悔多久**。

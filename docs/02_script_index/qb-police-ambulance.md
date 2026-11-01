@@ -1,3 +1,13 @@
+---
+id: 02-script-index-qb-police-ambulance
+type: manual
+status: archived
+system: justice
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # qb-policejob + qb-ambulancejob — 执法与医疗职业
 
 > **状态**: ✅ BOTH ENABLED | **CFG 模块**: police.cfg / medical.cfg

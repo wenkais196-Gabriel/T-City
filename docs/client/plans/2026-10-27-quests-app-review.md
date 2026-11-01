@@ -1,3 +1,13 @@
+---
+id: client-plans-2026-10-27-quests-app-review
+type: plan
+status: archived
+system: ux
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-04-30
+---
+
 # 调研 + 计划：任务 App 的「可发现性」与平板详情栏
 
 > L2（一个 app 页面 + 它的 pane 契约）。计划落在本文，验收命令与回滚写在 §4 / §5。

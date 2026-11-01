@@ -1,3 +1,13 @@
+---
+id: base-agent-design-01-live-perception
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 01 — 实时感知层 v2（Live Perception）
 
 > 目标：让 agent 看到**当前**世界（`position/health/vehicle/bucket/ping/job/money/quest` + `join/leave/death/job.change/money.change/quest.completed`），

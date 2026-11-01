@@ -1,3 +1,13 @@
+---
+id: police-design
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # T-City 警察玩法与系统设计（Police Roleplay DESIGN）
 
 > 仓库：`T-City-agent` ｜ 分支：`feat/police-roleplay`

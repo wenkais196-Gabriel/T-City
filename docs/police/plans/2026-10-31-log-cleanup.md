@@ -1,3 +1,13 @@
+---
+id: police-plans-2026-10-31-log-cleanup
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # 日志清理：两个还在复发的脚本错误（研究 → 计划 → 施工）
 
 > 数据来源：`scratch/fxserver-live.log`（8524 行，本机 FXServer @30130）。

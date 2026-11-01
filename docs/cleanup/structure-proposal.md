@@ -1,3 +1,12 @@
+---
+id: cleanup-structure-proposal
+type: audit
+status: final
+system: meta
+owner: hermes
+updated: 2026-10-23
+---
+
 # T-City 仓库结构与分类整改提案
 
 > **状态**：提案（未执行任何移动）

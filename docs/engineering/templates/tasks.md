@@ -1,3 +1,13 @@
+---
+id: engineering-templates-tasks
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 任务清单：<主题>
 
 > 阶段 D 的工作台。每条任务必须有 verify 列，且能独立交付。

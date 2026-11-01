@@ -1,3 +1,13 @@
+---
+id: engineering-templates-delivery
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 交付：<主题>
 
 > 阶段 S。这份清单可以当 PR 描述，也可以只做最后一遍自检。

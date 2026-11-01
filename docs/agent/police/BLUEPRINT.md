@@ -1,3 +1,13 @@
+---
+id: agent-police-blueprint
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # 警察模块蓝图 v1（待开发）
 
 > **状态**：设计定稿，**部分实现**。上线前请先读 [RESEARCH-2026-10.md](RESEARCH-2026-10.md)（调研与裁决依据）。
