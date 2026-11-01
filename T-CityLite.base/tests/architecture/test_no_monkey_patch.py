@@ -91,6 +91,14 @@ def test_scanner_catches_all_four_forms_and_skips_excluded(tmp_path: Path):
     _write(root, "[custom]/probe/tests/fixture.lua", "QBCore.Functions.Notify = function() end\n")
     _write(root, "[custom]/probe/server/comment.lua", "-- QBCore.Functions.Notify = function() end\n")
     _write(root, "[custom]/probe/server/compare.lua", "if QBCore.Functions.Notify == nil then return end\n")
+    # 文档字符串里贴的代码片段不算（下标形态必须跳过字符串内部）
+    _write(
+        root,
+        "[custom]/probe/server/docstring.lua",
+        "local msg = \"QBCore.Functions['Notify'] = function() end\"\n",
+    )
+    # server/ 目录下的 client_*.lua 是服务端文件（不能按文件名前缀判客户端）
+    _write(root, "[custom]/probe/server/client_bridge.lua", "QBCore.PlayerData = {}\n")
 
     hits = scan.scan_repo(root)
     kinds = sorted({(hit.symbol, hit.kind) for hit in hits})
@@ -101,4 +109,12 @@ def test_scanner_catches_all_four_forms_and_skips_excluded(tmp_path: Path):
     assert "Player.Functions.AddMoney" in symbols, "双引号下标形态没抓到"
     assert "Player.Functions.RemoveMoney" in symbols, "单引号下标形态没抓到"
     assert "QBCore.Debug" in symbols, "裸命名空间形态没抓到"
-    assert len(hits) == 5, f"反面对照被误报了：{[(hit.file, hit.symbol) for hit in hits]}"
+    assert len(hits) == 6, f"正/反面对照判断错了：{[(hit.file, hit.symbol) for hit in hits]}"
+    files = {hit.file for hit in hits}
+    assert not any("docstring" in name for name in files), (
+        f"字符串里贴的代码片段被误报了：{sorted(files)}"
+    )
+    # server/ 目录下的 client_*.lua 是**服务端**文件，不能被当成客户端放过
+    assert any("client_bridge" in name for name in files), (
+        f"server 目录下的 client_*.lua 被误判成客户端：{sorted(files)}"
+    )
