@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-01 ｜ **文档总数**：277 ｜ **已登记**：277 ｜ **未登记**：0
+**生成时间**：2026-11-01 ｜ **文档总数**：276 ｜ **已登记**：276 ｜ **未登记**：0
 
-**状态分布**：✅ active 152 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 151 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -217,7 +217,7 @@
 | [03 — 不可替代性与声誉：让玩家成为"基础设施"](server-design/03-irreplaceability-reputation.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/03-irreplaceability-reputation.md` |
 | [04 — 共治系统：让玩家成为规则的共同制定者](server-design/04-co-governance.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/04-co-governance.md` |
 
-### agent（34）
+### agent（33）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -235,7 +235,6 @@
 | [Agent Read API and MCP Sidecar (issue #24)](../T-CityLite.base/docs/agent/API.md) | manual | ✅ active | 2026-10-23 | 2027-01-30 |  | `T-CityLite.base/docs/agent/API.md` |
 | [驱动服务器控制台（`tcity-cmd`）](../T-CityLite.base/docs/agent/CONSOLE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/agent/CONSOLE.md` |
 | [把 MCP 接到 T-City 上（本地全链路）](../T-CityLite.base/docs/agent/MCP_WIRING.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `T-CityLite.base/docs/agent/MCP_WIRING.md` |
-| [T-City Agent Tool Surface (v1)](../T-CityLite.base/docs/agent/TOOLS.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `T-CityLite.base/docs/agent/TOOLS.md` |
 | [加 / 改一个 agent 动作：检查清单](agent/police/ATOOLS-DISCIPLINE.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `docs/agent/police/ATOOLS-DISCIPLINE.md` |
 | [Agent Read Layer (Phase 3 / P1)](../T-CityLite.base/docs/agent/README.md) | meta | ✅ active | 2026-10-27 | 2027-04-30 |  | `T-CityLite.base/docs/agent/README.md` |
 | [2026-11-01 · 下一步开发方向调研（Hermes + Claude Code 双份意见）](engineering/2026-11-01-next-epic-research.md) | research | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/2026-11-01-next-epic-research.md` |
