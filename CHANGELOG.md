@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **存档收敛为单一写者，拆掉 `ForceFlush → Save(true)` 的环（P1-2 / P1-1）**（qb-core / core-framework）：qb-core 的 `persistence_manager.lua` 重写为唯一写者 `Store`（一份脏池、一个定时器、一条 upsert），core-framework 的同名文件降级为纯委托层（无池、无 SQL、无定时器、不再回调 `Save(true)`）。三处语义修正：① 刷盘**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数（以前无论 SQL 成不成都清）；② `QBCore.Player.Save` 强制存档改为直接 `Store.SaveNow`，失败时 `IsDirty` 保持为 true 并 `ShowError`（以前无条件清）；③ `FlushAll` 兜底扫描 `IsDirty = true` 但没进池子的玩家（economy/metadata 服务只标 `IsDirty`，他们的钱以前只在下线那一刻才落库）。停服刷盘返回 ack `{reason, attempted, ok, failed, duration_ms}` 并打日志。证据：`tests/unit/layer1_core/test_persistence_single_owner.py`（改动前 **12 failed，含 399,964 层栈溢出**；改动后 19 passed）+ 重写的 `test_persistence.py`（delegate 转发契约），见 `docs/engineering/2026-11-foundation-p1-evidence.md`；全仓 `pytest tests/unit tests/architecture` → 1120 passed。真机：`restart qb-core` + 逐个 `ensure` 拉回被连带停掉的资源后，日志出现 `single owner store loaded` / `delegate loaded (owner=qb-core: resolved)`，无 SCRIPT ERROR。
 
+- **P1-4 阶段 C：删掉 `Player.Functions.AddMoney` 的包装（纯删除，一行不修）**（core-framework）：
+  这段包装今天本来就是死代码 —— `_G` 不跨资源，core-framework 里 `_G.Bus.EconomyService` 恒 nil，
+  ES 分支整段跳过、永远回落。但"死"不等于"无害"：它每 10 分钟把 Notify 与 AddMoney 的计数混在一起打印
+  （运维会以为加钱走了新路径），而且它的形参是 `self` 而全仓 60 处调用点是 3 参 dot 调用 —— 一旦有人
+  "顺手修好"ES 可见性，`self = 'cash'`，每个加钱点直接 SCRIPT ERROR；修好传参而不改签名则是
+  pcall 回落 + 原函数各调一次 ES = **双倍加钱**。所以只删不修。新增单元测试断言 PlayerLoaded 之后
+  `Player.Functions.AddMoney` 仍是玩家自己那个函数、调用确实落在它上面；换回旧实现 1 红。登记表 6 → 5 条。
 - **P1-4 阶段 B：删掉 `QBCore.Functions.GetPlayer` 的缓存猴补**（core-framework）：qb-core 的
   `GetPlayer` 本来就是一次表查，compat 外面套的 `playerCache` + `GetPlayerName` 活性校验有三个问题：
   命中时多一次 native 调用；**登出时不清缓存**（`QBCore.Player.Logout` → `OnPlayerUnload` → 200ms 后才置 nil，

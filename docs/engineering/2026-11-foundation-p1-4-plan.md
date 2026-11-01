@@ -86,7 +86,11 @@ review_by: 2026-12-31
 - 删 compat 里 origGetPlayer / playerCache / isOnline / `function QBCore.Functions.GetPlayer` 及两个 handler；
 - 判据见 G3–G5；allowlist 删对应行且不留死条目。
 
-### 阶段 C：删 `AddMoney` 包装（**一行不修**）
+### 阶段 C：删 `AddMoney` 包装（**一行不修**）  ✅ 2026-11-01 完成
+- 落地：compat.lua 删掉 `PlayerLoaded` 里的整个包装（含计数与首次路由提示），登记表 6 → 5 条；
+- 测试 tests/unit/layer1_core/test_compat_no_addmoney_wrapper.py：G6 断言 PlayerLoaded 之后
+  `Player.Functions.AddMoney` **仍是玩家自己那个函数**，且调用落在它上面（被中间闭包截走即红）。
+  换回旧实现该用例 1 红。
 - 删 compat 里 PlayerLoaded 内的包装与相关计数；
 - 不动 qb-core 的 `player.lua`（它本来就路由 ES）；
 - 判据见 G6–G8。
