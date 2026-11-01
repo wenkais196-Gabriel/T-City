@@ -14,6 +14,14 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 全局奖励倍率：与 core_economy 同语义（倍率，不是百分数；0/负数/未设置 → 1.0）。
+--- 三个读者必须在同一个单位上，否则仪表盘会显示一个永远不会生效的数字。
+local function rewardScale()
+    local value = GetConvarFloat('economy_reward_scale', 1.0)
+    if not (value > 0) then return 1.0 end   -- > 0 同时挡掉 0、负数与 NaN
+    return value
+end
+
 local Dashboard = {}
 
 -- ── 内部状态 ──────────────────────────────────────────────────────────
@@ -208,7 +216,7 @@ local function weeklyReport()
             houseGrowth = houseGrowth,
         },
         parameters = {
-            globalMultiplier = GetConvarInt('economy_reward_scale', 100) / 100.0,
+            globalMultiplier = rewardScale(),
             playersOnline = #QBCore.Functions.GetQBPlayers(),
         },
     }
