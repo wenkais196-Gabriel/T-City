@@ -154,6 +154,23 @@ assert(svc.Add(2, 3) == 5, "Add returned wrong value")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
+    def test_register_service_twice_overwrites(self):
+        """G14：同名服务再注册的现状语义 —— **覆盖**，旧方法整体消失。
+
+        不是"防重复注册"的防护，而是把当前语义钉死：将来若有人把它改成
+        "合并"或"拒绝"，这条会红，改动必须显式面对（`Bus.RegisterService` 也没有重名校验，
+        `bus.lua` 里 `Bus[name] = {}` 会清掉上一批方法）。
+        """
+        result = run_lua_test("""
+Bus.RegisterService("dup_svc", { Old = function() return 1 end })
+Bus.RegisterService("dup_svc", { New = function() return 2 end })
+assert(Bus.dup_svc.New ~= nil, "second registration missing")
+assert(Bus.dup_svc.Old == nil, "old method survived — 语义已变成合并，需显式确认")
+assert(Bus._services["dup_svc"].New ~= nil, "_services not overwritten")
+assert(Bus._services["dup_svc"].Old == nil, "_services merged unexpectedly")
+""")
+        assert result['ok'], f"Lua error: {result['stderr']}"
+
     def test_register_service_adds_exports(self):
         result = run_lua_test("""
 local methods = { GetBalance = function() return 100 end, Transfer = function(a,b) return true end }
