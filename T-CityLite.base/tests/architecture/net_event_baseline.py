@@ -122,12 +122,13 @@ def build(resources: Path | None = None) -> dict:
         stats["started"] = resource in ensured
 
     return {
-        "$comment": "P1-3 net event 基线。由 tests/architecture/net_event_baseline.py --write 生成，"
-                    "手改会被 test_net_event_inventory.py 判红。",
+        "$comment": "P1-3 net event 基线。由 tests/architecture/net_event_baseline.py --write 生成；"
+                    "test_net_event_inventory.py 会拿实测逐字段比对（含 started），手改即红。",
         "version": 1,
         "rule": "P1-3",
         "measured_at": date.today().isoformat(),
-        "scope": "resources/** 服务端脚本（排除 client/ 目录与 cl_*/client*.lua）",
+        "scope": "resources/** 服务端脚本（server/ 优先；manifest 的 client_scripts 块与单条 client_script 都排除；"
+                 "共享文件按服务端算）；started = 是否在 configs/**/*.cfg 与 server.cfg 的 ensure 列表里",
         "enforced": list(ENFORCED),
         "batches": batches,
         "resources": dict(sorted(per_resource.items())),

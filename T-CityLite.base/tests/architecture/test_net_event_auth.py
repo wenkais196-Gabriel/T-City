@@ -119,20 +119,22 @@ CALLBACK_RELAY = re.compile(
     r"ServerCallbacks\[name\]"
 )
 DEPRECATED_BLOCKED = re.compile(
-    # 硬阻断的**结构**证据：只写安全日志/审计，没有任何业务副作用（字符串里的 "BLOCKED"
-    # 不算 —— 那只是文案，剥掉字符串后还能匹配的才是代码里的保证）
-    r"LogSecurity|print\("
+    # 硬阻断的**结构**证据：必须真的写安全日志（`print` 太弱，一条 print('hello') 就能满足）
+    r"LogSecurity\("
 )
 #: self_scoped 的反面：handler 里出现了"拿客户端给的 id 去索引别人"的形状
 SELF_SCOPED_FOREIGN = re.compile(
-    r"Players\[\s*(?!src|source)[A-Za-z_]"     # QBCore.Players[targetId]
-    r"|GetPlayer\(\s*tonumber\("                    # GetPlayer(tonumber(arg))
-    r"|GetPlayerByCitizenId\(\s*(?!src)[A-Za-z_]"  # 按别人的 cid 取玩家
+    r"Players\s*\[\s*(?!src\b|source\b)[A-Za-z_]"     # QBCore.Players[targetId] / Players [targetId]
+    r"|GetPlayer\(\s*tonumber\("                       # GetPlayer(tonumber(arg))
+    r"|GetPlayer\(\s*(?!src\b|source\b)[A-Za-z_]"      # GetPlayer(targetId) / GetPlayer(targetId or 0)
+    r"|GetPlayerByCitizenId\(\s*(?!src\b)[A-Za-z_]"    # 按别人的 cid 取玩家
+    # 别名：`local P = QBCore.Players` 之后再 P[targetId]（静态只能拦一层）
+    r"|\b[A-Za-z_]\w*\s*=\s*(?:QBCore\.)?Players\b"
 )
-#: deprecated_blocked 的反面：说"BLOCKED"但后面照样写
+#: deprecated_blocked 的反面：说日志但后面照样写
 DEPRECATED_SIDE_EFFECT = re.compile(
-    r"(AddItem|RemoveItem|AddMoney|RemoveMoney|SetMetaData|SetJob|SetJobDuty|"
-    r"SetGang|SetMoney)"
+    r"\b(AddItem|RemoveItem|AddMoney|RemoveMoney|SetMetaData|SetJob|SetJobDuty|"
+    r"SetGang|SetMoney)\b|MySQL\.(insert|update|prepare)"
 )
 DIAGNOSTIC_GUARD = re.compile(
     # 2026-10-25: 框架的诊断通道走限流 owner，不叫 COOLDOWN 也不叫 PhoneDiag.Accept
@@ -395,29 +397,45 @@ def test_relay_callbacks_that_spawn_vehicles_are_guarded_somewhere():
     必须有一条能被验证的守卫，而不是靠"回调自己会校验"的口头承诺。
 
     载具生成这两个回调在 qb-core 里没有任何权限判断（谁都能让服务端 CreateVehicle），
-    实际守卫在 custom-security 的劫持里：admin 或执勤的合法职业 + 5 秒限频。
-    这里把"守卫存在"钉成闸门 —— 劫持被删、被改名、或权限判断被摘掉，都会红。
+    实际守卫在 custom-security 的劫持里。这里钉四件事：
+      ① 劫持仍然存在（是**赋值**成包装函数，不是只留一句 `local orig = ...`）；
+      ② 权限判定与限频在**包装函数体内**（不是文件里别处的死代码）；
+      ③ 开关 `security_check_vehicle_spawn` 没被关掉；
+      ④ custom-security 在启动集里，且 qb-core 重启后会重挂（否则守卫静默失效）。
     """
-    source = read(SECURITY_WRAPPER)
+    raw = read(SECURITY_WRAPPER)
+    source = strip_lua_noise(raw)
     for callback in RELAY_VEHICLE_CALLBACKS:
-        # 必须真的**赋值成一个包装函数**：只留 `local orig = ServerCallbacks['x']`
-        # 的引用不算劫持（那只是把原函数存起来，玩家照样随便调）
-        assert re.search(
-            r"QBCore\.ServerCallbacks\['" + re.escape(callback) + r"'\]\s*=\s*function", source
-        ), (
+        # 事件名本身在字符串里（剥噪声会把它变成 ''），所以定位用原文
+        match = re.search(
+            r"QBCore\.ServerCallbacks\['" + re.escape(callback) + r"'\]\s*=\s*function", raw
+        )
+        assert match, (
             f"{callback} 的守卫不见了：custom-security 不再劫持它，"
             f"任何客户端都能通过 QBCore:Server:TriggerCallback 让服务端刷车"
         )
-    assert "HasPermission(source, 'admin')" in source, (
-        "custom-security 的刷车守卫里没有 admin 判定 —— 劫持还在但没校验"
-    )
-    assert "CheckRateLimit(source, \"vehicle_spawn\"" in source, (
-        "custom-security 的刷车守卫里没有限频 —— 连点就能刷爆"
-    )
-    # 守卫是开关控制的：这个 convar 一旦关掉，槽位重新打开
+        # 窗口只到下一个 ServerCallbacks 赋值（否则会把后一个 wrapper 的守卫算进来）
+        nxt = raw.find("QBCore.ServerCallbacks['", match.end())
+        end_at = nxt if nxt != -1 else match.start() + 6000
+        wrapper = strip_lua_noise(raw[match.start():end_at])
+        assert re.search(r"HasPermission\(\s*source\s*,", wrapper), (
+            f"{callback} 的包装函数里没有 admin 判定 —— 劫持还在但没校验（文件别处的同名调用不算）"
+        )
+        assert re.search(r"CheckRateLimit\(\s*source\s*,", wrapper), (
+            f"{callback} 的包装函数里没有限频 —— 连点就能刷爆"
+        )
     cfg = read(BASE / "configs" / "modules" / "security.cfg")
     assert 'security_check_vehicle_spawn "true"' in cfg, (
         "security_check_vehicle_spawn 被关掉了 —— custom-security 的刷车守卫会整段跳过"
+    )
+    custom = read(BASE / "configs" / "modules" / "custom.cfg")
+    assert "ensure custom-security" in custom, (
+        "custom-security 不在启动集里 —— 守卫压根不会挂载"
+    )
+    assert re.search(
+        r"function\(resourceName\)[\s\S]{0,200}qb-core", raw
+    ), (
+        "qb-core 重启后没有重挂守卫（restart qb-core 会重建 ServerCallbacks，劫持丢失且无人发现）"
     )
 
 

@@ -301,7 +301,7 @@ end)
     ),
     Mutation(
         gate=("tests/architecture/test_net_event_inventory.py::"
-              "test_non_literal_registrations_do_not_grow"),
+              "test_non_literal_registrations_match_the_baseline"),
         path="resources/[custom]/__mutant_net/server/__mutant_literal.lua",
         content="""-- 变异注入：变量名注册（闸门看不见事件名）
 local EVENT_NAME = 'mutant:server:hidden'
@@ -311,7 +311,7 @@ RegisterNetEvent(EVENT_NAME, function() end)
     ),
     Mutation(
         gate=("tests/architecture/test_net_event_inventory.py::"
-              "test_unparsed_handlers_do_not_grow"),
+              "test_unparsed_handlers_match_the_baseline"),
         path="resources/[custom]/__mutant_net/server/__mutant_unparsed.lua",
         content="""-- 变异注入：handler 没有行首 end)，扫描器解析不了
 RegisterNetEvent('mutant:server:unparsed', function()
