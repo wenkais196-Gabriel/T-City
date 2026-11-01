@@ -22,7 +22,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-from net_event_scan import auth_tokens, non_literal_registrations, scan_repo
+from net_event_scan import is_guarded, non_literal_registrations, scan_repo
 
 BASE = Path(__file__).resolve().parents[2]          # T-CityLite.base/
 RESOURCES = BASE / "resources"
@@ -94,7 +94,7 @@ def build(resources: Path | None = None) -> dict:
         stats["events"] += 1
         batches[batch]["events"] += 1
 
-        if auth_tokens(event.body):
+        if is_guarded(event):
             stats["guarded"] += 1
             batches[batch]["guarded"] += 1
         elif event.name in registered:

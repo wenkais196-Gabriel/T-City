@@ -43,18 +43,37 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 | 批次 | 事件 | 已鉴权 | 已登记 | 未登记 | 在启动集内 |
 |---|---|---|---|---|---|
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
-| custom `[custom]` | 134 | 19 | 45 | 70 | 覆盖率 **64/134 ≈ 48%** |
+| custom `[custom]` | 134 | 41 | 45 | 48 | 覆盖率 **86/134 ≈ 64%**（P1-3 第 2 批：custom-vehicles 26→17 已鉴权、custom-police 证据链 5 个） |
 | qb `[qb]` | 216 | 16 | 0 | 200 | 债务 |
 | other（system / standalone / voice / cfx-default） | 77 | 1 | 6 | 70 | 债务 |
-| **合计** | **442** | 41 | 61 | **340** | — |
+| **合计** | **442** | 63 | 61 | **318** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
 **债的分布不是均匀的**：58 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
-它们贡献 **93/340（27%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
+它们贡献 **93/318（29%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
 `qb-crypto` 6、`qb-shops` 5、`qb-weed` 5、`qb-streetraces` 3…）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
+
+## 3.1 资源内部 helper 登记表（2026-11-01 第 2 批）
+
+全仓 318 个未登记事件里，有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
+（`CanModifyPlate` / `IsEmergencyService` / `onDutyOfficer` …），按固定 token 名单扫不出来。
+直接把这些名字塞进 token 名单等于"名字像校验就算校验"，所以另开了
+`tests/architecture/net_event_guard_helpers.json`：
+
+| 门槛 | 怎么保证 |
+|---|---|
+| 定义唯一 | 登记的 `defined_at` 里 `function <名字>(` 必须恰好出现一次 |
+| 证据齐全 | `requires_code` 在**剥掉注释/字符串**后必须全部命中；含字符串字面量的判据放 `requires_raw` |
+| 调用必须看返回值 | 资源内每一处调用都必须是 `if not <名字>(…) then … return` 形状（`H(x)` 单调用不算） |
+| 不许死豁免 | 登记了却没有任何调用点 → 红 |
+| 闸门自己会咬 | `gate_mutation_smoke.py` 里加了"调用但忽略返回值"的变异 |
+
+当前登记 5 个：`CanModifyPlate`（车牌写权限 = 车主或执勤机修）、`IsEmergencyService`
+（PA/警笛/雷达/锚定限紧急服务）、`IsSeatedIn` / `IsSeatedInPlate`（广播类只允许车内的人）、
+`onDutyOfficer`（执勤 + `PolicePolicy.Can`）。
 
 ## 4. 这一轮真正修掉的东西
 

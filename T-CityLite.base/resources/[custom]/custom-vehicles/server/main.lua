@@ -367,12 +367,37 @@ end
 
 local dashboardLocks = {}  -- [plate] = citizenid
 
+--- 车牌归一化（服务端比较一律用它，避免大小写/空格绕过）
+local function NormalizePlate(plate)
+    if type(plate) ~= 'string' then return nil end
+    local trimmed = plate:gsub('^%s+', ''):gsub('%s+$', '')
+    if trimmed == '' then return nil end
+    return trimmed:upper()
+end
+
+--- 玩家是否坐在该车牌的车里（requestDashboard 用：只拿到车牌）
+local function IsSeatedInPlate(src, plate)
+    local want = NormalizePlate(plate)
+    if not want then return false end
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false end
+    local veh = GetVehiclePedIsIn(ped, false)
+    if not veh or veh == 0 then return false end
+    return NormalizePlate(GetVehicleNumberPlateText(veh)) == want
+end
+
 --- 请求打开中控屏: 检查是否有其他人占用
 RegisterNetEvent('custom-vehicles:server:requestDashboard', function(plate)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or not plate then
         TriggerClientEvent('custom-vehicles:client:dashboardLockResult', src, false, '系统错误')
+        return
+    end
+
+    -- 中控屏是"车内乘员"独占的：不在该车牌的车里就别想抢锁（否则能远程占位/伪造占用）
+    if not IsSeatedInPlate(src, plate) then
+        TriggerClientEvent('custom-vehicles:client:dashboardLockResult', src, false, '你必须坐在该车内')
         return
     end
 

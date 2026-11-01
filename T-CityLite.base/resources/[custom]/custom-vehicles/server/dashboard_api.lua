@@ -11,6 +11,15 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 紧急服务（警察/医疗/消防）：PA 喊话、警笛、测速雷达、锚定只对这些职业开放。
+--- 抽出来的原因：同一段职业判断在三个事件里重复了三遍，其中两个事件压根没有。
+local function IsEmergencyService(src)
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false end
+    local job = Player.PlayerData.job
+    return job ~= nil and (job.name == 'police' or job.name == 'ambulance' or job.name == 'fire')
+end
+
 -- ==============================================================
 -- 外部 App 注册 API (可拓展)
 -- ==============================================================
@@ -110,9 +119,8 @@ RegisterNetEvent('custom-vehicles:server:megaphone', function(data)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
-    -- 职业鉴权：必须是警察
-    local job = Player.PlayerData.job
-    if not job or (job.name ~= 'police' and job.name ~= 'ambulance' and job.name ~= 'fire') then
+    -- 职业鉴权：必须是紧急服务（警察/医疗/消防）
+    if not IsEmergencyService(src) then
         if exports['custom-logs'] then
             exports['custom-logs']:LogSecurity('非法PA喊话',
                 ('**%s** (%s) 试图使用紧急喊话'):format(GetPlayerName(src), Player.PlayerData.citizenid), 16711680)
@@ -175,11 +183,7 @@ RegisterNetEvent('custom-vehicles:server:sirenControl', function(data, legacyVeh
 
     if not checkOpRateLimit(src, 'siren') then return end
 
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
-
-    local job = Player.PlayerData.job
-    if not job or (job.name ~= 'police' and job.name ~= 'ambulance' and job.name ~= 'fire') then return end
+    if not IsEmergencyService(src) then return end
 
     -- 兼容新旧两种调用约定:
     --   新(tcity-dashboard controller): data = { mode, vehNetId }
@@ -209,6 +213,8 @@ RegisterNetEvent('custom-vehicles:server:policeRadarLog', function(targetPlate, 
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    -- 雷达日志会被当成执法记录：限制在紧急服务内，否则任何人能伪造"某某超速"
+    if not IsEmergencyService(src) then return end
 
     -- 超速记录
     if targetSpeed > limitSpeed then
@@ -228,6 +234,7 @@ RegisterNetEvent('custom-vehicles:server:anchorControl', function(data, legacyVe
     local src = source
 
     if not checkOpRateLimit(src, 'anchor') then return end
+    if not IsEmergencyService(src) then return end
 
     -- 兼容新旧调用约定
     local action, veh
@@ -268,6 +275,9 @@ end)
 RegisterNetEvent('custom-vehicles:server:logisticsQuickLoad', function()
     local src = source
     if not checkOpRateLimit(src, 'logistics') then return end
+    -- 没有进行中的物流任务就不该能"快捷装货"（原来只有限频，任何玩家都能推任务进度）
+    local quests = exports['custom-quest']:GetActiveQuests(src)
+    if not quests or #quests == 0 then return end
     exports['custom-quest']:OnCustomEvent(src, 'dashboard_quick_load', {})
 end)
 

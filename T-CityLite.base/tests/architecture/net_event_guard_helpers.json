@@ -1,0 +1,64 @@
+{
+  "$comment": "资源内部的鉴权 helper 登记表。只有**证明过一次**的 helper 才能让调用点算作已鉴权：defined_at 里必须恰好定义一次、函数体含 requires 里的全部证据，且资源内每一处调用都必须是 `if not H(...) then return` 形状（调用但不看返回值不算）。新增 helper 请连同 test_net_event_auth.py::test_registered_guard_helpers_are_proven 一起过。",
+  "custom-vehicles": {
+    "CanModifyPlate": {
+      "defined_at": "custom-vehicles/server/vehicle_state.lua",
+      "requires_code": [
+        "QBCore.Functions.GetPlayer(src)",
+        "PlayerData.citizenid",
+        "KeyManager.GetOwner(plate)",
+        "return false"
+      ],
+      "requires_raw": [
+        "job.name == 'mechanic'",
+        "onduty"
+      ],
+      "why": "车牌写权限 = 车主 citizenid 相等，或执勤机修；其余一律 false"
+    },
+    "IsEmergencyService": {
+      "defined_at": "custom-vehicles/server/dashboard_api.lua",
+      "requires_code": [
+        "QBCore.Functions.GetPlayer(src)",
+        "return false"
+      ],
+      "requires_raw": [
+        "job.name == 'police'",
+        "job.name == 'ambulance'",
+        "job.name == 'fire'"
+      ],
+      "why": "紧急服务职业判定：PA 喊话 / 警笛 / 测速雷达 / 锚定只对这些职业开放"
+    },
+    "IsSeatedIn": {
+      "defined_at": "custom-vehicles/server/vehicle_state.lua",
+      "requires_code": [
+        "GetPlayerPed(src)",
+        "GetVehiclePedIsIn(ped, false) == veh",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "广播类事件（氮气火焰）只允许车里的人触发"
+    },
+    "IsSeatedInPlate": {
+      "defined_at": "custom-vehicles/server/main.lua",
+      "requires_code": [
+        "NormalizePlate(plate)",
+        "GetVehiclePedIsIn(ped, false)",
+        "NormalizePlate(GetVehicleNumberPlateText(veh)) == want",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "中控屏锁只对坐在该车牌车内的人开放"
+    }
+  },
+  "custom-police": {
+    "onDutyOfficer": {
+      "defined_at": "custom-police/server/evidence.lua",
+      "requires_code": [
+        "PolicePolicy.Can(player.PlayerData, capability)",
+        "return nil"
+      ],
+      "requires_raw": [],
+      "why": "执勤 + 能力判定（evidence.view / evidence.register），直接落到 PolicePolicy.Can"
+    }
+  }
+}
