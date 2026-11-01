@@ -713,6 +713,12 @@ def test_shapes_that_look_like_guards_are_not_counted():
             "if target.PlayerData.job.name ~= 'police' then return end",
             "DoPrivileged(target)",
         ),
+        "职业别名来自别人": _nl(
+            "local Player = QBCore.Functions.GetPlayer(src)",
+            "local job = target.PlayerData.job",
+            "if job.name ~= 'police' then return end",
+            "DoPrivileged(target)",
+        ),
     }
     for label, body in bad.items():
         assert not is_guarded(probe(body)), label + " 被当成了已鉴权"

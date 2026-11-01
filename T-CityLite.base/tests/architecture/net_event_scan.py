@@ -448,8 +448,16 @@ def job_deny_guard(code: str) -> bool:
     def dead_condition(text: str) -> bool:
         return "and false" in text or "false and" in text
 
-    sources = [m.group(1) for m in GET_PLAYER_CALL.finditer(code)]
-    sources += [m.group(1) for m in PLAYER_JOB_LOCAL.finditer(code)]
+    # 只认"从调用者自己的 Player 取出来的 job"：
+    # `local Player = GetPlayer(src)` → `local job = Player.PlayerData.job`
+    # 不接受 `local job = target.PlayerData.job`（判的是别人的职业）
+    player_vars = [m.group(1) for m in GET_PLAYER_CALL.finditer(code)]
+    sources = list(player_vars)
+    for base in player_vars:
+        alias = re.compile(
+            r"local\s+([A-Za-z_]\w*)\s*=\s*" + re.escape(base) + r"\.PlayerData\.job\b"
+        )
+        sources += [m.group(1) for m in alias.finditer(code)]
     for name in sources:
         pattern = re.compile(
             r"if[^\n]*\b" + re.escape(name) + r"\b[^\n]*\.name\s*~=[^\n]*\bthen\b[\s\S]{0,200}?\breturn\b"
