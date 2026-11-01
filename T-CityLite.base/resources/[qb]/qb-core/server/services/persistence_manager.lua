@@ -402,23 +402,12 @@ end)
 -- 对外暴露：全局 / Bus / exports
 -- ==============================================================
 
+-- qb-core 没有 include core-framework 的 bus.lua（Bus 只是一个普通的 _G 表），
+-- 所以这里不注册 Bus 服务：`service_persistence_*` 由 core-framework 的 delegate 提供。
 _G.DirtyFlush = Store
 _G.PlayerStore = Store
 if not _G.Bus then _G.Bus = {} end
 _G.Bus.PersistenceManager = Store
-
-if Bus and Bus.RegisterService then
-    Bus.RegisterService('persistence', {
-        MarkDirty = Store.MarkDirty,
-        SaveNow = Store.SaveNow,
-        ForceFlush = Store.ForceFlush,
-        ForceFlushPlayer = function(citizenid) return Store.SaveNow(citizenid, 'force_player') end,
-        FlushAll = Store.FlushAll,
-        Stats = Store.Stats,
-        StartFlushTick = Store.StartFlushTick,
-        StartHealthReport = Store.StartHealthReport,
-    })
-end
 
 exports('StoreMarkDirty', Store.MarkDirty)
 exports('StoreSaveNow', Store.SaveNow)
