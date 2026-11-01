@@ -226,5 +226,46 @@ if Bus and Bus.RegisterService then
 end
 
 print('[story-engine] ✅ 剧情引擎已启动 (v0.7.0)')
+-- ==============================================================
+-- 开发期：直接下发一个决策（不依赖 quest 状态），用于真机验证面板/点击链路
+-- 用法（控制台）：setr story_debug_cmds 1 ; story_offer_dev <src> [decisionId]
+-- ==============================================================
+RegisterCommand('story_nui_ping', function(source, args)
+    if GetConvar('story_debug_cmds', '0') ~= '1' then return end
+    if source ~= 0 then return end
+    local src = tonumber(args[1])
+    if not src then print('[story-dev] 用法: story_nui_ping <src>') return end
+    TriggerClientEvent('story:client:nuiPing', src)
+    print('[story-dev] nuiPing → src=' .. tostring(src))
+end, true)
+
+RegisterCommand('story_offer_dev', function(source, args)
+    if GetConvar('story_debug_cmds', '0') ~= '1' then
+        print('[story-dev] story_offer_dev 未启用（setr story_debug_cmds 1）')
+        return
+    end
+    if source ~= 0 then return end
+    local src = tonumber(args[1])
+    local decisionId = args[2] or 'police_ch1_honest_or_silent'
+    local questId = args[3] or 'dev_quest'
+    local stepId = args[4] or 'dev_step'
+    if not src then print('[story-dev] 用法: story_offer_dev <src> [decisionId] [questId] [stepId]') return end
+    local ok, res = pcall(function()
+        return exports['story-engine']:OfferDecision(src, questId, stepId, decisionId, 120)
+    end)
+    if not ok or res == false then
+        print(('[story-dev] OfferDecision 失败: %s'):format(tostring(ok and res or res)))
+        return
+    end
+    local def = exports['story-engine']:GetDecision(decisionId)
+    TriggerClientEvent('story:client:offerDecision', src, {
+        questId = questId, stepId = stepId, decision_id = decisionId,
+        prompt = def and def.prompt, options = def and def.options,
+        timeout = (def and def.timeout) or 120,
+    })
+    print(('[story-dev] 已下发决策 %s → src=%s（options=%d）')
+        :format(decisionId, tostring(src), def and def.options and #def.options or 0))
+end, true)
+
 print('[story-engine]   事件: story:server:makeDecision')
 print('[story-engine]   9 exports: GetArcChoices, GetAllChoices, CheckChoiceCondition, RegisterDecision, GetDecision, IsArcCompleted, IsArcEnabled, OfferDecision, ClearDecision')
