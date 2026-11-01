@@ -1,0 +1,498 @@
+#!/usr/bin/env python3
+"""文档生命周期工具（stdlib only）。
+
+子命令：
+  --check    校验 frontmatter/命名/链接/重复/索引是否最新（CI 用，退出码 1 = 有 ERROR）
+  --index    生成 docs/INDEX.md（唯一文档清单，含进度统计）
+  --report   输出 docs/_lifecycle.json + 控制台摘要（未登记/过期/孤儿/重复）
+  --adopt P  给指定文件补最小 frontmatter（--yes 直接写；否则只打印建议）
+
+规范见 docs/standards/doc-lifecycle.md。本文件不引入任何第三方依赖。
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import hashlib
+import json
+import os
+import re
+import sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# ---------------------------------------------------------------- 扫描范围
+
+ROOTS = ["docs", "T-CityLite.base/docs", "QBCore_Lite_versions"]
+ROOT_FILES = [
+    "AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md", "PROJECT_PROGRESS.md",
+    "WORKSPACE.md", "SECURITY.md", "CHANGELOG.md", "README.md", "REASONIX.md",
+]
+SKIP_PARTS = {"node_modules", ".git", "resources", "tests", "html", "web", "cache"}
+
+TYPES = ["spec", "manual", "adr", "plan", "audit", "research", "runbook", "meta"]
+STATUSES = ["draft", "review", "active", "final", "superseded", "archived"]
+SYSTEMS = [
+    "identity", "economy", "justice", "medical", "crime", "jobs", "vehicle",
+    "items", "property", "org", "comms", "quest", "ops", "ux", "world",
+    "agent", "delivery", "meta", "infra",
+]
+REQUIRED = ["id", "type", "status", "system", "updated"]
+REVIEW_REQUIRED = {"manual", "research", "runbook"}
+TYPE_LABEL = {
+    "spec": "设计/施工图", "manual": "手册/接口", "adr": "决策记录", "plan": "路线与计划",
+    "audit": "审计/验收", "research": "调研", "runbook": "运维 SOP", "meta": "规范/索引",
+}
+STATUS_BADGE = {
+    "draft": "🟡 draft", "review": "🔍 review", "active": "✅ active",
+    "final": "📌 final", "superseded": "♻️ superseded", "archived": "📦 archived",
+    "未登记": "❔ 未登记",
+}
+
+
+def rel(p: str) -> str:
+    return os.path.relpath(p, REPO).replace("\\", "/")
+
+
+def iter_docs() -> list[str]:
+    out: list[str] = []
+    for root in ROOTS:
+        base = os.path.join(REPO, root)
+        if not os.path.isdir(base):
+            continue
+        for dirpath, dirnames, files in os.walk(base):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_PARTS]
+            for f in files:
+                if f.endswith(".md") and f != "INDEX.md":
+                    out.append(os.path.join(dirpath, f))
+    for f in ROOT_FILES:
+        p = os.path.join(REPO, f)
+        if os.path.isfile(p):
+            out.append(p)
+    return sorted(set(out))
+
+
+# ---------------------------------------------------------------- frontmatter
+
+FM_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
+
+
+def parse_frontmatter(text: str) -> tuple[dict, int]:
+    """返回 (meta, 正文起始行号)。只支持扁平的 key: value 与 [a, b]。"""
+    m = FM_RE.match(text)
+    if not m:
+        return {}, 0
+    meta: dict = {}
+    for raw in m.group(1).splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        k, v = line.split(":", 1)
+        k, v = k.strip(), v.strip()
+        if v.startswith("[") and v.endswith("]"):
+            inner = v[1:-1].strip()
+            meta[k] = [x.strip().strip("'\"") for x in inner.split(",") if x.strip()] if inner else []
+        else:
+            meta[k] = v.strip("'\"")
+    return meta, m.group(0).count("\n")
+
+
+def render_frontmatter(meta: dict) -> str:
+    order = ["id", "type", "status", "system", "owner", "updated", "review_by",
+             "supersedes", "superseded_by", "tracks", "source_of_truth"]
+    keys = [k for k in order if k in meta] + [k for k in meta if k not in order]
+    lines = ["---"]
+    for k in keys:
+        v = meta[k]
+        if isinstance(v, list):
+            lines.append(f"{k}: [{', '.join(v)}]")
+        else:
+            lines.append(f"{k}: {v}")
+    lines.append("---")
+    return "\n".join(lines) + "\n"
+
+
+def load(p: str) -> tuple[dict, str, int]:
+    text = open(p, encoding="utf-8", errors="ignore").read()
+    meta, offset = parse_frontmatter(text)
+    return meta, text, offset
+
+
+def first_heading(text: str) -> str:
+    for line in text.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return "(无标题)"
+
+
+# ---------------------------------------------------------------- 校验
+
+def today() -> dt.date:
+    return dt.date.today()
+
+
+def parse_date(s: str) -> dt.date | None:
+    try:
+        return dt.date.fromisoformat(s)
+    except Exception:
+        return None
+
+
+def check(docs: list[str], index_path: str) -> tuple[list[str], list[str], dict]:
+    errors: list[str] = []
+    warns: list[str] = []
+    meta_cache: dict[str, dict] = {}
+    ids: dict[str, str] = {}
+    titles: dict[str, str] = {}
+    sot: dict[tuple[str, str], list[str]] = {}
+    sot_topics: dict[str, str] = {}
+    registered = 0
+
+    for p in docs:
+        rp = rel(p)
+        meta, text, _ = load(p)
+        meta_cache[rp] = meta
+        title = first_heading(text)
+        if title in titles and title != "(无标题)":
+            warns.append(f"重复标题：「{title}」{titles[title]} ↔ {rp}")
+        titles.setdefault(title, rp)
+
+        if not meta:
+            warns.append(f"未登记（无 frontmatter）：{rp}")
+            continue
+        registered += 1
+
+        for k in REQUIRED:
+            if not meta.get(k):
+                errors.append(f"{rp}: 缺少必填字段 `{k}`")
+
+        t, st, sysname = meta.get("type"), meta.get("status"), meta.get("system")
+        if t and t not in TYPES:
+            errors.append(f"{rp}: type=`{t}` 不在 {TYPES}")
+        if st and st not in STATUSES:
+            errors.append(f"{rp}: status=`{st}` 不在 {STATUSES}")
+        if sysname and sysname not in SYSTEMS:
+            errors.append(f"{rp}: system=`{sysname}` 不在 {SYSTEMS}")
+
+        for key in ("updated", "review_by"):
+            v = meta.get(key)
+            if not v:
+                continue
+            d = parse_date(v)
+            if d is None:
+                errors.append(f"{rp}: `{key}={v}` 不是 YYYY-MM-DD")
+            elif key == "updated" and d > today():
+                errors.append(f"{rp}: `updated` 在未来（{v}）")
+            elif key == "review_by" and d < today():
+                warns.append(f"{rp}: `review_by` 已过期（{v}），请复审并顺延")
+
+        if t in REVIEW_REQUIRED and not meta.get("review_by"):
+            errors.append(f"{rp}: type={t} 必须给 review_by（复审到期日）")
+
+        rid = meta.get("id")
+        if rid:
+            if rid in ids:
+                errors.append(f"id 重复：`{rid}` {ids[rid]} ↔ {rp}")
+            ids[rid] = rp
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,63}", rid):
+                warns.append(f"{rp}: id=`{rid}` 建议用小写 kebab-case")
+
+        if meta.get("source_of_truth") in ("true", "yes"):
+            topic = meta.get("topic")
+            if topic:
+                if topic in sot_topics:
+                    errors.append(f"topic=`{topic}` 有两个 source_of_truth：{sot_topics[topic]} ↔ {rp}")
+                sot_topics[topic] = rp
+            elif t and sysname:
+                sot.setdefault((sysname, t), []).append(rp)
+
+        if st == "superseded" and not meta.get("superseded_by"):
+            warns.append(f"{rp}: status=superseded 但未写 superseded_by")
+
+        rb = parse_date(meta.get("review_by") or "")
+        if rb and rb < today() and st == "active":
+            warns.append(f"复审已过期：{rp}（review_by={meta['review_by']}）")
+
+        base = os.path.basename(p)
+        if base != "README.md" and not re.fullmatch(r"[a-z0-9][a-z0-9._-]*\.md", base) \
+                and not re.fullmatch(r"[A-Z][A-Z0-9_-]*\.md", base):
+            warns.append(f"{rp}: 文件名既不是小写 kebab-case 也不是全大写规范名")
+
+    # 同一 (system,type) 多个 SoT 且都没写 topic → 提醒区分主题
+    for (sysname, t), paths in sot.items():
+        if len(paths) > 1:
+            warns.append(
+                f"(system={sysname}, type={t}) 有 {len(paths)} 份 source_of_truth，"
+                f"请给各自加 `topic` 区分：{', '.join(paths)}")
+
+    # supersedes 双向一致
+    for rp, meta in meta_cache.items():
+        for sid in meta.get("supersedes") or []:
+            other = ids.get(sid)
+            if not other:
+                errors.append(f"{rp}: supersedes 指向不存在的 id `{sid}`")
+            elif rp not in (meta_cache.get(other, {}).get("superseded_by") or []):
+                warns.append(f"{rp}: supersedes `{sid}` 但对方没有 superseded_by")
+
+    # 断链（先剥掉行内代码，避免把 `[a](b.md)` 这种示例当成真链接）
+    for p in docs:
+        text = open(p, encoding="utf-8", errors="ignore").read()
+        text = re.sub(r"`[^`\n]*`", "", text)
+        for target in re.findall(r"\]\(([^)#\s]+\.md)", text):
+            if target.startswith(("http://", "https://", "file://")):
+                continue
+            if not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(p), target))):
+                warns.append(f"断链：{rel(p)} → {target}")
+
+    # 索引是否最新
+    if os.path.exists(index_path):
+        want = build_index(docs)
+        have = open(index_path, encoding="utf-8", errors="ignore").read()
+        if want.strip() != have.strip():
+            warns.append("docs/INDEX.md 不是最新（运行 `python tools/docs_lifecycle.py --index`）")
+    else:
+        warns.append("docs/INDEX.md 不存在（运行 --index 生成）")
+
+    stats = {
+        "total": len(docs), "registered": registered, "unregistered": len(docs) - registered,
+        "errors": len(errors), "warnings": len(warns),
+    }
+    return errors, warns, stats
+
+
+# ---------------------------------------------------------------- 索引
+
+def build_index(docs: list[str]) -> str:
+    rows: dict[str, list[dict]] = {s: [] for s in SYSTEMS}
+    unregistered: list[dict] = []
+    for p in docs:
+        meta, text, _ = load(p)
+        item = {
+            "path": rel(p), "title": first_heading(text),
+            "type": meta.get("type", "—"), "status": meta.get("status", "未登记"),
+            "updated": meta.get("updated", "—"), "review_by": meta.get("review_by", "—"),
+            "sot": meta.get("source_of_truth") in ("true", "yes"),
+            "owner": meta.get("owner", "—"),
+        }
+        sysname = meta.get("system")
+        if not meta or sysname not in rows:
+            unregistered.append(item)
+        else:
+            rows[sysname].append(item)
+
+    total = len(docs)
+    reg = total - len(unregistered)
+    cnt = lambda st: sum(1 for v in rows.values() for i in v if i["status"] == st)  # noqa: E731
+
+    out = [
+        "# 文档索引（自动生成，请勿手改）",
+        "",
+        "> 由 `python tools/docs_lifecycle.py --index` 生成。规范："
+        "[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。",
+        "",
+        f"**生成时间**：{today().isoformat()} ｜ **文档总数**：{total} ｜ "
+        f"**已登记**：{reg} ｜ **未登记**：{len(unregistered)}",
+        "",
+        f"**状态分布**：✅ active {cnt('active')} ・ 🟡 draft {cnt('draft')} ・ "
+        f"🔍 review {cnt('review')} ・ 📌 final {cnt('final')} ・ "
+        f"♻️ superseded {cnt('superseded')} ・ 📦 archived {cnt('archived')}",
+        "",
+        "## 按系统",
+        "",
+    ]
+    for sysname in SYSTEMS:
+        items = sorted(rows[sysname], key=lambda i: (i["type"], i["path"]))
+        if not items:
+            continue
+        out.append(f"### {sysname}（{len(items)}）")
+        out.append("")
+        out.append("| 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |")
+        out.append("|---|---|---|---|---|---|---|")
+        for i in items:
+            out.append(
+                f"| [{i['title']}]({link_from_docs(i['path'])}) | {i['type']} | "
+                f"{STATUS_BADGE.get(i['status'], i['status'])} | "
+                f"{i['updated']} | {i['review_by']} | {'★' if i['sot'] else ''} | `{i['path']}` |"
+            )
+        out.append("")
+
+    if unregistered:
+        out.append(f"## 未登记（{len(unregistered)}）—— 待补 frontmatter")
+        out.append("")
+        out.append("| 文档 | 推断类型 | 路径 |")
+        out.append("|---|---|---|")
+        for i in sorted(unregistered, key=lambda x: x["path"]):
+            out.append(f"| {i['title']} | {guess_type(i['path'])} | `{i['path']}` |")
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def link_from_docs(path: str) -> str:
+    """INDEX.md 位于 docs/，把仓内路径转成相对链接。"""
+    if path.startswith("docs/"):
+        return path[len("docs/"):]
+    return "../" + path
+
+
+def guess_type(path: str) -> str:
+    p = path.lower()
+    if "/adr/" in p or "decision" in p:
+        return "adr"
+    if "blueprint" in p or "design" in p or "spec" in p:
+        return "spec"
+    if "audit" in p or "report" in p or "acceptance" in p or "review" in p:
+        return "audit"
+    if "research" in p or "analysis" in p:
+        return "research"
+    if "manual" in p or "reference" in p or "index" in p or "guide" in p:
+        return "manual"
+    if "progress" in p or "plan" in p or "roadmap" in p or "versions/" in p:
+        return "plan"
+    if "runbook" in p or "sop" in p or "workspace" in p:
+        return "runbook"
+    if "standard" in p or p.endswith("agents.md") or p.endswith("claude.md") or p.endswith("contributing.md"):
+        return "meta"
+    return "manual"
+
+
+# ---------------------------------------------------------------- 报告
+
+def report(docs: list[str], out_json: str) -> dict:
+    records = []
+    for p in docs:
+        meta, text, _ = load(p)
+        st = os.stat(p)
+        records.append({
+            "path": rel(p), "title": first_heading(text),
+            "registered": bool(meta), "type": meta.get("type"), "status": meta.get("status"),
+            "system": meta.get("system"), "updated": meta.get("updated"),
+            "review_by": meta.get("review_by"),
+            "mtime": dt.date.fromtimestamp(st.st_mtime).isoformat(),
+            "bytes": st.st_size,
+            "sha256": hashlib.sha256(re.sub(r"\s+", "", text).encode()).hexdigest()[:16],
+        })
+    # 内容重复
+    seen: dict[str, list[str]] = {}
+    for r in records:
+        seen.setdefault(r["sha256"], []).append(r["path"])
+    dups = [v for v in seen.values() if len(v) > 1]
+    # 孤儿：basename 不出现在任何 md/代码里
+    haystack = ""
+    for root in ROOTS:
+        base = os.path.join(REPO, root)
+        for dp, dn, fs in os.walk(base):
+            dn[:] = [d for d in dn if d not in SKIP_PARTS]
+            for f in fs:
+                if f.endswith((".md", ".py", ".lua", ".yml", ".cfg")) and f != "INDEX.md":
+                    try:
+                        haystack += open(os.path.join(dp, f), encoding="utf-8", errors="ignore").read()
+                    except Exception:
+                        pass
+    for f in ROOT_FILES:
+        p = os.path.join(REPO, f)
+        if os.path.isfile(p):
+            haystack += open(p, encoding="utf-8", errors="ignore").read()
+    orphans = [r["path"] for r in records if os.path.basename(r["path"]) not in haystack]
+
+    summary = {
+        "generated": today().isoformat(),
+        "total": len(records),
+        "registered": sum(1 for r in records if r["registered"]),
+        "unregistered": sum(1 for r in records if not r["registered"]),
+        "orphans": len(orphans),
+        "duplicate_groups": len(dups),
+        "by_type": {},
+        "by_status": {},
+    }
+    for r in records:
+        if r["type"]:
+            summary["by_type"][r["type"]] = summary["by_type"].get(r["type"], 0) + 1
+        if r["status"]:
+            summary["by_status"][r["status"]] = summary["by_status"].get(r["status"], 0) + 1
+
+    payload = {"summary": summary, "duplicates": dups, "orphans": orphans, "docs": records}
+    with open(out_json, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=1)
+    return payload
+
+
+# ---------------------------------------------------------------- adopt
+
+def adopt(paths: list[str], write: bool) -> None:
+    for p in paths:
+        meta, text, _ = load(p)
+        if meta:
+            print(f"SKIP 已有 frontmatter: {rel(p)}")
+            continue
+        slug = re.sub(r"[^a-z0-9]+", "-", os.path.splitext(os.path.basename(p))[0].lower()).strip("-")
+        today_s = today().isoformat()
+        guess = {
+            "id": slug, "type": guess_type(rel(p)), "status": "active",
+            "system": "meta", "owner": "hermes", "updated": today_s,
+        }
+        if guess["type"] in REVIEW_REQUIRED:
+            guess["review_by"] = (today() + dt.timedelta(days=90)).isoformat()
+        block = render_frontmatter(guess)
+        if not write:
+            print(f"--- 建议 frontmatter：{rel(p)}\n{block}")
+            continue
+        open(p, "w", encoding="utf-8").write(block + "\n" + text.lstrip("\n"))
+        print(f"ADOPT {rel(p)}")
+
+
+# ---------------------------------------------------------------- main
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="T-City 文档生命周期工具")
+    ap.add_argument("--check", action="store_true", help="校验并返回退出码")
+    ap.add_argument("--index", action="store_true", help="生成 docs/INDEX.md")
+    ap.add_argument("--report", action="store_true", help="生成 docs/_lifecycle.json 与摘要")
+    ap.add_argument("--adopt", nargs="*", help="为指定文档补最小 frontmatter")
+    ap.add_argument("--yes", action="store_true", help="配合 --adopt 直接写入")
+    ap.add_argument("--verbose", action="store_true", help="打印全部告警")
+    args = ap.parse_args()
+
+    docs = iter_docs()
+    index_path = os.path.join(REPO, "docs", "INDEX.md")
+
+    if args.adopt is not None:
+        adopt([os.path.join(REPO, x) if not os.path.isabs(x) else x for x in args.adopt], args.yes)
+        return 0
+
+    if args.index:
+        os.makedirs(os.path.dirname(index_path), exist_ok=True)
+        open(index_path, "w", encoding="utf-8").write(build_index(docs))
+        print(f"wrote {rel(index_path)} ({len(docs)} docs)")
+
+    if args.report:
+        out = os.path.join(REPO, "docs", "_lifecycle.json")
+        payload = report(docs, out)
+        s = payload["summary"]
+        print(f"[report] total={s['total']} registered={s['registered']} "
+              f"unregistered={s['unregistered']} orphans={s['orphans']} "
+              f"dup_groups={s['duplicate_groups']}")
+        print(f"         by_type={s['by_type']}")
+        print(f"         by_status={s['by_status']}")
+        print(f"         wrote {rel(out)}")
+
+    if args.check:
+        errors, warns, stats = check(docs, index_path)
+        limit = None if args.verbose else 20
+        for w in warns[:limit]:
+            print(f"WARN  {w}")
+        if limit and len(warns) > limit:
+            print(f"... 另有 {len(warns) - limit} 条告警（--verbose 查看）")
+        for e in errors:
+            print(f"ERROR {e}")
+        print(f"[check] total={stats['total']} registered={stats['registered']} "
+              f"unregistered={stats['unregistered']} errors={stats['errors']} warnings={stats['warnings']}")
+        return 1 if errors else 0
+
+    if not (args.index or args.report or args.check):
+        ap.print_help()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
