@@ -24,7 +24,7 @@ tracks: [docs/engineering/CONSTITUTION.md, docs/engineering/ARCHITECTURE.md]
 
 | 事实 | 实测值 | 后果 |
 |---|---|---|
-| net event 闸门覆盖 | 179 / 1102 次注册（16%） | 宪法④说的"每个事件"实际只管了六分之一 |
+| net event 闸门覆盖 | 曾是 179 / 1102 次注册（16%）；2026-11-01 起引擎层 100%、全仓有基线棘轮 | 宪法④说的"每个事件"当时只管了六分之一 |
 | SQL 闸门覆盖 | 15 / 117 次 MySQL 调用（13%） | 宪法③对框架层是空条款 |
 | NUI 回调 | 218 处 / 34 文件，无任何闸门 | 客户端消息的信任边界没人管 |
 | 存档实现 | 曾是两套 dirty 池 + 两个 900s 定时器，失败即清脏；2026-11-01 已收敛为单写者（失败保留 + 退避 + ack） | 当时会静默丢数据，现已消除 |
@@ -50,7 +50,7 @@ tracks: [docs/engineering/CONSTITUTION.md, docs/engineering/ARCHITECTURE.md]
 | TS-2 | 跨资源契约 | 只走 export：先 `GetResourceState == 'started'`，再 `pcall` + 错误码；超时只用于事件请求/响应门面 | `check_bus_wiring.py`（PascalCase 应升 ERROR） | ⑧ |
 | TS-3 | 数据所有权 | 一表一 owner；同表多写者必须在 `state_writers_allowlist.json` 登记 `allowed_files` 与理由 | `test_cross_resource_writes.py` | ⑥ |
 | TS-4 | 钱与物品唯一出口 | 钱只走 `Player.Functions.*` / `core_economy:TriggerReward`；物品同样收口（现状 `TriggerReward` 直连 `qb-inventory:AddItem`，须登记或改道） | `test_economy_single_owner.py` | ② |
-| TS-5 | 入站事件三件套 | 鉴权（`PolicePolicy.Can` / 常量 cap）+ 限流（key 含 src，登记预算）+ 投影；④ 的登记豁免保留，但每类豁免必须有 `expires` | `test_net_event_auth.py`（需扩到 qb-core 与全仓） | ①④⑦ |
+| TS-5 | 入站事件三件套 | 鉴权（`PolicePolicy.Can` / 常量 cap）+ 限流（key 含 src，登记预算）+ 投影；④ 的登记豁免保留，但每类豁免必须有 `expires` | `test_net_event_auth.py`（qb-core 已纳入，引擎层 100%）+ `test_net_event_inventory.py`（全仓 442 个服务端事件基线棘轮，存量按资源登记债务） | ①④⑦ |
 | TS-6 | 持久化 | 字段级 dirty 位图；单条多列 upsert；**成功才清位**；失败保留 + 退避重试 + ack；幂等键防重放 | `test_persistence_single_owner.py`（单写者 / 成功才清 / 失败保留 + 退避 + ack **已落地** 2026-11-01）；仍缺：字段级位图、幂等键 | ⑤ |
 | TS-7 | 启动与配置 | `boot.json` 单一来源生成 cfg（过渡期：`server.cfg` 唯一源，由 release_check 与模板比对）；convar 单位写进注释并有单测 | 缺 `test_boot_order.py` | ⑩ |
 | TS-8 | 预算与可观测 | 指标必须是墙钟与计数（`GetGameTimer` 差值、oxmysql 调用点计数、出站 payload 字节），不用 `os.clock` 冒充阻塞时长 | `test_nui_baseline.py` + 探针 | ⑦ |

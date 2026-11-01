@@ -23,9 +23,17 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+
+from net_event_scan import (
+    Event,
+    auth_tokens as scan_auth_tokens,
+    non_literal_in_dir,
+    read,
+    scan_dir,
+    strip_lua_noise,
+)
 
 BASE = Path(__file__).resolve().parents[2]  # T-CityLite.base/
 RESOURCES = BASE / "resources"
@@ -36,21 +44,14 @@ SCAN_DIRS = (
     ("custom-phone", CUSTOM / "custom-phone" / "server"),
     # 2026-10-25: 框架自己也有 net event（客户端诊断通道等），之前完全没被扫过
     ("core-framework", BASE / "resources" / "[standalone]" / "core-framework" / "server"),
+    # P1-3 批次①：引擎层 100%。qb-core 的 15 个服务端 net event 之前不在任何闸门里
+    ("qb-core", BASE / "resources" / "[qb]" / "qb-core" / "server"),
 )
 ALLOWLIST = Path(__file__).with_name("net_events_allowlist.json")
 
-REGISTER_RE = re.compile(r"""^\s*RegisterNetEvent\(\s*(['"])(?P<name>[^'"]+)\1""")
-END_RE = re.compile(r"^end\)\s*$")
-MAX_BLOCK_LINES = 400
+# `RegisterNetEvent('x', function ...)` 的解析统一在 net_event_scan 里（唯一实现），
+# 这里只保留"这段 handler 里有没有鉴权证据"的项目级 helper 名单。
 
-# A token that proves a unified auth decision inside the handler body.
-STRONG_TOKENS = {
-    "PolicePolicy.Can": re.compile(r"PolicePolicy\.Can\("),
-    "PolicePolicy.Check": re.compile(r"PolicePolicy\.Check\("),
-    "hasCapability": re.compile(r"\bhasCapability\b"),
-    "IsPlayerAceAllowed": re.compile(r"IsPlayerAceAllowed\("),
-    "system_source": re.compile(r"\bsrc\s*==\s*0\b|\bsrc\s*~=\s*0\s+then\s+return\b"),
-}
 
 # Project helpers that wrap PolicePolicy.Can. Verified in
 # test_auth_helpers_really_enforce_policypolicy so the allowlist cannot hide a
@@ -58,12 +59,41 @@ STRONG_TOKENS = {
 AUTH_HELPERS = {
     "onDutyOfficer": (
         CUSTOM / "custom-police" / "server" / "evidence.lua",
+        "onDutyOfficer",
         "PolicePolicy.Can(",
     ),
     "NPC.SubmitResult": (
         CUSTOM / "custom-police" / "server" / "p4_npc.lua",
+        "NPC.SubmitResult",
         "PolicePolicy.Can(",
     ),
+    # 事件的真正鉴权在模块里（PolicePolicy.Can），不在 handler 现场。
+    # 这三个别名把"调用点 → 定义 → 执行点"钉在一起，改掉任何一环都会红。
+    "PoliceDispatch.ArriveIncident": (
+        CUSTOM / "custom-police" / "server" / "p0_lifecycle.lua",
+        "P.ArriveIncident",
+        "PolicePolicy.Can(",
+    ),
+    "PoliceDispatch.ClaimIncident": (
+        CUSTOM / "custom-police" / "server" / "p0_lifecycle.lua",
+        "P.ClaimIncident",
+        "PolicePolicy.Can(",
+    ),
+    "AdoptDraft": (
+        CUSTOM / "custom-police" / "server" / "p0_incidents.lua",
+        "P.AdoptDraft",
+        "PolicePolicy.Can(",
+    ),
+    "ListDrafts": (
+        CUSTOM / "custom-police" / "server" / "p0_incidents.lua",
+        "P.ListDrafts",
+        "PolicePolicy.Can(",
+    ),
+}
+
+#: handler 里出现的调用形态（调用点可能没有括号，例如 `pcall(PoliceDispatch.X, src, ...)`）
+HELPER_PATTERNS = {
+    name: re.compile(rf"\b{re.escape(name)}\b") for name in AUTH_HELPERS
 }
 
 # What each allowlist category promises, and the token that must back it up.
@@ -75,7 +105,36 @@ CIVILIAN_GUARD = re.compile(
 SESSION_BIND = re.compile(
     r"metadata|taken_by|receiver_number|units\[requestId\]|"
     r"(?:StoreNotification|PhoneNotify\.Store)\(source|"
-    r"ResolveSource\(source\)|GetPlayer\(targetSrc"
+    r"ResolveSource\(source\)|GetPlayer\(targetSrc|"
+    # 只认"调用方自己的号码/身份"作为键：charinfo.phone 是本人资料里读出来的，
+    # 客户端改不了（以前这条靠 SQL 字符串里的 receiver_number 蒙混过关）
+    r"charinfo\.phone"
+)
+SELF_SCOPED = re.compile(
+    # 只碰 caller 自己的数据：先 `local src = source`，后续只对这一侧读写
+    r"local\s+src\s*=\s*source"
+)
+CALLBACK_RELAY = re.compile(
+    # 公用回调分发器：按名字派发到服务端已注册的回调
+    r"ServerCallbacks\[name\]"
+)
+DEPRECATED_BLOCKED = re.compile(
+    # 硬阻断的**结构**证据：必须真的写安全日志（`print` 太弱，一条 print('hello') 就能满足）
+    r"LogSecurity\("
+)
+#: self_scoped 的反面：handler 里出现了"拿客户端给的 id 去索引别人"的形状
+SELF_SCOPED_FOREIGN = re.compile(
+    r"Players\s*\[\s*(?!src\b|source\b)[A-Za-z_]"     # QBCore.Players[targetId] / Players [targetId]
+    r"|GetPlayer\(\s*tonumber\("                       # GetPlayer(tonumber(arg))
+    r"|GetPlayer\(\s*\(*\s*(?!src\b|source\b)[A-Za-z_]"   # GetPlayer(targetId) / GetPlayer((targetId)) / (x or 0)
+    r"|GetPlayerByCitizenId\(\s*(?!src\b)[A-Za-z_]"    # 按别人的 cid 取玩家
+    # 别名：`local P = QBCore.Players` 之后再 P[targetId]（静态只能拦一层）
+    r"|\b[A-Za-z_]\w*\s*=\s*(?:QBCore\.)?Players\b"
+)
+#: deprecated_blocked 的反面：说日志但后面照样写
+DEPRECATED_SIDE_EFFECT = re.compile(
+    r"\b(AddItem|RemoveItem|AddMoney|RemoveMoney|SetMetaData|SetJob|SetJobDuty|"
+    r"SetGang|SetMoney)\b|MySQL\.|exports\[[^\]]+\]:Set"
 )
 DIAGNOSTIC_GUARD = re.compile(
     # 2026-10-25: 框架的诊断通道走限流 owner，不叫 COOLDOWN 也不叫 PhoneDiag.Accept
@@ -87,20 +146,6 @@ REQUIRED_FIELDS = ("name", "file", "category", "reason", "evidence", "owner", "e
 DEBT_CATEGORIES = {"unchecked_debt"}
 
 
-@dataclass(frozen=True)
-class Event:
-    name: str
-    resource: str
-    path: Path
-    line: int
-    body: str
-
-    @property
-    def where(self) -> str:
-        rel = self.path.relative_to(RESOURCES).as_posix()
-        return f"{rel}:{self.line}"
-
-
 def lua_files() -> list[Path]:
     files: list[Path] = []
     for _, directory in SCAN_DIRS:
@@ -109,57 +154,20 @@ def lua_files() -> list[Path]:
     return files
 
 
-def read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
 def scan_events() -> tuple[list[Event], list[str]]:
-    """Return (events, problems). A problem is an unterminated handler."""
+    """扫描 SCAN_DIRS，返回 (events, problems)。解析器在 net_event_scan（唯一实现）。"""
     events: list[Event] = []
     problems: list[str] = []
     for resource, directory in SCAN_DIRS:
-        for path in sorted(directory.rglob("*.lua")):
-            lines = read(path).splitlines()
-            for index, line in enumerate(lines):
-                match = REGISTER_RE.match(line)
-                if not match:
-                    continue
-                name = match.group("name")
-                body: list[str] = []
-                cursor = index + 1
-                while cursor < len(lines):
-                    if END_RE.match(lines[cursor]):
-                        break
-                    body.append(lines[cursor])
-                    cursor += 1
-                    if len(body) > MAX_BLOCK_LINES:
-                        problems.append(
-                            f"{path.relative_to(RESOURCES).as_posix()}:{index + 1} "
-                            f"{name} no top-level 'end)' within {MAX_BLOCK_LINES} lines"
-                        )
-                        body = []
-                        cursor = len(lines)
-                        break
-                if cursor >= len(lines) and not body:
-                    # Either the block was terminated exactly on the last line
-                    # (ok) or we bailed out above (already reported).
-                    if not any(name in p for p in problems):
-                        problems.append(
-                            f"{path.relative_to(RESOURCES).as_posix()}:{index + 1} "
-                            f"{name} unterminated handler"
-                        )
-                    continue
-                events.append(
-                    Event(name=name, resource=resource, path=path, line=index + 1,
-                          body="\n".join(body))
-                )
+        assert directory.is_dir(), f"missing scan directory: {directory}"
+        found, issues = scan_dir(resource, directory)
+        events.extend(found)
+        problems.extend(issues)
     return events, problems
 
 
 def auth_tokens(body: str) -> list[str]:
-    found = [token for token, pattern in STRONG_TOKENS.items() if pattern.search(body)]
-    found += [helper for helper in AUTH_HELPERS if re.search(rf"\b{re.escape(helper)}\(", body)]
-    return found
+    return scan_auth_tokens(body, HELPER_PATTERNS)
 
 
 def load_allowlist() -> dict:
@@ -187,7 +195,7 @@ def report() -> str:
         f"{len(bad)}/{len(events)} unguarded",
     ]
     for event in bad:
-        lines.append(f"  {event.where}  {event.name}  no_auth")
+        lines.append(f"  {event.where(RESOURCES)}  {event.name}  no_auth")
     for problem in problems:
         lines.append(f"  SKIP {problem}")
     lines.append(
@@ -209,7 +217,9 @@ def test_scanner_covers_both_resources_and_every_handler_terminates():
     # shape: 40+ handlers across the two resources.
     assert len(events) >= 40, f"only {len(events)} net events found — scanner regression?"
     # 2026-10-25: 范围加了 core-framework（框架自己的 net event 之前没被扫过）
-    assert {event.resource for event in events} == {"custom-police", "custom-phone", "core-framework"}
+    assert {event.resource for event in events} == {
+        "custom-police", "custom-phone", "core-framework", "qb-core"
+    }
     assert all(event.name for event in events)
     assert all(len(event.body) > 0 for event in events)
     names = [event.name for event in events]
@@ -226,7 +236,7 @@ def test_every_net_event_is_authenticated_or_registered():
     bad = unregistered(events)
     if bad:
         detail = "\n".join(
-            f"  {event.where}  {event.name}  no_auth — add PolicePolicy.Can(...) "
+            f"  {event.where(RESOURCES)}  {event.name}  no_auth — add PolicePolicy.Can(...) "
             f"inside the handler, or register it in "
             f"tests/architecture/net_events_allowlist.json"
             for event in bad
@@ -284,26 +294,58 @@ def test_allowlisted_events_really_show_the_claim_in_their_body():
     for name, entry in allowlist_entries().items():
         event = events[name]
         assert event.path == allowlist_path(entry["file"]), (
-            f"{name}: allowlist says {entry['file']} but the handler is at {event.where}"
+            f"{name}: allowlist says {entry['file']} but the handler is at {event.where(RESOURCES)}"
         )
         category = entry["category"]
+        # 承诺检查一律在**剥掉注释与字符串**之后做：注释里写的检查不算检查
+        code = strip_lua_noise(event.body)
         if category == "already_checked":
-            assert MANUAL_CHECK.search(event.body), (
+            assert MANUAL_CHECK.search(code), (
                 f"{name}: registered as already_checked but no job/onduty/item check "
                 f"in the handler body — fix the handler or change the category"
             )
         elif category == "civilian":
-            assert CIVILIAN_GUARD.search(event.body), (
+            assert CIVILIAN_GUARD.search(code), (
                 f"{name}: registered as civilian but the handler does not validate or "
                 f"rate limit anything"
             )
         elif category == "session":
-            assert SESSION_BIND.search(event.body), (
+            assert SESSION_BIND.search(code), (
                 f"{name}: registered as session-bound but the handler never binds to "
                 f"the caller's own session/ownership"
             )
+        elif category == "self_scoped":
+            assert SELF_SCOPED.search(code), (
+                f"{name}: registered as self_scoped but the handler never binds to "
+                f"`local src = source` — a self-scoped claim needs the caller identity"
+            )
+            targets = re.findall(r"GetPlayer\(\s*([A-Za-z_][\w.]*)\s*\)", code)
+            foreign = [arg for arg in targets if arg not in ("src", "source")]
+            assert not foreign, (
+                f"{name}: registered as self_scoped but indexes another player "
+                f"({foreign}) — that is a cross-player write, not self-scoped"
+            )
+            foreign_ref = SELF_SCOPED_FOREIGN.search(code)
+            assert not foreign_ref, (
+                f"{name}: registered as self_scoped but reaches another player via "
+                f"{foreign_ref.group(0)!r} — 自作用域只能碰 src"
+            )
+        elif category == "callback_relay":
+            assert CALLBACK_RELAY.search(code), (
+                f"{name}: registered as callback_relay but does not dispatch through "
+                f"QBCore.ServerCallbacks[name]"
+            )
+        elif category == "deprecated_blocked":
+            assert DEPRECATED_BLOCKED.search(code), (
+                f"{name}: registered as deprecated_blocked but the handler no longer "
+                f"contains the BLOCKED guard — it may be executing again"
+            )
+            assert not DEPRECATED_SIDE_EFFECT.search(code), (
+                f"{name}: registered as deprecated_blocked but the handler still calls "
+                f"{DEPRECATED_SIDE_EFFECT.search(code).group(1)} — 说 BLOCKED 却照样写"
+            )
         elif category == "diagnostic":
-            assert DIAGNOSTIC_GUARD.search(event.body), (
+            assert DIAGNOSTIC_GUARD.search(code), (
                 f"{name}: registered as diagnostic but no rate limit / field whitelist"
             )
         # unchecked_debt carries no claim beyond the reason + expiry.
@@ -329,18 +371,85 @@ def test_diag_helper_really_limits_and_sanitizes():
 
 def test_auth_helpers_really_enforce_policypolicy():
     """The allowlist trusts helpers; verify each one still calls the policy."""
-    for helper, (path, token) in AUTH_HELPERS.items():
+    for helper, (path, definition, token) in AUTH_HELPERS.items():
         source = read(path)
         pattern = re.compile(
-            rf"(?:local )?function {re.escape(helper)}\([^)]*\)(.*?)^end\s*$",
+            rf"(?:local )?function\s+{re.escape(definition)}\s*\([^)]*\)(.*?)^end\s*$",
             re.DOTALL | re.MULTILINE,
         )
         match = pattern.search(source)
-        assert match, f"auth helper {helper} is not defined in {path.name} anymore"
-        assert token in match.group(1), (
-            f"auth helper {helper} in {path.name} no longer calls {token} — "
-            f"every event using it is now unguarded"
+        assert match, (
+            f"auth helper {helper}: 定义 {definition} 在 {path.name} 里找不到了 "
+            f"— handler 仍在调用它，等于没有鉴权"
         )
+        assert token in match.group(1), (
+            f"auth helper {helper}（{definition}，{path.name}）不再调用 {token} — "
+            f"所有依赖它的事件都变成未鉴权"
+        )
+
+
+RELAY_VEHICLE_CALLBACKS = ("QBCore:Server:SpawnVehicle", "QBCore:Server:CreateVehicle")
+SECURITY_WRAPPER = CUSTOM / "custom-security" / "server" / "security.lua"
+
+
+def test_relay_callbacks_that_spawn_vehicles_are_guarded_somewhere():
+    """`QBCore:Server:TriggerCallback` 是公用分发器，本身不鉴权 —— 那么它分发的**高危目标**
+    必须有一条能被验证的守卫，而不是靠"回调自己会校验"的口头承诺。
+
+    载具生成这两个回调在 qb-core 里没有任何权限判断（谁都能让服务端 CreateVehicle），
+    实际守卫在 custom-security 的劫持里。这里钉四件事：
+      ① 劫持仍然存在（是**赋值**成包装函数，不是只留一句 `local orig = ...`）；
+      ② 权限判定与限频在**包装函数体内**（不是文件里别处的死代码）；
+      ③ 开关 `security_check_vehicle_spawn` 没被关掉；
+      ④ custom-security 在启动集里，且 qb-core 重启后会重挂（否则守卫静默失效）。
+    """
+    raw = read(SECURITY_WRAPPER)
+    source = strip_lua_noise(raw)
+    for callback in RELAY_VEHICLE_CALLBACKS:
+        # 事件名本身在字符串里（剥噪声会把它变成 ''），所以定位用原文
+        match = re.search(
+            r"QBCore\.ServerCallbacks\['" + re.escape(callback) + r"'\]\s*=\s*function", raw
+        )
+        assert match, (
+            f"{callback} 的守卫不见了：custom-security 不再劫持它，"
+            f"任何客户端都能通过 QBCore:Server:TriggerCallback 让服务端刷车"
+        )
+        # 窗口只到下一个 ServerCallbacks 赋值（否则会把后一个 wrapper 的守卫算进来）
+        nxt = raw.find("QBCore.ServerCallbacks['", match.end())
+        end_at = nxt if nxt != -1 else match.start() + 6000
+        wrapper = strip_lua_noise(raw[match.start():end_at])
+        # `if false then <守卫> end; orig(...)` 能让"守卫存在"毫无意义：
+        # 要求守卫出现在真正的转发调用之前，且 wrapper 里没有恒假分支。
+        assert not re.search(r"if\s+false\s+then", wrapper), (
+            f"{callback}: 守卫被包在 `if false then` 里 —— 写了但永远不执行"
+        )
+        forward = re.search(r"orig[A-Za-z]*\s*\(", wrapper)
+        if forward:
+            guard_at = min(
+                [m.start() for m in re.finditer(r"HasPermission\(|CheckRateLimit\(", wrapper)] or [-1]
+            )
+            assert guard_at != -1 and guard_at < forward.start(), (
+                f"{callback}: 守卫出现在转发调用之后（甚至没有）——先刷车再校验等于没校验"
+            )
+        assert re.search(r"HasPermission\(\s*source\s*,", wrapper), (
+            f"{callback} 的包装函数里没有 admin 判定 —— 劫持还在但没校验（文件别处的同名调用不算）"
+        )
+        assert re.search(r"CheckRateLimit\(\s*source\s*,", wrapper), (
+            f"{callback} 的包装函数里没有限频 —— 连点就能刷爆"
+        )
+    cfg = read(BASE / "configs" / "modules" / "security.cfg")
+    assert 'security_check_vehicle_spawn "true"' in cfg, (
+        "security_check_vehicle_spawn 被关掉了 —— custom-security 的刷车守卫会整段跳过"
+    )
+    custom = read(BASE / "configs" / "modules" / "custom.cfg")
+    assert "ensure custom-security" in custom, (
+        "custom-security 不在启动集里 —— 守卫压根不会挂载"
+    )
+    assert re.search(
+        r"function\(resourceName\)[\s\S]{0,200}qb-core", raw
+    ), (
+        "qb-core 重启后没有重挂守卫（restart qb-core 会重建 ServerCallbacks，劫持丢失且无人发现）"
+    )
 
 
 def test_civilian_and_police_entry_points_exist_in_both_resources():
@@ -371,7 +480,7 @@ def test_no_auth_token_is_smuggled_in_via_a_comment():
             line for line in event.body.splitlines() if not line.lstrip().startswith("--")
         )
         if not auth_tokens(code):
-            offenders.append(event.where + " " + event.name)
+            offenders.append(event.where(RESOURCES) + " " + event.name)
     assert offenders == [], f"auth token only appears in comments: {offenders}"
 
 
@@ -383,33 +492,16 @@ if __name__ == "__main__":  # pragma: no cover - manual runner
 # 注册形式本身也是一条规则：必须写字面量
 # ---------------------------------------------------------------------------
 
-REGISTER_ANY = re.compile(r"RegisterNetEvent\s*\(\s*(?P<arg>[^,\n)]+)")
-
-
 def non_literal_registrations() -> list[str]:
-    """返回"第一个参数不是字符串字面量"的注册点。
+    """返回"第一个参数不是字符串字面量"的注册点（与全仓基线的判定同一实现）。
 
     为什么必须钉这条：扫描器按字面量取事件名，`RegisterNetEvent(EVENT_NAME, ...)`
     会让整条事件对闸门不可见——而诊断类事件能往服务端日志写字，看不见就等于没管。
-    实证：框架的客户端诊断通道第一版就是这么写的，加进 SCAN_DIRS 后依然"8 passed"。
     """
-    offenders = []
+    offenders: list[str] = []
     for _resource, directory in SCAN_DIRS:
-        for path in sorted(directory.rglob("*.lua")):
-            for index, line in enumerate(read(path).splitlines(), 1):
-                match = REGISTER_ANY.match(line.strip())
-                if not match:
-                    continue
-                arg = match.group("arg").strip()
-                if arg[:1] in ("'", '"'):
-                    continue
-                try:
-                    where = path.relative_to(RESOURCES).as_posix()
-                except ValueError:          # 反向校验用的是临时目录
-                    where = path.as_posix()
-                offenders.append(f"{where}:{index}  RegisterNetEvent({arg} ...)")
+        offenders.extend(non_literal_in_dir(directory))
     return offenders
-
 
 def test_net_event_registration_uses_a_literal_name():
     offenders = non_literal_registrations()
