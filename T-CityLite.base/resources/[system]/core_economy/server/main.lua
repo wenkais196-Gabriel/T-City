@@ -109,12 +109,15 @@ end)
 -- ── 全局乘数 ──────────────────────────────────────────────────────────
 
 local function getGlobalMultiplier()
-    -- 优先级: Convar economy_global_multiplier (手动) > economy_reward_scale (自适应) > 1.0
-    local manual = GetConvarInt('economy_global_multiplier', -1)
-    if manual > 0 then return manual / 100.0 end
+    -- 单位固定为「倍率」：1.0 = 1x（不是百分数）。configs/modules/economy.cfg 与
+    -- custom-economy 的 RewardScale 都按这个写法；历史上这里用 GetConvarInt 再 /100，
+    -- 于是同一个 convar 出现两种单位（"1.0" 会被读成 0.01）。
+    -- 判定：值必须是正数才生效，0 / 负数 / 未设置都当作「没配」，回落到 1.0。
+    local manual = GetConvarFloat('economy_global_multiplier', -1.0)
+    if manual > 0 then return manual end
 
-    local adaptive = GetConvarInt('economy_reward_scale', -1)
-    if adaptive > 0 then return adaptive / 100.0 end
+    local adaptive = GetConvarFloat('economy_reward_scale', -1.0)
+    if adaptive > 0 then return adaptive end
 
     return 1.0
 end

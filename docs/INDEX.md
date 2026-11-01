@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-01 ｜ **文档总数**：276 ｜ **已登记**：276 ｜ **未登记**：0
+**生成时间**：2026-11-01 ｜ **文档总数**：281 ｜ **已登记**：281 ｜ **未登记**：0
 
-**状态分布**：✅ active 151 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 156 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -289,7 +289,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（54）
+### meta（59）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -304,8 +304,10 @@
 | [T-City 仓库删除审计提案](cleanup/delete-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/delete-proposal.md` |
 | [T-City 仓库 `.gitignore` 审计提案](cleanup/ignore-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/ignore-proposal.md` |
 | [T-City 仓库结构与分类整改提案](cleanup/structure-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/structure-proposal.md` |
+| [P1-2 / P1-1 验收证据（存档单写者 + 拆环）](engineering/2026-11-foundation-p1-evidence.md) | audit | ✅ active | 2026-11-01 | 2027-05-01 |  | `docs/engineering/2026-11-foundation-p1-evidence.md` |
 | [T-CityLite 服务器总领手册](00-server-master-manual.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/00-server-master-manual.md` |
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
+| [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
 | [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `AGENTS.md` |
 | [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
@@ -331,6 +333,7 @@
 | [消耗品与状态层（custom-consumables）](engineering/CONSUMABLES.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/engineering/CONSUMABLES.md` |
 | [真机验证工作流（Live verification）](engineering/LIVE_VERIFICATION.md) | meta | ✅ active | 2026-10-30 | 2027-04-30 |  | `docs/engineering/LIVE_VERIFICATION.md` |
 | [REUSE — 共享代码放哪、什么该合并、怎么收敛](engineering/REUSE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/REUSE.md` |
+| [STANDARDS — 技术标准 v0.2（可执行、可验证）](engineering/STANDARDS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 | ★ | `docs/engineering/STANDARDS.md` |
 | [工作树与分支流程](engineering/WORKTREE.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/WORKTREE.md` |
 | [Agent 时代的工程运行模型（T-City 落地提案 v1）](engineering/agent-operating-model.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/agent-operating-model.md` |
 | [LLM 通用工艺准则（原 CLAUDE.md，2026-10-25 归档）](engineering/llm-craft.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/llm-craft.md` |
@@ -344,9 +347,11 @@
 | [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../PROJECT_PROGRESS.md) | plan | ✅ active | 2026-10-23 | 2027-04-30 |  | `PROJECT_PROGRESS.md` |
 | [⚙️ T-City Lite Career (职业身份) 系统重构技术方案](archive/QBCore_Lite_versions/career/refactor_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/refactor_plan.md` |
 | [仓库整理总方案（合并三份提案）](cleanup/PLAN.md) | plan | 📌 final | 2026-10-23 | 2027-04-30 |  | `docs/cleanup/PLAN.md` |
+| [2026-11 基石加固计划（P0 / P1 / P2）](engineering/2026-11-foundation-plan.md) | plan | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-plan.md` |
 | [T-City 服务器系统覆盖与规划缺口调研](analysis/2026-10-31-systems-coverage-survey.md) | research | 📌 final | 2026-10-31 | 2027-04-30 | ★ | `docs/analysis/2026-10-31-systems-coverage-survey.md` |
 | [T-City Lite — DevOps 工作流](DEVOPS.md) | runbook | ✅ active | 2026-10-23 | 2027-01-30 |  | `docs/DEVOPS.md` |
 | [📖 T-City Wiki 系统设计规格书](../T-CityLite.base/docs/design/tcity-wiki-design-spec.md) | spec | 🟡 draft | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-wiki-design-spec.md` |
+| [基石目标形态（TO-BE）— 五层、单写者、可验收的预算](engineering/FOUNDATION-TO-BE.md) | spec | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/FOUNDATION-TO-BE.md` |
 
 ### infra（16）
 

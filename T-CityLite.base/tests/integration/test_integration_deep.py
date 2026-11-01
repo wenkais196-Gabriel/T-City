@@ -631,8 +631,9 @@ Bus.economy.AddScaled(2, 'cash', 500, 'op2')
 Bus.economy.AddScaled(1, 'bank', 2000, 'op3')
 
 -- Flush all
-local flushed = Bus.persistence.FlushAll()
-assert(flushed >= 0, "FlushAll should return count")
+local ack = Bus.persistence.FlushAll()
+assert(type(ack) == "table", "FlushAll must return an ack table")
+assert(type(ack.attempted) == "number" and ack.attempted >= 0, "ack.attempted must be a count")
 
 -- Check stats
 local stats = Bus.persistence.Stats()
