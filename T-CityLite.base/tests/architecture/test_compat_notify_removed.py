@@ -96,9 +96,13 @@ def test_qb_core_notify_still_delivers_without_the_bus():
     # 一旦有人给 qb-core 注册 `_G.Bus.notify`，真实调用就会改走另一条路，
     # 而上面那条用例仍会是绿的（它证明的只是"无 Bus 时回退可用"）。
     writers = []
+    writer_re = re.compile(r"_G\.Bus(?:\.notify|\[\s*['\"]notify['\"]\s*\])\s*=+(?!=)")
+    alias_re = re.compile(r"^\s*local\s+\w+\s*=\s*_G\.Bus\s*$", re.M)
     for path in sorted((BASE / "resources" / "[qb]" / "qb-core").rglob("*.lua")):
         text = re.sub(r"--[^\n]*", "", path.read_text(encoding="utf-8", errors="ignore"))
-        if re.search(r"_G\.Bus\.notify\s*=+(?!=)", text):
+        # 别名写法也拦：`local b = _G.Bus` 再 `b.notify = ...`
+        aliased = alias_re.search(text) and re.search(r"\.notify\s*=+(?!=)", text)
+        if writer_re.search(text) or aliased:
             writers.append(path.relative_to(BASE / "resources").as_posix())
     assert writers == [], (
         "qb-core 里出现了 `_G.Bus.notify` 的写者 —— Notify 会改走 Bus 分支，"
