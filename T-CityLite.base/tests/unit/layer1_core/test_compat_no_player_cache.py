@@ -90,41 +90,53 @@ PROBE = r"""
 local player = { PlayerData = { source = 1, citizenid = 'CID1', job = { name = 'police' } }, Functions = {} }
 _G.QBCore.Players[1] = player
 
--- G4：函数本身必须还是 qb-core 那一个（compat 没有替换它），且返回值就是表里那张
+-- G4：函数本身必须还是 qb-core 那一个（不是"返回值相等"——缓存层也能返回同一张表）
 local stillOriginal = _G.QBCore.Functions.GetPlayer == _origGetPlayer
 local viaCore = _G.QBCore.Functions.GetPlayer(1)
 
--- G3：登出的那一刻（Players 被清空）之后必须返回 nil
+-- G5：字符串 source 必须在**还有玩家在线**时测，否则走的是 nil 短路，测不到旧实现的比较错误
+local okString, stringResult = pcall(function() return _G.QBCore.Functions.GetPlayer('1') end)
+
+-- G3：把 Players 清空（= 登出的那一刻），之后必须返回 nil
 _G.QBCore.Players[1] = nil
 local afterLogout = _G.QBCore.Functions.GetPlayer(1)
 
--- G5：字符串 source 不能抛错
-local okString, stringResult = pcall(function() return _G.QBCore.Functions.GetPlayer('1') end)
-
 print('RESULT ' .. string.format(
-    '{"sameFunction":%s,"identity":%s,"afterLogout":%s,"stringOk":%s,"stringResult":%s}',
+    '{"sameFunction":%s,"identity":%s,"stringOk":%s,"stringResult":%s,"afterLogout":%s}',
     tostring(stillOriginal),
     tostring(viaCore == player),
-    tostring(afterLogout == nil),
     tostring(okString),
-    stringResult == nil and 'null' or '"not-nil"'
+    stringResult == nil and 'null' or '"not-nil"',
+    tostring(afterLogout == nil)
 ))
 """
 
 
-def test_getplayer_is_not_wrapped_and_clears_on_logout():
-    result = run_lua(PROBE)
+def _probe() -> dict:
+    """一次 Lua 执行拿到全部 flag（各判据独立可观测，不被前一条的失败掩盖）。"""
+    return run_lua(PROBE)
+
+
+def test_getplayer_function_is_not_replaced():
+    """G4：compat 不许替换 `QBCore.Functions.GetPlayer`。"""
+    result = _probe()
     assert result["sameFunction"] is True, (
         "QBCore.Functions.GetPlayer 被 compat 替换了 —— 它必须还是 qb-core 那一个函数"
     )
-    assert result["identity"] is True, "GetPlayer 返回的不是 Players[src] 那张表"
+
+
+def test_getplayer_returns_nil_right_after_logout():
+    """G3：`Players[src]` 被清空之后（登出那一刻）必须返回 nil。"""
+    result = _probe()
     assert result["afterLogout"] is True, (
-        "Players[src] 被清空后 GetPlayer(src) 仍返回对象 —— 登出/选人界面期间会拿到前任 Player 表"
+        "Players[src] 清空后 GetPlayer(src) 仍返回对象 —— 选人界面期间会拿到前任 Player 表"
     )
+    assert result["identity"] is True, "GetPlayer 返回的不是 Players[src] 那张表"
 
 
-def test_getplayer_accepts_string_source():
-    result = run_lua(PROBE)
+def test_getplayer_accepts_string_source_while_online():
+    """G5：玩家在线时用字符串 source 查，不能抛错（旧实现的 `source <= 0` 会抛）。"""
+    result = _probe()
     assert result["stringOk"] is True, (
-        "GetPlayer('1') 抛错了 —— 旧实现的 `source <= 0` 对字符串 source 会 attempt to compare string with number"
+        "GetPlayer('1') 抛错 —— 旧实现的 `source <= 0` 对字符串 source 会 attempt to compare string with number"
     )
