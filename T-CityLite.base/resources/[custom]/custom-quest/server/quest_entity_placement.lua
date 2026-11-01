@@ -102,6 +102,13 @@ RegisterNetEvent('quest:server:placementComplete', function(questId, stepId, pla
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
+    -- 客户端说"我放好了"不算数：先过任务安全层（活跃任务 + 步骤顺序 + 尝试次数 + 限频）
+    local ok, err = QuestSecurity.ValidateClientEvent(src, questId, stepId, true)
+    if not ok then
+        TriggerClientEvent('QBCore:Notify', src, err or '任务校验失败', 'error')
+        return
+    end
+
     local citizenid = Player.PlayerData.citizenid
 
     print(('[quest-placement] 📥 placementComplete: src=%d, quest=%s, step=%s'):format(

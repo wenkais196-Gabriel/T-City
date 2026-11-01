@@ -19,6 +19,7 @@ QBCore.Functions.CreateCallback('cartel:server:getNPCs', function(source, cb)
     if not Player then cb({}); return end
 
     local isMember, _ = CartelService.IsMember(source)
+    if not isMember then cb({}); return end  -- 2026-11-01: 原来取了返回值却没用，非成员也能拿到 NPC 列表
     local npcs = {}
 
     for _, npcCfg in ipairs(Config.Cartel.NPCs) do
