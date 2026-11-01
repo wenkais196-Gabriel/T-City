@@ -23,9 +23,18 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+
+from net_event_scan import (
+    MAX_BLOCK_LINES,
+    STRONG_TOKENS,
+    Event,
+    auth_tokens as scan_auth_tokens,
+    non_literal_in_dir,
+    read,
+    scan_dir,
+)
 
 BASE = Path(__file__).resolve().parents[2]  # T-CityLite.base/
 RESOURCES = BASE / "resources"
@@ -36,21 +45,14 @@ SCAN_DIRS = (
     ("custom-phone", CUSTOM / "custom-phone" / "server"),
     # 2026-10-25: 框架自己也有 net event（客户端诊断通道等），之前完全没被扫过
     ("core-framework", BASE / "resources" / "[standalone]" / "core-framework" / "server"),
+    # P1-3 批次①：引擎层 100%。qb-core 的 15 个服务端 net event 之前不在任何闸门里
+    ("qb-core", BASE / "resources" / "[qb]" / "qb-core" / "server"),
 )
 ALLOWLIST = Path(__file__).with_name("net_events_allowlist.json")
 
-REGISTER_RE = re.compile(r"""^\s*RegisterNetEvent\(\s*(['"])(?P<name>[^'"]+)\1""")
-END_RE = re.compile(r"^end\)\s*$")
-MAX_BLOCK_LINES = 400
+# `RegisterNetEvent('x', function ...)` 的解析统一在 net_event_scan 里（唯一实现），
+# 这里只保留"这段 handler 里有没有鉴权证据"的项目级 helper 名单。
 
-# A token that proves a unified auth decision inside the handler body.
-STRONG_TOKENS = {
-    "PolicePolicy.Can": re.compile(r"PolicePolicy\.Can\("),
-    "PolicePolicy.Check": re.compile(r"PolicePolicy\.Check\("),
-    "hasCapability": re.compile(r"\bhasCapability\b"),
-    "IsPlayerAceAllowed": re.compile(r"IsPlayerAceAllowed\("),
-    "system_source": re.compile(r"\bsrc\s*==\s*0\b|\bsrc\s*~=\s*0\s+then\s+return\b"),
-}
 
 # Project helpers that wrap PolicePolicy.Can. Verified in
 # test_auth_helpers_really_enforce_policypolicy so the allowlist cannot hide a
@@ -77,6 +79,18 @@ SESSION_BIND = re.compile(
     r"(?:StoreNotification|PhoneNotify\.Store)\(source|"
     r"ResolveSource\(source\)|GetPlayer\(targetSrc"
 )
+SELF_SCOPED = re.compile(
+    # 只碰 caller 自己的数据：先 `local src = source`，后续只对这一侧读写
+    r"local\s+src\s*=\s*source"
+)
+CALLBACK_RELAY = re.compile(
+    # 公用回调分发器：按名字派发到服务端已注册的回调
+    r"ServerCallbacks\[name\]"
+)
+DEPRECATED_BLOCKED = re.compile(
+    # 硬阻断：既有安全日志，又真的不做副作用
+    r"BLOCKED"
+)
 DIAGNOSTIC_GUARD = re.compile(
     # 2026-10-25: 框架的诊断通道走限流 owner，不叫 COOLDOWN 也不叫 PhoneDiag.Accept
     r"COOLDOWN|cooldown|diagRateLimited|PHASES|PhoneDiag\.Accept|"
@@ -87,20 +101,6 @@ REQUIRED_FIELDS = ("name", "file", "category", "reason", "evidence", "owner", "e
 DEBT_CATEGORIES = {"unchecked_debt"}
 
 
-@dataclass(frozen=True)
-class Event:
-    name: str
-    resource: str
-    path: Path
-    line: int
-    body: str
-
-    @property
-    def where(self) -> str:
-        rel = self.path.relative_to(RESOURCES).as_posix()
-        return f"{rel}:{self.line}"
-
-
 def lua_files() -> list[Path]:
     files: list[Path] = []
     for _, directory in SCAN_DIRS:
@@ -109,57 +109,20 @@ def lua_files() -> list[Path]:
     return files
 
 
-def read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
 def scan_events() -> tuple[list[Event], list[str]]:
-    """Return (events, problems). A problem is an unterminated handler."""
+    """扫描 SCAN_DIRS，返回 (events, problems)。解析器在 net_event_scan（唯一实现）。"""
     events: list[Event] = []
     problems: list[str] = []
     for resource, directory in SCAN_DIRS:
-        for path in sorted(directory.rglob("*.lua")):
-            lines = read(path).splitlines()
-            for index, line in enumerate(lines):
-                match = REGISTER_RE.match(line)
-                if not match:
-                    continue
-                name = match.group("name")
-                body: list[str] = []
-                cursor = index + 1
-                while cursor < len(lines):
-                    if END_RE.match(lines[cursor]):
-                        break
-                    body.append(lines[cursor])
-                    cursor += 1
-                    if len(body) > MAX_BLOCK_LINES:
-                        problems.append(
-                            f"{path.relative_to(RESOURCES).as_posix()}:{index + 1} "
-                            f"{name} no top-level 'end)' within {MAX_BLOCK_LINES} lines"
-                        )
-                        body = []
-                        cursor = len(lines)
-                        break
-                if cursor >= len(lines) and not body:
-                    # Either the block was terminated exactly on the last line
-                    # (ok) or we bailed out above (already reported).
-                    if not any(name in p for p in problems):
-                        problems.append(
-                            f"{path.relative_to(RESOURCES).as_posix()}:{index + 1} "
-                            f"{name} unterminated handler"
-                        )
-                    continue
-                events.append(
-                    Event(name=name, resource=resource, path=path, line=index + 1,
-                          body="\n".join(body))
-                )
+        assert directory.is_dir(), f"missing scan directory: {directory}"
+        found, issues = scan_dir(resource, directory)
+        events.extend(found)
+        problems.extend(issues)
     return events, problems
 
 
 def auth_tokens(body: str) -> list[str]:
-    found = [token for token, pattern in STRONG_TOKENS.items() if pattern.search(body)]
-    found += [helper for helper in AUTH_HELPERS if re.search(rf"\b{re.escape(helper)}\(", body)]
-    return found
+    return scan_auth_tokens(body, AUTH_HELPERS)
 
 
 def load_allowlist() -> dict:
@@ -187,7 +150,7 @@ def report() -> str:
         f"{len(bad)}/{len(events)} unguarded",
     ]
     for event in bad:
-        lines.append(f"  {event.where}  {event.name}  no_auth")
+        lines.append(f"  {event.where(RESOURCES)}  {event.name}  no_auth")
     for problem in problems:
         lines.append(f"  SKIP {problem}")
     lines.append(
@@ -209,7 +172,9 @@ def test_scanner_covers_both_resources_and_every_handler_terminates():
     # shape: 40+ handlers across the two resources.
     assert len(events) >= 40, f"only {len(events)} net events found — scanner regression?"
     # 2026-10-25: 范围加了 core-framework（框架自己的 net event 之前没被扫过）
-    assert {event.resource for event in events} == {"custom-police", "custom-phone", "core-framework"}
+    assert {event.resource for event in events} == {
+        "custom-police", "custom-phone", "core-framework", "qb-core"
+    }
     assert all(event.name for event in events)
     assert all(len(event.body) > 0 for event in events)
     names = [event.name for event in events]
@@ -226,7 +191,7 @@ def test_every_net_event_is_authenticated_or_registered():
     bad = unregistered(events)
     if bad:
         detail = "\n".join(
-            f"  {event.where}  {event.name}  no_auth — add PolicePolicy.Can(...) "
+            f"  {event.where(RESOURCES)}  {event.name}  no_auth — add PolicePolicy.Can(...) "
             f"inside the handler, or register it in "
             f"tests/architecture/net_events_allowlist.json"
             for event in bad
@@ -284,7 +249,7 @@ def test_allowlisted_events_really_show_the_claim_in_their_body():
     for name, entry in allowlist_entries().items():
         event = events[name]
         assert event.path == allowlist_path(entry["file"]), (
-            f"{name}: allowlist says {entry['file']} but the handler is at {event.where}"
+            f"{name}: allowlist says {entry['file']} but the handler is at {event.where(RESOURCES)}"
         )
         category = entry["category"]
         if category == "already_checked":
@@ -301,6 +266,21 @@ def test_allowlisted_events_really_show_the_claim_in_their_body():
             assert SESSION_BIND.search(event.body), (
                 f"{name}: registered as session-bound but the handler never binds to "
                 f"the caller's own session/ownership"
+            )
+        elif category == "self_scoped":
+            assert SELF_SCOPED.search(event.body), (
+                f"{name}: registered as self_scoped but the handler never binds to "
+                f"`local src = source` — a self-scoped claim needs the caller identity"
+            )
+        elif category == "callback_relay":
+            assert CALLBACK_RELAY.search(event.body), (
+                f"{name}: registered as callback_relay but does not dispatch through "
+                f"QBCore.ServerCallbacks[name]"
+            )
+        elif category == "deprecated_blocked":
+            assert DEPRECATED_BLOCKED.search(event.body), (
+                f"{name}: registered as deprecated_blocked but the handler no longer "
+                f"contains the BLOCKED guard — it may be executing again"
             )
         elif category == "diagnostic":
             assert DIAGNOSTIC_GUARD.search(event.body), (
@@ -371,7 +351,7 @@ def test_no_auth_token_is_smuggled_in_via_a_comment():
             line for line in event.body.splitlines() if not line.lstrip().startswith("--")
         )
         if not auth_tokens(code):
-            offenders.append(event.where + " " + event.name)
+            offenders.append(event.where(RESOURCES) + " " + event.name)
     assert offenders == [], f"auth token only appears in comments: {offenders}"
 
 

@@ -1,0 +1,1504 @@
+{
+  "$comment": "P1-3 net event 基线。由 tests/architecture/net_event_baseline.py --write 生成，手改会被 test_net_event_inventory.py 判红。",
+  "version": 1,
+  "rule": "P1-3",
+  "measured_at": "2026-11-01",
+  "scope": "resources/** 服务端脚本（排除 client/ 目录与 cl_*/client*.lua）",
+  "enforced": [
+    "qb-core"
+  ],
+  "batches": {
+    "engine": {
+      "events": 15,
+      "guarded": 5,
+      "allowlisted": 10,
+      "unguarded": 0
+    },
+    "custom": {
+      "events": 134,
+      "guarded": 23,
+      "allowlisted": 45,
+      "unguarded": 66
+    },
+    "qb": {
+      "events": 221,
+      "guarded": 22,
+      "allowlisted": 0,
+      "unguarded": 199
+    },
+    "other": {
+      "events": 82,
+      "guarded": 1,
+      "allowlisted": 4,
+      "unguarded": 77
+    }
+  },
+  "resources": {
+    "PolyZone": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 4
+    },
+    "atom_nodes": {
+      "batch": "other",
+      "group": "[system]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "baseevents": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 7,
+      "guarded": 0,
+      "allowlisted": 4,
+      "unguarded": 3
+    },
+    "connectqueue": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "custom-agent-client": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 4
+    },
+    "custom-cartel": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 4
+    },
+    "custom-certificates": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 5,
+      "guarded": 4,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "custom-consumables": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0
+    },
+    "custom-documents": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "custom-justice": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 7,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 7
+    },
+    "custom-main": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "custom-mining": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "custom-phone": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 11,
+      "guarded": 0,
+      "allowlisted": 11,
+      "unguarded": 0
+    },
+    "custom-police": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 57,
+      "guarded": 18,
+      "allowlisted": 33,
+      "unguarded": 6
+    },
+    "custom-quest": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 11,
+      "guarded": 1,
+      "allowlisted": 0,
+      "unguarded": 10
+    },
+    "custom-taxes": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "custom-vehicles": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 26,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 26
+    },
+    "hardcap": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "interact-sound": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "money": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "money-fountain": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "monitor": {
+      "batch": "other",
+      "group": "[system]",
+      "events": 33,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 33
+    },
+    "oxmysql": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "ped-money-drops": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "player-data": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "playernames": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "pma-voice": {
+      "batch": "other",
+      "group": "[voice]",
+      "events": 3,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 3
+    },
+    "production-freeze": {
+      "batch": "other",
+      "group": "[system]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "qb-adminmenu": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 16,
+      "guarded": 15,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "qb-ambulancejob": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 22,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 22
+    },
+    "qb-apartments": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 10,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 10
+    },
+    "qb-cityhall": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "qb-clothing": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "qb-core": {
+      "batch": "engine",
+      "group": "[qb]",
+      "events": 15,
+      "guarded": 5,
+      "allowlisted": 10,
+      "unguarded": 0
+    },
+    "qb-crypto": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 6,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 6
+    },
+    "qb-doorlock": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 4,
+      "guarded": 1,
+      "allowlisted": 0,
+      "unguarded": 3
+    },
+    "qb-drugs": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 9,
+      "guarded": 1,
+      "allowlisted": 0,
+      "unguarded": 8
+    },
+    "qb-fuel": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 3,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 3
+    },
+    "qb-garages": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 6,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 6
+    },
+    "qb-houserobbery": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "qb-houses": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 19,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 19
+    },
+    "qb-hud": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "qb-inventory": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 8,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 8
+    },
+    "qb-lapraces": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 10,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 10
+    },
+    "qb-management": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 16,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 16
+    },
+    "qb-mechanicjob": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 4
+    },
+    "qb-multicharacter": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 4
+    },
+    "qb-pawnshop": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 4
+    },
+    "qb-prison": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 11,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 11
+    },
+    "qb-scoreboard": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 1
+    },
+    "qb-shops": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "qb-storerobbery": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 9,
+      "guarded": 2,
+      "allowlisted": 0,
+      "unguarded": 7
+    },
+    "qb-streetraces": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 3,
+      "guarded": 3,
+      "allowlisted": 0,
+      "unguarded": 0
+    },
+    "qb-target": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "qb-vehicleshop": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 12,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 12
+    },
+    "qb-weapons": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "qb-weathersync": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 7,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 7
+    },
+    "qb-weed": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "rconlog": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 3,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 3
+    },
+    "runcode": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 5
+    },
+    "sessionmanager": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "story-engine": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 0,
+      "unguarded": 2
+    },
+    "tcity-dashboard": {
+      "batch": "other",
+      "group": "[system]",
+      "events": 5,
+      "guarded": 1,
+      "allowlisted": 0,
+      "unguarded": 4
+    }
+  },
+  "unguarded": {
+    "PolyZone": [
+      "PolyZone:TriggerZoneEvent",
+      "polyzone:printBox",
+      "polyzone:printCircle",
+      "polyzone:printPoly"
+    ],
+    "atom_nodes": [
+      "atom:server:nodeReached"
+    ],
+    "baseevents": [
+      "baseevents:onPlayerDied",
+      "baseevents:onPlayerKilled",
+      "baseevents:onPlayerWasted"
+    ],
+    "connectqueue": [
+      "Queue:playerActivated"
+    ],
+    "custom-agent-client": [
+      "tcity:agent:ack",
+      "tcity:agent:devcmd_result",
+      "tcity:agent:ready",
+      "tcity:agent:state"
+    ],
+    "custom-cartel": [
+      "cartel:server:buyFromSupplier",
+      "cartel:server:finishProduction",
+      "cartel:server:sellToDealer",
+      "cartel:server:startProduction"
+    ],
+    "custom-certificates": [
+      "certificates:server:IssueCertificate"
+    ],
+    "custom-documents": [
+      "custom-documents:server:presentDocument"
+    ],
+    "custom-justice": [
+      "justice:server:imprison",
+      "justice:server:lawyerAcceptCase",
+      "justice:server:registerArrest",
+      "justice:server:requestReduction",
+      "justice:server:requestVisit",
+      "justice:server:sentenceComplete",
+      "justice:server:startTrial"
+    ],
+    "custom-main": [
+      "custom-main:server:ResetDeathStatus",
+      "custom-main:server:policeHandoverAlert"
+    ],
+    "custom-mining": [
+      "mining:server:mineOre",
+      "mining:server:smeltOre"
+    ],
+    "custom-police": [
+      "evidence:server:AddBlooddropToInventory",
+      "evidence:server:AddCasingToInventory",
+      "evidence:server:AddFingerprintToInventory",
+      "evidence:server:ClearBlooddrops",
+      "evidence:server:ClearCasings",
+      "police:server:NpcCalloutResult"
+    ],
+    "custom-quest": [
+      "hospital:server:SetDeathStatus",
+      "quest:server:aviationHeightMonitorComplete",
+      "quest:server:cargoDamageResult",
+      "quest:server:dashboardStampDelivery",
+      "quest:server:entityRecycled",
+      "quest:server:entityTrackingFail",
+      "quest:server:nodeComplete",
+      "quest:server:placementComplete",
+      "quest:server:registerTrailer",
+      "quest:server:trailerHitched"
+    ],
+    "custom-taxes": [
+      "durability:server:onWeaponFired"
+    ],
+    "custom-vehicles": [
+      "custom-vehicles:server:SaveVehicleProps",
+      "custom-vehicles:server:anchorControl",
+      "custom-vehicles:server:logisticsQuickLoad",
+      "custom-vehicles:server:logisticsStampDelivery",
+      "custom-vehicles:server:megaphone",
+      "custom-vehicles:server:policeRadarLog",
+      "custom-vehicles:server:releaseDashboard",
+      "custom-vehicles:server:requestDashboard",
+      "custom-vehicles:server:setDriveMode",
+      "custom-vehicles:server:sirenControl",
+      "custom-vehicles:server:syncNitrous",
+      "custom-vehicles:server:syncNitrousFlames",
+      "custom-vehicles:server:tuneStatus",
+      "custom-vehicles:server:updateComponents",
+      "custom-vehicles:server:updateDistance",
+      "qb-mechanicjob:server:SaveVehicleProps",
+      "qb-mechanicjob:server:repairVehicleComponent",
+      "qb-mechanicjob:server:syncNitrous",
+      "qb-mechanicjob:server:syncNitrousFlames",
+      "qb-mechanicjob:server:tuneStatus",
+      "qb-mechanicjob:server:updateDrivingDistance",
+      "qb-mechanicjob:server:updateVehicleComponents",
+      "qb-vehiclekeys:server:AcquireVehicleKeys",
+      "qb-vehiclekeys:server:GiveKeys",
+      "qb-vehiclekeys:server:RemoveKeys",
+      "qb-vehiclekeys:server:ToggleEngine"
+    ],
+    "hardcap": [
+      "hardcap:playerActivated"
+    ],
+    "interact-sound": [
+      "InteractSound_SV:PlayOnAll",
+      "InteractSound_SV:PlayOnOne",
+      "InteractSound_SV:PlayOnSource",
+      "InteractSound_SV:PlayWithinDistance",
+      "InteractSound_SV:PlayWithinDistance"
+    ],
+    "money": [
+      "money:requestDisplay"
+    ],
+    "money-fountain": [
+      "money_fountain:tryPickup",
+      "money_fountain:tryPlace"
+    ],
+    "monitor": [
+      "chatMessage",
+      "txaLogger:CommandExecuted",
+      "txaLogger:DebugMessage",
+      "txsv:ackWarning",
+      "txsv:checkIfAdmin",
+      "txsv:logger:deathEvent",
+      "txsv:req:bringPlayer",
+      "txsv:req:changePlayerMode",
+      "txsv:req:clearArea",
+      "txsv:req:freezePlayer",
+      "txsv:req:healEveryone",
+      "txsv:req:healMyself",
+      "txsv:req:healPlayer",
+      "txsv:req:plist:getDetailed",
+      "txsv:req:sendAnnouncement",
+      "txsv:req:serverCtx",
+      "txsv:req:showPlayerIDs",
+      "txsv:req:spectate:cycle",
+      "txsv:req:spectate:end",
+      "txsv:req:spectate:start",
+      "txsv:req:tpToCoords",
+      "txsv:req:tpToPlayer",
+      "txsv:req:tpToWaypoint",
+      "txsv:req:troll:setDrunk",
+      "txsv:req:troll:setOnFire",
+      "txsv:req:troll:wildAttack",
+      "txsv:req:vehicle:boost",
+      "txsv:req:vehicle:delete",
+      "txsv:req:vehicle:fix",
+      "txsv:req:vehicle:spawn:fivem",
+      "txsv:req:vehicle:spawn:redm",
+      "txsv:startedWalking",
+      "txsv:webpipe:req"
+    ],
+    "oxmysql": [
+      "oxmysql:loadResource",
+      "oxmysql:openUi"
+    ],
+    "ped-money-drops": [
+      "money:allowPickupNear",
+      "money:tryPickup"
+    ],
+    "player-data": [
+      "playerJoining"
+    ],
+    "playernames": [
+      "playernames:configure",
+      "playernames:init"
+    ],
+    "pma-voice": [
+      "pma-voice:setPlayerCall",
+      "pma-voice:setPlayerRadio",
+      "pma-voice:setTalkingOnRadio"
+    ],
+    "production-freeze": [
+      "i18n:client:reportLanguage",
+      "production:client:freezeDebug"
+    ],
+    "qb-adminmenu": [
+      "qb-admin:server:GetPlayersForBlips"
+    ],
+    "qb-ambulancejob": [
+      "hospital:server:AddDoctor",
+      "hospital:server:CanHelp",
+      "hospital:server:LeaveBed",
+      "hospital:server:RemoveDoctor",
+      "hospital:server:RespawnAtHospital",
+      "hospital:server:RestoreWeaponDamage",
+      "hospital:server:RevivePlayer",
+      "hospital:server:SendDoctorAlert",
+      "hospital:server:SendToBed",
+      "hospital:server:SetArmor",
+      "hospital:server:SetDeathStatus",
+      "hospital:server:SetLaststandStatus",
+      "hospital:server:SetWeaponDamage",
+      "hospital:server:SyncInjuries",
+      "hospital:server:TreatWounds",
+      "hospital:server:UseFirstAid",
+      "hospital:server:ambulanceAlert",
+      "hospital:server:removeBandage",
+      "hospital:server:removeIfaks",
+      "hospital:server:removePainkillers",
+      "hospital:server:resetHungerThirst",
+      "qb-ambulancejob:server:stash"
+    ],
+    "qb-apartments": [
+      "apartments:server:AddObject",
+      "apartments:server:CreateApartment",
+      "apartments:server:OpenDoor",
+      "apartments:server:RemoveObject",
+      "apartments:server:RingDoor",
+      "apartments:server:UpdateApartment",
+      "apartments:server:openStash",
+      "apartments:server:setCurrentApartment",
+      "qb-apartments:returnBucket",
+      "qb-apartments:server:SetInsideMeta"
+    ],
+    "qb-cityhall": [
+      "QBCore:Client:UpdateObject",
+      "qb-cityhall:server:ApplyJob",
+      "qb-cityhall:server:getIDs",
+      "qb-cityhall:server:requestId",
+      "qb-cityhall:server:sendDriverTest"
+    ],
+    "qb-clothing": [
+      "QBCore:Server:OnPlayerUnload",
+      "qb-clothes:loadPlayerSkin",
+      "qb-clothes:saveOutfit",
+      "qb-clothing:saveSkin",
+      "qb-clothing:server:removeOutfit"
+    ],
+    "qb-crypto": [
+      "qb-crypto:server:ExchangeFail",
+      "qb-crypto:server:ExchangeSuccess",
+      "qb-crypto:server:FetchWorth",
+      "qb-crypto:server:GetRebootState",
+      "qb-crypto:server:Rebooting",
+      "qb-crypto:server:SyncReboot"
+    ],
+    "qb-doorlock": [
+      "qb-doorlock:server:removeLockpick",
+      "qb-doorlock:server:updateState",
+      "txAdmin:events:scheduledRestart"
+    ],
+    "qb-drugs": [
+      "qb-drugs:server:acceptDelivery",
+      "qb-drugs:server:dealerShop",
+      "qb-drugs:server:failDelivery",
+      "qb-drugs:server:giveStealItems",
+      "qb-drugs:server:robCornerDrugs",
+      "qb-drugs:server:sendDeliverySMS",
+      "qb-drugs:server:successDelivery",
+      "qb-drugs:server:updateDealerItems"
+    ],
+    "qb-fuel": [
+      "qb-fuel:server:buyJerryCan",
+      "qb-fuel:server:refillJerryCan",
+      "qb-fuel:server:setCanFuel"
+    ],
+    "qb-garages": [
+      "qb-garages:server:PayDepotPrice",
+      "qb-garages:server:UpdateOutsideVehicle",
+      "qb-garages:server:syncGarage",
+      "qb-garages:server:trackVehicle",
+      "qb-garages:server:updateVehicleState",
+      "qb-garages:server:updateVehicleStats"
+    ],
+    "qb-houserobbery": [
+      "qb-houserobbery:server:SetBusyState",
+      "qb-houserobbery:server:enterHouse",
+      "qb-houserobbery:server:removeAdvancedLockpick",
+      "qb-houserobbery:server:removeLockpick",
+      "qb-houserobbery:server:searchFurniture"
+    ],
+    "qb-houses": [
+      "qb-houses:server:LogoutLocation",
+      "qb-houses:server:OpenDoor",
+      "qb-houses:server:RingDoor",
+      "qb-houses:server:SetHouseRammed",
+      "qb-houses:server:SetInsideMeta",
+      "qb-houses:server:SetRamState",
+      "qb-houses:server:addGarage",
+      "qb-houses:server:addNewHouse",
+      "qb-houses:server:buyHouse",
+      "qb-houses:server:createBlip",
+      "qb-houses:server:giveHouseKey",
+      "qb-houses:server:giveKey",
+      "qb-houses:server:lockHouse",
+      "qb-houses:server:openStash",
+      "qb-houses:server:removeHouseKey",
+      "qb-houses:server:savedecorations",
+      "qb-houses:server:setHouses",
+      "qb-houses:server:setLocation",
+      "qb-houses:server:viewHouse"
+    ],
+    "qb-hud": [
+      "hud:server:GainStress",
+      "hud:server:RelieveStress"
+    ],
+    "qb-inventory": [
+      "QBCore:Server:UpdateObject",
+      "qb-inventory:server:SetInventoryData",
+      "qb-inventory:server:closeInventory",
+      "qb-inventory:server:openDrop",
+      "qb-inventory:server:openVending",
+      "qb-inventory:server:snowball",
+      "qb-inventory:server:updateDrop",
+      "qb-inventory:server:useItem"
+    ],
+    "qb-lapraces": [
+      "qb-lapraces:server:CancelRace",
+      "qb-lapraces:server:CreateLapRace",
+      "qb-lapraces:server:FinishPlayer",
+      "qb-lapraces:server:JoinRace",
+      "qb-lapraces:server:LeaveRace",
+      "qb-lapraces:server:SaveRace",
+      "qb-lapraces:server:SetupRace",
+      "qb-lapraces:server:StartRace",
+      "qb-lapraces:server:UpdateRaceState",
+      "qb-lapraces:server:UpdateRacerData"
+    ],
+    "qb-management": [
+      "qb-bossmenu:server:FireEmployee",
+      "qb-bossmenu:server:GradeUpdate",
+      "qb-bossmenu:server:HireEmployee",
+      "qb-bossmenu:server:TransferOwnership",
+      "qb-bossmenu:server:stash",
+      "qb-gangmenu:server:FireMember",
+      "qb-gangmenu:server:GradeUpdate",
+      "qb-gangmenu:server:HireMember",
+      "qb-gangmenu:server:TransferOwnership",
+      "qb-gangmenu:server:personalStash",
+      "qb-gangmenu:server:stash",
+      "qb-orgmenu:server:FireMember",
+      "qb-orgmenu:server:GradeUpdate",
+      "qb-orgmenu:server:HireMember",
+      "qb-orgmenu:server:TransferOwnership",
+      "qb-orgmenu:server:stash"
+    ],
+    "qb-mechanicjob": [
+      "qb-mechanicjob:server:removeItem",
+      "qb-mechanicjob:server:sprayVehicle",
+      "qb-mechanicjob:server:sprayVehicleCustom",
+      "qb-mechanicjob:server:stash"
+    ],
+    "qb-multicharacter": [
+      "qb-multicharacter:server:createCharacter",
+      "qb-multicharacter:server:deleteCharacter",
+      "qb-multicharacter:server:disconnect",
+      "qb-multicharacter:server:loadUserData"
+    ],
+    "qb-pawnshop": [
+      "qb-pawnshop:server:launderMoney",
+      "qb-pawnshop:server:meltItemRemove",
+      "qb-pawnshop:server:pickupMelted",
+      "qb-pawnshop:server:sellPawnItems"
+    ],
+    "qb-prison": [
+      "prison:server:CheckChance",
+      "prison:server:CheckRecordStatus",
+      "prison:server:GiveJailItems",
+      "prison:server:JailAlarm",
+      "prison:server:RequestRelease",
+      "prison:server:ResetJailItems",
+      "prison:server:SaveJailItems",
+      "prison:server:SecurityLockdown",
+      "prison:server:SetGateHit",
+      "prison:server:SetJailStatus",
+      "prison:server:WorkReduction"
+    ],
+    "qb-scoreboard": [
+      "qb-scoreboard:server:SetActivityBusy"
+    ],
+    "qb-shops": [
+      "qb-shops:server:DoBail",
+      "qb-shops:server:PaySlip",
+      "qb-shops:server:RestockShopItems",
+      "qb-shops:server:UpdateShopItems",
+      "qb-shops:server:openShop"
+    ],
+    "qb-storerobbery": [
+      "qb-storerobbery:server:SafeReward",
+      "qb-storerobbery:server:callCops",
+      "qb-storerobbery:server:cancelRobbery",
+      "qb-storerobbery:server:removeAdvancedLockpick",
+      "qb-storerobbery:server:removeLockpick",
+      "qb-storerobbery:server:setSafeStatus",
+      "qb-storerobbery:server:syncMinPolice"
+    ],
+    "qb-target": [
+      "QBCore:Client:OnGangUpdate",
+      "QBCore:Client:OnJobUpdate",
+      "QBCore:Client:OnPlayerLoaded",
+      "QBCore:Client:OnPlayerUnload",
+      "QBCore:Player:SetPlayerData"
+    ],
+    "qb-vehicleshop": [
+      "qb-vehicleshop:server:addPlayer",
+      "qb-vehicleshop:server:buyShowroomVehicle",
+      "qb-vehicleshop:server:checkFinance",
+      "qb-vehicleshop:server:customTestDrive",
+      "qb-vehicleshop:server:deleteVehicle",
+      "qb-vehicleshop:server:financePayment",
+      "qb-vehicleshop:server:financePaymentFull",
+      "qb-vehicleshop:server:financeVehicle",
+      "qb-vehicleshop:server:removePlayer",
+      "qb-vehicleshop:server:sellShowroomVehicle",
+      "qb-vehicleshop:server:sellfinanceVehicle",
+      "qb-vehicleshop:server:swapVehicle"
+    ],
+    "qb-weapons": [
+      "qb-weapons:server:SetWeaponQuality",
+      "qb-weapons:server:TakeBackWeapon",
+      "qb-weapons:server:UpdateWeaponAmmo",
+      "qb-weapons:server:UpdateWeaponQuality",
+      "qb-weapons:server:removeWeaponAmmoItem"
+    ],
+    "qb-weathersync": [
+      "QBCore:Server:OnPlayerLoaded",
+      "qb-weathersync:server:RequestStateSync",
+      "qb-weathersync:server:setTime",
+      "qb-weathersync:server:setWeather",
+      "qb-weathersync:server:toggleBlackout",
+      "qb-weathersync:server:toggleDynamicWeather",
+      "qb-weathersync:server:toggleFreezeTime"
+    ],
+    "qb-weed": [
+      "qb-weed:server:foodPlant",
+      "qb-weed:server:harvestPlant",
+      "qb-weed:server:placePlant",
+      "qb-weed:server:removeDeathPlant",
+      "qb-weed:server:removeSeed"
+    ],
+    "rconlog": [
+      "rlPlayerActivated",
+      "rlUpdateNames",
+      "rlUpdateNamesResult"
+    ],
+    "runcode": [
+      "runcode:gotResult",
+      "runcode:gotSnippet",
+      "runcode:inBandResult",
+      "runcode:openUi",
+      "runcode:runInBand"
+    ],
+    "sessionmanager": [
+      "hostedSession",
+      "hostingSession"
+    ],
+    "story-engine": [
+      "story:server:makeDecision",
+      "tcity:client:telemetry"
+    ],
+    "tcity-dashboard": [
+      "custom-vehicles:server:logisticsQuickLoad",
+      "tcity-dashboard:server:flagPlate",
+      "tcity-dashboard:server:setTracker",
+      "tcity-dashboard:server:unflagPlate"
+    ]
+  },
+  "debt": [
+    {
+      "resource": "PolyZone",
+      "batch": "other",
+      "unguarded": 4,
+      "owner": "PolyZone",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "atom_nodes",
+      "batch": "other",
+      "unguarded": 1,
+      "owner": "atom_nodes",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "baseevents",
+      "batch": "other",
+      "unguarded": 3,
+      "owner": "baseevents",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "connectqueue",
+      "batch": "other",
+      "unguarded": 1,
+      "owner": "connectqueue",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-agent-client",
+      "batch": "custom",
+      "unguarded": 4,
+      "owner": "custom-agent-client",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-cartel",
+      "batch": "custom",
+      "unguarded": 4,
+      "owner": "custom-cartel",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-certificates",
+      "batch": "custom",
+      "unguarded": 1,
+      "owner": "custom-certificates",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-documents",
+      "batch": "custom",
+      "unguarded": 1,
+      "owner": "custom-documents",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-justice",
+      "batch": "custom",
+      "unguarded": 7,
+      "owner": "custom-justice",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-main",
+      "batch": "custom",
+      "unguarded": 2,
+      "owner": "custom-main",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-mining",
+      "batch": "custom",
+      "unguarded": 2,
+      "owner": "custom-mining",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-police",
+      "batch": "custom",
+      "unguarded": 6,
+      "owner": "custom-police",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-quest",
+      "batch": "custom",
+      "unguarded": 10,
+      "owner": "custom-quest",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-taxes",
+      "batch": "custom",
+      "unguarded": 1,
+      "owner": "custom-taxes",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "custom-vehicles",
+      "batch": "custom",
+      "unguarded": 26,
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "hardcap",
+      "batch": "other",
+      "unguarded": 1,
+      "owner": "hardcap",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "interact-sound",
+      "batch": "other",
+      "unguarded": 5,
+      "owner": "interact-sound",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "money",
+      "batch": "other",
+      "unguarded": 1,
+      "owner": "money",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "money-fountain",
+      "batch": "other",
+      "unguarded": 2,
+      "owner": "money-fountain",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "monitor",
+      "batch": "other",
+      "unguarded": 33,
+      "owner": "monitor",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "oxmysql",
+      "batch": "other",
+      "unguarded": 2,
+      "owner": "oxmysql",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "ped-money-drops",
+      "batch": "other",
+      "unguarded": 2,
+      "owner": "ped-money-drops",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "player-data",
+      "batch": "other",
+      "unguarded": 1,
+      "owner": "player-data",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "playernames",
+      "batch": "other",
+      "unguarded": 2,
+      "owner": "playernames",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "pma-voice",
+      "batch": "other",
+      "unguarded": 3,
+      "owner": "pma-voice",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "production-freeze",
+      "batch": "other",
+      "unguarded": 2,
+      "owner": "production-freeze",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-adminmenu",
+      "batch": "qb",
+      "unguarded": 1,
+      "owner": "qb-adminmenu",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-ambulancejob",
+      "batch": "qb",
+      "unguarded": 22,
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-apartments",
+      "batch": "qb",
+      "unguarded": 10,
+      "owner": "qb-apartments",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-cityhall",
+      "batch": "qb",
+      "unguarded": 5,
+      "owner": "qb-cityhall",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-clothing",
+      "batch": "qb",
+      "unguarded": 5,
+      "owner": "qb-clothing",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-crypto",
+      "batch": "qb",
+      "unguarded": 6,
+      "owner": "qb-crypto",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-doorlock",
+      "batch": "qb",
+      "unguarded": 3,
+      "owner": "qb-doorlock",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-drugs",
+      "batch": "qb",
+      "unguarded": 8,
+      "owner": "qb-drugs",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-fuel",
+      "batch": "qb",
+      "unguarded": 3,
+      "owner": "qb-fuel",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-garages",
+      "batch": "qb",
+      "unguarded": 6,
+      "owner": "qb-garages",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-houserobbery",
+      "batch": "qb",
+      "unguarded": 5,
+      "owner": "qb-houserobbery",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-houses",
+      "batch": "qb",
+      "unguarded": 19,
+      "owner": "qb-houses",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-hud",
+      "batch": "qb",
+      "unguarded": 2,
+      "owner": "qb-hud",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-inventory",
+      "batch": "qb",
+      "unguarded": 8,
+      "owner": "qb-inventory",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-lapraces",
+      "batch": "qb",
+      "unguarded": 10,
+      "owner": "qb-lapraces",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-management",
+      "batch": "qb",
+      "unguarded": 16,
+      "owner": "qb-management",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-mechanicjob",
+      "batch": "qb",
+      "unguarded": 4,
+      "owner": "qb-mechanicjob",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-multicharacter",
+      "batch": "qb",
+      "unguarded": 4,
+      "owner": "qb-multicharacter",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-pawnshop",
+      "batch": "qb",
+      "unguarded": 4,
+      "owner": "qb-pawnshop",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-prison",
+      "batch": "qb",
+      "unguarded": 11,
+      "owner": "qb-prison",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-scoreboard",
+      "batch": "qb",
+      "unguarded": 1,
+      "owner": "qb-scoreboard",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-shops",
+      "batch": "qb",
+      "unguarded": 5,
+      "owner": "qb-shops",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-storerobbery",
+      "batch": "qb",
+      "unguarded": 7,
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-target",
+      "batch": "qb",
+      "unguarded": 5,
+      "owner": "qb-target",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-vehicleshop",
+      "batch": "qb",
+      "unguarded": 12,
+      "owner": "qb-vehicleshop",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-weapons",
+      "batch": "qb",
+      "unguarded": 5,
+      "owner": "qb-weapons",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-weathersync",
+      "batch": "qb",
+      "unguarded": 7,
+      "owner": "qb-weathersync",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "qb-weed",
+      "batch": "qb",
+      "unguarded": 5,
+      "owner": "qb-weed",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "rconlog",
+      "batch": "other",
+      "unguarded": 3,
+      "owner": "rconlog",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "runcode",
+      "batch": "other",
+      "unguarded": 5,
+      "owner": "runcode",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "sessionmanager",
+      "batch": "other",
+      "unguarded": 2,
+      "owner": "sessionmanager",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "story-engine",
+      "batch": "custom",
+      "unguarded": 2,
+      "owner": "story-engine",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    },
+    {
+      "resource": "tcity-dashboard",
+      "batch": "other",
+      "unguarded": 4,
+      "owner": "tcity-dashboard",
+      "expires": "2027-03-31",
+      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
+    }
+  ],
+  "non_literal": [
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:192  Config.Quest.Events.QUEST_COLLECT",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:192  Config.Quest.Events.QUEST_COLLECT",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:267  Config.Quest.Events.QUEST_REQUEST_STATE",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:267  Config.Quest.Events.QUEST_REQUEST_STATE",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:30  Config.Quest.Events.QUEST_ACCEPT",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:30  Config.Quest.Events.QUEST_ACCEPT",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:57  Config.Quest.Events.QUEST_ABANDON",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:57  Config.Quest.Events.QUEST_ABANDON",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:74  Config.Quest.Events.QUEST_REACH",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:74  Config.Quest.Events.QUEST_REACH",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:120  Config.Vehicles.Events.CHECK_KEYS",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:120  Config.Vehicles.Events.CHECK_KEYS",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:139  Config.Vehicles.Events.HOTWIRE_ATTEMPT",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:139  Config.Vehicles.Events.HOTWIRE_ATTEMPT",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:223  Config.Vehicles.Events.LOCKPICK_ATTEMPT",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:223  Config.Vehicles.Events.LOCKPICK_ATTEMPT",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:27  Config.Vehicles.Events.REQUEST_KEYS",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:27  Config.Vehicles.Events.REQUEST_KEYS",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:40  Config.Vehicles.Events.GIVE_KEYS",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:40  Config.Vehicles.Events.GIVE_KEYS",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:79  Config.Vehicles.Events.REMOVE_KEYS",
+    "E:/T-City/T-CityLite.base/resources/[custom]/custom-vehicles/server/main.lua:79  Config.Vehicles.Events.REMOVE_KEYS",
+    "E:/T-City/T-CityLite.base/resources/[standalone]/PolyZone/ComboZone.lua:315  internalEventName"
+  ],
+  "unparsed": []
+}

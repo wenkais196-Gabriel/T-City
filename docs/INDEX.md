@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-01 ｜ **文档总数**：281 ｜ **已登记**：281 ｜ **未登记**：0
+**生成时间**：2026-11-01 ｜ **文档总数**：282 ｜ **已登记**：282 ｜ **未登记**：0
 
-**状态分布**：✅ active 156 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 157 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -289,7 +289,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（59）
+### meta（60）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -304,6 +304,7 @@
 | [T-City 仓库删除审计提案](cleanup/delete-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/delete-proposal.md` |
 | [T-City 仓库 `.gitignore` 审计提案](cleanup/ignore-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/ignore-proposal.md` |
 | [T-City 仓库结构与分类整改提案](cleanup/structure-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/structure-proposal.md` |
+| [net event 治理基线（P1-3 第 1 步）](engineering/2026-11-foundation-net-events-baseline.md) | audit | ✅ active | 2026-11-01 | 2027-02-01 |  | `docs/engineering/2026-11-foundation-net-events-baseline.md` |
 | [P1-2 / P1-1 验收证据（存档单写者 + 拆环）](engineering/2026-11-foundation-p1-evidence.md) | audit | ✅ active | 2026-11-01 | 2027-05-01 |  | `docs/engineering/2026-11-foundation-p1-evidence.md` |
 | [T-CityLite 服务器总领手册](00-server-master-manual.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/00-server-master-manual.md` |
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
