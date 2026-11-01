@@ -464,6 +464,7 @@ RegisterNetEvent('police:server:NpcCalloutResult', function(incidentId, outcome,
     if type(result) ~= 'table' then
         TriggerClientEvent('QBCore:Notify', src,
             ('NPC 警情上报失败：%s'):format(tostring(reason or 'unknown')), 'error')
+        return  -- 失败就到此为止：显式 return，别让后来的改动在它后面接副作用
     end
 end)
 

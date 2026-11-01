@@ -48,6 +48,31 @@
       ],
       "requires_raw": [],
       "why": "中控屏锁只对坐在该车牌车内的人开放"
+    },
+    "CanClaimPlate": {
+      "defined_at": "custom-vehicles/server/compat.lua",
+      "requires_code": [
+        "KeyManager.GetOwner(plate)",
+        "MySQL.scalar.await(",
+        "IsNearVehicleWithPlate(src, plate)",
+        "return false"
+      ],
+      "requires_raw": [
+        "FROM player_vehicles WHERE plate = ?"
+      ],
+      "shape": "local_check",
+      "why": "车牌认领：会话车主 / 数据库车主一致，无主车必须在车旁（GiveKeys 与 AcquireVehicleKeys 共用）"
+    },
+    "HasActiveQuest": {
+      "defined_at": "custom-vehicles/server/dashboard_api.lua",
+      "requires_code": [
+        "GetActiveQuests(src)",
+        "pcall(",
+        "return ok and type(quests) ==",
+        "#quests > 0"
+      ],
+      "requires_raw": [],
+      "why": "有进行中的任务才允许快捷装货（custom-quest 未就绪时按没有任务处理）"
     }
   },
   "custom-police": {
@@ -59,6 +84,94 @@
       ],
       "requires_raw": [],
       "why": "执勤 + 能力判定（evidence.view / evidence.register），直接落到 PolicePolicy.Can"
+    },
+    "PoliceDispatch.ArriveIncident": {
+      "defined_at": "custom-police/server/p0_lifecycle.lua",
+      "definition_marker": "function P.ArriveIncident(",
+      "requires_code": [
+        "PolicePolicy.Can"
+      ],
+      "requires_raw": [],
+      "shape": "pcall",
+      "why": "到场确认：PoliceDispatch 内部按 incident.arrive 能力判定"
+    },
+    "PoliceDispatch.ClaimIncident": {
+      "defined_at": "custom-police/server/p0_lifecycle.lua",
+      "definition_marker": "function P.ClaimIncident(",
+      "requires_code": [
+        "PolicePolicy.Can"
+      ],
+      "requires_raw": [],
+      "shape": "pcall",
+      "why": "认领警情：PoliceDispatch 内部按 incident.claim 能力判定"
+    },
+    "AdoptDraft": {
+      "defined_at": "custom-police/server/p0_incidents.lua",
+      "definition_marker": "function P.AdoptDraft(",
+      "requires_code": [
+        "PolicePolicy.Can",
+        "audit("
+      ],
+      "requires_raw": [],
+      "shape": "export",
+      "call": "exports['custom-police']:AdoptDraft",
+      "why": "采纳草稿：incident.update 能力 + 审计写不进去就不给做"
+    },
+    "ListDrafts": {
+      "defined_at": "custom-police/server/p0_incidents.lua",
+      "definition_marker": "function P.ListDrafts(",
+      "requires_code": [
+        "PolicePolicy.Can",
+        "audit("
+      ],
+      "requires_raw": [],
+      "shape": "export",
+      "call": "exports['custom-police']:ListDrafts",
+      "why": "读草稿箱：incident.update 能力 + 审计先写"
+    },
+    "NPC.SubmitResult": {
+      "defined_at": "custom-police/server/p4_npc.lua",
+      "definition_marker": "function NPC.SubmitResult(",
+      "requires_code": [
+        "PolicePolicy.Can(actor,",
+        "return false"
+      ],
+      "requires_raw": [
+        "'incident.update'"
+      ],
+      "shape": "delegate",
+      "call": "NPC.SubmitResult",
+      "why": "NPC 警情回执：incident.update 能力判定在被调函数内部"
+    }
+  },
+  "custom-quest": {
+    "QuestSecurity.ValidateClientEvent": {
+      "defined_at": "custom-quest/server/quest_security.lua",
+      "requires_code": [
+        "QuestSecurity.ValidateNonce(",
+        "CheckRateLimit(",
+        "ValidateStepOrder(",
+        "CheckStepAttempts(",
+        "return false"
+      ],
+      "requires_raw": [],
+      "shape": "ok_err",
+      "why": "nonce + 限频 + 玩家有效性 + 步骤顺序 + 尝试次数，任一失败返回 false"
+    }
+  },
+  "custom-cartel": {
+    "CartelService.IsMember": {
+      "defined_at": "custom-cartel/server/main.lua",
+      "requires_code": [
+        "QBCore.Functions.GetPlayer(source)",
+        "PlayerData.gang",
+        "return false"
+      ],
+      "requires_raw": [
+        "gang.name == 'cartel'"
+      ],
+      "why": "帮派成员校验：只有 gang.name == 'cartel' 的玩家返回 true（附带等级）",
+      "shape": "local_check"
     }
   }
 }

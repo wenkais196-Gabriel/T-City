@@ -742,6 +742,13 @@ RegisterNetEvent('quest:server:trailerHitched', function(questId, stepId, traile
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
+    -- 挂接是客户端上报的：先过任务安全层，再信 netId
+    local ok, err = QuestSecurity.ValidateClientEvent(src, questId, stepId, true)
+    if not ok then
+        TriggerClientEvent('QBCore:Notify', src, err or '任务校验失败', 'error')
+        return
+    end
+
     -- v0.10: 标记该 trailer 已挂接（TrailerTracker + EntityRegistry 双写）
     local citizenid = Player.PlayerData.citizenid
     if TrailerTracker[citizenid] and TrailerTracker[citizenid][questId] then
