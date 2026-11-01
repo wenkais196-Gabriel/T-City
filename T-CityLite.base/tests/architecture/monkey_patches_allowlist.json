@@ -2,13 +2,6 @@
   "$comment": "现存猴补登记表（P1-4 阶段 A）。规则：往 QBCore / QBCore.Functions / Player.Functions 上赋值就是猴补；新增必须先过这条闸门。每条必须带 owner + expires（到期日不续期即红），且**当前必须至少命中一处**——删掉猴补却忘了清登记项同样红（死条目）。P1-4 的阶段 B/C/D 会把 core-framework 的三条逐条删除，届时本文件同步减到只剩 production-freeze（dev-only）与 custom-vehicles 的兼容补丁。",
   "entries": [
     {
-      "file": "[standalone]/core-framework/compat.lua",
-      "symbol": "QBCore.Functions.Notify",
-      "owner": "core-framework",
-      "reason": "转发到 _G.Bus.notify（每源 200ms 一条、超限静默丢弃、正文截断 300 字符），把 qb-core 的 Notify 语义换成随 core-framework 生命周期变化的版本。P1-4 阶段 D 删除。",
-      "expires": "2027-03-31"
-    },
-    {
       "file": "[custom]/custom-vehicles/server/compat.lua",
       "symbol": "QBCore.Functions.OnGiveKeys",
       "owner": "custom-vehicles",

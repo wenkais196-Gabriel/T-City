@@ -21,7 +21,6 @@ shared_scripts {
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/rate_limit.lua',
-    'compat.lua',
     'contracts.lua',
     'services/economy_service.lua',
     'services/metadata_service.lua',

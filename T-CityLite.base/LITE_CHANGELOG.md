@@ -31,7 +31,7 @@ Date: 2026-06
 | `resources/[qb]/qb-core/server/events.lua` | 弃用事件硬拒绝 |
 | `resources/[qb]/qb-core/server/player.lua` | DirtyFlush + SecurityService + hunger 优化 |
 | `resources/[standalone]/core-framework/services/persistence_manager.lua` | ForceFlush 去循环 |
-| `resources/[standalone]/core-framework/compat.lua` | GetPlayer 活性校验 |
+| core-framework 的兼容层（compat.lua，P1-4 阶段 D 已删除） | GetPlayer 活性校验 |
 | `resources/[qb]/qb-vehicleshop/server/main.lua` | 异步化 |
 | `resources/[qb]/qb-banking/server.lua` | Rate Limit |
 | `resources/[compat]/qb-phone/server/main.lua` | PhoneCache + 异步化 |

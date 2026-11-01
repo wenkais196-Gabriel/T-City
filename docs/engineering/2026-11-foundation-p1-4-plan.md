@@ -95,7 +95,15 @@ review_by: 2026-12-31
 - 不动 qb-core 的 `player.lua`（它本来就路由 ES）；
 - 判据见 G6–G8。
 
-### 阶段 D：删 `Notify` 包装并下线 compat.lua
+### 阶段 D：删 `Notify` 包装并下线 compat.lua  ✅ 2026-11-01 完成
+- 落地：整份 compat.lua 删除、fxmanifest 去掉该行、登记表 5 → 4 条（只剩 custom-vehicles 的 OnGiveKeys
+  与 production-freeze 三条）；阶段 B/C 的两个包装级单元测试随文件一起退休（被测对象不存在了）；
+- 测试 tests/architecture/test_compat_notify_removed.py 三条：文件已删 / manifest 不再引用 /
+  **没有 `_G.Bus` 时 qb-core 的 Notify 仍把 `QBCore:Notify` 发出去**（qb-core 从未注册 `Bus.notify`，
+  恒走第 5 层回退 —— 这条把「删掉 compat 通知不会静默消失」变成可执行断言）。三条各配一条变异，
+  实测「注入红、对照绿」。
+- 反例：改 export + `GetResourceState` 守卫被否 —— export 到已停止的资源一样失败，只是换了个报错位置，
+  而且会多出第二个 Notify 入口。
 - 删 Notify 包装与统计线程 → 删除 compat.lua → 从 core-framework 的 fxmanifest 移除该行；
 - **显式不做**：不改 17 处服务端调用点、不新增 `exports['core-framework']:Notify` 第二入口；
   若日后要保留 `notify_service` 的限流收益，应在 qb-core 的 `Notify`（owner）里实现，另开 PR；

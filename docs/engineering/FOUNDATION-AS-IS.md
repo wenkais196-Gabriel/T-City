@@ -39,7 +39,7 @@ tracks: [docs/engineering/STANDARDS.md]
 | 安全 | core-framework/services/security_service.lua | 561 | 运行期调用方 0（只有 export 与注册） |
 | 限流 | core-framework/server/rate_limit.lua | 163 | 三类语义收敛，实现正确 |
 | 持久化 | `T-CityLite.base/resources/[qb]/qb-core/server/services/persistence_manager.lua`（Store） + `T-CityLite.base/resources/[standalone]/core-framework/services/persistence_manager.lua`（delegate） | 432 / 135 | **单写者**：Store 持有唯一脏池、定时器、写库语句；delegate 只转发（2026-11-01 起） |
-| 兼容层 | core-framework/compat.lua | 124 | 全局猴补 `QBCore.Functions.GetPlayer/Notify/AddMoney` |
+| 兼容层 | ~~core-framework/compat.lua~~ | 0（已删除） | P1-4 阶段 B/C/D 逐步删除了 GetPlayer 缓存、AddMoney 包装与 Notify 包装；文件于 2026-11-01 下线 |
 | 奖励网关 | [system]/core_economy/server/main.lua | 279 | 热度只存内存；倍率单位与读者冲突 |
 | 玩家账本 | qb-core 的 player.lua + services/economy_service.lua | ~1600 | **真正生效的写者** |
 
