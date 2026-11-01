@@ -114,13 +114,25 @@ def build(resources: Path | None = None) -> dict:
         "unguarded": {resource: sorted(names) for resource, names in sorted(unguarded.items())},
         "debt": debt,
         "non_literal": sorted(non_literal_registrations(resources)),
-        "unparsed": sorted(problems_where(problems)),
+        "unparsed": sorted(problems_where(problems, resources)),
     }
 
 
-def problems_where(problems: list[str]) -> list[str]:
-    """解析失败的 handler —— 也是债（扫描器看不见的那部分）。"""
-    return [problem.split(" ", 1)[0] for problem in problems]
+def problems_where(problems: list[str], resources: Path | None = None) -> list[str]:
+    """解析失败的 handler —— 也是债（扫描器看不见的那部分）。
+
+    路径同样要相对化：基线在 Windows 与 CI 的 Linux 上必须逐字节一致。
+    """
+    out = []
+    for problem in problems:
+        where = problem.split(" ", 1)[0]
+        if resources:
+            try:
+                where = Path(where).relative_to(resources).as_posix()
+            except ValueError:
+                pass
+        out.append(where)
+    return out
 
 
 def load() -> dict:

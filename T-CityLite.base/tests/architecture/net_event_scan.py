@@ -181,27 +181,39 @@ def scan_repo(resources: Path) -> tuple[list[Event], list[str]]:
     return events, problems
 
 
-def non_literal_in_dir(directory: Path) -> list[str]:
-    """一个目录里第一个参数不是字符串字面量的注册点（闸门看不见它们）。"""
+def _non_literal_in_file(path: Path, root: Path | None = None) -> list[str]:
+    where = path.relative_to(root) if root else path
+    offenders: list[str] = []
+    for index, line in enumerate(read(path).splitlines(), 1):
+        match = REGISTER_ANY.match(line.strip())
+        if not match:
+            continue
+        arg = match.group("arg").strip()
+        if arg[:1] in ("'", '"'):
+            continue
+        offenders.append(f"{where.as_posix()}:{index}  {arg}")
+    return offenders
+
+
+def non_literal_in_dir(directory: Path, root: Path | None = None) -> list[str]:
+    """一个目录里第一个参数不是字符串字面量的注册点（闸门看不见它们）。
+
+    `root` 用来把路径变成仓库相对路径 —— 基线文件要在 Windows 与 CI 的 Linux 上
+    逐字节一致，绝对路径会让两边永远不等。
+    """
     offenders: list[str] = []
     for path in sorted(directory.rglob("*.lua")):
         if is_client_path(path):
             continue
-        for index, line in enumerate(read(path).splitlines(), 1):
-            match = REGISTER_ANY.match(line.strip())
-            if not match:
-                continue
-            arg = match.group("arg").strip()
-            if arg[:1] in ("'", '"'):
-                continue
-            offenders.append(f"{path.as_posix()}:{index}  {arg}")
+        offenders.extend(_non_literal_in_file(path, root))
     return offenders
 
 
 def non_literal_registrations(resources: Path) -> list[str]:
-    """全仓（服务端侧）的非字面量注册点。"""
-    directories = {path.parent for path in resources.rglob("*.lua")}
+    """全仓（服务端侧）的非字面量注册点。按文件遍历（按目录遍历会因嵌套目录重复计数）。"""
     offenders: list[str] = []
-    for directory in sorted(directories):
-        offenders.extend(non_literal_in_dir(directory))
+    for path in sorted(resources.rglob("*.lua")):
+        if is_client_path(path):
+            continue
+        offenders.extend(_non_literal_in_file(path, resources))
     return offenders
