@@ -79,6 +79,13 @@
       "tables": [
         "player_choices"
       ]
+    },
+    {
+      "owner": "core-framework",
+      "tables": [
+        "world_state",
+        "world_events"
+      ]
     }
   ],
   "entries": [
