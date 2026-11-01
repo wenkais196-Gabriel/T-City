@@ -255,7 +255,9 @@ def test_every_net_event_is_authenticated_or_registered():
             f"FIT-03: {len(bad)}/{len(events)} net events have no auth token:\n{detail}"
         )
     # Every allowlisted event must still exist (no dead exemption, no typo).
-    names = {event.name for event in events}
+    # 用**全仓**事件名：这条测试的 `scan_events()` 只扫 SCAN_DIRS 子集，
+    # 拿它比对会把 custom-agent-client 这类不在子集里的登记判成"事件不存在"。
+    names = {event.name for event in _all_events()}
     stale = sorted(set(allowlist_entries()) - names)
     assert stale == [], f"allowlist entries for events that no longer exist: {stale}"
 
@@ -300,7 +302,7 @@ def allowlist_path(file_field: str) -> Path:
 
 def test_allowlisted_events_really_show_the_claim_in_their_body():
     """A category is a promise; check the handler still keeps it."""
-    events = {event.name: event for event in scan_events()[0]}
+    events = {event.name: event for event in _all_events()}  # 全仓：登记覆盖的不止 SCAN_DIRS 子集
     for name, entry in allowlist_entries().items():
         event = events[name]
         assert event.path == allowlist_path(entry["file"]), (
@@ -464,7 +466,7 @@ def test_relay_callbacks_that_spawn_vehicles_are_guarded_somewhere():
 
 def test_civilian_and_police_entry_points_exist_in_both_resources():
     """Guard against a rename that makes this suite silently vacuous."""
-    events = {event.name: event for event in scan_events()[0]}
+    events = {event.name: event for event in _all_events()}  # 全仓：登记覆盖的不止 SCAN_DIRS 子集
     for name in (
         "police:server:policeAlert",   # civilian report entry point
         "police:server:autoAlert",     # strong-auth reference implementation
@@ -560,6 +562,9 @@ def _function_block_raw(code: str, marker: str) -> str:
     """
     at = code.index(marker)
     lines = code[at:].splitlines()
+    # 单行定义：`function X.y(a) return t[a] end`
+    if re.search(r"end\s*$", lines[0]):
+        return lines[0]
     out = [lines[0]]
     for line in lines[1:]:
         out.append(line)
@@ -712,6 +717,26 @@ def test_shapes_that_look_like_guards_are_not_counted():
             "local Player = QBCore.Functions.GetPlayer(src)",
             "if target.PlayerData.job.name ~= 'police' then return end",
             "DoPrivileged(target)",
+        ),
+        "职业变量被重新赋值": _nl(
+            "local Caller = QBCore.Functions.GetPlayer(src)",
+            "Caller = QBCore.Functions.GetPlayer(target)",
+            "local callerJob = Caller.PlayerData.job.name",
+            "if callerJob ~= 'police' then return end",
+            "DoPrivileged(target)",
+        ),
+        "职业变量被行内条件重赋值": _nl(
+            "local Caller = QBCore.Functions.GetPlayer(src)",
+            "if flag then Caller = QBCore.Functions.GetPlayer(target) end",
+            "local callerJob = Caller.PlayerData.job.name",
+            "if callerJob ~= 'police' then return end",
+        ),
+        "职业变量被多重赋值": _nl(
+            "local Caller = QBCore.Functions.GetPlayer(src)",
+            "local other",
+            "Caller, other = QBCore.Functions.GetPlayer(target), 1",
+            "local callerJob = Caller.PlayerData.job.name",
+            "if callerJob ~= 'police' then return end",
         ),
         "职业别名来自别人": _nl(
             "local Player = QBCore.Functions.GetPlayer(src)",
