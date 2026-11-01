@@ -24,9 +24,13 @@ review_by: 2026-12-31
 | `QBCore.Functions.Notify` | 同上:111 | 优先 `Bus.notify.Send`，否则回落原实现 | **521 处** |
 | `QBCore.Debug` / `ShowError` / `ShowSuccess` | production-freeze/server/main.lua:26-32 | 生产模式下一个开关把它们换成空函数 | 仅该资源自身（测试用） |
 
-core-framework 的 compat.lua 全文 **124 行**，`Bus.` 引用 283 处、`core-framework` 字样 253 处
-（含文档与注释，不是调用数）。plan 里写的"988 处 / 185 文件"是 `GetPlayer` 的旧统计口径，
-今天实测是 **930 处 / 164 文件**。
+**统计口径（必须写明，否则数字对不上）**：上表所有调用方数字的统计范围是
+`T-CityLite.base/resources/**/*.lua`。同一模式在**全仓（含 tests/ 与 tools/）**是
+**1116 处 / 202 文件**。plan 里写的"988 处 / 185 文件"含测试 mock，和今天的 930 不是同一口径，
+不要混着引用。
+
+core-framework 的 compat.lua 全文 **124 行**；`Bus.SafeCall` 全仓 7 行 = **4 个真实调用点**
+（ambulancejob 两处、custom-police 一处、storerobbery 一处；另 2 条注释 + 1 处定义在 bus.lua）。
 
 ## 2. 三个猴补各自的真实问题
 
@@ -68,13 +72,13 @@ compat 在它外面加了：一次 `playerCache` 查 + 一次 `GetPlayerName` na
 
 `Bus` 是全局表，`core-framework` 停掉后 `_G.Bus` 仍指向旧表（Lua 全局不会自动清），
 `notifySvc.Send` 会在已停止的资源里执行 → 调用方拿到静默失败或 native 错误。
-同类问题在 `Bus.SafeCall`（7 处）也有：没有 `GetResourceState` 守卫。
+同类问题在 `Bus.SafeCall` 也有：全仓 7 行里只有 **4 个真实调用点**（ambulancejob 两处、custom-police 一处、storerobbery 一处），全部没有 `GetResourceState` 守卫。
 
 ## 3. 改造目标与验收
 
 | 目标 | 判据（可自动验证） |
 |---|---|
-| compat 不再给 `QBCore.Functions` 赋值 | 静态闸门：`resources/**` 里 `QBCore.Functions.<X> =` / `Player.Functions.<X> =` 的**赋值**数量必须等于登记表（终态 0），新增即红 |
+| compat 不再给 `QBCore.Functions` 赋值 | 静态闸门：`resources/**`（**排除 `[qb]/qb-core`**）里 `QBCore.Functions.X =`、`QBCore.Functions['X'] =`、`Player.Functions.X =` 三种形态的**赋值**数量必须等于登记表（终态 0），新增即红 |
 | 登出不串数据 | 离线单测：`Logout` 之后、下一次 `PlayerLoaded` 之前，`GetPlayer(src)` 必须为 **nil**（当前实现会返回已登出的 Player 表） |
 | 钱只有一条路径 | ① 单测：`Bus.EconomyService` 的注册者**唯一**（启动后打印/断言归属），排除"包装→ES→包装"递归；② 单测：ES 抛错时 `AddMoney` 不得二次加钱（用 mock ES 统计调用次数与最终余额） |
 | Notify 有生死守卫 | 静态断言：**所有**跨资源入口都带 `GetResourceState('core-framework') == 'started'`（"改走 export" 不算守卫——export 到已停止资源同样失败） |
@@ -103,6 +107,8 @@ compat 在它外面加了：一次 `playerCache` 查 + 一次 `GetPlayerName` na
 - 风险：若有资源**依赖**缓存的"同一表引用"语义（改了 Player 表后用旧引用读），删缓存后行为不变（qb-core 本来就返回同一张表）。
 
 **P1-4.3 `AddMoney` 路由下沉**
+- **第一步：钉死 `Bus.EconomyService` 的注册者唯一**（仓库有两份实现，core-framework 那份内部
+  又调 `Player.Functions.AddMoney` —— 注册错了就是递归）；用启动断言 + 单测把它固定下来；
 - 确认 qb-core 的 player.lua 里 `AddMoney` 已走 `Bus.EconomyService`（读代码，不假设）；
 - 若已走：删掉 compat 的每玩家包装；
 - 若未走：把路由写进 `player.lua` 一次（而不是每个玩家一份闭包）；
@@ -112,7 +118,7 @@ compat 在它外面加了：一次 `playerCache` 查 + 一次 `GetPlayerName` na
 **P1-4.4 `Notify` 与 `Bus.SafeCall` 的生死守卫**
 - `Notify` 改为 export（`exports['core-framework']:Notify(...)`），调用点用
   `if GetResourceState('core-framework') == 'started' then` 守卫；
-- 7 处 `Bus.SafeCall` 同样加守卫或改 export；
+- 4 个真实 `Bus.SafeCall` 调用点同样加守卫（`GetResourceState` 判定），不能只改 export；
 - 521 处调用点**不需要全改**：`QBCore.Functions.Notify` 是 qb-core 自己的 API，
   只要不再被 compat 覆盖就回到 qb-core 实现（五层校验仍在）。
 
