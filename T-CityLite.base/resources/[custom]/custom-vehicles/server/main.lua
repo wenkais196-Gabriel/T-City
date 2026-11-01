@@ -375,6 +375,16 @@ local function NormalizePlate(plate)
     return trimmed:upper()
 end
 
+--- 是否持有该车牌的中控屏排他锁（只有车内持有人能切驾驶模式）。
+--- 锁表一律用**归一化**车牌作键，避免 " abc123 " 与 "ABC123" 拿到两把锁。
+local function HoldsDashboardLock(src, plate)
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false end
+    local want = NormalizePlate(plate)
+    if not want then return false end
+    return dashboardLocks[want] == Player.PlayerData.citizenid
+end
+
 --- 玩家是否坐在该车牌的车里（requestDashboard 用：只拿到车牌）
 local function IsSeatedInPlate(src, plate)
     local want = NormalizePlate(plate)
@@ -402,7 +412,12 @@ RegisterNetEvent('custom-vehicles:server:requestDashboard', function(plate)
     end
 
     local citizenid = Player.PlayerData.citizenid
-    local currentHolder = dashboardLocks[plate]
+    local key = NormalizePlate(plate)
+    if not key then
+        TriggerClientEvent('custom-vehicles:client:dashboardLockResult', src, false, '车牌无效')
+        return
+    end
+    local currentHolder = dashboardLocks[key]
 
     -- 自己可以重新打开（关闭后立即重开）
     if currentHolder and currentHolder ~= citizenid then
@@ -416,7 +431,7 @@ RegisterNetEvent('custom-vehicles:server:requestDashboard', function(plate)
     end
 
     -- 获取锁
-    dashboardLocks[plate] = citizenid
+    dashboardLocks[key] = citizenid
     TriggerClientEvent('custom-vehicles:client:dashboardLockResult', src, true, nil)
 end)
 
@@ -427,8 +442,9 @@ RegisterNetEvent('custom-vehicles:server:releaseDashboard', function(plate)
     if not Player or not plate then return end
 
     local citizenid = Player.PlayerData.citizenid
-    if dashboardLocks[plate] == citizenid then
-        dashboardLocks[plate] = nil
+    local key = NormalizePlate(plate)
+    if key and dashboardLocks[key] == citizenid then
+        dashboardLocks[key] = nil
     end
 end)
 
@@ -438,14 +454,13 @@ RegisterNetEvent('custom-vehicles:server:setDriveMode', function(vehNetId, mode)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
-    local citizenid = Player.PlayerData.citizenid
     local veh = NetworkGetEntityFromNetworkId(vehNetId)
     if not veh or veh == 0 then return end
 
-    local plate = GetVehicleNumberPlateText(veh):gsub('^%s+', ''):gsub('%s+$', ''):upper()
+    local plate = NormalizePlate(GetVehicleNumberPlateText(veh))
 
     -- 只有持有中控屏锁的人可以切换模式
-    if dashboardLocks[plate] ~= citizenid then
+    if not HoldsDashboardLock(src, plate) then
         TriggerClientEvent('QBCore:Notify', src, '你没有中控屏操作权限', 'error')
         return
     end

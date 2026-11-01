@@ -553,6 +553,33 @@
       "evidence": "prison.lua:268 justice:server:requestVisit — VISIT_REQUEST_COOLDOWN_MS 5s/源 + type 校验；GetInmate 判的是**目标**",
       "owner": "custom-justice",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-vehicles:server:releaseDashboard",
+      "file": "custom-vehicles/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只释放**自己**持有的中控屏锁（`dashboardLocks[key] == 自己的 citizenid` 才清），不接受别人的 citizenid，越权面为零。",
+      "evidence": "main.lua:439 releaseDashboard — key 归一化后仅清自己的锁",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-vehiclekeys:server:RemoveKeys",
+      "file": "custom-vehicles/server/compat.lua",
+      "category": "self_scoped",
+      "reason": "只移除调用者**自己**名下的钥匙（`KeyManager.RemoveKeys(plate, 自己的 citizenid)`），不涉及他人。",
+      "evidence": "compat.lua:157 RemoveKeys — RemoveKeys(plate, Player.PlayerData.citizenid)",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-vehiclekeys:server:ToggleEngine",
+      "file": "custom-vehicles/server/compat.lua",
+      "category": "self_scoped",
+      "reason": "只对**自己在车内**的那辆车生效，且必须 `KeyManager.HasKeys(plate, 自己)` 才下发引擎切换；不接受任何玩家 id 参数。",
+      "evidence": "compat.lua:204 ToggleEngine — GetVehiclePedIsIn + KeyManager.HasKeys(plate, citizenid)",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
     }
   ]
 }

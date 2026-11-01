@@ -16,9 +16,9 @@
     },
     "custom": {
       "events": 133,
-      "guarded": 77,
-      "allowlisted": 37,
-      "unguarded": 19
+      "guarded": 80,
+      "allowlisted": 40,
+      "unguarded": 13
     },
     "qb": {
       "events": 216,
@@ -191,9 +191,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 26,
-      "guarded": 20,
-      "allowlisted": 0,
-      "unguarded": 6,
+      "guarded": 23,
+      "allowlisted": 3,
+      "unguarded": 0,
       "started": true
     },
     "hardcap": {
@@ -634,14 +634,6 @@
     "custom-taxes": [
       "durability:server:onWeaponFired"
     ],
-    "custom-vehicles": [
-      "custom-vehicles:server:logisticsStampDelivery",
-      "custom-vehicles:server:releaseDashboard",
-      "custom-vehicles:server:setDriveMode",
-      "qb-mechanicjob:server:updateDrivingDistance",
-      "qb-vehiclekeys:server:RemoveKeys",
-      "qb-vehiclekeys:server:ToggleEngine"
-    ],
     "hardcap": [
       "hardcap:playerActivated"
     ],
@@ -1066,14 +1058,6 @@
       "batch": "custom",
       "unguarded": 1,
       "owner": "custom-taxes",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "custom-vehicles",
-      "batch": "custom",
-      "unguarded": 6,
-      "owner": "custom-vehicles",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
