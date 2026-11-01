@@ -641,8 +641,13 @@ def _probe(body: str, resource: str = "custom-vehicles"):
     )
 
 
+def _nl(*parts: str) -> str:
+    """用 chr(10) 拼 Lua 片段，避免在测试源码里出现转义换行。"""
+    return chr(10).join(parts)
+
+
 def test_shapes_that_look_like_guards_are_not_counted():
-    """验收方在 PR #183 上实测能过的几种洗白形状，现在必须全部判否。
+    """验收方在 PR #183 上实测能过的洗白形状，现在必须全部判否。
 
     为什么单独写这一条：`is_guarded` 是"覆盖率"的唯一来源，如果它接受"判了但没拦住"，
     覆盖率就是自我安慰。这些形状都来自真实 review 里被指出的写法。
@@ -660,39 +665,63 @@ def test_shapes_that_look_like_guards_are_not_counted():
         )
 
     bad = {
-        "否定分支没有 return": chr(10).join([
+        "否定分支没有 return": _nl(
             "if not CanModifyPlate(src, plate) then Notify(src) end",
             "DoPrivileged(plate)",
             "return",
-        ]),
-        "调用了但没接返回值": chr(10).join([
+        ),
+        "调用了但没接返回值": _nl(
             "CanModifyPlate(src, plate)",
             "DoPrivileged(plate)",
-        ]),
-        "死代码里的守卫": chr(10).join([
+        ),
+        "死代码里的守卫": _nl(
             "if false then",
             "    if not CanModifyPlate(src, plate) then return end",
             "end",
             "DoPrivileged(plate)",
-        ]),
-        "local_check 只打印不 return": chr(10).join([
+        ),
+        "local_check 只打印不 return": _nl(
             "local ok, reason = CanClaimPlate(src, cid, plate)",
             "if not ok then print(reason) end",
             "Give(plate)",
-        ]),
-        "export 裸调用": chr(10).join([
+        ),
+        "export 裸调用": _nl(
             "exports['custom-police']:AdoptDraft(src, id)",
             "Delete(id)",
-        ]),
+        ),
+        "pcall 借了别人的 ok": _nl(
+            "local ok = true",
+            "pcall(PoliceDispatch.ArriveIncident, src, id)",
+            "if not ok then return end",
+        ),
+        "pcall 判的是 ok2": _nl(
+            "local ok, res = pcall(PoliceDispatch.ArriveIncident, src, id)",
+            "local ok2 = true",
+            "if not ok2 then return end",
+        ),
+        "delegate 裸调用": _nl(
+            "NPC.SubmitResult(src, id, outcome, notes)",
+            "Delete(id)",
+        ),
+        "职业判定是死分支": _nl(
+            "local Player = QBCore.Functions.GetPlayer(src)",
+            "if Player.PlayerData.job.name ~= 'police' and false then return end",
+            "DoPrivileged()",
+        ),
+        "职业判的是别人": _nl(
+            "local Player = QBCore.Functions.GetPlayer(src)",
+            "if target.PlayerData.job.name ~= 'police' then return end",
+            "DoPrivileged(target)",
+        ),
     }
     for label, body in bad.items():
         assert not is_guarded(probe(body)), label + " 被当成了已鉴权"
 
-    good = chr(10).join([
+    good = _nl(
         "if not CanModifyPlate(src, plate) then",
         "    Log()",
         "    return",
         "end",
         "DoPrivileged(plate)",
-    ])
+    )
     assert is_guarded(probe(good)), "正向形状被判否 —— 闸门写反了"

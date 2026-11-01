@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 17,
+      "guarded": 18,
       "allowlisted": 0,
-      "unguarded": 199
+      "unguarded": 198
     },
     "other": {
       "events": 76,
@@ -443,9 +443,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 4,
-      "guarded": 0,
+      "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 4,
+      "unguarded": 3,
       "started": true
     },
     "qb-multicharacter": {
@@ -886,8 +886,7 @@
     "qb-mechanicjob": [
       "qb-mechanicjob:server:removeItem",
       "qb-mechanicjob:server:sprayVehicle",
-      "qb-mechanicjob:server:sprayVehicleCustom",
-      "qb-mechanicjob:server:stash"
+      "qb-mechanicjob:server:sprayVehicleCustom"
     ],
     "qb-multicharacter": [
       "qb-multicharacter:server:createCharacter",
@@ -1307,7 +1306,7 @@
     {
       "resource": "qb-mechanicjob",
       "batch": "qb",
-      "unguarded": 4,
+      "unguarded": 3,
       "owner": "qb-mechanicjob",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"

@@ -54,9 +54,6 @@ STRONG_TOKENS: dict[str, re.Pattern[str]] = {
     "system_source": re.compile(r"\bsrc\s*~=\s*0\s+then\s+return\b|\bsource\s*~=\s*0\s+then\s+return\b"),
     # 回调必须有归属：只有"被问的那个人"能回答（QBCore:Server:TriggerClientCallback）
     "callback_owner": re.compile(r"\.source\s*~=\s*src\b|\bsource\s*~=\s*src\b"),
-    # 职业判定：`if job.name ~= 'judge' then ... return end`（字符串已剥成 ''，所以只钉操作符）
-    # 这类事件不靠 ACE/能力位，靠"你不是这个职业就滚"；与 HasPermission 同级
-    "job_deny": re.compile(r"\w*[Jj]ob\.name\s*~=\s*''[\s\S]{0,200}?\breturn\b"),
 }
 
 
@@ -305,18 +302,23 @@ def _local_check_problems(code: str, name: str) -> tuple[int, list[str]]:
 
 
 def _result_checked(lines: list[str], index: int, names: list[str]) -> bool:
-    """index 行之后的 12 行里，有没有"针对这些返回值"的否定分支**并真的 return**。"""
+    """index 行之后的 12 行里，有没有"针对这些返回值"的否定分支**并真的 return**。
+
+    变量名按词边界匹配：`if not ok2 then` 不能给 `ok` 作证（验收方实测过这种借位）。
+    """
     for offset in range(index, min(len(lines), index + 12)):
         line = lines[offset]
         text = line.strip()
         if not text.startswith("if "):
             continue
-        negated = any(
-            ("not " + name) in text
-            or ("type(" + name + ") ~=") in text
-            or (name + " ~=") in text
-            for name in names
-        )
+        negated = False
+        for name in names:
+            if re.search(r"\bnot\s+" + re.escape(name) + r"\b", text):
+                negated = True
+            if re.search(r"\btype\(\s*" + re.escape(name) + r"\s*\)\s*~=", text):
+                negated = True
+            if re.search(r"\b" + re.escape(name) + r"\b\s*~=", text):
+                negated = True
         if not negated:
             continue
         if "return" in text:
@@ -331,15 +333,23 @@ def _result_checked(lines: list[str], index: int, names: list[str]) -> bool:
     return False
 
 
-def _assignment_names(lines: list[str], index: int) -> tuple[int, list[str]] | None:
-    """找到 `local a, b = <调用>` 的变量名；支持 `pcall(function() return X end)` 包装。
+def _assignment_names(lines: list[str], index: int, call: str) -> tuple[int, list[str]] | None:
+    """找到**接住这次调用**的 `local a, b = ...`；找不到返回 None（返回值被丢了）。
 
-    返回 (赋值所在行号, 变量名)；找不到返回 None（说明返回值被丢弃了）。
+    只认两种情况：
+      * 赋值行本身含该调用（`local ok, res = H(...)`）；
+      * 调用在 `pcall(function() ... end)` 里，赋值在同一行（`local ok, res = pcall(function()`）。
+    不能"往上随便找一个 `local x =`"——那会让 `local ok = true` + 后续随便什么调用通过校验。
     """
     local_assign = re.compile(r"local\s+((?:[A-Za-z_]\w*\s*,\s*)*[A-Za-z_]\w*)[^=]*=")
     for back in range(index, max(-1, index - 4), -1):
-        match = local_assign.search(lines[back])
-        if match:
+        line = lines[back]
+        match = local_assign.search(line)
+        if not match:
+            continue
+        if call in line or (
+            "pcall(function()" in line and call in "".join(lines[back:index + 1])
+        ):
             names = [part.strip() for part in match.group(1).split(",") if part.strip()]
             if names:
                 return back, names
@@ -357,7 +367,7 @@ def _shape_problems(
         if not pattern.search(line) or any(skip in line for skip in skip_lines):
             continue
         uses += 1
-        found = _assignment_names(lines, index)
+        found = _assignment_names(lines, index, name)
         if not found:
             bad.append(str(index + 1) + ": 调用了 " + name + " 但没接返回值（判不了就没拦住）")
             continue
@@ -403,6 +413,8 @@ def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = Non
     code = strip_lua_noise(event.body)
     if any(pattern.search(code) for pattern in STRONG_TOKENS.values()):
         return True
+    if job_deny_guard(code):
+        return True
     registered = guard_helpers().get(event.resource, {})
     # 同名时登记表说了算：extra（闸门自带的宽松词匹配）不能把严格形状降级
     for name, pattern in (extra or {}).items():
@@ -414,6 +426,37 @@ def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = Non
         uses, problems = helper_call_problems(code, name, spec)
         if uses and not problems:
             return True
+    return False
+
+
+GET_PLAYER_CALL = re.compile(
+    r"local\s+([A-Za-z_]\w*)\s*=\s*QBCore\.Functions\.GetPlayer\(\s*(?:src|source)\s*\)"
+)
+PLAYER_JOB_LOCAL = re.compile(
+    r"local\s+([A-Za-z_]\w*)\s*=\s*[A-Za-z_]\w*\.PlayerData\.job\b"
+)
+
+
+def job_deny_guard(code: str) -> bool:
+    """职业白名单式判定：`if <本玩家的 job>.name ~= 'x' then … return end`。
+
+    为什么不用一行正则：`job.name ~= ...` 出现在别处（判的是**别人**的职业、或条件里带
+    `and false` 的死分支）时，一行正则照样命中 —— 验收方两种都实测过。
+    这里只认"变量来自 `QBCore.Functions.GetPlayer(src|source)`"或
+    "`local x = <某 Player>.PlayerData.job`"这两种本玩家来源。
+    """
+    def dead_condition(text: str) -> bool:
+        return "and false" in text or "false and" in text
+
+    sources = [m.group(1) for m in GET_PLAYER_CALL.finditer(code)]
+    sources += [m.group(1) for m in PLAYER_JOB_LOCAL.finditer(code)]
+    for name in sources:
+        pattern = re.compile(
+            r"if[^\n]*\b" + re.escape(name) + r"\b[^\n]*\.name\s*~=[^\n]*\bthen\b[\s\S]{0,200}?\breturn\b"
+        )
+        for hit in pattern.finditer(code):
+            if not dead_condition(hit.group(0)):
+                return True
     return False
 
 
