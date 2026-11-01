@@ -45,7 +45,7 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
 | custom `[custom]` | 134 | 41 | 45 | 48 | 覆盖率 **86/134 ≈ 64%**（P1-3 第 2 批：custom-vehicles 26→17 已鉴权、custom-police 证据链 5 个） |
 | qb `[qb]` | 216 | 16 | 0 | 200 | 债务 |
-| other（system / standalone / voice / cfx-default） | 77 | 1 | 6 | 70 | 债务 |
+| other（system / standalone / voice / cfx-default） | 76 | 1 | 6 | 69 | 债务 |
 | **合计** | **441** | 63 | 61 | **317** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
