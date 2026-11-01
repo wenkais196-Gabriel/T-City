@@ -35,7 +35,7 @@ PREFIXES = ("QBCore", "QBCore.Functions", "Player.Functions")
 #: 不扫的目录（相对 resources/）：API owner + 任何测试夹具
 EXCLUDED_PARTS = ("qb-core", "tests")
 
-#: 四种赋值形态。`Name` 限定成合法标识符，避免把 `X.Y ==` 这类比较当赋值。
+#: 三种写法 × 四个前缀。`Name` 限定成合法标识符，避免把 `X.Y ==` 这类比较当赋值。
 NAME = r"[A-Za-z_][A-Za-z0-9_]*"
 
 
@@ -66,8 +66,6 @@ def _build_patterns() -> list[tuple[re.Pattern[str], str, str]]:
                 "bracket",
             )
         )
-    # 裸 QBCore 命名空间（production-freeze 的 QBCore.Debug = function() end）
-    out.append((re.compile(rf"QBCore\.({NAME})\s*(?<![=<>~])=(?!=)"), "QBCore", "bare"))
     return out
 
 
@@ -80,7 +78,31 @@ def is_excluded(rel: Path) -> bool:
 
 
 def _is_client_file(rel: Path) -> bool:
-    return "client" in rel.parts[:-1] or rel.name.startswith(("cl_", "client"))
+    """只认**目录段** client：文件名前缀会把 `server/client_bridge.lua` 误判成客户端。"""
+    return "client" in rel.parts[:-1]
+
+
+def _string_spans(source: str) -> list[tuple[int, int]]:
+    """字符串字面量的区间（含引号）。用于把"文档里贴的代码片段"排除掉。"""
+    spans: list[tuple[int, int]] = []
+    i, n = 0, len(source)
+    while i < n:
+        ch = source[i]
+        if ch in "'\"":
+            quote, start = ch, i
+            i += 1
+            while i < n:
+                if source[i] == "\\":
+                    i += 2
+                    continue
+                if source[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            spans.append((start, i))
+        else:
+            i += 1
+    return spans
 
 
 def _strip_comments(source: str) -> str:
@@ -97,12 +119,15 @@ def scan_file(path: Path, rel: Path) -> list[Patch]:
     raw = path.read_text(encoding="utf-8", errors="ignore")
     code = strip_lua_noise(raw)
     comments_only = _strip_comments(raw)
+    spans = _string_spans(comments_only)
     is_client = _is_client_file(rel)
     hits: list[Patch] = []
     seen: set[tuple[str, str, int]] = set()
     for pattern, prefix, kind in PATTERNS:
         haystack = comments_only if kind == "bracket" else code
         for match in pattern.finditer(haystack):
+            if kind == "bracket" and any(lo <= match.start() < hi for lo, hi in spans):
+                continue  # 字符串里贴的代码片段不算猴补
             # 客户端文件里的裸 QBCore 命名空间赋值（qb-fuel 的 `QBCore.PlayerData = pData`）
             # 是玩家数据快照，不是给别人的 API 打补丁。
             if is_client and prefix == "QBCore":
