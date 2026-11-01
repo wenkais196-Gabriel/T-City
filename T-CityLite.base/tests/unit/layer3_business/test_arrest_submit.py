@@ -1460,7 +1460,9 @@ def test_sm02_closed_retry_is_idempotent_and_unknown_incidents_rejected():
     # retried close never rewrites closed_at/disposition.
     assert block.index("if currentStatus == targetStatus then") < block.index("local nextStatuses")
 
-    assert "SELECT id, status FROM police_incidents WHERE id = ? LIMIT 1" in block
+    # 2026-11-01：查询多取 x/y —— 结案要落世界痕迹（区域由坐标判定），
+    # 但"未知单号必须拒绝"这条语义不变，所以只更新查询形状、不动断言意图。
+    assert "SELECT id, status, x, y FROM police_incidents WHERE id = ? LIMIT 1" in block
     assert "if not incident then return false, 'incident_not_found' end" in block
 
 
