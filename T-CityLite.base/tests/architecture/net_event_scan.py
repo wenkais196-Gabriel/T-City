@@ -18,6 +18,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -149,6 +150,108 @@ def scan_dir(resource: str, directory: Path, kind: str = "server") -> tuple[list
         events.extend(found)
         problems.extend(issues)
     return events, problems
+
+
+GUARD_HELPERS_PATH = Path(__file__).with_name("net_event_guard_helpers.json")
+
+
+@lru_cache(maxsize=1)
+def guard_helpers() -> dict[str, dict[str, dict]]:
+    """资源内部鉴权 helper 的登记表（见 net_event_guard_helpers.json）。"""
+    data = json.loads(GUARD_HELPERS_PATH.read_text(encoding="utf-8"))
+    return {key: value for key, value in data.items() if not key.startswith("$")}
+
+
+@lru_cache(maxsize=64)
+def helpers_for(resource: str) -> dict[str, re.Pattern[str]]:
+    """该资源的 helper 调用形状：`if not H(...) then return`。
+
+    调用但忽略返回值（`H(x); doThing()`）不算鉴权，所以模式里钉死了否定分支与 return。
+    """
+    registered = guard_helpers().get(resource, {})
+    return {
+        name: re.compile(
+            r"if\s+not\s+"
+            + re.escape(name)
+            + r"\s*\(.*?\)\s*then[\s\S]{0,400}?\breturn\b"
+        )
+        for name in registered
+    }
+
+
+def helper_call_problems(code: str, name: str) -> tuple[int, list[str]]:
+    """登记的 helper 在代码里是否被**当成守卫**用（唯一实现，闸门与计数共用）。
+
+    形状要求：`if not H(...)` 的否定分支里真的 `return`，且不在 `if false` 死代码里。
+    只匹配名字是不够的 —— `if not H(x) then end` 或"先干活再校验"都能骗过纯正则。
+    """
+    lines = code.splitlines()
+    uses, bad = 0, []
+    for index, line in enumerate(lines):
+        if name + "(" not in line or "function " + name + "(" in line:
+            continue
+        uses += 1
+        text = line.strip()
+        if not text.startswith("if not " + name):
+            bad.append(str(index + 1) + ": 不是 `if not " + name + "(` 形状: " + text)
+            continue
+        # 死代码：往上找 10 行内缩进更浅的 `if false`（中间夹语句也要能抓到）
+        guard_indent_early = len(line) - len(line.lstrip())
+        dead = False
+        for back in range(index - 1, max(-1, index - 10), -1):
+            previous = lines[back]
+            previous_text = previous.strip()
+            if not previous_text:
+                continue
+            previous_indent = len(previous) - len(previous.lstrip())
+            if previous_text.startswith("if false") and previous_indent < guard_indent_early:
+                dead = True
+                break
+        if dead:
+            bad.append(str(index + 1) + ": 守卫在 `if false` 死代码块里")
+            continue
+        if "end" in text:
+            # 单行写法：if 的 end 就在本行 → return 必须在本行的 end 之前，
+            # `if not H(x) then end` + 后面随便一个 return 不能算数
+            head = text.split("end")[0]
+            if "return" in head:
+                continue
+            bad.append(str(index + 1) + ": 单行否定分支里没有 return（守卫形同虚设）")
+            continue
+        if "return" in text:
+            continue
+        found = False
+        guard_indent = len(line) - len(line.lstrip())
+        for follow in lines[index + 1:index + 20]:
+            inner = follow.strip()
+            follow_indent = len(follow) - len(follow.lstrip())
+            if inner.startswith("end") and follow_indent == guard_indent:
+                break
+            if inner.startswith("return"):
+                found = True
+                break
+        if not found:
+            bad.append(str(index + 1) + ": 否定分支里没有 return（守卫形同虚设）")
+    return uses, bad
+
+
+def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = None) -> bool:
+    """handler 是否带鉴权证据：强 token、外部 helper 正则，或**登记过且形状正确**的 helper。"""
+    code = strip_lua_noise(event.body)
+    if any(pattern.search(code) for pattern in STRONG_TOKENS.values()):
+        return True
+    registered = guard_helpers().get(event.resource, {})
+    # 同名时登记表说了算：extra（闸门自带的宽松词匹配）不能把严格形状降级
+    for name, pattern in (extra or {}).items():
+        if name in registered:
+            continue
+        if pattern.search(code):
+            return True
+    for name in registered:
+        uses, problems = helper_call_problems(code, name)
+        if uses and not problems:
+            return True
+    return False
 
 
 def auth_tokens(body: str, helpers: Mapping[str, re.Pattern[str]] | None = None) -> list[str]:

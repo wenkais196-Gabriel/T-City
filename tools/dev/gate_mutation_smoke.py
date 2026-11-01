@@ -374,6 +374,19 @@ MUTATIONS += [
     ),
 ]
 
+# P1-3 第四批：helper 登记表只认"看了返回值的调用"
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_auth.py::"
+              "test_registered_guard_helpers_are_proven"),
+        path="resources/[custom]/custom-vehicles/server/vehicle_state.lua",
+        content=None,
+        replace_from="    if not CanModifyPlate(source, plate) then return end",
+        replace_to="    CanModifyPlate(source, plate) -- 变异：调用了但忽略返回值",
+        what="鉴权 helper 被调用但不看返回值（等于没有任何保护）",
+    ),
+]
+
 
 def run_gate(nodeid: str) -> tuple[bool, str]:
     """返回 (passed, 最后一行输出)。passed=True 表示这条闸门**没红**。"""
