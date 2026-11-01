@@ -127,7 +127,7 @@ def test_recorded_counts_match_the_live_scan():
         + chr(10) + f"实测 {now['batches']}"
         + chr(10) + chr(10) + f"（{REGEN}）"
     )
-    fields = ("batch", "events", "guarded", "allowlisted", "unguarded")
+    fields = ("batch", "events", "guarded", "allowlisted", "unguarded", "started")
     live = {name: {key: stats[key] for key in fields} for name, stats in now["resources"].items()}
     recorded = {name: {key: stats[key] for key in fields} for name, stats in base["resources"].items()}
     assert live == recorded, (
@@ -137,24 +137,31 @@ def test_recorded_counts_match_the_live_scan():
         + chr(10) + chr(10) + f"（{REGEN}）"
     )
 
-def test_non_literal_registrations_do_not_grow():
+def test_non_literal_registrations_match_the_baseline():
+    """变量名注册与基线**双向**相等。
+
+    只拦"新增"是可以被绕过的：先把未来的 file:line 塞进基线，再引入对应代码。
+    """
     base = baseline.load()
     now = current()
-    added = sorted(set(now["non_literal"]) - set(base["non_literal"]))
-    assert added == [], (
-        "新增了变量名注册的 net event —— 闸门看不见它们。改成字面量：\n  "
-        + "\n  ".join(added) + f"\n\n（{REGEN}）"
+    assert sorted(now["non_literal"]) == sorted(base["non_literal"]), (
+        "变量名注册与基线不一致（新增=闸门看不见；减少=改了代码却没重生成基线）"
+        + chr(10) + f"实测 {now['non_literal']}"
+        + chr(10) + f"基线 {base['non_literal']}"
+        + chr(10) + chr(10) + f"（{REGEN}）"
     )
 
 
-def test_unparsed_handlers_do_not_grow():
+def test_unparsed_handlers_match_the_baseline():
+    """解析失败的 handler 与基线**双向**相等（同理，单向可以被预塞绕过）。"""
     base = baseline.load()
     now = current()
-    added = sorted(set(now["unparsed"]) - set(base["unparsed"]))
-    assert added == [], (
-        "扫描器解析不了这些 handler（等于没管）：\n  " + "\n  ".join(added)
+    assert sorted(now["unparsed"]) == sorted(base["unparsed"]), (
+        "解析失败的 handler 与基线不一致"
+        + chr(10) + f"实测 {now['unparsed']}"
+        + chr(10) + f"基线 {base['unparsed']}"
+        + chr(10) + chr(10) + f"（{REGEN}）"
     )
-
 
 # ---------------------------------------------------------------------------
 # 反向校验：新形状必须被抓到

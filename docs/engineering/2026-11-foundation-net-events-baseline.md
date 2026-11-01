@@ -28,7 +28,7 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 
 | 口径 | 说明 |
 |---|---|
-| 范围 | `resources/**` 的**服务端**脚本。客户端判定顺序：`server/` 目录 → fxmanifest 的 `client_scripts` → `cl_*` / `client*` 文件名。qb-target 的 init.lua 这种"看名字是服务端、manifest 说是客户端"的由第二步兜住 |
+| 范围 | `resources/**` 的**服务端**脚本。客户端判定顺序：`server/` 目录 → fxmanifest（`client_scripts { }` 块与 `client_script 'x.lua'` 单条都认）→ `cl_*` / `client*` 文件名。同一文件既声明 client 又声明 server 时按服务端算（漏扫比多算危险）。qb-target 的 init.lua 这类"名字看不出来"的由 manifest 兜住 |
 | 事件 | `RegisterNetEvent` / `RegisterServerEvent`，名字必须是字面量（变量名注册另计债） |
 | 两种写法 | 内联 handler；以及 `RegisterNetEvent('x')` + `AddEventHandler('x', fn)`（PolyZone / monitor 这类老资源）。后者去同文件找 fn 定义体，找不到就记空 body —— **空 body 永远算未鉴权**，只会多报债 |
 | 鉴权判定 | 先**剥掉注释与字符串**再匹配（`strip_lua_noise`）：注释里写的检查不算检查，日志里印一句 token 也不算 |
@@ -45,15 +45,15 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
 | custom `[custom]` | 134 | 19 | 45 | 70 | 覆盖率 **64/134 ≈ 48%** |
 | qb `[qb]` | 216 | 16 | 0 | 200 | 债务 |
-| other（system / standalone / voice / cfx-default） | 84 | 1 | 6 | 77 | 债务 |
-| **合计** | **449** | 41 | 61 | **347** | — |
+| other（system / standalone / voice / cfx-default） | 77 | 1 | 6 | 70 | 债务 |
+| **合计** | **442** | 41 | 61 | **340** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
-**债的分布不是均匀的**：59 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
-它们贡献 **98/347（28%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
-`qb-crypto` 6、`qb-shops` 5、`qb-weed` 5、`runcode` 5…）。基线里每个资源都带 `started`
+**债的分布不是均匀的**：58 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
+它们贡献 **93/340（27%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
+`qb-crypto` 6、`qb-shops` 5、`qb-weed` 5、`qb-streetraces` 3…）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
 
 ## 4. 这一轮真正修掉的东西
@@ -110,7 +110,7 @@ cd T-CityLite.base && python tests/architecture/net_event_baseline.py --write
 |---|---|---|
 | ① 引擎层（qb-core）100% | ✅ 15/15 | — |
 | ② `[custom]` ≥ 80% | **48%**（64/134） | 80% 需要 108 个，还差 **44** 个。其中 `custom-vehicles`（26）、`custom-quest`（14）、`custom-market`、`custom-storage` 是最该先做的——它们会写钱/物品/职业 |
-| ③ `[qb]` 登记为带 expires 的债务 | ✅ 59 个资源各有 owner + expires（2027-03-31） | 到期前要么修，要么续期并说明 |
+| ③ `[qb]` 登记为带 expires 的债务 | ✅ 58 个资源各有 owner + expires（2027-03-31） | 到期前要么修，要么续期并说明 |
 
 其它已知残余（不阻塞本步，但要在下一轮处理）：
 

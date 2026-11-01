@@ -173,13 +173,26 @@ def _manifest_client_scripts(resource_root: Path) -> frozenset[Path]:
     if not manifest.is_file():
         return frozenset()
     text = read(manifest)
-    files: set[Path] = set()
+    entries: list[str] = []
+    server_entries: list[str] = []
+    # 块状：client_scripts { 'a.lua', 'b.lua' }
     for match in re.finditer(r"client_scripts?\s*\{(?P<body>[^}]*)\}", text, re.DOTALL):
-        for entry in re.findall(r"['\"]([^'\"]+)['\"]", match.group("body")):
-            if entry.startswith("@"):
-                continue
-            files.add((resource_root / entry).resolve())
-    return frozenset(files)
+        entries.extend(re.findall(r"['\"]([^'\"]+)['\"]", match.group("body")))
+    # 单数/多个单条：client_script 'a.lua'（playernames / rconlog / runcode / oxmysql 都是这种）
+    for match in re.finditer(r"^\s*client_scripts?\s+(?P<q>['\"])(?P<file>[^'\"]+)(?P=q)", text, re.MULTILINE):
+        entries.append(match.group("file"))
+    # 同一个文件既声 client_script 又声 server_script 的（如 playernames_api.lua）
+    # 按服务端算 —— 漏扫比多算危险。
+    for match in re.finditer(r"server_scripts?\s*\{(?P<body>[^}]*)\}", text, re.DOTALL):
+        server_entries.extend(re.findall(r"['\"]([^'\"]+)['\"]", match.group("body")))
+    for match in re.finditer(r"^\s*server_scripts?\s+(?P<q>['\"])(?P<file>[^'\"]+)(?P=q)", text, re.MULTILINE):
+        server_entries.append(match.group("file"))
+    server_files = {
+        (resource_root / entry).resolve() for entry in server_entries if not entry.startswith("@")
+    }
+    return frozenset(
+        (resource_root / entry).resolve() for entry in entries if not entry.startswith("@")
+    ) - server_files
 
 
 def resource_root(path: Path) -> Path:
