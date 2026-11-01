@@ -139,7 +139,7 @@ qb-core → PolyZone → qb-target → 所有 NPC/物体交互
 │  安全服务   │     │  Plugin Contract │
 └──────┬──────┘     └────────┬─────────┘
        │                     │
-       └──── compat.lua ─────┘
+       └──── （compat.lua 已删除）────┘
          (GetPlayer 缓存 + AddMoney 桥接)
 ```
 
@@ -149,7 +149,7 @@ qb-core → PolyZone → qb-target → 所有 NPC/物体交互
 |:---|:---|:---|
 | **服务总线** | `Bus.RegisterService` → `Bus[name].method()` | core-framework/bus.lua |
 | **脏数据管道** | DirtyFlush — 标记 → 定时刷盘 → PlayerDropped 强制 | core-framework/cache/dirty_flush.lua |
-| **向后兼容桥** | compat.lua — GetPlayer 缓存 + AddMoney 路由 | core-framework/compat.lua |
+| **向后兼容桥** | ~~compat.lua~~ 已删除（P1-4 阶段 D）；不再有 GetPlayer 缓存 / AddMoney 路由 | 无 |
 | **插件契约** | `Bus.Plugin.Register/Subscribe/Publish` | core-framework/bus.lua |
 | **五层安全链** | L0 (SecurityService) → L1-3 (custom-security) → L4 (custom-crime) | 多资源 |
 | **统一奖励网关** | `core_economy.TriggerReward` — 全服唯一入口 | system/core_economy |
@@ -172,7 +172,7 @@ qb-core → PolyZone → qb-target → 所有 NPC/物体交互
   │     └─→ Player.Functions.AddMoney → 标记 DirtyFlush
   │
   └─→ Player.Functions.AddMoney()  ← 老旧路径 (直接)
-        └─→ 标记 DirtyFlush (通过 compat.lua 桥接)
+        └─→ 标记 DirtyFlush (直接调 Player.Functions，无桥接层)
 
 DirtyFlush 管道:
   内存标记 (isDirty = true)

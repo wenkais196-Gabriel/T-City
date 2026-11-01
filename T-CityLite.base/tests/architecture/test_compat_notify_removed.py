@@ -91,3 +91,16 @@ def test_qb_core_notify_still_delivers_without_the_bus():
         "没有 `_G.Bus` 时 qb-core 的 Notify 一条都没发出去 —— 删掉 compat 之后通知会静默消失"
     )
     assert result["name"] == "QBCore:Notify", f"发出去的不是 QBCore:Notify，实际 {result['name']!r}"
+
+    # harness 里 `_G.Bus = nil` 是**模拟**，不是事实 —— 这条把前提锁上：
+    # 一旦有人给 qb-core 注册 `_G.Bus.notify`，真实调用就会改走另一条路，
+    # 而上面那条用例仍会是绿的（它证明的只是"无 Bus 时回退可用"）。
+    writers = []
+    for path in sorted((BASE / "resources" / "[qb]" / "qb-core").rglob("*.lua")):
+        text = re.sub(r"--[^\n]*", "", path.read_text(encoding="utf-8", errors="ignore"))
+        if re.search(r"_G\.Bus\.notify\s*=+(?!=)", text):
+            writers.append(path.relative_to(BASE / "resources").as_posix())
+    assert writers == [], (
+        "qb-core 里出现了 `_G.Bus.notify` 的写者 —— Notify 会改走 Bus 分支，"
+        f"上面那条用例的前提被推翻：{writers}"
+    )
