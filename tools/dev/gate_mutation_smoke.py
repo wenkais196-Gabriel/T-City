@@ -339,6 +339,41 @@ end
     ),
 ]
 
+# P1-3 第二批：回调分发器的高危目标 + 基线数字的可信度
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_auth.py::"
+              "test_relay_callbacks_that_spawn_vehicles_are_guarded_somewhere"),
+        path="resources/[custom]/custom-security/server/security.lua",
+        content=None,
+        replace_from="QBCore.ServerCallbacks['QBCore:Server:SpawnVehicle'] = function(source, cb, model, coords, warp)",
+        replace_to="QBCore.ServerCallbacks['SpawnVehicle'] = function(source, cb, model, coords, warp)",
+        what="custom-security 不再劫持刷车回调（任何客户端都能通过 TriggerCallback 让服务端 CreateVehicle）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_recorded_counts_match_the_live_scan"),
+        path="tests/architecture/net_events_baseline.json",
+        content=None,
+        replace_from='"guarded": 19,',
+        replace_to='"guarded": 20,',
+        what="手改基线里的 guarded 数字（批次和仍然成立，但和实测对不上）",
+    ),
+]
+
+# P1-3 第三批：`src == 0` 不是鉴权
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_system_source_token_only_counts_the_server_only_shape"),
+        path="tests/architecture/net_event_scan.py",
+        content=None,
+        replace_from='"system_source": re.compile(r"\\bsrc\\s*~=\\s*0\\s+then\\s+return\\b|\\bsource\\s*~=\\s*0\\s+then\\s+return\\b"),',
+        replace_to='"system_source": re.compile(r"\\bsrc\\s*==?\\s*0\\b"),',
+        what="把 src == 0（只排除控制台）又当成鉴权 token —— 任何玩家照样能触发",
+    ),
+]
+
 
 def run_gate(nodeid: str) -> tuple[bool, str]:
     """返回 (passed, 最后一行输出)。passed=True 表示这条闸门**没红**。"""

@@ -49,6 +49,22 @@ def _allowlist_names() -> set[str]:
     return {entry["name"] for entry in data.get("entries", [])}
 
 
+def ensured_resources() -> set[str]:
+    """启动集：configs/**/*.cfg 与 server.cfg 里的 ensure/start。"""
+    import re
+    names: set[str] = set()
+    base = RESOURCES.parent
+    files = list((base / "configs").rglob("*.cfg")) + [base / "server.cfg"]
+    for path in files:
+        if not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            match = re.match(r"^\s*(?:ensure|start)\s+(\S+)", line)
+            if match:
+                names.add(match.group(1))
+    return names
+
+
 def _batch_of(group: str) -> str:
     for batch, prefixes in BATCHES.items():
         if group in prefixes:
@@ -100,6 +116,10 @@ def build(resources: Path | None = None) -> dict:
         }
         for resource, names in sorted(unguarded.items())
     ]
+
+    ensured = ensured_resources()
+    for resource, stats in per_resource.items():
+        stats["started"] = resource in ensured
 
     return {
         "$comment": "P1-3 net event 基线。由 tests/architecture/net_event_baseline.py --write 生成，"

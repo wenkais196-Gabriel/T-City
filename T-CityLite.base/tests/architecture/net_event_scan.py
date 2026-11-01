@@ -12,23 +12,33 @@
   - 内联：`RegisterNetEvent('name', function(...) ... end)`，handler 到行首（允许缩进）的 `end)`；
   - 拆分：`RegisterNetEvent('name')` + `AddEventHandler('name', fn)`，去同文件里找 fn 的定义体。
     找不到就给**空 body** —— 空 body 永远算"未鉴权"，只会多报债，不会漏报。
-* "已鉴权" = handler 里出现 `STRONG_TOKENS` 之一，或调用方传入的 helper
-  （helper 是否真的落到 PolicePolicy.Can，由测试另行追查）。
+* 鉴权判定前**先剥注释与字符串**（`strip_lua_noise`）：注释里写的检查不算检查。
+* 客户端脚本不进闸门：先看目录（`server/` 优先），再看 fxmanifest 的 `client_scripts`，
+  最后才是文件名约定。客户端 handler 的调用方是服务端，不是玩家可触发的入站面。
 """
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
-REGISTER_RE = re.compile(r"^\s*Register(?:Net|Server)Event\(\s*(['\"])(?P<name>[^'\"]+)\1")
+REGISTER_RE = re.compile(r"^\s*Register(?:Net|Server)Event\s*\(\s*(['\"])(?P<name>[^'\"]+)\1")
 REGISTER_ANY = re.compile(r"Register(?:Net|Server)Event\s*\(\s*(?P<arg>[^,\n)]*)")
 END_RE = re.compile(r"^\s*end\)\s*$")
 INLINE_HANDLER_RE = re.compile(r",\s*function\b")
 MAX_BLOCK_LINES = 400
 
+BLOCK_COMMENT = re.compile(r"--\[(=*)\[.*?\]\1\]", re.DOTALL)
+LONG_STRING = re.compile(r"\[(=*)\[.*?\]\1\]", re.DOTALL)
+LINE_COMMENT = re.compile(r"--[^\n]*")
+STRING = re.compile(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"")
+
 #: A token that proves a unified auth decision inside the handler body.
+#:
+#: 注意 `src == 0` **不是**鉴权：它只把控制台排除在外，任何玩家照样能触发。
+#: 真正表示"只允许服务端触发"的写法是 `src ~= 0 then return`（见 system_source）。
 STRONG_TOKENS: dict[str, re.Pattern[str]] = {
     "PolicePolicy.Can": re.compile(r"PolicePolicy\.Can\("),
     "PolicePolicy.Check": re.compile(r"PolicePolicy\.Check\("),
@@ -36,10 +46,19 @@ STRONG_TOKENS: dict[str, re.Pattern[str]] = {
     "IsPlayerAceAllowed": re.compile(r"IsPlayerAceAllowed\("),
     # qb-core 的权限判定是 HasPermission(src, 'admin') / ('command.'..name)
     "HasPermission": re.compile(r"HasPermission\(\s*src"),
-    "system_source": re.compile(r"\bsrc\s*==\s*0\b|\bsrc\s*~=\s*0\s+then\s+return\b"),
+    "system_source": re.compile(r"\bsrc\s*~=\s*0\s+then\s+return\b|\bsource\s*~=\s*0\s+then\s+return\b"),
     # 回调必须有归属：只有"被问的那个人"能回答（QBCore:Server:TriggerClientCallback）
     "callback_owner": re.compile(r"\.source\s*~=\s*src\b|\bsource\s*~=\s*src\b"),
 }
+
+
+def strip_lua_noise(source: str) -> str:
+    """去掉块注释、长字符串、行注释与普通字符串，保留行结构（换行不删）。"""
+    text = BLOCK_COMMENT.sub(lambda m: "\n" * m.group(0).count("\n"), source)
+    text = LONG_STRING.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = LINE_COMMENT.sub("", text)
+    text = STRING.sub("''", text)
+    return text
 
 
 @dataclass(frozen=True)
@@ -132,30 +151,64 @@ def scan_dir(resource: str, directory: Path, kind: str = "server") -> tuple[list
     return events, problems
 
 
-def auth_tokens(body: str, helpers: Mapping[str, object] | None = None) -> list[str]:
-    """handler 里出现的鉴权证据：强 token + 项目 helper（helper 另行追查真伪）。"""
-    found = [token for token, pattern in STRONG_TOKENS.items() if pattern.search(body)]
-    for helper in (helpers or {}):
-        if re.search(r"\b" + re.escape(helper) + r"\(", body):
-            found.append(helper)
+def auth_tokens(body: str, helpers: Mapping[str, re.Pattern[str]] | None = None) -> list[str]:
+    """handler 里出现的鉴权证据：强 token + 项目 helper（helper 另行追查真伪）。
+
+    匹配前先剥注释与字符串 —— 注释里写的检查不算检查。
+    """
+    code = strip_lua_noise(body)
+    found = [token for token, pattern in STRONG_TOKENS.items() if pattern.search(code)]
+    for name, pattern in (helpers or {}).items():
+        if pattern.search(code):
+            found.append(name)
     return found
 
 
+@lru_cache(maxsize=256)
+def _manifest_client_scripts(resource_root: Path) -> frozenset[Path]:
+    """fxmanifest 里 `client_scripts { ... }` 声明的文件（绝对路径）。"""
+    manifest = resource_root / "fxmanifest.lua"
+    if not manifest.is_file():
+        manifest = resource_root / "__resource.lua"
+    if not manifest.is_file():
+        return frozenset()
+    text = read(manifest)
+    files: set[Path] = set()
+    for match in re.finditer(r"client_scripts?\s*\{(?P<body>[^}]*)\}", text, re.DOTALL):
+        for entry in re.findall(r"['\"]([^'\"]+)['\"]", match.group("body")):
+            if entry.startswith("@"):
+                continue
+            files.add((resource_root / entry).resolve())
+    return frozenset(files)
+
+
+def resource_root(path: Path) -> Path:
+    """向上找到含 fxmanifest.lua 的资源根（找不到就返回原目录）。"""
+    current = path if path.is_dir() else path.parent
+    while current != current.parent:
+        if (current / "fxmanifest.lua").is_file() or (current / "__resource.lua").is_file():
+            return current
+        current = current.parent
+    return path.parent
+
+
 def is_client_path(path: Path) -> bool:
-    """客户端脚本判定：`/client/` 目录、`cl_*.lua` / `client*.lua` 文件名。
+    """客户端脚本判定：`/client/` 目录、fxmanifest 的 client_scripts、`cl_*` / `client*` 文件名。
 
     客户端也会 `RegisterNetEvent`（接服务端下发的通知），但那些 handler 的调用方是
     服务端，不是"任意玩家可触发的入站面"，所以不纳入鉴权闸门。
 
     两条容易踩反的边界：
     * `server/client_reports.lua` 是**服务端**脚本（名字里有 client，位置在 server/）；
-    * 根目录的 `client.lua` / `cl_*.lua` 是客户端脚本。
-    所以先看目录、再看文件名。
+    * `qb-target/init.lua` 是客户端脚本（名字看不出来，只有 fxmanifest 说了）。
+    所以顺序是：目录 → manifest → 文件名。
     """
     parts = [part.lower() for part in path.parts[:-1]]
     if "server" in parts:
         return False
     if "client" in parts:
+        return True
+    if path.resolve() in _manifest_client_scripts(resource_root(path)):
         return True
     name = path.name.lower()
     return name.startswith("cl_") or name.startswith("client")

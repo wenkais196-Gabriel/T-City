@@ -16,20 +16,20 @@
     },
     "custom": {
       "events": 134,
-      "guarded": 23,
+      "guarded": 19,
       "allowlisted": 45,
-      "unguarded": 66
+      "unguarded": 70
     },
     "qb": {
-      "events": 221,
-      "guarded": 22,
+      "events": 216,
+      "guarded": 16,
       "allowlisted": 0,
-      "unguarded": 199
+      "unguarded": 200
     },
     "other": {
       "events": 84,
-      "guarded": 3,
-      "allowlisted": 4,
+      "guarded": 1,
+      "allowlisted": 6,
       "unguarded": 77
     }
   },
@@ -40,7 +40,8 @@
       "events": 4,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 4
+      "unguarded": 4,
+      "started": true
     },
     "atom_nodes": {
       "batch": "other",
@@ -48,7 +49,8 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": true
     },
     "baseevents": {
       "batch": "other",
@@ -56,7 +58,8 @@
       "events": 7,
       "guarded": 0,
       "allowlisted": 4,
-      "unguarded": 3
+      "unguarded": 3,
+      "started": true
     },
     "connectqueue": {
       "batch": "other",
@@ -64,15 +67,17 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": false
     },
     "core-framework": {
       "batch": "other",
       "group": "[standalone]",
       "events": 2,
-      "guarded": 2,
-      "allowlisted": 0,
-      "unguarded": 0
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": true
     },
     "custom-agent-client": {
       "batch": "custom",
@@ -80,7 +85,8 @@
       "events": 4,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 4
+      "unguarded": 4,
+      "started": true
     },
     "custom-cartel": {
       "batch": "custom",
@@ -88,7 +94,8 @@
       "events": 4,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 4
+      "unguarded": 4,
+      "started": true
     },
     "custom-certificates": {
       "batch": "custom",
@@ -96,7 +103,8 @@
       "events": 5,
       "guarded": 4,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": true
     },
     "custom-consumables": {
       "batch": "custom",
@@ -104,7 +112,8 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 1,
-      "unguarded": 0
+      "unguarded": 0,
+      "started": true
     },
     "custom-documents": {
       "batch": "custom",
@@ -112,7 +121,8 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": true
     },
     "custom-justice": {
       "batch": "custom",
@@ -120,7 +130,8 @@
       "events": 7,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 7
+      "unguarded": 7,
+      "started": true
     },
     "custom-main": {
       "batch": "custom",
@@ -128,7 +139,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": true
     },
     "custom-mining": {
       "batch": "custom",
@@ -136,7 +148,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": true
     },
     "custom-phone": {
       "batch": "custom",
@@ -144,15 +157,17 @@
       "events": 11,
       "guarded": 0,
       "allowlisted": 11,
-      "unguarded": 0
+      "unguarded": 0,
+      "started": true
     },
     "custom-police": {
       "batch": "custom",
       "group": "[custom]",
       "events": 57,
-      "guarded": 18,
+      "guarded": 14,
       "allowlisted": 33,
-      "unguarded": 6
+      "unguarded": 10,
+      "started": true
     },
     "custom-quest": {
       "batch": "custom",
@@ -160,7 +175,8 @@
       "events": 11,
       "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 10
+      "unguarded": 10,
+      "started": true
     },
     "custom-taxes": {
       "batch": "custom",
@@ -168,7 +184,8 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": true
     },
     "custom-vehicles": {
       "batch": "custom",
@@ -176,7 +193,8 @@
       "events": 26,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 26
+      "unguarded": 26,
+      "started": true
     },
     "hardcap": {
       "batch": "other",
@@ -184,7 +202,8 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": true
     },
     "interact-sound": {
       "batch": "other",
@@ -192,7 +211,8 @@
       "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 5,
+      "started": true
     },
     "money": {
       "batch": "other",
@@ -200,7 +220,8 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": false
     },
     "money-fountain": {
       "batch": "other",
@@ -208,7 +229,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": false
     },
     "monitor": {
       "batch": "other",
@@ -216,7 +238,8 @@
       "events": 33,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 33
+      "unguarded": 33,
+      "started": false
     },
     "oxmysql": {
       "batch": "other",
@@ -224,7 +247,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": true
     },
     "ped-money-drops": {
       "batch": "other",
@@ -232,7 +256,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": false
     },
     "player-data": {
       "batch": "other",
@@ -240,7 +265,8 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": false
     },
     "playernames": {
       "batch": "other",
@@ -248,7 +274,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": false
     },
     "pma-voice": {
       "batch": "other",
@@ -256,7 +283,8 @@
       "events": 3,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 3
+      "unguarded": 3,
+      "started": true
     },
     "production-freeze": {
       "batch": "other",
@@ -264,7 +292,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": true
     },
     "qb-adminmenu": {
       "batch": "qb",
@@ -272,7 +301,8 @@
       "events": 16,
       "guarded": 15,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": true
     },
     "qb-ambulancejob": {
       "batch": "qb",
@@ -280,7 +310,8 @@
       "events": 22,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 22
+      "unguarded": 22,
+      "started": true
     },
     "qb-apartments": {
       "batch": "qb",
@@ -288,7 +319,8 @@
       "events": 10,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 10
+      "unguarded": 10,
+      "started": true
     },
     "qb-cityhall": {
       "batch": "qb",
@@ -296,7 +328,8 @@
       "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 5,
+      "started": true
     },
     "qb-clothing": {
       "batch": "qb",
@@ -304,7 +337,8 @@
       "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 5,
+      "started": true
     },
     "qb-core": {
       "batch": "engine",
@@ -312,7 +346,8 @@
       "events": 15,
       "guarded": 5,
       "allowlisted": 10,
-      "unguarded": 0
+      "unguarded": 0,
+      "started": true
     },
     "qb-crypto": {
       "batch": "qb",
@@ -320,7 +355,8 @@
       "events": 6,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 6
+      "unguarded": 6,
+      "started": false
     },
     "qb-doorlock": {
       "batch": "qb",
@@ -328,15 +364,17 @@
       "events": 4,
       "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 3
+      "unguarded": 3,
+      "started": true
     },
     "qb-drugs": {
       "batch": "qb",
       "group": "[qb]",
       "events": 9,
-      "guarded": 1,
+      "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 8
+      "unguarded": 9,
+      "started": true
     },
     "qb-fuel": {
       "batch": "qb",
@@ -344,7 +382,8 @@
       "events": 3,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 3
+      "unguarded": 3,
+      "started": true
     },
     "qb-garages": {
       "batch": "qb",
@@ -352,7 +391,8 @@
       "events": 6,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 6
+      "unguarded": 6,
+      "started": true
     },
     "qb-houserobbery": {
       "batch": "qb",
@@ -360,7 +400,8 @@
       "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 5,
+      "started": true
     },
     "qb-houses": {
       "batch": "qb",
@@ -368,7 +409,8 @@
       "events": 19,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 19
+      "unguarded": 19,
+      "started": false
     },
     "qb-hud": {
       "batch": "qb",
@@ -376,7 +418,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": true
     },
     "qb-inventory": {
       "batch": "qb",
@@ -384,7 +427,8 @@
       "events": 8,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 8
+      "unguarded": 8,
+      "started": true
     },
     "qb-lapraces": {
       "batch": "qb",
@@ -392,7 +436,8 @@
       "events": 10,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 10
+      "unguarded": 10,
+      "started": false
     },
     "qb-management": {
       "batch": "qb",
@@ -400,7 +445,8 @@
       "events": 16,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 16
+      "unguarded": 16,
+      "started": true
     },
     "qb-mechanicjob": {
       "batch": "qb",
@@ -408,7 +454,8 @@
       "events": 4,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 4
+      "unguarded": 4,
+      "started": true
     },
     "qb-multicharacter": {
       "batch": "qb",
@@ -416,7 +463,8 @@
       "events": 4,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 4
+      "unguarded": 4,
+      "started": true
     },
     "qb-pawnshop": {
       "batch": "qb",
@@ -424,7 +472,8 @@
       "events": 4,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 4
+      "unguarded": 4,
+      "started": true
     },
     "qb-prison": {
       "batch": "qb",
@@ -432,7 +481,8 @@
       "events": 11,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 11
+      "unguarded": 11,
+      "started": true
     },
     "qb-scoreboard": {
       "batch": "qb",
@@ -440,7 +490,8 @@
       "events": 1,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 1
+      "unguarded": 1,
+      "started": true
     },
     "qb-shops": {
       "batch": "qb",
@@ -448,31 +499,26 @@
       "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 5,
+      "started": false
     },
     "qb-storerobbery": {
       "batch": "qb",
       "group": "[qb]",
       "events": 9,
-      "guarded": 2,
+      "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 7
+      "unguarded": 9,
+      "started": true
     },
     "qb-streetraces": {
       "batch": "qb",
       "group": "[qb]",
       "events": 3,
-      "guarded": 3,
-      "allowlisted": 0,
-      "unguarded": 0
-    },
-    "qb-target": {
-      "batch": "qb",
-      "group": "[qb]",
-      "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 3,
+      "started": false
     },
     "qb-vehicleshop": {
       "batch": "qb",
@@ -480,7 +526,8 @@
       "events": 12,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 12
+      "unguarded": 12,
+      "started": true
     },
     "qb-weapons": {
       "batch": "qb",
@@ -488,7 +535,8 @@
       "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 5,
+      "started": true
     },
     "qb-weathersync": {
       "batch": "qb",
@@ -496,7 +544,8 @@
       "events": 7,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 7
+      "unguarded": 7,
+      "started": true
     },
     "qb-weed": {
       "batch": "qb",
@@ -504,7 +553,8 @@
       "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 5,
+      "started": false
     },
     "rconlog": {
       "batch": "other",
@@ -512,7 +562,8 @@
       "events": 3,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 3
+      "unguarded": 3,
+      "started": false
     },
     "runcode": {
       "batch": "other",
@@ -520,7 +571,8 @@
       "events": 5,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 5
+      "unguarded": 5,
+      "started": false
     },
     "sessionmanager": {
       "batch": "other",
@@ -528,7 +580,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": true
     },
     "story-engine": {
       "batch": "custom",
@@ -536,7 +589,8 @@
       "events": 2,
       "guarded": 0,
       "allowlisted": 0,
-      "unguarded": 2
+      "unguarded": 2,
+      "started": true
     },
     "tcity-dashboard": {
       "batch": "other",
@@ -544,7 +598,8 @@
       "events": 5,
       "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 4
+      "unguarded": 4,
+      "started": true
     }
   },
   "unguarded": {
@@ -606,7 +661,11 @@
       "evidence:server:AddFingerprintToInventory",
       "evidence:server:ClearBlooddrops",
       "evidence:server:ClearCasings",
-      "police:server:NpcCalloutResult"
+      "police:server:NpcCalloutResult",
+      "police:server:adoptDraft",
+      "police:server:arriveIncident",
+      "police:server:claimIncident",
+      "police:server:draftList"
     ],
     "custom-quest": [
       "hospital:server:SetDeathStatus",
@@ -799,6 +858,7 @@
       "qb-drugs:server:failDelivery",
       "qb-drugs:server:giveStealItems",
       "qb-drugs:server:robCornerDrugs",
+      "qb-drugs:server:sellCornerDrugs",
       "qb-drugs:server:sendDeliverySMS",
       "qb-drugs:server:successDelivery",
       "qb-drugs:server:updateDealerItems"
@@ -936,14 +996,14 @@
       "qb-storerobbery:server:removeAdvancedLockpick",
       "qb-storerobbery:server:removeLockpick",
       "qb-storerobbery:server:setSafeStatus",
+      "qb-storerobbery:server:startRobbery",
+      "qb-storerobbery:server:surrender",
       "qb-storerobbery:server:syncMinPolice"
     ],
-    "qb-target": [
-      "QBCore:Client:OnGangUpdate",
-      "QBCore:Client:OnJobUpdate",
-      "QBCore:Client:OnPlayerLoaded",
-      "QBCore:Client:OnPlayerUnload",
-      "QBCore:Player:SetPlayerData"
+    "qb-streetraces": [
+      "qb-streetraces:JoinRace",
+      "qb-streetraces:NewRace",
+      "qb-streetraces:RaceWon"
     ],
     "qb-vehicleshop": [
       "qb-vehicleshop:server:addPlayer",
@@ -1101,7 +1161,7 @@
     {
       "resource": "custom-police",
       "batch": "custom",
-      "unguarded": 6,
+      "unguarded": 10,
       "owner": "custom-police",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1277,7 +1337,7 @@
     {
       "resource": "qb-drugs",
       "batch": "qb",
-      "unguarded": 8,
+      "unguarded": 9,
       "owner": "qb-drugs",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1397,16 +1457,16 @@
     {
       "resource": "qb-storerobbery",
       "batch": "qb",
-      "unguarded": 7,
+      "unguarded": 9,
       "owner": "qb-storerobbery",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "qb-target",
+      "resource": "qb-streetraces",
       "batch": "qb",
-      "unguarded": 5,
-      "owner": "qb-target",
+      "unguarded": 3,
+      "owner": "qb-streetraces",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
@@ -1494,8 +1554,7 @@
     "[custom]/custom-vehicles/server/main.lua:223  Config.Vehicles.Events.LOCKPICK_ATTEMPT",
     "[custom]/custom-vehicles/server/main.lua:27  Config.Vehicles.Events.REQUEST_KEYS",
     "[custom]/custom-vehicles/server/main.lua:40  Config.Vehicles.Events.GIVE_KEYS",
-    "[custom]/custom-vehicles/server/main.lua:79  Config.Vehicles.Events.REMOVE_KEYS",
-    "[standalone]/PolyZone/ComboZone.lua:315  internalEventName"
+    "[custom]/custom-vehicles/server/main.lua:79  Config.Vehicles.Events.REMOVE_KEYS"
   ],
   "unparsed": []
 }
