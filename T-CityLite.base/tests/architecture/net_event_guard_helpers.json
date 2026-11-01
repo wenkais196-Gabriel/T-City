@@ -173,5 +173,29 @@
       "why": "帮派成员校验：只有 gang.name == 'cartel' 的玩家返回 true（附带等级）",
       "shape": "local_check"
     }
+  },
+  "custom-agent-client": {
+    "ClaimPending": {
+      "defined_at": "custom-agent-client/server/main.lua",
+      "requires_code": [
+        "pending[src] or {}",
+        "entry.session ~=",
+        "return nil"
+      ],
+      "requires_raw": [],
+      "why": "ack 归属：rid 必须在自己的 pending 表里且 session 令牌一致（令牌只发给该玩家客户端）",
+      "shape": "local_check"
+    }
+  },
+  "custom-justice": {
+    "JusticeService.GetInmate": {
+      "defined_at": "custom-justice/server/main.lua",
+      "requires_code": [
+        "return inmates[citizenid]"
+      ],
+      "requires_raw": [],
+      "shape": "local_check",
+      "why": "在押记录：只有真正在服刑的 citizenid 才在 inmates 表里（返回 nil = 不在监狱）"
+    }
   }
 }

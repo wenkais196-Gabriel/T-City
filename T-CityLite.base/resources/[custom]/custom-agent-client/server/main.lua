@@ -267,17 +267,27 @@ end
 
 local ACK_STATUS = { ok = true, rejected = true, failed = true, cancelled = true }
 
+--- 这条 ack 是否真的是"服务端发给这个人的那个请求"：
+--- rid 必须在**他自己的** pending 表里，且 session 令牌与服务端下发的一致
+--- （令牌只通过 `tcity:agent:hello` 发给该玩家的客户端，伪造他人 rid 也拿不到别人的令牌）。
+---@return table|nil entry
+local function ClaimPending(src, rid, session)
+    if type(rid) ~= 'string' or rid == '' or #rid > 80 then return nil end
+    local entry = (pending[src] or {})[rid]
+    if not entry or entry.session ~= session then return nil end
+    if entry.settled then return nil end
+    return entry
+end
+
 -- Telemetry only. An ack can settle a request, never write game state.
 RegisterNetEvent('tcity:agent:ack', function(ack)
     local src = source
     if type(ack) ~= 'table' or ack.v ~= 1 then return dropAck() end
     local rid = ack.request_id
-    if type(rid) ~= 'string' or rid == '' or #rid > 80 then return dropAck() end
-    local entry = (pending[src] or {})[rid]
-    if not entry or entry.session ~= ack.session then return dropAck() end
+    local entry = ClaimPending(src, rid, ack.session)
+    if not entry then return dropAck() end
     if not ACK_STATUS[ack.status] then return dropAck() end
     if ack.detail ~= nil and type(ack.detail) ~= 'table' then return dropAck() end
-    if entry.settled then return dropAck() end
 
     local detail = ack.detail
     if ack.status == 'ok' then
@@ -566,9 +576,19 @@ RegisterCommand('adc', function(source, args)
     print(('[agent-client][devcmd] src=%d cmd=%s'):format(math.floor(target), command))
 end, true)
 
+-- 纯遥测：客户端上报 devcmd 的执行结果，只写日志。
+-- 加每源 500ms 节流 + 类型/长度约束，否则任何客户端都能用它刷爆服务端日志。
+local DEVCMD_RESULT_COOLDOWN_MS = 500
+local devcmdResultAt = {}   -- [src] = GetGameTimer()
+
 RegisterNetEvent('tcity:agent:devcmd_result', function(command, status)
     local src = source
+    if type(src) ~= 'number' or src <= 0 then return end
+    local now = GetGameTimer() or 0
+    if now - (devcmdResultAt[src] or 0) < DEVCMD_RESULT_COOLDOWN_MS then return end
+    devcmdResultAt[src] = now
+    if type(command) ~= 'string' or type(status) ~= 'string' then return end
     print(('[agent-client][devcmd-result] src=%s status=%s cmd=%s'):format(
-        tostring(src), tostring(status), tostring(command)))
+        tostring(src), tostring(status):sub(1, 32), tostring(command):sub(1, 96)))
 end)
 
