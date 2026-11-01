@@ -132,7 +132,7 @@ RegisterNetEvent('mining:nodeComplete', function(activityId, oreType)
     local src = source
 
     -- 🎯 全服唯一入口 — 自动计算 base × global × heat × bonus
-    --    global_multiplier: 管理员 set convar economy_global_multiplier 80 → 全服挖矿打八折
+    --    global_multiplier: 管理员 set convar economy_global_multiplier 0.8 → 全服挖矿打八折（倍率不是百分数）
     --    heat_coefficient: 挖矿太热门 → 自动从 1.0 降到 0.7
     local baseReward = GetConvarInt('mining_base_reward', 50)  -- 从 economy_baseline.json 读取
 

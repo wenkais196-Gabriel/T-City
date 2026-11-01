@@ -366,8 +366,9 @@ Bus.economy.AddScaled(1, 'bank', 1000, 'op1')
 Bus.economy.AddScaled(1, 'bank', 2000, 'op2')
 
 -- Flush all
-local flushed = Bus.persistence.FlushAll()
-assert(flushed >= 0, "FlushAll should return count")
+local ack = Bus.persistence.FlushAll()
+assert(type(ack) == "table", "FlushAll must return an ack table")
+assert(type(ack.attempted) == "number" and ack.attempted >= 0, "ack.attempted must be a count")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 

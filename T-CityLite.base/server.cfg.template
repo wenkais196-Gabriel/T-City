@@ -84,6 +84,11 @@ add_ace group.admin command allow
 ## Resources
 add_ace resource.qb-core command allow
 
+## Debug（QBCore:DebugSomething 的来源守卫，见 STANDARDS TS-5）
+## 只有控制台、服务端自触发、或持有该 ACE 的玩家能让服务端打印表；
+## 不给这个 ACE 也不会破坏任何现有功能（服务端自己的 QBCore.Debug 不受影响）。
+# add_ace group.admin qb.debug allow
+
 ## Gods
 add_ace qbcore.god command allow
 

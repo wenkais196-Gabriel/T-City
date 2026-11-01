@@ -39,7 +39,9 @@ local function getDynamicPrice(itemName, basePrice)
     if exports['core_economy'] then
         globalMult = exports['core_economy']:GetGlobalMultiplier()
     else
-        globalMult = (GetConvarInt('economy_reward_scale', 100) / 100.0)
+        globalMult = GetConvarFloat('economy_reward_scale', 1.0)
+        -- 与 core_economy 同语义：0 / 负数 / NaN 当作「没配」，否则会把商品刷成免费或整屏 NaN
+        if not (globalMult > 0) then globalMult = 1.0 end
     end
     return math.floor(basePrice * globalMult + 0.5)
 end
