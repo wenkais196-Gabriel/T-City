@@ -7,6 +7,8 @@ version '1.7.0'
 
 shared_scripts {
 	'config.lua',
+	-- 区域判定的唯一实现（core-framework 的 shared/regions.lua），不复制一份
+	'@core-framework/shared/regions.lua',
 	'shared/policy.lua',
 	'shared/charges.lua',
 	'shared/insert_id.lua',

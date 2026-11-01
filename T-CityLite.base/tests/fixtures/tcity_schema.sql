@@ -315,11 +315,13 @@ DROP TABLE IF EXISTS `phone_cityfeed`;
 CREATE TABLE `phone_cityfeed` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `citizenid` varchar(50) NOT NULL,
+  `author_kind` enum('citizen','city') NOT NULL DEFAULT 'citizen',
   `content` text NOT NULL,
   `likes` int(11) DEFAULT 0,
   `timestamp` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
-  KEY `idx_time` (`timestamp`)
+  KEY `idx_time` (`timestamp`),
+  KEY `idx_author_kind` (`author_kind`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `phone_contacts`;

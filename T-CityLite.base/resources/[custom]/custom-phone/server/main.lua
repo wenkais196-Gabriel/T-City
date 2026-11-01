@@ -52,6 +52,8 @@ MySQL.ready(function()
         CREATE TABLE IF NOT EXISTS phone_cityfeed (
             id INT AUTO_INCREMENT PRIMARY KEY,
             citizenid VARCHAR(50) NOT NULL,
+            -- citizen = 玩家帖子；city = 城市公告（世界痕迹第一条链），见 migrations/v3.15
+            author_kind ENUM('citizen','city') NOT NULL DEFAULT 'citizen',
             content TEXT NOT NULL,
             likes INT DEFAULT 0,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -570,6 +572,37 @@ exports('SendSystemMessage', function(receiverNumber, message, senderLabel)
 end)
 
 -- ----------------------------------------------------
+-- CityFeed 城市公告（世界痕迹第一条链的出海口）
+-- ----------------------------------------------------
+-- 谁调：core-framework 的世界痕迹写者结案后触发（将来也可能由 director 的 L1 动作触发）。
+-- 为什么是导出而不是 net event：玩家不该能发城市公告；导出只在服务端侧可达。
+-- 校验规则在 server/city_feed.lua（可离线反证），这里只做 IO。
+-- 文案是模板拼出来的（见调用方），本函数不接任何生成式模型。
+--- 写一条城市公告。
+---@param content string
+---@param meta table|nil { region_id, region_label, incident_id } 预留：本阶段不入库、不打日志
+---@return boolean ok, number|string id_or_code
+exports('PostCityBulletin', function(content, meta)
+    local valid, cleaned = CityFeed.ValidateBulletin(content)
+    if not valid then return false, cleaned end
+
+    local okInsert, insertResult = pcall(function()
+        return MySQL.insert.await(
+            'INSERT INTO phone_cityfeed (citizenid, content, author_kind) VALUES (?, ?, ?)',
+            { CityFeed.CITY_AUTHOR, cleaned, 'city' })
+    end)
+    local postId = okInsert and PhoneDb.InsertId(insertResult) or 0
+    if postId == 0 then
+        return false, 'db_error'
+    end
+
+    -- 不做实时推送：CityFeed 在 App 打开时拉一次（onMount → getCityFeed），
+    -- 结案后的公告下一次打开就能看到。少一条客户端 net event = 少一个契约面。
+    print(('[custom-phone] city bulletin #%s: %s'):format(tostring(postId), cleaned))
+    return true, postId
+end)
+
+-- ----------------------------------------------------
 -- Notification Persistence (DB-backed)
 -- ----------------------------------------------------
 -- Notifications created by server code are persisted and pushed by
@@ -627,22 +660,29 @@ end)
 -- CityFeed Callbacks & SQL
 -- ----------------------------------------------------
 QBCore.Functions.CreateCallback('phone:server:getCityFeed', function(source, cb)
-    MySQL.Async.fetchAll('SELECT f.id, f.citizenid, f.content, f.likes, f.timestamp, p.charinfo FROM phone_cityfeed f LEFT JOIN players p ON f.citizenid = p.citizenid ORDER BY f.timestamp DESC LIMIT 30', {}, function(posts)
+    -- author_kind 决定这一条是玩家帖子还是城市公告（世界痕迹第一条链）。
+    -- 名字解析放在 Lua 里：city 行没有 players 记录，JOIN 只会给 NULL。
+    MySQL.Async.fetchAll('SELECT f.id, f.citizenid, f.content, f.likes, f.timestamp, f.author_kind, p.charinfo FROM phone_cityfeed f LEFT JOIN players p ON f.citizenid = p.citizenid ORDER BY f.timestamp DESC LIMIT 30', {}, function(posts)
         local formatted = {}
         for i = 1, #posts do
-            local name = "Anonymous"
-            if posts[i].charinfo then
-                local char = json.decode(posts[i].charinfo)
-                name = char.firstname .. " " .. char.lastname
+            local row = posts[i]
+            local name = nil
+            if type(row.charinfo) == 'string' and row.charinfo ~= '' then
+                local okChar, char = pcall(json.decode, row.charinfo)
+                if okChar and type(char) == 'table' and char.firstname then
+                    name = ('%s %s'):format(char.firstname, char.lastname or '')
+                end
             end
-            table.insert(formatted, {
-                id = posts[i].id,
+            local formattedRow = CityFeed.FormatRow({
+                id = row.id,
+                citizenid = row.citizenid,
                 name = name,
-                citizenid = posts[i].citizenid,
-                content = posts[i].content,
-                likes = posts[i].likes,
-                timestamp = posts[i].timestamp
+                content = row.content,
+                likes = row.likes,
+                timestamp = row.timestamp,
+                author_kind = row.author_kind,
             })
+            if formattedRow then table.insert(formatted, formattedRow) end
         end
         cb({ success = true, feed = formatted })
     end)
@@ -660,7 +700,8 @@ QBCore.Functions.CreateCallback('phone:server:postCityFeed', function(source, cb
     local citizenid = Player.PlayerData.citizenid
     local name = Player.PlayerData.charinfo.firstname .. " " .. Player.PlayerData.charinfo.lastname
 
-    MySQL.Async.insert('INSERT INTO phone_cityfeed (citizenid, content) VALUES (?, ?)', {
+    -- author_kind 由服务端写死为 citizen：客户端参数里没有、也不接受这个字段。
+    MySQL.Async.insert("INSERT INTO phone_cityfeed (citizenid, content, author_kind) VALUES (?, ?, 'citizen')", {
         citizenid, content
     }, function(result)
         local postId = PhoneDb.InsertId(result)
@@ -670,6 +711,7 @@ QBCore.Functions.CreateCallback('phone:server:postCityFeed', function(source, cb
                 post = {
                     id = postId,
                     name = name,
+                    author_kind = 'citizen',
                     citizenid = citizenid,
                     content = content,
                     likes = 0,

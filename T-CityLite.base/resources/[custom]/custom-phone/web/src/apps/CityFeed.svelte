@@ -91,7 +91,12 @@
         {#each feedList as post (post.id)}
           <div class="feed-card glass-card">
             <div class="feed-header">
-              <span class="feed-author">@{post.name}</span>
+              {#if post.author_kind === 'city'}
+                <!-- 城市公告：作者由服务端判定（author_kind），不是玩家昵称 -->
+                <span class="feed-author feed-author-city">📣 {post.name}</span>
+              {:else}
+                <span class="feed-author">@{post.name}</span>
+              {/if}
               <span class="feed-time">{formatTime(post.timestamp)}</span>
             </div>
             <p class="feed-body">{post.content}</p>
@@ -199,6 +204,12 @@
     font-size: 12.5px;
     font-weight: 700;
     color: hsl(var(--phone-accent));
+  }
+
+  .feed-author-city {
+    color: var(--accent, #38bdf8);
+    font-weight: 600;
+    letter-spacing: 0.02em;
   }
 
   .feed-time {

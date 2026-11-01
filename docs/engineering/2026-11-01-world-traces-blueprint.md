@@ -119,14 +119,14 @@ lua5.4 tests/agent/lua/runner.lua
 | T1 区域注册表 | ✅ | core-framework 的 shared/regions.lua | `tests/unit/layer1_core/test_world_regions.py`（4 条：锚点回落自己、半径边界、非法坐标兜底、纯度静态检查） |
 | T2 修 R7 + 痕迹写者 | ✅ | services/world_state_service.lua、services/world_trace_service.lua | `tests/unit/layer1_core/test_world_traces.py`（6 条：R7 三条回归断言 + 行为 harness 的 11 组用例） |
 | T3 结案挂钩 | ✅ | custom-police 的 server/p0_incidents.lua 结案分支（`pcall` 包裹） | 同上文件的挂钩断言（SELECT 带 x/y、调用点在 closed 分支内、早于通用 UPDATE） |
-| T4 CityFeed 公告 | ⬜ 未开工 | — | 需要迁移 v3.15 + `author_kind` |
-| T5 前端「城市」标识 | ⬜ 未开工 | — | 依赖 T4 |
-| T6 真机验收 | ⬜ 未做 | — | 需要起栈 |
+| T4 CityFeed 公告 | ✅ | custom-phone 的 server/city_feed.lua、server/main.lua、migrations/v3.15 | `tests/unit/layer1_core/test_city_feed.py`（5 条静态 + 行为 harness） |
+| T5 前端「📣 城市」标识 | ✅ | web/src/apps/CityFeed.svelte（构建产物已重建） | `npx svelte-check` 0 errors；`npm run build` 产物 hash 更新 |
+| T6 真机验收 | ⬜ 未做 | — | 需要起栈（见 §5 真机表） |
 
 **反向校验（人工变异）**：把 `value = decodeValue(row.state_value)` 改回 `value = row` → R7 断言变红；
 把结案里的 `RecordAt` 整段删掉 → 挂钩断言变红；两处都是一改就红、改回就绿（脚本跑过，见提交说明）。
 
-**回归面**：`pytest tests/unit tests/architecture -q` → **1101 passed / 147 skipped**（基线 1100 + 新增 10 减去改写的 1 处）；
+**回归面**：`pytest tests/unit tests/architecture -q` → **1109 passed / 147 skipped**（基线 1100 + 新增 10 减去改写的 1 处）；
 `lua5.4 tests/agent/lua/runner.lua` → 18 suites / 0 failed；四个改动的 Lua 文件 `luac5.4 -p` 全过。
 
 ---
