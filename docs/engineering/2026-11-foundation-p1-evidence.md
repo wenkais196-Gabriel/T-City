@@ -95,6 +95,7 @@ $ python tools/docs_lifecycle.py --check
 | 同文件 `:34` | `wallMs()` | ack 的 `duration_ms` 用 `GetGameTimer` 墙钟（TS-8），不再用 `os.clock` 冒充阻塞时长 |
 | 同文件 `:344` | `dirty_count` 别名 | custom-testing 的 stress_test.lua 与 architecture_stress_test.lua 仍读旧字段 |
 | core-framework 的 persistence_manager.lua:117 | `_G.DirtyFlush = Delegate` | 委托层：无池、无 SQL、无定时器、无 `Save` 调用 |
+| 同文件 :67-78 | `FlushAll` 只接受 ack 表 | owner 返回非表（旧版本/异常）时降级成 `attempted=0` 的**同形状** ack，调用方不会拿到 boolean |
 | `player.lua:606` | `store.SaveNow(Player, 'save_force')` | 强制存档一次写；失败保留脏标记并 `ShowError` |
 | `player.lua:594-598` | 非强制存档清 `IsDirty` | 债务已进池；不清会让 5 分钟心跳每次重跑 `SaveInventory` |
 

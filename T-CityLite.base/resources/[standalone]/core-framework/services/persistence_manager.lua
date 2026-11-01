@@ -66,11 +66,13 @@ end
 --- 刷盘：返回 owner 的 ack（{ reason, attempted, ok, failed, duration_ms }）。
 function PersistenceManager.FlushAll(reason, ignoreBackoff)
     local ack = callOwner('StoreFlushAll', reason or 'delegate', ignoreBackoff)
-    if ack then return ack end
+    if type(ack) == 'table' then return ack end
+    -- owner 不在 / 版本不匹配 / 返回的不是 ack：降级成"什么都没刷"，但**形状一致**，
+    -- 调用方（dashboard、压测脚本）不会拿到 boolean 之类的异构返回值。
     return {
         reason = reason or 'delegate',
         attempted = 0, ok = 0, failed = 0, duration_ms = 0,
-        owner = 'unavailable',
+        owner = (ack == nil) and 'unavailable' or 'bad_owner_ack',
     }
 end
 
