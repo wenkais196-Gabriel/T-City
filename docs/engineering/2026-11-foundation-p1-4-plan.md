@@ -62,13 +62,21 @@ review_by: 2026-12-31
 
 每个阶段 = 一个可独立合并/回滚的 PR。**B、C、D 按顺序**（同改一个文件）。
 
-### 阶段 A：静态闸门冻结新增猴补
-- 新增 tests/architecture 下的 test_no_monkey_patch.py + monkey_patches_allowlist.json；
+### 阶段 A：静态闸门冻结新增猴补  ✅ 2026-11-01 完成
+- 新增 tests/architecture 下的 monkey_patch_scan.py（唯一扫描器）+ test_no_monkey_patch.py + monkey_patches_allowlist.json；
 - 扫描根：`T-CityLite.base/resources/**/*.lua`；**排除** `[qb]/qb-core/**`（API owner）、任何 `tests/`、`docs/`；
-- 覆盖 **4 种形态**：`function <prefix>.<Name>(`、`<prefix>.<Name> =`、`<prefix>["<Name>"] =` 与 `<prefix>['<Name>'] =`（单双引号都要）、裸 `QBCore.<Name> =`；
-  `<prefix> ∈ {QBCore, QBCore.Functions, Player.Functions, _G.Bus}`；
+- 覆盖三种写法 × 三个前缀：`function <prefix>.<Name>(`、`<prefix>.<Name> =`、`<prefix>["<Name>"] =` 与
+  `<prefix>['<Name>'] =`（单双引号都要）；`<prefix> ∈ {QBCore, QBCore.Functions, Player.Functions}`。
+  `QBCore.<Name> =` 由 `QBCore` 前缀的 assign 形态覆盖（不再单列 `bare` 分支）；
+  **`_G.Bus.<X> =` 显式排除**——那是总线服务注册，不是猴补；
 - 登记项 `{file, symbol, owner, reason, expires}`；三条失败条件：**未登记命中 / 登记已过期 / 登记项 0 命中（死条目）**；
-- 变异用例：`tmp_path` 造 4 个形态各一的 fixture + 1 个排除路径下的对照，闸门必须红 4 放过 1。
+- 自证用例：`tmp_path` 造 5 个正例（function / assign / 单引号下标 / 双引号下标 / 裸命名空间）+ 4 个反例
+  （qb-core 目录、tests 目录、注释、`== nil` 比较）+ 2 个边界（文档字符串里贴的代码片段、server 目录下的 client_bridge.lua 之类），
+  断言正例全中、反例全不中、`server/` 下的 `client_*.lua` **仍要被抓到**。
+- **实测存量 8 处命中 / 7 个 (file,symbol)**：core-framework compat 三条（GetPlayer / Notify / AddMoney）、
+  custom-vehicles 的 `QBCore.Functions.OnGiveKeys`（2 处赋值）、production-freeze 三条（Debug / ShowError / ShowSuccess）。
+  两条边界写进了扫描器：`_G.Bus.X =` 是服务注册不算猴补；客户端文件的裸 `QBCore.X =`（qb-fuel 的 `QBCore.PlayerData = pData`）
+  是玩家数据快照不算。
 
 ### 阶段 B：删 `GetPlayer` 缓存
 - 删 compat 里 origGetPlayer / playerCache / isOnline / `function QBCore.Functions.GetPlayer` 及两个 handler；

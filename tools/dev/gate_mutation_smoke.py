@@ -374,6 +374,33 @@ MUTATIONS += [
     ),
 ]
 
+# P1-4 阶段 A：猴补闸门
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_no_monkey_patch.py::test_no_unregistered_monkey_patch",
+        path="resources/[custom]/__mutant_patch/server/__mutant.lua",
+        content="QBCore.Functions.GetPlayer = function(source) return nil end",
+        what="新增一处未登记的猴补（往 QBCore.Functions 上赋值）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_no_monkey_patch.py::"
+              "test_allowlist_entries_are_complete_and_not_expired"),
+        path="tests/architecture/monkey_patches_allowlist.json",
+        content=None,
+        replace_from='"expires": "2027-03-31"',
+        replace_to='"expires": "2020-01-01"',
+        what="登记项已过期（猴补变成永不过期的白名单）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_no_monkey_patch.py::test_allowlist_has_no_dead_entries",
+        path="tests/architecture/monkey_patches_allowlist.json",
+        content=None,
+        replace_from='"symbol": "QBCore.Debug"',
+        replace_to='"symbol": "QBCore.DebugNope"',
+        what="登记项指向不存在的符号（死条目：删了猴补没清登记）",
+    ),
+]
+
 # P1-3 第四批：helper 登记表只认"看了返回值的调用"
 MUTATIONS += [
     Mutation(
