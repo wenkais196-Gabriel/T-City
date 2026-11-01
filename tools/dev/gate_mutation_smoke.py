@@ -385,6 +385,15 @@ MUTATIONS += [
         replace_to="    CanModifyPlate(source, plate) -- 变异：调用了但忽略返回值",
         what="鉴权 helper 被调用但不看返回值（等于没有任何保护）",
     ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_auth.py::"
+              "test_shapes_that_look_like_guards_are_not_counted"),
+        path="tests/architecture/net_event_scan.py",
+        content=None,
+        replace_from='if inner.startswith("return"):',
+        replace_to='if False:',
+        what="否定分支不再要求 return（‘判了但没拦住’会被当成已鉴权）",
+    ),
 ]
 
 

@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   （`CartelService.IsMember`）。登记表新增 `shape`（`local_check` / `pcall` / `export` / `delegate`），
   每种形状都要求"返回值真的被判定"而不是"名字出现过"。同时加了一个 token `job_deny`
   （形如 `if xjob.name ~= '…' then … return end` 的职业白名单判定，与 `HasPermission` 同级）。
-  真修三处：① `quest:server:placementComplete` / `trailerHitched` 原来只查状态不查任务归属，
+  真修四处：① `quest:server:placementComplete` / `trailerHitched` 原来只查状态不查任务归属，
   任何人可对任意 questId 上报"放好了/挂上了"，现在先过任务安全层；② `custom-cartel` 的 NPC 回调
   取了 `IsMember` 却没用，非成员也能拿到 NPC 列表；③ `custom-vehicles` 的 `GiveKeys` 与
   `AcquireVehicleKeys` 各写了一遍认领校验且宽严不一 —— 收敛成 `CanClaimPlate`（会话车主 /

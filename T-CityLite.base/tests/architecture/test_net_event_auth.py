@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from datetime import date
 from pathlib import Path
 
@@ -36,6 +37,7 @@ from net_event_scan import (
     non_literal_in_dir,
     read,
     scan_dir,
+    scan_repo,
     strip_lua_noise,
 )
 
@@ -535,6 +537,16 @@ def test_literal_rule_fires_on_the_variable_form(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
+
+@lru_cache(maxsize=1)
+def _all_events():
+    return scan_repo(RESOURCES)[0]  # 全仓，不是本文件的 SCAN_DIRS 子集
+
+
+def events_for(resource: str):
+    return [event for event in _all_events() if event.resource == resource]
+
+
 def _resource_dir(name: str) -> Path:
     hits = sorted(RESOURCES.rglob(f"{name}/fxmanifest.lua"))
     assert len(hits) == 1, f"{name}: 找到 {len(hits)} 个 fxmanifest，无法唯一定位资源"
@@ -595,16 +607,92 @@ def test_registered_guard_helpers_are_proven():
                     f"{resource}/{name}: 原文函数体里找不到 {token!r}"
                 )
 
+            # 只看 **net event handler 的函数体**：helper 在 callback / 内部函数里的用法
+            # （例如 `cb(isMember)` 把布尔丢回客户端）不是这条规则要管的事。
             uses = 0
             problems: list[str] = []
-            for lua in sorted(root.rglob("*.lua")):
-                if is_client_path(lua):
-                    continue  # 服务端事件的鉴权只可能写在服务端文件里
-                found, bad = helper_call_problems(strip_lua_noise(read(lua)), name, spec)
+            for event in events_for(resource):
+                found, bad = helper_call_problems(event.body, name, spec)
                 uses += found
-                problems.extend(str(lua.relative_to(root)) + ":" + item for item in bad)
+                problems.extend(
+                    str(event.path.relative_to(root)) + ":" + str(event.line) + " " + item
+                    for item in bad
+                )
             assert not problems, (
                 f"{resource}/{name}: 有调用点没走 `if not {name}(...) then ... return`："
                 + chr(10) + "  " + (chr(10) + "  ").join(problems)
             )
             assert uses > 0, f"{resource}/{name}: 登记了但没有任何调用点（死豁免）"
+
+
+# ---------------------------------------------------------------------------
+# 负面形状：这些"看起来有校验"的写法必须**不**算已鉴权
+# ---------------------------------------------------------------------------
+
+
+def _probe(body: str, resource: str = "custom-vehicles"):
+    return Event(
+        name="probe:server:x",
+        resource=resource,
+        path=RESOURCES / "probe.lua",
+        line=1,
+        body=body,
+        kind="server",
+    )
+
+
+def test_shapes_that_look_like_guards_are_not_counted():
+    """验收方在 PR #183 上实测能过的几种洗白形状，现在必须全部判否。
+
+    为什么单独写这一条：`is_guarded` 是"覆盖率"的唯一来源，如果它接受"判了但没拦住"，
+    覆盖率就是自我安慰。这些形状都来自真实 review 里被指出的写法。
+    """
+    from net_event_scan import Event as ScanEvent
+
+    def probe(body: str) -> ScanEvent:
+        return ScanEvent(
+            name="probe:server:x",
+            resource="custom-vehicles",
+            path=RESOURCES / "probe.lua",
+            line=1,
+            body=body,
+            kind="server",
+        )
+
+    bad = {
+        "否定分支没有 return": chr(10).join([
+            "if not CanModifyPlate(src, plate) then Notify(src) end",
+            "DoPrivileged(plate)",
+            "return",
+        ]),
+        "调用了但没接返回值": chr(10).join([
+            "CanModifyPlate(src, plate)",
+            "DoPrivileged(plate)",
+        ]),
+        "死代码里的守卫": chr(10).join([
+            "if false then",
+            "    if not CanModifyPlate(src, plate) then return end",
+            "end",
+            "DoPrivileged(plate)",
+        ]),
+        "local_check 只打印不 return": chr(10).join([
+            "local ok, reason = CanClaimPlate(src, cid, plate)",
+            "if not ok then print(reason) end",
+            "Give(plate)",
+        ]),
+        "export 裸调用": chr(10).join([
+            "exports['custom-police']:AdoptDraft(src, id)",
+            "Delete(id)",
+        ]),
+    }
+    for label, body in bad.items():
+        assert not is_guarded(probe(body)), label + " 被当成了已鉴权"
+
+    good = chr(10).join([
+        "if not CanModifyPlate(src, plate) then",
+        "    Log()",
+        "    return",
+        "end",
+        "DoPrivileged(plate)",
+    ])
+    assert is_guarded(probe(good)), "正向形状被判否 —— 闸门写反了"
