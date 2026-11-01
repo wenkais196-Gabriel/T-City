@@ -51,7 +51,7 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
-**债的分布不是均匀的**：55 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
+**债的分布不是均匀的**：53 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
 它们贡献 **93/279（33%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
 `qb-crypto` 6、`qb-shops` 5、`qb-weed` 5、`qb-streetraces` 3…）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
@@ -140,14 +140,14 @@ cd T-CityLite.base && python tests/architecture/net_event_baseline.py --write
 | `RegisterNetEvent (`（多一个空格） | 扫描器仍然收得到（反向用例钉住） |
 | 注释里写 `-- PolicePolicy.Can(` / 字符串里印 token | 不算鉴权（两条反向用例） |
 
-**11 条变异用例全部"注入红 / 对照绿"**（`tools/dev/gate_mutation_smoke.py --only net_event`）。
+**12 条变异用例全部"注入红 / 对照绿"**（`tools/dev/gate_mutation_smoke.py --only net_event`）。
 
 ## 7. 还没做到的（诚实记账）
 
 | 计划里的判据 | 现状 | 差距 |
 |---|---|---|
 | ① 引擎层（qb-core）100% | ✅ 15/15 | — |
-| ② `[custom]` ≥ 80% | **90.2%（120/133）✅ 达成** | 剩余 26 个：`custom-vehicles` 6、`custom-quest` 5、`custom-justice` 4、`custom-agent-client` 4、其它零散。下一批把 `custom-agent-client` 的会话令牌绑定补成 helper |
+| ② `[custom]` ≥ 80% | **90.2%（120/133）✅ 达成** | 剩余 **13** 个：`custom-quest` 5（其中 `aviationHeightMonitorComplete` 需要服务端验高）、`custom-main` 2、`story-engine` 2、`custom-certificates` 1、`custom-documents` 1、`custom-justice` 1、`durability:server:onWeaponFired` 1 |
 | ③ `[qb]` 登记为带 expires 的债务 | ✅ 53 个仍有欠账的资源各有 owner + expires（2027-03-31）：`[qb]` 28 个、`[custom]` 7 个、other 18 个 | 到期前要么修，要么续期并说明 |
 
 其它已知残余（不阻塞本步，但要在下一轮处理）：
