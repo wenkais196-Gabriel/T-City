@@ -276,8 +276,9 @@ RegisterNetEvent('custom-vehicles:server:logisticsQuickLoad', function()
     local src = source
     if not checkOpRateLimit(src, 'logistics') then return end
     -- 没有进行中的物流任务就不该能"快捷装货"（原来只有限频，任何玩家都能推任务进度）
-    local quests = exports['custom-quest']:GetActiveQuests(src)
-    if not quests or #quests == 0 then return end
+    -- pcall：custom-quest 重启的空窗期里 exports 会抛错，不能把守卫变成运行时错误
+    local ok, quests = pcall(function() return exports['custom-quest']:GetActiveQuests(src) end)
+    if not ok or type(quests) ~= 'table' or #quests == 0 then return end
     exports['custom-quest']:OnCustomEvent(src, 'dashboard_quick_load', {})
 end)
 
