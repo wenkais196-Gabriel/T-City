@@ -30,6 +30,8 @@ from net_event_scan import (
     Event,
     auth_tokens as scan_auth_tokens,
     guard_helpers,
+    helper_call_problems,
+    is_client_path,
     is_guarded,
     non_literal_in_dir,
     read,
@@ -539,15 +541,32 @@ def _resource_dir(name: str) -> Path:
     return hits[0].parent
 
 
+def _function_block(code: str, name: str) -> str:
+    """从 `function <name>(` 截到顶层 `end`（列 0）。
+
+    只看整个文件会被"同文件别的函数里的证据"满足，所以登记检查限定在函数体。
+    """
+    marker = "function " + name + "("
+    at = code.index(marker)
+    lines = code[at:].splitlines()
+    out = [lines[0]]
+    for line in lines[1:]:
+        out.append(line)
+        if line.rstrip() in ("end", "end)"):
+            break
+    return chr(10).join(out)
+
+
 def test_registered_guard_helpers_are_proven():
     """登记过的 helper 必须是真校验，且每一处调用都必须看它的返回值。
 
     为什么需要这张表：`custom-vehicles` 的 26 个事件里有 10 个靠 `CanModifyPlate` 挡着，
     扫描器只认固定 token 的话会把这 10 个当成裸奔（假红）。但"调用了一个叫 Can 的函数"
-    本身不是证据 —— 所以这里对每一行登记做三件事：
-      ① 定义恰好一处（不是同名死代码、没有第二份实现互相覆盖）；
-      ② 函数体含约定证据（剥注释/字符串后）+ 含字符串字面量的证据（原文）；
-      ③ 资源内每一处调用都在 `if not H(...) then return` 形状里（调用但不看返回值不算）。
+    本身不是证据 —— 所以这里对每一行登记做四件事：
+      ① 定义恰好一处（不是同名死代码，也没有第二份实现互相覆盖）；
+      ② **函数体内**含约定证据（剥注释/字符串后）+ 含字符串字面量的证据（原文）；
+      ③ 资源内每一处调用都在 `if not H(...)` 的否定分支里，且该分支**真的 return**；
+      ④ 登记了却没有任何调用点 → 死豁免，红。
     """
     registry = guard_helpers()
     assert registry, "helper 登记表为空 —— 这条规则等于没写"
@@ -563,25 +582,30 @@ def test_registered_guard_helpers_are_proven():
             assert root in def_file.parents, f"{resource}/{name}: defined_at 不在该资源内"
             raw = read(def_file)
             code = strip_lua_noise(raw)
-            assert code.count(f"function {name}(") == 1, (
-                f"{resource}/{name}: 必须恰好定义一次（现在 {code.count('function ' + name + '(')} 次）"
+            assert code.count("function " + name + "(") == 1, (
+                f"{resource}/{name}: 必须恰好定义一次（现在 "
+                f"{code.count('function ' + name + '(')} 次）"
             )
+            block = _function_block(code, name)
             for token in spec.get("requires_code", []):
-                assert token in code, f"{resource}/{name}: 函数体里找不到 {token!r}（剥注释后）"
+                assert token in block, (
+                    f"{resource}/{name}: **函数体**里找不到 {token!r}（同文件其它函数里的不算）"
+                )
             for token in spec.get("requires_raw", []):
-                assert token in raw, f"{resource}/{name}: 原文里找不到 {token!r}"
+                assert token in _function_block(raw, name), (
+                    f"{resource}/{name}: 原文函数体里找不到 {token!r}"
+                )
 
             uses = 0
+            problems: list[str] = []
             for lua in sorted(root.rglob("*.lua")):
-                # 定义文件本身也要查（调用点多数就在同一个文件里），只跳过定义那一行
-                for number, line in enumerate(strip_lua_noise(read(lua)).splitlines(), 1):
-                    if f"{name}(" not in line or f"function {name}(" in line:
-                        continue
-                    uses += 1
-                    rel = lua.relative_to(root)
-                    assert re.search(rf"if\s+not\s+{name}\s*\(", line), (
-                        f"{rel}:{number} 调用了 {name} 但没走 `if not {name}(...) then return` —— "
-                        f"忽略返回值的调用不算鉴权"
-                    )
+                if is_client_path(lua):
+                    continue  # 服务端事件的鉴权只可能写在服务端文件里
+                found, bad = helper_call_problems(strip_lua_noise(read(lua)), name)
+                uses += found
+                problems.extend(str(lua.relative_to(root)) + ":" + item for item in bad)
+            assert not problems, (
+                f"{resource}/{name}: 有调用点没走 `if not {name}(...) then ... return`："
+                + chr(10) + "  " + (chr(10) + "  ").join(problems)
+            )
             assert uses > 0, f"{resource}/{name}: 登记了但没有任何调用点（死豁免）"
-

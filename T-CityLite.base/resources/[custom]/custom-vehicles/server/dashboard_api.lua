@@ -158,6 +158,9 @@ RegisterNetEvent('custom-vehicles:server:megaphone', function(data)
     local coords = GetEntityCoords(ped)
 
     -- 广播给附近玩家（通过 pma-voice 或其他方式）
+    -- 注意：job 必须是本作用域的变量。抽 IsEmergencyService 时曾把 `local job` 一起删掉，
+    -- 结果这里引用全局 job → 通过鉴权后必抛 attempt to index a nil value。
+    local job = Player.PlayerData.job or {}
     local title = '紧急人员'
     if job.name == 'police' then title = '警官'
     elseif job.name == 'ambulance' then title = '急救员'

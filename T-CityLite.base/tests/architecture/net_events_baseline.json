@@ -27,10 +27,10 @@
       "unguarded": 200
     },
     "other": {
-      "events": 77,
+      "events": 76,
       "guarded": 1,
       "allowlisted": 6,
-      "unguarded": 70
+      "unguarded": 69
     }
   },
   "resources": {
@@ -586,10 +586,10 @@
     "tcity-dashboard": {
       "batch": "other",
       "group": "[system]",
-      "events": 5,
+      "events": 4,
       "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 4,
+      "unguarded": 3,
       "started": true
     }
   },
@@ -1023,7 +1023,6 @@
       "tcity:client:telemetry"
     ],
     "tcity-dashboard": [
-      "custom-vehicles:server:logisticsQuickLoad",
       "tcity-dashboard:server:flagPlate",
       "tcity-dashboard:server:setTracker",
       "tcity-dashboard:server:unflagPlate"
@@ -1489,7 +1488,7 @@
     {
       "resource": "tcity-dashboard",
       "batch": "other",
-      "unguarded": 4,
+      "unguarded": 3,
       "owner": "tcity-dashboard",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
