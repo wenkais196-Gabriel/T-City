@@ -454,7 +454,6 @@ RegisterNetEvent('custom-vehicles:server:setDriveMode', function(vehNetId, mode)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
-    local citizenid = Player.PlayerData.citizenid
     local veh = NetworkGetEntityFromNetworkId(vehNetId)
     if not veh or veh == 0 then return end
 
