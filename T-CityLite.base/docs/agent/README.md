@@ -21,6 +21,9 @@ views, `agent_ro`, PII).
 
 > **Client harness:** Windows FiveM Legacy + MCP bridge, NUI test hooks and
 > known input limitations are documented in [`CLIENT_HARNESS.md`](CLIENT_HARNESS.md).
+> **先跑无头桩**：`lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua` 覆盖焦点/输入/
+> 事件/effect 通道（`stubs/client.lua` + `cases_client/`），不需要客户端与玩家；
+> 只剩三类必须先看真机，清单见 [`design/06-client-model.md`](design/06-client-model.md) §3。
 
 Agents read through a small, stable set of views instead of joining 20+ game
 tables. All access goes directly to MariaDB; it does not touch the FXServer
@@ -418,9 +421,11 @@ above was performed with the normal `.env` credentials.
 |---|---|
 | [`STATUS.md`](STATUS.md) | **先看这个**：分层现状、17 个动作覆盖、设计差异、上手顺序、未验证项 |
 | [`ACTIONS.md`](ACTIONS.md) | 动作契约：风险分级、参数规范化、审批、执行与回读、错误码、`agent_denials` |
-| [`TOOLS.md`](TOOLS.md) | 30 个工具的路由与风险表（由 `tools/agent_tools.json` 生成，勿手改） |
+| [`TOOLS.md`](TOOLS.md) | 34 个工具的路由与风险表（由 `tools/agent_tools.json` 生成，勿手改） |
 | [`EVAL.md`](EVAL.md) | 评测：导出、指标定义（含 denial_rate）、已知盲区 |
 | [`SMOKE.md`](SMOKE.md) | 实机冒烟：三段式检查与常见失败 |
-| [`design/`](design/) | 五份设计（实时感知 / 效果通道 / 工具契约 / 写操作 / 测试评测） |
+| [`design/`](design/) | 设计文档；[`06-client-model.md`](design/06-client-model.md) 是客户端性质（P01–P14）、可验证性矩阵与双端 agent 准备；[`07-harness-channel.md`](design/07-harness-channel.md) 是本地 console harness（`get_console_lines` / `get_console_match` / `get_client_log`） |
+| [`FIVEM_MCP_LIVE_TEST.md`](FIVEM_MCP_LIVE_TEST.md) | 第三方 fivem-mcp 0.6.0 的逐工具实测：23 个工具哪些能用、四个必踩的坑 |
+| `tests/agent/lua/runner_client.lua` | 无头客户端 suite（`stubs/client.lua` + `cases_client/`），不需要游戏与玩家 |
 
 实机验证顺序：建表（`v2.3`、`v2.5`）→ 开 convar → `tools/agent_smoke.py` → 导出审计 → `tools/agent_eval.py`。

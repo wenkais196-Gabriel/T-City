@@ -1,3 +1,14 @@
+---
+id: agent-status
+type: manual
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-01-31
+source_of_truth: true
+---
+
 # Agent 接管 · 实现状态
 
 > 快照：2026-10-22 · 分支 `feat/agent-takeover-v2` · PR #42
@@ -45,7 +56,8 @@
 lua5.4 tests/agent/lua/runner.lua        9 suites / 236 checks
 python3 -m pytest -q tests/agent         203 passed (3 skipped 需 DB)
 cd T-CityLite.base && pytest -q tests/unit   288 passed / 132 skipped（无库，2026-10-23 Windows 实测）
-python3 tools/agent_tools.py --check     31 tools, no drift
+python3 tools/agent_tools.py --check     34 tools, no drift
+# harness（本地只读）需 TCITY_HARNESS=1 + TCITY_HARNESS_SERVER_LOG 才出现在 tools/list
 ```
 
 **没有做过的**：真实 FXServer + GTA 客户端联调。所有 Lua 断言都在 stub 下；`DropPlayer` 异步、`DoesEntityExist` 延迟、`SetEntityCoords` 的 OneSync 时序均未在真机验证。

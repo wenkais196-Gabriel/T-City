@@ -89,7 +89,9 @@ FORBIDDEN_PARAM_NAMES = frozenset({"source", "playerid", "serverid", "netid", "s
 BUILTIN_REF_NAMES = frozenset({"action_id"})
 RISK_ORDER = {"L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
 CHANNELS = ("read", "write", "effect")
-ROUTES = ("gateway", "director")
+# ``harness`` tools run in-process on the operator's machine (design 07):
+# console/log observation only, read-only, and never reachable over HTTP.
+ROUTES = ("gateway", "director", "harness")
 RISKS = ("L0", "L1", "L2", "L3", "L4")
 BLAST_RADII = ("single", "group", "world")
 IDEMPOTENCY_MODES = ("required", "optional", "none")
@@ -439,6 +441,8 @@ def _validate_tool(errors: list[str], tool: Any, index: int) -> str | None:
         return None
 
     for key in TOOL_REQUIRED_KEYS:
+        if key == "http" and tool.get("route") == "harness":
+            continue
         if key not in tool:
             _err(errors, f"{path}.{key}", "is required")
     for key in sorted(set(tool) - TOOL_KEYS):
@@ -555,7 +559,15 @@ def _validate_tool(errors: list[str], tool: Any, index: int) -> str | None:
             _check_str(errors, f"{path}.director_action", action, pattern=DIRECTOR_ACTION_RE)
 
     props = _validate_input_schema(errors, tool, path)
-    _validate_http(errors, tool, path, channel, props)
+    if route == "harness":
+        # Harness tools are in-process and read-only: no HTTP surface, no
+        # director action, and the log paths come from the environment.
+        if channel != "read":
+            _err(errors, f"{path}.channel", "harness tools must be read-only")
+        if tool.get("http") is not None:
+            _err(errors, f"{path}.http", "harness tools must set http=null")
+    else:
+        _validate_http(errors, tool, path, channel, props)
     _validate_rate_limit(errors, tool, path, channel)
     _validate_limits(errors, tool, path)
     _validate_pii(errors, tool, path)
@@ -1153,7 +1165,11 @@ def render_tools_md(registry: dict[str, Any] | None = None) -> str:
     ]
     for index, tool in enumerate(tools, start=1):
         http = tool.get("http") or {}
-        route_text = f"{http.get('method', '?')} `{http.get('path', '?')}`"
+        route_text = (
+            f"{http.get('method', '?')} `{http.get('path', '?')}`"
+            if http
+            else "— (in-process)"
+        )
         verify = tool.get("verify")
         undo = tool.get("undo")
         lines.append(

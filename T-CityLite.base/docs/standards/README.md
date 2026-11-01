@@ -20,6 +20,7 @@
 | **[🔧 维护手册规范 (maintenance_manual_spec.md)](file:///e:/T-City/T-CityLite.base/docs/standards/maintenance_manual_spec.md)** | 日常维护与灾难备份 | 规范版本发布变更、Convar 清单、诊断指令、以及断线崩溃数据自愈。 |
 | **[📦 脚本模板模板 (script_templates.md)](file:///e:/T-City/T-CityLite.base/docs/standards/script_templates.md)** | 双端最小化基础骨架代码 | 提供内置安全测距、流控和统一 Logger 依赖的 sv/cl Lua 标准模板。 |
 | **[🚀 开发与维护工作流 (dev_workflow.md)](file:///e:/T-City/T-CityLite.base/docs/standards/dev_workflow.md)** | 人机协同闭环生命周期 | 针对单人开发者的“规划-开发-联调-测试-文档-发布”完整闭环流程。 |
+| **[🗂️ 文档生命周期规范 (../../../docs/standards/doc-lifecycle.md)](../../../docs/standards/doc-lifecycle.md)** | 项目级文档的类型 / 状态 / frontmatter / 迁移 | 全部 `*.md` 的分类、状态机、复审周期与自动索引（`python tools/docs_lifecycle.py`）。**新增/改名文档前必读。** |
 
 ---
 

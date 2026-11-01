@@ -1,3 +1,14 @@
+---
+id: phone-design
+type: spec
+status: active
+system: comms
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+source_of_truth: true
+---
+
 # custom-phone 性能与职业 App 接口设计
 
 > 输入：`qb-phone-research.md`（上游 qb-phone 架构/性能/借鉴清单）、`custom-phone-audit.md`（本地 20 条 bug、10 条性能问题）。

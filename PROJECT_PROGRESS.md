@@ -1,3 +1,14 @@
+---
+id: project-progress
+type: plan
+status: review
+system: delivery
+owner: hermes
+updated: 2026-10-31
+review_by: 2026-11-30
+source_of_truth: true
+---
+
 # 🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)
 
 > [!IMPORTANT]

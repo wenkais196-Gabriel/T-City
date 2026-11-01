@@ -5,7 +5,7 @@
 local AgentTools = {}
 
 AgentTools.SCHEMA_VERSION = 1
-AgentTools.REGISTRY_VERSION = "1.5.0"
+AgentTools.REGISTRY_VERSION = "1.6.0"
 
 AgentTools.TOOLS = {
   ["get_schema"] = {
@@ -683,6 +683,77 @@ AgentTools.TOOLS = {
       ["citizenid"] = { type = "string", chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz", min_length = 1, max_length = 11 },
       ["message"] = { type = "string", min_length = 1, max_length = 500 },
       ["idempotency_key"] = { type = "string", chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", min_length = 1, max_length = 128 },
+    },
+  },
+  ["get_console_lines"] = {
+    name = "get_console_lines",
+    title = "Observe the server or client console",
+    channel = "read",
+    route = "harness",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    auth = "default",
+    params = { "target", "limit", "after_seq", "contains", "pattern" },
+    required = { "target" },
+    schema = {
+      ["target"] = { type = "string", enum = { "server", "client" } },
+      ["limit"] = { type = "integer", minimum = 1, maximum = 200 },
+      ["after_seq"] = { type = "integer", minimum = 0 },
+      ["contains"] = { type = "string", max_length = 200 },
+      ["pattern"] = { type = "string", max_length = 200 },
+    },
+  },
+  ["get_console_match"] = {
+    name = "get_console_match",
+    title = "Wait for a console line",
+    channel = "read",
+    route = "harness",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    auth = "default",
+    params = { "target", "pattern", "timeout_ms", "after_seq", "contains" },
+    required = { "target", "pattern" },
+    schema = {
+      ["target"] = { type = "string", enum = { "server", "client" } },
+      ["pattern"] = { type = "string", min_length = 1, max_length = 200 },
+      ["timeout_ms"] = { type = "integer", minimum = 500, maximum = 30000 },
+      ["after_seq"] = { type = "integer", minimum = 0 },
+      ["contains"] = { type = "string", max_length = 200 },
+    },
+  },
+  ["get_client_log"] = {
+    name = "get_client_log",
+    title = "Tail the FiveM client log",
+    channel = "read",
+    route = "harness",
+    risk = "L0",
+    blast_radius = "single",
+    status = "active",
+    idempotency = "none",
+    dry_run = "not_applicable",
+    requires_approval = false,
+    undo_supported = false,
+    director_action = false,
+    auth = "default",
+    params = { "limit", "after_seq", "contains", "pattern" },
+    required = { },
+    schema = {
+      ["limit"] = { type = "integer", minimum = 1, maximum = 200 },
+      ["after_seq"] = { type = "integer", minimum = 0 },
+      ["contains"] = { type = "string", max_length = 200 },
+      ["pattern"] = { type = "string", max_length = 200 },
     },
   },
 }

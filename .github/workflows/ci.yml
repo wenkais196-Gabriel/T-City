@@ -140,6 +140,20 @@ jobs:
               print('\n'.join(missing[:50]))
           PY
 
+  docs-lifecycle:
+    name: Docs lifecycle (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate frontmatter / links / index freshness
+        continue-on-error: true
+        shell: bash
+        run: python3 tools/docs_lifecycle.py --check --verbose
+      - name: Document inventory summary
+        continue-on-error: true
+        shell: bash
+        run: python3 tools/docs_lifecycle.py --report
+
   db-schema:
     name: DB schema tests
     runs-on: ubuntu-latest

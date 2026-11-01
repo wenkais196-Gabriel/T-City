@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema_version": 1,
-  "registry_version": "1.5.0",
-  "generated": "2026-10-22T16:00:00Z",
+  "registry_version": "1.6.0",
+  "generated": "2026-10-26T19:57:38Z",
   "tools": [
     {
       "name": "get_schema",
@@ -234,7 +234,9 @@
       },
       "pii": {
         "returns_pii": false,
-        "untrusted_fields": ["payload"]
+        "untrusted_fields": [
+          "payload"
+        ]
       },
       "verify": null,
       "undo": null,
@@ -289,7 +291,9 @@
       },
       "pii": {
         "returns_pii": false,
-        "untrusted_fields": ["payload"]
+        "untrusted_fields": [
+          "payload"
+        ]
       },
       "verify": null,
       "undo": null,
@@ -339,7 +343,11 @@
       },
       "pii": {
         "returns_pii": false,
-        "untrusted_fields": ["summary", "text", "payload"]
+        "untrusted_fields": [
+          "summary",
+          "text",
+          "payload"
+        ]
       },
       "verify": null,
       "undo": null,
@@ -387,7 +395,9 @@
       },
       "pii": {
         "returns_pii": false,
-        "untrusted_fields": ["state_value"]
+        "untrusted_fields": [
+          "state_value"
+        ]
       },
       "verify": null,
       "undo": null,
@@ -2091,6 +2101,205 @@
         "per_minute": 2,
         "burst": 1
       }
+    },
+    {
+      "name": "get_console_lines",
+      "title": "Observe the server or client console",
+      "description": "Read recent console lines from the FXServer stdout log or the newest FiveM client log. Read-only and in-process; the log paths come from the operator's environment, and after_seq gives byte-cursor paging.",
+      "channel": "read",
+      "route": "harness",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.6.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": null,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "server",
+              "client"
+            ],
+            "description": "Which console to read: the FXServer stdout log or the newest FiveM client log."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50,
+            "description": "How many matching lines to return (most recent last)."
+          },
+          "after_seq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Byte cursor returned as next_seq by a previous call; omit to read the tail."
+          },
+          "contains": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Only return lines containing this substring."
+          },
+          "pattern": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Only return lines matching this regular expression."
+          }
+        },
+        "required": [
+          "target"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": [
+          "message"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_console_match",
+      "title": "Wait for a console line",
+      "description": "Block until the server or client console prints a line matching a regex, then return it with its channel. This is the harness assertion primitive: it times out with code=timeout instead of guessing from a status code.",
+      "channel": "read",
+      "route": "harness",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.6.0",
+      "rate_limit": {
+        "per_minute": 20,
+        "burst": 3
+      },
+      "http": null,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "server",
+              "client"
+            ],
+            "description": "Which console to read: the FXServer stdout log or the newest FiveM client log."
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Regular expression that the printed line must match."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 500,
+            "maximum": 30000,
+            "default": 5000,
+            "description": "How long to wait before reporting a timeout."
+          },
+          "after_seq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Byte cursor returned as next_seq by a previous call; omit to read the tail."
+          },
+          "contains": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Only return lines containing this substring."
+          }
+        },
+        "required": [
+          "target",
+          "pattern"
+        ]
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": [
+          "message"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
+    },
+    {
+      "name": "get_client_log",
+      "title": "Tail the FiveM client log",
+      "description": "Read the newest CitizenFX_log_*.log through a byte cursor, optionally filtered by substring or regex. Read-only evidence channel for behaviour that only appears in game.",
+      "channel": "read",
+      "route": "harness",
+      "director_action": null,
+      "risk": "L0",
+      "blast_radius": "single",
+      "requires_approval": false,
+      "idempotency": "none",
+      "dry_run": "not_applicable",
+      "undo_supported": false,
+      "status": "active",
+      "since": "1.6.0",
+      "rate_limit": {
+        "per_minute": 60,
+        "burst": 10
+      },
+      "http": null,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50,
+            "description": "How many matching lines to return (most recent last)."
+          },
+          "after_seq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Byte cursor returned as next_seq by a previous call; omit to read the tail."
+          },
+          "contains": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Only return lines containing this substring."
+          },
+          "pattern": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Only return lines matching this regular expression."
+          }
+        },
+        "required": []
+      },
+      "pii": {
+        "returns_pii": false,
+        "untrusted_fields": [
+          "message"
+        ]
+      },
+      "verify": null,
+      "undo": null,
+      "compensation": "none"
     }
   ]
 }

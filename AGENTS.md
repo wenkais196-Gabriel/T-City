@@ -1,3 +1,14 @@
+---
+id: agents-entry
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+source_of_truth: true
+---
+
 # AGENTS.md — T-City 项目 Agent 指南
 
 > 给新开的对话/新 agent 的入口文件。先读这一页，再读 `T-CityLite.base/docs/agent/STATUS.md`。
@@ -11,7 +22,7 @@ T-City 是一个 **QBCore / FiveM RP 服务器**（"T-City Lite"），外加一�
 
 - 30+ 资源、MariaDB、OneSync；
 - `custom-director`：服务端动作代理（18 个动作，L1–L4 风险分级，L3/L4 必须人审）；
-- `tools/agent_tools.json`：31 个 agent 工具的唯一事实源 → MCP / 文档 / Lua 镜像；
+- `tools/agent_tools.json`：34 个 agent 工具的唯一事实源 → MCP / 文档 / Lua 镜像；
 - 实时感知 `/agent/v1/live/*`、客户端效果通道 `custom-agent-client`、评测 `agent_eval.py`、实机冒烟 `agent_smoke.py`；
 - 手机是自研 Svelte 应用 `custom-phone`（不是 qb-phone，但借鉴其交互）。
 
@@ -83,6 +94,7 @@ E:\T-City\                      # 唯一 checkout：开发 + 文档 + CI 都在�
   ```bash
   python3 tools/agent_tools.py --write   # 生成 TOOLS.md / Lua 镜像
   python3 tools/agent_tools.py --check   # CI 会跑，必须 OK
+  python tools/docs_lifecycle.py --check # 文档规范校验（CI 现在 advisory，Phase 4 转阻断）
   ```
 - 新增工具必须：schema、risk、requires_approval、verify、idempotency、`since`，并同步动作/策略/测试。
 
@@ -97,6 +109,9 @@ cd T-CityLite.base && python3 -m pytest -q tests/unit
 
 # Lua golden（9 suites，236 checks）
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
+
+# 客户端无头套件（2 suites，23 checks；无游戏、无库、无玩家）
+lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua
 
 # 工具注册表一致性
 python3 tools/agent_tools.py --check
@@ -131,7 +146,7 @@ agent_eval.py ── 成功率/审批/拒绝/P95/幂等（离线）
 agent_smoke.py ── 实机三段式冒烟
 ```
 
-- 31 个工具 / 18 个动作；L3/L4 需要 `pending_approval` + admin token 审批。
+- 34 个工具（其中 3 个 harness 只读）/ 18 个动作；L3/L4 需要 `pending_approval` + admin token 审批。
 - 拒绝写入 `agent_denials`（不含参数值）；效果审计写 `agent_effects`（不存正文）。
 - 特权接口：admin token 只用于审批；live token 只读；两者绝不能相同。
 - 参考文档：`docs/agent/{STATUS,ACTIONS,TOOLS,EVAL,SMOKE}.md`、`docs/agent/design/01..05`、`docs/agent/reviews/01..08`。
@@ -188,6 +203,9 @@ agent_smoke.py ── 实机三段式冒烟
 | `tools/agent_mcp.py` / `agent_gateway.py` / `agent_eval.py` / `agent_smoke.py` | MCP 路由 / 只读网关 / 评测 / 冒烟 |
 | `tests/agent/*.py` | Python agent 契约/路由/评测测试 |
 | `docs/agent/STATUS.md` | 当前状态一页纸（先读） |
+| `docs/README.md` / `docs/INDEX.md` | 文档总入口（三条阅读路径） / 自动生成的唯一文档清单 |
+| `docs/standards/doc-lifecycle.md` | 文档生命周期规范：类型·状态·frontmatter·迁移·指标 |
+| `docs/analysis/2026-10-31-systems-coverage-survey.md` | 全服 17 系统覆盖与规划缺口（外部调研带来源） |
 | `docs/agent/ACTIONS.md` / `TOOLS.md` / `EVAL.md` / `SMOKE.md` | 动作/工具/评测/冒烟 |
 | `docs/agent/design/01..05` | 感知/效果/契约/写操作/测试设计 |
 | `docs/agent/reviews/01..08` | 评审记录 |
@@ -216,6 +234,7 @@ sed -n '1,120p' T-CityLite.base/docs/agent/STATUS.md
 python3 -m pytest -q tests/agent                        # 期望 203 passed / 3 skipped
 (cd T-CityLite.base && python3 -m pytest -q tests/unit)  # 期望 288 passed / 132 skipped（无库）
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua        # 期望 9 suites / 236 checks / 0 failed
-python3 tools/agent_tools.py --check                     # 期望 OK (31 tools)
+python3 tools/agent_tools.py --check                                                     # 期望 OK (34 tools)
+python tools/docs_lifecycle.py --check                                                   # 文档规范校验（frontmatter/断链/索引是否最新）
 curl -s http://127.0.0.1:30120/players.json              # 服务器/玩家是否在线（无服时必然失败）
 ```

@@ -126,3 +126,6 @@ T-CityLite.base/tests/nui/artifacts/
 
 # 服务器启动器日志
 logs/
+
+# 文档工具生成的快照（含 mtime，随时间漂移；归档快照请放进 docs/audit/）
+docs/_lifecycle.json

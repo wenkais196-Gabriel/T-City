@@ -5,6 +5,20 @@
 
 > 仅用于开发/测试环境。宿主 bridge 含 MCP token 和 RCON 密码，**不要提交**到仓库。
 
+## 0. 先确认这件事真的需要实机
+
+客户端逻辑的大部分性质**不需要**开游戏：`lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua`
+用 `tests/agent/lua/stubs/client.lua`（虚拟时钟 + 协程调度 + NUI 焦点/消息/回调 + 事件 + 原生桩）
+直接跑**未修改的**客户端 Lua，断言焦点三元组、控制禁用集合、忙循环预算、握手/ack 契约。
+
+必须先看真机的只有三类（详细矩阵见 [`design/06-client-model.md`](design/06-client-model.md) §3）：
+
+1. CEF 真实键鼠输入（本文 §1 的已知限制）；
+2. 原生渲染 / 物理 / 流式加载时序；
+3. GPU、编码、字体回退、TTS 语音包。
+
+换句话说：**先用无头桩把逻辑打绿，再来这里验证"看得见"的部分。**
+
 ## 1. 能力与边界
 
 | 能力 | 工具 | 说明 |
@@ -13,7 +27,7 @@
 | 执行客户端命令 | `client_command` | 走 devcon F8 控制台，可执行 `RegisterCommand` 的客户端命令；**不依赖鼠标** |
 | 截图 | `screenshot` | 失败取证；不要用它做断言 |
 | 读客户端日志 | `read_client_log` | 比 `read_console` 稳定；`read_console` 的 devcon tap 有竞态 |
-| 服务端命令 | `server_command` | 需要 `rcon_password` + `sv_rconMaxClients` |
+| 服务端命令 | `server_command` | 需要 server.cfg 写 **`set rcon_password "…"`**——裸写 `rcon_password` 实测不生效（`GetConvar` 读到空，RCON 回 `The server must set rcon_password`） |
 | 服务端信息 | `server_info` | `getinfo`，无需 RCON |
 
 **已知限制（2026-10-22）**：当前宿主环境下，MCP 的合成鼠标/键盘事件能送达游戏窗口，
@@ -23,6 +37,26 @@
 - NUI 的真实鼠标点击/键盘不要用 `press_key`/`click` 断言；
 - 用 `nuitest`（`SendNUIMessage({type='testChoose'})`）验证 **NUI JS → fetch → client Lua → server**；
 - 真实输入只做人工冒烟，或在 CI 外单独验证。
+
+## 1.1 断言优先：用 console harness，而不是截图
+
+`design/07-harness-channel.md` 落地的三个只读工具（`get_console_lines` / `get_console_match` /
+`get_client_log`）可以在**不开游戏、不看屏幕**的前提下完成大部分实机回归：只要求资源把结果
+`print` 出来。
+
+```bash
+export TCITY_HARNESS=1
+export TCITY_HARNESS_SERVER_LOG=E:/FXServer/fxserver.log
+```
+
+| 想确认的事 | 用什么 |
+|:---|:---|
+| 资源是否重载成功 | `get_console_match(server, "Started resource <name>")` |
+| 客户端脚本是否真的跑了 | `get_console_match(client, "\[<resource>\].*loaded")` |
+| 效果是否落地 | `get_console_match(server, "agent_effects.*<action>", timeout_ms=8000)` |
+| 刚才报了什么错 | `get_console_lines(server, pattern="error", limit=20)` |
+
+本文件 §1 的表格只用于**剩下三类必须实机的事**（06 §3）。
 
 ## 2. 宿主要求
 
@@ -70,12 +104,19 @@ Linux VM                                ▼
    python3 tools/fivem_mcp_client.py --tool status
    ```
 
-5. 客户端进游戏：
+5. 客户端进游戏：**必须经 shell 启动**，否则 FiveM 会拒绝并弹
+   `This application should be launched directly from the shell or a web browser`：
+
+   ```powershell
+   Start-Process explorer.exe -ArgumentList 'fivem://connect/172.20.101.94:30120'
+   ```
 
    ```text
    client_command connect 172.20.101.94:30120
    # 若停在角色选择，再按 ENTER（或人工点 ENTER GAME）
    ```
+
+   devcon（`127.0.0.1:29200`）只在**进服之后**才监听；启动器阶段没有。
 
 ## 5. 测试命令
 

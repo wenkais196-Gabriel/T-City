@@ -178,5 +178,5 @@ v0.1~v0.4 ──→ v0.5 犯罪 (A轨) ──→ v0.6-quest 任务系统 (D轨) 
 | 技术讨论记录 | [`/QBCore_Lite_技术讨论.md`](../QBCore_Lite_技术讨论.md) |
 | 项目 README | [`/T-CityLite.base/README.md`](../T-CityLite.base/README.md) |
 | 变更日志 | [`/T-CityLite.base/LITE_CHANGELOG.md`](../T-CityLite.base/LITE_CHANGELOG.md) |
-| 通用任务系统设计方案 | [`/quest-system-design.md`](../quest-system-design.md) |
+| 通用任务系统设计方案 | [`/v0.6-quest-system.md`](v0.6-quest-system.md) |
 | 架构重构交付报告 | [`/T-CityLite.base/docs/v0.5-architecture-migration.md`](../T-CityLite.base/docs/v0.5-architecture-migration.md) |
