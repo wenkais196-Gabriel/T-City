@@ -55,6 +55,18 @@ local function fireMoneyEvents(player, moneytype, amount, operation, reason)
     end
 end
 
+---金额格式化：金额可能是小数（工资佣金按比例会给 0.5 这类值），
+---用 %d 会直接抛 `bad argument #4 to 'format' (number has no integer representation)`
+---——而抛错发生在**写内存之后**，结果是"钱加了、审计没写、调用方收到错误"。
+---真机证据：2026-11-01 控制台 `givemoney 1 cash 0.5` 连续 10 次全部抛这个错。
+local function fmtAmount(value)
+    local num = tonumber(value) or 0
+    if num % 1 == 0 then
+        return ('%d'):format(num)
+    end
+    return ('%.2f'):format(num)
+end
+
 ---触发大额审计日志
 ---@param player table
 ---@param moneytype string
@@ -70,10 +82,10 @@ local function fireAuditLog(player, moneytype, amount, operation, newBalance, re
     local color = (operation == 'add' or operation == 'set') and 'lightgreen' or 'red'
     local opLabel = operation == 'add' and 'AddMoney' or (operation == 'remove' and 'RemoveMoney' or 'SetMoney')
 
-    local message = ('**%s** (citizenid: %s | id: %s)** $%d (%s) %s, new %s balance: %d reason: %s')
-        :format(playerName, citizenid, src, amount, moneytype,
+    local message = ('**%s** (citizenid: %s | id: %s)** $%s (%s) %s, new %s balance: %s reason: %s')
+        :format(playerName, citizenid, src, fmtAmount(amount), moneytype,
                 operation == 'add' and 'added' or (operation == 'remove' and 'removed' or 'set'),
-                moneytype, newBalance, reason)
+                moneytype, fmtAmount(newBalance), reason)
 
     if amount > 100000 then
         TriggerEvent('qb-log:server:CreateLog', 'playermoney', opLabel, color, message, true)
@@ -297,8 +309,8 @@ function EconomyService.AddMoneyOffline(citizenid, moneytype, amount, reason, cb
             -- 不能复用 fireAuditLog：它要 GetPlayerName(source) 和数值型 newBalance，
             -- 离线玩家两者都没有（source=-1 → nil → %s/%d 直接抛错）。这里单独写一行审计。
             TriggerEvent('qb-log:server:CreateLog', 'playermoney', 'AddMoneyOffline', 'lightgreen',
-                ('**离线入账** (citizenid: %s) $%d (%s) added. reason: %s'):format(
-                    citizenid, math.floor(amount), moneytype, reason or '-'),
+                ('**离线入账** (citizenid: %s) $%s (%s) added. reason: %s'):format(
+                    citizenid, fmtAmount(amount), moneytype, reason or '-'),
                 amount > 100000)
             cb(true)
         end
