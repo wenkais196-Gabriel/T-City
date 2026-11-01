@@ -16,7 +16,7 @@ game 'gta5'
 lua54 'yes'
 author 'T-City Lite'
 description 'Story engine with decision trees and player choice tracking'
-version '0.7.0'
+version '0.7.3'
 
 files {
     'client/decision_nui.html',
