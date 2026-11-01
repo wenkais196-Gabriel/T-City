@@ -163,9 +163,16 @@ function DecisionEngine.Resolve(source, chosenOptionId, isTimeout)
 
     -- 客户端超时信号或服务端兜底 → 使用默认选项
     if isTimeout or chosenOptionId == '__timeout__' or chosenOptionId == 'timeout' or chosenOptionId == 'skip' then
+        local decisionDef = DecisionEngine._registry[pending.decisionId]
+        -- 定义里没写 default_option 时用第一个选项兜底。
+        -- 真机事故：police_ch1_honest_or_silent 没有 default_option，
+        -- 超时/看门狗一触发就 clearPending 返回失败 → 任务永久停在 step_decision。
         chosenOptionId = pending.defaultOption
+            or (decisionDef and decisionDef.default_option)
+            or (decisionDef and decisionDef.options and decisionDef.options[1]
+                and decisionDef.options[1].id)
         if not chosenOptionId then
-            clearPending(source, 'no default option')
+            -- 连第一个选项都没有：保留 pending，让玩家还能手动选，不要清成死锁
             return false, 'No default option'
         end
     end

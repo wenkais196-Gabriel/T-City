@@ -14,11 +14,10 @@ CLIENT = REPO / "T-CityLite.base/resources/[custom]/story-engine/client/main.lua
 def test_decision_close_restores_keepinput_and_fires_a_watchdog() -> None:
     src = CLIENT.read_text(encoding="utf-8")
 
-    assert "function closeDecisionSurface(reason)" in src
+    assert "function closeDecisionSurface(reason, keepPending)" in src
     assert "SetNuiFocusKeepInput(keepInputBefore == true)" in src, "必须恢复进入前的 keepInput"
     assert "keepInputBefore = IsNuiFocusKeepingInput()" in src
-    assert "SetTimeout(" in src and "watchdog" in src, "CEF 不回调时要有看门狗"
-    # 三处关闭路径都要走统一出口，不允许再出现裸的 SetNuiFocus(false, false) 收尾
+    assert "closeDecisionSurface('watchdog', true)" in src, "看门狗收界面时保留待决策"
     assert src.count("closeDecisionSurface(") >= 4
 
 
