@@ -27,7 +27,7 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 
 | 口径 | 说明 |
 |---|---|
-| 范围 | `resources/**` 的**服务端**脚本；先看目录再看文件名——`server/` 下的一律算服务端（`core-framework/server/client_reports.lua` 就是这种名字带 client 的服务端脚本），`client/` 目录与根级 `client*.lua` / `cl_*.lua` 才排除 |
+| 范围 | `resources/**` 的**服务端**脚本；先看目录再看文件名——`server/` 下的一律算服务端（core-framework 的 client_reports.lua 就属于这种名字带 client 的服务端脚本），`client/` 目录与根级 `client*.lua` / `cl_*.lua` 才排除 |
 | 事件 | `RegisterNetEvent` / `RegisterServerEvent`，名字必须是字面量 |
 | 两种写法 | 内联 handler；以及 `RegisterNetEvent('x')` + `AddEventHandler('x', fn)`（PolyZone / monitor 这类老资源）。后者去同文件找 fn 定义体，找不到就记空 body —— **空 body 永远算未鉴权**，只会多报债 |
 | 已鉴权 | handler 里出现 `PolicePolicy.Can/Check`、`hasCapability`、`IsPlayerAceAllowed`、`HasPermission(src...)`、系统来源守卫、或回调归属校验（`pending.source ~= src`） |
@@ -43,9 +43,9 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 | other（system / standalone / voice / cfx-default） | 84 | 3 | 4 | 77 | 债务（基线棘轮） |
 | **合计** | **454** | 53 | 59 | **342** | — |
 
-另有 **23 处变量名注册**（`RegisterNetEvent(EVENT_NAME, ...)`）—— 扫描器看不见它们，
-单独作为债记在基线里，只许减少；`custom-quest`、`custom-vehicles`、`qb-storerobbery`、
-`core-framework/events`、`PolyZone` 是主要来源。解析失败的 handler：**0**。
+另有 **12 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`）—— 扫描器看不见它们，
+单独作为债记在基线里，只许减少；主要来源是 `custom-quest`（5 处）与 `custom-vehicles`（6 处）—— 这两个资源把事件名放在
+`Config.*.Events` 表里；第三处是 PolyZone 的 `internalEventName`（运行时拼出来的前缀）。解析失败的 handler：**0**。
 
 ## 4. 这一轮真正修掉的东西
 
