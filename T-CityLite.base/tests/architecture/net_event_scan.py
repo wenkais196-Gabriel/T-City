@@ -451,6 +451,12 @@ def job_deny_guard(code: str) -> bool:
     """
     lines = code.splitlines()
     player_vars = set(GET_PLAYER_CALL.findall(code))
+    # 同一个变量后来被重新赋值（`Caller = GetPlayer(target)`）时，不代表调用者本人 —— 剔除。
+    def reassigned(name: str) -> bool:
+        assign = re.compile(r"^\s*" + re.escape(name) + r"\s*=[^=]")
+        return any(assign.match(line) for line in lines)
+
+    player_vars = {name for name in player_vars if not reassigned(name)}
     aliases: set[str] = set()
     for line in lines:
         text = line.strip()
