@@ -131,6 +131,12 @@ RegisterCommand('police_incident_seed', function(src, args)
     local created = 0
     -- 第 4 个参数是 ref：给了 ref 就按 ref 合并（AC-P2-05），坐标怎么漂都合到一张单
     local ref = (args and args[4]) or nil
+    -- 第 5–7 个参数可选：x y z。为什么需要它：真机验收（到场判定、世界痕迹）
+    -- 必须在**真实地面坐标**上跑 —— 写死 (100…,200,30) 落在山坡虚空里，
+    -- 客户端到场检测按垂直距离判（ARRIVE_VERTICAL），z=30 与地面差 70 m 永远不翻 on_scene。
+    local seedX = tonumber(args and args[5])
+    local seedY = tonumber(args and args[6])
+    local seedZ = tonumber(args and args[7])
     local lastId, lastCount, merged = nil, nil, 0
     for i = 1, times do
         local ok, incident = pcall(function()
@@ -140,8 +146,10 @@ RegisterCommand('police_incident_seed', function(src, args)
                 code = code,
                 title = title,
                 ref = ref,
-                x = ref and (100.0 + i * 15.0) or (100.0 + i * 120.0),
-                y = 200.0, z = 30.0, priority = 1,
+                x = seedX or (ref and (100.0 + i * 15.0) or (100.0 + i * 120.0)),
+                y = seedY or 200.0,
+                z = seedZ or 30.0,
+                priority = 1,
             })
         end)
         if ok and incident then
