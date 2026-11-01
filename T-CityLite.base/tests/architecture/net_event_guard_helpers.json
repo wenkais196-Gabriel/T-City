@@ -188,14 +188,15 @@
     }
   },
   "custom-justice": {
-    "JusticeService.GetInmate": {
+    "JusticeService.GetOwnInmate": {
       "defined_at": "custom-justice/server/main.lua",
       "requires_code": [
-        "return inmates[citizenid]"
+        "player.PlayerData.citizenid",
+        "return inmates["
       ],
       "requires_raw": [],
       "shape": "local_check",
-      "why": "在押记录：只有真正在服刑的 citizenid 才在 inmates 表里（返回 nil = 不在监狱）"
+      "why": "调用者**自己**在押与否：只接受 Player 对象（source 派生），查不到别人的记录"
     }
   }
 }

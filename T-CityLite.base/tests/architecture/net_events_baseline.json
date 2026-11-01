@@ -16,8 +16,8 @@
     },
     "custom": {
       "events": 133,
-      "guarded": 78,
-      "allowlisted": 36,
+      "guarded": 77,
+      "allowlisted": 37,
       "unguarded": 19
     },
     "qb": {
@@ -128,8 +128,8 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 7,
-      "guarded": 6,
-      "allowlisted": 0,
+      "guarded": 5,
+      "allowlisted": 1,
       "unguarded": 1,
       "started": true
     },

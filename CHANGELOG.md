@@ -35,12 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **[custom] net event 覆盖率 80.5% → 85.7%（第 4 批）**：133 个 `[custom]` 事件里 114 个已鉴权或已登记。
   这批补的是"归属/前置条件住在别处"的三类：`custom-agent-client` 的 `ClaimPending`
   （ack 的 rid 必须在**自己的** pending 表里且 session 令牌一致）、`custom-justice` 的
-  `JusticeService.GetInmate`（只有在押的 citizenid 才有记录）、以及 `job_deny_guard` 支持
+  `JusticeService.GetOwnInmate`（只吃调用者自己的 Player 对象——探视请求判的是**目标**，因此单列 civilian 不计入）、以及 `job_deny_guard` 支持
   "先取职业名再比较"（`local callerJob = Caller.PlayerData.job.name`）这种别名写法 —— 直接拿下
   `justice:server:imprison`（原来只判了 caller job 但扫描器看不见）与 `qb-mechanicjob:server:stash`。
   `custom-agent-client` 的 `ready` / `state` / `devcmd_result` 按真实语义登记（自作用域 / 遥测），
   并给 `devcmd_result` 补了每源 500ms 节流与长度上限（原来任何客户端都能刷服务端日志）。
-  统计口径：440 事件 / 103 已鉴权 / 52 已登记 / 285 未登记 / 54 个债资源。
+  统计口径：440 事件 / 102 已鉴权 / 53 已登记 / 285 未登记 / 54 个债资源。
 - **[custom] net event 覆盖率 64% → 80.5%，P1-3 的 ② 达成（第 3 批）**：133 个 `[custom]` 事件里
   107 个已鉴权或已登记。这一批把"校验住在别处的"四类都做了可验证登记：警情分发器
   （`PoliceDispatch.ArriveIncident` / `.ClaimIncident`、`NPC.SubmitResult`：能力位判定在被调函数体内）、

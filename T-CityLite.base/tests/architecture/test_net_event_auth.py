@@ -718,6 +718,13 @@ def test_shapes_that_look_like_guards_are_not_counted():
             "if target.PlayerData.job.name ~= 'police' then return end",
             "DoPrivileged(target)",
         ),
+        "职业变量被重新赋值": _nl(
+            "local Caller = QBCore.Functions.GetPlayer(src)",
+            "Caller = QBCore.Functions.GetPlayer(target)",
+            "local callerJob = Caller.PlayerData.job.name",
+            "if callerJob ~= 'police' then return end",
+            "DoPrivileged(target)",
+        ),
         "职业别名来自别人": _nl(
             "local Player = QBCore.Functions.GetPlayer(src)",
             "local job = target.PlayerData.job",

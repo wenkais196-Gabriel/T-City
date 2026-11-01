@@ -19,6 +19,7 @@ local sessions = {}   -- sessions[src] = { token = 16 hex, seq = number }
 local pending = {}    -- pending[src][rid] = entry
 local inflight = {}   -- inflight[src] = number
 local droppedAcks = 0
+local devcmdResultAt = {}   -- [src] = GetGameTimer()（devcmd_result 每源节流）
 
 -- ---------------------------------------------------------------------------
 -- Configuration (read per call so the kill switch is live)
@@ -533,6 +534,7 @@ AddEventHandler('playerDropped', function()
     end
     pending[src] = nil
     inflight[src] = nil
+    devcmdResultAt[src] = nil   -- 节流表也要随玩家离场清理，否则按 source id 复用时会被旧时间戳挡住
     sessions[src] = nil
     stateBySrc[src] = nil
     -- 这里原来还有一行 buckets[src] = nil：限流改成 core-framework 的令牌桶 owner 之后
@@ -579,8 +581,6 @@ end, true)
 -- 纯遥测：客户端上报 devcmd 的执行结果，只写日志。
 -- 加每源 500ms 节流 + 类型/长度约束，否则任何客户端都能用它刷爆服务端日志。
 local DEVCMD_RESULT_COOLDOWN_MS = 500
-local devcmdResultAt = {}   -- [src] = GetGameTimer()
-
 RegisterNetEvent('tcity:agent:devcmd_result', function(command, status)
     local src = source
     if type(src) ~= 'number' or src <= 0 then return end
