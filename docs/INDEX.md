@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-01 ｜ **文档总数**：282 ｜ **已登记**：282 ｜ **未登记**：0
+**生成时间**：2026-11-01 ｜ **文档总数**：283 ｜ **已登记**：283 ｜ **未登记**：0
 
-**状态分布**：✅ active 157 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 158 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -354,7 +354,7 @@
 | [📖 T-City Wiki 系统设计规格书](../T-CityLite.base/docs/design/tcity-wiki-design-spec.md) | spec | 🟡 draft | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-wiki-design-spec.md` |
 | [基石目标形态（TO-BE）— 五层、单写者、可验收的预算](engineering/FOUNDATION-TO-BE.md) | spec | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/FOUNDATION-TO-BE.md` |
 
-### infra（16）
+### infra（17）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -371,6 +371,7 @@
 | [数据库表全量索引](04_call_reference/database_index.md) | manual | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/04_call_reference/database_index.md` |
 | [Cross-Resource Events Index](04_call_reference/events_index.md) | manual | ✅ active | 2026-10-22 | 2027-01-30 |  | `docs/04_call_reference/events_index.md` |
 | [重构删除清单 & 保留清单 v2.0](../T-CityLite.base/docs/refactoring_manifest_v2.md) | plan | 📌 final | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/refactoring_manifest_v2.md` |
+| [P1-4 调研：拆掉 compat 的全局猴补](engineering/2026-11-foundation-p1-4-research.md) | research | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-4-research.md` |
 | [v0.1 精简启动](archive/QBCore_Lite_versions/v0.1-lite-startup.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.1-lite-startup.md` |
 | [v0.2 基础 RP](archive/QBCore_Lite_versions/v0.2-basic-rp.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.2-basic-rp.md` |
 | [07 — 架构集成：如何嵌入 T-City Phase 0-3](server-design/07-architecture-integration.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/server-design/07-architecture-integration.md` |
