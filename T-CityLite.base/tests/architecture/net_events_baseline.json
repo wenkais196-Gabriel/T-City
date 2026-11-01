@@ -16,9 +16,9 @@
     },
     "custom": {
       "events": 134,
-      "guarded": 19,
+      "guarded": 41,
       "allowlisted": 45,
-      "unguarded": 70
+      "unguarded": 48
     },
     "qb": {
       "events": 216,
@@ -164,9 +164,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 57,
-      "guarded": 14,
+      "guarded": 19,
       "allowlisted": 33,
-      "unguarded": 10,
+      "unguarded": 5,
       "started": true
     },
     "custom-quest": {
@@ -191,9 +191,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 26,
-      "guarded": 0,
+      "guarded": 17,
       "allowlisted": 0,
-      "unguarded": 26,
+      "unguarded": 9,
       "started": true
     },
     "hardcap": {
@@ -647,11 +647,6 @@
       "mining:server:smeltOre"
     ],
     "custom-police": [
-      "evidence:server:AddBlooddropToInventory",
-      "evidence:server:AddCasingToInventory",
-      "evidence:server:AddFingerprintToInventory",
-      "evidence:server:ClearBlooddrops",
-      "evidence:server:ClearCasings",
       "police:server:NpcCalloutResult",
       "police:server:adoptDraft",
       "police:server:arriveIncident",
@@ -674,28 +669,11 @@
       "durability:server:onWeaponFired"
     ],
     "custom-vehicles": [
-      "custom-vehicles:server:SaveVehicleProps",
-      "custom-vehicles:server:anchorControl",
       "custom-vehicles:server:logisticsQuickLoad",
       "custom-vehicles:server:logisticsStampDelivery",
-      "custom-vehicles:server:megaphone",
-      "custom-vehicles:server:policeRadarLog",
       "custom-vehicles:server:releaseDashboard",
-      "custom-vehicles:server:requestDashboard",
       "custom-vehicles:server:setDriveMode",
-      "custom-vehicles:server:sirenControl",
-      "custom-vehicles:server:syncNitrous",
-      "custom-vehicles:server:syncNitrousFlames",
-      "custom-vehicles:server:tuneStatus",
-      "custom-vehicles:server:updateComponents",
-      "custom-vehicles:server:updateDistance",
-      "qb-mechanicjob:server:SaveVehicleProps",
-      "qb-mechanicjob:server:repairVehicleComponent",
-      "qb-mechanicjob:server:syncNitrous",
-      "qb-mechanicjob:server:syncNitrousFlames",
-      "qb-mechanicjob:server:tuneStatus",
       "qb-mechanicjob:server:updateDrivingDistance",
-      "qb-mechanicjob:server:updateVehicleComponents",
       "qb-vehiclekeys:server:AcquireVehicleKeys",
       "qb-vehiclekeys:server:GiveKeys",
       "qb-vehiclekeys:server:RemoveKeys",
@@ -1143,7 +1121,7 @@
     {
       "resource": "custom-police",
       "batch": "custom",
-      "unguarded": 10,
+      "unguarded": 5,
       "owner": "custom-police",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1167,7 +1145,7 @@
     {
       "resource": "custom-vehicles",
       "batch": "custom",
-      "unguarded": 26,
+      "unguarded": 9,
       "owner": "custom-vehicles",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"

@@ -18,6 +18,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -149,6 +150,43 @@ def scan_dir(resource: str, directory: Path, kind: str = "server") -> tuple[list
         events.extend(found)
         problems.extend(issues)
     return events, problems
+
+
+GUARD_HELPERS_PATH = Path(__file__).with_name("net_event_guard_helpers.json")
+
+
+@lru_cache(maxsize=1)
+def guard_helpers() -> dict[str, dict[str, dict]]:
+    """资源内部鉴权 helper 的登记表（见 net_event_guard_helpers.json）。"""
+    data = json.loads(GUARD_HELPERS_PATH.read_text(encoding="utf-8"))
+    return {key: value for key, value in data.items() if not key.startswith("$")}
+
+
+@lru_cache(maxsize=64)
+def helpers_for(resource: str) -> dict[str, re.Pattern[str]]:
+    """该资源的 helper 调用形状：`if not H(...) then return`。
+
+    调用但忽略返回值（`H(x); doThing()`）不算鉴权，所以模式里钉死了否定分支与 return。
+    """
+    registered = guard_helpers().get(resource, {})
+    return {
+        name: re.compile(
+            r"if\s+not\s+"
+            + re.escape(name)
+            + r"\s*\(.*?\)\s*then[\s\S]{0,400}?\breturn\b"
+        )
+        for name in registered
+    }
+
+
+def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = None) -> bool:
+    """handler 是否带鉴权证据（强 token 或本资源已证明的 helper）。
+
+    `extra` 给调用方补自己的 helper（闸门里的 AUTH_HELPERS），合并顺序是 extra 覆盖同名。
+    """
+    helpers = dict(helpers_for(event.resource))
+    helpers.update(extra or {})
+    return bool(auth_tokens(event.body, helpers))
 
 
 def auth_tokens(body: str, helpers: Mapping[str, re.Pattern[str]] | None = None) -> list[str]:
