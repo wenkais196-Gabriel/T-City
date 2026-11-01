@@ -560,76 +560,58 @@ end
 
 function QBCore.Player.Save(source, force)
     local Player = QBCore.Players[source]
-    if not Player then return end
+    if not Player then return false end
     local PlayerData = Player.PlayerData
-    if PlayerData then
-        local ped = GetPlayerPed(source)
-        local pcoords
-        if ped and ped ~= 0 then
-            pcoords = GetEntityCoords(ped)
-            local phealth = GetEntityHealth(ped)
-            if phealth > 0 then
-                PlayerData.metadata['health'] = phealth
-            end
-        else
-            -- 断线时 ped 可能已销毁，回退到上次持久化位置，避免写入 0,0,0
-            local pos = PlayerData.position
-            pcoords = pos and vector3(pos.x or 0.0, pos.y or 0.0, pos.z or 0.0) or vector3(0.0, 0.0, 0.0)
-        end
-
-        -- 物理位移增量检测：若位移差大于 5.0 米，同样标记为脏数据需要入库
-        local lastCoords = Player.LastSavedCoords
-        if not lastCoords or #(pcoords - lastCoords) > 5.0 then
-            Player.IsDirty = true
-        end
-
-        -- 核心性能阻断：如果数据干净（IsDirty = false）且非强制（force = false），直接跳过物理落盘以节约 70% I/O！
-        if not Player.IsDirty and not force then
-            return
-        end
-
-        -- ⚡ Performance Fix: 接入 DirtyFlush 管道
-        -- 非强制存盘 → 仅标记脏数据，由 DirtyFlush 定时批量落盘（默认 15 分钟一批）
-        -- 强制存盘 → 立即 Flush 单个玩家
-        -- 此举将每 5 分钟 100 次全字段 UPDATE 降低为每 15 分钟一次的批量写入，IO 削减 ~66%
-        local useDirtyFlush = DirtyFlush ~= nil
-        
-        if useDirtyFlush then
-            -- 标记脏数据到管道
-            DirtyFlush.MarkDirty(PlayerData.citizenid, 'all')
-            if force then
-                -- 强制存盘：立即刷盘（下线/重启/管理员手动存档）
-                DirtyFlush.ForceFlush(PlayerData.citizenid)
-            end
-        else
-            -- Fallback: DirtyFlush 不可用时走原始直接 SQL
-            MySQL.insert('INSERT INTO players (citizenid, cid, license, name, money, charinfo, job, gang, position, metadata) VALUES (:citizenid, :cid, :license, :name, :money, :charinfo, :job, :gang, :position, :metadata) ON DUPLICATE KEY UPDATE cid = :cid, name = :name, money = :money, charinfo = :charinfo, job = :job, gang = :gang, position = :position, metadata = :metadata', {
-                citizenid = PlayerData.citizenid,
-                cid = tonumber(PlayerData.cid),
-                license = PlayerData.license,
-                name = PlayerData.name,
-                money = json.encode(PlayerData.money),
-                charinfo = json.encode(PlayerData.charinfo),
-                job = json.encode(PlayerData.job),
-                gang = json.encode(PlayerData.gang),
-                position = json.encode(pcoords),
-                metadata = json.encode(PlayerData.metadata)
-            }, function()
-                -- 显式异步回调，防止数据库操作同步阻塞服务端主线程
-            end)
-        end
-        
-        if GetResourceState('qb-inventory') ~= 'missing' then exports['qb-inventory']:SaveInventory(source) end
-        
-        -- 保存完成，重置脏标记并缓存当前保存坐标位置
-        Player.IsDirty = false
-        Player.LastSavedCoords = pcoords
-        if not useDirtyFlush or force then
-            QBCore.ShowSuccess(resourceName, PlayerData.name .. ' PLAYER SAVED! (FORCE=' .. tostring(not not force) .. ')')
-        end
-    else
+    if not PlayerData then
         QBCore.ShowError(resourceName, 'ERROR QBCORE.PLAYER.SAVE - PLAYERDATA IS EMPTY!')
+        return false
     end
+
+    -- 坐标/血量：ped 已销毁（下线）时回落到上次持久化位置，不写 0,0,0
+    local store = PlayerStore or DirtyFlush
+    local pcoords = store and store.ResolveCoords and store.ResolveCoords(PlayerData)
+        or vector3(0.0, 0.0, 0.0)
+
+    -- 物理位移增量检测：若位移差大于 5.0 米，同样标记为脏数据需要入库
+    local lastCoords = Player.LastSavedCoords
+    if not lastCoords or #(pcoords - lastCoords) > 5.0 then
+        Player.IsDirty = true
+    end
+
+    -- 数据干净且非强制：没有东西要写
+    if not Player.IsDirty and not force then
+        return true
+    end
+
+    -- ① 记账：进唯一脏池（带 PlayerData 快照 —— 玩家离线后仍能补写）
+    local pooled = false
+    if store then
+        pooled = store.MarkDirty(PlayerData.citizenid, 'all', PlayerData) and true or false
+    end
+
+    -- ② 非强制 = 只标脏，等定时批量刷。
+    --    债务已经进了池子，`IsDirty` 只表示"还有没进池的改动"，这里清掉，
+    --    否则 5 分钟一次的心跳存档每次都会重跑 SaveInventory（多一倍 UPDATE）。
+    if not force then
+        if pooled then Player.IsDirty = false end
+        if GetResourceState('qb-inventory') ~= 'missing' then exports['qb-inventory']:SaveInventory(source) end
+        return true
+    end
+
+    -- ③ 强制 = 背包 + 立刻写一次。
+    --    这里**直接调 Store.SaveNow**，不再 DirtyFlush.ForceFlush → 避免
+    --    Save(true) → ForceFlush → Save(true) 的环（P1-2）。
+    if GetResourceState('qb-inventory') ~= 'missing' then exports['qb-inventory']:SaveInventory(source) end
+    if not store then return false, 'store_unavailable' end
+
+    local ok, err = store.SaveNow(Player, 'save_force')
+    if ok then
+        QBCore.ShowSuccess(resourceName, PlayerData.name .. ' PLAYER SAVED! (FORCE=true)')
+    else
+        -- 写失败不清脏：留着重试，绝不假装成功
+        QBCore.ShowError(resourceName, ('PLAYER SAVE FAILED (%s) — 脏标记保留，退避重试'):format(tostring(err)))
+    end
+    return ok, err
 end
 
 function QBCore.Player.SaveOffline(PlayerData)
