@@ -1,3 +1,13 @@
+-- T-City: 诊断开关必须定义在**所有用它的函数之前**（原先放在 316 行，
+-- 而 _openNui 在 28 行就引用它 → 早退分支的日志永远打不出来）。
+local DASH_DEBUG = GetConvar('dashboard_debug', '0') == '1'
+local function dbg(msg)
+    if DASH_DEBUG then print(('[dashboard] %s'):format(msg)) end
+end
+
+-- 锁请求的序号/在途标记：超时提醒用（见 _openNui 的 900ms 兜底）
+local lockSeq, lockPending = 0, false
+
 -- client/main.lua — 入车/下车状态机 (v2.0)
 --
 -- 核心流程:
@@ -37,7 +47,23 @@ local function _openNui(veh)
 
     -- 锁请求 (使用 custom-vehicles 现有排他锁系统)
     local plate = GetVehicleNumberPlateText(veh):gsub('^%s+', ''):gsub('%s+$', ''):upper()
+    lockPending = true
+    if DASH_DEBUG then print(('[dashboard] request_lock plate=%s veh=%s'):format(tostring(plate), tostring(veh))) end
     TriggerServerEvent('custom-vehicles:server:requestDashboard', plate)
+    -- 真机事故：custom-vehicles 被 restart 连坐停掉后，请求石沉大海，
+    -- 玩家看到的是"按 I 没反应"。900ms 无回执就说清楚缺的是什么。
+    local seq = (lockSeq or 0) + 1
+    lockSeq = seq
+    SetTimeout(900, function()
+        if lockSeq ~= seq or lockPending ~= true then return end
+        lockPending = false
+        local state = GetResourceState('custom-vehicles')
+        if DASH_DEBUG then
+            print(('[dashboard] lock_timeout veh_state=%s'):format(tostring(state)))
+        end
+        TriggerEvent('QBCore:Notify',
+            ('车机服务未就绪（custom-vehicles: %s）'):format(tostring(state)), 'error', 6000)
+    end)
 end
 
 -- 面板开着时允许穿透的车辆控制（59/60 移动、63/64 转向、71 油门、72 刹车、
@@ -120,13 +146,20 @@ end
 
 -- 监听旧 custom-vehicles 排他锁回调 (复用现有锁系统)
 RegisterNetEvent('custom-vehicles:client:dashboardLockResult', function(granted, errMsg)
+    lockPending = false
+    if DASH_DEBUG then
+        print(('[dashboard] lock_result granted=%s err=%s'):format(tostring(granted), tostring(errMsg)))
+    end
     if not granted then
         QBCore.Functions.Notify(errMsg or '无法打开中控屏', 'error')
         return
     end
 
     local veh = GetVehiclePedIsIn(PlayerPedId(), false)
-    if not veh or veh == 0 then return end
+    if not veh or veh == 0 then
+        if DASH_DEBUG then print('[dashboard] lock_ok_but_no_vehicle') end
+        return
+    end
 
     -- 确定模板
     local vclass = GetVehicleClass(veh)
@@ -306,11 +339,6 @@ end)
 local TOGGLE_DEBOUNCE_MS = 250
 local _lastToggleAt = 0
 
-local DASH_DEBUG = GetConvar('dashboard_debug', '0') == '1'
-local function dbg(msg)
-    if DASH_DEBUG then print(('[dashboard] %s'):format(msg)) end
-end
-
 RegisterCommand('dashboard', function()
     dbg('enter')
     -- 别的 UI（手机/平板）占着输入时不开中控：两套界面叠在一起，Esc/方向键归谁说不清
@@ -342,10 +370,25 @@ RegisterCommand('dashboard', function()
         return
     end
 
+    -- 状态自愈：_isDashboardOpen 可能是"界面已被 Esc 关掉但标志没清"的残留。
+    -- 只有栈顶确实是 dashboard 帧才算真的开着。
+    if _isDashboardOpen then
+        local onTop = false
+        pcall(function()
+            local top = exports['custom-ui']:Top()
+            onTop = top ~= nil and tostring(top.id or ''):find('^dashboard', 1) ~= nil
+        end)
+        if not onTop then
+            dbg('state:stale_open_flag_cleared')
+            _isDashboardOpen = false
+        end
+    end
+
     -- 后排乘客按 I → 换座浮层 (Plan C)
     if not _isDashboardOpen then
         for seatIdx = 1, 10 do
             if GetPedInVehicleSeat(veh, seatIdx) == ped then
+                dbg('blocked:seat_picker:' .. tostring(seatIdx))
                 _openSeatPicker(veh, seatIdx)
                 return
             end
@@ -354,13 +397,16 @@ RegisterCommand('dashboard', function()
 
     -- 驾驶/副驾 → 完整中控屏
     if _isDashboardOpen then
+        dbg('toggle:close')
         _closeNui()
     else
+        dbg('toggle:open')
         _openNui(veh)
     end
 end, false)
 
--- 按键绑定 (I)
+-- 按键绑定 (I)。客户端没有 SetConvar（真机报 nil），所以不做 convar 记忆：
+-- 重复绑定由命令内的 250ms 去抖兜住，日志里成对的 enter 已被去抖吃掉了。
 RegisterKeyMapping('dashboard', '智能中控屏', 'keyboard', 'I')
 
 -- ==============================================================

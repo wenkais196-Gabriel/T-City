@@ -441,12 +441,17 @@ DASH = REPO / "T-CityLite.base/resources/[system]/tcity-dashboard/client/main.lu
 QUEST_CLIENT = ROOT / "custom-quest/client/main.lua"
 
 
-def test_minimap_tool_is_off_by_default() -> None:
-    """改小地图组件的工具默认关：开着就必然和原生不一致。"""
-    src = read(HUD_TOOL)
-    assert "GetConvar('hud_position_tool', '0')" in src
-    part = block(src, "local function applyMap()", 400)
-    assert "if not HUD_TOOL_ENABLED then return end" in part
+def test_minimap_is_native_by_default() -> None:
+    """小地图只允许一个写者：qb-hud 默认不碰，调试工具关闭时也不碰。"""
+    hud = read(REPO / "T-CityLite.base/resources/[qb]/qb-hud/client.lua")
+    assert "GetConvar('hud_native_map', '1')" in hud, "qb-hud 必须默认保留原生小地图"
+    gate = block(hud, "GetConvar('hud_native_map', '1')", 200)
+    assert "return" in gate
+
+    tool = read(HUD_TOOL)
+    assert "GetConvar('hud_position_tool', '0')" in tool
+    part = block(tool, "local function applyMap()", 300)
+    assert "if not HUD_TOOL_ENABLED then return end" in part, "关闭时什么都不做（避免与 qb-hud 互相覆盖）"
 
 
 def test_radar_follows_the_vehicle_at_file_scope() -> None:
