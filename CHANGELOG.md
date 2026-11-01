@@ -42,8 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ② `dashboard_api` 的职业判断在三个事件里重复且两个事件压根没有 —— 抽出 `IsEmergencyService`，
      给 `policeRadarLog`（伪造超速记录）和 `anchorControl` 补上；
   ③ 中控屏锁 `requestDashboard` 能被不在车内的人抢走（远程占位），改为必须坐在该车牌车内；
-     氮气火焰广播只允许车内的人触发。基线总计 442 事件 / 63 已鉴权 / 61 已登记 / 318 未登记，
+     氮气火焰广播只允许车内的人触发。基线总计 441 事件 / 63 已鉴权 / 61 已登记 / 317 未登记，
   11 条变异用例全部"注入红 / 对照绿"。
+  验收方（CC）第一轮抓出两个 P0 并已修：① 抽 `IsEmergencyService` 时连 `local job` 一起删掉，
+  PA 喊话穿过鉴权后必抛 `job` 为 nil —— 运行时才炸；② `[system]/tcity-dashboard` 里另有一份
+  同名 `logisticsQuickLoad` 的无守卫 handler（net event 按名字全局派发），把刚补的守卫整个旁路，
+  已删除副本并加注释说明为什么不能有第二份。登记表的门槛同时收紧：证据比对限定在**函数体**、
+  调用点必须"否定分支里真的 return"（`if not H(x) then end` 不算）、`if false` 死代码不算、
+  同名 helper 以登记表的严格形状为准（此前 `extra` 覆盖会把严格模式降级成宽松词匹配）。
 - **net event 治理落地基线，引擎层覆盖到 100%（P1-3 第 1 步）**（qb-core / 架构闸门）：`QBCore:Server:TriggerClientCallback` 以前**任何客户端都能 resolve 任意待决的客户端回调**（回调只按名字索引，没有归属），伪造返回值会直接进服务端逻辑；现在建回调时记 `source`、handler 校验 `pending.source ~= src`，顺带修掉"回答后条目被清空、`Citizen.Await` 恢复时索引 nil"的潜伏错误。新增唯一扫描器 `net_event_scan.py`（闸门与基线生成器共用，支持内联与 `RegisterNetEvent` + `AddEventHandler` 两种写法），把全仓 **442 个服务端 net event** 固化成 `net_events_baseline.json`：引擎层 qb-core 15/15（5 已鉴权 + 10 按真实语义登记），`[custom]` 64/134、`[qb]` 16/216、其它 7/77；58 个还有欠账的资源各有 owner + expires 的债（其中 15 个不在启动集，占 93/340），新增未鉴权事件、变量名注册、解析失败、过期债、手改数字全部会红（10 条变异用例证明"注入红/对照绿"）。三个新登记类别都带可检查承诺（`self_scoped` 必须有 `local src = source` 且不索引别的玩家、`callback_relay` 必须走 `ServerCallbacks[name]` 且高危目标有守卫、`deprecated_blocked` 必须写安全日志、且不含列出的写 API（AddItem/RemoveItem/AddMoney/RemoveMoney/SetMetaData/SetJob/SetJobDuty/SetGang/SetMoney、任何 `MySQL.*`、`exports[...]:Set*`））。`[custom]` 覆盖率 48%，距计划里的 80% 还差 44 个事件，记在 `docs/engineering/2026-11-foundation-net-events-baseline.md`。
 - **`gate_mutation_smoke.py` 撤注入后清理新建的空目录**：变异用例把文件写进不存在的资源目录时，`unlink` 只删文件，空目录会让 `test_no_orphan_scripts`（每个 `[custom]` 目录必须有 fxmanifest）误红。
 

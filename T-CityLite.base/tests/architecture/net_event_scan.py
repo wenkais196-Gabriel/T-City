@@ -179,14 +179,62 @@ def helpers_for(resource: str) -> dict[str, re.Pattern[str]]:
     }
 
 
-def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = None) -> bool:
-    """handler 是否带鉴权证据（强 token 或本资源已证明的 helper）。
+def helper_call_problems(code: str, name: str) -> tuple[int, list[str]]:
+    """登记的 helper 在代码里是否被**当成守卫**用（唯一实现，闸门与计数共用）。
 
-    `extra` 给调用方补自己的 helper（闸门里的 AUTH_HELPERS），合并顺序是 extra 覆盖同名。
+    形状要求：`if not H(...)` 的否定分支里真的 `return`，且不在 `if false` 死代码里。
+    只匹配名字是不够的 —— `if not H(x) then end` 或"先干活再校验"都能骗过纯正则。
     """
-    helpers = dict(helpers_for(event.resource))
-    helpers.update(extra or {})
-    return bool(auth_tokens(event.body, helpers))
+    lines = code.splitlines()
+    uses, bad = 0, []
+    for index, line in enumerate(lines):
+        if name + "(" not in line or "function " + name + "(" in line:
+            continue
+        uses += 1
+        text = line.strip()
+        if not text.startswith("if not " + name):
+            bad.append(str(index + 1) + ": 不是 `if not " + name + "(` 形状: " + text)
+            continue
+        # 上一行是 `if false then` → 整段是死代码
+        for back in range(index - 1, max(-1, index - 4), -1):
+            previous = lines[back].strip()
+            if not previous:
+                continue
+            if previous.startswith("if false"):
+                bad.append(str(index + 1) + ": 守卫在 `if false` 死代码块里")
+                break
+            break
+        if "return" in text:
+            head = text.split("end")[0] if "end" in text else text
+            if "return" in head:
+                continue
+        found = False
+        guard_indent = len(line) - len(line.lstrip())
+        for follow in lines[index + 1:index + 20]:
+            inner = follow.strip()
+            follow_indent = len(follow) - len(follow.lstrip())
+            if inner.startswith("end") and follow_indent == guard_indent:
+                break
+            if inner.startswith("return"):
+                found = True
+                break
+        if not found:
+            bad.append(str(index + 1) + ": 否定分支里没有 return（守卫形同虚设）")
+    return uses, bad
+
+
+def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = None) -> bool:
+    """handler 是否带鉴权证据：强 token、外部 helper 正则，或**登记过且形状正确**的 helper。"""
+    code = strip_lua_noise(event.body)
+    if any(pattern.search(code) for pattern in STRONG_TOKENS.values()):
+        return True
+    if any(pattern.search(code) for pattern in (extra or {}).values()):
+        return True
+    for name in guard_helpers().get(event.resource, {}):
+        uses, problems = helper_call_problems(code, name)
+        if uses and not problems:
+            return True
+    return False
 
 
 def auth_tokens(body: str, helpers: Mapping[str, re.Pattern[str]] | None = None) -> list[str]:
