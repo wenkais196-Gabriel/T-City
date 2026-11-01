@@ -61,47 +61,17 @@ CreateThread(function()
 end)
 
 -- =============================================================
--- QBCore.Functions.GetPlayer 桥接
--- 添加缓存层: 高频调用直接走内存，减少 exports 开销
+-- QBCore.Functions.GetPlayer —— **不再打补丁**
 -- =============================================================
-local origGetPlayer = QBCore.Functions.GetPlayer
-local playerCache = {}
-
--- 🛡️ 活性校验：GetPlayerPing 对无效玩家也返回 0（>=0 恒真），
--- 改用 GetPlayerName（无效 source 返回 nil）判断玩家是否仍在线。
-local function isOnline(source)
-    if not source or source <= 0 then return false end
-    return GetPlayerName(source) ~= nil
-end
-
-function QBCore.Functions.GetPlayer(source)
-    -- 缓存命中 + 活性校验
-    local cached = playerCache[source]
-    if cached and isOnline(source) then
-        return cached
-    end
-    -- 缓存过期或无效 → 清除并穿透到原始接口
-    if cached then
-        playerCache[source] = nil
-    end
-    -- 调原始接口
-    local Player = origGetPlayer(source)
-    if Player and isOnline(source) then
-        playerCache[source] = Player
-    end
-    return Player
-end
-
--- playerDropped 时清除缓存
-AddEventHandler('playerDropped', function()
-    playerCache[source] = nil
-end)
-
-AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
-    if Player and Player.PlayerData then
-        playerCache[Player.PlayerData.source] = Player
-    end
-end)
+-- 2026-11-01（P1-4 阶段 B）：删掉这里原来的 playerCache + GetPlayerName 活性校验。
+-- 三个理由：
+--   1. qb-core 的 GetPlayer 本来就是 `QBCore.Players[tonumber(source)]` 一次表查，
+--      套一层缓存命中时反而多一次 native 调用（GetPlayerName），未命中时是"两次查表 + 一次 native"；
+--   2. 缓存不清登出：`QBCore.Player.Logout` → `OnPlayerUnload` → 200ms 后才把 Players[src] 置 nil，
+--      而这里没监听 OnPlayerUnload，停在选人界面的玩家会被返回**已登出**的 Player 表
+--      （`if not Player then return end` 全线失效）；
+--   3. 本资源重启后旧的 funcref 留在 qb-core 的表里，新实例再包一层 → 悬空引用 + 叠层。
+-- 需要按 source 查玩家 / 判在线，用 qb-core 的 GetPlayer + 自己判 GetPlayerName。
 
 -- =============================================================
 -- QBCore.Functions.Notify 桥接 → Bus.notify 服务

@@ -3,13 +3,6 @@
   "entries": [
     {
       "file": "[standalone]/core-framework/compat.lua",
-      "symbol": "QBCore.Functions.GetPlayer",
-      "owner": "core-framework",
-      "reason": "在 qb-core 的一次表查外再加一层 playerCache + GetPlayerName 校验；Logout 后不清缓存，且在 core-framework 重启后留下悬空 funcref。P1-4 阶段 B 删除。",
-      "expires": "2027-03-31"
-    },
-    {
-      "file": "[standalone]/core-framework/compat.lua",
       "symbol": "QBCore.Functions.Notify",
       "owner": "core-framework",
       "reason": "转发到 _G.Bus.notify（每源 200ms 一条、超限静默丢弃、正文截断 300 字符），把 qb-core 的 Notify 语义换成随 core-framework 生命周期变化的版本。P1-4 阶段 D 删除。",
