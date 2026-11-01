@@ -1,50 +1,23 @@
--- compat.lua — 向后兼容层
--- 确保旧版 QBCore.Functions 调用在所有模块迁移到新 Service 前仍然可用
+-- compat.lua — core-framework 剩下的**唯一**兼容层：QBCore.Functions.Notify
+-- （GetPlayer / AddMoney 的猴补已在 P1-4 阶段 B/C 删除，见各自位置的说明）
 --
--- 工作原理:
---   1. 劫持 QBCore.Player 的 Functions 方法
---   2. 直接路由到 Bus.EconomyService（内存优先 + DirtyFlush 管道）
---   3. Bus.EconomyService 不可用时 fallback 到原始逻辑
---   4. 输出统计日志（不中断流程）
---
--- 调用链 (简化后):
---   Player.Functions.AddMoney → Bus.EconomyService.AddMoney → 内存操作 → DirtyFlush
---   （原 triple-hop: compat → custom-main:AddScaledMoney(不存在) → fallback → origAddMoney → Bus.EconomyService）
+-- P1-4 阶段 D 会把这一层也删掉，届时本文件整体下线。
 
 local QBCore = exports['qb-core']:GetCoreObject()
 local compatStats = { shimmed_count = 0, fallback_count = 0 }
 
--- 在 QBCore.Player 创建后自动包装方法
-AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
-    local cid = Player.PlayerData.citizenid
-
-    -- 保存原始 AddMoney (已在 player.lua 中路由到 Bus.EconomyService)
-    local origAddMoney = Player.Functions.AddMoney
-
-    -- 包装 AddMoney: 直连 Bus.EconomyService，跳过不复存在的 custom-main:AddScaledMoney
-    Player.Functions.AddMoney = function(self, moneytype, amount, reason)
-        reason = reason or 'unknown'
-
-        -- 优先走 Bus.EconomyService (内存优先，单跳直达)
-        local ES = _G.Bus and _G.Bus.EconomyService
-        if ES then
-            local ok, result = pcall(ES.AddMoney, ES, self.PlayerData.citizenid, moneytype, amount, reason)
-            if ok and result then
-                compatStats.shimmed_count = compatStats.shimmed_count + 1
-                return true
-            end
-        end
-
-        -- fallback: 走原始逻辑 (player.lua 中已内置 EconomyService 路由)
-        compatStats.fallback_count = compatStats.fallback_count + 1
-        return origAddMoney(self, moneytype, amount, reason)
-    end
-
-    -- 输出首次路由提示（仅一次）
-    if compatStats.shimmed_count + compatStats.fallback_count == 0 then
-        print(('[compat] 🔄 Player.Functions.AddMoney → Bus.EconomyService routing active for %s'):format(cid))
-    end
-end)
+-- =============================================================
+-- Player.Functions.AddMoney —— **不再打补丁**
+-- =============================================================
+-- 2026-11-01（P1-4 阶段 C）：整段删除，**一行不修**。它今天本来就是死代码：
+--   * `_G.Bus.EconomyService` 是 qb-core 在自己状态里注册的；FiveM 每个资源一个 Lua 状态，
+--     `_G` 不跨资源 —— core-framework 这边 `_G.Bus.EconomyService` 恒为 nil，ES 分支整段跳过；
+--   * 即便可见，`pcall(ES.AddMoney, ES, ...)` 多传了一个 `ES`，而 qb-core 的 ES 是 dot 定义
+--     （签名 `(citizenid, moneytype, amount, reason)`）→ 参数整体错位，`tonumber('cash')` 为 nil → 恒 false；
+--   * 即便传参正确，本文件的形参是 `function(self, moneytype, amount, reason)`，而全仓 60 处调用点
+--     都是 3 参 dot 调用 → `self = 'cash'`，`self.PlayerData` 为 nil → 每个加钱点直接 SCRIPT ERROR。
+-- 所以"修好再删"才是危险动作：修好会把这些错位从死代码变成生产故障，或者让 pcall 回落与原函数
+-- 都调一次 ES → 双倍加钱。qb-core 的 player.lua 本来就已经路由 `_G.Bus.EconomyService`。
 
 -- 每 10 分钟打印兼容层统计
 CreateThread(function()
