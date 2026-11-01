@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+### Fixed
+- **剧情抉择面板：键鼠都能用，选完立刻释放焦点**（`story-engine`）。三处真机缺陷一起修：① `decision_nui.html` 的 NUI 回调写成了 `https://cfx-nui-story-engine/...` —— 那是**页面自身的 host**，回调必须 POST 到 `https://<GetParentResourceName()>/...`，于是 `nuiReady` / `nuiOpened` / `makeChoice` 全部 404 且被 `.catch` 吞掉（表现：面板能画、点不动、只能等 120 秒超时）；② 焦点顺序反了（`SetNuiFocus` 之后才 `SetNuiFocusKeepInput`），会把光标吃掉，改成**先 keepInput 再按焦点**；③ `options` 里带 `effects` 等表结构导致 `SendNUIMessage` 的 JSON 编码失败被静默丢弃，现在只发 `{id, text}`。另外：同一决策重复下发不再关闭重开（避免玩家点击时按钮 DOM 被重建）、手写测试页面卸载后不再残留 `nuiReady` 断言。真机：键盘 `1` → `nui.makeChoice` → `makeDecision choice=honest_cop` → `quest_event_log #89 complete`；鼠标点击同样产生一次 `makeChoice` + `makeDecision`。
+- **序章任务链三处静默失败**（`custom-quest`）：① checkpoint 半径原来优先取 cpType 默认值（`ring=30`），而服务端按模板 `step.data.radius`（15/20）复验距离 —— 于是"客户端喊到了、服务端判太远"，`quest_event_log` 里只有 `security_block distance_fail`（真机 `required=15.0 distance=28.78`）；② 决策节点把同一个事件派发**两遍**（`NODE_EVENTS[DECISION]` 本身就是 `story:client:offerDecision`，走到函数底部又发一次），第二遍关界面重开导致第一块面板的看门狗仍在计时；③ 决策 payload 只带 `decision_id`，`prompt/options` 在 story-engine 的决策定义里，而 `OfferDecision` 返回的是 `(true,'offered')` 不是表 —— 客户端永远收到 0 个选项走 skip 兜底。现在分别改为：模板优先的半径、DECISION 只派发一次、用 `GetDecision` 取定义并并进 payload。
+- **决策超时不再死锁**（`story-engine`）：`police_ch1_honest_or_silent` 没有 `default_option`，超时/看门狗一触发就 `clearPending` 返回失败，任务永久停在 `step_decision`。现在缺省时用**第一个选项**兜底；连选项都没有时保留 pending 让玩家手动选。
+- **任务接取去重**（`custom-quest`）：同一玩家同一任务可能出现多条 `in_progress`（真机 3 条），恢复时各自下发一次状态。`CreateQuest` 先查在办记录，有就跳过。
+- **story-engine 不在时决策会重试**（`custom-quest`）：`restart custom-quest` 会连坐停掉 story-engine 且不自动拉回，决策 export 消失后只打一行 warning 就软锁。现在 5 秒重试 6 次，耗尽后明确通知玩家"剧情服务暂不可用，请重新连接"。
+- **车机静默无响应**（`tcity-dashboard`）：`custom-vehicles` 被 `restart` 连坐停掉后，按 `I` 只发出 `request_lock` 就再无下文。服务端在 `onResourceStart` 检查并在必要时 `StartResource('custom-vehicles')`；客户端 900ms 无回执时提示"车机服务未就绪（custom-vehicles: stopped）"。
+- **小地图回原生**（`qb-hud` / `hud-position-tool`）：qb-hud 的 square 分支把 mask/blur 放大到 `0.2293×0.2625`（原生 `0.111×0.159`）并替换雷达遮罩贴图、踢 bigmap —— 内容溢出边框、偶发"倾斜巨图"。现在默认 `hud_native_map=1` 直接跳过整段；`hud-position-tool` 关闭时不再写组件（两个写者互相覆盖）。
+
+### Added
+- **`tools/dev/fivem_focus.py`**：把 FiveM 窗口切到前台（`AttachThreadInput` + 必要时点窗口中心）。`fivem_console.py --key` 依赖窗口在前台，之前只能手动 Alt-Tab。
+- **`tools/dev/cc_run.sh`**：在本机跑 Claude Code（后端是 DeepSeek 的 Anthropic 兼容端点）。修掉两个环境问题：`ANTHROPIC_*` 只在 `HKCU\Environment` 里、没有进 bash；模型名带本地后缀 `deepseek-flash[1m]` 端点不认。
+- **开发期重放命令**：`quest_reenode <src>`（重放当前步骤节点）、`story_offer_dev <src> [decisionId] [questId] [stepId]`（不依赖任务状态直接下发决策）、`story_nui_ping <src>`（NUI 管道探针），均由 convar 门控、默认关闭。
+
+
 ### Added
 - **警察系统文档沉淀**：新增 `docs/agent/police/README.md`（入口索引 + 现状一页表 + 踩坑清单 + 常驻/多机待办）与 `docs/agent/police/ATOOLS-DISCIPLINE.md`（加/改 agent 动作的九步检查清单：四处策略接点、工具名白名单、单一写者、fail-closed 审计、闸门命令）。
 - **AI 调度员 MVP**：`tools/agent/dispatch_mvp.py` 只做两件确定性的事 —— 从 `phone_messages` 增量取内容、把解析结果提交成 `police_call_draft` 草稿（幂等键按来源 id，令牌不落盘不打印）；**解析由 agent 完成**，脚本里没有关键词映射表。真机：3 条报案短信 → 草稿 `#71/#72/#73`（`10-31` / `911` / `10-52`），系统消息被跳过。

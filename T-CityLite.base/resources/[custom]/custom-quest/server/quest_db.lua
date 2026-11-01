@@ -18,7 +18,21 @@ local QUEST_DEBUG = GetConvar('quest_debug', 'false') == 'true'
 ---@param firstStep string|nil 第一个步骤 ID
 function QuestDB.CreateQuest(citizenid, questId, firstStep)
     if not MySQL then return end
-    MySQL.Async.insert(
+    -- 幂等：同一玩家同一任务同时只允许一条 in_progress。
+    -- 真机事故：反复接取刷出 3 条 in_progress（DXI50064 / police_ch1_first_shift），
+    -- 恢复时三行各自下发一次状态，玩家看到的是"任务在跳"。
+    MySQL.Async.fetchScalar(
+        'SELECT id FROM player_quests WHERE citizenid = ? AND quest_id = ? AND status = ? LIMIT 1',
+        { citizenid, questId, 'in_progress' },
+        function(existingId)
+            if existingId then
+                if QUEST_DEBUG then
+                    print(('[quest-db] ♻️ 已有进行中的记录 id=%s，跳过重复创建: %s → %s')
+                        :format(tostring(existingId), citizenid, questId))
+                end
+                return
+            end
+            MySQL.Async.insert(
         'INSERT INTO player_quests (citizenid, quest_id, status, current_step, progress_data, started_at) VALUES (?, ?, ?, ?, ?, NOW())',
         { citizenid, questId, 'in_progress', firstStep, '{}' },
         function(insertId)
@@ -27,6 +41,8 @@ function QuestDB.CreateQuest(citizenid, questId, firstStep)
                     print(('[quest-db] 📝 Quest started: %s → %s (id=%d)'):format(citizenid, questId, insertId))
                 end
             end
+        end
+    )
         end
     )
 end

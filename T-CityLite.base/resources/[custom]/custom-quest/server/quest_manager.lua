@@ -86,6 +86,33 @@ QuestNodes = {
             for k, v in pairs(payload) do data[k] = v end
         end
 
+        -- 决策弹窗的重试封装：story-engine 不在（资源被 restart 连坐停掉）时不要静默软锁
+        local function offerWithRetry(src, qid, sid, decisionId, timeout, attempt)
+            if attempt > 6 then
+                TriggerClientEvent('QBCore:Notify', src,
+                    '剧情服务暂不可用，任务已暂停；请重新连接后继续', 'error', 8000)
+                print(('[quest-nodes] ❌ OfferDecision 彻底失败（已重试 6 次）quest=%s step=%s')
+                    :format(tostring(qid), tostring(sid)))
+                return
+            end
+            SetTimeout(5000, function()
+                local ok2, res2 = pcall(function()
+                    return exports['story-engine']:OfferDecision(src, qid, sid, decisionId, timeout)
+                end)
+                if ok2 and res2 ~= false then
+                    TriggerClientEvent('story:client:offerDecision', src, {
+                        questId = qid, stepId = sid, decision_id = decisionId,
+                        prompt = res2 and res2.prompt, options = res2 and res2.options,
+                        timeout = (res2 and res2.timeout) or timeout or 120,
+                    })
+                    print(('[quest-nodes] ✅ 决策弹窗已补发 quest=%s step=%s (第 %d 次重试)')
+                        :format(tostring(qid), tostring(sid), attempt))
+                    return
+                end
+                offerWithRetry(src, qid, sid, decisionId, timeout, attempt + 1)
+            end)
+        end
+
         -- v0.7 story-engine: 决策步骤由服务端先登记 pending，再让客户端弹窗，
         -- 防止客户端伪造 questId/stepId 推进任意任务，也为超时提供兜底。
         if normalizedType == 'DECISION' and data.decision_id then
@@ -93,11 +120,38 @@ QuestNodes = {
                 return exports['story-engine']:OfferDecision(
                     source, questId, stepId, data.decision_id, data.timeout)
             end)
-            if not ok or result == false then
-                print(('[quest-nodes] ⚠️ OfferDecision failed: quest=%s, step=%s (%s)'):format(
-                    tostring(questId), tostring(stepId),
-                    tostring(ok and 'decision not registered' or result)))
+            -- 决策定义里的 prompt/options/timeout 必须并进 payload：
+            -- 模板里只写了 decision_id，客户端拿不到 options 就只能走 skip 兜底
+            -- （真机 telemetry: decision.offer 之后紧跟 decision.no_options）。
+            -- OfferDecision 返回的是 (true, 'offered')，**不是**表；
+            -- 定义要另外用 GetDecision 取（真机 telemetry: option_count=0 → no_options）。
+            if ok and result ~= false then
+                local ok2, def = pcall(function()
+                    return exports['story-engine']:GetDecision(data.decision_id)
+                end)
+                if ok2 and type(def) == 'table' then
+                    data.prompt = def.prompt or data.prompt
+                    data.options = def.options or data.options
+                    data.timeout = def.timeout or data.timeout
+                else
+                    print(('[quest-nodes] ⚠️ GetDecision 取不到定义: %s'):format(tostring(data.decision_id)))
+                end
             end
+            if not ok or result == false then
+                -- 真机事故：restart custom-quest 会连带停掉 story-engine（依赖方向是
+                -- story-engine -> custom-quest），restart 不会把它们拉回来，
+                -- 于是决策步骤永远拿不到弹窗 → 任务软锁在 step_decision。
+                -- 这里不再只打一行日志：重试 + 明确告知玩家，别静默卡死。
+                local reason = tostring(ok and 'decision not registered' or result)
+                print(('[quest-nodes] ⚠️ OfferDecision failed: quest=%s, step=%s (%s) — 5s 后重试')
+                    :format(tostring(questId), tostring(stepId), reason))
+                offerWithRetry(source, questId, stepId, data.decision_id, data.timeout, 1)
+            end
+            -- NODE_EVENTS[DECISION] 本身就是 'story:client:offerDecision'：
+            -- 这里自己发一次并提前返回，避免走到底部通用派发时同一决策下发两遍
+            -- （第二遍会收界面重开，第一块面板的看门狗照旧计时 → 面板在但点不动）。
+            TriggerClientEvent(eventName, source, data)
+            return
         end
 
         TriggerClientEvent(eventName, source, data)

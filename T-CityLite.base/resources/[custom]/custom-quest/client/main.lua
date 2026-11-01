@@ -80,6 +80,14 @@ function SetupReachZone(stepData, questId, stepId)
     local fired = false
     CreateThread(function()
         while activeZone == nil and activeQuest and activeQuest.current_step == stepId do
+            -- CheckpointManager 已经在管这一步（日志里 Created: ... type=ring）时，
+            -- 兜底轮询不要再触发一次，否则服务端会收到两条 quest:server:reach
+            local cpActive = false
+            pcall(function()
+                cpActive = CheckpointManager and CheckpointManager.GetActive ~= nil
+                    and CheckpointManager.GetActive() ~= nil
+            end)
+            if cpActive then break end
             Wait(500)
             local ped = PlayerPedId()
             if ped ~= 0 then

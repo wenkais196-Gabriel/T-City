@@ -381,6 +381,10 @@ RegisterNetEvent('custom-vehicles:server:requestDashboard', function(plate)
 
     -- 自己可以重新打开（关闭后立即重开）
     if currentHolder and currentHolder ~= citizenid then
+        if GetConvar('dashboard_debug', '0') == '1' then
+            print(('[dashboard][server] lock busy plate=%s holder=%s asker=%s'):format(
+                tostring(plate), tostring(currentHolder), tostring(citizenid)))
+        end
         TriggerClientEvent('custom-vehicles:client:dashboardLockResult', src, false,
             '中控屏正被车内另一位乘员使用中，请稍后再试')
         return

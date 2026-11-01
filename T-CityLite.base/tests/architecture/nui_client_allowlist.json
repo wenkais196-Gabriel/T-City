@@ -26,17 +26,6 @@
       "expires": "2027-03-31"
     },
     {
-      "id": "story-origin-hardcoded",
-      "check": "nui_origin_hardcoded",
-      "resource": "story-engine",
-      "file": "client/decision_nui.html",
-      "name": "cfx-nui-story-engine",
-      "owner": "story-engine",
-      "reason": "2 处 fetch('https://cfx-nui-story-engine/...') 硬编码资源名，应用 GetParentResourceName()（模板串）。改名后决策弹窗所有回调 404。审计 Medium O-03。",
-      "added": "2026-10-25",
-      "expires": "2027-03-31"
-    },
-    {
       "id": "story-nui-request-timeout",
       "check": "nui_request_timeout",
       "resource": "story-engine",

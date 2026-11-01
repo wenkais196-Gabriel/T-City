@@ -93,10 +93,12 @@
     </div>
 
     <script>
+        console.log('[decision-nui] script start');
         var remainingSec = 0;
         var timerInterval = null;
 
         function openDecision(data) {
+            nuiPost('nuiOpened', { n: (data && data.options && data.options.length) || 0, t: String((data && data.type) || '') });
             var panel = document.getElementById('decision-panel');
             var prompt = document.getElementById('prompt');
             var options = document.getElementById('options');
@@ -146,7 +148,7 @@
 
         function reportNuiError(kind, detail) {
             try {
-                fetch('https://cfx-nui-story-engine/debugNui', {
+                fetch('https://' + resourceName() + '/debugNui', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -157,8 +159,18 @@
             } catch (e) {}
         }
 
+        // NUI 回调必须 POST 到 https://<resource>/...（GetParentResourceName），
+        // 而不是页面自身的 host（cfx-nui-story-engine）——后者只会 404，
+        // 于是 nuiReady/makeChoice 一次都到不了 Lua（真机遥测 0 条）。
+        function resourceName() {
+            try {
+                if (typeof GetParentResourceName === 'function') return GetParentResourceName();
+            } catch (e) {}
+            return 'story-engine';
+        }
+
         function nuiPost(path, payload) {
-            return fetch('https://cfx-nui-story-engine/' + path, {
+            return fetch('https://' + resourceName() + '/' + path, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload || {})
@@ -221,6 +233,11 @@
         });
 
         // 监听 Lua 端消息
+        // 自证握手：客户端只有在收到这条之后才 SendNUIMessage。
+        // 真机事故：资源刚重启、CEF 还没加载完就发 openDecision → 消息被丢，
+        // 但 SetNuiFocus(true,true) 已经生效 → 画面没有面板、鼠标被锁、什么都点不了。
+        nuiPost('nuiReady', { ua: navigator.userAgent });
+
         window.addEventListener('message', function(event) {
             var data = event.data;
             if (!data || !data.type) return;
