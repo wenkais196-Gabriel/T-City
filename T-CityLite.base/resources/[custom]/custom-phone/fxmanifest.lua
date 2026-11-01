@@ -31,6 +31,8 @@ client_scripts {
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/sms.lua',
+    -- CityFeed 的纯规则（公告校验/作者归类），main.lua 之前加载
+    'server/city_feed.lua',
     -- core must load before the registry and main.lua
     'server/core/identity.lua',
     'server/core/rate_limit.lua',

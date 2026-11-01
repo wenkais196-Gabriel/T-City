@@ -92,16 +92,36 @@ def test_trace_service_is_the_only_writer_and_is_registered():
 def test_police_close_branch_hooks_the_trace_inside_the_closed_branch():
     src = read(INCIDENTS)
     assert "SELECT id, status, x, y FROM police_incidents" in src
+
+    # 挂钩被抽成 publishCloseTrace：区域判定 + 写痕迹 + 必要时发公告。
+    helper_at = src.index("local function publishCloseTrace(")
+    assert "Regions.RegionOf(tonumber(incident.x), tonumber(incident.y))" in src
+    assert "service_world_trace_Record(" in src
+    assert "PostCityBulletin(" in src
+
     close_at = src.index("if targetStatus == 'closed' then")
-    call_at = src.index("service_world_trace_RecordAt")
+    call_at = src.index("pcall(publishCloseTrace")
     # 非 closed 分支的通用 UPDATE 必须在调用点之后 —— 说明调用点确实在 closed 分支里，
     # 而不是被塞到了函数末尾（那样状态变更类调用也会写痕迹）。
     next_branch = src.index("SET status = ?, last_activity_at = NOW()", close_at)
-    assert close_at < call_at < next_branch, "痕迹调用必须在 closed 分支内，且早于通用 UPDATE 分支"
+    assert helper_at < close_at < call_at < next_branch, "痕迹调用必须在 closed 分支内，且早于通用 UPDATE 分支"
     # 必须被 pcall 包住：痕迹失败不能让结案失败。
-    wrapped = src[call_at - 400:call_at]
-    assert "pcall(" in wrapped, "结案里的痕迹调用必须在 pcall 内"
-    assert "tonumber(incident.x)" in src and "tonumber(incident.y)" in src
+    assert "if not traceOk or traceRecorded ~= true then" in src
+
+
+def test_police_manifest_uses_the_shared_region_table():
+    manifest = read(POLICE / "fxmanifest.lua")
+    assert "@core-framework/shared/regions.lua" in manifest, "警察要用同一份区域表，不要复制"
+
+
+def test_city_bulletin_is_only_for_resolutions():
+    src = code_only(read(INCIDENTS))
+    assert "local ANNOUNCE_DISPOSITIONS = { arrest = true, cleared = true }" in src
+    # 取消/误报/超时不该变成城市新闻。
+    announce_line = [l for l in src.splitlines() if l.startswith("local ANNOUNCE_DISPOSITIONS")]
+    assert announce_line and "cancelled" not in announce_line[0] and "stale" not in announce_line[0]
+    # 节流：只在「24 小时内第一起」时发公告。
+    assert "summary.closed_24h ~= 1 then return true end" in src
 
 
 # ---------------------------------------------------------------------------

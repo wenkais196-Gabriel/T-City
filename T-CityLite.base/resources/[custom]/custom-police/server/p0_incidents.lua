@@ -259,6 +259,44 @@ function P.DraftCallSystem(actorCid, data)
     return { id = result.id, status = 'draft', code = result.code, title = result.title }
 end
 
+-- ----------------------------------------------------------------
+-- 结案后的玩家可见后果（世界痕迹第一条链）
+-- ----------------------------------------------------------------
+-- 只做两件确定性的事：写区域状态、必要时发一条城市公告（手机 CityFeed）。
+-- 公告节流规则是「该区域 24 小时内的第一起有效结案」——不是每条结案都喊一声。
+-- 区域判定用 core-framework 的 regions.lua（本资源 fxmanifest 已 include），
+-- 写库只走 core-framework 的 world_trace 导出（world_state 的唯一写者）。
+local ANNOUNCE_DISPOSITIONS = { arrest = true, cleared = true }
+
+---@return boolean recorded
+local function publishCloseTrace(incident, incidentId, disposition, actorCid)
+    local regionId = Regions.RegionOf(tonumber(incident.x), tonumber(incident.y))
+
+    local recorded = exports['core-framework']:service_world_trace_Record(
+        regionId, 'crime_pressure',
+        { incident_id = incidentId, disposition = disposition }, actorCid)
+    if recorded ~= true then return false end
+
+    if not ANNOUNCE_DISPOSITIONS[disposition] then return true end
+
+    local value = exports['core-framework']:service_world_state_GetRegionState(regionId, 'crime_pressure')
+    local summary = exports['core-framework']:service_world_trace_Summarize(value, os.time())
+    if type(summary) ~= 'table' or summary.closed_24h ~= 1 then return true end
+
+    -- 文案是模板拼的，不接生成式模型（生成式内容要单独过 TOS，见调研文档 §3）。
+    local text = ('%s：本区一起警情已结案（24 小时内第 1 起）'):format(Regions.Label(regionId))
+    local posted, postErr = pcall(function()
+        return exports['custom-phone']:PostCityBulletin(text, {
+            region_id = regionId,
+            incident_id = incidentId,
+        })
+    end)
+    if not posted then
+        print(('[custom-police] city bulletin failed for #%s: %s'):format(tostring(incidentId), tostring(postErr)))
+    end
+    return true
+end
+
 function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
     local actor = pd(source)
     local allowed, policyReason = PolicePolicy.Can(actor, 'incident.update')
@@ -325,17 +363,12 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
             print(('[custom-police] incident.close audit failed for #%s'):format(tostring(id)))
         end
         -- 世界痕迹第一条链（docs/engineering/2026-11-01-world-traces-blueprint.md）：
-        -- 结案 → 区域状态 → CityFeed。区域由 core-framework 的 regions.lua 判定，
-        -- 本资源不算区域、不写 world_state（单一写者 = world_trace_service）。
-        -- 失败只记日志：痕迹不是业务结果的一部分，结案该成功还是成功。
-        local traceOk, traceAccepted = pcall(function()
-            return exports['core-framework']:service_world_trace_RecordAt(
-                tonumber(incident.x), tonumber(incident.y), 'crime_pressure',
-                { incident_id = id, disposition = closeDisposition }, actor.citizenid)
-        end)
-        if not traceOk or traceAccepted ~= true then
+        -- 结案 → 区域状态 → CityFeed。失败只记日志：痕迹不是业务结果的一部分，
+        -- 结案该成功还是成功（宪法第 1 条：权威仍在 custom-police）。
+        local traceOk, traceRecorded = pcall(publishCloseTrace, incident, id, closeDisposition, actor.citizenid)
+        if not traceOk or traceRecorded ~= true then
             print(('[custom-police] world trace skipped for #%s: %s')
-                :format(tostring(id), traceOk and 'declined' or tostring(traceAccepted)))
+                :format(tostring(id), traceOk and 'declined' or tostring(traceRecorded)))
         end
         return { id = id, status = 'closed', disposition = closeDisposition }
     end
