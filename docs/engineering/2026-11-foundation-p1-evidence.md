@@ -109,8 +109,9 @@ $ python tools/docs_lifecycle.py --check
 [scripts:core-framework] [persistence] ✅ delegate loaded (owner=qb-core: resolved)
 ```
 
-拉回后实测：`info.json` **85 个资源**在跑（与改动前一致），自 `single owner store loaded` 之后
+拉回后实测：`info.json` **85 个资源**在跑（与本次重启前一致），自 `single owner store loaded` 之后
 **0 条 SCRIPT ERROR / No such export**，且只出现一次 `Flush tick started`（qb-core 侧）。
+拉回过程中被 `ensure` 顺带起过的两个 dev 资源（custom-agent-ops / custom-testing）已停掉，恢复原启动集合。
 
 （重启过程中暴露并修掉了一个真问题：写者文件在 qb-core 的 `main.lua` 之前加载，
 顶层调 `exports['qb-core']:GetCoreObject()` 会直接 `No such export` 并中断整份脚本。
