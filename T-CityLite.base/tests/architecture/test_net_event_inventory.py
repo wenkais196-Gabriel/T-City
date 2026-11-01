@@ -113,6 +113,30 @@ def test_batch_totals_add_up():
         )
 
 
+def test_recorded_counts_match_the_live_scan():
+    """`batches` / `resources` 的数字必须等于实测。
+
+    只校验"批次内部相加相等"挡不住手改：把 events 和 guarded 一起改大，和仍然成立。
+    所以这里跟 live 扫描逐字段比 —— 手改基线一定红。
+    """
+    base = baseline.load()
+    now = current()
+    assert now["batches"] == base["batches"], (
+        "基线里的批次数字与实测不一致（手改过？）"
+        + chr(10) + f"基线 {base['batches']}"
+        + chr(10) + f"实测 {now['batches']}"
+        + chr(10) + chr(10) + f"（{REGEN}）"
+    )
+    fields = ("batch", "events", "guarded", "allowlisted", "unguarded")
+    live = {name: {key: stats[key] for key in fields} for name, stats in now["resources"].items()}
+    recorded = {name: {key: stats[key] for key in fields} for name, stats in base["resources"].items()}
+    assert live == recorded, (
+        "基线里的每资源数字与实测不一致（手改过？或改了扫描器却没重生成）"
+        + chr(10) + f"只在新基线: {sorted(set(live) - set(recorded))}"
+        + chr(10) + f"只在旧基线: {sorted(set(recorded) - set(live))}"
+        + chr(10) + chr(10) + f"（{REGEN}）"
+    )
+
 def test_non_literal_registrations_do_not_grow():
     base = baseline.load()
     now = current()
@@ -185,3 +209,44 @@ def test_reverse_non_literal_registration_is_reported(tmp_path: Path):
     )
     offenders = scan.non_literal_registrations(tmp_path)
     assert len(offenders) == 1 and "EVENT_NAME" in offenders[0], offenders
+
+
+def test_reverse_scanner_sees_registrations_with_a_space_before_the_paren(tmp_path: Path):
+    """`RegisterNetEvent (` 多一个空格以前完全不可见（事件名都扫不到）。"""
+    resource = tmp_path / "[custom]" / "spike-resource" / "server"
+    resource.mkdir(parents=True)
+    (resource / "main.lua").write_text(
+        "RegisterNetEvent ('spike:server:space', function(payload)" + chr(10)
+        + "    print(payload)" + chr(10) + "end)" + chr(10),
+        encoding="utf-8",
+    )
+    events, problems = scan.scan_repo(tmp_path)
+    assert problems == []
+    assert [event.name for event in events] == ["spike:server:space"]
+    assert scan.auth_tokens(events[0].body) == []
+
+
+def test_reverse_auth_token_in_a_comment_does_not_count():
+    """注释里写的检查不算检查 —— 否则"把检查注释掉"就能骗过闸门。"""
+    body = chr(10).join([
+        "local src = source",
+        "-- PolicePolicy.Can(actor, 'incident.claim')  ← 已经注释掉了",
+        "if not Player then return end",
+    ])
+    assert scan.auth_tokens(body) == []
+
+
+def test_reverse_auth_token_in_a_string_does_not_count():
+    """日志里印一句 PolicePolicy.Can( 也不等于真的校验。"""
+    body = chr(10).join([
+        "local src = source",
+        "print('PolicePolicy.Can( 还没接')",
+    ])
+    assert scan.auth_tokens(body) == []
+
+
+def test_system_source_token_only_counts_the_server_only_shape():
+    """`src == 0` 只排除控制台，不等于"只允许服务端"；只有 `src ~= 0 then return` 才算。"""
+    assert scan.auth_tokens("if src == 0 then return end") == []
+    assert scan.auth_tokens("if src ~= 0 then return end") == ["system_source"]
+    assert scan.auth_tokens("if source ~= 0 then return end") == ["system_source"]
