@@ -1,3 +1,13 @@
+---
+id: base-refactoring-manifest-v2
+type: plan
+status: final
+system: infra
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 重构删除清单 & 保留清单 v2.0
 # ============================================================================
 # 原则: 已重构为积木配置 + 统一网关调用的旧脚本 → 删除。

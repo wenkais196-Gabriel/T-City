@@ -1,3 +1,13 @@
+---
+id: engineering-reuse
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # REUSE — 共享代码放哪、什么该合并、怎么收敛
 
 > 这份文件回答"组件复用"的具体问题：**同一能力允许有几份实现**。

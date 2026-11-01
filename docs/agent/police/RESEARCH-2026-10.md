@@ -1,10 +1,21 @@
+---
+id: agent-police-research-2026-10
+type: research
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-30
+review_by: 2027-01-30
+supersedes: [agent-police-research-2026-10-v1]
+---
+
 # T-City Lite 警察模块调研 v2
 
 > **状态**：调研定稿，**未实现、未提交**。日期 2026-10-29。
 > **施工图**：[BLUEPRINT.md](BLUEPRINT.md)（分几个阶段、谁改哪个文件、怎么验收）。
 > **本文回答**：做什么、为什么、体验应该长什么样。
 > **证据口径**：外部事实附 URL；仓库事实附 `路径:行号`（均为实测，非推断）；标 **建议** 的是设计取舍。
-> **历史版本**：v1 存档于同目录 [RESEARCH-2026-10-v1.md](RESEARCH-2026-10-v1.md)（仅作差异对照，不要照它开工）。
+> **历史版本**：v1 存档于同目录 [RESEARCH-2026-10-ARCHIVED.md](RESEARCH-2026-10-ARCHIVED.md)（仅作差异对照，不要照它开工）。
 
 ## v2 相对 v1 的改动
 

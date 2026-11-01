@@ -1,3 +1,13 @@
+---
+id: client-research-nui-debug-playbook
+type: research
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-01-30
+---
+
 # NUI POST 未到达客户端 Lua 回调 —— 系统排查手册
 
 > 适用：T-City Lite `custom-phone`（Svelte 5 + Vite，`resources/[custom]/custom-phone`）。

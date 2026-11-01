@@ -1,4 +1,15 @@
-# custom-phone 性能与职业 App 接口设计
+---
+id: base-agent-phone-design
+type: spec
+status: superseded
+system: comms
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+superseded_by: [phone-design]
+---
+
+# custom-phone 性能与职业 App 接口设计（旧副本，现行版在 docs/agent/phone/DESIGN.md）
 
 > 输入：`qb-phone-research.md`（上游 qb-phone 架构/性能/借鉴清单）、`custom-phone-audit.md`（本地 20 条 bug、10 条性能问题）。
 > 本文只定方向与接口；P0 数据层修复已随 `cc1965d` 落地，见文末"已完成"。

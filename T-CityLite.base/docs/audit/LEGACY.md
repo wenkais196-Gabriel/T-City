@@ -1,4 +1,14 @@
-# 历史归档（不维护）
+---
+id: base-audit-legacy
+type: meta
+status: final
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
+# 历史归档（不维护）：T-CityLite.base/docs/audit
 
 这个目录是**历史记录**，不是说明书：里面的路径、文件名、目录结构反映的是当时的状态，
 之后的重构没有回填。所以这里不参与文档断链闸门（`tests/architecture/test_docs_links.py`）。

@@ -1,3 +1,13 @@
+---
+id: base-menu-interaction-design
+type: spec
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-21
+review_by: 2027-04-30
+---
+
 # 菜单交互设计规范（NUI / 世界交互）
 
 > 目标：所有菜单统一生命周期，解决“自动弹窗、关闭打一拳、远处隔空交互、手机滚轮穿透”。

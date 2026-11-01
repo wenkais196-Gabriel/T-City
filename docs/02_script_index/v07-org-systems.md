@@ -1,3 +1,13 @@
+---
+id: 02-script-index-v07-org-systems
+type: manual
+status: archived
+system: org
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # v0.7 组织系统五件套
 
 > **状态**: ✅ ALL ENABLED | **CFG 模块**: custom.cfg

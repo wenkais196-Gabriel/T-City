@@ -1,3 +1,12 @@
+---
+id: agent-police-acceptance-run-2026-10-30
+type: audit
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-31
+---
+
 # 验收记录 — P5（AI 支援）· 2026-10-30
 
 > 对象：本轮已实现的 **NPC 支援配方与硬约束**（PR #115）与 **L0 无线电层**（PR #117）。

@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-refactor-plan
+type: plan
+status: archived
+system: meta
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # ⚙️ T-City Lite Career (职业身份) 系统重构技术方案
 
 > **适用版本**: v0.6 - v1.0+  

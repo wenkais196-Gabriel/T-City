@@ -1,3 +1,13 @@
+---
+id: base-automated-testing-plan
+type: plan
+status: active
+system: delivery
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 🧪 T-City Lite 自动化测试方案
 
 > **版本**: v1.0

@@ -1,14 +1,22 @@
+---
+id: agents
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-11-01
+review_by: 2027-04-30
+---
+
 # AGENTS.md — T-City 入口索引
 
-> 给新开对话/新 agent 的**唯一入口**。本页只做三件事：告诉你去哪读、红线是什么、命令怎么跑。
-> 详细内容在分区文件里，本页**不超过 100 行**——超了就把内容下沉，不要在这里堆。
+> 给新开对话/新 agent 的**唯一入口**。本页只做三件事：去哪读、红线是什么、命令怎么跑。详细内容在分区文件里，本页压在 100 行内。
 
 ## 0. 这是什么
 
-**QBCore / FiveM RP 服务器**（T-City Lite）+ 一套 LLM agent 接管栈：116 个资源、MariaDB、OneSync、
-自研 Svelte 手机（`custom-phone`）、`custom-director` 动作代理（L1–L4 风险分级）。
+**QBCore / FiveM RP 服务器**（T-City Lite）+ 一套 LLM agent 接管栈：116 个资源、MariaDB、OneSync、自研 Svelte 手机（`custom-phone`）、`custom-director` 动作代理（L1–L4 风险分级）。
 
-## 1. 去哪读（按你的任务选一份，不要全读）
+## 1. 去哪读（按任务选一份，不要全读）
 
 | 我要做的事 | 先读 | 再读 |
 |---|---|---|
@@ -22,6 +30,7 @@
 | 想复用 / 合并重复实现 | `docs/engineering/REUSE.md` | `python3 tools/dev/reuse_scan.py --min 3` |
 | 交付 / 发版 | `docs/engineering/templates/delivery.md` | `tools/dev/release_check.py` |
 | **要上真机验证**（NUI / 输入 / 实体 / 时序） | `docs/engineering/LIVE_VERIFICATION.md` | `tools/dev/police_live_probe.py` + `tools/dev/fivem_console.py` |
+| 找某份文档在哪、什么状态 | `docs/INDEX.md`（自动生成的全量清单） | `docs/README.md`（人工导航） |
 
 ## 2. 十条红线（违反 = 打回，全文见 CONSTITUTION）
 
@@ -45,8 +54,7 @@
 | **L3 结构** | 跨文件、跨平面、新增资源/事件/表 | 走完整五阶段（R/P/D/V/S），产物入库 |
 | **L4 架构** | 鉴权模型、表结构、协议、依赖方向 | 五阶段 + 宪法对照 + 人审 |
 
-模板：`docs/engineering/templates/{research,plan,tasks,verification,delivery}.md`。
-判不准时按高一级走，并在计划里说明为什么。
+模板：`docs/engineering/templates/{research,plan,tasks,verification,delivery}.md`。判不准时按高一级走，并在计划里说明为什么。
 
 ## 4. 常用命令（照抄即可）
 
@@ -54,41 +62,29 @@
 # 测试（仓库根，全部离线，不需要服务器/DB）
 cd T-CityLite.base && /usr/bin/python3 -m pytest tests/unit tests/architecture -q
 cd T-CityLite.base/resources/[custom]/custom-phone/web && node tests/nui/run.mjs
-npx svelte-check --tsconfig ./tsconfig.app.json          # 前端类型
+npx svelte-check --tsconfig ./tsconfig.app.json     # 前端类型
+npm run build                                      # 改 web/src 后必做，产物进 ../../html
+luac5.4 -p <file.lua>                              # Lua 语法（qb-core 用 CfxLua `+=`，luac 解析不了）
+lua5.4 T-CityLite.base/tests/agent/lua/runner.lua  # Lua golden（13 suites / 253 checks）
 
-# 前端产物（改 web/src 后必须做）
-cd T-CityLite.base/resources/[custom]/custom-phone/web && npm run build   # 输出到 ../../html
-
-# Lua 语法（qb-core 例外：它用 CfxLua 扩展 `+=`，luac 无法解析）
-luac5.4 -p <file.lua>
-
-# Lua golden（13 suites，253 checks）
-lua5.4 T-CityLite.base/tests/agent/lua/runner.lua
-
-# 服务器（screen 会话 tcity；控制台用 tcity-cmd，见 ~/.local/bin）
+# 服务器（screen 会话 tcity；无 RCON，控制台走 tcity-cmd 注入）
 screen -dmS tcity bash -c 'cd <repo> && ./start.sh > /tmp/tcity_console.log 2>&1'
-tcity-cmd -w 8 "restart custom-phone"
-tcity-cmd --page                                        # 当前控制台页
-tail -40 /tmp/tcity_console.log                         # 服务端日志
+tcity-cmd -w 8 "restart custom-phone"   # tcity-cmd --page 看当前页；tail -40 /tmp/tcity_console.log 看日志
 
 # 真机（起栈顺序：Docker → FXServer → 客户端）
 docker start tcity-mariadb
-python3 tools/dev/police_live_probe.py --audit 5                 # 客户端 phone 状态 + 资源数 + 审计尾巴
-python3 tools/dev/fivem_console.py "restart custom-police"       # 控制台命令（经 MCP→RCON）
-python3 tools/dev/fivem_console.py --key Down                    # 真机按键（只有这条路径能进游戏）
-python3 tools/dev/fivem_console.py "adc 1 phoneui police_mdt"    # devcmd 直达 App（需 setr phone_ui_nav 1）
-
-# 交付前
-python3 tools/dev/release_check.py
+python3 tools/dev/police_live_probe.py --audit 5               # phone 状态 + 资源数 + 审计尾巴
+python3 tools/dev/fivem_console.py "restart custom-police"     # 控制台命令（MCP→RCON）
+python3 tools/dev/fivem_console.py --key Down                  # 真机按键（唯一能进游戏的路径）
+python3 tools/dev/fivem_console.py "adc 1 phoneui police_mdt"  # devcmd 直达 App（需 setr phone_ui_nav 1）
+python3 tools/dev/release_check.py                             # 交付前
 ```
 
 ## 5. 环境事实（会变，但 agent 必须知道）
 
 - 运行中的服务器 = **本仓库的 `T-CityLite.base`**，`start.sh` 拉起，端口 `30120/tcp+udp`。
-- 控制台**没有 RCON**：走 `screen` 注入（`tcity-cmd`）。控制台是裸 stdin，没有行编辑；
-  发送残留会和新命令拼成 `randomitemsrestart x`，工具会先发 80 个 DEL 清行。
-- `server.cfg`、`alpine/`、`cache/`、`txData/` 均 gitignored；`server.cfg` 含 DB 密码、license、token，
-  **永不提交**。凭据只放在 `~/.hermes/.tcity.env`（600）。
+- 控制台**没有 RCON**：走 `screen` 注入（`tcity-cmd`）。控制台是裸 stdin，无行编辑；发送残留会和新命令拼成 `randomitemsrestart x`，工具会先发 80 个 DEL 清行。
+- `server.cfg`、`alpine/`、`cache/`、`txData/` 均 gitignored；`server.cfg` 含 DB 密码、license、token，**永不提交**。凭据只放在 `~/.hermes/.tcity.env`（600）。
 - 玩家重连后 server id 会变，按 id 操作前先查 `http://127.0.0.1:30120/players.json`。
 - 改 `fxmanifest` **新增**脚本文件时必须 `refresh`（不是 `restart`），否则清单不重读。
 
@@ -106,4 +102,4 @@ python3 tools/dev/release_check.py
 - 不要把"应该做"写成"已经做"：文档里的状态要以代码和测试为准。
 - 不要为了过闸门而改闸门：先判断是代码错还是规则错，改规则要写明理由与到期日。
 
-**反引号里的路径必须能解析**：文档（含 `CHANGELOG.md`、`AGENTS.md`）里凡是写成`xxx/yyy.ext` 的反引号 token，断链闸门都会当成路径去解析；写不出来（比如只是 SQL 列名、资源内相对路径、manifest 的 `@resource/...` 写法）就不要用反引号，改成叙述。
+**反引号里的路径必须能解析**：凡是写成 `xxx/yyy.ext` 的反引号 token，断链闸门都会当路径解析；写不出来（SQL 列名、资源内相对路径、manifest 的 `@resource/...` 写法）就不要用反引号，改成叙述。

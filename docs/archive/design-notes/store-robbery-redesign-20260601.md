@@ -1,3 +1,12 @@
+---
+id: archive-design-notes-store-robbery-redesign-20260601
+type: audit
+status: archived
+system: crime
+owner: hermes
+updated: 2026-10-23
+---
+
 # 设计文档：商店抢劫重构 — "罪与罚" 沉浸式玩法
 
 ## 1. 现状分析

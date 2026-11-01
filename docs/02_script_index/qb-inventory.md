@@ -1,3 +1,13 @@
+---
+id: 02-script-index-qb-inventory
+type: manual
+status: archived
+system: items
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # qb-inventory — 玩家背包系统
 
 > **路径**: `resources/[qb]/qb-inventory/` | **状态**: ✅ ENABLED | **CFG 模块**: player.cfg

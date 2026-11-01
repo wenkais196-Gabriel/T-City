@@ -1,3 +1,13 @@
+---
+id: 01-resource-inventory
+type: manual
+status: archived
+system: infra
+owner: hermes
+updated: 2026-10-21
+review_by: 2027-01-30
+---
+
 # T-CityLite 全项目资源清单与启用矩阵
 
 > ⚠️ **历史快照（2026-06-05）**：本文件用于资源职责与依赖说明，启用数量已过期。

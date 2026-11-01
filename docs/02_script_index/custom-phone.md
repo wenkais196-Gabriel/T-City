@@ -1,3 +1,13 @@
+---
+id: 02-script-index-custom-phone
+type: manual
+status: archived
+system: comms
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # custom-phone — 高性能 Phone-First 手机系统
 
 > **路径**: `resources/[custom]/custom-phone/` | **状态**: ✅ ENABLED | **CFG 模块**: custom.cfg

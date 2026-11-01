@@ -1,3 +1,13 @@
+---
+id: police-gta-mod-research
+type: research
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-01-30
+---
+
 # GTA V 警察模组在 FiveM 服务器上的复现调研
 
 > 问题：能否把 LSPDFR 类单机警察模组的体验（NPC 帮手、NPC 任务/警情）搬到 T-City？

@@ -1,3 +1,13 @@
+---
+id: project-progress
+type: plan
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # 🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)
 
 > [!IMPORTANT]

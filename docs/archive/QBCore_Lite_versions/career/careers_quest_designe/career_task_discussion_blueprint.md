@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-careers-que-96403343
+type: spec
+status: archived
+system: quest
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # T-City 职业、资质与组织任务重构讨论蓝图 (v1.0)
 
 本蓝图旨在梳理服务器现有的所有**组织（Organization）**、**职业（Job）**和**资质（License）**，规划任务场景设计的讨论顺序。在接下来的讨论中，我们将以**“四原则”**和**“扮演沉浸感与成就感”**为最高导向，逐一细化各身份的专属任务玩法，为生成最终的游戏内玩家指引与 Wiki 奠定基础。

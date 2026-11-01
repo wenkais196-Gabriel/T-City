@@ -1,3 +1,13 @@
+---
+id: server-design-00-ownership-philosophy
+type: spec
+status: active
+system: world
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 00 — 所有权哲学：为什么所有权感是留存与付费的唯一引擎
 
 > **核心命题**: 玩家愿意留存并付费，不是因为你设计了精妙的钩子，而是因为他们对这个虚拟世界产生了**心理所有权（Psychological Ownership）**。  

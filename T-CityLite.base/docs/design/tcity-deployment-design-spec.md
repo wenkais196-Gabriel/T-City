@@ -1,3 +1,13 @@
+---
+id: base-design-tcity-deployment-design-spec
+type: spec
+status: active
+system: delivery
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 🚀 T-City 生产部署架构设计书
 
 > **修订日期**: 2026-06-05  

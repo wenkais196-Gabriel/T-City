@@ -1,3 +1,13 @@
+---
+id: server-design-05-narrative-ownership
+type: spec
+status: active
+system: quest
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 05 — 叙事所有权：让服务器拥有自己的历史
 
 > **核心命题**: "这个服务器有自己的故事，而我的行为是故事的一部分"——叙事所有权将玩家体验从"玩游戏"提升为"活在另一个世界里"。  

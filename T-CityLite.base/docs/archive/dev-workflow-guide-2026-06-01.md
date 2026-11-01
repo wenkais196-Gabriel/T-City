@@ -1,3 +1,13 @@
+---
+id: base-archive-dev-workflow-guide-2026-06-01
+type: manual
+status: archived
+system: delivery
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-01-30
+---
+
 # T-City Lite 开发工作流指南
 
 ## 📂 目录结构说明

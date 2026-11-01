@@ -1,3 +1,12 @@
+---
+id: base-agent-reviews-05-live-tools
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # 05 — Live tools / `auth` / 游标对抗性评审（`e8df70a`）
 
 - **评审对象**：`feat/agent-takeover-v2` @ `e8df70a`（`feat(agent): expose live perception as three MCP read tools`）

@@ -1,3 +1,13 @@
+---
+id: 02-script-index-custom-quest
+type: manual
+status: archived
+system: quest
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # custom-quest — 数据驱动任务系统
 
 > **路径**: `resources/[custom]/custom-quest/` | **状态**: ✅ ENABLED | **CFG 模块**: custom.cfg

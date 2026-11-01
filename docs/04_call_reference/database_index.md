@@ -1,3 +1,13 @@
+---
+id: 04-call-reference-database-index
+type: manual
+status: active
+system: infra
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # 数据库表全量索引
 
 > **数据库**: `QBCore_CDB34E` (从 `mysql_connection_string` 提取)

@@ -1,3 +1,12 @@
+---
+id: analysis-agent-e2e-testing-20261022
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # FiveM 双端 Agent 自动化测试：现状调研与落地方案
 
 > 调研日期：2026-10-22

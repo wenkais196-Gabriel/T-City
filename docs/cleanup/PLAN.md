@@ -1,3 +1,13 @@
+---
+id: cleanup-plan
+type: plan
+status: final
+system: meta
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # 仓库整理总方案（合并三份提案）
 
 > 分支：`chore/repo-cleanup`（基于 `99e0c27`，= master = dev）

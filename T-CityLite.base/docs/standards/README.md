@@ -1,3 +1,13 @@
+---
+id: base-standards-readme
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 🏛️ T-City Lite 统一开发标准与规范索引 (README.md)
 
 > **文档版本**: v1.1  
@@ -14,12 +24,12 @@
 
 | 文档名称 | 核心主题 | 说明 |
 | :--- | :--- | :--- |
-| **[📜 统一日志规范 (logging_spec.md)](file:///e:/T-City/T-CityLite.base/docs/standards/logging_spec.md)** | 控制台分级与美化日志 | 定义 DEBUG -> FATAL 级别，规避内存与性能开销，严格限制 F8 泄露。 |
-| **[📘 技术手册规范 (technical_manual_spec.md)](file:///e:/T-City/T-CityLite.base/docs/standards/technical_manual_spec.md)** | 技术设计与接口映射标准 | 定义组件设计时的 Mermaid 表达、服务导出映射及 Shim 兼容适配写法。 |
-| **[🧪 测试手册规范 (testing_manual_spec.md)](file:///e:/T-City/T-CityLite.base/docs/standards/testing_manual_spec.md)** | 两层自检与 NUI Mock | 规范 Python 静态扫描、Lua 断言套件，以及 Svelte 开发中的浏览器仿真。 |
-| **[🔧 维护手册规范 (maintenance_manual_spec.md)](file:///e:/T-City/T-CityLite.base/docs/standards/maintenance_manual_spec.md)** | 日常维护与灾难备份 | 规范版本发布变更、Convar 清单、诊断指令、以及断线崩溃数据自愈。 |
-| **[📦 脚本模板模板 (script_templates.md)](file:///e:/T-City/T-CityLite.base/docs/standards/script_templates.md)** | 双端最小化基础骨架代码 | 提供内置安全测距、流控和统一 Logger 依赖的 sv/cl Lua 标准模板。 |
-| **[🚀 开发与维护工作流 (dev_workflow.md)](file:///e:/T-City/T-CityLite.base/docs/standards/dev_workflow.md)** | 人机协同闭环生命周期 | 针对单人开发者的“规划-开发-联调-测试-文档-发布”完整闭环流程。 |
+| **[📜 统一日志规范 (logging_spec.md)](logging_spec.md)** | 控制台分级与美化日志 | 定义 DEBUG -> FATAL 级别，规避内存与性能开销，严格限制 F8 泄露。 |
+| **[📘 技术手册规范 (technical_manual_spec.md)](technical_manual_spec.md)** | 技术设计与接口映射标准 | 定义组件设计时的 Mermaid 表达、服务导出映射及 Shim 兼容适配写法。 |
+| **[🧪 测试手册规范 (testing_manual_spec.md)](testing_manual_spec.md)** | 两层自检与 NUI Mock | 规范 Python 静态扫描、Lua 断言套件，以及 Svelte 开发中的浏览器仿真。 |
+| **[🔧 维护手册规范 (maintenance_manual_spec.md)](maintenance_manual_spec.md)** | 日常维护与灾难备份 | 规范版本发布变更、Convar 清单、诊断指令、以及断线崩溃数据自愈。 |
+| **[📦 脚本模板模板 (script_templates.md)](script_templates.md)** | 双端最小化基础骨架代码 | 提供内置安全测距、流控和统一 Logger 依赖的 sv/cl Lua 标准模板。 |
+| **[🚀 开发与维护工作流 (dev_workflow.md)](dev_workflow.md)** | 人机协同闭环生命周期 | 针对单人开发者的“规划-开发-联调-测试-文档-发布”完整闭环流程。 |
 
 ---
 

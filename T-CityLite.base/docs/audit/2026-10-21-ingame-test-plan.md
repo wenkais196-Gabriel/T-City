@@ -1,3 +1,12 @@
+---
+id: base-audit-2026-10-21-ingame-test-plan
+type: audit
+status: final
+system: delivery
+owner: hermes
+updated: 2026-10-21
+---
+
 # 实机玩法回归测试计划（Issue #16）
 
 > **日期**: 2026-10-21

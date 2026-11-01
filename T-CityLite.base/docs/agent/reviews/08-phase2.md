@@ -1,3 +1,12 @@
+---
+id: base-agent-reviews-08-phase2
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # 08 — Phase 2 快速安全评审（A 手机系统短信 / B agent_effects 审计 / C live money）
 
 - 仓库/分支：`T-City-agent` @ `feat/agent-takeover-v2`

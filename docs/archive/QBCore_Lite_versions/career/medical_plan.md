@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-medical-plan
+type: plan
+status: archived
+system: medical
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # 🏥 T-City Lite 医护职业与救援系统 (EMS) 细化规划
 
 > **适用版本**: v0.6 - v0.8  
@@ -10,15 +20,15 @@
 经过对 `qb-ambulancejob` 源码的扫描，发现当前医护系统的运行机制和可以优化的地方如下：
 
 1. **载具解锁基础代码完备，但配置缺失**：
-   * 在 [client/job.lua:L44-L54](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua#L44-L54) 中，`getAuthorizedVehicles` 函数已经写好了“高等级玩家能够向下兼融低等级所有载具”的累进解锁逻辑。
-   * **问题**：但在 [config.lua:L115-L119](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-ambulancejob/config.lua#L115-L119) 的配置中，只有 `[0]` 键分配了唯一的一辆 `ambulance`。这导致高级医护人员（如主治医生、外科主任）提车时没有阶梯性待遇，缺乏职业进阶感。
+   * 在 [client/job.lua:L44-L54](T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua#L44-L54) 中，`getAuthorizedVehicles` 函数已经写好了“高等级玩家能够向下兼融低等级所有载具”的累进解锁逻辑。
+   * **问题**：但在 [config.lua:L115-L119](T-CityLite.base/resources/[qb]/qb-ambulancejob/config.lua#L115-L119) 的配置中，只有 `[0]` 键分配了唯一的一辆 `ambulance`。这导致高级医护人员（如主治医生、外科主任）提车时没有阶梯性待遇，缺乏职业进阶感。
 2. **直升机生成无任何限制**：
-   * 在 [client/job.lua:L364-L392](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua#L364-L392) 的 `EMSHelicopter` 交互点，任何救护人员只要在 duty 状态下，均可直接刷出并驾驶警用/医用直升机。
+   * 在 [client/job.lua:L364-L392](T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua#L364-L392) 的 `EMSHelicopter` 交互点，任何救护人员只要在 duty 状态下，均可直接刷出并驾驶警用/医用直升机。
    * **痛点**：这绕过了飞行执照校验，使 `custom-certificates` 中的 `pilot`（飞行许可证）在 EMS 体系中形同虚设。
 3. **空置的扩展属性（科室分工）**：
    * 医院内部同样需要精细化扮演。例如**外科医生（Surgeon）**与**急救员（Paramedic）**在抢救病人、执行直升机转运时的职责大不相同。目前整个 `qb-ambulancejob` 只是单一的 `ambulance` 职业包，没有任何内部科室（`department`）区分。
 4. **急救包（firstaid）使用与判定**：
-   * 在 [server/main.lua:L200-L234](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua#L200-L234) 中，服务器只验证了操作者是否拥有 `ambulance` 职业或者背包里有 `firstaid`（急救包）物品。如果是平民使用急救包，将无法区分其是否具有医疗背景。
+   * 在 [server/main.lua:L200-L234](T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua#L200-L234) 中，服务器只验证了操作者是否拥有 `ambulance` 职业或者背包里有 `firstaid`（急救包）物品。如果是平民使用急救包，将无法区分其是否具有医疗背景。
 
 ---
 
@@ -27,7 +37,7 @@
 ### 1) 累进车库配置与空中救援队限制 (Garage progression & Air Rescue Limit)
 补全阶梯救护车库配置，并将飞行限制接入 `custom-certificates`。
 
-* **修改文件**：[config.lua](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-ambulancejob/config.lua)
+* **修改文件**：[config.lua](T-CityLite.base/resources/[qb]/qb-ambulancejob/config.lua)
 * **具体做法**：
   * **阶梯载具配置**：
     ```lua

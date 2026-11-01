@@ -1,3 +1,12 @@
+---
+id: police-e2e-testing
+type: audit
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # 警察 P0 真实服务端 E2E（`police_e2e`）
 
 > 套件：`custom-testing/suites/10_police_e2e.lua`

@@ -1,3 +1,13 @@
+---
+id: base-agent-status
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-04-30
+---
+
 # Agent 接管 · 实现状态
 
 > 快照：2026-10-27 · master（#48/#50–#57 已合并）· 真机已联调（FXServer 37872 @30130 + FiveM 3258）

@@ -1,3 +1,13 @@
+---
+id: server-design-10-police-incident-lifecycle
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-26
+review_by: 2027-04-30
+---
+
 # 10 — 警情全生命周期：自动结算、两个按钮、一条归档线
 
 > **核心命题**: 警情的大部分状态变化**不该由人点按钮**。派单即出发、到场即结算、处理完才清场——

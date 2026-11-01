@@ -1,3 +1,12 @@
+---
+id: base-audit-2026-06-20-full-audit-report
+type: audit
+status: final
+system: delivery
+owner: hermes
+updated: 2026-06-21
+---
+
 # 🏛️ T-City Lite — 全局代码审计报告
 
 > **文档版本**: v1.0  

@@ -1,3 +1,13 @@
+---
+id: base-agent-design-04-write-actions
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 04 — 写操作扩展 v2：15 个动作与治理闭环
 
 > 状态：**Draft for build**（P0 可直接施工；teleport 延后到 v2.1）

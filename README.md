@@ -1,3 +1,13 @@
+---
+id: readme
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-26
+review_by: 2027-04-30
+---
+
 # T-City Lite
 
 QBCore / FiveM RP 服务器（"T-City Lite"），包含一套服务端权威的 **LLM agent 接管栈**与自研手机。

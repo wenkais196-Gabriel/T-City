@@ -1,3 +1,12 @@
+---
+id: police-live-acceptance
+type: audit
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # 警察系统进服验收清单
 
 > 测试角色：`IYY39878`（police / grade 4 / onduty）。测试库状态已清空：无 open incident、无 active sentence、无未付罚单、无令状。

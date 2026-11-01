@@ -1,3 +1,13 @@
+---
+id: base-agent-design-08-client-state-probe
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-04-30
+---
+
 # 08 · 客户端状态探测（read-only probe）
 
 > L3（跨资源：`custom-phone` → `custom-agent-client` → `custom-director`，新增事件 + 导出 + HTTP 路由 + 两个只读工具）。

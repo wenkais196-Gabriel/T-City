@@ -1,3 +1,13 @@
+---
+id: base-agent-director
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # Rule-Based Director Bridge (`custom-director`, v1)
 
 Issue **#31** adds the smallest useful director loop on top of the #30/#32

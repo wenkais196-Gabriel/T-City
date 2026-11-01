@@ -1,3 +1,13 @@
+---
+id: 01-module-manuals-01-core-infrastructure
+type: manual
+status: active
+system: infra
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # Module 1: 核心基础设施 (core.cfg / player.cfg / voice.cfg)
 
 > **CFG 文件**: `configs/modules/core.cfg` `player.cfg` `voice.cfg`

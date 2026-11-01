@@ -1,3 +1,13 @@
+---
+id: 03-maintenance-manuals-maintenance-guide
+type: runbook
+status: active
+system: delivery
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # 维护与排障手册
 
 ---

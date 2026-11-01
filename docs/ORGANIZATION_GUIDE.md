@@ -1,3 +1,13 @@
+---
+id: organization-guide
+type: manual
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # 🏛️ T-City 统一组织建立指导手册
 
 > **版本**: v1.0  

@@ -1,3 +1,13 @@
+---
+id: ops-runbook
+type: runbook
+status: active
+system: delivery
+owner: hermes
+updated: 2026-10-26
+review_by: 2027-01-30
+---
+
 # 运维手册（RUNBOOK）— T-City Lite
 
 > 目标：任何人（或任何 agent）在**不读代码**的情况下能启动、判断健康、备份、恢复、排障。

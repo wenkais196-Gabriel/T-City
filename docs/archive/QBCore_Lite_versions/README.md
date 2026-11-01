@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-readme
+type: meta
+status: archived
+system: meta
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # 📋 T-City Lite 版本规划索引
 
 > **本项目的一站式版本规划总览。每个版本对应一个独立的规格文档。**  
@@ -180,3 +190,23 @@ v0.1~v0.4 ──→ v0.5 犯罪 (A轨) ──→ v0.6-quest 任务系统 (D轨) 
 | 变更日志 | [`/T-CityLite.base/LITE_CHANGELOG.md`](../T-CityLite.base/LITE_CHANGELOG.md) |
 | 通用任务系统设计方案 | [`/quest-system-design.md`](../quest-system-design.md) |
 | 架构重构交付报告 | [`/T-CityLite.base/docs/v0.5-architecture-migration.md`](../T-CityLite.base/docs/v0.5-architecture-migration.md) |
+
+## 归档补充：career/ 与 UI 模板
+
+`career/` 是职业与任务系统的早期方案（`v0.6-quest` / `v0.7a-civilian-logistics` 的前身），
+已被 `docs/server-design/` 与 `docs/agent/` 的现行设计取代，仅作历史对照：
+
+| 文件 | 内容 |
+|---|---|
+| `career/overall_plan.md` | 职业体系总规划 |
+| `career/police_plan.md` | 警察职业线方案 |
+| `career/medical_plan.md` | 医疗职业线方案 |
+| `career/logistics_plan.md` | 物流职业线方案 |
+| `career/driver_plan.md` | 驾驶职业线方案 |
+| `career/pilot_plan.md` | 飞行职业线方案 |
+| `career/refactor_plan.md` | 职业系统重构方案 |
+| `career/careers_quest_designe/career_task_discussion_blueprint.md` | 职业任务讨论稿 |
+| `career/careers_quest_designe/task_atomic_nodes_spec.md` | 任务原子节点规格 |
+| `career/careers_quest_designe/task_scenarios_design.md` | 任务场景设计 |
+| `career/careers_quest_designe/task_scenarios_setup_manual.md` | 任务场景配置手册 |
+| `v0.4-ui-template.md` | UI 模板规格（v0.4 时代，已被 `T-CityLite.base/docs/v0.4-nui-standard.md` 取代） |

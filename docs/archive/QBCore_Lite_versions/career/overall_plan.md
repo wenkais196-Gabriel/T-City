@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-overall-plan
+type: plan
+status: archived
+system: jobs
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # 🎭 T-City Lite 职业身份与扮演体验（Career）总规划
 
 > **单一数据源 (Single Source of Truth)**  
@@ -11,11 +21,11 @@
 本服的职业系统遵循以下四大核心原则进行重构与扩展：
 
 1. **统一晋升与层级（Unified Tier & Grades）**：
-   所有职业严格执行 **0➔4 五级晋升制度**（见 [ORGANIZATION_GUIDE.md](file:///e:/T-City/docs/ORGANIZATION_GUIDE.md)）。职级不仅决定薪资，还直接与 `custom-career` 的全局 Tier (`entry`, `mid`, `leader`, `boss`) 挂钩，解锁对应的管理权限与社会化能力。
+   所有职业严格执行 **0➔4 五级晋升制度**（见 [ORGANIZATION_GUIDE.md](docs/ORGANIZATION_GUIDE.md)）。职级不仅决定薪资，还直接与 `custom-career` 的全局 Tier (`entry`, `mid`, `leader`, `boss`) 挂钩，解锁对应的管理权限与社会化能力。
 2. **凭证授权与限制（Certificates-Gated Authority）**：
-   特殊职业工具或高级载具的解锁，不再仅看“职业名”，而是看其是否在 `custom-career` 中持有特定的 **许可证/证书（Certs）**。例如，空中救援队需要 `pilot_license`，重型运输需要 `heavy_license`。所有驾驶限制由 [custom-certificates](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-certificates/server/main.lua) 强制约束。
+   特殊职业工具或高级载具的解锁，不再仅看“职业名”，而是看其是否在 `custom-career` 中持有特定的 **许可证/证书（Certs）**。例如，空中救援队需要 `pilot_license`，重型运输需要 `heavy_license`。所有驾驶限制由 [custom-certificates](T-CityLite.base/resources/[custom]/custom-certificates/server/main.lua) 强制约束。
 3. **轻量化与任务化（Quest-Driven Transformation）**：
-   废除传统平民职业（如公交、环卫、拖车）臃肿且耗能的客户端轮询，统一使用 [custom-quest](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua) 数据驱动状态机重写为“轻量级任务流”。玩家可以通过手机 Job Board 接单，以 GPS Waypoint 打卡和物理物品收集的形式完成执勤。
+   废除传统平民职业（如公交、环卫、拖车）臃肿且耗能的客户端轮询，统一使用 [custom-quest](T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua) 数据驱动状态机重写为“轻量级任务流”。玩家可以通过手机 Job Board 接单，以 GPS Waypoint 打卡和物理物品收集的形式完成执勤。
 4. **社会化协作与供应链（Economic & Social Synergy）**：
    打通职业之间的供需壁垒。矿工生产的铁矿石，由货车司机运往港口，成为市长城市工程（KPI）的耗材，或成为机修工制作高级改装配件的原料。农民种植的作物加工成食物，成为警员与平民维持生命体征的补给。
 
@@ -24,11 +34,11 @@
 ## 🔍 2. 当前基础设施与职业现状
 
 ### 已有基建
-* 📂 **基础职业配置**：[jobs.lua](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-core/shared/jobs.lua) 定义了 20 个标准职业及其 5 级职级名字。
-* 📂 **身份与组织缓存**：[configs.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-career/configs.lua) 实现了高并发的内存缓存与动态组织查找，提供 `PlayerMatchesTags` 比对。
-* 📂 **证件与状态机**：[custom-certificates/server/main.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-certificates/server/main.lua) 掌控物理驾照/船照/飞行照等实体，支持局方吊销、暂停、恢复逻辑。
-* 📂 **3D 文本投射**：[custom-documents/config.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-documents/config.lua) 支持警察直接查验玩家的实时证书状态。
-* 📂 **安全结算与倍率**：[custom-phone/server/jobboard.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-phone/server/jobboard.lua) 支持市长端发布工程，对接 `AddScaledMoney` 统一经济出口。
+* 📂 **基础职业配置**：[jobs.lua](T-CityLite.base/resources/[qb]/qb-core/shared/jobs.lua) 定义了 20 个标准职业及其 5 级职级名字。
+* 📂 **身份与组织缓存**：[configs.lua](T-CityLite.base/resources/[custom]/custom-career/configs.lua) 实现了高并发的内存缓存与动态组织查找，提供 `PlayerMatchesTags` 比对。
+* 📂 **证件与状态机**：[custom-certificates/server/main.lua](T-CityLite.base/resources/[custom]/custom-certificates/server/main.lua) 掌控物理驾照/船照/飞行照等实体，支持局方吊销、暂停、恢复逻辑。
+* 📂 **3D 文本投射**：[custom-documents/config.lua](T-CityLite.base/resources/[custom]/custom-documents/config.lua) 支持警察直接查验玩家的实时证书状态。
+* 📂 **安全结算与倍率**：[custom-phone/server/jobboard.lua](T-CityLite.base/resources/[custom]/custom-phone/server/jobboard.lua) 支持市长端发布工程，对接 `AddScaledMoney` 统一经济出口。
 
 ### 资源运行状态 (Active vs Inactive)
 * 🟢 **已启用职业资源**：`qb-policejob` (警局), `qb-ambulancejob` (医护), `qb-mechanicjob` (机修)。目前以独立 QBCore 模式运行，尚未集成多标签职业系统。

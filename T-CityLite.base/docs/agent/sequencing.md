@@ -1,3 +1,13 @@
+---
+id: base-agent-sequencing
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-21
+review_by: 2027-04-30
+---
+
 # Agent 基础设施推进顺序（P1 → P2 → P3）
 
 > 目标：让 agent 能**读得懂、测得动、写得安全**。

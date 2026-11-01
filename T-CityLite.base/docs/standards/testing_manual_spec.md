@@ -1,3 +1,13 @@
+---
+id: base-standards-testing-manual-spec
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 🧪 T-City Lite 测试手册编写规范 (testing_manual_spec.md)
 
 > **修订日期**: 2026-06-04  

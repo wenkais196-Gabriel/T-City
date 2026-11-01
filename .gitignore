@@ -165,3 +165,6 @@ coverage/
 
 # MCP host config（本机路径/token，只提交 .mcp.json.example）
 .mcp.json
+
+# 文档生命周期派生数据（--report 生成，含本机 mtime；由 tools/docs_lifecycle.py 随时重建）
+docs/_lifecycle.json
