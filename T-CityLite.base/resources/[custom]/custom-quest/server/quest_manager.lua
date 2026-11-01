@@ -123,10 +123,19 @@ QuestNodes = {
             -- 决策定义里的 prompt/options/timeout 必须并进 payload：
             -- 模板里只写了 decision_id，客户端拿不到 options 就只能走 skip 兜底
             -- （真机 telemetry: decision.offer 之后紧跟 decision.no_options）。
-            if ok and type(result) == 'table' then
-                data.prompt = result.prompt or data.prompt
-                data.options = result.options or data.options
-                data.timeout = result.timeout or data.timeout
+            -- OfferDecision 返回的是 (true, 'offered')，**不是**表；
+            -- 定义要另外用 GetDecision 取（真机 telemetry: option_count=0 → no_options）。
+            if ok and result ~= false then
+                local ok2, def = pcall(function()
+                    return exports['story-engine']:GetDecision(data.decision_id)
+                end)
+                if ok2 and type(def) == 'table' then
+                    data.prompt = def.prompt or data.prompt
+                    data.options = def.options or data.options
+                    data.timeout = def.timeout or data.timeout
+                else
+                    print(('[quest-nodes] ⚠️ GetDecision 取不到定义: %s'):format(tostring(data.decision_id)))
+                end
             end
             if not ok or result == false then
                 -- 真机事故：restart custom-quest 会连带停掉 story-engine（依赖方向是
@@ -138,6 +147,11 @@ QuestNodes = {
                     :format(tostring(questId), tostring(stepId), reason))
                 offerWithRetry(source, questId, stepId, data.decision_id, data.timeout, 1)
             end
+            -- NODE_EVENTS[DECISION] 本身就是 'story:client:offerDecision'：
+            -- 这里自己发一次并提前返回，避免走到底部通用派发时同一决策下发两遍
+            -- （第二遍会收界面重开，第一块面板的看门狗照旧计时 → 面板在但点不动）。
+            TriggerClientEvent(eventName, source, data)
+            return
         end
 
         TriggerClientEvent(eventName, source, data)

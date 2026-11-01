@@ -23,14 +23,19 @@ end
 -- ==============================================================
 
 -- 关闭决策弹窗的唯一出口：释放焦点 + 恢复 keepInput + 清状态
-function closeDecisionSurface(reason)
+function closeDecisionSurface(reason, keepPending)
     if not isNuiOpen and not pendingDecision then return end
     SetNuiFocus(false, false)
     -- 恢复进入前的 keepInput（手机开着时是 true），否则玩家控制/视角被锁
     SetNuiFocusKeepInput(keepInputBefore == true)
     isNuiOpen = false
     nuiOpenedAt = 0
-    pendingDecision = nil
+    -- 只有"玩家真的做了选择"才丢掉 pending；界面被看门狗收走时保留，
+    -- 否则 /story_choose 兜底也跟着失效（真机：20s 后命令直接说"没有待决策"）。
+    if not keepPending then pendingDecision = nil end
+    -- 看门狗/CEF 异常收界面后，不要再自动抢焦点（否则玩家控制被反复夺走）；
+    -- 此时 pendingDecision 仍保留，/story_choose 随时可用。
+    nuiClosedByPlayer = (reason == 'watchdog' or reason == 'nui_not_ready')
     openToken = (openToken or 0) + 1
     telemetry('nui.closeSurface', { reason = reason })
 end
@@ -91,7 +96,7 @@ RegisterNetEvent('story:client:offerDecision', function(data)
         SetTimeout(20000, function()
             if isNuiOpen and openToken == myToken then
                 print('[story-engine] ⏱️ 20s 无操作，交还控制（/story_choose 仍可继续）')
-                closeDecisionSurface('watchdog')
+                closeDecisionSurface('watchdog', true)
             end
         end)
         nuiOpenedAt = GetGameTimer()
@@ -108,6 +113,9 @@ RegisterNetEvent('story:client:offerDecision', function(data)
         -- 不再等握手才发：CEF 有时不回 nuiReady，等它就等于"永远没面板"。
         -- 直接发 + 1s 后补发一次（丢包兜底）；握手到了只是多一条日志。
         pendingNuiPayload = payload
+        lastDecisionPayload = payload
+        openedAtAll = true
+        nuiClosedByPlayer = false
         SendNUIMessage(payload)
         SetTimeout(1000, function()
             if pendingNuiPayload == payload then SendNUIMessage(payload) end
@@ -343,3 +351,23 @@ CreateThread(function()
 end)
 
 print('[story-engine] ✅ 客户端已就绪')
+
+-- 顺序无关的看护：quest 的 step 事件、手机、其它 NUI 都可能在决策期间抢焦点。
+-- 只要还有待决策，就每 2 秒自检一次：焦点丢了就重新拿回来并重发面板。
+CreateThread(function()
+    while true do
+        Wait(2000)
+        if pendingDecision and (isNuiOpen or openedAtAll) then
+            if not IsNuiFocused() and not (nuiClosedByPlayer) then
+                keepInputBefore = IsNuiFocusKeepingInput()
+                SetNuiFocusKeepInput(false)
+                SetNuiFocus(true, true)
+                isNuiOpen = true
+                if lastDecisionPayload then
+                    SendNUIMessage(lastDecisionPayload)
+                    print('[story-engine] 🔁 焦点被抢，已重新下发决策面板')
+                end
+            end
+        end
+    end
+end)
