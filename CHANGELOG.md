@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **存档收敛为单一写者，拆掉 `ForceFlush → Save(true)` 的环（P1-2 / P1-1）**（qb-core / core-framework）：qb-core 的 `persistence_manager.lua` 重写为唯一写者 `Store`（一份脏池、一个定时器、一条 upsert），core-framework 的同名文件降级为纯委托层（无池、无 SQL、无定时器、不再回调 `Save(true)`）。三处语义修正：① 刷盘**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数（以前无论 SQL 成不成都清）；② `QBCore.Player.Save` 强制存档改为直接 `Store.SaveNow`，失败时 `IsDirty` 保持为 true 并 `ShowError`（以前无条件清）；③ `FlushAll` 兜底扫描 `IsDirty = true` 但没进池子的玩家（economy/metadata 服务只标 `IsDirty`，他们的钱以前只在下线那一刻才落库）。停服刷盘返回 ack `{reason, attempted, ok, failed, duration_ms}` 并打日志。证据：`tests/unit/layer1_core/test_persistence_single_owner.py`（改动前 **12 failed，含 399,964 层栈溢出**；改动后 19 passed）+ 重写的 `test_persistence.py`（delegate 转发契约），见 `docs/engineering/2026-11-foundation-p1-evidence.md`；全仓 `pytest tests/unit tests/architecture` → 1120 passed。真机：`restart qb-core` + 逐个 `ensure` 拉回被连带停掉的资源后，日志出现 `single owner store loaded` / `delegate loaded (owner=qb-core: resolved)`，无 SCRIPT ERROR。
 
+- **P1-4 阶段 A：猴补闸门落地（冻结新增，存量 7 条带到期日）**（架构闸门）：`core-framework` 的
+  compat 一直在往 `QBCore.Functions` 上赋值（`GetPlayer` / `Notify` / `AddMoney`），这类改动在 diff 里
+  看不出来——调用点一行没变。新增唯一扫描器 `monkey_patch_scan.py` + 闸门 `test_no_monkey_patch.py`：
+  覆盖四种赋值形态（`function X.Y(`、`X.Y =`、`X["Y"] =` 单双引号、裸 `QBCore.X =`），排除 qb-core
+  （API owner）与 tests；登记表要求 owner + expires，**死条目**（登记了却一处都不命中）同样判红。
+  实测存量 8 处命中 / 7 个 (file,symbol)：core-framework 三条、custom-vehicles 的 `OnGiveKeys`（兼容层）、
+  production-freeze 的 Debug/ShowError/ShowSuccess（dev-only 工具）。两条边界写进扫描器：
+  `_G.Bus.X =` 是总线注册不算猴补，客户端文件里的裸 `QBCore.X =` 是玩家数据快照不算。
+  三条变异用例（新增未登记猴补 / 登记过期 / 死条目）全部"注入红、对照绿"。
 - **[custom] net event 覆盖率 85.7% → 90.2%（第 5 批）**：133 个 `[custom]` 事件里 120 个已鉴权或已登记。
   真修两处：① `qb-mechanicjob:server:updateDrivingDistance`（旧兼容事件）**完全没有校验** ——
   任何客户端可以给任意车牌刷里程；现在先过 `CanModifyPlate`。② 中控屏锁表原来用**原始**车牌作键
