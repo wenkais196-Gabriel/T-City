@@ -277,7 +277,7 @@ python tools/docs_lifecycle.py --check      # 校验（退出码 1 = 有 ERROR�
 python tools/docs_lifecycle.py --adopt <文件...> [--yes]   # 给旧文档补最小 frontmatter
 ```
 
-> `docs/INDEX.md` 入库（CI 校验它是否最新）；`docs/_lifecycle.json` **不入库**——它是派生数据且含本机 mtime，由 `--report` 随时重建，版本收尾时把其中的 summary 抄进版本报告即可。
+> `docs/INDEX.md` 入库（CI 校验它是否最新）；`_lifecycle.json`（docs 目录下）**不入库**——它是派生数据且含本机 mtime，由 `--report` 随时重建，版本收尾时把其中的 summary 抄进版本报告即可。
 
 **校验项**（`--check`）：
 
