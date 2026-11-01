@@ -109,25 +109,31 @@ review_by: 2026-12-31
   若日后要保留 `notify_service` 的限流收益，应在 qb-core 的 `Notify`（owner）里实现，另开 PR；
 - 判据见 G10–G11。
 
-## 5. 交付标准（DoD）
+## 5. 交付标准（DoD）与结项状态
 
-| 编号 | 断言 | 验证方式 |
-|---|---|---|
-| G1 | 闸门覆盖 4 种赋值形态 | `tmp_path` 注入 4 个 fixture，逐个必须命中（`function` 形态最易漏——现存两处猴补正是这种写法） |
-| G2 | 登记表无死条目、无过期、每条命中 ≥1 | 扫描结果与 allowlist 双向 diff |
-| G3 | Logout 之后、下一次 PlayerLoaded 之前，`GetPlayer(src) == nil` | Lua 单测（当前会返回前任表） |
-| G4 | `GetPlayer(src) == QBCore.Players[src]`（同一引用） | identity 断言 |
-| G5 | `GetPlayer('1')` / `GetPlayer('license:x')` 不抛错 | 单测（mock `GetPlayerName` 对字符串返回 nil） |
-| G6 | `PlayerLoaded` 后 `Player.Functions.AddMoney` 引用不变 | identity 断言 |
-| G7 | 一次 AddMoney = ES 调 1 次、余额 +1；ES"先写后抛错"时余额仍只 +1 | mock ES 计数 + 抛错用例 |
-| G8 | `_G.Bus.EconomyService =` 全仓唯一写入点在 qb-core；core-framework 永不写 | 静态扫描 + 注册键断言（`economy` vs `EconomyService`） |
-| G9 | 把 core-framework 的 ES 挂到 `_G.Bus.EconomyService` 会递归 → 必须有保护（超时/计数上限失败） | 单测 |
-| G10 | `_G.Bus.notify = nil` 时 `QBCore.Functions.Notify` 仍 `TriggerClientEvent` | 单测 |
-| G11 | manifest 不含 `compat.lua` 且文件已删除 | 静态断言 |
-| G12 | 既有回归全绿 | `pytest tests/unit tests/architecture tests/integration` |
-| G14 | 同名 `Bus.RegisterService` 再注册：断言当前语义（覆盖）被显式测试固定，或断言拒绝 | 单测：注册两次同名服务，断言 `Bus[name]` 的方法集与预期一致（本轮若不做防护，就把"覆盖"写成断言，防止未来悄悄改语义） |
-| G15 | 删除 compat 后 `QBCore.Functions.Notify` 与 qb-core 原函数**同一引用**（D6 的限速/截断语义随之消失） | identity 断言 |
-| G13 | 真机观察点 | ① 选人界面停 5 分钟：0 SCRIPT ERROR、无幽灵钱变动；② 换角色后余额/职业/物品为新角色；③ `restart core-framework` 后 GetPlayer/Notify 正常；④ 连续 10 次加钱（含小数 commission）无错 |
+> 结项日期 2026-11-01。状态只有三种：✅ 已证明（有可执行证据）/ ⚪ 结构上已成立（被测对象已删除，
+> 由更粗的断言兜住）/ ⛔ 未验证（写清缺什么，不冒充已做）。
+
+| 编号 | 断言 | 验证方式 | 状态 |
+|---|---|---|---|
+| G1 | 闸门覆盖猴补的**三种写法 × 三个前缀**（`function X.Y(` / `X.Y =` / `X["Y"] =` × `QBCore` / `QBCore.Functions` / `Player.Functions`） | 扫描器自证：5 个正例 + 4 个反例（qb-core 目录、tests 目录、注释、`== nil`）+ 2 个边界（docstring 代码片段不报、服务端目录下 client_ 前缀的 bridge 文件必须报），断言 `len(hits) == 6` | ✅ 已证明（`test_no_monkey_patch.py::test_scanner_catches_all_four_forms_and_skips_excluded`；原写「4 种形态」是错的——`QBCore.X =` 被 assign 形态覆盖，`bare` 分支是死代码，已删） |
+| G2 | 登记表无死条目、无过期、每条命中 ≥1 | 扫描结果与 allowlist 双向 diff | ✅ 已证明（三条独立用例 + 三条变异「注入红、对照绿」） |
+| G3 | Logout 之后、下一次 PlayerLoaded 之前，`GetPlayer(src) == nil` | Lua 单测（当时返回前任表） | ⚪ 结构成立：`GetPlayer` 就是 qb-core 的 `Players[src]` 表查，没有缓存层。阶段 B 的用例在文件删除时退休（`git show 2c3fce42` 可复现其红绿） |
+| G4 | `GetPlayer(src) == QBCore.Players[src]`（同一引用） | identity 断言 | ⚪ 同上（引用相等由"函数没被替换"直接推出） |
+| G5 | `GetPlayer('1')` 不抛错 | 单测 | ⚪ 同上（抛错来自 compat 的 `source <= 0`，那段代码已不存在；qb-core 用 `tonumber`） |
+| G6 | `PlayerLoaded` 后 `Player.Functions.AddMoney` 引用不变 | identity 断言 | ⚪ 同上（阶段 C 用例 `b5218ec4` 红绿可复现） |
+| G7 | 一次 AddMoney = ES 调 1 次、余额 +1；ES「先写后抛错」时余额仍只 +1 | 抽出 player.lua 真实的 `self.Functions.AddMoney` 函数体，在 mock ES 下跑三种场景 | ✅ 已证明（`tests/unit/layer1_core/test_addmoney_single_route.py`）。反向验证：注入「ES 失败就 pcall 回落再写一次」→ 该用例红） |
+| G8 | `_G.Bus.EconomyService =` 全仓唯一写入点在 qb-core | 静态扫描（去注释） | ✅ 已证明（`test_economy_service_single_registrar.py`，变异：往 core-framework 塞一行写者 → 红） |
+| G9 | core-framework 的 ES 挂到 `_G.Bus.EconomyService` 会递归 → 必须有保护 | 单测 | ⚪ 由 G8 前置拦截：静态禁止"第二个写者"，比运行时计数上限更早、更确定。运行时保护不再需要 |
+| G10 | `_G.Bus.notify = nil` 时 `QBCore.Functions.Notify` 仍 `TriggerClientEvent` | Lua 单测（抽真实函数体执行）+ 前提断言（qb-core 里不许出现 `_G.Bus.notify` 写者，含下标与别名形态） | ✅ 已证明（`test_compat_notify_removed.py`，两条变异：改成 `return` → 红；改事件名 → 红；注入写者 → 红） |
+| G11 | manifest 不含 `compat.lua` 且文件已删除 | 静态断言 | ✅ 已证明（两条用例 + 两条变异） |
+| G12 | 既有回归全绿 | `pytest tests/unit tests/architecture tests/integration` | ✅ 已证明：**1186 passed / 147 skipped / 51 subtests**；`gate_coverage` 276 = 预算（未抬高） |
+| G14 | 同名 `Bus.RegisterService` 再注册的现状语义被显式钉死 | 单测：注册两次，断言 `Bus[name]` 只剩第二批方法（覆盖） | ✅ 已证明（`test_bus.py::TestBusRegisterService::test_register_service_twice_overwrites`；变异「改成合并」→ 红） |
+| G15 | 删除 compat 后 `QBCore.Functions.Notify` 与 qb-core 原函数同一引用 | identity 断言 | ⚪ 结构成立：文件已删除、manifest 不再加载、全仓无 `QBCore.Functions.Notify =` 赋值（猴补闸门 + G15 静态扫描双重兜底） |
+| G13 | 真机观察点 ① 选人界面停 5 分钟 0 SCRIPT ERROR、无幽灵钱变动；② 换角色后余额/职业/物品正确；③ `restart core-framework` 后 GetPlayer/Notify 正常；④ 连续 10 次加钱（含小数 commission）无错 | 真机（需真人客户端） | ⛔ **未验证**。已做的部分：`refresh` + `restart core-framework` 后 **85 个资源、0 条 SCRIPT ERROR**；`restart qb-core` 后同样干净。缺的部分：没有任何玩家在线，①②④ 需要真人客户端才能观察 → 记为遗留项，不写成"已验证" |
+
+**已知局限**（不在本轮范围）：`custom-testing` 的两个压测脚本仍读旧的 persistence 字段（`dirty_count` 已移除）；
+P1-3 最后 13 个 net event（含需要服务端验高的 `aviationHeightMonitorComplete`）仍挂着 2027-03-31 的到期日。
 
 ## 6. 施工纪律
 
