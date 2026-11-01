@@ -9,13 +9,6 @@
       "expires": "2027-03-31"
     },
     {
-      "file": "[standalone]/core-framework/compat.lua",
-      "symbol": "Player.Functions.AddMoney",
-      "owner": "core-framework",
-      "reason": "每玩家登录时替换成闭包——今天是死代码（ES 跨资源恒 nil → 直接回落），但形态本身是猴补。P1-4 阶段 C 纯删除，不做修复。",
-      "expires": "2027-03-31"
-    },
-    {
       "file": "[custom]/custom-vehicles/server/compat.lua",
       "symbol": "QBCore.Functions.OnGiveKeys",
       "owner": "custom-vehicles",
