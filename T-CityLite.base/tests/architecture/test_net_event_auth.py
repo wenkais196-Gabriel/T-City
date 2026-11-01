@@ -126,7 +126,7 @@ DEPRECATED_BLOCKED = re.compile(
 SELF_SCOPED_FOREIGN = re.compile(
     r"Players\s*\[\s*(?!src\b|source\b)[A-Za-z_]"     # QBCore.Players[targetId] / Players [targetId]
     r"|GetPlayer\(\s*tonumber\("                       # GetPlayer(tonumber(arg))
-    r"|GetPlayer\(\s*(?!src\b|source\b)[A-Za-z_]"      # GetPlayer(targetId) / GetPlayer(targetId or 0)
+    r"|GetPlayer\(\s*\(*\s*(?!src\b|source\b)[A-Za-z_]"   # GetPlayer(targetId) / GetPlayer((targetId)) / (x or 0)
     r"|GetPlayerByCitizenId\(\s*(?!src\b)[A-Za-z_]"    # 按别人的 cid 取玩家
     # 别名：`local P = QBCore.Players` 之后再 P[targetId]（静态只能拦一层）
     r"|\b[A-Za-z_]\w*\s*=\s*(?:QBCore\.)?Players\b"
@@ -134,7 +134,7 @@ SELF_SCOPED_FOREIGN = re.compile(
 #: deprecated_blocked 的反面：说日志但后面照样写
 DEPRECATED_SIDE_EFFECT = re.compile(
     r"\b(AddItem|RemoveItem|AddMoney|RemoveMoney|SetMetaData|SetJob|SetJobDuty|"
-    r"SetGang|SetMoney)\b|MySQL\.(insert|update|prepare)"
+    r"SetGang|SetMoney)\b|MySQL\.|exports\[[^\]]+\]:Set"
 )
 DIAGNOSTIC_GUARD = re.compile(
     # 2026-10-25: 框架的诊断通道走限流 owner，不叫 COOLDOWN 也不叫 PhoneDiag.Accept
@@ -418,6 +418,19 @@ def test_relay_callbacks_that_spawn_vehicles_are_guarded_somewhere():
         nxt = raw.find("QBCore.ServerCallbacks['", match.end())
         end_at = nxt if nxt != -1 else match.start() + 6000
         wrapper = strip_lua_noise(raw[match.start():end_at])
+        # `if false then <守卫> end; orig(...)` 能让"守卫存在"毫无意义：
+        # 要求守卫出现在真正的转发调用之前，且 wrapper 里没有恒假分支。
+        assert not re.search(r"if\s+false\s+then", wrapper), (
+            f"{callback}: 守卫被包在 `if false then` 里 —— 写了但永远不执行"
+        )
+        forward = re.search(r"orig[A-Za-z]*\s*\(", wrapper)
+        if forward:
+            guard_at = min(
+                [m.start() for m in re.finditer(r"HasPermission\(|CheckRateLimit\(", wrapper)] or [-1]
+            )
+            assert guard_at != -1 and guard_at < forward.start(), (
+                f"{callback}: 守卫出现在转发调用之后（甚至没有）——先刷车再校验等于没校验"
+            )
         assert re.search(r"HasPermission\(\s*source\s*,", wrapper), (
             f"{callback} 的包装函数里没有 admin 判定 —— 劫持还在但没校验（文件别处的同名调用不算）"
         )

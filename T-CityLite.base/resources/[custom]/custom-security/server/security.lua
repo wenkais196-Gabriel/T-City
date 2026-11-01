@@ -150,7 +150,13 @@ end)
 --            回 调 拦 截 与 劫 持 层
 -- ==========================================
 
+local callbackGuardsInstalled = false
+
 local function InstallCallbackGuards()
+    -- 幂等：初始启动与 qb-core 重启都会调，重复包装会让同一次调用被校验两遍
+    if callbackGuardsInstalled then return end
+    callbackGuardsInstalled = true
+
     -- 等待由调用方负责：qb-core 重启后要能重新挂载（见文件末尾的 onResourceStart）
 
     -- 1. 劫持并防刷商店交易行为 ('qb-inventory:server:attemptPurchase')
@@ -268,6 +274,8 @@ end)
 -- 2026-11-01：真机重启 qb-core 时发现守卫静默失效（测试只断言了"启动时劫持过"）。
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= 'qb-core' then return end
+    -- qb-core 重建了 ServerCallbacks：先把幂等标记复位，否则重挂会被自己挡住
+    callbackGuardsInstalled = false
     CreateThread(function()
         Wait(1500)
         InstallCallbackGuards()
