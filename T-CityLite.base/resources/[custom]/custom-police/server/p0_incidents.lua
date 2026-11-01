@@ -263,10 +263,17 @@ end
 -- 结案后的玩家可见后果（世界痕迹第一条链）
 -- ----------------------------------------------------------------
 -- 只做两件确定性的事：写区域状态、必要时发一条城市公告（手机 CityFeed）。
--- 公告节流规则是「该区域 24 小时内的第一起有效结案」——不是每条结案都喊一声。
+-- 公告节流规则是「同一区域 30 分钟最多一条」——不是每条结案都喊一声。
 -- 区域判定用 core-framework 的 regions.lua（本资源 fxmanifest 已 include），
 -- 写库只走 core-framework 的 world_trace 导出（world_state 的唯一写者）。
 local ANNOUNCE_DISPOSITIONS = { arrest = true, cleared = true }
+
+-- 公告节流：同一区域 **30 分钟最多一条**（内存计时，重启后清零——宁可多一条，不漏）。
+-- 为什么不用 world_state 里的 closed_24h 判断：那是"写完之后"的值，而 Record 在缓存冷时
+-- 是异步落写的（CC 评审 2026-11-01 指出：冷态第一次结案 closed_24h 会被读成 0，
+-- 公告静默丢失）。用调用方自己的计时器既不依赖跨资源回调，也不受缓存状态影响。
+local ANNOUNCE_COOLDOWN = 30 * 60
+local lastAnnounceAt = {}
 
 ---@return boolean recorded
 local function publishCloseTrace(incident, incidentId, disposition, actorCid)
@@ -279,12 +286,13 @@ local function publishCloseTrace(incident, incidentId, disposition, actorCid)
 
     if not ANNOUNCE_DISPOSITIONS[disposition] then return true end
 
-    local value = exports['core-framework']:service_world_state_GetRegionState(regionId, 'crime_pressure')
-    local summary = exports['core-framework']:service_world_trace_Summarize(value, os.time())
-    if type(summary) ~= 'table' or summary.closed_24h ~= 1 then return true end
+    local now = os.time()
+    local last = lastAnnounceAt[regionId]
+    if last and now - last < ANNOUNCE_COOLDOWN then return true end
+    lastAnnounceAt[regionId] = now
 
     -- 文案是模板拼的，不接生成式模型（生成式内容要单独过 TOS，见调研文档 §3）。
-    local text = ('%s：本区一起警情已结案（24 小时内第 1 起）'):format(Regions.Label(regionId))
+    local text = ('%s：本区一起警情已结案'):format(Regions.Label(regionId))
     local posted, postErr = pcall(function()
         return exports['custom-phone']:PostCityBulletin(text, {
             region_id = regionId,
@@ -350,14 +358,19 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
     end
 
     if targetStatus == 'closed' then
+        -- 2026-11-01 真机实测：本 build 的 oxmysql 在参数里出现 nil 时，整条 UPDATE
+        -- **静默不生效**（.await 不抛错、受影响行 0），而 MDT 的「清场」不带 reason。
+        -- 现象是：审计 incident.close 写了、世界痕迹也写了，但警情还是 on_scene，
+        -- 于是可以反复"关"同一张单。所以这里不能把 nil 塞进参数，用空串占位。
         local closedReason = trim(reason):sub(1, 255)
-        if closedReason == '' then closedReason = nil end
-        MySQL.update.await([[
+        local affected = MySQL.update.await([[
             UPDATE police_incidents
                SET status = 'closed', closed_at = NOW(), disposition = ?, closed_by = ?,
                    closed_reason = ?, last_activity_at = NOW(), updated_at = NOW()
              WHERE id = ?
         ]], { closeDisposition, actor.citizenid, closedReason, id })
+        if type(affected) == 'table' then affected = affected.affectedRows end
+        affected = tonumber(affected) or 0
         releaseIncidentUnits(id)
         if not audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition) then
             print(('[custom-police] incident.close audit failed for #%s'):format(tostring(id)))
@@ -365,10 +378,16 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
         -- 世界痕迹第一条链（docs/engineering/2026-11-01-world-traces-blueprint.md）：
         -- 结案 → 区域状态 → CityFeed。失败只记日志：痕迹不是业务结果的一部分，
         -- 结案该成功还是成功（宪法第 1 条：权威仍在 custom-police）。
-        local traceOk, traceRecorded = pcall(publishCloseTrace, incident, id, closeDisposition, actor.citizenid)
-        if not traceOk or traceRecorded ~= true then
-            print(('[custom-police] world trace skipped for #%s: %s')
-                :format(tostring(id), traceOk and 'declined' or tostring(traceRecorded)))
+        -- 只在**真的写进了库**（affected > 0）才落痕迹：否则会出现"警情没关、痕迹却 +1"，
+        -- 而这正是 2026-11-01 那次静默 UPDATE 失败暴露出来的形态。
+        if affected > 0 then
+            local traceOk, traceRecorded = pcall(publishCloseTrace, incident, id, closeDisposition, actor.citizenid)
+            if not traceOk or traceRecorded ~= true then
+                print(('[custom-police] world trace skipped for #%s: %s')
+                    :format(tostring(id), traceOk and 'declined' or tostring(traceRecorded)))
+            end
+        else
+            print(('[custom-police] close did not persist for #%s (affected=0); trace skipped'):format(tostring(id)))
         end
         return { id = id, status = 'closed', disposition = closeDisposition }
     end

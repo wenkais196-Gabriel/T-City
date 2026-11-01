@@ -121,7 +121,26 @@ lua5.4 tests/agent/lua/runner.lua
 | T3 结案挂钩 | ✅ | custom-police 的 server/p0_incidents.lua 结案分支（`pcall` 包裹） | 同上文件的挂钩断言（SELECT 带 x/y、调用点在 closed 分支内、早于通用 UPDATE） |
 | T4 CityFeed 公告 | ✅ | custom-phone 的 server/city_feed.lua、server/main.lua、migrations/v3.15 | `tests/unit/layer1_core/test_city_feed.py`（5 条静态 + 行为 harness） |
 | T5 前端「📣 城市」标识 | ✅ | web/src/apps/CityFeed.svelte（构建产物已重建） | `npx svelte-check` 0 errors；`npm run build` 产物 hash 更新 |
-| T6 真机验收 | ⬜ 未做 | — | 需要起栈（见 §5 真机表） |
+| T6 真机验收 | ✅ 主链通过（负控待第二个客户端） | 见下方「真机证据」 | 真实 MDT 键盘导航：前往 → 自动到场 → 清场 |
+
+### 真机证据（2026-11-01，FXServer @30130 + 客户端 DXI50064）
+
+| 步骤 | 观察 |
+|---|---|
+| 种子警情 #83 @ (215,208,106) | `police_incident_seed 10-31 1 … - 215 208 106`（新增可选的 x/y/z 参数） |
+| MDT 键盘导航：调度 → 接警 → 前往 | `police_incident_units` 出现 `(83, DXI50064, primary)`，状态 `enroute` |
+| 到场 | 自动到场（`incident.arrive auto dist=0.1`）→ `on_scene`；坐标漂走时用「补录到场」也成功 |
+| 清场 | `police_incidents #83 status=closed disposition=cleared closed_by=DXI50064` |
+| 区域状态 | `world_state: vinewood / crime_pressure = {closed_total, recent:[ts…], last_incident_id, last_disposition}`，`changed_by=DXI50064` |
+| 再结一单 #84 | `closed_total` 由 1 → 2、`recent` 两条时间戳（读改写跨重启可用） |
+| CityFeed | `phone_cityfeed id=6/7 citizenid='city' author_kind='city' content='富人区：本区一起警情已结案'` |
+| 公告节流 | 30 分钟内第二单结案**不再发**公告（`phone_cityfeed` 仍 2 条） |
+
+**真机顺带挖出两个静默 bug（已在本次修掉，见 CHANGELOG）**：
+1. 本 build 的 oxmysql 是客户端插值，**nil 参数会把 `?` 留在 SQL 里** → 语句语法错误但 `.await` 不报错。MDT「清场」不带 reason → `closed_reason=nil` → 结案从来没真的写进库（审计照写，故极具迷惑性）。
+2. 同一原因让 `world_state` 的 `previous_value=nil` 首写静默丢失。
+
+**未验证**：① 非 lead 结案的负控（需要第二个客户端）；② CityFeed 的「📣 城市」像素渲染（本机没有截图工具链，只验到 `author_kind='city'` 落库 + 前端分支代码 + `svelte-check` 0 error）。
 
 **反向校验（人工变异）**：把 `value = decodeValue(row.state_value)` 改回 `value = row` → R7 断言变红；
 把结案里的 `RecordAt` 整段删掉 → 挂钩断言变红；两处都是一改就红、改回就绿（脚本跑过，见提交说明）。

@@ -75,6 +75,17 @@ def test_world_state_service_reads_first_row_explicitly():
     assert "GetRegionStateAsync    = WorldStateService.GetRegionStateAsync" in src
 
 
+def test_world_state_save_never_binds_a_nil_parameter():
+    """本 build 的 oxmysql 是客户端插值的：nil 参数会留成字面量 `?` → 语法错误且静默。
+
+    真机证据（2026-11-01）：world_state 的 INSERT 里 previous_value 传 nil 时，general_log
+    记录到的语句末尾是 `, ?)`，行没有变化、也没有任何报错。所以参数位必须永远是字符串。
+    """
+    src = code_only(read(STATE))
+    assert "local prevJson = 'null'" in src
+    assert "prevJson = okPrev and encoded or nil" not in src
+
+
 def test_trace_service_is_the_only_writer_and_is_registered():
     src = code_only(read(TRACE))
     assert "Bus.RegisterService('world_trace'" in src
@@ -120,8 +131,11 @@ def test_city_bulletin_is_only_for_resolutions():
     # 取消/误报/超时不该变成城市新闻。
     announce_line = [l for l in src.splitlines() if l.startswith("local ANNOUNCE_DISPOSITIONS")]
     assert announce_line and "cancelled" not in announce_line[0] and "stale" not in announce_line[0]
-    # 节流：只在「24 小时内第一起」时发公告。
-    assert "summary.closed_24h ~= 1 then return true end" in src
+    # 节流：同一区域 30 分钟最多一条公告，且**不依赖** world_state 的读值
+    # （CC 评审指出：冷缓存下 closed_24h 会被读成 0，公告静默丢失）。
+    assert "local ANNOUNCE_COOLDOWN = 30 * 60" in src
+    assert "if last and now - last < ANNOUNCE_COOLDOWN then return true end" in src
+    assert "service_world_state_GetRegionState" not in src
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +232,19 @@ expect(select(2, WorldTraceService.Record('south_ls', 'nope', nil, 'CID1')) == '
 expect(select(2, WorldTraceService.Record('south_ls', 'crime_pressure', nil, '')) == 'invalid_actor', '错误码 invalid_actor')
 expect(select(2, WorldTraceService.Record('south_ls', 'crime_pressure', 'x', 'CID1')) == 'invalid_payload', '错误码 invalid_payload')
 expect(writes == before, '非法输入不许落库')
+
+-- 1.5) 首次写入（没有旧值）：previous_value 参数必须是字符串 'null'，不能是 nil
+local savedParams = nil
+local origInsert = exports.oxmysql.insert
+exports.oxmysql.insert = function(_, sql, params, cb)
+    if savedParams == nil and sql:find('INSERT INTO world_state') then savedParams = params end
+    return origInsert(exports.oxmysql, sql, params, cb)
+end
+local okFirst, regionFirst = RecordAt(-47.91, -1758.43, 'crime_pressure', { incident_id = 699 }, 'CID0')
+exports.oxmysql.insert = origInsert
+expect(okFirst == true, '首次写入应被接受')
+expect(savedParams ~= nil, '应当捕获到一次 world_state INSERT')
+expect(type(savedParams[5]) == 'string', 'previous_value 参数不能是 nil（oxmysql 会留成 ?）')
 
 -- 2) 第一条痕迹：closed_total=1，recent 一条，last_incident_id 记住
 local ok, region = RecordAt(24.46, -1346.18, 'crime_pressure', { incident_id = 700, disposition = 'cited' }, 'CID1')
