@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+
+### Changed
+- **分支卫生：`dev` 与 `salvage/main-20261101` 清掉了**。`dev` 独有提交 0（tip 是 master 的祖先）、最后活动停在 2026-10-26，CI 的 `branches: [master, dev]` 同步改成只跑 master。`salvage` 是归档快照（相对 master 少 583 个提交、多 440 个文件，其中 401 个是上游残留），按内容逐个比对后把真正缺的 9 个文档/工具提取进 master（文档生命周期规范 + 工具、用 `--index` 对 275 份当前文档重新生成的 INDEX、手机 DESIGN、警察 BLUEPRINT-ITEMS 三份、系统覆盖调研），原始快照打成 tag `archive/salvage-20261101` 后删分支。`docs/engineering/WORKTREE.md` 里"6 个文件 master 里没有"的旧说法一并改正（实测 14，其中 5 个是路径迁移）。
+
 ### Fixed
 - **剧情抉择面板：键鼠都能用，选完立刻释放焦点**（`story-engine`）。三处真机缺陷一起修：① `decision_nui.html` 的 NUI 回调写成了 `https://cfx-nui-story-engine/...` —— 那是**页面自身的 host**，回调必须 POST 到 `https://<GetParentResourceName()>/...`，于是 `nuiReady` / `nuiOpened` / `makeChoice` 全部 404 且被 `.catch` 吞掉（表现：面板能画、点不动、只能等 120 秒超时）；② 焦点顺序反了（`SetNuiFocus` 之后才 `SetNuiFocusKeepInput`），会把光标吃掉，改成**先 keepInput 再按焦点**；③ `options` 里带 `effects` 等表结构导致 `SendNUIMessage` 的 JSON 编码失败被静默丢弃，现在只发 `{id, text}`。另外：同一决策重复下发不再关闭重开（避免玩家点击时按钮 DOM 被重建）、手写测试页面卸载后不再残留 `nuiReady` 断言。真机：键盘 `1` → `nui.makeChoice` → `makeDecision choice=honest_cop` → `quest_event_log #89 complete`；鼠标点击同样产生一次 `makeChoice` + `makeDecision`。
 - **序章任务链三处静默失败**（`custom-quest`）：① checkpoint 半径原来优先取 cpType 默认值（`ring=30`），而服务端按模板 `step.data.radius`（15/20）复验距离 —— 于是"客户端喊到了、服务端判太远"，`quest_event_log` 里只有 `security_block distance_fail`（真机 `required=15.0 distance=28.78`）；② 决策节点把同一个事件派发**两遍**（`NODE_EVENTS[DECISION]` 本身就是 `story:client:offerDecision`，走到函数底部又发一次），第二遍关界面重开导致第一块面板的看门狗仍在计时；③ 决策 payload 只带 `decision_id`，`prompt/options` 在 story-engine 的决策定义里，而 `OfferDecision` 返回的是 `(true,'offered')` 不是表 —— 客户端永远收到 0 个选项走 skip 兜底。现在分别改为：模板优先的半径、DECISION 只派发一次、用 `GetDecision` 取定义并并进 payload。

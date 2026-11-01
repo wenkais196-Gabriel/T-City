@@ -97,7 +97,7 @@ python3 tools/dev/release_check.py
 - `E:/T-City-harness` = **唯一运行树**（FXServer 的 cwd 在它的 `T-CityLite.base`），永远从 `origin/master` 切分支。
 - `E:/T-City` = git 元数据 + 归档（detached），**不得启服、不得改代码**。
 - 禁止在 master 上直接改；切分支/合并前先停服；**绝不在 harness 里 `git clean -fdx`**。
-- 完整流程与历史（含 `salvage/main-20261101` 保全的 39 项改动）见 `docs/engineering/WORKTREE.md`。
+- 完整流程与历史见 `docs/engineering/WORKTREE.md`；2026-11-01 那批 39 项本地改动已提取入库，原始快照打成 tag `archive/salvage-20261101`（分支已删）。
 
 ## 7. 不要做
 

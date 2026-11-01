@@ -38,10 +38,40 @@ git -C E:/T-City-harness branch -d <branch>
 - 实验资源（`zz-*` 之类）先 gitignore 或放 `scratch/`，别让它跟着提交进仓库。
 - 合并后立刻删远端与本地分支，别留着等下次"顺手"。
 
-## 4. 主树里那 39 项历史改动
+## 4. 主树里那 39 项历史改动（2026-11-01 已结清）
 
-已保全在 `salvage/main-20261101`（远端也有一份）。其中 6 个文件 master 里没有 ——
-mcp 诊断资源 zz-mcp-diag、docs 下的 INDEX 与 standards、2026-10-31 的系统覆盖调研、
-客户端 harness 测试、文档生命周期工具。要用的话单独挑出来走 PR，不要整体合并那个分支。
+**结论**：39 项已逐条核对完毕，有用的部分已提取进 master，原始快照保留为 tag
+`archive/salvage-20261101`（分支 `salvage/main-20261101` 已删除，README 上不再显示"落后 583 个提交"）。
+
+核对方法：那次保全提交改了 48 个文件，按**内容**逐个比对（不是看提交数）：
+
+| 类别 | 数量 | 处置 |
+|---|---|---|
+| 内容与 master 完全一致 | 4 | 无需处理 |
+| master 里更新（agent_tools / AGENTS / ci 等持续演进过） | 30 | 保留 master 版本 |
+| master 里根本没有 | 14 | 5 个只是路径迁移（`tests/agent/test_agent_*.py` → 现在的 `tests/tools/`），**已提取 9 个** |
+
+已提取（2026-11-01，PR 一并入库）：
+
+- `docs/standards/doc-lifecycle.md` + `tools/docs_lifecycle.py`（文档生命周期规范与工具，`--check` 实测 0 error）
+- `docs/INDEX.md`（用它自己的 `--index` **对 275 份当前文档重新生成**，不是搬旧快照）
+- `docs/agent/phone/DESIGN.md`、`docs/agent/police/BLUEPRINT-ITEMS{,-v1,-CC}.md`、`docs/analysis/2026-10-31-systems-coverage-survey.md`
+
+**为什么不整体合并那个分支**：`salvage` 相对 master 多出 440 个文件，其中 **401 个是上游残留**
+（qb-* 的 `.github/` 模板、旧 `html/assets` 产物）—— 合并会把它们全带回来。
 
 整仓备份：`C:/Users/swkgb/AppData/Local/hermes/cache/backup/T-City-20261101.bundle`（352 MB，`--all`）。
+
+## 5. 分支卫生（2026-11-01 清理）
+
+| 分支 | 处置 | 理由 |
+|---|---|---|
+| `dev` | **已删除**（远端 + 本地），CI 的 `branches` 列表同步去掉 | 独有提交 0（tip 是 master 的祖先），最后提交 2026-10-26，无任何文档引用 |
+| `salvage/main-20261101` | **转 tag 后删除** | 归档快照，见 §4；保留 tag 后历史仍可 `git show archive/salvage-20261101` |
+
+判断"一个分支该不该留"的两条命令：
+
+```bash
+git rev-list --count origin/<branch> ^origin/master   # 独有提交数，0 = 纯落后
+git log -1 --format='%ci %s' origin/<branch>          # 最后一次真实活动
+```
