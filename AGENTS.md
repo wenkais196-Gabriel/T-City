@@ -92,7 +92,14 @@ python3 tools/dev/release_check.py
 - 玩家重连后 server id 会变，按 id 操作前先查 `http://127.0.0.1:30120/players.json`。
 - 改 `fxmanifest` **新增**脚本文件时必须 `refresh`（不是 `restart`），否则清单不重读。
 
-## 6. 不要做
+## 6. 工作树与分支
+
+- `E:/T-City-harness` = **唯一运行树**（FXServer 的 cwd 在它的 `T-CityLite.base`），永远从 `origin/master` 切分支。
+- `E:/T-City` = git 元数据 + 归档（detached），**不得启服、不得改代码**。
+- 禁止在 master 上直接改；切分支/合并前先停服；**绝不在 harness 里 `git clean -fdx`**。
+- 完整流程与历史（含 `salvage/main-20261101` 保全的 39 项改动）见 `docs/engineering/WORKTREE.md`。
+
+## 7. 不要做
 
 - 不要 `git add -A`（先 `git status`）；不要提交 `server.cfg` / token / `alpine/` / `cache/` / `txData/`。
 - 不要在 `[qb]` 里做无关重排（会吞掉上游 diff，后续无法合并）。
