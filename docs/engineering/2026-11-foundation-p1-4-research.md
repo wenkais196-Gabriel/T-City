@@ -36,17 +36,33 @@ qb-core 的 `GetPlayer(source)` 本来就是 `QBCore.Players[tonumber(source)]`�
 compat 在它外面加了：一次 `playerCache` 查 + 一次 `GetPlayerName` native 调用（跨 Lua/native 边界），
 命中时反而**更慢**；未命中时是"两次查表 + 一次 native"。
 
-更要紧的是正确性：`playerCache[source]` 只在 `playerDropped` 与 `QBCore:Server:PlayerLoaded` 时清。
-**同一 source 换角色**（先 drop 再加载，或 #退出重进）时，若 `playerDropped` 先于本资源的 handler
-执行、且新加载没触发我们挂的 `PlayerLoaded`，缓存里就留着**上一个人的 Player 表**——
-读 job/citizenid 会拿到前任的数据。这正是 plan 里那条 DoD（"换角色后同 tick 读 job 得新值"）要防的事。
+更要紧的是正确性，但触发路径和最初写的不同（2026-11-01 验收方复核后更正）：
+
+- 正常换角色（drop → 重新加载）**不会**留前任数据：`playerDropped` 与 `QBCore:Server:PlayerLoaded`
+  两条 handler 都会清/覆盖缓存，且新角色构造必然触发后者。
+- **真正的窗口是登出**：`QBCore.Player.Logout` 触发 `OnPlayerUnload`，200ms 后 qb-core 把
+  `QBCore.Players[source]` 置 nil，但 compat **没有监听 `OnPlayerUnload`**。此时连接仍在、
+  `isOnline(src)` 仍为 true → `GetPlayer(src)` 继续返回**已登出的前任 Player 表**；
+  如果新角色加载失败、或玩家停在选人界面，这个窗口可以无限延长。
+- 另外 compat 的 `isOnline` 里写了 `source <= 0`，而 qb-core 的 `GetPlayer` 明确接受 `"1"` 这种
+  **字符串 source** —— 字符串走这条路径会抛 "attempt to compare string with number"，
+  这是删缓存前就已经存在的兼容性回归。
+
+所以 P1-4.2 的判据不能写成"换角色后同 tick 读 job 得新值"（当前代码就能过），
+必须写成"**Logout 之后、下一次 PlayerLoaded 之前**，`GetPlayer(src)` 必须返回 nil"。
 
 ### 2.2 `AddMoney` 的每玩家闭包有三份路由
 
-`player.lua` 里 `Player.Functions.AddMoney` 已经路由到 `Bus.EconomyService`；
-compat 又在 `PlayerLoaded` 时包一层直连 `Bus.EconomyService`，失败再回落 `origAddMoney`。
-结果是同一个语义有**两条路径 + 一个回落**，且 `RemoveMoney` 完全没被包（45 处调用走另一条路径）。
-调试时看到的"钱扣了但没记账"就看不出走的是哪条。
+`player.lua` 里 `Player.Functions.AddMoney` 与 `RemoveMoney` **都已经路由** `Bus.EconomyService`
+（两个函数是对称的，原先写"RemoveMoney 走另一条路径"不准确）。compat 的问题不是"多一条路"，
+而是**回落语义危险**：
+
+- compat 的 `origAddMoney` 不是"原始内存操作"，它就是 `player.lua` 那个**同样调 ES** 的实现 →
+  ES 抛错但已写库时，回落会**二次加钱**；回落再抛错则错误直接冒给调用方。
+- 更危险的是**归属**：仓库里有两份 EconomyService（qb-core 的 server/services 下那份
+  economy_service 与 core-framework 的 services 下那份），后者内部又调 `Player.Functions.AddMoney`。
+  如果注册到 `_G.Bus.EconomyService` 的是后者，包装 → ES → `Player.Functions.AddMoney`（包装）→ ES
+  就是**递归**。P1-4.3 必须先钉死"哪份实现注册到 Bus、注册顺序与覆盖规则"，再谈删包装。
 
 ### 2.3 `Notify` 直连 `_G.Bus`，没有资源生死守卫
 
@@ -59,18 +75,26 @@ compat 又在 `PlayerLoaded` 时包一层直连 `Bus.EconomyService`，失败再
 | 目标 | 判据（可自动验证） |
 |---|---|
 | compat 不再给 `QBCore.Functions` 赋值 | 静态闸门：`resources/**` 里 `QBCore.Functions.<X> =` / `Player.Functions.<X> =` 的**赋值**数量必须等于登记表（终态 0），新增即红 |
-| 换角色不串数据 | 离线单测：同一 source 先加载 A（citizenid=A）再加载 B，同 tick 读 `GetPlayer(src).PlayerData.citizenid` 得 B |
-| 钱只有一条路径 | 单测：`Player.Functions.AddMoney/RemoveMoney` 都只经过 `PlayerData.money` + `Bus.EconomyService`，且 `compatStats` 不再增长 |
-| Notify 有生死守卫 | 静态断言：跨资源调用点必须 `GetResourceState('core-framework') == 'started'` 或走 export |
+| 登出不串数据 | 离线单测：`Logout` 之后、下一次 `PlayerLoaded` 之前，`GetPlayer(src)` 必须为 **nil**（当前实现会返回已登出的 Player 表） |
+| 钱只有一条路径 | ① 单测：`Bus.EconomyService` 的注册者**唯一**（启动后打印/断言归属），排除"包装→ES→包装"递归；② 单测：ES 抛错时 `AddMoney` 不得二次加钱（用 mock ES 统计调用次数与最终余额） |
+| Notify 有生死守卫 | 静态断言：**所有**跨资源入口都带 `GetResourceState('core-framework') == 'started'`（"改走 export" 不算守卫——export 到已停止资源同样失败） |
 | 不回归 | `pytest tests/unit tests/architecture tests/integration` 全绿；真机 85 资源 0 SCRIPT ERROR |
 
 ## 4. 分阶段施工（每一步独立可回滚）
 
 **P1-4.1 冻结（先止血）**
-新增闸门 tests/architecture/test_no_monkey_patch.py（本轮不建，P1-4.1 建）：
-- 扫 `resources/**/*.lua`，正则匹配 `^\s*(QBCore|Player)\.Functions\.[A-Za-z_]+ =` 与 `^function QBCore\.Functions\.[A-Za-z_]+\(`；
-- 存量登记在 monkey_patches_allowlist.json（4 条：GetPlayer / AddMoney / Notify + production-freeze 的 3 个 QBCore.Debug/ShowError/ShowSuccess 记 1 组），每条带 owner + expires 2027-03-31；
-- 变异用例：往 `resources/[custom]/custom-vehicles/server/` 塞一份 `QBCore.Functions.GetPlayer = function() end`，闸门必须红。
+新增闸门 tests/architecture/test_no_monkey_patch.py（本轮不建，P1-4.1 建）。三个必须写进扫描规则的坑：
+
+1. **排除 `[qb]/qb-core`**：`function QBCore.Functions.GetPlayer(` 在那里是**自己定义公开 API**，
+   不排除的话第一天就有几十条红，4 条 allowlist 远远不够。
+2. **覆盖两种赋值形态**：`QBCore.Functions.X =` 与 `QBCore.Functions['X'] =`（表下标赋值同样能猴补）。
+3. **production-freeze 的写法不是 `.Functions`**：它是 `QBCore.Debug = function() end` /
+   `QBCore.ShowError` / `QBCore.ShowSuccess`，用 `.Functions` 正则命不中 —— allowlist 里按这个形状登记，
+   否则是死条目。
+
+存量登记在 monkey_patches_allowlist.json（GetPlayer / AddMoney / Notify + production-freeze 一组），
+带 owner + expires 2027-03-31；变异用例：往 `resources/[custom]/custom-vehicles/server/` 塞一个
+`QBCore.Functions.GetPlayer = function() end`，闸门必须红。
 
 **P1-4.2 `GetPlayer` 去缓存（收益最大、风险最低）**
 - 删掉 compat 里的 `playerCache` 与 `function QBCore.Functions.GetPlayer`；
@@ -100,8 +124,20 @@ compat 又在 `PlayerLoaded` 时包一层直连 `Bus.EconomyService`，失败再
 | `AddMoney` 路由下沉改错，钱多/少一次 | 单测 + 真机用 `/addmoney` 命令走一遍，看 `bus_economy` 审计与 DB |
 | 521 处 Notify 调用点里有资源在 `core-framework` 未启动时调用 | 守卫后静默跳过，不能 `error`；用 `GetResourceState` 而非 `IsDuplicityVersion` |
 | 闸门误报 production-freeze（它确实在改全局） | 登记表里单列，并把它限定为 dev-only 资源（convar gate） |
+| **EconomyService 双实现导致递归** | P1-4.3 前置：先钉死 Bus 上的注册者唯一（启动断言 + 单测），再删包装 |
+| **compat 在加载时捕获 `orig`** | `compat.lua:67/:109` 顶层取 `QBCore.Functions.GetPlayer/Notify`；若 compat 早于 qb-core 完成定义，`orig` 为 nil → 加一条启动顺序/依赖断言 |
 
-## 6. 不在这一项里做的
+## 6. 本轮验证记录（2026-11-01）
+
+```text
+python3 -m pytest T-CityLite.base/tests/architecture -q   →  433 passed, 15 skipped
+python3 tools/docs_lifecycle.py --check                    →  total=283 registered=283 errors=0 warnings=0
+```
+
+（验收方的环境里 `python` 没有 pytest 且工作目录不对，跑出 "file or directory not found"；
+上面是本机标准环境 `tc-venv` 的输出。）
+
+## 7. 不在这一项里做的
 
 - `[qb]` 上游资源的兼容层（qb-vehiclekeys / qb-mechanicjob 的旧事件桥）—— 那是 P1-3 的
   兼容面登记，不属于 `QBCore.Functions` 猴补；
