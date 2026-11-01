@@ -63,6 +63,7 @@ exports = setmetatable({}, {
 })
 
 GetConvarInt = function(_, default) return default end
+GetConvarFloat = function(_, default) return default end
 GetConvar = function(_, default) return default or '' end
 CreateThread = function() end
 AddEventHandler = function() end

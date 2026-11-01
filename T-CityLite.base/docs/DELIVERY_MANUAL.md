@@ -182,8 +182,8 @@ exports['core_economy']:TriggerReward(source, 'bank_escort', {
 ```
 finalReward = floor( baseReward × globalMultiplier × heatCoefficient × playerBonus )
 
-globalMultiplier:  Convar economy_global_multiplier / 100  (管理员手动)
-                   或 Convar economy_reward_scale / 100    (自适应调节)
+globalMultiplier:  Convar economy_global_multiplier（倍率，1.0 = 1x，管理员手动）
+                   或 Convar economy_reward_scale（倍率，1.0 = 1x，自适应调节）
 heatCoefficient:   活动热度衰减 (高频→降, 冷门→升, 0.5~1.5)
 playerBonus:       玩家 metadata.player_bonus (VIP/活动buff)
 ```
@@ -595,8 +595,8 @@ docs/refactoring_mining_before_after.lua — 采矿重构案例
 
 | 命令 / Convar | 功能 |
 |---------------|------|
-| `set convar economy_global_multiplier 80` | 全服收益打八折 |
-| `set convar economy_reward_scale 120` | 自适应调节倍率设为 1.2x |
+| `set convar economy_global_multiplier 0.8` | 全服收益打八折（倍率不是百分数） |
+| `set convar economy_reward_scale 1.2` | 自适应调节倍率设为 1.2x |
 | `set convar vehicle_insurance_required true` | 强制开启车辆保险 |
 | `/econ` | 查看实时经济仪表盘 |
 | `/hotrank` | 查看活动热度 Top 10 |
