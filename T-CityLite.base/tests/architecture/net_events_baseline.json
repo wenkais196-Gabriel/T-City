@@ -27,8 +27,8 @@
       "unguarded": 199
     },
     "other": {
-      "events": 82,
-      "guarded": 1,
+      "events": 84,
+      "guarded": 3,
       "allowlisted": 4,
       "unguarded": 77
     }
@@ -65,6 +65,14 @@
       "guarded": 0,
       "allowlisted": 0,
       "unguarded": 1
+    },
+    "core-framework": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 2,
+      "guarded": 2,
+      "allowlisted": 0,
+      "unguarded": 0
     },
     "custom-agent-client": {
       "batch": "custom",

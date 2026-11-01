@@ -27,7 +27,7 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 
 | 口径 | 说明 |
 |---|---|
-| 范围 | `resources/**` 的**服务端**脚本；排除 `client/` 目录与 `cl_*.lua` / `client*.lua`（客户端 handler 的调用方是服务端，不是玩家可触发的入站面） |
+| 范围 | `resources/**` 的**服务端**脚本；先看目录再看文件名——`server/` 下的一律算服务端（`core-framework/server/client_reports.lua` 就是这种名字带 client 的服务端脚本），`client/` 目录与根级 `client*.lua` / `cl_*.lua` 才排除 |
 | 事件 | `RegisterNetEvent` / `RegisterServerEvent`，名字必须是字面量 |
 | 两种写法 | 内联 handler；以及 `RegisterNetEvent('x')` + `AddEventHandler('x', fn)`（PolyZone / monitor 这类老资源）。后者去同文件找 fn 定义体，找不到就记空 body —— **空 body 永远算未鉴权**，只会多报债 |
 | 已鉴权 | handler 里出现 `PolicePolicy.Can/Check`、`hasCapability`、`IsPlayerAceAllowed`、`HasPermission(src...)`、系统来源守卫、或回调归属校验（`pending.source ~= src`） |
@@ -40,8 +40,8 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
 | custom `[custom]` | 134 | 23 | 45 | 66 | 债务（基线棘轮） |
 | qb `[qb]` | 221 | 22 | 0 | 199 | 债务（基线棘轮） |
-| other（system / standalone / voice / cfx-default） | 82 | 1 | 4 | 77 | 债务（基线棘轮） |
-| **合计** | **452** | 51 | 59 | **342** | — |
+| other（system / standalone / voice / cfx-default） | 84 | 3 | 4 | 77 | 债务（基线棘轮） |
+| **合计** | **454** | 53 | 59 | **342** | — |
 
 另有 **23 处变量名注册**（`RegisterNetEvent(EVENT_NAME, ...)`）—— 扫描器看不见它们，
 单独作为债记在基线里，只许减少；`custom-quest`、`custom-vehicles`、`qb-storerobbery`、

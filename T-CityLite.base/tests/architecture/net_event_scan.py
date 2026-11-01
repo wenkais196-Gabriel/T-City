@@ -146,8 +146,15 @@ def is_client_path(path: Path) -> bool:
 
     客户端也会 `RegisterNetEvent`（接服务端下发的通知），但那些 handler 的调用方是
     服务端，不是"任意玩家可触发的入站面"，所以不纳入鉴权闸门。
+
+    两条容易踩反的边界：
+    * `server/client_reports.lua` 是**服务端**脚本（名字里有 client，位置在 server/）；
+    * 根目录的 `client.lua` / `cl_*.lua` 是客户端脚本。
+    所以先看目录、再看文件名。
     """
     parts = [part.lower() for part in path.parts[:-1]]
+    if "server" in parts:
+        return False
     if "client" in parts:
         return True
     name = path.name.lower()
