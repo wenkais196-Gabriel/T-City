@@ -33,12 +33,10 @@ AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
     end
 end)
 
--- 物流快捷装货桥接
-RegisterNetEvent('custom-vehicles:server:logisticsQuickLoad', function()
-    local src = source
-    if exports['custom-quest'] then
-        exports['custom-quest']:OnCustomEvent(src, 'dashboard_quick_load', {})
-    end
-end)
+-- 物流快捷装货：**不要**在这里再注册一份 handler。
+-- FiveM 的 net event 按名字全局派发，同一名字在两个资源里各注册一份 = 两条独立入口；
+-- 这条桥接是从 custom-vehicles 抄来的无守卫副本（它连"有没有进行中的任务"都不查），
+-- 2026-11-01 验收时正是它把 custom-vehicles 里刚补的守卫整个旁路了。
+-- 真正的入口在 custom-vehicles/server/dashboard_api.lua。
 
 exports('RegisterDashboardApp', _RegisterDashboardApp)

@@ -29,6 +29,10 @@ from pathlib import Path
 from net_event_scan import (
     Event,
     auth_tokens as scan_auth_tokens,
+    guard_helpers,
+    helper_call_problems,
+    is_client_path,
+    is_guarded,
     non_literal_in_dir,
     read,
     scan_dir,
@@ -182,14 +186,18 @@ def allowlist_entries() -> dict[str, dict]:
 
 def unregistered(events: list[Event]) -> list[Event]:
     registered = allowlist_entries()
-    return [event for event in events if not auth_tokens(event.body) and event.name not in registered]
+    return [
+        event
+        for event in events
+        if not is_guarded(event, HELPER_PATTERNS) and event.name not in registered
+    ]
 
 
 def report() -> str:
     events, problems = scan_events()
     registered = allowlist_entries()
     bad = unregistered(events)
-    guarded = sum(1 for event in events if auth_tokens(event.body))
+    guarded = sum(1 for event in events if is_guarded(event, HELPER_PATTERNS))
     lines = [
         f"FIT-03 net-event-auth  {'FAIL' if (bad or problems) else 'PASS'}  "
         f"{len(bad)}/{len(events)} unguarded",
@@ -521,3 +529,83 @@ def test_literal_rule_fires_on_the_variable_form(tmp_path: Path):
         assert not non_literal_registrations(), "字面量注册不该被误报"
     finally:
         globals()["SCAN_DIRS"] = original
+
+# ---------------------------------------------------------------------------
+# helper 登记表：让"本资源自己的校验函数"算作鉴权，但只算**证明过**的那几个
+# ---------------------------------------------------------------------------
+
+
+def _resource_dir(name: str) -> Path:
+    hits = sorted(RESOURCES.rglob(f"{name}/fxmanifest.lua"))
+    assert len(hits) == 1, f"{name}: 找到 {len(hits)} 个 fxmanifest，无法唯一定位资源"
+    return hits[0].parent
+
+
+def _function_block(code: str, name: str) -> str:
+    """从 `function <name>(` 截到顶层 `end`（列 0）。
+
+    只看整个文件会被"同文件别的函数里的证据"满足，所以登记检查限定在函数体。
+    """
+    marker = "function " + name + "("
+    at = code.index(marker)
+    lines = code[at:].splitlines()
+    out = [lines[0]]
+    for line in lines[1:]:
+        out.append(line)
+        if line.rstrip() in ("end", "end)"):
+            break
+    return chr(10).join(out)
+
+
+def test_registered_guard_helpers_are_proven():
+    """登记过的 helper 必须是真校验，且每一处调用都必须看它的返回值。
+
+    为什么需要这张表：`custom-vehicles` 的 26 个事件里有 10 个靠 `CanModifyPlate` 挡着，
+    扫描器只认固定 token 的话会把这 10 个当成裸奔（假红）。但"调用了一个叫 Can 的函数"
+    本身不是证据 —— 所以这里对每一行登记做四件事：
+      ① 定义恰好一处（不是同名死代码，也没有第二份实现互相覆盖）；
+      ② **函数体内**含约定证据（剥注释/字符串后）+ 含字符串字面量的证据（原文）；
+      ③ 资源内每一处调用都在 `if not H(...)` 的否定分支里，且该分支**真的 return**；
+      ④ 登记了却没有任何调用点 → 死豁免，红。
+    """
+    registry = guard_helpers()
+    assert registry, "helper 登记表为空 —— 这条规则等于没写"
+    for resource, entries in registry.items():
+        root = _resource_dir(resource)
+        for name, spec in entries.items():
+            rel = Path(spec["defined_at"])
+            assert rel.parts and rel.parts[0] == resource, (
+                f"{resource}/{name}: defined_at 必须以资源名开头（现在 {spec['defined_at']!r}）"
+            )
+            def_file = (root / Path(*rel.parts[1:])).resolve()
+            assert def_file.is_file(), f"{resource}/{name}: defined_at 指向不存在的文件"
+            assert root in def_file.parents, f"{resource}/{name}: defined_at 不在该资源内"
+            raw = read(def_file)
+            code = strip_lua_noise(raw)
+            assert code.count("function " + name + "(") == 1, (
+                f"{resource}/{name}: 必须恰好定义一次（现在 "
+                f"{code.count('function ' + name + '(')} 次）"
+            )
+            block = _function_block(code, name)
+            for token in spec.get("requires_code", []):
+                assert token in block, (
+                    f"{resource}/{name}: **函数体**里找不到 {token!r}（同文件其它函数里的不算）"
+                )
+            for token in spec.get("requires_raw", []):
+                assert token in _function_block(raw, name), (
+                    f"{resource}/{name}: 原文函数体里找不到 {token!r}"
+                )
+
+            uses = 0
+            problems: list[str] = []
+            for lua in sorted(root.rglob("*.lua")):
+                if is_client_path(lua):
+                    continue  # 服务端事件的鉴权只可能写在服务端文件里
+                found, bad = helper_call_problems(strip_lua_noise(read(lua)), name)
+                uses += found
+                problems.extend(str(lua.relative_to(root)) + ":" + item for item in bad)
+            assert not problems, (
+                f"{resource}/{name}: 有调用点没走 `if not {name}(...) then ... return`："
+                + chr(10) + "  " + (chr(10) + "  ").join(problems)
+            )
+            assert uses > 0, f"{resource}/{name}: 登记了但没有任何调用点（死豁免）"
