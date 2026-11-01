@@ -374,6 +374,36 @@ MUTATIONS += [
     ),
 ]
 
+# P1-4 阶段 D（续）：manifest 不许把 compat 挂回去 / Notify 不许静默丢弃
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_compat_notify_removed.py::test_manifest_no_longer_loads_compat",
+        path="resources/[standalone]/core-framework/fxmanifest.lua",
+        content=None,
+        replace_from="    'bus.lua',",
+        replace_to="    'bus.lua',\n    'compat.lua',",
+        what="文件删了但 manifest 又把 compat.lua 挂回去（restart 报找不到文件）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_compat_notify_removed.py::test_qb_core_notify_still_delivers_without_the_bus",
+        path="resources/[qb]/qb-core/server/functions.lua",
+        content=None,
+        replace_from="    TriggerClientEvent('QBCore:Notify', source, safeText, texttype, length)",
+        replace_to="    return -- 变异注入：没有 Bus 就静默丢消息",
+        what="Notify 在无 Bus 时静默丢弃（通知消失了但没人知道）",
+    ),
+]
+
+# P1-4 阶段 D：compat.lua 下线后不许复活
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_compat_notify_removed.py::test_compat_file_is_gone",
+        path="resources/[standalone]/core-framework/compat.lua",
+        content="QBCore.Functions.Notify = function() end\n",
+        what="compat.lua 复活（Notify 猴补重新出现）",
+    ),
+]
+
 # P1-4 阶段 C：经济服务只能有一个注册者
 MUTATIONS += [
     Mutation(
