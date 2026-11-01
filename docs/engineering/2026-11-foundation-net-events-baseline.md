@@ -148,7 +148,7 @@ cd T-CityLite.base && python tests/architecture/net_event_baseline.py --write
 |---|---|---|
 | ① 引擎层（qb-core）100% | ✅ 15/15 | — |
 | ② `[custom]` ≥ 80% | **80.5%（107/133）✅ 达成** | 剩余 26 个：`custom-vehicles` 6、`custom-quest` 5、`custom-justice` 4、`custom-agent-client` 4、其它零散。下一批把 `custom-agent-client` 的会话令牌绑定补成 helper |
-| ③ `[qb]` 登记为带 expires 的债务 | ✅ 58 个仍有欠账的资源各有 owner + expires（2027-03-31）：`[qb]` 28 个、`[custom]` 12 个、other 18 个 | 到期前要么修，要么续期并说明 |
+| ③ `[qb]` 登记为带 expires 的债务 | ✅ 55 个仍有欠账的资源各有 owner + expires（2027-03-31）：`[qb]` 28 个、`[custom]` 9 个、other 18 个 | 到期前要么修，要么续期并说明 |
 
 其它已知残余（不阻塞本步，但要在下一轮处理）：
 
