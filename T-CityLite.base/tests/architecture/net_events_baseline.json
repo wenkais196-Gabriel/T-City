@@ -15,16 +15,16 @@
       "unguarded": 0
     },
     "custom": {
-      "events": 134,
-      "guarded": 41,
-      "allowlisted": 45,
-      "unguarded": 48
+      "events": 133,
+      "guarded": 63,
+      "allowlisted": 44,
+      "unguarded": 26
     },
     "qb": {
       "events": 216,
-      "guarded": 16,
+      "guarded": 18,
       "allowlisted": 0,
-      "unguarded": 200
+      "unguarded": 198
     },
     "other": {
       "events": 76,
@@ -92,9 +92,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 4,
-      "guarded": 0,
+      "guarded": 4,
       "allowlisted": 0,
-      "unguarded": 4,
+      "unguarded": 0,
       "started": true
     },
     "custom-certificates": {
@@ -128,9 +128,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 7,
-      "guarded": 0,
+      "guarded": 3,
       "allowlisted": 0,
-      "unguarded": 7,
+      "unguarded": 4,
       "started": true
     },
     "custom-main": {
@@ -146,9 +146,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 2,
-      "guarded": 0,
+      "guarded": 2,
       "allowlisted": 0,
-      "unguarded": 2,
+      "unguarded": 0,
       "started": true
     },
     "custom-phone": {
@@ -164,18 +164,18 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 57,
-      "guarded": 19,
-      "allowlisted": 33,
-      "unguarded": 5,
+      "guarded": 25,
+      "allowlisted": 32,
+      "unguarded": 0,
       "started": true
     },
     "custom-quest": {
       "batch": "custom",
       "group": "[custom]",
-      "events": 11,
-      "guarded": 1,
+      "events": 10,
+      "guarded": 5,
       "allowlisted": 0,
-      "unguarded": 10,
+      "unguarded": 5,
       "started": true
     },
     "custom-taxes": {
@@ -191,9 +191,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 26,
-      "guarded": 17,
+      "guarded": 20,
       "allowlisted": 0,
-      "unguarded": 9,
+      "unguarded": 6,
       "started": true
     },
     "hardcap": {
@@ -299,9 +299,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 22,
-      "guarded": 0,
+      "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 22,
+      "unguarded": 21,
       "started": true
     },
     "qb-apartments": {
@@ -443,9 +443,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 4,
-      "guarded": 0,
+      "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 4,
+      "unguarded": 3,
       "started": true
     },
     "qb-multicharacter": {
@@ -617,12 +617,6 @@
       "tcity:agent:ready",
       "tcity:agent:state"
     ],
-    "custom-cartel": [
-      "cartel:server:buyFromSupplier",
-      "cartel:server:finishProduction",
-      "cartel:server:sellToDealer",
-      "cartel:server:startProduction"
-    ],
     "custom-certificates": [
       "certificates:server:IssueCertificate"
     ],
@@ -631,51 +625,29 @@
     ],
     "custom-justice": [
       "justice:server:imprison",
-      "justice:server:lawyerAcceptCase",
-      "justice:server:registerArrest",
       "justice:server:requestReduction",
       "justice:server:requestVisit",
-      "justice:server:sentenceComplete",
-      "justice:server:startTrial"
+      "justice:server:sentenceComplete"
     ],
     "custom-main": [
       "custom-main:server:ResetDeathStatus",
       "custom-main:server:policeHandoverAlert"
     ],
-    "custom-mining": [
-      "mining:server:mineOre",
-      "mining:server:smeltOre"
-    ],
-    "custom-police": [
-      "police:server:NpcCalloutResult",
-      "police:server:adoptDraft",
-      "police:server:arriveIncident",
-      "police:server:claimIncident",
-      "police:server:draftList"
-    ],
     "custom-quest": [
       "hospital:server:SetDeathStatus",
       "quest:server:aviationHeightMonitorComplete",
       "quest:server:cargoDamageResult",
-      "quest:server:dashboardStampDelivery",
-      "quest:server:entityRecycled",
       "quest:server:entityTrackingFail",
-      "quest:server:nodeComplete",
-      "quest:server:placementComplete",
-      "quest:server:registerTrailer",
-      "quest:server:trailerHitched"
+      "quest:server:registerTrailer"
     ],
     "custom-taxes": [
       "durability:server:onWeaponFired"
     ],
     "custom-vehicles": [
-      "custom-vehicles:server:logisticsQuickLoad",
       "custom-vehicles:server:logisticsStampDelivery",
       "custom-vehicles:server:releaseDashboard",
       "custom-vehicles:server:setDriveMode",
       "qb-mechanicjob:server:updateDrivingDistance",
-      "qb-vehiclekeys:server:AcquireVehicleKeys",
-      "qb-vehiclekeys:server:GiveKeys",
       "qb-vehiclekeys:server:RemoveKeys",
       "qb-vehiclekeys:server:ToggleEngine"
     ],
@@ -754,7 +726,6 @@
       "qb-admin:server:GetPlayersForBlips"
     ],
     "qb-ambulancejob": [
-      "hospital:server:AddDoctor",
       "hospital:server:CanHelp",
       "hospital:server:LeaveBed",
       "hospital:server:RemoveDoctor",
@@ -915,8 +886,7 @@
     "qb-mechanicjob": [
       "qb-mechanicjob:server:removeItem",
       "qb-mechanicjob:server:sprayVehicle",
-      "qb-mechanicjob:server:sprayVehicleCustom",
-      "qb-mechanicjob:server:stash"
+      "qb-mechanicjob:server:sprayVehicleCustom"
     ],
     "qb-multicharacter": [
       "qb-multicharacter:server:createCharacter",
@@ -1070,14 +1040,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "custom-cartel",
-      "batch": "custom",
-      "unguarded": 4,
-      "owner": "custom-cartel",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "custom-certificates",
       "batch": "custom",
       "unguarded": 1,
@@ -1096,7 +1058,7 @@
     {
       "resource": "custom-justice",
       "batch": "custom",
-      "unguarded": 7,
+      "unguarded": 4,
       "owner": "custom-justice",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1110,25 +1072,9 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "custom-mining",
-      "batch": "custom",
-      "unguarded": 2,
-      "owner": "custom-mining",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "custom-police",
-      "batch": "custom",
-      "unguarded": 5,
-      "owner": "custom-police",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "custom-quest",
       "batch": "custom",
-      "unguarded": 10,
+      "unguarded": 5,
       "owner": "custom-quest",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1144,7 +1090,7 @@
     {
       "resource": "custom-vehicles",
       "batch": "custom",
-      "unguarded": 9,
+      "unguarded": 6,
       "owner": "custom-vehicles",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1240,7 +1186,7 @@
     {
       "resource": "qb-ambulancejob",
       "batch": "qb",
-      "unguarded": 22,
+      "unguarded": 21,
       "owner": "qb-ambulancejob",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1360,7 +1306,7 @@
     {
       "resource": "qb-mechanicjob",
       "batch": "qb",
-      "unguarded": 4,
+      "unguarded": 3,
       "owner": "qb-mechanicjob",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"

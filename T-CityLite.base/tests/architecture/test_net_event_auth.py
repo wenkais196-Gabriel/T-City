@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from datetime import date
 from pathlib import Path
 
@@ -36,6 +37,7 @@ from net_event_scan import (
     non_literal_in_dir,
     read,
     scan_dir,
+    scan_repo,
     strip_lua_noise,
 )
 
@@ -535,18 +537,27 @@ def test_literal_rule_fires_on_the_variable_form(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
+
+@lru_cache(maxsize=1)
+def _all_events():
+    return scan_repo(RESOURCES)[0]  # 全仓，不是本文件的 SCAN_DIRS 子集
+
+
+def events_for(resource: str):
+    return [event for event in _all_events() if event.resource == resource]
+
+
 def _resource_dir(name: str) -> Path:
     hits = sorted(RESOURCES.rglob(f"{name}/fxmanifest.lua"))
     assert len(hits) == 1, f"{name}: 找到 {len(hits)} 个 fxmanifest，无法唯一定位资源"
     return hits[0].parent
 
 
-def _function_block(code: str, name: str) -> str:
-    """从 `function <name>(` 截到顶层 `end`（列 0）。
+def _function_block_raw(code: str, marker: str) -> str:
+    """从 `marker` 截到顶层 `end`（列 0）。
 
     只看整个文件会被"同文件别的函数里的证据"满足，所以登记检查限定在函数体。
     """
-    marker = "function " + name + "("
     at = code.index(marker)
     lines = code[at:].splitlines()
     out = [lines[0]]
@@ -582,30 +593,141 @@ def test_registered_guard_helpers_are_proven():
             assert root in def_file.parents, f"{resource}/{name}: defined_at 不在该资源内"
             raw = read(def_file)
             code = strip_lua_noise(raw)
-            assert code.count("function " + name + "(") == 1, (
-                f"{resource}/{name}: 必须恰好定义一次（现在 "
-                f"{code.count('function ' + name + '(')} 次）"
+            marker = spec.get("definition_marker", "function " + name + "(")
+            assert code.count(marker) == 1, (
+                f"{resource}/{name}: 必须恰好定义一次（现在 {code.count(marker)} 次）"
             )
-            block = _function_block(code, name)
+            block = _function_block_raw(code, marker)
             for token in spec.get("requires_code", []):
                 assert token in block, (
                     f"{resource}/{name}: **函数体**里找不到 {token!r}（同文件其它函数里的不算）"
                 )
             for token in spec.get("requires_raw", []):
-                assert token in _function_block(raw, name), (
+                assert token in _function_block_raw(raw, marker), (
                     f"{resource}/{name}: 原文函数体里找不到 {token!r}"
                 )
 
+            # 只看 **net event handler 的函数体**：helper 在 callback / 内部函数里的用法
+            # （例如 `cb(isMember)` 把布尔丢回客户端）不是这条规则要管的事。
             uses = 0
             problems: list[str] = []
-            for lua in sorted(root.rglob("*.lua")):
-                if is_client_path(lua):
-                    continue  # 服务端事件的鉴权只可能写在服务端文件里
-                found, bad = helper_call_problems(strip_lua_noise(read(lua)), name)
+            for event in events_for(resource):
+                found, bad = helper_call_problems(event.body, name, spec)
                 uses += found
-                problems.extend(str(lua.relative_to(root)) + ":" + item for item in bad)
+                problems.extend(
+                    str(event.path.relative_to(root)) + ":" + str(event.line) + " " + item
+                    for item in bad
+                )
             assert not problems, (
                 f"{resource}/{name}: 有调用点没走 `if not {name}(...) then ... return`："
                 + chr(10) + "  " + (chr(10) + "  ").join(problems)
             )
             assert uses > 0, f"{resource}/{name}: 登记了但没有任何调用点（死豁免）"
+
+
+# ---------------------------------------------------------------------------
+# 负面形状：这些"看起来有校验"的写法必须**不**算已鉴权
+# ---------------------------------------------------------------------------
+
+
+def _probe(body: str, resource: str = "custom-vehicles"):
+    return Event(
+        name="probe:server:x",
+        resource=resource,
+        path=RESOURCES / "probe.lua",
+        line=1,
+        body=body,
+        kind="server",
+    )
+
+
+def _nl(*parts: str) -> str:
+    """用 chr(10) 拼 Lua 片段，避免在测试源码里出现转义换行。"""
+    return chr(10).join(parts)
+
+
+def test_shapes_that_look_like_guards_are_not_counted():
+    """验收方在 PR #183 上实测能过的洗白形状，现在必须全部判否。
+
+    为什么单独写这一条：`is_guarded` 是"覆盖率"的唯一来源，如果它接受"判了但没拦住"，
+    覆盖率就是自我安慰。这些形状都来自真实 review 里被指出的写法。
+    """
+    from net_event_scan import Event as ScanEvent
+
+    def probe(body: str) -> ScanEvent:
+        return ScanEvent(
+            name="probe:server:x",
+            resource="custom-vehicles",
+            path=RESOURCES / "probe.lua",
+            line=1,
+            body=body,
+            kind="server",
+        )
+
+    bad = {
+        "否定分支没有 return": _nl(
+            "if not CanModifyPlate(src, plate) then Notify(src) end",
+            "DoPrivileged(plate)",
+            "return",
+        ),
+        "调用了但没接返回值": _nl(
+            "CanModifyPlate(src, plate)",
+            "DoPrivileged(plate)",
+        ),
+        "死代码里的守卫": _nl(
+            "if false then",
+            "    if not CanModifyPlate(src, plate) then return end",
+            "end",
+            "DoPrivileged(plate)",
+        ),
+        "local_check 只打印不 return": _nl(
+            "local ok, reason = CanClaimPlate(src, cid, plate)",
+            "if not ok then print(reason) end",
+            "Give(plate)",
+        ),
+        "export 裸调用": _nl(
+            "exports['custom-police']:AdoptDraft(src, id)",
+            "Delete(id)",
+        ),
+        "pcall 借了别人的 ok": _nl(
+            "local ok = true",
+            "pcall(PoliceDispatch.ArriveIncident, src, id)",
+            "if not ok then return end",
+        ),
+        "pcall 判的是 ok2": _nl(
+            "local ok, res = pcall(PoliceDispatch.ArriveIncident, src, id)",
+            "local ok2 = true",
+            "if not ok2 then return end",
+        ),
+        "delegate 裸调用": _nl(
+            "NPC.SubmitResult(src, id, outcome, notes)",
+            "Delete(id)",
+        ),
+        "职业判定是死分支": _nl(
+            "local Player = QBCore.Functions.GetPlayer(src)",
+            "if Player.PlayerData.job.name ~= 'police' and false then return end",
+            "DoPrivileged()",
+        ),
+        "职业判的是别人": _nl(
+            "local Player = QBCore.Functions.GetPlayer(src)",
+            "if target.PlayerData.job.name ~= 'police' then return end",
+            "DoPrivileged(target)",
+        ),
+        "职业别名来自别人": _nl(
+            "local Player = QBCore.Functions.GetPlayer(src)",
+            "local job = target.PlayerData.job",
+            "if job.name ~= 'police' then return end",
+            "DoPrivileged(target)",
+        ),
+    }
+    for label, body in bad.items():
+        assert not is_guarded(probe(body)), label + " 被当成了已鉴权"
+
+    good = _nl(
+        "if not CanModifyPlate(src, plate) then",
+        "    Log()",
+        "    return",
+        "end",
+        "DoPrivileged(plate)",
+    )
+    assert is_guarded(probe(good)), "正向形状被判否 —— 闸门写反了"

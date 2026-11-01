@@ -564,11 +564,13 @@ function P.AdoptDraft(source, incidentId)
     if not allowed then return false, reason end
     local id = tonumber(incidentId)
     if not id then return false, 'invalid_incident' end
-    local ok, reason2 = P.SetIncidentStatus(source, id, 'open')
-    if not ok then return false, reason2 or 'adopt_failed' end
+    -- 审计必须**先于**状态变更：原来是先 SetIncidentStatus（已落库）再审计，
+    -- 审计写不进去时返回 false，但警情已经被打开了 —— 承诺与实现相反。
     if not audit(actor.citizenid, 'incident.adopt', tostring(id), nil) then
         return false, 'audit_unavailable'
     end
+    local ok, reason2 = P.SetIncidentStatus(source, id, 'open')
+    if not ok then return false, reason2 or 'adopt_failed' end
     return { id = id, status = 'open' }
 end
 

@@ -13,6 +13,14 @@ local QBCore = exports['qb-core']:GetCoreObject()
 
 --- 紧急服务（警察/医疗/消防）：PA 喊话、警笛、测速雷达、锚定只对这些职业开放。
 --- 抽出来的原因：同一段职业判断在三个事件里重复了三遍，其中两个事件压根没有。
+
+--- 该玩家是否有进行中的任务（快捷装货的前置条件）。
+--- pcall：custom-quest 重启的空窗期里 exports 会抛错，不能把守卫变成运行时错误。
+local function HasActiveQuest(src)
+    local ok, quests = pcall(function() return exports['custom-quest']:GetActiveQuests(src) end)
+    return ok and type(quests) == 'table' and #quests > 0
+end
+
 local function IsEmergencyService(src)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return false end
@@ -278,10 +286,7 @@ end)
 RegisterNetEvent('custom-vehicles:server:logisticsQuickLoad', function()
     local src = source
     if not checkOpRateLimit(src, 'logistics') then return end
-    -- 没有进行中的物流任务就不该能"快捷装货"（原来只有限频，任何玩家都能推任务进度）
-    -- pcall：custom-quest 重启的空窗期里 exports 会抛错，不能把守卫变成运行时错误
-    local ok, quests = pcall(function() return exports['custom-quest']:GetActiveQuests(src) end)
-    if not ok or type(quests) ~= 'table' or #quests == 0 then return end
+    if not HasActiveQuest(src) then return end
     exports['custom-quest']:OnCustomEvent(src, 'dashboard_quick_load', {})
 end)
 
