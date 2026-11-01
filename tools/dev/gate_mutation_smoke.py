@@ -275,6 +275,70 @@ MUTATIONS += [
     ),
 ]
 
+# P1-3：全仓 net event 基线（批次① 100% + 存量棘轮）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_baseline_matches_live_inventory"),
+        path="resources/[custom]/__mutant_net/server/__mutant.lua",
+        content="""-- 变异注入：全仓范围内新冒出一个未鉴权的 net event
+RegisterNetEvent('mutant:server:verb', function(payload)
+    print(payload)
+end)
+""",
+        what="未鉴权 net event 悄悄落进某个非强制资源（基线棘轮必须拦住）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_enforced_batch_has_zero_unguarded_events"),
+        path="resources/[qb]/qb-core/server/__mutant_net.lua",
+        content="""-- 变异注入：引擎层出现未鉴权的 net event
+RegisterNetEvent('QBCore:Server:MutantVerb', function(payload)
+    print(payload)
+end)
+""",
+        what="批次①（引擎层）从 100% 掉下来",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_non_literal_registrations_do_not_grow"),
+        path="resources/[custom]/__mutant_net/server/__mutant_literal.lua",
+        content="""-- 变异注入：变量名注册（闸门看不见事件名）
+local EVENT_NAME = 'mutant:server:hidden'
+RegisterNetEvent(EVENT_NAME, function() end)
+""",
+        what="变量名注册的 net event（对扫描器不可见）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_unparsed_handlers_do_not_grow"),
+        path="resources/[custom]/__mutant_net/server/__mutant_unparsed.lua",
+        content="""-- 变异注入：handler 没有行首 end)，扫描器解析不了
+RegisterNetEvent('mutant:server:unparsed', function()
+    if true then print('x') end
+end
+""",
+        what="解析不了的 handler（等于没有任何闸门看得见它）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_every_resource_with_debt_has_an_owner_and_a_future_expiry"),
+        path="tests/architecture/net_events_baseline.json",
+        content=None,
+        replace_from='"expires": "2027-03-31"',
+        replace_to='"expires": "2020-01-01"',
+        what="债的到期日已经过去（清单变成永不过期的白名单）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_net_event_inventory.py::test_batch_totals_add_up",
+        path="tests/architecture/net_events_baseline.json",
+        content=None,
+        replace_from='"events": 15,',
+        replace_to='"events": 99,',
+        what="批次数字与清单对不上（被手改过）",
+    ),
+]
+
 
 def run_gate(nodeid: str) -> tuple[bool, str]:
     """返回 (passed, 最后一行输出)。passed=True 表示这条闸门**没红**。"""
@@ -299,6 +363,7 @@ def run_once(mutation: Mutation) -> dict:
                 "detail": f"要篡改的文件不存在：{target.relative_to(REPO)}"}
 
     backup = None
+    created: list[Path] = []
     if mutation.content is None and mutation.replace_from:   # 就地替换片段
         backup = target.read_text(encoding="utf-8")
         if mutation.replace_from not in backup:
@@ -309,6 +374,12 @@ def run_once(mutation: Mutation) -> dict:
         backup = target.read_text(encoding="utf-8")
         target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n", encoding="utf-8")
     else:
+        # 记下这次真正新建的目录层级，撤注入后要删掉 —— 空目录会让
+        # `test_no_orphan_scripts`（每个 [custom] 目录必须有 fxmanifest）误红。
+        parent = target.parent
+        while not parent.exists() and parent != BASE.parent:
+            created.append(parent)
+            parent = parent.parent
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(mutation.content, encoding="utf-8")
 
@@ -319,6 +390,11 @@ def run_once(mutation: Mutation) -> dict:
             target.write_text(backup, encoding="utf-8")
         else:
             target.unlink(missing_ok=True)
+            for directory in created:          # 由深到浅，只删空目录
+                try:
+                    directory.rmdir()
+                except OSError:
+                    break
 
     passed_after_cleanup, control_line = run_gate(mutation.gate)   # 对照：撤掉注入必须恢复绿
     if (not passed_after_injection) and passed_after_cleanup:

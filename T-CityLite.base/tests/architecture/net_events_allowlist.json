@@ -7,7 +7,10 @@
     "civilian": "must stay reachable by non-police players; validated and/or rate limited inside the handler instead of capability-gated",
     "session": "handler is bound to the caller's own session/ownership (own phone number, own job board row, own tracker, own backup request) — no cross-player write",
     "diagnostic": "telemetry-only channel (server log); table-typed, whitelisted fields, rate limited per source",
-    "unchecked_debt": "known missing check, registered so it cannot silently grow; must be fixed or re-justified before expires"
+    "unchecked_debt": "known missing check, registered so it cannot silently grow; must be fixed or re-justified before expires",
+    "self_scoped": "handler 只读写 caller 自己的数据（source/GetPlayer(src)），不接受其它玩家 id 作为目标；越权面为零",
+    "callback_relay": "公用回调分发器：只按名字派发到服务端已注册的回调（QBCore.ServerCallbacks），鉴权与参数校验由被调用的回调自己负责",
+    "deprecated_blocked": "上游已确认可被利用的废弃事件：现在只打安全日志并直接拒绝，没有任何副作用（无钱、无物品、无状态写入）"
   },
   "entries": [
     {
@@ -423,6 +426,96 @@
       "reason": "qb-inventory 的物品使用广播，任何玩家都能触发；处理函数只认 beer/vodka 两种并校验玩家真的持有该物品（GetItemByName），其他人身上没有任何影响。",
       "evidence": "sobriety.lua qb-inventory:server:UseItem — DRINKS 白名单 + GetItemByName 归属校验",
       "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:Server:TriggerCallback",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "callback_relay",
+      "reason": "客户端调用服务端回调的唯一入口；QBCore 的设计就是回调可由任意客户端触发，每个回调必须自己校验参数与权限。这里只做派发。",
+      "evidence": "events.lua:132 按 QBCore.ServerCallbacks[name] 派发，回调内部自行校验",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:UpdatePlayer",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "客户端心跳上报饥饿/口渴的乘数；只写 caller 自己的 metadata，乘数被钳到 0.1..3.0。",
+      "evidence": "events.lua:144 只 GetPlayer(src) + tonumber 钳制",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:ToggleDuty",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "玩家切换自己的上下班状态；只改 caller 自己的 job.onduty。",
+      "evidence": "events.lua:167 只 GetPlayer(src)，无目标参数",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:enteringVehicle",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "载具事件回显给 caller 自己（车辆钥匙/车载系统用）；只把参数原样 TriggerClientEvent 回同一 src。",
+      "evidence": "events.lua:186 local src = source，回显给 src",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:enteredVehicle",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "同上：进入载具完成的回显。",
+      "evidence": "events.lua:197 local src = source，回显给 src",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:enteringAborted",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "同上：中止上车的回显。",
+      "evidence": "events.lua:208 local src = source，回显给 src",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:leftVehicle",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "同上：离开载具的回显。",
+      "evidence": "events.lua:213 local src = source，回显给 src",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:Server:UseItem",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "deprecated_blocked",
+      "reason": "上游标记为可利用的废弃物品事件；本仓已改为记录日志并直接拒绝。",
+      "evidence": "events.lua:234 BLOCKED + GetInvokingResource 记录后返回",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:Server:RemoveItem",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "deprecated_blocked",
+      "reason": "同上：废弃的移除物品事件，已硬阻断。",
+      "evidence": "events.lua:245 BLOCKED + GetInvokingResource 记录后返回",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:Server:AddItem",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "deprecated_blocked",
+      "reason": "同上：废弃的添加物品事件，已硬阻断。",
+      "evidence": "events.lua:256 BLOCKED + GetInvokingResource 记录后返回",
+      "owner": "qb-core",
       "expires": "2027-03-31"
     }
   ]

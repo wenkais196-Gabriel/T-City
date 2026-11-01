@@ -466,15 +466,20 @@ function QBCore.Functions.TriggerClientCallback(name, source, ...)
     end
 
     QBCore.ClientCallbacks[name] = {
+        -- 谁被问的：只有这个 source 有权回答（见 QBCore:Server:TriggerClientCallback）
+        source = source,
         callback = cb,
         promise = promise.new()
     }
 
     TriggerClientEvent('QBCore:Client:TriggerClientCallback', source, name, table.unpack(args))
 
+    local pending = QBCore.ClientCallbacks[name]
     if cb == nil then
-        Citizen.Await(QBCore.ClientCallbacks[name].promise)
-        return QBCore.ClientCallbacks[name].promise.value
+        Citizen.Await(pending.promise)
+        -- 注意：handler 回答后会把条目清掉，所以结果必须从 pending 读，
+        -- 不能回头再索引 QBCore.ClientCallbacks[name]（那会是 nil）。
+        return pending.promise.value
     end
 end
 
