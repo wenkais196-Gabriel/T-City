@@ -307,15 +307,14 @@ RegisterNetEvent('police:server:SetHandcuffStatus', function(isHandcuffed)
     -- 🔒 Security: 仅接受 boolean 类型 + 仅限 LEO 或 EMS 调用
     if type(isHandcuffed) ~= 'boolean' then return end
     local Player = QBCore.Functions.GetPlayer(src)
-    if Player then
-        -- 只有执法/医疗人员才能设置他人手铐状态；玩家自己不能解锁
-        local jobType = Player.PlayerData.job.type
-        if isHandcuffed == false then
-            -- 解锁手铐：必须是 LEO 或 EMS
-            if jobType ~= 'leo' and Player.PlayerData.job.name ~= 'ambulance' then return end
-        end
-        Player.Functions.SetMetaData('ishandcuffed', isHandcuffed)
-    end
+    if not Player then return end
+
+    -- 只有执法/医疗人员才能改手铐状态（**两个方向都要判**）。
+    -- 2026-11-01：原来只在 isHandcuffed == false 分支判职业，上铐那一支裸写 metadata。
+    local job = Player.PlayerData.job
+    if not job or (job.type ~= 'leo' and job.name ~= 'ambulance') then return end
+
+    Player.Functions.SetMetaData('ishandcuffed', isHandcuffed)
 end)
 
 RegisterNetEvent('police:server:showFingerprint', function(playerId)

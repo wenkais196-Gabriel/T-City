@@ -51,7 +51,7 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
-**债的分布不是均匀的**：58 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
+**债的分布不是均匀的**：55 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
 它们贡献 **93/294（32%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
 `qb-crypto` 6、`qb-shops` 5、`qb-weed` 5、`qb-streetraces` 3…）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
@@ -76,7 +76,7 @@ custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债�
 **不校验守卫在特权动作之前**（`DoThing(); if not H(x) then return end` 仍然算已鉴权）。
 这类形态靠 review 与单测覆盖，闸门抓不到。
 
-当前登记 12 个：`CanModifyPlate`（车牌写权限）、`CanClaimPlate`（认领车牌：会话车主/数据库车主/车旁）、
+当前登记 14 个：`CanModifyPlate`（车牌写权限）、`CanClaimPlate`（认领车牌：会话车主/数据库车主/车旁）、
 `IsEmergencyService`（PA/警笛/雷达/锚定）、`IsSeatedIn` / `IsSeatedInPlate`（广播与中控屏锁）、
 `HasActiveQuest`（有活才能装货）、`onDutyOfficer`（执勤 + `PolicePolicy.Can`）、
 `PoliceDispatch.ArriveIncident` / `.ClaimIncident`、`NPC.SubmitResult`（警情分发器内部按能力位判定）、
@@ -85,7 +85,11 @@ custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债�
 
 调用形状不止一种，登记时按 `shape` 声明：`deny_branch`（`if not H(...) then … return`）、
 `local_check`（`local ok, x = H(...)` 后判 `if not ok`）、`ok_err`、`pcall`（`pcall(H, …)` 后判结果）、
-`export`（`exports['res']:Method(…)`，判定在导出函数体内）、`delegate`（判定在被调函数体内）。
+`export`（`exports['res']:Method(…)`）、`delegate`（判定在被调函数体内）。
+
+**每种 shape 都要求"接住返回值 + 失败分支真的 return"**：`if not ok then print(err) end` 后面继续干活、
+或者把返回值丢掉都**不算**。反向用例在 `test_shapes_that_look_like_guards_are_not_counted`，
+闸门自证在 `gate_mutation_smoke.py`（12/12）。已知局限见上方"静态形状分析的天花板"。
 
 除 helper 外，还增加了一个 token：`job_deny` —— `if <x>job.name ~= '…' then … return end`
 （职业白名单式判定，和 `HasPermission` 同级；字符串剥成 `''` 所以只钉操作符）。

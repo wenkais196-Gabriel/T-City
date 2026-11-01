@@ -27,7 +27,11 @@ from pathlib import Path
 
 REGISTER_RE = re.compile(r"^\s*Register(?:Net|Server)Event\s*\(\s*(['\"])(?P<name>[^'\"]+)\1")
 REGISTER_ANY = re.compile(r"Register(?:Net|Server)Event\s*\(\s*(?P<arg>[^,\n)]*)")
-END_RE = re.compile(r"^\s*end\)\s*$")
+# handler 的收尾只认**列 0** 的 `end)`：以前允许缩进，于是 handler 里嵌套的
+# `pcall(function() ... end)` 会把函数体从中间截断（2026-11-01 验收发现：
+# police:server:adoptDraft 的 body 只有 13 行，后半段的守卫全被截掉）。
+END_RE = re.compile(r"^end\)\s*$")
+END_ANY_RE = re.compile(r"^\s*end\)\s*$")
 INLINE_HANDLER_RE = re.compile(r",\s*function\b")
 MAX_BLOCK_LINES = 400
 
@@ -120,12 +124,18 @@ def scan_file(resource: str, path: Path, kind: str = "server") -> tuple[list[Eve
         body: list[str] = []
         cursor = index + 1
         terminated = False
+        # 先只认列 0 的 `end)`：handler 内部的 `pcall(function() ... end)` 也是 `end)`，
+        # 早先允许缩进匹配时会把函数体从中间截断（adoptDraft 的 body 只有 13 行就是这原因）。
+        # 找不到再退回到"任意缩进"——有些注册点本身就在 `if ... then` 里（custom-phone 的 diag）。
+        end_re = END_RE
         while cursor < len(lines):
-            if END_RE.match(lines[cursor]):
+            if end_re.match(lines[cursor]):
                 terminated = True
                 break
             body.append(lines[cursor])
             cursor += 1
+            if not terminated and cursor >= len(lines) and not body:
+                break
             if len(body) > MAX_BLOCK_LINES:
                 problems.append(
                     f"{path.as_posix()}:{index + 1} {name} no top-level 'end)' "
@@ -133,6 +143,18 @@ def scan_file(resource: str, path: Path, kind: str = "server") -> tuple[list[Eve
                 )
                 body = []
                 break
+        if not terminated:
+            # 兜底：注册点被包在块里（缩进）时，收尾的 `end)` 也带缩进
+            body = []
+            cursor = index + 1
+            while cursor < len(lines):
+                if END_ANY_RE.match(lines[cursor]):
+                    terminated = True
+                    break
+                body.append(lines[cursor])
+                cursor += 1
+                if len(body) > MAX_BLOCK_LINES:
+                    break
         if not terminated:
             if not any(name in problem for problem in problems):
                 problems.append(f"{path.as_posix()}:{index + 1} {name} unterminated handler")
@@ -204,9 +226,7 @@ def helper_call_problems(
     if shape == "ok_err":
         return _ok_err_shape_problems(code, name)
     if shape == "delegate":
-        # 校验在被调用的函数体内（登记时已证明）；调用点只要真的调了
-        call = (spec or {}).get("call", name)
-        return (len(re.findall(re.escape(call) + r"\s*\(", code)), [])
+        return _delegate_shape_problems(code, name, spec or {})
     lines = code.splitlines()
     uses, bad = 0, []
     for index, line in enumerate(lines):
@@ -284,52 +304,98 @@ def _local_check_problems(code: str, name: str) -> tuple[int, list[str]]:
     return uses, bad
 
 
-def _pcall_shape_problems(code: str, name: str) -> tuple[int, list[str]]:
-    """`pcall(H, ...)` 且调用方紧跟一个 `if not ok` 判定。"""
+def _result_checked(lines: list[str], index: int, names: list[str]) -> bool:
+    """index 行之后的 12 行里，有没有"针对这些返回值"的否定分支**并真的 return**。"""
+    for offset in range(index, min(len(lines), index + 12)):
+        line = lines[offset]
+        text = line.strip()
+        if not text.startswith("if "):
+            continue
+        negated = any(
+            ("not " + name) in text
+            or ("type(" + name + ") ~=") in text
+            or (name + " ~=") in text
+            for name in names
+        )
+        if not negated:
+            continue
+        if "return" in text:
+            return True
+        indent = len(line) - len(line.lstrip())
+        for follow in lines[offset + 1:offset + 60]:
+            inner = follow.strip()
+            if inner.startswith("end") and (len(follow) - len(follow.lstrip())) == indent:
+                break
+            if inner.startswith("return"):
+                return True
+    return False
+
+
+def _assignment_names(lines: list[str], index: int) -> tuple[int, list[str]] | None:
+    """找到 `local a, b = <调用>` 的变量名；支持 `pcall(function() return X end)` 包装。
+
+    返回 (赋值所在行号, 变量名)；找不到返回 None（说明返回值被丢弃了）。
+    """
+    local_assign = re.compile(r"local\s+((?:[A-Za-z_]\w*\s*,\s*)*[A-Za-z_]\w*)[^=]*=")
+    for back in range(index, max(-1, index - 4), -1):
+        match = local_assign.search(lines[back])
+        if match:
+            names = [part.strip() for part in match.group(1).split(",") if part.strip()]
+            if names:
+                return back, names
+    return None
+
+
+def _shape_problems(
+    code: str, name: str, call_pattern: str, skip_lines: tuple[str, ...] = ()
+) -> tuple[int, list[str]]:
+    """通用形状：调用点必须把返回值接住，并在否定分支里真的 return。"""
     lines = code.splitlines()
-    marker = "pcall(" + name
+    pattern = re.compile(call_pattern)
     uses, bad = 0, []
     for index, line in enumerate(lines):
-        if marker not in line.replace(" ", ""):
+        if not pattern.search(line) or any(skip in line for skip in skip_lines):
             continue
         uses += 1
-        checked = any(
-            "if not ok" in follow or "if not res" in follow
-            for follow in lines[index:index + 9]
-        )
-        if not checked:
-            bad.append(str(index + 1) + ": pcall 了 " + name + " 却没有判定结果")
+        found = _assignment_names(lines, index)
+        if not found:
+            bad.append(str(index + 1) + ": 调用了 " + name + " 但没接返回值（判不了就没拦住）")
+            continue
+        at, names = found
+        if not _result_checked(lines, at, names):
+            bad.append(
+                str(index + 1) + ": 接了 " + name + " 的返回值却没在失败分支 return（"
+                + "/".join(names) + "）"
+            )
     return uses, bad
+
+
+def _local_check_problems(code: str, name: str) -> tuple[int, list[str]]:
+    return _shape_problems(
+        code, name, r"local\s+(?:[A-Za-z_]\w*\s*,\s*)*[A-Za-z_]\w*[^=]*=\s*"
+        + re.escape(name) + r"\s*\(",
+    )
 
 
 def _ok_err_shape_problems(code: str, name: str) -> tuple[int, list[str]]:
-    """`local ok, err = H(...)` + 紧跟 `if not ok ... return` 形状。"""
-    lines = code.splitlines()
-    uses, bad = 0, []
-    for index, line in enumerate(lines):
-        if name + "(" not in line or "function " + name + "(" in line:
-            continue
-        uses += 1
-        checked = any(
-            follow.strip().startswith("if not ok")
-            for follow in lines[index:index + 6]
-        )
-        if not checked:
-            bad.append(str(index + 1) + ": 调用了 " + name + " 但没判 `if not ok`")
-    return uses, bad
+    return _local_check_problems(code, name)
+
+
+def _pcall_shape_problems(code: str, name: str) -> tuple[int, list[str]]:
+    return _shape_problems(code, name, r"pcall\(\s*" + re.escape(name) + r"\b")
 
 
 def _export_shape_problems(code: str, spec: dict) -> tuple[int, list[str]]:
-    """`exports['res']:Method(...)` 形状：校验在导出函数体内，调用点只要存在。
-
-    注意：代码先剥了字符串，`exports['custom-police']` 会变成 `exports['']`，
-    所以按"括号里任意内容 + 冒号 + 方法名"匹配，不能拿登记表里的字面量直接 count。
-    """
+    """`exports['res']:Method(...)`：返回值必须被接住并在否定分支 return。"""
     method = spec.get("call", "").rsplit(":", 1)[-1]
     if not method:
         return (0, [])
-    pattern = re.compile(r"exports\[[^\]]*\]\s*:\s*" + re.escape(method) + r"\s*\(")
-    return (len(pattern.findall(code)), [])
+    return _shape_problems(code, method, r"exports\[[^\]]*\]\s*:\s*" + re.escape(method) + r"\s*\(")
+
+
+def _delegate_shape_problems(code: str, name: str, spec: dict) -> tuple[int, list[str]]:
+    call = spec.get("call", name)
+    return _shape_problems(code, name, re.escape(call) + r"\s*\(", skip_lines=("function ",))
 
 
 def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = None) -> bool:
