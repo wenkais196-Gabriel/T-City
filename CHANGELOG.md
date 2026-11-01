@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **存档收敛为单一写者，拆掉 `ForceFlush → Save(true)` 的环（P1-2 / P1-1）**（qb-core / core-framework）：qb-core 的 `persistence_manager.lua` 重写为唯一写者 `Store`（一份脏池、一个定时器、一条 upsert），core-framework 的同名文件降级为纯委托层（无池、无 SQL、无定时器、不再回调 `Save(true)`）。三处语义修正：① 刷盘**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数（以前无论 SQL 成不成都清）；② `QBCore.Player.Save` 强制存档改为直接 `Store.SaveNow`，失败时 `IsDirty` 保持为 true 并 `ShowError`（以前无条件清）；③ `FlushAll` 兜底扫描 `IsDirty = true` 但没进池子的玩家（economy/metadata 服务只标 `IsDirty`，他们的钱以前只在下线那一刻才落库）。停服刷盘返回 ack `{reason, attempted, ok, failed, duration_ms}` 并打日志。证据：`tests/unit/layer1_core/test_persistence_single_owner.py`（改动前 **12 failed，含 399,964 层栈溢出**；改动后 19 passed）+ 重写的 `test_persistence.py`（delegate 转发契约），见 `docs/engineering/2026-11-foundation-p1-evidence.md`；全仓 `pytest tests/unit tests/architecture` → 1120 passed。真机：`restart qb-core` + 逐个 `ensure` 拉回被连带停掉的资源后，日志出现 `single owner store loaded` / `delegate loaded (owner=qb-core: resolved)`，无 SCRIPT ERROR。
 
+- **P1-4 阶段 D：compat.lua 整份下线**（core-framework）：删掉 `QBCore.Functions.Notify` 的包装、
+  fxmanifest 去掉该行、文件删除，猴补登记表 5 → 4 条。删除而不是「改 export + GetResourceState 守卫」的理由：
+  export 到已停止的资源一样失败（只是换了个报错位置），且会多出第二个 Notify 入口；而这一层还静默改变语义
+  —— notify_service 每源 200ms 只放 1 条、超限直接丢、没有丢弃计数，qb-core 原实现不丢消息。
+  新增 `tests/architecture/test_compat_notify_removed.py`：文件已删 / manifest 不再引用 / 没有 `_G.Bus` 时
+  qb-core 的 Notify 仍把 `QBCore:Notify` 发出去（qb-core 从未注册 `Bus.notify`，恒走第 5 层回退）。
+  三条各配变异，「注入红、对照绿」实测通过。阶段 B/C 的两个包装级单元测试随文件退休。
 - **P1-4 阶段 C：删掉 `Player.Functions.AddMoney` 的包装（纯删除，一行不修）**（core-framework）：
   这段包装今天本来就是死代码 —— `_G` 不跨资源，core-framework 里 `_G.Bus.EconomyService` 恒 nil，
   ES 分支整段跳过、永远回落。但"死"不等于"无害"：它每 10 分钟把 Notify 与 AddMoney 的计数混在一起打印
@@ -485,7 +492,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 任务完成奖励幂等：`CompleteQuest` 回调只看 affectedRows，内存锁 + 10s 超时兜底，避免重复发奖
 - 地址池任务步骤顺序绕过：缓存空窗期改用 `_currentSteps` 内存步骤比对，不再直接放行
 - Bus 跨资源调用：7 个注册方 manifest include @core-framework/bus.lua，cartel/mining/justice 共 18 处改为显式 `service_*` export
-- `T-CityLite.base/resources/[standalone]/core-framework/compat.lua`: `GetPlayer` 缓存改用 `GetPlayerName` 做活性校验（`GetPlayerPing >= 0` 恒真）
+- core-framework 的兼容层（compat.lua，P1-4 阶段 D 已删除）: `GetPlayer` 缓存改用 `GetPlayerName` 做活性校验（`GetPlayerPing >= 0` 恒真）
 - `txAdminPort 0` 禁用管理员模式，避免端口冲突
 
 ### Changed

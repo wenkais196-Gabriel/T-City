@@ -474,7 +474,7 @@ Bus.RegisterService('patron', PatronService)
 ### 7.2 QBCore 兼容桥
 
 ```lua
--- compat.lua 中新增所有权系统的兼容映射
+-- 所有权系统的兼容映射（该段设计已随 compat.lua 于 2026-11-01 下线，仅作历史记录）
 -- 现有 QBCore API 不变，但底层享受新架构
 
 -- 例如: 现有帮派系统调用 QBCore.Functions.SetGang() 时
