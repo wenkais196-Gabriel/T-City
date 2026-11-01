@@ -43,22 +43,22 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 | 批次 | 事件 | 已鉴权 | 已登记 | 未登记 | 在启动集内 |
 |---|---|---|---|---|---|
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
-| custom `[custom]` | 133 | 77 | 37 | 19 | 覆盖率 **114/133 ≈ 85.7%**（第 4 批：代理会话归属、自己在押记录、职业名别名 + 三条例行登记；探视请求按 civilian 登记不计入） |
+| custom `[custom]` | 133 | 80 | 40 | 13 | 覆盖率 **120/133 ≈ 90.2%**（第 5 批：中控屏锁持有者、物流任务前缀条件；车钥匙两条自作用域登记） |
 | qb `[qb]` | 216 | 19 | 0 | 197 | 债务 |
 | other（system / standalone / voice / cfx-default） | 76 | 1 | 6 | 69 | 债务 |
-| **合计** | **440** | 102 | 53 | **285** | — |
+| **合计** | **440** | 105 | 56 | **279** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
-**债的分布不是均匀的**：55 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
-它们贡献 **93/285（33%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
+**债的分布不是均匀的**：53 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
+它们贡献 **93/279（33%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
 `qb-crypto` 6、`qb-shops` 5、`qb-weed` 5、`qb-streetraces` 3…）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
 
 ## 3.1 资源内部 helper 登记表（2026-11-01 第 2 批）
 
-全仓 285 个未登记事件里，有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
+全仓 279 个未登记事件里，有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
 （`CanModifyPlate` / `IsEmergencyService` / `onDutyOfficer` …），按固定 token 名单扫不出来。
 直接把这些名字塞进 token 名单等于"名字像校验就算校验"，所以另开了
 `tests/architecture/net_event_guard_helpers.json`：
@@ -140,15 +140,15 @@ cd T-CityLite.base && python tests/architecture/net_event_baseline.py --write
 | `RegisterNetEvent (`（多一个空格） | 扫描器仍然收得到（反向用例钉住） |
 | 注释里写 `-- PolicePolicy.Can(` / 字符串里印 token | 不算鉴权（两条反向用例） |
 
-**11 条变异用例全部"注入红 / 对照绿"**（`tools/dev/gate_mutation_smoke.py --only net_event`）。
+**12 条变异用例全部"注入红 / 对照绿"**（`tools/dev/gate_mutation_smoke.py --only net_event`）。
 
 ## 7. 还没做到的（诚实记账）
 
 | 计划里的判据 | 现状 | 差距 |
 |---|---|---|
 | ① 引擎层（qb-core）100% | ✅ 15/15 | — |
-| ② `[custom]` ≥ 80% | **85.7%（114/133）✅ 达成** | 剩余 26 个：`custom-vehicles` 6、`custom-quest` 5、`custom-justice` 4、`custom-agent-client` 4、其它零散。下一批把 `custom-agent-client` 的会话令牌绑定补成 helper |
-| ③ `[qb]` 登记为带 expires 的债务 | ✅ 54 个仍有欠账的资源各有 owner + expires（2027-03-31）：`[qb]` 28 个、`[custom]` 8 个、other 18 个 | 到期前要么修，要么续期并说明 |
+| ② `[custom]` ≥ 80% | **90.2%（120/133）✅ 达成** | 剩余 **13** 个：`custom-quest` 5（其中 `aviationHeightMonitorComplete` 需要服务端验高）、`custom-main` 2、`story-engine` 2、`custom-certificates` 1、`custom-documents` 1、`custom-justice` 1、`durability:server:onWeaponFired` 1 |
+| ③ `[qb]` 登记为带 expires 的债务 | ✅ 53 个仍有欠账的资源各有 owner + expires（2027-03-31）：`[qb]` 28 个、`[custom]` 7 个、other 18 个 | 到期前要么修，要么续期并说明 |
 
 其它已知残余（不阻塞本步，但要在下一轮处理）：
 

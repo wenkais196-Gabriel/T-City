@@ -73,6 +73,28 @@
       ],
       "requires_raw": [],
       "why": "有进行中的任务才允许快捷装货（custom-quest 未就绪时按没有任务处理）"
+    },
+    "HoldsDashboardLock": {
+      "defined_at": "custom-vehicles/server/main.lua",
+      "requires_code": [
+        "QBCore.Functions.GetPlayer(src)",
+        "NormalizePlate(plate)",
+        "dashboardLocks[want] ==",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "中控屏排他锁：只有锁的持有者（按归一化车牌）能切驾驶模式/操作中控台"
+    },
+    "FindLogisticsQuest": {
+      "defined_at": "custom-vehicles/server/dashboard_api.lua",
+      "requires_code": [
+        "GetActiveQuests(src)",
+        "LOGISTICS_QUESTS[quest.quest_id]",
+        "return nil"
+      ],
+      "requires_raw": [],
+      "shape": "local_check",
+      "why": "只认具体物流任务模板（euro_trucking_steel / heavy_trailer / aviation_smuggling_flight）"
     }
   },
   "custom-police": {

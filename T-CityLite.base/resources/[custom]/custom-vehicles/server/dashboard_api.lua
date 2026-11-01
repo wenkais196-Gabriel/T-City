@@ -14,6 +14,23 @@ local QBCore = exports['qb-core']:GetCoreObject()
 --- 紧急服务（警察/医疗/消防）：PA 喊话、警笛、测速雷达、锚定只对这些职业开放。
 --- 抽出来的原因：同一段职业判断在三个事件里重复了三遍，其中两个事件压根没有。
 
+--- 该玩家是否有进行中的**物流**任务（电子印章交单的前置条件）。
+--- 与 HasActiveQuest 的区别：这里要求具体任务模板，不是"随便有个任务"。
+local LOGISTICS_QUESTS = {
+    euro_trucking_steel = true,
+    euro_trucking_heavy_trailer = true,
+    aviation_smuggling_flight = true,
+}
+
+local function FindLogisticsQuest(src)
+    local ok, quests = pcall(function() return exports['custom-quest']:GetActiveQuests(src) end)
+    if not ok or type(quests) ~= 'table' then return nil end
+    for _, quest in ipairs(quests) do
+        if LOGISTICS_QUESTS[quest.quest_id] then return quest end
+    end
+    return nil
+end
+
 --- 该玩家是否有进行中的任务（快捷装货的前置条件）。
 --- pcall：custom-quest 重启的空窗期里 exports 会抛错，不能把守卫变成运行时错误。
 local function HasActiveQuest(src)
@@ -313,20 +330,9 @@ RegisterNetEvent('custom-vehicles:server:logisticsStampDelivery', function(veh)
     end
 
     -- 三合一电子戳校验:
-    -- 1. 获取当前活跃物流任务
+    -- 1. 当前活跃物流任务（只认真实物流模板）
     local citizenid = Player.PlayerData.citizenid
-    local activeQuests = exports['custom-quest']:GetActiveQuests(src) or {}
-
-    local logisticsQuest = nil
-    for _, q in ipairs(activeQuests) do
-        if q.quest_id == 'euro_trucking_steel'
-            or q.quest_id == 'euro_trucking_heavy_trailer'
-            or q.quest_id == 'aviation_smuggling_flight' then
-            logisticsQuest = q
-            break
-        end
-    end
-
+    local logisticsQuest = FindLogisticsQuest(src)
     if not logisticsQuest then
         TriggerClientEvent('QBCore:Notify', src, '没有进行中的物流任务', 'error')
         return

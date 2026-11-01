@@ -72,7 +72,7 @@ tracks: [docs/engineering/STANDARDS.md, docs/engineering/FOUNDATION-AS-IS.md, do
 |---|---|---|---|---|
 | P1-2 | **先做**：拆掉 `ForceFlush → Save(true)` 这条环，改为 `Store.SaveNow(player, reason)` | 等价复现脚本从 stack overflow 变单次写 | ✅ 2026-11-01（evidence §2→§3） | 与 qb-core 上游 `Save` 语义耦合 |
 | P1-1 | **后做**：存档收敛为单一 owner：一个池、一个定时器、失败保留 + 退避 + ack | 失败 fake DB 后 dirty 仍在且 `failed_flushes` 增长；停服刷盘有 ack | ✅ 2026-11-01（evidence §1、§4） | 停机时阻塞刷盘可能拖慢关服 |
-| P1-3 | net event 闸门扩到 qb-core 与全仓，存量按三批登记 | 分三批：① 引擎层（qb-core）100% ② `[custom]` ≥ 80% ③ `[qb]` 登记为带 `expires` 的债务。**基线 JSON 提交入库**，预算只许非增 | 🟡 2026-11-01 第 1 步：基线入库 + ① 100%（15/15）+ ③ 58 个仍有欠账的资源全部登记（[qb] 28 / [custom] 12 / other 18）；② **85.7%（114/133）达成**（第 4 批：会话归属 / 在押记录 / 职业名别名），见 `docs/engineering/2026-11-foundation-net-events-baseline.md` | 全仓 1102 次注册、918 个未覆盖，一次性 ≥80% 不现实，必须分阶段 |
+| P1-3 | net event 闸门扩到 qb-core 与全仓，存量按三批登记 | 分三批：① 引擎层（qb-core）100% ② `[custom]` ≥ 80% ③ `[qb]` 登记为带 `expires` 的债务。**基线 JSON 提交入库**，预算只许非增 | 🟡 2026-11-01 第 1 步：基线入库 + ① 100%（15/15）+ ③ 58 个仍有欠账的资源全部登记（[qb] 28 / [custom] 12 / other 18）；② **90.2%（120/133）达成**（第 5 批：中控屏锁 / 物流任务前置），见 `docs/engineering/2026-11-foundation-net-events-baseline.md` | 全仓 1102 次注册、918 个未覆盖，一次性 ≥80% 不现实，必须分阶段 |
 | P1-4 | 删掉 compat 的全局猴补，缓存收回框架内部 | 离线单测：换角色后同 tick 读 job 得新值；静态断言 compat 不再赋值 `QBCore.Functions.GetPlayer`；3 处 `Bus.SafeCall` 改 export 且含 `GetResourceState` 守卫 | ⬜ 未开始 | **实测 988 处 / 185 文件**引用 `QBCore.Functions.GetPlayer`（含测试 mock），必须连测试基础设施一起迁移，不能一刀切 |
 | P1-5 | 安全校验收敛一份并接进写路径（拒绝语义，不是 clamp） | `amount=999999` 返回拒绝；5,000,000 上限只剩一处 | ⬜ 未开始 | 拒绝语义可能打断现有业务流程 |
 
