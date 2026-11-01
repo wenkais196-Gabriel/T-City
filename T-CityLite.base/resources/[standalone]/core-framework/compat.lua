@@ -26,7 +26,7 @@ CreateThread(function()
         local total = compatStats.shimmed_count + compatStats.fallback_count
         if total > 0 then
             local pct = math.floor(compatStats.shimmed_count / total * 100)
-            print(('[compat] 📊 兼容层统计: %d 次调用, %d%% 直连 Bus.EconomyService, %d 次 fallback'):format(
+            print(('[compat] 📊 Notify 兼容层统计: %d 次调用, %d%% 走 Bus.notify, %d 次回落 qb-core'):format(
                 total, pct, compatStats.fallback_count
             ))
         end

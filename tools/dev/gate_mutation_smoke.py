@@ -374,6 +374,17 @@ MUTATIONS += [
     ),
 ]
 
+# P1-4 阶段 C：经济服务只能有一个注册者
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_economy_service_single_registrar.py::"
+              "test_economy_service_has_a_single_registrar"),
+        path="resources/[standalone]/core-framework/services/__mutant_economy.lua",
+        content="_G.Bus.EconomyService = {}\n",
+        what="出现第二个 EconomyService 注册者（挂错就是 包装→ES→包装 的无限递归）",
+    ),
+]
+
 # P1-4 阶段 A：猴补闸门
 MUTATIONS += [
     Mutation(
