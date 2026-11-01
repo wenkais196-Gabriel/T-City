@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+### Fixed
+- **结案从来没真的写进库（nil 参数让整条 UPDATE 静默失效）**（`custom-police` / `core-framework`）：真机排查发现本 build 的 oxmysql 是**客户端插值**的 —— 参数里出现 `nil` 时它不会绑成 `NULL`，而是把占位符 `?` 原样留在 SQL 里，于是语句语法错误、`.await` 也不报错。两处踩中：① MDT「清场」不带 reason，`closed_reason` 传 nil → 警情状态一直是 `on_scene`，而 `incident.close` 审计照写（"审计说关了、其实没关"，同一张单可以被反复"关"）；② `world_state` 落盘时 `previous_value` 传 nil → 首写静默丢失。现在 `closed_reason` 用空串、`previous_value` 传 JSON 的 `null`；并且**痕迹只在 `affected > 0` 时写**（`affected=0` 打日志不落痕迹），避免"警情没关、痕迹却 +1"。
+- **城市公告在冷缓存下会丢**（`custom-police`）：原节流规则是「该区 24 小时内第一起结案」，靠 `world_state` 的 `closed_24h` 判断 —— 而 `Record` 在缓存冷时是异步落写，读回来是 `nil` → `closed_24h=0` → 公告静默不发（CC 评审 2026-11-01 指出）。改成调用方自己的**每区域 30 分钟冷却**（内存计时，重启清零，宁可多一条不漏），不再依赖跨资源读值。
+
 ### Fixed
 - **`world_state` 读路径（审计 R7 挂了一个多月的那条债）**（`core-framework`）：旧实现用 `promise.new` + `Citizen.Await` 同步查库（首次读卡住主线程），且 `prepare` 取三列后直接 `local value = row` —— 拿到的是**整行**，还把 `changed_by` 硬写成 `nil`（注释说 not in this query，查询里明明有）。现在：`GetRegionState` 只读内存缓存、未命中返回 `nil` 并后台预热（绝不阻塞）；新增 `GetRegionStateAsync` / `GetRegionSnapshotAsync` / `GetPlayerTraces(cid, cb)` 走回调；`saveToDB` 把落盘的异步结果通过 `cb(ok, code)` 回报（`save_failed` 不再被静默吞掉）。证据：`tests/unit/layer1_core/test_world_traces.py` 的 `Citizen.Await` / `promise.new` / `local value = row` 三条回归断言 + 行为 harness（冷启动续写、落盘失败回报）。
 - **结案查询缺坐标**（`custom-police`）：`SetIncidentStatus` 的 `SELECT id, status` 改为 `SELECT id, status, x, y` —— 结案要落世界痕迹，区域只能由坐标判定。

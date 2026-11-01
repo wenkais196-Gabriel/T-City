@@ -81,10 +81,14 @@ local function saveToDB(region_id, state_key, value, changed_by, previous_value,
         if cb then cb(false, 'encode_failed') end
         return false, 'encode_failed'
     end
-    local prevJson = nil
+    -- 2026-11-01 真机实测：本 build 的 oxmysql 是**客户端插值**的，遇到 nil 参数会把它
+    -- 留成字面量 `?`，于是整条 SQL 语法错误、而 .await/回调都不报错 —— 写静默丢失。
+    -- 所以这里永远不给 nil：没有旧值时传 JSON 的 `null`（previous_value 的 CHECK 要求
+    -- json_valid，'null' 是合法 JSON，NULL 也合法，但参数位不能是 nil）。
+    local prevJson = 'null'
     if previous_value ~= nil then
         local okPrev, encoded = pcall(json.encode, previous_value)
-        prevJson = okPrev and encoded or nil
+        if okPrev and type(encoded) == 'string' then prevJson = encoded end
     end
     exports.oxmysql:insert(
         'INSERT INTO world_state (region_id, state_key, state_value, changed_by, previous_value) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE state_value = VALUES(state_value), changed_by = VALUES(changed_by), previous_value = VALUES(previous_value)',
