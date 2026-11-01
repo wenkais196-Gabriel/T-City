@@ -70,7 +70,7 @@ custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债�
 * `self_scoped`：必须有 `local src = source`，且 `GetPlayer(...)` 的参数只能是 `src`/`source`，
   并且不许出现 `Players[<别的变量>]` / `GetPlayer(tonumber(...))` / `GetPlayerByCitizenId(<别的变量>)`；
 * `callback_relay`：必须走 `QBCore.ServerCallbacks[name]`，且分发目标里的高危项要有可验证的守卫（见上）；
-* `deprecated_blocked`：必须有安全日志调用，并且**不许**出现 `AddItem/RemoveItem/AddMoney/RemoveMoney/SetMetaData/SetJob/SetGang/SetMoney`。
+* `deprecated_blocked`：必须有 `LogSecurity(` 调用，并且**不许**出现列出的写 API（`AddItem/RemoveItem/AddMoney/RemoveMoney/SetMetaData/SetJob/SetJobDuty/SetGang/SetMoney`、任何 `MySQL.*`、`exports[...]:Set*`）。
 
 ## 5. 闸门怎么工作
 
@@ -110,7 +110,7 @@ cd T-CityLite.base && python tests/architecture/net_event_baseline.py --write
 |---|---|---|
 | ① 引擎层（qb-core）100% | ✅ 15/15 | — |
 | ② `[custom]` ≥ 80% | **48%**（64/134） | 80% 需要 108 个，还差 **44** 个。其中 `custom-vehicles`（26）、`custom-quest`（14）、`custom-market`、`custom-storage` 是最该先做的——它们会写钱/物品/职业 |
-| ③ `[qb]` 登记为带 expires 的债务 | ✅ 58 个资源各有 owner + expires（2027-03-31） | 到期前要么修，要么续期并说明 |
+| ③ `[qb]` 登记为带 expires 的债务 | ✅ 58 个仍有欠账的资源各有 owner + expires（2027-03-31）：`[qb]` 28 个、`[custom]` 12 个、other 18 个 | 到期前要么修，要么续期并说明 |
 
 其它已知残余（不阻塞本步，但要在下一轮处理）：
 
