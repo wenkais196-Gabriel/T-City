@@ -301,6 +301,8 @@ end)
 -- ==============================================================
 
 RegisterNetEvent('qb-mechanicjob:server:updateDrivingDistance', function(plate, distance)
+    -- 2026-11-01: 这条旧兼容事件原来**没有任何校验** —— 任何客户端可以给任意车牌刷里程。
+    if not CanModifyPlate(source, plate) then return end
     AddDistance(plate, distance)
 end)
 
