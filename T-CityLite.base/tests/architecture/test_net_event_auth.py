@@ -272,6 +272,12 @@ def test_allowlisted_events_really_show_the_claim_in_their_body():
                 f"{name}: registered as self_scoped but the handler never binds to "
                 f"`local src = source` — a self-scoped claim needs the caller identity"
             )
+            targets = re.findall(r"GetPlayer\(\s*([A-Za-z_][\w.]*)\s*\)", event.body)
+            foreign = [arg for arg in targets if arg not in ("src", "source")]
+            assert not foreign, (
+                f"{name}: registered as self_scoped but indexes another player "
+                f"({foreign}) — that is a cross-player write, not self-scoped"
+            )
         elif category == "callback_relay":
             assert CALLBACK_RELAY.search(event.body), (
                 f"{name}: registered as callback_relay but does not dispatch through "
