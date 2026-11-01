@@ -13,6 +13,7 @@ version '0.6.0'
 
 shared_scripts {
     'shared/util.lua',
+    'shared/regions.lua',
     'bus.lua',
     'events/event_types.lua',
 }
@@ -28,6 +29,7 @@ server_scripts {
     'services/job_service.lua',
     'services/notify_service.lua',
     'services/world_state_service.lua',
+    'services/world_trace_service.lua',
     'services/patron_service.lua',
     'services/persistence_manager.lua',
     'server/client_reports.lua',

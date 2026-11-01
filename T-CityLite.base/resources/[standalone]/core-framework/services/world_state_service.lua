@@ -1,202 +1,272 @@
 -- world_state_service.lua — 世界状态读写服务
 -- 锚点: docs/server-design/02-world-traces.md
--- Phase 1 完整实现：内存缓存 + 异步 DB 持久化 + 事件发射
 --
--- 四原则落地:
---   模块化 — 独立 Service，通过 Bus 暴露，zero coupling
---   高性能 — 内存缓存 (O(1) 读)；写操作异步 (不阻塞游戏循环)
---   安全   — changed_by 仅服务端填充；region_id/state_key 白名单校验
---   可拓展 — Plugin Contract 可通过 Bus.GetService('world_state') 引用
+-- 读路径纪律（2026-11-01 修 R7）：
+--   * **绝不在游戏线程上 Await DB**。旧实现用 `promise.new` + `Citizen.Await` 同步查库，
+--     第一次读就把服务端主循环卡住（审计 R7 原文："首次读取阻塞主线程"）。
+--   * **绝不把行表当值返回**。旧实现 `local value = row` 拿到的是整行，且把 changed_by
+--     硬写成 nil（注释写 not in this query，可查询里明明有）—— 缓存一冷就返回错值。
+--   * 现在的语义：`GetRegionState` 只读缓存（未命中返回 nil 并触发一次异步预热），
+--     需要"现在就要"的调用方用 `GetRegionStateAsync(region, key, cb)`。
 --
--- 使用:
---   local state = Bus.world_state.GetRegionState('dock_zone', 'controller')
---   Bus.world_state.SetRegionState('dock_zone', 'controller', {gang='cartel'}, 'ABC123')
+-- 写路径不变：内存缓存 + 异步刷盘 + 变更事件。唯一写者是本服务；业务资源通过
+-- `service_world_state_*` / `service_world_trace_*` 导出调用，不直接写这张表。
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
 WorldStateService = WorldStateService or {}
 
 -- ============================================================================
--- 内存缓存: 'region_id:state_key' → { value, changed_by, changed_at, dirty }
+-- 内存缓存: 'region_id:state_key' → { value, changed_by, changed_at }
+-- loading: 同键异步加载去重，避免缓存一冷就被并发打爆
 -- ============================================================================
 local cache = {}
+local loading = {}
 
--- ============================================================================
--- 内部: 缓存键编码
--- ============================================================================
 local function cacheKey(region_id, state_key)
     return region_id .. ':' .. state_key
 end
 
--- ============================================================================
--- 内部: 从 DB 加载状态
--- ============================================================================
-local function loadFromDB(region_id, state_key)
-    local p = promise.new()
-    exports.oxmysql:prepare('SELECT state_value, changed_by, changed_at FROM world_state WHERE region_id = ? AND state_key = ?',
-        {region_id, state_key}, function(result)
-            p:resolve(result)
-        end)
-    local row = Citizen.Await(p)
-    if row then
-        local value = row
-        -- oxmysql prepare: single/multi-column → first row; single-column → scalar
-        if type(value) == 'string' then
-            -- JSON string from DB, decode it
-            local ok, decoded = pcall(json.decode, value)
-            if ok then value = decoded end
-        end
-        return {
-            value = value,
-            changed_by = nil, -- not in this query
-            changed_at = nil,
-        }
-    end
-    return nil
+--- 把 DB 的 state_value（JSON 文本或已解码的表）规整成 Lua 值。
+local function decodeValue(raw)
+    if type(raw) ~= 'string' then return raw end
+    local ok, decoded = pcall(json.decode, raw)
+    if ok then return decoded end
+    return raw
 end
 
--- ============================================================================
--- 内部: 异步写入 DB
--- ============================================================================
-local function saveToDB(region_id, state_key, value, changed_by, previous_value)
-    local valueJson = json.encode(value)
-    local prevJson = previous_value and json.encode(previous_value) or nil
+--- 异步取一行。回调参数是行表或 nil —— 既不是标量，也不是"整行当值"。
+local function fetchRow(region_id, state_key, cb)
+    exports.oxmysql:execute(
+        'SELECT state_value, changed_by, changed_at FROM world_state WHERE region_id = ? AND state_key = ? LIMIT 1',
+        { region_id, state_key },
+        function(rows)
+            local row = (type(rows) == 'table' and rows[1]) or nil
+            if type(row) ~= 'table' then return cb(nil) end
+            cb({
+                value = decodeValue(row.state_value),
+                changed_by = row.changed_by,
+                changed_at = row.changed_at,
+            })
+        end)
+end
+
+--- 预热缓存：不阻塞调用方。after(entry|nil) 在加载完成后调用。
+local function warm(region_id, state_key, after)
+    local ck = cacheKey(region_id, state_key)
+    if cache[ck] then
+        if after then after(cache[ck]) end
+        return
+    end
+    if loading[ck] then
+        -- 已经有人在拉了：本次不排队（排队会让"读"变成有隐藏代价的操作）。
+        if after then after(nil) end
+        return
+    end
+    loading[ck] = true
+    fetchRow(region_id, state_key, function(row)
+        loading[ck] = nil
+        if row then
+            cache[ck] = { value = row.value, changed_by = row.changed_by, changed_at = row.changed_at }
+        end
+        if after then after(cache[ck]) end
+    end)
+end
+
+--- 落盘。落盘是**异步**的，所以真实结果只能通过 cb 回来 ——
+--- 调用方要知道"到底写进 DB 没有"，就拿 cb；不关心就当 fire-and-forget。
+local function saveToDB(region_id, state_key, value, changed_by, previous_value, cb)
+    local okEncode, valueJson = pcall(json.encode, value)
+    if not okEncode then
+        if cb then cb(false, 'encode_failed') end
+        return false, 'encode_failed'
+    end
+    local prevJson = nil
+    if previous_value ~= nil then
+        local okPrev, encoded = pcall(json.encode, previous_value)
+        prevJson = okPrev and encoded or nil
+    end
     exports.oxmysql:insert(
         'INSERT INTO world_state (region_id, state_key, state_value, changed_by, previous_value) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE state_value = VALUES(state_value), changed_by = VALUES(changed_by), previous_value = VALUES(previous_value)',
-        {region_id, state_key, valueJson, changed_by, prevJson},
+        { region_id, state_key, valueJson, changed_by, prevJson },
         function(insertId)
-            if insertId then
-                -- 发射世界状态变更事件
-                if EventTypes and EventTypes.Publish then
-                    EventTypes.Publish(EventTypes.WORLD.STATE_CHANGED, region_id, state_key, value, changed_by)
-                end
+            if not insertId then
+                if cb then cb(false, 'save_failed') end
+                return
             end
-        end
-    )
+            if EventTypes and EventTypes.Publish then
+                EventTypes.Publish(EventTypes.WORLD.STATE_CHANGED, region_id, state_key, value, changed_by)
+            end
+            if cb then cb(true) end
+        end)
+    return true
 end
 
 -- ============================================================================
 -- Public API
 -- ============================================================================
 
---- 获取某区域的某个状态（内存优先 → DB 回退）
----@param region_id string 区域标识: dock_zone, plaza_market, cartel_base_01
----@param state_key  string 状态键: controller, price_modifier, market_exists
----@return any|nil 状态值
+--- 读缓存命中的值。**不做 IO**：未命中返回 nil，并在后台预热。
+---@param region_id string
+---@param state_key string
+---@return any|nil
 function WorldStateService.GetRegionState(region_id, state_key)
-    local ck = cacheKey(region_id, state_key)
-    if cache[ck] then
-        return cache[ck].value
-    end
-
-    -- DB 回退
-    local row = loadFromDB(region_id, state_key)
-    if row then
-        cache[ck] = {
-            value = row.value,
-            changed_by = row.changed_by,
-            changed_at = row.changed_at,
-            dirty = false,
-        }
-        return row.value
-    end
+    if type(region_id) ~= 'string' or type(state_key) ~= 'string' then return nil end
+    local entry = cache[cacheKey(region_id, state_key)]
+    if entry then return entry.value end
+    warm(region_id, state_key, nil)
     return nil
 end
 
---- 设置某区域的某个状态
----@param region_id  string 区域标识
----@param state_key  string 状态键
----@param value      any    新状态值
----@param changed_by string citizenid (仅服务端填充)
----@return boolean   success
-function WorldStateService.SetRegionState(region_id, state_key, value, changed_by)
-    if not region_id or not state_key or value == nil then
-        return false
+--- 确定性读取：缓存命中同步回调，未命中异步加载后回调。
+---@param region_id string
+---@param state_key string
+---@param cb fun(value: any|nil, entry: table|nil)
+function WorldStateService.GetRegionStateAsync(region_id, state_key, cb)
+    if type(cb) ~= 'function' then return false, 'invalid_callback' end
+    if type(region_id) ~= 'string' or type(state_key) ~= 'string' then
+        cb(nil, nil)
+        return false, 'invalid_args'
     end
+    local ck = cacheKey(region_id, state_key)
+    local entry = cache[ck]
+    if entry then
+        cb(entry.value, entry)
+        return true
+    end
+    warm(region_id, state_key, function(loaded)
+        cb(loaded and loaded.value or nil, loaded)
+    end)
+    return true
+end
+
+--- 设置某区域的某个状态（唯一写入口）。
+---@param region_id  string
+---@param state_key  string
+---@param value      any
+---@param changed_by string|nil citizenid（仅服务端填充）
+---@return boolean, string|nil
+--- @param cb fun(ok: boolean, code: string|nil)|nil 落盘的异步结果（不传就只打日志）
+--- @return boolean, string|nil 立即结果：true = 已接受（缓存已更新，落盘在后台）
+function WorldStateService.SetRegionState(region_id, state_key, value, changed_by, cb)
+    if type(region_id) ~= 'string' or region_id == '' then return false, 'invalid_region' end
+    if type(state_key) ~= 'string' or state_key == '' then return false, 'invalid_state_key' end
+    if value == nil then return false, 'invalid_value' end
 
     local ck = cacheKey(region_id, state_key)
-    local previous = cache[ck] and cache[ck].value or nil
+    local entry = cache[ck]
+    local previous = entry and entry.value or nil
 
-    -- 更新缓存
     cache[ck] = {
         value = value,
         changed_by = changed_by,
         changed_at = os.time(),
-        dirty = true,
     }
 
-    -- 异步刷盘 (不阻塞游戏循环)
-    saveToDB(region_id, state_key, value, changed_by, previous)
+    local onSaved = cb
+    if type(onSaved) ~= 'function' then
+        onSaved = function(okWrite, code)
+            if not okWrite then
+                print(('[world_state] ⚠️ 落盘失败 %s: %s'):format(ck, tostring(code)))
+            end
+        end
+    end
 
-    -- 标记 DirtyFlush (如果可用)
+    saveToDB(region_id, state_key, value, changed_by, previous, onSaved)
+
     if DirtyFlush and DirtyFlush.MarkDirty then
         DirtyFlush.MarkDirty(ck, 'world_state')
     end
-
     return true
 end
 
---- 获取某区域的完整状态快照
+--- 区域快照（缓存优先，不触发 IO）。
 ---@param region_id string
----@return table { state_key = value, ... }
+---@return table
 function WorldStateService.GetRegionSnapshot(region_id)
     local snapshot = {}
-    -- 从缓存收集所有匹配该 region 的 key
+    if type(region_id) ~= 'string' then return snapshot end
     local prefix = region_id .. ':'
     for ck, entry in pairs(cache) do
         if ck:sub(1, #prefix) == prefix then
-            local sk = ck:sub(#prefix + 1)
-            snapshot[sk] = entry.value
-        end
-    end
-    -- 也从 DB 加载 (补全缓存未命中的)
-    local p = promise.new()
-    exports.oxmysql:prepare('SELECT state_key, state_value FROM world_state WHERE region_id = ?',
-        {region_id}, function(result)
-            p:resolve(result)
-        end)
-    local rows = Citizen.Await(p)
-    if rows and type(rows) == 'table' then
-        for _, row in ipairs(rows) do
-            if not snapshot[row.state_key] then
-                local ok, decoded = pcall(json.decode, row.state_value)
-                snapshot[row.state_key] = ok and decoded or row.state_value
-            end
+            snapshot[ck:sub(#prefix + 1)] = entry.value
         end
     end
     return snapshot
 end
 
---- 获取玩家对世界的痕迹列表
----@param citizenid string
----@return table|nil {region_id, state_key, value, changed_at} 列表
-function WorldStateService.GetPlayerTraces(citizenid)
-    local p = promise.new()
-    exports.oxmysql:execute(
-        'SELECT region_id, state_key, state_value, changed_at FROM world_state WHERE changed_by = ? ORDER BY changed_at DESC LIMIT 50',
-        {citizenid}, function(result)
-            p:resolve(result)
-        end)
-    local rows = Citizen.Await(p)
-    if not rows then return {} end
-    local traces = {}
-    for _, row in ipairs(rows) do
-        local ok, decoded = pcall(json.decode, row.state_value)
-        table.insert(traces, {
-            region_id = row.region_id,
-            state_key = row.state_key,
-            value = ok and decoded or row.state_value,
-            changed_at = row.changed_at,
-        })
+--- 区域快照（确定性）：从 DB 拉全该区域的行，与缓存合并后回调。
+---@param region_id string
+---@param cb fun(snapshot: table)
+function WorldStateService.GetRegionSnapshotAsync(region_id, cb)
+    if type(cb) ~= 'function' then return false, 'invalid_callback' end
+    if type(region_id) ~= 'string' or region_id == '' then
+        cb({})
+        return false, 'invalid_region'
     end
-    return traces
+    exports.oxmysql:execute(
+        'SELECT state_key, state_value FROM world_state WHERE region_id = ?',
+        { region_id },
+        function(rows)
+            local snapshot = WorldStateService.GetRegionSnapshot(region_id)
+            if type(rows) == 'table' then
+                for i = 1, #rows do
+                    local row = rows[i]
+                    if type(row) == 'table' and type(row.state_key) == 'string' then
+                        if snapshot[row.state_key] == nil then
+                            snapshot[row.state_key] = decodeValue(row.state_value)
+                        end
+                    end
+                end
+            end
+            cb(snapshot)
+        end)
+    return true
 end
 
---- 获取玩家当前活跃的世界通知 (Phase 2 上线通知功能的前置 API)
+--- 玩家造成的痕迹（异步：这是玩家请求路径，不能卡主线程）。
 ---@param citizenid string
----@return table 通知列表 (当前返回空，Phase 2 实现)
+---@param cb fun(traces: table)
+function WorldStateService.GetPlayerTraces(citizenid, cb)
+    if type(cb) ~= 'function' then return false, 'invalid_callback' end
+    if type(citizenid) ~= 'string' or citizenid == '' then
+        cb({})
+        return false, 'invalid_citizenid'
+    end
+    exports.oxmysql:execute(
+        'SELECT region_id, state_key, state_value, changed_at FROM world_state WHERE changed_by = ? ORDER BY changed_at DESC LIMIT 50',
+        { citizenid },
+        function(rows)
+            local traces = {}
+            if type(rows) == 'table' then
+                for i = 1, #rows do
+                    local row = rows[i]
+                    if type(row) == 'table' then
+                        traces[#traces + 1] = {
+                            region_id = row.region_id,
+                            state_key = row.state_key,
+                            value = decodeValue(row.state_value),
+                            changed_at = row.changed_at,
+                        }
+                    end
+                end
+            end
+            cb(traces)
+        end)
+    return true
+end
+
+--- 玩家当前活跃的世界通知（Phase 2 实现：查询 world_events 最近 major+ 事件）。
+---@param citizenid string
+---@return table
 function WorldStateService.GetActiveNotifications(citizenid)
-    return {}  -- Phase 2 实现: 查询 world_events 表最近的 major+ 事件
+    return {}
+end
+
+--- 清空内存缓存（诊断与测试用，不影响 DB）。
+function WorldStateService.ClearCache()
+    cache = {}
+    loading = {}
 end
 
 -- ============================================================================
@@ -205,11 +275,14 @@ end
 if Bus and Bus.RegisterService then
     Bus.RegisterService('world_state', {
         GetRegionState         = WorldStateService.GetRegionState,
+        GetRegionStateAsync    = WorldStateService.GetRegionStateAsync,
         SetRegionState         = WorldStateService.SetRegionState,
         GetRegionSnapshot      = WorldStateService.GetRegionSnapshot,
+        GetRegionSnapshotAsync = WorldStateService.GetRegionSnapshotAsync,
         GetPlayerTraces        = WorldStateService.GetPlayerTraces,
         GetActiveNotifications = WorldStateService.GetActiveNotifications,
+        ClearCache             = WorldStateService.ClearCache,
     })
 end
 
-print('[world_state_service] 🌍 Phase 1 就绪: 内存缓存 + 异步持久化 + 事件发射')
+print('[world_state_service] 🌍 就绪: 内存缓存(不阻塞读) + 异步持久化 + 变更事件')

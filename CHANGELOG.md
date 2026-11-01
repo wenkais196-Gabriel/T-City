@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`world_state` 读路径（审计 R7 挂了一个多月的那条债）**（`core-framework`）：旧实现用 `promise.new` + `Citizen.Await` 同步查库（首次读卡住主线程），且 `prepare` 取三列后直接 `local value = row` —— 拿到的是**整行**，还把 `changed_by` 硬写成 `nil`（注释说 not in this query，查询里明明有）。现在：`GetRegionState` 只读内存缓存、未命中返回 `nil` 并后台预热（绝不阻塞）；新增 `GetRegionStateAsync` / `GetRegionSnapshotAsync` / `GetPlayerTraces(cid, cb)` 走回调；`saveToDB` 把落盘的异步结果通过 `cb(ok, code)` 回报（`save_failed` 不再被静默吞掉）。证据：`tests/unit/layer1_core/test_world_traces.py` 的 `Citizen.Await` / `promise.new` / `local value = row` 三条回归断言 + 行为 harness（冷启动续写、落盘失败回报）。
+- **结案查询缺坐标**（`custom-police`）：`SetIncidentStatus` 的 `SELECT id, status` 改为 `SELECT id, status, x, y` —— 结案要落世界痕迹，区域只能由坐标判定。
+
+### Added
+- **世界痕迹第一条链：结案 → 区域状态**（`core-framework` + `custom-police`）：新增 services 目录下的 world_trace_service.lua 作为 `world_state` 的**唯一写者**（`Record` / `RecordAt`，白名单 `crime_pressure`，30 s 同键去抖，`recent` 时间戳窗口上限 50）；新增 shared 目录下的 regions.lua（10 个区域，坐标取自 qb-storerobbery 与 qb-drugs 的既有配置 + 纯函数 `RegionOf`，非法坐标与远海一律兜底 `city_wide`）。`custom-police` 的结案分支在 `pcall` 里调 `service_world_trace_RecordAt`，**痕迹失败不影响结案**。`table_owners.json` 登记 `core-framework` 拥有 `world_state` / `world_events`（只登记 owner、不进 scan：边界对被扫描的 10 个资源已经生效，补扫另开任务）。施工图与验收：`docs/engineering/2026-11-01-world-traces-blueprint.md`；方向调研：`docs/engineering/2026-11-01-next-epic-research.md`。
+- **城市公告出口（CityFeed）**（`custom-phone`）：`phone_cityfeed` 加 `author_kind`（迁移 v3.15 纯增量、`information_schema` 守卫、可重复执行；fixture 同步），玩家发帖由服务端写死 `'citizen'`、城市公告走导出 `PostCityBulletin` 写 `'city'` + 哨兵作者，读路径按 `author_kind` 归类（否则 LEFT JOIN 不到就是 `@Anonymous`）。校验规则抽到 custom-phone 的 server 目录下 city_feed.lua（纯模块，长度按**字符**算：200 个汉字是 600 字节，用 `#` 判会误杀）。手机前端 CityFeed 给城市公告加「📣 城市」标识。结案只在 `arrest`/`cleared` 且该区 24 小时内第一起时发公告（避免刷屏）。
 
 
 ### Changed
