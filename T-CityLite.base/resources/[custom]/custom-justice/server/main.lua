@@ -130,6 +130,13 @@ function JusticeService.GetInmates() return inmates end
 
 function JusticeService.GetInmate(citizenid) return inmates[citizenid] end
 
+--- 调用者**自己**的在押记录：只接受 Player 对象（source 派生），因此不可能查别人。
+--- 探视是另一回事（判的是目标），不要用这个函数。
+function JusticeService.GetOwnInmate(player)
+    if not player or not player.PlayerData then return nil end
+    return inmates[player.PlayerData.citizenid]
+end
+
 --- Close the durable sentence first, then clear the runtime cache and push the
 --- online player out. `Release` is idempotent, so a repeated call (or a sweep
 --- that already expired the row) only clears the projection.

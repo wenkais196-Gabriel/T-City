@@ -16,15 +16,15 @@
     },
     "custom": {
       "events": 133,
-      "guarded": 63,
-      "allowlisted": 44,
-      "unguarded": 26
+      "guarded": 77,
+      "allowlisted": 37,
+      "unguarded": 19
     },
     "qb": {
       "events": 216,
-      "guarded": 18,
+      "guarded": 19,
       "allowlisted": 0,
-      "unguarded": 198
+      "unguarded": 197
     },
     "other": {
       "events": 76,
@@ -83,9 +83,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 4,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 4,
+      "guarded": 1,
+      "allowlisted": 3,
+      "unguarded": 0,
       "started": true
     },
     "custom-cartel": {
@@ -128,9 +128,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 7,
-      "guarded": 3,
-      "allowlisted": 0,
-      "unguarded": 4,
+      "guarded": 5,
+      "allowlisted": 1,
+      "unguarded": 1,
       "started": true
     },
     "custom-main": {
@@ -164,8 +164,8 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 57,
-      "guarded": 25,
-      "allowlisted": 32,
+      "guarded": 36,
+      "allowlisted": 21,
       "unguarded": 0,
       "started": true
     },
@@ -524,9 +524,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 5,
-      "guarded": 0,
+      "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 5,
+      "unguarded": 4,
       "started": true
     },
     "qb-weathersync": {
@@ -611,12 +611,6 @@
     "connectqueue": [
       "Queue:playerActivated"
     ],
-    "custom-agent-client": [
-      "tcity:agent:ack",
-      "tcity:agent:devcmd_result",
-      "tcity:agent:ready",
-      "tcity:agent:state"
-    ],
     "custom-certificates": [
       "certificates:server:IssueCertificate"
     ],
@@ -624,10 +618,7 @@
       "custom-documents:server:presentDocument"
     ],
     "custom-justice": [
-      "justice:server:imprison",
-      "justice:server:requestReduction",
-      "justice:server:requestVisit",
-      "justice:server:sentenceComplete"
+      "justice:server:imprison"
     ],
     "custom-main": [
       "custom-main:server:ResetDeathStatus",
@@ -957,8 +948,7 @@
       "qb-weapons:server:SetWeaponQuality",
       "qb-weapons:server:TakeBackWeapon",
       "qb-weapons:server:UpdateWeaponAmmo",
-      "qb-weapons:server:UpdateWeaponQuality",
-      "qb-weapons:server:removeWeaponAmmoItem"
+      "qb-weapons:server:UpdateWeaponQuality"
     ],
     "qb-weathersync": [
       "QBCore:Server:OnPlayerLoaded",
@@ -1032,14 +1022,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "custom-agent-client",
-      "batch": "custom",
-      "unguarded": 4,
-      "owner": "custom-agent-client",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "custom-certificates",
       "batch": "custom",
       "unguarded": 1,
@@ -1058,7 +1040,7 @@
     {
       "resource": "custom-justice",
       "batch": "custom",
-      "unguarded": 4,
+      "unguarded": 1,
       "owner": "custom-justice",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1378,7 +1360,7 @@
     {
       "resource": "qb-weapons",
       "batch": "qb",
-      "unguarded": 5,
+      "unguarded": 4,
       "owner": "qb-weapons",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
