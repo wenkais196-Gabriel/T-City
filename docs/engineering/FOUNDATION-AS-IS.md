@@ -38,7 +38,7 @@ tracks: [docs/engineering/STANDARDS.md]
 | 经济便利层 | core-framework/services/economy_service.lua | 168 | 与 qb-core 的同名实现并存 |
 | 安全 | core-framework/services/security_service.lua | 561 | 运行期调用方 0（只有 export 与注册） |
 | 限流 | core-framework/server/rate_limit.lua | 163 | 三类语义收敛，实现正确 |
-| 持久化 | core-framework/services/persistence_manager.lua | 252 | 与 qb-core 的同名文件并存 |
+| 持久化 | `T-CityLite.base/resources/[qb]/qb-core/server/services/persistence_manager.lua`（Store） + `T-CityLite.base/resources/[standalone]/core-framework/services/persistence_manager.lua`（delegate） | 432 / 135 | **单写者**：Store 持有唯一脏池、定时器、写库语句；delegate 只转发（2026-11-01 起） |
 | 兼容层 | core-framework/compat.lua | 124 | 全局猴补 `QBCore.Functions.GetPlayer/Notify/AddMoney` |
 | 奖励网关 | [system]/core_economy/server/main.lua | 279 | 热度只存内存；倍率单位与读者冲突 |
 | 玩家账本 | qb-core 的 player.lua + services/economy_service.lua | ~1600 | **真正生效的写者** |
@@ -66,8 +66,13 @@ tracks: [docs/engineering/STANDARDS.md]
 
 ![玩家数据状态机](assets/foundation/d6-data-lifecycle.svg)
 
-要点：两套 dirty 池各有一个 900s 定时器；刷盘失败也清脏标记；`ForceFlush → Save(true)` 构成环
-（已用等价 Lua 复现栈溢出，当前未爆只因 qb-core 的全局 `DirtyFlush` 指向它自己的 thin 实现）。
+要点：脏池、定时器、写库语句都只在 qb-core 的 `Store` 一份（2026-11-01 起）。
+刷盘走 `Store.SaveNow`：**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数，
+停服/资源停止刷盘返回 ack（`attempted / ok / failed / duration_ms`）。
+core-framework 的 `persistence_manager.lua` 已降级为 delegate —— 不再持有脏池、不再起定时器、
+不再回调 `Player.Functions.Save(true)`。那条 `ForceFlush → Save(true) → ForceFlush` 的环
+曾在同一个 Lua state 里复现 399,964 层栈溢出，现在由 `tests/unit/layer1_core/test_persistence_single_owner.py` 钉住。
+仍缺：字段级 dirty 位图与幂等键（见 STANDARDS TS-6）。
 
 ## 4. 资源分组与启动
 
@@ -80,7 +85,7 @@ tracks: [docs/engineering/STANDARDS.md]
 
 | 缺口 | 实测 | 影响 |
 |---|---|---|
-| 持久化所有权分裂 | 两套池 / 两个定时器 / 失败即清 | 静默丢钱丢数据 |
+| ~~持久化所有权分裂~~（2026-11-01 已修） | 单池 / 单定时器 / 失败保留 + 退避 + ack | 剩余：字段级位图、幂等键 |
 | net event 治理 | 179 / 1102（16%） | 引擎层事件无人审 |
 | 安全防火墙不在路径上 | 561 行零调用 | 钱路径只剩"调用方自觉" |
 | 经济倍率单位二义 | 3 个整数读者 + 2 个浮点读者 | 商店价与奖励可能差 100 倍 |
