@@ -280,7 +280,7 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
     end
 
     local incident = MySQL.single.await(
-        'SELECT id, status FROM police_incidents WHERE id = ? LIMIT 1', { id })
+        'SELECT id, status, x, y FROM police_incidents WHERE id = ? LIMIT 1', { id })
     if not incident then return false, 'incident_not_found' end
 
     local assigned = MySQL.single.await(
@@ -323,6 +323,19 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
         releaseIncidentUnits(id)
         if not audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition) then
             print(('[custom-police] incident.close audit failed for #%s'):format(tostring(id)))
+        end
+        -- 世界痕迹第一条链（docs/engineering/2026-11-01-world-traces-blueprint.md）：
+        -- 结案 → 区域状态 → CityFeed。区域由 core-framework 的 regions.lua 判定，
+        -- 本资源不算区域、不写 world_state（单一写者 = world_trace_service）。
+        -- 失败只记日志：痕迹不是业务结果的一部分，结案该成功还是成功。
+        local traceOk, traceAccepted = pcall(function()
+            return exports['core-framework']:service_world_trace_RecordAt(
+                tonumber(incident.x), tonumber(incident.y), 'crime_pressure',
+                { incident_id = id, disposition = closeDisposition }, actor.citizenid)
+        end)
+        if not traceOk or traceAccepted ~= true then
+            print(('[custom-police] world trace skipped for #%s: %s')
+                :format(tostring(id), traceOk and 'declined' or tostring(traceAccepted)))
         end
         return { id = id, status = 'closed', disposition = closeDisposition }
     end
