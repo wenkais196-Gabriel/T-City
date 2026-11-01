@@ -50,6 +50,9 @@ STRONG_TOKENS: dict[str, re.Pattern[str]] = {
     "system_source": re.compile(r"\bsrc\s*~=\s*0\s+then\s+return\b|\bsource\s*~=\s*0\s+then\s+return\b"),
     # 回调必须有归属：只有"被问的那个人"能回答（QBCore:Server:TriggerClientCallback）
     "callback_owner": re.compile(r"\.source\s*~=\s*src\b|\bsource\s*~=\s*src\b"),
+    # 职业判定：`if job.name ~= 'judge' then ... return end`（字符串已剥成 ''，所以只钉操作符）
+    # 这类事件不靠 ACE/能力位，靠"你不是这个职业就滚"；与 HasPermission 同级
+    "job_deny": re.compile(r"\w*[Jj]ob\.name\s*~=\s*''[\s\S]{0,200}?\breturn\b"),
 }
 
 
@@ -179,12 +182,31 @@ def helpers_for(resource: str) -> dict[str, re.Pattern[str]]:
     }
 
 
-def helper_call_problems(code: str, name: str) -> tuple[int, list[str]]:
+def helper_call_problems(
+    code: str, name: str, spec: dict | None = None
+) -> tuple[int, list[str]]:
     """登记的 helper 在代码里是否被**当成守卫**用（唯一实现，闸门与计数共用）。
 
     形状要求：`if not H(...)` 的否定分支里真的 `return`，且不在 `if false` 死代码里。
     只匹配名字是不够的 —— `if not H(x) then end` 或"先干活再校验"都能骗过纯正则。
+
+    `shape`（来自登记表，默认 deny_branch）：
+      * `pcall`  —— `pcall(H, ...)` 且紧跟 `if not ok` 判定（分发器/委托式）
+      * `export` —— `exports['res']:Method(...)`（导出函数内部自己校验）
     """
+    shape = (spec or {}).get("shape", "deny_branch")
+    if shape == "pcall":
+        return _pcall_shape_problems(code, name)
+    if shape == "export":
+        return _export_shape_problems(code, spec or {})
+    if shape == "local_check":
+        return _local_check_problems(code, name)
+    if shape == "ok_err":
+        return _ok_err_shape_problems(code, name)
+    if shape == "delegate":
+        # 校验在被调用的函数体内（登记时已证明）；调用点只要真的调了
+        call = (spec or {}).get("call", name)
+        return (len(re.findall(re.escape(call) + r"\s*\(", code)), [])
     lines = code.splitlines()
     uses, bad = 0, []
     for index, line in enumerate(lines):
@@ -235,6 +257,81 @@ def helper_call_problems(code: str, name: str) -> tuple[int, list[str]]:
     return uses, bad
 
 
+def _local_check_problems(code: str, name: str) -> tuple[int, list[str]]:
+    """`local flag, ... = H(...)` + 紧跟 `if not flag ... return` 形状（返回值必须被判定）。"""
+    assignment = re.compile(
+        r"local\s+((?:[A-Za-z_]\w*\s*,\s*)*[A-Za-z_]\w*)[^=]*=\s*"
+        + re.escape(name)
+        + r"\s*\("
+    )
+    lines = code.splitlines()
+    uses, bad = 0, []
+    for index, line in enumerate(lines):
+        match = assignment.search(line)
+        if not match:
+            continue
+        uses += 1
+        flags = [part.strip() for part in match.group(1).split(",")]
+        flags = [f for f in flags if f and f != "_"] or ["_"]
+        checked = any(
+            any(follow.strip().startswith("if not " + flag) for flag in flags)
+            or ("cb(" + flags[0] + ")") in follow
+            or ("return " + flags[0]) in follow
+            for follow in lines[index:index + 6]
+        )
+        if not checked:
+            bad.append(str(index + 1) + ": 取了 " + name + " 的返回值却没判 `if not " + flag + "`")
+    return uses, bad
+
+
+def _pcall_shape_problems(code: str, name: str) -> tuple[int, list[str]]:
+    """`pcall(H, ...)` 且调用方紧跟一个 `if not ok` 判定。"""
+    lines = code.splitlines()
+    marker = "pcall(" + name
+    uses, bad = 0, []
+    for index, line in enumerate(lines):
+        if marker not in line.replace(" ", ""):
+            continue
+        uses += 1
+        checked = any(
+            "if not ok" in follow or "if not res" in follow
+            for follow in lines[index:index + 9]
+        )
+        if not checked:
+            bad.append(str(index + 1) + ": pcall 了 " + name + " 却没有判定结果")
+    return uses, bad
+
+
+def _ok_err_shape_problems(code: str, name: str) -> tuple[int, list[str]]:
+    """`local ok, err = H(...)` + 紧跟 `if not ok ... return` 形状。"""
+    lines = code.splitlines()
+    uses, bad = 0, []
+    for index, line in enumerate(lines):
+        if name + "(" not in line or "function " + name + "(" in line:
+            continue
+        uses += 1
+        checked = any(
+            follow.strip().startswith("if not ok")
+            for follow in lines[index:index + 6]
+        )
+        if not checked:
+            bad.append(str(index + 1) + ": 调用了 " + name + " 但没判 `if not ok`")
+    return uses, bad
+
+
+def _export_shape_problems(code: str, spec: dict) -> tuple[int, list[str]]:
+    """`exports['res']:Method(...)` 形状：校验在导出函数体内，调用点只要存在。
+
+    注意：代码先剥了字符串，`exports['custom-police']` 会变成 `exports['']`，
+    所以按"括号里任意内容 + 冒号 + 方法名"匹配，不能拿登记表里的字面量直接 count。
+    """
+    method = spec.get("call", "").rsplit(":", 1)[-1]
+    if not method:
+        return (0, [])
+    pattern = re.compile(r"exports\[[^\]]*\]\s*:\s*" + re.escape(method) + r"\s*\(")
+    return (len(pattern.findall(code)), [])
+
+
 def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = None) -> bool:
     """handler 是否带鉴权证据：强 token、外部 helper 正则，或**登记过且形状正确**的 helper。"""
     code = strip_lua_noise(event.body)
@@ -247,8 +344,8 @@ def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = Non
             continue
         if pattern.search(code):
             return True
-    for name in registered:
-        uses, problems = helper_call_problems(code, name)
+    for name, spec in registered.items():
+        uses, problems = helper_call_problems(code, name, spec)
         if uses and not problems:
             return True
     return False

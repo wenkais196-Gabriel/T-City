@@ -346,8 +346,8 @@ AddEventHandler('playerDropped', function(reason)
 end)
 
 -- v0.10: 服务端实体回收通知——客户端清理本地引用
-RegisterNetEvent('quest:server:entityRecycled', function(questId, entityType)
-    -- 此事件由服务端内部调用，不是客户端上报
-end)
+-- 2026-11-01: 删掉 `quest:server:entityRecycled` 的空 handler。
+-- 它注册成 NetEvent 但函数体是空的（注释说"由服务端内部调用"）——任何客户端都能触发、
+-- 什么都不发生，纯粹是攻击面 + 一条看不见的未登记事件。
 
 print('[quest-entity-registry] ✅ v0.10: 实体注册表 + 延迟回收策略 (on_leave/timed/immediate/on_complete) 已就绪')

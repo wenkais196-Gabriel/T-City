@@ -541,12 +541,11 @@ def _resource_dir(name: str) -> Path:
     return hits[0].parent
 
 
-def _function_block(code: str, name: str) -> str:
-    """从 `function <name>(` 截到顶层 `end`（列 0）。
+def _function_block_raw(code: str, marker: str) -> str:
+    """从 `marker` 截到顶层 `end`（列 0）。
 
     只看整个文件会被"同文件别的函数里的证据"满足，所以登记检查限定在函数体。
     """
-    marker = "function " + name + "("
     at = code.index(marker)
     lines = code[at:].splitlines()
     out = [lines[0]]
@@ -582,17 +581,17 @@ def test_registered_guard_helpers_are_proven():
             assert root in def_file.parents, f"{resource}/{name}: defined_at 不在该资源内"
             raw = read(def_file)
             code = strip_lua_noise(raw)
-            assert code.count("function " + name + "(") == 1, (
-                f"{resource}/{name}: 必须恰好定义一次（现在 "
-                f"{code.count('function ' + name + '(')} 次）"
+            marker = spec.get("definition_marker", "function " + name + "(")
+            assert code.count(marker) == 1, (
+                f"{resource}/{name}: 必须恰好定义一次（现在 {code.count(marker)} 次）"
             )
-            block = _function_block(code, name)
+            block = _function_block_raw(code, marker)
             for token in spec.get("requires_code", []):
                 assert token in block, (
                     f"{resource}/{name}: **函数体**里找不到 {token!r}（同文件其它函数里的不算）"
                 )
             for token in spec.get("requires_raw", []):
-                assert token in _function_block(raw, name), (
+                assert token in _function_block_raw(raw, marker), (
                     f"{resource}/{name}: 原文函数体里找不到 {token!r}"
                 )
 
@@ -601,7 +600,7 @@ def test_registered_guard_helpers_are_proven():
             for lua in sorted(root.rglob("*.lua")):
                 if is_client_path(lua):
                     continue  # 服务端事件的鉴权只可能写在服务端文件里
-                found, bad = helper_call_problems(strip_lua_noise(read(lua)), name)
+                found, bad = helper_call_problems(strip_lua_noise(read(lua)), name, spec)
                 uses += found
                 problems.extend(str(lua.relative_to(root)) + ":" + item for item in bad)
             assert not problems, (

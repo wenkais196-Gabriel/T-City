@@ -32,6 +32,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **存档收敛为单一写者，拆掉 `ForceFlush → Save(true)` 的环（P1-2 / P1-1）**（qb-core / core-framework）：qb-core 的 `persistence_manager.lua` 重写为唯一写者 `Store`（一份脏池、一个定时器、一条 upsert），core-framework 的同名文件降级为纯委托层（无池、无 SQL、无定时器、不再回调 `Save(true)`）。三处语义修正：① 刷盘**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数（以前无论 SQL 成不成都清）；② `QBCore.Player.Save` 强制存档改为直接 `Store.SaveNow`，失败时 `IsDirty` 保持为 true 并 `ShowError`（以前无条件清）；③ `FlushAll` 兜底扫描 `IsDirty = true` 但没进池子的玩家（economy/metadata 服务只标 `IsDirty`，他们的钱以前只在下线那一刻才落库）。停服刷盘返回 ack `{reason, attempted, ok, failed, duration_ms}` 并打日志。证据：`tests/unit/layer1_core/test_persistence_single_owner.py`（改动前 **12 failed，含 399,964 层栈溢出**；改动后 19 passed）+ 重写的 `test_persistence.py`（delegate 转发契约），见 `docs/engineering/2026-11-foundation-p1-evidence.md`；全仓 `pytest tests/unit tests/architecture` → 1120 passed。真机：`restart qb-core` + 逐个 `ensure` 拉回被连带停掉的资源后，日志出现 `single owner store loaded` / `delegate loaded (owner=qb-core: resolved)`，无 SCRIPT ERROR。
 
+- **[custom] net event 覆盖率 64% → 80.5%，P1-3 的 ② 达成（第 3 批）**：133 个 `[custom]` 事件里
+  107 个已鉴权或已登记。这一批把"校验住在别处的"四类都做了可验证登记：警情分发器
+  （`PoliceDispatch.ArriveIncident` / `.ClaimIncident`、`NPC.SubmitResult`：能力位判定在被调函数体内）、
+  导出函数（`AdoptDraft` / `ListDrafts`：能力位 + 审计）、任务安全层
+  （`QuestSecurity.ValidateClientEvent`：nonce + 限频 + 步骤顺序 + 尝试次数）、帮派成员
+  （`CartelService.IsMember`）。登记表新增 `shape`（`local_check` / `pcall` / `export` / `delegate`），
+  每种形状都要求"返回值真的被判定"而不是"名字出现过"。同时加了一个 token `job_deny`
+  （形如 `if xjob.name ~= '…' then … return end` 的职业白名单判定，与 `HasPermission` 同级）。
+  真修三处：① `quest:server:placementComplete` / `trailerHitched` 原来只查状态不查任务归属，
+  任何人可对任意 questId 上报"放好了/挂上了"，现在先过任务安全层；② `custom-cartel` 的 NPC 回调
+  取了 `IsMember` 却没用，非成员也能拿到 NPC 列表；③ `custom-vehicles` 的 `GiveKeys` 与
+  `AcquireVehicleKeys` 各写了一遍认领校验且宽严不一 —— 收敛成 `CanClaimPlate`（会话车主 /
+  数据库车主 / 车旁三档），顺手给 `GiveKeys` 补上了它没有的数据库车主校验。另删除
+  `quest:server:entityRecycled` 这个注册成 NetEvent 但函数体为空的死 handler。
 - **net event 覆盖率 48% → 64%，并补上"资源自己的校验也算数"的登记表（P1-3 第 2 步）**：
   `[custom]` 从 64/134 提到 **86/134**。做法不是放宽 token 名单，而是新增
   `tests/architecture/net_event_guard_helpers.json` 登记**资源内部**的鉴权 helper
