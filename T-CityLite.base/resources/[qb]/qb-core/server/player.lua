@@ -558,6 +558,28 @@ end
 
 -- Save player info to database (make sure citizenid is the primary key in your database)
 
+-- ⚠️ 跨资源「函数引用」在数据库回调里不可用 —— 必须传数据，不能传 source。
+-- 真机证据（2026-11-01，玩家进角色时刷红字）：
+--   `QBCore.Player.Save` 是从 `QBCore.Player.CheckPlayerData` 的 oxmysql 回调里被调到的；
+--   那时再调 `exports['qb-inventory']:SaveInventory(source)`，qb-inventory 内部会用
+--   `QBCore.Functions.GetPlayer(source)`（qb-core 的**函数引用**）→
+--     SCRIPT ERROR: Execution of function reference in script host failed
+--   oxmysql 侧的对应报错更直白：`oxmysql tried to call a function reference in qb-core
+--   but the reference wasn't valid. (did qb-core restart recently?)`
+-- 只用 CreateThread 把它挪出回调**不够**（实测仍失败）。根治办法是压根不产生那次
+-- 跨资源函数调用：SaveInventory 本来就支持 offline 形态（第一个参数直接给 PlayerData），
+-- 而 Save() 手里正好有 PlayerData —— 传数据即可，既躲开函数引用，也少一次 GetPlayer。
+local function saveInventoryDeferred(PlayerData)
+    if GetResourceState('qb-inventory') == 'missing' then return end
+    if type(PlayerData) ~= 'table' or not PlayerData.citizenid then return end
+    local ok, err = pcall(function()
+        exports['qb-inventory']:SaveInventory(PlayerData, true)
+    end)
+    if not ok then
+        print(('[qb-core] SaveInventory 失败 (cid=%s): %s'):format(tostring(PlayerData.citizenid), tostring(err)))
+    end
+end
+
 function QBCore.Player.Save(source, force)
     local Player = QBCore.Players[source]
     if not Player then return false end
@@ -594,14 +616,14 @@ function QBCore.Player.Save(source, force)
     --    否则 5 分钟一次的心跳存档每次都会重跑 SaveInventory（多一倍 UPDATE）。
     if not force then
         if pooled then Player.IsDirty = false end
-        if GetResourceState('qb-inventory') ~= 'missing' then exports['qb-inventory']:SaveInventory(source) end
+        saveInventoryDeferred(PlayerData)
         return true
     end
 
     -- ③ 强制 = 背包 + 立刻写一次。
     --    这里**直接调 Store.SaveNow**，不再 DirtyFlush.ForceFlush → 避免
     --    Save(true) → ForceFlush → Save(true) 的环（P1-2）。
-    if GetResourceState('qb-inventory') ~= 'missing' then exports['qb-inventory']:SaveInventory(source) end
+    saveInventoryDeferred(PlayerData)
     if not store then return false, 'store_unavailable' end
 
     local ok, err = store.SaveNow(Player, 'save_force')
