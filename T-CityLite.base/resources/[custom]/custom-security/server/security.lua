@@ -150,9 +150,14 @@ end)
 --            回 调 拦 截 与 劫 持 层
 -- ==========================================
 
-CreateThread(function()
-    -- 稍作等待，确保 qb-core 和 qb-inventory 资源都已注册好它们的 ServerCallbacks
-    Wait(1500)
+local callbackGuardsInstalled = false
+
+local function InstallCallbackGuards()
+    -- 幂等：初始启动与 qb-core 重启都会调，重复包装会让同一次调用被校验两遍
+    if callbackGuardsInstalled then return end
+    callbackGuardsInstalled = true
+
+    -- 等待由调用方负责：qb-core 重启后要能重新挂载（见文件末尾的 onResourceStart）
 
     -- 1. 劫持并防刷商店交易行为 ('qb-inventory:server:attemptPurchase')
     local origAttemptPurchase = QBCore.ServerCallbacks['qb-inventory:server:attemptPurchase']
@@ -258,4 +263,21 @@ CreateThread(function()
         end
         DebugPrint("已成功劫持 `QBCore:Server:CreateVehicle` (安全防护挂载完成)")
     end
+end
+
+CreateThread(function()
+    Wait(1500)
+    InstallCallbackGuards()
+end)
+
+-- `restart qb-core` 会把 QBCore.ServerCallbacks 重新建出来，劫持就丢了 —— 必须重挂。
+-- 2026-11-01：真机重启 qb-core 时发现守卫静默失效（测试只断言了"启动时劫持过"）。
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= 'qb-core' then return end
+    -- qb-core 重建了 ServerCallbacks：先把幂等标记复位，否则重挂会被自己挡住
+    callbackGuardsInstalled = false
+    CreateThread(function()
+        Wait(1500)
+        InstallCallbackGuards()
+    end)
 end)
