@@ -428,7 +428,7 @@ CC 只抓首页：可确认 "Qbox 是 QBCore 的现代化分支，保留对 QBCo
 |---|---|---|
 | `qb-crypto` / 股票交易所 | 与「不卖数值、经济受控」的付费铁律冲突；投机玩法会放大经济波动 | `server-design/06-payment-model.md` 的付费铁律；`qb-crypto` 821 行 ⛔ 且无任何设计引用 |
 | 迁到 ox_inventory / Qbox | 自研 `custom-market`+`custom-storage`+`core_economy` 已成型；ox_inventory 的 metadata 能力可由现有槽位制补齐 | §3.1；迁移成本远高于补 `qb-shops` |
-| 自建反作弊引擎 | 客户端注入检测维护成本极高，收益递减；优先做**事件签名 + 服务端复验**（已有五层安全链） | `00_SERVER_MASTER_MANUAL` §6 五层安全链 |
+| 自建反作弊引擎 | 客户端注入检测维护成本极高，收益递减；优先做**事件签名 + 服务端复验**（已有五层安全链） | `00-server-master-manual` §6 五层安全链 |
 | 全套 MLO 内容生产 | 地图是美术资产不是系统；社区可买/可换 | §3.3 发布区现状 |
 | 一次性启用 `qb-smallresources`/`qb-radialmenu` | 整包启用会引入与现有交互范式（qb-target + 手机）冲突的入口 | `menu-interaction-design.md` 已定范式 |
 
@@ -473,3 +473,11 @@ ls T-CityLite.base/migrations/*.sql | wc -l                                     
 ---
 
 > **维护**：本文件是"规划缺口"的单一入口。补完一项就在 §4.1/§4.2 里划掉并链到新的设计文档（格式参照 `docs/agent/police/BLUEPRINT.md`）。
+
+## 同目录分析报告
+
+| 文件 | 内容 |
+|---|---|
+| `agent-e2e-testing-20261022.md` | agent 端到端测试可行性分析（2026-10-22 快照） |
+| `tuning_shop_analysis.md` | 改装店系统分析 |
+| `tuning_shop_player_experience.md` | 改装店玩家体验评估 |

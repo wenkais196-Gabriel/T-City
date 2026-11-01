@@ -1,3 +1,13 @@
+---
+id: base-vehicleshop-purchase-sequence
+type: spec
+status: active
+system: vehicle
+owner: hermes
+updated: 2026-10-21
+review_by: 2027-04-30
+---
+
 # qb-vehicleshop 购车流程梳理（v0.7a 实测后）
 
 > 目的：把当前 NUI 购车 sequence 与成熟 FiveM 车店对比，明确已修项与剩余优化。

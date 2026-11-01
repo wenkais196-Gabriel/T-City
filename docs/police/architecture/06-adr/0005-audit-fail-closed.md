@@ -1,3 +1,12 @@
+---
+id: police-architecture-06-adr-0005-audit-fail-closed
+type: adr
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # ADR-0005 敏感读审计 fail-closed
 
 - 状态：Proposed

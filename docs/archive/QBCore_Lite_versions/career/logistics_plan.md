@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-logistics-plan
+type: plan
+status: archived
+system: jobs
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # 🚚 T-City Lite 货运司机与物流系统 (Logistics) 细化规划
 
 > **适用版本**: v0.7a - v0.8  
@@ -10,16 +20,16 @@
 经过对任务系统及物流子模块的扫描，我们发现 T-City Lite 的货运系统采用了非常先进的**数据驱动无脚本化**设计，但仍有安全和体验漏洞需要闭环：
 
 1. **完全基于通用任务系统集成**：
-   * 区别于传统独立的 `qb-truckerjob`，我们的货运系统已完全合并至 `custom-quest` 中，通过 [quest_logistics.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_logistics.lua) 配置了三款代表性任务：
+   * 区别于传统独立的 `qb-truckerjob`，我们的货运系统已完全合并至 `custom-quest` 中，通过 [quest_logistics.lua](T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_logistics.lua) 配置了三款代表性任务：
      * `euro_trucking_steel`（C/B级常规钢板配送）
      * `euro_trucking_heavy_trailer`（A级 Semi 重载挂车运输，集成物理挂钩检测）
      * `aviation_smuggling_flight`（飞行走私，集成低空避雷达监控）
 2. **严重的执照准入校验缺失 (Exploit Risk)**：
    * 在物流任务配置中，明确定义了 `conditions = { min_license = 'heavy' }`（需要重载执照）及 `min_license = 'pilot'`（飞行执照）。
-   * **漏洞**：但在 [quest_manager.lua:L83-L90](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua#L83-L90) 的 `TriggerQuest` 触发检测中，**完全没有**对 `min_license` 这一条件进行核验。
+   * **漏洞**：但在 [quest_manager.lua:L83-L90](T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua#L83-L90) 的 `TriggerQuest` 触发检测中，**完全没有**对 `min_license` 这一条件进行核验。
    * **后果**：任何没有重型载具驾照、甚至没有飞行执照的平民，均可在手机端直接接单并驾驶重卡、半挂和飞机进行运输工作，这破坏了 `custom-certificates` 的准入闭环。
 3. **租用车钥匙与锁车逻辑脱节**：
-   * 在 [quest_logistics_validators.lua:L150-L182](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/quest_logistics_validators.lua#L150-L182) 中，租用卡车（如 Benson 或 Phantom）通过扣除押金和绑定车牌实现。
+   * 在 [quest_logistics_validators.lua:L150-L182](T-CityLite.base/resources/[custom]/custom-quest/server/quest_logistics_validators.lua#L150-L182) 中，租用卡车（如 Benson 或 Phantom）通过扣除押金和绑定车牌实现。
    * **问题**：绑定租用车后，系统并没有自动通过 `custom-vehicles` (或 `qb-vehiclekeys`) 向玩家发放车钥匙。这会导致如果玩家下车锁门后，将无法再次开锁进入车辆，直接卡死任务。
 
 ---
@@ -29,7 +39,7 @@
 ### 1) 修复任务执照准入守卫 (Fix License Guard in Quest Trigger)
 在任务状态机接单流程中，补充对证书/执照的强制强安全校验。
 
-* **修改文件**：[quest_manager.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua)
+* **修改文件**：[quest_manager.lua](T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua)
 * **具体做法**：
   在 `TriggerQuest` 校验链中，添加 `min_license` 的检测逻辑：
   ```lua
@@ -47,7 +57,7 @@
 ### 2) 租车联动与车钥匙自动分发 (Rental Vehicle Keys Integration)
 打通租车生成验证器与载具要是分发系统的桥梁。
 
-* **修改文件**：[quest_logistics_validators.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/quest_logistics_validators.lua)
+* **修改文件**：[quest_logistics_validators.lua](T-CityLite.base/resources/[custom]/custom-quest/server/quest_logistics_validators.lua)
 * **具体做法**：
   在 `validate_logistics_vehicle` 租车成功、绑定车牌的步骤后，立即分发虚拟钥匙：
   ```lua
@@ -65,7 +75,7 @@
 ### 3) 供应链联动与市长 KPI 反哺 (Mayor KPI & Society Integration)
 让平民货运司机与城市工程、市长业绩指标真正关联。
 
-* **修改文件**：[quest_logistics_validators.lua](file:///e:/T-City/T-CityLite.base/resources/[custom]/custom-quest/server/quest_logistics_validators.lua)
+* **修改文件**：[quest_logistics_validators.lua](T-CityLite.base/resources/[custom]/custom-quest/server/quest_logistics_validators.lua)
 * **具体做法**：
   在物流到达交付步骤（如运送钢材、桥梁箱梁）中，更新城市建设指标：
   * 当任务 `euro_trucking_steel` 完成时，触发：

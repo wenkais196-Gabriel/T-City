@@ -1,3 +1,13 @@
+---
+id: base-agent-client-harness
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-26
+review_by: 2027-04-30
+---
+
 # 客户端双端测试 Harness（MCP）
 
 本文记录在 **Windows 宿主机 + FiveM Legacy 客户端** 上，让 Agent 不依赖人工点击即可

@@ -1,3 +1,12 @@
+---
+id: cleanup-ignore-proposal
+type: audit
+status: final
+system: meta
+owner: hermes
+updated: 2026-10-23
+---
+
 # T-City 仓库 `.gitignore` 审计提案
 
 > 审计对象：`/home/swk/Documents/deepseek-harness/default-workspace/T-City-agent`，分支 `chore/repo-cleanup`（基线 `99e0c27`）。

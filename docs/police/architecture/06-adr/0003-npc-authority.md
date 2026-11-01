@@ -1,3 +1,12 @@
+---
+id: police-architecture-06-adr-0003-npc-authority
+type: adr
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # ADR-0003 NPC 支援：服务端权威 + 客户端 AI
 
 - 状态：Accepted（已实现 MVP）

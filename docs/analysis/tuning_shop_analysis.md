@@ -1,3 +1,13 @@
+---
+id: analysis-tuning-shop-analysis
+type: research
+status: final
+system: vehicle
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # T-City2 改装店玩法分析报告
 
 > **日期**: 2026-06-05 | **版本**: v1.0 | **目标读者**: 开发团队 / AI 辅助规划

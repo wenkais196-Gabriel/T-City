@@ -1,3 +1,13 @@
+---
+id: base-systems-atmosphere
+type: manual
+status: active
+system: world
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # T-City Atmosphere — 游戏内氛围音乐系统
 
 > v1.0 | 2026-06-19

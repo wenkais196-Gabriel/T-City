@@ -1,3 +1,13 @@
+---
+id: 04-call-reference-events-index
+type: manual
+status: active
+system: infra
+owner: hermes
+updated: 2026-10-22
+review_by: 2027-01-30
+---
+
 # Cross-Resource Events Index
 
 > **生成日期**: 2026-06-05 | **覆盖**: 所有启用资源的关键事件

@@ -1,3 +1,12 @@
+---
+id: base-global-audit-whitepaper
+type: audit
+status: final
+system: meta
+owner: hermes
+updated: 2026-10-25
+---
+
 # T-City Lite 全局架构审计与现代化调整白皮书
 
 > **文档版本**: v1.0  

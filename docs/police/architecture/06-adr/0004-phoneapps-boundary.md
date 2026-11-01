@@ -1,3 +1,12 @@
+---
+id: police-architecture-06-adr-0004-phoneapps-boundary
+type: adr
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # ADR-0004 职业 App 走 PhoneApps 注册表
 
 - 状态：Accepted（已实现）

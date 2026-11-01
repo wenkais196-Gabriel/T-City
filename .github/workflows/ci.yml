@@ -141,6 +141,25 @@ jobs:
               print('\n'.join(missing[:50]))
           PY
 
+  docs-lifecycle:
+    name: Docs lifecycle (frontmatter / links / index)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check frontmatter, links and duplicate titles
+        shell: bash
+        run: python3 tools/docs_lifecycle.py --check --verbose
+      - name: Index must be up to date
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/docs_lifecycle.py --index
+          if ! git diff --quiet -- docs/INDEX.md; then
+            echo "::error::docs/INDEX.md 不是最新，请在本地跑 python tools/docs_lifecycle.py --index 并提交"
+            git diff --stat -- docs/INDEX.md
+            exit 1
+          fi
+
   db-schema:
     name: DB schema tests
     runs-on: ubuntu-latest

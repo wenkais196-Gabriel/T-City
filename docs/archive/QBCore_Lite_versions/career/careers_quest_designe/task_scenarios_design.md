@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-careers-que-db1db7b1
+type: spec
+status: archived
+system: quest
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # T-City角色扮演核心任务设计与场景装配手册 (v2.0 — 经济与小游戏闭环版)
 
 本手册基于**行为经济学**与**微服务架构设计标准**制定。我们使用系统已有的 5 大原子节点（`GOTO`、`INTERACT`、`DELIVER`、`COMBAT`、`WAIT`）为积木，为 T-City 规划一套高度可控的资本经济模型、模块化小游戏接口、以及打破“自给自足”的部门统筹采购维护体系。
@@ -30,7 +40,7 @@
 
 ## 2. qb-minigames 小游戏库审计与精简建议
 
-通过对项目文件 [qb-minigames](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-minigames) 的扫描，我们整理出可供 `INTERACT` 节点调用的基础小游戏，并提出优化建议：
+通过对项目文件 [qb-minigames](T-CityLite.base/resources/[qb]/qb-minigames) 的扫描，我们整理出可供 `INTERACT` 节点调用的基础小游戏，并提出优化建议：
 
 ### 2.1 现有小游戏素材盘点
 | 小游戏名称 | 导出路径 (Export) | 建议用途 | 沉浸感评估 (RP Value) |

@@ -1,3 +1,13 @@
+---
+id: client-research-fivem-nui-2026
+type: research
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # FiveM 客户端 NUI/CEF 架构与调试实践（2026）
 
 > 适用对象：`custom-phone`（Svelte 5 + Vite，`ui_page 'html/index.html'`）及后续所有 NUI 资源。

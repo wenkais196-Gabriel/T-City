@@ -1,3 +1,13 @@
+---
+id: base-design-tcity-wiki-design-spec
+type: spec
+status: draft
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 📖 T-City Wiki 系统设计规格书
 
 > **修订日期**: 2026-06-05  

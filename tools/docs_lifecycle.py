@@ -22,6 +22,22 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# 历史归档豁免：唯一权威表是 tests/architecture/legacy_docs.json（test_docs_links.py 同源），
+# 这里复用同一张表，避免两个闸门对同一批文档给出互相矛盾的口径。
+LEGACY_REGISTRY = os.path.join(REPO, "T-CityLite.base", "tests", "architecture", "legacy_docs.json")
+
+
+def legacy_dirs() -> set[str]:
+    try:
+        with open(LEGACY_REGISTRY, encoding="utf-8") as fh:
+            return set(json.load(fh).get("dirs", {}))
+    except Exception:
+        return set()
+
+
+def in_legacy(relpath: str, dirs: set[str]) -> bool:
+    return any(relpath == d or relpath.startswith(d + "/") for d in dirs)
+
 # ---------------------------------------------------------------- 扫描范围
 
 ROOTS = ["docs", "T-CityLite.base/docs", "QBCore_Lite_versions"]
@@ -226,24 +242,29 @@ def check(docs: list[str], index_path: str) -> tuple[list[str], list[str], dict]
                 f"(system={sysname}, type={t}) 有 {len(paths)} 份 source_of_truth，"
                 f"请给各自加 `topic` 区分：{', '.join(paths)}")
 
-    # supersedes 双向一致
+    # supersedes 双向一致（比较 id，不是文件路径）
     for rp, meta in meta_cache.items():
+        cur_id = meta.get("id")
         for sid in meta.get("supersedes") or []:
             other = ids.get(sid)
             if not other:
                 errors.append(f"{rp}: supersedes 指向不存在的 id `{sid}`")
-            elif rp not in (meta_cache.get(other, {}).get("superseded_by") or []):
-                warns.append(f"{rp}: supersedes `{sid}` 但对方没有 superseded_by")
+            elif cur_id not in (meta_cache.get(other, {}).get("superseded_by") or []):
+                warns.append(f"{rp}: supersedes `{sid}` 但对方没有 superseded_by（应为 `{cur_id}`）")
 
     # 断链（先剥掉行内代码，避免把 `[a](b.md)` 这种示例当成真链接）
+    legacy = legacy_dirs()
     for p in docs:
+        rp = rel(p)
+        if in_legacy(rp, legacy):
+            continue
         text = open(p, encoding="utf-8", errors="ignore").read()
         text = re.sub(r"`[^`\n]*`", "", text)
         for target in re.findall(r"\]\(([^)#\s]+\.md)", text):
             if target.startswith(("http://", "https://", "file://")):
                 continue
             if not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(p), target))):
-                warns.append(f"断链：{rel(p)} → {target}")
+                warns.append(f"断链：{rp} → {target}")
 
     # 索引是否最新
     if os.path.exists(index_path):

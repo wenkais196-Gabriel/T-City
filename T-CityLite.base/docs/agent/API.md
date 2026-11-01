@@ -1,3 +1,13 @@
+---
+id: base-agent-api
+type: manual
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-01-30
+---
+
 # Agent Read API and MCP Sidecar (issue #24)
 
 Read-only HTTP API and stdio MCP server for T-City agents. Both surfaces reuse

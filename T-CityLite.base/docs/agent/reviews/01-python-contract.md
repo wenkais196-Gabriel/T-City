@@ -1,3 +1,12 @@
+---
+id: base-agent-reviews-01-python-contract
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # 01 — Python 工具契约层对抗性评审（`498b888`）
 
 - **评审对象**：`feat/agent-takeover-v2` @ `498b888`；范围 `git diff 9bd57d7..HEAD -- tools/ tests/`

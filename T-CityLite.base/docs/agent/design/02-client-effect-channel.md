@@ -1,3 +1,13 @@
+---
+id: base-agent-design-02-client-effect-channel
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 02 — 客户端效果通道（Effect Channel）v1 设计
 
 - 状态：**Draft for build**；目标资源：`T-CityLite.base/resources/[custom]/custom-agent-client/`（新建，server + client）

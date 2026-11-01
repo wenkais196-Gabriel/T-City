@@ -1,3 +1,12 @@
+---
+id: base-agent-fivem-mcp-live-test
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-27
+---
+
 # fivem-mcp 实机验证报告（ziyacivan/fivem-mcp 0.6.0）
 
 > 目标：在 Windows 单 checkout（`E:\T-City`）上起 FXServer + FiveM 客户端，逐工具验证 `npx fivem-mcp-server` 的 23 个工具，判断哪些能用在我们自己的 agent 栈（`tools/agent_mcp.py`）里。

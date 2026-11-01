@@ -1,3 +1,12 @@
+---
+id: cleanup-delete-proposal
+type: audit
+status: final
+system: meta
+owner: hermes
+updated: 2026-10-23
+---
+
 # T-City 仓库删除审计提案
 
 > **分支**：`chore/repo-cleanup`（= `dev` = `master`，`99e0c27`）

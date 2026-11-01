@@ -1,3 +1,12 @@
+---
+id: base-agent-reviews-07-final-security
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # 07 — 最终安全集成评审：四条凭证链 / 客户端 / 路径 / PII
 
 - **评审对象**：`feat/agent-takeover-v2` @ `4400d8b`（PR #42，ready）

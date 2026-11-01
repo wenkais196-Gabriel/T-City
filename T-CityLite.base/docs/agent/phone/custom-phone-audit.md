@@ -1,3 +1,12 @@
+---
+id: base-agent-phone-custom-phone-audit
+type: audit
+status: final
+system: comms
+owner: hermes
+updated: 2026-10-25
+---
+
 # custom-phone 审计报告（性能 + 当前故障）
 
 > 仓库：`/home/swk/Documents/deepseek-harness/default-workspace/T-City-agent`，分支 `master`

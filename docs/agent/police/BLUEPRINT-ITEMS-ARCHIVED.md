@@ -1,3 +1,14 @@
+---
+id: agent-police-blueprint-items-v1
+type: spec
+status: superseded
+system: justice
+owner: hermes
+updated: 2026-11-01
+review_by: 2027-04-30
+superseded_by: [agent-police-blueprint-items]
+---
+
 # 警察道具层蓝图（Items & Props）
 
 > **状态**：设计稿 v1，未实现。日期 2026-10-30。

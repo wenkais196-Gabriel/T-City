@@ -1,3 +1,13 @@
+---
+id: server-design-06-payment-model
+type: spec
+status: active
+system: economy
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 06 — 付费模型：Patron + Identity 双轨设计
 
 > **核心命题**: 付费不是"我给你东西，你给我钱"的交易，而是"这个服务器值得养，我的成就值得被看见"的归属行为。  

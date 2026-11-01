@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-careers-que-5cb5c6ff
+type: spec
+status: archived
+system: quest
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # T-City通用任务系统：原子节点设计与配置规范手册 (v2.0.0 — 解耦重构版)
 
 本手册是为 `custom-quest` 任务系统定制的高指导性规范。在架构设计上，本版本**不再受限于传统 QB 框架的 legacy 写法**，而是基于 **“模块化、高性能、安全、可拓展”** 四大铁律进行框架重构，建立抽象隔离层（Adapter Pattern），实现完全去耦合的微服务化设计。

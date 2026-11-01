@@ -1,3 +1,13 @@
+---
+id: police-architecture-deprecations
+type: manual
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-01-30
+---
+
 # 弃用登记（Deprecations）
 
 > 机器可读事实源：`T-CityLite.base/tests/architecture/deprecations.json`。

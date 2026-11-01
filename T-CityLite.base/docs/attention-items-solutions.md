@@ -1,3 +1,12 @@
+---
+id: base-attention-items-solutions
+type: audit
+status: final
+system: meta
+owner: hermes
+updated: 2026-10-21
+---
+
 # 注意项解决方案（2026-10-21）
 
 > 对应 v0.7a 验收后遗留的 5 类注意项。原则：能在 CI 自动化的自动化，必须真人客户端的给固定清单与证据要求。

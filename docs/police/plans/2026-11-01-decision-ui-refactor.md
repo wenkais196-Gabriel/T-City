@@ -1,3 +1,13 @@
+---
+id: police-plans-2026-11-01-decision-ui-refactor
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-11-01
+review_by: 2027-04-30
+---
+
 # 计划：剧情抉择 UI 重构（decision surface）
 
 > 阶段：L3（跨资源、改契约）。产物：本文 + 后续切片 PR。

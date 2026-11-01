@@ -1,3 +1,13 @@
+---
+id: police-architecture-08-scenarios
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 08 端到端场景（验收基线）
 
 > **基线快照 `568acd2` + post-baseline 复评，当前 HEAD `3bbcab3`**（2026-10-24）。只读代码 + 现有文档，未改代码、未连数据库、未碰 FXServer。

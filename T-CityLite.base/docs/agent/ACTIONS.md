@@ -1,3 +1,13 @@
+---
+id: base-agent-actions
+type: manual
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-01-30
+---
+
 # Agent Action Contract (`custom-director`, v1)
 
 Server-side contract for agent-proposed game actions. This is a safe slice of

@@ -1,3 +1,13 @@
+---
+id: police-plans-2026-10-31-quest-storyengine-and-sonar
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # 两个遗留问题：调研 → 方案 → 验证（2026-10-31）
 
 ## 1. `No such export IsArcEnabled in resource story-engine`

@@ -1,3 +1,13 @@
+---
+id: base-agent-design-07-harness-channel
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-04-30
+---
+
 # 07 · 本地 console harness：把「看得见」变成「断言得出」
 
 > 来源：`../FIVEM_MCP_LIVE_TEST.md`（第三方 fivem-mcp 0.6.0 的逐工具实测）。

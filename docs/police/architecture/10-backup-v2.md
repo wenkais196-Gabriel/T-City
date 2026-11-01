@@ -1,3 +1,13 @@
+---
+id: police-architecture-10-backup-v2
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # SM-06 v2：NPC 支援的生命周期契约
 
 > 状态：设计稿（L3，写代码前评审）

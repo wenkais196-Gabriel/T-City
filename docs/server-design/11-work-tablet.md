@@ -1,3 +1,13 @@
+---
+id: server-design-11-work-tablet
+type: spec
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-26
+review_by: 2027-04-30
+---
+
 # 11 · 工作平板：一台设备的两种形态
 
 > **状态**：P1–P4 已落地并通过线上重启（2026-10-26）。

@@ -1,3 +1,13 @@
+---
+id: agent-police-atools-discipline
+type: manual
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-01-30
+---
+
 # 加 / 改一个 agent 动作：检查清单
 
 > 一次做对的顺序。每一条都对应一个闸门，漏了不是"没测到"，而是**运行时静默失败**。

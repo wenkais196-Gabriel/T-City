@@ -1,3 +1,13 @@
+---
+id: engineering-scenario-engine-design
+type: spec
+status: active
+system: world
+owner: hermes
+updated: 2026-10-29
+review_by: 2027-04-30
+---
+
 # 情景制造器（Scenario Engine）设计稿
 
 > 状态：设计稿（L4 架构级，未写代码、未改任何现有文件）

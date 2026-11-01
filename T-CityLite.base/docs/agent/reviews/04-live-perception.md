@@ -1,3 +1,12 @@
+---
+id: base-agent-reviews-04-live-perception
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # 04 · Live perception（`/agent/v1/live/*`）对抗性评审
 
 - **评审对象**：`fe76857 feat(agent): add in-memory live perception endpoints (M1)`

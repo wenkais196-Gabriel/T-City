@@ -1,3 +1,14 @@
+---
+id: agent-police-research-2026-10-v1
+type: research
+status: superseded
+system: justice
+owner: hermes
+updated: 2026-10-30
+review_by: 2027-01-30
+superseded_by: [agent-police-research-2026-10]
+---
+
 # T-City Lite 警察模块调研：功能清单 + UX 设计
 
 > 状态：**调研 / 提案**（未实现、未提交）。日期 2026-10-29。

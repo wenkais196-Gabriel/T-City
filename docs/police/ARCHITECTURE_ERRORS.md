@@ -1,3 +1,12 @@
+---
+id: police-architecture-errors
+type: audit
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # 警察 MDT 错误码契约（FIT-04）
 
 > 状态：`police_mdt` 的 17 个 action 已全部返回结构化结果；`custom-police` 的 46 个

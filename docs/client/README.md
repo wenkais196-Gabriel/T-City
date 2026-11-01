@@ -1,3 +1,13 @@
+---
+id: client-readme
+type: meta
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 客户端与 NUI 资料库
 
 | 文档 | 内容 |
@@ -5,6 +15,8 @@
 | `FIVEM_CLIENT_RESEARCH.md` | FiveM/QBCore 客户端四层模型、NUI/CEF、QBCore callback 并发、故障矩阵 |
 | `CLIENT_AUDIT.md` | 客户端模块审计（phone/police/justice/agent/other）+ 优先修复 Top 10 + 扫描器说明 |
 | `plans/2026-10-25-client-baseline.md` | 客户端基线计划：手机查询失败定位、双端诊断协议、基线规则入 CI（含交付门禁） |
+| `plans/2026-10-27-input-layering.md` | 输入分层计划：三套输入源归并、焦点与游戏键冲突 |
+| `plans/2026-10-27-quests-app-review.md` | 任务 App 评审：入口、状态机与失败态 |
 | `research/fivem-nui-2026.md` | NUI/CEF 机制调研（ui_page/files、缓存与 restart、回调三态、焦点语义、DevTools/日志、性能与安全）+ 34 条可检查规则 |
 | `research/nui-debug-playbook.md` | NUI 请求失败排查手册：5 个 60 秒探针、判定矩阵、9 类原因排序、日志三通道 |
 | `research/client-observability-design.md` | 四段往返可观测设计：`phone:server:diag` 事件模型、采样限流、断点判定、脱敏与测试接法 |

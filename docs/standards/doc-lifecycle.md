@@ -28,7 +28,7 @@ source_of_truth: true
 | 文档数量与可发现性脱节 | 范围内 **172 份** md，其中 **43 份**在全仓任何文件里都没被提及（孤儿，25%） | 写了没人读得到，等于没写 |
 | 同一事实多处陈述，数字互相打架 | `PROJECT_PROGRESS.md` 写「78 资源 / 17 CFG」，实测 82 / 18；`01_resource_inventory.md` 自标「历史快照」 | 以文档为准做规划会踩空 |
 | 链接静默腐烂 | 建立规范时扫出 **3 处**断链（2 处真断、1 处是代码块内的示例被误判，已修）；`docs-check` 是 advisory，从不阻断 | 读者点到 404，信任崩塌 |
-| 本机绝对路径混入文档 | **67 处** `file:///e:/T-City/...` 分布在 14 个文件 | 换机器/换人全部失效，CI 也查不出来（被 `file://` 规则跳过） |
+| 本机绝对路径混入文档 | **67 处** 带盘符的 file URL（`e:/T-City/...`、`D:/txData/...`）分布在 14 个文件 | 换机器/换人全部失效，CI 也查不出来（被 file 协议规则跳过） |
 | 状态只存在于人的脑子里 | 172 份里只有 10 份（本次补的）声明了类型/状态/复审日 | 没人知道哪份还能信、哪份该归档 |
 
 所以本规范的目标不是"写得更漂亮"，而是**让文档可被检索、可被信任、可被统计**。
@@ -240,10 +240,10 @@ audit / research / adr 走短链：draft → final →（可选）archived / sup
 
 | 指标 | 定义 | 当前基线（2026-10-31 首次测量） | 目标 |
 |---|---|---|---|
-| 已登记率 | 有 frontmatter 的文档 / 范围内文档 | **10 / 172（5.8%）** | ≥ 90% |
-| 孤儿率 | 全仓无人引用的文档 / 总数 | **43 / 172（25%）** | ≤ 5% |
-| 断链 | 相对链接 404 数 | **0**（本次修掉 2 处真断链；第 3 处是代码块内的示例，已改工具跳过） | 恒为 0 |
-| 本机绝对路径 | `file:///` 出现次数 | **67（14 个文件，存量未清）** | 0 |
+| 已登记率 | 有 frontmatter 的文档 / 范围内文档 | **277 / 277（100%）**（2026-11-01 补齐；原 3 / 277） | ≥ 90% |
+| 孤儿率 | 全仓无人引用的文档 / 总数 | **0 / 277（0%）**（2026-11-01 全部挂进目录索引；原 43） | ≤ 5% |
+| 断链 | 相对链接 404 数 | **0**（活跃文档零断链；历史归档按 `legacy_docs.json` 显式豁免） | 恒为 0 |
+| 本机绝对路径 | 带盘符或本机用户名的 file URL 数 | **0**（2026-11-01 清零；清理前 67 处 / 14 文件） | 0 |
 | 到期未复审 | `review_by < today` 且 `active` | 0（刚建立，尚无到期） | 每版本清零 |
 | SoT 冲突 | 同一 `topic` 多个 `source_of_truth` | 0 | 恒为 0 |
 
@@ -259,7 +259,7 @@ audit / research / adr 走短链：draft → final →（可选）archived / sup
 
 ### 9.3 节奏
 
-- **每次提交**：CI 跑 `--check`（现在是 advisory，Phase 3 转阻断）
+- **每次提交**：CI 跑 `--check`（blocking）并要求 `docs/INDEX.md` 与工具输出一致
 - **每个 PR 合入后**：`--index` 重新生成（可由 CI 校验是否最新）
 - **每个版本收尾**：`--report` 归档 docs 目录下的 _lifecycle.json 快照，与本版对比"已登记率/孤儿率"变化
 - **每季度**：清理 `archive/`，把 `superseded` 满 6 个月的移到 `archive/`
@@ -275,6 +275,8 @@ python tools/docs_lifecycle.py --check      # 校验（退出码 1 = 有 ERROR�
 python tools/docs_lifecycle.py --adopt <文件...> [--yes]   # 给旧文档补最小 frontmatter
 ```
 
+> `docs/INDEX.md` 入库（CI 校验它是否最新）；`docs/_lifecycle.json` **不入库**——它是派生数据且含本机 mtime，由 `--report` 随时重建，版本收尾时把其中的 summary 抄进版本报告即可。
+
 **校验项**（`--check`）：
 
 | 级别 | 检查 |
@@ -284,7 +286,7 @@ python tools/docs_lifecycle.py --adopt <文件...> [--yes]   # 给旧文档补�
 
 > 注意语义方向：`updated` 是**过去**日期（内容最后变更），`review_by` 是**未来**日期（复审截止）。写反了会直接报错。
 
-**CI**：`.github/workflows/ci.yml` 的 `docs-lifecycle` job（advisory）。转阻断的条件：已登记率 ≥ 90% 且断链为 0。
+**CI**：`.github/workflows/ci.yml` 的 `docs-lifecycle` job。**2026-11-01 起为 blocking**（转阻断条件「已登记率 ≥ 90% 且断链为 0」已于同日满足）：`--check` 有 ERROR 即红，`--index` 后 `docs/INDEX.md` 有 diff 也红。
 
 ---
 
@@ -292,11 +294,11 @@ python tools/docs_lifecycle.py --adopt <文件...> [--yes]   # 给旧文档补�
 
 | Phase | 动作 | 判定完成 | 状态 |
 |---|---|---|---|
-| **0** | 落规范 + 工具 + 索引 + CI advisory | `--check` 能跑通、`docs/INDEX.md` 生成 | ✅ 本次交付 |
-| **1** | 补 SoT：每个系统的 `manual` 指定唯一权威文档；重复主题标 `superseded` | `(system,type)` SoT 无冲突 | 待做 |
-| **2** | 分批补 frontmatter（按系统，一次 1–2 个系统） | 已登记率 ≥ 90% | 待做 |
-| **3** | 清孤儿（44 份）：并入 `manual`／移 `archive/`／在索引里显式挂载 | 孤儿率 ≤ 5% | 待做 |
-| **4** | CI 从 advisory 转 blocking | CI 红则不能合 | 待做 |
+| **0** | 落规范 + 工具 + 索引 + CI advisory | `--check` 能跑通、`docs/INDEX.md` 生成 | ✅ 2026-10-31 交付 |
+| **1** | 补 SoT：每个系统的 `manual` 指定唯一权威文档；重复主题标 `superseded` | `(system,type)` SoT 无冲突 | 🟡 重复主题已裁决（`phone-design` / `BLUEPRINT-ITEMS` / `RESEARCH-2026-10` 三组双向 `supersedes`）；逐系统的 `manual` SoT 尚未指定 |
+| **2** | 分批补 frontmatter（按系统，一次 1–2 个系统） | 已登记率 ≥ 90% | ✅ 2026-11-01 一次补齐 274 份，277 / 277 |
+| **3** | 清孤儿：并入 `manual`／移 `archive/`／在索引里显式挂载 | 孤儿率 ≤ 5% | ✅ 2026-11-01 挂进各目录 README，孤儿 0 |
+| **4** | CI 从 advisory 转 blocking | CI 红则不能合 | ✅ 2026-11-01 `docs-lifecycle` job 上线即阻断 |
 
 **批次建议**（按活跃度，而非目录）：`justice`（警察 BLUEPRINT 系）→ `comms`（手机）→ `agent` → `economy` → `delivery` → 其余。
 
@@ -307,7 +309,7 @@ python tools/docs_lifecycle.py --adopt <文件...> [--yes]   # 给旧文档补�
 | 反模式 | 为什么禁 | 本仓实例 |
 |---|---|---|
 | 文档里写会过期的数字（资源数、用例数） | 一天就漂 | `PROJECT_PROGRESS.md` 的 78/17 |
-| `file:///e:/...` 本机绝对路径 | 换人换机全废，CI 也查不出 | 67 处 / 14 文件 |
+| 带盘符的 file URL（如 `e:/T-City/...`） | 换人换机全废，CI 也查不出 | 曾 67 处 / 14 文件，2026-11-01 清零 |
 | 同一主题两份文档都自称权威 | 读者不知信谁 | `01_resource_inventory.md` vs `PROJECT_PROGRESS.md` |
 | 用文件名表达状态（`-final`、`-v2`） | 状态会变，文件名不改就撒谎 | 历史遗留若干 |
 | audit/验收报告事后修改 | 快照失真 | —（用 `supersedes` 开新篇） |

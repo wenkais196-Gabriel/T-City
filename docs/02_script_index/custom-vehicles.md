@@ -1,3 +1,13 @@
+---
+id: 02-script-index-custom-vehicles
+type: manual
+status: archived
+system: vehicle
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # custom-vehicles — 统一车辆系统
 
 > **路径**: `resources/[custom]/custom-vehicles/` | **状态**: ✅ ENABLED | **CFG 模块**: vehicles.cfg

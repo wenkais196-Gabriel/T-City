@@ -1,3 +1,13 @@
+---
+id: 01-module-manuals-06-crime-system
+type: manual
+status: active
+system: crime
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # Module 6: 犯罪系统 (crime.cfg)
 
 > **CFG 文件**: `configs/modules/crime.cfg`

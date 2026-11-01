@@ -1,3 +1,13 @@
+---
+id: 01-module-manuals-04-vehicle-system
+type: manual
+status: active
+system: vehicle
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # Module 4: 车辆系统 (vehicles.cfg)
 
 > **CFG 文件**: `configs/modules/vehicles.cfg`

@@ -1,3 +1,13 @@
+---
+id: police-architecture-07-fitness-tests
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 07 — 架构适应度测试（Fitness Tests）
 
 > 架构基线 agent D ｜ 只读 + 文档 ｜ **基线快照 `568acd2` + post-baseline 复评，当前 HEAD `3bbcab3`**（2026-10-24）｜ 未改代码、未 commit、未触碰 FXServer。

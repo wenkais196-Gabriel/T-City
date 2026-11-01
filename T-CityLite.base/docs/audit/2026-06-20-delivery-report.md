@@ -1,3 +1,12 @@
+---
+id: base-audit-2026-06-20-delivery-report
+type: audit
+status: final
+system: delivery
+owner: hermes
+updated: 2026-06-21
+---
+
 # 🏁 T-City Lite — 工程交付报告
 
 > **交付日期**: 2026-06-20  

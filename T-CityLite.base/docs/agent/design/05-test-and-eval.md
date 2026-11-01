@@ -1,3 +1,13 @@
+---
+id: base-agent-design-05-test-and-eval
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 05 · Agent 基础设施测试与评测体系 v1
 
 > 范围：`custom-director` 写面 + agent 读面（HTTP gateway / MCP / schema registry）。

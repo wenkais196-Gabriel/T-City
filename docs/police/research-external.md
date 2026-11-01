@@ -1,3 +1,13 @@
+---
+id: police-research-external
+type: research
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-01-30
+---
+
 # 外部警察 / 调度 / MDT / 监狱 / 法庭模组调研
 
 > 调研对象：FiveM（QBCore / ESX / QBox / ox）主流警察业务模组，含本地基线 `qb-policejob`。

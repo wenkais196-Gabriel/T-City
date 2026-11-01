@@ -1,3 +1,13 @@
+---
+id: archive-qbcore-lite-versions-career-police-plan
+type: plan
+status: archived
+system: justice
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # 👮 T-City Lite 警察职业与司法系统 (LSPD) 细化规划
 
 > **适用版本**: v0.6 - v0.8  
@@ -10,16 +20,16 @@
 经过对 `qb-policejob` 相关文件的扫描，发现当前的代码设计存在以下限制和优化空间：
 
 1. **证书/执照指令设计脱节**：
-   * 在 [commands.lua:L10-L85](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-policejob/server/commands.lua#L10-L85) 中，警察的 `/grantlicense` 与 `/revokelicense` 是通过手动读写 `Player.PlayerData.metadata['licences']` 和 `'cert_status'` 实现的。
+   * 在 [commands.lua:L10-L85](T-CityLite.base/resources/[qb]/qb-policejob/server/commands.lua#L10-L85) 中，警察的 `/grantlicense` 与 `/revokelicense` 是通过手动读写 `Player.PlayerData.metadata['licences']` 和 `'cert_status'` 实现的。
    * **痛点**：这绕过了 `custom-certificates` 的标准导出函数（如 `GrantLicense`/`RevokeLicense`），导致如果其他系统挂载了执照变更的 Hook，将无法触发。此外，这使得吊销/授权逻辑存在重复的硬编码（例如物品扣除）。
 2. **载具授权等级失效与死码**：
-   * 在 [config.lua:L126-L138](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-policejob/config.lua#L126-L138) 中，`Config.AuthorizedVehicles` 仅定义了 `[0]` 键。
-   * 在 [client/job.lua:L168-L186](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-policejob/client/job.lua#L168-L186) 中，警局车库通过 `for grade = 0, playerGrade do` 循环去获取对应 grade 的授权载具。
+   * 在 [config.lua:L126-L138](T-CityLite.base/resources/[qb]/qb-policejob/config.lua#L126-L138) 中，`Config.AuthorizedVehicles` 仅定义了 `[0]` 键。
+   * 在 [client/job.lua:L168-L186](T-CityLite.base/resources/[qb]/qb-policejob/client/job.lua#L168-L186) 中，警局车库通过 `for grade = 0, playerGrade do` 循环去获取对应 grade 的授权载具。
    * **漏洞**：因为配置里只有 `0` 级键，正式警员 (1级)、警司 (2级) 等高等级玩家在车库无法看到任何车辆（获取到 `nil`）。且目前所有等级可取的载具完全一样，缺乏进阶扮演感。
 3. **空置的扩展属性（部门与辖区）**：
    * 我们自研的 `custom-career` 提供了 `department` (部门/科室) 与 `district` (辖区) 的元数据，但在 `qb-policejob` 中**完全没有使用**。普通警员、特警（SWAT）和刑警（CID）在脚本层无法被区分。
 4. **直升机等特殊装备无门槛**：
-   * 目前 [client/job.lua:L444-L463](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-policejob/client/job.lua#L444-L463) 允许任何 LSPD 成员在直升机停机坪直接生成警用直升机（ZULU），未验证其是否持有 `pilot` (飞行执照)。
+   * 目前 [client/job.lua:L444-L463](T-CityLite.base/resources/[qb]/qb-policejob/client/job.lua#L444-L463) 允许任何 LSPD 成员在直升机停机坪直接生成警用直升机（ZULU），未验证其是否持有 `pilot` (飞行执照)。
 
 ---
 
@@ -28,7 +38,7 @@
 ### 1) 统一重构证照指令接口 (Sync License Commands)
 将警局指令中手写 metadata 的逻辑剥离，全面对接 `custom-certificates` 统一服务接口。
 
-* **修改文件**：[commands.lua](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-policejob/server/commands.lua)
+* **修改文件**：[commands.lua](T-CityLite.base/resources/[qb]/qb-policejob/server/commands.lua)
 * **具体做法**：
   * 将 `/grantlicense` 的核心逻辑替换为 `exports['custom-certificates']:GrantLicense(targetId, licenseType)`。
   * 将 `/revokelicense` 替换为 `exports['custom-certificates']:RevokeLicense(targetId, licenseType)`。
@@ -39,7 +49,7 @@
 ### 2) 累进解锁车库与飞行许可制 (Garage Progression & Pilot Restriction)
 重构车库配置，使警车解锁呈阶梯性，并对直升机进行执照限制。
 
-* **修改文件**：[config.lua](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-policejob/config.lua) 与 [client/job.lua](file:///e:/T-City/T-CityLite.base/resources/[qb]/qb-policejob/client/job.lua)
+* **修改文件**：[config.lua](T-CityLite.base/resources/[qb]/qb-policejob/config.lua) 与 [client/job.lua](T-CityLite.base/resources/[qb]/qb-policejob/client/job.lua)
 * **阶梯载具配置**：
   ```lua
   Config.AuthorizedVehicles = {
