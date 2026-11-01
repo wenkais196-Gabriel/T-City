@@ -1,3 +1,13 @@
+---
+id: base-agent-console
+type: manual
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # 驱动服务器控制台（`tcity-cmd`）
 
 > 这份文档原先被手工追加在 `TOOLS.md` 末尾。`TOOLS.md` 是 `tools/agent_tools.py --write`

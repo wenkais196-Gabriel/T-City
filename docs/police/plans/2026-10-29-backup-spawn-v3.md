@@ -1,3 +1,13 @@
+---
+id: police-plans-2026-10-29-backup-spawn-v3
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-30
+review_by: 2027-04-30
+---
+
 # 计划：支援单位的生成点与到场（spawn v3）
 
 > 触发：2026-10-29 真机手感反馈——"生成点在目视范围内、不从路上来、会朝反方向开很远再掉头、

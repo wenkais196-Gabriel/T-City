@@ -1,3 +1,12 @@
+---
+id: base-agent-reviews-03-contract-ci
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # 03 — 工具契约与 CI 评审（commit `498b888`）
 
 - 仓库：`/home/swk/Documents/deepseek-harness/default-workspace/T-City-agent`

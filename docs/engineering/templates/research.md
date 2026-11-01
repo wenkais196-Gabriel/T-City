@@ -1,3 +1,13 @@
+---
+id: engineering-templates-research
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 调研：<主题>
 
 > 阶段 R。产物放 `docs/<area>/research/<YYYY-MM-DD>-<slug>.md`。

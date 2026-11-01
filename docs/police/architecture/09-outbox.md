@@ -1,3 +1,13 @@
+---
+id: police-architecture-09-outbox
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 09 · Intent TTL + Outbox（SM-03 残留补偿）
 
 > 落地：`migrations/v3.12_police_outbox.sql`、`custom-police/server/p2_system.lua`

@@ -1,3 +1,13 @@
+---
+id: server-design-04-co-governance
+type: spec
+status: active
+system: world
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 04 — 共治系统：让玩家成为规则的共同制定者
 
 > **核心命题**: "这个世界的规则，我有发言权"——当玩家从规则的被动接受者变成共同制定者，所有权感达到顶峰。  

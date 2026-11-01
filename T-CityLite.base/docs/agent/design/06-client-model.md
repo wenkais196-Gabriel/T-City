@@ -1,3 +1,13 @@
+---
+id: base-agent-design-06-client-model
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-04-30
+---
+
 # 06 · 客户端模型：性质、可验证性、双端 Agent 准备
 
 > 目标：把「客户端开发」从"改了要开游戏看一眼"变成"改了能断言"。
@@ -10,7 +20,7 @@
 > 行号已按 `custom-phone` 模块化（`client/core/*`）后的布局校准。
 >
 > 相关：[`07-harness-channel.md`](07-harness-channel.md)（把 §3 之外的部分变成 console 断言）、
-> [`docs/qbcore-client-code-analysis.md`](../../../docs/qbcore-client-code-analysis.md)（上游 QBCore 客户端代码面盘点）。
+> [`docs/qbcore-client-code-analysis.md`](../../../../docs/qbcore-client-code-analysis.md)（上游 QBCore 客户端代码面盘点）。
 
 ---
 

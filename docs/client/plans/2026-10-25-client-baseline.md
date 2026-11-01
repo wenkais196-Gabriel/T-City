@@ -1,3 +1,13 @@
+---
+id: client-plans-2026-10-25-client-baseline
+type: plan
+status: archived
+system: ux
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 客户端基线与手机查询故障 —— 计划（2026-10-25）
 
 > 状态：**P0 完成**（MDT 查询失败已真机验证）；P1-1 阶段 0/3 已落地；P1-2 待开发

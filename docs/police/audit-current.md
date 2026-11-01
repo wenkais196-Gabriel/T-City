@@ -1,3 +1,12 @@
+---
+id: police-audit-current
+type: audit
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-23
+---
+
 # T-City 警察能力现状审计（local audit）
 
 > 审计对象：`feat/police-roleplay` 工作树，只读代码 + 只读启动日志，未改任何 Lua/配置。

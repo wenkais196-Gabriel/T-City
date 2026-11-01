@@ -1,3 +1,13 @@
+---
+id: 07-narrative
+type: spec
+status: active
+system: quest
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 🎭 T-City · 中东翻版剧情线 — 叙事设计全案
 
 > **版本**: v1.0  

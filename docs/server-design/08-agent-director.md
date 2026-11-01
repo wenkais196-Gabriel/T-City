@@ -1,3 +1,13 @@
+---
+id: server-design-08-agent-director
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 08 — Agent 中枢游戏导演：架构设计与三阶段落地
 
 > **版本**: v0.1（设计稿，未实现）

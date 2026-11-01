@@ -1,3 +1,13 @@
+---
+id: agent-police-acceptance
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # 警察模块验收标准（ACCEPTANCE）
 
 > **状态**：验收标准 v1，随施工同步更新。日期 2026-10-30。

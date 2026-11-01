@@ -1,3 +1,13 @@
+---
+id: engineering-architecture
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # ARCHITECTURE — 四个平面与依赖方向
 
 > 这份文件回答一个问题：**谁可以调用谁**。

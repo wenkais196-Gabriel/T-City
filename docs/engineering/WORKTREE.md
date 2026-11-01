@@ -1,3 +1,13 @@
+---
+id: engineering-worktree
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-11-01
+review_by: 2027-04-30
+---
+
 # 工作树与分支流程
 
 > 2026-11-01 起生效。根 `AGENTS.md` 只放指针，细节在这里。
@@ -55,7 +65,7 @@ git -C E:/T-City-harness branch -d <branch>
 
 - `docs/standards/doc-lifecycle.md` + `tools/docs_lifecycle.py`（文档生命周期规范与工具，`--check` 实测 0 error）
 - `docs/INDEX.md`（用它自己的 `--index` **对 275 份当前文档重新生成**，不是搬旧快照）
-- `docs/agent/phone/DESIGN.md`、`docs/agent/police/BLUEPRINT-ITEMS{,-v1,-CC}.md`、`docs/analysis/2026-10-31-systems-coverage-survey.md`
+- `docs/agent/phone/DESIGN.md`、`docs/agent/police/BLUEPRINT-ITEMS{,-ARCHIVED,-CC}.md`、`docs/analysis/2026-10-31-systems-coverage-survey.md`
 
 **为什么不整体合并那个分支**：`salvage` 相对 master 多出 440 个文件，其中 **401 个是上游残留**
 （qb-* 的 `.github/` 模板、旧 `html/assets` 产物）—— 合并会把它们全带回来。

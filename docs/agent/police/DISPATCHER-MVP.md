@@ -1,3 +1,13 @@
+---
+id: agent-police-dispatcher-mvp
+type: spec
+status: draft
+system: justice
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # AI 调度员 MVP：agent 拿内容 → 解析 → call 卡草稿
 
 > 目标不是"上 LLM 服务"，而是**先把闭环跑通**：真实文本进来，模型判断，草稿进箱，警员采纳。

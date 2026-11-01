@@ -1,3 +1,13 @@
+---
+id: police-agent-control-research
+type: research
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-01-30
+---
+
 # Agent 全面接管服务器与自动化测试调研
 
 > 问题：为什么现在只能人工点、问题很怪？能否让 agent 接管服务器并自动测？

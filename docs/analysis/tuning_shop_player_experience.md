@@ -1,3 +1,13 @@
+---
+id: analysis-tuning-shop-player-experience
+type: research
+status: final
+system: vehicle
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # T-City2 改装店玩家体验流程设计
 
 > **日期**: 2026-06-05 | **版本**: v1.0 | **状态**: 设计草案  

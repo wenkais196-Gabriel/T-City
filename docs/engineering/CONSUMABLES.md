@@ -1,3 +1,13 @@
+---
+id: engineering-consumables
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # 消耗品与状态层（custom-consumables）
 
 > 为什么有这个东西：本服**没有 qb-smallresources**，而 `qb-core` 只在

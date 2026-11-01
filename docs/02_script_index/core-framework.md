@@ -1,3 +1,13 @@
+---
+id: 02-script-index-core-framework
+type: manual
+status: archived
+system: infra
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # core-framework — 核心服务框架 (v0.5 Data-Access Layer)
 
 > **路径**: `resources/[standalone]/core-framework/` | **状态**: ✅ ENABLED | **CFG 模块**: custom.cfg

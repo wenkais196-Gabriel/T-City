@@ -1,3 +1,12 @@
+---
+id: police-plans-2026-10-31-p2-dispatch-audit
+type: audit
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-31
+---
+
 # P2 调度总线 · 现状核对（2026-10-31）
 
 > 动手前的第一步：**先查清已有什么**。蓝图 §0 那句「排队/优先级/谁接了/到没到 在系统里无解」

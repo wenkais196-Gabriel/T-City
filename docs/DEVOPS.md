@@ -1,3 +1,13 @@
+---
+id: devops
+type: runbook
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-01-30
+---
+
 # T-City Lite — DevOps 工作流
 
 > **目标**：让每一次改动都能在 GitHub 上被追踪：Issue → 分支 → PR → CI → Review → 合并 → 发布。

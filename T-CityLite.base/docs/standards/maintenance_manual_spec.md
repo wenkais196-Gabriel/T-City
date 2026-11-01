@@ -1,3 +1,13 @@
+---
+id: base-standards-maintenance-manual-spec
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 🔧 T-City Lite 运维与维护手册规范 (maintenance_manual_spec.md)
 
 > **修订日期**: 2026-06-04  

@@ -1,3 +1,13 @@
+---
+id: base-interaction-memo
+type: spec
+status: active
+system: ux
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # T-City Lite 交互设计规范备忘录 (Interaction Design Memo)
 
 ## 📌 交互范式概述

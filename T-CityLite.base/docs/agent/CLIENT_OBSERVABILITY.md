@@ -1,3 +1,13 @@
+---
+id: base-agent-client-observability
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 客户端可观测性：服务端能看见客户端
 
 ## 问题

@@ -1,3 +1,13 @@
+---
+id: base-agent-eval
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-23
+review_by: 2027-04-30
+---
+
 # Agent Action Evaluation (`tools/agent_eval.py`)
 
 Offline, CI-friendly evaluator for the `agent_actions` audit table. It reads a

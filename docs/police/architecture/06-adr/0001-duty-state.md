@@ -1,3 +1,12 @@
+---
+id: police-architecture-06-adr-0001-duty-state
+type: adr
+status: final
+system: justice
+owner: hermes
+updated: 2026-10-24
+---
+
 # ADR-0001 值班/勤务状态收敛为单一状态机
 
 - 状态：Accepted（已实施 `bb64d87`；`police_units.status` 为状态、`job.onduty` 为投影）

@@ -1,3 +1,13 @@
+---
+id: engineering-agent-operating-model
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # Agent 时代的工程运行模型（T-City 落地提案 v1）
 
 > 目标：让「人 + 多个 agent」在同一个仓库里持续产出**可验收**的代码，并且不需要每次重新解释这个项目。
@@ -113,6 +123,9 @@ Spec Kit 把 SDD 的核心过程固化成 `Specify → Plan → Tasks → Implem
 | **D 开发** | 代码 + 测试 | 每个切片可运行；先红后绿有记录 |
 | **V 审查** | `verification.md` 或 PR 描述 | 测试输出原文、反向校验、`luac -p`/`svelte-check`、真机证据 |
 | **S 交付** | commit + CHANGELOG + 文档 | push 前密钥扫描、allowlist 到期检查、文档同步 |
+
+五份模板文件在 `docs/engineering/templates/` 下，按阶段取用：
+`research.md`（R 调研）、`plan.md`（P 计划）、`tasks.md`（D 切片）、`verification.md`（V 审查）、`delivery.md`（S 交付）。
 
 **分级**（避免流程变仪式）：
 - L1 微改（注释/文案/单行 bug）：直接改 + 测试；

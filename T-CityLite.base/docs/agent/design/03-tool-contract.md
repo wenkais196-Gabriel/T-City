@@ -1,3 +1,13 @@
+---
+id: base-agent-design-03-tool-contract
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 03 — 统一工具面（Tool Surface）v1 设计
 
 - 状态：**Draft for build**（M0 可直接施工；M1/M2 依赖 Lua 动作扩展）

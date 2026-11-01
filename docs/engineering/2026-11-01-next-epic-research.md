@@ -1,3 +1,13 @@
+---
+id: engineering-2026-11-01-next-epic-research
+type: research
+status: active
+system: agent
+owner: hermes
+updated: 2026-11-01
+review_by: 2027-01-30
+---
+
 # 2026-11-01 · 下一步开发方向调研（Hermes + Claude Code 双份意见）
 
 > 状态：调研稿，**未实现、未排期**。判据一律是代码/数据，不是文档自述。

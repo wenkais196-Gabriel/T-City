@@ -1,3 +1,13 @@
+---
+id: reasonix-hooks-config
+type: runbook
+status: active
+system: ops
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # Reasonix 通知声音配置
 
 ## 文件位置
@@ -15,12 +25,12 @@
     "PreToolUse": [
       {
         "match": "edit_file|write_file|multi_edit|run_command|run_background|submit_plan",
-        "command": "powershell -c \"Add-Type -AssemblyName PresentationCore; $mp=New-Object System.Windows.Media.MediaPlayer; $mp.Open([Uri]'file:///C:/Users/swkgb/Music/intervention.mp3'); $mp.Play(); Start-Sleep 2\""
+        "command": "powershell -c \"Add-Type -AssemblyName PresentationCore; $mp=New-Object System.Windows.Media.MediaPlayer; $mp.Open([Uri]('file:///' + $env:USERPROFILE + '/Music/intervention.mp3')); $mp.Play(); Start-Sleep 2\""
       }
     ],
     "Stop": [
       {
-        "command": "powershell -c \"Add-Type -AssemblyName PresentationCore; $mp=New-Object System.Windows.Media.MediaPlayer; $mp.Open([Uri]'file:///C:/Users/swkgb/Music/complete.mp3'); $mp.Play(); Start-Sleep 1\""
+        "command": "powershell -c \"Add-Type -AssemblyName PresentationCore; $mp=New-Object System.Windows.Media.MediaPlayer; $mp.Open([Uri]('file:///' + $env:USERPROFILE + '/Music/complete.mp3')); $mp.Play(); Start-Sleep 1\""
       }
     ]
   }

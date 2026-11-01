@@ -1,3 +1,13 @@
+---
+id: police-architecture-01-domain-model
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 警察系统领域模型（01 Domain Model）
 
 > **性质**：as-built 领域模型（读代码得出），面向**后续重构与新增玩法**，不是理想设计。

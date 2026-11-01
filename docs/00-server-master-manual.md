@@ -1,3 +1,13 @@
+---
+id: 00-server-master-manual
+type: manual
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # T-CityLite 服务器总领手册
 
 > **版本**: v0.7 | **引擎**: QBCore + FiveM | **数据库**: MySQL (oxmysql)
@@ -316,7 +326,7 @@ exports['core-framework']:DirtyFlushStats() -- 刷盘统计
 
 ```
 docs/
-├── 00_SERVER_MASTER_MANUAL.md          ← 本文件
+├── 00-server-master-manual.md          ← 本文件
 ├── 01_resource_inventory.md            ← 103 资源清单+启用矩阵
 ├── 01_module_manuals/
 │   ├── 01_core_infrastructure.md       ← 核心基础设施 (30 资源)

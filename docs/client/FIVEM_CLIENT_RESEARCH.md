@@ -1,3 +1,13 @@
+---
+id: client-fivem-client-research
+type: research
+status: active
+system: ux
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # FiveM / QBCore 客户端与 NUI 深度调研
 
 > 目标：解释“服务端完成度高、客户端反复出怪问题”的根因，并为后续客户端开发建立可复用资料库。

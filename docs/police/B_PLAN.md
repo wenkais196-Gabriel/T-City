@@ -1,3 +1,13 @@
+---
+id: police-b-plan
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 方案 B 落地计划（已拍板）
 
 决策：B 平衡；接受一次逮捕提交；证据/BOLO 降级为报告附件/标签；法庭保留但降级；

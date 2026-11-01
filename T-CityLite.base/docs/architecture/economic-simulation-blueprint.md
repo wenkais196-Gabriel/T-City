@@ -1,3 +1,13 @@
+---
+id: base-architecture-economic-simulation-blueprint
+type: spec
+status: active
+system: economy
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 🏙️ T-City 宏观经济模拟层 — 施工蓝图
 
 > **版本**: v1.0  

@@ -1,3 +1,13 @@
+---
+id: 01-module-manuals-05-jobs-and-permissions
+type: manual
+status: active
+system: jobs
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # Module 5: 职业与权限系统 (jobs.cfg / police.cfg / medical.cfg / career.cfg / admin.cfg)
 
 > **CFG 文件**: 5 个模块配置 | **资源数**: 8 个

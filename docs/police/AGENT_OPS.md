@@ -1,3 +1,13 @@
+---
+id: police-agent-ops
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # Agent Ops — 警察服务器实时观测与介入
 
 > 资源：`T-CityLite.base/resources/[custom]/custom-agent-ops/`

@@ -1,3 +1,13 @@
+---
+id: server-design-03-irreplaceability-reputation
+type: spec
+status: active
+system: world
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-04-30
+---
+
 # 03 — 不可替代性与声誉：让玩家成为"基础设施"
 
 > **核心命题**: "这个服务器上有些事，非我不可"——当玩家意识到自己不可替代时，离开的成本变得极高。  

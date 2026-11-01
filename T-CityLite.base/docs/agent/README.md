@@ -1,3 +1,13 @@
+---
+id: base-agent-readme
+type: meta
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-04-30
+---
+
 # Agent Read Layer (Phase 3 / P1)
 
 Read-only database contract for agent tooling. It implements the read side of
@@ -428,3 +438,19 @@ above was performed with the normal `.env` credentials.
 | [`design/`](design/) | 八份设计（实时感知 / 效果通道 / 工具契约 / 写操作 / 测试评测 / 客户端模型 / console harness 07 / 客户端状态探针 08） |
 | [`FIVEM_MCP_LIVE_TEST.md`](FIVEM_MCP_LIVE_TEST.md) | 第三方 fivem-mcp 0.6.0 的逐工具实测：23 个工具哪些能用、四个必踩的坑 |
 实机验证顺序：建表（`v2.3`、`v2.5`）→ 开 convar → `tools/agent_smoke.py` → 导出审计 → `tools/agent_eval.py`。
+
+## 评审与设计补遗
+
+对抗评审按主题分文件，结论已回写进 `ACTIONS.md` / `TOOLS.md` / `design/`：
+
+| 文件 | 主题 |
+|---|---|
+| `reviews/01-python-contract.md` | Python 契约层评审 |
+| `reviews/02-lua-refactor.md` | Lua 重构评审 |
+| `reviews/03-contract-ci.md` | 契约 CI 评审 |
+| `reviews/04-live-perception.md` | 真机感知评审 |
+| `reviews/05-live-tools.md` | 真机工具评审 |
+| `reviews/06-final-contract.md` | 终版契约评审 |
+| `reviews/07-final-security.md` | 终版安全评审 |
+| `reviews/08-phase2.md` | Phase 2 评审 |
+| `design/08-client-state-probe.md` | 客户端状态探针设计 |

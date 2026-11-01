@@ -1,3 +1,13 @@
+---
+id: police-architecture-05-nfr
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 05 — 非功能需求（NFR）与数字预算
 
 > 架构基线 agent D ｜ 只读 + 文档 ｜ **基线快照 `568acd2` + post-baseline 注记，当前 HEAD `3bbcab3`**（2026-10-24）｜ 未改代码、未 commit、未触碰 FXServer。

@@ -1,3 +1,12 @@
+---
+id: base-agent-reviews-06-final-contract
+type: audit
+status: final
+system: agent
+owner: hermes
+updated: 2026-10-25
+---
+
 # 06 — 四方契约最终一致性评审（`4400d8b`）
 
 - **评审对象**：`feat/agent-takeover-v2` @ `4400d8b`（PR #42，已 ready）

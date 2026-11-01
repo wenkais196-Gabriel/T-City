@@ -1,3 +1,13 @@
+---
+id: police-status
+type: plan
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # 警察系统实现状态（2026-10-23）
 
 ## 已交付

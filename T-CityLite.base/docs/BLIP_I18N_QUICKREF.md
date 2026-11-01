@@ -1,3 +1,13 @@
+---
+id: base-blip-i18n-quickref
+type: manual
+status: active
+system: comms
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # Blip 本地化维护速查卡
 
 > **适用人员**: 翻译 / 策划 / 运维  

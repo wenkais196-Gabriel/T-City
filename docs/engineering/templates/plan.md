@@ -1,3 +1,13 @@
+---
+id: engineering-templates-plan
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # 计划：<主题>
 
 > 阶段 P。产物放 `docs/<area>/plans/<YYYY-MM-DD>-<slug>.md`。L1/L2 改动可以只写进 commit message，

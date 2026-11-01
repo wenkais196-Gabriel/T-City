@@ -1,3 +1,13 @@
+---
+id: engineering-2026-11-01-world-traces-blueprint
+type: spec
+status: active
+system: world
+owner: hermes
+updated: 2026-11-01
+review_by: 2027-04-30
+---
+
 # A · 世界痕迹第一条链 — 施工图（research → plan）
 
 > 状态：**未开工**。本文只写"要动什么、谁写、怎么验"，不含代码。

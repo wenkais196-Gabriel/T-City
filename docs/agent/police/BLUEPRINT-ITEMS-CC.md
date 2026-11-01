@@ -1,3 +1,13 @@
+---
+id: agent-police-blueprint-items-cc
+type: spec
+status: draft
+system: justice
+owner: hermes
+updated: 2026-11-01
+review_by: 2027-04-30
+---
+
 # 警察道具层蓝图（Claude Code 独立版）
 
 > 本文件是 **Claude Code 独立调研产出**，原样保留，未与主稿合并。用于对照差异。

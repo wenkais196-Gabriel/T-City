@@ -1,3 +1,13 @@
+---
+id: base-delivery-manual
+type: manual
+status: active
+system: delivery
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # T-City Lite — 服务器重构项目交付与长期维护手册
 
 > **版本**: v2.0  |  **日期**: 2025  |  **重构范围**: 六阶段全栈现代化  

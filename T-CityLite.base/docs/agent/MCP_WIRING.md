@@ -1,3 +1,13 @@
+---
+id: base-agent-mcp-wiring
+type: manual
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-01-30
+---
+
 # 把 MCP 接到 T-City 上（本地全链路）
 
 > 结论先说：`tools/agent_mcp.py` 本身只是**路由壳**。它要有东西可路由，必须同时具备

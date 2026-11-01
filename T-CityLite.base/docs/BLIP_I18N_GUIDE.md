@@ -1,3 +1,13 @@
+---
+id: base-blip-i18n-guide
+type: manual
+status: active
+system: comms
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # 地图 Blip 配置与本地化 — 技术文档
 
 > **版本**: v1.0  

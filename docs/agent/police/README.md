@@ -1,3 +1,13 @@
+---
+id: agent-police-readme
+type: meta
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-31
+review_by: 2027-04-30
+---
+
 # 警察系统 · 入口与沉淀（2026-10-31）
 
 > 一页索引：谁该读哪份、现在做到哪、踩过哪些坑（别再踩）。
@@ -71,3 +81,10 @@ python tools/agent/dispatch_mvp.py submit parsed.json
 | 3 | 指纹/DNA 的样本袋玩法（多场景采集） | 需要采集物与 UI |
 | 4 | 保释 / 假释 | 依赖法院侧 |
 | 5 | bodycam | 已决定不做（显存与体积代价） |
+
+## 已替代 / 历史件
+
+| 文件 | 状态 | 说明 |
+|---|---|---|
+| `BLUEPRINT-ITEMS-ARCHIVED.md` | superseded | 道具层蓝图 v1，被 `BLUEPRINT-ITEMS.md` 取代；仅作差异对照 |
+| `RESEARCH-2026-10-ARCHIVED.md` | superseded | 2026-10 调研 v1，被 `RESEARCH-2026-10.md` 取代 |

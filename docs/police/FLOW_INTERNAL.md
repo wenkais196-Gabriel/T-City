@@ -1,3 +1,13 @@
+---
+id: police-flow-internal
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-24
+review_by: 2027-04-30
+---
+
 # T-City 警察 / 罪犯 / 律师 流程审计（FLOW_INTERNAL）
 
 > 内部流程审计，**只读**。基线 `master @ 4603d4b`（2026-10-24），代码未改动。

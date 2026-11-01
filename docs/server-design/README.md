@@ -1,3 +1,13 @@
+---
+id: server-design-readme
+type: meta
+status: active
+system: world
+owner: hermes
+updated: 2026-10-26
+review_by: 2027-04-30
+---
+
 # T-City 服务器核心机制设计手册
 
 > **版本**: v1.0  

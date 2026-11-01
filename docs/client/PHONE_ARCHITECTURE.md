@@ -1,3 +1,13 @@
+---
+id: client-phone-architecture
+type: manual
+status: active
+system: comms
+owner: hermes
+updated: 2026-10-27
+review_by: 2027-01-30
+---
+
 # 手机架构（目标态 v2）
 
 > 原则：**模块化 / 高性能 / 可扩展 / 安全**。本文是目标架构与迁移边界；现有 UI 行为不变。

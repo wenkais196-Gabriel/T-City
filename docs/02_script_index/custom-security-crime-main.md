@@ -1,3 +1,13 @@
+---
+id: 02-script-index-custom-security-crime-main
+type: manual
+status: archived
+system: crime
+owner: hermes
+updated: 2026-06-21
+review_by: 2027-01-30
+---
+
 # custom-security + custom-crime + custom-main — 安全与犯罪三件套
 
 > **路径**: `resources/[custom]/custom-security/` `custom-crime/` `custom-main/`

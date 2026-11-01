@@ -1,3 +1,12 @@
+---
+id: refactor-escape-sqli-20260601
+type: audit
+status: final
+system: infra
+owner: hermes
+updated: 2026-10-25
+---
+
 # 安全重构: 移除 escape_sqli 手动转义
 
 ## 变更概述

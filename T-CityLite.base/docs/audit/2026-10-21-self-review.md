@@ -1,3 +1,12 @@
+---
+id: base-audit-2026-10-21-self-review
+type: audit
+status: final
+system: delivery
+owner: hermes
+updated: 2026-10-21
+---
+
 # 自审记录 — Phase 1 审查与修复分支合并
 
 > **日期**: 2026-10-21

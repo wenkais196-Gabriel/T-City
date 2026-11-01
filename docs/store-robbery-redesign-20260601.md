@@ -1,3 +1,12 @@
+---
+id: store-robbery-redesign-20260601
+type: audit
+status: final
+system: crime
+owner: hermes
+updated: 2026-10-25
+---
+
 # 商店抢劫重构 — "罪与罚" 沉浸式玩法文档
 
 ## 一、用户手册

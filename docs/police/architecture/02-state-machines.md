@@ -1,3 +1,13 @@
+---
+id: police-architecture-02-state-machines
+type: spec
+status: active
+system: justice
+owner: hermes
+updated: 2026-10-29
+review_by: 2027-04-30
+---
+
 # 02 状态机（执勤 / 警情 / 文书 / 司法 / 在押 / NPC 支援 / Agent / NPC 警情）
 
 > **基线与现状**：本文是 **基线快照（`568acd2`）+ post-baseline 注记**，当前 HEAD 为 `3bbcab3`（2026-10-24）。

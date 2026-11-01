@@ -1,3 +1,13 @@
+---
+id: base-agent-smoke
+type: spec
+status: active
+system: agent
+owner: hermes
+updated: 2026-10-26
+review_by: 2027-04-30
+---
+
 # Live Smoke Checks (`tools/agent_smoke.py`)
 
 The golden/stub suite under `tests/agent/` runs without a server. This CLI is

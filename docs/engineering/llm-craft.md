@@ -1,3 +1,13 @@
+---
+id: engineering-llm-craft
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-04-30
+---
+
 # LLM 通用工艺准则（原 CLAUDE.md，2026-10-25 归档）
 
 > 这份是**与项目无关**的通用行为准则，保留作参考。项目约束在 `AGENTS.md` 与

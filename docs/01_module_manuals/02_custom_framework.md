@@ -1,3 +1,13 @@
+---
+id: 01-module-manuals-02-custom-framework
+type: manual
+status: active
+system: infra
+owner: hermes
+updated: 2026-10-25
+review_by: 2027-01-30
+---
+
 # Module 2: 自研核心框架 (custom.cfg)
 
 > **CFG 文件**: `configs/modules/custom.cfg`

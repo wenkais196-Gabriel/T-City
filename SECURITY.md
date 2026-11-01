@@ -1,3 +1,13 @@
+---
+id: security
+type: meta
+status: active
+system: meta
+owner: hermes
+updated: 2026-10-21
+review_by: 2027-04-30
+---
+
 # Security Policy
 
 ## 支持的版本
