@@ -78,7 +78,11 @@ review_by: 2026-12-31
   两条边界写进了扫描器：`_G.Bus.X =` 是服务注册不算猴补；客户端文件的裸 `QBCore.X =`（qb-fuel 的 `QBCore.PlayerData = pData`）
   是玩家数据快照不算。
 
-### 阶段 B：删 `GetPlayer` 缓存
+### 阶段 B：删 `GetPlayer` 缓存  ✅ 2026-11-01 完成
+- 落地：compat.lua 只留一段说明性注释（为什么不打这个补丁），登记表 7 → 6 条；
+- 测试 tests/unit/layer1_core/test_compat_no_player_cache.py：G4 断言**函数本身**仍是 qb-core 那一个
+  （不是「返回值相等」——缓存层两次调用返回同一张表也能骗过），G3 断言 Players[src] 清空后返回 nil，
+  G5 断言 GetPlayer('1') 不抛错。红绿已验证：换回旧实现该用例 1 红 1 绿。
 - 删 compat 里 origGetPlayer / playerCache / isOnline / `function QBCore.Functions.GetPlayer` 及两个 handler；
 - 判据见 G3–G5；allowlist 删对应行且不留死条目。
 
