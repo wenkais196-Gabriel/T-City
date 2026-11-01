@@ -195,19 +195,31 @@ def helper_call_problems(code: str, name: str) -> tuple[int, list[str]]:
         if not text.startswith("if not " + name):
             bad.append(str(index + 1) + ": 不是 `if not " + name + "(` 形状: " + text)
             continue
-        # 上一行是 `if false then` → 整段是死代码
-        for back in range(index - 1, max(-1, index - 4), -1):
-            previous = lines[back].strip()
-            if not previous:
+        # 死代码：往上找 10 行内缩进更浅的 `if false`（中间夹语句也要能抓到）
+        guard_indent_early = len(line) - len(line.lstrip())
+        dead = False
+        for back in range(index - 1, max(-1, index - 10), -1):
+            previous = lines[back]
+            previous_text = previous.strip()
+            if not previous_text:
                 continue
-            if previous.startswith("if false"):
-                bad.append(str(index + 1) + ": 守卫在 `if false` 死代码块里")
+            previous_indent = len(previous) - len(previous.lstrip())
+            if previous_text.startswith("if false") and previous_indent < guard_indent_early:
+                dead = True
                 break
-            break
-        if "return" in text:
-            head = text.split("end")[0] if "end" in text else text
+        if dead:
+            bad.append(str(index + 1) + ": 守卫在 `if false` 死代码块里")
+            continue
+        if "end" in text:
+            # 单行写法：if 的 end 就在本行 → return 必须在本行的 end 之前，
+            # `if not H(x) then end` + 后面随便一个 return 不能算数
+            head = text.split("end")[0]
             if "return" in head:
                 continue
+            bad.append(str(index + 1) + ": 单行否定分支里没有 return（守卫形同虚设）")
+            continue
+        if "return" in text:
+            continue
         found = False
         guard_indent = len(line) - len(line.lstrip())
         for follow in lines[index + 1:index + 20]:
@@ -228,9 +240,14 @@ def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = Non
     code = strip_lua_noise(event.body)
     if any(pattern.search(code) for pattern in STRONG_TOKENS.values()):
         return True
-    if any(pattern.search(code) for pattern in (extra or {}).values()):
-        return True
-    for name in guard_helpers().get(event.resource, {}):
+    registered = guard_helpers().get(event.resource, {})
+    # 同名时登记表说了算：extra（闸门自带的宽松词匹配）不能把严格形状降级
+    for name, pattern in (extra or {}).items():
+        if name in registered:
+            continue
+        if pattern.search(code):
+            return True
+    for name in registered:
         uses, problems = helper_call_problems(code, name)
         if uses and not problems:
             return True
