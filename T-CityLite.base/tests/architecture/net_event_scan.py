@@ -453,8 +453,19 @@ def job_deny_guard(code: str) -> bool:
     player_vars = set(GET_PLAYER_CALL.findall(code))
     # 同一个变量后来被重新赋值（`Caller = GetPlayer(target)`）时，不代表调用者本人 —— 剔除。
     def reassigned(name: str) -> bool:
-        assign = re.compile(r"^\s*" + re.escape(name) + r"\s*=[^=]")
-        return any(assign.match(line) for line in lines)
+        # 任意位置的赋值（不仅是行首）：`if x then Caller = … end`、`Caller, other = …` 都算；
+        # 只有 `local Caller = …` 这种**声明**不算重新赋值。
+        assign = re.compile(
+            r"(?<![\w.])" + re.escape(name) + r"\s*(?:,\s*[A-Za-z_]\w*\s*)*=(?!=)"
+        )
+        for line in lines:
+            if not assign.search(line):
+                continue
+            stripped = line.strip()
+            if stripped.startswith("local " + name) or stripped.startswith("local " + name + ","):
+                continue
+            return True
+        return False
 
     player_vars = {name for name in player_vars if not reassigned(name)}
     aliases: set[str] = set()

@@ -725,6 +725,19 @@ def test_shapes_that_look_like_guards_are_not_counted():
             "if callerJob ~= 'police' then return end",
             "DoPrivileged(target)",
         ),
+        "职业变量被行内条件重赋值": _nl(
+            "local Caller = QBCore.Functions.GetPlayer(src)",
+            "if flag then Caller = QBCore.Functions.GetPlayer(target) end",
+            "local callerJob = Caller.PlayerData.job.name",
+            "if callerJob ~= 'police' then return end",
+        ),
+        "职业变量被多重赋值": _nl(
+            "local Caller = QBCore.Functions.GetPlayer(src)",
+            "local other",
+            "Caller, other = QBCore.Functions.GetPlayer(target), 1",
+            "local callerJob = Caller.PlayerData.job.name",
+            "if callerJob ~= 'police' then return end",
+        ),
         "职业别名来自别人": _nl(
             "local Player = QBCore.Functions.GetPlayer(src)",
             "local job = target.PlayerData.job",
