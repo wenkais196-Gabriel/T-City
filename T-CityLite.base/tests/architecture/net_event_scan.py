@@ -437,33 +437,61 @@ PLAYER_JOB_LOCAL = re.compile(
 )
 
 
+def _job_dead(text: str) -> bool:
+    return "and false" in text or "false and" in text
+
+
 def job_deny_guard(code: str) -> bool:
     """职业白名单式判定：`if <本玩家的 job>.name ~= 'x' then … return end`。
 
     为什么不用一行正则：`job.name ~= ...` 出现在别处（判的是**别人**的职业、或条件里带
     `and false` 的死分支）时，一行正则照样命中 —— 验收方两种都实测过。
-    这里只认"变量来自 `QBCore.Functions.GetPlayer(src|source)`"或
-    "`local x = <某 Player>.PlayerData.job`"这两种本玩家来源。
+    这里只认"变量来自 `QBCore.Functions.GetPlayer(src|source)`"或由它派生的 job/职业名别名，
+    并要求该 if 分支里真的 return。全程不用跨行正则（用行级字符串判断，避免二次转义踩坑）。
     """
-    def dead_condition(text: str) -> bool:
-        return "and false" in text or "false and" in text
+    lines = code.splitlines()
+    player_vars = set(GET_PLAYER_CALL.findall(code))
+    aliases: set[str] = set()
+    for line in lines:
+        text = line.strip()
+        if not text.startswith("local ") or "=" not in text:
+            continue
+        lhs, _, rhs = text[len("local "):].partition("=")
+        name = lhs.split(",")[0].strip()
+        rhs = rhs.strip()
+        for player in player_vars:
+            if rhs.startswith(player + ".PlayerData.job"):
+                aliases.add(name)
+    sources = player_vars | aliases
+    if not sources:
+        return False
 
-    # 只认"从调用者自己的 Player 取出来的 job"：
-    # `local Player = GetPlayer(src)` → `local job = Player.PlayerData.job`
-    # 不接受 `local job = target.PlayerData.job`（判的是别人的职业）
-    player_vars = [m.group(1) for m in GET_PLAYER_CALL.finditer(code)]
-    sources = list(player_vars)
-    for base in player_vars:
-        alias = re.compile(
-            r"local\s+([A-Za-z_]\w*)\s*=\s*" + re.escape(base) + r"\.PlayerData\.job\b"
-        )
-        sources += [m.group(1) for m in alias.finditer(code)]
-    for name in sources:
-        pattern = re.compile(
-            r"if[^\n]*\b" + re.escape(name) + r"\b[^\n]*\.name\s*~=[^\n]*\bthen\b[\s\S]{0,200}?\breturn\b"
-        )
-        for hit in pattern.finditer(code):
-            if not dead_condition(hit.group(0)):
+    def mentions(text: str, name: str) -> bool:
+        at = text.find(name)
+        while at != -1:
+            before = text[at - 1] if at > 0 else " "
+            after = text[at + len(name)] if at + len(name) < len(text) else " "
+            if not (before.isalnum() or before == "_") and not (after.isalnum() or after == "_"):
+                return True
+            at = text.find(name, at + 1)
+        return False
+
+    for index, line in enumerate(lines):
+        text = line.strip()
+        if not text.startswith("if ") or "~=" not in text:
+            continue
+        if _job_dead(text):
+            continue
+        if not any(mentions(text, name) for name in sources):
+            continue
+        if "return" in text:
+            return True
+        indent = len(line) - len(line.lstrip())
+        for follow in lines[index + 1:index + 15]:
+            inner = follow.strip()
+            if inner.startswith("end") and (len(follow) - len(follow.lstrip())) == indent:
+                break
+            if inner.startswith("return"):
                 return True
     return False
 
