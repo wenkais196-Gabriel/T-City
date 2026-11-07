@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 按 CC 的分诊口径（A 真风险 / B 假风险 / C 待定），只修 A 档：实参可能是小数的那些。
     A 档分布：qb-drugs 8、custom-cartel 9、custom-crime 3、custom-security 2、custom-main 2、
     custom-market 2（余额与管理员改价），共 26 处字面量。
-  - 每个资源自带一份 `shared/money_format.lua`（函数名 `Money`），不跨资源引用 —— 避免新增加载顺序依赖。
+  - 每个资源自带一份 shared 目录下的 money_format 模块（函数名 `Money`），不跨资源引用 —— 避免新增加载顺序依赖。
     语义：整数不带小数点（$500）、小数两位（$61.75）、非数字回落 `0`。
   - B 档 21 处（整数常量 / `math.floor` / DB 整数列）留在基线里，`$comment` 已注明是假阳性；
     C 档 46 处多为 `production-freeze` 的 locale 模板串，不参与 `format`。
