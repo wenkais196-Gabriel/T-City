@@ -13,8 +13,16 @@
   * 区间内出现 `QBCore.Functions.<x>` / `Player.Functions.<x>` / `exports[` 即为命中；
   * `TriggerEvent` / `TriggerClientEvent` / `GetPlayerName` 等原生函数**不算**（任何 host 可调）。
 
-明确不覆盖：`local cb = function() ... end; MySQL.query(sql, {}, cb)` 这种间接回调，
-以及 `MySQL.x.await` 之后的续体（后者性质相同，但没有回调括号可依，只能靠 code review）。
+明确不覆盖：`local cb = function() ... end; MySQL.query(sql, {}, cb)` 这种**间接回调**
+（**已知盲区**，登记在 P1-5 计划 §8：当前全仓 0 处该形态；要关掉需要做一跳局部变量
+赋值追踪并补一条变异用例，本轮不做）。
+
+为什么 `MySQL.x.await` 的续体**不在**此列：oxmysql 的 Lua 包装
+（oxmysql/lib/MySQL.lua）里 `.await` = `promise.new()` + `Citizen.Await(p)`，
+恢复的是**调用方自己的协程**，所以续体里调跨资源函数引用是安全的；
+而回调闭包是被传给 JS、由 oxmysql 的宿主执行，那里没有调用方的 script host。
+实证：全仓已有 337 处 `.await`，其中 `qb-management/server/sv_gang.lua:24-26`
+在 `MySQL.query.await` 之后直接调 `QBCore.Functions.GetPlayerByCitizenId`，长期运行无报错。
 """
 
 from __future__ import annotations

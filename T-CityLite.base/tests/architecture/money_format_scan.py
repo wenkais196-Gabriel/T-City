@@ -6,7 +6,7 @@
 `EconomyService.AddMoney` 的顺序是「写内存 → 更新客户端 → 事件 → 写审计」，
 所以钱已经进账、审计没写、调用方还收到错误（有人加 pcall 回落就是双倍入账）。
 
-判据刻意保守：**只认 `$` 与 `%d` 出现在同一个字符串字面量里**。
+判据刻意保守：**只认 `$` 紧跟 `%d` 的同一字符串字面量**（`$%d` / `$%5d`）。
 计数/ID/时间戳的 `%d`、以及 `$%s` 已经正确的写法都不算。
 税、佣金、乘算奖励这类必然带小数的金额，全部落在这一形态里。
 """
@@ -22,7 +22,9 @@ BASE = Path(__file__).resolve().parents[2]          # T-CityLite.base/
 RESOURCES = BASE / "resources"
 BASELINE = Path(__file__).resolve().parent / "money_format_baseline.json"
 
-PERCENT_D = re.compile(r"%[-+0-9.]*d")
+# 只认「`$` 紧跟 `%d`」：`$%d` / `$%5d` / `$%05d`。
+# 反例：`%.d`（Lua 里是「字面点 + d」）、`%.2f`、`%d` 前面不是 `$` 的计数/ID。
+MONEY_PERCENT_D = re.compile(r"\$%[-+ 0-9]*(?:\.\d+)?d")
 
 
 @dataclass(frozen=True)
@@ -65,9 +67,7 @@ def _literals(text: str):
 def scan_text(text: str, rel: str = "<inline>") -> list[Site]:
     sites: list[Site] = []
     for index, literal in _literals(text):
-        if "$" not in literal:
-            continue
-        if not PERCENT_D.search(literal):
+        if not MONEY_PERCENT_D.search(literal):
             continue
         # 行首是注释的（`-- '$%d'`）跳过
         line_start = text.rfind("\n", 0, index) + 1
@@ -112,6 +112,22 @@ def write_baseline(path: Path = BASELINE) -> int:
     return payload["total"]
 
 
+def check() -> tuple[int, int]:
+    """返回 (当前命中数, 基线总数) —— 只读，不改文件。"""
+    total = sum(as_multiset(scan_repo()).values())
+    if not BASELINE.exists():
+        return total, 0
+    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    return total, int(baseline.get("total", 0))
+
+
 if __name__ == "__main__":  # pragma: no cover - 手工用
-    total = write_baseline()
-    print(f"wrote {BASELINE.name}: {total} 处")
+    import sys
+
+    if "--write" in sys.argv:
+        written = write_baseline()
+        print(f"wrote {BASELINE.name}: {written} 处")
+    else:
+        current, baseline_total = check()
+        print(f"当前 {current} 处 / 基线 {baseline_total} 处（只读；要重写基线请加 --write）")
+        raise SystemExit(0 if current == baseline_total else 1)
