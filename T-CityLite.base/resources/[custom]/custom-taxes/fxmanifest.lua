@@ -15,6 +15,7 @@ version '1.0.0'
 
 shared_scripts {
     '@qb-core/config.lua',
+    'shared/money_format.lua',
 }
 
 server_scripts {

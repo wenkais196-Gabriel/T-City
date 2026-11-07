@@ -57,7 +57,7 @@ AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneytype, amount, 
     -- 通过 SinkService 扣税
     if _G.Bus and _G.Bus.SinkService then
         _G.Bus.SinkService.Withdraw(src, taxAmount, 'transaction_tax',
-            ('large_transfer: $%d → taxed $%d (%s)'):format(amount, taxAmount, reason or 'unknown'))
+            ('large_transfer: $%s → taxed $%s (%s)'):format(TCMoney(amount), TCMoney(taxAmount), reason or 'unknown'))
     else
         -- fallback: 直接从玩家账户扣
         local Player = QBCore.Functions.GetPlayer(src)
@@ -73,14 +73,14 @@ AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneytype, amount, 
     -- 通知玩家
     if src > 0 then
         TriggerClientEvent('QBCore:Notify', src,
-            ('Large transfer tax: $%d (5%% of $%d)'):format(taxAmount, amount), 'primary')
+            ('Large transfer tax: $%s (5%% of $%s)'):format(TCMoney(taxAmount), TCMoney(amount)), 'primary')
     end
 
     -- 记录日志
     if exports['custom-logs'] then
         exports['custom-logs']:LogEconomy('大额转账扣税',
-            ('**Source**: %d | **金额**: $%d | **税收**: $%d | **原因**: %s'):format(
-                src, amount, taxAmount, reason or 'unknown'), 16776960)
+            ('**Source**: %d | **金额**: $%s | **税收**: $%s | **原因**: %s'):format(
+                src, TCMoney(amount), TCMoney(taxAmount), reason or 'unknown'), 16776960)
     end
 end)
 
@@ -106,7 +106,7 @@ AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneytype, amount, 
         if _G.Bus and _G.Bus.SinkService then
             -- 收款方扣税 (src 是收款方)
             _G.Bus.SinkService.Withdraw(src, taxAmount, 'transaction_tax',
-                ('org_transfer: $%d → taxed $%d'):format(amount, taxAmount))
+                ('org_transfer: $%s → taxed $%s'):format(TCMoney(amount), TCMoney(taxAmount)))
         end
 
         dailyStats.totalTaxCollected = dailyStats.totalTaxCollected + taxAmount
@@ -114,8 +114,8 @@ AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneytype, amount, 
 
         if exports['custom-logs'] then
             exports['custom-logs']:LogEconomy('跨组织转账扣税',
-                ('**收款方**: %d | **金额**: $%d | **税款**: $%d (3%%)'):format(
-                    src, amount, taxAmount), 16744448)
+                ('**收款方**: %d | **金额**: $%s | **税款**: $%s (3%%)'):format(
+                    src, TCMoney(amount), TCMoney(taxAmount)), 16744448)
         end
     end
 end)
@@ -127,11 +127,11 @@ RegisterCommand('taxstats', function(source)
     TriggerClientEvent('chat:addMessage', source, {
         color = { 255, 200, 50 },
         multiline = true,
-        args = { 'Tax', ('📊 今日税收统计\n大额交易: %d 笔\n跨组织转账: %d 笔\n总税收: $%d'):format(
-            stats.largeTransactionCount, stats.orgTransferCount, stats.totalTaxCollected) }
+        args = { 'Tax', ('📊 今日税收统计\n大额交易: %d 笔\n跨组织转账: %d 笔\n总税收: $%s'):format(
+            stats.largeTransactionCount, stats.orgTransferCount, TCMoney(stats.totalTaxCollected)) }
     })
 end, true)
 
 print('[TransactionMonitor] ✅ 大额转账监控已启动')
-print(('[TransactionMonitor]   大额阈值: $%dk (5%%) | 跨组织阈值: $%dk (3%%)'):format(
-    LARGE_TRANSACTION_THRESHOLD / 1000, ORG_TRANSFER_THRESHOLD / 1000))
+print(('[TransactionMonitor]   大额阈值: $%sk (5%%) | 跨组织阈值: $%sk (3%%)'):format(
+    TCMoney(LARGE_TRANSACTION_THRESHOLD / 1000), TCMoney(ORG_TRANSFER_THRESHOLD / 1000)))

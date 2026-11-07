@@ -16,6 +16,7 @@ import pytest
 
 BASE = Path(__file__).resolve().parents[3]
 REWARDS_LUA = str(BASE / 'resources' / '[custom]' / 'custom-quest' / 'server' / 'quest_rewards.lua')
+MONEY_LUA = str(BASE / 'resources' / '[custom]' / 'custom-quest' / 'shared' / 'money_format.lua')
 
 
 MOCK = r'''
@@ -85,7 +86,10 @@ end
 def run_rewards_test(test_code: str) -> dict:
     source = open(REWARDS_LUA, encoding='utf-8').read()
     source = source.replace("exports['qb-core']:GetCoreObject()", "QBCore")
-    script = MOCK + '\n' + source + '\n' + test_code
+    # 金额渲染函数住在 shared/money_format.lua（fxmanifest 的 shared_scripts 里），
+    # harness 只抽 server 脚本，所以要把它一起注入，否则 QuestMoney 是 nil。
+    shared = open(MONEY_LUA, encoding='utf-8').read()
+    script = MOCK + '\n' + shared + '\n' + source + '\n' + test_code
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False) as f:
         f.write(script)
