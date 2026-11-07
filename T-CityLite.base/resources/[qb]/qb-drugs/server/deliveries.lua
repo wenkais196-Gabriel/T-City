@@ -16,6 +16,29 @@ end)
 -- 🔒 排他锁: 防止同一玩家快速连续接取刷物品
 local acceptLocks = {}
 
+-- 🔒 服务端权威记录（2026-11-07，P1-5 阶段 F）：
+-- 原来押金 / 报酬 / 时间窗口全由客户端 deliveryData 决定 —— 改包就能 `deposit = 1e9`
+-- 换到 `AddMoney(finalReward + deposit)`，等于凭空印钱（宪法第 1 条：服务端权威）。
+-- 现在接单时按 Config 算好并留档，结算只认这份记录，客户端传的值一律不采信。
+local activeDeliveries = {}
+
+local function DeliveryTimes(distance)
+    local baseTime = math.ceil(distance / Config.DeliveryAvgSpeed) + Config.DeliveryFixedTime
+    return {
+        baseTime = baseTime,
+        fastTime = math.ceil(baseTime * Config.DeliveryFastMult),
+        maxTime = math.ceil(baseTime * Config.DeliveryLateMult),
+    }
+end
+
+-- 断线清理：记录属于"这个 source 上的这个角色"。掉线后不清，FiveM 复用 source 时
+-- 新玩家可能把旧单结算掉（CC 复核实测：没交押金也能拿到报酬+押金）。
+AddEventHandler('playerDropped', function()
+    local src = source
+    activeDeliveries[src] = nil
+    acceptLocks[src] = nil
+end)
+
 RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
@@ -28,9 +51,31 @@ RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
     end
     acceptLocks[src] = true
 
-    local deposit = deliveryData['deposit'] or 0
-    local item = Config.DeliveryItems[deliveryData.item].item
-    local itemAmount = deliveryData.amount
+    -- 一次只能有一单：否则第二单会覆盖记录 —— 第一单的押金白扣、货还在背包（CC 复核实测净赚 500/轮）
+    if activeDeliveries[src] then
+        acceptLocks[src] = nil
+        TriggerClientEvent('QBCore:Notify', src, '你还有一单配送没结算，先完成或取消它', 'error')
+        return
+    end
+
+    -- 校验商品：只认 Config 里的 key（原来直接索引，坏 key 会抛错；伪造 key 更是
+    -- 商品 key 在 Config 里是**数字下标**（1/2…），客户端传来也是数字；字符串 key 也一并接受
+    local itemKey = type(deliveryData) == 'table' and deliveryData.item or nil
+    local itemConfig = (type(itemKey) == 'number' or type(itemKey) == 'string')
+        and Config.DeliveryItems[itemKey] or nil
+    if not itemConfig then
+        acceptLocks[src] = nil
+        TriggerClientEvent('QBCore:Notify', src, '无效的配送商品', 'error')
+        return
+    end
+
+    -- 数量固定 1（客户端传什么都不认）；押金与报酬按 Config 反算
+    local itemAmount = 1
+    local item = itemConfig.item
+    local basePayout = itemConfig.payout * itemAmount
+    local deposit = math.ceil(basePayout * Config.DeliveryDepositRate)
+    local distance = math.max(0, math.min(tonumber(deliveryData.distance) or 0, 20000))
+    local times = DeliveryTimes(distance)
 
     -- 检查余额
     local cash = Player.Functions.GetMoney('cash')
@@ -50,6 +95,20 @@ RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
     -- 给货
     exports['qb-inventory']:AddItem(src, item, itemAmount, false, false, 'qb-drugs:server:acceptDelivery')
     TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'add')
+
+    -- 留档：结算只认这份，防重放
+    activeDeliveries[src] = {
+        citizenid = Player.PlayerData.citizenid,   -- 断线后 source 可能被复用，结算必须核对身份
+        item = itemKey,
+        amount = itemAmount,
+        basePayout = basePayout,
+        deposit = deposit,
+        fastTime = times.fastTime,
+        maxTime = times.maxTime,
+        acceptedAt = GetGameTimer(),
+        coords = type(deliveryData.coords) == 'table' and deliveryData.coords or nil,
+        locationLabel = deliveryData.locationLabel,
+    }
 
     -- 延迟释放锁 (防止极速连续触发)
     SetTimeout(2000, function()
@@ -80,8 +139,14 @@ RegisterNetEvent('qb-drugs:server:failDelivery', function(deliveryData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    local item = Config.DeliveryItems[deliveryData.item].item
-    local itemAmount = deliveryData.amount
+    local record = activeDeliveries[src]
+    if not record then return end
+    if record.citizenid and record.citizenid ~= Player.PlayerData.citizenid then
+        return
+    end
+    activeDeliveries[src] = nil
+    local item = Config.DeliveryItems[record.item].item
+    local itemAmount = record.amount
     local invItem = Player.Functions.GetItemByName(item)
     if invItem and invItem.amount >= itemAmount then
         exports['qb-inventory']:RemoveItem(src, item, itemAmount, false, 'qb-drugs:server:failDelivery')
@@ -90,19 +155,28 @@ RegisterNetEvent('qb-drugs:server:failDelivery', function(deliveryData)
     print(('[qb-drugs] %s delivery failed (timeout/cancel): removed %s x%d'):format(GetPlayerName(src), item, itemAmount))
 end)
 
-RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, completed, elapsed)
+RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, completed)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    local item = Config.DeliveryItems[deliveryData.item].item
-    local itemAmount = deliveryData.amount
-    local basePayout = deliveryData.basePayout or (deliveryData.itemData.payout * itemAmount)
-    local deposit = deliveryData.deposit or 0
-    local fastTime = deliveryData.fastTime or 300
-    local maxTime = deliveryData.maxTime or 600
+
+    -- 只认接单时留的档；没有档 = 没接单 / 已结算过（防重放双倍发钱）
+    local record = activeDeliveries[src]
+    if not record then return end
+    if record.citizenid and record.citizenid ~= Player.PlayerData.citizenid then
+        return                                      -- source 被复用给别的角色：不结旧单
+    end
+    activeDeliveries[src] = nil
+
+    local item = Config.DeliveryItems[record.item].item
+    local itemAmount = record.amount
+    local basePayout = record.basePayout
+    local deposit = record.deposit
+    local fastTime = record.fastTime
+    local maxTime = record.maxTime
     local copsOnline = QBCore.Functions.GetDutyCount('police')
     local invItem = Player.Functions.GetItemByName(item)
-    elapsed = tonumber(elapsed) or 0
+    local elapsed = GetGameTimer() - (record.acceptedAt or GetGameTimer())
 
     -- 判定等级
     local tier = 'timeout'  -- 超时
@@ -113,11 +187,13 @@ RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, compl
         end
     end
 
-    -- 先回收货物
-    if invItem and invItem.amount >= itemAmount then
-        exports['qb-inventory']:RemoveItem(src, item, itemAmount, false, 'qb-drugs:server:successDelivery')
-        TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
+    -- 先回收货物：**回收失败就不发钱**（原来背包里没有货也照发，等于白拿）
+    if not invItem or invItem.amount < itemAmount then
+        TriggerClientEvent('QBCore:Notify', src, ('配送物品不在背包里（需要 %s x%d），本次不算完成'):format(item, itemAmount), 'error')
+        return
     end
+    exports['qb-inventory']:RemoveItem(src, item, itemAmount, false, 'qb-drugs:server:successDelivery')
+    TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
 
     if tier == 'fast' then
         -- ⚡ 快速：120% 报酬 + 返还押金 + 声望+2
@@ -158,10 +234,10 @@ RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, compl
     end
 
     -- 通知手机：配送已结束，GPS 导航失效
-    if deliveryData.coords and deliveryData.coords.x then
+    if record.coords and record.coords.x then
         TriggerClientEvent('phone:client:gpsMessage', src, {
             status = 'done',
-            gps = { x = deliveryData.coords.x, y = deliveryData.coords.y, label = deliveryData.locationLabel or '目的地' },
+            gps = { x = record.coords.x, y = record.coords.y, label = record.locationLabel or '目的地' },
         })
     end
 end)
