@@ -50,7 +50,7 @@ REHOOK = re.compile(r"AddEventHandler\s*\(\s*['\"](?:onResourceStart|onClientRes
 USE_PATTERN = r"\.\s*(?:Functions|Player|Commands|ServerCallbacks|ClientCallbacks)\b"
 CLIENT_SEGMENTS = {"client", "cl_client", "cl"}
 
-COMMENT_BLOCK = re.compile(r"--\[(=*)\[.*?\]\]", re.S)   # 覆盖 --[[ ]] 与 --[=[ ]=] 长注释
+COMMENT_BLOCK = re.compile(r"--\[=*\[.*?\]=*\]", re.S)   # 覆盖 --[[ ]] 与 --[=[ ]=] 长注释（不用反向引用，避免写入时被转义吃掉）
 COMMENT_LINE = re.compile(r"--[^\n]*")
 
 
@@ -101,14 +101,18 @@ def _declares_qb_core(manifest: str) -> bool:
 
 
 def _has_rehook(source: str, variable: str) -> bool:
-    """结构化判重挂：AddEventHandler('onResourceStart'…) 的窗口里给**同一变量**重新赋值。"""
+    """结构化判重挂：AddEventHandler('onResourceStart'…) 的窗口里给**同一变量**赋值。
+
+    两种安全写法都认：
+      A. 直接同步重解析（`QBCore = exports['qb-core']:GetCoreObject()`）；
+      B. 线程里 pcall 重试后 `QBCore = core`（真机实证 A 会偶发 failed，B 才稳）。
+    两种的共同点：**给同一变量赋值** + 附近有 `GetCoreObject`。只出现事件名或只给别人赋值都不算。
+    """
     clean = _blank_comments(source)
-    assign = re.compile(
-        r"\b" + re.escape(variable) + r"\s*=\s*exports(?:\s*\[\s*['\"]qb-core['\"]\s*\]|\.qb-core)\s*:\s*GetCoreObject\s*\("
-    )
+    assign = re.compile(r"\b" + re.escape(variable) + r"\s*=\s*[\w_.]+")
     for match in REHOOK.finditer(clean):
-        window = clean[match.end(): match.end() + 1200]
-        if assign.search(window):
+        window = clean[match.end(): match.end() + 1600]
+        if assign.search(window) and "GetCoreObject" in window:
             return True
     return False
 

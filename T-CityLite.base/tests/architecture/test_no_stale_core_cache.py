@@ -63,8 +63,8 @@ def test_baseline_metadata_is_valid():
     assert payload.get("client_count") == len(payload.get("client_unverified", [])), (
         "client_count 与 client_unverified 条目数不一致"
     )
-    assert payload["count"] > 0 and payload["client_count"] > 0, (
-        "两侧都为 0 说明扫描器坏了（真机已证实至少各有一条），不要用空基线骗绿"
+    assert payload["count"] + payload["client_count"] > 0, (
+        "两侧都为 0 说明扫描器坏了（真机已证实至少有条 client 侧风险），不要用空基线骗绿"
     )
 
 
@@ -96,6 +96,24 @@ def test_scanner_classifies_the_three_safe_shapes():
         "-- AddEventHandler('onResourceStart', function() QBCore = exports['qb-core']:GetCoreObject() end)\n"
     )
     assert not scan._has_rehook(commented, "QBCore"), "注释里的重挂被当成自愈"
+
+    # 安全形态 B：线程里 pcall 重试后给同一变量赋值（真机实证过的写法）
+    retry_shape = (
+        "local QBCore = exports['qb-core']:GetCoreObject()\n"
+        "AddEventHandler('onResourceStart', function(resourceName)\n"
+        "    if resourceName ~= 'qb-core' then return end\n"
+        "    CreateThread(function()\n"
+        "        for _ = 1, 30 do\n"
+        "            local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)\n"
+        "            if ok and core then QBCore = core return end\n"
+        "            Wait(500)\n"
+        "        end\n"
+        "    end)\n"
+        "end)\n"
+    )
+    assert scan._has_rehook(retry_shape, "QBCore"), "线程重试形态（QBCore = core）没被识别为自愈"
+
+
 
     # 伪装 2b：`--[=[ ]=]` 长注释（普通 --[[ ]] 正则匹配不到的那种）
     long_comment = (

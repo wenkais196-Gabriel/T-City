@@ -61,12 +61,45 @@ review_by: 2026-12-31
    - **删除只看 retention**：探测范围宽 ≠ 删得狠（第一版就写错了，把 5 天前的文件删了，测试抓住）；
    - 当天文件永不删；`AuditSweepNow` 导出可手动触发。
 
-### 阶段 C（P2，未做）
+### 阶段 C（本轮完成 server 侧）
 
-5. 剩余 17 条 server 风险逐资源偿还（每个资源 1–2 行，但要逐个真机验证）。
-6. 19 个 **client** 侧风险文件：`onClientResourceStart('qb-core')` 的跨客户端语义**未在真机验证**，
-   验证前不动。
-7. 审计轮转参数进 SOP（convar 名、默认值、怎么改）。
+5. **剩余 17 条 server 风险已清零**（基线 server 17 → **0**，client 仍 19）。
+   17 个文件全部是 upstream `[qb]` 资源，统一加一段重解析处理器；其中 3 个
+   （qb-doorlock / qb-garages / qb-weed）原本已有 `onResourceStart`，但只处理**自己**启动
+   （`resource == GetCurrentResourceName()`），完全不管 qb-core 重启 —— 另挂一个专用处理器。
+6. **同步重解析不可靠，改成线程内重试（本轮最重要的发现）**：
+   PR #196 里的写法是在事件里直接 `QBCore = exports['qb-core']:GetCoreObject()`。
+   再跑一次真机就复现了失败：
+
+   ```
+   [script:qb-clothing] SCRIPT ERROR: @qb-clothing/server/main.lua:9:
+     An error occurred while calling export `GetCoreObject` in resource `qb-core`:
+       Execution of function reference in script host failed
+   ```
+
+   也就是说 `onResourceStart('qb-core')` 触发的那一刻，**本资源**持有的 export 函数引用
+   可能还指向 qb-core 的旧 script host —— 同步调用照样炸。现在的形态：
+
+   ```lua
+   AddEventHandler('onResourceStart', function(resourceName)
+       if resourceName ~= 'qb-core' then return end
+       CreateThread(function()
+           for _ = 1, 30 do
+               local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+               if ok and core then QBCore = core return end
+               Wait(500)
+           end
+       end)
+   end)
+   ```
+
+   扫描器的"已重挂"判定也随之放宽到两种安全写法（直接赋值 / 线程重试后 `QBCore = core`），
+   但仍要求**给同一变量赋值**且附近有 `GetCoreObject` —— `RegisterNetEvent` 冒充、注释、
+   给别人赋值三种伪装依旧判红。
+7. 19 个 **client** 侧风险文件：`onClientResourceStart('qb-core')` 的跨客户端语义**未在真机验证**，
+   验证前不动，记在 `client_unverified`。
+8. 审计轮转参数进 SOP（convar 名、默认值、怎么改）：`custom_logs_retention_days`（30）、
+   `custom_logs_max_bytes`（10485760）。
 
 ## 4. 交付标准（DoD）
 
@@ -80,6 +113,7 @@ review_by: 2026-12-31
 | G5 | 审计分片：过期删除、窗口内保留、当天保留、幂等 | Lua 沙箱跑真实 `SweepOldLogs` | 去掉 retention 判断（能探到就删）→ 红 |
 | G6 | 已有回归全绿 | `pytest tests/unit tests/architecture tests/integration` | — |
 | G7 | 真机 | `restart qb-core` + resync + 客户端加载 → 0 SCRIPT ERROR；审计按天分片、过期被清 | — |
+| G8 | 19 个重解析点全部是**线程重试**形态（同步调用真机会偶发 failed） | 扫描器 + 真机 | 改回同步调用 → 真机复现 qb-clothing 报错 |
 
 ## 5. 真机证据（2026-11-07）
 
