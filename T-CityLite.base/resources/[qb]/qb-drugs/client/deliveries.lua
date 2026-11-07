@@ -205,7 +205,7 @@ local function RequestDelivery()
     }
 
     QBCore.Functions.Notify(
-        ('📦 配送距离: %.0fm | 押金: $%d | 快速窗口: %ds'):format(distance, deposit, fastTime),
+        ('📦 配送距离: %.0fm | 押金: $%s | 快速窗口: %ds'):format(distance, Money(deposit), fastTime),
         'primary', 5000)
     TriggerServerEvent('qb-drugs:server:acceptDelivery', waitingDelivery)
 
@@ -234,8 +234,8 @@ local function RequestDelivery()
         local loc = waitingDelivery['coords']
         local itemLabel = QBCore.Shared.Items[waitingDelivery['itemData']['item']]['label']
         local locLabel = waitingDelivery['locationLabel'] or 'Drop-off'
-        local msg = ('📦 配送: %s x%d\n📍 %s | 📏 %.0fm\n⏱️ 快速:%ds 超时:%ds\n💰 押金:$%d'):format(
-            itemLabel, amount, locLabel, distance, fastTime, maxTime, deposit)
+        local msg = ('📦 配送: %s x%d\n📍 %s | 📏 %.0fm\n⏱️ 快速:%ds 超时:%ds\n💰 押金:$%s'):format(
+            itemLabel, amount, locLabel, distance, fastTime, maxTime, Money(deposit))
         TriggerServerEvent('qb-drugs:server:sendDeliverySMS', msg,
             { x = loc.x, y = loc.y, label = locLabel }, 'active')
     end)
