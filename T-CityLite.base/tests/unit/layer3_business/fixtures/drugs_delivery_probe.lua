@@ -211,8 +211,11 @@ emit('SCENARIO', 'double-accept')
 emit('DEDUCT_COUNT_DELTA', #state.removedMoney - deductBefore6)
 
 -- ── 场景 7：断线后 source 被复用给别的角色 → 旧记录不能结算 ──────────────────────
+-- 先清掉场景 6 留下的活跃单（否则这里的 accept 会被"已有活跃单"挡住，测的就不是 source 复用了）
+fire('qb-drugs:server:failDelivery', {})
 tick(3000)
-fire('qb-drugs:server:acceptDelivery', { item = 1, amount = 1, distance = 100 })   -- 角色 A 接单
+local accepted7 = fire('qb-drugs:server:acceptDelivery', { item = 1, amount = 1, distance = 100 })
+emit('ACCEPT_OK', accepted7 and 'yes' or 'no')
 state.items[Config.DeliveryItems[1].item] = 1
 player.PlayerData.citizenid = 'OTHERCID'                                          -- source 复用了
 local paidBefore7 = #state.addedMoney
