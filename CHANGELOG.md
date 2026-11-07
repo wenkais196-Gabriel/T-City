@@ -37,8 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     文件顶层 `local QBCore = exports['qb-core']:GetCoreObject()` 拿的是**当次 script host 的快照**，
     qb-core 重启后表里的函数引用全部失效。与「MySQL 回调里调引用」（PR #193/#194）不是一回事。
   - 修 qb-clothing（加 `onResourceStart` 重解析）与 custom-security（原重挂只复位标记、**没重解析 QBCore**，
-    守卫会挂到旧表上）。新增闸门 `test_no_stale_core_cache.py`：四条件判定 + server 23 条基线棘轮
-  （另 13 个 client 文件记 `client_unverified`，跨客户端语义未验证，不进棘轮但新增判红）。
+    守卫会挂到旧表上）。新增闸门 `test_no_stale_core_cache.py`：四条件判定 + server 17 条基线棘轮
+  （另 19 个 client 文件记 `client_unverified`，跨客户端语义未验证，不进棘轮但新增判红）。
   判重挂是结构化匹配：`RegisterNetEvent` 冒充、注释里的假重挂、给别的变量赋值都不算自愈。
   - 审计留存：按天分片 + 保留 30 天（`custom_logs_retention_days`）+ 单文件 10MB 滚动 + 单日 20 片封顶，
     启动宽扫 10 年清积压、每小时窄扫；**删除只看 retention**（第一版写错过，把 5 天前的文件删了，被测试抓住）。

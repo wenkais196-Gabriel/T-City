@@ -456,7 +456,7 @@ MUTATIONS += [
         gate="tests/architecture/test_no_stale_core_cache.py::test_baseline_metadata_is_valid",
         path="tests/architecture/stale_core_cache_baseline.json",
         content=None,
-        replace_from="  \"count\": 23,",
+        replace_from="  \"count\": 17,",
         replace_to="  \"count\": 0,",
         what="基线 count 与实际条目脱节（元数据失真）",
     ),

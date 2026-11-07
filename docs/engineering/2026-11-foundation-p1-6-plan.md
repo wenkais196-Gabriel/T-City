@@ -24,9 +24,9 @@ review_by: 2026-12-31
 2. 顶层缓存拿到的是 **qb-core 当次 script host 的快照**；qb-core 重启后表里的函数引用失效。
    没有声明 qb-core 依赖的资源不会被重启级联带走 → 旧表一直用下去。
 3. 规模（CC 可执行口径）：172 个文件顶层缓存，156 个用到函数引用，其中 119 个随级联自愈。
-   本仓扫描器（口径见 §3 阶段 A）判定 **server 侧 23 个文件**是真风险，另有 **13 个 client 文件**
+   本仓扫描器（口径见 §3 阶段 A）判定 **server 侧 17 个文件**是真风险，另有 **19 个 client 文件**
    单独记账（跨客户端语义未验证）。CC 初稿报 35/36，其中 12 条其实是 client 文件被旧的路径启发式
-   算进了 server —— 收口时按目录段重新划归，数字从 35 变成 23 + 13。
+   算进了 server —— 收口时按目录段重新划归，数字从 35 变成 17 + 19（其中 6 条是资源根目录的 client.lua）。
 4. `exec configs/modules/*.cfg`（ensure）**修不了**这类问题：`ensure` 对运行中的资源是 no-op，
    而风险集恰好是"从没被停过"的那批。
 
@@ -47,8 +47,8 @@ review_by: 2026-12-31
 2. **custom-security 的服务端主文件**：原来的重挂只复位了 `callbackGuardsInstalled`，
    **没有重解析 `QBCore`** —— 守卫会重新挂到旧表上（装上但无效）。现在两者都做。
 3. **闸门 `test_no_stale_core_cache.py`** + `stale_core_cache_scan.py`：
-   四条件判定（顶层缓存 ∧ 用函数引用 ∧ 无重解析 ∧ 不在级联内），基线 **server 23 条**棘轮，
-   client 13 条记 `client_unverified`（不进棘轮，但新增同样判红）。
+   四条件判定（顶层缓存 ∧ 用函数引用 ∧ 无重解析 ∧ 不在级联内），基线 **server 17 条**棘轮，
+   client 19 条记 `client_unverified`（不进棘轮，但新增同样判红）。
    判重挂是**结构化**的：只认 `AddEventHandler('onResourceStart'|'onClientResourceStart')`，
    且窗口内必须给**同一变量**重新赋值 `GetCoreObject()` —— `RegisterNetEvent` 冒充、
    注释里写事件名、给别的变量赋值，都不算自愈（CC 首轮验收的三条假阴性，已各有反向用例）。
@@ -63,8 +63,8 @@ review_by: 2026-12-31
 
 ### 阶段 C（P2，未做）
 
-5. 剩余 23 条 server 风险逐资源偿还（每个资源 1–2 行，但要逐个真机验证）。
-6. 13 个 **client** 侧风险文件：`onClientResourceStart('qb-core')` 的跨客户端语义**未在真机验证**，
+5. 剩余 17 条 server 风险逐资源偿还（每个资源 1–2 行，但要逐个真机验证）。
+6. 19 个 **client** 侧风险文件：`onClientResourceStart('qb-core')` 的跨客户端语义**未在真机验证**，
    验证前不动。
 7. 审计轮转参数进 SOP（convar 名、默认值、怎么改）。
 
@@ -75,7 +75,7 @@ review_by: 2026-12-31
 | G1 | 顶层缓存 + 用函数引用 + 无重解析 + 不在级联内 → 判红 | `stale_core_cache_scan.py` | fixture 新增一个这样的文件 → 红 |
 | G1b | 四种伪装形态不许判安全（RegisterNetEvent / 注释 / 别的变量 / 多缓存只判第一个） | 扫描器自证 | 把 `_has_rehook` 改成恒真 → 自证用例红 |
 | G2 | 三种安全形态（有重解析 / 声明依赖 / 只用 Shared 数据）不误报 | 扫描器自证 | 让 `_has_rehook` 恒真 → 自证用例红 |
-| G3 | 基线 server 23 / client 13 只许减 | 双向相等 + 元数据（owner/expires/count） | 改 count → 红 |
+| G3 | 基线 server 17 / client 19 只许减 | 双向相等 + 元数据（owner/expires/count） | 改 count → 红 |
 | G4 | `custom-security` 重挂时**同时**重解析 QBCore | 静态断言 handler 体内有赋值 | 删那行 → 红（阶段 A 已实机验证方向） |
 | G5 | 审计分片：过期删除、窗口内保留、当天保留、幂等 | Lua 沙箱跑真实 `SweepOldLogs` | 去掉 retention 判断（能探到就删）→ 红 |
 | G6 | 已有回归全绿 | `pytest tests/unit tests/architecture tests/integration` | — |
