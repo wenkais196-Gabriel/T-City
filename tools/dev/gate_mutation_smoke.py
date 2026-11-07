@@ -433,6 +433,43 @@ MUTATIONS += [
     ),
 ]
 
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_audit_retention.py::test_sweep_deletes_expired_shards_keeps_today_and_is_idempotent",
+        path="resources/[custom]/custom-logs/server/logs.lua",
+        content=None,
+        replace_from="            if offset > RETENTION_DAYS and day ~= today then",
+        replace_to="            if day ~= today then  -- 变异注入：不看 retention，能探到就删",
+        what="清理连当天分片一起删（审计数据丢失）",
+    ),
+]
+
+# P1-6：顶层缓存 QBCore 必须能自愈
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_no_stale_core_cache.py::test_no_new_stale_core_cache_files",
+        path="resources/[qb]/qb-shops/server/__mutant_stale.lua",
+        content="local QBCore = exports['qb-core']:GetCoreObject()\nQBCore.Functions.GetPlayer(1)\n",
+        what="新增顶层缓存且无重解析（restart qb-core 后函数引用失效）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_no_stale_core_cache.py::test_baseline_metadata_is_valid",
+        path="tests/architecture/stale_core_cache_baseline.json",
+        content=None,
+        replace_from="  \"count\": 35,",
+        replace_to="  \"count\": 0,",
+        what="基线 count 与实际条目脱节（元数据失真）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_no_stale_core_cache.py::test_scanner_classifies_the_three_safe_shapes",
+        path="tests/architecture/stale_core_cache_scan.py",
+        content=None,
+        replace_from="def _has_rehook(source: str) -> bool:",
+        replace_to="def _has_rehook(source: str) -> bool:\n    return True  # 变异注入：所有文件都当作已重挂",
+        what="扫描器把所有文件都当已自愈（风险集永远为空）",
+    ),
+]
+
 # P1-5 阶段 C：审计桥接必须可信且脱敏
 MUTATIONS += [
     Mutation(

@@ -1,6 +1,14 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local skinCache = {}
 
+-- ⚠️ qb-core 重启后，上面的顶层缓存是**旧 script host 的快照**，表里的函数引用全部失效
+-- （真机 2026-11-07 实测：`Execution of function reference in script host failed`）。
+-- 本资源没有 `dependency 'qb-core'`，所以 `restart qb-core` 不会停它 —— 必须自己重解析。
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= 'qb-core' then return end
+    QBCore = exports['qb-core']:GetCoreObject()
+end)
+
 local function SavePlayerSkinOffline(citizenid)
     local cache = skinCache[citizenid]
     if cache and cache.isDirty then
