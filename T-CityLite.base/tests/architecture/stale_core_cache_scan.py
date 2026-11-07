@@ -100,20 +100,58 @@ def _declares_qb_core(manifest: str) -> bool:
     return bool(re.search(r"^\s*['\"]?qb-core['\"]?\s*$", manifest, re.M)) and "dependenc" in manifest
 
 
-def _has_rehook(source: str, variable: str) -> bool:
-    """结构化判重挂：AddEventHandler('onResourceStart'…) 的窗口里给**同一变量**赋值。
+def _handler_bodies(clean: str):
+    """把每个 AddEventHandler('onResourceStart'…) 的**括号配对区间**取出来（不按字符数猜窗口）。"""
+    for match in REHOOK.finditer(clean):
+        open_index = clean.find("(", match.start())
+        if open_index < 0:
+            continue
+        depth = 0
+        for index in range(open_index, len(clean)):
+            char = clean[index]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    yield clean[open_index:index + 1]
+                    break
 
-    两种安全写法都认：
-      A. 直接同步重解析（`QBCore = exports['qb-core']:GetCoreObject()`）；
-      B. 线程里 pcall 重试后 `QBCore = core`（真机实证 A 会偶发 failed，B 才稳）。
-    两种的共同点：**给同一变量赋值** + 附近有 `GetCoreObject`。只出现事件名或只给别人赋值都不算。
+
+def _has_rehook(source: str, variable: str) -> bool:
+    """结构化判重挂：只在 AddEventHandler('onResourceStart'…) 的**函数体区间**里找，且必须是真赋值。
+
+    两种安全写法（其余一律不算）：
+      A. `<var> = exports['qb-core']:GetCoreObject()`（右值是**导出调用**本身）；
+      B. `if ok and core then <var> = core end`，且 `core` 在同一区间里由
+         `local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)` 绑定
+         —— 真机实证 A 在 qb-core 刚起来时会偶发 failed，B 才稳。
+
+    明确不接受（都有反向用例）：`<var> = <var>`、右值是死值/nil、赋值落在 `if not ok` 失败分支、
+    赋值在 handler 之外、以及只出现字符串 `'GetCoreObject'` 而没有真调用。
     """
     clean = _blank_comments(source)
-    assign = re.compile(r"\b" + re.escape(variable) + r"\s*=\s*[\w_.]+")
-    for match in REHOOK.finditer(clean):
-        window = clean[match.end(): match.end() + 1600]
-        if assign.search(window) and "GetCoreObject" in window:
+    export = r"exports\s*(?:\s*\[\s*['\x22]qb-core['\x22]\s*\]|\.qb-core)\s*:\s*GetCoreObject\s*\("
+    direct = re.compile(r"\b" + re.escape(variable) + r"\s*=\s*" + export)
+    retry_assign = re.compile(r"\b" + re.escape(variable) + r"\s*=\s*(\w+)\b")
+    export_call = re.compile(export)
+    for handler_body in _handler_bodies(clean):
+        if direct.search(handler_body):
             return True
+        if not export_call.search(handler_body):
+            continue
+        for match in retry_assign.finditer(handler_body):
+            bound = match.group(1)
+            if bound == variable:
+                continue                      # `X = X` 不是重挂
+            guard = handler_body[max(0, match.start() - 300): match.start()]
+            if not re.search(r"if\s+ok\b", guard):
+                continue                      # 没有成功守卫
+            if re.search(r"if\s+not\s+ok\b|unless", guard):
+                continue                      # 赋值在失败分支里
+            binding = re.compile(r"local\s+[^\n=]*\b" + re.escape(bound) + r"\b[^\n=]*=\s*pcall\s*\(")
+            if binding.search(handler_body):
+                return True
     return False
 
 

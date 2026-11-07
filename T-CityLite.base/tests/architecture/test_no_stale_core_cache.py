@@ -137,3 +137,54 @@ def test_scanner_classifies_the_three_safe_shapes():
 
     data_only = "local QBCore = exports['qb-core']:GetCoreObject()\nprint(QBCore.Shared.Items)\n"
     assert not re.search(r"\bQBCore" + scan.USE_PATTERN, data_only), "只用 Shared 数据的文件不该判风险"
+
+
+def test_scanner_rejects_the_bypass_shapes(tmp_path, monkeypatch):
+    """反向 fixture：五种"看起来像重挂、其实没重挂"的形态必须判红（CC 复核提出的绕过）。"""
+    base = "local QBCore = exports['qb-core']:GetCoreObject()\nQBCore.Functions.GetPlayer(1)\n"
+    bypass = {
+        "自赋值": base
+        + "AddEventHandler('onResourceStart', function(n)\n"
+          "    QBCore = QBCore\n    print('GetCoreObject')\nend)\n",
+        "右值是死值": base
+        + "AddEventHandler('onResourceStart', function(n)\n"
+          "    local core = nil\n    if ok and core then QBCore = core end\nend)\n",
+        "赋值在失败分支": base
+        + "AddEventHandler('onResourceStart', function(n)\n"
+          "    local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)\n"
+          "    if not ok then QBCore = core end\nend)\n",
+        "赋值在 handler 之外": base
+        + "AddEventHandler('onResourceStart', function(n)\n    print('hi')\nend)\n"
+          "QBCore = QBCore\nlocal c = exports['qb-core']:GetCoreObject()\n",
+        "只有字符串没有真调用": base
+        + "AddEventHandler('onResourceStart', function(n)\n"
+          "    print(\"exports['qb-core']:GetCoreObject(\")\n    QBCore = QBCore\nend)\n",
+    }
+    for name, source in bypass.items():
+        assert not scan._has_rehook(source, "QBCore"), f"绕过形态被判成自愈：{name}"
+        # 端到端：整份文件也不能因此从风险集里消失
+        root = tmp_path / "res"
+        (root / "res_x" / "server").mkdir(parents=True, exist_ok=True)
+        (root / "res_x" / "fxmanifest.lua").write_text("fx_version 'cerulean'\n", encoding="utf-8")
+        target = root / "res_x" / "server" / "main.lua"
+        target.write_text(source, encoding="utf-8")
+        monkeypatch.setattr(scan, "RESOURCES", root)
+        assert scan.scan_file(target), f"端到端漏判：{name}"
+
+    # 真形态（线程重试）必须仍被判自愈，端到端返回空
+    good = base + (
+        "AddEventHandler('onResourceStart', function(n)\n"
+        "    if n ~= 'qb-core' then return end\n"
+        "    CreateThread(function()\n"
+        "        local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)\n"
+        "        if ok and core then QBCore = core end\n"
+        "    end)\n"
+        "end)\n"
+    )
+    root = tmp_path / "res2"
+    (root / "res_y" / "server").mkdir(parents=True, exist_ok=True)
+    (root / "res_y" / "fxmanifest.lua").write_text("fx_version 'cerulean'\n", encoding="utf-8")
+    target = root / "res_y" / "server" / "main.lua"
+    target.write_text(good, encoding="utf-8")
+    monkeypatch.setattr(scan, "RESOURCES", root)
+    assert scan.scan_file(target) == [], "线程重试形态被判成风险（假阳性）"
