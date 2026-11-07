@@ -397,10 +397,10 @@ MUTATIONS += [
 MUTATIONS += [
     Mutation(
         gate="tests/architecture/test_cross_resource_callbacks.py::test_scanner_ignores_strings_comments_and_await_calls",
-        path="tests/architecture/cross_resource_callback_scan.py",
+        path="tests/architecture/lua_source.py",
         content=None,
-        replace_from="    return any(start <= index < end for start, end in spans)",
-        replace_to="    return False  # 变异注入：不再跳过字符串区间",
+        replace_from="        if start <= index < end:",
+        replace_to="        if False:  # 变异注入：不再跳过字符串区间",
         what="扫描器不再跳过字符串/注释（文案里的示例代码会被当成真调用）",
     ),
 ]
