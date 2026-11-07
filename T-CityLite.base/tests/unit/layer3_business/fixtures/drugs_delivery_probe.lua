@@ -89,6 +89,7 @@ exports = setmetatable({}, {
 })
 
 RegisterNetEvent = function(name, fn) handlers[name] = fn end
+AddEventHandler = function(name, fn) handlers[name] = fn end
 TriggerClientEvent = function(name, source, ...)
     local args = { ... }
     events[#events + 1] = { name = name, source = source, args = args }
@@ -97,7 +98,24 @@ TriggerClientEvent = function(name, source, ...)
     end
 end
 TriggerServerEvent = function() end
-SetTimeout = function(_, _) end
+-- 真定时器：accept 靠 SetTimeout(2000) 释放排他锁，no-op 会让后续场景全被锁挡住（CC 复核抓到过）
+local timers = {}
+SetTimeout = function(delay, fn)
+    timers[#timers + 1] = { due = state.now + (tonumber(delay) or 0), fn = fn }
+end
+local function tick(milliseconds)
+    state.now = state.now + (milliseconds or 0)
+    local due = {}
+    for _, timer in ipairs(timers) do
+        if timer.due <= state.now then due[#due + 1] = timer end
+    end
+    for _, timer in ipairs(due) do
+        for index, candidate in ipairs(timers) do
+            if candidate == timer then table.remove(timers, index) break end
+        end
+        timer.fn()
+    end
+end
 GetGameTimer = function() return state.now end
 GetPlayerName = function(source) return 'Tester' .. tostring(source) end
 GetCurrentResourceName = function() return 'qb-drugs' end
@@ -115,8 +133,13 @@ vector4 = function(x, y, z, w) return { x = x, y = y, z = z, w = w } end
 local function fire(name, ...)
     _G.source = 1
     assert(handlers[name], 'handler 未注册: ' .. name)
-    handlers[name](...)
+    -- handler 抛错也要继续跑后面的场景（旧实现遇到伪造 key 会直接崩）
+    local ok, err = pcall(handlers[name], ...)
     _G.source = nil
+    if not ok then
+        OUT[#OUT + 1] = 'HANDLER_ERROR|' .. tostring(err)
+    end
+    return ok
 end
 
 dofile(RES .. '/shared/money_format.lua')
@@ -161,12 +184,14 @@ emit('SCENARIO', 'replay')
 emit('PAID_COUNT_DELTA', #state.addedMoney - paidBefore)
 
 -- ── 场景 4：伪造商品 key ─────────────────────────────────────────────────────
+tick(3000)      -- 释放上一单的排他锁，否则这里测到的是 "Please wait..." 而不是商品校验
 local removedBefore = #state.removedMoney
 fire('qb-drugs:server:acceptDelivery', { item = 'not_an_item', amount = 1, deposit = 0 })
 emit('SCENARIO', 'fake-item')
 emit('DEDUCT_COUNT_DELTA', #state.removedMoney - removedBefore)
 
 -- ── 场景 5：背包里没有货时结算 → 不发钱 ──────────────────────────────────────
+tick(3000)
 fire('qb-drugs:server:acceptDelivery', { item = 2, amount = 1, distance = 100 })
 state.items[Config.DeliveryItems[2].item] = nil
 local paidBefore5 = #state.addedMoney
@@ -174,5 +199,38 @@ state.now = state.now + 100
 fire('qb-drugs:server:successDelivery', { item = 2, amount = 1, itemData = { payout = 1000 } }, true)
 emit('SCENARIO', 'missing-item')
 emit('PAID_COUNT_DELTA', #state.addedMoney - paidBefore5)
+
+
+-- ── 场景 6：连续接两单 —— 第二单必须被拒（否则覆盖记录 = 白扣押金 + 多留一个货）──────
+tick(3000)
+local deductBefore6 = #state.removedMoney
+fire('qb-drugs:server:acceptDelivery', { item = 2, amount = 1, distance = 100 })   -- 第一单
+tick(3000)
+fire('qb-drugs:server:acceptDelivery', { item = 1, amount = 1, distance = 100 })   -- 第二单，应被拒
+emit('SCENARIO', 'double-accept')
+emit('DEDUCT_COUNT_DELTA', #state.removedMoney - deductBefore6)
+
+-- ── 场景 7：断线后 source 被复用给别的角色 → 旧记录不能结算 ──────────────────────
+tick(3000)
+fire('qb-drugs:server:acceptDelivery', { item = 1, amount = 1, distance = 100 })   -- 角色 A 接单
+state.items[Config.DeliveryItems[1].item] = 1
+player.PlayerData.citizenid = 'OTHERCID'                                          -- source 复用了
+local paidBefore7 = #state.addedMoney
+tick(100)
+fire('qb-drugs:server:successDelivery', { item = 1, amount = 1, itemData = { payout = 1000 } }, true)
+emit('SCENARIO', 'source-reuse')
+emit('PAID_COUNT_DELTA', #state.addedMoney - paidBefore7)
+
+-- 断线回调本身也要清记录：清完之后再结算同样不发钱
+player.PlayerData.citizenid = 'TESTCID'
+if handlers['playerDropped'] then
+    _G.source = 1
+    handlers['playerDropped']()
+    _G.source = nil
+end
+local paidBefore8 = #state.addedMoney
+fire('qb-drugs:server:successDelivery', { item = 1, amount = 1, itemData = { payout = 1000 } }, true)
+emit('SCENARIO', 'after-drop')
+emit('PAID_COUNT_DELTA', #state.addedMoney - paidBefore8)
 
 io.write(table.concat(OUT, '\n'), '\n')

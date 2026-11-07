@@ -43,6 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 新增 `test_drugs_delivery_authority.py`：mock 运行时真的触发两个 net event，断言
     「押金 500 / 发货 1 个 / 结算 1500 / 重放 0 / 伪造 key 0 / 缺货 0」。对照旧实现实测为
     「押金 0 / 发货 999 / 结算 2.2e9 / 重放再发一次」。
+  - CC 复核后又补两个洞：**连开两单会覆盖记录**（押金白扣、货白留，实测净赚 500/轮）→ 接单时拒绝
+    已有活跃单；**断线后 source 被复用**会让新角色结算旧单 → 记录绑定 citizenid + playerDropped 清理。
+  - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
+    缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
+  - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
 - **P1-5 阶段 E：金额 `$%d` A 档 26 处偿还（93 → 68）**（2026-11-07）：
   - 按 CC 的分诊口径（A 真风险 / B 假风险 / C 待定），只修 A 档：实参可能是小数的那些。
     A 档分布：qb-drugs 8、custom-cartel 9、custom-crime 3、custom-security 2、custom-main 2、
