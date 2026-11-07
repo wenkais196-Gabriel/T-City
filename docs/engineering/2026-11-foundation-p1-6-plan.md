@@ -114,6 +114,7 @@ review_by: 2026-12-31
 | G6 | 已有回归全绿 | `pytest tests/unit tests/architecture tests/integration` | — |
 | G7 | 真机 | `restart qb-core` + resync + 客户端加载 → 0 SCRIPT ERROR；审计按天分片、过期被清 | — |
 | G8 | 19 个重解析点全部是**线程重试**形态（同步调用真机会偶发 failed） | 扫描器 + 真机 | 改回同步调用 → 真机复现 qb-clothing 报错 |
+| G9 | 至少挡得住 10 种「看起来像重挂其实没有」的写法 | `test_scanner_rejects_the_bypass_shapes`（含 `scan_file` 端到端） | `_has_rehook` 恒真 → 全红 |
 
 ## 5. 真机证据（2026-11-07）
 
@@ -127,3 +128,10 @@ review_by: 2026-12-31
 2. 不用 `pcall` 吞掉函数引用错误 —— 会把"静默失效"变成"带病运行"。
 3. 不把 `ensure` 当重启用（SOP 已写明）。
 4. 不做通配删除：清理只按文件名里的日期精确探测。
+5. **不引入 Lua AST**：判重挂用的是"字符串区间遮蔽 + 括号配对 + 结构匹配"，能挡住我们会写出来的
+   手滑形态（自赋值、死值、失败分支、handler 之外、字符串里写赋值、`if false` 死分支、
+   反了的事件名分支、`ok == false`），但**判不了可达性与值流**两件事：
+   - `local function later() ... end` 定义但从不调用；
+   - `local ok, core = pcall(...); core = nil; if ok and core then X = core end`。
+   这两类在仓库里没有实际出现，且需要调用图/值流分析；测试里用"断言现状"把它们记成**已知局限**
+   （将来真收紧到能识别，那两条断言会红，逼着文档同步）。对抗性伪装靠人审，不靠正则。

@@ -159,6 +159,22 @@ def test_scanner_rejects_the_bypass_shapes(tmp_path, monkeypatch):
         "只有字符串没有真调用": base
         + "AddEventHandler('onResourceStart', function(n)\n"
           "    print(\"exports['qb-core']:GetCoreObject(\")\n    QBCore = QBCore\nend)\n",
+        "死分支": base
+        + "AddEventHandler('onResourceStart', function(n)\n"
+          "    if false then QBCore = exports['qb-core']:GetCoreObject() end\nend)\n",
+        "字符串里写着整段赋值": base
+        + "AddEventHandler('onResourceStart', function(n)\n"
+          "    print(\"QBCore = exports['qb-core']:GetCoreObject()\")\nend)\n",
+        "长字符串伪造整个 handler": base
+        + "local doc = [[AddEventHandler('onResourceStart', function() "
+          "QBCore = exports['qb-core']:GetCoreObject() end)]]\n",
+        "反了的事件名分支": base
+        + "AddEventHandler('onResourceStart', function(n)\n"
+          "    if n ~= 'qb-core' then QBCore = exports['qb-core']:GetCoreObject() end\nend)\n",
+        "ok == false 失败分支": base
+        + "AddEventHandler('onResourceStart', function(n)\n"
+          "    local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)\n"
+          "    if ok == false then QBCore = core end\nend)\n",
     }
     for name, source in bypass.items():
         assert not scan._has_rehook(source, "QBCore"), f"绕过形态被判成自愈：{name}"
@@ -188,3 +204,23 @@ def test_scanner_rejects_the_bypass_shapes(tmp_path, monkeypatch):
     target.write_text(good, encoding="utf-8")
     monkeypatch.setattr(scan, "RESOURCES", root)
     assert scan.scan_file(target) == [], "线程重试形态被判成风险（假阳性）"
+
+    # 已知局限（显式记账，不假装覆盖）：
+    #   1. `local function later() QBCore = ... end` 定义但从不调用（需要调用图）；
+    #   2. `local ok, core = pcall(...); core = nil; if ok and core then QBCore = core end`（需要值流）。
+    # 两者在仓库里都没有实际出现；闸门的定位是挡住我们会写出来的手滑形态，对抗性伪装靠人审。
+    # 这里断言"现状"：将来若收紧到能识别，下面的断言会红，逼着同步改注释与文档。
+    nested = base + (
+        "AddEventHandler('onResourceStart', function(n)\n"
+        "    local function later() QBCore = exports['qb-core']:GetCoreObject() end\n"
+        "end)\n"
+    )
+    overwritten = base + (
+        "AddEventHandler('onResourceStart', function(n)\n"
+        "    local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)\n"
+        "    core = nil\n"
+        "    if ok and core then QBCore = core end\n"
+        "end)\n"
+    )
+    assert scan._has_rehook(nested, "QBCore") is True, "未调用嵌套函数已被识别，请更新注释与文档"
+    assert scan._has_rehook(overwritten, "QBCore") is True, "值覆盖已被识别，请更新注释与文档"
