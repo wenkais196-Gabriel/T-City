@@ -132,7 +132,7 @@ RegisterNetEvent('cartel:client:openSupplierMenu', function(data)
     local menuItems = {}
     for _, item in ipairs(items) do
         table.insert(menuItems, {
-            header = ('%s — $%d/pc (Stock: %d)'):format(L(item.label) or item.name, item.price, item.stock),
+            header = ('%s — $%s/pc (Stock: %d)'):format(L(item.label) or item.name, Money(item.price), item.stock),
             txt = ('Buy %s'):format(L(item.label) or item.name),
             params = {
                 event = 'cartel:client:buyItem',
@@ -161,7 +161,7 @@ end)
 
 RegisterNetEvent('cartel:client:buyItem', function(data)
     local dialog = exports['qb-input']:ShowInput({
-        header = ('Buy %s ($%d/pc)'):format(data.itemLabel, data.price),
+        header = ('Buy %s ($%s/pc)'):format(data.itemLabel, Money(data.price)),
         submitText = 'Confirm Purchase',
         inputs = {
             {
@@ -193,7 +193,7 @@ RegisterNetEvent('cartel:client:openDealerMenu', function(data)
     local menuItems = {}
     for itemName, price in pairs(buyPrices) do
         table.insert(menuItems, {
-            header = ('%s — $%d/pc'):format(itemName, price),
+            header = ('%s — $%s/pc'):format(itemName, Money(price)),
             txt = ('Sell %s'):format(itemName),
             params = {
                 event = 'cartel:client:sellItem',
@@ -216,7 +216,7 @@ end)
 
 RegisterNetEvent('cartel:client:sellItem', function(data)
     local dialog = exports['qb-input']:ShowInput({
-        header = ('Sell %s ($%d/pc)'):format(data.itemName, data.price),
+        header = ('Sell %s ($%s/pc)'):format(data.itemName, Money(data.price)),
         submitText = 'Confirm Sale',
         inputs = {
             {

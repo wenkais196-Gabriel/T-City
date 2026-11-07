@@ -6,6 +6,7 @@ description 'Allows players to deliver packages and sell drugs to npcs'
 version '1.3.0'
 
 shared_scripts {
+    'shared/money_format.lua',
     'config.lua',
     '@qb-core/shared/locale.lua',
     'locales/en.lua',

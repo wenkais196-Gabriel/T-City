@@ -42,8 +42,8 @@ AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
     DebugPrint(('PlayerLoaded: %s (%s)'):format(citizenid, name))
 
     -- 接入新 logs 模块记录精美的登录日志，同时附带资产审计信息
-    local text = ("**玩家名**: %s\n**CitizenID**: %s\n**物理ID (Source)**: %d\n**初始资金**: 现金 $%d | 银行 $%d"):format(
-        name, citizenid, src, cash, bank
+    local text = ("**玩家名**: %s\n**CitizenID**: %s\n**物理ID (Source)**: %d\n**初始资金**: 现金 $%s | 银行 $%s"):format(
+        name, citizenid, src, Money(cash), Money(bank)
     )
     exports['custom-logs']:LogGeneric("玩家上线通知", text, 65280) -- 绿色
 end)
@@ -103,8 +103,8 @@ AddEventHandler('QBCore:Server:OnPlayerUnload', function(src)
     DebugPrint(('PlayerUnload: %s (%s)'):format(citizenid, name))
 
     -- 接入新 logs 模块记录离线通知与离线资产审计
-    local text = ("**玩家名**: %s\n**CitizenID**: %s\n**离线前资金**: 现金 $%d | 银行 $%d"):format(
-        name, citizenid, cash, bank
+    local text = ("**玩家名**: %s\n**CitizenID**: %s\n**离线前资金**: 现金 $%s | 银行 $%s"):format(
+        name, citizenid, Money(cash), Money(bank)
     )
     exports['custom-logs']:LogGeneric("玩家离线通知", text, 16711680) -- 红色
 end)
