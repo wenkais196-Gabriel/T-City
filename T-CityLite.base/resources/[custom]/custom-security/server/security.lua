@@ -78,9 +78,9 @@ AddEventHandler('playerDropped', function(reason)
         )
 
         -- 组装 Discord 安全审计嵌入数据 (使用 custom-logs 导出)
-        local alertText = ("**玩家名**: %s (%s)\n**断连原因**: %s\n**状态**: %s\n**物理血量**: %d/200 (重伤判定: %s)\n**倒地死亡判定**: %s\n**手铐判定**: %s\n**坐标位置**: `%.2f, %.2f, %.2f`\n**钱包现金**: $%d | 银行余额: $%d\n**在线执勤警员**: %d 名"):format(
+        local alertText = ("**玩家名**: %s (%s)\n**断连原因**: %s\n**状态**: %s\n**物理血量**: %d/200 (重伤判定: %s)\n**倒地死亡判定**: %s\n**手铐判定**: %s\n**坐标位置**: `%.2f, %.2f, %.2f`\n**钱包现金**: $%s | 银行余额: $%s\n**在线执勤警员**: %d 名"):format(
             charName, cid, tostring(reason), statusAction, health, tostring(isWounded), tostring(isDead), tostring(isHandcuffed),
-            coords.x, coords.y, coords.z, cash, bank, policeCount
+            coords.x, coords.y, coords.z, Money(cash), Money(bank), policeCount
         )
         
         exports['custom-logs']:LogSecurity("战斗逃脱警报 (Combat Logging)", alertText, 13631488) -- 红色警报
@@ -104,11 +104,11 @@ AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneytype, amount, 
         local isadmin = QBCore.Functions.HasPermission(src, 'admin') or QBCore.Functions.HasPermission(src, 'god')
         
         -- 构建安全日志
-        local alertText = ("**警报级别**: %s\n**玩家名**: %s (%s)\n**物理ID**: %d\n**资产变动**: +$%d (%s)\n**来源事由**: %s\n**是否特权账号**: %s"):format(
+        local alertText = ("**警报级别**: %s\n**玩家名**: %s (%s)\n**物理ID**: %d\n**资产变动**: +$%s (%s)\n**来源事由**: %s\n**是否特权账号**: %s"):format(
             isadmin and "⚠️ 提示 (管理员操作)" or "🚨 严重高危 (瞬间巨额流入)",
             GetPlayerName(src) or "unknown",
             Player.PlayerData.citizenid or "unknown",
-            src, amount, moneytype, reason or "unknown",
+            src, Money(amount), moneytype, reason or "unknown",
             tostring(isadmin)
         )
 

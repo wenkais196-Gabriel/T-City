@@ -103,7 +103,7 @@ RegisterNetEvent('cartel:server:buyFromSupplier', function(npcId, itemName, quan
     -- 7. 扣款
     if Player.PlayerData.money.bank < totalCost and Player.PlayerData.money.cash < totalCost then
         TriggerClientEvent('QBCore:Notify', src,
-            ('资金不足，需要 $%d (市场价 $%d/个)'):format(totalCost, unitPrice), 'error')
+            ('资金不足，需要 $%s (市场价 $%s/个)'):format(Money(totalCost), Money(unitPrice)), 'error')
         return
     end
 
@@ -122,13 +122,13 @@ RegisterNetEvent('cartel:server:buyFromSupplier', function(npcId, itemName, quan
 
     -- 10. 通知
     TriggerClientEvent('QBCore:Notify', src,
-        ('购买了 %d x %s @ $%d/个 (总计 $%d)'):format(quantity, itemCfg.label or itemName, unitPrice, totalCost),
+        ('购买了 %d x %s @ $%s/个 (总计 $%s)'):format(quantity, itemCfg.label or itemName, Money(unitPrice), Money(totalCost)),
         'success')
 
     -- 审计日志
     if totalCost > 10000 and exports['custom-logs'] then
         exports['custom-logs']:LogEconomy('Cartel采购',
-            ('**%s** | 购买 %d x %s | $%d'):format(GetPlayerName(src), quantity, itemName, totalCost), 65280)
+            ('**%s** | 购买 %d x %s | $%s'):format(GetPlayerName(src), quantity, itemName, Money(totalCost)), 65280)
     end
 end)
 
@@ -218,13 +218,13 @@ RegisterNetEvent('cartel:server:sellToDealer', function(npcId, itemName, quantit
 
     -- 10. 通知
     TriggerClientEvent('QBCore:Notify', src,
-        ('出售了 %d x %s @ $%d/个 (总计 $%d)'):format(quantity, itemName, finalPrice, totalRevenue),
+        ('出售了 %d x %s @ $%s/个 (总计 $%s)'):format(quantity, itemName, Money(finalPrice), Money(totalRevenue)),
         'success')
 
     -- 审计日志
     if totalRevenue > 50000 and exports['custom-logs'] then
         exports['custom-logs']:LogEconomy('Cartel分销',
-            ('**%s** | 出售 %d x %s | $%d'):format(GetPlayerName(src), quantity, itemName, totalRevenue), 16744576)
+            ('**%s** | 出售 %d x %s | $%s'):format(GetPlayerName(src), quantity, itemName, Money(totalRevenue)), 16744576)
     end
 end)
 
