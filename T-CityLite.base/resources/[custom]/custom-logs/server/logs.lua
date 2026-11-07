@@ -65,6 +65,7 @@ end
 local RETENTION_DAYS = math.max(1, tonumber(GetConvar('custom_logs_retention_days', '30')) or 30)
 local MAX_FILE_BYTES = math.max(1024 * 1024, tonumber(GetConvar('custom_logs_max_bytes', '10485760')) or 10485760)
 local fileSizes = {}
+local oversizeWarned = false
 
 local function DatedFilename(logType, suffix)
     local day = os.date('%Y-%m-%d')
@@ -90,7 +91,14 @@ local function PickFilename(logType)
             return name
         end
         index = index + 1
-        if index > 20 then  -- 单日 20 个分片（≈200MB）封顶，防止异常刷屏打爆磁盘
+        if index > 20 then
+            -- 单日 20 个分片（≈200MB）。到顶后**继续写第 20 片**而不是新开文件，
+            -- 避免刷屏时把磁盘塞满 inode；但会告警一次，让运维看得见。
+            if not oversizeWarned then
+                oversizeWarned = true
+                print(('[custom-logs] ⚠️ %s 审计单日已超过 %d 片（%dMB），后续继续写入第 20 片：'
+                    .. '请检查是否有刷屏来源'):format(logType, 20, (MAX_FILE_BYTES * 20) // (1024 * 1024)))
+            end
             return DatedFilename(logType, 20)
         end
     end
@@ -115,7 +123,10 @@ end
 local AUDIT_TYPES = { 'economy', 'security', 'system' }
 
 local function SweepOldLogs(maxAgeDays)
-    if resourcePath == '' then return 0 end
+    if resourcePath == '' then
+        print('[custom-logs] ⚠️ 拿不到资源路径（GetResourcePath 返回空），跳过审计清理 —— 磁盘会持续增长')
+        return 0
+    end
     maxAgeDays = math.max(1, tonumber(maxAgeDays) or (RETENTION_DAYS + 2))
 
     local removed = 0
