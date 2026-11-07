@@ -68,3 +68,22 @@ def test_sanitizer_masks_identifiers_and_keeps_plain_text():
     plain = "Property tax: $61.75 processed"
     assert _run_sanitizer(plain) == plain, "普通文本被改动了（脱敏不能有副作用）"
     assert "\n" not in _run_sanitizer("line1\nline2"), "控制字符没清掉 —— 会把换行注入本地日志行"
+
+def test_log_sink_does_not_use_a_bare_relative_logs_path():
+    """审计落盘不能依赖进程 cwd —— 真机 2026-11-07 实测 `io.open("logs/…","a")` 恒失败。
+
+    FXServer 的 cwd 不是 server.cfg 所在目录，所以相对路径写盘会抛
+    `No such file or directory`，而降级分支写的子目录同样不存在 → **所有审计静默丢弃**
+    （连既有 LogEconomy/LogSecurity 调用点也一样，等于整条审计链路从未落过盘）。
+    修法是走 `GetResourcePath()` 的绝对路径 + 资源根目录兜底。
+    """
+    source = LOGS.read_text(encoding="utf-8")
+    # 只看代码，不看注释（注释里会引用这条历史 bug 的原写法）
+    code = chr(10).join(line for line in source.splitlines() if not line.lstrip().startswith("--"))
+
+    assert "GetResourcePath(" in code, (
+        "落盘没有用 GetResourcePath() 的绝对路径 —— 相对路径会随进程 cwd 失败"
+    )
+    for banned in ('io.open("logs/', "io.open('logs/", "io.open(folderPath"):
+        assert banned not in code, f"又出现了裸相对路径写盘（{banned}）—— cwd 不是数据目录时静默失败"
+    assert "SaveResourceFile(" in source, "缺少资源根目录兜底 —— 两条都失败就彻底丢了审计"

@@ -3,25 +3,48 @@ local QBCore = exports['qb-core']:GetCoreObject()
 local LogQueue = {}
 
 -- 高性能合并：批量清空写入
-local function FlushLogs()
-    local folderPath = "logs/"
-    local resourceName = GetCurrentResourceName()
+--
+-- ⚠️ 2026-11-07 真机发现：原来这里用相对路径 `logs/`，而 FXServer 的进程 cwd **不是**
+-- 数据目录（server.cfg 所在地），所以 `io.open("logs/…", "a")` 恒失败
+-- （`No such file or directory`）；降级分支写的 `logs_fallback/…` 目录也不存在，
+-- SaveResourceFile 同样失败 —— 结果是**所有审计静默丢弃**（连原有 LogEconomy/LogSecurity
+-- 调用点也一样）。所以改成：
+--   1) 绝对路径：`GetResourcePath()` 拿资源目录，写到 `<resource>/logs/`（目录不存在则跳过）；
+--   2) 再降级到资源根目录（无子目录，SaveResourceFile 一定能建文件）。
+local resourceName = GetCurrentResourceName()
+local resourcePath = GetResourcePath(resourceName) or ''
 
+local function AppendResourceFile(filename, chunk)
+    local existing = LoadResourceFile(resourceName, filename) or ""
+    return SaveResourceFile(resourceName, filename, existing .. chunk, -1)
+end
+
+local function FlushLogs()
     for filename, lines in pairs(LogQueue) do
         if #lines > 0 then
             local chunk = table.concat(lines)
             LogQueue[filename] = {} -- 立即清空缓冲区防止重复写入
 
-            -- 1. 尝试使用标准 Lua I/O 批量追加写入主服务器 logs/ 目录
-            local file, err = io.open(folderPath .. filename, "a")
-            if file then
-                file:write(chunk)
-                file:close()
-            else
-                -- 2. 权限受限时降级写入资源内部（非阻塞/Cfx自带安全通道）
-                local relativePath = ("logs_fallback/%s"):format(filename)
-                local existing = LoadResourceFile(resourceName, relativePath) or ""
-                SaveResourceFile(resourceName, relativePath, existing .. chunk, -1)
+            local written = false
+
+            -- 1. 资源目录下的 logs/（绝对路径，避开 cwd 不确定）
+            if resourcePath ~= '' then
+                local file = io.open(resourcePath .. 'logs/' .. filename, "a")
+                if file then
+                    file:write(chunk)
+                    file:close()
+                    written = true
+                end
+            end
+
+            -- 2. 降级：资源根目录（不依赖子目录存在）
+            if not written then
+                written = AppendResourceFile(filename, chunk) and true or false
+            end
+
+            -- 3. 两条都失败才抱怨一次（不再静默）
+            if not written then
+                print(('[custom-logs] ⚠️ 审计落盘失败（%s）—— 检查资源目录写权限'):format(filename))
             end
         end
     end

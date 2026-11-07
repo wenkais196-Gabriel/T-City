@@ -422,6 +422,17 @@ MUTATIONS += [
     ),
 ]
 
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_audit_bridge.py::test_log_sink_does_not_use_a_bare_relative_logs_path",
+        path="resources/[custom]/custom-logs/server/logs.lua",
+        content=None,
+        replace_from="                local file = io.open(resourcePath .. 'logs/' .. filename, \"a\")",
+        replace_to="                local file = io.open(\"logs/\" .. filename, \"a\")  -- 变异注入：裸相对路径",
+        what="审计落盘退回裸相对路径（cwd 不是数据目录时静默丢日志）",
+    ),
+]
+
 # P1-5 阶段 C：审计桥接必须可信且脱敏
 MUTATIONS += [
     Mutation(
