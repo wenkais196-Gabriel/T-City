@@ -20,7 +20,8 @@ review_by: 2026-12-31
    （`qb-garages/server/main.lua:276,279`）在 `MySQL.scalar` 回调里调
    `Player.Functions.RemoveMoney` —— 与 PR #193 修掉的是同一形态。**P0**。
 2. **金额格式化的规模双方判断冲突**：验收方看完样本后认为"只有 economy_service 两处"；
-   实施方词法扫描实测 **129 处** `$` 与 `%d` 同串的字面量（21 个资源）。
+   实施方词法扫描实测 **120 处** `$%d` 相邻的金额字面量（21 个资源；首版报 129，
+   经验收方指出 `%.d` 与 regex pattern 误报后收紧为「`$` 紧跟 `%d`」）。
    **以实施方为准**（可复现：抽字符串字面量后同时匹配 `$` 与 `%d`）。所以策略是
    **基线 + 棘轮 + 高危逐个修**，不是"两处已修完"。
 3. **审计链路是真问题但不是崩溃**：`qb-log:server:CreateLog` 全仓 47 处活跃发送点，
@@ -43,10 +44,16 @@ review_by: 2026-12-31
 
 ### A. 跨资源函数引用（真机已证实）
 
-判定依据（来自 PR #193 的真机栈）：在 oxmysql/JS 异步回调（或其 `await` 续体）里，
-调用**另一个资源经 `GetCoreObject()` 拿到的 Lua 函数引用**会抛
+判定依据（来自 PR #193 的真机栈）：在 oxmysql/JS **异步回调闭包**里调用
+**另一个资源经 `GetCoreObject()` 拿到的 Lua 函数引用**会抛
 `Execution of function reference in script host failed`；oxmysql 侧报
 `the reference wasn't valid`。`CreateThread + Wait(0)` 挪线程**实测无效**。
+
+**订正（2026-11-07，验收方指出）**：`MySQL.x.await` 的**续体是安全的** ——
+oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢复的是**调用方自己的协程**；
+只有传给 JS 的**回调闭包**才在 oxmysql 宿主里执行。实证：全仓 337 处 `.await`，
+`qb-management/server/sv_gang.lua:24-26` 在 `MySQL.query.await` 之后直接调
+`QBCore.Functions.GetPlayerByCitizenId`，长期运行无报错。所以 `qb-garages` 的修法（改 await）成立。
 
 | 编号 | 位置 | 触发时机 | 形态 | 状态 |
 |---|---|---|---|---|
@@ -166,7 +173,7 @@ review_by: 2026-12-31
 
 | 议题 | 验收方（CC） | 实施方 | 裁决 |
 |---|---|---|---|
-| 金额 `%d` 规模 | 「已证实的金额 `%d` 只有两处，其余是计数/ID」 | 词法扫描 129 处 `$`+`%d` | **按实施方**：CC 只看了样本；129 处可复现，且税/佣金/乘算必然带小数 |
+| 金额 `%d` 规模 | 「已证实的金额 `%d` 只有两处，其余是计数/ID」 | 词法扫描 120 处 `$%d`（首版 129 含 9 条 regex/`%.d` 误报，已收紧） | **两边都对了一半**：CC 的"两处"是已实锤的线上炸点，不是缺陷类总量；实施方扫的是全部候选 → 采用 120 条基线 + 逐个 triage |
 | A 类修正范围 | 主张修 `qb-garages` + 盘 `SaveInventory` | 同 | 一致 |
 | 是否新建审计表 | 建议先文件/webhook | 同 | 一致（P2 再评） |
 | 重启级联 | 给 SOP + 脚本 | 同 | 一致；基线取 85 |

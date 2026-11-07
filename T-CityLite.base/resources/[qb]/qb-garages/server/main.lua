@@ -268,21 +268,23 @@ RegisterNetEvent('qb-garages:server:PayDepotPrice', function(data)
     local Player = QBCore.Functions.GetPlayer(src)
     local cashBalance = Player.PlayerData.money['cash']
     local bankBalance = Player.PlayerData.money['bank']
-    MySQL.scalar('SELECT depotprice FROM player_vehicles WHERE plate = ?', { data.plate }, function(result)
-        if result then
-            local depotPrice = result
-
-            if cashBalance >= depotPrice then
-                Player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot')
-                TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
-            elseif bankBalance >= depotPrice then
-                Player.Functions.RemoveMoney('bank', depotPrice, 'paid-depot')
-                TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
-            else
-                TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_enough'), 'error')
-            end
+    -- ⚠️ 扣款必须在**同步段**做。原来扣款写在 MySQL.scalar 的回调里，而
+    -- `Player.Functions.RemoveMoney` 是 qb-core 的跨资源函数引用 —— 在 oxmysql 的
+    -- 异步回调里调用会抛 `Execution of function reference in script host failed`
+    -- （同一形态在 2026-11-01 真机的进角色路径上已经复现过一次）。
+    -- 修法：把价格取回到本资源线程（await），再走原有的判断与扣款。
+    local depotPrice = MySQL.scalar.await('SELECT depotprice FROM player_vehicles WHERE plate = ?', { data.plate })
+    if depotPrice then
+        if cashBalance >= depotPrice then
+            Player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot')
+            TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
+        elseif bankBalance >= depotPrice then
+            Player.Functions.RemoveMoney('bank', depotPrice, 'paid-depot')
+            TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
+        else
+            TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_enough'), 'error')
         end
-    end)
+    end
 end)
 
 -- House Garages
