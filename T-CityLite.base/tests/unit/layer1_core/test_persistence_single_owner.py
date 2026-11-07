@@ -167,6 +167,22 @@ QBCore = __QBCore
 
 def _extract_save_function() -> str:
     lines = PLAYER.read_text(encoding="utf-8").splitlines()
+
+    # Save() 现在调用文件级私有 helper `saveInventoryDeferred` —— 一起抽出来，
+    # 否则 harness 里会是 "attempt to call a nil value"（这个 helper 负责把背包写
+    # 从跨资源函数引用换成传数据，见 player.lua 里的注释）。
+    helper_start = None
+    for index, line in enumerate(lines):
+        if line.startswith("local function saveInventoryDeferred("):
+            helper_start = index
+            break
+    helper = []
+    if helper_start is not None:
+        for end in range(helper_start + 1, len(lines)):
+            if lines[end] == "end":
+                helper = lines[helper_start : end + 1]
+                break
+
     start = None
     for index, line in enumerate(lines):
         if line.startswith("function QBCore.Player.Save(source, force)"):
@@ -175,7 +191,7 @@ def _extract_save_function() -> str:
     assert start is not None, "player.lua 里找不到 QBCore.Player.Save —— 先更新这个 harness"
     for end in range(start + 1, len(lines)):
         if lines[end] == "end":
-            return "\n".join(lines[start : end + 1])
+            return "\n".join(helper + lines[start : end + 1])
     raise AssertionError("QBCore.Player.Save 没有闭合的 end")
 
 
