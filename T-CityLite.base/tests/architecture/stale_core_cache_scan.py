@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,12 +66,25 @@ class Risk:
         return f"{self.file}\u0000{self.variable}"
 
 
-def _blank_comments(source: str) -> str:
-    """把注释替换成等长空白（保留字符串字面量与行号），避免"注释里写着 onResourceStart"骗过判定。"""
+def _blank_comments(source: str, spans: list[tuple[int, int]] | None = None) -> str:
+    """把注释替换成等长空白（保留行号）。**字符串内部的 `--` 不算注释**，所以按字符串区间切段处理。"""
+    if spans is None:
+        spans = _string_spans(source)
+
     def blank(match: re.Match[str]) -> str:
         return re.sub(r"[^\n]", " ", match.group(0))
 
-    return COMMENT_LINE.sub(blank, COMMENT_BLOCK.sub(blank, source))
+    def segment(text: str) -> str:
+        return COMMENT_LINE.sub(blank, COMMENT_BLOCK.sub(blank, text))
+
+    pieces: list[str] = []
+    cursor = 0
+    for start, end in spans:
+        pieces.append(segment(source[cursor:start]))
+        pieces.append(source[start:end])      # 字符串原样保留
+        cursor = end
+    pieces.append(segment(source[cursor:]))
+    return "".join(pieces)
 
 
 def _scope(path: Path) -> str:
@@ -135,7 +149,13 @@ def _string_spans(source: str) -> list[tuple[int, int]]:
 
 
 def _in_string(spans: list[tuple[int, int]], position: int) -> bool:
-    return any(start <= position < end for start, end in spans)
+    if not spans:
+        return False
+    index = bisect_right(spans, (position, float("inf"))) - 1
+    if index < 0:
+        return False
+    start, end = spans[index]
+    return start <= position < end
 
 
 def _handler_bodies(clean: str, spans: list[tuple[int, int]]):
@@ -152,6 +172,8 @@ def _handler_bodies(clean: str, spans: list[tuple[int, int]]):
             continue
         depth = 0
         for index in range(open_index, len(clean)):
+            if _in_string(spans, index):
+                continue                       # 字符串里的括号不参与配对
             char = clean[index]
             if char == "(":
                 depth += 1
@@ -174,8 +196,8 @@ def _has_rehook(source: str, variable: str) -> bool:
     明确不接受（都有反向用例）：`<var> = <var>`、右值是死值/nil、赋值落在 `if not ok` 失败分支、
     赋值在 handler 之外、以及只出现字符串 `'GetCoreObject'` 而没有真调用。
     """
-    clean = _blank_comments(source)
-    spans = _string_spans(clean)
+    spans = _string_spans(source)
+    clean = _blank_comments(source, spans)
     export = r"exports\s*(?:\s*\[\s*['\x22]qb-core['\x22]\s*\]|\.qb-core)\s*:\s*GetCoreObject\s*\("
     direct = re.compile(r"\b" + re.escape(variable) + r"\s*=\s*" + export)
     retry_assign = re.compile(r"\b" + re.escape(variable) + r"\s*=\s*(\w+)\b")
