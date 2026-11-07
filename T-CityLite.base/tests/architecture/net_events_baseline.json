@@ -2,7 +2,7 @@
   "$comment": "P1-3 net event 基线。由 tests/architecture/net_event_baseline.py --write 生成；test_net_event_inventory.py 会拿实测逐字段比对（含 started），手改即红。",
   "version": 1,
   "rule": "P1-3",
-  "measured_at": "2026-11-01",
+  "measured_at": "2026-11-07",
   "scope": "resources/** 服务端脚本（server/ 优先；manifest 的 client_scripts 块与单条 client_script 都排除；共享文件按服务端算）；started = 是否在 configs/**/*.cfg 与 server.cfg 的 ensure 列表里",
   "enforced": [
     "qb-core"
@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 19,
+      "guarded": 21,
       "allowlisted": 0,
-      "unguarded": 197
+      "unguarded": 195
     },
     "other": {
       "events": 76,
@@ -362,9 +362,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 9,
-      "guarded": 0,
+      "guarded": 2,
       "allowlisted": 0,
-      "unguarded": 9,
+      "unguarded": 7,
       "started": true
     },
     "qb-fuel": {
@@ -773,12 +773,10 @@
     "qb-drugs": [
       "qb-drugs:server:acceptDelivery",
       "qb-drugs:server:dealerShop",
-      "qb-drugs:server:failDelivery",
       "qb-drugs:server:giveStealItems",
       "qb-drugs:server:robCornerDrugs",
       "qb-drugs:server:sellCornerDrugs",
       "qb-drugs:server:sendDeliverySMS",
-      "qb-drugs:server:successDelivery",
       "qb-drugs:server:updateDealerItems"
     ],
     "qb-fuel": [
@@ -1200,7 +1198,7 @@
     {
       "resource": "qb-drugs",
       "batch": "qb",
-      "unguarded": 9,
+      "unguarded": 7,
       "owner": "qb-drugs",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"

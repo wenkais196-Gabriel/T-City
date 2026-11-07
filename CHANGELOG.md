@@ -32,6 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **存档收敛为单一写者，拆掉 `ForceFlush → Save(true)` 的环（P1-2 / P1-1）**（qb-core / core-framework）：qb-core 的 `persistence_manager.lua` 重写为唯一写者 `Store`（一份脏池、一个定时器、一条 upsert），core-framework 的同名文件降级为纯委托层（无池、无 SQL、无定时器、不再回调 `Save(true)`）。三处语义修正：① 刷盘**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数（以前无论 SQL 成不成都清）；② `QBCore.Player.Save` 强制存档改为直接 `Store.SaveNow`，失败时 `IsDirty` 保持为 true 并 `ShowError`（以前无条件清）；③ `FlushAll` 兜底扫描 `IsDirty = true` 但没进池子的玩家（economy/metadata 服务只标 `IsDirty`，他们的钱以前只在下线那一刻才落库）。停服刷盘返回 ack `{reason, attempted, ok, failed, duration_ms}` 并打日志。证据：`tests/unit/layer1_core/test_persistence_single_owner.py`（改动前 **12 failed，含 399,964 层栈溢出**；改动后 19 passed）+ 重写的 `test_persistence.py`（delegate 转发契约），见 `docs/engineering/2026-11-foundation-p1-evidence.md`；全仓 `pytest tests/unit tests/architecture` → 1120 passed。真机：`restart qb-core` + 逐个 `ensure` 拉回被连带停掉的资源后，日志出现 `single owner store loaded` / `delegate loaded (owner=qb-core: resolved)`，无 SCRIPT ERROR。
 
+- **P1-5 阶段 F：qb-drugs 配送押金/报酬改服务端权威（可刷钱漏洞）**（2026-11-07）：
+  - 漏洞：`acceptDelivery` 与 `successDelivery` 直接采信客户端 `deliveryData` 的
+    `deposit` / `basePayout` / `amount` / `fastTime`。实测一个改过的包：不交押金拿到 999 个货；
+    结算时把 `deposit` 说成 1e9 → `AddMoney(finalReward + deposit)` 一次进账 **2,200,000,000**；
+    同一次结算还能重放。
+  - 修法：接单时按 Config 反算押金/报酬/时间窗口并存档（`activeDeliveries[src]`），数量固定 1；
+    结算只认这份存档（先消费再结算，防重放），`elapsed` 用服务端计时；背包里没有货就不发钱；
+    商品 key 必须在 `Config.DeliveryItems` 里。
+  - 新增 `test_drugs_delivery_authority.py`：mock 运行时真的触发两个 net event，断言
+    「押金 500 / 发货 1 个 / 结算 1500 / 重放 0 / 伪造 key 0 / 缺货 0」。对照旧实现实测为
+    「押金 0 / 发货 999 / 结算 2.2e9 / 重放再发一次」。
+  - CC 复核后又补两个洞：**连开两单会覆盖记录**（押金白扣、货白留，实测净赚 500/轮）→ 接单时拒绝
+    已有活跃单；**断线后 source 被复用**会让新角色结算旧单 → 记录绑定 citizenid + playerDropped 清理。
+  - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
+    缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
+  - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
 - **P1-5 阶段 E：金额 `$%d` A 档 26 处偿还（93 → 68）**（2026-11-07）：
   - 按 CC 的分诊口径（A 真风险 / B 假风险 / C 待定），只修 A 档：实参可能是小数的那些。
     A 档分布：qb-drugs 8、custom-cartel 9、custom-crime 3、custom-security 2、custom-main 2、
