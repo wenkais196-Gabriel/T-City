@@ -41,6 +41,7 @@ def _run_probe() -> dict[str, list[str]]:
             continue
         key, _, value = line.partition("|")
         parsed.setdefault(key, []).append(value)
+    assert "HANDLER_ERROR" not in parsed, f"handler 抛错：{parsed.get('HANDLER_ERROR')}"
     return parsed
 
 
@@ -64,11 +65,23 @@ def test_settlement_ignores_client_supplied_deposit():
 
 def test_settlement_is_single_use_and_rejects_forged_payloads():
     data = _run_probe()
-    replay_delta, fake_item_delta, missing_item_delta = (
-        data["PAID_COUNT_DELTA"],
-        data["DEDUCT_COUNT_DELTA"],
-        data["PAID_COUNT_DELTA"],
+    # 顺序：replay / fake-item / missing-item / double-accept / source-reuse / after-drop
+    assert data["PAID_COUNT_DELTA"][0] == "0", "重放结算又发了一次钱（缺『已结算』标记）"
+    assert data["DEDUCT_COUNT_DELTA"][0] == "0", "伪造商品 key 仍然扣了钱（没有校验 Config.DeliveryItems）"
+    assert data["PAID_COUNT_DELTA"][1] == "0", "背包里没有货也发了钱"
+
+
+def test_only_one_active_delivery_per_player():
+    data = _run_probe()
+    # 第二单必须被拒：只应有 1 次扣款（第一单 500），否则记录被覆盖 → 押金白扣、货白留
+    assert data["DEDUCT_COUNT_DELTA"][1] == "1", (
+        f"连开两单时扣款 {data['DEDUCT_COUNT_DELTA'][1]} 次（应为 1）—— 第二单覆盖了第一单的记录"
     )
-    assert replay_delta[0] == "0", "重放结算又发了一次钱（缺『已结算』标记）"
-    assert fake_item_delta[0] == "0", "伪造商品 key 仍然扣了钱（没有校验 Config.DeliveryItems）"
-    assert missing_item_delta[1] == "0", "背包里没有货也发了钱"
+
+
+def test_dropped_player_cannot_settle_or_be_impersonated():
+    data = _run_probe()
+    # source 被复用给别的角色 → 旧记录不结算
+    assert data["PAID_COUNT_DELTA"][2] == "0", "source 复用后新角色结算了别人留下的记录"
+    # 掉线回调清记录后，同一个 source 再发结算也不发钱
+    assert data["PAID_COUNT_DELTA"][3] == "0", "playerDropped 没有清记录，掉线后仍能结算"

@@ -31,6 +31,14 @@ local function DeliveryTimes(distance)
     }
 end
 
+-- 断线清理：记录属于"这个 source 上的这个角色"。掉线后不清，FiveM 复用 source 时
+-- 新玩家可能把旧单结算掉（CC 复核实测：没交押金也能拿到报酬+押金）。
+AddEventHandler('playerDropped', function()
+    local src = source
+    activeDeliveries[src] = nil
+    acceptLocks[src] = nil
+end)
+
 RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
@@ -43,7 +51,14 @@ RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
     end
     acceptLocks[src] = true
 
-    -- 校验商品：只认 Config 里的 key（原来直接索引，坏 key 会抛错；伪造 key 更是直接拿到任意物品）
+    -- 一次只能有一单：否则第二单会覆盖记录 —— 第一单的押金白扣、货还在背包（CC 复核实测净赚 500/轮）
+    if activeDeliveries[src] then
+        acceptLocks[src] = nil
+        TriggerClientEvent('QBCore:Notify', src, '你还有一单配送没结算，先完成或取消它', 'error')
+        return
+    end
+
+    -- 校验商品：只认 Config 里的 key（原来直接索引，坏 key 会抛错；伪造 key 更是
     -- 商品 key 在 Config 里是**数字下标**（1/2…），客户端传来也是数字；字符串 key 也一并接受
     local itemKey = type(deliveryData) == 'table' and deliveryData.item or nil
     local itemConfig = (type(itemKey) == 'number' or type(itemKey) == 'string')
@@ -83,6 +98,7 @@ RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
 
     -- 留档：结算只认这份，防重放
     activeDeliveries[src] = {
+        citizenid = Player.PlayerData.citizenid,   -- 断线后 source 可能被复用，结算必须核对身份
         item = itemKey,
         amount = itemAmount,
         basePayout = basePayout,
@@ -125,6 +141,9 @@ RegisterNetEvent('qb-drugs:server:failDelivery', function(deliveryData)
     if not Player then return end
     local record = activeDeliveries[src]
     if not record then return end
+    if record.citizenid and record.citizenid ~= Player.PlayerData.citizenid then
+        return
+    end
     activeDeliveries[src] = nil
     local item = Config.DeliveryItems[record.item].item
     local itemAmount = record.amount
@@ -144,6 +163,9 @@ RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, compl
     -- 只认接单时留的档；没有档 = 没接单 / 已结算过（防重放双倍发钱）
     local record = activeDeliveries[src]
     if not record then return end
+    if record.citizenid and record.citizenid ~= Player.PlayerData.citizenid then
+        return                                      -- source 被复用给别的角色：不结旧单
+    end
     activeDeliveries[src] = nil
 
     local item = Config.DeliveryItems[record.item].item
