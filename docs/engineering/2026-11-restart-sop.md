@@ -48,11 +48,13 @@ tcity-cmd -w 8 "restart <res>"      # Linux 布局
 
 然后**立刻核对**（三条都过才算恢复）：
 
-1. **资源数回到 85**（`configs/modules/*.cfg` 的 86 条 `ensure`，`custom-director` 重复一次）：
+1. **server.cfg exec 的模块里 `ensure` 的资源全部在跑**（按集合判定，不按固定数字 ——
+   地图资源 `fivem-map-*` 与 `dev.cfg` 的 `custom-testing`/`custom-agent-ops` 不该影响结果，
+   真机实测资源总数 85/86 都出现过）：
    ```bash
-   curl -s http://127.0.0.1:30130/info.json | jq '.resources | length'
+   curl -s http://127.0.0.1:30130/info.json | jq '.resources | length'   # 只看总数
    ```
-   少了就跑恢复脚本：
+   少了就跑恢复脚本（它会做集合核对，缺一个就退出 1）：
    ```bash
    pwsh tools/dev/resync_modules.ps1            # Windows（RCON）
    tools/dev/resync_modules.sh                  # Linux（有 tcity-cmd 时自动执行）
