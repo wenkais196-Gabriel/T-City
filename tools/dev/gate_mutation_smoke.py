@@ -405,6 +405,23 @@ MUTATIONS += [
     ),
 ]
 
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_money_format.py::test_money_format_debt_does_not_grow",
+        path="resources/[custom]/custom-taxes/server/__mutant_money.lua",
+        content="TriggerClientEvent('QBCore:Notify', src, ('税: $%d'):format(0.5), 'primary')",
+        what="新增一处 $%d 金额格式化（小数金额会抛 format 错）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_money_format.py::test_baseline_metadata_is_valid",
+        path="tests/architecture/money_format_baseline.json",
+        content=None,
+        replace_from='"owner": "hermes",',
+        replace_to='"owner": "",',
+        what="基线没有 owner（债无主，等于永久豁免）",
+    ),
+]
+
 # P1-5 阶段 A：MySQL 回调里不许调跨资源函数引用
 MUTATIONS += [
     Mutation(
