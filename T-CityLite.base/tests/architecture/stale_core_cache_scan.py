@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,7 +51,7 @@ REHOOK = re.compile(r"AddEventHandler\s*\(\s*['\"](?:onResourceStart|onClientRes
 USE_PATTERN = r"\.\s*(?:Functions|Player|Commands|ServerCallbacks|ClientCallbacks)\b"
 CLIENT_SEGMENTS = {"client", "cl_client", "cl"}
 
-COMMENT_BLOCK = re.compile(r"--\[(=*)\[.*?\]\]", re.S)   # 覆盖 --[[ ]] 与 --[=[ ]=] 长注释
+COMMENT_BLOCK = re.compile(r"--\[=*\[.*?\]=*\]", re.S)   # 覆盖 --[[ ]] 与 --[=[ ]=] 长注释（不用反向引用，避免写入时被转义吃掉）
 COMMENT_LINE = re.compile(r"--[^\n]*")
 
 
@@ -65,12 +66,25 @@ class Risk:
         return f"{self.file}\u0000{self.variable}"
 
 
-def _blank_comments(source: str) -> str:
-    """把注释替换成等长空白（保留字符串字面量与行号），避免"注释里写着 onResourceStart"骗过判定。"""
+def _blank_comments(source: str, spans: list[tuple[int, int]] | None = None) -> str:
+    """把注释替换成等长空白（保留行号）。**字符串内部的 `--` 不算注释**，所以按字符串区间切段处理。"""
+    if spans is None:
+        spans = _string_spans(source)
+
     def blank(match: re.Match[str]) -> str:
         return re.sub(r"[^\n]", " ", match.group(0))
 
-    return COMMENT_LINE.sub(blank, COMMENT_BLOCK.sub(blank, source))
+    def segment(text: str) -> str:
+        return COMMENT_LINE.sub(blank, COMMENT_BLOCK.sub(blank, text))
+
+    pieces: list[str] = []
+    cursor = 0
+    for start, end in spans:
+        pieces.append(segment(source[cursor:start]))
+        pieces.append(source[start:end])      # 字符串原样保留
+        cursor = end
+    pieces.append(segment(source[cursor:]))
+    return "".join(pieces)
 
 
 def _scope(path: Path) -> str:
@@ -100,16 +114,139 @@ def _declares_qb_core(manifest: str) -> bool:
     return bool(re.search(r"^\s*['\"]?qb-core['\"]?\s*$", manifest, re.M)) and "dependenc" in manifest
 
 
-def _has_rehook(source: str, variable: str) -> bool:
-    """结构化判重挂：AddEventHandler('onResourceStart'…) 的窗口里给**同一变量**重新赋值。"""
-    clean = _blank_comments(source)
-    assign = re.compile(
-        r"\b" + re.escape(variable) + r"\s*=\s*exports(?:\s*\[\s*['\"]qb-core['\"]\s*\]|\.qb-core)\s*:\s*GetCoreObject\s*\("
-    )
+def _string_spans(source: str) -> list[tuple[int, int]]:
+    """找出字符串字面量的区间（含引号/长括号）。字符串里写着"赋值"或整个 handler 都不算代码。"""
+    spans: list[tuple[int, int]] = []
+    index = 0
+    length = len(source)
+    while index < length:
+        char = source[index]
+        if char in ("'", '"'):
+            quote = char
+            start = index
+            index += 1
+            while index < length:
+                if source[index] == "\\":
+                    index += 2
+                    continue
+                if source[index] == quote:
+                    index += 1
+                    break
+                index += 1
+            spans.append((start, index))
+            continue
+        if char == "[":
+            bracket = re.match(r"\[(=*)\[", source[index:])
+            if bracket:
+                closer = "]" + bracket.group(1) + "]"
+                end = source.find(closer, index + len(bracket.group(0)))
+                end = length if end < 0 else end + len(closer)
+                spans.append((index, end))
+                index = end
+                continue
+        index += 1
+    return spans
+
+
+def _in_string(spans: list[tuple[int, int]], position: int) -> bool:
+    if not spans:
+        return False
+    index = bisect_right(spans, (position, float("inf"))) - 1
+    if index < 0:
+        return False
+    start, end = spans[index]
+    return start <= position < end
+
+
+def _handler_bodies(clean: str, spans: list[tuple[int, int]]):
+    """把每个**真代码里**的 AddEventHandler('onResourceStart'…) 括号配对区间取出来。
+
+    两处过滤：① 事件名出现在字符串里不算（长字符串伪造整个 handler）；② 窗口按括号配对，
+    不按字符数猜。
+    """
     for match in REHOOK.finditer(clean):
-        window = clean[match.end(): match.end() + 1200]
-        if assign.search(window):
+        if _in_string(spans, match.start()):
+            continue
+        open_index = clean.find("(", match.start())
+        if open_index < 0:
+            continue
+        depth = 0
+        for index in range(open_index, len(clean)):
+            if _in_string(spans, index):
+                continue                       # 字符串里的括号不参与配对
+            char = clean[index]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    yield clean[open_index:index + 1], open_index
+                    break
+
+
+def _has_rehook(source: str, variable: str) -> bool:
+    """结构化判重挂：只在 AddEventHandler('onResourceStart'…) 的**函数体区间**里找，且必须是真赋值。
+
+    两种安全写法（其余一律不算）：
+      A. `<var> = exports['qb-core']:GetCoreObject()`（右值是**导出调用**本身）；
+      B. `if ok and core then <var> = core end`，且 `core` 在同一区间里由
+         `local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)` 绑定
+         —— 真机实证 A 在 qb-core 刚起来时会偶发 failed，B 才稳。
+
+    明确不接受（都有反向用例）：`<var> = <var>`、右值是死值/nil、赋值落在 `if not ok` 失败分支、
+    赋值在 handler 之外、以及只出现字符串 `'GetCoreObject'` 而没有真调用。
+    """
+    spans = _string_spans(source)
+    clean = _blank_comments(source, spans)
+    export = r"exports\s*(?:\s*\[\s*['\x22]qb-core['\x22]\s*\]|\.qb-core)\s*:\s*GetCoreObject\s*\("
+    direct = re.compile(r"\b" + re.escape(variable) + r"\s*=\s*" + export)
+    retry_assign = re.compile(r"\b" + re.escape(variable) + r"\s*=\s*(\w+)\b")
+    export_call = re.compile(export)
+    for handler_body, offset in _handler_bodies(clean, spans):
+        # 这两个判断在"整份 handler 的文本"上做，先把字符串区间换算成 handler 内坐标
+        local_spans = [(start - offset, end - offset) for start, end in spans if end > offset and start < offset + len(handler_body)]
+
+        def real_match(pattern: re.Pattern[str]) -> re.Match[str] | None:
+            for match in pattern.finditer(handler_body):
+                if not _in_string(local_spans, match.start()):
+                    return match
+            return None
+
+        def unreachable(position: int) -> bool:
+            """死分支 / 反了的事件名分支：赋值位置之前的同窗口守卫里能看出来。"""
+            line_prefix = handler_body[handler_body.rfind("\n", 0, position) + 1: position]
+            guard = handler_body[max(0, position - 220): position]
+            if re.search(r"if\s+false\b", line_prefix + guard):
+                return True
+            # `if n ~= 'qb-core' then <赋值> end` = 反了的分支；`then return end` 是正常守卫，不算
+            if re.search(
+                r"~=\s*['\x22]qb-core['\x22][^\n]*\bthen\b(?![^\n]*\breturn\b)", guard
+            ) and not re.search(r"==\s*['\x22]qb-core['\x22]", guard):
+                return True
+            return False
+
+        match = real_match(direct)
+        if match and not unreachable(match.start()):
             return True
+        if not real_match(export_call):
+            continue
+        for match in retry_assign.finditer(handler_body):
+            if _in_string(local_spans, match.start()):
+                continue
+            if unreachable(match.start()):
+                continue
+            bound = match.group(1)
+            if bound == variable:
+                continue                      # `X = X` 不是重挂
+            line_prefix = handler_body[handler_body.rfind("\n", 0, match.start()) + 1: match.start()]
+            guard = handler_body[max(0, match.start() - 300): match.start()]
+            if not re.search(r"if\s+ok\b", guard):
+                continue                      # 没有成功守卫
+            if re.search(r"if\s+not\s+ok\b|ok\s*==\s*false|unless", guard + line_prefix):
+                continue                      # 赋值在失败分支里
+            binding = re.compile(r"local\s+[^\n=]*\b" + re.escape(bound) + r"\b[^\n=]*=\s*pcall\s*\(")
+            if binding.search(handler_body):
+                return True
     return False
 
 
