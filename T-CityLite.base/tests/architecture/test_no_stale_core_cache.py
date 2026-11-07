@@ -205,6 +205,32 @@ def test_scanner_rejects_the_bypass_shapes(tmp_path, monkeypatch):
     monkeypatch.setattr(scan, "RESOURCES", root)
     assert scan.scan_file(target) == [], "线程重试形态被判成风险（假阳性）"
 
+    # 字符串里的括号 / `--` 不得干扰括号配对与注释剥离（否则安全文件被误判风险）
+    paren_in_string = base + (
+        "AddEventHandler('onResourceStart', function(n)\n"
+        "    if n ~= 'qb-core' then return end\n"
+        "    print(')')\n"
+        "    QBCore = exports['qb-core']:GetCoreObject()\n"
+        "end)\n"
+    )
+    dash_in_string = base + (
+        "local note = 'a--b'\n"
+        "AddEventHandler('onResourceStart', function(n)\n"
+        "    if n ~= 'qb-core' then return end\n"
+        "    QBCore = exports['qb-core']:GetCoreObject()\n"
+        "end)\n"
+    )
+    assert scan._has_rehook(paren_in_string, "QBCore"), "字符串里的 ')' 干扰了括号配对"
+    assert scan._has_rehook(dash_in_string, "QBCore"), "字符串里的 '--' 被当成注释"
+
+    # 注释里的假重挂依旧不算（注释先于判定剥离）
+    comment_fake = base + (
+        "AddEventHandler('onResourceStart', function(n)\n"
+        "    -- QBCore = exports['qb-core']:GetCoreObject()\n"
+        "end)\n"
+    )
+    assert not scan._has_rehook(comment_fake, "QBCore"), "注释里的重挂被当成自愈"
+
     # 已知局限（显式记账，不假装覆盖）：
     #   1. `local function later() QBCore = ... end` 定义但从不调用（需要调用图）；
     #   2. `local ok, core = pcall(...); core = nil; if ok and core then QBCore = core end`（需要值流）。
