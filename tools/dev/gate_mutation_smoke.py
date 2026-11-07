@@ -394,6 +394,29 @@ MUTATIONS += [
     ),
 ]
 
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_cross_resource_callbacks.py::test_scanner_ignores_strings_comments_and_await_calls",
+        path="tests/architecture/cross_resource_callback_scan.py",
+        content=None,
+        replace_from="    return any(start <= index < end for start, end in spans)",
+        replace_to="    return False  # 变异注入：不再跳过字符串区间",
+        what="扫描器不再跳过字符串/注释（文案里的示例代码会被当成真调用）",
+    ),
+]
+
+# P1-5 阶段 A：MySQL 回调里不许调跨资源函数引用
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_cross_resource_callbacks.py::test_no_cross_resource_reference_inside_mysql_callbacks",
+        path="resources/[qb]/qb-garages/server/main.lua",
+        content=None,
+        replace_from="            Player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot')",
+        replace_to="            MySQL.scalar('SELECT depotprice FROM player_vehicles WHERE plate = ?', { data.plate }, function(r)\n                Player.Functions.RemoveMoney('cash', r, 'paid-depot') -- 变异注入\n            end)",
+        what="回调里调 Player.Functions.*（真机取抵押车崩因）",
+    ),
+]
+
 # P1-4 阶段 D：compat.lua 下线后不许复活
 MUTATIONS += [
     Mutation(
