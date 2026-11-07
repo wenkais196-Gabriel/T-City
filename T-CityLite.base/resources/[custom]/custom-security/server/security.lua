@@ -274,11 +274,18 @@ end)
 -- 2026-11-01：真机重启 qb-core 时发现守卫静默失效（测试只断言了"启动时劫持过"）。
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= 'qb-core' then return end
-    -- ⚠️ 必须**同时重解析 QBCore 表**：qb-core 重启后，本资源文件顶层缓存的
-    -- `local QBCore = exports['qb-core']:GetCoreObject()` 是旧 script host 的快照，
-    -- 表里的函数是失效的函数引用。只复位标记再重挂，守卫会挂到旧表上 —— 看起来装了、其实不生效。
-    -- （调研 2026-11-07：172 个文件顶层缓存，36 个不在重启级联内 → 属风险集）
-    QBCore = exports['qb-core']:GetCoreObject()
+    -- ⚠️ 不能在事件里同步调：真机实测此刻 export 引用可能还指向 qb-core 旧 script host，
+    -- 会抛 `Execution of function reference in script host failed`。放线程里重试到拿到新表。
+    CreateThread(function()
+        for _ = 1, 30 do
+            local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+            if ok and core then
+                QBCore = core
+                return
+            end
+            Wait(500)
+        end
+    end)
     -- qb-core 重建了 ServerCallbacks：先把幂等标记复位，否则重挂会被自己挡住
     callbackGuardsInstalled = false
     CreateThread(function()

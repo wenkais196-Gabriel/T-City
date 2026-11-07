@@ -6,7 +6,18 @@ local skinCache = {}
 -- 本资源没有 `dependency 'qb-core'`，所以 `restart qb-core` 不会停它 —— 必须自己重解析。
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= 'qb-core' then return end
-    QBCore = exports['qb-core']:GetCoreObject()
+    -- ⚠️ 不能在事件里同步调：真机实测此刻 export 引用可能还指向 qb-core 旧 script host，
+    -- 会抛 `Execution of function reference in script host failed`。放线程里重试到拿到新表。
+    CreateThread(function()
+        for _ = 1, 30 do
+            local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+            if ok and core then
+                QBCore = core
+                return
+            end
+            Wait(500)
+        end
+    end)
 end)
 
 local function SavePlayerSkinOffline(citizenid)

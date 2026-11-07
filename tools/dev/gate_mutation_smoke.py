@@ -444,6 +444,17 @@ MUTATIONS += [
     ),
 ]
 
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_no_stale_core_cache.py::test_scanner_rejects_the_bypass_shapes",
+        path="tests/architecture/stale_core_cache_scan.py",
+        content=None,
+        replace_from="def _has_rehook(source: str, variable: str) -> bool:",
+        replace_to="def _has_rehook(source: str, variable: str) -> bool:\n    return True  # 变异注入：任何 handler 都当作已重挂",
+        what="任何 handler 都当作已重挂（五种绕过全部放行）",
+    ),
+]
+
 # P1-6：顶层缓存 QBCore 必须能自愈
 MUTATIONS += [
     Mutation(
@@ -456,8 +467,8 @@ MUTATIONS += [
         gate="tests/architecture/test_no_stale_core_cache.py::test_baseline_metadata_is_valid",
         path="tests/architecture/stale_core_cache_baseline.json",
         content=None,
-        replace_from="  \"count\": 17,",
-        replace_to="  \"count\": 0,",
+        replace_from="  \"client_count\": 19,",
+        replace_to="  \"client_count\": 0,",
         what="基线 count 与实际条目脱节（元数据失真）",
     ),
     Mutation(
