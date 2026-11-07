@@ -14,15 +14,13 @@
   * `TriggerEvent` / `TriggerClientEvent` / `GetPlayerName` 等原生函数**不算**（任何 host 可调）。
 
 明确不覆盖：`local cb = function() ... end; MySQL.query(sql, {}, cb)` 这种**间接回调**
-（**已知盲区**，登记在 P1-5 计划 §8：当前全仓 0 处该形态；要关掉需要做一跳局部变量
-赋值追踪并补一条变异用例，本轮不做）。
+（已知盲区，登记在 P1-5 计划 §8：当前全仓 0 处该形态）。
 
-为什么 `MySQL.x.await` 的续体**不在**此列：oxmysql 的 Lua 包装
-（oxmysql/lib/MySQL.lua）里 `.await` = `promise.new()` + `Citizen.Await(p)`，
-恢复的是**调用方自己的协程**，所以续体里调跨资源函数引用是安全的；
-而回调闭包是被传给 JS、由 oxmysql 的宿主执行，那里没有调用方的 script host。
-实证：全仓已有 337 处 `.await`，其中 `qb-management/server/sv_gang.lua:24-26`
-在 `MySQL.query.await` 之后直接调 `QBCore.Functions.GetPlayerByCitizenId`，长期运行无报错。
+为什么 `MySQL.x.await` 的续体**不在**此列：oxmysql 的 Lua 包装里 `.await` =
+`promise.new()` + `Citizen.Await(p)`，恢复的是**调用方自己的协程**，所以续体里调跨资源
+函数引用是安全的；而回调闭包是被传给 JS、由 oxmysql 的宿主执行，那里没有调用方的 script host。
+实证：全仓 337 处 `.await`，其中 `qb-management/server/sv_gang.lua:24-26` 在
+`MySQL.query.await` 之后直接调 `QBCore.Functions.GetPlayerByCitizenId`，长期运行无报错。
 """
 
 from __future__ import annotations
@@ -31,10 +29,12 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import lua_source
+
 BASE = Path(__file__).resolve().parents[2]          # T-CityLite.base/
 RESOURCES = BASE / "resources"
 
-MYSQL_CALL = re.compile(r"\b(?:MySQL|exports\.oxmysql)\s*[.:]\s*(\w+)\s*(?:\.\s*await\s*)?\(")
+MYSQL_CALL = re.compile(r"\b(?:MySQL|exports\.oxmysql)\s*[.:]\s*\w+(?:\.await)?\s*\(")
 RISK = re.compile(r"\bQBCore\.Functions\.\w+|\bPlayer\.Functions\.\w+|exports\s*\[")
 
 
@@ -46,97 +46,28 @@ class Hit:
     snippet: str
 
 
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore")
-
-
-def _string_spans(text: str) -> list[tuple[int, int]]:
-    """字符串字面量区间（跳过注释），避免把文案里的 `Player.Functions.` 当代码。"""
-    spans: list[tuple[int, int]] = []
-    i, n = 0, len(text)
-    while i < n:
-        ch = text[i]
-        if ch == "-" and text.startswith("--", i):
-            j = text.find("\n", i)
-            i = n if j == -1 else j
-            continue
-        if ch in "'\"":
-            quote = ch
-            j = i + 1
-            while j < n:
-                if text[j] == "\\":
-                    j += 2
-                    continue
-                if text[j] == quote:
-                    break
-                j += 1
-            spans.append((i, j + 1))
-            i = j + 1
-            continue
-        if text.startswith("[[", i):
-            j = text.find("]]", i)
-            j = n if j == -1 else j + 2
-            spans.append((i, j))
-            i = j
-            continue
-        i += 1
-    return spans
-
-
-def _in_spans(index: int, spans: list[tuple[int, int]]) -> bool:
-    return any(start <= index < end for start, end in spans)
-
-
-def _match_paren(text: str, open_index: int) -> int:
-    """从 `(` 起做括号配平，返回对应 `)` 之后的位置。"""
-    depth = 0
-    i = open_index
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch in "'\"":
-            quote = ch
-            i += 1
-            while i < n:
-                if text[i] == "\\":
-                    i += 2
-                    continue
-                if text[i] == quote:
-                    break
-                i += 1
-        elif ch in "({[":
-            depth += 1
-        elif ch in ")}]":
-            depth -= 1
-            if depth == 0:
-                return i + 1
-        i += 1
-    return n
-
-
-def scan_text(text: str, rel: str = "<inline>") -> list[Hit]:
-    spans = _string_spans(text)
+def scan_text(source: str, rel: str = "<inline>") -> list[Hit]:
+    spans = lua_source.string_spans(source)
     hits: list[Hit] = []
 
-    for call in MYSQL_CALL.finditer(text):
+    for call in MYSQL_CALL.finditer(source):
         open_index = call.end() - 1
-        close_index = _match_paren(text, open_index)
+        close_index = lua_source.match_paren(source, open_index)
         if close_index <= open_index:
             continue
-        call_text = text[open_index:close_index]
 
-        callback = re.search(r"\bfunction\b", call_text)
+        callback = re.search(r"\bfunction\b", source[open_index:close_index])
         if not callback:
             continue
         body_start = open_index + callback.start()
-        body = text[body_start:close_index]
+        body = source[body_start:close_index]
 
         for risk in RISK.finditer(body):
             absolute = body_start + risk.start()
-            if _in_spans(absolute, spans):
+            if lua_source.in_spans(absolute, spans):
                 continue
-            line = text[:absolute].count("\n") + 1
-            raw = text.splitlines()[line - 1].strip()
+            line = lua_source.line_of(source, absolute)
+            raw = source.splitlines()[line - 1].strip()
             if raw.startswith("--"):
                 continue
             hits.append(Hit(rel, line, risk.group(0), raw[:110]))
@@ -144,7 +75,8 @@ def scan_text(text: str, rel: str = "<inline>") -> list[Hit]:
 
 
 def scan_file(path: Path) -> list[Hit]:
-    return scan_text(_read(path), path.relative_to(RESOURCES).as_posix())
+    return scan_text(path.read_text(encoding="utf-8", errors="ignore"),
+                     path.relative_to(RESOURCES).as_posix())
 
 
 def scan_repo() -> list[Hit]:

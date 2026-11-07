@@ -1,4 +1,4 @@
-"""扫描「金额格式化用 %d」—— `$` 与 `%d` 同串的字面量。
+"""扫描「金额格式化用 %d」—— `$` 紧跟 `%d` 的字面量。
 
 为什么：`('$%d'):format(0.5)` 在 Lua 5.4 直接抛
 `bad argument #1 to 'format' (number has no integer representation)`。
@@ -6,9 +6,8 @@
 `EconomyService.AddMoney` 的顺序是「写内存 → 更新客户端 → 事件 → 写审计」，
 所以钱已经进账、审计没写、调用方还收到错误（有人加 pcall 回落就是双倍入账）。
 
-判据刻意保守：**只认 `$` 紧跟 `%d` 的同一字符串字面量**（`$%d` / `$%5d`）。
-计数/ID/时间戳的 `%d`、以及 `$%s` 已经正确的写法都不算。
-税、佣金、乘算奖励这类必然带小数的金额，全部落在这一形态里。
+判据刻意保守：**只认 `$` 紧跟 `%d`**（`$%d` / `$%5d`）。
+反例（不算）：`%.d` 这种「字面点 + d」、`%.2f`、前面不是 `$` 的计数/ID。
 """
 
 from __future__ import annotations
@@ -18,13 +17,13 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import lua_source
+
 BASE = Path(__file__).resolve().parents[2]          # T-CityLite.base/
 RESOURCES = BASE / "resources"
 BASELINE = Path(__file__).resolve().parent / "money_format_baseline.json"
 
-# 只认「`$` 紧跟 `%d`」：`$%d` / `$%5d` / `$%05d`。
-# 反例：`%.d`（Lua 里是「字面点 + d」）、`%.2f`、`%d` 前面不是 `$` 的计数/ID。
-MONEY_PERCENT_D = re.compile(r"\$%[-+ 0-9]*(?:\.\d+)?d")
+MONEY_PERCENT_D = re.compile(r"\$%[-+ 0-9]*d")
 
 
 @dataclass(frozen=True)
@@ -33,48 +32,15 @@ class Site:
     text: str          # 字面量原文（含引号），用于指纹
 
 
-def _literals(text: str):
-    """产出 (start_index, literal_text)，跳过注释。"""
-    i, n = 0, len(text)
-    while i < n:
-        ch = text[i]
-        if ch == "-" and text.startswith("--", i):
-            j = text.find("\n", i)
-            i = n if j == -1 else j
-            continue
-        if ch in "'\"":
-            quote = ch
-            j = i + 1
-            while j < n:
-                if text[j] == "\\":
-                    j += 2
-                    continue
-                if text[j] == quote:
-                    break
-                j += 1
-            yield i, text[i : j + 1]
-            i = j + 1
-            continue
-        if text.startswith("[[", i):
-            j = text.find("]]", i)
-            j = n if j == -1 else j + 2
-            yield i, text[i:j]
-            i = j
-            continue
-        i += 1
-
-
-def scan_text(text: str, rel: str = "<inline>") -> list[Site]:
+def scan_text(source: str, rel: str = "<inline>") -> list[Site]:
     sites: list[Site] = []
-    for index, literal in _literals(text):
-        if not MONEY_PERCENT_D.search(literal):
+    for item in lua_source.literals(source):
+        if not MONEY_PERCENT_D.search(item.text):
             continue
-        # 行首是注释的（`-- '$%d'`）跳过
-        line_start = text.rfind("\n", 0, index) + 1
-        prefix = text[line_start:index].strip()
-        if prefix.startswith("--"):
+        line_start = source.rfind("\n", 0, item.start) + 1
+        if source[line_start:item.start].strip().startswith("--"):
             continue
-        sites.append(Site(rel, literal))
+        sites.append(Site(rel, item.text))
     return sites
 
 
@@ -100,8 +66,8 @@ def write_baseline(path: Path = BASELINE) -> int:
     counts = as_multiset(scan_repo())
     payload = {
         "$comment": (
-            "金额格式化债：`$` 与 `%d` 同串的字面量基线。只允许减少，不允许增加；"
-            "修好一处就从这里删一条（双向相等，删多了也会红）。"
+            "金额格式化债：`$` 紧跟 `%d` 的字面量基线。只允许减少，不允许增加；"
+            "修好一处就同步删一条（双向相等，删多了也会红）。"
         ),
         "owner": "hermes",
         "expires": "2027-03-31",
@@ -114,19 +80,17 @@ def write_baseline(path: Path = BASELINE) -> int:
 
 def check() -> tuple[int, int]:
     """返回 (当前命中数, 基线总数) —— 只读，不改文件。"""
-    total = sum(as_multiset(scan_repo()).values())
+    current = sum(as_multiset(scan_repo()).values())
     if not BASELINE.exists():
-        return total, 0
-    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
-    return total, int(baseline.get("total", 0))
+        return current, 0
+    return current, int(json.loads(BASELINE.read_text(encoding="utf-8")).get("total", 0))
 
 
 if __name__ == "__main__":  # pragma: no cover - 手工用
     import sys
 
     if "--write" in sys.argv:
-        written = write_baseline()
-        print(f"wrote {BASELINE.name}: {written} 处")
+        print(f"wrote {BASELINE.name}: {write_baseline()} 处")
     else:
         current, baseline_total = check()
         print(f"当前 {current} 处 / 基线 {baseline_total} 处（只读；要重写基线请加 --write）")
