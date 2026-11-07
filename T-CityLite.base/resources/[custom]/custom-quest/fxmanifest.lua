@@ -64,6 +64,7 @@ files {
 
 shared_scripts {
     'config.lua',
+    'shared/money_format.lua',
 }
 
 server_scripts {

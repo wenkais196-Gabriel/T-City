@@ -422,6 +422,26 @@ MUTATIONS += [
     ),
 ]
 
+# P1-5 阶段 C：审计桥接必须可信且脱敏
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_audit_bridge.py::test_bridge_is_trusted_and_sanitizes_before_writing",
+        path="resources/[custom]/custom-logs/server/logs.lua",
+        content=None,
+        replace_from="AddEventHandler('qb-log:server:CreateLog'",
+        replace_to="RegisterNetEvent('qb-log:server:CreateLog'",
+        what="把审计桥接注册成 NetEvent（客户端可伪造审计）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_audit_bridge.py::test_sanitizer_masks_identifiers_and_keeps_plain_text",
+        path="resources/[custom]/custom-logs/shared/sanitize.lua",
+        content=None,
+        replace_from="    if type(value) ~= 'string' or value == '' then return '***' end",
+        replace_to="    if value ~= nil then return value end  -- 变异注入：不再掩码",
+        what="脱敏函数不再掩码 citizenid（PII 直接落盘）",
+    ),
+]
+
 # P1-5 阶段 A：MySQL 回调里不许调跨资源函数引用
 MUTATIONS += [
     Mutation(

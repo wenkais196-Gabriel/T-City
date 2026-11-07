@@ -125,7 +125,7 @@ QBCore.Functions.CreateCallback('phone:server:sendGangObjective', function(sourc
 
     local msgContent = ("👁️ [OBJECTIVE DISPATCH] %s%s"):format(
         objective,
-        quota > 0 and (" (Cash Quota Target: $%d)"):format(quota) or ""
+        quota > 0 and (" (Cash Quota Target: $%s)"):format(PhoneMoney(quota)) or ""
     )
 
     local msgData = {

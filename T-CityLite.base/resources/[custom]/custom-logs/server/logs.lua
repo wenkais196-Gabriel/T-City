@@ -144,3 +144,40 @@ local function LogGeneric(title, message, color)
 end
 
 exports('LogGeneric', LogGeneric)
+
+-- ==========================================================
+-- qb-log 桥接：把 `[qb]` 侧那 47 处 TriggerEvent 接进来
+-- ==========================================================
+-- 背景（2026-11-07 调研）：全仓 47 处 `TriggerEvent('qb-log:server:CreateLog', …)`，
+-- 唯一监听者在 `archive/` 里（不启动）→ 活跃服 **零消费者**，经济审计、反作弊、
+-- 进出服日志全部丢失。这也是那个 `%d` 金额 bug 唯一可见症状只是报错的原因。
+--
+-- 为什么用 AddEventHandler 而不是 RegisterNetEvent：qb-ambulancejob 的客户端会
+-- `TriggerServerEvent('qb-log:…')`，注册成 NetEvent 就等于让客户端伪造审计。
+-- 这里只接**服务端可信**的 TriggerEvent。
+--
+-- message 是自由文本且带 PII（citizenid/license/ip/discord），必须先过 SanitizeLogText。
+local LOG_TYPE_ROUTING = {
+    playermoney = 'economy',
+    economy = 'economy',
+    anticheat = 'security',
+    bans = 'security',
+    security = 'security',
+}
+
+AddEventHandler('qb-log:server:CreateLog', function(logType, title, color, message, tagEveryone)
+    if type(message) ~= 'string' then return end
+
+    local kind = LOG_TYPE_ROUTING[logType] or 'system'
+    local safeTitle = SanitizeLogText(tostring(title or logType or 'qb-log'))
+    local safeMessage = SanitizeLogText(message)
+    local embedColor = tonumber(color) or nil
+
+    if kind == 'economy' then
+        LogEconomy(safeTitle, safeMessage, embedColor)
+    elseif kind == 'security' then
+        LogSecurity(safeTitle, safeMessage, embedColor)
+    else
+        LogGeneric(safeTitle, safeMessage, embedColor)
+    end
+end)
