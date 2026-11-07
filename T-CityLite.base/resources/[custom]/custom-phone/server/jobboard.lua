@@ -139,13 +139,13 @@ QBCore.Functions.CreateCallback('phone:server:postJob', function(source, cb, tit
             for _, playerId in ipairs(QBCore.Functions.GetPlayers()) do
                 PhoneNotify(playerId, {
                     title = "📋 New Urban Project",
-                    content = ("Project \"%s\" published by the Mayor! Payout: $%d."):format(title, reward),
+                    content = ("Project \"%s\" published by the Mayor! Payout: $%s."):format(title, PhoneMoney(reward)),
                 })
             end
 
             -- Discord Log
-            local auditText = ("**市长**: %s (%s)\n**工程**: %s\n**预算**: $%d\n**详述**: %s"):format(
-                GetPlayerName(source), Player.PlayerData.citizenid, title, reward, description
+            local auditText = ("**市长**: %s (%s)\n**工程**: %s\n**预算**: $%s\n**详述**: %s"):format(
+                GetPlayerName(source), Player.PlayerData.citizenid, title, PhoneMoney(reward), description
             )
             exports['custom-main']:LogEconomy("发布城市工程", auditText, 16776960)
 
@@ -248,7 +248,7 @@ RegisterNetEvent('phone:server:completeJob', function(id)
             -- Persisted server-originated notification (pushed once).
             PhoneNotify(src, {
                 title = "📋 Project Completed!",
-                content = ("You completed \"%s\" and received $%d (scaled by %.2f multiplier)."):format(job.title, finalAmount, scale),
+                content = ("You completed \"%s\" and received $%s (scaled by %.2f multiplier)."):format(job.title, PhoneMoney(finalAmount), scale),
             })
 
             -- Push update to NUI

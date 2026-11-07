@@ -78,7 +78,7 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 | qb-drugs | 8 | 押金、送货奖励 |
 | custom-quest | 8 | 奖励乘算（0.85 倍等） |
 | custom-market | 7 | 价格 |
-| 其余 14 个资源 | 33 | 零散 |
+| 其余 14 个资源 | 33 → 6 | 已偿还 taxes/phone/quest 的高危点 |
 
 危险等级取决于**入参是否可能带小数**：`%d` 对 `500.0` 不抛（Lua 5.4 里它是整数表示），
 对 `0.5` / `0.85*100` 抛。税率、佣金、乘算奖励这三类必然带小数。
@@ -117,28 +117,31 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 3. **闸门 G-A1**：静态扫描「MySQL 回调体内出现 `Player.Functions.` / `QBCore.Functions.` /
    `exports[`（非数据形态）」→ 红。配反向 fixture。允许白名单（带 owner + 到期）。
 
-### 阶段 B（P1）
+### 阶段 B（P1）  ✅ 闸门 + 首批偿还完成（2026-11-07）
 
 4. **闸门 G-B1（棘轮）**：`$` 与 `%d` 同串的字面量集合必须**逐条等于**基线（129 条，含
    文件+行文本指纹），新增要登记、删除要同步 → 双向相等。配反向 fixture。
-5. **修高危点**：`custom-taxes`（比例税）、`custom-phone`（转账）、`custom-quest`（乘算奖励）、
-   `qb-drugs`（押金/奖励）、`custom-cartel`（分红）。统一用「整数不带小数点、小数两位」的
-   渲染函数；每修一处从基线里删一条。
+5. **修高危点**：`custom-taxes`（比例税）、`custom-phone`（转账）、`custom-quest`（乘算奖励）
+   —— 已修，三个资源各自加资源内的 money_format 共享脚本（`TCMoney` / `PhoneMoney` / `QuestMoney`，
+   语义一致：整数不带小数点、小数两位），基线 120 → **93**。
+   `qb-drugs`（押金/奖励）、`custom-cartel`（分红）**未修**，留在基线里作为债（到期 2027-03-31）。
 6. **闸门 G-B2**：`math.floor(<money 名>)` → 红，除非行尾 `-- money-int-ok`。
 
-### 阶段 C（P1）
+### 阶段 C（P1）  ✅ 2026-11-07 完成
 
-7. **桥接 qb-log → custom-logs**：`AddEventHandler`（不是 `RegisterNetEvent`，防客户端伪造），
-   `playermoney` → `LogEconomy`，`anticheat`/`bans`/`security` → `LogSecurity`，其余 → `LogGeneric`。
-8. **PII 脱敏**：现有 `message` 是自由文本且多处含 `license`/`playerIp`/完整 `citizenid`。
-   桥接层必须先 `sanitize()`（掩码 cid 前4…后4、抹掉 license/ip/discord），再落盘。
+7. **桥接 qb-log → custom-logs**：已落地 —— `AddEventHandler`（不是 `RegisterNetEvent`，
+   防客户端伪造），`playermoney`/`economy` → `LogEconomy`，`anticheat`/`bans`/`security` → `LogSecurity`，
+   其余 → `LogGeneric`。
+8. **PII 脱敏**：已落地 custom-logs 的 shared 目录里 sanitize 脚本提供的 `SanitizeLogText` ——
+   `citizenid` 掩码（8 位以下整体 `***`）、`license`/`ip`/`discord`/`steam` 值打码、
+   控制字符清掉、正文截断 500。玩家名保留（排查需要，且不是可登录凭据）。
 9. **闸门 G-C1**：活跃 `TriggerEvent('qb-log:...')` 必须能找到被 `ensure` 的 handler；
    桥接存在且调用 `sanitize()`。配反向 fixture（payload 含 `playerIp` → 红）。
 
-### 阶段 D（P1）
+### 阶段 D（P1）  ✅ 2026-11-07 完成
 
-10. **`tools/dev/resync_modules.ps1`**：RCON 包装，`-DryRun` 打印 17 条 `exec`，
-    实跑后断言资源数回到 85。不动原 `.sh`。
+10. **`tools/dev/resync_modules.ps1`**：已落地 —— RCON 包装，`-DryRun` 打印 17 条 `exec`
+    （顺序同 `server.cfg`），实跑后查 `info.json` 核对资源数 85，不足则退出码 1。不动原 `.sh`。
 11. **SOP 文档**：活服禁止 `restart qb-core/core-framework/oxmysql`；必须热重启时按顺序
     `exec configs/modules/*.cfg`；验证三件事（资源数 85、无 `No such export`、关键命令已注册）。
 

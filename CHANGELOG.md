@@ -32,6 +32,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **存档收敛为单一写者，拆掉 `ForceFlush → Save(true)` 的环（P1-2 / P1-1）**（qb-core / core-framework）：qb-core 的 `persistence_manager.lua` 重写为唯一写者 `Store`（一份脏池、一个定时器、一条 upsert），core-framework 的同名文件降级为纯委托层（无池、无 SQL、无定时器、不再回调 `Save(true)`）。三处语义修正：① 刷盘**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数（以前无论 SQL 成不成都清）；② `QBCore.Player.Save` 强制存档改为直接 `Store.SaveNow`，失败时 `IsDirty` 保持为 true 并 `ShowError`（以前无条件清）；③ `FlushAll` 兜底扫描 `IsDirty = true` 但没进池子的玩家（economy/metadata 服务只标 `IsDirty`，他们的钱以前只在下线那一刻才落库）。停服刷盘返回 ack `{reason, attempted, ok, failed, duration_ms}` 并打日志。证据：`tests/unit/layer1_core/test_persistence_single_owner.py`（改动前 **12 failed，含 399,964 层栈溢出**；改动后 19 passed）+ 重写的 `test_persistence.py`（delegate 转发契约），见 `docs/engineering/2026-11-foundation-p1-evidence.md`；全仓 `pytest tests/unit tests/architecture` → 1120 passed。真机：`restart qb-core` + 逐个 `ensure` 拉回被连带停掉的资源后，日志出现 `single owner store loaded` / `delegate loaded (owner=qb-core: resolved)`，无 SCRIPT ERROR。
 
+- **P1-5 阶段 B/C/D：金额格式化偿还 + 审计桥接 + 重启 SOP**（2026-11-07）：
+  - **B**：`custom-taxes` / `custom-phone` / `custom-quest` 各加一份资源内的 money_format 共享脚本
+    （TCMoney / PhoneMoney / QuestMoney 三个函数，语义一致：整数不带小数点、小数两位），
+    把税（比例计算）、转账、乘算奖励这些**必然带小数**的金额从 `$%d` 改成 `$%s`；
+    金额格式化基线 **120 → 93**（`qb-drugs` / `custom-cartel` 仍留在基线里作为债）。
+  - **C**：`custom-logs` 新增 `qb-log:server:CreateLog` 桥接 —— 全仓 47 处发送点此前**零消费者**
+    （唯一监听者在 `archive/`，不启动），经济/反作弊/进出服审计全部丢失。桥接用
+    `AddEventHandler`（不是 `RegisterNetEvent`，防客户端伪造），按 `playermoney`/`anticheat` 分流到
+    已有的 `LogEconomy`/`LogSecurity`/`LogGeneric`；落盘前过 `SanitizeLogText`
+    （citizenid 掩码、license/ip/discord/steam 打码、控制字符清掉、截断 500）。
+  - **D**：`tools/dev/resync_modules.ps1`（RCON 包装，`-DryRun` 打印 17 条 `exec`，跑完核对资源数 85）
+    + `docs/engineering/2026-11-restart-sop.md`（`restart qb-core` 会停 44 个依赖资源的 SOP）。
 - **P1-4 阶段 D：compat.lua 整份下线**（core-framework）：删掉 `QBCore.Functions.Notify` 的包装、
   fxmanifest 去掉该行、文件删除，猴补登记表 5 → 4 条。删除而不是「改 export + GetResourceState 守卫」的理由：
   export 到已停止的资源一样失败（只是换了个报错位置），且会多出第二个 Notify 入口；而这一层还静默改变语义

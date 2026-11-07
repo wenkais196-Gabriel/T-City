@@ -266,8 +266,8 @@ function ProcessPropertyTax(source)
                         setLastTaxPaid(citizenid, houseId, now)
                         setDelinquentCount(citizenid, houseId, 0)
 
-                        print(('[PropertyTax] %s paid $%d for %s (%d cycles × $%d)')
-                            :format(citizenid, totalDue, houseId, cyclesDue, taxPerCycle))
+                        print(('[PropertyTax] %s paid $%s for %s (%d cycles × $%s)')
+                            :format(citizenid, TCMoney(totalDue), houseId, cyclesDue, TCMoney(taxPerCycle)))
                     else
                         -- 余额不足 → 递增欠费次数
                         local delinquent = getDelinquentCount(citizenid, houseId) + 1
@@ -281,8 +281,8 @@ function ProcessPropertyTax(source)
                             -- 通知玩家
                             local remaining = foreclosureThreshold - delinquent
                             TriggerClientEvent('QBCore:Notify', source,
-                                ('⚠️ Property tax overdue for %s! $%d due. Foreclosure in %d cycles.')
-                                    :format(house.label or houseId, totalDue, remaining),
+                                ('⚠️ Property tax overdue for %s! $%s due. Foreclosure in %d cycles.')
+                                    :format(house.label or houseId, TCMoney(totalDue), remaining),
                                 'error')
                         end
                     end
@@ -293,7 +293,7 @@ function ProcessPropertyTax(source)
 
     if taxDueTotal > 0 then
         TriggerClientEvent('QBCore:Notify', source,
-            ('Property tax: $%d processed for %d house(s).'):format(taxDueTotal, houseCount),
+            ('Property tax: $%s processed for %d house(s).'):format(TCMoney(taxDueTotal), houseCount),
             'primary')
     end
 
