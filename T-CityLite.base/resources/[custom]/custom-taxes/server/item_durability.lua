@@ -161,7 +161,7 @@ function RepairItem(source, itemName, slot)
     end
 
     TriggerClientEvent('QBCore:Notify', source,
-        ('%s repaired to full durability for $%d'):format(itemName, cost), 'success')
+        ('%s repaired to full durability for $%s'):format(itemName, TCMoney(cost)), 'success')
     return true, cost
 end
 

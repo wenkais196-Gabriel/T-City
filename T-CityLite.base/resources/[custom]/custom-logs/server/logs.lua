@@ -3,25 +3,48 @@ local QBCore = exports['qb-core']:GetCoreObject()
 local LogQueue = {}
 
 -- 高性能合并：批量清空写入
-local function FlushLogs()
-    local folderPath = "logs/"
-    local resourceName = GetCurrentResourceName()
+--
+-- ⚠️ 2026-11-07 真机发现：原来这里用相对路径 `logs/`，而 FXServer 的进程 cwd **不是**
+-- 数据目录（server.cfg 所在地），所以 `io.open("logs/…", "a")` 恒失败
+-- （`No such file or directory`）；降级分支写的 `logs_fallback/…` 目录也不存在，
+-- SaveResourceFile 同样失败 —— 结果是**所有审计静默丢弃**（连原有 LogEconomy/LogSecurity
+-- 调用点也一样）。所以改成：
+--   1) 绝对路径：`GetResourcePath()` 拿资源目录，写到 `<resource>/logs/`（目录不存在则跳过）；
+--   2) 再降级到资源根目录（无子目录，SaveResourceFile 一定能建文件）。
+local resourceName = GetCurrentResourceName()
+local resourcePath = GetResourcePath(resourceName) or ''
 
+local function AppendResourceFile(filename, chunk)
+    local existing = LoadResourceFile(resourceName, filename) or ""
+    return SaveResourceFile(resourceName, filename, existing .. chunk, -1)
+end
+
+local function FlushLogs()
     for filename, lines in pairs(LogQueue) do
         if #lines > 0 then
             local chunk = table.concat(lines)
             LogQueue[filename] = {} -- 立即清空缓冲区防止重复写入
 
-            -- 1. 尝试使用标准 Lua I/O 批量追加写入主服务器 logs/ 目录
-            local file, err = io.open(folderPath .. filename, "a")
-            if file then
-                file:write(chunk)
-                file:close()
-            else
-                -- 2. 权限受限时降级写入资源内部（非阻塞/Cfx自带安全通道）
-                local relativePath = ("logs_fallback/%s"):format(filename)
-                local existing = LoadResourceFile(resourceName, relativePath) or ""
-                SaveResourceFile(resourceName, relativePath, existing .. chunk, -1)
+            local written = false
+
+            -- 1. 资源目录下的 logs/（绝对路径，避开 cwd 不确定）
+            if resourcePath ~= '' then
+                local file = io.open(resourcePath .. 'logs/' .. filename, "a")
+                if file then
+                    file:write(chunk)
+                    file:close()
+                    written = true
+                end
+            end
+
+            -- 2. 降级：资源根目录（不依赖子目录存在）
+            if not written then
+                written = AppendResourceFile(filename, chunk) and true or false
+            end
+
+            -- 3. 两条都失败才抱怨一次（不再静默）
+            if not written then
+                print(('[custom-logs] ⚠️ 审计落盘失败（%s）—— 检查资源目录写权限'):format(filename))
             end
         end
     end
@@ -144,3 +167,40 @@ local function LogGeneric(title, message, color)
 end
 
 exports('LogGeneric', LogGeneric)
+
+-- ==========================================================
+-- qb-log 桥接：把 `[qb]` 侧那 47 处 TriggerEvent 接进来
+-- ==========================================================
+-- 背景（2026-11-07 调研）：全仓 47 处 `TriggerEvent('qb-log:server:CreateLog', …)`，
+-- 唯一监听者在 `archive/` 里（不启动）→ 活跃服 **零消费者**，经济审计、反作弊、
+-- 进出服日志全部丢失。这也是那个 `%d` 金额 bug 唯一可见症状只是报错的原因。
+--
+-- 为什么用 AddEventHandler 而不是 RegisterNetEvent：qb-ambulancejob 的客户端会
+-- `TriggerServerEvent('qb-log:…')`，注册成 NetEvent 就等于让客户端伪造审计。
+-- 这里只接**服务端可信**的 TriggerEvent。
+--
+-- message 是自由文本且带 PII（citizenid/license/ip/discord），必须先过 SanitizeLogText。
+local LOG_TYPE_ROUTING = {
+    playermoney = 'economy',
+    economy = 'economy',
+    anticheat = 'security',
+    bans = 'security',
+    security = 'security',
+}
+
+AddEventHandler('qb-log:server:CreateLog', function(logType, title, color, message, tagEveryone)
+    if type(message) ~= 'string' then return end
+
+    local kind = LOG_TYPE_ROUTING[logType] or 'system'
+    local safeTitle = SanitizeLogText(tostring(title or logType or 'qb-log'))
+    local safeMessage = SanitizeLogText(message)
+    local embedColor = tonumber(color) or nil
+
+    if kind == 'economy' then
+        LogEconomy(safeTitle, safeMessage, embedColor)
+    elseif kind == 'security' then
+        LogSecurity(safeTitle, safeMessage, embedColor)
+    else
+        LogGeneric(safeTitle, safeMessage, embedColor)
+    end
+end)

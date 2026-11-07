@@ -9,7 +9,8 @@ lua54 'yes'
 
 shared_scripts {
     '@qb-core/shared/locale.lua',
-    'config.lua'
+    'config.lua',
+    'shared/sanitize.lua'
 }
 
 server_scripts {

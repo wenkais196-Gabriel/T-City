@@ -52,20 +52,20 @@ QBCore.Functions.CreateCallback('phone:server:bankTransfer', function(source, cb
         -- Persisted server-originated notification (pushed once to recipient).
         PhoneNotify(targetPlayer.PlayerData.source, {
             title = "🏦 Wire Inbound",
-            content = ("Received $%d from %s %s. Memo: %s"):format(
-                amount, Player.PlayerData.charinfo.firstname, Player.PlayerData.charinfo.lastname, reason or "None"
+            content = ("Received $%s from %s %s. Memo: %s"):format(
+                PhoneMoney(amount), Player.PlayerData.charinfo.firstname, Player.PlayerData.charinfo.lastname, reason or "None"
             ),
         })
 
         -- Audit Logs
-        local auditText = ("**[在线] 汇款人**: %s (%s)\n**收款人**: %s (%s)\n**金额**: $%d\n**说明**: %s"):format(
+        local auditText = ("**[在线] 汇款人**: %s (%s)\n**收款人**: %s (%s)\n**金额**: $%s\n**说明**: %s"):format(
             GetPlayerName(source), Player.PlayerData.citizenid,
             GetPlayerName(targetPlayer.PlayerData.source), targetPlayer.PlayerData.citizenid,
-            amount, reason or "None"
+            PhoneMoney(amount), reason or "None"
         )
         exports['custom-main']:LogEconomy("手机银行转账", auditText, 65535)
 
-        cb({ success = true, newBalances = Player.PlayerData.money, message = ('Successfully transferred $%d to %s!'):format(amount, targetPlayer.PlayerData.charinfo.firstname) })
+        cb({ success = true, newBalances = Player.PlayerData.money, message = ('Successfully transferred $%s to %s!'):format(PhoneMoney(amount), targetPlayer.PlayerData.charinfo.firstname) })
     else
         -- Recipient is OFFLINE: Query database to find citizen and credit their account directly
         -- [PERF] Use JSON_EXTRACT for indexed query instead of full-text LIKE
@@ -101,14 +101,14 @@ QBCore.Functions.CreateCallback('phone:server:bankTransfer', function(source, cb
                 exports['qb-core']:EconomyAddMoneyOffline(foundCitizen, 'bank', amount,
                     'phone-transfer-offline-to-' .. foundCitizen, function(ok)
                     if ok then
-                        local auditText = ("**[离线] 汇款人**: %s (%s)\n**离线收款人**: %s %s (%s)\n**金额**: $%d\n**说明**: %s"):format(
+                        local auditText = ("**[离线] 汇款人**: %s (%s)\n**离线收款人**: %s %s (%s)\n**金额**: $%s\n**说明**: %s"):format(
                             GetPlayerName(source), Player.PlayerData.citizenid,
                             dbChar.firstname, dbChar.lastname, foundCitizen,
-                            amount, reason or "None"
+                            PhoneMoney(amount), reason or "None"
                         )
                         exports['custom-main']:LogEconomy("手机银行转账", auditText, 65535)
                         cb({ success = true, newBalances = Player.PlayerData.money,
-                            message = ('Successfully wired $%d to %s (Offline)!'):format(amount, dbChar.firstname) })
+                            message = ('Successfully wired $%s to %s (Offline)!'):format(PhoneMoney(amount), dbChar.firstname) })
                     else
                         -- 没入账 → 把发送方刚扣掉的钱退回去，绝不能吞掉
                         Player.Functions.AddMoney('bank', amount, "Transfer Rollback (offline credit failed)")

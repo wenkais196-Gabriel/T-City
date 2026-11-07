@@ -101,7 +101,7 @@ AddEventHandler('qb-houses:server:buyHouse', function(houseId, price)
             end
         end
         TriggerClientEvent('QBCore:Notify', src,
-            ('Property stamp duty: $%d'):format(stampDuty), 'primary')
+            ('Property stamp duty: $%s'):format(TCMoney(stampDuty)), 'primary')
     end
 end)
 

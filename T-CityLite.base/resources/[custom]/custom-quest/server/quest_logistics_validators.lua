@@ -394,7 +394,7 @@ AddEventHandler('quest:server:onQuestFailed', function(citizenid, questId, reaso
                     local accountType = template.rewards.money.type or 'bank'
                     Player.Functions.RemoveMoney(accountType, penalty, ('quest_fail:%s'):format(questId))
                     TriggerClientEvent('QBCore:Notify', src,
-                        ('💸 任务失败，扣除基础收益 50%% (-$%d)'):format(penalty), 'error')
+                        ('💸 任务失败，扣除基础收益 50%% (-$%s)'):format(QuestMoney(penalty)), 'error')
                 end
             end
         end
