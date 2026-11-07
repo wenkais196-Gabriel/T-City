@@ -97,6 +97,13 @@ def test_scanner_classifies_the_three_safe_shapes():
     )
     assert not scan._has_rehook(commented, "QBCore"), "注释里的重挂被当成自愈"
 
+    # 伪装 2b：`--[=[ ]=]` 长注释（普通 --[[ ]] 正则匹配不到的那种）
+    long_comment = (
+        "local QBCore = exports['qb-core']:GetCoreObject()\n"
+        "--[=[ AddEventHandler('onResourceStart', function() QBCore = exports['qb-core']:GetCoreObject() end) ]=]\n"
+    )
+    assert not scan._has_rehook(long_comment, "QBCore"), "长注释里的重挂被当成自愈"
+
     # 伪装 3：窗口里出现 GetCoreObject 但不是给同一变量赋值
     other_var = (
         "local QBCore = exports['qb-core']:GetCoreObject()\n"
@@ -105,6 +112,10 @@ def test_scanner_classifies_the_three_safe_shapes():
         "end)\n"
     )
     assert not scan._has_rehook(other_var, "QBCore"), "给别的变量赋值被当成同一变量已自愈"
+
+    # 根目录 client.lua 也要归 client 台账（qb-banking / safecracker 就是这种）
+    assert scan._scope(Path("a/[qb]/qb-banking/client.lua")) == "client"
+    assert scan._scope(Path("a/[qb]/qb-banking/server.lua")) == "server"
 
     data_only = "local QBCore = exports['qb-core']:GetCoreObject()\nprint(QBCore.Shared.Items)\n"
     assert not re.search(r"\bQBCore" + scan.USE_PATTERN, data_only), "只用 Shared 数据的文件不该判风险"

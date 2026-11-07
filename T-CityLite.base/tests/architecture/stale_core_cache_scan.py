@@ -50,7 +50,7 @@ REHOOK = re.compile(r"AddEventHandler\s*\(\s*['\"](?:onResourceStart|onClientRes
 USE_PATTERN = r"\.\s*(?:Functions|Player|Commands|ServerCallbacks|ClientCallbacks)\b"
 CLIENT_SEGMENTS = {"client", "cl_client", "cl"}
 
-COMMENT_BLOCK = re.compile(r"--\[\[.*?\]\]", re.S)
+COMMENT_BLOCK = re.compile(r"--\[(=*)\[.*?\]\]", re.S)   # 覆盖 --[[ ]] 与 --[=[ ]=] 长注释
 COMMENT_LINE = re.compile(r"--[^\n]*")
 
 
@@ -74,8 +74,14 @@ def _blank_comments(source: str) -> str:
 
 
 def _scope(path: Path) -> str:
+    """按目录段判 client；根目录下的 client.lua / cl_*.lua 也算（qb-banking、safecracker 就是这种）。"""
     parts = {part.lower() for part in path.parts}
-    return "client" if parts & CLIENT_SEGMENTS else "server"
+    if parts & CLIENT_SEGMENTS:
+        return "client"
+    name = path.name.lower()
+    if name == "client.lua" or name.startswith("cl_"):
+        return "client"
+    return "server"
 
 
 def _manifest_path(resource_dir: Path) -> Path | None:
