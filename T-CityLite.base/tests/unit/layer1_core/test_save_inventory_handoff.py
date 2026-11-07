@@ -70,6 +70,12 @@ exports = setmetatable({}, {
                         arg2 = args[2],
                         argCount = select('#', ...),
                     }
+                    -- 模拟 qb-inventory 的**真实分支**：offline=false 时它会调
+                    -- `QBCore.Functions.GetPlayer(source)`（跨资源函数引用，正是崩因）。
+                    -- 不模拟这一点，spy 断言就永远绿（验收方 2026-11-07 指出）。
+                    if args[2] ~= true then
+                        QBCore.Functions.GetPlayer(args[1])
+                    end
                 end
             end
         })
