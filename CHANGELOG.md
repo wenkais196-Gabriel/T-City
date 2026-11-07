@@ -32,6 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **存档收敛为单一写者，拆掉 `ForceFlush → Save(true)` 的环（P1-2 / P1-1）**（qb-core / core-framework）：qb-core 的 `persistence_manager.lua` 重写为唯一写者 `Store`（一份脏池、一个定时器、一条 upsert），core-framework 的同名文件降级为纯委托层（无池、无 SQL、无定时器、不再回调 `Save(true)`）。三处语义修正：① 刷盘**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数（以前无论 SQL 成不成都清）；② `QBCore.Player.Save` 强制存档改为直接 `Store.SaveNow`，失败时 `IsDirty` 保持为 true 并 `ShowError`（以前无条件清）；③ `FlushAll` 兜底扫描 `IsDirty = true` 但没进池子的玩家（economy/metadata 服务只标 `IsDirty`，他们的钱以前只在下线那一刻才落库）。停服刷盘返回 ack `{reason, attempted, ok, failed, duration_ms}` 并打日志。证据：`tests/unit/layer1_core/test_persistence_single_owner.py`（改动前 **12 failed，含 399,964 层栈溢出**；改动后 19 passed）+ 重写的 `test_persistence.py`（delegate 转发契约），见 `docs/engineering/2026-11-foundation-p1-evidence.md`；全仓 `pytest tests/unit tests/architecture` → 1120 passed。真机：`restart qb-core` + 逐个 `ensure` 拉回被连带停掉的资源后，日志出现 `single owner store loaded` / `delegate loaded (owner=qb-core: resolved)`，无 SCRIPT ERROR。
 
+- **P1-5 阶段 E：金额 `$%d` A 档 26 处偿还（93 → 68）**（2026-11-07）：
+  - 按 CC 的分诊口径（A 真风险 / B 假风险 / C 待定），只修 A 档：实参可能是小数的那些。
+    A 档分布：qb-drugs 8、custom-cartel 9、custom-crime 3、custom-security 2、custom-main 2、
+    custom-market 2（余额与管理员改价），共 26 处字面量。
+  - 每个资源自带一份 shared 目录下的 money_format 模块（函数名 `Money`），不跨资源引用 —— 避免新增加载顺序依赖。
+    语义：整数不带小数点（$500）、小数两位（$61.75）、非数字回落 `0`。
+  - B 档 21 处（整数常量 / `math.floor` / DB 整数列）留在基线里，`$comment` 已注明是假阳性；
+    C 档 46 处多为 `production-freeze` 的 locale 模板串，不参与 `format`。
+  - 新增 `test_money_renderers.py`：8 个渲染器 × 8 组输入（0.5 / 61.75 / 负数 / 字符串 / nil / 非数字），
+    防止某个资源的 `Money()` 把整数渲染成 `500.00` 或对 nil 抛错。
 - **P1-6 阶段 C：17 条 server 风险清零 + 同步重解析改成线程重试**（2026-11-07）：
   - 17 个 `[qb]` 资源补 `onResourceStart('qb-core')` 重解析；其中 qb-doorlock / qb-garages / qb-weed
     原本的处理器只认**自己**启动，另挂专用处理器。基线 server 17 → **0**。

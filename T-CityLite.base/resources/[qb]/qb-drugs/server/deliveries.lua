@@ -35,7 +35,7 @@ RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
     -- 检查余额
     local cash = Player.Functions.GetMoney('cash')
     if cash < deposit then
-        TriggerClientEvent('QBCore:Notify', src, ('押金不足！需要 $%d，你只有 $%d'):format(deposit, cash), 'error')
+        TriggerClientEvent('QBCore:Notify', src, ('押金不足！需要 $%s，你只有 $%s'):format(Money(deposit), Money(cash)), 'error')
         acceptLocks[src] = nil
         return
     end
@@ -56,8 +56,8 @@ RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)
         acceptLocks[src] = nil
     end)
 
-    print(('[qb-drugs] %s accepted delivery: %s x%d, deposit=$%d, distance=%.0fm'):format(
-        GetPlayerName(src), item, itemAmount, deposit, deliveryData['distance'] or 0))
+    print(('[qb-drugs] %s accepted delivery: %s x%d, deposit=$%s, distance=%.0fm'):format(
+        GetPlayerName(src), item, itemAmount, Money(deposit), deliveryData['distance'] or 0))
 end)
 
 -- Events
@@ -130,7 +130,7 @@ RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, compl
         Player.Functions.AddRep('dealer', Config.DeliveryRepGain + 1)
         local dealerRep = Player.Functions.GetRep('dealer')
         TriggerClientEvent('QBCore:Notify', src,
-            ('⚡ 快速送达！+$%d (含押金$%d) | 声望+%d'):format(finalReward + deposit, deposit, Config.DeliveryRepGain + 1), 'success')
+            ('⚡ 快速送达！+$%s (含押金$%s) | 声望+%d'):format(Money(finalReward + deposit), Money(deposit), Config.DeliveryRepGain + 1), 'success')
 
     elseif tier == 'normal' then
         -- 🟢 合格：100% 报酬 + 返还押金 + 声望+1
@@ -142,18 +142,18 @@ RegisterNetEvent('qb-drugs:server:successDelivery', function(deliveryData, compl
         Player.Functions.AddRep('dealer', Config.DeliveryRepGain)
         local dealerRep = Player.Functions.GetRep('dealer')
         TriggerClientEvent('QBCore:Notify', src,
-            ('🟢 合格送达！+$%d (含押金$%d) | 声望+%d'):format(finalReward + deposit, deposit, Config.DeliveryRepGain), 'success')
+            ('🟢 合格送达！+$%s (含押金$%s) | 声望+%d'):format(Money(finalReward + deposit), Money(deposit), Config.DeliveryRepGain), 'success')
 
     elseif tier == 'late' then
         -- 🟡 迟到：仅返还押金，无报酬，无声望
         Player.Functions.AddMoney('cash', deposit, '配送押金退还(迟到)')
         TriggerClientEvent('QBCore:Notify', src,
-            ('🟡 迟到送达！押金 $%d 已退还，无额外报酬'):format(deposit), 'primary')
+            ('🟡 迟到送达！押金 $%s 已退还，无额外报酬'):format(Money(deposit)), 'primary')
 
     else
         -- 🔴 超时：扣押金，货物已在顶部回收
         TriggerClientEvent('QBCore:Notify', src,
-            ('🔴 配送失败！押金 $%d 已损失'):format(deposit), 'error')
+            ('🔴 配送失败！押金 $%s 已损失'):format(Money(deposit)), 'error')
 
     end
 

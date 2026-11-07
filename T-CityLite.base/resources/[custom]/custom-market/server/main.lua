@@ -188,7 +188,7 @@ function MarketService.Buy(source, itemName, quantity)
     -- 2. 扣款（优先走统一经济出口）
     local bankBalance = Player.PlayerData.money.bank
     if bankBalance < totalCost then
-        return false, price, ('余额不足，需要 $%d，当前 $%d'):format(totalCost, bankBalance)
+        return false, price, ('余额不足，需要 $%d，当前 $%s'):format(totalCost, Money(bankBalance))
     end
 
     local deductOk = Player.Functions.RemoveMoney('bank', totalCost, 'MarketBuy:' .. itemName)
@@ -452,7 +452,7 @@ QBCore.Commands.Add('marketsetprice', '手动设置商品价格 (管理员)', {{
     end
 
     book.currentPrice = newPrice
-    TriggerClientEvent('QBCore:Notify', source, ('%s 价格已设为 $%d'):format(book.label, newPrice), 'success')
+    TriggerClientEvent('QBCore:Notify', source, ('%s 价格已设为 $%s'):format(book.label, Money(newPrice)), 'success')
 end, 'admin')
 
 print('[custom-market] 📊 动态交易市场已注册到 Bus')
