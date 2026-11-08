@@ -157,8 +157,24 @@ state.paid = {}
 fire(1, 'qb-shops:server:RestockShopItems', shopName)
 emit('RESTOCK_COOLDOWN_BLOCKED', tostring(#state.paid == 0))
 
--- 冷却过后可以再付
+-- 冷却键是「玩家 + 店」：同一玩家 30 秒内跑完**另一家店**必须照付
+-- （送货路线里相邻两家的交货点可能只隔 47 米，只按玩家计会吞掉第二趟工资）
+-- 现网只配了 1 家带 delivery 的店，这里造第二家（测的是冷却键，不是配置）
+local otherName = 'probe_second_shop'
+local other = {
+    label = 'Probe Shop', useStock = true, products = {},
+    coords = vec3(500.0, 500.0, 30.0),
+    delivery = vec3(510.0, 500.0, 30.0),
+}
+Config.Locations[otherName] = other
+state.coords = { x = other.delivery.x + 1.0, y = other.delivery.y, z = other.delivery.z }
+state.paid = {}
+fire(1, 'qb-shops:server:RestockShopItems', otherName)
+emit('RESTOCK_OTHER_SHOP_ALLOWED', tostring(#state.paid == 1))
+
+-- 冷却过后同一家店可以再付
 state.now = state.now + 31000
+state.coords = { x = shop.delivery.x + 1.0, y = shop.delivery.y, z = shop.delivery.z }
 state.paid = {}
 fire(1, 'qb-shops:server:RestockShopItems', shopName)
 emit('RESTOCK_AFTER_COOLDOWN_PAID', tostring(#state.paid == 1))
