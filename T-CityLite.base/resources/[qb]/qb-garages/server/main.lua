@@ -213,10 +213,21 @@ QBCore.Functions.CreateCallback('qb-garages:server:spawnvehicle', function(sourc
             cb(nil)
             return
         end
+        -- ⚠️ 客户端传的是 `GetSpawnPoint(garage)` 的返回值，即 **vector4**（`type()` == 'vector4'），
+        --    不是 table。只认 table 会把所有正常取车（公共车库 / 房车 / 赎车）全拒掉。
+        local ctype = type(coords)
+        if ctype ~= 'table' and ctype ~= 'vector3' and ctype ~= 'vector4' then
+            cb(nil)
+            return
+        end
+        local cx, cy, cz = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
+        if not cx or not cy or not cz then
+            cb(nil)
+            return
+        end
         local ped = GetPlayerPed(source)
         local pcoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
-        if type(coords) ~= 'table' or not pcoords
-            or #(pcoords - vector3(coords.x or 0.0, coords.y or 0.0, coords.z or 0.0)) > 100.0 then
+        if not pcoords or #(pcoords - vector3(cx, cy, cz)) > 100.0 then
             print(('[qb-garages] spawnvehicle rejected: 生成点离玩家太远 plate=%s'):format(tostring(plate)))
             cb(nil)
             return
@@ -377,10 +388,44 @@ end)
 
 RegisterNetEvent('qb-garages:server:syncGarage', function(updatedGarages)
     local src = source
-    -- 🔒 原来任何玩家都能用一张自造的表覆盖全服车库配置（点数/位置/开关全变）
-    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then return end
     if type(updatedGarages) ~= 'table' then return end
-    Config.Garages = updatedGarages
+
+    -- 控制台 / 管理员：整表覆盖（配置类操作）
+    if src == 0 or QBCore.Functions.HasPermission(src, 'admin') then
+        Config.Garages = updatedGarages
+        return
+    end
+
+    -- 🔒 普通玩家：**只接受房车条目**，逐条校验后合并。
+    --    客户端发的是整张 `Config.Garages`（qb-houses 建房/加载房车时追加 `type = 'house'` 的条目），
+    --    所以不能"全拒"—— 全拒会让服务端缺房车条目，`canDeposit` 里
+    --    `Config.Garages[garage].houseName` 索引 nil 直接抛错、存车流程中断。
+    --    也不能"全收"—— 否则任何玩家都能改公共车库的点位/开关。
+    local houses = {}
+    for _, row in ipairs(MySQL.query.await('SELECT name FROM houselocations', {}) or {}) do
+        if type(row) == 'table' and type(row.name) == 'string' then
+            houses[row.name] = true
+        end
+    end
+
+    local accepted = 0
+    for key, entry in pairs(updatedGarages) do
+        if type(key) == 'string' and type(entry) == 'table' and entry.type == 'house'
+            and type(entry.label) == 'string' and type(entry.houseName) == 'string'
+            and houses[entry.houseName] and type(entry.spawnPoint) == 'table' then
+            local point = entry.spawnPoint[1]
+            local ptype = type(point)
+            if ptype == 'table' or ptype == 'vector3' or ptype == 'vector4' then
+                if tonumber(point.x) and tonumber(point.y) and tonumber(point.z) then
+                    Config.Garages[key] = entry
+                    accepted = accepted + 1
+                end
+            end
+        end
+    end
+    if accepted > 0 then
+        print(('[qb-garages] syncGarage: src=%s 合并了 %d 个房车条目'):format(tostring(src), accepted))
+    end
 end)
 
 --Call from qb-phone
