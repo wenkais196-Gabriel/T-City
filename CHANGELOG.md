@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-3 批 1：qb-management 8 个老板菜单事件转「已鉴权」**（2026-11-08）：
+  - 这 8 个事件（GradeUpdate / FireEmployee / HireEmployee / TransferOwnership × job+组织两套）
+    本来就有 isboss + 菜单点 5m 双重校验，只是闸门不认识内联的 `job.isboss`；
+    现在抽出两个 helper（`IsJobBoss` / `IsPlayerBoss`）并登记进 `net_event_guard_helpers.json`，
+    闸门按登记证据逐条验证（定义一次 + 函数体含 `isboss == true` + 调用点必须是 `if not ... then return`）。
+  - 顺手补真洞：**招募可以隔着地图把人塞进职业/组织**（原来只校验 Boss 在菜单点，不看目标），
+    两个 Hire 事件现在要求目标也在 5m 内；三个 handler 缺 `if not Player then return end` 也补上了。
+  - 数字：qb 未登记事件 **195 → 187**（合计 277 → 269）。
 - **P1-5 阶段 G：掉线配送结算（押金不再白丢，也不白送一件货）**（2026-11-08）：
   - 之前：接单后掉线 = 押金没收、货留在背包（与“接了不做”等价，但玩家是意外掉线，体验上像被罚）。
   - 现在：`playerDropped` 把未结算的配送记到 citizenid 名下；玩家**重新上线**时结算 ——
