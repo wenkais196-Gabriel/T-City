@@ -302,6 +302,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 20：qb-weed 5 + qb-streetraces 3 —— `[qb]` 归零**（2026-11-08）：qb-weed 先修了一个
+  "这个资源根本跑不起来"的 bug —— `local plantCache = {}` 声明在文件**末尾**（第 126 行），而
+  `placePlant` / `removeDeathPlant` / `harvestPlant` / `foodPlant` 四个 handler 都在它之前，引用的是
+  全局 `plantCache`（nil）。对 master 版本跑探针，五个崩溃点：`server/main.lua:43/49/68/97` 的
+  `attempt to index a nil value (global 'plantCache')` 与 `:63` 的 `attempt to index a nil value
+  (local 'Player')` —— **"种一株植物"每次都会抛错**（行写进 DB 了，缓存行抛错、后续刷新不执行）。
+  把表挪到所有 handler 之前，并删掉末尾那份会把作用域再遮蔽一次的重复声明。在此之上补校验：
+  `placePlant` 原来**连 Player 都没取**（任何客户端都能往 house_plants 塞任意行）→ 要求 Player +
+  house 非空 + sort 在 `QBWeed.Plants` 白名单 + coords 能解出地图内 x/y/z + 单屋 20 株上限；
+  `removeDeathPlant` 只能铲缓存里且 building 对得上的植株；`harvestPlant` 的 `amount`（只用来发种子）
+  夹成 1..6、`plantName` 走白名单；`foodPlant` 的 `plantName` 走白名单（原来
+  `QBWeed.Plants[plantName]['label']` 遇到坏名字直接 nil 索引崩线程）。qb-streetraces 三条**本来就是**
+  服务端权威（stake 夹在 Config 区间、奖池按参赛人数重建、先销毁赛局再发钱、禁重复报名），本轮把
+  `RaceId` 规范成数字并登记，不改玩法。⚠️ 两个资源都不在启动集里，所以只有 `luac5.4 -p` + 探针，
+  **没有真机验证**。数字：未登记 **67 → 59**，**`[qb]` 216/216 与 `[custom]` 133/133 全部归零**；
+  allowlist 181。
+
 - **P1-3 批 19：qb-shops 5 条 + 修复批 17 的登记回退**（2026-11-08）：
   `qb-shops:server:PaySlip(drops)` **全仓没有任何客户端调用点**（deliveries.lua 只发 RestockShopItems /
   DoBail），却按客户端给的 `drops` 直接 `AddMoney('bank', Config.DeliveryPrice * drops)` —— 站在交货点发
