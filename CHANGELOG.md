@@ -58,8 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     ⑥ 没开赛就能报成绩（`StartedAt == nil` 时整套校验被跳过）；
     ⑦ 结算/离开后的清理只清一半 → `LastLeaderboard` / `NotFinished` / `LastRaces` / `StartedAt`
        跨场残留，赛道可能永久卡在「运行中」。
-  - 运行级测试：`fixtures/lapraces_probe.lua`（9 个场景，用 `debug.getupvalue` 直接读 handler
-    闭包里的私有表断言清理结果）、`fixtures/apartments_probe.lua`，共 2 条 pytest。
+  - 运行级测试：`T-CityLite.base/tests/unit/layer3_business/fixtures/lapraces_probe.lua`（9 个场景，用 `debug.getupvalue` 直接读 handler
+    闭包里的私有表断言清理结果）、`T-CityLite.base/tests/unit/layer3_business/fixtures/apartments_probe.lua`，共 2 条 pytest。
 
   - **公寓储物柜没有归属判定**：`apartments:server:openStash(apartmentId)` 传个 id 就
     `OpenInventory` 到别人家柜子 → 只认 `apartments` 表里登记在册的房主；
