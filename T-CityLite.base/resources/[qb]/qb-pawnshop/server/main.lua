@@ -157,18 +157,26 @@ RegisterNetEvent('qb-pawnshop:server:pickupMelted', function()
     local remaining = {}
     for _, batch in ipairs(pending) do
         if batch.readyAt <= now then
-            for _, reward in pairs(batch.entry.rewards) do
+            -- 逐条记「这条奖励已经发过了」：一个批次里可能有多条奖励（diamond_ring 是 diamond +
+            -- goldbar），如果只是"有一条失败就把整批留到下次"，已经发出去的那条会被重复发。
+            batch.paid = batch.paid or {}
+            local allPaid = true
+            for index, reward in ipairs(batch.entry.rewards) do
                 local rewardAmount = (tonumber(reward.amount) or 0) * batch.amount
-                if rewardAmount > 0 then
+                if rewardAmount <= 0 then
+                    batch.paid[index] = true
+                elseif not batch.paid[index] then
                     if exports['qb-inventory']:AddItem(src, reward.item, rewardAmount, false, false, 'qb-pawnshop:server:pickupMelted') then
+                        batch.paid[index] = true
                         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[reward.item], 'add')
                         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.items_received', { value = rewardAmount }), 'success')
                     else
+                        allPaid = false
                         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.inventory_full', { value = QBCore.Shared.Items[reward.item] }), 'error')
-                        remaining[#remaining + 1] = batch   -- 背包满：留着下次再取
                     end
                 end
             end
+            if not allPaid then remaining[#remaining + 1] = batch end   -- 还有没发出去的，留着下次
         else
             remaining[#remaining + 1] = batch           -- 还没到时间
         end
