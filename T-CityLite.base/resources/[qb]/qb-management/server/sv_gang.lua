@@ -1,5 +1,14 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- 帮派老板判定（闸门按 net_event_guard_helpers.json 登记，调用点必须是
+-- `if not IsGangBoss(Player) then ... return end` 形状）
+local function IsGangBoss(Player)
+	if Player and Player.PlayerData and Player.PlayerData.gang and Player.PlayerData.gang.isboss == true then
+		return true
+	end
+	return false
+end
+
 -- 🔧 自愈: 安全审计日志（不再永久封禁）
 local function SecurityAuditLog(src, action, detail)
     local playerName = GetPlayerName(src)
@@ -14,7 +23,7 @@ QBCore.Functions.CreateCallback('qb-gangmenu:server:GetEmployees', function(sour
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
 
-	if not Player.PlayerData.gang.isboss then
+	if not IsGangBoss(Player) then
 		SecurityAuditLog(src, 'GetEmployees', '非帮派Boss尝试获取成员列表')
 		return
 	end
@@ -98,7 +107,7 @@ RegisterNetEvent('qb-gangmenu:server:GradeUpdate', function(data)
 		return
 	end
 
-	if not Player.PlayerData.gang.isboss then
+	if not IsGangBoss(Player) then
 		SecurityAuditLog(src, 'GradeUpdate', '非帮派Boss尝试晋升成员')
 		return
 	end
@@ -143,7 +152,7 @@ RegisterNetEvent('qb-gangmenu:server:FireMember', function(target)
 		return
 	end
 
-	if not Player.PlayerData.gang.isboss then
+	if not IsGangBoss(Player) then
 		SecurityAuditLog(src, 'FireMember', '非帮派Boss尝试开除成员')
 		return
 	end
@@ -175,6 +184,7 @@ end)
 RegisterNetEvent('qb-gangmenu:server:HireMember', function(recruit)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
 	local Target = QBCore.Functions.GetPlayer(recruit)
 
 	-- 🔒 Security: 距离校验
@@ -192,9 +202,18 @@ RegisterNetEvent('qb-gangmenu:server:HireMember', function(recruit)
 		return
 	end
 
-	if not Player.PlayerData.gang.isboss then
+	if not IsGangBoss(Player) then
 		SecurityAuditLog(src, 'HireMember', '非帮派Boss尝试招募成员')
 		return
+	end
+
+	-- 目标必须在附近：原来只校验 Boss 是否在菜单点，能隔地图把任意玩家塞进自己帮派
+	if Target then
+		local targetCoords = GetEntityCoords(GetPlayerPed(Target.PlayerData.source))
+		if #(playerCoords - targetCoords) > 5.0 then
+			SecurityAuditLog(src, 'HireMember', '招募目标不在附近 — 疑似远程发包')
+			return
+		end
 	end
 
 	if Target and Target.Functions.SetGang(Player.PlayerData.gang.name, 0) then
@@ -266,7 +285,7 @@ RegisterNetEvent('qb-gangmenu:server:TransferOwnership', function(data)
 	end
 
 	-- 🔒 安全校验
-	if not Player.PlayerData.gang.isboss then
+	if not IsGangBoss(Player) then
 		SecurityAuditLog(src, 'TransferOwnership', '非帮派Boss尝试转让所有权')
 		return
 	end
