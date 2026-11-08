@@ -302,6 +302,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 15：qb-management 4 + custom-quest 4**（2026-11-08）：qb-management 那三个 boss 仓库入口
+  （职业 / 帮派 / 组织）其实早就写了「本人是 boss + 站在菜单点 2.5 米内」的判定，只是写成
+  `if not playerJob.isboss then return end` 这种闸门认不出来的形状 —— 本轮抽成
+  `CanOpenBossStash(src, Player, orgType, orgName)` 并登记进 `net_event_guard_helpers.json`，
+  **行为不变**（探针对旧版跑也是全绿），换来闸门能按 deny-early 形状持续核对；顺带给
+  `personalStash` 补了 gang 字段类型校验。custom-quest 那四条是「客户端报告任务进度」，
+  原来只判了 `Player` 存在：`aviationHeightMonitorComplete()` **连参数都没有**，任何玩家随手发一条
+  就能把自己「低空飞行 45 秒」的步骤标记完成 → 现在要求 questId 是字符串、确实在跑这单任务、
+  人**在载具里**（机型校验 best-effort：服务端原生不可用时放行，绝不 fail-closed —— 客户端发送后
+  会立即停掉监控，服务端拒绝就没有重试路径）；`registerTrailer` 补「必须正在跑该任务」与
+  **必填**的模型比对（写成 opt-in 的话少传一个参数就绕过）；`entityTrackingFail` 补 questId 校验与任务归属、`reason` 截断 100 字
+  （它会进安全审计日志）；`cargoDamageResult` 在 `data` 为 nil 时直接抛错、四个数值无界 → 类型
+  校验 + 各自夹取上限。客户端 `quest_logistics_client.lua` 现在把 `questId` 一起发上来。
+  测试：两个探针。旧版实测：`cargoDamageResult` 在 nil/非表时分别抛
+  `attempt to index a nil value (local 'data')` 与 `attempt to index a number value (local 'data')`，
+  坏 questId 时抛 `bad argument #3 to 'format' (number expected, got nil)`，`DAMAGE_CLAMPED=false`。
+  新增第三个探针 `quest_events_probe.lua`（真加载 custom-quest 的 server 主脚本）覆盖 fail-open 与模型比对：
+  旧版实测 `AVIATION_CAR_BLOCKED` / `AVIATION_ON_FOOT_BLOCKED` / `AVIATION_WRONG_QUEST_BLOCKED` /
+  `TRAILER_MISSING_MODEL_BLOCKED` / `TRAILER_MODEL_MISMATCH_BLOCKED` 全为 false。
+  数字：未登记 **106 → 98**（qb 30 → 26、custom 8；allowlist 151）；合计事件数按实测校正为 439。
+
 - **P1-3 批 14：qb-pawnshop 4 + qb-multicharacter 4**（2026-11-08）：qb-pawnshop 两条都是印钞机 ——
   `sellPawnItems` 的单价来自客户端（`totalPrice = itemAmount * itemPrice`，卖一块石头要价一百万），
   `pickupMelted` 的奖励表也来自客户端（`item.items[*].item.reward` 直接照单发物品，可要 99999 个金条），
