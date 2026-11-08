@@ -492,6 +492,51 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "hospital:server:RespawnAtHospital",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "civilian",
+      "reason": "平民死亡后回医院也要能用。hospitalIndex 经 tonumber 且越界回落 1；账单只从 caller 自己 bank 扣，付给 ambulance；监狱分支先清点背包再收费。",
+      "evidence": "main.lua RespawnAtHospital — tonumber(hospitalIndex) + Config 存在性回落 + RemoveMoney('bank', Config.BillCost)",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:SendToBed",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "civilian",
+      "reason": " civilians 也要能躺病床（平民进医院付账）。handler 内：30s 限流 + tonumber 校验 bedId/hospitalIndex + 按 Config 查表命中失败即 return；钱只从 caller 自己 bank 扣、付给 ambulance。",
+      "evidence": "main.lua SendToBed — _bedCooldowns 30s / tonumber(bedId,hospitalIndex) / hospital.beds[bedId] 查表 / RemoveMoney('bank', Config.BillCost)",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:removeBandage",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只从 caller 自己的背包移除绷带；物品名与数量是常量，source 不来自参数，越权面为零。",
+      "evidence": "main.lua removeBandage — local src = source → RemoveItem(src,'bandage',1)",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:removeIfaks",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只从 caller 自己的背包移除 ifaks；常量物品与数量，source 不来自参数。",
+      "evidence": "main.lua removeIfaks — local src = source → RemoveItem(src,'ifaks',1)",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:removePainkillers",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只从 caller 自己的背包移除 painkillers；常量物品与数量，source 不来自参数。",
+      "evidence": "main.lua removePainkillers — local src = source → RemoveItem(src,'painkillers',1)",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "QBCore:Server:AddItem",
       "file": "[qb]/qb-core/server/events.lua",
       "category": "deprecated_blocked",

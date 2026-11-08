@@ -48,6 +48,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-3 批 2：qb-ambulancejob 7 个事件（复活/治疗/病床/药箱）**（2026-11-08）：
+  - `RevivePlayer` / `TreatWounds` 原来把权限判断写成「if 是 EMS then 干活」，闸门不算鉴权；
+    改成 deny-early：抽出 `CanRevive(Player, src)` helper（在职 EMS，或 firstaid + medical_cert），
+    非授权直接审计 + return。登记进 `net_event_guard_helpers.json`。
+  - `removeBandage` / `removeIfaks` / `removePainkillers` 只动 caller 自己的背包 → 登记 `self_scoped`。
+  - `SendToBed` / `RespawnAtHospital` 是平民也要用的路径 → 登记 `civilian`，并补**索引校验**：
+    `bedId` / `hospitalIndex` 全是客户端传的，原来直接索引 `Config.Locations['hospital'][idx]['beds'][bedId]`
+    能让服务端崩；现在 tonumber + 查表命中失败即 return。
+  - 顺带把变异冒烟的锚点从 `"guarded": NN`（每清一批就失效）改成 `"events": 440`（总数稳定）。
+  - 数字：qb 未登记 **183 → 176**；全仓 **265 → 258**（allowlist 56 → 61）。
 - **P1-3 批 1：qb-management 8 个老板菜单事件转「已鉴权」**（2026-11-08）：
   - 这 8 个事件（bossmenu 4：GradeUpdate / FireEmployee / HireEmployee / TransferOwnership；
     orgmenu 4：GradeUpdate / FireMember / HireMember / TransferOwnership）

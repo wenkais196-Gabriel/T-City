@@ -252,5 +252,18 @@
       "requires_raw": [],
       "why": "帮派 BOSS 判定：PlayerData.gang.isboss 为 true。qb-gangmenu 的 GradeUpdate/FireMember/HireMember/TransferOwnership 都用它做首道拒绝，再叠加菜单点 5m 与目标 5m 距离校验。"
     }
+  },
+  "qb-ambulancejob": {
+    "CanRevive": {
+      "defined_at": "qb-ambulancejob/server/main.lua",
+      "requires_code": [
+        "PlayerData.job",
+        "onduty",
+        "HasItem",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "复活权限：在职 EMS，或持有 firstaid 且（未开启执照要求时）具备 medical_cert。hospital:server:RevivePlayer 用 `if not CanRevive(Player, src) then 审计+拒绝 return end` 做首道拒绝。"
+    }
   }
 }
