@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 37,
-      "allowlisted": 8,
-      "unguarded": 171
+      "guarded": 39,
+      "allowlisted": 28,
+      "unguarded": 149
     },
     "other": {
       "events": 76,
@@ -363,8 +363,8 @@
       "group": "[qb]",
       "events": 9,
       "guarded": 2,
-      "allowlisted": 0,
-      "unguarded": 7,
+      "allowlisted": 7,
+      "unguarded": 0,
       "started": true
     },
     "qb-fuel": {
@@ -471,8 +471,8 @@
       "group": "[qb]",
       "events": 11,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 11,
+      "allowlisted": 11,
+      "unguarded": 0,
       "started": true
     },
     "qb-scoreboard": {
@@ -524,9 +524,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 5,
-      "guarded": 1,
-      "allowlisted": 0,
-      "unguarded": 4,
+      "guarded": 3,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": true
     },
     "qb-weathersync": {
@@ -763,15 +763,6 @@
       "qb-doorlock:server:updateState",
       "txAdmin:events:scheduledRestart"
     ],
-    "qb-drugs": [
-      "qb-drugs:server:acceptDelivery",
-      "qb-drugs:server:dealerShop",
-      "qb-drugs:server:giveStealItems",
-      "qb-drugs:server:robCornerDrugs",
-      "qb-drugs:server:sellCornerDrugs",
-      "qb-drugs:server:sendDeliverySMS",
-      "qb-drugs:server:updateDealerItems"
-    ],
     "qb-fuel": [
       "qb-fuel:server:buyJerryCan",
       "qb-fuel:server:refillJerryCan",
@@ -862,19 +853,6 @@
       "qb-pawnshop:server:pickupMelted",
       "qb-pawnshop:server:sellPawnItems"
     ],
-    "qb-prison": [
-      "prison:server:CheckChance",
-      "prison:server:CheckRecordStatus",
-      "prison:server:GiveJailItems",
-      "prison:server:JailAlarm",
-      "prison:server:RequestRelease",
-      "prison:server:ResetJailItems",
-      "prison:server:SaveJailItems",
-      "prison:server:SecurityLockdown",
-      "prison:server:SetGateHit",
-      "prison:server:SetJailStatus",
-      "prison:server:WorkReduction"
-    ],
     "qb-scoreboard": [
       "qb-scoreboard:server:SetActivityBusy"
     ],
@@ -909,12 +887,6 @@
       "qb-vehicleshop:server:deleteVehicle",
       "qb-vehicleshop:server:removePlayer",
       "qb-vehicleshop:server:swapVehicle"
-    ],
-    "qb-weapons": [
-      "qb-weapons:server:SetWeaponQuality",
-      "qb-weapons:server:TakeBackWeapon",
-      "qb-weapons:server:UpdateWeaponAmmo",
-      "qb-weapons:server:UpdateWeaponQuality"
     ],
     "qb-weathersync": [
       "QBCore:Server:OnPlayerLoaded",
@@ -1172,14 +1144,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "qb-drugs",
-      "batch": "qb",
-      "unguarded": 7,
-      "owner": "qb-drugs",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "qb-fuel",
       "batch": "qb",
       "unguarded": 3,
@@ -1268,14 +1232,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "qb-prison",
-      "batch": "qb",
-      "unguarded": 11,
-      "owner": "qb-prison",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "qb-scoreboard",
       "batch": "qb",
       "unguarded": 1,
@@ -1312,14 +1268,6 @@
       "batch": "qb",
       "unguarded": 7,
       "owner": "qb-vehicleshop",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-weapons",
-      "batch": "qb",
-      "unguarded": 4,
-      "owner": "qb-weapons",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },

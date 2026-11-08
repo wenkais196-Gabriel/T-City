@@ -102,3 +102,20 @@ def test_drop_settlement_survives_missing_inventory_api():
     assert data["REFUND"][2] == "0", "qb-inventory 未就绪时仍然动了钱"
     # 下次上线（API 已注入）再结算，押金要补退
     assert data["REFUND"][3] == "500", "pending 被提前消费，玩家押金永久丢失"
+
+
+def test_dealer_sale_requires_the_goods_before_paying():
+    """卖货给 dealer：必须先真的扣掉货才发钱。
+
+    旧实现忽略 `RemoveItem` 的返回值 —— 库存打空时随便调一次
+    `updateDealerItems({slot=1}, 999, 'Sandy Dealer')` 就直接 `AddMoney(999 * 15)`。
+    实测（旧代码）PAID=14985 且背包一件没有；假 slot 还会 `attempt to index a nil value` 崩服务端。
+    """
+    data = _run_probe()
+    # 索引：场景 11 的四条在 PAID 列表尾部
+    no_items, fake_slot, name_mismatch, with_items = data["PAID"][-4:]
+    assert no_items == "0", "背包里没货也发钱了（印钱）"
+    assert fake_slot == "0", "伪造 slot 不该发钱"
+    assert name_mismatch == "0", "itemData.name 与 slot 不匹配时不该发钱"
+    assert with_items == "75", "正常卖 5 件（单价 15）应得 75"
+    assert data["ITEM_LEFT"][-1] == "0", "发钱了但货没扣掉"

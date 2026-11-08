@@ -173,14 +173,41 @@ RegisterNetEvent('qb-drugs:server:updateDealerItems', function(itemData, amount,
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    if Config.Dealers[dealer]['products'][itemData.slot].amount - 1 >= 0 then
-        Config.Dealers[dealer]['products'][itemData.slot].amount = Config.Dealers[dealer]['products'][itemData.slot].amount - amount
+
+    -- 🔒 参数全部来自客户端：dealer / slot / name / amount 逐个校验。
+    -- 原来直接 `Config.Dealers[dealer]['products'][slot]`（坏 key 就崩），
+    -- 且 `RemoveItem` 的返回值被忽略 —— 背包里没货也照样 AddMoney（等于印钱）。
+    if type(itemData) ~= 'table' or type(dealer) ~= 'string' then return end
+    local shop = Config.Dealers[dealer]
+    local slot = tonumber(itemData.slot)
+    if not shop or not shop.products or not slot then return end
+    local product = shop.products[slot]
+    if not product then return end
+    if itemData.name ~= product.name then return end
+
+    amount = tonumber(amount)
+    if not amount or amount <= 0 or amount % 1 ~= 0 then return end
+
+    -- 库存够：只减库存并广播（不发钱）
+    if product.amount - amount >= 0 then
+        product.amount = product.amount - amount
         TriggerClientEvent('qb-drugs:client:setDealerItems', -1, itemData, amount, dealer)
-    else
-        exports['qb-inventory']:RemoveItem(src, itemData.name, amount, false, 'qb-drugs:server:updateDealerItems')
-        Player.Functions.AddMoney('cash', amount * Config.Dealers[dealer]['products'][itemData.slot].price, 'qb-drugs:server:updateDealerItems')
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.item_unavailable'), 'error')
+        return
     end
+
+    -- 库存不足：玩家把货卖给 dealer —— 必须先真的扣掉货，才发钱
+    local held = Player.Functions.GetItemByName(product.name)
+    if not held or held.amount < amount then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.item_unavailable'), 'error')
+        return
+    end
+    local removed = exports['qb-inventory']:RemoveItem(src, product.name, amount, false, 'qb-drugs:server:updateDealerItems')
+    if removed == false then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.item_unavailable'), 'error')
+        return
+    end
+    Player.Functions.AddMoney('cash', amount * product.price, 'qb-drugs:server:updateDealerItems')
+    TriggerClientEvent('QBCore:Notify', src, Lang:t('error.item_unavailable'), 'error')
 end)
 
 -- 配送失败（超时/取消）：从背包移除任务物品
@@ -296,6 +323,9 @@ RegisterNetEvent('qb-drugs:server:sendDeliverySMS', function(message, coords, st
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    -- 🔒 文案完全来自客户端：非字符串直接拒，超长截断（原来可以把任意大小/任意内容塞进短信表）
+    if type(message) ~= 'string' or message == '' then return end
+    message = message:sub(1, 300)
     local phoneNumber = Player.PlayerData.charinfo.phone
     if not phoneNumber then return end
     local msgData = {
@@ -330,6 +360,8 @@ RegisterNetEvent('qb-drugs:server:dealerShop', function(currentDealer)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    -- 🔒 dealer key 是客户端给的：先校验类型再查表（原来非字符串 key 会抛 "table index is nil/NaN"）
+    if type(currentDealer) ~= 'string' then return end
     local playerPed = GetPlayerPed(src)
     local playerCoords = GetEntityCoords(playerPed)
     local dealerData = Config.Dealers[currentDealer]

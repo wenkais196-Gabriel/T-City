@@ -1682,7 +1682,8 @@ def test_qb_prison_jail_item_events_require_an_active_sentence_and_give_once():
                 src.index("RegisterNetEvent('prison:server:SecurityLockdown'")]
 
     assert "(metadata.injail or 0) <= 0" in save
-    assert "(metadata.injail or 0) <= 0" in reset
+    # Reset 的守卫改成 tonumber 形态（nil/字符串 metadata 也不会被当成"服刑中"）
+    assert "(tonumber(metadata.injail) or 0) <= 0" in reset
     # Give is the mirror image: it must only run after the sentence projection
     # was cleared (release), otherwise Give -> Save cycles farm the $80 stipend.
     assert "(metadata.injail or 0) > 0" in give
