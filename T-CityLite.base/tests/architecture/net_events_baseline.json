@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 92,
-      "allowlisted": 86,
-      "unguarded": 38
+      "guarded": 94,
+      "allowlisted": 92,
+      "unguarded": 30
     },
     "other": {
       "events": 75,
@@ -453,17 +453,17 @@
       "group": "[qb]",
       "events": 4,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 4,
+      "allowlisted": 4,
+      "unguarded": 0,
       "started": true
     },
     "qb-pawnshop": {
       "batch": "qb",
       "group": "[qb]",
       "events": 4,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 4,
+      "guarded": 2,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": true
     },
     "qb-prison": {
@@ -725,18 +725,6 @@
       "qb-mechanicjob:server:sprayVehicle",
       "qb-mechanicjob:server:sprayVehicleCustom"
     ],
-    "qb-multicharacter": [
-      "qb-multicharacter:server:createCharacter",
-      "qb-multicharacter:server:deleteCharacter",
-      "qb-multicharacter:server:disconnect",
-      "qb-multicharacter:server:loadUserData"
-    ],
-    "qb-pawnshop": [
-      "qb-pawnshop:server:launderMoney",
-      "qb-pawnshop:server:meltItemRemove",
-      "qb-pawnshop:server:pickupMelted",
-      "qb-pawnshop:server:sellPawnItems"
-    ],
     "qb-scoreboard": [
       "qb-scoreboard:server:SetActivityBusy"
     ],
@@ -979,22 +967,6 @@
       "batch": "qb",
       "unguarded": 3,
       "owner": "qb-mechanicjob",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-multicharacter",
-      "batch": "qb",
-      "unguarded": 4,
-      "owner": "qb-multicharacter",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-pawnshop",
-      "batch": "qb",
-      "unguarded": 4,
-      "owner": "qb-pawnshop",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
