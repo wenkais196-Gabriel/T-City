@@ -52,6 +52,10 @@ def test_crypto_exchange_never_pays_when_the_stick_is_not_consumed():
     assert data["REBOOT_PCT_REMOTE"][0] == "0", "站在 9999 米外也能写全服重启进度"
     assert data["REBOOT_STATE_OWNER_FINISH"][0] == "false", "重启发起者走出范围后无法收尾（全服会卡在「重启中」）"
     assert data["REBOOT_PCT_AFTER_NON_OWNER"][0] == "10", "非发起者也能改全服重启进度"
+    # 回补失败 → 挂账到 metadata → 上线重试补发
+    assert data["OWED_AFTER_DOUBLE_FAIL"][0] == "1", "加钱+回补都失败时没有挂账"
+    assert data["OWED_AFTER_RELOAD"][0] == "0", "上线补发后欠账没清"
+    assert data["STICKS_AFTER_RELOAD"][0] == "1", "上线补发没有真的给出 cryptostick"
 
 
 def test_storerobbery_alerts_use_server_coords_and_safes_need_proximity():
@@ -67,4 +71,6 @@ def test_storerobbery_alerts_use_server_coords_and_safes_need_proximity():
     assert data["ACTIVE_TABLE_FOUND"][0] == "true", "探针拿不到 activeRobberies（构造失效）"
     assert data["SAFE_ROBBED_CLOSE"][0] == "true", "站在保险箱旁反而标不了"
     assert data["RECENT_TABLE_FOUND"][0] == "true", "探针拿不到 recentStoreRobberies（构造失效）"
+    assert data["AFTER_DROP_ACTIVE"][0] == "true", "玩家掉线后 activeRobberies 没清（GetPlayer 为 nil 时）"
+    assert data["AFTER_DROP_RECENT"][0] == "true", "玩家掉线后 recentStoreRobberies 没清（source 复用会继承）"
     assert data["SAFE_ROBBED_RECENT"][0] == "true", "收银机 25 秒计时结束后，同店保险箱就再也标不了（正常玩法被堵）"

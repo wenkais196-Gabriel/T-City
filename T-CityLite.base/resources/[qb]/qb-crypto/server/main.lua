@@ -244,6 +244,29 @@ RegisterServerEvent('qb-crypto:server:ExchangeFail', function()
     end
 end)
 
+-- 兑换回补失败：把欠账写进玩家 metadata（qb-core 会存档，资源/服务器重启不丢），
+-- 玩家下次上线时重试补发。
+AddEventHandler('QBCore:Server:PlayerLoaded', function(player)
+    if not player or not player.PlayerData then return end
+    local metadata = player.PlayerData.metadata or {}
+    local owed = tonumber(metadata.cryptostick_refunds or 0) or 0
+    if owed <= 0 then return end
+    local src = player.PlayerData.source
+    local added = exports['qb-inventory']:AddItem(src, 'cryptostick', owed, false, {}, 'qb-crypto:refund-retry')
+    if added == true then
+        player.Functions.SetMetaData('cryptostick_refunds', 0)
+        print(('[qb-crypto] ✅ 补偿完成：citizenid=%s x%d'):format(tostring(player.PlayerData.citizenid), owed))
+    else
+        print(('[qb-crypto] ⚠️ 补偿仍失败（背包满？）：citizenid=%s x%d，下次上线再试'):format(
+            tostring(player.PlayerData.citizenid), owed))
+    end
+end)
+
+local lastRebootUpdate = {}
+local rebootOwner = nil       -- 当前重启会话的发起者
+local rebootOwnerAt = 0       -- 最后一次收到 owner 上报的时刻
+local REBOOT_SESSION_TIMEOUT = 60 * 1000   -- owner 60 秒不吭声就自动收尾，防"永久卡重启中"
+
 -- 会话看门狗：owner 静默（客户端每 ~1.2 秒会上报一次）超过 60 秒就自动收尾。
 -- 只在收到事件时判超时是不够的：owner 掉线/客户端卡死后不会再有人发事件。
 CreateThread(function()
@@ -258,25 +281,6 @@ CreateThread(function()
     end
 end)
 
--- 兑换回补失败的待补偿队列：citizenid → 次数（玩家上线时重试）
-local pendingRefunds = {}
-
-AddEventHandler('QBCore:Server:PlayerLoaded', function(player)
-    local cid = player and player.PlayerData and player.PlayerData.citizenid
-    local owed = cid and pendingRefunds[cid]
-    if not owed then return end
-    local src = player.PlayerData.source
-    local added = exports['qb-inventory']:AddItem(src, 'cryptostick', owed, false, {}, 'qb-crypto:refund-retry')
-    if added == true then
-        pendingRefunds[cid] = nil
-        print(('[qb-crypto] ✅ 补偿完成：citizenid=%s x%d'):format(tostring(cid), owed))
-    end
-end)
-
-local lastRebootUpdate = {}
-local rebootOwner = nil       -- 当前重启会话的发起者
-local rebootOwnerAt = 0       -- 最后一次收到 owner 上报的时刻
-local REBOOT_SESSION_TIMEOUT = 60 * 1000   -- owner 60 秒不吭声就自动收尾，防"永久卡重启中"
 RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
     local src = source
     -- 🔒 全服共享的重启状态：任意玩家原来能把它改成任意值（伪造"交易所重启中"）。
@@ -369,11 +373,13 @@ RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function()
             -- AddItem 签名是 (identifier, item, amount, slot, info, reason)，info 必须是 table
             local refunded = exports['qb-inventory']:AddItem(src, 'cryptostick', 1, false, {}, 'qb-crypto:server:ExchangeSuccess-refund')
             if refunded ~= true then
-                -- 回补也失败（背包满/物品异常）：记进待补偿队列，下次上线重试，别让玩家白丢物品
-                local cid = Player.PlayerData.citizenid
-                pendingRefunds[cid] = (pendingRefunds[cid] or 0) + 1
-                print(('[qb-crypto] ⚠️ 兑换回补失败：src=%s citizenid=%s 物品=cryptostick 待补偿=%d'):format(
-                    tostring(src), tostring(cid), pendingRefunds[cid]))
+                -- 回补也失败（背包满/物品异常）：欠账写进 metadata，玩家下次上线自动补发。
+                -- metadata 由 qb-core 存档，资源/服务器重启不会丢账。
+                local metadata = Player.PlayerData.metadata or {}
+                local owed = (tonumber(metadata.cryptostick_refunds or 0) or 0) + 1
+                Player.Functions.SetMetaData('cryptostick_refunds', owed)
+                print(('[qb-crypto] ⚠️ 兑换回补失败：src=%s citizenid=%s 已挂账 %d'):format(
+                    tostring(src), tostring(Player.PlayerData.citizenid), owed))
             end
             return
         end

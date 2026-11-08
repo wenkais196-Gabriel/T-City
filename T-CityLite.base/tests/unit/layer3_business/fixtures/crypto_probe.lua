@@ -16,9 +16,14 @@ end
 
 local state = { money = { crypto = 0 }, items = {}, addedMoney = {}, clientEvents = {}, coords = nil, addMoneyFails = false }
 
+-- metadata 单独一张表：SetMetaData 里不能引用 player 自身（局部变量在初始化式里还不可见）
+local playerMeta = {}
 local player = {
-    PlayerData = { source = 1, citizenid = 'TESTCID', charinfo = { firstname = 'T', lastname = 'C' } },
+    PlayerData = { source = 1, citizenid = 'TESTCID', charinfo = { firstname = 'T', lastname = 'C' }, metadata = playerMeta },
     Functions = {
+        SetMetaData = function(key, value)
+            playerMeta[key] = value
+        end,
         GetItemByName = function(name)
             return state.items[name] and { name = name, amount = state.items[name] } or nil
         end,
@@ -34,7 +39,7 @@ local player = {
 
 -- 第二个在线玩家（模拟"非 owner 也想改全服状态"）
 local otherPlayer = {
-    PlayerData = { source = 2, citizenid = 'OTHER', charinfo = { firstname = 'O', lastname = 'T' } },
+    PlayerData = { source = 2, citizenid = 'OTHER', charinfo = { firstname = 'O', lastname = 'T' }, metadata = {} },
     Functions = {
         GetItemByName = function() return nil end,
         AddMoney = function() return true end,
@@ -65,6 +70,7 @@ Wait = function() end
 local clock = 0
 GetGameTimer = function() return clock end
 GetConvar = function(_, default) return default end
+AddEventHandler = function(name, fn) handlers[name] = fn end
 GetPlayerPed = function() return 1 end
 GetEntityCoords = function() return state.coords or vector3(0.0, 0.0, 0.0) end
 -- FiveM 向量支持 `-` 与 `#`（资源里用 #(coords - anchor.xyz) 算距离）
@@ -95,6 +101,7 @@ exports = setmetatable({}, {
                 return function(_, ...)
                     if method == 'AddItem' then
                         local args = { ... }
+                        if state.addItemFails then return false end
                         local itemName = args[2]
                         state.items[itemName] = (state.items[itemName] or 0) + (args[3] or 1)
                         return true
@@ -180,6 +187,20 @@ state.addMoneyFails = true
 fireAs(1, 'qb-crypto:server:ExchangeSuccess')
 state.addMoneyFails = false
 emit('STICKS_BACK_AFTER_PAY_FAIL', state.items.cryptostick or 0)
+
+-- 场景 3c：加钱失败 + 回补也失败（背包满）→ 欠账写进 metadata，下次上线补发
+emit('SCENARIO', 'refund-fails-then-retry')
+state.items = { cryptostick = 1 }
+state.addMoneyFails = true
+state.addItemFails = true
+fireAs(1, 'qb-crypto:server:ExchangeSuccess')
+state.addMoneyFails = false
+state.addItemFails = false
+emit('OWED_AFTER_DOUBLE_FAIL', tostring(player.PlayerData.metadata.cryptostick_refunds or 0))
+local loaded = handlers['QBCore:Server:PlayerLoaded']
+if loaded then loaded(player) end
+emit('OWED_AFTER_RELOAD', tostring(player.PlayerData.metadata.cryptostick_refunds or 0))
+emit('STICKS_AFTER_RELOAD', state.items.cryptostick or 0)
 
 -- 场景 4：Rebooting 只接受已知 state 与 0~100
 emit('SCENARIO', 'rebooting-validation')
