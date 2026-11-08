@@ -2,7 +2,7 @@
   "$comment": "金额格式化债：`$` 紧跟 `%d` 的字面量基线。只允许减少，不允许增加；修好一处就同步删一条（双向相等，删多了也会红）。",
   "owner": "hermes",
   "expires": "2027-03-31",
-  "total": 68,
+  "total": 67,
   "entries": {
     "[custom]/custom-market/server/main.lua\u0000'%s %s | $%d (%s%d%%) | 供需 %d/%d'": 1,
     "[custom]/custom-market/server/main.lua\u0000'**%s** (%s) | 出售 %d x %s @ $%d/个 = $%d'": 1,
@@ -20,7 +20,6 @@
     "[custom]/custom-testing/stress_test.lua\u0000'$%d laundered at %.0f%% → $%d clean (loss $%d)'": 1,
     "[custom]/custom-testing/suites/01_banking_test.lua\u0000\"取款 $%d 后余额 = $%d\"": 1,
     "[custom]/custom-testing/suites/01_banking_test.lua\u0000\"存款 $%d 后现金 = $%d\"": 1,
-    "[qb]/qb-core/server/services/security_service.lua\u0000'[SECURITY] Player %d attempted SetMoney of $%d (%s) — EXCEEDS THRESHOLD, BLOCKED'": 1,
     "[qb]/qb-storerobbery/server/main.lua\u0000\"抢劫结算: 逗留时间 %d%%，实得 $%d × %d 袋\"": 1,
     "[qb]/qb-storerobbery/server/main.lua\u0000'[qb-storerobbery] ✅ Register %d reward: $%d×%d bags (time=%d%%) → %s'": 1,
     "[standalone]/core-framework/services/economy_service.lua\u0000'**%s** (%s) | +$%d (%s) | Scale: %.2fx'": 1,

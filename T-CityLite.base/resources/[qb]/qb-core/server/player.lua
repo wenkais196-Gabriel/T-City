@@ -6,6 +6,16 @@ QBCore.Player = {}
 -- Will cause major issues!
 
 local resourceName = GetCurrentResourceName()
+
+-- 金额校验的唯一实现（security_service.lua 在 fxmanifest 里先加载，文件尾部就挂到 _G.Bus）；
+-- 三个写入口的 offline 分支与 Bus 缺失时的 fallback 分支都走它，不再各写一份。
+local Security = _G.Bus and _G.Bus.SecurityService
+if type(Security) ~= 'table' or type(Security.ValidateAmount) ~= 'function' then
+    -- 不 assert：assert 会让整个 player.lua（QBCore.Player 全部定义）加载失败，
+    -- 故障面远大于经济模块。改成"告警 + 全拒绝"桩 —— 宁可一分钱都动不了，也不要未校验地写钱。
+    print('[player] ⚠️ SecurityService 未注册（检查 fxmanifest 加载顺序）—— 本会话拒绝所有金额变动')
+    Security = { ValidateAmount = function() return false end }
+end
 function QBCore.Player.Login(source, citizenid, newData)
     if source and source ~= '' then
         if citizenid then
@@ -357,12 +367,16 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
     function self.Functions.AddMoney(moneytype, amount, reason)
         -- 🔄 桥接层: 底层路由到 EconomyService (内存优先 + DirtyFlush 管道)
         -- 外部 API 签名完全不变 — 第三方插件零改动
+        -- 金额校验统一走 Security.ValidateAmount（唯一实现）：非数字/NaN/inf/负数/0/超阈值都拒绝
+        local amountOk, cleanedAmount = Security.ValidateAmount(amount, { allowZero = false })
+        if not amountOk then return false end
+        amount = cleanedAmount
+
         if self.Offline then
             -- 离线玩家: 保留原始内存操作逻辑 (EconomyService 仅操作在线玩家)
             reason = reason or 'unknown'
+            if type(moneytype) ~= 'string' then return false end
             moneytype = moneytype:lower()
-            amount = tonumber(amount)
-            if amount < 0 then return false end
             if not self.PlayerData.money[moneytype] then return false end
             self.PlayerData.money[moneytype] = self.PlayerData.money[moneytype] + amount
             self.IsDirty = true
@@ -380,11 +394,14 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
 
     function self.Functions.RemoveMoney(moneytype, amount, reason)
         -- 🔄 桥接层: 底层路由到 EconomyService (内存优先 + DirtyFlush 管道)
+        local amountOk, cleanedAmount = Security.ValidateAmount(amount, { allowZero = false })
+        if not amountOk then return false end
+        amount = cleanedAmount
+
         if self.Offline then
             reason = reason or 'unknown'
+            if type(moneytype) ~= 'string' then return false end
             moneytype = moneytype:lower()
-            amount = tonumber(amount)
-            if amount < 0 then return false end
             if not self.PlayerData.money[moneytype] then return false end
             for _, mtype in pairs(QBCore.Config.Money.DontAllowMinus) do
                 if mtype == moneytype then
@@ -409,19 +426,15 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
 
     function self.Functions.SetMoney(moneytype, amount, reason)
         -- 🔄 桥接层: 底层路由到 EconomyService (含 SecurityService 安全校验)
+        local amountOk, cleanedSetAmount = Security.ValidateAmount(amount, { allowZero = true })
+        if not amountOk then return false end
+        amount = cleanedSetAmount
+
         if self.Offline then
             reason = reason or 'unknown'
+            if type(moneytype) ~= 'string' then return false end
             moneytype = moneytype:lower()
-            amount = tonumber(amount)
-            if amount < 0 then return false end
             if not self.PlayerData.money[moneytype] then return false end
-            if Bus and Bus.SecurityService then
-                local ok, cleaned = Bus.SecurityService.ValidateMoneyEvent(
-                    self.PlayerData.source, amount, moneytype, reason
-                )
-                if not ok then return false end
-                amount = cleaned
-            end
             self.PlayerData.money[moneytype] = amount
             self.IsDirty = true
             return true
