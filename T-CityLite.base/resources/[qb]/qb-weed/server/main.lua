@@ -78,7 +78,9 @@ RegisterNetEvent('qb-weed:server:placePlant', function(coords, sort, currentHous
 
     local random = math.random(1, 2)
     local gender = (random == 1) and 'man' or 'woman'
-    local plantId = math.random(111111, 999999)
+    -- house_plants.plantid 是 varchar(50)：DB 回来的是字符串，
+    -- 所以缓存键也必须用字符串，否则本次会话种下的植株在 removeDeathPlant / harvestPlant 里按字符串查会 miss。
+    local plantId = tostring(math.random(111111, 999999))
 
     MySQL.insert('INSERT INTO house_plants (building, coords, gender, sort, plantid) VALUES (?, ?, ?, ?, ?)',
         { currentHouse, coords, gender, sort, plantId })
@@ -95,6 +97,7 @@ RegisterNetEvent('qb-weed:server:removeDeathPlant', function(building, plantId)
     if not Player then return end
     if type(building) ~= 'string' or #building == 0 or #building > 64 then return end
     if plantId == nil then return end
+    plantId = tostring(plantId)          -- 客户端回传的是 varchar 字符串，统一成字符串键
 
     local plant = plantCache[plantId]
     if type(plant) ~= 'table' or plant.building ~= building then return end
@@ -122,6 +125,9 @@ RegisterNetEvent('qb-weed:server:harvestPlant', function(house, amount, plantNam
     amount = math.floor(amount)
     if type(house) ~= 'string' or #house == 0 or #house > 64 then return end
     if not isValidPlantName(plantName) then return end
+    if plantId == nil then return end
+    plantId = tostring(plantId)          -- 同上：统一字符串键
+
     local weedBag = Player.Functions.GetItemByName('empty_weed_bag')
     local sndAmount = math.random(12, 16)
     if weedBag ~= nil and weedBag.amount >= sndAmount then
@@ -162,6 +168,9 @@ RegisterNetEvent('qb-weed:server:foodPlant', function(house, amount, plantName, 
     if not amount or amount <= 0 then return end
     if amount > 100 then amount = 100 end
     amount = math.floor(amount)
+    if plantId == nil then return end
+    plantId = tostring(plantId)          -- 同上：统一字符串键
+
     -- ⚡ Check cache first
     local plant = plantCache[plantId]
     if not plant then
@@ -199,7 +208,9 @@ CreateThread(function()
     local allPlants = MySQL.query.await('SELECT * FROM house_plants', {})
     if allPlants then
         for _, plant in ipairs(allPlants) do
-            plantCache[plant.plantid] = plant
+            if type(plant) == 'table' and plant.plantid ~= nil then
+                plantCache[tostring(plant.plantid)] = plant
+            end
         end
     end
     print(('[qb-weed] 🌱 Loaded %d plants into memory cache'):format(#allPlants or 0))
