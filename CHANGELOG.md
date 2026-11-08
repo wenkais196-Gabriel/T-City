@@ -315,7 +315,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   必须是 `v<version>_<snake>.sql`，配 3 条反向形状（重号树 / 坏名字树 / 干净树）与 2 条
   `gate_mutation_smoke` 变异用例（注入重号文件、注入坏文件名），实测「注入后红、对照绿」；
   `gate_coverage` 未证明数仍 276。幂等性用 `tools/dev/migrations_double_apply.py` 在真库上验证：
-  先铺基线 schema，再把 35 个迁移连跑两遍 —— **35/35 × 2 遍无错误**。`tests/integration/` 里有同名
+  先铺基线 schema（并删掉 dump 里已带的 `phone_number` / `idx_players_phone`，否则 v2.1 的 DDL 分支
+  只会走 `DO 0`，等于没验），再把 35 个迁移连跑两遍 —— **35/35 × 2 遍无错误**。
+  另按 CC 复核修了两处：① `v2.1_perf_indexes.sql` 的 PREPARE 串里引号层数写错（`"''$.phone''"`
+  会被解析成带引号的 `'$.phone'`，MySQL 报 3143 非法 JSON path）→ 去掉双引号；用**不含**该列的最小
+  schema 实测：ALTER + 3 条 CREATE INDEX 真的执行、插入后 `phone_number` 取值正确、第二遍幂等
+  ② 5 个迁移文件里 8 处注释/Run 指令仍指旧文件名。`tests/integration/` 里有同名
   用例复用该工具（没有 docker / 容器时 skip，静态闸门在 CI 里始终生效）。
 
 - **P1-5 二期：金额写路径收敛（拒绝语义）**（2026-11-08）：`SecurityService` 里新增
