@@ -71,6 +71,19 @@ local function saveShopInv(shop, products)
     SaveResourceFile(GetCurrentResourceName(), Config.ShopsInvJsonFile, json.encode(shopinv), -1)
 end
 
+-- 补货/工资这类"跑到点就发钱"的 handler 必须自带冷却：
+-- 客户端跑完一趟才发一次，但事件本身谁都能发，站在交货点循环调用就是印钞机。
+local RESTOCK_COOLDOWN_MS = 30000
+local LastRestock = {}
+
+local function nearCoords(source, coords, maxDistance)
+    if type(coords) ~= 'table' and type(coords) ~= 'vector3' and type(coords) ~= 'vector4' then return false end
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false end
+    local playerCoords = GetEntityCoords(ped)
+    return #(playerCoords - vector3(coords.x, coords.y, coords.z)) <= maxDistance
+end
+
 local function deliveryPay(source, shop)
     local Player = QBCore.Functions.GetPlayer(source)
     if not Player then return end
@@ -89,8 +102,21 @@ end
 
 RegisterNetEvent('qb-shops:server:RestockShopItems', function(shop)
     local src = source
-    if not shop then return end
-    if not Config.Locations[shop] then return end
+    if type(shop) ~= 'string' then return end
+    local location = Config.Locations[shop]
+    if type(location) ~= 'table' then return end
+
+    -- 一次交货一条钱：同一玩家**在同一家店** 30 秒内只认一条（原来站交货点循环发就能无限刷
+    -- DeliveryPrice）。⚠️ 冷却键必须带 shop：送货路线里相邻两家的交货点可能只隔 47 米
+    -- （ammunation ↔ ltdgasoline2），熟练玩家 30 秒内就能跑完第二趟 —— 只按 src 计会让第二趟的
+    -- 工资与补货被静默吞掉。
+    local cooldownKey = src .. ':' .. shop
+    local now = GetGameTimer()
+    if LastRestock[cooldownKey] and (now - LastRestock[cooldownKey]) < RESTOCK_COOLDOWN_MS then return end
+    -- 交货点距离（deliveryPay 内部也有一次，但它是"不付钱就 return"，闸门认不出这是守卫）
+    if not nearCoords(src, location.delivery, 10.0) then return end
+    LastRestock[cooldownKey] = now
+
     deliveryPay(src, shop)
     if not Config.Locations[shop].useStock then return end
     local randAmount = math.random(10, 50)
@@ -100,10 +126,17 @@ RegisterNetEvent('qb-shops:server:RestockShopItems', function(shop)
 end)
 
 RegisterNetEvent('qb-shops:server:UpdateShopItems', function(shop, itemData, amount) -- called from inventory
-    if not shop or not itemData or not amount then return end
-    if not Config.Locations[shop] then return end
-    if not Config.Locations[shop].useStock then return end
-    Config.Locations[shop].products[itemData.slot].amount = Config.Locations[shop].products[itemData.slot].amount - amount
+    -- itemData / amount 都来自客户端：`itemData.slot` 必须是该店真实存在的商品下标，
+    -- amount 必须是正整数（负数会把库存加上去 = 白拿货）。
+    if type(shop) ~= 'string' or type(itemData) ~= 'table' then return end
+    local location = Config.Locations[shop]
+    if type(location) ~= 'table' or not location.useStock then return end
+    local slot = tonumber(itemData.slot)
+    if not slot or not location.products[slot] then return end
+    amount = tonumber(amount)
+    if not amount or amount <= 0 then return end
+    if amount > 1000 then amount = 1000 end
+    Config.Locations[shop].products[slot].amount = Config.Locations[shop].products[slot].amount - math.floor(amount)
     if Config.Locations[shop].products[itemData.slot].amount < 0 then
         Config.Locations[shop].products[itemData.slot].amount = 0
     end
@@ -114,6 +147,8 @@ end)
 RegisterNetEvent('qb-shops:server:DoBail', function(bool)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    if type(bool) ~= 'boolean' then return end
     if bool then
         if Player.Functions.RemoveMoney('cash', Config.TruckDeposit, 'tow-received-bail') then
             Bail[Player.PlayerData.citizenid] = Config.TruckDeposit
@@ -136,6 +171,10 @@ RegisterNetEvent('qb-shops:server:DoBail', function(bool)
 end)
 
 RegisterNetEvent('qb-shops:server:PaySlip', function(drops)
+    -- 全仓没有任何客户端调用点（deliveries.lua 只发 RestockShopItems / DoBail），
+    -- 而这里按客户端给的 drops 直接 AddMoney：站在交货点发 PaySlip(99999) 就是 500 * 99999 的印钞机。
+    -- 既然没人用，就只认服务端来源。
+    if source ~= 0 then return end
     local src = source
     local playerPed = GetPlayerPed(src)
     local playerCoords = GetEntityCoords(playerPed)
@@ -156,9 +195,13 @@ end)
 
 RegisterNetEvent('qb-shops:server:openShop', function(data)
     local src = source
+    -- data 为 nil / 非表时 `data.shop` 会直接抛错打断事件线程
+    if type(data) ~= 'table' or type(data.shop) ~= 'string' then return end
     local shopName = data.shop
     local shopData = Config.Locations[shopName]
-    if not shopData then return end
+    if type(shopData) ~= 'table' then return end
+    -- 只允许打开自己身边这家店的界面（原来可以在任意位置开任意店）
+    if not nearCoords(src, shopData.coords, 5.0) then return end
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
     local playerData = Player.PlayerData

@@ -302,6 +302,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 19：qb-shops 5 条 + 修复批 17 的登记回退**（2026-11-08）：
+  `qb-shops:server:PaySlip(drops)` **全仓没有任何客户端调用点**（deliveries.lua 只发 RestockShopItems /
+  DoBail），却按客户端给的 `drops` 直接 `AddMoney('bank', Config.DeliveryPrice * drops)` —— 站在交货点发
+  `PaySlip(99999)` 就是 500 × 99999 的印钞机（探针实测旧版 `PAYSLIP_CLIENT_BLOCKED=false`）→ 改成只认
+  服务端来源。`RestockShopItems(shop)` 的 `deliveryPay` 有 10 米距离校验，但没有冷却也没有次数概念：
+  站在交货点循环发就能一遍遍拿 500 + 10% 概率的 `cryptostick`（旧版 `RESTOCK_COOLDOWN_BLOCKED=false`）
+  → 加 30 秒冷却（**键是「玩家 + 店」**：只按玩家计会吞掉同一玩家跑下一家店的工资，而路线里相邻两家的
+  交货点可能只隔 47 米），距离校验改成显式的 `nearCoords` helper（`deliveryPay` 内部那次是"不付钱就
+  return"，闸门认不出是守卫）。`UpdateShopItems(shop, itemData, amount)` 的 slot/amount 全客户端给：坏 slot 抛
+  `attempt to index a nil value`，负数 amount 会把库存**加上去**（白拿货）→ slot 必须命中该店商品、
+  amount 正数并夹到 1000。`openShop(data)` 的 `data` 为 nil 时抛错、且能在任意位置开任意店 →
+  类型校验 + 与门店坐标 5 米内。`DoBail` 补 Player 判空与 bool 类型校验。
+  另修一个**我自己在批 17 引入的回退**：`net_event_guard_helpers.json` 里 `custom-justice` 是整键覆盖，
+  把原有的人 `JusticeService.GetOwnInmate` 登记冲掉了，导致 `requestReduction` / `sentenceComplete`
+  从「已鉴权」翻回「未登记」（本轮恢复，custom 重新归零）。教训已写进 static-rule-gates 技能：
+  登记表一律 merge，不许 `d[key] = {...}`。
+  探针：qb-shops（补货工资的距离/冷却、PaySlip、库存扣减、开店距离）。数字：未登记 **74 → 67**
+  （qb 13 → 8、custom 2 → 0、allowlist 173）。
+
 - **P1-3 批 18：tcity-dashboard 3 + story-engine 2 + production-freeze 2**（2026-11-08）：
   `tcity-dashboard` 的车牌标记/取消/追踪器**本来就是**「在职警察」（`isOnDutyLeo`：`job.type == 'leo'`
   或 `job.name == 'police'` 且 onduty），本轮登记进 helpers；真修的是参数——`plate:upper()` 遇到
