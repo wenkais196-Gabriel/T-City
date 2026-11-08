@@ -38,7 +38,6 @@ RegisterNetEvent('hospital:server:SendToBed', function(bedId, isRevive, hospital
 	if _bedCooldowns == nil then _bedCooldowns = {} end
 	local now = os.time()
 	if _bedCooldowns[src] and (now - _bedCooldowns[src]) < 30 then return end
-	_bedCooldowns[src] = now
 
 	-- 🔒 索引校验：bedId / hospitalIndex 都是客户端传的，直接索引会把服务端打崩
 	bedId = tonumber(bedId)
@@ -47,6 +46,9 @@ RegisterNetEvent('hospital:server:SendToBed', function(bedId, isRevive, hospital
 	local hospital = Config.Locations['hospital'][hospitalIndex]
 	local bed = hospital and hospital['beds'] and hospital['beds'][bedId]
 	if not bed then return end
+
+	-- 只有校验通过才记冷却（非法索引不该把自己锁 30 秒）
+	_bedCooldowns[src] = now
 
 	TriggerClientEvent('hospital:client:SendToBed', src, bedId, bed, isRevive)
 	TriggerClientEvent('hospital:client:SetBed', -1, bedId, true, hospitalIndex)
@@ -233,7 +235,7 @@ RegisterNetEvent('hospital:server:TreatWounds', function(playerId)
 	else
 		-- 急诊科 (EMERGENCY) 只能用绷带止血, 发送 partial 而非 full
 		TriggerClientEvent('hospital:client:HealInjuries', Patient.PlayerData.source, 'partial')
-		TriggerClientEvent('QBCore:Notify', src, ('[%s] 仅能实施紧急止血 — 完全治愈需 SURGERY 科室'):format(deptConfig and deptConfig.label or deptName))
+		TriggerClientEvent('QBCore:Notify', src, ('[%s] 仅能实施紧急止血 — 完全治愈需 SURGERY 科室'):format(deptConfig and deptConfig.label or deptName), 'primary')
 	end
 end)
 
