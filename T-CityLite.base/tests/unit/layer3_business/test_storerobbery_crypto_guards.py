@@ -50,6 +50,7 @@ def test_crypto_exchange_never_pays_when_the_stick_is_not_consumed():
     assert data["REBOOT_PCT_AFTER_GOOD"][0] == "42", "合法进度没写进去"
     assert data["REBOOT_STATE_REMOTE"][0] == "false", "站在 9999 米外也能把全服状态改成「重启中」"
     assert data["REBOOT_PCT_REMOTE"][0] == "0", "站在 9999 米外也能写全服重启进度"
+    assert data["REBOOT_STATE_OWNER_FINISH"][0] == "false", "重启发起者走出范围后无法收尾（全服会卡在「重启中」）"
 
 
 def test_storerobbery_alerts_use_server_coords_and_safes_need_proximity():
@@ -58,8 +59,11 @@ def test_storerobbery_alerts_use_server_coords_and_safes_need_proximity():
     assert data["ALERT_COORDS_FROM_CLIENT"][0] == "false", "警情坐标仍然取客户端传的值"
     assert data["ALERT_COORDS_MATCH_CONFIG"][0] == "true", "警情坐标不是服务端配置的门店坐标"
 
-    assert data["ALERTS_FROM_BAD_CALLS"][0] == "0", "坏 kind / 坏 key / 站在远处仍然发出了警情"
+    assert data["ACTIVE_SETUP"][0] == "true", "探针没能构造活跃抢劫（callcops 正例失效）"
+    assert data["ALERTS_FROM_BAD_CALLS"][0] == "0", "坏 kind / 坏 key / 无抢劫记录 / 站在远处仍然发出了警情"
     assert data["SAFE_ROBBED_REMOTE"][0] == "false", "站在远处也能把保险箱标成已抢"
     assert data["SAFE_ROBBED_WITHOUT_ROBBERY"][0] == "false", "没在抢这家店也能把保险箱标成已抢"
     assert data["ACTIVE_TABLE_FOUND"][0] == "true", "探针拿不到 activeRobberies（构造失效）"
     assert data["SAFE_ROBBED_CLOSE"][0] == "true", "站在保险箱旁反而标不了"
+    assert data["RECENT_TABLE_FOUND"][0] == "true", "探针拿不到 recentStoreRobberies（构造失效）"
+    assert data["SAFE_ROBBED_RECENT"][0] == "true", "收银机 25 秒计时结束后，同店保险箱就再也标不了（正常玩法被堵）"

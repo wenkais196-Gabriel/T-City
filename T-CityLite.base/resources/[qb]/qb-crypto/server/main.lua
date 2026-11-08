@@ -244,23 +244,47 @@ RegisterServerEvent('qb-crypto:server:ExchangeFail', function()
     end
 end)
 
-local lastRebootUpdate = 0
+local lastRebootUpdate = {}
+local rebootOwner = nil   -- 当前重启会话的发起者：只有他能把状态改回 false
 RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
     local src = source
     -- 🔒 全服共享的重启状态：任意玩家原来能把它改成任意值（伪造"交易所重启中"）。
     --    客户端实际发的是 `Rebooting(true/false, percentage)`（见 client/main.lua 的重启循环），
     --    所以 state 必须是 boolean、percentage 必须是 0~100 的整数，并按秒节流。
     if type(src) ~= 'number' or type(state) ~= 'boolean' then return end
-    -- 🔒 全服共享状态必须只有"正在交易所柜员机前的人"能写（原来任何玩家都能伪造重启中）
-    if not QBCore.Functions.GetPlayer(src) or not NearExchange(src) then return end
+    -- 🔒 全服共享状态必须只有"正在交易所柜员机前的人"能写（原来任何玩家都能伪造重启中）。
+    --    例外：正在重启的会话发起者必须能把状态收尾（即使他已经走出 20 米），
+    --    否则服务端会永久卡在 state=true。
+    if not QBCore.Functions.GetPlayer(src) then return end
+    local isOwner = rebootOwner == src
+    if not isOwner and not NearExchange(src) then return end
     percentage = tonumber(percentage)
     if not percentage or percentage < 0 or percentage > 100 or percentage % 1 ~= 0 then return end
-    -- 客户端重启循环每帧上报一次进度：用毫秒计时，200ms 节流（1 秒会把进度拖慢 5~10 倍）
+    -- 客户端重启循环每帧上报一次进度：用毫秒计时，200ms 节流（**按玩家**，否则一个人能吃满全局冷却）
     local now = GetGameTimer()
-    if now - lastRebootUpdate < 200 then return end
-    lastRebootUpdate = now
+    if lastRebootUpdate[src] and now - lastRebootUpdate[src] < 200 then return end
+    lastRebootUpdate[src] = now
+
+    if state == true and not rebootOwner then
+        rebootOwner = src          -- 这次重启由他发起
+    elseif state == false and isOwner then
+        rebootOwner = nil         -- 发起者收尾
+    elseif state == false and rebootOwner ~= nil and rebootOwner ~= src then
+        return                     -- 别人不能替发起者把状态关掉
+    end
+
     Crypto.Exchange.RebootInfo.state = state
     Crypto.Exchange.RebootInfo.percentage = percentage
+end)
+
+AddEventHandler('playerDropped', function()
+    local src = source
+    if rebootOwner == src then
+        rebootOwner = nil
+        Crypto.Exchange.RebootInfo.state = false
+        Crypto.Exchange.RebootInfo.percentage = 0
+        TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+    end
 end)
 
 RegisterServerEvent('qb-crypto:server:GetRebootState', function()
@@ -301,7 +325,12 @@ RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function()
         -- 加钱失败就把 cryptostick 还回去，别让玩家既丢物品又没钱
         if Player.Functions.AddMoney('crypto', Amount, 'qb-crypto:server:ExchangeSuccess') == false then
             -- AddItem 签名是 (identifier, item, amount, slot, info, reason)，info 必须是 table
-            exports['qb-inventory']:AddItem(src, 'cryptostick', 1, false, {}, 'qb-crypto:server:ExchangeSuccess-refund')
+            local refunded = exports['qb-inventory']:AddItem(src, 'cryptostick', 1, false, {}, 'qb-crypto:server:ExchangeSuccess-refund')
+            if refunded ~= true then
+                -- 回补也失败（背包满/物品异常）：留痕，便于运营补偿
+                print(('[qb-crypto] ⚠️ 兑换回补失败：src=%s citizenid=%s 物品=cryptostick'):format(
+                    tostring(src), tostring(Player.PlayerData.citizenid)))
+            end
             return
         end
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.you_have_exchanged_your_cryptostick_for', { amount = Amount }), 'success', 3500)

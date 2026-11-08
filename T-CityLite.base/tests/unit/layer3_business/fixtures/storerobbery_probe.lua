@@ -119,8 +119,38 @@ GetHashKey = function(value) return 'hash:' .. tostring(value) end
 load_lua(RES .. '/config.lua', 'config.lua')
 load_lua(RES .. '/server/main.lua', 'main.lua')
 
+-- 读 handler 闭包里的私有表（activeRobberies / recentStoreRobberies）
+local function upvalueOf(handlerName, wanted)
+    local handler = handlers[handlerName]
+    for index = 1, 60 do
+        local name, value = debug.getupvalue(handler, index)
+        if not name then break end
+        if name == wanted then return value end
+    end
+    return nil
+end
+
+local function setActiveRobbery(registerId, sourceId)
+    local active = upvalueOf('qb-storerobbery:server:callCops', 'activeRobberies')
+    if not active then return false end
+    active[registerId] = { src = sourceId, startTime = 0 }
+    return true
+end
+
+local function clearRobberies()
+    local active = upvalueOf('qb-storerobbery:server:callCops', 'activeRobberies')
+    if active then
+        for key in pairs(active) do active[key] = nil end
+    end
+    local recent = upvalueOf('qb-storerobbery:server:callCops', 'recentStoreRobberies')
+    if recent then
+        for key in pairs(recent) do recent[key] = nil end
+    end
+end
+
 -- ── 1. callCops：客户端编坐标应被丢弃（人站在店里，否则服务端会按距离拒）──
 emit('SCENARIO', 'callcops-coords')
+emit('ACTIVE_SETUP', tostring(setActiveRobbery(1, 1)))
 local shopAnchor = Config.Registers[1][1]
 state.coords = vector3(shopAnchor.x, shopAnchor.y, shopAnchor.z)
 local fakeCoords = { x = 9999.0, y = 9999.0, z = 9999.0 }
@@ -144,8 +174,9 @@ local alertsBefore = 0
 for _, event in ipairs(state.clientEvents) do
     if event.name == 'qb-phone:client:addPoliceAlert' then alertsBefore = alertsBefore + 1 end
 end
+clearRobberies()   -- 没有任何抢劫记录：站在店里也不该发警情
 local anchor1 = Config.Registers[1][1]
-state.coords = vector3(anchor1.x, anchor1.y, anchor1.z)   -- 站在店里
+state.coords = vector3(anchor1.x, anchor1.y, anchor1.z)
 fireAs(1, 'qb-storerobbery:server:callCops', 'nonsense', 1, 'X', fakeCoords)
 fireAs(1, 'qb-storerobbery:server:callCops', 'cashier', 9999, 'X', fakeCoords)
 fireAs(1, 'qb-storerobbery:server:callCops', nil, nil, nil, nil)
@@ -174,20 +205,31 @@ emit('SAFE_ROBBED_WITHOUT_ROBBERY', tostring(Config.Safes[safeKey].robbed))
 
 emit('SCENARIO', 'safe-close')
 -- 模拟"本人正在抢这家店的收银台"（Config.Registers[1].safeKey == 1）
-local activeRobberies = nil
-local handler = handlers['qb-storerobbery:server:setSafeStatus']
-for index = 1, 40 do
-    local upName, upValue = debug.getupvalue(handler, index)
-    if not upName then break end
-    if upName == 'activeRobberies' then activeRobberies = upValue break end
-end
-emit('ACTIVE_TABLE_FOUND', tostring(activeRobberies ~= nil))
-if activeRobberies then
-    activeRobberies[1] = { src = 1, startTime = 0 }
-end
+emit('ACTIVE_TABLE_FOUND', tostring(setActiveRobbery(1, 1)))
 state.coords = vector3(anchorSafe.x, anchorSafe.y, anchorSafe.z)
 fireAs(1, 'qb-storerobbery:server:setSafeStatus', safeKey)
 emit('SAFE_ROBBED_CLOSE', tostring(Config.Safes[safeKey].robbed))
+
+emit('SCENARIO', 'safe-recent-robbery')
+-- 25 秒计时器已结束，但 10 分钟内本人抢过这家店：保险箱应当仍可标记
+Config.Safes[safeKey].robbed = false
+clearRobberies()
+-- recentStoreRobberies 只被 HasRecentStoreRobbery 这个函数捕获，
+-- handler 的 upvalue 里只有那个函数 → 再往下一层找
+local recent = nil
+local helper = upvalueOf('qb-storerobbery:server:setSafeStatus', 'HasRecentStoreRobbery')
+if helper then
+    for index = 1, 20 do
+        local name, value = debug.getupvalue(helper, index)
+        if not name then break end
+        if name == 'recentStoreRobberies' then recent = value break end
+    end
+end
+emit('RECENT_TABLE_FOUND', tostring(recent ~= nil))
+if recent then recent[safeKey] = { src = 1, at = GetGameTimer() } end
+state.coords = vector3(anchorSafe.x, anchorSafe.y, anchorSafe.z)
+fireAs(1, 'qb-storerobbery:server:setSafeStatus', safeKey)
+emit('SAFE_ROBBED_RECENT', tostring(Config.Safes[safeKey].robbed))
 
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')

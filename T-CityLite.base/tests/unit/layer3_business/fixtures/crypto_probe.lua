@@ -192,5 +192,15 @@ clock = clock + 1000
 fireAs(1, 'qb-crypto:server:Rebooting', true, 55)
 emit('REBOOT_STATE_REMOTE', tostring(Crypto.Exchange.RebootInfo.state))
 emit('REBOOT_PCT_REMOTE', tostring(Crypto.Exchange.RebootInfo.percentage))
+-- 场景 6：重启发起者走出 20 米，仍然必须能把状态收尾（否则全服永久卡"重启中"）
+emit('SCENARIO', 'reboot-owner-finish-remote')
+state.coords = vector3(Crypto.Exchange.coords.x, Crypto.Exchange.coords.y, Crypto.Exchange.coords.z)
+clock = clock + 1000
+fireAs(1, 'qb-crypto:server:Rebooting', true, 10)
+state.coords = vector3(9999.0, 9999.0, 9999.0)
+clock = clock + 1000
+fireAs(1, 'qb-crypto:server:Rebooting', false, 0)
+emit('REBOOT_STATE_OWNER_FINISH', tostring(Crypto.Exchange.RebootInfo.state))
+
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')
