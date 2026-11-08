@@ -44,21 +44,40 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 |---|---|---|---|---|---|
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
 | custom `[custom]` | 133 | 80 | 40 | 13 | 覆盖率 **120/133 ≈ 90.2%**（第 5 批：中控屏锁持有者、物流任务前缀条件；车钥匙两条自作用域登记） |
-| qb `[qb]` | 216 | 92 | 86 | 38 | 债务 |
+| qb `[qb]` | 216 | 94 | 92 | 30 | 债务 |
 | other（system / standalone / voice / cfx-default） | 75 | 5 | 6 | 64 | 债务 |
-| **合计** | **440** | 179 | 147 | **114** | — |
+| **合计** | **440** | 183 | 151 | **106** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
-**债的分布不是均匀的**（批 13 后重算）：114 条未登记里 **56 条在启动集内**（`started: true`），
+**债的分布不是均匀的**（批 14 后重算）：106 条未登记里 **48 条在启动集内**（`started: true`），
 58 条在 12 个不启动的资源里（其中 `monitor` 一家 33 条，txAdmin 自带，口径见 §6）。启动集内的
-头部已经降到 4 条一档（`qb-pawnshop` / `qb-multicharacter` / `qb-management` / `custom-quest`）。基线里每个资源都带 `started`
+头部是 `qb-management` 4、`custom-quest` 4、`PolyZone` 4，其后是 3 条一档
+（`tcity-dashboard` / `qb-mechanicjob` / `qb-fuel`）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
+
+### 3.1.1 `job_deny_guard` 的实际判据比名字宽（2026-11-08 批 14 实测）
+
+`job_deny_guard` 现在的实现是「`if <player 变量> … ~= … then … return`」，**不要求条件里出现
+`.job`**。也就是说：
+
+```lua
+local Player = QBCore.Functions.GetPlayer(src)
+if not Player or type(itemName) ~= 'string' then return end   -- 被算作"职业守卫"
+```
+
+这种「判空 + 类型校验」会被当成职业守卫计入已鉴权。按更严的口径（条件里必须出现 `.job` /
+`Job`）重新统计，全仓有 **36 条**事件会从"已鉴权"翻成"未登记"，其中大部分是本轮之前已经修过、
+用的是归属/状态校验（`hasKey`、`IsOwnTestDrive`、DB 归属查询）而不是职业判定的 handler。
+
+本轮**不动闸门**：这是判据口径决定，不是顺手能改的实现细节；而且翻面后需要逐条重新定性
+（allowlist 分类也会跟着变）。等 P1-3 收尾时单独做一次「闸门口径校准」，
+届时按 `.job` 严格判据重跑一遍并重新归类。
 
 ## 3.1 资源内部 helper 登记表（2026-11-01 第 2 批）
 
-全仓未登记事件里（当前 114），有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
+全仓未登记事件里（当前 106），有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
 （`CanModifyPlate` / `IsEmergencyService` / `onDutyOfficer` …），按固定 token 名单扫不出来。
 直接把这些名字塞进 token 名单等于"名字像校验就算校验"，所以另开了
 `tests/architecture/net_event_guard_helpers.json`：
