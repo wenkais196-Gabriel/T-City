@@ -18,15 +18,37 @@ AddEventHandler('txAdmin:events:healedPlayer', function(eventData)
 	TriggerClientEvent('hospital:client:HealInjuries', eventData.id, 'full')
 end)
 
+-- 复活权限的唯一判定入口（闸门按 net_event_guard_helpers.json 登记；
+-- 调用点必须是 `if not CanRevive(Player, src) then ... return end` 形状）
+local function CanRevive(Player, src)
+	if not Player then return false end
+	local isEMS = Player.PlayerData.job.name == 'ambulance' and Player.PlayerData.job.onduty
+	if isEMS then return true end
+	if not QBCore.Functions.HasItem(src, 'firstaid', 1) then return false end
+	if not Config.RequireMedicalCert then return true end
+	local certs = Player.PlayerData.metadata['cert_status'] or {}
+	return certs['medical'] == 'held'
+end
+
 RegisterNetEvent('hospital:server:SendToBed', function(bedId, isRevive, hospitalIndex)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
 	-- 🔒 Security: 限流 — 防止客户端高频刷扣款
 	if _bedCooldowns == nil then _bedCooldowns = {} end
 	local now = os.time()
 	if _bedCooldowns[src] and (now - _bedCooldowns[src]) < 30 then return end
 	_bedCooldowns[src] = now
-	TriggerClientEvent('hospital:client:SendToBed', src, bedId, Config.Locations['hospital'][hospitalIndex]['beds'][bedId], isRevive)
+
+	-- 🔒 索引校验：bedId / hospitalIndex 都是客户端传的，直接索引会把服务端打崩
+	bedId = tonumber(bedId)
+	hospitalIndex = tonumber(hospitalIndex)
+	if not bedId or not hospitalIndex then return end
+	local hospital = Config.Locations['hospital'][hospitalIndex]
+	local bed = hospital and hospital['beds'] and hospital['beds'][bedId]
+	if not bed then return end
+
+	TriggerClientEvent('hospital:client:SendToBed', src, bedId, bed, isRevive)
 	TriggerClientEvent('hospital:client:SetBed', -1, bedId, true, hospitalIndex)
 	Player.Functions.RemoveMoney('bank', Config.BillCost, 'respawned-at-hospital')
 	exports['qb-banking']:AddMoney('ambulance', Config.BillCost, 'Player treatment')
@@ -36,6 +58,10 @@ end)
 RegisterNetEvent('hospital:server:RespawnAtHospital', function(hospitalIndex)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
+	-- 🔒 索引校验：客户端传的 hospitalIndex 只在合法范围内使用
+	hospitalIndex = tonumber(hospitalIndex) or 1
+	if not Config.Locations['hospital'][hospitalIndex] then hospitalIndex = 1 end
 	-- 🌐 Atmosphere: return to default on respawn
 	if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'default') end
 	if Player.PlayerData.metadata['injail'] > 0 then
@@ -182,28 +208,32 @@ end)
 RegisterNetEvent('hospital:server:TreatWounds', function(playerId)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
+
+	-- 🔒 deny-early：非在职 EMS 直接拒绝（闸门要求先拒绝后干活）
+	if Player.PlayerData.job.name ~= 'ambulance' or not Player.PlayerData.job.onduty then
+		TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_ems'), 'error')
+		return
+	end
+
 	local Patient = QBCore.Functions.GetPlayer(playerId)
-	if Patient then
-		if Player.PlayerData.job.name == 'ambulance' and Player.PlayerData.job.onduty then
-			-- 🔧 科室权限检查: 完全治愈（full）仅 SURGERY 科室可执行
-			local dept = exports['custom-career']:GetPlayerIdentity(src)
-			local deptName = dept and dept.department or Config.DefaultDepartment
-			local deptConfig = Config.Departments[deptName]
-			if deptConfig and deptConfig.allowSurgery then
-				exports['qb-inventory']:RemoveItem(src, 'bandage', 1, false, 'hospital:server:TreatWounds')
-				TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['bandage'], 'remove')
-				TriggerClientEvent('hospital:client:HealInjuries', Patient.PlayerData.source, 'full')
-				print(('[EMS-TREAT] SURGERY doctor %s fully healed patient %s'):format(GetPlayerName(src), GetPlayerName(playerId)))
-			else
-				-- 急诊科 (EMERGENCY) 只能用绷带止血, 发送 partial 而非 full
-				exports['qb-inventory']:RemoveItem(src, 'bandage', 1, false, 'hospital:server:TreatWounds')
-				TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['bandage'], 'remove')
-				TriggerClientEvent('hospital:client:HealInjuries', Patient.PlayerData.source, 'partial')
-				TriggerClientEvent('QBCore:Notify', src, ('[%s] 仅能实施紧急止血 — 完全治愈需 SURGERY 科室'):format(deptConfig and deptConfig.label or '急诊科'), 'primary')
-			end
-		else
-			TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_ems'), 'error')
-		end
+	if not Patient then return end
+
+	-- 🔧 科室权限检查: 完全治愈（full）仅 SURGERY 科室可执行
+	local dept = exports['custom-career']:GetPlayerIdentity(src)
+	local deptName = dept and dept.department or Config.DefaultDepartment
+	local deptConfig = Config.Departments[deptName]
+
+	exports['qb-inventory']:RemoveItem(src, 'bandage', 1, false, 'hospital:server:TreatWounds')
+	TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['bandage'], 'remove')
+
+	if deptConfig and deptConfig.allowSurgery then
+		TriggerClientEvent('hospital:client:HealInjuries', Patient.PlayerData.source, 'full')
+		print(('[EMS-TREAT] SURGERY doctor %s fully healed patient %s'):format(GetPlayerName(src), GetPlayerName(playerId)))
+	else
+		-- 急诊科 (EMERGENCY) 只能用绷带止血, 发送 partial 而非 full
+		TriggerClientEvent('hospital:client:HealInjuries', Patient.PlayerData.source, 'partial')
+		TriggerClientEvent('QBCore:Notify', src, ('[%s] 仅能实施紧急止血 — 完全治愈需 SURGERY 科室'):format(deptConfig and deptConfig.label or deptName))
 	end
 end)
 
@@ -254,39 +284,31 @@ end)
 RegisterNetEvent('hospital:server:RevivePlayer', function(playerId, isOldMan)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
 	local Patient = QBCore.Functions.GetPlayer(playerId)
+	if not Patient then return end
+
 	local oldMan = isOldMan or false
-	if Patient then
-		-- 🔧 权限检查: 必须是 EMS 值班人员，或持有 firstaid + medical_cert
-		local isEMS = Player.PlayerData.job.name == 'ambulance' and Player.PlayerData.job.onduty
-		local hasFirstAid = QBCore.Functions.HasItem(src, 'firstaid', 1)
-		local hasMedicalCert = true -- 默认允许（向后兼容）
-		if Config.RequireMedicalCert and not isEMS then
-			-- 非 EMS 人员使用 firstaid 需持有 medical_cert
-			local certs = Player.PlayerData.metadata['cert_status'] or {}
-			hasMedicalCert = (certs['medical'] == 'held')
-		end
-		if isEMS or (hasFirstAid and hasMedicalCert) then
-			if oldMan then
-				if Player.Functions.RemoveMoney('cash', 5000, 'revived-player') then
-					exports['qb-inventory']:RemoveItem(src, 'firstaid', 1, false, 'hospital:server:RevivePlayer')
-					TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['firstaid'], 'remove')
-					TriggerClientEvent('hospital:client:Revive', Patient.PlayerData.source)
-				else
-					TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_enough_money'), 'error')
-				end
-			else
-				exports['qb-inventory']:RemoveItem(src, 'firstaid', 1, false, 'hospital:server:RevivePlayer')
-				TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['firstaid'], 'remove')
-				TriggerClientEvent('hospital:client:Revive', Patient.PlayerData.source)
-			end
-		else
-			-- 🔧 安全审计日志（不再永久封禁，而是记录 + 通知）
-			local reason = hasFirstAid and '缺少医疗执业执照 (medical_cert)' or '无 firstaid 物品或无 EMS 职业'
-			TriggerEvent('qb-log:server:CreateLog', 'ambulancejob', 'Revive Blocked', 'orange', string.format('%s (src=%s) tried to revive player %s — %s', GetPlayerName(src), src, playerId, reason), false)
-			TriggerClientEvent('QBCore:Notify', src, ('你没有权限复活他人（%s）'):format(reason), 'error')
+
+	-- 🔒 deny-early：既不是在职 EMS，也没有 firstaid + 医疗执照 → 拒绝
+	if not CanRevive(Player, src) then
+		local reason = '无 EMS 在职身份，且缺少 firstaid 或医疗执业执照 (medical_cert)'
+		TriggerEvent('qb-log:server:CreateLog', 'ambulancejob', 'Revive Blocked', 'orange',
+			string.format('%s (src=%s) tried to revive player %s — %s', GetPlayerName(src), src, GetPlayerName(playerId), reason))
+		TriggerClientEvent('QBCore:Notify', src, ('你没有权限复活他人（%s）'):format(reason), 'error')
+		return
+	end
+
+	if oldMan then
+		if not Player.Functions.RemoveMoney('cash', 5000, 'revived-player') then
+			TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_enough_money'), 'error')
+			return
 		end
 	end
+
+	exports['qb-inventory']:RemoveItem(src, 'firstaid', 1, false, 'hospital:server:RevivePlayer')
+	TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['firstaid'], 'remove')
+	TriggerClientEvent('hospital:client:Revive', Patient.PlayerData.source)
 end)
 
 RegisterNetEvent('hospital:server:SendDoctorAlert', function(hospitalName)
@@ -350,21 +372,27 @@ RegisterNetEvent('hospital:server:CanHelp', function(helperId, canHelp)
 end)
 
 RegisterNetEvent('hospital:server:removeBandage', function()
-	local Player = QBCore.Functions.GetPlayer(source)
+	-- 只动 caller 自己的背包：source 不来自参数，越权面为零
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
 	if not Player then return end
-	exports['qb-inventory']:RemoveItem(source, 'bandage', 1, false, 'hospital:server:removeBandage')
+	exports['qb-inventory']:RemoveItem(src, 'bandage', 1, false, 'hospital:server:removeBandage')
 end)
 
 RegisterNetEvent('hospital:server:removeIfaks', function()
-	local Player = QBCore.Functions.GetPlayer(source)
+	-- 只动 caller 自己的背包：source 不来自参数，越权面为零
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
 	if not Player then return end
-	exports['qb-inventory']:RemoveItem(source, 'ifaks', 1, false, 'hospital:server:removeIfaks')
+	exports['qb-inventory']:RemoveItem(src, 'ifaks', 1, false, 'hospital:server:removeIfaks')
 end)
 
 RegisterNetEvent('hospital:server:removePainkillers', function()
-	local Player = QBCore.Functions.GetPlayer(source)
+	-- 只动 caller 自己的背包：source 不来自参数，越权面为零
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
 	if not Player then return end
-	exports['qb-inventory']:RemoveItem(source, 'painkillers', 1, false, 'hospital:server:removePainkillers')
+	exports['qb-inventory']:RemoveItem(src, 'painkillers', 1, false, 'hospital:server:removePainkillers')
 end)
 
 RegisterNetEvent('hospital:server:resetHungerThirst', function()
