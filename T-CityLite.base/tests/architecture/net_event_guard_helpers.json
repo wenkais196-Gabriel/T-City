@@ -303,5 +303,19 @@
       "requires_raw": [],
       "why": "只有当前开放中的那场比赛的创建者能开始/取消/改状态；raceId 不在开放表里一律 false"
     }
+  },
+  "qb-weathersync": {
+    "isAllowedToChange": {
+      "defined_at": "qb-weathersync/server/server.lua",
+      "requires_code": [
+        "src == 0",
+        "QBCore.Functions.HasPermission(src",
+        "IsPlayerAceAllowed(src"
+      ],
+      "requires_raw": [
+        "admin"
+      ],
+      "why": "改天气/时间/停电/冻时只允许控制台（src==0）或有 admin 权限（ACE）的人；原来这个判定存在，但写成 if isAllowed 正分支，闸门识别不了"
+    }
   }
 }
