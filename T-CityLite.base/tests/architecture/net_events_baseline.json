@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 88,
-      "allowlisted": 75,
-      "unguarded": 53
+      "guarded": 91,
+      "allowlisted": 82,
+      "unguarded": 43
     },
     "other": {
       "events": 76,
@@ -326,9 +326,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 5,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 5,
+      "guarded": 1,
+      "allowlisted": 4,
+      "unguarded": 0,
       "started": true
     },
     "qb-core": {
@@ -389,9 +389,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 5,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 5,
+      "guarded": 2,
+      "allowlisted": 3,
+      "unguarded": 0,
       "started": true
     },
     "qb-houses": {
@@ -714,13 +714,6 @@
       "qb-cityhall:server:requestId",
       "qb-cityhall:server:sendDriverTest"
     ],
-    "qb-clothing": [
-      "QBCore:Server:OnPlayerUnload",
-      "qb-clothes:loadPlayerSkin",
-      "qb-clothes:saveOutfit",
-      "qb-clothing:saveSkin",
-      "qb-clothing:server:removeOutfit"
-    ],
     "qb-doorlock": [
       "qb-doorlock:server:removeLockpick",
       "qb-doorlock:server:updateState",
@@ -730,13 +723,6 @@
       "qb-fuel:server:buyJerryCan",
       "qb-fuel:server:refillJerryCan",
       "qb-fuel:server:setCanFuel"
-    ],
-    "qb-houserobbery": [
-      "qb-houserobbery:server:SetBusyState",
-      "qb-houserobbery:server:enterHouse",
-      "qb-houserobbery:server:removeAdvancedLockpick",
-      "qb-houserobbery:server:removeLockpick",
-      "qb-houserobbery:server:searchFurniture"
     ],
     "qb-hud": [
       "hud:server:GainStress",
@@ -987,14 +973,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "qb-clothing",
-      "batch": "qb",
-      "unguarded": 5,
-      "owner": "qb-clothing",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "qb-doorlock",
       "batch": "qb",
       "unguarded": 3,
@@ -1007,14 +985,6 @@
       "batch": "qb",
       "unguarded": 3,
       "owner": "qb-fuel",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-houserobbery",
-      "batch": "qb",
-      "unguarded": 5,
-      "owner": "qb-houserobbery",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
