@@ -224,12 +224,98 @@ local function GetVehicleTypeByModel(model)
     return vehicleType or 'automobile'
 end
 
+-- 试驾记录：netId -> { src, model, at }。生成在这里做，所以这里是唯一能记账的地方；
+-- `deleteVehicle` 靠它判断"这台车是不是你的试驾车"，否则任何人都能删任意实体。
+TestDriveVehicles = TestDriveVehicles or {}
+
+local function isOnDutyDealer(src)
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false end
+    local job = Player.PlayerData and Player.PlayerData.job
+    if type(job) ~= 'table' then return false end
+    return job.name == 'cardealer' and job.onduty == true
+end
+
+-- 车型属于哪家店：`QBCore.Shared.Vehicles[model].shop` 可以是单个店名，也可以是店名数组。
+-- 换展车的菜单就是按这个字段筛车型的，所以服务端也必须用同一套判据 —— 用静态的
+-- `ShowroomVehicles[*].chosenVehicle` 会把"店员刚换上的车"判成非法。
+function VehicleBelongsToShop(model, shopName)
+    local cfg = QBCore.Shared.Vehicles[model]
+    if not cfg then return false end
+    local shop = cfg.shop
+    if type(shop) == 'string' then return shop == shopName end
+    if type(shop) == 'table' then
+        for _, name in pairs(shop) do
+            if name == shopName then return true end
+        end
+    end
+    return false
+end
+
+function IsOwnTestDrive(netId, src)
+    local grant = TestDriveVehicles[netId]
+    return grant ~= nil and grant.src == src
+end
+
+local function purgeStaleTestDrives(src)
+    local now = os.time()
+    for netId, grant in pairs(TestDriveVehicles) do
+        if grant.src == src or (now - (grant.at or now)) > 600 then
+            TestDriveVehicles[netId] = nil
+        end
+    end
+end
+
 QBCore.Functions.CreateCallback('qb-vehicleshop:server:spawnvehicle', function(source, cb, plate, vehicle, coords)
+    -- 🔒 三个参数全来自客户端：车型必须是**某个车店展台上真实存在的车**，生成点必须在
+    --    该车店的试驾点附近。原来 `vehicle` 直接进 GetHashKey、`coords` 直接进生成函数 ——
+    --    任何玩家都能在任意坐标生成任意载具。
+    if type(plate) ~= 'string' or type(vehicle) ~= 'string' then cb(nil) return end
+    local ctype = type(coords)
+    if ctype ~= 'table' and ctype ~= 'vector3' and ctype ~= 'vector4' then cb(nil) return end
+    local cx, cy, cz = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
+    local cw = tonumber(coords.w) or 0.0
+    if not cx or not cy or not cz then cb(nil) return end
+    if not QBCore.Shared.Vehicles[vehicle] then cb(nil) return end
+
+    -- 同一个车型可能在多家门店销售：只要**任意一家**卖这台车的店就在附近即可。
+    local ped = GetPlayerPed(source)
+    local pcoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
+    if not pcoords then cb(nil) return end
+
+    local inShowroom, nearShop = false, false
+    for shopName, shop in pairs(Config.Shops) do
+        if VehicleBelongsToShop(vehicle, shopName) then
+            inShowroom = true
+            local spawnPoint = shop['TestDriveSpawn']
+            if spawnPoint then
+                local anchor = vector3(spawnPoint.x, spawnPoint.y, spawnPoint.z)
+                -- 玩家要在店里，**且**请求的生成点确实就在这家店的试驾点附近
+                -- （只校验玩家位置的话，站在店里就能把车刷到地图另一头）
+                if #(pcoords - anchor) <= 200.0 and #(vector3(cx, cy, cz) - anchor) <= 200.0 then
+                    nearShop = true
+                end
+            end
+        end
+    end
+    if not inShowroom then
+        print(('[qb-vehicleshop] spawnvehicle rejected: %s 不在任何展台'):format(tostring(vehicle)))
+        cb(nil)
+        return
+    end
+    if not nearShop then
+        print(('[qb-vehicleshop] spawnvehicle rejected: src=%s 离车店太远'):format(tostring(source)))
+        cb(nil)
+        return
+    end
+
+    purgeStaleTestDrives(source)
     local vehType = QBCore.Shared.Vehicles[vehicle]
                     and QBCore.Shared.Vehicles[vehicle].type
                     or GetVehicleTypeByModel(vehicle)
     local veh   = CreateVehicleServerSetter(GetHashKey(vehicle), vehType, coords.x, coords.y, coords.z, coords.w)
     local netId = NetworkGetNetworkIdFromEntity(veh)
+    TestDriveVehicles[netId] = { src = source, model = vehicle, at = os.time() }
     SetVehicleNumberPlateText(veh, plate)
     local vehProps = {}
     local result   = MySQL.rawExecute.await('SELECT mods FROM player_vehicles WHERE plate = ?', { plate })
@@ -254,6 +340,8 @@ end
 
 -- 直接暴露全局函数供同资源内其他模块使用
 _G._vehicleshop = {
+    IsOwnTestDrive         = IsOwnTestDrive,
+    VehicleBelongsToShop   = VehicleBelongsToShop,
     CheckVehicleLicense    = CheckVehicleLicense,
     GetRequiredLicenseName = GetRequiredLicenseName,
     comma_value            = comma_value,
