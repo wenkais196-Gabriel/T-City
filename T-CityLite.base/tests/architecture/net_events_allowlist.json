@@ -1149,6 +1149,33 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-vehicleshop:server:addPlayer",
+      "file": "[qb]/qb-vehicleshop/server/finance-lifecycle.lua",
+      "category": "self_scoped",
+      "reason": "玩家上号时启动自己的分期计时器。citizenid 已改为**只从调用者自己的 PlayerData 读**（客户端传的参数被忽略），所以越权面为零：原来的写法允许重置别人的计时起点。",
+      "evidence": "finance-lifecycle.lua addPlayer — local src = source / GetPlayer(src) / PlayerData.citizenid",
+      "owner": "qb-vehicleshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-vehicleshop:server:buyShowroomVehicle",
+      "file": "[qb]/qb-vehicleshop/server/purchases.lua",
+      "category": "civilian",
+      "reason": "平民在展台买车（玩法本身）。handler 内：2 秒限流 + vehicleData 类型校验 + 车型必须在 `QBCore.Shared.Vehicles` + 服务端距离校验（`IsPlayerNearShopWithVehicle`）+ 驾照校验 + 价格取自 `vehicleCfg.price`（不采信客户端）+ 扣款与插库走 `InsertVehicleAndDeduct`。",
+      "evidence": "purchases.lua buyShowroomVehicle — lastPurchaseAt 2s / type(vehicleData) / CheckVehicleLicense / IsPlayerNearShopWithVehicle / vehicleCfg.price",
+      "owner": "qb-vehicleshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-vehicleshop:server:checkFinance",
+      "file": "[qb]/qb-vehicleshop/server/finance-lifecycle.lua",
+      "category": "self_scoped",
+      "reason": "登录时检查**自己**有没有逾期未付的分期车。查询条件 `citizenid = 自己`；已补 player 为 nil 的判空（原来直接索引 `player.PlayerData` 会抛错）与每玩家 10 分钟冷却（handler 内有 `Wait(Config.PaymentWarning * 60000)`，连点会堆睡眠线程）。",
+      "evidence": "finance-lifecycle.lua checkFinance — if not player then return end / financeCheckedAt[src] 600s / WHERE citizenid = 自己",
+      "owner": "qb-vehicleshop",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "qb-vehicleshop:server:financePayment",
       "category": "self_scoped",
       "reason": "只动 caller 自己的分期记录：车牌来自客户端，但余额/每期额/期数一律 `SELECT … WHERE plate = ? AND citizenid = ?` 从 DB 取，UPDATE 也带 citizenid 条件；钱只从 caller 自己的 cash/bank 扣。",
@@ -1172,6 +1199,15 @@
       "reason": "自己给自己办分期：车型经配置校验，价格取 QBCore.Shared.Vehicles 配置值（不采信客户端），首付/期数有 min/max 边界，行只插入 caller 自己的 citizenid，钱只从 caller 自己扣。",
       "evidence": "finance-payments.lua financeVehicle — 车型校验 + Config 价格 + downPayment∈[minDown, price] + paymentAmount ≤ MaximumPayments + INSERT citizenid=pData",
       "file": "[qb]/qb-vehicleshop/server/finance-payments.lua",
+      "owner": "qb-vehicleshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-vehicleshop:server:removePlayer",
+      "file": "[qb]/qb-vehicleshop/server/finance-lifecycle.lua",
+      "category": "self_scoped",
+      "reason": "玩家下线/登出时结算**自己**的分期剩余时间。同 addPlayer，citizenid 只取自调用者本人。",
+      "evidence": "finance-lifecycle.lua removePlayer — local src = source / GetPlayer(src) / PlayerData.citizenid",
       "owner": "qb-vehicleshop",
       "expires": "2027-03-31"
     },

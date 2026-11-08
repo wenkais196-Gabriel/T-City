@@ -339,5 +339,30 @@
       ],
       "why": "改天气/时间/停电/冻时只允许控制台（src==0）或有 admin 权限（ACE）的人；原来这个判定存在，但写成 if isAllowed 正分支，闸门识别不了"
     }
+  },
+  "qb-vehicleshop": {
+    "dealerOnDuty": {
+      "defined_at": "qb-vehicleshop/server/finance-lifecycle.lua",
+      "requires_code": [
+        "job.name ==",
+        "job.onduty == true",
+        "QBCore.Functions.GetPlayer(src)"
+      ],
+      "requires_raw": [
+        "'cardealer'"
+      ],
+      "why": "换展车 / 发试驾是店员操作，结果会广播给全服或给任意玩家生成载具。只看客户端菜单的 job 过滤条件不算鉴权。"
+    },
+    "IsOwnTestDrive": {
+      "defined_at": "qb-vehicleshop/server/bus.lua",
+      "requires_code": [
+        "TestDriveVehicles[netId]",
+        "grant.src == src"
+      ],
+      "requires_raw": [
+        "TestDriveVehicles"
+      ],
+      "why": "删除试驾载具只认『本资源给这个玩家生成的净 id』，否则任意 netId 就是任意实体（别人的车、NPC、玩家）。"
+    }
   }
 }
