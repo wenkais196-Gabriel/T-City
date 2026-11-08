@@ -36,6 +36,12 @@ QBCore.Functions.CreateCallback('qb-scoreboard:server:GetScoreboardData', functi
 end)
 
 RegisterNetEvent('qb-scoreboard:server:SetActivityBusy', function(activity, bool)
+    -- 全仓没有任何客户端调用点（只有 client 侧的接收 handler），这个事件只该由服务端触发。
+    -- 原来任何玩家都能发：① 用坏 key 让 `Config.IllegalActions[activity].busy` 抛错打断事件线程；
+    -- ② 直接改所有人的"非法活动占用"状态（等于全服抢劫开关）。
+    if source ~= 0 then return end
+    if type(activity) ~= 'string' or type(Config.IllegalActions[activity]) ~= 'table' then return end
+    if type(bool) ~= 'boolean' then return end
     Config.IllegalActions[activity].busy = bool
     TriggerClientEvent('qb-scoreboard:client:SetActivityBusy', -1, activity, bool)
 end)
