@@ -302,6 +302,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 16：qb-fuel 3 + qb-doorlock 3 + qb-mechanicjob 3**（2026-11-08）：三个资源同一类问题——
+  客户端报什么就信什么。qb-fuel 的 `setCanFuel(fuel)` 直接把客户端给的数字写进油桶，而客户端调用点
+  传的是 `canLiter - liter`（语义是**扣减**）；服务端分不清"加满"和"扣减"，任何玩家发一条
+  `setCanFuel(40)` 就白得 40 升油（旧版实测 `CAN_INCREASE_BLOCKED=false`）。改为只允许单调递减 +
+  夹在 0..`Config.JerryCanLitre`；**想"加"的请求直接拒绝并提示**，而不是静默写成当前值 —— 客户端
+  `canLiter` 来自 `GetAmmoInPedWeapon`（油桶 ammo 是 0..100 刻度，`Config.JerryCanLitre` 只有 40），
+  两边错位时静默按当前值写会变成"油桶一个不少、车里油却加上去了"的刷油复制。`refillVehicle(litres)` 的升数夹到 300 升且必须为正（旧版负数会
+  把价格算成负数、`'abc'`/表直接抛 `attempt to mul a 'string' with a 'number'`）；`buyJerryCan` /
+  `refillJerryCan` 加"在加油站 40 米内"（旧版全图任意位置能下单）；老油桶 `info` 为 nil 时旧版
+  `jerryCan.info.fuel = ...` 直接抛错，现在补表。qb-doorlock 的 `updateState` 鉴权对象原来是
+  `sentSource or source`——**客户端塞第 8 个参数报一个在线警察的 server id，鉴权就按那个警察算**，
+  普通的门禁形同虚设（全仓客户端调用点都不传这个参数，旧版实测 `FORGED_SOURCE_BLOCKED=false`）；
+  改为只用 `source` 鉴权、`sentSource` 与 source 不符即拒绝。qb-mechanicjob 的
+  `sprayVehicle`/`sprayVehicleCustom` 没有任何来源校验：任何玩家能给**地图上任意一辆车**免费改色，
+  还能让服务端 `FreezeEntityPosition` 住 `PaintTime*1000` 毫秒（能把别人的车冻在路口）；改为
+  "本店员工 + 在本店喷漆位 20 米内 + 车在 20 米内"（与 client 侧 qb-target 的 paintbooth 职业限制
+  等价）。`removeItem(part, amount)` 顾客修车时也会调，所以**不加**职业限制，只做有界校验
+  （part 必须在 `QBCore.Shared.Items` 里、amount 夹成 1..10 整数）。三个探针（qb-fuel / qb-doorlock /
+  qb-mechanicjob 各一个，位于 layer3_business 的 fixtures 目录），对 master 版本跑实测 12 条断言翻红。
+  数字：未登记 **98 → 89**（qb 26 → 17、allowlist 153）；架构 455 passed / 15 skipped。
+
 - **P1-3 批 15：qb-management 4 + custom-quest 4**（2026-11-08）：qb-management 那三个 boss 仓库入口
   （职业 / 帮派 / 组织）其实早就写了「本人是 boss + 站在菜单点 2.5 米内」的判定，只是写成
   `if not playerJob.isboss then return end` 这种闸门认不出来的形状 —— 本轮抽成
