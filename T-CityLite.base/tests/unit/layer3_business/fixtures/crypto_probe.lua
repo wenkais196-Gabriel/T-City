@@ -32,8 +32,22 @@ local player = {
     },
 }
 
+-- 第二个在线玩家（模拟"非 owner 也想改全服状态"）
+local otherPlayer = {
+    PlayerData = { source = 2, citizenid = 'OTHER', charinfo = { firstname = 'O', lastname = 'T' } },
+    Functions = {
+        GetItemByName = function() return nil end,
+        AddMoney = function() return true end,
+        GetMoney = function() return 0 end,
+    },
+}
+
 local QBCoreMock = {
-    Functions = { GetPlayer = function(source) return source == 1 and player or nil end, CreateCallback = function() end },
+    Functions = { GetPlayer = function(source)
+        if source == 1 then return player end
+        if source == 2 then return otherPlayer end
+        return nil
+    end, CreateCallback = function() end },
     Shared = { Items = setmetatable({}, { __index = function(_, k) return { label = tostring(k) } end }) },
     Commands = { Add = function() end },
 }
@@ -192,6 +206,15 @@ clock = clock + 1000
 fireAs(1, 'qb-crypto:server:Rebooting', true, 55)
 emit('REBOOT_STATE_REMOTE', tostring(Crypto.Exchange.RebootInfo.state))
 emit('REBOOT_PCT_REMOTE', tostring(Crypto.Exchange.RebootInfo.percentage))
+-- 场景 6b：owner 存在时，其他玩家不能改全服状态
+emit('SCENARIO', 'reboot-non-owner')
+state.coords = vector3(Crypto.Exchange.coords.x, Crypto.Exchange.coords.y, Crypto.Exchange.coords.z)
+clock = clock + 1000
+fireAs(1, 'qb-crypto:server:Rebooting', true, 10)      -- 1 号发起
+clock = clock + 1000
+fireAs(2, 'qb-crypto:server:Rebooting', true, 99)      -- 2 号在柜员机前抢写
+emit('REBOOT_PCT_AFTER_NON_OWNER', tostring(Crypto.Exchange.RebootInfo.percentage))
+
 -- 场景 6：重启发起者走出 20 米，仍然必须能把状态收尾（否则全服永久卡"重启中"）
 emit('SCENARIO', 'reboot-owner-finish-remote')
 state.coords = vector3(Crypto.Exchange.coords.x, Crypto.Exchange.coords.y, Crypto.Exchange.coords.z)

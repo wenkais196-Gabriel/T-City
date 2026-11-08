@@ -226,7 +226,7 @@ if helper then
     end
 end
 emit('RECENT_TABLE_FOUND', tostring(recent ~= nil))
-if recent then recent[safeKey] = { src = 1, at = GetGameTimer() } end
+if recent then recent[safeKey] = { citizenid = 'TESTCID', at = GetGameTimer() } end
 state.coords = vector3(anchorSafe.x, anchorSafe.y, anchorSafe.z)
 fireAs(1, 'qb-storerobbery:server:setSafeStatus', safeKey)
 emit('SAFE_ROBBED_RECENT', tostring(Config.Safes[safeKey].robbed))
