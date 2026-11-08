@@ -5,6 +5,40 @@ local doctorCount = 0
 local doctorCalled = false
 local Doctors = {}
 
+-- 床位占用：`<hospitalIndex>:<bedId>` → src。放在服务端才能判断"谁能把这张床放出来"。
+local BedOccupant = {}
+-- 待回执的急救：目标 src → 发起急救的 src（`CanHelp` 只认这条回执）。
+local PendingAid = {}
+-- 最近被服务端复活/送进院的玩家：`resetHungerThirst` 只在这个窗口内放行。
+local RecentlyRevived = {}
+-- `ambulanceAlert` / `SendDoctorAlert` 的按玩家冷却
+local AlertCooldown = {}
+
+local REVIVE_WINDOW_SECONDS = 180
+
+local function bedKey(hospitalIndex, bedId)
+	return tostring(hospitalIndex) .. ':' .. tostring(bedId)
+end
+
+-- 在职 EMS 的唯一判定入口（闸门按 net_event_guard_helpers.json 登记）
+local function isOnDutyEMS(src, Player)
+	Player = Player or QBCore.Functions.GetPlayer(src)
+	if not Player then return false end
+	local job = Player.PlayerData and Player.PlayerData.job
+	if type(job) ~= 'table' then return false end
+	return job.name == 'ambulance' and job.onduty == true
+end
+
+local function markRevived(src)
+	RecentlyRevived[src] = os.time()
+end
+
+local function inReviveWindow(src)
+	local at = RecentlyRevived[src]
+	if not at then return false end
+	return (os.time() - at) <= REVIVE_WINDOW_SECONDS
+end
+
 -- Events
 
 -- Compatibility with txAdmin Menu's heal options.
@@ -14,6 +48,7 @@ AddEventHandler('txAdmin:events:healedPlayer', function(eventData)
 		return
 	end
 
+	markRevived(eventData.id)
 	TriggerClientEvent('hospital:client:Revive', eventData.id)
 	TriggerClientEvent('hospital:client:HealInjuries', eventData.id, 'full')
 end)
@@ -50,6 +85,7 @@ RegisterNetEvent('hospital:server:SendToBed', function(bedId, isRevive, hospital
 	-- 只有校验通过才记冷却（非法索引不该把自己锁 30 秒）
 	_bedCooldowns[src] = now
 
+	BedOccupant[bedKey(hospitalIndex, bedId)] = src
 	TriggerClientEvent('hospital:client:SendToBed', src, bedId, bed, isRevive)
 	TriggerClientEvent('hospital:client:SetBed', -1, bedId, true, hospitalIndex)
 	Player.Functions.RemoveMoney('bank', Config.BillCost, 'respawned-at-hospital')
@@ -64,6 +100,7 @@ RegisterNetEvent('hospital:server:RespawnAtHospital', function(hospitalIndex)
 	-- 🔒 索引校验：客户端传的 hospitalIndex 只在合法范围内使用
 	hospitalIndex = tonumber(hospitalIndex) or 1
 	if not Config.Locations['hospital'][hospitalIndex] then hospitalIndex = 1 end
+	markRevived(src)
 	-- 🌐 Atmosphere: return to default on respawn
 	if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'default') end
 	if Player.PlayerData.metadata['injail'] > 0 then
@@ -98,6 +135,7 @@ RegisterNetEvent('hospital:server:RespawnAtHospital', function(hospitalIndex)
 		for i = 1, #Config.Locations['hospital'][hospitalIndex]['beds'] do
 			local v = Config.Locations['hospital'][hospitalIndex]['beds'][i]
 			if not v.taken then
+				BedOccupant[bedKey(hospitalIndex, i)] = src
 				TriggerClientEvent('hospital:client:SendToBed', src, i, v, true)
 				TriggerClientEvent('hospital:client:SetBed', -1, i, true, hospitalIndex)
 				if Config.WipeInventoryOnRespawn then
@@ -112,6 +150,7 @@ RegisterNetEvent('hospital:server:RespawnAtHospital', function(hospitalIndex)
 			end
 		end
 		-- All beds were full, placing in first bed as fallback
+		BedOccupant[bedKey(hospitalIndex, 1)] = src
 		TriggerClientEvent('hospital:client:SendToBed', src, 1, Config.Locations['hospital'][hospitalIndex]['beds'][1], true)
 		TriggerClientEvent('hospital:client:SetBed', -1, 1, true, hospitalIndex)
 		if Config.WipeInventoryOnRespawn then
@@ -127,6 +166,12 @@ end)
 
 RegisterNetEvent('hospital:server:ambulanceAlert', function(text)
 	local src = source
+	if type(text) ~= 'string' then return end
+	-- 🔒 文案来自客户端：截断 + 15 秒冷却，否则一个人能拿它刷屏所有在职 EMS
+	text = text:sub(1, 200)
+	local now = os.time()
+	if AlertCooldown[src] and (now - AlertCooldown[src]) < 15 then return end
+	AlertCooldown[src] = now
 	local ped = GetPlayerPed(src)
 	local coords = GetEntityCoords(ped)
 	local players = QBCore.Functions.GetQBPlayers()
@@ -138,25 +183,56 @@ RegisterNetEvent('hospital:server:ambulanceAlert', function(text)
 end)
 
 RegisterNetEvent('hospital:server:LeaveBed', function(id, hospitalIndex)
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
+	id = tonumber(id)
+	hospitalIndex = tonumber(hospitalIndex)
+	if not id or not hospitalIndex then return end
+	local key = bedKey(hospitalIndex, id)
+	local occupant = BedOccupant[key]
+	-- 🔒 只有占用者本人（或收床的在职 EMS）能把这张床放出来；
+	--    原来任何人传任意床号就能让全服的床显示空闲。
+	if occupant and occupant ~= src then
+		-- 收床要走"在职 EMS"这条独立判定（单独一行，闸门按 deny-early 形状核对）
+		if not isOnDutyEMS(src, Player) then return end
+	end
+	BedOccupant[key] = nil
 	TriggerClientEvent('hospital:client:SetBed', -1, id, false, hospitalIndex)
 end)
 
 RegisterNetEvent('hospital:server:SyncInjuries', function(data)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
-	if Player then
-		Player.Functions.SetMetaData('injuries', data)
-	end
-	PlayerInjuries[src] = data
+	if not Player then return end
+	-- 🔒 只写**自己**的 metadata，但内容仍来自客户端：必须是表、字段必须有界，
+	--    否则一次 `isBleeding = 1e9` 就能让 HUD 与后续治疗判定错乱，甚至把 metadata 撑爆。
+	if type(data) ~= 'table' then return end
+	if data.limbs ~= nil and type(data.limbs) ~= 'table' then return end
+	local bleeding = tonumber(data.isBleeding) or 0
+	if bleeding < 0 then bleeding = 0 elseif bleeding > 100 then bleeding = 100 end
+	local sanitized = { limbs = data.limbs or {}, isBleeding = bleeding }
+	Player.Functions.SetMetaData('injuries', sanitized)
+	PlayerInjuries[src] = sanitized
 end)
 
 RegisterNetEvent('hospital:server:SetWeaponDamage', function(data)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
-	if Player then
-		Player.Functions.SetMetaData('weaponwounds', data)
-		PlayerWeaponWounds[Player.PlayerData.source] = data
+	if not Player then return end
+	-- 🔒 同上：自己身上的弹伤，但数值必须有界
+	if type(data) ~= 'table' then return end
+	local sanitized = {}
+	for bone, value in pairs(data) do
+		if type(bone) == 'string' then
+			local amount = tonumber(value)
+			if amount and amount >= 0 and amount <= 1000 then
+				sanitized[bone] = amount
+			end
+		end
 	end
+	Player.Functions.SetMetaData('weaponwounds', sanitized)
+	PlayerWeaponWounds[Player.PlayerData.source] = sanitized
 end)
 
 RegisterNetEvent('hospital:server:RestoreWeaponDamage', function()
@@ -254,24 +330,15 @@ end)
 
 RegisterNetEvent('hospital:server:RemoveDoctor', function(job)
 	local src = source
-	-- 🔒 Security: 服务端权威校验 — 禁止客户端自报职业
 	local Player = QBCore.Functions.GetPlayer(src)
-	if not Player then
-		-- 玩家已离线，从 Doctors 表中清理
-		if Doctors[src] then
-			doctorCount = doctorCount - 1
-			if doctorCount < 0 then doctorCount = 0 end
-			TriggerClientEvent('hospital:client:SetDoctorCount', -1, doctorCount)
-			Doctors[src] = nil
-		end
-		return
-	end
-	if job == 'ambulance' then
-		doctorCount = doctorCount - 1
-		if doctorCount < 0 then doctorCount = 0 end
-		TriggerClientEvent('hospital:client:SetDoctorCount', -1, doctorCount)
-		Doctors[src] = nil
-	end
+	if not isOnDutyEMS(src, Player) then return end
+	-- 🔒 只认服务端自己数过的人：`Doctors[src]` 是 AddDoctor 时（已校验在职 EMS）登记的。
+	--    原来只看客户端传的 `job == 'ambulance'`，任何玩家都能把 doctorCount 减到 0。
+	if not Doctors[src] then return end
+	Doctors[src] = nil
+	doctorCount = doctorCount - 1
+	if doctorCount < 0 then doctorCount = 0 end
+	TriggerClientEvent('hospital:client:SetDoctorCount', -1, doctorCount)
 end)
 
 AddEventHandler('playerDropped', function()
@@ -310,11 +377,29 @@ RegisterNetEvent('hospital:server:RevivePlayer', function(playerId, isOldMan)
 
 	exports['qb-inventory']:RemoveItem(src, 'firstaid', 1, false, 'hospital:server:RevivePlayer')
 	TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['firstaid'], 'remove')
+	markRevived(Patient.PlayerData.source)
 	TriggerClientEvent('hospital:client:Revive', Patient.PlayerData.source)
 end)
 
 RegisterNetEvent('hospital:server:SendDoctorAlert', function(hospitalName)
 	local src = source
+	if type(hospitalName) ~= 'string' then return end
+	-- 🔒 院名来自客户端：必须在配置里存在，否则这条广播就是伪造的
+	local valid = false
+	for _, hospital in pairs(Config.Locations['hospital'] or {}) do
+		if type(hospital) == 'table' and hospital['name'] == hospitalName then
+			valid = true
+			break
+		end
+	end
+	if not valid then return end
+	-- 🔒 按玩家冷却：原来只有一个全局 `doctorCalled`，谁先按下谁就能把它锁住
+	--    `Config.DocCooldown` 分钟，把真正的呼叫全挡掉。
+	local now = os.time()
+	if AlertCooldown['doctorCall:' .. tostring(src)] then
+		if (now - AlertCooldown['doctorCall:' .. tostring(src)]) < 30 then return end
+	end
+	AlertCooldown['doctorCall:' .. tostring(src)] = now
 	if not doctorCalled then
 		doctorCalled = true
 		local players = QBCore.Functions.GetQBPlayers()
@@ -342,9 +427,7 @@ RegisterNetEvent('hospital:server:UseFirstAid', function(targetId)
 	-- 🛡️ Security: 不能对自己使用
 	if src == tonumber(targetId) then return end
 	-- 🛡️ Security: 必须是 EMS 值班人员，或持有 firstaid 物品
-	local isEMS = Player.PlayerData.job.name == 'ambulance' and Player.PlayerData.job.onduty
-	local hasFirstAid = QBCore.Functions.HasItem(src, 'firstaid', 1)
-	if not isEMS and not hasFirstAid then
+	if not isOnDutyEMS(src, Player) and not QBCore.Functions.HasItem(src, 'firstaid', 1) then
 		-- 安全审计日志
 		TriggerEvent('qb-log:server:CreateLog', 'ambulancejob', 'FirstAid Blocked', 'orange',
 			string.format('%s (src=%s) tried to use firstaid on player %s — 无 EMS 职业且无 firstaid 物品',
@@ -361,11 +444,19 @@ RegisterNetEvent('hospital:server:UseFirstAid', function(targetId)
 		TriggerClientEvent('QBCore:Notify', src, '目标距离太远，无法进行急救', 'error')
 		return
 	end
+	-- 记下"这次急救由谁发起"：`CanHelp` 只认这条回执，别的玩家不能替人回答
+	PendingAid[tonumber(targetId)] = src
 	TriggerClientEvent('hospital:client:CanHelp', targetId, src)
 end)
 
 RegisterNetEvent('hospital:server:CanHelp', function(helperId, canHelp)
 	local src = source
+	helperId = tonumber(helperId)
+	if not helperId then return end
+	-- 🔒 只有被 `UseFirstAid` 问过的那个人能回答：否则任何玩家都能凭空让服务端
+	--    给任意 helper 发一条"可以施救"，配合客户端流程就能伪造治疗。
+	if PendingAid[src] ~= helperId then return end
+	PendingAid[src] = nil
 	if canHelp then
 		TriggerClientEvent('hospital:client:HelpPerson', helperId, src)
 	else
@@ -398,9 +489,14 @@ RegisterNetEvent('hospital:server:removePainkillers', function()
 end)
 
 RegisterNetEvent('hospital:server:resetHungerThirst', function()
-	local Player = QBCore.Functions.GetPlayer(source)
-
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
 	if not Player then return end
+	-- 🔒 这个事件等于把饥饿/口渴直接拉满：只允许"刚被服务端复活/送进院"的玩家调用，
+	--    否则任何玩家随时发一次就等于免费吃饭喝水。
+	if not inReviveWindow(src) and Player.PlayerData.metadata['isdead'] ~= true then
+		return
+	end
 
 	Player.Functions.SetMetaData('hunger', 100)
 	Player.Functions.SetMetaData('thirst', 100)
@@ -412,6 +508,9 @@ RegisterNetEvent('qb-ambulancejob:server:stash', function()
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
 	if not Player then return end
+	-- 🔒 客户端的 `job = 'ambulance'` 只是菜单过滤条件（可绕过）：
+	--    服务端必须自己确认在职 EMS，否则任何玩家都能开一个"救护队储物柜"。
+	if not isOnDutyEMS(src, Player) then return end
 	local citizenId = Player.PlayerData.citizenid
 	local stashName = 'ambulancestash_' .. citizenId
 	exports['qb-inventory']:OpenInventory(src, stashName)
