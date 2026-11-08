@@ -24,7 +24,7 @@ local state = {
 }
 
 local player = {
-    PlayerData = { citizenid = 'TESTCID', charinfo = { phone = '555-0100' }, metadata = { rep = { dealer = 5 } } },
+    PlayerData = { source = 1, citizenid = 'TESTCID', charinfo = { phone = '555-0100' }, metadata = { rep = { dealer = 5 } } },
     Functions = {
         -- 注意：资源里都是 `Player.Functions.X(...)` 这种**点调用**，mock 不能带 self 形参
         GetMoney = function(account) return state.money[account] or 0 end,
@@ -41,6 +41,14 @@ local player = {
         end,
         GetItemByName = function(name)
             return state.items[name] and { name = name, amount = state.items[name] } or nil
+        end,
+        RemoveItem = function(name, amount)
+            local have = state.items[name] or 0
+            if have < (amount or 0) then return false end
+            state.items[name] = have - amount
+            if state.items[name] == 0 then state.items[name] = nil end
+            state.removedItems[#state.removedItems + 1] = { item = name, amount = amount, source = 1 }
+            return true
         end,
         AddRep = function() end,
         GetRep = function() return 5 end,
@@ -235,5 +243,29 @@ local paidBefore8 = #state.addedMoney
 fire('qb-drugs:server:successDelivery', { item = 1, amount = 1, itemData = { payout = 1000 } }, true)
 emit('SCENARIO', 'after-drop')
 emit('PAID_COUNT_DELTA', #state.addedMoney - paidBefore8)
+
+-- ── 场景 8：接单后掉线，重新上线 → 回收货物 + 退还押金 ──────────────────────────
+tick(3000)
+state.items[Config.DeliveryItems[1].item] = nil
+fire('qb-drugs:server:acceptDelivery', { item = 1, amount = 1, distance = 100 })
+local cashBefore8 = state.money.cash
+fire('playerDropped', {})
+state.items[Config.DeliveryItems[1].item] = 1      -- 掉线时货还在背包
+tick(5000)
+fire('QBCore:Server:PlayerLoaded', player)
+emit('SCENARIO', 'drop-settlement')
+emit('REFUND', state.money.cash - cashBefore8)
+emit('ITEM_LEFT', tostring(state.items[Config.DeliveryItems[1].item] or 0))
+
+-- ── 场景 9：掉线前把货用掉了 → 押金不退 ────────────────────────────────────────
+tick(3000)
+fire('qb-drugs:server:acceptDelivery', { item = 1, amount = 1, distance = 100 })
+local cashBefore9 = state.money.cash
+fire('playerDropped', {})
+state.items[Config.DeliveryItems[1].item] = nil     -- 货没了
+tick(5000)
+fire('QBCore:Server:PlayerLoaded', player)
+emit('SCENARIO', 'drop-settlement-missing-item')
+emit('REFUND', state.money.cash - cashBefore9)
 
 io.write(table.concat(OUT, '\n'), '\n')
