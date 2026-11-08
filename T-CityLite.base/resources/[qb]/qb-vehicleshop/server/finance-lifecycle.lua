@@ -118,10 +118,32 @@ end)
 -- 同步展车切换
 RegisterNetEvent('qb-vehicleshop:server:swapVehicle', function(data)
     local src = source
-    -- 🔒 换展车是店员操作，结果会向**全服**广播：原来任何玩家都能把任意 data 推给所有客户端
-    --    （改别人的展车、伪造车型）。
-    if not dealerOnDuty(src) then return end
+    -- 🔒 原来任何玩家都能把任意 data 推给全服（改所有人的展车、伪造车型/槽位）。
+    --    但也不能一刀切"只允许在职店员"：4/5 家店是 `Type = 'free-use'`、`Job = 'none'`，
+    --    压根没有店员，换展车是**顾客**选车的正常流程（购买/试驾都作用在当前展车上）。
     if type(data) ~= 'table' or type(data.toVehicle) ~= 'string' then return end
+    local shopName = data.ClosestShop
+    local shop = type(shopName) == 'string' and Config.Shops[shopName] or nil
+    if not shop then return end
+    local slot = tonumber(data.ClosestVehicle)
+    local showroom = slot and shop['ShowroomVehicles'] and shop['ShowroomVehicles'][slot]
+    if type(showroom) ~= 'table' then return end
+    -- 车型必须是**这家店卖的**车（与客户端换车菜单同一判据）
+    if not shopUtil.VehicleBelongsToShop(data.toVehicle, shopName) then return end
+    -- 必须在展位旁边（防止远程改全服展车）
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    local ped = GetPlayerPed(src)
+    local pcoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
+    local coords = showroom.coords
+    local ctype = type(coords)
+    if not pcoords or (ctype ~= 'table' and ctype ~= 'vector3' and ctype ~= 'vector4') then return end
+    -- 60 米：足够覆盖车店园区（pdm 的展位到门口约 30 米），但挡得住远程改全服展车
+    if #(pcoords - vector3(coords.x, coords.y, coords.z)) > 60.0 then return end
+    -- managed 店（有店员的那种）才要求在职店员
+    if shop['Type'] ~= 'free-use' then
+        if not dealerOnDuty(src) then return end
+    end
     TriggerClientEvent('qb-vehicleshop:client:swapVehicle', -1, data)
     Wait(1500)                                                -- 等新车生成
     TriggerClientEvent('qb-vehicleshop:client:homeMenu', src) -- 重开菜单
@@ -134,10 +156,16 @@ RegisterNetEvent('qb-vehicleshop:server:customTestDrive', function(vehicle, play
     --    配合 3 米距离校验就能免费开走任何载具。
     if not dealerOnDuty(src) then return end
     if type(vehicle) ~= 'string' then return end
+    local ped = GetPlayerPed(src)
+    local pcoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
+    if not pcoords then return end
     local inShowroom = false
-    for _, shop in pairs(Config.Shops) do
-        for _, entry in pairs(shop['ShowroomVehicles'] or {}) do
-            if type(entry) == 'table' and entry.chosenVehicle == vehicle then inShowroom = true end
+    for shopName, shop in pairs(Config.Shops) do
+        if shopUtil.VehicleBelongsToShop(vehicle, shopName) then
+            local spawnPoint = shop['TestDriveSpawn']
+            if spawnPoint and #(pcoords - vector3(spawnPoint.x, spawnPoint.y, spawnPoint.z)) <= 200.0 then
+                inShowroom = true
+            end
         end
     end
     if not inShowroom then return end

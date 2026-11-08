@@ -236,6 +236,22 @@ local function isOnDutyDealer(src)
     return job.name == 'cardealer' and job.onduty == true
 end
 
+-- 车型属于哪家店：`QBCore.Shared.Vehicles[model].shop` 可以是单个店名，也可以是店名数组。
+-- 换展车的菜单就是按这个字段筛车型的，所以服务端也必须用同一套判据 —— 用静态的
+-- `ShowroomVehicles[*].chosenVehicle` 会把"店员刚换上的车"判成非法。
+function VehicleBelongsToShop(model, shopName)
+    local cfg = QBCore.Shared.Vehicles[model]
+    if not cfg then return false end
+    local shop = cfg.shop
+    if type(shop) == 'string' then return shop == shopName end
+    if type(shop) == 'table' then
+        for _, name in pairs(shop) do
+            if name == shopName then return true end
+        end
+    end
+    return false
+end
+
 function IsOwnTestDrive(netId, src)
     local grant = TestDriveVehicles[netId]
     return grant ~= nil and grant.src == src
@@ -262,18 +278,14 @@ QBCore.Functions.CreateCallback('qb-vehicleshop:server:spawnvehicle', function(s
     if not cx or not cy or not cz then cb(nil) return end
     if not QBCore.Shared.Vehicles[vehicle] then cb(nil) return end
 
-    -- 同一个车型可能在多个门店的展台上：只要**任意一个**有这台车的车店就在附近即可。
+    -- 同一个车型可能在多家门店销售：只要**任意一家**卖这台车的店就在附近即可。
     local ped = GetPlayerPed(source)
     local pcoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
     if not pcoords then cb(nil) return end
 
     local inShowroom, nearShop = false, false
-    for _, shop in pairs(Config.Shops) do
-        local hasVehicle = false
-        for _, entry in pairs(shop['ShowroomVehicles'] or {}) do
-            if type(entry) == 'table' and entry.chosenVehicle == vehicle then hasVehicle = true end
-        end
-        if hasVehicle then
+    for shopName, shop in pairs(Config.Shops) do
+        if VehicleBelongsToShop(vehicle, shopName) then
             inShowroom = true
             local spawnPoint = shop['TestDriveSpawn']
             if spawnPoint then
@@ -329,6 +341,7 @@ end
 -- 直接暴露全局函数供同资源内其他模块使用
 _G._vehicleshop = {
     IsOwnTestDrive         = IsOwnTestDrive,
+    VehicleBelongsToShop   = VehicleBelongsToShop,
     CheckVehicleLicense    = CheckVehicleLicense,
     GetRequiredLicenseName = GetRequiredLicenseName,
     comma_value            = comma_value,

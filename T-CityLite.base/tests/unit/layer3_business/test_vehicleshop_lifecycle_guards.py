@@ -73,12 +73,31 @@ def test_delete_vehicle_only_deletes_your_own_test_drive():
     assert data["DELETE_REPLAY_BLOCKED"] == "true", "同一个 netId 可以重复删除"
 
 
-def test_showroom_swap_requires_an_on_duty_dealer():
-    """换展车会向全服广播，只有在职店员能做。"""
+def test_showroom_swap_is_split_by_shop_type():
+    """换展车要按**店型**分流，不能一刀切只允许店员。
+
+    4/5 家店是 `Type = 'free-use'`、`Job = 'none'` —— 根本没有店员，顾客选车就是换展车；
+    只有 `managed` 店（`luxury`，Job = cardealer）才是店员操作。第一版写成"只允许在职店员"，
+    把自由车店的选车-购买主流程整条堵死了（且静默无提示）。
+    """
     data = _run()
-    assert data["SWAP_CIVILIAN_BLOCKED"] == "true", "平民能改全服展车"
-    assert data["SWAP_OFFDUTY_BLOCKED"] == "true", "下班的店员也能改"
-    assert data["SWAP_DEALER_ALLOWED"] == "true", "在职店员反而改不了（过度收紧）"
+    assert data["SWAP_FREE_USE_CIVILIAN_ALLOWED"] == "true", "自由车店的顾客换不了展车（功能回归）"
+    assert data["SWAP_MANAGED_CIVILIAN_BLOCKED"] == "true", "managed 店里平民能改展车"
+    assert data["SWAP_MANAGED_OFFDUTY_BLOCKED"] == "true", "managed 店里下班的店员也能改"
+    assert data["SWAP_MANAGED_DEALER_ALLOWED"] == "true", "在職店员反而改不了（过度收紧）"
+    assert data["SWAP_WRONG_SHOP_MODEL_BLOCKED"] == "true", "能给这家店换上别家卖的车"
+    assert data["SWAP_BAD_SLOT_BLOCKED"] == "true", "非法展位也能换"
+
+
+def test_whitelist_follows_the_shop_field_not_the_static_showroom():
+    """试驾白名单必须按 `QBCore.Shared.Vehicles[model].shop` 判，而不是静态的
+    `ShowroomVehicles[*].chosenVehicle`。
+
+    换展车只改客户端的 `chosenVehicle`（服务端 `Config` 从不更新），用静态表当权威会把
+    "刚从菜单换上来的车"判成非法 —— 换车之后整家店都试驾不了。
+    """
+    data = _run()
+    assert data["SPAWN_SWAPPED_MODEL_ALLOWED"] == "true", "换上的车型被旧白名单拒绝"
 
 
 def test_staff_test_drive_requires_a_dealer_and_a_showroom_model():

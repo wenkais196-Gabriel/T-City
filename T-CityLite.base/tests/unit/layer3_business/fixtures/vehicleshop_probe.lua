@@ -57,7 +57,12 @@ local QBCoreMock = {
             __index = function(_, key)
                 -- 只有测试里显式登记过的车型才算"存在"
                 if state.vehicleModels[key] then
-                    return { name = key, brand = 'test', model = key, price = 50000, type = 'automobile', category = 'sedan' }
+                    return {
+                        name = key, brand = 'test', model = key, price = 50000,
+                        type = 'automobile', category = 'sedan',
+                        -- 车店归属：换车菜单与服务端白名单都用这个字段
+                        shop = state.vehicleShop[key],
+                    }
                 end
                 return nil
             end,
@@ -67,7 +72,9 @@ local QBCoreMock = {
     Commands = { Add = function() end },
 }
 
-state.vehicleModels = { ardent = true, schafter2 = true, adder = true, police = true, police = true }
+state.vehicleModels = { ardent = true, schafter2 = true, adder = true, police = true, blista = true }
+-- pdm / boats / air / truck 是 free-use（Job='none'），luxury 是 managed（Job='cardealer'）
+state.vehicleShop = { ardent = 'pdm', schafter2 = 'pdm', blista = 'pdm', adder = 'luxury' }  -- police 不在任何店销售
 
 local handlers = {}
 RegisterNetEvent = function(name, fn) handlers[name] = fn end
@@ -220,14 +227,45 @@ emit('DELETE_REPLAY_BLOCKED', tostring(#state.deleted == after))
 -- ── 5. swapVehicle：只有在职店员能换展车 ──
 emit('SCENARIO', 'swap')
 local b = #state.broadcasts
+-- ① 店型错配：pdm 是 free-use，给它塞 luxury 的车（adder）→ 拒
 fireAs(1, 'qb-vehicleshop:server:swapVehicle', { toVehicle = 'adder', ClosestVehicle = 1, ClosestShop = shopName })
-emit('SWAP_CIVILIAN_BLOCKED', tostring(#state.broadcasts == b))
-fireAs(3, 'qb-vehicleshop:server:swapVehicle', { toVehicle = 'adder', ClosestVehicle = 1, ClosestShop = shopName })
-emit('SWAP_OFFDUTY_BLOCKED', tostring(#state.broadcasts == b))
-fireAs(2, 'qb-vehicleshop:server:swapVehicle', { toVehicle = 'adder', ClosestVehicle = 1, ClosestShop = shopName })
-emit('SWAP_DEALER_ALLOWED', tostring(#state.broadcasts > b))
+emit('SWAP_WRONG_SHOP_MODEL_BLOCKED', tostring(#state.broadcasts == b))
+-- ② 槽位非法 → 拒
+fireAs(1, 'qb-vehicleshop:server:swapVehicle', { toVehicle = 'blista', ClosestVehicle = 999, ClosestShop = shopName })
+emit('SWAP_BAD_SLOT_BLOCKED', tostring(#state.broadcasts == b))
+-- ③ free-use 店的平民换车：这是正常玩法（这家店没有店员），必须放行
+fireAs(1, 'qb-vehicleshop:server:swapVehicle', { toVehicle = 'blista', ClosestVehicle = 1, ClosestShop = shopName })
+local swapped = false
+for index = b + 1, #state.broadcasts do
+    if state.broadcasts[index].name == 'qb-vehicleshop:client:swapVehicle' then swapped = true end
+end
+emit('SWAP_FREE_USE_CIVILIAN_ALLOWED', tostring(swapped))
+
+-- ④ managed 店（luxury）：平民/下班店员拒，在职店员放行
+local managedName = nil
+for name, cfg in pairs(Config.Shops) do
+    if cfg['Type'] ~= 'free-use' then managedName = name end
+end
+if managedName then
+    local mShop = Config.Shops[managedName]
+    local mSlot = next(mShop['ShowroomVehicles'])
+    state.coords = vec3(mShop['ShowroomVehicles'][mSlot].coords.x, mShop['ShowroomVehicles'][mSlot].coords.y, mShop['ShowroomVehicles'][mSlot].coords.z)
+    local b2 = #state.broadcasts
+    fireAs(1, 'qb-vehicleshop:server:swapVehicle', { toVehicle = 'adder', ClosestVehicle = mSlot, ClosestShop = managedName })
+    emit('SWAP_MANAGED_CIVILIAN_BLOCKED', tostring(#state.broadcasts == b2))
+    fireAs(3, 'qb-vehicleshop:server:swapVehicle', { toVehicle = 'adder', ClosestVehicle = mSlot, ClosestShop = managedName })
+    emit('SWAP_MANAGED_OFFDUTY_BLOCKED', tostring(#state.broadcasts == b2))
+    fireAs(2, 'qb-vehicleshop:server:swapVehicle', { toVehicle = 'adder', ClosestVehicle = mSlot, ClosestShop = managedName })
+    emit('SWAP_MANAGED_DEALER_ALLOWED', tostring(#state.broadcasts > b2))
+end
+state.coords = vec3(spawnPoint.x, spawnPoint.y, spawnPoint.z)
 
 -- ── 6. customTestDrive：非店员 / 非展台车型必须被拒 ──
+-- ④b. 换上的车（blista，pdm 卖的）必须仍能试驾
+emit('SCENARIO', 'spawn-swapped-model')
+out = callCallback('qb-vehicleshop:server:spawnvehicle', 1, 'TD654321', 'blista', vec4(spawnPoint.x, spawnPoint.y, spawnPoint.z, 0.0))
+emit('SPAWN_SWAPPED_MODEL_ALLOWED', tostring(out ~= nil and out[1] ~= nil))
+
 emit('SCENARIO', 'custom-testdrive')
 b = #state.broadcasts
 fireAs(1, 'qb-vehicleshop:server:customTestDrive', showroomModel, 2)
