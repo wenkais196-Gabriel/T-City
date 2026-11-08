@@ -329,6 +329,10 @@ RegisterNetEvent('qb-inventory:server:updateDrop', function(dropId, coords)
         if ex then
             local ddx, ddy, ddz = ex - cx, ey - cy, ez - cz
             if ddx * ddx + ddy * ddy + ddz * ddz > 25.0 then return end
+            -- 落库用**实体真值**而不是客户端声称值：否则声称坐标可以在实体 5 米内的任意
+            -- 位置滑动，叠加 openDrop 的 2.5 米半径，等于能在离包 7.5 米处开包。
+            Drops[dropId].coords = vector3(ex, ey, ez)
+            return
         end
     elseif drop.owner and drop.owner ~= src
         and not QBCore.Functions.HasPermission(src, 'admin') then
