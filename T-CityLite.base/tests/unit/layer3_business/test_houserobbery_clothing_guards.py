@@ -106,6 +106,12 @@ def test_clothing_outfits_are_bounded_and_nil_safe():
     assert data["OUTFIT_REMOVE_MISSING_PLAYER_SAFE"] == "true", "Player 不存在时 removeOutfit 抛错"
 
 
+def test_get_outfits_callback_survives_a_missing_player():
+    """`getOutfits` 回调在角色尚未加载（Player 为 nil）时直接索引 `Player.PlayerData` 崩。"""
+    data = _run("clothing_probe.lua", "qb-clothing")
+    assert data["GETOUTFITS_MISSING_PLAYER_SAFE"] == "true", "Player 不存在时 getOutfits 抛错"
+
+
 def test_on_player_unload_only_runs_from_the_server():
     """`QBCore:Server:OnPlayerUnload` 是服务端内部事件，客户端不能自己发。"""
     data = _run("clothing_probe.lua", "qb-clothing")

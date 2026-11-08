@@ -189,5 +189,12 @@ emit('OUTFIT_LONG_NAME_REJECTED', tostring(state.inserts == 0))
 emit('SCENARIO', 'remove-outfit')
 emit('OUTFIT_REMOVE_MISSING_PLAYER_SAFE', tostring(fireAs(99, 'qb-clothing:server:removeOutfit', 'casual', 'outfit-1-1234')))
 
+-- ── 5. getOutfits 回调：Player 不存在时不崩 ──
+emit('SCENARIO', 'get-outfits')
+local callback = state.callbacks['qb-clothing:server:getOutfits']
+local okCb, cbErr = pcall(callback, 99, function() end)
+emit('GETOUTFITS_MISSING_PLAYER_SAFE', tostring(okCb))
+if not okCb then OUT[#OUT + 1] = 'HANDLER_ERROR|getOutfits|' .. tostring(cbErr) end
+
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')
