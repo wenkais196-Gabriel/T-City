@@ -128,7 +128,7 @@ end
 exports('hasKey', hasKey)
 
 
--- 警察分支专用：必须站在房子入口 8 米内（client 的 police_stormram 也是 dist < 1 才发事件，
+-- 警察分支专用：必须站在房子入口 2 米内（client 的 police_stormram 是 dist < 1 才发事件，
 -- 服务端不能只信 job.name，否则任意执勤警察可远程开锁 / 伪造破门状态）。
 local function IsNearHouse(src, house)
     local houseData = Config.Houses[house]
@@ -137,7 +137,7 @@ local function IsNearHouse(src, house)
     local ped = GetPlayerPed(src)
     if not ped or ped == 0 then return false end
     local coords = GetEntityCoords(ped)
-    return #(coords.xy - vector2(enter.x, enter.y)) < 8.0
+    return #(coords.xy - vector2(enter.x, enter.y)) < 2.0
 end
 
 local function GetHouseStreetCount(street)
@@ -187,7 +187,11 @@ RegisterNetEvent('qb-houses:server:createBlip', function()
     -- 与 /createhouse、/addgarage 命令同一授权主体：房地产中介；admin（ACE）与控制台仍然放行
     if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then
         local staff = QBCore.Functions.GetPlayer(src)
-        if not staff or staff.PlayerData.job.name ~= 'realestate' then return end
+        if not staff then
+            print(('[qb-houses] house-create 事件被拒：src=%s 尚未加载完成'):format(tostring(src)))
+            return
+        end
+        if staff.PlayerData.job.name ~= 'realestate' then return end
     end
     local ped = GetPlayerPed(src)
     local coords = GetEntityCoords(ped)
@@ -200,7 +204,11 @@ RegisterNetEvent('qb-houses:server:addNewHouse', function(street, coords, price,
     -- 与 /createhouse、/addgarage 命令同一授权主体：房地产中介；admin（ACE）与控制台仍然放行
     if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then
         local staff = QBCore.Functions.GetPlayer(src)
-        if not staff or staff.PlayerData.job.name ~= 'realestate' then return end
+        if not staff then
+            print(('[qb-houses] house-create 事件被拒：src=%s 尚未加载完成'):format(tostring(src)))
+            return
+        end
+        if staff.PlayerData.job.name ~= 'realestate' then return end
     end
     if type(street) ~= 'string' or type(coords) ~= 'table' then return end
     street = street:gsub("%'", '')
@@ -234,7 +242,11 @@ RegisterNetEvent('qb-houses:server:addGarage', function(house, coords)
     -- 与 /createhouse、/addgarage 命令同一授权主体：房地产中介；admin（ACE）与控制台仍然放行
     if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then
         local staff = QBCore.Functions.GetPlayer(src)
-        if not staff or staff.PlayerData.job.name ~= 'realestate' then return end
+        if not staff then
+            print(('[qb-houses] house-create 事件被拒：src=%s 尚未加载完成'):format(tostring(src)))
+            return
+        end
+        if staff.PlayerData.job.name ~= 'realestate' then return end
     end
     if type(house) ~= 'string' or not Config.Houses[house] or type(coords) ~= 'table' then return end
     MySQL.update('UPDATE houselocations SET garage = ? WHERE name = ?', { json.encode(coords), house })
@@ -266,9 +278,8 @@ RegisterNetEvent('qb-houses:server:openStash', function(CurrentHouse)
     local houseData = Config.Houses[CurrentHouse]
     if not houseData then return end
     -- 🔒 原来是"任何玩家传个房子名就能开这家的储物柜"（直接把别人的东西拿走）。
-    --    判定与客户端一致：房主 / 钥匙持有人 / 房地产中介（qb-houses:server:hasKey 的既有口径）。
-    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, CurrentHouse)
-        and Player.PlayerData.job.name ~= 'realestate' then
+    --    只认房主与钥匙持有人：realestate 虽然有 HasHouseKey（带看权限），但不能翻别人家东西。
+    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, CurrentHouse) then
         TriggerClientEvent('QBCore:Notify', src, '你没有这栋房子的钥匙', 'error')
         return
     end
@@ -345,7 +356,7 @@ RegisterNetEvent('qb-houses:server:SetRamState', function(bool, house)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or type(house) ~= 'string' or not Config.Houses[house] then return end
     -- 🔒 破门状态是警察行为：原来任何玩家都能把任意房子标成"正在被撞门"。
-    --    要求在职警察 **且** 人在这栋房子旁 8 米内（否则可远程伪造破门状态）。
+    --    要求在职警察 **且** 人在这栋房子旁 2 米内（否则可远程伪造破门状态）。
     local job = Player.PlayerData.job
     if job.name ~= 'police' or not job.onduty then return end
     if not IsNearHouse(src, house) then return end
