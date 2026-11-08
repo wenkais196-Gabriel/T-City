@@ -915,6 +915,15 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-doorlock:server:removeLockpick",
+      "file": "[qb]/qb-doorlock/server/main.lua",
+      "category": "self_scoped",
+      "reason": "把自己的开锁器扣掉 1 个。handler 内是白名单判定（只认 advancedlockpick / lockpick，其余一律 return），且 RemoveItem 绑的是 source 本人，参数不参与决定扣谁的东西。",
+      "evidence": "doorlock removeLockpick — lockpickType ~= \"advancedlockpick\" and lockpickType ~= \"lockpick\" then return",
+      "owner": "qb-doorlock",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "qb-drugs:server:acceptDelivery",
       "category": "civilian",
       "reason": "接单参数全部不采信：商品 key 查 Config.DeliveryItems、数量固定 1、押金/时限按距离服务端自算；带 acceptLocks 互斥 + 单活跃单约束（防连开两单覆盖记录）。",
@@ -1128,6 +1137,15 @@
       "reason": "帮派成员的个人仓库，名字固定为 `cartel_personal_<自己 citizenid>`，只开自己的那份；要求 gang.name 是字符串且不等于 none（原来 `playerGang.name` 为 nil 时会抛错）。",
       "evidence": "sv_gang.lua personalStash — type(playerGang) ~= 'table' / type(playerGang.name) ~= 'string' / 'cartel_personal_' .. citizenid",
       "owner": "qb-management",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-mechanicjob:server:removeItem",
+      "file": "[qb]/qb-mechanicjob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "顾客修车时按配方逐项扣自己的料（repair.lua 会调，所以不能加职业限制）。handler 内：part 必须存在于 QBCore.Shared.Items，amount 夹在 1..10 的整数（原来负数/天文数字都能过）。",
+      "evidence": "mechanicjob removeItem — type(QBCore.Shared.Items[part]) ~= 'table' / if amount > 10 then amount = 10",
+      "owner": "qb-mechanicjob",
       "expires": "2027-03-31"
     },
     {
