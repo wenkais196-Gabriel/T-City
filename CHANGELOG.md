@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-5 阶段 G：掉线配送结算（押金不再白丢，也不白送一件货）**（2026-11-08）：
+  - 之前：接单后掉线 = 押金没收、货留在背包（与“接了不做”等价，但玩家是意外掉线，体验上像被罚）。
+  - 现在：`playerDropped` 把未结算的配送记到 citizenid 名下；玩家**重新上线**时结算 ——
+    货还在就回收并全额退押金，货没了就不退（避免“退了押金又白拿货”）。
+    不在离线阶段动背包：离线装卸 inventory 会和存档打架。
+  - 新增用例：`test_drop_settlement_refunds_only_when_goods_are_recovered`
+    （退 500 + 货清零 / 货没了退 0），退回上一版实现时红。
 - **P1-5 阶段 E：金额 `$%d` A 档 26 处偿还（93 → 68）**（2026-11-07）：
   - 按 CC 的分诊口径（A 真风险 / B 假风险 / C 待定），只修 A 档：实参可能是小数的那些。
     A 档分布：qb-drugs 8、custom-cartel 9、custom-crime 3、custom-security 2、custom-main 2、
