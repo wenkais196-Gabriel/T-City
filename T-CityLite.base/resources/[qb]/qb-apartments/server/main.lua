@@ -73,38 +73,39 @@ RegisterNetEvent('apartments:server:openStash', function(CurrentApartment)
     exports['qb-inventory']:OpenInventory(src, CurrentApartment)
 end)
 
-RegisterNetEvent('apartments:server:CreateApartment', function(type, label, firstSpawn)
+RegisterNetEvent('apartments:server:CreateApartment', function(apartmentType, label, firstSpawn)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    -- 🔒 type 会被直接拼进 apartmentId / SQL，label 会进 DB：都要有类型与长度边界
-    if type(type) ~= 'string' or (Apartments.Locations or {})[type] == nil then return end
+    -- 🔒 形参原来叫 `type`，会遮蔽全局 type() —— `type(type)` 是把字符串当函数调用，
+    --    事件一触发就 `attempt to call a string value`。改名 apartmentType 并保留类型/查表校验。
+    if type(apartmentType) ~= 'string' or (Apartments.Locations or {})[apartmentType] == nil then return end
     label = tostring(label or ''):sub(1, 48)
-    local num = CreateApartmentId(type)
-    local apartmentId = tostring(type .. num)
+    local num = CreateApartmentId(apartmentType)
+    local apartmentId = tostring(apartmentType .. num)
     label = tostring(label .. ' ' .. num)
     MySQL.insert('INSERT INTO apartments (name, type, label, citizenid) VALUES (?, ?, ?, ?)', {
         apartmentId,
-        type,
+        apartmentType,
         label,
         Player.PlayerData.citizenid
     })
     TriggerClientEvent('QBCore:Notify', src, Lang:t('success.receive_apart') .. ' (' .. label .. ')')
     if firstSpawn then
-        TriggerClientEvent('apartments:client:SpawnInApartment', src, apartmentId, type)
+        TriggerClientEvent('apartments:client:SpawnInApartment', src, apartmentId, apartmentType)
     end
-    TriggerClientEvent('apartments:client:SetHomeBlip', src, type)
+    TriggerClientEvent('apartments:client:SetHomeBlip', src, apartmentType)
 end)
 
-RegisterNetEvent('apartments:server:UpdateApartment', function(type, label)
+RegisterNetEvent('apartments:server:UpdateApartment', function(apartmentType, label)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    if type(type) ~= 'string' or (Apartments.Locations or {})[type] == nil then return end
+    if type(apartmentType) ~= 'string' or (Apartments.Locations or {})[apartmentType] == nil then return end
     label = tostring(label or ''):sub(1, 48)
-    MySQL.update('UPDATE apartments SET type = ?, label = ? WHERE citizenid = ?', { type, label, Player.PlayerData.citizenid })
+    MySQL.update('UPDATE apartments SET type = ?, label = ? WHERE citizenid = ?', { apartmentType, label, Player.PlayerData.citizenid })
     TriggerClientEvent('QBCore:Notify', src, Lang:t('success.changed_apart'))
-    TriggerClientEvent('apartments:client:SetHomeBlip', src, type)
+    TriggerClientEvent('apartments:client:SetHomeBlip', src, apartmentType)
 end)
 
 RegisterNetEvent('apartments:server:RingDoor', function(apartmentId, apartment)

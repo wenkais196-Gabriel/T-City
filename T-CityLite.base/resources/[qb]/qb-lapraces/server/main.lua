@@ -139,12 +139,26 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
     if type(raceId) ~= 'string' or Races[raceId] == nil then return end
     -- 🔒 只有这场比赛的参赛者能报成绩；成绩必须是合理数字（原来客户端报 BestLap=0.001 就能刷赛道记录）
     local racer = Races[raceId].Racers[Player.PlayerData.citizenid]
-    if not racer or racer.Finished then return end
+    -- 🔒 不能用 racer.Finished 当防重放标记：UpdateRacerData 会先把它置 true（正常完赛顺序），
+    --    那样每次正常结算都会被自己挡住。用独立的 FinishHandled。
+    if not racer or racer.FinishHandled then return end
     TotalTime = tonumber(TotalTime)
     TotalLaps = tonumber(TotalLaps)
     BestLap = tonumber(BestLap) or TotalTime
     if not TotalTime or TotalTime <= 0 or not TotalLaps or TotalLaps < 1 then return end
+    -- 🔒 服务端计时对账：比赛开始时刻由 StartRace 记在服务端，客户端报的总时长不能超过真实流逝时间
+    local startedAt = Races[raceId].StartedAt
+    if startedAt then
+        local elapsed = (GetGameTimer() - startedAt) / 1000
+        if TotalTime > elapsed + 5 then return end
+        -- 单圈均值不能低于 5 秒（0.001 这种"破纪录"直接拒）
+        if (TotalTime / TotalLaps) < 5 then return end
+    end
     if BestLap <= 0 or BestLap > TotalTime then BestLap = TotalTime end
+    if (BestLap / math.max(1, TotalLaps)) < 5 and TotalLaps > 0 then
+        BestLap = TotalTime / TotalLaps
+    end
+    racer.FinishHandled = true
     local AvailableKey = GetOpenedRaceKey(raceId)
     local PlayersFinished = 0
     local AmountOfRacers = 0
@@ -207,8 +221,10 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
         TriggerClientEvent('qb-phone:client:RaceNotify', src, 'You have won the WR from ' .. RaceData.RaceName ..
             ' put down with a time of: ' .. SecondsToClock(BLap) .. '!')
     end
-    AvailableRaces[AvailableKey].RaceData = Races[RaceData.RaceId]
-    TriggerClientEvent('qb-lapraces:client:PlayerFinishs', -1, RaceData.RaceId, PlayersFinished, Player)
+    if AvailableKey and AvailableRaces[AvailableKey] then
+        AvailableRaces[AvailableKey].RaceData = Races[raceId]
+    end
+    TriggerClientEvent('qb-lapraces:client:PlayerFinishs', -1, raceId, PlayersFinished, Player)
     if PlayersFinished == AmountOfRacers then
         if NotFinished ~= nil and next(NotFinished) ~= nil and NotFinished[RaceData.RaceId] ~= nil and
             next(NotFinished[RaceData.RaceId]) ~= nil then
@@ -223,13 +239,15 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
                 }
             end
         end
-        Races[RaceData.RaceId].LastLeaderboard = LastRaces[RaceData.RaceId]
-        Races[RaceData.RaceId].Racers = {}
-        Races[RaceData.RaceId].Started = false
-        Races[RaceData.RaceId].Waiting = false
-        table.remove(AvailableRaces, AvailableKey)
-        LastRaces[RaceData.RaceId] = nil
-        NotFinished[RaceData.RaceId] = nil
+        Races[raceId].LastLeaderboard = LastRaces[raceId]
+        Races[raceId].Racers = {}
+        Races[raceId].Started = false
+        Races[raceId].Waiting = false
+        if AvailableKey and AvailableRaces[AvailableKey] then
+            table.remove(AvailableRaces, AvailableKey)
+        end
+        LastRaces[raceId] = nil
+        NotFinished[raceId] = nil
     end
     TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
 end)
@@ -256,8 +274,11 @@ RegisterNetEvent('qb-lapraces:server:JoinRace', function(RaceData)
     local RaceId = RaceData.RaceId
     if type(RaceId) ~= 'string' or Races[RaceId] == nil then return end
     local AvailableKey = GetOpenedRaceKey(RaceId)
+    -- 🔒 RaceId 存在但没开放 → AvailableKey 为 nil。原来先改 Waiting/Racers 再索引 nil：
+    --    既崩服务端，又把这条赛道卡成"已在运行"（作者再也开不了，取消也取消不掉）。
+    if not AvailableKey or not AvailableRaces[AvailableKey] then return end
     local CurrentRace = GetCurrentRace(Player.PlayerData.citizenid)
-    if CurrentRace ~= nil then
+    if CurrentRace ~= nil and Races[CurrentRace] then
         local AmountOfRacers = 0
         local PreviousRaceKey = GetOpenedRaceKey(CurrentRace)
         for _, _ in pairs(Races[CurrentRace].Racers) do
@@ -268,10 +289,12 @@ RegisterNetEvent('qb-lapraces:server:JoinRace', function(RaceData)
             Races[CurrentRace].Racers = {}
             Races[CurrentRace].Started = false
             Races[CurrentRace].Waiting = false
-            table.remove(AvailableRaces, PreviousRaceKey)
+            if PreviousRaceKey and AvailableRaces[PreviousRaceKey] then
+                table.remove(AvailableRaces, PreviousRaceKey)
+            end
             TriggerClientEvent('QBCore:Notify', src, 'You were the only one in the race, the race had ended', 'error')
             TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[CurrentRace])
-        else
+        elseif PreviousRaceKey and AvailableRaces[PreviousRaceKey] then
             AvailableRaces[PreviousRaceKey].RaceData = Races[CurrentRace]
             TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[CurrentRace])
         end
@@ -286,10 +309,9 @@ RegisterNetEvent('qb-lapraces:server:JoinRace', function(RaceData)
     AvailableRaces[AvailableKey].RaceData = Races[RaceId]
     TriggerClientEvent('qb-lapraces:client:JoinRace', src, Races[RaceId], AvailableRaces[AvailableKey].Laps)
     TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
-    local creatorsource = QBCore.Functions.GetPlayerByCitizenId(AvailableRaces[AvailableKey].SetupCitizenId).PlayerData
-                              .source
-    if creatorsource ~= Player.PlayerData.source then
-        TriggerClientEvent('qb-phone:client:RaceNotify', creatorsource,
+    local host = QBCore.Functions.GetPlayerByCitizenId(AvailableRaces[AvailableKey].SetupCitizenId)
+    if host and host.PlayerData.source ~= Player.PlayerData.source then
+        TriggerClientEvent('qb-phone:client:RaceNotify', host.PlayerData.source,
             string.sub(Player.PlayerData.charinfo.firstname, 1, 1) .. '. ' .. Player.PlayerData.charinfo.lastname ..
                 ' the race has been joined!')
     end
@@ -305,21 +327,24 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
     else
         RaceName = RaceData.RaceName
     end
-    local RaceId = GetRaceId(RaceName)
-    local AvailableKey = GetOpenedRaceKey(RaceData.RaceId)
-    local creatorsource = QBCore.Functions.GetPlayerByCitizenId(AvailableRaces[AvailableKey].SetupCitizenId).PlayerData
-                              .source
-    if creatorsource ~= Player.PlayerData.source then
-        TriggerClientEvent('qb-phone:client:RaceNotify', creatorsource,
-            string.sub(Player.PlayerData.charinfo.firstname, 1, 1) .. '. ' .. Player.PlayerData.charinfo.lastname ..
-                ' the race has been delivered!')
+    local raceId = type(RaceData.RaceId) == 'string' and RaceData.RaceId or GetRaceId(RaceName)
+    if not raceId or Races[raceId] == nil then return end
+    local AvailableKey = GetOpenedRaceKey(raceId)
+    local opened = AvailableKey and AvailableRaces[AvailableKey] or nil
+    if opened then
+        local host = QBCore.Functions.GetPlayerByCitizenId(opened.SetupCitizenId)
+        if host and host.PlayerData.source ~= Player.PlayerData.source then
+            TriggerClientEvent('qb-phone:client:RaceNotify', host.PlayerData.source,
+                string.sub(Player.PlayerData.charinfo.firstname, 1, 1) .. '. ' .. Player.PlayerData.charinfo.lastname ..
+                    ' the race has been delivered!')
+        end
     end
     local AmountOfRacers = 0
-    for _, _ in pairs(Races[RaceData.RaceId].Racers) do
+    for _, _ in pairs(Races[raceId].Racers) do
         AmountOfRacers = AmountOfRacers + 1
     end
-    if NotFinished[RaceData.RaceId] ~= nil then
-        NotFinished[RaceData.RaceId][#NotFinished[RaceData.RaceId]+1] = {
+    if NotFinished[raceId] ~= nil then
+        NotFinished[raceId][#NotFinished[raceId]+1] = {
             TotalTime = "DNF",
             BestLap = "DNF",
             Holder = {
@@ -329,7 +354,7 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
         }
     else
         NotFinished[RaceData.RaceId] = {}
-        NotFinished[RaceData.RaceId][#NotFinished[RaceData.RaceId]+1] = {
+        NotFinished[raceId][#NotFinished[raceId]+1] = {
             TotalTime = "DNF",
             BestLap = "DNF",
             Holder = {
@@ -338,7 +363,7 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
             }
         }
     end
-    Races[RaceId].Racers[Player.PlayerData.citizenid] = nil
+    Races[raceId].Racers[Player.PlayerData.citizenid] = nil
     if (AmountOfRacers - 1) == 0 then
         if NotFinished ~= nil and next(NotFinished) ~= nil and NotFinished[RaceId] ~= nil and next(NotFinished[RaceId]) ~=
             nil then
@@ -353,8 +378,8 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
                         }
                     }
                 else
-                    LastRaces[RaceId] = {}
-                    LastRaces[RaceId][#LastRaces[RaceId]+1] = {
+                    LastRaces[raceId] = {}
+                    LastRaces[raceId][#LastRaces[raceId]+1] = {
                         TotalTime = v.TotalTime,
                         BestLap = v.BestLap,
                         Holder = {
@@ -365,18 +390,20 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
                 end
             end
         end
-        Races[RaceId].LastLeaderboard = LastRaces[RaceId]
-        Races[RaceId].Racers = {}
-        Races[RaceId].Started = false
-        Races[RaceId].Waiting = false
-        table.remove(AvailableRaces, AvailableKey)
+        Races[raceId].LastLeaderboard = LastRaces[raceId]
+        Races[raceId].Racers = {}
+        Races[raceId].Started = false
+        Races[raceId].Waiting = false
+        if AvailableKey and AvailableRaces[AvailableKey] then
+            table.remove(AvailableRaces, AvailableKey)
+        end
         TriggerClientEvent('QBCore:Notify', src, 'You were the only one in the race.The race had ended.', 'error')
-        TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[RaceId])
-        LastRaces[RaceId] = nil
-        NotFinished[RaceId] = nil
-    else
-        AvailableRaces[AvailableKey].RaceData = Races[RaceId]
-        TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[RaceId])
+        TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[raceId])
+        LastRaces[raceId] = nil
+        NotFinished[raceId] = nil
+    elseif opened then
+        opened.RaceData = Races[raceId]
+        TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[raceId])
     end
     TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
 end)
@@ -412,7 +439,9 @@ RegisterNetEvent('qb-lapraces:server:SetupRace', function(RaceId, Laps)
                                     Races[RaceId])
                             end
                         end
-                        table.remove(AvailableRaces, AvailableKey)
+                        if AvailableKey and AvailableRaces[AvailableKey] then
+                            table.remove(AvailableRaces, AvailableKey)
+                        end
                         Races[RaceId].LastLeaderboard = {}
                         Races[RaceId].Racers = {}
                         Races[RaceId].Started = false
@@ -435,11 +464,10 @@ end)
 RegisterNetEvent('qb-lapraces:server:CancelRace', function(raceId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(source)
+    if not Player or type(raceId) ~= 'string' then return end
     local AvailableKey = GetOpenedRaceKey(raceId)
 
     TriggerClientEvent('QBCore:Notify', src, 'Stopping the race: ' .. raceId, 'error')
-
-    if not Player or type(raceId) ~= 'string' then return end
     if AvailableKey == nil or Races[raceId] == nil then
         TriggerClientEvent('QBCore:Notify', src, 'Race not open: ' .. tostring(raceId), 'error')
         return
@@ -509,6 +537,8 @@ RegisterNetEvent('qb-lapraces:server:StartRace', function(RaceId)
 
     AvailableRaces[AvailableKey].RaceData.Started = true
     AvailableRaces[AvailableKey].RaceData.Waiting = false
+    -- 服务端计时起点：FinishPlayer 用它对账客户端报的 TotalTime / BestLap
+    AvailableRaces[AvailableKey].RaceData.StartedAt = GetGameTimer()
     for CitizenId, _ in pairs(Races[RaceId].Racers) do
         local RacePlayer = QBCore.Functions.GetPlayerByCitizenId(CitizenId)
         if RacePlayer ~= nil then
