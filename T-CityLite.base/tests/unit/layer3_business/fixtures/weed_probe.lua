@@ -200,6 +200,22 @@ emit('HARVEST_AMOUNT_CLAMPED', tostring(okHarvestNoPlayer
 local okHarvestBadPlant = fire(1, 'qb-weed:server:harvestPlant', house, 1, 'not_a_plant', 1)
 emit('HARVEST_BAD_PLANT_SAFE', tostring(okHarvestBadPlant))
 
+-- 5b. 用**别人的 house** 收获同一个 plantid：必须什么都不发（缓存命中也要核归属）
+state.added = {}
+state.removed = {}
+state.inserts = {}
+fire(1, 'qb-weed:server:placePlant', coordsJson, plantName, 'other_house')
+local foreignInsert = state.inserts[#state.inserts]
+local foreignPlantId = foreignInsert and foreignInsert.params and foreignInsert.params[5]
+state.added = {}
+state.removed = {}
+fire(1, 'qb-weed:server:harvestPlant', house, 2, plantName, foreignPlantId)
+local leaked = #state.removed > 0
+for _, entry in ipairs(state.added) do
+    if type(entry.item) == 'string' and entry.item:find('weed_', 1, true) then leaked = true end
+end
+emit('HARVEST_WRONG_HOUSE_BLOCKED', tostring(not leaked))
+
 -- ── 6. 施肥：坏 plantName 不崩（原来直接 nil 索引）──
 emit('SCENARIO', 'food')
 local okFoodBadPlant = fire(1, 'qb-weed:server:foodPlant', house, 5, 'not_a_plant', 1)

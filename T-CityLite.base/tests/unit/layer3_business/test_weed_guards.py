@@ -83,4 +83,5 @@ def test_harvest_and_food_are_bounded():
     data = _run("weed_probe.lua", "[qb]/qb-weed")
     assert data["HARVEST_AMOUNT_CLAMPED"] == "true", "种子数量没夹取 / Player 为 nil 时抛错"
     assert data["HARVEST_BAD_PLANT_SAFE"] == "true", "坏 plantName 会抛错"
+    assert data["HARVEST_WRONG_HOUSE_BLOCKED"] == "true", "用别人的 house 串就能收获别人的植株（缓存命中没核归属）"
     assert data["FOOD_BAD_ARGS_SAFE"] == "true", "施肥收到坏 plantName / nil amount 会抛错（旧版 nil 索引）"
