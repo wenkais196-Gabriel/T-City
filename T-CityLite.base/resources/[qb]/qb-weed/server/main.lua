@@ -138,6 +138,9 @@ RegisterNetEvent('qb-weed:server:harvestPlant', function(house, amount, plantNam
                 local result = MySQL.query.await('SELECT * FROM house_plants WHERE plantid = ? AND building = ?', { plantId, house })
                 if result[1] ~= nil then plant = result[1] end
             end
+            -- 缓存命中时也要核归属：知道别人 plantid 的人可以用自己的 house 触发收获，
+            -- 收获物照发、DB 删除却因 building 不匹配落空（与 removeDeathPlant 的校验对齐）
+            if type(plant) == 'table' and plant.building ~= house then plant = nil end
             if plant then
                 exports['qb-inventory']:AddItem(src, 'weed_' .. plantName .. '_seed', amount, false, false, 'qb-weed:server:harvestPlant')
                 exports['qb-inventory']:AddItem(src, 'weed_' .. plantName, sndAmount, false, false, 'qb-weed:server:harvestPlant')
