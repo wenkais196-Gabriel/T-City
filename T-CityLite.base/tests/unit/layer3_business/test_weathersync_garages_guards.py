@@ -101,6 +101,22 @@ def test_depot_payment_requires_ownership_and_impound_state():
     assert _flag(data, "DEPOT_OTHERS"), "别人的车仍然能赎"
     assert _flag(data, "DEPOT_NOT_IMPOUNDED"), "没被扣押的车仍能通过赎车通道取车"
     assert _flag(data, "DEPOT_IMPOUNDED"), "自己的扣押车反而赎不出来（过度收紧）"
+    assert _flag(data, "DEPOT_PRICE_ONLY"), (
+        "只有 depotprice 而 state=0 的车赎不出来（AutoRespawn=false 的服务器会整体失效）"
+    )
+
+
+def test_outside_vehicle_registry_is_owner_scoped_and_clearable():
+    """`UpdateOutsideVehicle` 由"谁的车"和"存车时清空"两个语义组成。
+
+    旧版两处都不对：任何玩家都能把别人的车牌登记成"在外"（同时污染 `trackVehicle` 的坐标），
+    而存车时客户端传的 `nil` 会被写成 `{netID = nil, entity = 0}` —— 条目仍在表里，
+    `IsSpawnOk` 会一直认为车在外面，玩家存车后再也取不出来。
+    """
+    data = _run("garages_probe.lua", "qb-garages")
+    assert _flag(data, "OUTSIDE_SET"), "自己的车登记不进 OutsideVehicles"
+    assert _flag(data, "OUTSIDE_CLEARED"), "存车后条目没被清掉（会卡住 IsSpawnOk）"
+    assert _flag(data, "OUTSIDE_OTHERS_BLOCKED"), "别人的车牌仍能登记成「在外」"
 
 
 # ══════════════════════════════════════════════════════════════════
