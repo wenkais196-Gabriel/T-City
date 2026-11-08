@@ -546,6 +546,15 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "i18n:client:reportLanguage",
+      "file": "[system]/production-freeze/server/i18n_server.lua",
+      "category": "self_scoped",
+      "reason": "只写自己的 metadata.client_lang。防护：lang 必须是语言包里存在的代码（zh / en 白名单）、长度 ≤5、metadata 为 nil 时补表（原来表/4000 字串/伪造代码都会直接落库）。",
+      "evidence": "production-freeze i18n_server — SUPPORTED_LANGS[lang] / data.metadata.client_lang = lang",
+      "owner": "production-freeze",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "hospital:server:CanHelp",
       "file": "[qb]/qb-ambulancejob/server/main.lua",
       "category": "civilian",
@@ -1533,6 +1542,15 @@
       "evidence": "server.lua RequestStateSync — type(src) 校验 + lastStateSync[src] 5s 冷却 + TriggerClientEvent(-1)",
       "file": "[qb]/qb-weathersync/server/server.lua",
       "owner": "qb-weathersync",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "tcity:client:telemetry",
+      "file": "[custom]/story-engine/server/main.lua",
+      "category": "self_scoped",
+      "reason": "客户端上报自己的 NUI/焦点/回调失败，用来写 agent_events。防护：事件名必须是 ≤64 字字符串、data 只接受表、序列化后超过 2048 字节直接丢、每玩家 60 秒最多 120 条（原来三样全由客户端定）。",
+      "evidence": "story-engine telemetry — TELEMETRY_MAX_EVENT_LEN / TELEMETRY_MAX_PAYLOAD_BYTES / telemetryAllowed(src)",
+      "owner": "story-engine",
       "expires": "2027-03-31"
     }
   ]

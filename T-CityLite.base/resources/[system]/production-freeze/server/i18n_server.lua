@@ -6,6 +6,11 @@
 --       _L(nil, 'key')  → 默认英文 (无玩家上下文时)
 -- ============================================================================
 
+-- ⚠️ 这个文件原来完全没取 core object：`QBCore` 在本资源里恒为 nil，
+-- 于是「读玩家 client_lang」和「写玩家 client_lang」两条路都是死代码（服务端永远按 en 渲染）。
+-- 这里显式取一次，`_L` 与下面的上报 handler 都用它。
+local QBCore = exports['qb-core'] and exports['qb-core']:GetCoreObject() or nil
+
 local localeData = nil
 
 -- 加载语言包
@@ -37,10 +42,11 @@ function _L(source, key, ...)
 
     -- 检测玩家语言
     local lang = 'en'
-    if source and tonumber(source) and QBCore and QBCore.Players then
-        local Player = QBCore.Players[tonumber(source)]
-        if Player and Player.PlayerData and Player.PlayerData.metadata then
-            lang = Player.PlayerData.metadata.client_lang or 'en'
+    if source and tonumber(source) and QBCore then
+        local Player = QBCore.Functions.GetPlayer(tonumber(source))
+        local data = Player and Player.PlayerData
+        if type(data) == 'table' and type(data.metadata) == 'table' then
+            lang = data.metadata.client_lang or 'en'
         end
     end
 
@@ -59,14 +65,20 @@ end
 _I18N_LOADED = true
 
 -- 接收客户端语言上报
+-- 语言代码只有语言包里存在的那几种（zh / en）。原来客户端传什么就写什么：
+-- 表、5KB 字符串、任意伪造值都会直接落进 metadata.client_lang，服务端渲染时再拿它拼串。
+local SUPPORTED_LANGS = { zh = true, en = true }
+
 RegisterNetEvent('i18n:client:reportLanguage', function(lang)
     local src = source
-    if src and src > 0 and QBCore and QBCore.Players and QBCore.Players[src] then
-        if not QBCore.Players[src].PlayerData.metadata then
-            QBCore.Players[src].PlayerData.metadata = {}
-        end
-        QBCore.Players[src].PlayerData.metadata.client_lang = lang
-    end
+    if type(lang) ~= 'string' or #lang > 5 then return end
+    if not SUPPORTED_LANGS[lang] then return end
+    if not (src and src > 0 and QBCore) then return end
+
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- 走 qb-core 的 SetMetaData：既只碰调用者自己，也保证投影/持久化与其它资源一致
+    Player.Functions.SetMetaData('client_lang', lang)
 end)
 
 -- (生产模式静默: 服务端 i18n 引擎已激活)

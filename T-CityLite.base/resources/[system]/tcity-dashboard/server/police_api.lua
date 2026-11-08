@@ -131,9 +131,12 @@ RegisterNetEvent('tcity-dashboard:server:flagPlate', function(plate, reason)
         return
     end
 
+    -- plate/reason 都来自客户端：`plate:upper()` 遇到 nil / 数字会直接抛错打断事件线程
+    if type(plate) ~= 'string' or #plate == 0 or #plate > 12 then return end
+    if type(reason) ~= 'string' then reason = nil end
     local Player = QBCore.Functions.GetPlayer(src)
     plate = plate:upper()
-    reason = reason or '中控屏标记'
+    reason = reason and reason:sub(1, 120) or '中控屏标记'
 
     FlaggedPlates[plate] = {
         isflagged = true,
@@ -178,6 +181,7 @@ RegisterNetEvent('tcity-dashboard:server:unflagPlate', function(plate)
         return
     end
 
+    if type(plate) ~= 'string' or #plate == 0 or #plate > 12 then return end
     plate = plate:upper()
     if FlaggedPlates[plate] then
         FlaggedPlates[plate].isflagged = false

@@ -82,6 +82,16 @@ python tools/dev/fivem_console.py "start qb-inventory"                 # 对每�
 判定依据是**集合**不是数字（见上面第 1 条）；补完再跑一次 `resync_modules.ps1` 也可以，
 它会把模块 cfg 里 `ensure` 的资源重新拉起。
 
+2026-11-08 又实测到更狠的一次：`restart tcity-dashboard`（同批还有 `story-engine`）之后，
+在线资源从 88 掉到 **52**，被停的 26 个里包括 `core-framework`、`custom-phone`、`custom-police`、
+`custom-main`、`custom-logs`、`custom-economy`、`qb-phone`、`qb-drugs`、`qb-vehicleshop` 这类几乎
+全服都挂在上面的资源。恢复必须**按依赖顺序分两轮** `start`（先 `core-framework` / `custom-logs` /
+`custom-security` / `custom-main` / `custom-economy`，再起其余），一轮起不完 —— 第二轮是因为
+第一轮里后起的资源会反过来依赖前面刚起来的那些。
+
+经验值：`restart` 一个「被半个服 ensure 的资源」（`qb-core`、`core-framework`、`tcity-dashboard`、
+`story-engine`）之后，**先看 info.json 的数量再决定要不要补**，不要接着 restart 下一个。
+
 ## 4. 整服重启（唯一安全的重启 qb-core 方式）
 
 ```bash

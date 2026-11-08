@@ -95,10 +95,14 @@ RegisterNetEvent('story:server:makeDecision', function(questId, stepId, decision
         tostring(src), Player.PlayerData.citizenid, tostring(questId), tostring(stepId),
         tostring(decisionId), tostring(chosenOptionId)))
 
+    -- 真正的校验在 DecisionEngine.MakeChoice：只接受**服务端刚刚下发的**那个决策
+    -- （pending 按 source 存、quest/step/decision 三元组必须全等、有 expiresAt），
+    -- 这里只是把失败原因回给客户端。加 `return` 是为了让闸门能按 deny-early 形状核对。
     local success, message = DecisionEngine.MakeChoice(src, questId, stepId, decisionId, chosenOptionId)
 
     if not success then
         TriggerClientEvent('QBCore:Notify', src, message or 'Choice failed', 'error')
+        return
     end
 end)
 
@@ -106,13 +110,45 @@ end)
 -- 客户端可观测性（NUI / 焦点 / 回调失败）
 -- ==============================================================
 
+-- 客户端可观测性上报会**写库**（agent_events），所以三件事必须服务端定：
+-- 事件名长度、payload 大小、每玩家频率。原来全都没有 —— 一个改过的客户端可以
+-- 每帧发一条 300KB 的 data，把表写爆（`json.encode` 对自引用表还会抛错）。
+local TELEMETRY_MAX_EVENT_LEN = 64
+local TELEMETRY_MAX_PAYLOAD_BYTES = 2048
+local TELEMETRY_WINDOW_MS = 60000
+local TELEMETRY_MAX_PER_WINDOW = 120
+local TelemetryWindows = {}
+
+local function telemetryAllowed(src)
+    local now = GetGameTimer()
+    local window = TelemetryWindows[src]
+    if not window or (now - window.start) >= TELEMETRY_WINDOW_MS then
+        TelemetryWindows[src] = { start = now, count = 1 }
+        return true
+    end
+    if window.count >= TELEMETRY_MAX_PER_WINDOW then return false end
+    window.count = window.count + 1
+    return true
+end
+
+AddEventHandler('playerDropped', function()
+    TelemetryWindows[source] = nil
+end)
+
 RegisterNetEvent('tcity:client:telemetry', function(event, data)
     local src = source
     if not src or src <= 0 then return end
+    if not telemetryAllowed(src) then return end
+    if type(event) ~= 'string' or #event == 0 or #event > TELEMETRY_MAX_EVENT_LEN then return end
+    if data ~= nil and type(data) ~= 'table' then return end
+
     local Player = QBCore.Functions.GetPlayer(src)
     local cid = Player and Player.PlayerData and Player.PlayerData.citizenid or nil
-    local eventName = tostring(event or 'unknown')
-    local payload = json.encode({ event = eventName, data = data or {} })
+    local eventName = event
+
+    local ok, payload = pcall(json.encode, { event = eventName, data = data or {} })
+    if not ok or type(payload) ~= 'string' then return end
+    if #payload > TELEMETRY_MAX_PAYLOAD_BYTES then return end
 
     print(('[client-telemetry] src=%s cid=%s event=%s data=%s'):format(
         tostring(src), tostring(cid), eventName, tostring(payload)))
