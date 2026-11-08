@@ -1,4 +1,4 @@
--- v3.11_police_case_verdict.sql — 案卷需要能记住判决（AC-P1-03）
+-- v3.11.1_police_case_verdict.sql — 案卷需要能记住判决（AC-P1-03）
 --
 -- 现状：`police_cases` 只有 status（open/closed/archived），判决结果只能落在
 -- `police_reports.justice_verdict` 上；而报告不一定存在，于是"这案子判了几年"
