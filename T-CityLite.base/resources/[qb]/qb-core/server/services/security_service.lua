@@ -157,6 +157,29 @@ function SecurityService.ValidateGangEvent(source, gang, grade)
     return true, cleanedGang, cleanedGrade
 end
 
+---金额入参的**唯一**校验实现（拒绝语义，不是 clamp）
+---
+---拒绝：非数字 / NaN / inf / 负数 / 0（除非 allowZero）/ 超过单笔阈值。
+---为什么要拒绝而不是夹取：把 999999999 静默改成 5000000，上游拿到的仍是 `true`，
+---排查时钱"变了但没人改过"，比直接失败难查一个数量级。
+---@param amount any
+---@param opts table|nil { allowZero = boolean }
+---@return boolean ok, number|nil cleaned
+function SecurityService.ValidateAmount(amount, opts)
+    opts = opts or {}
+    -- sanitizeNumber 已经挡掉 nil / 非数字 / NaN / ±inf
+    local numOk, cleaned = sanitizeNumber(amount)
+    if not numOk then return false, nil end
+    if cleaned < 0 then return false, nil end
+    if cleaned == 0 and not opts.allowZero then return false, nil end
+    if cleaned > SecurityService.MONEY_MAX_SINGLE_TRANSACTION then
+        print(('[SECURITY] amount %.0f exceeds single-transaction limit (%.0f) — BLOCKED'):format(
+            cleaned, SecurityService.MONEY_MAX_SINGLE_TRANSACTION))
+        return false, nil
+    end
+    return true, cleaned
+end
+
 ---校验金钱变动事件
 ---@param source number 玩家服务器ID
 ---@param amount number 金额
@@ -170,14 +193,9 @@ function SecurityService.ValidateMoneyEvent(source, amount, moneytype, reason)
         return false, nil
     end
 
-    -- 2. 数值清洗
-    local numOk, cleanedAmount = sanitizeNumber(amount)
+    -- 2/3/5. 数值、负数、单笔阈值 —— 全部走 SecurityService.ValidateAmount（唯一实现）
+    local numOk, cleanedAmount = SecurityService.ValidateAmount(amount, { allowZero = true })
     if not numOk then
-        return false, nil
-    end
-
-    -- 3. 负数拒绝 (SetMoney 不接受负数)
-    if cleanedAmount < 0 then
         return false, nil
     end
 
@@ -188,12 +206,6 @@ function SecurityService.ValidateMoneyEvent(source, amount, moneytype, reason)
         if type(moneytype) ~= 'string' then
             return false, nil
         end
-    end
-
-    -- 5. 单笔阈值熔断
-    if cleanedAmount > SecurityService.MONEY_MAX_SINGLE_TRANSACTION then
-        print(('[SECURITY] Player %d attempted SetMoney of $%d (%s) — EXCEEDS THRESHOLD, BLOCKED'):format(source, cleanedAmount, moneytype or 'unknown'))
-        return false, nil
     end
 
     return true, cleanedAmount

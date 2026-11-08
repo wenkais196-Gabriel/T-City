@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-08 ｜ **文档总数**：287 ｜ **已登记**：287 ｜ **未登记**：0
+**生成时间**：2026-11-08 ｜ **文档总数**：288 ｜ **已登记**：288 ｜ **未登记**：0
 
-**状态分布**：✅ active 162 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 162 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -354,7 +354,7 @@
 | [📖 T-City Wiki 系统设计规格书](../T-CityLite.base/docs/design/tcity-wiki-design-spec.md) | spec | 🟡 draft | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-wiki-design-spec.md` |
 | [基石目标形态（TO-BE）— 五层、单写者、可验收的预算](engineering/FOUNDATION-TO-BE.md) | spec | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/FOUNDATION-TO-BE.md` |
 
-### infra（21）
+### infra（22）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -373,6 +373,7 @@
 | [重构删除清单 & 保留清单 v2.0](../T-CityLite.base/docs/refactoring_manifest_v2.md) | plan | 📌 final | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/refactoring_manifest_v2.md` |
 | [P1-4 开发计划与交付标准（实施方 + 验收方联合定稿）](engineering/2026-11-foundation-p1-4-plan.md) | plan | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-4-plan.md` |
 | [P1-5 施工计划：真机缺陷（跨资源引用 / 金额格式化 / 审计与运维）](engineering/2026-11-foundation-p1-5-plan.md) | plan | ✅ active | 2026-11-07 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-5-plan.md` |
+| [P1-5 二期施工计划：金额写路径收敛（拒绝语义）](engineering/2026-11-foundation-p1-5b-money-path-plan.md) | plan | 📌 final | 2026-11-08 | 2027-03-31 |  | `docs/engineering/2026-11-foundation-p1-5b-money-path-plan.md` |
 | [P1-6 施工计划：重启后的「失效函数引用」与审计留存](engineering/2026-11-foundation-p1-6-plan.md) | plan | ✅ active | 2026-11-07 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-6-plan.md` |
 | [P1-4 调研：拆掉 compat 的全局猴补](engineering/2026-11-foundation-p1-4-research.md) | research | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-4-research.md` |
 | [重启 SOP：`restart` 的级联与恢复](engineering/2026-11-restart-sop.md) | runbook | ✅ active | 2026-11-07 | 2027-02-01 |  | `docs/engineering/2026-11-restart-sop.md` |
