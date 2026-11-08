@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 65,
-      "allowlisted": 56,
-      "unguarded": 95
+      "guarded": 77,
+      "allowlisted": 57,
+      "unguarded": 82
     },
     "other": {
       "events": 76,
@@ -380,9 +380,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 6,
-      "guarded": 0,
+      "guarded": 6,
       "allowlisted": 0,
-      "unguarded": 6,
+      "unguarded": 0,
       "started": true
     },
     "qb-houserobbery": {
@@ -533,9 +533,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 7,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 7,
+      "guarded": 6,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": true
     },
     "qb-weed": {
@@ -748,14 +748,6 @@
       "qb-fuel:server:refillJerryCan",
       "qb-fuel:server:setCanFuel"
     ],
-    "qb-garages": [
-      "qb-garages:server:PayDepotPrice",
-      "qb-garages:server:UpdateOutsideVehicle",
-      "qb-garages:server:syncGarage",
-      "qb-garages:server:trackVehicle",
-      "qb-garages:server:updateVehicleState",
-      "qb-garages:server:updateVehicleStats"
-    ],
     "qb-houserobbery": [
       "qb-houserobbery:server:SetBusyState",
       "qb-houserobbery:server:enterHouse",
@@ -823,15 +815,6 @@
       "qb-vehicleshop:server:deleteVehicle",
       "qb-vehicleshop:server:removePlayer",
       "qb-vehicleshop:server:swapVehicle"
-    ],
-    "qb-weathersync": [
-      "QBCore:Server:OnPlayerLoaded",
-      "qb-weathersync:server:RequestStateSync",
-      "qb-weathersync:server:setTime",
-      "qb-weathersync:server:setWeather",
-      "qb-weathersync:server:toggleBlackout",
-      "qb-weathersync:server:toggleDynamicWeather",
-      "qb-weathersync:server:toggleFreezeTime"
     ],
     "qb-weed": [
       "qb-weed:server:foodPlant",
@@ -1072,14 +1055,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "qb-garages",
-      "batch": "qb",
-      "unguarded": 6,
-      "owner": "qb-garages",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "qb-houserobbery",
       "batch": "qb",
       "unguarded": 5,
@@ -1164,14 +1139,6 @@
       "batch": "qb",
       "unguarded": 7,
       "owner": "qb-vehicleshop",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-weathersync",
-      "batch": "qb",
-      "unguarded": 7,
-      "owner": "qb-weathersync",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
