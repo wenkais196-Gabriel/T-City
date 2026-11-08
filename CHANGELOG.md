@@ -48,6 +48,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-3 批 7：qb-storerobbery 9 + qb-crypto 6**（2026-11-08）：
+  - **白拿钱**：`qb-crypto:server:ExchangeSuccess` 忽略 `RemoveItem` 的返回值 —— 兑换时如果
+    扣不掉 cryptostick，`AddMoney` 照样执行（探针实测旧代码在扣货失败时仍入账一次）。
+    现在 `RemoveItem == false` 直接返回。
+  - **伪造警情**：`qb-storerobbery:server:callCops` 的店名与坐标全来自客户端 —— 任意玩家能凭空
+    给全服推一条「某店正在被抢」，坐标任意；坏 key 还会 `attempt to index a nil value`。
+    现在只认 Config 里真实存在的收银机/保险箱，坐标取服务端配置。
+  - **锁死全服保险箱**：`setSafeStatus` 原来任何玩家调一次就能把任意保险箱标成「已抢」
+    （40~80 分钟不可用）。现在要求调用者本人站在该保险箱交互距离内。
+  - **伪造交易所重启**：`Rebooting(state, percentage)` 原来把客户端值原样写进全服共享状态
+    （实测 `'hax'` 与 `150%` 都能写进去）→ 只接受已知 state + 0~100 进度 + 1 秒节流。
+  - 其余：`FetchWorth`（每币一条 SQL）加 5 秒冷却防放大；`syncMinPolice`/`SyncReboot` 广播加节流；
+    两个开锁器事件先确认本人真的持有再扣。
+  - 数字：两个资源 15 → 0；全仓未登记 **192 → 177**、qb **110 → 95**、allowlist **97 → 112**。
+  - 运行级测试：`T-CityLite.base/tests/unit/layer3_business/fixtures/storerobbery_probe.lua`、
+    `T-CityLite.base/tests/unit/layer3_business/fixtures/crypto_probe.lua`，2 条 pytest；
+    旧实现实测全红（客户端坐标被转发、远处锁保险箱、扣货失败照样发钱）。
 - **P1-3 批 6：qb-lapraces 10 + qb-apartments 10**（2026-11-08）：
   - **连带修掉的真 bug**（CC 六轮验收逐条揪出来的，都属于「能玩」级别）：
     ① `CreateApartment` 形参叫 `type` 遮蔽全局 `type()` → 事件一触发就崩、公寓建不出来；

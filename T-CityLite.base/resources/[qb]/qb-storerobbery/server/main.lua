@@ -507,6 +507,23 @@ AddEventHandler('playerDropped', function()
 end)
 
 RegisterNetEvent('qb-storerobbery:server:setSafeStatus', function(safe)
+    local src = source
+    -- 🔒 原来任何玩家调一次就能把任意保险箱标成"已抢"（40~80 分钟不可用），还能崩服务端。
+    --    现在要求：保险箱存在 + 调用者本人正在这间店实施抢劫 + 人在保险箱附近。
+    if type(safe) ~= 'string' and type(safe) ~= 'number' then return end
+    local safeEntry = Config.Safes[safe]
+    if not safeEntry or safeEntry.robbed then return end
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    local near = false
+    local ped = GetPlayerPed(src)
+    if ped and ped ~= 0 then
+        local coords = GetEntityCoords(ped)
+        local anchor = safeEntry[1]
+        local maxDist = tonumber(GetConvar('security_max_interaction_distance', '10.0')) or 10.0
+        near = anchor ~= nil and #(coords - anchor.xyz) <= maxDist
+    end
+    if not near then return end
     Config.Safes[safe].robbed = true
     TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, true)
 
@@ -557,13 +574,26 @@ RegisterNetEvent('qb-storerobbery:server:SafeReward', function(safe)
     end
 end)
 
-RegisterNetEvent('qb-storerobbery:server:callCops', function(type, safe, streetLabel, coords)
-    local cameraId
-    if type == 'safe' then
-        cameraId = Config.Safes[safe].camId
+RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetLabel, coords)
+    local src = source
+    -- 🔒 kind / safe / coords / streetLabel 全来自客户端：原来任意玩家能凭空给全服推一条
+    --    "某店正在被抢"的警情（坐标和店名都能编），坏 key 还会 nil 索引崩服务端。
+    --    现在只认 Config 里真实存在的收银机/保险箱，坐标取服务端配置。
+    --    注意形参不能叫 `type`：那会遮蔽全局 type()（公寓那边踩过一次）。
+    if type(kind) ~= 'string' then return end
+    if kind ~= 'safe' and kind ~= 'register' then return end
+    local entry, anchor
+    if kind == 'safe' then
+        entry = Config.Safes[safe]
+        anchor = entry and entry[1]
     else
-        cameraId = Config.Registers[safe].camId
+        entry = Config.Registers[safe]
+        anchor = entry and entry[1]
     end
+    if not entry or not anchor then return end
+    local cameraId = entry.camId
+    streetLabel = streetLabel or 'Unknown'
+    coords = { x = anchor.x, y = anchor.y, z = anchor.z }
     local alertData = {
         title = '10-33 | Shop Robbery',
         coords = { x = coords.x, y = coords.y, z = coords.z },
@@ -574,15 +604,20 @@ RegisterNetEvent('qb-storerobbery:server:callCops', function(type, safe, streetL
 end)
 
 RegisterNetEvent('qb-storerobbery:server:removeAdvancedLockpick', function()
-    local Player = QBCore.Functions.GetPlayer(source)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    exports['qb-inventory']:RemoveItem(source, 'advancedlockpick', 1, false, 'qb-storerobbery:server:removeAdvancedLockpick')
+    -- 只扣自己真的持有的开锁器（原来不看持有量，RemoveItem 失败也被当成"用掉了"）
+    if not Player.Functions.GetItemByName('advancedlockpick') then return end
+    exports['qb-inventory']:RemoveItem(src, 'advancedlockpick', 1, false, 'qb-storerobbery:server:removeAdvancedLockpick')
 end)
 
 RegisterNetEvent('qb-storerobbery:server:removeLockpick', function()
-    local Player = QBCore.Functions.GetPlayer(source)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    exports['qb-inventory']:RemoveItem(source, 'lockpick', 1, false, 'qb-storerobbery:server:removeLockpick')
+    if not Player.Functions.GetItemByName('lockpick') then return end
+    exports['qb-inventory']:RemoveItem(src, 'lockpick', 1, false, 'qb-storerobbery:server:removeLockpick')
 end)
 
 CreateThread(function()
@@ -636,7 +671,14 @@ QBCore.Functions.CreateCallback('qb-storerobbery:server:getMinPolice', function(
 end)
 
 -- 当 /setrobbery 更改门槛时，广播到所有客户端
+local lastMinPoliceSync = 0
 RegisterNetEvent('qb-storerobbery:server:syncMinPolice', function()
+    local src = source
+    -- 🔒 全服广播：加 10 秒冷却，避免任何玩家连点刷包
+    if type(src) ~= 'number' then return end
+    local now = os.time()
+    if now - lastMinPoliceSync < 10 then return end
+    lastMinPoliceSync = now
     local minPolice = tonumber(GetConvar("crime_min_police_storerobbery", "2")) or 2
     TriggerClientEvent('qb-storerobbery:client:updateMinPolice', -1, minPolice)
 end)
