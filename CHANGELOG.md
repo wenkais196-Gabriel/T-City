@@ -302,6 +302,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 17：qb-adminmenu / custom-justice / qb-hud / qb-scoreboard**（2026-11-08）：
+  `qb-admin:server:GetPlayersForBlips` **没有任何权限校验**，谁发谁拿，而下发的 `qb-admin:client:Show`
+  是**全服玩家的名字 + 实时坐标**——等于把 wallhack 发给所有人（客户端在轮询，拿到就是持续跟踪）。
+  客户端只在管理员打开 blips/names 开关时才轮询，所以服务端按 `admin` 权限 + ACE `command` 对齐不会
+  堵死任何职能（旧版实测 `BLIPS_CIVILIAN_BLOCKED=false`）。`hud:server:GainStress` /
+  `RelieveStress(amount)` 的 `amount` 全来自客户端：表/字符串让 `currentStress + amount` 直接抛
+  `attempt to perform arithmetic on a table value (local 'amount')` 打断事件线程，超大数字能一键把
+  压力拉满或清零 → 统一走 `sanitizeStressStep`（必须为正数、上限 100，与 qb-ambulancejob 治伤发的
+  100 相容）。`qb-scoreboard:server:SetActivityBusy(activity, bool)` 全仓**没有任何客户端调用点**却对
+  客户端开放：任何玩家能用坏 key 让 `Config.IllegalActions[activity].busy` 抛 `attempt to index a nil
+  value`，或者直接改全服的"非法活动占用"状态（等于全服抢劫开关）→ 改成 `source ~= 0` 拒绝 + activity
+  白名单 + bool 类型校验。`custom-justice` 的 `justice:server:imprison` 本来就是警察/法官限定，只是
+  写成正分支，闸门认不出形状 → 抽成 `IsLawEnforcement(Player)` 并登记（行为零变化，探针对旧版同样通过）。
+  另有 7 条登记为 `self_scoped` / `civilian`：证照自发（要求本人持该类执照）、死亡状态重置（冷却 +
+  医院资源运行期拦截 + 审计）、通缉上报（坐标校验 + 星级夹取 + 防刷）、出示证件（配置白名单 + 序列号
+  与持有人绑定）、武器耐久（配置白名单 + 只降自己那把）、stress 两条。三个探针（adminmenu / hud+scoreboard
+  共用一个带模式参数的探针，位于 layer3_business 的 fixtures 目录）。数字：未登记 **89 → 81**
+  （qb 17 → 13、custom 8 → 4、allowlist 160）。
+
 - **P1-3 批 16：qb-fuel 3 + qb-doorlock 3 + qb-mechanicjob 3**（2026-11-08）：三个资源同一类问题——
   客户端报什么就信什么。qb-fuel 的 `setCanFuel(fuel)` 直接把客户端给的数字写进油桶，而客户端调用点
   传的是 `canLiter - liter`（语义是**扣减**）；服务端分不清"加满"和"扣减"，任何玩家发一条

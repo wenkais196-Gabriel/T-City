@@ -91,13 +91,26 @@ function JusticeService.Imprison(citizenid, sentenceMinutes, crimes, opts)
     return true
 end
 
+-- 谁有权直接下判决：只认在职警察与法官。抽成 helper 是为了让 net-event 闸门能按
+-- deny-early 形状持续核对（原来写成正分支 `if a ~= 'police' and a ~= 'judge' then ... return end`，
+-- 行为一样但闸门认不出）。
+local LAW_ENFORCEMENT_JOBS = { police = true, judge = true }
+
+local function IsLawEnforcement(Player)
+    local data = Player and Player.PlayerData
+    if type(data) ~= 'table' then return false end
+    local job = data.job
+    if type(job) ~= 'table' or type(job.name) ~= 'string' then return false end
+    return LAW_ENFORCEMENT_JOBS[job.name] == true
+end
+
 RegisterNetEvent('justice:server:imprison', function(citizenid, sentenceMinutes, crimes)
     local callerSrc = source
     local Caller = QBCore.Functions.GetPlayer(callerSrc)
     if not Caller then return end
-    local callerJob = Caller.PlayerData.job.name
-    if callerJob ~= 'police' and callerJob ~= 'judge' then
-        print(('[SECURITY] justice:server:imprison blocked — unauthorized caller %s (job=%s)'):format(GetPlayerName(callerSrc), callerJob))
+    local allowed = IsLawEnforcement(Caller)
+    if not allowed then
+        print(('[SECURITY] justice:server:imprison blocked — unauthorized caller %s'):format(GetPlayerName(callerSrc)))
         return
     end
     JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
