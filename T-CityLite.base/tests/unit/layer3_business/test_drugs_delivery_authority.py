@@ -94,3 +94,11 @@ def test_drop_settlement_refunds_only_when_goods_are_recovered():
     assert data["ITEM_LEFT"][0] == "0", "退还押金了但货物没回收 —— 等于白送一件货"
     # 掉线前货已被用掉 → 押金不退
     assert data["REFUND"][1] == "0", "货都不在了还退押金，等于可以白拿一件货"
+
+
+def test_drop_settlement_survives_missing_inventory_api():
+    data = _run_probe()
+    # qb-inventory 未就绪（RemoveItem 为 nil）时不结算、也不丢 pending
+    assert data["REFUND"][2] == "0", "qb-inventory 未就绪时仍然动了钱"
+    # 下次上线（API 已注入）再结算，押金要补退
+    assert data["REFUND"][3] == "500", "pending 被提前消费，玩家押金永久丢失"

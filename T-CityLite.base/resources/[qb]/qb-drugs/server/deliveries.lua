@@ -58,10 +58,22 @@ AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
     local citizenid = Player.PlayerData.citizenid
     local pending = pendingSettlements[citizenid]
     if not pending then return end
-    pendingSettlements[citizenid] = nil            -- 先消费，防重复结算
+
+    -- qb-inventory 是在自己的 QBCore:Server:PlayerLoaded 里把 RemoveItem 注入到 Player.Functions 的；
+    -- 它热重启/加载顺序变化时这里会是 nil —— 此时**保留 pending**，等玩家下次上线再结算。
+    if type(Player.Functions.RemoveItem) ~= 'function' then
+        print(('[qb-drugs] drop settlement skipped for %s: qb-inventory 未就绪，保留待下次'):format(citizenid))
+        return
+    end
 
     local source = Player.PlayerData.source
-    local removed = Player.Functions.RemoveItem(pending.itemName, pending.amount, false, 'qb-drugs:dropSettlement')
+    local ok, removed = pcall(Player.Functions.RemoveItem, pending.itemName, pending.amount, false, 'qb-drugs:dropSettlement')
+    if not ok then
+        print(('[qb-drugs] drop settlement failed for %s: %s（保留 pending）'):format(citizenid, tostring(removed)))
+        return
+    end
+
+    pendingSettlements[citizenid] = nil            -- 结算成功后消费，防重复
 
     if removed then
         Player.Functions.AddMoney('cash', pending.deposit, '配送押金退还(掉线结算)')
