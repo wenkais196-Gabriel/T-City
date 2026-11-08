@@ -34,14 +34,53 @@ local function exploitBan(id, reason)
     DropPlayer(id, 'You were permanently banned by the server for: Exploiting')
 end
 
-RegisterNetEvent('qb-pawnshop:server:sellPawnItems', function(itemName, itemAmount, itemPrice)
+-- 价格 / 熔炼配方一律以**服务端**配置为准。原来两者都从客户端参数里取：
+--   `sellPawnItems(..., itemPrice)` 的单价来自客户端（卖一块石头要价一百万的印钞机），
+--   `pickupMelted(item)` 的奖励表也来自客户端（可以任意指定奖励物品与数量）。
+local MAX_SELL_AMOUNT = 100
+local MAX_MELT_AMOUNT = 100
+
+-- 熔炼中的批次：`[src] = { { entry, amount, readyAt } }`。
+-- 取回时**完全不看客户端提交的内容**，只按这里记的批次发奖 —— 否则站在当铺门口反复触发
+-- `pickupMelted` 就能无限领配置里的奖励（不需要原料、不需要等熔炼时间）。
+local PendingMelt = {}
+
+AddEventHandler('playerDropped', function()
+    PendingMelt[source] = nil
+end)
+
+local function findPawnEntry(itemName)
+    for _, entry in pairs(Config.PawnItems) do
+        if type(entry) == 'table' and entry.item == itemName then return entry end
+    end
+    return nil
+end
+
+local function findMeltingEntry(itemName)
+    for _, entry in pairs(Config.MeltingItems) do
+        if type(entry) == 'table' and entry.item == itemName then return entry end
+    end
+    return nil
+end
+
+local function sanitizeAmount(value, limit)
+    local amount = math.floor(tonumber(value) or 0)
+    if amount <= 0 or amount > limit then return nil end
+    return amount
+end
+
+RegisterNetEvent('qb-pawnshop:server:sellPawnItems', function(itemName, itemAmount)
     local src = source
     if not exports['custom-main']:CheckRateLimit(src, "sell_pawn_item", 1500) then
         TriggerClientEvent('QBCore:Notify', src, "您的操作过于频繁，请慢一点", "error")
         return
     end
     local Player = QBCore.Functions.GetPlayer(src)
-    local totalPrice = (tonumber(itemAmount) * itemPrice)
+    if not Player or type(itemName) ~= 'string' then return end
+    local pawnEntry = findPawnEntry(itemName)
+    local amount = sanitizeAmount(itemAmount, MAX_SELL_AMOUNT)
+    if not pawnEntry or not amount then return end
+    local totalPrice = (tonumber(pawnEntry.price) or 0) * amount
     local playerCoords = GetEntityCoords(GetPlayerPed(src))
     local dist
     for _, value in pairs(Config.PawnLocation) do
@@ -65,47 +104,87 @@ RegisterNetEvent('qb-pawnshop:server:sellPawnItems', function(itemName, itemAmou
     TriggerClientEvent('qb-pawnshop:client:openMenu', src)
 end)
 
-RegisterNetEvent('qb-pawnshop:server:meltItemRemove', function(itemName, itemAmount, item)
+RegisterNetEvent('qb-pawnshop:server:meltItemRemove', function(itemName, itemAmount)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    if exports['qb-inventory']:RemoveItem(src, itemName, itemAmount, false, 'qb-pawnshop:server:meltItemRemove') then
+    if not Player or type(itemName) ~= 'string' then return end
+    local meltEntry = findMeltingEntry(itemName)
+    local amount = sanitizeAmount(itemAmount, MAX_MELT_AMOUNT)
+    if not meltEntry or not amount then return end
+    if exports['qb-inventory']:RemoveItem(src, itemName, amount, false, 'qb-pawnshop:server:meltItemRemove') then
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[itemName], 'remove')
-        local meltTime = (tonumber(itemAmount) * item.time)
-        TriggerClientEvent('qb-pawnshop:client:startMelting', src, item, tonumber(itemAmount), (meltTime * 60000 / 1000))
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('info.melt_wait', { value = meltTime }), 'primary')
+        local meltMinutes = (amount * (tonumber(meltEntry.meltTime) or 0))
+        local meltSeconds = math.max(1, math.floor(meltMinutes * 60))
+        PendingMelt[src] = PendingMelt[src] or {}
+        table.insert(PendingMelt[src], {
+            entry = meltEntry,
+            amount = amount,
+            readyAt = os.time() + meltSeconds,
+        })
+        -- 回给客户端的是**服务端**那份条目（客户端提交的同名条目一律忽略）
+        TriggerClientEvent('qb-pawnshop:client:startMelting', src, meltEntry, amount, meltSeconds)
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('info.melt_wait', { value = meltMinutes }), 'primary')
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_items'), 'error')
     end
 end)
 
-RegisterNetEvent('qb-pawnshop:server:pickupMelted', function(item)
+RegisterNetEvent('qb-pawnshop:server:pickupMelted', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
     local playerCoords = GetEntityCoords(GetPlayerPed(src))
-    local dist
+    local nearPawn = false
     for _, value in pairs(Config.PawnLocation) do
-        dist = #(playerCoords - value.coords)
-        if #(playerCoords - value.coords) < 2 then
-            dist = #(playerCoords - value.coords)
+        if #(playerCoords - value.coords) < 5 then
+            nearPawn = true
             break
         end
     end
-    if dist > 5 then
+    if not nearPawn then
         exploitBan(src, 'pickupMelted Exploiting')
         return
     end
-    for _, v in pairs(item.items) do
-        local meltedAmount = v.amount
-        for _, m in pairs(v.item.reward) do
-            local rewardAmount = m.amount
-            if exports['qb-inventory']:AddItem(src, m.item, (meltedAmount * rewardAmount), false, false, 'qb-pawnshop:server:pickupMelted') then
-                TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[m.item], 'add')
-                TriggerClientEvent('QBCore:Notify', src, Lang:t('success.items_received', { value = (meltedAmount * rewardAmount), value2 = QBCore.Shared.Items[m.item].label }), 'success')
-                TriggerClientEvent('qb-pawnshop:client:resetPickup', src)
-            else
-                TriggerClientEvent('QBCore:Notify', src, Lang:t('error.inventory_full', { value = QBCore.Shared.Items[m.item].label }), 'warning', 7500)
+
+    -- 🔒 发奖只看服务端记的待取回批次：meltItemRemove 扣掉原料时登记，熔炼时间到才可领。
+    local pending = PendingMelt[src]
+    if type(pending) ~= 'table' or #pending == 0 then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_melt'), 'error')
+        return
+    end
+
+    local now = os.time()
+    local remaining = {}
+    for _, batch in ipairs(pending) do
+        if batch.readyAt <= now then
+            -- 逐条记「这条奖励已经发过了」：一个批次里可能有多条奖励（diamond_ring 是 diamond +
+            -- goldbar），如果只是"有一条失败就把整批留到下次"，已经发出去的那条会被重复发。
+            batch.paid = batch.paid or {}
+            local allPaid = true
+            for index, reward in ipairs(batch.entry.rewards) do
+                local rewardAmount = (tonumber(reward.amount) or 0) * batch.amount
+                if rewardAmount <= 0 then
+                    batch.paid[index] = true
+                elseif not batch.paid[index] then
+                    if exports['qb-inventory']:AddItem(src, reward.item, rewardAmount, false, false, 'qb-pawnshop:server:pickupMelted') then
+                        batch.paid[index] = true
+                        TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[reward.item], 'add')
+                        TriggerClientEvent('QBCore:Notify', src, Lang:t('success.items_received', { value = rewardAmount }), 'success')
+                    else
+                        allPaid = false
+                        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.inventory_full', { value = QBCore.Shared.Items[reward.item] }), 'error')
+                    end
+                end
             end
+            if not allPaid then remaining[#remaining + 1] = batch end   -- 还有没发出去的，留着下次
+        else
+            remaining[#remaining + 1] = batch           -- 还没到时间
         end
+    end
+
+    PendingMelt[src] = (#remaining > 0) and remaining or nil
+    if PendingMelt[src] == nil then
+        TriggerClientEvent('qb-pawnshop:client:resetPickup', src)
     end
     TriggerClientEvent('qb-pawnshop:client:openMenu', src)
 end)
@@ -128,6 +207,14 @@ end)
 
 QBCore.Functions.CreateCallback('qb-pawnshop:server:getInv', function(source, cb)
     local Player = QBCore.Functions.GetPlayer(source)
-    local inventory = Player.PlayerData.items
-    return cb(inventory)
+    if not Player then return cb({}, {}) end
+    -- `Config.PawnItems` 的 `price` 是 `math.random(50,100)`，客户端与服务端各自求值会不一致，
+    -- 所以展示价也由服务端下发（客户端不再用自己那份）。
+    local prices = {}
+    for _, entry in pairs(Config.PawnItems) do
+        if type(entry) == 'table' and type(entry.item) == 'string' then
+            prices[entry.item] = tonumber(entry.price) or 0
+        end
+    end
+    return cb(Player.PlayerData.items or {}, prices)
 end)

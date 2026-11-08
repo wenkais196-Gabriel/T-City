@@ -1113,6 +1113,60 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-multicharacter:server:createCharacter",
+      "file": "[qb]/qb-multicharacter/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能创建角色。handler 内：条数上限按 `Config.DefaultNumberOfCharacters` 与按 license 的例外表；charinfo 改为白名单字段 + 长度/类型收敛（原来是把客户端整张表 json 进库）；citizenid 由 qb-core 自己生成（客户端传的 `cid` 只是槽位号）。",
+      "evidence": "main.lua createCharacter — COUNT(*) 上限 / type(data) ~= 'table' / charinfo 白名单 / newData.cid = tonumber(data.cid)",
+      "owner": "qb-multicharacter",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-multicharacter:server:deleteCharacter",
+      "file": "[qb]/qb-multicharacter/server/main.lua",
+      "category": "civilian",
+      "reason": "删除自己的角色（配置开关控制）。handler 内 citizenid 类型/长度校验；**归属校验在 qb-core**：`DeleteCharacter` 会比对 license，不匹配直接拒绝。",
+      "evidence": "main.lua deleteCharacter — Config.EnableDeleteButton / type(citizenid) 校验 / DeleteCharacter 内部比对 license",
+      "owner": "qb-multicharacter",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-multicharacter:server:disconnect",
+      "file": "[qb]/qb-multicharacter/server/main.lua",
+      "category": "self_scoped",
+      "reason": "选人界面的「退出」按钮：只把**调用者自己**踢下线，越权面为零。",
+      "evidence": "main.lua disconnect — local src = source / DropPlayer(src, ...)",
+      "owner": "qb-multicharacter",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-multicharacter:server:loadUserData",
+      "file": "[qb]/qb-multicharacter/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家选完角色都会调用它。handler 内：cData 必须是表、citizenid 必须是 1..32 的字符串；**归属校验在 qb-core**：`Player.Login` 会比对 license，不匹配直接 DropPlayer 并写反作弊日志。",
+      "evidence": "main.lua loadUserData — type(cData) ~= 'table' / type(citizenid) ~= 'string' / QBCore.Player.Login 内部比对 license",
+      "owner": "qb-multicharacter",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-pawnshop:server:launderMoney",
+      "file": "[qb]/qb-pawnshop/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能在当铺洗钱（玩法本身）。金额 `tonumber` 且必须 > 0，实际折旧/冷却/警察校验/审计全部在 `custom-crime` 的 `LaunderMoney` 导出里。",
+      "evidence": "main.lua launderMoney — tonumber(amount) / amount <= 0 return / exports['custom-crime']:LaunderMoney",
+      "owner": "qb-pawnshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-pawnshop:server:pickupMelted",
+      "file": "[qb]/qb-pawnshop/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家在当铺取回熔炼产物（玩法本身）。奖励表改为从**服务端** `Config.MeltingItems` 按物品名查，客户端提交的 `item.reward` 一律忽略；数量夹 1..100；仍保留原有的「必须在当铺 5 米内」判定。原来直接用客户端给的 reward 表 —— 可以指定任意奖励物品与数量。",
+      "evidence": "main.lua pickupMelted — type(item) ~= 'table' / findMeltingEntry(名字) / sanitizeAmount(1..100) / 距离 ≤5m",
+      "owner": "qb-pawnshop",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "prison:server:CheckChance",
       "category": "civilian",
       "reason": "摸手机只在服刑期间、且每人只成功一次（GotItems[src]），概率 1/100 由服务端抽。",

@@ -302,6 +302,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 14：qb-pawnshop 4 + qb-multicharacter 4**（2026-11-08）：qb-pawnshop 两条都是印钞机 ——
+  `sellPawnItems` 的单价来自客户端（`totalPrice = itemAmount * itemPrice`，卖一块石头要价一百万），
+  `pickupMelted` 的奖励表也来自客户端（`item.items[*].item.reward` 直接照单发物品，可要 99999 个金条），
+  `meltItemRemove` 的熔炼耗时同样采信客户端提交的条目。三者一律改成按服务端 `Config.PawnItems` /
+  `Config.MeltingItems` 查表结算，数量夹 1..100，非法物品直接丢弃。qb-multicharacter：
+  `loadUserData(cData)` 遇到 nil/非表/非字符串 citizenid 直接抛错（归属校验本身在 qb-core 的
+  `Player.Login` 里比对 license）；`createCharacter` 把客户端整张表 `newData.charinfo = data`
+  写进 players.charinfo（可夹带 isAdmin / money / 5KB 字符串），改成白名单字段 + 长度收敛、`cid`
+  归一化成数字；`deleteCharacter` 补类型校验（归属由 qb-core 的 `DeleteCharacter` 比对）。
+  **CC 复核后又补两条**：① `pickupMelted` 原来只是把奖励表换成服务端配置，仍然可以站在当铺门口
+  反复触发、无限领配置奖励（不需要原料、不需要等熔炼时间）—— 改成 `meltItemRemove` 扣料成功时登记
+  `PendingMelt[src]`（含 `readyAt`），取回只按这批发、到时间才发、发完清除、背包满时保留、
+  掉线清理；② `Config.PawnItems.price` 是 `math.random(50,100)`，客户端与服务端各自求值，
+  改成服务端权威结算后会出现「显示 80 实收 52」—— `getInv` 回调同时下发价格表，客户端展示用服务端价；
+  ③ 批次里逐条记 `paid[index]`：多奖励条目（rolex 是 diamond / goldbar / electronickit 三条）在
+  「一条发得出去、一条背包满」时整批保留，会把已经发出去的那几条重复发 —— 只有全发完才清批次。
+  测试：两个探针。旧版实测：`SELL_PAID_CONFIG_PRICE=false`、`SELL_AMOUNT_CAPPED=false`、
+  `SELL_UNKNOWN_ITEM_REJECTED=false`、`MELT_USES_SERVER_ENTRY=false`；`loadUserData` 三种坏参数各抛一次
+  `attempt to index a ... value (local 'cData')`，`CREATE_STRIPS_UNKNOWN_FIELDS=false`、
+  `CREATE_CID_NUMERIC=false`。
+  数字：未登记 **114 → 106**（qb 38 → 30；allowlist 143 → 151）。附带发现：
+  `job_deny_guard` 的判据其实是「任一 player 变量上的 `~=` + return」，把「Player 存在性 + 类型」
+  也算作职业守卫（换更严的 `.job` 判据会有 36 条历史事件翻面，本轮不动闸门，已在基线文档记录）。
+
 - **P1-3 批 13：qb-cityhall 5 + interact-sound 5**（2026-11-08）：qb-cityhall 最实在的一条是
   `getIDs` 直接绑到 `giveStarterItems()` —— **任何玩家可以反复触发，每次都给一份 phone / id_card /
   driver_license**（无限刷物品）；改成按背包里是否已有逐个跳过。其余：`requestId(item, hall)` 的
