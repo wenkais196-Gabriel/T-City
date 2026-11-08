@@ -310,8 +310,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `personalStash` 补了 gang 字段类型校验。custom-quest 那四条是「客户端报告任务进度」，
   原来只判了 `Player` 存在：`aviationHeightMonitorComplete()` **连参数都没有**，任何玩家随手发一条
   就能把自己「低空飞行 45 秒」的步骤标记完成 → 现在要求 questId 是字符串、确实在跑这单任务、
-  人**在飞行器里**（直升机/固定翼）、是驾驶员、离地 ≤150 米；`registerTrailer` 补「必须正在跑该任务」
-  与申报模型和实体模型一致；`entityTrackingFail` 补 questId 校验与任务归属、`reason` 截断 100 字
+  人**在载具里**（机型校验 best-effort：服务端原生不可用时放行，绝不 fail-closed —— 客户端发送后
+  会立即停掉监控，服务端拒绝就没有重试路径）；`registerTrailer` 补「必须正在跑该任务」与
+  **必填**的模型比对（写成 opt-in 的话少传一个参数就绕过）；`entityTrackingFail` 补 questId 校验与任务归属、`reason` 截断 100 字
   （它会进安全审计日志）；`cargoDamageResult` 在 `data` 为 nil 时直接抛错、四个数值无界 → 类型
   校验 + 各自夹取上限。客户端 `quest_logistics_client.lua` 现在把 `questId` 一起发上来。
   测试：两个探针。旧版实测：`cargoDamageResult` 在 nil/非表时分别抛

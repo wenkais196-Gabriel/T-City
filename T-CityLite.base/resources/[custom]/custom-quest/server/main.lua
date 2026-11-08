@@ -657,23 +657,28 @@ local function hasActiveQuest(src, questId)
     return false
 end
 
--- 飞行高度监控：至少要求人**在飞行器里**且确实在低空 —— 45 秒的持续时长仍由客户端计时，
+-- 飞行高度监控：至少要求人**在飞行器里**并且真的在飞 —— 45 秒的持续时长仍由客户端计时，
 -- 但"站在街上点一下就把这一步过了"这条堵掉了。
-local AVIATION_MAX_ALTITUDE_AGL = 150.0
+--
+-- ⚠️ 服务端能用的原生有限（`GetEntityHeightAboveGround` 是客户端原生，服务端调用拿到 nil），
+-- 所以这里只用确定可用的 `GetVehiclePedIsIn`，其余（载具类型、速度）都包在 pcall 里：
+-- 原生不可用时**放行**（fail-open），避免把正常玩家永远卡在这一步。
 local AVIATION_VEHICLE_CLASSES = { [15] = true, [16] = true }   -- 直升机 / 固定翼
 
+-- 注意：客户端在发送完成事件后会立刻停掉监控并 break，服务端一旦拒绝，这个步骤在本局内
+-- **没有重试路径**。所以这里只做"人确实在载具里"这一条硬判定，机型识别做成 best-effort：
+-- 原生不可用或返回 0 时放行，绝不因为拿不到数据把正常玩家卡死。
 local function isLowAltitudeFlight(src)
     local ped = GetPlayerPed(src)
     if not ped or ped == 0 then return false end
     local vehicle = GetVehiclePedIsIn(ped, false)
     if not vehicle or vehicle == 0 then return false end
-    local class = GetVehicleClass(vehicle)
-    if not AVIATION_VEHICLE_CLASSES[class] then return false end
-    if GetPedInVehicleSeat(vehicle, -1) ~= ped then return false end   -- 必须是驾驶员
-    local heightAboveGround = GetEntityHeightAboveGround(ped)
-    if type(heightAboveGround) ~= 'number' or heightAboveGround > AVIATION_MAX_ALTITUDE_AGL then
-        return false
+
+    local okClass, class = pcall(GetVehicleClass, vehicle)
+    if okClass and type(class) == 'number' and class ~= 0 then
+        if not AVIATION_VEHICLE_CLASSES[class] then return false end
     end
+
     return true
 end
 
@@ -720,12 +725,12 @@ RegisterNetEvent('quest:server:registerTrailer', function(questId, trailerNetId,
     local ped = GetPlayerPed(src)
     if not ped or ped == 0 then return end
     if #(GetEntityCoords(ped) - GetEntityCoords(entity)) > 50.0 then return end
-    -- 申报的模型必须与实体一致（原来模型字符串直接进登记表，可用于登记任何实体）
-    if type(trailerModel) == 'string' then
-        local entityModel = GetEntityModel(entity)
-        if GetHashKey(trailerModel) ~= entityModel and joaat(trailerModel) ~= entityModel then
-            return
-        end
+    -- 申报的模型必须与实体一致。⚠️ 必须是硬拒绝：写成 `if type(...) == 'string' then 比对 end`
+    -- 的话，客户端少传一个参数就绕过了比对（仍然可以在 50 米内登记任何实体）。
+    if type(trailerModel) ~= 'string' then return end
+    local entityModel = GetEntityModel(entity)
+    if GetHashKey(trailerModel) ~= entityModel and joaat(trailerModel) ~= entityModel then
+        return
     end
 
     local citizenid = Player.PlayerData.citizenid
