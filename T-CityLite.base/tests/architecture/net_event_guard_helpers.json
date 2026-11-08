@@ -236,6 +236,16 @@
         "table",
         "string"
       ]
+    },
+    "JusticeService.GetOwnInmate": {
+      "defined_at": "custom-justice/server/main.lua",
+      "requires_code": [
+        "player.PlayerData.citizenid",
+        "return inmates["
+      ],
+      "requires_raw": [],
+      "shape": "local_check",
+      "why": "调用者**自己**在押与否：只接受 Player 对象（source 派生），查不到别人的记录"
     }
   },
   "qb-management": {
@@ -511,6 +521,17 @@
         "pending.expiresAt"
       ],
       "why": "剧情决策只接受服务端刚刚下发的那一个（按 source 存 pending + 三元组全等 + 过期时间），拒绝跨任务/跨步骤/重放。"
+    }
+  },
+  "qb-shops": {
+    "nearCoords": {
+      "defined_at": "qb-shops/server/main.lua",
+      "requires_code": [
+        "GetPlayerPed(source)",
+        "GetEntityCoords(ped)",
+        "<= maxDistance"
+      ],
+      "why": "补货工资/开店界面都要求玩家站在对应坐标 N 米内（服务端复算，客户端报的坐标不采信）。"
     }
   }
 }
