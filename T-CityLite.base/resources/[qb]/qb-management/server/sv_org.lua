@@ -149,23 +149,11 @@ RegisterNetEvent('qb-orgmenu:server:stash', function()
         return
     end
 
-    local playerPed = GetPlayerPed(src)
-    local playerCoords = GetEntityCoords(playerPed)
-    local menuConfig = orgType == 'job' and Config.BossMenus or Config.GangMenus
-
-    if not menuConfig[orgName] then return end
-    local bossCoords = menuConfig[orgName]
-    for i = 1, #bossCoords do
-        local coords = bossCoords[i]
-        if #(playerCoords - coords) < 2.5 then
-            local stashName = 'boss_' .. orgName
-            exports['qb-inventory']:OpenInventory(src, stashName, {
-                maxweight = 4000000,
-                slots = 25,
-            })
-            return
-        end
-    end
+    if not CanOpenBossStash(src, Player, orgType, orgName) then return end
+    exports['qb-inventory']:OpenInventory(src, 'boss_' .. orgName, {
+        maxweight = 4000000,
+        slots = 25,
+    })
 end)
 
 -- ==============================================================

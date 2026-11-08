@@ -646,12 +646,45 @@ end
 -- v0.7.1: 飞行高度监控完成事件
 -- ==============================================================
 
-RegisterNetEvent('quest:server:aviationHeightMonitorComplete', function()
+-- 这几个"客户端报告进度"的事件都必须确认：① questId 是字符串；② 该玩家**真的在跑这个任务**。
+-- 原来只判了 `Player` 存在，任何玩家随手发一条就能把自己的任务步骤标记完成。
+local function hasActiveQuest(src, questId)
+    if type(questId) ~= 'string' then return false end
+    local quests = QuestManager.GetActiveQuests(src) or {}
+    for _, quest in ipairs(quests) do
+        if quest and quest.quest_id == questId then return true end
+    end
+    return false
+end
+
+-- 飞行高度监控：至少要求人**在飞行器里**且确实在低空 —— 45 秒的持续时长仍由客户端计时，
+-- 但"站在街上点一下就把这一步过了"这条堵掉了。
+local AVIATION_MAX_ALTITUDE_AGL = 150.0
+local AVIATION_VEHICLE_CLASSES = { [15] = true, [16] = true }   -- 直升机 / 固定翼
+
+local function isLowAltitudeFlight(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false end
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if not vehicle or vehicle == 0 then return false end
+    local class = GetVehicleClass(vehicle)
+    if not AVIATION_VEHICLE_CLASSES[class] then return false end
+    if GetPedInVehicleSeat(vehicle, -1) ~= ped then return false end   -- 必须是驾驶员
+    local heightAboveGround = GetEntityHeightAboveGround(ped)
+    if type(heightAboveGround) ~= 'number' or heightAboveGround > AVIATION_MAX_ALTITUDE_AGL then
+        return false
+    end
+    return true
+end
+
+-- 客户端报告的 questId 现在从客户端参数里取（原来 handler 没有参数，直接无条件广播事件）
+RegisterNetEvent('quest:server:aviationHeightMonitorComplete', function(questId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if not hasActiveQuest(src, questId) then return end
+    if not isLowAltitudeFlight(src) then return end
 
-    -- 广播 aviation_height_monitor custom_event 给任务系统
     exports['custom-quest']:OnCustomEvent(src, 'aviation_height_monitor', {
         completed = true,
         timestamp = os.time(),
@@ -676,6 +709,8 @@ RegisterNetEvent('quest:server:registerTrailer', function(questId, trailerNetId,
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
     if not QuestRegistry.GetTemplate(questId) then return end
+    -- 只有**正在跑这个任务**的玩家才能登记挂车
+    if not hasActiveQuest(src, questId) then return end
 
     -- 🔒 netId/实体由客户端提供，必须验证存在性与归属距离，防止注册他人实体后被回收删除
     local netId = tonumber(trailerNetId)
@@ -685,6 +720,13 @@ RegisterNetEvent('quest:server:registerTrailer', function(questId, trailerNetId,
     local ped = GetPlayerPed(src)
     if not ped or ped == 0 then return end
     if #(GetEntityCoords(ped) - GetEntityCoords(entity)) > 50.0 then return end
+    -- 申报的模型必须与实体一致（原来模型字符串直接进登记表，可用于登记任何实体）
+    if type(trailerModel) == 'string' then
+        local entityModel = GetEntityModel(entity)
+        if GetHashKey(trailerModel) ~= entityModel and joaat(trailerModel) ~= entityModel then
+            return
+        end
+    end
 
     local citizenid = Player.PlayerData.citizenid
 
@@ -789,6 +831,11 @@ RegisterNetEvent('quest:server:entityTrackingFail', function(questId, reason)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if type(questId) ~= 'string' or #questId > 64 then return end
+    if not hasActiveQuest(src, questId) then return end
+    -- reason 会进安全审计日志：必须截断，否则客户端可以往日志里塞任意长度内容
+    if type(reason) ~= 'string' then reason = 'unknown' end
+    reason = reason:sub(1, 100)
 
     local citizenid = Player.PlayerData.citizenid
 

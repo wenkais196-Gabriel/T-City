@@ -54,27 +54,36 @@ QBCore.Functions.CreateCallback('qb-bossmenu:server:GetEmployees', function(sour
 	cb(employees)
 end)
 
+-- 仓库开门条件：本人是这个组织（职业/帮派）的 boss，且站在对应菜单点 2.5 米内。
+-- 三个模块（sv_boss / sv_gang / sv_org）共用；抽出来也让闸门能按 `if not CanOpenBossStash(...)`
+-- 的 deny-early 形状核对（原来的 `if not playerJob.isboss then return end` 闸门认不出来）。
+function CanOpenBossStash(src, Player, orgType, orgName)
+	if not Player or type(orgType) ~= 'string' or type(orgName) ~= 'string' then return false end
+	local data = orgType == 'gang' and Player.PlayerData.gang or Player.PlayerData.job
+	if type(data) ~= 'table' or not data.isboss or data.name ~= orgName then return false end
+	local menuConfig = orgType == 'gang' and Config.GangMenus or Config.BossMenus
+	local bossCoords = menuConfig and menuConfig[orgName] or nil
+	if type(bossCoords) ~= 'table' then return false end
+	local ped = GetPlayerPed(src)
+	if not ped or ped == 0 then return false end
+	local playerCoords = GetEntityCoords(ped)
+	for index = 1, #bossCoords do
+		local coords = bossCoords[index]
+		if coords and #(playerCoords - coords) < 2.5 then return true end
+	end
+	return false
+end
+
 RegisterNetEvent('qb-bossmenu:server:stash', function()
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
 	if not Player then return end
 	local playerJob = Player.PlayerData.job
-	if not playerJob.isboss then return end
-	local playerPed = GetPlayerPed(src)
-	local playerCoords = GetEntityCoords(playerPed)
-	if not Config.BossMenus[playerJob.name] then return end
-	local bossCoords = Config.BossMenus[playerJob.name]
-	for i = 1, #bossCoords do
-		local coords = bossCoords[i]
-		if #(playerCoords - coords) < 2.5 then
-			local stashName = 'boss_' .. playerJob.name
-			exports['qb-inventory']:OpenInventory(src, stashName, {
-				maxweight = 4000000,
-				slots = 25,
-			})
-			return
-		end
-	end
+	if not CanOpenBossStash(src, Player, 'job', playerJob and playerJob.name) then return end
+	exports['qb-inventory']:OpenInventory(src, 'boss_' .. playerJob.name, {
+		maxweight = 4000000,
+		slots = 25,
+	})
 end)
 
 -- Grade Change

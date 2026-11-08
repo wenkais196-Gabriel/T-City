@@ -415,10 +415,25 @@ end)
 -- citizenid → questId → CargoDamageRecord
 local CargoDamageRecords = {}
 
+-- 客户端上报的货运损伤：只写**自己**的记录，但内容必须校验 ——
+-- `data` 为 nil 时 `data.questId` 会直接抛错；数值不夹取的话可以上报负数/天文数字影响结算评分。
+local MAX_COLLISIONS = 500
+local MAX_DAMAGE_PCT = 100
+local MAX_HEALTH_DELTA = 2000
+
+local function clampNumber(value, limit)
+    local number = tonumber(value)
+    if not number then return 0 end
+    if number < 0 then return 0 end
+    if number > limit then return limit end
+    return number
+end
+
 RegisterNetEvent('quest:server:cargoDamageResult', function(data)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if type(data) ~= 'table' or type(data.questId) ~= 'string' or #data.questId > 64 then return end
 
     local citizenid = Player.PlayerData.citizenid
     if not CargoDamageRecords[citizenid] then
@@ -426,14 +441,16 @@ RegisterNetEvent('quest:server:cargoDamageResult', function(data)
     end
     CargoDamageRecords[citizenid][data.questId] = {
         questId = data.questId,
-        collisionCount = data.collisionCount or 0,
-        damagePct = data.damagePct or 0,
-        bodyHealthDelta = data.bodyHealthDelta or 0,
-        engineHealthDelta = data.engineHealthDelta or 0,
+        collisionCount = clampNumber(data.collisionCount, MAX_COLLISIONS),
+        damagePct = clampNumber(data.damagePct, MAX_DAMAGE_PCT),
+        bodyHealthDelta = clampNumber(data.bodyHealthDelta, MAX_HEALTH_DELTA),
+        engineHealthDelta = clampNumber(data.engineHealthDelta, MAX_HEALTH_DELTA),
     }
 
     print(('[logistics-damage] 📦 %s | 任务: %s | 碰撞: %d 次 | 损伤: %d%%'):format(
-        citizenid, data.questId, data.collisionCount, data.damagePct))
+        citizenid, data.questId,
+        CargoDamageRecords[citizenid][data.questId].collisionCount,
+        CargoDamageRecords[citizenid][data.questId].damagePct))
 end)
 
 -- ==============================================================

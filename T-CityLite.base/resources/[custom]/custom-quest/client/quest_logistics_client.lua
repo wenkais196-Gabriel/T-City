@@ -42,6 +42,7 @@ local EntityTracker = {
 
 local heightMonitor = {
     active = false,
+    questId = nil,          -- 服务端要用它确认"这个玩家真的在跑这单任务"
     maxHeight = 150.0,
     requiredDuration = 45,
     lowAltitudeTime = 0,      -- 累计低空时间（秒）
@@ -57,6 +58,7 @@ RegisterNetEvent('quest:client:activateHeightMonitor', function(data)
     if not data then return end
 
     heightMonitor.active = true
+    heightMonitor.questId = data.questId
     heightMonitor.maxHeight = data.max_height or 150.0
     heightMonitor.requiredDuration = data.check_duration_sec or 45
     heightMonitor.lowAltitudeTime = 0
@@ -142,7 +144,7 @@ Citizen.CreateThread(function()
                 QBCore.Functions.Notify('✅ 已成功穿越雷达网！', 'success')
 
                 -- 发送事件让 quest 系统推进步骤
-                TriggerServerEvent('quest:server:aviationHeightMonitorComplete')
+                TriggerServerEvent('quest:server:aviationHeightMonitorComplete', heightMonitor.questId)
                 break
             elseif heightMonitor.lowAltitudeTime >= heightMonitor.requiredDuration - 10 then
                 -- 快完成了，给提示
