@@ -44,14 +44,14 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 |---|---|---|---|---|---|
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
 | custom `[custom]` | 133 | 85 | 48 | 0 | 覆盖率 **133/133 = 100%**（批 18/19：剧情决策委托判定、遥测预算；并修复批 17 误删的 justice helper 登记） |
-| qb `[qb]` | 216 | 109 | 99 | 8 | 覆盖率 **208/216 ≈ 96%**（批 19：商铺补货工资加冷却、PaySlip 收成服务端、库存/开店参数有界） |
+| qb `[qb]` | 216 | 109 | 107 | **0** | 覆盖率 **216/216 = 100%**（批 20：qb-weed 五个 handler 的来源/参数校验 + plantCache 作用域修复；qb-streetraces 三条登记） |
 | other（system / standalone / voice / cfx-default） | 75 | 9 | 7 | 59 | 覆盖率 **16/75 ≈ 21%**（批 18：中控屏车牌三项 + 生产模式冻结；其余多为 vendored 库，见 §6） |
-| **合计** | **439** | 208 | 164 | **67** | — |
+| **合计** | **439** | 208 | 172 | **59** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
-**债的分布不是均匀的**（批 19 后重算）：67 条未登记里 **14 条在启动集内**（`started: true`），
+**债的分布不是均匀的**（批 20 后重算）：59 条未登记里 **14 条在启动集内**（`started: true`），
 58 条在 12 个不启动的资源里（其中 `monitor` 一家 33 条，txAdmin 自带，口径见 §6）。启动集内的
 在启动集内的 14 条**全是 vendored 基础库**：`PolyZone` 4、`pma-voice` 3、`baseevents` 3、
 `sessionmanager` 2、`hardcap` 1、`atom_nodes` 1 —— 按 §6 口径**不改**（改了下一次升级就被覆盖）。基线里每个资源都带 `started`
@@ -77,7 +77,7 @@ if not Player or type(itemName) ~= 'string' then return end   -- 被算作"职�
 
 ## 3.1 资源内部 helper 登记表（2026-11-01 第 2 批）
 
-全仓未登记事件里（当前 67），有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
+全仓未登记事件里（当前 59），有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
 （`CanModifyPlate` / `IsEmergencyService` / `onDutyOfficer` …），按固定 token 名单扫不出来。
 直接把这些名字塞进 token 名单等于"名字像校验就算校验"，所以另开了
 `tests/architecture/net_event_guard_helpers.json`：
@@ -183,7 +183,7 @@ cd T-CityLite.base && python tests/architecture/net_event_baseline.py --write
 |---|---|---|
 | ① 引擎层（qb-core）100% | ✅ 15/15 | — |
 | ② `[custom]` ≥ 80% | **100%（133/133）✅ 达成**（批 19） | `[custom]` 已零未登记；上一轮的 13 条由批 15–19 逐条修完或登记（`custom-quest` 的 `aviationHeightMonitorComplete` 在批 15 加了「必须在跑该任务 + 在载具里」的判定，不验高度）。 |
-| ③ `[qb]` 登记为带 expires 的债务 | ✅ 各资源各有 owner + expires（2027-03-31）：`[qb]` 剩 8 条未登记、other 剩 59 条（其中 `monitor` 33 条为 vendored，见 §6） | 到期前要么修，要么续期并说明 |
+| ③ `[qb]` 登记为带 expires 的债务 | ✅ `[qb]` 与 `[custom]` 都已归零；剩 59 条全在 other（其中 `monitor` 33 条为 txAdmin 自带、其余 26 条是 FiveM 基础库，见 §6） | 到期前要么修，要么续期并说明 |
 
 其它已知残余（不阻塞本步，但要在下一轮处理）：
 

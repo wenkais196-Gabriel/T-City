@@ -77,6 +77,11 @@ RegisterNetEvent('qb-streetraces:RaceWon', function(RaceId)
     local xPlayer = QBCore.Functions.GetPlayer(src)
     if not xPlayer then return end
 
+    -- RaceId 来自客户端：统一转成数字，非数字直接拒（表/字符串用作表键只是查不到，
+    -- 但规范化之后 `Races[RaceId]` 的命中面收窄到"服务端自己发出的 id"）
+    RaceId = tonumber(RaceId)
+    if not RaceId then return end
+
     local race = Races[RaceId]
     if not race or not race.started then
         TriggerClientEvent('QBCore:Notify', src, 'Invalid race', 'error')
@@ -108,6 +113,11 @@ RegisterNetEvent('qb-streetraces:JoinRace', function(RaceId)
     if not src or src == 0 then return end
     local xPlayer = QBCore.Functions.GetPlayer(src)
     if not xPlayer then return end
+
+    -- RaceId 来自客户端：统一转成数字，非数字直接拒（表/字符串用作表键只是查不到，
+    -- 但规范化之后 `Races[RaceId]` 的命中面收窄到"服务端自己发出的 id"）
+    RaceId = tonumber(RaceId)
+    if not RaceId then return end
 
     local race = Races[RaceId]
     if not race or race.started then
