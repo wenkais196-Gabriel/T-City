@@ -198,6 +198,11 @@ RegisterNetEvent('hospital:server:LeaveBed', function(id, hospitalIndex)
 		if not isOnDutyEMS(src, Player) then return end
 	end
 	BedOccupant[key] = nil
+	-- 顺手清掉这个玩家残留的占用记录：客户端的 hospitalLocation 可能是旧值（换过院），
+	-- 键对不上就会留下"永远被占"的床位。
+	for otherKey, owner in pairs(BedOccupant) do
+		if owner == src then BedOccupant[otherKey] = nil end
+	end
 	TriggerClientEvent('hospital:client:SetBed', -1, id, false, hospitalIndex)
 end)
 
@@ -305,6 +310,9 @@ RegisterNetEvent('hospital:server:TreatWounds', function(playerId)
 	exports['qb-inventory']:RemoveItem(src, 'bandage', 1, false, 'hospital:server:TreatWounds')
 	TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['bandage'], 'remove')
 
+	-- 治疗也算"刚被服务端救过"：客户端 `HealInjuries('full')` 会走 ResetAll()，
+	-- 里面包含 resetHungerThirst —— 不标记的话术后饥饿/口渴不会重置。
+	markRevived(Patient.PlayerData.source)
 	if deptConfig and deptConfig.allowSurgery then
 		TriggerClientEvent('hospital:client:HealInjuries', Patient.PlayerData.source, 'full')
 		print(('[EMS-TREAT] SURGERY doctor %s fully healed patient %s'):format(GetPlayerName(src), GetPlayerName(playerId)))
