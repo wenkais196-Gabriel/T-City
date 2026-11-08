@@ -827,8 +827,8 @@
     {
       "name": "qb-lapraces:server:SetupRace",
       "category": "civilian",
-      "reason": "把一场已有比赛放进「开放中」列表，带 Waiting/Started 状态判定 + 5 分钟自动回收；Laps 进 AvailableRaces。",
-      "evidence": "main.lua SetupRace — Races[RaceId] ~= nil / not Waiting / not Started 三重判定 + SetTimeout 回收",
+      "reason": "只有赛道创建者能把它挂到开放列表（Creator 比对），且 Waiting/Started 三重状态判定 + 5 分钟自动回收；Laps 夹在 1~99。",
+      "evidence": "main.lua SetupRace — Creator ~= Player.PlayerData.citizenid / tonumber(Laps) 1..99",
       "file": "[qb]/qb-lapraces/server/main.lua",
       "owner": "qb-lapraces",
       "expires": "2027-03-31"
