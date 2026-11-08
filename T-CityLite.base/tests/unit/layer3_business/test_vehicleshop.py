@@ -148,7 +148,7 @@ MySQL = {}
 MySQL.scalar = { await = function(sql, params) table.insert(__test.scalars, { sql=sql, params=params }) return nil end }
 MySQL.single = { await = function(sql, params) return { citizenid = "CID001", vehicle = "comet2", balance = 0, plate = "ABC123" } end }
 MySQL.query = { await = function(sql, params) return {} end }
-MySQL.update = function(sql, params, cb) table.insert(__test.updates, { sql=sql }) if cb then cb(1) end end
+MySQL.update = function(sql, params, cb) table.insert(__test.updates, { sql=sql, params=params }) if cb then cb(1) end end
 -- oxmysql 的 insert 回调实际返回 { insertId, affectedRows } 表（见 oxmysql/dist/build.js）
 MySQL.insert = function(sql, params, cb) table.insert(__test.inserts, { sql=sql }) if cb then cb({ insertId = 1, affectedRows = 1 }) end end
 MySQL.rawExecute = { await = function(sql, params) return {} end }
@@ -705,12 +705,40 @@ evt('CID001')
         assert r['ok'], f"Lua error: {r['stderr']}"
     
     def test_finance_payment_makes_payment(self):
-        """分期还款成功"""
+        """分期还款成功 —— 余额/最低额一律取 DB，客户端传的 balance 不采信"""
         r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
+__test.updates = {}
+-- DB 里真实余额 50000 / 最低 10000 / 还剩 5 期
+MySQL.single.await = function(sql, params)
+    return { balance = 50000, paymentamount = 10000, paymentsleft = 5 }
+end
 local evt = __test['evt_qb_vehicleshop_server_financePayment']
+-- 客户端谎报 balance=120000：服务端必须忽略
 evt(15000, { vehiclePlate = 'ABC123', balance = 120000, paymentsLeft = 12, paymentAmount = 10000 })
 assert(#__test.money_removed >= 1, "payment should remove money")
+assert(__test.money_removed[1].amt == 15000, "应扣客户端请求的 15000")
+assert(#__test.updates >= 1, "payment should update DB")
+-- 新余额 = 50000 - 15000 = 35000（不是 120000 - 15000）
+local found = nil
+for _, u in ipairs(__test.updates) do
+    if u.sql:find('balance = ?', 1, true) then found = u break end
+end
+assert(found ~= nil, "没有发出还款 UPDATE")
+assert(found.params[1] == 35000, "新余额必须基于 DB 值: " .. tostring(found.params[1]))
+""")
+        assert r['ok'], f"Lua error: {r['stderr']}"
+
+    def test_finance_payment_rejects_foreign_plate(self):
+        """别人的车牌（DB 查不到行）→ 一分钱都不动"""
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
+__test.money_removed = {}
+__test.updates = {}
+MySQL.single.await = function(sql, params) return nil end
+local evt = __test['evt_qb_vehicleshop_server_financePayment']
+evt(15000, { vehiclePlate = 'NOTMINE', balance = 120000, paymentsLeft = 12, paymentAmount = 10000 })
+assert(#__test.money_removed == 0, "不该从别人车牌的请求里扣钱")
+assert(#__test.updates == 0, "不该更新别人的分期记录")
 """)
         assert r['ok'], f"Lua error: {r['stderr']}"
     
@@ -752,17 +780,26 @@ assert(#__test.inserts >= 1, "vehicle should be inserted into DB")
         assert r['ok'], f"Lua error: {r['stderr']}"
     
     def test_finance_payment_full(self):
-        """全额结清"""
+        """全额结清 —— 余额取 DB，客户端谎报 vehBalance 无效（原来付 1 块能清零别人的分期）"""
         r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 __test.updates = {}
 source = 1
 local player = QBCore.Functions.GetPlayer(1)
 player.PlayerData.money.cash = 200000
+MySQL.single.await = function(sql, params) return { balance = 80000 } end
 local evt = __test['evt_qb_vehicleshop_server_financePaymentFull']
-evt({ vehBalance = 80000, vehPlate = 'ABC123' })
+evt({ vehBalance = 1, vehPlate = 'ABC123' })
 assert(#__test.money_removed >= 1, "payoff should remove money")
+assert(__test.money_removed[1].amt == 80000, "应按 DB 余额 80000 收，而不是客户端说的 1")
 assert(#__test.updates >= 1, "payoff should update DB")
+local found = nil
+for _, u in ipairs(__test.updates) do
+    if u.sql:find('balance = 0', 1, true) then found = u break end
+end
+assert(found ~= nil, "没有发出结清的 UPDATE")
+assert(found.sql:find('AND citizenid = ?', 1, true) ~= nil, "结清 UPDATE 必须带 citizenid 条件")
+assert(found.params[1] == 'ABC123', "应只更新请求里那台车")
 """)
         assert r['ok'], f"Lua error: {r['stderr']}"
 
@@ -1047,8 +1084,9 @@ assert(__test.callbacks['qb-vehicleshop:server:getVehicles'] ~= nil)
         r = run_vehicleshop_test([BUS_LUA, FINANCE_LC_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 source = 1
+MySQL.single.await = function(sql, params) return { balance = 120000, paymentamount = 10000, paymentsleft = 12 } end
 local evt = __test['evt_qb_vehicleshop_server_financePayment']
-evt(15000, { vehiclePlate='ABC123', balance=120000, paymentsLeft=12, paymentAmount=10000 })
+evt(15000, { vehiclePlate='ABC123' })
 assert(#__test.money_removed >= 1, "payment should remove money after split")
 """)
         assert r['ok'], f"Split finance payment failed: {r['stderr']}"
