@@ -22,6 +22,11 @@ local acceptLocks = {}
 -- 现在接单时按 Config 算好并留档，结算只认这份记录，客户端传的值一律不采信。
 local activeDeliveries = {}
 
+-- 掉线时把"未结算的配送"记到 citizenid 名下，等玩家**重新上线**再结算：
+-- 那时玩家在线，操作背包是安全的（离线装卸 inventory 会和存档打架）。
+-- 结算规则：货还在 → 回收并退还押金；货没了 → 押金不退（货已经被用掉了）。
+local pendingSettlements = {}
+
 local function DeliveryTimes(distance)
     local baseTime = math.ceil(distance / Config.DeliveryAvgSpeed) + Config.DeliveryFixedTime
     return {
@@ -35,8 +40,52 @@ end
 -- 新玩家可能把旧单结算掉（CC 复核实测：没交押金也能拿到报酬+押金）。
 AddEventHandler('playerDropped', function()
     local src = source
+    local record = activeDeliveries[src]
+    if record and record.citizenid then
+        pendingSettlements[record.citizenid] = {
+            itemName = Config.DeliveryItems[record.item].item,
+            amount = record.amount,
+            deposit = record.deposit,
+        }
+    end
     activeDeliveries[src] = nil
     acceptLocks[src] = nil
+end)
+
+-- 玩家重新上线：结算上一次掉线留下的配送（在线状态下操作背包才安全）
+AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
+    if not Player or not Player.PlayerData then return end
+    local citizenid = Player.PlayerData.citizenid
+    local pending = pendingSettlements[citizenid]
+    if not pending then return end
+
+    -- qb-inventory 是在自己的 QBCore:Server:PlayerLoaded 里把 RemoveItem 注入到 Player.Functions 的；
+    -- 它热重启/加载顺序变化时这里会是 nil —— 此时**保留 pending**，等玩家下次上线再结算。
+    if type(Player.Functions.RemoveItem) ~= 'function' then
+        print(('[qb-drugs] drop settlement skipped for %s: qb-inventory 未就绪，保留待下次'):format(citizenid))
+        return
+    end
+
+    local source = Player.PlayerData.source
+    local ok, removed = pcall(Player.Functions.RemoveItem, pending.itemName, pending.amount, false, 'qb-drugs:dropSettlement')
+    if not ok then
+        print(('[qb-drugs] drop settlement failed for %s: %s（保留 pending）'):format(citizenid, tostring(removed)))
+        return
+    end
+
+    pendingSettlements[citizenid] = nil            -- 结算成功后消费，防重复
+
+    if removed then
+        Player.Functions.AddMoney('cash', pending.deposit, '配送押金退还(掉线结算)')
+        TriggerClientEvent('QBCore:Notify', source,
+            ('上次掉线的配送已取消：回收 %s x%d，退还押金 $%s'):format(pending.itemName, pending.amount, Money(pending.deposit)),
+            'primary')
+        print(('[qb-drugs] drop settlement: %s refunded $%s'):format(citizenid, Money(pending.deposit)))
+    else
+        TriggerClientEvent('QBCore:Notify', source,
+            ('上次掉线的配送货已不在背包，押金 $%s 不退'):format(Money(pending.deposit)), 'error')
+        print(('[qb-drugs] drop settlement: %s forfeited $%s (item gone)'):format(citizenid, Money(pending.deposit)))
+    end
 end)
 
 RegisterNetEvent('qb-drugs:server:acceptDelivery', function(deliveryData)

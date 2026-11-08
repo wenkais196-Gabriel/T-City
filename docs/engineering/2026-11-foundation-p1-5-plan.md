@@ -164,6 +164,15 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 17. 新增 test_drugs_delivery_authority.py 与同目录 fixtures 下的 drugs_delivery_probe 探针：mock 掉 FiveM
     运行时（含**真的**定时器队列），真的触发 net event 断言钱与货的走向。
 
+### 阶段 G（P1）  ✅ 2026-11-08 完成（掉线配送结算）
+
+18. **掉线不再白扣押金**：`playerDropped` 把未结算配送记到 citizenid；重新上线时结算 ——
+    货在就回收 + 全额退押金，货没了就不退。不在离线阶段动背包（会和存档打架）。
+19. **结算顺序**：先确认 `RemoveItem` 可用 → `pcall` 调用 → 成功后才消费 pending；qb-inventory 未就绪
+    （热重启/加载顺序）时保留 pending，等下次上线补退。
+19. 新增用例 `test_drop_settlement_refunds_only_when_goods_are_recovered`（退 500 / 货清零、货没了退 0），
+    反向验证：退回上一版实现 → 红。
+
 ## 5. 交付标准（DoD）
 
 | 编号 | 断言 | 验证方式 | 反向形状 |
@@ -210,9 +219,10 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 - P1-3 最后 13 个 net event（含需服务端验高的 `aviationHeightMonitorComplete`）挂着 2027-03-31 的到期日。
 - 真机 G13（选人界面停 5 分钟 / 换角色 / 连续加钱）当时未做完，本阶段 G12 一并补。
 
-- **掉线配送的经济策略未定**：玩家接单后掉线，押金不退、货留在背包（与"接单后不完成"等价）。
-  三个选项待拍板：①按 citizenid 持久化活跃单（重连可续，需要客户端配合重建倒计时）；
-  ②掉线退款并回收货物（需要离线装卸 inventory，有存档竞态风险）；③维持现状并写进玩家须知。
-  当前取 ③，等产品判断。
+- **掉线配送已解决**（阶段 G）：不在离线阶段动背包（会和存档打架），改为把未结算配送记到
+  citizenid，等玩家**重新上线**（在线、背包可安全操作）时结算 —— 货在就回收 + 全退押金，
+  货没了就不退。代价是"掉线当下"押金仍处于冻结状态，最长冻结到玩家下次上线。
+- **pending 配送结算无 TTL**：玩家永不上线则 `pendingSettlements[citizenid]` 常驻内存（条目小），
+  服务器重启会丢（押金回到「白丢」）。需要落表或加过期时间，属 P2。
 - **client 侧 19 个顶层缓存文件未修**：`onClientResourceStart('qb-core')` 的跨客户端语义需要
   真人客户端在场才能验（本次实机时客户端未连上），修法与服务端一致（线程重试），但没验证前不动。

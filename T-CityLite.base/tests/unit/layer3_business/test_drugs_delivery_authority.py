@@ -85,3 +85,20 @@ def test_dropped_player_cannot_settle_or_be_impersonated():
     assert data["PAID_COUNT_DELTA"][2] == "0", "source 复用后新角色结算了别人留下的记录"
     # 掉线回调清记录后，同一个 source 再发结算也不发钱
     assert data["PAID_COUNT_DELTA"][3] == "0", "playerDropped 没有清记录，掉线后仍能结算"
+
+
+def test_drop_settlement_refunds_only_when_goods_are_recovered():
+    data = _run_probe()
+    # 掉线时货还在背包 → 重新上线：回收货物 + 全额退押金，净额 0
+    assert data["REFUND"][0] == "500", "重新上线没有退还押金（玩家白丢 500）"
+    assert data["ITEM_LEFT"][0] == "0", "退还押金了但货物没回收 —— 等于白送一件货"
+    # 掉线前货已被用掉 → 押金不退
+    assert data["REFUND"][1] == "0", "货都不在了还退押金，等于可以白拿一件货"
+
+
+def test_drop_settlement_survives_missing_inventory_api():
+    data = _run_probe()
+    # qb-inventory 未就绪（RemoveItem 为 nil）时不结算、也不丢 pending
+    assert data["REFUND"][2] == "0", "qb-inventory 未就绪时仍然动了钱"
+    # 下次上线（API 已注入）再结算，押金要补退
+    assert data["REFUND"][3] == "500", "pending 被提前消费，玩家押金永久丢失"
