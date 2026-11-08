@@ -16,15 +16,15 @@
     },
     "custom": {
       "events": 133,
-      "guarded": 83,
+      "guarded": 85,
       "allowlisted": 48,
-      "unguarded": 2
+      "unguarded": 0
     },
     "qb": {
       "events": 216,
-      "guarded": 106,
-      "allowlisted": 97,
-      "unguarded": 13
+      "guarded": 109,
+      "allowlisted": 99,
+      "unguarded": 8
     },
     "other": {
       "events": 75,
@@ -128,9 +128,9 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 7,
-      "guarded": 4,
+      "guarded": 6,
       "allowlisted": 1,
-      "unguarded": 2,
+      "unguarded": 0,
       "started": true
     },
     "custom-main": {
@@ -488,9 +488,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 5,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 5,
+      "guarded": 3,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": false
     },
     "qb-storerobbery": {
@@ -611,10 +611,6 @@
     "connectqueue": [
       "Queue:playerActivated"
     ],
-    "custom-justice": [
-      "justice:server:requestReduction",
-      "justice:server:sentenceComplete"
-    ],
     "hardcap": [
       "hardcap:playerActivated"
     ],
@@ -675,13 +671,6 @@
       "pma-voice:setPlayerRadio",
       "pma-voice:setTalkingOnRadio"
     ],
-    "qb-shops": [
-      "qb-shops:server:DoBail",
-      "qb-shops:server:PaySlip",
-      "qb-shops:server:RestockShopItems",
-      "qb-shops:server:UpdateShopItems",
-      "qb-shops:server:openShop"
-    ],
     "qb-streetraces": [
       "qb-streetraces:JoinRace",
       "qb-streetraces:NewRace",
@@ -737,14 +726,6 @@
       "batch": "other",
       "unguarded": 1,
       "owner": "connectqueue",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "custom-justice",
-      "batch": "custom",
-      "unguarded": 2,
-      "owner": "custom-justice",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
@@ -809,14 +790,6 @@
       "batch": "other",
       "unguarded": 3,
       "owner": "pma-voice",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-shops",
-      "batch": "qb",
-      "unguarded": 5,
-      "owner": "qb-shops",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },

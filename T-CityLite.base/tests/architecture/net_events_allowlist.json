@@ -1374,6 +1374,24 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-shops:server:DoBail",
+      "file": "[qb]/qb-shops/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只扣/退**自己**的押金（cash 优先、bank 兜底，走 Player.Functions.RemoveMoney）。本轮补了 Player 判空与 bool 类型校验（原来 Player 为 nil 会抛错）。",
+      "evidence": "qb-shops DoBail — if not Player then return end / if type(bool) ~= 'boolean' then return end",
+      "owner": "qb-shops",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-shops:server:UpdateShopItems",
+      "file": "[qb]/qb-shops/server/main.lua",
+      "category": "civilian",
+      "reason": "库存扣减（买家结账时调用）。防护：shop 必须是配置里的门店且 useStock、slot 必须是该店真实商品下标、amount 必须是正数并夹到 1000（原来负数会把库存加上去 = 白拿货，坏 slot 直接抛错）。",
+      "evidence": "qb-shops UpdateShopItems — type(itemData) ~= 'table' / location.products[slot] / if amount <= 0 then return end",
+      "owner": "qb-shops",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "qb-storerobbery:server:SafeReward",
       "category": "civilian",
       "reason": "保险箱收益：3 秒限流 + custom-crime 授权 + 距离判定，金额由服务端 math.random 生成。",
