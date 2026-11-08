@@ -1,5 +1,14 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- 老板权限的唯一判定入口（闸门按 net_event_guard_helpers.json 登记，
+-- 调用点必须是 `if not IsJobBoss(Player) then ... return end` 形状）
+local function IsJobBoss(Player)
+	if Player and Player.PlayerData and Player.PlayerData.job and Player.PlayerData.job.isboss == true then
+		return true
+	end
+	return false
+end
+
 -- 🔧 安全审计：不再永久封禁，改为记录 + 通知
 local function SecurityAuditLog(src, action, detail)
 	local playerName = GetPlayerName(src)
@@ -14,7 +23,7 @@ QBCore.Functions.CreateCallback('qb-bossmenu:server:GetEmployees', function(sour
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
 
-	if not Player.PlayerData.job.isboss then
+	if not IsJobBoss(Player) then
 		SecurityAuditLog(src, 'GetEmployees', '非 Boss 尝试获取员工列表')
 		return
 	end
@@ -72,6 +81,7 @@ end)
 RegisterNetEvent('qb-bossmenu:server:GradeUpdate', function(data)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
 	local Employee = QBCore.Functions.GetPlayerByCitizenId(data.cid) or QBCore.Functions.GetOfflinePlayerByCitizenId(data.cid)
 
 	-- 🔒 Security: 距离校验 — Boss 必须在对应 Boss 菜单点附近
@@ -89,7 +99,7 @@ RegisterNetEvent('qb-bossmenu:server:GradeUpdate', function(data)
 		return
 	end
 
-	if not Player.PlayerData.job.isboss then
+	if not IsJobBoss(Player) then
 		SecurityAuditLog(src, 'GradeUpdate', '非 Boss 尝试晋升员工')
 		return
 	end
@@ -117,6 +127,7 @@ end)
 RegisterNetEvent('qb-bossmenu:server:FireEmployee', function(target)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
 	local Employee = QBCore.Functions.GetPlayerByCitizenId(target) or QBCore.Functions.GetOfflinePlayerByCitizenId(target)
 
 	-- 🔒 Security: 距离校验
@@ -134,7 +145,7 @@ RegisterNetEvent('qb-bossmenu:server:FireEmployee', function(target)
 		return
 	end
 
-	if not Player.PlayerData.job.isboss then
+	if not IsJobBoss(Player) then
 		SecurityAuditLog(src, 'FireEmployee', '非 Boss 尝试解雇员工')
 		return
 	end
@@ -166,6 +177,7 @@ end)
 RegisterNetEvent('qb-bossmenu:server:HireEmployee', function(recruit)
 	local src = source
 	local Player = QBCore.Functions.GetPlayer(src)
+	if not Player then return end
 	local Target = QBCore.Functions.GetPlayer(recruit)
 
 	-- 🔒 Security: 距离校验
@@ -183,9 +195,18 @@ RegisterNetEvent('qb-bossmenu:server:HireEmployee', function(recruit)
 		return
 	end
 
-	if not Player.PlayerData.job.isboss then
+	if not IsJobBoss(Player) then
 		SecurityAuditLog(src, 'HireEmployee', '非 Boss 尝试招募员工')
 		return
+	end
+
+	-- 目标必须在 Boss 附近：原来只看 Boss 是否在菜单点，能隔着地图把任意玩家塞进自己职业
+	if Target then
+		local targetCoords = GetEntityCoords(GetPlayerPed(Target.PlayerData.source))
+		if #(playerCoords - targetCoords) > 5.0 then
+			SecurityAuditLog(src, 'HireEmployee', '招募目标不在附近 — 疑似远程发包')
+			return
+		end
 	end
 
 	if Target and Target.Functions.SetJob(Player.PlayerData.job.name, 0) then
@@ -257,7 +278,7 @@ RegisterNetEvent('qb-bossmenu:server:TransferOwnership', function(data)
 	end
 
 	-- 🔒 安全校验
-	if not Player.PlayerData.job.isboss then
+	if not IsJobBoss(Player) then
 		SecurityAuditLog(src, 'TransferOwnership', '非 Boss 尝试转让所有权')
 		return
 	end

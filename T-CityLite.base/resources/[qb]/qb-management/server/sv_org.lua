@@ -354,6 +354,13 @@ RegisterNetEvent('qb-orgmenu:server:HireMember', function(data)
         return
     end
 
+    -- 目标必须在 Boss 附近：原来只校验 Boss 在菜单点，能隔着地图把任意玩家塞进组织
+    local targetCoords = GetEntityCoords(GetPlayerPed(Target.PlayerData.source))
+    if #(GetEntityCoords(GetPlayerPed(src)) - targetCoords) > 5.0 then
+        SecurityAuditLog(src, 'HireMember', '招募目标不在附近 — 疑似远程发包')
+        return
+    end
+
     local success
     if orgType == 'job' then
         success = Target.Functions.SetJob(data.orgName, 0)
