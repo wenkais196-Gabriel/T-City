@@ -187,6 +187,8 @@ end)
 QBCore.Functions.CreateCallback('qb-clothing:server:getOutfits', function(source, cb)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    -- 回调可能在角色还没加载完时被调用（Player 为 nil），原来会直接索引崩
+    if not Player then cb({}); return end
     local anusVal = {}
 
     local result = MySQL.query.await('SELECT * FROM player_outfits WHERE citizenid = ?', { Player.PlayerData.citizenid })
