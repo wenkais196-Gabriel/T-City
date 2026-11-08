@@ -352,6 +352,8 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
         end
     end
     local leavingRacer = Races[raceId].Racers[Player.PlayerData.citizenid]
+    -- 不在参赛名单里（比赛已结算/从未加入）：直接退出，别给已结束的比赛留下 NotFinished 残渣
+    if not leavingRacer then return end
     -- 🔒 已经服务端确认完赛的人离开，不该再补一条 DNF
     if leavingRacer and leavingRacer.FinishHandled then
         Races[raceId].Racers[Player.PlayerData.citizenid] = nil
