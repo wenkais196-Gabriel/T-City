@@ -1473,6 +1473,33 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-streetraces:JoinRace",
+      "file": "[qb]/qb-streetraces/server/main.lua",
+      "category": "civilian",
+      "reason": "报名。防护：赛局未开始、禁止重复加入（查 race.joined）、押金从报名者自己身上扣。",
+      "evidence": "qb-streetraces JoinRace — if not race or race.started / You are already in this race",
+      "owner": "qb-streetraces",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-streetraces:NewRace",
+      "file": "[qb]/qb-streetraces/server/main.lua",
+      "category": "civilian",
+      "reason": "开赛。防护：stake 必须落在 Config.MinimumStake..MaximumStake、起终点六个坐标必须能 tonumber、直线距离 ≥ Config.MinimumRaceDistance；奖池由服务端按参赛人数重建，不采信客户端金额。",
+      "evidence": "qb-streetraces NewRace — Config.MaximumStake / #(startPos - endPos) < Config.MinimumRaceDistance",
+      "owner": "qb-streetraces",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-streetraces:RaceWon",
+      "file": "[qb]/qb-streetraces/server/main.lua",
+      "category": "civilian",
+      "reason": "领奖。防护：赛局必须存在且 started、调用者必须在 race.joined 里、奖池由服务端按参赛人数重建，且先销毁赛局再发钱（防重复领奖）。",
+      "evidence": "qb-streetraces RaceWon — race.joined / local pot = (tonumber(race.amount) or 0) * #race.joined",
+      "owner": "qb-streetraces",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "qb-vehicleshop:server:addPlayer",
       "file": "[qb]/qb-vehicleshop/server/finance-lifecycle.lua",
       "category": "self_scoped",
@@ -1560,6 +1587,51 @@
       "evidence": "server.lua RequestStateSync — type(src) 校验 + lastStateSync[src] 5s 冷却 + TriggerClientEvent(-1)",
       "file": "[qb]/qb-weathersync/server/server.lua",
       "owner": "qb-weathersync",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weed:server:foodPlant",
+      "file": "[qb]/qb-weed/server/main.lua",
+      "category": "self_scoped",
+      "reason": "施肥只扣自己的 weed_nutrition。防护：plantName 白名单（`QBWeed.Plants[plantName]['label']` 原来遇到坏名字直接 nil 索引崩）、house 非空、amount 夹到 1..100、植株必须存在。",
+      "evidence": "qb-weed foodPlant — isValidPlantName(plantName) / if amount > 100 then amount = 100",
+      "owner": "qb-weed",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weed:server:harvestPlant",
+      "file": "[qb]/qb-weed/server/main.lua",
+      "category": "self_scoped",
+      "reason": "收获只发给自己（AddItem 绑 src）。防护：Player 判空（原来 Player 为 nil 直接 `local 'Player'` 崩）、amount 夹成 1..6（它只用来发种子）、house/plantName 白名单校验；weed 与种植数量由服务端算。",
+      "evidence": "qb-weed harvestPlant — MAX_HARVEST_SEEDS / isValidPlantName(plantName) / Player.Functions.GetItemByName",
+      "owner": "qb-weed",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weed:server:placePlant",
+      "file": "[qb]/qb-weed/server/main.lua",
+      "category": "civilian",
+      "reason": "种植。防护：必须有 Player；currentHouse 必须是非空 ≤64 字符串；sort 必须是 QBWeed.Plants 里的作物；coords 必须是能解出 x/y/z 的 JSON 且在地图范围内；同一屋内最多 20 株。（原来连 Player 都没取，任何客户端都能往 house_plants 塞任意行。）",
+      "evidence": "qb-weed placePlant — isValidPlantName(sort) / sanitizePlantCoords(coords) / MAX_PLANTS_PER_HOUSE",
+      "owner": "qb-weed",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weed:server:removeDeathPlant",
+      "file": "[qb]/qb-weed/server/main.lua",
+      "category": "civilian",
+      "reason": "铲掉枯死植株。防护：必须有 Player；building 非空；plantId 必须**已在缓存里**且 building 与之一致（原来谁发谁删：给个 plantid 就能清别人屋里的植株）。",
+      "evidence": "qb-weed removeDeathPlant — plant.building ~= building then return",
+      "owner": "qb-weed",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weed:server:removeSeed",
+      "file": "[qb]/qb-weed/server/main.lua",
+      "category": "self_scoped",
+      "reason": "用掉自己背包里的 1 颗种子（RemoveItem 绑 src 与 itemslot）。参数只决定「扣哪一格」，不决定扣谁。",
+      "evidence": "qb-weed removeSeed — local Player = QBCore.Functions.GetPlayer(src) / RemoveItem(src, seed, 1, itemslot",
+      "owner": "qb-weed",
       "expires": "2027-03-31"
     },
     {

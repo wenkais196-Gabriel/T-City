@@ -19,6 +19,39 @@ AddEventHandler('onResourceStart', function(resourceName)
     end)
 end)
 
+-- ⚠️ 这个表原来声明在文件末尾（第 126 行），而 placePlant / removeDeathPlant / harvestPlant /
+-- foodPlant 都在它**之前**，于是它们引用的是全局 `plantCache`（nil），第一次调用就
+-- `attempt to index a nil value (global 'plantCache')`。挪到所有 handler 之前。
+local plantCache = {}
+
+local MAX_PLANTS_PER_HOUSE = 20
+local MAX_HARVEST_SEEDS = 6
+
+local function isValidPlantName(name)
+    return type(name) == 'string' and type(QBWeed) == 'table' and type(QBWeed.Plants) == 'table'
+        and type(QBWeed.Plants[name]) == 'table'
+end
+
+-- 客户端发的是 `json.encode({x=,y=,z=})`（字符串），这里解码后校验三个坐标，
+-- 返回**原始字符串**（DB 列一直存的就是它，不改存储格式）。
+local function sanitizePlantCoords(raw)
+    if type(raw) ~= 'string' or #raw > 256 then return nil end
+    local ok, decoded = pcall(json.decode, raw)
+    if not ok or type(decoded) ~= 'table' then return nil end
+    local x, y, z = tonumber(decoded.x), tonumber(decoded.y), tonumber(decoded.z)
+    if not (x and y and z) then return nil end
+    if math.abs(x) > 10000 or math.abs(y) > 10000 or math.abs(z) > 5000 then return nil end
+    return raw
+end
+
+local function countPlantsInHouse(building)
+    local count = 0
+    for _, plant in pairs(plantCache) do
+        if type(plant) == 'table' and plant.building == building then count = count + 1 end
+    end
+    return count
+end
+
 QBCore.Functions.CreateCallback('qb-weed:server:getBuildingPlants', function(_, cb, building)
     local buildingPlants = {}
 
@@ -32,9 +65,22 @@ QBCore.Functions.CreateCallback('qb-weed:server:getBuildingPlants', function(_, 
 end)
 
 RegisterNetEvent('qb-weed:server:placePlant', function(coords, sort, currentHouse)
+    -- 三个参数全来自客户端，而且这里原来**连 Player 都没取**：任何客户端都能往 house_plants
+    -- 里塞任意行（building/sort/coords 全自己定），等于免费无限种。
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    if type(currentHouse) ~= 'string' or #currentHouse == 0 or #currentHouse > 64 then return end
+    if not isValidPlantName(sort) then return end
+    coords = sanitizePlantCoords(coords)
+    if not coords then return end
+    if countPlantsInHouse(currentHouse) >= MAX_PLANTS_PER_HOUSE then return end
+
     local random = math.random(1, 2)
     local gender = (random == 1) and 'man' or 'woman'
-    local plantId = math.random(111111, 999999)
+    -- house_plants.plantid 是 varchar(50)：DB 回来的是字符串，
+    -- 所以缓存键也必须用字符串，否则本次会话种下的植株在 removeDeathPlant / harvestPlant 里按字符串查会 miss。
+    local plantId = tostring(math.random(111111, 999999))
 
     MySQL.insert('INSERT INTO house_plants (building, coords, gender, sort, plantid) VALUES (?, ?, ?, ?, ?)',
         { currentHouse, coords, gender, sort, plantId })
@@ -45,6 +91,17 @@ RegisterNetEvent('qb-weed:server:placePlant', function(coords, sort, currentHous
 end)
 
 RegisterNetEvent('qb-weed:server:removeDeathPlant', function(building, plantId)
+    -- 原来谁发谁删：随便给一个 plantid 就能清掉别人屋里的植物
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    if type(building) ~= 'string' or #building == 0 or #building > 64 then return end
+    if plantId == nil then return end
+    plantId = tostring(plantId)          -- 客户端回传的是 varchar 字符串，统一成字符串键
+
+    local plant = plantCache[plantId]
+    if type(plant) ~= 'table' or plant.building ~= building then return end
+
     MySQL.query('DELETE FROM house_plants WHERE plantid = ? AND building = ?', { plantId, building })
     plantCache[plantId] = nil
     TriggerClientEvent('qb-weed:client:refreshHousePlants', -1, building)
@@ -60,6 +117,17 @@ end)
 RegisterNetEvent('qb-weed:server:harvestPlant', function(house, amount, plantName, plantId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- amount 只用来发种子：客户端给多少就发多少（可印物品），夹成 1..6
+    amount = tonumber(amount)
+    if not amount or amount < 1 then return end
+    if amount > MAX_HARVEST_SEEDS then amount = MAX_HARVEST_SEEDS end
+    amount = math.floor(amount)
+    if type(house) ~= 'string' or #house == 0 or #house > 64 then return end
+    if not isValidPlantName(plantName) then return end
+    if plantId == nil then return end
+    plantId = tostring(plantId)          -- 同上：统一字符串键
+
     local weedBag = Player.Functions.GetItemByName('empty_weed_bag')
     local sndAmount = math.random(12, 16)
     if weedBag ~= nil and weedBag.amount >= sndAmount then
@@ -70,6 +138,9 @@ RegisterNetEvent('qb-weed:server:harvestPlant', function(house, amount, plantNam
                 local result = MySQL.query.await('SELECT * FROM house_plants WHERE plantid = ? AND building = ?', { plantId, house })
                 if result[1] ~= nil then plant = result[1] end
             end
+            -- 缓存命中时也要核归属：知道别人 plantid 的人可以用自己的 house 触发收获，
+            -- 收获物照发、DB 删除却因 building 不匹配落空（与 removeDeathPlant 的校验对齐）
+            if type(plant) == 'table' and plant.building ~= house then plant = nil end
             if plant then
                 exports['qb-inventory']:AddItem(src, 'weed_' .. plantName .. '_seed', amount, false, false, 'qb-weed:server:harvestPlant')
                 exports['qb-inventory']:AddItem(src, 'weed_' .. plantName, sndAmount, false, false, 'qb-weed:server:harvestPlant')
@@ -93,6 +164,16 @@ RegisterNetEvent('qb-weed:server:foodPlant', function(house, amount, plantName, 
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    -- 下面会读 QBWeed.Plants[plantName]['label']：plantName 不在白名单里就是 nil 索引崩线程
+    if not isValidPlantName(plantName) then return end
+    if type(house) ~= 'string' or #house == 0 or #house > 64 then return end
+    amount = tonumber(amount)
+    if not amount or amount <= 0 then return end
+    if amount > 100 then amount = 100 end
+    amount = math.floor(amount)
+    if plantId == nil then return end
+    plantId = tostring(plantId)          -- 同上：统一字符串键
+
     -- ⚡ Check cache first
     local plant = plantCache[plantId]
     if not plant then
@@ -123,14 +204,16 @@ end)
 
 -- ⚡ Performance: Memory-first plant cache — eliminates SELECT * FROM house_plants on every tick
 -- Plants are loaded once at startup, updated in-memory, and flush to DB via DirtyFlush pipeline
-local plantCache = {} -- { [plantId] = { building, coords, gender, sort, food, health, progress, stage, plantid } }
+-- 表本身声明在文件顶部（见那里的注释）；这里不能再 `local plantCache = {}`，否则遮蔽成两张表。
 
 -- Load all plants on startup
 CreateThread(function()
     local allPlants = MySQL.query.await('SELECT * FROM house_plants', {})
     if allPlants then
         for _, plant in ipairs(allPlants) do
-            plantCache[plant.plantid] = plant
+            if type(plant) == 'table' and plant.plantid ~= nil then
+                plantCache[tostring(plant.plantid)] = plant
+            end
         end
     end
     print(('[qb-weed] 🌱 Loaded %d plants into memory cache'):format(#allPlants or 0))
