@@ -290,5 +290,18 @@
       "requires_raw": [],
       "why": "只认房主（不认钥匙持有人）：改装饰 / 挪储物柜坐标 / 发钥匙 这类操作"
     }
+  },
+  "qb-lapraces": {
+    "IsRaceHost": {
+      "defined_at": "qb-lapraces/server/main.lua",
+      "requires_code": [
+        "GetOpenedRaceKey(RaceId)",
+        "AvailableRaces[key]",
+        "SetupCitizenId == CitizenId",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "只有当前开放中的那场比赛的创建者能开始/取消/改状态；raceId 不在开放表里一律 false"
+    }
   }
 }
