@@ -48,6 +48,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-3 批 4：qb-drugs 角落贩售 / qb-prison / qb-weapons 共 20 个事件**（2026-11-08）：
+  - **印钱**：`updateDealerItems` 忽略 `RemoveItem` 的返回值 —— 库存打空时调一次
+    `{slot=1}, 999, 'Sandy Dealer'` 就 `AddMoney(999×15)`（实测旧代码 PAID=14985，背包一件没有）；
+    坏 slot 还会 `attempt to index a nil value` 崩服务端。现在 dealer/slot/name 逐个校验，
+    先扣货、`RemoveItem` 返回 false 就不发钱。
+  - **武器复制**：`TakeBackWeapon(k)` 不校验归属与修理状态 —— 任意玩家对任意 k 都能取回，
+    送修者修好后再取一把（实测旧代码 ADDED 1→2→3）。现在要求 `CitizenId` 对得上、`Ready == true`，
+    取走即清记录。
+  - **无限弹药**：`UpdateWeaponAmmo` 把客户端 `amount` 原样写入（实测 999999 / -5 都写进去），
+    且不比对武器名。现在夹到 0~9999、必须整数、槽位与名字都要对。
+  - **监狱**：`SecurityLockdown` / `SetGateHit` 原来任意玩家调一次就能锁死全监狱 / 刷破门广播；
+    `JailAlarm` 无冷却可连点刷警报。三个都补了（狱警/在押者限定 + 60 秒冷却）。
+  - **角落贩售**：`giveStealItems` 只比对 item/amount，任何玩家都能领走别人被抢的货 →
+    记录里存 src 并要求一致；`availableDrugs[drugType]` 用物品名索引数组恒为 nil（rob 路径直接抛错）→
+    改按名字查表；`sendDeliverySMS` 的文案改为非空字符串 + 300 字截断。
+  - 数字：全仓未登记 **253 → 231**、qb **171 → 149**、allowlist **64 → 91**；
+    新增两组 Lua 沙箱探针（dealer 卖货 / 武器取回），旧实现实测全红。
 - **P1-3 批 3：qb-vehicleshop 5 个事件（分期还款 / 全额结清 / 分期购车 / 代客售车）**（2026-11-08）：
   - **两个真漏洞**：①`financePaymentFull` 的 `vehBalance` / `vehPlate` 全来自客户端 —— 付 1 块钱就能把
     **别人**的分期记录 balance 清零（等于白送一台车）；②`financePayment` 的 `vehData` 同样是客户端给的，

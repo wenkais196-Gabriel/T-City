@@ -627,6 +627,168 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-drugs:server:acceptDelivery",
+      "category": "civilian",
+      "reason": "接单参数全部不采信：商品 key 查 Config.DeliveryItems、数量固定 1、押金/时限按距离服务端自算；带 acceptLocks 互斥 + 单活跃单约束（防连开两单覆盖记录）。",
+      "evidence": "deliveries.lua acceptDelivery — type(itemKey)/Config.DeliveryItems 查表 + DeliveryTimes(distance) + acceptLocks[src]",
+      "file": "[qb]/qb-drugs/server/deliveries.lua",
+      "owner": "qb-drugs",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-drugs:server:dealerShop",
+      "category": "civilian",
+      "reason": "打开 dealer 商店只是把 Config 里的库存投影给调用者，不改钱物；dealer key 查表后取。",
+      "evidence": "deliveries.lua dealerShop — Config.Dealers[dealer] 查表 + 只回包给 src",
+      "file": "[qb]/qb-drugs/server/deliveries.lua",
+      "owner": "qb-drugs",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-drugs:server:giveStealItems",
+      "category": "self_scoped",
+      "reason": "只把货还给**被抢的那个人**：StolenDrugs 记录里存了 src 与 item/amount，三者都对上才 AddItem 并删记录；原来只比对 item/amount，任何玩家都能领走别人被抢的货。",
+      "evidence": "cornerselling.lua giveStealItems — v.src == src 且 table.remove 后 return（只发一次）",
+      "file": "[qb]/qb-drugs/server/cornerselling.lua",
+      "owner": "qb-drugs",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-drugs:server:robCornerDrugs",
+      "category": "already_checked",
+      "reason": "只抢自己背包里真有的货：drugType 走 Config 查表、amount 必须正整数、GetItemByName 数量够才 RemoveItem。",
+      "evidence": "cornerselling.lua robCornerDrugs — findAvailable(entry) + tonumber(amount) + GetItemByName",
+      "file": "[qb]/qb-drugs/server/cornerselling.lua",
+      "owner": "qb-drugs",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-drugs:server:sellCornerDrugs",
+      "category": "already_checked",
+      "reason": "售价由服务端按 Config.DrugsPrice 取中间价算出（客户端不传价格），发货前 GetItemByName 核对持有量。",
+      "evidence": "cornerselling.lua sellCornerDrugs — unitPrice 来自 Config.DrugsPrice / GetItemByName(item).amount >= amount",
+      "file": "[qb]/qb-drugs/server/cornerselling.lua",
+      "owner": "qb-drugs",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-drugs:server:sendDeliverySMS",
+      "category": "civilian",
+      "reason": "只按模板给**自己**发一条短信，文案由服务端拼接（客户端只传一句话），带长度截断。",
+      "evidence": "deliveries.lua sendDeliverySMS — type(msg) 校验 + 截断 + 只发给 src 本人",
+      "file": "[qb]/qb-drugs/server/deliveries.lua",
+      "owner": "qb-drugs",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-drugs:server:updateDealerItems",
+      "category": "self_scoped",
+      "reason": "卖给 dealer 的钱按 Config 价格算，且必须先真的扣掉货才发钱：dealer/slot/name 逐个校验，GetItemByName 数量不够或 RemoveItem 返回 false 都不发钱（原来忽略返回值 = 印钱）。",
+      "evidence": "deliveries.lua updateDealerItems — type(itemData)/product 查表 + GetItemByName + RemoveItem == false 则 return",
+      "file": "[qb]/qb-drugs/server/deliveries.lua",
+      "owner": "qb-drugs",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:CheckChance",
+      "category": "civilian",
+      "reason": "摸手机只在服刑期间、且每人只成功一次（GotItems[src]），概率 1/100 由服务端抽。",
+      "evidence": "main.lua CheckChance — tonumber(metadata.injail) + GotItems[src] 一次性",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:CheckRecordStatus",
+      "category": "civilian",
+      "reason": "只读改**自己**的 criminalrecord 元数据（到期自动消记录），不碰别人。",
+      "evidence": "main.lua CheckRecordStatus — metadata['criminalrecord'] 来自 GetPlayer(src)",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:GiveJailItems",
+      "category": "civilian",
+      "reason": "只还给已释放（injail == 0）且有快照的人，且一次刑期只能取一次（JailItemsRestored）。",
+      "evidence": "main.lua GiveJailItems — metadata['jailitems'] + (metadata.injail or 0) > 0 return + JailItemsRestored[src]",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:JailAlarm",
+      "category": "civilian",
+      "reason": "报警靠客户端检测破门触发，服务端只做两道限制：距监狱中心 200m 内直接拒（原逻辑）+ 每人 60 秒冷却（本轮新增）。",
+      "evidence": "main.lua JailAlarm — AlarmCooldownAt[src] 60s + #(coords.xy - middle) < 200 then return error(...)",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:RequestRelease",
+      "category": "civilian",
+      "reason": "只问不判：剩余刑期从 custom-justice 读，>0 只回提示，=0 才放人。",
+      "evidence": "main.lua RequestRelease — pcall exports['custom-justice']:RemainingSeconds + type(remainingSeconds)",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:ResetJailItems",
+      "category": "civilian",
+      "reason": "清空自己的 jailitems 快照，仅服刑期间有效；不清 JailItemsSeized，避免开第二个补助窗口。",
+      "evidence": "main.lua ResetJailItems — tonumber(metadata.injail) 校验 + SetMetaData('jailitems', {})",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:SaveJailItems",
+      "category": "civilian",
+      "reason": "只在服刑期间收缴，且每人每次刑期只快照一次（JailItemsSeized），防止 Save/Give 循环刷 $80 补助。",
+      "evidence": "main.lua SaveJailItems — metadata['jailitems'] + (metadata.injail or 0) <= 0 return + JailItemsSeized[src]",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:SecurityLockdown",
+      "category": "already_checked",
+      "reason": "锁死全监狱的广播只允许在职狱警或在押者触发（原来任意玩家一次调用就能锁服）。",
+      "evidence": "main.lua SecurityLockdown — job.name ~= 'police' or not job.onduty → 再判 injail",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:SetGateHit",
+      "category": "already_checked",
+      "reason": "破门广播同上（狱警/在押者），key 必须能转成数字。",
+      "evidence": "main.lua SetGateHit — job.name/onduty 判定 + tonumber(key)",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:SetJailStatus",
+      "category": "civilian",
+      "reason": "刑期不归客户端：先问 custom-justice:RemainingSeconds(citizenid)，拿到数就用它；拿不到才退回客户端值并夹到 0~120 分钟。",
+      "evidence": "main.lua SetJailStatus — pcall exports['custom-justice']:RemainingSeconds(cid) + math.max(0, math.min(120, ...))",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "prison:server:WorkReduction",
+      "category": "civilian",
+      "reason": "减刑分钟数夹到 1~5、每人 55 秒冷却，真正的刑期由 custom-justice:AdjustSentence 决定（失败就报错不落库）。",
+      "evidence": "main.lua WorkReduction — tonumber(minutes) 夹 1..5 + WorkReductionAt[cid] 55s + exports['custom-justice']",
+      "file": "[qb]/qb-prison/server/main.lua",
+      "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "qb-vehicleshop:server:financePayment",
       "category": "self_scoped",
       "reason": "只动 caller 自己的分期记录：车牌来自客户端，但余额/每期额/期数一律 `SELECT … WHERE plate = ? AND citizenid = ?` 从 DB 取，UPDATE 也带 citizenid 条件；钱只从 caller 自己的 cash/bank 扣。",
@@ -651,6 +813,24 @@
       "evidence": "finance-payments.lua financeVehicle — 车型校验 + Config 价格 + downPayment∈[minDown, price] + paymentAmount ≤ MaximumPayments + INSERT citizenid=pData",
       "file": "[qb]/qb-vehicleshop/server/finance-payments.lua",
       "owner": "qb-vehicleshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weapons:server:SetWeaponQuality",
+      "category": "civilian",
+      "reason": "耐久夹到 0~100 且槽位必须存在（原来 data.slot 坏值 → nil.info 抛错，可刷屏崩服务端）。",
+      "evidence": "main.lua SetWeaponQuality — type(data) + math.max(0, math.min(100, hp)) + items[slot] 判空",
+      "file": "[qb]/qb-weapons/server/main.lua",
+      "owner": "qb-weapons",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weapons:server:UpdateWeaponAmmo",
+      "category": "civilian",
+      "reason": "弹药由客户端上报（射击后回写），服务端只能夹范围：必须是非负整数且 ≤ 9999，槽位必须是本人的武器且名字对得上。原来 amount 原样写入 → 改包即无限子弹。",
+      "evidence": "main.lua UpdateWeaponAmmo — tonumber(amount) + math.min(amount, 9999) + items[slot].name 比对",
+      "file": "[qb]/qb-weapons/server/main.lua",
+      "owner": "qb-weapons",
       "expires": "2027-03-31"
     }
   ]

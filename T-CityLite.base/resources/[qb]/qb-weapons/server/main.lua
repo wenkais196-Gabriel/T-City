@@ -140,33 +140,62 @@ RegisterNetEvent('qb-weapons:server:UpdateWeaponAmmo', function(CurrentWeaponDat
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if type(CurrentWeaponData) ~= 'table' then return end
+
+    -- 🔒 弹药由客户端上报（射击后回写），服务端只能夹范围：
+    --    原来 amount 原样写入 → 改包即可给自己 999999 发子弹（无限弹药）。
     amount = tonumber(amount)
-    if CurrentWeaponData then
-        if Player.PlayerData.items[CurrentWeaponData.slot] then
-            Player.PlayerData.items[CurrentWeaponData.slot].info.ammo = amount
-        end
-        Player.Functions.SetInventory(Player.PlayerData.items, true)
-    end
+    if not amount or amount < 0 or amount % 1 ~= 0 then return end
+    amount = math.min(amount, 9999)
+
+    local slot = tonumber(CurrentWeaponData.slot)
+    if not slot then return end
+    local weapon = Player.PlayerData.items[slot]
+    if not weapon or type(weapon.info) ~= 'table' then return end
+    if weapon.name ~= CurrentWeaponData.name then return end
+
+    weapon.info.ammo = amount
+    Player.Functions.SetInventory(Player.PlayerData.items, true)
 end)
 
 RegisterNetEvent('qb-weapons:server:TakeBackWeapon', function(k)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    local itemdata = Config.WeaponRepairPoints[k].RepairingData.WeaponData
+
+    -- 🔒 k 是客户端索引；且只能取**自己**送修、且**已修好**的那把。
+    --    原来任何人都能对任意 k 取回 → 别人送修的枪可以被抢走（双方各得一把 = 复制）。
+    local point = Config.WeaponRepairPoints[tonumber(k) or 0]
+    if not point or type(point.RepairingData) ~= 'table' then return end
+    if point.RepairingData.CitizenId ~= Player.PlayerData.citizenid then return end
+    if point.RepairingData.Ready ~= true then return end
+    local itemdata = point.RepairingData.WeaponData
+    if type(itemdata) ~= 'table' or not itemdata.name then return end
+
+    itemdata.info = itemdata.info or {}
     itemdata.info.quality = 100
     exports['qb-inventory']:AddItem(src, itemdata.name, 1, false, itemdata.info, 'qb-weapons:server:TakeBackWeapon')
     TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[itemdata.name], 'add')
-    Config.WeaponRepairPoints[k].IsRepairing = false
-    Config.WeaponRepairPoints[k].RepairingData = {}
-    TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, Config.WeaponRepairPoints[k], k)
+    local index = tonumber(k) or 0
+    Config.WeaponRepairPoints[index].IsRepairing = false
+    Config.WeaponRepairPoints[index].RepairingData = {}
+    TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, Config.WeaponRepairPoints[index], index)
 end)
 
 RegisterNetEvent('qb-weapons:server:SetWeaponQuality', function(data, hp)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    local WeaponSlot = Player.PlayerData.items[data.slot]
+    -- 🔒 槽位与数值都得自己校验：原来 data.slot 不存在就 `nil.info` 抛错（可刷屏崩服务端），
+    --    hp 原样写入 → 任意改武器耐久（0~100 之外的值会破坏后续比较）
+    if type(data) ~= 'table' then return end
+    hp = tonumber(hp)
+    if not hp then return end
+    hp = math.max(0, math.min(100, hp))
+    local slot = tonumber(data.slot)
+    if not slot then return end
+    local WeaponSlot = Player.PlayerData.items[slot]
+    if not WeaponSlot or type(WeaponSlot.info) ~= 'table' then return end
     WeaponSlot.info.quality = hp
     Player.Functions.SetInventory(Player.PlayerData.items, true)
 end)
@@ -174,9 +203,19 @@ end)
 RegisterNetEvent('qb-weapons:server:UpdateWeaponQuality', function(data, RepeatAmount)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(data) ~= 'table' or type(data.name) ~= 'string' then return end
+    -- 🔒 三个直接索引原来都不判空：坏 name → WeaponData nil；坏 slot → WeaponSlot nil（崩）。
+    --    RepeatAmount 也是客户端给的，夹到 1~50 防止一次请求把耐久打穿（也防卡死循环）。
     local WeaponData = QBCore.Shared.Weapons[GetHashKey(data.name)]
-    local WeaponSlot = Player.PlayerData.items[data.slot]
+    local slot = tonumber(data.slot)
+    if not WeaponData or not slot then return end
+    local WeaponSlot = Player.PlayerData.items[slot]
+    if not WeaponSlot or type(WeaponSlot.info) ~= 'table' then return end
+    RepeatAmount = tonumber(RepeatAmount)
+    if not RepeatAmount or RepeatAmount < 1 then return end
+    RepeatAmount = math.min(math.floor(RepeatAmount), 50)
     local DecreaseAmount = Config.DurabilityMultiplier[data.name]
+    if not DecreaseAmount then return end
     if WeaponSlot then
         if not IsWeaponBlocked(WeaponData.name) then
             if WeaponSlot.info.quality then
