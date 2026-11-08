@@ -115,6 +115,9 @@ def test_doctor_count_only_changes_for_registered_ems():
     assert data["DOCTOR_COUNT_AFTER_ADD"] == "1"
     assert data["DOCTOR_COUNT_AFTER_CIVILIAN"] == "1", "平民改动了医生计数"
     assert data["DOCTOR_COUNT_AFTER_EMS"] == "0", "在班 EMS 反而减不掉（过度收紧）"
+    assert data["DOCTOR_COUNT_AFTER_CLOCK_OFF"] == "0", (
+        "下班注销被拒（qb-core 先把 onduty 置 false 再通知客户端，不能拿 onduty 当注销门槛）"
+    )
 
 
 def test_injury_sync_is_bounded():

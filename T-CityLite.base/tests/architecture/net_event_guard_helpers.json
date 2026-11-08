@@ -276,6 +276,16 @@
         "'ambulance'"
       ],
       "why": "在职 EMS 判定：job.name == 'ambulance' 且 onduty。客户端菜单里的 job 过滤条件不算鉴权（可绕过），服务端必须自己判。"
+    },
+    "isRegisteredDoctor": {
+      "defined_at": "qb-ambulancejob/server/main.lua",
+      "requires_code": [
+        "Doctors[src] == true"
+      ],
+      "requires_raw": [
+        "Doctors"
+      ],
+      "why": "只认服务端 AddDoctor 登记过的医生能注销计数。不能用 onduty 判定：qb-core 下班时先把 onduty 置 false 再通知客户端，客户端才补发 RemoveDoctor。"
     }
   },
   "qb-houses": {

@@ -29,6 +29,13 @@ local function isOnDutyEMS(src, Player)
 	return job.name == 'ambulance' and job.onduty == true
 end
 
+-- 只有服务端自己登记过的医生能注销。**不看 onduty**：qb-core 下班流程是
+-- 先把 `job.onduty` 置 false、再通知客户端 -> 客户端才补发 RemoveDoctor，
+-- 用 isOnDutyEMS 会把合法注销全挡掉，计数只增不减（只剩掉线那条路能减）。
+local function isRegisteredDoctor(src)
+	return Doctors[src] == true
+end
+
 local function markRevived(src)
 	RecentlyRevived[src] = os.time()
 end
@@ -48,7 +55,15 @@ AddEventHandler('txAdmin:events:healedPlayer', function(eventData)
 		return
 	end
 
-	markRevived(eventData.id)
+	if eventData.id == -1 then
+		-- txAdmin 的 heal all：-1 不是一个玩家，得把所有人都标进窗口，
+		-- 否则他们在客户端 `ResetAll()` 里的 resetHungerThirst 会被拒。
+		for _, target in pairs(QBCore.Functions.GetQBPlayers()) do
+			if target and target.PlayerData then markRevived(target.PlayerData.source) end
+		end
+	else
+		markRevived(eventData.id)
+	end
 	TriggerClientEvent('hospital:client:Revive', eventData.id)
 	TriggerClientEvent('hospital:client:HealInjuries', eventData.id, 'full')
 end)
@@ -338,11 +353,9 @@ end)
 
 RegisterNetEvent('hospital:server:RemoveDoctor', function(job)
 	local src = source
-	local Player = QBCore.Functions.GetPlayer(src)
-	if not isOnDutyEMS(src, Player) then return end
 	-- 🔒 只认服务端自己数过的人：`Doctors[src]` 是 AddDoctor 时（已校验在职 EMS）登记的。
 	--    原来只看客户端传的 `job == 'ambulance'`，任何玩家都能把 doctorCount 减到 0。
-	if not Doctors[src] then return end
+	if not isRegisteredDoctor(src) then return end
 	Doctors[src] = nil
 	doctorCount = doctorCount - 1
 	if doctorCount < 0 then doctorCount = 0 end
@@ -712,11 +725,14 @@ QBCore.Commands.Add('aheal', Lang:t('info.heal_player_a'), { { name = 'id', help
 	if args[1] then
 		local Player = QBCore.Functions.GetPlayer(tonumber(args[1]))
 		if Player then
+			-- 客户端 adminHeal 会调 resetHungerThirst，先进窗口
+			markRevived(Player.PlayerData.source)
 			TriggerClientEvent('hospital:client:adminHeal', Player.PlayerData.source)
 		else
 			TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_online'), 'error')
 		end
 	else
+		markRevived(src)
 		TriggerClientEvent('hospital:client:adminHeal', src)
 	end
 end, 'admin')

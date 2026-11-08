@@ -247,6 +247,12 @@ emit('DOCTOR_COUNT_AFTER_CIVILIAN', tostring(doctorCountNow()))
 fireAs(2, 'hospital:server:RemoveDoctor', 'ambulance')
 emit('DOCTOR_COUNT_AFTER_EMS', tostring(doctorCountNow()))
 
+-- 下班流程：qb-core 先把 onduty 置 false，客户端才补发 RemoveDoctor —— 必须仍能减
+fireAs(2, 'hospital:server:AddDoctor', 'ambulance')
+state.players[2].PlayerData.job.onduty = false
+fireAs(2, 'hospital:server:RemoveDoctor', 'ambulance')
+emit('DOCTOR_COUNT_AFTER_CLOCK_OFF', tostring(doctorCountNow()))
+
 -- ── 8. 伤情同步：越界值必须被夹 ──
 emit('SCENARIO', 'injuries')
 fireAs(1, 'hospital:server:SyncInjuries', 'not-a-table')
