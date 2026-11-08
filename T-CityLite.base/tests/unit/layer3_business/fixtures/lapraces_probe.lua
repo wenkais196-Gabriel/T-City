@@ -112,6 +112,24 @@ load_lua(RES .. '/config.lua', 'config.lua')
 Config.WhitelistedCreators = { 'HOSTCID' }
 load_lua(RES .. '/server/main.lua', 'main.lua')
 
+
+-- 通过 debug.getupvalue 取 handler 闭包里的私有表，直接断言内部状态（比"还能不能 Join"更硬）
+local function internal(name)
+    local handler = handlers['qb-lapraces:server:FinishPlayer']
+    for index = 1, 40 do
+        local upName, upValue = debug.getupvalue(handler, index)
+        if not upName then break end
+        if upName == name then return upValue end
+    end
+    return nil
+end
+
+local function count(tbl)
+    local n = 0
+    for _ in pairs(tbl or {}) do n = n + 1 end
+    return n
+end
+
 local function joinEvents()
     local n = 0
     for _, event in ipairs(state.clientEvents) do
@@ -178,23 +196,44 @@ emit('RECORD_WRITES_REPLAY', #state.updates - b)
 -- ── 7. 全员完赛 → 比赛必须被清掉（用"作者能否重新开放同一条赛道"观察）──
 emit('SCENARIO', 'all-finished-cleanup')
 fireAs(3, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 18)
+local RacesTable2 = internal('Races')
+local AvailableTable2 = internal('AvailableRaces')
+local settleRace = RacesTable2 and RacesTable2[raceId]
+emit('AFTER_SETTLE_STARTEDAT', tostring(settleRace and settleRace.StartedAt))
+emit('AFTER_SETTLE_RACERS', count(settleRace and settleRace.Racers))
+emit('AFTER_SETTLE_AVAILABLE', count(AvailableTable2))
 local joinsAfterSettle = joinEvents()
 fireAs(1, 'qb-lapraces:server:SetupRace', raceId, 10)
 fireAs(2, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
 emit('REOPEN_AFTER_SETTLE', joinEvents() > joinsAfterSettle)
 
--- ── 8. 反序离开：未完赛者先走（DNF），已完赛者后走 → 仍要清掉比赛 ──
+-- ── 8. 反序离开：已完赛者先完赛（另一人还在）→ 未完赛者离开（DNF）→ 已完赛者离开 ──
 emit('SCENARIO', 'leave-reverse-order')
 fireAs(1, 'qb-lapraces:server:StartRace', raceId)
 fireAs(3, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
 state.now = state.now + 205 * 1000
-fireAs(2, 'qb-lapraces:server:LeaveRace', { RaceId = raceId })                 -- 未完赛：DNF
-fireAs(3, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 18)
-fireAs(3, 'qb-lapraces:server:LeaveRace', { RaceId = raceId })                 -- 已完赛：不补 DNF，但要清理
+fireAs(3, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 18)   -- 已完赛，但 racer2 还在
+fireAs(2, 'qb-lapraces:server:LeaveRace', { RaceId = raceId })                  -- 未完赛离开 → DNF
+fireAs(3, 'qb-lapraces:server:LeaveRace', { RaceId = raceId })                  -- 已完赛离开 → 走 skipDnf + 最后一人清理
+
+local RacesTable = internal('Races')
+local AvailableTable = internal('AvailableRaces')
+local NotFinishedTable = internal('NotFinished')
+local LastRacesTable = internal('LastRaces')
+local race = RacesTable and RacesTable[raceId]
+emit('AFTER_LEAVE_RACERS', count(race and race.Racers))
+emit('AFTER_LEAVE_STARTED', tostring(race and race.Started))
+emit('AFTER_LEAVE_WAITING', tostring(race and race.Waiting))
+emit('AFTER_LEAVE_STARTEDAT', tostring(race and race.StartedAt))
+emit('AFTER_LEAVE_AVAILABLE', count(AvailableTable))
+emit('AFTER_LEAVE_NOTFINISHED', count(NotFinishedTable))
+emit('AFTER_LEAVE_LASTRACES', count(LastRacesTable))
+
 local joinsAfterLeave = joinEvents()
 fireAs(1, 'qb-lapraces:server:SetupRace', raceId, 10)
 fireAs(2, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
 emit('REOPEN_AFTER_LEAVE', joinEvents() > joinsAfterLeave)
+emit('AFTER_REOPEN_LEADERBOARD', count(RacesTable and RacesTable[raceId] and RacesTable[raceId].LastLeaderboard))
 
 -- ── 9. 坏包 ──
 emit('SCENARIO', 'bad-payloads')

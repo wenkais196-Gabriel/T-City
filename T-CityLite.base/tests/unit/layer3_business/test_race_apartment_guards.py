@@ -69,6 +69,16 @@ def test_race_finish_settles_once_and_survives_bad_payloads():
     assert data["RECORD_TIME"][0] == "18", "合法最佳圈被改写"
     assert data["RECORD_WRITES_REPLAY"][0] == "0", "重复 FinishPlayer 二次结算"
 
-    # 清理：全员完赛 / 反序离开后，作者都能重新开放同一条赛道（比赛没有卡死）
-    assert data["REOPEN_AFTER_SETTLE"][0] == "true", "全员完赛后比赛没被清掉（赛道永久卡在运行中）"
-    assert data["REOPEN_AFTER_LEAVE"][0] == "true", "反序离开后比赛没被清掉（赛道永久卡在运行中）"
+    # 清理（直接读 handler 闭包里的私有表，不靠"还能不能 Join"这种弱信号）
+    assert data["AFTER_SETTLE_RACERS"][0] == "0", "全员完赛后 Racers 没清空"
+    assert data["AFTER_SETTLE_STARTEDAT"][0] == "nil", "全员完赛后 StartedAt 没清（下一场会沿用旧计时）"
+    assert data["AFTER_SETTLE_AVAILABLE"][0] == "0", "全员完赛后比赛还挂在开放列表里"
+    assert data["AFTER_LEAVE_RACERS"][0] == "0", "反序离开后 Racers 没清空"
+    assert data["AFTER_LEAVE_STARTED"][0] == "false", "反序离开后 Started 没复位"
+    assert data["AFTER_LEAVE_WAITING"][0] == "false", "反序离开后 Waiting 没复位"
+    assert data["AFTER_LEAVE_STARTEDAT"][0] == "nil", "反序离开后 StartedAt 没清"
+    assert data["AFTER_LEAVE_AVAILABLE"][0] == "0", "反序离开后比赛还挂在开放列表里"
+    assert data["AFTER_LEAVE_NOTFINISHED"][0] == "0", "反序离开后 NotFinished 残留（下次会被并进新比赛）"
+    assert data["AFTER_LEAVE_LASTRACES"][0] == "0", "反序离开后 LastRaces 残留"
+    assert data["REOPEN_AFTER_LEAVE"][0] == "true", "清理后作者无法重新开放同一条赛道"
+    assert data["AFTER_REOPEN_LEADERBOARD"][0] == "0", "重开赛道后 LastLeaderboard 还挂着上一场的成绩"
