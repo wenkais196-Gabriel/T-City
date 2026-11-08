@@ -43,18 +43,18 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 | 批次 | 事件 | 已鉴权 | 已登记 | 未登记 | 在启动集内 |
 |---|---|---|---|---|---|
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
-| custom `[custom]` | 133 | 82 | 47 | 4 | 覆盖率 **129/133 ≈ 97%**（批 17：证照/死亡重置/通缉上报/修车耐久四条登记 + 监狱判决判定收成 helper） |
+| custom `[custom]` | 133 | 83 | 48 | 2 | 覆盖率 **131/133 ≈ 98%**（批 18：剧情决策委托判定登记、客户端遥测三件预算） |
 | qb `[qb]` | 216 | 106 | 97 | 13 | 覆盖率 **203/216 ≈ 94%**（批 17：管理菜单 blips 数据鉴权、stress 增量、抢劫占用开关） |
-| other（system / standalone / voice / cfx-default） | 75 | 5 | 6 | 64 | 债务 |
-| **合计** | **439** | 198 | 160 | **81** | — |
+| other（system / standalone / voice / cfx-default） | 75 | 9 | 7 | 59 | 覆盖率 **16/75 ≈ 21%**（批 18：中控屏车牌三项 + 生产模式冻结；其余多为 vendored 库，见 §6） |
+| **合计** | **439** | 203 | 162 | **74** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
-**债的分布不是均匀的**（批 17 后重算）：81 条未登记里 **23 条在启动集内**（`started: true`），
+**债的分布不是均匀的**（批 18 后重算）：74 条未登记里 **16 条在启动集内**（`started: true`），
 58 条在 12 个不启动的资源里（其中 `monitor` 一家 33 条，txAdmin 自带，口径见 §6）。启动集内的
-头部是 `PolyZone` 4、`tcity-dashboard` 3、`pma-voice` 3、`baseevents` 3、`sessionmanager` 2、
-`story-engine` 2、`production-freeze` 2。基线里每个资源都带 `started`
+在启动集内的 16 条主要是 vendored 基础库：`PolyZone` 4、`pma-voice` 3、`baseevents` 3、
+`sessionmanager` 2、`hardcap` 1、`atom_nodes` 1，外加 `runcode` 2（不启动）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
 
 ### 3.1.1 `job_deny_guard` 的实际判据比名字宽（2026-11-08 批 14 实测）
@@ -77,7 +77,7 @@ if not Player or type(itemName) ~= 'string' then return end   -- 被算作"职�
 
 ## 3.1 资源内部 helper 登记表（2026-11-01 第 2 批）
 
-全仓未登记事件里（当前 81），有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
+全仓未登记事件里（当前 74），有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
 （`CanModifyPlate` / `IsEmergencyService` / `onDutyOfficer` …），按固定 token 名单扫不出来。
 直接把这些名字塞进 token 名单等于"名字像校验就算校验"，所以另开了
 `tests/architecture/net_event_guard_helpers.json`：

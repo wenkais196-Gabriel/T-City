@@ -16,9 +16,9 @@
     },
     "custom": {
       "events": 133,
-      "guarded": 82,
-      "allowlisted": 47,
-      "unguarded": 4
+      "guarded": 83,
+      "allowlisted": 48,
+      "unguarded": 2
     },
     "qb": {
       "events": 216,
@@ -28,9 +28,9 @@
     },
     "other": {
       "events": 75,
-      "guarded": 5,
-      "allowlisted": 6,
-      "unguarded": 64
+      "guarded": 9,
+      "allowlisted": 7,
+      "unguarded": 59
     }
   },
   "resources": {
@@ -281,9 +281,9 @@
       "batch": "other",
       "group": "[system]",
       "events": 2,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "guarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": true
     },
     "qb-adminmenu": {
@@ -578,18 +578,18 @@
       "batch": "custom",
       "group": "[custom]",
       "events": 2,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "guarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": true
     },
     "tcity-dashboard": {
       "batch": "other",
       "group": "[system]",
       "events": 4,
-      "guarded": 1,
+      "guarded": 4,
       "allowlisted": 0,
-      "unguarded": 3,
+      "unguarded": 0,
       "started": true
     }
   },
@@ -675,10 +675,6 @@
       "pma-voice:setPlayerRadio",
       "pma-voice:setTalkingOnRadio"
     ],
-    "production-freeze": [
-      "i18n:client:reportLanguage",
-      "production:client:freezeDebug"
-    ],
     "qb-shops": [
       "qb-shops:server:DoBail",
       "qb-shops:server:PaySlip",
@@ -709,15 +705,6 @@
     "sessionmanager": [
       "hostedSession",
       "hostingSession"
-    ],
-    "story-engine": [
-      "story:server:makeDecision",
-      "tcity:client:telemetry"
-    ],
-    "tcity-dashboard": [
-      "tcity-dashboard:server:flagPlate",
-      "tcity-dashboard:server:setTracker",
-      "tcity-dashboard:server:unflagPlate"
     ]
   },
   "debt": [
@@ -826,14 +813,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "production-freeze",
-      "batch": "other",
-      "unguarded": 2,
-      "owner": "production-freeze",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "qb-shops",
       "batch": "qb",
       "unguarded": 5,
@@ -878,22 +857,6 @@
       "batch": "other",
       "unguarded": 2,
       "owner": "sessionmanager",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "story-engine",
-      "batch": "custom",
-      "unguarded": 2,
-      "owner": "story-engine",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "tcity-dashboard",
-      "batch": "other",
-      "unguarded": 3,
-      "owner": "tcity-dashboard",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     }

@@ -484,5 +484,33 @@
       "shape": "local_check",
       "why": "开门必须有授权：房主/钥匙/警察权限/开锁器，按门配置逐条判定。"
     }
+  },
+  "tcity-dashboard": {
+    "isOnDutyLeo": {
+      "defined_at": "tcity-dashboard/server/police_api.lua",
+      "requires_code": [
+        "job.type == ",
+        "job.name == ",
+        "job.onduty == true"
+      ],
+      "requires_raw": [
+        "leo",
+        "police"
+      ],
+      "why": "中控屏的车牌标记/取消/追踪器只能是**在职**警察（job.type=leo 或 job.name=police 且 onduty）。"
+    }
+  },
+  "story-engine": {
+    "DecisionEngine.MakeChoice": {
+      "defined_at": "story-engine/server/decision_engine.lua",
+      "call": "DecisionEngine.MakeChoice",
+      "shape": "delegate",
+      "requires_code": [
+        "DecisionEngine._pending[source]",
+        "pending.questId ~= questId",
+        "pending.expiresAt"
+      ],
+      "why": "剧情决策只接受服务端刚刚下发的那一个（按 source 存 pending + 三元组全等 + 过期时间），拒绝跨任务/跨步骤/重放。"
+    }
   }
 }
