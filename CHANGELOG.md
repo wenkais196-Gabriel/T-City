@@ -315,7 +315,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   注册了两次（后一个覆盖前一个，前一个是死代码）。改为：全局播放仅服务端可触发、声音参数走
   `^[A-Za-z0-9_%-]+$` 白名单 + 音量 0..1 + 按 (玩家, 文件) 100ms 限流（车辆转向灯频率高，不能用更长的
   窗口），并删掉重复注册。
-  测试：`fixtures/cityhall_probe.lua` / `fixtures/interactsound_probe.lua`。旧版实测：`requestId`
+  测试：两个探针（cityhall_probe.lua / interactsound_probe.lua，位于 layer3_business 的 fixtures 目录）。旧版实测：`requestId`
   坏 hall 抛 `attempt to index a nil value (field '?')`、`STARTER_REPEAT_NOTHING_ADDED=false`、
   `DRIVERTEST_MAIL_COUNT=49`、`APPLY_JOB_REMOTE_REJECTED=false`、`ALL_FROM_CLIENT_BLOCKED=false`、
   `ONE_FROM_CLIENT_BLOCKED=false`、`SOURCE_BAD_FILENAME_BLOCKED=false`、
