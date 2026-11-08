@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 54,
-      "allowlisted": 32,
-      "unguarded": 130
+      "guarded": 65,
+      "allowlisted": 41,
+      "unguarded": 110
     },
     "other": {
       "events": 76,
@@ -308,9 +308,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 10,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 10,
+      "guarded": 2,
+      "allowlisted": 8,
+      "unguarded": 0,
       "started": true
     },
     "qb-cityhall": {
@@ -425,9 +425,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 10,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 10,
+      "guarded": 9,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": false
     },
     "qb-management": {
@@ -724,18 +724,6 @@
       "hospital:server:resetHungerThirst",
       "qb-ambulancejob:server:stash"
     ],
-    "qb-apartments": [
-      "apartments:server:AddObject",
-      "apartments:server:CreateApartment",
-      "apartments:server:OpenDoor",
-      "apartments:server:RemoveObject",
-      "apartments:server:RingDoor",
-      "apartments:server:UpdateApartment",
-      "apartments:server:openStash",
-      "apartments:server:setCurrentApartment",
-      "qb-apartments:returnBucket",
-      "qb-apartments:server:SetInsideMeta"
-    ],
     "qb-cityhall": [
       "QBCore:Client:UpdateObject",
       "qb-cityhall:server:ApplyJob",
@@ -796,18 +784,6 @@
       "qb-inventory:server:snowball",
       "qb-inventory:server:updateDrop",
       "qb-inventory:server:useItem"
-    ],
-    "qb-lapraces": [
-      "qb-lapraces:server:CancelRace",
-      "qb-lapraces:server:CreateLapRace",
-      "qb-lapraces:server:FinishPlayer",
-      "qb-lapraces:server:JoinRace",
-      "qb-lapraces:server:LeaveRace",
-      "qb-lapraces:server:SaveRace",
-      "qb-lapraces:server:SetupRace",
-      "qb-lapraces:server:StartRace",
-      "qb-lapraces:server:UpdateRaceState",
-      "qb-lapraces:server:UpdateRacerData"
     ],
     "qb-management": [
       "qb-bossmenu:server:stash",
@@ -1083,14 +1059,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "qb-apartments",
-      "batch": "qb",
-      "unguarded": 10,
-      "owner": "qb-apartments",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "qb-cityhall",
       "batch": "qb",
       "unguarded": 5,
@@ -1159,14 +1127,6 @@
       "batch": "qb",
       "unguarded": 8,
       "owner": "qb-inventory",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-lapraces",
-      "batch": "qb",
-      "unguarded": 10,
-      "owner": "qb-lapraces",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },

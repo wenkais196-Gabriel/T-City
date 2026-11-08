@@ -44,21 +44,21 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 |---|---|---|---|---|---|
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
 | custom `[custom]` | 133 | 80 | 40 | 13 | 覆盖率 **120/133 ≈ 90.2%**（第 5 批：中控屏锁持有者、物流任务前缀条件；车钥匙两条自作用域登记） |
-| qb `[qb]` | 216 | 54 | 32 | 130 | 债务 |
+| qb `[qb]` | 216 | 65 | 41 | 110 | 债务 |
 | other（system / standalone / voice / cfx-default） | 76 | 1 | 6 | 69 | 债务 |
-| **合计** | **440** | 140 | 88 | **212** | — |
+| **合计** | **440** | 151 | 97 | **192** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
 **债的分布不是均匀的**：53 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
-它们贡献 **93/212（44%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
+它们贡献 **93/192（48%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
 `qb-crypto` 6、`qb-shops` 5、`qb-weed` 5、`qb-streetraces` 3…）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
 
 ## 3.1 资源内部 helper 登记表（2026-11-01 第 2 批）
 
-全仓 212 个未登记事件里，有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
+全仓 192 个未登记事件里，有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
 （`CanModifyPlate` / `IsEmergencyService` / `onDutyOfficer` …），按固定 token 名单扫不出来。
 直接把这些名字塞进 token 名单等于"名字像校验就算校验"，所以另开了
 `tests/architecture/net_event_guard_helpers.json`：
@@ -109,6 +109,22 @@ custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债�
   并且不许出现 `Players[<别的变量>]` / `GetPlayer(tonumber(...))` / `GetPlayerByCitizenId(<别的变量>)`；
 * `callback_relay`：必须走 `QBCore.ServerCallbacks[name]`，且分发目标里的高危项要有可验证的守卫（见上）；
 * `deprecated_blocked`：必须有 `LogSecurity(` 调用，并且**不许**出现列出的写 API（`AddItem/RemoveItem/AddMoney/RemoveMoney/SetMetaData/SetJob/SetJobDuty/SetGang/SetMoney`、任何 `MySQL.*`、`exports[...]:Set*`）。
+
+## 4.1 `monitor`（txAdmin）的 33 条不计入本仓库的"待修"
+
+`resources/[system]/monitor` 是 FXServer 自带的 txAdmin 面板，`txsv:*` 系列事件由 txAdmin
+自己鉴权：23 条明确调 `PlayerHasTxPermission(src, 'players.teleport')` 之类的权限判定，
+另外 10 条是日志/握手/管理查询（`chatMessage`、`txsv:logger:*`、`txsv:checkIfAdmin` 等），
+语义上本来就是开放的客户端上报面。
+
+判断：**这些不是本仓库的代码，也不该按本仓库的口径去改**（改 vendored 代码会在下次
+FXServer 升级时被覆盖）。所以：
+
+- 数字上仍然计入 192 条里（不屏蔽真实数量）；
+- 口径上单独说明：这 33 条的鉴权主体是 txAdmin 的 web 会话 + `PlayerHasTxPermission`，
+  与本仓库的 `net_event_scan` 识别的那套 token 不是一回事；
+- 若将来要收口，正确做法是给扫描器加一个 `local allow = H(...)` 形状（现有形状只认
+  `if not H(...)`），而不是把 33 条一条条写进 allowlist 当作"已证明"。
 
 ## 5. 闸门怎么工作
 
