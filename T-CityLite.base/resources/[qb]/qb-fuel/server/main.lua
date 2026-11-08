@@ -99,7 +99,14 @@ RegisterServerEvent('qb-fuel:server:setCanFuel', function (fuel)
     if current > MAX_CAN_FUEL then current = MAX_CAN_FUEL end
     local target = clampNumber(fuel, 0, MAX_CAN_FUEL)
     if not target then return end
-    if target > current then target = current end      -- 只能减不能加：加满必须走 refillJerryCan 付钱
+    -- 只能减不能加：加满必须走 refillJerryCan 付钱。
+    -- ⚠️ 这里**不能**静默写成 `target = current`：客户端 `canLiter` 来自 `GetAmmoInPedWeapon`
+    -- （油桶 ammo 是 0..100 刻度，而 `Config.JerryCanLitre` 只有 40），一旦两边错位就会变成
+    -- "油桶一个不少、车里油却加上去了" —— 那是刷油复制，比不给过更糟。
+    if target > current then
+        Player.Functions.Notify(Lang:t('error.no_fuel_can'), 'error')
+        return
+    end
 
     jerryCan.info.fuel = target
     jerryCan.info.ammo = target
