@@ -242,7 +242,20 @@ Drops['drop-1001'] = {
     createdTime = clock, owner = 1, coords = vec3(0.0, 0.0, 0.0),
     maxweight = 1000, slots = 10, isOpen = true, openedBy = 1, openedAt = clock,
 }
--- 2 号玩家站在旁边，但掉落物是 1 号刚打开的 → 60 秒内不能被抢开
+-- 远处的 3 号玩家调 openDrop：他在距离校验处就被拒，**不能**因此刷新租约。
+-- 判据落在"他之后，站在包旁边的 2 号能不能立刻接管"上（租约被远程续租的话，2 号会被挡 120 秒）。
+state.players[3] = makePlayer(3)
+clock = clock + 130                       -- 租约已过期，允许接管
+state.coords = vec3(500.0, 500.0, 0.0)
+fireAs(3, 'qb-inventory:server:openDrop', 'drop-1001')
+state.coords = vec3(0.5, 0.5, 0.0)
+state.playerInventoryOpened = nil
+fireAs(2, 'qb-inventory:server:openDrop', 'drop-1001')
+emit('DROP_TAKEOVER_NOT_STOLEN_BY_REMOTE', tostring(state.playerInventoryOpened ~= nil))
+
+-- 2 号玩家站在旁边，但掉落物是 1 号刚打开的（租约是新的）→ 120 秒内不能被抢开
+Drops['drop-1001'].openedBy = 1
+Drops['drop-1001'].openedAt = clock
 state.coords = vec3(0.5, 0.5, 0.0)
 state.playerInventoryOpened = nil
 fireAs(2, 'qb-inventory:server:openDrop', 'drop-1001')

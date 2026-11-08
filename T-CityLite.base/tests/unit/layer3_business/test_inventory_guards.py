@@ -70,6 +70,17 @@ def test_vending_handlers_survive_malformed_client_data():
     assert data["USE_ITEM_BAD_SAFE"] == "true", "useItem 收到非表参数时抛错"
 
 
+def test_open_drop_lease_is_written_after_the_distance_check():
+    """租约必须在距离校验**之后**写。
+
+    先写 `openedBy/openedAt` 再判距离的话，站在远处的人每 120 秒调一次 `openDrop` 就能不断续租：
+    他自己拿不到东西（随后被距离拒），但把租约攥在手里，站在包旁边的合法玩家永远接管不了。
+    判据落在「远程尝试之后，旁边的人能不能立刻接管」上。
+    """
+    data = _run()
+    assert data["DROP_TAKEOVER_NOT_STOLEN_BY_REMOTE"] == "true", "远程调用刷新了租约，旁边的人接管不了"
+
+
 def test_drop_cannot_be_locked_forever_by_one_player():
     """一个人打开掉落物后不关闭，不能让所有人永远打不开。"""
     data = _run()

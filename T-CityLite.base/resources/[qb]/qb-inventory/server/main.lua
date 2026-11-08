@@ -282,10 +282,13 @@ RegisterNetEvent('qb-inventory:server:openDrop', function(dropId)
     --    永久锁住，别人再也打不开。超过 2 分钟允许别人接管。
     local openedAt = drop.openedAt or 0
     if drop.isOpen and drop.openedBy ~= src and (os.time() - openedAt) < 120 then return end
-    drop.openedBy = src
-    drop.openedAt = os.time()
+    -- 🔒 距离校验必须在**写租约之前**：先写 openedBy/openedAt 再判距离的话，
+    --    远处的人每 120 秒调一次就能不断续租 —— 他自己开不了（随后被距离拒），
+    --    但把租约一直攥在手里，站在包旁边的合法玩家永远接管不了。
     local distance = #(playerCoords - drop.coords)
     if distance > 2.5 then return end
+    drop.openedBy = src
+    drop.openedAt = os.time()
     local formattedInventory = {
         name = dropId,
         label = dropId,
