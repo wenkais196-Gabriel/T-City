@@ -77,11 +77,16 @@ def test_drop_cannot_be_locked_forever_by_one_player():
     assert data["DROP_TAKEOVER_AFTER_TIMEOUT"] == "true", "超过 2 分钟仍无法接管（掉落物被永久锁死）"
 
 
-def test_drop_can_only_be_moved_by_its_owner():
-    """`updateDrop` 只校验"玩家 ↔ 坐标"距离，任何玩家都能把别人的包拖走。"""
+def test_drop_position_updates_require_the_bag_to_actually_be_there():
+    """`updateDrop` 的坐标必须和**包的实体位置**对得上。
+
+    只校验「玩家 ↔ 声称坐标」的话，改过的客户端可以把别处的包"挪"到自己脚下，
+    随后 `openDrop` 的 2.5 米校验就形同虚设（远程开包拿东西）。
+    但也不能只认创建者 —— 任何玩家都能把包捡起来带走（这是玩法），那样会堵死正常搬运。
+    """
     data = _run()
-    assert data["DROP_MOVE_FOREIGN_BLOCKED"] == "true", "别人能把你的包拖走"
-    assert data["DROP_MOVE_OWNER_ALLOWED"] == "true", "自己反而挪不动（过度收紧）"
+    assert data["DROP_MOVE_FOREIGN_BLOCKED"] == "true", "包的实体明明在别处，坐标却被远程改了"
+    assert data["DROP_MOVE_CARRIER_ALLOWED"] == "true", "正常「捡起再放下」被挡住（过度收紧）"
 
 
 def test_snowball_is_rate_limited_and_self_scoped():
