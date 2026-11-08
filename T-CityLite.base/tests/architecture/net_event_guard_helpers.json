@@ -222,15 +222,20 @@
     }
   },
   "custom-justice": {
-    "JusticeService.GetOwnInmate": {
-      "defined_at": "custom-justice/server/main.lua",
+    "IsLawEnforcement": {
+      "defined_at": "custom-justice/server/prison.lua",
       "requires_code": [
-        "player.PlayerData.citizenid",
-        "return inmates["
+        "LAW_ENFORCEMENT_JOBS",
+        "type(data) ~= ",
+        "type(job) ~= ",
+        "LAW_ENFORCEMENT_JOBS[job.name] == true"
       ],
-      "requires_raw": [],
       "shape": "local_check",
-      "why": "调用者**自己**在押与否：只接受 Player 对象（source 派生），查不到别人的记录"
+      "why": "直接下判决只认在职警察与法官（原来写成正分支，行为一致但闸门认不出）。",
+      "requires_raw": [
+        "table",
+        "string"
+      ]
     }
   },
   "qb-management": {

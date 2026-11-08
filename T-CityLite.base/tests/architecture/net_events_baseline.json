@@ -16,15 +16,15 @@
     },
     "custom": {
       "events": 133,
-      "guarded": 83,
-      "allowlisted": 42,
-      "unguarded": 8
+      "guarded": 82,
+      "allowlisted": 47,
+      "unguarded": 4
     },
     "qb": {
       "events": 216,
-      "guarded": 104,
-      "allowlisted": 95,
-      "unguarded": 17
+      "guarded": 106,
+      "allowlisted": 97,
+      "unguarded": 13
     },
     "other": {
       "events": 75,
@@ -102,8 +102,8 @@
       "group": "[custom]",
       "events": 5,
       "guarded": 4,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": true
     },
     "custom-consumables": {
@@ -120,17 +120,17 @@
       "group": "[custom]",
       "events": 1,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": true
     },
     "custom-justice": {
       "batch": "custom",
       "group": "[custom]",
       "events": 7,
-      "guarded": 5,
+      "guarded": 4,
       "allowlisted": 1,
-      "unguarded": 1,
+      "unguarded": 2,
       "started": true
     },
     "custom-main": {
@@ -138,8 +138,8 @@
       "group": "[custom]",
       "events": 2,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": true
     },
     "custom-mining": {
@@ -183,8 +183,8 @@
       "group": "[custom]",
       "events": 1,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": true
     },
     "custom-vehicles": {
@@ -290,9 +290,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 16,
-      "guarded": 15,
+      "guarded": 16,
       "allowlisted": 0,
-      "unguarded": 1,
+      "unguarded": 0,
       "started": true
     },
     "qb-ambulancejob": {
@@ -408,8 +408,8 @@
       "group": "[qb]",
       "events": 2,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": true
     },
     "qb-inventory": {
@@ -479,9 +479,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 1,
-      "guarded": 0,
+      "guarded": 1,
       "allowlisted": 0,
-      "unguarded": 1,
+      "unguarded": 0,
       "started": true
     },
     "qb-shops": {
@@ -611,21 +611,9 @@
     "connectqueue": [
       "Queue:playerActivated"
     ],
-    "custom-certificates": [
-      "certificates:server:IssueCertificate"
-    ],
-    "custom-documents": [
-      "custom-documents:server:presentDocument"
-    ],
     "custom-justice": [
-      "justice:server:imprison"
-    ],
-    "custom-main": [
-      "custom-main:server:ResetDeathStatus",
-      "custom-main:server:policeHandoverAlert"
-    ],
-    "custom-taxes": [
-      "durability:server:onWeaponFired"
+      "justice:server:requestReduction",
+      "justice:server:sentenceComplete"
     ],
     "hardcap": [
       "hardcap:playerActivated"
@@ -690,16 +678,6 @@
     "production-freeze": [
       "i18n:client:reportLanguage",
       "production:client:freezeDebug"
-    ],
-    "qb-adminmenu": [
-      "qb-admin:server:GetPlayersForBlips"
-    ],
-    "qb-hud": [
-      "hud:server:GainStress",
-      "hud:server:RelieveStress"
-    ],
-    "qb-scoreboard": [
-      "qb-scoreboard:server:SetActivityBusy"
     ],
     "qb-shops": [
       "qb-shops:server:DoBail",
@@ -776,42 +754,10 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "custom-certificates",
-      "batch": "custom",
-      "unguarded": 1,
-      "owner": "custom-certificates",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "custom-documents",
-      "batch": "custom",
-      "unguarded": 1,
-      "owner": "custom-documents",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "custom-justice",
       "batch": "custom",
-      "unguarded": 1,
-      "owner": "custom-justice",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "custom-main",
-      "batch": "custom",
       "unguarded": 2,
-      "owner": "custom-main",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "custom-taxes",
-      "batch": "custom",
-      "unguarded": 1,
-      "owner": "custom-taxes",
+      "owner": "custom-justice",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
@@ -884,30 +830,6 @@
       "batch": "other",
       "unguarded": 2,
       "owner": "production-freeze",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-adminmenu",
-      "batch": "qb",
-      "unguarded": 1,
-      "owner": "qb-adminmenu",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-hud",
-      "batch": "qb",
-      "unguarded": 2,
-      "owner": "qb-hud",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-scoreboard",
-      "batch": "qb",
-      "unguarded": 1,
-      "owner": "qb-scoreboard",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
