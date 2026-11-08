@@ -187,9 +187,11 @@ RegisterNetEvent('production:client:freezeDebug', function()
 
     if PolyZone and PolyZone.Create then
         local originalCreate = PolyZone.Create
-        PolyZone.Create = function(coords, options)
+        -- 保住 self：调用方写的是 `PolyZone:Create(points, opts)`，
+        -- 包装器第一个参数必须是 self，否则 points 会被当成 self、opts 被丢弃。
+        PolyZone.Create = function(self, points, options)
             if options then options.debugPoly = false end
-            return originalCreate(coords, options)
+            return originalCreate(self, points, options)
         end
     end
 end)
