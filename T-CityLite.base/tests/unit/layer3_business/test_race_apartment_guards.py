@@ -60,3 +60,10 @@ def test_race_finish_settles_once_and_survives_bad_payloads():
     assert data["RECORD_WRITES_AFTER_CHEAT"][0] == "0", "BestLap=0.001 仍能写纪录"
     assert data["RECORD_WRITES_AFTER_NORMAL"][0] == "1", "正常完赛没有结算（racer.Finished 又把自己挡住了？）"
     assert data["RECORD_WRITES_AFTER_REPLAY"][0] == "0", "重复 FinishPlayer 二次结算"
+
+
+# 变异证据（本机实测，改动 handler 才复现；不需要入闸门也要留档）：
+#   * `racer.FinishHandled` → `racer.Finished`（回到 CC 抓到的 B2）：
+#     RECORD_WRITES_AFTER_NORMAL 从 1 变 0 —— 这条断言真的在测"正常完赛能不能结算"。
+#   * 把 `local startedAt = Races[raceId].StartedAt` 改成 `nil`（去掉服务端对账）：
+#     RECORD_WRITES_AFTER_CHEAT 从 0 变 1 —— 这条断言真的在测 0.001 刷记录。
