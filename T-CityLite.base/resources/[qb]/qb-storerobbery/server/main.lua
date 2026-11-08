@@ -360,6 +360,16 @@ local recentStoreRobberies = {}
 -- 警情冷却表必须在 playerDropped 之前声明：handler 里 `lastCopCall[src] = nil` 若解析成全局会抛错
 local lastCopCall = {}
 
+-- source → citizenid 反查表：掉线时 QBCore 可能已经把玩家移除（GetPlayer 返回 nil），
+-- 而 recentStoreRobberies 可能只剩记录、没有 activeRobberies 可查。
+local srcToCitizenid = {}
+
+AddEventHandler('QBCore:Server:PlayerLoaded', function(player)
+    if player and player.PlayerData then
+        srcToCitizenid[player.PlayerData.source] = player.PlayerData.citizenid
+    end
+end)
+
 local function HasRecentStoreRobbery(citizenid, safeKey)
     local record = recentStoreRobberies[safeKey]
     if not record or not citizenid then return false end
@@ -531,7 +541,7 @@ AddEventHandler('playerDropped', function()
     local src = source
     -- 掉线时 QBCore 可能已经移除该玩家（GetPlayer 返回 nil），
     -- 所以优先用 activeRobberies 里记下的 citizenid 清"近期抢劫"记录
-    local droppedCid = nil
+    local droppedCid = srcToCitizenid[src]
     local droppedPlayer = QBCore.Functions.GetPlayer(src)
     if droppedPlayer and droppedPlayer.PlayerData then
         droppedCid = droppedPlayer.PlayerData.citizenid
@@ -539,6 +549,7 @@ AddEventHandler('playerDropped', function()
     for register, job in pairs(activeRobberies) do
         if job.src == src and job.citizenid then droppedCid = job.citizenid end
     end
+    srcToCitizenid[src] = nil
     if droppedCid then
         for safeKey, record in pairs(recentStoreRobberies) do
             if record.citizenid == droppedCid then recentStoreRobberies[safeKey] = nil end

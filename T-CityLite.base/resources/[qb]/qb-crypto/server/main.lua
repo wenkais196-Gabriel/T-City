@@ -196,6 +196,13 @@ QBCore.Commands.Add('crypto', '', {}, false, function(source)
 end)
 
 
+local lastRebootUpdate = {}
+-- 重启会话：只能由**服务端**在 ExchangeFail（真的扣掉一根 cryptostick）时创建，
+-- 客户端不能自报"我要开始重启"。owner 持续上报也不会永远占着：5 分钟硬上限。
+local rebootSession = nil     -- { owner = src, citizenid = ..., startedAt = ms, lastSeen = ms }
+local REBOOT_SESSION_TIMEOUT = 60 * 1000        -- owner 静默 60 秒自动收尾
+local REBOOT_SESSION_MAX = 5 * 60 * 1000        -- 单次重启最长 5 分钟，防止恶意长占
+
 -- 交易所柜员机位置（Config 里登记），用于把"任意玩家"收窄成"正在交易所前的人"
 local EXCHANGE_MAX_DIST = tonumber(GetConvar('crypto_exchange_max_distance', '20.0')) or 20.0
 
@@ -238,7 +245,19 @@ RegisterServerEvent('qb-crypto:server:ExchangeFail', function()
     if not Player then return end
     local ItemData = Player.Functions.GetItemByName('cryptostick')
     if ItemData ~= nil then
-        exports['qb-inventory']:RemoveItem(src, 'cryptostick', 1, false, 'qb-crypto:server:ExchangeFail')
+        local removed = exports['qb-inventory']:RemoveItem(src, 'cryptostick', 1, false, 'qb-crypto:server:ExchangeFail')
+        if removed ~= true then return end
+        -- 真的扣掉一根 cryptostick → 这次"交易所故障"是可信的，服务端登记重启会话
+        local now = GetGameTimer()
+        rebootSession = {
+            owner = src,
+            citizenid = Player.PlayerData.citizenid,
+            startedAt = now,
+            lastSeen = now,
+        }
+        Crypto.Exchange.RebootInfo.state = true
+        Crypto.Exchange.RebootInfo.percentage = 0
+        TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['cryptostick'], 'remove')
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.cryptostick_malfunctioned'), 'error')
     end
@@ -262,21 +281,22 @@ AddEventHandler('QBCore:Server:PlayerLoaded', function(player)
     end
 end)
 
-local lastRebootUpdate = {}
-local rebootOwner = nil       -- 当前重启会话的发起者
-local rebootOwnerAt = 0       -- 最后一次收到 owner 上报的时刻
-local REBOOT_SESSION_TIMEOUT = 60 * 1000   -- owner 60 秒不吭声就自动收尾，防"永久卡重启中"
 
 -- 会话看门狗：owner 静默（客户端每 ~1.2 秒会上报一次）超过 60 秒就自动收尾。
 -- 只在收到事件时判超时是不够的：owner 掉线/客户端卡死后不会再有人发事件。
 CreateThread(function()
     while true do
         Wait(15000)
-        if rebootOwner and (GetGameTimer() - rebootOwnerAt) > REBOOT_SESSION_TIMEOUT then
-            rebootOwner = nil
-            Crypto.Exchange.RebootInfo.state = false
-            Crypto.Exchange.RebootInfo.percentage = 0
-            TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+        if rebootSession then
+            local now = GetGameTimer()
+            local stale = (now - rebootSession.lastSeen) > REBOOT_SESSION_TIMEOUT
+            local expired = (now - rebootSession.startedAt) > REBOOT_SESSION_MAX
+            if stale or expired then
+                rebootSession = nil
+                Crypto.Exchange.RebootInfo.state = false
+                Crypto.Exchange.RebootInfo.percentage = 0
+                TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+            end
         end
     end
 end)
@@ -292,18 +312,20 @@ RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
     --    否则服务端会永久卡在 state=true。
     if not QBCore.Functions.GetPlayer(src) then return end
 
-    -- owner 超时（60 秒没有任何上报）→ 自动收尾，避免交易所永久卡"重启中"
-    if rebootOwner and (GetGameTimer() - rebootOwnerAt) > REBOOT_SESSION_TIMEOUT then
-        rebootOwner = nil
+    -- 🔒 会话必须由服务端创建（ExchangeFail 里挂上），客户端不能自己发起"重启"
+    if not rebootSession then return end
+    if rebootSession.owner ~= src then return end
+
+    local nowMs = GetGameTimer()
+    -- 静默超时 / 硬上限：满足任一就收尾
+    if (nowMs - rebootSession.lastSeen) > REBOOT_SESSION_TIMEOUT
+        or (nowMs - rebootSession.startedAt) > REBOOT_SESSION_MAX then
+        rebootSession = nil
         Crypto.Exchange.RebootInfo.state = false
         Crypto.Exchange.RebootInfo.percentage = 0
         TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+        return
     end
-
-    local isOwner = rebootOwner == src
-    -- 🔒 会话一旦有 owner，其他人**任何**上报都不接受（原来只拦 false，非 owner 的 true 还能覆盖进度）
-    if rebootOwner and not isOwner then return end
-    if not isOwner and not NearExchange(src) then return end
     percentage = tonumber(percentage)
     if not percentage or percentage < 0 or percentage > 100 or percentage % 1 ~= 0 then return end
     -- 客户端重启循环每帧上报一次进度：用毫秒计时，200ms 节流（**按玩家**，否则一个人能吃满全局冷却）
@@ -311,13 +333,10 @@ RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
     if lastRebootUpdate[src] and now - lastRebootUpdate[src] < 200 then return end
     lastRebootUpdate[src] = now
 
-    if state == true and not rebootOwner then
-        rebootOwner = src          -- 这次重启由他发起
-        rebootOwnerAt = GetGameTimer()
-    elseif state == false and isOwner then
-        rebootOwner = nil         -- 发起者收尾
+    rebootSession.lastSeen = nowMs
+    if state == false then
+        rebootSession = nil        -- 发起者收尾
     end
-    if isOwner then rebootOwnerAt = GetGameTimer() end
 
     Crypto.Exchange.RebootInfo.state = state
     Crypto.Exchange.RebootInfo.percentage = percentage
@@ -325,8 +344,8 @@ end)
 
 AddEventHandler('playerDropped', function()
     local src = source
-    if rebootOwner == src then
-        rebootOwner = nil
+    if rebootSession and rebootSession.owner == src then
+        rebootSession = nil
         Crypto.Exchange.RebootInfo.state = false
         Crypto.Exchange.RebootInfo.percentage = 0
         TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
@@ -343,7 +362,8 @@ local lastRebootSync = {}
 RegisterServerEvent('qb-crypto:server:SyncReboot', function()
     local src = source
     if type(src) ~= 'number' or not QBCore.Functions.GetPlayer(src) then return end
-    if not NearExchange(src) then return end
+    -- 只允许会话拥有者，或站在交易所前的人触发同步（原来任意附近玩家都能刷全服广播）
+    if not (rebootSession and rebootSession.owner == src) and not NearExchange(src) then return end
     -- 🔒 全服广播：按玩家 1 秒节流
     local now = os.time()
     if lastRebootSync[src] and now == lastRebootSync[src] then return end
