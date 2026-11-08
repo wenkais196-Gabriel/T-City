@@ -48,6 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-3 批 5：qb-houses 19 个事件（入室盗窃链）**（2026-11-08）：
+  - **任何玩家能打开别人家的储物柜**：`openStash(house)` 只查 `Config.Houses[house]` 是否存在，
+    没有任何钥匙判定 —— 传个房子名就 `OpenInventory` 到人家的 stash 上，物品直接拿走。
+    现在必须 `hasKey(license, citizenid, house)`（房主或持有人）。
+  - **入室链**：`OpenDoor(target, house)` 能把**任意玩家**传进任意房子；`lockHouse` 能上/开别人家的锁；
+    `setLocation` 能挪走别人家的储物柜/衣柜坐标；`savedecorations` 能改别人家装修。
+    四条现在分别要求 hasKey / isHouseOwner。
+  - **任何玩家能建房**：`addNewHouse`（任意价位）、`addGarage`、`createBlip`（全服广播）无管理员判定 →
+    加 `QBCore.Functions.HasPermission(src, 'admin')`。
+  - `SetRamState` / `SetHouseRammed` 是警察行为 → 要求在职 `police`；`buyHouse` / `viewHouse` /
+    `RingDoor` 缺查表（坏 house 名会让服务端崩）→ 先查 `Config.Houses`。
+  - `LogoutLocation` 会落盘 + `Player.Logout`，客户端连点会反复触发存档 → 加 citizenid 维度 10 秒冷却。
+  - 闸门：`hasKey` / `isHouseOwner` 登记进 `net_event_guard_helpers.json`（含 defined_at 与函数体证据），
+    每条调用点由闸门验证「在 `if not H(...)` 的否定分支里且真的 return」。
+  - 数字：qb-houses 19 → 0；全仓未登记 **231 → 212**、qb **149 → 130**、allowlist **91 → 92**。
 - **P1-3 批 4：qb-drugs 角落贩售 / qb-prison / qb-weapons 共 20 个事件**（2026-11-08）：
   - **印钱**：`updateDealerItems` 忽略 `RemoveItem` 的返回值 —— 库存打空时调一次
     `{slot=1}, 999, 'Sandy Dealer'` 就 `AddMoney(999×15)`（实测旧代码 PAID=14985，背包一件没有）；

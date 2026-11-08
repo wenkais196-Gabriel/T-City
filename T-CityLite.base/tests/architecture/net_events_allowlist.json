@@ -690,6 +690,42 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-houses:server:LogoutLocation",
+      "category": "civilian",
+      "reason": "在家下线：落盘 + QBCore.Player.Logout。加了 citizenid 维度的 10 秒冷却 —— 连点会反复触发存档，和角色存档线程抢写。",
+      "evidence": "qb-houses/server/main.lua LogoutLocation — logout_location_cooldown[cid] 10s",
+      "file": "[qb]/qb-houses/server/main.lua",
+      "owner": "qb-houses",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-houses:server:RingDoor",
+      "category": "civilian",
+      "reason": "按门铃只是把「谁按了哪栋」广播给客户端做音效；house 先查 Config、非字符串直接拒（原来可传任意值让全服刷广播）。",
+      "evidence": "qb-houses/server/main.lua RingDoor — type(house) ~= 'string' or not Config.Houses[house] then return",
+      "file": "[qb]/qb-houses/server/main.lua",
+      "owner": "qb-houses",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-houses:server:SetInsideMeta",
+      "category": "civilian",
+      "reason": "只写**自己** metadata.inside（进/出房子的投影状态）；metadata.inside 缺失时直接返回，避免 nil 索引崩溃。",
+      "evidence": "qb-houses/server/main.lua SetInsideMeta — type(insideMeta) ~= 'table' then return + 只碰 Player.PlayerData",
+      "file": "[qb]/qb-houses/server/main.lua",
+      "owner": "qb-houses",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-houses:server:setHouses",
+      "category": "unchecked_debt",
+      "reason": "只把服务端 Config.Houses 推给调用者（纯读、无 DB、无副作用），所以没有可校验的输入；保留在债务里是因为它仍然是一个「任何玩家可触发」的入口，未来如加调试字段需重新评估。",
+      "evidence": "qb-houses/server/main.lua setHouses — TriggerClientEvent('qb-houses:client:setHouseConfig', src, Config.Houses)",
+      "file": "[qb]/qb-houses/server/main.lua",
+      "owner": "qb-houses",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "prison:server:CheckChance",
       "category": "civilian",
       "reason": "摸手机只在服刑期间、且每人只成功一次（GotItems[src]），概率 1/100 由服务端抽。",

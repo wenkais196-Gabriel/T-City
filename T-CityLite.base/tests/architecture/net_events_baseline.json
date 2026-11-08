@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 39,
-      "allowlisted": 28,
-      "unguarded": 149
+      "guarded": 54,
+      "allowlisted": 32,
+      "unguarded": 130
     },
     "other": {
       "events": 76,
@@ -398,9 +398,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 19,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 19,
+      "guarded": 15,
+      "allowlisted": 4,
+      "unguarded": 0,
       "started": false
     },
     "qb-hud": {
@@ -783,27 +783,6 @@
       "qb-houserobbery:server:removeLockpick",
       "qb-houserobbery:server:searchFurniture"
     ],
-    "qb-houses": [
-      "qb-houses:server:LogoutLocation",
-      "qb-houses:server:OpenDoor",
-      "qb-houses:server:RingDoor",
-      "qb-houses:server:SetHouseRammed",
-      "qb-houses:server:SetInsideMeta",
-      "qb-houses:server:SetRamState",
-      "qb-houses:server:addGarage",
-      "qb-houses:server:addNewHouse",
-      "qb-houses:server:buyHouse",
-      "qb-houses:server:createBlip",
-      "qb-houses:server:giveHouseKey",
-      "qb-houses:server:giveKey",
-      "qb-houses:server:lockHouse",
-      "qb-houses:server:openStash",
-      "qb-houses:server:removeHouseKey",
-      "qb-houses:server:savedecorations",
-      "qb-houses:server:setHouses",
-      "qb-houses:server:setLocation",
-      "qb-houses:server:viewHouse"
-    ],
     "qb-hud": [
       "hud:server:GainStress",
       "hud:server:RelieveStress"
@@ -1164,14 +1143,6 @@
       "batch": "qb",
       "unguarded": 5,
       "owner": "qb-houserobbery",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-houses",
-      "batch": "qb",
-      "unguarded": 19,
-      "owner": "qb-houses",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
