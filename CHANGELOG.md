@@ -308,8 +308,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PaySlip(99999)` 就是 500 × 99999 的印钞机（探针实测旧版 `PAYSLIP_CLIENT_BLOCKED=false`）→ 改成只认
   服务端来源。`RestockShopItems(shop)` 的 `deliveryPay` 有 10 米距离校验，但没有冷却也没有次数概念：
   站在交货点循环发就能一遍遍拿 500 + 10% 概率的 `cryptostick`（旧版 `RESTOCK_COOLDOWN_BLOCKED=false`）
-  → 加 30 秒冷却，距离校验改成显式的 `nearCoords` helper（`deliveryPay` 内部那次是"不付钱就 return"，
-  闸门认不出是守卫）。`UpdateShopItems(shop, itemData, amount)` 的 slot/amount 全客户端给：坏 slot 抛
+  → 加 30 秒冷却（**键是「玩家 + 店」**：只按玩家计会吞掉同一玩家跑下一家店的工资，而路线里相邻两家的
+  交货点可能只隔 47 米），距离校验改成显式的 `nearCoords` helper（`deliveryPay` 内部那次是"不付钱就
+  return"，闸门认不出是守卫）。`UpdateShopItems(shop, itemData, amount)` 的 slot/amount 全客户端给：坏 slot 抛
   `attempt to index a nil value`，负数 amount 会把库存**加上去**（白拿货）→ slot 必须命中该店商品、
   amount 正数并夹到 1000。`openShop(data)` 的 `data` 为 nil 时抛错、且能在任意位置开任意店 →
   类型校验 + 与门店坐标 5 米内。`DoBail` 补 Player 判空与 bool 类型校验。

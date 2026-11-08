@@ -46,6 +46,7 @@ def test_restock_pay_is_distance_and_cooldown_bound():
     assert data["RESTOCK_FAR_BLOCKED"] == "true", "不在交货点也能结算补货工资"
     assert data["RESTOCK_NEAR_PAID"] == "true", "正常交货被拒（过度收紧）"
     assert data["RESTOCK_COOLDOWN_BLOCKED"] == "true", "冷却内可以重复领工资（旧版就是这样）"
+    assert data["RESTOCK_OTHER_SHOP_ALLOWED"] == "true", "同一玩家跑完另一家店被冷却吞掉（冷却键漏了 shop）"
     assert data["RESTOCK_AFTER_COOLDOWN_PAID"] == "true", "冷却过后领不到（过度收紧）"
     assert data["RESTOCK_BAD_ARGS_SAFE"] == "true", "shop 为 nil / 不存在的店会抛错"
 

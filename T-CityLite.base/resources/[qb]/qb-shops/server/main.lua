@@ -106,12 +106,16 @@ RegisterNetEvent('qb-shops:server:RestockShopItems', function(shop)
     local location = Config.Locations[shop]
     if type(location) ~= 'table' then return end
 
-    -- 一次交货一条钱：同一玩家 30 秒内只认一条（原来站交货点循环发就能无限刷 DeliveryPrice）
+    -- 一次交货一条钱：同一玩家**在同一家店** 30 秒内只认一条（原来站交货点循环发就能无限刷
+    -- DeliveryPrice）。⚠️ 冷却键必须带 shop：送货路线里相邻两家的交货点可能只隔 47 米
+    -- （ammunation ↔ ltdgasoline2），熟练玩家 30 秒内就能跑完第二趟 —— 只按 src 计会让第二趟的
+    -- 工资与补货被静默吞掉。
+    local cooldownKey = src .. ':' .. shop
     local now = GetGameTimer()
-    if LastRestock[src] and (now - LastRestock[src]) < RESTOCK_COOLDOWN_MS then return end
+    if LastRestock[cooldownKey] and (now - LastRestock[cooldownKey]) < RESTOCK_COOLDOWN_MS then return end
     -- 交货点距离（deliveryPay 内部也有一次，但它是"不付钱就 return"，闸门认不出这是守卫）
     if not nearCoords(src, location.delivery, 10.0) then return end
-    LastRestock[src] = now
+    LastRestock[cooldownKey] = now
 
     deliveryPay(src, shop)
     if not Config.Locations[shop].useStock then return end
