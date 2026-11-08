@@ -302,6 +302,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 11：qb-inventory 8 条**（2026-11-08）：核心资源，改动只限制在"客户端参数形状"与"归属"
+  两层，不碰物品搬运算法 ① `openVending(data)` / `closeInventory(inventory)` / `useItem(item)`
+  直接索引客户端参数（`data.coords` / `inventory:find` / `item.slot`），发个数字就能把事件线程打崩
+  → 补类型校验；② `openDrop(dropId)` 只认 `isOpen`，一个人打开后不发 `closeInventory`（改过的
+  客户端或直接崩游戏）就能把掉落物**永久锁死** → 记 `openedBy/openedAt`，2 分钟后允许接管；
+  ③ `updateDrop(dropId, coords)` 只校验"玩家 ↔ 声称坐标"距离、不校验归属，任何玩家都能把别人的
+  包一段段拖走（每次 5 米、次数不限）→ 只允许创建者或管理员；④ `QBCore:Server:UpdateObject`
+  的判据是 `source ~= ''`，而服务端 `source` 是数字 0，`0 ~= ''` 恒真 → handler 实际是**死代码**
+  （qb-core 重启后没人能刷新对象），改成 `source ~= 0`；⑤ `snowball` / `SetInventoryData` 已有
+  冷却与 `validateOtherPlayerInventory`（目标在线 + 3 米内），登记进 allowlist 并把该 helper 写进
+  `net_event_guard_helpers.json`。
+  测试：探针真加载 config + server/main.lua（functions.lua 的全局函数用桩替代，因为是核心资源，
+  加载整条依赖链不现实）。旧版实测：`openVending`/`closeInventory`/`useItem` 三个 handler 在收到
+  数字参数时分别抛 `attempt to index a number value`，`DROP_TAKEOVER_AFTER_TIMEOUT=false`、
+  `DROP_MOVE_FOREIGN_BLOCKED=false`、`UPDATE_OBJECT_SERVER_ALLOWED=false`。
+  数字：未登记 **142 → 134**（qb 61 → 53，allowlist 127 → 132）；`1262 passed`。
+
 - **P1-3 批 10：qb-vehicleshop 7 条 + 试驾生成回调**（2026-11-08）：批 3 已把"钱"的面改成服务端
   权威，这次剩下的都在**实体与配置**层：① 试驾生成回调 `spawnvehicle(plate, vehicle, coords)`
   三个参数全来自客户端且**没有任何校验** —— 车型直接进 `GetHashKey`、坐标直接进生成函数，

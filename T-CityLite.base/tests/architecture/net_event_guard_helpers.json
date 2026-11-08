@@ -364,5 +364,20 @@
       ],
       "why": "删除试驾载具只认『本资源给这个玩家生成的净 id』，否则任意 netId 就是任意实体（别人的车、NPC、玩家）。"
     }
+  },
+  "qb-inventory": {
+    "validateOtherPlayerInventory": {
+      "defined_at": "qb-inventory/server/main.lua",
+      "requires_code": [
+        "inventoryId:find(",
+        "HasPermission(src, ",
+        "GetEntityCoords(srcPed)",
+        "<= 3.0"
+      ],
+      "requires_raw": [
+        "otherplayer%-"
+      ],
+      "why": "搬运物品到 otherplayer-* 容器前，必须确认目标玩家在线且在自己 3 米内（管理员除外）；否则客户端可伪造本事件远程搬别人的背包。"
+    }
   }
 }
