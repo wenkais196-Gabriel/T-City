@@ -302,6 +302,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 13：qb-cityhall 5 + interact-sound 5**（2026-11-08）：qb-cityhall 最实在的一条是
+  `getIDs` 直接绑到 `giveStarterItems()` —— **任何玩家可以反复触发，每次都给一份 phone / id_card /
+  driver_license**（无限刷物品）；改成按背包里是否已有逐个跳过。其余：`requestId(item, hall)` 的
+  `hall` 来自客户端且直接索引 `Config.Cityhalls[hall]`（那是数组，坏下标 = nil 索引打崩事件线程）；
+  `sendDriverTest(instructors)` 的 instructors 是客户端给的 citizenid 列表、长度不限，对离线玩家走
+  `sendNewMailToOffline`（探针实测一次请求 49 封邮件），加条数上限 10 + 每人 60 秒冷却；
+  `ApplyJob` 的距离校验用的是**客户端声称**的市政厅坐标（在任意地点把坐标报成自己脚下就能远程
+  申请工作），改用服务端 `Config.Cityhalls[*].coords`。interact-sound 则在客户端开放了
+  `PlayOnAll` / `PlayOnOne`（仓库内**没有任何调用点**）—— 任何人能给全服或指定玩家刷声；
+  `PlayOnSource` / `PlayWithinDistance` 的文件名与音量零校验且无限流；`PlayWithinDistance` 还被
+  注册了两次（后一个覆盖前一个，前一个是死代码）。改为：全局播放仅服务端可触发、声音参数走
+  `^[A-Za-z0-9_%-]+$` 白名单 + 音量 0..1 + 按 (玩家, 文件) 100ms 限流（车辆转向灯频率高，不能用更长的
+  窗口），并删掉重复注册。
+  测试：`fixtures/cityhall_probe.lua` / `fixtures/interactsound_probe.lua`。旧版实测：`requestId`
+  坏 hall 抛 `attempt to index a nil value (field '?')`、`STARTER_REPEAT_NOTHING_ADDED=false`、
+  `DRIVERTEST_MAIL_COUNT=49`、`APPLY_JOB_REMOTE_REJECTED=false`、`ALL_FROM_CLIENT_BLOCKED=false`、
+  `ONE_FROM_CLIENT_BLOCKED=false`、`SOURCE_BAD_FILENAME_BLOCKED=false`、
+  `SOURCE_BAD_VOLUME_BLOCKED=false`、`SOURCE_RATE_LIMITED=false`。
+  数字：未登记 **124 → 114**（qb 43 → 38、other 65 → 64；`interact-sound` 5 → 4，重复注册已删）；
+  `1276 passed`。
+
 - **P1-3 批 12：qb-houserobbery 5 + qb-clothing 5**（2026-11-08）：qb-houserobbery 有一个**功能级**
   bug —— 搜刮家具的准入导出写成了 `exports['custom-main']:CheckHouseRobbery`，而这个导出只有
   `custom-crime` 提供，每次搜刮都会抛 `No such export CheckHouseRobbery in resource custom-main`，

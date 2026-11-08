@@ -16,25 +16,40 @@ exports('AddCityJob', AddCityJob)
 
 -- Functions
 
-local function giveStarterItems()
-    local Player = QBCore.Functions.GetPlayer(source)
+-- 已经拿过的东西不再发：原来任何玩家可以反复触发 `qb-cityhall:server:getIDs`，
+-- 每次都给一份 phone / id_card / driver_license（等于无限刷物品）。
+local function alreadyHas(Player, item)
+    local items = Player.PlayerData and Player.PlayerData.items
+    if type(items) ~= 'table' then return false end
+    for _, invItem in pairs(items) do
+        if type(invItem) == 'table' and invItem.name == item and (invItem.amount or 0) > 0 then
+            return true
+        end
+    end
+    return false
+end
+
+local function giveStarterItems(src, Player)
     if not Player then return end
     for _, v in pairs(QBCore.Shared.StarterItems) do
-        local info = {}
-        if v.item == 'id_card' then
-            info.citizenid = Player.PlayerData.citizenid
-            info.firstname = Player.PlayerData.charinfo.firstname
-            info.lastname = Player.PlayerData.charinfo.lastname
-            info.birthdate = Player.PlayerData.charinfo.birthdate
-            info.gender = Player.PlayerData.charinfo.gender
-            info.nationality = Player.PlayerData.charinfo.nationality
-        elseif v.item == 'driver_license' then
-            info.firstname = Player.PlayerData.charinfo.firstname
-            info.lastname = Player.PlayerData.charinfo.lastname
-            info.birthdate = Player.PlayerData.charinfo.birthdate
-            info.type = 'Class C Driver License'
+        if type(v) == 'table' and type(v.item) == 'string' and not alreadyHas(Player, v.item) then
+            local info = {}
+            local charinfo = Player.PlayerData.charinfo or {}
+            if v.item == 'id_card' then
+                info.citizenid = Player.PlayerData.citizenid
+                info.firstname = charinfo.firstname
+                info.lastname = charinfo.lastname
+                info.birthdate = charinfo.birthdate
+                info.gender = charinfo.gender
+                info.nationality = charinfo.nationality
+            elseif v.item == 'driver_license' then
+                info.firstname = charinfo.firstname
+                info.lastname = charinfo.lastname
+                info.birthdate = charinfo.birthdate
+                info.type = 'Class C Driver License'
+            end
+            exports['qb-inventory']:AddItem(src, v.item, 1, false, info, 'qb-cityhall:giveStarterItems')
         end
-        exports['qb-inventory']:AddItem(source, v.item, 1, false, info, 'qb-cityhall:giveStarterItems')
     end
 end
 
@@ -119,7 +134,12 @@ RegisterNetEvent('qb-cityhall:server:requestId', function(item, hall)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    local itemInfo = Config.Cityhalls[hall].licenses[item]
+    -- 🔒 hall / item 都来自客户端：`Config.Cityhalls` 是数组，坏下标会让这一行抛错；
+    --    item 必须是字符串（原来直接拿去索引 licenses）。
+    hall = tonumber(hall)
+    local cityhall = hall and Config.Cityhalls[hall] or nil
+    if type(cityhall) ~= 'table' or type(item) ~= 'string' then return end
+    local itemInfo = cityhall.licenses[item]
     if not itemInfo then return end
 
     -- 对于证件类物品，先检查背包是否已有实体证件（防止重复申领）
@@ -216,12 +236,23 @@ RegisterNetEvent('qb-cityhall:server:requestId', function(item, hall)
         ('You have received your %s for $%s'):format(itemInfo.label, itemInfo.cost), 'success', 5000)
 end)
 
+local driverTestCooldown = {}
+
 RegisterNetEvent('qb-cityhall:server:sendDriverTest', function(instructors)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    for i = 1, #instructors do
+    -- 🔒 `instructors` 是客户端传来的 citizenid 列表：原来可以塞任意长度，
+    --    给离线玩家无限发邮件（每次都会写库）。限制条数 + 格式 + 每人 60 秒一次。
+    if type(instructors) ~= 'table' then return end
+    local now = os.time()
+    if driverTestCooldown[src] and (now - driverTestCooldown[src]) < 60 then return end
+    driverTestCooldown[src] = now
+    local limit = math.min(#instructors, 10)
+    local sent = 0
+    for i = 1, limit do
         local citizenid = instructors[i]
+        if type(citizenid) == 'string' and #citizenid <= 32 then
         local SchoolPlayer = QBCore.Functions.GetPlayerByCitizenId(citizenid)
         if SchoolPlayer then
             TriggerClientEvent('qb-cityhall:client:sendDriverEmail', SchoolPlayer.PlayerData.source, Player.PlayerData.charinfo)
@@ -233,6 +264,8 @@ RegisterNetEvent('qb-cityhall:server:sendDriverTest', function(instructors)
                 button = {}
             }
             exports['qb-phone']:sendNewMailToOffline(citizenid, mailData)
+        end
+        sent = sent + 1
         end
     end
     TriggerClientEvent('QBCore:Notify', src, 'An email has been sent to driving schools, and you will be contacted automatically', 'success', 5000)
@@ -250,8 +283,20 @@ RegisterNetEvent('qb-cityhall:server:ApplyJob', function(job, cityhallCoords)
         ['job'] = job
     }
 
-    -- 🛡️ Security: 距离校验 + 职业可用性校验
-    if #(pedCoords - cityhallCoords) >= 20.0 or not availableJobs[job] then
+    -- 🛡️ Security: 距离校验用**服务端配置里的**市政厅坐标。
+    --    原来用的是客户端传进来的 `cityhallCoords` —— 传自己脚下就能远程申请工作。
+    local nearCityhall = false
+    for _, hallConfig in pairs(Config.Cityhalls) do
+        local coords = type(hallConfig) == 'table' and hallConfig.coords or nil
+        local ctype = type(coords)
+        if coords and (ctype == 'table' or ctype == 'vector3' or ctype == 'vector4') then
+            if #(pedCoords - vector3(coords.x, coords.y, coords.z)) < 20.0 then
+                nearCityhall = true
+                break
+            end
+        end
+    end
+    if not nearCityhall or not availableJobs[job] then
         return false
     end
 
@@ -273,9 +318,16 @@ RegisterNetEvent('qb-cityhall:server:ApplyJob', function(job, cityhallCoords)
     TriggerClientEvent('QBCore:Notify', data.src, Lang:t('info.new_job', { job = JobInfo.label }))
 end)
 
-RegisterNetEvent('qb-cityhall:server:getIDs', giveStarterItems)
+RegisterNetEvent('qb-cityhall:server:getIDs', function()
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    giveStarterItems(src, Player)
+end)
 
 RegisterNetEvent('QBCore:Client:UpdateObject', function()
+    -- 🔒 这是 qb-core 内部事件：客户端不该能把服务端的 QBCore 引用重新取一遍
+    if source ~= 0 then return end
     QBCore = exports['qb-core']:GetCoreObject()
 end)
 
