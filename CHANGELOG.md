@@ -302,6 +302,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 10：qb-vehicleshop 7 条 + 试驾生成回调**（2026-11-08）：批 3 已把"钱"的面改成服务端
+  权威，这次剩下的都在**实体与配置**层：① 试驾生成回调 `spawnvehicle(plate, vehicle, coords)`
+  三个参数全来自客户端且**没有任何校验** —— 车型直接进 `GetHashKey`、坐标直接进生成函数，
+  任何玩家能在任意坐标生成任意载具；改为「车型必须出现在某家车店的展台上 + 玩家在该店附近 +
+  请求的生成点也在该店试驾点附近」，并在生成时记账 `TestDriveVehicles[netId] = {src, model, at}`；
+  ② `deleteVehicle(netId)` 的 netId 直接进 `DeleteEntity` —— 任意 netId 就是任意实体（别人的车、
+  NPC、玩家），改为只认本资源给这个玩家生成的那台（`IsOwnTestDrive`），并校验实体存在；
+  ③ `swapVehicle(data)` 会向**全服**广播客户端给的 data → 改所有人的展车，改为只有在职店员
+  （`dealerOnDuty`）；④ `customTestDrive(vehicle, playerid)` 任何玩家能给任意人发**任意车型**
+  （含警车/飞机），改为在职店员 + 车型必须在展台上；⑤ `addPlayer/removePlayer(citizenid)` 的
+  citizenid 由客户端传 —— 能重置/结算**别人**的分期计时器，改为只认同调用者自己的；⑥
+  `checkFinance()` 在 player 为 nil 时直接索引 `player.PlayerData` 抛错，且 handler 里有
+  `Wait(Config.PaymentWarning * 60000)`，连点会堆睡眠线程，补判空 + 每玩家 10 分钟冷却。
+  测试：探针真加载 config + server/bus.lua + server/finance-lifecycle.lua；旧版实测
+  `SPAWN_FOREIGN_MODEL_BLOCKED=false`、`SPAWN_FAR_BLOCKED=false`、`DELETE_FOREIGN_BLOCKED=false`、
+  `SWAP_CIVILIAN_BLOCKED=false`、`TESTDRIVE_FOREIGN_MODEL_BLOCKED=false`、
+  `TIMER_VICTIM_UNTOUCHED=false`，以及 `checkFinance` 的 `attempt to index a nil value (local 'player')`。
+  数字：未登记 **149 → 142**（qb 68 → 61，allowlist 123 → 127）；`1256 passed`。
+
 - **P1-3 批 9：qb-ambulancejob 14 条**（2026-11-08）：这个资源之前已经加过 `CanRevive`、
   `SendToBed` 索引校验与 30 秒限流、"无伤不得自报死亡"，剩下 14 条里 9 条是真洞：
   ① `qb-ambulancejob:server:stash` 只看客户端菜单上的 job 过滤条件（可绕过）→ **任何玩家都能打开
