@@ -193,3 +193,28 @@ cd T-CityLite.base && python tests/architecture/net_event_baseline.py --write
 * `qb-inventory` 的 `vehicleCheck`（`commands.lua:121`）仍信任客户端返回的 `inventory` / `class`：
   归属校验只挡住"别的玩家"，被问的玩家仍可伪造自己打开哪个 trunk。
 * 基线 `measured_at` 用 `date.today()`：每天重生成都会变，别把"重生成"当成无脑操作。
+
+## 9. P1-3 收口（2026-11-08）
+
+20 批、PR #204–#221，从 **258 → 59**，其中 `[qb]`（216）与 `[custom]`（133）**全部归零**，
+`engine` 早在第一批就 100%。剩下 59 条全在 `other`，全部是 vendored 资源，按 §6 口径不动：
+
+| 资源 | 条数 | 性质 |
+|---|---|---|
+| `monitor` | 33 | txAdmin 自带，鉴权主体是 `PlayerHasTxPermission`，要收口得先给扫描器加一种形状 |
+| `PolyZone` / `baseevents` / `pma-voice` / `sessionmanager` / `hardcap` / `atom_nodes` | 14 | FiveM 基础库（启动集内），升版本会被覆盖 |
+| `rconlog` / `runcode` / `connectqueue` / `player-data` / `playernames` / `money` / `money-fountain` / `ped-money-drops` | 12 | FiveM 示例资源，均不在启动集 |
+
+**这批债里最值得记的三条**：
+
+1. `qb-doorlock:server:updateState` 的鉴权对象是 `sentSource or source` —— 客户端塞一个在线警察的
+   server id 就能开警察门（批 16）。
+2. `qb-shops:server:PaySlip(drops)` 全仓**没有客户端调用点**，却按客户端给的 `drops` 发钱
+   （批 19：500 × 99999）。
+3. `qb-weed` 的 `plantCache` 声明在文件末尾，四个 handler 引用全局 nil —— 「种一株植物」在 master 上
+   **每次都抛错**（批 20）。
+
+**两处客户端权威的残留**（已声明、不修）：`aviationHeightMonitorComplete` 的 45 秒计时仍在客户端
+（服务端只验「在载具里 + 在跑该任务」）；`qb-shops` 的补货次数仍由客户端在跑完路线后上报
+（服务端只能做距离 + 冷却）。
+
