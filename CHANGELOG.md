@@ -49,6 +49,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
 - **P1-3 批 6：qb-lapraces 10 + qb-apartments 10**（2026-11-08）：
+  - **连带修掉的真 bug**（CC 六轮验收逐条揪出来的，都属于「能玩」级别）：
+    ① `CreateApartment` 形参叫 `type` 遮蔽全局 `type()` → 事件一触发就崩、公寓建不出来；
+    ② 用 `racer.Finished` 当防重放标记，而客户端完赛前会先把它置 true → **每次正常完赛都不结算**；
+    ③ `table.remove(AvailableRaces, nil)` 会删掉**另一场**正在开放的比赛；
+    ④ 最佳圈校验写成 `BestLap / TotalLaps` → 10 圈赛里合法的 45 秒最佳圈被算成 4.5 秒并被改写；
+    ⑤ `BestLap <= TotalTime` 太松（45 秒最佳圈 > 20 秒平均圈也能过）→ 改为 `<= 平均圈速`；
+    ⑥ 没开赛就能报成绩（`StartedAt == nil` 时整套校验被跳过）；
+    ⑦ 结算/离开后的清理只清一半 → `LastLeaderboard` / `NotFinished` / `LastRaces` / `StartedAt`
+       跨场残留，赛道可能永久卡在「运行中」。
+  - 运行级测试：`fixtures/lapraces_probe.lua`（9 个场景，用 `debug.getupvalue` 直接读 handler
+    闭包里的私有表断言清理结果）、`fixtures/apartments_probe.lua`，共 2 条 pytest。
+
   - **公寓储物柜没有归属判定**：`apartments:server:openStash(apartmentId)` 传个 id 就
     `OpenInventory` 到别人家柜子 → 只认 `apartments` 表里登记在册的房主；
     `OpenDoor(target, …)` 同样改为房主才能把访客放进来。
