@@ -260,6 +260,7 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
         Races[raceId].Racers = {}
         Races[raceId].Started = false
         Races[raceId].Waiting = false
+        Races[raceId].StartedAt = nil
         if AvailableKey and AvailableRaces[AvailableKey] then
             table.remove(AvailableRaces, AvailableKey)
         end
@@ -442,6 +443,9 @@ RegisterNetEvent('qb-lapraces:server:SetupRace', function(RaceId, Laps)
                 --    否则在重新 StartRace 之前就能用旧 StartedAt 报成绩
                 Races[RaceId].StartedAt = nil
                 Races[RaceId].Racers = {}
+                Races[RaceId].LastLeaderboard = {}
+                NotFinished[RaceId] = nil
+                LastRaces[RaceId] = nil
                 Races[RaceId].Waiting = true
                 AvailableRaces[#AvailableRaces+1] = {
                     RaceData = Races[RaceId],
@@ -467,7 +471,9 @@ RegisterNetEvent('qb-lapraces:server:SetupRace', function(RaceId, Laps)
                         Races[RaceId].Racers = {}
                         Races[RaceId].Started = false
                         Races[RaceId].Waiting = false
+                        Races[RaceId].StartedAt = nil
                         LastRaces[RaceId] = nil
+                        NotFinished[RaceId] = nil
                         TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
                     end
                 end)
@@ -508,7 +514,9 @@ RegisterNetEvent('qb-lapraces:server:CancelRace', function(raceId)
     Races[raceId].Racers = {}
     Races[raceId].Started = false
     Races[raceId].Waiting = false
+    Races[raceId].StartedAt = nil
     LastRaces[raceId] = nil
+    NotFinished[raceId] = nil
     TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
 end)
 
