@@ -311,9 +311,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Player.Login` 里比对 license）；`createCharacter` 把客户端整张表 `newData.charinfo = data`
   写进 players.charinfo（可夹带 isAdmin / money / 5KB 字符串），改成白名单字段 + 长度收敛、`cid`
   归一化成数字；`deleteCharacter` 补类型校验（归属由 qb-core 的 `DeleteCharacter` 比对）。
+  **CC 复核后又补两条**：① `pickupMelted` 原来只是把奖励表换成服务端配置，仍然可以站在当铺门口
+  反复触发、无限领配置奖励（不需要原料、不需要等熔炼时间）—— 改成 `meltItemRemove` 扣料成功时登记
+  `PendingMelt[src]`（含 `readyAt`），取回只按这批发、到时间才发、发完清除、背包满时保留、
+  掉线清理；② `Config.PawnItems.price` 是 `math.random(50,100)`，客户端与服务端各自求值，
+  改成服务端权威结算后会出现「显示 80 实收 52」—— `getInv` 回调同时下发价格表，客户端展示用服务端价。
   测试：两个探针。旧版实测：`SELL_PAID_CONFIG_PRICE=false`、`SELL_AMOUNT_CAPPED=false`、
-  `SELL_UNKNOWN_ITEM_REJECTED=false`、`MELT_USES_SERVER_ENTRY=false`、
-  `PICKUP_IGNORES_CLIENT_REWARDS=false`；`loadUserData` 三种坏参数各抛一次
+  `SELL_UNKNOWN_ITEM_REJECTED=false`、`MELT_USES_SERVER_ENTRY=false`；`loadUserData` 三种坏参数各抛一次
   `attempt to index a ... value (local 'cData')`，`CREATE_STRIPS_UNKNOWN_FIELDS=false`、
   `CREATE_CID_NUMERIC=false`。
   数字：未登记 **114 → 106**（qb 38 → 30；allowlist 143 → 151）。附带发现：

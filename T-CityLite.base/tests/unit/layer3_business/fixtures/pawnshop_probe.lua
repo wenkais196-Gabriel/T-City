@@ -11,6 +11,9 @@ local function emit(...)
     OUT[#OUT + 1] = table.concat(parts, '|')
 end
 
+local clock = 1000000
+os = setmetatable({ time = function() return clock end, date = os.date }, { __index = os })
+
 local state = {
     money = {},
     added = {},
@@ -176,34 +179,39 @@ state.startMelting = nil
 fireAs(1, 'qb-pawnshop:server:meltItemRemove', 'not-a-melt-item', 1, meltEntry)
 emit('MELT_UNKNOWN_ITEM_REJECTED', tostring(state.startMelting == nil))
 
--- ── 3. pickupMelted：奖励只能来自服务端配方 ──
+-- ── 3. pickupMelted：只发服务端登记的待取回批次 ──
 emit('SCENARIO', 'pickup')
 state.added = {}
+-- ① 什么都没熔（没有待取回批次）+ 客户端伪造 payload → 一件都不发
 fireAs(1, 'qb-pawnshop:server:pickupMelted', {
     items = {
-        {
-            amount = 1,
-            item = {
-                item = meltEntry.item,
-                -- 客户端伪造的奖励表：想拿 99999 个 goldbar
-                reward = { { item = 'goldbar', amount = 99999 } },
-                rewards = { { item = 'goldbar', amount = 99999 } },
-            },
-        },
+        { amount = 100, item = { item = meltEntry.item, reward = { { item = 'goldbar', amount = 99999 } } } },
     },
 })
-local forged = false
-local total = 0
-for _, add in ipairs(state.added) do
-    total = total + (add.amount or 0)
-    if add.item == 'goldbar' and (add.amount or 0) > 10 then forged = true end
-end
-emit('PICKUP_IGNORES_CLIENT_REWARDS', tostring(not forged))
-emit('PICKUP_USES_CONFIG_REWARDS', tostring(total > 0))
+emit('PICKUP_WITHOUT_MELT_GIVES_NOTHING', tostring(#state.added == 0))
 
+-- ② 正常熔炼一批（meltEntry.meltTime 分钟 × 1 件）→ 未到时间取不到
+state.startMelting = nil
+fireAs(1, 'qb-pawnshop:server:meltItemRemove', meltEntry.item, 1, meltEntry)
 state.added = {}
-fireAs(1, 'qb-pawnshop:server:pickupMelted', { items = { { amount = 1, item = { item = 'not-a-melt-item' } } } })
-emit('PICKUP_UNKNOWN_ITEM_GIVES_NOTHING', tostring(#state.added == 0))
+fireAs(1, 'qb-pawnshop:server:pickupMelted')
+emit('PICKUP_BEFORE_READY_GIVES_NOTHING', tostring(#state.added == 0))
+
+-- ③ 把时间拨到熔炼完成之后 → 按服务端配方发奖一次
+local waitSeconds = math.max(1, math.floor((tonumber(meltEntry.meltTime) or 0) * 60)) + 5
+clock = clock + waitSeconds
+state.added = {}
+fireAs(1, 'qb-pawnshop:server:pickupMelted')
+local expected = 0
+for _, reward in pairs(meltEntry.rewards) do expected = expected + (reward.amount or 0) end
+local got = 0
+for _, add in ipairs(state.added) do got = got + (add.amount or 0) end
+emit('PICKUP_PAYS_CONFIG_REWARDS', tostring(got == expected))
+
+-- ④ 同一批只能领一次
+state.added = {}
+fireAs(1, 'qb-pawnshop:server:pickupMelted')
+emit('PICKUP_SECOND_TIME_GIVES_NOTHING', tostring(#state.added == 0))
 
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')

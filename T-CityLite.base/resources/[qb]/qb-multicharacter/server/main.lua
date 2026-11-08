@@ -149,7 +149,7 @@ RegisterNetEvent('qb-multicharacter:server:createCharacter', function(data)
     if type(data) ~= 'table' then return end
     local charinfo = {}
     for _, field in ipairs({
-        'firstname', 'lastname', 'birthdate', 'gender', 'nationality', 'phone', 'cid',
+        'firstname', 'lastname', 'birthdate', 'gender', 'nationality', 'phone', 'cid', 'account',
     }) do
         local value = data[field]
         if type(value) == 'string' and #value <= 64 then

@@ -178,7 +178,9 @@ RegisterNetEvent('qb-pawnshop:client:openMenu', function()
 end)
 
 RegisterNetEvent('qb-pawnshop:client:openPawn', function(data)
-    QBCore.Functions.TriggerCallback('qb-pawnshop:server:getInv', function(inventory)
+    -- 展示价用**服务端**下发的价格表：`Config.PawnItems.price` 是 math.random，客户端与服务端
+    -- 各自求值会不一致（看到 80 实收 52），所以价格不能只由本地配置决定。
+    QBCore.Functions.TriggerCallback('qb-pawnshop:server:getInv', function(inventory, prices)
         local PlyInv = inventory
         local pawnMenu = {
             {
@@ -189,14 +191,16 @@ RegisterNetEvent('qb-pawnshop:client:openPawn', function(data)
         for _, v in pairs(PlyInv) do
             for i = 1, #data.items do
                 if v.name == data.items[i].item then
+                    local serverPrice = type(prices) == 'table' and prices[v.name] or nil
+                    local displayPrice = serverPrice or data.items[i].price
                     pawnMenu[#pawnMenu + 1] = {
                         header = QBCore.Shared.Items[v.name].label,
-                        txt = Lang:t('info.sell_items', { value = data.items[i].price }),
+                        txt = Lang:t('info.sell_items', { value = displayPrice }),
                         params = {
                             event = 'qb-pawnshop:client:pawnitems',
                             args = {
                                 label = QBCore.Shared.Items[v.name].label,
-                                price = data.items[i].price,
+                                price = displayPrice,
                                 name = v.name,
                                 amount = v.amount
                             }
