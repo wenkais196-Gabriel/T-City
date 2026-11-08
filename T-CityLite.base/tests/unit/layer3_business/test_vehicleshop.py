@@ -277,7 +277,11 @@ SetEntityAsMissionEntity = function(e, a, b) end
 
 -- i18n stub
 Lang = {
+    -- 同时支持 Lang.t('k') 与 Lang:t('k')：冒号调用会把 Lang 自己当第一个参数传进来，
+    -- 原来只按点调用写，于是 Lang:t(...) 返回了整个表 → "attempt to concatenate a table value"，
+    -- 老用例用 pcall 把它吞了（CC 2026-11-08 复核发现）。
     t = function(key, args)
+        if type(key) ~= 'string' then key, args = args, key end
         local translations = {
             ['error.notenoughmoney'] = 'Not enough money',
             ['error.Invalid_ID'] = 'Invalid Player ID',
@@ -743,14 +747,44 @@ assert(#__test.updates == 0, "不该更新别人的分期记录")
         assert r['ok'], f"Lua error: {r['stderr']}"
     
     def test_finance_payment_below_minimum(self):
-        """还款金额低于最低额被拒绝"""
+        """还款金额低于最低额被拒绝（DB 行必须有余额，否则 handler 会先走"已还清"分支空转）"""
         r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
+__test.updates = {}
+-- 关键：给 DB 一个真实行，否则 :80 的 balance <= 0 会提前 return，测不到最低额校验
+MySQL.single.await = function(sql, params)
+    return { balance = 50000, paymentamount = 10000, paymentsleft = 5 }
+end
 local evt = __test['evt_qb_vehicleshop_server_financePayment']
--- paymentAmount=1000 < minPayment=10000 → should reject
--- Use pcall since Lang:t concatenation may fail in mock
-local ok, err = pcall(evt, 1000, { vehiclePlate = 'ABC123', balance = 120000, paymentsLeft = 12, paymentAmount = 10000 })
-assert(#__test.money_removed == 0, "should reject below-minimum payment")
+local ok, err = pcall(evt, 1000, { vehiclePlate = 'ABC123' })
+assert(ok, "handler 不该抛错: " .. tostring(err))
+assert(#__test.money_removed == 0, "低于最低额（10000）不该扣钱")
+assert(#__test.updates == 0, "低于最低额不该更新 DB")
+""")
+        assert r['ok'], f"Lua error: {r['stderr']}"
+
+    def test_sellfinance_vehicle_rejects_invalid_numbers(self):
+        """代客分期的数值 guard：0 期会除零、nil 首付会比较报错，都必须被挡在扣钱之前"""
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
+__test.money_removed = {}
+__test.money_added = {}
+__test.inserts = {}
+source = 1
+local player = QBCore.Functions.GetPlayer(1)
+player.PlayerData.job.name = 'cardealer'
+player.PlayerData.job.onduty = true
+local evt = __test['evt_qb_vehicleshop_server_sellfinanceVehicle']
+-- 0 期（原来会在 calculateFinance 里除零）
+local ok1 = pcall(evt, 15000, 0, 'comet2', 2)
+assert(ok1, "0 期不该抛错")
+-- nil 首付（原来 attempt to compare number with nil）
+local ok2 = pcall(evt, nil, 12, 'comet2', 2)
+assert(ok2, "nil 首付不该抛错")
+-- 非整数期数
+local ok3 = pcall(evt, 15000, 12.5, 'comet2', 2)
+assert(ok3, "非整数期数不该抛错")
+assert(#__test.money_removed == 0, "非法参数一分钱都不该扣")
+assert(#__test.inserts == 0, "非法参数不该写车辆记录")
 """)
         assert r['ok'], f"Lua error: {r['stderr']}"
     
