@@ -142,9 +142,10 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
     -- 🔒 防重放用独立的 FinishHandled；Finished 只由本函数（服务端）写
     if not racer or racer.FinishHandled then return end
 
-    -- 🔒 没开赛不能报成绩：StartedAt 由 StartRace 在服务端写
+    -- 🔒 没开赛不能报成绩：Started 与 StartedAt 都由 StartRace 在服务端写
+    --    （重开旧赛道时 SetupRace 会把两个都清掉，所以只认 StartedAt 不够）
     local startedAt = Races[raceId].StartedAt
-    if not startedAt then
+    if not startedAt or Races[raceId].Started ~= true then
         TriggerClientEvent('QBCore:Notify', src, '这场比赛还没有开始', 'error')
         return
     end
@@ -163,11 +164,15 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
     -- 服务端计时对账：上下界都要有
     local elapsed = (GetGameTimer() - startedAt) / 1000
     if TotalTime > elapsed + 5 then return end
-    if TotalTime < elapsed * 0.5 then return end
+    -- 下界贴近服务端计时（只留 10 秒容差），不再允许"半程完赛"
+    if TotalTime < elapsed - 10 then return end
 
-    -- 单圈均值下限 5 秒（0.001 这种直接拒）；最佳圈只判它自己，不除圈数
-    if (TotalTime / TotalLaps) < 5 then return end
-    if BestLap < 5 or BestLap > TotalTime then return end
+    -- 单圈均值下限（默认 5 秒，可用 Config.MinLapSeconds 覆盖）
+    local minLap = tonumber(Config.MinLapSeconds) or 5
+    local averageLap = TotalTime / TotalLaps
+    if averageLap < minLap then return end
+    -- 最佳圈必须落在 [下限, 平均圈速]：最佳圈不可能比平均圈还慢
+    if BestLap < minLap or BestLap > averageLap then return end
 
     racer.Finished = true          -- 服务端权威完赛标记（PlayersFinished 只统计它）
     racer.FinishHandled = true
@@ -312,11 +317,17 @@ RegisterNetEvent('qb-lapraces:server:JoinRace', function(RaceData)
         end
         TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
     end
-    Races[RaceId].Waiting = true
+    -- 🔒 只有未开赛的比赛才标 Waiting：开赛后加入如果也置 true，SetupRace 的 5 分钟
+    --    定时器会按 Waiting 把**运行中**的比赛清掉。
+    if not Races[RaceId].Started then
+        Races[RaceId].Waiting = true
+    end
     Races[RaceId].Racers[Player.PlayerData.citizenid] = {
         Checkpoint = 0,
         Lap = 1,
-        Finished = false
+        Finished = false,
+        FinishHandled = false,
+        ClientFinished = false,
     }
     AvailableRaces[AvailableKey].RaceData = Races[RaceId]
     TriggerClientEvent('qb-lapraces:client:JoinRace', src, Races[RaceId], AvailableRaces[AvailableKey].Laps)
@@ -352,32 +363,23 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
         end
     end
     local leavingRacer = Races[raceId].Racers[Player.PlayerData.citizenid]
-    -- 不在参赛名单里（比赛已结算/从未加入）：直接退出，别给已结束的比赛留下 NotFinished 残渣
+    -- 不在参赛名单里（比赛已结算 / 从未加入）：直接退出
     if not leavingRacer then return end
-    -- 🔒 已经服务端确认完赛的人离开，不该再补一条 DNF
-    if leavingRacer and leavingRacer.FinishHandled then
-        Races[raceId].Racers[Player.PlayerData.citizenid] = nil
-        if opened then opened.RaceData = Races[raceId] end
-        TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[raceId])
-        TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
-        return
-    end
+
+    -- 🔒 已服务端确认完赛的人离开不补 DNF，但**清理逻辑必须照走**：
+    --    如果他是最后一名车手，比赛要从开放列表移除、状态复位，否则会永久卡在"运行中"。
+    local skipDnf = leavingRacer.FinishHandled == true
+
     local AmountOfRacers = 0
     for _, _ in pairs(Races[raceId].Racers) do
         AmountOfRacers = AmountOfRacers + 1
     end
-    if NotFinished[raceId] ~= nil then
-        NotFinished[raceId][#NotFinished[raceId]+1] = {
-            TotalTime = "DNF",
-            BestLap = "DNF",
-            Holder = {
-                [1] = Player.PlayerData.charinfo.firstname,
-                [2] = Player.PlayerData.charinfo.lastname
-            }
-        }
-    else
-        NotFinished[raceId] = {}
-        NotFinished[raceId][#NotFinished[raceId]+1] = {
+
+    if not skipDnf then
+        if NotFinished[raceId] == nil then
+            NotFinished[raceId] = {}
+        end
+        NotFinished[raceId][#NotFinished[raceId] + 1] = {
             TotalTime = "DNF",
             BestLap = "DNF",
             Holder = {
@@ -386,46 +388,38 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
             }
         }
     end
+
     Races[raceId].Racers[Player.PlayerData.citizenid] = nil
+
     if (AmountOfRacers - 1) == 0 then
-        if NotFinished ~= nil and next(NotFinished) ~= nil and NotFinished[raceId] ~= nil and next(NotFinished[raceId]) ~=
-            nil then
+        -- 最后一名车手离开：把 DNF 记录并进 LastLeaderboard 并复位比赛
+        if NotFinished ~= nil and next(NotFinished) ~= nil and NotFinished[raceId] ~= nil
+            and next(NotFinished[raceId]) ~= nil then
             for _, v in pairs(NotFinished[raceId]) do
-                if LastRaces[raceId] ~= nil then
-                    LastRaces[raceId][#LastRaces[raceId]+1] = {
-                        TotalTime = v.TotalTime,
-                        BestLap = v.BestLap,
-                        Holder = {
-                            [1] = v.Holder[1],
-                            [2] = v.Holder[2]
-                        }
-                    }
-                else
+                if LastRaces[raceId] == nil then
                     LastRaces[raceId] = {}
-                    LastRaces[raceId][#LastRaces[raceId]+1] = {
-                        TotalTime = v.TotalTime,
-                        BestLap = v.BestLap,
-                        Holder = {
-                            [1] = v.Holder[1],
-                            [2] = v.Holder[2]
-                        }
-                    }
                 end
+                LastRaces[raceId][#LastRaces[raceId] + 1] = {
+                    TotalTime = v.TotalTime,
+                    BestLap = v.BestLap,
+                    Holder = { v.Holder[1], v.Holder[2] }
+                }
             end
         end
         Races[raceId].LastLeaderboard = LastRaces[raceId]
         Races[raceId].Racers = {}
         Races[raceId].Started = false
         Races[raceId].Waiting = false
+        Races[raceId].StartedAt = nil
         if AvailableKey and AvailableRaces[AvailableKey] then
             table.remove(AvailableRaces, AvailableKey)
         end
-        TriggerClientEvent('QBCore:Notify', src, 'You were the only one in the race.The race had ended.', 'error')
-        TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[raceId])
         LastRaces[raceId] = nil
         NotFinished[raceId] = nil
-    elseif opened then
-        opened.RaceData = Races[raceId]
+        TriggerClientEvent('QBCore:Notify', src, 'You were the only one in the race.The race had ended.', 'error')
+        TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[raceId])
+    else
+        if opened then opened.RaceData = Races[raceId] end
         TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[raceId])
     end
     TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
@@ -444,6 +438,10 @@ RegisterNetEvent('qb-lapraces:server:SetupRace', function(RaceId, Laps)
         end
         if not Races[RaceId].Waiting then
             if not Races[RaceId].Started then
+                -- 🔒 重开旧赛道：上一场的 StartedAt / 车手状态必须清掉，
+                --    否则在重新 StartRace 之前就能用旧 StartedAt 报成绩
+                Races[RaceId].StartedAt = nil
+                Races[RaceId].Racers = {}
                 Races[RaceId].Waiting = true
                 AvailableRaces[#AvailableRaces+1] = {
                     RaceData = Races[RaceId],
