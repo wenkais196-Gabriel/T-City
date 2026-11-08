@@ -38,23 +38,14 @@ end
 
 -- ── 客户端 Debug 冻结 ─────────────────────────────────────────────────
 
+-- ⚠️ `production:client:freezeDebug` 是**客户端**事件（server main 里 TriggerClientEvent -1 广播），
+-- 真正的处理器在 client/main.lua。这里原来的服务端同名注册是个 bug：
+--   ① 客户端收不到服务端注册的 handler，所以「生产模式禁用 DrawText3D / PolyZone debug」从未生效；
+--   ② 这份服务端副本让任何客户端发一条就能覆盖**服务端**全局（DrawText3D 等）。
+-- 保留一条只认服务端来源（source 0）的空实现，纯粹为了不断掉任何 `TriggerEvent` 调用方。
 RegisterNetEvent('production:client:freezeDebug', function()
+    if source ~= 0 then return end
     if not _G.PRODUCTION_MODE then return end
-
-    -- 重定向 DrawText3D
-    _G.DrawText3D = function() end
-    _G.DrawText3Ds = function() end
-    _G.DrawMarker = function() end
-
-    -- 禁用 PolyZone debugPoly
-    -- (在 client 端, 所有 PolyZone:Create 调用时强制 debugPoly = false)
-    if PolyZone then
-        local _originalCreate = PolyZone.Create
-        PolyZone.Create = function(coords, options)
-            if options then options.debugPoly = false end
-            return _originalCreate(coords, options)
-        end
-    end
 end)
 
 -- ── 2. 实体自动 GC (垃圾回收) ─────────────────────────────────────────
