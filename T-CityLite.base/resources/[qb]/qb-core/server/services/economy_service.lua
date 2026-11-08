@@ -14,6 +14,16 @@
 
 local EconomyService = {}
 
+-- security_service.lua 在 fxmanifest 里排在前面，且在文件尾部就挂到 _G.Bus.SecurityService；
+-- 这里直接取，**不写 fallback** —— 有 fallback 就等于有了第二份金额规则。
+local Security = _G.Bus and _G.Bus.SecurityService
+if type(Security) ~= 'table' or type(Security.ValidateAmount) ~= 'function' then
+    -- 不 assert：assert 会让整个 player.lua（QBCore.Player 全部定义）加载失败，
+    -- 故障面远大于经济模块。改成"告警 + 全拒绝"桩 —— 宁可一分钱都动不了，也不要未校验地写钱。
+    print('[economy_service] ⚠️ SecurityService 未注册（检查 fxmanifest 加载顺序）—— 本会话拒绝所有金额变动')
+    Security = { ValidateAmount = function() return false end }
+end
+
 -- ── 内部辅助 ──────────────────────────────────────────────────────────
 
 ---通过 citizenid 查找在线玩家对象
@@ -104,11 +114,13 @@ end
 ---@return boolean success
 function EconomyService.AddMoney(citizenid, moneytype, amount, reason)
     reason = reason or 'unknown'
+    if type(moneytype) ~= 'string' then return false end
     moneytype = moneytype:lower()
-    amount = tonumber(amount)
 
-    -- 参数校验
-    if amount == nil or amount <= 0 then return false end
+    -- 参数校验：非数字 / NaN / inf / 负数 / 0 / 超单笔阈值一律拒绝（唯一实现在 security_service）
+    local amountOk, cleanedAmount = Security.ValidateAmount(amount, { allowZero = false })
+    if not amountOk then return false end
+    amount = cleanedAmount
 
     local player = getPlayerByCitizenId(citizenid)
     if not player then return false end
@@ -138,11 +150,13 @@ end
 ---@return boolean success
 function EconomyService.RemoveMoney(citizenid, moneytype, amount, reason)
     reason = reason or 'unknown'
+    if type(moneytype) ~= 'string' then return false end
     moneytype = moneytype:lower()
-    amount = tonumber(amount)
 
-    -- 参数校验
-    if amount == nil or amount <= 0 then return false end
+    -- 参数校验：与 AddMoney 同一条（原来这里放行 NaN/inf 和超阈值）
+    local amountOk, cleanedAmount = Security.ValidateAmount(amount, { allowZero = false })
+    if not amountOk then return false end
+    amount = cleanedAmount
 
     local player = getPlayerByCitizenId(citizenid)
     if not player then return false end
@@ -186,11 +200,13 @@ end
 ---@return boolean success
 function EconomyService.SetMoney(citizenid, moneytype, amount, reason)
     reason = reason or 'unknown'
+    if type(moneytype) ~= 'string' then return false end
     moneytype = moneytype:lower()
-    amount = tonumber(amount)
 
-    -- 参数校验
-    if amount == nil or amount < 0 then return false end
+    -- 参数校验：SetMoney 允许设为 0（清空），其余规则与 Add/Remove 同一条
+    local amountOk, cleanedSetAmount = Security.ValidateAmount(amount, { allowZero = true })
+    if not amountOk then return false end
+    amount = cleanedSetAmount
 
     local player = getPlayerByCitizenId(citizenid)
     if not player then return false end

@@ -302,6 +302,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-5 二期：金额写路径收敛（拒绝语义）**（2026-11-08）：`SecurityService` 里新增
+  `ValidateAmount(amount, opts)` 作为金额入参的**唯一**实现（非数字 / NaN / inf / 负数 / 0 / 超过
+  `MONEY_MAX_SINGLE_TRANSACTION` 一律拒绝，**不 clamp**），`ValidateMoneyEvent` 的金额四步也收敛到它。
+  三个写入口全部接上：`EconomyService.AddMoney` / `RemoveMoney` / `SetMoney`，以及 qb-core 的
+  player.lua 里 offline 与 `Bus.EconomyService` 缺失时的 fallback 共 6 条分支 —— 之前**同一个非法输入
+  在不同路径得到不同答复**：`AddMoney` 接受 NaN（钱写成 NaN）、接受 inf、接受 5,000,001；`RemoveMoney`
+  接受 NaN；fallback 分支这些全放行；只有 `SetMoney` 有阈值熔断。探针对 master 实测
+  `ECONOMY_AddMoney_NAN|accept` / `_INF|accept` / `_OVER|accept` / `ECONOMY_RemoveMoney_NAN|accept`，
+  新版全 `reject`，而 `999999`（低于阈值）与 `SetMoney(0)`（清空）仍放行 —— 全拒的实现过不了这几条。
+  新增闸门 `tests/architecture/test_money_write_path.py`（3 条判据：money 表只许收敛层写、阈值只定义
+  一次、三个入口都调 `ValidateAmount`；4 条反向形状 + 注释/字符串不算命中），并给 `gate_mutation_smoke.py`
+  加 3 条变异用例（注入跨资源写表 / 第二份阈值定义 / 摘掉校验），三条实测「注入后红、对照绿」；
+  `gate_coverage` 未证明数仍为 276。`money_format_baseline.json` 因删掉一行 `$%d` 的 SECURITY 日志
+  同步重生成（债 68 → 67）。真机（0 玩家在线）：`start qb-core` 后 `[SecurityService] ✅ Registered` →
+  `[EconomyService] Registered` 顺序正确、无 assert 失败，`resync_modules.ps1` 补回连带资源后 89 个资源
+  0 `SCRIPT ERROR`。CC 复核的两个跟踪项也一并处理：① `player.lua` / `economy_service.lua` 里原来的
+  `assert(_G.Bus.SecurityService)` 改成「告警 + `ValidateAmount` 全拒绝桩」—— assert 会让整个
+  player.lua（`QBCore.Player` 全部定义）加载失败，故障面远大于经济模块；② `qb-cityhall` 的
+  `RemoveMoney('cash', itemInfo.cost)` 加 `cost > 0` 守卫（cost 为 0 是合法的免费项目，
+  收紧后 `RemoveMoney(0)` 返回 false 会把它卡成"钱不够"）。1322 passed / 147 skipped。
+
 - **P1-3 批 20：qb-weed 5 + qb-streetraces 3 —— `[qb]` 归零**（2026-11-08）：qb-weed 先修了一个
   "这个资源根本跑不起来"的 bug —— `local plantCache = {}` 声明在文件**末尾**（第 126 行），而
   `placePlant` / `removeDeathPlant` / `harvestPlant` / `foodPlant` 四个 handler 都在它之前，引用的是

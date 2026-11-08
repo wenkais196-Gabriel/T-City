@@ -40,6 +40,12 @@ def _addmoney_source() -> str:
 
 
 PRELUDE = r"""
+-- P1-5 二期：AddMoney 现在在入口处调 Security.ValidateAmount（金额规则唯一实现）。
+-- 这条用例测的是"一次调用只加一次钱"，不是金额校验，所以这里只放一条放行桩。
+local Security = { ValidateAmount = function(amount, opts)
+    return true, tonumber(amount)
+end }
+
 local online = { citizenid = 'CID1', money = { cash = 0, bank = 0 } }
 local calls = { count = 0, amounts = {} }
 local function make_es(mode)
