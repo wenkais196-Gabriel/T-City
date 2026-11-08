@@ -61,4 +61,7 @@ def test_ammo_is_clamped_and_bound_to_the_named_weapon():
     assert data["AMMO"][0] == "9999", "弹药上限没夹住（原来能直接写 999999 = 无限子弹）"
     assert data["AMMO"][1] == "9999", "负数弹药也被写进去了"
     assert data["AMMO"][2] == "9999", "坏 slot 改了别人的弹药"
-    assert data["AMMO"][3] == "9999", "name 与 slot 不匹配时仍写入（可把步枪弹药写到手枪上）"
+    # 合法值必须真的写进去 —— 否则一个"什么都拒绝"的坏实现也能让上面三条全绿
+    assert data["AMMO"][3] == "5", "合法弹药值（5 发）没能写入"
+    assert data["AMMO"][4] == "7", "第二次合法写入被误伤"
+    assert data["AMMO"][5] == "7", "name 与 slot 不匹配时仍写入（可把步枪弹药写到手枪上）"

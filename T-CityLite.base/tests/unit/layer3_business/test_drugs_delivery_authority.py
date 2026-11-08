@@ -112,10 +112,9 @@ def test_dealer_sale_requires_the_goods_before_paying():
     实测（旧代码）PAID=14985 且背包一件没有；假 slot 还会 `attempt to index a nil value` 崩服务端。
     """
     data = _run_probe()
-    # 索引：场景 11 的四条在 PAID 列表尾部
-    no_items, fake_slot, name_mismatch, with_items = data["PAID"][-4:]
-    assert no_items == "0", "背包里没货也发钱了（印钱）"
-    assert fake_slot == "0", "伪造 slot 不该发钱"
-    assert name_mismatch == "0", "itemData.name 与 slot 不匹配时不该发钱"
-    assert with_items == "75", "正常卖 5 件（单价 15）应得 75"
-    assert data["ITEM_LEFT"][-1] == "0", "发钱了但货没扣掉"
+    # 专用 key，不依赖 PAID 列表的位置（新增场景不会让断言错位）
+    assert data["DEALER_PAID_NO_ITEMS"][0] == "0", "背包里没货也发钱了（印钱）"
+    assert data["DEALER_PAID_FAKE_SLOT"][0] == "0", "伪造 slot 不该发钱"
+    assert data["DEALER_PAID_NAME_MISMATCH"][0] == "0", "itemData.name 与 slot 不匹配时不该发钱"
+    assert data["DEALER_PAID_WITH_ITEMS"][0] == "75", "正常卖 5 件（单价 15）应得 75"
+    assert data["DEALER_ITEM_LEFT"][0] == "0", "发钱了但货没扣掉"

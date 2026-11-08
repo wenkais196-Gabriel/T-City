@@ -175,6 +175,14 @@ local ok = fire('qb-weapons:server:UpdateWeaponAmmo', { slot = 999, name = 'weap
 emit('OK', ok)
 emit('AMMO', player.PlayerData.items[1].info.ammo)
 
+emit('SCENARIO', 'ammo-valid')
+fire('qb-weapons:server:UpdateWeaponAmmo', { slot = 1, name = 'weapon_pistol' }, 5)
+emit('AMMO', player.PlayerData.items[1].info.ammo)
+
+emit('SCENARIO', 'ammo-valid-again')
+fire('qb-weapons:server:UpdateWeaponAmmo', { slot = 1, name = 'weapon_pistol' }, 7)
+emit('AMMO', player.PlayerData.items[1].info.ammo)
+
 emit('SCENARIO', 'ammo-name-mismatch')
 fire('qb-weapons:server:UpdateWeaponAmmo', { slot = 1, name = 'weapon_carbinerifle' }, 42)
 emit('AMMO', player.PlayerData.items[1].info.ammo)

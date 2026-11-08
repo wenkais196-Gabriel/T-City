@@ -207,7 +207,7 @@ RegisterNetEvent('qb-drugs:server:updateDealerItems', function(itemData, amount,
         return
     end
     Player.Functions.AddMoney('cash', amount * product.price, 'qb-drugs:server:updateDealerItems')
-    TriggerClientEvent('QBCore:Notify', src, Lang:t('error.item_unavailable'), 'error')
+    TriggerClientEvent('QBCore:Notify', src, Lang:t('success.order_delivered'), 'success')
 end)
 
 -- 配送失败（超时/取消）：从背包移除任务物品
