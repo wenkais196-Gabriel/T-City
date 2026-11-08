@@ -59,12 +59,48 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "certificates:server:IssueCertificate",
+      "file": "[custom]/custom-certificates/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只给自己签发：handler 把 source 当唯一目标传给 IssueCertificate，后者要求调用者本身持有该类执照（licences[certType]）、且证书未被 suspended/revoked。参数 certType 走 IsValidCertType 白名单。",
+      "evidence": "certificates IssueCertificate — IssueCertificate(src, certType) / IsValidCertType(certType) / licences[certType]",
+      "owner": "custom-certificates",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-documents:server:presentDocument",
+      "file": "[custom]/custom-documents/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只出示**自己背包里**的证件。handler 内：itemName 必须在 Config.Documents 白名单、slot 指向的物品名必须等于 itemName（否则回退按名搜）、序列号与持有人 citizenid 绑定校验。",
+      "evidence": "custom-documents presentDocument — Config.Documents[itemName] / pItems[slot].name == itemName / itemInfo.serial",
+      "owner": "custom-documents",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "justice:server:requestVisit",
       "file": "custom-justice/server/prison.lua",
       "category": "civilian",
       "reason": "探视申请：调用方只需在线（Visitor 取自 source），校验的是**目标**是否在押，不是调用方鉴权，因此不计入已鉴权；目标不在押直接拒绝。",
       "evidence": "prison.lua:268 justice:server:requestVisit — VISIT_REQUEST_COOLDOWN_MS 5s/源 + type 校验；GetInmate 判的是**目标**",
       "owner": "custom-justice",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-main:server:ResetDeathStatus",
+      "file": "[custom]/custom-main/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只清自己的 isdead/inlaststand。handler 内：10 秒冷却、必须真的处于死亡/倒地、qb-ambulancejob 运行期间一律拦截并写安全审计（原来就是这套，只是闸门认不出形状）。",
+      "evidence": "custom-main ResetDeathStatus — ResetDeathCooldowns[src] / metadata['isdead'] / GetResourceState('qb-ambulancejob')",
+      "owner": "custom-main",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-main:server:policeHandoverAlert",
+      "file": "[custom]/custom-main/server/dispatch.lua",
+      "category": "civilian",
+      "reason": "客户端上报**自己**被通缉（coords/streetName/wantedLevel），handler 里只把结果推给**警察**（遍历在线警察 targetId），不写任何他人数据。防护：HANDOVER_COOLDOWN_MS 防刷、SanitizeCoords 校验坐标在地图范围内、wantedLevel 夹到 1..5、streetName 截断 64 字。",
+      "evidence": "custom-main policeHandoverAlert — HandoverCooldowns[src] / SanitizeCoords(coords) / math.min(5",
+      "owner": "custom-main",
       "expires": "2027-03-31"
     },
     {
@@ -471,6 +507,15 @@
       "reason": "客户端上报**自己**这趟货运的碰撞/损伤，只写 `CargoDamageRecords[自己 citizenid]`。handler 内：data 必须是表、questId 必须是 ≤64 的字符串，四个数值各自夹到 0..上限（原来 data 为 nil 时 `data.questId` 直接抛错，数值也无界）。",
       "evidence": "quest_logistics_validators.lua cargoDamageResult — type(data) ~= 'table' / clampNumber(collisionCount, 500) / CargoDamageRecords[citizenid]",
       "owner": "custom-quest",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "durability:server:onWeaponFired",
+      "file": "[custom]/custom-taxes/server/item_durability.lua",
+      "category": "self_scoped",
+      "reason": "只降**自己**手里那把武器的耐久（DegradeItem 的第一参固定为 source）。itemName 走 DurabilityConfig 白名单，不在表里直接 return。",
+      "evidence": "custom-taxes item_durability — DurabilityConfig[itemName] / DegradeItem(src, itemName, nil)",
+      "owner": "custom-taxes",
       "expires": "2027-03-31"
     },
     {
@@ -1047,6 +1092,24 @@
       "evidence": "qb-houses/server/main.lua setHouses — TriggerClientEvent('qb-houses:client:setHouseConfig', src, Config.Houses)",
       "file": "[qb]/qb-houses/server/main.lua",
       "owner": "qb-houses",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hud:server:GainStress",
+      "file": "[qb]/qb-hud/server.lua",
+      "category": "self_scoped",
+      "reason": "只改自己 metadata.stress。handler 内：amount 必须是正数（表/字符串一律 return），并夹到上限 100；结果再夹 0..100。（合法调用方只发 math.random(1,3)）",
+      "evidence": "qb-hud/server.lua GainStress — sanitizeStressStep(amount) / if not step then return end",
+      "owner": "qb-hud",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hud:server:RelieveStress",
+      "file": "[qb]/qb-hud/server.lua",
+      "category": "self_scoped",
+      "reason": "同上，只减自己的压力。合法调用方最高发 100（qb-ambulancejob 治疗），夹取口径与之相容。",
+      "evidence": "qb-hud/server.lua RelieveStress — sanitizeStressStep(amount) / if not step then return end",
+      "owner": "qb-hud",
       "expires": "2027-03-31"
     },
     {

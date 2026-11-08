@@ -36,11 +36,25 @@ QBCore.Commands.Add('dev', 'Enable/Disable developer Mode', {}, false, function(
     TriggerClientEvent('qb-admin:client:ToggleDevmode', source)
 end, 'admin')
 
+-- `amount` 来自客户端（client.lua 里是 math.random(1,3)，但事件本身谁都能发）：
+-- 表/字符串会让 `currentStress + amount` 直接抛错，超大数字可以一键把压力拉满（或反向清零）。
+local MAX_STRESS_STEP = 100
+
+local function sanitizeStressStep(amount)
+    local step = tonumber(amount)
+    if not step or step <= 0 then return nil end
+    if step > MAX_STRESS_STEP then step = MAX_STRESS_STEP end
+    return step
+end
+
 RegisterNetEvent('hud:server:GainStress', function(amount)
     if Config.DisableStress then return end
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    local step = sanitizeStressStep(amount)
+    if not step then return end
+    amount = step
     local job = Player.PlayerData.job
     if not job then return end
     if Config.WhitelistedJobs[job.type] or Config.WhitelistedJobs[job.name] then return end
@@ -61,6 +75,9 @@ RegisterNetEvent('hud:server:RelieveStress', function(amount)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    local step = sanitizeStressStep(amount)
+    if not step then return end
+    amount = step
 
     local meta = Player.PlayerData.metadata
     local currentStress = meta.stress or 0

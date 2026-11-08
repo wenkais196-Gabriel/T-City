@@ -104,6 +104,10 @@ end
 -- Events
 RegisterNetEvent('qb-admin:server:GetPlayersForBlips', function()
     local src = source
+    -- 这个 handler 下发的 `qb-admin:client:Show` 是**全服玩家的名字 + 坐标**（wallhack 级信息），
+    -- 原来没有任何权限校验：任何玩家发一条就能每 8 秒拿到所有人的实时位置。
+    -- 客户端只在管理员打开 blips/names 开关时才会轮询（qb-admin:isAdmin 回调），所以这里按 admin 权限对齐。
+    if not QBCore.Functions.HasPermission(src, 'admin') and not IsPlayerAceAllowed(src, 'command') then return end
     local players = GetQBPlayers()
     TriggerClientEvent('qb-admin:client:Show', src, players)
 end)
