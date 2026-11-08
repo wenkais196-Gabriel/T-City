@@ -697,6 +697,42 @@ def main(argv: list[str]) -> int:
     return 0 if all(r["status"] in ("ok", "skipped") for r in results) else 1
 
 
+# P1-5 二期：金额写路径收敛（三个写入口共用一条校验）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_money_write_path.py::"
+              "test_money_table_is_written_only_by_the_convergence_layer"),
+        path="resources/[custom]/custom-shop/server/money_probe.lua",
+        content=(
+            "QBCore = exports['qb-core']:GetCoreObject()\n"
+            "AddEventHandler('probe', function(player, amount)\n"
+            "    player.PlayerData.money['cash'] = amount\n"
+            "end)\n"
+        ),
+        what="资源绕过 Player.Functions 直接写 PlayerData.money（收敛层被旁路）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_money_write_path.py::"
+              "test_single_transaction_threshold_is_defined_exactly_once"),
+        path="resources/[custom]/custom-shop/server/threshold_probe.lua",
+        content="CustomLimit = {}\nCustomLimit.MONEY_MAX_SINGLE_TRANSACTION = 1000000\n",
+        what="单笔阈值出现第二份定义（两个上限，规则分叉）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_money_write_path.py::"
+              "test_every_money_entry_calls_the_shared_validator"),
+        path="resources/[qb]/qb-core/server/services/economy_service.lua",
+        content=None,
+        replace_from=(
+            "    local amountOk, cleanedAmount = Security.ValidateAmount(amount, { allowZero = false })\n"
+            "    if not amountOk then return false end\n"
+            "    amount = cleanedAmount"
+        ),
+        replace_to="    amount = tonumber(amount)  -- 变异注入：校验被摘掉",
+        what="AddMoney 摘掉唯一校验（NaN/inf/超阈值又能进账）",
+    ),
+]
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))
