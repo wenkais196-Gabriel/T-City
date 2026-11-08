@@ -265,5 +265,30 @@
       "requires_raw": [],
       "why": "复活权限：在职 EMS，或持有 firstaid 且（未开启执照要求时）具备 medical_cert。hospital:server:RevivePlayer 用 `if not CanRevive(Player, src) then 审计+拒绝 return end` 做首道拒绝。"
     }
+  },
+  "qb-houses": {
+    "hasKey": {
+      "defined_at": "qb-houses/server/main.lua",
+      "requires_code": [
+        "houseowneridentifier[house]",
+        "houseownercid[house]",
+        "housekeyholders[house]",
+        "return true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "房主（license + citizenid 都对）或钥匙持有人列表里的 citizenid 才返回 true；openStash / lockHouse / OpenDoor 靠它挡入室"
+    },
+    "isHouseOwner": {
+      "defined_at": "qb-houses/server/main.lua",
+      "requires_code": [
+        "houseowneridentifier[house]",
+        "houseownercid[house]",
+        "return true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "只认房主（不认钥匙持有人）：改装饰 / 挪储物柜坐标 / 发钥匙 这类操作"
+    }
   }
 }

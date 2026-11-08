@@ -44,21 +44,21 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 |---|---|---|---|---|---|
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
 | custom `[custom]` | 133 | 80 | 40 | 13 | 覆盖率 **120/133 ≈ 90.2%**（第 5 批：中控屏锁持有者、物流任务前缀条件；车钥匙两条自作用域登记） |
-| qb `[qb]` | 216 | 39 | 28 | 149 | 债务 |
+| qb `[qb]` | 216 | 54 | 32 | 130 | 债务 |
 | other（system / standalone / voice / cfx-default） | 76 | 1 | 6 | 69 | 债务 |
-| **合计** | **440** | 125 | 84 | **231** | — |
+| **合计** | **440** | 140 | 88 | **212** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
 **债的分布不是均匀的**：53 个还有欠账的资源里，15 个**不在启动集**（`ensure` 列表里没有），
-它们贡献 **93/231（40%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
+它们贡献 **93/212（44%）** 的未登记事件（`monitor` 33、`qb-houses` 19、`qb-lapraces` 10、
 `qb-crypto` 6、`qb-shops` 5、`qb-weed` 5、`qb-streetraces` 3…）。基线里每个资源都带 `started`
 标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
 
 ## 3.1 资源内部 helper 登记表（2026-11-01 第 2 批）
 
-全仓 231 个未登记事件里，有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
+全仓 212 个未登记事件里，有一部分**本来就写了校验**，只是校验住在资源自己的 helper 里
 （`CanModifyPlate` / `IsEmergencyService` / `onDutyOfficer` …），按固定 token 名单扫不出来。
 直接把这些名字塞进 token 名单等于"名字像校验就算校验"，所以另开了
 `tests/architecture/net_event_guard_helpers.json`：
