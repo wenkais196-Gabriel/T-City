@@ -302,6 +302,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 18：tcity-dashboard 3 + story-engine 2 + production-freeze 2**（2026-11-08）：
+  `tcity-dashboard` 的车牌标记/取消/追踪器**本来就是**「在职警察」（`isOnDutyLeo`：`job.type == 'leo'`
+  或 `job.name == 'police'` 且 onduty），本轮登记进 helpers；真修的是参数——`plate:upper()` 遇到
+  nil / 数字直接抛错打断事件线程（旧版实测两处 `attempt to index a nil value (local 'plate')`），
+  `reason` 也无长度上限 → 加类型/长度校验。`story:server:makeDecision` 的校验全在
+  `DecisionEngine.MakeChoice`（按 source 存 pending、quest/step/decision 三元组必须全等、带
+  expiresAt），本轮给它补 `return` 并登记成 delegate 形状。`tcity:client:telemetry` 会**写库**
+  （agent_events）而事件名/payload 大小/频率全由客户端定：一个改过的客户端可以每帧写一条大 payload
+  把表写爆（旧版实测 200 条全落库，`TELEMETRY_RATE_LIMITED=false`）→ 现在 64 字 / 2KB / 60 秒 120 条。
+  `i18n:client:reportLanguage(lang)` 原来客户端传什么就写什么（表、4000 字串、伪造的 `'xx'` 都进
+  `metadata.client_lang`）；顺带发现这个文件**根本没取 core object**（`QBCore` 在本资源恒为 nil），
+  所以「读/写玩家语言」两条路都是死代码、服务端永远按 en 渲染 → 显式 `GetCoreObject()` + 走
+  `Player.Functions.SetMetaData`，语言代码只认 `zh`/`en`。`production:client:freezeDebug` 是**客户端**
+  事件却注册在服务端 main 脚本里并被 `TriggerClientEvent(..., -1)` 广播 —— 服务端注册的 handler 永远
+  收不到广播，所以「生产模式关闭客户端 DrawText3D / PolyZone debug」从未生效，而那份服务端副本还让
+  任何客户端能覆盖**服务端**全局 → 处理器回到客户端的 main 脚本，服务端只留 `source ~= 0` 就拒绝的空实现；
+  同时删掉客户端 i18n 脚本里那份永远收不到的服务端事件注册。三个探针（dashboard / story telemetry /
+  i18n lang，位于 layer3_business 的 fixtures 目录）。数字：未登记 **81 → 74**（custom 4 → 2、
+  other 64 → 59、allowlist 162）；真机 restart 三个资源 0 错误。
+
 - **P1-3 批 17：qb-adminmenu / custom-justice / qb-hud / qb-scoreboard**（2026-11-08）：
   `qb-admin:server:GetPlayersForBlips` **没有任何权限校验**，谁发谁拿，而下发的 `qb-admin:client:Show`
   是**全服玩家的名字 + 实时坐标**——等于把 wallhack 发给所有人（客户端在轮询，拿到就是持续跟踪）。

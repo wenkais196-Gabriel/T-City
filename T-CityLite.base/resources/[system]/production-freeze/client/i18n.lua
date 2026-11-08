@@ -113,17 +113,9 @@ _I18N_LOADED = true
 
 -- ── 服务端注册 (供服务端脚本使用 _L) ──────────────────────────────────
 
--- 客户端语言检测结果同步到服务端
-RegisterNetEvent('i18n:client:reportLanguage', function(lang)
-    -- 服务端记录 (用于服务端发送本地化通知)
-    local src = source
-    if src and src > 0 then
-        -- 将语言存储到玩家 metadata 或临时表
-        if QBCore and QBCore.Players and QBCore.Players[src] then
-            QBCore.Players[src].PlayerData.metadata.client_lang = lang
-        end
-    end
-end)
+-- 这里原来还注册了一份 `i18n:client:reportLanguage`，但那是**服务端**事件
+-- （客户端只 TriggerServerEvent，永远不会收到同名广播），而且它读的 QBCore.Players 在客户端根本不存在。
+-- 纯死代码，删掉；真正的服务端处理器在 server/i18n_server.lua。
 
 -- 玩家加载完成后上报语言
 AddEventHandler('QBCore:Client:OnPlayerLoaded', function()
