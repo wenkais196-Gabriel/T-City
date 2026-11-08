@@ -17,14 +17,14 @@
     "custom": {
       "events": 133,
       "guarded": 80,
-      "allowlisted": 40,
-      "unguarded": 13
+      "allowlisted": 41,
+      "unguarded": 12
     },
     "qb": {
       "events": 216,
-      "guarded": 77,
-      "allowlisted": 57,
-      "unguarded": 82
+      "guarded": 82,
+      "allowlisted": 66,
+      "unguarded": 68
     },
     "other": {
       "events": 76,
@@ -174,8 +174,8 @@
       "group": "[custom]",
       "events": 10,
       "guarded": 5,
-      "allowlisted": 0,
-      "unguarded": 5,
+      "allowlisted": 1,
+      "unguarded": 4,
       "started": true
     },
     "custom-taxes": {
@@ -299,9 +299,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 22,
-      "guarded": 3,
-      "allowlisted": 5,
-      "unguarded": 14,
+      "guarded": 8,
+      "allowlisted": 14,
+      "unguarded": 0,
       "started": true
     },
     "qb-apartments": {
@@ -625,7 +625,6 @@
       "custom-main:server:policeHandoverAlert"
     ],
     "custom-quest": [
-      "hospital:server:SetDeathStatus",
       "quest:server:aviationHeightMonitorComplete",
       "quest:server:cargoDamageResult",
       "quest:server:entityTrackingFail",
@@ -707,22 +706,6 @@
     ],
     "qb-adminmenu": [
       "qb-admin:server:GetPlayersForBlips"
-    ],
-    "qb-ambulancejob": [
-      "hospital:server:CanHelp",
-      "hospital:server:LeaveBed",
-      "hospital:server:RemoveDoctor",
-      "hospital:server:RestoreWeaponDamage",
-      "hospital:server:SendDoctorAlert",
-      "hospital:server:SetArmor",
-      "hospital:server:SetDeathStatus",
-      "hospital:server:SetLaststandStatus",
-      "hospital:server:SetWeaponDamage",
-      "hospital:server:SyncInjuries",
-      "hospital:server:UseFirstAid",
-      "hospital:server:ambulanceAlert",
-      "hospital:server:resetHungerThirst",
-      "qb-ambulancejob:server:stash"
     ],
     "qb-cityhall": [
       "QBCore:Client:UpdateObject",
@@ -913,7 +896,7 @@
     {
       "resource": "custom-quest",
       "batch": "custom",
-      "unguarded": 5,
+      "unguarded": 4,
       "owner": "custom-quest",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
@@ -1011,14 +994,6 @@
       "batch": "qb",
       "unguarded": 1,
       "owner": "qb-adminmenu",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-ambulancejob",
-      "batch": "qb",
-      "unguarded": 14,
-      "owner": "qb-ambulancejob",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
