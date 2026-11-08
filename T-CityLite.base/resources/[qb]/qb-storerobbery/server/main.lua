@@ -354,12 +354,14 @@ local ROBBERY_DURATION_MS = 25000  -- 25 秒标准时长
 -- 收银机抢劫结算后，保险箱/警情仍需要看"本人刚抢过这家店"：
 -- activeRobberies 只有 25 秒寿命，但保险箱小游戏往往在那之后才完成。
 local RECENT_ROBBERY_WINDOW = 10 * 60 * 1000   -- 10 分钟
-local recentStoreRobberies = {}                -- [safeKey] = { src = n, at = GetGameTimer() }
+-- [safeKey] = { citizenid = '...', at = GetGameTimer() }
+-- 用 citizenid 而不是 source：source 会被复用，新玩家可能继承上一位玩家的"刚抢过"记录
+local recentStoreRobberies = {}
 
-local function HasRecentStoreRobbery(src, safeKey)
+local function HasRecentStoreRobbery(citizenid, safeKey)
     local record = recentStoreRobberies[safeKey]
-    if not record then return false end
-    if record.src ~= src then return false end
+    if not record or not citizenid then return false end
+    if record.citizenid ~= citizenid then return false end
     return (GetGameTimer() - record.at) <= RECENT_ROBBERY_WINDOW
 end
 
@@ -385,7 +387,10 @@ local function issueStoreReward(src, register)
     -- 记录"本人刚抢过这家店"，供保险箱/警情在 25 秒计时器结束后继续校验
     local registerCfg = Config.Registers[register]
     if registerCfg and registerCfg.safeKey then
-        recentStoreRobberies[registerCfg.safeKey] = { src = src, at = GetGameTimer() }
+        recentStoreRobberies[registerCfg.safeKey] = {
+            citizenid = Player.PlayerData.citizenid,
+            at = GetGameTimer(),
+        }
     end
 
     local job = activeRobberies[register]
@@ -515,6 +520,14 @@ end)
 -- 玩家下线 → 清理活跃抢劫
 AddEventHandler('playerDropped', function()
     local src = source
+    local droppedPlayer = QBCore.Functions.GetPlayer(src)
+    if droppedPlayer then
+        local cid = droppedPlayer.PlayerData.citizenid
+        for safeKey, record in pairs(recentStoreRobberies) do
+            if record.citizenid == cid then recentStoreRobberies[safeKey] = nil end
+        end
+    end
+    lastCopCall[src] = nil
     for register, job in pairs(activeRobberies) do
         if job.src == src then
             if job.timer then ClearTimeout(job.timer) end
@@ -546,7 +559,7 @@ RegisterNetEvent('qb-storerobbery:server:setSafeStatus', function(safe)
         end
     end
     -- 25 秒的收银机计时常在保险箱小游戏完成前结束 → 用 10 分钟内的"本店抢劫记录"兜住
-    if not hasActiveRobbery and not HasRecentStoreRobbery(src, safe) then return end
+    if not hasActiveRobbery and not HasRecentStoreRobbery(Player.PlayerData.citizenid, safe) then return end
 
     local near = false
     local ped = GetPlayerPed(src)
@@ -607,6 +620,7 @@ RegisterNetEvent('qb-storerobbery:server:SafeReward', function(safe)
     end
 end)
 
+local lastCopCall = {}
 RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetLabel, coords)
     local src = source
     -- 🔒 kind / safe / coords / streetLabel 全来自客户端：原来任意玩家能凭空给全服推一条
@@ -627,7 +641,7 @@ RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetL
     -- 收银机条目自带 safeKey；保险箱条目没有这个字段，它自己就是 safe 下标
     local storeSafeKey = entry.safeKey or (isSafe and safe or nil)
     if not storeSafeKey then return end
-    local authorized = HasRecentStoreRobbery(src, storeSafeKey)
+    local authorized = HasRecentStoreRobbery(Caller.PlayerData.citizenid, storeSafeKey)
     if not authorized then
         for register, job in pairs(activeRobberies) do
             local registerCfg = Config.Registers[register]
@@ -644,9 +658,13 @@ RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetL
     local maxDist = tonumber(GetConvar('security_max_interaction_distance', '10.0')) or 10.0
     if not callerCoords or #(callerCoords - anchor.xyz) > maxDist then return end
     local cameraId = entry.camId
-    -- 店名只取客户端文本的"显示用"部分：截断 + 去掉控制字符（坐标已由服务端决定）
-    streetLabel = tostring(streetLabel or ''):gsub('%c', ''):sub(1, 48)
-    if streetLabel == '' then streetLabel = 'Unknown' end
+    -- 🔒 店名不再采信客户端（可以随便编）：Config 里没有店名字段，统一用固定文案，
+    --    警察靠坐标定位就够；客户端传的 streetLabel 直接丢弃。
+    streetLabel = 'Unknown'
+    -- 🔒 按玩家 10 秒冷却：有抢劫记录的玩家原来可以连点刷全服警情
+    local now = GetGameTimer()
+    if lastCopCall[src] and now - lastCopCall[src] < 10000 then return end
+    lastCopCall[src] = now
     coords = { x = anchor.x, y = anchor.y, z = anchor.z }
     local alertData = {
         title = '10-33 | Shop Robbery',

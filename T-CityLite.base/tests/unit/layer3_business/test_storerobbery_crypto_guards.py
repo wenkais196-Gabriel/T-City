@@ -51,6 +51,7 @@ def test_crypto_exchange_never_pays_when_the_stick_is_not_consumed():
     assert data["REBOOT_STATE_REMOTE"][0] == "false", "站在 9999 米外也能把全服状态改成「重启中」"
     assert data["REBOOT_PCT_REMOTE"][0] == "0", "站在 9999 米外也能写全服重启进度"
     assert data["REBOOT_STATE_OWNER_FINISH"][0] == "false", "重启发起者走出范围后无法收尾（全服会卡在「重启中」）"
+    assert data["REBOOT_PCT_AFTER_NON_OWNER"][0] == "10", "非发起者也能改全服重启进度"
 
 
 def test_storerobbery_alerts_use_server_coords_and_safes_need_proximity():
