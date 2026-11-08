@@ -235,17 +235,17 @@ local lastRebootUpdate = 0
 RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
     local src = source
     -- 🔒 全服共享的重启状态：任意玩家原来能把它改成任意值（伪造"交易所重启中"）。
-    --    现在只接受已知状态 + 0~100 的进度，并加 1 秒节流。
-    if type(src) ~= 'number' or type(state) ~= 'string' then return end
-    local allowed = { waiting = true, rebooting = true, done = true, idle = true }
-    if not allowed[state] then return end
+    --    客户端实际发的是 `Rebooting(true/false, percentage)`（见 client/main.lua 的重启循环），
+    --    所以 state 必须是 boolean、percentage 必须是 0~100 的整数，并按秒节流。
+    if type(src) ~= 'number' or type(state) ~= 'boolean' then return end
     percentage = tonumber(percentage)
-    if not percentage or percentage < 0 or percentage > 100 then return end
-    local now = os.time()
-    if now == lastRebootUpdate then return end
+    if not percentage or percentage < 0 or percentage > 100 or percentage % 1 ~= 0 then return end
+    -- 客户端重启循环每帧上报一次进度：用毫秒计时，200ms 节流（1 秒会把进度拖慢 5~10 倍）
+    local now = GetGameTimer()
+    if now - lastRebootUpdate < 200 then return end
     lastRebootUpdate = now
     Crypto.Exchange.RebootInfo.state = state
-    Crypto.Exchange.RebootInfo.percentage = math.floor(percentage)
+    Crypto.Exchange.RebootInfo.percentage = percentage
 end)
 
 RegisterServerEvent('qb-crypto:server:GetRebootState', function()

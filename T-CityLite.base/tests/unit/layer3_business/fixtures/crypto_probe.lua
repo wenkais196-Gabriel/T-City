@@ -47,7 +47,8 @@ end
 CreateThread = function() end
 SetTimeout = function() end
 Wait = function() end
-GetGameTimer = function() return 0 end
+local clock = 0
+GetGameTimer = function() return clock end
 GetConvar = function(_, default) return default end
 vector2 = function(x, y) return { x = x, y = y, xyz = { x = x, y = y } } end
 vector3 = function(x, y, z) return { x = x, y = y, z = z, xyz = { x = x, y = y } } end
@@ -139,12 +140,15 @@ emit('STICKS_LEFT', state.items.cryptostick or 0)
 
 -- 场景 4：Rebooting 只接受已知 state 与 0~100
 emit('SCENARIO', 'rebooting-validation')
-fireAs(1, 'qb-crypto:server:Rebooting', 'hax', 50)
+-- 客户端真实发的是 Rebooting(true/false, pct)（见 client/main.lua 的重启循环）
+fireAs(1, 'qb-crypto:server:Rebooting', 'hax', 50)          -- 非 boolean → 拒
 emit('REBOOT_STATE_AFTER_BAD', tostring(Crypto.Exchange.RebootInfo.state))
-fireAs(1, 'qb-crypto:server:Rebooting', 'rebooting', 150)
+fireAs(1, 'qb-crypto:server:Rebooting', true, 150)          -- 越界 → 拒
 emit('REBOOT_PCT_AFTER_BAD', tostring(Crypto.Exchange.RebootInfo.percentage))
-fireAs(1, 'qb-crypto:server:Rebooting', 'rebooting', 42)
+clock = clock + 1000
+fireAs(1, 'qb-crypto:server:Rebooting', true, 42)           -- 合法
 emit('REBOOT_PCT_AFTER_GOOD', tostring(Crypto.Exchange.RebootInfo.percentage))
+emit('REBOOT_STATE_AFTER_GOOD', tostring(Crypto.Exchange.RebootInfo.state))
 
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')
