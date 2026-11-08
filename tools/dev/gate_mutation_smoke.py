@@ -357,8 +357,10 @@ MUTATIONS += [
         content=None,
         # 锚点必须是当前基线里**真实存在**的数字：原锚点 'guarded: 19' 随 P1-3 清债消失后
         # 这条变异就静默失效了（CC 2026-11-08 复核发现）。改成 qb 批次的 guarded 总数。
-        replace_from='"guarded": 33,',
-        replace_to='"guarded": 34,',
+        # 锚在 qb 批次的**事件总数**上：guarded/unguarded 每清一批就变（历史锚点已两次失效），
+        # 事件总数只有增删资源时才变，且基线里确实存在这个字段。
+        replace_from='"events": 216,',
+        replace_to='"events": 217,',
         what="手改基线里 qb 批次的 guarded 数字（与实测对不上）",
     ),
 ]
