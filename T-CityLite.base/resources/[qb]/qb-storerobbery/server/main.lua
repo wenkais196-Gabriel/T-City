@@ -351,6 +351,18 @@ end)
 local activeRobberies = {}
 local ROBBERY_DURATION_MS = 25000  -- 25 秒标准时长
 
+-- 收银机抢劫结算后，保险箱/警情仍需要看"本人刚抢过这家店"：
+-- activeRobberies 只有 25 秒寿命，但保险箱小游戏往往在那之后才完成。
+local RECENT_ROBBERY_WINDOW = 10 * 60 * 1000   -- 10 分钟
+local recentStoreRobberies = {}                -- [safeKey] = { src = n, at = GetGameTimer() }
+
+local function HasRecentStoreRobbery(src, safeKey)
+    local record = recentStoreRobberies[safeKey]
+    if not record then return false end
+    if record.src ~= src then return false end
+    return (GetGameTimer() - record.at) <= RECENT_ROBBERY_WINDOW
+end
+
 --- 根据实际逗留时间计算奖励倍率（阶梯惩罚）
 --- 满 25 秒 = 1.0x，每少 1 秒约扣 4%，最低 0.1x
 local function calculateTimeMultiplier(startTime, cancelTime)
@@ -368,6 +380,12 @@ local function issueStoreReward(src, register)
     if not Player then
         activeRobberies[register] = nil
         return
+    end
+
+    -- 记录"本人刚抢过这家店"，供保险箱/警情在 25 秒计时器结束后继续校验
+    local registerCfg = Config.Registers[register]
+    if registerCfg and registerCfg.safeKey then
+        recentStoreRobberies[registerCfg.safeKey] = { src = src, at = GetGameTimer() }
     end
 
     local job = activeRobberies[register]
@@ -527,7 +545,8 @@ RegisterNetEvent('qb-storerobbery:server:setSafeStatus', function(safe)
             break
         end
     end
-    if not hasActiveRobbery then return end
+    -- 25 秒的收银机计时常在保险箱小游戏完成前结束 → 用 10 分钟内的"本店抢劫记录"兜住
+    if not hasActiveRobbery and not HasRecentStoreRobbery(src, safe) then return end
 
     local near = false
     local ped = GetPlayerPed(src)
@@ -604,6 +623,21 @@ RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetL
     local entry = isSafe and Config.Safes[safe] or Config.Registers[safe]
     local anchor = entry and entry[1]
     if not entry or not anchor then return end
+    -- 🔒 必须"本人正在（或刚）抢这家店"：只靠距离的话，路过的人也能推假警情
+    -- 收银机条目自带 safeKey；保险箱条目没有这个字段，它自己就是 safe 下标
+    local storeSafeKey = entry.safeKey or (isSafe and safe or nil)
+    if not storeSafeKey then return end
+    local authorized = HasRecentStoreRobbery(src, storeSafeKey)
+    if not authorized then
+        for register, job in pairs(activeRobberies) do
+            local registerCfg = Config.Registers[register]
+            if job and job.src == src and registerCfg and registerCfg.safeKey == storeSafeKey then
+                authorized = true
+                break
+            end
+        end
+    end
+    if not authorized then return end
     -- 🔒 必须人就在这家店附近（原来任意玩家拿真实 key 就能给全服推警情）
     local ped = GetPlayerPed(src)
     local callerCoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
