@@ -47,9 +47,11 @@ local function IsWhitelisted(CitizenId)
         end
     end
     local Player = QBCore.Functions.GetPlayerByCitizenId(CitizenId)
-    local Perms = QBCore.Functions.GetPermission(Player.PlayerData.source)
-    if Perms == "admin" or Perms == "god" then
-        retval = true
+    if Player then
+        local Perms = QBCore.Functions.GetPermission(Player.PlayerData.source)
+        if Perms == "admin" or Perms == "god" then
+            retval = true
+        end
     end
     return retval
 end
@@ -110,6 +112,15 @@ local function GetRaceId(name)
     return retval
 end
 
+-- 比赛控制权：只有「当前开放中的那场比赛」的创建者能开始/取消/改状态。
+local function IsRaceHost(CitizenId, RaceId)
+    local key = GetOpenedRaceKey(RaceId)
+    if not key then return false end
+    local opened = AvailableRaces[key]
+    if not opened then return false end
+    return opened.SetupCitizenId == CitizenId
+end
+
 local function GenerateRaceId()
     local RaceId = "LR-" .. math.random(1111, 9999)
     while Races[RaceId] ~= nil do
@@ -123,10 +134,21 @@ end
 RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime, TotalLaps, BestLap)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    local AvailableKey = GetOpenedRaceKey(RaceData.RaceId)
+    if not Player or type(RaceData) ~= 'table' then return end
+    local raceId = RaceData.RaceId
+    if type(raceId) ~= 'string' or Races[raceId] == nil then return end
+    -- 🔒 只有这场比赛的参赛者能报成绩；成绩必须是合理数字（原来客户端报 BestLap=0.001 就能刷赛道记录）
+    local racer = Races[raceId].Racers[Player.PlayerData.citizenid]
+    if not racer or racer.Finished then return end
+    TotalTime = tonumber(TotalTime)
+    TotalLaps = tonumber(TotalLaps)
+    BestLap = tonumber(BestLap) or TotalTime
+    if not TotalTime or TotalTime <= 0 or not TotalLaps or TotalLaps < 1 then return end
+    if BestLap <= 0 or BestLap > TotalTime then BestLap = TotalTime end
+    local AvailableKey = GetOpenedRaceKey(raceId)
     local PlayersFinished = 0
     local AmountOfRacers = 0
-    for _, v in pairs(Races[RaceData.RaceId].Racers) do
+    for _, v in pairs(Races[raceId].Racers) do
         if v.Finished then
             PlayersFinished = PlayersFinished + 1
         end
@@ -230,7 +252,9 @@ end)
 RegisterNetEvent('qb-lapraces:server:JoinRace', function(RaceData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(RaceData) ~= 'table' then return end
     local RaceId = RaceData.RaceId
+    if type(RaceId) ~= 'string' or Races[RaceId] == nil then return end
     local AvailableKey = GetOpenedRaceKey(RaceId)
     local CurrentRace = GetCurrentRace(Player.PlayerData.citizenid)
     if CurrentRace ~= nil then
@@ -274,6 +298,7 @@ end)
 RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(RaceData) ~= 'table' then return end
     local RaceName
     if RaceData.RaceData ~= nil then
         RaceName = RaceData.RaceData.RaceName
@@ -358,6 +383,9 @@ end)
 
 RegisterNetEvent('qb-lapraces:server:SetupRace', function(RaceId, Laps)
     local Player = QBCore.Functions.GetPlayer(source)
+    if not Player or type(RaceId) ~= 'string' then return end
+    Laps = tonumber(Laps)
+    if not Laps or Laps < 1 or Laps > 99 then return end
     if Races[RaceId] ~= nil then
         if not Races[RaceId].Waiting then
             if not Races[RaceId].Started then
@@ -406,37 +434,50 @@ RegisterNetEvent('qb-lapraces:server:CancelRace', function(raceId)
 
     TriggerClientEvent('QBCore:Notify', src, 'Stopping the race: ' .. raceId, 'error')
 
-    if AvailableKey ~= nil then
-        if AvailableRaces[AvailableKey].SetupCitizenId == Player.PlayerData.citizenid then
-            for cid, _ in pairs(Races[raceId].Racers) do
-                local RacerData = QBCore.Functions.GetPlayerByCitizenId(cid)
-                if RacerData ~= nil then
-                    TriggerClientEvent('qb-lapraces:client:LeaveRace', RacerData.PlayerData.source, Races[raceId])
-                end
-            end
-
-            table.remove(AvailableRaces, AvailableKey)
-            Races[raceId].LastLeaderboard = {}
-            Races[raceId].Racers = {}
-            Races[raceId].Started = false
-            Races[raceId].Waiting = false
-            LastRaces[raceId] = nil
-            TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
-        end
-    else
-        TriggerClientEvent('QBCore:Notify', src, 'Race not open: ' .. raceId, 'error')
+    if not Player or type(raceId) ~= 'string' then return end
+    if AvailableKey == nil or Races[raceId] == nil then
+        TriggerClientEvent('QBCore:Notify', src, 'Race not open: ' .. tostring(raceId), 'error')
+        return
     end
+    -- 🔒 只有创建者能取消（原来判定在 AvailableRaces[key] 上，key 为 nil 时还会崩）
+    if not IsRaceHost(Player.PlayerData.citizenid, raceId) then return end
+
+    for cid, _ in pairs(Races[raceId].Racers) do
+        local RacerData = QBCore.Functions.GetPlayerByCitizenId(cid)
+        if RacerData ~= nil then
+            TriggerClientEvent('qb-lapraces:client:LeaveRace', RacerData.PlayerData.source, Races[raceId])
+        end
+    end
+
+    table.remove(AvailableRaces, AvailableKey)
+    Races[raceId].LastLeaderboard = {}
+    Races[raceId].Racers = {}
+    Races[raceId].Started = false
+    Races[raceId].Waiting = false
+    LastRaces[raceId] = nil
+    TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
 end)
 
 RegisterNetEvent('qb-lapraces:server:UpdateRaceState', function(RaceId, Started, Waiting)
-    Races[RaceId].Waiting = Waiting
-    Races[RaceId].Started = Started
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(RaceId) ~= 'string' or Races[RaceId] == nil then return end
+    -- 🔒 原来这四条语句没有任何校验：任何玩家改包即可把任意比赛开起来 / 停掉，RaceId 不存在还会崩
+    if not IsRaceHost(Player.PlayerData.citizenid, RaceId) then return end
+    Races[RaceId].Started = Started == true
+    Races[RaceId].Waiting = Waiting == true
 end)
 
 RegisterNetEvent('qb-lapraces:server:UpdateRacerData', function(RaceId, Checkpoint, Lap, Finished)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(RaceId) ~= 'string' or Races[RaceId] == nil then return end
     local CitizenId = Player.PlayerData.citizenid
+    -- 🔒 只改自己在**这场**比赛里的进度；原来 RaceId 坏值 / 没报名都是 nil 索引崩服务端
+    if Races[RaceId].Racers[CitizenId] == nil then return end
+    Checkpoint = tonumber(Checkpoint)
+    Lap = tonumber(Lap)
+    if not Checkpoint or not Lap or Checkpoint < 0 or Lap < 1 then return end
 
     Races[RaceId].Racers[CitizenId].Checkpoint = Checkpoint
     Races[RaceId].Racers[CitizenId].Lap = Lap
@@ -450,28 +491,35 @@ RegisterNetEvent('qb-lapraces:server:StartRace', function(RaceId)
     local MyPlayer = QBCore.Functions.GetPlayer(src)
     local AvailableKey = GetOpenedRaceKey(RaceId)
 
-    if RaceId ~= nil then
-        if AvailableRaces[AvailableKey].SetupCitizenId == MyPlayer.PlayerData.citizenid then
-            AvailableRaces[AvailableKey].RaceData.Started = true
-            AvailableRaces[AvailableKey].RaceData.Waiting = false
-            for CitizenId, _ in pairs(Races[RaceId].Racers) do
-                local Player = QBCore.Functions.GetPlayerByCitizenId(CitizenId)
-                if Player ~= nil then
-                    TriggerClientEvent('qb-lapraces:client:RaceCountdown', Player.PlayerData.source)
-                end
-            end
-            TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
-        else
-            TriggerClientEvent('QBCore:Notify', src, 'You are not the creator of the race..', 'error')
-        end
-    else
+    if not MyPlayer or type(RaceId) ~= 'string' then return end
+    if RaceId == nil or AvailableKey == nil or Races[RaceId] == nil then
         TriggerClientEvent('QBCore:Notify', src, 'You are not in a race..', 'error')
+        return
     end
+    -- 🔒 只有创建者能发车
+    if not IsRaceHost(MyPlayer.PlayerData.citizenid, RaceId) then
+        TriggerClientEvent('QBCore:Notify', src, 'You are not the creator of the race..', 'error')
+        return
+    end
+
+    AvailableRaces[AvailableKey].RaceData.Started = true
+    AvailableRaces[AvailableKey].RaceData.Waiting = false
+    for CitizenId, _ in pairs(Races[RaceId].Racers) do
+        local RacePlayer = QBCore.Functions.GetPlayerByCitizenId(CitizenId)
+        if RacePlayer ~= nil then
+            TriggerClientEvent('qb-lapraces:client:RaceCountdown', RacePlayer.PlayerData.source)
+        end
+    end
+    TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
 end)
 
 RegisterNetEvent('qb-lapraces:server:SaveRace', function(RaceData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(RaceData) ~= 'table' or type(RaceData.Checkpoints) ~= 'table' then return end
+    -- 🔒 原来任何玩家都能凭空保存一条赛道（无限写 DB）；创建权限应与 CreateLapRace 一致
+    if not IsWhitelisted(Player.PlayerData.citizenid) then return end
+    if type(RaceData.RaceName) ~= 'string' or #RaceData.Checkpoints == 0 then return end
     local RaceId = GenerateRaceId()
     local Checkpoints = {}
     for k, v in pairs(RaceData.Checkpoints) do
@@ -493,8 +541,8 @@ RegisterNetEvent('qb-lapraces:server:SaveRace', function(RaceData)
         LastLeaderboard = {}
     }
     MySQL.insert('INSERT INTO lapraces (name, checkpoints, creator, distance, raceid) VALUES (?, ?, ?, ?, ?)',
-        {RaceData.RaceName, json.encode(Checkpoints), Player.PlayerData.citizenid, RaceData.RaceDistance,
-         GenerateRaceId()})
+        {RaceData.RaceName, json.encode(Checkpoints), Player.PlayerData.citizenid,
+         math.ceil(tonumber(RaceData.RaceDistance) or 0), RaceId})
 end)
 
 -- Callbacks
