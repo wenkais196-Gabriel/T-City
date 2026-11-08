@@ -145,6 +145,25 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 11. **SOP 文档**：活服禁止 `restart qb-core/core-framework/oxmysql`；必须热重启时按顺序
     `exec configs/modules/*.cfg`；验证三件事（资源数 85、无 `No such export`、关键命令已注册）。
 
+### 阶段 E（P1）  ✅ 2026-11-07 完成（金额 A 档偿还）
+
+12. **A 档 26 处偿清**（基线 93 → 68）：qb-drugs 8、custom-cartel 9、custom-crime 3、
+    custom-security 2、custom-main 2、custom-market 2。每个资源自带 shared 下的 money_format 模块
+    （函数 `Money`），不跨资源引用。
+13. **B 档 21 处留基线**（整数常量 / `math.floor` / DB 整数列），`$comment` 已注明是假阳性；
+    **C 档 46 处**多为 production-freeze 的 locale 模板串（当前无调用点，但 `string.format`
+    通路是真的，记为潜在陷阱）。
+14. 新增 `test_money_renderers.py`：8 个渲染器 × 8 组输入 —— 静态闸门只看"还有没有 `$%d`"，
+    看不见"渲染成 500 还是 500.00"。
+
+### 阶段 F（P0 安全）  ✅ 2026-11-07 完成（qb-drugs 配送服务端权威）
+
+15. **押金/报酬/时间窗口改服务端算**：接单时按 Config 反算并存档（`activeDeliveries[src]`，
+    绑定 citizenid），数量固定 1，结算只认存档，`elapsed` 用服务端计时，背包无货不发钱。
+16. **单活跃配送约束 + 掉线清理**：防"连开两单覆盖记录"（净赚 500/轮）与"source 复用结算旧单"。
+17. 新增 test_drugs_delivery_authority.py 与同目录 fixtures 下的 drugs_delivery_probe 探针：mock 掉 FiveM
+    运行时（含**真的**定时器队列），真的触发 net event 断言钱与货的走向。
+
 ## 5. 交付标准（DoD）
 
 | 编号 | 断言 | 验证方式 | 反向形状 |
@@ -161,6 +180,10 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 | G10 | 既有回归全绿 | `pytest tests/unit tests/architecture tests/integration` | — |
 | G11 | 闸门预算不抬高 | `gate_coverage` 未证明数 ≤ 276 | 改 budget → 评审打回 |
 | G12 | 真机 | 干净重启 85 资源 0 SCRIPT ERROR；取抵押车 / 转账 / 交税 / 拿任务奖励四条路径无错 | — |
+| G13 | 金额 A 档 26 处偿清：基线 == 扫描 68 条，且与分档口径对得上 | `money_format_scan.py` 双向相等 | 改回 `$%d` → 红 |
+| G14 | 配送押金/报酬不采信客户端 | `test_drugs_delivery_authority.py`（押金 500 / 发货 1 / 结算 1500） | 退回旧实现 → 押金 0 / 发货 999 / 结算 2.2e9 |
+| G15 | 单活跃配送 + 断线不复用 | 同上（连开两单只扣 1 次；source 复用 0 收入） | 去掉 citizenid 核对 → 红 |
+| G16 | 两个配送事件被闸门识别为已鉴权 | net event 基线 qb 未登记 197 → 195 | 改回无校验 → 红 |
 
 ## 6. 施工纪律
 
@@ -186,3 +209,10 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 - `custom-testing` 两个压测脚本仍读旧的 persistence 字段（`dirty_count` 已移除）。
 - P1-3 最后 13 个 net event（含需服务端验高的 `aviationHeightMonitorComplete`）挂着 2027-03-31 的到期日。
 - 真机 G13（选人界面停 5 分钟 / 换角色 / 连续加钱）当时未做完，本阶段 G12 一并补。
+
+- **掉线配送的经济策略未定**：玩家接单后掉线，押金不退、货留在背包（与"接单后不完成"等价）。
+  三个选项待拍板：①按 citizenid 持久化活跃单（重连可续，需要客户端配合重建倒计时）；
+  ②掉线退款并回收货物（需要离线装卸 inventory，有存档竞态风险）；③维持现状并写进玩家须知。
+  当前取 ③，等产品判断。
+- **client 侧 19 个顶层缓存文件未修**：`onClientResourceStart('qb-core')` 的跨客户端语义需要
+  真人客户端在场才能验（本次实机时客户端未连上），修法与服务端一致（线程重试），但没验证前不动。
