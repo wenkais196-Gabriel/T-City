@@ -14,13 +14,185 @@
   },
   "entries": [
     {
-      "name": "evidence:server:UpdateStatus",
-      "file": "custom-police/server/evidence.lua",
+      "name": "core-framework:server:clientReady",
+      "file": "[standalone]/core-framework/server/client_reports.lua",
+      "category": "diagnostic",
+      "reason": "客户端资源加载完成信标。客户端 print 只进 F8、服务端看不到，这个通道让\"新客户端代码到底有没有加载\"能从服务端日志回答。不含业务数据，只写一行日志。",
+      "evidence": "client_reports.lua:clientReady — allow() 走 RateLimitWindow 3/60s + clean(resourceName,64) + clean(version,32) 白名单字符集",
+      "owner": "core-framework",
+      "expires": "2027-06-30"
+    },
+    {
+      "name": "core-framework:server:clientReport",
+      "file": "[standalone]/core-framework/server/client_reports.lua",
+      "category": "diagnostic",
+      "reason": "客户端错误/降级上报（CFShared.Report）。只接 kind 白名单与一条 message，去控制字符后截断到 400 字，防止客户端伪造多行服务端日志；每玩家 10 条/分钟。",
+      "evidence": "client_reports.lua:clientReport — KINDS 白名单 + clean(message,400) 去 %c + allow() RateLimitWindow 10/60s",
+      "owner": "core-framework",
+      "expires": "2027-06-30"
+    },
+    {
+      "name": "tcity:agent:devcmd_result",
+      "file": "custom-agent-client/server/main.lua",
+      "category": "diagnostic",
+      "reason": "遥测通道：客户端上报 devcmd 执行结果，服务端只写一行日志；每源 500ms 节流 + 类型/长度约束，不落 PII。",
+      "evidence": "main.lua:584 tcity:agent:devcmd_result — type 校验 + DEVCMD_RESULT_COOLDOWN_MS(500ms) + sub(1,96)",
+      "owner": "custom-agent-client",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "tcity:agent:ready",
+      "file": "custom-agent-client/server/main.lua",
+      "category": "self_scoped",
+      "reason": "握手：只给该玩家自己建会话令牌并回给本人（`sessions[src]`），不接受任何玩家 id 参数，没有跨玩家写入、没有执行意图；真正的执行只由服务端 dispatch 下发。",
+      "evidence": "main.lua:314 tcity:agent:ready — sessions[src] = {token}，只 TriggerClientEvent 回自己",
+      "owner": "custom-agent-client",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "tcity:agent:state",
+      "file": "custom-agent-client/server/main.lua",
+      "category": "self_scoped",
+      "reason": "客户端自身上报的界面状态：sanitizeState 只重建白名单字段并夹紧范围，每源 250ms 节流，写 stateBySrc[src]，只服务端 agent 读取。",
+      "evidence": "main.lua:499 tcity:agent:state — sanitizeState + STATE_MIN_INTERVAL_MS(250ms) + stateBySrc[src]",
+      "owner": "custom-agent-client",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "justice:server:requestVisit",
+      "file": "custom-justice/server/prison.lua",
       "category": "civilian",
-      "reason": "玩家自己身上的状态列表（红手、火药味、醉酒…）由本人客户端上报，不能要求警察身份；服务端只接受 table 并重建白名单副本（键数 ≤13、text ≤64、time ≤3600）。",
-      "evidence": "evidence.lua:216 evidence:server:UpdateStatus — type/tonumber/长度校验后写 PlayerStatus[src]",
+      "reason": "探视申请：调用方只需在线（Visitor 取自 source），校验的是**目标**是否在押，不是调用方鉴权，因此不计入已鉴权；目标不在押直接拒绝。",
+      "evidence": "prison.lua:268 justice:server:requestVisit — VISIT_REQUEST_COOLDOWN_MS 5s/源 + type 校验；GetInmate 判的是**目标**",
+      "owner": "custom-justice",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:appActionRequest",
+      "file": "custom-phone/server/main.lua",
+      "category": "civilian",
+      "reason": "职业 App 动作入口：PhoneApps.Action 同样在注册表内按 audience 复验权限/在勤，handler 只接受 3–64 字符 request_id 与 table，每玩家 token bucket（app:<cid>:action）限流，结果按调用者 source 单播回传。",
+      "evidence": "main.lua:1385 appActionRequest — validAppRequestId + type(data)=='table' + PhoneRateLimit.Allow(appRateKey) + PhoneApps.Action(src, ...) audience check, unicast to src",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:appQueryRequest",
+      "file": "custom-phone/server/main.lua",
+      "category": "civilian",
+      "reason": "职业 App 查询入口：任何玩家都可以请求，但 PhoneApps.Query 会按 app_id 注册的 audience（job/onduty）拒绝未授权玩家；handler 只接受 3–64 字符 request_id 与 table，每玩家 token bucket（app:<cid>:query）限流，响应只回传 request_id 和结果，不回显参数。",
+      "evidence": "main.lua:1364 appQueryRequest — validAppRequestId + type(data)=='table' + PhoneRateLimit.Allow(appRateKey) + PhoneApps.Query(src, ...) audience check, unicast to src",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:clientError",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "NUI 报错上报，只有 message/stack 两个字段被读取，其余丢弃；每 source 10 秒 1 条，字段截断到 300/500 并去控制字符。",
+      "evidence": "main.lua:1432 clientError — CLIENT_ERROR_COOLDOWN=10 + diagField(data.message,300)/diagField(data.stack,500)",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:completeJob",
+      "file": "custom-phone/server/jobboard.lua",
+      "category": "session",
+      "reason": "只能完成自己接的单：job.status == 'taken' 且 job.taken_by == 调用者 citizenid；另外做 25m 服务端距离校验和原子 UPDATE 领取。",
+      "evidence": "jobboard.lua:198 completeJob — job.taken_by ~= citizenid → return, dist > 25.0 拦截, UPDATE ... WHERE taken_by = ?",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:diag",
+      "file": "custom-phone/server/core/diag.lua",
+      "category": "diagnostic",
+      "reason": "四段往返诊断通道：只写服务端日志，不写库、不回包、不构成 RPC 面。payload 经 Sanitize 白名单投影（tid 3..64+字符集校验、kind/app/code 字符集与长度收敛、phases 最多 8 且序号 1..8、ui phase 必须在 13 项白名单内），trace 批次走 PhoneRateLimit 令牌桶 20/min burst 5，ui 事件按 (phase, src) 5s 冷却，另有全局每秒钟 50 行打印预算与 dropped 计数，客户端无法刷屏或注入。",
+      "evidence": "server/core/diag.lua:387 PhoneDiag.Accept — Sanitize + allowTrace(PhoneRateLimit 20/5) + allowUi(5s) + printBudgetOk(50/s)",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:focusState",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "NUI 焦点调试通道，不涉及玩家数据；只接受 table、phase 必须在白名单、每 source 5 秒 1 条，且所有字段去控制字符后截断（防止伪造服务器日志）。",
+      "evidence": "main.lua:1412 focusState — FOCUS_PHASES whitelist + FOCUS_COOLDOWN=5 + diagField sanitize",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:markMessagesRead",
+      "file": "custom-phone/server/main.lua",
+      "category": "session",
+      "reason": "已读范围固定为调用者自己的号码：receiver_number = Player.PlayerData.charinfo.phone，SQL 也按该号码过滤。",
+      "evidence": "main.lua:529 markMessagesRead —— sender/receiver 都以 caller 自己 PlayerData.charinfo.phone 为一方，只改自己的已读状态",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "phone:server:nuiProbe",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "四段探针结果回报：NUI 用一次真实 appQuery 走完 NUI→client→server→回包→NUI 后把终态码与耗时报给服务端，作为每次资源重启的端到端自检。只读取 code/build 两个字符串（字符集收敛 + 截断）与 dur 数字；每 source 3s 一条，不写库、不回包、不涉及玩家数据。",
+      "evidence": "main.lua phone:server:nuiProbe — PROBE_COOLDOWN_MS=3000 + code/build gsub 收敛 + dur 取整",
+      "owner": "custom-phone",
+      "expires": "2026-11-30"
+    },
+    {
+      "name": "phone:server:nuiReady",
+      "file": "custom-phone/server/main.lua",
+      "category": "diagnostic",
+      "reason": "NUI 自证握手：页面加载时把自己跑的是哪个 build、location.host 与 GetParentResourceName() 报给服务端，用于判定'改完不生效'是旧 bundle 缓存还是路由不通。只读取 build/host/parent/href 四个字符串字段，逐字符集收敛并截断；每 source 5s 一条，不写库、不回包、不涉及玩家数据。",
+      "evidence": "main.lua phone:server:nuiReady — NUI_READY_COOLDOWN_MS=5000 + field() gsub 收敛并截断",
+      "owner": "custom-phone",
+      "expires": "2026-11-30"
+    },
+    {
+      "name": "phone:server:storeNotification",
+      "file": "custom-phone/server/main.lua",
+      "category": "session",
+      "reason": "只写调用者自己的通知托盘（PhoneNotify.Store(source, ...) 内部 GetPlayer(source)），并丢弃 origin='server' 的回显以防存储回环。",
+      "evidence": "main.lua:578 storeNotification — PhoneNotify.Store(source, notification, 'client')，notify core 内 GetPlayer(source)，title/content 截断、app_id 白名单",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-phone:server:sendNewMail",
+      "file": "custom-phone/server/qb_phone_compat.lua",
+      "category": "session",
+      "reason": "兼容层只把邮件写进调用者自己的托盘：ResolveSource(source) 解析玩家，DeliverToPlayer 再逐字段校验/截断，不按客户端给的 citizenid 选人。",
+      "evidence": "qb_phone_compat.lua:266 sendNewMail — ResolveSource(source) + Compat.DeliverToPlayer(Player, citizenid, mail)",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-police:server:911",
+      "file": "custom-police/server/p0_incidents.lua",
+      "category": "civilian",
+      "reason": "平民 911 必须对所有人开放；事件只接受 table + 在线玩家、每 source 5 秒 1 条，长度/priority 在 CreateIncident 里夹取。",
+      "evidence": "p0_incidents.lua:601 911 — type(payload) ~= 'table' → return, pd(src) check, CALL_911_COOLDOWN=5",
       "owner": "custom-police",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-police:server:setStatus",
+      "file": "custom-police/server/p0_units.lua",
+      "category": "already_checked",
+      "reason": "只允许警察改自己的 10-x 状态；事件体先 isPolice(data)，随后 SetUnitStatusForSource 再查状态白名单、onduty 和 duty_failed。",
+      "evidence": "p0_units.lua:590 setStatus — isPolice(data) → P.SetUnitStatusForSource（内含 VALID_STATUS + onduty 校验）",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "custom-police/server/p0_units.lua",
+      "category": "already_checked",
+      "reason": "duty point toggle: handler rejects non-police via isPolice(pd(src)); the state write goes through P.SetDutyForSource (FIT-01).",
+      "owner": "custom-police",
+      "added": "2026-10-25",
+      "expires": "2027-03-31",
+      "name": "custom-police:server:toggleDuty",
+      "evidence": "p0_units.lua:734 handler: isPolice(pd(src)) then P.SetDutyForSource"
     },
     {
       "name": "evidence:server:CreateBloodDrop",
@@ -28,15 +200,6 @@
       "category": "civilian",
       "reason": "流血掉落由受伤玩家自己的客户端上报（qb-ambulancejob/client/wounding.lua:212），限制为警察会直接让血迹证据消失；改为服务端用调用者自己的 citizenid/bloodtype 覆盖客户端值，且坐标必须距调用者 ped ≤25m。",
       "evidence": "evidence.lua:239 CreateBloodDrop — dna := player.PlayerData.citizenid, coordsNearSource(src, coords), trackDrop 上限 500/TTL 1800s",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "evidence:server:CreateFingerDrop",
-      "file": "custom-police/server/evidence.lua",
-      "category": "civilian",
-      "reason": "指纹由案发现场的玩家客户端留下（qb-storerobbery / qb-houserobbery）。指纹值只取调用者自己的 metadata.fingerprint，坐标 ≤25m，表结构有上限，无法伪造他人身份。",
-      "evidence": "evidence.lua:259 CreateFingerDrop — fingerprint := player.PlayerData.metadata['fingerprint'], coordsNearSource, trackDrop",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
@@ -50,11 +213,38 @@
       "expires": "2027-03-31"
     },
     {
-      "name": "police:server:SearchPlayer",
+      "name": "evidence:server:CreateFingerDrop",
+      "file": "custom-police/server/evidence.lua",
+      "category": "civilian",
+      "reason": "指纹由案发现场的玩家客户端留下（qb-storerobbery / qb-houserobbery）。指纹值只取调用者自己的 metadata.fingerprint，坐标 ≤25m，表结构有上限，无法伪造他人身份。",
+      "evidence": "evidence.lua:259 CreateFingerDrop — fingerprint := player.PlayerData.metadata['fingerprint'], coordsNearSource, trackDrop",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "evidence:server:UpdateStatus",
+      "file": "custom-police/server/evidence.lua",
+      "category": "civilian",
+      "reason": "玩家自己身上的状态列表（红手、火药味、醉酒…）由本人客户端上报，不能要求警察身份；服务端只接受 table 并重建白名单副本（键数 ≤13、text ≤64、time ≤3600）。",
+      "evidence": "evidence.lua:216 evidence:server:UpdateStatus — type/tonumber/长度校验后写 PlayerStatus[src]",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "heli:server:spotlight",
+      "file": "custom-police/server/vehicle.lua",
+      "category": "unchecked_debt",
+      "reason": "警用直升机探照灯是纯视觉同步（TriggerClientEvent -1），不动钱/物品/状态；目前没有职业校验，任何客户端可切换全服探照灯。下一次摸 vehicle.lua 时补 PolicePolicy。",
+      "evidence": "vehicle.lua:32 spotlight — 仅 TriggerClientEvent('heli:client:spotlight', -1, serverID, state)",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:BillPlayer",
       "file": "custom-police/server/interactions.lua",
       "category": "already_checked",
-      "reason": "搜身要求 job.type == 'leo' + 2.5m 距离；打开的是对方背包（qb-inventory 自身再做权限）。",
-      "evidence": "interactions.lua:9 SearchPlayer — PlayerData.job.type ~= 'leo' → return",
+      "reason": "开罚单要求 job.type == 'leo'，金额服务端夹在 1..50000，且距离 ≤2.5m。",
+      "evidence": "interactions.lua:117 BillPlayer — job.type ~= 'leo' → return, fineAmount clamp",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
@@ -77,20 +267,29 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "police:server:FlaggedPlateTriggered",
+      "file": "custom-police/server/vehicle.lua",
+      "category": "unchecked_debt",
+      "reason": "ANPR 命中报警：客户端可伪造车牌/坐标给全体在勤警察发“被标记车辆”提示（骚扰/误导），但不动钱/物品。补 PolicePolicy.Can(actor,'incident.create') 前先登记。",
+      "evidence": "vehicle.lua:85 FlaggedPlateTriggered — 只遍历在勤警察发 police:client:policeAlert，调用方无鉴权",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:Impound",
+      "file": "custom-police/server/vehicle.lua",
+      "category": "already_checked",
+      "reason": "扣押/没收要求 job.type == 'leo' 且 onduty；非法调用写 custom-logs 安全日志后 return。",
+      "evidence": "vehicle.lua:37 Impound — job.type ~= 'leo' or not job.onduty → LogSecurity + return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "police:server:KidnapPlayer",
       "file": "custom-police/server/interactions.lua",
       "category": "civilian",
       "reason": "绑架是罪犯玩法（qb-kidnapping 桥接），不能要求警察身份；服务端只做 2.5m 距离 + 目标必须已铐/倒地/濒死，且仅触发客户端拖拽动画，不移动物品或钱。",
       "evidence": "interactions.lua:61 KidnapPlayer — 2.5m guard + metadata['ishandcuffed']/['isdead']/['inlaststand']",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:SetPlayerOutVehicle",
-      "file": "custom-police/server/interactions.lua",
-      "category": "civilian",
-      "reason": "把被铐/倒地的目标从车里拉出来，是警察与绑架双方都会用的动作；要求目标 metadata 处于 ishandcuffed/isdead 且距离 ≤2.5m。",
-      "evidence": "interactions.lua:81 SetPlayerOutVehicle — metadata['ishandcuffed'] or metadata['isdead'] + 2.5m guard",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
@@ -104,11 +303,11 @@
       "expires": "2027-03-31"
     },
     {
-      "name": "police:server:BillPlayer",
+      "name": "police:server:SearchPlayer",
       "file": "custom-police/server/interactions.lua",
       "category": "already_checked",
-      "reason": "开罚单要求 job.type == 'leo'，金额服务端夹在 1..50000，且距离 ≤2.5m。",
-      "evidence": "interactions.lua:117 BillPlayer — job.type ~= 'leo' → return, fineAmount clamp",
+      "reason": "搜身要求 job.type == 'leo' + 2.5m 距离；打开的是对方背包（qb-inventory 自身再做权限）。",
+      "evidence": "interactions.lua:9 SearchPlayer — PlayerData.job.type ~= 'leo' → return",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
@@ -118,6 +317,132 @@
       "category": "already_checked",
       "reason": "没收现金要求 job.type == 'leo' + 2.5m；现金经 RemoveMoney/AddItem 走框架接口。",
       "evidence": "interactions.lua:187 SeizeCash — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SendTrackerLocation",
+      "file": "custom-police/server/main.lua",
+      "category": "session",
+      "reason": "只有 metadata.tracker == true 的人（电子脚镣佩戴者）能上报自己的位置；坐标经 sanitizeAlertCoords 清洗，requestId 必须是存在的服务器 id，不能拿它当任意广播目标。",
+      "evidence": "main.lua:348 SendTrackerLocation — metadata['tracker'] ~= true → return, sanitizeAlertCoords(coords), tonumber(requestId) + GetPlayer",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SetHandcuffStatus",
+      "file": "custom-police/server/main.lua",
+      "category": "already_checked",
+      "reason": "true 分支是被铐玩家自己的客户端在 police:client:GetCuffed 里上报（必须允许平民），只写自己的 metadata；false（解铐）分支要求 LEO 或 EMS，并且 isHandcuffed 必须是 boolean。",
+      "evidence": "main.lua:284 SetHandcuffStatus — type(isHandcuffed) ~= 'boolean' → return; false 分支 job.type ~= 'leo' and job.name ~= 'ambulance' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SetPlayerOutVehicle",
+      "file": "custom-police/server/interactions.lua",
+      "category": "civilian",
+      "reason": "把被铐/倒地的目标从车里拉出来，是警察与绑架双方都会用的动作；要求目标 metadata 处于 ishandcuffed/isdead 且距离 ≤2.5m。",
+      "evidence": "interactions.lua:81 SetPlayerOutVehicle — metadata['ishandcuffed'] or metadata['isdead'] + 2.5m guard",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:SyncSpikes",
+      "file": "custom-police/server/objects.lua",
+      "category": "already_checked",
+      "reason": "钉刺带同步要求 job.type == 'leo'。",
+      "evidence": "objects.lua:38 SyncSpikes — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:TakeOutImpound",
+      "file": "custom-police/server/vehicle.lua",
+      "category": "already_checked",
+      "reason": "取回扣押车要求 LEO + onduty + 距扣押点 ≤10m（超距 DropPlayer）。",
+      "evidence": "vehicle.lua:63 TakeOutImpound — job.type ~= 'leo' or not job.onduty → return; Config.Locations['impound'] 距离校验",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:UpdateCurrentCops",
+      "file": "custom-police/server/main.lua",
+      "category": "civilian",
+      "reason": "只广播“在勤警力数量”给全体客户端（police:SetCopCount），没有写操作、没有玩家数据；客户端刷新 HUD 时会调它，updatingCops 防重入。",
+      "evidence": "main.lua:270 UpdateCurrentCops — 只读 GetQBPlayers 计数 + updatingCops 重入保护",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:backupAck",
+      "file": "custom-police/server/p2_system.lua",
+      "category": "session",
+      "reason": "阶段上报只对自己名下的活动单位生效：requestId 必须命中调用者 citizenid 的预算条目、entry.cid/entry.source 必须与调用者一致、阶段必须在 backup_contract 的白名单里且只能向前。其余一律丢弃并采样写 backup.ack_rejected（同单 10 秒一条），客户端无法推进/回退别人的单位。",
+      "evidence": "p2_system.lua backupAck — ownsBackupUnit(cid, requestId) + BackupContract.NormalizePhase + CanAdvance(entry.phase, phase) 三重校验，失败走 recordAckRejected",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:backupEnded",
+      "file": "custom-police/server/p2_system.lua",
+      "category": "session",
+      "reason": "只释放调用者自己那条 backup 预留：requestId 必须命中调用者 citizenid 名下的 NPCBudget 条目（kind=backup），别人的单号既不放名额也不写审计。",
+      "evidence": "p2_system.lua ownsBackupUnit + backupEnded — 遍历 backupSlots(cid) 命中 requestId 才 Release；阶段表条目随之清除",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:backupTargets",
+      "file": "custom-police/server/p2_system.lua",
+      "category": "session",
+      "reason": "只回答'我名下这一单附近有哪些通缉玩家'：调用者必须持有自己的活动支援单位，否则整条通道就是免费通缉雷达；每 source 3 秒限流；投影只有 net_id/distance/stars（无坐标、无 citizenid）。默认 convar police_backup_engage_wanted=0 关闭。",
+      "evidence": "p2_system.lua backupTargets — backupSlots(cid) 非空 + backupTargetAskedAt 3s 窗口 + GetBackupTargets 只读 PlayerData.metadata.wanted",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:deleteObject",
+      "file": "custom-police/server/objects.lua",
+      "category": "already_checked",
+      "reason": "删除道具要求 job.type == 'leo'，且对象必须存在。",
+      "evidence": "objects.lua:27 deleteObject — job.type ~= 'leo' → return, Objects[objectId] check",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:policeAlert",
+      "file": "custom-police/server/main.lua",
+      "category": "civilian",
+      "reason": "平民报警入口：qb-drugs / qb-storerobbery / qb-houserobbery / custom-vehicles 的报警都调它，限警察会让这些玩法不再通知警察（旧代码的 LEO-only 判断其实是 bug）。现在：坐标只取服务端 ped、文本去控制字符并截 200 字符、每 source 15 秒 1 条。",
+      "evidence": "main.lua:198 policeAlert — sanitizeAlertText + POLICE_ALERT_COOLDOWN=15 + 全部收件人为在勤警察",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "police:server:spawnObject",
+      "file": "custom-police/server/objects.lua",
+      "category": "already_checked",
+      "reason": "生成警用道具（路障/钉刺带）要求 job.type == 'leo'；对象 id 由服务端生成。",
+      "evidence": "objects.lua:16 spawnObject — PlayerData.job.type ~= 'leo' → return",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-inventory:server:UseItem",
+      "file": "custom-police/server/sobriety.lua",
+      "category": "already_checked",
+      "reason": "qb-inventory 的物品使用广播，任何玩家都能触发；处理函数只认 beer/vodka 两种并校验玩家真的持有该物品（GetItemByName），其他人身上没有任何影响。",
+      "evidence": "sobriety.lua qb-inventory:server:UseItem — DRINKS 白名单 + GetItemByName 归属校验",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-policejob:server:evidence",
+      "file": "custom-police/server/main.lua",
+      "category": "already_checked",
+      "reason": "打开证物柜要求 job.type == 'leo'（柜名仍由客户端给，但只对警察生效）。",
+      "evidence": "main.lua:183 evidence — PlayerData.job.type ~= 'leo' → return",
       "owner": "custom-police",
       "expires": "2027-03-31"
     },
@@ -137,421 +462,6 @@
       "reason": "打开警局垃圾桶要求 job.type == 'leo'。",
       "evidence": "main.lua:172 trash — PlayerData.job.type ~= 'leo' → return",
       "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "qb-policejob:server:evidence",
-      "file": "custom-police/server/main.lua",
-      "category": "already_checked",
-      "reason": "打开证物柜要求 job.type == 'leo'（柜名仍由客户端给，但只对警察生效）。",
-      "evidence": "main.lua:183 evidence — PlayerData.job.type ~= 'leo' → return",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:policeAlert",
-      "file": "custom-police/server/main.lua",
-      "category": "civilian",
-      "reason": "平民报警入口：qb-drugs / qb-storerobbery / qb-houserobbery / custom-vehicles 的报警都调它，限警察会让这些玩法不再通知警察（旧代码的 LEO-only 判断其实是 bug）。现在：坐标只取服务端 ped、文本去控制字符并截 200 字符、每 source 15 秒 1 条。",
-      "evidence": "main.lua:198 policeAlert — sanitizeAlertText + POLICE_ALERT_COOLDOWN=15 + 全部收件人为在勤警察",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:UpdateCurrentCops",
-      "file": "custom-police/server/main.lua",
-      "category": "civilian",
-      "reason": "只广播“在勤警力数量”给全体客户端（police:SetCopCount），没有写操作、没有玩家数据；客户端刷新 HUD 时会调它，updatingCops 防重入。",
-      "evidence": "main.lua:270 UpdateCurrentCops — 只读 GetQBPlayers 计数 + updatingCops 重入保护",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:SetHandcuffStatus",
-      "file": "custom-police/server/main.lua",
-      "category": "already_checked",
-      "reason": "true 分支是被铐玩家自己的客户端在 police:client:GetCuffed 里上报（必须允许平民），只写自己的 metadata；false（解铐）分支要求 LEO 或 EMS，并且 isHandcuffed 必须是 boolean。",
-      "evidence": "main.lua:284 SetHandcuffStatus — type(isHandcuffed) ~= 'boolean' → return; false 分支 job.type ~= 'leo' and job.name ~= 'ambulance' → return",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:SendTrackerLocation",
-      "file": "custom-police/server/main.lua",
-      "category": "session",
-      "reason": "只有 metadata.tracker == true 的人（电子脚镣佩戴者）能上报自己的位置；坐标经 sanitizeAlertCoords 清洗，requestId 必须是存在的服务器 id，不能拿它当任意广播目标。",
-      "evidence": "main.lua:348 SendTrackerLocation — metadata['tracker'] ~= true → return, sanitizeAlertCoords(coords), tonumber(requestId) + GetPlayer",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:spawnObject",
-      "file": "custom-police/server/objects.lua",
-      "category": "already_checked",
-      "reason": "生成警用道具（路障/钉刺带）要求 job.type == 'leo'；对象 id 由服务端生成。",
-      "evidence": "objects.lua:16 spawnObject — PlayerData.job.type ~= 'leo' → return",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:deleteObject",
-      "file": "custom-police/server/objects.lua",
-      "category": "already_checked",
-      "reason": "删除道具要求 job.type == 'leo'，且对象必须存在。",
-      "evidence": "objects.lua:27 deleteObject — job.type ~= 'leo' → return, Objects[objectId] check",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:SyncSpikes",
-      "file": "custom-police/server/objects.lua",
-      "category": "already_checked",
-      "reason": "钉刺带同步要求 job.type == 'leo'。",
-      "evidence": "objects.lua:38 SyncSpikes — PlayerData.job.type ~= 'leo' → return",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "custom-police:server:setStatus",
-      "file": "custom-police/server/p0_units.lua",
-      "category": "already_checked",
-      "reason": "只允许警察改自己的 10-x 状态；事件体先 isPolice(data)，随后 SetUnitStatusForSource 再查状态白名单、onduty 和 duty_failed。",
-      "evidence": "p0_units.lua:590 setStatus — isPolice(data) → P.SetUnitStatusForSource（内含 VALID_STATUS + onduty 校验）",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "custom-police:server:911",
-      "file": "custom-police/server/p0_incidents.lua",
-      "category": "civilian",
-      "reason": "平民 911 必须对所有人开放；事件只接受 table + 在线玩家、每 source 5 秒 1 条，长度/priority 在 CreateIncident 里夹取。",
-      "evidence": "p0_incidents.lua:601 911 — type(payload) ~= 'table' → return, pd(src) check, CALL_911_COOLDOWN=5",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:backupEnded",
-      "file": "custom-police/server/p2_system.lua",
-      "category": "session",
-      "reason": "只释放调用者自己那条 backup 预留：requestId 必须命中调用者 citizenid 名下的 NPCBudget 条目（kind=backup），别人的单号既不放名额也不写审计。",
-      "evidence": "p2_system.lua ownsBackupUnit + backupEnded — 遍历 backupSlots(cid) 命中 requestId 才 Release；阶段表条目随之清除",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "heli:server:spotlight",
-      "file": "custom-police/server/vehicle.lua",
-      "category": "unchecked_debt",
-      "reason": "警用直升机探照灯是纯视觉同步（TriggerClientEvent -1），不动钱/物品/状态；目前没有职业校验，任何客户端可切换全服探照灯。下一次摸 vehicle.lua 时补 PolicePolicy。",
-      "evidence": "vehicle.lua:32 spotlight — 仅 TriggerClientEvent('heli:client:spotlight', -1, serverID, state)",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:Impound",
-      "file": "custom-police/server/vehicle.lua",
-      "category": "already_checked",
-      "reason": "扣押/没收要求 job.type == 'leo' 且 onduty；非法调用写 custom-logs 安全日志后 return。",
-      "evidence": "vehicle.lua:37 Impound — job.type ~= 'leo' or not job.onduty → LogSecurity + return",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:TakeOutImpound",
-      "file": "custom-police/server/vehicle.lua",
-      "category": "already_checked",
-      "reason": "取回扣押车要求 LEO + onduty + 距扣押点 ≤10m（超距 DropPlayer）。",
-      "evidence": "vehicle.lua:63 TakeOutImpound — job.type ~= 'leo' or not job.onduty → return; Config.Locations['impound'] 距离校验",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:FlaggedPlateTriggered",
-      "file": "custom-police/server/vehicle.lua",
-      "category": "unchecked_debt",
-      "reason": "ANPR 命中报警：客户端可伪造车牌/坐标给全体在勤警察发“被标记车辆”提示（骚扰/误导），但不动钱/物品。补 PolicePolicy.Can(actor,'incident.create') 前先登记。",
-      "evidence": "vehicle.lua:85 FlaggedPlateTriggered — 只遍历在勤警察发 police:client:policeAlert，调用方无鉴权",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "phone:server:completeJob",
-      "file": "custom-phone/server/jobboard.lua",
-      "category": "session",
-      "reason": "只能完成自己接的单：job.status == 'taken' 且 job.taken_by == 调用者 citizenid；另外做 25m 服务端距离校验和原子 UPDATE 领取。",
-      "evidence": "jobboard.lua:198 completeJob — job.taken_by ~= citizenid → return, dist > 25.0 拦截, UPDATE ... WHERE taken_by = ?",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "phone:server:markMessagesRead",
-      "file": "custom-phone/server/main.lua",
-      "category": "session",
-      "reason": "已读范围固定为调用者自己的号码：receiver_number = Player.PlayerData.charinfo.phone，SQL 也按该号码过滤。",
-      "evidence": "main.lua:529 markMessagesRead —— sender/receiver 都以 caller 自己 PlayerData.charinfo.phone 为一方，只改自己的已读状态",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "phone:server:storeNotification",
-      "file": "custom-phone/server/main.lua",
-      "category": "session",
-      "reason": "只写调用者自己的通知托盘（PhoneNotify.Store(source, ...) 内部 GetPlayer(source)），并丢弃 origin='server' 的回显以防存储回环。",
-      "evidence": "main.lua:578 storeNotification — PhoneNotify.Store(source, notification, 'client')，notify core 内 GetPlayer(source)，title/content 截断、app_id 白名单",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "phone:server:focusState",
-      "file": "custom-phone/server/main.lua",
-      "category": "diagnostic",
-      "reason": "NUI 焦点调试通道，不涉及玩家数据；只接受 table、phase 必须在白名单、每 source 5 秒 1 条，且所有字段去控制字符后截断（防止伪造服务器日志）。",
-      "evidence": "main.lua:1412 focusState — FOCUS_PHASES whitelist + FOCUS_COOLDOWN=5 + diagField sanitize",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "phone:server:clientError",
-      "file": "custom-phone/server/main.lua",
-      "category": "diagnostic",
-      "reason": "NUI 报错上报，只有 message/stack 两个字段被读取，其余丢弃；每 source 10 秒 1 条，字段截断到 300/500 并去控制字符。",
-      "evidence": "main.lua:1432 clientError — CLIENT_ERROR_COOLDOWN=10 + diagField(data.message,300)/diagField(data.stack,500)",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "qb-phone:server:sendNewMail",
-      "file": "custom-phone/server/qb_phone_compat.lua",
-      "category": "session",
-      "reason": "兼容层只把邮件写进调用者自己的托盘：ResolveSource(source) 解析玩家，DeliverToPlayer 再逐字段校验/截断，不按客户端给的 citizenid 选人。",
-      "evidence": "qb_phone_compat.lua:266 sendNewMail — ResolveSource(source) + Compat.DeliverToPlayer(Player, citizenid, mail)",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "phone:server:appQueryRequest",
-      "file": "custom-phone/server/main.lua",
-      "category": "civilian",
-      "reason": "职业 App 查询入口：任何玩家都可以请求，但 PhoneApps.Query 会按 app_id 注册的 audience（job/onduty）拒绝未授权玩家；handler 只接受 3–64 字符 request_id 与 table，每玩家 token bucket（app:<cid>:query）限流，响应只回传 request_id 和结果，不回显参数。",
-      "evidence": "main.lua:1364 appQueryRequest — validAppRequestId + type(data)=='table' + PhoneRateLimit.Allow(appRateKey) + PhoneApps.Query(src, ...) audience check, unicast to src",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "phone:server:appActionRequest",
-      "file": "custom-phone/server/main.lua",
-      "category": "civilian",
-      "reason": "职业 App 动作入口：PhoneApps.Action 同样在注册表内按 audience 复验权限/在勤，handler 只接受 3–64 字符 request_id 与 table，每玩家 token bucket（app:<cid>:action）限流，结果按调用者 source 单播回传。",
-      "evidence": "main.lua:1385 appActionRequest — validAppRequestId + type(data)=='table' + PhoneRateLimit.Allow(appRateKey) + PhoneApps.Action(src, ...) audience check, unicast to src",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "file": "custom-police/server/p0_units.lua",
-      "category": "already_checked",
-      "reason": "duty point toggle: handler rejects non-police via isPolice(pd(src)); the state write goes through P.SetDutyForSource (FIT-01).",
-      "owner": "custom-police",
-      "added": "2026-10-25",
-      "expires": "2027-03-31",
-      "name": "custom-police:server:toggleDuty",
-      "evidence": "p0_units.lua:734 handler: isPolice(pd(src)) then P.SetDutyForSource"
-    },
-    {
-      "name": "phone:server:diag",
-      "file": "custom-phone/server/core/diag.lua",
-      "category": "diagnostic",
-      "reason": "四段往返诊断通道：只写服务端日志，不写库、不回包、不构成 RPC 面。payload 经 Sanitize 白名单投影（tid 3..64+字符集校验、kind/app/code 字符集与长度收敛、phases 最多 8 且序号 1..8、ui phase 必须在 13 项白名单内），trace 批次走 PhoneRateLimit 令牌桶 20/min burst 5，ui 事件按 (phase, src) 5s 冷却，另有全局每秒钟 50 行打印预算与 dropped 计数，客户端无法刷屏或注入。",
-      "evidence": "server/core/diag.lua:387 PhoneDiag.Accept — Sanitize + allowTrace(PhoneRateLimit 20/5) + allowUi(5s) + printBudgetOk(50/s)",
-      "owner": "custom-phone",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "phone:server:nuiReady",
-      "file": "custom-phone/server/main.lua",
-      "category": "diagnostic",
-      "reason": "NUI 自证握手：页面加载时把自己跑的是哪个 build、location.host 与 GetParentResourceName() 报给服务端，用于判定'改完不生效'是旧 bundle 缓存还是路由不通。只读取 build/host/parent/href 四个字符串字段，逐字符集收敛并截断；每 source 5s 一条，不写库、不回包、不涉及玩家数据。",
-      "evidence": "main.lua phone:server:nuiReady — NUI_READY_COOLDOWN_MS=5000 + field() gsub 收敛并截断",
-      "owner": "custom-phone",
-      "expires": "2026-11-30"
-    },
-    {
-      "name": "phone:server:nuiProbe",
-      "file": "custom-phone/server/main.lua",
-      "category": "diagnostic",
-      "reason": "四段探针结果回报：NUI 用一次真实 appQuery 走完 NUI→client→server→回包→NUI 后把终态码与耗时报给服务端，作为每次资源重启的端到端自检。只读取 code/build 两个字符串（字符集收敛 + 截断）与 dur 数字；每 source 3s 一条，不写库、不回包、不涉及玩家数据。",
-      "evidence": "main.lua phone:server:nuiProbe — PROBE_COOLDOWN_MS=3000 + code/build gsub 收敛 + dur 取整",
-      "owner": "custom-phone",
-      "expires": "2026-11-30"
-    },
-    {
-      "name": "core-framework:server:clientReady",
-      "file": "[standalone]/core-framework/server/client_reports.lua",
-      "category": "diagnostic",
-      "reason": "客户端资源加载完成信标。客户端 print 只进 F8、服务端看不到，这个通道让\"新客户端代码到底有没有加载\"能从服务端日志回答。不含业务数据，只写一行日志。",
-      "evidence": "client_reports.lua:clientReady — allow() 走 RateLimitWindow 3/60s + clean(resourceName,64) + clean(version,32) 白名单字符集",
-      "owner": "core-framework",
-      "expires": "2027-06-30"
-    },
-    {
-      "name": "core-framework:server:clientReport",
-      "file": "[standalone]/core-framework/server/client_reports.lua",
-      "category": "diagnostic",
-      "reason": "客户端错误/降级上报（CFShared.Report）。只接 kind 白名单与一条 message，去控制字符后截断到 400 字，防止客户端伪造多行服务端日志；每玩家 10 条/分钟。",
-      "evidence": "client_reports.lua:clientReport — KINDS 白名单 + clean(message,400) 去 %c + allow() RateLimitWindow 10/60s",
-      "owner": "core-framework",
-      "expires": "2027-06-30"
-    },
-    {
-      "name": "police:server:backupAck",
-      "file": "custom-police/server/p2_system.lua",
-      "category": "session",
-      "reason": "阶段上报只对自己名下的活动单位生效：requestId 必须命中调用者 citizenid 的预算条目、entry.cid/entry.source 必须与调用者一致、阶段必须在 backup_contract 的白名单里且只能向前。其余一律丢弃并采样写 backup.ack_rejected（同单 10 秒一条），客户端无法推进/回退别人的单位。",
-      "evidence": "p2_system.lua backupAck — ownsBackupUnit(cid, requestId) + BackupContract.NormalizePhase + CanAdvance(entry.phase, phase) 三重校验，失败走 recordAckRejected",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "police:server:backupTargets",
-      "file": "custom-police/server/p2_system.lua",
-      "category": "session",
-      "reason": "只回答'我名下这一单附近有哪些通缉玩家'：调用者必须持有自己的活动支援单位，否则整条通道就是免费通缉雷达；每 source 3 秒限流；投影只有 net_id/distance/stars（无坐标、无 citizenid）。默认 convar police_backup_engage_wanted=0 关闭。",
-      "evidence": "p2_system.lua backupTargets — backupSlots(cid) 非空 + backupTargetAskedAt 3s 窗口 + GetBackupTargets 只读 PlayerData.metadata.wanted",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "qb-inventory:server:UseItem",
-      "file": "custom-police/server/sobriety.lua",
-      "category": "already_checked",
-      "reason": "qb-inventory 的物品使用广播，任何玩家都能触发；处理函数只认 beer/vodka 两种并校验玩家真的持有该物品（GetItemByName），其他人身上没有任何影响。",
-      "evidence": "sobriety.lua qb-inventory:server:UseItem — DRINKS 白名单 + GetItemByName 归属校验",
-      "owner": "custom-police",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "QBCore:Server:TriggerCallback",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "callback_relay",
-      "reason": "公用回调分发器：只按名字派发到 QBCore.ServerCallbacks，鉴权与参数校验由被调用的回调自己负责。已知高危目标是载具生成（QBCore:Server:SpawnVehicle / CreateVehicle：qb-core 里没有任何权限判断），实际守卫在 custom-security 的劫持里（admin 或执勤合法职业 + 5 秒限频，受 security_check_vehicle_spawn 开关控制），由 test_relay_callbacks_that_spawn_vehicles_are_guarded_somewhere 钉住。其余回调需要逐个复核，到期前必须完成。",
-      "evidence": "events.lua:136 按 QBCore.ServerCallbacks[name] 派发；custom-security/server/security.lua:178-235 劫持两个载具回调并校验 HasPermission/CheckRateLimit",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "QBCore:UpdatePlayer",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "self_scoped",
-      "reason": "客户端心跳上报饥饿/口渴的乘数；只写 caller 自己的 metadata，乘数被钳到 0.1..3.0。",
-      "evidence": "events.lua:148 只 GetPlayer(src) + tonumber 钳制",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "QBCore:ToggleDuty",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "self_scoped",
-      "reason": "玩家切换自己的上下班状态；只改 caller 自己的 job.onduty。",
-      "evidence": "events.lua:171 只 GetPlayer(src)，无目标参数",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "baseevents:enteringVehicle",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "self_scoped",
-      "reason": "载具事件回显给 caller 自己（车辆钥匙/车载系统用）；只把参数原样 TriggerClientEvent 回同一 src。",
-      "evidence": "events.lua:190 local src = source，回显给 src",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "baseevents:enteredVehicle",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "self_scoped",
-      "reason": "同上：进入载具完成的回显。",
-      "evidence": "events.lua:201 local src = source，回显给 src",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "baseevents:enteringAborted",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "self_scoped",
-      "reason": "同上：中止上车的回显。",
-      "evidence": "events.lua:212 local src = source，回显给 src",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "baseevents:leftVehicle",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "self_scoped",
-      "reason": "同上：离开载具的回显。",
-      "evidence": "events.lua:217 local src = source，回显给 src",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "QBCore:Server:UseItem",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "deprecated_blocked",
-      "reason": "上游标记为可利用的废弃物品事件；本仓已改为记录日志并直接拒绝。",
-      "evidence": "events.lua:238 只写安全日志后返回，无业务副作用",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "QBCore:Server:RemoveItem",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "deprecated_blocked",
-      "reason": "同上：废弃的移除物品事件，已硬阻断。",
-      "evidence": "events.lua:249 只写安全日志后返回，无业务副作用",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "QBCore:Server:AddItem",
-      "file": "[qb]/qb-core/server/events.lua",
-      "category": "deprecated_blocked",
-      "reason": "同上：废弃的添加物品事件，已硬阻断。",
-      "evidence": "events.lua:260 只写安全日志后返回，无业务副作用",
-      "owner": "qb-core",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "tcity:agent:ready",
-      "file": "custom-agent-client/server/main.lua",
-      "category": "self_scoped",
-      "reason": "握手：只给该玩家自己建会话令牌并回给本人（`sessions[src]`），不接受任何玩家 id 参数，没有跨玩家写入、没有执行意图；真正的执行只由服务端 dispatch 下发。",
-      "evidence": "main.lua:314 tcity:agent:ready — sessions[src] = {token}，只 TriggerClientEvent 回自己",
-      "owner": "custom-agent-client",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "tcity:agent:state",
-      "file": "custom-agent-client/server/main.lua",
-      "category": "self_scoped",
-      "reason": "客户端自身上报的界面状态：sanitizeState 只重建白名单字段并夹紧范围，每源 250ms 节流，写 stateBySrc[src]，只服务端 agent 读取。",
-      "evidence": "main.lua:499 tcity:agent:state — sanitizeState + STATE_MIN_INTERVAL_MS(250ms) + stateBySrc[src]",
-      "owner": "custom-agent-client",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "tcity:agent:devcmd_result",
-      "file": "custom-agent-client/server/main.lua",
-      "category": "diagnostic",
-      "reason": "遥测通道：客户端上报 devcmd 执行结果，服务端只写一行日志；每源 500ms 节流 + 类型/长度约束，不落 PII。",
-      "evidence": "main.lua:584 tcity:agent:devcmd_result — type 校验 + DEVCMD_RESULT_COOLDOWN_MS(500ms) + sub(1,96)",
-      "owner": "custom-agent-client",
-      "expires": "2027-03-31"
-    },
-    {
-      "name": "justice:server:requestVisit",
-      "file": "custom-justice/server/prison.lua",
-      "category": "civilian",
-      "reason": "探视申请：调用方只需在线（Visitor 取自 source），校验的是**目标**是否在押，不是调用方鉴权，因此不计入已鉴权；目标不在押直接拒绝。",
-      "evidence": "prison.lua:268 justice:server:requestVisit — VISIT_REQUEST_COOLDOWN_MS 5s/源 + type 校验；GetInmate 判的是**目标**",
-      "owner": "custom-justice",
       "expires": "2027-03-31"
     },
     {
@@ -579,6 +489,96 @@
       "reason": "只对**自己在车内**的那辆车生效，且必须 `KeyManager.HasKeys(plate, 自己)` 才下发引擎切换；不接受任何玩家 id 参数。",
       "evidence": "compat.lua:204 ToggleEngine — GetVehiclePedIsIn + KeyManager.HasKeys(plate, citizenid)",
       "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:Server:AddItem",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "deprecated_blocked",
+      "reason": "同上：废弃的添加物品事件，已硬阻断。",
+      "evidence": "events.lua:260 只写安全日志后返回，无业务副作用",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:Server:RemoveItem",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "deprecated_blocked",
+      "reason": "同上：废弃的移除物品事件，已硬阻断。",
+      "evidence": "events.lua:249 只写安全日志后返回，无业务副作用",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:Server:TriggerCallback",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "callback_relay",
+      "reason": "公用回调分发器：只按名字派发到 QBCore.ServerCallbacks，鉴权与参数校验由被调用的回调自己负责。已知高危目标是载具生成（QBCore:Server:SpawnVehicle / CreateVehicle：qb-core 里没有任何权限判断），实际守卫在 custom-security 的劫持里（admin 或执勤合法职业 + 5 秒限频，受 security_check_vehicle_spawn 开关控制），由 test_relay_callbacks_that_spawn_vehicles_are_guarded_somewhere 钉住。其余回调需要逐个复核，到期前必须完成。",
+      "evidence": "events.lua:136 按 QBCore.ServerCallbacks[name] 派发；custom-security/server/security.lua:178-235 劫持两个载具回调并校验 HasPermission/CheckRateLimit",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:Server:UseItem",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "deprecated_blocked",
+      "reason": "上游标记为可利用的废弃物品事件；本仓已改为记录日志并直接拒绝。",
+      "evidence": "events.lua:238 只写安全日志后返回，无业务副作用",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:ToggleDuty",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "玩家切换自己的上下班状态；只改 caller 自己的 job.onduty。",
+      "evidence": "events.lua:171 只 GetPlayer(src)，无目标参数",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "QBCore:UpdatePlayer",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "客户端心跳上报饥饿/口渴的乘数；只写 caller 自己的 metadata，乘数被钳到 0.1..3.0。",
+      "evidence": "events.lua:148 只 GetPlayer(src) + tonumber 钳制",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:enteredVehicle",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "同上：进入载具完成的回显。",
+      "evidence": "events.lua:201 local src = source，回显给 src",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:enteringAborted",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "同上：中止上车的回显。",
+      "evidence": "events.lua:212 local src = source，回显给 src",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:enteringVehicle",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "载具事件回显给 caller 自己（车辆钥匙/车载系统用）；只把参数原样 TriggerClientEvent 回同一 src。",
+      "evidence": "events.lua:190 local src = source，回显给 src",
+      "owner": "qb-core",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:leftVehicle",
+      "file": "[qb]/qb-core/server/events.lua",
+      "category": "self_scoped",
+      "reason": "同上：离开载具的回显。",
+      "evidence": "events.lua:217 local src = source，回显给 src",
+      "owner": "qb-core",
       "expires": "2027-03-31"
     }
   ]

@@ -220,5 +220,37 @@
       "shape": "local_check",
       "why": "调用者**自己**在押与否：只接受 Player 对象（source 派生），查不到别人的记录"
     }
+  },
+  "qb-management": {
+    "IsJobBoss": {
+      "defined_at": "qb-management/server/sv_boss.lua",
+      "requires_code": [
+        "PlayerData.job",
+        "isboss == true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "职业老板判定：PlayerData.job.isboss 为 true 才算。qb-management 的老板菜单事件（GradeUpdate/FireEmployee/HireEmployee/TransferOwnership）都先用它拒绝非 boss，再叠加菜单点 5m 距离校验；闸门不认识内联的 job.isboss，所以登记成 helper。"
+    },
+    "IsPlayerBoss": {
+      "defined_at": "qb-management/server/sv_org.lua",
+      "requires_code": [
+        "PlayerData.job.isboss",
+        "PlayerData.gang.isboss",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "组织（job 或 gang）老板判定：按 orgType 分别看 PlayerData.job.isboss / PlayerData.gang.isboss。qb-orgmenu 的 GradeUpdate/FireMember/HireMember/TransferOwnership 都用它做首道拒绝。"
+    },
+    "IsGangBoss": {
+      "defined_at": "qb-management/server/sv_gang.lua",
+      "requires_code": [
+        "PlayerData.gang",
+        "isboss == true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "帮派 BOSS 判定：PlayerData.gang.isboss 为 true。qb-gangmenu 的 GradeUpdate/FireMember/HireMember/TransferOwnership 都用它做首道拒绝，再叠加菜单点 5m 与目标 5m 距离校验。"
+    }
   }
 }
