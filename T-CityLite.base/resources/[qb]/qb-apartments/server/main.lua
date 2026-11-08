@@ -28,9 +28,13 @@ end
 RegisterNetEvent('qb-apartments:server:SetInsideMeta', function(house, insideId, bool, isVisiting)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
     local insideMeta = Player.PlayerData.metadata['inside']
+    if type(insideMeta) ~= 'table' then insideMeta = {} end
+    if type(insideMeta.apartment) ~= 'table' then insideMeta.apartment = {} end
 
     if bool then
+        if type(insideId) ~= 'string' then return end
         local routeId = insideId:gsub('[^%-%d]', '')
         if not isVisiting then
             insideMeta.apartment.apartmentType = house
@@ -57,38 +61,58 @@ end)
 
 RegisterNetEvent('apartments:server:openStash', function(CurrentApartment)
     local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(CurrentApartment) ~= 'string' then return end
+    -- 🔒 原来是「传个公寓 id 就能开这家的储物柜」—— 直接拿走别人的东西。
+    --    公寓没有钥匙机制，所以只认登记在 apartments 表里的房主。
+    local owner = MySQL.scalar.await('SELECT citizenid FROM apartments WHERE name = ? LIMIT 1', { CurrentApartment })
+    if not owner or owner ~= Player.PlayerData.citizenid then
+        TriggerClientEvent('QBCore:Notify', src, '这不是你的公寓储物柜', 'error')
+        return
+    end
     exports['qb-inventory']:OpenInventory(src, CurrentApartment)
 end)
 
-RegisterNetEvent('apartments:server:CreateApartment', function(type, label, firstSpawn)
+RegisterNetEvent('apartments:server:CreateApartment', function(apartmentType, label, firstSpawn)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    local num = CreateApartmentId(type)
-    local apartmentId = tostring(type .. num)
+    if not Player then return end
+    -- 🔒 形参原来叫 `type`，会遮蔽全局 type() —— `type(type)` 是把字符串当函数调用，
+    --    事件一触发就 `attempt to call a string value`。改名 apartmentType 并保留类型/查表校验。
+    if type(apartmentType) ~= 'string' or (Apartments.Locations or {})[apartmentType] == nil then return end
+    label = tostring(label or ''):sub(1, 48)
+    local num = CreateApartmentId(apartmentType)
+    local apartmentId = tostring(apartmentType .. num)
     label = tostring(label .. ' ' .. num)
     MySQL.insert('INSERT INTO apartments (name, type, label, citizenid) VALUES (?, ?, ?, ?)', {
         apartmentId,
-        type,
+        apartmentType,
         label,
         Player.PlayerData.citizenid
     })
     TriggerClientEvent('QBCore:Notify', src, Lang:t('success.receive_apart') .. ' (' .. label .. ')')
     if firstSpawn then
-        TriggerClientEvent('apartments:client:SpawnInApartment', src, apartmentId, type)
+        TriggerClientEvent('apartments:client:SpawnInApartment', src, apartmentId, apartmentType)
     end
-    TriggerClientEvent('apartments:client:SetHomeBlip', src, type)
+    TriggerClientEvent('apartments:client:SetHomeBlip', src, apartmentType)
 end)
 
-RegisterNetEvent('apartments:server:UpdateApartment', function(type, label)
+RegisterNetEvent('apartments:server:UpdateApartment', function(apartmentType, label)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    MySQL.update('UPDATE apartments SET type = ?, label = ? WHERE citizenid = ?', { type, label, Player.PlayerData.citizenid })
+    if not Player then return end
+    if type(apartmentType) ~= 'string' or (Apartments.Locations or {})[apartmentType] == nil then return end
+    label = tostring(label or ''):sub(1, 48)
+    MySQL.update('UPDATE apartments SET type = ?, label = ? WHERE citizenid = ?', { apartmentType, label, Player.PlayerData.citizenid })
     TriggerClientEvent('QBCore:Notify', src, Lang:t('success.changed_apart'))
-    TriggerClientEvent('apartments:client:SetHomeBlip', src, type)
+    TriggerClientEvent('apartments:client:SetHomeBlip', src, apartmentType)
 end)
 
 RegisterNetEvent('apartments:server:RingDoor', function(apartmentId, apartment)
     local src = source
+    if type(apartmentId) ~= 'string' or type(apartment) ~= 'string' then return end
+    if ApartmentObjects[apartment] == nil or ApartmentObjects[apartment].apartments == nil then return end
+    if ApartmentObjects[apartment].apartments[apartmentId] == nil then return end
     if ApartmentObjects[apartment].apartments[apartmentId] ~= nil and next(ApartmentObjects[apartment].apartments[apartmentId].players) ~= nil then
         for k, _ in pairs(ApartmentObjects[apartment].apartments[apartmentId].players) do
             TriggerClientEvent('apartments:client:RingDoor', k, src)
@@ -97,7 +121,13 @@ RegisterNetEvent('apartments:server:RingDoor', function(apartmentId, apartment)
 end)
 
 RegisterNetEvent('apartments:server:OpenDoor', function(target, apartmentId, apartment)
-    local OtherPlayer = QBCore.Functions.GetPlayer(target)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(apartmentId) ~= 'string' then return end
+    -- 🔒 原来任何玩家都能把**任意玩家**传进任意公寓（配合 openStash 就是入室）
+    local owner = MySQL.scalar.await('SELECT citizenid FROM apartments WHERE name = ? LIMIT 1', { apartmentId })
+    if not owner or owner ~= Player.PlayerData.citizenid then return end
+    local OtherPlayer = QBCore.Functions.GetPlayer(tonumber(target) or 0)
     if OtherPlayer ~= nil then
         TriggerClientEvent('apartments:client:SpawnInApartment', OtherPlayer.PlayerData.source, apartmentId, apartment)
     end
@@ -106,6 +136,8 @@ end)
 RegisterNetEvent('apartments:server:AddObject', function(apartmentId, apartment, offset)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    if type(apartmentId) ~= 'string' or type(apartment) ~= 'string' or type(offset) ~= 'table' then return end
     if ApartmentObjects[apartment] ~= nil and ApartmentObjects[apartment].apartments ~= nil and ApartmentObjects[apartment].apartments[apartmentId] ~= nil then
         ApartmentObjects[apartment].apartments[apartmentId].players[src] = Player.PlayerData.citizenid
     else
@@ -127,6 +159,9 @@ end)
 
 RegisterNetEvent('apartments:server:RemoveObject', function(apartmentId, apartment)
     local src = source
+    if type(apartmentId) ~= 'string' or type(apartment) ~= 'string' then return end
+    if ApartmentObjects[apartment] == nil or ApartmentObjects[apartment].apartments == nil then return end
+    if ApartmentObjects[apartment].apartments[apartmentId] == nil then return end
     if ApartmentObjects[apartment].apartments[apartmentId].players ~= nil then
         ApartmentObjects[apartment].apartments[apartmentId].players[src] = nil
         if next(ApartmentObjects[apartment].apartments[apartmentId].players) == nil then
@@ -139,6 +174,7 @@ RegisterNetEvent('apartments:server:setCurrentApartment', function(ap)
     local Player = QBCore.Functions.GetPlayer(source)
 
     if not Player then return end
+    if type(ap) ~= 'string' or (Apartments.Locations or {})[ap] == nil then return end
 
     Player.Functions.SetMetaData('currentapartment', ap)
 end)

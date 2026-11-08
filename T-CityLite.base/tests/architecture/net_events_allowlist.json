@@ -537,6 +537,78 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "apartments:server:AddObject",
+      "category": "civilian",
+      "reason": "把「谁在这间公寓里」登记进 ApartmentObjects：三个参数都做 type 校验，offset 必须 table。",
+      "evidence": "main.lua AddObject — type(apartmentId)/type(apartment)/type(offset)",
+      "file": "[qb]/qb-apartments/server/main.lua",
+      "owner": "qb-apartments",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "apartments:server:CreateApartment",
+      "category": "civilian",
+      "reason": "给自己建一套公寓：type 必须在 Config 的 Locations 里，label 截断 48 字；行落库时 citizenid 取本人。",
+      "evidence": "main.lua CreateApartment — (Apartments.Locations or {})[type] ~= nil + label:sub(1,48)",
+      "file": "[qb]/qb-apartments/server/main.lua",
+      "owner": "qb-apartments",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "apartments:server:RemoveObject",
+      "category": "civilian",
+      "reason": "从登记表里摘掉自己（players[src] = nil），三层判空后才会写。",
+      "evidence": "main.lua RemoveObject — ApartmentObjects[...].apartments[apartmentId] 判空链",
+      "file": "[qb]/qb-apartments/server/main.lua",
+      "owner": "qb-apartments",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "apartments:server:RingDoor",
+      "category": "civilian",
+      "reason": "按门铃只在「这间公寓里有人」时把消息转给屋内的人；三个 key 全部做了类型与存在性判断。",
+      "evidence": "main.lua RingDoor — type(apartmentId)/ApartmentObjects[apartment] 判空三层",
+      "file": "[qb]/qb-apartments/server/main.lua",
+      "owner": "qb-apartments",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "apartments:server:UpdateApartment",
+      "category": "civilian",
+      "reason": "改自己的公寓记录：UPDATE 带 WHERE citizenid = 本人；type/label 同样有边界。",
+      "evidence": "main.lua UpdateApartment — WHERE citizenid = Player.PlayerData.citizenid + type 查表",
+      "file": "[qb]/qb-apartments/server/main.lua",
+      "owner": "qb-apartments",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "apartments:server:setCurrentApartment",
+      "category": "civilian",
+      "reason": "只写自己的 metadata.currentapartment；ap 必须在 Config 的 Locations 里。",
+      "evidence": "main.lua setCurrentApartment — (Apartments.Locations or {})[ap] ~= nil",
+      "file": "[qb]/qb-apartments/server/main.lua",
+      "owner": "qb-apartments",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-apartments:returnBucket",
+      "category": "self_scoped",
+      "reason": "只把自己塞回 0 号 routing bucket（离开公寓），无参数、不碰别人。",
+      "evidence": "main.lua returnBucket — SetPlayerRoutingBucket(src, 0)",
+      "file": "[qb]/qb-apartments/server/main.lua",
+      "owner": "qb-apartments",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-apartments:server:SetInsideMeta",
+      "category": "self_scoped",
+      "reason": "只写自己的 metadata.inside / routing bucket；insideId 做了 type 与字符过滤，apartment 子表缺失时补空表。",
+      "evidence": "main.lua SetInsideMeta — type(insideId) ~= 'string' / insideMeta.apartment 判空 + SetPlayerBucket(src)",
+      "file": "[qb]/qb-apartments/server/main.lua",
+      "owner": "qb-apartments",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "QBCore:Server:AddItem",
       "file": "[qb]/qb-core/server/events.lua",
       "category": "deprecated_blocked",
@@ -723,6 +795,42 @@
       "evidence": "qb-houses/server/main.lua setHouses — TriggerClientEvent('qb-houses:client:setHouseConfig', src, Config.Houses)",
       "file": "[qb]/qb-houses/server/main.lua",
       "owner": "qb-houses",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-lapraces:server:CreateLapRace",
+      "category": "self_scoped",
+      "reason": "只决定「能不能打开赛道编辑器」：白名单/管理员判定（IsWhitelisted）+ 重名校验，不改任何人的数据。",
+      "evidence": "main.lua CreateLapRace — IsWhitelisted(Player.PlayerData.citizenid) + IsNameAvailable(RaceName)",
+      "file": "[qb]/qb-lapraces/server/main.lua",
+      "owner": "qb-lapraces",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-lapraces:server:JoinRace",
+      "category": "civilian",
+      "reason": "只改自己在比赛里的状态；RaceId 必须是已存在的比赛（Races[RaceId] 判空），RaceData 必须是 table —— 原来坏包直接 nil 索引崩服务端。",
+      "evidence": "main.lua — type(RaceData) ~= 'table' / Races[RaceId] == nil then return",
+      "file": "[qb]/qb-lapraces/server/main.lua",
+      "owner": "qb-lapraces",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-lapraces:server:LeaveRace",
+      "category": "civilian",
+      "reason": "只改自己在比赛里的状态；RaceId 必须是已存在的比赛（Races[RaceId] 判空），RaceData 必须是 table —— 原来坏包直接 nil 索引崩服务端。",
+      "evidence": "main.lua — type(RaceData) ~= 'table' / Races[RaceId] == nil then return",
+      "file": "[qb]/qb-lapraces/server/main.lua",
+      "owner": "qb-lapraces",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-lapraces:server:SetupRace",
+      "category": "civilian",
+      "reason": "只有赛道创建者能把它挂到开放列表（Creator 比对），且 Waiting/Started 三重状态判定 + 5 分钟自动回收；Laps 夹在 1~99。",
+      "evidence": "main.lua SetupRace — Creator ~= Player.PlayerData.citizenid / tonumber(Laps) 1..99",
+      "file": "[qb]/qb-lapraces/server/main.lua",
+      "owner": "qb-lapraces",
       "expires": "2027-03-31"
     },
     {

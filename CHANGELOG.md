@@ -48,6 +48,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-3 批 6：qb-lapraces 10 + qb-apartments 10**（2026-11-08）：
+  - **连带修掉的真 bug**（CC 六轮验收逐条揪出来的，都属于「能玩」级别）：
+    ① `CreateApartment` 形参叫 `type` 遮蔽全局 `type()` → 事件一触发就崩、公寓建不出来；
+    ② 用 `racer.Finished` 当防重放标记，而客户端完赛前会先把它置 true → **每次正常完赛都不结算**；
+    ③ `table.remove(AvailableRaces, nil)` 会删掉**另一场**正在开放的比赛；
+    ④ 最佳圈校验写成 `BestLap / TotalLaps` → 10 圈赛里合法的 45 秒最佳圈被算成 4.5 秒并被改写；
+    ⑤ `BestLap <= TotalTime` 太松（45 秒最佳圈 > 20 秒平均圈也能过）→ 改为 `<= 平均圈速`；
+    ⑥ 没开赛就能报成绩（`StartedAt == nil` 时整套校验被跳过）；
+    ⑦ 结算/离开后的清理只清一半 → `LastLeaderboard` / `NotFinished` / `LastRaces` / `StartedAt`
+       跨场残留，赛道可能永久卡在「运行中」。
+  - 运行级测试：`T-CityLite.base/tests/unit/layer3_business/fixtures/lapraces_probe.lua`（9 个场景，用 `debug.getupvalue` 直接读 handler
+    闭包里的私有表断言清理结果）、`T-CityLite.base/tests/unit/layer3_business/fixtures/apartments_probe.lua`，共 2 条 pytest。
+
+  - **公寓储物柜没有归属判定**：`apartments:server:openStash(apartmentId)` 传个 id 就
+    `OpenInventory` 到别人家柜子 → 只认 `apartments` 表里登记在册的房主；
+    `OpenDoor(target, …)` 同样改为房主才能把访客放进来。
+  - **比赛状态零校验**：`UpdateRaceState` 原来四条赋值没有任何判断 —— 任何玩家改包就能把
+    任意比赛开起来/停掉；`UpdateRacerData` / `FinishPlayer` 的 `RaceId` 坏值直接 nil 索引崩服务端；
+    `FinishPlayer` 还能让参赛者随便报 `BestLap` 刷赛道纪录。现在全部要求「是这场比赛的在册车手」
+    + 成绩必须是合理数字（`BestLap ≤ TotalTime`）。
+  - **建房/建赛道没有授权一致性**：`SaveRace` 原来任何玩家都能凭空写一条赛道到 DB（无限写），
+    改为与 `CreateLapRace` 同一白名单；`CancelRace` / `StartRace` 收敛到 `IsRaceHost` helper。
+  - **真 bug**：`SaveRace` 里 `GenerateRaceId()` 调了两次 —— 内存里的赛道 id 与写进 DB 的 id 不一致，
+    重启后赛道记录对不上。现在只生成一次。
+  - qb-apartments 其余事件（`SetInsideMeta` / `RingDoor` / `AddObject` / `RemoveObject` / 建改公寓）
+    补齐类型与存在性判断：这些 key 全来自客户端，坏值原来会让服务端抛 `attempt to index a nil value`。
+  - 数字：qb-lapraces 10 → 0、qb-apartments 10 → 0；全仓未登记 **212 → 192**、qb **130 → 110**、
+    allowlist **92 → 97**。
 - **P1-3 批 5：qb-houses 19 个事件（入室盗窃链）**（2026-11-08）：
   - **任何玩家能打开别人家的储物柜**：`openStash(house)` 只查 `Config.Houses[house]` 是否存在，
     没有任何钥匙判定 —— 传个房子名就 `OpenInventory` 到人家的 stash 上，物品直接拿走。
