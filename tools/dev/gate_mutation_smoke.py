@@ -355,9 +355,11 @@ MUTATIONS += [
               "test_recorded_counts_match_the_live_scan"),
         path="tests/architecture/net_events_baseline.json",
         content=None,
-        replace_from='"guarded": 19,',
-        replace_to='"guarded": 20,',
-        what="手改基线里的 guarded 数字（批次和仍然成立，但和实测对不上）",
+        # 锚点必须是当前基线里**真实存在**的数字：原锚点 'guarded: 19' 随 P1-3 清债消失后
+        # 这条变异就静默失效了（CC 2026-11-08 复核发现）。改成 qb 批次的 guarded 总数。
+        replace_from='"guarded": 33,',
+        replace_to='"guarded": 34,',
+        what="手改基线里 qb 批次的 guarded 数字（与实测对不上）",
     ),
 ]
 

@@ -241,6 +241,16 @@
       ],
       "requires_raw": [],
       "why": "组织（job 或 gang）老板判定：按 orgType 分别看 PlayerData.job.isboss / PlayerData.gang.isboss。qb-orgmenu 的 GradeUpdate/FireMember/HireMember/TransferOwnership 都用它做首道拒绝。"
+    },
+    "IsGangBoss": {
+      "defined_at": "qb-management/server/sv_gang.lua",
+      "requires_code": [
+        "PlayerData.gang",
+        "isboss == true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "帮派 BOSS 判定：PlayerData.gang.isboss 为 true。qb-gangmenu 的 GradeUpdate/FireMember/HireMember/TransferOwnership 都用它做首道拒绝，再叠加菜单点 5m 与目标 5m 距离校验。"
     }
   }
 }
