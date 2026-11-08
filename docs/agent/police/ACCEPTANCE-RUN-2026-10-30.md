@@ -160,7 +160,7 @@ audit: coroner.request  → coroner.ended reason=done;live=32（+ npc.spawn / np
 
 ### AC-P1-03 需要的最小改动（待 owner 确认，动表结构属于 L4）
 
-1. `v3.11_police_case_verdict.sql`：给 `police_cases` 加 `court_status VARCHAR(24)` 与 `sentence_minutes INT`（用 v3.6 那套 `information_schema` 判断保证幂等）；
+1. `v3.11.1_police_case_verdict.sql`：给 `police_cases` 加 `court_status VARCHAR(24)` 与 `sentence_minutes INT`（用 v3.6 那套 `information_schema` 判断保证幂等）；
 2. 司法侧建案时**同时**调 owner 的 `CreateCase`，把两个 id 记下来（justice 的 `CASE-0001` ↔ police 的 `CASE-2026-00000N`）；
 3. `RecordVerdict` 再按这个映射回写 `police_cases.court_status` + `sentence_minutes`。
 

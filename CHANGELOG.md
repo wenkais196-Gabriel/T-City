@@ -302,6 +302,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P2-3：迁移版本号唯一 + 可重复执行**（2026-11-08）：`migrations/` 下有 **4 组重号**
+  （v0.7 ×2、v2.2 ×2、v3.11 ×2、v3.12 ×2）。重号不会让 `local_stack.sh` 崩（它用 `ls | sort -V`），
+  但把「谁先跑」变成了文件名字母序的意外结果，同一个版本号下两条迁移互相看不见。给每组里引用较少的
+  那个加二级号并同步 8 处引用：`v0.7_story_engine` → `v0.7.1_story_engine`、`v2.2_schema_reconcile` →
+  `v2.2.3_schema_reconcile`、`v3.11_police_case_verdict` → `v3.11.1_police_case_verdict`、
+  `v3.12_police_incident_ref` → `v3.12.1_police_incident_ref`（docs / 测试 / e2e README 一并更新）。
+  幂等这边修了一处真缺陷：`v2.1_perf_indexes.sql` 原来裸 `ALTER TABLE players ADD COLUMN phone_number
+  … VIRTUAL` + `CREATE INDEX`，**第二次执行必然** `ERROR 1060 Duplicate column name 'phone_number'`
+  → 四步都改成先查 `information_schema` 再 `PREPARE/EXECUTE`（沿用 v3.11/v3.12 的形状）。
+  新增闸门 `tests/architecture/test_migration_versions.py`：版本号前缀唯一（零基线零豁免）+ 文件名
+  必须是 `v<version>_<snake>.sql`，配 3 条反向形状（重号树 / 坏名字树 / 干净树）与 2 条
+  `gate_mutation_smoke` 变异用例（注入重号文件、注入坏文件名），实测「注入后红、对照绿」；
+  `gate_coverage` 未证明数仍 276。幂等性用 `tools/dev/migrations_double_apply.py` 在真库上验证：
+  先铺基线 schema，再把 35 个迁移连跑两遍 —— **35/35 × 2 遍无错误**。`tests/integration/` 里有同名
+  用例复用该工具（没有 docker / 容器时 skip，静态闸门在 CI 里始终生效）。
+
 - **P1-5 二期：金额写路径收敛（拒绝语义）**（2026-11-08）：`SecurityService` 里新增
   `ValidateAmount(amount, opts)` 作为金额入参的**唯一**实现（非数字 / NaN / inf / 负数 / 0 / 超过
   `MONEY_MAX_SINGLE_TRANSACTION` 一律拒绝，**不 clamp**），`ValidateMoneyEvent` 的金额四步也收敛到它。

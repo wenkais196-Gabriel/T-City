@@ -11,7 +11,7 @@ import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
 BASE = REPO / "T-CityLite.base"
-MIGRATION = BASE / "migrations/v3.11_police_case_verdict.sql"
+MIGRATION = BASE / "migrations/v3.11.1_police_case_verdict.sql"
 FIXTURE = BASE / "tests/fixtures/tcity_schema.sql"
 RECORDS = BASE / "resources/[custom]/custom-police/server/records.lua"
 CASES = BASE / "resources/[custom]/custom-police/server/p3_cases.lua"
