@@ -301,6 +301,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`gate_mutation_smoke.py` 撤注入后清理新建的空目录**：变异用例把文件写进不存在的资源目录时，`unlink` 只删文件，空目录会让 `test_no_orphan_scripts`（每个 `[custom]` 目录必须有 fxmanifest）误红。
 
 ### Fixed
+- **P1-3 批 8：qb-garages 6 + qb-weathersync 7**（2026-11-08）：qb-garages 是货真价实的洞 ——
+  取车回调 `spawnvehicle(plate, vehicle, coords)` 三个参数全来自客户端而服务端只查「在外车辆数 +
+  驾照等级」，**别人的车牌 / 任意车型 / 全图任意坐标都能生成**；`syncGarage` 任何玩家都能整表
+  覆盖 `Config.Garages`（全服车库点数与位置）；`PayDepotPrice` 按车牌查价不查 citizenid 也不查
+  state（别人的车、停在库里的车都能走"赎车"通道召唤）；`UpdateOutsideVehicle` 可把任意
+  (车牌, netID) 塞进全局表；`trackVehicle` 能拿任意车牌换实时坐标。修法：取车回调三重校验
+  （归属 + 车型与 `player_vehicles.vehicle` 一致 + 生成点在玩家 100 米内）、`syncGarage` 限控制台
+  或 admin、赎车要求「本人 + state=2 + 价格取库」、`OutsideVehicles` 要求本人实体真实存在、
+  `updateVehicleState` 白名单 {0,1,2}、`updateVehicleStats` 三个数值夹区间。qb-weathersync 本来
+  就有 `isAllowedToChange`（控制台 / admin ACE），但写成 `if isAllowed(...) then` 正分支，闸门只认
+  deny-early 形状，6 个事件一直被记为「未登记」—— 重构成 deny-early + 在
+  `net_event_guard_helpers.json` 登记（含 `requires_code` 证据），行为零变化；另补两处真缺口：
+  `RequestStateSync` 加每玩家 5 秒冷却（原来一人连点 = 2N 条全服广播）、
+  `QBCore:Server:OnPlayerLoaded` 加 `src ~= 0` 拒绝客户端触发。
+  测试：`fixtures/garages_probe.lua` / `fixtures/weathersync_probe.lua` 真加载资源 + mock 运行时，
+  旧版实测 `SPAWN_OTHERS=false`、`SPAWN_MISMATCH=false`、`SPAWN_FAR=false`、`SYNC_BLOCKED_FOR_PLAYER=false`、
+  `DEPOT_OTHERS=false`、`BROADCASTS_FROM_TWO_CALLS=4`、`BROADCASTS_FROM_CLIENT_TRIGGER=2`。
+  数字：未登记 **177 → 164**（qb 95 → 82，allowlist 112 → 113）；`1238 passed`。
+
+## [0.7a] — 载具重构与物流 — 2026-10-21
+
+> 代码完成于 2026-06-22，tag 于 2026-10-21；实机验收仍待完成。
+
+### Added
 - **结案从来没真的写进库（nil 参数让整条 UPDATE 静默失效）**（`custom-police` / `core-framework`）：真机排查发现本 build 的 oxmysql 是**客户端插值**的 —— 参数里出现 `nil` 时它不会绑成 `NULL`，而是把占位符 `?` 原样留在 SQL 里，于是语句语法错误、`.await` 也不报错。两处踩中：① MDT「清场」不带 reason，`closed_reason` 传 nil → 警情状态一直是 `on_scene`，而 `incident.close` 审计照写（"审计说关了、其实没关"，同一张单可以被反复"关"）；② `world_state` 落盘时 `previous_value` 传 nil → 首写静默丢失。现在 `closed_reason` 用空串、`previous_value` 传 JSON 的 `null`；并且**痕迹只在 `affected > 0` 时写**（`affected=0` 打日志不落痕迹），避免"警情没关、痕迹却 +1"。
 - **城市公告在冷缓存下会丢**（`custom-police`）：原节流规则是「该区 24 小时内第一起结案」，靠 `world_state` 的 `closed_24h` 判断 —— 而 `Record` 在缓存冷时是异步落写，读回来是 `nil` → `closed_24h=0` → 公告静默不发（CC 评审 2026-11-01 指出）。改成调用方自己的**每区域 30 分钟冷却**（内存计时，重启清零，宁可多一条不漏），不再依赖跨资源读值。
 - **`QBCore:DebugSomething` 是裸的 RegisterServerEvent（任意客户端可刷服务端日志）**（qb-core）：handler 的 `tbl` / `indent` / `resource` 全由客户端给，服务端直接 `print`，既能刷屏也能用深层表放大内存与 IO。现在用 `GetInvokingResource()` 区分「服务端自己 `QBCore.Debug`」与「客户端触发」，后者要求 `IsPlayerAceAllowed(src, 'qb.debug')`；`indent` 先 `tonumber` 再钳到 `MAX_DEBUG_INDENT = 8`（原来直接透传，可递归到栈溢出）。ACE 示例写进 `server.cfg.template`，不授予也不影响任何现有功能。闸门：`tests/architecture/test_engine_event_guards.py`（静态契约 + 剥守卫反向用例 + 跑真实文件的 Lua 行为验证：无 ACE 客户端 0 次打印、30 层嵌套表被截断）。
@@ -690,11 +714,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.7a] — 载具重构与物流 — 2026-10-21
-
-> 代码完成于 2026-06-22，tag 于 2026-10-21；实机验收仍待完成。
-
-### Added
 - **custom-vehicles**：替换 `qb-vehiclekeys`，事件驱动钥匙/锁车/共享，O(1) 内存缓存，兼容旧 exports/events；含安全带、巡航、转向灯、氮气、车辆损耗
 - **tcity-dashboard v2.1**：Vue 3 车载中控屏，6 类载具模板，警用控制台 / ANPR / 雷达 / 追踪 / CCTV
 - **custom-quest**：数据驱动任务状态机、外部脚本 API、安全门控、DB 持久化（v0.6 基础设施）

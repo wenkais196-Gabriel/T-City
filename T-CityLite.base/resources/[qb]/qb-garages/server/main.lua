@@ -192,6 +192,36 @@ QBCore.Functions.CreateCallback('qb-garages:server:spawnvehicle', function(sourc
             return
         end
 
+        -- 🔒 plate / vehicle / coords 全部来自客户端：
+        --    ① 车牌必须属于调用者；② 车型必须与库里登记的一致；③ 生成点必须在自己附近
+        --    （否则可以拿别人的车牌 / 换一个自己的车牌生成任意模型 / 全图任意点刷车）。
+        if type(plate) ~= 'string' or type(vehicle) ~= 'string' then
+            cb(nil)
+            return
+        end
+        local owned = MySQL.single.await(
+            'SELECT citizenid, vehicle FROM player_vehicles WHERE plate = ? LIMIT 1', { plate })
+        if not owned or owned.citizenid ~= Player.PlayerData.citizenid then
+            print(('[qb-garages] spawnvehicle rejected: plate %s 不属于 src=%s'):format(
+                tostring(plate), tostring(source)))
+            cb(nil)
+            return
+        end
+        if tostring(owned.vehicle) ~= vehicle then
+            print(('[qb-garages] spawnvehicle rejected: 车型不符 plate=%s db=%s req=%s'):format(
+                tostring(plate), tostring(owned.vehicle), tostring(vehicle)))
+            cb(nil)
+            return
+        end
+        local ped = GetPlayerPed(source)
+        local pcoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
+        if type(coords) ~= 'table' or not pcoords
+            or #(pcoords - vector3(coords.x or 0.0, coords.y or 0.0, coords.z or 0.0)) > 100.0 then
+            print(('[qb-garages] spawnvehicle rejected: 生成点离玩家太远 plate=%s'):format(tostring(plate)))
+            cb(nil)
+            return
+        end
+
         local vehData = QBCore.Shared.Vehicles[vehicle]
         local vehCategory = vehData and vehData.category
         local vehClassNum = vehCategory and vehicleClasses[vehCategory]
@@ -253,26 +283,46 @@ end)
 RegisterNetEvent('qb-garages:server:updateVehicleStats', function(plate, fuel, engine, body)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
+    if not Player or type(plate) ~= 'string' then return end
+    -- 🔒 三个数值都来自客户端：夹到合理区间，别让 fuel=999999 这种脏数据进库
+    fuel = math.max(0, math.min(100, tonumber(fuel) or 0))
+    engine = math.max(0, math.min(1000, tonumber(engine) or 0))
+    body = math.max(0, math.min(1000, tonumber(body) or 0))
     MySQL.update('UPDATE player_vehicles SET fuel = ?, engine = ?, body = ? WHERE plate = ? AND citizenid = ?', { fuel, engine, body, plate, Player.PlayerData.citizenid })
 end)
 
 RegisterNetEvent('qb-garages:server:updateVehicleState', function(state, plate)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
+    if not Player or type(plate) ~= 'string' then return end
+    -- 🔒 state 只允许 0（在外）/1（在库）/2（扣押）；其它值会把车卡成任何状态
+    state = tonumber(state)
+    if state ~= 0 and state ~= 1 and state ~= 2 then return end
     MySQL.update('UPDATE player_vehicles SET state = ?, depotprice = ? WHERE plate = ? AND citizenid = ?', { state, 0, plate, Player.PlayerData.citizenid })
 end)
 
 RegisterNetEvent('qb-garages:server:UpdateOutsideVehicle', function(plate, vehicleNetID)
-    OutsideVehicles[plate] = {
-        netID = vehicleNetID,
-        entity = NetworkGetEntityFromNetworkId(vehicleNetID)
-    }
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(plate) ~= 'string' then return end
+    -- 🔒 原来任何玩家都能把任意 (车牌, netID) 塞进 OutsideVehicles：
+    --    既能把别人的车标成"在外"，也能劫持 trackVehicle 的坐标。
+    local owner = MySQL.scalar.await('SELECT citizenid FROM player_vehicles WHERE plate = ? LIMIT 1', { plate })
+    if owner ~= Player.PlayerData.citizenid then return end
+    local netId = tonumber(vehicleNetID)
+    if not netId then return end
+    local entity = NetworkGetEntityFromNetworkId(netId)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return end
+    OutsideVehicles[plate] = { netID = netId, entity = entity }
 end)
 
 RegisterNetEvent('qb-garages:server:trackVehicle', function(plate)
     local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(plate) ~= 'string' then return end
+    -- 🔒 只能追踪自己名下的车（原来任何车牌都能拿到实时坐标）
+    local owner = MySQL.scalar.await('SELECT citizenid FROM player_vehicles WHERE plate = ? LIMIT 1', { plate })
+    if owner ~= Player.PlayerData.citizenid then return end
     local vehicleData = OutsideVehicles[plate]
     if vehicleData and DoesEntityExist(vehicleData.entity) then
         TriggerClientEvent('qb-garages:client:trackVehicle', src, GetEntityCoords(vehicleData.entity))
@@ -285,6 +335,7 @@ end)
 RegisterNetEvent('qb-garages:server:PayDepotPrice', function(data)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(data) ~= 'table' or type(data.plate) ~= 'string' then return end
     local cashBalance = Player.PlayerData.money['cash']
     local bankBalance = Player.PlayerData.money['bank']
     -- ⚠️ 扣款必须在**同步段**做。原来扣款写在 MySQL.scalar 的回调里，而
@@ -292,8 +343,12 @@ RegisterNetEvent('qb-garages:server:PayDepotPrice', function(data)
     -- 异步回调里调用会抛 `Execution of function reference in script host failed`
     -- （同一形态在 2026-11-01 真机的进角色路径上已经复现过一次）。
     -- 修法：把价格取回到本资源线程（await），再走原有的判断与扣款。
-    local depotPrice = MySQL.scalar.await('SELECT depotprice FROM player_vehicles WHERE plate = ?', { data.plate })
-    if depotPrice then
+    -- 🔒 只认自己名下、且处于扣押状态（state=2）的车；价格从库里取，不采信客户端
+    local row = MySQL.single.await(
+        'SELECT depotprice, citizenid, state FROM player_vehicles WHERE plate = ? LIMIT 1', { data.plate })
+    if not row or row.citizenid ~= Player.PlayerData.citizenid or tonumber(row.state) ~= 2 then return end
+    local depotPrice = tonumber(row.depotprice)
+    if depotPrice and depotPrice > 0 then
         if cashBalance >= depotPrice then
             Player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot')
             TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
@@ -309,6 +364,10 @@ end)
 -- House Garages
 
 RegisterNetEvent('qb-garages:server:syncGarage', function(updatedGarages)
+    local src = source
+    -- 🔒 原来任何玩家都能用一张自造的表覆盖全服车库配置（点数/位置/开关全变）
+    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then return end
+    if type(updatedGarages) ~= 'table' then return end
     Config.Garages = updatedGarages
 end)
 

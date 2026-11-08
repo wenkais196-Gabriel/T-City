@@ -1,0 +1,133 @@
+"""P1-3 批 8：qb-weathersync / qb-garages 的越权守卫。
+
+两个资源的问题性质不同：
+
+- qb-weathersync 本来就有 `isAllowedToChange`（控制台 / admin ACE），但写成了
+  `if isAllowedToChange(src) then ...` 的正分支，闸门只认 deny-early 形状 → 6 个事件在基线上被
+  记为"未登记"。真正缺的是另外两处：`RequestStateSync` 没有冷却（任何玩家连点就能让服务端
+  向全服刷同步包），`QBCore:Server:OnPlayerLoaded` 没有来源校验（客户端可以自己触发）。
+- qb-garages 是货真价实的洞：取车回调 `spawnvehicle(plate, vehicle, coords)` 三个参数全来自
+  客户端，服务端只查"在外车辆数"和"驾照等级" —— 别人的车牌、随便什么车型、全图任意坐标都能
+  生成；`syncGarage` 任何玩家都能用一张自造的表覆盖全服车库配置；`PayDepotPrice` 按车牌查价
+  不查归属。
+
+探针真加载资源的 `config.lua` + 服务端脚本，mock FiveM 运行时后直接调用 handler / callback。
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+BASE = Path(__file__).resolve().parents[3]
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+LUA = "lua5.4"
+
+
+def _run(probe: str, resource: str) -> dict[str, list[str]]:
+    proc = subprocess.run(
+        [LUA, (FIXTURES / probe).as_posix(), (BASE / "resources" / "[qb]" / resource).as_posix()],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, f"probe 失败：{proc.stderr} / {proc.stdout}"
+    data: dict[str, list[str]] = {}
+    for line in proc.stdout.splitlines():
+        if "|" not in line:
+            continue
+        key, _, value = line.partition("|")
+        data.setdefault(key, []).append(value)
+    assert "HANDLER_ERROR" not in data, f"handler 抛错：{data.get('HANDLER_ERROR')}"
+    return data
+
+
+def _flag(data: dict[str, list[str]], key: str) -> bool:
+    return data[key][0] == "true"
+
+
+# ══════════════════════════════════════════════════════════════════
+# qb-garages
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_spawnvehicle_rejects_plate_that_is_not_yours():
+    """取车回调不能拿别人的车牌生成载具。
+
+    旧版只看"在外车辆数 + 驾照等级"，`plate` 从不校验归属 —— 拿别人的车牌就能把别人的车
+    生成在自己脚下（同时把对方那台车标记为"在外"）。
+    """
+    data = _run("garages_probe.lua", "qb-garages")
+    assert _flag(data, "SPAWN_OK"), "自己的车 + 合法坐标反而被拒（过度收紧）"
+    assert _flag(data, "SPAWN_OTHERS"), "别人的车牌仍然能生成"
+
+
+def test_spawnvehicle_rejects_model_that_does_not_match_the_row():
+    """车型必须与 player_vehicles 里登记的一致。
+
+    旧版 `vehicle` 完全采信客户端：用自己的车牌 + 任意模型（喷气机、装甲车）就能生成，
+    只要 `QBCore.Shared.Vehicles[model]` 存在。
+    """
+    data = _run("garages_probe.lua", "qb-garages")
+    assert _flag(data, "SPAWN_MISMATCH"), "车型不符仍然放行"
+
+
+def test_spawnvehicle_rejects_spawn_point_far_from_the_player():
+    """生成点必须在玩家附近。
+
+    旧版 `coords` 直接透传，等于"全图任意点刷车"（可以刷进别人家、刷到地图边缘）。
+    """
+    data = _run("garages_probe.lua", "qb-garages")
+    assert _flag(data, "SPAWN_FAR"), "5000 米外的坐标仍然能生成"
+
+
+def test_sync_garage_requires_admin():
+    """`syncGarage` 会整表覆盖 `Config.Garages`。
+
+    旧版无任何鉴权：任何玩家发一张自造的表，就能改掉全服所有车库的点数、位置、开关。
+    """
+    data = _run("garages_probe.lua", "qb-garages")
+    assert _flag(data, "SYNC_BLOCKED_FOR_PLAYER"), "普通玩家仍能覆盖全服车库配置"
+    assert _flag(data, "SYNC_ALLOWED_FOR_ADMIN"), "管理员反而改不了（过度收紧）"
+
+
+def test_depot_payment_requires_ownership_and_impound_state():
+    """赎车只能赎自己名下、且处于扣押状态的车。
+
+    旧版 `PayDepotPrice(data)` 只按 `data.plate` 查价，不查 citizenid、不查 state：
+    别人的车（价格合适时）也能被"赎"出来，停在库里的车也能直接召唤。
+    """
+    data = _run("garages_probe.lua", "qb-garages")
+    assert _flag(data, "DEPOT_OTHERS"), "别人的车仍然能赎"
+    assert _flag(data, "DEPOT_NOT_IMPOUNDED"), "没被扣押的车仍能通过赎车通道取车"
+    assert _flag(data, "DEPOT_IMPOUNDED"), "自己的扣押车反而赎不出来（过度收紧）"
+
+
+# ══════════════════════════════════════════════════════════════════
+# qb-weathersync
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_weather_changes_stay_admin_only():
+    """改天气仍然只允许控制台 / admin —— 重构不能把这条放宽。"""
+    data = _run("weathersync_probe.lua", "qb-weathersync")
+    assert _flag(data, "WEATHER_UNCHANGED"), "普通玩家改动了天气"
+    assert _flag(data, "WEATHER_CHANGED"), "管理员改不动天气（过度收紧）"
+
+
+def test_state_sync_is_rate_limited_per_player():
+    """`RequestStateSync` 会向全服广播两条同步包 → 每玩家 5 秒一次。
+
+    旧版无冷却：一个人连点 N 次就是 2N 条全服广播。
+    """
+    data = _run("weathersync_probe.lua", "qb-weathersync")
+    assert data["BROADCASTS_FROM_TWO_CALLS"][0] == "2", (
+        "连续两次 RequestStateSync 产生了 "
+        f"{data['BROADCASTS_FROM_TWO_CALLS'][0]} 条广播（期望 2 = 只有第一次生效）"
+    )
+
+
+def test_client_cannot_trigger_onplayerloaded():
+    """`QBCore:Server:OnPlayerLoaded` 是服务端内部事件，客户端不该能触发。"""
+    data = _run("weathersync_probe.lua", "qb-weathersync")
+    assert data["BROADCASTS_FROM_CLIENT_TRIGGER"][0] == "0", "客户端触发了 OnPlayerLoaded 并产生了全服广播"
