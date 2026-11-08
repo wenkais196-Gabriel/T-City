@@ -294,23 +294,23 @@ state.items = {}
 Config.Dealers[dealerKey].products[1].amount = 0
 local cashBefore11 = state.money.cash
 fire('qb-drugs:server:updateDealerItems', { slot = 1, name = 'weed_whitewidow' }, 999, dealerKey)
-emit('PAID', state.money.cash - cashBefore11)
+emit('DEALER_PAID_NO_ITEMS', state.money.cash - cashBefore11)
 
 emit('SCENARIO', 'dealer-sell-fake-slot')
 local cash12 = state.money.cash
 fire('qb-drugs:server:updateDealerItems', { slot = 999, name = 'weed_whitewidow' }, 1, dealerKey)
-emit('PAID', state.money.cash - cash12)
+emit('DEALER_PAID_FAKE_SLOT', state.money.cash - cash12)
 
 emit('SCENARIO', 'dealer-sell-name-mismatch')
 local cash13 = state.money.cash
 fire('qb-drugs:server:updateDealerItems', { slot = 1, name = 'coke_brick' }, 1, dealerKey)
-emit('PAID', state.money.cash - cash13)
+emit('DEALER_PAID_NAME_MISMATCH', state.money.cash - cash13)
 
 emit('SCENARIO', 'dealer-sell-with-items')
 state.items = { weed_whitewidow = 5 }
 local cash14 = state.money.cash
 fire('qb-drugs:server:updateDealerItems', { slot = 1, name = 'weed_whitewidow' }, 5, dealerKey)
-emit('PAID', state.money.cash - cash14)
-emit('ITEM_LEFT', state.items.weed_whitewidow or 0)
+emit('DEALER_PAID_WITH_ITEMS', state.money.cash - cash14)
+emit('DEALER_ITEM_LEFT', state.items.weed_whitewidow or 0)
 
 io.write(table.concat(OUT, '\n'), '\n')

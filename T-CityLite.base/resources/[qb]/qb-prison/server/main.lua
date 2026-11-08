@@ -190,13 +190,16 @@ RegisterNetEvent('prison:server:CheckRecordStatus', function()
     end
 end)
 
-local alarm_cooldown = {}   -- 每人 60 秒报警冷却（key = source）
+local alarm_cooldown = {}   -- 每人 60 秒报警冷却（key = citizenid，source 会被复用）
 RegisterNetEvent('prison:server:JailAlarm', function()
     local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
     -- 🔒 原来无冷却：客户端连点即可反复刷警报与 `error()` 噪音
+    local cid = Player.PlayerData.citizenid
     local now = os.time()
-    if alarm_cooldown[src] and now - alarm_cooldown[src] < 60 then return end
-    alarm_cooldown[src] = now
+    if alarm_cooldown[cid] and now - alarm_cooldown[cid] < 60 then return end
+    alarm_cooldown[cid] = now
     if AlarmActivated then return end
     local playerPed = GetPlayerPed(source)
     local coords = GetEntityCoords(playerPed)
