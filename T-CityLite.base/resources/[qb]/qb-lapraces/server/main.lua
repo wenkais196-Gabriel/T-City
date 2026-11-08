@@ -139,25 +139,37 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
     if type(raceId) ~= 'string' or Races[raceId] == nil then return end
     -- 🔒 只有这场比赛的参赛者能报成绩；成绩必须是合理数字（原来客户端报 BestLap=0.001 就能刷赛道记录）
     local racer = Races[raceId].Racers[Player.PlayerData.citizenid]
-    -- 🔒 不能用 racer.Finished 当防重放标记：UpdateRacerData 会先把它置 true（正常完赛顺序），
-    --    那样每次正常结算都会被自己挡住。用独立的 FinishHandled。
+    -- 🔒 防重放用独立的 FinishHandled；Finished 只由本函数（服务端）写
     if not racer or racer.FinishHandled then return end
+
+    -- 🔒 没开赛不能报成绩：StartedAt 由 StartRace 在服务端写
+    local startedAt = Races[raceId].StartedAt
+    if not startedAt then
+        TriggerClientEvent('QBCore:Notify', src, '这场比赛还没有开始', 'error')
+        return
+    end
+    local OpenedKey = GetOpenedRaceKey(raceId)
+    local opened = (OpenedKey and AvailableRaces[OpenedKey]) or nil
+
     TotalTime = tonumber(TotalTime)
     TotalLaps = tonumber(TotalLaps)
     BestLap = tonumber(BestLap) or TotalTime
-    if not TotalTime or TotalTime <= 0 or not TotalLaps or TotalLaps < 1 then return end
-    -- 🔒 服务端计时对账：比赛开始时刻由 StartRace 记在服务端，客户端报的总时长不能超过真实流逝时间
-    local startedAt = Races[raceId].StartedAt
-    if startedAt then
-        local elapsed = (GetGameTimer() - startedAt) / 1000
-        if TotalTime > elapsed + 5 then return end
-        -- 单圈均值不能低于 5 秒（0.001 这种"破纪录"直接拒）
-        if (TotalTime / TotalLaps) < 5 then return end
-    end
-    if BestLap <= 0 or BestLap > TotalTime then BestLap = TotalTime end
-    if (BestLap / math.max(1, TotalLaps)) < 5 and TotalLaps > 0 then
-        BestLap = TotalTime / TotalLaps
-    end
+    if not TotalTime or TotalTime <= 0 or not TotalLaps or TotalLaps < 1 or TotalLaps % 1 ~= 0 then return end
+
+    -- 圈数必须与服务端开放时登记的圈数一致（不能少报圈数压低单圈均值）
+    local serverLaps = opened and tonumber(opened.Laps) or nil
+    if serverLaps and TotalLaps ~= serverLaps then return end
+
+    -- 服务端计时对账：上下界都要有
+    local elapsed = (GetGameTimer() - startedAt) / 1000
+    if TotalTime > elapsed + 5 then return end
+    if TotalTime < elapsed * 0.5 then return end
+
+    -- 单圈均值下限 5 秒（0.001 这种直接拒）；最佳圈只判它自己，不除圈数
+    if (TotalTime / TotalLaps) < 5 then return end
+    if BestLap < 5 or BestLap > TotalTime then return end
+
+    racer.Finished = true          -- 服务端权威完赛标记（PlayersFinished 只统计它）
     racer.FinishHandled = true
     local AvailableKey = GetOpenedRaceKey(raceId)
     local PlayersFinished = 0
@@ -205,7 +217,7 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
             }
             MySQL.update('UPDATE lapraces SET records = ? WHERE raceid = ?',
                 {json.encode(Races[RaceData.RaceId].Records), RaceData.RaceId})
-            TriggerClientEvent('qb-phone:client:RaceNotify', src, 'You have won the WR from ' .. RaceData.RaceName ..
+            TriggerClientEvent('qb-phone:client:RaceNotify', src, 'You have won the WR from ' .. tostring(Races[raceId].RaceName or 'Unknown') ..
                 ' disconnected with a time of: ' .. SecondsToClock(BLap) .. '!')
         end
     else
@@ -218,7 +230,7 @@ RegisterNetEvent('qb-lapraces:server:FinishPlayer', function(RaceData, TotalTime
         }
         MySQL.update('UPDATE lapraces SET records = ? WHERE raceid = ?',
             {json.encode(Races[RaceData.RaceId].Records), RaceData.RaceId})
-        TriggerClientEvent('qb-phone:client:RaceNotify', src, 'You have won the WR from ' .. RaceData.RaceName ..
+        TriggerClientEvent('qb-phone:client:RaceNotify', src, 'You have won the WR from ' .. tostring(Races[raceId].RaceName or 'Unknown') ..
             ' put down with a time of: ' .. SecondsToClock(BLap) .. '!')
     end
     if AvailableKey and AvailableRaces[AvailableKey] then
@@ -339,6 +351,15 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
                     ' the race has been delivered!')
         end
     end
+    local leavingRacer = Races[raceId].Racers[Player.PlayerData.citizenid]
+    -- 🔒 已经服务端确认完赛的人离开，不该再补一条 DNF
+    if leavingRacer and leavingRacer.FinishHandled then
+        Races[raceId].Racers[Player.PlayerData.citizenid] = nil
+        if opened then opened.RaceData = Races[raceId] end
+        TriggerClientEvent('qb-lapraces:client:LeaveRace', src, Races[raceId])
+        TriggerClientEvent('qb-phone:client:UpdateLapraces', -1)
+        return
+    end
     local AmountOfRacers = 0
     for _, _ in pairs(Races[raceId].Racers) do
         AmountOfRacers = AmountOfRacers + 1
@@ -353,7 +374,7 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
             }
         }
     else
-        NotFinished[RaceData.RaceId] = {}
+        NotFinished[raceId] = {}
         NotFinished[raceId][#NotFinished[raceId]+1] = {
             TotalTime = "DNF",
             BestLap = "DNF",
@@ -365,11 +386,11 @@ RegisterNetEvent('qb-lapraces:server:LeaveRace', function(RaceData)
     end
     Races[raceId].Racers[Player.PlayerData.citizenid] = nil
     if (AmountOfRacers - 1) == 0 then
-        if NotFinished ~= nil and next(NotFinished) ~= nil and NotFinished[RaceId] ~= nil and next(NotFinished[RaceId]) ~=
+        if NotFinished ~= nil and next(NotFinished) ~= nil and NotFinished[raceId] ~= nil and next(NotFinished[raceId]) ~=
             nil then
-            for _, v in pairs(NotFinished[RaceId]) do
-                if LastRaces[RaceId] ~= nil then
-                    LastRaces[RaceId][#LastRaces[RaceId]+1] = {
+            for _, v in pairs(NotFinished[raceId]) do
+                if LastRaces[raceId] ~= nil then
+                    LastRaces[raceId][#LastRaces[raceId]+1] = {
                         TotalTime = v.TotalTime,
                         BestLap = v.BestLap,
                         Holder = {
@@ -514,7 +535,8 @@ RegisterNetEvent('qb-lapraces:server:UpdateRacerData', function(RaceId, Checkpoi
 
     Races[RaceId].Racers[CitizenId].Checkpoint = Checkpoint
     Races[RaceId].Racers[CitizenId].Lap = Lap
-    Races[RaceId].Racers[CitizenId].Finished = Finished
+    -- 🔒 客户端只能影响 UI 标记；完赛计数只认 FinishPlayer 写的 Finished
+    Races[RaceId].Racers[CitizenId].ClientFinished = Finished == true
 
     TriggerClientEvent('qb-lapraces:client:UpdateRaceRacerData', -1, RaceId, Races[RaceId])
 end)

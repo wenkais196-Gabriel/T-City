@@ -53,17 +53,17 @@ def test_apartment_create_and_update_still_work_and_reject_bad_types():
 def test_race_finish_settles_once_and_survives_bad_payloads():
     data = _run("qb-lapraces", "lapraces_probe.lua")
     assert "HANDLER_ERROR" not in data, f"handler 抛错：{data.get('HANDLER_ERROR')}"
-    # 未开放的赛道：不回错、不把赛道卡成"运行中"
-    assert data["JOIN_OK"][0] == "true", "JoinRace 对未开放的 RaceId 崩了"
-    assert data["JOIN_WORKS_AFTER_SETUP"][0] == "true", "作者开放赛道后车手仍然加不进去"
-    # 成绩：0.001 拒绝、正常结算 1 次、重复结算 0 次
-    assert data["RECORD_WRITES_AFTER_CHEAT"][0] == "0", "BestLap=0.001 仍能写纪录"
-    assert data["RECORD_WRITES_AFTER_NORMAL"][0] == "1", "正常完赛没有结算（racer.Finished 又把自己挡住了？）"
-    assert data["RECORD_WRITES_AFTER_REPLAY"][0] == "0", "重复 FinishPlayer 二次结算"
 
+    # 未开放的赛道：不进 racer 表（不是"没崩就算过"）
+    assert data["JOINED_WHEN_CLOSED"][0] == "0", "未开放的赛道仍然把车手加进去了"
+    # 没开赛就报成绩：拒绝
+    assert data["RECORD_WRITES_WITHOUT_START"][0] == "0", "没 StartRace 也能写成绩"
+    # 开赛后正常加入
+    assert data["JOIN_WORKS_AFTER_START"][0] == "true", "开赛后车手加不进去"
 
-# 变异证据（本机实测，改动 handler 才复现；不需要入闸门也要留档）：
-#   * `racer.FinishHandled` → `racer.Finished`（回到 CC 抓到的 B2）：
-#     RECORD_WRITES_AFTER_NORMAL 从 1 变 0 —— 这条断言真的在测"正常完赛能不能结算"。
-#   * 把 `local startedAt = Races[raceId].StartedAt` 改成 `nil`（去掉服务端对账）：
-#     RECORD_WRITES_AFTER_CHEAT 从 0 变 1 —— 这条断言真的在测 0.001 刷记录。
+    # 成绩：0.001 拒绝、圈数不符拒绝、合法多圈通过且最佳圈不被改写、重复结算拒绝
+    assert data["RECORD_WRITES_CHEAT"][0] == "0", "BestLap=0.001 仍能写纪录"
+    assert data["RECORD_WRITES_LAPS_MISMATCH"][0] == "0", "客户端少报圈数能绕过均值校验"
+    assert data["RECORD_WRITES_NORMAL"][0] == "1", "合法完赛没有结算（Finished/FinishHandled 又打架了？）"
+    assert data["RECORD_TIME"][0] == "45", "合法的 45 秒最佳圈被改写（上一版 BestLap/TotalLaps 双重除法）"
+    assert data["RECORD_WRITES_REPLAY"][0] == "0", "重复 FinishPlayer 二次结算"
