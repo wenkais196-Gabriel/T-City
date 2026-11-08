@@ -435,5 +435,49 @@
       ],
       "why": "声音参数全来自客户端：文件名白名单 + 音量 0..1 + 按 (玩家, 文件) 100ms 限流，防止全服刷声。"
     }
+  },
+  "qb-fuel": {
+    "isNearGasStation": {
+      "defined_at": "qb-fuel/server/main.lua",
+      "requires_code": [
+        "GetPlayerPed(src)",
+        "Config.GasStations",
+        "#(coords - station) < GAS_STATION_RANGE"
+      ],
+      "why": "加油/买油桶/补油桶都必须在加油站附近（原来全图任意位置都能下单）。"
+    },
+    "clampNumber": {
+      "defined_at": "qb-fuel/server/main.lua",
+      "requires_code": [
+        "tonumber(value)",
+        "if number > max then number = max end"
+      ],
+      "why": "客户端给的升数/桶内油量必须夹在 0..上限，且负数、字符串、表一律变成 nil 被拒。",
+      "shape": "local_check"
+    }
+  },
+  "qb-mechanicjob": {
+    "CanSprayVehicle": {
+      "defined_at": "qb-mechanicjob/server/main.lua",
+      "requires_code": [
+        "Config.Shops",
+        "shop.managed",
+        "NetworkGetEntityFromNetworkId(netId)",
+        "#(playerCoords - shop.paint)"
+      ],
+      "why": "喷漆台只能是本店员工、在本店喷漆位旁、给身边的车喷（原来任何玩家可给地图上任意车辆免费改色并冻结）。"
+    }
+  },
+  "qb-doorlock": {
+    "isAuthorized": {
+      "defined_at": "qb-doorlock/server/main.lua",
+      "requires_code": [
+        "door.authorizedJobs",
+        "door.authorizedGangs",
+        "door.allAuthorized"
+      ],
+      "shape": "local_check",
+      "why": "开门必须有授权：房主/钥匙/警察权限/开锁器，按门配置逐条判定。"
+    }
   }
 }

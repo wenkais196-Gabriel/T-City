@@ -101,7 +101,37 @@ RegisterNetEvent('qb-mechanicjob:server:stash', function(data)
     end
 end)
 
+-- 喷漆台是"本店员工 + 在本店喷漆位旁边"才能用的（client 侧 qb-target 的 paintbooth 就是按 job 限制的）。
+-- 原来这两个 handler 没有任何来源校验：任何玩家可以给**地图上任意一辆车**免费改色，
+-- 还能让服务端把它 FreezeEntityPosition 住 PaintTime*1000 毫秒（顺手可以把别人的车冻在路口）。
+local PAINT_MAX_DISTANCE = 20.0     -- 玩家到本店喷漆位的最大距离（target 圈是 2.0，留出走动余量）
+local PAINT_VEHICLE_RANGE = 20.0    -- 车到玩家的最大距离
+
+local function CanSprayVehicle(src, netId)
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false end
+    local job = Player.PlayerData and Player.PlayerData.job
+    if type(job) ~= 'table' or type(job.name) ~= 'string' then return false end
+    local shop = Config.Shops and Config.Shops[job.name]
+    if type(shop) ~= 'table' or not shop.managed then return false end
+    if type(netId) ~= 'number' then return false end
+
+    local vehicle = NetworkGetEntityFromNetworkId(netId)
+    if not vehicle or vehicle == 0 then return false end
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false end
+
+    local playerCoords = GetEntityCoords(ped)
+    if shop.paint and #(playerCoords - shop.paint) > PAINT_MAX_DISTANCE then return false end
+    if #(playerCoords - GetEntityCoords(vehicle)) > PAINT_VEHICLE_RANGE then return false end
+    return true
+end
+
 RegisterNetEvent('qb-mechanicjob:server:sprayVehicleCustom', function(netId, section, type, color)
+    local src = source
+    if not CanSprayVehicle(src, netId) then return end
+    if section ~= 'primary' and section ~= 'secondary' then return end
+    if type(color) ~= 'table' then return end
     local vehicle = NetworkGetEntityFromNetworkId(netId)
     local vehicleCoords = GetEntityCoords(vehicle)
     local paintTypeIndex = GetPaintTypeIndex(type)
@@ -124,6 +154,9 @@ RegisterNetEvent('qb-mechanicjob:server:sprayVehicleCustom', function(netId, sec
 end)
 
 RegisterNetEvent('qb-mechanicjob:server:sprayVehicle', function(netId, primary, secondary, pearlescent, wheel, colors)
+    local src = source
+    if not CanSprayVehicle(src, netId) then return end
+    if type(colors) ~= 'table' then return end
     local vehicle = NetworkGetEntityFromNetworkId(netId)
     local vehicleCoords = GetEntityCoords(vehicle)
     FreezeEntityPosition(vehicle, true)
@@ -176,11 +209,20 @@ end)
 -- 兼容事件名在 custom-vehicles 中注册，qb-mechanicjob 不再重复处理
 -- ═══════════════════════════════════════════════════════════════
 
+-- 这个 handler 顾客也会触发（repair.lua 修车时按配方逐项扣料），所以**不能**加职业限制；
+-- 但 `part` / `amount` 完全是客户端给的：part 随便填会在 `QBCore.Shared.Items[part]` 上炸出 nil，
+-- amount 可以给负数或天文数字（负数扣料还可能把背包数量写成负的）。
 RegisterNetEvent('qb-mechanicjob:server:removeItem', function(part, amount)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    if not amount then amount = 1 end
+    if type(part) ~= 'string' or type(QBCore.Shared.Items[part]) ~= 'table' then return end
+
+    amount = tonumber(amount) or 1
+    if amount < 1 then amount = 1 end
+    if amount > 10 then amount = 10 end
+    amount = math.floor(amount)
+
     if not exports['qb-inventory']:RemoveItem(src, part, amount, false, 'qb-mechanicjob:server:removeItem') then DropPlayer(src, 'qb-mechanicjob:server:removeItem') end
     TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[part], 'remove')
 end)
