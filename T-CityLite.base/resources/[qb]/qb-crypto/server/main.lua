@@ -300,7 +300,8 @@ RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function()
         if removed ~= true then return end
         -- 加钱失败就把 cryptostick 还回去，别让玩家既丢物品又没钱
         if Player.Functions.AddMoney('crypto', Amount, 'qb-crypto:server:ExchangeSuccess') == false then
-            exports['qb-inventory']:AddItem(src, 'cryptostick', 1, false, false, 'qb-crypto:server:ExchangeSuccess-refund')
+            -- AddItem 签名是 (identifier, item, amount, slot, info, reason)，info 必须是 table
+            exports['qb-inventory']:AddItem(src, 'cryptostick', 1, false, {}, 'qb-crypto:server:ExchangeSuccess-refund')
             return
         end
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.you_have_exchanged_your_cryptostick_for', { amount = Amount }), 'success', 3500)
