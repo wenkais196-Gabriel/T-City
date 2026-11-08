@@ -245,6 +245,20 @@ clock = clock + 1000
 fireAs(2, 'qb-crypto:server:Rebooting', true, 99)
 emit('REBOOT_PCT_AFTER_NON_OWNER', tostring(Crypto.Exchange.RebootInfo.percentage))
 
+-- 场景 6a：非 owner 站在交易所前也不能触发全服 SyncReboot（否则所有客户端会显示假重启）
+emit('SCENARIO', 'syncreboot-non-owner')
+local syncBefore = 0
+for _, event in ipairs(state.clientEvents) do
+    if event.name == 'qb-crypto:client:SyncReboot' then syncBefore = syncBefore + 1 end
+end
+state.coords = vector3(Crypto.Exchange.coords.x, Crypto.Exchange.coords.y, Crypto.Exchange.coords.z)
+fireAs(2, 'qb-crypto:server:SyncReboot')
+local syncAfter = 0
+for _, event in ipairs(state.clientEvents) do
+    if event.name == 'qb-crypto:client:SyncReboot' then syncAfter = syncAfter + 1 end
+end
+emit('SYNC_FROM_NON_OWNER', syncAfter - syncBefore)
+
 -- 场景 6：会话拥有者走出 20 米，仍然必须能把状态收尾（否则全服永久卡"重启中"）
 emit('SCENARIO', 'reboot-owner-finish-remote')
 state.coords = vector3(9999.0, 9999.0, 9999.0)

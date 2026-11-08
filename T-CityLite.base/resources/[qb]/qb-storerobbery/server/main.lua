@@ -364,11 +364,15 @@ local lastCopCall = {}
 -- 而 recentStoreRobberies 可能只剩记录、没有 activeRobberies 可查。
 local srcToCitizenid = {}
 
-AddEventHandler('QBCore:Server:PlayerLoaded', function(player)
+local function rememberSource(player)
     if player and player.PlayerData then
         srcToCitizenid[player.PlayerData.source] = player.PlayerData.citizenid
     end
-end)
+end
+
+AddEventHandler('QBCore:Server:PlayerLoaded', rememberSource)
+-- 仓库里还有另一种拼写（qb-spawn / qb-multicharacter 用），一并监听
+AddEventHandler('QBCore:Server:OnPlayerLoaded', rememberSource)
 
 -- 资源重启时已经在线的玩家不会触发 PlayerLoaded → 启动时补一轮，避免反查表是空的
 AddEventHandler('onResourceStart', function(resourceName)

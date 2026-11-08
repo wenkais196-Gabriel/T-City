@@ -362,8 +362,10 @@ local lastRebootSync = {}
 RegisterServerEvent('qb-crypto:server:SyncReboot', function()
     local src = source
     if type(src) ~= 'number' or not QBCore.Functions.GetPlayer(src) then return end
-    -- 只允许会话拥有者，或站在交易所前的人触发同步（原来任意附近玩家都能刷全服广播）
-    if not (rebootSession and rebootSession.owner == src) and not NearExchange(src) then return end
+    -- 🔒 只允许当前重启会话的拥有者触发全服同步。
+    --    原来"站在交易所 20 米内"也能触发：服务端虽然会拒掉他的进度上报，但所有客户端会先
+    --    收到 SyncReboot 并把本地状态置成"重启中"，形成假重启显示。
+    if not (rebootSession and rebootSession.owner == src) then return end
     -- 🔒 全服广播：按玩家 1 秒节流
     local now = os.time()
     if lastRebootSync[src] and now == lastRebootSync[src] then return end
