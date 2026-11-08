@@ -933,6 +933,51 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-inventory:server:closeInventory",
+      "file": "[qb]/qb-inventory/server/main.lua",
+      "category": "civilian",
+      "reason": "关闭自己打开的界面（玩法本身）。handler 内：`inventory` 必须是字符串（否则 `:find` 抛错）、`otherplayer-` 分支先校验 targetId 数字且目标在线才清 inv_busy；不搬运任何物品、不写库。",
+      "evidence": "main.lua closeInventory — type(inventory) ~= 'string' / targetId 数字校验 / target 存在才设 inv_busy",
+      "owner": "qb-inventory",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-inventory:server:openDrop",
+      "file": "[qb]/qb-inventory/server/main.lua",
+      "category": "civilian",
+      "reason": "打开脚下的掉落物（玩法本身）。handler 内：dropId 必须是字符串、玩家与掉落物距离 ≤2.5 米（服务端算）、且加了 2 分钟接管窗口 —— 原来一个人打开后不发 closeInventory 就能把它永久锁死。",
+      "evidence": "main.lua openDrop — type(dropId) / #(playerCoords - drop.coords) > 2.5 return / openedAt 120s 接管",
+      "owner": "qb-inventory",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-inventory:server:openVending",
+      "file": "[qb]/qb-inventory/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能用售货机（玩法本身）。handler 内：`data` 必须是表、必须带 coords、玩家与 coords 距离 ≤3 米（服务端算），否则直接 return；商品表取自 `Config.VendingItems`，不采信客户端。",
+      "evidence": "main.lua openVending — type(data) ~= 'table' / 距离平方 > 9.0 return / CreateShop(Config.VendingItems)",
+      "owner": "qb-inventory",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-inventory:server:snowball",
+      "file": "[qb]/qb-inventory/server/main.lua",
+      "category": "self_scoped",
+      "reason": "雪球玩法：给自己加/减 `weapon_snowball`（玩具武器），只作用于调用者自己的背包。已有每玩家 2 秒冷却。",
+      "evidence": "main.lua snowball — local src = source / _snowballCooldowns[cooldownKey] 2s / AddItem(src,...) / RemoveItem(src,...)",
+      "owner": "qb-inventory",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-inventory:server:useItem",
+      "file": "[qb]/qb-inventory/server/main.lua",
+      "category": "self_scoped",
+      "reason": "使用**自己**某个槽位上的物品。handler 内补了 `item` 必须是表的校验（原来 `item.slot` 会抛错），物品数据由 `GetItemBySlot(src, ...)` 从服务端背包取，不采信客户端给的物品名。",
+      "evidence": "main.lua useItem — local src = source / type(item) ~= 'table' / GetItemBySlot(src, item.slot)",
+      "owner": "qb-inventory",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "qb-lapraces:server:CreateLapRace",
       "category": "self_scoped",
       "reason": "只决定「能不能打开赛道编辑器」：白名单/管理员判定（IsWhitelisted）+ 重名校验，不改任何人的数据。",

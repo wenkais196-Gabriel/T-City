@@ -64,7 +64,9 @@ AddEventHandler('txAdmin:events:serverShuttingDown', function()
 end)
 
 RegisterNetEvent('QBCore:Server:UpdateObject', function()
-    if source ~= '' then return end
+    -- 🔒 服务端事件的 `source` 是数字 0，不是空串 —— 原来这个判断永远为真，
+    --    任何客户端都能触发它把共享的 QBCore 对象重新取一遍。
+    if source ~= 0 then return end
     QBCore = exports['qb-core']:GetCoreObject()
 end)
 
@@ -154,7 +156,8 @@ RegisterNetEvent('qb-inventory:server:openVending', function(data)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
     -- 🔒 Security: 距离校验 — 防止远程开售货机
-    if not data.coords then return end
+    --     `data` 来自客户端：不是表时下面 `data.coords` 会抛错打崩事件线程。
+    if type(data) ~= 'table' or not data.coords then return end
     local playerPed = GetPlayerPed(src)
     local playerCoords = GetEntityCoords(playerPed)
     local dx = playerCoords.x - (data.coords.x or data.coords[1])
@@ -175,11 +178,16 @@ RegisterNetEvent('qb-inventory:server:closeInventory', function(inventory)
     local src = source
     local QBPlayer = QBCore.Functions.GetPlayer(src)
     if not QBPlayer then return end
+    -- 🔒 `inventory` 来自客户端：不是字符串时下面 `:find` 会抛错；
+    --    `Player(targetId)` 在目标已下线时是 nil，直接取 `.state` 也会抛错。
+    if type(inventory) ~= 'string' then return end
     Player(source).state.inv_busy = false
     if inventory:find('shop%-') then return end
     if inventory:find('otherplayer%-') then
         local targetId = tonumber(inventory:match('otherplayer%-(.+)'))
-        Player(targetId).state.inv_busy = false
+        if not targetId then return end
+        local target = Player(targetId)
+        if target then target.state.inv_busy = false end
         return
     end
     if Drops[inventory] then
@@ -200,6 +208,8 @@ end)
 
 RegisterNetEvent('qb-inventory:server:useItem', function(item)
     local src = source
+    -- 🔒 `item` 来自客户端：不是表时下面 `item.slot` 直接抛错
+    if type(item) ~= 'table' then return end
     local itemData = GetItemBySlot(src, item.slot)
     if not itemData then return end
     local itemInfo = QBCore.Shared.Items[itemData.name]
@@ -263,11 +273,17 @@ RegisterNetEvent('qb-inventory:server:openDrop', function(dropId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if type(dropId) ~= 'string' then return end
     local playerPed = GetPlayerPed(src)
     local playerCoords = GetEntityCoords(playerPed)
     local drop = Drops[dropId]
     if not drop then return end
-    if drop.isOpen then return end
+    -- 🔒 一个人打开后不发 closeInventory（改过的客户端 / 直接崩游戏）就能把这份掉落物
+    --    永久锁住，别人再也打不开。超过 2 分钟允许别人接管。
+    local openedAt = drop.openedAt or 0
+    if drop.isOpen and drop.openedBy ~= src and (os.time() - openedAt) < 120 then return end
+    drop.openedBy = src
+    drop.openedAt = os.time()
     local distance = #(playerCoords - drop.coords)
     if distance > 2.5 then return end
     local formattedInventory = {
@@ -286,7 +302,14 @@ RegisterNetEvent('qb-inventory:server:updateDrop', function(dropId, coords)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    if not Drops[dropId] then return end
+    if type(dropId) ~= 'string' or not Drops[dropId] then return end
+    -- 🔒 只有掉落物的创建者（或管理员）能挪它：原来任何玩家都能把别人的包拖走，
+    --    每次 5 米、次数不限。
+    local drop = Drops[dropId]
+    if drop.owner and drop.owner ~= src
+        and not QBCore.Functions.HasPermission(src, 'admin') then
+        return
+    end
     -- 坐标必须是 vector3 类型且分量在合理范围内（FiveM 地图边界: -4000 ~ 8000）
     if type(coords) ~= 'vector3' and type(coords) ~= 'table' then return end
     local cx, cy, cz = coords.x or coords[1], coords.y or coords[2], coords.z or coords[3]
@@ -354,6 +377,7 @@ QBCore.Functions.CreateCallback('qb-inventory:server:createDrop', function(sourc
                 items = itemsTable,
                 entityId = dropId,
                 createdTime = os.time(),
+                owner = src,
                 coords = playerCoords,
                 maxweight = Config.DropSize.maxweight,
                 slots = Config.DropSize.slots,
