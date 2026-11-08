@@ -39,11 +39,28 @@ local function SavePlayerSkinOffline(citizenid)
     end
 end
 
+-- 皮肤数据来自客户端：结构必须是有界的哈希（不是数组、不是几 MB 的字符串），
+-- 否则一次请求就能把 RAM 缓存与 playerskins 列写爆。
+local function isValidSkinPayload(model, skin)
+    if type(model) ~= 'string' or #model > 64 then return false end
+    if type(skin) ~= 'table' then return false end
+    local entries = 0
+    for key, value in pairs(skin) do
+        entries = entries + 1
+        if entries > 64 then return false end
+        if type(key) ~= 'string' and type(key) ~= 'number' then return false end
+        if type(value) ~= 'string' and type(value) ~= 'number' and type(value) ~= 'boolean' then
+            return false
+        end
+    end
+    return true
+end
+
 RegisterServerEvent("qb-clothing:saveSkin", function(model, skin)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    if model ~= nil and skin ~= nil then
+    if isValidSkinPayload(model, skin) then
         -- 核心优化：直接高频读写 RAM 缓存，零磁盘 I/O 开销
         skinCache[Player.PlayerData.citizenid] = {
             model = model,
@@ -80,6 +97,9 @@ end)
 
 -- 监听换线退服，强制安全刷回 SQL 数据库以保障绝对数据安全
 RegisterNetEvent('QBCore:Server:OnPlayerUnload', function(src)
+    -- 🔒 这是 qb-core 服务端内部事件（服务端触发时 source 是 0）：客户端不能自己发一份，
+    --    更不能用别人的 src 去强制写盘别人的皮肤。
+    if source ~= 0 then return end
     local Player = QBCore.Functions.GetPlayer(src)
     if Player then
         SavePlayerSkinOffline(Player.PlayerData.citizenid)
@@ -111,9 +131,21 @@ AddEventHandler('onResourceStop', function(resource)
     end
 end)
 
+local MAX_OUTFITS_PER_PLAYER = 30
+
 RegisterServerEvent("qb-clothes:saveOutfit", function(outfitName, model, skinData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- 🔒 三个参数都来自客户端：名字要短、模型要合法、皮肤要有界；
+    --    而且必须有条数上限 —— 原来可以无限插 `player_outfits`（每次插入还会全表回读）。
+    if type(outfitName) ~= 'string' or #outfitName == 0 or #outfitName > 48 then return end
+    if not isValidSkinPayload(model, skinData) then return end
+    local count = MySQL.scalar.await('SELECT COUNT(*) FROM player_outfits WHERE citizenid = ?', { Player.PlayerData.citizenid }) or 0
+    if count >= MAX_OUTFITS_PER_PLAYER then
+        TriggerClientEvent('QBCore:Notify', src, ('最多保存 %d 套服装'):format(MAX_OUTFITS_PER_PLAYER), 'error')
+        return
+    end
     if model ~= nil and skinData ~= nil then
         local outfitId = "outfit-"..math.random(1, 10).."-"..math.random(1111, 9999)
         MySQL.insert('INSERT INTO player_outfits (citizenid, outfitname, model, skin, outfitId) VALUES (?, ?, ?, ?, ?)', {
@@ -136,6 +168,8 @@ end)
 RegisterServerEvent("qb-clothing:server:removeOutfit", function(outfitName, outfitId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    if type(outfitName) ~= 'string' or type(outfitId) ~= 'string' then return end
     MySQL.query('DELETE FROM player_outfits WHERE citizenid = ? AND outfitname = ? AND outfitId = ?', {
         Player.PlayerData.citizenid,
         outfitName,
