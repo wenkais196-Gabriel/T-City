@@ -1111,6 +1111,15 @@
       "file": "[qb]/qb-weapons/server/main.lua",
       "owner": "qb-weapons",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weathersync:server:RequestStateSync",
+      "category": "civilian",
+      "reason": "把当前天气/时间单播同步给全服（只读投影，不改状态）；按玩家 5 秒冷却 + source 类型校验，避免连点刷包。",
+      "evidence": "server.lua RequestStateSync — type(src) 校验 + lastStateSync[src] 5s 冷却 + TriggerClientEvent(-1)",
+      "file": "[qb]/qb-weathersync/server/server.lua",
+      "owner": "qb-weathersync",
+      "expires": "2027-03-31"
     }
   ]
 }
