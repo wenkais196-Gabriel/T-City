@@ -96,6 +96,13 @@ def double_apply(keep_db: bool = False) -> tuple[int, list[str]]:
     if seeded.returncode != 0:
         raise EnvironmentBroken(f"基线 schema 铺设失败：{(seeded.stderr or '').strip()[:200]}")
 
+    # 基线 dump 里已经带了 v2.1 建的 phone_number 与 idx_players_phone（那份 dump 是"跑完迁移之后"
+    # 的状态）。不先把它们去掉，v2.1 的 DDL 分支就只会走 `DO 0`，等于没验 —— 而这正是它原来
+    # 第二次执行报 `ERROR 1060` 的地方。
+    run_sql(binary, user, password, SCRATCH_DB,
+            "ALTER TABLE players DROP INDEX idx_players_phone;"
+            "ALTER TABLE players DROP COLUMN phone_number;")
+
     files = sorted(MIGRATIONS.glob("*.sql"),
                    key=lambda path: [int(part) for part in re.match(r"^v([\d.]+)_", path.name).group(1).split(".")])
     errors: list[str] = []

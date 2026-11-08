@@ -16,7 +16,7 @@ SET @has_phone_column := (
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'players' AND COLUMN_NAME = 'phone_number'
 );
 SET @stmt_phone_column := IF(@has_phone_column = 0,
-    'ALTER TABLE players ADD COLUMN phone_number VARCHAR(20) GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(charinfo, "''$.phone''"))) VIRTUAL',
+    'ALTER TABLE players ADD COLUMN phone_number VARCHAR(20) GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(charinfo, ''$.phone'')) ) VIRTUAL',
     'DO 0');
 PREPARE stmt_phone_column FROM @stmt_phone_column;
 EXECUTE stmt_phone_column;

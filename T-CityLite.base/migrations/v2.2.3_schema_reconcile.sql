@@ -2,7 +2,7 @@
 -- v2.2 Schema Reconcile — story-engine 索引/唯一约束补齐
 -- ==============================================================
 -- 背景：线上库的 player_choices / story_completions 曾手工调整过，
---       与 v0.7_story_engine.sql 产生漂移。本迁移幂等补齐：
+--       与 v0.7.1_story_engine.sql 产生漂移。本迁移幂等补齐：
 --         player_choices     uq_choice(citizenid, decision_id) / idx_arc(arc_id)
 --         story_completions  uq_completion(citizenid, arc_id)
 --
@@ -10,7 +10,7 @@
 --   SELECT citizenid, arc_id, COUNT(*) c FROM story_completions
 --     GROUP BY citizenid, arc_id HAVING c > 1;
 --
--- Run: mysql -u root -p <数据库名> < v2.2_schema_reconcile.sql
+-- Run: mysql -u root -p <数据库名> < v2.2.3_schema_reconcile.sql
 
 DROP PROCEDURE IF EXISTS tcity_add_index_if_missing;
 
