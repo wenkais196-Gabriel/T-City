@@ -690,6 +690,42 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-cityhall:server:ApplyJob",
+      "file": "[qb]/qb-cityhall/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能在市政厅申请工作（玩法本身）。handler 内：距离用**服务端配置里**的市政厅坐标（原来用客户端传的坐标，等于可以远程申请）、职业必须在 `Config.AvailableJobs` 且存在于 `QBCore.Shared.Jobs`、且必须有 grade 0。",
+      "evidence": "main.lua ApplyJob — 遍历 Config.Cityhalls[*].coords < 20m / availableJobs[job] / JobInfo.grades['0']",
+      "owner": "qb-cityhall",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-cityhall:server:getIDs",
+      "file": "[qb]/qb-cityhall/server/main.lua",
+      "category": "self_scoped",
+      "reason": "发新手三件套（phone / id_card / driver_license）。原来任何玩家可以反复触发 → 无限刷物品；现在按背包里是否已有该物品逐个跳过，只补缺的那几件。",
+      "evidence": "main.lua getIDs → giveStarterItems — alreadyHas(Player, v.item) 跳过已持有 / AddItem(src, ...)",
+      "owner": "qb-cityhall",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-cityhall:server:requestId",
+      "file": "[qb]/qb-cityhall/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能在市政厅买证件（玩法本身）。handler 内：hall 经 tonumber 且必须命中 `Config.Cityhalls`、item 必须是字符串；已持有同类实体证件会拒；先 `GrantLicense` 授权、再扣现金、`AddItem` 失败自动退款。",
+      "evidence": "main.lua requestId — tonumber(hall) / type(cityhall) ~= 'table' / RemoveMoney('cash', itemInfo.cost) / 失败 AddMoney 退款",
+      "owner": "qb-cityhall",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-cityhall:server:sendDriverTest",
+      "file": "[qb]/qb-cityhall/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能向驾校发求助邮件（玩法本身）。handler 内：`instructors` 必须是表、最多 10 条、每条 citizenid 是 ≤32 的字符串、每人 60 秒一次 —— 原来可以塞任意长度给离线玩家无限写邮件。",
+      "evidence": "main.lua sendDriverTest — type(instructors) ~= 'table' / driverTestCooldown 60s / math.min(#instructors, 10)",
+      "owner": "qb-cityhall",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "qb-clothes:loadPlayerSkin",
       "file": "[qb]/qb-clothing/server/main.lua",
       "category": "self_scoped",

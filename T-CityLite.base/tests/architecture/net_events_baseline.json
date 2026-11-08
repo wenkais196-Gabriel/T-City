@@ -22,15 +22,15 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 91,
-      "allowlisted": 82,
-      "unguarded": 43
+      "guarded": 92,
+      "allowlisted": 86,
+      "unguarded": 38
     },
     "other": {
-      "events": 76,
-      "guarded": 1,
+      "events": 75,
+      "guarded": 5,
       "allowlisted": 6,
-      "unguarded": 69
+      "unguarded": 64
     }
   },
   "resources": {
@@ -208,10 +208,10 @@
     "interact-sound": {
       "batch": "other",
       "group": "[standalone]",
-      "events": 5,
-      "guarded": 0,
+      "events": 4,
+      "guarded": 4,
       "allowlisted": 0,
-      "unguarded": 5,
+      "unguarded": 0,
       "started": true
     },
     "money": {
@@ -317,9 +317,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 5,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 5,
+      "guarded": 1,
+      "allowlisted": 4,
+      "unguarded": 0,
       "started": true
     },
     "qb-clothing": {
@@ -636,13 +636,6 @@
     "hardcap": [
       "hardcap:playerActivated"
     ],
-    "interact-sound": [
-      "InteractSound_SV:PlayOnAll",
-      "InteractSound_SV:PlayOnOne",
-      "InteractSound_SV:PlayOnSource",
-      "InteractSound_SV:PlayWithinDistance",
-      "InteractSound_SV:PlayWithinDistance"
-    ],
     "money": [
       "money:requestDisplay"
     ],
@@ -706,13 +699,6 @@
     ],
     "qb-adminmenu": [
       "qb-admin:server:GetPlayersForBlips"
-    ],
-    "qb-cityhall": [
-      "QBCore:Client:UpdateObject",
-      "qb-cityhall:server:ApplyJob",
-      "qb-cityhall:server:getIDs",
-      "qb-cityhall:server:requestId",
-      "qb-cityhall:server:sendDriverTest"
     ],
     "qb-doorlock": [
       "qb-doorlock:server:removeLockpick",
@@ -885,14 +871,6 @@
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
     {
-      "resource": "interact-sound",
-      "batch": "other",
-      "unguarded": 5,
-      "owner": "interact-sound",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
       "resource": "money",
       "batch": "other",
       "unguarded": 1,
@@ -961,14 +939,6 @@
       "batch": "qb",
       "unguarded": 1,
       "owner": "qb-adminmenu",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "qb-cityhall",
-      "batch": "qb",
-      "unguarded": 5,
-      "owner": "qb-cityhall",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
     },
