@@ -323,7 +323,7 @@ python3 tests/check_bus_wiring.py       # 期望：0 ERROR（WARN 可接受）
 
 # 2) 数据库
 mysql -u ... < migrations/v0.7_quest_system.sql
-mysql -u ... < migrations/v0.7_story_engine.sql
+mysql -u ... < migrations/v0.7.1_story_engine.sql
 mysql -u ... < migrations/v0.8_ownership_engine.sql
 # 核对：SHOW TABLES LIKE 'player_quests'; 等
 ```

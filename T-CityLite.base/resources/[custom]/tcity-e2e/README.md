@@ -231,7 +231,7 @@ Runner 仍覆盖原 harness 的 21 项检查语义（检查名可能带 persona 
   `TriggerClientEvent` 会被丢弃。测试只覆盖服务端/DB 路径。
 - 断言 SQL 只允许 `SELECT`；runner 不执行写 SQL 测试（清理和 `advance_clock`
   调用的虚拟时钟 export 除外）。测试库需已执行
-  `migrations/v0.7_quest_system.sql`、`v0.7_story_engine.sql`、
+  `migrations/v0.7_quest_system.sql`、`v0.7.1_story_engine.sql`、
   `v0.7.2_schema_reconcile.sql` 等迁移。
 - 单次运行最多 100 个 fake player（source 9001–9100）。同一资源实例只应运行一次，
   不要并发 `ensure tcity-e2e`。

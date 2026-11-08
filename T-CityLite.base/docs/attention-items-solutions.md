@@ -29,7 +29,7 @@ L3 建议固定 6 条脚本：车店购车/分期/试驾、车库取车、中控
 - 已提供 `tests/fixtures/tcity_schema.sql`（仅结构，无数据），可导入一次性库。
 - CI 新增 MariaDB 10.11 service，导入 fixture 后跑全量 **418 passed**。
 - 本地不要把测试指向开发库；用 `TCITY_DB_NAME=<临时库>` 隔离。
-- 新增 `migrations/v2.2_schema_reconcile.sql`，幂等补齐 story-engine 唯一约束；执行前先查重复数据。
+- 新增 `migrations/v2.2.3_schema_reconcile.sql`，幂等补齐 story-engine 唯一约束；执行前先查重复数据。
 
 ## 3. 构建产物
 
