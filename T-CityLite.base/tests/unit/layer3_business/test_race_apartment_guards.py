@@ -54,16 +54,21 @@ def test_race_finish_settles_once_and_survives_bad_payloads():
     data = _run("qb-lapraces", "lapraces_probe.lua")
     assert "HANDLER_ERROR" not in data, f"handler 抛错：{data.get('HANDLER_ERROR')}"
 
-    # 未开放的赛道：不进 racer 表（不是"没崩就算过"）
+    # 入口：未开放不能加入（断言 racer 真的没进去）、没开赛不能报成绩、开赛后能加入
     assert data["JOINED_WHEN_CLOSED"][0] == "0", "未开放的赛道仍然把车手加进去了"
-    # 没开赛就报成绩：拒绝
     assert data["RECORD_WRITES_WITHOUT_START"][0] == "0", "没 StartRace 也能写成绩"
-    # 开赛后正常加入
     assert data["JOIN_WORKS_AFTER_START"][0] == "true", "开赛后车手加不进去"
 
-    # 成绩：0.001 拒绝、圈数不符拒绝、合法多圈通过且最佳圈不被改写、重复结算拒绝
+    # 伪造成绩：0.001 / 最佳圈大于平均圈 / 圈数不符，全部拒绝
     assert data["RECORD_WRITES_CHEAT"][0] == "0", "BestLap=0.001 仍能写纪录"
+    assert data["RECORD_WRITES_BESTLAP_OVER_AVERAGE"][0] == "0", "最佳圈比平均圈还慢也能写纪录"
     assert data["RECORD_WRITES_LAPS_MISMATCH"][0] == "0", "客户端少报圈数能绕过均值校验"
-    assert data["RECORD_WRITES_NORMAL"][0] == "1", "合法完赛没有结算（Finished/FinishHandled 又打架了？）"
-    assert data["RECORD_TIME"][0] == "45", "合法的 45 秒最佳圈被改写（上一版 BestLap/TotalLaps 双重除法）"
+
+    # 合法成绩（10 圈 / 200 秒 / 最佳圈 18 秒）：写一次、原样保留、不可重放
+    assert data["RECORD_WRITES_NORMAL"][0] == "1", "合法完赛没有结算"
+    assert data["RECORD_TIME"][0] == "18", "合法最佳圈被改写"
     assert data["RECORD_WRITES_REPLAY"][0] == "0", "重复 FinishPlayer 二次结算"
+
+    # 清理：全员完赛 / 反序离开后，作者都能重新开放同一条赛道（比赛没有卡死）
+    assert data["REOPEN_AFTER_SETTLE"][0] == "true", "全员完赛后比赛没被清掉（赛道永久卡在运行中）"
+    assert data["REOPEN_AFTER_LEAVE"][0] == "true", "反序离开后比赛没被清掉（赛道永久卡在运行中）"

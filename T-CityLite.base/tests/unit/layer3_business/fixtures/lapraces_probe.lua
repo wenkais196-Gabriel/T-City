@@ -1,7 +1,9 @@
 -- tests/unit/layer3_business/fixtures/lapraces_probe.lua
--- 真加载 qb-lapraces 的 config.lua + server/main.lua，按客户端真实顺序触发事件，
--- 检查：未开放不能加入 / 没开赛不能报成绩 / 0.001 不能刷记录 / 合法多圈成绩被保留 /
---      重复结算不会二次写库 / 离开时的 DNF 只补给没完赛的人。
+-- 真加载 qb-lapraces 的 config.lua + server/main.lua，按客户端真实顺序触发事件。
+-- 关注三件事：
+--   1) 未开放 / 未开赛 / 圈数不符 / 0.001 最佳圈 / 大于平均圈的最佳圈 → 都不能写成绩；
+--   2) 合法成绩只写一次，且最佳圈原样保留；
+--   3) 全员完赛后比赛要真的被清掉（可以用"作者能否重新开放同一条赛道"来观察）。
 
 local RES = arg[1] or error('need resource dir')
 
@@ -12,7 +14,7 @@ local function emit(...)
     OUT[#OUT + 1] = table.concat(parts, '|')
 end
 
-local state = { now = 0, inserts = {}, updates = {}, notifications = {}, clientEvents = {}, lastEncoded = nil }
+local state = { now = 0, inserts = {}, updates = {}, clientEvents = {}, lastEncoded = nil }
 
 local function mkplayer(source, cid)
     return {
@@ -57,9 +59,6 @@ RegisterServerEvent = RegisterNetEvent
 AddEventHandler = function(name, fn) handlers[name] = fn end
 TriggerClientEvent = function(name, target, ...)
     state.clientEvents[#state.clientEvents + 1] = { name = name, target = target, args = { ... } }
-    if name == 'QBCore:Notify' then
-        state.notifications[#state.notifications + 1] = tostring((...))
-    end
 end
 CreateThread = function() end
 SetTimeout = function() end
@@ -68,15 +67,11 @@ GetGameTimer = function() return state.now end
 GetConvar = function(_, default) return default end
 vector2 = function(x, y) return { x = x, y = y } end
 vector3 = function(x, y, z) return { x = x, y = y, z = z } end
-json = {
-    encode = function(value) state.lastEncoded = value; return 'encoded' end,
-    decode = function() return {} end,
-}
+json = { encode = function(value) state.lastEncoded = value; return 'encoded' end, decode = function() return {} end }
 
 local function dbRunner(kind)
     return function(...)
-        local args = { ... }
-        state[kind][#state[kind] + 1] = args
+        state[kind][#state[kind] + 1] = { ... }
         return 1
     end
 end
@@ -117,10 +112,10 @@ load_lua(RES .. '/config.lua', 'config.lua')
 Config.WhitelistedCreators = { 'HOSTCID' }
 load_lua(RES .. '/server/main.lua', 'main.lua')
 
-local function countClientEvents(name)
+local function joinEvents()
     local n = 0
     for _, event in ipairs(state.clientEvents) do
-        if event.name == name then n = n + 1 end
+        if event.name == 'qb-lapraces:client:JoinRace' then n = n + 1 end
     end
     return n
 end
@@ -131,64 +126,77 @@ fireAs(1, 'qb-lapraces:server:SaveRace', {
     Checkpoints = { [1] = { offset = { x = 0, y = 0, z = 0 }, coords = { x = 1, y = 2, z = 3 } } },
     RaceDistance = 1234,
 })
-local insertArgs = state.inserts[#state.inserts]
-local raceId = insertArgs[2][5]
+local raceId = state.inserts[#state.inserts][2][5]
 emit('RACE_ID', raceId ~= nil)
 
--- ── 场景 1：未开放的赛道不能 Join（要断言"真的没加进去"，不是只看没崩）──
+-- ── 1. 未开放的赛道不能加入 ──
 emit('SCENARIO', 'join-not-open')
-local joinsBefore = countClientEvents('qb-lapraces:client:JoinRace')
+local joinsBefore = joinEvents()
 fireAs(2, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
-emit('JOINED_WHEN_CLOSED', countClientEvents('qb-lapraces:client:JoinRace') - joinsBefore)
+emit('JOINED_WHEN_CLOSED', joinEvents() - joinsBefore)
 
--- ── 场景 2：没开赛不能报成绩（新建一条、加入、不 StartRace 直接结算）──
+-- ── 2. 没开赛不能报成绩 ──
 emit('SCENARIO', 'finish-without-start')
 fireAs(1, 'qb-lapraces:server:SetupRace', raceId, 10)
-local updatesBefore2 = #state.updates
+local updatesBefore = #state.updates
 fireAs(2, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
-fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 45)
-emit('RECORD_WRITES_WITHOUT_START', #state.updates - updatesBefore2)
+fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 18)
+emit('RECORD_WRITES_WITHOUT_START', #state.updates - updatesBefore)
 
--- ── 场景 3：开赛 → 两个车手加入 ──
+-- ── 3. 开赛后加入 ──
 emit('SCENARIO', 'race-running')
 fireAs(1, 'qb-lapraces:server:StartRace', raceId)
 fireAs(3, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
-emit('JOIN_WORKS_AFTER_START', countClientEvents('qb-lapraces:client:JoinRace') > joinsBefore)
-state.now = 210 * 1000   -- 服务端计时推进 210 秒
+emit('JOIN_WORKS_AFTER_START', joinEvents() > joinsBefore)
+state.now = 205 * 1000
 
--- ── 场景 4：0.001 最佳圈（同样在真实时长内）必须被拒 ──
-emit('SCENARIO', 'cheat-bestlap')
-local updatesBefore4 = #state.updates
+-- ── 4. 各类伪造成绩必须被拒 ──
+emit('SCENARIO', 'cheat-payloads')
+local b = #state.updates
 fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 0.001)
-emit('RECORD_WRITES_CHEAT', #state.updates - updatesBefore4)
+emit('RECORD_WRITES_CHEAT', #state.updates - b)
+b = #state.updates
+fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 45)  -- 45 > 平均 20
+emit('RECORD_WRITES_BESTLAP_OVER_AVERAGE', #state.updates - b)
+b = #state.updates
+fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 2, 18)   -- 圈数不符
+emit('RECORD_WRITES_LAPS_MISMATCH', #state.updates - b)
 
--- ── 场景 5：圈数不一致（服务端登记 10 圈，客户端报 2 圈）必须被拒 ──
-emit('SCENARIO', 'laps-mismatch')
-local updatesBefore5 = #state.updates
-fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 2, 45)
-emit('RECORD_WRITES_LAPS_MISMATCH', #state.updates - updatesBefore5)
-
--- ── 场景 6：合法多圈成绩（10 圈 / 总 200 秒 / 最佳圈 45 秒）必须被接受且不被改写 ──
+-- ── 5. 合法成绩（10 圈 / 200 秒 / 最佳圈 18 秒）──
 emit('SCENARIO', 'finish-normal')
-local updatesBefore6 = #state.updates
-fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 45)
-emit('RECORD_WRITES_NORMAL', #state.updates - updatesBefore6)
--- Records 表的字段名是 Time（= 本次写入的圈速），不是 BestLap
+b = #state.updates
+fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 18)
+emit('RECORD_WRITES_NORMAL', #state.updates - b)
 emit('RECORD_TIME', (state.lastEncoded and state.lastEncoded.Time) or 'nil')
 
--- ── 场景 7：重复结算（还有另一个未完赛车手，所以比赛没结束）必须被拒 ──
+-- ── 6. 重复结算（还有第三名车手未完赛）──
 emit('SCENARIO', 'finish-replay')
-local updatesBefore7 = #state.updates
-fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 45)
-emit('RECORD_WRITES_REPLAY', #state.updates - updatesBefore7)
+b = #state.updates
+fireAs(2, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 18)
+emit('RECORD_WRITES_REPLAY', #state.updates - b)
 
--- ── 场景 8：离开 —— 已完赛的人不补 DNF；未完赛的人补；RaceName 回退不崩 ──
-emit('SCENARIO', 'leave-finished')
-fireAs(2, 'qb-lapraces:server:LeaveRace', { RaceId = raceId })
-fireAs(3, 'qb-lapraces:server:LeaveRace', { RaceId = raceId, RaceData = { RaceName = 'Probe Circuit' } })
-fireAs(1, 'qb-lapraces:server:LeaveRace', { RaceData = { RaceName = 'Probe Circuit' } })
+-- ── 7. 全员完赛 → 比赛必须被清掉（用"作者能否重新开放同一条赛道"观察）──
+emit('SCENARIO', 'all-finished-cleanup')
+fireAs(3, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 18)
+local joinsAfterSettle = joinEvents()
+fireAs(1, 'qb-lapraces:server:SetupRace', raceId, 10)
+fireAs(2, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
+emit('REOPEN_AFTER_SETTLE', joinEvents() > joinsAfterSettle)
 
--- ── 场景 9：坏包 ──
+-- ── 8. 反序离开：未完赛者先走（DNF），已完赛者后走 → 仍要清掉比赛 ──
+emit('SCENARIO', 'leave-reverse-order')
+fireAs(1, 'qb-lapraces:server:StartRace', raceId)
+fireAs(3, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
+state.now = state.now + 205 * 1000
+fireAs(2, 'qb-lapraces:server:LeaveRace', { RaceId = raceId })                 -- 未完赛：DNF
+fireAs(3, 'qb-lapraces:server:FinishPlayer', { RaceId = raceId }, 200, 10, 18)
+fireAs(3, 'qb-lapraces:server:LeaveRace', { RaceId = raceId })                 -- 已完赛：不补 DNF，但要清理
+local joinsAfterLeave = joinEvents()
+fireAs(1, 'qb-lapraces:server:SetupRace', raceId, 10)
+fireAs(2, 'qb-lapraces:server:JoinRace', { RaceId = raceId })
+emit('REOPEN_AFTER_LEAVE', joinEvents() > joinsAfterLeave)
+
+-- ── 9. 坏包 ──
 emit('SCENARIO', 'bad-payloads')
 fireAs(2, 'qb-lapraces:server:CancelRace', {})
 fireAs(2, 'qb-lapraces:server:UpdateRacerData', 12345, 1, 1, false)
