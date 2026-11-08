@@ -303,13 +303,6 @@ RegisterNetEvent('qb-inventory:server:updateDrop', function(dropId, coords)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
     if type(dropId) ~= 'string' or not Drops[dropId] then return end
-    -- 🔒 只有掉落物的创建者（或管理员）能挪它：原来任何玩家都能把别人的包拖走，
-    --    每次 5 米、次数不限。
-    local drop = Drops[dropId]
-    if drop.owner and drop.owner ~= src
-        and not QBCore.Functions.HasPermission(src, 'admin') then
-        return
-    end
     -- 坐标必须是 vector3 类型且分量在合理范围内（FiveM 地图边界: -4000 ~ 8000）
     if type(coords) ~= 'vector3' and type(coords) ~= 'table' then return end
     local cx, cy, cz = coords.x or coords[1], coords.y or coords[2], coords.z or coords[3]
@@ -322,6 +315,22 @@ RegisterNetEvent('qb-inventory:server:updateDrop', function(dropId, coords)
     local dy = playerCoords.y - cy
     local dz = playerCoords.z - cz
     if dx*dx + dy*dy + dz*dz > 25.0 then return end -- 5m 平方
+    -- 🔒 归属判据用**实体真实位置**，不用记账：任何玩家都能把包捡起来带走（这是玩法），
+    --    所以"只有创建者能挪"会堵死正常搬运；而只校验"玩家 ↔ 声称坐标"又会让改过的客户端
+    --    把别处的包挪到自己脚下（随后 openDrop 的距离校验就形同虚设 → 远程开包拿东西）。
+    local drop = Drops[dropId]
+    local entity = drop.entityId and NetworkGetEntityFromNetworkId(drop.entityId) or nil
+    if entity and entity ~= 0 and DoesEntityExist(entity) then
+        local entityCoords = GetEntityCoords(entity)
+        local ex, ey, ez = tonumber(entityCoords.x), tonumber(entityCoords.y), tonumber(entityCoords.z)
+        if ex then
+            local ddx, ddy, ddz = ex - cx, ey - cy, ez - cz
+            if ddx * ddx + ddy * ddy + ddz * ddz > 25.0 then return end
+        end
+    elseif drop.owner and drop.owner ~= src
+        and not QBCore.Functions.HasPermission(src, 'admin') then
+        return  -- 实体已不存在：退回记账判据
+    end
     Drops[dropId].coords = vector3(cx, cy, cz)
 end)
 

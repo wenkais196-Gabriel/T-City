@@ -100,7 +100,12 @@ vector2 = function(x, y) return { x = x, y = y } end
 vector3 = vec3
 vector4 = function(x, y, z, w) local v = vec3(x, y, z); v.w = w; return v end
 state.coords = vec3(0.0, 0.0, 0.0)
-GetEntityCoords = function(entity) return state.coords end
+-- 实体坐标：掉落物实体用自己的位置（模拟"包被实体带到哪就在哪"）
+state.entityCoords = {}
+GetEntityCoords = function(entity)
+    if entity and state.entityCoords[entity] then return state.entityCoords[entity] end
+    return state.coords
+end
 NetworkGetEntityFromNetworkId = function(netId) return netId end
 NetworkGetNetworkIdFromEntity = function(entity) return entity end
 DoesEntityExist = function() return true end
@@ -246,12 +251,17 @@ emit('DROP_LOCKED_BY_OPENER', tostring(state.playerInventoryOpened == nil))
 clock = clock + 200
 fireAs(2, 'qb-inventory:server:openDrop', 'drop-1001')
 emit('DROP_TAKEOVER_AFTER_TIMEOUT', tostring(state.playerInventoryOpened ~= nil))
--- 2 号不能把 1 号的包拖走
+-- 包实体在 (0,0,0)：把服务端坐标挪到自己脚下（远处）必须被拒
 local originalCoords = Drops['drop-1001'].coords
-fireAs(2, 'qb-inventory:server:updateDrop', 'drop-1001', vec3(1.0, 1.0, 0.0))
+state.entityCoords[1001] = vec3(0.0, 0.0, 0.0)
+state.coords = vec3(5.0, 5.0, 0.0)
+fireAs(2, 'qb-inventory:server:updateDrop', 'drop-1001', vec3(5.0, 5.0, 0.0))
 emit('DROP_MOVE_FOREIGN_BLOCKED', tostring(Drops['drop-1001'].coords == originalCoords))
-fireAs(1, 'qb-inventory:server:updateDrop', 'drop-1001', vec3(1.0, 1.0, 0.0))
-emit('DROP_MOVE_OWNER_ALLOWED', tostring(Drops['drop-1001'].coords ~= originalCoords))
+-- 实体就在声称坐标旁边，且玩家本人也站在那里（正常"捡起再放下"）→ 放行，哪怕不是创建者
+state.entityCoords[1001] = vec3(1.0, 1.0, 0.0)
+state.coords = vec3(1.2, 1.2, 0.0)
+fireAs(2, 'qb-inventory:server:updateDrop', 'drop-1001', vec3(1.0, 1.0, 0.0))
+emit('DROP_MOVE_CARRIER_ALLOWED', tostring(Drops['drop-1001'].coords ~= originalCoords))
 
 -- ── 6. snowball：冷却 ──
 emit('SCENARIO', 'snowball')
