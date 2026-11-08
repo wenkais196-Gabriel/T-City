@@ -370,6 +370,19 @@ AddEventHandler('QBCore:Server:PlayerLoaded', function(player)
     end
 end)
 
+-- 资源重启时已经在线的玩家不会触发 PlayerLoaded → 启动时补一轮，避免反查表是空的
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    CreateThread(function()
+        Wait(2000)
+        for _, player in pairs(QBCore.Functions.GetQBPlayers() or {}) do
+            if player and player.PlayerData then
+                srcToCitizenid[player.PlayerData.source] = player.PlayerData.citizenid
+            end
+        end
+    end)
+end)
+
 local function HasRecentStoreRobbery(citizenid, safeKey)
     local record = recentStoreRobberies[safeKey]
     if not record or not citizenid then return false end
