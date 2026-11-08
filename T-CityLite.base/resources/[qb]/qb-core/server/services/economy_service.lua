@@ -16,8 +16,13 @@ local EconomyService = {}
 
 -- security_service.lua 在 fxmanifest 里排在前面，且在文件尾部就挂到 _G.Bus.SecurityService；
 -- 这里直接取，**不写 fallback** —— 有 fallback 就等于有了第二份金额规则。
-local Security = assert(_G.Bus and _G.Bus.SecurityService,
-    '[economy_service] SecurityService 未注册：检查 fxmanifest 加载顺序')
+local Security = _G.Bus and _G.Bus.SecurityService
+if type(Security) ~= 'table' or type(Security.ValidateAmount) ~= 'function' then
+    -- 不 assert：assert 会让整个 player.lua（QBCore.Player 全部定义）加载失败，
+    -- 故障面远大于经济模块。改成"告警 + 全拒绝"桩 —— 宁可一分钱都动不了，也不要未校验地写钱。
+    print('[economy_service] ⚠️ SecurityService 未注册（检查 fxmanifest 加载顺序）—— 本会话拒绝所有金额变动')
+    Security = { ValidateAmount = function() return false end }
+end
 
 -- ── 内部辅助 ──────────────────────────────────────────────────────────
 

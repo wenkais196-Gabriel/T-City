@@ -9,8 +9,13 @@ local resourceName = GetCurrentResourceName()
 
 -- 金额校验的唯一实现（security_service.lua 在 fxmanifest 里先加载，文件尾部就挂到 _G.Bus）；
 -- 三个写入口的 offline 分支与 Bus 缺失时的 fallback 分支都走它，不再各写一份。
-local Security = assert(_G.Bus and _G.Bus.SecurityService,
-    '[player] SecurityService 未注册：检查 fxmanifest 加载顺序')
+local Security = _G.Bus and _G.Bus.SecurityService
+if type(Security) ~= 'table' or type(Security.ValidateAmount) ~= 'function' then
+    -- 不 assert：assert 会让整个 player.lua（QBCore.Player 全部定义）加载失败，
+    -- 故障面远大于经济模块。改成"告警 + 全拒绝"桩 —— 宁可一分钱都动不了，也不要未校验地写钱。
+    print('[player] ⚠️ SecurityService 未注册（检查 fxmanifest 加载顺序）—— 本会话拒绝所有金额变动')
+    Security = { ValidateAmount = function() return false end }
+end
 function QBCore.Player.Login(source, citizenid, newData)
     if source and source ~= '' then
         if citizenid then

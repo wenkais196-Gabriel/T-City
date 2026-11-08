@@ -170,10 +170,14 @@ RegisterNetEvent('qb-cityhall:server:requestId', function(item, hall)
         end
     end
 
-    if not Player.Functions.RemoveMoney('cash', itemInfo.cost, 'cityhall id') then
-        TriggerClientEvent('QBCore:Notify', src,
-            ('You don\'t have enough money on you, you need %s cash'):format(itemInfo.cost), 'error')
-        return
+    -- cost 为 0 是合法的（免费项目）：P1-5 之后 RemoveMoney(0) 返回 false（金额必须 > 0），
+    -- 不判这一下会把免费项目卡成"钱不够"。
+    if (tonumber(itemInfo.cost) or 0) > 0 then
+        if not Player.Functions.RemoveMoney('cash', itemInfo.cost, 'cityhall id') then
+            TriggerClientEvent('QBCore:Notify', src,
+                ('You don\'t have enough money on you, you need %s cash'):format(itemInfo.cost), 'error')
+            return
+        end
     end
 
     local info = {}

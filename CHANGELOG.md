@@ -317,7 +317,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gate_coverage` 未证明数仍为 276。`money_format_baseline.json` 因删掉一行 `$%d` 的 SECURITY 日志
   同步重生成（债 68 → 67）。真机（0 玩家在线）：`start qb-core` 后 `[SecurityService] ✅ Registered` →
   `[EconomyService] Registered` 顺序正确、无 assert 失败，`resync_modules.ps1` 补回连带资源后 89 个资源
-  0 `SCRIPT ERROR`。1322 passed / 147 skipped。
+  0 `SCRIPT ERROR`。CC 复核的两个跟踪项也一并处理：① `player.lua` / `economy_service.lua` 里原来的
+  `assert(_G.Bus.SecurityService)` 改成「告警 + `ValidateAmount` 全拒绝桩」—— assert 会让整个
+  player.lua（`QBCore.Player` 全部定义）加载失败，故障面远大于经济模块；② `qb-cityhall` 的
+  `RemoveMoney('cash', itemInfo.cost)` 加 `cost > 0` 守卫（cost 为 0 是合法的免费项目，
+  收紧后 `RemoveMoney(0)` 返回 false 会把它卡成"钱不够"）。1322 passed / 147 skipped。
 
 - **P1-3 批 20：qb-weed 5 + qb-streetraces 3 —— `[qb]` 归零**（2026-11-08）：qb-weed 先修了一个
   "这个资源根本跑不起来"的 bug —— `local plantCache = {}` 声明在文件**末尾**（第 126 行），而
