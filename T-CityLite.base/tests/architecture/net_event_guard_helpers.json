@@ -395,5 +395,20 @@
       ],
       "why": "house/cabin 来自客户端，直接拿去索引 Config.Houses 会抛错打崩事件线程，也可能指向不存在的家具去刷 searched 状态。"
     }
+  },
+  "interact-sound": {
+    "canPlay": {
+      "defined_at": "interact-sound/server/main.lua",
+      "requires_code": [
+        "soundFile:match(",
+        "tonumber(soundVolume)",
+        "GetGameTimer()",
+        "_lastPlay[key]"
+      ],
+      "requires_raw": [
+        "^[A-Za-z0-9_%-]+$"
+      ],
+      "why": "声音参数全来自客户端：文件名白名单 + 音量 0..1 + 按 (玩家, 文件) 100ms 限流，防止全服刷声。"
+    }
   }
 }
