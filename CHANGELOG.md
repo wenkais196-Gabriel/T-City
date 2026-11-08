@@ -301,6 +301,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`gate_mutation_smoke.py` 撤注入后清理新建的空目录**：变异用例把文件写进不存在的资源目录时，`unlink` 只删文件，空目录会让 `test_no_orphan_scripts`（每个 `[custom]` 目录必须有 fxmanifest）误红。
 
 ### Fixed
+
+- **P1-3 批 9：qb-ambulancejob 14 条**（2026-11-08）：这个资源之前已经加过 `CanRevive`、
+  `SendToBed` 索引校验与 30 秒限流、"无伤不得自报死亡"，剩下 14 条里 9 条是真洞：
+  ① `qb-ambulancejob:server:stash` 只看客户端菜单上的 job 过滤条件（可绕过）→ **任何玩家都能打开
+  救护队储物柜**，改成服务端确认在职 EMS；② `LeaveBed(id, hospitalIndex)` 向全服广播
+  `SetBed(..., false, ...)` 且无归属校验 → 任何人传任意床号就能把全服的床标成空闲/赶人，改成
+  服务端按 `BedOccupant[院:床] = src` 记账，只有占用者本人或收床的在职 EMS 能放；③
+  `resetHungerThirst` 等于免费把饥饿/口渴拉满，改成只认服务端刚复活/送进院的玩家
+  （`markRevived` 在 RevivePlayer / RespawnAtHospital / txAdmin heal 三处写入，窗口 180 秒）；
+  ④ `ambulanceAlert(text)` 文案来自客户端且无冷却 → 一人刷爆所有在职 EMS，加 string 校验 +
+  截断 200 字 + 15 秒按玩家冷却；⑤ `SendDoctorAlert` 只有一个全局开关，谁先按下谁就能把它锁
+  `Config.DocCooldown` 分钟 → 院名必须命中配置 + 按玩家 30 秒冷却；⑥ `CanHelp` 任何玩家都能
+  替人回答"可以施救" → 只认 `UseFirstAid` 写入的 `PendingAid` 回执；⑦ `RemoveDoctor` 按客户端
+  传的 `job == 'ambulance'` 减 `doctorCount` → 平民能把医生数刷到 0，改成只认服务端登记过的
+  在班 EMS；⑧ `SyncInjuries` / `SetWeaponDamage` 写自己 metadata 但内容无界（`isBleeding = 1e9`）
+  → 类型校验 + 数值夹取。
+  EMS 判定抽成 `isOnDutyEMS` 并登记进 `net_event_guard_helpers.json`（闸门按 `if not isOnDutyEMS(...)`
+  形状核对）。测试：探针真加载该资源的 config.lua 与 server/main.lua，旧版实测
+  `STASH_CIVILIAN_BLOCKED=false`、`BED_RELEASED_BY_STRANGER=1`、`HUNGER_OUTSIDE_WINDOW_BLOCKED=false`、
+  `ALERT_COOLDOWN_BLOCKED=false`、`DOCTOR_ALERT_FAKE_NAME_IGNORED=false`、
+  `CANHELP_WITHOUT_PENDING=false`、`DOCTOR_COUNT_AFTER_CIVILIAN=0`、`INJURIES_BLEEDING_CLAMPED=false`。
+  数字：未登记 **164 → 149**（qb 82 → 68，allowlist 113 → 123）；`1249 passed`。
 - **P1-3 批 8：qb-garages 6 + qb-weathersync 7**（2026-11-08）：qb-garages 是货真价实的洞 ——
   取车回调 `spawnvehicle(plate, vehicle, coords)` 三个参数全来自客户端而服务端只查「在外车辆数 +
   驾照等级」，**别人的车牌 / 任意车型 / 全图任意坐标都能生成**；`syncGarage` 任何玩家都能整表

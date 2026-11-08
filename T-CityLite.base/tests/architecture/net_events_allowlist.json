@@ -492,6 +492,15 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "hospital:server:CanHelp",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "civilian",
+      "reason": "急救回执：只有**被 `UseFirstAid` 问过的那个患者**能回答。handler 内要求 `PendingAid[src] == helperId`（UseFirstAid 时写入的回执），回答后即清除；原来任何玩家都能凭空让服务端给任意 helper 发一条「可以施救」。",
+      "evidence": "main.lua CanHelp — PendingAid[src] ~= helperId return / PendingAid[src] = nil（UseFirstAid 写入）",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "hospital:server:RespawnAtHospital",
       "file": "[qb]/qb-ambulancejob/server/main.lua",
       "category": "civilian",
@@ -501,11 +510,83 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "hospital:server:RestoreWeaponDamage",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "清空**自己**的弹伤 metadata（nil），没有参数、不涉及他人。",
+      "evidence": "main.lua RestoreWeaponDamage — SetMetaData('weaponwounds', nil) 仅作用于 source 本人",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:SendDoctorAlert",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能呼叫医生（玩法本身）。handler 内已加：hospitalName 必须命中 `Config.Locations['hospital']` 里的 name（伪造院名直接丢弃）、按玩家 30 秒冷却 —— 原来只有全局 `doctorCalled` 开关，谁先按下谁就能把它锁住 `Config.DocCooldown` 分钟。",
+      "evidence": "main.lua SendDoctorAlert — type(hospitalName) ~= 'string' return / 按 Config 查 name / AlertCooldown['doctorCall:'..src] 30s",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "hospital:server:SendToBed",
       "file": "[qb]/qb-ambulancejob/server/main.lua",
       "category": "civilian",
       "reason": " civilians 也要能躺病床（平民进医院付账）。handler 内：30s 限流 + tonumber 校验 bedId/hospitalIndex + 按 Config 查表命中失败即 return；钱只从 caller 自己 bank 扣、付给 ambulance。",
       "evidence": "main.lua SendToBed — _bedCooldowns 30s / tonumber(bedId,hospitalIndex) / hospital.beds[bedId] 查表 / RemoveMoney('bank', Config.BillCost)",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:SetArmor",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "客户端上报**自己**的护甲值；handler 已夹 0..100，非数字或越界直接 return。",
+      "evidence": "main.lua SetArmor — tonumber(amount) / amount < 0 or amount > 100 return / SetMetaData('armor')",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:SetDeathStatus",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "客户端上报**自己**的死亡状态。handler 已校验：只收 boolean；且自报死亡时必须有伤情记录（否则写审计日志并 return），防止「伪装死亡」刷无敌。",
+      "evidence": "main.lua SetDeathStatus — type(isDead) ~= 'boolean' return / PlayerInjuries[src] 存在性检查 + 审计日志",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:SetLaststandStatus",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "客户端上报**自己**是否处于倒地待救状态，只写自己的 metadata；只收 boolean。",
+      "evidence": "main.lua SetLaststandStatus — type(bool) ~= 'boolean' return / SetMetaData('inlaststand')",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:SetWeaponDamage",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "客户端记录**自己**身上的弹伤（部位 → 数值），写自己的 metadata。handler 内已加：data 必须是 table，每个值为 0..1000 内的数字才落库，否则丢弃。",
+      "evidence": "main.lua SetWeaponDamage — type(data) ~= 'table' return / 逐字段 tonumber + 0..1000 夹取",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:SyncInjuries",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "self_scoped",
+      "reason": "客户端同步**自己**的伤情（四肢 + 出血量）到自己的 metadata，越权面为零。handler 内已加：data 必须是 table、limbs 必须是 table、isBleeding 夹到 0..100，不符合直接 return（防止 1e9 这类值把 HUD 与治疗判定写坏、把 metadata 撑爆）。",
+      "evidence": "main.lua SyncInjuries — type(data) ~= 'table' return / tonumber(isBleeding) 夹 0..100 / SetMetaData('injuries')",
+      "owner": "qb-ambulancejob",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hospital:server:ambulanceAlert",
+      "file": "[qb]/qb-ambulancejob/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能呼叫 EMS（这是玩法本身）。handler 内已加：text 必须 string 且截断 200 字、按玩家 15 秒冷却，避免一个人刷屏所有在职 EMS；广播目标是服务端按 job/onduty 筛出来的，不接受客户端指定。",
+      "evidence": "main.lua ambulanceAlert — type(text) ~= 'string' return / text:sub(1,200) / AlertCooldown[src] 15s / 收件人由 GetQBPlayers 按 job.onduty 过滤",
       "owner": "qb-ambulancejob",
       "expires": "2027-03-31"
     },
