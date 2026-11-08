@@ -89,3 +89,27 @@ def test_cargo_damage_values_are_clamped():
     """碰撞次数/损伤百分比/血量差值都会进入结算评分，必须夹取。"""
     data = _run("quest_probe.lua", "[custom]/custom-quest")
     assert data["DAMAGE_CLAMPED"] == "true", "越界数值没有被夹取（可上报负数或天文数字影响评分）"
+
+
+def test_aviation_completion_requires_being_in_an_aircraft_but_fails_open():
+    """`aviationHeightMonitorComplete(questId)`：客户端发完就 break，服务端拒绝没有重试路径。
+
+    所以机型识别必须是 fail-open —— 原生不存在 / 返回 0 时放行；只有**明确**识别为陆上载具
+    或人不在载具里才拒。旧版（master）后三条全是 false。
+    """
+    data = _run("quest_events_probe.lua", "[custom]/custom-quest")
+    assert data["AVIATION_COPLANE_ALLOWED"] == "true", "正常玩家开飞机反而过不了（过度收紧）"
+    assert data["AVIATION_NATIVE_MISSING_ALLOWED"] == "true", "拿不到机型就拒 = fail-closed，会卡死玩家"
+    assert data["AVIATION_CLASS_ZERO_ALLOWED"] == "true", "机型返回 0（未知）时不应拒绝"
+    assert data["AVIATION_CAR_BLOCKED"] == "true", "开轿车也能完成低空飞行步骤"
+    assert data["AVIATION_ON_FOOT_BLOCKED"] == "true", "站在地上也能完成低空飞行步骤"
+    assert data["AVIATION_WRONG_QUEST_BLOCKED"] == "true", "没接这单任务也能触发完成"
+
+
+def test_register_trailer_requires_matching_model():
+    """申报模型必须是字符串**且**与实体一致 —— opt-in 写法少传一个参数就绕过。"""
+    data = _run("quest_events_probe.lua", "[custom]/custom-quest")
+    assert data["TRAILER_VALID_MODEL_ALLOWED"] == "true", "正常登记挂车被拒（过度收紧）"
+    assert data["TRAILER_MISSING_MODEL_BLOCKED"] == "true", "不传模型也能登记"
+    assert data["TRAILER_BAD_MODEL_TYPE_BLOCKED"] == "true", "模型传数字也能登记"
+    assert data["TRAILER_MODEL_MISMATCH_BLOCKED"] == "true", "申报模型与实体不一致也能登记"

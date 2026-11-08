@@ -318,6 +318,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   测试：两个探针。旧版实测：`cargoDamageResult` 在 nil/非表时分别抛
   `attempt to index a nil value (local 'data')` 与 `attempt to index a number value (local 'data')`，
   坏 questId 时抛 `bad argument #3 to 'format' (number expected, got nil)`，`DAMAGE_CLAMPED=false`。
+  新增第三个探针 `quest_events_probe.lua`（真加载 custom-quest 的 server 主脚本）覆盖 fail-open 与模型比对：
+  旧版实测 `AVIATION_CAR_BLOCKED` / `AVIATION_ON_FOOT_BLOCKED` / `AVIATION_WRONG_QUEST_BLOCKED` /
+  `TRAILER_MISSING_MODEL_BLOCKED` / `TRAILER_MODEL_MISMATCH_BLOCKED` 全为 false。
   数字：未登记 **106 → 98**（qb 30 → 26、custom 8；allowlist 151）；合计事件数按实测校正为 439。
 
 - **P1-3 批 14：qb-pawnshop 4 + qb-multicharacter 4**（2026-11-08）：qb-pawnshop 两条都是印钞机 ——
