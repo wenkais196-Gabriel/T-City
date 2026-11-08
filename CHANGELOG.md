@@ -306,7 +306,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   客户端报什么就信什么。qb-fuel 的 `setCanFuel(fuel)` 直接把客户端给的数字写进油桶，而客户端调用点
   传的是 `canLiter - liter`（语义是**扣减**）；服务端分不清"加满"和"扣减"，任何玩家发一条
   `setCanFuel(40)` 就白得 40 升油（旧版实测 `CAN_INCREASE_BLOCKED=false`）。改为只允许单调递减 +
-  夹在 0..`Config.JerryCanLitre`；`refillVehicle(litres)` 的升数夹到 300 升且必须为正（旧版负数会
+  夹在 0..`Config.JerryCanLitre`；**想"加"的请求直接拒绝并提示**，而不是静默写成当前值 —— 客户端
+  `canLiter` 来自 `GetAmmoInPedWeapon`（油桶 ammo 是 0..100 刻度，`Config.JerryCanLitre` 只有 40），
+  两边错位时静默按当前值写会变成"油桶一个不少、车里油却加上去了"的刷油复制。`refillVehicle(litres)` 的升数夹到 300 升且必须为正（旧版负数会
   把价格算成负数、`'abc'`/表直接抛 `attempt to mul a 'string' with a 'number'`）；`buyJerryCan` /
   `refillJerryCan` 加"在加油站 40 米内"（旧版全图任意位置能下单）；老油桶 `info` 为 nil 时旧版
   `jerryCan.info.fuel = ...` 直接抛错，现在补表。qb-doorlock 的 `updateState` 鉴权对象原来是

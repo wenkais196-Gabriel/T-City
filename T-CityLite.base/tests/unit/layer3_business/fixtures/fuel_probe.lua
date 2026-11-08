@@ -152,8 +152,9 @@ emit('SCENARIO', 'jerry-can')
 state.itemName = 'weapon_petrolcan'
 state.item = { name = 'weapon_petrolcan', slot = 3, info = { fuel = 10, ammo = 10 } }
 state.addedItem = nil
+state.notified = nil
 fire('qb-fuel:server:setCanFuel', 40)          -- 想白加到满
-emit('CAN_INCREASE_BLOCKED', tostring(state.addedItem and state.addedItem.info.fuel == 10))
+emit('CAN_INCREASE_BLOCKED', tostring(state.addedItem == nil and state.notified == 'error'))
 
 state.item.info = { fuel = 25, ammo = 25 }
 state.addedItem = nil
