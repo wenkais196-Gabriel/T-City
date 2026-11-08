@@ -81,6 +81,36 @@ def test_spawnvehicle_rejects_spawn_point_far_from_the_player():
     assert _flag(data, "SPAWN_FAR"), "5000 米外的坐标仍然能生成"
 
 
+def test_spawnvehicle_accepts_fivem_vector_types():
+    """取车回调的坐标是 `GetSpawnPoint()` 的返回值 —— 真机上是 **vector4**，不是 table。
+
+    第一版只认 `type(coords) == 'table'`，会把所有正常取车（公共车库 / 房车 / 赎车）全拒掉。
+    纯 Lua 造不出 FiveM 的 vector4，所以这里分两段：
+    - 运行时：table 形状必须被接受，缺 z / 非坐标类型必须被拒；
+    - 静态：守卫必须显式列出 vector3 / vector4（否则又会退化成只认 table）。
+    """
+    source = (BASE / "resources" / "[qb]" / "qb-garages" / "server" / "main.lua").read_text(encoding="utf-8")
+    assert "vector4" in source and "vector3" in source, "坐标守卫没有接受 vector3/vector4"
+    assert "ctype ~= 'vector4'" in source, "守卫没有把 vector4 当成合法坐标类型"
+    data = _run("garages_probe.lua", "qb-garages")
+    assert _flag(data, "SPAWN_OK"), "table 形状的合法坐标被拒"
+    assert _flag(data, "SPAWN_BAD_COORDS"), "非坐标类型仍然放行"
+    assert _flag(data, "SPAWN_MISSING_Z"), "缺 z 的坐标仍然放行"
+
+
+def test_sync_garage_merges_house_entries_without_letting_players_rewrite_public_ones():
+    """`syncGarage` 不能"全挡"，也不能"全收"。
+
+    客户端在 qb-houses 建房/加载房车时会把**整张** `Config.Garages` 发给服务端（含 `type='house'`）。
+    全挡：服务端缺房车条目 → `canDeposit` 里 `Config.Garages[garage].houseName` 索引 nil 崩掉，
+    房车存不了车。全收：任何玩家都能改公共车库的点位与开关。
+    """
+    data = _run("garages_probe.lua", "qb-garages")
+    assert _flag(data, "SYNC_PUBLIC_UNTOUCHED"), "玩家仍然改写了公共车库条目"
+    assert _flag(data, "SYNC_HOUSE_MERGED"), "玩家的房车条目没有被合并（房车存车会崩）"
+    assert _flag(data, "SYNC_FOREIGN_HOUSE_REJECTED"), "houselocations 里没有的房车条目被接受"
+
+
 def test_sync_garage_requires_admin():
     """`syncGarage` 会整表覆盖 `Config.Garages`。
 

@@ -19,6 +19,7 @@ local state = {
   garageTable = nil,
   dbRows = {},          -- plate → { citizenid, vehicle, state, depotprice, mods }
   permission = false,   -- HasPermission 返回
+  houses = { { name = 'house1' } },  -- houselocations 表
 }
 
 local player = {
@@ -107,7 +108,12 @@ MySQL = {
       return row.citizenid
     end,
   },
-  query = { await = function() return {} end },
+  query = {
+    await = function(sql)
+      if type(sql) == 'string' and sql:find('houselocations', 1, true) then return state.houses end
+      return {}
+    end,
+  },
   update = function() return 1 end,
   insert = function() return 1 end,
 }
@@ -181,11 +187,31 @@ emit('SCENARIO', 'spawn-far')
 out = callCallback('qb-garages:server:spawnvehicle', 1, 'MINE', 'adder', { x = 5000.0, y = 5000.0, z = 0.0, w = 0.0 })
 emit('SPAWN_FAR', tostring(out == nil or out[1] == nil))
 
+-- ── 4b. 坐标必须是 table / vector3 / vector4，且带 x/y/z ──
+emit('SCENARIO', 'spawn-bad-coords')
+out = callCallback('qb-garages:server:spawnvehicle', 1, 'MINE', 'adder', 'not-a-position')
+emit('SPAWN_BAD_COORDS', tostring(out == nil or out[1] == nil))
+out = callCallback('qb-garages:server:spawnvehicle', 1, 'MINE', 'adder', { x = 0.0, y = 0.0 })
+emit('SPAWN_MISSING_Z', tostring(out == nil or out[1] == nil))
+
 -- ── 5. syncGarage：非管理员不能覆盖配置 ──
 emit('SCENARIO', 'sync-garage')
 local before = Config.Garages
 fireAs(1, 'qb-garages:server:syncGarage', { hacked = true })
 emit('SYNC_BLOCKED_FOR_PLAYER', tostring(Config.Garages ~= nil and Config.Garages.hacked == nil))
+local houseEntry = {
+  houseName = 'house1', label = 'House One', type = 'house',
+  spawnPoint = { vec3(10.0, 20.0, 30.0) },
+}
+state.permission = false
+fireAs(1, 'qb-garages:server:syncGarage', {
+  hacked = { label = 'pwned', type = 'public' },
+  housekey = houseEntry,
+  [ 'foreign' ] = { houseName = 'not-my-house', label = 'X', type = 'house', spawnPoint = { vec3(1, 2, 3) } },
+})
+emit('SYNC_PUBLIC_UNTOUCHED', tostring(Config.Garages.hacked == nil))
+emit('SYNC_HOUSE_MERGED', tostring(Config.Garages.housekey ~= nil and Config.Garages.housekey.houseName == 'house1'))
+emit('SYNC_FOREIGN_HOUSE_REJECTED', tostring(Config.Garages['foreign'] == nil))
 state.permission = true
 fireAs(1, 'qb-garages:server:syncGarage', { hacked = true })
 emit('SYNC_ALLOWED_FOR_ADMIN', tostring(Config.Garages ~= nil and Config.Garages.hacked == true))
