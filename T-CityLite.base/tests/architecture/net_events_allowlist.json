@@ -699,6 +699,60 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-crypto:server:ExchangeFail",
+      "category": "already_checked",
+      "reason": "失败路径只扣自己持有的一根 cryptostick（GetItemByName 判定后才 RemoveItem）。",
+      "evidence": "main.lua ExchangeFail — GetItemByName('cryptostick')",
+      "file": "[qb]/qb-crypto/server/main.lua",
+      "owner": "qb-crypto",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-crypto:server:ExchangeSuccess",
+      "category": "already_checked",
+      "reason": "兑换成功：必须真的持有 cryptostick，且 **RemoveItem 返回 false 就不发钱**（原来忽略返回值 = 白拿钱）。",
+      "evidence": "main.lua ExchangeSuccess — GetItemByName('cryptostick') + removed == false then return",
+      "file": "[qb]/qb-crypto/server/main.lua",
+      "owner": "qb-crypto",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-crypto:server:FetchWorth",
+      "category": "civilian",
+      "reason": "拉取全部币价（每种币一条 SQL）：加 5 秒全局冷却 + source 类型校验，防连点放大成 DB 压力。",
+      "evidence": "qb-crypto/server/main.lua FetchWorth — type(src) 校验 + lastWorthFetch 5s",
+      "file": "[qb]/qb-crypto/server/main.lua",
+      "owner": "qb-crypto",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-crypto:server:GetRebootState",
+      "category": "civilian",
+      "reason": "只把当前重启状态回包给调用者（先校验 source 与在线）。",
+      "evidence": "qb-crypto/server/main.lua GetRebootState — type(src) + GetPlayer(src)",
+      "file": "[qb]/qb-crypto/server/main.lua",
+      "owner": "qb-crypto",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-crypto:server:Rebooting",
+      "category": "civilian",
+      "reason": "全服重启状态：只接受已知 state 字符串 + 0~100 的进度 + 1 秒节流（原来任意值都能写）。",
+      "evidence": "qb-crypto/server/main.lua Rebooting — type(state) + allowed[state] + tonumber(percentage) 0..100",
+      "file": "[qb]/qb-crypto/server/main.lua",
+      "owner": "qb-crypto",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-crypto:server:SyncReboot",
+      "category": "civilian",
+      "reason": "全服广播同步：1 秒节流 + source 类型校验。",
+      "evidence": "qb-crypto/server/main.lua SyncReboot — type(src) + lastRebootSync 1s",
+      "file": "[qb]/qb-crypto/server/main.lua",
+      "owner": "qb-crypto",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "qb-drugs:server:acceptDelivery",
       "category": "civilian",
       "reason": "接单参数全部不采信：商品 key 查 Config.DeliveryItems、数量固定 1、押金/时限按距离服务端自算；带 acceptLocks 互斥 + 单活跃单约束（防连开两单覆盖记录）。",
@@ -930,6 +984,87 @@
       "evidence": "main.lua WorkReduction — tonumber(minutes) 夹 1..5 + WorkReductionAt[cid] 55s + exports['custom-justice']",
       "file": "[qb]/qb-prison/server/main.lua",
       "owner": "qb-prison",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:SafeReward",
+      "category": "civilian",
+      "reason": "保险箱收益：3 秒限流 + custom-crime 授权 + 距离判定，金额由服务端 math.random 生成。",
+      "evidence": "main.lua SafeReward — CheckRateLimit / CheckStoreRobbery / 距离判定 / math.random(cashA, cashB)",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:callCops",
+      "category": "civilian",
+      "reason": "警情：只认 Config 里真实存在的收银机/保险箱，坐标取服务端配置（客户端传的坐标与店名一律丢弃）。",
+      "evidence": "main.lua callCops — type(kind) 校验 + Config.Safes/Registers 查表 + coords = anchor",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:cancelRobbery",
+      "category": "self_scoped",
+      "reason": "只记录**自己**那次抢劫的逃跑时刻（activeRobberies[register].src == src），不改别人的状态。",
+      "evidence": "main.lua cancelRobbery — activeRobberies[register].src == src",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:removeAdvancedLockpick",
+      "category": "already_checked",
+      "reason": "只扣自己背包里真的持有的高级开锁器（原来不看持有量）。",
+      "evidence": "main.lua removeAdvancedLockpick — GetItemByName('advancedlockpick') 判定后才 RemoveItem",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:removeLockpick",
+      "category": "already_checked",
+      "reason": "同上：只扣自己持有的普通开锁器。",
+      "evidence": "main.lua removeLockpick — GetItemByName('lockpick') 判定后才 RemoveItem",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:setSafeStatus",
+      "category": "civilian",
+      "reason": "标保险箱已抢：现在要求保险箱存在 + 调用者在保险箱交互距离内（原来任何玩家能锁死全服保险箱）。",
+      "evidence": "main.lua setSafeStatus — type(safe) 校验 + GetEntityCoords 距离 <= security_max_interaction_distance",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:startRobbery",
+      "category": "civilian",
+      "reason": "开抢：3 秒限流 + 防重入 + custom-crime:CheckStoreRobbery 授权 + 距离判定，越界直接 DropPlayer。",
+      "evidence": "main.lua startRobbery — CheckRateLimit / activeRobberies[register] / CheckStoreRobbery / security_max_interaction_distance",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:surrender",
+      "category": "already_checked",
+      "reason": "自首流程：30 分钟冷却 + 5 分钟超时 + 只创建调用者自己的待处理记录，不直接发钱。",
+      "evidence": "main.lua surrender — SURRENDER_COOLDOWN / SURRENDER_TIMEOUT / 只写本人 citizenid",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-storerobbery:server:syncMinPolice",
+      "category": "civilian",
+      "reason": "全服广播警力门槛：10 秒冷却 + source 类型校验。",
+      "evidence": "main.lua syncMinPolice — type(src) 校验 + lastMinPoliceSync 10s",
+      "file": "[qb]/qb-storerobbery/server/main.lua",
+      "owner": "qb-storerobbery",
       "expires": "2027-03-31"
     },
     {
