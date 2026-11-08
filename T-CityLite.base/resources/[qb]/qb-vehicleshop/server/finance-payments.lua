@@ -173,6 +173,7 @@ RegisterNetEvent('qb-vehicleshop:server:financeVehicle', function(downPayment, p
         return
     end
     if not downPayment or not paymentAmount or downPayment < 0 or paymentAmount <= 0 then return end
+    if paymentAmount % 1 ~= 0 then return end -- 期数必须是整数（DB 列是 INT）
 
     -- 安全: 驾照检查
     if not shopUtil.CheckVehicleLicense(pData, vehicle) then
@@ -285,6 +286,13 @@ RegisterNetEvent('qb-vehicleshop:server:sellfinanceVehicle', function(downPaymen
 
     downPayment   = tonumber(downPayment)
     paymentAmount = tonumber(paymentAmount)
+    -- 🔒 数值 guard：nil/负数/0 期都会让下面的比较或 calculateFinance 抛错/除零
+    if not downPayment or not paymentAmount or downPayment < 0 or paymentAmount <= 0 then return end
+    if paymentAmount % 1 ~= 0 then return end
+    if paymentAmount > Config.MaximumPayments then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.exceededmax'), 'error')
+        return
+    end
     local vehiclePrice = QBCore.Shared.Vehicles[vehicle]['price']
     local timer        = (Config.PaymentInterval * 60)
     local minDown      = tonumber(shopUtil.round((Config.MinimumDown / 100) * vehiclePrice))
