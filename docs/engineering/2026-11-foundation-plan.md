@@ -82,7 +82,7 @@ tracks: [docs/engineering/STANDARDS.md, docs/engineering/FOUNDATION-AS-IS.md, do
 |---|---|---|
 | P2-1 | 主线程 `Citizen.Await` 清零（patron_service 优先） | 延迟 fake DB 单测断言不阻塞 |
 | P2-2 | 启动顺序进版本库（boot.json → cfg 生成 + 依赖先于使用闸门） | 删掉顺序注释后闸门仍能拦住错序 |
-| P2-3 | 迁移幂等 + 版本号唯一（现存 v3.11 / v3.12 各两条重号） | 重跑全部迁移不报错；重号被判红 |
+| P2-3 | 迁移幂等 + 版本号唯一（现存 v3.11 / v3.12 各两条重号） | 重跑全部迁移不报错；重号被判红 | ✅ 完成（2026-11-08）：4 组重号（v0.7 / v2.2 / v3.11 / v3.12）各给后来者加二级号并同步 8 处引用；新闸门 `test_migration_versions.py`（版本唯一 + 文件名形状，零基线）+ 2 条变异用例；`v2.1_perf_indexes.sql` 补 information_schema 守卫（原来第二次跑必报 `ERROR 1060 Duplicate column name`）；`tools/dev/migrations_double_apply.py` 实测 35/35 × 2 遍无错误 |
 | P2-4 | 预算数字化（IO/min、tick 阻塞、payload 字节） | 探针输出基线数字，超预算 CI 报警 |
 
 ## 5. 交付标准（DoD）

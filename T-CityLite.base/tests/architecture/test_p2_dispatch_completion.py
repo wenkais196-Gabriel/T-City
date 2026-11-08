@@ -15,7 +15,7 @@ POLICE = REPO / "T-CityLite.base/resources/[custom]/custom-police"
 INCIDENTS = POLICE / "server/p0_incidents.lua"
 GUIDE = POLICE / "client/incident_guidance.lua"
 POLICY = POLICE / "shared/policy.lua"
-MIGRATION = REPO / "T-CityLite.base/migrations/v3.12_police_incident_ref.sql"
+MIGRATION = REPO / "T-CityLite.base/migrations/v3.12.1_police_incident_ref.sql"
 
 
 def test_ref_and_merge_count_exist_in_schema_and_merge_path() -> None:

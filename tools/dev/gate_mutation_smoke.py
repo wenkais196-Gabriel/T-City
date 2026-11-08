@@ -733,6 +733,24 @@ MUTATIONS += [
     ),
 ]
 
+# P2-3：迁移版本号唯一（重号会让「哪个先跑」变成文件名字母序的意外结果）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_migration_versions.py::"
+              "test_every_migration_version_is_unique"),
+        path="migrations/v3.11_probe_duplicate.sql",
+        content="-- probe: 重号迁移（v3.11 下第二条）\n",
+        what="同一版本号下再塞一条迁移（v3.11_probe 与 v3.11.1_police_case_verdict 重号）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_migration_versions.py::"
+              "test_migration_filenames_are_well_formed"),
+        path="migrations/v3.16.Probe_Bad_Name.sql",
+        content="-- probe: 文件名里带点分与大写\n",
+        what="迁移文件名不合规（点分名 + 大写，扫描器应拒绝）",
+    ),
+]
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))

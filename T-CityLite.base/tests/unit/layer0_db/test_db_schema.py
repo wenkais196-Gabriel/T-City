@@ -5,7 +5,7 @@ Validates migrations:
   - v2.0_trinity_schema: qualifications, tax, insurance, economy_snapshots, npc_prices
   - v0.8_ownership_engine: world_state, world_events, trust_graph, patron_records,
     governance_proposals, skill_ranks, cosmetic_items, player_cosmetics, organization_rules
-  - v0.7_story_engine: player_choices, story_completions
+  - v0.7.1_story_engine: player_choices, story_completions
   - v2.1_perf_indexes: phone_number virtual column, performance indexes
 
 Uses db_conn and db_cursor fixtures from conftest.py (transactional rollback after each test).
