@@ -313,7 +313,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   house 非空 + sort 在 `QBWeed.Plants` 白名单 + coords 能解出地图内 x/y/z + 单屋 20 株上限；
   `removeDeathPlant` 只能铲缓存里且 building 对得上的植株；`harvestPlant` 的 `amount`（只用来发种子）
   夹成 1..6、`plantName` 走白名单；`foodPlant` 的 `plantName` 走白名单（原来
-  `QBWeed.Plants[plantName]['label']` 遇到坏名字直接 nil 索引崩线程）。qb-streetraces 三条**本来就是**
+  `QBWeed.Plants[plantName]['label']` 遇到坏名字直接 nil 索引崩线程）。CC 复核又抓到一条**我自己引入的
+  P0**：`house_plants.plantid` 是 varchar(50)，DB 回来与客户端回传的都是**字符串**，而 `placePlant` 用
+  `math.random` 的**数字**当缓存键 —— 于是「本次会话种下的植株」在 `removeDeathPlant` / `harvestPlant`
+  里按字符串查必然 miss（死株铲不掉），收获时 `plantCache[plantId] = nil` 也只清字符串键、数字键条目
+  变成幽灵继续占着单屋 20 株上限。修法：缓存键统一 `tostring`（含启动加载），并补「刚种下 → 收获 → 铲除」
+  的探针用例。qb-streetraces 三条**本来就是**
   服务端权威（stake 夹在 Config 区间、奖池按参赛人数重建、先销毁赛局再发钱、禁重复报名），本轮把
   `RaceId` 规范成数字并登记，不改玩法。⚠️ 两个资源都不在启动集里，所以只有 `luac5.4 -p` + 探针，
   **没有真机验证**。数字：未登记 **67 → 59**，**`[qb]` 216/216 与 `[custom]` 133/133 全部归零**；

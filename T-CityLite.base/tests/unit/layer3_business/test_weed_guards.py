@@ -68,6 +68,17 @@ def test_place_plant_validates_source_and_arguments():
     assert data["PLACE_HOUSE_CAP"] == "true", "同一屋能无限种（旧版没有上限）"
 
 
+def test_freshly_planted_can_be_harvested_and_removed():
+    """`house_plants.plantid` 是 varchar(50)，客户端回传的是**字符串**。
+
+    缓存键若用 `math.random` 的两位数（数字），本次会话种下的植株在 removeDeathPlant /
+    harvestPlant 里按字符串查会 miss —— 死株铲不掉、收获也收获不了（CC 复核发现的 P0）。
+    """
+    data = _run("weed_probe.lua", "[qb]/qb-weed")
+    assert data["HARVEST_FRESH_PLANT_OK"] == "true", "刚种下的植株收获不了（缓存键数字 vs 字符串）"
+    assert data["REMOVE_FRESH_PLANT_OK"] == "true", "收获后缓存没清干净，或铲除走错分支"
+
+
 def test_harvest_and_food_are_bounded():
     data = _run("weed_probe.lua", "[qb]/qb-weed")
     assert data["HARVEST_AMOUNT_CLAMPED"] == "true", "种子数量没夹取 / Player 为 nil 时抛错"

@@ -163,6 +163,26 @@ state.deletes = {}
 fire(1, 'qb-weed:server:removeDeathPlant', house, 123456)
 emit('REMOVE_UNKNOWN_BLOCKED', tostring(#state.deletes == 0))
 
+-- 4b. **本次会话刚种下的**植株必须能铲掉：plantid 在 DB 里是 varchar(50)，
+--     客户端拿到的是字符串 —— 缓存键若用 math.random 的数字就会 miss。
+--     （state.inserts 里最后一条 insert 的 params[5] 就是刚生成的 plantid）
+local freshInsert = state.inserts[#state.inserts]
+local freshPlantId = freshInsert and freshInsert.params and freshInsert.params[5]
+-- 注意顺序：收获会把植株从缓存里删掉，所以先测收获、再测铲除
+state.added = {}
+state.removed = {}
+fire(1, 'qb-weed:server:harvestPlant', house, 2, plantName, freshPlantId)
+local harvested = false
+for _, entry in ipairs(state.removed) do
+    if entry.item == 'empty_weed_bag' then harvested = true end
+end
+emit('HARVEST_FRESH_PLANT_OK', tostring(type(freshPlantId) == 'string' and harvested))
+
+state.deletes = {}
+fire(1, 'qb-weed:server:removeDeathPlant', house, freshPlantId)
+-- 已经被收获删掉的植株不该再删一次（这条同时验证 harvest 真的清了缓存）
+emit('REMOVE_FRESH_PLANT_OK', tostring(type(freshPlantId) == 'string' and #state.deletes == 0))
+
 -- ── 5. 收获：amount 夹取，无 Player 不崩 ──
 emit('SCENARIO', 'harvest')
 local plantedId = state.inserts[1] and 1 or nil
