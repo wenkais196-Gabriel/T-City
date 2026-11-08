@@ -202,49 +202,54 @@ if loaded then loaded(player) end
 emit('OWED_AFTER_RELOAD', tostring(player.PlayerData.metadata.cryptostick_refunds or 0))
 emit('STICKS_AFTER_RELOAD', state.items.cryptostick or 0)
 
--- 场景 4：Rebooting 只接受已知 state 与 0~100
+-- 场景 4：重启会话由服务端在 ExchangeFail 时创建；Rebooting 只做进度上报
 emit('SCENARIO', 'rebooting-validation')
--- 先站到交易所柜员机前（服务端会校验距离）
 state.coords = vector3(Crypto.Exchange.coords.x, Crypto.Exchange.coords.y, Crypto.Exchange.coords.z)
--- 客户端真实发的是 Rebooting(true/false, pct)（见 client/main.lua 的重启循环）
-fireAs(1, 'qb-crypto:server:Rebooting', 'hax', 50)          -- 非 boolean → 拒
-emit('REBOOT_STATE_AFTER_BAD', tostring(Crypto.Exchange.RebootInfo.state))
-fireAs(1, 'qb-crypto:server:Rebooting', true, 150)          -- 越界 → 拒
+state.items = { cryptostick = 1 }
+fireAs(1, 'qb-crypto:server:ExchangeFail')
+emit('SESSION_STATE_AFTER_FAIL', tostring(Crypto.Exchange.RebootInfo.state))
+clock = clock + 1000
+fireAs(1, 'qb-crypto:server:Rebooting', 'hax', 50)
 emit('REBOOT_PCT_AFTER_BAD', tostring(Crypto.Exchange.RebootInfo.percentage))
 clock = clock + 1000
-fireAs(1, 'qb-crypto:server:Rebooting', true, 42)           -- 合法
+fireAs(1, 'qb-crypto:server:Rebooting', true, 150)
+emit('REBOOT_PCT_AFTER_OUT_OF_RANGE', tostring(Crypto.Exchange.RebootInfo.percentage))
+clock = clock + 1000
+fireAs(1, 'qb-crypto:server:Rebooting', true, 42)
 emit('REBOOT_PCT_AFTER_GOOD', tostring(Crypto.Exchange.RebootInfo.percentage))
-emit('REBOOT_STATE_AFTER_GOOD', tostring(Crypto.Exchange.RebootInfo.state))
 
--- 场景 5：站在远处不能写全服重启状态
-emit('SCENARIO', 'reboot-remote')
--- 先站在柜员机前把状态复位（正常玩法），再走到 9999 米外尝试伪造"重启中"
-state.coords = vector3(Crypto.Exchange.coords.x, Crypto.Exchange.coords.y, Crypto.Exchange.coords.z)
+-- 场景 4b：没有会话时，任何玩家都不能自己发起重启
+emit('SCENARIO', 'reboot-without-session')
 clock = clock + 1000
 fireAs(1, 'qb-crypto:server:Rebooting', false, 0)
-state.coords = vector3(9999.0, 9999.0, 9999.0)
+emit('SESSION_CLEARED', tostring(Crypto.Exchange.RebootInfo.state))
 clock = clock + 1000
+fireAs(2, 'qb-crypto:server:Rebooting', true, 10)
+emit('REBOOT_PCT_WITHOUT_SESSION', tostring(Crypto.Exchange.RebootInfo.percentage))
+
+-- 场景 4c：会话硬上限 5 分钟 —— 拥有者持续上报也不能永久占用
+emit('SCENARIO', 'reboot-session-expiry')
+state.items = { cryptostick = 1 }
+fireAs(1, 'qb-crypto:server:ExchangeFail')
+clock = clock + 6 * 60 * 1000
 fireAs(1, 'qb-crypto:server:Rebooting', true, 55)
-emit('REBOOT_STATE_REMOTE', tostring(Crypto.Exchange.RebootInfo.state))
-emit('REBOOT_PCT_REMOTE', tostring(Crypto.Exchange.RebootInfo.percentage))
--- 场景 6b：owner 存在时，其他玩家不能改全服状态
+emit('REBOOT_STATE_AFTER_EXPIRY', tostring(Crypto.Exchange.RebootInfo.state))
+emit('REBOOT_PCT_AFTER_EXPIRY', tostring(Crypto.Exchange.RebootInfo.percentage))
+
+-- 场景 5：会话拥有者存在时，其他玩家（同样站在柜员机前）不能改进度
 emit('SCENARIO', 'reboot-non-owner')
 state.coords = vector3(Crypto.Exchange.coords.x, Crypto.Exchange.coords.y, Crypto.Exchange.coords.z)
+state.items = { cryptostick = 1 }
+fireAs(1, 'qb-crypto:server:ExchangeFail')
 clock = clock + 1000
-fireAs(1, 'qb-crypto:server:Rebooting', true, 10)      -- 1 号发起
-clock = clock + 1000
-fireAs(2, 'qb-crypto:server:Rebooting', true, 99)      -- 2 号在柜员机前抢写
+fireAs(2, 'qb-crypto:server:Rebooting', true, 99)
 emit('REBOOT_PCT_AFTER_NON_OWNER', tostring(Crypto.Exchange.RebootInfo.percentage))
 
--- 场景 6：重启发起者走出 20 米，仍然必须能把状态收尾（否则全服永久卡"重启中"）
+-- 场景 6：会话拥有者走出 20 米，仍然必须能把状态收尾（否则全服永久卡"重启中"）
 emit('SCENARIO', 'reboot-owner-finish-remote')
-state.coords = vector3(Crypto.Exchange.coords.x, Crypto.Exchange.coords.y, Crypto.Exchange.coords.z)
-clock = clock + 1000
-fireAs(1, 'qb-crypto:server:Rebooting', true, 10)
 state.coords = vector3(9999.0, 9999.0, 9999.0)
 clock = clock + 1000
 fireAs(1, 'qb-crypto:server:Rebooting', false, 0)
 emit('REBOOT_STATE_OWNER_FINISH', tostring(Crypto.Exchange.RebootInfo.state))
-
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')
