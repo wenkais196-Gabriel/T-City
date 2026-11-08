@@ -123,7 +123,7 @@ load_lua(RES .. '/server/main.lua', 'main.lua')
 emit('SCENARIO', 'callcops-coords')
 local fakeCoords = { x = 9999.0, y = 9999.0, z = 9999.0 }
 local before = #state.clientEvents
-fireAs(1, 'qb-storerobbery:server:callCops', 'register', 1, 'Fake Street', fakeCoords)
+fireAs(1, 'qb-storerobbery:server:callCops', 'cashier', 1, 'Fake Street', fakeCoords)
 local alert = nil
 for index = before + 1, #state.clientEvents do
     local event = state.clientEvents[index]
@@ -139,7 +139,7 @@ end
 -- ── 2. 坏 kind / 坏 key 不崩 ──
 emit('SCENARIO', 'callcops-bad-input')
 fireAs(1, 'qb-storerobbery:server:callCops', 'nonsense', 1, 'X', fakeCoords)
-fireAs(1, 'qb-storerobbery:server:callCops', 'register', 9999, 'X', fakeCoords)
+fireAs(1, 'qb-storerobbery:server:callCops', 'cashier', 9999, 'X', fakeCoords)
 fireAs(1, 'qb-storerobbery:server:callCops', nil, nil, nil, nil)
 
 -- ── 3. setSafeStatus：站远处不能把保险箱标成已抢 ──

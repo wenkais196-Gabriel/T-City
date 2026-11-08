@@ -580,16 +580,13 @@ RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetL
     --    "某店正在被抢"的警情（坐标和店名都能编），坏 key 还会 nil 索引崩服务端。
     --    现在只认 Config 里真实存在的收银机/保险箱，坐标取服务端配置。
     --    注意形参不能叫 `type`：那会遮蔽全局 type()（公寓那边踩过一次）。
+    -- 客户端实际传的 kind 是 'safe' 或 'cashier'（见 client/main.lua 的三处调用），
+    -- 所以只区分"保险箱"与"收银机"，具体 key 是否存在由查表决定。
     if type(kind) ~= 'string' then return end
-    if kind ~= 'safe' and kind ~= 'register' then return end
-    local entry, anchor
-    if kind == 'safe' then
-        entry = Config.Safes[safe]
-        anchor = entry and entry[1]
-    else
-        entry = Config.Registers[safe]
-        anchor = entry and entry[1]
-    end
+    if type(safe) ~= 'number' and type(safe) ~= 'string' then return end
+    local isSafe = kind == 'safe'
+    local entry = isSafe and Config.Safes[safe] or Config.Registers[safe]
+    local anchor = entry and entry[1]
     if not entry or not anchor then return end
     local cameraId = entry.camId
     streetLabel = streetLabel or 'Unknown'
@@ -599,7 +596,7 @@ RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetL
         coords = { x = coords.x, y = coords.y, z = coords.z },
         description = Lang:t('email.someone_is_trying_to_rob_a_store', { street = streetLabel, cameraId1 = cameraId })
     }
-    TriggerClientEvent('qb-storerobbery:client:robberyCall', -1, type, safe, streetLabel, coords)
+    TriggerClientEvent('qb-storerobbery:client:robberyCall', -1, kind, safe, streetLabel, coords)
     TriggerClientEvent('qb-phone:client:addPoliceAlert', -1, alertData)
 end)
 
