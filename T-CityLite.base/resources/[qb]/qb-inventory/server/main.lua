@@ -64,7 +64,9 @@ AddEventHandler('txAdmin:events:serverShuttingDown', function()
 end)
 
 RegisterNetEvent('QBCore:Server:UpdateObject', function()
-    if source ~= '' then return end
+    -- 🔒 服务端事件的 `source` 是数字 0，不是空串 —— 原来这个判断永远为真，
+    --    任何客户端都能触发它把共享的 QBCore 对象重新取一遍。
+    if source ~= 0 then return end
     QBCore = exports['qb-core']:GetCoreObject()
 end)
 
@@ -154,7 +156,8 @@ RegisterNetEvent('qb-inventory:server:openVending', function(data)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
     -- 🔒 Security: 距离校验 — 防止远程开售货机
-    if not data.coords then return end
+    --     `data` 来自客户端：不是表时下面 `data.coords` 会抛错打崩事件线程。
+    if type(data) ~= 'table' or not data.coords then return end
     local playerPed = GetPlayerPed(src)
     local playerCoords = GetEntityCoords(playerPed)
     local dx = playerCoords.x - (data.coords.x or data.coords[1])
@@ -175,11 +178,16 @@ RegisterNetEvent('qb-inventory:server:closeInventory', function(inventory)
     local src = source
     local QBPlayer = QBCore.Functions.GetPlayer(src)
     if not QBPlayer then return end
+    -- 🔒 `inventory` 来自客户端：不是字符串时下面 `:find` 会抛错；
+    --    `Player(targetId)` 在目标已下线时是 nil，直接取 `.state` 也会抛错。
+    if type(inventory) ~= 'string' then return end
     Player(source).state.inv_busy = false
     if inventory:find('shop%-') then return end
     if inventory:find('otherplayer%-') then
         local targetId = tonumber(inventory:match('otherplayer%-(.+)'))
-        Player(targetId).state.inv_busy = false
+        if not targetId then return end
+        local target = Player(targetId)
+        if target then target.state.inv_busy = false end
         return
     end
     if Drops[inventory] then
@@ -200,6 +208,8 @@ end)
 
 RegisterNetEvent('qb-inventory:server:useItem', function(item)
     local src = source
+    -- 🔒 `item` 来自客户端：不是表时下面 `item.slot` 直接抛错
+    if type(item) ~= 'table' then return end
     local itemData = GetItemBySlot(src, item.slot)
     if not itemData then return end
     local itemInfo = QBCore.Shared.Items[itemData.name]
@@ -263,13 +273,22 @@ RegisterNetEvent('qb-inventory:server:openDrop', function(dropId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if type(dropId) ~= 'string' then return end
     local playerPed = GetPlayerPed(src)
     local playerCoords = GetEntityCoords(playerPed)
     local drop = Drops[dropId]
     if not drop then return end
-    if drop.isOpen then return end
+    -- 🔒 一个人打开后不发 closeInventory（改过的客户端 / 直接崩游戏）就能把这份掉落物
+    --    永久锁住，别人再也打不开。超过 2 分钟允许别人接管。
+    local openedAt = drop.openedAt or 0
+    if drop.isOpen and drop.openedBy ~= src and (os.time() - openedAt) < 120 then return end
+    -- 🔒 距离校验必须在**写租约之前**：先写 openedBy/openedAt 再判距离的话，
+    --    远处的人每 120 秒调一次就能不断续租 —— 他自己开不了（随后被距离拒），
+    --    但把租约一直攥在手里，站在包旁边的合法玩家永远接管不了。
     local distance = #(playerCoords - drop.coords)
     if distance > 2.5 then return end
+    drop.openedBy = src
+    drop.openedAt = os.time()
     local formattedInventory = {
         name = dropId,
         label = dropId,
@@ -286,7 +305,7 @@ RegisterNetEvent('qb-inventory:server:updateDrop', function(dropId, coords)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    if not Drops[dropId] then return end
+    if type(dropId) ~= 'string' or not Drops[dropId] then return end
     -- 坐标必须是 vector3 类型且分量在合理范围内（FiveM 地图边界: -4000 ~ 8000）
     if type(coords) ~= 'vector3' and type(coords) ~= 'table' then return end
     local cx, cy, cz = coords.x or coords[1], coords.y or coords[2], coords.z or coords[3]
@@ -299,6 +318,26 @@ RegisterNetEvent('qb-inventory:server:updateDrop', function(dropId, coords)
     local dy = playerCoords.y - cy
     local dz = playerCoords.z - cz
     if dx*dx + dy*dy + dz*dz > 25.0 then return end -- 5m 平方
+    -- 🔒 归属判据用**实体真实位置**，不用记账：任何玩家都能把包捡起来带走（这是玩法），
+    --    所以"只有创建者能挪"会堵死正常搬运；而只校验"玩家 ↔ 声称坐标"又会让改过的客户端
+    --    把别处的包挪到自己脚下（随后 openDrop 的距离校验就形同虚设 → 远程开包拿东西）。
+    local drop = Drops[dropId]
+    local entity = drop.entityId and NetworkGetEntityFromNetworkId(drop.entityId) or nil
+    if entity and entity ~= 0 and DoesEntityExist(entity) then
+        local entityCoords = GetEntityCoords(entity)
+        local ex, ey, ez = tonumber(entityCoords.x), tonumber(entityCoords.y), tonumber(entityCoords.z)
+        if ex then
+            local ddx, ddy, ddz = ex - cx, ey - cy, ez - cz
+            if ddx * ddx + ddy * ddy + ddz * ddz > 25.0 then return end
+            -- 落库用**实体真值**而不是客户端声称值：否则声称坐标可以在实体 5 米内的任意
+            -- 位置滑动，叠加 openDrop 的 2.5 米半径，等于能在离包 7.5 米处开包。
+            Drops[dropId].coords = vector3(ex, ey, ez)
+            return
+        end
+    elseif drop.owner and drop.owner ~= src
+        and not QBCore.Functions.HasPermission(src, 'admin') then
+        return  -- 实体已不存在：退回记账判据
+    end
     Drops[dropId].coords = vector3(cx, cy, cz)
 end)
 
@@ -354,6 +393,7 @@ QBCore.Functions.CreateCallback('qb-inventory:server:createDrop', function(sourc
                 items = itemsTable,
                 entityId = dropId,
                 createdTime = os.time(),
+                owner = src,
                 coords = playerCoords,
                 maxweight = Config.DropSize.maxweight,
                 slots = Config.DropSize.slots,
