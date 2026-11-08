@@ -148,7 +148,7 @@ MySQL = {}
 MySQL.scalar = { await = function(sql, params) table.insert(__test.scalars, { sql=sql, params=params }) return nil end }
 MySQL.single = { await = function(sql, params) return { citizenid = "CID001", vehicle = "comet2", balance = 0, plate = "ABC123" } end }
 MySQL.query = { await = function(sql, params) return {} end }
-MySQL.update = function(sql, params, cb) table.insert(__test.updates, { sql=sql }) if cb then cb(1) end end
+MySQL.update = function(sql, params, cb) table.insert(__test.updates, { sql=sql, params=params }) if cb then cb(1) end end
 -- oxmysql 的 insert 回调实际返回 { insertId, affectedRows } 表（见 oxmysql/dist/build.js）
 MySQL.insert = function(sql, params, cb) table.insert(__test.inserts, { sql=sql }) if cb then cb({ insertId = 1, affectedRows = 1 }) end end
 MySQL.rawExecute = { await = function(sql, params) return {} end }
@@ -277,7 +277,11 @@ SetEntityAsMissionEntity = function(e, a, b) end
 
 -- i18n stub
 Lang = {
+    -- 同时支持 Lang.t('k') 与 Lang:t('k')：冒号调用会把 Lang 自己当第一个参数传进来，
+    -- 原来只按点调用写，于是 Lang:t(...) 返回了整个表 → "attempt to concatenate a table value"，
+    -- 老用例用 pcall 把它吞了（CC 2026-11-08 复核发现）。
     t = function(key, args)
+        if type(key) ~= 'string' then key, args = args, key end
         local translations = {
             ['error.notenoughmoney'] = 'Not enough money',
             ['error.Invalid_ID'] = 'Invalid Player ID',
@@ -705,24 +709,82 @@ evt('CID001')
         assert r['ok'], f"Lua error: {r['stderr']}"
     
     def test_finance_payment_makes_payment(self):
-        """分期还款成功"""
+        """分期还款成功 —— 余额/最低额一律取 DB，客户端传的 balance 不采信"""
         r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
+__test.updates = {}
+-- DB 里真实余额 50000 / 最低 10000 / 还剩 5 期
+MySQL.single.await = function(sql, params)
+    return { balance = 50000, paymentamount = 10000, paymentsleft = 5 }
+end
 local evt = __test['evt_qb_vehicleshop_server_financePayment']
+-- 客户端谎报 balance=120000：服务端必须忽略
 evt(15000, { vehiclePlate = 'ABC123', balance = 120000, paymentsLeft = 12, paymentAmount = 10000 })
 assert(#__test.money_removed >= 1, "payment should remove money")
+assert(__test.money_removed[1].amt == 15000, "应扣客户端请求的 15000")
+assert(#__test.updates >= 1, "payment should update DB")
+-- 新余额 = 50000 - 15000 = 35000（不是 120000 - 15000）
+local found = nil
+for _, u in ipairs(__test.updates) do
+    if u.sql:find('balance = ?', 1, true) then found = u break end
+end
+assert(found ~= nil, "没有发出还款 UPDATE")
+assert(found.params[1] == 35000, "新余额必须基于 DB 值: " .. tostring(found.params[1]))
+""")
+        assert r['ok'], f"Lua error: {r['stderr']}"
+
+    def test_finance_payment_rejects_foreign_plate(self):
+        """别人的车牌（DB 查不到行）→ 一分钱都不动"""
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
+__test.money_removed = {}
+__test.updates = {}
+MySQL.single.await = function(sql, params) return nil end
+local evt = __test['evt_qb_vehicleshop_server_financePayment']
+evt(15000, { vehiclePlate = 'NOTMINE', balance = 120000, paymentsLeft = 12, paymentAmount = 10000 })
+assert(#__test.money_removed == 0, "不该从别人车牌的请求里扣钱")
+assert(#__test.updates == 0, "不该更新别人的分期记录")
 """)
         assert r['ok'], f"Lua error: {r['stderr']}"
     
     def test_finance_payment_below_minimum(self):
-        """还款金额低于最低额被拒绝"""
+        """还款金额低于最低额被拒绝（DB 行必须有余额，否则 handler 会先走"已还清"分支空转）"""
         r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
+__test.updates = {}
+-- 关键：给 DB 一个真实行，否则 :80 的 balance <= 0 会提前 return，测不到最低额校验
+MySQL.single.await = function(sql, params)
+    return { balance = 50000, paymentamount = 10000, paymentsleft = 5 }
+end
 local evt = __test['evt_qb_vehicleshop_server_financePayment']
--- paymentAmount=1000 < minPayment=10000 → should reject
--- Use pcall since Lang:t concatenation may fail in mock
-local ok, err = pcall(evt, 1000, { vehiclePlate = 'ABC123', balance = 120000, paymentsLeft = 12, paymentAmount = 10000 })
-assert(#__test.money_removed == 0, "should reject below-minimum payment")
+local ok, err = pcall(evt, 1000, { vehiclePlate = 'ABC123' })
+assert(ok, "handler 不该抛错: " .. tostring(err))
+assert(#__test.money_removed == 0, "低于最低额（10000）不该扣钱")
+assert(#__test.updates == 0, "低于最低额不该更新 DB")
+""")
+        assert r['ok'], f"Lua error: {r['stderr']}"
+
+    def test_sellfinance_vehicle_rejects_invalid_numbers(self):
+        """代客分期的数值 guard：0 期会除零、nil 首付会比较报错，都必须被挡在扣钱之前"""
+        r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
+__test.money_removed = {}
+__test.money_added = {}
+__test.inserts = {}
+source = 1
+local player = QBCore.Functions.GetPlayer(1)
+player.PlayerData.job.name = 'cardealer'
+player.PlayerData.job.onduty = true
+local evt = __test['evt_qb_vehicleshop_server_sellfinanceVehicle']
+-- 0 期（原来会在 calculateFinance 里除零）
+local ok1 = pcall(evt, 15000, 0, 'comet2', 2)
+assert(ok1, "0 期不该抛错")
+-- nil 首付（原来 attempt to compare number with nil）
+local ok2 = pcall(evt, nil, 12, 'comet2', 2)
+assert(ok2, "nil 首付不该抛错")
+-- 非整数期数
+local ok3 = pcall(evt, 15000, 12.5, 'comet2', 2)
+assert(ok3, "非整数期数不该抛错")
+assert(#__test.money_removed == 0, "非法参数一分钱都不该扣")
+assert(#__test.inserts == 0, "非法参数不该写车辆记录")
 """)
         assert r['ok'], f"Lua error: {r['stderr']}"
     
@@ -752,17 +814,26 @@ assert(#__test.inserts >= 1, "vehicle should be inserted into DB")
         assert r['ok'], f"Lua error: {r['stderr']}"
     
     def test_finance_payment_full(self):
-        """全额结清"""
+        """全额结清 —— 余额取 DB，客户端谎报 vehBalance 无效（原来付 1 块能清零别人的分期）"""
         r = run_vehicleshop_test([BUS_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 __test.updates = {}
 source = 1
 local player = QBCore.Functions.GetPlayer(1)
 player.PlayerData.money.cash = 200000
+MySQL.single.await = function(sql, params) return { balance = 80000 } end
 local evt = __test['evt_qb_vehicleshop_server_financePaymentFull']
-evt({ vehBalance = 80000, vehPlate = 'ABC123' })
+evt({ vehBalance = 1, vehPlate = 'ABC123' })
 assert(#__test.money_removed >= 1, "payoff should remove money")
+assert(__test.money_removed[1].amt == 80000, "应按 DB 余额 80000 收，而不是客户端说的 1")
 assert(#__test.updates >= 1, "payoff should update DB")
+local found = nil
+for _, u in ipairs(__test.updates) do
+    if u.sql:find('balance = 0', 1, true) then found = u break end
+end
+assert(found ~= nil, "没有发出结清的 UPDATE")
+assert(found.sql:find('AND citizenid = ?', 1, true) ~= nil, "结清 UPDATE 必须带 citizenid 条件")
+assert(found.params[1] == 'ABC123', "应只更新请求里那台车")
 """)
         assert r['ok'], f"Lua error: {r['stderr']}"
 
@@ -1047,8 +1118,9 @@ assert(__test.callbacks['qb-vehicleshop:server:getVehicles'] ~= nil)
         r = run_vehicleshop_test([BUS_LUA, FINANCE_LC_LUA, FINANCE_PM_LUA], """
 __test.money_removed = {}
 source = 1
+MySQL.single.await = function(sql, params) return { balance = 120000, paymentamount = 10000, paymentsleft = 12 } end
 local evt = __test['evt_qb_vehicleshop_server_financePayment']
-evt(15000, { vehiclePlate='ABC123', balance=120000, paymentsLeft=12, paymentAmount=10000 })
+evt(15000, { vehiclePlate='ABC123' })
 assert(#__test.money_removed >= 1, "payment should remove money after split")
 """)
         assert r['ok'], f"Split finance payment failed: {r['stderr']}"
