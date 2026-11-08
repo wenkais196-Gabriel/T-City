@@ -425,7 +425,10 @@ RegisterNetEvent('qb-garages:server:syncGarage', function(updatedGarages)
 
     local accepted = 0
     for key, entry in pairs(updatedGarages) do
-        if type(key) == 'string' and type(entry) == 'table' and entry.type == 'house'
+        -- 同名的既有条目如果不是房车，玩家不能顶掉它（否则可以拿"legion"这类公共车库名当 key）
+        local existing = Config.Garages[key]
+        local collides = existing ~= nil and type(existing) == 'table' and existing.type ~= 'house'
+        if not collides and type(key) == 'string' and type(entry) == 'table' and entry.type == 'house'
             and type(entry.label) == 'string' and type(entry.houseName) == 'string'
             and houses[entry.houseName] and type(entry.spawnPoint) == 'table' then
             local point = entry.spawnPoint[1]

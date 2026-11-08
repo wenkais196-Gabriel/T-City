@@ -112,6 +112,9 @@ def test_sync_garage_merges_house_entries_without_letting_players_rewrite_public
     assert _flag(data, "SYNC_FAR_HOUSE_POINT_REJECTED"), (
         "房车点位与 houselocations.garage 相差 5 公里也被接受（等于任意坐标刷车）"
     )
+    assert _flag(data, "SYNC_PUBLIC_KEY_NOT_HIJACKED"), (
+        "玩家用公共车库名当 key 顶掉了非房车条目"
+    )
 
 
 def test_sync_garage_requires_admin():

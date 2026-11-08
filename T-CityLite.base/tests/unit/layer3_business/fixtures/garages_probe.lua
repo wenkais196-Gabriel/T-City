@@ -223,6 +223,8 @@ state.permission = false
 fireAs(1, 'qb-garages:server:syncGarage', {
   hacked = { label = 'pwned', type = 'public' },
   housekey = houseEntry,
+  -- 用公共车库的名字当 key，企图顶掉非房车条目
+  motelgarage = houseEntry,
   teleportkey = teleportEntry,
   [ 'foreign' ] = { houseName = 'not-my-house', label = 'X', type = 'house', spawnPoint = { vec3(1, 2, 3) } },
 })
@@ -230,6 +232,8 @@ emit('SYNC_PUBLIC_UNTOUCHED', tostring(Config.Garages.hacked == nil))
 emit('SYNC_HOUSE_MERGED', tostring(Config.Garages.housekey ~= nil and Config.Garages.housekey.houseName == 'house1'))
 emit('SYNC_FOREIGN_HOUSE_REJECTED', tostring(Config.Garages['foreign'] == nil))
 emit('SYNC_FAR_HOUSE_POINT_REJECTED', tostring(Config.Garages.teleportkey == nil))
+emit('SYNC_PUBLIC_KEY_NOT_HIJACKED',
+     tostring(Config.Garages.motelgarage ~= nil and Config.Garages.motelgarage.type == 'public'))
 state.permission = true
 fireAs(1, 'qb-garages:server:syncGarage', { hacked = true })
 emit('SYNC_ALLOWED_FOR_ADMIN', tostring(Config.Garages ~= nil and Config.Garages.hacked == true))
