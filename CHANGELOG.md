@@ -54,7 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     货还在就回收并全额退押金，货没了就不退（避免“退了押金又白拿货”）。
     不在离线阶段动背包：离线装卸 inventory 会和存档打架。
   - 新增用例：`test_drop_settlement_refunds_only_when_goods_are_recovered`
-    （退 500 + 货清零 / 货没了退 0），退回上一版实现时红。
+    （退 500 + 货清零 / 货没了退 0；qb-inventory 未就绪时保留 pending、下次上线补退），退回上一版实现时红。
+  - CC 复核的非阻断项已采纳：结算改成「成功后才消费 pending」+ `pcall` 包住 `RemoveItem`
+    + `RemoveItem` 未注入时打印并保留 pending（qb-inventory 热重启期间登录不会丢退款）。
+  - 仍留一条：pending 无 TTL（玩家永不上线则常驻内存，条目很小；服务器重启会丢），
+    需要落表或加过期，已记入计划遗留。
 - **P1-5 阶段 E：金额 `$%d` A 档 26 处偿还（93 → 68）**（2026-11-07）：
   - 按 CC 的分诊口径（A 真风险 / B 假风险 / C 待定），只修 A 档：实参可能是小数的那些。
     A 档分布：qb-drugs 8、custom-cartel 9、custom-crime 3、custom-security 2、custom-main 2、

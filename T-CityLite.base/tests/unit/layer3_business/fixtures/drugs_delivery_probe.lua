@@ -268,4 +268,23 @@ fire('QBCore:Server:PlayerLoaded', player)
 emit('SCENARIO', 'drop-settlement-missing-item')
 emit('REFUND', state.money.cash - cashBefore9)
 
+-- ── 场景 10：qb-inventory 未就绪（RemoveItem 还没注入）→ 保留 pending，下次上线再退 ──
+tick(3000)
+fire('qb-drugs:server:acceptDelivery', { item = 1, amount = 1, distance = 100 })
+local cashBefore10 = state.money.cash
+fire('playerDropped', {})
+state.items[Config.DeliveryItems[1].item] = 1
+local savedRemove = player.Functions.RemoveItem
+player.Functions.RemoveItem = nil
+tick(5000)
+fire('QBCore:Server:PlayerLoaded', player)
+emit('SCENARIO', 'drop-settlement-inventory-missing')
+emit('REFUND', state.money.cash - cashBefore10)
+
+player.Functions.RemoveItem = savedRemove
+tick(1000)
+fire('QBCore:Server:PlayerLoaded', player)
+emit('SCENARIO', 'drop-settlement-retry')
+emit('REFUND', state.money.cash - cashBefore10)
+
 io.write(table.concat(OUT, '\n'), '\n')

@@ -168,6 +168,8 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 
 18. **掉线不再白扣押金**：`playerDropped` 把未结算配送记到 citizenid；重新上线时结算 ——
     货在就回收 + 全额退押金，货没了就不退。不在离线阶段动背包（会和存档打架）。
+19. **结算顺序**：先确认 `RemoveItem` 可用 → `pcall` 调用 → 成功后才消费 pending；qb-inventory 未就绪
+    （热重启/加载顺序）时保留 pending，等下次上线补退。
 19. 新增用例 `test_drop_settlement_refunds_only_when_goods_are_recovered`（退 500 / 货清零、货没了退 0），
     反向验证：退回上一版实现 → 红。
 
@@ -220,5 +222,7 @@ oxmysql 的 Lua 包装里 `.await` = `promise.new()` + `Citizen.Await(p)`，恢�
 - **掉线配送已解决**（阶段 G）：不在离线阶段动背包（会和存档打架），改为把未结算配送记到
   citizenid，等玩家**重新上线**（在线、背包可安全操作）时结算 —— 货在就回收 + 全退押金，
   货没了就不退。代价是"掉线当下"押金仍处于冻结状态，最长冻结到玩家下次上线。
+- **pending 配送结算无 TTL**：玩家永不上线则 `pendingSettlements[citizenid]` 常驻内存（条目小），
+  服务器重启会丢（押金回到「白丢」）。需要落表或加过期时间，属 P2。
 - **client 侧 19 个顶层缓存文件未修**：`onClientResourceStart('qb-core')` 的跨客户端语义需要
   真人客户端在场才能验（本次实机时客户端未连上），修法与服务端一致（线程重试），但没验证前不动。
