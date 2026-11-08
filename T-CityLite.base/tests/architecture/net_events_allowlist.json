@@ -465,6 +465,15 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "quest:server:cargoDamageResult",
+      "file": "[custom]/custom-quest/server/quest_logistics_validators.lua",
+      "category": "self_scoped",
+      "reason": "客户端上报**自己**这趟货运的碰撞/损伤，只写 `CargoDamageRecords[自己 citizenid]`。handler 内：data 必须是表、questId 必须是 ≤64 的字符串，四个数值各自夹到 0..上限（原来 data 为 nil 时 `data.questId` 直接抛错，数值也无界）。",
+      "evidence": "quest_logistics_validators.lua cargoDamageResult — type(data) ~= 'table' / clampNumber(collisionCount, 500) / CargoDamageRecords[citizenid]",
+      "owner": "custom-quest",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "custom-vehicles:server:releaseDashboard",
       "file": "custom-vehicles/server/main.lua",
       "category": "self_scoped",
@@ -1110,6 +1119,15 @@
       "evidence": "main.lua SetupRace — Creator ~= Player.PlayerData.citizenid / tonumber(Laps) 1..99",
       "file": "[qb]/qb-lapraces/server/main.lua",
       "owner": "qb-lapraces",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-gangmenu:server:personalStash",
+      "file": "[qb]/qb-management/server/sv_gang.lua",
+      "category": "self_scoped",
+      "reason": "帮派成员的个人仓库，名字固定为 `cartel_personal_<自己 citizenid>`，只开自己的那份；要求 gang.name 是字符串且不等于 none（原来 `playerGang.name` 为 nil 时会抛错）。",
+      "evidence": "sv_gang.lua personalStash — type(playerGang) ~= 'table' / type(playerGang.name) ~= 'string' / 'cartel_personal_' .. citizenid",
+      "owner": "qb-management",
       "expires": "2027-03-31"
     },
     {
