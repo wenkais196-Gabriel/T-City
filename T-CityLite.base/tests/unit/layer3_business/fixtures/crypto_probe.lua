@@ -259,11 +259,21 @@ for _, event in ipairs(state.clientEvents) do
 end
 emit('SYNC_FROM_NON_OWNER', syncAfter - syncBefore)
 
--- 场景 6：会话拥有者走出 20 米，仍然必须能把状态收尾（否则全服永久卡"重启中"）
+-- 场景 6：会话拥有者走出 20 米，仍然必须能把状态收尾（否则全服永久卡"重启中"），
+--         且收尾时必须广播给其他客户端
 emit('SCENARIO', 'reboot-owner-finish-remote')
 state.coords = vector3(9999.0, 9999.0, 9999.0)
+local syncBeforeFinish = 0
+for _, event in ipairs(state.clientEvents) do
+    if event.name == 'qb-crypto:client:SyncReboot' then syncBeforeFinish = syncBeforeFinish + 1 end
+end
 clock = clock + 1000
 fireAs(1, 'qb-crypto:server:Rebooting', false, 0)
+local syncAfterFinish = 0
+for _, event in ipairs(state.clientEvents) do
+    if event.name == 'qb-crypto:client:SyncReboot' then syncAfterFinish = syncAfterFinish + 1 end
+end
 emit('REBOOT_STATE_OWNER_FINISH', tostring(Crypto.Exchange.RebootInfo.state))
+emit('SYNC_BROADCAST_ON_FINISH', tostring(syncAfterFinish > syncBeforeFinish))
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')

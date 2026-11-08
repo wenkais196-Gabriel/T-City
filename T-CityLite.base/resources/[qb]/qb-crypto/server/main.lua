@@ -334,12 +334,18 @@ RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
     lastRebootUpdate[src] = now
 
     rebootSession.lastSeen = nowMs
-    if state == false then
+    local finished = state == false
+    if finished then
         rebootSession = nil        -- 发起者收尾
     end
 
     Crypto.Exchange.RebootInfo.state = state
     Crypto.Exchange.RebootInfo.percentage = percentage
+    -- 🔒 owner 主动收尾时也必须广播：原来只改服务端状态，其他客户端会继续本地循环到 100%
+    --    （约 2 分钟）一直显示"重启中"。
+    if finished then
+        TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+    end
 end)
 
 AddEventHandler('playerDropped', function()
