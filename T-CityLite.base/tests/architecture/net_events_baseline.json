@@ -22,9 +22,9 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 35,
-      "allowlisted": 5,
-      "unguarded": 176
+      "guarded": 37,
+      "allowlisted": 8,
+      "unguarded": 171
     },
     "other": {
       "events": 76,
@@ -515,9 +515,9 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 12,
-      "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 12,
+      "guarded": 2,
+      "allowlisted": 3,
+      "unguarded": 7,
       "started": true
     },
     "qb-weapons": {
@@ -907,12 +907,7 @@
       "qb-vehicleshop:server:checkFinance",
       "qb-vehicleshop:server:customTestDrive",
       "qb-vehicleshop:server:deleteVehicle",
-      "qb-vehicleshop:server:financePayment",
-      "qb-vehicleshop:server:financePaymentFull",
-      "qb-vehicleshop:server:financeVehicle",
       "qb-vehicleshop:server:removePlayer",
-      "qb-vehicleshop:server:sellShowroomVehicle",
-      "qb-vehicleshop:server:sellfinanceVehicle",
       "qb-vehicleshop:server:swapVehicle"
     ],
     "qb-weapons": [
@@ -1315,7 +1310,7 @@
     {
       "resource": "qb-vehicleshop",
       "batch": "qb",
-      "unguarded": 12,
+      "unguarded": 7,
       "owner": "qb-vehicleshop",
       "expires": "2027-03-31",
       "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"

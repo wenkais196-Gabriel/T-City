@@ -146,8 +146,21 @@ end)
 RegisterNetEvent('qb-vehicleshop:server:sellShowroomVehicle', function(data, playerid)
     local src    = source
     local player = QBCore.Functions.GetPlayer(src)
-    local target = QBCore.Functions.GetPlayer(tonumber(playerid))
+    if not player then return end
 
+    -- 🔒 只有在职车行店员能代客下单：否则任意玩家都能把旁边路人的钱扣掉给自己买车
+    if player.PlayerData.job.name ~= 'cardealer' or not player.PlayerData.job.onduty then
+        TriggerClientEvent('QBCore:Notify', src, '只有车行员工可以代客下单', 'error')
+        return
+    end
+
+    -- 🔒 车型必须是配置里存在的（原来直接索引 QBCore.Shared.Vehicles[data].price，坏值会让服务端崩）
+    if type(data) ~= 'string' or not QBCore.Shared.Vehicles[data] then
+        TriggerClientEvent('QBCore:Notify', src, '无效的车型', 'error')
+        return
+    end
+
+    local target = QBCore.Functions.GetPlayer(tonumber(playerid))
     if not target then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.Invalid_ID'), 'error')
         return

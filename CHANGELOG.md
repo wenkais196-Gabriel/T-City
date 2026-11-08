@@ -48,6 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-3 批 3：qb-vehicleshop 5 个事件（分期还款 / 全额结清 / 分期购车 / 代客售车）**（2026-11-08）：
+  - **两个真漏洞**：①`financePaymentFull` 的 `vehBalance` / `vehPlate` 全来自客户端 —— 付 1 块钱就能把
+    **别人**的分期记录 balance 清零（等于白送一台车）；②`financePayment` 的 `vehData` 同样是客户端给的，
+    `UPDATE … WHERE plate = ?` 也能改到别人的车。现在余额/期数/每期额一律
+    `SELECT … WHERE plate = ? AND citizenid = ?` 从 DB 取，UPDATE 也带 citizenid。
+  - **代客售车没有店员校验**：任意玩家可把旁边路人的钱扣掉给对方买车、自己拿提成 ——
+    `sellShowroomVehicle` / `sellfinanceVehicle` 现在要求 `job.name == 'cardealer'` 且 onduty。
+  - 三处 `QBCore.Shared.Vehicles[vehicle].price` 直接索引（客户端传坏车名会让服务端崩）→ 先校验车型存在。
+  - 数字：qb 未登记 **176 → 171**；全仓 **258 → 253**（allowlist 61 → 64，两个代售事件转 guarded）。
 - **P1-3 批 2：qb-ambulancejob 7 个事件（复活/治疗/病床/药箱）**（2026-11-08）：
   - `RevivePlayer` / `TreatWounds` 原来把权限判断写成「if 是 EMS then 干活」，闸门不算鉴权；
     改成 deny-early：抽出 `CanRevive(Player, src)` helper（在职 EMS，或 firstaid + medical_cert），
