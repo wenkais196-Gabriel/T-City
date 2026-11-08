@@ -49,6 +49,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
   - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
 - **P1-3 批 7：qb-storerobbery 9 + qb-crypto 6**（2026-11-08）：
+  - **CC 九轮复核查出的后续**（都属于「任意玩家 vs 正在店里的人」这类边界，逐条收口）：
+    ① `Rebooting` 改成**服务端会话**：只有真的扣掉一根 cryptostick 的 `ExchangeFail` 能建会话，
+    进度上报只认 owner，60 秒静默 + 5 分钟硬上限；② `callCops`/`setSafeStatus` 要绑定「本人
+    正在/刚抢过这家店」（`recentStoreRobberies` 10 分钟窗口，按 citizenid）；③ 掉线清理补
+    `srcToCitizenid` 反查表；④ 兑换回补失败挂到 `metadata.cryptostick_refunds`，上线自动补发；
+    ⑤ **客户端** `SyncReboot`/`GetRebootState` 改为按服务端 payload 落地 —— 原来无条件当成
+    「开始重启」，导致 owner 收尾/超时/掉线的「停止」广播在别的客户端眼里变成「开始」，
+    别人会一直显示假重启约 2 分钟。
+
   - **白拿钱**：`qb-crypto:server:ExchangeSuccess` 忽略 `RemoveItem` 的返回值 —— 兑换时如果
     扣不掉 cryptostick，`AddMoney` 照样执行（探针实测旧代码在扣货失败时仍入账一次）。
     现在 `RemoveItem == false` 直接返回。
