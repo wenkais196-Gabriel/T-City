@@ -88,6 +88,10 @@ end)
 
 RegisterNetEvent('qb-multicharacter:server:loadUserData', function(cData)
     local src = source
+    -- 🔒 cData 来自客户端：不是表时 `cData.citizenid` 直接抛错；citizenid 不是字符串时
+    --    下面的 `:sub(1,4)` 也会抛错。归属校验在 qb-core 的 Player.Login 里（license 不匹配会 Drop）。
+    if type(cData) ~= 'table' then return end
+    if type(cData.citizenid) ~= 'string' or #cData.citizenid == 0 or #cData.citizenid > 32 then return end
     if QBCore.Player.Login(src, cData.citizenid) then
         repeat
             Wait(10)
@@ -98,7 +102,7 @@ RegisterNetEvent('qb-multicharacter:server:loadUserData', function(cData)
         QBCore.Commands.Refresh(src)
         loadHouseData(src)
         if Config.SkipSelection then
-            local coords = json.decode(cData.position)
+            local coords = type(cData.position) == 'string' and json.decode(cData.position) or nil
             TriggerClientEvent('qb-multicharacter:client:spawnLastLocation', src, coords, cData)
         else
             if GetResourceState('qb-apartments') == 'started' then
@@ -140,9 +144,24 @@ RegisterNetEvent('qb-multicharacter:server:createCharacter', function(data)
         return
     end
 
+    -- 🔒 charinfo 完全来自客户端（`newData.charinfo = data`）：不校验就等于让客户端往
+    --    players.charinfo 里写任意大小/结构的内容。这里做类型与长度收敛，并只保留白名单字段。
+    if type(data) ~= 'table' then return end
+    local charinfo = {}
+    for _, field in ipairs({
+        'firstname', 'lastname', 'birthdate', 'gender', 'nationality', 'phone', 'cid',
+    }) do
+        local value = data[field]
+        if type(value) == 'string' and #value <= 64 then
+            charinfo[field] = value
+        elseif type(value) == 'number' then
+            charinfo[field] = value
+        end
+    end
+    if type(charinfo.firstname) ~= 'string' or type(charinfo.lastname) ~= 'string' then return end
     local newData = {}
-    newData.cid = data.cid
-    newData.charinfo = data
+    newData.cid = tonumber(data.cid) or 1
+    newData.charinfo = charinfo
     if QBCore.Player.Login(src, false, newData) then
         repeat
             Wait(10)
@@ -170,6 +189,7 @@ end)
 RegisterNetEvent('qb-multicharacter:server:deleteCharacter', function(citizenid)
     local src = source
     if not Config.EnableDeleteButton then return end
+    if type(citizenid) ~= 'string' or #citizenid == 0 or #citizenid > 32 then return end
     QBCore.Player.DeleteCharacter(src, citizenid)
     TriggerClientEvent('QBCore:Notify', src, Lang:t('notifications.char_deleted'), 'success')
 end)

@@ -34,14 +34,44 @@ local function exploitBan(id, reason)
     DropPlayer(id, 'You were permanently banned by the server for: Exploiting')
 end
 
-RegisterNetEvent('qb-pawnshop:server:sellPawnItems', function(itemName, itemAmount, itemPrice)
+-- 价格 / 熔炼配方一律以**服务端**配置为准。原来两者都从客户端参数里取：
+--   `sellPawnItems(..., itemPrice)` 的单价来自客户端（卖一块石头要价一百万的印钞机），
+--   `pickupMelted(item)` 的奖励表也来自客户端（可以任意指定奖励物品与数量）。
+local MAX_SELL_AMOUNT = 100
+local MAX_MELT_AMOUNT = 100
+
+local function findPawnEntry(itemName)
+    for _, entry in pairs(Config.PawnItems) do
+        if type(entry) == 'table' and entry.item == itemName then return entry end
+    end
+    return nil
+end
+
+local function findMeltingEntry(itemName)
+    for _, entry in pairs(Config.MeltingItems) do
+        if type(entry) == 'table' and entry.item == itemName then return entry end
+    end
+    return nil
+end
+
+local function sanitizeAmount(value, limit)
+    local amount = math.floor(tonumber(value) or 0)
+    if amount <= 0 or amount > limit then return nil end
+    return amount
+end
+
+RegisterNetEvent('qb-pawnshop:server:sellPawnItems', function(itemName, itemAmount)
     local src = source
     if not exports['custom-main']:CheckRateLimit(src, "sell_pawn_item", 1500) then
         TriggerClientEvent('QBCore:Notify', src, "您的操作过于频繁，请慢一点", "error")
         return
     end
     local Player = QBCore.Functions.GetPlayer(src)
-    local totalPrice = (tonumber(itemAmount) * itemPrice)
+    if not Player or type(itemName) ~= 'string' then return end
+    local pawnEntry = findPawnEntry(itemName)
+    local amount = sanitizeAmount(itemAmount, MAX_SELL_AMOUNT)
+    if not pawnEntry or not amount then return end
+    local totalPrice = (tonumber(pawnEntry.price) or 0) * amount
     local playerCoords = GetEntityCoords(GetPlayerPed(src))
     local dist
     for _, value in pairs(Config.PawnLocation) do
@@ -65,13 +95,18 @@ RegisterNetEvent('qb-pawnshop:server:sellPawnItems', function(itemName, itemAmou
     TriggerClientEvent('qb-pawnshop:client:openMenu', src)
 end)
 
-RegisterNetEvent('qb-pawnshop:server:meltItemRemove', function(itemName, itemAmount, item)
+RegisterNetEvent('qb-pawnshop:server:meltItemRemove', function(itemName, itemAmount)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    if exports['qb-inventory']:RemoveItem(src, itemName, itemAmount, false, 'qb-pawnshop:server:meltItemRemove') then
+    if not Player or type(itemName) ~= 'string' then return end
+    local meltEntry = findMeltingEntry(itemName)
+    local amount = sanitizeAmount(itemAmount, MAX_MELT_AMOUNT)
+    if not meltEntry or not amount then return end
+    if exports['qb-inventory']:RemoveItem(src, itemName, amount, false, 'qb-pawnshop:server:meltItemRemove') then
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[itemName], 'remove')
-        local meltTime = (tonumber(itemAmount) * item.time)
-        TriggerClientEvent('qb-pawnshop:client:startMelting', src, item, tonumber(itemAmount), (meltTime * 60000 / 1000))
+        local meltTime = (amount * (tonumber(meltEntry.meltTime) or 0))
+        -- 回给客户端的是**服务端**那份条目（客户端提交的同名条目一律忽略）
+        TriggerClientEvent('qb-pawnshop:client:startMelting', src, meltEntry, amount, (meltTime * 60000 / 1000))
         TriggerClientEvent('QBCore:Notify', src, Lang:t('info.melt_wait', { value = meltTime }), 'primary')
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_items'), 'error')
@@ -94,9 +129,16 @@ RegisterNetEvent('qb-pawnshop:server:pickupMelted', function(item)
         exploitBan(src, 'pickupMelted Exploiting')
         return
     end
+    if type(item) ~= 'table' or type(item.items) ~= 'table' then return end
     for _, v in pairs(item.items) do
-        local meltedAmount = v.amount
-        for _, m in pairs(v.item.reward) do
+        if type(v) ~= 'table' then goto continue end
+        local submittedName = type(v.item) == 'table' and v.item.item or v.name
+        local meltEntry = type(submittedName) == 'string' and findMeltingEntry(submittedName) or nil
+        if not meltEntry then goto continue end
+        local meltedAmount = sanitizeAmount(v.amount, MAX_MELT_AMOUNT)
+        if not meltedAmount then goto continue end
+        -- 🔒 奖励表来自**服务端**配置：原来直接用客户端提交的 `v.item.reward`
+        for _, m in pairs(meltEntry.rewards) do
             local rewardAmount = m.amount
             if exports['qb-inventory']:AddItem(src, m.item, (meltedAmount * rewardAmount), false, false, 'qb-pawnshop:server:pickupMelted') then
                 TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[m.item], 'add')
@@ -106,6 +148,7 @@ RegisterNetEvent('qb-pawnshop:server:pickupMelted', function(item)
                 TriggerClientEvent('QBCore:Notify', src, Lang:t('error.inventory_full', { value = QBCore.Shared.Items[m.item].label }), 'warning', 7500)
             end
         end
+        ::continue::
     end
     TriggerClientEvent('qb-pawnshop:client:openMenu', src)
 end)
@@ -128,6 +171,6 @@ end)
 
 QBCore.Functions.CreateCallback('qb-pawnshop:server:getInv', function(source, cb)
     local Player = QBCore.Functions.GetPlayer(source)
-    local inventory = Player.PlayerData.items
-    return cb(inventory)
+    if not Player then return cb({}) end
+    return cb(Player.PlayerData.items or {})
 end)
