@@ -171,7 +171,7 @@ end)
 RegisterNetEvent('qb-houses:server:createBlip', function()
     local src = source
     -- 🔒 原来任何玩家都能对全服（-1）广播一个 blip
-    if not QBCore.Functions.HasPermission(src, 'admin') then return end
+    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then return end
     local ped = GetPlayerPed(src)
     local coords = GetEntityCoords(ped)
     TriggerClientEvent('qb-houses:client:createBlip', -1, coords)
@@ -180,11 +180,14 @@ end)
 RegisterNetEvent('qb-houses:server:addNewHouse', function(street, coords, price, tier)
     local src = source
     -- 🔒 建房是管理操作：原来任何玩家都能建任意价位的房子
-    if not QBCore.Functions.HasPermission(src, 'admin') then return end
+    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then return end
     if type(street) ~= 'string' or type(coords) ~= 'table' then return end
     street = street:gsub("%'", '')
     price = tonumber(price)
     tier = tonumber(tier)
+    price = tonumber(price)
+    tier = tonumber(tier)
+    if not price or price <= 0 or not tier then return end
     local houseCount = GetHouseStreetCount(street)
     local name = street:lower() .. tostring(houseCount)
     local label = street .. ' ' .. tostring(houseCount)
@@ -207,7 +210,7 @@ end)
 
 RegisterNetEvent('qb-houses:server:addGarage', function(house, coords)
     local src = source
-    if not QBCore.Functions.HasPermission(src, 'admin') then return end
+    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then return end
     if type(house) ~= 'string' or not Config.Houses[house] or type(coords) ~= 'table' then return end
     MySQL.update('UPDATE houselocations SET garage = ? WHERE name = ?', { json.encode(coords), house })
     local garageInfo = {
@@ -298,8 +301,13 @@ RegisterNetEvent('qb-houses:server:lockHouse', function(bool, house)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or type(house) ~= 'string' or not Config.Houses[house] then return end
-    -- 🔒 原来任何人都能上/开任意房子的锁（还能全服广播）
-    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house) then return end
+    -- 🔒 原来任何人都能上/开任意房子的锁（还能全服广播）。
+    --    例外：在职警察撞门（client 的 police_stormram 会调本事件开/关门），否则撞门玩法断裂。
+    local job = Player.PlayerData.job
+    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house)
+        and not (job.name == 'police' and job.onduty) then
+        return
+    end
     TriggerClientEvent('qb-houses:client:lockHouse', -1, bool == true, house)
 end)
 
@@ -323,6 +331,7 @@ RegisterNetEvent('qb-houses:server:giveKey', function(house, target)
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_owner'), 'error')
         return
     end
+    housekeyholders[house] = housekeyholders[house] or {}
     housekeyholders[house][#housekeyholders[house] + 1] = pData.PlayerData.citizenid
     MySQL.update('UPDATE player_houses SET keyholders = ? WHERE house = ?',
         { json.encode(housekeyholders[house]), house })
@@ -373,8 +382,9 @@ RegisterNetEvent('qb-houses:server:savedecorations', function(house, decorations
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or type(house) ~= 'string' or type(decorations) ~= 'table' then return end
     if not Config.Houses[house] then return end
-    -- 🔒 装饰是房主的：原来任何人都能改别人家的家具
-    if not isHouseOwner(Player.PlayerData.license, Player.PlayerData.citizenid, house) then return end
+    -- 🔒 原来任何人都能改别人家的家具；客户端 decorate.lua 允许 HasHouseKey 的人进装饰模式，
+    --    所以这里用 hasKey（房主或持有人），与客户端判定保持一致。
+    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house) then return end
     MySQL.update('UPDATE player_houses SET decorations = ? WHERE house = ?', { json.encode(decorations), house })
     TriggerClientEvent('qb-houses:server:sethousedecorations', -1, house, decorations)
 end)
@@ -434,8 +444,9 @@ RegisterNetEvent('qb-houses:server:setLocation', function(coords, house, type)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or type(house) ~= 'string' or type(coords) ~= 'table' then return end
     if not Config.Houses[house] then return end
-    -- 🔒 储物柜/衣柜/下线点都是房主财产：原来任何人能把别人家的储物柜坐标挪走
-    if not isHouseOwner(Player.PlayerData.license, Player.PlayerData.citizenid, house) then return end
+    -- 🔒 原来任何人能把别人家的储物柜坐标挪走；客户端用 HasHouseKey 判断入口，
+    --    服务端也用 hasKey，避免持有人点了没反应（静默丢弃）。
+    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house) then return end
     if type == 1 then
         MySQL.update('UPDATE player_houses SET stash = ? WHERE house = ?', { json.encode(coords), house })
     elseif type == 2 then
@@ -461,7 +472,7 @@ RegisterNetEvent('qb-houses:server:SetInsideMeta', function(insideId, bool)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
     local insideMeta = Player.PlayerData.metadata['inside']
-    if type(insideMeta) ~= 'table' then return end
+    if type(insideMeta) ~= 'table' or type(insideMeta.apartment) ~= 'table' then return end
     if bool then
         insideMeta.apartment.apartmentType = nil
         insideMeta.apartment.apartmentId = nil
