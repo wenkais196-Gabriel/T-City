@@ -197,7 +197,14 @@ end)
 
 -- Events
 
+local lastWorthFetch = 0
 RegisterServerEvent('qb-crypto:server:FetchWorth', function()
+    local src = source
+    if type(src) ~= 'number' then return end
+    -- 🔒 每次调用会为每种币各打一条 SQL：加 5 秒全局冷却，避免被连点放大成 DB 压力
+    local now = os.time()
+    if now - lastWorthFetch < 5 then return end
+    lastWorthFetch = now
     for name, _ in pairs(Crypto.Worth) do
         local result = MySQL.query.await('SELECT * FROM crypto WHERE crypto = ?', { name })
         if result[1] ~= nil then
@@ -215,6 +222,7 @@ end)
 RegisterServerEvent('qb-crypto:server:ExchangeFail', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
     local ItemData = Player.Functions.GetItemByName('cryptostick')
     if ItemData ~= nil then
         exports['qb-inventory']:RemoveItem(src, 'cryptostick', 1, false, 'qb-crypto:server:ExchangeFail')
@@ -223,23 +231,44 @@ RegisterServerEvent('qb-crypto:server:ExchangeFail', function()
     end
 end)
 
+local lastRebootUpdate = 0
 RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
+    local src = source
+    -- 🔒 全服共享的重启状态：任意玩家原来能把它改成任意值（伪造"交易所重启中"）。
+    --    现在只接受已知状态 + 0~100 的进度，并加 1 秒节流。
+    if type(src) ~= 'number' or type(state) ~= 'string' then return end
+    local allowed = { waiting = true, rebooting = true, done = true, idle = true }
+    if not allowed[state] then return end
+    percentage = tonumber(percentage)
+    if not percentage or percentage < 0 or percentage > 100 then return end
+    local now = os.time()
+    if now == lastRebootUpdate then return end
+    lastRebootUpdate = now
     Crypto.Exchange.RebootInfo.state = state
-    Crypto.Exchange.RebootInfo.percentage = percentage
+    Crypto.Exchange.RebootInfo.percentage = math.floor(percentage)
 end)
 
 RegisterServerEvent('qb-crypto:server:GetRebootState', function()
     local src = source
+    if type(src) ~= 'number' or not QBCore.Functions.GetPlayer(src) then return end
     TriggerClientEvent('qb-crypto:client:GetRebootState', src, Crypto.Exchange.RebootInfo)
 end)
 
+local lastRebootSync = 0
 RegisterServerEvent('qb-crypto:server:SyncReboot', function()
+    local src = source
+    if type(src) ~= 'number' then return end
+    -- 🔒 全服广播：1 秒节流
+    local now = os.time()
+    if now == lastRebootSync then return end
+    lastRebootSync = now
     TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
 end)
 
 RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
     local ItemData = Player.Functions.GetItemByName('cryptostick')
     if ItemData ~= nil then
         -- 🛡️ Security: Both LuckChance and LuckyNumber generated server-side (client value ignored)
@@ -250,7 +279,9 @@ RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function()
         if LuckChance == LuckyNumber then
             Amount = (math.random(1599999, 2599999) / DeelNumber)
         end
-        exports['qb-inventory']:RemoveItem(src, 'cryptostick', 1, false, 'qb-crypto:server:ExchangeSuccess')
+        -- 🔒 先确认 cryptostick 真的被扣掉，再发钱：原来忽略返回值，扣失败也会 AddMoney（等于白拿）
+        local removed = exports['qb-inventory']:RemoveItem(src, 'cryptostick', 1, false, 'qb-crypto:server:ExchangeSuccess')
+        if removed == false then return end
         Player.Functions.AddMoney('crypto', Amount, 'qb-crypto:server:ExchangeSuccess')
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.you_have_exchanged_your_cryptostick_for', { amount = Amount }), 'success', 3500)
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['cryptostick'], 'remove')
