@@ -690,6 +690,42 @@
       "expires": "2027-03-31"
     },
     {
+      "name": "qb-clothes:loadPlayerSkin",
+      "file": "[qb]/qb-clothing/server/main.lua",
+      "category": "self_scoped",
+      "reason": "加载**自己**的外观（RAM 命中就跳过 SQL）。",
+      "evidence": "clothing/main.lua loadPlayerSkin — local src = source / PlayerData.citizenid / TriggerClientEvent(loadSkin, src)",
+      "owner": "qb-clothing",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-clothes:saveOutfit",
+      "file": "[qb]/qb-clothing/server/main.lua",
+      "category": "self_scoped",
+      "reason": "保存**自己**的一套服装。本轮补：Player 判空（原来 nil 时直接索引崩）、名称长度、皮肤结构校验、每人最多 30 套（原来可以无限插 player_outfits，每次插入还会把全部服装回读一遍）。",
+      "evidence": "clothing/main.lua saveOutfit — if not Player then return end / isValidSkinPayload / MAX_OUTFITS_PER_PLAYER",
+      "owner": "qb-clothing",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-clothing:saveSkin",
+      "file": "[qb]/qb-clothing/server/main.lua",
+      "category": "self_scoped",
+      "reason": "保存**自己**的外观到 RAM 缓存。本轮补结构校验：model 必须是 ≤64 的字符串，skin 必须是 ≤64 个「字符串/数字键 → 标量值」的键值表（防止用超大表把缓存与 playerskins 列写爆）。",
+      "evidence": "clothing/main.lua saveSkin — local src = source / isValidSkinPayload(model, skin) / skinCache[citizenid]",
+      "owner": "qb-clothing",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-clothing:server:removeOutfit",
+      "file": "[qb]/qb-clothing/server/main.lua",
+      "category": "self_scoped",
+      "reason": "删除**自己**的一套服装（DELETE 语句带 `citizenid = ?`）。本轮补 Player 判空与参数类型校验。",
+      "evidence": "clothing/main.lua removeOutfit — if not Player then return end / DELETE ... WHERE citizenid = ? AND outfitname = ? AND outfitId = ?",
+      "owner": "qb-clothing",
+      "expires": "2027-03-31"
+    },
+    {
       "name": "QBCore:Server:AddItem",
       "file": "[qb]/qb-core/server/events.lua",
       "category": "deprecated_blocked",
@@ -894,6 +930,33 @@
       "evidence": "deliveries.lua updateDealerItems — type(itemData)/product 查表 + GetItemByName + RemoveItem == false 则 return",
       "file": "[qb]/qb-drugs/server/deliveries.lua",
       "owner": "qb-drugs",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-houserobbery:server:enterHouse",
+      "file": "[qb]/qb-houserobbery/server/main.lua",
+      "category": "civilian",
+      "reason": "任何玩家都能进入被撬开的房子（玩法本身）。handler 内：house 必须是字符串且在 Config 里、调用者必须是在线玩家；坏 key 原来会让 `Config.Houses[house]['opened']` 抛错打崩事件线程。",
+      "evidence": "main.lua enterHouse — type(houseConfig) ~= 'table' return / GetPlayer(src) / houseConfig['opened']",
+      "owner": "qb-houserobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-houserobbery:server:removeAdvancedLockpick",
+      "file": "[qb]/qb-houserobbery/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只删调用者自己背包里的 advancedlockpick，source 不来自参数，越权面为零。",
+      "evidence": "main.lua removeAdvancedLockpick — local src = source / GetPlayer(src) / RemoveItem(src, 'advancedlockpick', 1)",
+      "owner": "qb-houserobbery",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-houserobbery:server:removeLockpick",
+      "file": "[qb]/qb-houserobbery/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只删调用者自己背包里的 lockpick，source 不来自参数，越权面为零。",
+      "evidence": "main.lua removeLockpick — local src = source / GetPlayer(src) / RemoveItem(src, 'lockpick', 1)",
+      "owner": "qb-houserobbery",
       "expires": "2027-03-31"
     },
     {

@@ -379,5 +379,21 @@
       ],
       "why": "搬运物品到 otherplayer-* 容器前，必须确认目标玩家在线且在自己 3 米内（管理员除外）；否则客户端可伪造本事件远程搬别人的背包。"
     }
+  },
+  "qb-houserobbery": {
+    "getFurniture": {
+      "shape": "local_check",
+      "defined_at": "qb-houserobbery/server/main.lua",
+      "requires_code": [
+        "type(house) ~=",
+        "Config.Houses[house]",
+        "type(cabinConfig) ~=",
+        "tonumber(cabin)"
+      ],
+      "requires_raw": [
+        "furniture"
+      ],
+      "why": "house/cabin 来自客户端，直接拿去索引 Config.Houses 会抛错打崩事件线程，也可能指向不存在的家具去刷 searched 状态。"
+    }
   }
 }

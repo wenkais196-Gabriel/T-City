@@ -302,6 +302,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **P1-3 批 12：qb-houserobbery 5 + qb-clothing 5**（2026-11-08）：qb-houserobbery 有一个**功能级**
+  bug —— 搜刮家具的准入导出写成了 `exports['custom-main']:CheckHouseRobbery`，而这个导出只有
+  `custom-crime` 提供，每次搜刮都会抛 `No such export CheckHouseRobbery in resource custom-main`，
+  等于**整条房屋搜刮流程从来没跑通**；顺带 `SetBusyState(cabin, house, bool)` / `enterHouse(house)` /
+  `searchFurniture(cabin, house)` 都拿客户端传来的 house/cabin 直接索引 `Config.Houses[...]`（坏 key
+  就是一个 nil 索引，打崩事件线程），`SetBusyState` 还能把任意家具标成 isBusy 锁死整间房子，已搜过的
+  抽屉服务端也照样发奖。qb-clothing 集中在"客户端数据没有边界"：`saveSkin` 无结构/长度校验就进 RAM
+  缓存与 `playerskins` 列；`saveOutfit` 在 `Player` 为 nil 时直接索引崩、且**没有条数上限**（可无限往
+  `player_outfits` 插，每次插入还会全量回读）；`removeOutfit` 同样缺判空；`QBCore:Server:OnPlayerUnload(src)`
+  是服务端内部事件，客户端能自己发一份（还能传别人的 src 强制写盘别人的皮肤）。
+  测试：两个探针真加载 config + server/main.lua。旧版实测：`SetBusyState`/`enterHouse` 遇坏 key 抛
+  `attempt to index a nil value (field '?')`，`searchFurniture` 抛 `No such export CheckHouseRobbery
+  in resource custom-main`（`SEARCH_NO_ERROR=false`、`SEARCH_MARKED_SEARCHED=false`），
+  `SKIN_HUGE_REJECTED=false`、`UNLOAD_CLIENT_BLOCKED=false`、`OUTFIT_LIMIT_ENFORCED=false`，
+  且 `saveOutfit`/`removeOutfit` 在玩家对象缺失时抛 `attempt to index a nil value (local 'Player')`。
+  数字：未登记 **134 → 124**（qb 53 → 43，allowlist 132 → 139）；`1269 passed`。
+
 - **P1-3 批 11：qb-inventory 8 条**（2026-11-08）：核心资源，改动只限制在"客户端参数形状"与"归属"
   两层，不碰物品搬运算法 ① `openVending(data)` / `closeInventory(inventory)` / `useItem(item)`
   直接索引客户端参数（`data.coords` / `inventory:find` / `item.slot`），发个数字就能把事件线程打崩
