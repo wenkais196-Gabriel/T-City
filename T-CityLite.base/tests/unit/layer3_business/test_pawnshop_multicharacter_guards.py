@@ -66,12 +66,18 @@ def test_pawn_melt_recipe_comes_from_the_server():
     assert data["MELT_UNKNOWN_ITEM_REJECTED"] == "true", "不在配方里的物品也能熔"
 
 
-def test_pawn_pickup_rewards_cannot_be_forged():
-    """取回熔炼产物时，奖励只能按服务端配方发。"""
+def test_pawn_pickup_is_driven_by_the_server_side_melt_state():
+    """取回必须凭服务端登记的"熔炼批次"，不能凭客户端断言。
+
+    第一版只把奖励表改成服务端配置，仍然可以站在当铺门口反复触发 `pickupMelted`
+    无限领配置奖励（不需要原料、不需要等熔炼时间）—— 现在 `meltItemRemove` 成功扣料时登记
+    `PendingMelt[src]`，取回只按这批发、到时间才发、发完清除。
+    """
     data = _run("pawnshop_probe.lua", "qb-pawnshop")
-    assert data["PICKUP_IGNORES_CLIENT_REWARDS"] == "true", "客户端伪造的奖励表被照单全收（可刷任意物品）"
-    assert data["PICKUP_USES_CONFIG_REWARDS"] == "true", "正常取回反而没发奖励（过度收紧）"
-    assert data["PICKUP_UNKNOWN_ITEM_GIVES_NOTHING"] == "true", "不认识的物品也发了奖励"
+    assert data["PICKUP_WITHOUT_MELT_GIVES_NOTHING"] == "true", "没熔炼过也能领奖励（可无限刷配置奖励）"
+    assert data["PICKUP_BEFORE_READY_GIVES_NOTHING"] == "true", "熔炼还没到时间就能领"
+    assert data["PICKUP_PAYS_CONFIG_REWARDS"] == "true", "正常取回没发到配置奖励（过度收紧）"
+    assert data["PICKUP_SECOND_TIME_GIVES_NOTHING"] == "true", "同一批可以重复领取"
 
 
 # ══════════════════════════════════════════════════════════════════

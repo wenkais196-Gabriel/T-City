@@ -40,6 +40,15 @@ end
 local MAX_SELL_AMOUNT = 100
 local MAX_MELT_AMOUNT = 100
 
+-- 熔炼中的批次：`[src] = { { entry, amount, readyAt } }`。
+-- 取回时**完全不看客户端提交的内容**，只按这里记的批次发奖 —— 否则站在当铺门口反复触发
+-- `pickupMelted` 就能无限领配置里的奖励（不需要原料、不需要等熔炼时间）。
+local PendingMelt = {}
+
+AddEventHandler('playerDropped', function()
+    PendingMelt[source] = nil
+end)
+
 local function findPawnEntry(itemName)
     for _, entry in pairs(Config.PawnItems) do
         if type(entry) == 'table' and entry.item == itemName then return entry end
@@ -104,51 +113,70 @@ RegisterNetEvent('qb-pawnshop:server:meltItemRemove', function(itemName, itemAmo
     if not meltEntry or not amount then return end
     if exports['qb-inventory']:RemoveItem(src, itemName, amount, false, 'qb-pawnshop:server:meltItemRemove') then
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[itemName], 'remove')
-        local meltTime = (amount * (tonumber(meltEntry.meltTime) or 0))
+        local meltMinutes = (amount * (tonumber(meltEntry.meltTime) or 0))
+        local meltSeconds = math.max(1, math.floor(meltMinutes * 60))
+        PendingMelt[src] = PendingMelt[src] or {}
+        table.insert(PendingMelt[src], {
+            entry = meltEntry,
+            amount = amount,
+            readyAt = os.time() + meltSeconds,
+        })
         -- 回给客户端的是**服务端**那份条目（客户端提交的同名条目一律忽略）
-        TriggerClientEvent('qb-pawnshop:client:startMelting', src, meltEntry, amount, (meltTime * 60000 / 1000))
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('info.melt_wait', { value = meltTime }), 'primary')
+        TriggerClientEvent('qb-pawnshop:client:startMelting', src, meltEntry, amount, meltSeconds)
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('info.melt_wait', { value = meltMinutes }), 'primary')
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_items'), 'error')
     end
 end)
 
-RegisterNetEvent('qb-pawnshop:server:pickupMelted', function(item)
+RegisterNetEvent('qb-pawnshop:server:pickupMelted', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
     local playerCoords = GetEntityCoords(GetPlayerPed(src))
-    local dist
+    local nearPawn = false
     for _, value in pairs(Config.PawnLocation) do
-        dist = #(playerCoords - value.coords)
-        if #(playerCoords - value.coords) < 2 then
-            dist = #(playerCoords - value.coords)
+        if #(playerCoords - value.coords) < 5 then
+            nearPawn = true
             break
         end
     end
-    if dist > 5 then
+    if not nearPawn then
         exploitBan(src, 'pickupMelted Exploiting')
         return
     end
-    if type(item) ~= 'table' or type(item.items) ~= 'table' then return end
-    for _, v in pairs(item.items) do
-        if type(v) ~= 'table' then goto continue end
-        local submittedName = type(v.item) == 'table' and v.item.item or v.name
-        local meltEntry = type(submittedName) == 'string' and findMeltingEntry(submittedName) or nil
-        if not meltEntry then goto continue end
-        local meltedAmount = sanitizeAmount(v.amount, MAX_MELT_AMOUNT)
-        if not meltedAmount then goto continue end
-        -- 🔒 奖励表来自**服务端**配置：原来直接用客户端提交的 `v.item.reward`
-        for _, m in pairs(meltEntry.rewards) do
-            local rewardAmount = m.amount
-            if exports['qb-inventory']:AddItem(src, m.item, (meltedAmount * rewardAmount), false, false, 'qb-pawnshop:server:pickupMelted') then
-                TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[m.item], 'add')
-                TriggerClientEvent('QBCore:Notify', src, Lang:t('success.items_received', { value = (meltedAmount * rewardAmount), value2 = QBCore.Shared.Items[m.item].label }), 'success')
-                TriggerClientEvent('qb-pawnshop:client:resetPickup', src)
-            else
-                TriggerClientEvent('QBCore:Notify', src, Lang:t('error.inventory_full', { value = QBCore.Shared.Items[m.item].label }), 'warning', 7500)
+
+    -- 🔒 发奖只看服务端记的待取回批次：meltItemRemove 扣掉原料时登记，熔炼时间到才可领。
+    local pending = PendingMelt[src]
+    if type(pending) ~= 'table' or #pending == 0 then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_melt'), 'error')
+        return
+    end
+
+    local now = os.time()
+    local remaining = {}
+    for _, batch in ipairs(pending) do
+        if batch.readyAt <= now then
+            for _, reward in pairs(batch.entry.rewards) do
+                local rewardAmount = (tonumber(reward.amount) or 0) * batch.amount
+                if rewardAmount > 0 then
+                    if exports['qb-inventory']:AddItem(src, reward.item, rewardAmount, false, false, 'qb-pawnshop:server:pickupMelted') then
+                        TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[reward.item], 'add')
+                        TriggerClientEvent('QBCore:Notify', src, Lang:t('success.items_received', { value = rewardAmount }), 'success')
+                    else
+                        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.inventory_full', { value = QBCore.Shared.Items[reward.item] }), 'error')
+                        remaining[#remaining + 1] = batch   -- 背包满：留着下次再取
+                    end
+                end
             end
+        else
+            remaining[#remaining + 1] = batch           -- 还没到时间
         end
-        ::continue::
+    end
+
+    PendingMelt[src] = (#remaining > 0) and remaining or nil
+    if PendingMelt[src] == nil then
+        TriggerClientEvent('qb-pawnshop:client:resetPickup', src)
     end
     TriggerClientEvent('qb-pawnshop:client:openMenu', src)
 end)
@@ -171,6 +199,14 @@ end)
 
 QBCore.Functions.CreateCallback('qb-pawnshop:server:getInv', function(source, cb)
     local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then return cb({}) end
-    return cb(Player.PlayerData.items or {})
+    if not Player then return cb({}, {}) end
+    -- `Config.PawnItems` 的 `price` 是 `math.random(50,100)`，客户端与服务端各自求值会不一致，
+    -- 所以展示价也由服务端下发（客户端不再用自己那份）。
+    local prices = {}
+    for _, entry in pairs(Config.PawnItems) do
+        if type(entry) == 'table' and type(entry.item) == 'string' then
+            prices[entry.item] = tonumber(entry.price) or 0
+        end
+    end
+    return cb(Player.PlayerData.items or {}, prices)
 end)
