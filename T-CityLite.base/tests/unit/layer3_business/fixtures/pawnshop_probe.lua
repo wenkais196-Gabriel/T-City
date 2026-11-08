@@ -91,6 +91,7 @@ exports = setmetatable({}, {
         if name == 'qb-inventory' then
             return {
                 AddItem = function(_, src, item, amount)
+                    if state.failItem == item then return false end
                     state.added[#state.added + 1] = { src = src, item = item, amount = amount }
                     return true
                 end,
@@ -138,6 +139,7 @@ local function fireAs(src, name, ...)
 end
 
 state.players[1] = makePlayer(1)
+state.players[2] = makePlayer(2)   -- 隔离用：多奖励部分发放那个场景
 
 -- 站到当铺门口（Config.PawnLocation 第一项）
 local pawnCoords = nil
@@ -212,6 +214,45 @@ emit('PICKUP_PAYS_CONFIG_REWARDS', tostring(got == expected))
 state.added = {}
 fireAs(1, 'qb-pawnshop:server:pickupMelted')
 emit('PICKUP_SECOND_TIME_GIVES_NOTHING', tostring(#state.added == 0))
+
+-- ⑤ 多奖励条目：一条加成、另一条背包满 → 下次只能补发失败那条，不能把已发的再发一遍
+local multiEntry = nil
+for _, entry in pairs(Config.MeltingItems) do
+    if type(entry) == 'table' and type(entry.rewards) == 'table' and #entry.rewards >= 2 then
+        multiEntry = entry
+        break
+    end
+end
+if multiEntry then
+    state.hasItem = true
+    state.startMelting = nil
+    fireAs(2, 'qb-pawnshop:server:meltItemRemove', multiEntry.item, 1, multiEntry)
+    clock = clock + math.max(1, math.floor((tonumber(multiEntry.meltTime) or 0) * 60)) + 5
+
+    -- 让第二条奖励一直失败（模拟背包满 / 超重）
+    state.failItem = multiEntry.rewards[2].item
+    state.added = {}
+    fireAs(2, 'qb-pawnshop:server:pickupMelted')
+    local firstPass = #state.added
+
+    state.added = {}
+    fireAs(2, 'qb-pawnshop:server:pickupMelted')   -- 第二次：只重试失败那条，仍然失败 → 不发
+    local secondPass = #state.added
+
+    state.failItem = nil
+    state.added = {}
+    fireAs(2, 'qb-pawnshop:server:pickupMelted')   -- 背包腾出来后：只补发剩下那条
+    local thirdPass = #state.added
+    local repaidFirst = false
+    for _, add in ipairs(state.added) do
+        if add.item == multiEntry.rewards[1].item then repaidFirst = true end
+    end
+
+    -- 多奖励条目通常是 3 条（diamond / goldbar / electronickit）：第一轮发掉除失败那条以外的全部
+    local rewardCount = #multiEntry.rewards
+    emit('PICKUP_PARTIAL_NO_DOUBLE_PAY',
+         tostring(firstPass == rewardCount - 1 and secondPass == 0 and thirdPass == 1 and not repaidFirst))
+end
 
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')

@@ -315,7 +315,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   反复触发、无限领配置奖励（不需要原料、不需要等熔炼时间）—— 改成 `meltItemRemove` 扣料成功时登记
   `PendingMelt[src]`（含 `readyAt`），取回只按这批发、到时间才发、发完清除、背包满时保留、
   掉线清理；② `Config.PawnItems.price` 是 `math.random(50,100)`，客户端与服务端各自求值，
-  改成服务端权威结算后会出现「显示 80 实收 52」—— `getInv` 回调同时下发价格表，客户端展示用服务端价。
+  改成服务端权威结算后会出现「显示 80 实收 52」—— `getInv` 回调同时下发价格表，客户端展示用服务端价；
+  ③ 批次里逐条记 `paid[index]`：多奖励条目（rolex 是 diamond / goldbar / electronickit 三条）在
+  「一条发得出去、一条背包满」时整批保留，会把已经发出去的那几条重复发 —— 只有全发完才清批次。
   测试：两个探针。旧版实测：`SELL_PAID_CONFIG_PRICE=false`、`SELL_AMOUNT_CAPPED=false`、
   `SELL_UNKNOWN_ITEM_REJECTED=false`、`MELT_USES_SERVER_ENTRY=false`；`loadUserData` 三种坏参数各抛一次
   `attempt to index a ... value (local 'cData')`，`CREATE_STRIPS_UNKNOWN_FIELDS=false`、

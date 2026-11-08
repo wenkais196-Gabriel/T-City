@@ -78,6 +78,9 @@ def test_pawn_pickup_is_driven_by_the_server_side_melt_state():
     assert data["PICKUP_BEFORE_READY_GIVES_NOTHING"] == "true", "熔炼还没到时间就能领"
     assert data["PICKUP_PAYS_CONFIG_REWARDS"] == "true", "正常取回没发到配置奖励（过度收紧）"
     assert data["PICKUP_SECOND_TIME_GIVES_NOTHING"] == "true", "同一批可以重复领取"
+    assert data["PICKUP_PARTIAL_NO_DOUBLE_PAY"] == "true", (
+        "多奖励批次只要有一条发不出去就把整批留到下次，已发出去的那几条会被重复发"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════
