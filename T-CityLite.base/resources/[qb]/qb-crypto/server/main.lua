@@ -195,16 +195,29 @@ QBCore.Commands.Add('crypto', '', {}, false, function(source)
     TriggerClientEvent('QBCore:Notify', src, Lang:t('text.you_have_with_a_value_of', { playerPlayerDataMoneyCrypto = Player.PlayerData.money.crypto, mypocket = MyPocket }))
 end)
 
+
+-- 交易所柜员机位置（Config 里登记），用于把"任意玩家"收窄成"正在交易所前的人"
+local EXCHANGE_MAX_DIST = tonumber(GetConvar('crypto_exchange_max_distance', '20.0')) or 20.0
+
+local function NearExchange(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false end
+    local anchor = Crypto.Exchange and Crypto.Exchange.coords
+    if not anchor then return false end
+    local coords = GetEntityCoords(ped)
+    return #(coords - anchor.xyz) <= EXCHANGE_MAX_DIST
+end
+
 -- Events
 
-local lastWorthFetch = 0
+local lastWorthFetch = {}
 RegisterServerEvent('qb-crypto:server:FetchWorth', function()
     local src = source
-    if type(src) ~= 'number' then return end
-    -- 🔒 每次调用会为每种币各打一条 SQL：加 5 秒全局冷却，避免被连点放大成 DB 压力
+    if type(src) ~= 'number' or not QBCore.Functions.GetPlayer(src) then return end
+    -- 🔒 每次调用会为每种币各打一条 SQL：**按玩家**冷却（全局冷却会被一个人占满，把别人挡在外面）
     local now = os.time()
-    if now - lastWorthFetch < 5 then return end
-    lastWorthFetch = now
+    if lastWorthFetch[src] and now - lastWorthFetch[src] < 5 then return end
+    lastWorthFetch[src] = now
     for name, _ in pairs(Crypto.Worth) do
         local result = MySQL.query.await('SELECT * FROM crypto WHERE crypto = ?', { name })
         if result[1] ~= nil then
@@ -238,6 +251,8 @@ RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
     --    客户端实际发的是 `Rebooting(true/false, percentage)`（见 client/main.lua 的重启循环），
     --    所以 state 必须是 boolean、percentage 必须是 0~100 的整数，并按秒节流。
     if type(src) ~= 'number' or type(state) ~= 'boolean' then return end
+    -- 🔒 全服共享状态必须只有"正在交易所柜员机前的人"能写（原来任何玩家都能伪造重启中）
+    if not QBCore.Functions.GetPlayer(src) or not NearExchange(src) then return end
     percentage = tonumber(percentage)
     if not percentage or percentage < 0 or percentage > 100 or percentage % 1 ~= 0 then return end
     -- 客户端重启循环每帧上报一次进度：用毫秒计时，200ms 节流（1 秒会把进度拖慢 5~10 倍）
@@ -254,14 +269,15 @@ RegisterServerEvent('qb-crypto:server:GetRebootState', function()
     TriggerClientEvent('qb-crypto:client:GetRebootState', src, Crypto.Exchange.RebootInfo)
 end)
 
-local lastRebootSync = 0
+local lastRebootSync = {}
 RegisterServerEvent('qb-crypto:server:SyncReboot', function()
     local src = source
-    if type(src) ~= 'number' then return end
-    -- 🔒 全服广播：1 秒节流
+    if type(src) ~= 'number' or not QBCore.Functions.GetPlayer(src) then return end
+    if not NearExchange(src) then return end
+    -- 🔒 全服广播：按玩家 1 秒节流
     local now = os.time()
-    if now == lastRebootSync then return end
-    lastRebootSync = now
+    if lastRebootSync[src] and now == lastRebootSync[src] then return end
+    lastRebootSync[src] = now
     TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
 end)
 
@@ -279,10 +295,14 @@ RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function()
         if LuckChance == LuckyNumber then
             Amount = (math.random(1599999, 2599999) / DeelNumber)
         end
-        -- 🔒 先确认 cryptostick 真的被扣掉，再发钱：原来忽略返回值，扣失败也会 AddMoney（等于白拿）
+        -- 🔒 只有明确返回 true 才算扣成功（别的库存实现返回 nil 时 `== false` 挡不住 = 白拿）
         local removed = exports['qb-inventory']:RemoveItem(src, 'cryptostick', 1, false, 'qb-crypto:server:ExchangeSuccess')
-        if removed == false then return end
-        Player.Functions.AddMoney('crypto', Amount, 'qb-crypto:server:ExchangeSuccess')
+        if removed ~= true then return end
+        -- 加钱失败就把 cryptostick 还回去，别让玩家既丢物品又没钱
+        if Player.Functions.AddMoney('crypto', Amount, 'qb-crypto:server:ExchangeSuccess') == false then
+            exports['qb-inventory']:AddItem(src, 'cryptostick', 1, false, false, 'qb-crypto:server:ExchangeSuccess-refund')
+            return
+        end
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.you_have_exchanged_your_cryptostick_for', { amount = Amount }), 'success', 3500)
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['cryptostick'], 'remove')
         TriggerClientEvent('qb-phone:client:AddTransaction', src, Player, {}, Lang:t('credit.there_are_amount_credited', { amount = Amount }), 'Credit')

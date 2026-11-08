@@ -119,8 +119,10 @@ GetHashKey = function(value) return 'hash:' .. tostring(value) end
 load_lua(RES .. '/config.lua', 'config.lua')
 load_lua(RES .. '/server/main.lua', 'main.lua')
 
--- ── 1. callCops：客户端编坐标应被丢弃 ──
+-- ── 1. callCops：客户端编坐标应被丢弃（人站在店里，否则服务端会按距离拒）──
 emit('SCENARIO', 'callcops-coords')
+local shopAnchor = Config.Registers[1][1]
+state.coords = vector3(shopAnchor.x, shopAnchor.y, shopAnchor.z)
 local fakeCoords = { x = 9999.0, y = 9999.0, z = 9999.0 }
 local before = #state.clientEvents
 fireAs(1, 'qb-storerobbery:server:callCops', 'cashier', 1, 'Fake Street', fakeCoords)
@@ -136,13 +138,26 @@ if alert then
     emit('ALERT_COORDS_FROM_CLIENT', alert.coords.x == fakeCoords.x)
 end
 
--- ── 2. 坏 kind / 坏 key 不崩 ──
+-- ── 2. 坏 kind / 坏 key / 远处 → 都不该发警情 ──
 emit('SCENARIO', 'callcops-bad-input')
+local alertsBefore = 0
+for _, event in ipairs(state.clientEvents) do
+    if event.name == 'qb-phone:client:addPoliceAlert' then alertsBefore = alertsBefore + 1 end
+end
+local anchor1 = Config.Registers[1][1]
+state.coords = vector3(anchor1.x, anchor1.y, anchor1.z)   -- 站在店里
 fireAs(1, 'qb-storerobbery:server:callCops', 'nonsense', 1, 'X', fakeCoords)
 fireAs(1, 'qb-storerobbery:server:callCops', 'cashier', 9999, 'X', fakeCoords)
 fireAs(1, 'qb-storerobbery:server:callCops', nil, nil, nil, nil)
+state.coords = vector3(9999.0, 9999.0, 9999.0)            -- 走远
+fireAs(1, 'qb-storerobbery:server:callCops', 'cashier', 1, 'X', fakeCoords)
+local alertsAfter = 0
+for _, event in ipairs(state.clientEvents) do
+    if event.name == 'qb-phone:client:addPoliceAlert' then alertsAfter = alertsAfter + 1 end
+end
+emit('ALERTS_FROM_BAD_CALLS', alertsAfter - alertsBefore)
 
--- ── 3. setSafeStatus：站远处不能把保险箱标成已抢 ──
+-- ── 3. setSafeStatus：必须有"本店正在进行的抢劫" + 站在保险箱旁 ──
 emit('SCENARIO', 'safe-remote')
 local safeKey = 1
 Config.Safes[safeKey].robbed = false
@@ -150,9 +165,27 @@ state.coords = vector3(9999.0, 9999.0, 9999.0)
 fireAs(1, 'qb-storerobbery:server:setSafeStatus', safeKey)
 emit('SAFE_ROBBED_REMOTE', tostring(Config.Safes[safeKey].robbed))
 
+emit('SCENARIO', 'safe-no-active-robbery')
+-- 站在保险箱旁但没有任何 activeRobberies 记录：仍然不该标成已抢
+local anchorSafe = Config.Safes[safeKey][1]
+state.coords = vector3(anchorSafe.x, anchorSafe.y, anchorSafe.z)
+fireAs(1, 'qb-storerobbery:server:setSafeStatus', safeKey)
+emit('SAFE_ROBBED_WITHOUT_ROBBERY', tostring(Config.Safes[safeKey].robbed))
+
 emit('SCENARIO', 'safe-close')
-local anchor = Config.Safes[safeKey][1]
-state.coords = vector3(anchor.x, anchor.y, anchor.z)
+-- 模拟"本人正在抢这家店的收银台"（Config.Registers[1].safeKey == 1）
+local activeRobberies = nil
+local handler = handlers['qb-storerobbery:server:setSafeStatus']
+for index = 1, 40 do
+    local upName, upValue = debug.getupvalue(handler, index)
+    if not upName then break end
+    if upName == 'activeRobberies' then activeRobberies = upValue break end
+end
+emit('ACTIVE_TABLE_FOUND', tostring(activeRobberies ~= nil))
+if activeRobberies then
+    activeRobberies[1] = { src = 1, startTime = 0 }
+end
+state.coords = vector3(anchorSafe.x, anchorSafe.y, anchorSafe.z)
 fireAs(1, 'qb-storerobbery:server:setSafeStatus', safeKey)
 emit('SAFE_ROBBED_CLOSE', tostring(Config.Safes[safeKey].robbed))
 

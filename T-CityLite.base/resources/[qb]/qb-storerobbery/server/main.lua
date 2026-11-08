@@ -515,6 +515,20 @@ RegisterNetEvent('qb-storerobbery:server:setSafeStatus', function(safe)
     if not safeEntry or safeEntry.robbed then return end
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+
+    -- 🔒 只靠 10 米距离不够：任何玩家走到保险箱前就能把它标成"已抢"40~80 分钟。
+    --    现在要求本人在**同一家店**有一笔正在进行的收银机抢劫（行内联动同一台收银机）。
+    local hasActiveRobbery = false
+    for register, job in pairs(activeRobberies) do
+        local registerCfg = Config.Registers[register]
+        -- Config.Registers[register].safeKey 指向的正是 Config.Safes 的下标
+        if job and job.src == src and registerCfg and registerCfg.safeKey == safe then
+            hasActiveRobbery = true
+            break
+        end
+    end
+    if not hasActiveRobbery then return end
+
     local near = false
     local ped = GetPlayerPed(src)
     if ped and ped ~= 0 then
@@ -580,16 +594,25 @@ RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetL
     --    "某店正在被抢"的警情（坐标和店名都能编），坏 key 还会 nil 索引崩服务端。
     --    现在只认 Config 里真实存在的收银机/保险箱，坐标取服务端配置。
     --    注意形参不能叫 `type`：那会遮蔽全局 type()（公寓那边踩过一次）。
-    -- 客户端实际传的 kind 是 'safe' 或 'cashier'（见 client/main.lua 的三处调用），
-    -- 所以只区分"保险箱"与"收银机"，具体 key 是否存在由查表决定。
-    if type(kind) ~= 'string' then return end
+    -- 客户端实际传的 kind 是 'safe' 或 'cashier'（见 client/main.lua 的三处调用）。
+    -- 🔒 只接受这两个值：原来"不是 safe 就当收银机"，传 'nonsense' 也能发警情。
+    if type(kind) ~= 'string' or (kind ~= 'safe' and kind ~= 'cashier') then return end
     if type(safe) ~= 'number' and type(safe) ~= 'string' then return end
+    local Caller = QBCore.Functions.GetPlayer(src)
+    if not Caller then return end
     local isSafe = kind == 'safe'
     local entry = isSafe and Config.Safes[safe] or Config.Registers[safe]
     local anchor = entry and entry[1]
     if not entry or not anchor then return end
+    -- 🔒 必须人就在这家店附近（原来任意玩家拿真实 key 就能给全服推警情）
+    local ped = GetPlayerPed(src)
+    local callerCoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
+    local maxDist = tonumber(GetConvar('security_max_interaction_distance', '10.0')) or 10.0
+    if not callerCoords or #(callerCoords - anchor.xyz) > maxDist then return end
     local cameraId = entry.camId
-    streetLabel = streetLabel or 'Unknown'
+    -- 店名只取客户端文本的"显示用"部分：截断 + 去掉控制字符（坐标已由服务端决定）
+    streetLabel = tostring(streetLabel or ''):gsub('%c', ''):sub(1, 48)
+    if streetLabel == '' then streetLabel = 'Unknown' end
     coords = { x = anchor.x, y = anchor.y, z = anchor.z }
     local alertData = {
         title = '10-33 | Shop Robbery',
@@ -668,14 +691,14 @@ QBCore.Functions.CreateCallback('qb-storerobbery:server:getMinPolice', function(
 end)
 
 -- 当 /setrobbery 更改门槛时，广播到所有客户端
-local lastMinPoliceSync = 0
+local lastMinPoliceSync = {}
 RegisterNetEvent('qb-storerobbery:server:syncMinPolice', function()
     local src = source
-    -- 🔒 全服广播：加 10 秒冷却，避免任何玩家连点刷包
-    if type(src) ~= 'number' then return end
+    -- 🔒 全服广播：**按玩家** 10 秒冷却（全局冷却会被一个人占满，把别人挡在外面）
+    if type(src) ~= 'number' or not QBCore.Functions.GetPlayer(src) then return end
     local now = os.time()
-    if now - lastMinPoliceSync < 10 then return end
-    lastMinPoliceSync = now
+    if lastMinPoliceSync[src] and now - lastMinPoliceSync[src] < 10 then return end
+    lastMinPoliceSync[src] = now
     local minPolice = tonumber(GetConvar("crime_min_police_storerobbery", "2")) or 2
     TriggerClientEvent('qb-storerobbery:client:updateMinPolice', -1, minPolice)
 end)

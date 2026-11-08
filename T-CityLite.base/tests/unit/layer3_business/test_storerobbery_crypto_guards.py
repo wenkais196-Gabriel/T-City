@@ -44,9 +44,12 @@ def test_crypto_exchange_never_pays_when_the_stick_is_not_consumed():
     assert data["MONEY_EVENTS"][2] == "1", "正常兑换没有发钱"
     assert data["STICKS_LEFT"][0] == "0", "正常兑换没有扣掉 cryptostick"
 
-    assert data["REBOOT_STATE_AFTER_BAD"][0] == "false", "未知 state 被写进全服重启状态"
+    assert data["STICKS_BACK_AFTER_PAY_FAIL"][0] == "1", "加钱失败后 cryptostick 没有还回去（玩家既丢物品又没钱）"
+    assert data["REBOOT_STATE_AFTER_BAD"][0] == "false", "非 boolean 的 state 被写进全服重启状态"
     assert data["REBOOT_PCT_AFTER_BAD"][0] == "0", "越界进度（150）被写进全服状态"
     assert data["REBOOT_PCT_AFTER_GOOD"][0] == "42", "合法进度没写进去"
+    assert data["REBOOT_STATE_REMOTE"][0] == "false", "站在 9999 米外也能把全服状态改成「重启中」"
+    assert data["REBOOT_PCT_REMOTE"][0] == "0", "站在 9999 米外也能写全服重启进度"
 
 
 def test_storerobbery_alerts_use_server_coords_and_safes_need_proximity():
@@ -55,5 +58,8 @@ def test_storerobbery_alerts_use_server_coords_and_safes_need_proximity():
     assert data["ALERT_COORDS_FROM_CLIENT"][0] == "false", "警情坐标仍然取客户端传的值"
     assert data["ALERT_COORDS_MATCH_CONFIG"][0] == "true", "警情坐标不是服务端配置的门店坐标"
 
+    assert data["ALERTS_FROM_BAD_CALLS"][0] == "0", "坏 kind / 坏 key / 站在远处仍然发出了警情"
     assert data["SAFE_ROBBED_REMOTE"][0] == "false", "站在远处也能把保险箱标成已抢"
+    assert data["SAFE_ROBBED_WITHOUT_ROBBERY"][0] == "false", "没在抢这家店也能把保险箱标成已抢"
+    assert data["ACTIVE_TABLE_FOUND"][0] == "true", "探针拿不到 activeRobberies（构造失效）"
     assert data["SAFE_ROBBED_CLOSE"][0] == "true", "站在保险箱旁反而标不了"
