@@ -56,62 +56,104 @@ end)
 RegisterNetEvent('qb-vehicleshop:server:financePayment', function(paymentAmount, vehData)
     local src = source
     local player = QBCore.Functions.GetPlayer(src)
-    local cash   = player.PlayerData.money['cash']
-    local bank   = player.PlayerData.money['bank']
-    local plate  = vehData.vehiclePlate
+    if not player then return end
+
+    -- 🔒 只认客户端传来的**车牌**，其余（余额/期数/每期额）一律从 DB 取，
+    --    并且限定 citizenid = 本人 —— 原来 vehData 全由客户端决定，能改到别人的分期记录。
+    local plate = type(vehData) == 'table' and vehData.vehiclePlate or nil
+    if type(plate) ~= 'string' or #plate == 0 then return end
     paymentAmount = tonumber(paymentAmount)
-    local minPayment  = tonumber(vehData.paymentAmount)
-    local timer       = (Config.PaymentInterval * 60)
-    local newBalance, newPaymentsLeft, newPayment = calculateNewFinance(paymentAmount, vehData)
+    if not paymentAmount or paymentAmount <= 0 then return end
 
-    if newBalance <= 0 then
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.overpaid'), 'error')
+    local row = MySQL.single.await(
+        'SELECT balance, paymentamount, paymentsleft FROM player_vehicles WHERE plate = ? AND citizenid = ?',
+        { plate, player.PlayerData.citizenid }
+    )
+    if not row then
+        TriggerClientEvent('QBCore:Notify', src, '找不到这台车的分期记录（或不属于你）', 'error')
         return
     end
 
-    if not player or paymentAmount < minPayment then
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.minimumallowed') .. shopUtil.comma_value(minPayment), 'error')
+    local balance = tonumber(row.balance) or 0
+    local minPayment = tonumber(row.paymentamount) or 0
+    local paymentsLeft = tonumber(row.paymentsleft) or 0
+    if balance <= 0 or paymentsLeft <= 1 then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.alreadypaid'), 'error')
         return
     end
+    if paymentAmount < minPayment then
+        TriggerClientEvent('QBCore:Notify', src,
+            Lang:t('error.minimumallowed') .. shopUtil.comma_value(minPayment), 'error')
+        return
+    end
+    if paymentAmount > balance then paymentAmount = balance end
 
-    if cash >= paymentAmount then
-        player.Functions.RemoveMoney('cash', paymentAmount, 'financed vehicle')
-        MySQL.update('UPDATE player_vehicles SET balance = ?, paymentamount = ?, paymentsleft = ?, financetime = ? WHERE plate = ?',
-            { newBalance, newPayment, newPaymentsLeft, timer, plate })
-    elseif bank >= paymentAmount then
-        player.Functions.RemoveMoney('bank', paymentAmount, 'financed vehicle')
-        MySQL.update('UPDATE player_vehicles SET balance = ?, paymentamount = ?, paymentsleft = ?, financetime = ? WHERE plate = ?',
-            { newBalance, newPayment, newPaymentsLeft, timer, plate })
-    else
+    local newBalance = shopUtil.round(balance - paymentAmount)
+    local newPaymentsLeft = paymentsLeft - 1
+    local newPayment = shopUtil.round(newBalance / newPaymentsLeft)
+    local timer = (Config.PaymentInterval * 60)
+
+    local cash = player.PlayerData.money['cash']
+    local bank = player.PlayerData.money['bank']
+    local account = cash >= paymentAmount and 'cash' or (bank >= paymentAmount and 'bank' or nil)
+    if not account then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.notenoughmoney'), 'error')
+        return
     end
+
+    if not player.Functions.RemoveMoney(account, paymentAmount, 'financed vehicle') then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.notenoughmoney'), 'error')
+        return
+    end
+
+    MySQL.update(
+        'UPDATE player_vehicles SET balance = ?, paymentamount = ?, paymentsleft = ?, financetime = ? WHERE plate = ? AND citizenid = ?',
+        { newBalance, newPayment, newPaymentsLeft, timer, plate, player.PlayerData.citizenid }
+    )
 end)
 
 -- 全额结清
 RegisterNetEvent('qb-vehicleshop:server:financePaymentFull', function(data)
     local src = source
     local player = QBCore.Functions.GetPlayer(src)
-    local cash  = player.PlayerData.money['cash']
-    local bank  = player.PlayerData.money['bank']
-    local vehBalance = data.vehBalance
-    local vehPlate   = data.vehPlate
+    if not player then return end
 
-    if not player or vehBalance == 0 then
+    -- 🔒 余额也从 DB 取：原来 vehBalance 是客户端给的，付 1 块就能把别人的 balance 清零。
+    local plate = type(data) == 'table' and data.vehPlate or nil
+    if type(plate) ~= 'string' or #plate == 0 then return end
+
+    local row = MySQL.single.await(
+        'SELECT balance FROM player_vehicles WHERE plate = ? AND citizenid = ?',
+        { plate, player.PlayerData.citizenid }
+    )
+    if not row then
+        TriggerClientEvent('QBCore:Notify', src, '找不到这台车的分期记录（或不属于你）', 'error')
+        return
+    end
+
+    local balance = tonumber(row.balance) or 0
+    if balance <= 0 then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.alreadypaid'), 'error')
         return
     end
 
-    if cash >= vehBalance then
-        player.Functions.RemoveMoney('cash', vehBalance, 'paid off vehicle')
-        MySQL.update('UPDATE player_vehicles SET balance = ?, paymentamount = ?, paymentsleft = ?, financetime = ? WHERE plate = ?',
-            { 0, 0, 0, 0, vehPlate })
-    elseif bank >= vehBalance then
-        player.Functions.RemoveMoney('bank', vehBalance, 'paid off vehicle')
-        MySQL.update('UPDATE player_vehicles SET balance = ?, paymentamount = ?, paymentsleft = ?, financetime = ? WHERE plate = ?',
-            { 0, 0, 0, 0, vehPlate })
-    else
+    local cash = player.PlayerData.money['cash']
+    local bank = player.PlayerData.money['bank']
+    local account = cash >= balance and 'cash' or (bank >= balance and 'bank' or nil)
+    if not account then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.notenoughmoney'), 'error')
+        return
     end
+
+    if not player.Functions.RemoveMoney(account, balance, 'paid off vehicle') then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('error.notenoughmoney'), 'error')
+        return
+    end
+
+    MySQL.update(
+        'UPDATE player_vehicles SET balance = 0, paymentamount = 0, paymentsleft = 0, financetime = 0 WHERE plate = ? AND citizenid = ?',
+        { plate, player.PlayerData.citizenid }
+    )
 end)
 
 -- ==============================================================
@@ -123,6 +165,14 @@ RegisterNetEvent('qb-vehicleshop:server:financeVehicle', function(downPayment, p
     downPayment   = tonumber(downPayment)
     paymentAmount = tonumber(paymentAmount)
     local pData = QBCore.Functions.GetPlayer(src)
+    if not pData then return end
+
+    -- 🔒 车型必须是配置里存在的（原来直接索引 QBCore.Shared.Vehicles[vehicle].price，坏值会让服务端崩）
+    if type(vehicle) ~= 'string' or not QBCore.Shared.Vehicles[vehicle] then
+        TriggerClientEvent('QBCore:Notify', src, '无效的车型', 'error')
+        return
+    end
+    if not downPayment or not paymentAmount or downPayment < 0 or paymentAmount <= 0 then return end
 
     -- 安全: 驾照检查
     if not shopUtil.CheckVehicleLicense(pData, vehicle) then
@@ -199,6 +249,20 @@ end)
 RegisterNetEvent('qb-vehicleshop:server:sellfinanceVehicle', function(downPayment, paymentAmount, vehicle, playerid)
     local src    = source
     local player = QBCore.Functions.GetPlayer(src)
+    if not player then return end
+
+    -- 🔒 只有在职车行店员能代客办理分期（同 sellShowroomVehicle）
+    if player.PlayerData.job.name ~= 'cardealer' or not player.PlayerData.job.onduty then
+        TriggerClientEvent('QBCore:Notify', src, '只有车行员工可以代客办理分期', 'error')
+        return
+    end
+
+    -- 🔒 车型必须是配置里存在的
+    if type(vehicle) ~= 'string' or not QBCore.Shared.Vehicles[vehicle] then
+        TriggerClientEvent('QBCore:Notify', src, '无效的车型', 'error')
+        return
+    end
+
     local target = QBCore.Functions.GetPlayer(tonumber(playerid))
 
     -- 安全: 驾照检查

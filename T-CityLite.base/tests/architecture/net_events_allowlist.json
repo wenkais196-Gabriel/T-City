@@ -625,6 +625,33 @@
       "evidence": "events.lua:217 local src = source，回显给 src",
       "owner": "qb-core",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-vehicleshop:server:financePayment",
+      "category": "self_scoped",
+      "reason": "只动 caller 自己的分期记录：车牌来自客户端，但余额/每期额/期数一律 `SELECT … WHERE plate = ? AND citizenid = ?` 从 DB 取，UPDATE 也带 citizenid 条件；钱只从 caller 自己的 cash/bank 扣。",
+      "evidence": "finance-payments.lua financePayment — local src = source / MySQL.single.await(... AND citizenid = ?) / UPDATE ... AND citizenid = ?",
+      "file": "[qb]/qb-vehicleshop/server/finance-payments.lua",
+      "owner": "qb-vehicleshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-vehicleshop:server:financePaymentFull",
+      "category": "self_scoped",
+      "reason": "全额结清同样只认 DB：`vehBalance` 不再采信客户端（原来付 1 块就能把别人的 balance 清零），余额从 `WHERE plate = ? AND citizenid = ?` 取，UPDATE 也限定 citizenid。",
+      "evidence": "finance-payments.lua financePaymentFull — balance 来自 MySQL.single.await(citizenid) / UPDATE ... AND citizenid = ?",
+      "file": "[qb]/qb-vehicleshop/server/finance-payments.lua",
+      "owner": "qb-vehicleshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-vehicleshop:server:financeVehicle",
+      "category": "self_scoped",
+      "reason": "自己给自己办分期：车型经配置校验，价格取 QBCore.Shared.Vehicles 配置值（不采信客户端），首付/期数有 min/max 边界，行只插入 caller 自己的 citizenid，钱只从 caller 自己扣。",
+      "evidence": "finance-payments.lua financeVehicle — 车型校验 + Config 价格 + downPayment∈[minDown, price] + paymentAmount ≤ MaximumPayments + INSERT citizenid=pData",
+      "file": "[qb]/qb-vehicleshop/server/finance-payments.lua",
+      "owner": "qb-vehicleshop",
+      "expires": "2027-03-31"
     }
   ]
 }
