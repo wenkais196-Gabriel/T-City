@@ -13,7 +13,7 @@ local function emit(...)
     OUT[#OUT + 1] = table.concat(parts, '|')
 end
 
-local state = { clientEvents = {}, coords = nil }
+local state = { clientEvents = {}, coords = nil, playerGone = false }
 
 local player = {
     PlayerData = { source = 1, citizenid = 'TESTCID', charinfo = { firstname = 'T', lastname = 'C' } },
@@ -22,7 +22,10 @@ local player = {
 
 local QBCoreMock = {
     Functions = {
-        GetPlayer = function(source) return source == 1 and player or nil end,
+        GetPlayer = function(source)
+            if state.playerGone then return nil end
+            return source == 1 and player or nil
+        end,
         CreateCallback = function() end,
         GetDutyCount = function() return 0 end,
     },
@@ -230,6 +233,38 @@ if recent then recent[safeKey] = { citizenid = 'TESTCID', at = GetGameTimer() } 
 state.coords = vector3(anchorSafe.x, anchorSafe.y, anchorSafe.z)
 fireAs(1, 'qb-storerobbery:server:setSafeStatus', safeKey)
 emit('SAFE_ROBBED_RECENT', tostring(Config.Safes[safeKey].robbed))
+
+emit('SCENARIO', 'player-dropped-cleanup')
+-- 构造：一笔活跃抢劫 + 一条近期记录 + 一次警情冷却
+Config.Safes[safeKey].robbed = false
+setActiveRobbery(1, 1)
+local recentTable = nil
+do
+    local helper = upvalueOf('qb-storerobbery:server:setSafeStatus', 'HasRecentStoreRobbery')
+    if helper then
+        for index = 1, 20 do
+            local name, value = debug.getupvalue(helper, index)
+            if not name then break end
+            if name == 'recentStoreRobberies' then recentTable = value break end
+        end
+    end
+end
+if recentTable then recentTable[safeKey] = { citizenid = 'TESTCID', at = GetGameTimer() } end
+local activeTable = upvalueOf('qb-storerobbery:server:setSafeStatus', 'activeRobberies')
+if activeTable then activeTable[1].citizenid = 'TESTCID' end
+
+-- 掉线时 QBCore 已经移除玩家（GetPlayer 返回 nil），仍必须清干净
+state.playerGone = true
+local dropped = handlers['playerDropped']
+if dropped then
+    _G.source = 1          -- playerDropped 里 `local src = source` 读的是隐式全局
+    local ok, err = pcall(dropped)
+    _G.source = nil
+    if not ok then OUT[#OUT + 1] = 'HANDLER_ERROR|' .. tostring(err) end
+end
+state.playerGone = false
+emit('AFTER_DROP_ACTIVE', tostring(activeTable and next(activeTable) == nil))
+emit('AFTER_DROP_RECENT', tostring(recentTable and next(recentTable) == nil))
 
 emit('SCENARIO', 'done')
 io.write(table.concat(OUT, '\n'), '\n')

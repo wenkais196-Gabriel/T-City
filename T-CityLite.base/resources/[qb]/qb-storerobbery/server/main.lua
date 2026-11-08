@@ -357,6 +357,8 @@ local RECENT_ROBBERY_WINDOW = 10 * 60 * 1000   -- 10 分钟
 -- [safeKey] = { citizenid = '...', at = GetGameTimer() }
 -- 用 citizenid 而不是 source：source 会被复用，新玩家可能继承上一位玩家的"刚抢过"记录
 local recentStoreRobberies = {}
+-- 警情冷却表必须在 playerDropped 之前声明：handler 里 `lastCopCall[src] = nil` 若解析成全局会抛错
+local lastCopCall = {}
 
 local function HasRecentStoreRobbery(citizenid, safeKey)
     local record = recentStoreRobberies[safeKey]
@@ -488,7 +490,14 @@ RegisterNetEvent('qb-storerobbery:server:startRobbery', function(register)
         TriggerClientEvent('qb-storerobbery:client:robberyComplete', src, register)
     end)
 
-    activeRobberies[register] = { src = src, timer = timer, startTime = startTime, cancelTime = nil }
+    -- 记下 citizenid：掉线清理 recentStoreRobberies 时 QBCore 可能已移除该玩家
+    activeRobberies[register] = {
+        src = src,
+        citizenid = Player.PlayerData.citizenid,
+        timer = timer,
+        startTime = startTime,
+        cancelTime = nil,
+    }
     -- 🌐 Atmosphere: chase scene on robbery start
     if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'chase') end
     print(('[qb-storerobbery] 🔫 Register %d robbery started by %s (25s timer)'):format(register, GetPlayerName(src)))
@@ -520,11 +529,19 @@ end)
 -- 玩家下线 → 清理活跃抢劫
 AddEventHandler('playerDropped', function()
     local src = source
+    -- 掉线时 QBCore 可能已经移除该玩家（GetPlayer 返回 nil），
+    -- 所以优先用 activeRobberies 里记下的 citizenid 清"近期抢劫"记录
+    local droppedCid = nil
     local droppedPlayer = QBCore.Functions.GetPlayer(src)
-    if droppedPlayer then
-        local cid = droppedPlayer.PlayerData.citizenid
+    if droppedPlayer and droppedPlayer.PlayerData then
+        droppedCid = droppedPlayer.PlayerData.citizenid
+    end
+    for register, job in pairs(activeRobberies) do
+        if job.src == src and job.citizenid then droppedCid = job.citizenid end
+    end
+    if droppedCid then
         for safeKey, record in pairs(recentStoreRobberies) do
-            if record.citizenid == cid then recentStoreRobberies[safeKey] = nil end
+            if record.citizenid == droppedCid then recentStoreRobberies[safeKey] = nil end
         end
     end
     lastCopCall[src] = nil
@@ -620,7 +637,6 @@ RegisterNetEvent('qb-storerobbery:server:SafeReward', function(safe)
     end
 end)
 
-local lastCopCall = {}
 RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetLabel, coords)
     local src = source
     -- 🔒 kind / safe / coords / streetLabel 全来自客户端：原来任意玩家能凭空给全服推一条
