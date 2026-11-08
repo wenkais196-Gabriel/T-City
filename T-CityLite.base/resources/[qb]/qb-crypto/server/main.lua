@@ -257,7 +257,7 @@ RegisterServerEvent('qb-crypto:server:ExchangeFail', function()
         }
         Crypto.Exchange.RebootInfo.state = true
         Crypto.Exchange.RebootInfo.percentage = 0
-        TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+        TriggerClientEvent('qb-crypto:client:SyncReboot', -1, Crypto.Exchange.RebootInfo.state, Crypto.Exchange.RebootInfo.percentage)
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['cryptostick'], 'remove')
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.cryptostick_malfunctioned'), 'error')
     end
@@ -295,7 +295,7 @@ CreateThread(function()
                 rebootSession = nil
                 Crypto.Exchange.RebootInfo.state = false
                 Crypto.Exchange.RebootInfo.percentage = 0
-                TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+                TriggerClientEvent('qb-crypto:client:SyncReboot', -1, Crypto.Exchange.RebootInfo.state, Crypto.Exchange.RebootInfo.percentage)
             end
         end
     end
@@ -323,7 +323,7 @@ RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
         rebootSession = nil
         Crypto.Exchange.RebootInfo.state = false
         Crypto.Exchange.RebootInfo.percentage = 0
-        TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+        TriggerClientEvent('qb-crypto:client:SyncReboot', -1, Crypto.Exchange.RebootInfo.state, Crypto.Exchange.RebootInfo.percentage)
         return
     end
     percentage = tonumber(percentage)
@@ -344,7 +344,7 @@ RegisterServerEvent('qb-crypto:server:Rebooting', function(state, percentage)
     -- 🔒 owner 主动收尾时也必须广播：原来只改服务端状态，其他客户端会继续本地循环到 100%
     --    （约 2 分钟）一直显示"重启中"。
     if finished then
-        TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+        TriggerClientEvent('qb-crypto:client:SyncReboot', -1, Crypto.Exchange.RebootInfo.state, Crypto.Exchange.RebootInfo.percentage)
     end
 end)
 
@@ -354,7 +354,7 @@ AddEventHandler('playerDropped', function()
         rebootSession = nil
         Crypto.Exchange.RebootInfo.state = false
         Crypto.Exchange.RebootInfo.percentage = 0
-        TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+        TriggerClientEvent('qb-crypto:client:SyncReboot', -1, Crypto.Exchange.RebootInfo.state, Crypto.Exchange.RebootInfo.percentage)
     end
 end)
 
@@ -376,7 +376,7 @@ RegisterServerEvent('qb-crypto:server:SyncReboot', function()
     local now = os.time()
     if lastRebootSync[src] and now == lastRebootSync[src] then return end
     lastRebootSync[src] = now
-    TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+    TriggerClientEvent('qb-crypto:client:SyncReboot', -1, Crypto.Exchange.RebootInfo.state, Crypto.Exchange.RebootInfo.percentage)
 end)
 
 RegisterServerEvent('qb-crypto:server:ExchangeSuccess', function()

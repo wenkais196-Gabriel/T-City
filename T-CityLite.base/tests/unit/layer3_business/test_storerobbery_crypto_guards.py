@@ -79,3 +79,36 @@ def test_storerobbery_alerts_use_server_coords_and_safes_need_proximity():
     assert data["AFTER_DROP_ACTIVE"][0] == "true", "玩家掉线后 activeRobberies 没清（GetPlayer 为 nil 时）"
     assert data["AFTER_DROP_RECENT"][0] == "true", "玩家掉线后 recentStoreRobberies 没清（source 复用会继承）"
     assert data["SAFE_ROBBED_RECENT"][0] == "true", "收银机 25 秒计时结束后，同店保险箱就再也标不了（正常玩法被堵）"
+
+
+def test_client_sync_applies_server_state_instead_of_always_starting_a_reboot():
+    """客户端 `SyncReboot` 必须按服务端 payload 落地状态。
+
+    旧版 handler 无条件 `RebootInfo.state = true` + 启动重启循环 —— 服务端在 owner 收尾、
+    看门狗超时、playerDropped 时广播的「停止」会被客户端理解成「开始」，其他玩家就一直
+    显示假「重启中」（实测旧版 `COOLDOWN_STARTED_AFTER_FALSE=1`）。
+    """
+    proc = subprocess.run(
+        ["lua5.4", (FIXTURES / "crypto_client_sync_probe.lua").as_posix(),
+         (BASE / "resources" / "[qb]" / "qb-crypto" / "client" / "main.lua").as_posix()],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc.returncode == 0, f"probe 失败：{proc.stderr} / {proc.stdout}"
+    data: dict[str, list[str]] = {}
+    for line in proc.stdout.splitlines():
+        if "|" not in line:
+            continue
+        key, _, value = line.partition("|")
+        data.setdefault(key, []).append(value)
+
+    assert data["STATE_AFTER_FALSE_SYNC"][0] == "false", "收到 state=false 仍把本地状态置成「重启中」"
+    assert data["PCT_AFTER_FALSE_SYNC"][0] == "0", "收到 state=false 后进度没有归零"
+    assert data["COOLDOWN_STARTED_AFTER_FALSE"][0] == "0", "收到 state=false 仍启动了本地重启循环"
+    assert data["STATE_AFTER_TRUE_SYNC"][0] == "true", "收到 state=true 没有进入重启"
+    assert data["COOLDOWN_STARTED_AFTER_TRUE"][0] == "1", "收到 state=true 没有启动重启循环"
+    assert data["STATE_AFTER_FALSE_GET"][0] == "false", "首次同步的 false 没有落地（本地残留「重启中」）"
+    assert data["STATE_AFTER_TRUE_GET"][0] == "true", "首次同步的 true 没有落地"
+    assert data["PCT_AFTER_TRUE_GET"][0] == "55", "首次同步的进度没有落地"
+

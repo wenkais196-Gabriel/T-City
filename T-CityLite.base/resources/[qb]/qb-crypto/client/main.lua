@@ -98,9 +98,19 @@ end)
 
 -- Events
 
-RegisterNetEvent('qb-crypto:client:SyncReboot', function()
-	Crypto.Exchange.RebootInfo.state = true
-	SystemCrashCooldown()
+RegisterNetEvent('qb-crypto:client:SyncReboot', function(state, percentage)
+	-- 服务端广播现在带 state/percentage：false 表示"重启结束"，必须把本地状态一并清零，
+	-- 否则 owner 收尾后其他客户端会把它当成"开始重启"，继续本地循环显示假重启。
+	if type(state) == 'boolean' then
+		Crypto.Exchange.RebootInfo.state = state
+		Crypto.Exchange.RebootInfo.percentage = tonumber(percentage) or 0
+	else
+		-- 兼容旧调用（不带参数）＝ 开始重启
+		Crypto.Exchange.RebootInfo.state = true
+	end
+	if Crypto.Exchange.RebootInfo.state then
+		SystemCrashCooldown()
+	end
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
@@ -116,9 +126,11 @@ RegisterNetEvent('qb-crypto:client:UpdateCryptoWorth', function(crypto, amount, 
 end)
 
 RegisterNetEvent('qb-crypto:client:GetRebootState', function(RebootInfo)
-	if RebootInfo.state then
-		Crypto.Exchange.RebootInfo.state = RebootInfo.state
-		Crypto.Exchange.RebootInfo.percentage = RebootInfo.percentage
+	-- 首次同步：true 与 false 都要落地（原来只在 true 时赋值，本地会残留"重启中"）
+	if type(RebootInfo) ~= 'table' then return end
+	Crypto.Exchange.RebootInfo.state = RebootInfo.state == true
+	Crypto.Exchange.RebootInfo.percentage = tonumber(RebootInfo.percentage) or 0
+	if Crypto.Exchange.RebootInfo.state then
 		SystemCrashCooldown()
 	end
 end)
