@@ -56,6 +56,7 @@ def test_crypto_exchange_never_pays_when_the_stick_is_not_consumed():
     assert data["REBOOT_STATE_OWNER_FINISH"][0] == "false", "重启发起者走出范围后无法收尾（全服会卡在「重启中」）"
     assert data["REBOOT_PCT_AFTER_NON_OWNER"][0] == "0", "非发起者也能改全服重启进度（会话刚开始，进度应为 0）"
     assert data["SYNC_FROM_NON_OWNER"][0] == "0", "非发起者也能触发全服 SyncReboot（客户端会显示假重启）"
+    assert data["SYNC_BROADCAST_ON_FINISH"][0] == "true", "owner 收尾后没有广播，其他客户端会继续显示「重启中」"
     # 回补失败 → 挂账到 metadata → 上线重试补发
     assert data["OWED_AFTER_DOUBLE_FAIL"][0] == "1", "加钱+回补都失败时没有挂账"
     assert data["OWED_AFTER_RELOAD"][0] == "0", "上线补发后欠账没清"

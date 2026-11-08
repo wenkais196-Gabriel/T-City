@@ -367,6 +367,16 @@ local srcToCitizenid = {}
 local function rememberSource(player)
     if player and player.PlayerData then
         srcToCitizenid[player.PlayerData.source] = player.PlayerData.citizenid
+        return
+    end
+    -- QBCore:Server:OnPlayerLoaded 是无参数 net event（qb-spawn / qb-multicharacter 用），
+    -- 隐式 source 才是玩家 → 这里兜住这种调用形态
+    local src = source
+    if type(src) == 'number' and src > 0 then
+        local resolved = QBCore.Functions.GetPlayer(src)
+        if resolved and resolved.PlayerData then
+            srcToCitizenid[src] = resolved.PlayerData.citizenid
+        end
     end
 end
 
