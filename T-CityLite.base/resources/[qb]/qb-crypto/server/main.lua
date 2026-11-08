@@ -244,6 +244,20 @@ RegisterServerEvent('qb-crypto:server:ExchangeFail', function()
     end
 end)
 
+-- 会话看门狗：owner 静默（客户端每 ~1.2 秒会上报一次）超过 60 秒就自动收尾。
+-- 只在收到事件时判超时是不够的：owner 掉线/客户端卡死后不会再有人发事件。
+CreateThread(function()
+    while true do
+        Wait(15000)
+        if rebootOwner and (GetGameTimer() - rebootOwnerAt) > REBOOT_SESSION_TIMEOUT then
+            rebootOwner = nil
+            Crypto.Exchange.RebootInfo.state = false
+            Crypto.Exchange.RebootInfo.percentage = 0
+            TriggerClientEvent('qb-crypto:client:SyncReboot', -1)
+        end
+    end
+end)
+
 -- 兑换回补失败的待补偿队列：citizenid → 次数（玩家上线时重试）
 local pendingRefunds = {}
 
