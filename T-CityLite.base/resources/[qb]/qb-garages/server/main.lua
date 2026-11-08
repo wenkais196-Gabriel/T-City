@@ -309,6 +309,13 @@ RegisterNetEvent('qb-garages:server:UpdateOutsideVehicle', function(plate, vehic
     --    既能把别人的车标成"在外"，也能劫持 trackVehicle 的坐标。
     local owner = MySQL.scalar.await('SELECT citizenid FROM player_vehicles WHERE plate = ? LIMIT 1', { plate })
     if owner ~= Player.PlayerData.citizenid then return end
+    -- ⚠️ 客户端唯一的调用点传的是 `nil`（存车时通知"这台车不再在外面"）——
+    --    这里必须当成**删除**处理，不能当成"非法参数"早退，否则 OutsideVehicles 永远清不掉，
+    --    IsSpawnOk 会一直认为车还在外面，玩家存车后再也取不出来。
+    if vehicleNetID == nil then
+        OutsideVehicles[plate] = nil
+        return
+    end
     local netId = tonumber(vehicleNetID)
     if not netId then return end
     local entity = NetworkGetEntityFromNetworkId(netId)
@@ -343,11 +350,16 @@ RegisterNetEvent('qb-garages:server:PayDepotPrice', function(data)
     -- 异步回调里调用会抛 `Execution of function reference in script host failed`
     -- （同一形态在 2026-11-01 真机的进角色路径上已经复现过一次）。
     -- 修法：把价格取回到本资源线程（await），再走原有的判断与扣款。
-    -- 🔒 只认自己名下、且处于扣押状态（state=2）的车；价格从库里取，不采信客户端
+    -- 🔒 只认自己名下的车；价格从库里取，不采信客户端。
+    -- 口径与资源自身一致：被判"扣押"要么 state=2（警察 /impound*），要么挂着 depotprice
+    -- （`Config.AutoRespawn = false` 时 onResourceStart 给所有在外车辆标 500）。只认 state=2
+    -- 会在 AutoRespawn 关掉的服务器上让赎车永远失败。
     local row = MySQL.single.await(
         'SELECT depotprice, citizenid, state FROM player_vehicles WHERE plate = ? LIMIT 1', { data.plate })
-    if not row or row.citizenid ~= Player.PlayerData.citizenid or tonumber(row.state) ~= 2 then return end
+    if not row or row.citizenid ~= Player.PlayerData.citizenid then return end
     local depotPrice = tonumber(row.depotprice)
+    local impounded = tonumber(row.state) == 2 or (depotPrice or 0) > 0
+    if not impounded then return end
     if depotPrice and depotPrice > 0 then
         if cashBalance >= depotPrice then
             Player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot')

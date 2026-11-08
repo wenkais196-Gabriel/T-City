@@ -158,6 +158,8 @@ state.coords = vec3(0.0, 0.0, 0.0)
 state.dbRows['MINE'] = { citizenid = 'TESTCID', vehicle = 'adder', state = 1, depotprice = 0, mods = '{}' }
 state.dbRows['OTHERS'] = { citizenid = 'OTHER', vehicle = 'adder', state = 1, depotprice = 0, mods = '{}' }
 state.dbRows['IMPOUNDED'] = { citizenid = 'TESTCID', vehicle = 'adder', state = 2, depotprice = 500, mods = '{}' }
+-- AutoRespawn = false 时 onResourceStart 给"在外"车辆标价（state 仍是 0）→ 也必须能赎
+state.dbRows['PRICEONLY'] = { citizenid = 'TESTCID', vehicle = 'adder', state = 0, depotprice = 500, mods = '{}' }
 
 -- ── 1. spawnvehicle：自己的车 / 正常坐标 → 放行 ──
 emit('SCENARIO', 'spawn-own')
@@ -202,6 +204,36 @@ fireAs(1, 'qb-garages:server:PayDepotPrice', { plate = 'MINE' })
 emit('DEPOT_NOT_IMPOUNDED', tostring(taken == 0))
 fireAs(1, 'qb-garages:server:PayDepotPrice', { plate = 'IMPOUNDED' })
 emit('DEPOT_IMPOUNDED', tostring(taken == 1))
+TriggerClientEvent = originalTrigger
+
+-- ── 7. UpdateOutsideVehicle：登记 / 清空 / 别人的车牌 ──
+emit('SCENARIO', 'outside')
+local outsideHandler = handlers['qb-garages:server:UpdateOutsideVehicle']
+local function outsideTable()
+  for index = 1, 60 do
+    local name, value = debug.getupvalue(outsideHandler, index)
+    if not name then break end
+    if name == 'OutsideVehicles' then return value end
+  end
+  return nil
+end
+
+fireAs(1, 'qb-garages:server:UpdateOutsideVehicle', 'MINE', 777)
+emit('OUTSIDE_SET', tostring(outsideTable()['MINE'] ~= nil))
+-- 存车时客户端传 nil：必须清掉，否则 IsSpawnOk 永远认为车在外面（存了就取不出来）
+fireAs(1, 'qb-garages:server:UpdateOutsideVehicle', 'MINE', nil)
+emit('OUTSIDE_CLEARED', tostring(outsideTable()['MINE'] == nil))
+fireAs(1, 'qb-garages:server:UpdateOutsideVehicle', 'OTHERS', 778)
+emit('OUTSIDE_OTHERS_BLOCKED', tostring(outsideTable()['OTHERS'] == nil))
+
+-- ── 8. 只有 depotprice、state=0 的车也能赎（AutoRespawn=false 的口径） ──
+emit('SCENARIO', 'depot-price-only')
+taken = 0
+TriggerClientEvent = function(name)
+  if name == 'qb-garages:client:takeOutGarage' then taken = taken + 1 end
+end
+fireAs(1, 'qb-garages:server:PayDepotPrice', { plate = 'PRICEONLY' })
+emit('DEPOT_PRICE_ONLY', tostring(taken == 1))
 TriggerClientEvent = originalTrigger
 
 emit('SCENARIO', 'done')

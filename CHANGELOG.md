@@ -315,7 +315,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `net_event_guard_helpers.json` 登记（含 `requires_code` 证据），行为零变化；另补两处真缺口：
   `RequestStateSync` 加每玩家 5 秒冷却（原来一人连点 = 2N 条全服广播）、
   `QBCore:Server:OnPlayerLoaded` 加 `src ~= 0` 拒绝客户端触发。
-  测试：`fixtures/garages_probe.lua` / `fixtures/weathersync_probe.lua` 真加载资源 + mock 运行时，
+  测试：两个探针（garages_probe.lua / weathersync_probe.lua，位于 layer3_business 的 fixtures 目录） 真加载资源 + mock 运行时，
   旧版实测 `SPAWN_OTHERS=false`、`SPAWN_MISMATCH=false`、`SPAWN_FAR=false`、`SYNC_BLOCKED_FOR_PLAYER=false`、
   `DEPOT_OTHERS=false`、`BROADCASTS_FROM_TWO_CALLS=4`、`BROADCASTS_FROM_CLIENT_TRIGGER=2`。
   数字：未登记 **177 → 164**（qb 95 → 82，allowlist 112 → 113）；`1238 passed`。
