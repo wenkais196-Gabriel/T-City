@@ -109,6 +109,9 @@ def test_sync_garage_merges_house_entries_without_letting_players_rewrite_public
     assert _flag(data, "SYNC_PUBLIC_UNTOUCHED"), "玩家仍然改写了公共车库条目"
     assert _flag(data, "SYNC_HOUSE_MERGED"), "玩家的房车条目没有被合并（房车存车会崩）"
     assert _flag(data, "SYNC_FOREIGN_HOUSE_REJECTED"), "houselocations 里没有的房车条目被接受"
+    assert _flag(data, "SYNC_FAR_HOUSE_POINT_REJECTED"), (
+        "房车点位与 houselocations.garage 相差 5 公里也被接受（等于任意坐标刷车）"
+    )
 
 
 def test_sync_garage_requires_admin():

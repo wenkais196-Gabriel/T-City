@@ -19,7 +19,8 @@ local state = {
   garageTable = nil,
   dbRows = {},          -- plate → { citizenid, vehicle, state, depotprice, mods }
   permission = false,   -- HasPermission 返回
-  houses = { { name = 'house1' } },  -- houselocations 表
+  -- houselocations 表：garage 列是 json 字符串（qb-houses 写入的房车点位）
+  houses = { { name = 'house1', garage = '{"x":10.0,"y":20.0,"z":30.0,"w":0.0}' } },
 }
 
 local player = {
@@ -64,7 +65,17 @@ Wait = function() end
 GetGameTimer = function() return 0 end
 GetConvar = function(_, default) return default end
 Lang = { t = function(a, b) local key = type(a) == 'string' and a or b; return tostring(key) end }
-json = { encode = function() return '{}' end, decode = function() return {} end }
+-- 只解析测试里用到的扁平形状：{"x":1.0,"y":2.0,"z":3.0,"w":0.0}
+json = {
+  encode = function() return '{}' end,
+  decode = function(text)
+    local out = {}
+    for key, value in tostring(text):gmatch('"([%w_]+)"%s*:%s*([%-%d%.]+)') do
+      out[key] = tonumber(value)
+    end
+    return out
+  end,
+}
 vector2 = function(x, y) return { x = x, y = y } end
 local vectorMeta = {}
 vectorMeta.__sub = function(a, b)
@@ -201,17 +212,24 @@ fireAs(1, 'qb-garages:server:syncGarage', { hacked = true })
 emit('SYNC_BLOCKED_FOR_PLAYER', tostring(Config.Garages ~= nil and Config.Garages.hacked == nil))
 local houseEntry = {
   houseName = 'house1', label = 'House One', type = 'house',
-  spawnPoint = { vec3(10.0, 20.0, 30.0) },
+  spawnPoint = { vec3(10.0, 20.0, 30.0) },   -- 与 houselocations.garage 同点
+}
+-- 塞一个离房子 5 公里的"车库点"：服务端必须拒绝（否则等于任意坐标刷车）
+local teleportEntry = {
+  houseName = 'house1', label = 'Teleport', type = 'house',
+  spawnPoint = { vec3(5000.0, 5000.0, 30.0) },
 }
 state.permission = false
 fireAs(1, 'qb-garages:server:syncGarage', {
   hacked = { label = 'pwned', type = 'public' },
   housekey = houseEntry,
+  teleportkey = teleportEntry,
   [ 'foreign' ] = { houseName = 'not-my-house', label = 'X', type = 'house', spawnPoint = { vec3(1, 2, 3) } },
 })
 emit('SYNC_PUBLIC_UNTOUCHED', tostring(Config.Garages.hacked == nil))
 emit('SYNC_HOUSE_MERGED', tostring(Config.Garages.housekey ~= nil and Config.Garages.housekey.houseName == 'house1'))
 emit('SYNC_FOREIGN_HOUSE_REJECTED', tostring(Config.Garages['foreign'] == nil))
+emit('SYNC_FAR_HOUSE_POINT_REJECTED', tostring(Config.Garages.teleportkey == nil))
 state.permission = true
 fireAs(1, 'qb-garages:server:syncGarage', { hacked = true })
 emit('SYNC_ALLOWED_FOR_ADMIN', tostring(Config.Garages ~= nil and Config.Garages.hacked == true))

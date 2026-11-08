@@ -401,10 +401,25 @@ RegisterNetEvent('qb-garages:server:syncGarage', function(updatedGarages)
     --    所以不能"全拒"—— 全拒会让服务端缺房车条目，`canDeposit` 里
     --    `Config.Garages[garage].houseName` 索引 nil 直接抛错、存车流程中断。
     --    也不能"全收"—— 否则任何玩家都能改公共车库的点位/开关。
+    -- 房车点位必须与 qb-houses 里登记的 `houselocations.garage` 一致（50 米内）：
+    -- 否则玩家可以给自己的房子塞一个任意坐标的"车库点"，取车时就在那个点生成载具
+    -- （服务端只校验"离玩家 100 米内"，等于把生成点搬到他想去的地方）。
     local houses = {}
-    for _, row in ipairs(MySQL.query.await('SELECT name FROM houselocations', {}) or {}) do
+    for _, row in ipairs(MySQL.query.await('SELECT name, garage FROM houselocations', {}) or {}) do
         if type(row) == 'table' and type(row.name) == 'string' then
-            houses[row.name] = true
+            local anchor = nil
+            local decoded = nil
+            if type(row.garage) == 'string' and row.garage ~= '' then
+                local ok, parsed = pcall(json.decode, row.garage)
+                if ok then decoded = parsed end
+            elseif type(row.garage) == 'table' then
+                decoded = row.garage
+            end
+            if type(decoded) == 'table' then
+                local ax, ay, az = tonumber(decoded.x), tonumber(decoded.y), tonumber(decoded.z)
+                if ax and ay and az then anchor = { x = ax, y = ay, z = az } end
+            end
+            houses[row.name] = anchor or false
         end
     end
 
@@ -416,9 +431,14 @@ RegisterNetEvent('qb-garages:server:syncGarage', function(updatedGarages)
             local point = entry.spawnPoint[1]
             local ptype = type(point)
             if ptype == 'table' or ptype == 'vector3' or ptype == 'vector4' then
-                if tonumber(point.x) and tonumber(point.y) and tonumber(point.z) then
-                    Config.Garages[key] = entry
-                    accepted = accepted + 1
+                local px, py, pz = tonumber(point.x), tonumber(point.y), tonumber(point.z)
+                local anchor = houses[entry.houseName]
+                if px and py and pz and anchor then
+                    local dx, dy, dz = px - anchor.x, py - anchor.y, pz - anchor.z
+                    if math.sqrt(dx * dx + dy * dy + dz * dz) <= 50.0 then
+                        Config.Garages[key] = entry
+                        accepted = accepted + 1
+                    end
                 end
             end
         end
