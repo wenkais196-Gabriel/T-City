@@ -127,6 +127,19 @@ end
 
 exports('hasKey', hasKey)
 
+
+-- 警察分支专用：必须站在房子入口 8 米内（client 的 police_stormram 也是 dist < 1 才发事件，
+-- 服务端不能只信 job.name，否则任意执勤警察可远程开锁 / 伪造破门状态）。
+local function IsNearHouse(src, house)
+    local houseData = Config.Houses[house]
+    local enter = houseData and houseData.coords and houseData.coords.enter
+    if not enter then return false end
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false end
+    local coords = GetEntityCoords(ped)
+    return #(coords.xy - vector2(enter.x, enter.y)) < 8.0
+end
+
 local function GetHouseStreetCount(street)
     local count = 0
     local query = '%' .. street .. '%'
@@ -171,7 +184,11 @@ end)
 RegisterNetEvent('qb-houses:server:createBlip', function()
     local src = source
     -- 🔒 原来任何玩家都能对全服（-1）广播一个 blip
-    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then return end
+    -- 与 /createhouse、/addgarage 命令同一授权主体：房地产中介；admin（ACE）与控制台仍然放行
+    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then
+        local staff = QBCore.Functions.GetPlayer(src)
+        if not staff or staff.PlayerData.job.name ~= 'realestate' then return end
+    end
     local ped = GetPlayerPed(src)
     local coords = GetEntityCoords(ped)
     TriggerClientEvent('qb-houses:client:createBlip', -1, coords)
@@ -180,7 +197,11 @@ end)
 RegisterNetEvent('qb-houses:server:addNewHouse', function(street, coords, price, tier)
     local src = source
     -- 🔒 建房是管理操作：原来任何玩家都能建任意价位的房子
-    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then return end
+    -- 与 /createhouse、/addgarage 命令同一授权主体：房地产中介；admin（ACE）与控制台仍然放行
+    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then
+        local staff = QBCore.Functions.GetPlayer(src)
+        if not staff or staff.PlayerData.job.name ~= 'realestate' then return end
+    end
     if type(street) ~= 'string' or type(coords) ~= 'table' then return end
     street = street:gsub("%'", '')
     price = tonumber(price)
@@ -210,7 +231,11 @@ end)
 
 RegisterNetEvent('qb-houses:server:addGarage', function(house, coords)
     local src = source
-    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then return end
+    -- 与 /createhouse、/addgarage 命令同一授权主体：房地产中介；admin（ACE）与控制台仍然放行
+    if src ~= 0 and not QBCore.Functions.HasPermission(src, 'admin') then
+        local staff = QBCore.Functions.GetPlayer(src)
+        if not staff or staff.PlayerData.job.name ~= 'realestate' then return end
+    end
     if type(house) ~= 'string' or not Config.Houses[house] or type(coords) ~= 'table' then return end
     MySQL.update('UPDATE houselocations SET garage = ? WHERE name = ?', { json.encode(coords), house })
     local garageInfo = {
@@ -241,8 +266,9 @@ RegisterNetEvent('qb-houses:server:openStash', function(CurrentHouse)
     local houseData = Config.Houses[CurrentHouse]
     if not houseData then return end
     -- 🔒 原来是"任何玩家传个房子名就能开这家的储物柜"（直接把别人的东西拿走）。
-    --    现在必须持有钥匙或是房主。
-    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, CurrentHouse) then
+    --    判定与客户端一致：房主 / 钥匙持有人 / 房地产中介（qb-houses:server:hasKey 的既有口径）。
+    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, CurrentHouse)
+        and Player.PlayerData.job.name ~= 'realestate' then
         TriggerClientEvent('QBCore:Notify', src, '你没有这栋房子的钥匙', 'error')
         return
     end
@@ -304,8 +330,11 @@ RegisterNetEvent('qb-houses:server:lockHouse', function(bool, house)
     -- 🔒 原来任何人都能上/开任意房子的锁（还能全服广播）。
     --    例外：在职警察撞门（client 的 police_stormram 会调本事件开/关门），否则撞门玩法断裂。
     local job = Player.PlayerData.job
+    -- 🔒 钥匙持有人/房主，或（在职警察 **且** 人就在这栋房子旁边）。
+    --    只判 job.name 的话任意执勤警察能远程开/锁全城的门。
     if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house)
-        and not (job.name == 'police' and job.onduty) then
+        and job.name ~= 'realestate'
+        and not (job.name == 'police' and job.onduty and IsNearHouse(src, house)) then
         return
     end
     TriggerClientEvent('qb-houses:client:lockHouse', -1, bool == true, house)
@@ -315,9 +344,11 @@ RegisterNetEvent('qb-houses:server:SetRamState', function(bool, house)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or type(house) ~= 'string' or not Config.Houses[house] then return end
-    -- 🔒 破门状态是警察行为：原来任何玩家都能把任意房子标成"正在被撞门"
+    -- 🔒 破门状态是警察行为：原来任何玩家都能把任意房子标成"正在被撞门"。
+    --    要求在职警察 **且** 人在这栋房子旁 8 米内（否则可远程伪造破门状态）。
     local job = Player.PlayerData.job
     if job.name ~= 'police' or not job.onduty then return end
+    if not IsNearHouse(src, house) then return end
     Config.Houses[house].IsRaming = bool == true
     TriggerClientEvent('qb-houses:server:SetRamState', -1, bool, house)
 end)
@@ -364,7 +395,10 @@ RegisterNetEvent('qb-houses:server:OpenDoor', function(target, house)
     if not Player then return end
     -- 🔒 原来任何玩家都能把**任意玩家**传进任意房子（配合 openStash 就是入室盗窃）
     if type(house) ~= 'string' or not Config.Houses[house] then return end
-    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house) then return end
+    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house)
+        and Player.PlayerData.job.name ~= 'realestate' then
+        return
+    end
     local OtherPlayer = QBCore.Functions.GetPlayer(tonumber(target) or 0)
     if OtherPlayer then
         TriggerClientEvent('qb-houses:client:SpawnInApartment', OtherPlayer.PlayerData.source, house)
@@ -382,9 +416,12 @@ RegisterNetEvent('qb-houses:server:savedecorations', function(house, decorations
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or type(house) ~= 'string' or type(decorations) ~= 'table' then return end
     if not Config.Houses[house] then return end
-    -- 🔒 原来任何人都能改别人家的家具；客户端 decorate.lua 允许 HasHouseKey 的人进装饰模式，
-    --    所以这里用 hasKey（房主或持有人），与客户端判定保持一致。
-    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house) then return end
+    -- 🔒 原来任何人都能改别人家的家具；客户端 decorate.lua 用 HasHouseKey 判入口，
+    --    而 hasKey callback 对 realestate 放行 —— 服务端用同一口径，避免"点了没反应"。
+    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house)
+        and Player.PlayerData.job.name ~= 'realestate' then
+        return
+    end
     MySQL.update('UPDATE player_houses SET decorations = ? WHERE house = ?', { json.encode(decorations), house })
     TriggerClientEvent('qb-houses:server:sethousedecorations', -1, house, decorations)
 end)
@@ -445,8 +482,11 @@ RegisterNetEvent('qb-houses:server:setLocation', function(coords, house, type)
     if not Player or type(house) ~= 'string' or type(coords) ~= 'table' then return end
     if not Config.Houses[house] then return end
     -- 🔒 原来任何人能把别人家的储物柜坐标挪走；客户端用 HasHouseKey 判断入口，
-    --    服务端也用 hasKey，避免持有人点了没反应（静默丢弃）。
-    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house) then return end
+    --    服务端用同一口径（房主/持有人/realestate），避免静默丢弃。
+    if not hasKey(Player.PlayerData.license, Player.PlayerData.citizenid, house)
+        and Player.PlayerData.job.name ~= 'realestate' then
+        return
+    end
     if type == 1 then
         MySQL.update('UPDATE player_houses SET stash = ? WHERE house = ?', { json.encode(coords), house })
     elseif type == 2 then
@@ -463,6 +503,7 @@ RegisterNetEvent('qb-houses:server:SetHouseRammed', function(bool, house)
     if not Player or type(house) ~= 'string' or not Config.Houses[house] then return end
     local job = Player.PlayerData.job
     if job.name ~= 'police' or not job.onduty then return end
+    if not IsNearHouse(src, house) then return end
     Config.Houses[house].IsRammed = bool == true
     TriggerClientEvent('qb-houses:client:SetHouseRammed', -1, bool, house)
 end)
