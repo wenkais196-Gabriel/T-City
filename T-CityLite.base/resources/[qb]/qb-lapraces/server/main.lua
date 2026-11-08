@@ -387,6 +387,11 @@ RegisterNetEvent('qb-lapraces:server:SetupRace', function(RaceId, Laps)
     Laps = tonumber(Laps)
     if not Laps or Laps < 1 or Laps > 99 then return end
     if Races[RaceId] ~= nil then
+        -- 🔒 只有这条赛道的创建者能把它挂到「开放中」列表（原来任何玩家都能把别人的赛道开出去）
+        if Races[RaceId].Creator ~= Player.PlayerData.citizenid then
+            TriggerClientEvent('QBCore:Notify', source, '你不是这条赛道的作者', 'error')
+            return
+        end
         if not Races[RaceId].Waiting then
             if not Races[RaceId].Started then
                 Races[RaceId].Waiting = true
