@@ -287,4 +287,30 @@ fire('QBCore:Server:PlayerLoaded', player)
 emit('SCENARIO', 'drop-settlement-retry')
 emit('REFUND', state.money.cash - cashBefore10)
 
+-- ── 场景 11：updateDealerItems —— 背包没货也发钱？（旧实现忽略 RemoveItem 返回值 = 印钱）──
+local dealerKey = 'Sandy Dealer'
+emit('SCENARIO', 'dealer-sell-no-items')
+state.items = {}
+Config.Dealers[dealerKey].products[1].amount = 0
+local cashBefore11 = state.money.cash
+fire('qb-drugs:server:updateDealerItems', { slot = 1, name = 'weed_whitewidow' }, 999, dealerKey)
+emit('DEALER_PAID_NO_ITEMS', state.money.cash - cashBefore11)
+
+emit('SCENARIO', 'dealer-sell-fake-slot')
+local cash12 = state.money.cash
+fire('qb-drugs:server:updateDealerItems', { slot = 999, name = 'weed_whitewidow' }, 1, dealerKey)
+emit('DEALER_PAID_FAKE_SLOT', state.money.cash - cash12)
+
+emit('SCENARIO', 'dealer-sell-name-mismatch')
+local cash13 = state.money.cash
+fire('qb-drugs:server:updateDealerItems', { slot = 1, name = 'coke_brick' }, 1, dealerKey)
+emit('DEALER_PAID_NAME_MISMATCH', state.money.cash - cash13)
+
+emit('SCENARIO', 'dealer-sell-with-items')
+state.items = { weed_whitewidow = 5 }
+local cash14 = state.money.cash
+fire('qb-drugs:server:updateDealerItems', { slot = 1, name = 'weed_whitewidow' }, 5, dealerKey)
+emit('DEALER_PAID_WITH_ITEMS', state.money.cash - cash14)
+emit('DEALER_ITEM_LEFT', state.items.weed_whitewidow or 0)
+
 io.write(table.concat(OUT, '\n'), '\n')

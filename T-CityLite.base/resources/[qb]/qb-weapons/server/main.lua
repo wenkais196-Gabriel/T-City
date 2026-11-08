@@ -56,52 +56,83 @@ QBCore.Functions.CreateCallback('qb-weapons:server:RepairWeapon', function(sourc
     local Player = QBCore.Functions.GetPlayer(src)
     local minute = 60 * 1000
     local Timeout = math.random(5 * minute, 10 * minute)
-    local WeaponData = QBCore.Shared.Weapons[GetHashKey(data.name)]
-    local WeaponClass = (QBCore.Shared.SplitStr(WeaponData.ammotype, '_')[2]):lower()
 
     if not Player then
         cb(false)
         return
     end
 
-    if not Player.PlayerData.items[data.slot] then
+    -- 🔒 参数校验必须在**任何索引之前**：原来先读 data.name / WeaponData.ammotype /
+    --    info.quality，坏客户端数据（name 不存在、slot 非数字、info 缺失）直接抛错。
+    if type(data) ~= 'table' or type(data.name) ~= 'string' then
+        cb(false)
+        return
+    end
+    local point = Config.WeaponRepairPoints[tonumber(RepairPoint) or 0]
+    local slot = tonumber(data.slot)
+    if not point or not slot then
+        cb(false)
+        return
+    end
+    -- 🔒 维修点已被占用时拒绝：原来可以覆盖别人的 RepairingData，前一位玩家的枪直接消失。
+    if point.IsRepairing then
+        TriggerClientEvent('QBCore:Notify', src, '这个维修点正在使用中', 'error')
+        cb(false)
+        return
+    end
+    local WeaponData = QBCore.Shared.Weapons[GetHashKey(data.name)]
+    if not WeaponData or type(WeaponData.ammotype) ~= 'string' then
+        cb(false)
+        return
+    end
+    local WeaponClass = (QBCore.Shared.SplitStr(WeaponData.ammotype, '_')[2] or ''):lower()
+    if not Config.WeaponRepairCosts[WeaponClass] then
+        cb(false)
+        return
+    end
+
+    local weapon = Player.PlayerData.items[slot]
+    if not weapon or type(weapon.info) ~= 'table' then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_weapon_in_hand'), 'error')
         TriggerClientEvent('qb-weapons:client:SetCurrentWeapon', src, {}, false)
         cb(false)
         return
     end
 
-    if not Player.PlayerData.items[data.slot].info.quality or Player.PlayerData.items[data.slot].info.quality == 100 then
+    if not weapon.info.quality or weapon.info.quality == 100 then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_damage_on_weapon'), 'error')
         cb(false)
         return
     end
 
+    -- 🔒 先扣货、再扣钱、最后立记录：原来顺序是「扣钱 → 立记录 → 扣货」，
+    --    扣货失败时会留下一条指向仍在背包里的枪的 RepairingData（状态脏）。
+    if not exports['qb-inventory']:RemoveItem(src, weapon.name, 1, slot, 'qb-weapons:server:RepairWeapon') then
+        cb(false)
+        return
+    end
     if not Player.Functions.RemoveMoney('cash', Config.WeaponRepairCosts[WeaponClass]) then
+        -- 钱不够：把刚扣掉的枪还回去
+        exports['qb-inventory']:AddItem(src, weapon.name, 1, false, weapon.info, 'qb-weapons:server:RepairWeapon')
         cb(false)
         return
     end
 
-    Config.WeaponRepairPoints[RepairPoint].IsRepairing = true
-    Config.WeaponRepairPoints[RepairPoint].RepairingData = {
+    point.IsRepairing = true
+    point.RepairingData = {
         CitizenId = Player.PlayerData.citizenid,
-        WeaponData = Player.PlayerData.items[data.slot],
+        WeaponData = weapon,
         Ready = false,
     }
 
-    if not exports['qb-inventory']:RemoveItem(src, data.name, 1, data.slot, 'qb-weapons:server:RepairWeapon') then
-        Player.Functions.AddMoney('cash', Config.WeaponRepairCosts[WeaponClass], 'qb-weapons:server:RepairWeapon')
-        return
-    end
-
     TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[data.name], 'remove')
     TriggerClientEvent('qb-inventory:client:CheckWeapon', src, data.name)
-    TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, Config.WeaponRepairPoints[RepairPoint], RepairPoint)
+    TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, point, tonumber(RepairPoint))
 
     SetTimeout(Timeout, function()
-        Config.WeaponRepairPoints[RepairPoint].IsRepairing = false
-        Config.WeaponRepairPoints[RepairPoint].RepairingData.Ready = true
-        TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, Config.WeaponRepairPoints[RepairPoint], RepairPoint)
+        point.IsRepairing = false
+        if point.RepairingData then point.RepairingData.Ready = true end
+        TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, point, tonumber(RepairPoint))
         exports['qb-phone']:sendNewMailToOffline(Player.PlayerData.citizenid, {
             sender = Lang:t('mail.sender'),
             subject = Lang:t('mail.subject'),
@@ -109,10 +140,10 @@ QBCore.Functions.CreateCallback('qb-weapons:server:RepairWeapon', function(sourc
         })
 
         SetTimeout(7 * 60000, function()
-            if Config.WeaponRepairPoints[RepairPoint].RepairingData.Ready then
-                Config.WeaponRepairPoints[RepairPoint].IsRepairing = false
-                Config.WeaponRepairPoints[RepairPoint].RepairingData = {}
-                TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, Config.WeaponRepairPoints[RepairPoint], RepairPoint)
+            if point.RepairingData and point.RepairingData.Ready then
+                point.IsRepairing = false
+                point.RepairingData = {}
+                TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, point, tonumber(RepairPoint))
             end
         end)
     end)
@@ -140,33 +171,67 @@ RegisterNetEvent('qb-weapons:server:UpdateWeaponAmmo', function(CurrentWeaponDat
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if type(CurrentWeaponData) ~= 'table' then return end
+
+    -- 🔒 弹药由客户端上报（射击后回写），服务端只能夹范围：
+    --    原来 amount 原样写入 → 改包即可给自己 999999 发子弹（无限弹药）。
     amount = tonumber(amount)
-    if CurrentWeaponData then
-        if Player.PlayerData.items[CurrentWeaponData.slot] then
-            Player.PlayerData.items[CurrentWeaponData.slot].info.ammo = amount
-        end
-        Player.Functions.SetInventory(Player.PlayerData.items, true)
-    end
+    if not amount or amount < 0 or amount % 1 ~= 0 then return end
+    amount = math.min(amount, 9999)
+
+    local slot = tonumber(CurrentWeaponData.slot)
+    if not slot then return end
+    local weapon = Player.PlayerData.items[slot]
+    if not weapon or type(weapon.info) ~= 'table' then return end
+    if weapon.name ~= CurrentWeaponData.name then return end
+
+    weapon.info.ammo = amount
+    Player.Functions.SetInventory(Player.PlayerData.items, true)
 end)
 
 RegisterNetEvent('qb-weapons:server:TakeBackWeapon', function(k)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    local itemdata = Config.WeaponRepairPoints[k].RepairingData.WeaponData
+
+    -- 🔒 k 是客户端索引；且只能取**自己**送修、且**已修好**的那把。
+    --    原来任何人都能对任意 k 取回 → 别人送修的枪可以被抢走（双方各得一把 = 复制）。
+    local point = Config.WeaponRepairPoints[tonumber(k) or 0]
+    if not point or type(point.RepairingData) ~= 'table' then return end
+    if point.RepairingData.CitizenId ~= Player.PlayerData.citizenid then return end
+    if point.RepairingData.Ready ~= true then return end
+    local itemdata = point.RepairingData.WeaponData
+    if type(itemdata) ~= 'table' or not itemdata.name then return end
+
+    itemdata.info = itemdata.info or {}
     itemdata.info.quality = 100
-    exports['qb-inventory']:AddItem(src, itemdata.name, 1, false, itemdata.info, 'qb-weapons:server:TakeBackWeapon')
+    -- 🔒 背包满/AddItem 失败时**不能**清记录，否则枪直接消失
+    local added = exports['qb-inventory']:AddItem(src, itemdata.name, 1, false, itemdata.info, 'qb-weapons:server:TakeBackWeapon')
+    if added == false or added == nil then
+        TriggerClientEvent('QBCore:Notify', src, '背包空间不足，无法取回武器', 'error')
+        return
+    end
     TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[itemdata.name], 'add')
-    Config.WeaponRepairPoints[k].IsRepairing = false
-    Config.WeaponRepairPoints[k].RepairingData = {}
-    TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, Config.WeaponRepairPoints[k], k)
+    local index = tonumber(k) or 0
+    Config.WeaponRepairPoints[index].IsRepairing = false
+    Config.WeaponRepairPoints[index].RepairingData = {}
+    TriggerClientEvent('qb-weapons:client:SyncRepairShops', -1, Config.WeaponRepairPoints[index], index)
 end)
 
 RegisterNetEvent('qb-weapons:server:SetWeaponQuality', function(data, hp)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    local WeaponSlot = Player.PlayerData.items[data.slot]
+    -- 🔒 槽位与数值都得自己校验：原来 data.slot 不存在就 `nil.info` 抛错（可刷屏崩服务端），
+    --    hp 原样写入 → 任意改武器耐久（0~100 之外的值会破坏后续比较）
+    if type(data) ~= 'table' then return end
+    hp = tonumber(hp)
+    if not hp then return end
+    hp = math.max(0, math.min(100, hp))
+    local slot = tonumber(data.slot)
+    if not slot then return end
+    local WeaponSlot = Player.PlayerData.items[slot]
+    if not WeaponSlot or type(WeaponSlot.info) ~= 'table' then return end
     WeaponSlot.info.quality = hp
     Player.Functions.SetInventory(Player.PlayerData.items, true)
 end)
@@ -174,9 +239,19 @@ end)
 RegisterNetEvent('qb-weapons:server:UpdateWeaponQuality', function(data, RepeatAmount)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    if not Player or type(data) ~= 'table' or type(data.name) ~= 'string' then return end
+    -- 🔒 三个直接索引原来都不判空：坏 name → WeaponData nil；坏 slot → WeaponSlot nil（崩）。
+    --    RepeatAmount 也是客户端给的，夹到 1~50 防止一次请求把耐久打穿（也防卡死循环）。
     local WeaponData = QBCore.Shared.Weapons[GetHashKey(data.name)]
-    local WeaponSlot = Player.PlayerData.items[data.slot]
+    local slot = tonumber(data.slot)
+    if not WeaponData or not slot then return end
+    local WeaponSlot = Player.PlayerData.items[slot]
+    if not WeaponSlot or type(WeaponSlot.info) ~= 'table' then return end
+    RepeatAmount = tonumber(RepeatAmount)
+    if not RepeatAmount or RepeatAmount < 1 then return end
+    RepeatAmount = math.min(math.floor(RepeatAmount), 50)
     local DecreaseAmount = Config.DurabilityMultiplier[data.name]
+    if not DecreaseAmount then return end
     if WeaponSlot then
         if not IsWeaponBlocked(WeaponData.name) then
             if WeaponSlot.info.quality then

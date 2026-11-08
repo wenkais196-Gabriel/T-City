@@ -64,6 +64,24 @@ tcity-cmd -w 8 "restart <res>"      # Linux 布局
 3. **关键命令还在**：被停资源注册的命令会一起消失（`/revive`、`/garages` 等）。
    抽查方法：控制台输入该命令，看是报"未知命令"还是正常执行。
 
+## 3.5 ⚠️ `restart` 会连带停掉依赖它的资源
+
+2026-11-08 实测：`restart qb-weapons` 之后，控制台紧跟着停了 **12 个**资源 ——
+`qb-inventory`、`custom-justice`、`custom-police`、`custom-market`、`custom-cartel`、
+`custom-storage`、`custom-mining`、`custom-certificates`、`qb-ambulancejob`、`qb-cityhall`、
+`qb-management`、`qb-mechanicjob`。这些资源**不会自己回来**，`restart <名字>` 也没用
+（控制台只会回一句 `Can't restart a stopped resource.`）。
+
+所以每次 `restart` 一个被广泛依赖的资源后，必须做两步：
+
+```bash
+curl -s http://127.0.0.1:30130/info.json | jq '.resources | length'   # 掉了就补
+python tools/dev/fivem_console.py "start qb-inventory"                 # 对每个被停的用 start，不是 restart
+```
+
+判定依据是**集合**不是数字（见上面第 1 条）；补完再跑一次 `resync_modules.ps1` 也可以，
+它会把模块 cfg 里 `ensure` 的资源重新拉起。
+
 ## 4. 整服重启（唯一安全的重启 qb-core 方式）
 
 ```bash
