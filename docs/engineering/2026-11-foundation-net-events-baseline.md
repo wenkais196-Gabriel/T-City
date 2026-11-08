@@ -110,6 +110,22 @@ custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债�
 * `callback_relay`：必须走 `QBCore.ServerCallbacks[name]`，且分发目标里的高危项要有可验证的守卫（见上）；
 * `deprecated_blocked`：必须有 `LogSecurity(` 调用，并且**不许**出现列出的写 API（`AddItem/RemoveItem/AddMoney/RemoveMoney/SetMetaData/SetJob/SetJobDuty/SetGang/SetMoney`、任何 `MySQL.*`、`exports[...]:Set*`）。
 
+## 4.1 `monitor`（txAdmin）的 33 条不计入本仓库的"待修"
+
+`resources/[system]/monitor` 是 FXServer 自带的 txAdmin 面板，`txsv:*` 系列事件由 txAdmin
+自己鉴权：23 条明确调 `PlayerHasTxPermission(src, 'players.teleport')` 之类的权限判定，
+另外 10 条是日志/握手/管理查询（`chatMessage`、`txsv:logger:*`、`txsv:checkIfAdmin` 等），
+语义上本来就是开放的客户端上报面。
+
+判断：**这些不是本仓库的代码，也不该按本仓库的口径去改**（改 vendored 代码会在下次
+FXServer 升级时被覆盖）。所以：
+
+- 数字上仍然计入 192 条里（不屏蔽真实数量）；
+- 口径上单独说明：这 33 条的鉴权主体是 txAdmin 的 web 会话 + `PlayerHasTxPermission`，
+  与本仓库的 `net_event_scan` 识别的那套 token 不是一回事；
+- 若将来要收口，正确做法是给扫描器加一个 `local allow = H(...)` 形状（现有形状只认
+  `if not H(...)`），而不是把 33 条一条条写进 allowlist 当作"已证明"。
+
 ## 5. 闸门怎么工作
 
 `tests/architecture/test_net_event_inventory.py`：
