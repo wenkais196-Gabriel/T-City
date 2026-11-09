@@ -1,0 +1,35 @@
+{
+  "$comment": "P2-1 服务端 Citizen.Await 残留清单。每条都必须写清「为什么这条不是阻塞主线程」与到期日；修好之后同 commit 删条目。",
+  "entries": {
+    "[qb]/qb-core/server/functions.lua": {
+      "reason": "QBCore.Functions.TriggerClientCallback 的**同步模式**（cb == nil）—— 它的契约就是「等客户端回答」。等的是本机客户端的回包，不是 DB/HTTP；改成异步会直接破坏所有同步调用方的返回值语义。",
+      "owner": "qb-core",
+      "expires": "2027-03-31",
+      "shape": "client_roundtrip"
+    },
+    "[custom]/custom-agent-client/server/main.lua": {
+      "reason": "Agent 动作分发：等客户端执行回执（带 timeout_ms，`entry.promise` 由 ack/超时二选一 resolve）。同样是请求-响应契约，不是 DB 读。",
+      "owner": "custom-agent-client",
+      "expires": "2027-03-31",
+      "shape": "client_roundtrip"
+    },
+    "[custom]/custom-quest/server/quest_security.lua": {
+      "reason": "步骤上报校验里缓存空窗期的 DB 兜底（QuestCache 未命中时同步查一次）。校验函数返回 boolean，调用方是 net event handler；异步化要改整条校验链的契约，单独立项。",
+      "owner": "custom-quest",
+      "expires": "2027-03-31",
+      "shape": "db_fallback"
+    },
+    "[custom]/custom-quest/server/quest_logistics_validators.lua": {
+      "reason": "车辆归属校验（player_vehicles 查询，KeyManager 未命中时的 DB 兜底）。同属「返回 boolean 的校验器」这一类，异步化要改校验器契约。",
+      "owner": "custom-quest",
+      "expires": "2027-03-31",
+      "shape": "db_fallback"
+    },
+    "[qb]/qb-crypto/server/main.lua": {
+      "reason": "GetTickerPrice 等的是 PerformHttpRequest 回调，且**只被后台 ticker 线程调用**（每 Interval 一次），不在任何 player/net-event 路径上；网络挂起只会让这条线程停摆，不影响主流程。",
+      "owner": "qb-crypto",
+      "expires": "2027-03-31",
+      "shape": "dedicated_thread"
+    }
+  }
+}

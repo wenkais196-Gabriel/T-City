@@ -751,6 +751,21 @@ MUTATIONS += [
     ),
 ]
 
+# P2-1：服务端不许新增 Citizen.Await
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_no_server_await.py::"
+              "test_no_new_server_side_citizen_await"),
+        path="resources/[custom]/custom-justice/server/main.lua",
+        content=None,
+        replace_from="JusticeService = {}",
+        replace_to=("JusticeService = {}\n"
+                     "local _probe_promise = promise.new()\n"
+                     "Citizen.Await(_probe_promise)"),
+        what="服务端读路径上 Await DB（旧 patron_service 的形态）",
+    ),
+]
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))
