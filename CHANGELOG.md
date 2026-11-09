@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **P2-4 预算数字化**：`tools/dev/budget_probe.py` 按 fxmanifest 找服务端脚本、脱掉注释后统计六项静态计数，
+  输出基线并由 `T-CityLite.base/tests/architecture/io_budget.json` 钉住上限（`--update` 只允许往下写）：
+
+  | 指标 | 基线 | 含义 |
+  |---|---|---|
+  | `db_call_sites` | 463 | `MySQL.*` / `exports.oxmysql` 调用点总数（趋势指标） |
+  | `fast_polling_loops` | 2 | `while true` + 首个 `Wait ≤100ms`（≈600 次/分钟/条） |
+  | `warm_polling_loops` | 5 | `while true` + `Wait ≤1000ms`（≈60 次/分钟/条） |
+  | `wait_zero_loops` | 1 | `while true` + `Wait(0)`（吃满一个 tick） |
+  | `broadcast_sites` | 150 | `TriggerClientEvent(..., -1, ...)` 全服广播点 |
+  | `broadcast_inline_json` | 5 | 广播点里内联 `json.encode`（每次广播重新序列化） |
+
+  `fast_polling_loops` 的两条与 `wait_zero_loops` 的一条已逐一点名（txAdmin 的 runcode web 服务、
+  qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
+- **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
+  广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **顺带收敛**：把「哪些文件算服务端」的判定从 `tests/architecture/server_await_scan.py` 提到
+  `tools/dev/fivem_manifest.py`，P2-1 的闸门与 P2-4 的探针共用同一份 manifest 解析（此前只有前者一份，
+  但预算探针也要用 —— 复制一份迟早会走岔）。
 - **P2-2 启动顺序进版本库**：`T-CityLite.base/configs/boot.json` = 模块 exec 顺序的唯一事实来源
   （`server.cfg` 是 gitignored，17 行 `exec configs/modules/*.cfg` 的顺序以前只活在本地那份文件里）。
   新增 `tools/dev/boot_cfg.py`：把 boot.json 的模块顺序 + 各模块 cfg 的 `ensure` 行展开成真实启动序列，
