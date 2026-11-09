@@ -101,7 +101,13 @@ python tools/dev/fivem_console.py "quit" --wait 3
 # 3) 起
 cd T-CityLite.base && E:/FXServer/FXServer.exe +exec server.cfg
 # 4) 等到"Started resource"刷完，核对资源数 = 85
+# 5) 核对顺序没有漂移（server.cfg 不入库，这一条会拿本地那份跟 boot.json 比）
+python tools/dev/boot_cfg.py --check --server-cfg T-CityLite.base/server.cfg
 ```
+
+启动顺序的事实来源是 `T-CityLite.base/configs/boot.json`（模块 exec 顺序）+ 各模块 cfg 里的 `ensure` 行，
+`tools/dev/boot_cfg.py` 按 fxmanifest 的 `dependency` 校验「依赖先于使用」。**改顺序要改这三处之一并跑
+`--check`**，不要只在 cfg 里挪一行就完事 —— 顺序注释不参与判定。
 
 ## 5. 静默失效的排查清单
 
