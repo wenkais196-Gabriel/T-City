@@ -69,6 +69,11 @@ def test_warm_rejects_stuck_loading_and_sync_errors():
     # SetTier 之后，之前发出去的查询回调必须作废（否则刚设的等级被旧结果覆盖）
     assert data["PATRON_SET_SURVIVES_STALE_FAILURE"] == "true", "SetTier 被在途回调的失败结果覆盖"
     assert data["PATRON_SET_SURVIVES_STALE_ROW"] == "true", "SetTier 被在途回调带回的旧行覆盖"
+    # 看门狗重发会并存两条同代际查询：慢的那条晚到不许覆盖快的那条
+    assert data["PATRON_WATCHDOG_TWO_QUERIES"] == "true", "看门狗没有重发"
+    assert data["PATRON_WATCHDOG_Q2_APPLIED"] == "true", "新查询的结果没落地"
+    assert data["PATRON_WATCHDOG_STALE_Q1_IGNORED"] == "true", "晚到的旧查询覆盖了新结果"
+    assert data["PATRON_STALE_CB_ANSWERS"] == "true", "结果过期时回调永远不会被调用"
 
 
 def test_get_tier_async_resolves_after_load():

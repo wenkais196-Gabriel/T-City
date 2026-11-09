@@ -111,7 +111,9 @@ def _resource_server_files(resource_dir: Path) -> set[str] | None:
     server, client = _manifest_scripts(manifest)
     if not server and not client:
         return None
-    return server - client
+    # 不做 `server - client`：`shared_scripts` 和同时出现在两边（如 connectqueue 的
+    # shared/sh_queue.lua）都**确实在服务端执行**，减掉就是漏检。client 桶只留作诊断。
+    return server
 
 
 def server_files(resources: Path = RESOURCES) -> set[str]:

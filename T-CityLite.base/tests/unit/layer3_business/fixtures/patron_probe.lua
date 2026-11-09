@@ -88,6 +88,12 @@ local function safe(fn, ...)
     return value
 end
 
+-- 按发出顺序 flush 指定那一条：pending[1] 是最早发出的查询
+local function flushAt(index, row)
+    local cb = table.remove(state.pending, index)
+    if cb then cb(row) end
+end
+
 local function flush(row)
     local batch = state.pending
     state.pending = {}
@@ -181,6 +187,23 @@ safe(service.SetTier, 'CID8', 2)         -- 设成 2
 flush({ tier = 0, expires_at = '2099-01-01 00:00:00' })  -- 旧回调带回旧行 tier=0
 advance(10)                              -- 让 CID8 的缓存按 TTL 逻辑仍然有效
 emit('PATRON_SET_SURVIVES_STALE_ROW', tostring(safe(service.GetTier, 'CID8') == 2))
+
+-- ── 6c. 看门狗重发后，慢查询的晚到结果不许覆盖新结果 ──
+emit('SCENARIO', 'watchdog_race')
+state.mode = 'ok'
+state.queries = 0
+safe(service.GetTier, 'CID10')           -- q1 在途
+advance(12)                              -- 超过 LOAD_TIMEOUT_SEC
+safe(service.GetTier, 'CID10')           -- q2 重发
+emit('PATRON_WATCHDOG_TWO_QUERIES', tostring(state.queries == 2))
+flushAt(#state.pending, { tier = 2, expires_at = '2099-01-01 00:00:00' })  -- q2 先回：tier 2
+emit('PATRON_WATCHDOG_Q2_APPLIED', tostring(safe(service.GetTier, 'CID10') == 2))
+flushAt(1, {})                            -- q1 晚到：空结果（旧实现会 markFailed）
+emit('PATRON_WATCHDOG_STALE_Q1_IGNORED', tostring(safe(service.GetTier, 'CID10') == 2))
+
+local lateCb = 'unset'
+safe(service.GetTierAsync, 'CID10', function(tier) lateCb = tier end)
+emit('PATRON_STALE_CB_ANSWERS', tostring(lateCb == 2))
 
 -- ── 7. GetTierAsync：命中同步回调，未命中加载后回调 ──
 emit('SCENARIO', 'async')

@@ -91,7 +91,9 @@ local function warm(citizenid, after)
             if after then after(entry and entry.tier or 0) end
             return
         end
-        loading[citizenid] = nil
+        -- 超时重发**必须**换一代：否则 q1/q2 持有同一代际，q1 晚到时仍会覆盖 q2 的结果
+        -- （或写 markFailed 把刚读到的等级改成 0）。
+        bumpGeneration(citizenid)
     end
 
     loading[citizenid] = now
@@ -102,7 +104,12 @@ local function warm(citizenid, after)
         function(result)
             -- 在途期间 SetTier 改过等级：这次结果已经过期，丢掉（连 loading 都不要清，
             -- 那是新一代的在途标记）
-            if (generation[citizenid] or 0) ~= issued then return end
+            if (generation[citizenid] or 0) ~= issued then
+                -- 结果过期：按当前缓存答复，别让调用方的回调永远不回来
+                local current = tierCache[citizenid]
+                if after then after(current and current.tier or 0) end
+                return
+            end
             loading[citizenid] = nil
             local row = result
             if type(row) == 'table' and row[1] ~= nil and row.tier == nil then row = row[1] end
