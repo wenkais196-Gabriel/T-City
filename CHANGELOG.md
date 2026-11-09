@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
 - **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
   广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **第二轮 CC 复核（又四条）**：⑤ 循环体用 600 字符定窗，`while true do` 先干活、末尾才 `Wait(60)` 的
+  写法会整条漏掉 → 改成配对到 `end`/`until` 取体内第一个 Wait；⑥ `Wait(1e3)` / `Wait(0x64)` 落在常量
+  字符集之外被当"未知" → 放进字符集，并对 `10**400` 这类加溢出/超大值收敛（超一天即封顶）；
+  ⑦ `while running do Wait(50)` 这类非字面量条件不匹配 → 现在**所有 `while … do` 与 `repeat` 都认**，
+  但按条件分两类：字面量 `true/1`（或 `repeat`）= 无限轮询，其余 = 等条件循环；
+  ⑧ 等条件循环里的 `Wait(0)` 是正常写法（等到就退出），不该算进 `wait_zero_loops` → 新增
+  `conditional_busy_wait_loops` 单独计（11 条，用来发现"等一个永远不成立的条件"）。
+  基线随判据再更新：新增 `conditional_busy_wait_loops` 11、`polling_loops_unknown_interval` 22→23。
 - **CC 复核后的判据加固（四条都是"能绕过"）**：① `Wait` 参数不是数字字面量（`Wait(ms)` / `Wait()`）时
   整条循环被静默丢弃 → 新增 `polling_loops_unknown_interval` 单独计数（有预算就会显形）；
   ② 循环只认 `while true`，漏 `while (true)` / `while 1` / `repeat … until` → 一并认；
