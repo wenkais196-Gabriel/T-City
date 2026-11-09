@@ -62,6 +62,7 @@ def _budget_file(tmp_path: Path, **overrides: int) -> Path:
         "fast_polling_loops": 0,
         "warm_polling_loops": 0,
         "wait_zero_loops": 0,
+        "polling_loops_unknown_interval": 0,
         "broadcast_sites": 0,
         "broadcast_inline_json": 0,
     }.items()}
@@ -112,3 +113,56 @@ def test_reverse_comment_only_shapes_are_not_counted(tmp_path):
             "local a = 1\n")
     metrics = budget_probe.measure(_fixture(tmp_path, body))
     assert metrics["wait_zero_loops"] == 0 and metrics["db_call_sites"] == 0, metrics
+
+
+def test_reverse_variable_wait_interval_is_not_a_silent_escape(tmp_path):
+    """把 `Wait(50)` 改成 `Wait(ms)` 不能绕过 fast 预算：要落到 unknown 档并被看见。"""
+    resources = _fixture(tmp_path, "local ms = 50\nCreateThread(function()\n  while true do\n    Wait(ms)\n  end\nend)\n")
+    metrics = budget_probe.measure(resources)
+    assert metrics["polling_loops_unknown_interval"] == 1, metrics
+    budget = _budget_file(tmp_path, polling_loops_unknown_interval=0)
+    problems = budget_probe.check(metrics, budget)
+    assert any("polling_loops_unknown_interval" in problem for problem in problems), problems
+
+
+def test_reverse_loop_shapes_are_all_detected(tmp_path):
+    """`while (true)`、`while 1`、`repeat … until` 与 `while true` 等价，必须都算。"""
+    body = ("CreateThread(function()\n"
+            "  while (true) do Wait(50) end\n"
+            "end)\n"
+            "CreateThread(function()\n"
+            "  while 1 do Wait(50) end\n"
+            "end)\n"
+            "CreateThread(function()\n"
+            "  repeat Wait(50) until false\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["fast_polling_loops"] == 3, metrics
+
+
+def test_reverse_constant_expression_is_evaluated_not_guessed(tmp_path):
+    """`Wait(3600 * 1000)` 是常量表达式（一小时），不该被当成"未知"或"快循环"。"""
+    resources = _fixture(tmp_path, "CreateThread(function()\n  while true do\n    Wait(3600 * 1000)\n  end\nend)\n")
+    metrics = budget_probe.measure(resources)
+    assert metrics["polling_loops_unknown_interval"] == 0, metrics
+    assert metrics["fast_polling_loops"] == 0 and metrics["warm_polling_loops"] == 0, metrics
+
+
+def test_reverse_neighbour_statement_json_encode_is_not_attributed(tmp_path):
+    """广播后面的语句里有 json.encode，不该算到这次广播头上（固定窗口就是这么误判的）。"""
+    body = ("CreateThread(function()\n"
+            "  TriggerClientEvent('x:sync', -1, payload)\n"
+            "  local blob = json.encode({ a = 1 })\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["broadcast_sites"] == 1 and metrics["broadcast_inline_json"] == 0, metrics
+
+
+def test_reverse_long_broadcast_argument_list_is_still_detected(tmp_path):
+    """参数很长（远超固定窗口）时也要认出来。"""
+    padding = ", ".join(f"field_{index} = {index}" for index in range(80))
+    body = ("CreateThread(function()\n"
+            f"  TriggerClientEvent('x:sync', -1, json.encode({{ {padding} }}))\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["broadcast_inline_json"] == 1, metrics

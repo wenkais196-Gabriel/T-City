@@ -44,8 +44,9 @@ DB = re.compile(
     r"|exports\.oxmysql",
     re.I,
 )
-LOOP = re.compile(r"while\s+true\s+do", re.I)
-WAIT = re.compile(r"(?:Citizen\s*\.\s*)?Wait\s*\(\s*(\d+)\s*\)")
+LOOP = re.compile(r"while\s*\(?\s*(?:true|1)\s*\)?\s*do\b|\brepeat\b", re.I)
+#: 参数不一定是数字字面量（`Wait(ms)` / `Wait()` / `Wait(0.0)` 都见过）：先抓整段，再尝试解析
+WAIT = re.compile(r"(?:Citizen\s*\.\s*)?Wait\s*\(([^)]*)\)")
 BROADCAST = re.compile(r"TriggerClientEvent\s*\(\s*['\"][^'\"]+['\"]\s*,\s*-1\b")
 JSON_INLINE = re.compile(r"json\s*\.\s*encode\s*\(")
 
@@ -60,9 +61,56 @@ FAST_MS = 100
 WARM_MS = 1000
 
 
-def _first_wait(code: str, start: int) -> int | None:
+CONST_EXPR = re.compile(r"^[0-9+\-*/().\s]+$")
+
+
+def _constant_ms(raw: str) -> int | None:
+    """把 `50`、`0.0`、`3600 * 1000`、`60/2` 这类**常量表达式**折算成毫秒。
+
+    只接受数字与四则运算符 —— 变量/配置（`Config.DecayIntervalMs`）一律算未知，不去猜值。
+    """
+    raw = raw.strip()
+    if not raw or not CONST_EXPR.match(raw):
+        return None
+    try:
+        # 只允许算术：globals/locals 都清空，且上面已限定字符集
+        value = eval(raw, {"__builtins__": {}}, {})  # noqa: S307 —— 字符集已限定为数字与运算符
+    except Exception:
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_wait(code: str, start: int) -> tuple[int | None, bool]:
+    """返回 (毫秒, 是否间隔未知)。
+
+    `Wait(ms)` / `Wait()` 这类未知间隔单独计数（`polling_loops_unknown_interval`），**不并进 fast** ——
+    并进去会让 fast 这个数字失真；但不计数就会让"把 Wait(50) 改成 Wait(ms)"成为静默绕过。
+    """
     match = WAIT.search(code, start, start + LOOP_WINDOW)
-    return int(match.group(1)) if match else None
+    if not match:
+        return None, False
+    value = _constant_ms(match.group(1))
+    if value is None:
+        return None, True
+    return value, False
+
+
+def _call_arguments(code: str, open_paren: int) -> str:
+    """取一对配对括号之间的内容（广播参数可能很长，固定窗口会误判）。"""
+    depth = 0
+    index = open_paren
+    while index < len(code):
+        if code[index] == "(":
+            depth += 1
+        elif code[index] == ")":
+            depth -= 1
+            if depth == 0:
+                return code[open_paren:index]
+        index += 1
+    return code[open_paren:]
 
 
 def measure(resources: Path = RESOURCES) -> dict[str, int]:
@@ -72,6 +120,7 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
         "fast_polling_loops": 0,
         "warm_polling_loops": 0,
         "wait_zero_loops": 0,
+        "polling_loops_unknown_interval": 0,
         "broadcast_sites": 0,
         "broadcast_inline_json": 0,
     }
@@ -85,7 +134,11 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
         metrics["db_call_sites"] += len(DB.findall(code))
 
         for match in LOOP.finditer(code):
-            wait_ms = _first_wait(code, match.end())
+            wait_ms, unknown = _first_wait(code, match.end())
+            if unknown:
+                # 间隔由配置/变量决定：单独计数（有预算就会显形），但不冒充"快循环"
+                metrics["polling_loops_unknown_interval"] += 1
+                continue
             if wait_ms is None:
                 continue
             if wait_ms == 0:
@@ -97,7 +150,8 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
 
         for match in BROADCAST.finditer(code):
             metrics["broadcast_sites"] += 1
-            if JSON_INLINE.search(code[match.start():match.start() + 300]):
+            open_paren = code.find("(", match.start())
+            if open_paren != -1 and JSON_INLINE.search(_call_arguments(code, open_paren)):
                 metrics["broadcast_inline_json"] += 1
     return metrics
 
