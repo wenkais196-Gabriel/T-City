@@ -62,6 +62,7 @@ def _budget_file(tmp_path: Path, **overrides: int) -> Path:
         "fast_polling_loops": 0,
         "warm_polling_loops": 0,
         "wait_zero_loops": 0,
+        "conditional_busy_wait_loops": 0,
         "polling_loops_unknown_interval": 0,
         "broadcast_sites": 0,
         "broadcast_inline_json": 0,

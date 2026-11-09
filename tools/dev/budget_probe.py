@@ -44,7 +44,9 @@ DB = re.compile(
     r"|exports\.oxmysql",
     re.I,
 )
-LOOP = re.compile(r"while\s*\(?\s*(?:true|1)\s*\)?\s*do\b|\brepeat\b", re.I)
+LOOP = re.compile(r"\bwhile\s+([^\n]{0,80}?)\s+do\b|\brepeat\b", re.I)
+#: 条件字面量 = 无限循环（周期轮询）；否则是「等条件」循环（busy-wait 的另一种风险）
+INFINITE_COND = re.compile(r"^(true|1)$", re.I)
 #: 参数不一定是数字字面量（`Wait(ms)` / `Wait()` / `Wait(0.0)` 都见过）：先抓整段，再尝试解析
 WAIT = re.compile(r"(?:Citizen\s*\.\s*)?Wait\s*\(([^)]*)\)")
 BROADCAST = re.compile(r"TriggerClientEvent\s*\(\s*['\"][^'\"]+['\"]\s*,\s*-1\b")
@@ -61,7 +63,9 @@ FAST_MS = 100
 WARM_MS = 1000
 
 
-CONST_EXPR = re.compile(r"^[0-9+\-*/().\s]+$")
+CONST_EXPR = re.compile(r"^[0-9a-fA-FxXeE+\-*/(). %\s]+$")
+#: 超过一天就不必精确（也不会落在 fast/warm 档），防止 10**400 这类把探针算崩
+MAX_MS = 86_400_000
 
 
 def _constant_ms(raw: str) -> int | None:
@@ -75,12 +79,37 @@ def _constant_ms(raw: str) -> int | None:
     try:
         # 只允许算术：globals/locals 都清空，且上面已限定字符集
         value = eval(raw, {"__builtins__": {}}, {})  # noqa: S307 —— 字符集已限定为数字与运算符
-    except Exception:
+    except (SyntaxError, ValueError, TypeError, ZeroDivisionError, OverflowError, MemoryError):
         return None
     try:
-        return int(float(value))
-    except (TypeError, ValueError):
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
         return None
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    return min(int(abs(number)), MAX_MS)
+
+
+BLOCK_TOKEN = re.compile(r"\b(do|then|function|repeat|end|until)\b", re.I)
+OPENS = {"do", "then", "function", "repeat"}
+
+
+def _block_body(code: str, start: int) -> str:
+    """从循环关键字之后取**配对**到 `end`（`repeat` 取到 `until`）的那段。
+
+    不用固定字符窗口：`while true do` 后面先干一段活、末尾才 `Wait(60)` 是常见写法，
+    固定 600 字符会把这类循环漏掉，也会把循环外/内层线程的 Wait 误记成它的间隔。
+    """
+    depth = 1
+    for match in BLOCK_TOKEN.finditer(code, start):
+        word = match.group(1).lower()
+        if word in OPENS:
+            depth += 1
+        else:
+            depth -= 1
+            if depth == 0:
+                return code[start:match.start()]
+    return code[start:]
 
 
 def _first_wait(code: str, start: int) -> tuple[int | None, bool]:
@@ -89,7 +118,7 @@ def _first_wait(code: str, start: int) -> tuple[int | None, bool]:
     `Wait(ms)` / `Wait()` 这类未知间隔单独计数（`polling_loops_unknown_interval`），**不并进 fast** ——
     并进去会让 fast 这个数字失真；但不计数就会让"把 Wait(50) 改成 Wait(ms)"成为静默绕过。
     """
-    match = WAIT.search(code, start, start + LOOP_WINDOW)
+    match = WAIT.search(_block_body(code, start))
     if not match:
         return None, False
     value = _constant_ms(match.group(1))
@@ -120,6 +149,7 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
         "fast_polling_loops": 0,
         "warm_polling_loops": 0,
         "wait_zero_loops": 0,
+        "conditional_busy_wait_loops": 0,
         "polling_loops_unknown_interval": 0,
         "broadcast_sites": 0,
         "broadcast_inline_json": 0,
@@ -134,12 +164,23 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
         metrics["db_call_sites"] += len(DB.findall(code))
 
         for match in LOOP.finditer(code):
+            condition = (match.group(1) or "").strip()
+            while condition.startswith("(") and condition.endswith(")"):
+                condition = condition[1:-1].strip()
+            infinite = bool(INFINITE_COND.match(condition)) or match.group(1) is None
             wait_ms, unknown = _first_wait(code, match.end())
             if unknown:
-                # 间隔由配置/变量决定：单独计数（有预算就会显形），但不冒充"快循环"
-                metrics["polling_loops_unknown_interval"] += 1
+                # 间隔由配置/变量决定：单独计数（有预算就会显形），但不冒充"快循环"。
+                # 只对无限循环计数：等条件的循环退出由条件决定，间隔未知不算风险。
+                if infinite:
+                    metrics["polling_loops_unknown_interval"] += 1
                 continue
             if wait_ms is None:
+                continue
+            if not infinite:
+                # 「等条件」循环：Wait(0) 在这里是正常写法（等到就退出），但忙等仍然是风险
+                if wait_ms == 0:
+                    metrics["conditional_busy_wait_loops"] += 1
                 continue
             if wait_ms == 0:
                 metrics["wait_zero_loops"] += 1
