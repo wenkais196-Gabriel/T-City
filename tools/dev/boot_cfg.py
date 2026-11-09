@@ -168,7 +168,9 @@ def check(boot: Path = BOOT, modules: Path = MODULES, resources: Path = RESOURCE
         for dep in manifest_dependencies(resource, index):
             if BUILTIN_DEP.match(dep):
                 continue
-            if dep in BUILTIN_RESOURCE:
+            # 先看仓库里到底有没有这个资源：名字同时出现在 resources/ 和内置名单里时
+            # （自带 fork 的 chat/ox_lib 这类），**以仓库为准** —— 否则它的缺失/错序会被静默放过。
+            if dep not in index and dep in BUILTIN_RESOURCE:
                 continue
             if dep not in position:
                 problems.append(f"{resource}（{module}）依赖 {dep}，但启动序列里没有它")
