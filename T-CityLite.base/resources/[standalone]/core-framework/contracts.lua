@@ -140,6 +140,10 @@ Bus.RegisterService('governance', {
 -- 5. PatronService — 养服 ✅ Phase 1 已实现
 --    → core-framework/services/patron_service.lua
 --    → Bus.RegisterService('patron', ...) 在服务文件中注册
+--
+--    读语义：GetTier / IsActive 只读缓存、**不做 IO**，未命中返回 0（= 非 Patron，保守）
+--    并后台预热；需要"现在就要准确值"的地方用 GetTierAsync(citizenid, cb)。
+--    不要在这些入口上 Await DB：它们被高频调用，慢库会把处理该事件的协程一起拖住。
 -- ============================================================================
 
 -- ============================================================================
