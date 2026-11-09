@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
 - **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
   广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **CC 复核后的判据加固（四条都是"能绕过"）**：① `Wait` 参数不是数字字面量（`Wait(ms)` / `Wait()`）时
+  整条循环被静默丢弃 → 新增 `polling_loops_unknown_interval` 单独计数（有预算就会显形）；
+  ② 循环只认 `while true`，漏 `while (true)` / `while 1` / `repeat … until` → 一并认；
+  ③ `Wait(3600 * 1000)` 这种常量表达式被当"未知" → 改成安全求值（只允许数字与四则运算）；
+  ④ 广播用 300 字符窗口找 `json.encode`，会把下一条语句的序列化算到广播头上、也会漏掉长参数 →
+  改成按配对括号取参数列表。
+  判据变严后基线随之变化（这不是退步，是判据换了）：`fast_polling_loops` 2→4（新增把
+  qb-multicharacter 两条 10ms 循环显形）、`warm_polling_loops` 5→6、`broadcast_inline_json` 5→1
+  （固定窗口的 4 个是误计）。反向用例补到 10 条。
 - **顺带收敛**：把「哪些文件算服务端」的判定从 `tests/architecture/server_await_scan.py` 提到
   `tools/dev/fivem_manifest.py`，P2-1 的闸门与 P2-4 的探针共用同一份 manifest 解析（此前只有前者一份，
   但预算探针也要用 —— 复制一份迟早会走岔）。
