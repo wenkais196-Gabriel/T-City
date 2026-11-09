@@ -780,6 +780,24 @@ MUTATIONS += [
 ]
 
 
+# P2-4：新增一条 50ms 轮询循环（≈1200 次/分钟）必须撞预算
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_budget.py::"
+              "test_current_numbers_are_within_budget"),
+        path="resources/[custom]/custom-justice/server/main.lua",
+        content=None,
+        replace_from="JusticeService = {}",
+        replace_to=("JusticeService = {}\n"
+                     "CreateThread(function()\n"
+                     "    while true do\n"
+                     "        Wait(50)\n"
+                     "    end\n"
+                     "end)"),
+        what="新增 50ms 轮询循环",
+    ),
+]
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))

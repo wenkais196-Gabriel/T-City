@@ -1,0 +1,114 @@
+"""P2-4 闸门：IO / tick / payload 的静态预算。
+
+判据在 `tools/dev/budget_probe.py`：按 `fxmanifest` 找出服务端脚本，脱掉注释后统计
+  1. `db_call_sites` —— DB 调用点总数（趋势指标）；
+  2. `fast_polling_loops` / `warm_polling_loops` / `wait_zero_loops` —— `while true` 的轮询形状
+     （Wait ≤100ms ≈ 600 次/分钟、≤1000ms ≈ 60 次/分钟、Wait(0) 会吃满一个 tick）；
+  3. `broadcast_sites` / `broadcast_inline_json` —— 全服广播点，以及其中内联 `json.encode` 的点。
+
+数字超过 `io_budget.json` 就红。预算只能往下调（`--update` 会在数字变大时直接拒绝）。
+
+为什么用结构计数而不是跑测：这些形状的变化（多一个每秒轮询、多一个全服序列化广播）在 CI 里必须能被
+**静态**拦住 —— 等运行时才发现的成本就是线上卡顿。
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[3]
+sys.path.insert(0, (REPO / "tools" / "dev").as_posix())
+
+import budget_probe  # noqa: E402
+
+BUDGET = REPO / "T-CityLite.base" / "tests" / "architecture" / "io_budget.json"
+
+
+def test_current_numbers_are_within_budget():
+    problems = budget_probe.check()
+    assert not problems, "预算超了：\n  - " + "\n  - ".join(problems)
+
+    # 新增指标必须同时写预算，否则它永远是"没预算 = 不检查"
+    metrics = budget_probe.measure()
+    budget = budget_probe.load_budget(BUDGET)
+    missing = sorted(set(metrics) - set(budget))
+    assert not missing, f"这些指标没有预算：{missing}"
+    for name, entry in budget.items():
+        assert entry.get("note", "").strip(), f"{name} 没写 note（说明它量的是什么、超了该怎么做）"
+
+    # 反向保护：预算被清空/写成 0 会让闸门看起来永远绿（或永远红）
+    assert len(budget) >= 6, f"预算只剩 {len(budget)} 项，像是被清过"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 反向形状：每条指标都要能真的咬住
+# ══════════════════════════════════════════════════════════════════
+
+def _fixture(tmp_path: Path, body: str) -> Path:
+    resources = tmp_path / "resources"
+    directory = resources / "probe-res"
+    directory.mkdir(parents=True)
+    (directory / "fxmanifest.lua").write_text(
+        "fx_version 'cerulean'\nserver_script 'server.lua'\n", encoding="utf-8")
+    (directory / "server.lua").write_text(body, encoding="utf-8")
+    return resources
+
+
+def _budget_file(tmp_path: Path, **overrides: int) -> Path:
+    metrics = {name: {"budget": value, "note": "probe"} for name, value in {
+        "db_call_sites": 0,
+        "fast_polling_loops": 0,
+        "warm_polling_loops": 0,
+        "wait_zero_loops": 0,
+        "broadcast_sites": 0,
+        "broadcast_inline_json": 0,
+    }.items()}
+    for name, value in overrides.items():
+        metrics[name]["budget"] = value
+    path = tmp_path / "io_budget.json"
+    path.write_text(json.dumps({"metrics": metrics}, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def test_reverse_new_db_call_rejects_when_over_budget(tmp_path):
+    resources = _fixture(tmp_path, "CreateThread(function()\n  MySQL.query('SELECT 1')\nend)\n")
+    budget = _budget_file(tmp_path, db_call_sites=0)
+    problems = budget_probe.check(budget_probe.measure(resources), budget)
+    assert any("db_call_sites" in problem for problem in problems), problems
+
+
+def test_reverse_fast_polling_loop_rejects_when_over_budget(tmp_path):
+    resources = _fixture(tmp_path, "CreateThread(function()\n  while true do\n    Wait(50)\n  end\nend)\n")
+    budget = _budget_file(tmp_path, fast_polling_loops=0)
+    problems = budget_probe.check(budget_probe.measure(resources), budget)
+    assert any("fast_polling_loops" in problem for problem in problems), problems
+
+
+def test_reverse_wait_zero_loop_rejects_when_over_budget(tmp_path):
+    resources = _fixture(tmp_path, "CreateThread(function()\n  while true do\n    Wait(0)\n  end\nend)\n")
+    budget = _budget_file(tmp_path, wait_zero_loops=0)
+    problems = budget_probe.check(budget_probe.measure(resources), budget)
+    assert any("wait_zero_loops" in problem for problem in problems), problems
+
+
+def test_reverse_broadcast_inline_json_rejects_when_over_budget(tmp_path):
+    body = ("CreateThread(function()\n"
+            "  TriggerClientEvent('x:sync', -1, json.encode({ a = 1 }))\n"
+            "end)\n")
+    resources = _fixture(tmp_path, body)
+    metrics = budget_probe.measure(resources)
+    assert metrics["broadcast_inline_json"] == 1, metrics
+    budget = _budget_file(tmp_path, broadcast_inline_json=0)
+    problems = budget_probe.check(metrics, budget)
+    assert any("broadcast_inline_json" in problem for problem in problems), problems
+
+
+def test_reverse_comment_only_shapes_are_not_counted(tmp_path):
+    """注释里的 `while true do Wait(0)` / `MySQL.query` 不该计入 —— 计的是真的代码。"""
+    body = ("-- while true do Wait(0) end\n"
+            "-- MySQL.query('SELECT 1')\n"
+            "local a = 1\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["wait_zero_loops"] == 0 and metrics["db_call_sites"] == 0, metrics

@@ -1,0 +1,29 @@
+{
+  "$comment": "P2-4 静态预算。数字是结构计数（不需要起服），只能往下调；调高必须在 PR 里写 gate-change: 与理由。刷新用 python3 tools/dev/budget_probe.py --update（只允许往下写）。",
+  "metrics": {
+    "db_call_sites": {
+      "budget": 463,
+      "note": "服务端脚本里 MySQL.* / exports.oxmysql 的调用点总数（趋势指标，跟着业务长）。"
+    },
+    "fast_polling_loops": {
+      "budget": 2,
+      "note": "while true + 首个 Wait ≤ 100ms（≈600 次/分钟/条）。现有两条：runcode_web.lua:146（txAdmin 自带的 runcode web 服务）、qb-core/server/functions.lua:555（离线玩家清理循环里 100ms 重试）。都是第三方/框架代码，改之前先确认上游差异。owner=upstream expires=2027-03-31"
+    },
+    "warm_polling_loops": {
+      "budget": 5,
+      "note": "while true + 首个 Wait ≤ 1000ms（≈60 次/分钟/条）。新增一条就要问：能不能改成事件驱动？"
+    },
+    "wait_zero_loops": {
+      "budget": 1,
+      "note": "while true + Wait(0)：会吃满一个 tick。现有一条是 connectqueue/shared/sh_queue.lua:3（排队 pop 循环，上游设计）。owner=upstream expires=2027-03-31"
+    },
+    "broadcast_sites": {
+      "budget": 150,
+      "note": "TriggerClientEvent(..., -1, ...) 全服广播点。广播成本随在线人数线性放大。"
+    },
+    "broadcast_inline_json": {
+      "budget": 5,
+      "note": "广播点里内联 json.encode：每次广播都重新序列化一遍。要新增请先序列化一次再发，或改成只发脏字段。"
+    }
+  }
+}
