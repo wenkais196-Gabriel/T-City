@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   （`[voice]`、`[qb]` 在 glob 里是字符类）。服务端文件集合 309 → **701**。② `SetTier` 与在途查询
   无代际校验：冷读发出 SELECT → `SetTier(3)` 写缓存 → 旧回调无行，会把刚设的等级覆盖成 0
   （失败 30 秒、旧行 300 秒）。加 `generation[cid]`，回调先核对代际再落地。
+- **第三轮 CC 复核再修两处**：① 解析器做 `server - client` 减法，把 connectqueue 里同时声明为
+  `server_script` + `client_script` 的 shared/sh_queue.lua 剔出了服务端集合（它确实在服务端执行）→
+  去掉减法，client 桶只留作诊断；② 看门狗超时重发时没有换代际，q1/q2 持有同一代际，慢的那条晚到
+  仍会覆盖新结果或写 markFailed → 重发前 bump；另让跨代际丢弃时也回调调用方（否则
+  GetTierAsync 的 cb 永不触发）。服务端文件集合 701 → **704**。
 - 服务端剩余 4 处 Await 已声明性质：`qb-core` 的 `TriggerClientCallback` 同步模式、`custom-agent-client`
   的动作回执、`custom-quest` 缓存空窗 DB 兜底 ×2、`qb-crypto` ticker HTTP（独立线程）。
 - **基石三件套（规范 / 现状 / 目标）入库**：新增 `docs/engineering/STANDARDS.md`（TS-1…TS-13，每条挂闸门或显式缺口）、`docs/engineering/FOUNDATION-AS-IS.md`（组件、三条主链路、已知缺口，附 7 张 UML）、`docs/engineering/FOUNDATION-TO-BE.md`（五层目标、三条硬规则、性能预算数字），以及 `docs/engineering/2026-11-foundation-plan.md`（P0/P1/P2 施工计划与交付标准）。图纸在 `docs/engineering/assets/foundation/`（部署拓扑、分层组件、资源包图、奖励时序、事件时序、数据状态机、路线图），源生成器为一次性脚本，产物为纯 SVG，无外部依赖。
