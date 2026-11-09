@@ -766,6 +766,20 @@ MUTATIONS += [
     ),
 ]
 
+# P2-2：启动顺序必须按 fxmanifest 依赖排（qb-core 依赖 oxmysql）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_boot_order.py::"
+              "test_real_boot_order_respects_manifest_dependencies"),
+        path="configs/modules/core.cfg",
+        content=None,
+        replace_from="ensure oxmysql\nensure qb-core",
+        replace_to="ensure qb-core\nensure oxmysql",
+        what="启动顺序把依赖方 qb-core 排在被依赖的 oxmysql 之前",
+    ),
+]
+
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))

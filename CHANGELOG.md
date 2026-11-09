@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **P2-2 启动顺序进版本库**：`T-CityLite.base/configs/boot.json` = 模块 exec 顺序的唯一事实来源
+  （`server.cfg` 是 gitignored，17 行 `exec configs/modules/*.cfg` 的顺序以前只活在本地那份文件里）。
+  新增 `tools/dev/boot_cfg.py`：把 boot.json 的模块顺序 + 各模块 cfg 的 `ensure` 行展开成真实启动序列，
+  再按每个资源 `fxmanifest.lua` 的 `dependency` / `depend` 校验「依赖必须先于使用」，另核对
+  boot.json ↔ 模块目录一一对应、`ensure` 不指空、同一资源不重复 ensure。
+  实测：84 个资源 / 17 个模块，0 错序；本地 `server.cfg` 的 exec 顺序与 boot.json 一致；
+  真机 85 个在线资源里 84 个都在序列内（多出的 `fivem-map-skater` 由 server.cfg 的 `start` 拉起）。
+- **闸门 `tests/architecture/test_boot_order.py`**：6 条反向形状（错序 / 注释写对但顺序错 / 重复 ensure /
+  ensure 不存在的资源 / 模块没进 boot.json / server.cfg 与 boot.json 不一致）+ 嵌套资源目录
+  （`[qb]/qb-core`）形状 + 1 条变异（把 `ensure qb-core` 挪到 `ensure oxmysql` 前面 → 红、撤回 → 绿）。
+  判据只看 `ensure` 行与 manifest 依赖，**顺序注释不参与判定** —— 删掉注释不影响结论。
+- **CC 复核修正**：`BUILTIN_RESOURCE` 硬编码名单原来**先于**仓库索引判断，名字同时出现在 resources/ 和
+  内置名单里（自带 fork 的 chat 这类）时会被当内置跳过，缺失/错序静默通过 → 改成「仓库里有就按仓库判，
+  没有才看内置名单」，并补一条反向形状（仓库里真有 chat、依赖方没 ensure chat → 必须报）。
+- **DoD 自证**：新增用例把真实 configs/ 复制到临时目录、删掉全部注释行，①原顺序仍通过 ②交换两条
+  ensure 仍红 —— 「删掉顺序注释后闸门仍能拦住错序」由测试本身证明。
+- **已知残留**：`boot.json` 只管 `ensure` 的 84 个资源；地图这类由 server.cfg `start` 拉起的资源不在内。
+  另外「资源 A 在加载期读资源 B 的 exports 但没声明 `dependency`」这类隐式顺序约束无法静态判定。
 - **P2-1 `patron_service` 读路径不再 Await DB**：`GetTier` 原来在缓存未命中时 `promise.new()` +
   `Citizen.Await` 同步查 `patron_records`，第一次读就挂住处理该事件的协程（它还被 `IsActive` /
   `GetTierBySource` 这类高频入口调用）。现在只读缓存、未命中返回 0（保守）并后台预热，另加

@@ -1,0 +1,30 @@
+{
+  "$comment": "启动顺序的唯一事实来源（P2-2）。server.cfg 是 gitignored，只有本地那份知道 exec 了哪几个模块 —— 顺序一旦只活在 cfg 和注释里，换台机器就复现不了。改启动顺序只改这里 + 对应模块 cfg，然后跑 tools/dev/boot_cfg.py --check。",
+  "modules": [
+    "core.cfg",
+    "career.cfg",
+    "player.cfg",
+    "voice.cfg",
+    "custom.cfg",
+    "quest.cfg",
+    "police.cfg",
+    "vehicles.cfg",
+    "jobs.cfg",
+    "banking.cfg",
+    "medical.cfg",
+    "economy.cfg",
+    "security.cfg",
+    "crime.cfg",
+    "story.cfg",
+    "atmosphere.cfg",
+    "admin.cfg"
+  ],
+  "optional_modules": {
+    "dev.cfg": "开发/测试专用（custom-testing、custom-agent-ops、tcity-e2e）。生产不 exec。"
+  },
+  "$order_notes": [
+    "core.cfg 必须在最前：qb-core / core-framework / oxmysql 是所有资源的前置。",
+    "security.cfg 只有 set 没有 ensure，但要在需要它的资源之前 exec（经济/犯罪模块读这些 convar）。",
+    "dev.cfg 不在列表里：它由本地 server.cfg 追加 exec，生产环境不加。"
+  ]
+}
