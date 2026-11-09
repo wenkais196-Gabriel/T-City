@@ -4,8 +4,8 @@
 第一次读就把处理该事件的协程挂住，而 `GetTier` 又被 `IsActive` / `GetTierBySource` 这类高频入口调用。
 现在改成「只读缓存，未命中返回 0 + 后台预热」，需要准确值的调用方用 `GetTierAsync`。
 
-探针里的 `Citizen.Await` 桩**直接报错**（'would block the game thread'），fake oxmysql 故意不立刻回调。
-对 master 版本跑，10 条断言翻红（`PATRON_COLD_NO_BLOCK=false` 等）。
+探针里的 `Citizen.Await` 桩**直接报错**（'would block the game thread'），fake oxmysql 支持
+正常 / 同步抛错 / 永不回调三种模式。对 master 版本跑：5 true / **17 false**。
 """
 
 from __future__ import annotations
@@ -27,11 +27,9 @@ def _run(probe: str, resource_path: str) -> dict[str, str]:
     assert proc.returncode == 0, f"probe 失败：{proc.stderr} / {proc.stdout}"
     data: dict[str, str] = {}
     for line in proc.stdout.splitlines():
-        if "|" not in line:
-            continue
         key, _, value = line.partition("|")
-        data.setdefault(key, value)
-    assert "HANDLER_ERROR" not in data, f"handler 抛错：{data.get('HANDLER_ERROR')}"
+        if key.startswith("PATRON_"):
+            data.setdefault(key, value)
     return data
 
 
@@ -46,8 +44,28 @@ def test_get_tier_never_blocks_on_a_slow_database():
 def test_expired_and_failed_records_degrade_to_zero():
     data = _run("patron_probe.lua", "[standalone]/core-framework")
     assert data["PATRON_EXPIRED_IS_ZERO"] == "true", "过期记录没降级成 0"
+    # 过期记录不能把 expires_at 留在缓存里：留着会让 cacheValid 每次都判否 → 每读一次查一次库
+    assert data["PATRON_EXPIRED_SINGLE_QUERY"] == "true", "过期记录每读一次都撞库"
     assert data["PATRON_FAIL_TIER_ZERO"] == "true", "DB 失败时不是 0"
-    assert data["PATRON_FAIL_BACKOFF"] == "true", "DB 失败后没有退避，每次读都去撞库"
+
+
+def test_failed_reads_back_off_for_seconds_not_the_full_cache_ttl():
+    """CC 复核抓到的失真：失败条目曾经沿用 5 分钟 TTL，`failed_at` 的 30 秒退避是死代码。"""
+    data = _run("patron_probe.lua", "[standalone]/core-framework")
+    assert data["PATRON_FAIL_BACKOFF_IN_WINDOW"] == "true", "失败后立刻又去撞库"
+    assert data["PATRON_FAIL_STILL_COOLING_AT_20S"] == "true", "20 秒内不该重试"
+    assert data["PATRON_FAIL_RETRIES_AFTER_30S"] == "true", "过了 30 秒还不重试（说明退避被拉长到 TTL）"
+    assert data["PATRON_RECOVERS_AFTER_BACKOFF"] == "true", "退避结束后没恢复真实等级"
+
+
+def test_warm_rejects_stuck_loading_and_sync_errors():
+    """`loading` 守卫不能把人锁死：导出同步抛错 / 回调永不回来都要能重试。"""
+    data = _run("patron_probe.lua", "[standalone]/core-framework")
+    assert data["PATRON_SYNC_ERROR_NO_CRASH"] == "true", "导出同步抛错时 GetTier 崩了"
+    assert data["PATRON_SYNC_ERROR_RECOVERS"] == "true", "同步抛错后 loading 没清，永久不重试"
+    assert data["PATRON_SYNC_ERROR_TIER"] == "true", "同步抛错恢复后等级不对"
+    assert data["PATRON_WATCHDOG_WAITS"] == "true", "看门狗窗口内就重试了（会放大并发）"
+    assert data["PATRON_WATCHDOG_RETRIES"] == "true", "回调永不回来时没有看门狗，永久锁死"
 
 
 def test_get_tier_async_resolves_after_load():

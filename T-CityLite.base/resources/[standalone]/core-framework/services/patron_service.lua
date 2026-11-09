@@ -33,6 +33,7 @@ local CACHE_TTL_SEC = 300  -- 5分钟缓存过期
 -- DB 回退的加载状态：同一个人只拉一次，失败后短暂退避，避免缓存一冷就被并发打爆。
 local loading = {}
 local FAIL_BACKOFF_SEC = 30
+local LOAD_TIMEOUT_SEC = 10   -- 回调迟迟不来（导出被重启/网络挂住）就允许重试，别把人锁死
 
 --- 把 MySQL timestamp 字符串转成 unix 时间（缓存里统一用数字）。
 local function toUnixTime(value)
@@ -47,26 +48,45 @@ local function toUnixTime(value)
     })
 end
 
+--- 缓存是否还能用。
+--- 关键：**失败条目按 FAIL_BACKOFF_SEC 过期**，不能沿用 5 分钟的 CACHE_TTL ——
+--- 否则 DB 抖动一次，所有 Patron 读（含 GetTierAsync）要 5 分钟后才恢复。
+local function cacheValid(entry, now)
+    if not entry then return false end
+    if entry.failed_at then
+        return (now - entry.failed_at) < FAIL_BACKOFF_SEC
+    end
+    if (now - entry.cached_at) >= CACHE_TTL_SEC then return false end
+    if entry.expires_at and entry.expires_at < now then return false end
+    return true
+end
+
 --- 后台预热缓存。**不阻塞调用方**：DB 回来之前 GetTier 返回缓存里的值（没缓存就是 0）。
+--- 记一条"读失败了"的缓存：0 + 30 秒退避（cacheValid 认 failed_at）。
+local function markFailed(citizenid)
+    local now = os.time()
+    tierCache[citizenid] = { tier = 0, expires_at = nil, cached_at = now, failed_at = now }
+end
+
 local function warm(citizenid, after)
     local entry = tierCache[citizenid]
-    if entry and (os.time() - entry.cached_at) < CACHE_TTL_SEC
-        and not (entry.expires_at and entry.expires_at < os.time()) then
+    local now = os.time()
+    if cacheValid(entry, now) then
         if after then after(entry.tier) end
         return
     end
     if loading[citizenid] then
-        -- 已经有人在拉了：本次不排队（读不该有隐藏代价）
-        if after then after(entry and entry.tier or 0) end
-        return
-    end
-    if entry and entry.failed_at and (os.time() - entry.failed_at) < FAIL_BACKOFF_SEC then
-        if after then after(entry.tier) end
-        return
+        -- 已经有人在拉：本次不排队（读不该有隐藏代价）。但回调可能永远不来，超过看门狗
+        -- 就当作没在拉，允许重试 —— 否则一次异常导出调用会让这个人永久返回 0。
+        if (now - loading[citizenid]) < LOAD_TIMEOUT_SEC then
+            if after then after(entry and entry.tier or 0) end
+            return
+        end
+        loading[citizenid] = nil
     end
 
-    loading[citizenid] = true
-    exports.oxmysql:prepare(
+    loading[citizenid] = now
+    local started = pcall(exports.oxmysql.prepare, exports.oxmysql,
         'SELECT tier, expires_at FROM patron_records WHERE citizenid = ?',
         { citizenid },
         function(result)
@@ -77,18 +97,27 @@ local function warm(citizenid, after)
             if type(row) == 'table' and row.tier ~= nil then
                 local tier = tonumber(row.tier) or 0
                 local expires_at = toUnixTime(row.expires_at)
-                if expires_at and expires_at < os.time() then tier = 0 end
+                if expires_at and expires_at < os.time() then
+                    -- 过期就是 0，而且**不要**把 expires_at 留在缓存里：留着会让 cacheValid
+                    -- 每次都判否、每读一次就查一次库。
+                    tier, expires_at = 0, nil
+                end
                 tierCache[citizenid] = { tier = tier, expires_at = expires_at, cached_at = os.time() }
                 if after then after(tier) end
                 return
             end
 
-            -- DB 失败/无行：给一个短暂退避的 0，别让每次读都去撞库
-            tierCache[citizenid] = {
-                tier = 0, expires_at = nil, cached_at = os.time(), failed_at = os.time(),
-            }
+            -- DB 失败/无行：0 + 30 秒退避，别让每次读都去撞库
+            markFailed(citizenid)
             if after then after(0) end
         end)
+
+    if not started then
+        -- 导出同步抛错（oxmysql 重启窗口/根本没实现 prepare）：别把 loading 挂在那里
+        loading[citizenid] = nil
+        markFailed(citizenid)
+        if after then after(0) end
+    end
 end
 
 --- 获取玩家 Patron 等级 —— **只读缓存，不做 IO**。
@@ -104,13 +133,8 @@ end
 function PatronService.GetTier(citizenid)
     if not citizenid then return 0 end
     local entry = tierCache[citizenid]
-    local now = os.time()
-    if entry and (now - entry.cached_at) < CACHE_TTL_SEC then
-        if entry.expires_at and entry.expires_at < now then
-            tierCache[citizenid] = nil
-        else
-            return entry.tier
-        end
+    if cacheValid(entry, os.time()) then
+        return entry.tier
     end
     warm(citizenid, nil)
     return 0
@@ -124,9 +148,7 @@ function PatronService.GetTierAsync(citizenid, cb)
     if type(cb) ~= 'function' then return false end
     if not citizenid then cb(0) return false end
     local entry = tierCache[citizenid]
-    local now = os.time()
-    if entry and (now - entry.cached_at) < CACHE_TTL_SEC
-        and not (entry.expires_at and entry.expires_at < now) then
+    if cacheValid(entry, os.time()) then
         cb(entry.tier)
         return true
     end

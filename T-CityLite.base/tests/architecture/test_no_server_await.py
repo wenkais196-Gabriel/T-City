@@ -70,12 +70,16 @@ Citizen.Await(p)
 
 
 def test_reverse_server_await_is_detected():
-    assert scan.scan_source("[standalone]/core-framework/server/main.lua", SERVER_WITH_AWAIT)
+    # 用显式服务端集合调用（scan_repo 的真实形状）：路径里不一定有 /server/
+    rel = "[standalone]/core-framework/services/some_service.lua"
+    assert scan.scan_source(rel, SERVER_WITH_AWAIT, {rel})
 
 
 def test_reverse_comment_is_not_detected():
-    assert not scan.scan_source("[standalone]/core-framework/server/main.lua", COMMENT_ONLY)
+    rel = "[standalone]/core-framework/server/main.lua"
+    assert not scan.scan_source(rel, COMMENT_ONLY, {rel})
 
 
 def test_reverse_client_await_is_out_of_scope():
-    assert not scan.scan_source("[qb]/qb-input/client/main.lua", CLIENT_WITH_AWAIT)
+    # 客户端文件不在 server_scripts 里 → 集合里没有它 → 不算命中
+    assert not scan.scan_source("[qb]/qb-input/client/main.lua", CLIENT_WITH_AWAIT, set())

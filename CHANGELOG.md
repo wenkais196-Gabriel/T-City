@@ -29,9 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   写法）且跑在**脱掉注释**的代码上；存量 5 条进 `server_await_allowlist.json`（每条写明为何不是
   阻塞主线程 + owner + 到期日），allowlist 里有、代码里没有也会红；配 1 条变异用例（往
   custom-justice 注入 Await → 确认变红），`gate_coverage` 未证明数仍 **276**。
-- **探针 `patron_probe.lua`**：`Citizen.Await` 桩成 `error('would block the game thread')`、fake oxmysql
-  故意不立刻回调。对 master 版本跑 **10 条断言翻红**；真机 `core-framework` 启动
+- **探针 `patron_probe.lua`**：`Citizen.Await` 桩成 `error('would block the game thread')`，fake oxmysql
+  支持正常 / 同步抛错 / 永不回调三种模式。对 master 版本跑 5 true / **17 false**；真机启动
   `patron (5 methods)`、85 资源、`SCRIPT ERROR: 0`。
+- **CC 复核后的三处修正**：① 闸门原来按路径猜服务端，漏掉了 `services/patron_service.lua` 本体和
+  `contracts.lua` / `bus.lua` / 根级 `*_server.lua` → 改成以 `fxmanifest.lua` 的 `server_scripts` /
+  `shared_scripts` 为准（309 个服务端文件），变异点也改到 `services/` 布局上证明覆盖；
+  ② 失败条目的退避实际是 5 分钟（沿用 CACHE_TTL，`failed_at` 分支成了死代码）→ 抽出 `cacheValid`
+  让失败条目按 30 秒过期；③ `loading` 用 `pcall` 包住导出调用并在 10 秒后允许重试，
+  否则一次同步抛错/回调丢失会让该玩家永久返回 0。
 - 服务端剩余 4 处 Await 已声明性质：`qb-core` 的 `TriggerClientCallback` 同步模式、`custom-agent-client`
   的动作回执、`custom-quest` 缓存空窗 DB 兜底 ×2、`qb-crypto` ticker HTTP（独立线程）。
 - **基石三件套（规范 / 现状 / 目标）入库**：新增 `docs/engineering/STANDARDS.md`（TS-1…TS-13，每条挂闸门或显式缺口）、`docs/engineering/FOUNDATION-AS-IS.md`（组件、三条主链路、已知缺口，附 7 张 UML）、`docs/engineering/FOUNDATION-TO-BE.md`（五层目标、三条硬规则、性能预算数字），以及 `docs/engineering/2026-11-foundation-plan.md`（P0/P1/P2 施工计划与交付标准）。图纸在 `docs/engineering/assets/foundation/`（部署拓扑、分层组件、资源包图、奖励时序、事件时序、数据状态机、路线图），源生成器为一次性脚本，产物为纯 SVG，无外部依赖。
