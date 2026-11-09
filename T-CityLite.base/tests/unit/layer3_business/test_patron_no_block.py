@@ -66,6 +66,9 @@ def test_warm_rejects_stuck_loading_and_sync_errors():
     assert data["PATRON_SYNC_ERROR_TIER"] == "true", "同步抛错恢复后等级不对"
     assert data["PATRON_WATCHDOG_WAITS"] == "true", "看门狗窗口内就重试了（会放大并发）"
     assert data["PATRON_WATCHDOG_RETRIES"] == "true", "回调永不回来时没有看门狗，永久锁死"
+    # SetTier 之后，之前发出去的查询回调必须作废（否则刚设的等级被旧结果覆盖）
+    assert data["PATRON_SET_SURVIVES_STALE_FAILURE"] == "true", "SetTier 被在途回调的失败结果覆盖"
+    assert data["PATRON_SET_SURVIVES_STALE_ROW"] == "true", "SetTier 被在途回调带回的旧行覆盖"
 
 
 def test_get_tier_async_resolves_after_load():

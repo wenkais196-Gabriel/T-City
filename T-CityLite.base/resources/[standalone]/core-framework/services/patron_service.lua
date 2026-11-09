@@ -35,6 +35,15 @@ local loading = {}
 local FAIL_BACKOFF_SEC = 30
 local LOAD_TIMEOUT_SEC = 10   -- 回调迟迟不来（导出被重启/网络挂住）就允许重试，别把人锁死
 
+-- 代际：SetTier 之后，之前发出去的 SELECT 回调必须作废。否则「冷读发出查询 → SetTier(3)
+-- 写缓存 → 旧查询回调无行」会把刚设的等级覆盖成 0（失败 30 秒、旧行 300 秒，更糟）。
+local generation = {}
+local function bumpGeneration(citizenid)
+    generation[citizenid] = (generation[citizenid] or 0) + 1
+    loading[citizenid] = nil
+    return generation[citizenid]
+end
+
 --- 把 MySQL timestamp 字符串转成 unix 时间（缓存里统一用数字）。
 local function toUnixTime(value)
     if type(value) == 'number' then return value end
@@ -86,10 +95,14 @@ local function warm(citizenid, after)
     end
 
     loading[citizenid] = now
+    local issued = generation[citizenid] or 0
     local started = pcall(exports.oxmysql.prepare, exports.oxmysql,
         'SELECT tier, expires_at FROM patron_records WHERE citizenid = ?',
         { citizenid },
         function(result)
+            -- 在途期间 SetTier 改过等级：这次结果已经过期，丢掉（连 loading 都不要清，
+            -- 那是新一代的在途标记）
+            if (generation[citizenid] or 0) ~= issued then return end
             loading[citizenid] = nil
             local row = result
             if type(row) == 'table' and row[1] ~= nil and row.tier == nil then row = row[1] end
@@ -190,7 +203,8 @@ function PatronService.SetTier(citizenid, tier, external_data)
         {citizenid, tier, external_id}
     )
 
-    -- 立即更新缓存
+    -- 立即更新缓存（并让之前发出去的查询回调作废）
+    bumpGeneration(citizenid)
     tierCache[citizenid] = {
         tier = tier,
         expires_at = os.time() + (30 * 24 * 3600),  -- 30天后

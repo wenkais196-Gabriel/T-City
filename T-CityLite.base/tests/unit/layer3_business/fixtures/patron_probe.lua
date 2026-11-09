@@ -166,6 +166,22 @@ state.mode = 'ok'
 safe(service.GetTier, 'CID5')
 emit('PATRON_WATCHDOG_RETRIES', tostring(state.queries == firstWatchdog + 1))
 
+-- ── 6b. SetTier 与在途查询：旧回调不许覆盖刚设的等级 ──
+emit('SCENARIO', 'set_vs_inflight')
+state.mode = 'ok'
+state.queries = 0
+safe(service.GetTier, 'CID7')            -- 冷读，查询在途
+safe(service.SetTier, 'CID7', 3)         -- 在途期间设成 3
+flush(nil)                               -- 旧回调回来：无行
+emit('PATRON_SET_SURVIVES_STALE_FAILURE', tostring(safe(service.GetTier, 'CID7') == 3))
+
+state.queries = 0
+safe(service.GetTier, 'CID8')            -- 冷读
+safe(service.SetTier, 'CID8', 2)         -- 设成 2
+flush({ tier = 0, expires_at = '2099-01-01 00:00:00' })  -- 旧回调带回旧行 tier=0
+advance(10)                              -- 让 CID8 的缓存按 TTL 逻辑仍然有效
+emit('PATRON_SET_SURVIVES_STALE_ROW', tostring(safe(service.GetTier, 'CID8') == 2))
+
 -- ── 7. GetTierAsync：命中同步回调，未命中加载后回调 ──
 emit('SCENARIO', 'async')
 local hit = nil
