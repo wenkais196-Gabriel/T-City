@@ -177,3 +177,52 @@ def test_reverse_nested_resource_layout_is_supported(tmp_path):
         (directory / "fxmanifest.lua").write_text(
             f"fx_version 'cerulean'\n{deps_block}\n", encoding="utf-8")
     assert boot_cfg.check(boot=boot, modules=mods, resources=res)
+
+
+def test_order_detection_ignores_comments_and_still_rejects_swaps(tmp_path):
+    """DoD 原话：删掉顺序注释后闸门仍能拦住错序。
+
+    做法：把真实的 configs/ 复制到临时目录、**删掉所有注释行**，然后
+      ① 原顺序 → 仍通过（注释不参与判定）；
+      ② 交换两条 ensure → 仍红（注释没了也拦得住）。
+    """
+    import shutil
+
+    source = BASE / "configs"
+    copy = tmp_path / "configs"
+    shutil.copytree(source, copy)
+    modules = copy / "modules"
+    for cfg in modules.glob("*.cfg"):
+        kept = [line for line in cfg.read_text(encoding="utf-8").splitlines()
+                if not line.lstrip().startswith("#")]
+        cfg.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    boot = copy / "boot.json"
+    assert boot_cfg.check(boot=boot, modules=modules) == []
+
+    core = modules / "core.cfg"
+    text = core.read_text(encoding="utf-8")
+    assert "ensure oxmysql\nensure qb-core" in text
+    core.write_text(text.replace("ensure oxmysql\nensure qb-core",
+                                 "ensure qb-core\nensure oxmysql", 1), encoding="utf-8")
+    problems = boot_cfg.check(boot=boot, modules=modules)
+    assert any("排在它后面" in problem for problem in problems), problems
+
+
+def test_reverse_repo_resource_shadows_builtin_name(tmp_path):
+    """仓库里真的有 `chat` 时，它不能被 FiveM 内置名单放过去（否则缺失/错序静默通过）。"""
+    boot, mods, res = _fixture(
+        tmp_path,
+        modules={"a.cfg": "ensure consumer\n"},
+        boot_modules=["a.cfg"],
+        deps={},
+    )
+    for name, requirements in (("chat", []), ("consumer", ["chat"])):
+        directory = res / name
+        directory.mkdir()
+        block = "".join(f"    '{dep}',\n" for dep in requirements)
+        (directory / "fxmanifest.lua").write_text(
+            f"fx_version 'cerulean'\ndependencies {{\n{block}}}\n", encoding="utf-8")
+
+    problems = boot_cfg.check(boot=boot, modules=mods, resources=res)
+    assert any("chat" in problem for problem in problems), problems

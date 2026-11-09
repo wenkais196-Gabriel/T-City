@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ensure 不存在的资源 / 模块没进 boot.json / server.cfg 与 boot.json 不一致）+ 嵌套资源目录
   （`[qb]/qb-core`）形状 + 1 条变异（把 `ensure qb-core` 挪到 `ensure oxmysql` 前面 → 红、撤回 → 绿）。
   判据只看 `ensure` 行与 manifest 依赖，**顺序注释不参与判定** —— 删掉注释不影响结论。
+- **CC 复核修正**：`BUILTIN_RESOURCE` 硬编码名单原来**先于**仓库索引判断，名字同时出现在 resources/ 和
+  内置名单里（自带 fork 的 chat 这类）时会被当内置跳过，缺失/错序静默通过 → 改成「仓库里有就按仓库判，
+  没有才看内置名单」，并补一条反向形状（仓库里真有 chat、依赖方没 ensure chat → 必须报）。
+- **DoD 自证**：新增用例把真实 configs/ 复制到临时目录、删掉全部注释行，①原顺序仍通过 ②交换两条
+  ensure 仍红 —— 「删掉顺序注释后闸门仍能拦住错序」由测试本身证明。
 - **已知残留**：`boot.json` 只管 `ensure` 的 84 个资源；地图这类由 server.cfg `start` 拉起的资源不在内。
   另外「资源 A 在加载期读资源 B 的 exports 但没声明 `dependency`」这类隐式顺序约束无法静态判定。
 - **P2-1 `patron_service` 读路径不再 Await DB**：`GetTier` 原来在缓存未命中时 `promise.new()` +
