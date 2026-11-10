@@ -20,6 +20,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **P2-4 预算数字化**：`tools/dev/budget_probe.py` 按 fxmanifest 找服务端脚本、脱掉注释后统计六项静态计数，
+  输出基线并由 `T-CityLite.base/tests/architecture/io_budget.json` 钉住上限（`--update` 只允许往下写）：
+
+  | 指标 | 基线 | 含义 |
+  |---|---|---|
+  | `db_call_sites` | 463 | `MySQL.*` / `exports.oxmysql` 调用点总数（趋势指标） |
+  | `fast_polling_loops` | 2 | `while true` + 首个 `Wait ≤100ms`（≈600 次/分钟/条） |
+  | `warm_polling_loops` | 5 | `while true` + `Wait ≤1000ms`（≈60 次/分钟/条） |
+  | `wait_zero_loops` | 1 | `while true` + `Wait(0)`（吃满一个 tick） |
+  | `broadcast_sites` | 150 | `TriggerClientEvent(..., -1, ...)` 全服广播点 |
+  | `broadcast_inline_json` | 5 | 广播点里内联 `json.encode`（每次广播重新序列化） |
+
+  `fast_polling_loops` 的两条与 `wait_zero_loops` 的一条已逐一点名（txAdmin 的 runcode web 服务、
+  qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
+- **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
+  广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **第九轮 CC 复核**：Lua 的真值规则是"只有 `nil` / `false` 为假"，而常量求值用了 Python 的 `bool()` ——
+  `while 0 do` 在 Lua 里是死循环，却被判成"等条件"。修法：常量求值一律按 Lua 真值判定（`0`、`""` 为真）。
+  反向用例：`while 0 do Wait(1) end` 必须计入 fast；`repeat Wait(0) until 0` 只跑一次 → 归等条件循环。
+- **第八轮 CC 复核**：上一轮的修法引入了新漏洞 —— 外层取"体内第一个 Wait"，遇到
+  `while true do for … do Wait(2000) end Wait(0) end` 会先取到 2000ms（>1000，一个桶都不命中），
+  而内层 for 的 2000ms 也不计，四个桶全空。修法改成取体内**最小**的 Wait：最小 = 最坏节奏，
+  `Wait(0)` 在体里出现就说明这条循环在自旋。反向用例：「先 2000ms 后 Wait(0)」必须计入 wait_zero。
+- **第七轮 CC 复核**：`while true do for … do Wait(50) end end` —— 外层节流其实由内层 `for` 提供，
+  但嵌套排除把内层整体剔掉、`for` 又不算 conditional，于是 fast/warm/zero/unknown 全都不动。
+  修法：只排除**同为无限**的嵌套循环（它有自己的节奏）；嵌套的 `for` / 等条件循环里的 Wait 算外层的。
+  反向用例：「外层无限 + 内层 for 节流」必须计入 fast。`conditional_busy_wait_loops` 12→13 是分类器
+  把 connectqueue / monitor 里两个 `for` + `Wait(0)` 认了进来（判据更严，不是新债）。
+- **第六轮 CC 复核**：`repeat … until false` 后面还有同块语句时，条件会把后面的 token 一并吞进来
+  （`false cleanup ( )`），常量求值取不到 → 判成"等条件"。修法：条件只取到本行结束或 `;`。
+  反向用例：`until false` 后跟 `cleanup()` 仍必须是无限轮询。
+- **第五轮 CC 复核**：`until (false)`（括号包着）与 `until 1 == 2`（常量比较）仍被归成"等条件" →
+  条件归一化（去外层括号）+ 常量布尔求值（只放行数字/比较/逻辑符号，`false`/`true`/`nil` 先映射）。
+  反向用例再补一条：`false` / `(false)` / `1 == 2` 三种恒假写法都必须是无限轮询、`until not cond` 是等条件。
+- **第四轮 CC 复核（一处真错误）**：`lua_blocks.loops()` 对 `repeat` 的 condition 写死成空串，而
+  `_is_infinite` 把空条件当无限 → **所有** `repeat … until <非 false 条件>` 都被当成无限轮询。
+  后果有两个方向：qb-multicharacter 那两条 `repeat Wait(10) until hasData()` 被计成 fast（实际是等条件），
+  以及"把 `until false` 改成 `until cond`"这种无限化回归看不出来。修法：`repeat` 的条件从 `until` 之后
+  按块深度取到块外，只有字面量 `false` 算无限。基线随之收紧：`fast_polling_loops` 4→2、
+  `warm_polling_loops` 6→5（原来多算的就是那两条 repeat）。反向用例补到 16 条。
+- **第三轮 CC 复核：放弃正则，改用词法切分 + 块配对**。前两轮修的都是同一个病根 —— 用正则截循环体，
+  字符串里的 `end`、`elseif … then`、嵌套 `CreateThread`、`for` 循环全都会让截断错位。新增
+  `tools/dev/lua_blocks.py`（约 170 行）：把 Lua 切成 token（字符串/长字符串/数字/名字/符号），
+  开块只认 `do`/`function`/`if`/`repeat`、收块只认 `end`/`until`（`then` 不单独计数，所以
+  `elseif … then` 不会多算一层），于是 `for … do` / `while … do` 都各配一次 `end`。
+  预算探针改为在 token 上工作：`for i = 1, n do Wait(0) end` 归「等条件循环」、
+  `print("end")` 不再截断循环体、嵌套循环的 Wait 不再算到外层头上（外层真正 60 秒一圈不会被误报成 fast）。
+  基线随之收敛：`conditional_busy_wait_loops` 13→12、`broadcast_sites` 150→152（token 口径比正则准）。
+  反向用例补到 15 条。
+- **第二轮 CC 复核（又四条）**：⑤ 循环体用 600 字符定窗，`while true do` 先干活、末尾才 `Wait(60)` 的
+  写法会整条漏掉 → 改成配对到 `end`/`until` 取体内第一个 Wait；⑥ `Wait(1e3)` / `Wait(0x64)` 落在常量
+  字符集之外被当"未知" → 放进字符集，并对 `10**400` 这类加溢出/超大值收敛（超一天即封顶）；
+  ⑦ `while running do Wait(50)` 这类非字面量条件不匹配 → 现在**所有 `while … do` 与 `repeat` 都认**，
+  但按条件分两类：字面量 `true/1`（或 `repeat`）= 无限轮询，其余 = 等条件循环；
+  ⑧ 等条件循环里的 `Wait(0)` 是正常写法（等到就退出），不该算进 `wait_zero_loops` → 新增
+  `conditional_busy_wait_loops` 单独计（11 条，用来发现"等一个永远不成立的条件"）。
+  基线随判据再更新：新增 `conditional_busy_wait_loops` 11、`polling_loops_unknown_interval` 22→23。
+- **CC 复核后的判据加固（四条都是"能绕过"）**：① `Wait` 参数不是数字字面量（`Wait(ms)` / `Wait()`）时
+  整条循环被静默丢弃 → 新增 `polling_loops_unknown_interval` 单独计数（有预算就会显形）；
+  ② 循环只认 `while true`，漏 `while (true)` / `while 1` / `repeat … until` → 一并认；
+  ③ `Wait(3600 * 1000)` 这种常量表达式被当"未知" → 改成安全求值（只允许数字与四则运算）；
+  ④ 广播用 300 字符窗口找 `json.encode`，会把下一条语句的序列化算到广播头上、也会漏掉长参数 →
+  改成按配对括号取参数列表。
+  判据变严后基线随之变化（这不是退步，是判据换了）：`fast_polling_loops` 2→4（新增把
+  qb-multicharacter 两条 10ms 循环显形）、`warm_polling_loops` 5→6、`broadcast_inline_json` 5→1
+  （固定窗口的 4 个是误计）。反向用例补到 10 条。
+- **顺带收敛**：把「哪些文件算服务端」的判定从 `tests/architecture/server_await_scan.py` 提到
+  `tools/dev/fivem_manifest.py`，P2-1 的闸门与 P2-4 的探针共用同一份 manifest 解析（此前只有前者一份，
+  但预算探针也要用 —— 复制一份迟早会走岔）。
 - **P2-2 启动顺序进版本库**：`T-CityLite.base/configs/boot.json` = 模块 exec 顺序的唯一事实来源
   （`server.cfg` 是 gitignored，17 行 `exec configs/modules/*.cfg` 的顺序以前只活在本地那份文件里）。
   新增 `tools/dev/boot_cfg.py`：把 boot.json 的模块顺序 + 各模块 cfg 的 `ensure` 行展开成真实启动序列，
