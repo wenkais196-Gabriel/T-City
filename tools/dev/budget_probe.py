@@ -87,12 +87,17 @@ def _call_arguments(tokens: list[tuple[str, str, int]], open_index: int) -> list
     return tokens[open_index + 1:]
 
 
-def _find_wait(tokens: list[tuple[str, str, int]], start: int, end: int,
+def _loop_wait(tokens: list[tuple[str, str, int]], start: int, end: int,
                excluded: set[int] | None = None) -> tuple[int | None, bool]:
-    """在 [start, end) 里找第一个 `Wait(...)`（含 `Citizen.Wait`）。
+    """这条循环的实际节奏 = 体内**最小**的 Wait（含 `Citizen.Wait`）。
 
-    返回 (毫秒, 是否间隔未知)。间隔写成变量/配置 → unknown，单独计数（见模块 docstring）。
+    为什么取最小而不是第一个：`while true do for … do Wait(2000) end Wait(0) end` 里，第一个
+    Wait 是内层 for 的 2000ms，取它会得出"2 秒一圈"，而这条循环实际上每帧都在转（Wait(0)）。
+    取最小 = 取了最坏情况，也符合"这条循环最快多久转一圈"。
+    间隔写成变量/配置且没有可判定的数字时记 unknown（单独计数）。
     """
+    numbers: list[int] = []
+    unknown = False
     for cursor in range(start, end):
         if excluded and cursor in excluded:
             continue
@@ -102,11 +107,14 @@ def _find_wait(tokens: list[tuple[str, str, int]], start: int, end: int,
         if cursor + 1 >= end or tokens[cursor + 1][1] != "(":
             continue
         arguments = _call_arguments(tokens, cursor + 1)
-        if not arguments:
-            return None, True
-        milliseconds = _constant_ms(arguments)
-        return (milliseconds, False) if milliseconds is not None else (None, True)
-    return None, False
+        milliseconds = _constant_ms(arguments) if arguments else None
+        if milliseconds is None:
+            unknown = True
+        else:
+            numbers.append(milliseconds)
+    if numbers:
+        return min(numbers), False
+    return (None, True) if unknown else (None, False)
 
 
 #: 常量布尔表达式（`until 1 == 2` 这种）也要认：只放行数字与比较/逻辑符号
@@ -204,7 +212,7 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
                 # 排除掉就会整条漏计。
                 if _is_infinite(other):
                     nested.update(range(other["start"], other["body_end"] + 1))
-            milliseconds, unknown = _find_wait(
+            milliseconds, unknown = _loop_wait(
                 tokens, loop["body_start"], loop["body_end"], nested)
             infinite = _is_infinite(loop)
             if unknown:
