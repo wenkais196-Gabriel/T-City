@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **开服就绪包**（目标从「磨底座」转成「能开门」）：新增 `tools/dev/launch_check.py`，把"这台机器能不能
+  开门"拆成 11 项可复跑的检查，分 `repo`（CI 能跑）与 `local`（只在部署机跑）两半。
+  首次运行抓到的真问题：
+
+  | 项 | 发现 | 处置 |
+  |---|---|---|
+  | #1 | `hud-position-tool`、`custom-debug` 在**默认启动集**里（等于把调试入口开给玩家） | 移进 `configs/modules/dev.cfg`（生产不 exec） |
+  | #2 | 服务端 dev 命令无守卫（`careertest` 等） | 逐个核对：`careertest` 早已是 `'admin'`；其余在 dev-only 资源/测试夹具里 |
+  | #3 | 入库文件里的"密钥" | 全是占位符或 vendored 示例（txAdmin 文档里的 `cfxk_…`），非本仓库密钥 |
+  | #4 | 没有生产配置模板 | 新增 `configs/prod/server.cfg.example`（无密钥）+ 模板内容校验 |
+  | #5 | **从没做过备份** | 新增 `tools/dev/db_backup.py`（dump + manifest + 保留策略 + 恢复演练），实测 403 KB / 68 表，恢复到 `_restore_probe` 后 73 表 |
+  | #6–#11 | 本机是开发配置（8 槽、hostname 带 DEV、agent 开关全开、DB 是 root） | 写进 runbook 的"生产 vs 开发"对照表；生产值由模板承载 |
+
+  另：`docs/engineering/2026-11-launch-runbook.md`（开服前/中/后 + 出事处置 + 回滚 + 明确列出"还没做的"）、
+  `.gitignore` 加 `backups/`（含真实玩家数据，永不入库）、`launch_check.py --ci` 接入闸门
+  `tests/architecture/test_launch_readiness.py`（3 条用例，含两条注入式反向验证 + 1 条变异）。
+### Added
 - **`DirtyFlushStats` 说清"管线是否存在"**（老账：custom-testing 的压测靠 `dirty_count == 0` 判"脏池是空的"，
   而 `DirtyFlush` 全局从来没被定义过，导出走的是 `{ dirty_count = 0 }` 兜底 —— 那条断言永远是
   "空池，通过"）。现在导出带 `available`：未接入 → `available=false`，已实现 → 原样透出 + `available=true`，

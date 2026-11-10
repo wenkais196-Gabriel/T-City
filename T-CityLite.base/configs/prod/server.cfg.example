@@ -1,0 +1,88 @@
+# ==========================================================
+# T-City Lite — **生产** server.cfg 模板（无密钥，可入库）
+#
+# 用法：
+#   1. 复制到 T-CityLite.base/server.cfg（那份是 gitignored 的）
+#   2. 把 <...> 占位符换成真实值（license / rcon / DB 口令）
+#   3. 跑 tools/dev/launch_check.py，直到 `P0 未解决 0 项`
+#
+# 与开发服的区别（每一条都对应 launch_check 的一个检查项）：
+#   * 不带 dev.cfg（不加载 custom-testing / custom-agent-ops / 调试工具）
+#   * agent_actions_enabled / agent_live_enabled = 0，token 清空
+#   * sv_maxclients / onesync 按实际容量
+#   * DB 用专用账号，不用 root
+# ==========================================================
+
+endpoint_add_tcp "0.0.0.0:30130"
+endpoint_add_udp "0.0.0.0:30130"
+
+# 容量：按实际槽位填；32 以上必须显式开 OneSync
+sv_maxclients 32
+set onesync on
+sv_enforceGameBuild 3258
+
+sv_hostname "<对外展示的服务器名>"
+sets sv_projectName "T-City"
+sets sv_projectDesc "<一句话简介>"
+# sv_scriptHookAllowed 0 是默认值；需要 script hook 的调试客户端只在本机用开发 cfg
+
+# ── 密钥（只放在这份 gitignored 的文件里）──────────────────
+sv_licenseKey "<cfxk_...>"
+set rcon_password "<强随机值>"
+
+# ── 数据库：专用账号，不要 root ─────────────────────────────
+# CREATE USER 'tcity'@'%' ... GRANT ... ON `TCityLite`.*
+set mysql_connection_string "mysql://tcity:<口令>@127.0.0.1:3306/TCityLite?charset=utf8mb4"
+
+# ── 框架 ───────────────────────────────────────────────────
+setr qb_locale "zh-cn"
+setr UseTarget true
+
+# ── 语音 ───────────────────────────────────────────────────
+setr voice_useNativeAudio true
+setr voice_useSendingRangeOnly true
+setr voice_defaultCycle "GRAVE"
+setr voice_defaultVolume 0.3
+setr voice_enableRadioAnim 1
+setr voice_syncData 1
+
+# ── Agent 动作代理 / live 感知：**生产默认关闭** ───────────
+# 这两个开关等于"允许外部通过 HTTP 替玩家做事/读世界状态"。
+# 确需开启：换新 token、只监听受信网段、并接受"token 泄漏 = 可加钱"的风险。
+set agent_actions_enabled 0
+set agent_live_enabled 0
+# set agent_actions_token "<新随机值>"
+# set agent_actions_admin_token "<新随机值>"
+# set agent_live_token "<新随机值>"
+
+# ── 启动模块（顺序的事实来源是 configs/boot.json）─────────
+# 改动这里要同步 boot.json，并跑 `python3 tools/dev/boot_cfg.py --check`
+exec configs/modules/core.cfg
+exec configs/modules/career.cfg
+exec configs/modules/player.cfg
+exec configs/modules/voice.cfg
+exec configs/modules/custom.cfg
+exec configs/modules/quest.cfg
+exec configs/modules/police.cfg
+exec configs/modules/vehicles.cfg
+exec configs/modules/jobs.cfg
+exec configs/modules/banking.cfg
+exec configs/modules/medical.cfg
+exec configs/modules/economy.cfg
+exec configs/modules/security.cfg
+exec configs/modules/crime.cfg
+exec configs/modules/story.cfg
+exec configs/modules/atmosphere.cfg
+exec configs/modules/admin.cfg
+
+# 生产**不要** exec configs/modules/dev.cfg（custom-testing / custom-agent-ops / 调试工具）
+
+# ── ACE：管理员组 ──────────────────────────────────────────
+# 把真实管理员的 license/identifier 加进来，不要沿用开发值
+add_ace group.admin command allow
+add_ace resource.qb-core command allow
+add_ace qbcore.god command allow
+add_principal qbcore.god group.admin
+add_principal qbcore.god qbcore.admin
+add_principal qbcore.admin qbcore.mod
+# add_principal identifier.license:<管理员 license> qbcore.god

@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-10 ｜ **文档总数**：288 ｜ **已登记**：288 ｜ **未登记**：0
+**生成时间**：2026-11-10 ｜ **文档总数**：289 ｜ **已登记**：289 ｜ **未登记**：0
 
-**状态分布**：✅ active 162 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 163 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -289,7 +289,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（60）
+### meta（61）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -351,6 +351,7 @@
 | [2026-11 基石加固计划（P0 / P1 / P2）](engineering/2026-11-foundation-plan.md) | plan | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-plan.md` |
 | [T-City 服务器系统覆盖与规划缺口调研](analysis/2026-10-31-systems-coverage-survey.md) | research | 📌 final | 2026-10-31 | 2027-04-30 | ★ | `docs/analysis/2026-10-31-systems-coverage-survey.md` |
 | [T-City Lite — DevOps 工作流](DEVOPS.md) | runbook | ✅ active | 2026-10-23 | 2027-01-30 |  | `docs/DEVOPS.md` |
+| [开服 Runbook（T-City Lite）](engineering/2026-11-launch-runbook.md) | runbook | ✅ active | 2026-11-10 | 2027-03-31 |  | `docs/engineering/2026-11-launch-runbook.md` |
 | [📖 T-City Wiki 系统设计规格书](../T-CityLite.base/docs/design/tcity-wiki-design-spec.md) | spec | 🟡 draft | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-wiki-design-spec.md` |
 | [基石目标形态（TO-BE）— 五层、单写者、可验收的预算](engineering/FOUNDATION-TO-BE.md) | spec | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/FOUNDATION-TO-BE.md` |
 
