@@ -1,0 +1,37 @@
+{
+  "$comment": "P2-4 静态预算。数字是结构计数（不需要起服），只能往下调；调高必须在 PR 里写 gate-change: 与理由。刷新用 python3 tools/dev/budget_probe.py --update（只允许往下写）。",
+  "metrics": {
+    "db_call_sites": {
+      "budget": 463,
+      "note": "服务端脚本里 MySQL.* / exports.oxmysql 的调用点总数（趋势指标，跟着业务长）。"
+    },
+    "fast_polling_loops": {
+      "budget": 2,
+      "note": "**无限循环**（while true / while 1 / repeat-until-false）+ 体内首个 Wait ≤ 100ms（≈600 次/分钟/条）。现有两条：runcode_web.lua:146（txAdmin 的 runcode web 服务）、qb-core/server/functions.lua:555（离线玩家清理的 100ms 重试）。都是上游代码。owner=upstream expires=2027-03-31"
+    },
+    "warm_polling_loops": {
+      "budget": 5,
+      "note": "无限循环 + Wait ≤ 1000ms（≈60 次/分钟/条）。新增一条就要问：能不能改成事件驱动？"
+    },
+    "wait_zero_loops": {
+      "budget": 1,
+      "note": "无限循环 + Wait(0)：会吃满一个 tick。现有一条是 connectqueue/shared/sh_queue.lua:3（排队 pop 循环，上游设计）。owner=upstream expires=2027-03-31"
+    },
+    "conditional_busy_wait_loops": {
+      "budget": 13,
+      "note": "**等条件**循环（while <cond> / for / repeat-until-cond）+ Wait(0)：等到就退出，本身是正常写法（qb-core 的 while not DoesEntityExist(veh) 这类）。计数是为了让「等一个永远不会成立的条件」和「for 里的忙等」显形。（12→13 是因为分类器把 connectqueue / monitor 里两个 for+Wait(0) 认了进来，判据更严，不是新债。）"
+    },
+    "polling_loops_unknown_interval": {
+      "budget": 21,
+      "note": "无限循环里 Wait 的间隔由配置/变量决定（如 Wait(Config.DecayIntervalMs)），静态看不到真实频率。单独计数是为了让「把 Wait(50) 改成 Wait(ms)」不能静默绕过 fast/warm；改这些配置值时请人看一眼。"
+    },
+    "broadcast_sites": {
+      "budget": 152,
+      "note": "TriggerClientEvent(<event>, -1, ...) 全服广播点（按 token 认 `-1` 目标）。广播成本随在线人数线性放大。"
+    },
+    "broadcast_inline_json": {
+      "budget": 1,
+      "note": "广播**参数列表**里内联 json.encode（按配对括号取参，不是固定字符窗口）：每次广播都重新序列化一遍。要新增请先序列化一次再发，或只发脏字段。"
+    }
+  }
+}
