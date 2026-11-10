@@ -20,6 +20,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **开服就绪包**（目标从「磨底座」转成「能开门」）：新增 `tools/dev/launch_check.py`，把"这台机器能不能
+- **开服就绪包 · CC 复核后的加固**（两条 P0 + 四条 P1）：
+  ① **#1 原来不扫真正决定启动集的 `server.cfg`** —— 运维在那里加一行 `exec configs/modules/dev.cfg`
+  就能把 `/test` `/stress` `/agent` 还给玩家，而所有检查依然全绿；现在 module cfg 递归扫 + `server.cfg`
+  （或 `TCITY_SERVER_CFG` 指的那份）一起扫，`ensure|start|exec` 三种写法都认；
+  ② **占位符能带着 P0=0 上生产** —— 新增 #12：license / rcon / DB 口令是 `<...>` 或缺失就红；
+  #8 的 hostname 也认占位符；#9 改成"开关开着但没 token = 红"（原来这个组合反而绿）；
+  ③ `db_backup.py` 的口令原来进了 `docker exec -e MYSQL_PWD=<口令>` 的 argv（宿主机 ps/WMI/EDR 可见）→
+  改成 `-e MYSQL_PWD` 只传变量名、值走子进程 env；备份写入改成临时文件 + fsync + `os.replace`（半截文件不再冒充有效备份）；
+  ④ #11 从"mtime ≤ 24h"改成读 manifest：大小对不上或表数 < 50 都判红；
+  ⑤ #5 从"文件存在"改成查 `db_backup.py` 里有 dump 实现、runbook 里写了"恢复演练"；
+  ⑥ #2 的守卫判据改跑去掉注释后的调用文本（`-- IsAdmin` 不再算守卫）。
+  另外：模板补 `sv_scriptHookAllowed 0` / `sv_pureLevel` / txAdmin 端口与 ACE 说明；runbook 补
+  "生产预演"一节与演练库授权（少了那条，`--restore --to-scratch` 第一步建库就失败）。
+
+  实测：按模板填一份 `server.prod.local.cfg`（gitignored），`TCITY_SERVER_CFG=… launch_check.py`
+  → **12 项检查 P0 = 0**（唯一 P1 是 txAdmin 自带文档里的示例 license）。
+  1339 passed / 147 skipped / 51 subtests。
+  开门"拆成 11 项可复跑的检查，分 `repo`（CI 能跑）与 `local`（只在部署机跑）两半。
+  首次运行抓到的真问题：
+
+  | 项 | 发现 | 处置 |
+  |---|---|---|
+  | #1 | `hud-position-tool`、`custom-debug` 在**默认启动集**里（等于把调试入口开给玩家） | 移进 `configs/modules/dev.cfg`（生产不 exec） |
+  | #2 | 服务端 dev 命令无守卫（`careertest` 等） | 逐个核对：`careertest` 早已是 `'admin'`；其余在 dev-only 资源/测试夹具里 |
+  | #3 | 入库文件里的"密钥" | 全是占位符或 vendored 示例（txAdmin 文档里的 `cfxk_…`），非本仓库密钥 |
+  | #4 | 没有生产配置模板 | 新增 `configs/prod/server.cfg.example`（无密钥）+ 模板内容校验 |
+  | #5 | **从没做过备份** | 新增 `tools/dev/db_backup.py`（dump + manifest + 保留策略 + 恢复演练），实测 403 KB / 68 表，恢复到 `_restore_probe` 后 73 表 |
+  | #6–#11 | 本机是开发配置（8 槽、hostname 带 DEV、agent 开关全开、DB 是 root） | 写进 runbook 的"生产 vs 开发"对照表；生产值由模板承载 |
+
+  另：`docs/engineering/2026-11-launch-runbook.md`（开服前/中/后 + 出事处置 + 回滚 + 明确列出"还没做的"）、
+  `.gitignore` 加 `backups/`（含真实玩家数据，永不入库）、`launch_check.py --ci` 接入闸门
+  `tests/architecture/test_launch_readiness.py`（3 条用例，含两条注入式反向验证 + 1 条变异）。
+### Added
 - **`DirtyFlushStats` 说清"管线是否存在"**（老账：custom-testing 的压测靠 `dirty_count == 0` 判"脏池是空的"，
   而 `DirtyFlush` 全局从来没被定义过，导出走的是 `{ dirty_count = 0 }` 兜底 —— 那条断言永远是
   "空池，通过"）。现在导出带 `available`：未接入 → `available=false`，已实现 → 原样透出 + `available=true`，
