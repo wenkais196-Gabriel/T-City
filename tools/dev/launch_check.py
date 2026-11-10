@@ -132,7 +132,8 @@ def check_dev_resources_not_in_default_boot() -> Finding:
     #    这里最容易漏：运维只要在 server.cfg 里加一行 exec dev.cfg，玩家的 /test 就回来了。
     if SERVER_CFG.exists():
         text = SERVER_CFG.read_text(encoding="utf-8", errors="ignore")
-        if re.search(r"^\s*exec\s+configs/modules/dev\.cfg", text, re.M):
+        # 允许带引号与 ./ 前缀：`exec "configs/modules/dev.cfg"` / `exec ./configs/modules/dev.cfg`
+        if re.search(r'^\s*exec\s+"?\.?/?configs/modules/dev\.cfg"?\s*$', text, re.M):
             offenders.append(f"{SERVER_CFG.name}: exec configs/modules/dev.cfg")
         for match in re.finditer(r"^\s*(?:ensure|start)\s+[\"']?([\w\-]+)", text, re.M):
             if match.group(1) in DEV_ONLY_RESOURCES:
