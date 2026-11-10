@@ -811,6 +811,20 @@ MUTATIONS += [
     ),
 ]
 
+# 开服就绪：把调试资源塞回默认启动集 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_launch_readiness.py::"
+              "test_launch_readiness_repo_half_is_green"),
+        path="configs/modules/core.cfg",
+        content=None,
+        replace_from="ensure oxmysql\nensure qb-core",
+        replace_to="ensure oxmysql\nensure qb-core\nensure custom-testing",
+        what="把 custom-testing 塞回默认启动集（生产会给玩家开 /test）",
+    ),
+]
+
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))

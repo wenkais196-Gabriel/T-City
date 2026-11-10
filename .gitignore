@@ -168,3 +168,6 @@ coverage/
 
 # 文档生命周期派生数据（--report 生成，含本机 mtime；由 tools/docs_lifecycle.py 随时重建）
 docs/_lifecycle.json
+
+# 数据库备份（含真实玩家数据，永不入库）
+backups/
