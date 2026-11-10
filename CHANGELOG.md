@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
 - **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
   广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **第八轮 CC 复核**：上一轮的修法引入了新漏洞 —— 外层取"体内第一个 Wait"，遇到
+  `while true do for … do Wait(2000) end Wait(0) end` 会先取到 2000ms（>1000，一个桶都不命中），
+  而内层 for 的 2000ms 也不计，四个桶全空。修法改成取体内**最小**的 Wait：最小 = 最坏节奏，
+  `Wait(0)` 在体里出现就说明这条循环在自旋。反向用例：「先 2000ms 后 Wait(0)」必须计入 wait_zero。
 - **第七轮 CC 复核**：`while true do for … do Wait(50) end end` —— 外层节流其实由内层 `for` 提供，
   但嵌套排除把内层整体剔掉、`for` 又不算 conditional，于是 fast/warm/zero/unknown 全都不动。
   修法：只排除**同为无限**的嵌套循环（它有自己的节奏）；嵌套的 `for` / 等条件循环里的 Wait 算外层的。

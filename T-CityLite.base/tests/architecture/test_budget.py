@@ -281,3 +281,17 @@ def test_reverse_outer_infinite_loop_paced_by_nested_for(tmp_path):
             "end)\n")
     metrics = budget_probe.measure(_fixture(tmp_path, body))
     assert metrics["fast_polling_loops"] == 1, metrics
+
+
+def test_reverse_loop_paced_by_slowest_first_wait_still_sees_faster_one(tmp_path):
+    """体内先出现 2000ms、后面才 Wait(0)：这条循环实际在自旋，必须计入 wait_zero。"""
+    body = ("CreateThread(function()\n"
+            "  while true do\n"
+            "    for _, item in ipairs(queue) do\n"
+            "      Wait(2000)\n"
+            "    end\n"
+            "    Wait(0)\n"
+            "  end\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["wait_zero_loops"] == 1, metrics
