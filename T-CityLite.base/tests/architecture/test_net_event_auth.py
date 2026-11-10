@@ -103,7 +103,9 @@ HELPER_PATTERNS = {
 }
 
 # What each allowlist category promises, and the token that must back it up.
-MANUAL_CHECK = re.compile(r"job\.type|[Ii]sPolice|onduty|hasCapability|GetItemByName")
+MANUAL_CHECK = re.compile(
+    r"job\.type|[Ii]sPolice|onduty|hasCapability|GetItemByName|IsWhitelisted"
+)
 CIVILIAN_GUARD = re.compile(
     r"type\(|tonumber\(|sanitize|COOLDOWN|cooldown|coordsNearSource|updatingCops|"
     r"metadata\[|evidenceInfo|diff\("
@@ -341,6 +343,17 @@ def test_allowlisted_events_really_show_the_claim_in_their_body():
             assert not foreign_ref, (
                 f"{name}: registered as self_scoped but reaches another player via "
                 f"{foreign_ref.group(0)!r} — 自作用域只能碰 src"
+            )
+        elif category == "vendor_example":
+            # 供应商自带资源：代码不归本仓库，登记是为了让口径可见。必须真的是 [cfx-default] 下的文件，
+            # 否则就成了"给自己代码开后门"。
+            allowed_prefixes = (
+                "[cfx-default]/", "[system]/monitor/",
+                "[standalone]/PolyZone/", "[standalone]/connectqueue/",
+            )
+            assert entry["file"].startswith(allowed_prefixes), (
+                f"{name}: registered as vendor_example but lives in {entry['file']} "
+                f"— 只有供应商自带资源能用这个类别（见 test_net_event_auth.VENDOR_PREFIXES）"
             )
         elif category == "callback_relay":
             assert CALLBACK_RELAY.search(code), (

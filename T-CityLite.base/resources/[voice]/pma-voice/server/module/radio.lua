@@ -128,12 +128,14 @@ end
 exports('setPlayerRadio', setPlayerRadio)
 
 RegisterNetEvent('pma-voice:setPlayerRadio', function(radioChannel)
-	setPlayerRadio(source, radioChannel)
+	local src = source
+	setPlayerRadio(src, radioChannel)
 end)
 
 --- syncs the player talking across all radio members
 ---@param talking boolean sets if the palyer is talking.
-function setTalkingOnRadio(talking)
+function setTalkingOnRadio(talking, src)
+	src = src or source
 	if GetConvarInt('voice_enableRadios', 1) ~= 1 then return end
 	voiceData[source] = voiceData[source] or defaultTable(source)
 	local plyVoice = voiceData[source]
@@ -151,7 +153,11 @@ function setTalkingOnRadio(talking)
 	end
 end
 
-RegisterNetEvent('pma-voice:setTalkingOnRadio', setTalkingOnRadio)
+RegisterNetEvent('pma-voice:setTalkingOnRadio', function(talking)
+	local src = source
+	-- setTalkingOnRadio 内部仍读全局 source：这里显式绑定一次，让"只改自己"这件事在代码里看得见
+	setTalkingOnRadio(talking, src)
+end)
 
 AddEventHandler("onResourceStop", function(resource)
 	for channel, cfxFunctionRef in pairs(radioChecks) do

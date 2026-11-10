@@ -2,7 +2,7 @@
   "$comment": "P1-3 net event 基线。由 tests/architecture/net_event_baseline.py --write 生成；test_net_event_inventory.py 会拿实测逐字段比对（含 started），手改即红。",
   "version": 1,
   "rule": "P1-3",
-  "measured_at": "2026-11-08",
+  "measured_at": "2026-11-10",
   "scope": "resources/** 服务端脚本（server/ 优先；manifest 的 client_scripts 块与单条 client_script 都排除；共享文件按服务端算）；started = 是否在 configs/**/*.cfg 与 server.cfg 的 ensure 列表里",
   "enforced": [
     "qb-core"
@@ -22,15 +22,15 @@
     },
     "qb": {
       "events": 216,
-      "guarded": 109,
-      "allowlisted": 107,
+      "guarded": 105,
+      "allowlisted": 111,
       "unguarded": 0
     },
     "other": {
       "events": 75,
       "guarded": 9,
-      "allowlisted": 7,
-      "unguarded": 59
+      "allowlisted": 66,
+      "unguarded": 0
     }
   },
   "resources": {
@@ -39,8 +39,8 @@
       "group": "[standalone]",
       "events": 4,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 4,
+      "allowlisted": 4,
+      "unguarded": 0,
       "started": true
     },
     "atom_nodes": {
@@ -48,8 +48,8 @@
       "group": "[system]",
       "events": 1,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": true
     },
     "baseevents": {
@@ -57,8 +57,8 @@
       "group": "[cfx-default]",
       "events": 7,
       "guarded": 0,
-      "allowlisted": 4,
-      "unguarded": 3,
+      "allowlisted": 7,
+      "unguarded": 0,
       "started": true
     },
     "connectqueue": {
@@ -66,8 +66,8 @@
       "group": "[standalone]",
       "events": 1,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": false
     },
     "core-framework": {
@@ -201,8 +201,8 @@
       "group": "[cfx-default]",
       "events": 1,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": true
     },
     "interact-sound": {
@@ -219,8 +219,8 @@
       "group": "[cfx-default]",
       "events": 1,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": false
     },
     "money-fountain": {
@@ -228,8 +228,8 @@
       "group": "[cfx-default]",
       "events": 2,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": false
     },
     "monitor": {
@@ -237,8 +237,8 @@
       "group": "[system]",
       "events": 33,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 33,
+      "allowlisted": 33,
+      "unguarded": 0,
       "started": false
     },
     "ped-money-drops": {
@@ -246,8 +246,8 @@
       "group": "[cfx-default]",
       "events": 2,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": false
     },
     "player-data": {
@@ -255,8 +255,8 @@
       "group": "[cfx-default]",
       "events": 1,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": false
     },
     "playernames": {
@@ -264,8 +264,8 @@
       "group": "[cfx-default]",
       "events": 1,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
       "started": false
     },
     "pma-voice": {
@@ -273,8 +273,8 @@
       "group": "[voice]",
       "events": 3,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 3,
+      "allowlisted": 3,
+      "unguarded": 0,
       "started": true
     },
     "production-freeze": {
@@ -344,8 +344,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 6,
-      "guarded": 0,
-      "allowlisted": 6,
+      "guarded": 1,
+      "allowlisted": 5,
       "unguarded": 0,
       "started": false
     },
@@ -380,8 +380,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 6,
-      "guarded": 6,
-      "allowlisted": 0,
+      "guarded": 4,
+      "allowlisted": 2,
       "unguarded": 0,
       "started": true
     },
@@ -398,8 +398,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 19,
-      "guarded": 15,
-      "allowlisted": 4,
+      "guarded": 14,
+      "allowlisted": 5,
       "unguarded": 0,
       "started": false
     },
@@ -425,8 +425,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 10,
-      "guarded": 9,
-      "allowlisted": 1,
+      "guarded": 7,
+      "allowlisted": 3,
       "unguarded": 0,
       "started": false
     },
@@ -461,8 +461,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 4,
-      "guarded": 2,
-      "allowlisted": 2,
+      "guarded": 0,
+      "allowlisted": 4,
       "unguarded": 0,
       "started": true
     },
@@ -470,8 +470,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 11,
-      "guarded": 0,
-      "allowlisted": 11,
+      "guarded": 2,
+      "allowlisted": 9,
       "unguarded": 0,
       "started": true
     },
@@ -497,8 +497,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 9,
-      "guarded": 0,
-      "allowlisted": 9,
+      "guarded": 1,
+      "allowlisted": 8,
       "unguarded": 0,
       "started": true
     },
@@ -515,8 +515,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 12,
-      "guarded": 5,
-      "allowlisted": 7,
+      "guarded": 6,
+      "allowlisted": 6,
       "unguarded": 0,
       "started": true
     },
@@ -524,8 +524,8 @@
       "batch": "qb",
       "group": "[qb]",
       "events": 5,
-      "guarded": 3,
-      "allowlisted": 2,
+      "guarded": 1,
+      "allowlisted": 4,
       "unguarded": 0,
       "started": true
     },
@@ -552,8 +552,8 @@
       "group": "[cfx-default]",
       "events": 2,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": false
     },
     "runcode": {
@@ -561,8 +561,8 @@
       "group": "[cfx-default]",
       "events": 2,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": false
     },
     "sessionmanager": {
@@ -570,8 +570,8 @@
       "group": "[cfx-default]",
       "events": 2,
       "guarded": 0,
-      "allowlisted": 0,
-      "unguarded": 2,
+      "allowlisted": 2,
+      "unguarded": 0,
       "started": true
     },
     "story-engine": {
@@ -593,219 +593,8 @@
       "started": true
     }
   },
-  "unguarded": {
-    "PolyZone": [
-      "PolyZone:TriggerZoneEvent",
-      "polyzone:printBox",
-      "polyzone:printCircle",
-      "polyzone:printPoly"
-    ],
-    "atom_nodes": [
-      "atom:server:nodeReached"
-    ],
-    "baseevents": [
-      "baseevents:onPlayerDied",
-      "baseevents:onPlayerKilled",
-      "baseevents:onPlayerWasted"
-    ],
-    "connectqueue": [
-      "Queue:playerActivated"
-    ],
-    "hardcap": [
-      "hardcap:playerActivated"
-    ],
-    "money": [
-      "money:requestDisplay"
-    ],
-    "money-fountain": [
-      "money_fountain:tryPickup",
-      "money_fountain:tryPlace"
-    ],
-    "monitor": [
-      "chatMessage",
-      "txaLogger:CommandExecuted",
-      "txaLogger:DebugMessage",
-      "txsv:ackWarning",
-      "txsv:checkIfAdmin",
-      "txsv:logger:deathEvent",
-      "txsv:req:bringPlayer",
-      "txsv:req:changePlayerMode",
-      "txsv:req:clearArea",
-      "txsv:req:freezePlayer",
-      "txsv:req:healEveryone",
-      "txsv:req:healMyself",
-      "txsv:req:healPlayer",
-      "txsv:req:plist:getDetailed",
-      "txsv:req:sendAnnouncement",
-      "txsv:req:serverCtx",
-      "txsv:req:showPlayerIDs",
-      "txsv:req:spectate:cycle",
-      "txsv:req:spectate:end",
-      "txsv:req:spectate:start",
-      "txsv:req:tpToCoords",
-      "txsv:req:tpToPlayer",
-      "txsv:req:tpToWaypoint",
-      "txsv:req:troll:setDrunk",
-      "txsv:req:troll:setOnFire",
-      "txsv:req:troll:wildAttack",
-      "txsv:req:vehicle:boost",
-      "txsv:req:vehicle:delete",
-      "txsv:req:vehicle:fix",
-      "txsv:req:vehicle:spawn:fivem",
-      "txsv:req:vehicle:spawn:redm",
-      "txsv:startedWalking",
-      "txsv:webpipe:req"
-    ],
-    "ped-money-drops": [
-      "money:allowPickupNear",
-      "money:tryPickup"
-    ],
-    "player-data": [
-      "playerJoining"
-    ],
-    "playernames": [
-      "playernames:init"
-    ],
-    "pma-voice": [
-      "pma-voice:setPlayerCall",
-      "pma-voice:setPlayerRadio",
-      "pma-voice:setTalkingOnRadio"
-    ],
-    "rconlog": [
-      "rlPlayerActivated",
-      "rlUpdateNamesResult"
-    ],
-    "runcode": [
-      "runcode:gotResult",
-      "runcode:runInBand"
-    ],
-    "sessionmanager": [
-      "hostedSession",
-      "hostingSession"
-    ]
-  },
-  "debt": [
-    {
-      "resource": "PolyZone",
-      "batch": "other",
-      "unguarded": 4,
-      "owner": "PolyZone",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "atom_nodes",
-      "batch": "other",
-      "unguarded": 1,
-      "owner": "atom_nodes",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "baseevents",
-      "batch": "other",
-      "unguarded": 3,
-      "owner": "baseevents",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "connectqueue",
-      "batch": "other",
-      "unguarded": 1,
-      "owner": "connectqueue",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "hardcap",
-      "batch": "other",
-      "unguarded": 1,
-      "owner": "hardcap",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "money",
-      "batch": "other",
-      "unguarded": 1,
-      "owner": "money",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "money-fountain",
-      "batch": "other",
-      "unguarded": 2,
-      "owner": "money-fountain",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "monitor",
-      "batch": "other",
-      "unguarded": 33,
-      "owner": "monitor",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "ped-money-drops",
-      "batch": "other",
-      "unguarded": 2,
-      "owner": "ped-money-drops",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "player-data",
-      "batch": "other",
-      "unguarded": 1,
-      "owner": "player-data",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "playernames",
-      "batch": "other",
-      "unguarded": 1,
-      "owner": "playernames",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "pma-voice",
-      "batch": "other",
-      "unguarded": 3,
-      "owner": "pma-voice",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "rconlog",
-      "batch": "other",
-      "unguarded": 2,
-      "owner": "rconlog",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "runcode",
-      "batch": "other",
-      "unguarded": 2,
-      "owner": "runcode",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    },
-    {
-      "resource": "sessionmanager",
-      "batch": "other",
-      "unguarded": 2,
-      "owner": "sessionmanager",
-      "expires": "2027-03-31",
-      "reason": "存量未鉴权的服务端 net event，按资源整体登记；修复后本条目与数字同时下降"
-    }
-  ],
+  "unguarded": {},
+  "debt": [],
   "non_literal": [
     "[custom]/custom-quest/server/main.lua:192  Config.Quest.Events.QUEST_COLLECT",
     "[custom]/custom-quest/server/main.lua:267  Config.Quest.Events.QUEST_REQUEST_STATE",
