@@ -117,32 +117,69 @@ def _balance(text: str, open_index: int) -> str:
 # repo 半区（CI 可跑）
 # ══════════════════════════════════════════════════════════════════
 
-def check_dev_resources_not_in_default_boot() -> Finding:
-    offenders = []
-    # ① 模块 cfg（递归，防止有人在子目录里塞一份）
-    for module in sorted(MODULES.rglob("*.cfg")):
-        if module.name == "dev.cfg":
-            continue
-        for line in module.read_text(encoding="utf-8", errors="ignore").splitlines():
-            match = re.match(r"\s*(?:ensure|start)\s+[\"']?([\w\-]+)", line)
-            if match and match.group(1) in DEV_ONLY_RESOURCES:
-                offenders.append(f"{module.name}: {match.group(1)}")
+EXEC_LINE = re.compile(r'^\s*exec\s+"?([^"\s]+)"?\s*$', re.M)
+ENSURE_LINE = re.compile(r'^\s*(?:ensure|start)\s+"?([\w\-]+)"?', re.M)
 
-    # ② 真正决定启动集的 server.cfg（本地那份，或 TCITY_SERVER_CFG 指的那份）
-    #    这里最容易漏：运维只要在 server.cfg 里加一行 exec dev.cfg，玩家的 /test 就回来了。
+
+def _exec_targets(text: str, base: Path) -> list[Path]:
+    """一份 cfg 里 `exec` 指向的文件（绝对路径）。"""
+    targets = []
+    for name in EXEC_LINE.findall(text):
+        candidate = (base / name).resolve()
+        if candidate.exists():
+            targets.append(candidate)
+    return targets
+
+
+def _reachable_cfg(start: Path, depth: int = 3) -> list[Path]:
+    """从 server.cfg 出发，沿 `exec` 链能走到的所有 cfg（含自身）。
+
+    为什么要跟链：`configs/modules/any.cfg` 里写一行 `exec configs/modules/dev.cfg`，
+    dev 资源照样加载 —— 只看 server.cfg 会漏，只看模块目录又会把 dev.cfg 自己的内容当成"合法"。
+    """
+    seen: list[Path] = []
+    queue: list[tuple[Path, int]] = [(start, 0)]
+    while queue:
+        path, level = queue.pop(0)
+        if path in seen or level > depth:
+            continue
+        seen.append(path)
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        queue.extend((target, level + 1) for target in _exec_targets(text, path.parent))
+    return seen
+
+
+def check_dev_resources_not_in_default_boot() -> Finding:
+    offenders: list[str] = []
+
+    def scan(path: Path, label: str) -> None:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if path.name == "dev.cfg":
+            offenders.append(f"{label}: 被 exec 了（dev.cfg 是开发专用）")
+        # 按**文件名**也要拦：目标文件可能不在本仓库（比如部署机上的另一份），
+        # 只靠"跟链"会漏掉 `exec configs/modules/dev.cfg` 这种目标不存在的写法。
+        if re.search(r'^\s*exec\s+"?[^"\s]*dev\.cfg"?\s*$', text, re.M):
+            offenders.append(f"{label}: exec …dev.cfg")
+        for name in ENSURE_LINE.findall(text):
+            if name in DEV_ONLY_RESOURCES:
+                offenders.append(f"{label}: {name}")
+
     if SERVER_CFG.exists():
-        text = SERVER_CFG.read_text(encoding="utf-8", errors="ignore")
-        # 允许带引号与 ./ 前缀：`exec "configs/modules/dev.cfg"` / `exec ./configs/modules/dev.cfg`
-        if re.search(r'^\s*exec\s+"?\.?/?configs/modules/dev\.cfg"?\s*$', text, re.M):
-            offenders.append(f"{SERVER_CFG.name}: exec configs/modules/dev.cfg")
-        for match in re.finditer(r"^\s*(?:ensure|start)\s+[\"']?([\w\-]+)", text, re.M):
-            if match.group(1) in DEV_ONLY_RESOURCES:
-                offenders.append(f"{SERVER_CFG.name}: {match.group(1)}")
+        # 跟着 exec 链走：server.cfg → configs/modules/*.cfg → （可能）dev.cfg
+        for cfg in _reachable_cfg(SERVER_CFG.resolve()):
+            label = cfg.relative_to(BASE).as_posix() if BASE in cfg.parents else cfg.name
+            scan(cfg, label)
+    else:
+        for module in sorted(MODULES.rglob("*.cfg")):
+            scan(module, f"configs/modules/{module.relative_to(MODULES).as_posix()}")
+
+    # 去重但保留顺序
+    deduped = list(dict.fromkeys(offenders))
     return Finding(
         "#1 调试资源不在默认启动集",
-        "P0", "repo", not offenders,
-        "干净" if not offenders else "默认会加载：" + "、".join(offenders),
-        "把这几行挪到 configs/modules/dev.cfg（生产不 exec 那份）",
+        "P0", "repo", not deduped,
+        "干净" if not deduped else "默认会加载：" + "、".join(deduped),
+        "把这几行挪到 configs/modules/dev.cfg，并且不要让任何被 exec 的 cfg 去 exec dev.cfg",
     )
 
 
