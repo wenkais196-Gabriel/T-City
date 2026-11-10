@@ -284,9 +284,10 @@ RegisterNetEvent('qb-weapons:server:UpdateWeaponQuality', function(data, RepeatA
 end)
 
 RegisterNetEvent('qb-weapons:server:removeWeaponAmmoItem', function(item)
-    local Player = QBCore.Functions.GetPlayer(source)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
     if not Player or type(item) ~= 'table' or not item.name or not item.slot then return end
-    exports['qb-inventory']:RemoveItem(source, item.name, 1, item.slot, 'qb-weapons:server:removeWeaponAmmoItem')
+    exports['qb-inventory']:RemoveItem(src, item.name, 1, item.slot, 'qb-weapons:server:removeWeaponAmmoItem')
 end)
 
 -- Commands
