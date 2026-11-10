@@ -171,3 +171,5 @@ docs/_lifecycle.json
 
 # 数据库备份（含真实玩家数据，永不入库）
 backups/
+# 生产预演配置（含真实 license/rcon/DB 口令）
+server.*.local.cfg

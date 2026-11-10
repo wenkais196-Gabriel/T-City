@@ -64,6 +64,7 @@ SENSITIVE_PATTERNS = {
     "硬编码密码": re.compile(r"(?i)\b(?:password|passwd|pwd)\s*[:=]\s*['\"][^'\"]{6,}['\"]"),
     "Agent 令牌": re.compile(r"(?i)\b(?:agent_actions_token|agent_live_token)\b[^\n]{0,24}['\"][A-Za-z0-9_\-]{12,}['\"]"),
 }
+COMMENT = re.compile(r"--\[=*\[.*?\]=*\]|--[^\n]*", re.S)
 BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".ico", ".webp", ".woff", ".woff2", ".ttf", ".zip", ".svg", ".mp3", ".ogg"}
 
 
@@ -118,13 +119,24 @@ def _balance(text: str, open_index: int) -> str:
 
 def check_dev_resources_not_in_default_boot() -> Finding:
     offenders = []
-    for module in sorted(MODULES.glob("*.cfg")):
+    # ① 模块 cfg（递归，防止有人在子目录里塞一份）
+    for module in sorted(MODULES.rglob("*.cfg")):
         if module.name == "dev.cfg":
             continue
         for line in module.read_text(encoding="utf-8", errors="ignore").splitlines():
-            match = re.match(r"\s*ensure\s+([\w\-]+)", line)
+            match = re.match(r"\s*(?:ensure|start)\s+[\"']?([\w\-]+)", line)
             if match and match.group(1) in DEV_ONLY_RESOURCES:
                 offenders.append(f"{module.name}: {match.group(1)}")
+
+    # ② 真正决定启动集的 server.cfg（本地那份，或 TCITY_SERVER_CFG 指的那份）
+    #    这里最容易漏：运维只要在 server.cfg 里加一行 exec dev.cfg，玩家的 /test 就回来了。
+    if SERVER_CFG.exists():
+        text = SERVER_CFG.read_text(encoding="utf-8", errors="ignore")
+        if re.search(r"^\s*exec\s+configs/modules/dev\.cfg", text, re.M):
+            offenders.append(f"{SERVER_CFG.name}: exec configs/modules/dev.cfg")
+        for match in re.finditer(r"^\s*(?:ensure|start)\s+[\"']?([\w\-]+)", text, re.M):
+            if match.group(1) in DEV_ONLY_RESOURCES:
+                offenders.append(f"{SERVER_CFG.name}: {match.group(1)}")
     return Finding(
         "#1 调试资源不在默认启动集",
         "P0", "repo", not offenders,
@@ -157,7 +169,8 @@ def check_dev_commands_are_guarded() -> Finding:
             continue
         if any(resource in relative for resource in DEV_ONLY_RESOURCES):
             continue
-        if COMMAND_GUARD.search(call):
+        # 注释里写 IsAdmin 不算守卫：判据跑在去注释后的文本上
+        if COMMAND_GUARD.search(COMMENT.sub("", call)):
             continue
         bucket = client_offenders if "/client" in relative else server_offenders
         bucket.append(f"{name} ({relative}:{line})")
@@ -243,11 +256,22 @@ def check_prod_template_exists() -> Finding:
 def check_backup_tooling_exists() -> Finding:
     tool = REPO / "tools" / "dev" / "db_backup.py"
     doc = REPO / "docs" / "engineering" / "2026-11-launch-runbook.md"
-    missing = [name for name, path in (("db_backup.py", tool), ("launch-runbook.md", doc)) if not path.exists()]
+    problems = []
+    if not tool.exists():
+        problems.append("缺 db_backup.py")
+    elif "mariadb-dump" not in tool.read_text(encoding="utf-8", errors="ignore"):
+        problems.append("db_backup.py 里没有 dump 实现")
+    if not doc.exists():
+        problems.append("缺 launch-runbook.md")
+    else:
+        text = doc.read_text(encoding="utf-8", errors="ignore")
+        for needle in ("db_backup.py", "恢复演练"):
+            if needle not in text:
+                problems.append(f"runbook 里没写 {needle}")
     return Finding(
         "#5 备份与恢复手册",
-        "P0", "repo", not missing,
-        "齐" if not missing else "缺 " + "、".join(missing),
+        "P0", "repo", not problems,
+        "齐" if not problems else "；".join(problems),
         "新增 tools/dev/db_backup.py（dump + 保留策略）与 docs/engineering/2026-11-launch-runbook.md（含恢复演练）",
     )
 
@@ -296,7 +320,7 @@ def check_hostname() -> Finding:
     if text is None:
         return Finding("#8 服务器名", "P1", "local", False, "本地没有 server.cfg", "")
     hostname = _cfg_value(text, "sv_hostname") or ""
-    clean = bool(hostname) and not re.search(r"(?i)\bdev\b|调试|test", hostname)
+    clean = bool(hostname) and not re.search(r"(?i)\bdev\b|调试|test", hostname) and "<" not in hostname
     return Finding(
         "#8 服务器名不是 DEV", "P1", "local", clean, f"sv_hostname = {hostname or '（空）'}",
         "改成对外展示的名字（玩家列表里第一眼看到的就是它）",
@@ -311,9 +335,11 @@ def check_agent_switches() -> Finding:
     live = _cfg_value(text, "agent_live_enabled") or "0"
     tokens = [_cfg_value(text, name) for name in ("agent_actions_token", "agent_actions_admin_token", "agent_live_token")]
     secrets_present = any(token and len(token) >= 8 for token in tokens)
-    off = actions != "1" and live != "1"
+    enabled = actions in {"1", "true", "yes"} or live in {"1", "true", "yes"}
+    # 开着但没 token 更糟：要么等于裸奔，要么实现里根本不校验 —— 两种情况都不许 P0 归零
+    ok = (not enabled) or secrets_present
     return Finding(
-        "#9 Agent 动作/live 关闭或换 token", "P0", "local", off or not secrets_present,
+        "#9 Agent 动作/live 关闭或换 token", "P0", "local", ok,
         f"agent_actions_enabled={actions} agent_live_enabled={live}"
         + ("（cfg 里还有明文 dev token）" if secrets_present else ""),
         "生产环境设 0 / 移除；确需开启就换新 token 并只给受信网络",
@@ -338,11 +364,31 @@ def check_backups_fresh() -> Finding:
     if not directory.exists():
         return Finding("#11 最近备份", "P0", "local", False, "没有 backups/ 目录（从没备份过？）",
                        "跑 tools/dev/db_backup.py，并配成每天一次")
-    newest = max((path.stat().st_mtime for path in directory.glob("*.sql*")), default=0)
-    age_hours = (datetime.now().timestamp() - newest) / 3600 if newest else 10 ** 6
+    candidates = sorted(directory.glob("*.sql"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not candidates:
+        return Finding("#11 最近备份", "P0", "local", False, "backups/ 里没有 .sql 文件",
+                       "跑 tools/dev/db_backup.py，并配成每天一次")
+    newest = candidates[0]
+    age_hours = (datetime.now().timestamp() - newest.stat().st_mtime) / 3600
+    # 只看 mtime 会把空文件/半截文件当成"最近备份" —— manifest 里的表数与 sha256 才是证据
+    manifest = newest.with_suffix(".json")
+    problems = []
+    if age_hours > 24:
+        problems.append(f"最近备份 {age_hours:.1f} 小时前")
+    if not manifest.exists():
+        problems.append("缺 manifest（无法证明可恢复）")
+    else:
+        try:
+            info = json.loads(manifest.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            info = {}
+        if info.get("bytes") != newest.stat().st_size:
+            problems.append("manifest 记录的大小与文件不一致")
+        if int(info.get("tables", 0)) < 50:
+            problems.append(f"备份里只有 {info.get('tables', 0)} 张表（像是空库/半截）")
     return Finding(
-        "#11 最近备份在 24h 内", "P0", "local", age_hours <= 24,
-        f"最近备份 {age_hours:.1f} 小时前" if newest else "backups/ 里没有 .sql 文件",
+        "#11 最近备份可恢复（24h 内 + manifest 对得上）", "P0", "local", not problems,
+        "、".join(problems) if problems else f"{newest.name}，{age_hours:.1f} 小时前",
         "配置定时任务：每天跑一次 db_backup.py，保留 7 天",
     )
 
@@ -354,6 +400,29 @@ REPO_CHECKS = (
     check_prod_template_exists,
     check_backup_tooling_exists,
 )
+def check_placeholders_replaced() -> Finding:
+    """模板里的 `<...>` 不能原样上生产 —— 这一项防的是"把 example 复制过去就开服"。"""
+    text = _cfg_text()
+    if text is None:
+        return Finding("#12 占位符已替换", "P0", "local", False, "本地没有 server.cfg", "")
+    problems = []
+    license_value = _cfg_value(text, "sv_licenseKey") or ""
+    if "<" in license_value or not re.match(r"^cfxk_[A-Za-z0-9_]{10,}$", license_value):
+        problems.append("sv_licenseKey 缺失/是占位符")
+    rcon = _cfg_value(text, "rcon_password") or ""
+    if "<" in rcon or len(rcon) < 12:
+        problems.append("rcon_password 太短或是占位符")
+    match = re.search(r'mysql_connection_string\s+"mysql://[^:]+:([^@]*)@', text)
+    password = match.group(1) if match else ""
+    if not password or "<" in password:
+        problems.append("DB 口令是占位符")
+    return Finding(
+        "#12 占位符已替换（license / rcon / DB 口令）", "P0", "local", not problems,
+        "已替换" if not problems else "、".join(problems),
+        "把 configs/prod/server.cfg.example 里的 <...> 换成真实值",
+    )
+
+
 LOCAL_CHECKS = (
     check_capacity,
     check_onesync,
@@ -361,6 +430,7 @@ LOCAL_CHECKS = (
     check_agent_switches,
     check_db_account,
     check_backups_fresh,
+    check_placeholders_replaced,
 )
 
 
