@@ -109,6 +109,17 @@ python tools/dev/boot_cfg.py --check --server-cfg T-CityLite.base/server.cfg
 `tools/dev/boot_cfg.py` 按 fxmanifest 的 `dependency` 校验「依赖先于使用」。**改顺序要改这三处之一并跑
 `--check`**，不要只在 cfg 里挪一行就完事 —— 顺序注释不参与判定。
 
+### 4.1 `restart` 之后的补资源（自动化）
+
+`restart <res>` 会连带停掉所有依赖它的资源（实测 `restart core-framework` 把 85 → 54），
+按依赖顺序手工 `start` 很容易漏。用工具按 boot.json 的顺序补齐：
+
+```bash
+python tools/dev/restart_sweep.py     # 算差集 + 按序列 start + 复核在线数
+```
+
+它读的是 `configs/boot.json` 展开出的启动序列，所以顺序与 `boot_cfg.py --check` 一致。
+
 ## 5. 静默失效的排查清单
 
 症状是"功能没反应"，日志里未必有错误 —— 按这个顺序查：
