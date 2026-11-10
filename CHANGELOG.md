@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
 - **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
   广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **第四轮 CC 复核（一处真错误）**：`lua_blocks.loops()` 对 `repeat` 的 condition 写死成空串，而
+  `_is_infinite` 把空条件当无限 → **所有** `repeat … until <非 false 条件>` 都被当成无限轮询。
+  后果有两个方向：qb-multicharacter 那两条 `repeat Wait(10) until hasData()` 被计成 fast（实际是等条件），
+  以及"把 `until false` 改成 `until cond`"这种无限化回归看不出来。修法：`repeat` 的条件从 `until` 之后
+  按块深度取到块外，只有字面量 `false` 算无限。基线随之收紧：`fast_polling_loops` 4→2、
+  `warm_polling_loops` 6→5（原来多算的就是那两条 repeat）。反向用例补到 16 条。
 - **第三轮 CC 复核：放弃正则，改用词法切分 + 块配对**。前两轮修的都是同一个病根 —— 用正则截循环体，
   字符串里的 `end`、`elseif … then`、嵌套 `CreateThread`、`for` 循环全都会让截断错位。新增
   `tools/dev/lua_blocks.py`（约 170 行）：把 Lua 切成 token（字符串/长字符串/数字/名字/符号），
