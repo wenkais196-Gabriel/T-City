@@ -13,7 +13,7 @@
 StressTest = StressTest or {}
 
 local QBCore = exports['qb-core']:GetCoreObject()
-local results = { passed = 0, failed = 0, total = 0 }
+local results = { passed = 0, failed = 0, skipped = 0, total = 0 }
 local testPlayers = {}
 
 -- DirtyFlush 访问层 — 通过 exports['core-framework'] 代理
@@ -39,6 +39,9 @@ local function log(suite, msg, status)
     elseif status == 'fail' then
         results.failed = results.failed + 1
         print(('  ❌ [%s] %s'):format(suite, msg))
+    elseif status == 'skip' then
+        results.skipped = (results.skipped or 0) + 1
+        print(('  ⏭️ [%s] %s'):format(suite, msg))
     end
     results.total = results.total + 1
 end
@@ -89,10 +92,13 @@ local function Test_ConcurrentMoneyChanges()
 
     -- 验证脏数据池（proxy 自带 pcall，core-framework 不可用时 stats 为 nil → 优雅降级为 0）
     local stats = DirtyFlush.Stats()
-    if stats and stats.dirty_count and stats.dirty_count > 0 then
+    if not stats or stats.available == false then
+        -- 管线还没接入：与其用"池是空的"糊过去，不如明确说这一项没测
+        log(suite, 'DirtyFlush 管线未接入（DirtyFlushStats.available=false）——本项跳过', 'skip')
+    elseif stats and stats.dirty_count and stats.dirty_count > 0 then
         log(suite, ('DirtyFlush pool has %d entries after concurrent ops'):format(stats.dirty_count), 'pass')
     else
-        log(suite, 'DirtyFlush pool empty or unavailable (core-framework may not be started)', 'pass')
+        log(suite, 'DirtyFlush 已接入但池是空的（MarkDirty 没生效？）——本项跳过', 'skip')
     end
 end
 
@@ -110,16 +116,24 @@ local function Test_PlayerDisconnect()
     end
 
     local beforeStats = DirtyFlush.Stats()
-    local before = (beforeStats and beforeStats.dirty_count) and beforeStats.dirty_count or 0
+    if not beforeStats or beforeStats.available == false then
+        -- Stats() 返回 nil（proxy pcall 失败 / core-framework 没起）和 available=false 是同一种情况：
+        -- 没测到。以前这里会落到"both 0 → pass"，把"没测"写成"通过"。
+        log(suite, 'DirtyFlush 管线未接入或统计不可用——本项跳过', 'skip')
+        return
+    end
+    local before = beforeStats.dirty_count or 0
     DirtyFlush.FlushAll()
     local afterStats = DirtyFlush.Stats()
-    local after = (afterStats and afterStats.dirty_count) and afterStats.dirty_count or 0
-    if before > 0 and after < before then
+    local after = (afterStats and afterStats.dirty_count) or 0
+    if before == 0 then
+        -- 标记了 50 个脏玩家却读到 0：说明 MarkDirty 也没生效，同样是"没测到"
+        log(suite, 'DirtyFlush 已接入但 MarkDirty 未产生脏条目——本项跳过', 'skip')
+    elseif after < before then
         log(suite, ('ForceFlush reduced dirty pool: %d → %d'):format(before, after), 'pass')
-    elseif before == 0 and after == 0 then
-        log(suite, 'DirtyFlush unavailable (both 0) — core-framework may not be started', 'pass')
     else
-        log(suite, ('ForceFlush: before=%d after=%d'):format(before, after), 'pass')
+        -- flush 之后没减少 = 真的失败（以前这里也是 pass）
+        log(suite, ('ForceFlush 没减少脏池: before=%d after=%d'):format(before, after), 'fail')
     end
 end
 
@@ -275,8 +289,8 @@ function StressTest.RunAll()
 
     print('')
     print('───────────────────────────────────────────────')
-    print(('  结果: %d/%d 通过, %d 失败'):format(
-        results.passed, results.total, results.failed
+    print(('  结果: %d/%d 通过, %d 失败, %d 跳过'):format(
+        results.passed, results.total, results.failed, results.skipped or 0
     ))
     print(('  通过率: %.1f%%'):format(
         results.total > 0 and (results.passed / results.total * 100) or 0
@@ -294,7 +308,7 @@ function StressTest.RunAll()
 
     -- 清除测试数据
     testPlayers = {}
-    results = { passed = 0, failed = 0, total = 0 }
+    results = { passed = 0, failed = 0, skipped = 0, total = 0 }
 end
 
 -- 注册命令
