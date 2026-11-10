@@ -88,25 +88,35 @@ local function consume(player, itemName)
     return { hunger = hunger, thirst = thirst, alcohol = alcohol, drug = drug }
 end
 
---- 物品使用入口。qb-inventory 的物品事件是客户端可触发的，所以归属校验必须在服务端做。
-RegisterNetEvent('qb-inventory:server:UseItem', function(item)
-    local src = source
-    if type(item) ~= 'table' then return end
-    local name = tostring(item.name or '')
-    if name == '' then return end
-
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
-    -- 真的持有才生效：没有这件物品的玩家发这个事件什么都不该发生
-    if not Player.Functions.GetItemByName(name) then return end
-
-    local result, reason = consume(Player, name)
-    if not result then return end
-
+--- 物品使用入口。
+---
+--- ⚠ 走 `QBCore.Functions.CreateUseableItem`，**不要**监听 `qb-inventory:server:UseItem`：
+--- qb-inventory 的用物品路径是 `UseItem(name, src, itemData)` → `QBCore.Functions.CanUseItem`
+--- → 调注册进来的回调，它**从来不**发那个网络事件。原来只挂 `RegisterNetEvent`，
+--- 于是吃了完全没反应（2026-11-10 真机：买了水和食物，用了既不涨饥渴也不消耗）。
+local function notifyNeeds(src, itemName, result)
     TriggerClientEvent('QBCore:Notify', src,
-        ('%s：饥饿 %d / 口渴 %d'):format(name, math.floor(result.hunger), math.floor(result.thirst)),
+        ('%s：饥饿 %d / 口渴 %d'):format(itemName, math.floor(result.hunger), math.floor(result.thirst)),
         'success', 3500)
-end)
+    -- qb-hud 的圆环只认这个事件（qb-core 自己扣饥饿时也发它）
+    TriggerClientEvent('hud:client:UpdateNeeds', src, result.hunger, result.thirst)
+end
+
+for itemName in pairs(Config.Consumables) do
+    QBCore.Functions.CreateUseableItem(itemName, function(src)
+        local Player = QBCore.Functions.GetPlayer(src)
+        if not Player then return end
+        -- 真的持有才生效：没这件物品就不该涨饥渴
+        local item = Player.Functions.GetItemByName(itemName)
+        if not item then return end
+
+        local result = consume(Player, itemName)
+        if not result then return end
+
+        Player.Functions.RemoveItem(itemName, 1)
+        notifyNeeds(src, itemName, result)
+    end)
+end
 
 -- 定时衰减：单一写者，客户端不参与
 CreateThread(function()

@@ -46,7 +46,7 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 | custom `[custom]` | 133 | 85 | 48 | 0 | 覆盖率 **133/133 = 100%**（批 18/19：剧情决策委托判定、遥测预算；并修复批 17 误删的 justice helper 登记） |
 | qb `[qb]` | 216 | 109 | 107 | **0** | 覆盖率 **216/216 = 100%**（批 20：qb-weed 五个 handler 的来源/参数校验 + plantCache 作用域修复；qb-streetraces 三条登记） |
 | other（system / standalone / voice / cfx-default） | 75 | 5 | 70 | **0** | 覆盖 **75/75 = 100%**：本仓库自有资源全部有守卫或登记，供应商资源（cfx-default 21、monitor 33、PolyZone 4、connectqueue 1）按 `vendor_example` 记账 |
-| **合计** | **439** | 204 | 249 | **0** | — |
+| **合计** | **438** | 204 | 248 | **0** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
@@ -203,7 +203,7 @@ cd T-CityLite.base && python tests/architecture/net_event_baseline.py --write
 
 ## 9. P1-3 收口（2026-11-08）
 
-20 批、PR #204–#221，从 **258 → 59**，其中 `[qb]`（216）与 `[custom]`（133）**全部归零**，
+20 批、PR #204–#221，从 **258 → 59**，其中 `[qb]`（216）与 `[custom]`（132）**全部归零**，
 `engine` 早在第一批就 100%。剩下 59 条全在 `other`，全部是 vendored 资源，按 §6 口径不动：
 
 | 资源 | 条数 | 性质 |

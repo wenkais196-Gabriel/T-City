@@ -46,8 +46,10 @@ def test_config_covers_food_drink_and_drugs() -> None:
     cfg = CONFIG.read_text(encoding="utf-8")
     table = cfg[cfg.find("Config.Consumables"):cfg.find("Config.DecayIntervalMs")]
     names = set(re.findall(r"^\s{4}([a-z_]+)\s*=\s*\{", table, re.M))
-    assert {"water", "beer", "vodka"} <= names, "饮料"
-    assert {"sandwich", "burger"} <= names, "食物"
+    # `water` 在 items 表里不存在（真名是 water_bottle）——这条断言原来锁的是错名字，
+    # 于是"配置里写了饮料"这个事实成立，而玩家喝水毫无反应。
+    assert {"water_bottle", "beer", "vodka"} <= names, "饮料"
+    assert {"sandwich", "tosti"} <= names, "食物"
     assert any(n.startswith("weed") for n in names), "药物"
 
 
