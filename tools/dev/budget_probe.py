@@ -113,7 +113,8 @@ def _is_infinite(loop: dict) -> bool:
     kind = loop["kind"]
     condition = (loop.get("condition") or "").strip().lower()
     if kind == "repeat":
-        return condition in {"false", ""}
+        # 只有 `until false`（字面量）才算无限；条件取不到时按有限处理（不虚增 fast/warm）
+        return condition == "false"
     if kind == "for":
         return False
     normalized = condition.replace(" ", "")

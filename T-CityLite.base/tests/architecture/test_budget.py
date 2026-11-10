@@ -224,3 +224,16 @@ def test_reverse_elseif_does_not_break_block_matching(tmp_path):
             "end)\n")
     metrics = budget_probe.measure(_fixture(tmp_path, body))
     assert metrics["fast_polling_loops"] == 1, metrics
+
+
+def test_reverse_repeat_until_false_is_infinite_but_until_cond_is_not(tmp_path):
+    """`repeat Wait(50) until false` 是无限轮询；`until done` 是等条件循环 —— 别混为一谈。"""
+    infinite = _fixture(tmp_path / "a", "CreateThread(function()\n  repeat\n    Wait(50)\n  until false\nend)\n")
+    conditional = _fixture(tmp_path / "b", "CreateThread(function()\n  local done = false\n  repeat\n    Wait(50)\n  until done\nend)\n")
+
+    infinite_metrics = budget_probe.measure(infinite)
+    conditional_metrics = budget_probe.measure(conditional)
+
+    assert infinite_metrics["fast_polling_loops"] == 1, infinite_metrics
+    assert conditional_metrics["fast_polling_loops"] == 0, conditional_metrics
+    assert conditional_metrics["conditional_busy_wait_loops"] == 0, conditional_metrics

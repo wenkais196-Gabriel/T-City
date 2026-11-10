@@ -6,11 +6,11 @@
       "note": "服务端脚本里 MySQL.* / exports.oxmysql 的调用点总数（趋势指标，跟着业务长）。"
     },
     "fast_polling_loops": {
-      "budget": 4,
-      "note": "**无限循环**（while true / while 1 / repeat-until-false）+ 体内首个 Wait ≤ 100ms（≈600 次/分钟/条）。现四条：runcode_web.lua:146（txAdmin 的 runcode web 服务）、qb-core/server/functions.lua:555（离线玩家清理的 100ms 重试）、qb-multicharacter/server/main.lua:96 与 :166（10ms 等数据）。owner=hermes expires=2027-03-31"
+      "budget": 2,
+      "note": "**无限循环**（while true / while 1 / repeat-until-false）+ 体内首个 Wait ≤ 100ms（≈600 次/分钟/条）。现有两条：runcode_web.lua:146（txAdmin 的 runcode web 服务）、qb-core/server/functions.lua:555（离线玩家清理的 100ms 重试）。都是上游代码。owner=upstream expires=2027-03-31"
     },
     "warm_polling_loops": {
-      "budget": 6,
+      "budget": 5,
       "note": "无限循环 + Wait ≤ 1000ms（≈60 次/分钟/条）。新增一条就要问：能不能改成事件驱动？"
     },
     "wait_zero_loops": {

@@ -107,8 +107,17 @@ def loops(tokens: list[tuple[str, str, int]]) -> list[dict]:
             depth = level[index]
             for cursor in range(index + 1, len(tokens)):
                 if tokens[cursor][1].lower() == "until" and level[cursor] == depth:
+                    # 条件要从 `until` 之后取到块外：`repeat … until false` 才是无限循环，
+                    # 条件不取就会把所有 repeat 都当无限（早先就是这么错的）。
+                    condition: list[str] = []
+                    for later in range(cursor + 1, len(tokens)):
+                        if level[later] < depth:
+                            break
+                        condition.append(tokens[later][1])
+                        if len(condition) >= 12:
+                            break
                     found.append({"kind": "repeat", "start": index, "body_start": index + 1,
-                                  "body_end": cursor, "condition": ""})
+                                  "body_end": cursor, "condition": " ".join(condition)})
                     break
             continue
         if lowered not in {"while", "for"}:
