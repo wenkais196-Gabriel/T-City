@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`DirtyFlushStats` 说清"管线是否存在"**（老账：custom-testing 的压测靠 `dirty_count == 0` 判"脏池是空的"，
+  而 `DirtyFlush` 全局从来没被定义过，导出走的是 `{ dirty_count = 0 }` 兜底 —— 那条断言永远是
+  "空池，通过"）。现在导出带 `available`：未接入 → `available=false`，已实现 → 原样透出 + `available=true`，
+  `Stats()` 返回 nil 也降级成 `available=false`。
+  压测套件据此报 **跳过**（新增 `skip` 状态与「N 跳过」汇总）而不是假通过。
+  新用例 `test_dirtyflush_contract.py` + 探针 `bus_dirtyflush_probe.lua`（真加载 bus.lua，三条路径都断言）。
+### Added
 - **net event 口径校准（清掉 §3.1.1 那笔 36 条的账）**：`job_deny_guard` 原来把「判空 + 参数校验」也算成
   职业守卫，按严格口径（条件里必须真的提到 `.PlayerData.job`）重跑后 36 条从"已鉴权"翻成"未登记"。
   逐条复核后分三类处理，**本仓库自有资源的未登记事件归零**（439 事件 / 已鉴权 204 / 已登记 249 / 未登记 0）：
