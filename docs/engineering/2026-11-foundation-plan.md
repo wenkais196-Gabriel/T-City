@@ -85,6 +85,38 @@ tracks: [docs/engineering/STANDARDS.md, docs/engineering/FOUNDATION-AS-IS.md, do
 | P2-3 | 迁移幂等 + 版本号唯一（现存 v3.11 / v3.12 各两条重号） | 重跑全部迁移不报错；重号被判红 | ✅ 完成（2026-11-08）：4 组重号（v0.7 / v2.2 / v3.11 / v3.12）各给后来者加二级号并同步 8 处引用；新闸门 `test_migration_versions.py`（版本唯一 + 文件名形状，零基线）+ 2 条变异用例；`v2.1_perf_indexes.sql` 补 information_schema 守卫（原来第二次跑必报 `ERROR 1060 Duplicate column name`）；`tools/dev/migrations_double_apply.py` 实测 35/35 × 2 遍无错误 |
 | P2-4 | 预算数字化（IO/min、tick 阻塞、payload 字节） | ✅ 完成（2026-11-09）：`tools/dev/budget_probe.py` 输出 6 项静态计数基线（DB 调用点 463、≤100ms 轮询循环 2、≤1000ms 轮询 5、`Wait(0)` 循环 1、全服广播 150、广播内联 `json.encode` 5），`tests/architecture/io_budget.json` 钉住上限（只能往下调），闸门 `test_budget.py` 5 条反向形状 + 1 条变异（注入 50ms 轮询 → 红） |
 
+## 4.1 收口（2026-11-10）
+
+P0 / P1 / P2 全部完成。这一节只放**能被复核的数字**，不放"已完成"三个字。
+
+| 阶段 | 项 | 出口判据 | 实测 |
+|---|---|---|---|
+| P0 | 引擎层无鉴权的日志写入口 | 两个 P0 判据全绿 + 反向用例 | 闸门 + 先红后绿留档（PR #1xx） |
+| P0 | 经济倍率单位 | 同上 | `test_economy_multiplier` 系列 |
+| P1-3 | net event 鉴权扩面 | `[qb]` / `[custom]` 归零 | **439 事件 / 已鉴权 204 / 已登记 249 / 未登记 0**（`net_events_baseline.json`：0 resources with debt） |
+| P1-5 | 金额写路径收敛 | 唯一 `ValidateAmount` + 静态闸门 | Add/Remove/Set + offline + fallback 全部走它；`money_write_path_scan.py` 三条判据 |
+| P1-6 | stale-core 缓存 | server 17 条棘轮 / client 19 条登记 | `stale_core_cache_baseline.json`（owner/expires 齐，只许减） |
+| P2-1 | 主线程 `Citizen.Await` 清零 | 服务端读路径无 Await | `patron_service` 改缓存 + 后台预热；`server_await_allowlist.json` 5 条（每条写明为何不是阻塞） |
+| P2-2 | 启动顺序进版本库 | 删掉顺序注释后仍能拦住错序 | `configs/boot.json` + `boot_cfg.py --check`（84 资源 / 17 模块 / 0 错序） |
+| P2-3 | 迁移幂等 + 版本唯一 | 重跑不报错；重号判红 | 4 组重号修复；`migrations_double_apply.py` 35/35 × 2 遍无错误 |
+| P2-4 | 预算数字化 | 探针输出基线、超预算报警 | 8 项静态计数（DB 463 / fast 2 / warm 5 / wait0 1 / conditional 13 / unknown 21 / broadcast 152 / inline 1） |
+
+**闸门自身**：`gate_coverage` 未证明数 **276**（未抬高）；每个新增闸门都带反向形状 + 至少一条变异
+（`tools/dev/gate_mutation_smoke.py` 实测"注入后红、对照绿"）。
+
+**测试**：`1374 passed / 148 skipped / 51 subtests`（含 integration）；`release_check` 通过；
+`docs_lifecycle --check` 0 error。
+
+**真机**：FXServer `30130`，85 资源在线，`SCRIPT ERROR: 0`。
+
+**仍然开口的三件事**（都已登记，不是"忘掉的"）：
+
+1. 服务端还有 5 处 `Citizen.Await`（qb-core 的 `TriggerClientCallback` 同步模式、custom-agent-client
+   的动作回执、custom-quest 缓存空窗 DB 兜底 ×2、qb-crypto ticker HTTP）—— 契约性质，见 P2-1 条目；
+2. client 侧 19 个顶层缓存点：唯一验证手段（带在线客户端 `restart qb-core`）会让 FiveM 原生层崩溃，
+   记 `client_unverified`，不进棘轮但新增判红；
+3. `DirtyFlush` 管线尚未实现（导出已带 `available=false`，调用方据此跳过而不是假通过）。
+
 ## 5. 交付标准（DoD）
 
 一次改动只有同时满足下面七项才算交付：
