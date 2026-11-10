@@ -254,3 +254,17 @@ def test_reverse_repeat_until_constant_false_forms_are_infinite(tmp_path):
     metrics = budget_probe.measure(conditional)
     assert metrics["wait_zero_loops"] == 0, metrics
     assert metrics["conditional_busy_wait_loops"] == 1, metrics
+
+
+def test_reverse_repeat_condition_stops_at_statement_end(tmp_path):
+    """`repeat … until false` 后面还有同块语句时，条件只能是 `false`（不能把 cleanup() 并进去）。"""
+    body = ("CreateThread(function()\n"
+            "  local cleanup = function() end\n"
+            "  repeat\n"
+            "    Wait(50)\n"
+            "  until false\n"
+            "  cleanup()\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["fast_polling_loops"] == 1, metrics
+    assert metrics["conditional_busy_wait_loops"] == 0, metrics
