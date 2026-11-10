@@ -167,3 +167,60 @@ def test_reverse_long_broadcast_argument_list_is_still_detected(tmp_path):
             "end)\n")
     metrics = budget_probe.measure(_fixture(tmp_path, body))
     assert metrics["broadcast_inline_json"] == 1, metrics
+
+
+def test_reverse_for_loop_wait_is_classified_as_conditional(tmp_path):
+    """`for i = 1, n do Wait(0) end` 是有限循环：算 conditional busy-wait，不算无限轮询。"""
+    body = ("local function f(n)\n"
+            "  for i = 1, n do\n"
+            "    Wait(0)\n"
+            "  end\n"
+            "end\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["conditional_busy_wait_loops"] == 1, metrics
+    assert metrics["wait_zero_loops"] == 0, metrics
+
+
+def test_reverse_string_with_end_does_not_truncate_loop_body(tmp_path):
+    """`print("end")` 里的 end 不能把循环体截短（词法切分后它是字符串 token）。"""
+    body = ("CreateThread(function()\n"
+            "  while true do\n"
+            '    print("end")\n'
+            "    Wait(50)\n"
+            "  end\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["fast_polling_loops"] == 1, metrics
+
+
+def test_reverse_nested_thread_is_counted_once_per_loop(tmp_path):
+    """嵌套 `CreateThread` 里的循环各算各的：外层 60 秒、内层 50ms → 一 warm 一 fast。"""
+    body = ("CreateThread(function()\n"
+            "  while true do\n"
+            "    CreateThread(function()\n"
+            "      while true do\n"
+            "        Wait(50)\n"
+            "      end\n"
+            "    end)\n"
+            "    Wait(60000)\n"
+            "  end\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["fast_polling_loops"] == 1, metrics
+    assert metrics["warm_polling_loops"] == 0, metrics
+
+
+def test_reverse_elseif_does_not_break_block_matching(tmp_path):
+    """`elseif … then` 不多算一层块：循环体要完整取到 Wait。"""
+    body = ("CreateThread(function()\n"
+            "  while true do\n"
+            "    if a then\n"
+            "      x = 1\n"
+            "    elseif b then\n"
+            "      x = 2\n"
+            "    end\n"
+            "    Wait(40)\n"
+            "  end\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["fast_polling_loops"] == 1, metrics

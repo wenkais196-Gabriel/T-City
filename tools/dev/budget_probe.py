@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """IO / tick / payload 预算（P2-4）—— 给"性能"这件事一组会报警的数字。
 
-为什么是这三类：
+三类指标：
 
-* **IO**：DB 调用总数只涨不跌地跟着业务长，所以它是"趋势指标"；真正会被预算卡住的是**轮询形状** ——
-  `while true` + `Wait(≤100ms)` 的循环每条就是约 600 次/分钟，`Wait(≤1000ms)` 是约 60 次/分钟。
-* **tick**：`Wait(0)` 的循环会吃满一个 tick；服务端脚本里出现它就等于把一个核钉在某条协程上。
-* **payload**：全服广播（`TriggerClientEvent(..., -1, ...)`）里内联 `json.encode` 意味着每次广播都要
-  序列化一遍再发 N 份；这类点在预算里单独计数，因为它随在线人数线性放大。
+* **IO**：DB 调用点总数（趋势指标）+ 无限循环里的轮询形状；
+* **tick**：`while true` + `Wait(0)`（吃满一个 tick）、等条件循环里的 `Wait(0)`（忙等）；
+* **payload**：全服广播点，以及广播参数里内联 `json.encode` 的点（每次广播重新序列化 N 份）。
 
-数字都是**静态上界**（按代码结构推导，不需要跑服），因此能在 CI 里卡住"新加一个每秒轮询"这种改动。
+结构分析走 `tools/dev/lua_blocks.py` 的**词法切分 + 块配对**，不是正则截字符串 —— 早先的版本用固定
+字符窗口找循环体，被复核抓出四类误判（字符串里的 `end`、`elseif … then`、嵌套线程、`Wait` 在体末尾）。
+
+分类规则（每一类都有自己的预算）：
+  * `while true` / `while 1` / `repeat … until false` → **无限轮询**：
+    Wait(0) / ≤100ms / ≤1000ms / 未知间隔 分别计数；
+  * 其余 `while` / `for` / `repeat` → **等条件循环**：Wait(0) 是正常写法，单独计 `conditional_busy_wait_loops`
+    （用来显形"等一个永远不成立的条件"这类死等）。
 
 用法::
 
     python3 tools/dev/budget_probe.py                 # 打印当前数字
     python3 tools/dev/budget_probe.py --json
     python3 tools/dev/budget_probe.py --check         # 与 tests/architecture/io_budget.json 比较
-    python3 tools/dev/budget_probe.py --check --update  # 刷新 baseline（只能往下写）
+    python3 tools/dev/budget_probe.py --check --update # 刷新 baseline（只能往下写）
 
 退出码：0 = 在预算内；1 = 超预算；2 = 输入缺失。
 """
@@ -25,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import re
 import sys
 from pathlib import Path
@@ -37,47 +41,26 @@ BUDGET = BASE / "tests" / "architecture" / "io_budget.json"
 
 sys.path.insert(0, (REPO / "tools" / "dev").as_posix())
 import fivem_manifest  # noqa: E402
+import lua_blocks  # noqa: E402
 
-DB = re.compile(
-    r"\bMySQL\s*\.\s*(?:query|execute|insert|update|scalar|single|prepare|transaction)\b"
-    r"|exports\s*\[\s*['\"]oxmysql['\"]\s*\]"
-    r"|exports\.oxmysql",
-    re.I,
-)
-LOOP = re.compile(r"\bwhile\s+([^\n]{0,80}?)\s+do\b|\brepeat\b", re.I)
-#: 条件字面量 = 无限循环（周期轮询）；否则是「等条件」循环（busy-wait 的另一种风险）
-INFINITE_COND = re.compile(r"^(true|1)$", re.I)
-#: 参数不一定是数字字面量（`Wait(ms)` / `Wait()` / `Wait(0.0)` 都见过）：先抓整段，再尝试解析
-WAIT = re.compile(r"(?:Citizen\s*\.\s*)?Wait\s*\(([^)]*)\)")
-BROADCAST = re.compile(r"TriggerClientEvent\s*\(\s*['\"][^'\"]+['\"]\s*,\s*-1\b")
-JSON_INLINE = re.compile(r"json\s*\.\s*encode\s*\(")
-
-#: 循环里拿不到 Wait 间隔时的保守假设：按 1 次/秒 计
-UNKNOWN_INTERVAL_MS = 1000
-
-
-#: 只看循环头之后这一段里"第一个 Wait"：判的是"这条循环多久转一圈"，不需要精确配对
-LOOP_WINDOW = 600
-#: 轮询周期 ≤ 100ms 视为热循环（≈600 次/分钟/条）；≤ 1000ms 视为次热
+DB_WORDS = {"MySQL", "oxmysql"}
+DB_METHODS = {"query", "execute", "insert", "update", "scalar", "single", "prepare", "transaction"}
 FAST_MS = 100
 WARM_MS = 1000
-
-
-CONST_EXPR = re.compile(r"^[0-9a-fA-FxXeE+\-*/(). %\s]+$")
-#: 超过一天就不必精确（也不会落在 fast/warm 档），防止 10**400 这类把探针算崩
+#: 超过一天就不必精确（也不会落在 fast/warm 档），防止 `10**400` 把探针算崩
 MAX_MS = 86_400_000
+CONST_EXPR = re.compile(r"^[0-9a-fA-FxXeE+\-*/(). %\s]+$")
 
 
-def _constant_ms(raw: str) -> int | None:
-    """把 `50`、`0.0`、`3600 * 1000`、`60/2` 这类**常量表达式**折算成毫秒。
+def _constant_ms(tokens: list[tuple[str, str, int]]) -> int | None:
+    """把 `50`、`0.0`、`1e3`、`0x64`、`3600 * 1000` 这类**常量表达式**折算成毫秒。
 
     只接受数字与四则运算符 —— 变量/配置（`Config.DecayIntervalMs`）一律算未知，不去猜值。
     """
-    raw = raw.strip()
+    raw = "".join(token[1] for token in tokens).strip()
     if not raw or not CONST_EXPR.match(raw):
         return None
     try:
-        # 只允许算术：globals/locals 都清空，且上面已限定字符集
         value = eval(raw, {"__builtins__": {}}, {})  # noqa: S307 —— 字符集已限定为数字与运算符
     except (SyntaxError, ValueError, TypeError, ZeroDivisionError, OverflowError, MemoryError):
         return None
@@ -90,56 +73,53 @@ def _constant_ms(raw: str) -> int | None:
     return min(int(abs(number)), MAX_MS)
 
 
-BLOCK_TOKEN = re.compile(r"\b(do|then|function|repeat|end|until)\b", re.I)
-OPENS = {"do", "then", "function", "repeat"}
-
-
-def _block_body(code: str, start: int) -> str:
-    """从循环关键字之后取**配对**到 `end`（`repeat` 取到 `until`）的那段。
-
-    不用固定字符窗口：`while true do` 后面先干一段活、末尾才 `Wait(60)` 是常见写法，
-    固定 600 字符会把这类循环漏掉，也会把循环外/内层线程的 Wait 误记成它的间隔。
-    """
-    depth = 1
-    for match in BLOCK_TOKEN.finditer(code, start):
-        word = match.group(1).lower()
-        if word in OPENS:
-            depth += 1
-        else:
-            depth -= 1
-            if depth == 0:
-                return code[start:match.start()]
-    return code[start:]
-
-
-def _first_wait(code: str, start: int) -> tuple[int | None, bool]:
-    """返回 (毫秒, 是否间隔未知)。
-
-    `Wait(ms)` / `Wait()` 这类未知间隔单独计数（`polling_loops_unknown_interval`），**不并进 fast** ——
-    并进去会让 fast 这个数字失真；但不计数就会让"把 Wait(50) 改成 Wait(ms)"成为静默绕过。
-    """
-    match = WAIT.search(_block_body(code, start))
-    if not match:
-        return None, False
-    value = _constant_ms(match.group(1))
-    if value is None:
-        return None, True
-    return value, False
-
-
-def _call_arguments(code: str, open_paren: int) -> str:
-    """取一对配对括号之间的内容（广播参数可能很长，固定窗口会误判）。"""
+def _call_arguments(tokens: list[tuple[str, str, int]], open_index: int) -> list[tuple[str, str, int]]:
+    """`(` 之后的参数 token（到配对 `)` 为止）。"""
     depth = 0
-    index = open_paren
-    while index < len(code):
-        if code[index] == "(":
+    for cursor in range(open_index, len(tokens)):
+        value = tokens[cursor][1]
+        if value == "(":
             depth += 1
-        elif code[index] == ")":
+        elif value == ")":
             depth -= 1
             if depth == 0:
-                return code[open_paren:index]
-        index += 1
-    return code[open_paren:]
+                return tokens[open_index + 1:cursor]
+    return tokens[open_index + 1:]
+
+
+def _find_wait(tokens: list[tuple[str, str, int]], start: int, end: int,
+               excluded: set[int] | None = None) -> tuple[int | None, bool]:
+    """在 [start, end) 里找第一个 `Wait(...)`（含 `Citizen.Wait`）。
+
+    返回 (毫秒, 是否间隔未知)。间隔写成变量/配置 → unknown，单独计数（见模块 docstring）。
+    """
+    for cursor in range(start, end):
+        if excluded and cursor in excluded:
+            continue
+        kind, value, _offset = tokens[cursor]
+        if kind != "name" or value != "Wait":
+            continue
+        if cursor + 1 >= end or tokens[cursor + 1][1] != "(":
+            continue
+        arguments = _call_arguments(tokens, cursor + 1)
+        if not arguments:
+            return None, True
+        milliseconds = _constant_ms(arguments)
+        return (milliseconds, False) if milliseconds is not None else (None, True)
+    return None, False
+
+
+def _is_infinite(loop: dict) -> bool:
+    kind = loop["kind"]
+    condition = (loop.get("condition") or "").strip().lower()
+    if kind == "repeat":
+        return condition in {"false", ""}
+    if kind == "for":
+        return False
+    normalized = condition.replace(" ", "")
+    while normalized.startswith("(") and normalized.endswith(")"):
+        normalized = normalized[1:-1]
+    return normalized in {"true", "1"}
 
 
 def measure(resources: Path = RESOURCES) -> dict[str, int]:
@@ -154,45 +134,70 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
         "broadcast_sites": 0,
         "broadcast_inline_json": 0,
     }
+    db_pattern = re.compile(
+        r"\bMySQL\s*\.\s*(?:" + "|".join(DB_METHODS) + r")\b"
+        r"|exports\s*\[\s*['\"]oxmysql['\"]\s*\]"
+        r"|exports\.oxmysql",
+        re.I,
+    )
+
     for rel in sorted(fivem_manifest.server_files(resources)):
         try:
             source = (resources / rel).read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
         code = fivem_manifest.strip_comments(source)
+        metrics["db_call_sites"] += len(db_pattern.findall(code))
 
-        metrics["db_call_sites"] += len(DB.findall(code))
-
-        for match in LOOP.finditer(code):
-            condition = (match.group(1) or "").strip()
-            while condition.startswith("(") and condition.endswith(")"):
-                condition = condition[1:-1].strip()
-            infinite = bool(INFINITE_COND.match(condition)) or match.group(1) is None
-            wait_ms, unknown = _first_wait(code, match.end())
+        tokens = lua_blocks.tokenize(code)
+        all_loops = lua_blocks.loops(tokens)
+        for loop in all_loops:
+            # 只找**这条循环自己的** Wait：嵌套循环（常见是循环里再 CreateThread）有它自己的节奏，
+            # 把它算到外层头上会让"外层其实 60 秒一圈"被误报成 fast。
+            nested: set[int] = set()
+            for other in all_loops:
+                if other is loop:
+                    continue
+                if loop["body_start"] <= other["start"] < loop["body_end"]:
+                    nested.update(range(other["start"], other["body_end"] + 1))
+            milliseconds, unknown = _find_wait(
+                tokens, loop["body_start"], loop["body_end"], nested)
+            infinite = _is_infinite(loop)
             if unknown:
-                # 间隔由配置/变量决定：单独计数（有预算就会显形），但不冒充"快循环"。
-                # 只对无限循环计数：等条件的循环退出由条件决定，间隔未知不算风险。
                 if infinite:
                     metrics["polling_loops_unknown_interval"] += 1
                 continue
-            if wait_ms is None:
+            if milliseconds is None:
                 continue
             if not infinite:
-                # 「等条件」循环：Wait(0) 在这里是正常写法（等到就退出），但忙等仍然是风险
-                if wait_ms == 0:
+                if milliseconds == 0:
                     metrics["conditional_busy_wait_loops"] += 1
                 continue
-            if wait_ms == 0:
+            if milliseconds == 0:
                 metrics["wait_zero_loops"] += 1
-            elif wait_ms <= FAST_MS:
+            elif milliseconds <= FAST_MS:
                 metrics["fast_polling_loops"] += 1
-            elif wait_ms <= WARM_MS:
+            elif milliseconds <= WARM_MS:
                 metrics["warm_polling_loops"] += 1
 
-        for match in BROADCAST.finditer(code):
+        for cursor, (kind, value, _offset) in enumerate(tokens):
+            if kind != "name" or value != "TriggerClientEvent":
+                continue
+            if cursor + 1 >= len(tokens) or tokens[cursor + 1][1] != "(":
+                continue
+            arguments = _call_arguments(tokens, cursor + 1)
+            # 参数形状：<'event'>, <target = -1>, <payload...>
+            # 词法上 `-1` 是 symbol('-') + number('1')：判定广播目标时要按这个形状认
+            is_broadcast = any(
+                arguments[index][1] == "-" and arguments[index + 1][0] == "number"
+                and arguments[index + 1][1] == "1"
+                for index in range(min(len(arguments) - 1, 5))
+            )
+            if not is_broadcast:
+                continue
             metrics["broadcast_sites"] += 1
-            open_paren = code.find("(", match.start())
-            if open_paren != -1 and JSON_INLINE.search(_call_arguments(code, open_paren)):
+            if any(token[0] == "name" and token[1] == "json" for token in arguments) and \
+               any(token[0] == "name" and token[1] == "encode" for token in arguments):
                 metrics["broadcast_inline_json"] += 1
     return metrics
 
@@ -227,7 +232,7 @@ def write_budget(metrics: dict[str, int], path: Path = BUDGET) -> None:
     """刷新 baseline：只允许往下写（数字变大 = 退步，拒绝）。"""
     existing = load_budget(path)
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
-        "$comment": "P2-4 静态预算。数字是'''上界'''，只能往下调；调高必须在 PR 里写 gate-change: 与理由。",
+        "$comment": "P2-4 静态预算。数字是结构计数，只能往下调；调高必须在 PR 里写 gate-change: 与理由。",
         "metrics": {},
     }
     for name, value in metrics.items():
@@ -260,9 +265,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(metrics, ensure_ascii=False, indent=2))
     else:
+        budget = load_budget()
         for name, value in metrics.items():
-            limit = load_budget().get(name, {}).get("budget")
-            print(f"{name:28s} {value:6d}   预算 {limit if limit is not None else '—'}")
+            limit = budget.get(name, {}).get("budget")
+            print(f"{name:30s} {value:6d}   预算 {limit if limit is not None else '—'}")
 
     if args.check:
         problems = check(metrics)

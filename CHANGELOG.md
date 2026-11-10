@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
 - **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
   广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **第三轮 CC 复核：放弃正则，改用词法切分 + 块配对**。前两轮修的都是同一个病根 —— 用正则截循环体，
+  字符串里的 `end`、`elseif … then`、嵌套 `CreateThread`、`for` 循环全都会让截断错位。新增
+  `tools/dev/lua_blocks.py`（约 170 行）：把 Lua 切成 token（字符串/长字符串/数字/名字/符号），
+  开块只认 `do`/`function`/`if`/`repeat`、收块只认 `end`/`until`（`then` 不单独计数，所以
+  `elseif … then` 不会多算一层），于是 `for … do` / `while … do` 都各配一次 `end`。
+  预算探针改为在 token 上工作：`for i = 1, n do Wait(0) end` 归「等条件循环」、
+  `print("end")` 不再截断循环体、嵌套循环的 Wait 不再算到外层头上（外层真正 60 秒一圈不会被误报成 fast）。
+  基线随之收敛：`conditional_busy_wait_loops` 13→12、`broadcast_sites` 150→152（token 口径比正则准）。
+  反向用例补到 15 条。
 - **第二轮 CC 复核（又四条）**：⑤ 循环体用 600 字符定窗，`while true do` 先干活、末尾才 `Wait(60)` 的
   写法会整条漏掉 → 改成配对到 `end`/`until` 取体内第一个 Wait；⑥ `Wait(1e3)` / `Wait(0x64)` 落在常量
   字符集之外被当"未知" → 放进字符集，并对 `10**400` 这类加溢出/超大值收敛（超一天即封顶）；

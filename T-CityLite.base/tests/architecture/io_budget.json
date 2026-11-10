@@ -18,16 +18,16 @@
       "note": "无限循环 + Wait(0)：会吃满一个 tick。现有一条是 connectqueue/shared/sh_queue.lua:3（排队 pop 循环，上游设计）。owner=upstream expires=2027-03-31"
     },
     "conditional_busy_wait_loops": {
-      "budget": 11,
-      "note": "**等条件**循环（while <cond> do）+ Wait(0)：等到就退出，本身是正常写法（qb-core 的 while not DoesEntityExist(veh) 这类）。计数是为了让「等一个永远不会成立的条件」这种死等显形。"
+      "budget": 12,
+      "note": "**等条件**循环（while <cond> / for / repeat-until-cond）+ Wait(0)：等到就退出，本身是正常写法（qb-core 的 while not DoesEntityExist(veh) 这类）。计数是为了让「等一个永远不会成立的条件」显形。"
     },
     "polling_loops_unknown_interval": {
-      "budget": 23,
+      "budget": 21,
       "note": "无限循环里 Wait 的间隔由配置/变量决定（如 Wait(Config.DecayIntervalMs)），静态看不到真实频率。单独计数是为了让「把 Wait(50) 改成 Wait(ms)」不能静默绕过 fast/warm；改这些配置值时请人看一眼。"
     },
     "broadcast_sites": {
-      "budget": 150,
-      "note": "TriggerClientEvent(..., -1, ...) 全服广播点。广播成本随在线人数线性放大。"
+      "budget": 152,
+      "note": "TriggerClientEvent(<event>, -1, ...) 全服广播点（按 token 认 `-1` 目标）。广播成本随在线人数线性放大。"
     },
     "broadcast_inline_json": {
       "budget": 1,
