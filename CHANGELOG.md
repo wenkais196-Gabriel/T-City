@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
 - **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
   广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **第五轮 CC 复核**：`until (false)`（括号包着）与 `until 1 == 2`（常量比较）仍被归成"等条件" →
+  条件归一化（去外层括号）+ 常量布尔求值（只放行数字/比较/逻辑符号，`false`/`true`/`nil` 先映射）。
+  反向用例再补一条：`false` / `(false)` / `1 == 2` 三种恒假写法都必须是无限轮询、`until not cond` 是等条件。
 - **第四轮 CC 复核（一处真错误）**：`lua_blocks.loops()` 对 `repeat` 的 condition 写死成空串，而
   `_is_infinite` 把空条件当无限 → **所有** `repeat … until <非 false 条件>` 都被当成无限轮询。
   后果有两个方向：qb-multicharacter 那两条 `repeat Wait(10) until hasData()` 被计成 fast（实际是等条件），

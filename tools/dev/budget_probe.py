@@ -109,18 +109,56 @@ def _find_wait(tokens: list[tuple[str, str, int]], start: int, end: int,
     return None, False
 
 
+#: 常量布尔表达式（`until 1 == 2` 这种）也要认：只放行数字与比较/逻辑符号
+CONST_BOOL = re.compile(r"^[0-9.eExXa-fA-F 	()+\-*/%<>=~!]+$")
+
+
+def _normalize(condition: str) -> str:
+    text = (condition or "").strip().lower().replace(" ", "")
+    while text.startswith("(") and text.endswith(")"):
+        text = text[1:-1]
+    return text
+
+
+def _const_truth(condition: str) -> bool | None:
+    """常量布尔表达式的取值；取不出来返回 None（变量、函数调用等）。"""
+    raw = (condition or "").strip()
+    lowered = raw.lower()
+    if lowered in {"true"}:
+        return True
+    if lowered in {"false", "nil"}:
+        return False
+    if not raw or not CONST_BOOL.match(raw):
+        return None
+    pythonized = raw.replace("~=", "!=").replace(" and ", " and ").replace(" or ", " or ")
+    try:
+        return bool(eval(pythonized, {"__builtins__": {}}, {}))  # noqa: S307 —— 字符集已限定
+    except Exception:
+        return None
+
+
 def _is_infinite(loop: dict) -> bool:
     kind = loop["kind"]
-    condition = (loop.get("condition") or "").strip().lower()
-    if kind == "repeat":
-        # 只有 `until false`（字面量）才算无限；条件取不到时按有限处理（不虚增 fast/warm）
-        return condition == "false"
     if kind == "for":
         return False
-    normalized = condition.replace(" ", "")
-    while normalized.startswith("(") and normalized.endswith(")"):
-        normalized = normalized[1:-1]
-    return normalized in {"true", "1"}
+    condition = (loop.get("condition") or "").strip()
+    normalized = _normalize(condition)
+
+    if kind == "repeat":
+        # 无限 = `until <恒假>`：`false` / `(false)` / `1 == 2` 都算；变量条件、`until true` 都不算。
+        if not normalized:
+            return False
+        truth = _const_truth(normalized)
+        if truth is None:
+            return False
+        return truth is False
+
+    if not normalized:
+        return False
+    if normalized in {"true", "1"}:
+        return True
+    truth = _const_truth(normalized)
+    return truth is True
 
 
 def measure(resources: Path = RESOURCES) -> dict[str, int]:
