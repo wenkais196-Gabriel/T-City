@@ -176,6 +176,10 @@ def check_dev_resources_not_in_default_boot() -> Finding:
             scan(cfg, label)
     else:
         for module in sorted(MODULES.rglob("*.cfg")):
+            # 没有 server.cfg（CI）时只能扫模块目录：dev.cfg 自己不被谁 exec，跳过它的内容，
+            # 但仍然要查别的 cfg 有没有 exec 它。
+            if module.name.lower() == "dev.cfg":
+                continue
             scan(module, f"configs/modules/{module.relative_to(MODULES).as_posix()}")
 
     deduped = list(dict.fromkeys(offenders))
