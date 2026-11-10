@@ -295,3 +295,15 @@ def test_reverse_loop_paced_by_slowest_first_wait_still_sees_faster_one(tmp_path
             "end)\n")
     metrics = budget_probe.measure(_fixture(tmp_path, body))
     assert metrics["wait_zero_loops"] == 1, metrics
+
+
+def test_reverse_lua_zero_is_truthy_in_loop_conditions(tmp_path):
+    """Lua 里 `0` 是**真**：`while 0 do` 是死循环，`repeat … until 0` 只跑一次。"""
+    infinite = _fixture(tmp_path / "a", "CreateThread(function()\n  while 0 do\n    Wait(1)\n  end\nend)\n")
+    metrics = budget_probe.measure(infinite)
+    assert metrics["fast_polling_loops"] == 1, metrics
+
+    once = _fixture(tmp_path / "b", "CreateThread(function()\n  repeat\n    Wait(0)\n  until 0\nend)\n")
+    metrics = budget_probe.measure(once)
+    assert metrics["wait_zero_loops"] == 0, metrics
+    assert metrics["conditional_busy_wait_loops"] == 1, metrics
