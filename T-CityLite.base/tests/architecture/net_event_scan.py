@@ -415,6 +415,8 @@ def is_guarded(event: "Event", extra: Mapping[str, re.Pattern[str]] | None = Non
         return True
     if job_deny_guard(code):
         return True
+    if self_scope_guard(code):
+        return True
     registered = guard_helpers().get(event.resource, {})
     # 同名时登记表说了算：extra（闸门自带的宽松词匹配）不能把严格形状降级
     for name, pattern in (extra or {}).items():
@@ -439,6 +441,10 @@ PLAYER_JOB_LOCAL = re.compile(
 
 def _job_dead(text: str) -> bool:
     return "and false" in text or "false and" in text
+
+
+#: 条件里算"提到职业"的形状
+JOB_REF = re.compile(r"\.PlayerData\.job\b|\.job\.(?:name|type|label)\b|\bjob\s*==")
 
 
 def job_deny_guard(code: str) -> bool:
@@ -499,17 +505,78 @@ def job_deny_guard(code: str) -> bool:
             continue
         if _job_dead(text):
             continue
+        # 条件里必须**真的提到职业**：`.PlayerData.job` 直接出现，或用从它派生的别名。
+        # 只要求"提到了这个玩家变量"太松 —— `if Player.PlayerData.citizenid ~= x then return end`
+        # 那种归属/参数校验会被当成职业守卫（历史上就是这么把 36 条算成"已鉴权"的）。
+        if not (JOB_REF.search(text) or any(mentions(text, alias) for alias in aliases)):
+            continue
         if not any(mentions(text, name) for name in sources):
             continue
-        if "return" in text:
+        if _deny_block_returns(lines, index):
             return True
-        indent = len(line) - len(line.lstrip())
-        for follow in lines[index + 1:index + 15]:
-            inner = follow.strip()
-            if inner.startswith("end") and (len(follow) - len(follow.lstrip())) == indent:
-                break
-            if inner.startswith("return"):
-                return True
+    return False
+
+
+def _deny_block_returns(lines: list[str], index: int) -> bool:
+    """`if …` 这一行（或它的块内）是否真的 return —— 只认真正跳出的分支。"""
+    text = lines[index].strip()
+    if "return" in text:
+        return True
+    indent = len(lines[index]) - len(lines[index].lstrip())
+    for follow in lines[index + 1:index + 15]:
+        inner = follow.strip()
+        if inner.startswith("end") and (len(follow) - len(follow.lstrip())) == indent:
+            return False
+        if inner.startswith("return"):
+            return True
+    return False
+
+
+#: "这条记录属于调用者本人"的判定形状：与自己的 citizenid 比、或与 owner/serie 等比
+SELF_SCOPE_REF = re.compile(
+    r"\.PlayerData\.citizenid\b|\.citizenid\s*~=|\bowner\s*~=|\bowner\s*==\s*nil"
+)
+
+
+def self_scope_guard(code: str) -> bool:
+    """归属型守卫：`if <记录>.citizenid ~= Player.PlayerData.citizenid then return end`。
+
+    为什么需要这一类：把"职业白名单"当成唯一合法守卫，会把大量**本来就正确**的归属判定
+    （只能动自己的车/房/武器/配送单）算成"未鉴权"。去掉宽松口径后这类会一次性翻出来 20 多条，
+    与其把它们全写进 allowlist 当债，不如让扫描器认得这种形状 —— 它确实是授权判定。
+
+    判据刻意窄：条件里必须出现 `.PlayerData.citizenid`（或 `owner ~=` / `owner == nil`），
+    并且这个分支真的 `return`。
+    """
+    lines = code.splitlines()
+    # `local racer = Races[raceId].Racers[Player.PlayerData.citizenid]` 这种"用 citizenid 取自己那条"
+    # 的局部变量也算归属判定：后续 `if not racer then return end` 就是在拒绝别人。
+    self_aliases: set[str] = set()
+    for line in lines:
+        text = line.strip()
+        if not text.startswith("local ") or "=" not in text:
+            continue
+        lhs, _, rhs = text[len("local "):].partition("=")
+        if ".PlayerData.citizenid" in rhs:
+            self_aliases.add(lhs.split(",")[0].strip())
+
+    for index, line in enumerate(lines):
+        text = line.strip()
+        if not text.startswith("if "):
+            continue
+        denies = "~=" in text or "== nil" in text
+        alias_deny = any(
+            text.startswith("if not " + alias) or ("[" + alias + "]" in text)
+            for alias in self_aliases
+        )
+        if not denies and not alias_deny:
+            continue
+        if _job_dead(text):
+            continue
+        if not (SELF_SCOPE_REF.search(text) or alias_deny):
+            continue
+        if _deny_block_returns(lines, index):
+            return True
     return False
 
 

@@ -326,6 +326,16 @@
         "Doctors"
       ],
       "why": "只认服务端 AddDoctor 登记过的医生能注销计数。不能用 onduty 判定：qb-core 下班时先把 onduty 置 false 再通知客户端，客户端才补发 RemoveDoctor。"
+    },
+    "inReviveWindow": {
+      "defined_at": "qb-ambulancejob/server/main.lua",
+      "requires_code": [
+        "RecentlyRevived[src]",
+        "return false",
+        "REVIVE_WINDOW_SECONDS"
+      ],
+      "why": "复活窗口：只有服务端刚送进院/复活的玩家才允许把饥饿口渴拉满。窗口由服务端写、客户端读不到，所以它是一条真守卫（不是「看着像」）。",
+      "expires": "2027-03-31"
     }
   },
   "qb-houses": {
@@ -351,19 +361,6 @@
       ],
       "requires_raw": [],
       "why": "只认房主（不认钥匙持有人）：改装饰 / 挪储物柜坐标 / 发钥匙 这类操作"
-    }
-  },
-  "qb-lapraces": {
-    "IsRaceHost": {
-      "defined_at": "qb-lapraces/server/main.lua",
-      "requires_code": [
-        "GetOpenedRaceKey(RaceId)",
-        "AvailableRaces[key]",
-        "SetupCitizenId == CitizenId",
-        "return false"
-      ],
-      "requires_raw": [],
-      "why": "只有当前开放中的那场比赛的创建者能开始/取消/改状态；raceId 不在开放表里一律 false"
     }
   },
   "qb-weathersync": {
@@ -532,6 +529,19 @@
         "<= maxDistance"
       ],
       "why": "补货工资/开店界面都要求玩家站在对应坐标 N 米内（服务端复算，客户端报的坐标不采信）。"
+    }
+  },
+  "qb-lapraces": {
+    "IsRaceHost": {
+      "defined_at": "qb-lapraces/server/main.lua",
+      "requires_code": [
+        "GetOpenedRaceKey(RaceId)",
+        "AvailableRaces[key]",
+        "SetupCitizenId == CitizenId",
+        "return false"
+      ],
+      "why": "只有这场比赛的创建者能取消/发车/改状态。SetupCitizenId 由服务端在 CreateLapRace 时写入，客户端只能改自己那条比赛的进度（UpdateRacerData 另有 Racers[citizenid] 归属判定）。",
+      "expires": "2027-03-31"
     }
   }
 }

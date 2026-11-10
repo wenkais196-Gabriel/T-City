@@ -798,6 +798,19 @@ MUTATIONS += [
     ),
 ]
 
+# 口径校准：去掉"归属判定"这一类证据后，本仓库应当立刻出现未鉴权事件
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_scope.py::"
+              "test_own_resources_have_no_unguarded_events"),
+        path="tests/architecture/net_event_scan.py",
+        content=None,
+        replace_from=("    if self_scope_guard(code):\n        return True\n"),
+        replace_to="",
+        what="把 self_scope（归属判定）从 is_guarded 里摘掉",
+    ),
+]
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))

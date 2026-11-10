@@ -10,7 +10,8 @@
     "unchecked_debt": "known missing check, registered so it cannot silently grow; must be fixed or re-justified before expires",
     "self_scoped": "handler 只读写 caller 自己的数据（source/GetPlayer(src)），不接受其它玩家 id 作为目标；越权面为零",
     "callback_relay": "公用回调分发器：只按名字派发到服务端已注册的回调（QBCore.ServerCallbacks），鉴权与参数校验由被调用的回调自己负责",
-    "deprecated_blocked": "上游已确认可被利用的废弃事件：handler 只写安全日志并立即返回，不含任何业务副作用（无 AddItem/RemoveItem/AddMoney/RemoveMoney/SetMetaData/SetJob…）"
+    "deprecated_blocked": "上游已确认可被利用的废弃事件：handler 只写安全日志并立即返回，不含任何业务副作用（无 AddItem/RemoveItem/AddMoney/RemoveMoney/SetMetaData/SetJob…）",
+    "vendor_example": "第三方/平台自带资源里的事件（[cfx-default] / monitor / PolyZone / connectqueue）：代码不归本仓库维护，登记是为了让口径可见、且新增时能被看见。不允许本仓库自己的资源用这个类别（闸门按文件前缀校验）。"
   },
   "entries": [
     {
@@ -1641,6 +1642,618 @@
       "reason": "客户端上报自己的 NUI/焦点/回调失败，用来写 agent_events。防护：事件名必须是 ≤64 字字符串、data 只接受表、序列化后超过 2048 字节直接丢、每玩家 60 秒最多 120 条（原来三样全由客户端定）。",
       "evidence": "story-engine telemetry — TELEMETRY_MAX_EVENT_LEN / TELEMETRY_MAX_PAYLOAD_BYTES / telemetryAllowed(src)",
       "owner": "story-engine",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "money:requestDisplay",
+      "file": "[cfx-default]/[gameplay]/[examples]/money/server.lua",
+      "category": "vendor_example",
+      "reason": "cfx 示例资源：把**调用者自己**的余额按币种回给调用者（getPlayerId(source) → getMoneyForId），并同步到他自己的 state bag。它用 `local source = source` 这种遮蔽写法，所以按 civilian（只读展示、不写他人数据）归类。",
+      "evidence": "money:requestDisplay — playerData:getPlayerId(source) + TriggerClientEvent('money:displayUpdate', source, ...)",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-garages:server:updateVehicleStats",
+      "file": "[qb]/qb-garages/server/main.lua",
+      "category": "self_scoped",
+      "reason": "只写自己的车：SQL 是 `UPDATE player_vehicles SET fuel=?,engine=?,body=? WHERE plate=? AND citizenid=?`，三个数值先夹到合理区间。归属由 WHERE 里的 citizenid 保证，不在 Lua 层。",
+      "evidence": "updateVehicleStats — WHERE plate = ? AND citizenid = ?",
+      "owner": "qb-garages",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-garages:server:updateVehicleState",
+      "file": "[qb]/qb-garages/server/main.lua",
+      "category": "self_scoped",
+      "reason": "同 updateVehicleStats：`state` 只允许 0/1/2，SQL 同样带 `AND citizenid = ?`。",
+      "evidence": "updateVehicleState — WHERE plate = ? AND citizenid = ?",
+      "owner": "qb-garages",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-houses:server:viewHouse",
+      "file": "[qb]/qb-houses/server/main.lua",
+      "category": "civilian",
+      "reason": "看房：只读 Config.Houses 里的价格/中介费/税，把报价回给调用者自己。不动任何玩家数据。",
+      "evidence": "viewHouse — Config.Houses[house].price + TriggerClientEvent(..., src, ...)",
+      "owner": "qb-houses",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-houses:server:buyHouse",
+      "file": "[qb]/qb-houses/server/main.lua",
+      "category": "self_scoped",
+      "reason": "买房：花的是调用者自己的银行余额（`pData.Functions.RemoveMoney('bank', ...)`），所有权写进他自己的 citizenid/license；已售出的房子直接 CancelEvent+return。",
+      "evidence": "buyHouse — bankBalance >= HousePrice + RemoveMoney('bank', ...) + houseownercid[house] = pData.PlayerData.citizenid",
+      "owner": "qb-houses",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-pawnshop:server:sellPawnItems",
+      "file": "[qb]/qb-pawnshop/server/main.lua",
+      "category": "self_scoped",
+      "reason": "卖自己的物品：先过 CheckRateLimit（1.5 秒），单价与金额都由服务端表决定，RemoveItem 只作用于 src 自己。",
+      "evidence": "sellPawnItems — CheckRateLimit(src, 'sell_pawn_item', 1500) + RemoveItem(src, ...)",
+      "owner": "qb-pawnshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-pawnshop:server:meltItemRemove",
+      "file": "[qb]/qb-pawnshop/server/main.lua",
+      "category": "self_scoped",
+      "reason": "熔炼：只移除 src 自己的物品，奖励走服务端 PendingMelt 会话（batch 14 已把客户端奖励表改成服务端记账）。",
+      "evidence": "meltItemRemove — exports['qb-inventory']:RemoveItem(src, itemName, amount, ...) + PendingMelt",
+      "owner": "qb-pawnshop",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weapons:server:UpdateWeaponQuality",
+      "file": "[qb]/qb-weapons/server/main.lua",
+      "category": "self_scoped",
+      "reason": "改耐久：只写 Player.PlayerData.items[slot]（调用者自己的背包槽位），RepeatAmount 夹到 1~50。",
+      "evidence": "UpdateWeaponQuality — Player.PlayerData.items[slot]",
+      "owner": "qb-weapons",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-weapons:server:removeWeaponAmmoItem",
+      "file": "[qb]/qb-weapons/server/main.lua",
+      "category": "self_scoped",
+      "reason": "移除弹药：RemoveItem 只作用于调用者本人（source）。",
+      "evidence": "removeWeaponAmmoItem — RemoveItem(source, item.name, 1, item.slot, ...)",
+      "owner": "qb-weapons",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "atom:server:nodeReached",
+      "file": "[system]/atom_nodes/server/main.lua",
+      "category": "self_scoped",
+      "reason": "GOTO 节点到达：用服务端坐标与客户端上报的目标点做距离判定，只推进调用者自己的节点进度。",
+      "evidence": "nodeReached — GetEntityCoords(GetPlayerPed(src)) vs clientData.position（距离验证）",
+      "owner": "atom_nodes",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "pma-voice:setPlayerCall",
+      "file": "[voice]/pma-voice/server/module/phone.lua",
+      "category": "self_scoped",
+      "reason": "只写调用者自己的通话频道（voiceData[source]），频道号还会 tonumber 校验；无法改别人的语音状态。",
+      "evidence": "setPlayerCall — voiceData[source] + tonumber(_callChannel)",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "pma-voice:setPlayerRadio",
+      "file": "[voice]/pma-voice/server/module/radio.lua",
+      "category": "self_scoped",
+      "reason": "只写调用者自己的无线电频道；上游同样按 source 取 voiceData。",
+      "evidence": "setPlayerRadio — voiceData[source]",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "pma-voice:setTalkingOnRadio",
+      "file": "[voice]/pma-voice/server/module/radio.lua",
+      "category": "self_scoped",
+      "reason": "只翻转调用者自己的\"正在说话\"标记。",
+      "evidence": "setTalkingOnRadio — voiceData[source].talking",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "qb-lapraces:server:SaveRace",
+      "file": "[qb]/qb-lapraces/server/main.lua",
+      "category": "already_checked",
+      "reason": "存赛道要求 IsWhitelisted(citizenid)：Config.WhitelistedCreators 白名单，或 admin/god 权限。该函数用的是**正向**写法（`if IsWhitelisted(...) then …`），不满足登记表要求的 `if not H(...) then return` 形状，所以按 already_checked 记账而不是登记 helper。",
+      "evidence": "SaveRace — IsWhitelisted(Player.PlayerData.citizenid)（qb-lapraces/server/main.lua:41 定义）",
+      "owner": "qb-lapraces",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "money_fountain:tryPickup",
+      "file": "[cfx-default]/[gameplay]/[examples]/money-fountain/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[gameplay]/[examples]/money-fountain/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "money_fountain:tryPlace",
+      "file": "[cfx-default]/[gameplay]/[examples]/money-fountain/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[gameplay]/[examples]/money-fountain/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "money:allowPickupNear",
+      "file": "[cfx-default]/[gameplay]/[examples]/ped-money-drops/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[gameplay]/[examples]/ped-money-drops/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "money:tryPickup",
+      "file": "[cfx-default]/[gameplay]/[examples]/ped-money-drops/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[gameplay]/[examples]/ped-money-drops/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "playerJoining",
+      "file": "[cfx-default]/[gameplay]/player-data/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[gameplay]/player-data/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "playernames:init",
+      "file": "[cfx-default]/[gameplay]/playernames/playernames_sv.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[gameplay]/playernames/playernames_sv.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:onPlayerDied",
+      "file": "[cfx-default]/[system]/baseevents/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/baseevents/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:onPlayerKilled",
+      "file": "[cfx-default]/[system]/baseevents/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/baseevents/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "baseevents:onPlayerWasted",
+      "file": "[cfx-default]/[system]/baseevents/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/baseevents/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hardcap:playerActivated",
+      "file": "[cfx-default]/[system]/hardcap/server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/hardcap/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "rlPlayerActivated",
+      "file": "[cfx-default]/[system]/rconlog/rconlog_server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/rconlog/rconlog_server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "rlUpdateNamesResult",
+      "file": "[cfx-default]/[system]/rconlog/rconlog_server.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/rconlog/rconlog_server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "runcode:runInBand",
+      "file": "[cfx-default]/[system]/runcode/runcode_web.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/runcode/runcode_web.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "runcode:gotResult",
+      "file": "[cfx-default]/[system]/runcode/runcode_web.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/runcode/runcode_web.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hostingSession",
+      "file": "[cfx-default]/[system]/sessionmanager/server/host_lock.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/sessionmanager/server/host_lock.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "hostedSession",
+      "file": "[cfx-default]/[system]/sessionmanager/server/host_lock.lua",
+      "category": "vendor_example",
+      "reason": "FiveM 自带资源（[cfx-default]）：代码不归本仓库维护，我们也不会为它改鉴权。登记在这里是为了让口径可见 —— 它与 monitor（txAdmin）同属「平台自带、不按本仓库口径改」的一类。",
+      "evidence": "[cfx-default] 自带脚本 [cfx-default]/[system]/sessionmanager/server/host_lock.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "Queue:playerActivated",
+      "file": "[standalone]/connectqueue/shared/sh_queue.lua",
+      "category": "vendor_example",
+      "reason": "ConnectQueue 第三方库：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [standalone]/connectqueue/shared/sh_queue.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "polyzone:printPoly",
+      "file": "[standalone]/PolyZone/creation/server/creation.lua",
+      "category": "vendor_example",
+      "reason": "PolyZone 第三方库：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [standalone]/PolyZone/creation/server/creation.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "polyzone:printCircle",
+      "file": "[standalone]/PolyZone/creation/server/creation.lua",
+      "category": "vendor_example",
+      "reason": "PolyZone 第三方库：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [standalone]/PolyZone/creation/server/creation.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "polyzone:printBox",
+      "file": "[standalone]/PolyZone/creation/server/creation.lua",
+      "category": "vendor_example",
+      "reason": "PolyZone 第三方库：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [standalone]/PolyZone/creation/server/creation.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "PolyZone:TriggerZoneEvent",
+      "file": "[standalone]/PolyZone/server.lua",
+      "category": "vendor_example",
+      "reason": "PolyZone 第三方库：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [standalone]/PolyZone/server.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:freezePlayer",
+      "file": "[system]/monitor/resource/menu/server/sv_freeze_player.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_freeze_player.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:tpToWaypoint",
+      "file": "[system]/monitor/resource/menu/server/sv_main_page.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_main_page.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:sendAnnouncement",
+      "file": "[system]/monitor/resource/menu/server/sv_main_page.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_main_page.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:clearArea",
+      "file": "[system]/monitor/resource/menu/server/sv_main_page.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_main_page.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:healEveryone",
+      "file": "[system]/monitor/resource/menu/server/sv_main_page.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_main_page.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:healMyself",
+      "file": "[system]/monitor/resource/menu/server/sv_main_page.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_main_page.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:healPlayer",
+      "file": "[system]/monitor/resource/menu/server/sv_main_page.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_main_page.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:showPlayerIDs",
+      "file": "[system]/monitor/resource/menu/server/sv_main_page.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_main_page.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:tpToCoords",
+      "file": "[system]/monitor/resource/menu/server/sv_main_page.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_main_page.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:tpToPlayer",
+      "file": "[system]/monitor/resource/menu/server/sv_player_modal.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_player_modal.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:bringPlayer",
+      "file": "[system]/monitor/resource/menu/server/sv_player_modal.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_player_modal.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:changePlayerMode",
+      "file": "[system]/monitor/resource/menu/server/sv_player_mode.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_player_mode.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:spectate:start",
+      "file": "[system]/monitor/resource/menu/server/sv_spectate.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_spectate.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:spectate:cycle",
+      "file": "[system]/monitor/resource/menu/server/sv_spectate.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_spectate.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:spectate:end",
+      "file": "[system]/monitor/resource/menu/server/sv_spectate.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_spectate.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:troll:setDrunk",
+      "file": "[system]/monitor/resource/menu/server/sv_trollactions.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_trollactions.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:troll:setOnFire",
+      "file": "[system]/monitor/resource/menu/server/sv_trollactions.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_trollactions.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:troll:wildAttack",
+      "file": "[system]/monitor/resource/menu/server/sv_trollactions.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_trollactions.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:vehicle:fix",
+      "file": "[system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:vehicle:boost",
+      "file": "[system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:vehicle:spawn:redm",
+      "file": "[system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:vehicle:spawn:fivem",
+      "file": "[system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:vehicle:delete",
+      "file": "[system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_vehicle.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:webpipe:req",
+      "file": "[system]/monitor/resource/menu/server/sv_webpipe.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/menu/server/sv_webpipe.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:checkIfAdmin",
+      "file": "[system]/monitor/resource/sv_admins.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_admins.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:serverCtx",
+      "file": "[system]/monitor/resource/sv_ctx.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_ctx.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:startedWalking",
+      "file": "[system]/monitor/resource/sv_initialData.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_initialData.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:logger:deathEvent",
+      "file": "[system]/monitor/resource/sv_logger.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_logger.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txaLogger:CommandExecuted",
+      "file": "[system]/monitor/resource/sv_logger.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_logger.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txaLogger:DebugMessage",
+      "file": "[system]/monitor/resource/sv_logger.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_logger.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "chatMessage",
+      "file": "[system]/monitor/resource/sv_logger.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_logger.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:ackWarning",
+      "file": "[system]/monitor/resource/sv_main.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_main.lua",
+      "owner": "upstream",
+      "expires": "2027-03-31"
+    },
+    {
+      "name": "txsv:req:plist:getDetailed",
+      "file": "[system]/monitor/resource/sv_playerlist.lua",
+      "category": "vendor_example",
+      "reason": "txAdmin 自带（RCON/MCP 入口，权限由 txAdmin 自己的会话校验）：代码不归本仓库维护，我们不会为它改鉴权；登记在这里是为了让「哪些事件没被本仓库的守卫覆盖」这件事有账可查。",
+      "evidence": "vendor: [system]/monitor/resource/sv_playerlist.lua",
+      "owner": "upstream",
       "expires": "2027-03-31"
     }
   ]
