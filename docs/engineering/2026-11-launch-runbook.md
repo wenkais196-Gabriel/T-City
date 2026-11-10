@@ -83,6 +83,18 @@ python3 tools/dev/db_backup.py --restore <file> --to-scratch   # 恢复演练（
 
 排期：每天一次（Windows 任务计划 / cron），保留 7 天；大版本前额外手动存一份并标记文件名。
 
+## 3.5 `launch_check.py` 的边界（它是清单，不是防火墙）
+
+`launch_check.py` 的 #1 沿着 `exec` 链从 `server.cfg` 走到所有 cfg，认 `ensure` / `start` /
+`exec` 三种启动语句（含引号、行尾注释、大小写、带空格路径、8 跳以内的链）。**它不覆盖**：
+
+* txAdmin 接管后的 `ensure` 列表（那在 txAdmin 的 cfg 里，不在本仓库）；
+* `load_resource_file` 之类的运行时加载；
+* 有人手工在控制台 `ensure custom-testing` —— 这一条只能靠"事后看 `info.json` 资源数"发现。
+
+所以它解决的是"提交上去的配置不会把调试入口带给玩家"，不是"玩家一定拿不到调试入口"。
+开门前的最后一道是人读一遍 `server.cfg`。
+
 ## 4. 启动与停止
 
 ```bash
