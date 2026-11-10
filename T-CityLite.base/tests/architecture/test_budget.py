@@ -237,3 +237,20 @@ def test_reverse_repeat_until_false_is_infinite_but_until_cond_is_not(tmp_path):
     assert infinite_metrics["fast_polling_loops"] == 1, infinite_metrics
     assert conditional_metrics["fast_polling_loops"] == 0, conditional_metrics
     assert conditional_metrics["conditional_busy_wait_loops"] == 0, conditional_metrics
+
+
+def test_reverse_repeat_until_constant_false_forms_are_infinite(tmp_path):
+    """`until false` / `until (false)` / `until 1 == 2` 都是恒假 → 无限轮询；`until not cond` 是等条件。"""
+    for index, condition in enumerate(("false", "(false)", "1 == 2")):
+        resources = _fixture(tmp_path / f"case{index}",
+                             "CreateThread(function()\n  repeat\n    Wait(0)\n"
+                             f"  until {condition}\nend)\n")
+        metrics = budget_probe.measure(resources)
+        assert metrics["wait_zero_loops"] == 1, (condition, metrics)
+
+    conditional = _fixture(
+        tmp_path / "cond",
+        "CreateThread(function()\n  local cond = false\n  repeat\n    Wait(0)\n  until not cond\nend)\n")
+    metrics = budget_probe.measure(conditional)
+    assert metrics["wait_zero_loops"] == 0, metrics
+    assert metrics["conditional_busy_wait_loops"] == 1, metrics
