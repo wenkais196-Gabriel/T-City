@@ -3,7 +3,8 @@
 `tools/dev/launch_check.py` 分两半：**repo**（入库文件，CI 能跑）与 **local**（本机 server.cfg / 备份）。
 这里只锁 repo 半区 —— 它会红的四种典型情况：
 
-* 有人把 `custom-testing` / `custom-debug` 这类调试资源加回默认启动集（模块 cfg **或** server.cfg）；
+* 有人把 `custom-testing` / `custom-debug` 这类调试资源加回默认启动集（模块 cfg **或** server.cfg，
+  包括"某个模块 cfg 去 exec dev.cfg"这种间接加载）；
 * 新加的 dev/test 命令没有 `source ~= 0`、没有权限参数、也没有 convar 开关；
 * 有人把密钥（license / 口令 / agent token）写进入库文件；
 * 生产模板被删 / 少了关键开关。
@@ -82,4 +83,19 @@ def test_reverse_launch_check_scans_the_real_server_cfg(tmp_path):
     )
     result = _run("--ci", env={"TCITY_SERVER_CFG": str(probe)})
     assert result.returncode != 0, "server.cfg 里 exec 了 dev.cfg，闸门居然还是绿的"
+    assert "dev.cfg" in (result.stdout or ""), "报错里没点名 dev.cfg"
+
+
+def test_reverse_launch_check_follows_nested_exec(tmp_path):
+    """间接 exec 也要拦住：`configs/modules/core.cfg` 里 exec dev.cfg（server.cfg 里看不出来）。"""
+    base = tmp_path / "T-CityLite.base"
+    modules = base / "configs" / "modules"
+    modules.mkdir(parents=True)
+    (modules / "core.cfg").write_text("ensure oxmysql\nexec configs/modules/dev.cfg\n", encoding="utf-8")
+    (modules / "dev.cfg").write_text("ensure custom-testing\n", encoding="utf-8")
+    probe = base / "server.cfg"
+    probe.write_text("sv_maxclients 32\nexec configs/modules/core.cfg\n", encoding="utf-8")
+
+    result = _run("--ci", env={"TCITY_SERVER_CFG": str(probe)})
+    assert result.returncode != 0, "模块 cfg 里 exec 了 dev.cfg，闸门居然还是绿的"
     assert "dev.cfg" in (result.stdout or ""), "报错里没点名 dev.cfg"
