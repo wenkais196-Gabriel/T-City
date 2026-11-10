@@ -138,11 +138,14 @@ def _const_truth(condition: str) -> bool | None:
         return False
     if not raw or not CONST_BOOL.match(raw):
         return None
-    pythonized = raw.replace("~=", "!=").replace(" and ", " and ").replace(" or ", " or ")
+    pythonized = raw.replace("~=", "!=")
     try:
-        return bool(eval(pythonized, {"__builtins__": {}}, {}))  # noqa: S307 —— 字符集已限定
+        value = eval(pythonized, {"__builtins__": {}}, {})  # noqa: S307 —— 字符集已限定
     except Exception:
         return None
+    # Lua 的真值规则：**只有 nil 和 false 为假**（`0` 与 `""` 都是真）。用 Python 的 bool()
+    # 会把 `while 0 do` 判成"等条件循环" —— 而它在 Lua 里是死循环。
+    return not (value is False or value is None)
 
 
 def _is_infinite(loop: dict) -> bool:
