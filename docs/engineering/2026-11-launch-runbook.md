@@ -44,12 +44,31 @@ python3 tools/dev/launch_check.py --ci   # 只跑 repo 半区（CI 里跑这个�
 CREATE USER 'tcity'@'%' IDENTIFIED BY '<强口令>';
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES, CREATE TEMPORARY TABLES,
       EXECUTE, TRIGGER ON `TCityLite`.* TO 'tcity'@'%';
+-- 备份演练要建/删演练库（TCityLite_restore_probe）：单独授这一个库，别放到 *.*
+GRANT ALL PRIVILEGES ON `TCityLite_restore_probe`.* TO 'tcity'@'%';
 FLUSH PRIVILEGES;
 ```
 
 `CREATE/ALTER/DROP/TRIGGER` 是迁移需要（`migrations/` 里有建表与触发器）；**不要**给 `ALL ON *.*`。
+少了演练库那条授权，`db_backup.py --restore --to-scratch` 第一步就会失败（建库被拒）。
 
 改完 `server.cfg` 后重启，跑一次 `python3 tools/dev/launch_check.py` 确认 `#10` 变绿。
+
+## 2.1 生产预演：先拿一份"生产 cfg"跑一遍检查
+
+`server.cfg` 是开发那份时，`launch_check.py` 的 local 半区会报 4 个 P0（8 槽 / DEV 名 / agent 全开 /
+DB root）—— 这是对的，那台机不是生产。想在部署前确认"生产配置本身没问题"，做一份预演 cfg：
+
+```bash
+# 1) 按 configs/prod/server.cfg.example 填一份真实值（gitignored）
+cp T-CityLite.base/configs/prod/server.cfg.example T-CityLite.base/server.prod.local.cfg
+#    填 license / rcon / DB 口令 / 服务器名 ...
+
+# 2) 指过去跑检查
+TCITY_SERVER_CFG=T-CityLite.base/server.prod.local.cfg python3 tools/dev/launch_check.py
+```
+
+2026-11-10 实测：12 项检查 **P0 = 0**（唯一剩下的 P1 是 txAdmin 自带文档里的示例 license）。
 
 ## 3. 备份（开服前必须演练过一次）
 

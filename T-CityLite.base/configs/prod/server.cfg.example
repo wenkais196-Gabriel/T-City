@@ -21,6 +21,11 @@ sv_maxclients 32
 set onesync on
 sv_enforceGameBuild 3258
 
+# script hook 关掉：它允许客户端加载任意脚本（调试客户端只在本机开发服开）
+sv_scriptHookAllowed 0
+# 资源完整性：公开服建议 1（要求资源签名）；签名体系没上线前保留 0 并在 runbook 里记债
+sv_pureLevel 0
+
 sv_hostname "<对外展示的服务器名>"
 sets sv_projectName "T-City"
 sets sv_projectDesc "<一句话简介>"
@@ -55,6 +60,12 @@ set agent_live_enabled 0
 # set agent_actions_admin_token "<新随机值>"
 # set agent_live_token "<新随机值>"
 
+# ── txAdmin（如果用它管服）──────────────────────────────
+# set txAdminPort 40120        # **不要**对公网开放；用 SSH 隧道或只监听 127.0.0.1
+# set txAdminInterface "127.0.0.1"
+# txAdmin 自己会管理 ensure 列表 —— 一旦接管，server.cfg 里的 ensure 只作兜底，
+# 改启动顺序请改 txAdmin 的 cfg 并同步 configs/boot.json。
+
 # ── 启动模块（顺序的事实来源是 configs/boot.json）─────────
 # 改动这里要同步 boot.json，并跑 `python3 tools/dev/boot_cfg.py --check`
 exec configs/modules/core.cfg
@@ -86,3 +97,7 @@ add_principal qbcore.god group.admin
 add_principal qbcore.god qbcore.admin
 add_principal qbcore.admin qbcore.mod
 # add_principal identifier.license:<管理员 license> qbcore.god
+# 注意：qbcore.admin / qbcore.mod 也要各自的 add_ace（下面两行按需打开），
+# 只写 add_principal 不给权限，表现是"指令没反应"。
+# add_ace qbcore.admin command allow
+# add_ace qbcore.mod command allow

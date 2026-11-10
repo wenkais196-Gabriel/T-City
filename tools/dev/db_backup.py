@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import json
 import re
 import shutil
@@ -33,7 +34,7 @@ from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-SERVER_CFG = REPO / "T-CityLite.base" / "server.cfg"
+SERVER_CFG = Path(os.environ.get("TCITY_SERVER_CFG", str(REPO / "T-CityLite.base" / "server.cfg")))
 BACKUP_DIR = REPO / "backups"
 DEFAULT_KEEP = 7
 CONTAINER = "tcity-mariadb"
@@ -67,11 +68,12 @@ def dump(database: str) -> bytes:
     """在容器里导出（单事务、不锁表），口令通过环境变量传，不进命令行。"""
     _, user, password, _ = connection()
     command = [
-        "docker", "exec", "-i", "-e", f"MYSQL_PWD={password}", CONTAINER,
+        "docker", "exec", "-i", "-e", "MYSQL_PWD", CONTAINER,
         "mariadb-dump", f"-u{user}", "--single-transaction", "--skip-lock-tables",
         "--routines", "--triggers", "--default-character-set=utf8mb4", database,
     ]
-    result = subprocess.run(command, capture_output=True)
+    # `-e MYSQL_PWD` 只传变量**名**，值从子进程环境继承 → 口令不出现在宿主机 argv（ps/WMI/EDR）
+    result = subprocess.run(command, capture_output=True, env={**os.environ, "MYSQL_PWD": password})
     if result.returncode != 0:
         raise SystemExit(f"[backup] dump 失败：{(result.stderr or b'').decode('utf-8', 'ignore')[:300]}")
     return result.stdout
@@ -85,7 +87,12 @@ def write_backup(payload: bytes) -> Path:
     BACKUP_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     path = BACKUP_DIR / f"tcity-{stamp}.sql"
-    path.write_bytes(payload)
+    tmp = path.with_suffix(".sql.tmp")
+    with tmp.open("wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    tmp.replace(path)          # 原子替换：中途被杀不会留下半截 .sql
     manifest = BACKUP_DIR / f"tcity-{stamp}.json"
     manifest.write_text(json.dumps({
         "file": path.name,
@@ -133,29 +140,29 @@ def restore(source: Path, scratch: bool) -> int:
         return 2
 
     create = subprocess.run(
-        ["docker", "exec", "-i", "-e", f"MYSQL_PWD={password}", CONTAINER,
+        ["docker", "exec", "-i", "-e", "MYSQL_PWD", CONTAINER,
          "mariadb", f"-u{user}", "-e",
          f"DROP DATABASE IF EXISTS {target}; CREATE DATABASE {target} CHARACTER SET utf8mb4;"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env={**os.environ, "MYSQL_PWD": password},
     )
     if create.returncode != 0:
         print(f"[backup] 建库失败：{create.stderr[:300]}", file=sys.stderr)
         return 1
 
     load = subprocess.run(
-        ["docker", "exec", "-i", "-e", f"MYSQL_PWD={password}", CONTAINER,
+        ["docker", "exec", "-i", "-e", "MYSQL_PWD", CONTAINER,
          "mariadb", f"-u{user}", target],
-        input=source.read_bytes(), capture_output=True,
+        input=source.read_bytes(), capture_output=True, env={**os.environ, "MYSQL_PWD": password},
     )
     if load.returncode != 0:
         print(f"[backup] 恢复失败：{(load.stderr or b'').decode('utf-8', 'ignore')[:300]}", file=sys.stderr)
         return 1
 
     check = subprocess.run(
-        ["docker", "exec", "-i", "-e", f"MYSQL_PWD={password}", CONTAINER,
+        ["docker", "exec", "-i", "-e", "MYSQL_PWD", CONTAINER,
          "mariadb", f"-u{user}", "-N", "-e",
          "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE();", target],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env={**os.environ, "MYSQL_PWD": password},
     )
     tables = (check.stdout or "").strip()
     print(f"[backup] 恢复演练完成：{source.name} → {target}，表数 {tables}")
