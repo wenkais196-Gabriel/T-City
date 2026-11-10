@@ -268,3 +268,16 @@ def test_reverse_repeat_condition_stops_at_statement_end(tmp_path):
     metrics = budget_probe.measure(_fixture(tmp_path, body))
     assert metrics["fast_polling_loops"] == 1, metrics
     assert metrics["conditional_busy_wait_loops"] == 0, metrics
+
+
+def test_reverse_outer_infinite_loop_paced_by_nested_for(tmp_path):
+    """`while true do for … do Wait(50) end end`：外层节流由内层 for 提供，必须计入 fast。"""
+    body = ("CreateThread(function()\n"
+            "  while true do\n"
+            "    for _, player in ipairs(GetPlayers()) do\n"
+            "      Wait(50)\n"
+            "    end\n"
+            "  end\n"
+            "end)\n")
+    metrics = budget_probe.measure(_fixture(tmp_path, body))
+    assert metrics["fast_polling_loops"] == 1, metrics

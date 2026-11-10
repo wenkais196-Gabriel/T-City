@@ -18,8 +18,8 @@
       "note": "无限循环 + Wait(0)：会吃满一个 tick。现有一条是 connectqueue/shared/sh_queue.lua:3（排队 pop 循环，上游设计）。owner=upstream expires=2027-03-31"
     },
     "conditional_busy_wait_loops": {
-      "budget": 12,
-      "note": "**等条件**循环（while <cond> / for / repeat-until-cond）+ Wait(0)：等到就退出，本身是正常写法（qb-core 的 while not DoesEntityExist(veh) 这类）。计数是为了让「等一个永远不会成立的条件」显形。"
+      "budget": 13,
+      "note": "**等条件**循环（while <cond> / for / repeat-until-cond）+ Wait(0)：等到就退出，本身是正常写法（qb-core 的 while not DoesEntityExist(veh) 这类）。计数是为了让「等一个永远不会成立的条件」和「for 里的忙等」显形。（12→13 是因为分类器把 connectqueue / monitor 里两个 for+Wait(0) 认了进来，判据更严，不是新债。）"
     },
     "polling_loops_unknown_interval": {
       "budget": 21,

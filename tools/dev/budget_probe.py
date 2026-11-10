@@ -197,7 +197,12 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
             for other in all_loops:
                 if other is loop:
                     continue
-                if loop["body_start"] <= other["start"] < loop["body_end"]:
+                if not (loop["body_start"] <= other["start"] < loop["body_end"]):
+                    continue
+                # 只排除**同为无限**的嵌套循环（它有自己的节奏）；嵌套的 for / 等条件循环
+                # 里的 Wait 是外层节流的实际来源（`while true do for … do Wait(50) end end`），
+                # 排除掉就会整条漏计。
+                if _is_infinite(other):
                     nested.update(range(other["start"], other["body_end"] + 1))
             milliseconds, unknown = _find_wait(
                 tokens, loop["body_start"], loop["body_end"], nested)

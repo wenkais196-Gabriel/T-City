@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
 - **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
   广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **第七轮 CC 复核**：`while true do for … do Wait(50) end end` —— 外层节流其实由内层 `for` 提供，
+  但嵌套排除把内层整体剔掉、`for` 又不算 conditional，于是 fast/warm/zero/unknown 全都不动。
+  修法：只排除**同为无限**的嵌套循环（它有自己的节奏）；嵌套的 `for` / 等条件循环里的 Wait 算外层的。
+  反向用例：「外层无限 + 内层 for 节流」必须计入 fast。`conditional_busy_wait_loops` 12→13 是分类器
+  把 connectqueue / monitor 里两个 `for` + `Wait(0)` 认了进来（判据更严，不是新债）。
 - **第六轮 CC 复核**：`repeat … until false` 后面还有同块语句时，条件会把后面的 token 一并吞进来
   （`false cleanup ( )`），常量求值取不到 → 判成"等条件"。修法：条件只取到本行结束或 `;`。
   反向用例：`until false` 后跟 `cleanup()` 仍必须是无限轮询。
