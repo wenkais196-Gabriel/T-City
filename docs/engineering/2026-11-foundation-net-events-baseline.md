@@ -40,40 +40,47 @@ qb-core 的引擎层事件**一个都没在闸门里**；而全仓有 1102 次 `
 
 ## 3. 实测（2026-11-01）
 
-| 批次 | 事件 | 已鉴权 | 已登记 | 未登记 | 在启动集内 |
+| 批次 | 事件 | 已鉴权 | 已登记 | 未登记 | 覆盖情况 |
 |---|---|---|---|---|---|
 | **engine（qb-core）** | 15 | 5 | 10 | **0** | ✅ 100%，闸门硬性强制 |
 | custom `[custom]` | 133 | 85 | 48 | 0 | 覆盖率 **133/133 = 100%**（批 18/19：剧情决策委托判定、遥测预算；并修复批 17 误删的 justice helper 登记） |
 | qb `[qb]` | 216 | 109 | 107 | **0** | 覆盖率 **216/216 = 100%**（批 20：qb-weed 五个 handler 的来源/参数校验 + plantCache 作用域修复；qb-streetraces 三条登记） |
-| other（system / standalone / voice / cfx-default） | 75 | 9 | 7 | 59 | 覆盖率 **16/75 ≈ 21%**（批 18：中控屏车牌三项 + 生产模式冻结；其余多为 vendored 库，见 §6） |
-| **合计** | **439** | 208 | 172 | **59** | — |
+| other（system / standalone / voice / cfx-default） | 75 | 5 | 70 | **0** | 覆盖 **75/75 = 100%**：本仓库自有资源全部有守卫或登记，供应商资源（cfx-default 21、monitor 33、PolyZone 4、connectqueue 1）按 `vendor_example` 记账 |
+| **合计** | **439** | 204 | 249 | **0** | — |
 
 另有 **11 处变量名注册**（`RegisterNetEvent(Config.X.Events.Y, ...)`：custom-quest 5、
 custom-vehicles 6 —— 另有 PolyZone 1 处运行时拼接），单独记债，只许减少。
 
-**债的分布不是均匀的**（批 20 后重算）：59 条未登记里 **14 条在启动集内**（`started: true`），
-58 条在 12 个不启动的资源里（其中 `monitor` 一家 33 条，txAdmin 自带，口径见 §6）。启动集内的
-在启动集内的 14 条**全是 vendored 基础库**：`PolyZone` 4、`pma-voice` 3、`baseevents` 3、
-`sessionmanager` 2、`hardcap` 1、`atom_nodes` 1 —— 按 §6 口径**不改**（改了下一次升级就被覆盖）。基线里每个资源都带 `started`
-标记，排期时先看 `started: true` 的。客户端 handler（qb-target 的 init.lua、`[cfx-default]` 的 playernames_cl.lua / rconlog_client.lua 等）已按 manifest 排除。
+**2026-11-09 口径校准后：未登记 = 0。** 三类账分开记：
 
-### 3.1.1 `job_deny_guard` 的实际判据比名字宽（2026-11-08 批 14 实测）
+* **本仓库自有资源**（`[qb]` / `[custom]` / `[system]` 除 monitor）：要么 handler 里有守卫
+  （capability / 职业 / 归属 / 会话 / 已登记 helper），要么在 `net_events_allowlist.json` 里登记；
+* **供应商资源**（cfx-default 21、monitor 33、PolyZone 4、connectqueue 1）：登记为 `vendor_example`，
+  闸门按文件前缀校验，防止给自己代码开后门 —— 这是口径，不是债；
+* **变量名注册** 11 处（custom-quest 5、custom-vehicles 6）与 PolyZone 1 处运行时拼接，仍单独记债。
 
-`job_deny_guard` 现在的实现是「`if <player 变量> … ~= … then … return`」，**不要求条件里出现
-`.job`**。也就是说：
+### 3.1.1 `job_deny_guard` 的口径校准（2026-11-08 记债 → 2026-11-09 清账）
+
+`job_deny_guard` 原来的判据是「`if <player 变量> … ~= … then … return`」，**不要求条件里出现 `.job`**：
 
 ```lua
 local Player = QBCore.Functions.GetPlayer(src)
-if not Player or type(itemName) ~= 'string' then return end   -- 被算作"职业守卫"
+if not Player or type(itemName) ~= 'string' then return end   -- 曾被算作"职业守卫"
 ```
 
-这种「判空 + 类型校验」会被当成职业守卫计入已鉴权。按更严的口径（条件里必须出现 `.job` /
-`Job`）重新统计，全仓有 **36 条**事件会从"已鉴权"翻成"未登记"，其中大部分是本轮之前已经修过、
-用的是归属/状态校验（`hasKey`、`IsOwnTestDrive`、DB 归属查询）而不是职业判定的 handler。
+按更严的口径（条件里必须真的提到 `.PlayerData.job`，或用从它派生的别名）重跑，**36 条**事件从
+"已鉴权"翻成"未登记"。逐条复核后分成三类处理（2026-11-09 完成）：
 
-本轮**不动闸门**：这是判据口径决定，不是顺手能改的实现细节；而且翻面后需要逐条重新定性
-（allowlist 分类也会跟着变）。等 P1-3 收尾时单独做一次「闸门口径校准」，
-届时按 `.job` 严格判据重跑一遍并重新归类。
+| 类别 | 处理 | 数量 |
+|---|---|---|
+| 归属/状态校验（`owner ~= Player.PlayerData.citizenid`、`Races[id].Racers[citizenid]`） | 新增 `self_scope_guard` 证据类，扫描器认得这种形状 | 多数 |
+| 真 helper（`inReviveWindow`、`IsRaceHost`、`IsWhitelisted`） | 登记进 `net_event_guard_helpers.json` / `already_checked` | 4 条 |
+| 供应商资源（cfx-default / monitor / PolyZone / connectqueue） | 新增 `vendor_example` 类别，按文件前缀校验 | 38 条 |
+| 缺失 `local src = source` 绑定的（qb-weapons ×1、pma-voice ×3） | 补绑定（行为不变） | 4 条 |
+
+出口判据写在 `tests/architecture/test_net_event_scope.py::test_own_resources_have_no_unguarded_events`：
+**本仓库自有资源里未鉴权又未登记的事件必须为 0**，并配一条变异（把 `self_scope_guard` 从
+`is_guarded` 里摘掉 → 立刻变红）。
 
 ## 3.1 资源内部 helper 登记表（2026-11-01 第 2 批）
 

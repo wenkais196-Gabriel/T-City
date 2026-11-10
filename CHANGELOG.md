@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **net event 口径校准（清掉 §3.1.1 那笔 36 条的账）**：`job_deny_guard` 原来把「判空 + 参数校验」也算成
+  职业守卫，按严格口径（条件里必须真的提到 `.PlayerData.job`）重跑后 36 条从"已鉴权"翻成"未登记"。
+  逐条复核后分三类处理，**本仓库自有资源的未登记事件归零**（439 事件 / 已鉴权 204 / 已登记 249 / 未登记 0）：
+
+  | 类别 | 处理 |
+  |---|---|
+  | 归属/状态校验（`owner ~= Player.PlayerData.citizenid`、`Races[id].Racers[citizenid]`） | 新增证据类 `self_scope_guard`（含"从 citizenid 取自己那条"的别名识别） |
+  | 真 helper：`inReviveWindow`、`IsRaceHost`、`IsWhitelisted` | 登记 `net_event_guard_helpers.json` / `already_checked` |
+  | 供应商资源：cfx-default 21、monitor 33、PolyZone 4、connectqueue 1 | 新增 `vendor_example` 类别，闸门**按文件前缀**校验，防止给自己代码开后门 |
+  | 缺 `local src = source` 绑定的（qb-weapons ×1、pma-voice ×3） | 补绑定，行为不变 |
+
+  新闸门 `tests/architecture/test_net_event_scope.py`：出口判据「本仓库自有资源未鉴权又未登记 = 0」
+  + 守卫形状的双向用例（接受真守卫 / 拒绝"只判空"与"无 return"）+ 1 条变异（把 `self_scope_guard`
+  从 `is_guarded` 里摘掉 → 立刻变红）。
+### Added
 - **P2-4 预算数字化**：`tools/dev/budget_probe.py` 按 fxmanifest 找服务端脚本、脱掉注释后统计六项静态计数，
   输出基线并由 `T-CityLite.base/tests/architecture/io_budget.json` 钉住上限（`--update` 只允许往下写）：
 
