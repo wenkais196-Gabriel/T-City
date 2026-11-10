@@ -117,28 +117,31 @@ def _balance(text: str, open_index: int) -> str:
 # repo 半区（CI 可跑）
 # ══════════════════════════════════════════════════════════════════
 
-EXEC_LINE = re.compile(r'^\s*exec\s+"?([^"\s#]+)"?[^\n]*$', re.M)
+#: exec 目标：引号里允许空格（`exec "configs/a b.cfg"`），否则按到空白/注释为止切
+EXEC_LINE = re.compile(r'^\s*exec\s+(?:"([^"]+)"|([^\s#]+))', re.M)
 ENSURE_LINE = re.compile(r'^\s*(?:ensure|start)\s+"?([\w\-]+)"?', re.M)
 #: 任何 exec 行里出现 dev.cfg 就算（允许行尾注释/参数、大小写变体）
 DEV_EXEC = re.compile(r'^\s*exec\b[^\n]*dev\.cfg', re.M | re.I)
 
 
-def _exec_targets(text: str, base: Path) -> list[Path]:
-    """一份 cfg 里 `exec` 指向的文件（存在的才算）。"""
+def _exec_targets(text: str, root: Path) -> list[Path]:
+    """一份 cfg 里 `exec` 指向的文件（存在的才算）。
+
+    `exec` 的路径是**相对服务器根目录**（server.cfg 所在的目录），不是相对当前 cfg 文件 ——
+    `configs/modules/core.cfg` 里再 exec `configs/modules/b.cfg` 也要按根目录解析。
+    """
     targets = []
-    for name in EXEC_LINE.findall(text):
-        candidate = (base / name).resolve()
+    for quoted, bare in EXEC_LINE.findall(text):
+        name = quoted or bare
+        candidate = (root / name).resolve()
         if candidate.exists():
             targets.append(candidate)
     return targets
 
 
-def _reachable_cfg(start: Path, depth: int = 3) -> list[Path]:
-    """从 server.cfg 出发，沿 `exec` 链能走到的所有 cfg（含自身）。
-
-    为什么要跟链：`configs/modules/any.cfg` 里写一行 `exec configs/modules/dev.cfg`，
-    dev 资源照样加载 —— 只看 server.cfg 会漏。
-    """
+def _reachable_cfg(start: Path, depth: int = 8) -> list[Path]:
+    """从 server.cfg 出发，沿 `exec` 链能走到的所有 cfg（含自身）。"""
+    root = start.parent
     seen: list[Path] = []
     queue: list[tuple[Path, int]] = [(start, 0)]
     while queue:
@@ -147,7 +150,7 @@ def _reachable_cfg(start: Path, depth: int = 3) -> list[Path]:
             continue
         seen.append(path)
         text = path.read_text(encoding="utf-8", errors="ignore")
-        queue.extend((target, level + 1) for target in _exec_targets(text, path.parent))
+        queue.extend((target, level + 1) for target in _exec_targets(text, root))
     return seen
 
 
