@@ -811,6 +811,32 @@ MUTATIONS += [
     ),
 ]
 
+# 可消耗物品契约：表里写一个不存在的 item 名 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_consumables_contract.py::"
+              "test_consumable_names_exist_in_items"),
+        path="resources/[custom]/custom-consumables/config.lua",
+        content=None,
+        replace_from="water_bottle = { thirst = 35",
+        replace_to="water = { thirst = 35",
+        what="把 water_bottle 写回不存在的 water（2026-11-10 真机：喝水没反应）",
+    ),
+]
+
+# 可消耗物品契约：把注册入口摘掉 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_consumables_contract.py::"
+              "test_consumables_are_registered_as_useable_items"),
+        path="resources/[custom]/custom-consumables/server/main.lua",
+        content=None,
+        replace_from="QBCore.Functions.CreateUseableItem(itemName, function(src)",
+        replace_to="-- MUTATION: 注册入口被摘掉\nlocal _unused = (function(src)",
+        what="把 CreateUseableItem 注册摘掉（qb-inventory 又变成走不到）",
+    ),
+]
+
 # 开服就绪：把调试资源塞回默认启动集 → 闸门必须红
 MUTATIONS += [
     Mutation(
