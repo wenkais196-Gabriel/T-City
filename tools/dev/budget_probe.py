@@ -189,7 +189,7 @@ def measure(resources: Path = RESOURCES) -> dict[str, int]:
         metrics["db_call_sites"] += len(db_pattern.findall(code))
 
         tokens = lua_blocks.tokenize(code)
-        all_loops = lua_blocks.loops(tokens)
+        all_loops = lua_blocks.loops(tokens, code)
         for loop in all_loops:
             # 只找**这条循环自己的** Wait：嵌套循环（常见是循环里再 CreateThread）有它自己的节奏，
             # 把它算到外层头上会让"外层其实 60 秒一圈"被误报成 fast。

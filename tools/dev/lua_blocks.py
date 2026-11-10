@@ -92,7 +92,7 @@ def depths(tokens: list[tuple[str, str, int]]) -> list[int]:
     return result
 
 
-def loops(tokens: list[tuple[str, str, int]]) -> list[dict]:
+def loops(tokens: list[tuple[str, str, int]], code: str | None = None) -> list[dict]:
     """找出所有循环：`while … do`、`for … do`、`repeat … until`。
 
     返回 [{kind, start, body_start, body_end, condition}]，索引都是 token 下标。
@@ -110,10 +110,19 @@ def loops(tokens: list[tuple[str, str, int]]) -> list[dict]:
                     # 条件要从 `until` 之后取到块外：`repeat … until false` 才是无限循环，
                     # 条件不取就会把所有 repeat 都当无限（早先就是这么错的）。
                     condition: list[str] = []
+                    until_offset = tokens[cursor][2]
+                    until_line = code.count("\n", 0, until_offset) if code is not None else None
                     for later in range(cursor + 1, len(tokens)):
                         if level[later] < depth:
                             break
-                        condition.append(tokens[later][1])
+                        value = tokens[later][1]
+                        if value == ";":
+                            break
+                        # 条件只到本行结束：`until false` 后面跟同一块里的下一条语句
+                        # （`cleanup()`）时不能把后者并进条件，否则常量求值取不到 `false`。
+                        if code is not None and code.count("\n", 0, tokens[later][2]) != until_line:
+                            break
+                        condition.append(value)
                         if len(condition) >= 12:
                             break
                     found.append({"kind": "repeat", "start": index, "body_start": index + 1,
