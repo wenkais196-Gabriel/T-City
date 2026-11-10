@@ -117,12 +117,14 @@ def _balance(text: str, open_index: int) -> str:
 # repo 半区（CI 可跑）
 # ══════════════════════════════════════════════════════════════════
 
-EXEC_LINE = re.compile(r'^\s*exec\s+"?([^"\s]+)"?\s*$', re.M)
+EXEC_LINE = re.compile(r'^\s*exec\s+"?([^"\s#]+)"?[^\n]*$', re.M)
 ENSURE_LINE = re.compile(r'^\s*(?:ensure|start)\s+"?([\w\-]+)"?', re.M)
+#: 任何 exec 行里出现 dev.cfg 就算（允许行尾注释/参数、大小写变体）
+DEV_EXEC = re.compile(r'^\s*exec\b[^\n]*dev\.cfg', re.M | re.I)
 
 
 def _exec_targets(text: str, base: Path) -> list[Path]:
-    """一份 cfg 里 `exec` 指向的文件（绝对路径）。"""
+    """一份 cfg 里 `exec` 指向的文件（存在的才算）。"""
     targets = []
     for name in EXEC_LINE.findall(text):
         candidate = (base / name).resolve()
@@ -135,7 +137,7 @@ def _reachable_cfg(start: Path, depth: int = 3) -> list[Path]:
     """从 server.cfg 出发，沿 `exec` 链能走到的所有 cfg（含自身）。
 
     为什么要跟链：`configs/modules/any.cfg` 里写一行 `exec configs/modules/dev.cfg`，
-    dev 资源照样加载 —— 只看 server.cfg 会漏，只看模块目录又会把 dev.cfg 自己的内容当成"合法"。
+    dev 资源照样加载 —— 只看 server.cfg 会漏。
     """
     seen: list[Path] = []
     queue: list[tuple[Path, int]] = [(start, 0)]
@@ -154,18 +156,18 @@ def check_dev_resources_not_in_default_boot() -> Finding:
 
     def scan(path: Path, label: str) -> None:
         text = path.read_text(encoding="utf-8", errors="ignore")
-        if path.name == "dev.cfg":
+        if path.name.lower() == "dev.cfg":
             offenders.append(f"{label}: 被 exec 了（dev.cfg 是开发专用）")
-        # 按**文件名**也要拦：目标文件可能不在本仓库（比如部署机上的另一份），
-        # 只靠"跟链"会漏掉 `exec configs/modules/dev.cfg` 这种目标不存在的写法。
-        if re.search(r'^\s*exec\s+"?[^"\s]*dev\.cfg"?\s*$', text, re.M):
+        # 判据故意宽：被 exec 的 cfg 只要 exec 行里出现 dev.cfg 就算（含行尾注释、大小写变体）。
+        # 生产里没有任何正当理由 exec 一个叫 dev.cfg 的文件；假阳性只是让人看一眼，
+        # 假阴性则是 /test /stress 对玩家开放。
+        if DEV_EXEC.search(text):
             offenders.append(f"{label}: exec …dev.cfg")
         for name in ENSURE_LINE.findall(text):
             if name in DEV_ONLY_RESOURCES:
                 offenders.append(f"{label}: {name}")
 
     if SERVER_CFG.exists():
-        # 跟着 exec 链走：server.cfg → configs/modules/*.cfg → （可能）dev.cfg
         for cfg in _reachable_cfg(SERVER_CFG.resolve()):
             label = cfg.relative_to(BASE).as_posix() if BASE in cfg.parents else cfg.name
             scan(cfg, label)
@@ -173,7 +175,6 @@ def check_dev_resources_not_in_default_boot() -> Finding:
         for module in sorted(MODULES.rglob("*.cfg")):
             scan(module, f"configs/modules/{module.relative_to(MODULES).as_posix()}")
 
-    # 去重但保留顺序
     deduped = list(dict.fromkeys(offenders))
     return Finding(
         "#1 调试资源不在默认启动集",

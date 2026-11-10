@@ -1,10 +1,10 @@
 """开服就绪闸门（repo 半区）。
 
 `tools/dev/launch_check.py` 分两半：**repo**（入库文件，CI 能跑）与 **local**（本机 server.cfg / 备份）。
-这里只锁 repo 半区 —— 它会红的四种典型情况：
+这里只锁 repo 半区 —— 它会红的典型情况：
 
 * 有人把 `custom-testing` / `custom-debug` 这类调试资源加回默认启动集（模块 cfg **或** server.cfg，
-  包括"某个模块 cfg 去 exec dev.cfg"这种间接加载）；
+  包括"某个模块 cfg 去 exec dev.cfg"这种间接加载、以及带引号/行尾注释/大小写变体的写法）；
 * 新加的 dev/test 命令没有 `source ~= 0`、没有权限参数、也没有 convar 开关；
 * 有人把密钥（license / 口令 / agent token）写进入库文件；
 * 生产模板被删 / 少了关键开关。
@@ -91,7 +91,8 @@ def test_reverse_launch_check_follows_nested_exec(tmp_path):
     base = tmp_path / "T-CityLite.base"
     modules = base / "configs" / "modules"
     modules.mkdir(parents=True)
-    (modules / "core.cfg").write_text("ensure oxmysql\nexec configs/modules/dev.cfg\n", encoding="utf-8")
+    (modules / "core.cfg").write_text(
+        "ensure oxmysql\nexec configs/modules/dev.cfg\n", encoding="utf-8")
     (modules / "dev.cfg").write_text("ensure custom-testing\n", encoding="utf-8")
     probe = base / "server.cfg"
     probe.write_text("sv_maxclients 32\nexec configs/modules/core.cfg\n", encoding="utf-8")
@@ -99,3 +100,18 @@ def test_reverse_launch_check_follows_nested_exec(tmp_path):
     result = _run("--ci", env={"TCITY_SERVER_CFG": str(probe)})
     assert result.returncode != 0, "模块 cfg 里 exec 了 dev.cfg，闸门居然还是绿的"
     assert "dev.cfg" in (result.stdout or ""), "报错里没点名 dev.cfg"
+
+
+def test_reverse_launch_check_sees_trailing_comment_and_case(tmp_path):
+    """`exec configs/modules/dev.cfg # 开发用` 与 `DEV.CFG` 都要拦住。"""
+    base = tmp_path / "T-CityLite.base"
+    (base / "configs" / "modules").mkdir(parents=True)
+    probe = base / "server.cfg"
+
+    probe.write_text("sv_maxclients 32\nexec configs/modules/dev.cfg # 开发用\n", encoding="utf-8")
+    assert _run("--ci", env={"TCITY_SERVER_CFG": str(probe)}).returncode != 0, \
+        "行尾注释的 exec 漏了"
+
+    probe.write_text("sv_maxclients 32\nexec configs/modules/DEV.CFG\n", encoding="utf-8")
+    assert _run("--ci", env={"TCITY_SERVER_CFG": str(probe)}).returncode != 0, \
+        "大写 DEV.CFG 漏了"
