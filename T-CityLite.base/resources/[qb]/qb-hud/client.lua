@@ -197,7 +197,10 @@ AddEventHandler('pma-voice:radioActive', function(data)
 end)
 
 -- Callbacks & Events
-RegisterCommand('menu', function()
+-- H-6：这里原来叫 /menu，和 custom-admin 的 /menu（管理员面板）**重名**。
+-- 两个资源都注册同名命令时，谁生效取决于启动顺序 —— 玩家敲 /menu 有时开 HUD 设置、
+-- 有时印管理面板。HUD 设置是玩家功能，让出通用名，改用 /hud（键位映射不变）。
+RegisterCommand('hud', function()
     Wait(50)
     if showMenu then return end
     TriggerEvent('hud:client:playOpenMenuSounds')
@@ -214,7 +217,7 @@ RegisterNUICallback('closeMenu', function(_, cb)
     cb('ok')
 end)
 
-RegisterKeyMapping('menu', 'Open Menu', 'keyboard', config.OpenMenu)
+RegisterKeyMapping('hud', 'Open HUD Settings', 'keyboard', config.OpenMenu)
 
 -- Reset hud
 local function restartHud()
