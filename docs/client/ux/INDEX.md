@@ -26,7 +26,7 @@ review_by: 2027-02-28
 | 犯罪与组织 | [modules/crime.md](./modules/crime.md) | `qb-storerobbery`、`custom-cartel`、`qb-drugs`、`custom-mining`、`custom-crime` | **active · 已交付** | 报警分类、结算去重、单一派发、门槛入提示 |
 | 职业与任务 | [modules/jobs.md](./modules/jobs.md) | `custom-career`、`custom-quest`、`qb-management` | **active · 已交付** | 完成/步骤/失败各只发一条；`[E]` 入口；J-6 因无门槛字段不做 |
 | 角色与出生 | [modules/identity.md](./modules/identity.md) | `qb-multicharacter`、`qb-spawn`、`qb-apartments` | **active** | 卡片标快照时间、删角色需输全名、脏数据容错；出生选择（I-3）单列一批 |
-| HUD 与状态 | [modules/hud.md](./modules/hud.md) | `qb-hud`、`qb-scoreboard` | **draft**（只完成调研） | 饥饿/口渴/压力圆环 |
+| HUD 与状态 | [modules/hud.md](./modules/hud.md) | `qb-hud`、`qb-scoreboard` | **active · 已交付** | 圆环数值 + 三档配色 + 低状态提醒 + `/menu` 冲突已修 |
 | 管理与审计 | [modules/admin.md](./modules/admin.md) | `custom-admin`、`custom-logs`、`/agent` | **active · 已交付** | 339 条命令清单（生成式）、`/tccops` 权限洞已修、审计 + 二次确认 |
 
 ## 横向规则（所有模块都必须遵守）
