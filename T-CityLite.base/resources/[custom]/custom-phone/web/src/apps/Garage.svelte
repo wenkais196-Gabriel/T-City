@@ -1,6 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchNui, isBrowser } from '../utils/nui';
+
+  /** 在地图上标注这间车库。坐标由服务端随车辆列表下发（qb-garages 的 takeVehicle）。 */
+  async function markWaypoint(car: { garage?: string; coords?: { x: number; y: number } }) {
+    if (!car?.coords) return;
+    try {
+      await fetchNui('garageWaypoint', {
+        x: car.coords.x,
+        y: car.coords.y,
+        label: car.garage || '',
+      });
+    } catch {
+      /* 失败不打断 Garage 页：Lua 侧会自己决定要不要提示 */
+    }
+  }
   
   let vehicles = $state<any[]>([]);
   let isLoading = $state(true);
@@ -73,7 +87,16 @@
             <div class="vehicle-details">
               <div class="detail-row">
                 <span class="detail-lbl">Garage Location</span>
-                <span class="detail-val">{car.garage}</span>
+                <span class="detail-val">
+                  {car.garage}
+                  {#if car.coords}
+                    <button
+                      class="waypoint-btn"
+                      title="在地图上标注这间车库"
+                      onclick={() => markWaypoint(car)}
+                    >📍 地图</button>
+                  {/if}
+                </span>
               </div>
               <div class="detail-row">
                 <span class="detail-lbl">Status</span>
@@ -125,6 +148,14 @@
 </div>
 
 <style>
+    .waypoint-btn {
+    margin-left: 6px; padding: 1px 7px; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 10.5px; line-height: 1.5;
+    color: #c8b6ff; background: rgba(124, 92, 255, .16);
+    border: 1px solid rgba(124, 92, 255, .45);
+  }
+  .waypoint-btn:hover { background: rgba(124, 92, 255, .3); }
+
   .garage-app {
     display: flex;
     flex-direction: column;

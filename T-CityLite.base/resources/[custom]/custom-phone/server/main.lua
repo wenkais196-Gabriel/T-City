@@ -831,12 +831,26 @@ QBCore.Functions.CreateCallback('phone:server:getOwnedVehicles', function(source
                 status = "Impounded"
             end
 
+            -- 车库坐标：手机里能一键在地图标注（PO 2026-11-10 提的"pillboxgarage 在哪"）
+            local coords = nil
+            local ok, garages = pcall(function() return exports['qb-garages']:getAllGarages() end)
+            if ok and type(garages) == 'table' then
+                local entry = garages[vehicles[i].garage or '']
+                if type(entry) == 'table' then
+                    local point = entry.takeVehicle or entry.putVehicle
+                    if type(point) == 'table' or type(point) == 'vector3' or type(point) == 'vector4' then
+                        coords = { x = point.x, y = point.y }
+                    end
+                end
+            end
+
             -- Match friendly model name
             local model = vehicles[i].vehicle:upper()
             table.insert(list, {
                 model = model,
                 plate = vehicles[i].plate,
                 garage = vehicles[i].garage or "Main Impound",
+                coords = coords,
                 status = status,
                 fuel = tonumber(vehicles[i].fuel) or 100,
                 engine = math.floor((tonumber(vehicles[i].engine) or 1000) / 10),
