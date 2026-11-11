@@ -38,22 +38,7 @@ CreateThread(function()
             EndTextCommandSetBlipName(blip)
         end
 
-        -- qb-target 区域
-        exports['qb-target']:AddCircleZone('mining_' .. site.id, site.coords, site.radius, {
-            name = 'mining_' .. site.id,
-            debugPoly = false,
-        }, {
-            options = {
-                {
-                    type = 'client',
-                    event = 'mining:client:startMining',
-                    icon = 'fas fa-gem',
-                    label = ('在 %s 采矿'):format(site.label),
-                    siteId = site.id,
-                },
-            },
-            distance = site.radius,
-        })
+        -- C-4：采矿点交互改成 [E] 提示，见文件末尾的 InteractionLoop
     end
 
     -- 冶炼厂 Blip + Target
@@ -70,20 +55,7 @@ CreateThread(function()
         EndTextCommandSetBlipName(blip)
     end
 
-    exports['qb-target']:AddCircleZone('mining_smelter', smelter.coords, smelter.radius, {
-        name = 'mining_smelter',
-        debugPoly = false,
-    }, {
-        options = {
-            {
-                type = 'client',
-                event = 'mining:client:openSmelter',
-                icon = 'fas fa-fire',
-                label = '冶炼矿石',
-            },
-        },
-        distance = smelter.radius,
-    })
+    -- C-4：冶炼炉交互改成 [E] 提示（见 InteractionLoop）
 
     -- mining target zones ready
 end)
@@ -222,3 +194,49 @@ RegisterNetEvent('mining:client:doSmelt', function(data)
 end)
 
 -- mining-client startup print removed (production mode)
+
+-- ==============================================================
+-- C-4：统一 [E] 交互（采矿点 / 冶炼炉）
+-- 原来两处都是 qb-target 的圆形区域 —— 一个位置只有一个动作，却要长按 ALT。
+-- 现在按距离显示 custom-prompt，按 E 直接触发原来的事件（不改业务逻辑）。
+-- ==============================================================
+CreateThread(function()
+    while true do
+        local sleep = 800
+        local pos = GetEntityCoords(PlayerPedId())
+        local action, label, payload = nil, nil, nil
+
+        for _, site in ipairs(Config.Mining.Sites) do
+            if #(pos - site.coords) <= (site.radius or 5.0) then
+                action, label, payload = 'mining:client:startMining', ('在 %s 采矿'):format(site.label), { siteId = site.id }
+                sleep = 200
+                break
+            end
+        end
+
+        if not action then
+            local smelter = Config.Mining.SmelterLocation
+            if #(pos - smelter.coords) <= (smelter.radius or 3.0) then
+                action, label, payload = 'mining:client:openSmelter', '冶炼矿石', nil
+                sleep = 200
+            end
+        end
+
+        if action then
+            exports['custom-prompt']:Show({ key = 'E', label = label })
+            if IsControlJustReleased(0, 38) then
+                exports['custom-prompt']:Hide()
+                if payload then
+                    TriggerEvent(action, payload)
+                else
+                    TriggerEvent(action)
+                end
+                sleep = 800
+            end
+        else
+            exports['custom-prompt']:Hide()
+        end
+
+        Wait(sleep)
+    end
+end)
