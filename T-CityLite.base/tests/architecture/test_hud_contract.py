@@ -55,3 +55,15 @@ def test_money_stays_change_only_detects_always_on():
     cash_block = html.split('id="money-cash"', 1)[1].split("</div>", 1)[0]
     assert "v-if" in cash_block or "showCash" in cash_block, (
         "现金块变成了常显 —— PO 要求只在变化时显示")
+
+
+def test_three_tier_colors_detects_two_tier():
+    """H-3：饥饿/口渴要有三档（正常 / <40 预警 / <20 危险），不能只有"全橙 vs 红"。"""
+    app = APP.read_text(encoding="utf-8")
+    for stat in ("hunger", "thirst"):
+        assert f"data.{stat} < 20" in app, f"{stat} 没有危险档"
+        assert f"data.{stat} < 40" in app, f"{stat} 没有预警档"
+
+    # 反向：改回二档（只有 <=30 红），规则必须红
+    broken = app.replace("data.hunger < 40", "data.hunger <= 30", 1)
+    assert "data.hunger < 40" not in broken
