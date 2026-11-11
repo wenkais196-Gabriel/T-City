@@ -1,4 +1,18 @@
 local QBCore = exports['qb-core']:GetCoreObject()
+
+--- 车库反馈（V-1）：统一走 custom-notify 的三层分派。
+--- 车库原来全套 QBCore.Functions.Notify，与警情/交易挤同一条通道，样式也不统一。
+---@param text string
+---@param kind string|nil 'error' | nil（其余一律 feed）
+---@param length number|nil
+local function feedback(text, kind, length)
+    local pushKind = (kind == 'error') and 'error' or 'feed'
+    local src = GetPlayerServerId(PlayerId())
+    pcall(function()
+        exports['custom-notify']:Push(src, pushKind, text, nil, { duration = length })
+    end)
+end
+
 local PlayerData = {}
 local PlayerGang = {}
 local PlayerJob = {}
@@ -39,12 +53,12 @@ local function OpenGarageMenu(data)
     if garage and garage.takeVehicle then
         local dist = #(GetEntityCoords(PlayerPedId()) - garage.takeVehicle)
         if dist > 6.0 then
-            QBCore.Functions.Notify('靠近车库入口后再按 E', 'error', 3000)
+            feedback('靠近车库入口后再按 E', 'error', 3000)
             return
         end
     end
     QBCore.Functions.TriggerCallback('qb-garages:server:GetGarageVehicles', function(result)
-        if result == nil then return QBCore.Functions.Notify(Lang:t('error.no_vehicles'), 'error', 5000) end
+        if result == nil then return feedback(Lang:t('error.no_vehicles'), 'error', 5000) end
         local formattedVehicles = {}
         for _, v in pairs(result) do
             local enginePercent = QBCore.Shared.Round(v.engine, 0)
@@ -90,9 +104,9 @@ local function DepositVehicle(veh, data)
             TriggerServerEvent('qb-garages:server:updateVehicleStats', plate, totalFuel, engineDamage, bodyDamage)
             CheckPlayers(veh)
             if plate then TriggerServerEvent('qb-garages:server:UpdateOutsideVehicle', plate, nil) end
-            QBCore.Functions.Notify(Lang:t('success.vehicle_parked'), 'primary', 4500)
+            feedback(Lang:t('success.vehicle_parked'), 'primary', 4500)
         else
-            QBCore.Functions.Notify(Lang:t('error.not_owned'), 'error', 3500)
+            feedback(Lang:t('error.not_owned'), 'error', 3500)
         end
     end, plate, data.type, data.indexgarage, 1)
 end
@@ -192,7 +206,8 @@ local function CreateBlipsZones()
             -- 二次验证：确保玩家仍持有证件（防止并发变更）
             local garage = Config.Garages[zone.data.indexgarage]
             if garage and garage.requiredLicense and not HasRequiredLicense(garage) then
-                return  -- 无证件，静默忽略交互
+                feedback(('需要 %s 才能使用这个车库'):format(tostring(garage.requiredLicense)), 'error')
+                return
             end
 
             listenForKey = true
@@ -201,10 +216,13 @@ local function CreateBlipsZones()
                     Wait(0)
                     if IsControlJustReleased(0, 38) then
                         if GetVehiclePedIsUsing(PlayerPedId()) ~= 0 then
-                            if zone.data.type == 'depot' then return end
+                            if zone.data.type == 'depot' then
+                                feedback('扣押场不能存车，请去公共车库', 'error')
+                                return
+                            end
                             local currentVehicle = GetVehiclePedIsUsing(PlayerPedId())
                             if not IsVehicleAllowed(zone.data.category, currentVehicle) then
-                                QBCore.Functions.Notify(Lang:t('error.not_correct_type'), 'error', 3500)
+                                feedback(Lang:t('error.not_correct_type'), 'error', 3500)
                                 return
                             end
                             DepositVehicle(currentVehicle, zone.data)
@@ -301,7 +319,7 @@ function GetSpawnPoint(garage)
         end
     end
     if not location then
-        QBCore.Functions.Notify(Lang:t('error.vehicle_occupied'), 'error')
+        feedback(Lang:t('error.vehicle_occupied'), 'error')
     end
     return location
 end
@@ -364,14 +382,17 @@ RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
             print(('[qb-garages] takeOutGarage plate=%s index=%s garage=%s'):format(
                 tostring(data.plate), tostring(data.index), tostring(garage and garage.label)))
             if not garage or not garage.spawnPoint then
-                QBCore.Functions.Notify('车库配置无效', 'error', 5000)
+                feedback('车库配置无效', 'error', 5000)
                 return
             end
             local location = GetSpawnPoint(garage)
-            if not location then return end
+            if not location then
+                feedback('取车点被占用，先把车开走', 'error', 5000)
+                return
+            end
             QBCore.Functions.TriggerCallback('qb-garages:server:spawnvehicle', function(netId, properties, vehPlate)
                 if not netId then
-                    QBCore.Functions.Notify('取车失败：服务端拒绝生成载具（驾照/在外车辆上限）', 'error', 6000)
+                    feedback('取车失败：服务端拒绝生成载具（驾照/在外车辆上限）', 'error', 6000)
                     return
                 end
                 while not NetworkDoesNetworkIdExist(netId) do Wait(10) end
@@ -381,6 +402,9 @@ RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
                 exports[Config.FuelResource]:SetFuel(veh, data.stats.fuel)
                 TriggerServerEvent('qb-garages:server:updateVehicleState', 0, vehPlate)
                 TriggerEvent('vehiclekeys:client:SetOwner', vehPlate)
+                -- V-2：取车成功必须留一条回执（原来完全静默，玩家不知道生效没有）
+                feedback(('已取车 %s · %s'):format(tostring(vehPlate),
+                    tostring(garage.label or data.garage and data.garage.label or '车库')))
                 -- 同步预热 custom-vehicles 客户端缓存，防止 Warp 后冷缓存误锁
                 local normPlate = vehPlate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
                 TriggerEvent('custom-vehicles:client:keysUpdated', {
@@ -391,7 +415,7 @@ RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
                 SetVehicleEngineOn(veh, true, true, false)
             end, data.plate, data.vehicle, location, true)
         else
-            QBCore.Functions.Notify(Lang:t('error.not_depot'), 'error', 5000)
+            feedback(Lang:t('error.not_depot'), 'error', 5000)
         end
     end, data.plate, data.type)
 end)
