@@ -1,4 +1,15 @@
 local QBCore = exports['qb-core']:GetCoreObject()
+
+-- I-8：救援兜底提示去重。一次出生可能同时命中"掉出地图 + 水里 + 高空"，
+-- 原来三条 8 秒提示会叠在一起。6 秒内只让第一条说话。
+local _lastRescueAt = 0
+local function rescueToast(text)
+    local now = GetGameTimer()
+    if now - _lastRescueAt < 6000 then return end
+    _lastRescueAt = now
+    exports['custom-notify']:PushLocal('toast', text)
+end
+
 local camZPlus1 = 1500
 local camZPlus2 = 50
 local pointCamCoords = 75
@@ -89,7 +100,7 @@ local function RunEdgeCaseSafeguards(pos)
         -- 强制重定位至 Legion Square 市中心安全生成点
         x, y, z = 195.17, -933.77, 29.7
         SetEntityCoords(ped, x, y, z)
-        exports['custom-notify']:PushLocal('toast', "你被送回了市区（位置异常）")
+        rescueToast("你被送回了市区（位置异常）")
         DebugPrint("[qb-spawn] Edge-Case Safeguard triggered: Void fall prevented. Teleported to Legion Square.")
     end
 
@@ -97,7 +108,7 @@ local function RunEdgeCaseSafeguards(pos)
     if IsPedSwimming(ped) or IsEntityInWater(ped) then
         -- 赋予 15 秒无限肺活量/水下呼吸 Buff，确保玩家有足够的时间浮上海面
         SetPedMaxTimeUnderwater(ped, 15.0)
-        exports['custom-notify']:PushLocal('toast', "你在水里上线了，先上岸")
+        rescueToast("你在水里上线了，先上岸")
         DebugPrint("[qb-spawn] Edge-Case Safeguard triggered: Marine spawn buffer active.")
     end
 
@@ -107,7 +118,7 @@ local function RunEdgeCaseSafeguards(pos)
     if z > 150.0 and insideMeta.house == nil and insideMeta.apartment.apartmentType == nil then
         -- 紧急配给降落伞，防止重登高空自由落体摔死
         GiveWeaponToPed(ped, `GADGET_PARACHUTE`, 1, false, true)
-        exports['custom-notify']:PushLocal('toast', "你从高处落地，已自动稳住")
+        rescueToast("你从高处落地，已自动稳住")
         DebugPrint("[qb-spawn] Edge-Case Safeguard triggered: High-altitude spawn detected. Parachute supplied.")
     end
 
@@ -589,7 +600,7 @@ CreateThread(function()
                     FreezeEntityPosition(ped, false)
                     SetEntityVisible(ped, true)
                     DoScreenFadeIn(500)
-                    exports['custom-notify']:PushLocal('toast', "你被送回了市区（掉出地图）")
+                    rescueToast("你被送回了市区（掉出地图）")
                     DebugPrint("[qb-spawn] Guard Monitor: Void fall detected at Z=" .. tostring(coords.z) .. ". Reset to Legion Square.")
                 end
 
