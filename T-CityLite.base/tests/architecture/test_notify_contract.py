@@ -103,3 +103,16 @@ def test_reverse_dedupe_without_key_is_detected():
     broken = server.replace("key = key,", "", 1)
     assert broken != server
     assert "key = key," not in broken
+
+
+def test_client_side_has_local_export_detects_missing():
+    """客户端资源不能调服务端的 Push（客户端没有那个 export，pcall 一包就静默丢消息）。"""
+    client = CLIENT.read_text(encoding="utf-8")
+    assert "exports('PushLocal'" in client, "custom-notify 客户端没有本地出口 PushLocal"
+    mining = (REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-mining"
+              / "client" / "main.lua").read_text(encoding="utf-8")
+    assert "PushLocal" in mining, "采矿客户端还在调不存在的服务端 export"
+
+    # 反向：把服务端调用塞回客户端，规则必须认得出来
+    broken = mining + chr(10) + "exports['custom-notify']:Push('feed', 'x')"
+    assert ":Push('feed'" in broken

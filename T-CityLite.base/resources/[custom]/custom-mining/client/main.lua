@@ -8,6 +8,14 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 采矿反馈（C-5）：统一走 custom-notify 的**客户端本地出口**。
+--- 原来这里直接 exports:Push —— 那是服务端接口，客户端根本没有，pcall 一包就静默丢了。
+local function feedback(text, kind)
+    local pushKind = (kind == 'error') and 'error' or 'feed'
+    pcall(function() exports['custom-notify']:PushLocal(pushKind, text) end)
+end
+
+
 -- _L i18n 安全兜底: 防止 production-freeze 加载时序问题导致 _L 为 nil
 if _L == nil then
     _L = function(key, ...)
@@ -77,19 +85,19 @@ RegisterNetEvent('mining:client:startMining', function(data)
 
     -- 距离校验
     if #(playerCoords - site.coords) > site.radius + 5 then
-        QBCore.Functions.Notify('你离矿点太远了', 'error')
+        feedback('你离矿点太远了', 'error')
         return
     end
 
     -- 开始循环采集 (每次 progressbar 完成触发一次服务端采集)
-    QBCore.Functions.Notify(('开始采矿: %s'):format(site.label), 'primary')
+    feedback(('开始采矿: %s'):format(site.label), 'primary')
 
     CreateThread(function()
         local mining = true
         while mining do
             local dist = #(GetEntityCoords(PlayerPedId()) - site.coords)
             if dist > site.radius then
-                QBCore.Functions.Notify('你离开了矿点区域', 'error')
+                feedback('你离开了矿点区域', 'error')
                 mining = false
                 break
             end
@@ -114,7 +122,7 @@ RegisterNetEvent('mining:client:startMining', function(data)
 
             if cancelled then
                 mining = false
-                QBCore.Functions.Notify('采矿已停止', 'primary')
+                feedback('采矿已停止', 'primary')
                 break
             end
 
@@ -126,12 +134,12 @@ end)
 -- 采集结果通知
 RegisterNetEvent('mining:client:oreMined', function(data)
     if data.isDouble then
-        QBCore.Functions.Notify(
+        feedback(
             ('🎉 双倍收获！获得 %d x %s%s'):format(data.yield, data.oreLabel,
                 data.storedInOrg and ' → 组织仓库' or ''),
             'success')
     else
-        QBCore.Functions.Notify(
+        feedback(
             ('⛏️ 获得 %s%s'):format(data.oreLabel,
                 data.storedInOrg and ' → 组织仓库' or ''),
             'primary')
@@ -145,13 +153,13 @@ RegisterNetEvent('mining:client:openSmelter', function()
     local smelter = Config.Mining.SmelterLocation
     local dist = #(GetEntityCoords(PlayerPedId()) - smelter.coords)
     if dist > smelter.radius + 3 then
-        QBCore.Functions.Notify('你离冶炼厂太远了', 'error')
+        feedback('你离冶炼厂太远了', 'error')
         return
     end
 
     QBCore.Functions.TriggerCallback('mining:server:getSmeltRecipes', function(recipes)
         if #recipes == 0 then
-            QBCore.Functions.Notify('没有可用的冶炼配方', 'error')
+            feedback('没有可用的冶炼配方', 'error')
             return
         end
 
@@ -189,7 +197,7 @@ RegisterNetEvent('mining:client:doSmelt', function(data)
         }, {}, {}, {}, function()
             TriggerServerEvent('mining:server:smeltOre', data.recipeId)
         end, function()
-            QBCore.Functions.Notify('冶炼已取消', 'error')
+            feedback('冶炼已取消', 'error')
         end)
 end)
 
