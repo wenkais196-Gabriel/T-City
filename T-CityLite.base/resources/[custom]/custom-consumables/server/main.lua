@@ -95,9 +95,18 @@ end
 --- → 调注册进来的回调，它**从来不**发那个网络事件。原来只挂 `RegisterNetEvent`，
 --- 于是吃了完全没反应（2026-11-10 真机：买了水和食物，用了既不涨饥渴也不消耗）。
 local function notifyNeeds(src, itemName, result)
-    TriggerClientEvent('QBCore:Notify', src,
-        ('%s：饥饿 %d / 口渴 %d'):format(itemName, math.floor(result.hunger), math.floor(result.thirst)),
-        'success', 3500)
+    -- P2 试点：结果类通知走三层分派（左下角 feed），老 API 作为回退。
+    -- 入口是 custom-notify 的 export —— `_G.Bus` 是每个资源自己的 state，跨资源看不到。
+    local pushed = pcall(function()
+        exports['custom-notify']:Push(src, 'feed',
+            ('%s：饥饿 %d / 口渴 %d'):format(itemName, math.floor(result.hunger),
+                math.floor(result.thirst)), nil, { icon = '🍽' })
+    end)
+    if not pushed then
+        TriggerClientEvent('QBCore:Notify', src,
+            ('%s：饥饿 %d / 口渴 %d'):format(itemName, math.floor(result.hunger), math.floor(result.thirst)),
+            'success', 3500)
+    end
     -- qb-hud 的圆环只认这个事件（qb-core 自己扣饥饿时也发它）
     TriggerClientEvent('hud:client:UpdateNeeds', src, result.hunger, result.thirst)
 end

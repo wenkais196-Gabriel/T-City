@@ -837,6 +837,46 @@ MUTATIONS += [
     ),
 ]
 
+# 三层通知：kind 两侧不一致 / phone 上屏 / 限流太细 / 没进启动集 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_kind_sets_match_on_both_sides"),
+        path="resources/[custom]/custom-notify/client/main.lua",
+        content=None,
+        replace_from="local KINDS = { feed = true, toast = true, error = true }",
+        replace_to="local KINDS = { feed = true, toast = true }",
+        what="客户端少认一个 kind（error 通知会静默消失）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_phone_kind_is_not_rendered_on_screen"),
+        path="resources/[custom]/custom-notify/client/main.lua",
+        content=None,
+        replace_from="local KINDS = { feed = true, toast = true, error = true }",
+        replace_to="local KINDS = { feed = true, toast = true, error = true, phone = true }",
+        what="把 phone（IC 内容）也当成屏幕通知渲染",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_push_rate_limit_is_wider_than_send"),
+        path="resources/[custom]/custom-notify/server/main.lua",
+        content=None,
+        replace_from="local MAX_PER_WINDOW = 12",
+        replace_to="local MAX_PER_WINDOW = 1",
+        what="把分派限流收紧到比业务还细（一次交易第二条会被丢）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_resource_is_in_default_boot"),
+        path="configs/modules/custom.cfg",
+        content=None,
+        replace_from="ensure custom-notify\n",
+        replace_to="",
+        what="把通知渲染器从启动集里摘掉（通知发出去没人渲染）",
+    ),
+]
+
 # 开服就绪：把调试资源塞回默认启动集 → 闸门必须红
 MUTATIONS += [
     Mutation(

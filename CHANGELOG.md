@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **游戏内 UI/UX · P1 手机打字 + P2 三层通知**（PO 2026-11-10 拍板 D1=B / D5=乙）
+  - 手机文字输入：`focus.lua` 的 `PushFrame` 支持 `keepInput` 覆盖，text 帧改为
+    `keepInput=false`（原来写死读 convar，键盘一直归游戏，CEF 收不到字符）；
+    新增 `textFocus` NUI 回调，鼠标点输入框也入栈；`nav.lua` 在 text 帧期间不注入按键
+    （否则一键两用、Backspace 把输入框 blur 掉）。前端新增 `web/src/core/layers.ts`
+    （`textOwned` store + `use:textFocus` action），Messages 已接入。
+  - 三层通知：新资源 `custom-notify`（`feed` 左下 / `toast` 中央 / `error` 左下红 /
+    `phone` 只进手机），服务端唯一入口 `exports['custom-notify']:Push`，
+    每玩家 6/s 限流（qb-core Notify 的 200ms/1 条会把一次交易的第二条静默丢掉）。
+    首个迁移点：`custom-consumables` 吃喝结果。
+  - `/amenu` 补 `'admin'` 权限参数（原来默认 `user`，任何玩家能打开管理员面板）；
+    `custom-ui` 屏蔽表加 E(38) / ALT(19)：手机开着时不再触发游戏交互。
+  - 闸门：`test_notify_contract.py`（kind 两侧一致 / phone 不上屏 / 限流下限 / 必须在启动集）
+    + 4 条变异用例；`test_consumables.py` 的切块从死代码事件改为 `CreateUseableItem`。
 - **开服就绪包**（目标从「磨底座」转成「能开门」）：新增 `tools/dev/launch_check.py`，把"这台机器能不能
 - **开服就绪包 · CC 复核后的加固**（两条 P0 + 四条 P1）：
   ① **#1 原来不扫真正决定启动集的 `server.cfg`** —— 运维在那里加一行 `exec configs/modules/dev.cfg`

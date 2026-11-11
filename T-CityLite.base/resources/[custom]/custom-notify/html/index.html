@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>custom-notify</title>
+<style>
+  /* 三层通知：feed（左下）/ toast（中央偏上）/ error（左下红）
+     配色与 qb-hud、手机保持同一套：深底 + 3px 左侧色条 + 半透明边框。
+     不要用 backdrop-filter：CEF 里每个毛玻璃元素都会重算整块模糊，实机掉帧。 */
+  :root {
+    --ink: #eceff4;
+    --dim: #9aa3ad;
+    --feed: #2f3742;
+    --money: #4b9e5f;
+    --warn: #c9862f;
+    --err: #b93f3f;
+    --info: #3f7fb9;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; color: var(--ink); }
+
+  .feed-host {
+    position: fixed; left: 18px; bottom: 148px;
+    display: flex; flex-direction: column-reverse; gap: 6px; width: 320px;
+  }
+  .toast-host {
+    position: fixed; left: 50%; top: 16%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 8px; align-items: center;
+  }
+
+  .item {
+    display: grid; grid-template-columns: 3px 1fr; gap: 9px;
+    background: rgba(8, 9, 12, .82); border-radius: 3px; padding: 8px 10px 8px 0;
+    animation: slideIn .22s ease-out;
+    will-change: transform, opacity;
+  }
+  .item .bar { width: 3px; border-radius: 2px; background: var(--feed); }
+  .item.k-money .bar { background: var(--money); }
+  .item.k-warn .bar { background: var(--warn); }
+  .item.k-error .bar { background: var(--err); }
+  .item.k-info .bar { background: var(--info); }
+  .item .wrap { min-width: 0; }
+  .item .title { font-size: 12.5px; font-weight: 600; line-height: 1.3; }
+  .item .body { font-size: 12px; color: var(--dim); line-height: 1.35; margin-top: 2px; }
+  .item .title:empty { display: none; }
+
+  .toast {
+    background: rgba(12, 14, 18, .93); border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 10px; padding: 11px 18px; text-align: center; min-width: 240px;
+    max-width: 480px; animation: popIn .26s cubic-bezier(.2, .8, .3, 1);
+    will-change: transform, opacity;
+  }
+  .toast .kicker {
+    font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #8b95a1;
+  }
+  .toast .msg { font-size: 14px; font-weight: 600; margin-top: 5px; }
+  .toast .sub { font-size: 11.5px; color: var(--dim); margin-top: 4px; }
+  .toast.is-error { border-color: rgba(185, 63, 63, .55); }
+  .toast.is-error .msg { color: #ff9a95; }
+
+  .out { animation: fadeOut .18s ease-in forwards; }
+
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+  @keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+  @keyframes fadeOut { to { opacity: 0; transform: translateY(-4px); } }
+</style>
+</head>
+<body>
+<div class="feed-host" id="feed"></div>
+<div class="toast-host" id="toast"></div>
+
+<script>
+  const MAX_FEED = 4;
+  const MAX_TOAST = 2;
+  const feedHost = document.getElementById('feed');
+  const toastHost = document.getElementById('toast');
+
+  function toneOf(kind, icon) {
+    if (kind === 'error') return 'k-error';
+    if (icon === '$') return 'k-money';
+    if (kind === 'toast') return 'k-warn';
+    return 'k-info';
+  }
+
+  function dismiss(node, delay) {
+    setTimeout(() => {
+      node.classList.add('out');
+      setTimeout(() => node.remove(), 200);
+    }, delay);
+  }
+
+  function renderFeed(data) {
+    const el = document.createElement('div');
+    el.className = 'item ' + toneOf(data.kind, data.icon);
+    el.innerHTML = `
+      <div class="bar"></div>
+      <div class="wrap">
+        <div class="title"></div>
+        <div class="body"></div>
+      </div>`;
+    el.querySelector('.title').textContent = data.title || '';
+    el.querySelector('.body').textContent = data.body || '';
+    feedHost.appendChild(el);
+    while (feedHost.children.length > MAX_FEED) feedHost.firstElementChild.remove();
+    dismiss(el, data.duration || 5000);
+  }
+
+  function renderToast(data) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (data.kind === 'error' ? ' is-error' : '');
+    el.innerHTML = `
+      <div class="kicker"></div>
+      <div class="msg"></div>
+      <div class="sub"></div>`;
+    el.querySelector('.kicker').textContent = data.kind === 'error' ? 'ERROR' : 'NOTICE';
+    el.querySelector('.msg').textContent = data.title || '';
+    el.querySelector('.sub').textContent = data.body || '';
+    toastHost.appendChild(el);
+    while (toastHost.children.length > MAX_TOAST) toastHost.firstElementChild.remove();
+    dismiss(el, data.duration || 2500);
+  }
+
+  window.addEventListener('message', (event) => {
+    const data = event.data || {};
+    if (data.action !== 'notify') return;
+    if (data.kind === 'toast') return renderToast(data);
+    // error 要不要也来一条 toast？不要：错误必须留在左下角，不能打断玩家正在做的事
+    renderFeed(data);
+  });
+</script>
+</body>
+</html>
