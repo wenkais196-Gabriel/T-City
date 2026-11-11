@@ -431,3 +431,25 @@ altitude {
 .phase-fast    { color: #00c850; }
 .phase-normal  { color: #dcaa00; }
 .phase-overtime { color: #dc2828; }
+
+/* H-1：圆环数值。Quasar 的 show-value 会被默认插槽（这里的图标）覆盖，
+   所以数字单独放在圆环下方 —— 这是"只有颜色没有数值"的直接原因。 */
+.stat-num {
+    display: block;
+    margin-top: -6px;
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: .3px;
+    text-align: center;
+    color: rgba(255, 255, 255, .78);
+    font-variant-numeric: tabular-nums;
+}
+.stat-num.stat-low {
+    color: #ff5a5a;
+    font-weight: 700;
+    animation: stat-low-pulse 1.6s ease-in-out infinite;
+}
+@keyframes stat-low-pulse {
+    0%, 100% { opacity: .55; }
+    50%      { opacity: 1; }
+}
