@@ -1,4 +1,12 @@
 local QBCore = exports['qb-core']:GetCoreObject()
+
+--- 金额文本（money_format 闸门）：整数不带小数点，小数两位。
+local function money(n)
+    local num = tonumber(n) or 0
+    if num == math.floor(num) then return ('%d'):format(num) end
+    return ('%.2f'):format(num)
+end
+
 local SafeCodes = {}
 local cashA = 250
 local cashB = 450
@@ -465,11 +473,11 @@ local function issueStoreReward(src, register)
     -- qb-storerobbery:client:robberyComplete 还会再弹一句"抢劫完成"，同一件事两条。
     local pct = math.floor(timeMult * 100 + 0.5)
     local totalReward = worthValue * bags
-    local summary = ("抢劫结算：逗留 %d%%，实得 $%d × %d 袋"):format(pct, worthValue, bags)
+    local summary = ("抢劫结算：逗留 %d%%，实得 $%s × %d 袋"):format(pct, money(worthValue), bags)
     TriggerClientEvent('QBCore:Notify', src, summary, "success")
     pcall(function()
         exports['custom-notify']:Push(src, 'phone', '抢劫结算',
-            ("逗留 %d%%｜每袋 $%d｜共 %d 袋｜合计 $%d"):format(pct, worthValue, bags, totalReward))
+            ("逗留 %d%%｜每袋 $%s｜共 %d 袋｜合计 $%s"):format(pct, money(worthValue), bags, money(totalReward)))
     end)
 
     -- 良心扣除 + 弹窗通知
