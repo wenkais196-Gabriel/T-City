@@ -60,5 +60,43 @@ def test_rescue_copy_detects_dev_jargon():
     assert "PushLocal('toast'" in spawn, "救援提示没走 toast 通道"
 
     # 反向：把老文案塞回去，规则必须红
-    broken = spawn + NL + 'exports["x"] = "检测到空间裂缝"'
-    assert "空间裂缝" in broken
+    needle = "PushLocal(" + chr(39) + "toast" + chr(39) + ", " + chr(34) + "你被送回"
+    broken = spawn + NL + needle + chr(34) + ")"
+    assert needle in broken, "闸门没认出绕过救援去重的直接推送"
+
+
+def test_dirty_data_detects_whole_menu_freeze():
+    """I-6：任一列脏数据都不许让所有角色卡卡在加载（json.decode 必须容错）。"""
+    server = MC_SERVER.read_text(encoding="utf-8")
+    assert "safeDecode" in server, "角色数据解码没有容错"
+    assert "pcall(json.decode" in server, "没有 pcall 包住 json.decode"
+
+    # 反向：改回裸 json.decode，规则必须红
+    broken = server.replace("safeDecode(result[i].charinfo, {})", "json.decode(result[i].charinfo)")
+    assert "json.decode(result[i].charinfo)" in broken
+
+
+def test_stale_card_response_detects_race():
+    """I-7：选人列表的过期回包必须被丢弃（否则旧列表覆盖新卡）。"""
+    client = MC_SERVER.parent.parent / "client" / "main.lua"
+    text = client.read_text(encoding="utf-8")
+    app = MC_APP.read_text(encoding="utf-8")
+    assert "charRequestSeq" in text, "Lua 端没有请求序号"
+    assert "seq = mySeq" in text, "没有把序号发给 NUI"
+    assert "charDataSeq" in app, "NUI 端没有丢弃过期回包"
+
+    # 反向：把序号判断摘掉，规则必须红
+    broken = app.replace("if (event.data.seq < this.charDataSeq) return;", "")
+    assert "charDataSeq) return" not in broken
+
+
+def test_rescue_dedupe_detects_stacked_toasts():
+    """I-8：一次出生最多一条救援提示（原来三条 8 秒提示会叠在一起）。"""
+    spawn = SPAWN.read_text(encoding="utf-8")
+    assert "rescueToast" in spawn, "没有去重函数"
+    assert "PushLocal('toast', \"你被送回" not in spawn, "还有直接推送（绕过去重）"
+
+    # 反向：把一条改回直接推送，规则必须红
+    needle = "PushLocal(" + chr(39) + "toast" + chr(39) + ", " + chr(34) + "你被送回"
+    broken = spawn + NL + needle + chr(34) + ")"
+    assert needle in broken, "闸门没认出绕过救援去重的直接推送"

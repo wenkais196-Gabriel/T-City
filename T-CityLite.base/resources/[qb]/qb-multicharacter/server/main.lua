@@ -1,4 +1,16 @@
 local QBCore = exports['qb-core']:GetCoreObject()
+
+--- I-6：角色卡的数据来自 DB，任何一列脏数据（手工改库、旧版本字段）都会让
+--- json.decode 抛错，结果是**所有**角色卡都卡在加载界面。这里逐列容错：
+--- 解不开就给默认值，玩家至少能进游戏（并在卡片上看到金额为 0 而不是白屏）。
+local function safeDecode(raw, fallback)
+    if type(raw) ~= 'string' then return raw or fallback end
+    local ok, decoded = pcall(json.decode, raw)
+    if ok and type(decoded) == 'table' then return decoded end
+    print(('[qb-multicharacter] ⚠️ 角色数据解码失败，已用默认值：%s'):format(raw:sub(1, 80)))
+    return fallback
+end
+
 local hasDonePreloading = {}
 local Countries = json.decode(LoadResourceFile(GetCurrentResourceName(), '/countries.json'))
 
@@ -236,11 +248,11 @@ QBCore.Functions.CreateCallback('qb-multicharacter:server:setupCharacters', func
     local plyChars = {}
     MySQL.query('SELECT * FROM players WHERE license = ?', { license }, function(result)
         for i = 1, (#result), 1 do
-            result[i].charinfo = json.decode(result[i].charinfo)
-            result[i].money = json.decode(result[i].money)
-            result[i].job = json.decode(result[i].job)
-            result[i].metadata = json.decode(result[i].metadata)
-            result[i].position = json.decode(result[i].position)
+            result[i].charinfo = safeDecode(result[i].charinfo, {})
+            result[i].money = safeDecode(result[i].money, { cash = 0, bank = 0 })
+            result[i].job = safeDecode(result[i].job, { name = 'unemployed', label = '无业', grade = { level = 0, name = '—' } })
+            result[i].metadata = safeDecode(result[i].metadata, {})
+            result[i].position = safeDecode(result[i].position, { x = 0.0, y = 0.0, z = 0.0, a = 0.0 })
             -- I-1：角色卡是**数据库快照**，必须把"这是什么时候的"一起告诉玩家。
             -- players.last_updated 是 ON UPDATE CURRENT_TIMESTAMP，保存时会刷新。
             result[i].lastUpdated = result[i].last_updated

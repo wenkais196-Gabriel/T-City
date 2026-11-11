@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
             loadingText: "",
             selectedCharacter: -1,
             deleteConfirmName: "",
+            charDataSeq: 0,
             dollar: Intl.NumberFormat("en-US"),
             translations: {},
             customNationality: false,
@@ -236,6 +237,11 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                         break;
                     case "setupCharacters":
+                        // I-7：丢掉过期回包（Lua 端带 seq）
+                        if (typeof event.data.seq === "number") {
+                            if (event.data.seq < this.charDataSeq) return;
+                            this.charDataSeq = event.data.seq;
+                        }
                         var newChars = [];
                         for (var i = 0; i < event.data.characters.length; i++) {
                             newChars[event.data.characters[i].cid] = event.data.characters[i];
