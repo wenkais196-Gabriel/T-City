@@ -25,10 +25,10 @@ review_by: 2027-02-28
 | 权限来源 | 命令数 |
 |---|---|
 | — | 152 |
-| QBCore | 106 |
+| QBCore | 101 |
 | restricted=true | 40 |
 | job/gang 判定 | 35 |
-| ACE | 3 |
+| handler 内判定 | 8 |
 
 ## 按资源分组
 
@@ -81,14 +81,14 @@ review_by: 2027-02-28
 | `apanel` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:615 |
 | `checklicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:532 |
 | `clearme` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:261 |
-| `givelicense` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:360 |
+| `givelicense` | QBCore.Commands.Add | handler 内判定: canUseLicenseTool | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:360 |
 | `givemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:295 |
 | `menu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:619 |
 | `myid` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:126 |
-| `reinstatelicense` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:446 |
-| `revokelicense` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:403 |
+| `reinstatelicense` | QBCore.Commands.Add | handler 内判定: canUseLicenseTool | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:446 |
+| `revokelicense` | QBCore.Commands.Add | handler 内判定: canUseLicenseTool | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:403 |
 | `revokemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:325 |
-| `suspendlicense` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:489 |
+| `suspendlicense` | QBCore.Commands.Add | handler 内判定: canUseLicenseTool | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:489 |
 | `tccops` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:196 |
 
 ### custom-agent-client
@@ -142,7 +142,7 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `agentapprove` | RegisterCommand | ACE: qbcore.god | T-CityLite.base/resources/[custom]/custom-director/server/main.lua:2092 |
+| `agentapprove` | RegisterCommand | handler 内判定: IsPlayerAceAllowed | T-CityLite.base/resources/[custom]/custom-director/server/main.lua:2092 |
 
 ### custom-justice
 
@@ -224,7 +224,7 @@ review_by: 2027-02-28
 | `impoundnear` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:197 |
 | `impoundplayer` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:159 |
 | `lockdown` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/lockdown.lua:38 |
-| `npc_callout` | RegisterCommand | ACE: police.release | T-CityLite.base/resources/[custom]/custom-police/server/p4_npc.lua:471 |
+| `npc_callout` | RegisterCommand | handler 内判定: IsPlayerAceAllowed | T-CityLite.base/resources/[custom]/custom-police/server/p4_npc.lua:471 |
 | `pa` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/pa.lua:3 |
 | `paylawyer` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:476 |
 | `paytow` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:455 |
@@ -238,7 +238,7 @@ review_by: 2027-02-28
 | `police_incident_seed` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:122 |
 | `police_incidents_public` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:103 |
 | `police_justice_seed` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:51 |
-| `police_release` | RegisterCommand | ACE: police.release | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1889 |
+| `police_release` | RegisterCommand | handler 内判定: IsPlayerAceAllowed | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1889 |
 | `police_tow_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/tow.lua:131 |
 | `police_verdict_seed` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:80 |
 | `sample` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/forensics.lua:8 |
@@ -461,7 +461,7 @@ review_by: 2027-02-28
 | `givemoney` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-core/server/commands.lua:228 |
 | `job` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-core/server/commands.lua:248 |
 | `me` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-core/server/commands.lua:320 |
-| `ooc` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-core/server/commands.lua:287 |
+| `ooc` | QBCore.Commands.Add | handler 内判定: HasPermission | T-CityLite.base/resources/[qb]/qb-core/server/commands.lua:287 |
 | `openserver` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-core/server/commands.lua:158 |
 | `removepermission` | QBCore.Commands.Add | QBCore: god | T-CityLite.base/resources/[qb]/qb-core/server/commands.lua:146 |
 | `setgang` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-core/server/commands.lua:273 |
