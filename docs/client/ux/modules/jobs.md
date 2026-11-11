@@ -45,9 +45,32 @@ review_by: 2027-02-28
 2. **完成才值得打断**：完成给 `toast` + 音效，失败给 `error`，日常进度不发；
 3. **可复用分类**：同类消息（任务/职业/组织）用同一套标题与图标，玩家才认得出来。
 
-### 1.4 CC 调研补充
+### 1.4 CC 调研补充（2026-11-11）
 
-> 待 CC 结果（仓库 125 处通知的进度/结果/失败拆分 + 任务与老板菜单的三档归类）。
+**外部做法**：
+
+| 问题 | 主流做法 | 来源 |
+|---|---|---|
+| 进度 1/3→2/3 | 不逐次弹窗：放常驻菜单/屏幕 hint，只在完成或关键节点发通知 | force_quests 的 `ShowHints`；anox-carquest 的菜单内进度 |
+| 失败/超时 | 常见静默取消（缺口）；成熟做法用 `error` 说明原因 | force_quests；ox_lib notify（`error` 类型、默认 3s、`id` 去重） |
+| 老板菜单回执 | 成功/失败回执给**老板**；录用/解雇/晋升同时通知**被操作员工**；存取款只回执老板 | qb-bossmenu qb-bossmenu 的 server/sv_boss.lua |
+
+**仓库统计（125 处里可判 type 的 118 处）**：`error` 68 / `primary` 26 / `success` 24，
+另约 16 处是 admin/debug 命令。
+
+**同一件事发多条（重点）**：
+
+| 事件 | 条数 | 位置 |
+|---|---|---|
+| 任务完成 | **3+** | `quest_manager.lua:846-847` + `client/main.lua:274` + `quest_rewards.lua:156-157` |
+| 步骤推进 | **3** | 节点成功处 + `quest_manager.lua:1019-1020` + `client/main.lua:260` |
+| 物流失败 | **3–4** | `quest_logistics_client.lua:681,722` + `server/main.lua:860` + `client/main.lua:287` |
+| 死亡 | 2+ | `server/main.lua:1253,1276` + `client/main.lua:287` |
+| **逐秒提示** | 每秒 | `client/main.lua:687,702`、`quest_logistics_client.lua:718` |
+
+**老板菜单**：`qb-management/client/cl_boss.lua:148,163,198` 只把 hire/fire/grade 作为菜单参数发出，
+**客户端没有任何回执渲染**。
+
 
 ## 2. 设计（目标）
 
@@ -63,6 +86,15 @@ review_by: 2027-02-28
 | 完成 | `toast` + 音效 | 「<任务名> 完成 · 奖励 $X」 | 只有完成值得打断 |
 | 失败/超时 | `error` | 「<任务名> 失败：<原因>」 | 失败要说原因 |
 | 放弃 | `feed` | 「已放弃 <任务名>」 | — |
+
+**同一件事只发一条（CC 实测）**：
+
+| 事件 | 现在 | 改成 |
+|---|---|---|
+| 任务完成 | 3+ 条（结算 + 客户端 + 奖励） | **1 条**：由 `quest_rewards` 统一发（含奖励汇总） |
+| 步骤推进 | 3 条 | **1 条**：只在服务端发，客户端不重复 |
+| 物流失败 | 3–4 条 | **1 条** `error`，带原因 |
+| 逐秒倒计时 | **每秒一条** | 改成 HUD/面板常驻倒计时；只在 30s / 10s 各提醒一次 |
 
 **为什么进度不发通知**：`custom-quest` 现在 45 处通知集中在 `T-CityLite.base/resources/[custom]/custom-quest/server/main.lua`，其中大量是逐步进度 ——
 每完成一步弹一条，一个 5 步任务就刷 5 条，把真正的失败提示挤掉了。
@@ -100,9 +132,11 @@ review_by: 2027-02-28
 |---|---|---|---|---|
 | J-1 | 逐步进度不再发通知，只在**跨阶段**发一条 feed | `T-CityLite.base/resources/[custom]/custom-quest/server/main.lua`（进度回调处） | 中（要认出哪些是逐步） | 做一个 3 步任务：只在阶段变化时看到 feed，逐步无通知 |
 | J-2 | 45 处通知接三层通道（成功→feed、失败→error），硬编码英文改中文 | 同上 | 低（机械 + 逐条看） | 接受/放弃/失败三类表现不同 |
-| J-3 | 任务完成 toast + 失败 error（不再混用 success/primary） | 同上 | 低 | 完成弹中央，失败弹左下红 |
+| J-3 | 同一事件去重：完成 3→1 条、步骤 3→1 条、物流失败 3–4→1 条（带原因） | `quest_manager.lua:846,1019`、`quest_rewards.lua:156`、`quest_logistics_client.lua:681,722`、`client/main.lua:274,287` | 中（多文件） | 完成一次任务只看到 1 条结算 |
+| J-3b | 逐秒倒计时改常驻：只在 30s / 10s 各发一条 toast | `client/main.lua:687,702`、`quest_logistics_client.lua:718` | 中 | 运输过程中不再每秒刷屏 |
+| J-3c | 任务完成 toast + 失败 error（不再混用 success/primary） | 同上 | 低 | 完成弹中央，失败弹左下红 |
 | J-4 | qb-management 的 6 个 ALT 热区：单动作改 `[E]` | `T-CityLite.base/resources/[qb]/qb-management/client/` | 中（要实测距离） | 更衣室/储物柜按 E 直接可用 |
-| J-5 | 老板菜单回执：执行者 feed、当事人 phone | `qb-management` 服务端动作 | 中 | 发薪后员工手机有记录 |
+| J-5 | 老板菜单回执：执行者 feed、当事人 phone（现在客户端零渲染，`cl_boss.lua:148,163,198`） | `qb-management` 客户端与服务端动作 | 中 | 发薪后员工手机有记录，老板看到 feed |
 | J-6 | custom-career 晋升条件给"差多少" | `T-CityLite.base/resources/[custom]/custom-career/` | 低 | 面板显示「还差 X 点 / Y 小时」 |
 
 **顺序**：J-2（通道统一，最快见效）→ J-1（降噪，效果最大）→ J-3（完成/失败区分）→ J-4/J-5 → J-6。
