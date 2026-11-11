@@ -2255,6 +2255,15 @@
       "evidence": "vendor: [system]/monitor/resource/sv_playerlist.lua",
       "owner": "upstream",
       "expires": "2027-03-31"
+    },
+    {
+      "name": "custom-consumables:server:RestoreAfterRevive",
+      "file": "[custom]/custom-consumables/server/main.lua",
+      "category": "self_scoped",
+      "reason": "复活流程把饥渴抬到 50。饥渴的唯一写者是 custom-consumables，所以 ambulance 只能走这个入口。不接受任何目标参数 —— 只作用于调用者自己，越权面为零。",
+      "evidence": "handler 只读 source，不接 target；10 秒/人限流（reviveRestoreAt）；写入走 RestoreAfterRevive 的 clamp",
+      "owner": "custom-consumables",
+      "expires": "2027-06-30"
     }
   ]
 }
