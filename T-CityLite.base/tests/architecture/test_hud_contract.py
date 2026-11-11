@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -97,3 +98,48 @@ def test_stress_direction_and_throttle_detects_inverted_warn():
     # 反向：把方向改回低值，规则必须红
     broken = client.replace("stressNow >= STRESS_HIGH", "stressNow <= 20")
     assert "stressNow >= STRESS_HIGH" not in broken
+
+
+RING_OPEN = re.compile(r"<q-circular-progress\b[^>]*>")
+
+
+def _icon_rings_without_show_value(html: str) -> list[str]:
+    """找出"圆心有 <q-icon> 但外层环没写 show-value"的内层环。
+
+    Quasar 2.1.0 只在 showValue 为真时才创建 `.q-circular-progress__text`，
+    默认插槽也只在这层里渲染 —— 没有 show-value，插槽函数从不调用，
+    `<q-icon>` 连 DOM 节点都不生成（H-5 就是这样丢掉 5 个状态图标的）。
+    """
+    missing: list[str] = []
+    for m in RING_OPEN.finditer(html):
+        tag = m.group(0)
+        rest = html[m.end():]
+        stops = [i for i in (
+            rest.find("</q-circular-progress>"),
+            rest.find("<q-circular-progress"),
+            rest.find("</div>"),
+        ) if i != -1]
+        children = rest[:min(stops)] if stops else rest
+        if "<q-icon" in children and "show-value" not in tag:
+            missing.append(tag.strip()[:110])
+    return missing
+
+
+def test_ring_icon_slot_needs_show_value_detects_h5_regression():
+    """H-5：圆心带 `<q-icon>` 的内层环必须保留 show-value。
+
+    真机反馈（2026-11-11）：armor/hunger/thirst/stress/oxygen 五环中心全空，
+    玩家分不清哪个是口渴哪个是饥饿。根因是 H-1 把这些环的 show-value 删了。
+    """
+    html = INDEX.read_text(encoding="utf-8")
+    assert _icon_rings_without_show_value(html) == [], (
+        "有环心图标却没有 show-value：Quasar 不会渲染默认插槽，图标根本不会进 DOM（H-5）")
+
+    # 有插槽时 Quasar 不打印数值，数值仍由 .stat-num 承担 —— 两者不能互相顶掉
+    assert "stat-num" in html, "环下数值没了"
+
+    # 反向：把 armor 环的 show-value 删掉，规则必须红
+    broken = html.replace('show-value :value="armor"', ':value="armor"')
+    assert broken != html, "反向校验失效：找不到 armor 环的 show-value"
+    assert _icon_rings_without_show_value(broken), (
+        "反向校验失效：删掉 armor 的 show-value 之后规则还是绿的")

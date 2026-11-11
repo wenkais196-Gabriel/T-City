@@ -126,6 +126,9 @@ local STRESS_REARM = 30
 local REWARN_COOLDOWN_MS = 5 * 60 * 1000
 local lowWarnAt = { hunger = 0, thirst = 0, stress = 0, armor = 0 }
 local lowArmed = { hunger = true, thirst = true, stress = true, armor = true }
+-- H-6（2026-11-11 PO 反馈"我一直没装护甲也弹打光"）：护甲只在"从有到无"时提醒，
+-- 初始就是 0 不该触发；armorPeak 记录上次看到的非零值。
+local armorPeak = 0
 
 local LOW_TEXT = {
     hunger = '你饿得发慌了，找点吃的',
@@ -142,6 +145,13 @@ local function warnOnce(key, now)
     pcall(function() exports['custom-notify']:PushLocal('toast', LOW_TEXT[key]) end)
 end
 
+--- HUD 自己的提示统一走 feed（N-12，2026-11-12）：custom-notify 不在时回落 qb-core
+local function HudNotice(text, kind)
+    local ok, sent = pcall(function() return exports['custom-notify']:PushLocal(kind or 'feed', text) end)
+    if ok and sent == true then return end
+    QBCore.Functions.Notify(text)
+end
+
 CreateThread(function()
     while true do
         Wait(5000)
@@ -156,9 +166,15 @@ CreateThread(function()
         -- 压力：越高越糟（原来写成 <= 20 提醒，方向反了）
         if stressNow >= STRESS_HIGH then warnOnce('stress', now) elseif stressNow <= STRESS_REARM then lowArmed.stress = true end
 
-        -- 护甲：掉到 0 才提醒一次（低于 20 没必要打扰）
+        -- 护甲：只在"从有到无"的那一刻提醒一次（初始 0 / 一直没护甲都不触发）
         local armorValue = GetPedArmour(PlayerPedId()) or 0
-        if armorValue <= 0 then warnOnce('armor', now) elseif armorValue >= 20 then lowArmed.armor = true end
+        if armorValue > 0 then
+            armorPeak = armorValue
+            if armorValue >= 20 then lowArmed.armor = true end
+        elseif armorPeak > 0 then
+            warnOnce('armor', now)
+            armorPeak = 0
+        end
     end
 end)
 
@@ -217,7 +233,9 @@ RegisterNUICallback('closeMenu', function(_, cb)
     cb('ok')
 end)
 
-RegisterKeyMapping('hud', 'Open HUD Settings', 'keyboard', config.OpenMenu)
+-- PO 2026-11-12：I 键不再打开 HUD 设置 —— I 留给载具信息板（尚未实现），
+-- HUD 设置只走命令入口 `/hud`（:219）。要临时用键位就在五M设置里自己绑，不写进代码。
+-- RegisterKeyMapping('hud', 'Open HUD Settings', 'keyboard', config.OpenMenu)
 
 -- Reset hud
 local function restartHud()
@@ -467,7 +485,7 @@ RegisterNetEvent('hud:client:LoadMap', function()
             Wait(150)
         end
         if Menu.isMapNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.load_square_map'))
+            HudNotice(Lang:t('notify.load_square_map'))
         end
         SetMinimapClipType(0)
         AddReplaceTexture('platform:/textures/graphics', 'radarmasksm', 'squaremap', 'radarmasksm')
@@ -490,7 +508,7 @@ RegisterNetEvent('hud:client:LoadMap', function()
         end
         Wait(1200)
         if Menu.isMapNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.loaded_square_map'))
+            HudNotice(Lang:t('notify.loaded_square_map'))
         end
     elseif Menu.isToggleMapShapeChecked == 'circle' then
         RequestStreamedTextureDict('circlemap', false)
@@ -498,7 +516,7 @@ RegisterNetEvent('hud:client:LoadMap', function()
             Wait(150)
         end
         if Menu.isMapNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.load_circle_map'))
+            HudNotice(Lang:t('notify.load_circle_map'))
         end
         SetMinimapClipType(1)
         AddReplaceTexture('platform:/textures/graphics', 'radarmasksm', 'circlemap', 'radarmasksm')
@@ -521,7 +539,7 @@ RegisterNetEvent('hud:client:LoadMap', function()
         end
         Wait(1200)
         if Menu.isMapNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.loaded_circle_map'))
+            HudNotice(Lang:t('notify.loaded_circle_map'))
         end
     end
 
@@ -624,14 +642,15 @@ RegisterNUICallback('cinematicMode', function(_, cb)
         CinematicShow(false)
         Menu.isCinematicModeChecked = false
         if Menu.isCinematicNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.cinematic_off'), 'error')
+            -- 与 on 保持同一通道（原来 off 走 'error' 的右侧 NUI，on 走 feed，看起来像左右各弹一个）
+            HudNotice(Lang:t('notify.cinematic_off'))
         end
         DisplayRadar(1)
     else
         CinematicShow(true)
         Menu.isCinematicModeChecked = true
         if Menu.isCinematicNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.cinematic_on'))
+            HudNotice(Lang:t('notify.cinematic_on'))
         end
     end
     TriggerEvent('hud:client:playHudChecklistSound')

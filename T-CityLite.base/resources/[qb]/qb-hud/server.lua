@@ -97,7 +97,15 @@ RegisterNetEvent('hud:server:RelieveStress', function(amount)
 
     Player.Functions.SetMetaData('stress', newStress)
     TriggerClientEvent('hud:client:UpdateStress', src, newStress)
-    TriggerClientEvent('QBCore:Notify', src, Lang:t('notify.stress_removed'))
+    -- N-7（2026-11-11）：压力缓解走 feed（原来无 type → 落 GTA 原生 feed）
+    local delivered = false
+    local ok, sent = pcall(function()
+        return exports['custom-notify']:Push(src, 'feed', Lang:t('notify.stress_removed'))
+    end)
+    if ok and sent == true then delivered = true end
+    if not delivered then
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('notify.stress_removed'))
+    end
 end)
 
 QBCore.Functions.CreateCallback('hud:server:getMenu', function(_, cb)
