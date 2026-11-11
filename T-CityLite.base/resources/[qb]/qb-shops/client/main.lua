@@ -48,25 +48,8 @@ local function createPeds()
 
     for k, v in pairs(Config.Locations) do
         if not v.ped then
-            exports['qb-target']:AddCircleZone(k, vector3(v.coords.x, v.coords.y, v.coords.z), 0.5, {
-                name = k,
-                debugPoly = false,
-                useZ = true
-            }, {
-                options = {
-                    {
-                        label = v.targetLabel or defaultTargetLabel,
-                        icon = v.targetIcon or defaultTargetIcon,
-                        item = v.requiredItem,
-                        type = 'server',
-                        event = 'qb-shops:server:openShop',
-                        shop = k,
-                        job = v.requiredJob,
-                        gang = v.requiredGang
-                    }
-                },
-                distance = 2.0
-            })
+            -- E-1：这里原本是 qb-target 的 AddCircleZone（长按 ALT 开商店）。
+            -- 一个柜台只有一个动作，按 D2 应该是 [E]；入口统一到文件末尾的商铺提示循环。
         else
             local current = type(v['ped']) == 'number' and v['ped'] or joaat(v['ped'])
             RequestModel(current)
@@ -76,23 +59,8 @@ local function createPeds()
             FreezeEntityPosition(ShopPed[k], true)
             SetEntityInvincible(ShopPed[k], true)
             SetBlockingOfNonTemporaryEvents(ShopPed[k], true)
-            if Config.UseTarget then
-                exports['qb-target']:AddTargetEntity(ShopPed[k], {
-                    options = {
-                        {
-                            label = v.targetLabel or defaultTargetLabel,
-                            icon = v.targetIcon or defaultTargetIcon,
-                            item = v.requiredItem,
-                            type = 'server',
-                            event = 'qb-shops:server:openShop',
-                            shop = k,
-                            job = v.requiredJob,
-                            gang = v.requiredGang
-                        }
-                    },
-                    distance = 2.0
-                })
-            end
+            -- E-1：店员身上的 ALT 选项也去掉了 —— 同一个柜台有两套入口，
+            -- 玩家会撞见两种价格/两种交互；现在统一走 [E] 提示循环。
         end
     end
     pedSpawned = true
@@ -186,7 +154,9 @@ AddEventHandler('onResourceStop', function(resourceName)
 end)
 
 -- Threads
-if not Config.UseTarget then
+-- E-1：原本这里有两条路（UseTarget=true 走 ALT；false 走 qb-core 的 DrawText 黑条）。
+-- 现在两条都并到下面的统一 [E] 提示循环，所以这段不再启动。
+if false then
     CreateThread(function()
         for shop in pairs(Config.Locations) do
             NewZones[#NewZones + 1] = CircleZone:Create(vector3(Config.Locations[shop]['coords']['x'], Config.Locations[shop]['coords']['y'], Config.Locations[shop]['coords']['z']), Config.Locations[shop]['radius'] or 1.5, {
@@ -211,3 +181,49 @@ if not Config.UseTarget then
         end)
     end)
 end
+
+-- ==============================================================
+-- E-1：商铺统一 [E] 入口
+--   * 去掉 qb-target 的 ALT 区域/实体选项（原来同一个柜台有两套入口）；
+--   * 去掉 qb-core 的 DrawText 黑条（那是另一套视觉）；
+--   * 权限判定仍在服务端（qb-shops:server:openShop 会校验距离与职业/帮派），
+--     这里只负责"显示 + 按 E"。
+-- ==============================================================
+local SHOP_PROMPT_RANGE = 2.0
+local shopPromptShown = false
+
+CreateThread(function()
+    Wait(1500)
+    while true do
+        local sleep = 800
+        local pos = GetEntityCoords(PlayerPedId())
+        local nearest, nearestDist = nil, SHOP_PROMPT_RANGE
+
+        for key, shop in pairs(Config.Locations) do
+            local coords = shop.coords
+            if coords then
+                local dist = #(pos - vector3(coords.x, coords.y, coords.z))
+                if dist < nearestDist then nearest, nearestDist = key, dist end
+            end
+        end
+
+        if nearest then
+            sleep = 200
+            local shop = Config.Locations[nearest]
+            local label = shop.targetLabel or '打开商店'
+            exports['custom-prompt']:Show({ key = 'E', label = label })
+            shopPromptShown = true
+            if IsControlJustReleased(0, 38) then
+                exports['custom-prompt']:Hide()
+                shopPromptShown = false
+                TriggerServerEvent('qb-shops:server:openShop', { shop = nearest })
+                sleep = 1200
+            end
+        elseif shopPromptShown then
+            exports['custom-prompt']:Hide()
+            shopPromptShown = false
+        end
+
+        Wait(sleep)
+    end
+end)
