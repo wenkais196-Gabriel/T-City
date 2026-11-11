@@ -4,7 +4,7 @@
 
 **生成时间**：2026-11-11 ｜ **文档总数**：302 ｜ **已登记**：302 ｜ **未登记**：0
 
-**状态分布**：✅ active 170 ・ 🟡 draft 9 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 171 ・ 🟡 draft 8 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -12,7 +12,7 @@
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
-| [角色与出生 · UX 设计](client/ux/modules/identity.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/identity.md` |
+| [角色与出生 · UX 设计](client/ux/modules/identity.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/identity.md` |
 
 ### economy（6）
 
