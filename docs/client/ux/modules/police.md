@@ -60,17 +60,90 @@ review_by: 2027-02-28
 
 > CC 的同题调研（外部 + 仓库 195 处通知归类）正在跑，回来后与本表一起进 §2 设计。
 
+### 1.4 CC 调研补充（2026-11-11）
+
+| 产品 | 首屏答什么 | 分级做法 |
+|---|---|---|
+| `ps-mdt` | 在勤单位 / 新单 / 我的状态；档案文书退二级 | 自身不分级，调度继承 `ps-dispatch` |
+| `aty_mdt` | 个人状态、Active Units（10s 刷新）、Recent Dispatches（≤50） | **无 priority 字段**，只在打开的 MDT 里进列表，无声音无弹窗 |
+| `ps-dispatch` | 右侧警报栈（5s、最多 3 条）+ `O` 键调度板（≤25） | **P0 critical / P1 urgent / P2 routine / P3 low**；critical 置顶 + 粗边 + 脉冲；重大事件时 routine 静音，P1/求援/点名仍达 |
+
+**仓库归类（199 处命中）**：
+
+| 档 | 来源 | 例子 |
+|---|---|---|
+| 必须屏幕 | `client/main.lua`、`client/coroner.lua`、`client/incident_guidance.lua`、`server/p4_npc.lua` | `client/main.lua:162` 新警情（Notify+声音+blip，已有） |
+| 可以 feed | `server/commands.lua`(77)、`server/interactions.lua`、`server/vehicle.lua`、`client/job.lua` | `server/commands.lua:23` 发执照；`server/vehicle.lua:146` 车辆标记 |
+| 只进手机/日志 | `server/p0_incidents.lua`、`server/p2_system.lua`、`client/backup.lua`、`PoliceMDT.svelte` | `server/p2_system.lua:32` BOLO 只推手机 |
+
+**发现的零反馈缺口**：`client/coroner.lua:235` 的 target action 只发事件，
+`server/coroner.lua:75/83` 静默 `return` —— 成功与失败**都没有任何反馈**，
+这正是"按 E 没反应"的体感来源。
+
 ## 2. 设计（目标）
 
-_待写。_
+> 综合两份 R 阶段调研：我的外部实践（§1.3）+ CC 的产品对照与仓库归类（见 §1.4）。
+> 规则都能落成 if/else，不接受"视情况"。
+
+### 2.1 警情分级（引入 P0–P3，照抄 ps-dispatch 的语义）
+
+| 级别 | 判定（if 就能写） | 表现 |
+|---|---|---|
+| **P0** | 警员倒地 / 主动求援 / 银行劫案进行中 | `toast` + 声音 + 地图 blip + 手机留痕 |
+| **P1** | 枪击、重伤、持械、正在进行的重罪 | `toast` + 声音 + blip |
+| **P2** | 一般 911（噪音、违停、纠纷） | `feed` + MDT 列表 |
+| **P3** | 事后上报、路人报告 | 只进 MDT 列表 |
+
+**去重与合并**：同一 `code` + 同一区域 60 秒内重复 → 合并为一条，标题带 `×N`；
+P2/P3 在 P0 进行中**静音**（只进列表），P0/P1 永不静音。
+
+### 2.2 警员操作的回执（谁该看到什么）
+
+| 动作 | 执行者看到 | 当事人看到 |
+|---|---|---|
+| 发罚单 / 扣押 / 入狱 | `feed` 一行（金额/时长） | `phone` 通知（可回查） |
+| 发执照 / 改职级 / 改车牌 | `feed` 一行 | `phone` 一行 |
+| 命令执行失败（权限/距离/离线） | `error` 左下红 | — |
+| 新警情（P0/P1） | `toast` + 声音 | — |
+| 警情被接手/到场/结案 | `feed` 一行 | — |
+
+**铁律**：命令执行回执**不许**再上屏幕中央（现在 77 处全在 `commands.lua`）。
+
+### 2.3 验尸官 / 尸体交互（修零反馈）
+
+| 情形 | 表现 |
+|---|---|
+| 靠近尸体 | `prompt`：`[E] 呼叫验尸官` |
+| 呼叫成功 | `feed`："验尸官已在路上（约 2 分钟）" |
+| 附近没有尸体 | `error`："附近没有尸体" |
+| 已在处理中 | `error`："这具尸体已经有人处理了" |
+
+### 2.4 空态
+
+| 情形 | 表现 |
+|---|---|
+| MDT 无警情 | "当前没有进行中的警情"（不是空白） |
+| MDT 无在勤单位 | "暂无在勤单位" + 提示"按 E 上班" |
+| 手机未连接 | 页内："连接中…"（不许空白页） |
 
 ## 3. 计划（任务）
 
-_待写。_
+> 分工：**我开发（P）**，CC 定验收标准（V，见 §4）。
+
+| # | 任务 | 文件 | 风险 | 验收方式 |
+|---|---|---|---|---|
+| P-1 | `custom-notify` 加去重 + 合并：同 kind+title 3 秒内重复重启计时并显示 ×N；同来源突发 20 秒内合并 | `T-CityLite.base/resources/[custom]/custom-notify/server/main.lua` | 低（纯服务端） | 连发 3 条同文案只出现 1 条带 ×3 |
+| P-2 | 验尸官零反馈修复：成功 feed / 无尸体 error / 处理中 error，ALT 改 E 提示 | `T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua` | 中（碰交互入口） | 站尸体旁按 E 有反馈；空地上按 E 得到 error |
+| P-3 | 警情分级：incident 增加 priority（0–3），P0/P1 走 toast+声音，P2/P3 只进 feed/列表 | `T-CityLite.base/resources/[custom]/custom-police/server/p0_incidents.lua`、`client/main.lua`、MDT 查询 | 中（要兼容旧数据） | 不同 code 的警情表现分级正确 |
+| P-4 | 命令回执降噪：commands.lua 里 77 处 QBCore:Notify 改 feed，失败改 error | `T-CityLite.base/resources/[custom]/custom-police/server/commands.lua` | 低（机械替换 + 逐条看） | 改职级/发罚单不再弹屏幕中央 |
+| P-5 | MDT 空态文案（无警情 / 无在勤单位 / 连接中） | `T-CityLite.base/resources/[custom]/custom-phone/web/src/apps/PoliceMDT.svelte` | 低 | 断网/空库不是白屏 |
+
+**顺序**：P-1（通用零风险）→ P-2（PO 点名的"按 E 没用"）→ P-4（降噪）→ P-3（分级，涉及数据）→ P-5。
 
 ## 4. 验收（步骤）
 
-_待写。_
+> 由 CC 定标准（PO 2026-11-11 分工），待写入。
+
 
 ## 5. 已知未决
 

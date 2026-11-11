@@ -877,6 +877,19 @@ MUTATIONS += [
     ),
 ]
 
+# 三层通知去重：把 key 下发摘掉 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_dedupe_and_merge_are_wired"),
+        path="resources/[custom]/custom-notify/server/main.lua",
+        content=None,
+        replace_from="        key = key,\n",
+        replace_to="",
+        what="Push 不再下发 key（去重失效，同文案继续刷屏）",
+    ),
+]
+
 # 开服就绪：把调试资源塞回默认启动集 → 闸门必须红
 MUTATIONS += [
     Mutation(

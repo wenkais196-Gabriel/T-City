@@ -18,6 +18,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 DISPATCH = REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-notify" / "server" / "main.lua"
 CLIENT = REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-notify" / "client" / "main.lua"
+PAGE = (REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-notify"
+        / "html" / "index.html")
 MODULE_CFG = REPO / "T-CityLite.base" / "configs" / "modules" / "custom.cfg"
 
 
@@ -81,3 +83,23 @@ def test_reverse_kind_mismatch_is_detected():
     client = _client_kinds()
     assert server != client, "多出来的 kind 没被比对出来"
     assert (server - client) == {"banner"}
+
+def test_dedupe_and_merge_are_wired():
+    """去重必须在服务端做，且客户端要按 key 就地更新（否则只是刷屏更快）。"""
+    server = DISPATCH.read_text(encoding="utf-8")
+    page = PAGE.read_text(encoding="utf-8")
+
+    assert "DEDUPE_MS" in server, "服务端没有去重窗口常量"
+    assert "key = key" in server and "count = count" in server, (
+        "Push 没有把 key/count 下发给客户端 —— 客户端无法就地更新"
+    )
+    assert "×" in page, "页面没有合并计数的呈现"
+    assert "live" in page, "页面没有按 key 维护已存在的条目"
+
+
+def test_reverse_dedupe_without_key_is_detected():
+    """反向：把 key 下发删掉，上面的断言必须红。"""
+    server = DISPATCH.read_text(encoding="utf-8")
+    broken = server.replace("key = key,", "", 1)
+    assert broken != server
+    assert "key = key," not in broken
