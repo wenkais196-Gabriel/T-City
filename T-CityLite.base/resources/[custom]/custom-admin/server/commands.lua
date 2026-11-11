@@ -102,7 +102,9 @@ QBCore.Commands.Add('tccops', '调整抢劫警察门槛（调试）', { {
     end
     GlobalState:set('crime_min_police_storerobbery', value, true)
     QBCore.Functions.Notify(source, _L(source, 'admin_threshold_set', value), "primary")
-end, 'user')
+end, 'admin')
+-- 🔒 A-2：这里原本是 'user' —— **任何玩家**都能把抢劫警察门槛改成 0，
+--    等于关掉整条犯罪链的门禁。改门槛是玩法调参，必须是 admin。
 
 -- 在 QBCore 中注册管理员身份（确保 setrobbery 等 admin 命令可用）
 -- 🔒 默认关闭: 全量自动 admin 会让每个玩家获得管理命令与面板权限。
@@ -371,3 +373,61 @@ QBCore.Commands.Add('checklicense', '查看玩家执照状态 (Admin)', {
 end, 'admin')
 
 print('[custom-admin] ✅ 命令模块已加载 (myid + amenu + clearme + setrobbery + auto-admin + license管理)')
+
+-- A-2：面板命令搬到服务端（admin 权限）。文本从原客户端搬过来，内容不变。
+local PANEL_BODY = [[
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚗 载具:
+  /car [车型]       → 刷车
+  /dv               → 删除当前载具
+  /fix              → 修车
+  /admincar         → 保存到车库
+  /maxmods          → 满改
+
+👤 玩家管理:
+  /revive [ID]      → 复活
+  /goto [ID]        → 传送到
+  /bring [ID]       → 拉过来
+  /kick [ID] [理由]  → 踢出
+  /freeze [ID]      → 冻结
+  /spectate [ID]    → 观察
+
+🔧 开发者:
+  /noclip           → 穿墙
+  /coords           → 显示坐标
+  /setmodel [模型]   → 换模型
+  /setspeed [fast]  → 加速跑
+  /vector3          → 复制坐标
+
+🔰 系统:
+  /givemelicense [driver/pilot/boat/heavy/weapon] → 给自己发执照
+  /setleader [ID] [sheriff/mayor/gangboss]  → 指派领袖
+  /demote [ID]      → 撤销领袖
+  /settier [ID] [leader/mid/entry]  → 改层级
+  /announce [消息]   → 全服公告
+  /myid             → 查看标识符
+  /amenu            → 简版面板
+  /apanel           → 重新显示此面板
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+]]
+
+local MENU_BODY = [[
+━━━━━━━━━━━━━━━━━━━━
+/apanel   → 完整管理面板
+/car      → 刷车
+/dv       → 删车
+/revive   → 复活
+/goto     → 传送
+/noclip   → 穿墙
+/coords   → 坐标
+/myid     → 标识符
+━━━━━━━━━━━━━━━━━━━━
+]]
+
+QBCore.Commands.Add('apanel', '管理员完整面板', {}, false, function(source)
+    TriggerClientEvent('custom-admin:client:printPanel', source, '🛠️ 管理员面板 v2', PANEL_BODY)
+end, 'admin')
+
+QBCore.Commands.Add('menu', '快速菜单', {}, false, function(source)
+    TriggerClientEvent('custom-admin:client:printPanel', source, '⚡ 快速菜单', MENU_BODY)
+end, 'admin')
