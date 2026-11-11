@@ -71,6 +71,36 @@ review_by: 2027-02-28
 2. **阶段推进要有进度条**，不是每完成一步弹一条通知（与任务模块同一条结论）；
 3. **收益要能回看**：金额/物品清单应该留档（手机凭证），屏幕只给一句「已到账」。
 
+### 1.6 CC 调研补充（2026-11-11）
+
+**外部做法**：
+
+| 问题 | 外部做法 | 来源 |
+|---|---|---|
+| 进行中/冷却 | 实时倒计时、进度可视化、战利品预览；冷却区域直接标"暂不可用"，不靠连续弹窗 | Market Robbery；Advanced Drug Sales |
+| 警察/通缉 | 警情带**街名** + 60s 红 blip，按 start/complete/cancel 更新；`Policenotify()` 给警察通知 + 100s 脉冲 blip，可接 ps/cd/qs dispatch | Market Robbery；EST Scripts |
+| 收益 | 官方店抢发 `markedbills`（带 worth metadata），走物品/脏钱管道而非屏幕现金；商业毒品脚本支持 markedbills / dirty money → 洗白 clean cash | QBCore 官方文档；Advanced Drug Sales |
+| 坑 | 店抢警情依赖 qb-phone；换手机资源则警情**静默丢失** | QBCore 官方文档 |
+
+**仓库现状（CC 逐行）**：五处资源**全部**走 `QBCore:Notify`/`TriggerClientEvent`，**0 处** `custom-notify`。
+
+| 类型 | 证据 |
+|---|---|
+| 进行中 | `custom-mining` 的 client/main.lua:113；`custom-cartel` 的 client/main.lua:332；`qb-drugs` 的 client/deliveries.lua:207 |
+| 结果 | `qb-storerobbery` 的 server/main.lua:467；`custom-cartel` 的 server/drug_lab.lua:212；`custom-crime` 的 server/crime.lua:310 |
+| 失败 | `qb-storerobbery` 的 client/main.lua:145（警察不足）；`custom-cartel` 的 server/drug_lab.lua:171；`qb-drugs` 的 client/deliveries.lua:135（超时） |
+
+**同一事件发多条（关键）**：
+
+| 事件 | 条数 | 位置 |
+|---|---|---|
+| 收银机完成 | **3** | server/main.lua:467 + client/main.lua:450 + 独白 NUI client/main.lua:399 |
+| 接配送 | 2 | toast client/deliveries.lua:207 + 短信 :239 |
+| 商店抢劫报警 | **4** | client/main.lua:598 各警察自建 blip + 声音；server/main.lua:728 `robberyCall`；:729 qb-phone 警情；policeAlert 建单投影 |
+
+**进度条已经在用**（不是通知）：`qb-storerobbery` 的 client/main.lua:420、`custom-mining` 的 client/main.lua:127、
+`custom-cartel` 的 client/main.lua:345 —— 所以 §2.2 不需要重造进度条，只需把"阶段切换"从通知里拿掉。
+
 ## 2. 设计（目标）
 
 > 综合我的 §1.3–1.5。一句总纲：**门槛、冷却、收益都要"看得见"** ——
@@ -141,11 +171,12 @@ review_by: 2027-02-28
 
 | # | 任务 | 文件 | 风险 | 验收 |
 |---|---|---|---|---|
-| C-1 | 报警分类：`policeAlert(text, kind)` + 6 类标准标题与优先级；7 个调用点补 kind | custom-police 的 server 的 main.lua、custom-police 的 client 的 main.lua、custom-vehicles 的 client 的 main.lua、qb-drugs 的 client 的 {cornerselling,deliveries}.lua、qb-houserobbery 的 client 的 main.lua、qb-storerobbery 的 client 的 main.lua | 中（跨资源契约，需契约闸门） | 警察端工单标题是中文且分类正确；`officer_down` 排最前 |
+| C-1 ✅(`6bf4d92d`) | 报警分类：`policeAlert(text, kind)` + 6 类标准标题与优先级；7 个调用点补 kind | custom-police 的 server 的 main.lua、custom-police 的 client 的 main.lua、custom-vehicles 的 client 的 main.lua、qb-drugs 的 client 的 {cornerselling,deliveries}.lua、qb-houserobbery 的 client 的 main.lua、qb-storerobbery 的 client 的 main.lua | 中（跨资源契约，需契约闸门） | 警察端工单标题是中文且分类正确；`officer_down` 排最前 |
 | C-2 | 门槛/冷却写进交互提示（保险箱、收银机） | qb-storerobbery 的 client/main.lua | 中 | 警察不够时提示写"需 N 名（当前 M）"，按 E 无反应也不弹 error |
-| C-3 | 收益留档：完成/中断给 `feed` + 手机明细 | qb-storerobbery 的 client/main.lua、`qb-drugs` 出售处 | 低 | 屏幕一句、手机有金额与物品 |
+| C-3 ✅(`7c717344`) | 收益留档：完成/中断给 `feed` + 手机明细 | qb-storerobbery 的 client/main.lua、`qb-drugs` 出售处 | 低 | 屏幕一句、手机有金额与物品 |
 | C-4 | 单动作热区 → `[E]`（保险箱、冶炼、实验室） | qb-storerobbery / custom-mining / qb-drugs | 中（要实测距离） | 站到位置直接出现 `[E]`，不用 ALT |
 | C-5 | 失败原因细分（缺材料 / 有警察 / 冷却 / 距离） | qb-drugs、custom-mining | 低 | 四种失败四种文案 |
+| C-6 ✅(`7c717344`) | 报警单一派发入口：删 qb-phone 并行警情与客户端自建 blip，只留声音 + policeAlert 建单投影 | qb-storerobbery 的 server 与 client | 中 | 一次抢劫警官侧只响一次、地图上只有一颗 blip |
 
 **顺序**：C-1（收益最大、跨资源一次做完）→ C-3（低风险）→ C-2 → C-4 → C-5。
 
