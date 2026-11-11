@@ -63,6 +63,9 @@ QBCore.Commands.Add('amenu', '打开管理员菜单', {}, false, function(source
   /admincar        - 保存载具到车库
   /myid            - 查看标识符
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 完整清单（339 条，按权限分组，自动生成）：
+   docs/client/ux/admin-commands.md
+   改代码后重跑：python3 tools/dev/scan_commands.py
 ]]
         }
     })
