@@ -527,9 +527,9 @@ review_by: 2027-02-28
 | `bank` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:28 |
 | `cash` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:21 |
 | `dev` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-hud/server.lua:35 |
-| `menu` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:149 |
-| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:190 |
-| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:195 |
+| `menu` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:190 |
+| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:231 |
+| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:236 |
 
 ### qb-inventory
 
