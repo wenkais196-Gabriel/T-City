@@ -4,7 +4,7 @@
 
 **生成时间**：2026-11-11 ｜ **文档总数**：303 ｜ **已登记**：303 ｜ **未登记**：0
 
-**状态分布**：✅ active 173 ・ 🟡 draft 7 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 174 ・ 🟡 draft 6 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -195,7 +195,7 @@
 | [UX 工作流：调研 → 设计 → 计划 → 验收](client/ux/00-workflow.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/00-workflow.md` |
 | [管理员命令清单](client/ux/admin-commands.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/admin-commands.md` |
 | [经济与交易 · UX 设计](client/ux/modules/economy.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/economy.md` |
-| [HUD 与状态 · UX 设计](client/ux/modules/hud.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/hud.md` |
+| [HUD 与状态 · UX 设计](client/ux/modules/hud.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/hud.md` |
 | [医疗与急救 · UX 设计](client/ux/modules/medical.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/medical.md` |
 | [通知与交互提示 · UX 设计](client/ux/modules/notify-prompt.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/notify-prompt.md` |
 | [手机 · UX 设计](client/ux/modules/phone.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/phone.md` |
