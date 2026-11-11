@@ -418,15 +418,15 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `911e` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:616 |
-| `aheal` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:723 |
-| `heal` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:647 |
-| `kill` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:709 |
-| `revive` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:681 |
-| `revivep` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:664 |
-| `setemsdept` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:589 |
-| `setpain` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:695 |
-| `status` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:630 |
+| `911e` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:620 |
+| `aheal` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:727 |
+| `heal` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:651 |
+| `kill` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:713 |
+| `revive` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:685 |
+| `revivep` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:668 |
+| `setemsdept` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:593 |
+| `setpain` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:699 |
+| `status` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[qb]/qb-ambulancejob/server/main.lua:634 |
 
 ### qb-banking
 
