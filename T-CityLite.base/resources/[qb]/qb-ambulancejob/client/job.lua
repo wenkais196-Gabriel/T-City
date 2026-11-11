@@ -609,6 +609,7 @@ end
 -- ==============================================================
 local REVIVE_PROMPT_RANGE = 3.0
 local revivePromptShown = false
+local revivePromptLabel = nil
 
 CreateThread(function()
     while true do
@@ -631,22 +632,25 @@ CreateThread(function()
         end
 
         if bestId then
-            sleep = 200
+            sleep = 0
             local hasKit = QBCore.Functions.HasItem('firstaid')
-            exports['custom-prompt']:Show({
-                key = 'E',
-                label = hasKit and ('施救 · %s'):format(GetPlayerName(bestId)) or '施救（需要急救包）',
-            })
-            revivePromptShown = true
+            local reviveLabel = hasKit and ('施救 · %s'):format(GetPlayerName(bestId)) or '施救（需要急救包）'
+            if reviveLabel ~= revivePromptLabel then
+                exports['custom-prompt']:Show({ key = 'E', label = reviveLabel })
+                revivePromptLabel = reviveLabel
+                revivePromptShown = true
+            end
             if hasKit and IsControlJustReleased(0, 38) then
                 exports['custom-prompt']:Hide()
                 revivePromptShown = false
+                revivePromptLabel = nil
                 TriggerEvent('hospital:client:RevivePlayer')
                 sleep = 1500
             end
         elseif revivePromptShown then
             exports['custom-prompt']:Hide()
             revivePromptShown = false
+            revivePromptLabel = nil
         end
 
         Wait(sleep)
@@ -667,6 +671,7 @@ local EMS_ZONES = {
 }
 local EMS_ZONE_RANGE = 2.5
 local emsZoneShown = false
+local emsZoneLabel = nil
 
 CreateThread(function()
     Wait(2000)
@@ -690,12 +695,16 @@ CreateThread(function()
             end
 
             if found then
-                sleep = 200
-                exports['custom-prompt']:Show({ key = 'E', label = found.label })
-                emsZoneShown = true
+                sleep = 0
+                if found.label ~= emsZoneLabel then
+                    exports['custom-prompt']:Show({ key = 'E', label = found.label })
+                    emsZoneLabel = found.label
+                    emsZoneShown = true
+                end
                 if IsControlJustReleased(0, 38) then
                     exports['custom-prompt']:Hide()
                     emsZoneShown = false
+                    emsZoneLabel = nil
                     if found.server then
                         TriggerServerEvent(found.event)
                     else
@@ -706,6 +715,7 @@ CreateThread(function()
             elseif emsZoneShown then
                 exports['custom-prompt']:Hide()
                 emsZoneShown = false
+                emsZoneLabel = nil
             end
         end
         Wait(sleep)

@@ -16,13 +16,20 @@ local contextEntries = {}
 
 --- 主提示（准星下方，单条）
 ---@param opts table|nil { key: string, label: string, hold: number|nil }
+local lastShown = nil   -- 上一次真正发出去的 {key,label}，同内容不重发
 local function Show(opts)
     opts = opts or {}
     local label = tostring(opts.label or '')
     if label == '' then
+        lastShown = nil
         SendNUIMessage({ action = 'prompt', main = false })
         return
     end
+    local key = tostring(opts.key or 'E')
+    -- 逐帧调用者（老 DrawText 那一类，每秒 60 次）不该把 NUI 刷爆：
+    -- 同 key + 同文案就跳过（真机不看这一层会掉帧）。
+    if lastShown and lastShown.key == key and lastShown.label == label then return end
+    lastShown = { key = key, label = label }
     SendNUIMessage({
         action = 'prompt',
         main = {
@@ -34,6 +41,7 @@ local function Show(opts)
 end
 
 local function Hide()
+    lastShown = nil
     SendNUIMessage({ action = 'prompt', main = false })
 end
 

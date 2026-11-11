@@ -438,11 +438,29 @@ function PaycheckInterval()
                     if account ~= 0 then
                         exports['qb-banking']:RemoveMoney(Player.PlayerData.job.name, payment, 'Employee Paycheck')
                     end
-                    TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
+                    -- N-11（2026-11-12）：发薪提示走 feed，custom-notify 不在时回落原生
+                    local delivered = false
+                    local pok, psent = pcall(function()
+                        return exports['custom-notify']:Push(Player.PlayerData.source, 'feed',
+                            Lang:t('info.received_paycheck', { value = payment }))
+                    end)
+                    if pok and psent == true then delivered = true end
+                    if not delivered then
+                        TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
+                    end
                 end
             else
                 Player.Functions.AddMoney('bank', payment, 'paycheck')
-                TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
+                -- N-11（2026-11-12）：发薪提示走 feed，custom-notify 不在时回落原生
+                local delivered2 = false
+                local pok2, psent2 = pcall(function()
+                    return exports['custom-notify']:Push(Player.PlayerData.source, 'feed',
+                        Lang:t('info.received_paycheck', { value = payment }))
+                end)
+                if pok2 and psent2 == true then delivered2 = true end
+                if not delivered2 then
+                    TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
+                end
             end
         end
     end

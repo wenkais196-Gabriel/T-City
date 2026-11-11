@@ -606,7 +606,15 @@ RegisterNetEvent('hospital:client:Revive', function()
     TriggerServerEvent('hospital:server:SetDeathStatus', false)
     TriggerServerEvent('hospital:server:SetLaststandStatus', false)
     emsNotified = false
-    QBCore.Functions.Notify(Lang:t('info.healthy'))
+    -- N-7（2026-11-11）：复活结果走 feed（原来无 type → 落 GTA 原生 feed，和我们的通知层两套视觉）
+    local delivered = false
+    local ok, sent = pcall(function()
+        return exports['custom-notify']:PushLocal('feed', Lang:t('info.healthy'))
+    end)
+    if ok and sent == true then delivered = true end
+    if not delivered then
+        QBCore.Functions.Notify(Lang:t('info.healthy'))
+    end
 end)
 
 RegisterNetEvent('hospital:client:SetPain', function()
