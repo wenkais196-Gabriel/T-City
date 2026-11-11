@@ -1,3 +1,11 @@
+--- N-11（2026-11-12）：送货三段提示走 feed（原来无 type → GTA 原生黑条）
+local function DeliveryNotify(text, kind)
+    kind = (kind == 'error') and 'error' or 'feed'
+    local ok, sent = pcall(function() return exports['custom-notify']:PushLocal(kind, text) end)
+    if ok and sent == true then return end
+    QBCore.Functions.Notify(text, kind)
+end
+
 local QBCore = exports['qb-core']:GetCoreObject()
 local JobsDone = 0
 local LocationsDone = {}
@@ -87,7 +95,7 @@ local function setupZones(type, number)
                     TriggerEvent('qb-shops:client:Vehicle')
                 elseif type == 'stores' then
                     markerLocation = coords
-                    QBCore.Functions.Notify(Lang:t('mission.store_reached'))
+                    DeliveryNotify(Lang:t('mission.store_reached'))
                     ShowMarker(true)
                     SetDelivering(true)
                 end
@@ -219,7 +227,7 @@ local function getNewLocation()
         SetBlipRoute(CurrentBlip, true)
         SetBlipRouteColour(CurrentBlip, 3)
     else
-        QBCore.Functions.Notify(Lang:t('success.payslip_time'))
+        DeliveryNotify(Lang:t('success.payslip_time'))
         if CurrentBlip ~= nil then
             RemoveBlip(CurrentBlip)
             ClearAllBlipRoutes()
@@ -266,20 +274,20 @@ end
 local function GetInTrunk()
     local ped = PlayerPedId()
     if IsPedInAnyVehicle(ped, false) then
-        return QBCore.Functions.Notify(Lang:t('error.get_out_vehicle'), 'error')
+        return DeliveryNotify(Lang:t('error.get_out_vehicle'), 'error')
     end
     local pos = GetEntityCoords(ped, true)
     local vehicle = GetVehiclePedIsIn(ped, true)
     local tv = getTruckerVehicle(vehicle)
     if not isTruckerVehicle(vehicle) or CurrentPlate ~= QBCore.Functions.GetPlate(vehicle) then
-        return QBCore.Functions.Notify(Lang:t('error.vehicle_not_correct'), 'error')
+        return DeliveryNotify(Lang:t('error.vehicle_not_correct'), 'error')
     end
     if not BackDoorsOpen(vehicle) then
-        return QBCore.Functions.Notify(Lang:t('error.backdoors_not_open'), 'error')
+        return DeliveryNotify(Lang:t('error.backdoors_not_open'), 'error')
     end
     local trunkpos = GetOffsetFromEntityInWorldCoords(vehicle, 0, -2.5, 0)
     if #(pos - vector3(trunkpos.x, trunkpos.y, trunkpos.z)) > Config.Vehicles[tv].trunkpos then
-        return QBCore.Functions.Notify(Lang:t('error.too_far_from_trunk'), 'error')
+        return DeliveryNotify(Lang:t('error.too_far_from_trunk'), 'error')
     end
     if isWorking then return end
     isWorking = true
@@ -334,14 +342,14 @@ local function Deliver()
             currentCount = 0
             JobsDone = JobsDone + 1
             if JobsDone == Config.MaxDeliveries then
-                QBCore.Functions.Notify(Lang:t('mission.return_to_station'))
+                DeliveryNotify(Lang:t('mission.return_to_station'))
                 returnToStation()
             else
-                QBCore.Functions.Notify(Lang:t('mission.goto_next_point'))
+                DeliveryNotify(Lang:t('mission.goto_next_point'))
                 getNewLocation()
             end
         else
-            QBCore.Functions.Notify(Lang:t('mission.another_box'))
+            DeliveryNotify(Lang:t('mission.another_box'))
         end
     end, function()
         isWorking = false
@@ -426,13 +434,13 @@ RegisterNetEvent('qb-shops:client:Vehicle', function()
                 if returningToStation or CurrentLocation then
                     ClearAllBlipRoutes()
                     returningToStation = false
-                    QBCore.Functions.Notify(Lang:t('mission.job_completed'), 'success')
+                    DeliveryNotify(Lang:t('mission.job_completed'), 'success')
                 end
             else
-                QBCore.Functions.Notify(Lang:t('error.vehicle_not_correct'), 'error')
+                DeliveryNotify(Lang:t('error.vehicle_not_correct'), 'error')
             end
         else
-            QBCore.Functions.Notify(Lang:t('error.no_driver'))
+            DeliveryNotify(Lang:t('error.no_driver'))
         end
     end
 end)
@@ -455,7 +463,7 @@ CreateThread(function()
                     if #(GetEntityCoords(PlayerPedId()) - markerLocation) < 5 then
                         Deliver()
                     else
-                        QBCore.Functions.Notify(Lang:t('error.too_far_from_delivery'), 'error')
+                        DeliveryNotify(Lang:t('error.too_far_from_delivery'), 'error')
                     end
                 end
             end
