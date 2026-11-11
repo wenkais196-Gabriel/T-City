@@ -112,3 +112,17 @@ def test_raw_failure_reason_detects_leak():
     broken = manager.replace("('❌ 任务失败：%s'):format(reasonZh(reason))",
                              "('❌ 任务失败：%s'):format(reason)")
     assert "任务失败：%s'):format(reason)" in broken, "闸门没认出裸 reason"
+
+
+def test_step_progress_detects_per_tick_notify():
+    """J-1：逐步进度不许逐条发通知（进度属于面板，不属于通知）。"""
+    client = _text(CLIENT)
+    logistics = _text(BASE / "client" / "quest_logistics_client.lua")
+    assert "('Progress: %d/%d')" not in client, (
+        "QUEST_PROGRESS 又在每条进度上发通知了（J-1）")
+    assert "rem <= 10" not in logistics, (
+        "物流倒计时最后 10 秒会每秒一条（J-1/J-3b），应只在 10s 与 5s 提醒")
+
+    # 反向：把逐条进度塞回去，规则必须红
+    broken = client.replace("    QuestPrint('progress", "    QBCore.Functions.Notify('Progress: %d/%d', 'primary') or QuestPrint('progress", 1)
+    assert "('Progress: %d/%d')" in broken or "'Progress: %d/%d'" in broken, "闸门没认出逐条进度"

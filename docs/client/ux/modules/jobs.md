@@ -10,7 +10,7 @@ review_by: 2027-02-28
 
 # 职业与任务 · UX 设计
 
-> 状态 **draft**：目前只完成 §1 调研（数字均为实测扫描）。§2/§3/§4 待设计。
+> 状态 **active**：§1–§4 齐全。J-1/J-2/J-3/J-3b/J-4/J-5 已开发；J-6 经核实无数据可算，列入 §5 缺口。
 > 工作流见 [00-workflow.md](../00-workflow.md)。
 
 ## 1. 调研（现状）
@@ -130,21 +130,84 @@ review_by: 2027-02-28
 
 | # | 任务 | 文件 | 风险 | 验收 |
 |---|---|---|---|---|
-| J-1 | 逐步进度不再发通知，只在**跨阶段**发一条 feed | `T-CityLite.base/resources/[custom]/custom-quest/server/main.lua`（进度回调处） | 中（要认出哪些是逐步） | 做一个 3 步任务：只在阶段变化时看到 feed，逐步无通知 |
-| J-2 | 45 处通知接三层通道（成功→feed、失败→error），硬编码英文改中文 | 同上 | 低（机械 + 逐条看） | 接受/放弃/失败三类表现不同 |
-| J-3 | 同一事件去重：完成 3→1 条、步骤 3→1 条、物流失败 3–4→1 条（带原因） | `quest_manager.lua:846,1019`、`quest_rewards.lua:156`、`quest_logistics_client.lua:681,722`、`client/main.lua:274,287` | 中（多文件） | 完成一次任务只看到 1 条结算 |
-| J-3b | 逐秒倒计时改常驻：只在 30s / 10s 各发一条 toast | `client/main.lua:687,702`、`quest_logistics_client.lua:718` | 中 | 运输过程中不再每秒刷屏 |
-| J-3c | 任务完成 toast + 失败 error（不再混用 success/primary） | 同上 | 低 | 完成弹中央，失败弹左下红 |
-| J-4 | qb-management 的 6 个 ALT 热区：单动作改 `[E]` | `T-CityLite.base/resources/[qb]/qb-management/client/` | 中（要实测距离） | 更衣室/储物柜按 E 直接可用 |
-| J-5 | 老板菜单回执：执行者 feed、当事人 phone（现在客户端零渲染，`cl_boss.lua:148,163,198`） | `qb-management` 客户端与服务端动作 | 中 | 发薪后员工手机有记录，老板看到 feed |
-| J-6 | custom-career 晋升条件给"差多少" | `T-CityLite.base/resources/[custom]/custom-career/` | 低 | 面板显示「还差 X 点 / Y 小时」 |
+| J-1 ✅(`见下一条提交`) | 逐步进度不再发通知，只在**跨阶段**发一条 feed | `T-CityLite.base/resources/[custom]/custom-quest/server/main.lua`（进度回调处） | 中（要认出哪些是逐步） | 做一个 3 步任务：只在阶段变化时看到 feed，逐步无通知 |
+| J-2 ✅(`246e08df`) | 45 处通知接三层通道（成功→feed、失败→error），硬编码英文改中文 | 同上 | 低（机械 + 逐条看） | 接受/放弃/失败三类表现不同 |
+| J-3 ✅(`64cb53e9`) | 同一事件去重：完成 3→1 条、步骤 3→1 条、物流失败 3–4→1 条（带原因） | `quest_manager.lua:846,1019`、`quest_rewards.lua:156`、`quest_logistics_client.lua:681,722`、`client/main.lua:274,287` | 中（多文件） | 完成一次任务只看到 1 条结算 |
+| J-3b ✅(`64cb53e9`) | 逐秒倒计时改常驻：只在 30s / 10s 各发一条 toast | `client/main.lua:687,702`、`quest_logistics_client.lua:718` | 中 | 运输过程中不再每秒刷屏 |
+| J-3c ✅(`64cb53e9`) | 任务完成 toast + 失败 error（不再混用 success/primary） | 同上 | 低 | 完成弹中央，失败弹左下红 |
+| J-4 ✅(`1f0bb263`) | qb-management 的 6 个 ALT 热区：单动作改 `[E]` | `T-CityLite.base/resources/[qb]/qb-management/client/` | 中（要实测距离） | 更衣室/储物柜按 E 直接可用 |
+| J-5 ✅(`1f0bb263`) | 老板菜单回执：执行者 feed、当事人 phone（现在客户端零渲染，`cl_boss.lua:148,163,198`） | `qb-management` 客户端与服务端动作 | 中 | 发薪后员工手机有记录，老板看到 feed |
+| J-6 ⛔ | custom-career 晋升条件给"差多少" | `T-CityLite.base/resources/[custom]/custom-career/` | 低 | 面板显示「还差 X 点 / Y 小时」 |
 
 **顺序**：J-2（通道统一，最快见效）→ J-1（降噪，效果最大）→ J-3（完成/失败区分）→ J-4/J-5 → J-6。
 
 
 ## 4. 验收（步骤）
 
-_待写。_
+> CC 定标准（2026-11-11）。
+
+> 推进节点用 `/queststep <questId> <stepId>`（仓库自带）；
+> **注意**：仓库里没有任何 WAIT 类型步骤的任务，V-2 需要一个测试 fixture ——
+> CC 提到的 `qa_wait_30` **并不存在**，是待补的前置（见 §5）。
+
+### V-1 去重（J-3）
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | `/startquest <questId>` | 左下 **1 条**「已接受」 | 计数 =1 |
+| 2 | `/queststep <questId> <stepId>` 推 3 次 | 每次仅 1 条；完成瞬间仅 1 条「✅ 任务完成」 | 每事件 =1 |
+| 3 | 开手机 → 通知中心 | 1 条「任务结算」；**屏幕无结算** | 手机有、屏幕无 |
+| 4 | 接任务后自杀（`/admin` → Player Management → Kill） | 1 条红字「❌ 任务失败：你死亡了」 | =1 且中文 |
+
+**反例（必须不成立）**
+
+1. 完成瞬间屏上出现结算金额或「任务结算」；
+2. 死亡后出现第二条失败提示，或出现 `Quest failed`；
+3. 原因显示 `player_death` / `entity_timeout` / `validation_exhausted`。
+
+### V-2 倒计时（J-3b）
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | 接一个含 WAIT 步骤的任务，站进区域 | 前 20 秒**无**倒计时提示 | 计数 =0 |
+| 2 | 到剩余 10s、5s | 各 1 条「还需坚持 10/5 秒…」 | 共 =2 |
+| 3 | 等 hold 结束 | 1 条完成提示；无 `Hold for …` | 完成 =1 |
+
+**反例**：剩余 10→6 出现 9/8/7/6；剩余 5→1 出现 4/3/2/1；10s 或 5s 同秒两条。
+
+**已知缺口**：仓库没有 WAIT 类型步骤的任务，需先造 fixture 才能验（§5）。
+
+### V-3 [E] 入口（J-4）
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | `/setgang <id> cartel 0`；`/tp 1395.8 1141.74 115.24` | 出现「E 打开个人更衣与储物」 | 不用 ALT |
+| 2 | 按 **E** → 「个人储物箱」 | 库存直接打开 | 可用 |
+| 3 | 再按 E → 「个人更衣室」 | 换装界面直接打开 | 可用 |
+
+**反例**：必须长按 ALT 才出现；按 E 无反应；非本组织成员也能按 E 打开。
+
+### V-4 老板菜单（J-5）
+
+> A=`/setjob <A> police 4`；B=`unemployed`；C=`police 1`；三人 `tp 447.16 -974.31 30.47`。
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | A 按 E → Hire Members → B | A 一条 feed；B 手机「人事变动：你已被录用」；B 屏幕无弹窗 | 各 =1 |
+| 2 | A → Manage Members → B 升职级 | A 一条 feed；B 手机一条 | feed + phone |
+| 3 | A → 发薪 | A 的 feed 与菜单显示的人数/总额一致；B、C 手机各收本人金额，Σ = 总额 | 金额 = 人数 × 单价 |
+| 4 | A → Fire Member → B | A 一条 feed；B 手机一条 | feed + phone |
+
+**反例**：操作后老板无 feed；员工只在屏幕看到、手机查不到；发薪总额 ≠ 人数 × 单价，或员工实收与凭证不符。
+
+## 5. 已知缺口
+
+| # | 缺口 | 影响 | 计划 |
+|---|---|---|---|
+| 1 | 仓库无 WAIT 类型步骤的任务 | V-2 无法用现有任务验 | 造一个 QA fixture 任务（只进 dev 数据，不进正式任务池） |
+| 2 | 扣押/任务等"离线玩家"拿不到推送 | 离线时只能下次登录看面板 | 可接受（状态下已落库） |
+| 3 | **J-6 无法实现**：`custom-career` 只有 `rank_tier` / `department` / `district` / `certs`，全仓库没有 XP 或晋升门槛字段，"还差多少"没有数据可算 | 职业面板只能显示当前职级，给不出"差多少" | 需先定门槛模型（数据模型变更，L3+），本轮不做 |
+| 4 | 击杀类任务进度只发半程/完成两条，中途无可见进度 | 玩家看不到 2/5、3/5 | 后续接 HUD 常驻进度条 |
 
 ## 5. 已知未决
 
