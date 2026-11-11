@@ -241,6 +241,9 @@ QBCore.Functions.CreateCallback('qb-multicharacter:server:setupCharacters', func
             result[i].job = json.decode(result[i].job)
             result[i].metadata = json.decode(result[i].metadata)
             result[i].position = json.decode(result[i].position)
+            -- I-1：角色卡是**数据库快照**，必须把"这是什么时候的"一起告诉玩家。
+            -- players.last_updated 是 ON UPDATE CURRENT_TIMESTAMP，保存时会刷新。
+            result[i].lastUpdated = result[i].last_updated
             plyChars[#plyChars + 1] = result[i]
         end
         cb(plyChars)
