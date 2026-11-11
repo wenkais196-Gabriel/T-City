@@ -72,3 +72,16 @@ def test_safe_prompt_shows_gate_detects_hidden_state():
     broken = client + NL + (
         'QBCore.Functions.Notify(("需要至少 %d 名执勤警察才能打开保险箱"):format(minPolice), "error")')
     assert "需要至少 %d 名执勤警察才能打开保险箱" in broken, "闸门没认出老的报错写法"
+
+
+def test_mining_uses_e_prompt_detects_alt_regression():
+    """C-4：采矿点与冶炼炉都是单动作，必须 [E]，不许退回 qb-target 的 ALT。"""
+    mining = (REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-mining"
+              / "client" / "main.lua").read_text(encoding="utf-8")
+    assert "AddCircleZone" not in mining, "采矿/冶炼还在注册 qb-target 区域（ALT 入口未拆）"
+    assert "custom-prompt" in mining, "没有走 custom-prompt"
+    assert "在 %s 采矿" in mining and "冶炼矿石" in mining, "提示文案不见了"
+
+    # 反向：把 qb-target 区域塞回去，规则必须红
+    broken = mining + NL + "exports['qb-target']:AddCircleZone('mining_x', vec, 5.0, {}, {}, 5.0)"
+    assert "AddCircleZone" in broken, "闸门没认出回退的 ALT 区域"
