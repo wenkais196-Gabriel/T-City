@@ -447,7 +447,7 @@ end)
 -- 服务端通知抢劫完成
 RegisterNetEvent('qb-storerobbery:client:robberyComplete', function(register)
     currentRegister = 0
-    QBCore.Functions.Notify("抢劫完成！战利品已放入背包", "success")
+    -- C-3：完成/结算由服务端统一发一条，客户端不再重复弹窗
 end)
 
 function LockpickDoorAnim(time)
@@ -597,26 +597,9 @@ RegisterNetEvent('qb-storerobbery:client:robberyCall', function(_, _, _, coords)
         PlaySound(-1, 'Lose_1st', 'GTAO_FM_Events_Soundset', 0, 0, 1)
         TriggerServerEvent('police:server:policeAlert', Lang:t('email.storerobbery_progress'), 'store_robbery')
 
-        local transG = 250
-        local blip = AddBlipForCoord(coords.x, coords.y, coords.z)
-        SetBlipSprite(blip, 458)
-        SetBlipColour(blip, 1)
-        SetBlipDisplay(blip, 4)
-        SetBlipAlpha(blip, transG)
-        SetBlipScale(blip, 1.0)
-        BeginTextCommandSetBlipName('STRING')
-        AddTextComponentSubstringPlayerName(Lang:t('email.shop_robbery'))
-        EndTextCommandSetBlipName(blip)
-        while transG ~= 0 do
-            Wait(180 * 4)
-            transG = transG - 1
-            SetBlipAlpha(blip, transG)
-            if transG == 0 then
-                SetBlipSprite(blip, 2)
-                RemoveBlip(blip)
-                return
-            end
-        end
+        -- C-6：地图标记交给警情单的 guidance（client/incident_guidance.lua 从工单坐标建 blip）。
+        -- 这里原来自己再建一颗，同一抢劫在警官屏幕上会出现两颗同名 blip。
+        -- 声音保留：它是"立刻注意到"的唯一手段，工单通知是文字。
     end
 end)
 
