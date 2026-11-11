@@ -174,7 +174,7 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `mine` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-mining/server/main.lua:183 |
+| `mine` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-mining/server/main.lua:191 |
 
 ### custom-notify
 
@@ -187,11 +187,11 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `focusprobe` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:1106 |
-| `paycitation` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:1312 |
+| `focusprobe` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:1110 |
+| `paycitation` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:1316 |
 | `phone` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:481 |
 | `phone` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:496 |
-| `phone_call` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-phone/server/main.lua:1132 |
+| `phone_call` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-phone/server/main.lua:1142 |
 | `phonefix` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:514 |
 | `phoneui` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:505 |
 | `tablet` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-phone/client/main.lua:498 |
@@ -258,7 +258,7 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `prompttest` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-prompt/client/main.lua:69 |
+| `prompttest` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-prompt/client/main.lua:77 |
 
 ### custom-quest
 
@@ -524,9 +524,9 @@ review_by: 2027-02-28
 | `bank` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:31 |
 | `cash` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:24 |
 | `dev` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-hud/server.lua:38 |
-| `hud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:203 |
-| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:244 |
-| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:249 |
+| `hud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:219 |
+| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:262 |
+| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:267 |
 
 ### qb-inventory
 
@@ -537,10 +537,10 @@ review_by: 2027-02-28
 | `giveitem` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-inventory/server/commands.lua:3 |
 | `hotbar` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/server/commands.lua:101 |
 | `inventory` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/server/commands.lua:116 |
-| `openInv` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:306 |
+| `openInv` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:315 |
 | `randomitems` | QBCore.Commands.Add | QBCore: god | T-CityLite.base/resources/[qb]/qb-inventory/server/commands.lua:51 |
-| `slot_` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:317 |
-| `toggleHotbar` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:312 |
+| `slot_` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:326 |
+| `toggleHotbar` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:321 |
 
 ### qb-lapraces
 
@@ -560,7 +560,7 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `playerfocus` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-menu/client/main.lua:133 |
+| `playerfocus` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-menu/client/main.lua:135 |
 
 ### qb-multicharacter
 
