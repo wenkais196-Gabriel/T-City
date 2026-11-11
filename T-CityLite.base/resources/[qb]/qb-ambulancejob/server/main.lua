@@ -277,6 +277,9 @@ RegisterNetEvent('hospital:server:SetDeathStatus', function(isDead)
 			return
 		end
 		Player.Functions.SetMetaData('isdead', isDead)
+		-- M-1：把"倒着"放进 statebag —— 客户端不能读别人的 metadata，
+		-- 但 [E] 施救提示必须知道"身边这个人要不要救"。
+		pcall(function() Player(src).state:set('isdead', isDead, true) end)
 		-- 🌐 Atmosphere: respawn scene on death
 		if isDead and Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'respawn') end
 	end
@@ -289,6 +292,7 @@ RegisterNetEvent('hospital:server:SetLaststandStatus', function(bool)
 	local Player = QBCore.Functions.GetPlayer(src)
 	if Player then
 		Player.Functions.SetMetaData('inlaststand', bool)
+		pcall(function() Player(src).state:set('inlaststand', bool, true) end)
 	end
 end)
 

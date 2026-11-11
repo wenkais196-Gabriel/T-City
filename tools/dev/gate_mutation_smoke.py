@@ -811,6 +811,85 @@ MUTATIONS += [
     ),
 ]
 
+# 可消耗物品契约：表里写一个不存在的 item 名 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_consumables_contract.py::"
+              "test_consumable_names_exist_in_items"),
+        path="resources/[custom]/custom-consumables/config.lua",
+        content=None,
+        replace_from="water_bottle = { thirst = 35",
+        replace_to="water = { thirst = 35",
+        what="把 water_bottle 写回不存在的 water（2026-11-10 真机：喝水没反应）",
+    ),
+]
+
+# 可消耗物品契约：把注册入口摘掉 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_consumables_contract.py::"
+              "test_consumables_are_registered_as_useable_items"),
+        path="resources/[custom]/custom-consumables/server/main.lua",
+        content=None,
+        replace_from="QBCore.Functions.CreateUseableItem(itemName, function(src)",
+        replace_to="-- MUTATION: 注册入口被摘掉\nlocal _unused = (function(src)",
+        what="把 CreateUseableItem 注册摘掉（qb-inventory 又变成走不到）",
+    ),
+]
+
+# 三层通知：kind 两侧不一致 / phone 上屏 / 限流太细 / 没进启动集 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_kind_sets_match_on_both_sides"),
+        path="resources/[custom]/custom-notify/client/main.lua",
+        content=None,
+        replace_from="local KINDS = { feed = true, toast = true, error = true }",
+        replace_to="local KINDS = { feed = true, toast = true }",
+        what="客户端少认一个 kind（error 通知会静默消失）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_phone_kind_is_not_rendered_on_screen"),
+        path="resources/[custom]/custom-notify/client/main.lua",
+        content=None,
+        replace_from="local KINDS = { feed = true, toast = true, error = true }",
+        replace_to="local KINDS = { feed = true, toast = true, error = true, phone = true }",
+        what="把 phone（IC 内容）也当成屏幕通知渲染",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_push_rate_limit_is_wider_than_send"),
+        path="resources/[custom]/custom-notify/server/main.lua",
+        content=None,
+        replace_from="local MAX_PER_WINDOW = 12",
+        replace_to="local MAX_PER_WINDOW = 1",
+        what="把分派限流收紧到比业务还细（一次交易第二条会被丢）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_resource_is_in_default_boot"),
+        path="configs/modules/custom.cfg",
+        content=None,
+        replace_from="ensure custom-notify\n",
+        replace_to="",
+        what="把通知渲染器从启动集里摘掉（通知发出去没人渲染）",
+    ),
+]
+
+# 三层通知去重：把 key 下发摘掉 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_dedupe_and_merge_are_wired"),
+        path="resources/[custom]/custom-notify/server/main.lua",
+        content=None,
+        replace_from="        key = key,\n",
+        replace_to="",
+        what="Push 不再下发 key（去重失效，同文案继续刷屏）",
+    ),
+]
+
 # 开服就绪：把调试资源塞回默认启动集 → 闸门必须红
 MUTATIONS += [
     Mutation(

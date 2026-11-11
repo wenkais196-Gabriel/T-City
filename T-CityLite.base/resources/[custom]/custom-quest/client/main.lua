@@ -257,7 +257,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_STEP_ADVANCED, function(data)
     end
 
     print(('[quest-client] ➡️ STEP: %s → %s (type=%s)'):format(data.from_step, data.to_step, data.next_step_type))
-    QBCore.Functions.Notify(('Step: %s'):format(data.next_step_title), 'primary')
+    -- J-3：步骤推进由服务端发一条，客户端不再重复
 end)
 
 -- ==============================================================
@@ -271,7 +271,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_COMPLETED, function(data)
     ClearZone()
     CheckpointManager.Clear()  -- v0.11
     activeQuest = nil
-    QBCore.Functions.Notify(('Quest completed: %s!'):format(data.title), 'success')
+    -- J-3：完成回执由服务端发，客户端只清理状态
 end)
 
 -- ==============================================================
@@ -284,7 +284,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_FAILED, function(data)
     ClearZone()
     CheckpointManager.Clear()  -- v0.11
     activeQuest = nil
-    QBCore.Functions.Notify(('Quest failed: %s'):format(data.reason or 'unknown'), 'error')
+    -- J-3：失败由服务端 FailQuest 统一发（带中文原因），客户端只清理状态
 end)
 
 -- ==============================================================
@@ -306,8 +306,9 @@ end)
 
 RegisterNetEvent(Config.Quest.Events.QUEST_PROGRESS, function(data)
     if not activeQuest or activeQuest.quest_id ~= data.quest_id then return end
-    QBCore.Functions.Notify(
-        ('Progress: %d/%d'):format(data.progress, data.required), 'primary')
+    -- J-1：进度不是通知。3/5 → 4/5 这种逐步刷新留在面板（手机 Quests App 的 current_step），
+    -- 屏幕只在跨阶段处由服务端发一条（见 quest_manager 的「进入下一步」）。
+    QuestPrint('progress %s %d/%d', tostring(data.quest_id), data.progress or 0, data.required or 0)
 end)
 
 -- ==============================================================
@@ -613,9 +614,14 @@ RegisterNetEvent('quest:client:nodeCombat', function(data)
             end
 
             if newKillCount > killCount then
+                local previous = killCount
                 killCount = newKillCount
-                QBCore.Functions.Notify(
-                    ('Enemies eliminated: %d/%d'):format(killCount, requiredKills), 'primary')
+                -- J-1：原来每杀一只一条；改成半程与完成各一条
+                local half = math.max(1, math.floor(requiredKills / 2))
+                if (previous < half and killCount >= half) or killCount >= requiredKills then
+                    QBCore.Functions.Notify(
+                        ('敌人已清除 %d/%d'):format(killCount, requiredKills), 'primary')
+                end
             end
 
             if aliveCount == 0 and killCount >= requiredKills then
@@ -698,8 +704,9 @@ RegisterNetEvent('quest:client:nodeWait', function(data)
                     data.questId, data.stepId, 'WAIT',
                     { elapsed = elapsed, duration = duration }
                 )
-            elseif remaining <= 10 then
-                QBCore.Functions.Notify(('Hold for %d more seconds...'):format(remaining), 'primary')
+            elseif remaining == 10 or remaining == 5 then
+                -- J-3b：原来 remaining<=10 每秒一条（10/9/8…），降为 10s 与 5s 各一条
+                QBCore.Functions.Notify(('还需坚持 %d 秒…'):format(remaining), 'primary')
             end
         end
     end)

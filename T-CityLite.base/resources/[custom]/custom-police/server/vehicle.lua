@@ -173,8 +173,20 @@ QBCore.Commands.Add('impoundplayer', 'Impound all vehicles of a player', { { nam
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
         return
     end
-    local affected = MySQL.update.await('UPDATE player_vehicles SET state = 2 WHERE citizenid = ? AND state = 0', { Target.PlayerData.citizenid })
+    -- V-7：扣押是"状态迁移"，车主必须被主动告知（外部实践：只显示 Impounded 等于没说）。
+    -- 原因写进 status 列（'impound:<原因>'），手机 Garage 读它显示；没有原因就显示"未记录"。
+    local affected = MySQL.update.await(
+        "UPDATE player_vehicles SET state = 2, status = 'impound:警察扣押' WHERE citizenid = ? AND state = 0",
+        { Target.PlayerData.citizenid })
     TriggerClientEvent('QBCore:Notify', src, ('已扣押 %s 的 %d 辆载具'):format(GetPlayerName(targetId), affected), 'success')
+    if affected and affected > 0 then
+        -- 车主在线才推得到；离线车主下次打开 Garage 仍能看到状态（凭证落库在 player_vehicles 上）
+        pcall(function()
+            exports['custom-notify']:Push(Target.PlayerData.source, 'phone',
+                '你的载具被扣押', ('%d 辆载具被警方扣押，取回需前往扣押场缴纳费用'):format(affected),
+                { appId = 'garage' })
+        end)
+    end
     if exports['custom-logs'] then
         exports['custom-logs']:LogGeneric('警察扣押全部',
             ('**%s** 扣押了 **%s** 的全部 %d 辆载具'):format(GetPlayerName(src), GetPlayerName(targetId), affected), 16711680)

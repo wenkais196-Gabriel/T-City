@@ -3,6 +3,7 @@
   import { smsThreads, messagesList, playerData, contactsList, loadMessages, MESSAGE_PAGE_SIZE } from '../stores/phone';
   import { fetchNui } from '../utils/nui';
   import { onMount, tick } from 'svelte';
+  import { textFocus } from '../core/layers';
   import AppSurface from '../components/AppSurface.svelte';
   import Pane from '../components/Pane.svelte';
   import { PANE_CONTRACT as MESSAGES_PANES } from './contracts/messages.panes';
@@ -249,7 +250,7 @@
         </div>
 
         <form class="chat-input-bar" onsubmit={(e) => { e.preventDefault(); handleSendMessage(); }}>
-          <input type="text" class="phone-input chat-input" placeholder="Type a message..." bind:value={messageInput} />
+          <input type="text" class="phone-input chat-input" placeholder="Type a message..." bind:value={messageInput} use:textFocus />
           <button type="submit" class="send-btn" aria-label="Send message">➔</button>
         </form>
       {:else}

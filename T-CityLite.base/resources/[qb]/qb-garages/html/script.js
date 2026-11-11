@@ -123,7 +123,15 @@ function populateVehicleList(garageLabel, vehicles) {
                 status = "Drive";
             }
         } else if (v.state === 2) {
-            status = "Impound";
+            // PO 2026-11-12「有钱但无法付款」：被扣的车（state=2）原来一律渲染成
+            // "Impound" 并把按钮 **disabled**，于是站在扣押场也点不动。
+            // 只要在扣押场（type=depot）且挂了费用，就该是可点的「$价格」。
+            if (v.depotPrice && v.depotPrice > 0 && v.type === "depot") {
+                isDepotPrice = true;
+                status = "$" + v.depotPrice.toFixed(0);
+            } else {
+                status = "Impound";
+            }
         }
 
         const driveButton = document.createElement("button");

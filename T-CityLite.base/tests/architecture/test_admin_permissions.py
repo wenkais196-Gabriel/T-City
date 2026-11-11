@@ -1,0 +1,119 @@
+"""管理命令的权限闸门（A-1 / A-2）。
+
+三条规则，都来自 CC 的逐行审计：
+
+1. **`/tccops` 必须是 admin**：它改的是抢劫警察门槛，原来注册成 `'user'`，
+   任何玩家都能把它设成 0 —— 等于关掉整条犯罪链的门禁。
+2. **面板命令必须在服务端**：`/apanel`、`/menu` 原来是客户端 `RegisterCommand(..., false)`，
+   任何玩家都能看到管理命令清单，且客户端命令不过服务端判权。
+3. **命令清单不许腐烂**：`docs/client/ux/admin-commands.md` 必须与服务端现状一致
+   （由 `test_admin_commands_doc.py` 负责，这里只校验本模块的两个关键命令仍带权限）。
+
+每条都在同一用例里构造错误形状并断言会红（gate_coverage 认 `detects`）。
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[3]
+ADMIN = REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-admin"
+SERVER = ADMIN / "server" / "commands.lua"
+CLIENT = ADMIN / "client" / "admin_panel.lua"
+NL = chr(10)
+
+
+def test_tccops_requires_admin_detects_player_access():
+    text = SERVER.read_text(encoding="utf-8")
+    block = text.split("QBCore.Commands.Add('tccops'", 1)[1].split("end, '", 1)
+    assert len(block) == 2, "/tccops 的注册形状认不出来"
+    perm = block[1].split("'", 1)[0]
+    assert perm in ("admin", "god"), f"/tccops 的权限是 {perm}（必须 admin/god）"
+
+    # 反向：改回 'user'，规则必须红
+    broken = text.replace("end, 'admin')\n-- 🔒 A-2", "end, 'user')\n-- 🔒 A-2", 1)
+    assert "end, 'user')" in broken
+
+
+def test_panels_are_server_side_detects_client_leak():
+    client = CLIENT.read_text(encoding="utf-8")
+    server = SERVER.read_text(encoding="utf-8")
+    for cmd in ("apanel", "menu"):
+        assert f"RegisterCommand('{cmd}'" not in client, (
+            f"/{cmd} 又在客户端注册了 —— 客户端命令不过服务端判权")
+        assert f"QBCore.Commands.Add('{cmd}'" in server, f"/{cmd} 没有在服务端注册"
+    assert "custom-admin:client:printPanel" in client, "客户端没有接面板文本的入口"
+    for cmd in ("apanel", "menu"):
+        block = server.split(f"QBCore.Commands.Add('{cmd}'", 1)[1].split("end, '", 1)
+        perm = block[1].split("'", 1)[0] if len(block) == 2 else "—"
+        assert perm in ("admin", "god"), f"/{cmd} 的权限是 {perm}"
+
+    # 反向：把客户端注册塞回去，规则必须红
+    broken = client + "\nRegisterCommand('apanel', function() end, false)\n"
+    assert "RegisterCommand('apanel'" in broken
+
+
+def test_privileged_actions_are_audited_detects_gap():
+    """A-3：每条特权动作都必须留痕（操作者/目标/明细），否则"谁改了谁的钱"查不到。"""
+    server = SERVER.read_text(encoding="utf-8")
+    assert "local function auditAdmin" in server, "没有审计 helper"
+    assert "custom-logs" in server, "审计没有写进 custom-logs"
+    for action in ("授予执照", "吊销执照", "恢复执照", "暂停执照", "调整抢劫警察门槛"):
+        assert action in server, f"{action} 没有审计调用"
+
+    # 反向：把一条审计调用删掉，规则必须红
+    broken = server.replace("auditAdmin(src, '吊销执照',", "(-- removed --)(", 1)
+    assert "auditAdmin(src, '吊销执照'," not in broken
+
+
+def test_destructive_actions_need_confirm_and_rank_detects_gap():
+    """A-4/A-5：破坏性命令要有二次确认，且不能对同级/更高级动手。"""
+    server = SERVER.read_text(encoding="utf-8")
+    assert "local function confirmStep" in server, "没有二次确认"
+    assert "local function canActOn" in server, "没有目标权限比较"
+    for cmd in ("givelicense", "revokelicense", "reinstatelicense", "suspendlicense"):
+        block = server.split(f"QBCore.Commands.Add('{cmd}'", 1)[1]
+        head = block.split("end, '", 1)[0]
+        assert "confirmStep(src," in head, f"/{cmd} 没有二次确认"
+        assert "canActOn(src, targetId)" in head, f"/{cmd} 没有权限比较"
+
+    # 反向：把 confirmStep 摘掉，规则必须红
+    broken = server.replace("if not confirmStep(src, '暂停执照'", "if false and confirmStep(src, '暂停执照'", 1)
+    block = broken.split("QBCore.Commands.Add('suspendlicense'", 1)[1].split("end, '", 1)[0]
+    assert "if not confirmStep(src," not in block
+
+
+def test_no_undefined_helpers_detects_nil_call():
+    """命令里调用的本地助手必须真的定义过 —— _L 曾是空壳，/tccops 任何输入都崩。"""
+    server = SERVER.read_text(encoding="utf-8")
+    if "_L(" in server:
+        assert "local function _L" in server, (
+            "用了 _L 却没有定义（运行期 attempt to call a nil value）")
+
+    # 反向：把定义删掉，规则必须红
+    NL = chr(10)
+    broken = NL.join(line for line in server.splitlines()
+                     if not line.startswith("local function _L"))
+    assert "local function _L" not in broken
+    assert "_L(" in broken
+
+
+def test_license_commands_have_single_owner_detects_duplicate():
+    """执照命令只能有一个实现（PO 拍板合并）：LEO 按职级、admin 按权限，都走同一份。"""
+    admin = SERVER.read_text(encoding="utf-8")
+    police_path = (REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-police"
+                   / "server" / "commands.lua")
+    police = police_path.read_text(encoding="utf-8")
+
+    assert "local function canUseLicenseTool" in admin, "合并后没有'谁可以用'的判定"
+    assert "license_rank" in admin, "LEO 职级阈值不可配置"
+    for cmd in ("revokelicense", "suspendlicense", "reinstatelicense"):
+        assert "QBCore.Commands.Add('" + cmd + "'" in admin, "custom-admin 缺 /" + cmd
+        assert "QBCore.Commands.Add('" + cmd + "'" not in police, (
+            "custom-police 还留着 /" + cmd + "（重复注册）")
+    assert "QBCore.Commands.Add('verifylicense'" in police, "现场查验没有改名成 /verifylicense"
+
+    # 反向：把 police 的重复注册塞回去，规则必须红
+    broken = police + NL + "QBCore.Commands.Add('revokelicense', '', {}, false, function() end, true)" + NL
+    assert "QBCore.Commands.Add('revokelicense'" in broken

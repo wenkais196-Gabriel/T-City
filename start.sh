@@ -14,11 +14,21 @@ BRANCH=$(git -C "$SCRIPTPATH" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "u
 # 校验之后才发现 —— 也就是说，重复启动的代价是**烧掉一次 licence 配额**（实测 4 次
 # 连续失败就把 429 限流打了回来）。所以在启动任何东西之前先抢锁。
 LOCK=/tmp/tcity-server.lock
-exec 9>"$LOCK"
-if ! flock -n 9; then
-    echo "[start] 已有实例在运行（锁 $LOCK 被占用）" >&2
-    echo "        先停掉它：sudo systemctl stop tcity   或   screen -S tcity -X quit" >&2
-    exit 1
+if command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCK"
+    if ! flock -n 9; then
+        echo "[start] 已有实例在运行（锁 $LOCK 被占用）" >&2
+        echo "        先停掉它：sudo systemctl stop tcity   或   screen -S tcity -X quit" >&2
+        exit 1
+    fi
+else
+    # 没有 flock（MSYS/git-bash，例如 Windows 上的开发机）：退化成"看端口"。
+    # 端口通了就当成已有实例；端口不通就照常启动 —— 比直接拒跑有用得多。
+    if (exec 3<>/dev/tcp/127.0.0.1/30120) 2>/dev/null; then
+        echo "[start] 已有实例占着 30120（没有 flock，用端口判断）。要重启就先停掉它。" >&2
+        exit 1
+    fi
+    echo "[start] ⚠️ 没有 flock，已退化为端口探测（30120 空闲，继续启动）"
 fi
 
 echo "========================================"

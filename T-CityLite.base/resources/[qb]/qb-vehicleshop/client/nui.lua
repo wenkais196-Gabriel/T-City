@@ -24,7 +24,7 @@ end
 
 function _vCloseNui()
     nuiOpen = false
-    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu({ owner = GetCurrentResourceName() }) end)
     if not ok then
         SetNuiFocus(false, false)
         SetNuiFocusKeepInput(false)
@@ -66,10 +66,10 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('financeVehicle', function(data, cb)
-    nuiOpen = false
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
-    SendNUIMessage({ type = 'close' })
+    -- V-10 续（CC 评审 Q2 的回归点）：必须走 _vCloseNui 弹栈。
+    -- 原来直接 SetNuiFocus(false,false)+close，栈里的 menu:qb-vehicleshop 帧留着 →
+    -- custom-ui 之后每次 apply 都按这层禁走路/冲刺，玩家"下车走不动"。
+    _vCloseNui()
     if data and data.vehicle and data.downPayment and data.paymentCount then
         TriggerServerEvent('qb-vehicleshop:server:financeVehicle',
             tonumber(data.downPayment), tonumber(data.paymentCount), data.vehicle)
@@ -82,10 +82,7 @@ end)
 -- ==============================================================
 
 RegisterNUICallback('testDrive', function(data, cb)
-    nuiOpen = false
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
-    SendNUIMessage({ type = 'close' })
+    _vCloseNui() -- 同上：必须弹栈，否则试驾后人物动不了
     -- 试驾由现有的 TestDrive 事件处理
     -- NUI 关闭后, 模拟触发 TestDrive
     if not inTestDrive and ClosestVehicle ~= 0 then
@@ -153,7 +150,10 @@ function OpenVehicleShopNui(shopName)
     end
 
     payload.type = 'open'
-    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    -- V-10：焦点要由拥有 ui_page 的资源按（SetNuiFocus 是按资源的）
+    local ok = pcall(function()
+        exports['custom-ui']:OpenMenu({ keepInput = false, owner = GetCurrentResourceName() })
+    end)
     if not ok then
         SetNuiFocus(true, true)
         SetNuiFocusKeepInput(true)
@@ -170,3 +170,9 @@ end
 _G._vOpenNui = OpenVehicleShopNui
 
 print('[qb-vehicleshop] 🖥️  NUI 模块已加载 (nui.lua)')
+
+-- V-10（2026-11-12）：custom-ui 的输入栈会回调拥有页面的资源来真正按焦点
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    SetNuiFocusKeepInput(keepInput == true)
+    SetNuiFocus(hasFocus == true, hasCursor ~= false)
+end)

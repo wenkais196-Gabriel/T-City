@@ -175,3 +175,64 @@ def test_phone_frame_gate_detects_a_shell_without_app_or_text_frames():
     leaky = "SetNuiFocusKeepInput(keepInput)\nGetResourceState('custom-ui')\n"
     leaky += "function PhoneFocus.PushFrame() end\nfunction PhoneFocus.PopFrame() end\n"
     assert any("keepInput" in item for item in violations_in_phone_focus(leaky))
+
+# --------------------------------------------------------------------------- #
+# V-10：传 owner 的资源必须实现 ApplyFocus（否则栈静默回退 → 面板有、光标无）
+# --------------------------------------------------------------------------- #
+
+BASE = Path(__file__).resolve().parents[2]
+
+
+def _resource_sources() -> dict[str, str]:
+    """把每个资源目录下的 client Lua 拼起来（只看 client，焦点与页面都在客户端）。"""
+    out: dict[str, str] = {}
+    for manifest in (BASE / "resources").rglob("fxmanifest.lua"):
+        resource = manifest.parent
+        chunk = []
+        for lua in resource.rglob("*.lua"):
+            if "client" not in lua.parts:
+                continue
+            chunk.append(code_only(lua.read_text(encoding="utf-8", errors="ignore")))
+        if chunk:
+            out[resource.name] = "\n".join(chunk)
+    return out
+
+
+def violations_in_menu_owners(sources: dict[str, str]) -> list[str]:
+    """用 `OpenMenu({...owner=...})` 的资源，必须导出 ApplyFocus。
+
+    依据（真机两轮）：SetNuiFocus 是按资源的，custom-ui 没有 ui_page；栈会回调
+    `exports[owner]:ApplyFocus`，缺这个导出时 pcall 静默失败 → 回退到 custom-ui 自己按
+    → 面板能显示、没有光标、点不了按钮（扣押场取款）。注释里写"文件末尾有 export"不算数，
+    这里只看代码（code_only 已经剥掉注释）。
+    """
+    bad = []
+    for name, code in sources.items():
+        if "custom-ui']:OpenMenu(" not in code:
+            continue
+        uses_owner = "owner = GetCurrentResourceName()" in code or "owner = GetCurrentResourceName()" in code
+        if not uses_owner:
+            continue
+        # 锚定行首，避免"注释里提到"或"字符串里提到"蒙混过关
+        anchored = any(line.lstrip().startswith("exports('ApplyFocus'") for line in code.splitlines())
+        if not anchored:
+            bad.append(f"{name} 用 OpenMenu(owner=…) 但没有 exports('ApplyFocus')")
+    return bad
+
+
+def test_menu_owner_focus_gate_detects_missing_apply_focus():
+    """V-10 回归：qb-garages 曾经只有注释、没有 export，真机就是"没光标"。"""
+    sources = _resource_sources()
+    assert violations_in_menu_owners(sources) == [], violations_in_menu_owners(sources)
+
+    # 反向：一个传 owner 却不导出 ApplyFocus 的资源必须被抓住
+    fake = {"qb-fake": "exports['custom-ui']:OpenMenu({ keepInput = false, owner = GetCurrentResourceName() })"}
+    caught = violations_in_menu_owners(fake)
+    assert caught and "qb-fake" in caught[0], caught
+
+    # 反向：只有注释提到 ApplyFocus 的也必须红
+    fake2 = {
+        "qb-comment": "-- 真正的按下在 exports('ApplyFocus') 里\n"
+        "exports['custom-ui']:OpenMenu({ keepInput = false, owner = GetCurrentResourceName() })"
+    }
+    assert violations_in_menu_owners(fake2), "注释里的 export 声明被当成实现了"

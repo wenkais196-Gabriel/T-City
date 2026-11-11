@@ -159,23 +159,27 @@ state.coords = vector3(shopAnchor.x, shopAnchor.y, shopAnchor.z)
 local fakeCoords = { x = 9999.0, y = 9999.0, z = 9999.0 }
 local before = #state.clientEvents
 fireAs(1, 'qb-storerobbery:server:callCops', 'cashier', 1, 'Fake Street', fakeCoords)
-local alert = nil
+-- C-6 之后警情只有一个派发入口：robberyCall(kind, safe, streetLabel, coords)。
+-- 坐标必须来自服务端按 config 锚点算的，客户端传的 9999 必须被丢弃。
+local alertCoords = nil
 for index = before + 1, #state.clientEvents do
     local event = state.clientEvents[index]
-    if event.name == 'qb-phone:client:addPoliceAlert' then alert = event.args[1] end
+    if event.name == 'qb-storerobbery:client:robberyCall' then alertCoords = event.args[4] end
 end
-emit('ALERT_SENT', alert ~= nil)
-if alert then
+emit('ALERT_SENT', alertCoords ~= nil)
+if alertCoords then
     local anchor = Config.Registers[1][1]
-    emit('ALERT_COORDS_MATCH_CONFIG', alert.coords.x == anchor.x and alert.coords.y == anchor.y)
-    emit('ALERT_COORDS_FROM_CLIENT', alert.coords.x == fakeCoords.x)
+    emit('ALERT_COORDS_MATCH_CONFIG',
+        math.abs(alertCoords.x - anchor.x) < 1.0 and math.abs(alertCoords.y - anchor.y) < 1.0)
+    emit('ALERT_COORDS_FROM_CLIENT',
+        math.abs(alertCoords.x - fakeCoords.x) < 1.0 and math.abs(alertCoords.y - fakeCoords.y) < 1.0)
 end
 
 -- ── 2. 坏 kind / 坏 key / 远处 → 都不该发警情 ──
 emit('SCENARIO', 'callcops-bad-input')
 local alertsBefore = 0
 for _, event in ipairs(state.clientEvents) do
-    if event.name == 'qb-phone:client:addPoliceAlert' then alertsBefore = alertsBefore + 1 end
+    if event.name == 'qb-storerobbery:client:robberyCall' then alertsBefore = alertsBefore + 1 end
 end
 clearRobberies()   -- 没有任何抢劫记录：站在店里也不该发警情
 local anchor1 = Config.Registers[1][1]
@@ -187,7 +191,7 @@ state.coords = vector3(9999.0, 9999.0, 9999.0)            -- 走远
 fireAs(1, 'qb-storerobbery:server:callCops', 'cashier', 1, 'X', fakeCoords)
 local alertsAfter = 0
 for _, event in ipairs(state.clientEvents) do
-    if event.name == 'qb-phone:client:addPoliceAlert' then alertsAfter = alertsAfter + 1 end
+    if event.name == 'qb-storerobbery:client:robberyCall' then alertsAfter = alertsAfter + 1 end
 end
 emit('ALERTS_FROM_BAD_CALLS', alertsAfter - alertsBefore)
 
