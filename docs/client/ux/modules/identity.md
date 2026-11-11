@@ -132,11 +132,11 @@ qb-multicharacter 的 html/app.js 是两步：`prepareDelete` → `delete_charac
 
 | # | 任务 | 文件 | 风险 | 验收 |
 |---|---|---|---|---|
-| I-1 | 角色卡显示「上次保存 · N 分钟前」 | qb-multicharacter 的 server/main.lua（下发 last_updated）+ html/index.html + html/app.js | 低 | 卡片底部有时间；改库后重连时间更新 |
-| I-2 | 删除确认：显示角色名/citizenid + 输入角色名才能删 | qb-multicharacter 的 html/index.html + app.js | 中（Vue 模板改动） | 输错名字按钮不可点；输对才删得掉 |
+| I-1 ✅(`81caf286`) | 角色卡显示「上次保存 · N 分钟前」 | qb-multicharacter 的 server/main.lua（下发 last_updated）+ html/index.html + html/app.js | 低 | 卡片底部有时间；改库后重连时间更新 |
+| I-2 ✅(`81caf286`) | 删除确认：显示角色名/citizenid + 输入角色名才能删 | qb-multicharacter 的 html/index.html + app.js | 中（Vue 模板改动） | 输错名字按钮不可点；输对才删得掉 |
 | I-3 | 出生选择（上次位置 / 公寓 / 市区）+ 落地 toast | qb-spawn 的 client.lua + html；qb-apartments 联动 | **高**（新 UI + 传送链路，可能踩黑屏/无敌 bug） | 三个选项都能落地且不卡黑屏 |
-| I-4 | 救援文案世界观化，归 `toast` | qb-spawn 的 client.lua（4 处） | 低 | 文案不再出现"空间裂缝" |
-| I-5 | 公寓热区改 `[E]` | qb-apartments 的 client | 中 | 站到公寓门口出现 `[E]` |
+| I-4 ✅(`81caf286`) | 救援文案世界观化，归 `toast` | qb-spawn 的 client.lua（4 处） | 低 | 文案不再出现"空间裂缝" |
+| I-5 ⛔ 不改 | 公寓热区 | qb-apartments 的 client | — | 复核结论：入口有 3 个动作（进门/搬来/门铃），按 D2 多目标本来就该 ALT |
 
 **顺序**：I-1（低风险高收益）→ I-4（纯文案）→ I-2（删除保护）→ I-5 → I-3（最大，单独一轮）。
 
@@ -151,5 +151,8 @@ _待写。_
 
 ## 5. 已知未决
 
-- 角色卡的数据来源（PlayerData vs DB 二次查询）需要定死一个；
-- 出生点选择（公寓/上次位置/警局）没有 UI 引导。
+| # | 未决 | 影响 | 下一步 |
+|---|---|---|---|
+| 1 | **I-3 出生点选择未做**：要新 UI，还要插进 `qb-spawn` 的传送链路（那里有一串兜底补丁），写错就是全服黑屏 | 玩家仍然没有出生选择，也没有"你在哪"的交代 | 单独一批，先只对开发账号开放 |
+| 2 | 角色卡只标时间，不做实时同步 | 玩家仍可能看到旧金额（但知道是旧的） | 若 PO 要求实时，需要在选人前强制落库（跨资源契约变更） |
+| 3 | I-5 结论是不改 | 公寓入口保持 ALT | 与 D2 一致，不需要动作 |
