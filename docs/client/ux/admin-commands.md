@@ -124,7 +124,7 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `consumables_status` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-consumables/server/main.lua:172 |
+| `consumables_status` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-consumables/server/main.lua:206 |
 
 ### custom-debug
 

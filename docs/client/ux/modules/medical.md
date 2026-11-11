@@ -93,7 +93,7 @@ review_by: 2027-02-28
 |---|---|---|---|---|
 | M-1 | 施救从 ALT 热区改为 E 提示 | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua`:253、`custom-police` 同类 | 中（要实测距离/判定） | 站在倒地队友旁直接按 E |
 | M-2 | 濒死倒计时加文字（剩余秒数） | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/main.lua`（laststand 段） | 低 | 倒地后屏幕显示秒数 |
-| M-3 | 复活规则：护甲 0 + 饥渴 50 | client/main.lua 第 574 行、`custom-consumables` 新增 `exports('RestoreAfterRevive')` | 中（碰饥渴写者） | 复活后 HUD 圆环显示 50，护甲条为 0 |
+| M-3 ✅(`c523052c`) | 复活规则：护甲 0 + 饥渴 50 | client/main.lua 第 574 行、`custom-consumables` 新增 `exports('RestoreAfterRevive')` | 中（碰饥渴写者） | 复活后 HUD 圆环显示 50，护甲条为 0 |
 | M-4 | 医院 6 个热区 ALT → E | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua`:446-662 | 中 | 医院前台/柜子/电梯都按 E |
 | M-5 | 施救成功/失败的 feed 文案 | 同上 | 低 | 救起后双方各有 feed |
 
