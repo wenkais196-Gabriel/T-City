@@ -143,10 +143,10 @@ custom-admin **全文 0 处审计调用**。结论：有金额流水，**没有"
 | A-1 ✅(`4b54a3e6`) | 生成式命令清单 + 防腐闸门 | `tools/dev/scan_commands.py`、`docs/client/ux/admin-commands.md` | 低 | 339 条、危险且无判权 0 条 |
 | A-2 ✅(`98e5e852`) | `/tccops` 改 `admin`；`/apanel`、`/menu` 上服务端 | custom-admin 的 server 与 client | 低 | 普通玩家用 `/tccops` 被拒 |
 | A-3 ✅(`5d091841`) | 特权动作审计（操作者/目标/前→后）+ 执行者回执 | custom-admin 的 server/commands.lua | 低 | `custom-logs` 出现"管理员操作"行 |
-| A-4 | 破坏性操作二次确认（执照 4 条 + 大额给钱） | custom-admin 的 server/commands.lua、qb-core 的 commands.lua | 中（要改交互节奏） | 第一次输出摘要，10 秒内重复才生效 |
-| A-5 | 目标权限比较：不能对同级/更高级动手 | custom-admin 的 server/commands.lua | 中 | admin 吊销 god 的执照被拒 |
+| A-4 ✅(`edce23cb`) | 破坏性操作二次确认（执照 4 条 + 大额给钱） | custom-admin 的 server/commands.lua、qb-core 的 commands.lua | 中（要改交互节奏） | 第一次输出摘要，10 秒内重复才生效 |
+| A-5 ✅(`edce23cb`) | 目标权限比较：不能对同级/更高级动手 | custom-admin 的 server/commands.lua | 中 | admin 吊销 god 的执照被拒 |
 
-**顺序**：A-4 → A-5（都依赖 A-3 的审计骨架）。
+**顺序**：A-4 → A-5（都依赖 A-3 的审计骨架）。**A-1…A-5 全部完成**，§4 验收由 CC 定后入库。
 
 
 ## 4. 验收（步骤）
