@@ -1,5 +1,8 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- 压力提示限流（每 source 30 秒最多一条，见 GainStress）
+local stressNoticeAt = {}
+
 -- qb-core 重启后，上面这份快照里的函数引用会全部失效（P1-6，PR #196）：
 -- 本资源没有声明 qb-core 依赖，不会被重启级联带走，所以在 qb-core 起来时重解析一次。
 AddEventHandler('onResourceStart', function(resourceName)
@@ -67,7 +70,14 @@ RegisterNetEvent('hud:server:GainStress', function(amount)
 
     Player.Functions.SetMetaData('stress', newStress)
     TriggerClientEvent('hud:client:UpdateStress', src, newStress)
-    TriggerClientEvent('QBCore:Notify', src, Lang:t('notify.stress_gain'), 'error', 1500)
+    -- CC 实测：射击时客户端按 10% 概率发 GainStress，扣一次扳机就能触发多条，
+    -- 而这里每收一条就弹一次 error —— 玩家看到的是"压力+1"刷屏。
+    -- 改成每 30 秒最多一条；真正的告警交给客户端的 H-2（压力 ≥80 才提醒）。
+    local now = os.time()
+    if not stressNoticeAt[src] or now - stressNoticeAt[src] >= 30 then
+        stressNoticeAt[src] = now
+        TriggerClientEvent('QBCore:Notify', src, Lang:t('notify.stress_gain'), 'error', 1500)
+    end
 end)
 
 RegisterNetEvent('hud:server:RelieveStress', function(amount)

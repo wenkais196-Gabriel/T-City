@@ -121,34 +121,44 @@ end
 -- ==============================================================
 local LOW_THRESHOLD = 20
 local REWARN_ABOVE = 30
+local STRESS_HIGH = 80      -- 压力是"越高越糟"，方向与饥饿/口渴相反
+local STRESS_REARM = 30
 local REWARN_COOLDOWN_MS = 5 * 60 * 1000
-local lowWarnAt = { hunger = 0, thirst = 0, stress = 0 }
-local lowArmed = { hunger = true, thirst = true, stress = true }
+local lowWarnAt = { hunger = 0, thirst = 0, stress = 0, armor = 0 }
+local lowArmed = { hunger = true, thirst = true, stress = true, armor = true }
 
 local LOW_TEXT = {
     hunger = '你饿得发慌了，找点吃的',
     thirst = '你渴得难受，找点水喝',
     stress = '压力太大了，去休息一下',
+    armor = '护甲已经打光了',
 }
+
+local function warnOnce(key, now)
+    if not lowArmed[key] then return end
+    if now - (lowWarnAt[key] or 0) < REWARN_COOLDOWN_MS then return end
+    lowArmed[key] = false
+    lowWarnAt[key] = now
+    pcall(function() exports['custom-notify']:PushLocal('toast', LOW_TEXT[key]) end)
+end
 
 CreateThread(function()
     while true do
         Wait(5000)
-        local values = { hunger = hunger or 100, thirst = thirst or 100, stress = stress or 0 }
         local now = GetGameTimer()
-        for key, value in pairs(values) do
-            if value <= LOW_THRESHOLD then
-                if lowArmed[key] and now - (lowWarnAt[key] or 0) >= REWARN_COOLDOWN_MS then
-                    lowArmed[key] = false
-                    lowWarnAt[key] = now
-                    pcall(function()
-                        exports['custom-notify']:PushLocal('toast', LOW_TEXT[key])
-                    end)
-                end
-            elseif value >= REWARN_ABOVE then
-                lowArmed[key] = true
-            end
-        end
+        local hungerNow, thirstNow = hunger or 100, thirst or 100
+        local stressNow = stress or 0
+
+        -- 饥饿 / 口渴：越低越糟
+        if hungerNow <= LOW_THRESHOLD then warnOnce('hunger', now) elseif hungerNow >= REWARN_ABOVE then lowArmed.hunger = true end
+        if thirstNow <= LOW_THRESHOLD then warnOnce('thirst', now) elseif thirstNow >= REWARN_ABOVE then lowArmed.thirst = true end
+
+        -- 压力：越高越糟（原来写成 <= 20 提醒，方向反了）
+        if stressNow >= STRESS_HIGH then warnOnce('stress', now) elseif stressNow <= STRESS_REARM then lowArmed.stress = true end
+
+        -- 护甲：掉到 0 才提醒一次（低于 20 没必要打扰）
+        local armorValue = GetPedArmour(PlayerPedId()) or 0
+        if armorValue <= 0 then warnOnce('armor', now) elseif armorValue >= 20 then lowArmed.armor = true end
     end
 end)
 
