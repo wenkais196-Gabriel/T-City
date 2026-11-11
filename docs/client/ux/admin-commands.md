@@ -14,7 +14,7 @@ review_by: 2027-02-28
 
 # 管理员命令清单
 
-共 **339** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
+共 **336** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
 
 ## 危险命令但没有判权：0 条
 
@@ -27,7 +27,7 @@ review_by: 2027-02-28
 | — | 152 |
 | QBCore | 106 |
 | restricted=true | 40 |
-| job/gang 判定 | 38 |
+| job/gang 判定 | 35 |
 | ACE | 3 |
 
 ## 按资源分组
@@ -77,19 +77,19 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `amenu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:130 |
-| `apanel` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:560 |
-| `checklicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:477 |
-| `clearme` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:234 |
-| `givelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:333 |
-| `givemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:268 |
-| `menu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:564 |
-| `myid` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:99 |
-| `reinstatelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:405 |
-| `revokelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:369 |
-| `revokemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:298 |
-| `suspendlicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:441 |
-| `tccops` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:169 |
+| `amenu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:157 |
+| `apanel` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:615 |
+| `checklicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:532 |
+| `clearme` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:261 |
+| `givelicense` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:360 |
+| `givemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:295 |
+| `menu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:619 |
+| `myid` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:126 |
+| `reinstatelicense` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:446 |
+| `revokelicense` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:403 |
+| `revokemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:325 |
+| `suspendlicense` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:489 |
+| `tccops` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:196 |
 
 ### custom-agent-client
 
@@ -204,33 +204,32 @@ review_by: 2027-02-28
 | `10-7` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/p0.lua:9 |
 | `10-8` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/p0.lua:7 |
 | `911` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/p0.lua:11 |
-| `911p` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:572 |
-| `anklet` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:465 |
-| `ankletlocation` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:476 |
+| `911p` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:496 |
+| `anklet` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:389 |
+| `ankletlocation` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:400 |
 | `backup` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/backup.lua:1205 |
-| `callsign` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:249 |
-| `cam` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:520 |
-| `checkid` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:389 |
-| `checklicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:431 |
-| `clearblood` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:357 |
-| `clearcasings` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:346 |
+| `callsign` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:173 |
+| `cam` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:444 |
+| `checkid` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:313 |
+| `clearblood` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:281 |
+| `clearcasings` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:270 |
 | `coroner` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua:180 |
-| `cuff` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:233 |
-| `depot` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:496 |
-| `escort` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:244 |
-| `fine` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:300 |
+| `cuff` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:157 |
+| `depot` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:420 |
+| `escort` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:168 |
+| `fine` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:224 |
 | `flagplate` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:100 |
 | `grantlicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:27 |
-| `impound` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:507 |
+| `impound` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:431 |
 | `impoundnear` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:197 |
 | `impoundplayer` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:159 |
 | `lockdown` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/lockdown.lua:38 |
 | `npc_callout` | RegisterCommand | ACE: police.release | T-CityLite.base/resources/[custom]/custom-police/server/p4_npc.lua:471 |
 | `pa` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/pa.lua:3 |
-| `paylawyer` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:552 |
-| `paytow` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:531 |
+| `paylawyer` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:476 |
+| `paytow` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:455 |
 | `plateinfo` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:139 |
-| `pobject` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:153 |
+| `pobject` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:77 |
 | `police_backup_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1828 |
 | `police_backup_state` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1853 |
 | `police_case_seed` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:10 |
@@ -242,20 +241,18 @@ review_by: 2027-02-28
 | `police_release` | RegisterCommand | ACE: police.release | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1889 |
 | `police_tow_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/tow.lua:131 |
 | `police_verdict_seed` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:80 |
-| `reinstatelicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:106 |
-| `revokelicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:53 |
 | `sample` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/forensics.lua:8 |
-| `sc` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:289 |
-| `seizecash` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:278 |
-| `setdept` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:179 |
-| `setdistrict` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:205 |
-| `spikestrip` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:144 |
-| `suspendlicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:80 |
-| `takedna` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:368 |
-| `takedrivinglicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:131 |
+| `sc` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:213 |
+| `seizecash` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:202 |
+| `setdept` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:103 |
+| `setdistrict` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:129 |
+| `spikestrip` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:68 |
+| `takedna` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:292 |
+| `takedrivinglicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:55 |
 | `tow` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/tow.lua:165 |
 | `unflagplate` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:119 |
-| `unjail` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:255 |
+| `unjail` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:179 |
+| `verifylicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:355 |
 
 ### custom-prompt
 

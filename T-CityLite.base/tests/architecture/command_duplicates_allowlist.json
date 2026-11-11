@@ -2,12 +2,9 @@
   "why": "同名命令由不同资源注册时，生效者取决于资源启动顺序 —— 玩家看到的是'有时候不好使'。这里登记已存在的重复，新增一律红；清掉一条必须同时删条目。",
   "tighten_by": "2027-02-28",
   "known": {
-    "revokelicense": "custom-admin 与 custom-police 各有一套：前者 admin+审计+二次确认，后者限 LEO 职级。谁生效取决于启动顺序，需要 PO 决定单一归属。",
-    "reinstatelicense": "同上（custom-admin 与 custom-police）",
-    "suspendlicense": "同上（custom-admin 与 custom-police）",
-    "checklicense": "同上（custom-admin 与 custom-police）",
     "mycareer": "custom-career 的 client 与 server 各注册一次（同一资源内部）",
     "notifytest": "custom-notify 与 notify-test（后者是测试资源，可能不在启动集）",
-    "phone": "custom-phone 的 client 内注册两次"
+    "phone": "custom-phone 的 client 内注册两次",
+    "_note_license_merged": "执照命令已合并到 custom-admin（LEO 值班按职级或 admin 可用）；custom-police 的现场查验改名 /verifylicense"
   }
 }

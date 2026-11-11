@@ -40,7 +40,8 @@ def _duplicates(rows: list[dict]) -> dict[str, list[str]]:
 
 def test_command_names_are_unique_detects_collision():
     allowlist = json.loads(ALLOWLIST.read_text(encoding="utf-8"))
-    known = set(allowlist.get("known", {}))
+    # 以下划线开头的是说明字段，不是债务条目
+    known = {k for k in allowlist.get("known", {}) if not k.startswith("_")}
     dupes = _duplicates(_rows())
     new_dupes = {name: where for name, where in dupes.items() if name not in known}
     assert not new_dupes, (
@@ -56,7 +57,8 @@ def test_command_names_are_unique_detects_collision():
 def test_allowlist_entries_still_duplicate_detects_stale():
     """清掉的重复必须同 commit 删条目 —— 否则清单会烂成"永久豁免"。"""
     allowlist = json.loads(ALLOWLIST.read_text(encoding="utf-8"))
-    known = set(allowlist.get("known", {}))
+    # 以下划线开头的是说明字段，不是债务条目
+    known = {k for k in allowlist.get("known", {}) if not k.startswith("_")}
     dupes = set(_duplicates(_rows()))
     stale = known - dupes
     assert not stale, f"这些重复已经不存在了，请从 allowlist 删掉：{sorted(stale)}"

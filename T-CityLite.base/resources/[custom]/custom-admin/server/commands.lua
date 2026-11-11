@@ -72,6 +72,33 @@ local function _L(_, key, arg)
     return (template:gsub('%%s', tostring(arg)))
 end
 
+--- 谁可以使用执照工具（合并后的唯一入口）：
+---   admin/god —— 管理侧；
+---   值班 LEO 且职级 ≥ 阈值 —— 执法侧（原 custom-police 的口径，阈值默认 2）。
+--- 阈值用 convar 覆盖：setr license_rank 3
+local LICENSE_RANK_FALLBACK = 2
+local function licenseRankThreshold()
+    return tonumber(GetConvar('license_rank', tostring(LICENSE_RANK_FALLBACK))) or LICENSE_RANK_FALLBACK
+end
+
+---@return boolean allowed, string|nil reason
+local function canUseLicenseTool(src)
+    if QBCore.Functions.HasPermission(src, 'admin') or QBCore.Functions.HasPermission(src, 'god') then
+        return true, nil
+    end
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false, '玩家数据未加载' end
+    local job = Player.PlayerData.job or {}
+    if job.type ~= 'leo' then return false, '只有值班警察或管理员可以使用执照命令' end
+    if not job.onduty then return false, '需要先上岗' end
+    local grade = (job.grade and job.grade.level) or 0
+    local threshold = licenseRankThreshold()
+    if grade < threshold then
+        return false, ('职级不足（需要 %d 级，你是 %d 级）'):format(threshold, grade)
+    end
+    return true, nil
+end
+
 local function auditAdmin(src, action, targetLabel, detail, kind)
     local executor = GetPlayerName(src) or ('#%s'):format(tostring(src))
     local line = ('%s | 操作者 %s(#%s) | 目标 %s | %s'):format(
@@ -334,6 +361,13 @@ QBCore.Commands.Add('givelicense', '授予玩家执照 (Admin)', {
     { name = 'id', help = '玩家 ID' },
     { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
 }, false, function(source, args)
+    do
+        local allowed, reason = canUseLicenseTool(source)
+        if not allowed then
+            TriggerClientEvent('QBCore:Notify', source, reason, 'error')
+            return
+        end
+    end
     local src = source
     local targetId = tonumber(args[1])
     local licenseType = args[2] and args[2]:lower()
@@ -364,12 +398,19 @@ QBCore.Commands.Add('givelicense', '授予玩家执照 (Admin)', {
     else
         TriggerClientEvent('QBCore:Notify', src, msg or '授予失败', 'error')
     end
-end, 'admin')
+end, 'user')
 
 QBCore.Commands.Add('revokelicense', '吊销玩家执照 (Admin)', {
     { name = 'id', help = '玩家 ID' },
     { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
 }, false, function(source, args)
+    do
+        local allowed, reason = canUseLicenseTool(source)
+        if not allowed then
+            TriggerClientEvent('QBCore:Notify', source, reason, 'error')
+            return
+        end
+    end
     local src = source
     local targetId = tonumber(args[1])
     local licenseType = args[2] and args[2]:lower()
@@ -400,12 +441,19 @@ QBCore.Commands.Add('revokelicense', '吊销玩家执照 (Admin)', {
     else
         TriggerClientEvent('QBCore:Notify', src, msg or '吊销失败', 'error')
     end
-end, 'admin')
+end, 'user')
 
 QBCore.Commands.Add('reinstatelicense', '恢复玩家执照 (Admin)', {
     { name = 'id', help = '玩家 ID' },
     { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
 }, false, function(source, args)
+    do
+        local allowed, reason = canUseLicenseTool(source)
+        if not allowed then
+            TriggerClientEvent('QBCore:Notify', source, reason, 'error')
+            return
+        end
+    end
     local src = source
     local targetId = tonumber(args[1])
     local licenseType = args[2] and args[2]:lower()
@@ -436,12 +484,19 @@ QBCore.Commands.Add('reinstatelicense', '恢复玩家执照 (Admin)', {
     else
         TriggerClientEvent('QBCore:Notify', src, msg or '恢复失败', 'error')
     end
-end, 'admin')
+end, 'user')
 
 QBCore.Commands.Add('suspendlicense', '暂停玩家执照 (Admin)', {
     { name = 'id', help = '玩家 ID' },
     { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
 }, false, function(source, args)
+    do
+        local allowed, reason = canUseLicenseTool(source)
+        if not allowed then
+            TriggerClientEvent('QBCore:Notify', source, reason, 'error')
+            return
+        end
+    end
     local src = source
     local targetId = tonumber(args[1])
     local licenseType = args[2] and args[2]:lower()
@@ -472,7 +527,7 @@ QBCore.Commands.Add('suspendlicense', '暂停玩家执照 (Admin)', {
     else
         TriggerClientEvent('QBCore:Notify', src, msg or '暂停失败', 'error')
     end
-end, 'admin')
+end, 'user')
 
 QBCore.Commands.Add('checklicense', '查看玩家执照状态 (Admin)', {
     { name = 'id', help = '玩家 ID' }
