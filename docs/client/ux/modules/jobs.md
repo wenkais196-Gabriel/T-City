@@ -51,11 +51,62 @@ review_by: 2027-02-28
 
 ## 2. 设计（目标）
 
-_待写。_
+> 综合我的 §1.3 与 CC 的 §1.4。核心一句：**进度不是通知**。
+
+### 2.1 任务反馈的四通道
+
+| 时机 | 通道 | 表现 | 依据 |
+|---|---|---|---|
+| 接受任务 | `feed` | 「已接受：<任务名>」 | 结果是玩家主动动作 |
+| 逐步进度（1/5 → 2/5） | **不发通知** | 手机 Quests App 的 `current_step` 常驻刷新 | BetonQuest 用 bossbar，我们用既有 App |
+| **跨阶段**（阶段 1→2） | `feed` | 「<任务名>：进入第二阶段 · <阶段名>」 | 阶段变化值得一条 |
+| 完成 | `toast` + 音效 | 「<任务名> 完成 · 奖励 $X」 | 只有完成值得打断 |
+| 失败/超时 | `error` | 「<任务名> 失败：<原因>」 | 失败要说原因 |
+| 放弃 | `feed` | 「已放弃 <任务名>」 | — |
+
+**为什么进度不发通知**：`custom-quest` 现在 45 处通知集中在 `T-CityLite.base/resources/[custom]/custom-quest/server/main.lua`，其中大量是逐步进度 ——
+每完成一步弹一条，一个 5 步任务就刷 5 条，把真正的失败提示挤掉了。
+
+### 2.2 文案与语言
+
+| 问题 | 规则 |
+|---|---|
+| 硬编码英文（`Quest system is disabled` / `Please wait before accepting another quest` / `Node validation failed`） | 一律改中文；任务名/阶段名来自数据，不翻译 |
+| 同一件事 success 与 primary 混用 | 统一：成功 `feed`、失败 `error`、需注意 `toast` |
+
+### 2.3 老板 / 组织菜单（qb-management）
+
+| 动作 | 执行者看到 | 当事人看到 |
+|---|---|---|
+| 招人 / 开除 | `feed` 一行 | `phone` 一行（可回查） |
+| 发薪 | `feed`（金额与人数） | `phone`（金额） |
+| 调整职级 / 调价 | `feed` | `phone`（仅涉及本人时） |
+| 失败（权限/资金不足） | `error` | — |
+
+热区：6 个 ALT 热区里凡是**单一动作**的，改成 `prompt` 的 `[E]`；只有"同一位置多选项"才留 ALT。
+
+### 2.4 职业面板（custom-career）
+
+| 情形 | 表现 |
+|---|---|
+| 看晋升条件 | 列出「已满足 / 还差什么」（现在只说"不够"，不说差多少） |
+| 晋升成功 | `toast`「已晋升为 <职级>」+ `phone` 留档 |
+| 考核失败 | `error` 带差距 |
+
 
 ## 3. 计划（任务）
 
-_待写。_
+| # | 任务 | 文件 | 风险 | 验收 |
+|---|---|---|---|---|
+| J-1 | 逐步进度不再发通知，只在**跨阶段**发一条 feed | `T-CityLite.base/resources/[custom]/custom-quest/server/main.lua`（进度回调处） | 中（要认出哪些是逐步） | 做一个 3 步任务：只在阶段变化时看到 feed，逐步无通知 |
+| J-2 | 45 处通知接三层通道（成功→feed、失败→error），硬编码英文改中文 | 同上 | 低（机械 + 逐条看） | 接受/放弃/失败三类表现不同 |
+| J-3 | 任务完成 toast + 失败 error（不再混用 success/primary） | 同上 | 低 | 完成弹中央，失败弹左下红 |
+| J-4 | qb-management 的 6 个 ALT 热区：单动作改 `[E]` | `T-CityLite.base/resources/[qb]/qb-management/client/` | 中（要实测距离） | 更衣室/储物柜按 E 直接可用 |
+| J-5 | 老板菜单回执：执行者 feed、当事人 phone | `qb-management` 服务端动作 | 中 | 发薪后员工手机有记录 |
+| J-6 | custom-career 晋升条件给"差多少" | `T-CityLite.base/resources/[custom]/custom-career/` | 低 | 面板显示「还差 X 点 / Y 小时」 |
+
+**顺序**：J-2（通道统一，最快见效）→ J-1（降噪，效果最大）→ J-3（完成/失败区分）→ J-4/J-5 → J-6。
+
 
 ## 4. 验收（步骤）
 
