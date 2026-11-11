@@ -595,7 +595,7 @@ end)
 RegisterNetEvent('qb-storerobbery:client:robberyCall', function(_, _, _, coords)
     if (PlayerJob.name == 'police' or PlayerJob.type == 'leo') and onDuty then
         PlaySound(-1, 'Lose_1st', 'GTAO_FM_Events_Soundset', 0, 0, 1)
-        TriggerServerEvent('police:server:policeAlert', Lang:t('email.storerobbery_progress'))
+        TriggerServerEvent('police:server:policeAlert', Lang:t('email.storerobbery_progress'), 'store_robbery')
 
         local transG = 250
         local blip = AddBlipForCoord(coords.x, coords.y, coords.z)

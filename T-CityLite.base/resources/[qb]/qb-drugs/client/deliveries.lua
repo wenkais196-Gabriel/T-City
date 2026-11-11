@@ -141,7 +141,7 @@ end
 
 local function PoliceCall()
     if math.random(1, 100) <= Config.PoliceCallChance then
-        TriggerServerEvent('police:server:policeAlert', 'Suspicous activity')
+        TriggerServerEvent('police:server:policeAlert', '可疑运输', 'drug_delivery')
     end
 end
 
