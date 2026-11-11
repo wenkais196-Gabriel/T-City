@@ -27,10 +27,20 @@ document.addEventListener("DOMContentLoaded", () => {
             characterAmount: 0,
             loadingText: "",
             selectedCharacter: -1,
+            deleteConfirmName: "",
             dollar: Intl.NumberFormat("en-US"),
             translations: {},
             customNationality: false,
             nationalities: [],
+        },
+        computed: {
+            // I-2：输入的角色名与当前选中角色逐字一致才允许删除
+            deleteConfirmOk: function () {
+                var ch = this.characters[this.selectedCharacter];
+                if (!ch || !ch.charinfo) return false;
+                var full = ((ch.charinfo.firstname || "") + " " + (ch.charinfo.lastname || "")).trim();
+                return full.length > 0 && this.deleteConfirmName.trim() === full;
+            },
         },
         methods: {
             click_character: function (idx, type) {
@@ -50,9 +60,23 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
             },
+            // I-1：把 last_updated 变成"上次保存 · 12 分钟前"
+            savedAgo: function (raw) {
+                if (!raw) return '';
+                var ts = Date.parse(String(raw).replace(' ', 'T'));
+                if (!ts || isNaN(ts)) return '';
+                var mins = Math.floor((Date.now() - ts) / 60000);
+                if (mins < 1) return '刚刚';
+                if (mins < 60) return mins + ' 分钟前';
+                var hours = Math.floor(mins / 60);
+                if (hours < 24) return hours + ' 小时前';
+                return Math.floor(hours / 24) + ' 天前';
+            },
+
             prepareDelete: function () {
                 this.show.characters = false;
                 this.show.delete = true;
+                this.deleteConfirmName = "";
             },
             cancelDelete: function () {
                 this.show.delete = false;
@@ -63,7 +87,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 this.show.characters = true;
             },
             delete_character: function () {
-                if (this.show.delete) {
+                // I-2：输入必须与角色全名逐字一致，否则不删
+                if (this.show.delete && this.deleteConfirmOk) {
                     this.show.delete = false;
                     axios.post("https://qb-multicharacter/removeCharacter", {
                         citizenid: this.characters[this.selectedCharacter].citizenid,

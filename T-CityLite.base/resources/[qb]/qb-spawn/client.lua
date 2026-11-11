@@ -89,7 +89,7 @@ local function RunEdgeCaseSafeguards(pos)
         -- 强制重定位至 Legion Square 市中心安全生成点
         x, y, z = 195.17, -933.77, 29.7
         SetEntityCoords(ped, x, y, z)
-        QBCore.Functions.Notify("检测到空间裂缝，您已被引力安全拉回市区中心。", "error", 8000)
+        exports['custom-notify']:PushLocal('toast', "你被送回了市区（位置异常）")
         DebugPrint("[qb-spawn] Edge-Case Safeguard triggered: Void fall prevented. Teleported to Legion Square.")
     end
 
@@ -97,7 +97,7 @@ local function RunEdgeCaseSafeguards(pos)
     if IsPedSwimming(ped) or IsEntityInWater(ped) then
         -- 赋予 15 秒无限肺活量/水下呼吸 Buff，确保玩家有足够的时间浮上海面
         SetPedMaxTimeUnderwater(ped, 15.0)
-        QBCore.Functions.Notify("检测到您在水中上线，水下呼吸气泡已充盈，请尽快游上海面。", "primary", 8000)
+        exports['custom-notify']:PushLocal('toast', "你在水里上线了，先上岸")
         DebugPrint("[qb-spawn] Edge-Case Safeguard triggered: Marine spawn buffer active.")
     end
 
@@ -107,7 +107,7 @@ local function RunEdgeCaseSafeguards(pos)
     if z > 150.0 and insideMeta.house == nil and insideMeta.apartment.apartmentType == nil then
         -- 紧急配给降落伞，防止重登高空自由落体摔死
         GiveWeaponToPed(ped, `GADGET_PARACHUTE`, 1, false, true)
-        QBCore.Functions.Notify("检测到高空坠落危机，紧急救生备用伞包已自动配给。", "warning", 8000)
+        exports['custom-notify']:PushLocal('toast', "你从高处落地，已自动稳住")
         DebugPrint("[qb-spawn] Edge-Case Safeguard triggered: High-altitude spawn detected. Parachute supplied.")
     end
 
@@ -589,7 +589,7 @@ CreateThread(function()
                     FreezeEntityPosition(ped, false)
                     SetEntityVisible(ped, true)
                     DoScreenFadeIn(500)
-                    QBCore.Functions.Notify("检测到您坠入虚空空间，已安全将您重置回市区中心。", "error", 8000)
+                    exports['custom-notify']:PushLocal('toast', "你被送回了市区（掉出地图）")
                     DebugPrint("[qb-spawn] Guard Monitor: Void fall detected at Z=" .. tostring(coords.z) .. ". Reset to Legion Square.")
                 end
 
