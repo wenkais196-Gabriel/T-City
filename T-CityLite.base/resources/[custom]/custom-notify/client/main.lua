@@ -59,4 +59,24 @@ RegisterCommand('notifytest', function(_, args)
     })
 end, false)
 
+--- 客户端本地出口（C-5）：客户端资源（采矿、抢劫等）本来可以直接说一句，
+--- 但屏幕上"怎么说"必须只有一套。原来它们各自 QBCore.Functions.Notify，
+--- 于是同一件事在不同资源里长得不一样；现在统一从这里走。
+--- 注意：这是**本地渲染**，不经过服务端；跨玩家/带权限的内容必须走服务端 Push。
+---@param kind string 'feed' | 'toast' | 'error'
+---@param text string
+---@param opts table|nil { duration: number }
+local function PushLocal(kind, text, opts)
+    if not KINDS[kind] then return false end
+    opts = opts or {}
+    TriggerEvent('tcity:notify', {
+        kind = kind,
+        body = text,
+        duration = opts.duration,
+    })
+    return true
+end
+
+exports('PushLocal', PushLocal)
+
 print('[custom-notify] 三层通知渲染器已就绪（feed / toast / error）')
