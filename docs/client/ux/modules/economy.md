@@ -72,9 +72,9 @@ review_by: 2027-02-28
 
 | # | 任务 | 文件 | 风险 | 验收 |
 |---|---|---|---|---|
-| E-1 | `qb-shops` 去掉 ALT 双入口，只留 E | `qb-shops/client/main.lua:33,51-69,189` | 低（去掉一段注册） | 柜台前只出现一条 E 提示 |
-| E-2 | 购买/出售结果改走 `feed`（金额高亮） | `qb-shops/client`（面板回调处） | 低 | 买水后左下 feed 带余额 |
-| E-3 | 余额不足改走 `error` | 同上（失败分支） | 低 | 钱不够时左下红条，不弹 toast |
+| E-1 ✅(`0db8ec79`) | `qb-shops` 去掉 ALT 双入口，只留 E | `qb-shops/client/main.lua:33,51-69,189` | 低（去掉一段注册） | 柜台前只出现一条 E 提示 |
+| E-2 ✅(`0db8ec79`) | 购买/出售结果改走 `feed`（金额高亮） | `qb-shops/client`（面板回调处） | 低 | 买水后左下 feed 带余额 |
+| E-3 ✅(`0db8ec79`) | 余额不足改走 `error` | 同上（失败分支） | 低 | 钱不够时左下红条，不弹 toast |
 | E-4 | 银行入账改走 `phone`，并要求凭证可回查 | `qb-banking/server` | 中（要确认凭证落库） | 转账后手机通知中心有记录 |
 | E-5 | 工资/罚款分别迁 `feed` / `toast` | `T-CityLite.base/resources/[qb]/qb-core/server/services/economy_service.lua`、罚款调用点 | 中（调用点多） | 发工资与罚款表现不同 |
 

@@ -18,8 +18,8 @@ review_by: 2027-02-28
 | 模块 | 文档 | 覆盖的资源 | 状态 | 备注 |
 |---|---|---|---|---|
 | 手机 | [modules/phone.md](./modules/phone.md) | `custom-phone`、`custom-ui`（焦点/层） | **active** | 文字输入已修；Garage 标注已加 |
-| 经济与交易 | [modules/economy.md](./modules/economy.md) | `qb-shops`、`qb-banking`、`custom-market`、`qb-pawnshop`、`core_economy` | **active** | 商店双入口待去 |
-| 医疗与急救 | [modules/medical.md](./modules/medical.md) | `qb-ambulancejob`、`custom-consumables` | **active** | 复活不恢复护甲/饥渴 |
+| 经济与交易 | [modules/economy.md](./modules/economy.md) | `qb-shops`、`qb-banking`、`custom-market`、`qb-pawnshop`、`core_economy` | **active · 已交付** | 商店单入口 `[E]`；购买回执带余额与差额 |
+| 医疗与急救 | [modules/medical.md](./modules/medical.md) | `qb-ambulancejob`、`custom-consumables` | **active · 已交付** | 复活护甲 0 / 饥渴 50；施救与医院热区改 `[E]` |
 | 通知与提示 | [modules/notify-prompt.md](./modules/notify-prompt.md) | `custom-notify`、`custom-prompt`、`qb-core` Notify | **active** | 横向组件，其余模块都依赖它 |
 | 警务 | [modules/police.md](./modules/police.md) | `custom-police`、`custom-justice`、MDT | **active** | 去重合并 + 验尸官反馈 + 76 处回执降噪（待 PO 真机验） |
 | 载具与车库 | [modules/vehicles.md](./modules/vehicles.md) | `qb-garages`、`qb-vehicleshop`、`qb-fuel`、`custom-vehicles` | **active · 已交付** | V-1…V-7 全完成（取车回执、扣押三件套、主动推送） |
