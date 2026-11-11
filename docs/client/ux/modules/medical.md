@@ -91,11 +91,11 @@ review_by: 2027-02-28
 
 | # | 任务 | 文件 | 风险 | 验收 |
 |---|---|---|---|---|
-| M-1 | 施救从 ALT 热区改为 E 提示 | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua`:253、`custom-police` 同类 | 中（要实测距离/判定） | 站在倒地队友旁直接按 E |
-| M-2 | 濒死倒计时加文字（剩余秒数） | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/main.lua`（laststand 段） | 低 | 倒地后屏幕显示秒数 |
+| M-1 ✅(`12a94482`) | 施救从 ALT 热区改为 E 提示 | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua`:253、`custom-police` 同类 | 中（要实测距离/判定） | 站在倒地队友旁直接按 E |
+| M-2 ✅(`12a94482`) | 濒死倒计时加文字（剩余秒数） | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/main.lua`（laststand 段） | 低 | 倒地后屏幕显示秒数 |
 | M-3 ✅(`c523052c`) | 复活规则：护甲 0 + 饥渴 50 | client/main.lua 第 574 行、`custom-consumables` 新增 `exports('RestoreAfterRevive')` | 中（碰饥渴写者） | 复活后 HUD 圆环显示 50，护甲条为 0 |
-| M-4 | 医院 6 个热区 ALT → E | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua`:446-662 | 中 | 医院前台/柜子/电梯都按 E |
-| M-5 | 施救成功/失败的 feed 文案 | 同上 | 低 | 救起后双方各有 feed |
+| M-4 ✅(`12a94482`) | 医院 6 个热区 ALT → E | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua`:446-662 | 中 | 医院前台/柜子/电梯都按 E |
+| M-5 ✅(`12a94482`) | 施救成功/失败的 feed 文案 | 同上 | 低 | 救起后双方各有 feed |
 
 ## 4. 验收（步骤）
 
@@ -113,3 +113,13 @@ review_by: 2027-02-28
 - 医院床位的"付钱离床"流程没有 UX 设计（涉及扣费与同意）；
 - 玩家互救的 `firstaid` 消耗逻辑与提示不一致（消耗了但没提示）；
 - EMS 的 `/heal` 与 `/revive` 权限边界需要与"管理与审计"模块统一。
+
+## 6. 系统性发现（2026-11-11）
+
+**`setr qb_locale "zh-cn"` 对这些资源完全无效。** qb-core 的 locale.lua 不读这个 convar，
+而每个 `locales/*.lua` 都是 `Lang = Lang or Locale:new(...)` —— fxmanifest 里 `en.lua` 先加载，
+后面任何一个 locale 文件都进不去。
+
+影响面：所有仍用 `Lang:t(...)` 的资源（不止 ambulancejob）实际显示的都是英文。
+本模块的处理是**把玩家可见的文案直接写成中文**（濒死倒计时、施救回执）；
+其余资源同理，不能靠"补一个 zh-cn.lua"解决 —— 那是死代码。
