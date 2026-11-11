@@ -165,17 +165,28 @@ function PhoneFocus.Acquire(owner, opts)
 end
 
 --- 压入一个子帧（App / 输入框）。父帧已经在栈上；没有 custom-ui 时什么都不做。
+---
+--- `opts.keepInput` 是**必须**能覆盖的：输入框帧要把键盘交给 CEF（keepInput=false），
+--- 否则玩家打的字根本进不了 NUI —— 原来这里写死读 convar，于是"输入框入了栈却没生效"。
 ---@param id string 例如 'phone:mdt'、'phone:text'
+---@param opts table|nil { keepInput = boolean }
 ---@return boolean
-function PhoneFocus.PushFrame(id)
+function PhoneFocus.PushFrame(id, opts)
     local layer = inputLayer()
     if not layer or type(id) ~= 'string' or id == '' then return false end
+    opts = opts or {}
+    local keep
+    if opts.keepInput == nil then
+        keep = GetConvar('phone_keep_input', '1') == '1'
+    else
+        keep = opts.keepInput == true
+    end
     local ok = pcall(function()
         layer:Push({
             id = id,
             cursor = true,
-            keepInput = GetConvar('phone_keep_input', '1') == '1',
-            allow = GetConvar('phone_keep_input', '1') == '1' and ALLOW_WHILE_OPEN or nil,
+            keepInput = keep,
+            allow = keep and ALLOW_WHILE_OPEN or nil,
             owner = GetCurrentResourceName(),
         })
     end)

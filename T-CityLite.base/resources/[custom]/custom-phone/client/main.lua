@@ -67,13 +67,28 @@ RegisterNUICallback('uiFocus', function(data, cb)
     end
     focusHint = label
     -- 输入框 = 一层 text 帧：Esc/返回 先退出它，再退出 App。见 interaction path 设计。
+    -- keepInput 必须为 false：键盘交给 CEF，玩家打的字才进得了 input。
     if kind == 'text' then
-        PhoneFocus.PushFrame('phone:text')
+        PhoneFocus.PushFrame('phone:text', { keepInput = false })
     else
         PhoneFocus.PopFrame('phone:text')
     end
+    -- nav.lua 靠这个状态决定"这一帧要不要注入按键"（跨脚本全局在本 build 不可靠）
+    LocalPlayer.state:set('phoneTextFocus', kind == 'text', false)
     PhoneBridge.AnswerFn(cb)({ ok = true })
     announceUiState()
+end)
+
+RegisterNUICallback('textFocus', function(data, cb)
+    -- 独立于 uiFocus：鼠标点输入框走这里（nav 的 uiFocus 只在键盘导航 paint 时发）。
+    local active = type(data) == 'table' and data.active == true
+    if active then
+        PhoneFocus.PushFrame('phone:text', { keepInput = false })
+    else
+        PhoneFocus.PopFrame('phone:text')
+    end
+    LocalPlayer.state:set('phoneTextFocus', active, false)
+    PhoneBridge.AnswerFn(cb)({ ok = true })
 end)
 
 RegisterNUICallback('appState', function(data, cb)
