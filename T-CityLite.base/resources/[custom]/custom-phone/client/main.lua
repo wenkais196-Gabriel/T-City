@@ -58,7 +58,6 @@ local currentAppFrame = nil
 
 RegisterNUICallback('uiFocus', function(data, cb)
     local label = type(data) == 'table' and data.label or nil
-    local kind = type(data) == 'table' and data.kind or nil
     if type(label) == 'string' then
         -- 折叠空白再**去掉首尾**：只 gsub 不 trim 会把 "   " 变成 " "，被当成有焦点
         label = label:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', ''):sub(1, 40)
@@ -66,15 +65,10 @@ RegisterNUICallback('uiFocus', function(data, cb)
         label = ''
     end
     focusHint = label
-    -- 输入框 = 一层 text 帧：Esc/返回 先退出它，再退出 App。见 interaction path 设计。
-    -- keepInput 必须为 false：键盘交给 CEF，玩家打的字才进得了 input。
-    if kind == 'text' then
-        PhoneFocus.PushFrame('phone:text', { keepInput = false })
-    else
-        PhoneFocus.PopFrame('phone:text')
-    end
-    -- nav.lua 靠这个状态决定"这一帧要不要注入按键"（跨脚本全局在本 build 不可靠）
-    LocalPlayer.state:set('phoneTextFocus', kind == 'text', false)
+    -- 注意：这里**不再**动 text 帧。
+    -- nav.ts 的 paint() 每次键盘焦点变化都会发 uiFocus，若此时 kind 不是 'text' 就弹掉
+    -- text 帧，会把玩家刚点进输入框的键盘所有权抢回游戏（症状：打一个字焦点就没了）。
+    -- text 帧的 push/pop 只由 `textFocus` 一处负责。
     PhoneBridge.AnswerFn(cb)({ ok = true })
     announceUiState()
 end)
