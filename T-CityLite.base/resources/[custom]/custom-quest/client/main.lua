@@ -257,7 +257,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_STEP_ADVANCED, function(data)
     end
 
     print(('[quest-client] ➡️ STEP: %s → %s (type=%s)'):format(data.from_step, data.to_step, data.next_step_type))
-    QBCore.Functions.Notify(('Step: %s'):format(data.next_step_title), 'primary')
+    -- J-3：步骤推进由服务端发一条，客户端不再重复
 end)
 
 -- ==============================================================
@@ -271,7 +271,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_COMPLETED, function(data)
     ClearZone()
     CheckpointManager.Clear()  -- v0.11
     activeQuest = nil
-    QBCore.Functions.Notify(('Quest completed: %s!'):format(data.title), 'success')
+    -- J-3：完成回执由服务端发，客户端只清理状态
 end)
 
 -- ==============================================================
@@ -284,7 +284,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_FAILED, function(data)
     ClearZone()
     CheckpointManager.Clear()  -- v0.11
     activeQuest = nil
-    QBCore.Functions.Notify(('Quest failed: %s'):format(data.reason or 'unknown'), 'error')
+    -- J-3：失败由服务端 FailQuest 统一发（带中文原因），客户端只清理状态
 end)
 
 -- ==============================================================
@@ -698,8 +698,9 @@ RegisterNetEvent('quest:client:nodeWait', function(data)
                     data.questId, data.stepId, 'WAIT',
                     { elapsed = elapsed, duration = duration }
                 )
-            elseif remaining <= 10 then
-                QBCore.Functions.Notify(('Hold for %d more seconds...'):format(remaining), 'primary')
+            elseif remaining == 10 or remaining == 5 then
+                -- J-3b：原来 remaining<=10 每秒一条（10/9/8…），降为 10s 与 5s 各一条
+                QBCore.Functions.Notify(('还需坚持 %d 秒…'):format(remaining), 'primary')
             end
         end
     end)
