@@ -67,3 +67,16 @@ def test_three_tier_colors_detects_two_tier():
     # 反向：改回二档（只有 <=30 红），规则必须红
     broken = app.replace("data.hunger < 40", "data.hunger <= 30", 1)
     assert "data.hunger < 40" not in broken
+
+
+def test_scoreboard_has_empty_state_and_legend_detects_blank():
+    """H-4：分数板要么没人时说话，要么解释符号 —— 不能只有一串 ✅❌⏳。"""
+    sb = REPO / "T-CityLite.base" / "resources" / "[qb]" / "qb-scoreboard"
+    app = (sb / "html" / "app.js").read_text(encoding="utf-8")
+    assert "暂无在线玩家" in app, "0 人时还是显示 0 / 64（看起来像加载失败）"
+    assert "renderLegend" in app, "没有图例"
+    assert "✅" in app and "❌" in app and "⏳" in app, "图例没有解释三个符号"
+
+    # 反向：把空态文案删掉，规则必须红
+    broken = app.replace("暂无在线玩家", "0")
+    assert "暂无在线玩家" not in broken
