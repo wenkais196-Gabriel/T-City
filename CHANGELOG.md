@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 手机文字输入：`focus.lua` 的 `PushFrame` 支持 `keepInput` 覆盖，text 帧改为
     `keepInput=false`（原来写死读 convar，键盘一直归游戏，CEF 收不到字符）；
     新增 `textFocus` NUI 回调，鼠标点输入框也入栈；`nav.lua` 在 text 帧期间不注入按键
-    （否则一键两用、Backspace 把输入框 blur 掉）。前端新增 `web/src/core/layers.ts`
+    （否则一键两用、Backspace 把输入框 blur 掉）。custom-phone 前端新增 layers.ts
     （`textOwned` store + `use:textFocus` action），Messages 已接入。
   - 三层通知：新资源 `custom-notify`（`feed` 左下 / `toast` 中央 / `error` 左下红 /
     `phone` 只进手机），服务端唯一入口 `exports['custom-notify']:Push`，

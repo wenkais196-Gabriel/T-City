@@ -17,20 +17,16 @@
 local KINDS = { feed = true, toast = true, error = true, phone = true }
 local WINDOW_MS = 2000
 local MAX_PER_WINDOW = 12 -- 6/s：比 qb-core Notify 的 5/s 宽，一次交易的多行结果够用
-local buckets = {}        -- src -> { count, windowStart }
 
---- 简易滑动窗口（每玩家一个桶）。不用 core-framework 的 RateLimit 是为了让这个
---- 资源不依赖任何别的资源就能被调用方使用（它是最底层的 UI 资源）。
+--- 限流走 core-framework 的唯一实现（RATE-01 闸门：全仓只许有一份限流）。
+--- core-framework 不在时**放行**：通知不是安全边界，宁可多发也不要把消息吞掉。
 local function allow(src)
-    local now = GetGameTimer()
-    local bucket = buckets[src]
-    if not bucket or now - bucket.windowStart >= WINDOW_MS then
-        buckets[src] = { count = 1, windowStart = now }
-        return true
-    end
-    if bucket.count >= MAX_PER_WINDOW then return false end
-    bucket.count = bucket.count + 1
-    return true
+    local ok, allowed = pcall(function()
+        return exports['core-framework']:RateLimitWindow(
+            ('notifypush:%d'):format(src), MAX_PER_WINDOW, WINDOW_MS)
+    end)
+    if not ok then return true end
+    return allowed ~= false
 end
 
 local function clean(value, limit)
