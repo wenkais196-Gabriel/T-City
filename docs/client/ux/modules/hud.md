@@ -149,6 +149,47 @@ qb-hud 的 html/index.html 里的 #money-change 是变化时元素，`#money-cas
 | H-2 ✅(`dd814ac3`) | 低状态提醒（阈值 20 / 5 分钟冷却 / 回升 30 重新上膛） | `T-CityLite.base/resources/[qb]/qb-hud/client.lua` | 低 | 饿到 20 以下弹一次 toast，5 分钟内不再弹 |
 | H-3 ✅(`42d26813`) | 三档配色（<40 琥珀、<20 红） | `T-CityLite.base/resources/[qb]/qb-hud/html/app.js` 的颜色分支 | 低 | 60 / 35 / 15 三个值三种颜色 |
 | H-4 ✅(`33f23db7`) | `qb-scoreboard` 的空态与图例 | `T-CityLite.base/resources/[qb]/qb-scoreboard/` | 低 | 没人在线时不是一片空白 |
+| H-5 | **环心标识回归**：PO 真机反馈"带数字的环中间缺是哪个状态的标识（口渴/饥饿）"。实测截图：voice/health 有图标，armor/hunger/thirst/stress/oxygen 五环中心全空 | `T-CityLite.base/resources/[qb]/qb-hud/html/index.html`:229、238、247、256、265（这 5 个内层环缺 `show-value` —— 根因已实证，见下方方案） | 中（改了 HUD 主界面） | 五环中心各有一个图标，环下数字仍在且圆心无重复数字 |
+
+H-5 的证据图（2026-11-11 真机，2546×1434 原像素 2× 放大）：
+
+![带数字的环中心缺标识](../assets/hud-rings-empty-center.png)
+
+#### H-5 方案（与 CC 联审，2026-11-11）
+
+**根因（实证，不是推断）**：Quasar 2.1.0 的 `q-circular-progress` **只在 `show-value` 为真时**才创建圆心文字层
+`.q-circular-progress__text`，而默认插槽只在这一层里渲染；没有 `show-value` → 插槽函数从不被调用 →
+`<q-icon>` 连 DOM 节点都不生成，圆心只剩 `center-color` 画的暗盘。
+
+- **引入点**：H-1（`dd814ac3`）为了"数值移到环下"，把这 5 个内层环的 `show-value` **删掉了**，图标随之消失。
+  `git show dd814ac3 -- ...qb-hud/html/index.html` 里就是 `- … show-value :value="armor"` / `+ … :value="armor"` 成对出现。
+- **两条独立证据**：
+  1. 离线复现（用仓库 vendor 里的 Vue + Quasar 2.1.0 搭最小页）：带 `show-value` 的组渲染出 `i.fas.fa-heart.q-icon`；
+     去掉 `show-value` 的组 DOM 里**没有 `<i>`**；再补回来，图标回到圆心且 `__text` 是**空串**（插槽盖掉了数值）。
+  2. CC 只读读 vendor 压缩源：`!0===t.showValue && i.push(… void 0!==o.default ? o.default() : …)`。
+- **排除项**：不是闭合标签不配对（health 组没有内层闭合却正常渲染），也不是图标名不存在（FA 6.5.2 里
+  `fa-shield-alt`/`fa-hamburger`/`fa-tint`/`fa-brain`/`fa-lungs` 都在）。
+
+**修法（最小 diff：5 个属性）**：给 armor / hunger / thirst / stress / oxygen 的内层环补回 `show-value`：
+
+```diff
+- <q-circular-progress class="q-ml-xl" style="left: -50%;" :value="armor" … center-color="grey-10">
++ <q-circular-progress class="q-ml-xl" style="left: -50%;" show-value :value="armor" … center-color="grey-10">
+```
+
+有插槽时 Quasar 用插槽、不渲染数值，所以圆心只有图标、环下 `stat-num` 仍是唯一数字（不会重复）。
+voice/health/armed 本来就对，零改动。
+
+**验收**：1) 离线：圆心出现 `i.q-icon` 且 `__text` 为空；2) 闸门：在 `T-CityLite.base/tests/architecture/test_hud_contract.py`
+加断言"圆心带 `<q-icon>` 的内层环必须有 `show-value`"，反向把 `show-value` 删掉必须红；3) 真机：五环心各一个图标、
+环下数字仍在、圆心无重复数字。
+
+> 教训：H-1 的结论写的是"图标留圆心、数值放环下"，交付时只验证了后半句。删一个属性看起来无害，
+> 但它同时是插槽的开关 —— 改 Quasar 组件的属性前，先确认它开关的是哪一层。
+
+| H-6 ✅ | **护甲提醒误报**（PO 2026-11-12："我一直没装备护甲也弹'护甲已经打光了'"）：`lowArmed.armor` 初始为真 + `GetPedArmour()<=0` 直接触发，缺"从有到无"的边沿判定 | `T-CityLite.base/resources/[qb]/qb-hud/client.lua`:127-170（新增 `armorPeak`，只在非零→0 时提醒） | 低 | 裸奔 2 分钟不弹；穿上护甲再打光只弹一次 |
+
+| H-7 ✅ | **I 键归载具信息板**（PO 2026-11-12）：`RegisterKeyMapping('hud', …, 'I')` 去掉 —— I 留给载具信息板（尚未实现），HUD 设置只走命令 `/hud` | `T-CityLite.base/resources/[qb]/qb-hud/client.lua`:236 | 低 | 按 I 不再弹 HUD 设置；`/hud` 仍能打开 |
 
 **H-1…H-4 全部完成**，§4 验收等 CC 定标准后入库。
 

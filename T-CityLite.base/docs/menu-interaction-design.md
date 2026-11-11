@@ -140,8 +140,11 @@ end)
 本项目的 `custom-ui` 把这套逻辑封装为：
 
 ```lua
-exports['custom-ui']:OpenMenu({ keepInput = true })   -- 手机
-exports['custom-ui']:OpenMenu({ keepInput = false })  -- 车店/车库
+exports['custom-ui']:OpenMenu({ keepInput = true })   -- 手机（页面属于 custom-phone，由它导出 ApplyFocus）
+exports['custom-ui']:OpenMenu({ keepInput = false, owner = GetCurrentResourceName() })  -- 车店/车库/qb-menu
+-- ⚠️ 必须传 owner：SetNuiFocus 是按资源的，custom-ui 没有 ui_page；栈会回调
+--    exports[owner]:ApplyFocus(...) 让**拥有页面**的资源按焦点。缺 owner 或缺这个导出
+--    会静默回退到 custom-ui 自己按 → 面板能显示、没有光标、点不了（真机踩过两次）。
 exports['custom-ui']:CloseMenu()                     -- 内部 GuardControls
 ```
 
@@ -149,7 +152,7 @@ exports['custom-ui']:CloseMenu()                     -- 内部 GuardControls
 
 | API | 作用 |
 |-----|------|
-| `OpenMenu({keepInput})` | 统一设置 NUI focus / keepInput |
+| `OpenMenu({keepInput, owner})` | 统一设置 NUI focus / keepInput；**owner 必填**（页面所属资源，负责导出 `ApplyFocus`） |
 | `CloseMenu({guardMs})` | 释放焦点 + 300ms 防误触 |
 | `GuardControls(ms)` | 屏蔽攻击/瞄准/武器/电台轮盘 |
 | `DistanceToCoords(coords, max)` | 客户端距离判断 |
