@@ -594,6 +594,10 @@ RegisterNetEvent('hospital:client:Revive', function()
     TriggerServerEvent('hospital:server:RestoreWeaponDamage')
     SetEntityMaxHealth(player, 200)
     SetEntityHealth(player, 200)
+    -- M-3（D3=甲）：救起来是"裸装起来" —— 护甲归零，饥渴抬到 50。
+    -- 饥渴只由 custom-consumables 写，所以这里走它的事件，不直接改 metadata。
+    SetPedArmour(player, 0)
+    TriggerServerEvent('custom-consumables:server:RestoreAfterRevive')
     ClearPedBloodDamage(player)
     SetPlayerSprint(PlayerId(), true)
     ResetAll()

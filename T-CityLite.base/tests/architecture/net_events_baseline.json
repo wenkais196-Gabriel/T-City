@@ -15,9 +15,9 @@
       "unguarded": 0
     },
     "custom": {
-      "events": 132,
+      "events": 133,
       "guarded": 85,
-      "allowlisted": 47,
+      "allowlisted": 48,
       "unguarded": 0
     },
     "qb": {
@@ -102,6 +102,15 @@
       "group": "[custom]",
       "events": 5,
       "guarded": 4,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-consumables": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 1,
+      "guarded": 0,
       "allowlisted": 1,
       "unguarded": 0,
       "started": true

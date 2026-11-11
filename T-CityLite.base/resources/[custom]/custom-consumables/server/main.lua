@@ -144,6 +144,40 @@ CreateThread(function()
 end)
 
 --- 供其它资源读（警用酒测/药检）。
+--- 复活后把饥渴"抬到下限"（M-3）。饥渴的唯一写者是本资源，所以别的地方只能调这个。
+--- 语义：只抬不压 —— 如果玩家原本更饱，就保持原值（不让救人反而变饿）。
+---@param src number 玩家 server id
+---@param floor number|nil 下限，默认 50
+---@return table|nil result { hunger, thirst }
+local function RestoreAfterRevive(src, floor)
+    local player = QBCore.Functions.GetPlayer(src)
+    if not player then return nil end
+    local target = clamp(tonumber(floor) or 50.0, 0.0, 100.0)
+    local status = statusOf(player)
+    local hunger = math.max(status.hunger, target)
+    local thirst = math.max(status.thirst, target)
+
+    player.Functions.SetMetaData('hunger', hunger)
+    player.Functions.SetMetaData('thirst', thirst)
+    TriggerClientEvent('hud:client:UpdateNeeds', src, hunger, thirst)
+    return { hunger = hunger, thirst = thirst }
+end
+
+exports('RestoreAfterRevive', RestoreAfterRevive)
+
+--- 复活流程的服务端入口（M-3）。
+--- 只作用于 **调用者自己**：不接受 source/target 参数，所以没人能借它给别人抬饥渴。
+local reviveRestoreAt = {}
+RegisterNetEvent('custom-consumables:server:RestoreAfterRevive', function()
+    local src = source
+    if not src or src <= 0 then return end
+    local nowSec = os.time()
+    if reviveRestoreAt[src] and nowSec - reviveRestoreAt[src] < 10 then return end
+    reviveRestoreAt[src] = nowSec
+    RestoreAfterRevive(src, 50.0)
+end)
+
+
 exports('GetStatus', function(srcOrCid)
     local Player
     if type(srcOrCid) == 'number' then
