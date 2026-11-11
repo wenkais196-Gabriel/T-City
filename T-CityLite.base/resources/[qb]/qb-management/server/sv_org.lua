@@ -15,6 +15,19 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 人事回执（J-5）：老板操作 → 屏上 feed/error；被操作的当事人 → 手机留档（离线也能回查）。
+local function feedback(src, text, kind)
+    if type(text) == 'table' then text = text.text or '' end
+    local pushKind = (kind == 'error') and 'error' or 'feed'
+    pcall(function() exports['custom-notify']:Push(src, pushKind, tostring(text)) end)
+end
+
+--- 当事人凭证（录用/晋升/开除/所有权转移）：只进手机，不打断对方屏幕
+local function personnelNote(src, body)
+    pcall(function() exports['custom-notify']:Push(src, 'phone', '人事变动', tostring(body)) end)
+end
+
+
 -- ==============================================================
 -- 安全工具
 -- ==============================================================
@@ -25,7 +38,7 @@ local function SecurityAuditLog(src, action, detail)
     print(('[SECURITY-ORG] %s (src=%s) attempted %s — %s'):format(playerName, src, action, detail))
     TriggerEvent('qb-log:server:CreateLog', 'orgmenu', 'Suspicious Activity', 'orange',
         string.format('%s (src=%s) attempted %s: %s', playerName, src, action, detail), false)
-    TriggerClientEvent('QBCore:Notify', src, '你没有权限执行此操作', 'error')
+    feedback(src, '你没有权限执行此操作', 'error')
 end
 
 -- ==============================================================
@@ -197,7 +210,7 @@ RegisterNetEvent('qb-orgmenu:server:GradeUpdate', function(data)
     -- Boss 不能越级提拔：自己的 grade.level 必须大于目标等级
     local _, bossGrade = GetPlayerOrgInfo(Player, orgType)
     if data.grade > bossGrade then
-        TriggerClientEvent('QBCore:Notify', src, 'You cannot promote to this rank!', 'error')
+        feedback(src, '不能晋升到这个职级', 'error')
         return
     end
 
@@ -209,14 +222,13 @@ RegisterNetEvent('qb-orgmenu:server:GradeUpdate', function(data)
     end
 
     if success then
-        TriggerClientEvent('QBCore:Notify', src, 'Successfully promoted!', 'success')
+        feedback(src, '已晋升该成员', 'success')
         Employee.Functions.Save()
         if Employee.PlayerData.source then
-            TriggerClientEvent('QBCore:Notify', Employee.PlayerData.source,
-                'You have been promoted to ' .. data.gradename .. '.', 'success')
+            personnelNote(Employee.PlayerData.source, '你已被晋升为 ' .. tostring(data.gradename or ''))
         end
     else
-        TriggerClientEvent('QBCore:Notify', src, 'Grade does not exist.', 'error')
+        feedback(src, '该职级不存在', 'error')
     end
 
     TriggerClientEvent('qb-orgmenu:client:OpenMenu', src)
@@ -261,8 +273,7 @@ RegisterNetEvent('qb-orgmenu:server:FireMember', function(data)
 
     -- 不能开除自己（Boss 退出请走 TransferOwnership）
     if data.cid == Player.PlayerData.citizenid then
-        TriggerClientEvent('QBCore:Notify', src,
-            'You cannot fire yourself! Use "Transfer Ownership" to step down.', 'error')
+        feedback(src, '不能开除自己（想退位请用「转移所有权」）', 'error')
         return
     end
 
@@ -272,7 +283,7 @@ RegisterNetEvent('qb-orgmenu:server:FireMember', function(data)
         or Employee.PlayerData.gang.grade.level
     local _, bossGrade = GetPlayerOrgInfo(Player, orgType)
     if empGrade > bossGrade then
-        TriggerClientEvent('QBCore:Notify', src, 'You cannot fire this citizen!', 'error')
+        feedback(src, '你不能开除这名成员', 'error')
         return
     end
 
@@ -294,13 +305,12 @@ RegisterNetEvent('qb-orgmenu:server:FireMember', function(data)
             .. ' successfully fired ' .. Employee.PlayerData.charinfo.firstname .. ' '
             .. Employee.PlayerData.charinfo.lastname .. ' (' .. data.orgName .. ')', false)
 
-        TriggerClientEvent('QBCore:Notify', src, 'Member fired!', 'success')
+        feedback(src, '已开除该成员', 'success')
         if Employee.PlayerData.source then
-            TriggerClientEvent('QBCore:Notify', Employee.PlayerData.source,
-                'You have been expelled from the organization!', 'error')
+            personnelNote(Employee.PlayerData.source, '你已被移出组织')
         end
     else
-        TriggerClientEvent('QBCore:Notify', src, 'Error.', 'error')
+        feedback(src, '操作失败', 'error')
     end
 
     TriggerClientEvent('qb-orgmenu:client:OpenMenu', src)
@@ -360,11 +370,10 @@ RegisterNetEvent('qb-orgmenu:server:HireMember', function(data)
         local orgLabel = orgType == 'job'
             and QBCore.Shared.Jobs[data.orgName].label
             or QBCore.Shared.Gangs[data.orgName].label
-        TriggerClientEvent('QBCore:Notify', src,
-            'You hired ' .. Target.PlayerData.charinfo.firstname .. ' '
+        feedback(src,
+            '已录用 ' .. Target.PlayerData.charinfo.firstname .. ' '
             .. Target.PlayerData.charinfo.lastname .. ' as ' .. orgLabel, 'success')
-        TriggerClientEvent('QBCore:Notify', Target.PlayerData.source,
-            'You have been hired as ' .. orgLabel, 'success')
+        personnelNote(Target.PlayerData.source, '你已被录用为 ' .. orgLabel)
 
         local logType = orgType == 'job' and 'bossmenu' or 'gangmenu'
         TriggerEvent('qb-log:server:CreateLog', logType, 'Recruit',
@@ -394,7 +403,7 @@ RegisterNetEvent('qb-orgmenu:server:TransferOwnership', function(data)
 
     local orgType = GetOrgType(data.orgName)
     if not orgType then
-        TriggerClientEvent('QBCore:Notify', src, 'Invalid organization.', 'error')
+        feedback(src, '组织无效', 'error')
         return
     end
 
@@ -422,14 +431,14 @@ RegisterNetEvent('qb-orgmenu:server:TransferOwnership', function(data)
 
     -- 🔒 安全校验 2: 不能传给自己
     if data.successorCid == Player.PlayerData.citizenid then
-        TriggerClientEvent('QBCore:Notify', src, 'You cannot transfer ownership to yourself!', 'error')
+        feedback(src, '不能把所有权转给自己', 'error')
         return
     end
 
     -- 🔒 安全校验 3: 接班人必须在同组织
     local Successor = QBCore.Functions.GetPlayerByCitizenId(data.successorCid)
     if not Successor then
-        TriggerClientEvent('QBCore:Notify', src, 'The designated successor is not found.', 'error')
+        feedback(src, '指定的继承人不存在', 'error')
         return
     end
 
@@ -438,15 +447,15 @@ RegisterNetEvent('qb-orgmenu:server:TransferOwnership', function(data)
         or Successor.PlayerData.gang.name
 
     if successorOrgName ~= data.orgName then
-        TriggerClientEvent('QBCore:Notify', src,
-            'The designated successor is not a member of this organization!', 'error')
+        feedback(src,
+            '继承人不是本组织成员', 'error')
         return
     end
 
     -- 🔒 安全校验 4: 接班人必须在线
     if not Successor.PlayerData.source then
-        TriggerClientEvent('QBCore:Notify', src,
-            'The designated successor must be online to accept ownership.', 'error')
+        feedback(src,
+            '继承人必须在线才能接管', 'error')
         return
     end
 
@@ -455,8 +464,8 @@ RegisterNetEvent('qb-orgmenu:server:TransferOwnership', function(data)
         and Successor.PlayerData.job.isboss
         or Successor.PlayerData.gang.isboss
     if isSuccessorBoss then
-        TriggerClientEvent('QBCore:Notify', src,
-            'This member is already a Boss! Choose someone else.', 'error')
+        feedback(src,
+            '该成员已经是老板，请换人', 'error')
         return
     end
 
@@ -471,8 +480,8 @@ RegisterNetEvent('qb-orgmenu:server:TransferOwnership', function(data)
     end
 
     if not step1Success then
-        TriggerClientEvent('QBCore:Notify', src,
-            'Failed to promote successor. Transfer aborted.', 'error')
+        feedback(src,
+            '提升继承人失败，转移已中止', 'error')
         return
     end
 
@@ -493,8 +502,8 @@ RegisterNetEvent('qb-orgmenu:server:TransferOwnership', function(data)
         else
             Successor.Functions.SetGang(data.orgName, Successor.PlayerData.gang.grade.level)
         end
-        TriggerClientEvent('QBCore:Notify', src,
-            'Failed to complete transfer. Rolled back.', 'error')
+        feedback(src,
+            '转移失败，已回滚', 'error')
         return
     end
 
@@ -505,15 +514,13 @@ RegisterNetEvent('qb-orgmenu:server:TransferOwnership', function(data)
         and QBCore.Shared.Jobs[data.orgName].label
         or QBCore.Shared.Gangs[data.orgName].label
 
-    TriggerClientEvent('QBCore:Notify', src,
+    feedback(src,
         'You have transferred ownership of ' .. orgLabel .. ' to '
         .. Successor.PlayerData.charinfo.firstname .. ' '
-        .. Successor.PlayerData.charinfo.lastname .. '. You are now a civilian.', 'success')
+        .. Successor.PlayerData.charinfo.lastname .. '. 你已变回平民。', 'success')
 
-    TriggerClientEvent('QBCore:Notify', Successor.PlayerData.source,
-        '⚠️ You are now the new Boss of ' .. orgLabel .. '! '
-        .. Player.PlayerData.charinfo.firstname .. ' '
-        .. Player.PlayerData.charinfo.lastname .. ' has stepped down.', 'success')
+    personnelNote(Successor.PlayerData.source,
+        '⚠️ 你已接管 ' .. orgLabel .. '（原老板已退位）')
 
     -- 审计日志
     local logType = orgType == 'job' and 'bossmenu' or 'gangmenu'
