@@ -133,11 +133,11 @@ review_by: 2027-02-28
 |---|---|---|---|---|
 | V-1 ✅(`c55b628e`) | 接入三层通道：`qb-garages` 的 `QBCore.Functions.Notify` 收口到本地 `feedback()`（success→feed、error→error） | `T-CityLite.base/resources/[qb]/qb-garages/client/main.lua` | 低（机械 + 逐条看） | 取车/存车提示落在左下，右侧不再弹 |
 | V-2 ✅(`c55b628e`) | 取车成功回执 | 同上（取车回调末尾） | 低 | 取车后左下出现「已取车 …」 |
-| V-3 | 扣押取车结果回执（成功/失败都要） | 同上 `327-335` 段 + 服务端 `PayDepotPrice` 返回 | 中（要看服务端返回形状） | 缴费成功有余额；失败具名 |
+| V-3 ✅(`63452b44`) | 扣押取车结果回执（成功/失败都要） | 同上 `327-335` 段 + 服务端 `PayDepotPrice` 返回 | 中（要看服务端返回形状） | 缴费成功有余额；失败具名 |
 | V-4 ✅(`c55b628e`) | depot 内按 E → error（现在静默） | 同上 `:204` | 低 | 扣押场里按 E 得到红条 |
-| V-5 | 手机 Garage 显示扣押三件套（原因/金额/地点） | `T-CityLite.base/resources/[custom]/custom-phone/server/main.lua`（`getOwnedVehicles`）+ `Garage.svelte` | 中（要加字段并兼容旧行） | 被扣车的卡片能看到原因与金额 |
-| V-6 | 手机拉取失败与"没有车"分开 | `Garage.svelte` | 低 | 断网时显示重试，不显示"名下没有车辆" |
-| V-7 | 扣押瞬间主动推 `phone` | `qb-garages` 的扣押入口（`/impound` 与拖车） | 中（要拿车主 cid） | 车被扣后手机会话里有凭证 |
+| V-5 ✅(`63452b44`) | 手机 Garage 显示扣押三件套（原因/金额/地点） | `T-CityLite.base/resources/[custom]/custom-phone/server/main.lua`（`getOwnedVehicles`）+ `Garage.svelte` | 中（要加字段并兼容旧行） | 被扣车的卡片能看到原因与金额 |
+| V-6 ✅(`63452b44`) | 手机拉取失败与"没有车"分开 | `Garage.svelte` | 低 | 断网时显示重试，不显示"名下没有车辆" |
+| V-7 ✅(`8d469850`) | 扣押瞬间主动推 `phone` | `qb-garages` 的扣押入口（`/impound` 与拖车） | 中（要拿车主 cid） | 车被扣后手机会话里有凭证 |
 
 **顺序**：V-4（最小、真静默）→ V-1（统一通道）→ V-2（取车回执）→ V-3（扣押取车）→ V-5/V-6（手机侧）→ V-7（主动通知）。
 
