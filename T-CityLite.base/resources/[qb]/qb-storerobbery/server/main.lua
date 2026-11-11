@@ -461,11 +461,16 @@ local function issueStoreReward(src, register)
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['stickynote'], 'add')
     end
 
-    -- 通知玩家结算信息
+    -- C-3：结算只发一条屏上（feed）+ 一条手机明细。原来这条之后
+    -- qb-storerobbery:client:robberyComplete 还会再弹一句"抢劫完成"，同一件事两条。
     local pct = math.floor(timeMult * 100 + 0.5)
     local totalReward = worthValue * bags
-    TriggerClientEvent('QBCore:Notify', src,
-        ("抢劫结算: 逗留时间 %d%%，实得 $%d × %d 袋"):format(pct, worthValue, bags), "success")
+    local summary = ("抢劫结算：逗留 %d%%，实得 $%d × %d 袋"):format(pct, worthValue, bags)
+    TriggerClientEvent('QBCore:Notify', src, summary, "success")
+    pcall(function()
+        exports['custom-notify']:Push(src, 'phone', '抢劫结算',
+            ("逗留 %d%%｜每袋 $%d｜共 %d 袋｜合计 $%d"):format(pct, worthValue, bags, totalReward))
+    end)
 
     -- 良心扣除 + 弹窗通知
     local citizenid = Player.PlayerData.citizenid
@@ -726,7 +731,12 @@ RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetL
         description = Lang:t('email.someone_is_trying_to_rob_a_store', { street = streetLabel, cameraId1 = cameraId })
     }
     TriggerClientEvent('qb-storerobbery:client:robberyCall', -1, kind, safe, streetLabel, coords)
-    TriggerClientEvent('qb-phone:client:addPoliceAlert', -1, alertData)
+    -- C-6：警情只走 policeAlert（它建单 → projectIncident 负责通知与地图标记）。
+    -- 原来这里还并行发一条 qb-phone 警情，加上客户端各警察自己建的 blip，
+    -- 一次抢劫在警官屏幕上会响 4 次。alertData 保留给下面的日志/兼容读取。
+    if alertData and type(alertData) == 'table' and alertData.title then
+        print(('[qb-storerobbery] 抢劫报警: %s @ %s'):format(alertData.title, tostring(streetLabel)))
+    end
 end)
 
 RegisterNetEvent('qb-storerobbery:server:removeAdvancedLockpick', function()
