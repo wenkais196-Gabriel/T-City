@@ -118,6 +118,9 @@ RegisterNetEvent('qb-multicharacter:server:loadUserData', function(cData)
             TriggerClientEvent('qb-multicharacter:client:spawnLastLocation', src, coords, cData)
         else
             if GetResourceState('qb-apartments') == 'started' then
+                -- I-3：这是"选已有角色"的路径，服务端打标；客户端传什么都覆盖掉，
+                -- 否则老角色可以自称新角色，从而绕过上次位置、走公寓选择流程。
+                cData.isNew = false
                 TriggerClientEvent('apartments:client:setupSpawnUI', src, cData)
             else
                 TriggerClientEvent('qb-spawn:client:setupSpawns', src, cData, false, nil)
@@ -185,6 +188,7 @@ RegisterNetEvent('qb-multicharacter:server:createCharacter', function(data)
             QBCore.Commands.Refresh(src)
             loadHouseData(src)
             TriggerClientEvent('qb-multicharacter:client:closeNUI', src)
+            newData.isNew = true   -- I-3：只有这条路是真·新角色
             TriggerClientEvent('apartments:client:setupSpawnUI', src, newData)
             GiveStarterItems(src)
         else
