@@ -77,19 +77,19 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `amenu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:42 |
-| `apanel` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:427 |
-| `checklicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:344 |
-| `clearme` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:141 |
-| `givelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:240 |
-| `givemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:175 |
-| `menu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:431 |
-| `myid` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:11 |
-| `reinstatelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:292 |
-| `revokelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:266 |
-| `revokemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:205 |
-| `suspendlicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:318 |
-| `tccops` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:81 |
+| `amenu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:114 |
+| `apanel` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:542 |
+| `checklicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:459 |
+| `clearme` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:216 |
+| `givelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:315 |
+| `givemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:250 |
+| `menu` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:546 |
+| `myid` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:83 |
+| `reinstatelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:387 |
+| `revokelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:351 |
+| `revokemelicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:280 |
+| `suspendlicense` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:423 |
+| `tccops` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-admin/server/commands.lua:153 |
 
 ### custom-agent-client
 

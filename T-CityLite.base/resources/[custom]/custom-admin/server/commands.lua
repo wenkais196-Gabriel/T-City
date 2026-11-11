@@ -8,6 +8,54 @@ local QBCore = exports['qb-core']:GetCoreObject()
 ---   1) 落 custom-logs（本地文件 + Discord）；
 ---   2) 执行者拿 feed 回执（含目标与明细，可截图留证）；
 ---   3) 审计写失败只 print，不影响业务（审计不能成为可用性单点）。
+--- 权限层级（A-5）：不能对同级或更高级动手。
+local RANK_LEVELS = { user = 0, mod = 1, admin = 2, god = 3 }
+local function rankOf(src)
+    local best = -1
+    for level, weight in pairs(RANK_LEVELS) do
+        if QBCore.Functions.HasPermission(src, level) then
+            if weight > best then best = weight end
+        end
+    end
+    return best
+end
+
+---@return boolean allowed, string|nil reason
+local function canActOn(src, targetId)
+    if src == targetId then return true end
+    local mine, theirs = rankOf(src), rankOf(targetId)
+    if mine < 0 then return false, '你没有管理权限' end
+    if theirs >= mine then
+        return false, ('对方权限不低于你（你 %s / 对方 %s）'):format(
+            tostring(mine), tostring(theirs))
+    end
+    return true, nil
+end
+
+--- 二次确认（A-4）：第一次只输出摘要，10 秒内用同样的参数再执行一次才生效。
+--- 为什么不做成通知：通知是事后单向，不能阻止误操作，也不构成"同意"。
+local CONFIRM_WINDOW_MS = 10000
+local pendingConfirm = {}
+local function confirmStep(src, action, key, summary)
+    local now = GetGameTimer()
+    local slot = ('%s|%s|%s'):format(tostring(src), action, tostring(key))
+    local entry = pendingConfirm[slot]
+    if entry and now - entry.at <= CONFIRM_WINDOW_MS then
+        pendingConfirm[slot] = nil
+        return true
+    end
+    pendingConfirm[slot] = { at = now }
+    -- 顺手清掉过期项，避免长跑积累
+    for other, info in pairs(pendingConfirm) do
+        if now - info.at > CONFIRM_WINDOW_MS then pendingConfirm[other] = nil end
+    end
+    pcall(function()
+        exports['custom-notify']:Push(src, 'toast', '确认操作',
+            ('%s · 10 秒内再执行一次以确认'):format(summary))
+    end)
+    return false
+end
+
 local function auditAdmin(src, action, targetLabel, detail, kind)
     local executor = GetPlayerName(src) or ('#%s'):format(tostring(src))
     local line = ('%s | 操作者 %s(#%s) | 目标 %s | %s'):format(
@@ -280,6 +328,15 @@ QBCore.Commands.Add('givelicense', '授予玩家执照 (Admin)', {
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
         return
     end
+    local allowed, reason = canActOn(src, targetId)
+    if not allowed then
+        TriggerClientEvent('QBCore:Notify', src, reason, 'error')
+        return
+    end
+    if not confirmStep(src, '授予执照', ('%s:%s'):format(targetId, licenseType),
+        ('授予 %s 的 %s 执照'):format(GetPlayerName(targetId), tostring(licenseType))) then
+        return
+    end
     local success, msg = exports['custom-certificates']:GrantLicense(targetId, licenseType)
     if success then
         auditAdmin(src, '授予执照', GetPlayerName(targetId), ('+%s'):format(tostring(licenseType)))
@@ -305,6 +362,15 @@ QBCore.Commands.Add('revokelicense', '吊销玩家执照 (Admin)', {
     local target = QBCore.Functions.GetPlayer(targetId)
     if not target then
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
+        return
+    end
+    local allowed, reason = canActOn(src, targetId)
+    if not allowed then
+        TriggerClientEvent('QBCore:Notify', src, reason, 'error')
+        return
+    end
+    if not confirmStep(src, '吊销执照', ('%s:%s'):format(targetId, licenseType),
+        ('吊销 %s 的 %s 执照'):format(GetPlayerName(targetId), tostring(licenseType))) then
         return
     end
     local success, msg = exports['custom-certificates']:RevokeLicense(targetId, licenseType)
@@ -334,6 +400,15 @@ QBCore.Commands.Add('reinstatelicense', '恢复玩家执照 (Admin)', {
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
         return
     end
+    local allowed, reason = canActOn(src, targetId)
+    if not allowed then
+        TriggerClientEvent('QBCore:Notify', src, reason, 'error')
+        return
+    end
+    if not confirmStep(src, '恢复执照', ('%s:%s'):format(targetId, licenseType),
+        ('恢复 %s 的 %s 执照'):format(GetPlayerName(targetId), tostring(licenseType))) then
+        return
+    end
     local success, msg = exports['custom-certificates']:ReinstateLicense(targetId, licenseType)
     if success then
         auditAdmin(src, '恢复执照', GetPlayerName(targetId), ('~%s'):format(tostring(licenseType)))
@@ -359,6 +434,15 @@ QBCore.Commands.Add('suspendlicense', '暂停玩家执照 (Admin)', {
     local target = QBCore.Functions.GetPlayer(targetId)
     if not target then
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
+        return
+    end
+    local allowed, reason = canActOn(src, targetId)
+    if not allowed then
+        TriggerClientEvent('QBCore:Notify', src, reason, 'error')
+        return
+    end
+    if not confirmStep(src, '暂停执照', ('%s:%s'):format(targetId, licenseType),
+        ('暂停 %s 的 %s 执照'):format(GetPlayerName(targetId), tostring(licenseType))) then
         return
     end
     local success, msg = exports['custom-certificates']:SuspendLicense(targetId, licenseType)
