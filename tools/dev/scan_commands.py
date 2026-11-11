@@ -70,8 +70,20 @@ def balanced_call(text: str, start: int, limit: int = 4000) -> str:
     return text[start:start + limit]
 
 
+#: 回调内部自建的门禁（注册成 user，但进了回调先判定）。扫描器要能认出来，
+#: 否则文档会把"注册成 user + 内部判定"写成"全体可用"，管理员照着文档会误判。
+INLINE_GATES = ("canUseLicenseTool", "CanRevive", "canActOn", "HasPermission(",
+                "IsPlayerAceAllowed(", "PolicePolicy.Can(", "QBCore.Functions.HasPermission(")
+
+
 def classify(call: str, api: str) -> str:
     perms = re.findall(r"['\"](god|admin|mod|user)['\"]", call)
+    if perms and perms[-1] != "user":
+        return "QBCore: " + perms[-1]
+    for gate in INLINE_GATES:
+        if gate in call:
+            name = gate.rstrip("(")
+            return "handler 内判定: " + name
     if perms:
         return "QBCore: " + perms[-1]
     ace = re.search(r"IsPlayerAceAllowed\(\s*\w+\s*,\s*['\"]([^'\"]+)['\"]", call)
