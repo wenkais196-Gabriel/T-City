@@ -64,3 +64,20 @@ def test_privileged_actions_are_audited_detects_gap():
     # 反向：把一条审计调用删掉，规则必须红
     broken = server.replace("auditAdmin(src, '吊销执照',", "(-- removed --)(", 1)
     assert "auditAdmin(src, '吊销执照'," not in broken
+
+
+def test_destructive_actions_need_confirm_and_rank_detects_gap():
+    """A-4/A-5：破坏性命令要有二次确认，且不能对同级/更高级动手。"""
+    server = SERVER.read_text(encoding="utf-8")
+    assert "local function confirmStep" in server, "没有二次确认"
+    assert "local function canActOn" in server, "没有目标权限比较"
+    for cmd in ("givelicense", "revokelicense", "reinstatelicense", "suspendlicense"):
+        block = server.split(f"QBCore.Commands.Add('{cmd}'", 1)[1]
+        head = block.split("end, '", 1)[0]
+        assert "confirmStep(src," in head, f"/{cmd} 没有二次确认"
+        assert "canActOn(src, targetId)" in head, f"/{cmd} 没有权限比较"
+
+    # 反向：把 confirmStep 摘掉，规则必须红
+    broken = server.replace("if not confirmStep(src, '暂停执照'", "if false and confirmStep(src, '暂停执照'", 1)
+    block = broken.split("QBCore.Commands.Add('suspendlicense'", 1)[1].split("end, '", 1)[0]
+    assert "if not confirmStep(src," not in block
