@@ -1,7 +1,7 @@
 ---
 id: ux-vehicles
 type: manual
-status: draft
+status: active
 system: vehicle
 owner: hermes
 updated: 2026-11-11
@@ -131,10 +131,10 @@ review_by: 2027-02-28
 
 | # | 任务 | 文件 | 风险 | 验收方式 |
 |---|---|---|---|---|
-| V-1 | 接入三层通道：`qb-garages` 的 `QBCore.Functions.Notify` 收口到本地 `feedback()`（success→feed、error→error） | `T-CityLite.base/resources/[qb]/qb-garages/client/main.lua` | 低（机械 + 逐条看） | 取车/存车提示落在左下，右侧不再弹 |
-| V-2 | 取车成功回执 | 同上（取车回调末尾） | 低 | 取车后左下出现「已取车 …」 |
+| V-1 ✅(`c55b628e`) | 接入三层通道：`qb-garages` 的 `QBCore.Functions.Notify` 收口到本地 `feedback()`（success→feed、error→error） | `T-CityLite.base/resources/[qb]/qb-garages/client/main.lua` | 低（机械 + 逐条看） | 取车/存车提示落在左下，右侧不再弹 |
+| V-2 ✅(`c55b628e`) | 取车成功回执 | 同上（取车回调末尾） | 低 | 取车后左下出现「已取车 …」 |
 | V-3 | 扣押取车结果回执（成功/失败都要） | 同上 `327-335` 段 + 服务端 `PayDepotPrice` 返回 | 中（要看服务端返回形状） | 缴费成功有余额；失败具名 |
-| V-4 | depot 内按 E → error（现在静默） | 同上 `:204` | 低 | 扣押场里按 E 得到红条 |
+| V-4 ✅(`c55b628e`) | depot 内按 E → error（现在静默） | 同上 `:204` | 低 | 扣押场里按 E 得到红条 |
 | V-5 | 手机 Garage 显示扣押三件套（原因/金额/地点） | `T-CityLite.base/resources/[custom]/custom-phone/server/main.lua`（`getOwnedVehicles`）+ `Garage.svelte` | 中（要加字段并兼容旧行） | 被扣车的卡片能看到原因与金额 |
 | V-6 | 手机拉取失败与"没有车"分开 | `Garage.svelte` | 低 | 断网时显示重试，不显示"名下没有车辆" |
 | V-7 | 扣押瞬间主动推 `phone` | `qb-garages` 的扣押入口（`/impound` 与拖车） | 中（要拿车主 cid） | 车被扣后手机会话里有凭证 |
@@ -144,7 +144,52 @@ review_by: 2027-02-28
 
 ## 4. 验收（步骤）
 
-_待写。_
+> CC 定标准（2026-11-11）。前置：测试账号名下有 **TESTCAR1 / TESTCAR2**；
+> DB 判定统一用 `SELECT state, depotprice FROM player_vehicles WHERE plate=?`。
+
+### V-2 取车成功回执
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | DB 置 TESTCAR1 `state=1`；站入公共车库圆圈中心按 **E**，菜单点取车 | WARP 上车同时出现 feed「已取车 TESTCAR1 · <车库>」，**不得**走 error | 截图 |
+| 2 | 取车后查 DB | `state` 由 1 变 0 | DB |
+
+### V-3 扣押取车（缴费）
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | DB 置 TESTCAR2 `state=2, depotprice=500`，现金 ≥500；depot 圈内按 E 取车 | feed「已缴 $500 取出 TESTCAR2」；现金 −500 | 截图 |
+| 2 | 查 DB | `state` 2→0，`depotprice`→0 | DB 两列 |
+| 3 | 现金 <500 重复步骤 1 | error「现金不足」；不扣款、不 WARP | 截图 + DB 未变 |
+
+### V-4 depot 内按 E
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | 坐进 TESTCAR1 驶入 depot 圆圈按 **E** | error「扣押场不能存车，请去公共车库」，非静默 | 截图 |
+| 2 | 查 DB | `state` 仍为 0 | DB |
+
+### V-5 手机扣押三件套
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | DB 置 TESTCAR2 `state=2, depotprice=750`；打开手机 Garage | 卡片**同屏**四项：扣押中 / 原因 / $750 / 地点 | 截图 |
+| 2 | 对照金额 | 显示 $750 | DB depotprice=750 |
+
+### V-6 拉取失败与「没有车」分开
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 1 | 用 0 车账号打开 Garage | 空态「名下没有车辆」（非错误样式） | 截图 |
+| 2 | 令 `getOwnedVehicles` 超时/抛错后重开 | 「拉取失败，请重试」，与步骤 1 文案不同 | 两态对比截图 |
+
+**反例（必须不成立）**
+
+1. 取车成功仅 WARP、无任何回执；
+2. 扣押缴费失败仍扣钱，或 `state` 被改成 0；
+3. depot 内按 E 完全无通知；
+4. 拉取失败复用「名下没有车辆」空态；
+5. 扣押卡片只显示 Impounded，缺金额/原因/地点。
 
 ## 5. 已知未决
 

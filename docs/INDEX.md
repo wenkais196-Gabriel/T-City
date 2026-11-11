@@ -4,7 +4,7 @@
 
 **生成时间**：2026-11-11 ｜ **文档总数**：302 ｜ **已登记**：302 ｜ **未登记**：0
 
-**状态分布**：✅ active 168 ・ 🟡 draft 11 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 169 ・ 🟡 draft 10 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -132,7 +132,7 @@
 |---|---|---|---|---|---|---|
 | [Module 4: 车辆系统 (vehicles.cfg)](01_module_manuals/04_vehicle_system.md) | manual | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/01_module_manuals/04_vehicle_system.md` |
 | [custom-vehicles — 统一车辆系统](02_script_index/custom-vehicles.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-vehicles.md` |
-| [载具与车库 · UX 设计](client/ux/modules/vehicles.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/vehicles.md` |
+| [载具与车库 · UX 设计](client/ux/modules/vehicles.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/vehicles.md` |
 | [✈️ T-City Lite 飞行员与航空系统 (Pilot) 细化规划](archive/QBCore_Lite_versions/career/pilot_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/pilot_plan.md` |
 | [T-City2 改装店玩法分析报告](analysis/tuning_shop_analysis.md) | research | 📌 final | 2026-10-25 | 2027-01-30 |  | `docs/analysis/tuning_shop_analysis.md` |
 | [T-City2 改装店玩家体验流程设计](analysis/tuning_shop_player_experience.md) | research | 📌 final | 2026-06-21 | 2027-01-30 |  | `docs/analysis/tuning_shop_player_experience.md` |
