@@ -4,7 +4,7 @@
 
 **生成时间**：2026-11-11 ｜ **文档总数**：302 ｜ **已登记**：302 ｜ **未登记**：0
 
-**状态分布**：✅ active 169 ・ 🟡 draft 10 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 170 ・ 🟡 draft 9 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -110,7 +110,7 @@
 | [商店抢劫重构 — "罪与罚" 沉浸式玩法文档](store-robbery-redesign-20260601.md) | audit | 📌 final | 2026-10-25 | — |  | `docs/store-robbery-redesign-20260601.md` |
 | [Module 6: 犯罪系统 (crime.cfg)](01_module_manuals/06_crime_system.md) | manual | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/01_module_manuals/06_crime_system.md` |
 | [custom-security + custom-crime + custom-main — 安全与犯罪三件套](02_script_index/custom-security-crime-main.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-security-crime-main.md` |
-| [犯罪与组织 · UX 设计](client/ux/modules/crime.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/crime.md` |
+| [犯罪与组织 · UX 设计](client/ux/modules/crime.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/crime.md` |
 | [v0.5 犯罪玩法](archive/QBCore_Lite_versions/v0.5-crime-gameplay.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.5-crime-gameplay.md` |
 
 ### jobs（8）
