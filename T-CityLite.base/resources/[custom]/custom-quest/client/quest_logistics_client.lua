@@ -713,9 +713,9 @@ Citizen.CreateThread(function()
                 local mins = math.floor(rem / 60)
                 local secs = rem % 60
                 QBCore.Functions.Notify(('⏰ 剩余时间: %d:%02d（恢复运输可暂停）'):format(mins, secs), 'error', 4000)
-            elseif rem <= 10 and rem > 0 and rem ~= EntityTracker.lastNotifySec then
+            elseif (rem == 10 or rem == 5) and rem ~= EntityTracker.lastNotifySec then
                 EntityTracker.lastNotifySec = rem
-                QBCore.Functions.Notify(('🚨 最后 %d 秒！'):format(rem), 'error', 3000)
+                QBCore.Functions.Notify(('🚨 只剩 %d 秒！'):format(rem), 'error', 3000)
             end
 
             if rem <= 0 then

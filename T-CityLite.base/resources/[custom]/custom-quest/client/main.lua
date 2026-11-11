@@ -306,8 +306,9 @@ end)
 
 RegisterNetEvent(Config.Quest.Events.QUEST_PROGRESS, function(data)
     if not activeQuest or activeQuest.quest_id ~= data.quest_id then return end
-    QBCore.Functions.Notify(
-        ('Progress: %d/%d'):format(data.progress, data.required), 'primary')
+    -- J-1：进度不是通知。3/5 → 4/5 这种逐步刷新留在面板（手机 Quests App 的 current_step），
+    -- 屏幕只在跨阶段处由服务端发一条（见 quest_manager 的「进入下一步」）。
+    QuestPrint('progress %s %d/%d', tostring(data.quest_id), data.progress or 0, data.required or 0)
 end)
 
 -- ==============================================================
@@ -613,9 +614,14 @@ RegisterNetEvent('quest:client:nodeCombat', function(data)
             end
 
             if newKillCount > killCount then
+                local previous = killCount
                 killCount = newKillCount
-                QBCore.Functions.Notify(
-                    ('Enemies eliminated: %d/%d'):format(killCount, requiredKills), 'primary')
+                -- J-1：原来每杀一只一条；改成半程与完成各一条
+                local half = math.max(1, math.floor(requiredKills / 2))
+                if (previous < half and killCount >= half) or killCount >= requiredKills then
+                    QBCore.Functions.Notify(
+                        ('敌人已清除 %d/%d'):format(killCount, requiredKills), 'primary')
+                end
             end
 
             if aliveCount == 0 and killCount >= requiredKills then
