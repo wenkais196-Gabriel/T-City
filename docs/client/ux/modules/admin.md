@@ -1,7 +1,7 @@
 ---
 id: ux-admin
 type: manual
-status: draft
+status: active
 system: ops
 owner: hermes
 updated: 2026-11-11
@@ -10,7 +10,7 @@ review_by: 2027-02-28
 
 # 管理与审计 · UX 设计
 
-> 状态 **draft**：目前只完成 §1 调研（数字均为实测扫描）。§2/§3/§4 待设计。
+> 状态 **active**：四节齐全。A-1…A-5 已交付；细分权限层与金钱命令审计列入 §5。
 > 工作流见 [00-workflow.md](../00-workflow.md)。
 
 ## 1. 调研（现状）
@@ -151,7 +151,68 @@ custom-admin **全文 0 处审计调用**。结论：有金额流水，**没有"
 
 ## 4. 验收（步骤）
 
-_待写。_
+> CC 定标准（2026-11-11）。身份约定：**P** = 无授权玩家；**A/B** = `qbcore.admin`；**G** = `qbcore.god`。
+> 授权方式（二选一）：控制台 `add_principal player.<id> qbcore.admin`，或已有 god 用 `/addpermission <id> admin`。
+> **前置**：`admin_autogrant` 必须是 `false`（否则全服自动 admin）。
+
+### V-1 命令清单（A-1）
+
+| 步骤 | 操作 | 期望 | 判定 |
+|---|---|---|---|
+| 1 | 仓库根执行 `python3 tools/dev/scan_commands.py --check` | 「命令清单是最新的」，退出码 0 | 退出码 |
+| 2 | 看 `admin-commands.md` | 「共 **339** 条」「危险命令但没有判权：0 条」；`tccops`/`givelicense`/`apanel` 都是 `QBCore: admin` | Grep |
+| 3 | `pytest tests/architecture/test_admin_commands_doc.py tests/architecture/test_admin_permissions.py -q` | 全通过 | pytest |
+
+**反例**：手改清单后 `--check` 仍通过；危险命令权限为 `—` 仍通过；`/tccops` 回退 `user` 后仍通过。
+
+### V-2 权限（A-2）
+
+| 步骤 | 操作 | 期望 | 判定 |
+|---|---|---|---|
+| 1 | P 输入 `/tccops 0`、`/apanel`、`/menu` | 全部被拒（控制台 `Access denied`），门槛不变 | 控制台 + 审计无 P 记录 |
+| 2 | P 看聊天框 | 不出现「🛠️ 管理员面板 v2」「⚡ 快速菜单」 | 截图 |
+| 3 | A 输入 `/tccops`、`/tccops 0`、`/apanel`、`/menu` | 「当前抢劫警察门槛：2」→「门槛已设为 0」；两个面板正文出现 | 截图 |
+
+**反例**：P 执行后门槛变 0；P 看到管理面板；客户端仍有 `RegisterCommand('apanel')`。
+
+### V-3 审计（A-3）
+
+| 步骤 | 操作 | 期望 | 判定 |
+|---|---|---|---|
+| 1 | A 执行 `/givelicense <P> boat` 两次（10 秒内） | 左下 feed「管理员操作 · 授予执照 · <P>」 | 截图 |
+| 2 | 等 6 秒，看 `custom-logs` 资源目录下 `logs/system_audit-<日期>.log` | 含 `[管理员操作] 授予执照 | 操作者 <A>(#id) | 目标 <P> | +boat` | Grep |
+| 3 | 依次 `/revokelicense <P> driver`、`/suspendlicense <P> driver`、`/reinstatelicense <P> driver`，再 `/tccops 2`、`/tccops 0` | 追加 `-driver` / `!driver` / `~driver`；门槛行出现 `2 → 0` | Grep |
+
+**反例**：审计行缺操作者或前→后；执行者收不到 feed；审计失败导致命令无法执行。
+
+### V-4 二次确认（A-4）
+
+| 步骤 | 操作 | 期望 | 判定 |
+|---|---|---|---|
+| 1 | A 执行 `/givelicense <P> pilot` 一次，等 11 秒 | toast「确认操作 · … · 10 秒内再执行一次」；pilot 仍 unclaimed；无审计 | `/checklicense <P>` |
+| 2 | 10 秒内再执行同一条 | pilot 变 held；审计 `+pilot`；P 收到通知 | 同上 |
+| 3 | 执行一次 `/givelicense <P> heavy`，等 11 秒后再执行 | 第二次仍只出摘要；heavy 仍 unclaimed | 同上 |
+
+**反例**：首次就生效；10 秒内换类型/换执行者也被当成确认；超时的第二次直接生效。
+
+### V-5 目标权限比较（A-5）
+
+| 步骤 | 操作 | 期望 | 判定 |
+|---|---|---|---|
+| 1 | A 执行 `/revokelicense <G> driver` | 拒绝「对方权限不低于你（你 2 / 对方 3）」；无确认、无审计；G 执照不变 | 截图 + `/checklicense <G>` |
+| 2 | A 执行 `/revokelicense <B> driver`（B 也是 admin） | 拒绝「你 2 / 对方 2」 | 截图 |
+| 3 | G 执行 `/revokelicense <A> driver` 两次 | 成功；审计 `-driver` | 日志 |
+
+**反例**：A 对 G 的任一条执照命令成功；A 对同级 B 成功；被拒时仍弹确认或写审计。
+
+## 5. 已知未决
+
+| # | 未决 | 影响 | 下一步 |
+|---|---|---|---|
+| 1 | 权限分层只落到 `admin` / `god` 两级 | 「mod 能复活但不能踢人」这类细分还没做 | 需要一张动作→权限的对照表，再逐条改注册 |
+| 2 | 审计只覆盖 custom-admin 的 7 个动作 | 改钱（qb-core 的 `/givemoney`）仍无审计 | 下一批：qb-core 的金钱命令接同一个 auditAdmin |
+| 3 | 审计只写本地文件 + Discord | 游戏内无法检索历史 | 后续接 MDT 或专门的审计页 |
+| 4 | `/menu` 与 `/apanel` 内容有重叠 | 玩家看到两套 | 合并成一套或按权限裁剪 |
 
 ## 5. 已知未决
 

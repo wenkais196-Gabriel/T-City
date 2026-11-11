@@ -56,6 +56,22 @@ local function confirmStep(src, action, key, summary)
     return false
 end
 
+-- /tccops 用的 _L 从来没有定义过（custom-admin 也没加载 locale 文件），
+-- 所以这条命令任何输入都会在 Lua 里 "attempt to call a nil value (_L)"。
+-- 只有 4 个键，直接给中文，不留一个"看起来有 i18n"的空壳。
+local THRESHOLD_TEXT = {
+    current = '当前抢劫警察门槛：%s',
+    reset   = '已恢复为 2（生产标准）',
+    invalid = '只能填 0-10 的整数',
+    set     = '门槛已设为 %s',
+}
+local function _L(_, key, arg)
+    local template = THRESHOLD_TEXT[key]
+    if not template then return tostring(key) end
+    if arg == nil then return template end
+    return (template:gsub('%%s', tostring(arg)))
+end
+
 local function auditAdmin(src, action, targetLabel, detail, kind)
     local executor = GetPlayerName(src) or ('#%s'):format(tostring(src))
     local line = ('%s | 操作者 %s(#%s) | 目标 %s | %s'):format(
@@ -162,7 +178,9 @@ QBCore.Commands.Add('tccops', '调整抢劫警察门槛（调试）', { {
     end
 
     if args[1]:lower() == 'reset' then
+        local previous = GlobalState and GlobalState.crime_min_police_storerobbery
         GlobalState:set('crime_min_police_storerobbery', 2, true)
+        auditAdmin(source, '重置抢劫警察门槛', '全局', ('%s → 2'):format(tostring(previous)))
         QBCore.Functions.Notify(source, _L(source, 'admin_reset_to_2'), "success")
         return
     end

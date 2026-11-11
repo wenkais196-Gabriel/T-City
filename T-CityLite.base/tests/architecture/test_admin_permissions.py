@@ -81,3 +81,18 @@ def test_destructive_actions_need_confirm_and_rank_detects_gap():
     broken = server.replace("if not confirmStep(src, '暂停执照'", "if false and confirmStep(src, '暂停执照'", 1)
     block = broken.split("QBCore.Commands.Add('suspendlicense'", 1)[1].split("end, '", 1)[0]
     assert "if not confirmStep(src," not in block
+
+
+def test_no_undefined_helpers_detects_nil_call():
+    """命令里调用的本地助手必须真的定义过 —— _L 曾是空壳，/tccops 任何输入都崩。"""
+    server = SERVER.read_text(encoding="utf-8")
+    if "_L(" in server:
+        assert "local function _L" in server, (
+            "用了 _L 却没有定义（运行期 attempt to call a nil value）")
+
+    # 反向：把定义删掉，规则必须红
+    NL = chr(10)
+    broken = NL.join(line for line in server.splitlines()
+                     if not line.startswith("local function _L"))
+    assert "local function _L" not in broken
+    assert "_L(" in broken

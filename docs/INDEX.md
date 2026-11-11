@@ -4,7 +4,7 @@
 
 **生成时间**：2026-11-11 ｜ **文档总数**：303 ｜ **已登记**：303 ｜ **未登记**：0
 
-**状态分布**：✅ active 172 ・ 🟡 draft 8 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 173 ・ 🟡 draft 7 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -184,7 +184,7 @@
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
-| [管理与审计 · UX 设计](client/ux/modules/admin.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/admin.md` |
+| [管理与审计 · UX 设计](client/ux/modules/admin.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/admin.md` |
 | [Reasonix 通知声音配置](reasonix-hooks-config.md) | runbook | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/reasonix-hooks-config.md` |
 
 ### ux（28）
