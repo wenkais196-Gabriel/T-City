@@ -72,9 +72,9 @@ review_by: 2027-02-28
 
 | 档 | 来源 | 例子 |
 |---|---|---|
-| 必须屏幕 | `client/main.lua`、`client/coroner.lua`、`client/incident_guidance.lua`、`server/p4_npc.lua` | `client/main.lua:162` 新警情（Notify+声音+blip，已有） |
-| 可以 feed | `server/commands.lua`(77)、`server/interactions.lua`、`server/vehicle.lua`、`client/job.lua` | `server/commands.lua:23` 发执照；`server/vehicle.lua:146` 车辆标记 |
-| 只进手机/日志 | `server/p0_incidents.lua`、`server/p2_system.lua`、`client/backup.lua`、`PoliceMDT.svelte` | `server/p2_system.lua:32` BOLO 只推手机 |
+| 必须屏幕 | `T-CityLite.base/resources/[custom]/custom-police/client/main.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/incident_guidance.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/p4_npc.lua` | `client/main.lua:162` 新警情（Notify+声音+blip，已有） |
+| 可以 feed | `T-CityLite.base/resources/[custom]/custom-police/server/commands.lua`(77)、`T-CityLite.base/resources/[custom]/custom-police/server/interactions.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/job.lua` | `server/commands.lua:23` 发执照；`server/vehicle.lua:146` 车辆标记 |
+| 只进手机/日志 | `T-CityLite.base/resources/[custom]/custom-police/server/p0_incidents.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/backup.lua`、`PoliceMDT.svelte` | `server/p2_system.lua:32` BOLO 只推手机 |
 
 **发现的零反馈缺口**：`client/coroner.lua:235` 的 target action 只发事件，
 `server/coroner.lua:75/83` 静默 `return` —— 成功与失败**都没有任何反馈**，
@@ -132,17 +132,45 @@ P2/P3 在 P0 进行中**静音**（只进列表），P0/P1 永不静音。
 
 | # | 任务 | 文件 | 风险 | 验收方式 |
 |---|---|---|---|---|
-| P-1 | `custom-notify` 加去重 + 合并：同 kind+title 3 秒内重复重启计时并显示 ×N；同来源突发 20 秒内合并 | `T-CityLite.base/resources/[custom]/custom-notify/server/main.lua` | 低（纯服务端） | 连发 3 条同文案只出现 1 条带 ×3 |
-| P-2 | 验尸官零反馈修复：成功 feed / 无尸体 error / 处理中 error，ALT 改 E 提示 | `T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua` | 中（碰交互入口） | 站尸体旁按 E 有反馈；空地上按 E 得到 error |
-| P-3 | 警情分级：incident 增加 priority（0–3），P0/P1 走 toast+声音，P2/P3 只进 feed/列表 | `T-CityLite.base/resources/[custom]/custom-police/server/p0_incidents.lua`、`client/main.lua`、MDT 查询 | 中（要兼容旧数据） | 不同 code 的警情表现分级正确 |
-| P-4 | 命令回执降噪：commands.lua 里 77 处 QBCore:Notify 改 feed，失败改 error | `T-CityLite.base/resources/[custom]/custom-police/server/commands.lua` | 低（机械替换 + 逐条看） | 改职级/发罚单不再弹屏幕中央 |
+| P-1 ✅(`2d96b89b`) | `custom-notify` 加去重 + 合并：同 kind+title 3 秒内重复重启计时并显示 ×N；同来源突发 20 秒内合并 | `T-CityLite.base/resources/[custom]/custom-notify/server/main.lua` | 低（纯服务端） | 连发 3 条同文案只出现 1 条带 ×3 |
+| P-2 ✅(`61af6cb2`) | 验尸官零反馈修复：成功 feed / 无尸体 error / 处理中 error，ALT 改 E 提示 | `T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua`、`T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua` | 中（碰交互入口） | 站尸体旁按 E 有反馈；空地上按 E 得到 error |
+| P-3 | 警情分级：incident 增加 priority（0–3），P0/P1 走 toast+声音，P2/P3 只进 feed/列表 | `T-CityLite.base/resources/[custom]/custom-police/server/p0_incidents.lua`、`T-CityLite.base/resources/[custom]/custom-police/client/main.lua`、MDT 查询 | 中（要兼容旧数据） | 不同 code 的警情表现分级正确 |
+| P-4 ✅(`833a3b8a`) | 命令回执降噪：commands.lua 里 77 处 QBCore:Notify 改 feed，失败改 error | `T-CityLite.base/resources/[custom]/custom-police/server/commands.lua` | 低（机械替换 + 逐条看） | 改职级/发罚单不再弹屏幕中央 |
 | P-5 | MDT 空态文案（无警情 / 无在勤单位 / 连接中） | `T-CityLite.base/resources/[custom]/custom-phone/web/src/apps/PoliceMDT.svelte` | 低 | 断网/空库不是白屏 |
 
 **顺序**：P-1（通用零风险）→ P-2（PO 点名的"按 E 没用"）→ P-4（降噪）→ P-3（分级，涉及数据）→ P-5。
 
 ## 4. 验收（步骤）
 
-> 由 CC 定标准（PO 2026-11-11 分工），待写入。
+> 由 CC 定标准（PO 2026-11-11 分工），共 5 步。判定一律以**截图**为准（左下角 1 秒内截）。
+
+### P-1 去重与合并
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 0 | 控制台 `setr notify_dev 1`，进服 | `/notifydev` 可用 | 控制台回显 |
+| 1 | 聊天框输入一次 `/notifydev`（A×3 + B） | 左下 2 条：A「支付 −$2 · 水 1 瓶」带 `×3`；B「案件 PC-2026-1104 已登记」无角标 | 1s 后截左下角 |
+| 2 | 不操作，看同一次命令的第 4 条 B | B 独立成条，不与 A 同条，无 `×N` | 同图；带角标行只有 1 行 |
+| 3 | 记 t0；t0+3.3～4.0s 再输 `/notifydev`（feed 5s 才消失） | A 出现**第二条独立条目**，旧条仍 `×3`；不得合并成 `×4`/`×6` | 输入后 0.5s 内截图；只数 A 行，仍 1 条即失败 |
+| 4 | 连发 6 条不同 feed（`/notifydev` 只有 2 种文案，无 6 条入口则记「阻塞」，不得记通过） | 只留最新 4 条，最早 2 条被挤掉 | 截图计数，或 CEF 查 `#feed .item` 为 4 |
+
+**反例（必须不成立）**
+
+1. 3 条相同后 A 行 ≥2 条，或角标不是 `×3` → 不通过；
+2. B 被并入 A 条目，或 B 带 `×N` → 不通过；
+3. 3 秒后只有旧条被续命、没有独立新条 → 不通过；
+4. 角标回退（`×3`→`×2`），或 3 秒后仍出现 `×4` 及以上 → 不通过；
+5. 6 条不同文案时屏显 ≥5 条，或挤掉的是最新而不是最早 → 不通过。
+
+### P-2 验尸官反馈 / P-4 命令回执（同批验收）
+
+| 步骤 | 操作 | 期望现象 | 判定 |
+|---|---|---|---|
+| 5 | 站到尸体旁 → ALT → “叫验尸官” | 左下 feed「验尸官已在路上 · 约 2 分钟到达现场」 | 截图 |
+| 6 | 立刻再叫一次 | 左下**红条**「验尸官正在路上，N 秒后可再叫」，中央**无** toast | 截图 |
+| 7 | 发一张罚单（`/grantlicense` 或罚单命令） | 左下 feed 出现回执，**不再**在屏幕右侧弹 NUI 通知 | 截图 |
+
+**反例**：第 6 步出现中央 toast、或第 7 步右侧仍有通知 → 不通过。
 
 
 ## 5. 已知未决
