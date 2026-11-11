@@ -555,6 +555,10 @@ RegisterNUICallback('garageWaypoint', function(data, cb)
     if garageKey ~= '' and (not x or not y) then
         QBCore.Functions.TriggerCallback('phone:server:garageCoords', function(coords)
             if not coords then
+                -- 静默失败在真机上等于"按钮坏了"（PO 2026-11-12 反馈）。给一条可见反馈。
+                pcall(function()
+                    exports['custom-notify']:PushLocal('error', '这间车库没有坐标，地图标不出来')
+                end)
                 PhoneBridge.AnswerFn(cb)({ ok = false, reason = 'no_coords' })
                 return
             end

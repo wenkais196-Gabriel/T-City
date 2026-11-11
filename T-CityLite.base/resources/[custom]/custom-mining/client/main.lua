@@ -8,6 +8,15 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- C-7：倒地/死亡判定。四键都查：服务端写 isdead/inlaststand，客户端写 isDead/inLaststand。
+--- 注意：**必须**声明在第一个使用点（采矿循环 `:101`）之前 —— 上一版把它放在 215 行，
+--- 真机直接 SCRIPT ERROR：attempt to call a nil value (global 'IsDowned')。
+local function IsDowned()
+    local st = LocalPlayer.state
+    return st.isDead == true or st.inLaststand == true
+        or st.isdead == true or st.inlaststand == true
+end
+
 --- 采矿反馈（C-5）：统一走 custom-notify 的**客户端本地出口**。
 --- 原来这里直接 exports:Push —— 那是服务端接口，客户端根本没有，pcall 一包就静默丢了。
 local function feedback(text, kind)
@@ -56,6 +65,7 @@ CreateThread(function()
         SetBlipSprite(blip, smelter.blip.sprite)
         SetBlipColour(blip, smelter.blip.color)
         SetBlipScale(blip, smelter.blip.scale)
+        -- 2026-11-12 PO：冶炼厂已找到，blip 回滚成近距离可见（原来为排查改成全图可见）
         SetBlipAsShortRange(blip, true)
         SetBlipCategory(blip, 135)
         BeginTextCommandSetBlipName('STRING')
@@ -95,6 +105,12 @@ RegisterNetEvent('mining:client:startMining', function(data)
     CreateThread(function()
         local mining = true
         while mining do
+            if IsDowned() then
+                feedback('你倒下了，采矿中断', 'error')
+                mining = false
+                break
+            end
+
             local dist = #(GetEntityCoords(PlayerPedId()) - site.coords)
             if dist > site.radius then
                 feedback('你离开了矿点区域', 'error')
@@ -209,6 +225,11 @@ end)
 -- 现在按距离显示 custom-prompt，按 E 直接触发原来的事件（不改业务逻辑）。
 -- ==============================================================
 CreateThread(function()
+    -- N-6：只 Hide 自己 Show 过的提示。原来 else 分支每轮（800ms）无条件 Hide()，
+    -- 会把商店/警察/医护正在显示的提示一起打掉 —— 真机表现就是"[E] 打开商店"每约 0.8 秒闪一下。
+    -- 其余资源（qb-shops / qb-storerobbery / qb-ambulancejob / qb-management）都是这个写法。
+    local promptShown = false
+    local promptLabel = nil
     while true do
         local sleep = 800
         local pos = GetEntityCoords(PlayerPedId())
@@ -230,10 +251,19 @@ CreateThread(function()
             end
         end
 
+        if IsDowned() then action = nil end -- C-7：倒地时不给任何交互提示
+
         if action then
-            exports['custom-prompt']:Show({ key = 'E', label = label })
+            sleep = 0 -- N-8：范围内每帧采样 E（松开只在 1 帧为真，轮询会丢按键）
+            if label ~= promptLabel then
+                exports['custom-prompt']:Show({ key = 'E', label = label })
+                promptLabel = label
+                promptShown = true
+            end
             if IsControlJustReleased(0, 38) then
                 exports['custom-prompt']:Hide()
+                promptShown = false
+                promptLabel = nil
                 if payload then
                     TriggerEvent(action, payload)
                 else
@@ -241,8 +271,10 @@ CreateThread(function()
                 end
                 sleep = 800
             end
-        else
+        elseif promptShown then
             exports['custom-prompt']:Hide()
+            promptShown = false
+            promptLabel = nil
         end
 
         Wait(sleep)

@@ -104,6 +104,8 @@ end
 -- 不满足时按 E 无反应、不弹 error（error 只用于"做了但没成功"）。
 local safeResetAt = {}
 local safePromptShown = false
+-- N-8：E 键每帧采样，同文案不重发（和 qb-shops 一致）
+local safePromptLabel = nil
 local GetEffectiveMinPolice  -- 定义在文件后面（门槛读取），这里先声明
 
 RegisterNetEvent('qb-storerobbery:client:setSafeStatus', function(safe, robbed, resetAt)
@@ -129,35 +131,53 @@ CreateThread(function()
         end
 
         if nearest then
-            sleep = 200
+            sleep = 0
             local info = Config.Safes[nearest]
             local label
             local usable = false
+            -- C-8（2026-11-12 PO 反馈"保险箱按 E 没反应"）：不可用时也要给失败反馈。
+            -- 文案复用提示里已经算好的值，保证提示与通知不漂移。
+            local blockKind, blockText = nil, nil
             if info.robbed then
                 local resetAt = safeResetAt[nearest]
                 local remaining = resetAt and math.max(0, resetAt - os.time()) or nil
                 label = remaining and ('保险箱已空 · 冷却 %d:%02d'):format(math.floor(remaining / 60), remaining % 60)
                     or '保险箱已空'
+                blockKind = 'feed'
+                blockText = remaining and ('保险箱已空 · 冷却剩余 %d:%02d'):format(math.floor(remaining / 60), remaining % 60)
+                    or '保险箱已被洗劫，等刷新后再来'
             else
                 local minPolice = GetEffectiveMinPolice()
                 if CurrentCops < minPolice then
                     label = ('撬保险箱 · 需 %d 名警察（当前 %d）'):format(minPolice, CurrentCops)
+                    blockKind = 'error'
+                    blockText = ('警力不足 · 需 %d 名，当前 %d 名'):format(minPolice, CurrentCops)
                 else
                     label = '撬保险箱'
                     usable = true
                 end
             end
 
-            exports['custom-prompt']:Show({ key = 'E', label = label })
-            safePromptShown = true
+            if label ~= safePromptLabel then
+                exports['custom-prompt']:Show({ key = 'E', label = label })
+                safePromptLabel = label
+                safePromptShown = true
+            end
 
-            if usable and IsControlJustReleased(0, 38) then
-                exports['custom-prompt']:Hide()
-                OpenSafeInteraction(nearest)
+            if IsControlJustReleased(0, 38) then
+                if usable then
+                    exports['custom-prompt']:Hide()
+                    safePromptShown = false
+                    safePromptLabel = nil
+                    OpenSafeInteraction(nearest)
+                elseif blockText then
+                    pcall(function() exports['custom-notify']:PushLocal(blockKind, blockText) end)
+                end
             end
         elseif safePromptShown then
             exports['custom-prompt']:Hide()
             safePromptShown = false
+            safePromptLabel = nil
         end
 
         Wait(sleep)
