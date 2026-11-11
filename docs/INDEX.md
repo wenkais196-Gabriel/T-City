@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-11 ｜ **文档总数**：289 ｜ **已登记**：289 ｜ **未登记**：0
+**生成时间**：2026-11-11 ｜ **文档总数**：295 ｜ **已登记**：295 ｜ **未登记**：0
 
-**状态分布**：✅ active 163 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 168 ・ 🟡 draft 4 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -176,11 +176,17 @@
 |---|---|---|---|---|---|---|
 | [Reasonix 通知声音配置](reasonix-hooks-config.md) | runbook | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/reasonix-hooks-config.md` |
 
-### ux（20）
+### ux（26）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [T-City 客户端（FiveM / QBCore / NUI）审计](client/CLIENT_AUDIT.md) | audit | 📌 final | 2026-10-25 | — |  | `docs/client/CLIENT_AUDIT.md` |
+| [UX 工作流：调研 → 设计 → 计划 → 验收](client/ux/00-workflow.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/00-workflow.md` |
+| [经济与交易 · UX 设计](client/ux/modules/economy.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/economy.md` |
+| [医疗与急救 · UX 设计](client/ux/modules/medical.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/medical.md` |
+| [通知与交互提示 · UX 设计](client/ux/modules/notify-prompt.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/notify-prompt.md` |
+| [手机 · UX 设计](client/ux/modules/phone.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/phone.md` |
+| [<模块名> · UX 设计](client/ux/modules/template.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/template.md` |
 | [客户端与 NUI 资料库](client/README.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/client/README.md` |
 | [客户端基线与手机查询故障 —— 计划（2026-10-25）](client/plans/2026-10-25-client-baseline.md) | plan | 📦 archived | 2026-10-25 | 2027-04-30 |  | `docs/client/plans/2026-10-25-client-baseline.md` |
 | [输入分层提案：让 UI 像 GTA 暂停菜单那样接管输入](client/plans/2026-10-27-input-layering.md) | plan | 📦 archived | 2026-10-27 | 2027-04-30 |  | `docs/client/plans/2026-10-27-input-layering.md` |
