@@ -153,8 +153,11 @@ function QuestRewards.GrantRewards(source, rewards, questId)
             exports['custom-logs']:LogGeneric('任务奖励发放', logText, 65280)
         end
 
-        TriggerClientEvent('QBCore:Notify', source,
-            ('💰 任务结算 | %s'):format(table.concat(granted, ' | ')), 'success')
+        -- J-3：结算不再占屏（"任务完成"已经说过一次），改成手机凭证可回查
+        pcall(function()
+            exports['custom-notify']:Push(source, 'phone', '任务结算',
+                table.concat(granted, ' | '), { appId = 'quests' })
+        end)
     end
 
     return true
