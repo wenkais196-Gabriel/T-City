@@ -552,6 +552,22 @@ end)
 
 -- CEF 上报真实 CSS px：surface 阈值判定在 Lua，但只有页面知道窗口多大。
 -- 回调名拼错会让 NUI 契约闸门直接红，所以这里必须与 fetchNui('surfaceInfo') 对齐。
+RegisterNUICallback('garageWaypoint', function(data, cb)
+    -- 只接受有限数字：NUI 侧数据可被玩家改，未校验的 SetNewWaypoint 会崩原生层
+    local x = tonumber(data and data.x)
+    local y = tonumber(data and data.y)
+    local label = type(data) == 'table' and tostring(data.label or '') or ''
+    if not x or not y or x ~= x or y ~= y or math.abs(x) > 40000 or math.abs(y) > 40000 then
+        PhoneBridge.AnswerFn(cb)({ ok = false, reason = 'bad_coords' })
+        return
+    end
+    SetNewWaypoint(x + 0.0, y + 0.0)
+    PhoneBridge.AnswerFn(cb)({ ok = true })
+    if _G.PhoneNotifyFeed then
+        _G.PhoneNotifyFeed('已标注：' .. (label ~= '' and label or '车库'))
+    end
+end)
+
 RegisterNUICallback('surfaceInfo', function(data, cb)
     local ok = Surface.SetViewport(data and data.width, data and data.height)
     cb({ success = ok, surface = Surface.Current() })
