@@ -104,10 +104,10 @@ qb-hud 的 html/index.html 里的 #money-change 是变化时元素，`#money-cas
 |---|---|---|---|---|
 | H-1 ✅(`dd814ac3`) | 圆环补数值（下方小字）+ 低值红字脉冲 | `T-CityLite.base/resources/[qb]/qb-hud/html/index.html`、`styles.css` | 低 | 圆环下方能看到 0–100 的数字 |
 | H-2 ✅(`dd814ac3`) | 低状态提醒（阈值 20 / 5 分钟冷却 / 回升 30 重新上膛） | `T-CityLite.base/resources/[qb]/qb-hud/client.lua` | 低 | 饿到 20 以下弹一次 toast，5 分钟内不再弹 |
-| H-3 | 三档配色（<40 琥珀、<20 红） | `T-CityLite.base/resources/[qb]/qb-hud/html/app.js` 的颜色分支 | 低 | 60 / 35 / 15 三个值三种颜色 |
-| H-4 | `qb-scoreboard` 的空态与排序说明 | `T-CityLite.base/resources/[qb]/qb-scoreboard/` | 低 | 没人在线时不是一片空白 |
+| H-3 ✅(`42d26813`) | 三档配色（<40 琥珀、<20 红） | `T-CityLite.base/resources/[qb]/qb-hud/html/app.js` 的颜色分支 | 低 | 60 / 35 / 15 三个值三种颜色 |
+| H-4 ✅(`33f23db7`) | `qb-scoreboard` 的空态与图例 | `T-CityLite.base/resources/[qb]/qb-scoreboard/` | 低 | 没人在线时不是一片空白 |
 
-**顺序**：H-3（配色，最小）→ H-4。
+**H-1…H-4 全部完成**，§4 验收等 CC 定标准后入库。
 
 
 ## 4. 验收（步骤）
