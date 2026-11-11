@@ -834,17 +834,25 @@ QBCore.Functions.CreateCallback('phone:server:getOwnedVehicles', function(source
     local Player = QBCore.Functions.GetPlayer(source)
     if not Player then return cb({}) end
 
-    MySQL.Async.fetchAll('SELECT vehicle, plate, garage, state, fuel, engine, body FROM player_vehicles WHERE citizenid = ? LIMIT 200', {
+    MySQL.Async.fetchAll('SELECT vehicle, plate, garage, state, fuel, engine, body, depotprice, status FROM player_vehicles WHERE citizenid = ? LIMIT 200', {
         Player.PlayerData.citizenid
     }, function(vehicles)
         local list = {}
         for i = 1, #vehicles do
+            local depotPrice = tonumber(vehicles[i].depotprice) or 0
             local status = "Stored"
             if vehicles[i].state == 0 then
                 status = "Out of Garage"
-            elseif vehicles[i].state == 2 then
+            elseif vehicles[i].state == 2 or depotPrice > 0 then
                 status = "Impounded"
             end
+
+            -- 扣押原因：库里没有专门字段，约定写在 status 列里（'impound:<原因>'），
+            -- 没有就留空 —— 前端显示"原因未记录"，不编造。
+            local rawStatus = tostring(vehicles[i].status or '')
+            local impoundReason = ''
+            local captured = rawStatus:match('^impound:(.+)$')
+            if captured then impoundReason = captured:sub(1, 60) end
 
             -- 车库坐标：手机里能一键在地图标注（PO 2026-11-10 提的"pillboxgarage 在哪"）
             local coords = nil
@@ -865,8 +873,11 @@ QBCore.Functions.CreateCallback('phone:server:getOwnedVehicles', function(source
                 model = model,
                 plate = vehicles[i].plate,
                 garage = vehicles[i].garage or "Main Impound",
+                garageKey = vehicles[i].garage or '',
                 coords = coords,
                 status = status,
+                depotPrice = depotPrice,
+                impoundReason = impoundReason,
                 fuel = tonumber(vehicles[i].fuel) or 100,
                 engine = math.floor((tonumber(vehicles[i].engine) or 1000) / 10),
                 body = math.floor((tonumber(vehicles[i].body) or 1000) / 10)

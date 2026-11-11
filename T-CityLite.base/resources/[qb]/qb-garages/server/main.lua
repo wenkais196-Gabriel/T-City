@@ -1,5 +1,12 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 车库服务端反馈（V-3）：扣押缴费这类动作必须有回执，否则玩家不知道钱扣没扣。
+local function feedback(src, kind, title, body)
+    pcall(function()
+        exports['custom-notify']:Push(src, kind, title, body)
+    end)
+end
+
 -- qb-core 重启后，上面这份快照里的函数引用会全部失效（P1-6，PR #196）：
 -- 本文件原有的 onResourceStart 只处理**自己**启动（resource == GetCurrentResourceName()），
 -- 不管 qb-core 重启，所以另挂一个专门重解析。
@@ -354,6 +361,7 @@ RegisterNetEvent('qb-garages:server:PayDepotPrice', function(data)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or type(data) ~= 'table' or type(data.plate) ~= 'string' then return end
+    local plate = tostring(data.plate)
     local cashBalance = Player.PlayerData.money['cash']
     local bankBalance = Player.PlayerData.money['bank']
     -- ⚠️ 扣款必须在**同步段**做。原来扣款写在 MySQL.scalar 的回调里，而
@@ -367,19 +375,35 @@ RegisterNetEvent('qb-garages:server:PayDepotPrice', function(data)
     -- 会在 AutoRespawn 关掉的服务器上让赎车永远失败。
     local row = MySQL.single.await(
         'SELECT depotprice, citizenid, state FROM player_vehicles WHERE plate = ? LIMIT 1', { data.plate })
-    if not row or row.citizenid ~= Player.PlayerData.citizenid then return end
+    if not row then
+        feedback(src, 'error', '这辆车不存在或已被转移')
+        return
+    end
+    if row.citizenid ~= Player.PlayerData.citizenid then
+        feedback(src, 'error', '这不是你的车')
+        return
+    end
     local depotPrice = tonumber(row.depotprice)
     local impounded = tonumber(row.state) == 2 or (depotPrice or 0) > 0
-    if not impounded then return end
+    if not impounded then
+        feedback(src, 'error', '这辆车没有被扣押')
+        return
+    end
     if depotPrice and depotPrice > 0 then
         if cashBalance >= depotPrice then
             Player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot')
+            feedback(src, 'feed', ('已缴 $%d 取回 %s'):format(depotPrice, plate),
+                ('现金余额 $%d'):format(Player.PlayerData.money['cash']))
             TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
         elseif bankBalance >= depotPrice then
             Player.Functions.RemoveMoney('bank', depotPrice, 'paid-depot')
+            feedback(src, 'feed', ('已缴 $%d 取回 %s'):format(depotPrice, plate),
+                ('银行余额 $%d'):format(Player.PlayerData.money['bank']))
             TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
         else
-            TriggerClientEvent('QBCore:Notify', src, Lang:t('error.not_enough'), 'error')
+            local have = math.max(cashBalance, bankBalance)
+            feedback(src, 'error', ('取回需要 $%d，你有 $%d，还差 $%d'):format(
+                depotPrice, have, math.max(0, depotPrice - have)))
         end
     end
 end)
