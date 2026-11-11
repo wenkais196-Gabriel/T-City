@@ -66,7 +66,7 @@ QBCore.Commands.Add('amenu', '打开管理员菜单', {}, false, function(source
 ]]
         }
     })
-end)
+end, 'admin')
 
 -- ==========================================
 --        调 试 命 令 — 抢 劫 警 察 门 槛

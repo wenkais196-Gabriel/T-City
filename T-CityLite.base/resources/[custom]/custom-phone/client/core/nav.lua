@@ -92,6 +92,14 @@ function PhoneNav.Tick()
         return
     end
 
+    -- 0) 输入框正在吃键盘：这一帧什么都别注入。
+    --    键盘归 CEF 时字符是原生 input 处理的；再注入一次 move/back 就会
+    --    "按一下方向键挪两格"、"按一次 Backspace 输入框反而失焦"（真机踩过）。
+    if LocalPlayer.state.phoneTextFocus then
+        rawEdges()   -- 仍要读一遍把边沿吃掉，否则退出输入后第一帧会补发旧键
+        return
+    end
+
     -- 1) 键盘：原始按键优先。同一个键这一帧既被原始按键抓到、又出现在控制轮询里时，
     --    只走原始按键那条（否则一次按键会挪两格）。
     local edges = rawEdges()

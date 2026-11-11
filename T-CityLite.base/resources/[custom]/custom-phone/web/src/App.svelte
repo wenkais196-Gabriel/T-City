@@ -351,6 +351,13 @@
       // 输入框里的打字不受影响（那些键不会走导航）。
       if (luaOwnsNavKeys && !isEditableTarget(e.target)) return;
       if (e.key === 'Escape') {
+        // 输入框里按 Esc = 收起键盘/失焦，**不是**关掉整台手机
+        // （真机踩过：写着消息按 Esc，手机直接没了，草稿也丢了）
+        if (isEditableTarget(e.target)) {
+          (e.target as HTMLElement).blur();
+          e.preventDefault();
+          return;
+        }
         closePhone();
         return;
       }
