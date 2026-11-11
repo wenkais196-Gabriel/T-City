@@ -16,8 +16,14 @@ review_by: 2027-04-30
 
 | 目录 | 角色 | 规则 |
 |---|---|---|
-| `E:/T-City-harness` | **唯一运行树**（FXServer 的 cwd 是它的 `T-CityLite.base`） | 永远从 `origin/master` 切新分支；同时只承载一个进行中的分支 |
-| `E:/T-City` | git 元数据 + 归档（detached，tag `archive/main-salvage-20261101`） | **不得在此启服、不得在此改代码** |
+| `E:/T-City` | **唯一工作树 + 运行树**（FXServer 的 cwd 是它的 `T-CityLite.base`） | 永远从 `origin/master` 切新分支；同时只承载一个进行中的分支 |
+| `E:/archive/T-City-harness-20261101` | 2026-11-01 之前那棵 worktree 的只读归档（含当时未提交的两份草稿与运行日志） | 不得再改、不得再启服 |
+
+**为什么合并成一棵树**：2026-11-01 主仓库的 git 元数据目录（原 `E:/T-City`）在会话中被移除，
+`E:/T-City-harness` 立刻变成孤儿 worktree（`.git` 文件指向一个不存在的 `worktrees/T-City-harness`），
+所有 git 操作失败、`release_check.py` 只能扫到 0 个文件。当天按 GitHub 远端重新克隆到 `E:/T-City`，
+把 harness 里未提交的改动逐文件搬过去并提交成 PR，随后把 harness 整体归档。**双树方案的价值
+（一份跑、一份改）不值得它带来的故障模式**：元数据一丢，两棵树就都不可信，而"跑"和"改"本来就能靠停服/切分支解决。
 
 历史原因：主树曾长期停在 `chore/windows-workspace-baseline` 上，与 master 差 1611 个文件（全是假 diff），
 39 项本地改动既没提交也没人看。2026-11-01 把这些改动保全到 `salvage/main-20261101` 分支后，
@@ -27,18 +33,32 @@ review_by: 2027-04-30
 
 ```bash
 # 开工（先停服：RCON quit，等 30130 释放）
-git -C E:/T-City-harness fetch --prune
-git -C E:/T-City-harness switch -c <type>/<scope>-<slug> origin/master
+git -C E:/T-City fetch --prune
+git -C E:/T-City switch -c <type>/<scope>-<slug> origin/master
 
 # 收工
-git -C E:/T-City-harness push -u origin HEAD
+git -C E:/T-City push -u origin HEAD
 gh pr create --base master
 
 # 合并后
-git -C E:/T-City-harness switch master
-git -C E:/T-City-harness merge --ff-only origin/master
-git -C E:/T-City-harness branch -d <branch>
+git -C E:/T-City switch master
+git -C E:/T-City merge --ff-only origin/master
+git -C E:/T-City branch -d <branch>
 ```
+
+### 2.1 新克隆到能起服之间
+
+gitignored 的运行时依赖不在仓库里，clone 完直接起服会看到每个资源都报
+`@oxmysql/lib/MySQL.lua:94: No such export query in resource oxmysql`：
+
+| 步骤 | 命令 / 说明 |
+|---|---|
+| 1. 配置 | `cp T-CityLite.base/server.cfg.template T-CityLite.base/server.cfg`，填 license / DB / token |
+| 2. 补 oxmysql 依赖 | 从旧树或备份复制 `oxmysql` 的 `node_modules`（13 MB；缺了整库不可用） |
+| 3. 起服 | `cd T-CityLite.base && E:/FXServer/FXServer.exe +exec server.cfg`（本机 artifact 在 `E:/FXServer`） |
+| 4. 自检 | `curl -s 127.0.0.1:30130/info.json` 应返回 85 个资源；控制台无 `No such export` / `SCRIPT ERROR` |
+
+只改前端才需要 `custom-phone/web` 与 `tcity-dashboard/nui` 的 node_modules（89 MB / 99 MB），起服不需要。
 
 ## 3. 规则
 
