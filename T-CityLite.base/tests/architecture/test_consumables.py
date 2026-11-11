@@ -27,12 +27,16 @@ def test_status_is_written_to_player_metadata() -> None:
 
 def test_item_use_verifies_ownership_and_cooldown() -> None:
     src = SERVER.read_text(encoding="utf-8")
-    at = src.find("qb-inventory:server:UseItem")
-    assert at != -1
-    block = src[at:at + 900]
-    assert "GetItemByName" in block, "没有这件物品的玩家发事件什么都不该发生"
+    # 入口是 CreateUseableItem（qb-inventory 的用物品路径），不是网络事件 ——
+    # 原来这条断言按 `qb-inventory:server:UseItem` 切块，锁的其实是死代码。
+    # 注释行要先剔掉，否则会切到文档注释里那句“走 CreateUseableItem”上。
+    code = chr(10).join(l for l in src.splitlines() if not l.lstrip().startswith("--"))
+    at = code.find("QBCore.Functions.CreateUseableItem(")
+    assert at != -1, "没有把可消耗物品注册成 useable item，玩家用了不会有任何反应"
+    block = code[at:at + 900]
+    assert "GetItemByName" in block, "没有这件物品的玩家不该涨饥渴"
+    assert "RemoveItem" in block, "吃完不扣物品 = 无限吃喝"
     assert "cooldown" in src, "同类物品要有使用间隔"
-
 
 def test_decay_is_server_side_and_single_writer() -> None:
     src = SERVER.read_text(encoding="utf-8")
