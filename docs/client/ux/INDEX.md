@@ -23,9 +23,9 @@ review_by: 2027-02-28
 | 通知与提示 | [modules/notify-prompt.md](./modules/notify-prompt.md) | `custom-notify`、`custom-prompt`、`qb-core` Notify | **active** | 横向组件，其余模块都依赖它 |
 | 警务 | [modules/police.md](./modules/police.md) | `custom-police`、`custom-justice`、MDT | **active** | 去重合并 + 验尸官反馈 + 76 处回执降噪（待 PO 真机验） |
 | 载具与车库 | [modules/vehicles.md](./modules/vehicles.md) | `qb-garages`、`qb-vehicleshop`、`qb-fuel`、`custom-vehicles` | **active · 已交付** | V-1…V-7 全完成（取车回执、扣押三件套、主动推送） |
-| 犯罪与组织 | [modules/crime.md](./modules/crime.md) | `qb-storerobbery`、`custom-cartel`、`qb-drugs`、`custom-mining`、`custom-crime` | **draft**（只完成调研） | 含互动热区改 E |
+| 犯罪与组织 | [modules/crime.md](./modules/crime.md) | `qb-storerobbery`、`custom-cartel`、`qb-drugs`、`custom-mining`、`custom-crime` | **active · 已交付** | 报警分类、结算去重、单一派发、门槛入提示 |
 | 职业与任务 | [modules/jobs.md](./modules/jobs.md) | `custom-career`、`custom-quest`、`qb-management` | **active · 已交付** | 完成/步骤/失败各只发一条；`[E]` 入口；J-6 因无门槛字段不做 |
-| 角色与出生 | [modules/identity.md](./modules/identity.md) | `qb-multicharacter`、`qb-spawn`、`qb-apartments` | **draft**（只完成调研） | 含出生引导 |
+| 角色与出生 | [modules/identity.md](./modules/identity.md) | `qb-multicharacter`、`qb-spawn`、`qb-apartments` | **active** | 卡片标快照时间、删角色需输全名、脏数据容错；出生选择（I-3）单列一批 |
 | HUD 与状态 | [modules/hud.md](./modules/hud.md) | `qb-hud`、`qb-scoreboard` | **draft**（只完成调研） | 饥饿/口渴/压力圆环 |
 | 管理与审计 | [modules/admin.md](./modules/admin.md) | `custom-admin`、`custom-logs`、`/agent` | **draft**（只完成调研） | 命令清单、权限分层 |
 
