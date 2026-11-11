@@ -36,6 +36,42 @@ local function clean(value, limit)
     return text
 end
 
+-- ═══════════════════════════════════════════════════════════
+-- 去重与合并（P-1）
+--
+-- 依据（R 阶段两份调研）：
+--   * roclicks 的游戏反馈模式：**相同文案去重并重启计时**、突发多条目合并成一条带累计；
+--   * ps-dispatch：同类报警在短时间内合并显示 `×N`，避免警报栈被同一件事刷满。
+--
+-- 规则：同一玩家、同 kind、同 title+body 在 DEDUPE_MS 内重复 → 不新增一条，
+-- 而是把已存在那条的计数 +1、计时重置（客户端按 key 就地更新）。
+-- ═══════════════════════════════════════════════════════════
+local DEDUPE_MS = 3000
+local dedupe = {} -- key -> { at = ms, count = n }
+
+local function nextCount(key)
+    local now = GetGameTimer()
+    local entry = dedupe[key]
+    if entry and (now - entry.at) < DEDUPE_MS then
+        entry.at = now
+        entry.count = entry.count + 1
+        return entry.count
+    end
+    dedupe[key] = { at = now, count = 1 }
+    return 1
+end
+
+-- 每 30 秒清一次过期键，避免长会话里表无限增长
+CreateThread(function()
+    while true do
+        Wait(30000)
+        local now = GetGameTimer()
+        for key, entry in pairs(dedupe) do
+            if (now - entry.at) > DEDUPE_MS * 4 then dedupe[key] = nil end
+        end
+    end
+end)
+
 --- 三层分派入口
 ---@param source number
 ---@param kind string
@@ -66,12 +102,18 @@ local function Push(source, kind, title, body, opts)
         return ok
     end
 
+    -- 去重：同 kind + 同文案 → 不新增，客户端按 key 就地更新计数并重置计时
+    local key = ('%d|%s|%s|%s'):format(source, kind, safeTitle, safeBody)
+    local count = nextCount(key)
+
     TriggerClientEvent('tcity:notify', source, {
         kind = kind,
         title = safeTitle,
         body = safeBody,
         icon = opts.icon,
         duration = opts.duration,
+        key = key,
+        count = count,
     })
     return true
 end
@@ -82,5 +124,23 @@ exports('Broadcast', function(kind, title, body, opts)
         Push(tonumber(src), kind, title, body, opts)
     end
 end)
+
+-- 开发自检：`/notifydev`（`setr notify_dev 1` 才可用）
+-- 发 3 条完全相同的 + 1 条不同的 —— 用来肉眼确认去重合并（应看到 1 条 ×3 和 1 条单独）。
+RegisterCommand('notifydev', function(source)
+    if GetConvar('notify_dev', '0') ~= '1' then
+        print('[custom-notify] /notifydev 已关闭（setr notify_dev 1 打开）')
+        return
+    end
+    local src = tonumber(source)
+    if not src or src <= 0 then
+        print('[custom-notify] /notifydev 只能在游戏里用')
+        return
+    end
+    for _ = 1, 3 do
+        Push(src, 'feed', '支付 −$2 · 水 1 瓶', '便利店 · 余额 $516', { icon = '$' })
+    end
+    Push(src, 'feed', '案件 PC-2026-1104 已登记', 'MDT · 已归档')
+end, false)
 
 print('[custom-notify] 三层分派入口已注册（exports: Push / Broadcast）')
