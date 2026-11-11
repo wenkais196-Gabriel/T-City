@@ -1,6 +1,13 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
 --- 车库服务端反馈（V-3）：扣押缴费这类动作必须有回执，否则玩家不知道钱扣没扣。
+--- 金额文本（闸门 money_format）：整数不带小数点，小数两位；禁止 %d 直接套金额。
+local function money(n)
+    local num = tonumber(n) or 0
+    if num == math.floor(num) then return ('%d'):format(num) end
+    return ('%.2f'):format(num)
+end
+
 local function feedback(src, kind, title, body)
     pcall(function()
         exports['custom-notify']:Push(src, kind, title, body)
@@ -392,18 +399,18 @@ RegisterNetEvent('qb-garages:server:PayDepotPrice', function(data)
     if depotPrice and depotPrice > 0 then
         if cashBalance >= depotPrice then
             Player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot')
-            feedback(src, 'feed', ('已缴 $%d 取回 %s'):format(depotPrice, plate),
-                ('现金余额 $%d'):format(Player.PlayerData.money['cash']))
+            feedback(src, 'feed', ('已缴 $%s 取回 %s'):format(money(depotPrice), plate),
+                ('现金余额 $%s'):format(money(Player.PlayerData.money['cash'])))
             TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
         elseif bankBalance >= depotPrice then
             Player.Functions.RemoveMoney('bank', depotPrice, 'paid-depot')
-            feedback(src, 'feed', ('已缴 $%d 取回 %s'):format(depotPrice, plate),
-                ('银行余额 $%d'):format(Player.PlayerData.money['bank']))
+            feedback(src, 'feed', ('已缴 $%s 取回 %s'):format(money(depotPrice), plate),
+                ('银行余额 $%s'):format(money(Player.PlayerData.money['bank'])))
             TriggerClientEvent('qb-garages:client:takeOutGarage', src, data)
         else
             local have = math.max(cashBalance, bankBalance)
-            feedback(src, 'error', ('取回需要 $%d，你有 $%d，还差 $%d'):format(
-                depotPrice, have, math.max(0, depotPrice - have)))
+            feedback(src, 'error', ('取回需要 $%s，你有 $%s，还差 $%s'):format(
+                money(depotPrice), money(have), money(math.max(0, depotPrice - have))))
         end
     end
 end)
