@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>custom-prompt</title>
+<style>
+  :root {
+    --ink: #eceff4;
+    --dim: #9aa3ad;
+    --key-bg: #e9edf3;
+    --key-ink: #12151a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: transparent;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; color: var(--ink);
+  }
+
+  /* 主提示：准星下方 */
+  .main-host {
+    position: fixed; left: 50%; top: 56%; transform: translate(-50%, 0);
+    display: none; align-items: center; gap: 9px;
+    background: rgba(10, 12, 16, .78); border-radius: 8px; padding: 7px 12px;
+    animation: fadeIn .16s ease-out;
+  }
+  .main-host.on { display: flex; }
+  .main-host .label { font-size: 12.5px; }
+  .main-host .hold-bar {
+    position: absolute; left: 0; bottom: 0; height: 2px; width: 0%;
+    background: #7c5cff; border-radius: 0 0 8px 8px; transition: width .1s linear;
+  }
+
+  /* 右侧上下文列表 */
+  .list-host {
+    position: fixed; right: 22px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 6px; align-items: flex-end;
+  }
+  .list-item {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(10, 12, 16, .72); padding: 6px 10px; border-radius: 7px;
+    font-size: 12px; animation: slideIn .16s ease-out;
+  }
+  .list-item .label { color: var(--ink); }
+
+  kbd {
+    display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px;
+    border-radius: 5px; background: var(--key-bg); color: var(--key-ink);
+    font: 700 11.5px/1 inherit;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div class="main-host" id="main">
+  <kbd id="mainKey">E</kbd>
+  <span class="label" id="mainLabel"></span>
+  <div class="hold-bar" id="holdBar"></div>
+</div>
+<div class="list-host" id="list"></div>
+
+<script>
+  const mainHost = document.getElementById('main');
+  const mainKey = document.getElementById('mainKey');
+  const mainLabel = document.getElementById('mainLabel');
+  const holdBar = document.getElementById('holdBar');
+  const listHost = document.getElementById('list');
+
+  window.addEventListener('message', (event) => {
+    const data = event.data || {};
+    if (data.action !== 'prompt') return;
+
+    if (data.main) {
+      mainKey.textContent = data.main.key || 'E';
+      mainLabel.textContent = data.main.label || '';
+      mainHost.classList.add('on');
+      // hold>0 时画一个进度条（长按类交互，例如按住修车）
+      holdBar.style.width = data.main.hold > 0 ? '100%' : '0%';
+      holdBar.style.transitionDuration = data.main.hold > 0 ? (data.main.hold + 'ms') : '0s';
+      if (data.main.hold > 0) {
+        requestAnimationFrame(() => { holdBar.style.width = '100%'; });
+      }
+    } else if (data.main === false) {
+      mainHost.classList.remove('on');
+      holdBar.style.width = '0%';
+    }
+
+    if (data.list) {
+      listHost.innerHTML = '';
+      data.list.forEach((entry) => {
+        const el = document.createElement('div');
+        el.className = 'list-item';
+        const key = document.createElement('kbd');
+        key.textContent = entry.key || 'E';
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = entry.label || '';
+        el.appendChild(key);
+        el.appendChild(label);
+        listHost.appendChild(el);
+      });
+    }
+  });
+</script>
+</body>
+</html>
