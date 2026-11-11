@@ -524,12 +524,12 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `bank` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:28 |
-| `cash` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:21 |
-| `dev` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-hud/server.lua:35 |
-| `menu` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:190 |
-| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:231 |
-| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:236 |
+| `bank` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:31 |
+| `cash` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:24 |
+| `dev` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-hud/server.lua:38 |
+| `hud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:203 |
+| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:244 |
+| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:249 |
 
 ### qb-inventory
 
