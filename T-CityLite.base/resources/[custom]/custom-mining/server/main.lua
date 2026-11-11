@@ -28,6 +28,14 @@ RegisterNetEvent('mining:server:mineOre', function(siteId)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
+    -- C-7（2026-11-12 PO 反馈"倒地后还能采矿"）：死亡/倒地状态下拒绝产出。
+    -- 客户端在倒地被本地复活时 Ped 是活的，IsEntityDead 不可靠，只认状态袋与 metadata。
+    local md = Player.PlayerData.metadata or {}
+    if md.isdead == true or md.inlaststand == true then
+        feedback(src, '你倒下了，无法采矿', 'error')
+        return
+    end
+
     -- 1. 职业校验 (必须是 miner)
     local job = Player.PlayerData.job
     if not job or job.name ~= 'miner' then

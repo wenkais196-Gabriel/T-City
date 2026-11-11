@@ -822,7 +822,17 @@ QBCore.Functions.CreateCallback('phone:server:garageCoords', function(_, cb, gar
     if key == '' then return cb(nil) end
     local ok, garages = pcall(function() return exports['qb-garages']:getAllGarages() end)
     if not ok or type(garages) ~= 'table' then return cb(nil) end
-    local entry = garages[key]
+    -- ⚠️ qb-garages 的 getAllGarages() 返回的是**数组**（`garages[#garages+1] = { name = 车库键 }`），
+    -- 不是 name → entry 的字典。原来直接 `garages[key]` 永远 nil，手机里的「📍 地图」点了没反应
+    -- （PO 2026-11-12 报的"手机车库无法给出载具位置"）。
+    local entry = nil
+    if garages[key] then
+        entry = garages[key]            -- 兼容将来改成字典
+    else
+        for _, candidate in pairs(garages) do
+            if type(candidate) == 'table' and candidate.name == key then entry = candidate break end
+        end
+    end
     if type(entry) ~= 'table' then return cb(nil) end
     local point = entry.takeVehicle or entry.putVehicle
     if not point or not point.x or not point.y then return cb(nil) end

@@ -191,11 +191,15 @@ end
 -- ==============================================================
 local SHOP_PROMPT_RANGE = 2.0
 local shopPromptShown = false
+-- E 键采样（N-8，2026-11-11）：IsControlJustReleased 只在"松开的那一帧"为真，
+-- 在 200ms 轮询里 12 次里有 11 次采不到 —— 真机表现就是"要反复按 E 才开得了商店"。
+-- 所以只在范围内切到每帧采样（Wait(0)），并用 lastKey/lastLabel 防止每帧重发 NUI 消息。
+local shopPromptKey, shopPromptLabel = nil, nil
 
 CreateThread(function()
     Wait(1500)
     while true do
-        local sleep = 800
+        local sleep = 500
         local pos = GetEntityCoords(PlayerPedId())
         local nearest, nearestDist = nil, SHOP_PROMPT_RANGE
 
@@ -208,20 +212,39 @@ CreateThread(function()
         end
 
         if nearest then
-            sleep = 200
-            local shop = Config.Locations[nearest]
-            local label = shop.targetLabel or '打开商店'
-            exports['custom-prompt']:Show({ key = 'E', label = label })
-            shopPromptShown = true
-            if IsControlJustReleased(0, 38) then
-                exports['custom-prompt']:Hide()
-                shopPromptShown = false
-                TriggerServerEvent('qb-shops:server:openShop', { shop = nearest })
-                sleep = 1200
+            sleep = 0
+            -- N-10（2026-11-12 PO 反馈"商店已经打开还显示 E 打开商店"）：
+            -- 商店界面跑在 qb-inventory 的 NUI 上，开/关只发生在它那边，所以由它报状态，这里让位。
+            local invOpen = false
+            local okInv, invState = pcall(function() return exports['qb-inventory']:IsOpen() end)
+            if okInv and invState == true then invOpen = true end
+
+            if invOpen then
+                if shopPromptShown then
+                    exports['custom-prompt']:Hide()
+                    shopPromptShown = false
+                    shopPromptKey, shopPromptLabel = nil, nil
+                end
+            else
+                local shop = Config.Locations[nearest]
+                local label = shop.targetLabel or '打开商店'
+                if nearest ~= shopPromptKey or label ~= shopPromptLabel then
+                    exports['custom-prompt']:Show({ key = 'E', label = label })
+                    shopPromptKey, shopPromptLabel = nearest, label
+                    shopPromptShown = true
+                end
+                if IsControlJustReleased(0, 38) then
+                    exports['custom-prompt']:Hide()
+                    shopPromptShown = false
+                    shopPromptKey, shopPromptLabel = nil, nil
+                    TriggerServerEvent('qb-shops:server:openShop', { shop = nearest })
+                    Wait(1200)
+                end
             end
         elseif shopPromptShown then
             exports['custom-prompt']:Hide()
             shopPromptShown = false
+            shopPromptKey, shopPromptLabel = nil, nil
         end
 
         Wait(sleep)

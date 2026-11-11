@@ -21,14 +21,26 @@ local function isExcluded(veh)
     return EXCLUDED_CLASSES[GetVehicleClass(veh)] or false
 end
 
+--- 双闪开/关的提示（N-11 continuation）：走 feed 左侧窄条，不再走 qb-core 右栏
+local function hazardNotice(text)
+    local ok, sent = pcall(function() return exports['custom-notify']:PushLocal('feed', text) end)
+    if ok and sent == true then return end
+    QBCore.Functions.Notify(text, 'primary')
+end
+
 local function applyLights(veh)
     -- GTA5: side 0=右, 1=左 (与直觉相反)
     SetVehicleIndicatorLights(veh, 1, leftOn or hazardOn)
     SetVehicleIndicatorLights(veh, 0, rightOn or hazardOn)
 end
 
--- 上层（手机/背包/菜单）是否让输入归它：custom-ui 的交互路径栈说了算。
+-- 上层（ESC 暂停菜单 / 手机 / 背包）是否让输入归它。
+-- 2026-11-12 PO 反馈"ESC 里按方向键会开关转向灯和双闪"：原来的 gate 只问 custom-ui 的路径栈，
+-- 而 **ESC 暂停菜单不是 custom-ui 的层**（GTA 自己的前端），所以漏掉了 —— 补 IsPauseMenuActive()。
+-- 同一写法可参考 seatbelt.lua:80（那里一直是对的）。
 local function uiTookInput()
+    if IsPauseMenuActive() then return true end
+    if IsNuiFocused() then return true end
     local ok, taken = pcall(function() return exports['custom-ui']:IsTaken() end)
     return ok and taken == true
 end
@@ -99,10 +111,10 @@ Citizen.CreateThread(function()
             hazardOn = not hazardOn
             if hazardOn then
                 leftOn, rightOn = true, true
-                QBCore.Functions.Notify('🚨 双闪已开启', 'primary')
+                hazardNotice('🚨 双闪已开启')
             else
                 leftOn, rightOn = false, false
-                QBCore.Functions.Notify('🚨 双闪已关闭', 'primary')
+                hazardNotice('🚨 双闪已关闭')
             end
             applyLights(veh)
         end
@@ -189,9 +201,9 @@ RegisterNetEvent('custom-vehicles:client:toggleHazard', function()
     toggleHazard()
     -- 回传状态给 dashboard
     if hazardOn then
-        QBCore.Functions.Notify('🚨 双闪已开启', 'primary')
+        hazardNotice('🚨 双闪已开启')
     else
-        QBCore.Functions.Notify('🚨 双闪已关闭', 'primary')
+        hazardNotice('🚨 双闪已关闭')
     end
 end)
 

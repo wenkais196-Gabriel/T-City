@@ -103,6 +103,12 @@ end
 
 exports('HasItem', HasItem)
 
+-- N-10（2026-11-12）：给交互提示层一个"背包界面是否开着"的只读信号。
+-- 商店/保险箱/箱子都跑在这套 inventory NUI 上，关界面发生在它的回调里，调用方看不见，
+-- 所以只能由这里报状态（qb-inventory/client/main.lua 是唯一知道开关时刻的地方）。
+local inventoryOpen = false
+exports('IsOpen', function() return inventoryOpen end)
+
 -- Events
 
 RegisterNetEvent('qb-inventory:client:requiredItems', function(items, bool)
@@ -134,6 +140,7 @@ RegisterNetEvent('qb-inventory:client:hotbar', function(items)
 end)
 
 RegisterNetEvent('qb-inventory:client:closeInv', function()
+    inventoryOpen = false
     SendNUIMessage({
         action = 'close',
     })
@@ -169,6 +176,7 @@ end)
 
 RegisterNetEvent('qb-inventory:client:openInventory', function(items, other)
     if not PlayerData or not PlayerData.metadata or PlayerData.metadata['isdead'] or PlayerData.metadata['inlaststand'] then return end
+    inventoryOpen = true
     SetNuiFocus(true, true)
     SendNUIMessage({
         action = 'open',
@@ -199,6 +207,7 @@ RegisterNUICallback('AttemptPurchase', function(data, cb)
 end)
 
 RegisterNUICallback('CloseInventory', function(data, cb)
+    inventoryOpen = false
     SetNuiFocus(false, false)
     if data.name then
         if data.name:find('trunk-') then
