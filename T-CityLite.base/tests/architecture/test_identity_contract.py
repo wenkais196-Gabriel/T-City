@@ -100,3 +100,21 @@ def test_rescue_dedupe_detects_stacked_toasts():
     needle = "PushLocal(" + chr(39) + "toast" + chr(39) + ", " + chr(34) + "你被送回"
     broken = spawn + NL + needle + chr(34) + ")"
     assert needle in broken, "闸门没认出绕过救援去重的直接推送"
+
+
+def test_new_character_flag_detects_apartment_based_guess():
+    """I-3：新角色判据必须来自服务端标记，不能是"有没有公寓"。"""
+    server = MC_SERVER.read_text(encoding="utf-8")
+    apts = (REPO / "T-CityLite.base" / "resources" / "[qb]" / "qb-apartments"
+            / "client" / "main.lua").read_text(encoding="utf-8")
+
+    assert "cData.isNew = false" in server, "选已有角色的路径没有打 isNew=false"
+    assert "newData.isNew = true" in server, "新角色创建的路径没有打 isNew=true"
+    assert "isNewCharacter" in apts, "公寓没有读 isNew"
+    assert "isNewCharacter and Apartments.Starting" in apts, (
+        "公寓还在用 Apartments.Starting 单独判断（无房老角色会被当成新角色）")
+
+    # 反向：把判据改回只看公寓开关，规则必须红
+    broken = apts.replace("if isNewCharacter and Apartments.Starting then",
+                          "if Apartments.Starting then")
+    assert "if isNewCharacter and Apartments.Starting then" not in broken
