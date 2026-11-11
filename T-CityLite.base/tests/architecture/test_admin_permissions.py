@@ -21,6 +21,7 @@ REPO = Path(__file__).resolve().parents[3]
 ADMIN = REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-admin"
 SERVER = ADMIN / "server" / "commands.lua"
 CLIENT = ADMIN / "client" / "admin_panel.lua"
+NL = chr(10)
 
 
 def test_tccops_requires_admin_detects_player_access():
@@ -96,3 +97,23 @@ def test_no_undefined_helpers_detects_nil_call():
                      if not line.startswith("local function _L"))
     assert "local function _L" not in broken
     assert "_L(" in broken
+
+
+def test_license_commands_have_single_owner_detects_duplicate():
+    """执照命令只能有一个实现（PO 拍板合并）：LEO 按职级、admin 按权限，都走同一份。"""
+    admin = SERVER.read_text(encoding="utf-8")
+    police_path = (REPO / "T-CityLite.base" / "resources" / "[custom]" / "custom-police"
+                   / "server" / "commands.lua")
+    police = police_path.read_text(encoding="utf-8")
+
+    assert "local function canUseLicenseTool" in admin, "合并后没有'谁可以用'的判定"
+    assert "license_rank" in admin, "LEO 职级阈值不可配置"
+    for cmd in ("revokelicense", "suspendlicense", "reinstatelicense"):
+        assert "QBCore.Commands.Add('" + cmd + "'" in admin, "custom-admin 缺 /" + cmd
+        assert "QBCore.Commands.Add('" + cmd + "'" not in police, (
+            "custom-police 还留着 /" + cmd + "（重复注册）")
+    assert "QBCore.Commands.Add('verifylicense'" in police, "现场查验没有改名成 /verifylicense"
+
+    # 反向：把 police 的重复注册塞回去，规则必须红
+    broken = police + NL + "QBCore.Commands.Add('revokelicense', '', {}, false, function() end, true)" + NL
+    assert "QBCore.Commands.Add('revokelicense'" in broken

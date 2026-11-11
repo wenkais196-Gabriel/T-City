@@ -50,84 +50,8 @@ QBCore.Commands.Add('grantlicense', Lang:t('commands.license_grant'), { { name =
     end
 end)
 
-QBCore.Commands.Add('revokelicense', Lang:t('commands.license_revoke'), { { name = 'id', help = Lang:t('info.player_id') }, { name = 'license', help = Lang:t('info.license_type') } }, true, function(source, args)
-    local src = source
-    local validTypes = { driver = true, weapon = true, pilot = true, boat = true, heavy = true }
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
-    if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.grade.level >= Config.LicenseRank then
-        if validTypes[args[2]] then
-            local targetId = tonumber(args[1])
-            local SearchedPlayer = QBCore.Functions.GetPlayer(targetId)
-            if not SearchedPlayer then return end
-            -- 🔄 委托给 custom-certificates 统一管理（含实体证件移除）
-            local success, msg = exports['custom-certificates']:RevokeLicense(targetId, args[2])
-            if success then
-                feedback(SearchedPlayer.PlayerData.source, Lang:t('error.revoked_license'), 'error')
-                feedback(src, Lang:t('success.revoke_license'), 'success')
-            else
-                feedback(src, msg or Lang:t('error.error_license'), 'error')
-            end
-        else
-            feedback(src, Lang:t('error.error_license'), 'error')
-        end
-    else
-        feedback(src, Lang:t('error.rank_revoke'), 'error')
-    end
-end)
-
 -- 🔧 新增: 暂停执照（对接 custom-certificates）
-QBCore.Commands.Add('suspendlicense', '暂停玩家执照', { { name = 'id', help = Lang:t('info.player_id') }, { name = 'license', help = Lang:t('info.license_type') } }, true, function(source, args)
-    local src = source
-    local validTypes = { driver = true, weapon = true, pilot = true, boat = true, heavy = true }
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
-    if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.grade.level >= Config.LicenseRank then
-        if validTypes[args[2]] then
-            local targetId = tonumber(args[1])
-            local SearchedPlayer = QBCore.Functions.GetPlayer(targetId)
-            if not SearchedPlayer then return end
-            local success, msg = exports['custom-certificates']:SuspendLicense(targetId, args[2])
-            if success then
-                feedback(SearchedPlayer.PlayerData.source, ('你的 %s 执照已被暂停'):format(args[2]), 'error')
-                feedback(src, ('已暂停玩家 %s 的 %s 执照'):format(targetId, args[2]), 'success')
-            else
-                feedback(src, msg or '操作失败', 'error')
-            end
-        else
-            feedback(src, '无效的执照类型', 'error')
-        end
-    else
-        feedback(src, Lang:t('error.rank_license'), 'error')
-    end
-end)
-
 -- 🔧 新增: 恢复执照（对接 custom-certificates）
-QBCore.Commands.Add('reinstatelicense', '恢复玩家执照', { { name = 'id', help = Lang:t('info.player_id') }, { name = 'license', help = Lang:t('info.license_type') } }, true, function(source, args)
-    local src = source
-    local validTypes = { driver = true, weapon = true, pilot = true, boat = true, heavy = true }
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end -- 控制台 (source=0) 或本帧刚掉线时 GetPlayer 为 nil
-    if Player.PlayerData.job.type == 'leo' and Player.PlayerData.job.grade.level >= Config.LicenseRank then
-        if validTypes[args[2]] then
-            local targetId = tonumber(args[1])
-            local SearchedPlayer = QBCore.Functions.GetPlayer(targetId)
-            if not SearchedPlayer then return end
-            local success, msg = exports['custom-certificates']:ReinstateLicense(targetId, args[2])
-            if success then
-                feedback(SearchedPlayer.PlayerData.source, ('你的 %s 执照已恢复'):format(args[2]), 'success')
-                feedback(src, ('已恢复玩家 %s 的 %s 执照'):format(targetId, args[2]), 'success')
-            else
-                feedback(src, msg or '操作失败', 'error')
-            end
-        else
-            feedback(src, '无效的执照类型', 'error')
-        end
-    else
-        feedback(src, Lang:t('error.rank_license'), 'error')
-    end
-end)
-
 QBCore.Commands.Add('takedrivinglicense', Lang:t('commands.drivinglicense'), {}, false, function(source)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
@@ -428,7 +352,7 @@ QBCore.Commands.Add('checkid', '查验目标玩家ID卡', { { name = 'id', help 
     end, targetId)
 end)
 
-QBCore.Commands.Add('checklicense', '查验目标玩家证照状态', { { name = 'id', help = Lang:t('info.player_id') } }, true, function(source, args)
+QBCore.Commands.Add('verifylicense', '查验目标玩家证照状态', { { name = 'id', help = Lang:t('info.player_id') } }, true, function(source, args)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player or Player.PlayerData.job.type ~= 'leo' or not Player.PlayerData.job.onduty then
