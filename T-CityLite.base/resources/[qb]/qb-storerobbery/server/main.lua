@@ -639,11 +639,14 @@ RegisterNetEvent('qb-storerobbery:server:setSafeStatus', function(safe)
     end
     if not near then return end
     Config.Safes[safe].robbed = true
-    TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, true)
+    -- C-2：把"什么时候能再撬"也发下去 —— 冷却必须是可见状态，不是按下去吃 error
+    local resetInMs = math.random(40, 80) * (60 * 1000)
+    local resetAt = os.time() + math.floor(resetInMs / 1000)
+    TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, true, resetAt)
 
-    SetTimeout(math.random(40, 80) * (60 * 1000), function()
+    SetTimeout(resetInMs, function()
         Config.Safes[safe].robbed = false
-        TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, false)
+        TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, false, nil)
     end)
 end)
 

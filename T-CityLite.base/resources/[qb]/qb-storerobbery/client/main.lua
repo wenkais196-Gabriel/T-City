@@ -98,41 +98,70 @@ local function OpenSafeInteraction(safe)
     end
 end
 
--- 为每个保险箱注册 qb-target 圆形区域（ALT 交互）
-CreateThread(function()
-    Wait(2000)  -- 等待 Config 加载完毕
-    for safe, data in pairs(Config.Safes) do
-        local coords = data[1] or data.xyz
-        if coords then
-            exports['qb-target']:AddCircleZone('storerobbery_safe_' .. safe, coords, 1.5, {
-                name = 'storerobbery_safe_' .. safe,
-                debugPoly = false,
-                useZ = true,
-            }, {
-                options = {
-                    {
-                        type = "client",
-                        event = "qb-storerobbery:client:trySafe",
-                        icon = "fas fa-lock",
-                        label = "尝试破解保险箱",
-                        safeId = safe,
-                    },
-                    {
-                        type = "client",
-                        event = "qb-storerobbery:client:trySafe",
-                        icon = "fas fa-check-circle",
-                        label = "保险箱已打开",
-                        safeId = safe,
-                        canInteract = function()
-                            return Config.Safes[safe] and Config.Safes[safe].robbed
-                        end,
-                    },
-                },
-                distance = 2.0,
-            })
-        end
+-- 保险箱交互（C-2）：[E] 单一入口，提示里直接写状态。
+-- 原来这里是 qb-target 的 AddCircleZone —— 单动作却要长按 ALT，而且门槛/冷却只在按下去之后
+-- 用一句 error 告诉你。现在：提示里写「需 N 名警察（当前 M）」或「已空 · 冷却 mm:ss」，
+-- 不满足时按 E 无反应、不弹 error（error 只用于"做了但没成功"）。
+local safeResetAt = {}
+local safePromptShown = false
+local GetEffectiveMinPolice  -- 定义在文件后面（门槛读取），这里先声明
+
+RegisterNetEvent('qb-storerobbery:client:setSafeStatus', function(safe, robbed, resetAt)
+    if Config.Safes[safe] then
+        Config.Safes[safe].robbed = robbed
+        safeResetAt[safe] = robbed and resetAt or nil
     end
-    -- storerobbery startup print removed
+end)
+
+CreateThread(function()
+    Wait(2000)
+    while true do
+        local sleep = 1000
+        local ped = PlayerPedId()
+        local pos = GetEntityCoords(ped)
+        local nearest, nearestDist = nil, 2.3
+        for safe, data in pairs(Config.Safes) do
+            local coords = data[1] or data.xyz
+            if coords then
+                local dist = #(pos - coords.xyz)
+                if dist < nearestDist then nearest, nearestDist = safe, dist end
+            end
+        end
+
+        if nearest then
+            sleep = 200
+            local info = Config.Safes[nearest]
+            local label
+            local usable = false
+            if info.robbed then
+                local resetAt = safeResetAt[nearest]
+                local remaining = resetAt and math.max(0, resetAt - os.time()) or nil
+                label = remaining and ('保险箱已空 · 冷却 %d:%02d'):format(math.floor(remaining / 60), remaining % 60)
+                    or '保险箱已空'
+            else
+                local minPolice = GetEffectiveMinPolice()
+                if CurrentCops < minPolice then
+                    label = ('撬保险箱 · 需 %d 名警察（当前 %d）'):format(minPolice, CurrentCops)
+                else
+                    label = '撬保险箱'
+                    usable = true
+                end
+            end
+
+            exports['custom-prompt']:Show({ key = 'E', label = label })
+            safePromptShown = true
+
+            if usable and IsControlJustReleased(0, 38) then
+                exports['custom-prompt']:Hide()
+                OpenSafeInteraction(nearest)
+            end
+        elseif safePromptShown then
+            exports['custom-prompt']:Hide()
+            safePromptShown = false
+        end
+
+        Wait(sleep)
+    end
 end)
 
 RegisterNetEvent('qb-storerobbery:client:trySafe', function(data)
@@ -168,7 +197,7 @@ RegisterNetEvent('police:SetCopCount', function(amount)
 end)
 
 -- 警察门槛读取辅助（优先级: GlobalState > Convar > 默认 2）
-local function GetEffectiveMinPolice()
+function GetEffectiveMinPolice()
     if GlobalState and GlobalState.crime_min_police_storerobbery ~= nil then
         return GlobalState.crime_min_police_storerobbery
     end

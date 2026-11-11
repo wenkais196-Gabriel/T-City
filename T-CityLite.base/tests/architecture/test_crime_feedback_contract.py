@@ -56,3 +56,19 @@ def test_single_dispatch_entry_detects_parallel_paths():
         "闸门没认出并行警情路径")
     broken = alert_block + NL + "local b = AddBlipForCoord(0.0, 0.0, 0.0)"
     assert "AddBlipForCoord" in broken, "闸门没认出本地 blip"
+
+
+def test_safe_prompt_shows_gate_detects_hidden_state():
+    """C-2：门槛与冷却必须在提示里，不能只在按下去之后用 error 说。"""
+    client = CLIENT.read_text(encoding="utf-8")
+    server = SERVER.read_text(encoding="utf-8")
+    assert "custom-prompt" in client, "保险箱交互没有走 custom-prompt"
+    assert "需 %d 名警察（当前 %d）" in client, "提示里没写警察门槛"
+    assert "冷却 %d:%02d" in client, "提示里没写冷却倒计时"
+    assert "storerobbery_safe_" not in client, "保险箱还在注册 qb-target 区域（ALT 入口未拆）"
+    assert "resetAt" in server, "服务端没有把重置时间发下去（客户端算不出冷却）"
+
+    # 反向：把"按下去才报错"的老写法塞回去，规则必须红
+    broken = client + NL + (
+        'QBCore.Functions.Notify(("需要至少 %d 名执勤警察才能打开保险箱"):format(minPolice), "error")')
+    assert "需要至少 %d 名执勤警察才能打开保险箱" in broken, "闸门没认出老的报错写法"
