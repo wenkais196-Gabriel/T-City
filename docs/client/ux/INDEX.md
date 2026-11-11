@@ -24,13 +24,13 @@ review_by: 2027-02-28
 | 手机 | [modules/phone.md](./modules/phone.md) | `custom-phone`、`custom-ui`（焦点/层） | **active** | 文字输入已修；Garage 标注已加 |
 | 经济与交易 | [modules/economy.md](./modules/economy.md) | `qb-shops`、`qb-banking`、`custom-market`、`qb-pawnshop`、`core_economy` | **active · 已交付** | 商店单入口 `[E]`；购买回执带余额与差额 |
 | 医疗与急救 | [modules/medical.md](./modules/medical.md) | `qb-ambulancejob`、`custom-consumables` | **active · 已交付** | 复活护甲 0 / 饥渴 50；施救与医院热区改 `[E]` |
-| 通知与提示 | [modules/notify-prompt.md](./modules/notify-prompt.md) | `custom-notify`、`custom-prompt`、`qb-core` Notify | **active** | 横向组件，其余模块都依赖它 |
+| 通知与提示 | [modules/notify-prompt.md](./modules/notify-prompt.md) | `custom-notify`、`custom-prompt`、`qb-core` Notify | **active** | 横向组件，其余模块都依赖它；N-5 字号已按 A 改（待真机复核）、N-6 闪烁方案已定（根因 custom-mining） |
 | 警务 | [modules/police.md](./modules/police.md) | `custom-police`、`custom-justice`、MDT | **active** | 去重合并 + 验尸官反馈 + 76 处回执降噪（待 PO 真机验） |
 | 载具与车库 | [modules/vehicles.md](./modules/vehicles.md) | `qb-garages`、`qb-vehicleshop`、`qb-fuel`、`custom-vehicles` | **active · 已交付** | V-1…V-7 全完成（取车回执、扣押三件套、主动推送） |
 | 犯罪与组织 | [modules/crime.md](./modules/crime.md) | `qb-storerobbery`、`custom-cartel`、`qb-drugs`、`custom-mining`、`custom-crime` | **active · 已交付** | 报警分类、结算去重、单一派发、门槛入提示 |
 | 职业与任务 | [modules/jobs.md](./modules/jobs.md) | `custom-career`、`custom-quest`、`qb-management` | **active · 已交付** | 完成/步骤/失败各只发一条；`[E]` 入口；J-6 因无门槛字段不做 |
 | 角色与出生 | [modules/identity.md](./modules/identity.md) | `qb-multicharacter`、`qb-spawn`、`qb-apartments` | **active** | 卡片标快照时间、删角色需输全名、脏数据容错；出生选择（I-3）单列一批 |
-| HUD 与状态 | [modules/hud.md](./modules/hud.md) | `qb-hud`、`qb-scoreboard` | **active · 已交付** | 圆环数值 + 三档配色 + 低状态提醒 + `/menu` 冲突已修 |
+| HUD 与状态 | [modules/hud.md](./modules/hud.md) | `qb-hud`、`qb-scoreboard` | **active** | 圆环数值 + 三档配色 + 低状态提醒 + `/menu` 冲突已修；**H-5 环心图标回归（PO 真机反馈）** |
 | 管理与审计 | [modules/admin.md](./modules/admin.md) | `custom-admin`、`custom-logs`、`/agent` | **active · 已交付** | 339 条命令清单（生成式）、`/tccops` 权限洞已修、审计 + 二次确认 |
 
 ## 横向规则（所有模块都必须遵守）

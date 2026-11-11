@@ -138,6 +138,18 @@ review_by: 2027-02-28
 | V-5 ✅(`63452b44`) | 手机 Garage 显示扣押三件套（原因/金额/地点） | `T-CityLite.base/resources/[custom]/custom-phone/server/main.lua`（`getOwnedVehicles`）+ `Garage.svelte` | 中（要加字段并兼容旧行） | 被扣车的卡片能看到原因与金额 |
 | V-6 ✅(`63452b44`) | 手机拉取失败与"没有车"分开 | `Garage.svelte` | 低 | 断网时显示重试，不显示"名下没有车辆" |
 | V-7 ✅(`8d469850`) | 扣押瞬间主动推 `phone` | `qb-garages` 的扣押入口（`/impound` 与拖车） | 中（要拿车主 cid） | 车被扣后手机会话里有凭证 |
+| V-11 ✅ | **扣押场"有钱但无法付款"**（PO 2026-11-12）：`T-CityLite.base/resources/[qb]/qb-garages/html/script.js` 把 `state=2` 一律渲染成 `Impound` 并把按钮 **disabled**，站在扣押场也点不动。改成"在扣押场（type=depot）且挂了费用"就渲染成可点的 `$金额` | `T-CityLite.base/resources/[qb]/qb-garages/html/script.js`:119-135 | 低 | 扣押场的车显示 `$500` 且可点；公共车库里的被扣车仍显示 `Impound`（只读） |
+| V-10 ✅ | **扣押场取车面板没有光标、点不了付款**（PO 2026-11-12）。真因不是 keepInput 顺序（第一次这么判断是错的），而是：`SetNuiFocus` **按资源**生效，`custom-ui` 没有 ui_page，从它那里调等于把焦点给空气（`T-CityLite.base/resources/[custom]/custom-ui/client/main.lua`:122-125 的注释自己就写着）。修法：`OpenMenu` 接受 `owner` 并压栈，栈回调**拥有页面**的资源 `exports('ApplyFocus')` 来按焦点；`CloseMenu({owner=…})` 只弹自己那层 | `T-CityLite.base/resources/[custom]/custom-ui/client/main.lua`:47-75、`:83-110`（含 `Input.Top` 投影）；`T-CityLite.base/resources/[qb]/qb-garages/client/main.lua`:86-100、`:607-615`；`T-CityLite.base/resources/[qb]/qb-menu/client/main.lua`:8-16；`T-CityLite.base/resources/[qb]/qb-vehicleshop/client/nui.lua`:156 | 中（所有走 custom-ui 的菜单） | 扣押场面板一出来就有光标、能点「付款」；boss 菜单 / 车店同样恢复 |
+
+> **V-10 的两次翻车（比修复本身更值钱）**
+> 1. 第一次只看注释顺序（keepInput 在 focus 之后），改完**没有任何改善** —— 注释说的那条规则是真的，但它不是这次的病。
+> 2. 第二次补 `ApplyFocus` 时，我的自检写成 `if "exports('ApplyFocus'" not in s`，而**注释里就写着这个词**，于是判定"已存在"、真正的 export 没写进去；
+>    随后的 `grep -c` 也匹配到了注释行。真机表现与上一次一模一样，才被 cc 评审指出"`qb-garages` 全文没有 ApplyFocus"。
+>    规则：注释里不要写"文件末尾有 X"这种实现声明；自检一律用**锚定**模式（`^exports('X'`），不要用子串。
+> 3. 现在再加一道双保险：`qb-garages` 在 `OpenMenu` 之后**自己**也按一次 `SetNuiFocus`（同一个资源、同一组值，幂等），
+>    栈那边哪天没走通也不会退化成"面板有、光标无"。
+| V-9 ✅ | **手机车库的「📍 地图」点了没反应**（PO 2026-11-12）：`phone:server:garageCoords` 把 `qb-garages:getAllGarages()` 当字典用（`garages[key]`），而它返回的是**数组**（每项带 `name`）→ 永远取不到 → 静默 `no_coords` | `T-CityLite.base/resources/[custom]/custom-phone/server/main.lua`:820-845（改成先查字典再线性找 `name`）；失败时补一条 error feed | 低 | 手机里点地图 → 小地图出现到该车库的路线；找不到坐标时有红条说明 |
+| V-8 ✅ | **ESC 暂停菜单里按方向键会打转向灯 / 双闪**（PO 反馈的"老问题"）：`indicators.lua` 的输入门只问 `custom-ui:IsTaken()`，而 ESC 是 GTA 自己的前端、不在那个层栈里；`cruise.lua` 的 lock 模式 ↑↓ 同理 | `T-CityLite.base/resources/[custom]/custom-vehicles/client/indicators.lua`:30-40、`T-CityLite.base/resources/[custom]/custom-vehicles/client/cruise.lua`:261-268 | 低 | ESC 菜单里按 ←/→/↓ 只导航、不打灯；关掉菜单后 ←/→ 正常 |
 
 **顺序**：V-4（最小、真静默）→ V-1（统一通道）→ V-2（取车回执）→ V-3（扣押取车）→ V-5/V-6（手机侧）→ V-7（主动通知）。
 
