@@ -52,7 +52,7 @@ local DynamicMenuItems = {}
 
 local function CloseMenuFull()
     exports['qb-menu']:closeMenu()
-    exports['qb-core']:HideText()
+    exports['custom-prompt']:Hide()
     shownMenu = false
 end
 
@@ -469,7 +469,7 @@ end)
 -- ==============================================================
 
 CreateThread(function()
-    if Config.UseTarget then
+    if Config.UseTarget and not Config.ManagementUsePrompt then
         -- === Job Boss Zones ===
         if Config.BossMenus then
             for job, zones in pairs(Config.BossMenus) do
@@ -528,7 +528,7 @@ CreateThread(function()
             end
         end
     else
-        -- === DrawText 模式（非 Target）===
+        -- === [E] 提示模式（J-4：custom-prompt，不再用 qb-core 的 DrawText 黑条）===
         while true do
             local wait = 2500
             local pos = GetEntityCoords(PlayerPedId())
@@ -546,11 +546,11 @@ CreateThread(function()
                             if #(pos - coords) <= 1.5 then
                                 nearMenu = true
                                 if not shownMenu then
-                                    exports['qb-core']:DrawText('[E] Open ' .. (orgType == 'job' and 'Job' or 'Gang') .. ' Management', 'left')
+                                    exports['custom-prompt']:Show({ key = 'E', label = '打开' .. (orgType == 'job' and '职业' or '帮派') .. '管理' })
                                     shownMenu = true
                                 end
                                 if IsControlJustReleased(0, 38) then
-                                    exports['qb-core']:HideText()
+                                    exports['custom-prompt']:Hide()
                                     TriggerEvent('qb-orgmenu:client:OpenMenu')
                                 end
                             end

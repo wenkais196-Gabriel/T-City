@@ -1,7 +1,10 @@
 -- Zones for Menus
 Config = Config or {}
 
-Config.UseTarget = GetConvar('UseTarget', 'false') == 'true' -- Use qb-target interactions (don't change this, go to your server.cfg and add `setr UseTarget true` to use this and just that from true to false or the other way around)
+Config.UseTarget = GetConvar('UseTarget', 'false') == 'true'
+-- J-4：老板/黑帮/组织菜单只有一个动作（开菜单），按 D2 走 [E]，不走 qb-target 的 ALT。
+-- 其余资源仍按 UseTarget 走 ALT（世界物件列表）不受影响。
+Config.ManagementUsePrompt = true -- Use qb-target interactions (don't change this, go to your server.cfg and add `setr UseTarget true` to use this and just that from true to false or the other way around)
 
 Config.BossMenus = {
     police = {
