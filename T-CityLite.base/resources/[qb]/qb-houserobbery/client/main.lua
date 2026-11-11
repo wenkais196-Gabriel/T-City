@@ -71,7 +71,7 @@ end
 
 local function alertCops()
     if math.random(1, 100) < Config.ChanceToAlertPolice then
-        TriggerServerEvent('police:server:policeAlert', Lang:t('info.palert'))
+        TriggerServerEvent('police:server:policeAlert', Lang:t('info.palert'), 'house_robbery')
     end
 end
 

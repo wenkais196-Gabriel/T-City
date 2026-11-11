@@ -18,12 +18,37 @@ APP = REPO / "T-CityLite.base/resources/[system]/tcity-dashboard/nui/src/App.vue
 
 
 def test_focus_owner_honours_an_explicit_keepinput_false() -> None:
+    """keepInput 必须**每次显式设**，且在 SetNuiFocus 之前。
+
+    2026-11-12 之前这条断言卡的是一个字面形状（`elseif opts.keepInput == false then`），
+    改成 owner 分支后实现从"按需设"变成"每次设一个布尔"，字面形状变了但语义更强；
+    照 tests/AGENTS.md「不要断言实现细节」，这里改断言**不变量**：
+      1) 传了 keepInput=false 就要真的被采纳（不能只在 true 时才设）；
+      2) keepInput 的调用位置必须在 SetNuiFocus **之前**（这个 build 上 keepInput 会粘住，
+         顺序反了就是"面板出来、没有光标"—— 真机踩过两次）；
+      3) 老路径里不能出现"只在 true 时才设"的分支。
+    """
     src = CUSTOM_UI.read_text(encoding="utf-8")
     at = src.find("function OpenMenu(opts)")
     assert at != -1
-    block = src[at:at + 900]
-    assert "elseif opts.keepInput == false then" in block
-    assert "SetNuiFocusKeepInput(false)" in block
+    end = src.find("\nend", at)
+    block = src[at:end + 4]
+
+    assert "opts.keepInput" in block, "OpenMenu 必须读 opts.keepInput"
+    assert "SetNuiFocusKeepInput(" in block, "必须真的施加 keepInput"
+
+    # 不变量 2：顺序。老路径（无 owner）里 setKeepInput 必须在 SetNuiFocus 之前。
+    legacy = block[block.find("-- ↓ 以下是无 owner 的老路径"):] if "-- ↓ 以下是无 owner 的老路径" in block else block
+    keep_at = legacy.find("SetNuiFocusKeepInput(")
+    focus_at = legacy.find("SetNuiFocus(true, true)")
+    assert keep_at != -1 and focus_at != -1, "老路径必须两者都有"
+    assert keep_at < focus_at, "keepInput 必须在 SetNuiFocus 之前设（顺序反了会丢光标）"
+
+    # 反向校验：只写"true 才设"的分支（原 bug 形状）必须被抓住
+    assert "opts.keepInput then" not in legacy, (
+        "不要只在 keepInput=true 时才设：这个 build 上 keepInput 会粘住，"
+        "必须每次都显式设一个布尔（citizenfx#3593）"
+    )
 
 
 def test_dashboard_pushes_frames_owned_by_itself() -> None:

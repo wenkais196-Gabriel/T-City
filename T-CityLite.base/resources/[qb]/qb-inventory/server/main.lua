@@ -454,13 +454,31 @@ QBCore.Functions.CreateCallback('qb-inventory:server:attemptPurchase', function(
     end
 
     local price = shopInfo.items[itemInfo.slot].price * amount
+    -- E-2 / E-3（UX 经济模块）：购买结果要能对账。
+    --   成功 → feed「支付 −$X · 物品 ×N · 余额 $Y」（金额与余额都在，玩家能自己核）
+    --   失败 → error「现金不足，还差 $Z」（不只说"钱不够"，要给差额）
+    -- 文案原来只有一句英文 `You do not have enough money`。
+    local function shopMoney(n)
+        local num = tonumber(n) or 0
+        if num == math.floor(num) then return ('%d'):format(num) end
+        return ('%.2f'):format(num)
+    end
+    local function shopFeedback(kind, text)
+        pcall(function() exports['custom-notify']:Push(source, kind, text) end)
+    end
+
     if Player.PlayerData.money.cash >= price then
         Player.Functions.RemoveMoney('cash', price, 'shop-purchase')
         AddItem(source, itemInfo.name, amount, nil, itemInfo.info, 'shop-purchase')
         TriggerEvent('qb-shops:server:UpdateShopItems', shop, itemInfo, amount)
+        local remaining = Player.PlayerData.money.cash
+        local itemLabel = (itemInfo.label or itemInfo.name)
+        shopFeedback('feed', ('支付 −$%s · %s ×%d · 余额 $%s'):format(
+            shopMoney(price), itemLabel, amount, shopMoney(remaining)))
         cb(true)
     else
-        TriggerClientEvent('QBCore:Notify', source, 'You do not have enough money', 'error')
+        local shortfall = price - (tonumber(Player.PlayerData.money.cash) or 0)
+        shopFeedback('error', ('现金不足，还差 $%s'):format(shopMoney(shortfall)))
         cb(false)
     end
 end)

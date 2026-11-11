@@ -5,6 +5,13 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 采矿服务端反馈（C-5）：同一套分派，服务端按 source 直推。
+local function feedback(src, text, kind)
+    local pushKind = (kind == 'error') and 'error' or 'feed'
+    pcall(function() exports['custom-notify']:Push(src, pushKind, tostring(text)) end)
+end
+
+
 -- ==============================================================
 -- 冶炼事件
 -- ==============================================================
@@ -16,7 +23,7 @@ RegisterNetEvent('mining:server:smeltOre', function(recipeId)
     -- 1. 职业校验
     local job = Player.PlayerData.job
     if not job or job.name ~= 'miner' then
-        TriggerClientEvent('QBCore:Notify', src, _L(src, 'mining_smelter_staff_only'), 'error')
+        feedback(src, _L(src, 'mining_smelter_staff_only'), 'error')
         return
     end
 
@@ -26,14 +33,14 @@ RegisterNetEvent('mining:server:smeltOre', function(recipeId)
         if r.id == recipeId then recipe = r; break end
     end
     if not recipe then
-        TriggerClientEvent('QBCore:Notify', src, _L(src, 'unknown_recipe'), 'error')
+        feedback(src, _L(src, 'unknown_recipe'), 'error')
         return
     end
 
     -- 3. 原料校验
     for _, input in ipairs(recipe.inputs) do
         if not QBCore.Functions.HasItem(src, input.name, input.count) then
-            TriggerClientEvent('QBCore:Notify', src,
+            feedback(src,
                 ('原料不足: 需要 %d x %s'):format(input.count, input.label), 'error')
             return
         end
@@ -46,7 +53,7 @@ RegisterNetEvent('mining:server:smeltOre', function(recipeId)
 
     -- 5. 判定成功/失败
     if math.random() < recipe.failRate then
-        TriggerClientEvent('QBCore:Notify', src, ('冶炼失败！%s已损坏'):format(recipe.label), 'error')
+        feedback(src, ('冶炼失败！%s已损坏'):format(recipe.label), 'error')
         return
     end
 
@@ -67,7 +74,7 @@ RegisterNetEvent('mining:server:smeltOre', function(recipeId)
         exports['qb-inventory']:AddItem(src, recipe.output.name, recipe.output.count, nil, nil, 'Smelter')
     end
 
-    TriggerClientEvent('QBCore:Notify', src,
+    feedback(src,
         ('✅ 冶炼成功: %d x %s%s'):format(recipe.output.count, recipe.output.label,
             storedInOrg and ' (已存入组织仓库)' or ''), 'success')
 end)

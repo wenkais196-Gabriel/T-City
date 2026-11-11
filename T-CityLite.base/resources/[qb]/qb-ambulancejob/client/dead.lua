@@ -184,14 +184,19 @@ CreateThread(function()
             elseif InLaststand then
                 sleep = 5
 
+                -- M-2：秒数本来就有（math.ceil(LaststandTime)），问题是**文案是英文**。
+                -- 而且 setr qb_locale 对这套 locale 不生效（见提交说明），所以直接写中文。
+                local seconds = math.ceil(LaststandTime)
                 if LaststandTime > Config.MinimumRevive then
-                    DrawTxt(0.5, 1.30, 1.0, 1.0, 0.6, Lang:t('info.bleed_out', { time = math.ceil(LaststandTime) }), 255, 255, 255, 255)
+                    DrawTxt(0.5, 1.30, 1.0, 1.0, 0.6,
+                        ('你将在一 ~r~%d~s~ 秒后失去意识'):format(seconds), 255, 255, 255, 255)
                 else
-                    DrawTxt(0.5, 1.30, 1.0, 1.0, 0.6, Lang:t('info.bleed_out_help', { time = math.ceil(LaststandTime) }), 255, 255, 255, 255)
+                    DrawTxt(0.5, 1.30, 1.0, 1.0, 0.6,
+                        ('你将在一 ~r~%d~s~ 秒后失去意识 · 旁边有人能救你'):format(seconds), 255, 255, 255, 255)
                     if not emsNotified then
-                        DrawTxt(0.5, 1.26, 1.0, 1.0, 0.6, Lang:t('info.request_help'), 255, 255, 255, 255)
+                        DrawTxt(0.5, 1.26, 1.0, 1.0, 0.6, '按 ~r~E~s~ 呼救（医护会收到）', 255, 255, 255, 255)
                     else
-                        DrawTxt(0.5, 1.26, 1.0, 1.0, 0.6, Lang:t('info.help_requested'), 255, 255, 255, 255)
+                        DrawTxt(0.5, 1.26, 1.0, 1.0, 0.6, '已呼救，等医护到场', 255, 255, 255, 255)
                     end
 
                     if IsControlJustPressed(0, 47) and not emsNotified then

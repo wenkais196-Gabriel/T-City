@@ -1,5 +1,120 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 管理员操作审计（A-3）。
+--- 现状：custom-logs 有金额流水，但**没有操作者、没有旧值** —— "谁改了谁的钱"查不到；
+--- custom-admin 全文 0 处审计调用。这里给每条特权动作补上：
+---   操作者(名字+id) / 动作 / 目标 / 明细 / 时间
+--- 三件事一起做：
+---   1) 落 custom-logs（本地文件 + Discord）；
+---   2) 执行者拿 feed 回执（含目标与明细，可截图留证）；
+---   3) 审计写失败只 print，不影响业务（审计不能成为可用性单点）。
+--- 权限层级（A-5）：不能对同级或更高级动手。
+local RANK_LEVELS = { user = 0, mod = 1, admin = 2, god = 3 }
+local function rankOf(src)
+    local best = -1
+    for level, weight in pairs(RANK_LEVELS) do
+        if QBCore.Functions.HasPermission(src, level) then
+            if weight > best then best = weight end
+        end
+    end
+    return best
+end
+
+---@return boolean allowed, string|nil reason
+local function canActOn(src, targetId)
+    if src == targetId then return true end
+    local mine, theirs = rankOf(src), rankOf(targetId)
+    if mine < 0 then return false, '你没有管理权限' end
+    if theirs >= mine then
+        return false, ('对方权限不低于你（你 %s / 对方 %s）'):format(
+            tostring(mine), tostring(theirs))
+    end
+    return true, nil
+end
+
+--- 二次确认（A-4）：第一次只输出摘要，10 秒内用同样的参数再执行一次才生效。
+--- 为什么不做成通知：通知是事后单向，不能阻止误操作，也不构成"同意"。
+local CONFIRM_WINDOW_MS = 10000
+local pendingConfirm = {}
+local function confirmStep(src, action, key, summary)
+    local now = GetGameTimer()
+    local slot = ('%s|%s|%s'):format(tostring(src), action, tostring(key))
+    local entry = pendingConfirm[slot]
+    if entry and now - entry.at <= CONFIRM_WINDOW_MS then
+        pendingConfirm[slot] = nil
+        return true
+    end
+    pendingConfirm[slot] = { at = now }
+    -- 顺手清掉过期项，避免长跑积累
+    for other, info in pairs(pendingConfirm) do
+        if now - info.at > CONFIRM_WINDOW_MS then pendingConfirm[other] = nil end
+    end
+    pcall(function()
+        exports['custom-notify']:Push(src, 'toast', '确认操作',
+            ('%s · 10 秒内再执行一次以确认'):format(summary))
+    end)
+    return false
+end
+
+-- /tccops 用的 _L 从来没有定义过（custom-admin 也没加载 locale 文件），
+-- 所以这条命令任何输入都会在 Lua 里 "attempt to call a nil value (_L)"。
+-- 只有 4 个键，直接给中文，不留一个"看起来有 i18n"的空壳。
+local THRESHOLD_TEXT = {
+    current = '当前抢劫警察门槛：%s',
+    reset   = '已恢复为 2（生产标准）',
+    invalid = '只能填 0-10 的整数',
+    set     = '门槛已设为 %s',
+}
+local function _L(_, key, arg)
+    local template = THRESHOLD_TEXT[key]
+    if not template then return tostring(key) end
+    if arg == nil then return template end
+    return (template:gsub('%%s', tostring(arg)))
+end
+
+--- 谁可以使用执照工具（合并后的唯一入口）：
+---   admin/god —— 管理侧；
+---   值班 LEO 且职级 ≥ 阈值 —— 执法侧（原 custom-police 的口径，阈值默认 2）。
+--- 阈值用 convar 覆盖：setr license_rank 3
+local LICENSE_RANK_FALLBACK = 2
+local function licenseRankThreshold()
+    return tonumber(GetConvar('license_rank', tostring(LICENSE_RANK_FALLBACK))) or LICENSE_RANK_FALLBACK
+end
+
+---@return boolean allowed, string|nil reason
+local function canUseLicenseTool(src)
+    if QBCore.Functions.HasPermission(src, 'admin') or QBCore.Functions.HasPermission(src, 'god') then
+        return true, nil
+    end
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false, '玩家数据未加载' end
+    local job = Player.PlayerData.job or {}
+    if job.type ~= 'leo' then return false, '只有值班警察或管理员可以使用执照命令' end
+    if not job.onduty then return false, '需要先上岗' end
+    local grade = (job.grade and job.grade.level) or 0
+    local threshold = licenseRankThreshold()
+    if grade < threshold then
+        return false, ('职级不足（需要 %d 级，你是 %d 级）'):format(threshold, grade)
+    end
+    return true, nil
+end
+
+local function auditAdmin(src, action, targetLabel, detail, kind)
+    local executor = GetPlayerName(src) or ('#%s'):format(tostring(src))
+    local line = ('%s | 操作者 %s(#%s) | 目标 %s | %s'):format(
+        action, executor, tostring(src), tostring(targetLabel or '-'), tostring(detail or '-'))
+    local ok, err = pcall(function()
+        exports['custom-logs']:LogGeneric('管理员操作', line, 16744192)
+    end)
+    if not ok then print(('[custom-admin] ⚠️ 审计写入失败: %s'):format(tostring(err))) end
+    pcall(function()
+        exports['custom-notify']:Push(src, kind == 'error' and 'error' or 'feed', '管理员操作',
+            ('%s · %s'):format(action, tostring(targetLabel or '')), { icon = '🛠' })
+    end)
+    return line
+end
+
+
 -- 辅助函数：输出调试日志
 local function DebugPrint(msg)
     print(('[custom-admin][server] %s'):format(msg))
@@ -63,10 +178,13 @@ QBCore.Commands.Add('amenu', '打开管理员菜单', {}, false, function(source
   /admincar        - 保存载具到车库
   /myid            - 查看标识符
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 完整清单（339 条，按权限分组，自动生成）：
+   docs/client/ux/admin-commands.md
+   改代码后重跑：python3 tools/dev/scan_commands.py
 ]]
         }
     })
-end)
+end, 'admin')
 
 -- ==========================================
 --        调 试 命 令 — 抢 劫 警 察 门 槛
@@ -87,7 +205,9 @@ QBCore.Commands.Add('tccops', '调整抢劫警察门槛（调试）', { {
     end
 
     if args[1]:lower() == 'reset' then
+        local previous = GlobalState and GlobalState.crime_min_police_storerobbery
         GlobalState:set('crime_min_police_storerobbery', 2, true)
+        auditAdmin(source, '重置抢劫警察门槛', '全局', ('%s → 2'):format(tostring(previous)))
         QBCore.Functions.Notify(source, _L(source, 'admin_reset_to_2'), "success")
         return
     end
@@ -97,9 +217,14 @@ QBCore.Commands.Add('tccops', '调整抢劫警察门槛（调试）', { {
         QBCore.Functions.Notify(source, _L(source, 'admin_invalid_0_10'), "error")
         return
     end
+    local previous = GlobalState and GlobalState.crime_min_police_storerobbery
     GlobalState:set('crime_min_police_storerobbery', value, true)
+    auditAdmin(source, '调整抢劫警察门槛', '全局',
+        ('%s → %s'):format(tostring(previous), tostring(value)))
     QBCore.Functions.Notify(source, _L(source, 'admin_threshold_set', value), "primary")
-end, 'user')
+end, 'admin')
+-- 🔒 A-2：这里原本是 'user' —— **任何玩家**都能把抢劫警察门槛改成 0，
+--    等于关掉整条犯罪链的门禁。改门槛是玩法调参，必须是 admin。
 
 -- 在 QBCore 中注册管理员身份（确保 setrobbery 等 admin 命令可用）
 -- 🔒 默认关闭: 全量自动 admin 会让每个玩家获得管理命令与面板权限。
@@ -236,6 +361,13 @@ QBCore.Commands.Add('givelicense', '授予玩家执照 (Admin)', {
     { name = 'id', help = '玩家 ID' },
     { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
 }, false, function(source, args)
+    do
+        local allowed, reason = canUseLicenseTool(source)
+        if not allowed then
+            TriggerClientEvent('QBCore:Notify', source, reason, 'error')
+            return
+        end
+    end
     local src = source
     local targetId = tonumber(args[1])
     local licenseType = args[2] and args[2]:lower()
@@ -248,20 +380,37 @@ QBCore.Commands.Add('givelicense', '授予玩家执照 (Admin)', {
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
         return
     end
+    local allowed, reason = canActOn(src, targetId)
+    if not allowed then
+        TriggerClientEvent('QBCore:Notify', src, reason, 'error')
+        return
+    end
+    if not confirmStep(src, '授予执照', ('%s:%s'):format(targetId, licenseType),
+        ('授予 %s 的 %s 执照'):format(GetPlayerName(targetId), tostring(licenseType))) then
+        return
+    end
     local success, msg = exports['custom-certificates']:GrantLicense(targetId, licenseType)
     if success then
+        auditAdmin(src, '授予执照', GetPlayerName(targetId), ('+%s'):format(tostring(licenseType)))
         TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
         TriggerClientEvent('QBCore:Notify', src, ('✅ 已授予 %s %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
         TriggerClientEvent('QBCore:Notify', targetId, ('管理员授予了你 %s 执照'):format(licenseType), 'success')
     else
         TriggerClientEvent('QBCore:Notify', src, msg or '授予失败', 'error')
     end
-end, 'admin')
+end, 'user')
 
 QBCore.Commands.Add('revokelicense', '吊销玩家执照 (Admin)', {
     { name = 'id', help = '玩家 ID' },
     { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
 }, false, function(source, args)
+    do
+        local allowed, reason = canUseLicenseTool(source)
+        if not allowed then
+            TriggerClientEvent('QBCore:Notify', source, reason, 'error')
+            return
+        end
+    end
     local src = source
     local targetId = tonumber(args[1])
     local licenseType = args[2] and args[2]:lower()
@@ -274,20 +423,37 @@ QBCore.Commands.Add('revokelicense', '吊销玩家执照 (Admin)', {
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
         return
     end
+    local allowed, reason = canActOn(src, targetId)
+    if not allowed then
+        TriggerClientEvent('QBCore:Notify', src, reason, 'error')
+        return
+    end
+    if not confirmStep(src, '吊销执照', ('%s:%s'):format(targetId, licenseType),
+        ('吊销 %s 的 %s 执照'):format(GetPlayerName(targetId), tostring(licenseType))) then
+        return
+    end
     local success, msg = exports['custom-certificates']:RevokeLicense(targetId, licenseType)
     if success then
+        auditAdmin(src, '吊销执照', GetPlayerName(targetId), ('-%s'):format(tostring(licenseType)))
         TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
         TriggerClientEvent('QBCore:Notify', src, ('🗑️ 已吊销 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
         TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已被吊销'):format(licenseType), 'error')
     else
         TriggerClientEvent('QBCore:Notify', src, msg or '吊销失败', 'error')
     end
-end, 'admin')
+end, 'user')
 
 QBCore.Commands.Add('reinstatelicense', '恢复玩家执照 (Admin)', {
     { name = 'id', help = '玩家 ID' },
     { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
 }, false, function(source, args)
+    do
+        local allowed, reason = canUseLicenseTool(source)
+        if not allowed then
+            TriggerClientEvent('QBCore:Notify', source, reason, 'error')
+            return
+        end
+    end
     local src = source
     local targetId = tonumber(args[1])
     local licenseType = args[2] and args[2]:lower()
@@ -300,20 +466,37 @@ QBCore.Commands.Add('reinstatelicense', '恢复玩家执照 (Admin)', {
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
         return
     end
+    local allowed, reason = canActOn(src, targetId)
+    if not allowed then
+        TriggerClientEvent('QBCore:Notify', src, reason, 'error')
+        return
+    end
+    if not confirmStep(src, '恢复执照', ('%s:%s'):format(targetId, licenseType),
+        ('恢复 %s 的 %s 执照'):format(GetPlayerName(targetId), tostring(licenseType))) then
+        return
+    end
     local success, msg = exports['custom-certificates']:ReinstateLicense(targetId, licenseType)
     if success then
+        auditAdmin(src, '恢复执照', GetPlayerName(targetId), ('~%s'):format(tostring(licenseType)))
         TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
         TriggerClientEvent('QBCore:Notify', src, ('🔄 已恢复 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
         TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已恢复'):format(licenseType), 'success')
     else
         TriggerClientEvent('QBCore:Notify', src, msg or '恢复失败', 'error')
     end
-end, 'admin')
+end, 'user')
 
 QBCore.Commands.Add('suspendlicense', '暂停玩家执照 (Admin)', {
     { name = 'id', help = '玩家 ID' },
     { name = 'type', help = 'driver / pilot / boat / heavy / weapon' }
 }, false, function(source, args)
+    do
+        local allowed, reason = canUseLicenseTool(source)
+        if not allowed then
+            TriggerClientEvent('QBCore:Notify', source, reason, 'error')
+            return
+        end
+    end
     local src = source
     local targetId = tonumber(args[1])
     local licenseType = args[2] and args[2]:lower()
@@ -326,15 +509,25 @@ QBCore.Commands.Add('suspendlicense', '暂停玩家执照 (Admin)', {
         TriggerClientEvent('QBCore:Notify', src, '玩家不在线', 'error')
         return
     end
+    local allowed, reason = canActOn(src, targetId)
+    if not allowed then
+        TriggerClientEvent('QBCore:Notify', src, reason, 'error')
+        return
+    end
+    if not confirmStep(src, '暂停执照', ('%s:%s'):format(targetId, licenseType),
+        ('暂停 %s 的 %s 执照'):format(GetPlayerName(targetId), tostring(licenseType))) then
+        return
+    end
     local success, msg = exports['custom-certificates']:SuspendLicense(targetId, licenseType)
     if success then
+        auditAdmin(src, '暂停执照', GetPlayerName(targetId), ('!%s'):format(tostring(licenseType)))
         TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
         TriggerClientEvent('QBCore:Notify', src, ('⏸️ 已暂停 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
         TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已被暂停'):format(licenseType), 'error')
     else
         TriggerClientEvent('QBCore:Notify', src, msg or '暂停失败', 'error')
     end
-end, 'admin')
+end, 'user')
 
 QBCore.Commands.Add('checklicense', '查看玩家执照状态 (Admin)', {
     { name = 'id', help = '玩家 ID' }
@@ -368,3 +561,61 @@ QBCore.Commands.Add('checklicense', '查看玩家执照状态 (Admin)', {
 end, 'admin')
 
 print('[custom-admin] ✅ 命令模块已加载 (myid + amenu + clearme + setrobbery + auto-admin + license管理)')
+
+-- A-2：面板命令搬到服务端（admin 权限）。文本从原客户端搬过来，内容不变。
+local PANEL_BODY = [[
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚗 载具:
+  /car [车型]       → 刷车
+  /dv               → 删除当前载具
+  /fix              → 修车
+  /admincar         → 保存到车库
+  /maxmods          → 满改
+
+👤 玩家管理:
+  /revive [ID]      → 复活
+  /goto [ID]        → 传送到
+  /bring [ID]       → 拉过来
+  /kick [ID] [理由]  → 踢出
+  /freeze [ID]      → 冻结
+  /spectate [ID]    → 观察
+
+🔧 开发者:
+  /noclip           → 穿墙
+  /coords           → 显示坐标
+  /setmodel [模型]   → 换模型
+  /setspeed [fast]  → 加速跑
+  /vector3          → 复制坐标
+
+🔰 系统:
+  /givemelicense [driver/pilot/boat/heavy/weapon] → 给自己发执照
+  /setleader [ID] [sheriff/mayor/gangboss]  → 指派领袖
+  /demote [ID]      → 撤销领袖
+  /settier [ID] [leader/mid/entry]  → 改层级
+  /announce [消息]   → 全服公告
+  /myid             → 查看标识符
+  /amenu            → 简版面板
+  /apanel           → 重新显示此面板
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+]]
+
+local MENU_BODY = [[
+━━━━━━━━━━━━━━━━━━━━
+/apanel   → 完整管理面板
+/car      → 刷车
+/dv       → 删车
+/revive   → 复活
+/goto     → 传送
+/noclip   → 穿墙
+/coords   → 坐标
+/myid     → 标识符
+━━━━━━━━━━━━━━━━━━━━
+]]
+
+QBCore.Commands.Add('apanel', '管理员完整面板', {}, false, function(source)
+    TriggerClientEvent('custom-admin:client:printPanel', source, '🛠️ 管理员面板 v2', PANEL_BODY)
+end, 'admin')
+
+QBCore.Commands.Add('menu', '快速菜单', {}, false, function(source)
+    TriggerClientEvent('custom-admin:client:printPanel', source, '⚡ 快速菜单', MENU_BODY)
+end, 'admin')

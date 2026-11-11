@@ -209,6 +209,10 @@
             </div>
             <div id="ui-container">
                 <div id="playerHud" v-show="show">
+                    <!-- H-5（2026-11-11）：每个圆心带 <q-icon> 的内层环**必须**保留 show-value。
+                         原因：Quasar 2.1.0 只在 showValue 为真时才建 .q-circular-progress__text，
+                         默认插槽也只在这一层里渲染 —— 删掉 show-value，图标连 DOM 都不生成（H-1 就是这么丢的）。
+                         有插槽时 Quasar 用插槽、不打印数值，所以环下 .stat-num 仍是唯一数字。 -->
                     <transition name="fade">
                     <div v-if="showVoice">
                         <q-circular-progress class="q-ml-xl" style="opacity: 40%;" :value="static" :thickness="0.24" :style="{color: talkingColor}" :min="0" :max="100"></q-circular-progress>
@@ -228,6 +232,8 @@
                         <q-circular-progress class="q-ml-xl" style="opacity: 40%;" :value="static" :thickness="0.24" :style="{color: armorColor}" :min="0" :max="100"></q-circular-progress>
                         <q-circular-progress class="q-ml-xl" style="left: -50%;" show-value :value="armor" :thickness="0.24" :style="{color: armorColor}" :min="0" :max="100" center-color="grey-10">
                         <q-icon id="Icons" name="fas fa-shield-alt" color="white"/>
+                    </q-circular-progress>
+                    <span class="stat-num" :class="{ 'stat-low': armor < 20 }">{{ Math.round(armor) }}</span>
                     </div>
                     </transition>
                     <transition name="fade">
@@ -235,6 +241,8 @@
                         <q-circular-progress class="q-ml-xl" style="opacity: 40%;" :value="static" :thickness="0.24" :style="{color: hungerColor}" :min="0" :max="100"></q-circular-progress>
                         <q-circular-progress class="q-ml-xl" style="left: -50%;" show-value :value="hunger" :thickness="0.24" :style="{color: hungerColor}" :min="0" :max="100" center-color="grey-10">
                         <q-icon id="Icons" style="top: -1px; left: -0.5px;" name="fas fa-hamburger" color="white"/>
+                    </q-circular-progress>
+                    <span class="stat-num" :class="{ 'stat-low': hunger < 20 }">{{ Math.round(hunger) }}</span>
                     </div>
                     </transition>
                     <transition name="fade">
@@ -242,6 +250,8 @@
                         <q-circular-progress class="q-ml-xl" style="opacity: 40%;" :value="static" :thickness="0.24" :style="{color: thirstColor}" :min="0" :max="100"></q-circular-progress>
                         <q-circular-progress class="q-ml-xl" style="left: -50%;" show-value :value="thirst" :thickness="0.24" :style="{color: thirstColor}" :min="0" :max="100" center-color="grey-10">
                         <q-icon id="Icons" style="top: -0.5px; left: -0.5px;" name="fas fa-tint" color="white"/>
+                    </q-circular-progress>
+                    <span class="stat-num" :class="{ 'stat-low': thirst < 20 }">{{ Math.round(thirst) }}</span>
                     </div>
                     </transition>
                     <transition name="fade">
@@ -249,6 +259,8 @@
                         <q-circular-progress class="q-ml-xl" style="opacity: 40%;" :value="static" :thickness="0.24" color="stress" :min="0" :max="100"></q-circular-progress>
                         <q-circular-progress class="q-ml-xl" style="left: -50%;" show-value :value="stress" :thickness="0.24" color="stress" :min="0" :max="100" center-color="grey-10">
                         <q-icon id="Icons" style="top: -0.5px; left: -0.5px;" name="fas fa-brain" color="white"/>
+                    </q-circular-progress>
+                    <span class="stat-num">{{ Math.round(stress) }}</span>
                     </div>
                     </transition>
                     <transition name="fade">
@@ -256,6 +268,8 @@
                         <q-circular-progress class="q-ml-xl" style="opacity: 40%;" :value="static" :thickness="0.24" color="oxygen" :min="0" :max="100"></q-circular-progress>
                         <q-circular-progress class="q-ml-xl" style="left: -50%;" show-value :value="oxygen" :thickness="0.24" color="oxygen" :min="0" :max="100" center-color="grey-10">
                         <q-icon id="Icons" style="top: -2px; left: -0.1px;" name="fas fa-lungs" color="white"/>
+                    </q-circular-progress>
+                    <span class="stat-num" :class="{ 'stat-low': oxygen < 20 }">{{ Math.round(oxygen) }}</span>
                     </div>
                     </transition>
                     <transition name="fade">

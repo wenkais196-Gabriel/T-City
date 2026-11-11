@@ -814,21 +814,67 @@ QBCore.Functions.CreateCallback('phone:server:shareContactNearby', function(sour
     end)
 end)
 
+-- 2.9 车库坐标（Garage App 的"在地图上标注"按需解析）
+-- 为什么不塞进车辆列表：qb-garages 没启动 / 车库被删时坐标是 nil，按钮就整个不渲染 ——
+-- 玩家看到的是"这个 App 没有标注功能"，而不是"这间车库没有坐标"。
+QBCore.Functions.CreateCallback('phone:server:garageCoords', function(_, cb, garageKey)
+    local key = tostring(garageKey or '')
+    if key == '' then return cb(nil) end
+    local ok, garages = pcall(function() return exports['qb-garages']:getAllGarages() end)
+    if not ok or type(garages) ~= 'table' then return cb(nil) end
+    -- ⚠️ qb-garages 的 getAllGarages() 返回的是**数组**（`garages[#garages+1] = { name = 车库键 }`），
+    -- 不是 name → entry 的字典。原来直接 `garages[key]` 永远 nil，手机里的「📍 地图」点了没反应
+    -- （PO 2026-11-12 报的"手机车库无法给出载具位置"）。
+    local entry = nil
+    if garages[key] then
+        entry = garages[key]            -- 兼容将来改成字典
+    else
+        for _, candidate in pairs(garages) do
+            if type(candidate) == 'table' and candidate.name == key then entry = candidate break end
+        end
+    end
+    if type(entry) ~= 'table' then return cb(nil) end
+    local point = entry.takeVehicle or entry.putVehicle
+    if not point or not point.x or not point.y then return cb(nil) end
+    cb({ x = point.x + 0.0, y = point.y + 0.0 })
+end)
+
 -- 3. Fetch owned vehicles for Garage App
 QBCore.Functions.CreateCallback('phone:server:getOwnedVehicles', function(source, cb)
     local Player = QBCore.Functions.GetPlayer(source)
     if not Player then return cb({}) end
 
-    MySQL.Async.fetchAll('SELECT vehicle, plate, garage, state, fuel, engine, body FROM player_vehicles WHERE citizenid = ? LIMIT 200', {
+    MySQL.Async.fetchAll('SELECT vehicle, plate, garage, state, fuel, engine, body, depotprice, status FROM player_vehicles WHERE citizenid = ? LIMIT 200', {
         Player.PlayerData.citizenid
     }, function(vehicles)
         local list = {}
         for i = 1, #vehicles do
+            local depotPrice = tonumber(vehicles[i].depotprice) or 0
             local status = "Stored"
             if vehicles[i].state == 0 then
                 status = "Out of Garage"
-            elseif vehicles[i].state == 2 then
+            elseif vehicles[i].state == 2 or depotPrice > 0 then
                 status = "Impounded"
+            end
+
+            -- 扣押原因：库里没有专门字段，约定写在 status 列里（'impound:<原因>'），
+            -- 没有就留空 —— 前端显示"原因未记录"，不编造。
+            local rawStatus = tostring(vehicles[i].status or '')
+            local impoundReason = ''
+            local captured = rawStatus:match('^impound:(.+)$')
+            if captured then impoundReason = captured:sub(1, 60) end
+
+            -- 车库坐标：手机里能一键在地图标注（PO 2026-11-10 提的"pillboxgarage 在哪"）
+            local coords = nil
+            local ok, garages = pcall(function() return exports['qb-garages']:getAllGarages() end)
+            if ok and type(garages) == 'table' then
+                local entry = garages[vehicles[i].garage or '']
+                if type(entry) == 'table' then
+                    local point = entry.takeVehicle or entry.putVehicle
+                    if type(point) == 'table' or type(point) == 'vector3' or type(point) == 'vector4' then
+                        coords = { x = point.x, y = point.y }
+                    end
+                end
             end
 
             -- Match friendly model name
@@ -837,7 +883,11 @@ QBCore.Functions.CreateCallback('phone:server:getOwnedVehicles', function(source
                 model = model,
                 plate = vehicles[i].plate,
                 garage = vehicles[i].garage or "Main Impound",
+                garageKey = vehicles[i].garage or '',
+                coords = coords,
                 status = status,
+                depotPrice = depotPrice,
+                impoundReason = impoundReason,
                 fuel = tonumber(vehicles[i].fuel) or 100,
                 engine = math.floor((tonumber(vehicles[i].engine) or 1000) / 10),
                 body = math.floor((tonumber(vehicles[i].body) or 1000) / 10)

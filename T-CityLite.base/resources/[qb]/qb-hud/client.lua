@@ -12,6 +12,7 @@ local hunger = 100
 local thirst = 100
 local cashAmount = 0
 local bankAmount = 0
+
 local nitroActive = 0
 local harness = 0
 local hp = 100
@@ -110,6 +111,73 @@ local function hasHarness(items)
     harness = _harness
 end
 
+-- ==============================================================
+-- H-2：低状态提醒
+-- HUD 圆环只是"状态"，不是"事件"；但**低于阈值**确实是个需要动手的事件，
+-- 值得一次打断（toast）。规则：
+--   * 阈值 20，只有跨过阈值才提醒（不是一直提醒）；
+--   * 同一个状态 5 分钟内最多一次（玩家在跑路时不该被反复打扰）；
+--   * 回升到 30 以上才重新"上膛"，避免在 20 附近抖动时反复触发。
+-- ==============================================================
+local LOW_THRESHOLD = 20
+local REWARN_ABOVE = 30
+local STRESS_HIGH = 80      -- 压力是"越高越糟"，方向与饥饿/口渴相反
+local STRESS_REARM = 30
+local REWARN_COOLDOWN_MS = 5 * 60 * 1000
+local lowWarnAt = { hunger = 0, thirst = 0, stress = 0, armor = 0 }
+local lowArmed = { hunger = true, thirst = true, stress = true, armor = true }
+-- H-6（2026-11-11 PO 反馈"我一直没装护甲也弹打光"）：护甲只在"从有到无"时提醒，
+-- 初始就是 0 不该触发；armorPeak 记录上次看到的非零值。
+local armorPeak = 0
+
+local LOW_TEXT = {
+    hunger = '你饿得发慌了，找点吃的',
+    thirst = '你渴得难受，找点水喝',
+    stress = '压力太大了，去休息一下',
+    armor = '护甲已经打光了',
+}
+
+local function warnOnce(key, now)
+    if not lowArmed[key] then return end
+    if now - (lowWarnAt[key] or 0) < REWARN_COOLDOWN_MS then return end
+    lowArmed[key] = false
+    lowWarnAt[key] = now
+    pcall(function() exports['custom-notify']:PushLocal('toast', LOW_TEXT[key]) end)
+end
+
+--- HUD 自己的提示统一走 feed（N-12，2026-11-12）：custom-notify 不在时回落 qb-core
+local function HudNotice(text, kind)
+    local ok, sent = pcall(function() return exports['custom-notify']:PushLocal(kind or 'feed', text) end)
+    if ok and sent == true then return end
+    QBCore.Functions.Notify(text)
+end
+
+CreateThread(function()
+    while true do
+        Wait(5000)
+        local now = GetGameTimer()
+        local hungerNow, thirstNow = hunger or 100, thirst or 100
+        local stressNow = stress or 0
+
+        -- 饥饿 / 口渴：越低越糟
+        if hungerNow <= LOW_THRESHOLD then warnOnce('hunger', now) elseif hungerNow >= REWARN_ABOVE then lowArmed.hunger = true end
+        if thirstNow <= LOW_THRESHOLD then warnOnce('thirst', now) elseif thirstNow >= REWARN_ABOVE then lowArmed.thirst = true end
+
+        -- 压力：越高越糟（原来写成 <= 20 提醒，方向反了）
+        if stressNow >= STRESS_HIGH then warnOnce('stress', now) elseif stressNow <= STRESS_REARM then lowArmed.stress = true end
+
+        -- 护甲：只在"从有到无"的那一刻提醒一次（初始 0 / 一直没护甲都不触发）
+        local armorValue = GetPedArmour(PlayerPedId()) or 0
+        if armorValue > 0 then
+            armorPeak = armorValue
+            if armorValue >= 20 then lowArmed.armor = true end
+        elseif armorPeak > 0 then
+            warnOnce('armor', now)
+            armorPeak = 0
+        end
+    end
+end)
+
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     Wait(2000)
     local hudSettings = GetResourceKvpString('hudSettings')
@@ -145,7 +213,10 @@ AddEventHandler('pma-voice:radioActive', function(data)
 end)
 
 -- Callbacks & Events
-RegisterCommand('menu', function()
+-- H-6：这里原来叫 /menu，和 custom-admin 的 /menu（管理员面板）**重名**。
+-- 两个资源都注册同名命令时，谁生效取决于启动顺序 —— 玩家敲 /menu 有时开 HUD 设置、
+-- 有时印管理面板。HUD 设置是玩家功能，让出通用名，改用 /hud（键位映射不变）。
+RegisterCommand('hud', function()
     Wait(50)
     if showMenu then return end
     TriggerEvent('hud:client:playOpenMenuSounds')
@@ -162,7 +233,9 @@ RegisterNUICallback('closeMenu', function(_, cb)
     cb('ok')
 end)
 
-RegisterKeyMapping('menu', 'Open Menu', 'keyboard', config.OpenMenu)
+-- PO 2026-11-12：I 键不再打开 HUD 设置 —— I 留给载具信息板（尚未实现），
+-- HUD 设置只走命令入口 `/hud`（:219）。要临时用键位就在五M设置里自己绑，不写进代码。
+-- RegisterKeyMapping('hud', 'Open HUD Settings', 'keyboard', config.OpenMenu)
 
 -- Reset hud
 local function restartHud()
@@ -412,7 +485,7 @@ RegisterNetEvent('hud:client:LoadMap', function()
             Wait(150)
         end
         if Menu.isMapNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.load_square_map'))
+            HudNotice(Lang:t('notify.load_square_map'))
         end
         SetMinimapClipType(0)
         AddReplaceTexture('platform:/textures/graphics', 'radarmasksm', 'squaremap', 'radarmasksm')
@@ -435,7 +508,7 @@ RegisterNetEvent('hud:client:LoadMap', function()
         end
         Wait(1200)
         if Menu.isMapNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.loaded_square_map'))
+            HudNotice(Lang:t('notify.loaded_square_map'))
         end
     elseif Menu.isToggleMapShapeChecked == 'circle' then
         RequestStreamedTextureDict('circlemap', false)
@@ -443,7 +516,7 @@ RegisterNetEvent('hud:client:LoadMap', function()
             Wait(150)
         end
         if Menu.isMapNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.load_circle_map'))
+            HudNotice(Lang:t('notify.load_circle_map'))
         end
         SetMinimapClipType(1)
         AddReplaceTexture('platform:/textures/graphics', 'radarmasksm', 'circlemap', 'radarmasksm')
@@ -466,7 +539,7 @@ RegisterNetEvent('hud:client:LoadMap', function()
         end
         Wait(1200)
         if Menu.isMapNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.loaded_circle_map'))
+            HudNotice(Lang:t('notify.loaded_circle_map'))
         end
     end
 
@@ -569,14 +642,15 @@ RegisterNUICallback('cinematicMode', function(_, cb)
         CinematicShow(false)
         Menu.isCinematicModeChecked = false
         if Menu.isCinematicNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.cinematic_off'), 'error')
+            -- 与 on 保持同一通道（原来 off 走 'error' 的右侧 NUI，on 走 feed，看起来像左右各弹一个）
+            HudNotice(Lang:t('notify.cinematic_off'))
         end
         DisplayRadar(1)
     else
         CinematicShow(true)
         Menu.isCinematicModeChecked = true
         if Menu.isCinematicNotifChecked then
-            QBCore.Functions.Notify(Lang:t('notify.cinematic_on'))
+            HudNotice(Lang:t('notify.cinematic_on'))
         end
     end
     TriggerEvent('hud:client:playHudChecklistSound')
@@ -757,7 +831,7 @@ CreateThread(function()
             local weapon = GetSelectedPedWeapon(player)
             -- Player hud
             if not config.WhitelistedWeaponArmed[weapon] then
-                if weapon ~= `WEAPON_UNARMED` then
+                if weapon ~= 'WEAPON_UNARMED' then
                     armed = true
                 else
                     armed = false
@@ -1002,7 +1076,7 @@ if not config.DisableStress then
             if LocalPlayer.state.isLoggedIn then
                 local ped = PlayerPedId()
                 local weapon = GetSelectedPedWeapon(ped)
-                if weapon ~= `WEAPON_UNARMED` then
+                if weapon ~= 'WEAPON_UNARMED' then
                     if IsPedShooting(ped) and not config.WhitelistedWeaponStress[weapon] then
                         if math.random() < config.StressChance then
                             TriggerServerEvent('hud:server:GainStress', math.random(1, 3))

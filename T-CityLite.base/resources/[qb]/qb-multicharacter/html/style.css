@@ -791,3 +791,30 @@ html {
     0%, 100% { transform: translateY(0) translate3d(0,0,0); }
     50% { transform: translateY(3px) translate3d(0,0,0); }
 }
+
+/* I-1：角色卡的数据时间（快照说明，不是实时数据） */
+.char-saved {
+    margin: 6px 0 0;
+    font-size: 11px;
+    letter-spacing: .4px;
+    color: rgba(255, 255, 255, .55);
+    text-align: right;
+}
+
+/* I-2：删除确认（显示身份 + 输入名字） */
+.delete-title { font-size: 15px; letter-spacing: 1px; margin-bottom: 6px; }
+.delete-target { font-size: 18px; font-weight: 600; margin: 2px 0 6px; }
+.delete-cid { font-size: 12px; opacity: .6; font-weight: 400; }
+.delete-warn { color: #e06c6c; font-size: 12px; line-height: 1.5; margin-bottom: 10px; }
+.delete-hint { font-size: 12px; opacity: .8; margin-bottom: 6px; }
+.delete-input {
+    width: 240px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    background: rgba(0, 0, 0, .35);
+    border: 1px solid rgba(255, 255, 255, .25);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 14px;
+}
+.delete-input:focus { outline: none; border-color: rgba(255, 255, 255, .6); }

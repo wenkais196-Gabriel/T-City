@@ -1,9 +1,24 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchNui, isBrowser } from '../utils/nui';
-  
+
   let vehicles = $state<any[]>([]);
   let isLoading = $state(true);
+  let loadError = $state<string | null>(null);
+
+  /** 在地图上标注这间车库：只带车库名，坐标由服务端按需解析。 */
+  async function markWaypoint(car: { garage?: string; coords?: { x: number; y: number } }) {
+    if (!car?.garage && !car?.coords) return;
+    try {
+      await fetchNui('garageWaypoint', {
+        garage: car.garage || '',
+        x: car.coords?.x,
+        y: car.coords?.y,
+      });
+    } catch {
+      /* 失败不打断 Garage 页：Lua 侧自己决定要不要提示 */
+    }
+  }
 
   onMount(async () => {
     if (isBrowser()) {
@@ -22,12 +37,28 @@
     try {
       const res = await fetchNui('getOwnedVehicles');
       vehicles = res || [];
+      loadError = null;
     } catch (err) {
+      // 关键：拉取失败**不能**退化成"名下没有车" —— 那样玩家会以为车没了
       console.error(err);
+      loadError = '拉取失败，请重试';
     } finally {
       isLoading = false;
     }
   });
+
+  async function reload() {
+    isLoading = true;
+    loadError = null;
+    try {
+      const res = await fetchNui('getOwnedVehicles');
+      vehicles = res || [];
+    } catch {
+      loadError = '拉取失败，请重试';
+    } finally {
+      isLoading = false;
+    }
+  }
 
   const getStatusColor = (status: string) => {
     if (status === 'Stored') return '#22c55e'; // Green
@@ -54,6 +85,12 @@
         <div class="spinner"></div>
         <span>Syncing satellite data...</span>
       </div>
+    {:else if loadError}
+      <div class="empty-state">
+        <span>⚠️</span>
+        <span class="empty-text">{loadError}</span>
+        <button class="waypoint-btn" onclick={() => reload()}>重试</button>
+      </div>
     {:else if vehicles.length === 0}
       <div class="empty-state">
         <span>🚗</span>
@@ -73,12 +110,31 @@
             <div class="vehicle-details">
               <div class="detail-row">
                 <span class="detail-lbl">Garage Location</span>
-                <span class="detail-val">{car.garage}</span>
+                <span class="detail-val">
+                  {car.garage}
+                  {#if car.garage}
+                    <button
+                      class="waypoint-btn"
+                      title="在地图上标注这间车库"
+                      onclick={() => markWaypoint(car)}
+                    >📍 地图</button>
+                  {/if}
+                </span>
               </div>
               <div class="detail-row">
                 <span class="detail-lbl">Status</span>
                 <span class="detail-val" style="color: {getStatusColor(car.status)}">{car.status}</span>
               </div>
+              {#if car.status === 'Impounded'}
+                <div class="detail-row">
+                  <span class="detail-lbl">取回费用</span>
+                  <span class="detail-val">${car.depotPrice ?? 0}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-lbl">扣押原因</span>
+                  <span class="detail-val">{car.impoundReason || '未记录'}</span>
+                </div>
+              {/if}
             </div>
 
             <!-- Health Status Bars -->
@@ -125,6 +181,14 @@
 </div>
 
 <style>
+    .waypoint-btn {
+    margin-left: 6px; padding: 1px 7px; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 10.5px; line-height: 1.5;
+    color: #c8b6ff; background: rgba(124, 92, 255, .16);
+    border: 1px solid rgba(124, 92, 255, .45);
+  }
+  .waypoint-btn:hover { background: rgba(124, 92, 255, .3); }
+
   .garage-app {
     display: flex;
     flex-direction: column;

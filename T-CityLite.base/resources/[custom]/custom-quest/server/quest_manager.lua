@@ -209,6 +209,20 @@ QuestNodes = {
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 失败原因中文（J-3）：玩家看不懂 player_death / validation_exhausted 这种内部词
+local REASON_ZH = {
+    player_death = '你死亡了',
+    entity_timeout = '运输超时',
+    entity_tracking_violation = '运输违规（载具被毁或远离路线）',
+    validation_exhausted = '校验多次失败',
+    vehicle_destroyed = '载具被毁',
+    unknown = '未知原因',
+}
+local function reasonZh(reason)
+    return REASON_ZH[reason] or ('任务失败（%s）'):format(tostring(reason))
+end
+
+
 -- ==============================================================
 -- 内部辅助
 -- ==============================================================
@@ -843,8 +857,9 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
                     print(('[quest-manager] ❌ GrantRewards failed: %s'):format(tostring(rewardErr)))
                 end
 
+                -- J-3：完成的唯一一条屏上回执（原来的 client/main.lua 与 quest_rewards 各发一条是重复）
                 TriggerClientEvent('QBCore:Notify', src,
-                    ('Quest completed: %s!'):format(template.title), 'success')
+                    ('✅ 任务完成：%s'):format(template.title), 'success')
             else
                 print('[quest-manager] ❌ getSourceFromCid returned nil — cannot send completion to client!')
             end
@@ -1016,8 +1031,9 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
             next_step_data = nextStep.data,
         })
 
+        -- J-3：步骤推进的唯一一条（客户端原来还发一条 "Step: xxx"）
         TriggerClientEvent('QBCore:Notify', src,
-            ('Step completed: %s → %s'):format(currentStep.title, nextStep.title), 'primary')
+            ('➡️ 进入下一步：%s'):format(nextStep.title), 'primary')
     end
 
     -- v0.8b: 更新缓存为新的当前步骤（缓存过期/无MySQL 时兜底重建）
@@ -1142,6 +1158,9 @@ function QuestManager.FailQuest(source, questId, reason)
             quest_id = questId,
             reason = reason,
         })
+        -- J-3：失败的唯一一条（原来 client/main.lua:287 还重复发一条英文 Quest failed）
+        TriggerClientEvent('QBCore:Notify', src,
+            ('❌ 任务失败：%s'):format(reasonZh(reason)), 'error')
     end
 
     -- v0.7.0: 广播任务失败事件

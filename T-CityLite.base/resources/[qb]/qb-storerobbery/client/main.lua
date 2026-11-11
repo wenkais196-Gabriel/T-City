@@ -98,41 +98,90 @@ local function OpenSafeInteraction(safe)
     end
 end
 
--- 为每个保险箱注册 qb-target 圆形区域（ALT 交互）
-CreateThread(function()
-    Wait(2000)  -- 等待 Config 加载完毕
-    for safe, data in pairs(Config.Safes) do
-        local coords = data[1] or data.xyz
-        if coords then
-            exports['qb-target']:AddCircleZone('storerobbery_safe_' .. safe, coords, 1.5, {
-                name = 'storerobbery_safe_' .. safe,
-                debugPoly = false,
-                useZ = true,
-            }, {
-                options = {
-                    {
-                        type = "client",
-                        event = "qb-storerobbery:client:trySafe",
-                        icon = "fas fa-lock",
-                        label = "尝试破解保险箱",
-                        safeId = safe,
-                    },
-                    {
-                        type = "client",
-                        event = "qb-storerobbery:client:trySafe",
-                        icon = "fas fa-check-circle",
-                        label = "保险箱已打开",
-                        safeId = safe,
-                        canInteract = function()
-                            return Config.Safes[safe] and Config.Safes[safe].robbed
-                        end,
-                    },
-                },
-                distance = 2.0,
-            })
-        end
+-- 保险箱交互（C-2）：[E] 单一入口，提示里直接写状态。
+-- 原来这里是 qb-target 的 AddCircleZone —— 单动作却要长按 ALT，而且门槛/冷却只在按下去之后
+-- 用一句 error 告诉你。现在：提示里写「需 N 名警察（当前 M）」或「已空 · 冷却 mm:ss」，
+-- 不满足时按 E 无反应、不弹 error（error 只用于"做了但没成功"）。
+local safeResetAt = {}
+local safePromptShown = false
+-- N-8：E 键每帧采样，同文案不重发（和 qb-shops 一致）
+local safePromptLabel = nil
+local GetEffectiveMinPolice  -- 定义在文件后面（门槛读取），这里先声明
+
+RegisterNetEvent('qb-storerobbery:client:setSafeStatus', function(safe, robbed, resetAt)
+    if Config.Safes[safe] then
+        Config.Safes[safe].robbed = robbed
+        safeResetAt[safe] = robbed and resetAt or nil
     end
-    -- storerobbery startup print removed
+end)
+
+CreateThread(function()
+    Wait(2000)
+    while true do
+        local sleep = 1000
+        local ped = PlayerPedId()
+        local pos = GetEntityCoords(ped)
+        local nearest, nearestDist = nil, 2.3
+        for safe, data in pairs(Config.Safes) do
+            local coords = data[1] or data.xyz
+            if coords then
+                local dist = #(pos - coords.xyz)
+                if dist < nearestDist then nearest, nearestDist = safe, dist end
+            end
+        end
+
+        if nearest then
+            sleep = 0
+            local info = Config.Safes[nearest]
+            local label
+            local usable = false
+            -- C-8（2026-11-12 PO 反馈"保险箱按 E 没反应"）：不可用时也要给失败反馈。
+            -- 文案复用提示里已经算好的值，保证提示与通知不漂移。
+            local blockKind, blockText = nil, nil
+            if info.robbed then
+                local resetAt = safeResetAt[nearest]
+                local remaining = resetAt and math.max(0, resetAt - os.time()) or nil
+                label = remaining and ('保险箱已空 · 冷却 %d:%02d'):format(math.floor(remaining / 60), remaining % 60)
+                    or '保险箱已空'
+                blockKind = 'feed'
+                blockText = remaining and ('保险箱已空 · 冷却剩余 %d:%02d'):format(math.floor(remaining / 60), remaining % 60)
+                    or '保险箱已被洗劫，等刷新后再来'
+            else
+                local minPolice = GetEffectiveMinPolice()
+                if CurrentCops < minPolice then
+                    label = ('撬保险箱 · 需 %d 名警察（当前 %d）'):format(minPolice, CurrentCops)
+                    blockKind = 'error'
+                    blockText = ('警力不足 · 需 %d 名，当前 %d 名'):format(minPolice, CurrentCops)
+                else
+                    label = '撬保险箱'
+                    usable = true
+                end
+            end
+
+            if label ~= safePromptLabel then
+                exports['custom-prompt']:Show({ key = 'E', label = label })
+                safePromptLabel = label
+                safePromptShown = true
+            end
+
+            if IsControlJustReleased(0, 38) then
+                if usable then
+                    exports['custom-prompt']:Hide()
+                    safePromptShown = false
+                    safePromptLabel = nil
+                    OpenSafeInteraction(nearest)
+                elseif blockText then
+                    pcall(function() exports['custom-notify']:PushLocal(blockKind, blockText) end)
+                end
+            end
+        elseif safePromptShown then
+            exports['custom-prompt']:Hide()
+            safePromptShown = false
+            safePromptLabel = nil
+        end
+
+        Wait(sleep)
+    end
 end)
 
 RegisterNetEvent('qb-storerobbery:client:trySafe', function(data)
@@ -168,7 +217,7 @@ RegisterNetEvent('police:SetCopCount', function(amount)
 end)
 
 -- 警察门槛读取辅助（优先级: GlobalState > Convar > 默认 2）
-local function GetEffectiveMinPolice()
+function GetEffectiveMinPolice()
     if GlobalState and GlobalState.crime_min_police_storerobbery ~= nil then
         return GlobalState.crime_min_police_storerobbery
     end
@@ -447,7 +496,7 @@ end)
 -- 服务端通知抢劫完成
 RegisterNetEvent('qb-storerobbery:client:robberyComplete', function(register)
     currentRegister = 0
-    QBCore.Functions.Notify("抢劫完成！战利品已放入背包", "success")
+    -- C-3：完成/结算由服务端统一发一条，客户端不再重复弹窗
 end)
 
 function LockpickDoorAnim(time)
@@ -595,28 +644,11 @@ end)
 RegisterNetEvent('qb-storerobbery:client:robberyCall', function(_, _, _, coords)
     if (PlayerJob.name == 'police' or PlayerJob.type == 'leo') and onDuty then
         PlaySound(-1, 'Lose_1st', 'GTAO_FM_Events_Soundset', 0, 0, 1)
-        TriggerServerEvent('police:server:policeAlert', Lang:t('email.storerobbery_progress'))
+        TriggerServerEvent('police:server:policeAlert', Lang:t('email.storerobbery_progress'), 'store_robbery')
 
-        local transG = 250
-        local blip = AddBlipForCoord(coords.x, coords.y, coords.z)
-        SetBlipSprite(blip, 458)
-        SetBlipColour(blip, 1)
-        SetBlipDisplay(blip, 4)
-        SetBlipAlpha(blip, transG)
-        SetBlipScale(blip, 1.0)
-        BeginTextCommandSetBlipName('STRING')
-        AddTextComponentSubstringPlayerName(Lang:t('email.shop_robbery'))
-        EndTextCommandSetBlipName(blip)
-        while transG ~= 0 do
-            Wait(180 * 4)
-            transG = transG - 1
-            SetBlipAlpha(blip, transG)
-            if transG == 0 then
-                SetBlipSprite(blip, 2)
-                RemoveBlip(blip)
-                return
-            end
-        end
+        -- C-6：地图标记交给警情单的 guidance（client/incident_guidance.lua 从工单坐标建 blip）。
+        -- 这里原来自己再建一颗，同一抢劫在警官屏幕上会出现两颗同名 blip。
+        -- 声音保留：它是"立刻注意到"的唯一手段，工单通知是文字。
     end
 end)
 

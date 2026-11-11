@@ -124,3 +124,20 @@ body {
     color: var(--md-dark-on-surface);
     font-size: 1.3vh;
 }
+
+/* H-4：图例（解释符号含义 + 指向详情入口） */
+.scoreboard-legend {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, .18);
+    text-align: center;
+}
+.scoreboard-legend .legend-line {
+    font-size: 11px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, .72);
+    letter-spacing: .4px;
+}
+.scoreboard-legend .legend-hint {
+    color: rgba(255, 255, 255, .5);
+}

@@ -19,7 +19,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **扣押场「有钱但无法付款」**：`T-CityLite.base/resources/[qb]/qb-garages/html/script.js` 把 `state=2` 一律渲染成 `Impound` 且按钮 disabled，
+  在扣押场也点不动；现在 `type='depot'` 且 `depotPrice>0` 就渲染成可点的 `$金额`（公共车库里的被扣车仍只读）。
+- **交互提示仍走 DrawText**：`qb-garages` 的 "E - Depot"/房屋车库两处改走 `custom-prompt`（准星下方）；
+  `custom-prompt:Show` 增加"同 key 同文案不重发"，逐帧调用者不再刷 NUI。
+- **通知统一到新标准（N-1a 轨 0）**：`QBCore.Functions.Notify` 入口按 type 映射到 custom-notify 的三个通道
+  （success/primary/info→feed、error→error、warning/police/ambulance→toast），**1119 处调用点一行不改**；
+  custom-notify 不可用时 pcall 失败回落原三条轨。右侧 qb-core 黑条与 GTA 原生黑条默认不再出现。
+- **扣押场取车面板没有光标、点不了付款**
+  - 真因：`SetNuiFocus` 按资源生效，`custom-ui` 无 ui_page，从它那里调等于把焦点给空气（其 `:122-125` 注释已写明）。
+    `OpenMenu({owner=…})` 现在压栈，由拥有页面的资源导出 `ApplyFocus` 真正按焦点；`CloseMenu({owner=…})` 只弹自己那层。
+    涉及 `custom-ui`、`qb-garages`（上一版漏写了 export —— 注释里有、代码里没有）、`qb-menu`、`qb-vehicleshop`；
+    `qb-garages` 另加一道"自己再按一次焦点"的双保险。
+  - 连带修掉 CC 评审指出的两个回归点：① `qb-vehicleshop` 的分期/试驾回调绕开栈直接 `SetNuiFocus` → `menu:qb-vehicleshop`
+    帧滞留，之后玩家"下车走不动"，现改为走 `_vCloseNui()` 弹栈；② `custom-ui:CloseMenu` 弹栈后又补一刀
+    `SetNuiFocus(false,false)`，与栈的结论打架，现在只在老路径（未弹栈）时才清。
+  - 新闸门（`tests/architecture/test_input_layer_contracts.py`）：**用 `OpenMenu(owner=…)` 的资源必须导出 `ApplyFocus`**，
+    锚定行首匹配（注释/字符串里提到不算），并带两条反向用例。当前扫描 62 个资源、0 违规。
+- **手机车库的「📍 地图」点了没反应**
+  - `phone:server:garageCoords` 把 `exports['qb-garages']:getAllGarages()` 当字典用（`garages[key]`），
+    而它返回的是**数组**（每项带 `name` 字段）→ 永远 nil → 客户端静默返回 `no_coords`。
+    改成先兼容字典、再线性匹配 `name`；真取不到坐标时给一条 error feed（不再静默）。
+- **载具键位 · ESC 菜单里方向键会打灯（PO 说的老问题）**
+  - `custom-vehicles` 的输入门只问 `custom-ui:IsTaken()`，而 ESC 暂停菜单是 GTA 自己的前端、不在层栈里，
+    所以车里按 ←/→/↓ 导航菜单时会同时切转向灯/双闪。门里补 `IsPauseMenuActive()` 与 `IsNuiFocused()`；
+    `cruise.lua` 的 lock 模式 ↑↓ 同样加门（`seatbelt.lua` 一直是对的，照它写）。
+  - 双闪开/关提示从 qb-core 右栏（`'primary'`）改走 feed。
+- **游戏内提示层 · 真机第四轮（PO 2026-11-12 夜）**
+  - **采矿 `SCRIPT ERROR: attempt to call a nil value (global 'IsDowned')`**：`IsDowned()` 写在文件 215 行、
+    第一次使用在 101 行，Lua 的 local 只对其后可见 → 移到文件顶部（13 行）。`luac -p` 拦不住这类错误。
+  - **冶炼厂 blip 回滚**：恢复 `SetBlipAsShortRange(true)`（全图可见是为排查"找不到冶炼炉"临时加的，
+    PO 已确认找到）。
+  - **I 键不再绑 HUD 设置**：去掉 `RegisterKeyMapping('hud', …, 'I')`，I 留给载具信息板（尚未实现），
+    HUD 设置只走 `/hud`。
+  - **电影模式 on/off 分居左右**：`cinematic_off` 原来带 `'error'` → 右侧 qb-core NUI，`cinematic_on` 走 feed →
+    左侧，看起来像两条各弹一个；现在都走 feed。
+- **游戏内提示层 · 真机第三轮（PO 2026-11-12）**
+  - **商店界面打开后仍显示 `[E] 打开商店`**：`qb-inventory` 新增只读 `exports('IsOpen')`（开关时刻只有它知道），
+    `qb-shops` 在背包界面开着时让位、关掉后按需重现。
+  - **薪水 / 送货 / HUD 设置提示没迁移**：`qb-core` 发薪 2 处、`qb-shops` 送货 13 处、`qb-hud` 5 处
+    （地图形状 / 电影模式）改为走 `custom-notify`（`error` 保持红条），资源缺失时回落原通道。
+  - **护甲误报**：`qb-hud` 的护甲提醒改成"从有到无"的边沿触发（新增 `armorPeak`），没装护甲不再弹
+    "护甲已经打光了"。
+  - **采矿交互返工**：`custom-mining` 客户端加 `IsDowned()`（四键状态袋）——倒地不出提示、不派发 E、
+    中断采矿循环；服务端 `mining:server:mineOre` 以 `metadata.isdead/inlaststand` 拒绝产出。
+    冶炼厂 blip 从 `SetBlipAsShortRange(true)` 改成 `false` + `SetBlipDisplay(4)` —— 它离矿点 5.0–5.7 km，
+    近距离模式等于永远看不见（"不知道冶炼炉在哪"的根因）。
+  - **保险箱按 E 无反馈**：`qb-storerobbery` 现在无论 `usable` 都响应 E —— 警力不足给 `error`
+    「警力不足 · 需 N 名，当前 M 名」，冷却/已空给 `feed`「冷却剩余 mm:ss」（沿用 C-2 的口径变更）。
+- **游戏内提示层 · 真机第二轮（PO 2026-11-11）**
+  - **feed 压小地图**：`custom-notify` 的 `bottom` 从 10.3vh 改 21vh。实测原生通知块底边在 20.9vh
+    （同窗 2546×1434 底部留 300px），小地图约占底部 19.8% 高 —— 原来 10.3vh 正好压上去。
+  - **`[E]` 要反复按才开商店**：`T-CityLite.base/resources/[qb]/qb-shops/client/main.lua` 的 `IsControlJustReleased(0,38)` 原来在
+    `Wait(200)` 的轮询里采样（松开只在 1 帧为真，约 11/12 次采不到）；改成"在范围内每帧采样 +
+    内容未变不重发 NUI 消息"，离开范围仍回落 500ms。
+  - **复活后仍走原生提示**：`T-CityLite.base/resources/[qb]/qb-ambulancejob/client/main.lua` 的 `info.healthy` 与
+    `T-CityLite.base/resources/[qb]/qb-hud/server.lua` 的 `stress_removed` 都没有 type（落 GTA 原生 feed）→ 改走
+    `exports['custom-notify']:PushLocal('feed', …)` / `:Push(src, 'feed', …)`，自定义通知资源不在时
+    回落到原来的 `QBCore.Functions.Notify`。
+  - **商店提示闪烁的根因**：`T-CityLite.base/resources/[custom]/custom-mining/client/main.lua` 每轮（800ms）无条件
+    `exports['custom-prompt']:Hide()`，会打掉别家正在显示的提示；补 `promptShown` 守卫，只 Hide 自己
+    Show 过的（与 qb-shops / qb-storerobbery / qb-ambulancejob / qb-management 一致）。
+  - **HUD 五环圆心缺状态图标**：H-1 为把数值移到环下，删掉了 armor/hunger/thirst/stress/oxygen
+    五个内层环的 `show-value`；Quasar 2.1.0 只在 `showValue` 时渲染默认插槽 → 图标连 DOM 都不生成。
+    补回 `show-value`（插槽会盖掉数值，环下 `.stat-num` 仍是唯一数字）。
+  - 闸门：`tests/architecture/test_hud_contract.py` 新增 `test_ring_icon_slot_needs_show_value_*`，
+    反向校验"删掉 show-value 必须红"。
+
 ### Added
+- **游戏内 UI/UX · P1 手机打字 + P2 三层通知**（PO 2026-11-10 拍板 D1=B / D5=乙）
+  - 手机文字输入：`focus.lua` 的 `PushFrame` 支持 `keepInput` 覆盖，text 帧改为
+    `keepInput=false`（原来写死读 convar，键盘一直归游戏，CEF 收不到字符）；
+    新增 `textFocus` NUI 回调，鼠标点输入框也入栈；`nav.lua` 在 text 帧期间不注入按键
+    （否则一键两用、Backspace 把输入框 blur 掉）。custom-phone 前端新增 layers.ts
+    （`textOwned` store + `use:textFocus` action），Messages 已接入。
+  - 三层通知：新资源 `custom-notify`（`feed` 左下 / `toast` 中央 / `error` 左下红 /
+    `phone` 只进手机），服务端唯一入口 `exports['custom-notify']:Push`，
+    每玩家 6/s 限流（qb-core Notify 的 200ms/1 条会把一次交易的第二条静默丢掉）。
+    首个迁移点：`custom-consumables` 吃喝结果。
+  - `/amenu` 补 `'admin'` 权限参数（原来默认 `user`，任何玩家能打开管理员面板）；
+    `custom-ui` 屏蔽表加 E(38) / ALT(19)：手机开着时不再触发游戏交互。
+  - 闸门：`test_notify_contract.py`（kind 两侧一致 / phone 不上屏 / 限流下限 / 必须在启动集）
+    + 4 条变异用例；`test_consumables.py` 的切块从死代码事件改为 `CreateUseableItem`。
 - **开服就绪包**（目标从「磨底座」转成「能开门」）：新增 `tools/dev/launch_check.py`，把"这台机器能不能
 - **开服就绪包 · CC 复核后的加固**（两条 P0 + 四条 P1）：
   ① **#1 原来不扫真正决定启动集的 `server.cfg`** —— 运维在那里加一行 `exec configs/modules/dev.cfg`

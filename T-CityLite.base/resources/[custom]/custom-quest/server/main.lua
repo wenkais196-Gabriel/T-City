@@ -16,6 +16,19 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 任务反馈（J-2）：统一走 custom-notify 的三层分派。
+--- 原来 45 处 feedback(...)，成功/失败/进度挤同一条样式。
+---@param src number
+---@param text string|table
+---@param kind string|nil 'error' → error；其余（success/primary）→ feed
+local function feedback(src, text, kind)
+    if type(text) == 'table' then text = text.text or text.caption or '' end
+    local pushKind = (kind == 'error') and 'error' or 'feed'
+    pcall(function()
+        exports['custom-notify']:Push(src, pushKind, text)
+    end)
+end
+
 -- ==============================================================
 -- 初始化
 -- ==============================================================
@@ -32,21 +45,21 @@ RegisterNetEvent(Config.Quest.Events.QUEST_ACCEPT, function(questId)
 
     -- 安全校验
     if not Config.Quest.Enabled then
-        TriggerClientEvent('QBCore:Notify', src, 'Quest system is disabled', 'error')
+        feedback(src, '任务系统已关闭', 'error')
         return
     end
 
     -- Rate Limit 检查
     if not QuestSecurity.CheckRateLimit(src, 'accept') then
-        TriggerClientEvent('QBCore:Notify', src, 'Please wait before accepting another quest', 'error')
+        feedback(src, '请稍后再接受新任务', 'error')
         return
     end
 
     local success, message = QuestManager.TriggerQuest(src, questId)
     if success then
-        TriggerClientEvent('QBCore:Notify', src, message, 'success')
+        feedback(src, message, 'success')
     else
-        TriggerClientEvent('QBCore:Notify', src, message, 'error')
+        feedback(src, message, 'error')
     end
 end)
 
@@ -63,7 +76,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_ABANDON, function(questId)
 
     local success, message = QuestManager.AbandonQuest(src, questId)
     if success then
-        TriggerClientEvent('QBCore:Notify', src, message, 'primary')
+        feedback(src, message, 'primary')
     end
 end)
 
@@ -103,7 +116,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_REACH, function(questId, stepId, nonc
     )
 
     if not success then
-        TriggerClientEvent('QBCore:Notify', src, message, 'error')
+        feedback(src, message, 'error')
     end
 end)
 
@@ -141,7 +154,7 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
                     GetPlayerName(src), cid, questId, stepId, nodeType, err or 'unknown'
                 ), 16711680)
         end
-        TriggerClientEvent('QBCore:Notify', src, 'Node validation failed', 'error')
+        feedback(src, '任务节点校验失败', 'error')
         return
     end
 
@@ -150,7 +163,7 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
     if template and template.mode == 'competitive' then
         local locked, owner = QuestMutex.IsLocked(questId, stepId)
         if locked and owner ~= src then
-            TriggerClientEvent('QBCore:Notify', src, '目标已被其他人抢先完成', 'error')
+            feedback(src, '目标已被其他人抢先完成', 'error')
             return
         end
         -- 首次完成者加锁
@@ -167,7 +180,7 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
     local valid, validateErr = QuestNodes.ValidateNode(src, questId, stepId, clientData)
     print(('[custom-quest] 🔍 ValidateNode result: valid=%s, err=%s'):format(tostring(valid), tostring(validateErr)))
     if not valid then
-        TriggerClientEvent('QBCore:Notify', src, validateErr or 'Node validation failed', 'error')
+        feedback(src, validateErr or '任务节点校验失败', 'error')
         return
     end
 
@@ -181,7 +194,7 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
     )
 
     if not success then
-        TriggerClientEvent('QBCore:Notify', src, message, 'error')
+        feedback(src, message, 'error')
     end
 end)
 
@@ -200,7 +213,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_COLLECT, function(questId, stepId, no
     local template = QuestRegistry.GetTemplate(questId)
     local step = QuestRegistry.GetStep(template, stepId)
     if not step or not step.data or not step.data.items then
-        TriggerClientEvent('QBCore:Notify', src, 'Invalid collect step configuration', 'error')
+        feedback(src, '收集步骤配置无效', 'error')
         return
     end
 
@@ -228,7 +241,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_COLLECT, function(questId, stepId, no
             end
 
             if hasCount < requiredCount then
-                TriggerClientEvent('QBCore:Notify', src,
+                feedback(src,
                     ('Need %d x %s (you have %d)'):format(requiredCount, itemReq.name, hasCount), 'error')
                 return
             end
@@ -256,7 +269,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_COLLECT, function(questId, stepId, no
     )
 
     if not success then
-        TriggerClientEvent('QBCore:Notify', src, message, 'error')
+        feedback(src, message, 'error')
     end
 end)
 
@@ -792,7 +805,7 @@ RegisterNetEvent('quest:server:trailerHitched', function(questId, stepId, traile
     -- 挂接是客户端上报的：先过任务安全层，再信 netId
     local ok, err = QuestSecurity.ValidateClientEvent(src, questId, stepId, true)
     if not ok then
-        TriggerClientEvent('QBCore:Notify', src, err or '任务校验失败', 'error')
+        feedback(src, err or '任务校验失败', 'error')
         return
     end
 
@@ -857,7 +870,7 @@ RegisterNetEvent('quest:server:entityTrackingFail', function(questId, reason)
 
     -- 失败任务
     QuestManager.FailQuest(src, questId, reason or 'entity_tracking_violation')
-    TriggerClientEvent('QBCore:Notify', src, '❌ 任务失败：违反运输规则', 'error')
+    feedback(src, '❌ 任务失败：违反运输规则', 'error')
 end)
 
 -- ==============================================================
@@ -884,13 +897,13 @@ RegisterNetEvent('quest:server:dashboardStampDelivery', function(callerSrc, ques
     -- 安全校验
     local ok, err = QuestSecurity.ValidateClientEvent(src, questId, stepId, true)  -- v0.7.2: 跳过 Nonce
     if not ok then
-        TriggerClientEvent('QBCore:Notify', src, err or 'Validation failed', 'error')
+        feedback(src, err or 'Validation failed', 'error')
         return
     end
 
     local template = QuestRegistry.GetTemplate(questId)
     if not template then
-        TriggerClientEvent('QBCore:Notify', src, 'Quest template not found', 'error')
+        feedback(src, '找不到任务模板', 'error')
         return
     end
 
@@ -916,7 +929,7 @@ RegisterNetEvent('quest:server:dashboardStampDelivery', function(callerSrc, ques
             local questData = { questId = questId, citizenid = Player.PlayerData.citizenid, vehicleNetId = nil }  -- dashboard 无 clientData
             local passed, msg = QuestValidators.Run(step.data.validator_id, src, validatorData, questData)
             if not passed then
-                TriggerClientEvent('QBCore:Notify', src, msg or '电子印章校验失败', 'error')
+                feedback(src, msg or '电子印章校验失败', 'error')
                 return
             end
 
@@ -924,13 +937,13 @@ RegisterNetEvent('quest:server:dashboardStampDelivery', function(callerSrc, ques
             local success, message = QuestManager.AdvanceStep(
                 Player.PlayerData.citizenid, questId, stepId)
             if not success then
-                TriggerClientEvent('QBCore:Notify', src, message, 'error')
+                feedback(src, message, 'error')
             end
             return
         end
     end
 
-    TriggerClientEvent('QBCore:Notify', src, '未找到可校验的步骤', 'error')
+    feedback(src, '未找到可校验的步骤', 'error')
 end)
 
 -- ==============================================================
@@ -941,7 +954,7 @@ RegisterCommand('startquest', function(source, args)
     local src = source
     local questId = args[1]
     if not questId then
-        TriggerClientEvent('QBCore:Notify', src, '用法: /startquest <questId>', 'error')
+        feedback(src, '用法: /startquest <questId>', 'error')
         -- 列出可用任务
         local ids = QuestRegistry.GetAllIds()
         local list = table.concat(ids, ', ')
@@ -955,9 +968,9 @@ RegisterCommand('startquest', function(source, args)
 
     local success, message = QuestManager.TriggerQuest(src, questId)
     if success then
-        TriggerClientEvent('QBCore:Notify', src, message, 'success')
+        feedback(src, message, 'success')
     else
-        TriggerClientEvent('QBCore:Notify', src, message, 'error')
+        feedback(src, message, 'error')
     end
 end, true) -- restricted
 
@@ -968,22 +981,22 @@ RegisterCommand('abandonquest', function(source, args)
         -- 无参数: 放弃所有活跃任务
         local activeQuests = QuestManager.GetActiveQuests(src)
         if not activeQuests or #activeQuests == 0 then
-            TriggerClientEvent('QBCore:Notify', src, '没有活跃任务', 'error')
+            feedback(src, '没有活跃任务', 'error')
             return
         end
         for _, q in ipairs(activeQuests) do
             QuestManager.AbandonQuest(src, q.quest_id)
         end
-        TriggerClientEvent('QBCore:Notify', src,
+        feedback(src,
             ('已放弃 %d 个活跃任务'):format(#activeQuests), 'primary')
         return
     end
 
     local success, message = QuestManager.AbandonQuest(src, questId)
     if success then
-        TriggerClientEvent('QBCore:Notify', src, message, 'primary')
+        feedback(src, message, 'primary')
     else
-        TriggerClientEvent('QBCore:Notify', src, message, 'error')
+        feedback(src, message, 'error')
     end
 end, true) -- restricted
 
@@ -992,9 +1005,9 @@ RegisterCommand('grantheavy', function(source)
     if exports['custom-certificates'] and exports['custom-certificates'].GrantLicense then
         local ok, msg = exports['custom-certificates']:GrantLicense(src, 'heavy')
         if ok then
-            TriggerClientEvent('QBCore:Notify', src, '✅ 已授予重型载具执照 (heavy)', 'success')
+            feedback(src, '✅ 已授予重型载具执照 (heavy)', 'success')
         else
-            TriggerClientEvent('QBCore:Notify', src, '❌ 执照授予失败: ' .. (msg or 'unknown'), 'error')
+            feedback(src, '❌ 执照授予失败: ' .. (msg or 'unknown'), 'error')
         end
     else
         -- fallback: 直接设 metadata
@@ -1003,7 +1016,7 @@ RegisterCommand('grantheavy', function(source)
             local licences = Player.PlayerData.metadata.licences or {}
             licences['heavy'] = true
             Player.Functions.SetMetaData('licences', licences)
-            TriggerClientEvent('QBCore:Notify', src, '✅ 已强制写入 heavy 执照 (metadata fallback)', 'success')
+            feedback(src, '✅ 已强制写入 heavy 执照 (metadata fallback)', 'success')
         end
     end
 end, true) -- restricted
@@ -1013,9 +1026,9 @@ RegisterCommand('revokeheavy', function(source)
     if exports['custom-certificates'] and exports['custom-certificates'].RevokeLicense then
         local ok, msg = exports['custom-certificates']:RevokeLicense(src, 'heavy')
         if ok then
-            TriggerClientEvent('QBCore:Notify', src, '🗑️ 已吊销重型载具执照 (heavy)', 'success')
+            feedback(src, '🗑️ 已吊销重型载具执照 (heavy)', 'success')
         else
-            TriggerClientEvent('QBCore:Notify', src, '❌ 吊销失败: ' .. (msg or 'unknown'), 'error')
+            feedback(src, '❌ 吊销失败: ' .. (msg or 'unknown'), 'error')
         end
     else
         local Player = QBCore.Functions.GetPlayer(src)
@@ -1023,7 +1036,7 @@ RegisterCommand('revokeheavy', function(source)
             local licences = Player.PlayerData.metadata.licences or {}
             licences['heavy'] = nil
             Player.Functions.SetMetaData('licences', licences)
-            TriggerClientEvent('QBCore:Notify', src, '🗑️ 已强制清除 heavy 执照 (metadata fallback)', 'success')
+            feedback(src, '🗑️ 已强制清除 heavy 执照 (metadata fallback)', 'success')
         end
     end
 end, true) -- restricted
@@ -1032,13 +1045,13 @@ RegisterCommand('debugquest', function(source, args)
     local src = source
     local questId = args[1]
     if not questId then
-        TriggerClientEvent('QBCore:Notify', src, '用法: /debugquest <questId>', 'error')
+        feedback(src, '用法: /debugquest <questId>', 'error')
         return
     end
 
     local template = QuestRegistry.GetTemplate(questId)
     if not template then
-        TriggerClientEvent('QBCore:Notify', src, '任务模板不存在: ' .. questId, 'error')
+        feedback(src, '任务模板不存在: ' .. questId, 'error')
         return
     end
 
@@ -1161,14 +1174,14 @@ RegisterCommand('queststep', function(source, args)
     local targetStepId = args[2]
 
     if not questId or not targetStepId then
-        TriggerClientEvent('QBCore:Notify', src, '用法: /queststep <questId> <stepId>', 'error')
-        TriggerClientEvent('QBCore:Notify', src, '例: /queststep euro_container_haul step_deliver_container', 'primary')
+        feedback(src, '用法: /queststep <questId> <stepId>', 'error')
+        feedback(src, '例: /queststep euro_container_haul step_deliver_container', 'primary')
         return
     end
 
     local template = QuestRegistry.GetTemplate(questId)
     if not template then
-        TriggerClientEvent('QBCore:Notify', src, '任务模板不存在: ' .. questId, 'error')
+        feedback(src, '任务模板不存在: ' .. questId, 'error')
         return
     end
 
@@ -1182,7 +1195,7 @@ RegisterCommand('queststep', function(source, args)
     end
 
     if not targetIndex then
-        TriggerClientEvent('QBCore:Notify', src, '步骤不存在: ' .. targetStepId, 'error')
+        feedback(src, '步骤不存在: ' .. targetStepId, 'error')
         -- 列出可用步骤
         local stepIds = {}
         for _, step in ipairs(template.steps) do
@@ -1201,7 +1214,7 @@ RegisterCommand('queststep', function(source, args)
     -- 接取任务
     local success, message = QuestManager.TriggerQuest(src, questId)
     if not success then
-        TriggerClientEvent('QBCore:Notify', src, '接取失败: ' .. message, 'error')
+        feedback(src, '接取失败: ' .. message, 'error')
         return
     end
 
@@ -1222,13 +1235,13 @@ RegisterCommand('queststep', function(source, args)
         -- 直接推进步骤（绕过校验器）
         local advanceSuccess = QuestManager.AdvanceStep(citizenid, questId, step.id, { _debug_skip = true })
         if not advanceSuccess then
-            TriggerClientEvent('QBCore:Notify', src,
+            feedback(src,
                 ('❌ 跳步失败于 %s (索引 %d)'):format(step.id, i), 'error')
             return
         end
     end
 
-    TriggerClientEvent('QBCore:Notify', src,
+    feedback(src,
         ('✅ 已跳至 %s → %s (%d/%d)'):format(questId, targetStepId, targetIndex, #template.steps), 'success')
 end, true) -- restricted
 
@@ -1250,7 +1263,7 @@ RegisterNetEvent('hospital:server:SetDeathStatus', function(isDead)
     for _, q in ipairs(activeQuests) do
         QuestManager.FailQuest(src, q.quest_id, 'player_death')
     end
-    TriggerClientEvent('QBCore:Notify', src, '💀 任务失败：你已死亡', 'error')
+    feedback(src, '💀 任务失败：你已死亡', 'error')
 end)
 
 -- 兜底：每 30 秒轮询（无 qb-ambulancejob 或跨资源事件丢失时兜底）
@@ -1273,7 +1286,7 @@ Citizen.CreateThread(function()
             for _, q in ipairs(activeQuests) do
                 QuestManager.FailQuest(src, q.quest_id, 'player_death')
             end
-            TriggerClientEvent('QBCore:Notify', src, '💀 任务失败：你已死亡', 'error')
+            feedback(src, '💀 任务失败：你已死亡', 'error')
             ::next_player::
         end
     end
@@ -1330,7 +1343,7 @@ RegisterNetEvent('quest:server:savePosCollection', function(collection)
     end
 
     if src and src > 0 then
-        TriggerClientEvent('QBCore:Notify', src,
+        feedback(src,
             ('💾 %d 个坐标已保存: %s'):format(#collection, filePath), 'success')
     end
 end)

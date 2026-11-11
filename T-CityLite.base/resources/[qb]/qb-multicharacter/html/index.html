@@ -72,6 +72,11 @@
                                         </div>
                                     </div>
 
+                                    <!-- I-1：数据是快照，必须标注时间 -->
+                                    <div class="char-saved" v-if="savedAgo(characters[index].lastUpdated)">
+                                        上次保存 · {{ savedAgo(characters[index].lastUpdated) }}
+                                    </div>
+
                                     <!-- Status Attributes (Progress Bars) -->
                                     <div class="char-status-section">
                                         <!-- Health Status -->
@@ -153,9 +158,27 @@
                         <!-- Character Delete Confirmation -->
                         <transition name="fade">
                             <div class="character-delete" v-if="show.delete">
-                                <p>{{translate('deletechar_description')}}</p>
+                                <!-- I-2：删角色是不可逆动作。必须让人看清删的是谁，并主动输入名字。 -->
+                                <p class="delete-title">删除角色</p>
+                                <p class="delete-target" v-if="characters[selectedCharacter]">
+                                    {{ characters[selectedCharacter].charinfo.firstname }}
+                                    {{ characters[selectedCharacter].charinfo.lastname }}
+                                    <span class="delete-cid">({{ characters[selectedCharacter].citizenid }})</span>
+                                </p>
+                                <p class="delete-warn">此操作不可恢复：背包、车辆、房产、银行余额都会一并删除。</p>
+                                <p class="delete-hint">请输入上面的角色全名以确认：</p>
+                                <input
+                                    class="delete-input"
+                                    v-model="deleteConfirmName"
+                                    type="text"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                    placeholder="角色全名"
+                                />
                                 <div class="character-delete-btns">
-                                    <v-btn class="confirm-btn" v-ripple @click="delete_character">{{translate('confirm')}}</v-btn>
+                                    <v-btn class="confirm-btn" v-ripple
+                                        :disabled="!deleteConfirmOk"
+                                        @click="delete_character">{{translate('confirm')}}</v-btn>
                                     <v-btn class="cancel-btn" v-ripple @click="cancelDelete">{{translate('cancel')}}</v-btn>
                                 </div>
                             </div>

@@ -6,7 +6,7 @@ local DynamicMenuItems = {}
 -- UTIL
 local function CloseMenuFull()
     exports['qb-menu']:closeMenu()
-    exports['qb-core']:HideText()
+    exports['custom-prompt']:Hide()
     shownBossMenu = false
 end
 
@@ -214,7 +214,7 @@ end)
 
 -- MAIN THREAD
 CreateThread(function()
-    if Config.UseTarget then
+    if Config.UseTarget and not Config.ManagementUsePrompt then
         for job, zones in pairs(Config.BossMenus) do
             for index, coords in ipairs(zones) do
                 local zoneName = job .. '_bossmenu_' .. index
@@ -252,11 +252,11 @@ CreateThread(function()
                                 if #(pos - coords) <= 1.5 then
                                     nearBossmenu = true
                                     if not shownBossMenu then
-                                        exports['qb-core']:DrawText(Lang:t('drawtext.label'), 'left')
+                                        exports['custom-prompt']:Show({ key = 'E', label = Lang:t('drawtext.label') })
                                         shownBossMenu = true
                                     end
                                     if IsControlJustReleased(0, 38) then
-                                        exports['qb-core']:HideText()
+                                        exports['custom-prompt']:Hide()
                                         TriggerEvent('qb-bossmenu:client:OpenMenu')
                                     end
                                 end
