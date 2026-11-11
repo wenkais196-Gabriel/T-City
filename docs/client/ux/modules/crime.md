@@ -10,7 +10,7 @@ review_by: 2027-02-28
 
 # 犯罪与组织 · UX 设计
 
-> 状态 **active**：四节齐全。C-1/C-3/C-6 已交付，C-2/C-4/C-5 待开发。
+> 状态 **active · 已交付**：C-1…C-6 全部完成。
 > 工作流见 [00-workflow.md](../00-workflow.md)。
 
 ## 1. 调研（现状）
@@ -172,10 +172,10 @@ review_by: 2027-02-28
 | # | 任务 | 文件 | 风险 | 验收 |
 |---|---|---|---|---|
 | C-1 ✅(`6bf4d92d`) | 报警分类：`policeAlert(text, kind)` + 6 类标准标题与优先级；7 个调用点补 kind | custom-police 的 server 的 main.lua、custom-police 的 client 的 main.lua、custom-vehicles 的 client 的 main.lua、qb-drugs 的 client 的 {cornerselling,deliveries}.lua、qb-houserobbery 的 client 的 main.lua、qb-storerobbery 的 client 的 main.lua | 中（跨资源契约，需契约闸门） | 警察端工单标题是中文且分类正确；`officer_down` 排最前 |
-| C-2 | 门槛/冷却写进交互提示（保险箱、收银机） | qb-storerobbery 的 client/main.lua | 中 | 警察不够时提示写"需 N 名（当前 M）"，按 E 无反应也不弹 error |
+| C-2 ✅(`ae10c785`) | 门槛/冷却写进交互提示（保险箱、收银机） | qb-storerobbery 的 client/main.lua | 中 | 警察不够时提示写"需 N 名（当前 M）"，按 E 无反应也不弹 error |
 | C-3 ✅(`7c717344`) | 收益留档：完成/中断给 `feed` + 手机明细 | qb-storerobbery 的 client/main.lua、`qb-drugs` 出售处 | 低 | 屏幕一句、手机有金额与物品 |
-| C-4 | 单动作热区 → `[E]`（保险箱、冶炼、实验室） | qb-storerobbery / custom-mining / qb-drugs | 中（要实测距离） | 站到位置直接出现 `[E]`，不用 ALT |
-| C-5 | 失败原因细分（缺材料 / 有警察 / 冷却 / 距离） | qb-drugs、custom-mining | 低 | 四种失败四种文案 |
+| C-4 ✅(`5da47b2c`) | 单动作热区 → `[E]`（保险箱、冶炼、实验室） | qb-storerobbery / custom-mining / qb-drugs | 中（要实测距离） | 站到位置直接出现 `[E]`，不用 ALT |
+| C-5 ✅(`c8443524`) | 失败原因细分**经核实已达标**（文案早就分开），改做通道迁移：custom-mining 17 处接三层 | custom-mining | 低 | 采矿失败走 error、开始/产出走 feed |
 | C-6 ✅(`7c717344`) | 报警单一派发入口：删 qb-phone 并行警情与客户端自建 blip，只留声音 + policeAlert 建单投影 | qb-storerobbery 的 server 与 client | 中 | 一次抢劫警官侧只响一次、地图上只有一颗 blip |
 
 **顺序**：C-1（收益最大、跨资源一次做完）→ C-3（低风险）→ C-2 → C-4 → C-5。
