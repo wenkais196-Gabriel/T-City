@@ -83,8 +83,20 @@ local function OpenGarageMenu(data)
                 balance = v.balance or 0
             }
         end
-        local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
-        if not ok then SetNuiFocus(true, true) end
+        -- V-10：SetNuiFocus 是按资源的，必须由拥有 ui_page 的我们自己来按。
+        -- （真正的按下在文件末尾的 exports('ApplyFocus') 里，由 custom-ui 的栈回调）
+        -- 把 owner 传给 custom-ui 的栈，它会回过来调我们的 ApplyFocus（见文件末尾的 export）。
+        local ok, err = pcall(function()
+            exports['custom-ui']:OpenMenu({ keepInput = false, owner = GetCurrentResourceName() })
+        end)
+        -- 双保险：无论栈有没有走通，都由**我们自己**按一次焦点（这是本资源的 ui_page）。
+        -- 栈的 ownerApply 失败时是静默的（老版本 custom-ui / 导出缺失），只靠它会把
+        -- "面板出来但没光标"重新演一遍。
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(true, true)
+        if not ok then
+            print(('[qb-garages] custom-ui OpenMenu 调用失败：%s'):format(tostring(err)))
+        end
         SendNUIMessage({
             action = 'VehicleList',
             garageLabel = Config.Garages[data.indexgarage].label,
@@ -243,10 +255,14 @@ local function CreateBlipsZones()
             elseif zone.data.type == 'depot' then
                 displayText = Lang:t('info.depot_e')
             end
-            exports['qb-core']:DrawText(displayText, 'left')
+            -- N-2 续（PO 2026-11-12「交互还走原来 notification」）：车位提示改走 custom-prompt。
+            -- 原文案形如 "E - Depot"，键块由 custom-prompt 自己画，所以把前缀剥掉。
+            -- custom-prompt 有"同内容不重发"的守卫（本文件是逐帧循环，也不会刷 NUI）。
+            local label = tostring(displayText):gsub('^E%s*%-%s*', '')
+            pcall(function() exports['custom-prompt']:Show({ key = 'E', label = label }) end)
         else
             listenForKey = false
-            exports['qb-core']:HideText()
+            pcall(function() exports['custom-prompt']:Hide() end)
         end
     end)
 end
@@ -327,7 +343,7 @@ end
 -- NUI Callbacks
 
 RegisterNUICallback('closeGarage', function(_, cb)
-    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu({ owner = GetCurrentResourceName() }) end)
     if not ok then SetNuiFocus(false, false) end
     cb('ok')
 end)
@@ -379,8 +395,10 @@ RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
         if spawn then
             -- NUI 回传的 garage 表可能丢失 vector4 类型；优先用 index 从客户端 Config 取
             local garage = Config.Garages[data.index] or data.garage
-            print(('[qb-garages] takeOutGarage plate=%s index=%s garage=%s'):format(
-                tostring(data.plate), tostring(data.index), tostring(garage and garage.label)))
+            if GetConvarInt('tcity_debug', 0) == 1 then
+                print(('[qb-garages] takeOutGarage plate=%s index=%s garage=%s'):format(
+                    tostring(data.plate), tostring(data.index), tostring(garage and garage.label)))
+            end
             if not garage or not garage.spawnPoint then
                 feedback('车库配置无效', 'error', 5000)
                 return
@@ -464,7 +482,8 @@ local function CreateHouseZone(index, garage, zoneType)
                     end
                 end
             end)
-            exports['qb-core']:DrawText(Lang:t('info.house_garage'), 'left')
+            local houseLabel = tostring(Lang:t('info.house_garage')):gsub('^E%s*%-%s*', '')
+            pcall(function() exports['custom-prompt']:Show({ key = 'E', label = houseLabel }) end)
         else
             listenForKeyHouse = false
             exports['qb-core']:HideText()
@@ -588,4 +607,15 @@ end)
 
 RegisterNetEvent('QBCore:Client:OnJobUpdate', function(job)
     PlayerJob = job
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- V-10（2026-11-12 PO：扣押场取车面板没有光标、点不了付款）
+-- SetNuiFocus 是**按资源**的：custom-ui 没有 ui_page，从它那里调等于把焦点给空气。
+-- custom-ui 的输入栈只决定"该谁有焦点"，然后回调**拥有页面**的资源的这个 export。
+-- （上一版漏了这段 —— 注释里写了 export 名，代码里没有，栈的 ownerApply 静默失败。）
+-- ══════════════════════════════════════════════════════════════
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    SetNuiFocusKeepInput(keepInput == true)
+    SetNuiFocus(hasFocus == true, hasCursor ~= false)
 end)

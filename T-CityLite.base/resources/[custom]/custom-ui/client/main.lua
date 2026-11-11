@@ -48,23 +48,38 @@ end
 ---@param opts table|nil { keepInput = boolean }
 function OpenMenu(opts)
     opts = opts or {}
+    -- ⚠️ 关键（V-10）：`SetNuiFocus` 是**按资源**的，custom-ui 自己没有 ui_page ——
+    -- 从这里直接调等于把焦点交给空气："面板显示出来了、没有光标、点不了"
+    -- （本文件 :122-125 就是这么写的，只是 OpenMenu 这条老路径一直没照做）。
+    -- 所以调用方必须传 `owner = GetCurrentResourceName()`，栈会把焦点转给**拥有页面**的资源，
+    -- 由它自己的 `exports('ApplyFocus')` 执行真正的 SetNuiFocus。
+    if type(opts.owner) == 'string' and opts.owner ~= '' then
+        local id = opts.id or ('menu:' .. opts.owner)
+        Input.Push({
+            id = id,
+            owner = opts.owner,
+            keepInput = opts.keepInput == true,
+            cursor = true,
+            close = function()
+                pcall(function() exports['custom-ui']:CloseMenu() end)
+            end,
+        })
+        -- 栈里若已有别的层，我们插在栈顶；关的时候只弹自己这层
+        return true
+    end
+    -- ↓ 以下是无 owner 的老路径（保留兼容：只有一个 ui_page 的资源自己调 SetNuiFocus 也一样能用）
+    -- ⚠️ 顺序与幂等，照本文件 :212-215 的规矩来：
+    --   (1) keepInput 必须在 SetNuiFocus **之前**设，之后调用会把光标弄丢；
+    --   (2) 而且**每次都设** —— 这个 build 上 keepInput 一旦为 true 会粘住（citizenfx#3593）。
+    -- 原来的写法正好两条都犯：先 SetNuiFocus 再按需设 keepInput，且只在显式传参时才设。
+    -- 真机表现（PO 2026-11-12）：扣押场取车面板出来了、**没有光标、点不了付款**。
+    local keepInput = opts.keepInput == true
+    SetNuiFocusKeepInput(keepInput)
     -- Reset first: another resource (notably qb-menu's old one-argument
     -- SetNuiFocus(false)) can leave the NUI half-focused, and a plain
     -- SetNuiFocus(true, true) then shows the page without a usable cursor.
     SetNuiFocus(false, false)
     SetNuiFocus(true, true)
-    -- qb-phone never calls SetNuiFocusKeepInput(false): movement keeps working
-    -- while the phone is open and only look/attack are disabled per frame. An
-    -- explicit false here was what froze WASD, so only opt in when asked.
-    --
-    -- 但 `keepInput = false` 是**显式请求独占输入**（车机中控这类全屏终端）：
-    -- 这个标志是客户端全局的，手机开过一次之后它会一直留着 true，于是车机
-    -- 打开面板、光标也出来了，视角却还能转（2026-10-31 真机现象）。
-    if opts.keepInput then
-        SetNuiFocusKeepInput(true)
-    elseif opts.keepInput == false then
-        SetNuiFocusKeepInput(false)
-    end
     isOpen = true
     -- Some builds ignore the cursor flag when focus is granted in the same
     -- frame as the reset. Re-assert it after one frame and again after 100ms;
@@ -82,8 +97,23 @@ end
 ---@param opts table|nil { guardMs = number }
 function CloseMenu(opts)
     opts = opts or {}
+    -- 栈顶若是"菜单帧"，只弹这一层（焦点还给下层 UI 或游戏）。
+    -- 注意：这里不能读文件后面的 `local path` —— OpenMenu/CloseMenu 定义在它之前，
+    -- 访问到的是同名**全局**（nil）。只能走全局的 Input API。
+    -- 传了 opts.owner 就只弹**自己**那层，避免异步关闭时误弹别人的菜单（CC 评审 Q2）。
+    local popped = false
+    local frame = Input.Top and Input.Top() or nil
+    if frame and frame.owner and tostring(frame.id):sub(1, 5) == 'menu:' then
+        local wantId = type(opts.owner) == 'string' and opts.owner ~= '' and ('menu:' .. opts.owner) or nil
+        if not wantId or frame.id == wantId then
+            Input.Pop(frame.id)
+            popped = true
+        end
+    end
     isOpen = false
-    SetNuiFocus(false, false)
+    -- 弹过栈就别再补 SetNuiFocus(false,false)：栈的 apply() 已经把焦点交回下层（手机）或游戏，
+    -- 这里再清一次会跟栈的结论打架（CC 评审 Q2）。只有走老路径时才需要手动放。
+    if not popped then SetNuiFocus(false, false) end
     -- Do not force keepInput off here: qb-phone leaves it alone and movement
     -- resumes after close because focus is already gone.
     GuardControls(opts.guardMs or 300)
@@ -304,7 +334,8 @@ end
 function Input.Top()
     local frame = topFrame()
     if not frame then return nil end
-    return { id = frame.id, kind = frame.kind, allow = frame.allow }
+    -- owner 也要投影出来：CloseMenu 靠它判断栈顶是不是"菜单帧"（V-10）
+    return { id = frame.id, kind = frame.kind, allow = frame.allow, owner = frame.owner }
 end
 
 --- 当前路径，底 → 顶，如 { 'phone', 'phone:mdt', 'phone:mdt/search' }
