@@ -2,22 +2,22 @@
   import { onMount } from 'svelte';
   import { fetchNui, isBrowser } from '../utils/nui';
 
-  /** 在地图上标注这间车库。坐标由服务端随车辆列表下发（qb-garages 的 takeVehicle）。 */
-  async function markWaypoint(car: { garage?: string; coords?: { x: number; y: number } }) {
-    if (!car?.coords) return;
-    try {
-      await fetchNui('garageWaypoint', {
-        x: car.coords.x,
-        y: car.coords.y,
-        label: car.garage || '',
-      });
-    } catch {
-      /* 失败不打断 Garage 页：Lua 侧会自己决定要不要提示 */
-    }
-  }
-  
   let vehicles = $state<any[]>([]);
   let isLoading = $state(true);
+
+  /** 在地图上标注这间车库：只带车库名，坐标由服务端按需解析。 */
+  async function markWaypoint(car: { garage?: string; coords?: { x: number; y: number } }) {
+    if (!car?.garage && !car?.coords) return;
+    try {
+      await fetchNui('garageWaypoint', {
+        garage: car.garage || '',
+        x: car.coords?.x,
+        y: car.coords?.y,
+      });
+    } catch {
+      /* 失败不打断 Garage 页：Lua 侧自己决定要不要提示 */
+    }
+  }
 
   onMount(async () => {
     if (isBrowser()) {
@@ -89,7 +89,7 @@
                 <span class="detail-lbl">Garage Location</span>
                 <span class="detail-val">
                   {car.garage}
-                  {#if car.coords}
+                  {#if car.garage}
                     <button
                       class="waypoint-btn"
                       title="在地图上标注这间车库"

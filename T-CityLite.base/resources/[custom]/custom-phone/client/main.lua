@@ -547,19 +547,30 @@ end)
 -- CEF 上报真实 CSS px：surface 阈值判定在 Lua，但只有页面知道窗口多大。
 -- 回调名拼错会让 NUI 契约闸门直接红，所以这里必须与 fetchNui('surfaceInfo') 对齐。
 RegisterNUICallback('garageWaypoint', function(data, cb)
-    -- 只接受有限数字：NUI 侧数据可被玩家改，未校验的 SetNewWaypoint 会崩原生层
+    local garageKey = type(data) == 'table' and tostring(data.garage or '') or ''
     local x = tonumber(data and data.x)
     local y = tonumber(data and data.y)
-    local label = type(data) == 'table' and tostring(data.label or '') or ''
+
+    -- 坐标可以随请求带来（老路径），也可以只给车库名让服务端解析
+    if garageKey ~= '' and (not x or not y) then
+        QBCore.Functions.TriggerCallback('phone:server:garageCoords', function(coords)
+            if not coords then
+                PhoneBridge.AnswerFn(cb)({ ok = false, reason = 'no_coords' })
+                return
+            end
+            SetNewWaypoint(coords.x, coords.y)
+            PhoneBridge.AnswerFn(cb)({ ok = true })
+        end, garageKey)
+        return
+    end
+
+    -- 只接受有限数字：NUI 侧数据可被玩家改，未校验的 SetNewWaypoint 会崩原生层
     if not x or not y or x ~= x or y ~= y or math.abs(x) > 40000 or math.abs(y) > 40000 then
         PhoneBridge.AnswerFn(cb)({ ok = false, reason = 'bad_coords' })
         return
     end
     SetNewWaypoint(x + 0.0, y + 0.0)
     PhoneBridge.AnswerFn(cb)({ ok = true })
-    if _G.PhoneNotifyFeed then
-        _G.PhoneNotifyFeed('已标注：' .. (label ~= '' and label or '车库'))
-    end
 end)
 
 RegisterNUICallback('surfaceInfo', function(data, cb)

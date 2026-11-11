@@ -814,6 +814,21 @@ QBCore.Functions.CreateCallback('phone:server:shareContactNearby', function(sour
     end)
 end)
 
+-- 2.9 车库坐标（Garage App 的"在地图上标注"按需解析）
+-- 为什么不塞进车辆列表：qb-garages 没启动 / 车库被删时坐标是 nil，按钮就整个不渲染 ——
+-- 玩家看到的是"这个 App 没有标注功能"，而不是"这间车库没有坐标"。
+QBCore.Functions.CreateCallback('phone:server:garageCoords', function(_, cb, garageKey)
+    local key = tostring(garageKey or '')
+    if key == '' then return cb(nil) end
+    local ok, garages = pcall(function() return exports['qb-garages']:getAllGarages() end)
+    if not ok or type(garages) ~= 'table' then return cb(nil) end
+    local entry = garages[key]
+    if type(entry) ~= 'table' then return cb(nil) end
+    local point = entry.takeVehicle or entry.putVehicle
+    if not point or not point.x or not point.y then return cb(nil) end
+    cb({ x = point.x + 0.0, y = point.y + 0.0 })
+end)
+
 -- 3. Fetch owned vehicles for Garage App
 QBCore.Functions.CreateCallback('phone:server:getOwnedVehicles', function(source, cb)
     local Player = QBCore.Functions.GetPlayer(source)
