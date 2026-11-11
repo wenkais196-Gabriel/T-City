@@ -51,3 +51,16 @@ def test_panels_are_server_side_detects_client_leak():
     # 反向：把客户端注册塞回去，规则必须红
     broken = client + "\nRegisterCommand('apanel', function() end, false)\n"
     assert "RegisterCommand('apanel'" in broken
+
+
+def test_privileged_actions_are_audited_detects_gap():
+    """A-3：每条特权动作都必须留痕（操作者/目标/明细），否则"谁改了谁的钱"查不到。"""
+    server = SERVER.read_text(encoding="utf-8")
+    assert "local function auditAdmin" in server, "没有审计 helper"
+    assert "custom-logs" in server, "审计没有写进 custom-logs"
+    for action in ("授予执照", "吊销执照", "恢复执照", "暂停执照", "调整抢劫警察门槛"):
+        assert action in server, f"{action} 没有审计调用"
+
+    # 反向：把一条审计调用删掉，规则必须红
+    broken = server.replace("auditAdmin(src, '吊销执照',", "(-- removed --)(", 1)
+    assert "auditAdmin(src, '吊销执照'," not in broken
