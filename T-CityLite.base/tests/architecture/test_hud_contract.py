@@ -80,3 +80,20 @@ def test_scoreboard_has_empty_state_and_legend_detects_blank():
     # 反向：把空态文案删掉，规则必须红
     broken = app.replace("暂无在线玩家", "0")
     assert "暂无在线玩家" not in broken
+
+
+def test_stress_direction_and_throttle_detects_inverted_warn():
+    """压力是"越高越糟"：提醒要在 ≥80，不是 ≤20；服务端不许每条 GainStress 都弹。"""
+    client = CLIENT.read_text(encoding="utf-8")
+    server = (HUD / "server.lua").read_text(encoding="utf-8")
+
+    assert "STRESS_HIGH" in client and "STRESS_REARM" in client, "压力没有独立的方向常量"
+    assert "stressNow >= STRESS_HIGH" in client, "压力提醒方向反了（应在高值提醒）"
+    assert "stressNow <= LOW_THRESHOLD" not in client, "压力还在按'低值'判断"
+    assert "armor" in client and "护甲" in client, "护甲耗尽没有提醒"
+
+    assert "stressNoticeAt" in server, "服务端 GainStress 没有限流（射击时会刷屏）"
+
+    # 反向：把方向改回低值，规则必须红
+    broken = client.replace("stressNow >= STRESS_HIGH", "stressNow <= 20")
+    assert "stressNow >= STRESS_HIGH" not in broken
