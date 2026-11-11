@@ -1,5 +1,29 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 管理员操作审计（A-3）。
+--- 现状：custom-logs 有金额流水，但**没有操作者、没有旧值** —— "谁改了谁的钱"查不到；
+--- custom-admin 全文 0 处审计调用。这里给每条特权动作补上：
+---   操作者(名字+id) / 动作 / 目标 / 明细 / 时间
+--- 三件事一起做：
+---   1) 落 custom-logs（本地文件 + Discord）；
+---   2) 执行者拿 feed 回执（含目标与明细，可截图留证）；
+---   3) 审计写失败只 print，不影响业务（审计不能成为可用性单点）。
+local function auditAdmin(src, action, targetLabel, detail, kind)
+    local executor = GetPlayerName(src) or ('#%s'):format(tostring(src))
+    local line = ('%s | 操作者 %s(#%s) | 目标 %s | %s'):format(
+        action, executor, tostring(src), tostring(targetLabel or '-'), tostring(detail or '-'))
+    local ok, err = pcall(function()
+        exports['custom-logs']:LogGeneric('管理员操作', line, 16744192)
+    end)
+    if not ok then print(('[custom-admin] ⚠️ 审计写入失败: %s'):format(tostring(err))) end
+    pcall(function()
+        exports['custom-notify']:Push(src, kind == 'error' and 'error' or 'feed', '管理员操作',
+            ('%s · %s'):format(action, tostring(targetLabel or '')), { icon = '🛠' })
+    end)
+    return line
+end
+
+
 -- 辅助函数：输出调试日志
 local function DebugPrint(msg)
     print(('[custom-admin][server] %s'):format(msg))
@@ -100,7 +124,10 @@ QBCore.Commands.Add('tccops', '调整抢劫警察门槛（调试）', { {
         QBCore.Functions.Notify(source, _L(source, 'admin_invalid_0_10'), "error")
         return
     end
+    local previous = GlobalState and GlobalState.crime_min_police_storerobbery
     GlobalState:set('crime_min_police_storerobbery', value, true)
+    auditAdmin(source, '调整抢劫警察门槛', '全局',
+        ('%s → %s'):format(tostring(previous), tostring(value)))
     QBCore.Functions.Notify(source, _L(source, 'admin_threshold_set', value), "primary")
 end, 'admin')
 -- 🔒 A-2：这里原本是 'user' —— **任何玩家**都能把抢劫警察门槛改成 0，
@@ -255,6 +282,7 @@ QBCore.Commands.Add('givelicense', '授予玩家执照 (Admin)', {
     end
     local success, msg = exports['custom-certificates']:GrantLicense(targetId, licenseType)
     if success then
+        auditAdmin(src, '授予执照', GetPlayerName(targetId), ('+%s'):format(tostring(licenseType)))
         TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
         TriggerClientEvent('QBCore:Notify', src, ('✅ 已授予 %s %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
         TriggerClientEvent('QBCore:Notify', targetId, ('管理员授予了你 %s 执照'):format(licenseType), 'success')
@@ -281,6 +309,7 @@ QBCore.Commands.Add('revokelicense', '吊销玩家执照 (Admin)', {
     end
     local success, msg = exports['custom-certificates']:RevokeLicense(targetId, licenseType)
     if success then
+        auditAdmin(src, '吊销执照', GetPlayerName(targetId), ('-%s'):format(tostring(licenseType)))
         TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
         TriggerClientEvent('QBCore:Notify', src, ('🗑️ 已吊销 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
         TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已被吊销'):format(licenseType), 'error')
@@ -307,6 +336,7 @@ QBCore.Commands.Add('reinstatelicense', '恢复玩家执照 (Admin)', {
     end
     local success, msg = exports['custom-certificates']:ReinstateLicense(targetId, licenseType)
     if success then
+        auditAdmin(src, '恢复执照', GetPlayerName(targetId), ('~%s'):format(tostring(licenseType)))
         TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
         TriggerClientEvent('QBCore:Notify', src, ('🔄 已恢复 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
         TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已恢复'):format(licenseType), 'success')
@@ -333,6 +363,7 @@ QBCore.Commands.Add('suspendlicense', '暂停玩家执照 (Admin)', {
     end
     local success, msg = exports['custom-certificates']:SuspendLicense(targetId, licenseType)
     if success then
+        auditAdmin(src, '暂停执照', GetPlayerName(targetId), ('!%s'):format(tostring(licenseType)))
         TriggerClientEvent('custom-certificates:client:ForceRefreshCache', targetId)
         TriggerClientEvent('QBCore:Notify', src, ('⏸️ 已暂停 %s 的 %s 执照'):format(GetPlayerName(targetId), licenseType), 'success')
         TriggerClientEvent('QBCore:Notify', targetId, ('你的 %s 执照已被暂停'):format(licenseType), 'error')
