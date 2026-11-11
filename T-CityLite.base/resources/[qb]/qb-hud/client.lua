@@ -111,6 +111,47 @@ local function hasHarness(items)
     harness = _harness
 end
 
+-- ==============================================================
+-- H-2：低状态提醒
+-- HUD 圆环只是"状态"，不是"事件"；但**低于阈值**确实是个需要动手的事件，
+-- 值得一次打断（toast）。规则：
+--   * 阈值 20，只有跨过阈值才提醒（不是一直提醒）；
+--   * 同一个状态 5 分钟内最多一次（玩家在跑路时不该被反复打扰）；
+--   * 回升到 30 以上才重新"上膛"，避免在 20 附近抖动时反复触发。
+-- ==============================================================
+local LOW_THRESHOLD = 20
+local REWARN_ABOVE = 30
+local REWARN_COOLDOWN_MS = 5 * 60 * 1000
+local lowWarnAt = { hunger = 0, thirst = 0, stress = 0 }
+local lowArmed = { hunger = true, thirst = true, stress = true }
+
+local LOW_TEXT = {
+    hunger = '你饿得发慌了，找点吃的',
+    thirst = '你渴得难受，找点水喝',
+    stress = '压力太大了，去休息一下',
+}
+
+CreateThread(function()
+    while true do
+        Wait(5000)
+        local values = { hunger = hunger or 100, thirst = thirst or 100, stress = stress or 0 }
+        local now = GetGameTimer()
+        for key, value in pairs(values) do
+            if value <= LOW_THRESHOLD then
+                if lowArmed[key] and now - (lowWarnAt[key] or 0) >= REWARN_COOLDOWN_MS then
+                    lowArmed[key] = false
+                    lowWarnAt[key] = now
+                    pcall(function()
+                        exports['custom-notify']:PushLocal('toast', LOW_TEXT[key])
+                    end)
+                end
+            elseif value >= REWARN_ABOVE then
+                lowArmed[key] = true
+            end
+        end
+    end
+end)
+
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     Wait(2000)
     local hudSettings = GetResourceKvpString('hudSettings')
