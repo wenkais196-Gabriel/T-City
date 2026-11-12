@@ -15,7 +15,7 @@ source_of_truth: true
 
 > **一句话**：把仓库从「生产级工具面 + 控制平面」推进到「可观测、可控、可回归」的完整 Agent 系统。
 > **Issue**：Epic #234 ｜ 执行项 #235–#240 ｜ 检索专题 #233
-> **盘点基线**：master `86b9993`（2026-11-12），静态代码分析，未复跑测试。
+> **盘点基线**：master `86b9993`（2026-11-12），静态代码分析；`tools/` 测试已实测（239 passed）。
 > **定位**：本仓是企业级 Agent 控制平面的一个**真实部署案例**，FiveM 是宿主环境而非主题。
 
 ---
@@ -153,7 +153,9 @@ W5 / W6 有余力再做。
 
 ## 7. 验证与口径
 
-- 全部盘点为**静态代码分析**，未独立复跑测试；「620+ 用例」来自 `STATUS.md` 与测试文件静态统计，引用前须实跑一次
+- `tools/` 工具层**已实测**：`pytest tests/tools -q` → **239 passed / 3 skipped / 716 subtests（6.37s，2026-11-12）**
+- `STATUS.md` 记的是「227 passed」，实测 239 —— **存在文档漂移**，引用测试数字前以实跑为准
+- `T-CityLite.base` 的 unit / architecture 测试与 Lua golden harness（253 checks）仍未复跑
 - 业界结论来自公开文档；semconv 属性名随版本变动（`gen_ai.tool.call_id` → `gen_ai.tool.call.id`），W1 必须固定版本并写入 registry `_meta`
 - 工期按 1 名熟悉仓库的工程师全职估算；实际投入按每周 20h 折算
 - 动态风险规则上线前必须 shadow mode 观察 ≥1 周，否则可能把正常运营动作打成 429/拒绝
