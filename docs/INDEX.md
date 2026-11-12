@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-11 ｜ **文档总数**：304 ｜ **已登记**：304 ｜ **未登记**：0
+**生成时间**：2026-11-12 ｜ **文档总数**：305 ｜ **已登记**：305 ｜ **未登记**：0
 
-**状态分布**：✅ active 175 ・ 🟡 draft 6 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 176 ・ 🟡 draft 6 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -237,7 +237,7 @@
 | [03 — 不可替代性与声誉：让玩家成为"基础设施"](server-design/03-irreplaceability-reputation.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/03-irreplaceability-reputation.md` |
 | [04 — 共治系统：让玩家成为规则的共同制定者](server-design/04-co-governance.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/04-co-governance.md` |
 
-### agent（33）
+### agent（34）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -257,6 +257,7 @@
 | [把 MCP 接到 T-City 上（本地全链路）](../T-CityLite.base/docs/agent/MCP_WIRING.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `T-CityLite.base/docs/agent/MCP_WIRING.md` |
 | [加 / 改一个 agent 动作：检查清单](agent/police/ATOOLS-DISCIPLINE.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `docs/agent/police/ATOOLS-DISCIPLINE.md` |
 | [Agent Read Layer (Phase 3 / P1)](../T-CityLite.base/docs/agent/README.md) | meta | ✅ active | 2026-10-27 | 2027-04-30 |  | `T-CityLite.base/docs/agent/README.md` |
+| [Agent 控制平面升级计划](plan/agent-control-plane-upgrade.md) | plan | ✅ active | 2026-11-12 | 2027-03-31 | ★ | `docs/plan/agent-control-plane-upgrade.md` |
 | [2026-11-01 · 下一步开发方向调研（Hermes + Claude Code 双份意见）](engineering/2026-11-01-next-epic-research.md) | research | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/2026-11-01-next-epic-research.md` |
 | [客户端双端测试 Harness（MCP）](../T-CityLite.base/docs/agent/CLIENT_HARNESS.md) | spec | ✅ active | 2026-10-26 | 2027-04-30 |  | `T-CityLite.base/docs/agent/CLIENT_HARNESS.md` |
 | [客户端可观测性：服务端能看见客户端](../T-CityLite.base/docs/agent/CLIENT_OBSERVABILITY.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/agent/CLIENT_OBSERVABILITY.md` |
@@ -330,7 +331,7 @@
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
 | [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
 | [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `AGENTS.md` |
-| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `CHANGELOG.md` |
+| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-12 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
 | [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-10-21 | 2027-04-30 |  | `CONTRIBUTING.md` |
 | [T-City Lite](../README.md) | meta | ✅ active | 2026-10-26 | 2027-04-30 |  | `README.md` |

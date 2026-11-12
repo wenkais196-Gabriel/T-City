@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-01
+updated: 2026-11-12
 review_by: 2027-04-30
 ---
 
@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [Unreleased]
+
+### Added
+- **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
+  合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
+  （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：
+  `agent_harness.py` 不是 agent 循环（全仓无 LLM SDK）、成本计量并入 runtime、排期改为 8 周口径、
+  自建 runtime 是为承载「执行前挂起等人批」而必须。
+- `docs/INDEX.md` 重新生成（305 篇，0 未登记）。
 
 ### Fixed
 - **扣押场「有钱但无法付款」**：`T-CityLite.base/resources/[qb]/qb-garages/html/script.js` 把 `state=2` 一律渲染成 `Impound` 且按钮 disabled，
