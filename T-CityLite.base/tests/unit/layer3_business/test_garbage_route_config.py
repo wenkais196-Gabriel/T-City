@@ -33,7 +33,7 @@ EXPECTED = {
 
 
 def _tasks() -> dict[str, list[str]]:
-    data = run_probe("garbage_config_probe.lua", RES)
+    data = run_probe("route_config_probe.lua", RES, extra_args=["quest_garbage.lua"])
     assert data["LOAD_OK"] == "true", "quest_garbage.lua 加载失败（语法或返回形状不对）"
     assert data["TASK_COUNT"] == str(len(EXPECTED)), f"任务数不对：{data['TASK_COUNT']}"
     return {f"TASK_{i}": (data[f"TASK_{i}"].split("|") if f"TASK_{i}" in data else []) for i in (1, 2, 3)}
@@ -43,10 +43,11 @@ def test_three_tiers_with_expected_stops_and_money():
     tasks = _tasks()
     seen = {}
     for key, row in tasks.items():
-        # id|stations|min|max|rep|level|orderOk|metaOk|firstType|lastType
+        # 列序：id|站数|min|max|声望键|声望值|等级|顺序OK|元数据OK|首步类型|末步类型|职业
         quest_id = row[0]
         stations = int(row[1])
         money_min, money_max = int(row[2]), int(row[3])
+        assert row[4] == "garbage", f"{quest_id}: 声望键是 {row[4]}，期望 garbage"
         assert quest_id in EXPECTED, f"{key} 的 id 不在预期里：{quest_id}"
         want_stops, want_money = EXPECTED[quest_id]
         assert stations == want_stops, f"{quest_id}: validator 步骤 {stations} 个，期望 {want_stops}"
@@ -61,12 +62,12 @@ def test_step_order_and_metadata_are_sane():
     tasks = _tasks()
     for key, row in tasks.items():
         quest_id = row[0]
-        assert row[6] == "true", f"{quest_id}: validator 站号不连续（配置里跳了号 → 玩家会卡站）"
-        assert row[7] == "true", (
+        assert row[7] == "true", f"{quest_id}: validator 站号不连续（配置里跳了号 → 玩家会卡站）"
+        assert row[8] == "true", (
             f"{quest_id}: 某个收运点缺 validator_id / job / require_duty / coords / radius，或坐标重复"
         )
-        assert row[8] == "interact", f"{quest_id}: 第一步不是 interact（报到）"
-        assert row[9] == "interact", f"{quest_id}: 最后一步不是 interact（交回），任务不会结算"
+        assert row[9] == "interact", f"{quest_id}: 第一步不是 interact（报到）"
+        assert row[10] == "interact", f"{quest_id}: 最后一步不是 interact（交回），任务不会结算"
 
 
 def test_quest_ids_are_globally_unique():
@@ -89,7 +90,7 @@ def test_config_payload_reaches_the_validator():
     坐标只写在顶层 `data.coords` 的话，校验器拿到 nil，每站都判 `no_coords`
     （真机表现：走到点、按 E 没反应）。这条是我第一版配置里的真 bug。
     """
-    data = run_probe("route_integration_probe.lua", RES)
+    data = run_probe("route_integration_probe.lua", RES, extra_args=["quest_garbage.lua"])
     assert data["HAS_VALIDATOR_STEP"] == "true", "第一档任务里没有 validator 步骤"
     assert data["REGISTERED"] == "true", "validate_route_stop 没注册"
     assert data["PAYLOAD_HAS_COORDS"] == "true", (
