@@ -67,7 +67,9 @@ npm run build                                      # 改 web/src 后必做，产
 luac5.4 -p <file.lua>                              # Lua 语法（qb-core 用 CfxLua `+=`，luac 解析不了）
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua  # Lua golden（13 suites / 253 checks）
 
-# 服务器（screen 会话 tcity；无 RCON，控制台走 tcity-cmd 注入）
+# 服务器：一键起（Docker 引擎 → MariaDB → 等 3307 → FXServer → 自检）
+.\start.cmd            # Windows 日常只用这条；-Status / -Restart / -Stop
+# 下面是手工等价的旧路径（screen 会话 tcity；无 RCON，控制台走 tcity-cmd 注入）
 screen -dmS tcity bash -c 'cd <repo> && ./start.sh > /tmp/tcity_console.log 2>&1'
 tcity-cmd -w 8 "restart custom-phone"   # tcity-cmd --page 看当前页；tail -40 /tmp/tcity_console.log 看日志
 
