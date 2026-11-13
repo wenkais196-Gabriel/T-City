@@ -48,6 +48,10 @@ exports = setmetatable({}, {
                 end,
                 IsArcEnabled = function(_, _) return __state.arc_enabled end,
             }
+        elseif resource == 'qb-core' then
+            -- 真实资源里 QBCore 全局不存在（见 quest_availability.lua 顶部），只能从 exports 取。
+            -- 桩若只给全局，测试会绿而生产恒 fail-open —— 剧情抉择/警力/冷却三个门控形同虚设。
+            return { GetCoreObject = function() return QBCore end }
         end
         return nil
     end,
