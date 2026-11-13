@@ -20,12 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **职业内容填充规划**：新增 `docs/plan/jobs-content-roadmap.md`（type=plan, status=draft）。实测 22 个职业里只有 4 个有真实循环、
+  市政厅可申请的 7 个民职有 6 个是空壳；据此确立「三种机制 × N 份数据」的内容模型与 R0–R6 分批，
+  硬约束为 0 个新资源 / 0 张新表 / 0 个新 net event。§11.1 记录五项拍板（首批 R0+R1、干活为主、先 NPC、职权型不做、realestate 不碰）。
+- **职业内容调研（阶段 R）**：新增 `docs/plan/jobs-content/01-research.md`（type=research）。含内部实测 8 条（带 file:line）、
+  外部 7 个来源的做法对照、6 条假设（4 条被证据排除）、按平面的影响面，以及与 Claude Code 的引擎表达力盘点
+  （NPC 乘客 / 里程计价 / 乱序多站 / 失败判定 / 结算幂等五项，逐条给现在靠哪个 step 类型与最小新增）。
+  调研修正了三条原判断：数值按技能分三档而不是统一一条带、放弃「玩家自排路线」、NPC 预算不能复用警察的。
 - **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
   合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
   （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：
   `agent_harness.py` 不是 agent 循环（全仓无 LLM SDK）、成本计量并入 runtime、排期改为 8 周口径、
   自建 runtime 是为承载「执行前挂起等人批」而必须。
-- `docs/INDEX.md` 重新生成（305 篇，0 未登记）。
+- `docs/INDEX.md` 重新生成（308 篇，0 未登记）。
 
 ### Changed
 - **一键启动**：新增 `start-tcity.ps1` + `start.cmd`（`-Status` / `-Restart` / `-Stop`）。顺序固定为

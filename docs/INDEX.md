@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-13 ｜ **文档总数**：305 ｜ **已登记**：305 ｜ **未登记**：0
+**生成时间**：2026-11-13 ｜ **文档总数**：308 ｜ **已登记**：308 ｜ **未登记**：0
 
-**状态分布**：✅ active 176 ・ 🟡 draft 6 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 176 ・ 🟡 draft 9 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -113,7 +113,7 @@
 | [犯罪与组织 · UX 设计](client/ux/modules/crime.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/crime.md` |
 | [v0.5 犯罪玩法](archive/QBCore_Lite_versions/v0.5-crime-gameplay.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.5-crime-gameplay.md` |
 
-### jobs（8）
+### jobs（11）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -123,8 +123,11 @@
 | [🚗 T-City Lite 驾驶员与驾考系统 (Driver) 细化规划](archive/QBCore_Lite_versions/career/driver_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/driver_plan.md` |
 | [🚚 T-City Lite 货运司机与物流系统 (Logistics) 细化规划](archive/QBCore_Lite_versions/career/logistics_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/logistics_plan.md` |
 | [🎭 T-City Lite 职业身份与扮演体验（Career）总规划](archive/QBCore_Lite_versions/career/overall_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/overall_plan.md` |
+| [内容填充总规划（职业优先，R0–R6）](plan/jobs-content-roadmap.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content-roadmap.md` |
+| [调研：职业内容填充（阶段 R）](plan/jobs-content/01-research.md) | research | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/01-research.md` |
 | [T-City Lite — 职业声望与进阶养成系统设计](../T-CityLite.base/docs/v0.7-career-reputation-design.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/v0.7-career-reputation-design.md` |
 | [v0.7a 载具系统重构与通用物流任务系统集成](archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md` |
+| [设计：职业内容填充（阶段 D）](plan/jobs-content/02-design.md) | spec | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/02-design.md` |
 
 ### vehicle（7）
 
