@@ -710,6 +710,13 @@ function QuestManager.TriggerQuest(source, questId)
     }
     QuestCache.SetActiveQuests(citizenid, merged)
 
+    -- R1：每次接单都清掉多站路线的会话。
+    -- 不清会有个很难查的死锁：玩家在第 3 站放弃/失败/掉线后会话停在 3，重新接单从第 1 站开始，
+    -- 校验器按"只能完成下一站"拒掉第 1 站 —— 这个任务从此再也做不了。
+    if QuestRouteValidators and QuestRouteValidators.ResetSession then
+        QuestRouteValidators.ResetSession(citizenid, questId)
+    end
+
     -- 10b. v1.0.0: 如果第一步是节点类型，初始化节点
     if firstStep then
         local firstNodeType = template.steps[1] and template.steps[1].type

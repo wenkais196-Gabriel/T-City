@@ -37,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   证据：`test_quest_step_gate.py` 5 条（判定/入参/开关）+ `test_quest_step_gate_contract.py` 2 条（契约顺序 + 顺序调反必须判红）；
   全量 `pytest tests/unit tests/architecture` → 1409 passed / 147 skipped。
   **真机未验**：logistics/aviation 的 27 个 validator 步骤要在服务器上跑一遍，确认真实流程不被误拦。
+- **多站路线校验器（R1 · P1）**：新增 custom-quest 的 server/quest_route_validators.lua，注册 `validate_route_stop`，
+  garbage / bus 共用。五条判据按顺序判：站号合法 → **顺序**（只能完成会话里的下一站）→ 职业/在岗 → 坐标存在
+  → 距离 ≤ radius → 载具（可选），**全部通过之后才写会话**（先落账会白送一站）。会话只在内存，键是
+  `citizenid:questId`，0 张新表。
+  另修一条会锁死任务的路径：`QuestManager.TriggerQuest` 每次接单都清该任务的会话 —— 玩家在第 3 站放弃/掉线后
+  会话停在 3，重新接单从第 1 站开始，会被「只能完成下一站」永久拒掉。
+  证据：`test_route_stop_validator.py` 7 条（顺序/跳站/重放/远距/错职业/不在岗/无载具/坏参数/跨任务隔离/陈旧会话重置）；
+  先红后绿：实现文件不存在时 6 条全红。全量 `pytest tests/unit tests/architecture` → 1417 passed / 147 skipped。
 - **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
   合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
   （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：
