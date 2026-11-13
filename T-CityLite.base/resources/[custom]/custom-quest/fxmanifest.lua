@@ -74,6 +74,7 @@ server_scripts {
     'server/quest_db.lua',
     'server/quest_registry.lua',
     'server/quest_validators.lua',
+    'server/quest_step_gate.lua',            -- 阶段D C1: validator 步骤的服务端闸（纯函数）
     'server/quest_logistics_validators.lua',
     'server/quest_entity_tracker.lua',       -- v0.9: 实体追踪（脱钩/下车倒计时）
     'server/quest_entity_registry.lua',       -- v0.10: 实体注册表 + 延迟回收策略
