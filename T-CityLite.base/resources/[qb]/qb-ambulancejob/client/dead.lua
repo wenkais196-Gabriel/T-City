@@ -199,9 +199,19 @@ CreateThread(function()
                         DrawTxt(0.5, 1.26, 1.0, 1.0, 0.6, '已呼救，等医护到场', 255, 255, 255, 255)
                     end
 
-                    if IsControlJustPressed(0, 47) and not emsNotified then
+                    -- 2026-11-12 PO 真机：「按 E 呼救」按下去毫无反馈。
+                    -- 根因：文案写的是 E，代码轮询的却是 **47（INPUT_DETONATE = 键盘 G）** ——
+                    -- 按 E 永远进不来，连 cooldown 都不会触发，玩家只能怀疑自己按空了。
+                    if IsControlJustPressed(0, 38) and not emsNotified then
                         TriggerServerEvent('hospital:server:ambulanceAlert', Lang:t('info.civ_down'))
                         emsNotified = true
+                        -- 按下之后必须有回执：这里是"生死关头"，不能靠玩家自己猜。
+                        local okNotice = pcall(function()
+                            exports['custom-notify']:PushLocal('feed', '已呼救 · 医护收到了你的位置')
+                        end)
+                        if not okNotice then
+                            QBCore.Functions.Notify('已呼救 · 医护收到了你的位置', 'success')
+                        end
                     end
                 end
 
