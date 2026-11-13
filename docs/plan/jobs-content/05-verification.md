@@ -68,6 +68,8 @@ $ <python> -m pytest tests/unit tests/architecture -q
 
 ## 4. 真机证据
 
+### 4.1 `garbage_v1_city`（4 站）
+
 服务器：FXServer `:30130`，**86 个资源**（85 应有 + `fivem-map-hipster`），整份控制台日志
 `SCRIPT ERROR` = **0**。玩家 `ChillyOtter2835`（`DXI50064`），职业 `garbage` grade 0。
 
@@ -95,12 +97,25 @@ $ <python> -m pytest tests/unit tests/architecture -q
 1745  （同上，第二次按 E）
 ```
 
+### 4.2 `bus_v1_city`（6 站）—— 同一轮真机
+
+| 行号 | 内容 | 说明 |
+|---|---|---|
+| 2538 | `nodeComplete: step_clock_in, INTERACT` | 打卡上班 |
+| 2541 | `ExecuteNode: step_stop_01, VALIDATOR` | 进入第 1 站 |
+| 2543 → 2592 | `step_stop_01..step_stop_06` 依次 `nodeComplete`，全程无 `validator failed` | 6 站全过 |
+| 2594 | `ExecuteNode: step_clock_out, INTERACT, auto=true` | 末站后自动回站签到 |
+| 2607 | `🏁 COMPLETING quest: bus_v1_city` | 结算 |
+| 2608 | `💰 $486 (bank), bus rep +25` | 与配置 6 站 / $486 一致 |
+
+同一玩家、同一会话连续跑完 garbage 与 bus 两条，说明校验器会话键（`citizenid:questId`）确实按任务隔离：
+跑完 garbage 后 bus 的第 1 站没有被前一条任务的会话顶掉。
 ## 5. 未覆盖的部分
 
 | 项 | 为什么没测 | 谁来兜 |
 |---|---|---|
 | `garbage_v1_district`（6 站）/ `garbage_v1_full`（8 站） | 只跑通最短档，长档的站距与载具续航未验 | 下一轮真机 |
-| `bus_v1_*` 三档 | 共享同一校验器与同一套配置形状，但 bus 的站点是主路近似坐标 | 下一轮真机（重点是站距与停车点是否合理） |
+| `bus_v1_crosstown`（8 站）/ `bus_v1_full`（10 站） | `bus_v1_city` 6 站已跑通，长档未跑 | 下一轮真机 |
 | 断线重连 / 服务器重启后中途接着跑 | 会话是内存态，只验过冷启动采纳站号的离线探针 | 下一轮真机：跑两站后重连 |
 | 手机端任务列表（`GetAvailableQuests`）在本次修复后的真实排序与文案 | 修复了三个 fail-open 门控，玩家可见行为会变 | 下一轮真机打开手机任务 App 对照 |
 | 结算落库（`player_quests` 状态、rep 持久化） | 未查 DB | 下一轮 `SELECT` 核对 |
