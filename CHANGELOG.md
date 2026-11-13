@@ -27,7 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   自建 runtime 是为承载「执行前挂起等人批」而必须。
 - `docs/INDEX.md` 重新生成（305 篇，0 未登记）。
 
+### Changed
+- **一键启动**：新增 `start-tcity.ps1` + `start.cmd`（`-Status` / `-Restart` / `-Stop`）。顺序固定为
+  Docker 引擎 → 容器 → `mariadb-admin ping` → FXServer → 自检（资源数稳定、关键资源齐全、日志无
+  `SCRIPT ERROR` / `awaitConnection failed`）。起因：Docker Desktop 被关掉后 MariaDB 一起没了，
+  FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
+
 ### Fixed
+- **濒死时「按 E 呼救」没有任何反应**：`qb-ambulancejob/client/dead.lua` 的文案写 E，
+  轮询的却是 control 47（INPUT_DETONATE = 键盘 G）；改成 38 并补一条 feed 回执。
 - **扣押场「有钱但无法付款」**：`T-CityLite.base/resources/[qb]/qb-garages/html/script.js` 把 `state=2` 一律渲染成 `Impound` 且按钮 disabled，
   在扣押场也点不动；现在 `type='depot'` 且 `depotPrice>0` 就渲染成可点的 `$金额`（公共车库里的被扣车仍只读）。
 - **交互提示仍走 DrawText**：`qb-garages` 的 "E - Depot"/房屋车库两处改走 `custom-prompt`（准星下方）；

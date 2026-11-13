@@ -92,6 +92,27 @@ python tools/dev/fivem_console.py "start qb-inventory"                 # 对每�
 经验值：`restart` 一个「被半个服 ensure 的资源」（`qb-core`、`core-framework`、`tcity-dashboard`、
 `story-engine`）之后，**先看 info.json 的数量再决定要不要补**，不要接着 restart 下一个。
 
+## 3.5 一键启动（2026-11-12 起，日常只用这条）
+
+```powershell
+.\start.cmd            # 起整套：Docker 引擎 → MariaDB → 等 3307 → FXServer → 自检
+.\start.cmd -Status     # 只看状态，不动任何东西
+.\start.cmd -Restart    # 优雅停服后重起（推荐改了 qb-core / 资源个数变化时用）
+.\start.cmd -Stop       # 只停 FXServer（不影响 Docker/DB）
+```
+
+`start-tcity.ps1` 把顺序固定成四步，每步都有超时和明确报错：
+
+| 步骤 | 判据 | 为什么必须显式等 |
+|---|---|---|
+| Docker 引擎 | `docker info` 退出码 0 | 引擎没起时 `docker start` 直接报 npipe 错误；MariaDB 也就整个不存在 |
+| 容器 `tcity-mariadb` | `State.Status == running` 且 `mariadb-admin ping` 通 | 端口先开、InnoDB 还在恢复，ping 才代表真的能查 |
+| 数据库端口 | 从 `server.cfg` 的 `mysql_connection_string` 解析 host:port（当前 `3307`） | 端口写死在脚本里迟早过期 |
+| FXServer | `http://127.0.0.1:30130/info.json` 资源数稳定 20 秒 + 关键资源齐全 + 日志无 `SCRIPT ERROR` / `awaitConnection failed` | **oxmysql 不会自己重试**：抢在 MariaDB 就绪前连一次失败，就得整服重起（中途 `restart oxmysql` 会连带停掉 qb-core 等 41 个依赖） |
+
+真机事故背景：关掉 Docker Desktop 后 MariaDB 一起没了，FXServer 照样起得来、`oxmysql` 卡在
+`connect ETIMEDOUT`，表现是"服务器在跑但所有要库的功能空转"。
+
 ## 4. 整服重启（唯一安全的重启 qb-core 方式）
 
 ```bash
