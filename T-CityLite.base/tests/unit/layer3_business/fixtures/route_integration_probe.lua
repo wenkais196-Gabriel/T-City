@@ -39,6 +39,13 @@ QBCore = {
     },
 }
 QuestValidators = { _validators = {}, Register = function(id, fn) QuestValidators._validators[id] = fn end }
+-- 资源里用 exports['qb-core']:GetCoreObject() 取核心（不是全局 QBCore）
+exports = setmetatable({}, { __index = function(_, key)
+    if key == 'qb-core' then
+        return { GetCoreObject = function() return QBCore end }
+    end
+    return nil
+end })
 
 local function load_file(path, chunkname)
     local handle = assert(io.open(path, 'r'))
