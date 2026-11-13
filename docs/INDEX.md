@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-13 ｜ **文档总数**：310 ｜ **已登记**：310 ｜ **未登记**：0
+**生成时间**：2026-11-13 ｜ **文档总数**：311 ｜ **已登记**：311 ｜ **未登记**：0
 
-**状态分布**：✅ active 176 ・ 🟡 draft 11 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 176 ・ 🟡 draft 12 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -113,7 +113,7 @@
 | [犯罪与组织 · UX 设计](client/ux/modules/crime.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/crime.md` |
 | [v0.5 犯罪玩法](archive/QBCore_Lite_versions/v0.5-crime-gameplay.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.5-crime-gameplay.md` |
 
-### jobs（12）
+### jobs（13）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -129,6 +129,7 @@
 | [T-City Lite — 职业声望与进阶养成系统设计](../T-CityLite.base/docs/v0.7-career-reputation-design.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/v0.7-career-reputation-design.md` |
 | [v0.7a 载具系统重构与通用物流任务系统集成](archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md` |
 | [设计：职业内容填充（阶段 D）](plan/jobs-content/02-design.md) | spec | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/02-design.md` |
+| [数值卡：R0/R1 三个职业（阶段 P4 输入）](plan/jobs-content/04-numbers.md) | spec | 🟡 draft | 2026-11-13 | 2027-04-30 |  | `docs/plan/jobs-content/04-numbers.md` |
 
 ### vehicle（7）
 

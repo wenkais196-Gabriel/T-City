@@ -48,6 +48,10 @@ def test_three_tiers_with_expected_stops_and_money():
         stations = int(row[1])
         money_min, money_max = int(row[2]), int(row[3])
         assert row[4] == "garbage", f"{quest_id}: 声望键是 {row[4]}，期望 garbage"
+        # 接单条件 / 校验器职业必须一致：不一致时平民能接、第 1 站判 wrong_job 卡死
+        assert row[11] == "garbage", f"{quest_id}: validator_data.job 是 {row[11]}"
+        assert row[12] == "garbage", f"{quest_id}: required_tags.job 是 {row[12]}（手机列表不会过滤）"
+        assert row[13] == "garbage", f"{quest_id}: conditions.require_job 是 {row[13]}（接单不会拦）"
         assert quest_id in EXPECTED, f"{key} 的 id 不在预期里：{quest_id}"
         want_stops, want_money = EXPECTED[quest_id]
         assert stations == want_stops, f"{quest_id}: validator 步骤 {stations} 个，期望 {want_stops}"
