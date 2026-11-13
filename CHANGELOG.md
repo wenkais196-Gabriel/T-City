@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   反向：删掉配置文件 → probe 直接失败。全量 pytest → 1420 passed / 147 skipped。
   **真机未验**：坐标是洛圣都常驻垃圾点的大致位置，P2 验收要求先在 dev 服跑一条真实任务。
   **已知缺陷（既有）**：`conditions.daily_limit` 在 custom-quest 里没有调用点，所以每日上限目前不生效。
+  **上线前修掉的接线 bug**：`QuestStepGate.ValidatorPayload` 只给校验器 `validator_data` + 白名单 meta，
+  而 `coords` 不在白名单里 —— 第一版配置只把坐标写在顶层 `data.coords`（客户端画交互点要用），
+  校验器拿到 nil，每站都判 `no_coords`，真机表现就是「走到点按 E 没反应」。现在坐标在 `validator_data`
+  里也放一份，并加了 `route_integration_probe.lua` 把「配置 → 载荷 → 校验器」整条链跑一遍（删掉
+  validator_data 里的 coords 会立刻红）。
 - **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
   合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
   （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：

@@ -46,6 +46,9 @@ for questIndex, quest in ipairs(quests) do
             if data.validator_id ~= 'validate_route_stop' then metaOk = false end
             if vdata.job ~= 'garbage' or vdata.require_duty ~= true then metaOk = false end
             if type(data.coords) ~= 'table' then metaOk = false end
+            -- 校验器只拿 validator_data + 白名单 meta；coords 不在白名单里，
+            -- 所以服务端坐标必须同时出现在 validator_data 中，否则每站都会被判 no_coords。
+            if type(vdata.coords) ~= 'table' then metaOk = false end
             if (tonumber(data.radius) or 0) < 10 then metaOk = false end
 
             local coords = data.coords
