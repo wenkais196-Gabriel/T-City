@@ -15,6 +15,11 @@
 
 QuestRouteValidators = QuestRouteValidators or {}
 
+-- 本资源里 `QBCore` **不是全局**：custom-quest 所有服务端文件都走 exports 现取核心对象。
+-- 写成裸 QBCore，第一次校验就会抛 `attempt to index a nil value (global 'QBCore')`，
+-- 而 pcall 只把这句话回给客户端 —— 表现就是一句被截断的 "Validator error: @…"。
+local QBCore = exports['qb-core']:GetCoreObject()
+
 --- key → { index = 下一站站号, startedAt = os.time() }
 QuestRouteValidators.Sessions = QuestRouteValidators.Sessions or {}
 
@@ -96,8 +101,20 @@ function QuestRouteValidators.ValidateStop(source, stepData, questData)
     if not ped or ped == 0 then return false, 'no_ped' end
 
     -- 7. 距离
-    local playerCoords = GetEntityCoords(ped)
-    local distance = #(playerCoords - vector3(coords.x, coords.y, coords.z))
+    -- 两点讲究：
+    --   a) GetEntityCoords 在服务端可能拿不到（ped 未流入时返回 nil），直接做减法会抛错，
+    --      而抛错经 pcall 在客户端只剩一句被截断的 "Validator error: @…/quest_rou…"，
+    --      排查时看不到任何有用信息 —— 所以显式 pcall + 取分量，把崩溃降级成错误码。
+    --   b) 用分量算距离而不是 vector3 减法：服务端与离线探针都能跑，不依赖 vector3 类型。
+    local okCoords, playerCoords = pcall(GetEntityCoords, ped)
+    if not okCoords or playerCoords == nil then
+        return false, 'no_player_coords'
+    end
+    local px, py, pz = playerCoords.x, playerCoords.y, playerCoords.z
+    if not px or not py then return false, 'no_player_coords' end
+    pz = pz or 0.0
+    local dz = pz - (tonumber(coords.z) or 0.0)
+    local distance = math.sqrt((px - coords.x) ^ 2 + (py - coords.y) ^ 2 + dz ^ 2)
     local radius = tonumber(stepData.radius) or 10.0
     if distance > radius then
         return false, ('too_far: %.1f > %.1f'):format(distance, radius)

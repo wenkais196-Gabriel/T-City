@@ -17,6 +17,10 @@
 
 QuestAvailability = QuestAvailability or {}
 
+-- 本资源里 `QBCore` **不是全局**：写成裸 QBCore 时 `type(QBCore) == 'table'` 恒为假，
+-- 于是下面三处门控（剧情抉择 / 在勤警力 / 冷却）全部静默 fail-open —— 不报错，但从来没生效过。
+local QBCore = exports['qb-core']:GetCoreObject()
+
 local REASONS = {
     tags = 'You do not meet the requirements for this quest',
     police = 'Not enough officers on duty',

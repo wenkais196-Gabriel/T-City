@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-13 ｜ **文档总数**：311 ｜ **已登记**：311 ｜ **未登记**：0
+**生成时间**：2026-11-13 ｜ **文档总数**：312 ｜ **已登记**：312 ｜ **未登记**：0
 
-**状态分布**：✅ active 176 ・ 🟡 draft 12 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 177 ・ 🟡 draft 12 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -113,11 +113,12 @@
 | [犯罪与组织 · UX 设计](client/ux/modules/crime.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/crime.md` |
 | [v0.5 犯罪玩法](archive/QBCore_Lite_versions/v0.5-crime-gameplay.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.5-crime-gameplay.md` |
 
-### jobs（13）
+### jobs（14）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [v0.7a 验收报告（服务端 / 无头）](../T-CityLite.base/docs/v0.7a-acceptance-report.md) | audit | 📌 final | 2026-10-25 | — |  | `T-CityLite.base/docs/v0.7a-acceptance-report.md` |
+| [验证：R1 就业循环 · garbage 真机跑通（阶段 V1）](plan/jobs-content/05-verification.md) | audit | ✅ active | 2026-11-13 | 2027-04-30 |  | `docs/plan/jobs-content/05-verification.md` |
 | [Module 5: 职业与权限系统 (jobs.cfg / police.cfg / medical.cfg / career.cfg / admin.cfg)](01_module_manuals/05_jobs_and_permissions.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/01_module_manuals/05_jobs_and_permissions.md` |
 | [职业与任务 · UX 设计](client/ux/modules/jobs.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/jobs.md` |
 | [🚗 T-City Lite 驾驶员与驾考系统 (Driver) 细化规划](archive/QBCore_Lite_versions/career/driver_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/driver_plan.md` |
