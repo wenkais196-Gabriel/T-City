@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **R1 真机验收：bus 也跑通**：`bus_v1_city`（6 站）同一会话跑完 → `completing` → `$486 (bank) + bus rep +25`，
+  与配置一致；同一位玩家先 garbage 后 bus，验证会话键按任务隔离。证据已并入 `docs/plan/jobs-content/05-verification.md` §4.2。
 - **R1 真机验收记录**：新增 `docs/plan/jobs-content/05-verification.md`（type=audit）。
   记录 `garbage_v1_city` 在 `:30130` 真机上的完整一趟：报到 → 4 站 validator 全过（无 `validator failed`）
   → 自动交回 → `🏁 COMPLETING` → `$370 (bank) + garbage rep +8`，与配置的 4 站 / $370 / 10 袋一致；
@@ -105,7 +107,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **多站路线校验器在真机上把玩家卡在第 1 站（R1 真机验收抓出）**：`custom-quest` 的
+- **按 I 键仍然弹出 qb-hud 的设置菜单，和中控屏抢键**：qb-hud 早先已把 I 键的 `RegisterKeyMapping`
+  注释掉，但**玩家本机的绑定是持久化的** —— 玩家本机的 CitizenFX 的 fivem.cfg 里留着
+  `rbind qb-hud KEYBOARD I "hud"`，删掉代码里的注册不会删掉它，于是按 I 同时触发 `hud`（弹 HUD 设置）
+  和 `dashboard`（载具中控屏，被前者占走焦点）。修法：HUD 设置的命令名从 `hud` 改为 `hudsettings`，
+  `hud` 保留为**空操作**专用于接住那条残留绑定。现在 I 只有中控屏一条路径，未坐进载具时由
+  tcity-dashboard 自己回一句「你必须坐在载具中才能打开中控屏」。玩家若要恢复键位，在五M设置的
+  按键绑定里给「HUD 设置」自己绑，或敲 `/hudsettings`。
+- **多站路线校验器在真机上把玩家卡在第 1 站（R1 真机验收抓出）**- **多站路线校验器在真机上把玩家卡在第 1 站（R1 真机验收抓出）**：`custom-quest` 的
   `quest_route_validators.lua` 用了裸全局 `QBCore`，而该资源里根本不存在这个全局（每个服务端文件
   都用 `exports['qb-core']:GetCoreObject()` 现取）。第一次站点校验就抛
   `attempt to index a nil value (global 'QBCore')`，经 `pcall` 在客户端只剩一句被截断的
