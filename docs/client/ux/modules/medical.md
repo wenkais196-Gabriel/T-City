@@ -94,6 +94,7 @@ review_by: 2027-02-28
 | M-1 ✅(`12a94482`) | 施救从 ALT 热区改为 E 提示 | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua`:253、`custom-police` 同类 | 中（要实测距离/判定） | 站在倒地队友旁直接按 E |
 | M-2 ✅(`12a94482`) | 濒死倒计时加文字（剩余秒数） | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/main.lua`（laststand 段） | 低 | 倒地后屏幕显示秒数 |
 | M-3 ✅(`c523052c`) | 复活规则：护甲 0 + 饥渴 50 | client/main.lua 第 574 行、`custom-consumables` 新增 `exports('RestoreAfterRevive')` | 中（碰饥渴写者） | 复活后 HUD 圆环显示 50，护甲条为 0 |
+| M-2b ✅ | **「按 E 呼救」按下去毫无反馈**（PO 2026-11-12 真机）：`dead.lua` 的濒死分支文案写 E，代码轮询的却是 **control 47（INPUT_DETONATE = 键盘 G）** —— 按 E 永远进不来，连冷却都不会触发。改成 38（E），并在按下后补一条 feed 回执（`custom-notify:PushLocal`，失败回落 `QBCore.Functions.Notify`） | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/dead.lua`:196-215 | 低 | 按 E 立刻看到「已呼救 · 医护收到了你的位置」，文案转「已呼救，等医护到场」；在职医护收到派单 |
 | M-4 ✅(`12a94482`) | 医院 6 个热区 ALT → E | `T-CityLite.base/resources/[qb]/qb-ambulancejob/client/job.lua`:446-662 | 中 | 医院前台/柜子/电梯都按 E |
 | M-5 ✅(`12a94482`) | 施救成功/失败的 feed 文案 | 同上 | 低 | 救起后双方各有 feed |
 
