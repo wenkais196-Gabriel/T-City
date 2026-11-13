@@ -64,6 +64,22 @@ def test_bad_input_is_safe_and_does_not_advance():
     assert data["BAD_INDEX_SAFE"] == "true", "站号 0 / 非数字没被拒"
     assert data["NO_PLAYER_SAFE"] == "true", "玩家不存在时抛错"
     assert data["NIL_STEP_SAFE"] == "true", "stepData 为 nil 时抛错"
+    assert data["NO_PLAYER_COORDS_SAFE"] == "true", (
+        "服务端取不到玩家坐标时抛错（真机上就是一句截断的 Validator error，玩家永远过不了这一站）"
+    )
+
+
+def test_validator_reason_reaches_the_caller():
+    """`QuestValidators.Run` 必须把校验器的第二个返回值带出来。
+
+    旧实现写的是 `local ok, result = pcall(...)`，只接住两个值 —— 校验器返回
+    `(false, 'wrong_job')` 时原因被丢弃，所有拒绝都压成字符串 `'failed'`：
+    玩家看到的和日志里记的都没有可诊断信息。
+    """
+    data = _data()
+    assert data["RUN_MESSAGE_PASSTHROUGH"] == "true", (
+        "拒绝原因被 Run 吞掉了（全部变成 'failed'），真机排查时看不到 wrong_job / too_far"
+    )
 
 
 def test_sessions_are_scoped_per_quest():

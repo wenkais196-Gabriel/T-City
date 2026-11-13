@@ -30,7 +30,10 @@ vector3 = function(x, y, z) return setmetatable({ x = x or 0.0, y = y or 0.0, z 
 
 -- ── FiveM / QBCore 桩 ──
 GetPlayerPed = function(source) return tonumber(source) or 0 end
-GetEntityCoords = function() return vector3(state.coords.x, state.coords.y, state.coords.z) end
+GetEntityCoords = function()
+    if state.coordsFailed then return nil end
+    return vector3(state.coords.x, state.coords.y, state.coords.z)
+end
 GetVehiclePedIsIn = function() return state.vehicle end
 
 local function makePlayer(source, jobName, duty)
@@ -46,13 +49,23 @@ local function makePlayer(source, jobName, duty)
 end
 
 QBCore = { Functions = { GetPlayer = function(source) return state.players[tonumber(source) or -1] end } }
+
+-- 资源里用 exports['qb-core']:GetCoreObject() 取核心（不是全局 QBCore），桩要跟上
+exports = setmetatable({}, { __index = function(_, key)
+    if key == 'qb-core' then
+        return { GetCoreObject = function() return QBCore end }
+    end
+    return nil
+end })
 state.players[1] = makePlayer(1, 'garbage', true)
 
--- 加载被测文件（只依赖 QuestValidators 这个全局表）
-QuestValidators = { _validators = {}, Register = function(id, fn) QuestValidators._validators[id] = fn end }
-local handle = assert(io.open(RES .. '/server/quest_route_validators.lua', 'r'))
-local source = handle:read('a'); handle:close()
-assert(load(source, '@quest_route_validators.lua'))()
+-- 加载被测文件：注册表也用**真实实现**（Run 的返回值透传本身也要被测），不造假桩。
+QuestValidators = nil
+for _, rel in ipairs({ '/server/quest_validators.lua', '/server/quest_route_validators.lua' }) do
+    local handle = assert(io.open(RES .. rel, 'r'))
+    local source = handle:read('a'); handle:close()
+    assert(load(source, '@' .. rel))()
+end
 
 local validate = QuestValidators._validators['validate_route_stop']
 if not validate then
@@ -138,6 +151,23 @@ local okNoPlayer = validate(99, step({ index = 5 }), questData)
 emit('NO_PLAYER_SAFE', tostring(okNoPlayer == false))
 local okNilStep = validate(1, nil, questData)
 emit('NIL_STEP_SAFE', tostring(okNilStep == false))
+
+-- ── 9b. 服务端取不到坐标：拒绝但**不抛错** ──
+-- 旧实现是 #(playerCoords - vector3(...))，playerCoords 为 nil 时直接抛错，
+-- 经 pcall 只剩一句截断的 "Validator error" —— 真机上就是这么卡住的。
+local expectedIdx = QuestRouteValidators.ExpectedIndex('CID1', 'garbage_v1_city')
+state.coordsFailed = true
+local okNoPc, codeNoPc = validate(1, step({ index = expectedIdx }), questData)
+emit('NO_PLAYER_COORDS_SAFE', tostring(okNoPc == false and codeNoPc == 'no_player_coords'))
+state.coordsFailed = false
+
+-- ── 9c. QuestValidators.Run 必须把第二返回值（原因）透出 ──
+-- 旧实现 `local ok, result = pcall(...)` 会把它丢掉，所有拒绝都变成 'failed'.
+state.players[1].PlayerData.job = { name = 'trucker', onduty = true, grade = { level = 0 } }
+local runPassed, runMsg = QuestValidators.Run('validate_route_stop', 1,
+    step({ index = QuestRouteValidators.ExpectedIndex('CID1', 'garbage_v1_city') }), questData)
+emit('RUN_MESSAGE_PASSTHROUGH', tostring(runPassed == false and runMsg == 'wrong_job'))
+state.players[1].PlayerData.job = { name = 'garbage', onduty = true, grade = { level = 0 } }
 
 -- ── 10. 不同任务互不影响（会话键带 questId）──
 local okOther = validate(1, step({ index = 1 }), { questId = 'bus_v1_loop' })

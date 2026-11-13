@@ -43,7 +43,20 @@ local function runStepValidator(src, questId, step, questData, opts)
         QuestStepGate.ValidatorPayload(step), questData)
     if passed then return true end
 
+    -- 校验器失败必须同时落服务端日志：只回客户端的话，玩家截图里只有半句
+    -- `Validator error: @custom-quest/server/quest_rou…`，排查根本看不到真实原因。
+    print(('[custom-quest] ⚠️ validator failed: %s | quest=%s | %s')
+        :format(tostring(validatorId), tostring(questId), tostring(msg)))
     if opts.force or QuestStepGate.Enforced() then
+        -- 完整原因同时进聊天框：toast 会截断，玩家根本没法转达。
+        -- 必须只在这条分支里发 —— enforce=0 时校验失败会被放行，此时给玩家红字是误报。
+        pcall(function()
+            TriggerClientEvent('chat:addMessage', src, {
+                color = { 255, 120, 120 },
+                multiline = true,
+                args = { '[任务校验]', tostring(msg) },
+            })
+        end)
         feedback(src, msg or opts.failMessage or '任务步骤校验未通过', 'error')
         return false
     end

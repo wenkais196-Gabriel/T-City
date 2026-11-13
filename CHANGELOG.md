@@ -20,7 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **职业内容填充规划**：新增 `docs/plan/jobs-content-roadmap.md`（type=plan, status=draft）。实测 22 个职业里只有 4 个有真实循环、
+- **R1 真机验收记录**：新增 `docs/plan/jobs-content/05-verification.md`（type=audit）。
+  记录 `garbage_v1_city` 在 `:30130` 真机上的完整一趟：报到 → 4 站 validator 全过（无 `validator failed`）
+  → 自动交回 → `🏁 COMPLETING` → `$370 (bank) + garbage rep +8`，与配置的 4 站 / $370 / 10 袋一致；
+  同时存档修复前的失败证据（`global 'QBCore'` 那两行）与 6 项未覆盖（bus 三档、district/full 档、
+  断线重连、手机列表、结算落库、薪资抑制）。- **职业内容填充规划**：新增 `docs/plan/jobs-content-roadmap.md`（type=plan, status=draft）。实测 22 个职业里只有 4 个有真实循环、
   市政厅可申请的 7 个民职有 6 个是空壳；据此确立「三种机制 × N 份数据」的内容模型与 R0–R6 分批，
   硬约束为 0 个新资源 / 0 张新表 / 0 个新 net event。§11.1 记录五项拍板（首批 R0+R1、干活为主、先 NPC、职权型不做、realestate 不碰）。
 - **职业内容调研（阶段 R）**：新增 `docs/plan/jobs-content/01-research.md`（type=research）。含内部实测 8 条（带 file:line）、
@@ -101,6 +105,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
+- **多站路线校验器在真机上把玩家卡在第 1 站（R1 真机验收抓出）**：`custom-quest` 的
+  `quest_route_validators.lua` 用了裸全局 `QBCore`，而该资源里根本不存在这个全局（每个服务端文件
+  都用 `exports['qb-core']:GetCoreObject()` 现取）。第一次站点校验就抛
+  `attempt to index a nil value (global 'QBCore')`，经 `pcall` 在客户端只剩一句被截断的
+  `Validator error: @custom-quest/server/quest_rou…` —— 玩家侧表现为「到了点按 E 没反应」。
+  补 `local QBCore = exports['qb-core']:GetCoreObject()` 后 `garbage_v1_city` 四站全程通过。
+- **校验器的拒绝原因被注册表吞掉**：`QuestValidators.Run` 写的是 `local ok, result = pcall(fn, ...)`，
+  只接住两个返回值 —— 校验器返回 `(false, 'wrong_job')` 时第二个值被丢弃，所有拒绝都压成字符串
+  `'failed'`。这影响**所有**校验器（不止多站路线），是排查看不到原因的第二层原因。改成
+  `local ok, passed, message = pcall(...)` 并原样返回 `message`。
+- **任务列表的三个门控从来没生效过（CC 复核发现）**：`quest_availability.lua` 同样用裸 `QBCore`，
+  但写法是 `type(QBCore) == 'table'` 守卫 —— 不报错、条件恒假，于是剧情抉择前置、在勤警力、
+  冷却三项**静默 fail-open**：有前置要求的任务恒显示「可接」，冷却中的不显示剩余时间。补
+  `local QBCore = exports['qb-core']:GetCoreObject()` 后三项一次修好（玩家可见行为会变：
+  该灰的会灰、冷却会显示）。根因能藏这么久，是因为测试桩自己造了一个生产环境没有的全局 QBCore。
+- **校验失败的提示发错了时机**：`runStepValidator` 的聊天/通知提示写在 `Enforced()` 判断之前，
+  `quest_step_validator_enforce=0`（放行模式）时校验失败会被放行，玩家却仍收到红字误报。
+  现在提示只在「真的拦住」的分支里发；服务端 `print` 保持无条件（诊断要全量）。
 - **qb-shops 补货结算是敞开的钱口（R0 第 1 项）**：`T-CityLite.base/resources/[qb]/qb-shops/server/main.lua` 的
   `RestockShopItems` 只有「10 米距离 + 每玩家每店 30 秒」两道闸，**没有任何「这一趟是跑出来的」凭据** ——
   任何职业站在任意交货点，每 30 秒就能领 `Config.DeliveryPrice`（$500），配置里 45 处交货点。
