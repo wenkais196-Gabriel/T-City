@@ -80,3 +80,22 @@ def test_quest_ids_are_globally_unique():
 
     clashes = {qid: files for qid, files in owners.items() if len(files) > 1}
     assert not clashes, f"任务 id 重名：{clashes}"
+
+
+def test_config_payload_reaches_the_validator():
+    """配置 → ValidatorPayload → validate_route_stop 的整条链必须接得上。
+
+    `ValidatorPayload` 只给 `validator_data` + 白名单 meta，而 `coords` 不在白名单里：
+    坐标只写在顶层 `data.coords` 的话，校验器拿到 nil，每站都判 `no_coords`
+    （真机表现：走到点、按 E 没反应）。这条是我第一版配置里的真 bug。
+    """
+    data = run_probe("route_integration_probe.lua", RES)
+    assert data["HAS_VALIDATOR_STEP"] == "true", "第一档任务里没有 validator 步骤"
+    assert data["REGISTERED"] == "true", "validate_route_stop 没注册"
+    assert data["PAYLOAD_HAS_COORDS"] == "true", (
+        "校验器载荷里没有服务端坐标 —— 配置只把 coords 写在顶层，没写进 validator_data"
+    )
+    assert data["PAYLOAD_HAS_INDEX"] == "true", "载荷里的站号不是 1（ValidatorPayload 没带 validator_data）"
+    assert data["INTEGRATION_FIRST_STOP"] == "true|ok", (
+        f"站着正确坐标上也过不了第一站：{data.get('INTEGRATION_FIRST_STOP')}"
+    )
