@@ -54,14 +54,19 @@ local function buildSteps(stops)
             description = '把该点的垃圾袋装车',
             type = 'validator',
             data = {
+                -- coords / radius 在这里是给客户端画交互点用的（顶层字段）
                 coords = point,
                 radius = 12.0,
                 validator_id = 'validate_route_stop',
+                -- 校验器只收到 validator_data + 白名单 meta（coords 不在白名单里），
+                -- 所以服务端要用的坐标必须在 validator_data 里也放一份。
                 validator_data = {
                     index = index,
                     index_total = stops,
                     job = 'garbage',
                     require_duty = true,
+                    coords = point,
+                    radius = 12.0,
                 },
             },
         }
