@@ -80,3 +80,23 @@ def test_rejects_reversed_order_and_missing_gate():
     assert not helper_runs_the_gate("local function runStepValidator(...) return true end"), (
         "谓词对没问闸的 helper 仍然通过"
     )
+
+
+REACH_OPEN = "RegisterNetEvent(Config.Quest.Events.QUEST_REACH"
+TYPE_GUARD = "reachStep.type ~= 'reach'"
+
+
+def _reach_region(text: str) -> str:
+    start = text.index(REACH_OPEN)
+    nxt = text.find("RegisterNetEvent(", start + len(REACH_OPEN))
+    return text[start:] if nxt == -1 else text[start:nxt]
+
+
+def test_rejects_non_reach_step_sent_to_the_reach_event():
+    """`quest:server:reach` 只准推进 reach 步骤。
+
+    否则客户端对一个 validator 步骤发 reach 就能绕过 runStepValidator ——
+    C1 的闸只挂在 nodeComplete 与 dashboard 两条腿上（R1 验收时由 Claude Code 指出）。
+    """
+    region = _reach_region(MAIN_LUA.read_text(encoding="utf-8", errors="replace"))
+    assert TYPE_GUARD in region, "reach 事件没有类型守卫：validator 步骤可被 reach 事件直接推进"
