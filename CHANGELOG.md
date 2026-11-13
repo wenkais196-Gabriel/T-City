@@ -64,6 +64,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   校验器拿到 nil，每站都判 `no_coords`，真机表现就是「走到点按 E 没反应」。现在坐标在 `validator_data`
   里也放一份，并加了 `route_integration_probe.lua` 把「配置 → 载荷 → 校验器」整条链跑一遍（删掉
   validator_data 里的 coords 会立刻红）。
+- **bus 线路（R1 · P3）**：新增 custom-quest 的 config/quests/quest_bus.lua，三档 `bus_v1_city/crosstown/full`
+  （6/8/10 站），金额按 02-design §2.3 的 bus 档固定为 $486 / $648 / $810（站×90×0.9，≈1,620 $/h）。
+  与 garbage 同构：每站一个 `validator` 走 `validate_route_stop`，首尾 interact（签到 / 交班）。
+  配置测试与 garbage 共用一份通用 probe（route_config_probe.lua，文件名作参数），避免两份脚手架；
+  另外整链用例也参数化了，bus 同样断言「配置 → 载荷 → 校验器」能跑通第一站。
+  证据：test_bus_route_config.py 3 条 + 全量 pytest → 1425 passed / 147 skipped。
+  **本轮未做**：准点率（punctuality）—— 现有 CalculateTimeBonus 只读物流追踪器，bus 没有；记进 03-plan §7。
+  **真机未验**：坐标是主干道公交站的大致位置。
 - **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
   合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
   （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：
