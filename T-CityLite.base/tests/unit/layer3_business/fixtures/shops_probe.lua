@@ -13,7 +13,7 @@ end
 
 local state = {
     players = {}, coords = { x = 0.0, y = 0.0, z = 0.0 }, now = 1000,
-    paid = {}, broadcasts = {}, added = {}, saved = 0,
+    paid = {}, broadcasts = {}, added = {}, saved = 0, rep = {},
 }
 
 local function makePlayer(source)
@@ -33,6 +33,8 @@ local function makePlayer(source)
         RemoveMoney = function() return true end,
         AddItem = function() return true end,
         RemoveItem = function() return true end,
+        AddRep = function(rep, amount) state.rep[#state.rep + 1] = { rep = rep, amount = amount } return true end,
+        GetRep = function() return 0 end,
         Notify = function() end,
         SetMetaData = function() end,
     }
@@ -130,6 +132,15 @@ local function fire(src, name, ...)
     return ok
 end
 
+-- 租车成功的唯一标志是服务端让客户端生成货车；被拒时只会发一条 error 通知，
+-- 所以不能用"有没有广播"来判断（会把拒绝通知误读成成功）。
+local function sawSpawnVehicle()
+    for _, entry in ipairs(state.broadcasts) do
+        if entry.name == 'qb-shops:client:SpawnVehicle' then return true end
+    end
+    return false
+end
+
 state.players[1] = makePlayer(1)
 
 -- 找一家有 delivery 点、且 useStock 的店
@@ -139,6 +150,44 @@ for name, value in pairs(Config.Locations) do
 end
 assert(shopName, '没有带 delivery 的店')
 
+-- ── 0. 职业门 + 押金会话（R0 / R0.3，2026-11-13）──
+--     冷却只限速，不证明"跑了这一趟"；凭据必须是 DoBail(true) 扣过押金的会话。
+--     而会话只有（在岗的）trucker 才能开：否则收押金换车却结算不了，等于骗钱。
+emit('SCENARIO', 'gates')
+state.coords = { x = shop.delivery.x + 1.0, y = shop.delivery.y, z = shop.delivery.z }
+
+-- 0a 非 trucker（默认 unemployed）租不到车
+state.broadcasts = {}
+fire(1, 'qb-shops:server:DoBail', true)
+emit('RENTAL_NON_TRUCKER_BLOCKED', tostring(not sawSpawnVehicle()))
+
+-- 0b 在岗 trucker 但还没付押金：不能结算（会话门）
+state.players[1].PlayerData.job = { name = 'trucker', onduty = true, grade = { level = 0 } }
+state.paid = {}
+fire(1, 'qb-shops:server:RestockShopItems', shopName)
+emit('RESTOCK_NO_SESSION_BLOCKED', tostring(#state.paid == 0))
+
+-- 0c 付押金换车（正常流程）→ 有会话，可以结算；每站给 delivery 声望
+state.broadcasts = {}
+fire(1, 'qb-shops:server:DoBail', true)
+emit('RENTAL_TRUCKER_ALLOWED', tostring(sawSpawnVehicle()))
+state.paid = {}
+state.rep = {}
+state.now = state.now + 31000
+fire(1, 'qb-shops:server:RestockShopItems', shopName)
+emit('RESTOCK_SESSION_OPEN_PAID', tostring(#state.paid == 1 and state.paid[1].amount == Config.DeliveryPrice))
+emit('RESTOCK_REP_GRANTED', tostring(#state.rep == 1 and state.rep[1].rep == 'delivery'))
+-- 默认不给 cryptostick（一根 ≈ $1,000，会把这一档收益抬到 $6k+/h）
+emit('RESTOCK_NO_BONUS_ITEM', tostring(Config.DeliveryCryptostickChance == 0 and #state.added == 0))
+
+-- 0d 在岗起租、中途下班：不结算（防"租完就换职业"）
+state.players[1].PlayerData.job.onduty = false
+state.now = state.now + 31000
+state.paid = {}
+fire(1, 'qb-shops:server:RestockShopItems', shopName)
+emit('RESTOCK_OFFDUTY_BLOCKED', tostring(#state.paid == 0))
+state.players[1].PlayerData.job.onduty = true
+
 -- ── 1. 不在交货点：不付钱 ──
 emit('SCENARIO', 'restock')
 state.coords = { x = 0.0, y = 0.0, z = 0.0 }
@@ -147,6 +196,7 @@ fire(1, 'qb-shops:server:RestockShopItems', shopName)
 emit('RESTOCK_FAR_BLOCKED', tostring(#state.paid == 0))
 
 -- ── 2. 在交货点：付一次 ──
+state.now = state.now + 31000
 state.coords = { x = shop.delivery.x + 1.0, y = shop.delivery.y, z = shop.delivery.z }
 state.paid = {}
 fire(1, 'qb-shops:server:RestockShopItems', shopName)
@@ -183,6 +233,26 @@ emit('RESTOCK_AFTER_COOLDOWN_PAID', tostring(#state.paid == 1))
 local okBadShop = fire(1, 'qb-shops:server:RestockShopItems', nil)
 local okBadShop2 = fire(1, 'qb-shops:server:RestockShopItems', 'not_a_shop')
 emit('RESTOCK_BAD_ARGS_SAFE', tostring(okBadShop and okBadShop2))
+
+-- ── 3c. 会话上限与关闭（R0，2026-11-13）──
+--     一趟（付一次押金）最多结算 Config.MaxDeliveries 次，与客户端 JobsDone 同口径；
+--     关闭会话（还车退押金）后不再结算。原来这两条都不存在 = 无限刷。
+emit('SCENARIO', 'session-cap')
+fire(1, 'qb-shops:server:DoBail', true)
+state.paid = {}
+state.coords = { x = shop.delivery.x + 1.0, y = shop.delivery.y, z = shop.delivery.z }
+for _ = 1, Config.MaxDeliveries + 5 do
+    state.now = state.now + 31000
+    fire(1, 'qb-shops:server:RestockShopItems', shopName)
+end
+emit('RESTOCK_SESSION_CAP', tostring(#state.paid == Config.MaxDeliveries))
+emit('RESTOCK_SESSION_CAP_COUNT', tostring(#state.paid))
+
+fire(1, 'qb-shops:server:DoBail', false)
+state.now = state.now + 31000
+state.paid = {}
+fire(1, 'qb-shops:server:RestockShopItems', shopName)
+emit('RESTOCK_SESSION_CLOSED_BLOCKED', tostring(#state.paid == 0))
 
 -- ── 4. PaySlip：客户端来源直接拒（全仓无调用点）──
 --     坐标放到 DeliveryLocations.main 旁边，让旧版**真的付钱**，这条才有区分度
