@@ -275,7 +275,7 @@ review_by: 2027-02-28
 | `quest_reenode` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:399 |
 | `questrestore` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:319 |
 | `queststep` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1227 |
-| `reloadquests` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/quest_registry.lua:411 |
+| `reloadquests` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/quest_registry.lua:413 |
 | `revokeheavy` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1080 |
 | `savepos` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_pos_collector.lua:29 |
 | `startquest` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1009 |
