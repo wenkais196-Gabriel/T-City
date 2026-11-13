@@ -1,9 +1,9 @@
 {
   "since": "2026-10-25",
-  "max_unproven": 277,
+  "max_unproven": 278,
   "note": "未证明 = 既没在 gate_history 里失败过、也不是变异冒烟用例、自身也不是反向校验的架构规则。它与另一个数字配套：gate_mutation_smoke 目前覆盖 20 条规则。这个预算只许往下走——每加一条变异用例（或给某条规则补反向校验），就把 max_unproven 减到新的实测值。",
   "measured": {
-    "total": 550,
+    "total": 551,
     "proven_by_smoke": 69,
     "proven_by_reverse_tests": 204
   },
@@ -331,6 +331,12 @@
       "max_unproven": 277,
       "previous": 276,
       "why": "阶段 D · C1 服务端闸：新增契约『nodeComplete 必须在 AdvanceStep 之前咨询 QuestStepGate』（1 条前向规则；同文件的反向校验已按名字计入已证明）"
+    },
+    {
+      "date": "2026-11-13",
+      "max_unproven": 278,
+      "previous": 277,
+      "why": "C1 契约测试拆成两跳（helper 必须问闸 / nodeComplete 必须先问再推进），多出 1 条前向规则；同文件的反向校验按名字计入已证明"
     }
   ]
 }
