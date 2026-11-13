@@ -49,6 +49,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   否则资源/服务器重启后任务停在 N 站而会话丢失，该站被永久判 out_of_order（只能放弃重接）；
   ②`quest:server:reach` 只准推进 reach 步骤、`CompleteStep` 导出也过同一道闸 —— 原来这两条路都能绕过
   validator（C1 的闸只挂在 nodeComplete 与 dashboard 上）。
+- **garbage 站点谱（R1 · P2）**：新增 custom-quest 的 config/quests/quest_garbage.lua，三档任务
+  `garbage_v1_city/district/full`（4/6/8 站）。每站一个 `validator` 步骤走 `validate_route_stop`，
+  首尾是 interact（报到 / 交回）。金额 = 站×30 + 袋×25，按 02-design §2.3 定为固定值
+  $370 / $705 / $1,140（≈1,388 / 1,763 / 2,138 $/h，落在低技能带）。
+  注册要改两处（这是这套引擎的坑）：fxmanifest 的 files 与 quest_registry 的 knownFiles 列表，缺一处就静默不加载。
+  证据：`test_garbage_route_config.py` 3 条 —— 站号必须连续从 1 开始（跳号会让玩家卡站）、
+  每站必须带 validator_id/job/require_duty/coords/radius、首尾必须是 interact、坐标不许重复、quest id 全局唯一；
+  反向：删掉配置文件 → probe 直接失败。全量 pytest → 1420 passed / 147 skipped。
+  **真机未验**：坐标是洛圣都常驻垃圾点的大致位置，P2 验收要求先在 dev 服跑一条真实任务。
+  **已知缺陷（既有）**：`conditions.daily_limit` 在 custom-quest 里没有调用点，所以每日上限目前不生效。
 - **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
   合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
   （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：

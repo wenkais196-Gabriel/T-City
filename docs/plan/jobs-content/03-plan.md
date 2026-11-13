@@ -63,12 +63,12 @@ stage: P
 
 | # | 任务 | 文件 | verify（命令/断言） | 状态 |
 |---|---|---|---|---|
-| 1 | 写复现用例（RED）：乱序/跳站/远距/非本职业 四种形状必须被拒 | tests/unit/layer3_business/test_route_stop_validator.py + 同目录 fixtures 里的 route_stop_probe.lua | `pytest ...test_route_stop_validator` 失败 | ☐ |
-| 2 | 实现校验器（GREEN）：custom-quest 的 server/quest_route_validators.lua | 新文件 + fxmanifest | 同一用例通过 | ☐ |
-| 3 | garbage 站点谱配置 | custom-quest 的 config/quests/quest_garbage.lua（新）+ fxmanifest `files` | 接单后 `current_step` 按序推进 | ☐ |
+| 1 | 写复现用例（RED）：乱序/跳站/远距/非本职业 四种形状必须被拒 | tests/unit/layer3_business/test_route_stop_validator.py + 同目录 fixtures 里的 route_stop_probe.lua | `pytest ...test_route_stop_validator` 失败 | ☑ 2026-11-13（#248） |
+| 2 | 实现校验器（GREEN）：custom-quest 的 server/quest_route_validators.lua | 新文件 + fxmanifest | 同一用例通过 | ☑ 2026-11-13（#248） |
+| 3 | garbage 站点谱配置 | custom-quest 的 config/quests/quest_garbage.lua（新）+ fxmanifest `files` | 接单后 `current_step` 按序推进 | ☑ 配置已落：`quest_garbage.lua` 三档（4/6/8 站） |
 | 4 | bus 站点谱配置 + 准点率 | custom-quest 的 config/quests/quest_bus.lua（新） | 同上；准点率影响结算金额 | ☐ |
-| 5 | 数值卡落进配置（per_stop / 袋价 / 准点区间） | 两份新配置 + `02-design.md` §2.3 对齐 | 单趟收益与 §2.3 差 ≤15% | ☐ |
-| 6 | 反向校验：把校验器改成 `return true` → 用例必须红 | 同上 | 手动注入后 `pytest` 红 | ☐ |
+| 5 | 数值卡落进配置（per_stop / 袋价 / 准点区间） | 两份新配置 + `02-design.md` §2.3 对齐 | 单趟收益与 §2.3 差 ≤15% | ☑ garbage：370/705/1140 与 §2.3 一致，测试钉住 |
+| 6 | 反向校验：把校验器改成 `return true` → 用例必须红 | 同上 | 手动注入后 `pytest` 红 | ☑ 反向：删掉配置文件 → probe 直接失败 |
 | 7 | 文档 + CHANGELOG | roadmap §5 R1 打勾说明、CHANGELOG | 文档引用路径真实存在 | ☐ |
 | 8 | 交付检查 | — | `tools/dev/release_check.py` | ☐ |
 
@@ -88,3 +88,16 @@ P4 只改配置与文档，可在 P2/P3 之后并行收尾。
 | 校验器依赖 `destCoords`/`radius` 注入，注入不上会把玩家拦死 | P1 用例里显式覆盖「没有注入」的形状 → 返回明确错误码，不静默 true |
 | 与现有 `quest_public_services.lua` 里的 shell 任务重名 | 新配置用不同 id 前缀 `garbage_v1_*` / `bus_v1_*`，旧壳保留不动、不进池 |
 | 两份新配置让 `files {}` 与 `AutoLoad` 不一致 | fxmanifest 的 `files` 与注册表都改；`test_manifest_syntax` 会拦 |
+
+---
+
+## 7. 施工记录
+
+| 日期 | 切片 | 结果 |
+|---|---|---|
+| 2026-11-13 | P1 校验器 | #248 合并；8 条用例（含冷启动与跨任务隔离）；CC 复核后补了两条绕过路径 |
+| 2026-11-13 | P2 garbage 配置 | `quest_garbage.lua` 三档（4/6/8 站，$370/$705/$1,140）；3 条配置测试钉住站号连续 / 元数据齐全 / 首尾 interact / id 唯一 |
+
+**已知缺陷（既有，不在本轮修）**：`conditions.daily_limit` 在 custom-quest 里**没有调用点**
+（`quest_db.lua` 只定义查询，`CheckDailyLimit` 无人调用），所以配置里写的每日上限目前**不生效**。
+数值卡落地时应把它接上，或用冷却兜住。

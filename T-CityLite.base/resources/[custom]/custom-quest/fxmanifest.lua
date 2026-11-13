@@ -34,6 +34,7 @@ files {
     'config/quests/quest_driver_exam.lua',
     'config/quests/quest_pilot_exam.lua',
     'config/quests/quest_public_services.lua',
+    'config/quests/quest_garbage.lua',
     'config/quests/quest_legal_aviation.lua',
     'config/quests/quest_civilian_misc.lua',
     -- v0.8b: 配送地址池
