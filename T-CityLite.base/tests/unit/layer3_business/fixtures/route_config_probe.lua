@@ -78,8 +78,11 @@ for questIndex, quest in ipairs(quests) do
             break
         end
     end
+    local tagJob = (quest.required_tags and quest.required_tags.job) or 'nil'
+    local requireJob = (quest.conditions and quest.conditions.require_job) or 'nil'
     emit('TASK_' .. questIndex, quest.id, #validatorSteps, tostring(money.min), tostring(money.max),
-        repKey, repValue, quest.level, tostring(orderOk), tostring(metaOk), firstType, lastType, job)
+        repKey, repValue, quest.level, tostring(orderOk), tostring(metaOk), firstType, lastType, job,
+        tostring(tagJob), tostring(requireJob))
 end
 
 io.write(table.concat(OUT, '\n'), '\n')

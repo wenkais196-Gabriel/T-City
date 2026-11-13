@@ -72,6 +72,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   证据：test_bus_route_config.py 3 条 + 全量 pytest → 1425 passed / 147 skipped。
   **本轮未做**：准点率（punctuality）—— 现有 CalculateTimeBonus 只读物流追踪器，bus 没有；记进 03-plan §7。
   **真机未验**：坐标是主干道公交站的大致位置。
+- **接单条件与校验器不一致的卡死（R1 复核修复）**：garbage/bus 的 `required_tags` 只写了 `role=civilian`，
+  而服务端校验器要求 `job=garbage/bus` —— 平民能接单、走到第 1 站必被判 `wrong_job`，任务卡死。
+  两处一起修：①配置的 `required_tags` 加 `job`（手机列表据此过滤）；②`TriggerQuest` 新增
+  `conditions.require_job` 校验，接单时就拒。**只认显式声明的字段**，不改既有模板语义
+  （否则帮派成员做矿工任务这类正常路径会被一并关掉——过度收紧比漏拦更难查）。
+  证据：两份配置测试各加三条断言（validator job / required_tags.job / require_job 三者必须一致）。
+  另新增 docs/plan/jobs-content/04-numbers.md（数值卡）：三个职业九档的 $/h 与目标带逐项对照。
 - **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
   合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
   （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：

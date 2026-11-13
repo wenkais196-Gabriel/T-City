@@ -88,8 +88,8 @@ return {
         description = '市中心到小首尔一圈，新手司机的第一条线。',
         category = 'civilian',
         level = 1,
-        required_tags = { role = 'civilian' },
-        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8 },
+        required_tags = { role = 'civilian', job = 'bus' },
+        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8, require_job = 'bus' },
         rewards = {
             money = { type = 'bank', min = 486, max = 486 },   -- 6×90×0.9
             rep = { bus = 25 },
@@ -102,8 +102,8 @@ return {
         description = '过海到 Del Perro 再折返，站距明显拉长。',
         category = 'civilian',
         level = 2,
-        required_tags = { role = 'civilian' },
-        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8 },
+        required_tags = { role = 'civilian', job = 'bus' },
+        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8, require_job = 'bus' },
         rewards = {
             money = { type = 'bank', min = 648, max = 648 },   -- 8×90×0.9
             rep = { bus = 25 },
@@ -116,8 +116,8 @@ return {
         description = '一条线跑遍全城十个换乘点，工时长但一趟顶两趟。',
         category = 'civilian',
         level = 3,
-        required_tags = { role = 'civilian' },
-        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8 },
+        required_tags = { role = 'civilian', job = 'bus' },
+        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8, require_job = 'bus' },
         rewards = {
             money = { type = 'bank', min = 810, max = 810 },   -- 10×90×0.9
             rep = { bus = 25 },

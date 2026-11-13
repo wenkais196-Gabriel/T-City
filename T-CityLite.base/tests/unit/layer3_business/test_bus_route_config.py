@@ -49,6 +49,8 @@ def test_three_lines_with_expected_stops_and_money():
         )
         assert row[4] == "bus", f"{quest_id}: 声望键是 {row[4]}，期望 bus"
         assert row[11] == "bus", f"{quest_id}: validator_data.job 是 {row[11]}，期望 bus（否则判 wrong_job）"
+        assert row[12] == "bus", f"{quest_id}: required_tags.job 是 {row[12]}（手机列表不会过滤）"
+        assert row[13] == "bus", f"{quest_id}: conditions.require_job 是 {row[13]}（接单不会拦）"
         seen.add(quest_id)
     assert seen == set(EXPECTED), f"缺少任务：{set(EXPECTED) - seen}"
 
