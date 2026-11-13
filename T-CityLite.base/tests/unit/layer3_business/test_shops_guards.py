@@ -51,6 +51,29 @@ def test_restock_pay_is_distance_and_cooldown_bound():
     assert data["RESTOCK_BAD_ARGS_SAFE"] == "true", "shop 为 nil / 不存在的店会抛错"
 
 
+def test_restock_pay_requires_a_paid_delivery_session():
+    """冷却只限速，不证明「跑了这一趟」。R0（2026-11-13）加押金会话 + 每趟次数上限。"""
+    data = _run("shops_probe.lua", "[qb]/qb-shops")
+    assert data["RESTOCK_NO_SESSION_BLOCKED"] == "true", "没付押金也能在交货点领钱（旧版就是这样）"
+    assert data["RESTOCK_SESSION_OPEN_PAID"] == "true", "付了押金反而领不到（过度收紧）"
+    assert data["RESTOCK_SESSION_CAP"] == "true", (
+        f"一趟能结算超过 MaxDeliveries 次：实测 {data.get('RESTOCK_SESSION_CAP_COUNT')}"
+    )
+    assert data["RESTOCK_SESSION_CLOSED_BLOCKED"] == "true", "还车（关闭会话）后仍能继续领钱"
+
+
+def test_delivery_loop_is_trucker_only_and_pays_rep():
+    """R0.3：送货循环归 trucker。租车与结算都受职业门约束；每站给 delivery 声望。"""
+    data = _run("shops_probe.lua", "[qb]/qb-shops")
+    assert data["RENTAL_NON_TRUCKER_BLOCKED"] == "true", "非 trucker 也能租车（收了押金却结算不了 = 骗钱）"
+    assert data["RENTAL_TRUCKER_ALLOWED"] == "true", "在岗 trucker 租不到车（过度收紧）"
+    assert data["RESTOCK_OFFDUTY_BLOCKED"] == "true", "在岗起租后下班仍能结算（职业门只看了一次）"
+    assert data["RESTOCK_REP_GRANTED"] == "true", "跑完一站没有 delivery 声望"
+    assert data["RESTOCK_NO_BONUS_ITEM"] == "true", (
+        "每站还额外发 cryptostick（一根 ≈ $1,000）——把这一档收益抬到 $6k+/h"
+    )
+
+
 def test_payslip_is_not_reachable_from_clients():
     """全仓没有客户端调用点，却按客户端给的 drops 发钱。"""
     data = _run("shops_probe.lua", "[qb]/qb-shops")
