@@ -64,8 +64,13 @@ function QuestRouteValidators.ValidateStop(source, stepData, questData)
     local citizenid = Player.PlayerData.citizenid
     local questId = (type(questData) == 'table' and questData.questId) or 'unknown'
 
-    -- 4. 顺序：只能完成"下一站"
-    local expected = QuestRouteValidators.ExpectedIndex(citizenid, questId)
+    -- 4. 顺序：只能完成"下一站"。
+    -- 没有会话时（资源/服务器重启、或本趟第一次校验）以**这一步自己声明的站号**为准：
+    -- 否则任务在 DB 里停在 N 站而内存会话丢了，第 N 站会被永久判成 out_of_order，
+    -- 玩家只能放弃重接才能解开（CC 在 R1·P1 验收里抓到的死锁）。
+    local session = Sessions[sessionKey(citizenid, questId)]
+    local expected = (session and tonumber(session.index)) or index
+    if expected < 1 then expected = index end
     if index ~= expected then
         return false, ('out_of_order: expected %d, got %d'):format(expected, index)
     end
@@ -106,7 +111,6 @@ function QuestRouteValidators.ValidateStop(source, stepData, questData)
 
     -- 全部判据通过之后才落账
     local key = sessionKey(citizenid, questId)
-    local session = Sessions[key]
     Sessions[key] = {
         index = index + 1,
         startedAt = (session and session.startedAt) or os.time(),

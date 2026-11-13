@@ -152,4 +152,12 @@ QuestRouteValidators.ResetSession('CID1', 'garbage_v1_city')
 local okRestart = validate(1, step({ index = 1 }), questData)
 emit('RESET_SESSION_ALLOWS_RESTART', tostring(okRestart == true))
 
+-- ── 12. 冷启动：没有会话时以当前步的站号为准（重启后不能把任务锁死）──
+QuestRouteValidators.ResetSession('CID1', 'garbage_v1_city')
+local okCold = validate(1, step({ index = 7 }), questData)
+emit('COLD_START_ADOPTS_INDEX', tostring(okCold == true))
+-- 之后又回到单调：第 7 站已经过了，再交第 7 站要拒
+local okColdReplay = validate(1, step({ index = 7 }), questData)
+emit('COLD_START_THEN_MONOTONIC', tostring(okColdReplay == false))
+
 io.write(table.concat(OUT, '\n'), '\n')

@@ -129,6 +129,20 @@ RegisterNetEvent(Config.Quest.Events.QUEST_REACH, function(questId, stepId, nonc
         return
     end
 
+    -- R1：reach 事件只准推进 reach 步骤。否则客户端能对一个 validator 步骤发 reach，
+    -- 绕过 runStepValidator（C1 的闸只挂在 nodeComplete 与 dashboard 两条腿上）。
+    local reachTemplate = QuestRegistry.GetTemplate(questId)
+    if reachTemplate then
+        local reachStep = nil
+        for _, candidate in ipairs(reachTemplate.steps or {}) do
+            if candidate.id == stepId then reachStep = candidate break end
+        end
+        if reachStep and reachStep.type ~= 'reach' then
+            feedback(src, '步骤类型不匹配', 'error')
+            return
+        end
+    end
+
     -- 推进步骤
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
@@ -553,6 +567,22 @@ end)
 
 -- 3. 直接完成某一步
 exports('CompleteStep', function(source, questId, stepId)
+    -- R1：导出入口也要过 validator 闸。否则任何服务端调用方（别的资源、调试脚本）
+    -- 都能跳过校验直接推进，C1 的拦截就只在两条腿上成立。
+    local template = QuestRegistry.GetTemplate(questId)
+    if template then
+        local stepDef = nil
+        for _, candidate in ipairs(template.steps or {}) do
+            if candidate.id == stepId then stepDef = candidate break end
+        end
+        if stepDef then
+            local Player = QBCore.Functions.GetPlayer(source)
+            local cid = Player and Player.PlayerData.citizenid or 'unknown'
+            local allowed = runStepValidator(source, questId, stepDef,
+                { questId = questId, citizenid = cid }, { failMessage = '任务步骤校验未通过' })
+            if not allowed then return false, 'validation_failed' end
+        end
+    end
     return QuestManager.CompleteStep(source, questId, stepId)
 end)
 

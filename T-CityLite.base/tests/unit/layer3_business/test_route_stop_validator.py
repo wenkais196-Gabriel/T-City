@@ -80,3 +80,14 @@ def test_stale_session_is_reset_on_quest_start():
     assert data["RESET_SESSION_ALLOWS_RESTART"] == "true", (
         "ResetSession 之后第 1 站仍然过不去 —— 玩家会永远卡在这个任务上"
     )
+
+
+def test_cold_start_adopts_the_current_step_index():
+    """资源/服务器重启后会话丢了，但任务还在 DB 的某一站 —— 那一站必须能过，不能锁死。"""
+    data = _data()
+    assert data["COLD_START_ADOPTS_INDEX"] == "true", (
+        "会话丢失后第 7 站被拒：重启会让所有多站任务卡死（CC 在验收里抓到的死锁）"
+    )
+    assert data["COLD_START_THEN_MONOTONIC"] == "true", (
+        "冷启动采纳站号之后不再单调，同一站可以重复提交"
+    )

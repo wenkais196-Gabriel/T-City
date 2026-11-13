@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   会话停在 3，重新接单从第 1 站开始，会被「只能完成下一站」永久拒掉。
   证据：`test_route_stop_validator.py` 7 条（顺序/跳站/重放/远距/错职业/不在岗/无载具/坏参数/跨任务隔离/陈旧会话重置）；
   先红后绿：实现文件不存在时 6 条全红。全量 `pytest tests/unit tests/architecture` → 1417 passed / 147 skipped。
+  验收后补两处（Claude Code 在 R1·P1 复核里指出）：①**冷启动**——没有会话时以当前步自己声明的站号为准，
+  否则资源/服务器重启后任务停在 N 站而会话丢失，该站被永久判 out_of_order（只能放弃重接）；
+  ②`quest:server:reach` 只准推进 reach 步骤、`CompleteStep` 导出也过同一道闸 —— 原来这两条路都能绕过
+  validator（C1 的闸只挂在 nodeComplete 与 dashboard 上）。
 - **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
   合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
   （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：
