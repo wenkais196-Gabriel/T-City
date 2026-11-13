@@ -265,6 +265,8 @@ local function LoadExternalQuests()
                     'config/quests/quest_civilian_ch4_mogul.lua',
                     'config/quests/quest_civilian_ch4_artisan.lua',
                     'config/quests/quest_civilian_ch4_survivor.lua',
+                    -- R1（职业内容填充）：多站路线
+                    'config/quests/quest_garbage.lua',
                 }
                 for _, fn in ipairs(knownFiles) do
                     local c = LoadResourceFile(GetCurrentResourceName(), fn)
