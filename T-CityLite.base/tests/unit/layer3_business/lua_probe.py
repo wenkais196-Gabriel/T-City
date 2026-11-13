@@ -27,6 +27,7 @@ def run_probe(
     resource_path: str,
     fixtures: Path | None = None,
     timeout: int = 90,
+    extra_args: list[str] | None = None,
 ) -> dict[str, str]:
     """跑一个离线 Lua probe，返回 `{KEY: VALUE}`。
 
@@ -34,8 +35,10 @@ def run_probe(
     例如 `[qb]/qb-shops` 或 `[custom]/custom-quest`。
     """
     probe_path = (fixtures or (Path(__file__).resolve().parent / "fixtures")) / probe
+    argv = ["lua5.4", probe_path.as_posix(), (BASE / "resources" / resource_path).as_posix()]
+    argv.extend(extra_args or [])
     proc = subprocess.run(
-        ["lua5.4", probe_path.as_posix(), (BASE / "resources" / resource_path).as_posix()],
+        argv,
         capture_output=True,
         text=True,
         timeout=timeout,

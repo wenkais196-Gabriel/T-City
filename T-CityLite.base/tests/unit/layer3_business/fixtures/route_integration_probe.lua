@@ -7,6 +7,7 @@
 -- 这条把整条链跑一遍，防止两边各写各的。
 
 local RES = arg[1] or error('need resource dir')
+local CONFIG = arg[2] or 'quest_garbage.lua'
 
 local OUT = {}
 local function emit(...)
@@ -23,7 +24,7 @@ end
 vectorMeta.__len = function(a) return math.sqrt((a.x or 0) ^ 2 + (a.y or 0) ^ 2 + (a.z or 0) ^ 2) end
 vector3 = function(x, y, z) return setmetatable({ x = x or 0.0, y = y or 0.0, z = z or 0.0 }, vectorMeta) end
 
-local state = { coords = { x = 0.0, y = 0.0, z = 0.0 } }
+local state = { coords = { x = 0.0, y = 0.0, z = 0.0 }, job = 'garbage' }
 GetPlayerPed = function(source) return tonumber(source) or 0 end
 GetEntityCoords = function() return vector3(state.coords.x, state.coords.y, state.coords.z) end
 GetVehiclePedIsIn = function() return 0 end
@@ -33,7 +34,7 @@ QBCore = {
     Functions = {
         GetPlayer = function(source)
             if tonumber(source) ~= 1 then return nil end
-            return { PlayerData = { citizenid = 'CID1', job = { name = 'garbage', onduty = true, grade = { level = 0 } } }, Functions = {} }
+            return { PlayerData = { citizenid = 'CID1', job = { name = state.job, onduty = true, grade = { level = 0 } } }, Functions = {} }
         end,
     },
 }
@@ -49,10 +50,10 @@ end
 load_file(RES .. '/server/quest_step_gate.lua', 'quest_step_gate.lua')
 load_file(RES .. '/server/quest_route_validators.lua', 'quest_route_validators.lua')
 
-local handle = assert(io.open(RES .. '/config/quests/quest_garbage.lua', 'r'))
+local handle = assert(io.open(RES .. '/config/quests/' .. CONFIG, 'r'))
 local source = handle:read('a')
 handle:close()
-local quests = assert(load(source, '@quest_garbage.lua'))()
+local quests = assert(load(source, '@' .. CONFIG))()
 
 local quest = quests[1]
 local step = nil
@@ -65,6 +66,15 @@ if not step then
     return
 end
 emit('HAS_VALIDATOR_STEP', 'true')
+-- 职业取自配置本身（不同配置文件服务不同职业）
+for _, candidate in ipairs(quest.steps or {}) do
+    if candidate.type == 'validator' and candidate.data and candidate.data.validator_data
+        and type(candidate.data.validator_data.job) == 'string' then
+        state.job = candidate.data.validator_data.job
+        break
+    end
+end
+emit('CONFIG_JOB', state.job)
 
 -- 1. 载荷里到底有没有服务端坐标
 local payload = QuestStepGate.ValidatorPayload(step)
