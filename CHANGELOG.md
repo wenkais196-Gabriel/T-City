@@ -20,7 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **R1 真机验收：bus 也跑通**：`bus_v1_city`（6 站）同一会话跑完 → `completing` → `$486 (bank) + bus rep +25`，
+- **单趟耗时遥测（数值卡的数据源）**：`custom-quest` 在接单时记 `os.time()`、完成/放弃/失败时清掉，
+  并在 `🏁 COMPLETING` 那行日志里带出「用时=x.x 分钟」。只走内存 + 日志，0 新表 / 0 新事件。
+  起因：`04-numbers.md` 的时薪是「站数 × 单站耗时 × 收益」三条假设叠出来的，其中单站耗时从来没测过 ——
+  存量 7 条任务壳要不要降价，得先有真实数据才谈得上定价。- **R1 真机验收：bus 也跑通**：`bus_v1_city`（6 站）同一会话跑完 → `completing` → `$486 (bank) + bus rep +25`，
   与配置一致；同一位玩家先 garbage 后 bus，验证会话键按任务隔离。证据已并入 `docs/plan/jobs-content/05-verification.md` §4.2。
 - **R1 真机验收记录**：新增 `docs/plan/jobs-content/05-verification.md`（type=audit）。
   记录 `garbage_v1_city` 在 `:30130` 真机上的完整一趟：报到 → 4 站 validator 全过（无 `validator failed`）
@@ -107,7 +110,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **按 I 键仍然弹出 qb-hud 的设置菜单，和中控屏抢键**：qb-hud 早先已把 I 键的 `RegisterKeyMapping`
+- **`QuestManager.AbandonQuest` 被定义了两次，前一份的校验静默失效**：`quest_manager.lua` 里同名函数
+  出现两遍，Lua 后一份覆盖前一份。第一份带「questId 必须是字符串 + 任务必须真的在进行中」两道校验，
+  第二份没有 —— 生效的是第二份，于是传 nil/空串也会一路走到 `QuestDB.AbandonQuest`，而 SQL 那边的
+  参数是 nil。现在合并为一份（保留校验 + 保留日志），并加闸 `test_quest_manager_definitions.py`：
+  `QuestManager.X` 重复定义必须被抓到（判定逻辑喂合成文本，正反形状都断言）。- **按 I 键仍然弹出 qb-hud 的设置菜单，和中控屏抢键**：qb-hud 早先已把 I 键的 `RegisterKeyMapping`
   注释掉，但**玩家本机的绑定是持久化的** —— 玩家本机的 CitizenFX 的 fivem.cfg 里留着
   `rbind qb-hud KEYBOARD I "hud"`，删掉代码里的注册不会删掉它，于是按 I 同时触发 `hud`（弹 HUD 设置）
   和 `dashboard`（载具中控屏，被前者占走焦点）。修法：HUD 设置的命令名从 `hud` 改为 `hudsettings`，

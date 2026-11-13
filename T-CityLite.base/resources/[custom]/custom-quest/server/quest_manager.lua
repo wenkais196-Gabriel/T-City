@@ -250,6 +250,25 @@ end
 ---@param questId string
 ---@return boolean success
 ---@return string message
+-- ── 单趟耗时（数值卡的真实数据源）──────────────────────────────────────────
+-- 04-numbers.md 的时薪是「站数 × 单站耗时 × 收益」三条假设叠出来的，任何一条错，定价整体偏。
+-- 这里只记内存 + 一行日志（0 新表 / 0 新事件），键与其它内存态一致：citizenid:questId。
+local QuestRunStarted = {}
+
+--- 记一趟的开始时间（TriggerQuest 成功时）
+local function markRunStart(citizenid, questId)
+    QuestRunStarted[tostring(citizenid) .. ':' .. tostring(questId)] = os.time()
+end
+
+--- 取走这趟的耗时（分钟，保留一位小数）；没有记录时返回 nil
+local function takeRunElapsed(citizenid, questId)
+    local key = tostring(citizenid) .. ':' .. tostring(questId)
+    local startedAt = QuestRunStarted[key]
+    QuestRunStarted[key] = nil
+    if not startedAt then return nil end
+    return (os.time() - startedAt) / 60
+end
+
 function QuestManager.TriggerQuest(source, questId)
     local citizenid = getCidFromSource(source)
     if not citizenid then
@@ -770,6 +789,7 @@ function QuestManager.TriggerQuest(source, questId)
     end
 
     QuestPrint('🚀 Quest started: %s → %s', citizenid, questId)
+    markRunStart(citizenid, questId)
     return true, ('Quest accepted: %s'):format(template.title)
 end
 
@@ -859,7 +879,10 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
 
             -- 发放奖励
             local src = getSourceFromCid(citizenid)
-            print(('[quest-manager] 🏁 COMPLETING quest: %s, citizenid=%s, src=%s'):format(questId, citizenid, tostring(src)))
+            local elapsedMin = takeRunElapsed(citizenid, questId)
+            print(('[quest-manager] 🏁 COMPLETING quest: %s, citizenid=%s, src=%s, 用时=%s 分钟'):format(
+                questId, citizenid, tostring(src),
+                elapsedMin and ('%.1f'):format(elapsedMin) or '?'))
             if src then
                 TriggerClientEvent(Config.Quest.Events.QUEST_COMPLETED, src, {
                     quest_id = questId,
@@ -1109,42 +1132,6 @@ end
 ---@param questId string
 ---@return boolean success
 ---@return string message
-function QuestManager.AbandonQuest(source, questId)
-    local citizenid = getCidFromSource(source)
-    if not citizenid then
-        return false, 'Player not found'
-    end
-    if type(questId) ~= 'string' or questId == '' then
-        return false, 'Invalid quest'
-    end
-    if not QuestManager.IsQuestActive(source, questId) then
-        return false, 'Quest is not active'
-    end
-
-    QuestDB.AbandonQuest(citizenid, questId)
-    QuestDB.LogEvent(citizenid, questId, 'abandon', nil, {})
-
-    -- 释放排他锁 + 收起节点（与 FailQuest 同一条清理链）
-    local template = QuestRegistry.GetTemplate(questId)
-    if template then
-        if template.mode == 'competitive' or template.mode == 'group' then
-            QuestMutex.ReleaseLock(questId, source)
-        end
-        QuestNodes.CancelAllNodes(source, questId)
-    end
-
-    QuestCache.UnindexEvent(citizenid, questId)
-    QuestCache.InvalidateActive(citizenid)
-    QuestManager._resolvedTemplates[citizenid .. '_' .. questId] = nil
-    QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
-    QuestManager._completing[citizenid .. '_' .. questId] = nil
-
-    local src = getSourceFromCid(citizenid)
-    if src then
-        TriggerClientEvent(Config.Quest.Events.QUEST_ABANDONED, src, { quest_id = questId })
-    end
-    return true, 'Quest abandoned'
-end
 
 function QuestManager.FailQuest(source, questId, reason)
     local citizenid = getCidFromSource(source)
@@ -1152,6 +1139,7 @@ function QuestManager.FailQuest(source, questId, reason)
         return false, 'Player not found'
     end
 
+    takeRunElapsed(citizenid, questId)  -- 失败也清计时
     QuestDB.FailQuest(citizenid, questId, reason)
     QuestDB.LogEvent(citizenid, questId, 'fail', nil, { reason = reason })
 
@@ -1195,12 +1183,22 @@ end
 ---@param questId string
 ---@return boolean success
 ---@return string message
+-- 说明：这里**只能有一份** AbandonQuest。历史上有两份同名定义，后一份静默覆盖前一份，
+-- 前一份里的入参校验（questId 类型 / 是否真的在进行中）就此失效 —— 传 nil 也会走到 QuestDB。
+-- 已合并为一份：保留校验 + 保留日志。
 function QuestManager.AbandonQuest(source, questId)
     local citizenid = getCidFromSource(source)
     if not citizenid then
         return false, 'Player not found'
     end
+    if type(questId) ~= 'string' or questId == '' then
+        return false, 'Invalid quest'
+    end
+    if not QuestManager.IsQuestActive(source, questId) then
+        return false, 'Quest is not active'
+    end
 
+    takeRunElapsed(citizenid, questId)  -- 清掉单趟计时（放弃也要清，否则内存留垃圾）
     QuestDB.AbandonQuest(citizenid, questId)
     QuestDB.LogEvent(citizenid, questId, 'abandon', nil, {})
 
