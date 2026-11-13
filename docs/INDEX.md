@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-13 ｜ **文档总数**：308 ｜ **已登记**：308 ｜ **未登记**：0
+**生成时间**：2026-11-13 ｜ **文档总数**：310 ｜ **已登记**：310 ｜ **未登记**：0
 
-**状态分布**：✅ active 176 ・ 🟡 draft 9 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 176 ・ 🟡 draft 11 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -113,7 +113,7 @@
 | [犯罪与组织 · UX 设计](client/ux/modules/crime.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/crime.md` |
 | [v0.5 犯罪玩法](archive/QBCore_Lite_versions/v0.5-crime-gameplay.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.5-crime-gameplay.md` |
 
-### jobs（11）
+### jobs（12）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -124,6 +124,7 @@
 | [🚚 T-City Lite 货运司机与物流系统 (Logistics) 细化规划](archive/QBCore_Lite_versions/career/logistics_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/logistics_plan.md` |
 | [🎭 T-City Lite 职业身份与扮演体验（Career）总规划](archive/QBCore_Lite_versions/career/overall_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/overall_plan.md` |
 | [内容填充总规划（职业优先，R0–R6）](plan/jobs-content-roadmap.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content-roadmap.md` |
+| [计划：R1 多站驾驶（garbage + bus）](plan/jobs-content/03-plan.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/03-plan.md` |
 | [调研：职业内容填充（阶段 R）](plan/jobs-content/01-research.md) | research | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/01-research.md` |
 | [T-City Lite — 职业声望与进阶养成系统设计](../T-CityLite.base/docs/v0.7-career-reputation-design.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/v0.7-career-reputation-design.md` |
 | [v0.7a 载具系统重构与通用物流任务系统集成](archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md` |
@@ -240,7 +241,7 @@
 | [03 — 不可替代性与声誉：让玩家成为"基础设施"](server-design/03-irreplaceability-reputation.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/03-irreplaceability-reputation.md` |
 | [04 — 共治系统：让玩家成为规则的共同制定者](server-design/04-co-governance.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/04-co-governance.md` |
 
-### agent（34）
+### agent（35）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -261,6 +262,7 @@
 | [加 / 改一个 agent 动作：检查清单](agent/police/ATOOLS-DISCIPLINE.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `docs/agent/police/ATOOLS-DISCIPLINE.md` |
 | [Agent Read Layer (Phase 3 / P1)](../T-CityLite.base/docs/agent/README.md) | meta | ✅ active | 2026-10-27 | 2027-04-30 |  | `T-CityLite.base/docs/agent/README.md` |
 | [Agent 控制平面升级计划](plan/agent-control-plane-upgrade.md) | plan | ✅ active | 2026-11-12 | 2027-03-31 | ★ | `docs/plan/agent-control-plane-upgrade.md` |
+| [Agent 模块化施工计划（M1–M7）](plan/agent-module-execution.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/agent-module-execution.md` |
 | [2026-11-01 · 下一步开发方向调研（Hermes + Claude Code 双份意见）](engineering/2026-11-01-next-epic-research.md) | research | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/2026-11-01-next-epic-research.md` |
 | [客户端双端测试 Harness（MCP）](../T-CityLite.base/docs/agent/CLIENT_HARNESS.md) | spec | ✅ active | 2026-10-26 | 2027-04-30 |  | `T-CityLite.base/docs/agent/CLIENT_HARNESS.md` |
 | [客户端可观测性：服务端能看见客户端](../T-CityLite.base/docs/agent/CLIENT_OBSERVABILITY.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/agent/CLIENT_OBSERVABILITY.md` |
