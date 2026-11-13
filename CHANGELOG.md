@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **濒死时「按 E 呼救」没有任何反应**：`qb-ambulancejob/client/dead.lua` 的文案写 E，
+- **濒死时「按 E 呼救」没有任何反应**：`T-CityLite.base/resources/[qb]/qb-ambulancejob/client/dead.lua` 的文案写 E，
   轮询的却是 control 47（INPUT_DETONATE = 键盘 G）；改成 38 并补一条 feed 回执。
 - **扣押场「有钱但无法付款」**：`T-CityLite.base/resources/[qb]/qb-garages/html/script.js` 把 `state=2` 一律渲染成 `Impound` 且按钮 disabled，
   在扣押场也点不动；现在 `type='depot'` 且 `depotPrice>0` 就渲染成可点的 `$金额`（公共车库里的被扣车仍只读）。
