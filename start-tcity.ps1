@@ -215,24 +215,37 @@ function Start-Server {
 
 function Wait-Ready([int]$Timeout) {
     Write-Step '等资源加载完成'
-    $deadline = (Get-Date).AddSeconds($Timeout)
+    $start = Get-Date
+    $deadline = $start.AddSeconds($Timeout)
     $lastCount = -1
     $stableSince = $null
+    $requiredStable = $null   # 关键资源连续可见的起点
     while ((Get-Date) -lt $deadline) {
         $res = Get-ResourceList
-        if ($null -ne $res) {
-            if ($res.Count -ne $lastCount) {
-                Write-Host "   … 资源 $($res.Count)" -NoNewline
-                $lastCount = $res.Count
-                $stableSince = Get-Date
-            } elseif ($stableSince -and ((Get-Date) - $stableSince).TotalSeconds -ge 20) {
-                Write-Host ''
-                break
+        if ($null -eq $res) {
+            Start-Sleep -Seconds 5
+            continue
+        }
+        if ($res.Count -ne $lastCount) {
+            $elapsed = [int]((Get-Date) - $start).TotalSeconds
+            Write-Host ("   … {0,3}s  资源 {1}" -f $elapsed, $res.Count)
+            $lastCount = $res.Count
+            $stableSince = Get-Date
+        } else {
+            $missing = @($Required | Where-Object { $res -notcontains $_ })
+            if ($missing.Count -eq 0) {
+                if (-not $requiredStable) { $requiredStable = Get-Date }
+                $seen = ((Get-Date) - $stableSince).TotalSeconds
+                $held = ((Get-Date) - $requiredStable).TotalSeconds
+                # 两个条件任一满足就算就绪：数量 15 秒没变，或关键资源已齐且稳了 10 秒。
+                # 不用"必须 20 秒一动不动"——真机上偶发一个资源 restart 会把等待拖到超时。
+                if ($seen -ge 15 -or $held -ge 10) { break }
+            } else {
+                $requiredStable = $null
             }
         }
-        Start-Sleep -Seconds 5
+        Start-Sleep -Seconds 3
     }
-    Write-Host ''
 
     $res = Get-ResourceList
     if ($null -eq $res) { throw "服务端在 $Timeout 秒内没有响应 :30130" }
