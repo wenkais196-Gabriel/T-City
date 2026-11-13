@@ -267,6 +267,19 @@ function QuestManager.TriggerQuest(source, questId)
         return false, ('Quest not found: %s'):format(questId)
     end
 
+    -- R1（2026-11-13）：接单时校验「必须持有某个职业」。
+    -- 起因（CC 在 R1 复核里指出）：garbage/bus 的 required_tags 只写了 role=civilian，
+    -- 而服务端校验器要求 job=garbage/bus —— 平民能接、走第 1 站必被判 wrong_job 卡死。
+    -- 这里只认**显式声明**的 conditions.require_job：不动既有模板的语义
+    -- （对它们一律放宽，避免把帮派成员做矿工任务这类正常路径一并关掉）。
+    local requireJob = type(template.conditions) == 'table' and template.conditions.require_job or nil
+    if type(requireJob) == 'string' and requireJob ~= '' then
+        local Player = QBCore.Functions.GetPlayer(source)
+        local job = Player and Player.PlayerData and Player.PlayerData.job
+        if type(job) ~= 'table' or job.name ~= requireJob then
+            return false, ('需要职业：%s'):format(requireJob)
+        end
+    end
     -- v0.8b: 地址池解析 — 如果模板有 address_pool 引用，深克隆并替换为真实坐标
     local hasAddressPools = false
     for _, step in ipairs(template.steps) do

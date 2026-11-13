@@ -93,8 +93,8 @@ return {
         description = '沿最近的四个收运点走一圈，适合刚上岗的环卫工。',
         category = 'civilian',
         level = 1,
-        required_tags = { role = 'civilian' },
-        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8 },
+        required_tags = { role = 'civilian', job = 'garbage' },
+        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8, require_job = 'garbage' },
         rewards = {
             money = { type = 'bank', min = 370, max = 370 },   -- 4×30 + 10×25
             rep = { garbage = 8 },                              -- 5 + 10/3
@@ -107,8 +107,8 @@ return {
         description = '六个收运点，跨两个片区，垃圾袋比城区多一倍。',
         category = 'civilian',
         level = 2,
-        required_tags = { role = 'civilian' },
-        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8 },
+        required_tags = { role = 'civilian', job = 'garbage' },
+        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8, require_job = 'garbage' },
         rewards = {
             money = { type = 'bank', min = 705, max = 705 },   -- 6×30 + 21×25
             rep = { garbage = 12 },                             -- 5 + 21/3
@@ -121,8 +121,8 @@ return {
         description = '八个收运点跑遍全城，一趟抵别人两趟。',
         category = 'civilian',
         level = 3,
-        required_tags = { role = 'civilian' },
-        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8 },
+        required_tags = { role = 'civilian', job = 'garbage' },
+        conditions = { cooldown_hours = 0, min_police = 0, daily_limit = 8, require_job = 'garbage' },
         rewards = {
             money = { type = 'bank', min = 1140, max = 1140 },  -- 8×30 + 36×25
             rep = { garbage = 17 },                             -- 5 + 36/3
