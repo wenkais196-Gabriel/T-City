@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dashboardStampDelivery` 那条路径上跑过校验器，客户端 `nodeComplete` 这条腿直接推进 ——「到达判定」「绑定载具」
   走客户端就能整段跳过（调研 §2.1-5）。回滚：`setr quest_step_validator_enforce 0`（只记日志不拦）。
   只对**声明了** `validator_id` 的步骤生效，未注册校验器时不拦（向后兼容）。
+  两条腿共用一个 `runStepValidator` helper（dashboard 走 force、nodeComplete 受 convar 控制），
+  原来 dashboard 里那份 validator 白名单已删除 —— SonarCloud 对首次提交报的 20% 新代码重复就是这两段。
   证据：`test_quest_step_gate.py` 5 条（判定/入参/开关）+ `test_quest_step_gate_contract.py` 2 条（契约顺序 + 顺序调反必须判红）；
   全量 `pytest tests/unit tests/architecture` → 1409 passed / 147 skipped。
   **真机未验**：logistics/aviation 的 27 个 validator 步骤要在服务器上跑一遍，确认真实流程不被误拦。
