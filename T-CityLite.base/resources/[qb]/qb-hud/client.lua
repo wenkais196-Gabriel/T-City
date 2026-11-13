@@ -215,8 +215,15 @@ end)
 -- Callbacks & Events
 -- H-6：这里原来叫 /menu，和 custom-admin 的 /menu（管理员面板）**重名**。
 -- 两个资源都注册同名命令时，谁生效取决于启动顺序 —— 玩家敲 /menu 有时开 HUD 设置、
--- 有时印管理面板。HUD 设置是玩家功能，让出通用名，改用 /hud（键位映射不变）。
-RegisterCommand('hud', function()
+-- 有时印管理面板。HUD 设置是玩家功能，让出通用名。
+--
+-- PO 2026-11-13：命令名再从 `hud` 改成 `hudsettings`。原因不是命名，是**键位**：
+-- 旧版本用 RegisterKeyMapping('hud', …, 'I') 绑过 I 键，那条绑定会被五M写进玩家本机的
+-- `%APPDATA%/CitizenFX/fivem.cfg`（形如 `rbind qb-hud KEYBOARD I "hud"`）。
+-- 代码里删掉 RegisterKeyMapping **不会**删掉玩家本机那条 —— 实测删了之后按 I 仍然弹 HUD 设置，
+-- 和载具中控屏抢同一个键。命令改名后，旧绑定指向一个空操作（见下方 `hud`），
+-- I 就只剩 tcity-dashboard 的中控屏一条路径。
+RegisterCommand('hudsettings', function()
     Wait(50)
     if showMenu then return end
     TriggerEvent('hud:client:playOpenMenuSounds')
@@ -224,6 +231,10 @@ RegisterCommand('hud', function()
     SendNUIMessage({ action = 'open' })
     showMenu = true
 end)
+
+-- 旧命令名保留为**空操作**：只为接住玩家本机残留的 I 键绑定，不要在这里加任何界面逻辑。
+-- 想恢复键位：玩家在 五M 设置 → 按键绑定 里给「HUD 设置」自己绑一个键，或敲 /hudsettings。
+RegisterCommand('hud', function() end, false)
 
 RegisterNUICallback('closeMenu', function(_, cb)
     Wait(50)
@@ -233,9 +244,9 @@ RegisterNUICallback('closeMenu', function(_, cb)
     cb('ok')
 end)
 
--- PO 2026-11-12：I 键不再打开 HUD 设置 —— I 留给载具信息板（尚未实现），
--- HUD 设置只走命令入口 `/hud`（:219）。要临时用键位就在五M设置里自己绑，不写进代码。
--- RegisterKeyMapping('hud', 'Open HUD Settings', 'keyboard', config.OpenMenu)
+-- PO 2026-11-12：I 键不再打开 HUD 设置 —— I 留给载具中控屏（tcity-dashboard 的 /dashboard）。
+-- HUD 设置只走命令入口 `/hudsettings`。要临时用键位就在五M设置里自己绑，不写进代码。
+-- RegisterKeyMapping('hudsettings', 'Open HUD Settings', 'keyboard', config.OpenMenu)
 
 -- Reset hud
 local function restartHud()

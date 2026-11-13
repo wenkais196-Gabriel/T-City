@@ -14,7 +14,7 @@ review_by: 2027-02-28
 
 # 管理员命令清单
 
-共 **336** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
+共 **337** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
 
 ## 危险命令但没有判权：0 条
 
@@ -24,7 +24,7 @@ review_by: 2027-02-28
 
 | 权限来源 | 命令数 |
 |---|---|
-| — | 152 |
+| — | 153 |
 | QBCore | 101 |
 | restricted=true | 40 |
 | job/gang 判定 | 35 |
@@ -524,9 +524,10 @@ review_by: 2027-02-28
 | `bank` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:31 |
 | `cash` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:24 |
 | `dev` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-hud/server.lua:38 |
-| `hud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:219 |
-| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:262 |
-| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:267 |
+| `hud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:237 |
+| `hudsettings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:226 |
+| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:273 |
+| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:278 |
 
 ### qb-inventory
 
