@@ -184,6 +184,33 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
         return
     end
 
+    -- 阶段 D · C1（2026-11-13）：validator 步骤必须在服务端真的跑一次校验器。
+    -- 客户端 nodeComplete 这条腿过去直接推进，`validator_id` 从未执行（调研 §2.1-5）——
+    -- 「到达判定」「绑定载具」这类校验走客户端就能整段跳过。
+    -- 回滚开关：`setr quest_step_validator_enforce 0`（只记日志不拦）。
+    if template and QuestStepGate then
+        local stepDef = nil
+        for _, candidate in ipairs(template.steps or {}) do
+            if candidate.id == stepId then stepDef = candidate break end
+        end
+        local requiredValidator = QuestStepGate.RequiredValidator(stepDef)
+        if requiredValidator then
+            local playerObj = QBCore.Functions.GetPlayer(src)
+            local cid = playerObj and playerObj.PlayerData.citizenid or 'unknown'
+            local passed, validatorMsg = QuestValidators.Run(requiredValidator, src,
+                QuestStepGate.ValidatorPayload(stepDef),
+                { questId = questId, citizenid = cid, clientData = clientData })
+            if not passed then
+                if QuestStepGate.Enforced() then
+                    feedback(src, validatorMsg or '任务步骤校验未通过', 'error')
+                    return
+                end
+                print(('[custom-quest] ⚠️ validator 未通过但拦截已关闭: %s / %s / %s')
+                    :format(tostring(requiredValidator), questId, tostring(validatorMsg)))
+            end
+        end
+    end
+
     -- 推进步骤
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end

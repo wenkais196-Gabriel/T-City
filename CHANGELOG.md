@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   外部 7 个来源的做法对照、6 条假设（4 条被证据排除）、按平面的影响面，以及与 Claude Code 的引擎表达力盘点
   （NPC 乘客 / 里程计价 / 乱序多站 / 失败判定 / 结算幂等五项，逐条给现在靠哪个 step 类型与最小新增）。
   调研修正了三条原判断：数值按技能分三档而不是统一一条带、放弃「玩家自排路线」、NPC 预算不能复用警察的。
+- **validator 步骤的服务端闸（阶段 D · C1）**：`custom-quest` 新增 quest_step_gate.lua（纯函数，零原生依赖），
+  并在 `nodeComplete` 处理器里**于 `AdvanceStep` 之前**执行步骤的 `validator_id`。原因：`validator` 步骤过去只在
+  `dashboardStampDelivery` 那条路径上跑过校验器，客户端 `nodeComplete` 这条腿直接推进 ——「到达判定」「绑定载具」
+  走客户端就能整段跳过（调研 §2.1-5）。回滚：`setr quest_step_validator_enforce 0`（只记日志不拦）。
+  只对**声明了** `validator_id` 的步骤生效，未注册校验器时不拦（向后兼容）。
+  证据：`test_quest_step_gate.py` 5 条（判定/入参/开关）+ `test_quest_step_gate_contract.py` 2 条（契约顺序 + 顺序调反必须判红）；
+  全量 `pytest tests/unit tests/architecture` → 1409 passed / 147 skipped。
+  **真机未验**：logistics/aviation 的 27 个 validator 步骤要在服务器上跑一遍，确认真实流程不被误拦。
 - **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
   合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
   （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：

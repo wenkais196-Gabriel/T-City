@@ -96,7 +96,7 @@ source_of_truth: false
 
 | 批次 | 内容 | 交付物 | 验收门（可判定） | 工时 |
 |---|---|---|---|---|
-| **R0 堵漏 + trucker 收编** | ①给 qb-shops 的 `RestockShopItems` 加 job 校验（现在任何职业站在交货点，每 30 秒就能拿 $500）；②把送货循环接进 trucker 职业（job 变更、结算审计、rep）；③把 `quest_logistics` 里重复的运输任务去重 | 1 处鉴权 + 1 份 validator + 结算统一 | 非 trucker 触发 → 拒绝且记审计；trucker 触发 → 只有 1 条结算回执；同一单重复提交 → 第二次拒绝 | 14h |
+| **R0 堵漏 + trucker 收编** | ①给 qb-shops 的 `RestockShopItems` 加 job 校验（现在任何职业站在交货点，每 30 秒就能拿 $500）；②把送货循环接进 trucker 职业（job 变更、结算审计、rep）；③~~`quest_logistics` 去重~~ **已撤回**：2026-11-13 实测 31 份配置 / 183 个 step、12 个运输任务 id 全部唯一，没有重复（只有跨任务的同名 step id，属正常命名空间） | 1 处鉴权 + 1 份 validator + 结算统一 | 非 trucker 触发 → 拒绝且记审计；trucker 触发 → 只有 1 条结算回执；同一单重复提交 → 第二次拒绝 | 14h |
 | **R1 多站驾驶（无 NPC）** | garbage（袋数/站点谱）、bus（站点谱 + 准点率） | 2 份 config + route validator | 各跑通一次；每职业 ≥3 点位 ≥2 难度档；中途放弃只扣押金不吞钱 | 22h |
 | **R2 第一个 NPC** | taxi（乘客 NPC、计价、小费、取消惩罚）→ tow（玩家车归属，最贵放末位） | 1 份 config + NPC 生成 + 车程 HUD | taxi 三条反例全过（无乘客提交 / 远距提交 / 重复结算）；tow 拖走别人车必须拒绝 | 30h |
 | **R3 站点服务** | reporter（拍照取证 → 交稿）、hotdog（NPC 顾客 + 定价 + 库存）、recycle（要补 plastic 商品进 market） | 3 份 config + station 机制 | 每个 ≥3 点位；hotdog 的顾客走 NPCBudget 且不超每玩家 2 个槽 | 26h |
