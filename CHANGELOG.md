@@ -35,12 +35,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/INDEX.md` 重新生成（308 篇，0 未登记）。
 
 ### Changed
+- **送货循环归 trucker，结算额回到带内（R0.3）**：qb-shops 的 `Config.DeliveryPrice` 从 **$500/站降到 $70/站**。
+  原值 20 站/趟 = $10,000，按 25–40 分钟折算 **$15k–24k/h**，比低技能带（$1.8k–2.5k/h）高 6–13 倍；
+  现值 ≈ $1,400/趟 ≈ $2.4k/h。同时新增 `Config.DeliveryJob = { name = 'trucker', requireDuty = true }`：
+  **租车与结算都要求在岗 trucker**（此前任何职业都能租车跑单；只放结算不放租车 = 收押金却结算不了）。
+  每站结算额外给 `delivery` 声望 +1 —— 这条声望此前只在死代码 `PaySlip` 里发过，从未真正产生。
+  另把每站 10% 概率的 `cryptostick` 改成配置 `DeliveryCryptostickChance`（默认 **0**）：一根按 qb-crypto 的
+  `Worth = 1000` 兑换，20 站/趟期望 2 根 = $2,000，比现金结算还多，实际收益约 $6k/h —— 这条是 Claude Code
+  验收时抓出来的。数值依据与分档见 `docs/plan/jobs-content/02-design.md` §2。
 - **一键启动**：新增 `start-tcity.ps1` + `start.cmd`（`-Status` / `-Restart` / `-Stop`）。顺序固定为
   Docker 引擎 → 容器 → `mariadb-admin ping` → FXServer → 自检（资源数稳定、关键资源齐全、日志无
   `SCRIPT ERROR` / `awaitConnection failed`）。起因：Docker Desktop 被关掉后 MariaDB 一起没了，
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
+- **qb-shops 补货结算是敞开的钱口（R0 第 1 项）**：`T-CityLite.base/resources/[qb]/qb-shops/server/main.lua` 的
+  `RestockShopItems` 只有「10 米距离 + 每玩家每店 30 秒」两道闸，**没有任何「这一趟是跑出来的」凭据** ——
+  任何职业站在任意交货点，每 30 秒就能领 `Config.DeliveryPrice`（$500），配置里 45 处交货点。
+  现在改成**押金会话**：只有 `DoBail(true)` 扣过押金才开一趟，趟内最多结算 `Config.MaxDeliveries` 次
+  （与客户端 `JobsDone` 同口径），还车退押金时关闭会话。钥匙用 `citizenid` 而非 source，重连不白送新趟。
+  先红后绿的证据：旧实现的 probe 在「没付押金」场景下照付；新实现在同场景拒绝、付过押金的照付、满 20 次后拒绝、
+  还车后拒绝（`tests/unit/layer3_business/test_shops_guards.py`）。
 - **濒死时「按 E 呼救」没有任何反应**：`T-CityLite.base/resources/[qb]/qb-ambulancejob/client/dead.lua` 的文案写 E，
   轮询的却是 control 47（INPUT_DETONATE = 键盘 G）；改成 38 并补一条 feed 回执。
 - **扣押场「有钱但无法付款」**：`T-CityLite.base/resources/[qb]/qb-garages/html/script.js` 把 `state=2` 一律渲染成 `Impound` 且按钮 disabled，

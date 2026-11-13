@@ -5,8 +5,16 @@ Config.UseTarget = GetConvar('UseTarget', 'false') == 'true'
 Config.ShopsInvJsonFile = './json/shops-inventory.json'
 Config.TruckDeposit = 125
 Config.MaxDeliveries = 20
-Config.DeliveryPrice = 500
+-- 每站结算额。2026-11-13（R0.3）从 500 下调到 70：20 站/趟 × $500 = $10,000，
+-- 按 25–40 分钟一趟折算 $15k–24k/h，比低技能带（$1.8k–2.5k/h）高 6–13 倍。
+-- 70 × 20 站 ≈ $1,400/趟 ≈ $2.4k/h，落在带内。数值框架见 docs/plan/jobs-content/02-design.md §2。
+Config.DeliveryPrice = 70
+-- 结算要求的职业（不在岗或职业不符一律不结算）。置空表 = 不校验（退回旧行为）。
+Config.DeliveryJob = { name = 'trucker', requireDuty = true }
 Config.RewardItem = 'cryptostick'
+-- 每站额外给 cryptostick 的概率（%）。默认 0：qb-crypto 里一根 ≈ $1,000，
+-- 10%/站 = 20 站/趟期望 $2,000，比现金结算还多，会把这一档的实际收益抬到 $6k+/h。
+Config.DeliveryCryptostickChance = 0
 Config.Fuel = 'LegacyFuel'
 
 Config.DeliveryLocations = {
