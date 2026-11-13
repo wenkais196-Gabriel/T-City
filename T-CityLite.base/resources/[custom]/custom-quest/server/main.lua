@@ -29,6 +29,29 @@ local function feedback(src, text, kind)
     end)
 end
 
+-- 阶段 D · C1：validator 步骤的校验器只在这里跑。两条腿共用一份实现 ——
+--   * dashboardStampDelivery（电子印章）：force = true，历史行为是必拦；
+--   * nodeComplete（客户端）：受 convar `quest_step_validator_enforce` 控制，可一键回滚。
+-- 「哪些步骤需要校验」与入参合成都在 server/quest_step_gate.lua，避免两份白名单各自漂移。
+local function runStepValidator(src, questId, step, questData, opts)
+    opts = opts or {}
+    if not (QuestStepGate and QuestValidators) then return true end
+    local validatorId = QuestStepGate.RequiredValidator(step)
+    if not validatorId then return true end
+
+    local passed, msg = QuestValidators.Run(validatorId, src,
+        QuestStepGate.ValidatorPayload(step), questData)
+    if passed then return true end
+
+    if opts.force or QuestStepGate.Enforced() then
+        feedback(src, msg or opts.failMessage or '任务步骤校验未通过', 'error')
+        return false
+    end
+    print(('[custom-quest] ⚠️ validator 未通过但拦截已关闭: %s / %s / %s')
+        :format(tostring(validatorId), tostring(questId), tostring(msg)))
+    return true
+end
+
 -- ==============================================================
 -- 初始化
 -- ==============================================================
@@ -182,6 +205,25 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
     if not valid then
         feedback(src, validateErr or '任务节点校验失败', 'error')
         return
+    end
+
+    -- 阶段 D · C1（2026-11-13）：validator 步骤必须在服务端真的跑一次校验器。
+    -- 客户端 nodeComplete 这条腿过去直接推进，`validator_id` 从未执行（调研 §2.1-5）——
+    -- 「到达判定」「绑定载具」这类校验走客户端就能整段跳过。
+    -- 回滚开关：`setr quest_step_validator_enforce 0`（只记日志不拦）。
+    if template then
+        local stepDef = nil
+        for _, candidate in ipairs(template.steps or {}) do
+            if candidate.id == stepId then stepDef = candidate break end
+        end
+        if stepDef then
+            local playerObj = QBCore.Functions.GetPlayer(src)
+            local cid = playerObj and playerObj.PlayerData.citizenid or 'unknown'
+            local allowed = runStepValidator(src, questId, stepDef,
+                { questId = questId, citizenid = cid, clientData = clientData },
+                { failMessage = '任务步骤校验未通过' })
+            if not allowed then return end
+        end
     end
 
     -- 推进步骤
@@ -912,26 +954,10 @@ RegisterNetEvent('quest:server:dashboardStampDelivery', function(callerSrc, ques
             local Player = QBCore.Functions.GetPlayer(src)
             if not Player then return end
 
-            local validatorData = step.data.validator_data or {}
-            -- 合并校验器关心的meta字段（不混入UI字段）
-            local validatorMetaKeys = {
-                destCoords = true, radius = true, use_bound_vehicle = true,
-                require_trailer = true, returnCoords = true,
-                allowed_classes = true, fallback_model = true,
-                rental_fee_percent = true, rental_deposit = true,
-            }
-            for k, v in pairs(step.data) do
-                if validatorMetaKeys[k] then
-                    validatorData[k] = v
-                end
-            end
-
             local questData = { questId = questId, citizenid = Player.PlayerData.citizenid, vehicleNetId = nil }  -- dashboard 无 clientData
-            local passed, msg = QuestValidators.Run(step.data.validator_id, src, validatorData, questData)
-            if not passed then
-                feedback(src, msg or '电子印章校验失败', 'error')
-                return
-            end
+            local allowed = runStepValidator(src, questId, step, questData,
+                { force = true, failMessage = '电子印章校验失败' })
+            if not allowed then return end
 
             -- 校验通过，推进步骤
             local success, message = QuestManager.AdvanceStep(

@@ -2,7 +2,7 @@
   "$comment": "P1-3 net event 基线。由 tests/architecture/net_event_baseline.py --write 生成；test_net_event_inventory.py 会拿实测逐字段比对（含 started），手改即红。",
   "version": 1,
   "rule": "P1-3",
-  "measured_at": "2026-11-11",
+  "measured_at": "2026-11-13",
   "scope": "resources/** 服务端脚本（server/ 优先；manifest 的 client_scripts 块与单条 client_script 都排除；共享文件按服务端算）；started = 是否在 configs/**/*.cfg 与 server.cfg 的 ensure 列表里",
   "enforced": [
     "qb-core"
@@ -596,11 +596,11 @@
   "unguarded": {},
   "debt": [],
   "non_literal": [
-    "[custom]/custom-quest/server/main.lua:205  Config.Quest.Events.QUEST_COLLECT",
-    "[custom]/custom-quest/server/main.lua:280  Config.Quest.Events.QUEST_REQUEST_STATE",
-    "[custom]/custom-quest/server/main.lua:43  Config.Quest.Events.QUEST_ACCEPT",
-    "[custom]/custom-quest/server/main.lua:70  Config.Quest.Events.QUEST_ABANDON",
-    "[custom]/custom-quest/server/main.lua:87  Config.Quest.Events.QUEST_REACH",
+    "[custom]/custom-quest/server/main.lua:110  Config.Quest.Events.QUEST_REACH",
+    "[custom]/custom-quest/server/main.lua:247  Config.Quest.Events.QUEST_COLLECT",
+    "[custom]/custom-quest/server/main.lua:322  Config.Quest.Events.QUEST_REQUEST_STATE",
+    "[custom]/custom-quest/server/main.lua:66  Config.Quest.Events.QUEST_ACCEPT",
+    "[custom]/custom-quest/server/main.lua:93  Config.Quest.Events.QUEST_ABANDON",
     "[custom]/custom-vehicles/server/main.lua:120  Config.Vehicles.Events.CHECK_KEYS",
     "[custom]/custom-vehicles/server/main.lua:139  Config.Vehicles.Events.HOTWIRE_ATTEMPT",
     "[custom]/custom-vehicles/server/main.lua:223  Config.Vehicles.Events.LOCKPICK_ATTEMPT",
