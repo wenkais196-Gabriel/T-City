@@ -16,33 +16,15 @@
 
 from __future__ import annotations
 
-import subprocess
+import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parents[3]
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
-
-
-def _run(probe: str, resource_path: str) -> dict[str, str]:
-    proc = subprocess.run(
-        ["lua5.4", (FIXTURES / probe).as_posix(), (BASE / "resources" / resource_path).as_posix()],
-        capture_output=True,
-        text=True,
-        timeout=90,
-    )
-    assert proc.returncode == 0, f"probe 失败：{proc.stderr} / {proc.stdout}"
-    data: dict[str, str] = {}
-    for line in proc.stdout.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        data.setdefault(key, value)
-    assert "HANDLER_ERROR" not in data, f"handler 抛错：{data.get('HANDLER_ERROR')}"
-    return data
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lua_probe import run_probe  # noqa: E402
 
 
 def test_restock_pay_is_distance_and_cooldown_bound():
-    data = _run("shops_probe.lua", "[qb]/qb-shops")
+    data = run_probe("shops_probe.lua", "[qb]/qb-shops")
     assert data["RESTOCK_FAR_BLOCKED"] == "true", "不在交货点也能结算补货工资"
     assert data["RESTOCK_NEAR_PAID"] == "true", "正常交货被拒（过度收紧）"
     assert data["RESTOCK_COOLDOWN_BLOCKED"] == "true", "冷却内可以重复领工资（旧版就是这样）"
@@ -53,7 +35,7 @@ def test_restock_pay_is_distance_and_cooldown_bound():
 
 def test_restock_pay_requires_a_paid_delivery_session():
     """冷却只限速，不证明「跑了这一趟」。R0（2026-11-13）加押金会话 + 每趟次数上限。"""
-    data = _run("shops_probe.lua", "[qb]/qb-shops")
+    data = run_probe("shops_probe.lua", "[qb]/qb-shops")
     assert data["RESTOCK_NO_SESSION_BLOCKED"] == "true", "没付押金也能在交货点领钱（旧版就是这样）"
     assert data["RESTOCK_SESSION_OPEN_PAID"] == "true", "付了押金反而领不到（过度收紧）"
     assert data["RESTOCK_SESSION_CAP"] == "true", (
@@ -64,7 +46,7 @@ def test_restock_pay_requires_a_paid_delivery_session():
 
 def test_delivery_loop_is_trucker_only_and_pays_rep():
     """R0.3：送货循环归 trucker。租车与结算都受职业门约束；每站给 delivery 声望。"""
-    data = _run("shops_probe.lua", "[qb]/qb-shops")
+    data = run_probe("shops_probe.lua", "[qb]/qb-shops")
     assert data["RENTAL_NON_TRUCKER_BLOCKED"] == "true", "非 trucker 也能租车（收了押金却结算不了 = 骗钱）"
     assert data["RENTAL_TRUCKER_ALLOWED"] == "true", "在岗 trucker 租不到车（过度收紧）"
     assert data["RESTOCK_OFFDUTY_BLOCKED"] == "true", "在岗起租后下班仍能结算（职业门只看了一次）"
@@ -76,19 +58,19 @@ def test_delivery_loop_is_trucker_only_and_pays_rep():
 
 def test_payslip_is_not_reachable_from_clients():
     """全仓没有客户端调用点，却按客户端给的 drops 发钱。"""
-    data = _run("shops_probe.lua", "[qb]/qb-shops")
+    data = run_probe("shops_probe.lua", "[qb]/qb-shops")
     assert data["PAYSLIP_CLIENT_BLOCKED"] == "true", "客户端发 PaySlip(99999) 就能印钞（旧版就是这样）"
 
 
 def test_shop_stock_updates_are_bounded():
-    data = _run("shops_probe.lua", "[qb]/qb-shops")
+    data = run_probe("shops_probe.lua", "[qb]/qb-shops")
     assert data["STOCK_DECREMENT_OK"] == "true", "正常结账扣库存被拒（过度收紧）"
     assert data["STOCK_NEGATIVE_BLOCKED"] == "true", "负数数量会把库存加上去（旧版就是这样）"
     assert data["STOCK_BAD_SLOT_SAFE"] == "true", "坏 slot 打断事件线程（旧版就是这样）"
 
 
 def test_open_shop_requires_being_there():
-    data = _run("shops_probe.lua", "[qb]/qb-shops")
+    data = run_probe("shops_probe.lua", "[qb]/qb-shops")
     assert data["OPENSHOP_NIL_DATA_SAFE"] == "true", "data 为 nil 时抛错（旧版就是这样）"
     assert data["OPENSHOP_NEAR_ALLOWED"] == "true", "站在店门口开不了界面（过度收紧）"
     assert data["OPENSHOP_FAR_BLOCKED"] == "true", "能在任意位置开任意店（旧版就是这样）"
