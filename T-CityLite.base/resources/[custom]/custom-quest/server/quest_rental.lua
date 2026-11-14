@@ -294,6 +294,12 @@ function QuestRental.ClaimPendingRefund(player)
     local amount = math.max(0, math.floor(tonumber(pending.amount) or 0))
     if amount > 0 then
         player.Functions.AddMoney('bank', amount, 'quest-rental-restart-refund')
+        -- 必须告诉玩家：这笔钱是「上次没结清」退回来的，不然他只会觉得银行多了个没来由的数字。
+        local src = player.PlayerData and player.PlayerData.source
+        if src then
+            TriggerClientEvent('QBCore:Notify', src,
+                ('💰 上次租借押金已退回银行：$%s'):format(tostring(amount)), 'success', 8000)
+        end
     end
     if QuestDB and QuestDB.LogEvent then
         QuestDB.LogEvent(citizenid, pending.questId or 'unknown', 'rental_close', nil, {
