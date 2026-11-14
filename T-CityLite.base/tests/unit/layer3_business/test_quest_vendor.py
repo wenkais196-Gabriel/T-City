@@ -144,3 +144,64 @@ def test_vendor_is_declared_in_the_manifest():
     assert "server/quest_vendor.lua" in read(MANIFEST), (
         "quest_vendor.lua 不在 fxmanifest 的 server_scripts 里 —— "
         "探针全绿也不会在生产环境加载")
+
+
+# ---------------------------------------------------------------------------
+# S3 接线：做热狗（nonce 一次性 + 原料先扣再加成品）
+# ---------------------------------------------------------------------------
+
+BRIDGE = BASE / "resources/[custom]/custom-quest/server/quest_vendor_bridge.lua"
+VENDOR_CLIENT = BASE / "resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua"
+
+
+def test_cook_actions_are_whitelisted_on_the_only_event():
+    """做热狗与收摊都必须走那条唯一的 vendorAction，不新开事件。"""
+    bridge = BRIDGE.read_text(encoding="utf-8")
+    actions_line = [l for l in bridge.splitlines() if l.startswith("local ACTIONS")][0]
+    for action in ("accept", "reject", "purchase", "cook", "close"):
+        assert f"{action} = true" in actions_line, f"{action} 不在动作白名单里"
+    # 整个文件只能有一个 RegisterNetEvent
+    assert bridge.count("RegisterNetEvent(") == 1
+
+
+def test_cooking_consumes_raw_before_adding_stock():
+    """先扣原料再加成品。
+
+    反过来写的话，原料耗尽时 AddStock 已经成功、ConsumeRaw 返回 no_raw，
+    结果就是「原料 0 还能一直做出热狗」。
+    """
+    bridge = BRIDGE.read_text(encoding="utf-8")
+    consume = bridge.index("local consumed = QuestVendor.ConsumeRaw(citizenid)")
+    add = bridge.index("local added = QuestVendor.AddStock(citizenid, result.tier, 1)")
+    assert consume < add, "顺序反了：必须先扣原料"
+    assert "if not consumed then" in bridge[consume:add], "扣原料失败必须提前返回"
+
+
+def test_quality_comes_from_the_server_side_minigame_resolution():
+    """品质由 QuestMinigame.Resolve 按 tiers 映射，客户端只说失误几次。"""
+    bridge = BRIDGE.read_text(encoding="utf-8")
+    assert "QuestMinigame.Resolve(citizenid, nonce" in bridge
+    assert "result.tier" in bridge
+    cook_config = bridge[bridge.index("function QuestVendorBridge.CookConfig()"):]
+    cook_config = cook_config[:cook_config.index("\nend\n")]
+    assert "max_faults = 0" in cook_config and "'exotic'" in cook_config
+    assert "max_faults = 1" in cook_config and "'rare'" in cook_config
+
+
+def test_closing_the_stand_does_two_things():
+    """收摊要同时关会话与推进任务。
+
+    只关会话：任务永远停在「开卖」；只推进任务：顾客继续来加钱。
+    """
+    client = VENDOR_CLIENT.read_text(encoding="utf-8")
+    assert "TriggerServerEvent('quest:server:vendorAction', 'close'" in client
+    assert "TriggerServerEvent('quest:server:nodeComplete', booth.questId, booth.stepId, 'vendor'" in client
+
+
+def test_cooking_uses_the_shared_minigame_export():
+    client = VENDOR_CLIENT.read_text(encoding="utf-8")
+    assert "exports['qb-minigames']:KeyMinigame(10)" in client
+    # 客户端不许自己判定品质
+    block = client[client.index("quest:client:cookStart"):]
+    block = block[:block.index("end)")]
+    assert "exotic" not in block and "rare" not in block, "客户端不能自己决定品质"

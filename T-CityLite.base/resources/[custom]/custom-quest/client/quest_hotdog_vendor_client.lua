@@ -145,6 +145,12 @@ local function ToVec3(value)
 end
 
 --- NUI / 暂停菜单有焦点时，Y/N/E/ALT 不该穿透到游戏世界。
+--- 玩家可见的提示。走 qb-core 的原生通知（与全仓其它资源一致），
+-- 不用 chat：chat 会被别的消息顶掉，而这几条都是「刚做完一件事」的即时回执。
+local function Notify(text, kind, duration)
+    TriggerEvent('QBCore:Notify', text, kind or 'primary', duration or 4000)
+end
+
 local function UiHasFocus()
     local nui = type(IsNuiFocused) == 'function' and NativeBool(IsNuiFocused())
     local pause = type(IsPauseMenuActive) == 'function' and NativeBool(IsPauseMenuActive())
@@ -329,6 +335,9 @@ RegisterNetEvent('quest:client:vendorState', function(payload)
 
     local booth = {
         questId = questId,
+        -- 收摊时要回调 nodeComplete(questId, stepId, 'vendor')，所以这一份必须存下来；
+        -- 只存 questId 的话收摊后任务永远停在这一步。
+        stepId = type(payload.stepId) == 'string' and payload.stepId or nil,
         boothNetId = boothNetId,
         coords = CoordsFromPayload(payload, boothNetId) or (previous and previous.coords),
         state = state,
@@ -478,16 +487,67 @@ local function HandleOwnerInteract()
 
     -- 本地只发请求；state 的最终变化以服务端回来的 vendorState 为准。
     -- 先给一个 3 秒的 pending，按 E 不会连发，也不会假装已经开/关了。
-    if booth.state == 'open' then
-        booth.pendingAction = 'close'
-        booth.pendingUntil = now + PENDING_MS
-        TriggerEvent('quest:hotdog:closeBooth')
+    if booth.state ~= 'open' then
+        -- 开卖是服务端在「放下推车」那一刻自动做的，收摊之后这条路已经是终点。
+        Notify('已经收摊了，回租赁点结算吧', 'primary', 4000)
+        return
+    end
+
+    booth.pendingAction = 'close'
+    booth.pendingUntil = now + PENDING_MS
+    -- 两条消息各司其职：
+    --   vendorAction('close') → 关顾客会话（不再来人、不再推报价）
+    --   nodeComplete('vendor') → 推进任务（否则任务永远停在「开卖」这一步）
+    -- 只发前者：摊收了但任务还在卖；只发后者：任务过了但顾客继续来。
+    TriggerServerEvent('quest:server:vendorAction', 'close', {})
+    if booth.stepId then
+        TriggerServerEvent('quest:server:nodeComplete', booth.questId, booth.stepId, 'vendor', {})
     else
-        booth.pendingAction = 'open'
-        booth.pendingUntil = now + PENDING_MS
-        TriggerEvent('quest:hotdog:openBooth')
+        print('[quest-hotdog-vendor-client] ⚠️ 收摊时没有 stepId —— 任务不会推进')
     end
 end
+
+-- ==============================================================
+-- 做热狗：G 起小游戏 → KeyMinigame(10) → 只报 faults
+--
+-- 客户端拿不到「我做了几份」这种结论：份额由服务端按 nonce 反查会话决定，
+-- 这里能发的只有「这一次我失误了几次」。
+-- ==============================================================
+
+local cookPending = false
+
+local function HandleCook(ped)
+    if UiHasFocus() then return end
+    local booth = NearestBooth(GetEntityCoords(ped), OWNER_DISTANCE, true)
+    if not booth or booth.state ~= 'open' then return end
+    if cookPending then return end
+    if (booth.raw or 0) <= 0 then return end
+
+    cookPending = true
+    TriggerServerEvent('quest:server:vendorAction', 'cook', { mode = 'start' })
+    -- 服务端回 cookStart 才真的开小游戏；3 秒没回来就允许再按（服务端拒绝/超时都不会卡死）
+    SetTimeout(3000, function() cookPending = false end)
+end
+
+RegisterNetEvent('quest:client:cookStart', function(payload)
+    cookPending = false
+    if type(payload) ~= 'table' or type(payload.nonce) ~= 'string' then return end
+
+    local ok, result = pcall(function()
+        return exports['qb-minigames']:KeyMinigame(10)
+    end)
+    if not ok or type(result) ~= 'table' then
+        Notify('小游戏没起来（qb-minigames 不可用）', 'error', 5000)
+        return
+    end
+
+    TriggerServerEvent('quest:server:vendorAction', 'cook', {
+        mode = 'report',
+        nonce = payload.nonce,
+        faults = result.faults,
+        quit = result.quit == true,
+    })
+end)
 
 -- ==============================================================
 -- 报价：Y 成交 / N 拒绝
@@ -783,11 +843,12 @@ local function DrawOwnerStatus(booth, now)
     local pending = booth.pendingUntil and now < booth.pendingUntil
     local prompt
     if pending then
-        prompt = booth.pendingAction == 'open' and '[E] 开卖中…' or '[E] 收摊中…'
+        prompt = '[E] 收摊中…'
     elseif booth.state == 'open' then
-        prompt = '[E] 收摊'
+        -- 开卖是「放下推车」那一刻服务端自动做的；营业中能做的只有两件事。
+        prompt = booth.raw > 0 and '[E] 收摊 · [G] 做热狗' or '[E] 收摊（原料用完了）'
     else
-        prompt = '[E] 开卖'
+        prompt = '已收摊 · 回租赁点结算'
     end
     DrawText2D(x, y + 0.058, prompt, 0.33,
         pending and COLOR.grey or COLOR.gold)
@@ -883,6 +944,11 @@ RegisterCommand('quest_hotdog_vendor_interact', function()
     HandleOwnerInteract()
 end, false)
 RegisterKeyMapping('quest_hotdog_vendor_interact', '热狗摊 · 开卖/收摊', 'keyboard', 'E')
+
+RegisterCommand('quest_hotdog_vendor_cook', function()
+    HandleCook(PlayerPedId())
+end, false)
+RegisterKeyMapping('quest_hotdog_vendor_cook', '热狗摊 · 做热狗', 'keyboard', 'G')
 
 RegisterCommand('quest_hotdog_vendor_accept', function()
     ResolveOffer(true)
