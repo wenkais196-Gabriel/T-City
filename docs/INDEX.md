@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-14 ｜ **文档总数**：317 ｜ **已登记**：317 ｜ **未登记**：0
+**生成时间**：2026-11-14 ｜ **文档总数**：318 ｜ **已登记**：318 ｜ **未登记**：0
 
-**状态分布**：✅ active 181 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 182 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -172,12 +172,13 @@
 | [custom-phone 性能与职业 App 接口设计](agent/phone/DESIGN.md) | spec | ✅ active | 2026-10-31 | 2027-04-30 | ★ | `docs/agent/phone/DESIGN.md` |
 | [v0.4 自研手机系统（custom-phone）](archive/QBCore_Lite_versions/v0.4-custom-phone.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.4-custom-phone.md` |
 
-### quest（13）
+### quest（14）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [custom-quest — 数据驱动任务系统](02_script_index/custom-quest.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-quest.md` |
 | [T-City 职业与组织任务情景建立手册 (Batch 1, Batch 2, Batch 3 & Batch 4)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_setup_manual.md) | manual | 📦 archived | 2026-10-23 | 2027-01-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_setup_manual.md` |
+| [热狗摊：开发计划（据 UX 规格 §10 拆片）](plan/jobs-content/11-hotdog-dev-plan.md) | plan | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/11-hotdog-dev-plan.md` |
 | [任务节点与 UX 调研：以「热狗摊」为样本](plan/jobs-content/07-quest-ux-research.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/07-quest-ux-research.md` |
 | [成熟职业脚本调研：官方 9 个 job 的玩法循环拆解](plan/jobs-content/08-mature-scripts-survey.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/08-mature-scripts-survey.md` |
 | [T-City Lite — 通用任务模板系统设计](../T-CityLite.base/docs/v0.7-mission-template-design.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/v0.7-mission-template-design.md` |
