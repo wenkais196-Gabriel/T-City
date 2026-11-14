@@ -20,7 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **单趟耗时遥测（数值卡的数据源）**：`custom-quest` 在接单时记 `os.time()`、完成/放弃/失败时清掉，
+- **薪资抑制（R2）：让「干活」成为主要收入**：qb-core 每 10 分钟按职级发 `grades[level].payment`，
+  原始区间 10–200 → **$60–1,200/小时**的白拿收入，会盖过 R1 三个循环职业的 1,400–2,800 $/h。
+  新增 `T-CityLite.base/resources/[system]/core_economy/server/salary_scale.lua`：只改 `QBShared.Jobs` 这张共享表（就是 PaycheckInterval 读的那张），
+  **qb-core 一行没动**，上游可以照常合并。两个 convar：`economy_salary_scale`（默认 1.0 = 不动）、
+  `economy_salary_cap`（默认 0 = 不封顶）；本次配 0.35 / 50 → 单次 $4–50，折算 **$24–300/小时**。
+  实现要点：每次应用都从**原始值**重算（`restart core_economy` 不会把工资越压越低），非法 convar 一律回落
+  安全默认，回滚只需把 scale 改回 1.0 并重启。闸门：`tests/unit/layer3_business/test_salary_scale.py`
+  7 条（安全默认 / 缩放封顶 / 幂等 / 从原始值重算 / 单调性 / 非法值 / 可回滚）。- **单趟耗时遥测（数值卡的数据源）**：`custom-quest` 在接单时记 `os.time()`、完成/放弃/失败时清掉，
   并在 `🏁 COMPLETING` 那行日志里带出「用时=x.x 分钟」。只走内存 + 日志，0 新表 / 0 新事件。
   起因：`04-numbers.md` 的时薪是「站数 × 单站耗时 × 收益」三条假设叠出来的，其中单站耗时从来没测过 ——
   存量 7 条任务壳要不要降价，得先有真实数据才谈得上定价。- **R1 真机验收：bus 也跑通**：`bus_v1_city`（6 站）同一会话跑完 → `completing` → `$486 (bank) + bus rep +25`，
