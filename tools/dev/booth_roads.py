@@ -91,6 +91,11 @@ def main() -> int:
     new_hash = hashlib.sha256(text.encode()).hexdigest()
 
     if args.check:
+        if not ROAD_CACHE.exists():
+            # 缓存是 gitignored 的（.cache/），CI 里没有它。这时「产物过期」这件事
+            # **无法判定** —— 返回 2 让调用方跳过，而不是把「没数据」说成「不一致」。
+            print(f"[check] SKIP 缺路网缓存：{ROAD_CACHE}")
+            return 2
         if not OUT.exists():
             print(f"[check] 缺产物：{OUT}")
             return 1

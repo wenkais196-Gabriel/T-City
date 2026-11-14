@@ -92,6 +92,10 @@ def test_road_points_are_in_sync_with_the_cache():
         [python, str(REPO / "tools/dev/booth_roads.py"), "--check"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
     )
+    if proc.returncode == 2:
+        # 路网缓存是 gitignored 的，CI 机器上没有 —— 这时「产物是否过期」无法判定，
+        # 只能跳过。产物本身已经在仓库里（hotdog_roads.lua），服务端照样能跑。
+        pytest.skip(proc.stdout.strip())
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
