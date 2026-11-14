@@ -75,6 +75,30 @@ def render(pts: list[tuple[float, float]], center: tuple[float, float], radius: 
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
+def check(cache: Path = ROAD_CACHE, out: Path = OUT) -> int:
+    """校验产物是否与路网缓存一致。
+
+    返回值：0 一致 / 1 不一致 / 2 无法判定（缓存不存在）。
+
+    抽成函数是为了让测试**进程内**调用：起子进程时要先 `shutil.which` 找一个解释器，
+    那条路径在静态分析里等于「用 PATH 里的可执行文件跑命令」，会平白拉低安全评级。
+    """
+    if not cache.exists():
+        print(f"[check] SKIP 缺路网缓存：{cache}")
+        return 2
+    if not out.exists():
+        print(f"[check] 缺产物：{out}")
+        return 1
+    points = slice_points(load_points(), (215.0, -810.0), 350.0)
+    expected = hashlib.sha256(render(points, (215.0, -810.0), 350.0).encode()).hexdigest()
+    actual = hashlib.sha256(out.read_text(encoding="utf-8").encode()).hexdigest()
+    if expected != actual:
+        print("[check] 产物与路网缓存不一致 —— 需要重跑 tools/dev/booth_roads.py")
+        return 1
+    print(f"[check] OK 节点 {len(points)} 个")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--center", default="215,-810", help="切片中心 x,y")

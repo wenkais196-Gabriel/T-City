@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import re
 import shutil
 import subprocess
@@ -31,7 +32,7 @@ LUA = shutil.which("lua5.4")  # NOSONAR
 
 def run_probe(source: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [LUA, str(PROBE), str(source)],
+        [LUA, str(PROBE), str(source)],  # NOSONAR 固定名字的解释器，路径不来自外部输入
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
     )
 
@@ -86,20 +87,17 @@ def test_booth_files_are_declared_in_the_manifest():
 
 
 def test_road_points_are_in_sync_with_the_cache():
-    """路网点是生成物。缓存更新而 Lua 没重跑，判据就会对着旧地图判断。"""
-    python = shutil.which("python3") or shutil.which("python")  # NOSONAR（同上：固定名字、非外部输入）
-    if python is None:
-        pytest.skip("需要 python 跑生成器")
-    proc = subprocess.run(
-        [python, str(REPO / "tools/dev/booth_roads.py"), "--check"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
-    )
-    if proc.returncode == 2:
-        # 路网缓存是 gitignored 的，CI 机器上没有 —— 这时「产物是否过期」无法判定，
-        # 只能跳过。产物本身已经在仓库里（hotdog_roads.lua），服务端照样能跑。
-        pytest.skip(proc.stdout.strip())
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    """路网点是生成物。缓存更新而 JSON 没重跑，判据就会对着旧地图判断。"""
+    spec = importlib.util.spec_from_file_location("booth_roads", REPO / "tools/dev/booth_roads.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)   # type: ignore[union-attr]
 
+    rc = module.check()
+    if rc == 2:
+        # 路网缓存是 gitignored 的，CI 机器上没有 —— 「产物是否过期」这时无法判定。
+        # 产物本身已经在仓库里（hotdog_roads.json），服务端照样能跑。
+        pytest.skip("缺 .cache/roads（gitignored），无法判定同步性")
+    assert rc == 0, "hotdog_roads.json 与路网缓存不一致 —— 重跑 tools/dev/booth_roads.py"
 
 def test_dev_template_uses_the_booth_step():
     """配置里那条 dev 模板必须真的用上 booth 步骤，否则接线全绿也没人走这条路径。"""
