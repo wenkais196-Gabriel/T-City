@@ -55,9 +55,14 @@ def test_probe_goes_red_when_the_cap_is_removed(tmp_path: Path):
 
 
 def test_close_paths_are_wired_into_every_termination_route():
-    """失败、放弃、断线三条路径都必须关租；少一条就是「押金要不回来」。"""
+    """成功、失败、放弃、断线四条路径都必须关租；少一条就是「押金要不回来」。
+
+    成功这条最容易被漏（本会话就漏过一次）：失败/放弃/断线都关了，
+    但完成任务时没人关，押金就卡在会话里直到玩家下次断线或超时。
+    """
     manager = (BASE / "resources/[custom]/custom-quest/server/quest_manager.lua").read_text(encoding="utf-8")
     cache = (BASE / "resources/[custom]/custom-quest/server/quest_cache.lua").read_text(encoding="utf-8")
+    assert "closeRentalFor(src, 'returned')" in manager, "完成任务时没有关租 —— happy path 押金退不回来"
     assert "closeRentalFor(source, 'failed')" in manager
     assert "closeRentalFor(source, 'abandoned')" in manager
     assert "QuestRental.CloseOnDrop" in cache
