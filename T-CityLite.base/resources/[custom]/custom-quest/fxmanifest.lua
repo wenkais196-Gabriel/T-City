@@ -85,6 +85,7 @@ server_scripts {
     'server/quest_booth.lua',              -- S2：摊位摆放判定（服务端权威）+ 实体登记/回收
     'server/quest_vendor.lua',             -- S4：顾客会话（NPC 报价 / 玩家购买 / Tick 推进）
     'server/quest_vendor_bridge.lua',      -- S4 接线：开卖/Tick/动作事件（只开一条 vendorAction）
+    'server/quest_settle.lua',              -- S5：结算账单（六行 + 幂等回执）
     'server/quest_logistics_validators.lua',
     'server/quest_entity_tracker.lua',       -- v0.9: 实体追踪（脱钩/下车倒计时）
     'server/quest_entity_registry.lua',       -- v0.10: 实体注册表 + 延迟回收策略
