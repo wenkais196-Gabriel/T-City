@@ -138,18 +138,34 @@ review_by: 2027-02-28
 
 ---
 
-## 6. 社区脚本（CC 并行调研）
+## 6. 社区脚本
 
-> 占位：CC 正在跑 `Quasar` / `Renewed` / `jim-*` / `wasabi_*` 等源码可读的职业包，
-> 回来后补进本节（循环形状、押金、顾客类型、结算方式、值得抄的点）。
+官方 job 的共同短板是「没有玩家参与」—— 顾客全是 NPC。社区里那块成熟的是**玩家摆摊/经营**：
 
----
+### 6.1 `renzuzu/renzu_shops`（93★，ox_inventory）
 
+| 机制 | 实现 | 证据 |
+|---|---|---|
+| 玩家摊位 | `PlayerBooth` 配置 + 可购买摊位道具（`ch_prop_ch_gazebo_01`），带 metadata（label / model / type legal\|illegal / 黑白名单） | 仓库的 stalls 配置 |
+| 玩家经营店铺 | `ownedshops/` 下十来个现成店（Burgershot、Bean Machine、PondCafe、Pharmacy…） | 仓库目录 |
+| 补货链 | 店铺下单 → 送货任务派给「快递职业」→ `payperdistance = 5.45` 按距离付钱 | 仓库的 shipping 配置 |
+| 限额与折扣 | `supplierlimit = 100`（每单最多送多少）、`discount = 0.75` | 同上 |
+
+**对我们的价值**：这就是「玩家能不能买热狗」的成熟形态 —— **卖东西的人摆摊、买东西的人走过去按价成交**，
+而不是我们把 NPC 顾客做得更聪明。它也顺带回答了「补货」该怎么做：把补货做成一条送货任务，而不是凭空刷库存。
+
+### 6.2 `Katania91/kt-deliveries`（21★，ox_lib，多框架）
+
+NPC 接单点 → 生成厢车 → 一串送货点。结构上和我们现有的「到点」模板最接近，**没有押金、没有顾客成交**。
+它的价值是证明了一件事：纯「跑点」型任务不需要复杂节点，我们要补的是**有产出与成交**的那一类。
+
+> CC 的独立调研（Quasar / Renewed / jim / wasabi 等）回来后追加到本节；
+> 若与上面结论冲突，以带行号证据的为准。
 ## 7. 未验证 / 本轮没覆盖
 
 | 项 | 状态 |
 |---|---|
-| `qb-mechanicjob` | 未展开（有 NPC 维修呼叫，结构可能更有参考价值） |
+| `qb-mechanicjob` | 已查：不是任务循环，是**部件磨损模拟**（`WearableParts`、按里程扣耐久、`DamageThreshold = 25`）。可借鉴的是「损耗状态」这个概念（摊位/载具也能有耐久） |
 | `qb-busjob` 的结算公式 | 只看了 config，未读客户端计价 |
 | `qb-taxijob` 的 `Meter` 是否真的在用 | config 里有 125/英里，但服务端用的是 `random(65,105)`，两者关系未查清 |
 | 社区脚本 | CC 进行中 |
