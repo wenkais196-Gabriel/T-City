@@ -61,10 +61,29 @@ def test_coordinate_scan_rejects_out_of_world_points_and_the_tree_is_clean(tmp_p
     assert bad.returncode != 0, "界外点没有被判成硬错误（闸门等于没有）：\n" + bad.stdout + bad.stderr
     assert "硬错误 1" in bad.stdout, bad.stdout
 
+    # 反向：占位坐标 (0,0,0) 也必须是硬错误 —— 它让 validate_delivery_arrival 要求玩家开到原点
+    (tmp_path / "quest_bad.lua").write_text(
+        "return {\n"
+        "    {\n"
+        "        id = 'test_placeholder',\n"
+        "        title = 'placeholder',\n"
+        "        steps = {\n"
+        "            { id = 'step_unload', type = 'validator', data = {\n"
+        "                destCoords = { x = 0, y = 0, z = 0 },\n"
+        "            } },\n"
+        "        },\n"
+        "    },\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    placeholder = _scan(tmp_path)
+    assert placeholder.returncode != 0, "占位坐标 (0,0,0) 没被判成硬错误：\n" + placeholder.stdout
+    assert "占位" in placeholder.stdout, placeholder.stdout
+
     # 真实仓库：不允许有任何硬错误
     good = _scan()
     assert good.returncode == 0, (
-        "任务坐标里有硬错误（世界边界外 / z 越界）—— 这种点玩家一定到不了：\n"
+        "任务坐标里有硬错误（世界边界外 / z 越界 / 占位 0,0,0）—— 这种点玩家一定到不了：\n"
         + good.stdout + good.stderr
     )
     assert "硬错误 0" in good.stdout, good.stdout

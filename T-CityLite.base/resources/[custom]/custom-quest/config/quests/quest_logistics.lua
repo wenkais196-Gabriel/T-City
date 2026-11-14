@@ -110,7 +110,7 @@ return {
                     in_vehicle = true,
                     validator_id = 'validate_delivery_arrival',
                     validator_data = {
-                        destCoords = { x = 0, y = 0, z = 0 },
+                        destCoords = { x = 1100.0, y = -1500.0, z = 33.7 },
                         use_bound_vehicle = true,
                     },
                 },
@@ -121,7 +121,7 @@ return {
                 description = '保持停稳状态，在车内按住 E 键完成电子戳戳印与卸货',
                 type = 'interact',
                 data = {
-                    coords = { x = 0, y = 0, z = 0 },
+                    coords = { x = 1100.0, y = -1500.0, z = 33.7 },
                     radius = 10.0,
                     duration = 4000,
                     label = '起重机卸货中...',
@@ -221,7 +221,7 @@ return {
                     in_vehicle = true,
                     validator_id = 'validate_delivery_arrival',
                     validator_data = {
-                        destCoords = { x = 0, y = 0, z = 0 },
+                        destCoords = { x = -1000.0, y = -2600.0, z = 18.2 },
                         use_bound_vehicle = true,
                         require_trailer = true,
                     },
@@ -551,7 +551,7 @@ return {
                     in_vehicle = true,
                     validator_id = 'validate_delivery_arrival',
                     validator_data = {
-                        destCoords = { x = 0, y = 0, z = 0 },
+                        destCoords = { x = -700.0, y = -950.0, z = 18.2 },
                         use_bound_vehicle = true,
                         require_trailer = true,
                     },
@@ -681,7 +681,7 @@ return {
                     in_vehicle = true,
                     validator_id = 'validate_delivery_arrival',
                     validator_data = {
-                        destCoords = { x = 0, y = 0, z = 0 },
+                        destCoords = { x = 1200.0, y = -3200.0, z = 4.8 },
                         use_bound_vehicle = true,
                         require_trailer = true,
                     },
@@ -811,7 +811,7 @@ return {
                     in_vehicle = true,
                     validator_id = 'validate_delivery_arrival',
                     validator_data = {
-                        destCoords = { x = 0, y = 0, z = 0 },
+                        destCoords = { x = -55.0, y = -1100.0, z = 25.4 },
                         use_bound_vehicle = true,
                         require_trailer = true,
                     },
@@ -1054,7 +1054,7 @@ return {
                     in_vehicle = true,
                     validator_id = 'validate_delivery_arrival',
                     validator_data = {
-                        destCoords = { x = 0, y = 0, z = 0 },
+                        destCoords = { x = 250.0, y = -1350.0, z = 30.9 },
                         use_bound_vehicle = true,
                         require_trailer = true,
                     },
@@ -1184,7 +1184,7 @@ return {
                     in_vehicle = true,
                     validator_id = 'validate_delivery_arrival',
                     validator_data = {
-                        destCoords = { x = 0, y = 0, z = 0 },
+                        destCoords = { x = -560.0, y = 5300.0, z = 69.2 },
                         use_bound_vehicle = true,
                         require_trailer = true,
                     },
