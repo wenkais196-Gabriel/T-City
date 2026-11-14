@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import argparse
 import io
-import os
+import json
 import math
+import os
 import re
 import sys
 import urllib.request
@@ -177,8 +178,89 @@ def render(points: list[Point], style: str, scale: int, margin: int, out: Path):
     return crop
 
 
-COORD_RE = re.compile(r"coords\s*=\s*\{\s*x\s*=\s*(-?[\d.]+)\s*,\s*y\s*=\s*(-?[\d.]+)\s*,\s*z\s*=\s*(-?[\d.]+)")
+COORD_RE = re.compile(
+    r"(?:dest|return)?[cC]oords\s*=\s*\{\s*x\s*=\s*(-?[\d.]+)\s*,\s*y\s*=\s*(-?[\d.]+)\s*,\s*z\s*=\s*(-?[\d.]+)"
+)
 STEP_RE = re.compile(r"id\s*=\s*'(step_[^']+)'")
+
+
+# ── 路网（判「这个点离能开车/走人的地面有多远」）─────────────────────────────
+# 数据：DurtyFree/gta-v-data-dumps 的 nodes.zip（67,454 个车辆节点，MIT）
+# 缓存：.cache/roads/road_points.bin —— 'RDP1' + uint32 计数 + 每点 3×float32(x,y,z)，水面节点已剔除
+ROAD_NODES_URL = "https://raw.githubusercontent.com/DurtyFree/gta-v-data-dumps/master/nodes.zip"
+ROAD_CACHE = REPO / ".cache/roads/road_points.bin"
+ROAD_CELL = 50.0
+#: 离最近路面节点超过这么多米 → 提示（非飞行任务）
+ROAD_FAR_M = 60.0
+#: 与最近路面节点的高差超过这么多米 → 提示（非飞行任务；楼顶/空中/地下）
+ROAD_DZ_M = 25.0
+
+
+def build_road_cache() -> int:
+    """下载 nodes.zip 并写出紧凑缓存（只留非水面节点的 x,y,z）。"""
+    import struct
+    import zipfile
+
+    ROAD_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    req = urllib.request.Request(ROAD_NODES_URL, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        blob = resp.read()
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        cells = json.loads(archive.read("nodes.json").decode("utf-8", errors="replace"))
+
+    triples: list[float] = []
+    for cell in cells:
+        for node in cell.get("Nodes") or []:
+            pos = node.get("Position") or {}
+            if "X" not in pos or "Y" not in pos or node.get("IsOnWater"):
+                continue
+            triples.extend((float(pos["X"]), float(pos["Y"]), float(pos.get("Z") or 0.0)))
+
+    with open(ROAD_CACHE, "wb") as fh:
+        fh.write(b"RDP1")
+        fh.write(struct.pack("<I", len(triples) // 3))
+        fh.write(struct.pack(f"<{len(triples)}f", *triples))
+    return len(triples) // 3
+
+
+class RoadIndex:
+    """按 50 m 网格分桶的路面节点索引；只回答「最近节点的水平距离 + 高差」。"""
+
+    def __init__(self, points: list[tuple[float, float, float]]):
+        self.grid: dict[tuple[int, int], list[tuple[float, float, float]]] = {}
+        for x, y, z in points:
+            self.grid.setdefault((int(x // ROAD_CELL), int(y // ROAD_CELL)), []).append((x, y, z))
+
+    def nearest(self, x: float, y: float, max_ring: int = 14) -> tuple[float, float] | None:
+        """返回（水平距离 m，与该节点的高差 m）；max_ring 之外没节点时返回 None。"""
+        best: tuple[float, float] | None = None
+        gx, gy = int(x // ROAD_CELL), int(y // ROAD_CELL)
+        for ring in range(max_ring + 1):
+            for dx in range(-ring, ring + 1):
+                for dy in range(-ring, ring + 1):
+                    if max(abs(dx), abs(dy)) != ring:
+                        continue
+                    for cx, cy, cz in self.grid.get((gx + dx, gy + dy), ()):
+                        dist = math.hypot(cx - x, cy - y)
+                        if best is None or dist < best[0]:
+                            best = (dist, cz)
+            if best and best[0] <= ring * ROAD_CELL:
+                return best
+        return best
+
+
+def load_road_index() -> RoadIndex | None:
+    """读缓存；没有缓存返回 None（CI 不联网，也不该被 4 MB 下载卡住）。"""
+    import struct
+
+    if not ROAD_CACHE.exists():
+        return None
+    raw = ROAD_CACHE.read_bytes()
+    if raw[:4] != b"RDP1":
+        return None
+    (count,) = struct.unpack("<I", raw[4:8])
+    values = struct.unpack(f"<{count * 3}f", raw[8:8 + count * 12])
+    return RoadIndex([(values[i], values[i + 1], values[i + 2]) for i in range(0, count * 3, 3)])
 
 
 def template_blocks(text: str):
@@ -204,17 +286,40 @@ def template_blocks(text: str):
     return out
 
 
-def _point_issues(x: float, y: float, z: float, airborne_ok: bool) -> tuple[list[str], str]:
+def _road_hint(x: float, y: float, z: float, road: "RoadIndex | None", airborne_ok: bool) -> str:
+    """离路太远 / 与路面高差太大 —— 这两条能把「点在楼里/空中」拣出来。"""
+    if road is None or airborne_ok:
+        return ""
+    found = road.nearest(x, y)
+    if found is None:
+        return "附近 700 m 内没有路面节点"
+    dist, road_z = found
+    if dist > ROAD_FAR_M:
+        return f"离最近路面 {dist:.0f} m —— 确认有路过去"
+    dz = z - road_z
+    if abs(dz) > ROAD_DZ_M:
+        return f"比最近路面{'高' if dz > 0 else '低'} {abs(dz):.0f} m（路面 z={road_z:.0f}）"
+    return ""
+
+
+def _point_issues(x: float, y: float, z: float, airborne_ok: bool,
+                  road: "RoadIndex | None" = None) -> tuple[list[str], str]:
     """单点判定：返回（硬错误列表，提示文本）。硬错误 = 玩家一定到不了。"""
     hard: list[str] = []
+    if x == 0 and y == 0 and z == 0:
+        # (0,0,0) 从来不是真实目标点，就是没填。这类占位点会让 validate_delivery_arrival
+        # 要求玩家开到原点（实测在路面下方 70 m），整条任务永远交不掉。
+        return ["坐标是占位 (0, 0, 0)"], ""
     if not (WORLD["x"][0] <= x <= WORLD["x"][1] and WORLD["y"][0] <= y <= WORLD["y"][1]):
         hard.append("世界边界外")
     if not (WORLD["z"][0] <= z <= WORLD["z"][1]):
         hard.append(f"z={z:.0f} 越界")
-    hint = ""
-    if not hard and z > 120 and not airborne_ok:
+    if hard:
+        return hard, ""
+    hint = _road_hint(x, y, z, road, airborne_ok)
+    if not hint and z > 120 and not airborne_ok:
         hint = "z 偏高 —— 确认在楼顶还是空中"
-    return hard, hint
+    return [], hint
 
 
 def parse_points(block: str) -> list[Point]:
@@ -233,7 +338,8 @@ def parse_points(block: str) -> list[Point]:
     return points
 
 
-def _scan_template(cfg_name: str, name: str, block: str) -> tuple[int, int, int]:
+def _scan_template(cfg_name: str, name: str, block: str,
+                   road: "RoadIndex | None" = None) -> tuple[int, int, int]:
     """扫一个模板：返回（点数、硬错误数、提示数），边扫边打印。"""
     airborne_ok = any(k in name for k in ("aviation", "pilot", "flight", "airlift"))
     errors = hints = 0
@@ -249,7 +355,7 @@ def _scan_template(cfg_name: str, name: str, block: str) -> tuple[int, int, int]
             continue
         x, y, z = (float(v) for v in coords.groups())
         seen.setdefault((x, y, z), []).append(step or "?")
-        hard, hint = _point_issues(x, y, z, airborne_ok)
+        hard, hint = _point_issues(x, y, z, airborne_ok, road)
         where = f"{cfg_name:<34} {name:<28} {step or '?':<22} ({x:.0f}, {y:.0f}, {z:.0f})"
         if hard:
             errors += 1
@@ -268,12 +374,15 @@ def _scan_template(cfg_name: str, name: str, block: str) -> tuple[int, int, int]
 def scan_all() -> int:
     """扫全部任务配置，分两档报：硬错误（一定有问题）与提示（需要人看一眼）。"""
     errors = hints = total_templates = total_points = 0
+    road = load_road_index()
+    if road is None:
+        print("  (没有路网缓存：跳过「离路多远 / 高差」两条判据 —— 跑 --build-roads 生成)")
     for cfg in sorted(QUESTS_DIR.rglob("*.lua")):
         text = cfg.read_text(encoding="utf-8", errors="replace")
         for name, block in template_blocks(text).items():
             total_templates += 1
             total_points += len(COORD_RE.findall(block))
-            _, hard, soft = _scan_template(cfg.name, name, block)
+            _, hard, soft = _scan_template(cfg.name, name, block, road)
             errors += hard
             hints += soft
     print(f"\n扫描：{total_templates} 个模板 / {total_points} 个坐标点 | 硬错误 {errors} | 提示 {hints}")
@@ -368,6 +477,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--quest", help="任务模板 id（如 hotdog_vendor）")
     ap.add_argument("--coords", help="直接给坐标：x,y,z 或 x,y,z;x,y,z")
     ap.add_argument("--scan", action="store_true", help="扫全部任务配置，只报可疑坐标")
+    ap.add_argument("--build-roads", action="store_true", help="下载并生成路网缓存（约 4 MB，一次性）")
     ap.add_argument("--style", default="atlas", choices=sorted(STYLES))
     ap.add_argument("--scale", type=int, default=3, help="放大倍数（瓦片只到 z5，靠放大看清街道）")
     ap.add_argument("--margin", type=int, default=110, help="边距（z5 像素）")
@@ -377,6 +487,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.build_roads:
+        count = build_road_cache()
+        print(f"路网缓存已生成：{count} 个路面节点 → {ROAD_CACHE}")
+        return 0
     if args.scan:
         return scan_all()
     return render_and_report(args)
