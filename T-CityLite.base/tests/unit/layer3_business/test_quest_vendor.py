@@ -205,3 +205,29 @@ def test_cooking_uses_the_shared_minigame_export():
     block = client[client.index("quest:client:cookStart"):]
     block = block[:block.index("end)")]
     assert "exotic" not in block and "rare" not in block, "客户端不能自己决定品质"
+
+
+def test_customer_ped_is_created_and_deleted_by_the_client():
+    """顾客 ped 是表现层：客户端生成、客户端删，且必须防「报价换了 ped 还在」。"""
+    client = VENDOR_CLIENT.read_text(encoding="utf-8")
+    assert "local function SpawnCustomerPed" in client
+    assert "CreatePed(4, model" in client
+    # 生成是异步的（RequestModel 会 yield）：回来时要重新确认还是同一张报价
+    spawn_block = client[client.index("local wantOfferId = offerId"):]
+    spawn_block = spawn_block[:spawn_block.index("end)")]
+    assert "ActiveOffer.offerId ~= wantOfferId" in spawn_block, (
+        "没有校验报价是否已被替换 —— 会把上一张报价的 ped 挂到新报价上，两边都删不掉")
+    # 清理必须走 ClearOffer（成交/过期/替换/任务结束都汇到那里）
+    clear = client[client.index("local function ClearOffer"):]
+    clear = clear[:clear.index("\nend\n")]
+    assert "DeleteEntity(offer.localPed)" in clear
+
+
+def test_customer_ped_does_not_block_the_road():
+    """顾客是冻结的无敌 ped：不挡车、不被误伤、不被事件打断。"""
+    client = VENDOR_CLIENT.read_text(encoding="utf-8")
+    block = client[client.index("local function SpawnCustomerPed"):]
+    block = block[:block.index("\nend\n")]
+    assert "FreezeEntityPosition(ped, true)" in block
+    assert "SetEntityInvincible(ped, true)" in block
+    assert "SetBlockingOfNonTemporaryEvents(ped, true)" in block
