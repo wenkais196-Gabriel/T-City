@@ -117,7 +117,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **任务节点能力的真实边界被查清了**：`Config.Quest.StepTypes` 声明 13 种，实际只有 8 种有处理分支 ——
+- **物流「租借会话」只有开始、没有关闭**：`rentalDeposit` 在 `quest_logistics_validators.lua:193` 写死为 `0`
+  （配置里的押金根本收不到）；`ClearLogisticsBinding` 定义了却**全仓库没有一处调用**；`playerDropped`
+  只清 `QuestCache`，不清 logistics binding。放弃/失败/掉线后 plate / netId / rentalFeePct 会残留。
+- **成熟职业脚本调研（官方 9 个 job + 社区）**：提炼出押金即会话、服务端发牌、结算走物理点、
+  基础值×条件倍率−税、反作弊三件套等 7 个模式，并定位到可复用的正确骨架（custom-cartel 的生产引擎：
+  `finishAt` + 完成时复验 + 扣料产出）。见 `docs/plan/jobs-content/08-mature-scripts-survey.md`。- **任务节点能力的真实边界被查清了**：`Config.Quest.StepTypes` 声明 13 种，实际只有 8 种有处理分支 ——
   `collect` / `wait` / `combat` / `placement` 是**死类型**（注册器只校验名字在白名单里，客户端毫无反应，
   配置选到它们任务会静默卡死）。
 - **热狗这类循环型任务缺 4 类节点**：对照上游 qb-hotdogjob 的真实流程（押金租摊 → 推车 → KeyMinigame
