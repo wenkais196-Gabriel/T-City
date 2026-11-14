@@ -61,9 +61,11 @@ local function closeRentalFor(source, reason, questId)
     if ok and result and not result.idempotent then
         QuestPrint('🏁 rental closed (%s): refund=$%s rent=$%s %smin',
             tostring(reason), tostring(result.refund), tostring(result.rent), tostring(result.minutes))
+        return result
     elseif not ok then
         QuestPrint('⚠️ rental close failed: %s (%s)', tostring(reason), tostring(result))
     end
+    return nil
 end
 local function clearLogisticsFor(citizenid, questId)
     if type(ClearLogisticsBinding) ~= 'function' then return end
@@ -77,12 +79,75 @@ end
 -- 客户端也会自己删实体（它知道句柄），两边都删是幂等的 —— 服务端这一侧负责**记录**。
 -- 顾客会话也必须随任务结束关掉：会话留着 → Tick 还在跑 → 定期给一个
 -- 已经不在摊位上的玩家推报价（玩家看到「顾客来了」但摊位已经没了）。
-local function closeVendorFor(citizenid, questId, reason)
-    if type(QuestVendorBridge) ~= 'table' or type(QuestVendorBridge.CloseFor) ~= 'function' then return end
-    local ok, err = pcall(QuestVendorBridge.CloseFor, citizenid, questId, reason)
-    if not ok then
-        QuestPrint('⚠️ CloseVendor failed: %s → %s (%s)', tostring(citizenid), tostring(questId), tostring(err))
+--- 从模板里找价格表（摊位那一步的 vendor.prices）
+local function vendorPricesOf(questId)
+    if type(QuestRegistry) ~= 'table' or type(QuestRegistry.GetTemplate) ~= 'function' then return nil end
+    local template = QuestRegistry.GetTemplate(questId)
+    for _, step in ipairs(template and template.steps or {}) do
+        local vendor = step.data and step.data.vendor
+        if type(vendor) == 'table' and type(vendor.prices) == 'table' then
+            return vendor.prices
+        end
     end
+    return nil
+end
+
+--- 结算回执：六行明细推到玩家聊天框。
+-- 为什么用 chat 而不是新开一条 net event：S5 只负责「算对 + 只发一次」，
+-- 账单 UI（手机里的卡片）属于 S6 的 UX 收口；先让数据能到玩家眼前，
+-- 而且 chat:addMessage 是全仓既有的通道，不增加事件面。
+local function issueSettleReceipt(src, citizenid, questId, rentalResult, vendorSummary)
+    if type(QuestSettle) ~= 'table' or type(QuestSettle.Compute) ~= 'function' then return end
+
+    local receipt = QuestSettle.Compute({
+        depositRefund = rentalResult and rentalResult.refund or 0,
+        rent = rentalResult and rentalResult.rent or 0,
+        soldTotal = vendorSummary and vendorSummary.revenue or 0,
+        leftover = vendorSummary and vendorSummary.stock or nil,
+        prices = vendorPricesOf(questId),
+        raw = vendorSummary and vendorSummary.raw or 0,
+        taxRate = 0,   -- 还没有税率来源；有税率时这里换成配置
+    })
+
+    local issued = QuestSettle.Issue(citizenid, questId, questId .. ':complete', receipt)
+    if not issued then return end
+
+    local lines = { '**本班账单**' }
+    for _, row in ipairs(issued.rows) do
+        local sign = row.amount < 0 and '-' or '+'
+        local text = ('%s  %s$%s'):format(row.label, sign,
+            type(QuestMoney) == 'function' and QuestMoney(math.abs(row.amount)) or tostring(math.abs(row.amount)))
+        if row.counted == false then
+            text = text .. '   （已付现，不计入净额）'
+        elseif row.muted then
+            text = text .. '   （未启用）'
+        end
+        lines[#lines + 1] = text
+    end
+    lines[#lines + 1] = ('**净额 %s$%s**'):format(
+        issued.net < 0 and '-' or '+',
+        type(QuestMoney) == 'function' and QuestMoney(math.abs(issued.net)) or tostring(math.abs(issued.net)))
+    if issued.replayed then lines[#lines + 1] = '（这张回执之前已经开过，金额不会重复计入）' end
+
+    pcall(function()
+        TriggerClientEvent('chat:addMessage', src, {
+            color = { 120, 220, 150 },
+            multiline = true,
+            args = { '[任务结算]', table.concat(lines, '\n') },
+        })
+    end)
+
+    QuestPrint('🧾 settle issued: %s | %s | net=$%s | sold=$%s',
+        tostring(citizenid), tostring(questId), tostring(issued.net), tostring(issued.soldTotal))
+end
+local function closeVendorFor(citizenid, questId, reason)
+    if type(QuestVendorBridge) ~= 'table' or type(QuestVendorBridge.CloseFor) ~= 'function' then return nil end
+    local ok, summary = pcall(QuestVendorBridge.CloseFor, citizenid, questId, reason)
+    if not ok then
+        QuestPrint('⚠️ CloseVendor failed: %s → %s (%s)', tostring(citizenid), tostring(questId), tostring(summary))
+        return nil
+    end
+    return summary
 end
 local function closeBoothFor(citizenid, questId, reason)
     if type(QuestBooth) ~= 'table' or type(QuestBooth.RemoveBooth) ~= 'function' then return end
@@ -964,9 +1029,10 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
 
                 -- 完成任务 = 正常归还：租借会话必须在这里关掉（退押金按已用时长结算）。
                 -- 少了这一条，happy path 上押金永远退不回来 —— 失败/放弃/断线都关了，只有成功没关。
-                closeVendorFor(citizenid, questId, 'completed')
+                local vendorSummary = closeVendorFor(citizenid, questId, 'completed')
                 closeBoothFor(citizenid, questId, 'completed')
-                closeRentalFor(src, 'returned', questId)
+                local rentalResult = closeRentalFor(src, 'returned', questId)
+                issueSettleReceipt(src, citizenid, questId, rentalResult, vendorSummary)
 
                 -- v0.7.2: 奖励在完成事件之后发放，避免奖励异常阻断客户端清理
                 local rewardOk, rewardErr = xpcall(function()
