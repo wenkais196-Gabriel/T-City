@@ -330,3 +330,28 @@ function QuestDB.DailyLimitIncrementSync(citizenid, questId, limitType, periodSt
 end
 print('[quest-db] ✅ 任务数据库操作层已加载 (v0.7.0)')
 print('[quest-db]   新增: daily/weekly 次数限制 + 每日上限检查')
+
+--- 找出「有 rental_open 但没有对应 rental_close」的会话（重启后补退用）。
+--- 一条 SQL 里做 LEFT JOIN 会踩到同表多次引用的可读性问题，这里用 NOT EXISTS：
+--- 对每个 open 行，检查它之后有没有同 citizenid + quest_id 的 close 行。
+---@param cb fun(rows: table[]|nil)
+function QuestDB.FindUnclosedRentals(cb)
+    if not MySQL then if cb then cb({}) end return end
+    MySQL.Async.fetchAll([[
+        SELECT o.citizenid, o.quest_id, o.step_id, o.metadata, UNIX_TIMESTAMP(o.created_at) AS created_at
+        FROM quest_event_log o
+        WHERE o.event_type = 'rental_open'
+          AND o.created_at > DATE_SUB(NOW(), INTERVAL 2 DAY)
+          AND NOT EXISTS (
+              SELECT 1 FROM quest_event_log c
+              WHERE c.event_type = 'rental_close'
+                AND c.citizenid = o.citizenid
+                AND c.quest_id = o.quest_id
+                AND c.created_at >= o.created_at
+          )
+        ORDER BY o.created_at ASC
+        LIMIT 200
+    ]], {}, function(rows)
+        if cb then cb(rows or {}) end
+    end)
+end

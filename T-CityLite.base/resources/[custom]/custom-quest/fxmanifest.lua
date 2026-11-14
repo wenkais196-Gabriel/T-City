@@ -25,6 +25,7 @@ files {
     'config/quests/quest_miner.lua',
     'config/quests/quest_chain_miner.lua',
     'config/quests/quest_logistics.lua',
+    'config/quests/quest_hotdog.lua',      -- S1 dev：租借原语验收（convar quest_hotdog_dev）
     'config/quests/quest_cartel_initiation.lua',
     'config/quests/quest_cartel_drug_run.lua',
     'config/quests/quest_chain_cartel.lua',
@@ -78,6 +79,8 @@ server_scripts {
     'server/quest_validators.lua',
     'server/quest_step_gate.lua',            -- 阶段D C1: validator 步骤的服务端闸（纯函数）
     'server/quest_route_validators.lua',      -- R1: 多站路线校验器（validate_route_stop）
+    'server/quest_rental.lua',
+    'server/quest_minigame.lua',           -- S3 内核：小游戏 nonce + 品质映射（CC 实现）
     'server/quest_logistics_validators.lua',
     'server/quest_entity_tracker.lua',       -- v0.9: 实体追踪（脱钩/下车倒计时）
     'server/quest_entity_registry.lua',       -- v0.10: 实体注册表 + 延迟回收策略
