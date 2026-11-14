@@ -143,6 +143,7 @@ Config.Quest.Checkpoint = {
         ['goto']  = 'ring',    -- goto 是 Lua 5.4 关键字，必须 ['goto']
         validator = 'cylinder',
         interact  = 'arrow',
+        rental    = 'arrow',   -- 租借点也是「站到点上按 E」，与 interact 同一种 checkpoint
         deliver   = 'cylinder',
     },
 

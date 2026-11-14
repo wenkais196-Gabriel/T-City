@@ -485,6 +485,7 @@ RegisterNetEvent('quest:client:nodeInteract', function(data)
                                 local veh = GetVehiclePedIsIn(ped, false)
                                 if veh and veh ~= 0 then DetachVehicleFromTrailer(veh) end
                             end
+                            activeNode = nil   -- 上报后立刻退出这个节点，防止重复上报
                             TriggerServerEvent('quest:server:nodeComplete',
                                 data.questId, data.stepId, 'INTERACT',
                                 { position = targetVec, detachTrailer = data.detachTrailer }
@@ -493,15 +494,22 @@ RegisterNetEvent('quest:client:nodeInteract', function(data)
                     end)
                 else
                     Citizen.Wait(data.duration or 3000)
-                    if data.detachTrailer then
-                        local ped = PlayerPedId()
-                        local veh = GetVehiclePedIsIn(ped, false)
-                        if veh and veh ~= 0 then DetachVehicleFromTrailer(veh) end
+                    -- 与上面 progressbar 分支同样的两道护栏：
+                    -- ① 任务可能在等待期间已经完成（服务端把这一步算作最后一步时），此时不该再上报；
+                    -- ② 上报后立即把 activeNode 置空，避免同一节点被循环重复上报 ——
+                    --    以前重复上报会让服务端打到 SECURITY BLOCK（玩家看到「任务节点校验失败」红字）。
+                    if activeNode and activeNode.stepId == data.stepId then
+                        if data.detachTrailer then
+                            local ped = PlayerPedId()
+                            local veh = GetVehiclePedIsIn(ped, false)
+                            if veh and veh ~= 0 then DetachVehicleFromTrailer(veh) end
+                        end
+                        activeNode = nil
+                        TriggerServerEvent('quest:server:nodeComplete',
+                            data.questId, data.stepId, 'INTERACT',
+                            { position = targetVec, detachTrailer = data.detachTrailer }
+                        )
                     end
-                    TriggerServerEvent('quest:server:nodeComplete',
-                        data.questId, data.stepId, 'INTERACT',
-                        { position = targetVec, detachTrailer = data.detachTrailer }
-                    )
                 end
             end
             ::continue_interact::
