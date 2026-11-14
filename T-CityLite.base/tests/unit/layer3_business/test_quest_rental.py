@@ -239,3 +239,14 @@ def test_validator_node_also_clears_active_node_after_reporting():
     body = src[src.index("RegisterNetEvent('quest:client:nodeValidator'"):]
     body = body[:body.index("if PolyZone then")]
     assert body.count("activeNode = nil") >= 2, "两条上报分支都要清 activeNode"
+
+
+
+def test_deposit_gate_cannot_be_disabled_by_a_convar():
+    """`quest_step_validator_enforce=0` 是为了「校验器误伤时一键放行」而存在的，
+    但它一旦被关，整条押金闸就静默消失，玩家侧零信号。钱不能有这个后门。
+
+    所以 rental 步骤的校验必须带 force —— 与 dashboard 印章同一条强拦路径。
+    """
+    src = (BASE / "resources/[custom]/custom-quest/server/main.lua").read_text(encoding="utf-8")
+    assert "force = (stepDef.type == 'rental')" in src, "rental 的校验没有 force —— convar 一关押金就没人扣"
