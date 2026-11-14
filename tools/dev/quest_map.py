@@ -31,7 +31,6 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
 
 REPO = Path(__file__).resolve().parents[2]
 QUESTS_DIR = Path(os.environ.get(
@@ -83,7 +82,8 @@ def meters_per_pixel(zoom: int = MAX_TILE_ZOOM) -> float:
     return 1.0 / (PX_PER_UNIT_Z0 * (2 ** zoom))
 
 
-def fetch_tile(style: str, z: int, x: int, y: int, cache: Path) -> Image.Image | None:
+def fetch_tile(style: str, z: int, x: int, y: int, cache: Path):
+    from PIL import Image
     cache.mkdir(parents=True, exist_ok=True)
     f = cache / f"{style}_{z}_{x}_{y}.img"
     if f.exists():
@@ -103,7 +103,9 @@ def fetch_tile(style: str, z: int, x: int, y: int, cache: Path) -> Image.Image |
         return None
 
 
-def render(points: list[Point], style: str, scale: int, margin: int, out: Path) -> Image.Image:
+def render(points: list[Point], style: str, scale: int, margin: int, out: Path):
+    # 延迟导入：--scan 是纯文本体检，CI 里没有 Pillow 也必须能跑
+    from PIL import Image, ImageDraw, ImageFont
     z = MAX_TILE_ZOOM
     px = [pixel_of(p.x, p.y, z) for p in points]
     xs = [p[0] for p in px]
