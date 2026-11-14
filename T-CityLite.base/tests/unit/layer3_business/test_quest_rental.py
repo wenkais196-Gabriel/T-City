@@ -137,3 +137,27 @@ def test_helper_order_rule_rejects_use_before_declaration():
     uses = [i for i in range(len(broken)) if broken.startswith("closeRentalFor(", i)]
     body_uses = [u for u in uses if u != declared]
     assert not (declared < min(body_uses))
+
+
+
+def test_late_node_complete_is_not_shown_to_the_player_as_an_error():
+    """任务刚完成时客户端还握着一个节点，会再上报一次 nodeComplete。
+
+    真机表现：任务明明完成了，屏幕却弹「任务节点校验失败」——服务端把「任务不活跃」
+    当成作弊拦截并把红字推给了玩家。诚实玩家只是晚到几百毫秒。
+    修法：审计照留（print + custom-logs），但这一种原因不再 feedback。
+    """
+    src = (BASE / "resources/[custom]/custom-quest/server/main.lua").read_text(encoding="utf-8")
+    assert "benignLatePacket" in src, "迟到包的豁免没了 —— 玩家会再次看到假的校验失败"
+    assert "if not benignLatePacket then" in src
+    # 反向：豁免必须只针对这一种原因，不能把所有安全拦截都静音
+    assert "err == 'Quest not active for this player'" in src
+
+
+def test_client_does_not_re_send_the_same_node_twice():
+    """同一个 INTERACT 节点只能上报一次：上报后把 activeNode 置空。"""
+    src = (BASE / "resources/[custom]/custom-quest/client/main.lua").read_text(encoding="utf-8")
+    node_body = src[src.index("RegisterNetEvent('quest:client:nodeInteract'"):]
+    node_body = node_body[:node_body.index("RegisterNetEvent('quest:client:nodeDeliver'") if "nodeDeliver" in node_body else len(node_body)]
+    assert node_body.count("activeNode = nil") >= 2, "上报后没有清 activeNode —— 同一节点会被循环重复上报"
+    assert "if activeNode and activeNode.stepId == data.stepId then" in node_body, "无进度条分支缺少前置护栏"
