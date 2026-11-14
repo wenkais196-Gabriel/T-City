@@ -260,7 +260,13 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
             local cid = playerObj and playerObj.PlayerData.citizenid or 'unknown'
             local allowed = runStepValidator(src, questId, stepDef,
                 { questId = questId, citizenid = cid, clientData = clientData },
-                { failMessage = '任务步骤校验未通过' })
+                {
+                    failMessage = '任务步骤校验未通过',
+                    -- 押金是钱：rental 步骤不受 `quest_step_validator_enforce` 回滚开关影响。
+                    -- 那个 convar 本来是为了「校验器误伤时一键放行」，但它一旦被关，
+                    -- 整条押金闸就静默消失（玩家侧零信号）—— 钱不能有这个后门。
+                    force = (stepDef.type == 'rental'),
+                })
             if not allowed then return end
         end
     end
