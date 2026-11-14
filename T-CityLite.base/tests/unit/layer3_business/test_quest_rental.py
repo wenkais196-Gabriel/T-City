@@ -108,3 +108,32 @@ def test_rental_wiring_rule_rejects_the_silent_dead_shape():
     """反向校验：只有事件映射、没有别名时，规则必须判红。"""
     broken = "RENTAL = 'quest:client:nodeInteract'"
     assert "RENTAL = 'INTERACT'" not in broken
+
+
+
+def test_close_helpers_are_declared_before_their_first_use():
+    """Lua 的 local 只在声明之后可见 —— 顺序错了就是运行时 nil 调用。
+
+    真机症状：任务结算到一半 `attempt to call a nil value (global 'closeRentalFor')`，
+    因为 helper 原本写在 FailQuest 之前（≈1160 行），而完成路径在 911 行就调它。
+    `luac -p` 查不出这类错（语法没问题，作用域有问题）。
+    """
+    src = (BASE / "resources/[custom]/custom-quest/server/quest_manager.lua").read_text(encoding="utf-8")
+    for name in ("closeRentalFor", "clearLogisticsFor"):
+        declared = src.find(f"local function {name}(")
+        assert declared != -1, f"{name} 没有声明"
+        uses = [i for i in range(len(src)) if src.startswith(name + "(", i)]
+        body_uses = [u for u in uses if u != declared]
+        assert body_uses, f"{name} 没有任何调用点"
+        assert declared < min(body_uses), (
+            f"{name} 在声明（偏移 {declared}）之前就被调用了（偏移 {min(body_uses)}）——"
+            "运行时会退化成全局查找并报 nil")
+
+
+def test_helper_order_rule_rejects_use_before_declaration():
+    """反向校验：调用写在声明之前，规则必须判红。"""
+    broken = "closeRentalFor(src, 'returned')\nlocal function closeRentalFor(source, reason)\nend\ncloseRentalFor(x, 'y')\n"
+    declared = broken.find("local function closeRentalFor(")
+    uses = [i for i in range(len(broken)) if broken.startswith("closeRentalFor(", i)]
+    body_uses = [u for u in uses if u != declared]
+    assert not (declared < min(body_uses))
