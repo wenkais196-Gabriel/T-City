@@ -117,7 +117,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **热狗摊 UX 规格定稿（草稿）**：状态机（租借/推车/摆放/营业/做热狗/顾客/成交/收摊/结算/挂起）+
+- **热狗线 S0 坐标踏勘**：Legion Square 东侧广场定下 7 个坐标（租赁点 / 3 个摆位 / 2 个顾客生成点 /
+  队列点），逐个过「离最近路面 ≤ 10 m、高差 ≤ 1.5 m + 卫星图人眼」；摆位 A 用的是真机验证过的旧壳点位。
+  见 `docs/plan/jobs-content/12-hotdog-coordinates.md`（含被淘汰的候选与原因）。
+- **热狗线 S1：租借原语 `server/quest_rental.lua`** —— 押金会话（同任务只能一个）、按分钟计租
+  （免租期 + `max_minutes` 封顶）、四条关闭路径（归还 / 放弃 / 失败 / 断线）、重启扫描 + 登录补退。
+  钱只走 `Player.Functions`；断线与重启都不直接转账（离线玩家没有合法写入路径），改为排队到下次登录。
+  接线：新 step 类型 `rental`（客户端按 interact 处理，推进走既有 `nodeComplete`，**0 新 net event**）；
+  校验器 `validate_rental_open`；`QuestDB.FindUnclosedRentals` 读日志。
+  测试 `tests/unit/layer3_business/test_quest_rental.py` + 探针 9 条不变量（含反向校验：去掉封顶必须红）。
+- **热狗线 S3 内核（CC 实现）：`server/quest_minigame.lua`** —— 一次性 nonce、过期、
+  `quit` 也消耗 nonce、`faults → 三档品质` 服务端映射；探针 7 条 + 反向校验（改成永远返回 common 必须红）。- **热狗摊 UX 规格定稿（草稿）**：状态机（租借/推车/摆放/营业/做热狗/顾客/成交/收摊/结算/挂起）+
   逐状态的「看到/听到/能做/失败态」、6 张线框图、键位矩阵、中英文案表、音效清单、账单明细规则、
   中断恢复，以及 A1–A22 可打勾的 UX 验收 + V1–V8 真机剧本 + D1–D12 开发口径。
   见 `docs/plan/jobs-content/10-hotdog-ux-spec.md`。- **物流租借绑定的三个真 bug**：① 绑定里的押金写死 `rentalDeposit = 0`（配置里 300–2000 的押金

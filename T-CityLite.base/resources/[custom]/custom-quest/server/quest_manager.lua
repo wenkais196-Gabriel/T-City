@@ -1153,6 +1153,20 @@ end
 -- 任务终结（失败/放弃）必须把物流绑定一起清掉。
 -- 否则 plate / netId / rentalFeePct 会残留到下一趟：玩家可能按上一趟的费率结算，
 -- 或者一辆已经不属于他的车仍被当成「已绑定任务载具」。
+-- 任务终结时把租借会话关掉（押金按已用时长结算后退回）。
+-- 与 clearLogisticsFor 分开：那个清的是「载具绑定」，这个清的是「押金会话」。
+local function closeRentalFor(source, reason)
+    if type(QuestRental) ~= 'table' or type(QuestRental.Close) ~= 'function' then return end
+    local Player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(source)
+    if not Player then return end
+    local ok, result = pcall(QuestRental.Close, Player, reason)
+    if ok and result and not result.idempotent then
+        QuestPrint('🏁 rental closed (%s): refund=$%s rent=$%s %smin',
+            tostring(reason), tostring(result.refund), tostring(result.rent), tostring(result.minutes))
+    elseif not ok then
+        QuestPrint('⚠️ rental close failed: %s (%s)', tostring(reason), tostring(result))
+    end
+end
 local function clearLogisticsFor(citizenid, questId)
     if type(ClearLogisticsBinding) ~= 'function' then return end
     local ok, err = pcall(ClearLogisticsBinding, citizenid, questId)
@@ -1187,6 +1201,7 @@ function QuestManager.FailQuest(source, questId, reason)
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
     clearLogisticsFor(citizenid, questId)
+    closeRentalFor(source, 'failed')
 
     local src = getSourceFromCid(citizenid)
     if src then
@@ -1247,6 +1262,7 @@ function QuestManager.AbandonQuest(source, questId)
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
     clearLogisticsFor(citizenid, questId)
+    closeRentalFor(source, 'abandoned')
 
     local src = getSourceFromCid(citizenid)
     if src then
