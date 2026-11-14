@@ -158,7 +158,16 @@ AddEventHandler('playerDropped', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if Player and Player.PlayerData then
-        QuestCache.ClearPlayer(Player.PlayerData.citizenid)
+        local citizenid = Player.PlayerData.citizenid
+        QuestCache.ClearPlayer(citizenid)
+        -- 断线同样要清物流绑定：questId 此刻已不可知，只能整表清（键是 citizenid → questId）。
+        -- 不清的后果：重连后旧 plate/netId 还挂在内存里，等于「车没还但费率还在」。
+        if type(ClearAllLogisticsBindings) == 'function' then
+            local ok, cleared = pcall(ClearAllLogisticsBindings, citizenid)
+            if ok and cleared and cleared > 0 then
+                print(('[quest-cache] 🧹 cleared %d logistics binding(s) on drop: %s'):format(cleared, citizenid))
+            end
+        end
     end
 end)
 
