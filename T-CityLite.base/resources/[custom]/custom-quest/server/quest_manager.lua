@@ -901,6 +901,10 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
                     rewards = template.rewards,
                 })
 
+                -- 完成任务 = 正常归还：租借会话必须在这里关掉（退押金按已用时长结算）。
+                -- 少了这一条，happy path 上押金永远退不回来 —— 失败/放弃/断线都关了，只有成功没关。
+                closeRentalFor(src, 'returned')
+
                 -- v0.7.2: 奖励在完成事件之后发放，避免奖励异常阻断客户端清理
                 local rewardOk, rewardErr = xpcall(function()
                     return QuestRewards.GrantRewards(src, template.rewards, questId)
