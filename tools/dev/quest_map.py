@@ -204,86 +204,108 @@ def template_blocks(text: str):
     return out
 
 
+def _point_issues(x: float, y: float, z: float, airborne_ok: bool) -> tuple[list[str], str]:
+    """单点判定：返回（硬错误列表，提示文本）。硬错误 = 玩家一定到不了。"""
+    hard: list[str] = []
+    if not (WORLD["x"][0] <= x <= WORLD["x"][1] and WORLD["y"][0] <= y <= WORLD["y"][1]):
+        hard.append("世界边界外")
+    if not (WORLD["z"][0] <= z <= WORLD["z"][1]):
+        hard.append(f"z={z:.0f} 越界")
+    hint = ""
+    if not hard and z > 120 and not airborne_ok:
+        hint = "z 偏高 —— 确认在楼顶还是空中"
+    return hard, hint
+
+
+def parse_points(block: str) -> list[Point]:
+    """从一段模板正文里抽出步骤坐标（step id 作为标签）。"""
+    points: list[Point] = []
+    step = None
+    for line in block.splitlines():
+        found = STEP_RE.search(line)
+        if found:
+            step = found.group(1)
+        coords = COORD_RE.search(line)
+        if not coords:
+            continue
+        x, y, z = (float(v) for v in coords.groups())
+        points.append(Point(x, y, z, label=(step or "pt").replace("step_", "")))
+    return points
+
+
+def _scan_template(cfg_name: str, name: str, block: str) -> tuple[int, int, int]:
+    """扫一个模板：返回（点数、硬错误数、提示数），边扫边打印。"""
+    airborne_ok = any(k in name for k in ("aviation", "pilot", "flight", "airlift"))
+    errors = hints = 0
+    seen: dict[tuple[float, float, float], list[str]] = {}
+    step = None
+    lines = block.splitlines()
+    for line in lines:
+        found = STEP_RE.search(line)
+        if found:
+            step = found.group(1)
+        coords = COORD_RE.search(line)
+        if not coords:
+            continue
+        x, y, z = (float(v) for v in coords.groups())
+        seen.setdefault((x, y, z), []).append(step or "?")
+        hard, hint = _point_issues(x, y, z, airborne_ok)
+        where = f"{cfg_name:<34} {name:<28} {step or '?':<22} ({x:.0f}, {y:.0f}, {z:.0f})"
+        if hard:
+            errors += 1
+            print(f"  ✗ {where}  " + "；".join(hard))
+        elif hint:
+            hints += 1
+            print(f"  ? {where}  {hint}")
+    for coords, steps in seen.items():
+        if len(set(steps)) >= 3:
+            hints += 1
+            print(f"  ? {cfg_name:<34} {name:<28} {len(set(steps))} 个步骤共用同一点 "
+                  f"({coords[0]:.0f}, {coords[1]:.0f}, {coords[2]:.0f}) —— 确认不需要移动？")
+    return len(lines), errors, hints
+
+
 def scan_all() -> int:
     """扫全部任务配置，分两档报：硬错误（一定有问题）与提示（需要人看一眼）。"""
-    errors = hints = 0
-    total_templates = total_points = 0
+    errors = hints = total_templates = total_points = 0
     for cfg in sorted(QUESTS_DIR.rglob("*.lua")):
         text = cfg.read_text(encoding="utf-8", errors="replace")
         for name, block in template_blocks(text).items():
             total_templates += 1
-            # 飞行类任务本来就在空中：z 高不是问题
-            airborne_ok = any(k in name for k in ("aviation", "pilot", "flight", "airlift"))
-            seen: dict[tuple[float, float, float], list[str]] = {}
-            step = None
-            for line in block.splitlines():
-                m = STEP_RE.search(line)
-                if m:
-                    step = m.group(1)
-                m = COORD_RE.search(line)
-                if not m:
-                    continue
-                total_points += 1
-                x, y, z = (float(v) for v in m.groups())
-                seen.setdefault((x, y, z), []).append(step or "?")
-                hard = []
-                if not (WORLD["x"][0] <= x <= WORLD["x"][1] and WORLD["y"][0] <= y <= WORLD["y"][1]):
-                    hard.append("世界边界外")
-                if not (WORLD["z"][0] <= z <= WORLD["z"][1]):
-                    hard.append(f"z={z:.0f} 越界")
-                if hard:
-                    errors += 1
-                    print(f"  ✗ {cfg.name:<34} {name:<28} {step or '?':<22} ({x:.0f}, {y:.0f}, {z:.0f})  "
-                          + "；".join(hard))
-                elif z > 120 and not airborne_ok:
-                    hints += 1
-                    print(f"  ? {cfg.name:<34} {name:<28} {step or '?':<22} ({x:.0f}, {y:.0f}, {z:.0f})  "
-                          "z 偏高 —— 确认在楼顶还是空中")
-            for coords, steps in seen.items():
-                if len(set(steps)) >= 3:
-                    hints += 1
-                    print(f"  ? {cfg.name:<34} {name:<28} {len(set(steps))} 个步骤共用同一点 "
-                          f"({coords[0]:.0f}, {coords[1]:.0f}, {coords[2]:.0f}) —— 确认不需要移动？")
+            total_points += len(COORD_RE.findall(block))
+            _, hard, soft = _scan_template(cfg.name, name, block)
+            errors += hard
+            hints += soft
     print(f"\n扫描：{total_templates} 个模板 / {total_points} 个坐标点 | 硬错误 {errors} | 提示 {hints}")
     print("硬错误 = 世界边界外或 z 越界（一定有问题）；提示 = 需要人看一眼（楼顶/同一地点多步骤）。")
     return 0 if errors == 0 else 1
 
 
+def template_block_of(text: str, quest_id: str) -> str | None:
+    """按花括号配对截出某个模板的正文（避免把后面的任务也读进来）。"""
+    needle = f"id = '{quest_id}'"
+    if needle not in text:
+        return None
+    id_at = text.index(needle)
+    open_at = text.rindex("{", 0, id_at)
+    depth = 0
+    for pos in range(open_at, len(text)):
+        ch = text[pos]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_at:pos + 1]
+    return None
+
+
 def load_quest(quest_id: str) -> tuple[str, list[Point]]:
     for cfg in sorted(QUESTS_DIR.rglob("*.lua")):
-        text = cfg.read_text(encoding="utf-8", errors="replace")
-        if f"id = '{quest_id}'" not in text:
-            continue
-        id_at = text.index(f"id = '{quest_id}'")
-        # 向前找到这个模板自己的开括号，再向后按深度配对，避免把后面几个任务也读进来
-        open_at = text.rindex("{", 0, id_at)
-        depth, close_at = 0, None
-        for pos in range(open_at, len(text)):
-            ch = text[pos]
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    close_at = pos + 1
-                    break
-        assert close_at, f"{quest_id} 的表格没有闭合"
-        block = text[open_at:close_at]
-        points: list[Point] = []
-        current_step = None
-        for line in block.splitlines():
-            m = re.search(r"id\s*=\s*'(step_[^']+)'", line)
-            if m:
-                current_step = m.group(1)
-            m = re.search(r"coords\s*=\s*\{\s*x\s*=\s*(-?[\d.]+)\s*,\s*y\s*=\s*(-?[\d.]+)\s*,\s*z\s*=\s*(-?[\d.]+)", line)
-            if m:
-                points.append(Point(float(m.group(1)), float(m.group(2)), float(m.group(3)),
-                                    label=(current_step or "pt").replace("step_", "")))
-            if line.strip() == "}," and points and "id = '" in line:
-                break
-        return cfg.name, points
+        block = template_block_of(cfg.read_text(encoding="utf-8", errors="replace"), quest_id)
+        if block is not None:
+            return cfg.name, parse_points(block)
     raise SystemExit(f"没找到任务模板 {quest_id}")
-
 
 def sanity(points: list[Point]) -> list[str]:
     notes: list[str] = []
@@ -302,7 +324,46 @@ def sanity(points: list[Point]) -> list[str]:
     return notes
 
 
-def main() -> int:
+def points_from_cli(spec: str) -> list[Point]:
+    points: list[Point] = []
+    for chunk in spec.split(";"):
+        parts = [float(v) for v in chunk.split(",")]
+        points.append(Point(parts[0], parts[1], parts[2] if len(parts) > 2 else 0.0))
+    return points
+
+
+def resolve_points(args) -> tuple[str, list[Point]]:
+    if args.quest:
+        return load_quest(args.quest)
+    if args.coords:
+        return "cli", points_from_cli(args.coords)
+    raise SystemExit("要么 --quest / --coords / --scan")
+
+
+def render_and_report(args) -> int:
+    source, points = resolve_points(args)
+    if not points:
+        raise SystemExit(f"{source} 里没解析到坐标")
+
+    out = Path(args.out) if Path(args.out).is_absolute() else REPO / args.out
+    img = render(points, args.style, args.scale, args.margin, out)
+
+    print(f"来源: {source}")
+    for i, p in enumerate(points, 1):
+        gx, gy = pixel_of(p.x, p.y)
+        extra = f"  r={p.radius}m" if p.radius else ""
+        print(f"  #{i} {p.label:<14} ({p.x:>9.1f}, {p.y:>9.1f}, {p.z:>6.1f})  "
+              f"z5px=({gx:>7.1f}, {gy:>7.1f}){extra}")
+    notes = sanity(points)
+    if notes:
+        print("体检:")
+        for note in notes:
+            print("  !", note)
+    print(f"图: {out}  ({img.width}x{img.height})")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="把任务坐标画到 GTA 地图上")
     ap.add_argument("--quest", help="任务模板 id（如 hotdog_vendor）")
     ap.add_argument("--coords", help="直接给坐标：x,y,z 或 x,y,z;x,y,z")
@@ -311,41 +372,14 @@ def main() -> int:
     ap.add_argument("--scale", type=int, default=3, help="放大倍数（瓦片只到 z5，靠放大看清街道）")
     ap.add_argument("--margin", type=int, default=110, help="边距（z5 像素）")
     ap.add_argument("--out", default=".cache/quest_map/out.png")
-    args = ap.parse_args()
+    return ap
 
+
+def main() -> int:
+    args = build_parser().parse_args()
     if args.scan:
         return scan_all()
-
-    if args.quest:
-        source, points = load_quest(args.quest)
-    elif args.coords:
-        source = "cli"
-        points = []
-        for chunk in args.coords.split(";"):
-            parts = [float(v) for v in chunk.split(",")]
-            points.append(Point(parts[0], parts[1], parts[2] if len(parts) > 2 else 0.0))
-    else:
-        ap.error("要么 --quest / --coords / --scan")
-
-    if not points:
-        raise SystemExit(f"{source} 里没解析到坐标")
-
-    out = (REPO / args.out) if not Path(args.out).is_absolute() else Path(args.out)
-    img = render(points, args.style, args.scale, args.margin, out)
-
-    print(f"来源: {source}")
-    for i, p in enumerate(points, 1):
-        gx, gy = pixel_of(p.x, p.y)
-        print(f"  #{i} {p.label:<14} ({p.x:>9.1f}, {p.y:>9.1f}, {p.z:>6.1f})  z5px=({gx:>7.1f}, {gy:>7.1f})"
-              + (f"  r={p.radius}m" if p.radius else ""))
-    notes = sanity(points)
-    if notes:
-        print("体检:")
-        for n in notes:
-            print("  !", n)
-    print(f"图: {out}  ({img.width}x{img.height})")
-    return 0
-
+    return render_and_report(args)
 
 if __name__ == "__main__":
     raise SystemExit(main())
