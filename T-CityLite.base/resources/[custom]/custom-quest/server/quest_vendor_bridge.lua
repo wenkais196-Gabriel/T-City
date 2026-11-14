@@ -53,6 +53,18 @@ local function ResolvePlayer(citizenid)
     return nil
 end
 
+--- 模板里「售卖」那一步的 id。收摊由服务端推进，不再让客户端报 stepId ——
+-- 客户端手里那个 stepId 是**摆摊**那一步的（`vendorState` 是开卖时推的），
+-- 拿它去 nodeComplete 会被判 `Step order violation`（真机已实测：
+-- expected step_sell, got step_place_stand，红字刷屏）。
+local function vendorStepIdOf(questId)
+    if type(QuestRegistry) ~= 'table' or type(QuestRegistry.GetTemplate) ~= 'function' then return nil end
+    local template = QuestRegistry.GetTemplate(questId)
+    for _, step in ipairs(template and template.steps or {}) do
+        if step.type == 'vendor' then return step.id end
+    end
+    return nil
+end
 local function PushState(citizenid, reason)
     local player = ResolvePlayer(citizenid)
     if not player then return end
@@ -415,6 +427,20 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
             return
         end
         local summary = QuestVendorBridge.CloseFor(citizenid, booth.questId, 'closed_by_player')
+
+        -- 推进任务这一步必须由服务端做：客户端不知道当前是哪一步
+        -- （它只知道「摆摊那一步」的 id —— 拿那个报上去就是 step order violation）。
+        local stepId = vendorStepIdOf(booth.questId)
+        if stepId then
+            local advanced, msg = QuestManager.AdvanceStep(citizenid, booth.questId, stepId, {})
+            if not advanced then
+                print(('[vendor-bridge] ⚠️ 收摊后推进失败：%s | %s | %s')
+                    :format(tostring(citizenid), tostring(stepId), tostring(msg)))
+            end
+        else
+            print(('[vendor-bridge] ⚠️ 模板里没有 vendor 步骤：%s')
+                :format(tostring(booth.questId)))
+        end
         if summary then
             TriggerClientEvent('QBCore:Notify', src,
                 ('收摊了 · 本班售出 %s 份 · 收入 $%s'):format(
