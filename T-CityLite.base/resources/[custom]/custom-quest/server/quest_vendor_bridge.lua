@@ -89,6 +89,18 @@ function QuestVendorBridge.OpenFor(source, citizenid, questId, boothNetId, cfg, 
     if not session then return false, err end
 
     StepIds[citizenid] = stepId
+
+    -- 初始库存：S3 的小游戏还没接进客户端，`AddStock` 暂时没有调用方。
+    -- 不给起始货的话 Tick 永远不会说「可以来顾客」（它要求 stockTotal > 0），
+    -- 真机表现就是「摆好摊以后一个人都不来」。接了做热狗之后再把这个配置去掉。
+    local starting = type(cfg) == 'table' and cfg.starting_stock or nil
+    if type(starting) == 'table' then
+        for quality, count in pairs(starting) do
+            local amount = tonumber(count)
+            if amount and amount > 0 then QuestVendor.AddStock(citizenid, quality, amount) end
+        end
+    end
+
     PushState(citizenid, 'opened')
     QuestVendorBridge.StartTick(citizenid)
     print(('[vendor-bridge] 🍔 开卖：%s | %s | netId=%s'):format(
