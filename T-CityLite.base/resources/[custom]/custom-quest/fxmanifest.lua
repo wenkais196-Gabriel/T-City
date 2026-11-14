@@ -83,6 +83,7 @@ server_scripts {
     'server/quest_rental.lua',
     'server/quest_minigame.lua',           -- S3 内核：小游戏 nonce + 品质映射（CC 实现）
     'server/quest_booth.lua',              -- S2：摊位摆放判定（服务端权威）+ 实体登记/回收
+    'server/quest_vendor.lua',             -- S4：顾客会话（NPC 报价 / 玩家购买 / Tick 推进）
     'server/quest_logistics_validators.lua',
     'server/quest_entity_tracker.lua',       -- v0.9: 实体追踪（脱钩/下车倒计时）
     'server/quest_entity_registry.lua',       -- v0.10: 实体注册表 + 延迟回收策略
