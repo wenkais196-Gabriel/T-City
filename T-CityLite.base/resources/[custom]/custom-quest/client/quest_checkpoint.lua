@@ -41,6 +41,7 @@ local DEFAULT_CHECKPOINT_TYPE = {
     ['goto']  = 'ring',    -- Lua 5.4 关键字
     validator = 'cylinder',
     interact  = 'arrow',
+    rental    = 'arrow',   -- 租借点：与 interact 同表现（否则该步不画 checkpoint）
     deliver   = 'cylinder',
 }
 

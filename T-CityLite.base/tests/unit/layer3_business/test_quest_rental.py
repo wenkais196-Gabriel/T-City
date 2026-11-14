@@ -82,3 +82,29 @@ def test_restart_scan_only_queues():
     scan_body = src[src.index("function QuestRental.QueueUnclosedSessions"):src.index("function QuestRental.ClaimPendingRefund")]
     assert "AddMoney" not in scan_body, "启动扫描里出现了 AddMoney"
     assert "PendingRefunds[cid]" in scan_body
+
+
+
+def test_rental_step_is_wired_end_to_end_on_the_client_side():
+    """真机症状：走到租赁点没有「按 E」提示。
+
+    原因是三张表都要登记，少一张这一步就静默死掉：
+      1) 服务端 QuestNodes._eventMap 没有 RENTAL → 打「Unknown node type」→ 客户端收不到节点；
+      2) ValidateNode 的别名表没有 RENTAL→INTERACT → 客户端上报 INTERACT 被判定类型不符；
+      3) 配置与客户端的 checkpoint 类型推断表没有 rental → 不画 checkpoint。
+    这三处都属于「配置选到一个没人处理的名字」，运行时没有任何报错，只有玩家发现按不了 E。
+    """
+    manager = (BASE / "resources/[custom]/custom-quest/server/quest_manager.lua").read_text(encoding="utf-8")
+    config = (BASE / "resources/[custom]/custom-quest/config.lua").read_text(encoding="utf-8")
+    checkpoint = (BASE / "resources/[custom]/custom-quest/client/quest_checkpoint.lua").read_text(encoding="utf-8")
+
+    assert "RENTAL    = 'quest:client:nodeInteract'" in manager, "服务端没有把 rental 映射到客户端节点"
+    assert "RENTAL = 'INTERACT'" in manager, "别名表缺 RENTAL→INTERACT，客户端上报会被判类型不符"
+    assert "rental    = 'arrow'" in config, "配置的 checkpoint 类型表缺 rental"
+    assert "rental    = 'arrow'" in checkpoint, "客户端的 checkpoint 类型推断表缺 rental"
+
+
+def test_rental_wiring_rule_rejects_the_silent_dead_shape():
+    """反向校验：只有事件映射、没有别名时，规则必须判红。"""
+    broken = "RENTAL = 'quest:client:nodeInteract'"
+    assert "RENTAL = 'INTERACT'" not in broken

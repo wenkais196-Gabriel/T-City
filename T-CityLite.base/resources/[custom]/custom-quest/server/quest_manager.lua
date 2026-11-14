@@ -51,6 +51,9 @@ QuestNodes = {
         REACH     = 'quest:client:nodeGoto',
         INTERACT  = 'quest:client:nodeInteract',
         VALIDATOR = 'quest:client:nodeValidator',
+        -- rental 复用 interact 的客户端表现（提示 + 进度条 + nodeComplete）：
+        -- 押金在服务端校验器里扣，客户端这一步只负责「站到点上按 E」。
+        RENTAL    = 'quest:client:nodeInteract',
         DELIVER   = 'quest:client:nodeDeliver',
         COMBAT    = 'quest:client:nodeCombat',
         WAIT      = 'quest:client:nodeWait',
@@ -183,7 +186,9 @@ QuestNodes = {
         local claimed = clientData and string.upper(tostring(clientData.nodeType or '')) or ''
         local expected = string.upper(tostring(step.type or ''))
         if claimed ~= '' and expected ~= '' then
-            local alias = { REACH = 'GOTO' }
+            -- RENTAL 借用 INTERACT 的节点事件，所以客户端上报的 nodeType 是 INTERACT；
+            -- 不登记这条别名，服务端会判 'Node type mismatch: expected RENTAL, got INTERACT'。
+            local alias = { REACH = 'GOTO', RENTAL = 'INTERACT' }
             if claimed ~= expected and alias[expected] ~= claimed then
                 return false, ('Node type mismatch: expected %s, got %s'):format(expected, claimed)
             end
