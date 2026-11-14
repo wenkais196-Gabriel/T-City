@@ -47,11 +47,11 @@ QuestManager._completing = {}
 -- ══════════════════════════════════════════════════════════════
 -- 任务终结时把租借会话关掉（押金按已用时长结算后退回）。
 -- 与 clearLogisticsFor 分开：那个清的是「载具绑定」，这个清的是「押金会话」。
-local function closeRentalFor(source, reason)
+local function closeRentalFor(source, reason, questId)
     if type(QuestRental) ~= 'table' or type(QuestRental.Close) ~= 'function' then return end
     local Player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(source)
     if not Player then return end
-    local ok, result = pcall(QuestRental.Close, Player, reason)
+    local ok, result = pcall(QuestRental.Close, Player, reason, os.time(), questId)
     if ok and result and not result.idempotent then
         QuestPrint('🏁 rental closed (%s): refund=$%s rent=$%s %smin',
             tostring(reason), tostring(result.refund), tostring(result.rent), tostring(result.minutes))
@@ -937,7 +937,7 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
 
                 -- 完成任务 = 正常归还：租借会话必须在这里关掉（退押金按已用时长结算）。
                 -- 少了这一条，happy path 上押金永远退不回来 —— 失败/放弃/断线都关了，只有成功没关。
-                closeRentalFor(src, 'returned')
+                closeRentalFor(src, 'returned', questId)
 
                 -- v0.7.2: 奖励在完成事件之后发放，避免奖励异常阻断客户端清理
                 local rewardOk, rewardErr = xpcall(function()
@@ -1063,7 +1063,7 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
             nodePayload.action = nodePayload.action or 'detach_trailer'
         end
 
-        local atomTypes = { GOTO = true, INTERACT = true, DELIVER = true, COMBAT = true, WAIT = true, VALIDATOR = true, PLACEMENT = true, DECISION = true }
+        local atomTypes = { GOTO = true, INTERACT = true, DELIVER = true, COMBAT = true, WAIT = true, VALIDATOR = true, RENTAL = true, PLACEMENT = true, DECISION = true }
         if atomTypes[nodeType] and QuestNodes then
             local src = getSourceFromCid(citizenid)
             if src then
@@ -1219,7 +1219,7 @@ function QuestManager.FailQuest(source, questId, reason)
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
     clearLogisticsFor(citizenid, questId)
-    closeRentalFor(source, 'failed')
+    closeRentalFor(source, 'failed', questId)
 
     local src = getSourceFromCid(citizenid)
     if src then
@@ -1280,7 +1280,7 @@ function QuestManager.AbandonQuest(source, questId)
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
     clearLogisticsFor(citizenid, questId)
-    closeRentalFor(source, 'abandoned')
+    closeRentalFor(source, 'abandoned', questId)
 
     local src = getSourceFromCid(citizenid)
     if src then

@@ -62,9 +62,9 @@ def test_close_paths_are_wired_into_every_termination_route():
     """
     manager = (BASE / "resources/[custom]/custom-quest/server/quest_manager.lua").read_text(encoding="utf-8")
     cache = (BASE / "resources/[custom]/custom-quest/server/quest_cache.lua").read_text(encoding="utf-8")
-    assert "closeRentalFor(src, 'returned')" in manager, "完成任务时没有关租 —— happy path 押金退不回来"
-    assert "closeRentalFor(source, 'failed')" in manager
-    assert "closeRentalFor(source, 'abandoned')" in manager
+    assert "closeRentalFor(src, 'returned', questId)" in manager, "完成任务时没有关租 —— happy path 押金退不回来"
+    assert "closeRentalFor(source, 'failed', questId)" in manager
+    assert "closeRentalFor(source, 'abandoned', questId)" in manager
     assert "QuestRental.CloseOnDrop" in cache
 
 
@@ -161,3 +161,44 @@ def test_client_does_not_re_send_the_same_node_twice():
     node_body = node_body[:node_body.index("RegisterNetEvent('quest:client:nodeDeliver'") if "nodeDeliver" in node_body else len(node_body)]
     assert node_body.count("activeNode = nil") >= 2, "上报后没有清 activeNode —— 同一节点会被循环重复上报"
     assert "if activeNode and activeNode.stepId == data.stepId then" in node_body, "无进度条分支缺少前置护栏"
+
+
+
+def test_rental_type_is_registered_in_every_dispatch_table():
+    """CC 复核列出 RENTAL 需要登记的 8 处；漂移一处就是「配置合法、走到点上没反应」。
+
+    本次真机连撞的四处：事件映射、别名单、函数作用域、校验闸；
+    这里再补最容易漏的第 5 处 —— `atomTypes`（决定非第一步的节点会不会被下发）。
+    """
+    manager = (BASE / "resources/[custom]/custom-quest/server/quest_manager.lua").read_text(encoding="utf-8")
+    atom_line = next(l for l in manager.splitlines() if "local atomTypes =" in l)
+    assert "RENTAL = true" in atom_line, "atomTypes 没有 RENTAL —— rental 只要不是第一步就不会下发节点"
+
+
+def test_client_active_node_local_is_declared_before_every_cleanup_helper():
+    """activeNode 的 local 必须声明在 ClearZone / clearAllNodes 之前。
+
+    声明在 389 行时，之前那些函数里的 `activeNode = nil` 清的是**全局**，
+    与节点线程读写的 file-local 是两个变量 —— 完成/失败/放弃都清不掉线程，
+    玩家走回同一坐标还能再按一次 E（真机症状：任务完成后弹 任务节点校验失败）。
+    """
+    src = (BASE / "resources/[custom]/custom-quest/client/main.lua").read_text(encoding="utf-8")
+    declared = src.index("local activeNode = nil")
+    first_cleanup = src.index("activeNode = nil", declared + 1)
+    clear_zone = src.index("function ClearZone()")
+    assert declared < clear_zone, "activeNode 的 local 又跑到 ClearZone 后面去了 —— 清理会清到全局"
+    assert declared < first_cleanup
+
+
+def test_rental_payload_carries_the_step_id_for_audit():
+    """不带 nodeId 的话，rental_open / rental_close 的 step_id 永远是 NULL。"""
+    gate = (BASE / "resources/[custom]/custom-quest/server/quest_step_gate.lua").read_text(encoding="utf-8")
+    assert "payload.nodeId = step.id" in gate
+    for key in ("deposit", "rate_per_min", "grace_sec", "max_minutes"):
+        assert key + " = true" in gate, f"META_KEYS 缺 {key}：写在 step.data 顶层时会静默变 0"
+
+
+def test_rental_steps_must_declare_a_validator_at_registration_time():
+    """没有 validator_id 的 rental 步骤应当注册失败，而不是运行时静默不扣押金。"""
+    reg = (BASE / "resources/[custom]/custom-quest/server/quest_registry.lua").read_text(encoding="utf-8")
+    assert "is rental but has no validator_id" in reg
