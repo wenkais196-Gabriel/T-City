@@ -98,7 +98,7 @@ return {
                 description = '前往洛圣都新闻社领取采访任务',
                 type = 'reach',
                 data = {
-                    coords = { x = -600.0, y = -930.0, z = 23.0 },
+                    coords = { x = -591.8, y = -901.0, z = 24.7 },
                     radius = 10.0,
                 },
             },
@@ -108,7 +108,7 @@ return {
                 description = '从编辑处获取今日采访线索',
                 type = 'interact',
                 data = {
-                    coords = { x = -600.0, y = -930.0, z = 23.0 },
+                    coords = { x = -591.8, y = -901.0, z = 24.7 },
                     radius = 5.0,
                     duration = 3000,
                     label = '领取采访任务...',
@@ -120,7 +120,7 @@ return {
                 description = '驾车前往新闻事件现场',
                 type = 'reach',
                 data = {
-                    coords = { x = 200.0, y = -900.0, z = 30.0 },
+                    coords = { x = 246.0, y = -899.2, z = 28.1 },
                     radius = 15.0,
                 },
             },
@@ -130,7 +130,7 @@ return {
                 description = '在事件现场拍摄新闻照片',
                 type = 'interact',
                 data = {
-                    coords = { x = 200.0, y = -900.0, z = 30.0 },
+                    coords = { x = 246.0, y = -899.2, z = 28.1 },
                     radius = 15.0,
                     duration = 4000,
                     label = '拍摄新闻照片...',
@@ -142,7 +142,7 @@ return {
                 description = '返回新闻社提交稿件和照片',
                 type = 'reach',
                 data = {
-                    coords = { x = -600.0, y = -930.0, z = 23.0 },
+                    coords = { x = -591.8, y = -901.0, z = 24.7 },
                     radius = 10.0,
                 },
             },
@@ -152,7 +152,7 @@ return {
                 description = '将照片和稿件提交给编辑',
                 type = 'interact',
                 data = {
-                    coords = { x = -600.0, y = -930.0, z = 23.0 },
+                    coords = { x = -591.8, y = -901.0, z = 24.7 },
                     radius = 5.0,
                     duration = 3000,
                     label = '提交稿件...',

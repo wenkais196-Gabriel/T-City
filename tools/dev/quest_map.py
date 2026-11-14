@@ -472,12 +472,86 @@ def render_and_report(args) -> int:
     return 0
 
 
+# ── 联络图（一次看完所有模板的点位）──────────────────────────────────────────
+SHEET_COLS = 4
+SHEET_ROWS = 3
+SHEET_TILE = 320
+
+
+def all_templates() -> list[tuple[str, list[Point]]]:
+    """把全仓任务模板都解析出来：(模板名, 点列表)。"""
+    out: list[tuple[str, list[Point]]] = []
+    for cfg in sorted(QUESTS_DIR.rglob("*.lua")):
+        text = cfg.read_text(encoding="utf-8", errors="replace")
+        for name, block in template_blocks(text).items():
+            points = parse_points(block)
+            if points:
+                out.append((name, points))
+    return out
+
+
+def _sheet_tile(points: list[Point], style: str, name: str, workdir: Path, tile_px: int = SHEET_TILE):
+    """渲染单块缩略图（失败不中断整页）。"""
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+    tmp = workdir / f"{name}.png"
+    try:
+        img = render(points, style, 3, 70, tmp)
+    except Exception as exc:  # noqa: BLE001 - 单块失败不该毁掉整张联络图
+        img = Image.new("RGB", (tile_px, tile_px), (40, 20, 20))
+        ImageDraw.Draw(img).text((8, 8), f"render failed: {exc}"[:40], fill=(255, 120, 120))
+        return img
+    thumb = ImageOps.fit(img, (tile_px, tile_px))
+    draw = ImageDraw.Draw(thumb, "RGBA")
+    try:
+        font = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 16)
+    except Exception:
+        font = ImageFont.load_default()
+    draw.rectangle([0, 0, tile_px, 26], fill=(0, 0, 0, 175))
+    draw.text((6, 4), name, fill=(255, 255, 255, 255), font=font)
+    return thumb
+
+
+def build_sheets(style: str, out_prefix: Path, only: list[str] | None = None,
+                 tile_px: int = SHEET_TILE) -> list[Path]:
+    """每页 12 个模板的联络图；返回生成的页文件。"""
+    from PIL import Image
+
+    templates = all_templates()
+    if only:
+        wanted = {n.strip() for n in only}
+        templates = [t for t in templates if t[0] in wanted]
+        missing = wanted - {t[0] for t in templates}
+        if missing:
+            print(f"  ! 没找到这些模板：{sorted(missing)}")
+    workdir = REPO / ".cache/quest_map/tiles"
+    workdir.mkdir(parents=True, exist_ok=True)
+    per_page = SHEET_COLS * SHEET_ROWS
+    pages: list[Path] = []
+    for page_no, start in enumerate(range(0, len(templates), per_page), start=1):
+        chunk = templates[start:start + per_page]
+        sheet = Image.new("RGB", (SHEET_COLS * tile_px, SHEET_ROWS * tile_px), (12, 12, 14))
+        for idx, (name, points) in enumerate(chunk):
+            tile = _sheet_tile(points, style, name, workdir, tile_px)
+            sheet.paste(tile, ((idx % SHEET_COLS) * tile_px, (idx // SHEET_COLS) * tile_px))
+        out = out_prefix.with_name(f"{out_prefix.name}_{page_no:02d}.png")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sheet.save(out)
+        pages.append(out)
+        names = ", ".join(n for n, _ in chunk)
+        print(f"  第 {page_no} 页（{len(chunk)} 个）：{names}")
+    return pages
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="把任务坐标画到 GTA 地图上")
     ap.add_argument("--quest", help="任务模板 id（如 hotdog_vendor）")
     ap.add_argument("--coords", help="直接给坐标：x,y,z 或 x,y,z;x,y,z")
     ap.add_argument("--scan", action="store_true", help="扫全部任务配置，只报可疑坐标")
     ap.add_argument("--build-roads", action="store_true", help="下载并生成路网缓存（约 4 MB，一次性）")
+    ap.add_argument("--sheet", action="store_true", help="所有模板渲染成联络图（每页 12 个）")
+    ap.add_argument("--only", help="配合 --sheet：只渲染这些模板（逗号分隔）")
+    ap.add_argument("--tile", type=int, default=SHEET_TILE, help="联络图每格像素")
     ap.add_argument("--style", default="atlas", choices=sorted(STYLES))
     ap.add_argument("--scale", type=int, default=3, help="放大倍数（瓦片只到 z5，靠放大看清街道）")
     ap.add_argument("--margin", type=int, default=110, help="边距（z5 像素）")
@@ -487,6 +561,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.sheet:
+        only = [s for s in (args.only or "").split(",") if s.strip()]
+        pages = build_sheets(args.style, Path(args.out).with_suffix(""), only or None, args.tile)
+        print(f"共 {len(pages)} 页")
+        return 0
     if args.build_roads:
         count = build_road_cache()
         print(f"路网缓存已生成：{count} 个路面节点 → {ROAD_CACHE}")
