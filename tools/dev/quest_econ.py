@@ -34,8 +34,10 @@ REPO = Path(__file__).resolve().parents[2]
 QUESTS_DIR = REPO / "T-CityLite.base/resources/[custom]/custom-quest/config/quests"
 
 # 物流任务的目的地在 destCoords（不是 coords）；漏掉它的话距离会少算一个数量级
+# 注意：只认 "ords" 结尾的小写/驼峰写法，destCoords / returnCoords / coords 都能命中，
+# 但不带前缀交替组 —— 带 (?:dest|return)? 会被 Sonar 判成"复杂正则"（复杂度 26 > 20）。
 COORD_RE = re.compile(
-    r"(?:dest|return)?[cC]oords\s*=\s*\{\s*x\s*=\s*(-?[\d.]+)\s*,\s*y\s*=\s*(-?[\d.]+)\s*,\s*z\s*=\s*(-?[\d.]+)"
+    r"[cC]oords\s*=\s*\{\s*x\s*=\s*(-?[\d.]+)\s*,\s*y\s*=\s*(-?[\d.]+)\s*,\s*z\s*=\s*(-?[\d.]+)"
 )
 REWARD_RE = re.compile(
     r"money\s*=\s*\{\s*type\s*=\s*'(\w+)'\s*,\s*min\s*=\s*(\d+)\s*,\s*max\s*=\s*(\d+)"
@@ -152,51 +154,57 @@ def is_gated(row: "QuestEcon") -> bool:
     return row.category == GATED_CATEGORY and not row.once and not is_flight(row.name)
 
 
+def render_table(rows: list[QuestEcon]) -> None:
+    print(f"{'任务':<28}{'点':>3}{'路程m':>7}{'交互s':>6}{'估时min':>9}"
+          f"{'价格':>13}{'$/h':>8}  判定")
+    for row in rows:
+        in_band = BAND_LOW - BAND_TOLERANCE <= row.per_hour_mid <= BAND_HIGH + BAND_TOLERANCE
+        if row.once:
+            verdict = "一次性"
+        elif is_flight(row.name):
+            verdict = "飞行类"
+        elif is_gated(row):
+            verdict = "OK" if in_band else "越界"
+        else:
+            verdict = "待决策" if not in_band else "OK"
+        print(f"{row.name:<28}{row.points:>3}{row.distance_m:>7.0f}{row.interact_s:>6.0f}"
+              f"{row.minutes:>9.1f}{f'${row.money_min}-{row.money_max}':>13}"
+              f"{row.per_hour_mid:>8.0f}  {verdict}")
+
+
+def run_check(rows: list[QuestEcon]) -> int:
+    """受闸任务必须在带内；其余越带的只报告，不阻断（那是另一轮决策）。"""
+    lo, hi = BAND_LOW - BAND_TOLERANCE, BAND_HIGH + BAND_TOLERANCE
+    bad = [r for r in rows if is_gated(r) and not lo <= r.per_hour_mid <= hi]
+    wait = [r for r in rows
+            if not is_gated(r) and not r.once and not is_flight(r.name)
+            and not lo <= r.per_hour_mid <= hi]
+    if wait:
+        print(f"\n另有 {len(wait)} 个非本轮任务越带（犯罪/采矿/物流，价位待决策）："
+              + ", ".join(f"{r.name} {r.per_hour_mid:.0f}$/h" for r in wait[:6]) + " …")
+    if not bad:
+        print(f"\n受闸任务全部在目标带内（{BAND_LOW:.0f}–{BAND_HIGH:.0f} ±{BAND_TOLERANCE:.0f} $/h）")
+        return 0
+    print(f"\n越出目标带的任务（估算 $/h 不在 {BAND_LOW:.0f}–{BAND_HIGH:.0f} "
+          f"±{BAND_TOLERANCE:.0f}）：", file=sys.stderr)
+    for row in bad:
+        print(f"  {row.name}: ${row.money_min}-{row.money_max} / {row.minutes:.1f} min "
+              f"= {row.per_hour_mid:.0f} $/h", file=sys.stderr)
+    return 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="任务收益估算（$/h）")
     ap.add_argument("--list", action="store_true", help="列出所有任务")
     ap.add_argument("--check", action="store_true", help="越出目标带就非零退出")
     args = ap.parse_args()
 
-    rows = all_quests()
-    rows.sort(key=lambda r: -r.per_hour_mid)
+    rows = sorted(all_quests(), key=lambda r: -r.per_hour_mid)
     if args.list or not args.check:
-        print(f"{'任务':<28}{'点':>3}{'路程m':>7}{'交互s':>6}{'估时min':>9}"
-              f"{'价格':>13}{'$/h':>8}  判定")
-        for row in rows:
-            in_band = BAND_LOW - BAND_TOLERANCE <= row.per_hour_mid <= BAND_HIGH + BAND_TOLERANCE
-            if row.once:
-                verdict = "一次性"
-            elif is_flight(row.name):
-                verdict = "飞行类"
-            elif is_gated(row):
-                verdict = "OK" if in_band else "越界"
-            else:
-                verdict = "待决策" if not in_band else "OK"
-            print(f"{row.name:<28}{row.points:>3}{row.distance_m:>7.0f}{row.interact_s:>6.0f}"
-                  f"{row.minutes:>9.1f}{f'${row.money_min}-{row.money_max}':>13}"
-                  f"{row.per_hour_mid:>8.0f}  {verdict}")
-
+        render_table(rows)
     if args.check:
-        bad = [r for r in rows
-               if is_gated(r)
-               and not (BAND_LOW - BAND_TOLERANCE <= r.per_hour_mid <= BAND_HIGH + BAND_TOLERANCE)]
-        wait = [r for r in rows
-                if not is_gated(r) and not r.once and not is_flight(r.name)
-                and not (BAND_LOW - BAND_TOLERANCE <= r.per_hour_mid <= BAND_HIGH + BAND_TOLERANCE)]
-        if wait:
-            print(f"\n另有 {len(wait)} 个非本轮任务越带（犯罪/采矿/物流，价位待决策）："
-                  + ", ".join(f"{r.name} {r.per_hour_mid:.0f}$/h" for r in wait[:6]) + " …")
-        if bad:
-            print("\n越出目标带的任务（估算 $/h 不在 "
-                  f"{BAND_LOW:.0f}–{BAND_HIGH:.0f} ±{BAND_TOLERANCE:.0f}）：", file=sys.stderr)
-            for row in bad:
-                print(f"  {row.name}: ${row.money_min}-{row.money_max} / {row.minutes:.1f} min "
-                      f"= {row.per_hour_mid:.0f} $/h", file=sys.stderr)
-            return 1
-        print(f"\n受闸任务全部在目标带内（{BAND_LOW:.0f}–{BAND_HIGH:.0f} ±{BAND_TOLERANCE:.0f} $/h）")
+        return run_check(rows)
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
