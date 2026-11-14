@@ -1150,6 +1150,16 @@ end
 ---@return boolean success
 ---@return string message
 
+-- 任务终结（失败/放弃）必须把物流绑定一起清掉。
+-- 否则 plate / netId / rentalFeePct 会残留到下一趟：玩家可能按上一趟的费率结算，
+-- 或者一辆已经不属于他的车仍被当成「已绑定任务载具」。
+local function clearLogisticsFor(citizenid, questId)
+    if type(ClearLogisticsBinding) ~= 'function' then return end
+    local ok, err = pcall(ClearLogisticsBinding, citizenid, questId)
+    if not ok then
+        QuestPrint('⚠️ ClearLogisticsBinding failed: %s → %s (%s)', citizenid, questId, tostring(err))
+    end
+end
 function QuestManager.FailQuest(source, questId, reason)
     local citizenid = getCidFromSource(source)
     if not citizenid then
@@ -1176,6 +1186,7 @@ function QuestManager.FailQuest(source, questId, reason)
     -- v1.1: 任务终结 → 清理内存步骤与完成锁
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
+    clearLogisticsFor(citizenid, questId)
 
     local src = getSourceFromCid(citizenid)
     if src then
@@ -1235,6 +1246,7 @@ function QuestManager.AbandonQuest(source, questId)
     -- v1.1: 任务终结 → 清理内存步骤与完成锁
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
+    clearLogisticsFor(citizenid, questId)
 
     local src = getSourceFromCid(citizenid)
     if src then

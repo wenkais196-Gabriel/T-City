@@ -22,6 +22,7 @@ local QBCore = exports['qb-core']:GetCoreObject()
 ---@field rentalDeposit number 租车押金
 ---@field rentalFeePct number  租车抽成比例 (0-100)
 
+-- [quest-logistics-binding-store] begin
 -- citizenid → questId → LogisticsBinding
 local PlayerBindings = {}
 
@@ -77,6 +78,7 @@ local function clearBinding(citizenid, questId)
         PlayerBindings[citizenid][questId] = nil
     end
 end
+-- [quest-logistics-binding-store] end
 
 -- ==============================================================
 -- 辅助函数: 安全获取玩家当前车辆信息
@@ -183,14 +185,17 @@ local function validate_logistics_vehicle(src, stepData, questData)
     -- 3. 验证通过 → 清除尝试计数 + 记录绑定
     clearValidationAttempts(citizenid, questId)
     local isOwned = playerOwnsVehicle(citizenid, vehInfo.plate)
-    local rentalFeePct = stepData.rental_fee_percent or 20
+    local rentalFeePct = tonumber(stepData.rental_fee_percent) or 20
+    -- 押金由租赁行在租车时收取，任务这边只**记录**（结算收据要显示它、将来 settle 节点要用）。
+    -- 这里曾经写死 0，导致配置里 300–2000 的押金在收据上永远是 $0（2026-11-14 修）。
+    local rentalDeposit = tonumber(stepData.rental_deposit) or 0
 
     setBinding(citizenid, questId, {
         plate    = vehInfo.plate,
         netId    = vehInfo.netId,
         model    = vehInfo.model,
         isRental = not isOwned,
-        rentalDeposit = 0,
+        rentalDeposit = isOwned and 0 or rentalDeposit,
         rentalFeePct  = isOwned and 0 or rentalFeePct,
     })
 
@@ -199,7 +204,11 @@ local function validate_logistics_vehicle(src, stepData, questData)
     if isOwned then
         return true, ('✅ 已绑定私家车 [%s] — 享受 100%% 收益'):format(vehInfo.plate)
     else
-        return true, ('📋 已登记运输载具 [%s] — 收益抽成 %d%%'):format(vehInfo.plate, rentalFeePct)
+        local msg = ('📋 已登记运输载具 [%s] — 收益抽成 %d%%'):format(vehInfo.plate, rentalFeePct)
+        if rentalDeposit > 0 then
+            msg = ('%s，押金 $%s（租赁行收取，归还全退）'):format(msg, QuestMoney and QuestMoney(rentalDeposit) or tostring(rentalDeposit))
+        end
+        return true, msg
     end
 end
 
@@ -318,6 +327,7 @@ end
 -- 导出
 -- ==============================================================
 
+-- [quest-logistics-binding-api] begin
 function GetLogisticsBinding(citizenid, questId)
     return getBinding(citizenid, questId)
 end
@@ -326,6 +336,21 @@ function ClearLogisticsBinding(citizenid, questId)
     clearBinding(citizenid, questId)
     clearValidationAttempts(citizenid, questId)
 end
+
+--- 玩家下线时调用：该玩家**所有**任务的绑定与尝试计数一起清掉。
+--- 绑定的键是 citizenid → questId（questId 在断线时已经不可知），所以只能整表清。
+---@param citizenid string
+---@return number cleared 清掉的绑定数（用于日志/测试断言）
+function ClearAllLogisticsBindings(citizenid)
+    local cleared = 0
+    if PlayerBindings[citizenid] then
+        for _ in pairs(PlayerBindings[citizenid]) do cleared = cleared + 1 end
+        PlayerBindings[citizenid] = nil
+    end
+    ValidationAttempts[citizenid] = nil
+    return cleared
+end
+-- [quest-logistics-binding-api] end
 
 -- ==============================================================
 -- 注册
