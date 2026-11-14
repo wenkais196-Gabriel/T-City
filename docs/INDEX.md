@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-14 ｜ **文档总数**：316 ｜ **已登记**：316 ｜ **未登记**：0
+**生成时间**：2026-11-14 ｜ **文档总数**：317 ｜ **已登记**：317 ｜ **未登记**：0
 
-**状态分布**：✅ active 181 ・ 🟡 draft 12 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 181 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -172,7 +172,7 @@
 | [custom-phone 性能与职业 App 接口设计](agent/phone/DESIGN.md) | spec | ✅ active | 2026-10-31 | 2027-04-30 | ★ | `docs/agent/phone/DESIGN.md` |
 | [v0.4 自研手机系统（custom-phone）](archive/QBCore_Lite_versions/v0.4-custom-phone.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.4-custom-phone.md` |
 
-### quest（12）
+### quest（13）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -186,6 +186,7 @@
 | [T-City通用任务系统：原子节点设计与配置规范手册 (v2.0.0 — 解耦重构版)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_atomic_nodes_spec.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_atomic_nodes_spec.md` |
 | [T-City角色扮演核心任务设计与场景装配手册 (v2.0 — 经济与小游戏闭环版)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_design.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_design.md` |
 | [v0.6-quest 通用任务系统（Quest/Mission System）](archive/QBCore_Lite_versions/v0.6-quest-system.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.6-quest-system.md` |
+| [热狗摊玩家 UX 规格](plan/jobs-content/10-hotdog-ux-spec.md) | spec | 🟡 draft | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/10-hotdog-ux-spec.md` |
 | [05 — 叙事所有权：让服务器拥有自己的历史](server-design/05-narrative-ownership.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/05-narrative-ownership.md` |
 | [09 — 任务的三种入口：日常是货架、剧情是剧本、奇遇是天气](server-design/09-quest-pre-start-and-kinds.md) | spec | ✅ active | 2026-10-26 | 2027-04-30 |  | `docs/server-design/09-quest-pre-start-and-kinds.md` |
 
