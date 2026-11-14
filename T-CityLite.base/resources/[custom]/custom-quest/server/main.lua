@@ -204,7 +204,15 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
                     GetPlayerName(src), cid, questId, stepId, nodeType, err or 'unknown'
                 ), 16711680)
         end
-        feedback(src, '任务节点校验失败', 'error')
+        -- 「任务已经不活跃」是玩家侧最常见的迟到包：客户端进度条走完的瞬间正好赶上
+        -- 服务端把任务标记完成（真的会差几百毫秒），于是这一步的 nodeComplete 晚到。
+        -- 以前这里一律发红字，玩家看到的是「任务都完成了却弹任务节点校验失败」。
+        -- 审计仍要留（上面已经 print + custom-logs），但**不再给玩家弹错误** ——
+        -- 诚实玩家只是晚到，作弊者本来也不靠这条提示。
+        local benignLatePacket = (err == 'Quest not active for this player')
+        if not benignLatePacket then
+            feedback(src, '任务节点校验失败', 'error')
+        end
         return
     end
 

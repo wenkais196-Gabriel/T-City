@@ -27,9 +27,17 @@ QuestStepGate.META_KEYS = {
 --- 该步骤是否必须通过 validator；不需要时返回 nil
 ---@param step table|nil
 ---@return string|nil validatorId
+--: 哪些步骤类型必须过校验器。**新类型一定要加进来**：
+--: `rental` 初版只加到客户端表现里，忘了加这张表，结果押金那一步的校验器根本没跑 ——
+--: 真机表现是「任务能推进，但一分钱押金没扣、日志里连 rental_open 都没有」。
+QuestStepGate.VALIDATED_TYPES = {
+    validator = true,
+    rental    = true,   -- 租借点：validate_rental_open 负责扣押金与建会话
+}
+
 function QuestStepGate.RequiredValidator(step)
     if type(step) ~= 'table' then return nil end
-    if step.type ~= 'validator' then return nil end
+    if not QuestStepGate.VALIDATED_TYPES[step.type] then return nil end
     local data = step.data
     if type(data) ~= 'table' then return nil end
     local validatorId = data.validator_id
