@@ -192,10 +192,16 @@ def test_closing_the_stand_does_two_things():
     """收摊要同时关会话与推进任务。
 
     只关会话：任务永远停在「开卖」；只推进任务：顾客继续来加钱。
+    两者现在**都在服务端**完成（客户端只发一条 close）—— 客户端手里的 stepId 是
+    摆摊那一步的，早先拿它报 nodeComplete 会判 Step order violation。
     """
     client = VENDOR_CLIENT.read_text(encoding="utf-8")
     assert "TriggerServerEvent('quest:server:vendorAction', 'close'" in client
-    assert "TriggerServerEvent('quest:server:nodeComplete', booth.questId, booth.stepId, 'vendor'" in client
+    bridge = BRIDGE.read_text(encoding="utf-8")
+    close_block = bridge[bridge.index("if action == 'close' then"):]
+    close_block = close_block[:close_block.index("\n    end\n")]
+    assert "CloseFor(citizenid" in close_block, "收摊必须关顾客会话"
+    assert "AdvanceStep(citizenid" in close_block, "收摊必须推进任务"
 
 
 def test_cooking_uses_the_shared_minigame_export():
@@ -231,3 +237,53 @@ def test_customer_ped_does_not_block_the_road():
     assert "FreezeEntityPosition(ped, true)" in block
     assert "SetEntityInvincible(ped, true)" in block
     assert "SetBlockingOfNonTemporaryEvents(ped, true)" in block
+
+
+# ---------------------------------------------------------------------------
+# 真机两处硬伤（2026-11-14 晚）：收摊推进报 Step order violation / 中文画成方块
+# ---------------------------------------------------------------------------
+
+BOOTH_CLIENT = BASE / "resources/[custom]/custom-quest/client/quest_hotdog_client.lua"
+FONT = BASE / "resources/[custom]/custom-quest/fonts/hotdog_ui.ttf"
+FONT_TOOL = BASE.parent / "tools/dev/build_quest_font.py"
+
+
+def test_closing_the_stand_does_not_report_a_stale_step_id():
+    """收摊不许再由客户端报 nodeComplete。
+
+    真机：`vendorState.stepId` 是**摆摊**那一步的 id（开卖时就推下来了），拿它去 nodeComplete
+    会被判 `Step order violation: expected step_sell, got step_place_stand`，红字刷屏。
+    现在改由服务端在 close 动作里自己推进。
+    """
+    client = VENDOR_CLIENT.read_text(encoding="utf-8")
+    assert "nodeComplete', booth.questId, booth.stepId, 'vendor'" not in client
+    bridge = BRIDGE.read_text(encoding="utf-8")
+    assert "local function vendorStepIdOf" in bridge, "服务端必须自己找 vendor 步骤"
+    close_block = bridge[bridge.index("if action == 'close' then"):]
+    close_block = close_block[:close_block.index("\n    end\n")]
+    assert "QuestManager.AdvanceStep(citizenid, booth.questId, stepId, {})" in close_block
+
+
+def test_chinese_text_uses_a_bundled_font():
+    """GTA 内置字体没有 CJK：界面中文必须走自带字体的 id。"""
+    for path in (VENDOR_CLIENT, BOOTH_CLIENT):
+        src = path.read_text(encoding="utf-8")
+        assert "RegisterFontFile('fonts/hotdog_ui.ttf')" in src, f"{path.name} 没有注册中文字体"
+        # 代码里不许再出现硬编码 4 号字体（注释里提到可以）
+        code = "\n".join(line.split("--")[0] for line in src.splitlines())
+        assert "SetTextFont(4)" not in code, f"{path.name} 还有硬编码字体 4 —— 中文会变方块"
+    assert FONT.exists(), "缺 fonts/hotdog_ui.ttf（跑 tools/dev/build_quest_font.py）"
+
+
+def test_font_subset_is_in_sync_with_the_source_strings():
+    """改了文案不重跑字体会让新字变方块，所以字符集有指纹。"""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("build_quest_font", FONT_TOOL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)   # type: ignore[union-attr]
+    chars = module.char_set()
+    stamp = FONT.with_suffix(".sha256")
+    assert stamp.exists(), "缺字符集指纹"
+    assert stamp.read_text(encoding="utf-8").strip() == module.fingerprint(chars), (
+        "源码里的字符集变了 —— 重跑 tools/dev/build_quest_font.py")
