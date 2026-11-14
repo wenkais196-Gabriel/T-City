@@ -74,10 +74,15 @@ function Get-ServerSetting([string]$Name) {
 
 function Get-DbEndpoint {
     $cs = Get-ServerSetting 'mysql_connection_string'
-    if (-not $cs) { return @{ Host = '127.0.0.1'; Port = 3306; Password = $null } }
+    if (-not $cs) { return @{ Host = '127.0.0.1'; Port = 3306; User = 'root'; Password = $null } }
     $m = [regex]::Match($cs, 'mysql://(?<user>[^:@/]*):(?<pass>[^@]*)@(?<host>[^:/]+):(?<port>\d+)')
     if (-not $m.Success) { throw "server.cfg 里的 mysql_connection_string 解析不出 host:port：$cs" }
-    return @{ Host = $m.Groups['host'].Value; Port = [int]$m.Groups['port'].Value; Password = $m.Groups['pass'].Value }
+    return @{
+        Host = $m.Groups['host'].Value
+        Port = [int]$m.Groups['port'].Value
+        User = $m.Groups['user'].Value
+        Password = $m.Groups['pass'].Value
+    }
 }
 
 function Test-Tcp([string]$TargetHost, [int]$Port, [int]$TimeoutMs = 1500) {
@@ -124,7 +129,9 @@ function Show-Status {
     if (Test-Path $LogFile) {
         $bad = Select-String -Path $LogFile -Pattern 'SCRIPT ERROR|awaitConnection failed' -SimpleMatch:$false |
                Select-Object -Last 3
-        if ($bad) { Write-Warn2 "日志里有 $($bad.Count) 条可疑行（$LogFile）" } else { Write-Ok '日志无 SCRIPT ERROR / 连接失败' }
+        $badList = @($bad)
+        # 日志跨启动复用：这里报的是**历史**可疑行，不等于本次启动有问题（-Status 不做本次判定）。
+        if ($badList.Count -gt 0) { Write-Warn2 "日志里有 $($badList.Count) 条历史可疑行（含上次启动；本次是否正常看完整启动输出）" } else { Write-Ok '日志无 SCRIPT ERROR / 连接失败' }
     }
 }
 
@@ -159,6 +166,27 @@ function Ensure-DockerEngine {
 }
 
 # ── 3. MariaDB ────────────────────────────────────────────────────────────
+
+# 冷启动时 `mariadb-admin ping` 会往 stderr 写 "connect ... failed"。
+# PowerShell 5.1 在 $ErrorActionPreference = 'Stop' 下把**原生程序的 stderr 当成 terminating error**，
+# 于是第一次 ping 失败就把整个启动脚本打飞（2026-11-14 真机：容器刚 start、InnoDB 还在恢复，
+# 脚本以 "mariadb-admin: connect to server at '127.0.0.1' failed" 退出，FXServer 根本没起）。
+#
+# 另外：**ping 的退出码不可信** —— 实测 `mariadb-admin ping` 在密码错误时仍返回 0
+# （它只证明"服务端在听"，不证明"这套凭据能用"）。而 oxmysql 用的是 server.cfg 里的凭据，
+# 所以这里改成真跑一条查询：`mariadb -e "SELECT 1"`，密码错时退出码是 1。
+function Test-DbQuery([string]$Name, [string]$User, [string]$Password) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        # 必须用长选项：PowerShell 把 `-h127.0.0.1` 交给原生程序时会变成 host `127`（实测报 `Can't connect to server on '127'`），`--host=` 形式才稳。
+        docker exec $Name mariadb "--host=127.0.0.1" "--user=$User" "--password=$Password" -N -B -e 'SELECT 1' 2>&1 | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
 function Ensure-Database {
     $db = Get-DbEndpoint
     Write-Step "MariaDB（容器 $Container，端口 $($db.Port)）"
@@ -175,19 +203,29 @@ function Ensure-Database {
         Write-Ok '容器已在运行'
     }
 
-    # 端口通了还不够：InnoDB 恢复期间端口会先开、查询仍会失败，所以再 ping 一次
-    for ($i = 0; $i -lt 60; $i++) {
-        if (Test-Tcp $db.Host $db.Port) {
-            if ($db.Password) {
-                docker exec $Container mariadb-admin ping -h 127.0.0.1 -uroot "-p$($db.Password)" *> $null
-                if ($LASTEXITCODE -eq 0) { Write-Ok "数据库可查询（$($i * 2 + 2)s）"; return }
-            } else {
-                Write-Ok "端口可连接（$($i * 2 + 2)s）"; return
+    # 端口通不等于能查：InnoDB 恢复期间端口先开、查询仍失败（断电/强制重启后尤其明显）。
+    # 给 180 秒；每 20 秒报一次进度，避免看起来像卡死。
+    $start = Get-Date
+    $deadline = $start.AddSeconds(180)
+    $announced = $false
+    while ((Get-Date) -lt $deadline) {
+        $elapsed = [int]((Get-Date) - $start).TotalSeconds
+        if ($db.Password) {
+            if ((Test-Tcp $db.Host $db.Port) -and (Test-DbQuery $Container $db.User $db.Password)) {
+                Write-Ok "数据库可查询（${elapsed}s）"
+                return
             }
+        } elseif (Test-Tcp $db.Host $db.Port) {
+            Write-Ok "端口可连接（${elapsed}s，未配密码）"
+            return
+        }
+        if (-not $announced -and $elapsed -ge 20) {
+            Write-Host '   …  容器已启动，等 InnoDB 恢复（最多 3 分钟）'
+            $announced = $true
         }
         Start-Sleep -Seconds 2
     }
-    throw "等了 120 秒 $($db.Host):$($db.Port) 仍不可用（看 docker logs $Container）"
+    throw "等了 180 秒 $($db.Host):$($db.Port) 仍不可查询（看 docker logs $Container）"
 }
 
 # ── 4. FXServer ───────────────────────────────────────────────────────────
@@ -196,6 +234,8 @@ function Start-Server {
     if (-not (Test-Path $FXServer)) { throw "找不到 FXServer：$FXServer（设环境变量 TCITY_FXSERVER 可改）" }
     if (Test-Tcp '127.0.0.1' 30130) {
         Write-Warn2 '30130 已被占用 —— 已有实例在跑。要重启请用 -Restart'
+        # 挂到已运行实例：只检查从此刻起新增的日志行
+        if (Test-Path $LogFile) { $script:LogOffset = (Get-Item $LogFile).Length }
         return
     }
 
@@ -203,6 +243,7 @@ function Start-Server {
     $logDir = Split-Path -Parent $LogFile
     if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
     Remove-Item $LogFile -ErrorAction SilentlyContinue
+    $script:LogOffset = 0
 
     $proc = Start-Process -FilePath $FXServer `
         -ArgumentList '+exec', 'server.cfg' `
@@ -211,6 +252,23 @@ function Start-Server {
         -RedirectStandardError (Join-Path $env:TEMP 'tcity_console.err.log') `
         -PassThru -WindowStyle Hidden
     Write-Ok "已拉起（PID $($proc.Id)），日志 $LogFile"
+}
+
+# 自检只看**本次启动之后**写进日志的行：日志文件跨启动复用（不删），
+# 上一次冷启动留下的 `awaitConnection failed` 会被误判成这次失败（2026-11-14 实测）。
+$script:LogOffset = 0
+
+function Get-LogSinceStart {
+    if (-not (Test-Path $LogFile)) { return @() }
+    try {
+        $fs = [System.IO.File]::Open($LogFile, 'Open', 'Read', 'ReadWrite')
+        try {
+            $from = [Math]::Min([int64]$script:LogOffset, $fs.Length)
+            $fs.Position = $from
+            $sr = New-Object System.IO.StreamReader($fs)
+            return @($sr.ReadToEnd() -split "`r?`n")
+        } finally { $fs.Close() }
+    } catch { return @() }
 }
 
 function Wait-Ready([int]$Timeout) {
@@ -255,11 +313,12 @@ function Wait-Ready([int]$Timeout) {
     if ($missing) { Write-Bad ("关键资源缺失: " + ($missing -join ', ')); $fail++ }
     else { Write-Ok "资源 $($res.Count) 个，关键资源齐全" }
 
-    $errors = Select-String -Path $LogFile -Pattern 'SCRIPT ERROR' | Select-Object -Last 5
+    $sinceStart = Get-LogSinceStart
+    $errors = $sinceStart | Select-String -Pattern 'SCRIPT ERROR' | Select-Object -Last 5
     if ($errors) { Write-Bad "日志里有 SCRIPT ERROR（$($errors.Count) 条）"; $errors | ForEach-Object { Write-Host "      $($_.Line.Trim())" }; $fail++ }
 
     # 这一条是本脚本存在的理由：oxmysql 不会自己重试，抢跑一次就得重起整服
-    $dbFail = Select-String -Path $LogFile -Pattern 'awaitConnection failed|ETIMEDOUT' | Select-Object -Last 3
+    $dbFail = $sinceStart | Select-String -Pattern 'awaitConnection failed|ETIMEDOUT' | Select-Object -Last 3
     if ($dbFail) { Write-Bad 'oxmysql 连接数据库失败 —— 说明它抢在 MariaDB 就绪之前连了，请 -Restart 重试'; $fail++ }
     else { Write-Ok 'oxmysql 连接正常' }
 
