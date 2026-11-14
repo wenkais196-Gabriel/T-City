@@ -117,7 +117,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **6 个模板的任务点落在建筑内部 / 楼顶，玩家到不了**：把全部 78 个模板渲染成卫星联络图逐格看过之后，
+- **Docker 引擎起不来时启动器只说「看日志」，没说怎么办**：真机形态是 Docker Desktop 报
+  `Docker Desktop is unable to start`、`com.docker.service` 停在 Stopped、WSL 的 Ubuntu 与
+  `docker-desktop` 两个发行版都是 Stopped —— 卡的是 **WSL 虚拟机**，不是 Docker 服务，
+  所以 `Start-Service` 或单独启发行版都无效。同一根因还会让 Docker 自己崩一次并弹
+  `vpnkit-bridge handshake failed … received bad magic string`（管道里回来的是 NUL + 一句 Windows
+  超时文本）。启动器的 180 秒超时现在会直接给出四步恢复法（`wsl --shutdown` → 结束 Docker 进程 →
+  重开 → 再跑脚本），并明确警告**不要点 “Reset to factory defaults”**（会连卷一起删，丢 `tcity-mariadb` 数据）。- **6 个模板的任务点落在建筑内部 / 楼顶，玩家到不了**：把全部 78 个模板渲染成卫星联络图逐格看过之后，
   确认 `hotdog_vendor`（前一 PR 已修）、`cartel_ch4_benevolent_king`、`cartel_ch4_tyrant`、
   `civilian_ch4_artisan`、`civilian_ch4_survivor`、`news_report` 的点都在**建筑内部**；
   `civilian_ch4_mogul` 的 3 步在 Arcadius **楼顶**（z=150，比路面高 122 m，玩家上不去）。

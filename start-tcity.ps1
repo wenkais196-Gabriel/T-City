@@ -162,7 +162,17 @@ function Ensure-DockerEngine {
         Start-Sleep -Seconds 3
         try { docker info *> $null; if ($LASTEXITCODE -eq 0) { Write-Ok "引擎就绪（$($i * 3 + 3)s）"; return } } catch { }
     }
-    throw '等了 180 秒 Docker 引擎仍未就绪'
+    # 实测最常见的形态：Docker Desktop 报 “Docker Desktop is unable to start”，com.docker.service 停在
+    # Stopped，WSL 的 Ubuntu / docker-desktop 两个发行版都是 Stopped —— 卡的是 WSL 虚拟机，不是服务。
+    # 单独 Start-Service 或单独启发行版都无效；`wsl --shutdown` + 杀掉 Docker Desktop 再重开才恢复
+    # （2026-11-14 实测：引擎 10 秒就绪）。Docker Desktop 自己崩过一次还会弹
+    # “vpnkit-bridge handshake failed … received bad magic string”，同一个根因。
+    throw ('等了 180 秒 Docker 引擎仍未就绪。多半是 WSL 虚拟机卡住，而不是 Docker 服务没起：' +
+        '  1) wsl --shutdown' +
+        '  2) 任务管理器结束 Docker Desktop / com.docker.backend / vpnkit' +
+        '  3) 重新打开 Docker Desktop，等 docker info 能跑通' +
+        '  4) 再执行本脚本。不要点 Docker 的 “Reset to factory defaults” —— 会连卷一起删掉，' +
+        'tcity-mariadb 的数据就没了。')
 }
 
 # ── 3. MariaDB ────────────────────────────────────────────────────────────
