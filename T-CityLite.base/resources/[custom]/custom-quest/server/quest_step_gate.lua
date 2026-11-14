@@ -22,6 +22,10 @@ QuestStepGate.META_KEYS = {
     require_trailer = true, returnCoords = true,
     allowed_classes = true, fallback_model = true,
     rental_fee_percent = true, rental_deposit = true,
+    -- 租借原语（quest_rental.lua）要的四个字段。不放进这张表的话，只要有人把它们
+    -- 写在 step.data 顶层（和 coords/label 同级，很自然），校验器收到 nil → 押金 0、租金 0，
+    -- 全程零报错。写进 validator_data 一样有效，但别指望参与者记得。
+    deposit = true, rate_per_min = true, grace_sec = true, max_minutes = true,
 }
 
 --- 该步骤是否必须通过 validator；不需要时返回 nil
@@ -61,6 +65,9 @@ function QuestStepGate.ValidatorPayload(step)
         local value = step.data[key]
         if value ~= nil then payload[key] = value end
     end
+    -- 审计需要知道是哪个节点开的租，但 step.data 里没有自己的 id；
+    -- 不显式带上，rental_open / rental_close 行的 step_id 就永远是 NULL。
+    payload.nodeId = step.id
     return payload
 end
 

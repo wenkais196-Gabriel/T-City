@@ -17,6 +17,15 @@ local currentBlip = nil
 -- v0.7.0: 活跃的 PolyZone 实例
 local activeZone = nil
 
+-- 活跃节点状态：**必须声明在文件最顶部**。
+-- 之前它声明在 389 行，而 ClearZone / clearAllNodes / QUEST_COMPLETED / FAILED /
+-- ABANDONED 都定义在它之前 —— 那些函数里的 `activeNode = nil` 清的是**全局**，
+-- 而各节点线程读写的是**文件局部**。两套变量互不相干，于是完成/失败/放弃都清不掉
+-- 节点线程：玩家走回同一个坐标还能再按一次 E，给已结束的任务补发 nodeComplete
+-- （真机表现为「任务完成后弹出 任务节点校验失败」）。
+local activeNode = nil
+local nodeTimer = nil
+
 -- ==============================================================
 -- 路点管理
 -- ==============================================================
@@ -385,9 +394,6 @@ end, false)
 -- v1.0.0: 原子节点客户端处理器
 -- ==============================================================
 
--- 活跃的节点状态 (每个玩家同时只有一个活跃节点)
-local activeNode = nil
-local nodeTimer = nil
 
 -- ── GOTO 节点 (已由 QUEST_ACCEPTED / QUEST_STEP_ADVANCED 处理) ────
 
