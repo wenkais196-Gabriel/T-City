@@ -16,13 +16,13 @@ if GetConvar('quest_hotdog_dev', '0') ~= '1' then
 end
 
 local RENT_POINT   = { x = 215.0,  y = -772.0, z = 30.5 }   -- 租赁点 / 归还区
-local STAND_A      = { x = 215.8,  y = -810.3, z = 30.7 }   -- 摆位 A（真机已验证）
+local STAND_A      = { x = 215.8,  y = -810.3, z = 30.7 }   -- 摆位 A（真机已验证；摆摊是自由选点，这里只作参考）
 
 return {
     {
         id = 'hotdog_dev_rental',
         title = '热狗摊 · 租借验收（dev）',
-        description = '租一辆热狗车 → 推到摊位点 → 回来还车。只用于验证押金与计租。',
+        description = '租一辆热狗车 → 推到广场放下 → 回来还车。只用于验证押金、计租与摆放判定。',
         category = 'test',      -- 不是 civilian：收益闸不按 $/h 判它（它本来就不该有收益）
         level = 1,
         required_tags = { role = 'civilian' },
@@ -57,11 +57,19 @@ return {
                 },
             },
             {
-                id = 'step_reach_stand',
-                title = '推到摊位点',
-                description = '把热狗车推到 Legion Square 东侧广场。',
-                type = 'reach',
-                data = { coords = STAND_A, radius = 3.0 },
+                id = 'step_place_stand',
+                title = '摆摊',
+                description = '把推车推到 Legion Square 东侧广场，选个不挡路的位置放下。',
+                type = 'booth',
+                data = {
+                    model = 'prop_hotdogstand_01',
+                    rental_point = RENT_POINT,
+                    max_distance = 200.0,     -- 离租赁点
+                    road_clearance = 6.0,     -- 离路面节点（离线点，见 hotdog_roads.lua）
+                    min_separation = 15.0,    -- 离别人的摊位
+                    label = '放下推车',
+                    validator_id = 'validate_booth_place',
+                },
             },
             {
                 id = 'step_return_cart',

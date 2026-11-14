@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **S2 热狗摊位实体（服务端权威 + 客户端推车）**：新增 `custom-quest` 的 `quest_booth` 服务端脚本与
+  `quest_hotdog_client` 客户端脚本，把「把推车推到某处放下」变成一条**可判定的规则**而不是一句提示。
+  服务端自己算三条硬判据（离租赁点 / 离路面节点 / 离其它摊位）外加配置禁摆区；客户端能拿到
+  `IsPointOnRoad`、坡度、水面这些服务端没有的原生，所以它参与测算，但**只能让判定更严（veto），不能放宽**。
+  路面点不是现算的：`tools/dev/booth_roads.py` 从 `.cache/roads/road_points.bin` 离线切出 Legion Square
+  一带的路面节点写成 `custom-quest` 的 `hotdog_roads` 配置（1402 个，19.9 KB），服务端只做一次最近点比较；
+  `--check` 让「缓存更新了但 Lua 没重生成」这件事变成一条会红的测试。
+  拒绝文案与 UX 规格一致（离租赁点太远 / 挡在车道上 / 旁边已经有摊位 / 这里放不稳 / 这里不许摆摊）。
+  实体走既有 `QuestEntityRegistry`（`on_quest_end`，不走 `on_leave`：玩家走开去卖货是常态），
+  四条关闭路径（归还/放弃/失败/断线）都删实体。**没有新 net event、没有新表**：摆放坐标与 netId 走
+  既有 `nodeComplete` 的 `clientData`，由 `validate_booth_place` 校验器裁决。
+  闸门：`tests/unit/layer3_business/test_quest_booth.py` 6 条（探针 17/17、删掉压路判据必红、
+  `booth` 已进 `VALIDATED_TYPES` 与 `META_KEYS`、清单声明、路网点与缓存同步、dev 模板真的用上 booth）。
 - **薪资抑制（R2）：让「干活」成为主要收入**：qb-core 每 10 分钟按职级发 `grades[level].payment`，
   原始区间 10–200 → **$60–1,200/小时**的白拿收入，会盖过 R1 三个循环职业的 1,400–2,800 $/h。
   新增 `T-CityLite.base/resources/[system]/core_economy/server/salary_scale.lua`：只改 `QBShared.Jobs` 这张共享表（就是 PaycheckInterval 读的那张），

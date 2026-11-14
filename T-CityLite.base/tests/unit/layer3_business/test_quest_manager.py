@@ -245,16 +245,18 @@ assert(QuestNodes._eventMap.DECISION == "story:client:offerDecision",
         assert result['ok'], f"Lua error: {result['stderr']}"
 
     def test_event_map_count(self):
-        """Verify exactly 10 node types are mapped (GOTO/REACH/INTERACT/VALIDATOR/DELIVER/COMBAT/WAIT/PLACEMENT/DECISION/RENTAL)"""
+        """Verify exactly 11 node types are mapped (GOTO/REACH/INTERACT/VALIDATOR/DELIVER/COMBAT/WAIT/PLACEMENT/DECISION/RENTAL/BOOTH)"""
         result = run_lua_test("""
 local count = 0
 for _ in pairs(QuestNodes._eventMap) do count = count + 1 end
-assert(count == 10, "expected 10 node types, got " .. tostring(count))
+assert(count == 11, "expected 11 node types, got " .. tostring(count))
 -- reach 是模板里最常见的步骤类型，必须和 GOTO 走同一条下发路径
 assert(QuestNodes._eventMap.REACH == QuestNodes._eventMap.GOTO, "reach must reuse the goto node")
 -- rental 没有自己的客户端表现，复用 interact（提示 + 进度条 + nodeComplete）；
 -- 漏这条映射的后果已实测：任务接取后客户端收不到节点，走到点上按不了 E。
 assert(QuestNodes._eventMap.RENTAL == QuestNodes._eventMap.INTERACT, "rental must reuse the interact node")
+-- booth 同理：漏了它，服务端把「摆摊」这一步交给客户端时查不到事件名，玩家什么都收不到。
+assert(QuestNodes._eventMap.BOOTH == QuestNodes._eventMap.INTERACT, "booth must reuse the interact node")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
