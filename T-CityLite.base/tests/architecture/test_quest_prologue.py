@@ -24,7 +24,12 @@ CFG = REPO / "T-CityLite.base/resources/[custom]/custom-quest/config/quests/ques
 def test_reach_steps_are_dispatched_to_the_client() -> None:
     src = MGR.read_text(encoding="utf-8")
     at = src.index("_eventMap = {")
-    block = src[at:src.index("},")]
+    # 必须**从 at 之后**找结尾：整个文件里第一个 `},` 可能出现在 `_eventMap` 之前的
+    # 任何一处表构造里（例如结算回执的 chat payload），那样切出来是空串，
+    # 断言就变成「REACH 不在空串里」——看起来是代码坏了，其实是测试写错了。
+    # 同一个文件里 test_every_step_type_in_the_police_prologue_is_mapped 早就用的是
+    # `src.index("},", at)`，这里对齐。
+    block = src[at:src.index("},", at)]
     assert "REACH" in block, "reach 步骤必须能下发，否则客户端没有触发区"
     assert "GOTO" in block
 
