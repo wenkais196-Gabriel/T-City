@@ -117,7 +117,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **`conditions.daily_limit` 是死字段，同一条路线可以一天刷无限次**：`custom-quest` 里
+- **热狗摊任务的地点在大楼里面，玩家根本到不了**：`hotdog_vendor` 的 4 个步骤都写在同一组坐标
+  `(-150, -250, 44)`，离线渲染后可以看到它落在 Las Lagunas Boulevard 东侧一栋建筑的**内部** ——
+  走过去既进不去、也不会出现交互提示。坐标改到 Legion Square 广场空地 `(215.8, -810.3, 30.7)`
+  （卫星/街区两种底图都核对过是开阔地面），半径相应放宽到 8 m / 5 m。
+- **没有离线核对任务坐标的手段（新增工具 + 闸门）**：一次要校 78 个模板 / 179 个坐标点，
+  原先只能进游戏肉身跑。新增 `tools/dev/quest_map.py`：按社区标定把游戏坐标换算成像素、
+  抓 GTA 地图瓦片（atlas / satellite / grid）渲染 PNG，红点 + 半径圈 + 比例尺，
+  `--scan` 模式给出硬错误（世界边界外 / z 越界，退出码非 0）与提示（z 偏高、多步骤同点）。
+  闸门 `tests/architecture/test_quest_coords.py`：硬错误必须为 0，反向用例喂一个界外点必须red；
+  同时钉住热狗摊不许回到那栋楼里。用法与判读方法见 `docs/engineering/QUEST_COORDS.md`。- **`conditions.daily_limit` 是死字段，同一条路线可以一天刷无限次**：`custom-quest` 里
   `QuestDB.CheckDailyLimit` 与 `QuestDB.UpdateDailyLimit` 都写好了，但**两边都没有调用点** ——
   配置里写着 `daily_limit = 8`，运行时形同不存在，`04-numbers.md` 的「$/h」只能算理论值。
   新增 `T-CityLite.base/resources/[custom]/custom-quest/server/quest_daily_limit.lua` 接管：接单时内存判定（`TriggerQuest` 是同步函数，不能等异步查询），
