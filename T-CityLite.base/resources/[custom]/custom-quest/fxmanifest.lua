@@ -64,6 +64,8 @@ files {
     'config/quests/quest_civilian_ch4_mogul.lua',
     'config/quests/quest_civilian_ch4_artisan.lua',
     'config/quests/quest_civilian_ch4_survivor.lua',
+
+    'fonts/hotdog_ui.ttf',   -- 中文字形子集（GTA 原生字体没有 CJK，见 tools/dev/build_quest_font.py）
 }
 
 shared_scripts {

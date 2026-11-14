@@ -25,6 +25,14 @@
 --   hints 只能让服务端判得更严，绝不能放宽 —— 所以这里绝不把 true 改写成 false。
 -- ==============================================================
 
+-- 中文必须用自带字体：GTA 内置字体没有 CJK 字形（真机实测：预览提示整排 □）
+-- 与 quest_hotdog_vendor_client.lua 用同一份子集字体，见 tools/dev/build_quest_font.py
+local UI_FONT = 4
+CreateThread(function()
+    local ok, id = pcall(function() return RegisterFontFile('fonts/hotdog_ui.ttf') end)
+    if ok and type(id) == 'number' and id > 0 then UI_FONT = id end
+end)
+
 local QBCore = exports['qb-core']:GetCoreObject()
 
 -- ==============================================================
@@ -652,6 +660,7 @@ local function DrawPreviewMarker(pos, legal, reason)
     SetDrawOrigin(pos.x, pos.y, pos.z + 1.6, 0)
     BeginTextCommandDisplayText('STRING')
     AddTextComponentSubstringPlayerName(text)
+    SetTextFont(UI_FONT)
     SetTextScale(0.36, 0.36)
     SetTextColour(r, g, b, 255)
     SetTextCentre(true)
