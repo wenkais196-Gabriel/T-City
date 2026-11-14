@@ -117,7 +117,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **`QuestManager.AbandonQuest` 被定义了两次，前一份的校验静默失效**：`quest_manager.lua` 里同名函数
+- **一键启动在冷启动（重启电脑后）直接退出，FXServer 根本没起**：`start-tcity.ps1` 的数据库检查用了
+  `docker exec mariadb-admin ping`，而 PowerShell 5.1 在 `$ErrorActionPreference = 'Stop'` 下把**原生程序的
+  stderr 当成 terminating error** —— 容器刚 `docker start`、InnoDB 还在恢复时 ping 会往 stderr 写
+  `connect to server at '127.0.0.1' failed`，脚本就以这条消息退出（实测复现）。三处修法：
+  ① ping 改在 `Continue` 语义下跑，只看退出码；② 顺带发现 **ping 的退出码不可信**（密码错也返回 0），
+  改成真跑 `SELECT 1`，且必须用 `--host=/--user=/--password=` 长选项（PowerShell 把 `-h127.0.0.1`
+  交给原生程序会变成 host `127`）；③ 等待窗口 120s → 180s，每 20 秒报一次「等 InnoDB 恢复」进度。
+- **启动自检把上一次启动的日志当成这次失败**：日志文件跨启动复用，自检扫全文件，于是旧日志里的
+  `awaitConnection failed` 让新一次启动判红（实测：服务器明明正常，却提示「oxmysql 连接数据库失败，请 -Restart」）。
+  现在记录本次启动的日志字节偏移，只扫之后新增的行；挂到已在运行的实例时以当前长度为起点。
+- **`start.cmd -Status` 在只有 1 条可疑行时崩**：PowerShell 5.1 里单条匹配不是数组、没有 `.Count`，
+  改成 `@($badList).Count`；同时把提示改成「历史可疑行（含上次启动）」，避免误读成当前故障。- **`QuestManager.AbandonQuest` 被定义了两次，前一份的校验静默失效**：`quest_manager.lua` 里同名函数
   出现两遍，Lua 后一份覆盖前一份。第一份带「questId 必须是字符串 + 任务必须真的在进行中」两道校验，
   第二份没有 —— 生效的是第二份，于是传 nil/空串也会一路走到 `QuestDB.AbandonQuest`，而 SQL 那边的
   参数是 nil。现在合并为一份（保留校验 + 保留日志），并加闸 `test_quest_manager_definitions.py`：
