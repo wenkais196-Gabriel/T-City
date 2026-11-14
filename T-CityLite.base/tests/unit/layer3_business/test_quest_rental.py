@@ -226,3 +226,16 @@ def test_deposit_is_only_taken_when_the_journal_row_lands():
     assert "rollbackJournal" in open_body, "没有回滚路径：落库失败时押金会被吞"
     assert "quest-rental-rollback" in open_body
     assert "journal_unavailable" in open_body, "没有 DB 层时应当拒绝开租，而不是收钱"
+
+
+
+def test_validator_node_also_clears_active_node_after_reporting():
+    """validator 节点（物流/航空在用）上报后同样要清 activeNode。
+
+    CC 复核 D-3：它以前完全不清。下一步若是 reach（没有节点事件去覆盖），
+    这条线程会活到下一站，玩家再按一次 E 就给已完成的校验步骤补报一次 → 顺序校验失败 → 红字。
+    """
+    src = (BASE / "resources/[custom]/custom-quest/client/quest_logistics_client.lua").read_text(encoding="utf-8")
+    body = src[src.index("RegisterNetEvent('quest:client:nodeValidator'"):]
+    body = body[:body.index("if PolyZone then")]
+    assert body.count("activeNode = nil") >= 2, "两条上报分支都要清 activeNode"
