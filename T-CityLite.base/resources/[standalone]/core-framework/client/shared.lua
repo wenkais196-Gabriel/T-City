@@ -29,9 +29,12 @@ end
 ---@param y number
 ---@param z number
 ---@param text string
-function CFShared.DrawText3D(x, y, z, text)
+---@param fontId number|nil 可选字体 id（CJK 需要调用方先 RegisterFontFile，默认 4）
+function CFShared.DrawText3D(x, y, z, text, fontId)
     SetTextScale(0.35, 0.35)
-    SetTextFont(4)
+    -- GTA 内置字体没有中文字形（会画成方块），需要中文的资源自己 RegisterFontFile
+    -- 再把 id 传进来；不传就保持原来的 4，行为对既有调用方完全不变。
+    SetTextFont(fontId or 4)
     SetTextProportional(1)
     SetTextColour(255, 255, 255, 215)
     BeginTextCommandDisplayText('STRING')

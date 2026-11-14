@@ -162,13 +162,31 @@ local function IsDeadPed(ped)
 end
 
 -- ==============================================================
+-- 中文必须用自带字体：GTA 内置字体没有 CJK 字形
+--
+-- 真机实测：原来的状态条整排画成 □□□（中文全丢），因为 SetTextFont(4) 只有拉丁字形。
+-- FiveM 的 RegisterFontFile 可以从资源里加载字体并返回一个 id，把它交给 SetTextFont
+-- 就能正常显示中文。字体是 NotoSansSC 的子集（约 450 KB，见 tools/dev/build_quest_font.py）。
+-- ==============================================================
+
+local UI_FONT = 4   -- 回退值：字体加载失败时至少英文数字还能看
+CreateThread(function()
+    local ok, id = pcall(function() return RegisterFontFile('fonts/hotdog_ui.ttf') end)
+    if ok and type(id) == 'number' and id > 0 then
+        UI_FONT = id
+    else
+        print('[quest-hotdog-vendor] ⚠️ 中文字体加载失败，界面文字会显示成方块')
+    end
+end)
+
+-- ==============================================================
 -- 绘制助手：全部原生 DrawText / DrawRect，不引 NUI
 -- ==============================================================
 
 local function DrawText2D(x, y, text, scale, colour, centered)
     if type(text) ~= 'string' or text == '' then return end
     local c = colour or COLOR.white
-    SetTextFont(4)
+    SetTextFont(UI_FONT)
     SetTextScale(scale or 0.32, scale or 0.32)
     SetTextColour(c[1], c[2], c[3], c[4] or 255)
     SetTextDropShadow()
@@ -190,7 +208,7 @@ end
 --   * core-framework 在 fxmanifest 里排在本资源之前，加载期就包含 `@core-framework/client/shared.lua`，
 --     所以这里不需要 fallback —— 真缺了它，是整个依赖坏了，不是这一句该兜的事。
 local function DrawBoothText3D(x, y, z, text)
-    CFShared.DrawText3D(x, y, z, text)
+    CFShared.DrawText3D(x, y, z, text, UI_FONT)
 end
 
 -- ==============================================================
@@ -552,16 +570,10 @@ local function HandleOwnerInteract()
 
     booth.pendingAction = 'close'
     booth.pendingUntil = now + PENDING_MS
-    -- 两条消息各司其职：
-    --   vendorAction('close') → 关顾客会话（不再来人、不再推报价）
-    --   nodeComplete('vendor') → 推进任务（否则任务永远停在「开卖」这一步）
-    -- 只发前者：摊收了但任务还在卖；只发后者：任务过了但顾客继续来。
+    -- 只发一条：服务端收到 close 后自己关会话**并**推进任务。
+    -- 曾经这里还发了一条 nodeComplete(booth.stepId)，而 booth.stepId 是「摆摊」那一步的 id
+    -- （vendorState 是开卖时推下来的），服务端判 `Step order violation` → 红字刷屏。
     TriggerServerEvent('quest:server:vendorAction', 'close', {})
-    if booth.stepId then
-        TriggerServerEvent('quest:server:nodeComplete', booth.questId, booth.stepId, 'vendor', {})
-    else
-        print('[quest-hotdog-vendor-client] ⚠️ 收摊时没有 stepId —— 任务不会推进')
-    end
 end
 
 -- ==============================================================
