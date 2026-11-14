@@ -30,6 +30,15 @@ local function readConfig()
     return scale, cap
 end
 
+--- 金额渲染：整数不带小数点、小数两位（与 custom-quest 的 QuestMoney 同语义）。
+--- 不许写 `('$%d'):format(x)`：Lua 5.4 对小数直接抛 `number has no integer representation`，
+--- 闸门 tests/architecture/test_money_format.py 也把这种写法列为只减不增的债。
+local function formatMoney(value)
+    local num = tonumber(value)
+    if not num then return '0' end
+    if num % 1 == 0 then return ('%d'):format(num) end
+    return ('%.2f'):format(num)
+end
 --- 单次薪资的计算（纯函数，离线探针直接喂值）
 ---@param payment number 原始支付
 ---@param scale number 乘数
@@ -126,8 +135,8 @@ function ApplySalaryScale(jobs)
         .. '单次 %d–%d → %d–%d%s')
         :format(scale, cap > 0 and ('$' .. cap) or 'off', report.jobs, report.grades, report.changed,
                 report.before.min, report.before.max, report.after.min, report.after.max,
-                perHour > 0 and ('；折算 $%d–%d/小时'):format(
-                    math.floor(report.after.min * perHour), math.floor(report.after.max * perHour)) or ''))
+                perHour > 0 and ('；折算 $%s–%s/小时'):format(
+                    formatMoney(report.after.min * perHour), formatMoney(report.after.max * perHour)) or ''))
     return report
 end
 
