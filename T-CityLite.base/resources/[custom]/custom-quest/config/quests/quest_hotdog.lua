@@ -69,6 +69,29 @@ return {
                     min_separation = 15.0,    -- 离别人的摊位
                     label = '放下推车',
                     validator_id = 'validate_booth_place',
+                    -- 开卖参数：摊位一摆好就开张，价格与节奏都由服务端掌握
+                    vendor = {
+                        prices = { common = 6, rare = 9, exotic = 14 },
+                        first_customer_ms = { 8000, 15000 },
+                        interval_ms = { 15000, 40000 },
+                        patience_ms = 45000,
+                        max_global_npcs = 8,
+                        reject_cooldown_ms = 60000,
+                        max_rejects = 3,
+                        max_offers_per_session = 32,
+                    },
+                },
+            },
+            {
+                id = 'step_sell',
+                title = '开卖',
+                description = '在摊位按 E 收摊；顾客来了会弹报价，Y 成交 / N 拒绝。',
+                type = 'vendor',
+                data = {
+                    coords = STAND_A,
+                    radius = 3.0,
+                    label = '收摊',
+                    duration = 800,
                 },
             },
             {

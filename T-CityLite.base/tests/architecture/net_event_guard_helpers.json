@@ -191,6 +191,21 @@
         "quest_id"
       ],
       "why": "客户端报告进度的事件必须确认「这个玩家真的在跑这单任务」：questId 类型 + 在 GetActiveQuests 列表里。"
+    },
+    "QuestVendorGuard.Validate": {
+      "defined_at": "custom-quest/server/quest_vendor_bridge.lua",
+      "requires_code": [
+        "GetPlayer(src)",
+        "PlayerData.citizenid",
+        "ACTIONS[action]",
+        "RateLimited(citizenid)",
+        "ctx.player = Player",
+        "return false"
+      ],
+      "requires_raw": [
+        "type(payload) ~= 'table'"
+      ],
+      "why": "摊位动作（成交/拒绝/购买）的唯一入口守卫：玩家必须在线、action 必须在白名单、必须过限流；距离与归属在 handler 里按会话/摊位再判一次。"
     }
   },
   "custom-cartel": {

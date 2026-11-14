@@ -84,6 +84,7 @@ server_scripts {
     'server/quest_minigame.lua',           -- S3 内核：小游戏 nonce + 品质映射（CC 实现）
     'server/quest_booth.lua',              -- S2：摊位摆放判定（服务端权威）+ 实体登记/回收
     'server/quest_vendor.lua',             -- S4：顾客会话（NPC 报价 / 玩家购买 / Tick 推进）
+    'server/quest_vendor_bridge.lua',      -- S4 接线：开卖/Tick/动作事件（只开一条 vendorAction）
     'server/quest_logistics_validators.lua',
     'server/quest_entity_tracker.lua',       -- v0.9: 实体追踪（脱钩/下车倒计时）
     'server/quest_entity_registry.lua',       -- v0.10: 实体注册表 + 延迟回收策略
@@ -111,6 +112,7 @@ client_scripts {
     'client/quest_logistics_client.lua',
     'client/quest_entity_placement.lua',     -- v0.10: placement 节点客户端
     'client/quest_hotdog_client.lua',        -- S2: 热狗推车生成/推车/摆放预览（服务端 quest_booth.lua 裁决）
+    'client/quest_hotdog_vendor_client.lua', -- S4: 顾客报价 / 玩家购买 / 摊位状态条（原生 DrawText）
     'client/quest_cargo_damage.lua',
 }
 
