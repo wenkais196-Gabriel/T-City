@@ -85,6 +85,12 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="只比对现有产物是否与缓存一致")
     args = ap.parse_args()
 
+    # 先判缓存：load_points() 里是 sys.exit(1)（"缺数据"是一种**错误**），
+    # 但 --check 面对"数据不在"只能是"无法判定"，必须在加载前分流。
+    if args.check and not ROAD_CACHE.exists():
+        print(f"[check] SKIP 缺路网缓存：{ROAD_CACHE}")
+        return 2
+
     cx, cy = (float(v) for v in args.center.split(","))
     pts = slice_points(load_points(), (cx, cy), args.radius)
     text = render(pts, (cx, cy), args.radius)
