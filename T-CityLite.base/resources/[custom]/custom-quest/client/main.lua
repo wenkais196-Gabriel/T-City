@@ -182,7 +182,8 @@ RegisterNetEvent(Config.Quest.Events.QUEST_ACCEPTED, function(data)
                             backup_coords = step.data.backup_coords,
                         })
                     end
-                elseif (step.type == 'validator' or step.type == 'interact' or step.type == 'rental') and step.data and step.data.coords then
+                elseif (step.type == 'validator' or step.type == 'interact' or step.type == 'rental'
+                    or step.type == 'booth') and step.data and step.data.coords then
                     SetNewBlip(step.data.coords, step.title)
                 end
                 break
@@ -231,7 +232,8 @@ RegisterNetEvent(Config.Quest.Events.QUEST_STEP_ADVANCED, function(data)
         elseif data.next_step_type == 'reach' and stepData.coords then
             SetNewBlip(stepData.coords, data.next_step_title)
             SetupReachZone(stepData, data.quest_id, data.to_step)
-        elseif (data.next_step_type == 'validator' or data.next_step_type == 'interact' or data.next_step_type == 'rental') and stepData.coords then
+        elseif (data.next_step_type == 'validator' or data.next_step_type == 'interact' or data.next_step_type == 'rental'
+                or data.next_step_type == 'booth') and stepData.coords then
             SetNewBlip(stepData.coords, data.next_step_title)
         elseif data.next_step_type == 'deliver' or data.next_step_type == 'DELIVER' then
             if stepData.destCoords then
@@ -342,7 +344,8 @@ RegisterNetEvent(Config.Quest.Events.QUEST_STATE_RESTORE, function(data)
                 if step.type == 'reach' and step.data and step.data.coords then
                     SetNewBlip(step.data.coords, step.title)
                     SetupReachZone(step.data, data.quest_id, step.id)
-                elseif (step.type == 'validator' or step.type == 'interact' or step.type == 'rental') and step.data and step.data.coords then
+                elseif (step.type == 'validator' or step.type == 'interact' or step.type == 'rental'
+                    or step.type == 'booth') and step.data and step.data.coords then
                     -- v0.7.2: reconnect 时恢复 validator/interact 的 blip
                     SetNewBlip(step.data.coords, step.title)
                 elseif (step.type == 'deliver' or step.type == 'DELIVER') and step.data and step.data.destCoords then

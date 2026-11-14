@@ -26,6 +26,10 @@ QuestStepGate.META_KEYS = {
     -- 写在 step.data 顶层（和 coords/label 同级，很自然），校验器收到 nil → 押金 0、租金 0，
     -- 全程零报错。写进 validator_data 一样有效，但别指望参与者记得。
     deposit = true, rate_per_min = true, grace_sec = true, max_minutes = true,
+    -- 摊位（quest_booth.lua）要的字段。同理：写在 step.data 顶层才自然，
+    -- 漏进白名单的话校验器收到 nil → 距离/间隔全走默认值，判定形同虚设。
+    model = true, rental_point = true, max_distance = true,
+    road_clearance = true, min_separation = true, forbidden_zones = true,
 }
 
 --- 该步骤是否必须通过 validator；不需要时返回 nil
@@ -37,6 +41,7 @@ QuestStepGate.META_KEYS = {
 QuestStepGate.VALIDATED_TYPES = {
     validator = true,
     rental    = true,   -- 租借点：validate_rental_open 负责扣押金与建会话
+    booth     = true,   -- 摊位：validate_booth_place 负责摆放判定与实体登记
 }
 
 function QuestStepGate.RequiredValidator(step)

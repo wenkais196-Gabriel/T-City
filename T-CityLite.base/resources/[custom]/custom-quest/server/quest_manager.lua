@@ -72,6 +72,16 @@ local function clearLogisticsFor(citizenid, questId)
         QuestPrint('⚠️ ClearLogisticsBinding failed: %s → %s (%s)', citizenid, questId, tostring(err))
     end
 end
+-- 摊位实体回收：登记在 QuestEntityRegistry 里的 netId 必须在这里一起清，
+-- 否则玩家下线后那条记录还在，下一位用同一 citizenid 的会话会拿到一个死句柄。
+-- 客户端也会自己删实体（它知道句柄），两边都删是幂等的 —— 服务端这一侧负责**记录**。
+local function closeBoothFor(citizenid, questId, reason)
+    if type(QuestBooth) ~= 'table' or type(QuestBooth.RemoveBooth) ~= 'function' then return end
+    local ok, removed = pcall(QuestBooth.RemoveBooth, citizenid, questId, reason)
+    if not ok then
+        QuestPrint('⚠️ RemoveBooth failed: %s → %s (%s)', tostring(citizenid), tostring(questId), tostring(removed))
+    end
+end
 
 -- ══════════════════════════════════════════════════════════════
 -- v0.8a: QuestNodes 兼容层 — 原 quest_nodes.lua 已移除，
@@ -89,6 +99,7 @@ QuestNodes = {
         -- rental 复用 interact 的客户端表现（提示 + 进度条 + nodeComplete）：
         -- 押金在服务端校验器里扣，客户端这一步只负责「站到点上按 E」。
         RENTAL    = 'quest:client:nodeInteract',
+        BOOTH     = 'quest:client:nodeInteract',   -- 摆摊：客户端画交互点，放下即上报
         DELIVER   = 'quest:client:nodeDeliver',
         COMBAT    = 'quest:client:nodeCombat',
         WAIT      = 'quest:client:nodeWait',
@@ -223,7 +234,7 @@ QuestNodes = {
         if claimed ~= '' and expected ~= '' then
             -- RENTAL 借用 INTERACT 的节点事件，所以客户端上报的 nodeType 是 INTERACT；
             -- 不登记这条别名，服务端会判 'Node type mismatch: expected RENTAL, got INTERACT'。
-            local alias = { REACH = 'GOTO', RENTAL = 'INTERACT' }
+            local alias = { REACH = 'GOTO', RENTAL = 'INTERACT', BOOTH = 'INTERACT' }
             if claimed ~= expected and alias[expected] ~= claimed then
                 return false, ('Node type mismatch: expected %s, got %s'):format(expected, claimed)
             end
@@ -943,6 +954,7 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
 
                 -- 完成任务 = 正常归还：租借会话必须在这里关掉（退押金按已用时长结算）。
                 -- 少了这一条，happy path 上押金永远退不回来 —— 失败/放弃/断线都关了，只有成功没关。
+                closeBoothFor(citizenid, questId, 'completed')
                 closeRentalFor(src, 'returned', questId)
 
                 -- v0.7.2: 奖励在完成事件之后发放，避免奖励异常阻断客户端清理
@@ -1069,7 +1081,7 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
             nodePayload.action = nodePayload.action or 'detach_trailer'
         end
 
-        local atomTypes = { GOTO = true, INTERACT = true, DELIVER = true, COMBAT = true, WAIT = true, VALIDATOR = true, RENTAL = true, PLACEMENT = true, DECISION = true }
+        local atomTypes = { GOTO = true, INTERACT = true, DELIVER = true, COMBAT = true, WAIT = true, VALIDATOR = true, RENTAL = true, BOOTH = true, PLACEMENT = true, DECISION = true }
         if atomTypes[nodeType] and QuestNodes then
             local src = getSourceFromCid(citizenid)
             if src then
@@ -1224,6 +1236,7 @@ function QuestManager.FailQuest(source, questId, reason)
     -- v1.1: 任务终结 → 清理内存步骤与完成锁
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
+    closeBoothFor(citizenid, questId, 'failed')
     clearLogisticsFor(citizenid, questId)
     closeRentalFor(source, 'failed', questId)
 
@@ -1285,6 +1298,7 @@ function QuestManager.AbandonQuest(source, questId)
     -- v1.1: 任务终结 → 清理内存步骤与完成锁
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
+    closeBoothFor(citizenid, questId, 'abandoned')
     clearLogisticsFor(citizenid, questId)
     closeRentalFor(source, 'abandoned', questId)
 
