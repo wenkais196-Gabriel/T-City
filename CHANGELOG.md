@@ -117,7 +117,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **旧壳任务印钞（约 11,000 $/h，新路线的 4–8 倍）**：真机跑 `hotdog_vendor` 拿到第一个实测
+- **任务节点能力的真实边界被查清了**：`Config.Quest.StepTypes` 声明 13 种，实际只有 8 种有处理分支 ——
+  `collect` / `wait` / `combat` / `placement` 是**死类型**（注册器只校验名字在白名单里，客户端毫无反应，
+  配置选到它们任务会静默卡死）。
+- **热狗这类循环型任务缺 4 类节点**：对照上游 qb-hotdogjob 的真实流程（押金租摊 → 推车 → KeyMinigame
+  定三档品质 → NPC 顾客成交 → 归还退押金），我们只有「到点/交互」两种能用，缺租借（押金+计时）、
+  小游戏生产、持续售卖、归还结算。调研与模板草案见 `docs/plan/jobs-content/07-quest-ux-research.md`。- **旧壳任务印钞（约 11,000 $/h，新路线的 4–8 倍）**：真机跑 `hotdog_vendor` 拿到第一个实测
   —— 同点连做 4 步，结算日志 `用时=0.9 分钟`，发给玩家 $165。7 条民职旧壳按 2,000 $/h 重定价：
   hotdog $150–350→$22–40、taxi $200–500→$35–55、bus $300–600→$38–58、tow $400–800→$38–58、
   garbage_collection $250–500→$55–80、recycle $200–450→$50–75、news $300–600→$85–130，
