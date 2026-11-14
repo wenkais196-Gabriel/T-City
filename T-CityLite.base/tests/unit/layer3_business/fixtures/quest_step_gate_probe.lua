@@ -36,6 +36,11 @@ emit('RV_EMPTY_ID', tostring(QuestStepGate.RequiredValidator(
     { id = 's1', type = 'validator', data = { validator_id = '' } }) == nil))
 emit('RV_WRONG_TYPE', tostring(QuestStepGate.RequiredValidator(
     { id = 's1', type = 'reach', data = { validator_id = 'x' } }) == nil))
+-- rental 是新增的受闸类型：押金必须在服务端扣，漏掉这条 `validate_rental_open` 根本不会跑
+emit('RV_RENTAL_GATED', tostring(QuestStepGate.RequiredValidator(
+    { id = 's1', type = 'rental', data = { validator_id = 'validate_rental_open' } }) == 'validate_rental_open'))
+emit('RV_RENTAL_NO_ID', tostring(QuestStepGate.RequiredValidator(
+    { id = 's1', type = 'rental', data = {} }) == nil))
 emit('RV_NIL_STEP', tostring(QuestStepGate.RequiredValidator(nil) == nil))
 emit('RV_NO_DATA', tostring(QuestStepGate.RequiredValidator(
     { id = 's1', type = 'validator' }) == nil))

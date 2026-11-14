@@ -39,6 +39,35 @@ QuestManager._currentSteps = {}
 QuestManager._completing = {}
 
 -- ══════════════════════════════════════════════════════════════
+-- 任务终结时的清理助手
+--
+-- 必须定义在**文件顶部**：Lua 的 local 只在词法作用域内可见，这两段原本写在
+-- FailQuest 之前（≈1160 行），而完成路径在 911 行就调用了 closeRentalFor ——
+-- 于是完成时找不到它，直接 SCRIPT ERROR（真机会看到任务结算到一半崩掉）。
+-- ══════════════════════════════════════════════════════════════
+-- 任务终结时把租借会话关掉（押金按已用时长结算后退回）。
+-- 与 clearLogisticsFor 分开：那个清的是「载具绑定」，这个清的是「押金会话」。
+local function closeRentalFor(source, reason)
+    if type(QuestRental) ~= 'table' or type(QuestRental.Close) ~= 'function' then return end
+    local Player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(source)
+    if not Player then return end
+    local ok, result = pcall(QuestRental.Close, Player, reason)
+    if ok and result and not result.idempotent then
+        QuestPrint('🏁 rental closed (%s): refund=$%s rent=$%s %smin',
+            tostring(reason), tostring(result.refund), tostring(result.rent), tostring(result.minutes))
+    elseif not ok then
+        QuestPrint('⚠️ rental close failed: %s (%s)', tostring(reason), tostring(result))
+    end
+end
+local function clearLogisticsFor(citizenid, questId)
+    if type(ClearLogisticsBinding) ~= 'function' then return end
+    local ok, err = pcall(ClearLogisticsBinding, citizenid, questId)
+    if not ok then
+        QuestPrint('⚠️ ClearLogisticsBinding failed: %s → %s (%s)', citizenid, questId, tostring(err))
+    end
+end
+
+-- ══════════════════════════════════════════════════════════════
 -- v0.8a: QuestNodes 兼容层 — 原 quest_nodes.lua 已移除，
 -- atom_nodes 使用不同事件名。此 shim 将旧 API 桥接到客户端现有事件。
 -- ══════════════════════════════════════════════════════════════
@@ -1162,27 +1191,7 @@ end
 -- 任务终结（失败/放弃）必须把物流绑定一起清掉。
 -- 否则 plate / netId / rentalFeePct 会残留到下一趟：玩家可能按上一趟的费率结算，
 -- 或者一辆已经不属于他的车仍被当成「已绑定任务载具」。
--- 任务终结时把租借会话关掉（押金按已用时长结算后退回）。
--- 与 clearLogisticsFor 分开：那个清的是「载具绑定」，这个清的是「押金会话」。
-local function closeRentalFor(source, reason)
-    if type(QuestRental) ~= 'table' or type(QuestRental.Close) ~= 'function' then return end
-    local Player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(source)
-    if not Player then return end
-    local ok, result = pcall(QuestRental.Close, Player, reason)
-    if ok and result and not result.idempotent then
-        QuestPrint('🏁 rental closed (%s): refund=$%s rent=$%s %smin',
-            tostring(reason), tostring(result.refund), tostring(result.rent), tostring(result.minutes))
-    elseif not ok then
-        QuestPrint('⚠️ rental close failed: %s (%s)', tostring(reason), tostring(result))
-    end
-end
-local function clearLogisticsFor(citizenid, questId)
-    if type(ClearLogisticsBinding) ~= 'function' then return end
-    local ok, err = pcall(ClearLogisticsBinding, citizenid, questId)
-    if not ok then
-        QuestPrint('⚠️ ClearLogisticsBinding failed: %s → %s (%s)', citizenid, questId, tostring(err))
-    end
-end
+
 function QuestManager.FailQuest(source, questId, reason)
     local citizenid = getCidFromSource(source)
     if not citizenid then

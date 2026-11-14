@@ -26,6 +26,8 @@ def test_only_validator_steps_with_an_id_are_gated():
     assert data["RV_WRONG_TYPE"] == "true", "非 validator 类型也被要求过校验（过度收紧）"
     assert data["RV_NIL_STEP"] == "true", "nil 步骤抛错"
     assert data["RV_NO_DATA"] == "true", "没有 data 的 validator 步骤抛错"
+    assert data["RV_RENTAL_GATED"] == "true", "rental 步骤没有进受闸类型表 —— 押金校验器不会跑（真机：任务能推进但没扣钱）"
+    assert data["RV_RENTAL_NO_ID"] == "true", "没有 validator_id 的 rental 步骤被要求过校验"
 
 
 def test_validator_payload_merges_only_metadata():
