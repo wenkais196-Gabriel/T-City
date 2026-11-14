@@ -162,7 +162,17 @@ function Ensure-DockerEngine {
         Start-Sleep -Seconds 3
         try { docker info *> $null; if ($LASTEXITCODE -eq 0) { Write-Ok "引擎就绪（$($i * 3 + 3)s）"; return } } catch { }
     }
-    throw '等了 180 秒 Docker 引擎仍未就绪'
+    # 实测最常见的形态：Docker Desktop 报 “Docker Desktop is unable to start”，com.docker.service 停在
+    # Stopped，WSL 的 Ubuntu / docker-desktop 两个发行版都是 Stopped —— 卡的是 WSL 虚拟机，不是服务。
+    # 单独 Start-Service 或单独启发行版都无效；`wsl --shutdown` + 杀掉 Docker Desktop 再重开才恢复
+    # （2026-11-14 实测：引擎 10 秒就绪）。Docker Desktop 自己崩过一次还会弹
+    # “vpnkit-bridge handshake failed … received bad magic string”，同一个根因。
+    throw ('等了 180 秒 Docker 引擎仍未就绪。多半是 WSL 虚拟机卡住，而不是 Docker 服务没起：' +
+        '  1) wsl --shutdown' +
+        '  2) 任务管理器结束 Docker Desktop / com.docker.backend / vpnkit' +
+        '  3) 重新打开 Docker Desktop，等 docker info 能跑通' +
+        '  4) 再执行本脚本。不要点 Docker 的 “Reset to factory defaults” —— 会连卷一起删掉，' +
+        'tcity-mariadb 的数据就没了。')
 }
 
 # ── 3. MariaDB ────────────────────────────────────────────────────────────
@@ -187,6 +197,32 @@ function Test-DbQuery([string]$Name, [string]$User, [string]$Password) {
     }
 }
 
+# 端口通不等于能查：InnoDB 恢复期间端口先开、查询仍失败（断电/强制重启后尤其明显）。
+# 给 180 秒；每 20 秒报一次进度，避免看起来像卡死。
+function Test-DatabaseReady($db) {
+    if (-not (Test-Tcp $db.Host $db.Port)) { return $false }
+    if (-not $db.Password) { return $true }
+    return (Test-DbQuery $Container $db.User $db.Password)
+}
+
+function Wait-DatabaseReady($db) {
+    $start = Get-Date
+    $announced = $false
+    while (((Get-Date) - $start).TotalSeconds -lt 180) {
+        $elapsed = [int]((Get-Date) - $start).TotalSeconds
+        if (Test-DatabaseReady $db) {
+            Write-Ok "数据库可查询（${elapsed}s）"
+            return
+        }
+        if (-not $announced -and $elapsed -ge 20) {
+            Write-Host '   …  容器已启动，等 InnoDB 恢复（最多 3 分钟）'
+            $announced = $true
+        }
+        Start-Sleep -Seconds 2
+    }
+    throw "等了 180 秒 $($db.Host):$($db.Port) 仍不可查询（看 docker logs $Container）"
+    }
+
 function Ensure-Database {
     $db = Get-DbEndpoint
     Write-Step "MariaDB（容器 $Container，端口 $($db.Port)）"
@@ -203,29 +239,7 @@ function Ensure-Database {
         Write-Ok '容器已在运行'
     }
 
-    # 端口通不等于能查：InnoDB 恢复期间端口先开、查询仍失败（断电/强制重启后尤其明显）。
-    # 给 180 秒；每 20 秒报一次进度，避免看起来像卡死。
-    $start = Get-Date
-    $deadline = $start.AddSeconds(180)
-    $announced = $false
-    while ((Get-Date) -lt $deadline) {
-        $elapsed = [int]((Get-Date) - $start).TotalSeconds
-        if ($db.Password) {
-            if ((Test-Tcp $db.Host $db.Port) -and (Test-DbQuery $Container $db.User $db.Password)) {
-                Write-Ok "数据库可查询（${elapsed}s）"
-                return
-            }
-        } elseif (Test-Tcp $db.Host $db.Port) {
-            Write-Ok "端口可连接（${elapsed}s，未配密码）"
-            return
-        }
-        if (-not $announced -and $elapsed -ge 20) {
-            Write-Host '   …  容器已启动，等 InnoDB 恢复（最多 3 分钟）'
-            $announced = $true
-        }
-        Start-Sleep -Seconds 2
-    }
-    throw "等了 180 秒 $($db.Host):$($db.Port) 仍不可查询（看 docker logs $Container）"
+    Wait-DatabaseReady $db
 }
 
 # ── 4. FXServer ───────────────────────────────────────────────────────────
@@ -271,8 +285,8 @@ function Get-LogSinceStart {
     } catch { return @() }
 }
 
-function Wait-Ready([int]$Timeout) {
-    Write-Step '等资源加载完成'
+function Wait-ResourceLoad([int]$Timeout) {
+    # 轮询直到「资源数量 15 秒没变」或「关键资源已齐且稳了 10 秒」。
     $start = Get-Date
     $deadline = $start.AddSeconds($Timeout)
     $lastCount = -1
@@ -297,35 +311,50 @@ function Wait-Ready([int]$Timeout) {
                 $held = ((Get-Date) - $requiredStable).TotalSeconds
                 # 两个条件任一满足就算就绪：数量 15 秒没变，或关键资源已齐且稳了 10 秒。
                 # 不用"必须 20 秒一动不动"——真机上偶发一个资源 restart 会把等待拖到超时。
-                if ($seen -ge 15 -or $held -ge 10) { break }
+                if ($seen -ge 15 -or $held -ge 10) { return }
             } else {
                 $requiredStable = $null
             }
         }
         Start-Sleep -Seconds 3
     }
+}
 
-    $res = Get-ResourceList
+function Report-BootChecks($res, [int]$Timeout) {
+    # 启动自检：关键资源是否齐全、本次启动后有没有 SCRIPT ERROR、oxmysql 有没有抢跑。
     if ($null -eq $res) { throw "服务端在 $Timeout 秒内没有响应 :30130" }
 
     $fail = 0
-    $missing = $Required | Where-Object { $res -notcontains $_ }
-    if ($missing) { Write-Bad ("关键资源缺失: " + ($missing -join ', ')); $fail++ }
+    $missing = @($Required | Where-Object { $res -notcontains $_ })
+    if ($missing.Count -gt 0) { Write-Bad ("关键资源缺失: " + ($missing -join ', ')); $fail++ }
     else { Write-Ok "资源 $($res.Count) 个，关键资源齐全" }
 
     $sinceStart = Get-LogSinceStart
-    $errors = $sinceStart | Select-String -Pattern 'SCRIPT ERROR' | Select-Object -Last 5
-    if ($errors) { Write-Bad "日志里有 SCRIPT ERROR（$($errors.Count) 条）"; $errors | ForEach-Object { Write-Host "      $($_.Line.Trim())" }; $fail++ }
+    $errors = @($sinceStart | Select-String -Pattern 'SCRIPT ERROR' | Select-Object -Last 5)
+    if ($errors.Count -gt 0) {
+        Write-Bad "日志里有 SCRIPT ERROR（$($errors.Count) 条）"
+        $errors | ForEach-Object { Write-Host "      $($_.Line.Trim())" }
+        $fail++
+    }
 
     # 这一条是本脚本存在的理由：oxmysql 不会自己重试，抢跑一次就得重起整服
-    $dbFail = $sinceStart | Select-String -Pattern 'awaitConnection failed|ETIMEDOUT' | Select-Object -Last 3
-    if ($dbFail) { Write-Bad 'oxmysql 连接数据库失败 —— 说明它抢在 MariaDB 就绪之前连了，请 -Restart 重试'; $fail++ }
-    else { Write-Ok 'oxmysql 连接正常' }
+    $dbFail = @($sinceStart | Select-String -Pattern 'awaitConnection failed|ETIMEDOUT' | Select-Object -Last 3)
+    if ($dbFail.Count -gt 0) {
+        Write-Bad 'oxmysql 连接数据库失败 —— 说明它抢在 MariaDB 就绪之前连了，请 -Restart 重试'
+        $fail++
+    } else {
+        Write-Ok 'oxmysql 连接正常'
+    }
 
     if ($fail -gt 0) { throw '启动自检未通过（见上面几条）' }
     Write-Host "`n  服已就绪：http://127.0.0.1:30130/players.json`n" -ForegroundColor Green
 }
 
+function Wait-Ready([int]$Timeout) {
+    Write-Step '等资源加载完成'
+    Wait-ResourceLoad $Timeout
+    Report-BootChecks (Get-ResourceList) $Timeout
+}
 # ── 主流程 ─────────────────────────────────────────────────────────────────
 try {
     if ($Status) { Show-Status; exit 0 }
