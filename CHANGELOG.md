@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **S4 热狗售卖闭环（服务端 + 接线）**：`custom-quest` 新增顾客会话内核 `quest_vendor` 与接线层
+  `quest_vendor_bridge`。摊位一摆好就开张（玩家不需要再按一次「开卖」），每秒 Tick 决定
+  「现在能不能来顾客」，报价金额、库存、一次性 `offerId` 全在服务端算；客户端只能按 Y/N 或买。
+  买家这条路径**先扣买家再动库存**（内核 `Purchase` 只负责扣库存 + 给摊主记收入，
+  它不知道买家是谁），内核失败自动退款 —— 顺序反过来就会在买家付不出时白送一份。
+  只新增**一条** net event `quest:server:vendorAction`（action 白名单 + 5 秒 10 次限流 +
+  6 m 距离 + 归属校验），并且把它登记进 `net_event_guard_helpers.json` 的
+  `QuestVendorGuard.Validate`，全仓 net event 仍是 440 / **0 未登记**。
+  顺带修掉扫描器的一个假阳性：`"end" in text` 会把标识符里的子串当关键字
+  （helper 名为 `QuestVendorGuard.Validate` 时，"V**end**or" 被切中）。
 - **S2 热狗摊位实体（服务端权威 + 客户端推车）**：新增 `custom-quest` 的 `quest_booth` 服务端脚本与
   `quest_hotdog_client` 客户端脚本，把「把推车推到某处放下」变成一条**可判定的规则**而不是一句提示。
   服务端自己算三条硬判据（离租赁点 / 离路面节点 / 离其它摊位）外加配置禁摆区；客户端能拿到

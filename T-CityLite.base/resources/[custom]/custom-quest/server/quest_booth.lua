@@ -264,6 +264,22 @@ function QuestBooth.Get(citizenid)
     return Booths[citizenid]
 end
 
+--- 按 netId 找摊位（买家要买别人的摊，所以不能只按 citizenid 查）
+---@param netId number
+---@return table|nil booth  附带 ownerCitizenid
+function QuestBooth.FindByNetId(netId)
+    local numeric = tonumber(netId)
+    if not numeric then return nil end
+    for cid, booth in pairs(Booths) do
+        if booth.netId == numeric then
+            local copy = { ownerCitizenid = cid, questId = booth.questId }
+            for k, v in pairs(booth) do copy[k] = v end
+            return copy
+        end
+    end
+    return nil
+end
+
 --- 当前摊位总数
 function QuestBooth.Count()
     local n = 0
@@ -335,6 +351,19 @@ local function validate_booth_place(source, stepData, questData)
     if not registered then
         return false, regReason
     end
+
+    -- 摊位一摆好就开卖：玩家不需要再按一次「开卖」，符合 UX 规格里
+    -- 「放下即开张，收摊要主动做」的节奏。开卖失败只记日志 ——
+    -- 摆放本身成功了，不能因为生意开不起来就把摊位判死。
+    if type(QuestVendorBridge) == 'table' and type(QuestVendorBridge.OpenFor) == 'function' then
+        local ok, err = QuestVendorBridge.OpenFor(source, citizenid, questId,
+            booth.netId, stepData.vendor, stepData.nodeId)
+        if not ok then
+            print(('[quest-booth] ⚠️ 开卖失败：%s | %s | %s'):format(
+                citizenid, tostring(questId), tostring(err)))
+        end
+    end
+
     return true, nil
 end
 
