@@ -236,6 +236,10 @@ RegisterNetEvent('quest:client:nodeValidator', function(data)
                         },
                     }, function(cancelled)
                         if not cancelled and activeNode and activeNode.stepId == data.stepId then
+                            -- 上报后必须退出这个节点：否则线程会活到下一站。
+                            -- 下一步如果是 reach（没有节点事件覆盖它），玩家再按一次 E 就会
+                            -- 给已经完成的校验步骤补报一次 → 顺序校验失败 → 弹红字。
+                            activeNode = nil
                             TriggerServerEvent('quest:server:nodeComplete',
                                 data.questId, data.stepId, 'VALIDATOR',
                                 { position = targetVec, vehicleNetId = vehNetId }
@@ -245,6 +249,7 @@ RegisterNetEvent('quest:client:nodeValidator', function(data)
                 else
                     Citizen.Wait(data.duration or 3000)
                     if activeNode and activeNode.stepId == data.stepId then
+                        activeNode = nil
                         TriggerServerEvent('quest:server:nodeComplete',
                             data.questId, data.stepId, 'VALIDATOR',
                             { position = targetVec, vehicleNetId = vehNetId }
