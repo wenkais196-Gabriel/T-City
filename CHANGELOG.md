@@ -117,7 +117,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **物流租借绑定的三个真 bug**：① 绑定里的押金写死 `rentalDeposit = 0`（配置里 300–2000 的押金
+- **热狗摊 UX 规格定稿（草稿）**：状态机（租借/推车/摆放/营业/做热狗/顾客/成交/收摊/结算/挂起）+
+  逐状态的「看到/听到/能做/失败态」、6 张线框图、键位矩阵、中英文案表、音效清单、账单明细规则、
+  中断恢复，以及 A1–A22 可打勾的 UX 验收 + V1–V8 真机剧本 + D1–D12 开发口径。
+  见 `docs/plan/jobs-content/10-hotdog-ux-spec.md`。- **物流租借绑定的三个真 bug**：① 绑定里的押金写死 `rentalDeposit = 0`（配置里 300–2000 的押金
   在收据上永远是 $0）；② `ClearLogisticsBinding` 定义了却全仓库零调用（失败/放弃后 plate / netId /
   rentalFeePct 残留，下一趟按上一趟费率结算）；③ `playerDropped` 只清 `QuestCache`，断线后旧绑定还在。
   修法：押金改从 `stepData.rental_deposit` 读（自有车仍为 0）；`FailQuest` / `AbandonQuest` 走
