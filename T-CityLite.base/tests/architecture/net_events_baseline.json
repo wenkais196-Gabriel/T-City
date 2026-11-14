@@ -598,8 +598,8 @@
   "non_literal": [
     "[custom]/custom-quest/server/main.lua:106  Config.Quest.Events.QUEST_ABANDON",
     "[custom]/custom-quest/server/main.lua:123  Config.Quest.Events.QUEST_REACH",
-    "[custom]/custom-quest/server/main.lua:282  Config.Quest.Events.QUEST_COLLECT",
-    "[custom]/custom-quest/server/main.lua:357  Config.Quest.Events.QUEST_REQUEST_STATE",
+    "[custom]/custom-quest/server/main.lua:286  Config.Quest.Events.QUEST_COLLECT",
+    "[custom]/custom-quest/server/main.lua:361  Config.Quest.Events.QUEST_REQUEST_STATE",
     "[custom]/custom-quest/server/main.lua:79  Config.Quest.Events.QUEST_ACCEPT",
     "[custom]/custom-vehicles/server/main.lua:120  Config.Vehicles.Events.CHECK_KEYS",
     "[custom]/custom-vehicles/server/main.lua:139  Config.Vehicles.Events.HOTWIRE_ATTEMPT",

@@ -209,7 +209,11 @@ RegisterNetEvent('quest:server:nodeComplete', function(questId, stepId, nodeType
         -- 以前这里一律发红字，玩家看到的是「任务都完成了却弹任务节点校验失败」。
         -- 审计仍要留（上面已经 print + custom-logs），但**不再给玩家弹错误** ——
         -- 诚实玩家只是晚到，作弊者本来也不靠这条提示。
-        local benignLatePacket = (err == 'Quest not active for this player')
+        -- 两种都是「任务刚结束/缓存刚清」时的同一种迟到包：
+        --   Quest not active for this player —— 活跃列表非空但没这条；
+        --   No active quests in cache        —— 列表已空（单任务完成后的常态）。
+        local benignLatePacket = (err == 'Quest not active for this player'
+            or err == 'No active quests in cache')
         if not benignLatePacket then
             feedback(src, '任务节点校验失败', 'error')
         end

@@ -136,7 +136,11 @@ end
 ---@param now number|nil
 ---@return boolean ok
 ---@return table result { refund, rent, minutes, idempotent }
-function QuestRental.Close(player, reason, now)
+---@param player table
+---@param reason string
+---@param now number|nil
+---@param questId string|nil 只关这条任务的会话；传了但与会话不符时不关（见下）
+function QuestRental.Close(player, reason, now, questId)
     if type(player) ~= 'table' or type(player.PlayerData) ~= 'table' then
         return false, { reason = 'no_player' }
     end
@@ -145,6 +149,11 @@ function QuestRental.Close(player, reason, now)
     if not session then
         -- 幂等：重复关闭不重复退钱，也不报错（调用方可能是「失败」+「断线」两条路径同时触发）
         return true, { refund = 0, rent = 0, minutes = 0, idempotent = true, reason = reason }
+    end
+    -- 玩家身上只有**一个**会话，但结束的可能是另一条任务：
+    -- 传了 questId 就对一下，不符时不要动它（否则 A 任务结束会把 B 任务的押金结掉）。
+    if questId and session.questId and session.questId ~= questId then
+        return true, { refund = 0, rent = 0, minutes = 0, idempotent = true, reason = 'quest_mismatch' }
     end
 
     local receipt = QuestRental.ComputeReceipt(session, now or os.time())
