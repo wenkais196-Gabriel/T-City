@@ -106,6 +106,7 @@ Config.Quest.StepTypes = {
     PLACEMENT      = 'placement',       -- v0.10: 实体放置回收（自动脱钩+验证+延迟回收）
     DECISION       = 'decision',        -- v0.7 story-engine: 剧情决策点（弹出NUI选择）
     REWARD         = 'reward',          -- 奖励步骤（自动完成）
+    RENTAL         = 'rental',          -- 租借步骤（押金会话，见 server/quest_rental.lua）
 }
 
 -- ==============================================================

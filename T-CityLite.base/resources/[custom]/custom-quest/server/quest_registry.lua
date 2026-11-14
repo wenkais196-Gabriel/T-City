@@ -231,6 +231,7 @@ local function LoadExternalQuests()
                 local knownFiles = {
                     'config/quests/quest_miner.lua',
                     'config/quests/quest_logistics.lua',
+                    'config/quests/quest_hotdog.lua',
                     'config/quests/quest_cartel_initiation.lua',
                     'config/quests/quest_cartel_drug_run.lua',
                     'config/quests/quest_chain_cartel.lua',
