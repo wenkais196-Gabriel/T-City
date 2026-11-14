@@ -162,6 +162,15 @@ AddEventHandler('playerDropped', function()
         QuestCache.ClearPlayer(citizenid)
         -- 断线同样要清物流绑定：questId 此刻已不可知，只能整表清（键是 citizenid → questId）。
         -- 不清的后果：重连后旧 plate/netId 还挂在内存里，等于「车没还但费率还在」。
+        -- 租借会话同样要在断线时关掉：此刻玩家已不可用，不能直接退钱，
+        -- 走 CloseOnDrop 塞进待退队列，下次登录由 ClaimPendingRefund 补。
+        if type(QuestRental) == 'table' and type(QuestRental.CloseOnDrop) == 'function' then
+            local okRent, rentRes = pcall(QuestRental.CloseOnDrop, citizenid)
+            if okRent and rentRes and not rentRes.idempotent then
+                print(('[quest-cache] 🏁 rental closed on drop: %s (refund $%s deferred)'):format(
+                    citizenid, tostring(rentRes.refund)))
+            end
+        end
         if type(ClearAllLogisticsBindings) == 'function' then
             local ok, cleared = pcall(ClearAllLogisticsBindings, citizenid)
             if ok and cleared and cleared > 0 then
