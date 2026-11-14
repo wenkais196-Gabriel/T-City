@@ -26,7 +26,7 @@ files {
     'config/quests/quest_chain_miner.lua',
     'config/quests/quest_logistics.lua',
     'config/quests/quest_hotdog.lua',      -- S1 dev：租借原语验收（convar quest_hotdog_dev）
-    'config/quests/hotdog_roads.lua',      -- 生成物：摆摊「挡车道」判据用的路面点（tools/dev/booth_roads.py）
+    'config/quests/hotdog_roads.json',      -- 生成物：摆摊「挡车道」判据用的路面点（tools/dev/booth_roads.py）
     'config/quests/quest_cartel_initiation.lua',
     'config/quests/quest_cartel_drug_run.lua',
     'config/quests/quest_chain_cartel.lua',

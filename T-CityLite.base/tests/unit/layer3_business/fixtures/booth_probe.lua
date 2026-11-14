@@ -16,17 +16,20 @@ local SOURCE = arg[1]
 if not SOURCE then error('用法: lua5.4 booth_probe.lua <quest_booth.lua>') end
 
 -- 路网数据：故意给一个极简表（(215,-810) 附近一条路），距离计算走真实实现
-local ROAD_FILE = [[
-return {
-    center = { x = 215.0, y = -810.0 },
-    radius = 350,
-    points = { 215.0,-800.0, 215.0,-804.0, 215.0,-808.0, 215.0,-812.0 },
-}
-]]
+local ROAD_FILE = '{"center":{"x":215.0,"y":-810.0},"radius":350.0,' ..
+    '"points":[215.0,-800.0,215.0,-804.0,215.0,-808.0,215.0,-812.0]}'
 
+-- lua5.4 没有 FiveM 的 json；这里只认 center/radius/points，够探针用
+json = { decode = function(text)
+    local pts = {}
+    for a, b in (text or ''):gmatch('(%-?%d+%.?%d*),(%-?%d+%.?%d*)') do
+        pts[#pts + 1] = tonumber(a); pts[#pts + 1] = tonumber(b)
+    end
+    return { points = pts, radius = 350 }
+end }
 GetCurrentResourceName = function() return 'custom-quest' end
 LoadResourceFile = function(_, path)
-    if path == 'config/quests/hotdog_roads.lua' then return ROAD_FILE end
+    if path == 'config/quests/hotdog_roads.json' then return ROAD_FILE end
     return nil
 end
 

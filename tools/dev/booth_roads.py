@@ -19,13 +19,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import struct
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 ROAD_CACHE = REPO / ".cache/roads/road_points.bin"
-OUT = REPO / "T-CityLite.base/resources/[custom]/custom-quest/config/quests/hotdog_roads.lua"
+OUT = REPO / "T-CityLite.base/resources/[custom]/custom-quest/config/quests/hotdog_roads.json"
 
 MAGIC = b"RDP1"
 
@@ -57,25 +58,21 @@ def slice_points(
 
 
 def render(pts: list[tuple[float, float]], center: tuple[float, float], radius: float) -> str:
-    body = ", ".join(f"{x},{y}" for x, y in pts)
-    return (
-        "-- 自动生成，不要手改。生成器：tools/dev/booth_roads.py\n"
-        "--\n"
-        "-- 用途：服务端判「摊位是不是摆在车道上」。数据源 .cache/roads/road_points.bin\n"
-        "-- （地面车辆节点、已剔除水面）。客户端也能调 IsPointOnRoad，但那只能用来**画预览**；\n"
-        "-- 服务端需要一份自己可信的数据，所以离线切好随资源加载。\n"
-        "--\n"
-        f"-- 区域：center=({center[0]}, {center[1]}) radius={radius:g} m，节点 {len(pts)} 个，样例间距约 7 m。\n"
-        "\n"
-        "return {\n"
-        f"    center = {{ x = {center[0]}, y = {center[1]} }},\n"
-        f"    radius = {radius:g},\n"
-        "    -- 两两一组：x1,y1,x2,y2,...\n"
-        "    points = {\n"
-        f"        {body},\n"
-        "    },\n"
-        "}\n"
-    )
+    """写成 JSON 而不是生成 Lua。
+
+    两条理由：
+      1. 生成物是**数据**，不是代码 —— 让服务端 `load()` 一段从磁盘读出来的字符串，
+         等于给自己开一个「文件被替换就执行任意代码」的口子（Sonar 的安全闸也会拦）。
+      2. `json.decode` 是 FiveM 现成的，比 `load` 少一层错误处理。
+    """
+    payload = {
+        "center": {"x": center[0], "y": center[1]},
+        "radius": radius,
+        "points": [round(v, 1) for point in pts for v in point],
+        "source": ".cache/roads/road_points.bin",
+        "generator": "tools/dev/booth_roads.py",
+    }
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
 def main() -> int:
