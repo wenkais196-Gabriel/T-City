@@ -88,13 +88,30 @@ zoom 0 时整图 256×256 px，游戏坐标 (x, y) 落在
 |---|---|---|---|
 | `hotdog_vendor` | `(-150, -250, 44)` | 落在 Las Lagunas Blvd 东侧建筑**内部**，4 个步骤全在楼里 | `(215.8, -810.3, 30.7)`，Legion Square 广场空地，半径放宽到 8/5 m |
 
-## 下一步：把「离路多远」也自动化（未做）
+## 已实现：离路距离 + 与路面高差
 
-目前「落在建筑里」只能靠人眼看渲染图。可自动化的下一条判据是**最近道路节点距离**：
+「落在建筑里」原先只能人眼看图。现在多两条可自动化的判据，数据来自
+`DurtyFree/gta-v-data-dumps` 的 `nodes.zip`（67,454 个车辆节点，MIT）：
 
-- 数据源：`DurtyFree/gta-v-data-dumps` 的 `nodes.zip`（约 3.98 MB，67,454 个车辆节点，MIT）
-- 判据：点到最近节点的水平距离 > 25 m 且不在水里 → 大概率是院内/楼顶/荒地，标成「提示」
-- 局限：只判「远离路网」，判不了楼顶 vs 楼内；后者要解析 `.ybn`/ymap 碰撞（`VIRUXE/rage-formats`），成本高
+```bash
+python tools/dev/quest_map.py --build-roads   # 一次性：下载 4 MB → .cache/roads/road_points.bin
+python tools/dev/quest_map.py --scan          # 自动带上两条判据
+```
 
-水与高度（可选）：海面 z=0 由本机 `water.xml` 给出；`Andreas1331/ragemp-gtav-heightmap` 有 407 MB 的
-1 m 高度图（8400×12126，MIT），能判「这个点在水下还是在地面」—— 但 407 MB 不适合放进 CI。
+| 判据 | 阈值 | 为什么这么定 |
+|---|---|---|
+| 离最近路面节点的水平距离 | > **60 m** | 旧热狗摊位离路 25.7 m（在楼里）；新位置 6.8 m。60 m 之外基本都是院墙内/荒野/海里 |
+| 与最近路面节点的高差 | > **25 m** | `civilian_ch4_mogul` 在 z=150、路面 z=28 → 高 122 m（楼顶或空中）；正常路边点 dz < 5 m |
+
+水面节点（`IsOnWater`）已剔除，否则码头/沙滩旁边的点会被判成「贴着路」。飞行类任务跳过这两条。
+缓存不在库里（`.cache/` 已 gitignore）：CI 里没有缓存就自动跳过这两条，只跑边界与占位检查。
+
+### 这条判据第一次跑就抓到的东西
+
+| 类型 | 实例 |
+|---|---|
+| **硬错误**：占位坐标 `(0,0,0)` | 7 条物流任务的目的地（`euro_trucking_steel` / `heavy_trailer` / `fuel_tanker` / `container_haul` / `car_transport` / `oversized_construction` / `timber_haul`）—— `validate_delivery_arrival` 会要求玩家把车开到原点（实测在路面下方 70 m），整条任务永远交不掉。已全部换成真实目的地（并逐个核对离路 < 35 m、dz < 3 m） |
+| 提示：离路 438–456 m | `quest_miner.lua` 四个矿工任务、`civilian_ch1_first_dollar.step_go_mine` —— 都在同一片山区，需要确认是有小路能开进去，还是干脆落在山里 |
+| 提示：比路面高 122 m | `civilian_ch4_mogul` 三个步骤都在 Arcadius 楼顶高度 |
+
+`(0,0,0)` 现在是**硬错误**（不是提示）：它从来不是真实目标，就是没填。
