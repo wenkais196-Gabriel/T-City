@@ -173,3 +173,6 @@ docs/_lifecycle.json
 backups/
 # 生产预演配置（含真实 license/rcon/DB 口令）
 server.*.local.cfg
+
+# 离线地图渲染的瓦片缓存（tools/dev/quest_map.py）
+.cache/
