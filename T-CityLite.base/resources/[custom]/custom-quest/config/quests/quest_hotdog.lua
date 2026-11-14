@@ -79,6 +79,8 @@ return {
                         reject_cooldown_ms = 60000,
                         max_rejects = 3,
                         max_offers_per_session = 32,
+                        -- 起始库存（S3 做热狗接进客户端后删掉这一行）
+                        starting_stock = { common = 6, rare = 3, exotic = 1 },
                     },
                 },
             },
