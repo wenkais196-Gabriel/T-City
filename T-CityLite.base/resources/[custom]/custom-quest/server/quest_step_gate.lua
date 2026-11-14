@@ -41,7 +41,8 @@ QuestStepGate.META_KEYS = {
 QuestStepGate.VALIDATED_TYPES = {
     validator = true,
     rental    = true,   -- 租借点：validate_rental_open 负责扣押金与建会话
-    booth     = true,   -- 摊位：validate_booth_place 负责摆放判定与实体登记
+    booth     = true,   -- 摊位：validate_booth_place 负责摆放判定 + 实体登记 + 开卖
+    -- vendor 不列在这里：收摊这一步没有要校验的东西，推进即可。
 }
 
 function QuestStepGate.RequiredValidator(step)
