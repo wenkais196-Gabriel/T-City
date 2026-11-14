@@ -14,7 +14,7 @@ review_by: 2027-02-28
 
 # 管理员命令清单
 
-共 **341** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
+共 **342** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
 
 ## 危险命令但没有判权：0 条
 
@@ -24,7 +24,7 @@ review_by: 2027-02-28
 
 | 权限来源 | 命令数 |
 |---|---|
-| — | 157 |
+| — | 158 |
 | QBCore | 101 |
 | restricted=true | 40 |
 | job/gang 判定 | 35 |
@@ -272,10 +272,11 @@ review_by: 2027-02-28
 | `quest` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:386 |
 | `quest_client_test` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/tests/client/quest_client_test.lua:337 |
 | `quest_flow_test` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/tests/server/quest_flow_test.lua:323 |
-| `quest_hotdog_vendor_accept` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:887 |
-| `quest_hotdog_vendor_decline` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:892 |
-| `quest_hotdog_vendor_interact` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:882 |
-| `quest_hotdog_vendor_menu` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:897 |
+| `quest_hotdog_vendor_accept` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:953 |
+| `quest_hotdog_vendor_cook` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:948 |
+| `quest_hotdog_vendor_decline` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:958 |
+| `quest_hotdog_vendor_interact` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:943 |
+| `quest_hotdog_vendor_menu` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:963 |
 | `quest_reenode` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:430 |
 | `questrestore` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:330 |
 | `queststep` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1258 |

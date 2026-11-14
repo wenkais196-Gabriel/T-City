@@ -23,7 +23,7 @@
 
 QuestVendorBridge = QuestVendorBridge or {}
 
-local ACTIONS = { accept = true, reject = true, purchase = true }
+local ACTIONS = { accept = true, reject = true, purchase = true, cook = true, close = true }
 local ACTION_WINDOW_MS = 5000
 local ACTION_LIMIT = 10
 local NEAR_BOOTH = 6.0
@@ -199,6 +199,20 @@ function QuestVendorBridge.OfferToOwner(citizenid)
     })
 end
 
+--- 做热狗的小游戏配置（三档：0 失误异域 / 1 失误稀有 / ≥2 普通）。
+-- 放在函数里而不是常量：调用方（模板）将来要能按等级换难度。
+function QuestVendorBridge.CookConfig()
+    return {
+        ttl_sec = 60,
+        count = 10,        -- KeyMinigame(10)：10 个键
+        max_faults = 10,
+        tiers = {
+            { max_faults = 0, tier = 'exotic', item = 'hotdog_exotic' },
+            { max_faults = 1, tier = 'rare', item = 'hotdog_rare' },
+            { max_faults = 10, tier = 'common', item = 'hotdog_common' },
+        },
+    }
+end
 --- 限流：每人 5 秒最多 10 次动作
 local function RateLimited(citizenid)
     local now = NowMs()
@@ -254,6 +268,77 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
     if not QuestVendorGuard.Validate(source, action, payload, ctx) then return end
     local Player, citizenid = ctx.player, ctx.citizenid
     local src = source
+
+    -- 做热狗：两段式。start 发 nonce（一次性），report 交 faults。
+    -- faults 是客户端唯一能编的数字，所以服务端从 nonce 反查会话、按 tiers 映射品质，
+    -- 客户端拿不到「直接说我做了一份异域热狗」这条路。
+    if action == 'cook' then
+        local session = QuestVendor.Get(citizenid)
+        if not session or session.state ~= 'open' then
+            TriggerClientEvent('QBCore:Notify', src, '先摆摊才能做热狗', 'error', 4000)
+            return
+        end
+
+        local mode = payload.mode
+        if mode == 'start' then
+            if (session.raw or 0) <= 0 then
+                TriggerClientEvent('QBCore:Notify', src, '原料用完了', 'error', 4000)
+                return
+            end
+            local nonce, err = QuestMinigame.Start(citizenid, session.questId, 'cook', QuestVendorBridge.CookConfig())
+            if not nonce then
+                local messages = { already_open = '正在做上一份', bad_config = '小游戏配置有问题' }
+                TriggerClientEvent('QBCore:Notify', src, messages[err] or '现在做不了', 'error', 4000)
+                return
+            end
+            TriggerClientEvent('quest:client:cookStart', src, { nonce = nonce })
+            return
+        end
+
+        if mode == 'report' then
+            local nonce = payload.nonce
+            local ok, result = QuestMinigame.Resolve(citizenid, nonce, {
+                faults = payload.faults,
+                quit = payload.quit == true,
+            })
+            if not ok then
+                local messages = {
+                    already_used = '这次已经结算过了',
+                    unknown_nonce = '没有这次制作',
+                    expired = '太慢了，这份废了',
+                    bad_faults = '上报数据不合法',
+                    wrong_owner = '不是你的这次制作',
+                }
+                TriggerClientEvent('QBCore:Notify', src, messages[result] or '制作失败', 'error', 4000)
+                return
+            end
+
+            if result and result.quit then
+                TriggerClientEvent('QBCore:Notify', src, '这一份没做完（原料没扣）', 'primary', 3000)
+                return
+            end
+
+            -- 成功：扣一份原料、加一份成品。顺序很重要：
+            -- 先扣原料再加成品，反之原料已经耗尽时会凭空多出一份热狗。
+            local consumed = QuestVendor.ConsumeRaw(citizenid)
+            if not consumed then
+                TriggerClientEvent('QBCore:Notify', src, '原料用完了', 'error', 4000)
+                return
+            end
+            local added = QuestVendor.AddStock(citizenid, result.tier, 1)
+            if not added then
+                TriggerClientEvent('QBCore:Notify', src, '成品放不下了', 'error', 4000)
+                return
+            end
+            TriggerClientEvent('QBCore:Notify', src,
+                ('做好了：%s（失误 %s 次）'):format(tostring(result.tier), tostring(result.faults)),
+                'success', 4000)
+            PushState(citizenid, 'update')
+            return
+        end
+
+        return
+    end
 
     if action == 'purchase' then
         local booth = QuestBooth and QuestBooth.FindByNetId and QuestBooth.FindByNetId(payload.boothNetId)
@@ -319,6 +404,23 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
                 ('玩家买了 1 份 %s · +$%s'):format(tostring(item), tostring(unit)), 'success', 4000)
         end
         PushState(booth.ownerCitizenid, 'update')
+        return
+    end
+
+    if action == 'close' then
+        local booth = QuestBooth and QuestBooth.Get and QuestBooth.Get(citizenid)
+        if not booth then return end
+        if not NearBooth(src, booth) then
+            TriggerClientEvent('QBCore:Notify', src, '离摊位太远了', 'error', 4000)
+            return
+        end
+        local summary = QuestVendorBridge.CloseFor(citizenid, booth.questId, 'closed_by_player')
+        if summary then
+            TriggerClientEvent('QBCore:Notify', src,
+                ('收摊了 · 本班售出 %s 份 · 收入 $%s'):format(
+                    tostring(summary.sold or 0), QuestMoney(summary.revenue or 0)),
+                'success', 6000)
+        end
         return
     end
 
