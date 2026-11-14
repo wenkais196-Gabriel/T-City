@@ -212,6 +212,27 @@ review_by: 2027-02-28
 
 ---
 
+## 6.5 闸门与预算约束（新节点落地前必须知道）
+
+这些不是建议，是仓库里**已经在跑的红线**。设计新节点前先按这张表对一遍，否则 PR 会被闸门打回。
+
+| 约束 | 现值 | 对新节点意味着什么 |
+|---|---|---|
+| **NPC 预算闸**（FIT-07，custom-police 资源的 `npc_budget` 共享模块）| 全局 6 槽 / 每人 2 槽 / TTL 10 分钟 / 60 s sweep；槽价 backup=1、callout=2 | 热狗顾客**不能**无脑 spawn。若复用同一预算：6 槽全服意味着同时最多 6 个顾客，且模块属于 police 域（跨平面，要声明契约）。**建议：顾客用「1 个临时 ped、成交即删」的轻量形态，不占预算**，同屏上限 1–3 |
+| **循环预算**（`io_budget.json`）| warm_polling_loops ≤ 5、fast_polling_loops ≤ 2、wait_zero_loops ≤ 1 | `vendor_session` 必须事件/定时器驱动（`SetTimeout` 链），**不能**新增 `while true … Wait(1000)` |
+| **广播预算** | broadcast_sites 152 | 顾客到访用实体 target 或单点事件，不用 `-1` 全服广播 |
+| **DB 调用预算** | db_call_sites 465（趋势）| 租借会话、账单**不落库**（内存即可，退出即作废）；只有 daily_limit 这类跨会话计数走 DB owner |
+| **复用预算**（`reuse_budget.json`）| `loadAnimDict` ≤ 12、`DrawText3D` ≤ 4 | 新客户端代码必须用 core-framework 的共享函数，不得再抄一份动画加载/3D 文字 |
+| **数字预算**（FIT-13）| 每个「已实现」的数字要同时出现在代码与文档 | 新节点的常量（顾客上限、租借上限分钟、小游戏难度）要登记进 `number_budget.json` 并写进文档，否则文档漂移会红 |
+| **文档** | 315 篇已登记 | 新增文档要 frontmatter + `--index` 重生成；`system` 只能取白名单值（本系列取 `quest`） |
+
+### 由此得出的实现形态建议
+
+| 节点 | 不要这样做 | 应该这样做 |
+|---|---|---|
+| `vendor_session` | 每人 spawn 3 个常驻 ped、每 1 s 轮询一次 | 单个临时 ped，`SetTimeout` 排下一次到访；成交即删；同屏 ≤ 1 |
+| `minigame` | 客户端判定品质后直接发奖励 | 客户端只上报 `faults`，服务端映射品质与产出 |
+| `rental` | 押金写成客户端状态 | 服务端会话 + 不变量（只有 `settle` 能退），放弃/超时也走同一条退款路径 |
 ## 7. 交付标准
 
 ### 7.1 代码 / 配置交付标准
