@@ -117,7 +117,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **7 条物流任务的目的地是占位坐标 `(0,0,0)`，整条任务永远交不掉**：`euro_trucking_steel` /
+- **6 个模板的任务点落在建筑内部 / 楼顶，玩家到不了**：把全部 78 个模板渲染成卫星联络图逐格看过之后，
+  确认 `hotdog_vendor`（前一 PR 已修）、`cartel_ch4_benevolent_king`、`cartel_ch4_tyrant`、
+  `civilian_ch4_artisan`、`civilian_ch4_survivor`、`news_report` 的点都在**建筑内部**；
+  `civilian_ch4_mogul` 的 3 步在 Arcadius **楼顶**（z=150，比路面高 122 m，玩家上不去）。
+  全部移到最近的可站立位置（车道 / 人行道 / 街面），`mogul` 的「站在顶层办公室」文案同步改成「站在楼下」。
+  这类「在楼里但离路只有 20 m」的点，路网判据抓不到，只能靠联络图人眼过 —— 方法见
+  `docs/engineering/QUEST_COORDS.md`，全量结论见 `docs/plan/jobs-content/06-coord-audit.md`。
+- **`quest_map.py` 新增 `--sheet` / `--only` / `--tile`**：把全部模板渲染成每页 12 格的卫星联络图，
+  一次看完 78 个模板的点位分布；配合 `--only` 可以只放大可疑的几个复查。- **7 条物流任务的目的地是占位坐标 `(0,0,0)`，整条任务永远交不掉**：`euro_trucking_steel` /
   `euro_trucking_heavy_trailer` / `euro_fuel_tanker` / `euro_container_haul` / `euro_car_transport` /
   `euro_oversized_construction` / `euro_timber_haul` 的 `destCoords`（和 `step_unload_cargo` 的 coords）
   全是 `{0, 0, 0}`。`validate_delivery_arrival` 会拿它算距离，而原点是路面下方 70 m 的一个点 ——
