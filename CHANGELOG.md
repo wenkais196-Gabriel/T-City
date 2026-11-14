@@ -117,7 +117,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **热狗摊任务的地点在大楼里面，玩家根本到不了**：`hotdog_vendor` 的 4 个步骤都写在同一组坐标
+- **7 条物流任务的目的地是占位坐标 `(0,0,0)`，整条任务永远交不掉**：`euro_trucking_steel` /
+  `euro_trucking_heavy_trailer` / `euro_fuel_tanker` / `euro_container_haul` / `euro_car_transport` /
+  `euro_oversized_construction` / `euro_timber_haul` 的 `destCoords`（和 `step_unload_cargo` 的 coords）
+  全是 `{0, 0, 0}`。`validate_delivery_arrival` 会拿它算距离，而原点是路面下方 70 m 的一个点 ——
+  玩家把车开到那儿也判不到。已按各自主题换成真实目的地（港口/Cypress Flats/机场货运/加油站/车行/工地/锯木厂），
+  每个都核对过离路 < 35 m、与路面高差 < 3 m。
+- **坐标体检加了「离路多远」「与路面高差」两条判据，并抓出上面的占位点**：`tools/dev/quest_map.py`
+  新增 `--build-roads`（一次性把 DurtyFree 的 67,454 个路面节点收成 108 KB 缓存）与两条提示规则
+  （离路 > 60 m / 高差 > 25 m；水面节点已剔除、飞行类任务跳过）；`(0,0,0)` 升为**硬错误**。
+  首次全仓扫描还留下 17 条提示，其中矿工四个任务离路 438–456 m、`civilian_ch4_mogul` 三步骤比路面高 122 m，
+  需要进游戏或人眼再确认。- **热狗摊任务的地点在大楼里面，玩家根本到不了**：`hotdog_vendor` 的 4 个步骤都写在同一组坐标
   `(-150, -250, 44)`，离线渲染后可以看到它落在 Las Lagunas Boulevard 东侧一栋建筑的**内部** ——
   走过去既进不去、也不会出现交互提示。坐标改到 Legion Square 广场空地 `(215.8, -810.3, 30.7)`
   （卫星/街区两种底图都核对过是开阔地面），半径相应放宽到 8 m / 5 m。
