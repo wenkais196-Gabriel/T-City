@@ -84,6 +84,7 @@ server_scripts {
     'server/quest_entity_placement.lua',      -- v0.10: placement 节点服务端
     'server/quest_address_resolver.lua',
     'server/quest_cooldown.lua',
+    'server/quest_daily_limit.lua',       -- R2：把 conditions.daily_limit 接上（之前是死字段）
     'server/quest_rewards.lua',
     'server/quest_security.lua',
     -- v1.0.0: 新增模块 — 排他锁 / 组队

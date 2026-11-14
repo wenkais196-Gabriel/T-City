@@ -691,6 +691,17 @@ function QuestManager.TriggerQuest(source, questId)
             return false, ('Quest on cooldown for %d more minutes'):format(remainingMinutes)
         end
     end
+    -- R2：每日/每周次数上限。模板早就写了 conditions.daily_limit，但 CheckDailyLimit
+    -- 与 UpdateDailyLimit 都没有调用点 —— 同一条路线曾可以一天刷无限次。
+    local dailyLimit = template.conditions and tonumber(template.conditions.daily_limit) or 0
+    if dailyLimit > 0 and QuestDailyLimit then
+        local limitType = (template.conditions and template.conditions.limit_type) or 'daily'
+        local allowed, done = QuestDailyLimit.Allowed(citizenid, questId, dailyLimit, limitType)
+        if not allowed then
+            local scope = limitType == 'weekly' and '本周' or '今天'
+            return false, ('%s已经做过 %d 次了（上限 %d），换个活干吧'):format(scope, done, dailyLimit)
+        end
+    end
 
     -- 7. v1.0.0: 竞争/组队模式 → 先抢排他锁；失败则不落库，避免幽灵 in_progress
     if template.mode == 'competitive' then
@@ -912,6 +923,12 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
             local cooldownHours = template.conditions and template.conditions.cooldown_hours or 0
             if cooldownHours > 0 then
                 QuestCooldown.SetCooldown(citizenid, questId, cooldownHours)
+            end
+
+            -- R2：完成一次记一次，供 daily_limit 判定（内存即时 + DB 异步）
+            if QuestDailyLimit and template.conditions and tonumber(template.conditions.daily_limit) then
+                QuestDailyLimit.Increment(citizenid, questId,
+                    (template.conditions.limit_type) or 'daily')
             end
 
             -- v0.7.0: 清理事件反向索引
