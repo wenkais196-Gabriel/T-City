@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-14 ｜ **文档总数**：312 ｜ **已登记**：312 ｜ **未登记**：0
+**生成时间**：2026-11-14 ｜ **文档总数**：313 ｜ **已登记**：313 ｜ **未登记**：0
 
-**状态分布**：✅ active 177 ・ 🟡 draft 12 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 178 ・ 🟡 draft 12 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -383,7 +383,7 @@
 | [📖 T-City Wiki 系统设计规格书](../T-CityLite.base/docs/design/tcity-wiki-design-spec.md) | spec | 🟡 draft | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-wiki-design-spec.md` |
 | [基石目标形态（TO-BE）— 五层、单写者、可验收的预算](engineering/FOUNDATION-TO-BE.md) | spec | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/FOUNDATION-TO-BE.md` |
 
-### infra（22）
+### infra（23）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -406,6 +406,7 @@
 | [P1-6 施工计划：重启后的「失效函数引用」与审计留存](engineering/2026-11-foundation-p1-6-plan.md) | plan | ✅ active | 2026-11-07 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-6-plan.md` |
 | [P1-4 调研：拆掉 compat 的全局猴补](engineering/2026-11-foundation-p1-4-research.md) | research | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-4-research.md` |
 | [重启 SOP：`restart` 的级联与恢复](engineering/2026-11-restart-sop.md) | runbook | ✅ active | 2026-11-07 | 2027-02-01 |  | `docs/engineering/2026-11-restart-sop.md` |
+| [任务坐标怎么离线核对（不进游戏）](engineering/QUEST_COORDS.md) | runbook | ✅ active | 2026-11-14 | 2027-04-30 |  | `docs/engineering/QUEST_COORDS.md` |
 | [v0.1 精简启动](archive/QBCore_Lite_versions/v0.1-lite-startup.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.1-lite-startup.md` |
 | [v0.2 基础 RP](archive/QBCore_Lite_versions/v0.2-basic-rp.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.2-basic-rp.md` |
 | [07 — 架构集成：如何嵌入 T-City Phase 0-3](server-design/07-architecture-integration.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/server-design/07-architecture-integration.md` |

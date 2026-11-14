@@ -29,8 +29,8 @@ return {
                 description = '前往市区的热狗摊位',
                 type = 'reach',
                 data = {
-                    coords = { x = -150.0, y = -250.0, z = 44.0 },
-                    radius = 5.0,
+                    coords = { x = 215.8, y = -810.3, z = 30.7 },
+                    radius = 8.0,
                 },
             },
             {
@@ -39,8 +39,8 @@ return {
                 description = '从冰箱取出热狗和面包',
                 type = 'interact',
                 data = {
-                    coords = { x = -150.0, y = -250.0, z = 44.0 },
-                    radius = 5.0,
+                    coords = { x = 215.8, y = -810.3, z = 30.7 },
+                    radius = 8.0,
                     duration = 3000,
                     label = '准备食材...',
                 },
@@ -51,8 +51,8 @@ return {
                 description = '在烤架上翻烤热狗至金黄',
                 type = 'interact',
                 data = {
-                    coords = { x = -150.0, y = -250.0, z = 44.0 },
-                    radius = 3.0,
+                    coords = { x = 215.8, y = -810.3, z = 30.7 },
+                    radius = 5.0,
                     duration = 5000,
                     label = '烤制热狗...',
                 },
@@ -63,8 +63,8 @@ return {
                 description = '等待顾客购买并收款',
                 type = 'interact',
                 data = {
-                    coords = { x = -150.0, y = -250.0, z = 44.0 },
-                    radius = 3.0,
+                    coords = { x = 215.8, y = -810.3, z = 30.7 },
+                    radius = 5.0,
                     duration = 4000,
                     label = '售卖中...',
                 },
