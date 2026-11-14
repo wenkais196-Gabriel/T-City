@@ -245,11 +245,11 @@ assert(QuestNodes._eventMap.DECISION == "story:client:offerDecision",
         assert result['ok'], f"Lua error: {result['stderr']}"
 
     def test_event_map_count(self):
-        """Verify exactly 11 node types are mapped (GOTO/REACH/INTERACT/VALIDATOR/DELIVER/COMBAT/WAIT/PLACEMENT/DECISION/RENTAL/BOOTH)"""
+        """Verify exactly 12 node types are mapped (…/RENTAL/BOOTH/VENDOR)"""
         result = run_lua_test("""
 local count = 0
 for _ in pairs(QuestNodes._eventMap) do count = count + 1 end
-assert(count == 11, "expected 11 node types, got " .. tostring(count))
+assert(count == 12, "expected 12 node types, got " .. tostring(count))
 -- reach 是模板里最常见的步骤类型，必须和 GOTO 走同一条下发路径
 assert(QuestNodes._eventMap.REACH == QuestNodes._eventMap.GOTO, "reach must reuse the goto node")
 -- rental 没有自己的客户端表现，复用 interact（提示 + 进度条 + nodeComplete）；
@@ -257,6 +257,8 @@ assert(QuestNodes._eventMap.REACH == QuestNodes._eventMap.GOTO, "reach must reus
 assert(QuestNodes._eventMap.RENTAL == QuestNodes._eventMap.INTERACT, "rental must reuse the interact node")
 -- booth 同理：漏了它，服务端把「摆摊」这一步交给客户端时查不到事件名，玩家什么都收不到。
 assert(QuestNodes._eventMap.BOOTH == QuestNodes._eventMap.INTERACT, "booth must reuse the interact node")
+-- vendor（收摊）同一套路：漏了它，玩家在摊位按 E 之后服务端收不到完成。
+assert(QuestNodes._eventMap.VENDOR == QuestNodes._eventMap.INTERACT, "vendor must reuse the interact node")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 

@@ -15,8 +15,8 @@
       "unguarded": 0
     },
     "custom": {
-      "events": 133,
-      "guarded": 85,
+      "events": 134,
+      "guarded": 86,
       "allowlisted": 48,
       "unguarded": 0
     },
@@ -172,8 +172,8 @@
     "custom-quest": {
       "batch": "custom",
       "group": "[custom]",
-      "events": 10,
-      "guarded": 8,
+      "events": 11,
+      "guarded": 9,
       "allowlisted": 2,
       "unguarded": 0,
       "started": true

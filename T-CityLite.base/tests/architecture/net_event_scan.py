@@ -249,10 +249,15 @@ def helper_call_problems(
         if dead:
             bad.append(str(index + 1) + ": 守卫在 `if false` 死代码块里")
             continue
-        if "end" in text:
+        if re.search(r"\bend\b", text):
             # 单行写法：if 的 end 就在本行 → return 必须在本行的 end 之前，
-            # `if not H(x) then end` + 后面随便一个 return 不能算数
-            head = text.split("end")[0]
+            # `if not H(x) then end` + 后面随便一个 return 不能算数。
+            #
+            # ⚠️ 必须用 `\bend\b`，不能用 `"end" in text` + `split("end")`：
+            # 那会把标识符里的子串当关键字 —— helper 叫 `QuestVendorGuard.Validate` 时，
+            # "V**end**or" 先被切中，head 变成 "if not QuestV"，于是合法的
+            # `if not X(...) then return end` 被判成「守卫形同虚设」。
+            head = re.sub(r"\bend\b.*$", "", text, count=1)
             if "return" in head:
                 continue
             bad.append(str(index + 1) + ": 单行否定分支里没有 return（守卫形同虚设）")
