@@ -49,8 +49,14 @@ QuestManager._completing = {}
 -- 与 clearLogisticsFor 分开：那个清的是「载具绑定」，这个清的是「押金会话」。
 local function closeRentalFor(source, reason, questId)
     if type(QuestRental) ~= 'table' or type(QuestRental.Close) ~= 'function' then return end
-    local Player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(source)
-    if not Player then return end
+    -- ⚠️ 这里**不能**用文件局部的 QBCore：它在本文件第 244 行才声明，
+    -- 而本函数在第 50 行 —— 同一条街上的坑已经踩过两次（rental helper 一次、这里一次）。
+    -- 走 export 是与加载顺序无关的取法。
+    local okPlayer, Player = pcall(function() return exports['qb-core']:GetPlayer(source) end)
+    if not okPlayer or not Player then
+        print(('[quest-manager] ⚠️ closeRentalFor: 取不到玩家 (source=%s)'):format(tostring(source)))
+        return
+    end
     local ok, result = pcall(QuestRental.Close, Player, reason, os.time(), questId)
     if ok and result and not result.idempotent then
         QuestPrint('🏁 rental closed (%s): refund=$%s rent=$%s %smin',

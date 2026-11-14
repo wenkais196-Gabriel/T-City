@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -250,3 +251,22 @@ def test_deposit_gate_cannot_be_disabled_by_a_convar():
     """
     src = (BASE / "resources/[custom]/custom-quest/server/main.lua").read_text(encoding="utf-8")
     assert "force = (stepDef.type == 'rental')" in src, "rental 的校验没有 force —— convar 一关押金就没人扣"
+
+
+
+def test_no_top_of_file_helper_touches_a_later_declared_local():
+    """文件顶部的 helper 不许引用「更晚才声明」的 file-local。
+
+    真机第三次：closeRentalFor 在第 50 行，而 `local QBCore` 在第 244 行 ——
+    于是 QBCore 退化成全局 nil，`if not Player then return end` 静默返回：
+    任务完成时押金没退、会话没关，玩家再接单被告知「身上还有没结清的租借」。
+    这已经是同一类坑的第三次（前两次是 closeRentalFor 自身声明位置、activeNode 作用域）。
+    """
+    src = (BASE / "resources/[custom]/custom-quest/server/quest_manager.lua").read_text(encoding="utf-8")
+    declared_at = src.index("local QBCore = ")
+    # 只看代码里的**变量引用**：注释里提到 QBCore、或者事件名字符串 'QBCore:Notify' 都是正常的。
+    head_code = "\n".join(line.split("--")[0] for line in src[:declared_at].splitlines())
+    head_code = re.sub(r"'[^']*'|\"[^\"]*\"", "''", head_code)   # 去掉字符串字面量
+    assert "QBCore" not in head_code, (
+        "`local QBCore` 之前出现了 QBCore 变量引用 —— 那是一处静默 nil（运行时不会报错，只会 in 判断里返回）")
+    assert 'exports[\'qb-core\']:GetPlayer' in src[:3000], "顶部 helper 应走 export 取玩家，而不是依赖局部"

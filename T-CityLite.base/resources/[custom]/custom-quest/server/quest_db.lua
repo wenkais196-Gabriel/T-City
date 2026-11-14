@@ -349,7 +349,15 @@ function QuestDB.LogRentalEvent(citizenid, questId, eventType, stepId, metadata,
         'INSERT INTO quest_event_log (citizenid, quest_id, step_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
         { citizenid, questId, stepId, eventType, metaJson },
         function(affected)
-            if cb then cb((affected or 0) > 0, affected or 0) end
+            -- oxmysql 的回调形状随版本不同：可能是数字，也可能是 { affectedRows = n }。
+            -- 直接拿表去比大小会抛 'attempt to compare number with table'（真机已踩），
+            -- 而那个异常会让「落库失败就退款」的兜底整段失效。
+            local rows = affected
+            if type(rows) == 'table' then
+                rows = rows.affectedRows or rows.affected or rows.affected_rows or 0
+            end
+            local n = tonumber(rows) or 0
+            if cb then cb(n > 0, n) end
         end
     )
 end
