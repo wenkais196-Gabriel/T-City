@@ -26,6 +26,7 @@ files {
     'config/quests/quest_chain_miner.lua',
     'config/quests/quest_logistics.lua',
     'config/quests/quest_hotdog.lua',      -- S1 dev：租借原语验收（convar quest_hotdog_dev）
+    'config/quests/hotdog_roads.json',      -- 生成物：摆摊「挡车道」判据用的路面点（tools/dev/booth_roads.py）
     'config/quests/quest_cartel_initiation.lua',
     'config/quests/quest_cartel_drug_run.lua',
     'config/quests/quest_chain_cartel.lua',
@@ -81,6 +82,7 @@ server_scripts {
     'server/quest_route_validators.lua',      -- R1: 多站路线校验器（validate_route_stop）
     'server/quest_rental.lua',
     'server/quest_minigame.lua',           -- S3 内核：小游戏 nonce + 品质映射（CC 实现）
+    'server/quest_booth.lua',              -- S2：摊位摆放判定（服务端权威）+ 实体登记/回收
     'server/quest_logistics_validators.lua',
     'server/quest_entity_tracker.lua',       -- v0.9: 实体追踪（脱钩/下车倒计时）
     'server/quest_entity_registry.lua',       -- v0.10: 实体注册表 + 延迟回收策略
@@ -107,6 +109,7 @@ client_scripts {
     'client/quest_pos_collector.lua',         -- v0.11: 航空坐标采集工具
     'client/quest_logistics_client.lua',
     'client/quest_entity_placement.lua',     -- v0.10: placement 节点客户端
+    'client/quest_hotdog_client.lua',        -- S2: 热狗推车生成/推车/摆放预览（服务端 quest_booth.lua 裁决）
     'client/quest_cargo_damage.lua',
 }
 
