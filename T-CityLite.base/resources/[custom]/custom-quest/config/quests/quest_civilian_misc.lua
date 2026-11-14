@@ -20,7 +20,7 @@ return {
             daily_limit = 15,
         },
         rewards = {
-            money = { type = 'cash', min = 150, max = 350 },
+            money = { type = 'cash', min = 22, max = 40 },
         },
         steps = {
             {
@@ -88,7 +88,7 @@ return {
             daily_limit = 8,
         },
         rewards = {
-            money = { type = 'bank', min = 300, max = 600 },
+            money = { type = 'bank', min = 85, max = 130 },
             rep = { reporter = 30 },
         },
         steps = {
@@ -177,7 +177,7 @@ return {
             daily_limit = 10,
         },
         rewards = {
-            money = { type = 'bank', min = 200, max = 450 },
+            money = { type = 'bank', min = 50, max = 75 },
             items = { { name = 'plastic', count = 3 } },
             rep = { recycle = 25 },
         },

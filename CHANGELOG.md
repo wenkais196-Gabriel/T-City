@@ -117,7 +117,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **Docker 引擎起不来时启动器只说「看日志」，没说怎么办**：真机形态是 Docker Desktop 报
+- **旧壳任务印钞（约 11,000 $/h，新路线的 4–8 倍）**：真机跑 `hotdog_vendor` 拿到第一个实测
+  —— 同点连做 4 步，结算日志 `用时=0.9 分钟`，发给玩家 $165。7 条民职旧壳按 2,000 $/h 重定价：
+  hotdog $150–350→$22–40、taxi $200–500→$35–55、bus $300–600→$38–58、tow $400–800→$38–58、
+  garbage_collection $250–500→$55–80、recycle $200–450→$50–75、news $300–600→$85–130，
+  折算 1,984–3,016 $/h，落在目标带内。
+- **收益从来没有被算成每小时**：新增 `tools/dev/quest_econ.py`（路程 × 1.4 绕路系数 / 15 m/s +
+  交互时长 + 25 s 开销）与 `tests/architecture/test_quest_economy.py`（受闸任务必须落在
+  1,400–2,800 ±400；一次性剧情章节按 `story_arc` 豁免；自带超发模板的反向校验）。- **Docker 引擎起不来时启动器只说「看日志」，没说怎么办**：真机形态是 Docker Desktop 报
   `Docker Desktop is unable to start`、`com.docker.service` 停在 Stopped、WSL 的 Ubuntu 与
   `docker-desktop` 两个发行版都是 Stopped —— 卡的是 **WSL 虚拟机**，不是 Docker 服务，
   所以 `Start-Service` 或单独启发行版都无效。同一根因还会让 Docker 自己崩一次并弹
