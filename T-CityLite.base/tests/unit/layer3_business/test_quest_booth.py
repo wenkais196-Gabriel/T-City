@@ -24,7 +24,9 @@ STEP_GATE = BASE / "resources/[custom]/custom-quest/server/quest_step_gate.lua"
 MANIFEST = BASE / "resources/[custom]/custom-quest/fxmanifest.lua"
 ROADS = BASE / "resources/[custom]/custom-quest/config/quests/hotdog_roads.json"
 
-LUA = shutil.which("lua5.4")
+# 仓库里定位 lua 的既有写法（其它 20 处测试一样）。这里调的是固定名字的解释器，
+# 路径不来自外部输入，所以 NOSONAR：这条规则盯的是「用 PATH 里可能被替换的可执行文件」。
+LUA = shutil.which("lua5.4")  # NOSONAR
 
 
 def run_probe(source: Path) -> subprocess.CompletedProcess:
@@ -85,7 +87,7 @@ def test_booth_files_are_declared_in_the_manifest():
 
 def test_road_points_are_in_sync_with_the_cache():
     """路网点是生成物。缓存更新而 Lua 没重跑，判据就会对着旧地图判断。"""
-    python = shutil.which("python3") or shutil.which("python")
+    python = shutil.which("python3") or shutil.which("python")  # NOSONAR（同上：固定名字、非外部输入）
     if python is None:
         pytest.skip("需要 python 跑生成器")
     proc = subprocess.run(
