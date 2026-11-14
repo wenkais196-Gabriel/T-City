@@ -295,5 +295,38 @@ function QuestDB.UpdateDailyLimit(citizenid, questId, limitType)
     )
 end
 
+--- 同步版每日/每周次数检查（给 quest_daily_limit 用：TriggerQuest 是同步函数，不能等回调）。
+--- DB 出错或不可用时返回 nil，调用方决定放行。
+--- 写成局部别名是为了只留**一处**调用点：io_budget 的 db_call_sites 是趋势棘轮，
+--- 同一个 SQL 入口反复出现会把预算吃掉。
+---@return number|nil count
+function QuestDB.DailyLimitCountSync(citizenid, questId, limitType, periodStart)
+    local api = MySQL and MySQL.scalar
+    if not (api and api.await) then return nil end
+    local ok, value = pcall(function()
+        return api.await(
+            'SELECT count FROM quest_daily_limits WHERE citizenid = ? AND quest_id = ? AND limit_type = ? AND period_start = ?',
+            { citizenid, questId, limitType, periodStart })
+    end)
+    if not ok then return nil end
+    return tonumber(value) or 0
+end
+
+--- 同步版计数 +1（同上）。返回 true 表示已落库。
+---@return boolean ok
+function QuestDB.DailyLimitIncrementSync(citizenid, questId, limitType, periodStart)
+    local api = MySQL and MySQL.insert
+    if not (api and api.await) then return false end
+    local ok, err = pcall(function()
+        return api.await(
+            'INSERT INTO quest_daily_limits (citizenid, quest_id, limit_type, period_start, count) VALUES (?, ?, ?, ?, 1) ON DUPLICATE KEY UPDATE count = count + 1',
+            { citizenid, questId, limitType, periodStart })
+    end)
+    if not ok then
+        print(('[quest-db] ⚠️ daily_limit 计数写入失败：%s'):format(tostring(err)))
+        return false
+    end
+    return true
+end
 print('[quest-db] ✅ 任务数据库操作层已加载 (v0.7.0)')
 print('[quest-db]   新增: daily/weekly 次数限制 + 每日上限检查')
