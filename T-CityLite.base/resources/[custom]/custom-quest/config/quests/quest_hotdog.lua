@@ -64,6 +64,21 @@ return {
                 data = { coords = STAND_A, radius = 3.0 },
             },
             {
+                id = 'step_place_stand',
+                title = '摆摊',
+                description = '把推车推到广场，选个不挡路的位置放下。',
+                type = 'booth',
+                data = {
+                    model = 'prop_hotdogstand_01',
+                    rental_point = RENT_POINT,
+                    max_distance = 200.0,     -- 离租赁点
+                    road_clearance = 6.0,     -- 离路面节点（离线点，见 hotdog_roads.lua）
+                    min_separation = 15.0,    -- 离别人的摊位
+                    label = '放下推车',
+                    validator_id = 'validate_booth_place',
+                },
+            },
+            {
                 id = 'step_return_cart',
                 title = '还车结算',
                 description = '把推车放回租赁点，押金按已用时长结算。',
