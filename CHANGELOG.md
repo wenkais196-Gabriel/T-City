@@ -117,7 +117,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **一键启动在冷启动（重启电脑后）直接退出，FXServer 根本没起**：`start-tcity.ps1` 的数据库检查用了
+- **`conditions.daily_limit` 是死字段，同一条路线可以一天刷无限次**：`custom-quest` 里
+  `QuestDB.CheckDailyLimit` 与 `QuestDB.UpdateDailyLimit` 都写好了，但**两边都没有调用点** ——
+  配置里写着 `daily_limit = 8`，运行时形同不存在，`04-numbers.md` 的「$/h」只能算理论值。
+  新增 `T-CityLite.base/resources/[custom]/custom-quest/server/quest_daily_limit.lua` 接管：接单时内存判定（`TriggerQuest` 是同步函数，不能等异步查询），
+  未命中查一次库并按「当天」缓存；完成时内存 +1 立即生效、DB 异步累加；跨周期自动归零；
+  DB 不可用时**放行并警告**（一次 ETIMEDOUT 不能把所有人的任务锁死）；未声明上限的模板视为不限。
+  闸门：`test_daily_limit.py` 6 条（上限生效 / 计数落库 / 按玩家与任务隔离 / 跨周期归零 /
+  DB 抖动放行且恢复后重新拦 / 没写上等于不限）。- **一键启动在冷启动（重启电脑后）直接退出，FXServer 根本没起**：`start-tcity.ps1` 的数据库检查用了
   `docker exec mariadb-admin ping`，而 PowerShell 5.1 在 `$ErrorActionPreference = 'Stop'` 下把**原生程序的
   stderr 当成 terminating error** —— 容器刚 `docker start`、InnoDB 还在恢复时 ping 会往 stderr 写
   `connect to server at '127.0.0.1' failed`，脚本就以这条消息退出（实测复现）。三处修法：
