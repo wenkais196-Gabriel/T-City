@@ -92,6 +92,25 @@ MUTATIONS: list[Mutation] = [
     ),
 
     Mutation(
+        gate="tests/architecture/test_quest_economy.py::test_gated_loop_quests_stay_inside_the_target_band",
+        path="resources/[custom]/custom-quest/config/quests/__mutant_overpaid.lua",
+        content=(
+            "-- 变异注入：一条 1 分钟、给 $9,000 的平民任务（旧壳印钞的形状）\n"
+            "QuestTemplates['mutant_overpaid'] = {\n"
+            "    id = 'mutant_overpaid',\n"
+            "    title = '变异注入',\n"
+            "    category = 'civilian',\n"
+            "    conditions = { cooldown_hours = 0, daily_limit = 10 },\n"
+            "    rewards = { money = { type = 'cash', min = 8000, max = 10000 } },\n"
+            "    steps = {\n"
+            "        { id = 'step_a', type = 'reach', coords = { x = 100.0, y = 200.0, z = 30.0 } },\n"
+            "        { id = 'step_b', type = 'reach', coords = { x = 160.0, y = 200.0, z = 30.0 } },\n"
+            "    },\n"
+            "}\n"
+        ),
+        what="平民任务 1 分钟给 $9,000（旧壳印钞的形状）必须被收益闸拦下",
+    ),
+    Mutation(
         gate="tests/architecture/test_evidence_authority.py::test_identity_fields_come_from_the_server_record",
         path="resources/[custom]/custom-police/server/evidence.lua",
         content=None,

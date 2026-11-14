@@ -27,7 +27,7 @@ return {
             daily_limit = 20,
         },
         rewards = {
-            money = { type = 'bank', min = 200, max = 500 },
+            money = { type = 'bank', min = 35, max = 55 },
             rep = { taxi = 30 },
         },
         steps = {
@@ -96,7 +96,7 @@ return {
             daily_limit = 10,
         },
         rewards = {
-            money = { type = 'bank', min = 300, max = 600 },
+            money = { type = 'bank', min = 38, max = 58 },
             rep = { bus = 40 },
         },
         steps = {
@@ -165,7 +165,7 @@ return {
             daily_limit = 15,
         },
         rewards = {
-            money = { type = 'bank', min = 400, max = 800 },
+            money = { type = 'bank', min = 38, max = 58 },
             rep = { tow = 35 },
         },
         steps = {
@@ -247,7 +247,7 @@ return {
             daily_limit = 12,
         },
         rewards = {
-            money = { type = 'bank', min = 250, max = 500 },
+            money = { type = 'bank', min = 55, max = 80 },
             rep = { garbage = 25 },
         },
         steps = {
