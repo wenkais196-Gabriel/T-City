@@ -1,0 +1,2194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>热狗摊 · 预期流程 UX 演示 / Hotdog Vendor · Expected Flow</title>
+<!--
+  单文件离线演示。依据：
+  - docs/plan/jobs-content/10-hotdog-ux-spec.md（§3 状态卡 / §4 线框 / §6 文案 / §10.1 A1–A22）
+  - docs/plan/jobs-content/11-hotdog-dev-plan.md（§1 分片 / §5 对应表）
+  - docs/plan/jobs-content/12-hotdog-coordinates.md（S0 坐标）
+  所有画面与数据均为演示写死值，不是游戏内实拍。
+-->
+<style>
+/* ============================================================
+   0. Tokens / reset
+   ============================================================ */
+:root{
+  --bg:#070a0f;
+  --bg-2:#0b1017;
+  --panel:rgba(13,18,25,.94);
+  --panel-2:rgba(18,24,33,.92);
+  --line:rgba(255,255,255,.12);
+  --line-strong:rgba(255,255,255,.22);
+  --text:#e9eef6;
+  --muted:#93a0b4;
+  --dim:#667386;
+  --accent:#ffb547;
+  --accent-2:#ffcf5c;
+  --green:#44d17b;
+  --red:#ff5c5c;
+  --blue:#6fb6ff;
+  --gold:#ffcf5c;
+  --mono:"Cascadia Mono","Consolas","SFMono-Regular","Menlo",monospace;
+  --sans:"Segoe UI","Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Hiragino Sans GB",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:
+    radial-gradient(1200px 700px at 72% -10%,rgba(255,181,71,.085),transparent 60%),
+    radial-gradient(900px 620px at 8% 8%,rgba(90,169,255,.06),transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit}
+a{color:var(--accent-2)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sr-only{
+  position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;
+}
+.hidden{display:none!important}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.en{color:var(--muted);font-size:.82em;letter-spacing:.02em}
+.en-block{display:block;color:var(--muted);font-size:.78em;letter-spacing:.02em;line-height:1.35}
+.plus{color:var(--green)}
+.minus{color:var(--red)}
+.zero{color:var(--dim)}
+
+/* ============================================================
+   1. Page chrome
+   ============================================================ */
+.topbar{
+  position:sticky;top:0;z-index:50;
+  display:flex;align-items:center;gap:16px;flex-wrap:nowrap;
+  padding:10px clamp(14px,3vw,36px);
+  background:rgba(7,10,15,.9);
+  border-bottom:1px solid var(--line);
+  backdrop-filter:blur(12px);
+}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-mark{
+  flex:0 0 30px;width:30px;height:30px;display:grid;place-items:center;
+  border:1px solid rgba(255,181,71,.35);border-radius:6px;
+  background:rgba(255,181,71,.1);
+}
+.brand-mark svg{width:21px;height:21px}
+.brand-title{font-size:14px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+.brand-sub{font-size:9px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase;white-space:nowrap}
+.spacer{flex:1}
+.progress-wrap{width:min(46vw,520px);min-width:180px}
+.progress-meta{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;color:var(--muted);margin-bottom:4px}
+.progress-track{display:flex;gap:3px;height:6px}
+.progress-seg{flex:1;background:rgba(255,255,255,.1);border-radius:2px;transition:background .2s,box-shadow .2s}
+.progress-seg.done{background:rgba(255,181,71,.42)}
+.progress-seg.active{background:var(--accent);box-shadow:0 0 10px rgba(255,181,71,.55)}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border:1px solid var(--line-strong);background:rgba(255,255,255,.05);
+  color:var(--text);padding:7px 12px;border-radius:4px;
+  font-size:13px;cursor:pointer;
+  transition:background .15s,border-color .15s,transform .1s;
+}
+.btn:hover{background:rgba(255,255,255,.1)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{
+  background:linear-gradient(180deg,#ffc866,#e89a24);
+  border-color:#ffd58a;color:#241703;font-weight:700;
+}
+.btn.primary:hover{background:linear-gradient(180deg,#ffd27f,#f0a531)}
+.btn.ghost{background:transparent;color:var(--muted)}
+.btn:disabled{opacity:.55;cursor:default;transform:none}
+.top-reset{flex:0 0 auto;font-size:12px}
+.disclaimer{
+  display:flex;align-items:flex-start;gap:10px;
+  margin:12px clamp(14px,3vw,36px) 0;
+  padding:10px 14px;
+  border:1px solid rgba(255,181,71,.35);
+  border-left:4px solid var(--accent);
+  background:linear-gradient(90deg,rgba(255,181,71,.13),rgba(255,181,71,.02));
+  color:#ffd9a0;font-size:13px;line-height:1.55;
+}
+.disclaimer strong{color:#fff}
+.disclaimer .en{color:rgba(255,217,160,.7)}
+
+/* ============================================================
+   2. Stage / layout
+   ============================================================ */
+main{max-width:1440px;margin:0 auto;padding:14px clamp(14px,3vw,36px) 40px}
+.step-rail{display:flex;gap:6px;overflow-x:auto;padding:6px 0 12px;scrollbar-width:thin}
+.step-rail button{
+  flex:0 0 auto;display:flex;align-items:center;gap:6px;
+  background:rgba(255,255,255,.03);color:var(--muted);
+  border:1px solid var(--line);border-radius:4px;
+  padding:5px 9px;font-size:11px;cursor:pointer;white-space:nowrap;
+  transition:color .15s,border-color .15s,background .15s;
+}
+.step-rail button .num{font-family:var(--mono);color:var(--dim)}
+.step-rail button:hover{color:var(--text);border-color:var(--line-strong)}
+.step-rail button.done{color:var(--text);border-color:rgba(255,181,71,.28)}
+.step-rail button.active{
+  color:#1a1205;background:var(--accent);border-color:var(--accent);font-weight:700;
+}
+.step-rail button.active .num{color:rgba(26,18,5,.65)}
+.stage-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:2px 0 12px}
+.stage-kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--accent);text-transform:uppercase}
+.stage-title{margin:2px 0 0;font-size:clamp(20px,2.3vw,30px);line-height:1.18;font-weight:700}
+.stage-title .en{display:block;font-size:.5em;color:var(--muted);font-weight:400;letter-spacing:.04em;margin-top:2px}
+.stage-meta{font-size:11.5px;color:var(--dim);text-align:right;white-space:nowrap}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,330px);gap:16px;align-items:start}
+.screen-col{min-width:0}
+.block-label{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;font-size:12px;font-weight:700;letter-spacing:.03em}
+.block-label .en{font-weight:400;font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
+.viewport{
+  position:relative;aspect-ratio:16/9;overflow:hidden;
+  border:1px solid var(--line-strong);border-radius:6px;
+  background:#0a0d12;
+  box-shadow:0 20px 60px rgba(0,0,0,.45);
+  isolation:isolate;
+}
+.world{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+.vignette{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 45%,transparent 52%,rgba(0,0,0,.55) 100%);
+}
+.mock-watermark{
+  position:absolute;top:8px;right:10px;z-index:40;
+  font-family:var(--mono);font-size:9px;letter-spacing:.12em;
+  color:rgba(255,255,255,.38);border:1px solid rgba(255,255,255,.16);
+  background:rgba(0,0,0,.35);padding:2px 6px;border-radius:3px;
+  pointer-events:none;
+}
+.step-layer{position:absolute;inset:0;display:none;z-index:3}
+.step-layer.active{display:block;animation:layerIn .28s ease-out}
+@keyframes layerIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.demo-bar{
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  margin-top:8px;padding:7px 10px;
+  border:1px dashed rgba(255,255,255,.18);border-radius:4px;
+  background:rgba(255,255,255,.02);
+}
+.demo-bar-label{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);white-space:nowrap}
+.demo-bar-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.demo-hint{font-size:11px;color:var(--dim)}
+.mini-btn{
+  border:1px solid var(--line);background:rgba(255,255,255,.04);
+  color:var(--muted);padding:5px 9px;border-radius:3px;
+  font-size:11px;cursor:pointer;transition:color .15s,border-color .15s,background .15s;
+}
+.mini-btn:hover{color:var(--text);border-color:var(--line-strong)}
+.mini-btn[aria-pressed="true"]{
+  color:#1a1205;background:var(--accent);border-color:var(--accent);font-weight:700;
+}
+.mini-btn:disabled{opacity:.5;cursor:default}
+.screen-caption{margin:8px 0 0;font-size:12.5px;line-height:1.6;color:var(--muted)}
+.screen-caption::before{
+  content:"讲解 / NOTES";display:block;
+  font-size:9px;letter-spacing:.11em;color:var(--dim);margin-bottom:2px;
+}
+.stage-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px}
+.nav-btn{min-width:120px}
+.stage-nav-center{text-align:center;display:flex;flex-direction:column;gap:2px}
+#step-counter{font-family:var(--mono);font-size:12px;color:var(--accent-2)}
+.kbd-hint{font-size:10px;color:var(--dim)}
+
+/* ============================================================
+   3. Side cards
+   ============================================================ */
+.side{display:flex;flex-direction:column;gap:12px}
+.card{
+  background:linear-gradient(180deg,rgba(17,23,32,.9),rgba(11,15,22,.94));
+  border:1px solid var(--line);border-radius:6px;padding:12px 14px;
+}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
+.card-head h2{margin:0;font-size:13px;letter-spacing:.02em;line-height:1.3}
+.card-head h2 .en{display:block;font-size:9px;letter-spacing:.1em;color:var(--dim);font-weight:400;margin-top:1px}
+.card-tag{
+  font-size:9px;padding:2px 6px;border:1px solid var(--line);border-radius:3px;
+  color:var(--dim);white-space:nowrap;flex:0 0 auto;
+}
+.sound-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.sound-item{
+  padding:6px 8px;border:1px solid rgba(255,255,255,.08);border-radius:4px;
+  background:rgba(255,255,255,.02);transition:border-color .15s,background .15s;
+}
+.sound-item.active{border-color:rgba(255,181,71,.5);background:rgba(255,181,71,.07)}
+.sound-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.sound-top code{font-family:var(--mono);font-size:11.5px;color:var(--accent-2)}
+.sound-meta{font-size:9.5px;color:var(--dim);white-space:nowrap}
+.sound-trigger{font-size:11px;color:var(--muted);margin-top:2px}
+.card-foot{margin:8px 0 0;font-size:10.5px;color:var(--dim);line-height:1.5}
+.accept-chips{display:flex;flex-wrap:wrap;gap:5px}
+.accept-chip{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:34px;padding:4px 7px;
+  border:1px solid rgba(255,181,71,.35);border-radius:3px;
+  background:rgba(255,181,71,.07);color:var(--accent-2);
+  font-family:var(--mono);font-size:11px;text-decoration:none;
+}
+.accept-chip:hover{background:rgba(255,181,71,.18);border-color:var(--accent)}
+.card-link{display:inline-block;margin-top:8px;font-size:11px;color:var(--accent);text-decoration:none}
+.card-link:hover{text-decoration:underline}
+
+/* ============================================================
+   4. Shared NUI surfaces
+   ============================================================ */
+.nui-panel{
+  background:linear-gradient(180deg,rgba(17,23,32,.97),rgba(9,13,19,.97));
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:6px;
+  box-shadow:0 18px 50px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.05);
+}
+.viewport .btn{font-size:clamp(9px,.9vw,13px);padding:6px 10px}
+.viewport .btn kbd{font-size:.85em}
+kbd{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:20px;height:20px;padding:0 5px;
+  border:1px solid rgba(255,255,255,.28);border-bottom-width:2px;border-radius:3px;
+  background:rgba(255,255,255,.08);color:#fff;
+  font-family:var(--mono);font-size:.78em;line-height:1;white-space:nowrap;
+}
+.w3d{
+  position:absolute;left:50%;bottom:100%;
+  transform:translateX(-50%);margin-bottom:6px;
+  z-index:6;text-align:center;white-space:nowrap;
+  color:#fff;font-size:clamp(10px,1.05vw,15px);line-height:1.3;
+  text-shadow:0 2px 4px #000,0 0 12px rgba(0,0,0,.95);
+  pointer-events:none;
+}
+.w3d .en-block{color:rgba(255,255,255,.78);text-shadow:0 2px 4px #000}
+.w3d .key{color:var(--accent-2)}
+.prompt{
+  position:absolute;left:50%;bottom:4%;transform:translateX(-50%);
+  z-index:20;display:flex;align-items:center;gap:9px;
+  padding:8px 12px;white-space:nowrap;
+  background:rgba(8,11,15,.88);border:1px solid rgba(255,255,255,.18);
+  border-radius:5px;font-size:clamp(10px,.95vw,14px);
+  box-shadow:0 8px 30px rgba(0,0,0,.45);
+}
+.prompt small{display:block;font-size:.68em;color:var(--dim);line-height:1.3}
+.prompt.danger{border-color:rgba(255,92,92,.55);color:#ffb3b3}
+.prompt.danger kbd{border-color:rgba(255,92,92,.6);color:#ffb3b3}
+.hud{
+  position:absolute;left:2%;top:16%;z-index:8;
+  width:23%;min-width:156px;max-width:270px;
+  padding:9px 11px;
+  background:rgba(10,14,20,.86);
+  border:1px solid rgba(255,255,255,.14);
+  border-left:3px solid var(--accent);
+  border-radius:4px;
+  backdrop-filter:blur(4px);
+  font-size:clamp(9.5px,.95vw,12.5px);
+  line-height:1.45;
+}
+.hud-title{display:flex;align-items:center;gap:6px;font-weight:700;font-size:1.08em;margin-bottom:4px}
+.hud-title .en{font-size:.72em;letter-spacing:.08em;color:var(--dim)}
+.hud-title .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.dot.amber{background:var(--accent);box-shadow:0 0 8px rgba(255,181,71,.6)}
+.dot.green{background:var(--green);box-shadow:0 0 8px rgba(68,209,123,.6)}
+.dot.grey{background:var(--dim)}
+.hud-row{display:flex;justify-content:space-between;gap:10px;padding:1.5px 0;color:var(--muted)}
+.hud-row b{color:var(--text);font-family:var(--mono);font-weight:600;text-align:right}
+.hud-sub{font-size:.82em;color:var(--dim);padding:0 0 3px 0;font-family:var(--mono)}
+.hud-divider{height:1px;background:rgba(255,255,255,.08);margin:5px 0}
+.hud-note{font-size:.78em;color:var(--dim);line-height:1.45;margin-top:3px}
+.hud-badge{
+  margin-top:6px;padding:3px 6px;border:1px solid rgba(255,181,71,.35);
+  border-radius:3px;background:rgba(255,181,71,.08);
+  color:var(--accent-2);font-size:.78em;text-align:center;
+}
+.toast{
+  position:absolute;left:50%;top:5%;transform:translateX(-50%);
+  z-index:30;display:none;align-items:center;gap:9px;
+  padding:8px 14px;white-space:nowrap;
+  background:rgba(10,14,20,.96);
+  border:1px solid var(--line-strong);border-left:4px solid var(--accent);
+  border-radius:4px;font-size:clamp(10px,.95vw,14px);line-height:1.35;
+  box-shadow:0 12px 36px rgba(0,0,0,.55);
+}
+.toast.show{display:flex}
+.toast .en-block{color:var(--muted)}
+.quality-toast[data-faults="0"]{border-left-color:var(--gold)}
+.quality-toast[data-faults="1"]{border-left-color:var(--blue)}
+.quality-toast[data-faults="2"]{border-left-color:var(--muted)}
+.success-toast{border-left-color:var(--green)}
+.error-toast{border-left-color:var(--red)}
+.rent-toast{border-left-color:var(--accent);left:2%;transform:none}
+.quality-symbol{font-size:1.3em;line-height:1;font-style:normal}
+.quality-symbol.exotic{color:var(--gold)}
+.quality-symbol.rare{color:var(--blue)}
+.quality-symbol.common{color:var(--muted)}
+.subtitle{
+  position:absolute;left:50%;bottom:16%;transform:translateX(-50%);
+  z-index:24;display:none;padding:7px 16px;
+  background:rgba(0,0,0,.78);border:1px solid rgba(255,255,255,.18);
+  border-radius:4px;font-size:clamp(10px,.95vw,14px);white-space:nowrap;
+  text-align:center;
+}
+.subtitle.show{display:block}
+
+/* ============================================================
+   5. World actors
+   ============================================================ */
+.actor{position:absolute;z-index:2}
+.cart-actor{width:26%;max-width:340px;z-index:3}
+.cart-svg{width:100%;height:auto;display:block;filter:drop-shadow(0 16px 12px rgba(0,0,0,.5))}
+.umbrella-actor{width:30%;max-width:380px;z-index:1;pointer-events:none}
+.umbrella-actor svg{width:100%;height:auto;display:block;filter:drop-shadow(0 10px 10px rgba(0,0,0,.38))}
+.ped-actor{width:8.5%;max-width:110px;z-index:4}
+.ped-svg{width:100%;height:auto;display:block;filter:drop-shadow(0 8px 6px rgba(0,0,0,.45))}
+.ped-npc{--shirt:#8a6f9e;--pants:#262d3a;--skin:#d5a06f}
+.ped-player{--shirt:#3d8f6f;--pants:#1e2a33;--skin:#c98a5b}
+.ped-vendor{--shirt:#c05a35;--pants:#232a35;--skin:#d5a06f}
+.name-tag{
+  position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
+  margin-bottom:4px;padding:2px 6px;white-space:nowrap;
+  background:rgba(0,0,0,.74);border:1px solid var(--line);
+  border-radius:3px;font-size:clamp(7px,.62vw,10px);color:var(--text);
+}
+.player-tag{border-color:rgba(61,143,111,.55);color:#9fe3c2}
+.motion-lines{position:absolute;left:-13%;top:38%;width:25%;height:38%;pointer-events:none;opacity:.55;display:none}
+.motion-lines i{display:block;height:3px;margin:8px 0;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.65));animation:motion 1.1s linear infinite}
+.motion-lines i:nth-child(2){width:70%;margin-left:30%;animation-delay:.18s}
+.motion-lines i:nth-child(3){width:45%;margin-left:55%;animation-delay:.36s}
+@keyframes motion{from{transform:translateX(10px);opacity:0}30%{opacity:1}to{transform:translateX(-14px);opacity:0}}
+.pushing .cart-svg{animation:pushBob 1.7s ease-in-out infinite}
+.pushing .motion-lines{display:block}
+@keyframes pushBob{0%,100%{transform:translateY(0) rotate(-.4deg)}50%{transform:translateY(-3px) rotate(.4deg)}}
+.s2-cart{left:18%;bottom:17%;width:24%}
+.s3-cart{left:44%;bottom:19%;width:25%;z-index:3}
+.s4-cart{left:50%;bottom:20%;width:24%;z-index:3}
+.s5-cart{left:53%;bottom:18%;width:26%}
+.s5-umbrella{left:54%;bottom:26%;width:30%}
+.s6-cart{left:53%;bottom:18%;width:26%}
+.s6-umbrella{left:54%;bottom:26%;width:30%}
+.s7-cart{left:53%;bottom:18%;width:26%}
+.s7-umbrella{left:54%;bottom:26%;width:30%}
+.s7-customer{left:38%;bottom:12%;width:8%}
+.s8-cart{left:53%;bottom:18%;width:26%}
+.s8-umbrella{left:54%;bottom:26%;width:30%}
+.s8-vendor{left:58%;bottom:21%;width:7.2%;z-index:2}
+.s8-buyer{left:44%;bottom:11%;width:8.2%;z-index:4}
+.s9-cart{left:55%;bottom:18%;width:26%;transition:left .9s ease}
+.s9-umbrella{left:56%;bottom:26%;width:30%;transition:opacity .45s,transform .55s}
+.s10-cart{left:16%;bottom:18%;width:22%;opacity:.68}
+.ghost{opacity:.62}
+.ghost .cart-svg{filter:drop-shadow(0 10px 10px rgba(0,0,0,.35)) saturate(.7)}
+.ghost-tag{
+  position:absolute;left:50%;bottom:-19px;transform:translateX(-50%);
+  padding:2px 6px;border:1px dashed rgba(255,255,255,.28);border-radius:3px;
+  background:rgba(0,0,0,.55);font-size:clamp(7px,.6vw,9px);color:var(--muted);
+  white-space:nowrap;
+}
+.footprint{
+  position:absolute;z-index:1;border:3px dashed var(--green);
+  background:rgba(68,209,123,.12);border-radius:10px;
+  transform:translateX(-50%) perspective(520px) rotateX(60deg);
+  transform-origin:50% 100%;
+  box-shadow:inset 0 0 24px rgba(68,209,123,.2);
+}
+.footprint.red{border-color:var(--red);background:rgba(255,92,92,.14);box-shadow:inset 0 0 24px rgba(255,92,92,.22)}
+.s3-target{left:73%;bottom:13%;width:26%;height:16%}
+.s4-footprint{left:50%;bottom:14%;width:34%;height:19%}
+.ground-label{
+  position:absolute;z-index:5;transform:translateX(-50%);
+  font-size:clamp(8px,.75vw,11px);color:var(--green);
+  text-shadow:0 2px 4px #000;white-space:nowrap;
+}
+.ground-label.red{color:#ff9b9b}
+.s3-label{left:73%;bottom:31%}
+.s4-label{left:50%;bottom:35%}
+.place-reason{
+  position:absolute;left:50%;top:10%;transform:translateX(-50%);
+  z-index:12;width:min(46%,460px);padding:8px 12px;text-align:center;
+  border:1px solid rgba(255,92,92,.55);border-left:4px solid var(--red);
+  background:rgba(40,10,12,.9);border-radius:4px;
+  color:#ffb3b3;font-size:clamp(9px,.88vw,13px);line-height:1.4;
+}
+.place-reason .en-block{color:rgba(255,179,179,.7)}
+.place-state{position:absolute;inset:0;display:none}
+.place-state.active{display:block}
+.route-arrow{position:absolute;z-index:2;opacity:.55;pointer-events:none}
+.route-arrow svg{width:100%;height:auto;display:block}
+.s3-arrow{left:62%;bottom:33%;width:8%}
+.s9-route{left:27%;bottom:25%;width:17%;transform:rotate(180deg)}
+.return-zone{
+  position:absolute;left:8%;bottom:12%;width:22%;height:20%;
+  z-index:1;border:3px dashed rgba(255,181,71,.85);border-radius:10px;
+  background:rgba(255,181,71,.09);
+  transform:perspective(520px) rotateX(60deg);transform-origin:50% 100%;
+}
+.return-label{left:19%;bottom:35%;color:var(--accent-2)}
+.return-sub{display:block;font-size:.8em;color:var(--muted);margin-top:1px}
+.phase-strip{
+  position:absolute;z-index:18;display:flex;align-items:center;gap:6px;
+  padding:5px 9px;white-space:nowrap;
+  background:rgba(8,11,15,.8);border:1px solid var(--line);border-radius:4px;
+  font-size:clamp(8px,.72vw,11px);color:var(--dim);
+}
+.phase-strip span.active{color:var(--accent-2);font-weight:700}
+.phase-strip i{font-style:normal;color:var(--dim)}
+.quote-strip{left:2%;bottom:12%}
+.packing-strip{left:50%;bottom:12%;transform:translateX(-50%)}
+.screen-dim{position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,rgba(4,7,10,.18),rgba(4,7,10,.66) 64%,rgba(4,7,10,.82))}
+.screen-dim-strong{position:absolute;inset:0;z-index:1;background:rgba(3,6,9,.66)}
+
+/* ============================================================
+   6. Step 1: phone / task list
+   ============================================================ */
+.phone{
+  position:absolute;right:5%;top:7%;z-index:3;
+  width:min(35%,370px);height:86%;
+  display:flex;flex-direction:column;overflow:hidden;
+  background:linear-gradient(180deg,#111720,#0a0e14);
+  border:2px solid #2b3542;border-radius:20px;
+  box-shadow:0 30px 70px rgba(0,0,0,.65),inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.phone-notch{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:32%;height:14px;background:#05070a;border-radius:0 0 10px 10px;z-index:2}
+.phone-top{display:flex;justify-content:space-between;align-items:center;padding:22px 14px 8px;font-size:.75em;color:var(--muted);border-bottom:1px solid var(--line)}
+.phone-body{flex:1;padding:10px 12px;overflow-y:auto;scrollbar-width:thin}
+.phone-foot{padding:6px 12px 10px;font-size:.62em;color:var(--dim);border-top:1px solid var(--line)}
+.task-card{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.03);padding:10px;transition:border-color .2s}
+.task-head{display:flex;gap:9px;align-items:flex-start}
+.task-icon{flex:0 0 34px;width:34px;height:34px;display:grid;place-items:center;background:rgba(255,181,71,.12);border:1px solid rgba(255,181,71,.3);border-radius:6px}
+.task-icon svg{width:24px;height:24px}
+.task-name{font-weight:700;font-size:.88em;line-height:1.3}
+.task-name-en{font-size:.68em;color:var(--muted);line-height:1.3;margin-top:2px}
+.task-name-progress,.task-name-en-progress,.task-status-progress{display:none}
+.accepted .task-name-available,.accepted .task-name-en-available,.accepted .task-status-available{display:none}
+.accepted .task-name-progress,.accepted .task-name-en-progress,.accepted .task-status-progress{display:block}
+.accepted .task-card{border-color:rgba(255,181,71,.42)}
+.accepted .accept-btn{opacity:.55;pointer-events:none}
+.task-location{margin:8px 0;padding:6px 8px;border:1px dashed var(--line);border-radius:4px;font-size:.68em;color:var(--muted);line-height:1.45}
+.task-next-box{margin:8px 0;padding:7px 8px;border:1px solid rgba(255,181,71,.25);background:rgba(255,181,71,.06);border-radius:4px}
+.task-label{font-size:.62em;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.task-next{font-size:.8em;font-weight:700;margin-top:2px}
+.task-next-en{font-size:.66em;color:var(--muted);line-height:1.35}
+.task-deposit{margin:8px 0 10px;padding:7px 8px;border-left:3px solid var(--accent);background:rgba(255,181,71,.08);border-radius:0 4px 4px 0}
+.task-deposit p{margin:3px 0 0;font-size:.72em;line-height:1.45}
+.task-deposit b{color:var(--accent-2);font-family:var(--mono)}
+.accept-btn{width:100%;font-size:.78em}
+.task-status{margin-top:7px;font-size:.66em;color:var(--muted);text-align:center}
+
+/* ============================================================
+   7. Step 2: rental menu / bank
+   ============================================================ */
+.rental-menu{position:absolute;right:5%;top:9%;z-index:12;width:min(43%,430px);padding:13px 16px}
+.menu-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.menu-title{font-size:1.14em;font-weight:700;line-height:1.25}
+.menu-title .en-block{font-weight:400;color:var(--muted);font-size:.6em;letter-spacing:.05em;margin-top:1px}
+.menu-tag{font-size:.62em;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:2px 5px;white-space:nowrap}
+.menu-rule{height:1px;background:rgba(255,255,255,.1);margin:8px 0}
+.menu-line{display:flex;justify-content:space-between;gap:12px;padding:4.5px 0;border-bottom:1px solid rgba(255,255,255,.055);font-size:.8em;line-height:1.35}
+.menu-line:last-of-type{border-bottom:none}
+.menu-line .sub{display:block;font-size:.72em;color:var(--dim);margin-top:1px}
+.menu-line b{font-family:var(--mono);color:var(--accent-2);white-space:nowrap;flex:0 0 auto}
+.menu-actions{display:flex;gap:8px;margin-top:10px}
+.menu-actions .btn{flex:1}
+.menu-balance{margin-top:8px;font-size:.7em;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.menu-balance b{font-family:var(--mono);color:var(--text)}
+.menu-balance .bank-after,.menu-balance .delta{opacity:.45}
+.confirmed .menu-balance .bank-after,.confirmed .menu-balance .delta{opacity:1}
+.menu-balance .delta{color:var(--red);font-family:var(--mono)}
+.bank-arrow{color:var(--dim)}
+.bank-chip{
+  position:absolute;right:4%;bottom:3%;z-index:14;
+  display:flex;align-items:center;gap:7px;
+  padding:7px 11px;background:rgba(8,11,15,.86);
+  border:1px solid var(--line-strong);border-left:3px solid var(--green);
+  border-radius:4px;font-size:clamp(9px,.8vw,12px);
+}
+.bank-label{font-size:.72em;letter-spacing:.08em;color:var(--dim)}
+.bank-value{font-family:var(--mono);color:var(--text);font-weight:700}
+.bank-chip .bank-after,.bank-chip .bank-delta{opacity:.45}
+.confirmed .bank-chip .bank-after,.confirmed .bank-chip .bank-delta{opacity:1}
+.bank-delta{font-family:var(--mono);color:var(--red);font-weight:700}
+
+/* ============================================================
+   8. Step 4: placement toggle text
+   ============================================================ */
+.place-state .hud{top:16%}
+
+/* ============================================================
+   9. Step 6: minigame
+   ============================================================ */
+.minigame{
+  position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);
+  z-index:14;width:min(44%,440px);padding:13px 16px;text-align:center;
+}
+.mg-head{font-size:1.02em;font-weight:700;line-height:1.3}
+.mg-head .en-block{font-weight:400;font-size:.64em;color:var(--muted);letter-spacing:.04em}
+.mg-keys{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:12px 0}
+.mg-key{
+  aspect-ratio:1.55;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--line-strong);background:rgba(255,255,255,.05);
+  border-radius:3px;font-family:var(--mono);font-size:.8em;color:var(--muted);
+  transition:background .15s,border-color .15s,color .15s;
+}
+.mg-key.hit{border-color:rgba(68,209,123,.55);background:rgba(68,209,123,.14);color:var(--green)}
+.mg-key.miss{border-color:rgba(255,92,92,.75);background:rgba(255,92,92,.2);color:var(--red);animation:missPulse .38s ease-out}
+@keyframes missPulse{0%{transform:scale(1.16)}100%{transform:scale(1)}}
+.mg-hint{font-size:.74em;color:var(--muted);line-height:1.4}
+.mg-hint .en-block{color:var(--dim)}
+
+/* ============================================================
+   10. Step 7: quote panel
+   ============================================================ */
+.quote-panel{position:absolute;right:5%;top:16%;z-index:16;width:min(38%,390px);padding:13px 16px}
+.quote-head{font-size:1.08em;font-weight:700}
+.quote-head .en-block{font-weight:400;font-size:.6em;color:var(--muted);letter-spacing:.05em}
+.quote-item{display:flex;align-items:center;gap:8px;margin:10px 0 5px;font-size:.92em}
+.quote-item b{margin-left:auto;font-family:var(--mono);color:var(--accent-2);font-size:1.15em}
+.quote-price{font-size:.84em;color:var(--muted);margin-bottom:10px}
+.quote-price b{font-family:var(--mono);color:var(--text)}
+.quote-price .en-block{font-size:.82em;color:var(--dim)}
+.patience{margin:10px 0 12px}
+.patience-bar{height:8px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.06)}
+.patience-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#ffcf5c,#ffb547);transition:width .22s linear,background .2s}
+.patience.danger .patience-bar i{background:var(--red)}
+.patience>span{display:block;margin-top:5px;font-size:.72em;color:var(--muted);font-family:var(--mono)}
+.patience.danger>span{color:#ffb3b3}
+.quote-actions{display:flex;gap:8px}
+.quote-actions .btn{flex:1}
+.quote-foot{margin-top:9px;font-size:.62em;color:var(--dim);line-height:1.4}
+.quote-foot .mono{color:var(--muted)}
+.customer-w3d{white-space:nowrap}
+.patience-inline{display:block;font-size:.8em;color:var(--accent-2);text-shadow:0 2px 4px #000}
+.sold .customer-w3d,.declined .customer-w3d,.timeout .customer-w3d{display:none}
+.customer-leave{transform:translateX(-140%);opacity:0;transition:transform 1.2s ease,opacity 1.2s ease}
+.sold .quote-strip,.declined .quote-strip,.timeout .quote-strip{display:none}
+.sold .quote-panel,.declined .quote-panel,.timeout .quote-panel{display:none}
+
+/* ============================================================
+   11. Step 8: buy menu / feeds
+   ============================================================ */
+.buy-menu{position:absolute;right:5%;top:17%;z-index:16;width:min(35%,360px);padding:12px 15px}
+.menu-kicker{font-family:var(--mono);font-size:.58em;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:3px}
+.buy-menu .menu-title{font-size:1.02em}
+.buy-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.82em}
+.buy-row:last-of-type{border-bottom:none}
+.buy-row>b{font-family:var(--mono);color:var(--accent-2);margin-left:auto}
+.buy-row .stock{min-width:64px;text-align:right;font-size:.78em;color:var(--muted);font-family:var(--mono)}
+.buy-row.sold-out{opacity:.48}
+.buy-row.sold-out .stock{color:var(--red)}
+.buy-foot{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:.62em;color:var(--dim);line-height:1.45}
+.quality{font-style:normal;font-weight:700}
+.quality.exotic{color:var(--gold)}
+.quality.rare{color:var(--blue)}
+.quality.common{color:var(--muted)}
+.feed{
+  position:absolute;z-index:25;width:33%;max-width:330px;
+  padding:8px 11px;line-height:1.4;
+  background:rgba(10,14,20,.95);border:1px solid var(--line);
+  border-radius:4px;font-size:clamp(9px,.8vw,12px);
+  box-shadow:0 10px 30px rgba(0,0,0,.5);
+}
+.seller-feed{top:4%;right:5%;border-left:3px solid var(--green)}
+.buyer-feed{bottom:10%;left:2%;border-left:3px solid var(--red)}
+.feed-label{display:block;font-size:.62em;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+.feed b{font-family:var(--mono)}
+.seller-feed b{color:var(--green)}
+.buyer-feed b{color:var(--red)}
+
+/* ============================================================
+   12. Step 9: packing phases
+   ============================================================ */
+#packing-text-2,.packing-title-2,.packing-prompt-2,.packing-step-2{display:none}
+.phase-2 #packing-text-1,.phase-2 .packing-title-1,.phase-2 .packing-prompt-1,.phase-2 .packing-step-1{display:none}
+.phase-2 #packing-text-2{display:block}
+.phase-2 .packing-title-2{display:inline}
+.phase-2 .packing-prompt-2{display:flex}
+.phase-2 .packing-step-2{display:inline}
+.phase-2 #packing-cart{left:52%}
+.phase-2 #packing-umbrella{opacity:0;transform:translateY(10px) scaleY(.45)}
+.phase-2 #packing-cart .motion-lines{display:block}
+.phase-2 #packing-cart .cart-svg{animation:pushBob 1.7s ease-in-out infinite}
+.phase-2 #return-zone{animation:zonePulse 1.6s ease-in-out infinite}
+@keyframes zonePulse{0%,100%{box-shadow:inset 0 0 20px rgba(255,181,71,.12)}50%{box-shadow:inset 0 0 36px rgba(255,181,71,.34),0 0 18px rgba(255,181,71,.18)}}
+
+/* ============================================================
+   13. Step 10: receipt
+   ============================================================ */
+.receipt-wrap{
+  position:absolute;inset:0;z-index:14;
+  display:flex;align-items:center;justify-content:flex-end;
+  padding:3% 5% 3% 0;
+}
+.receipt{
+  width:min(54%,560px);max-height:94%;overflow-y:auto;
+  padding:15px 18px;scrollbar-width:thin;overscroll-behavior:contain;
+}
+.receipt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.receipt-kicker{font-family:var(--mono);font-size:.58em;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+.receipt-title{font-size:1.08em;font-weight:700;line-height:1.3;margin-top:1px}
+.receipt-title .mono{color:var(--accent-2);font-size:.9em}
+.receipt-title .en-block{font-weight:400;font-size:.62em;color:var(--muted);letter-spacing:.03em}
+.settled-badge{
+  display:none;flex:0 0 auto;padding:2px 7px;
+  border:1px solid rgba(68,209,123,.4);border-radius:3px;
+  background:rgba(68,209,123,.1);color:var(--green);
+  font-size:.62em;font-weight:700;white-space:nowrap;
+}
+.settled-again .settled-badge{display:inline-flex}
+.receipt-time{margin:8px 0 10px;padding:6px 8px;border:1px dashed var(--line);border-radius:4px;font-size:.72em;color:var(--muted);line-height:1.45}
+.receipt-time .en-block{font-size:.9em;color:var(--dim)}
+.receipt-net-top{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:8px 10px;margin-bottom:8px;
+  border:1px solid rgba(68,209,123,.28);border-radius:4px;
+  background:rgba(68,209,123,.07);font-size:.82em;color:var(--muted);
+}
+.receipt-net-top b{font-family:var(--mono);font-size:1.55em;color:var(--green);line-height:1}
+.receipt-toggle{width:100%;justify-content:space-between;font-size:.76em}
+.toggle-caret{transition:transform .2s;font-size:.85em}
+.open .toggle-caret{transform:rotate(180deg)}
+.receipt-breakdown{display:none;margin-top:9px}
+.open .receipt-breakdown{display:block}
+.receipt-section-label{font-family:var(--mono);font-size:.58em;letter-spacing:.1em;color:var(--dim);text-transform:uppercase;margin-bottom:5px}
+.receipt-row{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06);
+  font-size:.78em;line-height:1.35;
+}
+.receipt-row>span{color:var(--muted)}
+.receipt-row .en-block{font-size:.82em;color:var(--dim)}
+.receipt-row b{font-family:var(--mono);font-size:1.02em;white-space:nowrap;flex:0 0 auto}
+.open .receipt-row{animation:rowIn .28s ease-out both;animation-delay:calc(var(--i) * 55ms)}
+@keyframes rowIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.receipt-sum{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:7px;padding:7px 8px;
+  border:1px dashed rgba(255,255,255,.2);border-radius:4px;
+  font-size:.7em;color:var(--muted);
+}
+.open .receipt-sum{animation:rowIn .3s ease-out both;animation-delay:360ms}
+.sum-calc{font-family:var(--mono);color:var(--accent-2);white-space:nowrap;font-size:1.02em}
+.sum-calc b{color:var(--green)}
+.receipt-net{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  margin-top:7px;padding:8px 9px;
+  border:1px solid rgba(68,209,123,.35);border-radius:4px;
+  background:rgba(68,209,123,.08);
+  font-size:.86em;font-weight:700;
+}
+.receipt-net b{font-family:var(--mono);font-size:1.5em;color:var(--green);line-height:1}
+.open .receipt-net{animation:netIn .38s ease-out both;animation-delay:430ms}
+@keyframes netIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+.receipt-footnote{margin-top:8px;font-size:.64em;color:var(--dim);line-height:1.45}
+.receipt-recon{margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
+.recon-title{font-family:var(--mono);font-size:.58em;letter-spacing:.1em;color:var(--dim);text-transform:uppercase;margin-bottom:4px}
+.recon-row{display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:.68em;color:var(--muted)}
+.recon-row b{font-family:var(--mono);color:var(--text)}
+.recon-note{margin-top:3px;font-size:.62em;color:var(--dim)}
+.receipt-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.receipt-actions .btn{font-size:.72em;padding:5px 9px}
+.receipt-toast{
+  display:none;margin-top:8px;padding:6px 8px;
+  border:1px solid rgba(68,209,123,.35);border-radius:4px;
+  background:rgba(68,209,123,.08);color:#9fe3c2;font-size:.66em;line-height:1.4;
+}
+.settled-again .receipt-toast{display:block}
+.after-close{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  display:none;width:min(46%,430px);padding:18px;text-align:center;
+}
+.after-close-title{font-size:1.02em;font-weight:700}
+.after-close-title .en{display:block;font-size:.6em;letter-spacing:.1em;color:var(--dim);font-weight:400;margin-top:2px}
+.after-close p{font-size:.78em;color:var(--muted);margin:8px 0 12px;line-height:1.5}
+.receipt-wrap.closed .receipt{display:none}
+.receipt-wrap.closed .after-close{display:block}
+
+/* ============================================================
+   14. Acceptance table
+   ============================================================ */
+.acceptance{
+  max-width:1440px;margin:0 auto;padding:32px clamp(14px,3vw,36px) 40px;
+  border-top:1px solid var(--line);scroll-margin-top:74px;
+}
+.acceptance-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:14px}
+.section-kicker{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--accent);text-transform:uppercase}
+.acceptance h2{margin:2px 0 6px;font-size:clamp(20px,2vw,26px);line-height:1.2}
+.acceptance-head p{margin:0;max-width:780px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.acceptance-head code{font-family:var(--mono);color:var(--accent-2);font-size:.92em}
+.acceptance-stats{display:flex;gap:8px;flex:0 0 auto}
+.stat{min-width:70px;padding:7px 10px;border:1px solid var(--line);border-radius:4px;text-align:center;background:rgba(255,255,255,.02)}
+.stat b{display:block;font-family:var(--mono);font-size:20px;line-height:1.1}
+.stat span{font-size:10px;color:var(--dim)}
+.stat.partial b{color:var(--accent-2)}
+.stat.todo b{color:var(--red)}
+.acceptance-note{
+  padding:9px 12px;border:1px solid rgba(255,181,71,.3);border-left:3px solid var(--accent);
+  background:rgba(255,181,71,.07);font-size:12.5px;color:#ffd9a0;line-height:1.55;
+  border-radius:0 4px 4px 0;
+}
+.acceptance-note strong{color:#fff}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin:12px 0;padding:8px 0;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+.legend b{font-family:var(--mono)}
+.q-exotic{color:var(--gold)}
+.q-rare{color:var(--blue)}
+.q-common{color:var(--muted)}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:5px}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:880px}
+thead th{
+  text-align:left;padding:9px 10px;background:rgba(255,255,255,.04);
+  border-bottom:1px solid var(--line-strong);
+  font-size:10.5px;letter-spacing:.06em;color:var(--muted);
+  text-transform:uppercase;white-space:nowrap;
+}
+tbody td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top;line-height:1.5}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,.025)}
+tbody tr:target{background:rgba(255,181,71,.09);outline:2px solid var(--accent);outline-offset:-2px;scroll-margin-top:86px}
+td.id a{font-family:var(--mono);color:var(--accent-2);text-decoration:none;font-weight:700;white-space:nowrap}
+td.id a:hover{text-decoration:underline}
+th:nth-child(2),td:nth-child(2){width:34%}
+th:nth-child(4),td:nth-child(4){width:38%}
+.slice{
+  display:inline-block;margin:0 4px 3px 0;padding:1px 5px;
+  border:1px solid rgba(111,182,255,.35);border-radius:3px;
+  color:#a9d2ff;font-family:var(--mono);font-size:10px;white-space:nowrap;
+}
+.status{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:1px 6px;border-radius:3px;margin-bottom:3px;
+  font-size:10px;font-weight:700;white-space:nowrap;
+}
+.status-todo{color:#ffb3b3;background:rgba(255,92,92,.12);border:1px solid rgba(255,92,92,.3)}
+.status-partial{color:#ffd98a;background:rgba(255,181,71,.12);border:1px solid rgba(255,181,71,.3)}
+.status-detail{display:block;color:var(--muted);font-size:11px}
+.acceptance-foot{margin-top:12px;font-size:11.5px;color:var(--dim);line-height:1.6}
+.acceptance-foot p{margin:4px 0}
+
+/* ============================================================
+   15. Footer / responsive
+   ============================================================ */
+.page-footer{
+  max-width:1440px;margin:0 auto;padding:18px clamp(14px,3vw,36px) 40px;
+  border-top:1px solid var(--line);font-size:11px;color:var(--dim);line-height:1.7;
+}
+.page-footer code{font-family:var(--mono);color:var(--muted)}
+.footer-note{margin-top:6px}
+@media (max-width:1100px){
+  .workspace{grid-template-columns:minmax(0,1fr) 280px}
+  .quote-panel{width:42%}
+  .rental-menu{width:46%}
+  .receipt{width:58%}
+}
+@media (max-width:980px){
+  .topbar{flex-wrap:wrap}
+  .progress-wrap{order:3;width:100%;min-width:0}
+  .workspace{grid-template-columns:1fr}
+  .side{display:grid;grid-template-columns:1fr 1fr}
+  .stage-head{flex-direction:column;align-items:flex-start;gap:4px}
+  .stage-meta{text-align:left}
+}
+@media (max-width:700px){
+  .side{grid-template-columns:1fr}
+  .brand-sub{display:none}
+  .top-reset{font-size:11px;padding:5px 8px}
+  .acceptance-head{flex-direction:column}
+  .acceptance-stats{width:100%}
+  .stat{flex:1}
+  .phone{width:52%;right:4%}
+  .rental-menu{width:58%;right:3%}
+  .quote-panel{width:56%;right:3%}
+  .buy-menu{width:50%;right:3%}
+  .receipt{width:86%}
+  .feed{width:48%}
+  .hud{width:30%;min-width:132px}
+  .prompt{font-size:9px;padding:6px 8px}
+  .stage-nav{flex-wrap:wrap}
+  .nav-btn{min-width:100px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+  }
+}
+
+/* ============================================================
+   16. Inline SVG artwork
+   ============================================================ */
+.svg-defs{position:absolute;width:0;height:0;overflow:hidden}
+</style>
+</head>
+<body>
+<div id="live" class="sr-only" aria-live="polite"></div>
+
+<!-- Shared inline artwork (no external icons / fonts) -->
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="icon-hotdog" viewBox="0 0 64 64">
+      <path d="M9 40 Q9 28 23 24 L44 16 Q55 12 59 21 Q62 29 52 33 L30 43 Q17 49 9 40 Z" fill="#e0a24a"/>
+      <path d="M14 38 Q14 30 26 26 L44 19 Q51 16 54 21" fill="none" stroke="#b9572f" stroke-width="6" stroke-linecap="round"/>
+      <path d="M21 42 Q30 36 38 32" stroke="#ffd98a" stroke-width="4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="cart" viewBox="0 0 320 240">
+      <ellipse cx="160" cy="222" rx="120" ry="14" fill="#000" opacity=".35"/>
+      <circle cx="90" cy="205" r="24" fill="#15181e" stroke="#3c4450" stroke-width="6"/>
+      <circle cx="238" cy="205" r="24" fill="#15181e" stroke="#3c4450" stroke-width="6"/>
+      <circle cx="90" cy="205" r="7" fill="#6b7482"/>
+      <circle cx="238" cy="205" r="7" fill="#6b7482"/>
+      <path d="M48 118 H268 V190 Q268 202 256 202 H60 Q48 202 48 190 Z" fill="#c7462f" stroke="#7d2a1d" stroke-width="4"/>
+      <rect x="58" y="128" width="200" height="52" rx="6" fill="#e3d9c6" opacity=".93"/>
+      <rect x="118" y="96" width="120" height="30" rx="6" fill="#2b2f36" stroke="#4b535f" stroke-width="3"/>
+      <rect x="126" y="102" width="104" height="12" rx="4" fill="#5a606b"/>
+      <g fill="#b9572f">
+        <rect x="136" y="103" width="30" height="8" rx="4"/>
+        <rect x="174" y="103" width="30" height="8" rx="4"/>
+      </g>
+      <rect x="70" y="58" width="180" height="42" rx="6" fill="#ffcf5c" stroke="#8a6a1e" stroke-width="3"/>
+      <text x="160" y="86" text-anchor="middle" font-family="Arial,sans-serif" font-size="24" font-weight="700" fill="#3a250d" letter-spacing="2">HOTDOGS</text>
+      <path d="M48 132 H20 V168 H48" fill="none" stroke="#8a94a3" stroke-width="8" stroke-linecap="round"/>
+      <path d="M150 92 q10 -18 0 -36" stroke="#fff" stroke-width="4" fill="none" opacity=".16"/>
+    </symbol>
+    <symbol id="umbrella" viewBox="0 0 320 140">
+      <path d="M160 130 V56" stroke="#8a94a3" stroke-width="8"/>
+      <path d="M16 70 Q160 -40 304 70 Q260 54 220 70 Q190 54 160 70 Q130 54 100 70 Q60 54 16 70 Z" fill="#d64a35" stroke="#7d2a1d" stroke-width="4"/>
+      <path d="M16 70 Q80 50 160 70 Q240 50 304 70" fill="none" stroke="#f3e6cf" stroke-width="8" opacity=".8"/>
+      <circle cx="160" cy="52" r="6" fill="#ffcf5c"/>
+    </symbol>
+    <symbol id="ped" viewBox="0 0 120 260">
+      <ellipse cx="60" cy="250" rx="34" ry="8" fill="#000" opacity=".3"/>
+      <circle cx="60" cy="36" r="24" fill="var(--skin,#d5a06f)"/>
+      <path d="M36 62 Q60 48 84 62 L90 150 Q60 164 30 150 Z" fill="var(--shirt,#4d7ea8)"/>
+      <path d="M36 76 L18 142" stroke="var(--shirt,#4d7ea8)" stroke-width="14" stroke-linecap="round"/>
+      <path d="M84 76 L102 142" stroke="var(--shirt,#4d7ea8)" stroke-width="14" stroke-linecap="round"/>
+      <rect x="40" y="150" width="15" height="82" rx="7" fill="var(--pants,#242b36)"/>
+      <rect x="65" y="150" width="15" height="82" rx="7" fill="var(--pants,#242b36)"/>
+      <rect x="34" y="226" width="26" height="10" rx="4" fill="#101318"/>
+      <rect x="60" y="226" width="26" height="10" rx="4" fill="#101318"/>
+      <path d="M44 22 Q60 4 76 22" fill="none" stroke="#2a2018" stroke-width="10" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="car" viewBox="0 0 360 160">
+      <ellipse cx="180" cy="146" rx="150" ry="12" fill="#000" opacity=".3"/>
+      <path d="M20 112 Q20 80 56 72 L104 40 Q120 28 146 28 H230 Q252 28 266 46 L300 78 Q336 86 340 112 V124 H20 Z" fill="#2f4a5e" stroke="#1b2b36" stroke-width="4"/>
+      <path d="M112 44 H154 V76 H94 Z" fill="#93b3c9" opacity=".75"/>
+      <path d="M166 44 H226 Q244 44 254 58 L268 76 H166 Z" fill="#93b3c9" opacity=".75"/>
+      <circle cx="94" cy="124" r="26" fill="#12161c" stroke="#4a5360" stroke-width="6"/>
+      <circle cx="270" cy="124" r="26" fill="#12161c" stroke="#4a5360" stroke-width="6"/>
+      <circle cx="94" cy="124" r="8" fill="#7b8492"/>
+      <circle cx="270" cy="124" r="8" fill="#7b8492"/>
+      <rect x="36" y="96" width="34" height="10" rx="5" fill="#ffcf5c" opacity=".8"/>
+    </symbol>
+    <symbol id="arrow" viewBox="0 0 120 40">
+      <path d="M6 20 H96" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="10 8"/>
+      <path d="M88 8 L108 20 L88 32 Z" fill="currentColor"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#icon-hotdog"></use></svg></span>
+    <div>
+      <div class="brand-title">热狗摊 · 预期流程</div>
+      <div class="brand-sub">Hotdog Vendor · Expected Flow · UX Demo</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="progress-wrap">
+    <div class="progress-meta">
+      <span id="step-counter-top">第 1 步 / 共 10 步</span>
+      <span class="mono" id="progress-pct">10%</span>
+    </div>
+    <div class="progress-track" id="progress-track" role="progressbar" aria-label="演示进度" aria-valuemin="1" aria-valuemax="10" aria-valuenow="1"></div>
+  </div>
+  <button class="btn top-reset" type="button" id="reset-demo">↺ 重置 <span class="en">Reset</span></button>
+</header>
+
+<div class="disclaimer" role="note">
+  <div>
+    <strong>这是 UX 演示，不是游戏内实拍；当前实机只完成 S1（租借原语）。</strong>
+    <span class="en">This is a UX demo, not in-game capture. Only S1 (the rental primitive) exists in the real build.</span>
+  </div>
+</div>
+
+<main id="main">
+  <nav class="step-rail" id="step-rail" aria-label="流程步骤"></nav>
+
+  <section class="stage" aria-labelledby="stage-title-zh">
+    <div class="stage-head">
+      <div>
+        <div class="stage-kicker" id="stage-kicker">L=IDLE · 任务可接取</div>
+        <h1 class="stage-title" id="stage-title-zh"><span id="stage-title-text">任务列表 / 接单</span><span class="en" id="stage-title-en">Task list / Accept the job</span></h1>
+      </div>
+      <div class="stage-meta">10 步走完「租—推—摆—做—卖—还」<br>Legion Square 东侧广场 · S0 坐标</div>
+    </div>
+
+    <div class="workspace">
+      <div class="screen-col">
+        <div class="block-label">玩家看到 <span class="en">What the player sees</span></div>
+
+        <div class="viewport" id="viewport">
+          <!-- Shared world backdrop -->
+          <svg class="world" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <defs>
+              <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#0a121a"/>
+                <stop offset=".42" stop-color="#223447"/>
+                <stop offset=".68" stop-color="#5c5146"/>
+                <stop offset="1" stop-color="#a8754a"/>
+              </linearGradient>
+              <linearGradient id="plazaGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#2b303a"/>
+                <stop offset="1" stop-color="#171b22"/>
+              </linearGradient>
+              <linearGradient id="bldgGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#0f1822"/>
+                <stop offset="1" stop-color="#1b2735"/>
+              </linearGradient>
+              <radialGradient id="sunGlow" cx=".5" cy=".5" r=".5">
+                <stop offset="0" stop-color="#ffc06a" stop-opacity=".5"/>
+                <stop offset="1" stop-color="#ffc06a" stop-opacity="0"/>
+              </radialGradient>
+              <pattern id="paving" width="90" height="45" patternUnits="userSpaceOnUse">
+                <path d="M0 45 H90 M45 0 V45" stroke="#3d4551" stroke-width="1.2" opacity=".55"/>
+              </pattern>
+            </defs>
+            <rect width="1600" height="900" fill="url(#skyGrad)"/>
+            <circle cx="1180" cy="330" r="320" fill="url(#sunGlow)"/>
+            <path d="M0 470 V360 H80 V320 H150 V380 H230 V300 H310 V390 H390 V340 H470 V420 H560 V470 Z" fill="#0b141d"/>
+            <path d="M1030 470 V350 H1110 V300 H1200 V390 H1280 V320 H1360 V370 H1450 V310 H1540 V350 H1600 V470 Z" fill="#0a121a"/>
+            <g fill="#ffd38a" opacity=".28">
+              <rect x="96" y="336" width="9" height="11"/><rect x="112" y="336" width="9" height="11"/>
+              <rect x="242" y="318" width="9" height="11"/><rect x="258" y="318" width="9" height="11"/>
+              <rect x="242" y="338" width="9" height="11"/><rect x="258" y="338" width="9" height="11"/>
+              <rect x="1122" y="318" width="9" height="11"/><rect x="1138" y="318" width="9" height="11"/>
+              <rect x="1294" y="336" width="9" height="11"/><rect x="1310" y="336" width="9" height="11"/>
+              <rect x="1462" y="328" width="9" height="11"/><rect x="1478" y="328" width="9" height="11"/>
+            </g>
+            <path d="M0 470 V400 H120 V370 H260 V430 H400 V470 Z" fill="url(#bldgGrad)"/>
+            <path d="M1210 470 V405 H1330 V365 H1450 V425 H1600 V470 Z" fill="url(#bldgGrad)"/>
+            <g>
+              <rect x="318" y="420" width="9" height="58" fill="#241d16"/>
+              <circle cx="322" cy="405" r="38" fill="#1b2d23"/>
+              <circle cx="302" cy="420" r="26" fill="#1a2a21"/>
+              <rect x="1298" y="420" width="9" height="58" fill="#241d16"/>
+              <circle cx="1302" cy="402" r="40" fill="#1b2d23"/>
+              <circle cx="1326" cy="422" r="26" fill="#1a2a21"/>
+            </g>
+            <rect y="470" width="1600" height="430" fill="url(#plazaGrad)"/>
+            <rect y="470" width="1600" height="250" fill="url(#paving)" opacity=".3"/>
+            <g stroke="#414a56" stroke-width="2" opacity=".28">
+              <line x1="800" y1="470" x2="-450" y2="900"/>
+              <line x1="800" y1="470" x2="0" y2="900"/>
+              <line x1="800" y1="470" x2="520" y2="900"/>
+              <line x1="800" y1="470" x2="1080" y2="900"/>
+              <line x1="800" y1="470" x2="1600" y2="900"/>
+              <line x1="800" y1="470" x2="2050" y2="900"/>
+            </g>
+            <g stroke="#414a56" stroke-width="1.5" opacity=".2">
+              <line x1="0" y1="530" x2="1600" y2="530"/>
+              <line x1="0" y1="600" x2="1600" y2="600"/>
+              <line x1="0" y1="675" x2="1600" y2="675"/>
+            </g>
+            <rect y="720" width="1600" height="180" fill="#101419"/>
+            <line x1="0" y1="720" x2="1600" y2="720" stroke="#3b4450" stroke-width="5"/>
+            <g stroke="#e4b552" stroke-width="7" opacity=".4" stroke-dasharray="90 80">
+              <line x1="0" y1="812" x2="1600" y2="812"/>
+            </g>
+            <g fill="#dfe4ec" opacity=".18">
+              <rect x="36" y="720" width="30" height="180"/>
+              <rect x="100" y="720" width="30" height="180"/>
+              <rect x="164" y="720" width="30" height="180"/>
+              <rect x="228" y="720" width="30" height="180"/>
+              <rect x="292" y="720" width="30" height="180"/>
+            </g>
+            <g stroke="#3c4654" stroke-width="8" fill="none">
+              <path d="M128 720 V548"/><path d="M128 548 H184"/>
+              <path d="M1472 720 V548"/><path d="M1472 548 H1416"/>
+            </g>
+            <circle cx="187" cy="552" r="13" fill="#ffd27a" opacity=".45"/>
+            <circle cx="1413" cy="552" r="13" fill="#ffd27a" opacity=".45"/>
+            <rect y="430" width="1600" height="70" fill="#c08a5a" opacity=".08"/>
+          </svg>
+          <div class="vignette" aria-hidden="true"></div>
+
+          <!-- ============ STEP 1 · 任务列表 / 接单 ============ -->
+          <div class="step-layer" data-step="1" aria-label="第 1 步：任务列表与接单">
+            <div class="screen-dim"></div>
+            <div class="phone">
+              <div class="phone-notch" aria-hidden="true"></div>
+              <div class="phone-top"><span>任务 <span class="en">QUESTS</span></span><span class="mono">14:01</span></div>
+              <div class="phone-body">
+                <div class="task-card" id="task-card">
+                  <div class="task-head">
+                    <span class="task-icon"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#icon-hotdog"></use></svg></span>
+                    <div>
+                      <div class="task-name">
+                        <span class="task-name-available">热狗摊贩 · 可接取</span>
+                        <span class="task-name-progress">热狗摊贩 · 租推车并推到摊位</span>
+                      </div>
+                      <div class="task-name-en">
+                        <span class="task-name-en-available">Hotdog Vendor · Available</span>
+                        <span class="task-name-en-progress">Hotdog Vendor · Rent a cart and push it to its pitch</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="task-location">Legion Square 东侧广场 · 租赁点 <span class="mono">215.0, -772.0</span><span class="en-block">Legion Square east plaza · Rental point</span></div>
+                  <div class="task-next-box">
+                    <div class="task-label">下一步目标 <span class="en">NEXT OBJECTIVE</span></div>
+                    <div class="task-next">租推车并推到摊位</div>
+                    <div class="task-next-en">Rent a cart and push it to its pitch</div>
+                  </div>
+                  <div class="task-deposit">
+                    <div class="task-label">押金说明 <span class="en">DEPOSIT</span></div>
+                    <p>银行扣押金 <b>$250</b>，按分钟 <b>$6</b> 计租，前 60 秒免租。</p>
+                    <p class="en-block">$250 bank deposit · $6/min · first 60 seconds free</p>
+                  </div>
+                  <button class="btn primary accept-btn" type="button" id="accept-task" data-action="accept-task">接取任务 <span class="en">Accept</span></button>
+                  <div class="task-status"><span class="task-status-available">状态：可接取</span><span class="task-status-progress">状态：进行中</span></div>
+                </div>
+              </div>
+              <div class="phone-foot">任务 App 只保留一条进行中条目 <span class="en">One active entry only</span></div>
+            </div>
+          </div>
+
+          <!-- ============ STEP 2 · 租赁点 ============ -->
+          <div class="step-layer" data-step="2" aria-label="第 2 步：租赁点与押金">
+            <div class="screen-dim"></div>
+            <div class="actor cart-actor s2-cart">
+              <div class="w3d">热狗推车租赁<span class="en-block">Hotdog Cart Rental</span></div>
+              <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+            </div>
+            <div class="menu-panel nui-panel rental-menu">
+              <div class="menu-head">
+                <div class="menu-title">热狗推车租赁<span class="en-block">Hotdog Cart Rental</span></div>
+                <div class="menu-tag">按分钟计租 <span class="en">Per minute</span></div>
+              </div>
+              <div class="menu-rule"></div>
+              <div class="menu-line"><span>押金（银行，归还后退）<span class="sub">Deposit · bank · refunded on return</span></span><b>$250</b></div>
+              <div class="menu-line"><span>租金（前 60 秒不计）<span class="sub">Rent · first 60 seconds free</span></span><b>$6/分钟</b></div>
+              <div class="menu-line"><span>原料<span class="sub">Ingredients</span></span><b>30 份</b></div>
+              <div class="menu-line"><span>成品上限<span class="sub">Finished stock cap</span></span><b>30 份</b></div>
+              <div class="menu-line"><span>建议营业<span class="sub">Suggested shift</span></span><b>45 分钟</b></div>
+              <div class="menu-rule"></div>
+              <div class="menu-actions">
+                <button class="btn primary" type="button" data-action="rent-confirm">确认租借 <span class="en">Confirm rental</span></button>
+                <button class="btn ghost" type="button" data-action="rent-cancel">取消 <span class="en">Cancel</span></button>
+              </div>
+              <div class="menu-balance">银行余额 <span class="en">Bank balance</span> <b class="bank-before">$516</b><span class="bank-arrow">→</span><b class="bank-after">$266</b><span class="delta">−$250</span></div>
+            </div>
+            <div class="prompt"><kbd>E</kbd><span>租推车 <span class="en">Rent a cart</span><small>租赁点 · Rental point</small></span></div>
+            <div class="bank-chip">
+              <span class="bank-label">银行 <span class="en">BANK</span></span>
+              <b class="bank-value bank-before">$516</b>
+              <span class="bank-arrow">→</span>
+              <b class="bank-value bank-after">$266</b>
+              <span class="bank-delta">−$250</span>
+            </div>
+            <div class="toast rent-toast" data-toast="rent">押金 $250 · 托管中<span class="en-block">Deposit $250 · Held</span></div>
+          </div>
+
+          <!-- ============ STEP 3 · 推车中 ============ -->
+          <div class="step-layer" data-step="3" aria-label="第 3 步：推车中">
+            <div class="footprint green s3-target"></div>
+            <div class="ground-label s3-label">绿框 · 目标摊位 <span class="en">Green zone</span></div>
+            <div class="actor cart-actor s3-cart pushing">
+              <div class="w3d">推到绿框 · [G] 放下<span class="en-block">Push to the green zone · [G] Drop</span></div>
+              <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+              <div class="motion-lines" aria-hidden="true"><i></i><i></i><i></i></div>
+            </div>
+            <div class="route-arrow s3-arrow" style="color:#44d17b" aria-hidden="true"><svg viewBox="0 0 120 40"><use href="#arrow"></use></svg></div>
+            <div class="hud">
+              <div class="hud-title"><span class="dot amber"></span>推车中 <span class="en">PUSHING</span></div>
+              <div class="hud-row"><span>押金</span><b>$250 · 托管中</b></div>
+              <div class="hud-row"><span>剩余</span><b>59:48</b></div>
+              <div class="hud-row"><span>速度</span><b>推车减速</b></div>
+              <div class="hud-divider"></div>
+              <div class="hud-note">动画 <span class="mono">missfinale_c2ig_11</span><br><span class="mono">pushcar_offcliff_f</span></div>
+              <div class="hud-note">起步音 <span class="mono">RumbleStart</span> ×1</div>
+            </div>
+            <div class="prompt"><kbd>G</kbd><span>走到绿框后放下推车 <span class="en">Walk to the green zone · Drop</span><small>控制 47 · INPUT_DETACH</small></span></div>
+          </div>
+
+          <!-- ============ STEP 4 · 摆放预览（两态） ============ -->
+          <div class="step-layer" data-step="4" aria-label="第 4 步：摆放预览">
+            <div class="place-state place-green active" data-place="green">
+              <div class="footprint green s4-footprint"></div>
+              <div class="ground-label s4-label">合法摊位 · 绿框 <span class="en">Valid pitch</span></div>
+              <div class="actor cart-actor s4-cart ghost">
+                <div class="w3d">摆放位置：可用<span class="en-block">Placement: OK</span></div>
+                <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+                <div class="ghost-tag">幽灵预览 <span class="en">GHOST</span></div>
+              </div>
+              <div class="hud">
+                <div class="hud-title"><span class="dot amber"></span>摆放预览 <span class="en">PLACING</span></div>
+                <div class="hud-row"><span>成品</span><b>0/30</b></div>
+                <div class="hud-row"><span>原料</span><b>30</b></div>
+                <div class="hud-row"><span>押金</span><b>$250 · 托管中</b></div>
+              </div>
+              <div class="prompt"><kbd>E</kbd><span>确认摆放 <span class="en">Confirm</span></span><kbd>G</kbd><span>取消 <span class="en">Cancel</span></span></div>
+            </div>
+            <div class="place-state place-red" data-place="red">
+              <div class="place-reason">这里挡住车道了，往人行道挪一点<span class="en-block">This blocks the road. Move onto the sidewalk.</span></div>
+              <div class="footprint red s4-footprint"></div>
+              <div class="ground-label red s4-label">不可摆放 · 红框 <span class="en">Blocked pitch</span></div>
+              <div class="actor cart-actor s4-cart ghost">
+                <div class="w3d">摆放位置：不可用<span class="en-block">Placement: Blocked</span></div>
+                <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+                <div class="ghost-tag">幽灵预览 <span class="en">GHOST</span></div>
+              </div>
+              <div class="actor s4-car" style="left:8%;bottom:7%;width:32%;z-index:4">
+                <svg viewBox="0 0 360 160" style="width:100%;height:auto;display:block;filter:drop-shadow(0 12px 10px rgba(0,0,0,.5))" aria-hidden="true"><use href="#car"></use></svg>
+              </div>
+              <div class="hud">
+                <div class="hud-title"><span class="dot amber"></span>摆放预览 <span class="en">PLACING</span></div>
+                <div class="hud-row"><span>成品</span><b>0/30</b></div>
+                <div class="hud-row"><span>原料</span><b>30</b></div>
+                <div class="hud-row"><span>押金</span><b>$250 · 托管中</b></div>
+              </div>
+              <div class="prompt danger"><kbd>E</kbd><span>不可摆放 <span class="en">Can't place</span></span><kbd>G</kbd><span>取消 <span class="en">Cancel</span></span></div>
+            </div>
+          </div>
+
+          <!-- ============ STEP 5 · 已摆摊、未开卖 ============ -->
+          <div class="step-layer" data-step="5" aria-label="第 5 步：已摆摊、未开卖">
+            <div class="actor umbrella-actor s5-umbrella"><svg viewBox="0 0 320 140" aria-hidden="true"><use href="#umbrella"></use></svg></div>
+            <div class="actor cart-actor s5-cart">
+              <div class="w3d">热狗摊 · 已打烊 · [G] 开卖<span class="en-block">Hotdog stand · Closed · [G] Open</span></div>
+              <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+            </div>
+            <div class="hud">
+              <div class="hud-title"><span class="dot grey"></span>热狗摊 · 已打烊 <span class="en">CLOSED</span></div>
+              <div class="hud-row"><span>成品 <span class="en">Stock</span></span><b>0/30</b></div>
+              <div class="hud-sub">异域 0 · 稀有 0 · 普通 0</div>
+              <div class="hud-row"><span>原料 <span class="en">Ingredients</span></span><b>30</b></div>
+              <div class="hud-row"><span>顾客 <span class="en">Customers</span></span><b>0</b></div>
+              <div class="hud-row"><span>已售 <span class="en">Sold</span></span><b>0 份 · $0</b></div>
+              <div class="hud-row"><span>押金 <span class="en">Deposit</span></span><b>$250 · 托管中</b></div>
+              <div class="hud-row"><span>剩余 <span class="en">Left</span></span><b>59:41</b></div>
+            </div>
+            <div class="prompt"><kbd>E</kbd><span>做热狗 <span class="en">Cook a hotdog</span><small>成品为 0，先备货再开卖</small></span></div>
+          </div>
+
+          <!-- ============ STEP 6 · 做热狗（小游戏） ============ -->
+          <div class="step-layer" data-step="6" aria-label="第 6 步：做热狗小游戏">
+            <div class="actor umbrella-actor s6-umbrella"><svg viewBox="0 0 320 140" aria-hidden="true"><use href="#umbrella"></use></svg></div>
+            <div class="actor cart-actor s6-cart">
+              <div class="w3d">正在做热狗…<span class="en-block">Cooking…</span></div>
+              <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+            </div>
+            <div class="hud">
+              <div class="hud-title"><span class="dot grey"></span>热狗摊 · 已打烊 <span class="en">CLOSED</span></div>
+              <div class="hud-row"><span>成品</span><b id="cook-stock">1/30</b></div>
+              <div class="hud-sub" id="cook-breakdown">异域 1 · 稀有 0 · 普通 0</div>
+              <div class="hud-row"><span>原料</span><b id="cook-ingredients">29</b></div>
+              <div class="hud-row"><span>顾客</span><b>0</b></div>
+              <div class="hud-row"><span>已售</span><b>$0</b></div>
+              <div class="hud-row"><span>押金</span><b>$250 · 托管中</b></div>
+              <div class="hud-row"><span>剩余</span><b>59:30</b></div>
+              <div class="hud-badge">正在做热狗 <span class="en">COOKING</span></div>
+            </div>
+            <div class="minigame nui-panel">
+              <div class="mg-head">做热狗 · 10 次按键<span class="en-block">Cook a hotdog · 10 keys</span></div>
+              <div class="mg-keys" id="mg-keys">
+                <span class="mg-key hit">◼</span><span class="mg-key hit">◼</span><span class="mg-key hit">◼</span><span class="mg-key hit">◼</span><span class="mg-key hit">◼</span>
+                <span class="mg-key hit">◼</span><span class="mg-key hit">◼</span><span class="mg-key hit">◼</span><span class="mg-key hit">◼</span><span class="mg-key hit">◼</span>
+              </div>
+              <div class="mg-hint">按顺序敲击 · 0 失误 = 异域 · Esc 取消<span class="en-block">Hit the keys shown · 0 misses = Exotic · Esc to cancel</span></div>
+            </div>
+            <div class="toast quality-toast show" data-faults="0">
+              <span class="quality-symbol exotic">★</span>
+              <span>完美！异域热狗 ×1<span class="en-block">★ Perfect! Exotic hotdog ×1</span></span>
+            </div>
+            <div class="toast quality-toast" data-faults="1">
+              <span class="quality-symbol rare">◆</span>
+              <span>不错！稀有热狗 ×1<span class="en-block">Nice! Rare hotdog ×1</span></span>
+            </div>
+            <div class="toast quality-toast" data-faults="2">
+              <span class="quality-symbol common">●</span>
+              <span>普通热狗 ×1<span class="en-block">Common hotdog ×1</span></span>
+            </div>
+          </div>
+
+          <!-- ============ STEP 7 · 开卖 + NPC 顾客 ============ -->
+          <div class="step-layer" data-step="7" aria-label="第 7 步：开卖与 NPC 顾客">
+            <div class="actor umbrella-actor s7-umbrella"><svg viewBox="0 0 320 140" aria-hidden="true"><use href="#umbrella"></use></svg></div>
+            <div class="actor cart-actor s7-cart">
+              <div class="w3d">热狗摊 · 营业中 · [G] 打烊<span class="en-block">Hotdog stand · Open · [G] Close</span></div>
+              <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+            </div>
+            <div class="actor ped-actor s7-customer" id="quote-customer">
+              <div class="w3d customer-w3d">顾客 · 正在点单<span class="en-block">Customer · Ordering</span><span class="patience-inline" id="customer-patience">耐心 12s <span class="en">Patience 12s</span></span></div>
+              <svg class="ped-svg ped-npc" viewBox="0 0 120 260" aria-hidden="true"><use href="#ped"></use></svg>
+            </div>
+            <div class="hud">
+              <div class="hud-title"><span class="dot green"></span>热狗摊 · 营业中 <span class="en">OPEN</span></div>
+              <div class="hud-row"><span>成品</span><b id="quote-hud-stock">3/30</b></div>
+              <div class="hud-sub" id="quote-hud-breakdown">异域 1 · 稀有 2 · 普通 0</div>
+              <div class="hud-row"><span>原料</span><b>27</b></div>
+              <div class="hud-row"><span>顾客</span><b id="quote-hud-customer">正在点单 · 12s</b></div>
+              <div class="hud-row"><span>已售</span><b id="quote-hud-sold">0 份 · $0</b></div>
+              <div class="hud-row"><span>押金</span><b>$250 · 托管中</b></div>
+              <div class="hud-row"><span>剩余</span><b>58:40</b></div>
+            </div>
+            <div class="quote-panel nui-panel" id="quote-panel">
+              <div class="quote-head">顾客点单<span class="en-block">Customer Order</span></div>
+              <div class="quote-item"><span class="quality rare">◆</span><span>稀有热狗 <span class="en">Rare hotdog</span></span><b>×2</b></div>
+              <div class="quote-price">出价 <b>$9</b>/份 · 合计 <b>$18</b><span class="en-block">Offer $9 each · Total $18</span></div>
+              <div class="patience" id="patience">
+                <div class="patience-bar"><i id="patience-fill" style="width:60%"></i></div>
+                <span id="patience-text">耐心 12s <span class="en">Patience 12s</span></span>
+              </div>
+              <div class="quote-actions">
+                <button class="btn primary" type="button" data-action="quote-accept"><kbd>Y</kbd> 成交 <span class="en">Accept</span></button>
+                <button class="btn ghost" type="button" data-action="quote-decline"><kbd>N</kbd> 拒绝 <span class="en">Decline</span></button>
+              </div>
+              <div class="quote-foot">最后 5 秒变红并播 <span class="mono">hazard_tick</span> <span class="en">Last 5s turns red</span></div>
+            </div>
+            <div class="toast success-toast" id="quote-success">售出 稀有热狗 ×2 · +$18 现金<span class="en-block">Sold Rare hotdog ×2 · +$18 cash</span></div>
+            <div class="toast error-toast" id="quote-timeout">顾客等太久，走了<span class="en-block">The customer waited too long and left.</span></div>
+            <div class="subtitle" id="customer-subtitle"></div>
+            <div class="phase-strip quote-strip">
+              <span>走近中 <span class="en">Approaching</span></span><i>→</i>
+              <span>等待点单 <span class="en">Waiting</span></span><i>→</i>
+              <span class="active">正在点单 <span class="en">Ordering</span></span>
+            </div>
+          </div>
+
+          <!-- ============ STEP 8 · 玩家顾客 ============ -->
+          <div class="step-layer" data-step="8" aria-label="第 8 步：玩家顾客与 ALT 菜单">
+            <div class="actor umbrella-actor s8-umbrella"><svg viewBox="0 0 320 140" aria-hidden="true"><use href="#umbrella"></use></svg></div>
+            <div class="actor cart-actor s8-cart">
+              <div class="w3d">热狗摊 · 营业中<span class="en-block">Hotdog stand · Open</span></div>
+              <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+            </div>
+            <div class="actor ped-actor s8-vendor">
+              <div class="name-tag">摊主 <span class="en">Vendor</span></div>
+              <svg class="ped-svg ped-vendor" viewBox="0 0 120 260" aria-hidden="true"><use href="#ped"></use></svg>
+            </div>
+            <div class="actor ped-actor s8-buyer">
+              <div class="name-tag player-tag">玩家 张三 <span class="en">Player Zhang San</span></div>
+              <svg class="ped-svg ped-player" viewBox="0 0 120 260" aria-hidden="true"><use href="#ped"></use></svg>
+            </div>
+            <div class="menu-panel nui-panel buy-menu">
+              <div class="menu-kicker">ALT · qb-target</div>
+              <div class="menu-title">热狗摊 · 今日菜单<span class="en-block">Hotdog Stand · Today's Menu</span></div>
+              <div class="buy-row sold-out"><span><i class="quality exotic">★</i> 异域热狗 <span class="en">Exotic</span></span><b>$12</b><span class="stock">售罄 <span class="en">Sold out</span></span></div>
+              <div class="buy-row"><span><i class="quality rare">◆</i> 稀有热狗 <span class="en">Rare</span></span><b>$9</b><span class="stock">库存 1 <span class="en">Stock 1</span></span></div>
+              <div class="buy-row"><span><i class="quality common">●</i> 普通热狗 <span class="en">Common</span></span><b>$5</b><span class="stock">库存 4 <span class="en">Stock 4</span></span></div>
+              <div class="buy-foot">售罄行灰掉并写「售罄」；打烊时整张菜单显示「打烊中」<span class="en-block">Grey out sold-out rows; closed shows "Closed"</span></div>
+            </div>
+            <div class="feed seller-feed"><span class="feed-label">摊主客户端 <span class="en">SELLER</span></span>玩家 张三 买了 稀有热狗 ×1 · <b>+$9</b> 现金<span class="en-block">Player Zhang San bought Rare hotdog ×1 · +$9 cash</span></div>
+            <div class="feed buyer-feed"><span class="feed-label">买家客户端 <span class="en">BUYER</span></span>买到 稀有热狗 ×1 · <b>−$9</b> 现金<span class="en-block">Bought Rare hotdog ×1 · −$9 cash</span></div>
+            <div class="prompt"><kbd>ALT</kbd><span>购买热狗 <span class="en">Buy a hotdog</span><small>非摊主只看到购买选项</small></span></div>
+          </div>
+
+          <!-- ============ STEP 9 · 收摊推回 ============ -->
+          <div class="step-layer" data-step="9" aria-label="第 9 步：收摊与推回">
+            <div class="actor umbrella-actor s9-umbrella" id="packing-umbrella"><svg viewBox="0 0 320 140" aria-hidden="true"><use href="#umbrella"></use></svg></div>
+            <div class="actor cart-actor s9-cart" id="packing-cart">
+              <div class="w3d" id="packing-text-1">收摊中…<span class="en-block">Packing up…</span></div>
+              <div class="w3d" id="packing-text-2">推回租赁点 · [G] 放下并结算<span class="en-block">Push back to the rental point · [G] Drop and settle</span></div>
+              <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+              <div class="motion-lines" aria-hidden="true"><i></i><i></i><i></i></div>
+            </div>
+            <div class="return-zone" id="return-zone"></div>
+            <div class="ground-label return-label">归还区 <span class="en">Return zone</span><span class="return-sub">[G] 放下并结算</span></div>
+            <div class="route-arrow s9-route" style="color:#ffb547" aria-hidden="true"><svg viewBox="0 0 120 40"><use href="#arrow"></use></svg></div>
+            <div class="hud">
+              <div class="hud-title"><span class="dot amber"></span><span class="packing-title-1">收摊中 <span class="en">PACKING</span></span><span class="packing-title-2">推回租赁点 <span class="en">PUSH BACK</span></span></div>
+              <div class="hud-row"><span>成品</span><b>0/30</b></div>
+              <div class="hud-row"><span>原料</span><b>0</b></div>
+              <div class="hud-row"><span>已售</span><b>$174</b></div>
+              <div class="hud-row"><span>押金</span><b>$250 · 托管中</b></div>
+              <div class="hud-row"><span>剩余</span><b>54:00</b></div>
+            </div>
+            <div class="prompt packing-prompt-1"><span>收摊动画 1.5s… <span class="en">Packing animation…</span></span></div>
+            <div class="prompt packing-prompt-2"><kbd>G</kbd><span>放下并结算 <span class="en">Drop and settle</span><small>归还区 · Return zone</small></span></div>
+            <div class="phase-strip packing-strip">
+              <span class="packing-step-1 active">收起推车 <span class="en">Pack up</span></span>
+              <span class="packing-step-2 active">推回租赁点 <span class="en">Push back</span></span>
+              <i>→</i><span>归还区 <span class="en">Return zone</span></span>
+            </div>
+          </div>
+
+          <!-- ============ STEP 10 · 结算回执 ============ -->
+          <div class="step-layer" data-step="10" aria-label="第 10 步：结算回执">
+            <div class="screen-dim-strong"></div>
+            <div class="actor cart-actor s10-cart">
+              <div class="w3d">已结算<span class="en-block">Settled</span></div>
+              <svg class="cart-svg" viewBox="0 0 320 240" aria-hidden="true"><use href="#cart"></use></svg>
+            </div>
+            <div class="receipt-wrap" id="receipt-wrap">
+              <div class="receipt nui-panel" id="receipt">
+                <div class="receipt-head">
+                  <div>
+                    <div class="receipt-kicker">结算回执 <span class="en">Shift Receipt</span></div>
+                    <div class="receipt-title">本次营业账单 <span class="mono">#HD-1042</span><span class="en-block">Shift Receipt #HD-1042</span></div>
+                  </div>
+                  <div class="settled-badge">已结算 <span class="en">Settled</span></div>
+                </div>
+                <div class="receipt-time">起租 14:02 · 还车 14:08 · 计费 6 分钟<span class="en-block">Started 14:02 · Returned 14:08 · 6 min billed</span></div>
+                <div class="receipt-net-top"><span>净额 <span class="en">NET</span></span><b>+$388</b></div>
+                <button class="btn receipt-toggle" type="button" data-action="toggle-receipt" aria-expanded="false" aria-controls="receipt-breakdown">
+                  <span class="toggle-label">点开明细 <span class="en">Show breakdown</span></span>
+                  <span class="toggle-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="receipt-breakdown" id="receipt-breakdown">
+                  <div class="receipt-section-label">六类明细 <span class="en">Six line items</span></div>
+                  <div class="receipt-row" style="--i:0"><span>押金退回（银行）<span class="en-block">Deposit refund (bank)</span></span><b class="plus">+$250</b></div>
+                  <div class="receipt-row" style="--i:1"><span>租金 6 分钟 × $6/分钟<span class="en-block">Rent 6 min × $6/min</span></span><b class="minus">−$36</b></div>
+                  <div class="receipt-row" style="--i:2"><span>售出（已付现）<span class="en-block">Sold (paid in cash)</span></span><b class="plus">+$174</b></div>
+                  <div class="receipt-row" style="--i:3"><span>成品回收 0 份<span class="en-block">Unsold hotdogs recovered 0</span></span><b class="zero">+$0</b></div>
+                  <div class="receipt-row" style="--i:4"><span>原料回收 0 份<span class="en-block">Unused ingredients recovered 0</span></span><b class="zero">+$0</b></div>
+                  <div class="receipt-row" style="--i:5"><span>营业税 0%（未启用）<span class="en-block">Sales tax 0% (disabled)</span></span><b class="zero">−$0</b></div>
+                  <div class="receipt-sum" style="--i:6">
+                    <span>分项之和 <span class="en">Sum</span></span>
+                    <span class="sum-calc">250 − 36 + 174 + 0 + 0 − 0 = <b>+388</b></span>
+                  </div>
+                  <div class="receipt-net"><span>净额 <span class="en">NET</span></span><b>+$388</b></div>
+                  <div class="receipt-footnote">售出所得已在每笔成交时以现金支付<span class="en-block">Sales were paid in cash at each transaction.</span></div>
+                  <div class="receipt-recon">
+                    <div class="recon-title">对账口径 <span class="en">Reconciliation</span></div>
+                    <div class="recon-row"><span>本次退回银行 <span class="en">Refunded to bank</span></span><b>+$214</b></div>
+                    <div class="recon-row"><span>本班净赚 <span class="en">Shift profit</span></span><b>+$138</b></div>
+                    <div class="recon-row"><span>资金回到手里 <span class="en">Cash returned</span></span><b>+$388</b></div>
+                    <div class="recon-note">现金 +$174 · 银行 +$214<span class="en-block">Cash +$174 · Bank +$214</span></div>
+                  </div>
+                </div>
+                <div class="receipt-actions">
+                  <button class="btn ghost" type="button" data-action="close-receipt">关闭 <span class="en">Close</span></button>
+                </div>
+                <div class="receipt-toast" id="receipt-toast">已结算 · 金额未重复变动<span class="en-block">Settled · no duplicate payout</span></div>
+              </div>
+              <div class="after-close nui-panel">
+                <div class="after-close-title">账单已关闭 <span class="en">RECEIPT CLOSED</span></div>
+                <p>回到租赁点后仍可回看上一张账单，不需要重新结算。</p>
+                <button class="btn primary" type="button" data-action="reopen-receipt"><kbd>ALT</kbd> 查看上次账单 <span class="en">View last receipt</span></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mock-watermark">UX MOCK · 非游戏实拍</div>
+        </div>
+
+        <div class="demo-bar">
+          <span class="demo-bar-label">演示控制 <span class="en">Demo controls</span></span>
+          <div class="demo-bar-actions" id="demo-controls"></div>
+        </div>
+        <p class="screen-caption" id="screen-caption"></p>
+      </div>
+
+      <aside class="side">
+        <section class="card" aria-labelledby="hears-title">
+          <div class="card-head">
+            <h2 id="hears-title">玩家听到 <span class="en">WHAT THE PLAYER HEARS</span></h2>
+            <span class="card-tag">静音演示</span>
+          </div>
+          <ul class="sound-list" id="sound-list"></ul>
+          <p class="card-foot">音效名来自规格 §7 清单；本页不播放音频。</p>
+        </section>
+
+        <section class="card" aria-labelledby="accept-title">
+          <div class="card-head">
+            <h2 id="accept-title">这一步的验收编号 <span class="en">ACCEPTANCE IDS</span></h2>
+          </div>
+          <div class="accept-chips" id="accept-chips"></div>
+          <p class="card-foot">本步应满足项，不代表当前已通过。当前实机只完成 S1；S2–S6 未开工。</p>
+          <a class="card-link" href="#acceptance">查看 A1–A22 验收对照表 ↓</a>
+        </section>
+      </aside>
+    </div>
+
+    <div class="stage-nav">
+      <button class="btn nav-btn" type="button" id="prev-btn">← 上一步</button>
+      <div class="stage-nav-center">
+        <span id="step-counter">第 1 / 10 步</span>
+        <span class="kbd-hint">键盘 ← → 切换 · 也可点顶部步骤条</span>
+      </div>
+      <button class="btn primary nav-btn" type="button" id="next-btn"><span id="next-label">下一步 ▶</span></button>
+    </div>
+  </section>
+</main>
+
+<section class="acceptance" id="acceptance">
+  <div class="acceptance-head">
+    <div>
+      <div class="section-kicker">交付对照 <span class="en">Delivery check</span></div>
+      <h2>A1–A22 验收对照表</h2>
+      <p>依据 <code>10-hotdog-ux-spec.md</code> §10.1；片归属依据 <code>11-hotdog-dev-plan.md</code> §5。状态按真实进度填写，未美化。</p>
+    </div>
+    <div class="acceptance-stats" aria-label="状态汇总">
+      <div class="stat"><b>0</b><span>已实现</span></div>
+      <div class="stat partial"><b>2</b><span>部分</span></div>
+      <div class="stat todo"><b>20</b><span>未实现</span></div>
+    </div>
+  </div>
+
+  <div class="acceptance-note">
+    <strong>S1（租借原语）已完成：</strong>押金会话、会话恢复、幂等已实现并测试。S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口都还没开工。
+  </div>
+
+  <div class="legend">
+    <span><b class="q-exotic">★</b> 异域 / Exotic</span>
+    <span><b class="q-rare">◆</b> 稀有 / Rare</span>
+    <span><b class="q-common">●</b> 普通 / Common</span>
+    <span>金额：<b class="plus">+</b> 收入 · <b class="minus">−</b> 支出</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>验收标准（§10.1）</th>
+          <th>属于哪一片（§5）</th>
+          <th>当前状态</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr id="a1"><td class="id"><a href="#a1">A1</a></td><td>每个交互点都有可见提示，不存在“走过去没反应”</td><td><span class="slice">S2</span><span class="slice">S4</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a2"><td class="id"><a href="#a2">A2</a></td><td>每个阶段都有阶段名和下一步动作</td><td><span class="slice">S2</span><span class="slice">S4</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a3"><td class="id"><a href="#a3">A3</a></td><td>每一笔钱的变化都有即时 toast 或账单行</td><td><span class="slice">S2</span><span class="slice">S4</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a4"><td class="id"><a href="#a4">A4</a></td><td>每个失败分支都有人话原因和下一步</td><td><span class="slice">S2</span><span class="slice">S4</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a5"><td class="id"><a href="#a5">A5</a></td><td>关键动作有动画和音效，不瞬移</td><td><span class="slice">S2</span><span class="slice">S3</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a6"><td class="id"><a href="#a6">A6</a></td><td>账单至少六类明细，关闭后可回看</td><td><span class="slice">S5</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a7"><td class="id"><a href="#a7">A7</a></td><td>摊位 HUD 常驻显示成品、原料、顾客、已售、押金、时间</td><td><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a8"><td class="id"><a href="#a8">A8</a></td><td>顾客报价有耐心倒计时，接受/拒绝/无视都有反馈</td><td><span class="slice">S4</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a9"><td class="id"><a href="#a9">A9</a></td><td>做热狗完成立刻显示品质；取消不扣原料</td><td><span class="slice">S3</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a10"><td class="id"><a href="#a10">A10</a></td><td>玩家顾客能通过 target 购买；售罄/打烊/摊主不在有明确状态</td><td><span class="slice">S4</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a11"><td class="id"><a href="#a11">A11</a></td><td>摆放预览红/绿 + 具体原因；合法位置能一次成功</td><td><span class="slice">S0</span><span class="slice">S2</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a12"><td class="id"><a href="#a12">A12</a></td><td>断线重连后摊位还在、押金状态可见；超时/重启有账单</td><td><span class="slice">S1</span><span class="slice">S6</span></td><td><span class="status status-partial">部分</span><span class="status-detail">押金会话与会话恢复已实现（S1），摊位实体未做（S2）</span></td></tr>
+        <tr id="a13"><td class="id"><a href="#a13">A13</a></td><td>超时 T-15/T-5/T-1 提醒；死亡/被抢/被捕/推车被撞有提示</td><td><span class="slice">S0</span><span class="slice">S2</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a14"><td class="id"><a href="#a14">A14</a></td><td>频率/距离校验失败有可见反馈，不允许静默</td><td><span class="slice">S4</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a15"><td class="id"><a href="#a15">A15</a></td><td>中英文案完整、长度适配、不截断</td><td><span class="slice">S4</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a16"><td class="id"><a href="#a16">A16</a></td><td>颜色不是唯一信息载体</td><td><span class="slice">S1</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a17"><td class="id"><a href="#a17">A17</a></td><td>HUD 不与 qb-hud 重叠；右侧列表不同时出现</td><td><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a18"><td class="id"><a href="#a18">A18</a></td><td>同屏 NPC 顾客 ≤ 1；不叠人；下一位在前一位离开后出现</td><td><span class="slice">S4</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a19"><td class="id"><a href="#a19">A19</a></td><td>账单数字可对账；分项之和 = 净额；售出不重复计入</td><td><span class="slice">S5</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a20"><td class="id"><a href="#a20">A20</a></td><td>重复结算/重复租借/重复成交幂等，不重复打钱</td><td><span class="slice">S5</span></td><td><span class="status status-partial">部分</span><span class="status-detail">押金会话幂等已实现并测试（S1）</span></td></tr>
+        <tr id="a21"><td class="id"><a href="#a21">A21</a></td><td>手机任务 App 的阶段文案与 HUD 一致；完成/失败/挂起都有条目</td><td><span class="slice">S1</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+        <tr id="a22"><td class="id"><a href="#a22">A22</a></td><td>非车主/路人看到正确的只读状态，不会误触管理</td><td><span class="slice">S1</span><span class="slice">S6</span></td><td><span class="status status-todo">未实现</span><span class="status-detail">S2 摊位实体 / S3 小游戏 / S4 顾客 / S5 账单 / S6 UX 收口 都还没开工</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="acceptance-foot">
+    <p>“未实现”指对应分片尚未开工，不是指本演示无法播放。本页所有画面为 HTML 模拟，数据写死。</p>
+    <p>状态汇总：22 项中 0 项已实现、2 项部分、20 项未实现。A12 与 A20 的已完成部分都属于 S1。</p>
+  </div>
+</section>
+
+<footer class="page-footer">
+  <div><strong>依据：</strong><code>docs/plan/jobs-content/10-hotdog-ux-spec.md</code> §3 / §4 / §6 / §10.1 · <code>11-hotdog-dev-plan.md</code> §5 · <code>12-hotdog-coordinates.md</code> S0</div>
+  <div>场景：Legion Square 东侧广场 · 租赁点/归还区 <span class="mono">215.0, -772.0, 30.5</span> · 摆位 A <span class="mono">215.8, -810.3, 30.7</span>（真机已验证）</div>
+  <div class="footer-note">单文件离线 HTML；不引用 CDN、外部 JS 或外部字体。画面是 UX 演示，不是游戏内实拍；当前实机只完成 S1（租借原语）。</div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var STEPS = [
+    {
+      n: 1,
+      state: 'L=IDLE · 任务可接取',
+      title: '任务列表 / 接单',
+      titleEn: 'Task list / Accept the job',
+      rail: '任务列表',
+      caption: '手机任务 App 只保留一条进行中条目。接取后任务名固定为「热狗摊贩」，下一步目标改为「租推车并推到摊位」；押金规则在扣钱之前说清。',
+      hears: [
+        { name: '—', meta: '本步无规格指定音效', trigger: '任务 App 的 UI 音不在本规格验收范围' }
+      ],
+      accepts: ['A1', 'A2', 'A15', 'A21']
+    },
+    {
+      n: 2,
+      state: 'L=RENT_MENU → CART_FREE',
+      title: '租赁点 · 3D 提示',
+      titleEn: 'Rental point · 3D prompt',
+      rail: '租赁点',
+      caption: '扣款前把押金、租金、原料、上限、时长五件事说全；确认后银行 −$250，押金进入托管。租赁点坐标 215.0, -772.0, 30.5（S0 渲染确认）。',
+      hears: [
+        { name: 'tick', meta: '本地 · 0.25', trigger: '打开租赁菜单' },
+        { name: 'BellStartEnd', meta: '本地 · 0.35', trigger: '确认租借成功' },
+        { name: 'Alert', meta: '本地 · 0.3', trigger: '余额不足 / 已有未结算会话（失败分支）' }
+      ],
+      accepts: ['A1', 'A3', 'A5', 'A12', 'A15', 'A19']
+    },
+    {
+      n: 3,
+      state: 'L=PUSHING',
+      title: '推车中',
+      titleEn: 'Pushing the cart',
+      rail: '推车中',
+      caption: '推车是物理动作：速度明显变慢、起步只播一次 RumbleStart、放下有 1.2 秒弯腰动作；画面只保留一个主行动「按 G 放下」。',
+      hears: [
+        { name: 'keys', meta: '本地 · 0.25', trigger: '抓住推车' },
+        { name: 'RumbleStart', meta: '本地 · 0.2 · 只播一次', trigger: '推车起步' },
+        { name: 'DoorClose', meta: '本地 · 0.3', trigger: '放下推车' }
+      ],
+      accepts: ['A1', 'A2', 'A5', 'A12', 'A15']
+    },
+    {
+      n: 4,
+      state: 'L=PLACING',
+      title: '摆放预览',
+      titleEn: 'Placement preview',
+      rail: '摆放预览',
+      caption: '预览阶段就能看到结果：绿框可放、红框给具体原因。不可用时按 E 也要有反馈，不能静默；红/绿不是唯一信息，文字给出方向。',
+      hears: [
+        { name: 'tick', meta: '本地 · 0.2', trigger: '红 → 绿（只在变化时）' },
+        { name: 'tooshort', meta: '本地 · 0.25', trigger: '绿 → 红（只在变化时）' },
+        { name: 'DoorClose', meta: '本地 · 0.35', trigger: '确认摆放成功' }
+      ],
+      accepts: ['A1', 'A4', 'A11', 'A15', 'A16']
+    },
+    {
+      n: 5,
+      state: 'L=DEPLOYED · B=CLOSED',
+      title: '已摆摊 · 未开卖',
+      titleEn: 'Deployed · Closed',
+      rail: '已摆摊',
+      caption: '开卖前 HUD 六项常驻：成品、原料、顾客、已售、押金、剩余时间。成品为 0 时按 G 会被拒绝并提示「还没有成品，先按 E 做几份热狗」。',
+      hears: [
+        { name: 'BellStartEnd', meta: '世界声 · ≤20 m · 0.35', trigger: '开卖成功' },
+        { name: 'Alert', meta: '本地 · 0.25', trigger: '成品为 0 / 收摊打断（失败分支）' }
+      ],
+      accepts: ['A2', 'A3', 'A7', 'A12', 'A15']
+    },
+    {
+      n: 6,
+      state: 'A=COOKING',
+      title: '做热狗 · 小游戏',
+      titleEn: 'Cooking · KeyMinigame',
+      rail: '做热狗',
+      caption: 'KeyMinigame(10) 只回 {quit, faults}；服务端按 faults 映射品质。完成立刻用 toast + 声音告诉玩家，不等结算；Esc 退出不扣原料。',
+      hears: [
+        { name: 'deepfried', meta: '本地 · 0.3', trigger: '开始做热狗' },
+        { name: 'BellStartEnd', meta: '本地 · 0.35', trigger: '0 失误 → 异域', faults: 0 },
+        { name: 'Shop', meta: '本地 · 0.35', trigger: '1 失误 → 稀有', faults: 1 },
+        { name: 'tick', meta: '本地 · 0.25', trigger: '≥2 失误 → 普通', faults: 2 },
+        { name: 'tooshort', meta: '本地 · 0.2', trigger: 'Esc 取消，不扣原料' }
+      ],
+      accepts: ['A4', 'A5', 'A7', 'A9', 'A15']
+    },
+    {
+      n: 7,
+      state: 'B=OPEN · C=QUOTE',
+      title: '开卖 + NPC 顾客',
+      titleEn: 'Open · NPC customer',
+      rail: 'NPC 顾客',
+      caption: '报价把「卖什么、几份、多少钱、还剩多久」说全。Y 成交 / N 拒绝 / Esc 回到等待；无视到 0 秒会离开。最后 5 秒变红并播 hazard_tick。',
+      hears: [
+        { name: 'doorbell', meta: '世界声 · 25 m · 0.3', trigger: '顾客生成' },
+        { name: 'tick', meta: '本地 · 0.2 / 0.25', trigger: '顾客到达 / 报价打开' },
+        { name: 'hazard_tick', meta: '本地 · 每秒 1 次 · 最多 5 次', trigger: '耐心 < 5s' },
+        { name: 'Shop', meta: '本地 · 0.35', trigger: 'Y 成交' },
+        { name: 'tooshort', meta: '本地 · 0.2', trigger: 'N 拒绝' },
+        { name: 'Alert', meta: '本地 · 0.2', trigger: '无视离开' }
+      ],
+      accepts: ['A1', 'A3', 'A4', 'A5', 'A7', 'A8', 'A15', 'A18']
+    },
+    {
+      n: 8,
+      state: 'P=BROWSING / BUYING',
+      title: '玩家顾客 · ALT 菜单',
+      titleEn: 'Player customer · ALT menu',
+      rail: '玩家顾客',
+      caption: '玩家顾客通过 ALT target 购买；三档价格、库存、售罄/打烊/摊主不在都要有字。买卖双方金额对称、方向相反；非摊主不能管理。',
+      hears: [
+        { name: 'Shop', meta: '本地 · 0.3（买家） / 0.35（摊主）', trigger: '购买成功' },
+        { name: 'tooshort', meta: '本地 · 0.2', trigger: '售罄 / 库存竞态' }
+      ],
+      accepts: ['A3', 'A4', 'A10', 'A15', 'A16', 'A22']
+    },
+    {
+      n: 9,
+      state: 'L=PACKING → PUSHING（返回）',
+      title: '收摊 · 推回',
+      titleEn: 'Packing · Push back',
+      rail: '收摊推回',
+      caption: '收摊不是菜单里的「结束」：先播 1.5 秒收摊动画，自动接回推车，再推回租赁点；在归还区按 G 才进入归还菜单。',
+      hears: [
+        { name: 'DoorClose', meta: '本地 · 0.35', trigger: '收起推车' },
+        { name: 'BellStartEnd', meta: '世界声 · 0.3', trigger: '进入归还区' },
+        { name: 'Shop', meta: '本地 · 0.35', trigger: '确认结算' }
+      ],
+      accepts: ['A1', 'A2', 'A5', 'A6', 'A12', 'A15']
+    },
+    {
+      n: 10,
+      state: 'L=SETTLING → SETTLED',
+      title: '结算回执',
+      titleEn: 'Settlement receipt',
+      rail: '结算回执',
+      caption: '账单六类逐行；分项之和 = 净额；售出标「已付现」，不重复计入。关闭后仍可在租赁点回看；重复结算不重复打钱。',
+      hears: [
+        { name: 'Shop', meta: '本地 · 0.35', trigger: '结算成功' },
+        { name: 'tick', meta: '本地 · 0.2', trigger: '账单打开' },
+        { name: 'Alert', meta: '本地 · 0.3', trigger: '结算失败（失败分支）' }
+      ],
+      accepts: ['A3', 'A6', 'A15', 'A16', 'A19', 'A20']
+    }
+  ];
+
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+  var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+
+  var state = {
+    step: 1,
+    accepted: false,
+    rented: false,
+    placement: 'green',
+    faults: 0,
+    quote: 'open',
+    quoteTimer: null,
+    packingTimer: null,
+    receiptOpen: false,
+    receiptClosed: false,
+    settledAgain: false
+  };
+
+  var els = {
+    rail: $('#step-rail'),
+    progress: $('#progress-track'),
+    soundList: $('#sound-list'),
+    acceptChips: $('#accept-chips'),
+    caption: $('#screen-caption'),
+    demoControls: $('#demo-controls'),
+    kicker: $('#stage-kicker'),
+    titleZh: $('#stage-title-zh'),
+    titleEn: $('#stage-title-en'),
+    titleText: $('#stage-title-text'),
+    stepCounter: $('#step-counter'),
+    stepCounterTop: $('#step-counter-top'),
+    progressPct: $('#progress-pct'),
+    prev: $('#prev-btn'),
+    next: $('#next-btn'),
+    nextLabel: $('#next-label'),
+    live: $('#live')
+  };
+
+  /* ---------- build rail + progress ---------- */
+  STEPS.forEach(function (s) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('data-step', String(s.n));
+    b.innerHTML = '<span class="num">' + String(s.n).padStart(2, '0') + '</span><span>' + s.rail + '</span>';
+    b.addEventListener('click', function () { goToStep(s.n); });
+    els.rail.appendChild(b);
+
+    var seg = document.createElement('span');
+    seg.className = 'progress-seg';
+    seg.setAttribute('data-step', String(s.n));
+    els.progress.appendChild(seg);
+  });
+
+  /* ---------- renderers ---------- */
+  function renderSounds(items) {
+    els.soundList.innerHTML = items.map(function (it) {
+      var faultAttr = (it.faults !== undefined && it.faults !== null) ? ' data-faults="' + it.faults + '"' : '';
+      return '<li class="sound-item"' + faultAttr + '>' +
+        '<div class="sound-top"><code>' + it.name + '</code><span class="sound-meta">' + it.meta + '</span></div>' +
+        '<div class="sound-trigger">' + it.trigger + '</div>' +
+        '</li>';
+    }).join('');
+    if (state.step === 6) updateSoundHighlight();
+  }
+
+  function renderAccepts(ids) {
+    els.acceptChips.innerHTML = ids.map(function (id) {
+      return '<a class="accept-chip" href="#' + id.toLowerCase() + '" title="在对照表中查看 ' + id + '">' + id + '</a>';
+    }).join('');
+  }
+
+  function renderDemoControls(n) {
+    var html = '';
+    if (n === 1) {
+      html = state.accepted
+        ? '<button class="mini-btn" type="button" disabled>已接取 / Accepted</button><span class="demo-hint">任务条目已变为「租推车并推到摊位」。</span>'
+        : '<button class="mini-btn" type="button" data-action="accept-task">▶ 接取任务</button><span class="demo-hint">在手机里点「接取任务」也可以。</span>';
+    } else if (n === 2) {
+      html = state.rented
+        ? '<button class="mini-btn" type="button" disabled>已租借 / Rented</button><button class="mini-btn" type="button" data-action="rent-reset">↺ 重置本步</button>'
+        : '<button class="mini-btn" type="button" data-action="rent-confirm">▶ 演示确认租借（扣 $250）</button><button class="mini-btn" type="button" data-action="rent-reset">↺ 重置本步</button>';
+    } else if (n === 3) {
+      html = '<span class="demo-hint">推车时不能做热狗、不能开卖；到绿框再按 G。</span>';
+    } else if (n === 4) {
+      html = '<button class="mini-btn" type="button" data-placement="green" aria-pressed="' + (state.placement === 'green') + '">绿框 · 可放</button>' +
+        '<button class="mini-btn" type="button" data-placement="red" aria-pressed="' + (state.placement === 'red') + '">红框 · 不可放</button>' +
+        '<span class="demo-hint">切换两种摆放预览；红框必须给具体原因。</span>';
+    } else if (n === 5) {
+      html = '<span class="demo-hint">成品为 0：先按 E 做热狗，再按 G 开卖。</span>';
+    } else if (n === 6) {
+      html = [0, 1, 2].map(function (f) {
+        var label = f === 0 ? '0 失误 · 异域' : (f === 1 ? '1 失误 · 稀有' : '≥2 失误 · 普通');
+        return '<button class="mini-btn" type="button" data-faults="' + f + '" aria-pressed="' + (state.faults === f) + '">' + label + '</button>';
+      }).join('') + '<span class="demo-hint">完成立刻出品质；Esc 退出不扣原料。</span>';
+    } else if (n === 7) {
+      html = '<button class="mini-btn" type="button" data-action="quote-timeout">▶ 演示耐心耗尽（加速）</button>' +
+        '<button class="mini-btn" type="button" data-action="quote-reset">↺ 重置本步</button>' +
+        '<span class="demo-hint">也可以直接点面板里的 Y 成交 / N 拒绝。</span>';
+    } else if (n === 8) {
+      html = '<span class="demo-hint">非摊主只看到购买选项；售罄行灰掉并写「售罄」。</span>';
+    } else if (n === 9) {
+      html = '<button class="mini-btn" type="button" data-action="replay-packing">↻ 重播收摊动画</button><span class="demo-hint">自动播放：收摊 1.5s → 推回租赁点。</span>';
+    } else if (n === 10) {
+      html = '<button class="mini-btn" type="button" data-action="settle-again">↻ 再结算一次（演示 A20）</button>' +
+        '<button class="mini-btn" type="button" data-action="reset-receipt">↺ 重置本步</button>' +
+        '<span class="demo-hint">在回执里点「点开明细」查看六行；再点一次收起。</span>';
+    }
+    els.demoControls.innerHTML = html;
+  }
+
+  /* ---------- navigation ---------- */
+  function goToStep(n) {
+    n = Math.max(1, Math.min(10, Number(n) || 1));
+    state.step = n;
+
+    $$('.step-layer').forEach(function (el) {
+      el.classList.toggle('active', Number(el.getAttribute('data-step')) === n);
+    });
+    $$('#step-rail button').forEach(function (b) {
+      var bn = Number(b.getAttribute('data-step'));
+      b.classList.toggle('active', bn === n);
+      b.classList.toggle('done', bn < n);
+    });
+    $$('.progress-seg').forEach(function (seg) {
+      var sn = Number(seg.getAttribute('data-step'));
+      seg.classList.toggle('active', sn === n);
+      seg.classList.toggle('done', sn < n);
+    });
+
+    var s = STEPS[n - 1];
+    els.kicker.textContent = s.state;
+    els.titleText.textContent = s.title;
+    els.titleEn.textContent = s.titleEn;
+    els.caption.textContent = s.caption;
+    els.stepCounter.textContent = '第 ' + n + ' / 10 步';
+    els.stepCounterTop.textContent = '第 ' + n + ' 步 / 共 10 步';
+    els.progressPct.textContent = (n * 10) + '%';
+    els.progress.setAttribute('aria-valuenow', String(n));
+    els.live.textContent = '第 ' + n + ' 步：' + s.title;
+
+    renderSounds(s.hears);
+    renderAccepts(s.accepts);
+    renderDemoControls(n);
+
+    els.prev.disabled = n === 1;
+    els.nextLabel.textContent = n === 10 ? '再看一遍 ↺' : '下一步 ▶';
+
+    if (state.quoteTimer && n !== 7) {
+      clearInterval(state.quoteTimer);
+      state.quoteTimer = null;
+    }
+    if (state.packingTimer) {
+      clearTimeout(state.packingTimer);
+      state.packingTimer = null;
+    }
+    if (n === 4) setPlacement(state.placement);
+    if (n === 6) setFaults(state.faults);
+    if (n === 7) resetQuote();
+    if (n === 9) startPacking();
+
+    try { history.replaceState(null, '', '#step-' + n); } catch (e) { /* file:// may refuse */ }
+  }
+
+  /* ---------- step 1: accept task ---------- */
+  function acceptTask() {
+    if (state.accepted) return;
+    state.accepted = true;
+    $('.step-layer[data-step="1"]').classList.add('accepted');
+    var phoneBtn = $('#accept-task');
+    if (phoneBtn) {
+      phoneBtn.disabled = true;
+      phoneBtn.innerHTML = '已接取 <span class="en">Accepted</span>';
+    }
+    renderDemoControls(1);
+  }
+
+  /* ---------- step 2: rent confirm ---------- */
+  function rentConfirm() {
+    if (state.rented) return;
+    state.rented = true;
+    var layer = $('.step-layer[data-step="2"]');
+    layer.classList.add('confirmed');
+    var btn = layer.querySelector('[data-action="rent-confirm"]');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '已租借 <span class="en">Rented</span>';
+    }
+    var toast = layer.querySelector('.rent-toast');
+    if (toast) toast.classList.add('show');
+    renderDemoControls(2);
+  }
+
+  function resetRent() {
+    state.rented = false;
+    var layer = $('.step-layer[data-step="2"]');
+    if (!layer) return;
+    layer.classList.remove('confirmed');
+    var btn = layer.querySelector('[data-action="rent-confirm"]');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '确认租借 <span class="en">Confirm rental</span>';
+    }
+    var toast = layer.querySelector('.rent-toast');
+    if (toast) toast.classList.remove('show');
+    if (state.step === 2) renderDemoControls(2);
+  }
+
+  /* ---------- step 4: placement ---------- */
+  function setPlacement(mode) {
+    state.placement = mode === 'red' ? 'red' : 'green';
+    var layer = $('.step-layer[data-step="4"]');
+    if (layer) {
+      $$('.place-state', layer).forEach(function (el) {
+        el.classList.toggle('active', el.getAttribute('data-place') === state.placement);
+      });
+    }
+    $$('#demo-controls [data-placement]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-placement') === state.placement));
+    });
+  }
+
+  /* ---------- step 6: cook result ---------- */
+  function setFaults(n) {
+    n = Number(n) || 0;
+    if (n < 0) n = 0;
+    if (n > 2) n = 2;
+    state.faults = n;
+
+    $$('#mg-keys .mg-key').forEach(function (k, i) {
+      k.classList.remove('hit', 'miss');
+      k.classList.add(i < n ? 'miss' : 'hit');
+    });
+    $$('.quality-toast').forEach(function (t) {
+      t.classList.toggle('show', Number(t.getAttribute('data-faults')) === n);
+    });
+
+    var map = {
+      0: { stock: '1/30', breakdown: '异域 1 · 稀有 0 · 普通 0' },
+      1: { stock: '1/30', breakdown: '异域 0 · 稀有 1 · 普通 0' },
+      2: { stock: '1/30', breakdown: '异域 0 · 稀有 0 · 普通 1' }
+    };
+    var m = map[n];
+    if ($('#cook-stock')) $('#cook-stock').textContent = m.stock;
+    if ($('#cook-breakdown')) $('#cook-breakdown').textContent = m.breakdown;
+    if ($('#cook-ingredients')) $('#cook-ingredients').textContent = '29';
+
+    $$('#demo-controls [data-faults]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-faults')) === n));
+    });
+    updateSoundHighlight();
+  }
+
+  function updateSoundHighlight() {
+    $$('#sound-list .sound-item[data-faults]').forEach(function (el) {
+      el.classList.toggle('active', Number(el.getAttribute('data-faults')) === state.faults);
+    });
+  }
+
+  /* ---------- step 7: quote ---------- */
+  function resetQuote() {
+    if (state.quoteTimer) {
+      clearInterval(state.quoteTimer);
+      state.quoteTimer = null;
+    }
+    state.quote = 'open';
+    var layer = $('.step-layer[data-step="7"]');
+    if (!layer) return;
+    layer.classList.remove('sold', 'declined', 'timeout');
+
+    var panel = $('#quote-panel');
+    if (panel) panel.classList.remove('hidden');
+    var success = $('#quote-success');
+    if (success) success.classList.remove('show');
+    var timeout = $('#quote-timeout');
+    if (timeout) timeout.classList.remove('show');
+
+    var customer = $('#quote-customer');
+    if (customer) customer.classList.remove('customer-leave');
+    var w3d = $('.customer-w3d');
+    if (w3d) w3d.style.display = '';
+
+    var sub = $('#customer-subtitle');
+    if (sub) { sub.innerHTML = ''; sub.classList.remove('show'); }
+
+    var patience = $('#patience');
+    if (patience) patience.classList.remove('danger');
+    var fill = $('#patience-fill');
+    if (fill) fill.style.width = '60%';
+    var ptext = $('#patience-text');
+    if (ptext) ptext.innerHTML = '耐心 12s <span class="en">Patience 12s</span>';
+    var cp = $('#customer-patience');
+    if (cp) cp.innerHTML = '耐心 12s <span class="en">Patience 12s</span>';
+
+    if ($('#quote-hud-stock')) $('#quote-hud-stock').textContent = '3/30';
+    if ($('#quote-hud-breakdown')) $('#quote-hud-breakdown').textContent = '异域 1 · 稀有 2 · 普通 0';
+    if ($('#quote-hud-customer')) $('#quote-hud-customer').textContent = '正在点单 · 12s';
+    if ($('#quote-hud-sold')) $('#quote-hud-sold').textContent = '0 份 · $0';
+  }
+
+  function closeQuotePanel() {
+    var panel = $('#quote-panel');
+    if (panel) panel.classList.add('hidden');
+    var w3d = $('.customer-w3d');
+    if (w3d) w3d.style.display = 'none';
+  }
+
+  function quoteAccept() {
+    if (state.quote !== 'open' && state.quote !== 'timing') return;
+    if (state.quoteTimer) {
+      clearInterval(state.quoteTimer);
+      state.quoteTimer = null;
+    }
+    state.quote = 'sold';
+    var layer = $('.step-layer[data-step="7"]');
+    layer.classList.add('sold');
+    closeQuotePanel();
+    var success = $('#quote-success');
+    if (success) success.classList.add('show');
+    var sub = $('#customer-subtitle');
+    if (sub) {
+      sub.innerHTML = '谢谢！<span class="en-block">Thanks!</span>';
+      sub.classList.add('show');
+    }
+    if ($('#quote-hud-stock')) $('#quote-hud-stock').textContent = '1/30';
+    if ($('#quote-hud-breakdown')) $('#quote-hud-breakdown').textContent = '异域 1 · 稀有 0 · 普通 0';
+    if ($('#quote-hud-customer')) $('#quote-hud-customer').textContent = '无';
+    if ($('#quote-hud-sold')) $('#quote-hud-sold').textContent = '2 份 · $18';
+  }
+
+  function quoteDecline() {
+    if (state.quote !== 'open' && state.quote !== 'timing') return;
+    if (state.quoteTimer) {
+      clearInterval(state.quoteTimer);
+      state.quoteTimer = null;
+    }
+    state.quote = 'declined';
+    var layer = $('.step-layer[data-step="7"]');
+    layer.classList.add('declined');
+    closeQuotePanel();
+    var sub = $('#customer-subtitle');
+    if (sub) {
+      sub.innerHTML = '那我去别家看看。<span class="en-block">I\'ll try somewhere else.</span>';
+      sub.classList.add('show');
+    }
+    var customer = $('#quote-customer');
+    if (customer) customer.classList.add('customer-leave');
+    if ($('#quote-hud-customer')) $('#quote-hud-customer').textContent = '无';
+  }
+
+  function startQuoteTimeoutDemo() {
+    resetQuote();
+    state.quote = 'timing';
+    var fill = $('#patience-fill');
+    var ptext = $('#patience-text');
+    var cp = $('#customer-patience');
+    var patience = $('#patience');
+    var remaining = 12;
+    var ticks = 40;
+    var dec = 12 / ticks;
+    state.quoteTimer = setInterval(function () {
+      remaining = Math.max(0, remaining - dec);
+      var pct = Math.max(0, Math.min(100, (remaining / 20) * 100));
+      if (fill) fill.style.width = pct + '%';
+      var secs = Math.ceil(remaining);
+      if (ptext) ptext.innerHTML = '耐心 ' + secs + 's <span class="en">Patience ' + secs + 's</span>';
+      if (cp) cp.innerHTML = '耐心 ' + secs + 's <span class="en">Patience ' + secs + 's</span>';
+      if (patience) patience.classList.toggle('danger', remaining <= 5);
+      if (remaining <= 0) {
+        clearInterval(state.quoteTimer);
+        state.quoteTimer = null;
+        state.quote = 'timeout';
+        var layer = $('.step-layer[data-step="7"]');
+        layer.classList.add('timeout');
+        closeQuotePanel();
+        var toast = $('#quote-timeout');
+        if (toast) toast.classList.add('show');
+        var customer = $('#quote-customer');
+        if (customer) customer.classList.add('customer-leave');
+        if ($('#quote-hud-customer')) $('#quote-hud-customer').textContent = '无';
+      }
+    }, 100);
+  }
+
+  /* ---------- step 9: packing sequence ---------- */
+  function startPacking() {
+    if (state.packingTimer) {
+      clearTimeout(state.packingTimer);
+      state.packingTimer = null;
+    }
+    var layer = $('.step-layer[data-step="9"]');
+    if (!layer) return;
+    layer.classList.remove('phase-2');
+    state.packingTimer = setTimeout(function () {
+      layer.classList.add('phase-2');
+      state.packingTimer = null;
+    }, 1400);
+  }
+
+  /* ---------- step 10: receipt ---------- */
+  function toggleReceipt() {
+    var receipt = $('#receipt');
+    if (!receipt) return;
+    var open = receipt.classList.toggle('open');
+    state.receiptOpen = open;
+    var btn = receipt.querySelector('[data-action="toggle-receipt"]');
+    if (btn) {
+      btn.setAttribute('aria-expanded', String(open));
+      var label = btn.querySelector('.toggle-label');
+      if (label) {
+        label.innerHTML = open
+          ? '收起明细 <span class="en">Hide breakdown</span>'
+          : '点开明细 <span class="en">Show breakdown</span>';
+      }
+    }
+  }
+
+  function closeReceipt() {
+    var wrap = $('#receipt-wrap');
+    if (wrap) wrap.classList.add('closed');
+    state.receiptClosed = true;
+  }
+
+  function reopenReceipt() {
+    var wrap = $('#receipt-wrap');
+    if (wrap) wrap.classList.remove('closed');
+    state.receiptClosed = false;
+  }
+
+  function settleAgain() {
+    reopenReceipt();
+    var receipt = $('#receipt');
+    if (!receipt) return;
+    receipt.classList.add('settled-again');
+    state.settledAgain = true;
+    var toast = $('#receipt-toast');
+    if (toast) toast.classList.add('show');
+  }
+
+  function resetReceipt() {
+    state.receiptOpen = false;
+    state.receiptClosed = false;
+    state.settledAgain = false;
+    var receipt = $('#receipt');
+    var wrap = $('#receipt-wrap');
+    if (receipt) {
+      receipt.classList.remove('open', 'settled-again');
+      receipt.scrollTop = 0;
+      var btn = receipt.querySelector('[data-action="toggle-receipt"]');
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        var label = btn.querySelector('.toggle-label');
+        if (label) label.innerHTML = '点开明细 <span class="en">Show breakdown</span>';
+      }
+    }
+    if (wrap) wrap.classList.remove('closed');
+    var toast = $('#receipt-toast');
+    if (toast) toast.classList.remove('show');
+    if (state.step === 10) renderDemoControls(10);
+  }
+
+  /* ---------- reset all ---------- */
+  function resetAll() {
+    state.accepted = false;
+    var l1 = $('.step-layer[data-step="1"]');
+    if (l1) l1.classList.remove('accepted');
+    var phoneBtn = $('#accept-task');
+    if (phoneBtn) {
+      phoneBtn.disabled = false;
+      phoneBtn.innerHTML = '接取任务 <span class="en">Accept</span>';
+    }
+
+    resetRent();
+    setPlacement('green');
+    setFaults(0);
+    resetQuote();
+    if (state.packingTimer) {
+      clearTimeout(state.packingTimer);
+      state.packingTimer = null;
+    }
+    var l9 = $('.step-layer[data-step="9"]');
+    if (l9) l9.classList.remove('phase-2');
+    resetReceipt();
+    goToStep(1);
+  }
+
+  /* ---------- event delegation ---------- */
+  document.addEventListener('click', function (e) {
+    var actionEl = e.target.closest('[data-action]');
+    if (actionEl) {
+      var action = actionEl.getAttribute('data-action');
+      if (action === 'accept-task') { acceptTask(); return; }
+      if (action === 'rent-confirm') { rentConfirm(); return; }
+      if (action === 'rent-cancel') { goToStep(1); return; }
+      if (action === 'rent-reset') { resetRent(); return; }
+      if (action === 'quote-accept') { quoteAccept(); return; }
+      if (action === 'quote-decline') { quoteDecline(); return; }
+      if (action === 'quote-timeout') { startQuoteTimeoutDemo(); return; }
+      if (action === 'quote-reset') { resetQuote(); return; }
+      if (action === 'replay-packing') { startPacking(); return; }
+      if (action === 'toggle-receipt') { toggleReceipt(); return; }
+      if (action === 'close-receipt') { closeReceipt(); return; }
+      if (action === 'reopen-receipt') { reopenReceipt(); return; }
+      if (action === 'settle-again') { settleAgain(); return; }
+      if (action === 'reset-receipt') { resetReceipt(); return; }
+      return;
+    }
+
+    var placeEl = e.target.closest('button[data-placement]');
+    if (placeEl) { setPlacement(placeEl.getAttribute('data-placement')); return; }
+
+    var faultEl = e.target.closest('button[data-faults]');
+    if (faultEl) { setFaults(Number(faultEl.getAttribute('data-faults'))); return; }
+  });
+
+  els.prev.addEventListener('click', function () {
+    if (state.step > 1) goToStep(state.step - 1);
+  });
+  els.next.addEventListener('click', function () {
+    if (state.step === 10) { resetAll(); return; }
+    goToStep(state.step + 1);
+  });
+  $('#reset-demo').addEventListener('click', resetAll);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    var tag = (e.target && e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (state.step < 10) goToStep(state.step + 1);
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (state.step > 1) goToStep(state.step - 1);
+      return;
+    }
+    if (e.key === 'Home') { e.preventDefault(); goToStep(1); return; }
+    if (e.key === 'End') { e.preventDefault(); goToStep(10); return; }
+
+    if (state.step === 7 && (state.quote === 'open' || state.quote === 'timing')) {
+      if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); quoteAccept(); }
+      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); quoteDecline(); }
+    }
+  });
+
+  /* ---------- boot ---------- */
+  var initial = 1;
+  var m = location.hash.match(/^#step-(\d+)$/);
+  if (m) initial = Number(m[1]);
+  goToStep(initial);
+})();
+</script>
+</body>
+</html>
