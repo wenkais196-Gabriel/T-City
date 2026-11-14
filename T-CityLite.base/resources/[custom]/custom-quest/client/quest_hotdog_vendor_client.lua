@@ -254,6 +254,46 @@ end
 -- 清理
 -- ==============================================================
 
+-- ==============================================================
+-- 顾客 ped：报价来了才出现在摊位旁，报价结束就删掉
+--
+-- 为什么由客户端生成：顾客是**表现**，不是权威状态。服务端已经决定了
+-- 「现在可以来一位」以及「这位要买什么、多少钱」；ped 只是把这件事画出来。
+-- 让服务端 spawn 会多一条实体生命周期要走注册表，而它一秒钟就不在了。
+-- ==============================================================
+
+local CUSTOMER_MODELS = { 'a_m_m_farmer_01', 'a_m_y_business_01', 'a_f_y_tourist_01' }
+
+---@return number|nil ped
+local function SpawnCustomerPed(boothCoords)
+    if type(boothCoords) ~= 'table' or type(boothCoords.x) ~= 'number' then return nil end
+
+    local model = joaat(CUSTOMER_MODELS[math.random(#CUSTOMER_MODELS)])
+    RequestModel(model)
+    local deadline = GetGameTimer() + 3000
+    while not NativeBool(HasModelLoaded(model)) and GetGameTimer() < deadline do
+        Wait(50)
+    end
+    if not NativeBool(HasModelLoaded(model)) then
+        SetModelAsNoLongerNeeded(model)
+        return nil
+    end
+
+    -- 站在摊位前 2.2 m 的随机方位，朝向摊主（不是朝向摊位：他是来跟人说话的）
+    local angle = math.rad(math.random(0, 359))
+    local x = boothCoords.x + math.cos(angle) * 2.2
+    local y = boothCoords.y + math.sin(angle) * 2.2
+    local ped = CreatePed(4, model, x, y, boothCoords.z, 0.0, true, true)
+    SetModelAsNoLongerNeeded(model)
+    if not ped or ped == 0 or not NativeBool(DoesEntityExist(ped)) then return nil end
+
+    SetEntityAsMissionEntity(ped, true, true)
+    FreezeEntityPosition(ped, true)
+    SetEntityInvincible(ped, true)
+    SetBlockingOfNonTemporaryEvents(ped, true)
+    pcall(function() TaskTurnPedToFaceEntity(ped, PlayerPedId(), 1500) end)
+    return ped
+end
 local function ClearOffer(reason)
     local offer = ActiveOffer
     ActiveOffer = nil
@@ -467,6 +507,23 @@ RegisterNetEvent('quest:client:vendorOffer', function(payload)
         npcOwned = payload.npcOwned == true or payload.npc_owned == true,
         localPed = nil,
     }
+
+    -- 生成 ped 必须在新线程里做：RequestModel 会 yield，而 Wait 不能在网络事件
+    -- 回调里直接调。生成完先确认「还是这一张报价」再挂上去，否则会把刚被替换掉的
+    -- 报价的 ped 挂到新报价上（然后两边都不会删）。
+    local wantOfferId = offerId
+    local boothCoords = CoordsFromPayload(payload, math.floor(NumberOr(payload.boothNetId, 0)))
+    CreateThread(function()
+        local ped = SpawnCustomerPed(boothCoords)
+        if not ped then return end
+        if not ActiveOffer or ActiveOffer.offerId ~= wantOfferId then
+            -- 报价已经换人/结束了：这份 ped 立刻删，别留一个没人管的 NPC 站街上
+            SetEntityAsMissionEntity(ped, true, true)
+            DeleteEntity(ped)
+            return
+        end
+        ActiveOffer.localPed = ped
+    end)
 end)
 
 -- ==============================================================

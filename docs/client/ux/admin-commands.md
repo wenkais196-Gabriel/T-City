@@ -272,11 +272,11 @@ review_by: 2027-02-28
 | `quest` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:386 |
 | `quest_client_test` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/tests/client/quest_client_test.lua:337 |
 | `quest_flow_test` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/tests/server/quest_flow_test.lua:323 |
-| `quest_hotdog_vendor_accept` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:953 |
-| `quest_hotdog_vendor_cook` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:948 |
-| `quest_hotdog_vendor_decline` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:958 |
-| `quest_hotdog_vendor_interact` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:943 |
-| `quest_hotdog_vendor_menu` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:963 |
+| `quest_hotdog_vendor_accept` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1010 |
+| `quest_hotdog_vendor_cook` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1005 |
+| `quest_hotdog_vendor_decline` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1015 |
+| `quest_hotdog_vendor_interact` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1000 |
+| `quest_hotdog_vendor_menu` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1020 |
 | `quest_reenode` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:430 |
 | `questrestore` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:330 |
 | `queststep` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1258 |
