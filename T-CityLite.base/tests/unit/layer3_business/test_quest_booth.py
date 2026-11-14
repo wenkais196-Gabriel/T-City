@@ -22,7 +22,7 @@ BOOTH = BASE / "resources/[custom]/custom-quest/server/quest_booth.lua"
 PROBE = Path(__file__).with_name("fixtures") / "booth_probe.lua"
 STEP_GATE = BASE / "resources/[custom]/custom-quest/server/quest_step_gate.lua"
 MANIFEST = BASE / "resources/[custom]/custom-quest/fxmanifest.lua"
-ROADS = BASE / "resources/[custom]/custom-quest/config/quests/hotdog_roads.lua"
+ROADS = BASE / "resources/[custom]/custom-quest/config/quests/hotdog_roads.json"
 
 LUA = shutil.which("lua5.4")
 
@@ -80,7 +80,7 @@ def test_booth_step_is_wired_into_the_validator_gate():
 def test_booth_files_are_declared_in_the_manifest():
     manifest = MANIFEST.read_text(encoding="utf-8")
     assert "server/quest_booth.lua" in manifest
-    assert "config/quests/hotdog_roads.lua" in manifest
+    assert "config/quests/hotdog_roads.json" in manifest
 
 
 def test_road_points_are_in_sync_with_the_cache():

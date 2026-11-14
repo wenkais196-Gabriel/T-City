@@ -120,10 +120,12 @@ end
 function QuestBooth.NearestRoadDistance(x, y)
     if type(x) ~= 'number' or type(y) ~= 'number' then return nil end
     if Roads == nil and not RoadLoadFailed then
-        local raw = LoadResourceFile(GetCurrentResourceName(), 'config/quests/hotdog_roads.lua')
+        local raw = LoadResourceFile(GetCurrentResourceName(), 'config/quests/hotdog_roads.json')
         if type(raw) == 'string' and raw ~= '' then
-            local chunk = load(raw, '@hotdog_roads.lua')
-            local ok, data = pcall(chunk)
+            -- 数据文件用 json.decode，**不**用 load()：那份文件是生成物，内容是坐标；
+            -- 用 load 执行从磁盘读回的字符串等于开一个「文件被替换就执行任意代码」的口子，
+            -- 而它本来只是一张点表。
+            local ok, data = pcall(json.decode, raw)
             if ok and type(data) == 'table' and type(data.points) == 'table' then
                 Roads = data
                 print(('[quest-booth] 🛣️ 路网点已加载：%d 个（%s 米半径）')
@@ -134,7 +136,7 @@ function QuestBooth.NearestRoadDistance(x, y)
             end
         else
             RoadLoadFailed = true
-            print('[quest-booth] ⚠️ 缺 config/quests/hotdog_roads.lua —— 先跑 tools/dev/booth_roads.py')
+            print('[quest-booth] ⚠️ 缺 config/quests/hotdog_roads.json —— 先跑 tools/dev/booth_roads.py')
         end
     end
     if Roads == nil then return nil end
