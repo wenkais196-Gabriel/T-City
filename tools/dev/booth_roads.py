@@ -106,35 +106,19 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="只比对现有产物是否与缓存一致")
     args = ap.parse_args()
 
-    # 先判缓存：load_points() 里是 sys.exit(1)（"缺数据"是一种**错误**），
-    # 但 --check 面对"数据不在"只能是"无法判定"，必须在加载前分流。
-    if args.check and not ROAD_CACHE.exists():
-        print(f"[check] SKIP 缺路网缓存：{ROAD_CACHE}")
-        return 2
+    if args.check:
+        # 复用 check()：write 与 verify 必须是同一份渲染逻辑，
+        # 否则「生成时用 A、校验时用 B」会让这个闸门变成装饰。
+        return check()
 
     cx, cy = (float(v) for v in args.center.split(","))
     pts = slice_points(load_points(), (cx, cy), args.radius)
     text = render(pts, (cx, cy), args.radius)
-    new_hash = hashlib.sha256(text.encode()).hexdigest()
-
-    if args.check:
-        if not ROAD_CACHE.exists():
-            # 缓存是 gitignored 的（.cache/），CI 里没有它。这时「产物过期」这件事
-            # **无法判定** —— 返回 2 让调用方跳过，而不是把「没数据」说成「不一致」。
-            print(f"[check] SKIP 缺路网缓存：{ROAD_CACHE}")
-            return 2
-        if not OUT.exists():
-            print(f"[check] 缺产物：{OUT}")
-            return 1
-        old = hashlib.sha256(OUT.read_text(encoding="utf-8").encode()).hexdigest()
-        if old != new_hash:
-            print("[check] 产物与路网缓存不一致 —— 需要重跑 tools/dev/booth_roads.py")
-            return 1
-        print(f"[check] OK 节点 {len(pts)} 个")
-        return 0
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(text, encoding="utf-8", newline="\n")
+    # 目标路径是模块级常量（仓库内的固定位置），不来自命令行、也不来自缓存内容，
+    # 所以这里不存在路径注入 —— NOSONAR 对的是"写入路径由外部输入拼接"那条规则。
+    OUT.write_text(text, encoding="utf-8", newline="\n")  # NOSONAR 固定目标路径
     print(f"[write] {OUT.relative_to(REPO)} 节点 {len(pts)} 个，{len(text)} 字节")
     return 0
 
