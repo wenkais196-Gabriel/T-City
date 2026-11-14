@@ -15,7 +15,24 @@ if not SOURCE then error('用法: lua5.4 rental_probe.lua <quest_rental.lua>') e
 
 QuestDB = { events = {}, LogEvent = function(cid, qid, ev, node, meta)
     table.insert(QuestDB.events, { cid = cid, qid = qid, ev = ev, node = node, meta = meta or {} })
-end, FindUnclosedRentals = function(cb) cb({}) end }
+end, FindUnclosedRentals = function(cb) cb({}) end,
+    -- 与生产同签名：写日志带回调。默认成功；用例里可以换成失败版验证回滚。
+    LogRentalEvent = function(cid, qid, ev, node, meta, cb)
+        table.insert(QuestDB.events, { cid = cid, qid = qid, ev = ev, node = node, meta = meta or {} })
+        if cb then cb(QuestDB.failWrites ~= true, QuestDB.failWrites and 0 or 1) end
+    end,
+    failWrites = false }
+-- FiveM 的 json 全局在 lua5.4 里不存在；这里给一个只认这几个字段的桩，
+-- 目的是验证「字符串形态的 metadata 也能被解出金额」，不是复刻解码器。
+json = { decode = function(text)
+    return {
+        deposit = tonumber((text or ''):match('"deposit":(%d+)')),
+        rate_per_min = tonumber((text or ''):match('"rate_per_min":(%d+)')) or 0,
+        grace_sec = tonumber((text or ''):match('"grace_sec":(%d+)')) or 0,
+        max_minutes = tonumber((text or ''):match('"max_minutes":(%d+)')) or 0,
+        started_at = tonumber((text or ''):match('"started_at":(%d+)')),
+    }
+end }
 AddEventHandler = function() end
 CreateThread = function() end     -- 启动扫描在探针里不跑
 Wait = function() end
@@ -124,6 +141,28 @@ check('grace_period_means_no_rent',
     ok9 and res9.minutes == 0 and res9.rent == 0 and res9.refund == 250,
     ('min=%s rent=%s refund=%s'):format(res9.minutes, res9.rent, res9.refund))
 
+
+-- 10. 日志落库失败 → 押金原路退回、不留会话（否则重启后永远退不了）
+QuestRental.Reset()
+QuestDB.failWrites = true
+local unlucky = makePlayer('cid-journal', 1000)
+local okJ = QuestRental.Open(unlucky, 'q', 'node', { deposit = 250, rate_per_min = 6, now = T0 })
+QuestDB.failWrites = false
+check('journal_failure_refunds_and_rolls_back',
+    okJ == true and not QuestRental.IsOpen('cid-journal') and unlucky.money.bank == 1000,
+    ('open=%s session=%s bank=%s'):format(tostring(okJ), tostring(QuestRental.IsOpen('cid-journal')), unlucky.money.bank))
+
+-- 11. 重启扫描能解 JSON 字符串形态的 metadata（oxmysql 版本差异）
+QuestRental.Reset()
+local queuedStr = QuestRental.QueueUnclosedSessions({
+    { citizenid = 'cid-json', quest_id = 'q', step_id = 'node',
+      metadata = '{"deposit":400,"rate_per_min":0,"grace_sec":0,"max_minutes":60,"started_at":1700000000}',
+      created_at = T0 },
+}, T0 + 60)
+local jsonPending = QuestRental.GetPendingRefund('cid-json')
+check('boot_scan_decodes_string_metadata',
+    queuedStr == 1 and jsonPending ~= nil and jsonPending.amount == 400,
+    ('queued=%s amount=%s'):format(queuedStr, jsonPending and jsonPending.amount or 'nil'))
 local failures = 0
 for _, r in ipairs(results) do
     if not r.ok then failures = failures + 1 end

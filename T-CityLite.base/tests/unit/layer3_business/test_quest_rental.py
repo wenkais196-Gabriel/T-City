@@ -37,7 +37,7 @@ def run_probe(source: Path) -> subprocess.CompletedProcess:
 def test_rental_invariants_hold():
     proc = run_probe(RENTAL)
     assert proc.returncode == 0, f"探针失败：\n{proc.stdout}\n{proc.stderr}"
-    assert "SUMMARY 9/9" in proc.stdout
+    assert "SUMMARY 11/11" in proc.stdout
 
 
 @pytest.mark.skipif(LUA is None, reason="需要 lua5.4")
@@ -202,3 +202,27 @@ def test_rental_steps_must_declare_a_validator_at_registration_time():
     """没有 validator_id 的 rental 步骤应当注册失败，而不是运行时静默不扣押金。"""
     reg = (BASE / "resources/[custom]/custom-quest/server/quest_registry.lua").read_text(encoding="utf-8")
     assert "is rental but has no validator_id" in reg
+
+
+
+def test_restart_scan_pairs_close_with_the_right_open():
+    """重启扫描按 started_at 配对，而不是「有更晚的 close 就算已关闭」。
+
+    只比时间先后的话：同一任务第二次租借的 close 会把第一次未关闭的 open
+    证明成已关闭，第一次的押金静默丢失。
+    """
+    db = (BASE / "resources/[custom]/custom-quest/server/quest_db.lua").read_text(encoding="utf-8")
+    assert "JSON_EXTRACT(c.metadata, '$.started_at')" in db, "配对没按 started_at —— 会串单"
+    assert "JSON_EXTRACT(o.metadata, '$.started_at')" in db
+
+
+def test_deposit_is_only_taken_when_the_journal_row_lands():
+    """扣钱与落库要么一起成功，要么一起回滚。
+
+    扣了钱但 rental_open 写不进去 = 重启后扫不到这条会话 = 押金永远退不回来。
+    """
+    src = (BASE / "resources/[custom]/custom-quest/server/quest_rental.lua").read_text(encoding="utf-8")
+    open_body = src[src.index("function QuestRental.Open"):src.index("function QuestRental.Close")]
+    assert "rollbackJournal" in open_body, "没有回滚路径：落库失败时押金会被吞"
+    assert "quest-rental-rollback" in open_body
+    assert "journal_unavailable" in open_body, "没有 DB 层时应当拒绝开租，而不是收钱"
