@@ -117,7 +117,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
-- **物流「租借会话」只有开始、没有关闭**：`rentalDeposit` 在 `quest_logistics_validators.lua:193` 写死为 `0`
+- **物流租借绑定的三个真 bug**：① 绑定里的押金写死 `rentalDeposit = 0`（配置里 300–2000 的押金
+  在收据上永远是 $0）；② `ClearLogisticsBinding` 定义了却全仓库零调用（失败/放弃后 plate / netId /
+  rentalFeePct 残留，下一趟按上一趟费率结算）；③ `playerDropped` 只清 `QuestCache`，断线后旧绑定还在。
+  修法：押金改从 `stepData.rental_deposit` 读（自有车仍为 0）；`FailQuest` / `AbandonQuest` 走
+  `clearLogisticsFor()`（pcall 保护）；新增 `ClearAllLogisticsBindings(citizenid)` 供断线整表清。
+  回归闸：`tests/unit/layer3_business/test_logistics_binding_lifecycle.py`（3 条静态契约 + 1 条运行时探针，
+  每条都带反向校验；探针真跑源码里的绑定存储，验幂等/计数/只清一个不动兄弟）。- **物流「租借会话」只有开始、没有关闭**：`rentalDeposit` 在 `quest_logistics_validators.lua:193` 写死为 `0`
   （配置里的押金根本收不到）；`ClearLogisticsBinding` 定义了却**全仓库没有一处调用**；`playerDropped`
   只清 `QuestCache`，不清 logistics binding。放弃/失败/掉线后 plate / netId / rentalFeePct 会残留。
 - **成熟职业脚本调研（官方 9 个 job + 社区）**：提炼出押金即会话、服务端发牌、结算走物理点、
