@@ -117,14 +117,32 @@ function QuestRental.Open(player, questId, nodeId, cfg)
     }
     Sessions[citizenid] = session
 
-    if QuestDB and QuestDB.LogEvent then
-        QuestDB.LogEvent(citizenid, questId, 'rental_open', nodeId, {
+    -- 会话必须先落日志，再算「开好了」：日志里没有这条 open，服务器重启后扫描不到，
+    -- 押金就永远退不回来。所以这里按「先扣钱 → 写日志 → 写失败就原路退回」的顺序，
+    -- 并把 started_at 一起写进去（重启补退要靠它和 close 精确配对）。
+    local function rollbackJournal()
+        Sessions[citizenid] = nil
+        if deposit > 0 then
+            player.Functions.AddMoney('bank', deposit, 'quest-rental-rollback')
+        end
+        print(('[quest-rental] ⚠️ rental_open 落库失败，押金 $%s 已原路退回（%s / %s）')
+            :format(tostring(deposit), tostring(citizenid), tostring(questId)))
+    end
+
+    if QuestDB and QuestDB.LogRentalEvent then
+        QuestDB.LogRentalEvent(citizenid, questId, 'rental_open', nodeId, {
             deposit = session.deposit,
             rate_per_min = session.ratePerMin,
             grace_sec = session.graceSec,
             max_minutes = session.maxMinutes,
             started_at = session.startedAt,
-        })
+        }, function(ok)
+            if not ok then rollbackJournal() end
+        end)
+    else
+        -- 没有 DB 层就当作「写不进去」处理：宁可不开租，也不要收一笔查不到的钱
+        rollbackJournal()
+        return false, 'journal_unavailable'
     end
 
     return true, session
@@ -164,12 +182,13 @@ function QuestRental.Close(player, reason, now, questId)
     Sessions[citizenid] = nil
 
     if QuestDB and QuestDB.LogEvent then
-        QuestDB.LogEvent(citizenid, session.questId, 'rental_close', session.nodeId, {
+        QuestDB.LogRentalEvent(citizenid, session.questId, 'rental_close', session.nodeId, {
             reason = reason or 'unknown',
             minutes = receipt.minutes,
             rent = receipt.rent,
             refund = receipt.refund,
             capped = receipt.capped,
+            started_at = session.startedAt,   -- 与 open 配对：同一任务多次租借也不会串
         })
     end
 
@@ -206,8 +225,9 @@ function QuestRental.CloseOnDrop(citizenid, now)
         }
     end
     if QuestDB and QuestDB.LogEvent then
-        QuestDB.LogEvent(citizenid, session.questId, 'rental_close', session.nodeId, {
+        QuestDB.LogRentalEvent(citizenid, session.questId, 'rental_close', session.nodeId, {
             reason = 'dropped',
+            started_at = session.startedAt,
             minutes = receipt.minutes,
             rent = receipt.rent,
             refund = receipt.refund,
@@ -228,6 +248,16 @@ function QuestRental.QueueUnclosedSessions(rows, now)
         local cid = row.citizenid
         if type(cid) == 'string' and cid ~= '' and not Sessions[cid] and not PendingRefunds[cid] then
             local meta = row.metadata or {}
+            -- oxmysql 有的版本把 LONGTEXT 原样返回成字符串，有的解成表；两种都要能跑，
+            -- 否则补退会按 deposit=0 算出 0 元，还打一行「已排队」的成功日志。
+            if type(meta) == 'string' then
+                if type(json) == 'table' and json.decode then
+                    local okDecode, decoded = pcall(json.decode, meta)
+                    meta = (okDecode and type(decoded) == 'table') and decoded or {}
+                else
+                    meta = {}   -- 没有 json 库（离线探针）时当作空表，宁可少退也不要算错
+                end
+            end
             -- 重启时无法区分「玩家还在推着车」和「早就下线了」，一律按已用时长结算：
             -- 保守起见按 open 时记的 started_at 算到重启时刻。
             local fake = {
