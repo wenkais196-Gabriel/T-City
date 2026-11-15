@@ -31,7 +31,15 @@ local function makePlayer(source)
         job = { name = 'unemployed', onduty = false }, metadata = {},
         money = { cash = 1000, bank = 1000 }, items = {},
     }
-    player.Functions = { SetMetaData = function() end, AddMoney = function() end }
+    player.Functions = {
+        SetMetaData = function() end,
+        AddMoney = function(account, amount, reason)
+            state.money[#state.money + 1] = {
+                src = player.PlayerData.source, account = account, amount = amount, reason = reason,
+            }
+            return true
+        end,
+    }
     return player
 end
 
@@ -79,15 +87,6 @@ exports = setmetatable({}, {
     __call = function(_, name, fn) rawset(exports, name, fn) end,
     __index = function(_, name)
         if name == 'qb-core' then return { GetCoreObject = function() return QBCoreMock end } end
-        if name == 'custom-main' then
-            return {
-                CheckRateLimit = function() return true end,
-                AddScaledMoney = function(_, src, account, amount, reason)
-                    state.money[#state.money + 1] = { src = src, account = account, amount = amount, reason = reason }
-                    return amount
-                end,
-            }
-        end
         if name == 'qb-inventory' then
             return {
                 AddItem = function(_, src, item, amount)

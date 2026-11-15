@@ -69,6 +69,7 @@ review_by: 2027-04-30
 | 前端拿数据 | `fetchNui('<callback>', payload)` → 客户端回调 → `PhoneBridge.Request` → 服务端 | 页面里 `fetch('https://cfx-nui-...')` |
 | 前端做动作 | `requestAppAction` → 服务端 `appAction` 分支（带限流与权限） | 前端拼 SQL / 直接改 store 当成已生效 |
 | 客户端拿数据 | `PhoneBridge.Request(event, payload, cb, timeoutMs)` | 自己维护 request id 表 |
+| 跨资源服务调用 | `exports['<owner>']:service_<name>_<method>`，方法必须登记在 `service_contracts.json` | `Bus.<service>.<method>`（跨资源恒 nil） |
 | 服务端推 UI | `TriggerClientEvent('phone:client:...')` → 客户端 `SendNUIMessage` | 服务端直接发 NUI 消息（不存在） |
 | 改钱/物品 | `Player.Functions.AddMoney` / `core_economy:TriggerReward` | `UPDATE players SET money` |
 | 新增表 | `migrations/v*.sql`（幂等）+ `table_owners.json` + `tests/fixtures/tcity_schema.sql` | 直接改库 |

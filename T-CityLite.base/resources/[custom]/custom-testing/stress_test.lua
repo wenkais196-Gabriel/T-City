@@ -50,10 +50,17 @@ end
 -- 测试套件 1: 100 人并发金钱变动 + 脏数据刷盘
 -- ==============================================================
 
-local function Test_ConcurrentMoneyChanges()
+local function Test_ConcurrentMoneyChanges(source)
     local suite = 'ConcurrentMoney'
 
-    -- 模拟 100 个虚拟玩家
+    -- 真实玩家：压力测试只测吞吐，不走倍率/热度；拿不到就跳过
+    local Player = (source and source > 0) and QBCore.Functions.GetPlayer(source) or nil
+    if not Player then
+        log(suite, '拿不到真实玩家（请在游戏内执行 /stress）——本项跳过', 'skip')
+        return
+    end
+
+    -- 模拟 100 个虚拟玩家的并发节奏，写入落在真实玩家身上
     for i = 1, 100 do
         testPlayers[i] = {
             source = i,
@@ -70,15 +77,8 @@ local function Test_ConcurrentMoneyChanges()
             local player = testPlayers[i]
             local amount = math.random(10, 10000)
 
-            -- 通过统一出口
-            if exports['custom-main'] then
-                pcall(function()
-                    exports['custom-main']:AddScaledMoney(
-                        player.source, 'bank', amount,
-                        'stress-test round ' .. round
-                    )
-                end)
-            end
+            -- 走原语写路径（真实玩家；不引入倍率/热度）
+            Player.Functions.AddMoney('bank', amount, 'stress-test round ' .. round)
 
             -- 标记脏数据（proxy 自带 pcall，失败静默返回 nil）
             DirtyFlush.MarkDirty(player.citizenid, 'money')
@@ -273,14 +273,14 @@ end
 -- 调度器
 -- ==============================================================
 
-function StressTest.RunAll()
+function StressTest.RunAll(source)
     print('')
     print('═══════════════════════════════════════════════')
     print('  架构重构压力测试')
     print('═══════════════════════════════════════════════')
     print('')
 
-    Test_ConcurrentMoneyChanges()
+    Test_ConcurrentMoneyChanges(source)
     Test_PlayerDisconnect()
     Test_EventInjection()
     Test_EconomyShim()
@@ -316,7 +316,7 @@ RegisterCommand('stress', function(source, args)
     if source > 0 then
         TriggerClientEvent('QBCore:Notify', source, 'Stress test running in server console...', 'primary')
     end
-    StressTest.RunAll()
+    StressTest.RunAll(source)
 end, true)
 
 print('[stress-test] ✅ 架构压力测试已加载')
