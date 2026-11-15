@@ -2,7 +2,7 @@
 id: engineering-2026-11-abstraction-convergence-plan
 type: plan
 status: active
-system: engineering
+system: meta
 owner: hermes
 updated: 2026-11-15
 review_by: 2027-03-31
