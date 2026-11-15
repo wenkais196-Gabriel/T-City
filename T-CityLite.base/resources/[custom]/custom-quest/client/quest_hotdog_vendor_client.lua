@@ -567,8 +567,8 @@ RegisterNetEvent('quest:client:vendorState', function(payload)
 
     local booth = {
         questId = questId,
-        -- 收摊时要回调 nodeComplete(questId, stepId, 'vendor')，所以这一份必须存下来；
-        -- 只存 questId 的话收摊后任务永远停在这一步。
+        -- stepId 仅保留作展示/关联；收摊推进由服务端 close 动作完成，客户端不再报 nodeComplete
+        -- （这个值还是摆摊那一步的 id，拿它上报会被判 Step order violation）。
         stepId = type(payload.stepId) == 'string' and payload.stepId or nil,
         boothNetId = boothNetId,
         coords = CoordsFromPayload(payload, boothNetId) or (previous and previous.coords),

@@ -287,3 +287,47 @@ def test_font_subset_is_in_sync_with_the_source_strings():
     assert stamp.exists(), "缺字符集指纹"
     assert stamp.read_text(encoding="utf-8").strip() == module.fingerprint(chars), (
         "源码里的字符集变了 —— 重跑 tools/dev/build_quest_font.py")
+
+
+# ---------------------------------------------------------------------------
+# 收摊双通道（2026-11-15）：一次 E 只能推进一次
+#
+# 静态形状由 tests/architecture/test_quest_vendor_single_channel.py 守；
+# 这里跑运行时探针：真实模板 + 真实 nodeInteract 处理器 + 真实 bridge close 分支。
+# ---------------------------------------------------------------------------
+
+HOTDOG_TEMPLATE = BASE / "resources/[custom]/custom-quest/config/quests/quest_hotdog.lua"
+MAIN_CLIENT = BASE / "resources/[custom]/custom-quest/client/main.lua"
+SINGLE_CHANNEL_PROBE = (
+    Path(__file__).resolve().parent / "fixtures" / "vendor_single_channel_probe.lua"
+)
+
+
+def _run_single_channel_probe(*extra: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [LUA, str(SINGLE_CHANNEL_PROBE), str(MAIN_CLIENT), str(BRIDGE),
+         str(HOTDOG_TEMPLATE), *extra],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
+    )
+
+
+@pytest.mark.skipif(LUA is None, reason="需要 lua5.4")
+def test_single_action_advances_vendor_step_exactly_once():
+    """通用交互对 vendor 步骤不发 nodeComplete；一次 close 只推进一次。"""
+    proc = _run_single_channel_probe()
+    assert proc.returncode == 0, f"探针失败：\n{proc.stdout}\n{proc.stderr}"
+    assert "SUMMARY 6/6" in proc.stdout, proc.stdout
+
+
+@pytest.mark.skipif(LUA is None, reason="需要 lua5.4")
+def test_probe_goes_red_when_vendor_step_regains_interaction_data():
+    """反向校验：把 coords/radius/duration 塞回 vendor 步骤，探针必须变红。
+
+    这正是事故形状：模板里只要还挂着通用交互数据，客户端就会画点并上报
+    nodeComplete，与收摊的服务端推进各算一次。
+    """
+    proc = _run_single_channel_probe("--mutate")
+    assert proc.returncode != 0, "vendor 步骤重新带上交互数据后探针仍然通过"
+    assert "FAIL vendor_does_not_start_interact_thread" in proc.stdout, (
+        f"期望通用交互线程被启动而变红，实际输出：\n{proc.stdout}"
+    )

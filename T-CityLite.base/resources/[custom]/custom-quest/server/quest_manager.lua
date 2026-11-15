@@ -181,7 +181,11 @@ QuestNodes = {
         -- 押金在服务端校验器里扣，客户端这一步只负责「站到点上按 E」。
         RENTAL    = 'quest:client:nodeInteract',
         BOOTH     = 'quest:client:nodeInteract',   -- 摆摊：客户端画交互点，放下即上报
-        VENDOR    = 'quest:client:nodeInteract',   -- 收摊：摊位交互点按 E 即完成
+        -- VENDOR 的推进只走服务端收摊分支（quest_vendor_bridge.lua 的 close）。
+        -- 模板里**不要**再给 vendor 步骤 coords/radius/duration：通用 interact
+        -- 会画点并报 nodeComplete，与收摊各推进一次（真机 Step order violation）。
+        -- 保留这条映射只是为了不让 ExecuteNode 打 "Unknown node type"；正常无 payload。
+        VENDOR    = 'quest:client:nodeInteract',
         DELIVER   = 'quest:client:nodeDeliver',
         COMBAT    = 'quest:client:nodeCombat',
         WAIT      = 'quest:client:nodeWait',
