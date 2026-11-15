@@ -47,7 +47,7 @@
 
 - [ ] `cd T-CityLite.base && python3 tests/check_cfgs.py`
 - [ ] `cd T-CityLite.base && python3 tests/check_dependencies.py`
-- [ ] 修改的 Lua 文件通过 `luac5.4 -p`
+- [ ] 修改的 Lua 文件通过 `luac5.4 -p`（PowerShell 下写 `luac5.4.exe`，否则会弹「选择应用打开 .4 文件」）
 - [ ] 已在 FXServer 实机启动（版本 / artifact：）
 - [ ] 已在游戏内复现 / 回归
 
