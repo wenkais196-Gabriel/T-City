@@ -35,6 +35,8 @@ import re
 import tempfile
 from pathlib import Path
 
+from lua_source import blank_noise
+
 BASE = Path(__file__).resolve().parents[2]
 CUSTOM = BASE / "resources" / "[custom]"
 
@@ -61,7 +63,6 @@ DELEGATE = "resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lu
 
 _FUNCTION = re.compile(r"\b(?:local\s+)?function\s+([A-Za-z_][\w.:]*)\s*\(")
 _TOKEN = re.compile(r"\b(?:function|if|for|while|repeat|do|end|until)\b")
-_LONG_BRACKET = re.compile(r"\[(=*)\[")
 _GLOBAL_ALIAS_DEF = re.compile(r"\bfunction\s+(Money|PhoneMoney|QuestMoney|TCMoney)\s*\(")
 _ALIAS_CALL = re.compile(r"(?<![:.\w])(Money|PhoneMoney|QuestMoney|TCMoney)\s*\(")
 _ALIAS_DEF_SUB = re.compile(r"\bfunction\s+(?:Money|PhoneMoney|QuestMoney|TCMoney)\s*\(")
@@ -78,62 +79,6 @@ IMPL_MARKERS = (
 EXPORT_CALL = re.compile(r"exports\s*\[\s*'core-framework'\s*\]\s*:\s*FormatMoney\s*\(")
 DELEGATE_GUARD = re.compile(r"type\s*\(\s*QuestMoney\s*\)\s*==\s*'function'")
 DELEGATE_CALL = re.compile(r"return\s+QuestMoney\s*\(")
-
-
-def _blank(text: str) -> str:
-    """用空格替换，保留换行（长度/行号不变）。"""
-    return "".join("\n" if char == "\n" else " " for char in text)
-
-
-def _skip_quoted(source: str, index: int, quote: str) -> int:
-    cursor, size = index + 1, len(source)
-    while cursor < size:
-        if source[cursor] == "\\":
-            cursor += 2
-            continue
-        if source[cursor] == quote:
-            return cursor + 1
-        cursor += 1
-    return size
-
-
-def strip_lua_noise(source: str, *, keep_strings: bool) -> str:
-    """去掉注释（可选去掉字符串），长度/行号保持不变。"""
-    out: list[str] = []
-    index, size = 0, len(source)
-    while index < size:
-        char = source[index]
-        if char == "-" and source.startswith("--", index):
-            long_match = _LONG_BRACKET.match(source, index + 2)
-            if long_match:
-                close = "]" + long_match.group(1) + "]"
-                end = source.find(close, long_match.end())
-                end = size if end == -1 else end + len(close)
-            else:
-                end = source.find("\n", index)
-                end = size if end == -1 else end
-            out.append(_blank(source[index:end]))
-            index = end
-            continue
-        if char == "[":
-            long_match = _LONG_BRACKET.match(source, index)
-            if long_match:
-                close = "]" + long_match.group(1) + "]"
-                end = source.find(close, long_match.end())
-                end = size if end == -1 else end + len(close)
-                chunk = source[index:end]
-                out.append(chunk if keep_strings else _blank(chunk))
-                index = end
-                continue
-        if char in "\"'":
-            end = _skip_quoted(source, index, char)
-            chunk = source[index:end]
-            out.append(chunk if keep_strings else _blank(chunk))
-            index = end
-            continue
-        out.append(char)
-        index += 1
-    return "".join(out)
 
 
 def _function_end(structural: str, body_start: int) -> int:
@@ -160,8 +105,8 @@ def _function_end(structural: str, body_start: int) -> int:
 
 def implementations(source: str) -> list[tuple[int, str]]:
     """返回同函数体内同时出现三个实现标记的 `(行号, 函数名)`。"""
-    lexical = strip_lua_noise(source, keep_strings=True)
-    structural = strip_lua_noise(source, keep_strings=False)
+    lexical = blank_noise(source, keep_strings=True)
+    structural = blank_noise(source, keep_strings=False)
     hits: list[tuple[int, str]] = []
     for match in _FUNCTION.finditer(lexical):
         end = _function_end(structural, match.end())
@@ -173,7 +118,7 @@ def implementations(source: str) -> list[tuple[int, str]]:
 
 def global_alias_definitions(source: str) -> list[tuple[int, str]]:
     """`[custom]` 里非 `local` 的 `function Money(...)` 等 → (行号, 名字)。"""
-    structural = strip_lua_noise(source, keep_strings=False)
+    structural = blank_noise(source, keep_strings=False)
     hits: list[tuple[int, str]] = []
     for match in _GLOBAL_ALIAS_DEF.finditer(structural):
         line_start = structural.rfind("\n", 0, match.start()) + 1
@@ -185,13 +130,13 @@ def global_alias_definitions(source: str) -> list[tuple[int, str]]:
 
 def alias_calls(source: str) -> set[str]:
     """返回源码里调用的别名（剥注释/字符串；函数定义不算调用）。"""
-    structural = strip_lua_noise(source, keep_strings=False)
+    structural = blank_noise(source, keep_strings=False)
     structural = _ALIAS_DEF_SUB.sub("function __alias_definition(", structural)
     return {match.group(1) for match in _ALIAS_CALL.finditer(structural)}
 
 
 def _is_delegate(source: str) -> bool:
-    lexical = strip_lua_noise(source, keep_strings=True)
+    lexical = blank_noise(source, keep_strings=True)
     return bool(DELEGATE_GUARD.search(lexical) and DELEGATE_CALL.search(lexical))
 
 
@@ -205,7 +150,7 @@ def _defines_alias(resource: Path, name: str) -> bool:
     for path in resource.rglob("*.lua"):
         if path.name == "fxmanifest.lua":
             continue
-        if pattern.search(strip_lua_noise(
+        if pattern.search(blank_noise(
                 path.read_text(encoding="utf-8", errors="ignore"), keep_strings=False)):
             return True
     return False
@@ -268,7 +213,7 @@ def test_money_format_has_a_single_implementation():
     if not alias_path.is_file():
         problems.append(f"{ALIASES}: 别名文件不存在")
     else:
-        content = strip_lua_noise(
+        content = blank_noise(
             alias_path.read_text(encoding="utf-8", errors="ignore"), keep_strings=True)
         for name in ALIAS_NAMES:
             if not re.search(rf"\bfunction\s+{name}\s*\(", content):
