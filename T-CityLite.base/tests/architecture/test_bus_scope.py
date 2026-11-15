@@ -1,9 +1,13 @@
-"""ARCH — 跨资源 Bus 读取闸门（S2a）。
+"""ARCH — 跨资源 Bus 读取闸门（S2a + S2b）。
 
 为什么需要这条规则：FiveM 里每个 resource 是独立的 Lua state，`_G.Bus` **不跨资源**。
 `core-framework/bus.lua` 的 `Bus.RegisterService` 只把服务挂到**调用方自己**的 Bus；
 别的资源里读 `Bus.<service>` 恒为 nil。这类分支通常包在 `if Bus and ...` 里，
 永远不会执行，表现是 BGM 不放、车辆状态永远走 fallback，而日志干干净净。
+
+S2b 把扫描根扩到税/热度/通知：custom-taxes（SinkService）、qb-shops（NPCPricing）、
+production-freeze（HeatService/NPCPricing）、custom-phone（EconomyService）与
+qb-core 自己的 `functions.lua`（notify）/`heat_service.lua`（CoreEconomy）。
 
 判定口径刻意是「跨资源读取」而不是「出现 Bus 字样」：
 
@@ -32,17 +36,36 @@ TOOL = REPO / "tools" / "dev" / "service_contracts_scan.py"
 
 #: 扫描根（相对 BASE）。前 4 个是 S2a 的调用方；custom-vehicles/server 是 owner 根：
 #: §4.2.5 的变异注入文件在这里，owner 读自己的 `Bus.vehicles` 必须放行。
+#: S2b 追加 4 个目录 + 2 个单文件（qb-core 的 services 目录里还有 owner 自注册，
+#: 只扫这两个调用点所在的文件，避免把 owner 自读也当跨资源读取）。
 SCAN_ROOTS = (
     "resources/[custom]/custom-police/server",
     "resources/[qb]/qb-ambulancejob/server",
     "resources/[qb]/qb-storerobbery/server",
     "resources/[qb]/qb-vehicleshop/server",
     "resources/[custom]/custom-vehicles/server",
+    "resources/[custom]/custom-taxes/server",
+    "resources/[qb]/qb-shops/server",
+    "resources/[system]/production-freeze/server",
+    "resources/[custom]/custom-phone/server",
+    "resources/[qb]/qb-core/server/functions.lua",
+    "resources/[qb]/qb-core/server/services/heat_service.lua",
+)
+
+#: owner 文件：允许读写自己的 `_G.Bus.<service>`（*_service 文件就是 qb-core 的
+#: 进程内注册者）。本片不把它们放进 SCAN_ROOTS；任何人以后扩大扫描根时按文件放行。
+OWNER_FILES = (
+    "resources/[qb]/qb-core/server/player.lua",
+    "resources/[qb]/qb-core/server/services/sink_service.lua",
+    "resources/[qb]/qb-core/server/services/economy_service.lua",
 )
 
 #: `Bus.RegisterService('<service>', { ... })` —— 声明侧，同时给出 owner。
 REGISTER_RE = re.compile(
     r"Bus\.RegisterService\s*\(\s*(['\"])(?P<service>[^'\"]+)\1")
+#: `_G.Bus.<service> = <table>` —— 资源在自己的 Lua state 里直接自注册（写者即 owner）。
+BUS_ASSIGN_RE = re.compile(
+    r"(?<![\w.])(?:_G\.)?Bus\.(?P<member>[A-Za-z_]\w*)\s*=(?!=)")
 #: 字面量 `exports('service_<service>_<Method>', ...)` —— 静态导出的 owner 来源。
 SERVICE_EXPORT_RE = re.compile(
     r"exports\s*\(\s*(['\"])service_(?P<service>[A-Za-z0-9_]+)_"
@@ -126,8 +149,9 @@ def wiring_problems(resource: str, resource_dir: Path) -> list[str]:
 def survey(resources: Path = RESOURCES) -> tuple[dict[str, str], list[str]]:
     """返回 (service -> owner, 接线问题)。
 
-    owner 从两处静态声明推导：`Bus.RegisterService('<service>', {...})` 与
-    字面量 `exports('service_<service>_<Method>', ...)`。
+    owner 从三处静态声明推导：`Bus.RegisterService('<service>', {...})`、
+    字面量 `exports('service_<service>_<Method>', ...)`，以及
+    `_G.Bus.<service> = <table>` 这种进程内自注册（qb-core 的 *Service 模块）。
     """
     tool = _load_tool()
     roots = _resource_roots(resources)
@@ -155,6 +179,11 @@ def survey(resources: Path = RESOURCES) -> tuple[dict[str, str], list[str]]:
                 continue
             owners.setdefault(match.group("service"), resource)
 
+        for match in BUS_ASSIGN_RE.finditer(code):
+            if tool.in_spans(match.start(), spans):
+                continue
+            owners.setdefault(match.group("member"), resource)
+
     problems: list[str] = []
     for resource, resource_dir in sorted(register_resources.items()):
         problems.extend(wiring_problems(resource, resource_dir))
@@ -162,8 +191,11 @@ def survey(resources: Path = RESOURCES) -> tuple[dict[str, str], list[str]]:
 
 
 def bus_read_violations(source: str, resource: str, relative: str,
-                        owners: dict[str, str]) -> list[str]:
+                        owners: dict[str, str],
+                        owner_files: tuple[str, ...] | list[str] = ()) -> list[str]:
     """一段 Lua 源码里的跨资源 Bus 读取。`relative` 相对 resources/。"""
+    if relative in owner_files:
+        return []
     tool = _load_tool()
     code, spans = tool.analyse_lua(source)
     problems: list[str] = []
@@ -233,16 +265,17 @@ def test_no_cross_resource_bus_reads():
     problems: list[str] = []
     for root in SCAN_ROOTS:
         root_path = BASE / root
-        assert root_path.is_dir(), f"扫描根不存在：{root}"
+        assert root_path.exists(), f"扫描根不存在：{root}"
         resource_dir = _resource_root_of(root_path, _resource_roots())
         assert resource_dir is not None and resource_dir.name != "resources", (
             f"扫描根不在任何资源目录下：{root}")
         resource = resource_dir.name
-        for path in sorted(root_path.rglob("*.lua")):
+        paths = [root_path] if root_path.is_file() else sorted(root_path.rglob("*.lua"))
+        for path in paths:
             relative = path.relative_to(RESOURCES).as_posix()
             problems.extend(bus_read_violations(
                 path.read_text(encoding="utf-8", errors="ignore"),
-                resource, relative, owners))
+                resource, relative, owners, OWNER_FILES))
 
     assert not (problems or wiring), (
         "跨资源 Bus 闸门红了。读取侧：`_G.Bus` 是资源私有状态，跨资源读 `Bus.<service>` 恒 nil，"
@@ -271,6 +304,21 @@ def test_reverse_cross_resource_bus_read_is_rejected(tmp_path):
         "resources/[custom]/custom-vehicles/server/probe.lua", owners)
     assert not owner_read, owner_read
 
+    # `_G.Bus.<service> = <table>` 是 owner 在自己进程内的自注册（写），不是读取。
+    owners_with_heat = dict(owners, HeatService="qb-core")
+    self_register = bus_read_violations(
+        "_G.Bus.HeatService = HeatService\n", "qb-core",
+        "resources/[qb]/qb-core/server/services/heat_service.lua", owners_with_heat)
+    assert not self_register, self_register
+
+    # OWNER_FILES：owner 文件读自己的 EconomyService 放行；同样读取换个文件必须报。
+    own_economy = "_G.Bus.EconomyService.RemoveMoney(cid, 'bank', 1, 'x')\n"
+    assert not bus_read_violations(
+        own_economy, "qb-core", OWNER_FILES[1], owners, OWNER_FILES)
+    assert bus_read_violations(
+        own_economy, "qb-core", "resources/[qb]/qb-core/server/other.lua",
+        owners, OWNER_FILES)
+
     probe = tmp_path / "probe"
     (probe / "server").mkdir(parents=True)
     (probe / "server" / "main.lua").write_text(
@@ -288,3 +336,8 @@ def test_reverse_cross_resource_bus_read_is_rejected(tmp_path):
         encoding="utf-8")
     _, wiring_after = survey(tmp_path)
     assert not wiring_after, wiring_after
+
+    (probe / "server" / "heat.lua").write_text(
+        "_G.Bus.HeatService = {}\n", encoding="utf-8")
+    owners_after, _ = survey(tmp_path)
+    assert owners_after.get("HeatService") == "probe", owners_after
