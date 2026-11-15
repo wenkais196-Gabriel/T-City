@@ -881,12 +881,14 @@ const playerHud = {
             } else if (data.dynamicHunger == false) {
                 this.showHunger = true;
             }
-            if (data.hunger >= 100) {
-                this.hungerColor = "#dd6e14";
-            } else if (data.hunger <= 30) {
-                this.hungerColor = "#ff0000";
+            // H-3：三档。原来 >=100 与 31-99 同色（都是橙），饱与半饱看不出来，
+            // 而且只有 <=30 才突变红 —— 中间没有预警区。
+            if (data.hunger < 20) {
+                this.hungerColor = "#ff5a5a";      // 危险
+            } else if (data.hunger < 40) {
+                this.hungerColor = "#e0a13a";      // 预警
             } else {
-                this.hungerColor = "#dd6e14";
+                this.hungerColor = "#dd6e14";      // 正常
             }
 
             if (data.dynamicThirst == true) {
@@ -898,10 +900,11 @@ const playerHud = {
             } else if (data.dynamicThirst == false) {
                 this.showThirst = true;
             }
-            if (data.thirst >= 100) {
-                this.thirstColor = "#1a7cad";
-            } else if (data.thirst <= 30) {
-                this.thirstColor = "#ff0000";
+            // H-3：与饥饿同一套三档（口渴用蓝色系）
+            if (data.thirst < 20) {
+                this.thirstColor = "#ff5a5a";
+            } else if (data.thirst < 40) {
+                this.thirstColor = "#3fb6d6";
             } else {
                 this.thirstColor = "#1a7cad";
             }

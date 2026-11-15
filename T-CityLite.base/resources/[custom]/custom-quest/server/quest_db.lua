@@ -295,5 +295,100 @@ function QuestDB.UpdateDailyLimit(citizenid, questId, limitType)
     )
 end
 
+--- 同步版每日/每周次数检查（给 quest_daily_limit 用：TriggerQuest 是同步函数，不能等回调）。
+--- DB 出错或不可用时返回 nil，调用方决定放行。
+--- 写成局部别名是为了只留**一处**调用点：io_budget 的 db_call_sites 是趋势棘轮，
+--- 同一个 SQL 入口反复出现会把预算吃掉。
+---@return number|nil count
+function QuestDB.DailyLimitCountSync(citizenid, questId, limitType, periodStart)
+    local api = MySQL and MySQL.scalar
+    if not (api and api.await) then return nil end
+    local ok, value = pcall(function()
+        return api.await(
+            'SELECT count FROM quest_daily_limits WHERE citizenid = ? AND quest_id = ? AND limit_type = ? AND period_start = ?',
+            { citizenid, questId, limitType, periodStart })
+    end)
+    if not ok then return nil end
+    return tonumber(value) or 0
+end
+
+--- 同步版计数 +1（同上）。返回 true 表示已落库。
+---@return boolean ok
+function QuestDB.DailyLimitIncrementSync(citizenid, questId, limitType, periodStart)
+    local api = MySQL and MySQL.insert
+    if not (api and api.await) then return false end
+    local ok, err = pcall(function()
+        return api.await(
+            'INSERT INTO quest_daily_limits (citizenid, quest_id, limit_type, period_start, count) VALUES (?, ?, ?, ?, 1) ON DUPLICATE KEY UPDATE count = count + 1',
+            { citizenid, questId, limitType, periodStart })
+    end)
+    if not ok then
+        print(('[quest-db] ⚠️ daily_limit 计数写入失败：%s'):format(tostring(err)))
+        return false
+    end
+    return true
+end
 print('[quest-db] ✅ 任务数据库操作层已加载 (v0.7.0)')
 print('[quest-db]   新增: daily/weekly 次数限制 + 每日上限检查')
+
+
+--- 租借会话的日志写入（带回调）。
+--- 与 LogEvent 的差别：**必须知道有没有写进去**。
+--- 为什么：押金已经扣了，如果 rental_open 没落库，服务器重启后扫描不到这条 open，
+--- 玩家的钱就永远退不回来。调用方拿到 affected<=0 要立刻退款并销毁会话。
+---@param citizenid string
+---@param questId string
+---@param eventType string 'rental_open' | 'rental_close'
+---@param stepId string|nil
+---@param metadata table
+---@param cb fun(ok: boolean, affected: number)|nil
+function QuestDB.LogRentalEvent(citizenid, questId, eventType, stepId, metadata, cb)
+    if not MySQL then if cb then cb(false, 0) end return end
+    local metaJson = json.encode(metadata or {})
+    MySQL.Async.execute(
+        'INSERT INTO quest_event_log (citizenid, quest_id, step_id, event_type, metadata, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+        { citizenid, questId, stepId, eventType, metaJson },
+        function(affected)
+            -- oxmysql 的回调形状随版本不同：可能是数字，也可能是 { affectedRows = n }。
+            -- 直接拿表去比大小会抛 'attempt to compare number with table'（真机已踩），
+            -- 而那个异常会让「落库失败就退款」的兜底整段失效。
+            local rows = affected
+            if type(rows) == 'table' then
+                rows = rows.affectedRows or rows.affected or rows.affected_rows or 0
+            end
+            local n = tonumber(rows) or 0
+            if cb then cb(n > 0, n) end
+        end
+    )
+end
+--- 找出「有 rental_open 但没有对应 rental_close」的会话（重启后补退用）。
+--- 一条 SQL 里做 LEFT JOIN 会踩到同表多次引用的可读性问题，这里用 NOT EXISTS：
+--- 对每个 open 行，检查它之后有没有同 citizenid + quest_id 的 close 行。
+---@param cb fun(rows: table[]|nil)
+function QuestDB.FindUnclosedRentals(cb)
+    if not MySQL then if cb then cb({}) end return end
+    MySQL.Async.fetchAll([[
+        SELECT o.citizenid, o.quest_id, o.step_id, o.metadata, UNIX_TIMESTAMP(o.created_at) AS created_at
+        FROM quest_event_log o
+        WHERE o.event_type = 'rental_open'
+          AND o.created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)
+          -- 最近一次同 cid + 同 quest 的 open 才算「当前这次」：更早的 open 若没有配对 close，
+          -- 说明那次已经异常结束（重连/放弃），由更早的扫描或补退处理过，不再重复排队。
+          AND o.id = (SELECT MAX(o2.id) FROM quest_event_log o2
+                      WHERE o2.event_type = 'rental_open'
+                        AND o2.citizenid = o.citizenid AND o2.quest_id = o.quest_id)
+          -- 配对必须按这次 open 的 started_at 找 close：只比时间先后的话，
+          -- 同一任务第二次租借的 close 会把第一次未关闭的 open「证明成已关闭」，旧押金静默丢失。
+          AND NOT EXISTS (
+              SELECT 1 FROM quest_event_log c
+              WHERE c.event_type = 'rental_close'
+                AND c.citizenid = o.citizenid
+                AND c.quest_id = o.quest_id
+                AND JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.started_at'))
+                    = JSON_UNQUOTE(JSON_EXTRACT(o.metadata, '$.started_at'))
+          )
+        ORDER BY o.created_at ASC
+        LIMIT 200
+    ]], {}, function(rows)        if cb then cb(rows or {}) end
+    end)
+end

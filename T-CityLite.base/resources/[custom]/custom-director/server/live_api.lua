@@ -108,10 +108,9 @@ local function liveConfig(cfg)
     }
 end
 
--- Token bucket per live credential. The key is a cheap hash so the secret is
--- not used as a table key. agent_live_rate_per_min=0 disables the limit.
-local liveBuckets = {}
-
+-- Token bucket per live credential, owned by core-framework. The key is a
+-- cheap hash so the secret is not used as a table key.
+-- agent_live_rate_per_min=0 disables the limit.
 local function liveKey(token)
     local hash = 5381
     for i = 1, #token do
@@ -122,26 +121,13 @@ end
 
 local function rateGate(live)
     if live.rate_per_min <= 0 then return nil end
-    local key = liveKey(live.token)
-    local now = GetGameTimer()
-    local bucket = liveBuckets[key]
-    if not bucket then
-        bucket = { tokens = live.burst, updatedAt = now }
-        liveBuckets[key] = bucket
-    end
-    local elapsed = math.max(0, now - bucket.updatedAt)
-    if elapsed > 0 then
-        bucket.tokens = math.min(live.burst, bucket.tokens + elapsed * (live.rate_per_min / 60000))
-        bucket.updatedAt = now
-    end
-    if bucket.tokens < 1 then
-        local retryMs = math.ceil((1 - bucket.tokens) / (live.rate_per_min / 60000))
-        return failure(429, 'rate_limited', 'too many live requests', {
-            ['Retry-After'] = tostring(math.max(1, math.ceil(retryMs / 1000))),
-        })
-    end
-    bucket.tokens = bucket.tokens - 1
-    return nil
+    local key = ('director:live:%s'):format(liveKey(live.token))
+    local allowed, retryAfterMs = exports['core-framework']:RateLimitTokenBucket(
+        key, live.rate_per_min, live.burst)
+    if allowed then return nil end
+    return failure(429, 'rate_limited', 'too many live requests', {
+        ['Retry-After'] = tostring(math.max(1, math.ceil((retryAfterMs or 0) / 1000))),
+    })
 end
 
 local function authorized(request, token)
@@ -612,7 +598,7 @@ end
 -- Returns nil for non-live paths so the existing director routes are untouched.
 -- Test hook: drop the rate-limit buckets (not a FiveM export).
 function LiveApi._ResetRateLimit()
-    liveBuckets = {}
+    exports['core-framework']:RateLimitReset('director:live:')
 end
 
 -- GET /agent/v1/live/police/cases/{case_id} — 一张案卷的摘要（P6-1）。

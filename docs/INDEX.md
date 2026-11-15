@@ -2,11 +2,17 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-01 ｜ **文档总数**：276 ｜ **已登记**：276 ｜ **未登记**：0
+**生成时间**：2026-11-15 ｜ **文档总数**：321 ｜ **已登记**：321 ｜ **未登记**：0
 
-**状态分布**：✅ active 151 ・ 🟡 draft 3 ・ 🔍 review 0 ・ 📌 final 75 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 184 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 45
 
 ## 按系统
+
+### identity（1）
+
+| 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
+|---|---|---|---|---|---|---|
+| [角色与出生 · UX 设计](client/ux/modules/identity.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/identity.md` |
 
 ### economy（6）
 
@@ -19,7 +25,7 @@
 | [v0.6a 民间经济职业生态（Civilian Economy）](archive/QBCore_Lite_versions/v0.6a-civilian-economy.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.6a-civilian-economy.md` |
 | [06 — 付费模型：Patron + Identity 双轨设计](server-design/06-payment-model.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/06-payment-model.md` |
 
-### justice（65）
+### justice（66）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -41,6 +47,7 @@
 | [P3 盘查与文书 · 现状核对（2026-10-31）](police/plans/2026-10-31-p3-audit.md) | audit | 📌 final | 2026-10-31 | — |  | `docs/police/plans/2026-10-31-p3-audit.md` |
 | [P4 证据与 bodycam · 施工方案（2026-10-31）](police/plans/2026-10-31-p4-audit.md) | audit | 📌 final | 2026-10-31 | — |  | `docs/police/plans/2026-10-31-p4-audit.md` |
 | [qb-policejob + qb-ambulancejob — 执法与医疗职业](02_script_index/qb-police-ambulance.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/qb-police-ambulance.md` |
+| [警务 · UX 设计](client/ux/modules/police.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/police.md` |
 | [弃用登记（Deprecations）](police/architecture/deprecations.md) | manual | ✅ active | 2026-10-24 | 2027-01-30 |  | `docs/police/architecture/deprecations.md` |
 | [警察系统 · 入口与沉淀（2026-10-31）](agent/police/README.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/agent/police/README.md` |
 | [警察扮演（Police Roleplay）](police/README.md) | meta | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/README.md` |
@@ -95,7 +102,7 @@
 |---|---|---|---|---|---|---|
 | [🏥 T-City Lite 医护职业与救援系统 (EMS) 细化规划](archive/QBCore_Lite_versions/career/medical_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/medical_plan.md` |
 
-### crime（5）
+### crime（6）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -103,26 +110,36 @@
 | [商店抢劫重构 — "罪与罚" 沉浸式玩法文档](store-robbery-redesign-20260601.md) | audit | 📌 final | 2026-10-25 | — |  | `docs/store-robbery-redesign-20260601.md` |
 | [Module 6: 犯罪系统 (crime.cfg)](01_module_manuals/06_crime_system.md) | manual | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/01_module_manuals/06_crime_system.md` |
 | [custom-security + custom-crime + custom-main — 安全与犯罪三件套](02_script_index/custom-security-crime-main.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-security-crime-main.md` |
+| [犯罪与组织 · UX 设计](client/ux/modules/crime.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/crime.md` |
 | [v0.5 犯罪玩法](archive/QBCore_Lite_versions/v0.5-crime-gameplay.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.5-crime-gameplay.md` |
 
-### jobs（7）
+### jobs（15）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [v0.7a 验收报告（服务端 / 无头）](../T-CityLite.base/docs/v0.7a-acceptance-report.md) | audit | 📌 final | 2026-10-25 | — |  | `T-CityLite.base/docs/v0.7a-acceptance-report.md` |
+| [验证：R1 就业循环 · garbage 真机跑通（阶段 V1）](plan/jobs-content/05-verification.md) | audit | ✅ active | 2026-11-13 | 2027-04-30 |  | `docs/plan/jobs-content/05-verification.md` |
+| [全量排查：78 个任务模板的坐标（阶段 V2）](plan/jobs-content/06-coord-audit.md) | audit | ✅ active | 2026-11-14 | 2027-04-30 |  | `docs/plan/jobs-content/06-coord-audit.md` |
 | [Module 5: 职业与权限系统 (jobs.cfg / police.cfg / medical.cfg / career.cfg / admin.cfg)](01_module_manuals/05_jobs_and_permissions.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/01_module_manuals/05_jobs_and_permissions.md` |
+| [职业与任务 · UX 设计](client/ux/modules/jobs.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/jobs.md` |
 | [🚗 T-City Lite 驾驶员与驾考系统 (Driver) 细化规划](archive/QBCore_Lite_versions/career/driver_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/driver_plan.md` |
 | [🚚 T-City Lite 货运司机与物流系统 (Logistics) 细化规划](archive/QBCore_Lite_versions/career/logistics_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/logistics_plan.md` |
 | [🎭 T-City Lite 职业身份与扮演体验（Career）总规划](archive/QBCore_Lite_versions/career/overall_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/overall_plan.md` |
+| [内容填充总规划（职业优先，R0–R6）](plan/jobs-content-roadmap.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content-roadmap.md` |
+| [计划：R1 多站驾驶（garbage + bus）](plan/jobs-content/03-plan.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/03-plan.md` |
+| [调研：职业内容填充（阶段 R）](plan/jobs-content/01-research.md) | research | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/01-research.md` |
 | [T-City Lite — 职业声望与进阶养成系统设计](../T-CityLite.base/docs/v0.7-career-reputation-design.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/v0.7-career-reputation-design.md` |
 | [v0.7a 载具系统重构与通用物流任务系统集成](archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md` |
+| [设计：职业内容填充（阶段 D）](plan/jobs-content/02-design.md) | spec | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/02-design.md` |
+| [数值卡：R0/R1 三个职业（阶段 P4 输入）](plan/jobs-content/04-numbers.md) | spec | 🟡 draft | 2026-11-13 | 2027-04-30 |  | `docs/plan/jobs-content/04-numbers.md` |
 
-### vehicle（6）
+### vehicle（7）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [Module 4: 车辆系统 (vehicles.cfg)](01_module_manuals/04_vehicle_system.md) | manual | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/01_module_manuals/04_vehicle_system.md` |
 | [custom-vehicles — 统一车辆系统](02_script_index/custom-vehicles.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-vehicles.md` |
+| [载具与车库 · UX 设计](client/ux/modules/vehicles.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/vehicles.md` |
 | [✈️ T-City Lite 飞行员与航空系统 (Pilot) 细化规划](archive/QBCore_Lite_versions/career/pilot_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/pilot_plan.md` |
 | [T-City2 改装店玩法分析报告](analysis/tuning_shop_analysis.md) | research | 📌 final | 2026-10-25 | 2027-01-30 |  | `docs/analysis/tuning_shop_analysis.md` |
 | [T-City2 改装店玩家体验流程设计](analysis/tuning_shop_player_experience.md) | research | 📌 final | 2026-06-21 | 2027-01-30 |  | `docs/analysis/tuning_shop_player_experience.md` |
@@ -155,32 +172,46 @@
 | [custom-phone 性能与职业 App 接口设计](agent/phone/DESIGN.md) | spec | ✅ active | 2026-10-31 | 2027-04-30 | ★ | `docs/agent/phone/DESIGN.md` |
 | [v0.4 自研手机系统（custom-phone）](archive/QBCore_Lite_versions/v0.4-custom-phone.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.4-custom-phone.md` |
 
-### quest（10）
+### quest（15）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [custom-quest — 数据驱动任务系统](02_script_index/custom-quest.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-quest.md` |
 | [T-City 职业与组织任务情景建立手册 (Batch 1, Batch 2, Batch 3 & Batch 4)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_setup_manual.md) | manual | 📦 archived | 2026-10-23 | 2027-01-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_setup_manual.md` |
+| [热狗摊：开发计划（据 UX 规格 §10 拆片）](plan/jobs-content/11-hotdog-dev-plan.md) | plan | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/11-hotdog-dev-plan.md` |
+| [任务节点与 UX 调研：以「热狗摊」为样本](plan/jobs-content/07-quest-ux-research.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/07-quest-ux-research.md` |
+| [成熟职业脚本调研：官方 9 个 job 的玩法循环拆解](plan/jobs-content/08-mature-scripts-survey.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/08-mature-scripts-survey.md` |
+| [热狗线坐标表（S0 踏勘结果）](plan/jobs-content/12-hotdog-coordinates.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/12-hotdog-coordinates.md` |
 | [T-City Lite — 通用任务模板系统设计](../T-CityLite.base/docs/v0.7-mission-template-design.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/v0.7-mission-template-design.md` |
 | [🎭 T-City · 中东翻版剧情线 — 叙事设计全案](07_narrative/middle-east-narrative-design.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/07_narrative/middle-east-narrative-design.md` |
 | [T-City 职业、资质与组织任务重构讨论蓝图 (v1.0)](archive/QBCore_Lite_versions/career/careers_quest_designe/career_task_discussion_blueprint.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/career_task_discussion_blueprint.md` |
 | [T-City通用任务系统：原子节点设计与配置规范手册 (v2.0.0 — 解耦重构版)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_atomic_nodes_spec.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_atomic_nodes_spec.md` |
 | [T-City角色扮演核心任务设计与场景装配手册 (v2.0 — 经济与小游戏闭环版)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_design.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_design.md` |
 | [v0.6-quest 通用任务系统（Quest/Mission System）](archive/QBCore_Lite_versions/v0.6-quest-system.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.6-quest-system.md` |
+| [热狗摊玩家 UX 规格](plan/jobs-content/10-hotdog-ux-spec.md) | spec | 🟡 draft | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/10-hotdog-ux-spec.md` |
 | [05 — 叙事所有权：让服务器拥有自己的历史](server-design/05-narrative-ownership.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/05-narrative-ownership.md` |
 | [09 — 任务的三种入口：日常是货架、剧情是剧本、奇遇是天气](server-design/09-quest-pre-start-and-kinds.md) | spec | ✅ active | 2026-10-26 | 2027-04-30 |  | `docs/server-design/09-quest-pre-start-and-kinds.md` |
 
-### ops（1）
+### ops（2）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
+| [管理与审计 · UX 设计](client/ux/modules/admin.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/admin.md` |
 | [Reasonix 通知声音配置](reasonix-hooks-config.md) | runbook | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/reasonix-hooks-config.md` |
 
-### ux（20）
+### ux（29）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [T-City 客户端（FiveM / QBCore / NUI）审计](client/CLIENT_AUDIT.md) | audit | 📌 final | 2026-10-25 | — |  | `docs/client/CLIENT_AUDIT.md` |
+| [UX 工作流：调研 → 设计 → 计划 → 验收](client/ux/00-workflow.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/00-workflow.md` |
+| [管理员命令清单](client/ux/admin-commands.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/admin-commands.md` |
+| [经济与交易 · UX 设计](client/ux/modules/economy.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/economy.md` |
+| [HUD 与状态 · UX 设计](client/ux/modules/hud.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/hud.md` |
+| [医疗与急救 · UX 设计](client/ux/modules/medical.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/medical.md` |
+| [通知与交互提示 · UX 设计](client/ux/modules/notify-prompt.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/notify-prompt.md` |
+| [手机 · UX 设计](client/ux/modules/phone.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/phone.md` |
+| [<模块名> · UX 设计](client/ux/modules/template.md) | manual | 🟡 draft | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/template.md` |
 | [客户端与 NUI 资料库](client/README.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/client/README.md` |
 | [客户端基线与手机查询故障 —— 计划（2026-10-25）](client/plans/2026-10-25-client-baseline.md) | plan | 📦 archived | 2026-10-25 | 2027-04-30 |  | `docs/client/plans/2026-10-25-client-baseline.md` |
 | [输入分层提案：让 UI 像 GTA 暂停菜单那样接管输入](client/plans/2026-10-27-input-layering.md) | plan | 📦 archived | 2026-10-27 | 2027-04-30 |  | `docs/client/plans/2026-10-27-input-layering.md` |
@@ -192,6 +223,7 @@
 | [手机/平板 NUI 的键盘与手柄导航（研究 + 设计）](client/research/keyboard-and-gamepad-navigation.md) | research | ✅ active | 2026-10-27 | 2027-01-30 |  | `docs/client/research/keyboard-and-gamepad-navigation.md` |
 | [NUI POST 未到达客户端 Lua 回调 —— 系统排查手册](client/research/nui-debug-playbook.md) | research | ✅ active | 2026-10-27 | 2027-01-30 |  | `docs/client/research/nui-debug-playbook.md` |
 | [QBCore 客户端代码面分析（T-City 实测 + 上游对照）](qbcore-client-code-analysis.md) | research | 📌 final | 2026-10-27 | 2027-01-30 |  | `docs/qbcore-client-code-analysis.md` |
+| [真机验证清单（按模块）](client/ux/PLAYTEST.md) | runbook | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/PLAYTEST.md` |
 | [T-City Lite 交互设计规范备忘录 (Interaction Design Memo)](../T-CityLite.base/docs/interaction_memo.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/interaction_memo.md` |
 | [菜单交互设计规范（NUI / 世界交互）](../T-CityLite.base/docs/menu-interaction-design.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/menu-interaction-design.md` |
 | [v0.4 NUI 现代化标准与测试手册](../T-CityLite.base/docs/v0.4-nui-standard.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/v0.4-nui-standard.md` |
@@ -217,7 +249,7 @@
 | [03 — 不可替代性与声誉：让玩家成为"基础设施"](server-design/03-irreplaceability-reputation.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/03-irreplaceability-reputation.md` |
 | [04 — 共治系统：让玩家成为规则的共同制定者](server-design/04-co-governance.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/04-co-governance.md` |
 
-### agent（33）
+### agent（35）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -235,8 +267,10 @@
 | [Agent Read API and MCP Sidecar (issue #24)](../T-CityLite.base/docs/agent/API.md) | manual | ✅ active | 2026-10-23 | 2027-01-30 |  | `T-CityLite.base/docs/agent/API.md` |
 | [驱动服务器控制台（`tcity-cmd`）](../T-CityLite.base/docs/agent/CONSOLE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/agent/CONSOLE.md` |
 | [把 MCP 接到 T-City 上（本地全链路）](../T-CityLite.base/docs/agent/MCP_WIRING.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `T-CityLite.base/docs/agent/MCP_WIRING.md` |
-| [加 / 改一个 agent 动作：检查清单](agent/police/ATOOLS-DISCIPLINE.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `docs/agent/police/ATOOLS-DISCIPLINE.md` |
+| [加 / 改一个 agent 动作：检查清单](agent/police/ATOOLS-DISCIPLINE.md) | manual | ✅ active | 2026-11-15 | 2027-01-30 |  | `docs/agent/police/ATOOLS-DISCIPLINE.md` |
 | [Agent Read Layer (Phase 3 / P1)](../T-CityLite.base/docs/agent/README.md) | meta | ✅ active | 2026-10-27 | 2027-04-30 |  | `T-CityLite.base/docs/agent/README.md` |
+| [Agent 控制平面升级计划](plan/agent-control-plane-upgrade.md) | plan | ✅ active | 2026-11-12 | 2027-03-31 | ★ | `docs/plan/agent-control-plane-upgrade.md` |
+| [Agent 模块化施工计划（M1–M7）](plan/agent-module-execution.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/agent-module-execution.md` |
 | [2026-11-01 · 下一步开发方向调研（Hermes + Claude Code 双份意见）](engineering/2026-11-01-next-epic-research.md) | research | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/2026-11-01-next-epic-research.md` |
 | [客户端双端测试 Harness（MCP）](../T-CityLite.base/docs/agent/CLIENT_HARNESS.md) | spec | ✅ active | 2026-10-26 | 2027-04-30 |  | `T-CityLite.base/docs/agent/CLIENT_HARNESS.md` |
 | [客户端可观测性：服务端能看见客户端](../T-CityLite.base/docs/agent/CLIENT_OBSERVABILITY.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/agent/CLIENT_OBSERVABILITY.md` |
@@ -289,7 +323,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（54）
+### meta（63）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -304,12 +338,15 @@
 | [T-City 仓库删除审计提案](cleanup/delete-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/delete-proposal.md` |
 | [T-City 仓库 `.gitignore` 审计提案](cleanup/ignore-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/ignore-proposal.md` |
 | [T-City 仓库结构与分类整改提案](cleanup/structure-proposal.md) | audit | 📌 final | 2026-10-23 | — |  | `docs/cleanup/structure-proposal.md` |
+| [net event 治理基线（P1-3 第 1 步）](engineering/2026-11-foundation-net-events-baseline.md) | audit | ✅ active | 2026-11-01 | 2027-02-01 |  | `docs/engineering/2026-11-foundation-net-events-baseline.md` |
+| [P1-2 / P1-1 验收证据（存档单写者 + 拆环）](engineering/2026-11-foundation-p1-evidence.md) | audit | ✅ active | 2026-11-01 | 2027-05-01 |  | `docs/engineering/2026-11-foundation-p1-evidence.md` |
 | [T-CityLite 服务器总领手册](00-server-master-manual.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/00-server-master-manual.md` |
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
-| [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `AGENTS.md` |
-| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `CHANGELOG.md` |
+| [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
+| [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `AGENTS.md` |
+| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
-| [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-10-21 | 2027-04-30 |  | `CONTRIBUTING.md` |
+| [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CONTRIBUTING.md` |
 | [T-City Lite](../README.md) | meta | ✅ active | 2026-10-26 | 2027-04-30 |  | `README.md` |
 | [Security Policy](../SECURITY.md) | meta | ✅ active | 2026-10-21 | 2027-04-30 |  | `SECURITY.md` |
 | [T-CityLite.base/docs/ — 服务器与 agent 技术文档](../T-CityLite.base/docs/README.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/README.md` |
@@ -326,11 +363,12 @@
 | [历史归档（不维护）：docs/archive](archive/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/archive/LEGACY.md` |
 | [📋 T-City Lite 版本规划索引](archive/QBCore_Lite_versions/README.md) | meta | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/README.md` |
 | [历史归档（不维护）：docs/cleanup](cleanup/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/cleanup/LEGACY.md` |
-| [ARCHITECTURE — 四个平面与依赖方向](engineering/ARCHITECTURE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/ARCHITECTURE.md` |
+| [ARCHITECTURE — 四个平面与依赖方向](engineering/ARCHITECTURE.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `docs/engineering/ARCHITECTURE.md` |
 | [CONSTITUTION — T-City 的十条不变量](engineering/CONSTITUTION.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/CONSTITUTION.md` |
 | [消耗品与状态层（custom-consumables）](engineering/CONSUMABLES.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/engineering/CONSUMABLES.md` |
 | [真机验证工作流（Live verification）](engineering/LIVE_VERIFICATION.md) | meta | ✅ active | 2026-10-30 | 2027-04-30 |  | `docs/engineering/LIVE_VERIFICATION.md` |
 | [REUSE — 共享代码放哪、什么该合并、怎么收敛](engineering/REUSE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/REUSE.md` |
+| [STANDARDS — 技术标准 v0.2（可执行、可验证）](engineering/STANDARDS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 | ★ | `docs/engineering/STANDARDS.md` |
 | [工作树与分支流程](engineering/WORKTREE.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/WORKTREE.md` |
 | [Agent 时代的工程运行模型（T-City 落地提案 v1）](engineering/agent-operating-model.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/agent-operating-model.md` |
 | [LLM 通用工艺准则（原 CLAUDE.md，2026-10-25 归档）](engineering/llm-craft.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/llm-craft.md` |
@@ -344,11 +382,16 @@
 | [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../PROJECT_PROGRESS.md) | plan | ✅ active | 2026-10-23 | 2027-04-30 |  | `PROJECT_PROGRESS.md` |
 | [⚙️ T-City Lite Career (职业身份) 系统重构技术方案](archive/QBCore_Lite_versions/career/refactor_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/refactor_plan.md` |
 | [仓库整理总方案（合并三份提案）](cleanup/PLAN.md) | plan | 📌 final | 2026-10-23 | 2027-04-30 |  | `docs/cleanup/PLAN.md` |
+| [抽象收敛施工计划（2026-11）](engineering/2026-11-abstraction-convergence-plan.md) | plan | ✅ active | 2026-11-15 | 2027-03-31 |  | `docs/engineering/2026-11-abstraction-convergence-plan.md` |
+| [2026-11 基石加固计划（P0 / P1 / P2）](engineering/2026-11-foundation-plan.md) | plan | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-plan.md` |
 | [T-City 服务器系统覆盖与规划缺口调研](analysis/2026-10-31-systems-coverage-survey.md) | research | 📌 final | 2026-10-31 | 2027-04-30 | ★ | `docs/analysis/2026-10-31-systems-coverage-survey.md` |
+| [T-City 抽象设计审计（2026-11-15）](archive/2026-11-abstraction-audit.md) | research | 📦 archived | 2026-11-15 | 2027-03-31 |  | `docs/archive/2026-11-abstraction-audit.md` |
 | [T-City Lite — DevOps 工作流](DEVOPS.md) | runbook | ✅ active | 2026-10-23 | 2027-01-30 |  | `docs/DEVOPS.md` |
+| [开服 Runbook（T-City Lite）](engineering/2026-11-launch-runbook.md) | runbook | ✅ active | 2026-11-10 | 2027-03-31 |  | `docs/engineering/2026-11-launch-runbook.md` |
 | [📖 T-City Wiki 系统设计规格书](../T-CityLite.base/docs/design/tcity-wiki-design-spec.md) | spec | 🟡 draft | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-wiki-design-spec.md` |
+| [基石目标形态（TO-BE）— 五层、单写者、可验收的预算](engineering/FOUNDATION-TO-BE.md) | spec | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/FOUNDATION-TO-BE.md` |
 
-### infra（16）
+### infra（23）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -365,6 +408,13 @@
 | [数据库表全量索引](04_call_reference/database_index.md) | manual | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/04_call_reference/database_index.md` |
 | [Cross-Resource Events Index](04_call_reference/events_index.md) | manual | ✅ active | 2026-10-22 | 2027-01-30 |  | `docs/04_call_reference/events_index.md` |
 | [重构删除清单 & 保留清单 v2.0](../T-CityLite.base/docs/refactoring_manifest_v2.md) | plan | 📌 final | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/refactoring_manifest_v2.md` |
+| [P1-4 开发计划与交付标准（实施方 + 验收方联合定稿）](engineering/2026-11-foundation-p1-4-plan.md) | plan | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-4-plan.md` |
+| [P1-5 施工计划：真机缺陷（跨资源引用 / 金额格式化 / 审计与运维）](engineering/2026-11-foundation-p1-5-plan.md) | plan | ✅ active | 2026-11-07 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-5-plan.md` |
+| [P1-5 二期施工计划：金额写路径收敛（拒绝语义）](engineering/2026-11-foundation-p1-5b-money-path-plan.md) | plan | 📌 final | 2026-11-08 | 2027-03-31 |  | `docs/engineering/2026-11-foundation-p1-5b-money-path-plan.md` |
+| [P1-6 施工计划：重启后的「失效函数引用」与审计留存](engineering/2026-11-foundation-p1-6-plan.md) | plan | ✅ active | 2026-11-07 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-6-plan.md` |
+| [P1-4 调研：拆掉 compat 的全局猴补](engineering/2026-11-foundation-p1-4-research.md) | research | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-p1-4-research.md` |
+| [重启 SOP：`restart` 的级联与恢复](engineering/2026-11-restart-sop.md) | runbook | ✅ active | 2026-11-07 | 2027-02-01 |  | `docs/engineering/2026-11-restart-sop.md` |
+| [任务坐标怎么离线核对（不进游戏）](engineering/QUEST_COORDS.md) | runbook | ✅ active | 2026-11-14 | 2027-04-30 |  | `docs/engineering/QUEST_COORDS.md` |
 | [v0.1 精简启动](archive/QBCore_Lite_versions/v0.1-lite-startup.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.1-lite-startup.md` |
 | [v0.2 基础 RP](archive/QBCore_Lite_versions/v0.2-basic-rp.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.2-basic-rp.md` |
 | [07 — 架构集成：如何嵌入 T-City Phase 0-3](server-design/07-architecture-integration.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/server-design/07-architecture-integration.md` |

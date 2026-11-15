@@ -438,11 +438,29 @@ function PaycheckInterval()
                     if account ~= 0 then
                         exports['qb-banking']:RemoveMoney(Player.PlayerData.job.name, payment, 'Employee Paycheck')
                     end
-                    TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
+                    -- N-11（2026-11-12）：发薪提示走 feed，custom-notify 不在时回落原生
+                    local delivered = false
+                    local pok, psent = pcall(function()
+                        return exports['custom-notify']:Push(Player.PlayerData.source, 'feed',
+                            Lang:t('info.received_paycheck', { value = payment }))
+                    end)
+                    if pok and psent == true then delivered = true end
+                    if not delivered then
+                        TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
+                    end
                 end
             else
                 Player.Functions.AddMoney('bank', payment, 'paycheck')
-                TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
+                -- N-11（2026-11-12）：发薪提示走 feed，custom-notify 不在时回落原生
+                local delivered2 = false
+                local pok2, psent2 = pcall(function()
+                    return exports['custom-notify']:Push(Player.PlayerData.source, 'feed',
+                        Lang:t('info.received_paycheck', { value = payment }))
+                end)
+                if pok2 and psent2 == true then delivered2 = true end
+                if not delivered2 then
+                    TriggerClientEvent('QBCore:Notify', Player.PlayerData.source, Lang:t('info.received_paycheck', { value = payment }))
+                end
             end
         end
     end
@@ -466,15 +484,20 @@ function QBCore.Functions.TriggerClientCallback(name, source, ...)
     end
 
     QBCore.ClientCallbacks[name] = {
+        -- 谁被问的：只有这个 source 有权回答（见 QBCore:Server:TriggerClientCallback）
+        source = source,
         callback = cb,
         promise = promise.new()
     }
 
     TriggerClientEvent('QBCore:Client:TriggerClientCallback', source, name, table.unpack(args))
 
+    local pending = QBCore.ClientCallbacks[name]
     if cb == nil then
-        Citizen.Await(QBCore.ClientCallbacks[name].promise)
-        return QBCore.ClientCallbacks[name].promise.value
+        Citizen.Await(pending.promise)
+        -- 注意：handler 回答后会把条目清掉，所以结果必须从 pending 读，
+        -- 不能回头再索引 QBCore.ClientCallbacks[name]（那会是 nil）。
+        return pending.promise.value
     end
 end
 
@@ -726,7 +749,7 @@ function QBCore.Functions.HasItem(source, items, amount)
 end
 
 --- 统一通知入口 (服务端 → 客户端路由)
---- 🛡️ 五层安全: Source 校验 → 存活检查 → 限流防刷 → 内容清洗 → Bus 路由
+--- 🛡️ 四层安全: Source 校验 → 存活检查 → 内容清洗 → 客户端投递
 ---@param source any       目标玩家 source
 ---@param text string      通知文本
 ---@param texttype string  通知类型 (注意: 不能叫 type，会覆盖内置函数)
@@ -756,15 +779,7 @@ function QBCore.Functions.Notify(source, text, texttype, length)
     end
 
     -- ═══════════════════════════════════════════════════════════
-    -- 第4层: 优先走 Bus.notify 服务 (含限流 + 审计)
-    -- ═══════════════════════════════════════════════════════════
-    if _G.Bus and _G.Bus.notify and _G.Bus.notify.Send then
-        _G.Bus.notify.Send(source, safeText, texttype, length)
-        return
-    end
-
-    -- ═══════════════════════════════════════════════════════════
-    -- 第5层: 回退 — 直连客户端事件 (无 Bus 时)
+    -- 第4层: 直连客户端事件
     -- ═══════════════════════════════════════════════════════════
     TriggerClientEvent('QBCore:Notify', source, safeText, texttype, length)
 end

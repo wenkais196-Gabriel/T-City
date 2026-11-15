@@ -256,7 +256,7 @@ RegisterNetEvent('hospital:client:RevivePlayer', function()
         local player, distance = GetClosestPlayer()
         if player ~= -1 and distance < 5.0 then
             local playerId = GetPlayerServerId(player)
-            QBCore.Functions.Progressbar('hospital_revive', Lang:t('progress.revive'), 5000, false, true, {
+            QBCore.Functions.Progressbar('hospital_revive', '正在施救…', 5000, false, true, {
                 disableMovement = false,
                 disableCarMovement = false,
                 disableMouse = false,
@@ -267,17 +267,18 @@ RegisterNetEvent('hospital:client:RevivePlayer', function()
                 flags = 33,
             }, {}, {}, function() -- Done
                 StopAnimTask(PlayerPedId(), healAnimDict, 'exit', 1.0)
-                QBCore.Functions.Notify(Lang:t('success.revived'), 'success')
+                -- M-5：救人者与旁观都看得到结果（feed），不再和错误挤同一条样式
+                exports['custom-notify']:PushLocal('feed', ('已救起 %s'):format(GetPlayerName(player)))
                 TriggerServerEvent('hospital:server:RevivePlayer', playerId)
             end, function() -- Cancel
                 StopAnimTask(PlayerPedId(), healAnimDict, 'exit', 1.0)
-                QBCore.Functions.Notify(Lang:t('error.canceled'), 'error')
+                exports['custom-notify']:PushLocal('error', '施救中断')
             end)
         else
-            QBCore.Functions.Notify(Lang:t('error.no_player'), 'error')
+            exports['custom-notify']:PushLocal('error', '附近没有需要施救的人')
         end
     else
-        QBCore.Functions.Notify(Lang:t('error.no_firstaid'), 'error')
+        exports['custom-notify']:PushLocal('error', '需要急救包')
     end
 end)
 
@@ -478,88 +479,16 @@ if Config.UseTarget then
     CreateThread(function()
         for i = 1, #Config.Locations['duty'] do
             local v = Config.Locations['duty'][i]
-            exports['qb-target']:AddBoxZone('duty' .. i, vector3(v.x, v.y, v.z), 1.5, 1, {
-                name = 'duty' .. i,
-                debugPoly = false,
-                heading = -20,
-                minZ = v.z - 2,
-                maxZ = v.z + 2,
-            }, {
-                options = {
-                    {
-                        type = 'client',
-                        event = 'EMSToggle:Duty',
-                        icon = 'fa fa-clipboard',
-                        label = 'Sign In/Off duty',
-                        job = 'ambulance'
-                    }
-                },
-                distance = 1.5
-            })
-        end
+                    end
         for i = 1, #Config.Locations['stash'] do
             local v = Config.Locations['stash'][i]
-            exports['qb-target']:AddBoxZone('stash' .. i, vector3(v.x, v.y, v.z), 1, 1, {
-                name = 'stash' .. i,
-                debugPoly = false,
-                heading = -20,
-                minZ = v.z - 2,
-                maxZ = v.z + 2,
-            }, {
-                options = {
-                    {
-                        type = 'server',
-                        event = 'qb-ambulancejob:server:stash',
-                        icon = 'fa fa-hand',
-                        label = 'Open Stash',
-                        job = 'ambulance'
-                    }
-                },
-                distance = 1.5
-            })
-        end
+                    end
         for i = 1, #Config.Locations['roof'] do
             local v = Config.Locations['roof'][i]
-            exports['qb-target']:AddBoxZone('roof' .. i, vector3(v.x, v.y, v.z), 2, 2, {
-                name = 'roof' .. i,
-                debugPoly = false,
-                heading = -20,
-                minZ = v.z - 2,
-                maxZ = v.z + 2,
-            }, {
-                options = {
-                    {
-                        type = 'client',
-                        event = 'qb-ambulancejob:elevator_roof',
-                        icon = 'fas fa-hand-point-up',
-                        label = 'Take Elevator',
-                        job = 'ambulance'
-                    },
-                },
-                distance = 8
-            })
-        end
+                    end
         for i = 1, #Config.Locations['main'] do
             local v = Config.Locations['main'][i]
-            exports['qb-target']:AddBoxZone('main' .. i, vector3(v.x, v.y, v.z), 1.5, 1.5, {
-                name = 'main' .. i,
-                debugPoly = false,
-                heading = -20,
-                minZ = v.z - 2,
-                maxZ = v.z + 2,
-            }, {
-                options = {
-                    {
-                        type = 'client',
-                        event = 'qb-ambulancejob:elevator_main',
-                        icon = 'fas fa-hand-point-up',
-                        label = 'Take Elevator',
-                        job = 'ambulance'
-                    },
-                },
-                distance = 8
-            })
-        end
+                    end
     end)
 else
     CreateThread(function()
@@ -671,3 +600,124 @@ else
         end)
     end)
 end
+
+-- ==============================================================
+-- M-1：施救从"命令 + ALT 热区"改成 **E**。
+-- 判定用 statebag（isdead / inlaststand），因为客户端读不到别人的 metadata。
+-- 按 E 之后仍然走原来的 hospital:client:RevivePlayer —— 物品检查、5 秒进度条、
+-- 服务端权限（CanRevive：在职 EMS 或 firstaid + 医疗执照）全都不变，只换了入口。
+-- ==============================================================
+local REVIVE_PROMPT_RANGE = 3.0
+local revivePromptShown = false
+local revivePromptLabel = nil
+
+CreateThread(function()
+    while true do
+        local sleep = 800
+        local ped = PlayerPedId()
+        local myCoords = GetEntityCoords(ped)
+        local bestId, bestDist = nil, REVIVE_PROMPT_RANGE
+
+        for _, playerIdx in ipairs(GetActivePlayers()) do
+            local other = GetPlayerServerId(playerIdx)
+            if other ~= GetPlayerServerId(PlayerId()) then
+                local state = Player(other).state
+                local downed = state and (state.isdead or state.inlaststand)
+                if downed then
+                    local otherPed = GetPlayerPed(playerIdx)
+                    local dist = #(myCoords - GetEntityCoords(otherPed))
+                    if dist < bestDist then bestId, bestDist = playerIdx, dist end
+                end
+            end
+        end
+
+        if bestId then
+            sleep = 0
+            local hasKit = QBCore.Functions.HasItem('firstaid')
+            local reviveLabel = hasKit and ('施救 · %s'):format(GetPlayerName(bestId)) or '施救（需要急救包）'
+            if reviveLabel ~= revivePromptLabel then
+                exports['custom-prompt']:Show({ key = 'E', label = reviveLabel })
+                revivePromptLabel = reviveLabel
+                revivePromptShown = true
+            end
+            if hasKit and IsControlJustReleased(0, 38) then
+                exports['custom-prompt']:Hide()
+                revivePromptShown = false
+                revivePromptLabel = nil
+                TriggerEvent('hospital:client:RevivePlayer')
+                sleep = 1500
+            end
+        elseif revivePromptShown then
+            exports['custom-prompt']:Hide()
+            revivePromptShown = false
+            revivePromptLabel = nil
+        end
+
+        Wait(sleep)
+    end
+end)
+
+-- ==============================================================
+-- M-4：医院 4 类热区 → 统一 [E]
+-- 原来每一项都是 qb-target 的 AddBoxZone（长按 ALT 出选项），而每个位置只有一个动作。
+-- 动作与"仅 ambulance 可用"的判定保持原样，只换入口；距离统一 2.5 米
+-- （原来 roof 配了 8 米，提示会从很远就弹出来）。
+-- ==============================================================
+local EMS_ZONES = {
+    { key = 'duty',  label = '值班 签到/签退', event = 'EMSToggle:Duty',                 server = false },
+    { key = 'stash', label = '打开储物柜',     event = 'qb-ambulancejob:server:stash',   server = true  },
+    { key = 'roof',  label = '上楼',           event = 'qb-ambulancejob:elevator_roof',  server = false },
+    { key = 'main',  label = '下楼',           event = 'qb-ambulancejob:elevator_main',  server = false },
+}
+local EMS_ZONE_RANGE = 2.5
+local emsZoneShown = false
+local emsZoneLabel = nil
+
+CreateThread(function()
+    Wait(2000)
+    while true do
+        local sleep = 800
+        local isEMS = PlayerData and PlayerData.job and PlayerData.job.name == 'ambulance'
+        if isEMS then
+            local pos = GetEntityCoords(PlayerPedId())
+            local found = nil
+            for _, zone in ipairs(EMS_ZONES) do
+                local list = Config.Locations[zone.key]
+                if list then
+                    for _, v in ipairs(list) do
+                        if #(pos - vector3(v.x, v.y, v.z)) <= EMS_ZONE_RANGE then
+                            found = zone
+                            break
+                        end
+                    end
+                end
+                if found then break end
+            end
+
+            if found then
+                sleep = 0
+                if found.label ~= emsZoneLabel then
+                    exports['custom-prompt']:Show({ key = 'E', label = found.label })
+                    emsZoneLabel = found.label
+                    emsZoneShown = true
+                end
+                if IsControlJustReleased(0, 38) then
+                    exports['custom-prompt']:Hide()
+                    emsZoneShown = false
+                    emsZoneLabel = nil
+                    if found.server then
+                        TriggerServerEvent(found.event)
+                    else
+                        TriggerEvent(found.event)
+                    end
+                    sleep = 1200
+                end
+            elseif emsZoneShown then
+                exports['custom-prompt']:Hide()
+                emsZoneShown = false
+                emsZoneLabel = nil
+            end
+        end
+        Wait(sleep)
+    end
+end)

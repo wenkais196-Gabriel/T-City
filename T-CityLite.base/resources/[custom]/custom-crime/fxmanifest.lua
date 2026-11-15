@@ -7,6 +7,10 @@ version '1.0.0'
 
 lua54 'yes'
 
+shared_scripts {
+    '@core-framework/shared/money_aliases.lua'
+}
+
 server_scripts {
     'server/crime.lua'
 }

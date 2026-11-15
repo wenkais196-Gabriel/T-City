@@ -73,6 +73,11 @@ function Bootstrap.Load(options)
     require('mysql')(env, options.db)
     require('json')
 
+    -- 服务端写库走 core-framework/server/db.lua 的 Db.Insert/Db.Update；
+    -- 先加载适配器，后面的 main.lua/director.lua 才能在调用时解析 Db。
+    dofile(findRepoRoot()
+        .. '/T-CityLite.base/resources/[standalone]/core-framework/server/db.lua')
+
     -- core-framework 的 convar 助手族（ConvarString/ConvarInt/...）是**全局**函数，
     -- 资源里写的是 `exports['core-framework']:ConvarString(...)`。不加载这一份，
     -- 所有读 convar 的开关都会读成空 → 功能被当成关闭（HTTP 适配器就返回 503）。

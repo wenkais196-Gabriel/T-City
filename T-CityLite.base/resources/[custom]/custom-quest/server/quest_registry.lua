@@ -73,6 +73,15 @@ function QuestRegistry.RegisterTemplate(template)
         for _, vtype in pairs(validTypes) do
             if vtype == step.type then found = true; break end
         end
+        -- rental 步骤的唯一开关是 validator_id：漏写/拼错时校验器不会被调用，
+        -- 押金一分不扣也不建会话，但任务照常推进（真机 0 条 rental_open 就是这么来的）。
+        -- 这类错误必须在**注册期**炸出来，不能等玩家跑到点上才发现。
+        if step.type == 'rental' then
+            local vid = step.data and step.data.validator_id
+            if type(vid) ~= 'string' or vid == '' then
+                return false, ('Template %s step %s is rental but has no validator_id'):format(template.id, step.id)
+            end
+        end
         if not found then
             return false, ('Template %s step %s has unknown type: %s'):format(template.id, step.id, step.type)
         end
@@ -231,6 +240,7 @@ local function LoadExternalQuests()
                 local knownFiles = {
                     'config/quests/quest_miner.lua',
                     'config/quests/quest_logistics.lua',
+                    'config/quests/quest_hotdog.lua',
                     'config/quests/quest_cartel_initiation.lua',
                     'config/quests/quest_cartel_drug_run.lua',
                     'config/quests/quest_chain_cartel.lua',
@@ -265,6 +275,9 @@ local function LoadExternalQuests()
                     'config/quests/quest_civilian_ch4_mogul.lua',
                     'config/quests/quest_civilian_ch4_artisan.lua',
                     'config/quests/quest_civilian_ch4_survivor.lua',
+                    -- R1（职业内容填充）：多站路线
+                    'config/quests/quest_garbage.lua',
+                    'config/quests/quest_bus.lua',
                 }
                 for _, fn in ipairs(knownFiles) do
                     local c = LoadResourceFile(GetCurrentResourceName(), fn)

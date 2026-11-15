@@ -1,105 +1,70 @@
-"""
-test_persistence.py — Persistence Manager 单元测试
+"""core-framework 的 persistence 只是 delegate —— 转发契约。
 
-测试范围:
-- StartFlushTick (tick interval, Convar override)
-- FlushAll (批量刷盘, 计数, 空池)
-- ForceFlushPlayer (单玩家紧急刷盘)
-- Stats (统计信息)
-- StartHealthReport (健康报告启动)
-- Bus 注册
-- 资源停止钩子 (onResourceStop)
+2026-11-01（P1-1/P1-2）之前，这个文件测的是“delegate 自己持有一个脏池，刷盘时
+调用 `Player.Functions.Save(true)`”。那正是环本身：`Save(true)` 会回头调
+`DirtyFlush.ForceFlush`。旧断言等于把 bug 写进了验收标准，所以整份改写成
+**转发契约**：所有状态在 qb-core 的 Store 里，这里只验它把调用送对地方、
+并且自己没有池子/定时器/写库语句。
+
+行为级证据（真实 Store + 真实 Player.Save + fake DB 失败）在
+`tests/unit/layer1_core/test_persistence_single_owner.py`。
 """
 
-import os
+from __future__ import annotations
+
+import re
 import subprocess
 import tempfile
 from pathlib import Path
+
 import pytest
 
+BASE = Path(__file__).resolve().parents[3]
+CF_STORE = (
+    BASE / "resources" / "[standalone]" / "core-framework" / "services" / "persistence_manager.lua"
+)
 
-CORE_UTIL = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'shared' / 'util.lua')
-PERSISTENCE_LUA = str(Path(__file__).resolve().parents[3] / 'resources' / '[standalone]' / 'core-framework' / 'services' / 'persistence_manager.lua')
+MOCK = r"""
+-- ── fake owner：qb-core 的 Store 通过 exports['qb-core'] 暴露 ──────────
+__calls = {}
+__ack = { reason = 'owner_ack', attempted = 2, ok = 1, failed = 1, duration_ms = 7 }
+__owner_available = true
 
+local function record(name)
+    return function(...)
+        __calls[#__calls + 1] = { name = name, args = { ... } }
+        if name == 'StoreFlushAll' then return __ack end
+        if name == 'StoreStats' then
+            return { dirty_pool_size = 3, failed_flushes = 1, flush_count = 5,
+                     force_count = 2, last_flush_time = 1, last_flush_duration = 9,
+                     total_players_flushed = 4 }
+        end
+        return true
+    end
+end
 
-def run_persistence_test(test_code: str) -> dict:
-    """Load persistence manager with mocks and run test code."""
-    mock = r'''
--- Mocks for Persistence Manager
-__saves = {}
-_G.QBCore = {
-    Functions = {
-        GetPlayer = function(src) return {
-            PlayerData = { citizenid = "MOCK001", money = { bank = 10000, cash = 500 } },
-            Functions = { AddMoney = function() return true end, RemoveMoney = function() return true end },
-        } end,
-        -- PersistenceManager.ForceFlush 通过 citizenid 找到在线玩家并调用 Save(true)
-        GetPlayerByCitizenId = function(cid)
-            return {
-                PlayerData = { citizenid = cid },
-                Functions = {
-                    Save = function(force) __saves[#__saves + 1] = cid end,
-                },
-            }
-        end,
-    },
-    Shared = { Round = function(v) return math.floor(v + 0.5) end },
+local ownerExports = {
+    StoreMarkDirty = record('StoreMarkDirty'),
+    StoreSaveNow = record('StoreSaveNow'),
+    StoreForceFlush = record('StoreForceFlush'),
+    StoreFlushAll = record('StoreFlushAll'),
+    StoreStats = record('StoreStats'),
 }
+
 exports = setmetatable({}, {
-    __index = function(t, k)
-        if k == "qb-core" then 
-            return { GetCoreObject = function() return _G.QBCore end }
-        end
-        return function(...) return true end
+    __index = function(_, resource)
+        if resource == 'qb-core' and __owner_available then return ownerExports end
+        return nil
     end,
-    __call = function(t, name, fn) return true end
+    __call = function() end,
 })
--- DirtyFlush mock
-_DirtyFlushData = {}
-DirtyFlush = {
-    _dirty = _DirtyFlushData,
-    MarkDirty = function(cid, dtype) _DirtyFlushData[cid] = (type(dtype) == "string") and true or dtype or true end,
-    Stats = function()
-        local count = 0; for _ in pairs(_DirtyFlushData) do count = count + 1 end
-        return { dirty_count = count }
-    end,
-    ForceFlush = function(cid)
-        if _DirtyFlushData[cid] then
-            _DirtyFlushData[cid] = nil
-        end
-    end,
-}
--- Convar mocks
-_G.__convars = {
-    persistence_flush_interval = "900",
-}
-GetConvar = function(name, default)
-    return _G.__convars[name] or default or ""
-end
-GetConvarInt = function(name, default)
-    return tonumber(GetConvar(name, tostring(default or 0))) or default
-end
-GetCurrentResourceName = function() return "test-resource" end
-GetPlayerName = function(src) return "Test Player" end
-LoadResourceFile = function() return "" end
-IsDuplicityVersion = function() return true end
-CreateThread = function(fn)
-    -- Don't actually run threads in unit tests (would infinite-loop on tick timers)
-    -- API tests verify that StartFlushTick/StartHealthReport don't crash on call
-end
-Wait = function(ms) end
-Citizen = { CreateThread = CreateThread, Wait = Wait }
-RegisterNetEvent = function() end; AddEventHandler = function() end
-TriggerEvent = function() end; TriggerClientEvent = function() end
-MySQL = { query = function(s,p,cb) if cb then cb({}) end end }
-print = function(...) end
-os = { time = os.time, clock = os.clock, date = os.date }
-math = math; table = table; string = string
-pairs = pairs; ipairs = ipairs; type = type; tostring = tostring; tonumber = tonumber
-setmetatable = setmetatable; getmetatable = getmetatable
-pcall = pcall; error = error; assert = assert
-load = load; next = next
-require = nil; package = nil; dofile = nil
+
+__threads = 0
+function CreateThread(_) __threads = __threads + 1 end
+function Wait(_) end
+AddEventHandler = function() end
+GetCurrentResourceName = function() return 'core-framework' end
+
 _G.Bus = _G.Bus or {}
 Bus = _G.Bus
 Bus._services = {}
@@ -108,240 +73,133 @@ function Bus.RegisterService(name, methods)
     Bus[name] = {}
     for k, v in pairs(methods) do Bus[name][k] = v end
 end
-function Bus.GetService(name)
-    return Bus._services[name]
-end
-'''
+function Bus.GetService(name) return Bus._services[name] end
+"""
 
-    with open(CORE_UTIL, 'r') as f:
-        util_code = f.read()
 
-    with open(PERSISTENCE_LUA, 'r') as f:
-        persistence_code = f.read()
-
-    # Patch QBCore export call
-    persistence_code = persistence_code.replace(
-        "exports['qb-core']:GetCoreObject()",
-        "QBCore"
-    )
-    # Disable auto-start threads in unit tests
-    # Use regex to only replace standalone calls, not function definitions
-    import re
-    persistence_code = re.sub(
-        r'^(PersistenceManager\.StartFlushTick)\(\)',
-        r'-- \1() -- disabled for unit test',
-        persistence_code, flags=re.MULTILINE
-    )
-    persistence_code = re.sub(
-        r'^(PersistenceManager\.StartHealthReport)\(\)',
-        r'-- \1() -- disabled for unit test',
-        persistence_code, flags=re.MULTILINE
-    )
-
-    # persistence_manager.lua 在加载时会用 LocalDirtyFlush 覆盖 _G.DirtyFlush
-    # （2026-06-22 架构修复：不再依赖外部注入的 DirtyFlush）。
-    # 把测试用的 _DirtyFlushData 重新指向真实脏数据表，保证测试观察/修改的是同一实例。
-    bridge = '\n_DirtyFlushData = DirtyFlush._dirty\n'
-
-    full_script = mock + '\n' + util_code + '\n' + persistence_code + bridge + test_code
-
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False) as f:
-        f.write(full_script)
-        tmp = f.name
-
+def run(probe: str) -> dict:
+    source = CF_STORE.read_text(encoding="utf-8")
+    with tempfile.NamedTemporaryFile("w", suffix=".lua", delete=False, encoding="utf-8") as handle:
+        handle.write(MOCK + "\n" + source + "\n" + probe)
+        path = handle.name
     try:
-        result = subprocess.run(['lua5.4', tmp], capture_output=True, text=True, timeout=10)
-        return {'ok': result.returncode == 0, 'stdout': result.stdout, 'stderr': result.stderr}
+        result = subprocess.run(["lua5.4", path], capture_output=True, text=True, timeout=15)
     finally:
-        os.unlink(tmp)
+        Path(path).unlink(missing_ok=True)
+
+    values: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if "=" in line:
+            key, _, raw = line.partition("=")
+            values[key.strip()] = raw.strip()
+    return {"ok": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr,
+            "values": values}
 
 
-class TestPersistenceFlushAll:
-    """FlushAll — 全量刷盘"""
+def _num(result: dict, key: str) -> float:
+    assert result["ok"], f"Lua 执行失败：\n{result['stderr']}\n{result['stdout']}"
+    assert key in result["values"], f"探针没有输出 {key}: {result['values']}"
+    return float(result["values"][key])
 
-    def test_flush_all_empty(self):
-        result = run_persistence_test("""
-local count = PersistenceManager.FlushAll()
-assert(count == 0, "empty pool should flush 0")
+
+def test_delegate_holds_no_state_and_starts_no_thread():
+    result = run("""
+print('DIRTY_POOL=' .. tostring(_G.DirtyFlush._dirty))
+print('THREADS=' .. __threads)
 """)
-        assert result['ok'], f"Lua error: {result['stderr']}"
+    assert result["values"].get("DIRTY_POOL") == "nil", (
+        "delegate 又开了一份脏池 —— 两个池就是两套真相: " + result["stdout"]
+    )
+    assert _num(result, "THREADS") == 0, (
+        "delegate 又起了自己的定时器 —— 900s 会刷两次: " + result["stdout"]
+    )
 
-    def test_flush_all_with_dirty_players(self):
-        result = run_persistence_test("""
-_DirtyFlushData["CID_A"] = true
-_DirtyFlushData["CID_B"] = true
-_DirtyFlushData["CID_C"] = true
-local count = PersistenceManager.FlushAll()
-assert(count == 3, "should flush 3, got: " .. tostring(count))
--- Each dirty player must be force-saved via Player.Functions.Save(true)
-assert(#__saves == 3, "should call Player.Functions.Save 3 times, got: " .. tostring(#__saves))
--- All should be cleared
-assert(_DirtyFlushData["CID_A"] == nil, "CID_A not flushed")
-assert(_DirtyFlushData["CID_B"] == nil, "CID_B not flushed")
-assert(_DirtyFlushData["CID_C"] == nil, "CID_C not flushed")
+
+def test_mark_dirty_and_force_flush_forward_to_owner():
+    result = run("""
+PersistenceManager.MarkDirty('CID1', 'money')
+PersistenceManager.ForceFlushPlayer('CID1')
+print('CALLS=' .. #__calls)
+print('CALL1=' .. tostring(__calls[1] and __calls[1].name))
+print('CALL1_ARG=' .. tostring(__calls[1] and __calls[1].args[1]))
+print('CALL1_TYPE=' .. tostring(__calls[1] and __calls[1].args[2]))
+print('CALL2=' .. tostring(__calls[2] and __calls[2].name))
+print('CALL2_REASON=' .. tostring(__calls[2] and __calls[2].args[2]))
 """)
-        assert result['ok'], f"Lua error: {result['stderr']}"
+    assert _num(result, "CALLS") == 2, result["stdout"]
+    assert result["values"].get("CALL1") == "StoreMarkDirty", result["stdout"]
+    assert result["values"].get("CALL1_ARG") == "CID1", result["stdout"]
+    assert result["values"].get("CALL1_TYPE") == "money", result["stdout"]
+    assert result["values"].get("CALL2") == "StoreSaveNow", (
+        "ForceFlushPlayer 必须走 SaveNow，不是走 Save(true): " + result["stdout"]
+    )
+    assert result["values"].get("CALL2_REASON") == "force_player", result["stdout"]
 
-    def test_flush_all_without_dirtyflush(self):
-        result = run_persistence_test("""
-DirtyFlush = nil
-local count = PersistenceManager.FlushAll()
-assert(count == 0, "should return 0 without DirtyFlush")
+
+def test_flush_all_returns_the_owner_ack_verbatim():
+    result = run("""
+local ack = PersistenceManager.FlushAll('resource_stop', true)
+print('ACK_REASON=' .. tostring(ack.reason))
+print('ACK_ATTEMPTED=' .. tostring(ack.attempted))
+print('ACK_OK=' .. tostring(ack.ok))
+print('ACK_FAILED=' .. tostring(ack.failed))
+print('OWNER_ARG=' .. tostring(__calls[1] and __calls[1].name))
+print('IGNORE_ARG=' .. tostring(__calls[1] and __calls[1].args[2]))
 """)
-        assert result['ok'], f"Lua error: {result['stderr']}"
+    assert result["values"].get("ACK_REASON") == "owner_ack", (
+        "ack 必须是 owner 的原始结果，不能在这里重新编一个: " + result["stdout"]
+    )
+    assert _num(result, "ACK_ATTEMPTED") == 2 and _num(result, "ACK_FAILED") == 1, result["stdout"]
+    assert result["values"].get("OWNER_ARG") == "StoreFlushAll", result["stdout"]
+    assert result["values"].get("IGNORE_ARG") == "true", (
+        "停服刷盘必须把 ignoreBackoff 透传下去: " + result["stdout"]
+    )
 
 
-class TestPersistenceForceFlush:
-    """ForceFlushPlayer — 单玩家刷盘"""
-
-    def test_force_flush_dirty_player(self):
-        result = run_persistence_test("""
-_DirtyFlushData["CID_X"] = true
-PersistenceManager.ForceFlushPlayer("CID_X")
-assert(#__saves == 1, "dirty player should be force-saved once")
-assert(_DirtyFlushData["CID_X"] == nil, "CID_X should be flushed")
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-    def test_force_flush_clean_player(self):
-        result = run_persistence_test("""
--- Player not dirty — should not error
-PersistenceManager.ForceFlushPlayer("CLEAN_PLAYER")
-assert(true, "should not crash on clean player")
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-    def test_force_flush_nil_citizenid(self):
-        result = run_persistence_test("""
-PersistenceManager.ForceFlushPlayer(nil)
-assert(true, "should not crash on nil citizenid")
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-
-class TestPersistenceStats:
-    """Stats — 统计信息"""
-
-    def test_stats_initial(self):
-        result = run_persistence_test("""
+def test_stats_are_tagged_with_the_owner_resource():
+    result = run("""
 local s = PersistenceManager.Stats()
-assert(s.flush_count ~= nil, "flush_count missing")
-assert(s.force_count ~= nil, "force_count missing")
-assert(s.dirty_pool_size ~= nil, "dirty_pool_size missing")
-assert(s.dirty_pool_size == 0, "initial dirty pool should be 0")
+print('OWNER=' .. tostring(s.owner))
+print('POOL=' .. tostring(s.dirty_pool_size))
+print('FAILED=' .. tostring(s.failed_flushes))
 """)
-        assert result['ok'], f"Lua error: {result['stderr']}"
+    assert result["values"].get("OWNER") == "qb-core", result["stdout"]
+    assert _num(result, "POOL") == 3 and _num(result, "FAILED") == 1, result["stdout"]
 
-    def test_stats_after_flush(self):
-        result = run_persistence_test("""
-_DirtyFlushData["CID_1"] = true
-_DirtyFlushData["CID_2"] = true
-PersistenceManager.FlushAll()
+
+def test_missing_owner_degrades_instead_of_crashing():
+    result = run("""
+__owner_available = false
+local ack = PersistenceManager.FlushAll('tick')
 local s = PersistenceManager.Stats()
-assert(s.force_count >= 1, "force_count should increase")
-assert(s.dirty_pool_size == 0, "dirty pool should be 0 after flush")
+print('ACK_OWNER=' .. tostring(ack.owner))
+print('ACK_ATTEMPTED=' .. tostring(ack.attempted))
+print('STATS_OWNER=' .. tostring(s.owner))
+print('STATS_POOL=' .. tostring(s.dirty_pool_size))
 """)
-        assert result['ok'], f"Lua error: {result['stderr']}"
+    assert result["ok"], f"owner 缺失时不许抛错:\n{result['stderr']}"
+    assert result["values"].get("ACK_OWNER") == "unavailable", result["stdout"]
+    assert result["values"].get("STATS_OWNER") == "unavailable", result["stdout"]
 
-    def test_stats_fields_complete(self):
-        result = run_persistence_test("""
-local s = PersistenceManager.Stats()
--- Check all expected fields exist
-assert(s.flush_count ~= nil)
-assert(s.force_count ~= nil)
-assert(s.last_flush_time ~= nil)
-assert(s.last_flush_duration ~= nil)
-assert(s.total_players_flushed ~= nil)
-assert(s.failed_flushes ~= nil)
-assert(s.dirty_pool_size ~= nil)
+
+def test_bus_service_keeps_the_same_method_names():
+    result = run("""
+local keys = {}
+for name in pairs(Bus.GetService('persistence') or {}) do keys[#keys + 1] = name end
+table.sort(keys)
+print('METHODS=' .. table.concat(keys, ','))
+print('HAS_SAVE_NOW=' .. tostring(Bus.persistence ~= nil and Bus.persistence.SaveNow ~= nil))
 """)
-        assert result['ok'], f"Lua error: {result['stderr']}"
+    methods = set((result["values"].get("METHODS") or "").split(","))
+    required = {"MarkDirty", "SaveNow", "ForceFlush", "ForceFlushPlayer", "FlushAll", "Stats",
+                "StartFlushTick", "StartHealthReport"}
+    assert required <= methods, f"Bus 方法表少了 {required - methods}: {result['stdout']}"
+    assert result["values"].get("HAS_SAVE_NOW") == "true", result["stdout"]
 
 
-class TestPersistenceStartFlushTick:
-    """StartFlushTick — 配置化定时刷盘"""
-
-    def test_start_flush_tick_default_interval(self):
-        result = run_persistence_test("""
--- Just verify it doesn't crash with default params
--- We disabled auto-start in the mock, so call manually
-PersistenceManager.StartFlushTick(30)  -- 30s for test
-assert(true, "StartFlushTick should not crash")
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-    def test_start_flush_tick_convar_override(self):
-        result = run_persistence_test("""
-__convars.persistence_flush_interval = "60"
-PersistenceManager.StartFlushTick()  -- reads from convar
-assert(true)
--- Restore
-__convars.persistence_flush_interval = "900"
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-    def test_start_flush_tick_minimum_interval(self):
-        result = run_persistence_test("""
--- Should clamp to 30s minimum
-PersistenceManager.StartFlushTick(5)
-assert(true)
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-
-class TestPersistenceHealthReport:
-    """StartHealthReport — 健康报告"""
-
-    def test_health_report_starts(self):
-        result = run_persistence_test("""
-PersistenceManager.StartHealthReport()
-assert(true, "should not crash")
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-
-class TestPersistenceBusRegistration:
-    """Bus 注册"""
-
-    def test_registered_on_bus(self):
-        result = run_persistence_test("""
-assert(Bus.persistence ~= nil, "not on Bus.persistence")
-assert(Bus.persistence.StartFlushTick ~= nil)
-assert(Bus.persistence.FlushAll ~= nil)
-assert(Bus.persistence.ForceFlushPlayer ~= nil)
-assert(Bus.persistence.Stats ~= nil)
-assert(Bus.persistence.StartHealthReport ~= nil)
-local svc = Bus.GetService("persistence")
-assert(svc ~= nil, "GetService returned nil")
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-
-class TestPersistenceOnResourceStop:
-    """onResourceStop 钩子"""
-
-    def test_resource_stop_flushes_all(self):
-        result = run_persistence_test("""
-_DirtyFlushData["CID_STOP"] = true
--- Simulate resource stop event
--- The handler is registered in the file with AddEventHandler('onResourceStop', ...)
--- But in mock env, AddEventHandler is a no-op. 
--- We test the FlushAll behavior directly instead.
-local count = PersistenceManager.FlushAll()
-assert(count == 1, "should flush 1 player")
-assert(_DirtyFlushData["CID_STOP"] == nil, "player should be cleaned")
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-
-class TestPersistenceConvarHelper:
-    """GetIntConvar 辅助函数"""
-
-    def test_get_int_convar_default(self):
-        result = run_persistence_test("""
--- Test via FlushAll which uses it indirectly
--- Actually test the convar integration directly
-local val = GetConvarInt("nonexistent_var", 42)
-assert(val == 42, "default wrong: " .. tostring(val))
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
+def test_no_sql_and_no_save_call_in_source():
+    source = CF_STORE.read_text(encoding="utf-8")
+    assert not re.search(r"\bINSERT\s+INTO\b", source, re.IGNORECASE), (
+        "delegate 里出现了写库语句 —— 写者只能有一个"
+    )
+    assert "Player.Functions.Save" not in source, "delegate 又接回 Save(true) 了"

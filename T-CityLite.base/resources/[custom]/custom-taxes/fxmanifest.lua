@@ -15,6 +15,7 @@ version '1.0.0'
 
 shared_scripts {
     '@qb-core/config.lua',
+    '@core-framework/shared/money_aliases.lua',
 }
 
 server_scripts {
@@ -30,4 +31,5 @@ server_scripts {
 dependencies {
     'qb-core',
     'oxmysql',
+    'core-framework',
 }

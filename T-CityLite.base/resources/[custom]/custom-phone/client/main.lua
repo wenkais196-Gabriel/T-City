@@ -58,7 +58,6 @@ local currentAppFrame = nil
 
 RegisterNUICallback('uiFocus', function(data, cb)
     local label = type(data) == 'table' and data.label or nil
-    local kind = type(data) == 'table' and data.kind or nil
     if type(label) == 'string' then
         -- 折叠空白再**去掉首尾**：只 gsub 不 trim 会把 "   " 变成 " "，被当成有焦点
         label = label:gsub('%s+', ' '):gsub('^%s+', ''):gsub('%s+$', ''):sub(1, 40)
@@ -66,14 +65,24 @@ RegisterNUICallback('uiFocus', function(data, cb)
         label = ''
     end
     focusHint = label
-    -- 输入框 = 一层 text 帧：Esc/返回 先退出它，再退出 App。见 interaction path 设计。
-    if kind == 'text' then
-        PhoneFocus.PushFrame('phone:text')
+    -- 注意：这里**不再**动 text 帧。
+    -- nav.ts 的 paint() 每次键盘焦点变化都会发 uiFocus，若此时 kind 不是 'text' 就弹掉
+    -- text 帧，会把玩家刚点进输入框的键盘所有权抢回游戏（症状：打一个字焦点就没了）。
+    -- text 帧的 push/pop 只由 `textFocus` 一处负责。
+    PhoneBridge.AnswerFn(cb)({ ok = true })
+    announceUiState()
+end)
+
+RegisterNUICallback('textFocus', function(data, cb)
+    -- 独立于 uiFocus：鼠标点输入框走这里（nav 的 uiFocus 只在键盘导航 paint 时发）。
+    local active = type(data) == 'table' and data.active == true
+    if active then
+        PhoneFocus.PushFrame('phone:text', { keepInput = false })
     else
         PhoneFocus.PopFrame('phone:text')
     end
+    LocalPlayer.state:set('phoneTextFocus', active, false)
     PhoneBridge.AnswerFn(cb)({ ok = true })
-    announceUiState()
 end)
 
 RegisterNUICallback('appState', function(data, cb)
@@ -537,6 +546,37 @@ end)
 
 -- CEF 上报真实 CSS px：surface 阈值判定在 Lua，但只有页面知道窗口多大。
 -- 回调名拼错会让 NUI 契约闸门直接红，所以这里必须与 fetchNui('surfaceInfo') 对齐。
+RegisterNUICallback('garageWaypoint', function(data, cb)
+    local garageKey = type(data) == 'table' and tostring(data.garage or '') or ''
+    local x = tonumber(data and data.x)
+    local y = tonumber(data and data.y)
+
+    -- 坐标可以随请求带来（老路径），也可以只给车库名让服务端解析
+    if garageKey ~= '' and (not x or not y) then
+        QBCore.Functions.TriggerCallback('phone:server:garageCoords', function(coords)
+            if not coords then
+                -- 静默失败在真机上等于"按钮坏了"（PO 2026-11-12 反馈）。给一条可见反馈。
+                pcall(function()
+                    exports['custom-notify']:PushLocal('error', '这间车库没有坐标，地图标不出来')
+                end)
+                PhoneBridge.AnswerFn(cb)({ ok = false, reason = 'no_coords' })
+                return
+            end
+            SetNewWaypoint(coords.x, coords.y)
+            PhoneBridge.AnswerFn(cb)({ ok = true })
+        end, garageKey)
+        return
+    end
+
+    -- 只接受有限数字：NUI 侧数据可被玩家改，未校验的 SetNewWaypoint 会崩原生层
+    if not x or not y or x ~= x or y ~= y or math.abs(x) > 40000 or math.abs(y) > 40000 then
+        PhoneBridge.AnswerFn(cb)({ ok = false, reason = 'bad_coords' })
+        return
+    end
+    SetNewWaypoint(x + 0.0, y + 0.0)
+    PhoneBridge.AnswerFn(cb)({ ok = true })
+end)
+
 RegisterNUICallback('surfaceInfo', function(data, cb)
     local ok = Surface.SetViewport(data and data.width, data and data.height)
     cb({ success = ok, surface = Surface.Current() })
@@ -973,7 +1013,7 @@ end)
 -- Dynamic Leader app unlocking
 local function CheckLeaderApp()
     local success, identity = pcall(function()
-        return exports['custom-career']:GetLocalIdentity()
+        return exports['custom-career']:GetPlayerIdentity()
     end)
     if success and identity then
         if identity.rank_tier == 'leader' then
@@ -1278,7 +1318,7 @@ RegisterCommand('paycitation', function(_, args)
     if not id then return TriggerEvent('QBCore:Notify', '用法: /paycitation <id>', 'error') end
     QBCore.Functions.TriggerCallback('phone:server:payCitation', function(res)
         if res and res.success then
-            TriggerEvent('QBCore:Notify', ('罚单 #%d 已支付 $%d'):format(res.id, res.amount), 'success')
+            TriggerEvent('QBCore:Notify', ('罚单 #%d 已支付 $%s'):format(res.id, PhoneMoney(res.amount)), 'success')
         else
             TriggerEvent('QBCore:Notify', ('支付失败: %s'):format(res and res.error or 'unknown'), 'error')
         end

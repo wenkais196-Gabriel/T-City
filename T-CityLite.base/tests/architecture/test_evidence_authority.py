@@ -115,7 +115,7 @@ def missing_broadcast(source: str) -> list[str]:
     problems = []
     if "store[id] = nil" not in body:
         problems.append("pruneExpired 没删任何东西")
-    if "TriggerClientEvent(removeEvent, -1, id)" not in body:
+    if "Broadcast.Scope(removeEvent, { job = 'police', onduty = true }, id)" not in body:
         problems.append("删了但没广播 Remove*：客户端会留着一个换不出东西的幽灵标记")
     return problems
 

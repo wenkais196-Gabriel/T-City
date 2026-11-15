@@ -349,4 +349,4 @@ Player.Functions.AddMoney('bank', 5000, 'legacy_code_reward')
 Player.Functions.SetJob('police', 3)
 ```
 
-兼容层（`compat.lua`）负责桥接，新服务不可用时自动 fallback 到原始逻辑。
+旧实现里的兼容层（compat.lua）曾负责桥接，但它已于 2026-11-01 整体下线；现在调用方直接用 qb-core 原实现，取不到服务时由调用方自己决定回退。

@@ -106,6 +106,9 @@ Config.Quest.StepTypes = {
     PLACEMENT      = 'placement',       -- v0.10: 实体放置回收（自动脱钩+验证+延迟回收）
     DECISION       = 'decision',        -- v0.7 story-engine: 剧情决策点（弹出NUI选择）
     REWARD         = 'reward',          -- 奖励步骤（自动完成）
+    RENTAL         = 'rental',          -- 租借步骤（押金会话，见 server/quest_rental.lua）
+    BOOTH          = 'booth',           -- 摆摊（摆放判定 + 实体登记 + 开卖，见 server/quest_booth.lua）
+    VENDOR         = 'vendor',          -- 售卖（NPC 顾客 / 玩家购买，见 server/quest_vendor.lua）
 }
 
 -- ==============================================================
@@ -142,6 +145,9 @@ Config.Quest.Checkpoint = {
         ['goto']  = 'ring',    -- goto 是 Lua 5.4 关键字，必须 ['goto']
         validator = 'cylinder',
         interact  = 'arrow',
+        rental    = 'arrow',   -- 租借点也是「站到点上按 E」，与 interact 同一种 checkpoint
+        booth     = 'arrow',   -- 摆摊：推到目标点按 E 放下，同样是交互点
+        vendor    = 'arrow',   -- 收摊：摊位交互点
         deliver   = 'cylinder',
     },
 

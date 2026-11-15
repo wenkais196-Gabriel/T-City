@@ -594,6 +594,10 @@ RegisterNetEvent('hospital:client:Revive', function()
     TriggerServerEvent('hospital:server:RestoreWeaponDamage')
     SetEntityMaxHealth(player, 200)
     SetEntityHealth(player, 200)
+    -- M-3（D3=甲）：救起来是"裸装起来" —— 护甲归零，饥渴抬到 50。
+    -- 饥渴只由 custom-consumables 写，所以这里走它的事件，不直接改 metadata。
+    SetPedArmour(player, 0)
+    TriggerServerEvent('custom-consumables:server:RestoreAfterRevive')
     ClearPedBloodDamage(player)
     SetPlayerSprint(PlayerId(), true)
     ResetAll()
@@ -602,7 +606,15 @@ RegisterNetEvent('hospital:client:Revive', function()
     TriggerServerEvent('hospital:server:SetDeathStatus', false)
     TriggerServerEvent('hospital:server:SetLaststandStatus', false)
     emsNotified = false
-    QBCore.Functions.Notify(Lang:t('info.healthy'))
+    -- N-7（2026-11-11）：复活结果走 feed（原来无 type → 落 GTA 原生 feed，和我们的通知层两套视觉）
+    local delivered = false
+    local ok, sent = pcall(function()
+        return exports['custom-notify']:PushLocal('feed', Lang:t('info.healthy'))
+    end)
+    if ok and sent == true then delivered = true end
+    if not delivered then
+        QBCore.Functions.Notify(Lang:t('info.healthy'))
+    end
 end)
 
 RegisterNetEvent('hospital:client:SetPain', function()

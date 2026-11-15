@@ -6,7 +6,7 @@ local DynamicMenuItems = {}
 -- UTIL
 local function CloseMenuFullGang()
     exports['qb-menu']:closeMenu()
-    exports['qb-core']:HideText()
+    exports['custom-prompt']:Hide()
     shownGangMenu = false
 end
 
@@ -362,7 +362,7 @@ end)
 -- MAIN THREAD
 
 CreateThread(function()
-    if Config.UseTarget then
+    if Config.UseTarget and not Config.ManagementUsePrompt then
         for gang, zones in pairs(Config.GangMenus) do
             if gang ~= 'cartel' then
                 for index, coords in ipairs(zones) do
@@ -460,12 +460,12 @@ CreateThread(function()
                                 if #(pos - coords) <= 1.5 then
                                     nearGangmenu = true
                                     if not shownGangMenu then
-                                        exports['qb-core']:DrawText(Lang:t('drawtextgang.label'), 'left')
+                                        exports['custom-prompt']:Show({ key = 'E', label = Lang:t('drawtextgang.label') })
                                         shownGangMenu = true
                                     end
 
                                     if IsControlJustReleased(0, 38) then
-                                        exports['qb-core']:HideText()
+                                        exports['custom-prompt']:Hide()
                                         TriggerEvent('qb-gangmenu:client:OpenMenu')
                                     end
                                 end

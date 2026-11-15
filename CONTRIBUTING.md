@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-10-21
+updated: 2026-11-15
 review_by: 2027-04-30
 ---
 
@@ -27,7 +27,7 @@ cd T-City
 # Python 静态检查
 python3 --version        # >= 3.12
 
-# Lua 语法检查（可选，本机）
+# Lua 语法检查（可选，本机；PowerShell 下必须写 lua5.4.exe / luac5.4.exe）
 lua5.4 -v
 ```
 
@@ -90,6 +90,7 @@ python3 tests/check_bus_wiring.py
 python3 -m compileall -q tests
 
 # 改到的 Lua 文件（FiveM 反引号字面量无法被标准 luac 解析，跳过即可）
+# PowerShell 下写 luac5.4.exe：裸名的扩展名是 .4，会被当成文档弹出「选择应用」并卡住
 luac5.4 -p resources/.../your_file.lua
 ```
 

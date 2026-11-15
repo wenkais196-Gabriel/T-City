@@ -191,6 +191,29 @@ function QBCore.Functions.Notify(text, texttype, length, icon)
     end
 
     -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    -- 轨 0（N-1，PO 2026-11-12「把 notification 都改成新标准」）：
+    -- 全部交给 custom-notify 的三层通道，**调用点一行都不用改**。
+    --   success / primary / info → feed（左下）
+    --   error                    → error（左下红）
+    --   warning / police / ambulance → toast（中央，需要停一下看的）
+    -- custom-notify 不在（资源重启/被删）时 pcall 失败 → 落回原来的三条轨，行为不变。
+    -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    do
+        local KIND = {
+            success = 'feed', primary = 'feed', info = 'feed',
+            error = 'error',
+            warning = 'toast', police = 'toast', ambulance = 'toast',
+        }
+        local kind = KIND[texttype or 'primary'] or 'feed'
+        local body = captionText and (tostring(captionText) .. ' · ' .. tostring(messageText))
+            or tostring(messageText)
+        local okPush, sent = pcall(function()
+            return exports['custom-notify']:PushLocal(kind, body, { duration = duration })
+        end)
+        if okPush and sent == true then return end
+    end
+
+    -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     -- 轨 1: 自定义插件类型 → Bus.Plugin.Publish 事件总线
     -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if texttype and _G.Bus and _G.Bus.Plugin and _G.Bus.Plugin._plugins then

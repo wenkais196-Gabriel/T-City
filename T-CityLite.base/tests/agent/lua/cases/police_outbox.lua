@@ -28,6 +28,8 @@ return {
         end
 
         local env = ctx.bootstrap.Load({ load_main = false, convars = {} })
+        -- InsertId 是门面；归一化 owner 必须先于门面加载。
+        dofile('T-CityLite.base/resources/[standalone]/core-framework/server/db.lua')
         dofile('T-CityLite.base/resources/[custom]/custom-police/shared/insert_id.lua')
         _G.Outbox = nil -- re-load a fresh table even when runner runs all cases
         dofile('T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua')

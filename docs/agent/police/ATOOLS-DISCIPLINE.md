@@ -4,7 +4,7 @@ type: manual
 status: active
 system: agent
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-15
 review_by: 2027-01-30
 ---
 
@@ -60,7 +60,7 @@ review_by: 2027-01-30
 python tools/agent_tools.py --check                      # 注册表三处一致
 python3 -m pytest tests/tools -q                         # 动作/工具契约
 python3 -m pytest tests/architecture -q                  # 写者/鉴权/文档/覆盖预算
-lua5.4 T-CityLite.base/tests/agent/lua/runner.lua        # golden
+lua5.4 T-CityLite.base/tests/agent/lua/runner.lua        # golden（PowerShell 里写 lua5.4.exe）
 python3 tools/dev/release_check.py                       # 交付前
 ```
 

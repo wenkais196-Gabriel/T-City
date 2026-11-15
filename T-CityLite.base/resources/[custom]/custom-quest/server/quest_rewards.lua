@@ -40,7 +40,7 @@ function QuestRewards.GrantRewards(source, rewards, questId)
                 local cut = math.floor(amount * binding.rentalFeePct / 100)
                 amount = amount - cut
                 TriggerClientEvent('QBCore:Notify', source,
-                    ('📋 非自有车抽成 %d%% (-$%d)'):format(binding.rentalFeePct, cut), 'primary')
+                    ('📋 非自有车抽成 %d%% (-$%s)'):format(binding.rentalFeePct, QuestMoney(cut)), 'primary')
             end
         end
 
@@ -78,10 +78,10 @@ function QuestRewards.GrantRewards(source, rewards, questId)
             local delta = finalAmount - amount
             if delta > 0 then
                 TriggerClientEvent('QBCore:Notify', source,
-                    ('📊 时效+货物修正：+$%d'):format(delta), 'success')
+                    ('📊 时效+货物修正：+$%s'):format(QuestMoney(delta)), 'success')
             else
                 TriggerClientEvent('QBCore:Notify', source,
-                    ('📊 时效+货物修正：-$%d'):format(math.abs(delta)), 'error')
+                    ('📊 时效+货物修正：-$%s'):format(QuestMoney(math.abs(delta))), 'error')
             end
         end
 
@@ -108,10 +108,10 @@ function QuestRewards.GrantRewards(source, rewards, questId)
                 end
             end
             if not useScaled then
-                print(('[quest-rewards] ⚠️ fallback AddMoney %s $%d'):format(rewardReason, finalAmount))
+                print(('[quest-rewards] ⚠️ fallback AddMoney %s $%s'):format(rewardReason, QuestMoney(finalAmount)))
                 Player.Functions.AddMoney(accountType, finalAmount, rewardReason)
             end
-            table.insert(granted, ('$%d (%s)'):format(finalAmount, accountType))
+            table.insert(granted, ('$%s (%s)'):format(QuestMoney(finalAmount), accountType))
         end
     end
 
@@ -153,8 +153,11 @@ function QuestRewards.GrantRewards(source, rewards, questId)
             exports['custom-logs']:LogGeneric('任务奖励发放', logText, 65280)
         end
 
-        TriggerClientEvent('QBCore:Notify', source,
-            ('💰 任务结算 | %s'):format(table.concat(granted, ' | ')), 'success')
+        -- J-3：结算不再占屏（"任务完成"已经说过一次），改成手机凭证可回查
+        pcall(function()
+            exports['custom-notify']:Push(source, 'phone', '任务结算',
+                table.concat(granted, ' | '), { appId = 'quests' })
+        end)
     end
 
     return true

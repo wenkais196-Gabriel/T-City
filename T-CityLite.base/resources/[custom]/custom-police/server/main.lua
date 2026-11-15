@@ -2,14 +2,33 @@
 QBCore = exports['qb-core']:GetCoreObject()
 local updatingCops = false
 
--- 自动警情限流: source -> 上次触发时间 (模块级)
-local autoAlertCooldown = {}
+-- 自动警情限流：每 source 10 秒 1 次（system 走独立键）。
 local AUTO_ALERT_COOLDOWN = 10
 
 -- 平民报警 (qb-drugs / qb-storerobbery / qb-houserobbery / custom-vehicles 的
 -- 热接线报警都会触发 policeAlert) 每 source 15 秒 1 次。
-local policeAlertCooldown = {}
 local POLICE_ALERT_COOLDOWN = 15
+
+--- 报警分类（C-1）：原来工单标题是调用方自由文本，警察端会出现
+--- 'Drug sale in progress' / 'Suspicous activity'（拼错）/ Lang:t 原文。
+--- kind 可选，未知或缺失时回退到调用方文本，所以老调用点不会坏。
+local ALERT_KINDS = {
+    store_robbery  = { title = '商店抢劫',       priority = 2 },
+    house_robbery  = { title = '入室盗窃',       priority = 2 },
+    drug_sale      = { title = '毒品交易',       priority = 2 },
+    drug_delivery  = { title = '可疑运输',       priority = 2 },
+    vehicle_theft  = { title = '车辆抢夺',       priority = 1 },
+    officer_down   = { title = '警员受伤，请求支援', priority = 3 },
+}
+
+---@return string title, number priority, boolean matched
+local function resolveAlertKind(kind, fallbackText)
+    if type(kind) == 'string' then
+        local entry = ALERT_KINDS[kind]
+        if entry then return entry.title, entry.priority, true end
+    end
+    return fallbackText, 2, false
+end
 
 local function sanitizeAlertCoords(coords)
     if type(coords) ~= 'table' then return nil end
@@ -221,31 +240,32 @@ end
 -- 热接线报警都从这里进来，所以**不能**只限警察。安全性靠三件事保证：
 -- 坐标完全由服务端从报警者 ped 上取（客户端不发坐标）、文本清洗截断、
 -- 每 source 15 秒最多 1 次。
-RegisterNetEvent('police:server:policeAlert', function(text)
+RegisterNetEvent('police:server:policeAlert', function(text, kind)
     local src = source
     if not QBCore.Functions.GetPlayer(src) then return end
-    local now = os.time()
-    for otherSrc, lastAt in pairs(policeAlertCooldown) do
-        if now - lastAt > 120 then policeAlertCooldown[otherSrc] = nil end
-    end
-    local last = policeAlertCooldown[src]
-    if last and now - last < POLICE_ALERT_COOLDOWN then return end
     local message = sanitizeAlertText(text)
+    local title, priority = resolveAlertKind(kind, message)
+    if kind and ALERT_KINDS[kind] then
+        message = title  -- 分类命中：用标准标题，不用调用方的自由文本
+    end
     if not message then return end
     local ped = GetPlayerPed(src)
     if not ped or ped == 0 then return end
     -- Server-authoritative location: a caller cannot place the alert elsewhere.
     local coords = GetEntityCoords(ped)
     local alertCoords = { x = coords.x, y = coords.y, z = coords.z }
-    policeAlertCooldown[src] = now
+    -- 冷却在"确定要建单"时才记账：参数不合法或没有 ped 的请求不占窗口
+    -- （与旧表只在最后写入的行为一致）。src 键由 playerDropped 清。
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:alert'):format(src), POLICE_ALERT_COOLDOWN * 1000) then return end
 
     -- 报警必须进警情板。以前这里只发通知 + 插旗，于是"被抢了报警"在 MDT 里
     -- 等于没发生：不能派单、不能清场、不留记录、进不了统计。
-    local incident = createIncidentForAlert(src, message, alertCoords, 2)
+    local incident = createIncidentForAlert(src, message, alertCoords, priority or 2)
 
     -- 通知与地图标记都由建单负责（projectIncident），这里只留日志。
-    print(('[policeAlert] src=%s | #%s | %s | 值班警察: %d 人'):format(
-        tostring(src), tostring(incident and incident.id or '-'), message,
+    print(('[policeAlert] src=%s | #%s | kind=%s | %s | 值班警察: %d 人'):format(
+        tostring(src), tostring(incident and incident.id or '-'), tostring(kind or '-'), message,
         tonumber(incident and incident.alerted) or 0))
 end)
 
@@ -262,17 +282,12 @@ RegisterNetEvent('police:server:autoAlert', function(coords, text)
     end
     local cooldownKey = isSystem and 'system' or src
 
-    local now = os.time()
-    for otherSrc, lastAt in pairs(autoAlertCooldown) do
-        if now - lastAt > 60 then autoAlertCooldown[otherSrc] = nil end
-    end
-    local last = autoAlertCooldown[cooldownKey]
-    if last and now - last < AUTO_ALERT_COOLDOWN then return end
-
     local alertCoords = sanitizeAlertCoords(coords)
     local message = sanitizeAlertText(text)
     if not alertCoords or not message then return end
-    autoAlertCooldown[cooldownKey] = now
+    -- 冷却在"确定要建单"时才记账（非法坐标/文本不占窗口），与旧表一致。
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:autoalert'):format(cooldownKey), AUTO_ALERT_COOLDOWN * 1000) then return end
 
     -- 系统警报同样进警情板：车辆防盗、脚本事件都从这里来。
     -- src == 0 没有玩家可校验，所以走系统路径并标明来源。
@@ -286,6 +301,16 @@ RegisterNetEvent('police:server:autoAlert', function(coords, text)
     print(('[autoAlert] #%s | %s | 值班警察: %d 人'):format(
         tostring(incident and incident.id or '-'), message,
         tonumber(incident and incident.alerted) or 0))
+end)
+
+-- 玩家下线：一次清掉该 source 名下的所有 src 键（911 / alert / autoalert /
+-- evidence pickup）。cid 键（forensic/tow/coroner/backup）不在这里清 ——
+-- 它们由 owner 每 60s 回收 15 分钟未更新的条目，且所有 cid 冷却最长 60s。
+AddEventHandler('playerDropped', function()
+    local src = tonumber(source) or 0
+    if src > 0 then
+        exports['core-framework']:RateLimitReset(('police:%s:'):format(src))
+    end
 end)
 
 RegisterNetEvent('police:server:UpdateCurrentCops', function()
@@ -307,15 +332,14 @@ RegisterNetEvent('police:server:SetHandcuffStatus', function(isHandcuffed)
     -- 🔒 Security: 仅接受 boolean 类型 + 仅限 LEO 或 EMS 调用
     if type(isHandcuffed) ~= 'boolean' then return end
     local Player = QBCore.Functions.GetPlayer(src)
-    if Player then
-        -- 只有执法/医疗人员才能设置他人手铐状态；玩家自己不能解锁
-        local jobType = Player.PlayerData.job.type
-        if isHandcuffed == false then
-            -- 解锁手铐：必须是 LEO 或 EMS
-            if jobType ~= 'leo' and Player.PlayerData.job.name ~= 'ambulance' then return end
-        end
-        Player.Functions.SetMetaData('ishandcuffed', isHandcuffed)
-    end
+    if not Player then return end
+
+    -- 只有执法/医疗人员才能改手铐状态（**两个方向都要判**）。
+    -- 2026-11-01：原来只在 isHandcuffed == false 分支判职业，上铐那一支裸写 metadata。
+    local job = Player.PlayerData.job
+    if not job or (job.type ~= 'leo' and job.name ~= 'ambulance') then return end
+
+    Player.Functions.SetMetaData('ishandcuffed', isHandcuffed)
 end)
 
 RegisterNetEvent('police:server:showFingerprint', function(playerId)

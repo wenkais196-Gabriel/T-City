@@ -1,0 +1,612 @@
+{
+  "$comment": "P1-3 net event 基线。由 tests/architecture/net_event_baseline.py --write 生成；test_net_event_inventory.py 会拿实测逐字段比对（含 started），手改即红。",
+  "version": 1,
+  "rule": "P1-3",
+  "measured_at": "2026-11-15",
+  "scope": "resources/** 服务端脚本（server/ 优先；manifest 的 client_scripts 块与单条 client_script 都排除；共享文件按服务端算）；started = 是否在 configs/**/*.cfg 与 server.cfg 的 ensure 列表里",
+  "enforced": [
+    "qb-core"
+  ],
+  "batches": {
+    "engine": {
+      "events": 15,
+      "guarded": 5,
+      "allowlisted": 10,
+      "unguarded": 0
+    },
+    "custom": {
+      "events": 134,
+      "guarded": 86,
+      "allowlisted": 48,
+      "unguarded": 0
+    },
+    "qb": {
+      "events": 216,
+      "guarded": 105,
+      "allowlisted": 111,
+      "unguarded": 0
+    },
+    "other": {
+      "events": 75,
+      "guarded": 9,
+      "allowlisted": 66,
+      "unguarded": 0
+    }
+  },
+  "resources": {
+    "PolyZone": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 4,
+      "unguarded": 0,
+      "started": true
+    },
+    "atom_nodes": {
+      "batch": "other",
+      "group": "[system]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "baseevents": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 7,
+      "guarded": 0,
+      "allowlisted": 7,
+      "unguarded": 0,
+      "started": true
+    },
+    "connectqueue": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": false
+    },
+    "core-framework": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-agent-client": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 4,
+      "guarded": 1,
+      "allowlisted": 3,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-cartel": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 4,
+      "guarded": 4,
+      "allowlisted": 0,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-certificates": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 5,
+      "guarded": 4,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-consumables": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-documents": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-justice": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 7,
+      "guarded": 6,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-main": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-mining": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 2,
+      "guarded": 2,
+      "allowlisted": 0,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-phone": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 11,
+      "guarded": 0,
+      "allowlisted": 11,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-police": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 57,
+      "guarded": 36,
+      "allowlisted": 21,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-quest": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 11,
+      "guarded": 9,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-taxes": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "custom-vehicles": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 26,
+      "guarded": 23,
+      "allowlisted": 3,
+      "unguarded": 0,
+      "started": true
+    },
+    "hardcap": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "interact-sound": {
+      "batch": "other",
+      "group": "[standalone]",
+      "events": 4,
+      "guarded": 4,
+      "allowlisted": 0,
+      "unguarded": 0,
+      "started": true
+    },
+    "money": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": false
+    },
+    "money-fountain": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": false
+    },
+    "monitor": {
+      "batch": "other",
+      "group": "[system]",
+      "events": 33,
+      "guarded": 0,
+      "allowlisted": 33,
+      "unguarded": 0,
+      "started": false
+    },
+    "ped-money-drops": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": false
+    },
+    "player-data": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": false
+    },
+    "playernames": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 1,
+      "guarded": 0,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": false
+    },
+    "pma-voice": {
+      "batch": "other",
+      "group": "[voice]",
+      "events": 3,
+      "guarded": 0,
+      "allowlisted": 3,
+      "unguarded": 0,
+      "started": true
+    },
+    "production-freeze": {
+      "batch": "other",
+      "group": "[system]",
+      "events": 2,
+      "guarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-adminmenu": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 16,
+      "guarded": 16,
+      "allowlisted": 0,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-ambulancejob": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 22,
+      "guarded": 8,
+      "allowlisted": 14,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-apartments": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 10,
+      "guarded": 2,
+      "allowlisted": 8,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-cityhall": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 1,
+      "allowlisted": 4,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-clothing": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 1,
+      "allowlisted": 4,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-core": {
+      "batch": "engine",
+      "group": "[qb]",
+      "events": 15,
+      "guarded": 5,
+      "allowlisted": 10,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-crypto": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 6,
+      "guarded": 1,
+      "allowlisted": 5,
+      "unguarded": 0,
+      "started": false
+    },
+    "qb-doorlock": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 4,
+      "guarded": 3,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-drugs": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 9,
+      "guarded": 2,
+      "allowlisted": 7,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-fuel": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 3,
+      "guarded": 3,
+      "allowlisted": 0,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-garages": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 6,
+      "guarded": 4,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-houserobbery": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 2,
+      "allowlisted": 3,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-houses": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 19,
+      "guarded": 14,
+      "allowlisted": 5,
+      "unguarded": 0,
+      "started": false
+    },
+    "qb-hud": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-inventory": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 8,
+      "guarded": 3,
+      "allowlisted": 5,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-lapraces": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 10,
+      "guarded": 7,
+      "allowlisted": 3,
+      "unguarded": 0,
+      "started": false
+    },
+    "qb-management": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 16,
+      "guarded": 15,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-mechanicjob": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 4,
+      "guarded": 3,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-multicharacter": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 4,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-pawnshop": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 4,
+      "guarded": 0,
+      "allowlisted": 4,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-prison": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 11,
+      "guarded": 2,
+      "allowlisted": 9,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-scoreboard": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 1,
+      "guarded": 1,
+      "allowlisted": 0,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-shops": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 3,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-storerobbery": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 9,
+      "guarded": 1,
+      "allowlisted": 8,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-streetraces": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 3,
+      "guarded": 0,
+      "allowlisted": 3,
+      "unguarded": 0,
+      "started": false
+    },
+    "qb-vehicleshop": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 12,
+      "guarded": 6,
+      "allowlisted": 6,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-weapons": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 1,
+      "allowlisted": 4,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-weathersync": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 7,
+      "guarded": 6,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "qb-weed": {
+      "batch": "qb",
+      "group": "[qb]",
+      "events": 5,
+      "guarded": 0,
+      "allowlisted": 5,
+      "unguarded": 0,
+      "started": false
+    },
+    "rconlog": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": false
+    },
+    "runcode": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": false
+    },
+    "sessionmanager": {
+      "batch": "other",
+      "group": "[cfx-default]",
+      "events": 2,
+      "guarded": 0,
+      "allowlisted": 2,
+      "unguarded": 0,
+      "started": true
+    },
+    "story-engine": {
+      "batch": "custom",
+      "group": "[custom]",
+      "events": 2,
+      "guarded": 1,
+      "allowlisted": 1,
+      "unguarded": 0,
+      "started": true
+    },
+    "tcity-dashboard": {
+      "batch": "other",
+      "group": "[system]",
+      "events": 4,
+      "guarded": 4,
+      "allowlisted": 0,
+      "unguarded": 0,
+      "started": true
+    }
+  },
+  "unguarded": {},
+  "debt": [],
+  "non_literal": [
+    "[custom]/custom-quest/server/main.lua:106  Config.Quest.Events.QUEST_ABANDON",
+    "[custom]/custom-quest/server/main.lua:123  Config.Quest.Events.QUEST_REACH",
+    "[custom]/custom-quest/server/main.lua:292  Config.Quest.Events.QUEST_COLLECT",
+    "[custom]/custom-quest/server/main.lua:367  Config.Quest.Events.QUEST_REQUEST_STATE",
+    "[custom]/custom-quest/server/main.lua:79  Config.Quest.Events.QUEST_ACCEPT",
+    "[custom]/custom-vehicles/server/main.lua:120  Config.Vehicles.Events.CHECK_KEYS",
+    "[custom]/custom-vehicles/server/main.lua:139  Config.Vehicles.Events.HOTWIRE_ATTEMPT",
+    "[custom]/custom-vehicles/server/main.lua:223  Config.Vehicles.Events.LOCKPICK_ATTEMPT",
+    "[custom]/custom-vehicles/server/main.lua:27  Config.Vehicles.Events.REQUEST_KEYS",
+    "[custom]/custom-vehicles/server/main.lua:40  Config.Vehicles.Events.GIVE_KEYS",
+    "[custom]/custom-vehicles/server/main.lua:79  Config.Vehicles.Events.REMOVE_KEYS"
+  ],
+  "unparsed": []
+}

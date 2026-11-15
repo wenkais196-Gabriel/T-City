@@ -1,4 +1,21 @@
 local QBCore = exports['qb-core']:GetCoreObject()
+
+--- 金额文本（money_format 闸门）：整数不带小数点，小数两位。
+local function money(n)
+    local num = tonumber(n) or 0
+    if num == math.floor(num) then return ('%d'):format(num) end
+    return ('%.2f'):format(num)
+end
+
+--- 全局奖励倍率：core_economy 不可用时回落 1.0，奖励路径不许因缺 export 崩掉。
+local function getRewardScale()
+    local ok, multiplier = pcall(function()
+        return exports['core_economy']:GetGlobalMultiplier()
+    end)
+    if ok and type(multiplier) == 'number' then return multiplier end
+    return 1.0
+end
+
 local SafeCodes = {}
 local cashA = 250
 local cashB = 450
@@ -351,6 +368,59 @@ end)
 local activeRobberies = {}
 local ROBBERY_DURATION_MS = 25000  -- 25 秒标准时长
 
+-- 收银机抢劫结算后，保险箱/警情仍需要看"本人刚抢过这家店"：
+-- activeRobberies 只有 25 秒寿命，但保险箱小游戏往往在那之后才完成。
+local RECENT_ROBBERY_WINDOW = 10 * 60 * 1000   -- 10 分钟
+-- [safeKey] = { citizenid = '...', at = GetGameTimer() }
+-- 用 citizenid 而不是 source：source 会被复用，新玩家可能继承上一位玩家的"刚抢过"记录
+local recentStoreRobberies = {}
+-- 警情冷却表必须在 playerDropped 之前声明：handler 里 `lastCopCall[src] = nil` 若解析成全局会抛错
+local lastCopCall = {}
+
+-- source → citizenid 反查表：掉线时 QBCore 可能已经把玩家移除（GetPlayer 返回 nil），
+-- 而 recentStoreRobberies 可能只剩记录、没有 activeRobberies 可查。
+local srcToCitizenid = {}
+
+local function rememberSource(player)
+    if player and player.PlayerData then
+        srcToCitizenid[player.PlayerData.source] = player.PlayerData.citizenid
+        return
+    end
+    -- QBCore:Server:OnPlayerLoaded 是无参数 net event（qb-spawn / qb-multicharacter 用），
+    -- 隐式 source 才是玩家 → 这里兜住这种调用形态
+    local src = source
+    if type(src) == 'number' and src > 0 then
+        local resolved = QBCore.Functions.GetPlayer(src)
+        if resolved and resolved.PlayerData then
+            srcToCitizenid[src] = resolved.PlayerData.citizenid
+        end
+    end
+end
+
+AddEventHandler('QBCore:Server:PlayerLoaded', rememberSource)
+-- 仓库里还有另一种拼写（qb-spawn / qb-multicharacter 用），一并监听
+AddEventHandler('QBCore:Server:OnPlayerLoaded', rememberSource)
+
+-- 资源重启时已经在线的玩家不会触发 PlayerLoaded → 启动时补一轮，避免反查表是空的
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    CreateThread(function()
+        Wait(2000)
+        for _, player in pairs(QBCore.Functions.GetQBPlayers() or {}) do
+            if player and player.PlayerData then
+                srcToCitizenid[player.PlayerData.source] = player.PlayerData.citizenid
+            end
+        end
+    end)
+end)
+
+local function HasRecentStoreRobbery(citizenid, safeKey)
+    local record = recentStoreRobberies[safeKey]
+    if not record or not citizenid then return false end
+    if record.citizenid ~= citizenid then return false end
+    return (GetGameTimer() - record.at) <= RECENT_ROBBERY_WINDOW
+end
+
 --- 根据实际逗留时间计算奖励倍率（阶梯惩罚）
 --- 满 25 秒 = 1.0x，每少 1 秒约扣 4%，最低 0.1x
 local function calculateTimeMultiplier(startTime, cancelTime)
@@ -370,10 +440,19 @@ local function issueStoreReward(src, register)
         return
     end
 
+    -- 记录"本人刚抢过这家店"，供保险箱/警情在 25 秒计时器结束后继续校验
+    local registerCfg = Config.Registers[register]
+    if registerCfg and registerCfg.safeKey then
+        recentStoreRobberies[registerCfg.safeKey] = {
+            citizenid = Player.PlayerData.citizenid,
+            at = GetGameTimer(),
+        }
+    end
+
     local job = activeRobberies[register]
     local timeMult = calculateTimeMultiplier(job.startTime, job.cancelTime)
     local bags = math.random(1, math.floor(3 * timeMult + 0.5) or 1)
-    local scale = exports['custom-economy']:GetEconomyRewardScale()
+    local scale = getRewardScale()
     local baseValue = math.random(cashA, cashB)
     local worthValue = math.floor(baseValue * scale * timeMult + 0.5)
     if worthValue < 1 then worthValue = 1 end
@@ -399,11 +478,16 @@ local function issueStoreReward(src, register)
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['stickynote'], 'add')
     end
 
-    -- 通知玩家结算信息
+    -- C-3：结算只发一条屏上（feed）+ 一条手机明细。原来这条之后
+    -- qb-storerobbery:client:robberyComplete 还会再弹一句"抢劫完成"，同一件事两条。
     local pct = math.floor(timeMult * 100 + 0.5)
     local totalReward = worthValue * bags
-    TriggerClientEvent('QBCore:Notify', src,
-        ("抢劫结算: 逗留时间 %d%%，实得 $%d × %d 袋"):format(pct, worthValue, bags), "success")
+    local summary = ("抢劫结算：逗留 %d%%，实得 $%s × %d 袋"):format(pct, money(worthValue), bags)
+    TriggerClientEvent('QBCore:Notify', src, summary, "success")
+    pcall(function()
+        exports['custom-notify']:Push(src, 'phone', '抢劫结算',
+            ("逗留 %d%%｜每袋 $%s｜共 %d 袋｜合计 $%s"):format(pct, money(worthValue), bags, money(totalReward)))
+    end)
 
     -- 良心扣除 + 弹窗通知
     local citizenid = Player.PlayerData.citizenid
@@ -465,9 +549,16 @@ RegisterNetEvent('qb-storerobbery:server:startRobbery', function(register)
         TriggerClientEvent('qb-storerobbery:client:robberyComplete', src, register)
     end)
 
-    activeRobberies[register] = { src = src, timer = timer, startTime = startTime, cancelTime = nil }
+    -- 记下 citizenid：掉线清理 recentStoreRobberies 时 QBCore 可能已移除该玩家
+    activeRobberies[register] = {
+        src = src,
+        citizenid = Player.PlayerData.citizenid,
+        timer = timer,
+        startTime = startTime,
+        cancelTime = nil,
+    }
     -- 🌐 Atmosphere: chase scene on robbery start
-    if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'chase') end
+    pcall(function() exports['tcity-atmosphere']:service_atmosphere_PlayScene(src, 'chase') end)
     print(('[qb-storerobbery] 🔫 Register %d robbery started by %s (25s timer)'):format(register, GetPlayerName(src)))
 
     -- 5. 报警系统检查 → 2 星通缉
@@ -497,6 +588,23 @@ end)
 -- 玩家下线 → 清理活跃抢劫
 AddEventHandler('playerDropped', function()
     local src = source
+    -- 掉线时 QBCore 可能已经移除该玩家（GetPlayer 返回 nil），
+    -- 所以优先用 activeRobberies 里记下的 citizenid 清"近期抢劫"记录
+    local droppedCid = srcToCitizenid[src]
+    local droppedPlayer = QBCore.Functions.GetPlayer(src)
+    if droppedPlayer and droppedPlayer.PlayerData then
+        droppedCid = droppedPlayer.PlayerData.citizenid
+    end
+    for register, job in pairs(activeRobberies) do
+        if job.src == src and job.citizenid then droppedCid = job.citizenid end
+    end
+    srcToCitizenid[src] = nil
+    if droppedCid then
+        for safeKey, record in pairs(recentStoreRobberies) do
+            if record.citizenid == droppedCid then recentStoreRobberies[safeKey] = nil end
+        end
+    end
+    lastCopCall[src] = nil
     for register, job in pairs(activeRobberies) do
         if job.src == src then
             if job.timer then ClearTimeout(job.timer) end
@@ -507,12 +615,47 @@ AddEventHandler('playerDropped', function()
 end)
 
 RegisterNetEvent('qb-storerobbery:server:setSafeStatus', function(safe)
-    Config.Safes[safe].robbed = true
-    TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, true)
+    local src = source
+    -- 🔒 原来任何玩家调一次就能把任意保险箱标成"已抢"（40~80 分钟不可用），还能崩服务端。
+    --    现在要求：保险箱存在 + 调用者本人正在这间店实施抢劫 + 人在保险箱附近。
+    if type(safe) ~= 'string' and type(safe) ~= 'number' then return end
+    local safeEntry = Config.Safes[safe]
+    if not safeEntry or safeEntry.robbed then return end
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
 
-    SetTimeout(math.random(40, 80) * (60 * 1000), function()
+    -- 🔒 只靠 10 米距离不够：任何玩家走到保险箱前就能把它标成"已抢"40~80 分钟。
+    --    现在要求本人在**同一家店**有一笔正在进行的收银机抢劫（行内联动同一台收银机）。
+    local hasActiveRobbery = false
+    for register, job in pairs(activeRobberies) do
+        local registerCfg = Config.Registers[register]
+        -- Config.Registers[register].safeKey 指向的正是 Config.Safes 的下标
+        if job and job.src == src and registerCfg and registerCfg.safeKey == safe then
+            hasActiveRobbery = true
+            break
+        end
+    end
+    -- 25 秒的收银机计时常在保险箱小游戏完成前结束 → 用 10 分钟内的"本店抢劫记录"兜住
+    if not hasActiveRobbery and not HasRecentStoreRobbery(Player.PlayerData.citizenid, safe) then return end
+
+    local near = false
+    local ped = GetPlayerPed(src)
+    if ped and ped ~= 0 then
+        local coords = GetEntityCoords(ped)
+        local anchor = safeEntry[1]
+        local maxDist = tonumber(GetConvar('security_max_interaction_distance', '10.0')) or 10.0
+        near = anchor ~= nil and #(coords - anchor.xyz) <= maxDist
+    end
+    if not near then return end
+    Config.Safes[safe].robbed = true
+    -- C-2：把"什么时候能再撬"也发下去 —— 冷却必须是可见状态，不是按下去吃 error
+    local resetInMs = math.random(40, 80) * (60 * 1000)
+    local resetAt = os.time() + math.floor(resetInMs / 1000)
+    TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, true, resetAt)
+
+    SetTimeout(resetInMs, function()
         Config.Safes[safe].robbed = false
-        TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, false)
+        TriggerClientEvent('qb-storerobbery:client:setSafeStatus', -1, safe, false, nil)
     end)
 end)
 
@@ -537,7 +680,7 @@ RegisterNetEvent('qb-storerobbery:server:SafeReward', function(safe)
         return DropPlayer(src, 'Attempted exploit abuse')
     end
     local bags = math.random(1, 3)
-    local scale = exports['custom-economy']:GetEconomyRewardScale()
+    local scale = getRewardScale()
     local worthValue = math.floor(math.random(cashA, cashB) * scale + 0.5)
     local info = {
         worth = worthValue
@@ -557,32 +700,80 @@ RegisterNetEvent('qb-storerobbery:server:SafeReward', function(safe)
     end
 end)
 
-RegisterNetEvent('qb-storerobbery:server:callCops', function(type, safe, streetLabel, coords)
-    local cameraId
-    if type == 'safe' then
-        cameraId = Config.Safes[safe].camId
-    else
-        cameraId = Config.Registers[safe].camId
+RegisterNetEvent('qb-storerobbery:server:callCops', function(kind, safe, streetLabel, coords)
+    local src = source
+    -- 🔒 kind / safe / coords / streetLabel 全来自客户端：原来任意玩家能凭空给全服推一条
+    --    "某店正在被抢"的警情（坐标和店名都能编），坏 key 还会 nil 索引崩服务端。
+    --    现在只认 Config 里真实存在的收银机/保险箱，坐标取服务端配置。
+    --    注意形参不能叫 `type`：那会遮蔽全局 type()（公寓那边踩过一次）。
+    -- 客户端实际传的 kind 是 'safe' 或 'cashier'（见 client/main.lua 的三处调用）。
+    -- 🔒 只接受这两个值：原来"不是 safe 就当收银机"，传 'nonsense' 也能发警情。
+    if type(kind) ~= 'string' or (kind ~= 'safe' and kind ~= 'cashier') then return end
+    if type(safe) ~= 'number' and type(safe) ~= 'string' then return end
+    local Caller = QBCore.Functions.GetPlayer(src)
+    if not Caller then return end
+    local isSafe = kind == 'safe'
+    local entry = isSafe and Config.Safes[safe] or Config.Registers[safe]
+    local anchor = entry and entry[1]
+    if not entry or not anchor then return end
+    -- 🔒 必须"本人正在（或刚）抢这家店"：只靠距离的话，路过的人也能推假警情
+    -- 收银机条目自带 safeKey；保险箱条目没有这个字段，它自己就是 safe 下标
+    local storeSafeKey = entry.safeKey or (isSafe and safe or nil)
+    if not storeSafeKey then return end
+    local authorized = HasRecentStoreRobbery(Caller.PlayerData.citizenid, storeSafeKey)
+    if not authorized then
+        for register, job in pairs(activeRobberies) do
+            local registerCfg = Config.Registers[register]
+            if job and job.src == src and registerCfg and registerCfg.safeKey == storeSafeKey then
+                authorized = true
+                break
+            end
+        end
     end
+    if not authorized then return end
+    -- 🔒 必须人就在这家店附近（原来任意玩家拿真实 key 就能给全服推警情）
+    local ped = GetPlayerPed(src)
+    local callerCoords = ped and ped ~= 0 and GetEntityCoords(ped) or nil
+    local maxDist = tonumber(GetConvar('security_max_interaction_distance', '10.0')) or 10.0
+    if not callerCoords or #(callerCoords - anchor.xyz) > maxDist then return end
+    local cameraId = entry.camId
+    -- 🔒 店名不再采信客户端（可以随便编）：Config 里没有店名字段，统一用固定文案，
+    --    警察靠坐标定位就够；客户端传的 streetLabel 直接丢弃。
+    streetLabel = 'Unknown'
+    -- 🔒 按玩家 10 秒冷却：有抢劫记录的玩家原来可以连点刷全服警情
+    local now = GetGameTimer()
+    if lastCopCall[src] and now - lastCopCall[src] < 10000 then return end
+    lastCopCall[src] = now
+    coords = { x = anchor.x, y = anchor.y, z = anchor.z }
     local alertData = {
         title = '10-33 | Shop Robbery',
         coords = { x = coords.x, y = coords.y, z = coords.z },
         description = Lang:t('email.someone_is_trying_to_rob_a_store', { street = streetLabel, cameraId1 = cameraId })
     }
-    TriggerClientEvent('qb-storerobbery:client:robberyCall', -1, type, safe, streetLabel, coords)
-    TriggerClientEvent('qb-phone:client:addPoliceAlert', -1, alertData)
+    TriggerClientEvent('qb-storerobbery:client:robberyCall', -1, kind, safe, streetLabel, coords)
+    -- C-6：警情只走 policeAlert（它建单 → projectIncident 负责通知与地图标记）。
+    -- 原来这里还并行发一条 qb-phone 警情，加上客户端各警察自己建的 blip，
+    -- 一次抢劫在警官屏幕上会响 4 次。alertData 保留给下面的日志/兼容读取。
+    if alertData and type(alertData) == 'table' and alertData.title then
+        print(('[qb-storerobbery] 抢劫报警: %s @ %s'):format(alertData.title, tostring(streetLabel)))
+    end
 end)
 
 RegisterNetEvent('qb-storerobbery:server:removeAdvancedLockpick', function()
-    local Player = QBCore.Functions.GetPlayer(source)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    exports['qb-inventory']:RemoveItem(source, 'advancedlockpick', 1, false, 'qb-storerobbery:server:removeAdvancedLockpick')
+    -- 只扣自己真的持有的开锁器（原来不看持有量，RemoveItem 失败也被当成"用掉了"）
+    if not Player.Functions.GetItemByName('advancedlockpick') then return end
+    exports['qb-inventory']:RemoveItem(src, 'advancedlockpick', 1, false, 'qb-storerobbery:server:removeAdvancedLockpick')
 end)
 
 RegisterNetEvent('qb-storerobbery:server:removeLockpick', function()
-    local Player = QBCore.Functions.GetPlayer(source)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    exports['qb-inventory']:RemoveItem(source, 'lockpick', 1, false, 'qb-storerobbery:server:removeLockpick')
+    if not Player.Functions.GetItemByName('lockpick') then return end
+    exports['qb-inventory']:RemoveItem(src, 'lockpick', 1, false, 'qb-storerobbery:server:removeLockpick')
 end)
 
 CreateThread(function()
@@ -636,7 +827,14 @@ QBCore.Functions.CreateCallback('qb-storerobbery:server:getMinPolice', function(
 end)
 
 -- 当 /setrobbery 更改门槛时，广播到所有客户端
+local lastMinPoliceSync = {}
 RegisterNetEvent('qb-storerobbery:server:syncMinPolice', function()
+    local src = source
+    -- 🔒 全服广播：**按玩家** 10 秒冷却（全局冷却会被一个人占满，把别人挡在外面）
+    if type(src) ~= 'number' or not QBCore.Functions.GetPlayer(src) then return end
+    local now = os.time()
+    if lastMinPoliceSync[src] and now - lastMinPoliceSync[src] < 10 then return end
+    lastMinPoliceSync[src] = now
     local minPolice = tonumber(GetConvar("crime_min_police_storerobbery", "2")) or 2
     TriggerClientEvent('qb-storerobbery:client:updateMinPolice', -1, minPolice)
 end)

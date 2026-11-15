@@ -6,7 +6,9 @@ local sendData = nil
 
 -- 复用 custom-ui：统一焦点 + 关闭后防误触攻击
 local function uiOpen()
-    local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
+    local ok = pcall(function()
+        exports['custom-ui']:OpenMenu({ keepInput = false, owner = GetCurrentResourceName() })
+    end)
     if not ok then
         SetNuiFocus(true, true)
         SetNuiFocusKeepInput(false)
@@ -14,7 +16,7 @@ local function uiOpen()
 end
 
 local function uiClose()
-    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu({ owner = GetCurrentResourceName() }) end)
     if not ok then
         SetNuiFocus(false, false)
         SetNuiFocusKeepInput(false)
@@ -143,3 +145,9 @@ RegisterKeyMapping('playerFocus', 'Give Menu Focus', 'keyboard', 'LMENU')
 exports('openMenu', openMenu)
 exports('closeMenu', closeMenu)
 exports('showHeader', showHeader)
+
+-- V-10（2026-11-12）：焦点必须由拥有 ui_page 的资源按（SetNuiFocus 是按资源的）
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    SetNuiFocusKeepInput(keepInput == true)
+    SetNuiFocus(hasFocus == true, hasCursor ~= false)
+end)

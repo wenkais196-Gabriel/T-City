@@ -1,5 +1,23 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- qb-core 重启后，上面这份快照里的函数引用会全部失效（P1-6，PR #196）：
+-- 本资源没有声明 qb-core 依赖，不会被重启级联带走，所以在 qb-core 起来时重解析一次。
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= 'qb-core' then return end
+    -- ⚠️ 不能在事件里同步调：真机实测此刻 export 引用可能还指向 qb-core 旧 script host，
+    -- 会抛 `Execution of function reference in script host failed`。放线程里重试到拿到新表。
+    CreateThread(function()
+        for _ = 1, 30 do
+            local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+            if ok and core then
+                QBCore = core
+                return
+            end
+            Wait(500)
+        end
+    end)
+end)
+
 local Races = {}
 
 RegisterNetEvent('qb-streetraces:NewRace', function(RaceTable)
@@ -59,6 +77,11 @@ RegisterNetEvent('qb-streetraces:RaceWon', function(RaceId)
     local xPlayer = QBCore.Functions.GetPlayer(src)
     if not xPlayer then return end
 
+    -- RaceId 来自客户端：统一转成数字，非数字直接拒（表/字符串用作表键只是查不到，
+    -- 但规范化之后 `Races[RaceId]` 的命中面收窄到"服务端自己发出的 id"）
+    RaceId = tonumber(RaceId)
+    if not RaceId then return end
+
     local race = Races[RaceId]
     if not race or not race.started then
         TriggerClientEvent('QBCore:Notify', src, 'Invalid race', 'error')
@@ -90,6 +113,11 @@ RegisterNetEvent('qb-streetraces:JoinRace', function(RaceId)
     if not src or src == 0 then return end
     local xPlayer = QBCore.Functions.GetPlayer(src)
     if not xPlayer then return end
+
+    -- RaceId 来自客户端：统一转成数字，非数字直接拒（表/字符串用作表键只是查不到，
+    -- 但规范化之后 `Races[RaceId]` 的命中面收窄到"服务端自己发出的 id"）
+    RaceId = tonumber(RaceId)
+    if not RaceId then return end
 
     local race = Races[RaceId]
     if not race or race.started then

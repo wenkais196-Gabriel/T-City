@@ -1,4 +1,22 @@
 local QBCore = exports['qb-core']:GetCoreObject()
+
+-- qb-core 重启后，上面这份快照里的函数引用会全部失效（P1-6，PR #196）：
+-- 本资源没有声明 qb-core 依赖，不会被重启级联带走，所以在 qb-core 起来时重解析一次。
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= 'qb-core' then return end
+    -- ⚠️ 不能在事件里同步调：真机实测此刻 export 引用可能还指向 qb-core 旧 script host，
+    -- 会抛 `Execution of function reference in script host failed`。放线程里重试到拿到新表。
+    CreateThread(function()
+        for _ = 1, 30 do
+            local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+            if ok and core then
+                QBCore = core
+                return
+            end
+            Wait(500)
+        end
+    end)
+end)
 local GotItems = {}
 local AlarmActivated = false
 
@@ -103,13 +121,21 @@ RegisterNetEvent('prison:server:ResetJailItems', function()
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
     local metadata = Player.PlayerData.metadata or {}
-    if (metadata.injail or 0) <= 0 then return end
+    if (tonumber(metadata.injail) or 0) <= 0 then return end
     -- Deliberately keep JailItemsSeized set: Reset may not open a second
     -- SaveJailItems stipend snapshot in the same sentence.
     Player.Functions.SetMetaData('jailitems', {})
 end)
 
 RegisterNetEvent('prison:server:SecurityLockdown', function()
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- 🔒 原来任意玩家调一次就把整座监狱锁死（全服广播 -1）；只允许狱警或在押者触发
+    local job = Player.PlayerData.job
+    if job.name ~= 'police' or not job.onduty then
+        if (tonumber(Player.PlayerData.metadata.injail) or 0) <= 0 then return end
+    end
     TriggerClientEvent('prison:client:SetLockDown', -1, true)
     for _, v in pairs(QBCore.Functions.GetPlayers()) do
         local Player = QBCore.Functions.GetPlayer(v)
@@ -122,6 +148,16 @@ RegisterNetEvent('prison:server:SecurityLockdown', function()
 end)
 
 RegisterNetEvent('prison:server:SetGateHit', function(key)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- 🔒 同上：破门广播只给狱警/在押者；key 必须是数字
+    local job = Player.PlayerData.job
+    if job.name ~= 'police' or not job.onduty then
+        if (tonumber(Player.PlayerData.metadata.injail) or 0) <= 0 then return end
+    end
+    key = tonumber(key)
+    if not key then return end
     TriggerClientEvent('prison:client:SetGateHit', -1, key, true)
     if math.random(1, 100) <= 50 then
         for _, v in pairs(QBCore.Functions.GetPlayers()) do
@@ -154,7 +190,16 @@ RegisterNetEvent('prison:server:CheckRecordStatus', function()
     end
 end)
 
+local alarm_cooldown = {}   -- 每人 60 秒报警冷却（key = citizenid，source 会被复用）
 RegisterNetEvent('prison:server:JailAlarm', function()
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    -- 🔒 原来无冷却：客户端连点即可反复刷警报与 `error()` 噪音
+    local cid = Player.PlayerData.citizenid
+    local now = os.time()
+    if alarm_cooldown[cid] and now - alarm_cooldown[cid] < 60 then return end
+    alarm_cooldown[cid] = now
     if AlarmActivated then return end
     local playerPed = GetPlayerPed(source)
     local coords = GetEntityCoords(playerPed)
@@ -169,7 +214,9 @@ end)
 RegisterNetEvent('prison:server:CheckChance', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
-    if not Player or Player.PlayerData.metadata.injail == 0 or GotItems[src] then return end
+    if not Player then return end
+    -- 只在服刑期间才能摸到手机；tonumber 兜住 metadata 缺失/字符串的情况
+    if (tonumber(Player.PlayerData.metadata.injail) or 0) <= 0 or GotItems[src] then return end
     local chance = math.random(100)
     local odd = math.random(100)
     if chance ~= odd then return end

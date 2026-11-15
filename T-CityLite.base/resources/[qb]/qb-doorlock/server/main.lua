@@ -1,5 +1,24 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- qb-core 重启后，上面这份快照里的函数引用会全部失效（P1-6，PR #196）：
+-- 本文件原有的 onResourceStart 只处理**自己**启动（resource == GetCurrentResourceName()），
+-- 不管 qb-core 重启，所以另挂一个专门重解析。
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= 'qb-core' then return end
+    -- ⚠️ 不能在事件里同步调：真机实测此刻 export 引用可能还指向 qb-core 旧 script host，
+    -- 会抛 `Execution of function reference in script host failed`。放线程里重试到拿到新表。
+    CreateThread(function()
+        for _ = 1, 30 do
+            local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+            if ok and core then
+                QBCore = core
+                return
+            end
+            Wait(500)
+        end
+    end)
+end)
+
 -- Functions
 
 local function showWarning(msg)
@@ -138,7 +157,12 @@ end)
 -- Events
 
 RegisterNetEvent('qb-doorlock:server:updateState', function(doorID, locked, src, usedLockpick, unlockAnyway, enableSounds, enableAnimation, sentSource)
-	local playerId = sentSource or source
+	-- ⚠️ 原来是 `local playerId = sentSource or source`：客户端可以塞第 8 个参数指定"是谁在开门"，
+	-- 鉴权（isAuthorized）就按那个玩家算 —— 报一个在线警察的 server id 就能开任何警察门。
+	-- 全仓客户端调用点（qb-doorlock/client/main.lua 两处、qb-prison/prisonbreak.lua 一处）都不传这个参数，
+	-- 所以这里直接忽略并用 source 鉴权；真传了且与 source 不符就是伪造，拒绝。
+	if sentSource ~= nil and sentSource ~= source then return end
+	local playerId = source
 	local Player = QBCore.Functions.GetPlayer(playerId)
 	if not Player then return end
 	if type(doorID) ~= 'number' and type(doorID) ~= 'string' then
@@ -162,7 +186,8 @@ RegisterNetEvent('qb-doorlock:server:updateState', function(doorID, locked, src,
 		return
 	end
 
-	if not unlockAnyway and not isAuthorized(Player, Config.DoorList[doorID], usedLockpick) then
+	local authorized = isAuthorized(Player, Config.DoorList[doorID], usedLockpick)
+	if not authorized and not unlockAnyway then
 		if Config.Warnings then
 			showWarning(Lang:t("general.warn_no_authorisation", {player = Player.PlayerData.name, license = Player.PlayerData.license, doorID = doorID}))
 		end
@@ -294,6 +319,8 @@ AddEventHandler('onResourceStop', function(resource)
 end)
 
 RegisterNetEvent('txAdmin:events:scheduledRestart', function(eventData)
+	-- txAdmin 是服务端事件（source 为 0）；客户端发同名事件应当忽略
+	if source ~= 0 then return end
     if eventData.secondsRemaining == 60 then
         CreateThread(function()
             Wait(45000)
@@ -304,14 +331,15 @@ RegisterNetEvent('txAdmin:events:scheduledRestart', function(eventData)
     end
 end)
 
-RegisterNetEvent('qb-doorlock:server:removeLockpick', function(type)
-	local Player = QBCore.Functions.GetPlayer(source)
+RegisterNetEvent('qb-doorlock:server:removeLockpick', function(lockpickType)
+	local src = source
+	local Player = QBCore.Functions.GetPlayer(src)
 
 	if not Player then return end
-
-	if type == "advancedlockpick" or type == "lockpick" then
-		Player.Functions.RemoveItem(type, 1)
-	end
+	-- 只认两种开锁器，其余一律拒绝（原来写成正分支 `if a or b then`，闸门认不出是守卫）。
+	-- 参数改名避免遮蔽全局 `type`。
+	if lockpickType ~= "advancedlockpick" and lockpickType ~= "lockpick" then return end
+	Player.Functions.RemoveItem(lockpickType, 1)
 end)
 
 -- Commands

@@ -32,6 +32,9 @@ python3 tools/dev/reuse_scan.py --min 3        # 现在哪些能力被实现了�
 | 跨资源业务能力 | 由 **owner 资源** 用 `exports` 暴露，别的资源调用前先确认 owner 表 | `core_economy:TriggerReward` |
 | 资源内部重复（同一资源多文件） | 该资源自建的 client 库文件 / shared 目录 | — |
 
+跨资源服务调用只认 `exports['<owner>']:service_<name>_<method>`；`Bus` 只是 owner 侧
+进程内注册实现，**不得跨资源读取**（跨资源恒 nil）。
+
 调用方写法（**不要**在文件顶部直接 `local f = exports[...]`）：
 
 ```lua
@@ -47,6 +50,7 @@ local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDic
 | **上游/第三方**代码 | `qb-*` 里的 `loadAnimDict`（10 份）、`standalone/`（2 份） | 迁成我们核心的导出 = 与上游分叉，后续无法合并上游更新 |
 | 参数语义还没统一 | `DrawText3D` / `DrawText3Ds` | 各份 scale/color/参数顺序不同，先统一签名再合并 |
 | owner 明确的业务能力 | `HasItem` / `AddMoney` | 真正的 owner 是 qb-inventory / 经济服务，重复的应该是"调用 owner"而不是"再写一份" |
+| **门面 / 别名**（显式决策） | `InsertId`（custom-police 的 shared/insert_id.lua 转调 `Db.InsertId`，2026-11 S4）、`Money`/`PhoneMoney`/`QuestMoney`/`TCMoney`（`money_aliases.lua` 转调 `FormatMoney`，2026-11 S6） | 实现只有一份（`T-CityLite.base/resources/[standalone]/core-framework/server/db.lua`、`T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua`）；保留下来的名字只是历史调用点的引用面。判据：函数体只转调 owner、不含自己的逻辑。**这不是重复，是兼容层**；新增时要在本表登记一行 |
 
 判据很实用：**合并后行为是否完全一致**。一致 → 合并；不一致 → 那不是重复，是同名。
 
@@ -67,6 +71,8 @@ local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDic
 | `loadAnimDict` | 17 | 12 | `[custom]` 5 处合并；qb/standalone 保留（不迁上游） |
 | convar 助手族（`GetIntConvar` / `GetBoolConvar` / `GetFloatConvar` / `GetStrConvar` / `GetNumConvar` / `convarInt` / `convarString`） | 23 | 0（全部走 `ConvarString/Int/Float/Bool`） | 12 个文件迁移；**这批是在加载期调用的**，所以顺带给 6 个资源补了 `dependencies { 'core-framework' }` |
 | 合计同名 ≥4 的能力组 | 15 组 | 12 组 | `reuse_budget.json` 同步收紧 |
+| 跨资源 Bus 读取 | 4 个扫描根（S2a） | 0（本次收敛） | 6 个扫描根/文件（税/热度/通知）；`Bus` 只作 owner 侧注册辅助 |
+| `LoadModel` | 4 个 `[custom]` 本地实现（含 2 个无超时） | 0（统一走 `CFShared.LoadModel`） | `T-CityLite.base/resources/[standalone]/core-framework/client/shared.lua:69-104` |
 
 顺带修掉的两个真隐患：
 
@@ -75,7 +81,7 @@ local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDic
   顺序敏感。所以迁移必须同时补 `dependencies`，否则某个资源先起就会 `No such export` 整个加载失败。
   闸门 `test_load_time_callers_declare_the_core_dependency` 把这条钉住了。
 
-下一批候选（按收益排序）：`loadModel`（阻塞循环，与 loadAnimDict 同类，需加超时）→
+下一批候选（按收益排序）：~~`loadModel`~~（已完成，S5：统一走 `CFShared.LoadModel`）→
 `checkRateLimit`（与 `core-framework` 的 `rate_limit.lua` 职责重叠）→ `DrawText3D` 族（先统一签名）→
 `AddMoney`（重复本身可能是宪法②的违反，要单独审）。
 

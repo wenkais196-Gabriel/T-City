@@ -39,6 +39,125 @@ QuestManager._currentSteps = {}
 QuestManager._completing = {}
 
 -- ══════════════════════════════════════════════════════════════
+-- 任务终结时的清理助手
+--
+-- 必须定义在**文件顶部**：Lua 的 local 只在词法作用域内可见，这两段原本写在
+-- FailQuest 之前（≈1160 行），而完成路径在 911 行就调用了 closeRentalFor ——
+-- 于是完成时找不到它，直接 SCRIPT ERROR（真机会看到任务结算到一半崩掉）。
+-- ══════════════════════════════════════════════════════════════
+-- 任务终结时把租借会话关掉（押金按已用时长结算后退回）。
+-- 与 clearLogisticsFor 分开：那个清的是「载具绑定」，这个清的是「押金会话」。
+local function closeRentalFor(source, reason, questId)
+    if type(QuestRental) ~= 'table' or type(QuestRental.Close) ~= 'function' then return end
+    -- ⚠️ 这里**不能**用文件局部的 QBCore：它在本文件第 244 行才声明，
+    -- 而本函数在第 50 行 —— 同一条街上的坑已经踩过两次（rental helper 一次、这里一次）。
+    -- 走 export 是与加载顺序无关的取法。
+    local okPlayer, Player = pcall(function() return exports['qb-core']:GetPlayer(source) end)
+    if not okPlayer or not Player then
+        print(('[quest-manager] ⚠️ closeRentalFor: 取不到玩家 (source=%s)'):format(tostring(source)))
+        return
+    end
+    local ok, result = pcall(QuestRental.Close, Player, reason, os.time(), questId)
+    if ok and result and not result.idempotent then
+        QuestPrint('🏁 rental closed (%s): refund=$%s rent=$%s %smin',
+            tostring(reason), tostring(result.refund), tostring(result.rent), tostring(result.minutes))
+        return result
+    elseif not ok then
+        QuestPrint('⚠️ rental close failed: %s (%s)', tostring(reason), tostring(result))
+    end
+    return nil
+end
+local function clearLogisticsFor(citizenid, questId)
+    if type(ClearLogisticsBinding) ~= 'function' then return end
+    local ok, err = pcall(ClearLogisticsBinding, citizenid, questId)
+    if not ok then
+        QuestPrint('⚠️ ClearLogisticsBinding failed: %s → %s (%s)', citizenid, questId, tostring(err))
+    end
+end
+-- 摊位实体回收：登记在 QuestEntityRegistry 里的 netId 必须在这里一起清，
+-- 否则玩家下线后那条记录还在，下一位用同一 citizenid 的会话会拿到一个死句柄。
+-- 客户端也会自己删实体（它知道句柄），两边都删是幂等的 —— 服务端这一侧负责**记录**。
+-- 顾客会话也必须随任务结束关掉：会话留着 → Tick 还在跑 → 定期给一个
+-- 已经不在摊位上的玩家推报价（玩家看到「顾客来了」但摊位已经没了）。
+--- 从模板里找价格表（摊位那一步的 vendor.prices）
+local function vendorPricesOf(questId)
+    if type(QuestRegistry) ~= 'table' or type(QuestRegistry.GetTemplate) ~= 'function' then return nil end
+    local template = QuestRegistry.GetTemplate(questId)
+    for _, step in ipairs(template and template.steps or {}) do
+        local vendor = step.data and step.data.vendor
+        if type(vendor) == 'table' and type(vendor.prices) == 'table' then
+            return vendor.prices
+        end
+    end
+    return nil
+end
+
+--- 结算回执：六行明细推到玩家聊天框。
+-- 为什么用 chat 而不是新开一条 net event：S5 只负责「算对 + 只发一次」，
+-- 账单 UI（手机里的卡片）属于 S6 的 UX 收口；先让数据能到玩家眼前，
+-- 而且 chat:addMessage 是全仓既有的通道，不增加事件面。
+local function issueSettleReceipt(src, citizenid, questId, rentalResult, vendorSummary)
+    if type(QuestSettle) ~= 'table' or type(QuestSettle.Compute) ~= 'function' then return end
+
+    local receipt = QuestSettle.Compute({
+        depositRefund = rentalResult and rentalResult.refund or 0,
+        rent = rentalResult and rentalResult.rent or 0,
+        soldTotal = vendorSummary and vendorSummary.revenue or 0,
+        leftover = vendorSummary and vendorSummary.stock or nil,
+        prices = vendorPricesOf(questId),
+        raw = vendorSummary and vendorSummary.raw or 0,
+        taxRate = 0,   -- 还没有税率来源；有税率时这里换成配置
+    })
+
+    local issued = QuestSettle.Issue(citizenid, questId, questId .. ':complete', receipt)
+    if not issued then return end
+
+    local lines = { '**本班账单**' }
+    for _, row in ipairs(issued.rows) do
+        local sign = row.amount < 0 and '-' or '+'
+        local text = ('%s  %s$%s'):format(row.label, sign,
+            type(QuestMoney) == 'function' and QuestMoney(math.abs(row.amount)) or tostring(math.abs(row.amount)))
+        if row.counted == false then
+            text = text .. '   （已付现，不计入净额）'
+        elseif row.muted then
+            text = text .. '   （未启用）'
+        end
+        lines[#lines + 1] = text
+    end
+    lines[#lines + 1] = ('**净额 %s$%s**'):format(
+        issued.net < 0 and '-' or '+',
+        type(QuestMoney) == 'function' and QuestMoney(math.abs(issued.net)) or tostring(math.abs(issued.net)))
+    if issued.replayed then lines[#lines + 1] = '（这张回执之前已经开过，金额不会重复计入）' end
+
+    pcall(function()
+        TriggerClientEvent('chat:addMessage', src, {
+            color = { 120, 220, 150 },
+            multiline = true,
+            args = { '[任务结算]', table.concat(lines, '\n') },
+        })
+    end)
+
+    QuestPrint('🧾 settle issued: %s | %s | net=$%s | sold=$%s',
+        tostring(citizenid), tostring(questId), tostring(issued.net), tostring(issued.soldTotal))
+end
+local function closeVendorFor(citizenid, questId, reason)
+    if type(QuestVendorBridge) ~= 'table' or type(QuestVendorBridge.CloseFor) ~= 'function' then return nil end
+    local ok, summary = pcall(QuestVendorBridge.CloseFor, citizenid, questId, reason)
+    if not ok then
+        QuestPrint('⚠️ CloseVendor failed: %s → %s (%s)', tostring(citizenid), tostring(questId), tostring(summary))
+        return nil
+    end
+    return summary
+end
+local function closeBoothFor(citizenid, questId, reason)
+    if type(QuestBooth) ~= 'table' or type(QuestBooth.RemoveBooth) ~= 'function' then return end
+    local ok, removed = pcall(QuestBooth.RemoveBooth, citizenid, questId, reason)
+    if not ok then
+        QuestPrint('⚠️ RemoveBooth failed: %s → %s (%s)', tostring(citizenid), tostring(questId), tostring(removed))
+    end
+end
+
+-- ══════════════════════════════════════════════════════════════
 -- v0.8a: QuestNodes 兼容层 — 原 quest_nodes.lua 已移除，
 -- atom_nodes 使用不同事件名。此 shim 将旧 API 桥接到客户端现有事件。
 -- ══════════════════════════════════════════════════════════════
@@ -51,6 +170,11 @@ QuestNodes = {
         REACH     = 'quest:client:nodeGoto',
         INTERACT  = 'quest:client:nodeInteract',
         VALIDATOR = 'quest:client:nodeValidator',
+        -- rental 复用 interact 的客户端表现（提示 + 进度条 + nodeComplete）：
+        -- 押金在服务端校验器里扣，客户端这一步只负责「站到点上按 E」。
+        RENTAL    = 'quest:client:nodeInteract',
+        BOOTH     = 'quest:client:nodeInteract',   -- 摆摊：客户端画交互点，放下即上报
+        VENDOR    = 'quest:client:nodeInteract',   -- 收摊：摊位交互点按 E 即完成
         DELIVER   = 'quest:client:nodeDeliver',
         COMBAT    = 'quest:client:nodeCombat',
         WAIT      = 'quest:client:nodeWait',
@@ -183,7 +307,9 @@ QuestNodes = {
         local claimed = clientData and string.upper(tostring(clientData.nodeType or '')) or ''
         local expected = string.upper(tostring(step.type or ''))
         if claimed ~= '' and expected ~= '' then
-            local alias = { REACH = 'GOTO' }
+            -- RENTAL 借用 INTERACT 的节点事件，所以客户端上报的 nodeType 是 INTERACT；
+            -- 不登记这条别名，服务端会判 'Node type mismatch: expected RENTAL, got INTERACT'。
+            local alias = { REACH = 'GOTO', RENTAL = 'INTERACT', BOOTH = 'INTERACT', VENDOR = 'INTERACT' }
             if claimed ~= expected and alias[expected] ~= claimed then
                 return false, ('Node type mismatch: expected %s, got %s'):format(expected, claimed)
             end
@@ -208,6 +334,20 @@ QuestNodes = {
 }
 
 local QBCore = exports['qb-core']:GetCoreObject()
+
+--- 失败原因中文（J-3）：玩家看不懂 player_death / validation_exhausted 这种内部词
+local REASON_ZH = {
+    player_death = '你死亡了',
+    entity_timeout = '运输超时',
+    entity_tracking_violation = '运输违规（载具被毁或远离路线）',
+    validation_exhausted = '校验多次失败',
+    vehicle_destroyed = '载具被毁',
+    unknown = '未知原因',
+}
+local function reasonZh(reason)
+    return REASON_ZH[reason] or ('任务失败（%s）'):format(tostring(reason))
+end
+
 
 -- ==============================================================
 -- 内部辅助
@@ -236,6 +376,25 @@ end
 ---@param questId string
 ---@return boolean success
 ---@return string message
+-- ── 单趟耗时（数值卡的真实数据源）──────────────────────────────────────────
+-- 04-numbers.md 的时薪是「站数 × 单站耗时 × 收益」三条假设叠出来的，任何一条错，定价整体偏。
+-- 这里只记内存 + 一行日志（0 新表 / 0 新事件），键与其它内存态一致：citizenid:questId。
+local QuestRunStarted = {}
+
+--- 记一趟的开始时间（TriggerQuest 成功时）
+local function markRunStart(citizenid, questId)
+    QuestRunStarted[tostring(citizenid) .. ':' .. tostring(questId)] = os.time()
+end
+
+--- 取走这趟的耗时（分钟，保留一位小数）；没有记录时返回 nil
+local function takeRunElapsed(citizenid, questId)
+    local key = tostring(citizenid) .. ':' .. tostring(questId)
+    local startedAt = QuestRunStarted[key]
+    QuestRunStarted[key] = nil
+    if not startedAt then return nil end
+    return (os.time() - startedAt) / 60
+end
+
 function QuestManager.TriggerQuest(source, questId)
     local citizenid = getCidFromSource(source)
     if not citizenid then
@@ -253,6 +412,19 @@ function QuestManager.TriggerQuest(source, questId)
         return false, ('Quest not found: %s'):format(questId)
     end
 
+    -- R1（2026-11-13）：接单时校验「必须持有某个职业」。
+    -- 起因（CC 在 R1 复核里指出）：garbage/bus 的 required_tags 只写了 role=civilian，
+    -- 而服务端校验器要求 job=garbage/bus —— 平民能接、走第 1 站必被判 wrong_job 卡死。
+    -- 这里只认**显式声明**的 conditions.require_job：不动既有模板的语义
+    -- （对它们一律放宽，避免把帮派成员做矿工任务这类正常路径一并关掉）。
+    local requireJob = type(template.conditions) == 'table' and template.conditions.require_job or nil
+    if type(requireJob) == 'string' and requireJob ~= '' then
+        local Player = QBCore.Functions.GetPlayer(source)
+        local job = Player and Player.PlayerData and Player.PlayerData.job
+        if type(job) ~= 'table' or job.name ~= requireJob then
+            return false, ('需要职业：%s'):format(requireJob)
+        end
+    end
     -- v0.8b: 地址池解析 — 如果模板有 address_pool 引用，深克隆并替换为真实坐标
     local hasAddressPools = false
     for _, step in ipairs(template.steps) do
@@ -645,6 +817,17 @@ function QuestManager.TriggerQuest(source, questId)
             return false, ('Quest on cooldown for %d more minutes'):format(remainingMinutes)
         end
     end
+    -- R2：每日/每周次数上限。模板早就写了 conditions.daily_limit，但 CheckDailyLimit
+    -- 与 UpdateDailyLimit 都没有调用点 —— 同一条路线曾可以一天刷无限次。
+    local dailyLimit = template.conditions and tonumber(template.conditions.daily_limit) or 0
+    if dailyLimit > 0 and QuestDailyLimit then
+        local limitType = (template.conditions and template.conditions.limit_type) or 'daily'
+        local allowed, done = QuestDailyLimit.Allowed(citizenid, questId, dailyLimit, limitType)
+        if not allowed then
+            local scope = limitType == 'weekly' and '本周' or '今天'
+            return false, ('%s已经做过 %d 次了（上限 %d），换个活干吧'):format(scope, done, dailyLimit)
+        end
+    end
 
     -- 7. v1.0.0: 竞争/组队模式 → 先抢排他锁；失败则不落库，避免幽灵 in_progress
     if template.mode == 'competitive' then
@@ -696,6 +879,13 @@ function QuestManager.TriggerQuest(source, questId)
     }
     QuestCache.SetActiveQuests(citizenid, merged)
 
+    -- R1：每次接单都清掉多站路线的会话。
+    -- 不清会有个很难查的死锁：玩家在第 3 站放弃/失败/掉线后会话停在 3，重新接单从第 1 站开始，
+    -- 校验器按"只能完成下一站"拒掉第 1 站 —— 这个任务从此再也做不了。
+    if QuestRouteValidators and QuestRouteValidators.ResetSession then
+        QuestRouteValidators.ResetSession(citizenid, questId)
+    end
+
     -- 10b. v1.0.0: 如果第一步是节点类型，初始化节点
     if firstStep then
         local firstNodeType = template.steps[1] and template.steps[1].type
@@ -736,6 +926,7 @@ function QuestManager.TriggerQuest(source, questId)
     end
 
     QuestPrint('🚀 Quest started: %s → %s', citizenid, questId)
+    markRunStart(citizenid, questId)
     return true, ('Quest accepted: %s'):format(template.title)
 end
 
@@ -825,13 +1016,23 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
 
             -- 发放奖励
             local src = getSourceFromCid(citizenid)
-            print(('[quest-manager] 🏁 COMPLETING quest: %s, citizenid=%s, src=%s'):format(questId, citizenid, tostring(src)))
+            local elapsedMin = takeRunElapsed(citizenid, questId)
+            print(('[quest-manager] 🏁 COMPLETING quest: %s, citizenid=%s, src=%s, 用时=%s 分钟'):format(
+                questId, citizenid, tostring(src),
+                elapsedMin and ('%.1f'):format(elapsedMin) or '?'))
             if src then
                 TriggerClientEvent(Config.Quest.Events.QUEST_COMPLETED, src, {
                     quest_id = questId,
                     title = template.title,
                     rewards = template.rewards,
                 })
+
+                -- 完成任务 = 正常归还：租借会话必须在这里关掉（退押金按已用时长结算）。
+                -- 少了这一条，happy path 上押金永远退不回来 —— 失败/放弃/断线都关了，只有成功没关。
+                local vendorSummary = closeVendorFor(citizenid, questId, 'completed')
+                closeBoothFor(citizenid, questId, 'completed')
+                local rentalResult = closeRentalFor(src, 'returned', questId)
+                issueSettleReceipt(src, citizenid, questId, rentalResult, vendorSummary)
 
                 -- v0.7.2: 奖励在完成事件之后发放，避免奖励异常阻断客户端清理
                 local rewardOk, rewardErr = xpcall(function()
@@ -843,8 +1044,9 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
                     print(('[quest-manager] ❌ GrantRewards failed: %s'):format(tostring(rewardErr)))
                 end
 
+                -- J-3：完成的唯一一条屏上回执（原来的 client/main.lua 与 quest_rewards 各发一条是重复）
                 TriggerClientEvent('QBCore:Notify', src,
-                    ('Quest completed: %s!'):format(template.title), 'success')
+                    ('✅ 任务完成：%s'):format(template.title), 'success')
             else
                 print('[quest-manager] ❌ getSourceFromCid returned nil — cannot send completion to client!')
             end
@@ -854,6 +1056,12 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
             local cooldownHours = template.conditions and template.conditions.cooldown_hours or 0
             if cooldownHours > 0 then
                 QuestCooldown.SetCooldown(citizenid, questId, cooldownHours)
+            end
+
+            -- R2：完成一次记一次，供 daily_limit 判定（内存即时 + DB 异步）
+            if QuestDailyLimit and template.conditions and tonumber(template.conditions.daily_limit) then
+                QuestDailyLimit.Increment(citizenid, questId,
+                    (template.conditions.limit_type) or 'daily')
             end
 
             -- v0.7.0: 清理事件反向索引
@@ -950,7 +1158,7 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
             nodePayload.action = nodePayload.action or 'detach_trailer'
         end
 
-        local atomTypes = { GOTO = true, INTERACT = true, DELIVER = true, COMBAT = true, WAIT = true, VALIDATOR = true, PLACEMENT = true, DECISION = true }
+        local atomTypes = { GOTO = true, INTERACT = true, DELIVER = true, COMBAT = true, WAIT = true, VALIDATOR = true, RENTAL = true, BOOTH = true, VENDOR = true, PLACEMENT = true, DECISION = true }
         if atomTypes[nodeType] and QuestNodes then
             local src = getSourceFromCid(citizenid)
             if src then
@@ -1016,8 +1224,9 @@ function QuestManager.AdvanceStep(citizenid, questId, stepId, data)
             next_step_data = nextStep.data,
         })
 
+        -- J-3：步骤推进的唯一一条（客户端原来还发一条 "Step: xxx"）
         TriggerClientEvent('QBCore:Notify', src,
-            ('Step completed: %s → %s'):format(currentStep.title, nextStep.title), 'primary')
+            ('➡️ 进入下一步：%s'):format(nextStep.title), 'primary')
     end
 
     -- v0.8b: 更新缓存为新的当前步骤（缓存过期/无MySQL 时兜底重建）
@@ -1073,42 +1282,10 @@ end
 ---@param questId string
 ---@return boolean success
 ---@return string message
-function QuestManager.AbandonQuest(source, questId)
-    local citizenid = getCidFromSource(source)
-    if not citizenid then
-        return false, 'Player not found'
-    end
-    if type(questId) ~= 'string' or questId == '' then
-        return false, 'Invalid quest'
-    end
-    if not QuestManager.IsQuestActive(source, questId) then
-        return false, 'Quest is not active'
-    end
 
-    QuestDB.AbandonQuest(citizenid, questId)
-    QuestDB.LogEvent(citizenid, questId, 'abandon', nil, {})
-
-    -- 释放排他锁 + 收起节点（与 FailQuest 同一条清理链）
-    local template = QuestRegistry.GetTemplate(questId)
-    if template then
-        if template.mode == 'competitive' or template.mode == 'group' then
-            QuestMutex.ReleaseLock(questId, source)
-        end
-        QuestNodes.CancelAllNodes(source, questId)
-    end
-
-    QuestCache.UnindexEvent(citizenid, questId)
-    QuestCache.InvalidateActive(citizenid)
-    QuestManager._resolvedTemplates[citizenid .. '_' .. questId] = nil
-    QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
-    QuestManager._completing[citizenid .. '_' .. questId] = nil
-
-    local src = getSourceFromCid(citizenid)
-    if src then
-        TriggerClientEvent(Config.Quest.Events.QUEST_ABANDONED, src, { quest_id = questId })
-    end
-    return true, 'Quest abandoned'
-end
+-- 任务终结（失败/放弃）必须把物流绑定一起清掉。
+-- 否则 plate / netId / rentalFeePct 会残留到下一趟：玩家可能按上一趟的费率结算，
+-- 或者一辆已经不属于他的车仍被当成「已绑定任务载具」。
 
 function QuestManager.FailQuest(source, questId, reason)
     local citizenid = getCidFromSource(source)
@@ -1116,6 +1293,7 @@ function QuestManager.FailQuest(source, questId, reason)
         return false, 'Player not found'
     end
 
+    takeRunElapsed(citizenid, questId)  -- 失败也清计时
     QuestDB.FailQuest(citizenid, questId, reason)
     QuestDB.LogEvent(citizenid, questId, 'fail', nil, { reason = reason })
 
@@ -1135,6 +1313,10 @@ function QuestManager.FailQuest(source, questId, reason)
     -- v1.1: 任务终结 → 清理内存步骤与完成锁
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
+    closeVendorFor(citizenid, questId, 'failed')
+    closeBoothFor(citizenid, questId, 'failed')
+    clearLogisticsFor(citizenid, questId)
+    closeRentalFor(source, 'failed', questId)
 
     local src = getSourceFromCid(citizenid)
     if src then
@@ -1142,6 +1324,9 @@ function QuestManager.FailQuest(source, questId, reason)
             quest_id = questId,
             reason = reason,
         })
+        -- J-3：失败的唯一一条（原来 client/main.lua:287 还重复发一条英文 Quest failed）
+        TriggerClientEvent('QBCore:Notify', src,
+            ('❌ 任务失败：%s'):format(reasonZh(reason)), 'error')
     end
 
     -- v0.7.0: 广播任务失败事件
@@ -1156,12 +1341,22 @@ end
 ---@param questId string
 ---@return boolean success
 ---@return string message
+-- 说明：这里**只能有一份** AbandonQuest。历史上有两份同名定义，后一份静默覆盖前一份，
+-- 前一份里的入参校验（questId 类型 / 是否真的在进行中）就此失效 —— 传 nil 也会走到 QuestDB。
+-- 已合并为一份：保留校验 + 保留日志。
 function QuestManager.AbandonQuest(source, questId)
     local citizenid = getCidFromSource(source)
     if not citizenid then
         return false, 'Player not found'
     end
+    if type(questId) ~= 'string' or questId == '' then
+        return false, 'Invalid quest'
+    end
+    if not QuestManager.IsQuestActive(source, questId) then
+        return false, 'Quest is not active'
+    end
 
+    takeRunElapsed(citizenid, questId)  -- 清掉单趟计时（放弃也要清，否则内存留垃圾）
     QuestDB.AbandonQuest(citizenid, questId)
     QuestDB.LogEvent(citizenid, questId, 'abandon', nil, {})
 
@@ -1181,6 +1376,10 @@ function QuestManager.AbandonQuest(source, questId)
     -- v1.1: 任务终结 → 清理内存步骤与完成锁
     QuestManager._currentSteps[citizenid .. '_' .. questId] = nil
     QuestManager._completing[citizenid .. '_' .. questId] = nil
+    closeVendorFor(citizenid, questId, 'abandoned')
+    closeBoothFor(citizenid, questId, 'abandoned')
+    clearLogisticsFor(citizenid, questId)
+    closeRentalFor(source, 'abandoned', questId)
 
     local src = getSourceFromCid(citizenid)
     if src then

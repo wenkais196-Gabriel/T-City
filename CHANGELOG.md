@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-01
+updated: 2026-11-15
 review_by: 2027-04-30
 ---
 
@@ -19,6 +19,594 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **热狗摊位改 CEF 菜单（中文不再变方块）**：`T-CityLite.base/resources/[custom]/custom-quest` 新增 `ui_page 'html/vendor.html'`，
+  摊位状态条、顾客报价（进度条 + 成交/拒绝）、今日菜单（上下选择 + Enter 买 1 份）三块面板改由
+  CEF 渲染——原生 `DrawText` 没有 CJK 字形，中文只能画成方块。新增两个 NUI 回调
+  `offerAction`（accept/reject）与 `buyRow`（按行购买），Lua 侧只推送 `status`/`offer`/`menu`/`hint`
+  四种消息，**不新增 net event**（`T-CityLite.base/tests/architecture/net_events_baseline.json` 只改 `measured_at`）。
+  网页侧 `post()` 带 `AbortController` + 5s 超时，回调丢了界面不会永远转圈（NUI-CLIENT-01）。
+- **摊位微调位置**：`quest:server:vendorAction` 新增 `move` 动作，服务端 `QuestBooth.MoveTo` 只改
+  坐标、**不重建实体**（推车 netId 不变，客户端不用重新上报），校验复用首次摆放的
+  `QuestBooth.ValidatePlacement`（同样的距离/道路/遮挡判据），失败按 reason 提示。
+
+### Fixed
+- **`local function` 在定义之前被调用**（运行时报 `attempt to call a nil value`，`luac -p` 查不出来）：
+  `T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua` 的 `coronerFeedback` 与 `T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_client.lua`
+  的 `HidePreviewText` 都定义在调用点之后，已前移。新增闸门
+  `T-CityLite.base/tests/architecture/test_lua_local_order.py`（[custom] 的 quest/phone/police 全量扫描，注释与字符串已剥除），
+  并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
+
+### Security
+- **S7 证据广播按受众收口**：`T-CityLite.base/resources/[custom]/custom-police/server/evidence.lua` 的 9 处 `TriggerClientEvent(..., -1, ...)`
+  改为 `Broadcast.Scope(..., { job = 'police', onduty = true }, ...)`，DNA/血型/指纹/弹壳只在岗警察可见；
+  `[custom]` 剩余 19 处全服广播登记 `broadcast_allowlist.json`（按 file+event 合并为 13 条，含
+  owner/reason/expires），`broadcast_sites` 预算 152 → 143。
+
+### Added
+- **S4 热狗售卖闭环（服务端 + 接线）**：`T-CityLite.base/resources/[custom]/custom-quest` 新增顾客会话内核 `quest_vendor` 与接线层
+  `quest_vendor_bridge`。摊位一摆好就开张（玩家不需要再按一次「开卖」），每秒 Tick 决定
+  「现在能不能来顾客」，报价金额、库存、一次性 `offerId` 全在服务端算；客户端只能按 Y/N 或买。
+  买家这条路径**先扣买家再动库存**（内核 `Purchase` 只负责扣库存 + 给摊主记收入，
+  它不知道买家是谁），内核失败自动退款 —— 顺序反过来就会在买家付不出时白送一份。
+  只新增**一条** net event `quest:server:vendorAction`（action 白名单 + 5 秒 10 次限流 +
+  6 m 距离 + 归属校验），并且把它登记进 `net_event_guard_helpers.json` 的
+  `QuestVendorGuard.Validate`，全仓 net event 仍是 440 / **0 未登记**。
+  顺带修掉扫描器的一个假阳性：`"end" in text` 会把标识符里的子串当关键字
+  （helper 名为 `QuestVendorGuard.Validate` 时，"V**end**or" 被切中）。
+- **S2 热狗摊位实体（服务端权威 + 客户端推车）**：新增 `T-CityLite.base/resources/[custom]/custom-quest` 的 `quest_booth` 服务端脚本与
+  `quest_hotdog_client` 客户端脚本，把「把推车推到某处放下」变成一条**可判定的规则**而不是一句提示。
+  服务端自己算三条硬判据（离租赁点 / 离路面节点 / 离其它摊位）外加配置禁摆区；客户端能拿到
+  `IsPointOnRoad`、坡度、水面这些服务端没有的原生，所以它参与测算，但**只能让判定更严（veto），不能放宽**。
+  路面点不是现算的：`tools/dev/booth_roads.py` 从 `.cache/roads/road_points.bin` 离线切出 Legion Square
+  一带的路面节点写成 `T-CityLite.base/resources/[custom]/custom-quest` 的 `hotdog_roads` 配置（1402 个，19.9 KB），服务端只做一次最近点比较；
+  `--check` 让「缓存更新了但 Lua 没重生成」这件事变成一条会红的测试。
+  拒绝文案与 UX 规格一致（离租赁点太远 / 挡在车道上 / 旁边已经有摊位 / 这里放不稳 / 这里不许摆摊）。
+  实体走既有 `QuestEntityRegistry`（`on_quest_end`，不走 `on_leave`：玩家走开去卖货是常态），
+  四条关闭路径（归还/放弃/失败/断线）都删实体。**没有新 net event、没有新表**：摆放坐标与 netId 走
+  既有 `nodeComplete` 的 `clientData`，由 `validate_booth_place` 校验器裁决。
+  闸门：`tests/unit/layer3_business/test_quest_booth.py` 6 条（探针 17/17、删掉压路判据必红、
+  `booth` 已进 `VALIDATED_TYPES` 与 `META_KEYS`、清单声明、路网点与缓存同步、dev 模板真的用上 booth）。
+- **薪资抑制（R2）：让「干活」成为主要收入**：qb-core 每 10 分钟按职级发 `grades[level].payment`，
+  原始区间 10–200 → **$60–1,200/小时**的白拿收入，会盖过 R1 三个循环职业的 1,400–2,800 $/h。
+  新增 `T-CityLite.base/resources/[system]/core_economy/server/salary_scale.lua`：只改 `QBShared.Jobs` 这张共享表（就是 PaycheckInterval 读的那张），
+  **qb-core 一行没动**，上游可以照常合并。两个 convar：`economy_salary_scale`（默认 1.0 = 不动）、
+  `economy_salary_cap`（默认 0 = 不封顶）；本次配 0.35 / 50 → 单次 $4–50，折算 **$24–300/小时**。
+  实现要点：每次应用都从**原始值**重算（`restart core_economy` 不会把工资越压越低），非法 convar 一律回落
+  安全默认，回滚只需把 scale 改回 1.0 并重启。闸门：`tests/unit/layer3_business/test_salary_scale.py`
+  7 条（安全默认 / 缩放封顶 / 幂等 / 从原始值重算 / 单调性 / 非法值 / 可回滚）。- **单趟耗时遥测（数值卡的数据源）**：`T-CityLite.base/resources/[custom]/custom-quest` 在接单时记 `os.time()`、完成/放弃/失败时清掉，
+  并在 `🏁 COMPLETING` 那行日志里带出「用时=x.x 分钟」。只走内存 + 日志，0 新表 / 0 新事件。
+  起因：`04-numbers.md` 的时薪是「站数 × 单站耗时 × 收益」三条假设叠出来的，其中单站耗时从来没测过 ——
+  存量 7 条任务壳要不要降价，得先有真实数据才谈得上定价。- **R1 真机验收：bus 也跑通**：`bus_v1_city`（6 站）同一会话跑完 → `completing` → `$486 (bank) + bus rep +25`，
+  与配置一致；同一位玩家先 garbage 后 bus，验证会话键按任务隔离。证据已并入 `docs/plan/jobs-content/05-verification.md` §4.2。
+- **R1 真机验收记录**：新增 `docs/plan/jobs-content/05-verification.md`（type=audit）。
+  记录 `garbage_v1_city` 在 `:30130` 真机上的完整一趟：报到 → 4 站 validator 全过（无 `validator failed`）
+  → 自动交回 → `🏁 COMPLETING` → `$370 (bank) + garbage rep +8`，与配置的 4 站 / $370 / 10 袋一致；
+  同时存档修复前的失败证据（`global 'QBCore'` 那两行）与 6 项未覆盖（bus 三档、district/full 档、
+  断线重连、手机列表、结算落库、薪资抑制）。- **职业内容填充规划**：新增 `docs/plan/jobs-content-roadmap.md`（type=plan, status=draft）。实测 22 个职业里只有 4 个有真实循环、
+  市政厅可申请的 7 个民职有 6 个是空壳；据此确立「三种机制 × N 份数据」的内容模型与 R0–R6 分批，
+  硬约束为 0 个新资源 / 0 张新表 / 0 个新 net event。§11.1 记录五项拍板（首批 R0+R1、干活为主、先 NPC、职权型不做、realestate 不碰）。
+- **职业内容调研（阶段 R）**：新增 `docs/plan/jobs-content/01-research.md`（type=research）。含内部实测 8 条（带 file:line）、
+  外部 7 个来源的做法对照、6 条假设（4 条被证据排除）、按平面的影响面，以及与 Claude Code 的引擎表达力盘点
+  （NPC 乘客 / 里程计价 / 乱序多站 / 失败判定 / 结算幂等五项，逐条给现在靠哪个 step 类型与最小新增）。
+  调研修正了三条原判断：数值按技能分三档而不是统一一条带、放弃「玩家自排路线」、NPC 预算不能复用警察的。
+- **validator 步骤的服务端闸（阶段 D · C1）**：`T-CityLite.base/resources/[custom]/custom-quest` 新增 quest_step_gate.lua（纯函数，零原生依赖），
+  并在 `nodeComplete` 处理器里**于 `AdvanceStep` 之前**执行步骤的 `validator_id`。原因：`validator` 步骤过去只在
+  `dashboardStampDelivery` 那条路径上跑过校验器，客户端 `nodeComplete` 这条腿直接推进 ——「到达判定」「绑定载具」
+  走客户端就能整段跳过（调研 §2.1-5）。回滚：`setr quest_step_validator_enforce 0`（只记日志不拦）。
+  只对**声明了** `validator_id` 的步骤生效，未注册校验器时不拦（向后兼容）。
+  两条腿共用一个 `runStepValidator` helper（dashboard 走 force、nodeComplete 受 convar 控制），
+  原来 dashboard 里那份 validator 白名单已删除 —— SonarCloud 对首次提交报的 20% 新代码重复就是这两段。
+  证据：`test_quest_step_gate.py` 5 条（判定/入参/开关）+ `test_quest_step_gate_contract.py` 2 条（契约顺序 + 顺序调反必须判红）；
+  全量 `pytest tests/unit tests/architecture` → 1409 passed / 147 skipped。
+  **真机未验**：logistics/aviation 的 27 个 validator 步骤要在服务器上跑一遍，确认真实流程不被误拦。
+- **多站路线校验器（R1 · P1）**：新增 custom-quest 的 server/quest_route_validators.lua，注册 `validate_route_stop`，
+  garbage / bus 共用。五条判据按顺序判：站号合法 → **顺序**（只能完成会话里的下一站）→ 职业/在岗 → 坐标存在
+  → 距离 ≤ radius → 载具（可选），**全部通过之后才写会话**（先落账会白送一站）。会话只在内存，键是
+  `citizenid:questId`，0 张新表。
+  另修一条会锁死任务的路径：`QuestManager.TriggerQuest` 每次接单都清该任务的会话 —— 玩家在第 3 站放弃/掉线后
+  会话停在 3，重新接单从第 1 站开始，会被「只能完成下一站」永久拒掉。
+  证据：`test_route_stop_validator.py` 7 条（顺序/跳站/重放/远距/错职业/不在岗/无载具/坏参数/跨任务隔离/陈旧会话重置）；
+  先红后绿：实现文件不存在时 6 条全红。全量 `pytest tests/unit tests/architecture` → 1417 passed / 147 skipped。
+  验收后补两处（Claude Code 在 R1·P1 复核里指出）：①**冷启动**——没有会话时以当前步自己声明的站号为准，
+  否则资源/服务器重启后任务停在 N 站而会话丢失，该站被永久判 out_of_order（只能放弃重接）；
+  ②`quest:server:reach` 只准推进 reach 步骤、`CompleteStep` 导出也过同一道闸 —— 原来这两条路都能绕过
+  validator（C1 的闸只挂在 nodeComplete 与 dashboard 上）。
+- **garbage 站点谱（R1 · P2）**：新增 custom-quest 的 config/quests/quest_garbage.lua，三档任务
+  `garbage_v1_city/district/full`（4/6/8 站）。每站一个 `validator` 步骤走 `validate_route_stop`，
+  首尾是 interact（报到 / 交回）。金额 = 站×30 + 袋×25，按 02-design §2.3 定为固定值
+  $370 / $705 / $1,140（≈1,388 / 1,763 / 2,138 $/h，落在低技能带）。
+  注册要改两处（这是这套引擎的坑）：fxmanifest 的 files 与 quest_registry 的 knownFiles 列表，缺一处就静默不加载。
+  证据：`test_garbage_route_config.py` 3 条 —— 站号必须连续从 1 开始（跳号会让玩家卡站）、
+  每站必须带 validator_id/job/require_duty/coords/radius、首尾必须是 interact、坐标不许重复、quest id 全局唯一；
+  反向：删掉配置文件 → probe 直接失败。全量 pytest → 1420 passed / 147 skipped。
+  **真机未验**：坐标是洛圣都常驻垃圾点的大致位置，P2 验收要求先在 dev 服跑一条真实任务。
+  **已知缺陷（既有）**：`conditions.daily_limit` 在 custom-quest 里没有调用点，所以每日上限目前不生效。
+  **上线前修掉的接线 bug**：`QuestStepGate.ValidatorPayload` 只给校验器 `validator_data` + 白名单 meta，
+  而 `coords` 不在白名单里 —— 第一版配置只把坐标写在顶层 `data.coords`（客户端画交互点要用），
+  校验器拿到 nil，每站都判 `no_coords`，真机表现就是「走到点按 E 没反应」。现在坐标在 `validator_data`
+  里也放一份，并加了 `route_integration_probe.lua` 把「配置 → 载荷 → 校验器」整条链跑一遍（删掉
+  validator_data 里的 coords 会立刻红）。
+- **bus 线路（R1 · P3）**：新增 custom-quest 的 config/quests/quest_bus.lua，三档 `bus_v1_city/crosstown/full`
+  （6/8/10 站），金额按 02-design §2.3 的 bus 档固定为 $486 / $648 / $810（站×90×0.9，≈1,620 $/h）。
+  与 garbage 同构：每站一个 `validator` 走 `validate_route_stop`，首尾 interact（签到 / 交班）。
+  配置测试与 garbage 共用一份通用 probe（route_config_probe.lua，文件名作参数），避免两份脚手架；
+  另外整链用例也参数化了，bus 同样断言「配置 → 载荷 → 校验器」能跑通第一站。
+  证据：test_bus_route_config.py 3 条 + 全量 pytest → 1425 passed / 147 skipped。
+  **本轮未做**：准点率（punctuality）—— 现有 CalculateTimeBonus 只读物流追踪器，bus 没有；记进 03-plan §7。
+  **真机未验**：坐标是主干道公交站的大致位置。
+- **接单条件与校验器不一致的卡死（R1 复核修复）**：garbage/bus 的 `required_tags` 只写了 `role=civilian`，
+  而服务端校验器要求 `job=garbage/bus` —— 平民能接单、走到第 1 站必被判 `wrong_job`，任务卡死。
+  两处一起修：①配置的 `required_tags` 加 `job`（手机列表据此过滤）；②`TriggerQuest` 新增
+  `conditions.require_job` 校验，接单时就拒。**只认显式声明的字段**，不改既有模板语义
+  （否则帮派成员做矿工任务这类正常路径会被一并关掉——过度收紧比漏拦更难查）。
+  证据：两份配置测试各加三条断言（validator job / required_tags.job / require_job 三者必须一致）。
+  另新增 docs/plan/jobs-content/04-numbers.md（数值卡）：三个职业九档的 $/h 与目标带逐项对照。
+- **Agent 控制平面升级计划**：新增 `docs/plan/agent-control-plane-upgrade.md`（type=plan, status=active, source_of_truth）。
+  合并两轮独立盘点（主会话判断 + Claude Code 274 行静态分析），建立 15 项工作项与 Issue 映射
+  （Epic #234 ／ 执行项 #235–#240 ／ 检索专题 #233），并记录 4 处判断修正：
+  `agent_harness.py` 不是 agent 循环（全仓无 LLM SDK）、成本计量并入 runtime、排期改为 8 周口径、
+  自建 runtime 是为承载「执行前挂起等人批」而必须。
+- `docs/INDEX.md` 重新生成（308 篇，0 未登记）。
+
+### Changed
+- **`FormatMoney` 合并 8 份 `[custom]` 金额格式化实现**：唯一实现收口到
+  `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` 的 `FormatMoney`
+  （nil/非数字/NaN → `'0'`，整数无小数点，小数两位，负数保留符号），并在客户端与服务端都
+  注册为导出。custom-market / custom-main / custom-cartel / custom-security / custom-crime /
+  custom-phone / custom-quest / custom-taxes 各自的 shared/money_format.lua **删除**；
+  四个历史别名（`Money`/`PhoneMoney`/`QuestMoney`/`TCMoney`）只在
+  `T-CityLite.base/resources/[standalone]/core-framework/shared/money_aliases.lua`
+  定义一次，各资源 fxmanifest 以 '@core-framework/shared/money_aliases.lua' include
+  （8 份逐行相同的门面会让 Sonar
+  新代码重复涨到 9.9%；集中一份后为 0）。
+  `$%d` 基线 66→59（market main 6、phone client 1 改为 `$%s` + 别名）；新闸门
+  `tests/architecture/test_money_format_single_owner.py` 抓第二份实现/别名、
+  并检查每个别名调用点的 fxmanifest 真的加载了别名文件，变异冒烟证明会红。
+- **退役跨资源 Bus（税/热度/通知）**：qb-core 新增两个 append-only 导出
+  `exports('SinkWithdraw', SinkService.Withdraw)` / `exports('HeatReset', HeatService.ResetHeat)`，
+  内部仍走既有的 `EconomyService.RemoveMoney` / `HeatService.ResetHeat`，不新增扣钱路径。
+  custom-taxes 的 4 个扣税点改走 `exports['qb-core']:SinkWithdraw`（保留原
+  `Player.Functions.RemoveMoney` 回落）：大额转账税/房产税/购房印花税/武器维修费此前**只扣钱、
+  不进 sink 统计**，现在都进 sink 并触发 `QBCore:Server:OnMoneySink`；跨组织转账税此前因
+  `_G.Bus.SinkService` 恒 nil 且无回落而**从未扣除**，现在会真的扣 3%。
+  production-freeze 的 `ResetEconomyToDayOne` 改走 `HeatReset`（热度重置此前从未执行），
+  并保留删除 npc_prices.json 的代码；qb-shops 删掉永远为 nil 的 `_G.Bus.NPCPricing`
+  分支（改用 `GetResourceState('core_economy')`）；custom-phone 删掉 `_G.Bus.EconomyService`
+  分支保留手动转账；`QBCore.Functions.Notify` 直接 `TriggerClientEvent`，不再走从未注册的
+  `_G.Bus.notify`。`test_bus_scope.py` 扫描根扩到上述 4 个目录 + qb-core 的 `functions.lua` /
+  `heat_service.lua`。
+- **退役跨资源 Bus（场景/作业/车辆）**：`_G.Bus` 是每个 resource 私有的 Lua 状态，跨资源读
+  `Bus.<service>` 恒 nil。本次把 4 处 BGM 死调用（custom-police 追车、qb-ambulancejob
+  重生/死亡、qb-storerobbery 抢劫）改成 `exports['tcity-atmosphere']:service_atmosphere_PlayScene`；
+  `custom-police` 的 `Bus.JobService.SetJob` 分支删掉，直接走 qb-core 的
+  `player.Functions.SetJob`。`qb-vehicleshop` 不再调用 `Bus.RegisterService('dealership')`
+  （该资源不加载 Bus，注册从未执行）：8 个 `service_dealership_*` 改为静态 `exports(...)`，
+  二手车状态改走 `exports['custom-vehicles']:GetVehicleState`。core-framework 的
+  contracts.lua 删除 5 个从未实现的占位服务（reputation/chronicle/governance/cosmetics/funnel），
+  `service_contracts.json` 的 `planned_services` 清空。
+  新增闸门 `tests/architecture/test_bus_scope.py`：跨资源 Bus 读取 + `Bus.RegisterService`
+  的 manifest 接线双判据，变异冒烟证明会红。
+- **PowerShell 下 Lua 检查必须写 `.exe`**：`luac5.4` / `lua5.4` 的扩展名被 Windows 读成 `.4`（无关联程序），PowerShell 会把该文件当“文档”交给 ShellExecute → 弹「选择一个应用以打开此 .4 文件」并**阻塞命令**，表现是「每改一个 Lua 文件弹一个框」而语法检查其实一次都没跑。约定层同步到 `AGENTS.md §5`、`CONTRIBUTING.md`、PR 模板与 `.agents/skills/fivem-resource-development/{SKILL.md,references/verification.md}`：PowerShell 写 `luac5.4.exe` / `lua5.4.exe`，bash/MSYS 与 Python `subprocess` 继续用裸名。加 `.cmd` 包装无效（`where` 顺序：字面文件 → `.cmd` → `.exe`），要根治只能在 `PATHEXT` 追加 `.4`。
+- **送货循环归 trucker，结算额回到带内（R0.3）**：qb-shops 的 `Config.DeliveryPrice` 从 **$500/站降到 $70/站**。
+  原值 20 站/趟 = $10,000，按 25–40 分钟折算 **$15k–24k/h**，比低技能带（$1.8k–2.5k/h）高 6–13 倍；
+  现值 ≈ $1,400/趟 ≈ $2.4k/h。同时新增 `Config.DeliveryJob = { name = 'trucker', requireDuty = true }`：
+  **租车与结算都要求在岗 trucker**（此前任何职业都能租车跑单；只放结算不放租车 = 收押金却结算不了）。
+  每站结算额外给 `delivery` 声望 +1 —— 这条声望此前只在死代码 `PaySlip` 里发过，从未真正产生。
+  另把每站 10% 概率的 `cryptostick` 改成配置 `DeliveryCryptostickChance`（默认 **0**）：一根按 qb-crypto 的
+  `Worth = 1000` 兑换，20 站/趟期望 2 根 = $2,000，比现金结算还多，实际收益约 $6k/h —— 这条是 Claude Code
+  验收时抓出来的。数值依据与分档见 `docs/plan/jobs-content/02-design.md` §2。
+- **一键启动**：新增 `start-tcity.ps1` + `start.cmd`（`-Status` / `-Restart` / `-Stop`）。顺序固定为
+  Docker 引擎 → 容器 → `mariadb-admin ping` → FXServer → 自检（资源数稳定、关键资源齐全、日志无
+  `SCRIPT ERROR` / `awaitConnection failed`）。起因：Docker Desktop 被关掉后 MariaDB 一起没了，
+  FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
+
+### Fixed
+- **`LoadModel` 收口到 `CFShared.LoadModel`**：删除 custom-police/custom-cartel/custom-quest
+  的 4 份本地实现（其中 custom-quest combat 节点**无超时**，custom-cartel 是 300×10ms 轮询）；
+  模型缺失时客户端不再卡死，失败经 `CFShared.Report` 上报一次。新闸门
+  `tests/architecture/test_load_model_single_owner.py` 只抓「无退出条件的循环」，热狗两个
+  客户端的 `deadline`/`generation` 有界循环不在范围内。
+- **`Db` 结果适配器**：`insertId/affectedRows` 归一化收口到
+  `T-CityLite.base/resources/[standalone]/core-framework/server/db.lua`
+  （`Db.Insert/Update/Query/Single/Scalar` +
+  `Db.InsertId/AffectedRows`）；director 不再把 `affectedRows=1` 当记录 id；
+  phone/police 的 5 个调用方保留门面、行为不变；新闸门
+  `tests/architecture/test_db_result_adapter.py` 钉住「归一化只在适配器里」。
+- **方法级导出契约闸门 + 修 11 处死调用 + 1 处兜底**：卖物品不再丢物品、抢劫奖励不再报
+  `No such export`、武器耐久恢复更新。闸门（`tools/dev/service_contracts_scan.py` +
+  `tests/architecture/test_service_contracts.py`）把全仓字面量 `exports['<res>']:<Method>(`
+  调用与声明逐方法对账（登记表 `service_contracts.json`，176 个 service 方法 + 33 个外部
+  调用点复核）；本次换掉 `custom-main:AddScaledMoney/CheckRateLimit`、
+  `custom-economy:GetEconomyRewardScale/AddScaledMoney`、`qb-inventory:SetItemInfo`、
+  `custom-career:GetLocalIdentity` 共 12 个真实死调用：当铺卖物品失败自动退回物品；
+  抢劫奖励走 `core_economy:GetGlobalMultiplier`（pcall 回落 1.0）；洗钱、街角卖货、
+  压力测试回到 `Player.Functions` 原语写路径；武器耐久改走 `qb-inventory:SetItemData`；
+  手机 Leader app 改走 `custom-career:GetPlayerIdentity`。
+- **热狗线 S0 坐标踏勘**：Legion Square 东侧广场定下 7 个坐标（租赁点 / 3 个摆位 / 2 个顾客生成点 /
+  队列点），逐个过「离最近路面 ≤ 10 m、高差 ≤ 1.5 m + 卫星图人眼」；摆位 A 用的是真机验证过的旧壳点位。
+  见 `docs/plan/jobs-content/12-hotdog-coordinates.md`（含被淘汰的候选与原因）。
+- **热狗线 S1：租借原语 custom-quest 的 quest_rental 服务端脚本** —— 押金会话（同任务只能一个）、按分钟计租
+  （免租期 + `max_minutes` 封顶）、四条关闭路径（归还 / 放弃 / 失败 / 断线）、重启扫描 + 登录补退。
+  钱只走 `Player.Functions`；断线与重启都不直接转账（离线玩家没有合法写入路径），改为排队到下次登录。
+  接线：新 step 类型 `rental`（客户端按 interact 处理，推进走既有 `nodeComplete`，**0 新 net event**）；
+  校验器 `validate_rental_open`；`QuestDB.FindUnclosedRentals` 读日志。
+  测试 `tests/unit/layer3_business/test_quest_rental.py` + 探针 9 条不变量（含反向校验：去掉封顶必须红）。
+- **热狗线 S3 内核（CC 实现）：custom-quest 的 quest_minigame 服务端脚本** —— 一次性 nonce、过期、
+  `quit` 也消耗 nonce、`faults → 三档品质` 服务端映射；探针 7 条 + 反向校验（改成永远返回 common 必须红）。- **热狗摊 UX 规格定稿（草稿）**：状态机（租借/推车/摆放/营业/做热狗/顾客/成交/收摊/结算/挂起）+
+  逐状态的「看到/听到/能做/失败态」、6 张线框图、键位矩阵、中英文案表、音效清单、账单明细规则、
+  中断恢复，以及 A1–A22 可打勾的 UX 验收 + V1–V8 真机剧本 + D1–D12 开发口径。
+  见 `docs/plan/jobs-content/10-hotdog-ux-spec.md`。- **物流租借绑定的三个真 bug**：① 绑定里的押金写死 `rentalDeposit = 0`（配置里 300–2000 的押金
+  在收据上永远是 $0）；② `ClearLogisticsBinding` 定义了却全仓库零调用（失败/放弃后 plate / netId /
+  rentalFeePct 残留，下一趟按上一趟费率结算）；③ `playerDropped` 只清 `QuestCache`，断线后旧绑定还在。
+  修法：押金改从 `stepData.rental_deposit` 读（自有车仍为 0）；`FailQuest` / `AbandonQuest` 走
+  `clearLogisticsFor()`（pcall 保护）；新增 `ClearAllLogisticsBindings(citizenid)` 供断线整表清。
+  回归闸：`tests/unit/layer3_business/test_logistics_binding_lifecycle.py`（3 条静态契约 + 1 条运行时探针，
+  每条都带反向校验；探针真跑源码里的绑定存储，验幂等/计数/只清一个不动兄弟）。- **物流「租借会话」只有开始、没有关闭**：`rentalDeposit` 在 `quest_logistics_validators.lua:193` 写死为 `0`
+  （配置里的押金根本收不到）；`ClearLogisticsBinding` 定义了却**全仓库没有一处调用**；`playerDropped`
+  只清 `QuestCache`，不清 logistics binding。放弃/失败/掉线后 plate / netId / rentalFeePct 会残留。
+- **成熟职业脚本调研（官方 9 个 job + 社区）**：提炼出押金即会话、服务端发牌、结算走物理点、
+  基础值×条件倍率−税、反作弊三件套等 7 个模式，并定位到可复用的正确骨架（custom-cartel 的生产引擎：
+  `finishAt` + 完成时复验 + 扣料产出）。见 `docs/plan/jobs-content/08-mature-scripts-survey.md`。- **任务节点能力的真实边界被查清了**：`Config.Quest.StepTypes` 声明 13 种，实际只有 8 种有处理分支 ——
+  `collect` / `wait` / `combat` / `placement` 是**死类型**（注册器只校验名字在白名单里，客户端毫无反应，
+  配置选到它们任务会静默卡死）。
+- **热狗这类循环型任务缺 4 类节点**：对照上游 qb-hotdogjob 的真实流程（押金租摊 → 推车 → KeyMinigame
+  定三档品质 → NPC 顾客成交 → 归还退押金），我们只有「到点/交互」两种能用，缺租借（押金+计时）、
+  小游戏生产、持续售卖、归还结算。调研与模板草案见 `docs/plan/jobs-content/07-quest-ux-research.md`。- **旧壳任务印钞（约 11,000 $/h，新路线的 4–8 倍）**：真机跑 `hotdog_vendor` 拿到第一个实测
+  —— 同点连做 4 步，结算日志 `用时=0.9 分钟`，发给玩家 $165。7 条民职旧壳按 2,000 $/h 重定价：
+  hotdog $150–350→$22–40、taxi $200–500→$35–55、bus $300–600→$38–58、tow $400–800→$38–58、
+  garbage_collection $250–500→$55–80、recycle $200–450→$50–75、news $300–600→$85–130，
+  折算 1,984–3,016 $/h，落在目标带内。
+- **收益从来没有被算成每小时**：新增 `tools/dev/quest_econ.py`（路程 × 1.4 绕路系数 / 15 m/s +
+  交互时长 + 25 s 开销）与 `tests/architecture/test_quest_economy.py`（受闸任务必须落在
+  1,400–2,800 ±400；一次性剧情章节按 `story_arc` 豁免；自带超发模板的反向校验）。- **Docker 引擎起不来时启动器只说「看日志」，没说怎么办**：真机形态是 Docker Desktop 报
+  `Docker Desktop is unable to start`、`com.docker.service` 停在 Stopped、WSL 的 Ubuntu 与
+  `docker-desktop` 两个发行版都是 Stopped —— 卡的是 **WSL 虚拟机**，不是 Docker 服务，
+  所以 `Start-Service` 或单独启发行版都无效。同一根因还会让 Docker 自己崩一次并弹
+  `vpnkit-bridge handshake failed … received bad magic string`（管道里回来的是 NUL + 一句 Windows
+  超时文本）。启动器的 180 秒超时现在会直接给出四步恢复法（`wsl --shutdown` → 结束 Docker 进程 →
+  重开 → 再跑脚本），并明确警告**不要点 “Reset to factory defaults”**（会连卷一起删，丢 `tcity-mariadb` 数据）。- **6 个模板的任务点落在建筑内部 / 楼顶，玩家到不了**：把全部 78 个模板渲染成卫星联络图逐格看过之后，
+  确认 `hotdog_vendor`（前一 PR 已修）、`cartel_ch4_benevolent_king`、`cartel_ch4_tyrant`、
+  `civilian_ch4_artisan`、`civilian_ch4_survivor`、`news_report` 的点都在**建筑内部**；
+  `civilian_ch4_mogul` 的 3 步在 Arcadius **楼顶**（z=150，比路面高 122 m，玩家上不去）。
+  全部移到最近的可站立位置（车道 / 人行道 / 街面），`mogul` 的「站在顶层办公室」文案同步改成「站在楼下」。
+  这类「在楼里但离路只有 20 m」的点，路网判据抓不到，只能靠联络图人眼过 —— 方法见
+  `docs/engineering/QUEST_COORDS.md`，全量结论见 `docs/plan/jobs-content/06-coord-audit.md`。
+- **`quest_map.py` 新增 `--sheet` / `--only` / `--tile`**：把全部模板渲染成每页 12 格的卫星联络图，
+  一次看完 78 个模板的点位分布；配合 `--only` 可以只放大可疑的几个复查。- **7 条物流任务的目的地是占位坐标 `(0,0,0)`，整条任务永远交不掉**：`euro_trucking_steel` /
+  `euro_trucking_heavy_trailer` / `euro_fuel_tanker` / `euro_container_haul` / `euro_car_transport` /
+  `euro_oversized_construction` / `euro_timber_haul` 的 `destCoords`（和 `step_unload_cargo` 的 coords）
+  全是 `{0, 0, 0}`。`validate_delivery_arrival` 会拿它算距离，而原点是路面下方 70 m 的一个点 ——
+  玩家把车开到那儿也判不到。已按各自主题换成真实目的地（港口/Cypress Flats/机场货运/加油站/车行/工地/锯木厂），
+  每个都核对过离路 < 35 m、与路面高差 < 3 m。
+- **坐标体检加了「离路多远」「与路面高差」两条判据，并抓出上面的占位点**：`tools/dev/quest_map.py`
+  新增 `--build-roads`（一次性把 DurtyFree 的 67,454 个路面节点收成 108 KB 缓存）与两条提示规则
+  （离路 > 60 m / 高差 > 25 m；水面节点已剔除、飞行类任务跳过）；`(0,0,0)` 升为**硬错误**。
+  首次全仓扫描还留下 17 条提示，其中矿工四个任务离路 438–456 m、`civilian_ch4_mogul` 三步骤比路面高 122 m，
+  需要进游戏或人眼再确认。- **热狗摊任务的地点在大楼里面，玩家根本到不了**：`hotdog_vendor` 的 4 个步骤都写在同一组坐标
+  `(-150, -250, 44)`，离线渲染后可以看到它落在 Las Lagunas Boulevard 东侧一栋建筑的**内部** ——
+  走过去既进不去、也不会出现交互提示。坐标改到 Legion Square 广场空地 `(215.8, -810.3, 30.7)`
+  （卫星/街区两种底图都核对过是开阔地面），半径相应放宽到 8 m / 5 m。
+- **没有离线核对任务坐标的手段（新增工具 + 闸门）**：一次要校 78 个模板 / 179 个坐标点，
+  原先只能进游戏肉身跑。新增 `tools/dev/quest_map.py`：按社区标定把游戏坐标换算成像素、
+  抓 GTA 地图瓦片（atlas / satellite / grid）渲染 PNG，红点 + 半径圈 + 比例尺，
+  `--scan` 模式给出硬错误（世界边界外 / z 越界，退出码非 0）与提示（z 偏高、多步骤同点）。
+  闸门 `tests/architecture/test_quest_coords.py`：硬错误必须为 0，反向用例喂一个界外点必须red；
+  同时钉住热狗摊不许回到那栋楼里。用法与判读方法见 `docs/engineering/QUEST_COORDS.md`。- **`conditions.daily_limit` 是死字段，同一条路线可以一天刷无限次**：`T-CityLite.base/resources/[custom]/custom-quest` 里
+  `QuestDB.CheckDailyLimit` 与 `QuestDB.UpdateDailyLimit` 都写好了，但**两边都没有调用点** ——
+  配置里写着 `daily_limit = 8`，运行时形同不存在，`04-numbers.md` 的「$/h」只能算理论值。
+  新增 `T-CityLite.base/resources/[custom]/custom-quest/server/quest_daily_limit.lua` 接管：接单时内存判定（`TriggerQuest` 是同步函数，不能等异步查询），
+  未命中查一次库并按「当天」缓存；完成时内存 +1 立即生效、DB 异步累加；跨周期自动归零；
+  DB 不可用时**放行并警告**（一次 ETIMEDOUT 不能把所有人的任务锁死）；未声明上限的模板视为不限。
+  闸门：`test_daily_limit.py` 6 条（上限生效 / 计数落库 / 按玩家与任务隔离 / 跨周期归零 /
+  DB 抖动放行且恢复后重新拦 / 没写上等于不限）。- **一键启动在冷启动（重启电脑后）直接退出，FXServer 根本没起**：`start-tcity.ps1` 的数据库检查用了
+  `docker exec mariadb-admin ping`，而 PowerShell 5.1 在 `$ErrorActionPreference = 'Stop'` 下把**原生程序的
+  stderr 当成 terminating error** —— 容器刚 `docker start`、InnoDB 还在恢复时 ping 会往 stderr 写
+  `connect to server at '127.0.0.1' failed`，脚本就以这条消息退出（实测复现）。三处修法：
+  ① ping 改在 `Continue` 语义下跑，只看退出码；② 顺带发现 **ping 的退出码不可信**（密码错也返回 0），
+  改成真跑 `SELECT 1`，且必须用 `--host=/--user=/--password=` 长选项（PowerShell 把 `-h127.0.0.1`
+  交给原生程序会变成 host `127`）；③ 等待窗口 120s → 180s，每 20 秒报一次「等 InnoDB 恢复」进度。
+- **启动自检把上一次启动的日志当成这次失败**：日志文件跨启动复用，自检扫全文件，于是旧日志里的
+  `awaitConnection failed` 让新一次启动判红（实测：服务器明明正常，却提示「oxmysql 连接数据库失败，请 -Restart」）。
+  现在记录本次启动的日志字节偏移，只扫之后新增的行；挂到已在运行的实例时以当前长度为起点。
+- **`start.cmd -Status` 在只有 1 条可疑行时崩**：PowerShell 5.1 里单条匹配不是数组、没有 `.Count`，
+  改成 `@($badList).Count`；同时把提示改成「历史可疑行（含上次启动）」，避免误读成当前故障。- **`QuestManager.AbandonQuest` 被定义了两次，前一份的校验静默失效**：`quest_manager.lua` 里同名函数
+  出现两遍，Lua 后一份覆盖前一份。第一份带「questId 必须是字符串 + 任务必须真的在进行中」两道校验，
+  第二份没有 —— 生效的是第二份，于是传 nil/空串也会一路走到 `QuestDB.AbandonQuest`，而 SQL 那边的
+  参数是 nil。现在合并为一份（保留校验 + 保留日志），并加闸 `test_quest_manager_definitions.py`：
+  `QuestManager.X` 重复定义必须被抓到（判定逻辑喂合成文本，正反形状都断言）。- **按 I 键仍然弹出 qb-hud 的设置菜单，和中控屏抢键**：qb-hud 早先已把 I 键的 `RegisterKeyMapping`
+  注释掉，但**玩家本机的绑定是持久化的** —— 玩家本机的 CitizenFX 的 fivem.cfg 里留着
+  `rbind qb-hud KEYBOARD I "hud"`，删掉代码里的注册不会删掉它，于是按 I 同时触发 `hud`（弹 HUD 设置）
+  和 `dashboard`（载具中控屏，被前者占走焦点）。修法：HUD 设置的命令名从 `hud` 改为 `hudsettings`，
+  `hud` 保留为**空操作**专用于接住那条残留绑定。现在 I 只有中控屏一条路径，未坐进载具时由
+  tcity-dashboard 自己回一句「你必须坐在载具中才能打开中控屏」。玩家若要恢复键位，在五M设置的
+  按键绑定里给「HUD 设置」自己绑，或敲 `/hudsettings`。
+- **多站路线校验器在真机上把玩家卡在第 1 站（R1 真机验收抓出）**- **多站路线校验器在真机上把玩家卡在第 1 站（R1 真机验收抓出）**：`T-CityLite.base/resources/[custom]/custom-quest` 的
+  `quest_route_validators.lua` 用了裸全局 `QBCore`，而该资源里根本不存在这个全局（每个服务端文件
+  都用 `exports['qb-core']:GetCoreObject()` 现取）。第一次站点校验就抛
+  `attempt to index a nil value (global 'QBCore')`，经 `pcall` 在客户端只剩一句被截断的
+  `Validator error: @custom-quest/server/quest_rou…` —— 玩家侧表现为「到了点按 E 没反应」。
+  补 `local QBCore = exports['qb-core']:GetCoreObject()` 后 `garbage_v1_city` 四站全程通过。
+- **校验器的拒绝原因被注册表吞掉**：`QuestValidators.Run` 写的是 `local ok, result = pcall(fn, ...)`，
+  只接住两个返回值 —— 校验器返回 `(false, 'wrong_job')` 时第二个值被丢弃，所有拒绝都压成字符串
+  `'failed'`。这影响**所有**校验器（不止多站路线），是排查看不到原因的第二层原因。改成
+  `local ok, passed, message = pcall(...)` 并原样返回 `message`。
+- **任务列表的三个门控从来没生效过（CC 复核发现）**：`quest_availability.lua` 同样用裸 `QBCore`，
+  但写法是 `type(QBCore) == 'table'` 守卫 —— 不报错、条件恒假，于是剧情抉择前置、在勤警力、
+  冷却三项**静默 fail-open**：有前置要求的任务恒显示「可接」，冷却中的不显示剩余时间。补
+  `local QBCore = exports['qb-core']:GetCoreObject()` 后三项一次修好（玩家可见行为会变：
+  该灰的会灰、冷却会显示）。根因能藏这么久，是因为测试桩自己造了一个生产环境没有的全局 QBCore。
+- **校验失败的提示发错了时机**：`runStepValidator` 的聊天/通知提示写在 `Enforced()` 判断之前，
+  `quest_step_validator_enforce=0`（放行模式）时校验失败会被放行，玩家却仍收到红字误报。
+  现在提示只在「真的拦住」的分支里发；服务端 `print` 保持无条件（诊断要全量）。
+- **qb-shops 补货结算是敞开的钱口（R0 第 1 项）**：`T-CityLite.base/resources/[qb]/qb-shops/server/main.lua` 的
+  `RestockShopItems` 只有「10 米距离 + 每玩家每店 30 秒」两道闸，**没有任何「这一趟是跑出来的」凭据** ——
+  任何职业站在任意交货点，每 30 秒就能领 `Config.DeliveryPrice`（$500），配置里 45 处交货点。
+  现在改成**押金会话**：只有 `DoBail(true)` 扣过押金才开一趟，趟内最多结算 `Config.MaxDeliveries` 次
+  （与客户端 `JobsDone` 同口径），还车退押金时关闭会话。钥匙用 `citizenid` 而非 source，重连不白送新趟。
+  先红后绿的证据：旧实现的 probe 在「没付押金」场景下照付；新实现在同场景拒绝、付过押金的照付、满 20 次后拒绝、
+  还车后拒绝（`tests/unit/layer3_business/test_shops_guards.py`）。
+- **濒死时「按 E 呼救」没有任何反应**：`T-CityLite.base/resources/[qb]/qb-ambulancejob/client/dead.lua` 的文案写 E，
+  轮询的却是 control 47（INPUT_DETONATE = 键盘 G）；改成 38 并补一条 feed 回执。
+- **扣押场「有钱但无法付款」**：`T-CityLite.base/resources/[qb]/qb-garages/html/script.js` 把 `state=2` 一律渲染成 `Impound` 且按钮 disabled，
+  在扣押场也点不动；现在 `type='depot'` 且 `depotPrice>0` 就渲染成可点的 `$金额`（公共车库里的被扣车仍只读）。
+- **交互提示仍走 DrawText**：`qb-garages` 的 "E - Depot"/房屋车库两处改走 `custom-prompt`（准星下方）；
+  `custom-prompt:Show` 增加"同 key 同文案不重发"，逐帧调用者不再刷 NUI。
+- **通知统一到新标准（N-1a 轨 0）**：`QBCore.Functions.Notify` 入口按 type 映射到 custom-notify 的三个通道
+  （success/primary/info→feed、error→error、warning/police/ambulance→toast），**1119 处调用点一行不改**；
+  custom-notify 不可用时 pcall 失败回落原三条轨。右侧 qb-core 黑条与 GTA 原生黑条默认不再出现。
+- **扣押场取车面板没有光标、点不了付款**
+  - 真因：`SetNuiFocus` 按资源生效，`custom-ui` 无 ui_page，从它那里调等于把焦点给空气（其 `:122-125` 注释已写明）。
+    `OpenMenu({owner=…})` 现在压栈，由拥有页面的资源导出 `ApplyFocus` 真正按焦点；`CloseMenu({owner=…})` 只弹自己那层。
+    涉及 `custom-ui`、`qb-garages`（上一版漏写了 export —— 注释里有、代码里没有）、`qb-menu`、`qb-vehicleshop`；
+    `qb-garages` 另加一道"自己再按一次焦点"的双保险。
+  - 连带修掉 CC 评审指出的两个回归点：① `qb-vehicleshop` 的分期/试驾回调绕开栈直接 `SetNuiFocus` → `menu:qb-vehicleshop`
+    帧滞留，之后玩家"下车走不动"，现改为走 `_vCloseNui()` 弹栈；② `custom-ui:CloseMenu` 弹栈后又补一刀
+    `SetNuiFocus(false,false)`，与栈的结论打架，现在只在老路径（未弹栈）时才清。
+  - 新闸门（`tests/architecture/test_input_layer_contracts.py`）：**用 `OpenMenu(owner=…)` 的资源必须导出 `ApplyFocus`**，
+    锚定行首匹配（注释/字符串里提到不算），并带两条反向用例。当前扫描 62 个资源、0 违规。
+- **手机车库的「📍 地图」点了没反应**
+  - `phone:server:garageCoords` 把 `exports['qb-garages']:getAllGarages()` 当字典用（`garages[key]`），
+    而它返回的是**数组**（每项带 `name` 字段）→ 永远 nil → 客户端静默返回 `no_coords`。
+    改成先兼容字典、再线性匹配 `name`；真取不到坐标时给一条 error feed（不再静默）。
+- **载具键位 · ESC 菜单里方向键会打灯（PO 说的老问题）**
+  - `custom-vehicles` 的输入门只问 `custom-ui:IsTaken()`，而 ESC 暂停菜单是 GTA 自己的前端、不在层栈里，
+    所以车里按 ←/→/↓ 导航菜单时会同时切转向灯/双闪。门里补 `IsPauseMenuActive()` 与 `IsNuiFocused()`；
+    `cruise.lua` 的 lock 模式 ↑↓ 同样加门（`seatbelt.lua` 一直是对的，照它写）。
+  - 双闪开/关提示从 qb-core 右栏（`'primary'`）改走 feed。
+- **游戏内提示层 · 真机第四轮（PO 2026-11-12 夜）**
+  - **采矿 `SCRIPT ERROR: attempt to call a nil value (global 'IsDowned')`**：`IsDowned()` 写在文件 215 行、
+    第一次使用在 101 行，Lua 的 local 只对其后可见 → 移到文件顶部（13 行）。`luac -p` 拦不住这类错误。
+  - **冶炼厂 blip 回滚**：恢复 `SetBlipAsShortRange(true)`（全图可见是为排查"找不到冶炼炉"临时加的，
+    PO 已确认找到）。
+  - **I 键不再绑 HUD 设置**：去掉 `RegisterKeyMapping('hud', …, 'I')`，I 留给载具信息板（尚未实现），
+    HUD 设置只走 `/hud`。
+  - **电影模式 on/off 分居左右**：`cinematic_off` 原来带 `'error'` → 右侧 qb-core NUI，`cinematic_on` 走 feed →
+    左侧，看起来像两条各弹一个；现在都走 feed。
+- **游戏内提示层 · 真机第三轮（PO 2026-11-12）**
+  - **商店界面打开后仍显示 `[E] 打开商店`**：`qb-inventory` 新增只读 `exports('IsOpen')`（开关时刻只有它知道），
+    `qb-shops` 在背包界面开着时让位、关掉后按需重现。
+  - **薪水 / 送货 / HUD 设置提示没迁移**：`qb-core` 发薪 2 处、`qb-shops` 送货 13 处、`qb-hud` 5 处
+    （地图形状 / 电影模式）改为走 `custom-notify`（`error` 保持红条），资源缺失时回落原通道。
+  - **护甲误报**：`qb-hud` 的护甲提醒改成"从有到无"的边沿触发（新增 `armorPeak`），没装护甲不再弹
+    "护甲已经打光了"。
+  - **采矿交互返工**：`custom-mining` 客户端加 `IsDowned()`（四键状态袋）——倒地不出提示、不派发 E、
+    中断采矿循环；服务端 `mining:server:mineOre` 以 `metadata.isdead/inlaststand` 拒绝产出。
+    冶炼厂 blip 从 `SetBlipAsShortRange(true)` 改成 `false` + `SetBlipDisplay(4)` —— 它离矿点 5.0–5.7 km，
+    近距离模式等于永远看不见（"不知道冶炼炉在哪"的根因）。
+  - **保险箱按 E 无反馈**：`qb-storerobbery` 现在无论 `usable` 都响应 E —— 警力不足给 `error`
+    「警力不足 · 需 N 名，当前 M 名」，冷却/已空给 `feed`「冷却剩余 mm:ss」（沿用 C-2 的口径变更）。
+- **游戏内提示层 · 真机第二轮（PO 2026-11-11）**
+  - **feed 压小地图**：`custom-notify` 的 `bottom` 从 10.3vh 改 21vh。实测原生通知块底边在 20.9vh
+    （同窗 2546×1434 底部留 300px），小地图约占底部 19.8% 高 —— 原来 10.3vh 正好压上去。
+  - **`[E]` 要反复按才开商店**：`T-CityLite.base/resources/[qb]/qb-shops/client/main.lua` 的 `IsControlJustReleased(0,38)` 原来在
+    `Wait(200)` 的轮询里采样（松开只在 1 帧为真，约 11/12 次采不到）；改成"在范围内每帧采样 +
+    内容未变不重发 NUI 消息"，离开范围仍回落 500ms。
+  - **复活后仍走原生提示**：`T-CityLite.base/resources/[qb]/qb-ambulancejob/client/main.lua` 的 `info.healthy` 与
+    `T-CityLite.base/resources/[qb]/qb-hud/server.lua` 的 `stress_removed` 都没有 type（落 GTA 原生 feed）→ 改走
+    `exports['custom-notify']:PushLocal('feed', …)` / `:Push(src, 'feed', …)`，自定义通知资源不在时
+    回落到原来的 `QBCore.Functions.Notify`。
+  - **商店提示闪烁的根因**：`T-CityLite.base/resources/[custom]/custom-mining/client/main.lua` 每轮（800ms）无条件
+    `exports['custom-prompt']:Hide()`，会打掉别家正在显示的提示；补 `promptShown` 守卫，只 Hide 自己
+    Show 过的（与 qb-shops / qb-storerobbery / qb-ambulancejob / qb-management 一致）。
+  - **HUD 五环圆心缺状态图标**：H-1 为把数值移到环下，删掉了 armor/hunger/thirst/stress/oxygen
+    五个内层环的 `show-value`；Quasar 2.1.0 只在 `showValue` 时渲染默认插槽 → 图标连 DOM 都不生成。
+    补回 `show-value`（插槽会盖掉数值，环下 `.stat-num` 仍是唯一数字）。
+  - 闸门：`tests/architecture/test_hud_contract.py` 新增 `test_ring_icon_slot_needs_show_value_*`，
+    反向校验"删掉 show-value 必须红"。
+
+### Added
+- **游戏内 UI/UX · P1 手机打字 + P2 三层通知**（PO 2026-11-10 拍板 D1=B / D5=乙）
+  - 手机文字输入：`focus.lua` 的 `PushFrame` 支持 `keepInput` 覆盖，text 帧改为
+    `keepInput=false`（原来写死读 convar，键盘一直归游戏，CEF 收不到字符）；
+    新增 `textFocus` NUI 回调，鼠标点输入框也入栈；`nav.lua` 在 text 帧期间不注入按键
+    （否则一键两用、Backspace 把输入框 blur 掉）。custom-phone 前端新增 layers.ts
+    （`textOwned` store + `use:textFocus` action），Messages 已接入。
+  - 三层通知：新资源 `custom-notify`（`feed` 左下 / `toast` 中央 / `error` 左下红 /
+    `phone` 只进手机），服务端唯一入口 `exports['custom-notify']:Push`，
+    每玩家 6/s 限流（qb-core Notify 的 200ms/1 条会把一次交易的第二条静默丢掉）。
+    首个迁移点：`custom-consumables` 吃喝结果。
+  - `/amenu` 补 `'admin'` 权限参数（原来默认 `user`，任何玩家能打开管理员面板）；
+    `custom-ui` 屏蔽表加 E(38) / ALT(19)：手机开着时不再触发游戏交互。
+  - 闸门：`test_notify_contract.py`（kind 两侧一致 / phone 不上屏 / 限流下限 / 必须在启动集）
+    + 4 条变异用例；`test_consumables.py` 的切块从死代码事件改为 `CreateUseableItem`。
+- **开服就绪包**（目标从「磨底座」转成「能开门」）：新增 `tools/dev/launch_check.py`，把"这台机器能不能
+- **开服就绪包 · CC 复核后的加固**（两条 P0 + 四条 P1）：
+  ① **#1 原来不扫真正决定启动集的 `server.cfg`** —— 运维在那里加一行 `exec configs/modules/dev.cfg`
+  就能把 `/test` `/stress` `/agent` 还给玩家，而所有检查依然全绿；现在 module cfg 递归扫 + `server.cfg`
+  （或 `TCITY_SERVER_CFG` 指的那份）一起扫，`ensure|start|exec` 三种写法都认；
+  ② **占位符能带着 P0=0 上生产** —— 新增 #12：license / rcon / DB 口令是 `<...>` 或缺失就红；
+  #8 的 hostname 也认占位符；#9 改成"开关开着但没 token = 红"（原来这个组合反而绿）；
+  ③ `db_backup.py` 的口令原来进了 `docker exec -e MYSQL_PWD=<口令>` 的 argv（宿主机 ps/WMI/EDR 可见）→
+  改成 `-e MYSQL_PWD` 只传变量名、值走子进程 env；备份写入改成临时文件 + fsync + `os.replace`（半截文件不再冒充有效备份）；
+  ④ #11 从"mtime ≤ 24h"改成读 manifest：大小对不上或表数 < 50 都判红；
+  ⑤ #5 从"文件存在"改成查 `db_backup.py` 里有 dump 实现、runbook 里写了"恢复演练"；
+  ⑥ #2 的守卫判据改跑去掉注释后的调用文本（`-- IsAdmin` 不再算守卫）。
+  另外：模板补 `sv_scriptHookAllowed 0` / `sv_pureLevel` / txAdmin 端口与 ACE 说明；runbook 补
+  "生产预演"一节与演练库授权（少了那条，`--restore --to-scratch` 第一步建库就失败）。
+
+  实测：按模板填一份 `server.prod.local.cfg`（gitignored），`TCITY_SERVER_CFG=… launch_check.py`
+  → **12 项检查 P0 = 0**（唯一 P1 是 txAdmin 自带文档里的示例 license）。
+  1339 passed / 147 skipped / 51 subtests。
+  开门"拆成 11 项可复跑的检查，分 `repo`（CI 能跑）与 `local`（只在部署机跑）两半。
+  首次运行抓到的真问题：
+
+  | 项 | 发现 | 处置 |
+  |---|---|---|
+  | #1 | `hud-position-tool`、`custom-debug` 在**默认启动集**里（等于把调试入口开给玩家） | 移进 `configs/modules/dev.cfg`（生产不 exec） |
+  | #2 | 服务端 dev 命令无守卫（`careertest` 等） | 逐个核对：`careertest` 早已是 `'admin'`；其余在 dev-only 资源/测试夹具里 |
+  | #3 | 入库文件里的"密钥" | 全是占位符或 vendored 示例（txAdmin 文档里的 `cfxk_…`），非本仓库密钥 |
+  | #4 | 没有生产配置模板 | 新增 `configs/prod/server.cfg.example`（无密钥）+ 模板内容校验 |
+  | #5 | **从没做过备份** | 新增 `tools/dev/db_backup.py`（dump + manifest + 保留策略 + 恢复演练），实测 403 KB / 68 表，恢复到 `_restore_probe` 后 73 表 |
+  | #6–#11 | 本机是开发配置（8 槽、hostname 带 DEV、agent 开关全开、DB 是 root） | 写进 runbook 的"生产 vs 开发"对照表；生产值由模板承载 |
+
+  另：`docs/engineering/2026-11-launch-runbook.md`（开服前/中/后 + 出事处置 + 回滚 + 明确列出"还没做的"）、
+  `.gitignore` 加 `backups/`（含真实玩家数据，永不入库）、`launch_check.py --ci` 接入闸门
+  `tests/architecture/test_launch_readiness.py`（3 条用例，含两条注入式反向验证 + 1 条变异）。
+### Added
+- **`DirtyFlushStats` 说清"管线是否存在"**（老账：custom-testing 的压测靠 `dirty_count == 0` 判"脏池是空的"，
+  而 `DirtyFlush` 全局从来没被定义过，导出走的是 `{ dirty_count = 0 }` 兜底 —— 那条断言永远是
+  "空池，通过"）。现在导出带 `available`：未接入 → `available=false`，已实现 → 原样透出 + `available=true`，
+  `Stats()` 返回 nil 也降级成 `available=false`。
+  压测套件据此报 **跳过**（新增 `skip` 状态与「N 跳过」汇总）而不是假通过。
+  新用例 `test_dirtyflush_contract.py` + 探针 `bus_dirtyflush_probe.lua`（真加载 bus.lua，三条路径都断言）。
+### Added
+- **net event 口径校准（清掉 §3.1.1 那笔 36 条的账）**：`job_deny_guard` 原来把「判空 + 参数校验」也算成
+  职业守卫，按严格口径（条件里必须真的提到 `.PlayerData.job`）重跑后 36 条从"已鉴权"翻成"未登记"。
+  逐条复核后分三类处理，**本仓库自有资源的未登记事件归零**（439 事件 / 已鉴权 204 / 已登记 249 / 未登记 0）：
+
+  | 类别 | 处理 |
+  |---|---|
+  | 归属/状态校验（`owner ~= Player.PlayerData.citizenid`、`Races[id].Racers[citizenid]`） | 新增证据类 `self_scope_guard`（含"从 citizenid 取自己那条"的别名识别） |
+  | 真 helper：`inReviveWindow`、`IsRaceHost`、`IsWhitelisted` | 登记 `net_event_guard_helpers.json` / `already_checked` |
+  | 供应商资源：cfx-default 21、monitor 33、PolyZone 4、connectqueue 1 | 新增 `vendor_example` 类别，闸门**按文件前缀**校验，防止给自己代码开后门 |
+  | 缺 `local src = source` 绑定的（qb-weapons ×1、pma-voice ×3） | 补绑定，行为不变 |
+
+  新闸门 `tests/architecture/test_net_event_scope.py`：出口判据「本仓库自有资源未鉴权又未登记 = 0」
+  + 守卫形状的双向用例（接受真守卫 / 拒绝"只判空"与"无 return"）+ 1 条变异（把 `self_scope_guard`
+  从 `is_guarded` 里摘掉 → 立刻变红）。
+### Added
+- **P2-4 预算数字化**：`tools/dev/budget_probe.py` 按 fxmanifest 找服务端脚本、脱掉注释后统计六项静态计数，
+  输出基线并由 `T-CityLite.base/tests/architecture/io_budget.json` 钉住上限（`--update` 只允许往下写）：
+
+  | 指标 | 基线 | 含义 |
+  |---|---|---|
+  | `db_call_sites` | 463 | `MySQL.*` / `exports.oxmysql` 调用点总数（趋势指标） |
+  | `fast_polling_loops` | 2 | `while true` + 首个 `Wait ≤100ms`（≈600 次/分钟/条） |
+  | `warm_polling_loops` | 5 | `while true` + `Wait ≤1000ms`（≈60 次/分钟/条） |
+  | `wait_zero_loops` | 1 | `while true` + `Wait(0)`（吃满一个 tick） |
+  | `broadcast_sites` | 150 | `TriggerClientEvent(..., -1, ...)` 全服广播点 |
+  | `broadcast_inline_json` | 5 | 广播点里内联 `json.encode`（每次广播重新序列化） |
+
+  `fast_polling_loops` 的两条与 `wait_zero_loops` 的一条已逐一点名（txAdmin 的 runcode web 服务、
+  qb-core 离线玩家清理循环、connectqueue 的排队 pop 循环），都是上游代码，预算条目里写了 owner 与到期日。
+- **闸门 `tests/architecture/test_budget.py`**：5 条反向形状（新增 DB 调用 / 50ms 轮询 / `Wait(0)` 循环 /
+  广播内联 `json.encode` / 注释里的形状不该计数）+ 1 条变异（往 custom-justice 注入 50ms 轮询 → 红、撤回 → 绿）。
+- **第九轮 CC 复核**：Lua 的真值规则是"只有 `nil` / `false` 为假"，而常量求值用了 Python 的 `bool()` ——
+  `while 0 do` 在 Lua 里是死循环，却被判成"等条件"。修法：常量求值一律按 Lua 真值判定（`0`、`""` 为真）。
+  反向用例：`while 0 do Wait(1) end` 必须计入 fast；`repeat Wait(0) until 0` 只跑一次 → 归等条件循环。
+- **第八轮 CC 复核**：上一轮的修法引入了新漏洞 —— 外层取"体内第一个 Wait"，遇到
+  `while true do for … do Wait(2000) end Wait(0) end` 会先取到 2000ms（>1000，一个桶都不命中），
+  而内层 for 的 2000ms 也不计，四个桶全空。修法改成取体内**最小**的 Wait：最小 = 最坏节奏，
+  `Wait(0)` 在体里出现就说明这条循环在自旋。反向用例：「先 2000ms 后 Wait(0)」必须计入 wait_zero。
+- **第七轮 CC 复核**：`while true do for … do Wait(50) end end` —— 外层节流其实由内层 `for` 提供，
+  但嵌套排除把内层整体剔掉、`for` 又不算 conditional，于是 fast/warm/zero/unknown 全都不动。
+  修法：只排除**同为无限**的嵌套循环（它有自己的节奏）；嵌套的 `for` / 等条件循环里的 Wait 算外层的。
+  反向用例：「外层无限 + 内层 for 节流」必须计入 fast。`conditional_busy_wait_loops` 12→13 是分类器
+  把 connectqueue / monitor 里两个 `for` + `Wait(0)` 认了进来（判据更严，不是新债）。
+- **第六轮 CC 复核**：`repeat … until false` 后面还有同块语句时，条件会把后面的 token 一并吞进来
+  （`false cleanup ( )`），常量求值取不到 → 判成"等条件"。修法：条件只取到本行结束或 `;`。
+  反向用例：`until false` 后跟 `cleanup()` 仍必须是无限轮询。
+- **第五轮 CC 复核**：`until (false)`（括号包着）与 `until 1 == 2`（常量比较）仍被归成"等条件" →
+  条件归一化（去外层括号）+ 常量布尔求值（只放行数字/比较/逻辑符号，`false`/`true`/`nil` 先映射）。
+  反向用例再补一条：`false` / `(false)` / `1 == 2` 三种恒假写法都必须是无限轮询、`until not cond` 是等条件。
+- **第四轮 CC 复核（一处真错误）**：`lua_blocks.loops()` 对 `repeat` 的 condition 写死成空串，而
+  `_is_infinite` 把空条件当无限 → **所有** `repeat … until <非 false 条件>` 都被当成无限轮询。
+  后果有两个方向：qb-multicharacter 那两条 `repeat Wait(10) until hasData()` 被计成 fast（实际是等条件），
+  以及"把 `until false` 改成 `until cond`"这种无限化回归看不出来。修法：`repeat` 的条件从 `until` 之后
+  按块深度取到块外，只有字面量 `false` 算无限。基线随之收紧：`fast_polling_loops` 4→2、
+  `warm_polling_loops` 6→5（原来多算的就是那两条 repeat）。反向用例补到 16 条。
+- **第三轮 CC 复核：放弃正则，改用词法切分 + 块配对**。前两轮修的都是同一个病根 —— 用正则截循环体，
+  字符串里的 `end`、`elseif … then`、嵌套 `CreateThread`、`for` 循环全都会让截断错位。新增
+  `tools/dev/lua_blocks.py`（约 170 行）：把 Lua 切成 token（字符串/长字符串/数字/名字/符号），
+  开块只认 `do`/`function`/`if`/`repeat`、收块只认 `end`/`until`（`then` 不单独计数，所以
+  `elseif … then` 不会多算一层），于是 `for … do` / `while … do` 都各配一次 `end`。
+  预算探针改为在 token 上工作：`for i = 1, n do Wait(0) end` 归「等条件循环」、
+  `print("end")` 不再截断循环体、嵌套循环的 Wait 不再算到外层头上（外层真正 60 秒一圈不会被误报成 fast）。
+  基线随之收敛：`conditional_busy_wait_loops` 13→12、`broadcast_sites` 150→152（token 口径比正则准）。
+  反向用例补到 15 条。
+- **第二轮 CC 复核（又四条）**：⑤ 循环体用 600 字符定窗，`while true do` 先干活、末尾才 `Wait(60)` 的
+  写法会整条漏掉 → 改成配对到 `end`/`until` 取体内第一个 Wait；⑥ `Wait(1e3)` / `Wait(0x64)` 落在常量
+  字符集之外被当"未知" → 放进字符集，并对 `10**400` 这类加溢出/超大值收敛（超一天即封顶）；
+  ⑦ `while running do Wait(50)` 这类非字面量条件不匹配 → 现在**所有 `while … do` 与 `repeat` 都认**，
+  但按条件分两类：字面量 `true/1`（或 `repeat`）= 无限轮询，其余 = 等条件循环；
+  ⑧ 等条件循环里的 `Wait(0)` 是正常写法（等到就退出），不该算进 `wait_zero_loops` → 新增
+  `conditional_busy_wait_loops` 单独计（11 条，用来发现"等一个永远不成立的条件"）。
+  基线随判据再更新：新增 `conditional_busy_wait_loops` 11、`polling_loops_unknown_interval` 22→23。
+- **CC 复核后的判据加固（四条都是"能绕过"）**：① `Wait` 参数不是数字字面量（`Wait(ms)` / `Wait()`）时
+  整条循环被静默丢弃 → 新增 `polling_loops_unknown_interval` 单独计数（有预算就会显形）；
+  ② 循环只认 `while true`，漏 `while (true)` / `while 1` / `repeat … until` → 一并认；
+  ③ `Wait(3600 * 1000)` 这种常量表达式被当"未知" → 改成安全求值（只允许数字与四则运算）；
+  ④ 广播用 300 字符窗口找 `json.encode`，会把下一条语句的序列化算到广播头上、也会漏掉长参数 →
+  改成按配对括号取参数列表。
+  判据变严后基线随之变化（这不是退步，是判据换了）：`fast_polling_loops` 2→4（新增把
+  qb-multicharacter 两条 10ms 循环显形）、`warm_polling_loops` 5→6、`broadcast_inline_json` 5→1
+  （固定窗口的 4 个是误计）。反向用例补到 10 条。
+- **顺带收敛**：把「哪些文件算服务端」的判定从 `tests/architecture/server_await_scan.py` 提到
+  `tools/dev/fivem_manifest.py`，P2-1 的闸门与 P2-4 的探针共用同一份 manifest 解析（此前只有前者一份，
+  但预算探针也要用 —— 复制一份迟早会走岔）。
+- **P2-2 启动顺序进版本库**：`T-CityLite.base/configs/boot.json` = 模块 exec 顺序的唯一事实来源
+  （`server.cfg` 是 gitignored，17 行 `exec configs/modules/*.cfg` 的顺序以前只活在本地那份文件里）。
+  新增 `tools/dev/boot_cfg.py`：把 boot.json 的模块顺序 + 各模块 cfg 的 `ensure` 行展开成真实启动序列，
+  再按每个资源 `fxmanifest.lua` 的 `dependency` / `depend` 校验「依赖必须先于使用」，另核对
+  boot.json ↔ 模块目录一一对应、`ensure` 不指空、同一资源不重复 ensure。
+  实测：84 个资源 / 17 个模块，0 错序；本地 `server.cfg` 的 exec 顺序与 boot.json 一致；
+  真机 85 个在线资源里 84 个都在序列内（多出的 `fivem-map-skater` 由 server.cfg 的 `start` 拉起）。
+- **闸门 `tests/architecture/test_boot_order.py`**：6 条反向形状（错序 / 注释写对但顺序错 / 重复 ensure /
+  ensure 不存在的资源 / 模块没进 boot.json / server.cfg 与 boot.json 不一致）+ 嵌套资源目录
+  （`[qb]/qb-core`）形状 + 1 条变异（把 `ensure qb-core` 挪到 `ensure oxmysql` 前面 → 红、撤回 → 绿）。
+  判据只看 `ensure` 行与 manifest 依赖，**顺序注释不参与判定** —— 删掉注释不影响结论。
+- **CC 复核修正**：`BUILTIN_RESOURCE` 硬编码名单原来**先于**仓库索引判断，名字同时出现在 resources/ 和
+  内置名单里（自带 fork 的 chat 这类）时会被当内置跳过，缺失/错序静默通过 → 改成「仓库里有就按仓库判，
+  没有才看内置名单」，并补一条反向形状（仓库里真有 chat、依赖方没 ensure chat → 必须报）。
+- **DoD 自证**：新增用例把真实 configs/ 复制到临时目录、删掉全部注释行，①原顺序仍通过 ②交换两条
+  ensure 仍红 —— 「删掉顺序注释后闸门仍能拦住错序」由测试本身证明。
+- **已知残留**：`boot.json` 只管 `ensure` 的 84 个资源；地图这类由 server.cfg `start` 拉起的资源不在内。
+  另外「资源 A 在加载期读资源 B 的 exports 但没声明 `dependency`」这类隐式顺序约束无法静态判定。
+- **P2-1 `patron_service` 读路径不再 Await DB**：`GetTier` 原来在缓存未命中时 `promise.new()` +
+  `Citizen.Await` 同步查 `patron_records`，第一次读就挂住处理该事件的协程（它还被 `IsActive` /
+  `GetTierBySource` 这类高频入口调用）。现在只读缓存、未命中返回 0（保守）并后台预热，另加
+  `GetTierAsync(citizenid, cb)` 给需要确定值的调用方；DB 失败/无行给 30 秒退避的 0，避免缓存一冷
+  就被并发打爆。
+- **闸门 `tests/architecture/test_no_server_await.py`**：只扫服务端脚本（客户端 Await NUI/动画是正常
+  写法）且跑在**脱掉注释**的代码上；存量 5 条进 `server_await_allowlist.json`（每条写明为何不是
+  阻塞主线程 + owner + 到期日），allowlist 里有、代码里没有也会红；配 1 条变异用例（往
+  custom-justice 注入 Await → 确认变红），`gate_coverage` 未证明数仍 **276**。
+- **探针 `patron_probe.lua`**：`Citizen.Await` 桩成 `error('would block the game thread')`，fake oxmysql
+  支持正常 / 同步抛错 / 永不回调三种模式。对 master 版本跑 5 true / **17 false**；真机启动
+  `patron (5 methods)`、85 资源、`SCRIPT ERROR: 0`。
+- **CC 复核后的三处修正**：① 闸门原来按路径猜服务端，漏掉了 core-framework 的 patron_service.lua 本体和
+  `contracts.lua` / `bus.lua` / 根级 `*_server.lua` → 改成以 `fxmanifest.lua` 的 `server_scripts` /
+  `shared_scripts` 为准（309 个服务端文件），变异点也改到 `services/` 布局上证明覆盖；
+  ② 失败条目的退避实际是 5 分钟（沿用 CACHE_TTL，`failed_at` 分支成了死代码）→ 抽出 `cacheValid`
+  让失败条目按 30 秒过期；③ `loading` 用 `pcall` 包住导出调用并在 10 秒后允许重试，
+  否则一次同步抛错/回调丢失会让该玩家永久返回 0。
+- **第二轮 CC 复核再修两处**：① manifest 解析器只认 `keyword [{=]` 的形状，而仓库里 20+ 处是
+  `server_script 'server/main.lua'` / `shared_script '...'`（单数 + 空格）—— 那些资源贡献 0 个
+  服务端文件；改成「括号配对 / 到行尾」两种取法，glob 加 recursive 且对目录做 escape
+  （`[voice]`、`[qb]` 在 glob 里是字符类）。服务端文件集合 309 → **701**。② `SetTier` 与在途查询
+  无代际校验：冷读发出 SELECT → `SetTier(3)` 写缓存 → 旧回调无行，会把刚设的等级覆盖成 0
+  （失败 30 秒、旧行 300 秒）。加 `generation[cid]`，回调先核对代际再落地。
+- **第三轮 CC 复核再修两处**：① 解析器做 `server - client` 减法，把 connectqueue 里同时声明为
+  `server_script` + `client_script` 的 shared/sh_queue.lua 剔出了服务端集合（它确实在服务端执行）→
+  去掉减法，client 桶只留作诊断；② 看门狗超时重发时没有换代际，q1/q2 持有同一代际，慢的那条晚到
+  仍会覆盖新结果或写 markFailed → 重发前 bump；另让跨代际丢弃时也回调调用方（否则
+  GetTierAsync 的 cb 永不触发）。服务端文件集合 701 → **704**。
+- 服务端剩余 4 处 Await 已声明性质：`qb-core` 的 `TriggerClientCallback` 同步模式、`custom-agent-client`
+  的动作回执、`T-CityLite.base/resources/[custom]/custom-quest` 缓存空窗 DB 兜底 ×2、`qb-crypto` ticker HTTP（独立线程）。
+- **基石三件套（规范 / 现状 / 目标）入库**：新增 `docs/engineering/STANDARDS.md`（TS-1…TS-13，每条挂闸门或显式缺口）、`docs/engineering/FOUNDATION-AS-IS.md`（组件、三条主链路、已知缺口，附 7 张 UML）、`docs/engineering/FOUNDATION-TO-BE.md`（五层目标、三条硬规则、性能预算数字），以及 `docs/engineering/2026-11-foundation-plan.md`（P0/P1/P2 施工计划与交付标准）。图纸在 `docs/engineering/assets/foundation/`（部署拓扑、分层组件、资源包图、奖励时序、事件时序、数据状态机、路线图），源生成器为一次性脚本，产物为纯 SVG，无外部依赖。
+- **两个 P0 闸门先红后绿**（改动前实测 `5 failed`：`test_economy_multiplier` 的 3 条 + `test_engine_event_guards` 的 2 条；改完后两个文件共 7 passed）：`tests/architecture/test_engine_event_guards.py`（引擎层调试事件的来源守卫，带剥守卫反向用例）、`tests/unit/layer1_core/test_economy_multiplier.py`（真实加载 core_economy 的 main.lua 跑 Lua 沙箱，钉住倍率单位）。
+
 ### Changed
 - **文档生命周期 Phase 1–4 落地：276 份文档全登记、孤儿清零、本机绝对路径清零**（`docs/standards/doc-lifecycle.md`）：按规范 §11 把存量一次做完，数字全部来自 `python tools/docs_lifecycle.py --check/--report`。具体：① 给 273 份文档补 frontmatter（登记率 3/276 → **276/276**），`system` 按 §7 的 19 个键、`type` 按 §1 的 8 种、`id` 由路径派生保证唯一、`updated` 取 git 最后提交日、`review_by` 按类型周期（manual/research/runbook 90 天，spec/meta/plan 180 天）；② 孤儿 43 → **0**，全部挂进所属目录的 README 索引（`T-CityLite.base/docs/README.md` 根级补遗表、`T-CityLite.base/docs/agent/README.md` 评审表、`docs/police/README.md` 的 plans 索引等）；③ 带盘符的 file URL 67 处 → **0**，同目录引用改相对文件名、其余改仓库根相对路径、`docs/reasonix-hooks-config.md` 的 PowerShell 音乐路径改用 `$env:USERPROFILE`；④ 4 组重复主题定 SoT 并双向 `supersedes`（`phone-design`、`BLUEPRINT-ITEMS`、`RESEARCH-2026-10`、5 份 `LEGACY.md` 的重复标题改为按目录区分）；⑤ 4 个不合规文件名改正（`BLUEPRINT-ITEMS-v1` / `RESEARCH-2026-10-v1` → `-ARCHIVED`，`00_SERVER_MASTER_MANUAL.md` → `00-server-master-manual.md`，中文名叙事设计稿 → `middle-east-narrative-design.md`）。`--check` 现为 **0 error / 0 warning**。
 - **`tools/docs_lifecycle.py` 三处口径修正**：① 断链检查改为复用 `T-CityLite.base/tests/architecture/legacy_docs.json` —— 与既有的 `test_docs_links.py` 同一张豁免表，不再一边豁免一边报断（历史归档不修引用是有意的，改路径会伪造历史）；② `supersedes` 双向校验原来拿**文件路径**去比对方的 **id 列表**，只要有 `supersedes` 就必然误报，改为比 `id`；③ 新增 `docs/INDEX.md` 过期即红的 CI 校验。生成物（`<!-- @generated by ... -->` 打头的 `T-CityLite.base/docs/agent/TOOLS.md`）按 `INDEX.md` 的既有先例排除出扫描范围 —— 给它盖 frontmatter 会被 `tools/agent_tools.py --check` 立刻判 stale。
@@ -26,9 +614,601 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **根入口文档压回行数闸门内**：补 frontmatter 后 `AGENTS.md` 119 行、`CLAUDE.md` 27 行，双双越过 `test_agent_docs.py` 的上限（110 / 20）。按 AGENTS.md 自己的规矩压到 **105 / 20** 行：合并重复的环境事实与命令块，指向新增的 `docs/INDEX.md` 作为全量清单入口。
 
 
+- **存档收敛为单一写者，拆掉 `ForceFlush → Save(true)` 的环（P1-2 / P1-1）**（qb-core / core-framework）：qb-core 的 `persistence_manager.lua` 重写为唯一写者 `Store`（一份脏池、一个定时器、一条 upsert），core-framework 的同名文件降级为纯委托层（无池、无 SQL、无定时器、不再回调 `Save(true)`）。三处语义修正：① 刷盘**成功才清脏**，失败保留 + 指数退避 + `failed_flushes` 计数（以前无论 SQL 成不成都清）；② `QBCore.Player.Save` 强制存档改为直接 `Store.SaveNow`，失败时 `IsDirty` 保持为 true 并 `ShowError`（以前无条件清）；③ `FlushAll` 兜底扫描 `IsDirty = true` 但没进池子的玩家（economy/metadata 服务只标 `IsDirty`，他们的钱以前只在下线那一刻才落库）。停服刷盘返回 ack `{reason, attempted, ok, failed, duration_ms}` 并打日志。证据：`tests/unit/layer1_core/test_persistence_single_owner.py`（改动前 **12 failed，含 399,964 层栈溢出**；改动后 19 passed）+ 重写的 `test_persistence.py`（delegate 转发契约），见 `docs/engineering/2026-11-foundation-p1-evidence.md`；全仓 `pytest tests/unit tests/architecture` → 1120 passed。真机：`restart qb-core` + 逐个 `ensure` 拉回被连带停掉的资源后，日志出现 `single owner store loaded` / `delegate loaded (owner=qb-core: resolved)`，无 SCRIPT ERROR。
+
+- **P1-5 阶段 F：qb-drugs 配送押金/报酬改服务端权威（可刷钱漏洞）**（2026-11-07）：
+  - 漏洞：`acceptDelivery` 与 `successDelivery` 直接采信客户端 `deliveryData` 的
+    `deposit` / `basePayout` / `amount` / `fastTime`。实测一个改过的包：不交押金拿到 999 个货；
+    结算时把 `deposit` 说成 1e9 → `AddMoney(finalReward + deposit)` 一次进账 **2,200,000,000**；
+    同一次结算还能重放。
+  - 修法：接单时按 Config 反算押金/报酬/时间窗口并存档（`activeDeliveries[src]`），数量固定 1；
+    结算只认这份存档（先消费再结算，防重放），`elapsed` 用服务端计时；背包里没有货就不发钱；
+    商品 key 必须在 `Config.DeliveryItems` 里。
+  - 新增 `test_drugs_delivery_authority.py`：mock 运行时真的触发两个 net event，断言
+    「押金 500 / 发货 1 个 / 结算 1500 / 重放 0 / 伪造 key 0 / 缺货 0」。对照旧实现实测为
+    「押金 0 / 发货 999 / 结算 2.2e9 / 重放再发一次」。
+  - CC 复核后又补两个洞：**连开两单会覆盖记录**（押金白扣、货白留，实测净赚 500/轮）→ 接单时拒绝
+    已有活跃单；**断线后 source 被复用**会让新角色结算旧单 → 记录绑定 citizenid + playerDropped 清理。
+  - 测试探针本身也修了：SetTimeout 原来是 no-op，accept 的排他锁永远不释放，导致「伪造 key /
+    缺货不发钱」两条断言其实是空过（CC 抓到）；现在用真的定时器队列 + tick(ms) 推进时间。
+  - 连带：这两个事件现在被闸门识别为「已鉴权」，net event 基线 qb 未登记 197 → 195。
+- **P1-3 批 7：qb-storerobbery 9 + qb-crypto 6**（2026-11-08）：
+  - **CC 九轮复核查出的后续**（都属于「任意玩家 vs 正在店里的人」这类边界，逐条收口）：
+    ① `Rebooting` 改成**服务端会话**：只有真的扣掉一根 cryptostick 的 `ExchangeFail` 能建会话，
+    进度上报只认 owner，60 秒静默 + 5 分钟硬上限；② `callCops`/`setSafeStatus` 要绑定「本人
+    正在/刚抢过这家店」（`recentStoreRobberies` 10 分钟窗口，按 citizenid）；③ 掉线清理补
+    `srcToCitizenid` 反查表；④ 兑换回补失败挂到 `metadata.cryptostick_refunds`，上线自动补发；
+    ⑤ **客户端** `SyncReboot`/`GetRebootState` 改为按服务端 payload 落地 —— 原来无条件当成
+    「开始重启」，导致 owner 收尾/超时/掉线的「停止」广播在别的客户端眼里变成「开始」，
+    别人会一直显示假重启约 2 分钟。
+
+  - **白拿钱**：`qb-crypto:server:ExchangeSuccess` 忽略 `RemoveItem` 的返回值 —— 兑换时如果
+    扣不掉 cryptostick，`AddMoney` 照样执行（探针实测旧代码在扣货失败时仍入账一次）。
+    现在 `RemoveItem == false` 直接返回。
+  - **伪造警情**：`qb-storerobbery:server:callCops` 的店名与坐标全来自客户端 —— 任意玩家能凭空
+    给全服推一条「某店正在被抢」，坐标任意；坏 key 还会 `attempt to index a nil value`。
+    现在只认 Config 里真实存在的收银机/保险箱，坐标取服务端配置。
+  - **锁死全服保险箱**：`setSafeStatus` 原来任何玩家调一次就能把任意保险箱标成「已抢」
+    （40~80 分钟不可用）。现在要求调用者本人站在该保险箱交互距离内。
+  - **伪造交易所重启**：`Rebooting(state, percentage)` 原来把客户端值原样写进全服共享状态
+    （实测 `'hax'` 与 `150%` 都能写进去）→ 只接受已知 state + 0~100 进度 + 1 秒节流。
+  - 其余：`FetchWorth`（每币一条 SQL）加 5 秒冷却防放大；`syncMinPolice`/`SyncReboot` 广播加节流；
+    两个开锁器事件先确认本人真的持有再扣。
+  - 数字：两个资源 15 → 0；全仓未登记 **192 → 177**、qb **110 → 95**、allowlist **97 → 112**。
+  - 运行级测试：`T-CityLite.base/tests/unit/layer3_business/fixtures/storerobbery_probe.lua`、
+    `T-CityLite.base/tests/unit/layer3_business/fixtures/crypto_probe.lua`，2 条 pytest；
+    旧实现实测全红（客户端坐标被转发、远处锁保险箱、扣货失败照样发钱）。
+- **P1-3 批 6：qb-lapraces 10 + qb-apartments 10**（2026-11-08）：
+  - **连带修掉的真 bug**（CC 六轮验收逐条揪出来的，都属于「能玩」级别）：
+    ① `CreateApartment` 形参叫 `type` 遮蔽全局 `type()` → 事件一触发就崩、公寓建不出来；
+    ② 用 `racer.Finished` 当防重放标记，而客户端完赛前会先把它置 true → **每次正常完赛都不结算**；
+    ③ `table.remove(AvailableRaces, nil)` 会删掉**另一场**正在开放的比赛；
+    ④ 最佳圈校验写成 `BestLap / TotalLaps` → 10 圈赛里合法的 45 秒最佳圈被算成 4.5 秒并被改写；
+    ⑤ `BestLap <= TotalTime` 太松（45 秒最佳圈 > 20 秒平均圈也能过）→ 改为 `<= 平均圈速`；
+    ⑥ 没开赛就能报成绩（`StartedAt == nil` 时整套校验被跳过）；
+    ⑦ 结算/离开后的清理只清一半 → `LastLeaderboard` / `NotFinished` / `LastRaces` / `StartedAt`
+       跨场残留，赛道可能永久卡在「运行中」。
+  - 运行级测试：`T-CityLite.base/tests/unit/layer3_business/fixtures/lapraces_probe.lua`（9 个场景，用 `debug.getupvalue` 直接读 handler
+    闭包里的私有表断言清理结果）、`T-CityLite.base/tests/unit/layer3_business/fixtures/apartments_probe.lua`，共 2 条 pytest。
+
+  - **公寓储物柜没有归属判定**：`apartments:server:openStash(apartmentId)` 传个 id 就
+    `OpenInventory` 到别人家柜子 → 只认 `apartments` 表里登记在册的房主；
+    `OpenDoor(target, …)` 同样改为房主才能把访客放进来。
+  - **比赛状态零校验**：`UpdateRaceState` 原来四条赋值没有任何判断 —— 任何玩家改包就能把
+    任意比赛开起来/停掉；`UpdateRacerData` / `FinishPlayer` 的 `RaceId` 坏值直接 nil 索引崩服务端；
+    `FinishPlayer` 还能让参赛者随便报 `BestLap` 刷赛道纪录。现在全部要求「是这场比赛的在册车手」
+    + 成绩必须是合理数字（`BestLap ≤ TotalTime`）。
+  - **建房/建赛道没有授权一致性**：`SaveRace` 原来任何玩家都能凭空写一条赛道到 DB（无限写），
+    改为与 `CreateLapRace` 同一白名单；`CancelRace` / `StartRace` 收敛到 `IsRaceHost` helper。
+  - **真 bug**：`SaveRace` 里 `GenerateRaceId()` 调了两次 —— 内存里的赛道 id 与写进 DB 的 id 不一致，
+    重启后赛道记录对不上。现在只生成一次。
+  - qb-apartments 其余事件（`SetInsideMeta` / `RingDoor` / `AddObject` / `RemoveObject` / 建改公寓）
+    补齐类型与存在性判断：这些 key 全来自客户端，坏值原来会让服务端抛 `attempt to index a nil value`。
+  - 数字：qb-lapraces 10 → 0、qb-apartments 10 → 0；全仓未登记 **212 → 192**、qb **130 → 110**、
+    allowlist **92 → 97**。
+- **P1-3 批 5：qb-houses 19 个事件（入室盗窃链）**（2026-11-08）：
+  - **任何玩家能打开别人家的储物柜**：`openStash(house)` 只查 `Config.Houses[house]` 是否存在，
+    没有任何钥匙判定 —— 传个房子名就 `OpenInventory` 到人家的 stash 上，物品直接拿走。
+    现在必须 `hasKey(license, citizenid, house)`（房主或持有人）。
+  - **入室链**：`OpenDoor(target, house)` 能把**任意玩家**传进任意房子；`lockHouse` 能上/开别人家的锁；
+    `setLocation` 能挪走别人家的储物柜/衣柜坐标；`savedecorations` 能改别人家装修。
+    四条现在分别要求 hasKey / isHouseOwner。
+  - **任何玩家能建房**：`addNewHouse`（任意价位）、`addGarage`、`createBlip`（全服广播）无管理员判定 →
+    加 `QBCore.Functions.HasPermission(src, 'admin')`。
+  - `SetRamState` / `SetHouseRammed` 是警察行为 → 要求在职 `police`；`buyHouse` / `viewHouse` /
+    `RingDoor` 缺查表（坏 house 名会让服务端崩）→ 先查 `Config.Houses`。
+  - `LogoutLocation` 会落盘 + `Player.Logout`，客户端连点会反复触发存档 → 加 citizenid 维度 10 秒冷却。
+  - 闸门：`hasKey` / `isHouseOwner` 登记进 `net_event_guard_helpers.json`（含 defined_at 与函数体证据），
+    每条调用点由闸门验证「在 `if not H(...)` 的否定分支里且真的 return」。
+  - 数字：qb-houses 19 → 0；全仓未登记 **231 → 212**、qb **149 → 130**、allowlist **91 → 92**。
+- **P1-3 批 4：qb-drugs 角落贩售 / qb-prison / qb-weapons 共 20 个事件**（2026-11-08）：
+  - **印钱**：`updateDealerItems` 忽略 `RemoveItem` 的返回值 —— 库存打空时调一次
+    `{slot=1}, 999, 'Sandy Dealer'` 就 `AddMoney(999×15)`（实测旧代码 PAID=14985，背包一件没有）；
+    坏 slot 还会 `attempt to index a nil value` 崩服务端。现在 dealer/slot/name 逐个校验，
+    先扣货、`RemoveItem` 返回 false 就不发钱。
+  - **武器复制**：`TakeBackWeapon(k)` 不校验归属与修理状态 —— 任意玩家对任意 k 都能取回，
+    送修者修好后再取一把（实测旧代码 ADDED 1→2→3）。现在要求 `CitizenId` 对得上、`Ready == true`，
+    取走即清记录。
+  - **无限弹药**：`UpdateWeaponAmmo` 把客户端 `amount` 原样写入（实测 999999 / -5 都写进去），
+    且不比对武器名。现在夹到 0~9999、必须整数、槽位与名字都要对。
+  - **监狱**：`SecurityLockdown` / `SetGateHit` 原来任意玩家调一次就能锁死全监狱 / 刷破门广播；
+    `JailAlarm` 无冷却可连点刷警报。三个都补了（狱警/在押者限定 + 60 秒冷却）。
+  - **角落贩售**：`giveStealItems` 只比对 item/amount，任何玩家都能领走别人被抢的货 →
+    记录里存 src 并要求一致；`availableDrugs[drugType]` 用物品名索引数组恒为 nil（rob 路径直接抛错）→
+    改按名字查表；`sendDeliverySMS` 的文案改为非空字符串 + 300 字截断。
+  - 数字：全仓未登记 **253 → 231**、qb **171 → 149**、allowlist **64 → 91**；
+    新增两组 Lua 沙箱探针（dealer 卖货 / 武器取回），旧实现实测全红。
+- **P1-3 批 3：qb-vehicleshop 5 个事件（分期还款 / 全额结清 / 分期购车 / 代客售车）**（2026-11-08）：
+  - **两个真漏洞**：①`financePaymentFull` 的 `vehBalance` / `vehPlate` 全来自客户端 —— 付 1 块钱就能把
+    **别人**的分期记录 balance 清零（等于白送一台车）；②`financePayment` 的 `vehData` 同样是客户端给的，
+    `UPDATE … WHERE plate = ?` 也能改到别人的车。现在余额/期数/每期额一律
+    `SELECT … WHERE plate = ? AND citizenid = ?` 从 DB 取，UPDATE 也带 citizenid。
+  - **代客售车没有店员校验**：任意玩家可把旁边路人的钱扣掉给对方买车、自己拿提成 ——
+    `sellShowroomVehicle` / `sellfinanceVehicle` 现在要求 `job.name == 'cardealer'` 且 onduty。
+  - 三处 `QBCore.Shared.Vehicles[vehicle].price` 直接索引（客户端传坏车名会让服务端崩）→ 先校验车型存在。
+  - 数字：qb 未登记 **176 → 171**；全仓 **258 → 253**（allowlist 61 → 64，两个代售事件转 guarded）。
+- **P1-3 批 2：qb-ambulancejob 7 个事件（复活/治疗/病床/药箱）**（2026-11-08）：
+  - `RevivePlayer` / `TreatWounds` 原来把权限判断写成「if 是 EMS then 干活」，闸门不算鉴权；
+    改成 deny-early：抽出 `CanRevive(Player, src)` helper（在职 EMS，或 firstaid + medical_cert），
+    非授权直接审计 + return。登记进 `net_event_guard_helpers.json`。
+  - `removeBandage` / `removeIfaks` / `removePainkillers` 只动 caller 自己的背包 → 登记 `self_scoped`。
+  - `SendToBed` / `RespawnAtHospital` 是平民也要用的路径 → 登记 `civilian`，并补**索引校验**：
+    `bedId` / `hospitalIndex` 全是客户端传的，原来直接索引 `Config.Locations['hospital'][idx]['beds'][bedId]`
+    能让服务端崩；现在 tonumber + 查表命中失败即 return。
+  - 顺带把变异冒烟的锚点从 `"guarded": NN`（每清一批就失效）改成 `"events": 440`（总数稳定）。
+  - 数字：qb 未登记 **183 → 176**；全仓 **265 → 258**（allowlist 56 → 61）。
+- **P1-3 批 1：qb-management 8 个老板菜单事件转「已鉴权」**（2026-11-08）：
+  - 这 8 个事件（bossmenu 4：GradeUpdate / FireEmployee / HireEmployee / TransferOwnership；
+    orgmenu 4：GradeUpdate / FireMember / HireMember / TransferOwnership）
+    本来就有 isboss + 菜单点 5m 双重校验，只是闸门不认识内联的 `job.isboss`；
+    现在抽出两个 helper（`IsJobBoss` / `IsPlayerBoss`）并登记进 `net_event_guard_helpers.json`，
+    闸门按登记证据逐条验证（定义一次 + 函数体含 `isboss == true` + 调用点必须是 `if not ... then return`）。
+  - 顺手补真洞：**招募可以隔着地图把人塞进职业/组织/帮派**（原来只校验 Boss 在菜单点，不看目标），
+    三个 Hire 事件都要求目标也在 5m 内；sv_boss / sv_gang 缺 `if not Player then return end` 的
+    handler 一并补上。
+  - 顺带修掉一条**失效的闸门变异**：`tools/dev/gate_mutation_smoke.py` 里锚点 `"guarded": 19,` 随 P1-3
+    清债早已不存在，这条变异一直在静默跳过（CC 复核发现）；改锚到当前 qb 批次的 guarded 数，
+    现在 12/12 都是「注入红 / 对照绿」。
+  - 数字：qb 未登记事件 **195 → 183**（合计 277 → 265）；qb-management guarded 8 → 12。
+- **P1-5 阶段 G：掉线配送结算（押金不再白丢，也不白送一件货）**（2026-11-08）：
+  - 之前：接单后掉线 = 押金没收、货留在背包（与“接了不做”等价，但玩家是意外掉线，体验上像被罚）。
+  - 现在：`playerDropped` 把未结算的配送记到 citizenid 名下；玩家**重新上线**时结算 ——
+    货还在就回收并全额退押金，货没了就不退（避免“退了押金又白拿货”）。
+    不在离线阶段动背包：离线装卸 inventory 会和存档打架。
+  - 新增用例：`test_drop_settlement_refunds_only_when_goods_are_recovered`
+    （退 500 + 货清零 / 货没了退 0；qb-inventory 未就绪时保留 pending、下次上线补退），退回上一版实现时红。
+  - CC 复核的非阻断项已采纳：结算改成「成功后才消费 pending」+ `pcall` 包住 `RemoveItem`
+    + `RemoveItem` 未注入时打印并保留 pending（qb-inventory 热重启期间登录不会丢退款）。
+  - 仍留一条：pending 无 TTL（玩家永不上线则常驻内存，条目很小；服务器重启会丢），
+    需要落表或加过期，已记入计划遗留。
+- **P1-5 阶段 E：金额 `$%d` A 档 26 处偿还（93 → 68）**（2026-11-07）：
+  - 按 CC 的分诊口径（A 真风险 / B 假风险 / C 待定），只修 A 档：实参可能是小数的那些。
+    A 档分布：qb-drugs 8、custom-cartel 9、custom-crime 3、custom-security 2、custom-main 2、
+    custom-market 2（余额与管理员改价），共 26 处字面量。
+  - 每个资源自带一份 shared 目录下的 money_format 模块（函数名 `Money`），不跨资源引用 —— 避免新增加载顺序依赖。
+    语义：整数不带小数点（$500）、小数两位（$61.75）、非数字回落 `0`。
+  - B 档 21 处（整数常量 / `math.floor` / DB 整数列）留在基线里，`$comment` 已注明是假阳性；
+    C 档 46 处多为 `production-freeze` 的 locale 模板串，不参与 `format`。
+  - 新增 `test_money_renderers.py`：8 个渲染器 × 8 组输入（0.5 / 61.75 / 负数 / 字符串 / nil / 非数字），
+    防止某个资源的 `Money()` 把整数渲染成 `500.00` 或对 nil 抛错。
+- **P1-6 阶段 C：17 条 server 风险清零 + 同步重解析改成线程重试**（2026-11-07）：
+  - 17 个 `[qb]` 资源补 `onResourceStart('qb-core')` 重解析；其中 qb-doorlock / qb-garages / qb-weed
+    原本的处理器只认**自己**启动，另挂专用处理器。基线 server 17 → **0**。
+  - ⚠️ 关键订正：PR #196 那种**事件里同步**调 `exports['qb-core']:GetCoreObject()` 不可靠 ——
+    再跑一次真机复现 `qb-clothing/server/main.lua:9 … Execution of function reference in script
+    host failed`（事件触发时本资源持有的 export 引用仍指向旧 script host）。改成 `CreateThread`
+    里 `pcall` 重试（最多 30 次 × 500ms），复验 0 SCRIPT ERROR。
+  - 扫描器的重挂判定接受两种安全写法（直接赋值 / 线程重试后 `QBCore = core`），但仍要求给同一
+    变量赋值且附近有 `GetCoreObject`。
+- **P1-6：`restart qb-core` 后的「失效函数引用」+ 审计留存**（2026-11-07）：
+  - 真机 `qb-clothing` 报 `Execution of function reference in script host failed` —— 这是第三类跨资源引用问题：
+    文件顶层 `local QBCore = exports['qb-core']:GetCoreObject()` 拿的是**当次 script host 的快照**，
+    qb-core 重启后表里的函数引用全部失效。与「MySQL 回调里调引用」（PR #193/#194）不是一回事。
+  - 修 qb-clothing（加 `onResourceStart` 重解析）与 custom-security（原重挂只复位标记、**没重解析 QBCore**，
+    守卫会挂到旧表上）。新增闸门 `test_no_stale_core_cache.py`：四条件判定 + server 17 条基线棘轮
+  （另 19 个 client 文件记 `client_unverified`，跨客户端语义未验证，不进棘轮但新增判红）。
+  判重挂是结构化匹配：`RegisterNetEvent` 冒充、注释里的假重挂、给别的变量赋值都不算自愈。
+  - 审计留存：按天分片 + 保留 30 天（`custom_logs_retention_days`）+ 单文件 10MB 滚动 + 单日 20 片封顶，
+    启动宽扫 10 年清积压、每小时窄扫；**删除只看 retention**（第一版写错过，把 5 天前的文件删了，被测试抓住）。
+  - 真机：`restart qb-core` + resync + 客户端加载 → 0 SCRIPT ERROR；`🧹 启动清理：删除 1 个过期审计分片`。
+- **P1-5 阶段 B/C/D：金额格式化偿还 + 审计桥接 + 重启 SOP**（2026-11-07）：
+  - **B**：`custom-taxes` / `custom-phone` / `T-CityLite.base/resources/[custom]/custom-quest` 各加一份资源内的 money_format 共享脚本
+    （TCMoney / PhoneMoney / QuestMoney 三个函数，语义一致：整数不带小数点、小数两位），
+    把税（比例计算）、转账、乘算奖励这些**必然带小数**的金额从 `$%d` 改成 `$%s`；
+    金额格式化基线 **120 → 93**（`qb-drugs` / `custom-cartel` 仍留在基线里作为债）。
+  - **C**：`custom-logs` 新增 `qb-log:server:CreateLog` 桥接 —— 全仓 47 处发送点此前**零消费者**
+    （唯一监听者在 `archive/`，不启动），经济/反作弊/进出服审计全部丢失。桥接用
+    `AddEventHandler`（不是 `RegisterNetEvent`，防客户端伪造），按 `playermoney`/`anticheat` 分流到
+    已有的 `LogEconomy`/`LogSecurity`/`LogGeneric`；落盘前过 `SanitizeLogText`
+    （citizenid 掩码、license/ip/discord/steam 打码、控制字符清掉、截断 500）。
+  - **D**：`tools/dev/resync_modules.ps1`（RCON 包装，`-DryRun` 打印 17 条 `exec`，跑完核对资源数 85）
+    + `docs/engineering/2026-11-restart-sop.md`（`restart qb-core` 会停 44 个依赖资源的 SOP）。
+- **P1-4 阶段 D：compat.lua 整份下线**（core-framework）：删掉 `QBCore.Functions.Notify` 的包装、
+  fxmanifest 去掉该行、文件删除，猴补登记表 5 → 4 条。删除而不是「改 export + GetResourceState 守卫」的理由：
+  export 到已停止的资源一样失败（只是换了个报错位置），且会多出第二个 Notify 入口；而这一层还静默改变语义
+  —— notify_service 每源 200ms 只放 1 条、超限直接丢、没有丢弃计数，qb-core 原实现不丢消息。
+  新增 `tests/architecture/test_compat_notify_removed.py`：文件已删 / manifest 不再引用 / 没有 `_G.Bus` 时
+  qb-core 的 Notify 仍把 `QBCore:Notify` 发出去（qb-core 从未注册 `Bus.notify`，恒走第 5 层回退）。
+  三条各配变异，「注入红、对照绿」实测通过。阶段 B/C 的两个包装级单元测试随文件退休。
+- **P1-4 阶段 C：删掉 `Player.Functions.AddMoney` 的包装（纯删除，一行不修）**（core-framework）：
+  这段包装今天本来就是死代码 —— `_G` 不跨资源，core-framework 里 `_G.Bus.EconomyService` 恒 nil，
+  ES 分支整段跳过、永远回落。但"死"不等于"无害"：它每 10 分钟把 Notify 与 AddMoney 的计数混在一起打印
+  （运维会以为加钱走了新路径），而且它的形参是 `self` 而全仓 60 处调用点是 3 参 dot 调用 —— 一旦有人
+  "顺手修好"ES 可见性，`self = 'cash'`，每个加钱点直接 SCRIPT ERROR；修好传参而不改签名则是
+  pcall 回落 + 原函数各调一次 ES = **双倍加钱**。所以只删不修。新增单元测试断言 PlayerLoaded 之后
+  `Player.Functions.AddMoney` 仍是玩家自己那个函数、调用确实落在它上面；换回旧实现 1 红。登记表 6 → 5 条。
+- **P1-4 阶段 B：删掉 `QBCore.Functions.GetPlayer` 的缓存猴补**（core-framework）：qb-core 的
+  `GetPlayer` 本来就是一次表查，compat 外面套的 `playerCache` + `GetPlayerName` 活性校验有三个问题：
+  命中时多一次 native 调用；**登出时不清缓存**（`QBCore.Player.Logout` → `OnPlayerUnload` → 200ms 后才置 nil，
+  compat 没监听该事件）→ 停在选人界面的玩家会拿到**已登出**的 Player 表，`if not Player then return end`
+  全线失效；本资源重启后旧 funcref 留在 qb-core 表里形成叠层。新增单元测试断言：函数**本身**仍是 qb-core
+  那一个（不是返回值相等）、`Players[src]` 清空后返回 nil、字符串 source 不抛错（旧实现的 `source <= 0`
+  会 attempt to compare string with number）。换回旧实现该用例 1 红 1 绿；闸门登记表 7 → 6 条。
+- **P1-4 阶段 A：猴补闸门落地（冻结新增，存量 7 条带到期日）**（架构闸门）：`core-framework` 的
+  compat 一直在往 `QBCore.Functions` 上赋值（`GetPlayer` / `Notify` / `AddMoney`），这类改动在 diff 里
+  看不出来——调用点一行没变。新增唯一扫描器 `monkey_patch_scan.py` + 闸门 `test_no_monkey_patch.py`：
+  覆盖四种赋值形态（`function X.Y(`、`X.Y =`、`X["Y"] =` 单双引号、裸 `QBCore.X =`），排除 qb-core
+  （API owner）与 tests；登记表要求 owner + expires，**死条目**（登记了却一处都不命中）同样判红。
+  实测存量 8 处命中 / 7 个 (file,symbol)：core-framework 三条、custom-vehicles 的 `OnGiveKeys`（兼容层）、
+  production-freeze 的 Debug/ShowError/ShowSuccess（dev-only 工具）。两条边界写进扫描器：
+  `_G.Bus.X =` 是总线注册不算猴补，客户端文件里的裸 `QBCore.X =` 是玩家数据快照不算。
+  三条变异用例（新增未登记猴补 / 登记过期 / 死条目）全部"注入红、对照绿"。
+- **[custom] net event 覆盖率 85.7% → 90.2%（第 5 批）**：133 个 `[custom]` 事件里 120 个已鉴权或已登记。
+  真修两处：① `qb-mechanicjob:server:updateDrivingDistance`（旧兼容事件）**完全没有校验** ——
+  任何客户端可以给任意车牌刷里程；现在先过 `CanModifyPlate`。② 中控屏锁表原来用**原始**车牌作键
+  （" abc123 " 与 "ABC123" 能拿到两把锁），统一 `NormalizePlate` 并抽出 `HoldsDashboardLock`。
+  另把物流交单的"有具体物流任务"抽成 `FindLogisticsQuest`（只认 euro_trucking_* / aviation_smuggling_flight
+  三个模板），三条自作用域事件（`releaseDashboard`、`RemoveKeys`、`ToggleEngine`）按真实语义登记。
+  统计口径：440 事件 / 105 已鉴权 / 56 已登记 / 279 未登记 / 53 个债资源。
+- **[custom] net event 覆盖率 80.5% → 85.7%（第 4 批）**：133 个 `[custom]` 事件里 114 个已鉴权或已登记。
+  这批补的是"归属/前置条件住在别处"的三类：`custom-agent-client` 的 `ClaimPending`
+  （ack 的 rid 必须在**自己的** pending 表里且 session 令牌一致）、`custom-justice` 的
+  `JusticeService.GetOwnInmate`（只吃调用者自己的 Player 对象——探视请求判的是**目标**，因此单列 civilian 不计入）、以及 `job_deny_guard` 支持
+  "先取职业名再比较"（`local callerJob = Caller.PlayerData.job.name`）这种别名写法 —— 直接拿下
+  `justice:server:imprison`（原来只判了 caller job 但扫描器看不见）与 `qb-mechanicjob:server:stash`。
+  `custom-agent-client` 的 `ready` / `state` / `devcmd_result` 按真实语义登记（自作用域 / 遥测），
+  并给 `devcmd_result` 补了每源 500ms 节流与长度上限（原来任何客户端都能刷服务端日志）。
+  统计口径：440 事件 / 102 已鉴权 / 53 已登记 / 285 未登记 / 54 个债资源。
+- **[custom] net event 覆盖率 64% → 80.5%，P1-3 的 ② 达成（第 3 批）**：133 个 `[custom]` 事件里
+  107 个已鉴权或已登记。这一批把"校验住在别处的"四类都做了可验证登记：警情分发器
+  （`PoliceDispatch.ArriveIncident` / `.ClaimIncident`、`NPC.SubmitResult`：能力位判定在被调函数体内）、
+  导出函数（`AdoptDraft` / `ListDrafts`：能力位 + 审计）、任务安全层
+  （`QuestSecurity.ValidateClientEvent`：nonce + 限频 + 步骤顺序 + 尝试次数）、帮派成员
+  （`CartelService.IsMember`）。登记表新增 `shape`（`local_check` / `pcall` / `export` / `delegate`），
+  每种形状都要求"返回值真的被判定"而不是"名字出现过"。同时加了一个 token `job_deny`
+  （形如 `if xjob.name ~= '…' then … return end` 的职业白名单判定，与 `HasPermission` 同级）。
+  真修四处：① `quest:server:placementComplete` / `trailerHitched` 原来只查状态不查任务归属，
+  任何人可对任意 questId 上报"放好了/挂上了"，现在先过任务安全层；② `custom-cartel` 的 NPC 回调
+  取了 `IsMember` 却没用，非成员也能拿到 NPC 列表；③ `custom-vehicles` 的 `GiveKeys` 与
+  `AcquireVehicleKeys` 各写了一遍认领校验且宽严不一 —— 收敛成 `CanClaimPlate`（会话车主 /
+  数据库车主 / 车旁三档），顺手给 `GiveKeys` 补上了它没有的数据库车主校验。另删除
+  `quest:server:entityRecycled` 这个注册成 NetEvent 但函数体为空的死 handler。
+- **net event 覆盖率 48% → 64%，并补上"资源自己的校验也算数"的登记表（P1-3 第 2 步）**：
+  `[custom]` 从 64/134 提到 **86/134**。做法不是放宽 token 名单，而是新增
+  `tests/architecture/net_event_guard_helpers.json` 登记**资源内部**的鉴权 helper
+  （`CanModifyPlate` / `IsEmergencyService` / `IsSeatedIn` / `IsSeatedInPlate` / `onDutyOfficer`）：
+  每个 helper 必须定义唯一、函数体含约定证据（剥注释后比对）、资源内**每一处**调用都走
+  `if not H(...) then return`，登记了却没有调用点也算红。顺带修了三处真问题：
+  ① `custom-vehicles:server:logisticsQuickLoad` 原来只有限频、没有"有活才能装货"，任何玩家能推任务进度；
+  ② `dashboard_api` 的职业判断在三个事件里重复且两个事件压根没有 —— 抽出 `IsEmergencyService`，
+     给 `policeRadarLog`（伪造超速记录）和 `anchorControl` 补上；
+  ③ 中控屏锁 `requestDashboard` 能被不在车内的人抢走（远程占位），改为必须坐在该车牌车内；
+     氮气火焰广播只允许车内的人触发。基线总计 441 事件 / 63 已鉴权 / 61 已登记 / 317 未登记，
+  11 条变异用例全部"注入红 / 对照绿"。
+  验收方（CC）第一轮抓出两个 P0 并已修：① 抽 `IsEmergencyService` 时连 `local job` 一起删掉，
+  PA 喊话穿过鉴权后必抛 `job` 为 nil —— 运行时才炸；② `[system]/tcity-dashboard` 里另有一份
+  同名 `logisticsQuickLoad` 的无守卫 handler（net event 按名字全局派发），把刚补的守卫整个旁路，
+  已删除副本并加注释说明为什么不能有第二份。登记表的门槛同时收紧：证据比对限定在**函数体**、
+  调用点必须"否定分支里真的 return"（`if not H(x) then end` 不算）、`if false` 死代码不算、
+  同名 helper 以登记表的严格形状为准（此前 `extra` 覆盖会把严格模式降级成宽松词匹配）。
+- **net event 治理落地基线，引擎层覆盖到 100%（P1-3 第 1 步）**（qb-core / 架构闸门）：`QBCore:Server:TriggerClientCallback` 以前**任何客户端都能 resolve 任意待决的客户端回调**（回调只按名字索引，没有归属），伪造返回值会直接进服务端逻辑；现在建回调时记 `source`、handler 校验 `pending.source ~= src`，顺带修掉"回答后条目被清空、`Citizen.Await` 恢复时索引 nil"的潜伏错误。新增唯一扫描器 `net_event_scan.py`（闸门与基线生成器共用，支持内联与 `RegisterNetEvent` + `AddEventHandler` 两种写法），把全仓 **442 个服务端 net event** 固化成 `T-CityLite.base/tests/architecture/net_events_baseline.json`：引擎层 qb-core 15/15（5 已鉴权 + 10 按真实语义登记），`[custom]` 64/134、`[qb]` 16/216、其它 7/77；58 个还有欠账的资源各有 owner + expires 的债（其中 15 个不在启动集，占 93/340），新增未鉴权事件、变量名注册、解析失败、过期债、手改数字全部会红（10 条变异用例证明"注入红/对照绿"）。三个新登记类别都带可检查承诺（`self_scoped` 必须有 `local src = source` 且不索引别的玩家、`callback_relay` 必须走 `ServerCallbacks[name]` 且高危目标有守卫、`deprecated_blocked` 必须写安全日志、且不含列出的写 API（AddItem/RemoveItem/AddMoney/RemoveMoney/SetMetaData/SetJob/SetJobDuty/SetGang/SetMoney、任何 `MySQL.*`、`exports[...]:Set*`））。`[custom]` 覆盖率 48%，距计划里的 80% 还差 44 个事件，记在 `docs/engineering/2026-11-foundation-net-events-baseline.md`。
+- **`tools/dev/gate_mutation_smoke.py` 撤注入后清理新建的空目录**：变异用例把文件写进不存在的资源目录时，`unlink` 只删文件，空目录会让 `test_no_orphan_scripts`（每个 `[custom]` 目录必须有 fxmanifest）误红。
+
 ### Fixed
+
+- **P2-3：迁移版本号唯一 + 可重复执行**（2026-11-08）：`migrations/` 下有 **4 组重号**
+  （v0.7 ×2、v2.2 ×2、v3.11 ×2、v3.12 ×2）。重号不会让 `local_stack.sh` 崩（它用 `ls | sort -V`），
+  但把「谁先跑」变成了文件名字母序的意外结果，同一个版本号下两条迁移互相看不见。给每组里引用较少的
+  那个加二级号并同步 8 处引用：`v0.7_story_engine` → `v0.7.1_story_engine`、`v2.2_schema_reconcile` →
+  `v2.2.3_schema_reconcile`、`v3.11_police_case_verdict` → `v3.11.1_police_case_verdict`、
+  `v3.12_police_incident_ref` → `v3.12.1_police_incident_ref`（docs / 测试 / e2e README 一并更新）。
+  幂等这边修了一处真缺陷：`v2.1_perf_indexes.sql` 原来裸 `ALTER TABLE players ADD COLUMN phone_number
+  … VIRTUAL` + `CREATE INDEX`，**第二次执行必然** `ERROR 1060 Duplicate column name 'phone_number'`
+  → 四步都改成先查 `information_schema` 再 `PREPARE/EXECUTE`（沿用 v3.11/v3.12 的形状）。
+  新增闸门 `tests/architecture/test_migration_versions.py`：版本号前缀唯一（零基线零豁免）+ 文件名
+  必须是 `v<version>_<snake>.sql`，配 3 条反向形状（重号树 / 坏名字树 / 干净树）与 2 条
+  `gate_mutation_smoke` 变异用例（注入重号文件、注入坏文件名），实测「注入后红、对照绿」；
+  `gate_coverage` 未证明数仍 276。幂等性用 `tools/dev/migrations_double_apply.py` 在真库上验证：
+  先铺基线 schema（并删掉 dump 里已带的 `phone_number` / `idx_players_phone`，否则 v2.1 的 DDL 分支
+  只会走 `DO 0`，等于没验），再把 35 个迁移连跑两遍 —— **35/35 × 2 遍无错误**。
+  另按 CC 复核修了两处：① `v2.1_perf_indexes.sql` 的 PREPARE 串里引号层数写错（`"''$.phone''"`
+  会被解析成带引号的 `'$.phone'`，MySQL 报 3143 非法 JSON path）→ 去掉双引号；用**不含**该列的最小
+  schema 实测：ALTER + 3 条 CREATE INDEX 真的执行、插入后 `phone_number` 取值正确、第二遍幂等
+  ② 5 个迁移文件里 8 处注释/Run 指令仍指旧文件名。`tests/integration/` 里有同名
+  用例复用该工具（没有 docker / 容器时 skip，静态闸门在 CI 里始终生效）。
+
+- **P1-5 二期：金额写路径收敛（拒绝语义）**（2026-11-08）：`SecurityService` 里新增
+  `ValidateAmount(amount, opts)` 作为金额入参的**唯一**实现（非数字 / NaN / inf / 负数 / 0 / 超过
+  `MONEY_MAX_SINGLE_TRANSACTION` 一律拒绝，**不 clamp**），`ValidateMoneyEvent` 的金额四步也收敛到它。
+  三个写入口全部接上：`EconomyService.AddMoney` / `RemoveMoney` / `SetMoney`，以及 qb-core 的
+  player.lua 里 offline 与 `Bus.EconomyService` 缺失时的 fallback 共 6 条分支 —— 之前**同一个非法输入
+  在不同路径得到不同答复**：`AddMoney` 接受 NaN（钱写成 NaN）、接受 inf、接受 5,000,001；`RemoveMoney`
+  接受 NaN；fallback 分支这些全放行；只有 `SetMoney` 有阈值熔断。探针对 master 实测
+  `ECONOMY_AddMoney_NAN|accept` / `_INF|accept` / `_OVER|accept` / `ECONOMY_RemoveMoney_NAN|accept`，
+  新版全 `reject`，而 `999999`（低于阈值）与 `SetMoney(0)`（清空）仍放行 —— 全拒的实现过不了这几条。
+  新增闸门 `tests/architecture/test_money_write_path.py`（3 条判据：money 表只许收敛层写、阈值只定义
+  一次、三个入口都调 `ValidateAmount`；4 条反向形状 + 注释/字符串不算命中），并给 `tools/dev/gate_mutation_smoke.py`
+  加 3 条变异用例（注入跨资源写表 / 第二份阈值定义 / 摘掉校验），三条实测「注入后红、对照绿」；
+  `gate_coverage` 未证明数仍为 276。`money_format_baseline.json` 因删掉一行 `$%d` 的 SECURITY 日志
+  同步重生成（债 68 → 67）。真机（0 玩家在线）：`start qb-core` 后 `[SecurityService] ✅ Registered` →
+  `[EconomyService] Registered` 顺序正确、无 assert 失败，`resync_modules.ps1` 补回连带资源后 89 个资源
+  0 `SCRIPT ERROR`。CC 复核的两个跟踪项也一并处理：① `player.lua` / `economy_service.lua` 里原来的
+  `assert(_G.Bus.SecurityService)` 改成「告警 + `ValidateAmount` 全拒绝桩」—— assert 会让整个
+  player.lua（`QBCore.Player` 全部定义）加载失败，故障面远大于经济模块；② `qb-cityhall` 的
+  `RemoveMoney('cash', itemInfo.cost)` 加 `cost > 0` 守卫（cost 为 0 是合法的免费项目，
+  收紧后 `RemoveMoney(0)` 返回 false 会把它卡成"钱不够"）。1322 passed / 147 skipped。
+
+- **P1-3 批 20：qb-weed 5 + qb-streetraces 3 —— `[qb]` 归零**（2026-11-08）：qb-weed 先修了一个
+  "这个资源根本跑不起来"的 bug —— `local plantCache = {}` 声明在文件**末尾**（第 126 行），而
+  `placePlant` / `removeDeathPlant` / `harvestPlant` / `foodPlant` 四个 handler 都在它之前，引用的是
+  全局 `plantCache`（nil）。对 master 版本跑探针，五个崩溃点：`server/main.lua:43/49/68/97` 的
+  `attempt to index a nil value (global 'plantCache')` 与 `:63` 的 `attempt to index a nil value
+  (local 'Player')` —— **"种一株植物"每次都会抛错**（行写进 DB 了，缓存行抛错、后续刷新不执行）。
+  把表挪到所有 handler 之前，并删掉末尾那份会把作用域再遮蔽一次的重复声明。在此之上补校验：
+  `placePlant` 原来**连 Player 都没取**（任何客户端都能往 house_plants 塞任意行）→ 要求 Player +
+  house 非空 + sort 在 `QBWeed.Plants` 白名单 + coords 能解出地图内 x/y/z + 单屋 20 株上限；
+  `removeDeathPlant` 只能铲缓存里且 building 对得上的植株；`harvestPlant` 的 `amount`（只用来发种子）
+  夹成 1..6、`plantName` 走白名单；`foodPlant` 的 `plantName` 走白名单（原来
+  `QBWeed.Plants[plantName]['label']` 遇到坏名字直接 nil 索引崩线程）。CC 复核又抓到一条**我自己引入的
+  P0**：`house_plants.plantid` 是 varchar(50)，DB 回来与客户端回传的都是**字符串**，而 `placePlant` 用
+  `math.random` 的**数字**当缓存键 —— 于是「本次会话种下的植株」在 `removeDeathPlant` / `harvestPlant`
+  里按字符串查必然 miss（死株铲不掉），收获时 `plantCache[plantId] = nil` 也只清字符串键、数字键条目
+  变成幽灵继续占着单屋 20 株上限。修法：缓存键统一 `tostring`（含启动加载），并补「刚种下 → 收获 → 铲除」
+  的探针用例。qb-streetraces 三条**本来就是**
+  服务端权威（stake 夹在 Config 区间、奖池按参赛人数重建、先销毁赛局再发钱、禁重复报名），本轮把
+  `RaceId` 规范成数字并登记，不改玩法。⚠️ 两个资源都不在启动集里，所以只有 `luac5.4 -p` + 探针，
+  **没有真机验证**。数字：未登记 **67 → 59**，**`[qb]` 216/216 与 `[custom]` 133/133 全部归零**；
+  allowlist 181。
+
+- **P1-3 批 19：qb-shops 5 条 + 修复批 17 的登记回退**（2026-11-08）：
+  `qb-shops:server:PaySlip(drops)` **全仓没有任何客户端调用点**（deliveries.lua 只发 RestockShopItems /
+  DoBail），却按客户端给的 `drops` 直接 `AddMoney('bank', Config.DeliveryPrice * drops)` —— 站在交货点发
+  `PaySlip(99999)` 就是 500 × 99999 的印钞机（探针实测旧版 `PAYSLIP_CLIENT_BLOCKED=false`）→ 改成只认
+  服务端来源。`RestockShopItems(shop)` 的 `deliveryPay` 有 10 米距离校验，但没有冷却也没有次数概念：
+  站在交货点循环发就能一遍遍拿 500 + 10% 概率的 `cryptostick`（旧版 `RESTOCK_COOLDOWN_BLOCKED=false`）
+  → 加 30 秒冷却（**键是「玩家 + 店」**：只按玩家计会吞掉同一玩家跑下一家店的工资，而路线里相邻两家的
+  交货点可能只隔 47 米），距离校验改成显式的 `nearCoords` helper（`deliveryPay` 内部那次是"不付钱就
+  return"，闸门认不出是守卫）。`UpdateShopItems(shop, itemData, amount)` 的 slot/amount 全客户端给：坏 slot 抛
+  `attempt to index a nil value`，负数 amount 会把库存**加上去**（白拿货）→ slot 必须命中该店商品、
+  amount 正数并夹到 1000。`openShop(data)` 的 `data` 为 nil 时抛错、且能在任意位置开任意店 →
+  类型校验 + 与门店坐标 5 米内。`DoBail` 补 Player 判空与 bool 类型校验。
+  另修一个**我自己在批 17 引入的回退**：`net_event_guard_helpers.json` 里 `custom-justice` 是整键覆盖，
+  把原有的人 `JusticeService.GetOwnInmate` 登记冲掉了，导致 `requestReduction` / `sentenceComplete`
+  从「已鉴权」翻回「未登记」（本轮恢复，custom 重新归零）。教训已写进 static-rule-gates 技能：
+  登记表一律 merge，不许 `d[key] = {...}`。
+  探针：qb-shops（补货工资的距离/冷却、PaySlip、库存扣减、开店距离）。数字：未登记 **74 → 67**
+  （qb 13 → 8、custom 2 → 0、allowlist 173）。
+
+- **P1-3 批 18：tcity-dashboard 3 + story-engine 2 + production-freeze 2**（2026-11-08）：
+  `tcity-dashboard` 的车牌标记/取消/追踪器**本来就是**「在职警察」（`isOnDutyLeo`：`job.type == 'leo'`
+  或 `job.name == 'police'` 且 onduty），本轮登记进 helpers；真修的是参数——`plate:upper()` 遇到
+  nil / 数字直接抛错打断事件线程（旧版实测两处 `attempt to index a nil value (local 'plate')`），
+  `reason` 也无长度上限 → 加类型/长度校验。`story:server:makeDecision` 的校验全在
+  `DecisionEngine.MakeChoice`（按 source 存 pending、quest/step/decision 三元组必须全等、带
+  expiresAt），本轮给它补 `return` 并登记成 delegate 形状。`tcity:client:telemetry` 会**写库**
+  （agent_events）而事件名/payload 大小/频率全由客户端定：一个改过的客户端可以每帧写一条大 payload
+  把表写爆（旧版实测 200 条全落库，`TELEMETRY_RATE_LIMITED=false`）→ 现在 64 字 / 2KB / 60 秒 120 条。
+  `i18n:client:reportLanguage(lang)` 原来客户端传什么就写什么（表、4000 字串、伪造的 `'xx'` 都进
+  `metadata.client_lang`）；顺带发现这个文件**根本没取 core object**（`QBCore` 在本资源恒为 nil），
+  所以「读/写玩家语言」两条路都是死代码、服务端永远按 en 渲染 → 显式 `GetCoreObject()` + 走
+  `Player.Functions.SetMetaData`，语言代码只认 `zh`/`en`。`production:client:freezeDebug` 是**客户端**
+  事件却注册在服务端 main 脚本里并被 `TriggerClientEvent(..., -1)` 广播 —— 服务端注册的 handler 永远
+  收不到广播，所以「生产模式关闭客户端 DrawText3D / PolyZone debug」从未生效，而那份服务端副本还让
+  任何客户端能覆盖**服务端**全局 → 处理器回到客户端的 main 脚本，服务端只留 `source ~= 0` 就拒绝的空实现；
+  同时删掉客户端 i18n 脚本里那份永远收不到的服务端事件注册。三个探针（dashboard / story telemetry /
+  i18n lang，位于 layer3_business 的 fixtures 目录）。数字：未登记 **81 → 74**（custom 4 → 2、
+  other 64 → 59、allowlist 162）；真机 restart 三个资源 0 错误。
+
+- **P1-3 批 17：qb-adminmenu / custom-justice / qb-hud / qb-scoreboard**（2026-11-08）：
+  `qb-admin:server:GetPlayersForBlips` **没有任何权限校验**，谁发谁拿，而下发的 `qb-admin:client:Show`
+  是**全服玩家的名字 + 实时坐标**——等于把 wallhack 发给所有人（客户端在轮询，拿到就是持续跟踪）。
+  客户端只在管理员打开 blips/names 开关时才轮询，所以服务端按 `admin` 权限 + ACE `command` 对齐不会
+  堵死任何职能（旧版实测 `BLIPS_CIVILIAN_BLOCKED=false`）。`hud:server:GainStress` /
+  `RelieveStress(amount)` 的 `amount` 全来自客户端：表/字符串让 `currentStress + amount` 直接抛
+  `attempt to perform arithmetic on a table value (local 'amount')` 打断事件线程，超大数字能一键把
+  压力拉满或清零 → 统一走 `sanitizeStressStep`（必须为正数、上限 100，与 qb-ambulancejob 治伤发的
+  100 相容）。`qb-scoreboard:server:SetActivityBusy(activity, bool)` 全仓**没有任何客户端调用点**却对
+  客户端开放：任何玩家能用坏 key 让 `Config.IllegalActions[activity].busy` 抛 `attempt to index a nil
+  value`，或者直接改全服的"非法活动占用"状态（等于全服抢劫开关）→ 改成 `source ~= 0` 拒绝 + activity
+  白名单 + bool 类型校验。`custom-justice` 的 `justice:server:imprison` 本来就是警察/法官限定，只是
+  写成正分支，闸门认不出形状 → 抽成 `IsLawEnforcement(Player)` 并登记（行为零变化，探针对旧版同样通过）。
+  另有 7 条登记为 `self_scoped` / `civilian`：证照自发（要求本人持该类执照）、死亡状态重置（冷却 +
+  医院资源运行期拦截 + 审计）、通缉上报（坐标校验 + 星级夹取 + 防刷）、出示证件（配置白名单 + 序列号
+  与持有人绑定）、武器耐久（配置白名单 + 只降自己那把）、stress 两条。三个探针（adminmenu / hud+scoreboard
+  共用一个带模式参数的探针，位于 layer3_business 的 fixtures 目录）。数字：未登记 **89 → 81**
+  （qb 17 → 13、custom 8 → 4、allowlist 160）。
+
+- **P1-3 批 16：qb-fuel 3 + qb-doorlock 3 + qb-mechanicjob 3**（2026-11-08）：三个资源同一类问题——
+  客户端报什么就信什么。qb-fuel 的 `setCanFuel(fuel)` 直接把客户端给的数字写进油桶，而客户端调用点
+  传的是 `canLiter - liter`（语义是**扣减**）；服务端分不清"加满"和"扣减"，任何玩家发一条
+  `setCanFuel(40)` 就白得 40 升油（旧版实测 `CAN_INCREASE_BLOCKED=false`）。改为只允许单调递减 +
+  夹在 0..`Config.JerryCanLitre`；**想"加"的请求直接拒绝并提示**，而不是静默写成当前值 —— 客户端
+  `canLiter` 来自 `GetAmmoInPedWeapon`（油桶 ammo 是 0..100 刻度，`Config.JerryCanLitre` 只有 40），
+  两边错位时静默按当前值写会变成"油桶一个不少、车里油却加上去了"的刷油复制。`refillVehicle(litres)` 的升数夹到 300 升且必须为正（旧版负数会
+  把价格算成负数、`'abc'`/表直接抛 `attempt to mul a 'string' with a 'number'`）；`buyJerryCan` /
+  `refillJerryCan` 加"在加油站 40 米内"（旧版全图任意位置能下单）；老油桶 `info` 为 nil 时旧版
+  `jerryCan.info.fuel = ...` 直接抛错，现在补表。qb-doorlock 的 `updateState` 鉴权对象原来是
+  `sentSource or source`——**客户端塞第 8 个参数报一个在线警察的 server id，鉴权就按那个警察算**，
+  普通的门禁形同虚设（全仓客户端调用点都不传这个参数，旧版实测 `FORGED_SOURCE_BLOCKED=false`）；
+  改为只用 `source` 鉴权、`sentSource` 与 source 不符即拒绝。qb-mechanicjob 的
+  `sprayVehicle`/`sprayVehicleCustom` 没有任何来源校验：任何玩家能给**地图上任意一辆车**免费改色，
+  还能让服务端 `FreezeEntityPosition` 住 `PaintTime*1000` 毫秒（能把别人的车冻在路口）；改为
+  "本店员工 + 在本店喷漆位 20 米内 + 车在 20 米内"（与 client 侧 qb-target 的 paintbooth 职业限制
+  等价）。`removeItem(part, amount)` 顾客修车时也会调，所以**不加**职业限制，只做有界校验
+  （part 必须在 `QBCore.Shared.Items` 里、amount 夹成 1..10 整数）。三个探针（qb-fuel / qb-doorlock /
+  qb-mechanicjob 各一个，位于 layer3_business 的 fixtures 目录），对 master 版本跑实测 12 条断言翻红。
+  数字：未登记 **98 → 89**（qb 26 → 17、allowlist 153）；架构 455 passed / 15 skipped。
+
+- **P1-3 批 15：qb-management 4 + custom-quest 4**（2026-11-08）：qb-management 那三个 boss 仓库入口
+  （职业 / 帮派 / 组织）其实早就写了「本人是 boss + 站在菜单点 2.5 米内」的判定，只是写成
+  `if not playerJob.isboss then return end` 这种闸门认不出来的形状 —— 本轮抽成
+  `CanOpenBossStash(src, Player, orgType, orgName)` 并登记进 `net_event_guard_helpers.json`，
+  **行为不变**（探针对旧版跑也是全绿），换来闸门能按 deny-early 形状持续核对；顺带给
+  `personalStash` 补了 gang 字段类型校验。custom-quest 那四条是「客户端报告任务进度」，
+  原来只判了 `Player` 存在：`aviationHeightMonitorComplete()` **连参数都没有**，任何玩家随手发一条
+  就能把自己「低空飞行 45 秒」的步骤标记完成 → 现在要求 questId 是字符串、确实在跑这单任务、
+  人**在载具里**（机型校验 best-effort：服务端原生不可用时放行，绝不 fail-closed —— 客户端发送后
+  会立即停掉监控，服务端拒绝就没有重试路径）；`registerTrailer` 补「必须正在跑该任务」与
+  **必填**的模型比对（写成 opt-in 的话少传一个参数就绕过）；`entityTrackingFail` 补 questId 校验与任务归属、`reason` 截断 100 字
+  （它会进安全审计日志）；`cargoDamageResult` 在 `data` 为 nil 时直接抛错、四个数值无界 → 类型
+  校验 + 各自夹取上限。客户端 `quest_logistics_client.lua` 现在把 `questId` 一起发上来。
+  测试：两个探针。旧版实测：`cargoDamageResult` 在 nil/非表时分别抛
+  `attempt to index a nil value (local 'data')` 与 `attempt to index a number value (local 'data')`，
+  坏 questId 时抛 `bad argument #3 to 'format' (number expected, got nil)`，`DAMAGE_CLAMPED=false`。
+  新增第三个探针 `quest_events_probe.lua`（真加载 custom-quest 的 server 主脚本）覆盖 fail-open 与模型比对：
+  旧版实测 `AVIATION_CAR_BLOCKED` / `AVIATION_ON_FOOT_BLOCKED` / `AVIATION_WRONG_QUEST_BLOCKED` /
+  `TRAILER_MISSING_MODEL_BLOCKED` / `TRAILER_MODEL_MISMATCH_BLOCKED` 全为 false。
+  数字：未登记 **106 → 98**（qb 30 → 26、custom 8；allowlist 151）；合计事件数按实测校正为 439。
+
+- **P1-3 批 14：qb-pawnshop 4 + qb-multicharacter 4**（2026-11-08）：qb-pawnshop 两条都是印钞机 ——
+  `sellPawnItems` 的单价来自客户端（`totalPrice = itemAmount * itemPrice`，卖一块石头要价一百万），
+  `pickupMelted` 的奖励表也来自客户端（`item.items[*].item.reward` 直接照单发物品，可要 99999 个金条），
+  `meltItemRemove` 的熔炼耗时同样采信客户端提交的条目。三者一律改成按服务端 `Config.PawnItems` /
+  `Config.MeltingItems` 查表结算，数量夹 1..100，非法物品直接丢弃。qb-multicharacter：
+  `loadUserData(cData)` 遇到 nil/非表/非字符串 citizenid 直接抛错（归属校验本身在 qb-core 的
+  `Player.Login` 里比对 license）；`createCharacter` 把客户端整张表 `newData.charinfo = data`
+  写进 players.charinfo（可夹带 isAdmin / money / 5KB 字符串），改成白名单字段 + 长度收敛、`cid`
+  归一化成数字；`deleteCharacter` 补类型校验（归属由 qb-core 的 `DeleteCharacter` 比对）。
+  **CC 复核后又补两条**：① `pickupMelted` 原来只是把奖励表换成服务端配置，仍然可以站在当铺门口
+  反复触发、无限领配置奖励（不需要原料、不需要等熔炼时间）—— 改成 `meltItemRemove` 扣料成功时登记
+  `PendingMelt[src]`（含 `readyAt`），取回只按这批发、到时间才发、发完清除、背包满时保留、
+  掉线清理；② `Config.PawnItems.price` 是 `math.random(50,100)`，客户端与服务端各自求值，
+  改成服务端权威结算后会出现「显示 80 实收 52」—— `getInv` 回调同时下发价格表，客户端展示用服务端价；
+  ③ 批次里逐条记 `paid[index]`：多奖励条目（rolex 是 diamond / goldbar / electronickit 三条）在
+  「一条发得出去、一条背包满」时整批保留，会把已经发出去的那几条重复发 —— 只有全发完才清批次。
+  测试：两个探针。旧版实测：`SELL_PAID_CONFIG_PRICE=false`、`SELL_AMOUNT_CAPPED=false`、
+  `SELL_UNKNOWN_ITEM_REJECTED=false`、`MELT_USES_SERVER_ENTRY=false`；`loadUserData` 三种坏参数各抛一次
+  `attempt to index a ... value (local 'cData')`，`CREATE_STRIPS_UNKNOWN_FIELDS=false`、
+  `CREATE_CID_NUMERIC=false`。
+  数字：未登记 **114 → 106**（qb 38 → 30；allowlist 143 → 151）。附带发现：
+  `job_deny_guard` 的判据其实是「任一 player 变量上的 `~=` + return」，把「Player 存在性 + 类型」
+  也算作职业守卫（换更严的 `.job` 判据会有 36 条历史事件翻面，本轮不动闸门，已在基线文档记录）。
+
+- **P1-3 批 13：qb-cityhall 5 + interact-sound 5**（2026-11-08）：qb-cityhall 最实在的一条是
+  `getIDs` 直接绑到 `giveStarterItems()` —— **任何玩家可以反复触发，每次都给一份 phone / id_card /
+  driver_license**（无限刷物品）；改成按背包里是否已有逐个跳过。其余：`requestId(item, hall)` 的
+  `hall` 来自客户端且直接索引 `Config.Cityhalls[hall]`（那是数组，坏下标 = nil 索引打崩事件线程）；
+  `sendDriverTest(instructors)` 的 instructors 是客户端给的 citizenid 列表、长度不限，对离线玩家走
+  `sendNewMailToOffline`（探针实测一次请求 49 封邮件），加条数上限 10 + 每人 60 秒冷却；
+  `ApplyJob` 的距离校验用的是**客户端声称**的市政厅坐标（在任意地点把坐标报成自己脚下就能远程
+  申请工作），改用服务端 `Config.Cityhalls[*].coords`。interact-sound 则在客户端开放了
+  `PlayOnAll` / `PlayOnOne`（仓库内**没有任何调用点**）—— 任何人能给全服或指定玩家刷声；
+  `PlayOnSource` / `PlayWithinDistance` 的文件名与音量零校验且无限流；`PlayWithinDistance` 还被
+  注册了两次（后一个覆盖前一个，前一个是死代码）。改为：全局播放仅服务端可触发、声音参数走
+  `^[A-Za-z0-9_%-]+$` 白名单 + 音量 0..1 + 按 (玩家, 文件) 100ms 限流（车辆转向灯频率高，不能用更长的
+  窗口），并删掉重复注册。
+  测试：两个探针（cityhall_probe.lua / interactsound_probe.lua，位于 layer3_business 的 fixtures 目录）。旧版实测：`requestId`
+  坏 hall 抛 `attempt to index a nil value (field '?')`、`STARTER_REPEAT_NOTHING_ADDED=false`、
+  `DRIVERTEST_MAIL_COUNT=49`、`APPLY_JOB_REMOTE_REJECTED=false`、`ALL_FROM_CLIENT_BLOCKED=false`、
+  `ONE_FROM_CLIENT_BLOCKED=false`、`SOURCE_BAD_FILENAME_BLOCKED=false`、
+  `SOURCE_BAD_VOLUME_BLOCKED=false`、`SOURCE_RATE_LIMITED=false`。
+  数字：未登记 **124 → 114**（qb 43 → 38、other 65 → 64；`interact-sound` 5 → 4，重复注册已删）；
+  `1276 passed`。
+
+- **P1-3 批 12：qb-houserobbery 5 + qb-clothing 5**（2026-11-08）：qb-houserobbery 有一个**功能级**
+  bug —— 搜刮家具的准入导出写成了 `exports['custom-main']:CheckHouseRobbery`，而这个导出只有
+  `custom-crime` 提供，每次搜刮都会抛 `No such export CheckHouseRobbery in resource custom-main`，
+  等于**整条房屋搜刮流程从来没跑通**；顺带 `SetBusyState(cabin, house, bool)` / `enterHouse(house)` /
+  `searchFurniture(cabin, house)` 都拿客户端传来的 house/cabin 直接索引 `Config.Houses[...]`（坏 key
+  就是一个 nil 索引，打崩事件线程），`SetBusyState` 还能把任意家具标成 isBusy 锁死整间房子，已搜过的
+  抽屉服务端也照样发奖。qb-clothing 集中在"客户端数据没有边界"：`saveSkin` 无结构/长度校验就进 RAM
+  缓存与 `playerskins` 列；`saveOutfit` 在 `Player` 为 nil 时直接索引崩、且**没有条数上限**（可无限往
+  `player_outfits` 插，每次插入还会全量回读）；`removeOutfit` 同样缺判空；`QBCore:Server:OnPlayerUnload(src)`
+  是服务端内部事件，客户端能自己发一份（还能传别人的 src 强制写盘别人的皮肤）。
+  测试：两个探针真加载 config + server/main.lua。旧版实测：`SetBusyState`/`enterHouse` 遇坏 key 抛
+  `attempt to index a nil value (field '?')`，`searchFurniture` 抛 `No such export CheckHouseRobbery
+  in resource custom-main`（`SEARCH_NO_ERROR=false`、`SEARCH_MARKED_SEARCHED=false`），
+  `SKIN_HUGE_REJECTED=false`、`UNLOAD_CLIENT_BLOCKED=false`、`OUTFIT_LIMIT_ENFORCED=false`，
+  且 `saveOutfit`/`removeOutfit` 在玩家对象缺失时抛 `attempt to index a nil value (local 'Player')`。
+  数字：未登记 **134 → 124**（qb 53 → 43，allowlist 132 → 139）；`1269 passed`。
+
+- **P1-3 批 11：qb-inventory 8 条**（2026-11-08）：核心资源，改动只限制在"客户端参数形状"与"归属"
+  两层，不碰物品搬运算法 ① `openVending(data)` / `closeInventory(inventory)` / `useItem(item)`
+  直接索引客户端参数（`data.coords` / `inventory:find` / `item.slot`），发个数字就能把事件线程打崩
+  → 补类型校验；② `openDrop(dropId)` 只认 `isOpen`，一个人打开后不发 `closeInventory`（改过的
+  客户端或直接崩游戏）就能把掉落物**永久锁死** → 记 `openedBy/openedAt`，2 分钟后允许接管；
+  ③ `updateDrop(dropId, coords)` 只校验"玩家 ↔ 声称坐标"距离、不校验归属，任何玩家都能把别人的
+  包一段段拖走（每次 5 米、次数不限）→ 只允许创建者或管理员；④ `QBCore:Server:UpdateObject`
+  的判据是 `source ~= ''`，而服务端 `source` 是数字 0，`0 ~= ''` 恒真 → handler 实际是**死代码**
+  （qb-core 重启后没人能刷新对象），改成 `source ~= 0`；⑤ `snowball` / `SetInventoryData` 已有
+  冷却与 `validateOtherPlayerInventory`（目标在线 + 3 米内），登记进 allowlist 并把该 helper 写进
+  `net_event_guard_helpers.json`。
+  测试：探针真加载 config + server/main.lua（functions.lua 的全局函数用桩替代，因为是核心资源，
+  加载整条依赖链不现实）。旧版实测：`openVending`/`closeInventory`/`useItem` 三个 handler 在收到
+  数字参数时分别抛 `attempt to index a number value`，`DROP_TAKEOVER_AFTER_TIMEOUT=false`、
+  `DROP_MOVE_FOREIGN_BLOCKED=false`、`UPDATE_OBJECT_SERVER_ALLOWED=false`。
+  数字：未登记 **142 → 134**（qb 61 → 53，allowlist 127 → 132）；`1262 passed`。
+
+- **P1-3 批 10：qb-vehicleshop 7 条 + 试驾生成回调**（2026-11-08）：批 3 已把"钱"的面改成服务端
+  权威，这次剩下的都在**实体与配置**层：① 试驾生成回调 `spawnvehicle(plate, vehicle, coords)`
+  三个参数全来自客户端且**没有任何校验** —— 车型直接进 `GetHashKey`、坐标直接进生成函数，
+  任何玩家能在任意坐标生成任意载具；改为「车型必须出现在某家车店的展台上 + 玩家在该店附近 +
+  请求的生成点也在该店试驾点附近」，并在生成时记账 `TestDriveVehicles[netId] = {src, model, at}`；
+  ② `deleteVehicle(netId)` 的 netId 直接进 `DeleteEntity` —— 任意 netId 就是任意实体（别人的车、
+  NPC、玩家），改为只认本资源给这个玩家生成的那台（`IsOwnTestDrive`），并校验实体存在；
+  ③ `swapVehicle(data)` 会向**全服**广播客户端给的 data → 改所有人的展车，改为只有在职店员
+  （`dealerOnDuty`）；④ `customTestDrive(vehicle, playerid)` 任何玩家能给任意人发**任意车型**
+  （含警车/飞机），改为在职店员 + 车型必须在展台上；⑤ `addPlayer/removePlayer(citizenid)` 的
+  citizenid 由客户端传 —— 能重置/结算**别人**的分期计时器，改为只认同调用者自己的；⑥
+  `checkFinance()` 在 player 为 nil 时直接索引 `player.PlayerData` 抛错，且 handler 里有
+  `Wait(Config.PaymentWarning * 60000)`，连点会堆睡眠线程，补判空 + 每玩家 10 分钟冷却。
+  测试：探针真加载 config + server/bus.lua + server/finance-lifecycle.lua；旧版实测
+  `SPAWN_FOREIGN_MODEL_BLOCKED=false`、`SPAWN_FAR_BLOCKED=false`、`DELETE_FOREIGN_BLOCKED=false`、
+  `SWAP_CIVILIAN_BLOCKED=false`、`TESTDRIVE_FOREIGN_MODEL_BLOCKED=false`、
+  `TIMER_VICTIM_UNTOUCHED=false`，以及 `checkFinance` 的 `attempt to index a nil value (local 'player')`。
+  数字：未登记 **149 → 142**（qb 68 → 61，allowlist 123 → 127）；`1256 passed`。
+
+- **P1-3 批 9：qb-ambulancejob 14 条**（2026-11-08）：这个资源之前已经加过 `CanRevive`、
+  `SendToBed` 索引校验与 30 秒限流、"无伤不得自报死亡"，剩下 14 条里 9 条是真洞：
+  ① `qb-ambulancejob:server:stash` 只看客户端菜单上的 job 过滤条件（可绕过）→ **任何玩家都能打开
+  救护队储物柜**，改成服务端确认在职 EMS；② `LeaveBed(id, hospitalIndex)` 向全服广播
+  `SetBed(..., false, ...)` 且无归属校验 → 任何人传任意床号就能把全服的床标成空闲/赶人，改成
+  服务端按 `BedOccupant[院:床] = src` 记账，只有占用者本人或收床的在职 EMS 能放；③
+  `resetHungerThirst` 等于免费把饥饿/口渴拉满，改成只认服务端刚复活/送进院的玩家
+  （`markRevived` 在 RevivePlayer / RespawnAtHospital / txAdmin heal 三处写入，窗口 180 秒）；
+  ④ `ambulanceAlert(text)` 文案来自客户端且无冷却 → 一人刷爆所有在职 EMS，加 string 校验 +
+  截断 200 字 + 15 秒按玩家冷却；⑤ `SendDoctorAlert` 只有一个全局开关，谁先按下谁就能把它锁
+  `Config.DocCooldown` 分钟 → 院名必须命中配置 + 按玩家 30 秒冷却；⑥ `CanHelp` 任何玩家都能
+  替人回答"可以施救" → 只认 `UseFirstAid` 写入的 `PendingAid` 回执；⑦ `RemoveDoctor` 按客户端
+  传的 `job == 'ambulance'` 减 `doctorCount` → 平民能把医生数刷到 0，改成只认服务端登记过的
+  在班 EMS；⑧ `SyncInjuries` / `SetWeaponDamage` 写自己 metadata 但内容无界（`isBleeding = 1e9`）
+  → 类型校验 + 数值夹取。
+  EMS 判定抽成 `isOnDutyEMS` 并登记进 `net_event_guard_helpers.json`（闸门按 `if not isOnDutyEMS(...)`
+  形状核对）。测试：探针真加载该资源的 config.lua 与 server/main.lua，旧版实测
+  `STASH_CIVILIAN_BLOCKED=false`、`BED_RELEASED_BY_STRANGER=1`、`HUNGER_OUTSIDE_WINDOW_BLOCKED=false`、
+  `ALERT_COOLDOWN_BLOCKED=false`、`DOCTOR_ALERT_FAKE_NAME_IGNORED=false`、
+  `CANHELP_WITHOUT_PENDING=false`、`DOCTOR_COUNT_AFTER_CIVILIAN=0`、`INJURIES_BLEEDING_CLAMPED=false`。
+  数字：未登记 **164 → 149**（qb 82 → 68，allowlist 113 → 123）；`1249 passed`。
+- **P1-3 批 8：qb-garages 6 + qb-weathersync 7**（2026-11-08）：qb-garages 是货真价实的洞 ——
+  取车回调 `spawnvehicle(plate, vehicle, coords)` 三个参数全来自客户端而服务端只查「在外车辆数 +
+  驾照等级」，**别人的车牌 / 任意车型 / 全图任意坐标都能生成**；`syncGarage` 任何玩家都能整表
+  覆盖 `Config.Garages`（全服车库点数与位置）；`PayDepotPrice` 按车牌查价不查 citizenid 也不查
+  state（别人的车、停在库里的车都能走"赎车"通道召唤）；`UpdateOutsideVehicle` 可把任意
+  (车牌, netID) 塞进全局表；`trackVehicle` 能拿任意车牌换实时坐标。修法：取车回调三重校验
+  （归属 + 车型与 `player_vehicles.vehicle` 一致 + 生成点在玩家 100 米内）、`syncGarage` 限控制台
+  或 admin、赎车要求「本人 + state=2 + 价格取库」、`OutsideVehicles` 要求本人实体真实存在、
+  `updateVehicleState` 白名单 {0,1,2}、`updateVehicleStats` 三个数值夹区间。qb-weathersync 本来
+  就有 `isAllowedToChange`（控制台 / admin ACE），但写成 `if isAllowed(...) then` 正分支，闸门只认
+  deny-early 形状，6 个事件一直被记为「未登记」—— 重构成 deny-early + 在
+  `net_event_guard_helpers.json` 登记（含 `requires_code` 证据），行为零变化；另补两处真缺口：
+  `RequestStateSync` 加每玩家 5 秒冷却（原来一人连点 = 2N 条全服广播）、
+  `QBCore:Server:OnPlayerLoaded` 加 `src ~= 0` 拒绝客户端触发。
+  测试：两个探针（garages_probe.lua / weathersync_probe.lua，位于 layer3_business 的 fixtures 目录） 真加载资源 + mock 运行时，
+  旧版实测 `SPAWN_OTHERS=false`、`SPAWN_MISMATCH=false`、`SPAWN_FAR=false`、`SYNC_BLOCKED_FOR_PLAYER=false`、
+  `DEPOT_OTHERS=false`、`BROADCASTS_FROM_TWO_CALLS=4`、`BROADCASTS_FROM_CLIENT_TRIGGER=2`。
+  数字：未登记 **177 → 164**（qb 95 → 82，allowlist 112 → 113）；`1238 passed`。
+
+### Security
+- **S3 限流收口到 `RateLimit`**（2026-11-15）：`custom-police` 7 个文件 / 8 张本地表
+  （forensics / tow / coroner / evidence / p2_system / p0_incidents / main）与
+  `custom-director` 的 `liveBuckets` 令牌桶全部迁到 `core-framework` 的
+  `RateLimitCooldown` / `RateLimitTokenBucket`；键统一 `police:<src|cid>:<action>` 与
+  `director:live:<hash>`，阈值按秒 → 毫秒等价换算。
+  `playerDropped` 一次 `RateLimitReset('police:<src>:')` 清掉 src 键；cid 键由 owner 新增的
+  60s 自清理线程回收（`RateLimit.Sweep(15 * 60 * 1000)`）。旧的 60s prune 循环与 evidence
+  的每 64 次 prune / `pickupWrites` 计数器已删除；director 的 429 复用 owner 返回的
+  `retryAfterMs`。闸门 `test_rate_limit_single_owner.py` 的 `IMPL_MARKERS` / `CALLERS`
+  先红后绿。
+
+## [0.7a] — 载具重构与物流 — 2026-10-21
+
+> 代码完成于 2026-06-22，tag 于 2026-10-21；实机验收仍待完成。
+
+### Added
 - **结案从来没真的写进库（nil 参数让整条 UPDATE 静默失效）**（`custom-police` / `core-framework`）：真机排查发现本 build 的 oxmysql 是**客户端插值**的 —— 参数里出现 `nil` 时它不会绑成 `NULL`，而是把占位符 `?` 原样留在 SQL 里，于是语句语法错误、`.await` 也不报错。两处踩中：① MDT「清场」不带 reason，`closed_reason` 传 nil → 警情状态一直是 `on_scene`，而 `incident.close` 审计照写（"审计说关了、其实没关"，同一张单可以被反复"关"）；② `world_state` 落盘时 `previous_value` 传 nil → 首写静默丢失。现在 `closed_reason` 用空串、`previous_value` 传 JSON 的 `null`；并且**痕迹只在 `affected > 0` 时写**（`affected=0` 打日志不落痕迹），避免"警情没关、痕迹却 +1"。
 - **城市公告在冷缓存下会丢**（`custom-police`）：原节流规则是「该区 24 小时内第一起结案」，靠 `world_state` 的 `closed_24h` 判断 —— 而 `Record` 在缓存冷时是异步落写，读回来是 `nil` → `closed_24h=0` → 公告静默不发（CC 评审 2026-11-01 指出）。改成调用方自己的**每区域 30 分钟冷却**（内存计时，重启清零，宁可多一条不漏），不再依赖跨资源读值。
+- **`QBCore:DebugSomething` 是裸的 RegisterServerEvent（任意客户端可刷服务端日志）**（qb-core）：handler 的 `tbl` / `indent` / `resource` 全由客户端给，服务端直接 `print`，既能刷屏也能用深层表放大内存与 IO。现在用 `GetInvokingResource()` 区分「服务端自己 `QBCore.Debug`」与「客户端触发」，后者要求 `IsPlayerAceAllowed(src, 'qb.debug')`；`indent` 先 `tonumber` 再钳到 `MAX_DEBUG_INDENT = 8`（原来直接透传，可递归到栈溢出）。ACE 示例写进 `server.cfg.template`，不授予也不影响任何现有功能。闸门：`tests/architecture/test_engine_event_guards.py`（静态契约 + 剥守卫反向用例 + 跑真实文件的 Lua 行为验证：无 ACE 客户端 0 次打印、30 层嵌套表被截断）。
+- **经济倍率一个 convar 两种单位（最多差 100 倍）**（core_economy / qb-shops / economy-dashboard）：`economy_reward_scale` 被三个整数读者按 `/100` 解析、被两个浮点读者直接当倍率，而 `economy.cfg` 写的是 `1.0` —— 走网关的奖励与商店价会变成 1%。统一为**浮点倍率**（`1.0 = 1x`），三处改 `GetConvarFloat`；`0 / 负数 / 未设置` 一律回落 `1.0`。`economy.cfg` 补单位注释，`T-CityLite.base/docs/DELIVERY_MANUAL.md` 里 `/100` 的公式说明与 `80 / 120` 的示例命令同步改成倍率写法（否则运维照着旧文档敲 `80` 就是 80 倍）。闸门：`tests/unit/layer1_core/test_economy_multiplier.py`（真实加载源码跑 Lua 沙箱，含三读者单位一致性断言）。
 
 ### Fixed
 - **`world_state` 读路径（审计 R7 挂了一个多月的那条债）**（`core-framework`）：旧实现用 `promise.new` + `Citizen.Await` 同步查库（首次读卡住主线程），且 `prepare` 取三列后直接 `local value = row` —— 拿到的是**整行**，还把 `changed_by` 硬写成 `nil`（注释说 not in this query，查询里明明有）。现在：`GetRegionState` 只读内存缓存、未命中返回 `nil` 并后台预热（绝不阻塞）；新增 `GetRegionStateAsync` / `GetRegionSnapshotAsync` / `GetPlayerTraces(cid, cb)` 走回调；`saveToDB` 把落盘的异步结果通过 `cb(ok, code)` 回报（`save_failed` 不再被静默吞掉）。证据：`tests/unit/layer1_core/test_world_traces.py` 的 `Citizen.Await` / `promise.new` / `local value = row` 三条回归断言 + 行为 harness（冷启动续写、落盘失败回报）。
@@ -44,10 +1224,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **剧情抉择面板：键鼠都能用，选完立刻释放焦点**（`story-engine`）。三处真机缺陷一起修：① `decision_nui.html` 的 NUI 回调写成了 `https://cfx-nui-story-engine/...` —— 那是**页面自身的 host**，回调必须 POST 到 `https://<GetParentResourceName()>/...`，于是 `nuiReady` / `nuiOpened` / `makeChoice` 全部 404 且被 `.catch` 吞掉（表现：面板能画、点不动、只能等 120 秒超时）；② 焦点顺序反了（`SetNuiFocus` 之后才 `SetNuiFocusKeepInput`），会把光标吃掉，改成**先 keepInput 再按焦点**；③ `options` 里带 `effects` 等表结构导致 `SendNUIMessage` 的 JSON 编码失败被静默丢弃，现在只发 `{id, text}`。另外：同一决策重复下发不再关闭重开（避免玩家点击时按钮 DOM 被重建）、手写测试页面卸载后不再残留 `nuiReady` 断言。真机：键盘 `1` → `nui.makeChoice` → `makeDecision choice=honest_cop` → `quest_event_log #89 complete`；鼠标点击同样产生一次 `makeChoice` + `makeDecision`。
-- **序章任务链三处静默失败**（`custom-quest`）：① checkpoint 半径原来优先取 cpType 默认值（`ring=30`），而服务端按模板 `step.data.radius`（15/20）复验距离 —— 于是"客户端喊到了、服务端判太远"，`quest_event_log` 里只有 `security_block distance_fail`（真机 `required=15.0 distance=28.78`）；② 决策节点把同一个事件派发**两遍**（`NODE_EVENTS[DECISION]` 本身就是 `story:client:offerDecision`，走到函数底部又发一次），第二遍关界面重开导致第一块面板的看门狗仍在计时；③ 决策 payload 只带 `decision_id`，`prompt/options` 在 story-engine 的决策定义里，而 `OfferDecision` 返回的是 `(true,'offered')` 不是表 —— 客户端永远收到 0 个选项走 skip 兜底。现在分别改为：模板优先的半径、DECISION 只派发一次、用 `GetDecision` 取定义并并进 payload。
+- **序章任务链三处静默失败**（`T-CityLite.base/resources/[custom]/custom-quest`）：① checkpoint 半径原来优先取 cpType 默认值（`ring=30`），而服务端按模板 `step.data.radius`（15/20）复验距离 —— 于是"客户端喊到了、服务端判太远"，`quest_event_log` 里只有 `security_block distance_fail`（真机 `required=15.0 distance=28.78`）；② 决策节点把同一个事件派发**两遍**（`NODE_EVENTS[DECISION]` 本身就是 `story:client:offerDecision`，走到函数底部又发一次），第二遍关界面重开导致第一块面板的看门狗仍在计时；③ 决策 payload 只带 `decision_id`，`prompt/options` 在 story-engine 的决策定义里，而 `OfferDecision` 返回的是 `(true,'offered')` 不是表 —— 客户端永远收到 0 个选项走 skip 兜底。现在分别改为：模板优先的半径、DECISION 只派发一次、用 `GetDecision` 取定义并并进 payload。
 - **决策超时不再死锁**（`story-engine`）：`police_ch1_honest_or_silent` 没有 `default_option`，超时/看门狗一触发就 `clearPending` 返回失败，任务永久停在 `step_decision`。现在缺省时用**第一个选项**兜底；连选项都没有时保留 pending 让玩家手动选。
-- **任务接取去重**（`custom-quest`）：同一玩家同一任务可能出现多条 `in_progress`（真机 3 条），恢复时各自下发一次状态。`CreateQuest` 先查在办记录，有就跳过。
-- **story-engine 不在时决策会重试**（`custom-quest`）：`restart custom-quest` 会连坐停掉 story-engine 且不自动拉回，决策 export 消失后只打一行 warning 就软锁。现在 5 秒重试 6 次，耗尽后明确通知玩家"剧情服务暂不可用，请重新连接"。
+- **任务接取去重**（`T-CityLite.base/resources/[custom]/custom-quest`）：同一玩家同一任务可能出现多条 `in_progress`（真机 3 条），恢复时各自下发一次状态。`CreateQuest` 先查在办记录，有就跳过。
+- **story-engine 不在时决策会重试**（`T-CityLite.base/resources/[custom]/custom-quest`）：`restart custom-quest` 会连坐停掉 story-engine 且不自动拉回，决策 export 消失后只打一行 warning 就软锁。现在 5 秒重试 6 次，耗尽后明确通知玩家"剧情服务暂不可用，请重新连接"。
 - **车机静默无响应**（`tcity-dashboard`）：`custom-vehicles` 被 `restart` 连坐停掉后，按 `I` 只发出 `request_lock` 就再无下文。服务端在 `onResourceStart` 检查并在必要时 `StartResource('custom-vehicles')`；客户端 900ms 无回执时提示"车机服务未就绪（custom-vehicles: stopped）"。
 - **小地图回原生**（`qb-hud` / `hud-position-tool`）：qb-hud 的 square 分支把 mask/blur 放大到 `0.2293×0.2625`（原生 `0.111×0.159`）并替换雷达遮罩贴图、踢 bigmap —— 内容溢出边框、偶发"倾斜巨图"。现在默认 `hud_native_map=1` 直接跳过整段；`hud-position-tool` 关闭时不再写组件（两个写者互相覆盖）。
 
@@ -91,7 +1271,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **qb-crypto:104 `attempt to compare table with number`（47 次）**：本服 oxmysql 的 `update` 回调回表，而代码按数字比较；且回调里再调 `MySQL.query.await`（`RefreshCrypto`）会触发 `nested ref call`。改成同步 `update.await` + 行数归一化（table/number 都吃）后再 insert + 刷新。真机：`crypto` 表本来**一直是空的**（因为 insert 分支永远走不到），修完 `qbit` 落库 `worth=5200`，重启后 `104` / `nested ref` / `SCRIPT ERROR` 新增 **0 / 0 / 0**。
 - **`qb-crypto` 的 `setcryptoworth` 控制台执行报 null player**：`source=0` 时仍 `TriggerClientEvent`。已加控制台分支（改为打日志），控制台改价可用。
 - **`custom-phone → custom-quest:GetAvailableQuests` export 异常**：手机任务列表是读路径，异常直接穿透会让整页空白且刷日志。改为 `pcall` fail-soft（失败返回空列表），真实错误在 `quest_debug=1` 时打印一次。
-- **`No such export IsArcEnabled in resource story-engine`**：`custom-quest` 的 `callExport` 用 `type(target[method])` 判断导出是否存在，但 FiveM 的 `exports[...]` 是代理表，**索引未注册的导出会直接抛错**，守卫本身成了崩溃点。改为把索引包进 `pcall`（资源没起时安全返回 nil = 跳过检查）。环境侧补 `ensure story-engine`。
+- **`No such export IsArcEnabled in resource story-engine`**：`T-CityLite.base/resources/[custom]/custom-quest` 的 `callExport` 用 `type(target[method])` 判断导出是否存在，但 FiveM 的 `exports[...]` 是代理表，**索引未注册的导出会直接抛错**，守卫本身成了崩溃点。改为把索引包进 `pcall`（资源没起时安全返回 nil = 跳过检查）。环境侧补 `ensure story-engine`。
 - **SonarCloud `C Maintainability Rating on New Code`**：把 8 个 `test_p6*.py` 合并成 `test_p6_agent_stack.py`（共用路径与读取辅助，23 条断言不变），消除跨文件重复样板；覆盖率棘轮随之下调到 259。
 - **`police_call_draft` 审批阶段 `unknown field code_fallback`**：服务端回填的 `code_fallback` 在 approve 时会拿存下来的 params 再规范化一次，白名单不认它 → 草稿永远停在 `rejected`。已把该字段纳入归一化白名单。
 - **警察序章卡在第一步**：模板里 `reach` 步骤走到 `QuestNodes.ExecuteNode` 时 `_eventMap` 没有 `REACH`，日志出现 `Unknown node type: reach → REACH` 后直接 return —— 客户端拿不到 blip 与触发区，玩家永远走不到第一个点。补 `REACH → quest:client:nodeGoto`（复用既有 blip + SetupReachZone）。
@@ -262,13 +1442,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **systemd 单元会让崩溃循环无限重试，把自己锁死在外部限流里**。实测：一次 Cfx.re license 429 之后，`Restart=always` + `RestartSec=5` 在半小时内重启了 **323 次**，每次都去打一次 license 校验——"等一会儿就好"的限流被续成了死锁。现在单元文件带 `StartLimitIntervalSec=300` + `StartLimitBurst=5`（5 次 / 5 分钟后 systemd 放弃并进入 failed，等人来看），`RestartSec` 放宽到 10 秒；`install_service.py` 的校验器把"缺启动限流"和"限流额度太小"都判为坏单元（反向用例：删掉 `StartLimitBurst`、改成 `StartLimitBurst=1` 都必须被拒）。
 
 ### Added
-- **任务 App：30 个任务模板第一次有了玩家入口**。此前 `custom-quest` 的 14,903 行与 `config/quests/` 下 30 个模板（平民/警察/卡特尔/物流/矿业…）只有 `custom-director` 的 agent 动作和 e2e 测试能触发，玩家在游戏里根本接不到任务。
+- **任务 App：30 个任务模板第一次有了玩家入口**。此前 `T-CityLite.base/resources/[custom]/custom-quest` 的 14,903 行与 `config/quests/` 下 30 个模板（平民/警察/卡特尔/物流/矿业…）只有 `custom-director` 的 agent 动作和 e2e 测试能触发，玩家在游戏里根本接不到任务。
   - custom-quest/server/quest_availability.lua：只读的「这个玩家现在能接什么」计算层，同步检查职业标签 / 在勤警力 / 执照 / 重复接取 / 冷却，五种原因码可区分；依赖资源缺失时与 `TriggerQuest` 同样采取宽松策略，不会把全部任务藏起来。**接取权威仍在 `quest_manager.TriggerQuest`**，这里算错最多是显示错，不会让玩家凭空接到任务。
   - 新增导出 `GetAvailableQuests(source)` / `GetQuestDetail(source, questId)`；详情只给步骤标题与类型，不暴露坐标等执行细节。
   - custom-phone/server/apps/quests.lua：注册 `quests` App（对所有职业可见，平民也有平民线）。`quest_id` 由客户端提供，所以在这一层先清洗（≤64 字符、`[A-Za-z0-9_]`），非法 id **不会**下沉到 custom-quest；接取/放弃走 `TriggerQuest`/`AbandonQuest`，被拒时把下游给玩家的原句带回 UI。
   - web/src/apps/Quests.svelte + core/appRegistry.ts：可接/进行中两个页签；不可接的任务**照样显示**并写明原因（"Not enough officers on duty"），而不是从列表里消失。没有专属组件的 App 仍然回退到 `DynamicApp`。
   - `/listquests` 支持控制台调用（`source == 0` 时直接 print）：运维在服务器上就能确认模板加载了多少条，而不是拿到 `native Argument at index 1 was null`
-  - 启动自证：`custom-quest` 导出注册后打印「手机任务入口已就绪」，手机 App 注册后打印「quests app registered」；`tools/ops/healthcheck.py` 的启动标记从 3 条扩到 5 条 —— 否则「入口挂了」和「入口没写」在日志上长得一模一样
+  - 启动自证：`T-CityLite.base/resources/[custom]/custom-quest` 导出注册后打印「手机任务入口已就绪」，手机 App 注册后打印「quests app registered」；`tools/ops/healthcheck.py` 的启动标记从 3 条扩到 5 条 —— 否则「入口挂了」和「入口没写」在日志上长得一模一样
   - 一条**跨资源导出调用约定**的回归：`exports['res']:Method(a)` 的第一个参数是 proxy 自己，少传 self 会静默把 `source` 当成 tags、把 tags 丢成 nil（真实表现是"所有带标签的任务都不可接"，而只看返回值的测试仍然全绿）。现已断言导出收到的参数各就各位，并做过去掉 self 必须变红的反向校验
   - 测试：`test_quest_availability.py`（lua5.4 真跑模块，5 种不满足条件逐个要求被拒）、`test_quest_phone_app.py`（注册契约 + 边界清洗，非法 id 时下游调用计数必须为 0）、`test_quest_entrypoint.py`（接线闸门，反向禁止手机层出现 `MySQL`/`QuestDB`/`QuestManager` 等旁路）、NUI 2 个新场景（列表渲染 + 点接取真的发 `appAction` 并显示下游拒绝原因）
 - **P0 运维基础设施：服务器现在会自己起来、自己备份、自己体检**（见 `docs/ops/RUNBOOK.md`）
@@ -368,7 +1548,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `qb-inventory`: `SetInventoryData` 对 `otherplayer-*` 容器增加 3m 距离校验（管理员豁免），堵住伪造事件远程搬运他人物品；槽位/数量先 `tonumber` 再比较，避免非法类型报错
 - `custom-admin`: 全量自动 admin 改为 `admin_autogrant` convar（默认关闭）
 - `story-engine`: 决策绑定服务端 pending offer（quest/step/decision），拒绝跨任务伪造；超时由服务端按默认选项收口
-- `custom-quest`: `ValidateNode` 实现类型 + 服务端距离校验；`registerTrailer` 校验实体与距离；`cleanupTrailers` 改为非网络事件；`savePosCollection` 限制管理员
+- `T-CityLite.base/resources/[custom]/custom-quest`: `ValidateNode` 实现类型 + 服务端距离校验；`registerTrailer` 校验实体与距离；`cleanupTrailers` 改为非网络事件；`savePosCollection` 限制管理员
 - `custom-vehicles`: 钥匙/改装/部件/氮气事件统一校验车主或执勤机修；部件值夹紧 0–100
 - `qb-hotdogjob`: 职业校验 + 数量≤5 + 单价按 Config 边界，堵住 `$10k/秒`
 - `qb-streetraces`: 服务端重建赛局与奖池，领奖前销毁，加入去重
@@ -389,11 +1569,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `custom-phone`: appQuery/appAction 预算拆成 120/min burst 40 与 30/min burst 10 后，单元测试仍按 burst 10 断言；测试对齐真实预算并覆盖 action 桶独立耗尽
 - `custom-phone`: 移除 appQuery 逐请求调试 `print`，handoff 追踪改由 `appQuery-hit`/`appAction-hit` 诊断阶段承担
 - `custom-director`: `police_run_e2e` 调用的 `custom-agent-ops` 只在 `configs/modules/dev.cfg` 启动，FIT-10 导出门禁红；登记为 deferred repo 资源（未启动时动作返回 `execution_failed`，不影响正常流程）
-- `custom-quest`: 服务端重启后 `QuestCache` 未从 DB 预加载，`step_decision` 重连不弹窗；改为 `QBCore:Server:PlayerLoaded` 预加载 + `/questrestore`
+- `T-CityLite.base/resources/[custom]/custom-quest`: 服务端重启后 `QuestCache` 未从 DB 预加载，`step_decision` 重连不弹窗；改为 `QBCore:Server:PlayerLoaded` 预加载 + `/questrestore`
 - `story-engine`: decision NUI 增加焦点/`keepInput` 遥测、300s 看门狗、`SetNuiFocusKeepInput(false)`，避免重连软锁与手机 UI 抢焦点
 - `core-framework` 引用了不存在的 `cache/*.lua`，导致自身及 9 个下游资源无法启动
 - 启动顺序与 `fxmanifest` 依赖冲突（11 处）；补齐 `qb-prison`、`qb-minigames`、`safecracker`
-- `custom-quest` / `custom-taxes` / `core-framework` / `qb-recyclejob` 缺少 manifest 里声明的 @oxmysql/lib/MySQL.lua
+- `T-CityLite.base/resources/[custom]/custom-quest` / `custom-taxes` / `core-framework` / `qb-recyclejob` 缺少 manifest 里声明的 @oxmysql/lib/MySQL.lua
 - qb-core 无定时刷盘：补 15min tick + `onResourceStop`；断线位置回退，避免写 `0,0,0`
 - 任务冷却异步查询导致永久失效；改为内存权威 + 登录回填
 - `core_economy` 未定义 `EconomyService`；市场/卡特尔卖货扣物不付钱
@@ -403,22 +1583,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 任务完成奖励幂等：`CompleteQuest` 回调只看 affectedRows，内存锁 + 10s 超时兜底，避免重复发奖
 - 地址池任务步骤顺序绕过：缓存空窗期改用 `_currentSteps` 内存步骤比对，不再直接放行
 - Bus 跨资源调用：7 个注册方 manifest include @core-framework/bus.lua，cartel/mining/justice 共 18 处改为显式 `service_*` export
-- `T-CityLite.base/resources/[standalone]/core-framework/compat.lua`: `GetPlayer` 缓存改用 `GetPlayerName` 做活性校验（`GetPlayerPing >= 0` 恒真）
+- core-framework 的兼容层（compat.lua，P1-4 阶段 D 已删除）: `GetPlayer` 缓存改用 `GetPlayerName` 做活性校验（`GetPlayerPing >= 0` 恒真）
 - `txAdminPort 0` 禁用管理员模式，避免端口冲突
 
 ### Changed
 - `server.cfg.template` 按依赖图重排：`core → career → player → voice → custom → quest → police → vehicles → jobs → banking → medical → economy → security → crime → story → atmosphere → admin`
-- `custom-quest` 从 `custom.cfg` 移到 `quest.cfg`；`custom-justice` 移到 `police.cfg`；`progressbar` 提前到 `player.cfg`
+- `T-CityLite.base/resources/[custom]/custom-quest` 从 `custom.cfg` 移到 `quest.cfg`；`custom-justice` 移到 `police.cfg`；`progressbar` 提前到 `player.cfg`
 - `custom-testing` 从 `custom.cfg` 移到 `dev.cfg`（生产默认不加载）
 - CI 增加 `check_bus_wiring.py`，防止注册方再次漏 include `bus.lua`
 
 ---
 
-## [0.7a] — 载具重构与物流 — 2026-10-21
-
-> 代码完成于 2026-06-22，tag 于 2026-10-21；实机验收仍待完成。
-
-### Added
 - **custom-vehicles**：替换 `qb-vehiclekeys`，事件驱动钥匙/锁车/共享，O(1) 内存缓存，兼容旧 exports/events；含安全带、巡航、转向灯、氮气、车辆损耗
 - **tcity-dashboard v2.1**：Vue 3 车载中控屏，6 类载具模板，警用控制台 / ANPR / 雷达 / 追踪 / CCTV
 - **custom-quest**：数据驱动任务状态机、外部脚本 API、安全门控、DB 持久化（v0.6 基础设施）

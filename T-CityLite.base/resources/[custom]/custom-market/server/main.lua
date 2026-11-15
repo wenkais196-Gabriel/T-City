@@ -188,7 +188,7 @@ function MarketService.Buy(source, itemName, quantity)
     -- 2. 扣款（优先走统一经济出口）
     local bankBalance = Player.PlayerData.money.bank
     if bankBalance < totalCost then
-        return false, price, ('余额不足，需要 $%d，当前 $%d'):format(totalCost, bankBalance)
+        return false, price, ('余额不足，需要 $%s，当前 $%s'):format(Money(totalCost), Money(bankBalance))
     end
 
     local deductOk = Player.Functions.RemoveMoney('bank', totalCost, 'MarketBuy:' .. itemName)
@@ -214,15 +214,15 @@ function MarketService.Buy(source, itemName, quantity)
 
     -- 5. 审计日志
     if quantity * price > 50000 and exports['custom-logs'] then
-        exports['custom-logs']:LogEconomy('MarketBuy', ('**%s** (%s) | 购买 %d x %s @ $%d/个 = $%d'):format(
+        exports['custom-logs']:LogEconomy('MarketBuy', ('**%s** (%s) | 购买 %d x %s @ $%s/个 = $%s'):format(
             GetPlayerName(source), Player.PlayerData.citizenid,
-            quantity, itemName, price, totalCost
+            quantity, itemName, Money(price), Money(totalCost)
         ), 65280)
     end
 
     -- 6. 通知
     TriggerClientEvent('QBCore:Notify', source,
-        ('购买了 %d x %s @ $%d/个 (总计 $%d)'):format(quantity, book.label, price, totalCost),
+        ('购买了 %d x %s @ $%s/个 (总计 $%s)'):format(quantity, book.label, Money(price), Money(totalCost)),
         'success'
     )
 
@@ -283,15 +283,15 @@ function MarketService.Sell(source, itemName, quantity)
 
     -- 6. 审计日志
     if quantity * price > 50000 and exports['custom-logs'] then
-        exports['custom-logs']:LogEconomy('MarketSell', ('**%s** (%s) | 出售 %d x %s @ $%d/个 = $%d'):format(
+        exports['custom-logs']:LogEconomy('MarketSell', ('**%s** (%s) | 出售 %d x %s @ $%s/个 = $%s'):format(
             GetPlayerName(source), Player.PlayerData.citizenid,
-            quantity, itemName, price, totalRevenue
+            quantity, itemName, Money(price), Money(totalRevenue)
         ), 16744576)
     end
 
     -- 7. 通知
     TriggerClientEvent('QBCore:Notify', source,
-        ('出售了 %d x %s @ $%d/个 (总计 $%d)'):format(quantity, book.label, price, totalRevenue),
+        ('出售了 %d x %s @ $%s/个 (总计 $%s)'):format(quantity, book.label, Money(price), Money(totalRevenue)),
         'success'
     )
 
@@ -427,8 +427,8 @@ QBCore.Commands.Add('market', '查看交易市场价格 (可选参数: 分类名
         local color = item.change >= 0 and { 255, 100, 100 } or { 100, 255, 100 }
         TriggerClientEvent('chat:addMessage', source, {
             color = color,
-            args = { '  ', ('%s %s | $%d (%s%d%%) | 供需 %d/%d'):format(
-                arrow, item.label, item.price,
+            args = { '  ', ('%s %s | $%s (%s%d%%) | 供需 %d/%d'):format(
+                arrow, item.label, Money(item.price),
                 item.change >= 0 and '+' or '', item.change,
                 item.supply or 0, item.demand or 0
             ) }
@@ -452,7 +452,7 @@ QBCore.Commands.Add('marketsetprice', '手动设置商品价格 (管理员)', {{
     end
 
     book.currentPrice = newPrice
-    TriggerClientEvent('QBCore:Notify', source, ('%s 价格已设为 $%d'):format(book.label, newPrice), 'success')
+    TriggerClientEvent('QBCore:Notify', source, ('%s 价格已设为 $%s'):format(book.label, Money(newPrice)), 'success')
 end, 'admin')
 
 print('[custom-market] 📊 动态交易市场已注册到 Bus')

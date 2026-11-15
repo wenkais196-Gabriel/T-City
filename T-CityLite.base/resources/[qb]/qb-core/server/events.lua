@@ -117,15 +117,19 @@ end)
 
 -- Client Callback
 RegisterNetEvent('QBCore:Server:TriggerClientCallback', function(name, ...)
-    if QBCore.ClientCallbacks[name] then
-        QBCore.ClientCallbacks[name].promise:resolve(...)
+    local src = source
+    local pending = QBCore.ClientCallbacks[name]
+    -- 只有"被问的那个人"能回答。以前任何客户端都能 resolve 任意待决回调，
+    -- 等于把伪造的返回值塞进服务端逻辑（钱、库存校验都可能走这条）。
+    if not pending or pending.source ~= src then return end
 
-        if QBCore.ClientCallbacks[name].callback then
-            QBCore.ClientCallbacks[name].callback(...)
-        end
+    pending.promise:resolve(...)
 
-        QBCore.ClientCallbacks[name] = nil
+    if pending.callback then
+        pending.callback(...)
     end
+
+    QBCore.ClientCallbacks[name] = nil
 end)
 
 -- Server Callback

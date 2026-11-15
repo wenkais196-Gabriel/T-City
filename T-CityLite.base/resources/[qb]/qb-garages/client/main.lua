@@ -1,4 +1,18 @@
 local QBCore = exports['qb-core']:GetCoreObject()
+
+--- 车库反馈（V-1）：统一走 custom-notify 的三层分派。
+--- 车库原来全套 QBCore.Functions.Notify，与警情/交易挤同一条通道，样式也不统一。
+---@param text string
+---@param kind string|nil 'error' | nil（其余一律 feed）
+---@param length number|nil
+local function feedback(text, kind, length)
+    local pushKind = (kind == 'error') and 'error' or 'feed'
+    local src = GetPlayerServerId(PlayerId())
+    pcall(function()
+        exports['custom-notify']:Push(src, pushKind, text, nil, { duration = length })
+    end)
+end
+
 local PlayerData = {}
 local PlayerGang = {}
 local PlayerJob = {}
@@ -39,12 +53,12 @@ local function OpenGarageMenu(data)
     if garage and garage.takeVehicle then
         local dist = #(GetEntityCoords(PlayerPedId()) - garage.takeVehicle)
         if dist > 6.0 then
-            QBCore.Functions.Notify('靠近车库入口后再按 E', 'error', 3000)
+            feedback('靠近车库入口后再按 E', 'error', 3000)
             return
         end
     end
     QBCore.Functions.TriggerCallback('qb-garages:server:GetGarageVehicles', function(result)
-        if result == nil then return QBCore.Functions.Notify(Lang:t('error.no_vehicles'), 'error', 5000) end
+        if result == nil then return feedback(Lang:t('error.no_vehicles'), 'error', 5000) end
         local formattedVehicles = {}
         for _, v in pairs(result) do
             local enginePercent = QBCore.Shared.Round(v.engine, 0)
@@ -69,8 +83,20 @@ local function OpenGarageMenu(data)
                 balance = v.balance or 0
             }
         end
-        local ok = pcall(function() exports['custom-ui']:OpenMenu({ keepInput = false }) end)
-        if not ok then SetNuiFocus(true, true) end
+        -- V-10：SetNuiFocus 是按资源的，必须由拥有 ui_page 的我们自己来按。
+        -- （真正的按下在文件末尾的 exports('ApplyFocus') 里，由 custom-ui 的栈回调）
+        -- 把 owner 传给 custom-ui 的栈，它会回过来调我们的 ApplyFocus（见文件末尾的 export）。
+        local ok, err = pcall(function()
+            exports['custom-ui']:OpenMenu({ keepInput = false, owner = GetCurrentResourceName() })
+        end)
+        -- 双保险：无论栈有没有走通，都由**我们自己**按一次焦点（这是本资源的 ui_page）。
+        -- 栈的 ownerApply 失败时是静默的（老版本 custom-ui / 导出缺失），只靠它会把
+        -- "面板出来但没光标"重新演一遍。
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(true, true)
+        if not ok then
+            print(('[qb-garages] custom-ui OpenMenu 调用失败：%s'):format(tostring(err)))
+        end
         SendNUIMessage({
             action = 'VehicleList',
             garageLabel = Config.Garages[data.indexgarage].label,
@@ -90,9 +116,9 @@ local function DepositVehicle(veh, data)
             TriggerServerEvent('qb-garages:server:updateVehicleStats', plate, totalFuel, engineDamage, bodyDamage)
             CheckPlayers(veh)
             if plate then TriggerServerEvent('qb-garages:server:UpdateOutsideVehicle', plate, nil) end
-            QBCore.Functions.Notify(Lang:t('success.vehicle_parked'), 'primary', 4500)
+            feedback(Lang:t('success.vehicle_parked'), 'primary', 4500)
         else
-            QBCore.Functions.Notify(Lang:t('error.not_owned'), 'error', 3500)
+            feedback(Lang:t('error.not_owned'), 'error', 3500)
         end
     end, plate, data.type, data.indexgarage, 1)
 end
@@ -192,7 +218,8 @@ local function CreateBlipsZones()
             -- 二次验证：确保玩家仍持有证件（防止并发变更）
             local garage = Config.Garages[zone.data.indexgarage]
             if garage and garage.requiredLicense and not HasRequiredLicense(garage) then
-                return  -- 无证件，静默忽略交互
+                feedback(('需要 %s 才能使用这个车库'):format(tostring(garage.requiredLicense)), 'error')
+                return
             end
 
             listenForKey = true
@@ -201,10 +228,13 @@ local function CreateBlipsZones()
                     Wait(0)
                     if IsControlJustReleased(0, 38) then
                         if GetVehiclePedIsUsing(PlayerPedId()) ~= 0 then
-                            if zone.data.type == 'depot' then return end
+                            if zone.data.type == 'depot' then
+                                feedback('扣押场不能存车，请去公共车库', 'error')
+                                return
+                            end
                             local currentVehicle = GetVehiclePedIsUsing(PlayerPedId())
                             if not IsVehicleAllowed(zone.data.category, currentVehicle) then
-                                QBCore.Functions.Notify(Lang:t('error.not_correct_type'), 'error', 3500)
+                                feedback(Lang:t('error.not_correct_type'), 'error', 3500)
                                 return
                             end
                             DepositVehicle(currentVehicle, zone.data)
@@ -225,10 +255,14 @@ local function CreateBlipsZones()
             elseif zone.data.type == 'depot' then
                 displayText = Lang:t('info.depot_e')
             end
-            exports['qb-core']:DrawText(displayText, 'left')
+            -- N-2 续（PO 2026-11-12「交互还走原来 notification」）：车位提示改走 custom-prompt。
+            -- 原文案形如 "E - Depot"，键块由 custom-prompt 自己画，所以把前缀剥掉。
+            -- custom-prompt 有"同内容不重发"的守卫（本文件是逐帧循环，也不会刷 NUI）。
+            local label = tostring(displayText):gsub('^E%s*%-%s*', '')
+            pcall(function() exports['custom-prompt']:Show({ key = 'E', label = label }) end)
         else
             listenForKey = false
-            exports['qb-core']:HideText()
+            pcall(function() exports['custom-prompt']:Hide() end)
         end
     end)
 end
@@ -301,7 +335,7 @@ function GetSpawnPoint(garage)
         end
     end
     if not location then
-        QBCore.Functions.Notify(Lang:t('error.vehicle_occupied'), 'error')
+        feedback(Lang:t('error.vehicle_occupied'), 'error')
     end
     return location
 end
@@ -309,7 +343,7 @@ end
 -- NUI Callbacks
 
 RegisterNUICallback('closeGarage', function(_, cb)
-    local ok = pcall(function() exports['custom-ui']:CloseMenu() end)
+    local ok = pcall(function() exports['custom-ui']:CloseMenu({ owner = GetCurrentResourceName() }) end)
     if not ok then SetNuiFocus(false, false) end
     cb('ok')
 end)
@@ -361,17 +395,22 @@ RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
         if spawn then
             -- NUI 回传的 garage 表可能丢失 vector4 类型；优先用 index 从客户端 Config 取
             local garage = Config.Garages[data.index] or data.garage
-            print(('[qb-garages] takeOutGarage plate=%s index=%s garage=%s'):format(
-                tostring(data.plate), tostring(data.index), tostring(garage and garage.label)))
+            if GetConvarInt('tcity_debug', 0) == 1 then
+                print(('[qb-garages] takeOutGarage plate=%s index=%s garage=%s'):format(
+                    tostring(data.plate), tostring(data.index), tostring(garage and garage.label)))
+            end
             if not garage or not garage.spawnPoint then
-                QBCore.Functions.Notify('车库配置无效', 'error', 5000)
+                feedback('车库配置无效', 'error', 5000)
                 return
             end
             local location = GetSpawnPoint(garage)
-            if not location then return end
+            if not location then
+                feedback('取车点被占用，先把车开走', 'error', 5000)
+                return
+            end
             QBCore.Functions.TriggerCallback('qb-garages:server:spawnvehicle', function(netId, properties, vehPlate)
                 if not netId then
-                    QBCore.Functions.Notify('取车失败：服务端拒绝生成载具（驾照/在外车辆上限）', 'error', 6000)
+                    feedback('取车失败：服务端拒绝生成载具（驾照/在外车辆上限）', 'error', 6000)
                     return
                 end
                 while not NetworkDoesNetworkIdExist(netId) do Wait(10) end
@@ -381,6 +420,9 @@ RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
                 exports[Config.FuelResource]:SetFuel(veh, data.stats.fuel)
                 TriggerServerEvent('qb-garages:server:updateVehicleState', 0, vehPlate)
                 TriggerEvent('vehiclekeys:client:SetOwner', vehPlate)
+                -- V-2：取车成功必须留一条回执（原来完全静默，玩家不知道生效没有）
+                feedback(('已取车 %s · %s'):format(tostring(vehPlate),
+                    tostring(garage.label or data.garage and data.garage.label or '车库')))
                 -- 同步预热 custom-vehicles 客户端缓存，防止 Warp 后冷缓存误锁
                 local normPlate = vehPlate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
                 TriggerEvent('custom-vehicles:client:keysUpdated', {
@@ -391,7 +433,7 @@ RegisterNetEvent('qb-garages:client:takeOutGarage', function(data)
                 SetVehicleEngineOn(veh, true, true, false)
             end, data.plate, data.vehicle, location, true)
         else
-            QBCore.Functions.Notify(Lang:t('error.not_depot'), 'error', 5000)
+            feedback(Lang:t('error.not_depot'), 'error', 5000)
         end
     end, data.plate, data.type)
 end)
@@ -440,7 +482,8 @@ local function CreateHouseZone(index, garage, zoneType)
                     end
                 end
             end)
-            exports['qb-core']:DrawText(Lang:t('info.house_garage'), 'left')
+            local houseLabel = tostring(Lang:t('info.house_garage')):gsub('^E%s*%-%s*', '')
+            pcall(function() exports['custom-prompt']:Show({ key = 'E', label = houseLabel }) end)
         else
             listenForKeyHouse = false
             exports['qb-core']:HideText()
@@ -564,4 +607,15 @@ end)
 
 RegisterNetEvent('QBCore:Client:OnJobUpdate', function(job)
     PlayerJob = job
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- V-10（2026-11-12 PO：扣押场取车面板没有光标、点不了付款）
+-- SetNuiFocus 是**按资源**的：custom-ui 没有 ui_page，从它那里调等于把焦点给空气。
+-- custom-ui 的输入栈只决定"该谁有焦点"，然后回调**拥有页面**的资源的这个 export。
+-- （上一版漏了这段 —— 注释里写了 export 名，代码里没有，栈的 ownerApply 静默失败。）
+-- ══════════════════════════════════════════════════════════════
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    SetNuiFocusKeepInput(keepInput == true)
+    SetNuiFocus(hasFocus == true, hasCursor ~= false)
 end)

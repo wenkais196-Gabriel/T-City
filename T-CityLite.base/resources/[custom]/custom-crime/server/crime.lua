@@ -282,21 +282,17 @@ local function LaunderMoney(src, amount)
         return false, 0, "扣款失败"
     end
 
-    -- 7. 入干净钱（到 bank）— 经统一经济出口
-    if exports['custom-main'] and exports['custom-main'].AddScaledMoney then
-        exports['custom-main']:AddScaledMoney(src, 'bank', cleanAmount, 'LaunderMoney:deposit')
-    else
-        Player.Functions.AddMoney('bank', cleanAmount, 'LaunderMoney:deposit')
-    end
+    -- 7. 入干净钱（到 bank）— 洗钱是原语写路径，不叠经济倍率
+    Player.Functions.AddMoney('bank', cleanAmount, 'LaunderMoney:deposit')
 
     -- 8. 更新冷却状态
     if not Cooldowns.LaunderPlayer then Cooldowns.LaunderPlayer = {} end
     Cooldowns.LaunderPlayer[Player.PlayerData.citizenid] = now
 
     -- 9. 审计日志
-    local logText = ("**玩家**: %s (%s)\n**洗钱金额**: $%d\n**折旧率**: %.0f%%\n**手续费损失**: $%d\n**净入银行**: $%d\n**当前在线警察**: %d 名"):format(
+    local logText = ("**玩家**: %s (%s)\n**洗钱金额**: $%s\n**折旧率**: %.0f%%\n**手续费损失**: $%s\n**净入银行**: $%s\n**当前在线警察**: %d 名"):format(
         GetPlayerName(src), Player.PlayerData.citizenid,
-        amount, (1 - rate) * 100, loss, cleanAmount, policeCount
+        Money(amount), (1 - rate) * 100, Money(loss), Money(cleanAmount), policeCount
     )
 
     if amount >= 10000 then
@@ -414,12 +410,8 @@ local function MultiLaunderMoney(src, amount, tierLevel)
 
     -- 6. 入账
     if tierLevel == 4 then
-        -- 最终层: 入 bank
-        if exports['custom-main'] and exports['custom-main'].AddScaledMoney then
-            exports['custom-main']:AddScaledMoney(src, 'bank', cleanAmount, 'MultiLaunder:L4')
-        else
-            Player.Functions.AddMoney('bank', cleanAmount, 'MultiLaunder:L4')
-        end
+        -- 最终层: 入 bank（原语写路径，不叠经济倍率）
+        Player.Functions.AddMoney('bank', cleanAmount, 'MultiLaunder:L4')
     else
         -- 中间层: 入 cash (模拟中间资产)
         Player.Functions.AddMoney('cash', cleanAmount, ('MultiLaunder:L%d'):format(tierLevel))
@@ -430,17 +422,17 @@ local function MultiLaunderMoney(src, amount, tierLevel)
 
     -- 8. 审计
     local cartelTag = isCartel and ' [Cartel专属]' or ''
-    local logText = ('**玩家**: %s (%s)\n**层级**: L%d %s%s\n**洗入**: $%d\n**保留率**: %.0f%%\n**手续费**: $%d\n**净得**: $%d'):format(
+    local logText = ('**玩家**: %s (%s)\n**层级**: L%d %s%s\n**洗入**: $%s\n**保留率**: %.0f%%\n**手续费**: $%s\n**净得**: $%s'):format(
         GetPlayerName(src), Player.PlayerData.citizenid,
-        tierLevel, tier.label, cartelTag, amount, rate * 100, loss, cleanAmount)
+        tierLevel, tier.label, cartelTag, Money(amount), rate * 100, Money(loss), Money(cleanAmount))
 
     if exports['custom-logs'] then
         exports['custom-logs']:LogEconomy('多层洗钱', logText, isCartel and 16738657 or 16763904)
     end
 
     TriggerClientEvent('QBCore:Notify', src,
-        ('[L%d] %s: $%d → $%d (%.0f%%%s)'):format(
-            tierLevel, tier.label, amount, cleanAmount, rate * 100, cartelTag),
+        ('[L%d] %s: $%s → $%s (%.0f%%%s)'):format(
+            tierLevel, tier.label, Money(amount), Money(cleanAmount), rate * 100, cartelTag),
         'success')
 
     return true, cleanAmount, "洗钱成功"

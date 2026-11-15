@@ -22,6 +22,7 @@ local QBCore = exports['qb-core']:GetCoreObject()
 ---@field rentalDeposit number 租车押金
 ---@field rentalFeePct number  租车抽成比例 (0-100)
 
+-- [quest-logistics-binding-store] begin
 -- citizenid → questId → LogisticsBinding
 local PlayerBindings = {}
 
@@ -77,6 +78,7 @@ local function clearBinding(citizenid, questId)
         PlayerBindings[citizenid][questId] = nil
     end
 end
+-- [quest-logistics-binding-store] end
 
 -- ==============================================================
 -- 辅助函数: 安全获取玩家当前车辆信息
@@ -183,14 +185,17 @@ local function validate_logistics_vehicle(src, stepData, questData)
     -- 3. 验证通过 → 清除尝试计数 + 记录绑定
     clearValidationAttempts(citizenid, questId)
     local isOwned = playerOwnsVehicle(citizenid, vehInfo.plate)
-    local rentalFeePct = stepData.rental_fee_percent or 20
+    local rentalFeePct = tonumber(stepData.rental_fee_percent) or 20
+    -- 押金由租赁行在租车时收取，任务这边只**记录**（结算收据要显示它、将来 settle 节点要用）。
+    -- 这里曾经写死 0，导致配置里 300–2000 的押金在收据上永远是 $0（2026-11-14 修）。
+    local rentalDeposit = tonumber(stepData.rental_deposit) or 0
 
     setBinding(citizenid, questId, {
         plate    = vehInfo.plate,
         netId    = vehInfo.netId,
         model    = vehInfo.model,
         isRental = not isOwned,
-        rentalDeposit = 0,
+        rentalDeposit = isOwned and 0 or rentalDeposit,
         rentalFeePct  = isOwned and 0 or rentalFeePct,
     })
 
@@ -199,7 +204,11 @@ local function validate_logistics_vehicle(src, stepData, questData)
     if isOwned then
         return true, ('✅ 已绑定私家车 [%s] — 享受 100%% 收益'):format(vehInfo.plate)
     else
-        return true, ('📋 已登记运输载具 [%s] — 收益抽成 %d%%'):format(vehInfo.plate, rentalFeePct)
+        local msg = ('📋 已登记运输载具 [%s] — 收益抽成 %d%%'):format(vehInfo.plate, rentalFeePct)
+        if rentalDeposit > 0 then
+            msg = ('%s，押金 $%s（租赁行收取，归还全退）'):format(msg, QuestMoney and QuestMoney(rentalDeposit) or tostring(rentalDeposit))
+        end
+        return true, msg
     end
 end
 
@@ -318,6 +327,7 @@ end
 -- 导出
 -- ==============================================================
 
+-- [quest-logistics-binding-api] begin
 function GetLogisticsBinding(citizenid, questId)
     return getBinding(citizenid, questId)
 end
@@ -326,6 +336,21 @@ function ClearLogisticsBinding(citizenid, questId)
     clearBinding(citizenid, questId)
     clearValidationAttempts(citizenid, questId)
 end
+
+--- 玩家下线时调用：该玩家**所有**任务的绑定与尝试计数一起清掉。
+--- 绑定的键是 citizenid → questId（questId 在断线时已经不可知），所以只能整表清。
+---@param citizenid string
+---@return number cleared 清掉的绑定数（用于日志/测试断言）
+function ClearAllLogisticsBindings(citizenid)
+    local cleared = 0
+    if PlayerBindings[citizenid] then
+        for _ in pairs(PlayerBindings[citizenid]) do cleared = cleared + 1 end
+        PlayerBindings[citizenid] = nil
+    end
+    ValidationAttempts[citizenid] = nil
+    return cleared
+end
+-- [quest-logistics-binding-api] end
 
 -- ==============================================================
 -- 注册
@@ -394,7 +419,7 @@ AddEventHandler('quest:server:onQuestFailed', function(citizenid, questId, reaso
                     local accountType = template.rewards.money.type or 'bank'
                     Player.Functions.RemoveMoney(accountType, penalty, ('quest_fail:%s'):format(questId))
                     TriggerClientEvent('QBCore:Notify', src,
-                        ('💸 任务失败，扣除基础收益 50%% (-$%d)'):format(penalty), 'error')
+                        ('💸 任务失败，扣除基础收益 50%% (-$%s)'):format(QuestMoney(penalty)), 'error')
                 end
             end
         end
@@ -415,10 +440,25 @@ end)
 -- citizenid → questId → CargoDamageRecord
 local CargoDamageRecords = {}
 
+-- 客户端上报的货运损伤：只写**自己**的记录，但内容必须校验 ——
+-- `data` 为 nil 时 `data.questId` 会直接抛错；数值不夹取的话可以上报负数/天文数字影响结算评分。
+local MAX_COLLISIONS = 500
+local MAX_DAMAGE_PCT = 100
+local MAX_HEALTH_DELTA = 2000
+
+local function clampNumber(value, limit)
+    local number = tonumber(value)
+    if not number then return 0 end
+    if number < 0 then return 0 end
+    if number > limit then return limit end
+    return number
+end
+
 RegisterNetEvent('quest:server:cargoDamageResult', function(data)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    if type(data) ~= 'table' or type(data.questId) ~= 'string' or #data.questId > 64 then return end
 
     local citizenid = Player.PlayerData.citizenid
     if not CargoDamageRecords[citizenid] then
@@ -426,14 +466,16 @@ RegisterNetEvent('quest:server:cargoDamageResult', function(data)
     end
     CargoDamageRecords[citizenid][data.questId] = {
         questId = data.questId,
-        collisionCount = data.collisionCount or 0,
-        damagePct = data.damagePct or 0,
-        bodyHealthDelta = data.bodyHealthDelta or 0,
-        engineHealthDelta = data.engineHealthDelta or 0,
+        collisionCount = clampNumber(data.collisionCount, MAX_COLLISIONS),
+        damagePct = clampNumber(data.damagePct, MAX_DAMAGE_PCT),
+        bodyHealthDelta = clampNumber(data.bodyHealthDelta, MAX_HEALTH_DELTA),
+        engineHealthDelta = clampNumber(data.engineHealthDelta, MAX_HEALTH_DELTA),
     }
 
     print(('[logistics-damage] 📦 %s | 任务: %s | 碰撞: %d 次 | 损伤: %d%%'):format(
-        citizenid, data.questId, data.collisionCount, data.damagePct))
+        citizenid, data.questId,
+        CargoDamageRecords[citizenid][data.questId].collisionCount,
+        CargoDamageRecords[citizenid][data.questId].damagePct))
 end)
 
 -- ==============================================================

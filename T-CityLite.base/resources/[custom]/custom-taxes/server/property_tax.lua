@@ -254,11 +254,10 @@ function ProcessPropertyTax(source)
                     local playerMoney = Player.PlayerData.money['bank'] or 0
 
                     if playerMoney >= totalDue then
-                        -- 足额扣款
-                        if _G.Bus and _G.Bus.SinkService then
-                            _G.Bus.SinkService.Withdraw(source, totalDue, 'housing_tax',
-                                ('%s (cycles: %d)'):format(houseId, cyclesDue))
-                        else
+                        -- 足额扣款：走 qb-core 的 SinkWithdraw；失败时保留原有的直接扣款回落
+                        local sinkOk = exports['qb-core']:SinkWithdraw(source, totalDue, 'housing_tax',
+                            ('%s (cycles: %d)'):format(houseId, cyclesDue))
+                        if not sinkOk then
                             Player.Functions.RemoveMoney('bank', totalDue,
                                 ('property_tax:%s'):format(houseId))
                         end
@@ -266,8 +265,8 @@ function ProcessPropertyTax(source)
                         setLastTaxPaid(citizenid, houseId, now)
                         setDelinquentCount(citizenid, houseId, 0)
 
-                        print(('[PropertyTax] %s paid $%d for %s (%d cycles × $%d)')
-                            :format(citizenid, totalDue, houseId, cyclesDue, taxPerCycle))
+                        print(('[PropertyTax] %s paid $%s for %s (%d cycles × $%s)')
+                            :format(citizenid, TCMoney(totalDue), houseId, cyclesDue, TCMoney(taxPerCycle)))
                     else
                         -- 余额不足 → 递增欠费次数
                         local delinquent = getDelinquentCount(citizenid, houseId) + 1
@@ -281,8 +280,8 @@ function ProcessPropertyTax(source)
                             -- 通知玩家
                             local remaining = foreclosureThreshold - delinquent
                             TriggerClientEvent('QBCore:Notify', source,
-                                ('⚠️ Property tax overdue for %s! $%d due. Foreclosure in %d cycles.')
-                                    :format(house.label or houseId, totalDue, remaining),
+                                ('⚠️ Property tax overdue for %s! $%s due. Foreclosure in %d cycles.')
+                                    :format(house.label or houseId, TCMoney(totalDue), remaining),
                                 'error')
                         end
                     end
@@ -293,7 +292,7 @@ function ProcessPropertyTax(source)
 
     if taxDueTotal > 0 then
         TriggerClientEvent('QBCore:Notify', source,
-            ('Property tax: $%d processed for %d house(s).'):format(taxDueTotal, houseCount),
+            ('Property tax: $%s processed for %d house(s).'):format(TCMoney(taxDueTotal), houseCount),
             'primary')
     end
 

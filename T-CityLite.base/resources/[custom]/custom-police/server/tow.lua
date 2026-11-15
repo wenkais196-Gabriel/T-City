@@ -11,7 +11,6 @@ local TOW_COOLDOWN_SECONDS = 60
 local TOW_SWEEP_MS = 10000
 
 local towRequests = {}   -- [requestId] = { cid, source, at }
-local towCooldown = {}   -- [cid] = os.time()
 local towSequence = 0
 
 local function nextRequestId()
@@ -76,19 +75,21 @@ RegisterNetEvent('police:server:towRequest', function(plate, netId)
         return
     end
 
-    local last = towCooldown[cid] or 0
-    if os.time() - last < TOW_COOLDOWN_SECONDS then return end
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:tow'):format(cid), TOW_COOLDOWN_SECONDS * 1000) then return end
 
     local requestId = nextRequestId()
     local admitted = NPCBudget and NPCBudget.Acquire and NPCBudget.Acquire('tow', requestId, cid)
     if not admitted then
+        -- 旧实现只在成功下单后写冷却；owner 的 Cooldown 是"检查即记账"，
+        -- 所以预算拒绝时撤回刚记的这条，保持"失败不占冷却"的语义。
+        exports['core-framework']:RateLimitReset(('police:%s:tow'):format(cid))
         if not audit(cid, 'tow.rejected', requestId, 'budget') then
             print('[custom-police] tow.rejected audit failed')
         end
         return
     end
 
-    towCooldown[cid] = os.time()
     towRequests[requestId] = { cid = cid, source = src, at = os.time() }
     if not audit(cid, 'tow.request', requestId, tostring(plate)) then
         print(('[custom-police] tow.request audit failed: %s'):format(requestId))

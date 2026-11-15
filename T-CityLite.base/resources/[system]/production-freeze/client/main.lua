@@ -173,3 +173,25 @@ CreateThread(function()
 end)
 
 -- (生产模式静默: 动画打断/PolyZone/UI 调优已激活)
+
+-- ── 客户端 Debug 冻结（生产模式）─────────────────────────────
+-- 这段原来写在 server/main.lua 里并被 `TriggerClientEvent('production:client:freezeDebug', -1)`
+-- 广播，但服务端注册的 handler 收不到广播 —— 于是「生产模式关闭 DrawText3D / PolyZone debug」
+-- 从未生效。真正该在这里：只影响**本资源**自己的全局（每个 resource 有独立 Lua 状态）。
+RegisterNetEvent('production:client:freezeDebug', function()
+    if not _G.PRODUCTION_MODE then return end
+
+    _G.DrawText3D = function() end
+    _G.DrawText3Ds = function() end
+    _G.DrawMarker = function() end
+
+    if PolyZone and PolyZone.Create then
+        local originalCreate = PolyZone.Create
+        -- 保住 self：调用方写的是 `PolyZone:Create(points, opts)`，
+        -- 包装器第一个参数必须是 self，否则 points 会被当成 self、opts 被丢弃。
+        PolyZone.Create = function(self, points, options)
+            if options then options.debugPoly = false end
+            return originalCreate(self, points, options)
+        end
+    end
+end)

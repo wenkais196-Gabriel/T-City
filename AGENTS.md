@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-01
+updated: 2026-11-15
 review_by: 2027-04-30
 ---
 
@@ -66,8 +66,11 @@ npx svelte-check --tsconfig ./tsconfig.app.json     # 前端类型
 npm run build                                      # 改 web/src 后必做，产物进 ../../html
 luac5.4 -p <file.lua>                              # Lua 语法（qb-core 用 CfxLua `+=`，luac 解析不了）
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua  # Lua golden（13 suites / 253 checks）
+# ↑ PowerShell 里必须带 .exe（裸名会弹「打开方式」并卡住命令，见 §5 环境事实）
 
-# 服务器（screen 会话 tcity；无 RCON，控制台走 tcity-cmd 注入）
+# 服务器：一键起（Docker 引擎 → MariaDB → 等 3307 → FXServer → 自检）
+.\start.cmd            # Windows 日常只用这条；-Status / -Restart / -Stop
+# 下面是手工等价的旧路径（screen 会话 tcity；无 RCON，控制台走 tcity-cmd 注入）
 screen -dmS tcity bash -c 'cd <repo> && ./start.sh > /tmp/tcity_console.log 2>&1'
 tcity-cmd -w 8 "restart custom-phone"   # tcity-cmd --page 看当前页；tail -40 /tmp/tcity_console.log 看日志
 
@@ -87,6 +90,7 @@ python3 tools/dev/release_check.py                             # 交付前
 - `server.cfg`、`alpine/`、`cache/`、`txData/` 均 gitignored；`server.cfg` 含 DB 密码、license、token，**永不提交**。凭据只放在 `~/.hermes/.tcity.env`（600）。
 - 玩家重连后 server id 会变，按 id 操作前先查 `http://127.0.0.1:30120/players.json`。
 - 改 `fxmanifest` **新增**脚本文件时必须 `refresh`（不是 `restart`），否则清单不重读。
+- **POSIX 工具名在 PowerShell 里要带 `.exe`**：`luac5.4` / `lua5.4` 的扩展名被 Windows 读成 `.4`，该扩展名无关联程序，PowerShell 会把文件当“文档”交给 ShellExecute → 弹「选择一个应用以打开此 .4 文件」并**阻塞命令**（每个改过的 Lua 文件弹一次，看起来像“改一个文件弹一个框”）。bash/MSYS 与 Python `subprocess` 用裸名正常；`cmd` 则根本解析不到裸名。想根治可在 `PATHEXT` 追加 `.4`，但改机器环境前先确认；加 `lua5.4.cmd` 包装**无效**（`where` 顺序：字面文件 → `.cmd` → `.exe`）。
 
 ## 6. 工作树与分支
 

@@ -1,0 +1,562 @@
+{
+  "$comment": "资源内部的鉴权 helper 登记表。只有**证明过一次**的 helper 才能让调用点算作已鉴权：defined_at 里必须恰好定义一次、函数体含 requires 里的全部证据，且资源内每一处调用都必须是 `if not H(...) then return` 形状（调用但不看返回值不算）。新增 helper 请连同 test_net_event_auth.py::test_registered_guard_helpers_are_proven 一起过。",
+  "custom-vehicles": {
+    "CanModifyPlate": {
+      "defined_at": "custom-vehicles/server/vehicle_state.lua",
+      "requires_code": [
+        "QBCore.Functions.GetPlayer(src)",
+        "PlayerData.citizenid",
+        "KeyManager.GetOwner(plate)",
+        "return false"
+      ],
+      "requires_raw": [
+        "job.name == 'mechanic'",
+        "onduty"
+      ],
+      "why": "车牌写权限 = 车主 citizenid 相等，或执勤机修；其余一律 false"
+    },
+    "IsEmergencyService": {
+      "defined_at": "custom-vehicles/server/dashboard_api.lua",
+      "requires_code": [
+        "QBCore.Functions.GetPlayer(src)",
+        "return false"
+      ],
+      "requires_raw": [
+        "job.name == 'police'",
+        "job.name == 'ambulance'",
+        "job.name == 'fire'"
+      ],
+      "why": "紧急服务职业判定：PA 喊话 / 警笛 / 测速雷达 / 锚定只对这些职业开放"
+    },
+    "IsSeatedIn": {
+      "defined_at": "custom-vehicles/server/vehicle_state.lua",
+      "requires_code": [
+        "GetPlayerPed(src)",
+        "GetVehiclePedIsIn(ped, false) == veh",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "广播类事件（氮气火焰）只允许车里的人触发"
+    },
+    "IsSeatedInPlate": {
+      "defined_at": "custom-vehicles/server/main.lua",
+      "requires_code": [
+        "NormalizePlate(plate)",
+        "GetVehiclePedIsIn(ped, false)",
+        "NormalizePlate(GetVehicleNumberPlateText(veh)) == want",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "中控屏锁只对坐在该车牌车内的人开放"
+    },
+    "CanClaimPlate": {
+      "defined_at": "custom-vehicles/server/compat.lua",
+      "requires_code": [
+        "KeyManager.GetOwner(plate)",
+        "MySQL.scalar.await(",
+        "IsNearVehicleWithPlate(src, plate)",
+        "return false"
+      ],
+      "requires_raw": [
+        "FROM player_vehicles WHERE plate = ?"
+      ],
+      "shape": "local_check",
+      "why": "车牌认领：会话车主 / 数据库车主一致，无主车必须在车旁（GiveKeys 与 AcquireVehicleKeys 共用）"
+    },
+    "HasActiveQuest": {
+      "defined_at": "custom-vehicles/server/dashboard_api.lua",
+      "requires_code": [
+        "GetActiveQuests(src)",
+        "pcall(",
+        "return ok and type(quests) ==",
+        "#quests > 0"
+      ],
+      "requires_raw": [],
+      "why": "有进行中的任务才允许快捷装货（custom-quest 未就绪时按没有任务处理）"
+    },
+    "HoldsDashboardLock": {
+      "defined_at": "custom-vehicles/server/main.lua",
+      "requires_code": [
+        "QBCore.Functions.GetPlayer(src)",
+        "NormalizePlate(plate)",
+        "dashboardLocks[want] ==",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "中控屏排他锁：只有锁的持有者（按归一化车牌）能切驾驶模式/操作中控台"
+    },
+    "FindLogisticsQuest": {
+      "defined_at": "custom-vehicles/server/dashboard_api.lua",
+      "requires_code": [
+        "GetActiveQuests(src)",
+        "LOGISTICS_QUESTS[quest.quest_id]",
+        "return nil"
+      ],
+      "requires_raw": [],
+      "shape": "local_check",
+      "why": "只认具体物流任务模板（euro_trucking_steel / heavy_trailer / aviation_smuggling_flight）"
+    }
+  },
+  "custom-police": {
+    "onDutyOfficer": {
+      "defined_at": "custom-police/server/evidence.lua",
+      "requires_code": [
+        "PolicePolicy.Can(player.PlayerData, capability)",
+        "return nil"
+      ],
+      "requires_raw": [],
+      "why": "执勤 + 能力判定（evidence.view / evidence.register），直接落到 PolicePolicy.Can"
+    },
+    "PoliceDispatch.ArriveIncident": {
+      "defined_at": "custom-police/server/p0_lifecycle.lua",
+      "definition_marker": "function P.ArriveIncident(",
+      "requires_code": [
+        "PolicePolicy.Can"
+      ],
+      "requires_raw": [],
+      "shape": "pcall",
+      "why": "到场确认：PoliceDispatch 内部按 incident.arrive 能力判定"
+    },
+    "PoliceDispatch.ClaimIncident": {
+      "defined_at": "custom-police/server/p0_lifecycle.lua",
+      "definition_marker": "function P.ClaimIncident(",
+      "requires_code": [
+        "PolicePolicy.Can"
+      ],
+      "requires_raw": [],
+      "shape": "pcall",
+      "why": "认领警情：PoliceDispatch 内部按 incident.claim 能力判定"
+    },
+    "AdoptDraft": {
+      "defined_at": "custom-police/server/p0_incidents.lua",
+      "definition_marker": "function P.AdoptDraft(",
+      "requires_code": [
+        "PolicePolicy.Can",
+        "audit("
+      ],
+      "requires_raw": [],
+      "shape": "export",
+      "call": "exports['custom-police']:AdoptDraft",
+      "why": "采纳草稿：incident.update 能力 + 审计写不进去就不给做"
+    },
+    "ListDrafts": {
+      "defined_at": "custom-police/server/p0_incidents.lua",
+      "definition_marker": "function P.ListDrafts(",
+      "requires_code": [
+        "PolicePolicy.Can",
+        "audit("
+      ],
+      "requires_raw": [],
+      "shape": "export",
+      "call": "exports['custom-police']:ListDrafts",
+      "why": "读草稿箱：incident.update 能力 + 审计先写"
+    },
+    "NPC.SubmitResult": {
+      "defined_at": "custom-police/server/p4_npc.lua",
+      "definition_marker": "function NPC.SubmitResult(",
+      "requires_code": [
+        "PolicePolicy.Can(actor,",
+        "return false"
+      ],
+      "requires_raw": [
+        "'incident.update'"
+      ],
+      "shape": "delegate",
+      "call": "NPC.SubmitResult",
+      "why": "NPC 警情回执：incident.update 能力判定在被调函数内部"
+    }
+  },
+  "custom-quest": {
+    "QuestSecurity.ValidateClientEvent": {
+      "defined_at": "custom-quest/server/quest_security.lua",
+      "requires_code": [
+        "QuestSecurity.ValidateNonce(",
+        "CheckRateLimit(",
+        "ValidateStepOrder(",
+        "CheckStepAttempts(",
+        "return false"
+      ],
+      "requires_raw": [],
+      "shape": "ok_err",
+      "why": "nonce + 限频 + 玩家有效性 + 步骤顺序 + 尝试次数，任一失败返回 false"
+    },
+    "hasActiveQuest": {
+      "defined_at": "custom-quest/server/main.lua",
+      "requires_code": [
+        "QuestManager.GetActiveQuests(src)",
+        "quest.quest_id == questId",
+        "type(questId) ~="
+      ],
+      "requires_raw": [
+        "quest_id"
+      ],
+      "why": "客户端报告进度的事件必须确认「这个玩家真的在跑这单任务」：questId 类型 + 在 GetActiveQuests 列表里。"
+    },
+    "QuestVendorGuard.Validate": {
+      "defined_at": "custom-quest/server/quest_vendor_bridge.lua",
+      "requires_code": [
+        "GetPlayer(src)",
+        "PlayerData.citizenid",
+        "ACTIONS[action]",
+        "RateLimited(citizenid)",
+        "ctx.player = Player",
+        "return false"
+      ],
+      "requires_raw": [
+        "type(payload) ~= 'table'"
+      ],
+      "why": "摊位动作（成交/拒绝/购买）的唯一入口守卫：玩家必须在线、action 必须在白名单、必须过限流；距离与归属在 handler 里按会话/摊位再判一次。"
+    }
+  },
+  "custom-cartel": {
+    "CartelService.IsMember": {
+      "defined_at": "custom-cartel/server/main.lua",
+      "requires_code": [
+        "QBCore.Functions.GetPlayer(source)",
+        "PlayerData.gang",
+        "return false"
+      ],
+      "requires_raw": [
+        "gang.name == 'cartel'"
+      ],
+      "why": "帮派成员校验：只有 gang.name == 'cartel' 的玩家返回 true（附带等级）",
+      "shape": "local_check"
+    }
+  },
+  "custom-agent-client": {
+    "ClaimPending": {
+      "defined_at": "custom-agent-client/server/main.lua",
+      "requires_code": [
+        "pending[src] or {}",
+        "entry.session ~=",
+        "return nil"
+      ],
+      "requires_raw": [],
+      "why": "ack 归属：rid 必须在自己的 pending 表里且 session 令牌一致（令牌只发给该玩家客户端）",
+      "shape": "local_check"
+    }
+  },
+  "custom-justice": {
+    "IsLawEnforcement": {
+      "defined_at": "custom-justice/server/prison.lua",
+      "requires_code": [
+        "LAW_ENFORCEMENT_JOBS",
+        "type(data) ~= ",
+        "type(job) ~= ",
+        "LAW_ENFORCEMENT_JOBS[job.name] == true"
+      ],
+      "shape": "local_check",
+      "why": "直接下判决只认在职警察与法官（原来写成正分支，行为一致但闸门认不出）。",
+      "requires_raw": [
+        "table",
+        "string"
+      ]
+    },
+    "JusticeService.GetOwnInmate": {
+      "defined_at": "custom-justice/server/main.lua",
+      "requires_code": [
+        "player.PlayerData.citizenid",
+        "return inmates["
+      ],
+      "requires_raw": [],
+      "shape": "local_check",
+      "why": "调用者**自己**在押与否：只接受 Player 对象（source 派生），查不到别人的记录"
+    }
+  },
+  "qb-management": {
+    "IsJobBoss": {
+      "defined_at": "qb-management/server/sv_boss.lua",
+      "requires_code": [
+        "PlayerData.job",
+        "isboss == true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "职业老板判定：PlayerData.job.isboss 为 true 才算。qb-management 的老板菜单事件（GradeUpdate/FireEmployee/HireEmployee/TransferOwnership）都先用它拒绝非 boss，再叠加菜单点 5m 距离校验；闸门不认识内联的 job.isboss，所以登记成 helper。"
+    },
+    "IsPlayerBoss": {
+      "defined_at": "qb-management/server/sv_org.lua",
+      "requires_code": [
+        "PlayerData.job.isboss",
+        "PlayerData.gang.isboss",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "组织（job 或 gang）老板判定：按 orgType 分别看 PlayerData.job.isboss / PlayerData.gang.isboss。qb-orgmenu 的 GradeUpdate/FireMember/HireMember/TransferOwnership 都用它做首道拒绝。"
+    },
+    "IsGangBoss": {
+      "defined_at": "qb-management/server/sv_gang.lua",
+      "requires_code": [
+        "PlayerData.gang",
+        "isboss == true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "帮派 BOSS 判定：PlayerData.gang.isboss 为 true。qb-gangmenu 的 GradeUpdate/FireMember/HireMember/TransferOwnership 都用它做首道拒绝，再叠加菜单点 5m 与目标 5m 距离校验。"
+    },
+    "CanOpenBossStash": {
+      "defined_at": "qb-management/server/sv_boss.lua",
+      "requires_code": [
+        "data.isboss",
+        "data.name ~= orgName",
+        "Config.BossMenus",
+        "#(playerCoords - coords) < 2.5"
+      ],
+      "requires_raw": [
+        "isboss"
+      ],
+      "why": "boss 仓库（职业/帮派/组织三处共用）：必须本人是 org 的 boss、org 名匹配、且站在对应菜单点 2.5 米内。"
+    }
+  },
+  "qb-ambulancejob": {
+    "CanRevive": {
+      "defined_at": "qb-ambulancejob/server/main.lua",
+      "requires_code": [
+        "PlayerData.job",
+        "onduty",
+        "HasItem",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "复活权限：在职 EMS，或持有 firstaid 且（未开启执照要求时）具备 medical_cert。hospital:server:RevivePlayer 用 `if not CanRevive(Player, src) then 审计+拒绝 return end` 做首道拒绝。"
+    },
+    "isOnDutyEMS": {
+      "defined_at": "qb-ambulancejob/server/main.lua",
+      "requires_code": [
+        "job.name ==",
+        "job.onduty == true",
+        "QBCore.Functions.GetPlayer(src)"
+      ],
+      "requires_raw": [
+        "'ambulance'"
+      ],
+      "why": "在职 EMS 判定：job.name == 'ambulance' 且 onduty。客户端菜单里的 job 过滤条件不算鉴权（可绕过），服务端必须自己判。"
+    },
+    "isRegisteredDoctor": {
+      "defined_at": "qb-ambulancejob/server/main.lua",
+      "requires_code": [
+        "Doctors[src] == true"
+      ],
+      "requires_raw": [
+        "Doctors"
+      ],
+      "why": "只认服务端 AddDoctor 登记过的医生能注销计数。不能用 onduty 判定：qb-core 下班时先把 onduty 置 false 再通知客户端，客户端才补发 RemoveDoctor。"
+    },
+    "inReviveWindow": {
+      "defined_at": "qb-ambulancejob/server/main.lua",
+      "requires_code": [
+        "RecentlyRevived[src]",
+        "return false",
+        "REVIVE_WINDOW_SECONDS"
+      ],
+      "why": "复活窗口：只有服务端刚送进院/复活的玩家才允许把饥饿口渴拉满。窗口由服务端写、客户端读不到，所以它是一条真守卫（不是「看着像」）。",
+      "expires": "2027-03-31"
+    }
+  },
+  "qb-houses": {
+    "hasKey": {
+      "defined_at": "qb-houses/server/main.lua",
+      "requires_code": [
+        "houseowneridentifier[house]",
+        "houseownercid[house]",
+        "housekeyholders[house]",
+        "return true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "房主（license + citizenid 都对）或钥匙持有人列表里的 citizenid 才返回 true；openStash / lockHouse / OpenDoor 靠它挡入室"
+    },
+    "isHouseOwner": {
+      "defined_at": "qb-houses/server/main.lua",
+      "requires_code": [
+        "houseowneridentifier[house]",
+        "houseownercid[house]",
+        "return true",
+        "return false"
+      ],
+      "requires_raw": [],
+      "why": "只认房主（不认钥匙持有人）：改装饰 / 挪储物柜坐标 / 发钥匙 这类操作"
+    }
+  },
+  "qb-weathersync": {
+    "isAllowedToChange": {
+      "defined_at": "qb-weathersync/server/server.lua",
+      "requires_code": [
+        "src == 0",
+        "QBCore.Functions.HasPermission(src",
+        "IsPlayerAceAllowed(src"
+      ],
+      "requires_raw": [
+        "admin"
+      ],
+      "why": "改天气/时间/停电/冻时只允许控制台（src==0）或有 admin 权限（ACE）的人；原来这个判定存在，但写成 if isAllowed 正分支，闸门识别不了"
+    }
+  },
+  "qb-vehicleshop": {
+    "dealerOnDuty": {
+      "defined_at": "qb-vehicleshop/server/finance-lifecycle.lua",
+      "requires_code": [
+        "job.name ==",
+        "job.onduty == true",
+        "QBCore.Functions.GetPlayer(src)"
+      ],
+      "requires_raw": [
+        "'cardealer'"
+      ],
+      "why": "换展车 / 发试驾是店员操作，结果会广播给全服或给任意玩家生成载具。只看客户端菜单的 job 过滤条件不算鉴权。"
+    },
+    "IsOwnTestDrive": {
+      "defined_at": "qb-vehicleshop/server/bus.lua",
+      "requires_code": [
+        "TestDriveVehicles[netId]",
+        "grant.src == src"
+      ],
+      "requires_raw": [
+        "TestDriveVehicles"
+      ],
+      "why": "删除试驾载具只认『本资源给这个玩家生成的净 id』，否则任意 netId 就是任意实体（别人的车、NPC、玩家）。"
+    }
+  },
+  "qb-inventory": {
+    "validateOtherPlayerInventory": {
+      "defined_at": "qb-inventory/server/main.lua",
+      "requires_code": [
+        "inventoryId:find(",
+        "HasPermission(src, ",
+        "GetEntityCoords(srcPed)",
+        "<= 3.0"
+      ],
+      "requires_raw": [
+        "otherplayer%-"
+      ],
+      "why": "搬运物品到 otherplayer-* 容器前，必须确认目标玩家在线且在自己 3 米内（管理员除外）；否则客户端可伪造本事件远程搬别人的背包。"
+    }
+  },
+  "qb-houserobbery": {
+    "getFurniture": {
+      "shape": "local_check",
+      "defined_at": "qb-houserobbery/server/main.lua",
+      "requires_code": [
+        "type(house) ~=",
+        "Config.Houses[house]",
+        "type(cabinConfig) ~=",
+        "tonumber(cabin)"
+      ],
+      "requires_raw": [
+        "furniture"
+      ],
+      "why": "house/cabin 来自客户端，直接拿去索引 Config.Houses 会抛错打崩事件线程，也可能指向不存在的家具去刷 searched 状态。"
+    }
+  },
+  "interact-sound": {
+    "canPlay": {
+      "defined_at": "interact-sound/server/main.lua",
+      "requires_code": [
+        "soundFile:match(",
+        "tonumber(soundVolume)",
+        "GetGameTimer()",
+        "_lastPlay[key]"
+      ],
+      "requires_raw": [
+        "^[A-Za-z0-9_%-]+$"
+      ],
+      "why": "声音参数全来自客户端：文件名白名单 + 音量 0..1 + 按 (玩家, 文件) 100ms 限流，防止全服刷声。"
+    }
+  },
+  "qb-fuel": {
+    "isNearGasStation": {
+      "defined_at": "qb-fuel/server/main.lua",
+      "requires_code": [
+        "GetPlayerPed(src)",
+        "Config.GasStations",
+        "#(coords - station) < GAS_STATION_RANGE"
+      ],
+      "why": "加油/买油桶/补油桶都必须在加油站附近（原来全图任意位置都能下单）。"
+    },
+    "clampNumber": {
+      "defined_at": "qb-fuel/server/main.lua",
+      "requires_code": [
+        "tonumber(value)",
+        "if number > max then number = max end"
+      ],
+      "why": "客户端给的升数/桶内油量必须夹在 0..上限，且负数、字符串、表一律变成 nil 被拒。",
+      "shape": "local_check"
+    }
+  },
+  "qb-mechanicjob": {
+    "CanSprayVehicle": {
+      "defined_at": "qb-mechanicjob/server/main.lua",
+      "requires_code": [
+        "Config.Shops",
+        "shop.managed",
+        "NetworkGetEntityFromNetworkId(netId)",
+        "#(playerCoords - shop.paint)"
+      ],
+      "why": "喷漆台只能是本店员工、在本店喷漆位旁、给身边的车喷（原来任何玩家可给地图上任意车辆免费改色并冻结）。"
+    }
+  },
+  "qb-doorlock": {
+    "isAuthorized": {
+      "defined_at": "qb-doorlock/server/main.lua",
+      "requires_code": [
+        "door.authorizedJobs",
+        "door.authorizedGangs",
+        "door.allAuthorized"
+      ],
+      "shape": "local_check",
+      "why": "开门必须有授权：房主/钥匙/警察权限/开锁器，按门配置逐条判定。"
+    }
+  },
+  "tcity-dashboard": {
+    "isOnDutyLeo": {
+      "defined_at": "tcity-dashboard/server/police_api.lua",
+      "requires_code": [
+        "job.type == ",
+        "job.name == ",
+        "job.onduty == true"
+      ],
+      "requires_raw": [
+        "leo",
+        "police"
+      ],
+      "why": "中控屏的车牌标记/取消/追踪器只能是**在职**警察（job.type=leo 或 job.name=police 且 onduty）。"
+    }
+  },
+  "story-engine": {
+    "DecisionEngine.MakeChoice": {
+      "defined_at": "story-engine/server/decision_engine.lua",
+      "call": "DecisionEngine.MakeChoice",
+      "shape": "delegate",
+      "requires_code": [
+        "DecisionEngine._pending[source]",
+        "pending.questId ~= questId",
+        "pending.expiresAt"
+      ],
+      "why": "剧情决策只接受服务端刚刚下发的那一个（按 source 存 pending + 三元组全等 + 过期时间），拒绝跨任务/跨步骤/重放。"
+    }
+  },
+  "qb-shops": {
+    "nearCoords": {
+      "defined_at": "qb-shops/server/main.lua",
+      "requires_code": [
+        "GetPlayerPed(source)",
+        "GetEntityCoords(ped)",
+        "<= maxDistance"
+      ],
+      "why": "补货工资/开店界面都要求玩家站在对应坐标 N 米内（服务端复算，客户端报的坐标不采信）。"
+    }
+  },
+  "qb-lapraces": {
+    "IsRaceHost": {
+      "defined_at": "qb-lapraces/server/main.lua",
+      "requires_code": [
+        "GetOpenedRaceKey(RaceId)",
+        "AvailableRaces[key]",
+        "SetupCitizenId == CitizenId",
+        "return false"
+      ],
+      "why": "只有这场比赛的创建者能取消/发车/改状态。SetupCitizenId 由服务端在 CreateLapRace 时写入，客户端只能改自己那条比赛的进度（UpdateRacerData 另有 Racers[citizenid] 归属判定）。",
+      "expires": "2027-03-31"
+    }
+  }
+}

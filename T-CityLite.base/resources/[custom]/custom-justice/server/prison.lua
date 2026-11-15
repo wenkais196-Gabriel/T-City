@@ -91,13 +91,26 @@ function JusticeService.Imprison(citizenid, sentenceMinutes, crimes, opts)
     return true
 end
 
+-- 谁有权直接下判决：只认在职警察与法官。抽成 helper 是为了让 net-event 闸门能按
+-- deny-early 形状持续核对（原来写成正分支 `if a ~= 'police' and a ~= 'judge' then ... return end`，
+-- 行为一样但闸门认不出）。
+local LAW_ENFORCEMENT_JOBS = { police = true, judge = true }
+
+local function IsLawEnforcement(Player)
+    local data = Player and Player.PlayerData
+    if type(data) ~= 'table' then return false end
+    local job = data.job
+    if type(job) ~= 'table' or type(job.name) ~= 'string' then return false end
+    return LAW_ENFORCEMENT_JOBS[job.name] == true
+end
+
 RegisterNetEvent('justice:server:imprison', function(citizenid, sentenceMinutes, crimes)
     local callerSrc = source
     local Caller = QBCore.Functions.GetPlayer(callerSrc)
     if not Caller then return end
-    local callerJob = Caller.PlayerData.job.name
-    if callerJob ~= 'police' and callerJob ~= 'judge' then
-        print(('[SECURITY] justice:server:imprison blocked — unauthorized caller %s (job=%s)'):format(GetPlayerName(callerSrc), callerJob))
+    local allowed = IsLawEnforcement(Caller)
+    if not allowed then
+        print(('[SECURITY] justice:server:imprison blocked — unauthorized caller %s'):format(GetPlayerName(callerSrc)))
         return
     end
     JusticeService.Imprison(citizenid, sentenceMinutes, crimes)
@@ -190,7 +203,7 @@ RegisterNetEvent('justice:server:requestReduction', function(reductionType)
     if not Player then return end
 
     local cid = Player.PlayerData.citizenid
-    local inmate = JusticeService.GetInmate(cid)
+    local inmate = JusticeService.GetOwnInmate(Player)
     if not inmate then
         TriggerClientEvent('QBCore:Notify', src, _L(src, 'justice_not_in_prison'), 'error')
         return
@@ -232,7 +245,7 @@ RegisterNetEvent('justice:server:sentenceComplete', function()
     if not Player then return end
 
     local cid = Player.PlayerData.citizenid
-    local inmate = JusticeService.GetInmate(cid)
+    local inmate = JusticeService.GetOwnInmate(Player)
     if not inmate then
         TriggerClientEvent('QBCore:Notify', src, _L(src, 'justice_not_inmate') or 'You are not in prison', 'error')
         return
@@ -265,10 +278,19 @@ end)
 -- 探视请求
 -- ==============================================================
 
+-- 探视请求会给**另一个玩家**推通知：必须限频，否则任何人可以对囚犯刷屏
+local VISIT_REQUEST_COOLDOWN_MS = 5000
+local visitRequestAt = {}   -- [src] = GetGameTimer()
+
 RegisterNetEvent('justice:server:requestVisit', function(inmateCitizenid)
     local src = source
     local Visitor = QBCore.Functions.GetPlayer(src)
     if not Visitor then return end
+
+    local now = GetGameTimer() or 0
+    if now - (visitRequestAt[src] or 0) < VISIT_REQUEST_COOLDOWN_MS then return end
+    visitRequestAt[src] = now
+    if type(inmateCitizenid) ~= 'string' or #inmateCitizenid > 50 then return end
 
     local inmate = JusticeService.GetInmate(inmateCitizenid)
     if not inmate then
