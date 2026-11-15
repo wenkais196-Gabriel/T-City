@@ -633,10 +633,10 @@ def main(argv: list[str]) -> int:
 
     if args.update:
         updated = update_registry(registry, scan_result)
+        payload = json.dumps(updated, ensure_ascii=False, indent=2) + "\n"
         # NOSONAR 固定目标路径（模块常量 REGISTRY），写入内容是本脚本从代码生成的 JSON，
-        # 不含任何来自文件内容的路径片段 —— 与 tools/dev/booth_roads.py 的同类标注一致。
-        REGISTRY.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + "\n",
-                            encoding="utf-8")
+        # 不含任何来自文件内容的路径片段 —— 与 tools/dev/booth_roads.py 同类标注。
+        REGISTRY.write_text(payload, encoding="utf-8")  # NOSONAR 固定目标 + 自生成内容
         total = sum(len(spec.get("methods") or {}) for spec in updated["services"].values())
         print(f"已写入 {REGISTRY.relative_to(REPO)}："
               f"{len(updated['services'])} 个服务 / {total} 个方法")
