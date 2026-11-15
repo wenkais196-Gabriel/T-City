@@ -1043,6 +1043,18 @@ MUTATIONS += [
     ),
 ]
 
+# S7：受众广播登记闸门（[custom] 里未登记的 -1 全服广播必须被拦住）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_broadcast_scope.py::"
+              "test_every_custom_broadcast_is_registered"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_broadcast.lua",
+        content=("-- 变异注入：未登记的全服广播\n"
+                 "TriggerClientEvent('probe:client:all', -1)\n"),
+        what="未登记的 TriggerClientEvent(..., -1, ...) 全服广播",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:
