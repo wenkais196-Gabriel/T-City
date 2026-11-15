@@ -459,10 +459,13 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
 
         TriggerClientEvent('QBCore:Notify', src,
             ('买到了：%s · $%s'):format(tostring(item), tostring(unit)), 'success', 4000)
+        -- 收银：买家与摊主各一声（常量文件名/音量）；不是 -1 全服广播。
+        TriggerClientEvent('InteractSound_CL:PlayOnOne', src, 'Shop', 0.3)
         local owner = ResolvePlayer(booth.ownerCitizenid)
         if owner then
             TriggerClientEvent('QBCore:Notify', owner.PlayerData.source,
                 ('玩家买了 1 份 %s · +$%s'):format(tostring(item), tostring(unit)), 'success', 4000)
+            TriggerClientEvent('InteractSound_CL:PlayOnOne', owner.PlayerData.source, 'Shop', 0.25)
         end
         PushState(booth.ownerCitizenid, 'update')
         return
@@ -550,6 +553,8 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
         TriggerClientEvent('QBCore:Notify', src,
             ('成交：%s ×%s · +$%s'):format(tostring(result.item), tostring(result.count),
                 tostring(result.price or result.total or '?')), 'success', 4000)
+        -- 收银：只给摊主本人播；文件名与音量都是服务端常量，不转发任何客户端参数。
+        TriggerClientEvent('InteractSound_CL:PlayOnOne', src, 'Shop', 0.35)
     else
         local ok = QuestVendor.RejectOffer(citizenid, offerId)
         if not ok then return end

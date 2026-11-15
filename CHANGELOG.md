@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **热狗摊音效（顾客上门 + 收银）**：只复用 interact-sound 现有的 doorbell / Shop 两个 ogg，
+  不新增素材。顾客报价到达时，客户端用 `InteractSound_SV:PlayWithinDistance` 播 25 m 世界声
+  （音量 0.3）；NPC 成交与玩家购买的成功分支由服务端用 `InteractSound_CL:PlayOnOne` 给摊主 /
+  买家播收银声（0.35 / 0.3 / 0.25），只传常量文件名与常量音量，不转发任何客户端参数，
+  也没有新增 `TriggerClientEvent(..., -1, ...)` 广播点（`broadcast_sites` 预算仍为 143）。
+  新增 `T-CityLite.base/tests/architecture/test_quest_sound_calls.py`：扫描
+  `T-CityLite.base/resources/[custom]/custom-quest` 的音效调用，断言文件名能在
+  `T-CityLite.base/resources/[standalone]/interact-sound/client/html/sounds` 找到、
+  音量落在 `(0, 0.5]`、没有新增全服广播，并用变异用例证明闸门会红。
 - **热狗摊位改 CEF 菜单（中文不再变方块）**：`T-CityLite.base/resources/[custom]/custom-quest` 新增 `ui_page 'html/vendor.html'`，
   摊位状态条、顾客报价（进度条 + 成交/拒绝）、今日菜单（上下选择 + Enter 买 1 份）三块面板改由
   CEF 渲染——原生 `DrawText` 没有 CJK 字形，中文只能画成方块。新增两个 NUI 回调
