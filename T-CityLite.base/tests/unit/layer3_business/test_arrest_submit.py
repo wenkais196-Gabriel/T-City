@@ -1863,10 +1863,12 @@ def test_arrest_audits_citation_and_evidence_children():
 def test_pay_citation_claims_before_charging_and_rolls_back_on_failure():
     src = p1_src()
     # Bundled oxmysql returns { affectedRows = n }; stock builds return n.
-    # 这段归一化随抢占一起进了唯一写者（server/citations.lua 的 ClaimPaid）。
+    # 形状归一化已收口到 core-framework/server/db.lua（S4）；ClaimPaid 只消费
+    # Db.Update 的结果，不再自己解 affectedRows/affected_rows。
     owner = (POLICE / "server/citations.lua").read_text(encoding="utf-8")
     assert "function PoliceCitations.ClaimPaid(" in owner
-    assert "result.affectedRows" in owner and "result.affected_rows" in owner
+    assert "Db.Update(" in owner
+    assert "result.affectedRows" not in owner and "result.affected_rows" not in owner
 
     start = src.index("function P1.PayCitation(")
     block = src[start:]

@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 BASE = Path(__file__).resolve().parents[3]
+DB_LUA = BASE / "resources" / "[standalone]" / "core-framework" / "server" / "db.lua"
 SRC = BASE / "resources" / "[custom]" / "custom-police" / "server" / "records.lua"
 
 STUBS = """
@@ -60,7 +61,12 @@ def lua() -> str:
 
 
 def run(body: str) -> dict:
-    script = STUBS + "\n" + SRC.read_text(encoding="utf-8") + "\n" + textwrap.dedent(body)
+    script = (
+        STUBS + "\n"
+        + DB_LUA.read_text(encoding="utf-8") + "\n"
+        + SRC.read_text(encoding="utf-8") + "\n"
+        + textwrap.dedent(body)
+    )
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}"
     out = {}

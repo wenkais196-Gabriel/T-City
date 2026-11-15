@@ -363,13 +363,16 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
         -- 现象是：审计 incident.close 写了、世界痕迹也写了，但警情还是 on_scene，
         -- 于是可以反复"关"同一张单。所以这里不能把 nil 塞进参数，用空串占位。
         local closedReason = trim(reason):sub(1, 255)
-        local affected = MySQL.update.await([[
+        local affected, dbErr = Db.Update([[
             UPDATE police_incidents
                SET status = 'closed', closed_at = NOW(), disposition = ?, closed_by = ?,
                    closed_reason = ?, last_activity_at = NOW(), updated_at = NOW()
              WHERE id = ?
         ]], { closeDisposition, actor.citizenid, closedReason, id })
-        if type(affected) == 'table' then affected = affected.affectedRows end
+        if not affected then
+            print(('[custom-police] [db] incident.close update failed for #%s: %s'):format(
+                tostring(id), tostring(dbErr)))
+        end
         affected = tonumber(affected) or 0
         releaseIncidentUnits(id)
         if not audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition) then
@@ -534,14 +537,18 @@ function P.DiscardDraft(source, incidentId)
     if grade(actor) < 2 then return false, 'grade_too_low' end
     local id = tonumber(incidentId)
     if not id then return false, 'invalid_incident' end
-    local changed = MySQL.update.await([[
+    local changed, dbErr = Db.Update([[
         UPDATE police_incidents
            SET status = 'closed', disposition = 'cancelled', closed_at = NOW(),
                closed_by = ?, closed_reason = 'draft_discarded'
          WHERE id = ? AND status = 'draft'
     ]], { tostring(actor.citizenid), id })
-    if type(changed) == 'table' then changed = changed.affectedRows or changed[1] end
-    if not changed or changed == 0 then
+    if not changed then
+        print(('[custom-police] [db] draft discard update failed for #%s: %s'):format(
+            tostring(id), tostring(dbErr)))
+    end
+    changed = tonumber(changed) or 0
+    if changed == 0 then
         return false, 'not_draft'
     end
     if not audit(actor.citizenid, 'incident.discard', tostring(id), nil) then

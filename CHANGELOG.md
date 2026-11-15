@@ -164,6 +164,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
+- **`Db` 结果适配器**：`insertId/affectedRows` 归一化收口到
+  `T-CityLite.base/resources/[standalone]/core-framework/server/db.lua`
+  （`Db.Insert/Update/Query/Single/Scalar` +
+  `Db.InsertId/AffectedRows`）；director 不再把 `affectedRows=1` 当记录 id；
+  phone/police 的 5 个调用方保留门面、行为不变；新闸门
+  `tests/architecture/test_db_result_adapter.py` 钉住「归一化只在适配器里」。
 - **方法级导出契约闸门 + 修 11 处死调用 + 1 处兜底**：卖物品不再丢物品、抢劫奖励不再报
   `No such export`、武器耐久恢复更新。闸门（`tools/dev/service_contracts_scan.py` +
   `tests/architecture/test_service_contracts.py`）把全仓字面量 `exports['<res>']:<Method>(`
