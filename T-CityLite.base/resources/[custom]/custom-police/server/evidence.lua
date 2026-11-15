@@ -130,7 +130,7 @@ end
 
 --- Remember a drop server-side. The TTL sweep keeps the table self-limiting;
 --- the hard cap stops a burst before the sweep can run.
---- 清掉老于 TTL 的行，并**广播**给所有客户端让它们删掉屏幕上的标记。
+--- 清掉老于 TTL 的行，并广播给**在岗警察**让它们删掉屏幕上的标记。
 --- 只删本地表不广播 = 客户端留着一个"幽灵"标记，玩家走过去按 G 什么也换不到。
 ---@return number removed
 local function pruneExpired(store, removeEvent, now)
@@ -139,7 +139,7 @@ local function pruneExpired(store, removeEvent, now)
     for id, row in pairs(store) do
         if type(row) == 'table' and row.at and now - row.at > ttl then
             store[id] = nil
-            TriggerClientEvent(removeEvent, -1, id)
+            Broadcast.Scope(removeEvent, { job = 'police', onduty = true }, id)
             removed = removed + 1
         end
     end
@@ -293,7 +293,7 @@ RegisterNetEvent('evidence:server:CreateBloodDrop', function(citizenid, bloodtyp
     if not blood or blood == '' then return end
     local bloodId = CreateBloodId()
     if not trackDrop(BloodDrops, bloodId, { dna = dna, bloodtype = blood }, 'evidence:client:RemoveBlooddrop') then return end
-    TriggerClientEvent('evidence:client:AddBlooddrop', -1, bloodId, dna, blood, where)
+    Broadcast.Scope('evidence:client:AddBlooddrop', { job = 'police', onduty = true }, bloodId, dna, blood, where)
 end)
 
 --- Same rule: the fingerprint is the caller's, never a value the caller picked.
@@ -308,7 +308,7 @@ RegisterNetEvent('evidence:server:CreateFingerDrop', function(coords)
     if not where then return end
     local fingerId = CreateFingerId()
     if not trackDrop(FingerDrops, fingerId, { fingerprint = fingerprint }, 'evidence:client:RemoveFingerprint') then return end
-    TriggerClientEvent('evidence:client:AddFingerPrint', -1, fingerId, fingerprint, where)
+    Broadcast.Scope('evidence:client:AddFingerPrint', { job = 'police', onduty = true }, fingerId, fingerprint, where)
 end)
 
 --- Clearing evidence is destructive and is a police-only command
@@ -320,7 +320,7 @@ RegisterNetEvent('evidence:server:ClearBlooddrops', function(blooddropList)
     local ids = readIdList(blooddropList)
     if not ids then return end
     for _, id in ipairs(ids) do
-        TriggerClientEvent('evidence:client:RemoveBlooddrop', -1, id)
+        Broadcast.Scope('evidence:client:RemoveBlooddrop', { job = 'police', onduty = true }, id)
         BloodDrops[id] = nil
     end
 end)
@@ -350,7 +350,7 @@ RegisterNetEvent('evidence:server:AddBlooddropToInventory', function(bloodId, bl
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddBlooddropToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddBlooddropToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
-            TriggerClientEvent('evidence:client:RemoveBlooddrop', -1, id)
+            Broadcast.Scope('evidence:client:RemoveBlooddrop', { job = 'police', onduty = true }, id)
             BloodDrops[id] = nil
         end
     else
@@ -380,7 +380,7 @@ RegisterNetEvent('evidence:server:AddFingerprintToInventory', function(fingerId,
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddFingerprintToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddFingerprintToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
-            TriggerClientEvent('evidence:client:RemoveFingerprint', -1, id)
+            Broadcast.Scope('evidence:client:RemoveFingerprint', { job = 'police', onduty = true }, id)
             FingerDrops[id] = nil
         end
     else
@@ -433,7 +433,7 @@ RegisterNetEvent('evidence:server:CreateCasing', function(weapon, coords)
         print(('[evidence] casing %s weapon=%s src=%s serie=%s')
             :format(tostring(casingId), tostring(weapon), tostring(src), tostring(serieNumber)))
     end
-    TriggerClientEvent('evidence:client:AddCasing', -1, casingId, weapon, where, serieNumber)
+    Broadcast.Scope('evidence:client:AddCasing', { job = 'police', onduty = true }, casingId, weapon, where, serieNumber)
 end)
 
 RegisterNetEvent('evidence:server:ClearCasings', function(casingList)
@@ -442,7 +442,7 @@ RegisterNetEvent('evidence:server:ClearCasings', function(casingList)
     local ids = readIdList(casingList)
     if not ids then return end
     for _, id in ipairs(ids) do
-        TriggerClientEvent('evidence:client:RemoveCasing', -1, id)
+        Broadcast.Scope('evidence:client:RemoveCasing', { job = 'police', onduty = true }, id)
         Casings[id] = nil
     end
 end)
@@ -475,7 +475,7 @@ RegisterNetEvent('evidence:server:AddCasingToInventory', function(casingId, casi
     if exports['qb-inventory']:RemoveItem(src, 'empty_evidence_bag', 1, false, 'evidence:server:AddCasingToInventory') then
         if exports['qb-inventory']:AddItem(src, 'filled_evidence_bag', 1, false, info, 'evidence:server:AddCasingToInventory') then
             TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items['filled_evidence_bag'], 'add')
-            TriggerClientEvent('evidence:client:RemoveCasing', -1, id)
+            Broadcast.Scope('evidence:client:RemoveCasing', { job = 'police', onduty = true }, id)
             Casings[id] = nil
         end
     else
