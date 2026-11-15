@@ -21,6 +21,24 @@ from pathlib import Path
 #: 仓库根（本文件在 T-CityLite.base/tests/unit/layer3_business/ 下）
 BASE = Path(__file__).resolve().parents[3]
 
+#: core-framework 的 DB 结果适配器。S4 之后写库调用点统一走 `Db.Insert/Db.Update`，
+#: 所以加载写库模块的 harness 必须先把适配器读进来（顺序与 custom-police 的 manifest 一致）。
+DB_ADAPTER = BASE / "resources" / "[standalone]" / "core-framework" / "server" / "db.lua"
+
+
+def load_with_db(stubs: str, source: Path, body: str) -> str:
+    """拼出「stubs → db.lua → 被测源码 → body」的 Lua 脚本。
+
+    这段拼装原本在 test_police_records/citations/evidence_writer 里各写一遍
+    （同一段 10 行 × 3），SonarCloud 会算成新代码重复。
+    """
+    return (
+        stubs + "\n"
+        + DB_ADAPTER.read_text(encoding="utf-8") + "\n"
+        + source.read_text(encoding="utf-8") + "\n"
+        + body
+    )
+
 
 def run_probe(
     probe: str,
