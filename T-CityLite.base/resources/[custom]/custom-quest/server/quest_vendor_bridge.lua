@@ -34,6 +34,13 @@ local Rate = {}
 local Ticking = {}
 --- citizenid → stepId（客户端收摊时要拿它回调 nodeComplete）
 local StepIds = {}
+--- 最近一次 CloseFor 的汇总（citizenid → { summary, questId, at }）。
+--- 为什么需要：摊主按 E 收摊时 CloseFor 已经把会话销毁并返回汇总；任务完成路径
+--- 会再调一次 CloseFor（此时已无会话 → nil），账单的售出 / 成品回收 / 原料回收行
+--- 就会全变 0。这份缓存只给「收摊之后的终结路径」取一次，取走即删。
+local LastSummary = {}
+--- 缓存上界：超过 30 分钟不再用于结算；同一 citizenid 开新会话也会清掉。
+local SUMMARY_TTL_MS = 30 * 60 * 1000
 
 local function NowMs()
     if type(GetGameTimer) == 'function' then return GetGameTimer() end
@@ -109,6 +116,9 @@ function QuestVendorBridge.OpenFor(source, citizenid, questId, boothNetId, cfg, 
     local session, err = QuestVendor.Open(citizenid, questId, boothNetId, cfg)
     if not session then return false, err end
 
+    -- 新会话开始 = 上一班的汇总作废，避免旧数据被下一班的完成路径取走。
+    LastSummary[citizenid] = nil
+
     StepIds[citizenid] = stepId
 
     -- 初始库存：S3 的小游戏还没接进客户端，`AddStock` 暂时没有调用方。
@@ -130,13 +140,43 @@ function QuestVendorBridge.OpenFor(source, citizenid, questId, boothNetId, cfg, 
 end
 
 --- 关会话（收摊 / 任务结束 / 断线）。幂等。
+--- 返回值语义不变：能关掉会话时返回汇总，重复调用仍返回 nil。
 function QuestVendorBridge.CloseFor(citizenid, questId, reason)
     if type(QuestVendor) ~= 'table' or type(QuestVendor.Close) ~= 'function' then return nil end
     local summary = QuestVendor.Close(citizenid, questId, reason)
     QuestVendorBridge.StopTick(citizenid)
     StepIds[citizenid] = nil
     PushState(citizenid, 'closed')
+    -- 只多存一份，不改返回值：给「收摊之后才完成」的路径取用。
+    -- 写缓存时顺手清一遍过期项，避免只有 Close 才触发清理导致表无界增长。
+    if summary then
+        local now = NowMs()
+        for other, entry in pairs(LastSummary) do
+            if now - entry.at > SUMMARY_TTL_MS then LastSummary[other] = nil end
+        end
+        LastSummary[citizenid] = { summary = summary, questId = summary.questId, at = now }
+    end
     return summary
+end
+
+--- 取走最近一次 CloseFor 的汇总（一次性消费）。
+--- 完成路径在第二次 CloseFor 拿到 nil 之后调用它；任务不匹配或已过期时返回 nil，
+--- 且不会误删别的任务的缓存。
+---@param citizenid string
+---@param questId string|nil 传了就只接受同一任务的缓存
+---@return table|nil summary
+function QuestVendorBridge.TakeLastSummary(citizenid, questId)
+    if type(citizenid) ~= 'string' then return nil end
+    local entry = LastSummary[citizenid]
+    if not entry then return nil end
+    if NowMs() - entry.at > SUMMARY_TTL_MS then
+        LastSummary[citizenid] = nil
+        return nil
+    end
+    if questId and entry.questId ~= questId then return nil end
+    -- 一次性消费：取走即删，重复调用返回 nil。
+    LastSummary[citizenid] = nil
+    return entry.summary
 end
 
 --- 每摊一个 Tick 循环：1 秒一次，会话关闭即退出。
@@ -419,10 +459,13 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
 
         TriggerClientEvent('QBCore:Notify', src,
             ('买到了：%s · $%s'):format(tostring(item), tostring(unit)), 'success', 4000)
+        -- 收银：买家与摊主各一声（常量文件名/音量）；不是 -1 全服广播。
+        TriggerClientEvent('InteractSound_CL:PlayOnOne', src, 'Shop', 0.3)
         local owner = ResolvePlayer(booth.ownerCitizenid)
         if owner then
             TriggerClientEvent('QBCore:Notify', owner.PlayerData.source,
                 ('玩家买了 1 份 %s · +$%s'):format(tostring(item), tostring(unit)), 'success', 4000)
+            TriggerClientEvent('InteractSound_CL:PlayOnOne', owner.PlayerData.source, 'Shop', 0.25)
         end
         PushState(booth.ownerCitizenid, 'update')
         return
@@ -510,6 +553,8 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
         TriggerClientEvent('QBCore:Notify', src,
             ('成交：%s ×%s · +$%s'):format(tostring(result.item), tostring(result.count),
                 tostring(result.price or result.total or '?')), 'success', 4000)
+        -- 收银：只给摊主本人播；文件名与音量都是服务端常量，不转发任何客户端参数。
+        TriggerClientEvent('InteractSound_CL:PlayOnOne', src, 'Shop', 0.35)
     else
         local ok = QuestVendor.RejectOffer(citizenid, offerId)
         if not ok then return end
