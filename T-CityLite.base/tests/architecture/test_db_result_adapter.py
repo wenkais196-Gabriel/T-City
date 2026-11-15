@@ -36,14 +36,11 @@ CORE = RESOURCES / "[standalone]" / "core-framework"
 DB_LUA = CORE / "server" / "db.lua"
 POLICE_INSERT_ID = CUSTOM / "custom-police" / "shared" / "insert_id.lua"
 
-#: 计划 §1.3 明确不迁移的文件 + 不在 §4.5.1 的 19 文件内、但碰巧有同形状归一化的文件。
+#: 计划 §1.3 明确不迁移的文件：回调式 MySQL.Async，迁到 await 会改异步语义。
 #: 条目消失（文件被收口）时前向测试会红，逼着把例外删掉。
 OUT_OF_SCOPE = {
     "[custom]/custom-quest/server/quest_db.lua": (
         "计划 §1.3：回调式 MySQL.Async，迁到 await 会改异步语义；S4 不迁移"
-    ),
-    "[custom]/custom-justice/server/sentence.lua": (
-        "不在计划 §4.5.1 的 19 文件内；S4 不迁移，登记为已知例外"
     ),
 }
 
