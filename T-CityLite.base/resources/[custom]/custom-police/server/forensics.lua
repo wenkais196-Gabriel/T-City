@@ -43,7 +43,6 @@ end
 
 local COOLDOWN_SECONDS = 20
 local LAB_DELAY_MS = 60000
-local cooldown = {}   -- [cid] = os.time()
 
 local function audit(cid, action, target, detail)
     if type(PoliceAudit) ~= 'table' then return false end
@@ -76,8 +75,10 @@ RegisterNetEvent('police:server:forensicSample', function(kind, caseId)
 
     local cid = type(data.citizenid) == 'string' and data.citizenid or ''
     if cid == '' then return end
-    if os.time() - (cooldown[cid] or 0) < COOLDOWN_SECONDS then return end
-    cooldown[cid] = os.time()
+    -- 每角色 20 秒一次。cid 键没有 playerDropped 可依赖，由 owner 每 60s 回收
+    -- 15 分钟未更新的条目（所有 cid 冷却最长 60s，不会误删活跃键）。
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:forensic'):format(cid), COOLDOWN_SECONDS * 1000) then return end
 
     local label = KIND_LABEL[kind]
     local description = '已送检，约 60 秒出结果'
