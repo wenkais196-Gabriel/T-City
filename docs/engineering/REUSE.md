@@ -50,6 +50,7 @@ local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDic
 | **上游/第三方**代码 | `qb-*` 里的 `loadAnimDict`（10 份）、`standalone/`（2 份） | 迁成我们核心的导出 = 与上游分叉，后续无法合并上游更新 |
 | 参数语义还没统一 | `DrawText3D` / `DrawText3Ds` | 各份 scale/color/参数顺序不同，先统一签名再合并 |
 | owner 明确的业务能力 | `HasItem` / `AddMoney` | 真正的 owner 是 qb-inventory / 经济服务，重复的应该是"调用 owner"而不是"再写一份" |
+| **门面 / 别名**（显式决策） | `InsertId`（custom-police 的 shared/insert_id.lua 转调 `Db.InsertId`，2026-11 S4）、`Money`/`PhoneMoney`/`QuestMoney`/`TCMoney`（`money_aliases.lua` 转调 `FormatMoney`，2026-11 S6） | 实现只有一份（`T-CityLite.base/resources/[standalone]/core-framework/server/db.lua`、`T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua`）；保留下来的名字只是历史调用点的引用面。判据：函数体只转调 owner、不含自己的逻辑。**这不是重复，是兼容层**；新增时要在本表登记一行 |
 
 判据很实用：**合并后行为是否完全一致**。一致 → 合并；不一致 → 那不是重复，是同名。
 
