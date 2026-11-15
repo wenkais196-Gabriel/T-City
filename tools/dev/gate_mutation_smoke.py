@@ -1072,6 +1072,26 @@ MUTATIONS += [
     ),
 ]
 
+# 自建命名空间：调用一个不存在的方法（luac -p 与 local_order 都查不出）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_namespace_method_calls.py::"
+              "test_called_namespace_methods_exist"),
+        path="resources/[custom]/custom-quest/server/__mutant_namespace.lua",
+        content=("-- 变异注入：调用自建表里不存在的方法\n"
+                 "ProbeSurface = ProbeSurface or {}\n"
+                 "function ProbeSurface.Known()\n"
+                 "    return 1\n"
+                 "end\n"
+                 "local function boot()\n"
+                 "    ProbeSurface.Known()\n"
+                 "    ProbeSurface.Missing()\n"
+                 "end\n"
+                 "boot()\n"),
+        what="调用了本资源自建命名空间里没有定义的方法",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:

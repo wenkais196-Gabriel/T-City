@@ -446,7 +446,9 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
         end
 
         QuestBooth.MoveTo(citizenid, pos)
-        QuestVendorBridge.PushFor(citizenid)
+        -- 推一次状态给摊主，UI 才能知道摊位换了位置（这里曾经写成未定义的 PushFor，
+        -- 运行期 attempt to call a nil value，挪位后界面不刷新）。
+        PushState(citizenid, 'moved')
         return
     end
 
