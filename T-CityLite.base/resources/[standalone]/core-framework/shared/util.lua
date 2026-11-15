@@ -68,6 +68,19 @@ function ConvarBool(name, default)
     return raw == 'true' or raw == '1' or raw == 'TRUE'
 end
 
+--- 金额渲染：nil/非数字/NaN → '0'；整数不带小数点（500）；小数两位（61.75）；
+--- 负数保留符号（-12.35）。这是全仓唯一实现：`[custom]` 各资源的
+--- shared/money_format.lua 只保留同名门面转调本函数（闸门：
+--- tests/architecture/test_money_format_single_owner.py）。
+--- @param value any
+--- @return string
+function FormatMoney(value)
+    local num = tonumber(value)
+    if not num or num ~= num then return '0' end
+    if num % 1 == 0 then return ('%d'):format(num) end
+    return ('%.2f'):format(num)
+end
+
 -- 只在客户端注册：服务端没有 RequestAnimDict/GetGameTimer 这套动画原生。
 if not IsDuplicityVersion() then
     exports('LoadAnimDict', LoadAnimDictBlocking)
@@ -82,3 +95,6 @@ exports('ConvarString', ConvarString)
 exports('ConvarInt', ConvarInt)
 exports('ConvarFloat', ConvarFloat)
 exports('ConvarBool', ConvarBool)
+
+-- 金额渲染同样两端都要用；[custom] 的 shared/money_format.lua 门面转调它。
+exports('FormatMoney', FormatMoney)

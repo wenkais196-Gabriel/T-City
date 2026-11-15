@@ -1318,7 +1318,7 @@ RegisterCommand('paycitation', function(_, args)
     if not id then return TriggerEvent('QBCore:Notify', '用法: /paycitation <id>', 'error') end
     QBCore.Functions.TriggerCallback('phone:server:payCitation', function(res)
         if res and res.success then
-            TriggerEvent('QBCore:Notify', ('罚单 #%d 已支付 $%d'):format(res.id, res.amount), 'success')
+            TriggerEvent('QBCore:Notify', ('罚单 #%d 已支付 $%s'):format(res.id, PhoneMoney(res.amount)), 'success')
         else
             TriggerEvent('QBCore:Notify', ('支付失败: %s'):format(res and res.error or 'unknown'), 'error')
         end
