@@ -124,6 +124,13 @@ MUTATIONS: list[Mutation] = [
         what="自建限流表",
     ),
     Mutation(
+        gate="tests/architecture/test_rate_limit_single_owner.py::test_no_new_rate_limiter_grows",
+        path="resources/[custom]/custom-vehicles/server/__mutant_ratelimit2.lua",
+        content=("-- 变异注入：令牌桶换了个别名又长出来\n"
+                 "local liveBuckets = {}\n"),
+        what="自建限流表（S3 新增的 liveBuckets 别名）",
+    ),
+    Mutation(
         gate="tests/architecture/test_plane_boundaries.py::test_planes_do_not_leak_across_boundaries",
         path="resources/[custom]/custom-vehicles/client/__mutant_plane.lua",
         content="-- 变异注入：客户端直连数据库\nlocal x = MySQL.Async.fetchAll('SELECT 1', {})\n",
