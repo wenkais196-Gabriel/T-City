@@ -13,7 +13,8 @@ local TOW_DRAG_MS = 20000
 
 local tows = {}   -- [requestId] = state
 
-local loadModel = EntityUtil.LoadModel
+-- 旧实现是 5s 超时；CFShared.LoadModel 默认 10s，调用点显式传 5000 保持行为一致。
+local loadModel = CFShared.LoadModel
 local deleteEntity = EntityUtil.Delete
 
 local function cleanup(requestId, reason)
@@ -79,7 +80,7 @@ RegisterNetEvent('police:client:SpawnTow', function(requestId, netId)
 
     local vehicleHash = GetHashKey(TOW_VEHICLE)
     local pedHash = GetHashKey(TOW_PED)
-    if not loadModel(vehicleHash) or not loadModel(pedHash) then
+    if not loadModel(vehicleHash, 5000) or not loadModel(pedHash, 5000) then
         TriggerServerEvent('police:server:towDone', requestId, 'model')
         return
     end
@@ -181,7 +182,7 @@ RegisterNetEvent('police:client:TowDevWreck', function()
     local forward = GetEntityForwardVector(playerPed)
     local at = GetEntityCoords(playerPed) + forward * 5.0
     local hash = GetHashKey('blista')
-    if not loadModel(hash) then return end
+    if not loadModel(hash, 5000) then return end
     local wreck = CreateVehicle(hash, at.x, at.y, at.z, 0.0, true, true)
     SetModelAsNoLongerNeeded(hash)
     if not wreck or wreck == 0 then return end

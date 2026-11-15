@@ -164,6 +164,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
+- **`LoadModel` 收口到 `CFShared.LoadModel`**：删除 custom-police/custom-cartel/custom-quest
+  的 4 份本地实现（其中 custom-quest combat 节点**无超时**，custom-cartel 是 300×10ms 轮询）；
+  模型缺失时客户端不再卡死，失败经 `CFShared.Report` 上报一次。新闸门
+  `tests/architecture/test_load_model_single_owner.py` 只抓「无退出条件的循环」，热狗两个
+  客户端的 `deadline`/`generation` 有界循环不在范围内。
 - **`Db` 结果适配器**：`insertId/affectedRows` 归一化收口到
   `T-CityLite.base/resources/[standalone]/core-framework/server/db.lua`
   （`Db.Insert/Update/Query/Single/Scalar` +
