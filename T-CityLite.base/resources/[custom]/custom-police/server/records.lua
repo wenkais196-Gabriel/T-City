@@ -185,16 +185,11 @@ function PoliceRecords.RecordCaseVerdict(caseId, courtStatus, minutes)
     if minutesValue then
         minutesValue = math.max(0, math.floor(minutesValue))
     end
-    local ok, result = pcall(function()
-        return MySQL.update.await(
-            'UPDATE police_cases SET court_status = ?, sentence_minutes = ? WHERE id = ?',
-            { status, minutesValue, id })
-    end)
-    if not ok or type(result) == 'string' then return false, 0 end
-    if type(result) == 'table' then
-        return true, tonumber(result.affectedRows) or tonumber(result.affected_rows) or 0
-    end
-    return true, tonumber(result) or 0
+    local affected, err = Db.Update(
+        'UPDATE police_cases SET court_status = ?, sentence_minutes = ? WHERE id = ?',
+        { status, minutesValue, id })
+    if err then return false, 0 end
+    return true, affected or 0
 end
 
 --- 记录司法判决（只更新判决字段，不动报告正文）。
@@ -206,14 +201,9 @@ function PoliceRecords.RecordVerdict(justiceCaseId, verdict, status)
     -- justice_case_id 是 VARCHAR(32)：字符串 "CASE-0001" 与数字都要原样传
     local id = tostring(justiceCaseId or '')
     if id == '' then return false, 0 end
-    local ok, result = pcall(function()
-        return MySQL.update.await(
-            'UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?',
-            { verdict, status, id })
-    end)
-    if not ok or type(result) == 'string' then return false, 0 end
-    if type(result) == 'table' then
-        return true, tonumber(result.affectedRows) or tonumber(result.affected_rows) or 0
-    end
-    return true, tonumber(result) or 0
+    local affected, err = Db.Update(
+        'UPDATE police_reports SET justice_verdict = ?, justice_status = ? WHERE justice_case_id = ?',
+        { verdict, status, id })
+    if err then return false, 0 end
+    return true, affected or 0
 end

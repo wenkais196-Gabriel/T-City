@@ -995,6 +995,18 @@ MUTATIONS += [
     ),
 ]
 
+# S4：DB 结果归一化只许在 core-framework/server/db.lua
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_db_result_adapter.py::"
+              "test_result_normalisation_only_in_db_adapter"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_db.lua",
+        content=("-- 变异注入：绕过 Db 适配器自己解 oxmysql 返回形状\n"
+                 "local id = type(res) == 'table' and (res.affectedRows or res[1]) or res\n"),
+        what="调用点自己归一化 insertId/affectedRows（affectedRows 会被当成 id）",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:

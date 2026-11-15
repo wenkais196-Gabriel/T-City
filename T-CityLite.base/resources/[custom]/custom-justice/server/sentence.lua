@@ -28,15 +28,6 @@ local function trimTo(value, limit)
     return value
 end
 
---- The bundled oxmysql build returns `{ affectedRows = n }` for update; stock
---- builds return a number. Normalise both so "row was actually transitioned"
---- checks are reliable.
-local function affectedRows(result)
-    if type(result) == 'number' then return result end
-    if type(result) == 'table' then return math.floor(tonumber(result.affectedRows) or 0) end
-    return 0
-end
-
 --- Remaining seconds for the newest active sentence, measured by MySQL.
 --- Returns 0 when the citizen has no active sentence.
 function JusticeSentences.RemainingSeconds(citizenid)
@@ -123,7 +114,7 @@ function JusticeSentences.Apply(citizenid, minutes, caseId, reason, mode, create
 
     -- Broken active row (or none yet): start a new sentence. This is a single
     -- statement per branch; the bundled oxmysql build has no transactions.
-    if affectedRows(affected) == 0 then
+    if Db.AffectedRows(affected) == 0 then
         MySQL.insert.await(
             [[INSERT INTO justice_sentences
                 (citizenid, case_id, minutes, reason, status, started_at, ends_at, created_by)
@@ -146,7 +137,7 @@ function JusticeSentences.Release(citizenid, reason, status)
           SET status = ?, released_at = NOW()
           WHERE citizenid = ? AND status = 'active']],
         { status, cid })
-    if affectedRows(affected) == 0 then return false end
+    if Db.AffectedRows(affected) == 0 then return false end
 
     print(('[justice-sentences] released %s (%s)%s'):format(
         cid, status, reason and (' — ' .. tostring(reason)) or ''))
@@ -168,7 +159,7 @@ function JusticeSentences.Adjust(citizenid, deltaMinutes, reason)
           SET ends_at = GREATEST(NOW(), DATE_ADD(ends_at, INTERVAL ? MINUTE))
           WHERE citizenid = ? AND status = 'active']],
         { deltaMinutes, cid })
-    if affectedRows(affected) == 0 then return 0 end
+    if Db.AffectedRows(affected) == 0 then return 0 end
 
     local remaining = JusticeSentences.RemainingSeconds(cid)
     if remaining <= 0 then
@@ -187,10 +178,11 @@ function JusticeSentences.ExpireSweep()
           LIMIT 200]], {}) or {}
     if #rows == 0 then return 0 end
 
-    local affected = affectedRows(MySQL.update.await(
+    local affected = MySQL.update.await(
         [[UPDATE justice_sentences
           SET status = 'expired', released_at = NOW()
-          WHERE status = 'active' AND ends_at <= NOW()]], {}))
+          WHERE status = 'active' AND ends_at <= NOW()]], {})
+    affected = Db.AffectedRows(affected)
 
     for _, row in ipairs(rows) do
         local cid = row.citizenid

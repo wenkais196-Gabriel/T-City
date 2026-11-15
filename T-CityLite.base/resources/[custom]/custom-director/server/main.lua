@@ -126,38 +126,21 @@ local function dbScalar(sql, params)
 end
 
 local function dbInsert(sql, params)
-    local ok, insertId = pcall(function()
-        return MySQL.insert.await(sql, params or {})
-    end)
-    if not ok then
-        print(('[custom-director] DB insert failed: %s'):format(truncate(insertId, 200)))
-        return nil, tostring(insertId)
+    local id, err = Db.Insert(sql, params)
+    if not id then
+        print(('[custom-director] DB insert failed: %s'):format(truncate(err, 200)))
+        return nil, err
     end
-    -- oxmysql may return a number or { affectedRows, insertId }
-    if type(insertId) == 'string' then
-        return nil, insertId
-    end
-    if type(insertId) == 'table' then
-        insertId = insertId.insertId or insertId.affectedRows or 0
-    end
-    return tonumber(insertId) or 0, nil
+    return id, nil
 end
 
 local function dbUpdate(sql, params)
-    local ok, affected = pcall(function()
-        return MySQL.update.await(sql, params or {})
-    end)
-    if not ok then
-        print(('[custom-director] DB update failed: %s'):format(truncate(affected, 200)))
-        return 0, tostring(affected)
+    local affected, err = Db.Update(sql, params)
+    if err then
+        print(('[custom-director] DB update failed: %s'):format(truncate(err, 200)))
+        return nil, err
     end
-    if type(affected) == 'string' then
-        return 0, affected
-    end
-    if type(affected) == 'table' then
-        affected = affected.affectedRows or 0
-    end
-    return tonumber(affected) or 0, nil
+    return affected, nil
 end
 
 -- ---------------------------------------------------------------------------

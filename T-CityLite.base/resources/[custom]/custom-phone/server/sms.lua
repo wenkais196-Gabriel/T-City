@@ -7,27 +7,26 @@
 Sms = {}
 
 -- ---------------------------------------------------------------------------
--- DB result normalisation (shared by every custom-phone server script).
+-- DB result normalisation facades (shared by every custom-phone server script).
 --
--- The bundled oxmysql backend returns `{ insertId = n, affectedRows = n }`
--- from `insert` / `update`, while stock oxmysql returns plain numbers. Every
--- write callback must go through these helpers so a table is never used as a
--- numeric id or compared with a number.
+-- 归一化只有一份：`@core-framework/server/db.lua` 的 `Db.InsertId` /
+-- `Db.AffectedRows`。这两个名字保留是为了不牵动 phone 服务端里的
+-- `PhoneDb.InsertId/AffectedRows` 调用点（归一是形状问题，不是业务问题）。
+-- 本文件的 harness 必须先加载 db.lua（见 tests/unit/layer3_business/
+-- test_phone_db_contract.py）。
 -- ---------------------------------------------------------------------------
 PhoneDb = {}
 
 ---@param result table|number|nil
 ---@return number insertId  0 when the insert failed or returned no id
 function PhoneDb.InsertId(result)
-    if type(result) == 'table' then result = result.insertId end
-    return tonumber(result) or 0
+    return Db.InsertId(result)
 end
 
 ---@param result table|number|nil
 ---@return number affectedRows
 function PhoneDb.AffectedRows(result)
-    if type(result) == 'table' then result = result.affectedRows end
-    return tonumber(result) or 0
+    return Db.AffectedRows(result)
 end
 
 --- Truncate to at most `limit` UTF-8 characters (not bytes).
