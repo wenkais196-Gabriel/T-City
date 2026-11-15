@@ -78,7 +78,7 @@
 
 ```bash
 cd T-CityLite.base && /usr/bin/python3 -m pytest tests/unit tests/architecture -q
-luac5.4 -p resources/[custom]/<res>/server/main.lua      # 全部改过的 Lua
+luac5.4 -p resources/[custom]/<res>/server/main.lua      # 全部改过的 Lua（PowerShell 里写 luac5.4.exe）
 tcity-cmd -w 8 "restart <res>"                            # 控制台应无 SCRIPT ERROR
 tcity-cmd --page | grep -a "\\[custom-<res>\\]"            # 资源自检日志
 ```
