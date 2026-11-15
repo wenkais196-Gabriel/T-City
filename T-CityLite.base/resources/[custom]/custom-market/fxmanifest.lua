@@ -8,7 +8,7 @@ description 'Dynamic commodity market with supply-demand price engine — buy hi
 version '1.0.0'
 
 shared_scripts {
-    'shared/money_format.lua',
+    '@core-framework/shared/money_aliases.lua',
     'config.lua',
 }
 

@@ -1033,6 +1033,14 @@ MUTATIONS += [
                  "end\n"),
         what="第二份金额格式化实现（小数金额的格式语义分叉）",
     ),
+    Mutation(
+        gate=("tests/architecture/test_money_format_single_owner.py::"
+              "test_money_alias_users_load_the_alias_file"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_money_alias.lua",
+        content=("-- 变异注入：调用金额别名，但本资源 fxmanifest 没 include 别名文件\n"
+                 "CreateThread(function() print(Money(1)) end)\n"),
+        what="别名调用点没接线（运行时会 attempt to call a nil value (global 'Money')）",
+    ),
 ]
 
 

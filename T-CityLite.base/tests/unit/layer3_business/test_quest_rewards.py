@@ -16,7 +16,7 @@ import pytest
 
 BASE = Path(__file__).resolve().parents[3]
 REWARDS_LUA = str(BASE / 'resources' / '[custom]' / 'custom-quest' / 'server' / 'quest_rewards.lua')
-MONEY_LUA = str(BASE / 'resources' / '[custom]' / 'custom-quest' / 'shared' / 'money_format.lua')
+ALIASES_LUA = str(BASE / 'resources' / '[standalone]' / 'core-framework' / 'shared' / 'money_aliases.lua')
 UTIL_LUA = str(BASE / 'resources' / '[standalone]' / 'core-framework' / 'shared' / 'util.lua')
 
 
@@ -101,11 +101,12 @@ end
 def run_rewards_test(test_code: str) -> dict:
     source = open(REWARDS_LUA, encoding='utf-8').read()
     source = source.replace("exports['qb-core']:GetCoreObject()", "QBCore")
-    # 金额渲染函数住在 shared/money_format.lua（fxmanifest 的 shared_scripts 里），
-    # harness 只抽 server 脚本，所以要把它一起注入，否则 QuestMoney 是 nil。
-    # S6 之后门面转调 core-framework:FormatMoney，所以先加载真实 util.lua。
+    # 金额别名住在 core-framework/shared/money_aliases.lua（fxmanifest 的
+    # shared_scripts 里以 '@core-framework/...' 加载），harness 只抽 server 脚本，
+    # 所以要把它一起注入，否则 QuestMoney 是 nil；别名转调 FormatMoney，
+    # 所以先加载真实 util.lua。
     util = open(UTIL_LUA, encoding='utf-8').read()
-    shared = open(MONEY_LUA, encoding='utf-8').read()
+    shared = open(ALIASES_LUA, encoding='utf-8').read()
     script = MOCK + '\n' + util + '\n' + shared + '\n' + source + '\n' + test_code
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False) as f:
