@@ -324,18 +324,21 @@ QBCore.Functions.CreateCallback('qb-vehicleshop:server:spawnvehicle', function(s
 end)
 
 -- ==============================================================
--- Bus 注册
+-- 静态导出（S2a：不再依赖 core-framework Bus）
 -- ==============================================================
 
-if Bus and Bus.RegisterService then
-    Bus.RegisterService('dealership', {
-        GetShopConfig      = Dealership.GetShopConfig,
-        GetShopList        = Dealership.GetShopList,
-        CalculateFinance   = Dealership.CalculateFinance,
-        RecalculateFinance = Dealership.RecalculateFinance,
-        CheckLicense       = Dealership.CheckLicense,
-        GetLicenseName     = Dealership.GetLicenseName,
-    })
+exports('service_dealership_GetShopConfig', Dealership.GetShopConfig)
+exports('service_dealership_GetShopList', Dealership.GetShopList)
+exports('service_dealership_CalculateFinance', Dealership.CalculateFinance)
+exports('service_dealership_RecalculateFinance', Dealership.RecalculateFinance)
+exports('service_dealership_CheckLicense', Dealership.CheckLicense)
+exports('service_dealership_GetLicenseName', Dealership.GetLicenseName)
+
+-- 兼容：若宿主加载了 core-framework Bus（单元 harness / 未来的接入方），保留进程内
+-- 服务表；qb-vehicleshop 自身不加载 Bus，生产路径只走上面的静态 exports。
+if Bus and Bus._services then
+    Bus._services['dealership'] = Dealership
+    Bus.dealership = Dealership
 end
 
 -- 直接暴露全局函数供同资源内其他模块使用
@@ -348,7 +351,8 @@ _G._vehicleshop = {
     round                  = round,
     GeneratePlate          = GeneratePlate,
     IsPlayerNearShopWithVehicle = IsPlayerNearShopWithVehicle,
+    Dealership             = Dealership,
 }
 
-print('[qb-vehicleshop] 🏪 Bus 服务已注册 (dealership, 6 methods)')
+print('[qb-vehicleshop] 🏪 静态导出已注册 (dealership, 6 methods)')
 print('[qb-vehicleshop]   Exports: service_dealership_GetShopConfig/GetShopList/CalculateFinance/RecalculateFinance/CheckLicense/GetLicenseName')

@@ -126,6 +126,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/INDEX.md` 重新生成（308 篇，0 未登记）。
 
 ### Changed
+- **退役跨资源 Bus（场景/作业/车辆）**：`_G.Bus` 是每个 resource 私有的 Lua 状态，跨资源读
+  `Bus.<service>` 恒 nil。本次把 4 处 BGM 死调用（custom-police 追车、qb-ambulancejob
+  重生/死亡、qb-storerobbery 抢劫）改成 `exports['tcity-atmosphere']:service_atmosphere_PlayScene`；
+  `custom-police` 的 `Bus.JobService.SetJob` 分支删掉，直接走 qb-core 的
+  `player.Functions.SetJob`。`qb-vehicleshop` 不再调用 `Bus.RegisterService('dealership')`
+  （该资源不加载 Bus，注册从未执行）：8 个 `service_dealership_*` 改为静态 `exports(...)`，
+  二手车状态改走 `exports['custom-vehicles']:GetVehicleState`。core-framework 的
+  contracts.lua 删除 5 个从未实现的占位服务（reputation/chronicle/governance/cosmetics/funnel），
+  `service_contracts.json` 的 `planned_services` 清空。
+  新增闸门 `tests/architecture/test_bus_scope.py`：跨资源 Bus 读取 + `Bus.RegisterService`
+  的 manifest 接线双判据，变异冒烟证明会红。
 - **送货循环归 trucker，结算额回到带内（R0.3）**：qb-shops 的 `Config.DeliveryPrice` 从 **$500/站降到 $70/站**。
   原值 20 站/趟 = $10,000，按 25–40 分钟折算 **$15k–24k/h**，比低技能带（$1.8k–2.5k/h）高 6–13 倍；
   现值 ≈ $1,400/趟 ≈ $2.4k/h。同时新增 `Config.DeliveryJob = { name = 'trucker', requireDuty = true }`：
