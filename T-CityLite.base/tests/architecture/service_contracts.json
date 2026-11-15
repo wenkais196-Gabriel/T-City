@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "note": "方法级导出契约登记表。services 由 tools/dev/service_contracts_scan.py --update 从代码生成（Bus.RegisterService 方法 + 字面量 service_* 导出），review diff 后再提交；dynamic_exports / external_exports 是人工登记，只放行树内不存在或上游动态注册的方法，树内自研资源一律逐方法登记。",
+  "note": "方法级导出契约登记表。services 由 tools/dev/service_contracts_scan.py --update 从代码生成（Bus.RegisterService 方法 + 字面量 service_* 导出），review diff 后再提交。放行分三段：dynamic_exports（运行时循环注册，静态扫不到方法名）、external_exports（只放树外资源，本地无法证明）、in_tree_missing_exports（树内资源确实缺的导出，逐条带到期日与 follow_up；树内已有声明的方法不许登记）。review.allowlisted_call_sites 是三段放行实际覆盖的调用点总数，任何人加一条放行都必须同步改它。",
   "services": {
     "atmosphere": {
       "status": "implemented",
@@ -1745,20 +1745,28 @@
       ],
       "reason": "树外资源；调用点在 custom-vehicles/qb-core 的兼容分支，缺失时由调用方回落。",
       "source": "resources/[qb]/qb-core/client/events.lua:175"
-    },
+    }
+  },
+  "in_tree_missing_exports": {
     "safecracker": {
       "methods": [
         "StartSafeCracker"
       ],
-      "reason": "vendored 上游 minigame 资源（初始提交 1e39c451，非自研）。当前 client.lua 只注册 net event SafeCracker:StartMinigame，没有 StartSafeCracker export；custom-cartel/client/main.lua:337 的调用是 S1 范围外的潜在死调用，登记为上游契约、留给验收者决定是否在后续片修复。",
-      "source": "resources/[standalone]/safecracker/client.lua:25"
+      "owner": "custom-cartel",
+      "why": "safecracker 资源只有 net event（SafeCracker:StartMinigame），没有任何 exports()；custom-cartel/client/main.lua:338 的调用会抛 No such export（client 已用 pcall 降级到 progressbar，但配方仍没有 safecracker 小游戏）。config.lua:59 让该配方默认走 safecracker 分支。",
+      "source": "resources/[custom]/custom-cartel/client/main.lua:338",
+      "follow_up": "把 cartel 的 safecracker 分支改成事件式小游戏（SafeCracker:StartMinigame），或把 config.lua:59 的 minigame 改回 progressbar",
+      "expires": "2027-03-31"
     },
     "qb-interior": {
       "methods": [
         "CreateFurniMotelStandard"
       ],
-      "reason": "vendored 上游 qb-interior（非自研）没有该 shell 导出；调用点在 vendored qb-houses/client/main.lua:732 的 tier 16 分支。S1 不改上游资源，登记为上游契约。",
-      "source": "resources/[qb]/qb-interior/client/main.lua"
+      "owner": "qb-interior",
+      "why": "vendored 上游 qb-interior 没有该 shell 导出；调用点在 vendored qb-houses/client/main.lua:732 的 tier 16 分支。",
+      "source": "resources/[qb]/qb-houses/client/main.lua:732",
+      "follow_up": "上游后续版本带该导出时删除本条",
+      "expires": "2027-03-31"
     }
   },
   "plugin_contract": {
@@ -1767,6 +1775,7 @@
   },
   "review": {
     "external_call_sites": 33,
+    "allowlisted_call_sites": 11,
     "services": [
       "atmosphere",
       "cartel",

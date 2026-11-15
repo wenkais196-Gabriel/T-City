@@ -20,8 +20,11 @@
 * ``services``              —— 每个 `Bus.RegisterService` 方法一条（含字面量 `service_*` 导出）；
 * ``planned_services``      —— 契约已登记、实现还是占位的服务名；
 * ``dynamic_exports``       —— 运行时循环注册、静态扫不到方法名的资源；
-* ``external_exports``      —— 自有资源调用树外/vendored 上游资源时，逐方法登记；
-* ``review``                —— 外部调用点的复核锚点（数量 + 服务名 + `reviewed` 标记）。
+* ``external_exports``      —— **只放树外资源**（树都没装，没法在本地证明）；
+* ``in_tree_missing_exports`` —— 树内资源确实缺的导出（vendored 上游/待修调用方），逐条带
+  到期日与 follow_up；树内已有声明的方法不许登记进来；
+* ``review``                —— 外部调用点的复核锚点（数量 + 服务名 + `reviewed` 标记 +
+  `allowlisted_call_sites` 放行总数，任何人加一条放行都要让这个数字在 diff 里动一下）。
 
 用法::
 
@@ -41,6 +44,7 @@ import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -99,6 +103,9 @@ class Scan:
     service_values: dict[str, dict[str, str]] = field(
         default_factory=lambda: defaultdict(dict))
     calls: list[Call] = field(default_factory=list)
+    #: 放行段实际覆盖的调用点数（call_violations / allowlist_violations 填充）
+    allowlisted: dict[str, int] = field(default_factory=lambda: {
+        "external": 0, "in_tree_missing": 0, "dynamic_methods": 0})
 
     def declared_service_methods(self) -> dict[str, dict[str, tuple[str, int]]]:
         merged: dict[str, dict[str, tuple[str, int]]] = defaultdict(dict)
@@ -328,6 +335,75 @@ def _allowed_external(registry: dict) -> dict[str, set[str]]:
     return allowed
 
 
+def _allowed_in_tree_missing(registry: dict) -> dict[str, set[str]]:
+    allowed: dict[str, set[str]] = {}
+    for resource, spec in (registry.get("in_tree_missing_exports") or {}).items():
+        methods = (spec or {}).get("methods")
+        allowed[resource] = set(methods) if isinstance(methods, list) else set()
+    return allowed
+
+
+def classify_calls(scan_result: Scan, registry: dict) -> tuple[list[tuple[Call, str | None]],
+                                                              dict[str, int]]:
+    """每条调用归到「树内声明 / 三段放行 / 未解析」，并统计放行段覆盖的调用点数。
+
+    放行段的计数口径：external + in_tree_missing + dynamic 的 **methods** 模式。
+    dynamic 的 resource 模式（qb-core / qb-fuel 的运行时循环）无法逐方法计数，不计入
+    `review.allowlisted_call_sites`。
+    """
+    dynamic = _allowed_dynamic(registry)
+    external = _allowed_external(registry)
+    in_tree_missing = _allowed_in_tree_missing(registry)
+    counts = {"external": 0, "in_tree_missing": 0, "dynamic_methods": 0}
+
+    classified: list[tuple[Call, str | None]] = []
+    for call in scan_result.calls:
+        if (call.resource in scan_result.resource_dirs
+                and call.method in scan_result.declarations.get(call.resource, set())):
+            classified.append((call, "declared"))
+            continue
+        if call.resource in dynamic and dynamic[call.resource] is None:
+            classified.append((call, "dynamic_resource"))
+            continue
+        if call.resource in dynamic and call.method in dynamic[call.resource]:
+            counts["dynamic_methods"] += 1
+            classified.append((call, "dynamic_methods"))
+            continue
+        if call.method in in_tree_missing.get(call.resource, set()):
+            counts["in_tree_missing"] += 1
+            classified.append((call, "in_tree_missing"))
+            continue
+        if call.method in external.get(call.resource, set()):
+            counts["external"] += 1
+            classified.append((call, "external"))
+            continue
+        classified.append((call, None))
+    return classified, counts
+
+
+def allowlisted_counts(scan_result: Scan, registry: dict) -> dict[str, int]:
+    """放行段覆盖的调用点数；同时写回 `Scan.allowlisted` 供前向测试/k 计数核对。"""
+    _, counts = classify_calls(scan_result, registry)
+    scan_result.allowlisted = counts
+    return counts
+
+
+def expired_in_tree_missing(registry: dict, today: date | None = None) -> list[str]:
+    """返回 `in_tree_missing_exports` 里已过期或 expires 解析不了的条目。"""
+    today = today or date.today()
+    problems: list[str] = []
+    for resource, spec in (registry.get("in_tree_missing_exports") or {}).items():
+        raw = (spec or {}).get("expires")
+        try:
+            when = date.fromisoformat(str(raw))
+        except ValueError:
+            problems.append(f"in_tree_missing_exports[{resource}]: expires 不是 ISO 日期 — {raw!r}")
+            continue
+        if when < today:
+            problems.append(f"in_tree_missing_exports[{resource}] 已于 {when} 到期（修掉或删条目）")
+    return problems
+
+
 def _external_service_call_sites(scan_result: Scan, registry: dict) -> list[Call]:
     owner = {}
     for service, spec in (registry.get("services") or {}).items():
@@ -346,19 +422,14 @@ def _external_service_call_sites(scan_result: Scan, registry: dict) -> list[Call
 
 
 def call_violations(scan_result: Scan, registry: dict) -> list[str]:
-    """每条调用必须能解析到：树内字面量声明 / dynamic_exports / external_exports。"""
+    """每条调用必须能解析到：树内字面量声明 / dynamic_exports / external_exports /
+    in_tree_missing_exports。"""
     problems: list[str] = []
-    dynamic = _allowed_dynamic(registry)
-    external = _allowed_external(registry)
+    classified, counts = classify_calls(scan_result, registry)
+    scan_result.allowlisted = counts
 
-    for call in scan_result.calls:
-        if call.resource in scan_result.resource_dirs:
-            if call.method in scan_result.declarations.get(call.resource, set()):
-                continue
-        if call.resource in dynamic and (
-                dynamic[call.resource] is None or call.method in dynamic[call.resource]):
-            continue
-        if call.method in external.get(call.resource, set()):
+    for call, kind in classified:
+        if kind is not None:
             continue
         if call.resource in scan_result.resource_dirs:
             problems.append(
@@ -370,12 +441,61 @@ def call_violations(scan_result: Scan, registry: dict) -> list[str]:
     return problems
 
 
+def allowlist_violations(scan_result: Scan, registry: dict) -> list[str]:
+    """放行表自身的诚实性：树外/树内分层、到期日、放行总数锚点。"""
+    problems: list[str] = []
+
+    in_tree = registry.get("in_tree_missing_exports")
+    if not isinstance(in_tree, dict):
+        problems.append("service_contracts.json 缺 `in_tree_missing_exports` 段（或不是对象）")
+        in_tree = {}
+
+    for resource, spec in in_tree.items():
+        if not isinstance(spec, dict):
+            problems.append(f"in_tree_missing_exports[{resource}]: 条目必须是对象")
+            continue
+        for field_name in ("methods", "owner", "why", "source", "follow_up", "expires"):
+            if not spec.get(field_name):
+                problems.append(f"in_tree_missing_exports[{resource}]: 缺 `{field_name}`")
+        methods = spec.get("methods") if isinstance(spec.get("methods"), list) else []
+        if resource not in scan_result.resource_dirs:
+            problems.append(
+                f"in_tree_missing_exports[{resource}]: 不是树内资源；树外资源请登记 external_exports")
+            continue
+        for method in methods:
+            if method in scan_result.declarations.get(resource, set()):
+                problems.append(
+                    f"in_tree_missing_exports[{resource}]:{method} 在代码里已有声明，不能登记为缺失")
+
+    for resource, spec in (registry.get("external_exports") or {}).items():
+        if resource in scan_result.resource_dirs:
+            problems.append(
+                f"external_exports[{resource}]: 资源在树内；树内缺导出请登记 in_tree_missing_exports")
+        methods = (spec or {}).get("methods")
+        if not isinstance(methods, list) or not methods:
+            problems.append(f"external_exports[{resource}]: methods 必须是非空列表")
+
+    problems.extend(expired_in_tree_missing(registry))
+
+    counts = allowlisted_counts(scan_result, registry)
+    total = sum(counts.values())
+    expected = (registry.get("review") or {}).get("allowlisted_call_sites")
+    if not isinstance(expected, int) or isinstance(expected, bool):
+        problems.append("review.allowlisted_call_sites 必须是整数")
+    elif expected != total:
+        problems.append(
+            f"review.allowlisted_call_sites 写的是 {expected}，实测 {total} 处"
+            f"（external={counts['external']} / in_tree_missing={counts['in_tree_missing']} / "
+            f"dynamic_methods={counts['dynamic_methods']}）；加了一条放行就同步改这个数字")
+    return problems
+
+
 def registry_violations(scan_result: Scan, registry: dict) -> list[str]:
     """登记表自身的完整性：段缺失、service_* 对账、review 锚点。"""
     problems: list[str] = []
 
     for key in ("services", "planned_services", "dynamic_exports",
-                "external_exports", "plugin_contract", "review"):
+                "external_exports", "in_tree_missing_exports", "plugin_contract", "review"):
         if key not in registry:
             problems.append(f"service_contracts.json 缺 `{key}` 段")
 
@@ -433,8 +553,10 @@ def registry_violations(scan_result: Scan, registry: dict) -> list[str]:
 
 
 def violations(scan_result: Scan, registry: dict) -> list[str]:
-    """把「调用解析不了」「service_* 登记不齐」「登记表形状坏了」一次说清。"""
-    return registry_violations(scan_result, registry) + call_violations(scan_result, registry)
+    """把「放行表不诚实」「调用解析不了」「service_* 登记不齐」一次说清。"""
+    return (allowlist_violations(scan_result, registry)
+            + registry_violations(scan_result, registry)
+            + call_violations(scan_result, registry))
 
 
 def _existing_methods(registry: dict) -> dict[str, dict]:
