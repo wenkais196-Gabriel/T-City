@@ -70,7 +70,7 @@ files {
 
 shared_scripts {
     'config.lua',
-    'shared/money_format.lua',
+    '@core-framework/shared/money_aliases.lua',
 }
 
 server_scripts {

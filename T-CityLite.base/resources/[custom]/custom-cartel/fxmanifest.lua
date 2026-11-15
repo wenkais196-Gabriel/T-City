@@ -8,7 +8,7 @@ description 'Cartel organization core — drug production chain, NPC allies, ter
 version '1.0.0'
 
 shared_scripts {
-    'shared/money_format.lua',
+    '@core-framework/shared/money_aliases.lua',
     'config.lua',
 }
 
