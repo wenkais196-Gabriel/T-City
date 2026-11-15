@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-14 ｜ **文档总数**：319 ｜ **已登记**：319 ｜ **未登记**：0
+**生成时间**：2026-11-15 ｜ **文档总数**：320 ｜ **已登记**：320 ｜ **未登记**：0
 
-**状态分布**：✅ active 183 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
+**状态分布**：✅ active 184 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 44
 
 ## 按系统
 
@@ -323,7 +323,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（61）
+### meta（62）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -382,6 +382,7 @@
 | [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../PROJECT_PROGRESS.md) | plan | ✅ active | 2026-10-23 | 2027-04-30 |  | `PROJECT_PROGRESS.md` |
 | [⚙️ T-City Lite Career (职业身份) 系统重构技术方案](archive/QBCore_Lite_versions/career/refactor_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/refactor_plan.md` |
 | [仓库整理总方案（合并三份提案）](cleanup/PLAN.md) | plan | 📌 final | 2026-10-23 | 2027-04-30 |  | `docs/cleanup/PLAN.md` |
+| [抽象收敛施工计划（2026-11）](engineering/2026-11-abstraction-convergence-plan.md) | plan | ✅ active | 2026-11-15 | 2027-03-31 |  | `docs/engineering/2026-11-abstraction-convergence-plan.md` |
 | [2026-11 基石加固计划（P0 / P1 / P2）](engineering/2026-11-foundation-plan.md) | plan | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-plan.md` |
 | [T-City 服务器系统覆盖与规划缺口调研](analysis/2026-10-31-systems-coverage-survey.md) | research | 📌 final | 2026-10-31 | 2027-04-30 | ★ | `docs/analysis/2026-10-31-systems-coverage-survey.md` |
 | [T-City Lite — DevOps 工作流](DEVOPS.md) | runbook | ✅ active | 2026-10-23 | 2027-01-30 |  | `docs/DEVOPS.md` |

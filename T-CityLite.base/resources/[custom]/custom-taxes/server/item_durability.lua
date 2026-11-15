@@ -117,7 +117,7 @@ function DegradeItem(source, itemName, slot)
 
     -- 更新耐久 metadata
     local newInfo = setDurability(itemData, newDurability)
-    exports['qb-inventory']:SetItemInfo(source, slot, newInfo)
+    exports['qb-inventory']:SetItemData(source, itemName, 'info', newInfo, slot)
 
     -- 低耐久警告 (20% 以下)
     local pct = newDurability / config.maxDurability
@@ -157,7 +157,7 @@ function RepairItem(source, itemName, slot)
     -- 恢复耐久
     if GetResourceState('qb-inventory') ~= 'missing' then
         local newInfo = { durability = config.maxDurability }
-        exports['qb-inventory']:SetItemInfo(source, slot, newInfo)
+        exports['qb-inventory']:SetItemData(source, itemName, 'info', newInfo, slot)
     end
 
     TriggerClientEvent('QBCore:Notify', source,

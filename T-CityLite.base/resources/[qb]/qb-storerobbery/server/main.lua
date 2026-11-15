@@ -7,6 +7,15 @@ local function money(n)
     return ('%.2f'):format(num)
 end
 
+--- 全局奖励倍率：core_economy 不可用时回落 1.0，奖励路径不许因缺 export 崩掉。
+local function getRewardScale()
+    local ok, multiplier = pcall(function()
+        return exports['core_economy']:GetGlobalMultiplier()
+    end)
+    if ok and type(multiplier) == 'number' then return multiplier end
+    return 1.0
+end
+
 local SafeCodes = {}
 local cashA = 250
 local cashB = 450
@@ -443,7 +452,7 @@ local function issueStoreReward(src, register)
     local job = activeRobberies[register]
     local timeMult = calculateTimeMultiplier(job.startTime, job.cancelTime)
     local bags = math.random(1, math.floor(3 * timeMult + 0.5) or 1)
-    local scale = exports['custom-economy']:GetEconomyRewardScale()
+    local scale = getRewardScale()
     local baseValue = math.random(cashA, cashB)
     local worthValue = math.floor(baseValue * scale * timeMult + 0.5)
     if worthValue < 1 then worthValue = 1 end
@@ -671,7 +680,7 @@ RegisterNetEvent('qb-storerobbery:server:SafeReward', function(safe)
         return DropPlayer(src, 'Attempted exploit abuse')
     end
     local bags = math.random(1, 3)
-    local scale = exports['custom-economy']:GetEconomyRewardScale()
+    local scale = getRewardScale()
     local worthValue = math.floor(math.random(cashA, cashB) * scale + 0.5)
     local info = {
         worth = worthValue

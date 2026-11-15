@@ -504,7 +504,7 @@ review_by: 2027-02-28
 | `deliverydebug` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-drugs/client/deliveries.lua:430 |
 | `deliveryreset` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-drugs/client/deliveries.lua:440 |
 | `newdealer` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-drugs/server/deliveries.lua:390 |
-| `selldrugs` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-drugs/server/cornerselling.lua:113 |
+| `selldrugs` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-drugs/server/cornerselling.lua:105 |
 
 ### qb-houserobbery
 
@@ -600,8 +600,8 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `acceptsurrender` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-storerobbery/server/main.lua:186 |
-| `surrenders` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-storerobbery/server/main.lua:270 |
+| `acceptsurrender` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-storerobbery/server/main.lua:195 |
+| `surrenders` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[qb]/qb-storerobbery/server/main.lua:279 |
 
 ### qb-target
 

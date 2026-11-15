@@ -617,10 +617,10 @@ def run_once(mutation: Mutation) -> dict:
         if mutation.replace_from not in backup:
             return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
                     "detail": f"要替换的片段在 {target.relative_to(REPO)} 里找不到（代码变了，更新用例）"}
-        target.write_text(backup.replace(mutation.replace_from, mutation.replace_to, 1), encoding="utf-8")
+        target.write_text(backup.replace(mutation.replace_from, mutation.replace_to, 1), encoding="utf-8")  # NOSONAR 目标路径来自 MUTATIONS 硬编码 path；内容是同文件备份写回，无路径拼接
     elif mutation.content is None:          # 就地追加（历史形状）
         backup = target.read_text(encoding="utf-8")
-        target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n", encoding="utf-8")
+        target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n", encoding="utf-8")  # NOSONAR 固定目标 + 原地追加，不存在路径拼接
     else:
         # 记下这次真正新建的目录层级，撤注入后要删掉 —— 空目录会让
         # `test_no_orphan_scripts`（每个 [custom] 目录必须有 fxmanifest）误红。
@@ -629,13 +629,13 @@ def run_once(mutation: Mutation) -> dict:
             created.append(parent)
             parent = parent.parent
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(mutation.content, encoding="utf-8")
+        target.write_text(mutation.content, encoding="utf-8")  # NOSONAR 内容与路径都来自 MUTATIONS 常量表，无外部输入
 
     try:
         passed_after_injection, injected_line = run_gate(mutation.gate)
     finally:
         if backup is not None:
-            target.write_text(backup, encoding="utf-8")
+            target.write_text(backup, encoding="utf-8")  # NOSONAR 把同文件原内容写回同一路径（还原注入）
         else:
             target.unlink(missing_ok=True)
             for directory in created:          # 由深到浅，只删空目录
@@ -900,6 +900,35 @@ MUTATIONS += [
         replace_from="ensure oxmysql\nensure qb-core",
         replace_to="ensure oxmysql\nensure qb-core\nensure custom-testing",
         what="把 custom-testing 塞回默认启动集（生产会给玩家开 /test）",
+    ),
+]
+
+# 方法级导出契约：调一个 owner 没声明的导出方法 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_service_contracts.py::"
+              "test_every_export_call_resolves"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_export_call.lua",
+        content="exports['custom-main']:AddScaledMoney(1, 'cash', 1, 'probe')\n",
+        what="跨资源调用了未声明的导出方法（真机上只在调用点抛 No such export）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_service_contracts.py::"
+              "test_every_export_call_resolves"),
+        path="tests/architecture/service_contracts.json",
+        content=None,
+        replace_from='"in_tree_missing_exports": {\n    "safecracker": {',
+        replace_to=('"in_tree_missing_exports": {\n'
+                    '    "custom-main": {\n'
+                    '      "methods": ["LogEconomy"],\n'
+                    '      "owner": "probe",\n'
+                    '      "why": "probe",\n'
+                    '      "source": "probe",\n'
+                    '      "follow_up": "probe",\n'
+                    '      "expires": "2099-01-01"\n'
+                    '    },\n'
+                    '    "safecracker": {'),
+        what="把树内已有声明的方法登记成「缺失导出」（放行表想堵住闸门的嘴）",
     ),
 ]
 
