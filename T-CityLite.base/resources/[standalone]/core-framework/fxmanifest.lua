@@ -22,6 +22,7 @@ server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/db.lua',
     'server/rate_limit.lua',
+    'server/broadcast.lua',
     'contracts.lua',
     'services/economy_service.lua',
     'services/metadata_service.lua',

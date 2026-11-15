@@ -27,6 +27,7 @@ import pytest
 BASE = Path(__file__).resolve().parents[3]
 SERVER = BASE / "resources" / "[custom]" / "custom-police" / "server" / "evidence.lua"
 CLIENT = BASE / "resources" / "[custom]" / "custom-police" / "client" / "evidence.lua"
+BROADCAST = BASE / "resources" / "[standalone]" / "core-framework" / "server" / "broadcast.lua"
 
 _BACKTICK = re.compile(r"`([^`\n]+)`")
 
@@ -64,6 +65,14 @@ QBCore = {
     Functions = {
         CreateCallback = function(name, fn) __callbacks[name] = fn end,
         GetPlayer = function(src) return __players[src] end,
+        -- 证据广播走 Broadcast.Scope({ job = 'police', onduty = true })：
+        -- 只有 job/onduty 都对的调用才返回当前 source，漏参数会直接掉成 0 次广播。
+        GetPlayersByJob = function(job, checkOnDuty)
+            if job == 'police' and checkOnDuty == true and source and source > 0 then
+                return { source }
+            end
+            return {}
+        end,
     },
     Shared = { Weapons = {}, Items = {} },
 }
@@ -79,6 +88,10 @@ exports = setmetatable({}, {
     __index = function(_t, resource)
         return setmetatable({}, {
             __index = function(_r, fn)
+                -- Broadcast.Scope 用 exports['qb-core']:GetCoreObject() 取在岗名单
+                if resource == 'qb-core' and fn == 'GetCoreObject' then
+                    return function(_self) return QBCore end
+                end
                 return function(_self, src, item, amount, slot, info, reason)
                     if fn == 'AddItem' then
                         __inventory.adds[#__inventory.adds + 1] =
@@ -171,7 +184,8 @@ end
 
 
 def run(body: str) -> dict:
-    script = STUBS + "\n" + STUBS_SAY + "\n" + cfx(SERVER) + "\n" + HARNESS + "\n" + textwrap.dedent(body)
+    script = (STUBS + "\n" + STUBS_SAY + "\n" + cfx(BROADCAST) + "\n" + cfx(SERVER)
+              + "\n" + HARNESS + "\n" + textwrap.dedent(body))
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=90)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr[-900:]}"
     out = {}
