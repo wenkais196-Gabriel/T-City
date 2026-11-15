@@ -27,6 +27,15 @@
 
 -- 中文必须用自带字体：GTA 内置字体没有 CJK 字形（真机实测：预览提示整排 □）
 -- 与 quest_hotdog_vendor_client.lua 用同一份子集字体，见 tools/dev/build_quest_font.py
+--- 预览提示的 NUI 镜像（只记上次发出去的文案，避免每帧发消息）
+local PreviewText = { last = nil }
+
+local function HidePreviewText()
+    if PreviewText.last == nil then return end
+    PreviewText.last = nil
+    SendNUIMessage({ action = 'preview', visible = false })
+end
+
 local UI_FONT = 4
 CreateThread(function()
     local ok, id = pcall(function() return RegisterFontFile('fonts/hotdog_ui.ttf') end)
@@ -186,6 +195,7 @@ end
 -- ==============================================================
 
 local function DeleteCart(reason)
+    HidePreviewText()
     local cart = BoothState.cart
     local wasPushing = BoothState.pushing
 
@@ -374,6 +384,15 @@ end
 local function GrabCart()
     local cart = BoothState.cart
     if not EntityExists(cart) then return end
+
+    -- 已经不是「摆放步骤」还来抓车 = 玩家想挪摊位：
+    -- 恢复当时那份配置（预览要用），并打上 repositioning 标记。
+    -- 有它 ConfirmPlacement 才会走 move，而不是再报一次 nodeComplete
+    -- （那会撞上服务端的步骤顺序校验 —— 真机红字就是这么来的）。
+    if not BoothState.active then
+        BoothState.repositioning = true
+        if not BoothState.cfg then BoothState.cfg = BoothState.lastCfg end
+    end
 
     local ped = PlayerPedId()
     if NativeBool(IsPedInAnyVehicle(ped, false)) then
@@ -655,18 +674,19 @@ local function DrawPreviewMarker(pos, legal, reason)
         r, g, b, 55,
         false, false, 2, false, nil, nil, false)
 
-    -- 红框上方给具体原因（UX §3.3：只说「不能摆」等于没说）
-    local text = legal and '✅ 这里可以摆摊 · [E] 放下' or ('❌ ' .. (reason or REASON.UNSTABLE))
-    SetDrawOrigin(pos.x, pos.y, pos.z + 1.6, 0)
-    BeginTextCommandDisplayText('STRING')
-    AddTextComponentSubstringPlayerName(text)
-    SetTextFont(UI_FONT)
-    SetTextScale(0.36, 0.36)
-    SetTextColour(r, g, b, 255)
-    SetTextCentre(true)
-    EndTextCommandDisplayText(0.0, 0.0)
-    ClearDrawOrigin()
+    -- 红框上方给具体原因（UX §3.3：只说「不能摆」等于没说）。
+    --
+    -- 走 NUI 而不是原生 DrawText：GTA 内置字体没有 CJK 字形，中文会整排变方块；
+    -- RegisterFontFile 在本 build 上不生效（真机实测），而 CEF 用系统字体没问题。
+    local text = legal and '✅ 可以摆摊 · [E] 放下'
+        or ('❌ ' .. (reason or REASON.UNSTABLE))
+    if PreviewText.last ~= text then
+        PreviewText.last = text
+        SendNUIMessage({ action = 'preview', visible = true, text = text,
+            legal = legal == true })
+    end
 end
+
 
 -- ==============================================================
 -- 上报
@@ -693,6 +713,8 @@ local function ConfirmPlacement()
     local stepId = BoothState.stepId
     local model = BoothState.cfg.model
     local generation = BoothState.generation
+    -- 挪摊位：任务早过了「摆放」这一步，不能再报 nodeComplete（会被步骤顺序校验拦）。
+    local repositioning = BoothState.repositioning == true
 
     -- 快照 hints：预览表下一帧还会被写，别让序列化拿到半更新的值
     local hints = {
@@ -716,7 +738,8 @@ local function ConfirmPlacement()
         end
 
         if generation ~= BoothState.generation then return end
-        if not BoothState.active or BoothState.questId ~= questId or BoothState.stepId ~= stepId then
+        if not repositioning
+            and (not BoothState.active or BoothState.questId ~= questId or BoothState.stepId ~= stepId) then
             BoothState.confirming = false
             return
         end
@@ -745,6 +768,22 @@ local function ConfirmPlacement()
         print(('[quest-hotdog-client] 📤 booth 上报：quest=%s step=%s netId=%d pos=(%.1f,%.1f,%.1f) hints(road=%s slope=%s water=%s inside=%s)')
             :format(questId, stepId, netId, coords.x, coords.y, coords.z,
                 tostring(hints.onRoad), tostring(hints.slope), tostring(hints.water), tostring(hints.inside)))
+
+        if repositioning then
+            -- 挪位只需要新坐标：车还是那辆，netId 不变，服务端只更新摊位记录。
+            TriggerServerEvent('quest:server:vendorAction', 'move', {
+                x = coords.x, y = coords.y, z = coords.z,
+                netId = netId, hints = hints,
+            })
+            BoothState.repositioning = false
+            BoothState.placed = false
+            BoothState.previewing = false
+            BoothState.preview = nil
+            BoothState.pushing = false
+            HidePreviewText()
+            Notify('✅ 摊位已挪到新位置', 'success', 4000)
+            return
+        end
 
         TriggerServerEvent('quest:server:nodeComplete', questId, stepId, 'booth', {
             booth = {
@@ -796,6 +835,9 @@ local function ActivateBooth(questId, stepId, cfg)
     BoothState.questId = questId
     BoothState.stepId = stepId
     BoothState.cfg = cfg
+    -- 记住这份配置：玩家放下车之后可能想「挪一米」，那时 active 已经是 false，
+    -- 但预览校验仍需要 model / 距离 / 间隔这些参数。
+    BoothState.lastCfg = cfg
     BoothState.spawning = true   -- 先占位，避免主线程在 spawn 线程启动前误报「没生成出来」
     BoothState.lastSpawnNotify = GetGameTimer()
 
@@ -939,7 +981,10 @@ end)
 
 Citizen.CreateThread(function()
     while true do
-        if not BoothState.active then
+        -- 只要还有推车实体就得醒着：放下（HaltBooth）之后 active=false，
+        -- 但玩家仍可能想「推走摊位挪个位置」—— 真机报的就是「按 E 车不跟我走」，
+        -- 原因就是这里直接睡 500ms，整个循环根本不看按键。
+        if not BoothState.active and not EntityExists(BoothState.cart) then
             Wait(500)
         else
             Wait(0)
