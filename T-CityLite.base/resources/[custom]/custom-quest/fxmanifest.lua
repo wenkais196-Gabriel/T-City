@@ -80,6 +80,9 @@ shared_scripts {
 server_scripts {
     '@core-framework/bus.lua',
     '@oxmysql/lib/MySQL.lua',
+    -- S7: 受众感知广播（旁观者推送用 Broadcast.Scope 按坐标收窄受众）；
+    -- 必须排在 MySQL 之后，写法与 custom-police 的 fxmanifest 一致。
+    '@core-framework/server/broadcast.lua',
     'server/quest_cache.lua',
     'server/quest_db.lua',
     'server/quest_registry.lua',

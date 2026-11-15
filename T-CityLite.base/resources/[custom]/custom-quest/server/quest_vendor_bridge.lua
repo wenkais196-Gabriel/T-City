@@ -28,6 +28,9 @@ local ACTION_WINDOW_MS = 5000
 local ACTION_LIMIT = 10
 local NEAR_BOOTH = 6.0
 
+--- 旁观者推送半径：交互距离是 6 m，广播 10 m 让正在走近的玩家提前拿到摊位状态。
+local PUBLIC_RADIUS = 10.0
+
 --- citizenid → { count, windowStart }
 local Rate = {}
 --- citizenid → true（该摊的 Tick 循环是否在跑）
@@ -133,6 +136,7 @@ function QuestVendorBridge.OpenFor(source, citizenid, questId, boothNetId, cfg, 
     end
 
     PushState(citizenid, 'opened')
+    QuestVendorBridge.PushBystanders(citizenid)
     QuestVendorBridge.StartTick(citizenid)
     print(('[vendor-bridge] 🍔 开卖：%s | %s | netId=%s'):format(
         citizenid, tostring(questId), tostring(boothNetId)))
@@ -147,6 +151,8 @@ function QuestVendorBridge.CloseFor(citizenid, questId, reason)
     QuestVendorBridge.StopTick(citizenid)
     StepIds[citizenid] = nil
     PushState(citizenid, 'closed')
+    -- 会话已经销毁（或 questId 不匹配时仍在），PushBystanders 按剩余会话推导 open/closed。
+    QuestVendorBridge.PushBystanders(citizenid)
     -- 只多存一份，不改返回值：给「收摊之后才完成」的路径取用。
     -- 写缓存时顺手清一遍过期项，避免只有 Close 才触发清理导致表无界增长。
     if summary then
@@ -211,6 +217,8 @@ function QuestVendorBridge.StartTick(citizenid)
             end
 
             PushState(citizenid, 'update')
+            -- 每秒一次：让刚走进 10 m 的玩家补到摊位状态，菜单才会出现。
+            QuestVendorBridge.PushBystanders(citizenid)
         end
     end)
 end
@@ -299,6 +307,65 @@ local function UnitPriceOf(session, item)
     local prices = session and session.cfg and session.cfg.prices
     local price = type(prices) == 'table' and prices[item]
     return tonumber(price)
+end
+
+-- [vendor-bystander] begin
+-- 旁观者 payload 的**唯一**构造点。返回表的键就是字段白名单：
+--   isOwner / boothNetId / state / coords / items（可买档位 + 单价）。
+-- 库存明细、收入、押金、顾客报价、citizenid、玩家名一律不进来。
+-- 运行时探针 tests/unit/layer3_business/fixtures/vendor_bystander_probe.lua
+-- 会喂一个塞满摊主私有字段的假会话，并深扫返回值。
+local PUBLIC_QUALITIES = { 'common', 'rare', 'exotic' }
+
+---@param booth table QuestBooth 记录（netId / x / y / z）
+---@param session table|nil 会话；打烊后为 nil
+---@param state string 'open' | 'closed'
+---@return table payload
+function QuestVendorBridge.BuildBystanderPayload(booth, session, state)
+    local items = {}
+    if state == 'open' and type(session) == 'table' then
+        local prices = type(session.cfg) == 'table' and session.cfg.prices or {}
+        local stock = type(session.stock) == 'table' and session.stock or {}
+        for _, quality in ipairs(PUBLIC_QUALITIES) do
+            local unitPrice = tonumber(prices[quality])
+            local count = tonumber(stock[quality]) or 0
+            if unitPrice and unitPrice > 0 and count > 0 then
+                items[#items + 1] = { quality = quality, unitPrice = unitPrice }
+            end
+        end
+    end
+    return {
+        isOwner = false,
+        boothNetId = booth.netId,
+        state = state,
+        coords = { x = booth.x, y = booth.y, z = booth.z },
+        items = items,
+    }
+end
+-- [vendor-bystander] end
+
+--- 只给摊位附近的旁观者：与摊主 PushState 完全分开，避免把私有字段带出去。
+--- 受众由 Broadcast.Scope 按坐标计算；这里**不**用 TriggerClientEvent(..., -1)。
+--- 每台摊位的 Tick（1 秒）也会调用它，让刚走进半径的玩家能补到当前状态。
+---@param citizenid string
+---@return number recipients
+function QuestVendorBridge.PushBystanders(citizenid)
+    if type(Broadcast) ~= 'table' or type(Broadcast.Scope) ~= 'function' then return 0 end
+    if type(QuestBooth) ~= 'table' or type(QuestBooth.Get) ~= 'function' then return 0 end
+
+    local booth = QuestBooth.Get(citizenid)
+    if type(booth) ~= 'table' or type(booth.x) ~= 'number' then return 0 end
+
+    local session = nil
+    if type(QuestVendor) == 'table' and type(QuestVendor.Get) == 'function' then
+        session = QuestVendor.Get(citizenid)
+    end
+    local state = session and session.state == 'open' and 'open' or 'closed'
+    local payload = QuestVendorBridge.BuildBystanderPayload(booth, session, state)
+    return Broadcast.Scope('quest:client:vendorState', {
+        coords = vector3(booth.x, booth.y, booth.z),
+        radius = PUBLIC_RADIUS,
+    }, payload)
 end
 
 --- 入口鉴权：这一个函数就是 `quest:server:vendorAction` 的全部守卫证据
@@ -395,6 +462,7 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
                 ('做好了：%s（失误 %s 次）'):format(tostring(result.tier), tostring(result.faults)),
                 'success', 4000)
             PushState(citizenid, 'update')
+            QuestVendorBridge.PushBystanders(citizenid)
             return
         end
 
@@ -468,6 +536,7 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
             TriggerClientEvent('InteractSound_CL:PlayOnOne', owner.PlayerData.source, 'Shop', 0.25)
         end
         PushState(booth.ownerCitizenid, 'update')
+        QuestVendorBridge.PushBystanders(booth.ownerCitizenid)
         return
     end
 
@@ -492,6 +561,7 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
         -- 推一次状态给摊主，UI 才能知道摊位换了位置（这里曾经写成未定义的 PushFor，
         -- 运行期 attempt to call a nil value，挪位后界面不刷新）。
         PushState(citizenid, 'moved')
+        QuestVendorBridge.PushBystanders(citizenid)
         return
     end
 
@@ -562,6 +632,7 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
     end
 
     PushState(citizenid, 'update')
+    QuestVendorBridge.PushBystanders(citizenid)
 end)
 
 --- 断线：必须关会话（摊主不在，顾客会一直等），并停掉 Tick
@@ -574,6 +645,8 @@ AddEventHandler('playerDropped', function()
     if QuestVendor and QuestVendor.Get and QuestVendor.Get(citizenid) then
         QuestVendor.Close(citizenid, nil, 'dropped')
     end
+    -- 摊位实体还在，但会话已经关了：告诉附近买家“摊主收摊了”。
+    QuestVendorBridge.PushBystanders(citizenid)
     Rate[citizenid] = nil
     StepIds[citizenid] = nil
 end)
