@@ -412,14 +412,8 @@ RegisterNetEvent('quest:client:monitorTrailerHitch', function(data)
     trailerMonitor.spawnedTrailerNetId = nil
 
     local modelHash = GetHashKey(trailerMonitor.trailerModel)
-    RequestModel(modelHash)
-    local timeout = 0
-    while not HasModelLoaded(modelHash) and timeout < 50 do
-        Citizen.Wait(100)
-        timeout = timeout + 1
-    end
-
-    if not HasModelLoaded(modelHash) then
+    -- 旧实现是 50×100ms 的本地轮询；失败经 CFShared.Report 上报一次。
+    if not CFShared.LoadModel(modelHash, 5000) then
         QBCore.Functions.Notify('⚠️ 挂车模型加载失败: ' .. trailerMonitor.trailerModel, 'error')
         return
     end

@@ -213,7 +213,7 @@ review_by: 2027-02-28
 | `checkid` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:313 |
 | `clearblood` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:281 |
 | `clearcasings` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:270 |
-| `coroner` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua:180 |
+| `coroner` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/coroner.lua:181 |
 | `cuff` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:157 |
 | `depot` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:420 |
 | `escort` | QBCore.Commands.Add | — | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:168 |
@@ -249,7 +249,7 @@ review_by: 2027-02-28
 | `spikestrip` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:68 |
 | `takedna` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:292 |
 | `takedrivinglicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:55 |
-| `tow` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/tow.lua:165 |
+| `tow` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/tow.lua:166 |
 | `unflagplate` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:119 |
 | `unjail` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:179 |
 | `verifylicense` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:355 |
