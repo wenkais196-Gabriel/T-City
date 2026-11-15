@@ -40,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `QuestBooth.ValidatePlacement`（同样的距离/道路/遮挡判据），失败按 reason 提示。
 
 ### Fixed
+- **热狗收摊按一次 E 推进两次（Step order violation）**：`quest_hotdog.lua` 的 `step_sell`
+  （`type = 'vendor'`）同时带了 `coords / radius / duration`，于是既走服务端 `close` 分支的
+  `AdvanceStep`，又被 `quest_manager.lua` 的 `_eventMap.VENDOR` 映射成通用 `nodeInteract`
+  再报一次 `nodeComplete`。现在去掉该步的通用交互数据（方案 A）：vendor 步骤的推进只由
+  服务端收摊分支完成，交互提示继续由热狗客户端自己画（`vendorState` 状态条 + E 键映射）。
+  不新增 net event，`BOOTH` / `RENTAL` 的 `nodeInteract` 复用不受影响。新增静态闸门
+  `T-CityLite.base/tests/architecture/test_quest_vendor_single_channel.py`（真加载全部模板 +
+  反向校验：带 coords 的 vendor 步必须判红）与运行时探针
+  `T-CityLite.base/tests/unit/layer3_business/fixtures/vendor_single_channel_probe.lua`
+  （真实模板 + 真实 `nodeInteract` 处理器 + 真实 `close` 分支：一次动作只推进一次）。
 - **买家看不到别人的摊位（整条购买路径不可达）**：`T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor_bridge.lua`
   的 `PushState` 只把摊位状态单播给摊主本人，买家客户端永远没有别人的摊位记录，`[ALT]` 购买菜单因此不可达。
   现在另加一条旁观者推送：`QuestVendorBridge.PushBystanders` 用

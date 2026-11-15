@@ -412,6 +412,9 @@ end)
 
 -- ── INTERACT 节点: 进度条 + 动画 ──────────────────────────────────
 
+-- [node-interact] begin
+-- 这段被 tests/unit/layer3_business/fixtures/vendor_single_channel_probe.lua 抽取后真跑：
+-- vendor 步骤没有 coords 时必须直接 return，不能走到 nodeComplete。
 RegisterNetEvent('quest:client:nodeInteract', function(data)
     ClearZone()
     activeNode = { type = 'INTERACT', questId = data.questId, stepId = data.stepId, data = data }
@@ -536,6 +539,7 @@ RegisterNetEvent('quest:client:nodeInteract', function(data)
         if zone then activeZone = zone end
     end
 end)
+-- [node-interact] end
 
 -- ── DELIVER 节点: 运送标记 ──────────────────────────────────────
 
