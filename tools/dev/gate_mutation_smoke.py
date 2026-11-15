@@ -637,13 +637,13 @@ def _inject(mutation: Mutation) -> tuple[str | None, list[Path], str | None]:
         if mutation.replace_from not in backup:
             return None, [], (f"要替换的片段在 {target.relative_to(REPO)} 里找不到"
                               "（代码变了，更新用例）")
-        target.write_text(backup.replace(mutation.replace_from, mutation.replace_to, 1),
-                          encoding="utf-8")  # NOSONAR 目标路径来自 MUTATIONS 硬编码 path
+        payload = backup.replace(mutation.replace_from, mutation.replace_to, 1)
+        target.write_text(payload, encoding="utf-8")  # NOSONAR 目标路径来自 MUTATIONS 硬编码 path
         return backup, [], None
     if mutation.content is None:            # 就地追加（历史形状）
         backup = target.read_text(encoding="utf-8")
-        target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n",
-                          encoding="utf-8")  # NOSONAR 固定目标 + 原地追加，无路径拼接
+        payload = backup.rstrip("\n") + "\n\n    'core-framework'\nend\n"
+        target.write_text(payload, encoding="utf-8")  # NOSONAR 固定目标 + 原地追加，无路径拼接
         return backup, [], None
     created = _create_parent_dirs(target)
     target.write_text(mutation.content, encoding="utf-8")  # NOSONAR 内容/路径都来自常量表
