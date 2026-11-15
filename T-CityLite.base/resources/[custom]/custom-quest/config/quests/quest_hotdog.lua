@@ -89,12 +89,11 @@ return {
                 title = '开卖',
                 description = '在摊位按 E 收摊；顾客来了会弹报价，Y 成交 / N 拒绝。',
                 type = 'vendor',
-                data = {
-                    coords = STAND_A,
-                    radius = 3.0,
-                    label = '收摊',
-                    duration = 800,
-                },
+                -- 不要给这一步写 coords / radius / duration：
+                -- vendor 由服务端在收摊动作里推进（quest_vendor_bridge.lua 的 close 分支）；
+                -- 通用 nodeInteract 一旦拿到坐标就会再报一次 nodeComplete，
+                -- 与服务端各推进一次 → 真机 `Step order violation`。
+                -- 交互提示由热狗客户端自己画（vendorState 状态条 + E 键映射），不靠模板坐标。
             },
             {
                 id = 'step_return_cart',
