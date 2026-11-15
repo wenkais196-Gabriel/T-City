@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>热狗摊</title>
+<style>
+  :root{
+    --card:rgba(12,12,14,.86);
+    --line:rgba(255,255,255,.10);
+    --text:#f4f4f5;
+    --muted:#a1a1aa;
+    --accent:#a78bfa;
+    --green:#4ade80;
+    --red:#f87171;
+    --amber:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;background:transparent;overflow:hidden;
+    font-family:"Noto Sans SC","Microsoft YaHei","PingFang SC",-apple-system,sans-serif;
+    color:var(--text);-webkit-font-smoothing:antialiased}
+  .hide{display:none!important}
+
+  /* 左下：摊位状态条（只在摊位附近出现） */
+  #status{position:absolute;left:26px;bottom:210px;min-width:340px;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px}
+  #status .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  #status .name{font-size:14px;font-weight:600;letter-spacing:.02em}
+  #status .state{font-size:11px;padding:2px 8px;border-radius:999px;
+    background:rgba(74,222,128,.16);color:var(--green)}
+  #status .state.closed{background:rgba(161,161,170,.16);color:var(--muted)}
+  #status .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 10px;font-size:12px}
+  #status .grid div{color:var(--muted)}
+  #status .grid b{color:var(--text);font-variant-numeric:tabular-nums;margin-left:4px}
+  #status .hint{margin-top:9px;padding-top:8px;border-top:1px solid var(--line);
+    font-size:12px;color:var(--amber);letter-spacing:.02em}
+
+  /* 底部居中：摆摊预览 */
+  #preview{position:absolute;left:50%;bottom:170px;transform:translateX(-50%);
+    background:rgba(12,12,14,.88);border-radius:10px;padding:9px 18px;
+    font-size:15px;font-weight:600;letter-spacing:.02em;color:#4ade80;
+    border:1px solid rgba(74,222,128,.45)}
+  #preview.bad{color:#fca5a5;border-color:rgba(248,113,113,.5)}
+  #preview.near{border-color:rgba(251,191,36,.5);color:#fde68a}
+
+  /* 底部居中：买家提示 */
+  #hint{position:absolute;left:50%;bottom:120px;transform:translateX(-50%);
+    background:rgba(12,12,14,.86);border:1px solid rgba(251,191,36,.35);
+    border-radius:10px;padding:9px 16px;font-size:13px;color:#fde68a;letter-spacing:.02em}
+  #hint.off{border-color:rgba(161,161,170,.3);color:#a1a1aa}
+
+  /* 右下：顾客报价 */
+  #offer{position:absolute;right:26px;bottom:210px;width:300px;
+    background:var(--card);border:1px solid rgba(167,139,250,.35);border-radius:14px;
+    padding:13px 14px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  #offer .who{font-size:11px;color:var(--accent);letter-spacing:.1em;margin-bottom:6px}
+  #offer .item{font-size:15px;font-weight:600;margin-bottom:2px}
+  #offer .price{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;margin:4px 0 8px}
+  #offer .bar{height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}
+  #offer .bar i{display:block;height:100%;background:var(--accent);width:100%;
+    transition:width .25s linear}
+  #offer .keys{display:flex;gap:8px;margin-top:11px}
+  #offer button{flex:1;padding:8px;border-radius:9px;border:1px solid var(--line);
+    background:rgba(255,255,255,.05);color:var(--text);font-size:12px;cursor:pointer;
+    font-family:inherit}
+  #offer button.yes{background:rgba(74,222,128,.16);border-color:rgba(74,222,128,.4);color:#bbf7d0}
+  #offer button.no{background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.35);color:#fecaca}
+
+  /* 右侧：玩家购买菜单 */
+  #menu{position:absolute;right:26px;top:50%;transform:translateY(-50%);width:320px;
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:14px}
+  #menu h3{font-size:13px;font-weight:600;margin-bottom:4px}
+  #menu .sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+  #menu .row{display:flex;justify-content:space-between;align-items:center;
+    padding:9px 10px;border-radius:9px;font-size:13px;cursor:pointer;margin-bottom:4px}
+  #menu .row:hover{background:rgba(255,255,255,.06)}
+  #menu .row.sel{background:rgba(167,139,250,.18);outline:1px solid rgba(167,139,250,.4)}
+  #menu .row.sold{opacity:.42;cursor:not-allowed}
+  #menu .row .p{font-variant-numeric:tabular-nums;color:var(--green)}
+  #menu .row.sold .p{color:var(--muted)}
+  #menu .foot{margin-top:10px;font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div id="preview" class="hide"></div>
+<div id="hint" class="hide">[ALT] 购买热狗</div>
+
+<div id="status" class="hide">
+  <div class="top">
+    <span class="name">热狗摊</span>
+    <span class="state" id="st-state">营业中</span>
+  </div>
+  <div class="grid">
+    <div>异域<b id="st-exotic">0</b></div>
+    <div>稀有<b id="st-rare">0</b></div>
+    <div>普通<b id="st-common">0</b></div>
+    <div>原料<b id="st-raw">0</b></div>
+    <div>已售<b id="st-sold">0</b></div>
+    <div>收入<b id="st-revenue">$0</b></div>
+  </div>
+  <div class="hint" id="st-hint">[E] 收摊 · [G] 做热狗</div>
+</div>
+
+<div id="offer" class="hide">
+  <div class="who">顾客上门</div>
+  <div class="item" id="of-item">普通热狗 ×1</div>
+  <div class="price" id="of-price">$6</div>
+  <div class="bar"><i id="of-bar"></i></div>
+  <div class="keys">
+    <button class="yes" data-act="accept">[Y] 成交</button>
+    <button class="no" data-act="reject">[N] 拒绝</button>
+  </div>
+</div>
+
+<div id="menu" class="hide">
+  <h3>今日菜单</h3>
+  <div class="sub" id="menu-sub">按上下键选择 · Enter 买 1 份 · 退格关闭</div>
+  <div id="menu-rows"></div>
+  <div class="foot" id="menu-foot"></div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const post = (name, data) => {
+    // 带超时的 NUI 请求：回调丢了（资源重启/脚本报错）不能让界面永远转圈。
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 5000);
+    return fetch(`https://${GetParentResourceName()}/${name}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}), signal: ctl.signal
+    }).catch(() => {}).finally(() => clearTimeout(timer));
+  };
+
+  function show(el, on) { el.classList.toggle('hide', !on); }
+
+  let offerTimer = null;
+  let offerEnds = 0;
+  let offerTotal = 1;
+
+  window.addEventListener('message', (e) => {
+    const d = e.data || {};
+    if (d.action === 'status') {
+      show($('status'), d.visible === true);
+      if (d.visible) {
+        $('st-exotic').textContent = d.stock?.exotic ?? 0;
+        $('st-rare').textContent = d.stock?.rare ?? 0;
+        $('st-common').textContent = d.stock?.common ?? 0;
+        $('st-raw').textContent = d.raw ?? 0;
+        $('st-sold').textContent = d.sold ?? 0;
+        $('st-revenue').textContent = '$' + (d.revenue ?? 0);
+        const open = d.state === 'open';
+        const badge = $('st-state');
+        badge.textContent = open ? '营业中' : '已打烊';
+        badge.classList.toggle('closed', !open);
+        $('st-hint').textContent = d.hint || (open ? '[E] 收摊 · [G] 做热狗' : '回租赁点结算');
+      }
+    }
+
+    if (d.action === 'offer') {
+      if (d.visible === false) { show($('offer'), false); clearInterval(offerTimer); return; }
+      show($('offer'), true);
+      $('of-item').textContent = `${d.label || '热狗'} ×${d.count ?? 1}`;
+      $('of-price').textContent = '$' + (d.price ?? 0);
+      offerEnds = Date.now() + (d.remainingMs ?? 0);
+      offerTotal = Math.max(1, d.remainingMs ?? 1);
+      clearInterval(offerTimer);
+      offerTimer = setInterval(() => {
+        const left = offerEnds - Date.now();
+        const bar = $('of-bar');
+        bar.style.width = Math.max(0, Math.min(100, (left / offerTotal) * 100)) + '%';
+        if (left <= 0) { clearInterval(offerTimer); show($('offer'), false); }
+      }, 120);
+    }
+
+    if (d.action === 'preview') {
+      show($('preview'), d.visible === true);
+      if (d.visible) {
+        $('preview').textContent = d.text || '';
+        $('preview').classList.toggle('bad', d.legal === false);
+        $('preview').classList.toggle('near', d.legal === true && d.confirm === false);
+      }
+    }
+
+    if (d.action === 'hint') {
+      show($('hint'), d.visible === true);
+      if (d.visible) {
+        $('hint').textContent = d.text || '';
+        $('hint').classList.toggle('off', d.enabled === false);
+      }
+    }
+
+    if (d.action === 'menu') {
+      if (d.visible === false) { show($('menu'), false); return; }
+      show($('menu'), true);
+      $('menu-sub').textContent = d.sub || '按上下键选择 · Enter 买 1 份 · 退格关闭';
+      $('menu-foot').textContent = d.foot || '';
+      const rows = $('menu-rows');
+      rows.innerHTML = '';
+      (d.rows || []).forEach((r, i) => {
+        const el = document.createElement('div');
+        el.className = 'row' + (r.disabled ? ' sold' : '') + (i === d.selected ? ' sel' : '');
+        el.innerHTML = `<span>${r.label}${r.note ? ' · ' + r.note : ''}</span><span class="p">${r.price}</span>`;
+        if (!r.disabled) el.onclick = () => post('buyRow', { index: i });
+        rows.appendChild(el);
+      });
+    }
+  });
+
+  document.querySelectorAll('#offer button').forEach((b) => {
+    b.onclick = () => post('offerAction', { action: b.dataset.act });
+  });
+</script>
+</body>
+</html>

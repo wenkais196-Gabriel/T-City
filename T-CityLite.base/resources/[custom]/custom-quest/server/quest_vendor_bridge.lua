@@ -23,7 +23,7 @@
 
 QuestVendorBridge = QuestVendorBridge or {}
 
-local ACTIONS = { accept = true, reject = true, purchase = true, cook = true, close = true }
+local ACTIONS = { accept = true, reject = true, purchase = true, cook = true, close = true, move = true }
 local ACTION_WINDOW_MS = 5000
 local ACTION_LIMIT = 10
 local NEAR_BOOTH = 6.0
@@ -53,6 +53,15 @@ local function ResolvePlayer(citizenid)
     return nil
 end
 
+--- 摊位的摆放配置（服务端挪位时复用同一套判据）
+local function boothStepCfgOf(questId)
+    if type(QuestRegistry) ~= 'table' or type(QuestRegistry.GetTemplate) ~= 'function' then return nil end
+    local template = QuestRegistry.GetTemplate(questId)
+    for _, step in ipairs(template and template.steps or {}) do
+        if step.type == 'booth' and step.data then return step.data end
+    end
+    return nil
+end
 --- 模板里「售卖」那一步的 id。收摊由服务端推进，不再让客户端报 stepId ——
 -- 客户端手里那个 stepId 是**摆摊**那一步的（`vendorState` 是开卖时推的），
 -- 拿它去 nodeComplete 会被判 `Step order violation`（真机已实测：
@@ -416,6 +425,28 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
                 ('玩家买了 1 份 %s · +$%s'):format(tostring(item), tostring(unit)), 'success', 4000)
         end
         PushState(booth.ownerCitizenid, 'update')
+        return
+    end
+
+    -- 挪摊位：玩家放下车之后想微调位置。校验与首次摆放**同一条判据**，
+    -- 只是不再登记实体（车还是那辆，netId 不变）。
+    if action == 'move' then
+        local booth = QuestBooth.Get(citizenid)
+        if not booth then return end
+        local pos = { x = tonumber(payload.x), y = tonumber(payload.y), z = tonumber(payload.z) }
+        if not pos.x or not pos.y then return end
+
+        local cfg = boothStepCfgOf(booth.questId)
+        if cfg then
+            local ok, reason = QuestBooth.ValidatePlacement(citizenid, cfg, pos, payload.hints)
+            if not ok then
+                TriggerClientEvent('QBCore:Notify', src, reason or '这里放不了', 'error', 4000)
+                return
+            end
+        end
+
+        QuestBooth.MoveTo(citizenid, pos)
+        QuestVendorBridge.PushFor(citizenid)
         return
     end
 
