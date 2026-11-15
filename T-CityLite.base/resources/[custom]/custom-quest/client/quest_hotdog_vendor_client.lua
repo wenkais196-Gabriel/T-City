@@ -591,6 +591,10 @@ RegisterNetEvent('quest:client:vendorOffer', function(payload)
     local count = math.floor(NumberOr(payload.count, 0))
     if count <= 0 then return end
 
+    -- 顾客上门：世界声 25 m、音量 0.3（interact-sound 服务端会校验文件名/音量并限流）。
+    -- 放在所有校验之后：重复的 offerId 会被上面的 ResolvedOffers 挡掉，不会叠音。
+    TriggerServerEvent('InteractSound_SV:PlayWithinDistance', 25.0, 'doorbell', 0.3)
+
     -- 服务端与客户端的 GetGameTimer 不同源（服务器进程启动时刻 ≠ 客户端游戏启动时刻）。
     -- 正确的做法是接线方发 remainingMs（= offer.expiresAt - QuestVendor.Now()），
     -- 客户端换算成本地截止时间；下面的兜底只是让旧接线不至于把面板永远吞掉。

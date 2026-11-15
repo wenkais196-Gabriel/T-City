@@ -43,26 +43,6 @@ _CALL = re.compile(r"\bTriggerClientEvent\s*\(")
 _QUOTED = re.compile(r"(['\"])(.*?)\1", re.S)
 
 
-def _arguments(code: str, open_index: int, close_index: int) -> list[tuple[int, int]]:
-    """按顶层逗号切参数，返回每个参数的 `(start, end)` 偏移。
-
-    `code` 是字符串已抹白的结构化视图，所以括号/逗号只可能来自真代码。
-    """
-    bounds: list[tuple[int, int]] = []
-    start, depth = open_index + 1, 0
-    for index in range(open_index + 1, close_index - 1):
-        char = code[index]
-        if char in "([{":
-            depth += 1
-        elif char in ")]}":
-            depth -= 1
-        elif char == "," and depth == 0:
-            bounds.append((start, index))
-            start = index + 1
-    bounds.append((start, close_index - 1))
-    return bounds
-
-
 def _scan_source(source: str, rel: str) -> list[dict]:
     """返回 `source` 里所有发往 `-1` 的 TriggerClientEvent 调用点。"""
     code = lua_source.blank_noise(source)                      # 注释 + 字符串 → 空白
@@ -70,7 +50,7 @@ def _scan_source(source: str, rel: str) -> list[dict]:
     sites: list[dict] = []
     for match in _CALL.finditer(code):
         open_index = match.end() - 1
-        arguments = _arguments(code, open_index, lua_source.match_paren(code, open_index))
+        arguments = lua_source.argument_spans(code, open_index)
         if len(arguments) < 2 or re.sub(r"\s+", "", code[slice(*arguments[1])]) != "-1":
             continue
         raw_event = text[slice(*arguments[0])].strip()

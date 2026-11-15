@@ -1093,6 +1093,19 @@ MUTATIONS += [
 ]
 
 
+# 热狗音效：不存在的素材 / 超过 0.5 的音量必须被闸门拦住
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_quest_sound_calls.py::"
+              "test_quest_sound_calls_are_bounded"),
+        path="resources/[custom]/custom-quest/client/__mutant_sound.lua",
+        content=("-- 变异注入：不存在的音效文件 + 超过 0.5 的音量\n"
+                 "TriggerServerEvent('InteractSound_SV:PlayWithinDistance', 25.0, 'nope', 0.9)\n"),
+        what="热狗音效引用不存在的文件且音量超过 0.5",
+    ),
+]
+
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))
