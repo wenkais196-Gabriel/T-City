@@ -10,8 +10,8 @@ local LIFETIME_MS = 5 * 60 * 1000
 
 local active = { props = {}, armed = false }
 
--- 模型加载复用 client/entity_util.lua（REUSE-01：不要再抄一份）
-local loadModel = EntityUtil.LoadModel
+-- 模型加载走 CFShared.LoadModel；旧实现是 5s，调用点显式传 5000 保持一致。
+local loadModel = CFShared.LoadModel
 
 local function removeProps()
     for _, prop in ipairs(active.props) do
@@ -23,7 +23,7 @@ end
 
 local function place(model, coords, heading)
     local hash = GetHashKey(model)
-    if not loadModel(hash) then return false end
+    if not loadModel(hash, 5000) then return false end
     local prop = CreateObject(hash, coords.x, coords.y, coords.z, true, true, false)
     SetModelAsNoLongerNeeded(hash)
     if not prop or prop == 0 then return false end

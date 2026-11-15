@@ -13,7 +13,8 @@ local CORONER_LEAVE_MS = 12000
 
 local coroners = {}   -- [requestId] = state
 
-local loadModel = EntityUtil.LoadModel
+-- 旧实现是 5s 超时；CFShared.LoadModel 默认 10s，调用点显式传 5000 保持行为一致。
+local loadModel = CFShared.LoadModel
 local deleteEntity = EntityUtil.Delete
 
 local function cleanup(requestId, reason)
@@ -104,7 +105,7 @@ RegisterNetEvent('police:client:SpawnCoroner', function(requestId, corpseNet)
 
     local vehicleHash = GetHashKey(CORONER_VEHICLE)
     local pedHash = GetHashKey(CORONER_PED)
-    if not loadModel(vehicleHash) or not loadModel(pedHash) then
+    if not loadModel(vehicleHash, 5000) or not loadModel(pedHash, 5000) then
         TriggerServerEvent('police:server:coronerDone', requestId, 'model')
         return
     end
@@ -192,7 +193,7 @@ RegisterNetEvent('police:client:CoronerDevCorpse', function()
     local forward = GetEntityForwardVector(playerPed)
     local at = GetEntityCoords(playerPed) + forward * 4.0
     local hash = GetHashKey('a_m_m_business_01')
-    if not loadModel(hash) then return end
+    if not loadModel(hash, 5000) then return end
     local ped = CreatePed(4, hash, at.x, at.y, at.z, 0.0, true, true)
     SetModelAsNoLongerNeeded(hash)
     if not ped or ped == 0 then return end

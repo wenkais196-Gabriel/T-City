@@ -71,6 +71,7 @@ local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDic
 | convar 助手族（`GetIntConvar` / `GetBoolConvar` / `GetFloatConvar` / `GetStrConvar` / `GetNumConvar` / `convarInt` / `convarString`） | 23 | 0（全部走 `ConvarString/Int/Float/Bool`） | 12 个文件迁移；**这批是在加载期调用的**，所以顺带给 6 个资源补了 `dependencies { 'core-framework' }` |
 | 合计同名 ≥4 的能力组 | 15 组 | 12 组 | `reuse_budget.json` 同步收紧 |
 | 跨资源 Bus 读取 | 4 个扫描根（S2a） | 0（本次收敛） | 6 个扫描根/文件（税/热度/通知）；`Bus` 只作 owner 侧注册辅助 |
+| `LoadModel` | 4 个 `[custom]` 本地实现（含 2 个无超时） | 0（统一走 `CFShared.LoadModel`） | `T-CityLite.base/resources/[standalone]/core-framework/client/shared.lua:69-104` |
 
 顺带修掉的两个真隐患：
 
@@ -79,7 +80,7 @@ local loadAnimDict = function(dict) return exports['core-framework']:LoadAnimDic
   顺序敏感。所以迁移必须同时补 `dependencies`，否则某个资源先起就会 `No such export` 整个加载失败。
   闸门 `test_load_time_callers_declare_the_core_dependency` 把这条钉住了。
 
-下一批候选（按收益排序）：`loadModel`（阻塞循环，与 loadAnimDict 同类，需加超时）→
+下一批候选（按收益排序）：~~`loadModel`~~（已完成，S5：统一走 `CFShared.LoadModel`）→
 `checkRateLimit`（与 `core-framework` 的 `rate_limit.lua` 职责重叠）→ `DrawText3D` 族（先统一签名）→
 `AddMoney`（重复本身可能是宪法②的违反，要单独审）。
 

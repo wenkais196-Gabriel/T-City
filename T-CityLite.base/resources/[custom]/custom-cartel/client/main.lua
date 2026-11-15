@@ -39,19 +39,15 @@ end)
 
 function spawnNPC(npcCfg)
     local hash = GetHashKey(npcCfg.model)
-    RequestModel(hash)
-    local timeout = 0
-    while not HasModelLoaded(hash) do
-        Wait(10)
-        timeout = timeout + 1
-        if timeout > 300 then
-            print('[cartel] ❌ NPC模型加载失败: ' .. npcCfg.model)
-            return
-        end
+    -- 旧实现是 300×10ms 的本地轮询；失败时经 CFShared.Report 上报一次。
+    if not CFShared.LoadModel(hash, 5000) then
+        print('[cartel] ❌ NPC模型加载失败: ' .. tostring(npcCfg.model))
+        return
     end
 
     local ped = CreatePed(0, hash, npcCfg.coords.x, npcCfg.coords.y, npcCfg.coords.z - 1.0,
         npcCfg.coords.w, false, true)
+    CFShared.ReleaseModel(hash)
     if DoesEntityExist(ped) then
         FreezeEntityPosition(ped, true)
         SetEntityInvincible(ped, true)
