@@ -1092,6 +1092,19 @@ MUTATIONS += [
     ),
 ]
 
+# 热狗：测试期数值必须自洽（押金撑不满计费期就是最典型的坏形状）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_hotdog_test_numbers.py::"
+              "test_hotdog_test_numbers_are_self_consistent"),
+        path="resources/[custom]/custom-quest/config/quests/quest_hotdog.lua",
+        content=None,
+        replace_from="                        deposit = 50,\n",
+        replace_to="                        deposit = 1,\n",
+        what="押金 1 撑不住 20 分钟 × $1 的计费",
+    ),
+]
+
 
 # 热狗音效：不存在的素材 / 超过 0.5 的音量必须被闸门拦住
 MUTATIONS += [
