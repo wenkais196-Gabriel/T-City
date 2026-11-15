@@ -617,9 +617,12 @@ def run_once(mutation: Mutation) -> dict:
         if mutation.replace_from not in backup:
             return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
                     "detail": f"要替换的片段在 {target.relative_to(REPO)} 里找不到（代码变了，更新用例）"}
+        # NOSONAR 目标路径来自 MUTATIONS 里的硬编码 path（无外部输入），内容是把同一文件
+        # 的备份写回去 —— Sonar 的「文件内容 → 写入路径」污点链在这里是误报。
         target.write_text(backup.replace(mutation.replace_from, mutation.replace_to, 1), encoding="utf-8")
     elif mutation.content is None:          # 就地追加（历史形状）
         backup = target.read_text(encoding="utf-8")
+        # NOSONAR 同上：固定目标 + 原地追加，不存在路径拼接。
         target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n", encoding="utf-8")
     else:
         # 记下这次真正新建的目录层级，撤注入后要删掉 —— 空目录会让
@@ -629,12 +632,14 @@ def run_once(mutation: Mutation) -> dict:
             created.append(parent)
             parent = parent.parent
         target.parent.mkdir(parents=True, exist_ok=True)
+        # NOSONAR 同上：注入内容来自 MUTATIONS 常量表，路径来自同一张表的硬编码 path。
         target.write_text(mutation.content, encoding="utf-8")
 
     try:
         passed_after_injection, injected_line = run_gate(mutation.gate)
     finally:
         if backup is not None:
+            # NOSONAR 同上：把同一文件的原内容写回同一路径（还原注入）。
             target.write_text(backup, encoding="utf-8")
         else:
             target.unlink(missing_ok=True)
