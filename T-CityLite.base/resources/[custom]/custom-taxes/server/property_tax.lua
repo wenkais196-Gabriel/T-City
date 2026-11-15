@@ -254,11 +254,10 @@ function ProcessPropertyTax(source)
                     local playerMoney = Player.PlayerData.money['bank'] or 0
 
                     if playerMoney >= totalDue then
-                        -- 足额扣款
-                        if _G.Bus and _G.Bus.SinkService then
-                            _G.Bus.SinkService.Withdraw(source, totalDue, 'housing_tax',
-                                ('%s (cycles: %d)'):format(houseId, cyclesDue))
-                        else
+                        -- 足额扣款：走 qb-core 的 SinkWithdraw；失败时保留原有的直接扣款回落
+                        local sinkOk = exports['qb-core']:SinkWithdraw(source, totalDue, 'housing_tax',
+                            ('%s (cycles: %d)'):format(houseId, cyclesDue))
+                        if not sinkOk then
                             Player.Functions.RemoveMoney('bank', totalDue,
                                 ('property_tax:%s'):format(houseId))
                         end
