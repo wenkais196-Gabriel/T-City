@@ -73,16 +73,8 @@ RegisterNetEvent('qb-drugs:server:sellCornerDrugs', function(drugType, amount, p
     if hasItem and hasItem.amount >= amount then
         TriggerClientEvent('QBCore:Notify', src, Lang:t('success.offer_accepted'), 'success')
         exports['qb-inventory']:RemoveItem(src, item, amount, false, 'qb-drugs:server:sellCornerDrugs')
-        -- [SECURITY] Route through AddScaledMoney unified economy exit
-        local function doPayout(src, amount, reason)
-            if exports['custom-economy'] and exports['custom-economy'].AddScaledMoney then
-                exports['custom-economy']:AddScaledMoney(src, 'cash', amount, reason)
-            else
-                local Player = QBCore.Functions.GetPlayer(src)
-                if Player then Player.Functions.AddMoney('cash', amount, reason) end
-            end
-        end
-        doPayout(src, serverPrice, 'qb-drugs:server:sellCornerDrugs')
+        -- [SECURITY] 街角卖货走原语写路径：不叠经济倍率，也不依赖已退役的 custom-economy
+        Player.Functions.AddMoney('cash', serverPrice, 'qb-drugs:server:sellCornerDrugs')
         TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[item], 'remove')
         TriggerClientEvent('qb-drugs:client:refreshAvailableDrugs', src, getAvailableDrugs(src))
     else

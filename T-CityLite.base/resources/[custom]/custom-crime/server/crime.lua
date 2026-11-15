@@ -282,12 +282,8 @@ local function LaunderMoney(src, amount)
         return false, 0, "扣款失败"
     end
 
-    -- 7. 入干净钱（到 bank）— 经统一经济出口
-    if exports['custom-main'] and exports['custom-main'].AddScaledMoney then
-        exports['custom-main']:AddScaledMoney(src, 'bank', cleanAmount, 'LaunderMoney:deposit')
-    else
-        Player.Functions.AddMoney('bank', cleanAmount, 'LaunderMoney:deposit')
-    end
+    -- 7. 入干净钱（到 bank）— 洗钱是原语写路径，不叠经济倍率
+    Player.Functions.AddMoney('bank', cleanAmount, 'LaunderMoney:deposit')
 
     -- 8. 更新冷却状态
     if not Cooldowns.LaunderPlayer then Cooldowns.LaunderPlayer = {} end
@@ -414,12 +410,8 @@ local function MultiLaunderMoney(src, amount, tierLevel)
 
     -- 6. 入账
     if tierLevel == 4 then
-        -- 最终层: 入 bank
-        if exports['custom-main'] and exports['custom-main'].AddScaledMoney then
-            exports['custom-main']:AddScaledMoney(src, 'bank', cleanAmount, 'MultiLaunder:L4')
-        else
-            Player.Functions.AddMoney('bank', cleanAmount, 'MultiLaunder:L4')
-        end
+        -- 最终层: 入 bank（原语写路径，不叠经济倍率）
+        Player.Functions.AddMoney('bank', cleanAmount, 'MultiLaunder:L4')
     else
         -- 中间层: 入 cash (模拟中间资产)
         Player.Functions.AddMoney('cash', cleanAmount, ('MultiLaunder:L%d'):format(tierLevel))

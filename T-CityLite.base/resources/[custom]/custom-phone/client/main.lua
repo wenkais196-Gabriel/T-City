@@ -1013,7 +1013,7 @@ end)
 -- Dynamic Leader app unlocking
 local function CheckLeaderApp()
     local success, identity = pcall(function()
-        return exports['custom-career']:GetLocalIdentity()
+        return exports['custom-career']:GetPlayerIdentity()
     end)
     if success and identity then
         if identity.rank_tier == 'leader' then

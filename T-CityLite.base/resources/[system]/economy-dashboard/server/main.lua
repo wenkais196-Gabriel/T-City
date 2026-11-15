@@ -267,8 +267,8 @@ RegisterCommand('econ', function(source)
         or 0
 
     local globalMult = 1.0
-    if exports['custom-economy'] then
-        globalMult = exports['custom-economy']:GetEconomyRewardScale()
+    if GetResourceState('core_economy') == 'started' then
+        globalMult = exports['core_economy']:GetGlobalMultiplier()
     end
 
     local lines = {

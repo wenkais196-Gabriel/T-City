@@ -140,6 +140,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FXServer 照样起得来而 `oxmysql` 卡在 `connect ETIMEDOUT`，且它不会自己重试。
 
 ### Fixed
+- **方法级导出契约闸门 + 修 11 处死调用 + 1 处兜底**：卖物品不再丢物品、抢劫奖励不再报
+  `No such export`、武器耐久恢复更新。闸门（`tools/dev/service_contracts_scan.py` +
+  `tests/architecture/test_service_contracts.py`）把全仓字面量 `exports['<res>']:<Method>(`
+  调用与声明逐方法对账（登记表 `service_contracts.json`，176 个 service 方法 + 33 个外部
+  调用点复核）；本次换掉 `custom-main:AddScaledMoney/CheckRateLimit`、
+  `custom-economy:GetEconomyRewardScale/AddScaledMoney`、`qb-inventory:SetItemInfo`、
+  `custom-career:GetLocalIdentity` 共 12 个真实死调用：当铺卖物品失败自动退回物品；
+  抢劫奖励走 `core_economy:GetGlobalMultiplier`（pcall 回落 1.0）；洗钱、街角卖货、
+  压力测试回到 `Player.Functions` 原语写路径；武器耐久改走 `qb-inventory:SetItemData`；
+  手机 Leader app 改走 `custom-career:GetPlayerIdentity`。
 - **热狗线 S0 坐标踏勘**：Legion Square 东侧广场定下 7 个坐标（租赁点 / 3 个摆位 / 2 个顾客生成点 /
   队列点），逐个过「离最近路面 ≤ 10 m、高差 ≤ 1.5 m + 卫星图人眼」；摆位 A 用的是真机验证过的旧壳点位。
   见 `docs/plan/jobs-content/12-hotdog-coordinates.md`（含被淘汰的候选与原因）。
