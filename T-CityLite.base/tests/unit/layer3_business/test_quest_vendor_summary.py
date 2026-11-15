@@ -92,6 +92,13 @@ def test_completion_path_uses_the_one_shot_cache():
     assert "QuestVendorBridge.CloseFor" in block
     assert "QuestVendorBridge.TakeLastSummary" in block, (
         "closeVendorFor 没有取一次性缓存 —— 第二次 CloseFor 返回 nil 时账单仍是 0")
+    # 只断言「出现过这个名字」会被 `if false and …` 这种改法骗过去（实测过）。
+    # 所以这里钉住整段守卫 + 取用调用：删掉、改名、或者把它短路掉都会红。
+    assert ("    if not summary and type(QuestVendorBridge.TakeLastSummary) == 'function' then\n"
+            "        local okCached, cached = pcall(QuestVendorBridge.TakeLastSummary, citizenid, questId)\n"
+            "        if okCached then summary = cached end\n"
+            "    end") in block, (
+        "完成路径的缓存回补被改写了 —— 允许改实现，但要同步这里；不接受只留一句注释或短路守卫")
 
     bridge = BRIDGE.read_text(encoding="utf-8")
     assert "function QuestVendorBridge.TakeLastSummary" in bridge
