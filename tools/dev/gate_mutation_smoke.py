@@ -1019,6 +1019,30 @@ MUTATIONS += [
     ),
 ]
 
+# S6：金额格式化只许一份实现（core-framework/shared/util.lua 的 FormatMoney）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_money_format_single_owner.py::"
+              "test_money_format_has_a_single_implementation"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_money_format.lua",
+        content=("-- 变异注入：又抄一份金额格式化实现\n"
+                 "local function PhoneMoney(v)\n"
+                 "    local n = tonumber(v)\n"
+                 "    if n % 1 == 0 then return ('%d'):format(n) end\n"
+                 "    return ('%.2f'):format(n)\n"
+                 "end\n"),
+        what="第二份金额格式化实现（小数金额的格式语义分叉）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_money_format_single_owner.py::"
+              "test_money_alias_users_load_the_alias_file"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_money_alias.lua",
+        content=("-- 变异注入：调用金额别名，但本资源 fxmanifest 没 include 别名文件\n"
+                 "CreateThread(function() print(Money(1)) end)\n"),
+        what="别名调用点没接线（运行时会 attempt to call a nil value (global 'Money')）",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:

@@ -126,6 +126,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/INDEX.md` 重新生成（308 篇，0 未登记）。
 
 ### Changed
+- **`FormatMoney` 合并 8 份 `[custom]` 金额格式化实现**：唯一实现收口到
+  `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` 的 `FormatMoney`
+  （nil/非数字/NaN → `'0'`，整数无小数点，小数两位，负数保留符号），并在客户端与服务端都
+  注册为导出。custom-market / custom-main / custom-cartel / custom-security / custom-crime /
+  custom-phone / custom-quest / custom-taxes 各自的 shared/money_format.lua **删除**；
+  四个历史别名（`Money`/`PhoneMoney`/`QuestMoney`/`TCMoney`）只在
+  `T-CityLite.base/resources/[standalone]/core-framework/shared/money_aliases.lua`
+  定义一次，各资源 fxmanifest 以 '@core-framework/shared/money_aliases.lua' include
+  （8 份逐行相同的门面会让 Sonar
+  新代码重复涨到 9.9%；集中一份后为 0）。
+  `$%d` 基线 66→59（market main 6、phone client 1 改为 `$%s` + 别名）；新闸门
+  `tests/architecture/test_money_format_single_owner.py` 抓第二份实现/别名、
+  并检查每个别名调用点的 fxmanifest 真的加载了别名文件，变异冒烟证明会红。
 - **退役跨资源 Bus（税/热度/通知）**：qb-core 新增两个 append-only 导出
   `exports('SinkWithdraw', SinkService.Withdraw)` / `exports('HeatReset', HeatService.ResetHeat)`，
   内部仍走既有的 `EconomyService.RemoveMoney` / `HeatService.ResetHeat`，不新增扣钱路径。

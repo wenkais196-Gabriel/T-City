@@ -76,7 +76,7 @@ review_by: 2027-03-31
 | S3 | 限流收口到 `RateLimit` | §4.5、§6 第 3 件 | 12 | 8 文件/9 张本地表消失；`IMPL_MARKERS` 扩展后先红后绿 |
 | S4 | `Db` 结果适配器 | §4.2 | 19 | `[custom]`/core-framework 范围内，`insertId/affectedRows` 归一化只在 **core-framework/server/db.lua**；4 种返回形状单测全绿 |
 | S5 | `CFShared.LoadModel` 采纳 | §4.3 | 12 | 8 个迁移文件不再有无退出条件的本地模型循环 |
-| S6 | `FormatMoney` 合并 + `$%d` 基线下降 | §4.4 | 16 | 8 份实现变 8 个 ≤10 行门面；`$%d` 基线 66→59 |
+| S6 | `FormatMoney` 合并 + `$%d` 基线下降 | §4.4 | 17 | 8 份实现变 1 个 `money_aliases.lua`（4 个别名）+ 8 个 manifest include；`$%d` 基线 66→59 |
 | S7 | 受众感知广播收口 | §4.6 | 11 | `evidence.lua` 9 处 `-1` 改 `Broadcast.Scope`；其余 19 处全部登记 |
 
 > 文件数含新增测试、登记表、`CHANGELOG.md`、文档；不含 `git revert` 之类的回滚操作。
@@ -190,7 +190,7 @@ Set-Location E:/T-City-abs
 | S3 | 限流收口 | 12 | S2a（同一文件 `p2_system.lua`） | 与 S4–S7 开发可并行 | 7 个 custom-police 文件 + 1 个 director + owner 自清理 + 测试/交付 |
 | S4 | `Db` 结果适配器 | 19 | S3（同一文件 `p0_incidents.lua`） | 与 S5/S6 开发可并行 | 适配器 + 6 个归一化点必须同 PR：新闸门要求归一化只在 `db.lua`，拆开中间态必红；2 个 Lua harness 必须同 PR 才能保持绿 |
 | S5 | `LoadModel` 采纳 | 12 | S2b（同一个 `REUSE.md`） | 与 S3/S4/S6 开发可并行 | 8 个客户端文件 + 新闸门 + 交付 |
-| S6 | `FormatMoney` 合并 | 16 | S1 | 与 S2–S5/S7 开发可并行 | 8 个门面是同一语义的横向展开；拆开就是两套实现并存；`test_money_renderers.py` 必须同 PR 改加载方式 |
+| S6 | `FormatMoney` 合并 | 17 | S1 | 与 S2–S5/S7 开发可并行 | 8 份逐行相同的门面会被 Sonar 算成新代码重复（9.9%）；改为一个 `money_aliases.lua` + 8 个 manifest include；`test_money_renderers.py` 必须同 PR 改加载方式 |
 | S7 | 证据广播收口 | 11 | S4（同一个 `T-CityLite.base/resources/[standalone]/core-framework/fxmanifest.lua`） | 与 S5/S6 开发可并行 | 1 个业务文件 9 处 + helper + allowlist + 预算/交付 + 1 个静态测试断言更新 |
 
 > **S2 为什么拆成两片**：原样执行是 20+ 文件、2–3 天（报告 §5.3 自己的估算），违反
@@ -1123,10 +1123,12 @@ luac5.4 -p "resources/[custom]/custom-quest/client/quest_logistics_client.lua"
 
 ---
 
-### 4.7 S6 — `FormatMoney` 合并 + `$%d` 基线下降
+### 4.7 S6 — `FormatMoney` 合并 + `$%d` 基线下降（已按 Sonar 重复返工）
 
-**验收口径**：金额格式化实现只剩 `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` 一份；8 个 `[custom]`
-shared/money_format.lua 都是 ≤10 行、只转调 `exports['core-framework']:FormatMoney` 的门面；
+**验收口径**：金额格式化实现只剩 `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` 一份；
+四个历史别名（`Money`/`PhoneMoney`/`QuestMoney`/`TCMoney`）只在
+`T-CityLite.base/resources/[standalone]/core-framework/shared/money_aliases.lua` 定义一次，
+8 个 `[custom]` 资源删除各自的 shared/money_format.lua 并在 fxmanifest 里 include 别名文件；
 `$%d` 基线从 66 降到 59，`test_money_format.py` 双向相等。
 
 #### 4.7.1 影响文件
@@ -1134,39 +1136,42 @@ shared/money_format.lua 都是 ≤10 行、只转调 `exports['core-framework']:
 | 动作 | 路径 |
 |---|---|
 | 修改 | `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` |
-| 修改 | `T-CityLite.base/resources/[custom]/custom-market/shared/money_format.lua` |
-| 修改 | `T-CityLite.base/resources/[custom]/custom-main/shared/money_format.lua` |
-| 修改 | `T-CityLite.base/resources/[custom]/custom-cartel/shared/money_format.lua` |
-| 修改 | `T-CityLite.base/resources/[custom]/custom-security/shared/money_format.lua` |
-| 修改 | `T-CityLite.base/resources/[custom]/custom-crime/shared/money_format.lua` |
-| 修改 | `T-CityLite.base/resources/[custom]/custom-phone/shared/money_format.lua` |
-| 修改 | `T-CityLite.base/resources/[custom]/custom-quest/shared/money_format.lua` |
-| 修改 | `T-CityLite.base/resources/[custom]/custom-taxes/shared/money_format.lua` |
+| 新增 | **T-CityLite.base/resources/[standalone]/core-framework/shared/money_aliases.lua** |
+| 修改 | 8 个 `[custom]` 资源的 `fxmanifest.lua`：custom-market / custom-main / custom-cartel / custom-security / custom-crime / custom-phone / custom-quest / custom-taxes（shared/money_format.lua → '@core-framework/shared/money_aliases.lua'） |
 | 修改 | `T-CityLite.base/resources/[custom]/custom-market/server/main.lua` |
 | 修改 | `T-CityLite.base/resources/[custom]/custom-phone/client/main.lua` |
 | 修改 | `T-CityLite.base/tests/architecture/money_format_baseline.json` |
 | 修改 | `T-CityLite.base/tests/unit/layer3_business/test_money_renderers.py` |
+| 修改 | `T-CityLite.base/tests/unit/layer3_business/test_quest_rewards.py` |
 | 新增 | **T-CityLite.base/tests/architecture/test_money_format_single_owner.py** |
 | 修改 | `tools/dev/gate_mutation_smoke.py` |
 | 修改 | `CHANGELOG.md` |
 
-删除：无。
-16 文件。**为什么不能再切**：8 个门面是同一语义的横向展开，拆开就是两套实现并存；
-`test_money_renderers.py` 直接 dofile 8 个门面，必须同 PR 改成先加载真实 `FormatMoney`；
-2 个调用点（market 6 条、phone 1 条）是 `$%d` 基线下降的最小证明；
+删除：8 个 `[custom]` 资源的 shared/money_format.lua（同上 8 个资源；名称不带完整路径，
+避免把已删除文件写成文档链接）。
+17 文件。**为什么不能再切**：8 份门面逐行相同，保留它们就是 Sonar 新代码重复（实测 9.9%）；
+`test_money_renderers.py` / `test_quest_rewards.py` 直接 dofile 门面，必须同 PR 改成
+加载唯一别名文件；2 个调用点（market 6 条、phone 1 条）是 `$%d` 基线下降的最小证明；
 基线/闸门/smoke/CHANGELOG 是交付要求。
 
 **方案选择（与报告 §4.4 的差异）**：报告建议删除 8 个 shared/money_format.lua 并把所有
 调用点改成 `FormatMoney`。实际调用点有 76 处 / 29 文件，一个 PR 做不完（>12 文件、>1 天）。
-本计划改为**保留 8 个 ≤10 行门面**：
+本计划先保留 8 个 ≤10 行门面，但 Sonar 把 8 份逐行相同的门面算成新代码重复（9.9%，阈值 3%），
+所以返工为**一个共享别名文件** core-framework/shared/money_aliases.lua：
+资源 fxmanifest 用 '@core-framework/shared/money_aliases.lua' include，
+四个历史名字与全部调用点不变；`FormatMoney` 仍是唯一实现。
+
 ```lua
-function Money(value)
+local function alias(value)
     if GetResourceState('core-framework') ~= 'started' then return '0' end
     return exports['core-framework']:FormatMoney(value)
 end
+
+function Money(value) return alias(value) end
+function PhoneMoney(value) return alias(value) end
+function QuestMoney(value) return alias(value) end
+function TCMoney(value) return alias(value) end
 ```
-这满足「实现只有一份」；`reuse_scan` 的 `ADAPTER_RE` 已把「≤10 行且只转调 exports」认定为包装，
-不会算成重复。删除门面的清理是后续独立 PR，不在本片验收内。
 
 #### 4.7.2 先红后绿
 
@@ -1175,7 +1180,7 @@ end
 custom-market、custom-main、custom-cartel、custom-security、custom-crime、custom-phone
 （`PhoneMoney`）、custom-quest（`QuestMoney`）、custom-taxes（`TCMoney`）。
 
-**绿（commit 2：加 `FormatMoney` + 门面 + 基线）**：
+**绿（commit 2：加 `FormatMoney` + 别名文件 + 基线）**：
 - `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` 加：
 ```lua
 --- 金额渲染：nil/非数字 → '0'；整数无小数点；小数两位；负数保留符号。
@@ -1187,31 +1192,39 @@ function FormatMoney(value)
 end
 exports('FormatMoney', FormatMoney)   -- 两端都注册：shared/util.lua 在客户端和服务端都加载
 ```
-- 8 个 shared/money_format.lua 改成上面的门面；保留原函数名（`Money`/`PhoneMoney`/
-  `QuestMoney`/`TCMoney`），调用点不改名。
+- 8 个资源各自的 shared/money_format.lua 删除；四个历史名字（`Money`/`PhoneMoney`/
+  `QuestMoney`/`TCMoney`）只在 `T-CityLite.base/resources/[standalone]/core-framework/shared/money_aliases.lua`
+  定义一次，资源 fxmanifest 用 '@core-framework/shared/money_aliases.lua' include；调用点不改名。
 - `T-CityLite.base/resources/[custom]/custom-market/server/main.lua` 的 6 条 `$%d` 改成 `$%s` + `Money(...)`；
 - `T-CityLite.base/resources/[custom]/custom-phone/client/main.lua` 的 1 条 `$%d` 改成 `$%s` + `PhoneMoney(...)`；
 - `money_format_baseline.json` 删掉这 7 条，`total` 66→59（双向相等，必须同 commit）。
 
-**`test_money_renderers.py` 的加载方式必须同 PR 改**：它现在直接 `dofile` 每个
-shared/money_format.lua 并调用 `Money/PhoneMoney/QuestMoney`。门面改成
-`exports['core-framework']:FormatMoney` 后，测试要先定义**可调用且可索引**的 `exports` 表
-（`__call` 注册、`__index` 返回 `core-framework` 的方法表），定义
-`IsDuplicityVersion() return false`，`dofile(core-framework/shared/util.lua)` 拿到真实
-`FormatMoney`，再 `dofile` 门面。否则 8 个参数化用例会因 `exports` nil 全红。
+**`test_money_renderers.py` / `test_quest_rewards.py` 的加载方式必须同 PR 改**：它们现在
+直接 `dofile` 每个资源的门面。别名转调 `exports['core-framework']:FormatMoney` 后，
+测试要先定义**可调用且可索引**的 `exports` 表（`__call` 注册、`__index` 返回
+`core-framework` 的方法表），定义 `IsDuplicityVersion() return false`，
+`dofile(core-framework/shared/util.lua)` 拿到真实 `FormatMoney`，再 `dofile` 唯一别名文件；
+渲染测试对**四个别名**各跑同一组输入。
 
-**闸门设计**（`test_money_format_single_owner.py`，只写两个 `test_` 函数）：
+**闸门设计**（`test_money_format_single_owner.py`，三个 `test_` 函数）：
 1. `test_money_format_has_a_single_implementation`（前向）：
    - 扫 `resources/[custom]/**/*.lua`，找 `tonumber(...)` + `% 1 == 0` + `%.2f` 的组合；
+   - 8 个旧门面文件不许再出现；`[custom]` 里非 `local` 的全局别名定义也不许出现；
    - 允许 `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua`（唯一实现）；
-   - 允许 8 个 ≤10 行、函数体只出现 `exports['core-framework']:FormatMoney` 的门面；
+   - 别名文件必须存在、定义四个名字、只出现 `exports['core-framework']:FormatMoney`；
    - 允许 `T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:122-131` 的委托 fallback
      （它先 `if type(QuestMoney) == 'function' then return QuestMoney(value) end`，不是第二份实现）；
    - qb-drugs 不在 `[custom]` 扫描范围。
 2. `test_reverse_money_format_alias_is_rejected`（反向）：
    - 合成 `local function PhoneMoney(value) ... end` 的实现体 → 必须报；
-   - 合成 `function Money(value) return exports['core-framework']:FormatMoney(value) end` → 必须不报；
+   - 合成全局 `function Money(value) ... end` 的复制门面 → 必须报；
+   - 合成 `local function Money(value) return alias(value) end` → 必须不报；
    - 合成只有 `$%s` 的安全文案 → 必须不报。
+3. `test_money_alias_users_load_the_alias_file`（接线）：
+   - 凡是 `[custom]` 资源里调用了四个别名之一，其 `fxmanifest.lua` 必须包含
+     @core-framework/shared/money_aliases.lua，或同资源内定义了同名等价函数；
+   - 反向：合成一个调 `Money()` 但 manifest 没 include 的资源 → 必须红；补上 include → 必须绿。
+     这是运行时才会炸的 `attempt to call a nil value (global 'Money')`，静态闸门正是该拦它的地方。
 
 #### 4.7.3 验收命令
 
@@ -1222,14 +1235,15 @@ Set-Location E:/T-City-abs/T-CityLite.base
 & 'C:\Users\swkgb\AppData\Local\Programs\Python\Python312\python.exe' -m pytest tests/unit/layer3_business/test_money_renderers.py -q
 & 'C:\Users\swkgb\AppData\Local\Programs\Python\Python312\python.exe' -m pytest tests/unit tests/architecture -q
 luac5.4 -p "resources/[standalone]/core-framework/shared/util.lua"
-luac5.4 -p "resources/[custom]/custom-market/shared/money_format.lua"
-luac5.4 -p "resources/[custom]/custom-main/shared/money_format.lua"
-luac5.4 -p "resources/[custom]/custom-cartel/shared/money_format.lua"
-luac5.4 -p "resources/[custom]/custom-security/shared/money_format.lua"
-luac5.4 -p "resources/[custom]/custom-crime/shared/money_format.lua"
-luac5.4 -p "resources/[custom]/custom-phone/shared/money_format.lua"
-luac5.4 -p "resources/[custom]/custom-quest/shared/money_format.lua"
-luac5.4 -p "resources/[custom]/custom-taxes/shared/money_format.lua"
+luac5.4 -p "resources/[standalone]/core-framework/shared/money_aliases.lua"
+luac5.4 -p "resources/[custom]/custom-market/fxmanifest.lua"
+luac5.4 -p "resources/[custom]/custom-main/fxmanifest.lua"
+luac5.4 -p "resources/[custom]/custom-cartel/fxmanifest.lua"
+luac5.4 -p "resources/[custom]/custom-security/fxmanifest.lua"
+luac5.4 -p "resources/[custom]/custom-crime/fxmanifest.lua"
+luac5.4 -p "resources/[custom]/custom-phone/fxmanifest.lua"
+luac5.4 -p "resources/[custom]/custom-quest/fxmanifest.lua"
+luac5.4 -p "resources/[custom]/custom-taxes/fxmanifest.lua"
 luac5.4 -p "resources/[custom]/custom-market/server/main.lua"
 luac5.4 -p "resources/[custom]/custom-phone/client/main.lua"
 ```
@@ -1255,18 +1269,24 @@ Set-Location E:/T-City-abs/T-CityLite.base
 
 #### 4.7.5 闸门覆盖率记账
 
-- 新增 **1 条前向规则**（`test_money_format_has_a_single_implementation`）+ 1 条反向。
-- 选 **(a)**：变异用例注入 **resources/[custom]/custom-vehicles/server/__mutant_money_format.lua**，
-  内容 `local function PhoneMoney(v) local n=tonumber(v); if n%1==0 then return ('%d'):format(n) end; return ('%.2f'):format(n) end`；
-  gate 指向 `test_money_format_has_a_single_implementation`。
-- 增量 **+0**。若不加变异，则 +1（279），`history` 写
-  `date=2026-11-15 / previous=278 / why="新增金额格式化单一实现前向规则" / 到期条件="补变异用例后降回 278"`。
+- 新增 **2 条前向规则**（`test_money_format_has_a_single_implementation`、
+  `test_money_alias_users_load_the_alias_file`）+ 1 条反向。
+- 选 **(a)**，两条变异用例：
+  - 注入 **resources/[custom]/custom-vehicles/server/__mutant_money_format.lua**，
+    内容 `local function PhoneMoney(v) local n=tonumber(v); if n%1==0 then return ('%d'):format(n) end; return ('%.2f'):format(n) end`；
+    gate 指向 `test_money_format_has_a_single_implementation`；
+  - 注入 **resources/[custom]/custom-vehicles/server/__mutant_money_alias.lua**，
+    内容 `CreateThread(function() print(Money(1)) end)`（该资源 manifest 不含别名文件）；
+    gate 指向 `test_money_alias_users_load_the_alias_file`。
+- 增量 **+0**。若不加变异，则 +2（280），`history` 写
+  `date=2026-11-15 / previous=278 / why="新增金额格式化单一实现与别名接线前向规则" / 到期条件="补变异用例后降回 278"`。
 
 #### 4.7.6 CHANGELOG + 文档
 
 - `CHANGELOG.md` → `### Changed`：
   「`FormatMoney` 合并 8 份 `[custom]` 金额格式化实现；8 个 shared/money_format.lua
-  变为 ≤10 行门面；`$%d` 基线 66→59（market main 6、phone client 1）。」
+  删除，四个别名只在 core-framework/shared/money_aliases.lua 定义一次并由各资源 include；
+  `$%d` 基线 66→59（market main 6、phone client 1）。」
 - `docs/engineering/REUSE.md`：本片不动。理由：§2 已写明「与业务无关的纯工具放
   `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua`，用 `exports` 暴露」；`FormatMoney` 是这条规则的直接应用，
   没有新规则要写。若评审要求登记当前状态，可在 §5 表加一行（不改变本片验收）。
@@ -1278,7 +1298,8 @@ Set-Location E:/T-City-abs/T-CityLite.base
 
 - `git revert <sha>` 足够；必须**同一 commit** 回滚 `money_format_baseline.json` 与代码，
   否则 `test_money_format.py` 会因「债已不在但基线还留着」红。
-- 8 个门面与 2 个调用点可分开回滚；回滚门面会恢复本地实现，基线不用动（`$%s` 仍是安全写法）。
+- 别名文件与 2 个调用点可分开回滚；回滚别名文件会让 8 个资源的调用点变成 nil 全局，
+  必须连同各自的 fxmanifest include 一起回；基线不用动（`$%s` 仍是安全写法）。
 - 无数据/迁移；金额显示变化只影响文案。
 - 需要 `restart`：`core-framework`（shared/util.lua 改动，客户端需要 `refresh` 才能拿到新文件）、
   `custom-market`、`custom-phone`、`custom-main`、`custom-cartel`、`custom-security`、
@@ -1291,7 +1312,7 @@ Set-Location E:/T-City-abs/T-CityLite.base
 | 触发步骤 | 期望现象 | 判定方式 | 标记 |
 |---|---|---|---|
 | 市场买卖一件带小数价格的物品 | 金额显示整数无小数点、小数两位；无 `number has no integer representation` | 客户端 UI 截图 + 服务端日志 | ⛔ 显示只能真机看 |
-| 手机罚单/任务板显示金额 | 同上；`PhoneMoney`/`QuestMoney` 门面生效 | 手机截图 | ⛔ |
+| 手机罚单/任务板显示金额 | 同上；`PhoneMoney`/`QuestMoney` 别名生效 | 手机截图 | ⛔ |
 | 服务端控制台探针 `exports['core-framework']:FormatMoney(61.75)` / `(500)` / `('x')` | `'61.75'` / `'500'` / `'0'` | 控制台输出 | ✅ 服务端可判 |
 | 客户端 F8 探针同上 | 客户端也能拿到 `FormatMoney` 导出 | F8 输出 | ⛔ 客户端导出只能真机 |
 | 修一条 `$%d` 后跑 `test_money_format.py` | 基线双向相等；total=59 | pytest 输出 | ✅ 离线可判 |
@@ -1544,7 +1565,7 @@ S1  (导出契约闸门 + 11 个死调用 + 1 个兜底)
 | G13 | 限流 | `test_rate_limit_single_owner.py` 绿；8 个文件在 `CALLERS`；`IMPL_MARKERS` 无命中 |
 | G14 | DB 归一化 | `test_db_result_adapter.py` 绿；`[custom]`/core-framework 内 `type(x)=='table'` + `insertId/affectedRows` 只出现在 `db.lua`（`[qb]` 上游除外） |
 | G15 | LoadModel | `test_load_model_single_owner.py` 绿；7 个调用文件有 `CFShared.LoadModel`；`entity_util.lua` 无本地实现 |
-| G16 | FormatMoney | `test_money_format_single_owner.py` 绿；8 个门面 ≤10 行；`$%d` 59 |
+| G16 | FormatMoney | `test_money_format_single_owner.py` 绿；别名只在 `money_aliases.lua` 一份；每个调用点的 manifest 有 include；`$%d` 59 |
 | G17 | 广播 | `test_broadcast_scope.py` 绿；`[custom]` 的 19 处 `-1`（13 条）全部登记 |
 | G18 | 真机 | §4 各片 ⛔ 行有证据；未完成的在 `CHANGELOG.md`/Issue 里写 owner + expires |
 
@@ -1558,7 +1579,7 @@ S1  (导出契约闸门 + 11 个死调用 + 1 个兜底)
 | 本地限流表/桶 | 9 表 / 8 文件 | 0（全部走 `RateLimit`） | `test_rate_limit_single_owner.py` |
 | DB 归一化实现 | 6 | 1（`db.lua`） | `test_db_result_adapter.py` |
 | 本地 `LoadModel` 循环 | 4（2 个无超时） | 0 | `test_load_model_single_owner.py` |
-| 金额格式化实现 | 8 `[custom]` | 1（`FormatMoney`）+ 8 门面 | `test_money_format_single_owner.py` |
+| 金额格式化实现 | 8 `[custom]` | 1（`FormatMoney`）+ 1 个别名文件（4 个名字） | `test_money_format_single_owner.py` |
 | `$%d` 基线 | 66 | 59 | `money_format_baseline.json` |
 | `[custom]` 的 `-1` | 28 | 19（全部登记） | `broadcast_allowlist.json` |
 | `broadcast_sites` | 152 | ≤144（实测） | `io_budget.json` + `budget_probe --check` |
@@ -1582,7 +1603,7 @@ S1  (导出契约闸门 + 11 个死调用 + 1 个兜底)
 | S3 | P3 | 限流 owner + 服务端入口 |
 | S4 | P3 + P0（`insert_id.lua` 是 shared 文件但只在 server 加载） | `db.lua` 必须放 `server/`；`insert_id.lua` 从 shared 移到 server 加载 |
 | S5 | P2 | 客户端模型加载；不改服务端 |
-| S6 | P0 + P2 | `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` 是 P0 纯函数；8 个门面是 P0；`T-CityLite.base/resources/[custom]/custom-phone/client/main.lua` 是 P2 |
+| S6 | P0 + P2 | `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` 是 P0 纯函数；8 个 manifest include 是 P0；`T-CityLite.base/resources/[custom]/custom-phone/client/main.lua` 是 P2 |
 | S7 | P3 + P0（`broadcast.lua` 是 server include） | 只改服务端收件人；无 P1 |
 
 ### 7.2 跨平面契约变化
@@ -1592,7 +1613,7 @@ S1  (导出契约闸门 + 11 个死调用 + 1 个兜底)
 | 导出 | 5 个占位 `service_*`（reputation/chronicle/governance/cosmetics/funnel） | 删除 | 0 个外部调用点 |
 | 导出 | `service_dealership_*` 只在文档里 | 8 个真实静态导出 | qb-vehicleshop 内部/未来调用方 |
 | 导出 | 无 `SinkWithdraw`/`HeatReset` | `qb-core:SinkWithdraw`、`qb-core:HeatReset` | custom-taxes、production-freeze |
-| 导出 | 无 `FormatMoney` | `core-framework:FormatMoney`（两端） | 8 个 `[custom]` 门面 |
+| 导出 | 无 `FormatMoney` | `core-framework:FormatMoney`（两端） | 8 个 `[custom]` 资源（include 别名文件） |
 | 错误码 | Db 调用方各自 `tonumber(...) or 0` | `nil, 'db_error'` / `nil, 'no_insert_id'` | director/phone/police 调用方 |
 | 事件 | 无新 net event | 无 | 无 |
 | 广播 | `TriggerClientEvent(..., -1)` | `Broadcast.Scope(event, audience, ...)` | custom-police evidence |
@@ -1626,7 +1647,7 @@ S1  (导出契约闸门 + 11 个死调用 + 1 个兜底)
 | S4 `Db` 错误语义变化 | 中 | 调用方把 `nil` 当 0 | 单测 4 形状；调用方保留 `affected or 0`；真机 DB 写 |
 | S4 3 个 fxmanifest 加 include 顺序错 | 低 | `Db` 未定义 | include 放在 `@oxmysql` 之后、所有业务 server 脚本之前；`test_resource_wiring` 校验文件存在 |
 | S5 超时从 5s/无超时变 10s | 低 | 模型加载慢时行为变化 | 显式传 5000/10000；真机缺失模型 |
-| S6 门面在 core-framework 未启动时返回 `'0'` | 低 | 金额显示 0 | core-framework 在启动集；门面 `GetResourceState` 判断；真机客户端/服务端探针 |
+| S6 别名在 core-framework 未启动时返回 `'0'` | 低 | 金额显示 0 | core-framework 在启动集；别名 `GetResourceState` 判断；真机客户端/服务端探针 |
 | S6 `T-CityLite.base/resources/[standalone]/core-framework/shared/util.lua` 新增导出需要 `refresh` | 中 | 已连接客户端拿不到 `FormatMoney` | 按 REUSE.md §6：`refresh` + `restart` + 重连；F8 自证 |
 | S7 证据对平民不可见改变玩法 | 中 | 平民看不到弹壳/血滴 | 先在测试服双客户端验证；如果产品要求平民可见，改为 `{source=src}` + 警察双受众，单独 PR |
 | S7 `broadcast_sites` 预算回滚失败 | 低 | `test_budget.py` 红 | 回滚用 `git revert` 恢复 152；不要用 `budget_probe --update` 调高 |
@@ -1649,9 +1670,9 @@ S1  (导出契约闸门 + 11 个死调用 + 1 个兜底)
 | S4 | `T-CityLite.base/tests/unit/layer3_business/test_phone_db_contract.py` | 修改现有 Lua harness | 先加载 `db.lua`；`PhoneDb` 契约仍绿 |
 | S4 | `T-CityLite.base/tests/agent/lua/cases/police_outbox.lua` | 修改现有 Lua case | 先加载 `db.lua`；outbox case 仍绿 |
 | S5 | **T-CityLite.base/tests/architecture/test_load_model_single_owner.py** | 架构闸门 | 8 文件走 `CFShared.LoadModel`；无无超时循环；反向 2 形状 |
-| S6 | **T-CityLite.base/tests/architecture/test_money_format_single_owner.py** | 架构闸门 | 8 门面 ≤10 行；别名 `PhoneMoney` 也抓；反向 2 形状 |
+| S6 | **T-CityLite.base/tests/architecture/test_money_format_single_owner.py** | 架构闸门 | 8 个旧门面不许回来；别名只在 `money_aliases.lua`；调用点 manifest 必须 include；反向 3 形状 |
 | S6 | `T-CityLite.base/tests/architecture/test_money_format.py` | 现有闸门 | `$%d` 基线 66→59，双向相等 |
-| S6 | `T-CityLite.base/tests/unit/layer3_business/test_money_renderers.py` | 修改现有 Lua harness | 先加载真实 `FormatMoney` + 可调用/可索引 `exports`，再 dofile 门面；8 组输入仍绿 |
+| S6 | `T-CityLite.base/tests/unit/layer3_business/test_money_renderers.py` | 修改现有 Lua harness | 先加载真实 `FormatMoney` + 可调用/可索引 `exports`，再 dofile `money_aliases.lua`；4 个别名 × 9 组输入 |
 | S7 | **T-CityLite.base/tests/architecture/test_broadcast_scope.py** | 架构闸门 | 9 处 evidence 红→绿；13 条（19 处）登记；死条目/过期红 |
 | S7 | `T-CityLite.base/tests/architecture/test_evidence_authority.py` | 修改现有静态断言 | `:118` 的 `TriggerClientEvent(removeEvent, -1, id)` 改为 `Broadcast.Scope(...)` |
 | 全部 | `tools/dev/gate_mutation_smoke.py` | 变异用例 | 7 条新用例注入红、对照绿 |
@@ -1670,7 +1691,7 @@ S1  (导出契约闸门 + 11 个死调用 + 1 个兜底)
 | S5 | `RequestModel(hash); while not HasModelLoaded(hash) do Wait(10) end` | `test_no_local_loadmodel_loops` 红 |
 | S5 | 带 `deadline` 的循环 | 不红 |
 | S6 | `local function PhoneMoney(v) ... % 1 ... %.2f ... end` | `test_money_format_has_a_single_implementation` 红 |
-| S6 | 只转调 `FormatMoney` 的门面 | 不红 |
+| S6 | 只转调 `FormatMoney` 的别名文件 / 文件内 `local` 委托 | 不红 |
 | S7 | `TriggerClientEvent('probe:client:all', -1)` | `test_every_custom_broadcast_is_registered` 红 |
 | S7 | 注释里的 `-1` | 不红 |
 
@@ -1713,7 +1734,7 @@ S4 的 2 个「必须先加载 db.lua」的 harness 已经计入 S4 的 19 文�
 | S4 | `T-CityLite.base/tests/unit/layer3_business/test_phone_apps.py`（静态断言） | `insert_id.lua` 保留含 `insertId` 的注释即可，不改测试 |
 | S7 | `T-CityLite.base/tests/unit/layer1_core/test_police_evidence_create.py`、`T-CityLite.base/tests/architecture/test_evidence_authority.py`、`T-CityLite.base/tests/unit/layer2_engine/test_evidence_casing_hint.py` | `Broadcast = { Scope = function() return 0 end }`；`test_evidence_authority.py:118` 的静态断言改成 `Broadcast.Scope`；`test_evidence_casing_hint.py` 只读文本，不需要执行 |
 | S5 | 客户端文件没有同类的「真加载服务端源码」harness；只需 `CFShared` stub（已有 `CFShared` 的资源不需要） | 以 `pytest tests/unit tests/architecture` 红名单为准 |
-| S6 | `T-CityLite.base/tests/unit/layer3_business/test_money_renderers.py` | 先定义可调用/可索引的 `exports` 表 + `dofile(core-framework/shared/util.lua)`，再 dofile 8 个门面；见 §4.7.2 |
+| S6 | `T-CityLite.base/tests/unit/layer3_business/test_money_renderers.py` | 先定义可调用/可索引的 `exports` 表 + `dofile(core-framework/shared/util.lua)`，再 dofile `money_aliases.lua`（4 个别名）；见 §4.7.2 |
 
 > 规则：**先跑全量，再补 stub**。不要把 stub 写成第二份实现——只返回固定值/成功，
 > 不复制限流/DB 归一化逻辑；否则新闸门会把它当成第二份实现。
@@ -1787,5 +1808,5 @@ S4 的 2 个「必须先加载 db.lua」的 harness 已经计入 S4 的 19 文�
 | 第 3 件：限流收口 | S3 | 8 文件/9 表 + marker 扩展 |
 | 下一批 4：Db 适配器 | S4 | adapter + 6 个归一化点；quest/story 回调风格见 §1.3 |
 | 下一批 5：LoadModel | S5 | 8 个 `[custom]` 文件；热狗不动 |
-| 下一批 6：FormatMoney | S6 | 门面方案；`$%d` 66→59 |
+| 下一批 6：FormatMoney | S6 | 别名文件方案（8 个 manifest include）；`$%d` 66→59 |
 | 下一批 7：证据广播 | S7 | evidence 9 处 + 19 处（13 条）allowlist |
