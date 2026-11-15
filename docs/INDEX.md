@@ -267,7 +267,7 @@
 | [Agent Read API and MCP Sidecar (issue #24)](../T-CityLite.base/docs/agent/API.md) | manual | ✅ active | 2026-10-23 | 2027-01-30 |  | `T-CityLite.base/docs/agent/API.md` |
 | [驱动服务器控制台（`tcity-cmd`）](../T-CityLite.base/docs/agent/CONSOLE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/agent/CONSOLE.md` |
 | [把 MCP 接到 T-City 上（本地全链路）](../T-CityLite.base/docs/agent/MCP_WIRING.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `T-CityLite.base/docs/agent/MCP_WIRING.md` |
-| [加 / 改一个 agent 动作：检查清单](agent/police/ATOOLS-DISCIPLINE.md) | manual | ✅ active | 2026-10-31 | 2027-01-30 |  | `docs/agent/police/ATOOLS-DISCIPLINE.md` |
+| [加 / 改一个 agent 动作：检查清单](agent/police/ATOOLS-DISCIPLINE.md) | manual | ✅ active | 2026-11-15 | 2027-01-30 |  | `docs/agent/police/ATOOLS-DISCIPLINE.md` |
 | [Agent Read Layer (Phase 3 / P1)](../T-CityLite.base/docs/agent/README.md) | meta | ✅ active | 2026-10-27 | 2027-04-30 |  | `T-CityLite.base/docs/agent/README.md` |
 | [Agent 控制平面升级计划](plan/agent-control-plane-upgrade.md) | plan | ✅ active | 2026-11-12 | 2027-03-31 | ★ | `docs/plan/agent-control-plane-upgrade.md` |
 | [Agent 模块化施工计划（M1–M7）](plan/agent-module-execution.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/agent-module-execution.md` |
@@ -343,10 +343,10 @@
 | [T-CityLite 服务器总领手册](00-server-master-manual.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/00-server-master-manual.md` |
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
 | [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
-| [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `AGENTS.md` |
+| [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `AGENTS.md` |
 | [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
-| [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-10-21 | 2027-04-30 |  | `CONTRIBUTING.md` |
+| [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CONTRIBUTING.md` |
 | [T-City Lite](../README.md) | meta | ✅ active | 2026-10-26 | 2027-04-30 |  | `README.md` |
 | [Security Policy](../SECURITY.md) | meta | ✅ active | 2026-10-21 | 2027-04-30 |  | `SECURITY.md` |
 | [T-CityLite.base/docs/ — 服务器与 agent 技术文档](../T-CityLite.base/docs/README.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/README.md` |

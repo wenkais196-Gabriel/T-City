@@ -1055,6 +1055,23 @@ MUTATIONS += [
     ),
 ]
 
+# 热狗：Lua 局部函数必须先定义后调用（luac -p 查不出来，运行时才崩）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_lua_local_order.py::"
+              "test_local_functions_are_declared_before_they_are_called"),
+        path="resources/[custom]/custom-quest/client/__mutant_local_order.lua",
+        content=("-- 变异注入：局部函数在定义之前被调用\n"
+                 "local function boot()\n"
+                 "    return helper()\n"
+                 "end\n"
+                 "local function helper()\n"
+                 "    return 1\n"
+                 "end\n"),
+        what="local function 在同一文件里先被调用、后定义",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:
