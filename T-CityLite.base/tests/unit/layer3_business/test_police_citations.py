@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from lua_probe import load_with_db
+
 BASE = Path(__file__).resolve().parents[3]
 SRC = BASE / "resources" / "[custom]" / "custom-police" / "server" / "citations.lua"
 
@@ -55,7 +57,7 @@ def lua() -> str:
 
 
 def run(body: str) -> dict:
-    script = STUBS + "\n" + SRC.read_text(encoding="utf-8") + "\n" + textwrap.dedent(body)
+    script = load_with_db(STUBS, SRC, textwrap.dedent(body))
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}"
     out = {}
