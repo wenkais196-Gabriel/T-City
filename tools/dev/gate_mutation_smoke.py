@@ -33,6 +33,11 @@ REPO = Path(__file__).resolve().parents[2]
 BASE = REPO / "T-CityLite.base"
 ARCH = BASE / "tests" / "architecture"
 
+#: 变异用例反复引用的目标路径（同一字面量出现 3 次以上就命名，改路径时只改一处）
+LOGS_LUA = "resources/[custom]/custom-logs/server/logs.lua"
+NET_EVENT_SCAN = "tests/architecture/net_event_scan.py"
+NET_EVENTS_BASELINE = "tests/architecture/net_events_baseline.json"
+
 
 @dataclass(frozen=True)
 class Mutation:
@@ -330,7 +335,7 @@ end
     Mutation(
         gate=("tests/architecture/test_net_event_inventory.py::"
               "test_every_resource_with_debt_has_an_owner_and_a_future_expiry"),
-        path="tests/architecture/net_events_baseline.json",
+        path=NET_EVENTS_BASELINE,
         content=None,
         replace_from='"expires": "2027-03-31"',
         replace_to='"expires": "2020-01-01"',
@@ -338,7 +343,7 @@ end
     ),
     Mutation(
         gate="tests/architecture/test_net_event_inventory.py::test_batch_totals_add_up",
-        path="tests/architecture/net_events_baseline.json",
+        path=NET_EVENTS_BASELINE,
         content=None,
         replace_from='"events": 15,',
         replace_to='"events": 99,',
@@ -360,7 +365,7 @@ MUTATIONS += [
     Mutation(
         gate=("tests/architecture/test_net_event_inventory.py::"
               "test_recorded_counts_match_the_live_scan"),
-        path="tests/architecture/net_events_baseline.json",
+        path=NET_EVENTS_BASELINE,
         content=None,
         # 锚点必须是当前基线里**真实存在**的数字：原锚点 'guarded: 19' 随 P1-3 清债消失后
         # 这条变异就静默失效了（CC 2026-11-08 复核发现）。改成 qb 批次的 guarded 总数。
@@ -377,7 +382,7 @@ MUTATIONS += [
     Mutation(
         gate=("tests/architecture/test_net_event_inventory.py::"
               "test_system_source_token_only_counts_the_server_only_shape"),
-        path="tests/architecture/net_event_scan.py",
+        path=NET_EVENT_SCAN,
         content=None,
         replace_from='"system_source": re.compile(r"\\bsrc\\s*~=\\s*0\\s+then\\s+return\\b|\\bsource\\s*~=\\s*0\\s+then\\s+return\\b"),',
         replace_to='"system_source": re.compile(r"\\bsrc\\s*==?\\s*0\\b"),',
@@ -436,7 +441,7 @@ MUTATIONS += [
 MUTATIONS += [
     Mutation(
         gate="tests/architecture/test_audit_bridge.py::test_log_sink_does_not_use_a_bare_relative_logs_path",
-        path="resources/[custom]/custom-logs/server/logs.lua",
+        path=LOGS_LUA,
         content=None,
         replace_from="                local file = io.open(resourcePath .. 'logs/' .. filename, \"a\")",
         replace_to="                local file = io.open(\"logs/\" .. filename, \"a\")  -- 变异注入：裸相对路径",
@@ -447,7 +452,7 @@ MUTATIONS += [
 MUTATIONS += [
     Mutation(
         gate="tests/architecture/test_audit_retention.py::test_sweep_deletes_expired_shards_keeps_today_and_is_idempotent",
-        path="resources/[custom]/custom-logs/server/logs.lua",
+        path=LOGS_LUA,
         content=None,
         replace_from="            if offset > RETENTION_DAYS and day ~= today then",
         replace_to="            if day ~= today then  -- 变异注入：不看 retention，能探到就删",
@@ -496,7 +501,7 @@ MUTATIONS += [
 MUTATIONS += [
     Mutation(
         gate="tests/architecture/test_audit_bridge.py::test_bridge_is_trusted_and_sanitizes_before_writing",
-        path="resources/[custom]/custom-logs/server/logs.lua",
+        path=LOGS_LUA,
         content=None,
         replace_from="AddEventHandler('qb-log:server:CreateLog'",
         replace_to="RegisterNetEvent('qb-log:server:CreateLog'",
@@ -586,7 +591,7 @@ MUTATIONS += [
     Mutation(
         gate=("tests/architecture/test_net_event_auth.py::"
               "test_shapes_that_look_like_guards_are_not_counted"),
-        path="tests/architecture/net_event_scan.py",
+        path=NET_EVENT_SCAN,
         content=None,
         replace_from='if inner.startswith("return"):',
         replace_to='if False:',
@@ -608,59 +613,101 @@ def run_gate(nodeid: str) -> tuple[bool, str]:
     return proc.returncode == 0, (tail[-1] if tail else "")
 
 
+def _skip(mutation: Mutation, detail: str) -> dict:
+    return {"gate": mutation.gate, "what": mutation.what, "status": "skipped", "detail": detail}
+
+
+def _create_parent_dirs(target: Path) -> list[Path]:
+    """新建目标目录层级，返回真正新建的目录（由深到浅）—— 撤注入后要删掉，
+    否则空目录会让 `test_no_orphan_scripts`（每个 [custom] 目录必须有 fxmanifest）误红。"""
+    created: list[Path] = []
+    parent = target.parent
+    while not parent.exists() and parent != BASE.parent:
+        created.append(parent)
+        parent = parent.parent
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return created
+
+
+def _inject(mutation: Mutation) -> tuple[str | None, list[Path], str | None]:
+    """注入变异，返回 (backup, 新建目录, 不适用原因)。原因非空时不写入任何东西。"""
+    target = mutation.target
+    if mutation.content is None and mutation.replace_from:
+        backup = target.read_text(encoding="utf-8")
+        if mutation.replace_from not in backup:
+            return None, [], (f"要替换的片段在 {target.relative_to(REPO)} 里找不到"
+                              "（代码变了，更新用例）")
+        target.write_text(backup.replace(mutation.replace_from, mutation.replace_to, 1),
+                          encoding="utf-8")  # NOSONAR 目标路径来自 MUTATIONS 硬编码 path
+        return backup, [], None
+    if mutation.content is None:            # 就地追加（历史形状）
+        backup = target.read_text(encoding="utf-8")
+        target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n",
+                          encoding="utf-8")  # NOSONAR 固定目标 + 原地追加，无路径拼接
+        return backup, [], None
+    created = _create_parent_dirs(target)
+    target.write_text(mutation.content, encoding="utf-8")  # NOSONAR 内容/路径都来自常量表
+    return None, created, None
+
+
+def _restore(target: Path, backup: str | None, created: list[Path]) -> None:
+    """撤掉注入：有备份就写回，否则删文件并回收自己建的目录。"""
+    if backup is not None:
+        target.write_text(backup, encoding="utf-8")  # NOSONAR 同文件原内容写回同一路径
+        return
+    target.unlink(missing_ok=True)
+    for directory in created:               # 由深到浅，只删空目录
+        try:
+            directory.rmdir()
+        except OSError:
+            break
+
+
+def _verdict(passed_after_injection: bool, passed_after_cleanup: bool) -> str:
+    if passed_after_injection:
+        return "gate-dead"                  # 注入后仍然通过 → 规则没生效
+    if passed_after_cleanup:
+        return "ok"
+    return "always-red"                     # 撤掉注入还红 → 规则本身坏了，或有别的脏东西
+
+
 def run_once(mutation: Mutation) -> dict:
     target = mutation.target
     if mutation.content is not None and target.exists():
-        return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
-                "detail": f"目标文件已存在，不覆盖：{target.relative_to(REPO)}"}
+        return _skip(mutation, f"目标文件已存在，不覆盖：{target.relative_to(REPO)}")
     if mutation.content is None and not target.exists():
-        return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
-                "detail": f"要篡改的文件不存在：{target.relative_to(REPO)}"}
+        return _skip(mutation, f"要篡改的文件不存在：{target.relative_to(REPO)}")
 
-    backup = None
-    created: list[Path] = []
-    if mutation.content is None and mutation.replace_from:   # 就地替换片段
-        backup = target.read_text(encoding="utf-8")
-        if mutation.replace_from not in backup:
-            return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
-                    "detail": f"要替换的片段在 {target.relative_to(REPO)} 里找不到（代码变了，更新用例）"}
-        target.write_text(backup.replace(mutation.replace_from, mutation.replace_to, 1), encoding="utf-8")  # NOSONAR 目标路径来自 MUTATIONS 硬编码 path；内容是同文件备份写回，无路径拼接
-    elif mutation.content is None:          # 就地追加（历史形状）
-        backup = target.read_text(encoding="utf-8")
-        target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n", encoding="utf-8")  # NOSONAR 固定目标 + 原地追加，不存在路径拼接
-    else:
-        # 记下这次真正新建的目录层级，撤注入后要删掉 —— 空目录会让
-        # `test_no_orphan_scripts`（每个 [custom] 目录必须有 fxmanifest）误红。
-        parent = target.parent
-        while not parent.exists() and parent != BASE.parent:
-            created.append(parent)
-            parent = parent.parent
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(mutation.content, encoding="utf-8")  # NOSONAR 内容与路径都来自 MUTATIONS 常量表，无外部输入
+    backup, created, reason = _inject(mutation)
+    if reason:
+        return _skip(mutation, reason)
 
     try:
         passed_after_injection, injected_line = run_gate(mutation.gate)
     finally:
-        if backup is not None:
-            target.write_text(backup, encoding="utf-8")  # NOSONAR 把同文件原内容写回同一路径（还原注入）
-        else:
-            target.unlink(missing_ok=True)
-            for directory in created:          # 由深到浅，只删空目录
-                try:
-                    directory.rmdir()
-                except OSError:
-                    break
+        _restore(target, backup, created)
 
     passed_after_cleanup, control_line = run_gate(mutation.gate)   # 对照：撤掉注入必须恢复绿
-    if (not passed_after_injection) and passed_after_cleanup:
-        status = "ok"
-    elif passed_after_injection:
-        status = "gate-dead"          # 注入后仍然通过 → 规则没生效
-    else:
-        status = "always-red"         # 撤掉注入还红 → 规则本身坏了，或有别的脏东西
-
-    return {"gate": mutation.gate, "what": mutation.what, "status": status,
+    return {"gate": mutation.gate, "what": mutation.what,
+            "status": _verdict(passed_after_injection, passed_after_cleanup),
             "injected": injected_line, "control": control_line}
+
+
+_VERDICT_LABEL = {"ok": "会红 ✓", "gate-dead": "没红 ✗（规则失效）",
+                  "always-red": "常红 ✗（规则坏了）", "skipped": "跳过"}
+
+
+def _print_header(results: list[dict]) -> int:
+    width = max(len(r["gate"].split("::")[-1]) for r in results)
+    print(f"{'闸门用例'.ljust(width)}  注入后   对照   判定")
+    return width
+
+
+def _print_row(result: dict, width: int) -> None:
+    inj = "红" if "failed" in str(result.get("injected", "")) else "绿"
+    ctl = "绿" if "passed" in str(result.get("control", "")) else "红"
+    name = result["gate"].split("::")[-1]
+    print(f"{name.ljust(width)}  {inj:^6}  {ctl:^4}   {_VERDICT_LABEL[result['status']]}")
 
 
 def main(argv: list[str]) -> int:
@@ -688,14 +735,9 @@ def main(argv: list[str]) -> int:
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
-        width = max(len(r["gate"].split("::")[-1]) for r in results)
-        print(f"{'闸门用例'.ljust(width)}  注入后   对照   判定")
+        width = _print_header(results)
         for r in results:
-            verdict = {"ok": "会红 ✓", "gate-dead": "没红 ✗（规则失效）",
-                       "always-red": "常红 ✗（规则坏了）", "skipped": "跳过"}[r["status"]]
-            inj = "红" if "failed" in str(r.get("injected", "")) else "绿"
-            ctl = "绿" if "passed" in str(r.get("control", "")) else "红"
-            print(f"{r['gate'].split('::')[-1].ljust(width)}  {inj:^6}  {ctl:^4}   {verdict}")
+            _print_row(r, width)
         dead = [r for r in results if r["status"] in ("gate-dead", "always-red")]
         print(f"\n{len(results)} 条用例：{len(results)-len(dead)} 条证明会红，{len(dead)} 条有问题")
         for r in dead:
@@ -810,7 +852,7 @@ MUTATIONS += [
     Mutation(
         gate=("tests/architecture/test_net_event_scope.py::"
               "test_own_resources_have_no_unguarded_events"),
-        path="tests/architecture/net_event_scan.py",
+        path=NET_EVENT_SCAN,
         content=None,
         replace_from=("    if self_scope_guard(code):\n        return True\n"),
         replace_to="",
