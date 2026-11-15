@@ -903,6 +903,17 @@ MUTATIONS += [
     ),
 ]
 
+# 方法级导出契约：调一个 owner 没声明的导出方法 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_service_contracts.py::"
+              "test_every_export_call_resolves"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_export_call.lua",
+        content="exports['custom-main']:AddScaledMoney(1, 'cash', 1, 'probe')\n",
+        what="跨资源调用了未声明的导出方法（真机上只在调用点抛 No such export）",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:
