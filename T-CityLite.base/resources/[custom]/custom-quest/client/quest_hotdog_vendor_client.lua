@@ -25,10 +25,11 @@
 --      本片按任务书用 E / ALT。ALT 会同时触发 qb-target（它默认也绑 LMENU），
 --      真机如果两套 UI 打架，应改成 qb-target 的一个选项或换键。
 --
--- 买家侧依赖（主 agent 需要补的接线）：
---   vendorState 目前按契约只发给摊主。别的玩家要看到菜单，服务端必须把同一份
---   状态广播给摊位附近的玩家，并显式带 isOwner=false；否则客户端无法区分
---   “我的摊”和“别人的摊”，会把所有人都当成摊主（见 IsOwnPayload 的缺省分支）。
+-- 买家侧（A10 已接线）：
+--   vendorState 现在有两种 payload：摊主单播（缺省 isOwner=true）与摊位附近的
+--   旁观者广播（显式 isOwner=false，只含 boothNetId/state/coords/items）。
+--   IsOwnPayload 以 isOwner 为准；旁观者记录在离开 PUBLIC_CLEAR_DISTANCE 后清掉，
+--   否则服务端停止广播（不在半径内）时客户端会一直留着一个过期的“别人的摊”。
 -- ==============================================================
 
 local QBCore = nil
@@ -50,6 +51,7 @@ local CONTROL_FRONTEND_CANCEL2 = 202
 
 local OWNER_DISTANCE = 3.0      -- 摊主状态条 / 开卖收摊
 local BUYER_DISTANCE = 2.5      -- 玩家购买菜单
+local PUBLIC_CLEAR_DISTANCE = 12.0  -- 超过它就不再收到广播，清掉旁观者记录（服务端半径 10 m + 2 m 余量）
 local PENDING_MS     = 3000     -- 发出开卖/收摊请求后等新 vendorState 的窗口
 local BUY_DEBOUNCE_MS = 1500    -- 本地防连点；真正的频率闸在服务端
 local WAIT_IDLE      = 500      -- 没有任何摊位时
@@ -453,6 +455,21 @@ local function ClearBuyMenu()
     NuiSend({ action = 'menu', visible = false })
 end
 
+--- 旁观者记录只在服务端广播半径内有效：离开之后不会再更新，必须清掉。
+--- 摊主自己的记录不清（它要留着按 E 收摊 / 看状态条）。
+local function PruneBystanderBooths(pedCoords)
+    for netId, booth in pairs(Booths) do
+        if not booth.isOwner then
+            if not booth.coords or #(pedCoords - booth.coords) > PUBLIC_CLEAR_DISTANCE then
+                Booths[netId] = nil
+                if BuyMenu and BuyMenu.boothNetId == netId then
+                    ClearBuyMenu()
+                end
+            end
+        end
+    end
+end
+
 local function CleanupQuest(questId, reason)
     -- offerId 的序号是每个会话从 1 开始的；任务结束/换会话时必须把
     -- “已经按过 Y/N”的记录一起清掉，否则下一轮第一单会被误吞。
@@ -486,6 +503,51 @@ end
 
 RegisterNetEvent('quest:client:vendorState', function(payload)
     if type(payload) ~= 'table' then return end
+
+    -- 旁观者推送（服务端 Broadcast.Scope）：只用于买家菜单 / 提示。
+    -- payload 字段白名单见 server/quest_vendor_bridge.lua 的 BuildBystanderPayload。
+    local isOwner = IsOwnPayload(payload)
+    if not isOwner then
+        local boothNetId = math.floor(NumberOr(payload.boothNetId, 0))
+        if boothNetId <= 0 then return end
+
+        -- 摊主本人也在广播半径内。自己的记录以 PushState 单播为准，
+        -- 不能被公开广播覆盖成 isOwner=false（否则状态条/收摊会消失）。
+        local previous = Booths[boothNetId]
+        if previous and previous.isOwner then return end
+
+        local state = payload.state == 'open' and 'open' or 'closed'
+        local prices, available = {}, {}
+        if type(payload.items) == 'table' then
+            for _, row in ipairs(payload.items) do
+                if type(row) == 'table' then
+                    local quality = NormalizeQuality(row.quality)
+                    local unitPrice = NumberOr(row.unitPrice, 0)
+                    if QUALITY_LABELS[quality] and unitPrice > 0 then
+                        prices[quality] = unitPrice
+                        available[quality] = true
+                    end
+                end
+            end
+        end
+
+        Booths[boothNetId] = {
+            boothNetId = boothNetId,
+            coords = CoordsFromPayload(payload, boothNetId) or (previous and previous.coords),
+            state = state,
+            prices = prices,
+            available = available,
+            -- 旁观者拿不到库存明细；stock 只留空表，避免其它路径按 nil 索引。
+            stock = { common = 0, rare = 0, exotic = 0 },
+            isOwner = false,
+            updatedAt = GetGameTimer(),
+        }
+
+        if state == 'closed' and BuyMenu and BuyMenu.boothNetId == boothNetId then
+            ClearBuyMenu()
+        end
+        return
+    end
 
     local boothNetId = math.floor(NumberOr(payload.boothNetId, 0))
     if boothNetId <= 0 then return end
@@ -526,7 +588,7 @@ RegisterNetEvent('quest:client:vendorState', function(payload)
         revenue  = NumberOr(payload.revenue, 0),
         ownerAway = payload.ownerAway == true or payload.owner_away == true
             or payload.state == 'away',
-        isOwner = IsOwnPayload(payload),
+        isOwner = true,
         updatedAt = GetGameTimer(),
         pendingAction = sameState and previous.pendingAction or nil,
         pendingUntil = sameState and previous.pendingUntil or nil,
@@ -774,7 +836,13 @@ end
 local function MenuBlockReason(booth, quality)
     if booth.state ~= 'open' then return '打烊中' end
     if booth.ownerAway then return '摊主走开了' end
-    if quality and (booth.stock[quality] or 0) <= 0 then return '售罄' end
+    if quality then
+        -- 摊主记录用 stock；旁观者记录只有服务端给的「可买清单」（available）。
+        local available = booth.isOwner
+            and (booth.stock and (booth.stock[quality] or 0) > 0)
+            or (booth.available and booth.available[quality] == true)
+        if not available then return '售罄' end
+    end
     return nil
 end
 
@@ -852,20 +920,28 @@ local function DrawBuyMenu(booth, menu, now)
     -- 价格/库存仍是服务端给的那份，客户端只负责显示。
     local rows = {}
     for _, quality in ipairs(MENU_ORDER) do
-        local stock = booth.stock[quality] or 0
-        local price = booth.prices[quality] or 0
+        local stock = booth.stock and (booth.stock[quality] or 0) or 0
+        local price = booth.prices and (booth.prices[quality] or 0) or 0
+        local available = booth.isOwner and stock > 0
+            or (booth.available and booth.available[quality] == true)
         local label = ({ exotic = '异域热狗', rare = '稀有热狗', common = '普通热狗' })[quality] or quality
         rows[#rows + 1] = {
             quality = quality,
             label = label,
-            note = stock > 0 and ('库存 ' .. stock) or '售罄',
-            price = '$' .. Money(price),
-            disabled = stock <= 0,
+            note = available and (booth.isOwner and ('库存 ' .. stock) or '有货') or '售罄',
+            price = price > 0 and ('$' .. Money(price)) or '—',
+            disabled = not available,
         }
     end
 
-    local sig = ('%s|%d|%s'):format(tostring(menu.boothNetId), menu.selected,
-        tostring(menu.flash or ''))
+    -- 可买清单 / 单价变了也要重发（旁观者 payload 每秒更新，不能只按 selected 去重）。
+    local availability = {}
+    for _, row in ipairs(rows) do
+        availability[#availability + 1] = ('%s:%s:%s'):format(
+            row.quality, row.disabled and '0' or '1', row.price)
+    end
+    local sig = ('%s|%d|%s|%s'):format(tostring(menu.boothNetId), menu.selected,
+        tostring(menu.flash or ''), table.concat(availability, ','))
     if sig == NuiMirror.menuSig then return end
     NuiMirror.menuSig = sig
 
@@ -956,6 +1032,9 @@ CreateThread(function()
         local pedCoords = GetEntityCoords(ped)
         local dead = IsDeadPed(ped)
 
+        -- 旁观者记录没有服务端更新来源之后（离开广播半径），必须清掉。
+        PruneBystanderBooths(pedCoords)
+
         -- 报价到 0 自动消失；不替玩家成交（服务端 Tick 也会判过期）。
         if ActiveOffer and (dead or now >= ActiveOffer.expiresAt) then
             ClearOffer(dead and 'dead' or 'timeout')
@@ -995,6 +1074,8 @@ CreateThread(function()
                     if not ActiveOffer and not BuyMenu then
                         sleep = WAIT_NEAR
                     end
+                else
+                    HideBuyerHint()
                 end
             end
         end

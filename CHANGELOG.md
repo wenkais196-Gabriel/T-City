@@ -40,6 +40,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `QuestBooth.ValidatePlacement`（同样的距离/道路/遮挡判据），失败按 reason 提示。
 
 ### Fixed
+- **买家看不到别人的摊位（整条购买路径不可达）**：`T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor_bridge.lua`
+  的 `PushState` 只把摊位状态单播给摊主本人，买家客户端永远没有别人的摊位记录，`[ALT]` 购买菜单因此不可达。
+  现在另加一条旁观者推送：`QuestVendorBridge.PushBystanders` 用
+  `Broadcast.Scope('quest:client:vendorState', { coords, radius = 10 }, payload)` 只发给摊位附近的玩家
+  （复用既有事件名，**不新增 net event**，`net_events_baseline.json` 仍为 440 / 0）。payload 由
+  `BuildBystanderPayload` 唯一构造，字段白名单只有 `isOwner=false` / `boothNetId` / `state` / `coords` /
+  `items`（可买档位 + 单价），不含库存明细、收入、押金、顾客报价或 citizenid；摊主状态仍只走 `PushState`。
+  客户端按 `isOwner=false` 走买家分支，离开 12 m 后清掉旁观者记录；custom-quest 的 fxmanifest 补上
+  core-framework 的 server/broadcast.lua（manifest 的 @ 包含写法，不是仓库内可解析的路径）。新增运行时探针
+  `T-CityLite.base/tests/unit/layer3_business/fixtures/vendor_bystander_probe.lua`（喂带 citizenid / 收入的
+  假会话，深扫返回值）与静态闸门 `T-CityLite.base/tests/architecture/test_quest_vendor_bystander.py`
+  （四条反向校验证明规则会红）。
 - **收摊后账单的售出 / 回收行恒为 0**：`T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor_bridge.lua`
   里 `CloseFor` 返回的汇总原来只用来发一条聊天通知就被丢掉；任务完成路径
   （`T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua` 的 `closeVendorFor`）
