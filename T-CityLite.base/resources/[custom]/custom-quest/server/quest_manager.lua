@@ -147,6 +147,13 @@ local function closeVendorFor(citizenid, questId, reason)
         QuestPrint('⚠️ CloseVendor failed: %s → %s (%s)', tostring(citizenid), tostring(questId), tostring(summary))
         return nil
     end
+    -- 摊主先按 E 收摊时，CloseFor 已经销毁会话并返回过 summary（桥里留了一份一次性缓存）。
+    -- 完成路径再调 CloseFor 只会拿到 nil；不从缓存补这一手，账单的售出 / 成品回收 /
+    -- 原料回收行就全是 0。取走即删，同一份收摊数据不会开出第二张账单。
+    if not summary and type(QuestVendorBridge.TakeLastSummary) == 'function' then
+        local okCached, cached = pcall(QuestVendorBridge.TakeLastSummary, citizenid, questId)
+        if okCached then summary = cached end
+    end
     return summary
 end
 local function closeBoothFor(citizenid, questId, reason)
