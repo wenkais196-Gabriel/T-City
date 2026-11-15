@@ -1,10 +1,16 @@
-"""六个资源的 `Money()` 渲染器：整数不带小数点、小数保留两位、非法输入回落 '0'。
+"""金额渲染器：整数不带小数点、小数保留两位、非法输入回落 '0'。
 
-为什么单独测：这六个 `shared/money_format.lua` 是 P1-5 阶段 E 新建的，被 26 处文案共用。
-它们一旦写错（比如把整数也渲染成 `500.00`、或对 nil 抛错），所有金额文案一起坏，
+为什么单独测：`shared/money_format.lua` 被 26 处文案共用。它们一旦写错
+（比如把整数也渲染成 `500.00`、或对 nil 抛错），所有金额文案一起坏，
 而金额文案的错误**不会**在静态闸门里出现（闸门只查"还有没有 `$%d`"）。
 
-做法：用 lua5.4 直接 `dofile` 每个模块，跑一组固定输入，断言输出字符串。
+S6 之后：8 个 `[custom]` 门面只转调 `exports['core-framework']:FormatMoney`，
+唯一实现在 `core-framework/shared/util.lua`；`[qb]/qb-drugs` 是上游，仍是本地实现。
+
+做法：用 lua5.4 先造一个**可调用且可索引**的 `exports` 桩（`__call` 注册、
+`__index` 返回 core-framework 的方法表），`dofile` 真实 util.lua 拿到 FormatMoney，
+再 `dofile` 门面；跑一组固定输入，断言输出字符串。冒号调用会多传方法表，
+桩里的包装器把它剥掉（与 FiveM 导出调用语义一致）。
 """
 
 from __future__ import annotations
@@ -16,6 +22,30 @@ import pytest
 
 BASE = Path(__file__).resolve().parents[3]
 RESOURCES = BASE / "resources"
+UTIL = RESOURCES / "[standalone]" / "core-framework" / "shared" / "util.lua"
+
+#: 门面用 `exports['core-framework']:FormatMoney(value)` 转调唯一实现。
+#: 桩必须同时支持 `exports('Name', fn)`（__call）和 `exports['res']:Method(...)`
+#: （__index）。FiveM 的冒号调用只把业务参数传给导出函数，所以包装器在
+#: `self == framework` 时剥掉多传的方法表。
+MOCK_EXPORTS = """
+local framework = {}
+local function colonSafe(fn)
+    return function(self, ...)
+        if self == framework then return fn(...) end
+        return fn(self, ...)
+    end
+end
+exports = setmetatable({}, {
+    __call = function(_, name, fn) framework[name] = colonSafe(fn) end,
+    __index = function(_, resource)
+        if resource == 'core-framework' then return framework end
+        return nil
+    end,
+})
+function IsDuplicityVersion() return false end
+function GetResourceState(resource) return resource == 'core-framework' and 'started' or 'stopped' end
+"""
 
 MODULES = {
     "qb-drugs": "[qb]/qb-drugs",
@@ -61,7 +91,13 @@ def test_money_renderer_formats_integers_and_decimals(resource):
         f"    print('CASE|{index}|' .. tostring({function}({argument})))"
         for index, (argument, _) in enumerate(CASES)
     )
-    script = f"dofile([[{path.as_posix()}]])\n" + lua_cases + "\n"
+    script = (
+        MOCK_EXPORTS
+        + f"dofile([[{UTIL.as_posix()}]])\n"
+        + f"dofile([[{path.as_posix()}]])\n"
+        + lua_cases
+        + "\n"
+    )
 
     proc = subprocess.run(
         ["lua5.4", "-e", script],
