@@ -87,6 +87,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `T-CityLite.base/tests/architecture/test_lua_local_order.py`（[custom] 的 quest/phone/police 全量扫描，注释与字符串已剥除），
   并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
 
+### Changed
+- **热狗数值改成测试期占位档**（正式值等经济系统联动）：`T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_hotdog.lua`
+  押金 250 → **50**、租金 6 → **1 每分钟**（免租 60 → 30 秒，计费上限 60 → 20 分钟，保证满时长也扣不穿押金）、
+  单价 6/9/14 → **8/16/32**（取偶数，成品回收按 0.5 折价不会出 $7.5）、顾客节奏 8–15 s/15–40 s → **3–6 s/6–15 s**、
+  耐心 45 → 30 秒。新增闸门 `T-CityLite.base/tests/architecture/test_hotdog_test_numbers.py`
+  （真加载模板表，校验押金 ≥ 计费上限 × 费率、单价递增且偶数、节奏自洽，并带两个反向控制）。
+- **新增真机验收清单** `docs/plan/jobs-content/14-hotdog-live-checklist.md`：单人 13 条 / 多人 8 条分列，
+  多人项一律标 ⛔ 待后期；单人的三个已知缺口（CEF 无焦点、状态条缺三项、顾客原地生成）单独列出，不算通过。
+
 ### Security
 - **S7 证据广播按受众收口**：`T-CityLite.base/resources/[custom]/custom-police/server/evidence.lua` 的 9 处 `TriggerClientEvent(..., -1, ...)`
   改为 `Broadcast.Scope(..., { job = 'police', onduty = true }, ...)`，DNA/血型/指纹/弹壳只在岗警察可见；

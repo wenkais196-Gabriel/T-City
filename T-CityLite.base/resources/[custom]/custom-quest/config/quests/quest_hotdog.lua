@@ -46,13 +46,16 @@ return {
                     duration = 1500,
                     label = '租借热狗车',
                     validator_id = 'validate_rental_open',
-                    -- 押金 250、每分钟 6 块、前 60 秒免租、最多计 60 分钟：
-                    -- 满一小时 = 250 押金全部抵扣（退 0），符合 UX 规格 §3.1 的预期
+                    -- 【测试期占位数值】先做成"方便测一轮"的档位，正式数值等经济系统联动时
+                    -- 由 docs/plan/jobs-content/13-hotdog-remaining-plan.md 的 E 片统一配（含税率）。
+                    -- 不变量：deposit >= max_minutes × rate_per_min（满时长也扣不穿押金），
+                    -- 由 tests/architecture/test_hotdog_test_numbers.py 把守。
+                    -- 押金 50、每分钟 1 块、前 30 秒免租、最多计 20 分钟 → 满 20 分钟租金 20，退 30。
                     validator_data = {
-                        deposit = 250,
-                        rate_per_min = 6,
-                        grace_sec = 60,
-                        max_minutes = 60,
+                        deposit = 50,
+                        rate_per_min = 1,
+                        grace_sec = 30,
+                        max_minutes = 20,
                     },
                 },
             },
@@ -71,15 +74,19 @@ return {
                     validator_id = 'validate_booth_place',
                     -- 开卖参数：摊位一摆好就开张，价格与节奏都由服务端掌握
                     vendor = {
-                        prices = { common = 6, rare = 9, exotic = 14 },
-                        first_customer_ms = { 8000, 15000 },
-                        interval_ms = { 15000, 40000 },
-                        patience_ms = 45000,
+                        -- 【测试期占位数值】单价取偶数，成品回收按 0.5 折价才不会出现 $7.5。
+                        -- 顾客节奏压短：第一位 3–6 秒，之后 6–15 秒，耐心 30 秒 —— 一轮测试能在
+                        -- 一分钟内看到多次报价，不用干等 40 秒。
+                        prices = { common = 8, rare = 16, exotic = 32 },
+                        first_customer_ms = { 3000, 6000 },
+                        interval_ms = { 6000, 15000 },
+                        patience_ms = 30000,
                         max_global_npcs = 8,
                         reject_cooldown_ms = 60000,
                         max_rejects = 3,
                         max_offers_per_session = 32,
-                        -- 起始库存（S3 做热狗接进客户端后删掉这一行）
+                        -- 起始库存：测试期给足（普通 6 / 稀有 3 / 高级 1），不开张就能卖；
+                        -- 正式数值随 E 片一起定。
                         starting_stock = { common = 6, rare = 3, exotic = 1 },
                     },
                 },
