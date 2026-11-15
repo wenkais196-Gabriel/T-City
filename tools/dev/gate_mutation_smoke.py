@@ -1007,6 +1007,18 @@ MUTATIONS += [
     ),
 ]
 
+# S5：模型加载收口到 CFShared.LoadModel
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_load_model_single_owner.py::"
+              "test_no_local_loadmodel_loops"),
+        path="resources/[custom]/custom-vehicles/client/__mutant_model.lua",
+        content=("-- 变异注入：无退出条件的本地模型加载循环\n"
+                 "RequestModel(hash)\nwhile not HasModelLoaded(hash) do Wait(10) end\n"),
+        what="本地模型加载没有超时（模型缺失时客户端线程永远不退出）",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:
