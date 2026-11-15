@@ -558,7 +558,7 @@ RegisterNetEvent('qb-storerobbery:server:startRobbery', function(register)
         cancelTime = nil,
     }
     -- 🌐 Atmosphere: chase scene on robbery start
-    if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'chase') end
+    pcall(function() exports['tcity-atmosphere']:service_atmosphere_PlayScene(src, 'chase') end)
     print(('[qb-storerobbery] 🔫 Register %d robbery started by %s (25s timer)'):format(register, GetPlayerName(src)))
 
     -- 5. 报警系统检查 → 2 星通缉

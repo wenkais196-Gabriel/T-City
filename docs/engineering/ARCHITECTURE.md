@@ -82,6 +82,11 @@ review_by: 2027-04-30
 - `table_owners.json`：表 → owner 资源，跨资源写必须走 owner；
 - `resource_wiring_allowlist.json`：资源级引用（`exports` / 资源名硬编码）的豁免登记。
 
+跨资源服务调用只走 `exports['<owner>']:service_<name>_<method>`；`Bus` 只是 owner 侧的
+注册辅助，跨资源不可见（`_G.Bus` 是每个 resource 私有的 Lua 状态）。`Bus.Plugin` 在
+`service_contracts.json` 里标 `planned`（全仓 0 个 `Bus.Plugin.Register` 调用），不对外宣传；
+闸门是 `tests/architecture/test_bus_scope.py`。
+
 组件的复用规则（共享代码放哪、什么不该合并、棘轮怎么收敛）见 `docs/engineering/REUSE.md`，
 闸门是 `tests/architecture/test_reuse_budget.py`。
 

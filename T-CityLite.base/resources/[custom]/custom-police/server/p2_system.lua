@@ -1900,12 +1900,8 @@ RegisterCommand('police_release', function(source, args)
     TriggerClientEvent('prison:client:UnjailPerson', target)
     local job = args[2]
     if job and job ~= '' then
-        local okJob, errJob
-        if Bus and Bus.JobService and type(Bus.JobService.SetJob) == 'function' then
-            okJob, errJob = Bus.JobService.SetJob(target, job, args[3] or '0', 'police_release')
-        else
-            okJob, errJob = player.Functions.SetJob(job, args[3] or '0')
-        end
+        -- qb-core 是 job 的 owner；`Bus.JobService` 在别的资源 Lua state 里恒 nil。
+        local okJob, errJob = player.Functions.SetJob(job, args[3] or '0')
         print(('[custom-police] SetJob(%s,%s) -> %s %s'):format(job, tostring(args[3]), tostring(okJob), tostring(errJob)))
     end
     print(('[custom-police] released %s%s'):format(target, job and (' -> ' .. job) or ''))

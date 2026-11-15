@@ -99,77 +99,6 @@
         }
       }
     },
-    "chronicle": {
-      "status": "planned",
-      "owner": "core-framework",
-      "methods": {
-        "GetPlayerChronicle": {
-          "args": [
-            "citizenid"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "GetSeasonChronicle": {
-          "args": [
-            "season_id"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "RecordEvent": {
-          "args": [
-            "event_data"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        }
-      }
-    },
-    "cosmetics": {
-      "status": "planned",
-      "owner": "core-framework",
-      "methods": {
-        "Equip": {
-          "args": [
-            "citizenid",
-            "item_id",
-            "equip"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "GetEquipped": {
-          "args": [
-            "citizenid"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "GetUnlockable": {
-          "args": [
-            "citizenid"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "Purchase": {
-          "args": [
-            "citizenid",
-            "item_id"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        }
-      }
-    },
     "dashboard": {
       "status": "implemented",
       "owner": "tcity-dashboard",
@@ -354,84 +283,6 @@
             "toCitizenId",
             "amount",
             "reason"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        }
-      }
-    },
-    "funnel": {
-      "status": "planned",
-      "owner": "core-framework",
-      "methods": {
-        "GetFunnelStage": {
-          "args": [
-            "citizenid"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "GetRecommendations": {
-          "args": [
-            "citizenid"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "RecordSocialSignal": {
-          "args": [
-            "citizenid",
-            "signal_type",
-            "data"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        }
-      }
-    },
-    "governance": {
-      "status": "planned",
-      "owner": "core-framework",
-      "methods": {
-        "CreateProposal": {
-          "args": [
-            "scope",
-            "scope_id",
-            "proposal_type",
-            "title",
-            "description",
-            "proposed_by"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "GetActiveProposals": {
-          "args": [
-            "scope",
-            "scope_id"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "GetProposal": {
-          "args": [
-            "proposal_id"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "Vote": {
-          "args": [
-            "proposal_id",
-            "citizenid",
-            "vote"
           ],
           "returns": "unverified",
           "failure": "unverified",
@@ -1149,41 +1000,6 @@
         }
       }
     },
-    "reputation": {
-      "status": "planned",
-      "owner": "core-framework",
-      "methods": {
-        "AddTrustEdge": {
-          "args": [
-            "from_citizen",
-            "to_citizen",
-            "category",
-            "weight",
-            "reason"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "CheckInteractionHistory": {
-          "args": [
-            "from_citizen",
-            "to_citizen"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        },
-        "GetTrustSummary": {
-          "args": [
-            "citizenid"
-          ],
-          "returns": "unverified",
-          "failure": "unverified",
-          "reviewed": false
-        }
-      }
-    },
     "security": {
       "status": "implemented",
       "owner": "core-framework",
@@ -1695,13 +1511,7 @@
       }
     }
   },
-  "planned_services": [
-    "chronicle",
-    "cosmetics",
-    "funnel",
-    "governance",
-    "reputation"
-  ],
+  "planned_services": [],
   "dynamic_exports": {
     "qb-core": {
       "mode": "resource",
@@ -1774,7 +1584,7 @@
     "reason": "全仓 0 个 Bus.Plugin.Register 调用"
   },
   "review": {
-    "external_call_sites": 33,
+    "external_call_sites": 37,
     "allowlisted_call_sites": 11,
     "services": [
       "atmosphere",

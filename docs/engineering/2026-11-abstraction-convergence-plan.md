@@ -125,8 +125,15 @@ review_by: 2027-03-31
 
 ```powershell
 Set-Location E:/T-City-abs/T-CityLite.base
-& 'C:\Users\swkgb\AppData\Local\Programs\Python\Python312\python.exe' -m pytest tests/unit tests/architecture -q
+& 'C:\Users\swkgb\AppData\Local\Programs\Python\Python312\python.exe' -m pytest tests/unit tests/architecture tests/agent -q
+& 'C:\Users\swkgb\AppData\Local\Programs\Python\Python312\python.exe' -m pytest tests/integration -q
 ```
+
+> **`tests/integration` 必须跑**（2026-11-15 补）：CI 只跑 `tests/unit / tests/architecture /
+> tests/agent`，`tests/integration` 不在 CI 里，所以它红着也能合并。S2a 删掉 5 个占位服务后，
+> `TestContractsIntegration` 的 5 条旧断言红了一整片而 CI 全绿——测试说谎比红灯更糟。
+> 凡是删除/改签名/改注册行为的片（S2a、S2b、S3、S5、S6），`tests/integration` 与 `tests/agent`
+> 都要进本片的验收命令。
 
 单文件/单闸门：
 
