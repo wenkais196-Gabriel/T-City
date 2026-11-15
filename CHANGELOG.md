@@ -1139,6 +1139,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DEPOT_OTHERS=false`、`BROADCASTS_FROM_TWO_CALLS=4`、`BROADCASTS_FROM_CLIENT_TRIGGER=2`。
   数字：未登记 **177 → 164**（qb 95 → 82，allowlist 112 → 113）；`1238 passed`。
 
+### Security
+- **S3 限流收口到 `RateLimit`**（2026-11-15）：`custom-police` 7 个文件 / 8 张本地表
+  （forensics / tow / coroner / evidence / p2_system / p0_incidents / main）与
+  `custom-director` 的 `liveBuckets` 令牌桶全部迁到 `core-framework` 的
+  `RateLimitCooldown` / `RateLimitTokenBucket`；键统一 `police:<src|cid>:<action>` 与
+  `director:live:<hash>`，阈值按秒 → 毫秒等价换算。
+  `playerDropped` 一次 `RateLimitReset('police:<src>:')` 清掉 src 键；cid 键由 owner 新增的
+  60s 自清理线程回收（`RateLimit.Sweep(15 * 60 * 1000)`）。旧的 60s prune 循环与 evidence
+  的每 64 次 prune / `pickupWrites` 计数器已删除；director 的 429 复用 owner 返回的
+  `retryAfterMs`。闸门 `test_rate_limit_single_owner.py` 的 `IMPL_MARKERS` / `CALLERS`
+  先红后绿。
+
 ## [0.7a] — 载具重构与物流 — 2026-10-21
 
 > 代码完成于 2026-06-22，tag 于 2026-10-21；实机验收仍待完成。

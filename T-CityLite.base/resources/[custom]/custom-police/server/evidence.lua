@@ -168,23 +168,12 @@ local function trackDrop(store, id, row, removeEvent)
     return true
 end
 
-local pickupAt = {}
-local pickupWrites = 0
-
---- One pickup per source per second.
+--- One pickup per source per second. 旧实现自己维护 pickupAt + 每 64 次 prune；
+--- 这两件事都归 owner 了：Cooldown 记账，Sweep 每 60s 回收 15 分钟未更新的键。
+--- 这里保留成门面，三个入口共用同一个键，避免各写一遍 format。
 local function pickupRateLimited(src)
-    pickupWrites = pickupWrites + 1
-    if pickupWrites % 64 == 0 then
-        local now = os.time()
-        for key, at in pairs(pickupAt) do
-            if now - at > 60 then pickupAt[key] = nil end
-        end
-    end
-    local now = os.time()
-    local last = pickupAt[src]
-    if last and now - last < PICKUP_COOLDOWN then return true end
-    pickupAt[src] = now
-    return false
+    return not exports['core-framework']:RateLimitCooldown(
+        ('police:%s:evidence:pickup'):format(src), PICKUP_COOLDOWN * 1000)
 end
 
 --- Copy only the item fields the inventory UI knows about and cap every value,

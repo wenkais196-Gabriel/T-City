@@ -161,3 +161,16 @@ if Bus and Bus.RegisterService then
 end
 
 print('[core-framework] rate limit ready (exports: RateLimitCooldown, RateLimitWindow, RateLimitReset, RateLimitTokenBucket)')
+
+-- owner 自清理：cid 等没有 playerDropped 钩子的键由这里统一回收。
+-- 每 60s 扫一遍，清掉 15 分钟未更新的条目；15 分钟大于所有已知冷却（最长 60s），
+-- 不会误删活跃键。Wait 是常量 60000，不落入预算的 fast/warm/unknown 三档。
+-- `type(CreateThread)` 守卫让纯函数单测（lua5.4 直接加载本文件）不必桩线程。
+if type(CreateThread) == 'function' then
+    CreateThread(function()
+        while true do
+            Wait(60 * 1000)
+            RateLimit.Sweep(15 * 60 * 1000)
+        end
+    end)
+end

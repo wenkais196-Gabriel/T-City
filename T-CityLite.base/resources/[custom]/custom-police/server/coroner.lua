@@ -13,7 +13,6 @@ local CORONER_COOLDOWN_SECONDS = 60
 local CORONER_SWEEP_MS = 10000
 
 local coronerRequests = {}   -- [requestId] = { cid, source, at }
-local coronerCooldown = {}   -- [cid] = os.time()
 local coronerSequence = 0
 
 local function nextRequestId()
@@ -88,16 +87,18 @@ RegisterNetEvent('police:server:coronerRequest', function(corpseNet)
         return
     end
 
-    local last = coronerCooldown[cid] or 0
-    if os.time() - last < CORONER_COOLDOWN_SECONDS then
-        coronerFeedback(src, 'error', ('验尸官正在路上，%d 秒后可再叫'):format(
-            math.max(0, CORONER_COOLDOWN_SECONDS - (os.time() - last))))
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:coroner'):format(cid), CORONER_COOLDOWN_SECONDS * 1000) then
+        -- owner 只回 boolean（没有剩余秒数），提示固定成完整冷却时长。
+        coronerFeedback(src, 'error', ('验尸官正在路上，%d 秒后可再叫'):format(CORONER_COOLDOWN_SECONDS))
         return
     end
 
     local requestId = nextRequestId()
     local admitted = NPCBudget and NPCBudget.Acquire and NPCBudget.Acquire('coroner', requestId, cid)
     if not admitted then
+        -- 与旧表一致：预算拒绝不占冷却（owner 的 Cooldown 已记账，这里撤回）。
+        exports['core-framework']:RateLimitReset(('police:%s:coroner'):format(cid))
         coronerFeedback(src, 'error', '验尸官暂时忙不过来（名额已满）')
         if not audit(cid, 'coroner.rejected', requestId, 'budget') then
             print(('[custom-police] coroner.rejected audit failed: %s'):format(tostring(requestId)))
@@ -105,7 +106,6 @@ RegisterNetEvent('police:server:coronerRequest', function(corpseNet)
         return
     end
 
-    coronerCooldown[cid] = os.time()
     coronerRequests[requestId] = { cid = cid, source = src, at = os.time() }
     if not audit(cid, 'coroner.request', requestId, '') then
         print(('[custom-police] coroner.request audit failed: %s'):format(tostring(requestId)))
