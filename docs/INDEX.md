@@ -344,7 +344,7 @@
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
 | [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
 | [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `AGENTS.md` |
-| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-12 | 2027-04-30 |  | `CHANGELOG.md` |
+| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
 | [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-10-21 | 2027-04-30 |  | `CONTRIBUTING.md` |
 | [T-City Lite](../README.md) | meta | ✅ active | 2026-10-26 | 2027-04-30 |  | `README.md` |
@@ -363,7 +363,7 @@
 | [历史归档（不维护）：docs/archive](archive/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/archive/LEGACY.md` |
 | [📋 T-City Lite 版本规划索引](archive/QBCore_Lite_versions/README.md) | meta | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/README.md` |
 | [历史归档（不维护）：docs/cleanup](cleanup/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/cleanup/LEGACY.md` |
-| [ARCHITECTURE — 四个平面与依赖方向](engineering/ARCHITECTURE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/ARCHITECTURE.md` |
+| [ARCHITECTURE — 四个平面与依赖方向](engineering/ARCHITECTURE.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `docs/engineering/ARCHITECTURE.md` |
 | [CONSTITUTION — T-City 的十条不变量](engineering/CONSTITUTION.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/CONSTITUTION.md` |
 | [消耗品与状态层（custom-consumables）](engineering/CONSUMABLES.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/engineering/CONSUMABLES.md` |
 | [真机验证工作流（Live verification）](engineering/LIVE_VERIFICATION.md) | meta | ✅ active | 2026-10-30 | 2027-04-30 |  | `docs/engineering/LIVE_VERIFICATION.md` |

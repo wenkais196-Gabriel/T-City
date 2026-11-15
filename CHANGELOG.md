@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-12
+updated: 2026-11-15
 review_by: 2027-04-30
 ---
 
@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [Unreleased]
+
+### Security
+- **S7 证据广播按受众收口**：`T-CityLite.base/resources/[custom]/custom-police/server/evidence.lua` 的 9 处 `TriggerClientEvent(..., -1, ...)`
+  改为 `Broadcast.Scope(..., { job = 'police', onduty = true }, ...)`，DNA/血型/指纹/弹壳只在岗警察可见；
+  `[custom]` 剩余 19 处全服广播登记 `broadcast_allowlist.json`（按 file+event 合并为 13 条，含
+  owner/reason/expires），`broadcast_sites` 预算 152 → 143。
 
 ### Added
 - **S4 热狗售卖闭环（服务端 + 接线）**：`custom-quest` 新增顾客会话内核 `quest_vendor` 与接线层

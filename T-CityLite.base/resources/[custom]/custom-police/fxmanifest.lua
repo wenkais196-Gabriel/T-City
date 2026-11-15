@@ -67,6 +67,8 @@ dependencies {
 server_scripts {
 
 	'@oxmysql/lib/MySQL.lua',
+    -- 受众感知广播（S7）：@core-framework/server/broadcast.lua 必须排在 MySQL 之后
+    '@core-framework/server/broadcast.lua',
     -- insertId/affectedRows 的归一化在 @core-framework/server/db.lua；
     -- 这个文件只剩门面，p0/p2/p3 的 InsertId( 调用点保持不变。
     '@core-framework/server/db.lua',
