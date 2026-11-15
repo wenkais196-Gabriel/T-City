@@ -169,11 +169,18 @@ request pairs, load order.
 ## Verify without a game client
 
 ```bash
-luac5.4 -p client/main.lua server/main.lua                     # syntax
+luac5.4 -p client/main.lua server/main.lua                     # syntax (PowerShell: luac5.4.exe)
 /usr/bin/python3 -m pytest tests/unit tests/architecture -q    # unit + architecture gates
 npx svelte-check --tsconfig ./tsconfig.app.json                # types, before any build
 node tests/nui/run.mjs                                         # headless NUI (playwright-core)
 ```
+
+**Bare `luac5.4` / `lua5.4` in PowerShell is a hang, not an error.** Windows reads `.4` as the file's
+extension, nothing has that association, so PowerShell hands the file to ShellExecute and Windows
+shows 「选择一个应用以打开此 .4 文件」 — the command blocks until a human dismisses it, once per
+invocation. Always write `luac5.4.exe` / `lua5.4.exe` when the shell is PowerShell (bash/MSYS and
+Python `subprocess` are unaffected; `cmd` cannot resolve the bare name at all). No timeout, empty
+output and a stray `OpenWith.exe` process are the fingerprint.
 
 Then `restart <resource>` on the live server and read the boot lines: `Started resource X` with no
 `stack traceback` is the layer the unit gates cannot prove. Detail, ordering and what each check does

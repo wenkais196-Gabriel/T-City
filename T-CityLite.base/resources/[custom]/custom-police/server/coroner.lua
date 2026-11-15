@@ -48,6 +48,17 @@ local function releaseRequest(requestId, reason)
 end
 
 --- 客户端上报完成（或失败）。只认自己名下的单号。
+--- 验尸官请求的反馈（P-2）：以前失败全是静默 return，玩家体感就是"按了没反应"。
+--- 走 custom-notify 的三层分派：成功 feed、失败 error（error 永不 toast）。
+local function coronerFeedback(src, kind, title, body)
+    pcall(function()
+        exports['custom-notify']:Push(src, kind, title, body)
+    end)
+end
+-- ⚠️ 定义必须在**使用点之前**：Lua 的 local 不做前向声明，
+-- 写在后面的话前面那次调用会解析成全局 nil —— 静默到运行时才炸。
+-- （2026-11-14 由 tests/architecture/test_lua_local_order.py 抓出）
+
 RegisterNetEvent('police:server:coronerDone', function(requestId, reason)
     local src = tonumber(source) or 0
     local player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(src)
@@ -64,13 +75,6 @@ end)
 
 --- 玩家叫验尸官。`corpseNet` 由客户端提供（它才看得到那一具尸体是哪一个），
 --- 服务端不复验实体归属：这是纯表现层动作，真正的权威是"谁在岗、有没有名额"。
---- 验尸官请求的反馈（P-2）：以前失败全是静默 return，玩家体感就是"按了没反应"。
---- 走 custom-notify 的三层分派：成功 feed、失败 error（error 永不 toast）。
-local function coronerFeedback(src, kind, title, body)
-    pcall(function()
-        exports['custom-notify']:Push(src, kind, title, body)
-    end)
-end
 
 RegisterNetEvent('police:server:coronerRequest', function(corpseNet)
     local src = tonumber(source) or 0

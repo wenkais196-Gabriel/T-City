@@ -312,9 +312,119 @@ local function SpawnCustomerPed(boothCoords)
     pcall(function() TaskTurnPedToFaceEntity(ped, PlayerPedId(), 1500) end)
     return ped
 end
+-- ==============================================================
+-- NUI 镜像：界面文字改由 html/vendor.html 画
+--
+-- 为什么不用原生 DrawText：GTA 内置字体没有 CJK 字形，中文整排是方块；
+-- RegisterFontFile 这条路在本 build 上不生效（真机实测仍然方块）。
+-- NUI 是 CEF，用系统字体渲染中文没有问题，而且能直接给按钮点击。
+--
+-- 这里只做「状态 → 消息」的镜像，业务判断全在原来的状态机里，没有搬逻辑。
+-- 每条消息都带签名（sig）：状态没变就不重发 —— 主循环是每帧跑的，
+-- 每帧发一条 NUI 消息会让 CEF 与 Lua 都白忙。
+-- ==============================================================
+
+local NuiMirror = { statusVisible = false, statusSig = '', offerId = nil, offerSig = '', menuSig = '', hintVisible = false }
+
+local function NuiSend(payload)
+    SendNUIMessage(payload)
+end
+
+--- 摊主状态条
+local function PushStatus(booth, now)
+    local pending = booth.pendingUntil and now < booth.pendingUntil
+    local hint
+    if pending then
+        hint = '[E] 收摊中…'
+    elseif booth.state == 'open' then
+        hint = booth.raw > 0 and '[E] 收摊 · [G] 做热狗' or '[E] 收摊（原料用完了）'
+    else
+        hint = '已收摊 · 回租赁点结算'
+    end
+
+    local sig = ('%s|%d|%d|%d|%d|%d|%s|%s'):format(
+        tostring(booth.state), booth.stock.exotic, booth.stock.rare, booth.stock.common,
+        booth.raw, booth.sold, Money(booth.revenue), hint)
+    if sig == NuiMirror.statusSig and NuiMirror.statusVisible then return end
+    NuiMirror.statusSig = sig
+    NuiMirror.statusVisible = true
+
+    NuiSend({
+        action = 'status', visible = true, state = booth.state,
+        stock = booth.stock, raw = booth.raw, sold = booth.sold,
+        revenue = tonumber(Money(booth.revenue)) or 0, hint = hint,
+        questId = booth.questId,
+    })
+end
+
+local function HideStatus()
+    if not NuiMirror.statusVisible then return end
+    NuiMirror.statusVisible = false
+    NuiMirror.statusSig = ''
+    NuiSend({ action = 'status', visible = false })
+end
+
+--- 顾客报价（HTML 里自己跑倒计时条，所以只在换人时发一次）
+local function PushOffer()
+    local offer = ActiveOffer
+    if not offer then
+        if NuiMirror.offerId then
+            NuiMirror.offerId = nil
+            NuiSend({ action = 'offer', visible = false })
+        end
+        return
+    end
+
+    local sig = ('%s|%d|%d'):format(tostring(offer.offerId), offer.count, offer.price)
+    if sig == NuiMirror.offerSig then return end
+    NuiMirror.offerSig = sig
+    NuiMirror.offerId = offer.offerId
+
+    local qualityLabel = ({ exotic = '异域热狗', rare = '稀有热狗', common = '普通热狗' })[offer.item]
+        or '热狗'
+    NuiSend({
+        action = 'offer', visible = true,
+        offerId = offer.offerId,
+        label = qualityLabel,
+        count = offer.count,
+        price = offer.price,
+        unitPrice = offer.unitPrice,
+        remainingMs = math.max(0, (offer.expiresAt or 0) - GetGameTimer()),
+    })
+end
+
+local function HideOffer()
+    NuiMirror.offerId = nil
+    NuiMirror.offerSig = ''
+    NuiSend({ action = 'offer', visible = false })
+end
+
+--- 买家提示（ALT 购买 / 摊主不在 / 打烊）
+local function PushBuyerHint(booth)
+    local text, ok
+    if booth.state ~= 'open' then
+        text, ok = '热狗摊打烊中', false
+    elseif booth.ownerAway then
+        text, ok = '摊主走开了', false
+    else
+        text, ok = '[ALT] 购买热狗', true
+    end
+    if NuiMirror.hintSig == text then return end
+    NuiMirror.hintSig = text
+    NuiMirror.hintVisible = true
+    NuiSend({ action = 'hint', visible = true, text = text, enabled = ok })
+end
+
+local function HideBuyerHint()
+    if not NuiMirror.hintVisible then return end
+    NuiMirror.hintVisible = false
+    NuiMirror.hintSig = nil
+    NuiSend({ action = 'hint', visible = false })
+end
 local function ClearOffer(reason)
     local offer = ActiveOffer
     ActiveOffer = nil
+    HideOffer()
     if not offer then return end
 
     -- 本文件目前不生成顾客 ped（npcNetId 由接线方给）。保留这条路径是为了
@@ -339,6 +449,8 @@ end
 
 local function ClearBuyMenu()
     BuyMenu = nil
+    NuiMirror.menuSig = ''
+    NuiSend({ action = 'menu', visible = false })
 end
 
 local function CleanupQuest(questId, reason)
@@ -732,56 +844,34 @@ local function SendPurchase(booth, quality)
 end
 
 local function DrawBuyMenu(booth, menu, now)
-    local panel = { x = 0.635, y = 0.300, w = 0.345, h = 0.285 }
-    DrawPanel(panel.x, panel.y, panel.w, panel.h, 190)
-
-    local x = panel.x + 0.016
-    local y = panel.y + 0.012
-
-    DrawText2D(x, y, '热狗摊 · 今日菜单', 0.38, COLOR.gold)
-
-    local stateText, stateColour
-    if booth.state ~= 'open' then
-        stateText, stateColour = '打烊中', COLOR.grey
-    elseif booth.ownerAway then
-        stateText, stateColour = '摊主走开了，暂时不能买', COLOR.amber
-    else
-        stateText, stateColour = '营业中', COLOR.green
-    end
-    DrawText2D(x, y + 0.034, stateText, 0.32, stateColour)
-
-    for index, quality in ipairs(MENU_ORDER) do
-        local rowY = y + 0.070 + (index - 1) * 0.042
-        local selected = menu.selected == index
-        if selected then
-            -- 选中行用底色 + 行首 “>” 两个信号，不只靠颜色（UX A16）
-            DrawRect(panel.x + panel.w * 0.5, rowY + 0.012,
-                panel.w - 0.024, 0.036, 255, 255, 255, 28)
-        end
-
+    -- 菜单行由 HTML 渲染；这里把「每一档」整理成它要的形状。
+    -- 价格/库存仍是服务端给的那份，客户端只负责显示。
+    local rows = {}
+    for _, quality in ipairs(MENU_ORDER) do
         local stock = booth.stock[quality] or 0
         local price = booth.prices[quality] or 0
-        local blocked = MenuBlockReason(booth, quality)
-        local colour = blocked and COLOR.grey or COLOR.white
-        if selected and not blocked then colour = COLOR.gold end
-
-        local cursor = selected and '> ' or '  '
-        local soldOut = (blocked == '售罄') and ' · 售罄' or ''
-        local line = ('%s%s $%s  (库存 %d%s)'):format(
-            cursor,
-            QUALITY_LABELS[quality] or quality,
-            Money(price),
-            stock,
-            soldOut)
-        DrawText2D(x, rowY, line, 0.33, colour)
+        local label = ({ exotic = '异域热狗', rare = '稀有热狗', common = '普通热狗' })[quality] or quality
+        rows[#rows + 1] = {
+            quality = quality,
+            label = label,
+            note = stock > 0 and ('库存 ' .. stock) or '售罄',
+            price = '$' .. Money(price),
+            disabled = stock <= 0,
+        }
     end
 
-    local footerY = y + 0.205
-    DrawText2D(x, footerY, '上下键选择 · Enter 购买 1 份 · 退格 关闭', 0.28, COLOR.grey)
+    local sig = ('%s|%d|%s'):format(tostring(menu.boothNetId), menu.selected,
+        tostring(menu.flash or ''))
+    if sig == NuiMirror.menuSig then return end
+    NuiMirror.menuSig = sig
 
-    if menu.flash and menu.flashUntil and now < menu.flashUntil then
-        DrawText2D(x, footerY + 0.026, menu.flash, 0.28, COLOR.amber)
-    end
+    NuiSend({
+        action = 'menu', visible = true,
+        selected = menu.selected - 1,   -- HTML 里是 0 基
+        rows = rows,
+        sub = '按上下键选择 · Enter 买 1 份 · 退格关闭',
+        foot = menu.flash or '',
+    })
 end
 
 local function UpdateBuyMenu(pedCoords, now)
@@ -829,110 +919,16 @@ end
 -- ==============================================================
 
 local function DrawOffer(now)
-    local offer = ActiveOffer
-    if not offer then return end
-
-    local remaining = offer.expiresAt - now
-    if remaining <= 0 then
-        ClearOffer('timeout')
-        return
-    end
-    local seconds = math.max(0, math.ceil(remaining / 1000))
-
-    -- 顾客头顶 3D：玩家要能一眼把“这个报价”对上“这位顾客”。
-    -- 只画一个 3D 绘制点（UX §2.8 的 3D 文字预算）。
-    if offer.npcNetId > 0 then
-        local ped = NetworkGetEntityFromNetworkId(offer.npcNetId)
-        if ped and ped ~= 0 and NativeBool(DoesEntityExist(ped)) then
-            local coords = GetEntityCoords(ped)
-            DrawBoothText3D(coords.x, coords.y, coords.z + 1.05,
-                ('顾客 · 正在点单~n~耐心 %ds'):format(seconds))
-        end
-    end
-
-    -- 右下角报价面板
-    local panel = { x = 0.705, y = 0.705, w = 0.280, h = 0.205 }
-    DrawPanel(panel.x, panel.y, panel.w, panel.h, 185)
-
-    local x = panel.x + 0.014
-    local y = panel.y + 0.012
-
-    DrawText2D(x, y, '顾客点单', 0.36, COLOR.gold)
-
-    local item = offer.item
-    local itemLabel = QUALITY_LABELS_LONG[item] or tostring(item)
-    DrawText2D(x, y + 0.032,
-        ('%s %s ×%d'):format(QUALITY_SYMBOLS[item] or '●', itemLabel, offer.count),
-        0.34, COLOR.white)
-
-    DrawText2D(x, y + 0.062,
-        ('$%s/份 · 共 $%s'):format(Money(offer.unitPrice), Money(offer.price)),
-        0.32, COLOR.white)
-
-    local patienceColour = COLOR.green
-    if seconds <= 5 then
-        patienceColour = COLOR.red
-    elseif seconds <= 10 then
-        patienceColour = COLOR.amber
-    end
-    DrawText2D(x, y + 0.092, ('耐心 %ds'):format(seconds), 0.32, patienceColour)
-
-    -- 耐心条按“收到报价时的总耐心”归一化；最后 5 秒整条变红。
-    local barX = panel.x + 0.014
-    local barY = panel.y + 0.145
-    local barW = panel.w - 0.028
-    local ratio = math.max(0, math.min(1, remaining / offer.initialMs))
-    DrawRect(barX + barW * 0.5, barY, barW, 0.010, 35, 35, 35, 220)
-    if ratio > 0 then
-        DrawRect(barX + barW * ratio * 0.5, barY, barW * ratio, 0.010,
-            patienceColour[1], patienceColour[2], patienceColour[3], 230)
-    end
-
-    DrawText2D(x, y + 0.160, '[Y] 成交    [N] 拒绝', 0.33, COLOR.white)
+    -- 参数保留：调用点还在传 now（报价倒计时由 HTML 自己跑）
+    PushOffer()
 end
 
 local function DrawOwnerStatus(booth, now)
-    local panel = { x = 0.015, y = 0.405, w = 0.270, h = 0.085 }
-    DrawPanel(panel.x, panel.y, panel.w, panel.h, 175)
-
-    local x = panel.x + 0.012
-    local y = panel.y + 0.008
-
-    local title = booth.state == 'open' and '热狗摊 · 营业中' or '热狗摊 · 已打烊'
-    DrawText2D(x, y, title, 0.34, booth.state == 'open' and COLOR.green or COLOR.grey)
-
-    -- 任务书要求的一行状态条：成品三档 / 原料 / 已售 / 收入
-    local stock = booth.stock
-    DrawText2D(x, y + 0.030,
-        ('成品 异域 %d · 稀有 %d · 普通 %d · 原料 %d · 已售 %d · 收入 $%s'):format(
-            stock.exotic, stock.rare, stock.common, booth.raw, booth.sold,
-            Money(booth.revenue)),
-        0.27, COLOR.white)
-
-    local pending = booth.pendingUntil and now < booth.pendingUntil
-    local prompt
-    if pending then
-        prompt = '[E] 收摊中…'
-    elseif booth.state == 'open' then
-        -- 开卖是「放下推车」那一刻服务端自动做的；营业中能做的只有两件事。
-        prompt = booth.raw > 0 and '[E] 收摊 · [G] 做热狗' or '[E] 收摊（原料用完了）'
-    else
-        prompt = '已收摊 · 回租赁点结算'
-    end
-    DrawText2D(x, y + 0.058, prompt, 0.33,
-        pending and COLOR.grey or COLOR.gold)
+    PushStatus(booth, now)
 end
 
 local function DrawBuyerPrompt(booth)
-    local text, colour
-    if booth.state ~= 'open' then
-        text, colour = '[ALT] 热狗摊 · 打烊中', COLOR.grey
-    elseif booth.ownerAway then
-        text, colour = '[ALT] 摊主走开了', COLOR.amber
-    else
-        text, colour = '[ALT] 购买热狗', COLOR.gold
-    end
-    DrawText2D(0.5, 0.900, text, 0.36, colour, true)
+    PushBuyerHint(booth)
 end
 
 -- ==============================================================
@@ -972,6 +968,7 @@ CreateThread(function()
             UpdateBuyMenu(pedCoords, now)
         end
 
+        if boothCount == 0 then HideStatus(); HideBuyerHint() end
         if boothCount > 0 and not dead then
             local own = NearestBooth(pedCoords, OWNER_DISTANCE, true)
             if own then
@@ -985,6 +982,7 @@ CreateThread(function()
                     sleep = WAIT_NEAR
                 end
             else
+                HideStatus()
                 local other = NearestBooth(pedCoords, BUYER_DISTANCE, false)
                 if other then
                     if not BuyMenu then
@@ -1072,3 +1070,33 @@ AddEventHandler('onResourceStop', function(resourceName)
 end)
 
 print('[quest-hotdog-vendor] 🌭 S4 客户端已就绪：状态条 / 报价面板 / 购买菜单 / 清理')
+
+-- ==============================================================
+-- NUI 回调：按钮点击（HTML 里的 [Y]成交 / [N]拒绝 / 行点击）
+--
+-- 注意 cb 在本 build 可能是可调用表，**不要**写 `if type(cb) ~= 'function'`
+-- 那种守卫会静默丢掉每一次应答（[custom] AGENTS.md 里记着这条）。
+-- ==============================================================
+
+RegisterNUICallback('offerAction', function(data, cb)
+    local action = type(data) == 'table' and data.action or nil
+    if action == 'accept' then
+        ResolveOffer(true)
+    elseif action == 'reject' then
+        ResolveOffer(false)
+    end
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('buyRow', function(data, cb)
+    local index = type(data) == 'table' and tonumber(data.index) or nil
+    local menu = BuyMenu
+    if menu and index then
+        local quality = MENU_ORDER[index + 1]
+        local booth = Booths[menu.boothNetId]
+        if quality and booth then
+            SendPurchase(booth, quality)
+        end
+    end
+    cb({ ok = true })
+end)
