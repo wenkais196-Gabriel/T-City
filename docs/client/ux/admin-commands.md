@@ -233,7 +233,7 @@ review_by: 2027-02-28
 | `police_backup_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1829 |
 | `police_backup_state` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1854 |
 | `police_case_seed` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:10 |
-| `police_coroner_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua:143 |
+| `police_coroner_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua:147 |
 | `police_incident_bench` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:168 |
 | `police_incident_seed` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:122 |
 | `police_incidents_public` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:103 |
@@ -272,11 +272,11 @@ review_by: 2027-02-28
 | `quest` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:386 |
 | `quest_client_test` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/tests/client/quest_client_test.lua:337 |
 | `quest_flow_test` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/tests/server/quest_flow_test.lua:323 |
-| `quest_hotdog_vendor_accept` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1022 |
-| `quest_hotdog_vendor_cook` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1017 |
-| `quest_hotdog_vendor_decline` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1027 |
-| `quest_hotdog_vendor_interact` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1012 |
-| `quest_hotdog_vendor_menu` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1032 |
+| `quest_hotdog_vendor_accept` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1020 |
+| `quest_hotdog_vendor_cook` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1015 |
+| `quest_hotdog_vendor_decline` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1025 |
+| `quest_hotdog_vendor_interact` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1010 |
+| `quest_hotdog_vendor_menu` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1030 |
 | `quest_reenode` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:430 |
 | `questrestore` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:330 |
 | `queststep` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1258 |

@@ -287,6 +287,22 @@ function QuestBooth.Count()
     return n
 end
 
+--- 挪摊位：只更新坐标，实体 netId 不变（推车还是那辆）。
+--- 为什么不在服务端重建记录：netId 变了就意味着客户端要重新上报、实体注册表要重登记，
+--- 而玩家想做的只是「挪一米」，副作用越小越好。
+---@param citizenid string
+---@param pos table { x, y, z }
+---@return boolean ok
+function QuestBooth.MoveTo(citizenid, pos)
+    local booth = Booths[citizenid]
+    if not booth then return false end
+    if type(pos) ~= 'table' or type(pos.x) ~= 'number' then return false end
+    booth.x, booth.y, booth.z = pos.x, pos.y, pos.z
+    print(('[quest-booth] ↔️ 摊位挪位：%s | (%.1f, %.1f, %.1f)')
+        :format(citizenid, pos.x, pos.y, pos.z))
+    return true
+end
+
 --- 关摊位：删实体 + 清记录（名字别叫 Release：那个词全仓已有 4 份实现，会撞复用量闸）。四条关闭路径都走这里（归还/放弃/失败/断线）。
 ---@param citizenid string
 ---@param questId string|nil 传了才按任务关；不传关该玩家所有摊位

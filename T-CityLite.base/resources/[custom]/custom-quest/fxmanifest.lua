@@ -21,6 +21,8 @@ description 'Data-driven quest/mission system with state machine, security guard
 version '0.7.0'
 
 -- v0.7.0: 声明外部任务配置文件（使其可通过 LoadResourceFile 访问）
+ui_page 'html/vendor.html'
+
 files {
     'config/quests/quest_miner.lua',
     'config/quests/quest_chain_miner.lua',
@@ -66,6 +68,8 @@ files {
     'config/quests/quest_civilian_ch4_survivor.lua',
 
     'fonts/hotdog_ui.ttf',   -- 中文字形子集（GTA 原生字体没有 CJK，见 tools/dev/build_quest_font.py）
+
+    'html/vendor.html',   -- 摊位/报价/购买菜单（CEF 渲染中文；原生 DrawText 没有 CJK 字形）
 }
 
 shared_scripts {
