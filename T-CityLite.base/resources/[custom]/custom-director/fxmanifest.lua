@@ -14,6 +14,7 @@ shared_scripts {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    '@core-framework/server/db.lua',
     '@core-framework/bus.lua',
     'server/policy.lua',
     'server/director_rules.lua',

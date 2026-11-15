@@ -14,6 +14,7 @@ from pathlib import Path
 TESTS_DIR = Path(__file__).resolve().parent
 BASE = TESTS_DIR.parent
 POLICE = BASE / "resources" / "[custom]" / "custom-police"
+CORE_DB = BASE / "resources" / "[standalone]" / "core-framework" / "server" / "db.lua"
 
 #: 加载顺序，改这里之前先改 fxmanifest
 MODULES = (
@@ -41,8 +42,14 @@ def p0_text(server_dir: Path | None = None) -> str:
 
 
 def p0_dofiles(lua_quote=str, server_dir: Path | None = None) -> str:
-    """给 lua harness 用的加载序列：dofile 每个模块，顺序与 manifest 一致。"""
-    return "\n".join(f"dofile({lua_quote(str(path))})" for path in module_paths(server_dir))
+    """给 lua harness 用的加载序列：dofile 每个模块，顺序与 manifest 一致。
+
+    p0 的写路径走 `Db.Update`（归一化 owner 在 core-framework/server/db.lua），
+    所以 harness 必须先把适配器加载进来 —— custom-police 的 manifest 也是
+    `@oxmysql/lib/MySQL.lua` → `@core-framework/server/db.lua` → p0。
+    """
+    paths = (CORE_DB,) + module_paths(server_dir)
+    return "\n".join(f"dofile({lua_quote(str(path))})" for path in paths)
 
 
 def p0_module_of(marker: str, server_dir: Path | None = None) -> str | None:

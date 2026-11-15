@@ -11,7 +11,6 @@ shared_scripts {
 	'@core-framework/shared/regions.lua',
 	'shared/policy.lua',
 	'shared/charges.lua',
-	'shared/insert_id.lua',
 	'shared/npc_budget.lua',
 	'shared/backup_contract.lua',
 	'shared/radio_text.lua',
@@ -68,6 +67,10 @@ dependencies {
 server_scripts {
 
 	'@oxmysql/lib/MySQL.lua',
+    -- insertId/affectedRows 的归一化在 @core-framework/server/db.lua；
+    -- 这个文件只剩门面，p0/p2/p3 的 InsertId( 调用点保持不变。
+    '@core-framework/server/db.lua',
+    'shared/insert_id.lua',
     -- 审计的唯一写者：必须排在所有调用它的文件之前
     'server/audit.lua',
     'server/citations.lua',

@@ -58,6 +58,7 @@ GetGameTimer = GetGameTimer or function() return os.time() * 1000 end
 MAIN = PHONE / "server" / "main.lua"
 MANIFEST = PHONE / "fxmanifest.lua"
 SMS = PHONE / "server" / "sms.lua"
+DB_LUA = BASE / "resources" / "[standalone]" / "core-framework" / "server" / "db.lua"
 
 LUA_BIN = shutil.which("lua5.4")
 MARKER = "phone-app-protocol"
@@ -296,6 +297,8 @@ MySQL = {{
     }},
 }}
 
+-- PhoneDb 是门面；归一化 owner 必须先于 sms.lua 加载。
+dofile([[{DB_LUA}]])
 dofile([[{SMS}]])
 dofile([[{EVENTS}]])
 dofile([[{NOTIFY}]])

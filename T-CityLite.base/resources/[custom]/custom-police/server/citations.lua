@@ -123,20 +123,12 @@ end
 ---@param citizenid string
 ---@return boolean claimed, boolean ok
 function PoliceCitations.ClaimPaid(id, citizenid)
-    local ok, result = pcall(function()
-        return MySQL.update.await(
-            "UPDATE police_citations SET status = 'paid', paid_at = NOW()"
-            .. " WHERE id = ? AND citizenid = ? AND status = 'unpaid'",
-            { tonumber(id), tostring(citizenid) })
-    end)
-    if not ok then return false, false end
-    local affected = 0
-    if type(result) == 'table' then
-        affected = tonumber(result.affectedRows) or tonumber(result.affected_rows) or 0
-    elseif type(result) == 'number' then
-        affected = result
-    end
-    return affected > 0, true
+    local affected, err = Db.Update(
+        "UPDATE police_citations SET status = 'paid', paid_at = NOW()"
+        .. " WHERE id = ? AND citizenid = ? AND status = 'unpaid'",
+        { tonumber(id), tostring(citizenid) })
+    if err then return false, false end
+    return (affected or 0) > 0, true
 end
 
 --- 把刚抢占的罚单放回去（扣款失败时）。

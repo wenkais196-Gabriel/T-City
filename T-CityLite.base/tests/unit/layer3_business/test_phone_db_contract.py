@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 BASE = Path(__file__).resolve().parents[3]
+DB_LUA = BASE / 'resources' / '[standalone]' / 'core-framework' / 'server' / 'db.lua'
 SMS_LUA = BASE / 'resources' / '[custom]' / 'custom-phone' / 'server' / 'sms.lua'
 MAIN_LUA = BASE / 'resources' / '[custom]' / 'custom-phone' / 'server' / 'main.lua'
 IDENTITY_LUA = BASE / 'resources' / '[custom]' / 'custom-phone' / 'server' / 'core' / 'identity.lua'
@@ -49,6 +50,9 @@ def _table_block(sql: str, table: str) -> str:
 class TestPhoneDbHelpers:
     def test_insert_id_accepts_table_and_number(self):
         result = run_lua(f'''
+-- 归一化 owner 必须先加载；PhoneDb 只是门面。
+local dbChunk = assert(loadfile([[{DB_LUA}]]))
+dbChunk()
 local chunk = assert(loadfile([[{SMS_LUA}]]))
 chunk()
 assert(PhoneDb.InsertId({{ insertId = 42, affectedRows = 1 }}) == 42)
@@ -60,6 +64,8 @@ assert(PhoneDb.InsertId({{ affectedRows = 1 }}) == 0)
 
     def test_affected_rows_accepts_table_and_number(self):
         result = run_lua(f'''
+local dbChunk = assert(loadfile([[{DB_LUA}]]))
+dbChunk()
 local chunk = assert(loadfile([[{SMS_LUA}]]))
 chunk()
 assert(PhoneDb.AffectedRows({{ affectedRows = 3 }}) == 3)
