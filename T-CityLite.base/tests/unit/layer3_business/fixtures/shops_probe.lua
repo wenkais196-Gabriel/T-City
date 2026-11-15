@@ -64,6 +64,7 @@ CreateThread = function() end
 Wait = function() end
 GetGameTimer = function() return state.now end
 GetCurrentResourceName = function() return 'qb-shops' end
+GetResourceState = function(name) return name == 'core_economy' and 'started' or 'missing' end
 GetPlayerName = function(source) return 'player' .. tostring(source) end
 GetConvar = function(_, default) return default end
 GetConvarFloat = function(_, default) return tonumber(default) or 1.0 end

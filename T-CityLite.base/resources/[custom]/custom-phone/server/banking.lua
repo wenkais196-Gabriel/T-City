@@ -31,23 +31,11 @@ QBCore.Functions.CreateCallback('phone:server:bankTransfer', function(source, cb
     end
 
     if targetPlayer then
-        -- Recipient is ONLINE: atomic transfer via EconomyService (deduct+credit+rollback)
-        local es = _G.Bus and _G.Bus.EconomyService
-        if es and es.TransferMoney then
-            local ok = es.TransferMoney(
-                Player.PlayerData.citizenid, targetPlayer.PlayerData.citizenid,
-                'bank', amount, "Transfer to " .. toPhoneNumber
-            )
-            if not ok then
-                return cb({ success = false, message = 'Transfer failed' })
-            end
-        else
-            -- Fallback: manual deduct+add
-            if not Player.Functions.RemoveMoney('bank', amount, "Transfer to " .. toPhoneNumber) then
-                return cb({ success = false, message = 'Deduction failed' })
-            end
-            targetPlayer.Functions.AddMoney('bank', amount, "Transfer from " .. Player.PlayerData.charinfo.phone)
+        -- Recipient is ONLINE: manual deduct+add
+        if not Player.Functions.RemoveMoney('bank', amount, "Transfer to " .. toPhoneNumber) then
+            return cb({ success = false, message = 'Deduction failed' })
         end
+        targetPlayer.Functions.AddMoney('bank', amount, "Transfer from " .. Player.PlayerData.charinfo.phone)
 
         -- Persisted server-originated notification (pushed once to recipient).
         PhoneNotify(targetPlayer.PlayerData.source, {

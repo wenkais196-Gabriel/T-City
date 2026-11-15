@@ -146,11 +146,10 @@ function RepairItem(source, itemName, slot)
     local Player = QBCore.Functions.GetPlayer(source)
     if not Player then return false, 0 end
 
-    if _G.Bus and _G.Bus.SinkService then
-        local ok = _G.Bus.SinkService.Withdraw(source, cost, 'weapon_repair',
-            ('repair:%s'):format(itemName))
-        if not ok then return false, 0 end
-    else
+    -- 走 qb-core 的 SinkWithdraw；失败时保留原有的直接扣款回落
+    local ok = exports['qb-core']:SinkWithdraw(source, cost, 'weapon_repair',
+        ('repair:%s'):format(itemName))
+    if not ok then
         Player.Functions.RemoveMoney('bank', cost, ('repair:%s'):format(itemName))
     end
 

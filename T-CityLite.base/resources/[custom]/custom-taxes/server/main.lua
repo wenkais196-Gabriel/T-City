@@ -90,10 +90,10 @@ AddEventHandler('qb-houses:server:buyHouse', function(houseId, price)
     -- 额外征收 2% 房产购置印花税
     local stampDuty = math.floor(price * 0.02)
     if stampDuty > 0 then
-        if _G.Bus and _G.Bus.SinkService then
-            _G.Bus.SinkService.Withdraw(src, stampDuty, 'transaction_tax',
-                ('house_purchase:%s'):format(houseId))
-        else
+        -- 走 qb-core 的 SinkWithdraw；失败时保留原有的直接扣款回落
+        local sinkOk = exports['qb-core']:SinkWithdraw(src, stampDuty, 'transaction_tax',
+            ('house_purchase:%s'):format(houseId))
+        if not sinkOk then
             local Player = QBCore.Functions.GetPlayer(src)
             if Player then
                 Player.Functions.RemoveMoney('bank', stampDuty,

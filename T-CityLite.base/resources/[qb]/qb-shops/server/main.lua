@@ -48,13 +48,9 @@ end
 ---@param basePrice number
 ---@return number dynamicPrice
 local function getDynamicPrice(itemName, basePrice)
-    -- 优先使用 NPCPricing 引擎 (NPC 动态定价)
-    if _G.Bus and _G.Bus.NPCPricing then
-        return _G.Bus.NPCPricing.GetBuyPrice(itemName, basePrice)
-    end
-    -- Fallback: 使用全局经济乘数
+    -- 使用全局经济乘数 (core_economy 按资源状态判定，资源代理恒 truthy)
     local globalMult = 1.0
-    if exports['core_economy'] then
+    if GetResourceState('core_economy') == 'started' then
         globalMult = exports['core_economy']:GetGlobalMultiplier()
     else
         globalMult = GetConvarFloat('economy_reward_scale', 1.0)
