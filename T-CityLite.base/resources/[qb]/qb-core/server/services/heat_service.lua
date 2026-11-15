@@ -94,9 +94,9 @@ end
 ---@return number coefficient (0.5 ~ 1.5)
 function HeatService.GetHeatCoefficient(activityId)
     -- 🔄 Unified: delegate to core_economy if available (single source of truth)
-    local ce = _G.Bus and _G.Bus.CoreEconomy
-    if ce and ce.GetActivityHeat then
-        return ce.GetActivityHeat(activityId)
+    -- _G.Bus 不跨资源；用资源状态判可用性，调用 owner 的导出。
+    if GetResourceState('core_economy') == 'started' then
+        return exports['core_economy']:GetActivityHeat(activityId)
     end
 
     if not activityId then
@@ -280,8 +280,7 @@ AddEventHandler('onResourceStart', function(resourceName)
         _G.Bus.HeatService = HeatService
 
         -- 🔄 Unified: skip own decay tick if core_economy is available (it has its own)
-        local ce = _G.Bus.CoreEconomy
-        if ce and ce.GetActivityHeat then
+        if GetResourceState('core_economy') == 'started' then
             print('[HeatService] ✅ Skipping decay tick — delegated to core_economy')
         else
             startDecayTick()
@@ -301,3 +300,6 @@ end)
 -- 立即可用
 if not _G.Bus then _G.Bus = {} end
 _G.Bus.HeatService = HeatService
+
+-- S2b：跨资源入口（append-only）。内部仍调 HeatService.ResetHeat。
+exports('HeatReset', HeatService.ResetHeat)

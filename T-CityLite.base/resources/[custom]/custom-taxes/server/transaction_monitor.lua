@@ -54,11 +54,10 @@ AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneytype, amount, 
     local taxAmount = math.floor(amount * LARGE_TRANSACTION_TAX_RATE)
     if taxAmount <= 0 then return end
 
-    -- 通过 SinkService 扣税
-    if _G.Bus and _G.Bus.SinkService then
-        _G.Bus.SinkService.Withdraw(src, taxAmount, 'transaction_tax',
-            ('large_transfer: $%s → taxed $%s (%s)'):format(TCMoney(amount), TCMoney(taxAmount), reason or 'unknown'))
-    else
+    -- 通过 qb-core 的 SinkWithdraw 扣税；失败时保留原有的直接扣款回落
+    local sinkOk = exports['qb-core']:SinkWithdraw(src, taxAmount, 'transaction_tax',
+        ('large_transfer: $%s → taxed $%s (%s)'):format(TCMoney(amount), TCMoney(taxAmount), reason or 'unknown'))
+    if not sinkOk then
         -- fallback: 直接从玩家账户扣
         local Player = QBCore.Functions.GetPlayer(src)
         if Player then
@@ -103,10 +102,12 @@ AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneytype, amount, 
         -- 可能是组织间转账
         local taxAmount = math.floor(amount * ORG_TRANSFER_TAX_RATE)
 
-        if _G.Bus and _G.Bus.SinkService then
-            -- 收款方扣税 (src 是收款方)
-            _G.Bus.SinkService.Withdraw(src, taxAmount, 'transaction_tax',
-                ('org_transfer: $%s → taxed $%s'):format(TCMoney(amount), TCMoney(taxAmount)))
+        -- 收款方扣税 (src 是收款方)；失败时打日志，不静默
+        local sinkOk = exports['qb-core']:SinkWithdraw(src, taxAmount, 'transaction_tax',
+            ('org_transfer: $%s → taxed $%s'):format(TCMoney(amount), TCMoney(taxAmount)))
+        if not sinkOk then
+            print(('[TransactionMonitor] SinkWithdraw failed: org_transfer src=%s amount=$%s')
+                :format(src, TCMoney(taxAmount)))
         end
 
         dailyStats.totalTaxCollected = dailyStats.totalTaxCollected + taxAmount
