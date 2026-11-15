@@ -298,8 +298,8 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `proptax` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-taxes/server/property_tax.lua:320 |
-| `taxstats` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-taxes/server/transaction_monitor.lua:125 |
+| `proptax` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-taxes/server/property_tax.lua:319 |
+| `taxstats` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-taxes/server/transaction_monitor.lua:126 |
 
 ### custom-testing
 

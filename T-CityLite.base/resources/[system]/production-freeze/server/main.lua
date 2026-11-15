@@ -110,13 +110,10 @@ end)
 
 ---重置全服热度计数器到初始状态
 function ResetEconomyToDayOne()
-    if _G.Bus and _G.Bus.HeatService then
-        _G.Bus.HeatService.ResetHeat(nil)
-    end
-    if _G.Bus and _G.Bus.NPCPricing then
-        -- NPCPricing 持久化在 data/npc_prices.json, 删除即可重置
-        SaveResourceFile(GetCurrentResourceName(), 'data/npc_prices.json', '{}', -1)
-    end
+    -- _G.Bus 不跨资源；走 qb-core 的 HeatReset 导出（qb-core 未启动时 pcall 兜底）
+    pcall(function() exports['qb-core']:HeatReset(nil) end)
+    -- NPCPricing 持久化在 data/npc_prices.json, 删除即可重置
+    SaveResourceFile(GetCurrentResourceName(), 'data/npc_prices.json', '{}', -1)
     -- 重置 adaptive loop 的 economy_state.json
     SaveResourceFile(GetCurrentResourceName(), 'data/economy_state.json',
         '{"RewardScale":1.0,"PriceScale":1.0,"TotalEarned":0,"TotalSpent":0,"Events":0,"SavedAt":0}', -1)

@@ -126,6 +126,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/INDEX.md` 重新生成（308 篇，0 未登记）。
 
 ### Changed
+- **退役跨资源 Bus（税/热度/通知）**：qb-core 新增两个 append-only 导出
+  `exports('SinkWithdraw', SinkService.Withdraw)` / `exports('HeatReset', HeatService.ResetHeat)`，
+  内部仍走既有的 `EconomyService.RemoveMoney` / `HeatService.ResetHeat`，不新增扣钱路径。
+  custom-taxes 的 4 个扣税点改走 `exports['qb-core']:SinkWithdraw`（保留原
+  `Player.Functions.RemoveMoney` 回落）：大额转账税/房产税/购房印花税/武器维修费此前**只扣钱、
+  不进 sink 统计**，现在都进 sink 并触发 `QBCore:Server:OnMoneySink`；跨组织转账税此前因
+  `_G.Bus.SinkService` 恒 nil 且无回落而**从未扣除**，现在会真的扣 3%。
+  production-freeze 的 `ResetEconomyToDayOne` 改走 `HeatReset`（热度重置此前从未执行），
+  并保留删除 npc_prices.json 的代码；qb-shops 删掉永远为 nil 的 `_G.Bus.NPCPricing`
+  分支（改用 `GetResourceState('core_economy')`）；custom-phone 删掉 `_G.Bus.EconomyService`
+  分支保留手动转账；`QBCore.Functions.Notify` 直接 `TriggerClientEvent`，不再走从未注册的
+  `_G.Bus.notify`。`test_bus_scope.py` 扫描根扩到上述 4 个目录 + qb-core 的 `functions.lua` /
+  `heat_service.lua`。
 - **退役跨资源 Bus（场景/作业/车辆）**：`_G.Bus` 是每个 resource 私有的 Lua 状态，跨资源读
   `Bus.<service>` 恒 nil。本次把 4 处 BGM 死调用（custom-police 追车、qb-ambulancejob
   重生/死亡、qb-storerobbery 抢劫）改成 `exports['tcity-atmosphere']:service_atmosphere_PlayScene`；

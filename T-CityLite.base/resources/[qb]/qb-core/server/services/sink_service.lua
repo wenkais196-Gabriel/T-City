@@ -226,3 +226,7 @@ end)
 
 if not _G.Bus then _G.Bus = {} end
 _G.Bus.SinkService = SinkService
+
+-- S2b：跨资源入口（append-only）。内部仍走 _G.Bus.EconomyService.RemoveMoney，
+-- 不新增任何扣钱路径；返回 false 时调用方保留自己的 Player.Functions 回落。
+exports('SinkWithdraw', SinkService.Withdraw)

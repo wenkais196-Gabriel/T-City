@@ -749,7 +749,7 @@ function QBCore.Functions.HasItem(source, items, amount)
 end
 
 --- 统一通知入口 (服务端 → 客户端路由)
---- 🛡️ 五层安全: Source 校验 → 存活检查 → 限流防刷 → 内容清洗 → Bus 路由
+--- 🛡️ 四层安全: Source 校验 → 存活检查 → 内容清洗 → 客户端投递
 ---@param source any       目标玩家 source
 ---@param text string      通知文本
 ---@param texttype string  通知类型 (注意: 不能叫 type，会覆盖内置函数)
@@ -779,15 +779,7 @@ function QBCore.Functions.Notify(source, text, texttype, length)
     end
 
     -- ═══════════════════════════════════════════════════════════
-    -- 第4层: 优先走 Bus.notify 服务 (含限流 + 审计)
-    -- ═══════════════════════════════════════════════════════════
-    if _G.Bus and _G.Bus.notify and _G.Bus.notify.Send then
-        _G.Bus.notify.Send(source, safeText, texttype, length)
-        return
-    end
-
-    -- ═══════════════════════════════════════════════════════════
-    -- 第5层: 回退 — 直连客户端事件 (无 Bus 时)
+    -- 第4层: 直连客户端事件
     -- ═══════════════════════════════════════════════════════════
     TriggerClientEvent('QBCore:Notify', source, safeText, texttype, length)
 end
