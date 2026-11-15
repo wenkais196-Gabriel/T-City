@@ -466,21 +466,15 @@ end)
 
 -- 平民 911：任何玩家都能打，所以只接受 table、按 source 限流（5 秒 1 条），
 -- 其余校验（title/description 长度、priority 夹取）在 CreateIncident 里。
-local call911Cooldown = {}
-
+-- 冷却与过期清理都在限流 owner：src 键由 main.lua 的 playerDropped 一次清掉。
 local CALL_911_COOLDOWN = 5
 
 RegisterNetEvent('custom-police:server:911', function(payload)
     local src = source
     if type(payload) ~= 'table' then return end
     if not pd(src) then return end
-    local now = os.time()
-    for otherSrc, lastAt in pairs(call911Cooldown) do
-        if now - lastAt > 60 then call911Cooldown[otherSrc] = nil end
-    end
-    local last = call911Cooldown[src]
-    if last and now - last < CALL_911_COOLDOWN then return end
-    call911Cooldown[src] = now
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:911'):format(src), CALL_911_COOLDOWN * 1000) then return end
     P.CreateIncident(src, payload)
 end)
 

@@ -2,13 +2,12 @@
 QBCore = exports['qb-core']:GetCoreObject()
 local updatingCops = false
 
--- 自动警情限流: source -> 上次触发时间 (模块级)
-local autoAlertCooldown = {}
+-- 自动警情限流：每 source 10 秒 1 次（system 走独立键）。
 local AUTO_ALERT_COOLDOWN = 10
 
 -- 平民报警 (qb-drugs / qb-storerobbery / qb-houserobbery / custom-vehicles 的
 -- 热接线报警都会触发 policeAlert) 每 source 15 秒 1 次。
-local policeAlertCooldown = {}
+local POLICE_ALERT_COOLDOWN = 15
 
 --- 报警分类（C-1）：原来工单标题是调用方自由文本，警察端会出现
 --- 'Drug sale in progress' / 'Suspicous activity'（拼错）/ Lang:t 原文。
@@ -30,8 +29,6 @@ local function resolveAlertKind(kind, fallbackText)
     end
     return fallbackText, 2, false
 end
-
-local POLICE_ALERT_COOLDOWN = 15
 
 local function sanitizeAlertCoords(coords)
     if type(coords) ~= 'table' then return nil end
@@ -246,12 +243,6 @@ end
 RegisterNetEvent('police:server:policeAlert', function(text, kind)
     local src = source
     if not QBCore.Functions.GetPlayer(src) then return end
-    local now = os.time()
-    for otherSrc, lastAt in pairs(policeAlertCooldown) do
-        if now - lastAt > 120 then policeAlertCooldown[otherSrc] = nil end
-    end
-    local last = policeAlertCooldown[src]
-    if last and now - last < POLICE_ALERT_COOLDOWN then return end
     local message = sanitizeAlertText(text)
     local title, priority = resolveAlertKind(kind, message)
     if kind and ALERT_KINDS[kind] then
@@ -263,7 +254,10 @@ RegisterNetEvent('police:server:policeAlert', function(text, kind)
     -- Server-authoritative location: a caller cannot place the alert elsewhere.
     local coords = GetEntityCoords(ped)
     local alertCoords = { x = coords.x, y = coords.y, z = coords.z }
-    policeAlertCooldown[src] = now
+    -- 冷却在"确定要建单"时才记账：参数不合法或没有 ped 的请求不占窗口
+    -- （与旧表只在最后写入的行为一致）。src 键由 playerDropped 清。
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:alert'):format(src), POLICE_ALERT_COOLDOWN * 1000) then return end
 
     -- 报警必须进警情板。以前这里只发通知 + 插旗，于是"被抢了报警"在 MDT 里
     -- 等于没发生：不能派单、不能清场、不留记录、进不了统计。
@@ -288,17 +282,12 @@ RegisterNetEvent('police:server:autoAlert', function(coords, text)
     end
     local cooldownKey = isSystem and 'system' or src
 
-    local now = os.time()
-    for otherSrc, lastAt in pairs(autoAlertCooldown) do
-        if now - lastAt > 60 then autoAlertCooldown[otherSrc] = nil end
-    end
-    local last = autoAlertCooldown[cooldownKey]
-    if last and now - last < AUTO_ALERT_COOLDOWN then return end
-
     local alertCoords = sanitizeAlertCoords(coords)
     local message = sanitizeAlertText(text)
     if not alertCoords or not message then return end
-    autoAlertCooldown[cooldownKey] = now
+    -- 冷却在"确定要建单"时才记账（非法坐标/文本不占窗口），与旧表一致。
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:autoalert'):format(cooldownKey), AUTO_ALERT_COOLDOWN * 1000) then return end
 
     -- 系统警报同样进警情板：车辆防盗、脚本事件都从这里来。
     -- src == 0 没有玩家可校验，所以走系统路径并标明来源。
@@ -312,6 +301,16 @@ RegisterNetEvent('police:server:autoAlert', function(coords, text)
     print(('[autoAlert] #%s | %s | 值班警察: %d 人'):format(
         tostring(incident and incident.id or '-'), message,
         tonumber(incident and incident.alerted) or 0))
+end)
+
+-- 玩家下线：一次清掉该 source 名下的所有 src 键（911 / alert / autoalert /
+-- evidence pickup）。cid 键（forensic/tow/coroner/backup）不在这里清 ——
+-- 它们由 owner 每 60s 回收 15 分钟未更新的条目，且所有 cid 冷却最长 60s。
+AddEventHandler('playerDropped', function()
+    local src = tonumber(source) or 0
+    if src > 0 then
+        exports['core-framework']:RateLimitReset(('police:%s:'):format(src))
+    end
 end)
 
 RegisterNetEvent('police:server:UpdateCurrentCops', function()
