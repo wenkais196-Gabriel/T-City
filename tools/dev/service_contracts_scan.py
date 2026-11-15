@@ -65,8 +65,8 @@ EXPORT_DECL_RE = re.compile(
 SERVICE_RE = re.compile(
     r"Bus\.RegisterService\s*\(\s*(?P<quote>['\"])(?P<svc>[^'\"]+)(?P=quote)\s*,"
 )
-SERVICE_EXPORT_RE = re.compile(r"^service_(?P<svc>.+)_(?P<method>[A-Z]\w*)$")
-METHOD_ASSIGN_RE = re.compile(r"^\s*(?P<name>[A-Za-z_]\w*)\s*=\s*(?P<value>.*)$", re.M)
+SERVICE_EXPORT_RE = re.compile(r"^service_(?P<svc>[A-Za-z0-9_]+)_(?P<method>[A-Z][A-Za-z0-9_]*)$")
+METHOD_ASSIGN_RE = re.compile(r"^\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>.*)$", re.M)
 FUNCTION_DEF_RE = re.compile(
     r"(?:^|\n)\s*(?:local\s+)?function\s+(?P<name>[A-Za-z_][\w.:]*)\s*"
     r"\((?P<params>[^)]*)\)"
@@ -633,6 +633,8 @@ def main(argv: list[str]) -> int:
 
     if args.update:
         updated = update_registry(registry, scan_result)
+        # NOSONAR 固定目标路径（模块常量 REGISTRY），写入内容是本脚本从代码生成的 JSON，
+        # 不含任何来自文件内容的路径片段 —— 与 tools/dev/booth_roads.py 的同类标注一致。
         REGISTRY.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + "\n",
                             encoding="utf-8")
         total = sum(len(spec.get("methods") or {}) for spec in updated["services"].values())
