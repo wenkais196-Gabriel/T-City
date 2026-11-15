@@ -1,0 +1,122 @@
+{
+  "$comment": "S7 受众广播债务清单（不是白名单）：[custom] 下每一处 TriggerClientEvent(<event>, -1, ...) 都必须在这里按 file+event 登记，audience 只能是 all（代码还是 -1），并写清 owner/reason/expires。sites 是该 file+event 当前的广播点数，多一处就要重新审。要收窄受众就改用 Broadcast.Scope 并删掉条目；条目没有对应代码会被判为死条目。",
+  "entries": [
+    {
+      "file": "resources/[custom]/custom-cartel/server/drug_lab.lua",
+      "event": "police:client:cartelRaidAlert",
+      "sites": 1,
+      "audience": "all",
+      "reason": "突袭警报当前发给所有客户端（含非警察的现场玩家）；下一轮计划改为 Broadcast.Scope({ coords, radius }) 只通知附近玩家，本片只登记不改行为。",
+      "owner": "custom-cartel",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-phone/server/jobboard.lua",
+      "event": "phone:client:newJob",
+      "sites": 3,
+      "audience": "all",
+      "reason": "工作板是公开内容：上架、刷新、完成都会改变所有玩家手机上的可接任务列表，收窄受众会让非附近玩家看到过期列表。",
+      "owner": "custom-phone",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-police/server/main.lua",
+      "event": "police:client:UpdateBlips",
+      "sites": 1,
+      "audience": "all",
+      "reason": "警员 blip 由全服客户端显示（平民小地图也能看到警察标记），收窄会改变现有可见性，属于玩法决策而不是性能优化。",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-police/server/main.lua",
+      "event": "police:SetCopCount",
+      "sites": 2,
+      "audience": "all",
+      "reason": "在岗警察数量是公开的世界状态（HUD/调度显示），所有客户端都要更新；只发警察会让平民端数字停在旧值。",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-police/server/objects.lua",
+      "event": "police:client:SyncSpikes",
+      "sites": 1,
+      "audience": "all",
+      "reason": "钉刺带是路面上的公共实体，所有客户端都要看到/同步；只发警察会让非警察玩家看不到危险。",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-police/server/objects.lua",
+      "event": "police:client:removeObject",
+      "sites": 1,
+      "audience": "all",
+      "reason": "路障/道具由服务端统一回收，所有客户端都要移除本地实体副本，否则会留下看不见的碰撞体。",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-police/server/vehicle.lua",
+      "event": "heli:client:spotlight",
+      "sites": 1,
+      "audience": "all",
+      "reason": "直升机探照灯是公共视觉状态，附近所有玩家都要看到光束；只发警察会让平民端看不到探照灯。",
+      "owner": "custom-police",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-vehicles/server/dashboard_api.lua",
+      "event": "custom-vehicles:client:anchorState",
+      "sites": 2,
+      "audience": "all",
+      "reason": "锚定状态影响车辆物理表现，所有观察者都要收到同一状态；只发车主会让其他客户端看到车在漂移。",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-vehicles/server/dashboard_api.lua",
+      "event": "custom-vehicles:client:megaphoneAudio",
+      "sites": 1,
+      "audience": "all",
+      "reason": "警用麦克风音频必须发给周边所有玩家（不只是警察），否则喊话只有同事听得到。",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-vehicles/server/dashboard_api.lua",
+      "event": "custom-vehicles:client:sirenMode",
+      "sites": 1,
+      "audience": "all",
+      "reason": "警笛模式是公共世界状态，所有客户端都要听到/看到（含平民与其它车辆）。",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-vehicles/server/main.lua",
+      "event": "custom-vehicles:client:applyDriveMode",
+      "sites": 1,
+      "audience": "all",
+      "reason": "驾驶模式（悬挂/引擎参数）是车辆的公共状态，所有观察者都要看到一致的车辆姿态。",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-vehicles/server/main.lua",
+      "event": "custom-vehicles:client:setStolen",
+      "sites": 2,
+      "audience": "all",
+      "reason": "被盗状态要让所有客户端同步车辆外观/警报（警察与路人都是观察者），这是世界状态而不是车主的私有数据。",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    },
+    {
+      "file": "resources/[custom]/custom-vehicles/server/vehicle_state.lua",
+      "event": "custom-vehicles:client:syncNitrousFlames",
+      "sites": 2,
+      "audience": "all",
+      "reason": "氮气火焰是载具外观状态，附近所有客户端都要看到同一辆车的火焰；只发车主会漏掉其他观察者。",
+      "owner": "custom-vehicles",
+      "expires": "2027-03-31"
+    }
+  ]
+}
