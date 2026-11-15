@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `QuestBooth.ValidatePlacement`（同样的距离/道路/遮挡判据），失败按 reason 提示。
 
 ### Fixed
+- **挪摊位推了一个不存在的方法**：`T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor_bridge.lua`
+  的 `move` 分支调用 `QuestVendorBridge.PushFor(citizenid)`，而这个方法从未定义（真正的推送函数是
+  `PushState`）——`MoveTo` 成功之后立刻 `attempt to call a nil value`，界面不刷新。
+  新闸门 `T-CityLite.base/tests/architecture/test_namespace_method_calls.py`：资源内自建命名空间
+  （`Name = {}` / `Name = X or {}`）的每次 `Name.Method(` 调用都必须在资源内有定义（含
+  `function Name.M(`、`Name.M = <非 nil>`、`local M = Name` 别名三种写法）；外部命名空间
+  （`Citizen` / `CFShared` / `MySQL` / `QuestNodes` …）不参与。全 `[custom]` 115 个资源实测只有这一处违规，
+  零误报、无白名单；`gate_mutation_smoke` 有变异用例证明会红。
 - **`local function` 在定义之前被调用**（运行时报 `attempt to call a nil value`，`luac -p` 查不出来）：
   `T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua` 的 `coronerFeedback` 与 `T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_client.lua`
   的 `HidePreviewText` 都定义在调用点之后，已前移。新增闸门
