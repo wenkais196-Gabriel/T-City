@@ -230,16 +230,16 @@ review_by: 2027-02-28
 | `paytow` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:455 |
 | `plateinfo` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/vehicle.lua:139 |
 | `pobject` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:77 |
-| `police_backup_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1828 |
-| `police_backup_state` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1853 |
+| `police_backup_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1829 |
+| `police_backup_state` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1854 |
 | `police_case_seed` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:10 |
 | `police_coroner_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/coroner.lua:143 |
 | `police_incident_bench` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:168 |
 | `police_incident_seed` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:122 |
 | `police_incidents_public` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:103 |
 | `police_justice_seed` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:51 |
-| `police_release` | RegisterCommand | handler 内判定: IsPlayerAceAllowed | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1889 |
-| `police_tow_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/tow.lua:131 |
+| `police_release` | RegisterCommand | handler 内判定: IsPlayerAceAllowed | T-CityLite.base/resources/[custom]/custom-police/server/p2_system.lua:1890 |
+| `police_tow_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/tow.lua:132 |
 | `police_verdict_seed` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-police/server/seed_dev.lua:80 |
 | `sample` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-police/client/forensics.lua:8 |
 | `sc` | QBCore.Commands.Add | job/gang 判定 | T-CityLite.base/resources/[custom]/custom-police/server/commands.lua:213 |

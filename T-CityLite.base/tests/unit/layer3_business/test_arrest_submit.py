@@ -925,12 +925,13 @@ def test_auto_alert_requires_on_duty_police_and_rate_limits_per_source():
     # 单一投影取代（同一个检查现在只在一处发生）。
     assert block.index("PolicePolicy.Can") < block.index("createIncidentForAlert(")
 
-    assert "local autoAlertCooldown = {}" in src
+    # 冷却表已收口到限流 owner（S3）：只剩常量与 owner 调用，不再有本地表。
     assert "local AUTO_ALERT_COOLDOWN = 10" in src
-    assert "if last and now - last < AUTO_ALERT_COOLDOWN then return end" in block
+    assert "autoAlertCooldown" not in src
+    assert "exports['core-framework']:RateLimitCooldown(" in block
+    assert "('police:%s:autoalert'):format(cooldownKey), AUTO_ALERT_COOLDOWN * 1000" in block
     assert "local isSystem = src == 0" in block
     assert "local cooldownKey = isSystem and 'system' or src" in block
-    assert "autoAlertCooldown[cooldownKey] = now" in block
 
     assert "local function sanitizeAlertCoords(coords)" in src
     assert "local function sanitizeAlertText(text)" in src
@@ -1148,7 +1149,9 @@ def test_request_backup_enforces_cooldown_and_unified_budget():
     assert "local BACKUP_MAX_UNITS = 2" in src
     assert "if units > BACKUP_MAX_UNITS then units = BACKUP_MAX_UNITS end" in block
     assert "backupUnitCount" not in src
-    assert "if now - last < BACKUP_COOLDOWN then return fail('cooldown') end" in block
+    assert "('police:%s:backup'):format(cid), BACKUP_COOLDOWN * 1000" in block
+    assert "if not exports['core-framework']:RateLimitCooldown(" in block
+    assert "return fail('cooldown')" in block
     # FIT-07: the per-citizen cap now comes from the shared budget (2 slots).
     assert "NPCBudget.Acquire('backup', requestId, cid)" in block
     assert "if budgetError == 'player_limit' then return rollback('limit') end" in block
@@ -1160,7 +1163,8 @@ def test_request_backup_enforces_cooldown_and_unified_budget():
     assert "NPCBudget.Release(id, 'request_rollback')" in block
     assert "return rollback('audit_unavailable')" in block
     assert "return rollback('not_police')" in block
-    assert "backupCooldown[cid] = previousCooldown" in block
+    # rollback 用 owner 的 Reset 撤回刚记的冷却（旧表“还原 previousCooldown”的等价写法）。
+    assert "exports['core-framework']:RateLimitReset(('police:%s:backup'):format(cid))" in block
     assert "stillThere.PlayerData.citizenid ~= cid" in block
 
 

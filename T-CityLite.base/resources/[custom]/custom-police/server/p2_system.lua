@@ -553,7 +553,6 @@ end
 -- ---------------------------------------------------------------------------
 local BACKUP_MAX_UNITS = 2 -- 每人两个槽；一次响应最多两辆车
 local BACKUP_COOLDOWN = 60
-local backupCooldown = {} -- [citizenid] = os.time() of the last accepted request
 local backupSource = {}   -- [source] = citizenid, kept while any slot remains
 local backupSeq = 0
 -- 阶段表（S2）：[requestId] = { phase, cid, source, at, spawnedAt, enrouteAt,
@@ -760,8 +759,10 @@ function RequestBackup(source, tier)
     end
 
     local now = os.time()
-    local last = tonumber(backupCooldown[cid]) or 0
-    if now - last < BACKUP_COOLDOWN then return fail('cooldown') end
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:backup'):format(cid), BACKUP_COOLDOWN * 1000) then
+        return fail('cooldown')
+    end
 
     -- 响应级别（B1）：1 = 一辆车两人；2 = 两辆车四人（正好用满每人的 2 个槽）。
     -- 调用方（MDT / agent）可以显式给 tier；没给就吃 convar 的默认值。
@@ -776,7 +777,6 @@ function RequestBackup(source, tier)
     -- pass the limit check. Bind the source first: playerDropped can run while
     -- the budget audit suspends, and it must be able to find this reservation.
     local previousSource = backupSource[src]
-    local previousCooldown = backupCooldown[cid]
     backupSource[src] = cid
 
     local requestIds = {}
@@ -790,7 +790,9 @@ function RequestBackup(source, tier)
             backupPhases[id] = nil
         end
         if backupSource[src] == cid then backupSource[src] = previousSource end
-        backupCooldown[cid] = previousCooldown
+        -- 只有过了冷却闸门才会走到 rollback：清掉刚记下的冷却 = 还原旧值
+        -- （旧时间戳此刻已超过 BACKUP_COOLDOWN，和"没有记录"等价）。
+        exports['core-framework']:RateLimitReset(('police:%s:backup'):format(cid))
         return fail(errorCode)
     end
 
@@ -842,7 +844,6 @@ function RequestBackup(source, tier)
         }
     end
 
-    backupCooldown[cid] = now
     -- 只发一次事件，把整组 id 与"跟着谁"交给客户端；客户端依次生成并错开停车位。
     TriggerClientEvent('police:client:SpawnBackup', src, requestIds[1], requestIds, escortSource)
     return { ok = true, request_id = requestIds[1], request_ids = requestIds, tier = units }
