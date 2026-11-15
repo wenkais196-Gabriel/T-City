@@ -912,6 +912,24 @@ MUTATIONS += [
         content="exports['custom-main']:AddScaledMoney(1, 'cash', 1, 'probe')\n",
         what="跨资源调用了未声明的导出方法（真机上只在调用点抛 No such export）",
     ),
+    Mutation(
+        gate=("tests/architecture/test_service_contracts.py::"
+              "test_every_export_call_resolves"),
+        path="tests/architecture/service_contracts.json",
+        content=None,
+        replace_from='"in_tree_missing_exports": {\n    "safecracker": {',
+        replace_to=('"in_tree_missing_exports": {\n'
+                    '    "custom-main": {\n'
+                    '      "methods": ["LogEconomy"],\n'
+                    '      "owner": "probe",\n'
+                    '      "why": "probe",\n'
+                    '      "source": "probe",\n'
+                    '      "follow_up": "probe",\n'
+                    '      "expires": "2099-01-01"\n'
+                    '    },\n'
+                    '    "safecracker": {'),
+        what="把树内已有声明的方法登记成「缺失导出」（放行表想堵住闸门的嘴）",
+    ),
 ]
 
 

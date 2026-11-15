@@ -50,15 +50,26 @@ def test_every_export_call_resolves():
     assert result.calls, "扫描不到任何 `exports['res']:Method(` 调用，范围被改坏了？"
     assert len(result.declared_service_methods()) >= 20, "Bus.RegisterService 一个都没解析到？"
 
+    # 放行总数是人工锚点：任何人往 external/in_tree_missing/dynamic-methods 里加一条，
+    # 都必须让 review.allowlisted_call_sites 在 diff 里动一下。
+    allowlisted_total = sum(result.allowlisted.values())
+    assert allowlisted_total == registry["review"]["allowlisted_call_sites"], (
+        f"放行段实测 {result.allowlisted}（合计 {allowlisted_total}），"
+        f"与 review.allowlisted_call_sites={registry['review']['allowlisted_call_sites']} 不一致")
+    assert not tool.expired_in_tree_missing(registry), (
+        "in_tree_missing_exports 有过期/无法解析的条目：" + "；".join(
+            tool.expired_in_tree_missing(registry)))
+
     assert not problems, (
         "导出契约闸门红了。修法：把调用点改成真实 owner 的导出；树内方法不存在就是死调用，"
-        "不要用 pcall / truthy 守卫糊过去。树外或动态注册的方法逐方法登记进 "
-        "tests/architecture/service_contracts.json 的 external_exports / dynamic_exports。\n  "
+        "不要用 pcall / truthy 守卫糊过去。树外资源登记 external_exports；树内确实缺的导出"
+        "登记 in_tree_missing_exports（带 expires/follow_up）；运行时循环注册登记 "
+        "dynamic_exports。见 tests/architecture/service_contracts.json。\n  "
         + "\n  ".join(problems))
 
 
 def test_reverse_unresolved_export_is_rejected():
-    """反向：合成的未声明调用必须报；注释/字符串里的同名文本必须不报。"""
+    """反向：未声明调用必须报；注释/字符串不报；放行表也不能把已声明方法登记成缺失。"""
     tool = _load_tool()
     registry = tool.load_registry()
 
@@ -93,3 +104,28 @@ def test_reverse_unresolved_export_is_rejected():
     # 已声明方法 / 已登记的动态资源 → 必须不报
     assert not problems_for("exports['custom-main']:LogEconomy('t', 'm', 1)\n")
     assert not problems_for("exports['qb-core']:GetPlayer(1)\n")
+
+    # 放行表本身也要被校验：树内已有声明的方法不许登记成「缺失」
+    poisoned_registry = {
+        "services": {},
+        "planned_services": [],
+        "dynamic_exports": {},
+        "external_exports": {},
+        "in_tree_missing_exports": {
+            "custom-main": {
+                "methods": ["LogEconomy"],
+                "owner": "probe",
+                "why": "probe",
+                "source": "probe.lua",
+                "follow_up": "probe",
+                "expires": "2099-01-01",
+            }
+        },
+        "plugin_contract": {"status": "planned", "reason": "probe"},
+        "review": {"external_call_sites": 0, "services": [], "allowlisted_call_sites": 0},
+    }
+    synthetic = tool.Scan()
+    synthetic.resource_dirs = {"custom-main"}
+    synthetic.declarations = defaultdict(set, {"custom-main": {"LogEconomy"}})
+    allowlist_problems = tool.allowlist_violations(synthetic, poisoned_registry)
+    assert any("已有声明" in problem for problem in allowlist_problems), allowlist_problems

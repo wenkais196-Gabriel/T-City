@@ -333,29 +333,30 @@ RegisterNetEvent('cartel:client:productionStarted', function(data)
 
     -- 根据配方使用不同的交互方式
     if data.minigame == 'safecracker' then
-        -- 使用 safecracker 小游戏
-        local success = exports['safecracker']:StartSafeCracker()
-        if success then
+        -- safecracker 资源只有 net event（SafeCracker:StartMinigame），没有 StartSafeCracker 导出；
+        -- 导出缺失时不许静默失败：打一行日志并降级到 progressbar 分支，保证配方可产出。
+        local ok, success = pcall(function() return exports['safecracker']:StartSafeCracker() end)
+        if ok and success then
             TriggerServerEvent('cartel:server:finishProduction', data.recipeId)
-        else
-            QBCore.Functions.Notify(_L('cartel_production_fail'), 'error')
+            return
         end
-    else
-        -- 使用 progressbar
-        QBCore.Functions.Progressbar('cartel_production', ('Producing: %s'):format(L(data.label)),
-            data.duration * 1000, false, true, {
-                disableMovement = true,
-                disableCarMovement = true,
-                disableMouse = false,
-                disableCombat = true,
-            }, {}, {}, {}, function()
-                -- 完成 → 通知服务端
-                TriggerServerEvent('cartel:server:finishProduction', data.recipeId)
-            end, function()
-                -- 取消 → 不通知服务端，原料不消耗
-                QBCore.Functions.Notify(_L('cartel_production_cancel'), 'error')
-            end)
+        print(('[custom-cartel] safecracker 导出不可用（ok=%s），降级到 progressbar：%s')
+            :format(tostring(ok), tostring(data.label)))
     end
+    -- 落到下面的 progressbar 分支（保持原有进度条逻辑不变）
+    QBCore.Functions.Progressbar('cartel_production', ('Producing: %s'):format(L(data.label)),
+        data.duration * 1000, false, true, {
+            disableMovement = true,
+            disableCarMovement = true,
+            disableMouse = false,
+            disableCombat = true,
+        }, {}, {}, {}, function()
+            -- 完成 → 通知服务端
+            TriggerServerEvent('cartel:server:finishProduction', data.recipeId)
+        end, function()
+            -- 取消 → 不通知服务端，原料不消耗
+            QBCore.Functions.Notify(_L('cartel_production_cancel'), 'error')
+        end)
 end)
 
 -- ==============================================================
