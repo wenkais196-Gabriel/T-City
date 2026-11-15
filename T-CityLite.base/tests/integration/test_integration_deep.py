@@ -7,7 +7,7 @@ test_integration_deep.py — T-City Lite 深度集成测试
 3. Decision → Quest: 决策结果推进任务步进
 4. Full Lifecycle: 注册→赚钱→接任务→做决策→领奖励
 5. Plugin Pub/Sub: Bus Plugin 发布订阅跨服务
-6. Contracts: WorldState/Patron/Chronicle 契约验证
+6. Contracts: WorldState/Patron 契约验证 + Phase 2/3 占位服务不注册
 """
 
 import os
@@ -523,84 +523,79 @@ assert(Bus.Plugin.GetSchema("temp_plugin") == nil, "plugin should be unregistere
 # ── Contracts 契约验证 ─────────────────────────────────────────────────
 
 class TestContractsIntegration:
-    """Contracts 契约注册与跨服务引用"""
+    """contracts.lua 只保留 Bus 注册机制；Phase 2/3 的 5 个占位服务不再注册
+    （抽象审计 2026-11-15，service_contracts.json 的 planned_services 为空）。"""
 
-    def test_contracts_register_on_bus(self):
+    def test_planned_services_are_not_registered(self):
+        """5 个占位服务必须彻底离开 Bus；注册机制本身仍可用（正向控制）。"""
         result = run_deep_integration([BUS_LUA, CONTRACTS_LUA], """
--- After loading contracts.lua, services should be on Bus
-assert(Bus.reputation ~= nil, "reputation service not registered")
-assert(Bus.chronicle ~= nil, "chronicle service not registered")
-assert(Bus.governance ~= nil, "governance service not registered")
-assert(Bus.cosmetics ~= nil, "cosmetics service not registered")
-assert(Bus.funnel ~= nil, "funnel service not registered")
+-- 反向：5 个占位服务在属性和 _services 两条路上都必须不存在
+for _, name in ipairs({ "reputation", "chronicle", "governance", "cosmetics", "funnel" }) do
+    assert(Bus[name] == nil,
+        "Bus." .. name .. " 仍存在：contracts.lua 又把 S2a 删除的占位服务注册回来了")
+    assert(Bus._services[name] == nil,
+        "Bus._services['" .. name .. "'] 仍存在：占位服务没有真正退役")
+end
 
--- Verify they're in _services
-assert(Bus._services["reputation"] ~= nil)
-assert(Bus._services["chronicle"] ~= nil)
-assert(Bus._services["governance"] ~= nil)
-assert(Bus._services["cosmetics"] ~= nil)
-assert(Bus._services["funnel"] ~= nil)
+-- 正向控制：同一个 Bus 上注册新服务仍然可用，证明坏的不是注册机制
+Bus.RegisterService("probe", { Ping = function() return "pong" end })
+assert(Bus._services["probe"] ~= nil, "probe 未写入 Bus._services，注册机制坏了")
+assert(Bus.probe ~= nil, "Bus.probe 未生成，RegisterService 的命名空间映射坏了")
+assert(Bus.probe.Ping() == "pong", "Bus.probe.Ping() 应返回 'pong'")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
-    def test_contract_stubs_return_phase_markers(self):
-        """Phase 2-3 stubs return Phase markers"""
+    def test_planned_services_are_absent_from_contracts(self):
+        """contracts.lua 正文不再注册 5 个占位服务；SafeCall 也不再假装成功。"""
+        source = Path(CONTRACTS_LUA).read_text(encoding="utf-8")
+        source = re.sub(r"--\[(=*)\[.*?\]\1\]", "", source, flags=re.S)
+        source = re.sub(r"--[^\n]*", "", source)
+        pattern = re.compile(
+            r"Bus\.RegisterService\s*\(\s*['\"]"
+            r"(reputation|chronicle|governance|cosmetics|funnel)['\"]")
+        assert pattern.search("Bus.RegisterService('reputation', {})"), (
+            "静态断言的正则本身失效：合成样本没被匹配，等于没检查")
+        found = pattern.findall(source)
+        assert not found, (
+            "contracts.lua 仍在注册已被 S2a 删除的占位服务："
+            + ", ".join(sorted(set(found)))
+            + "。这 5 个服务从未实现；service_contracts.json 的 planned_services 已清空，"
+              "不要再把它们挂回 Bus。")
+
         result = run_deep_integration([BUS_LUA, CONTRACTS_LUA], """
--- Reputation stubs return "Phase 2"
-local ok, err_reputation = Bus.reputation.AddTrustEdge("a", "b", "combat", 0.5, "test")
-assert(err_reputation == "Phase 2", "reputation not in Phase 2: " .. tostring(err_reputation))
-assert(Bus.reputation.GetTrustSummary("a") == nil, "GetTrustSummary should return nil stub")
-assert(Bus.reputation.CheckInteractionHistory("a", "b") == false, "CheckInteractionHistory should return false stub")
+-- 反向：服务不存在时 SafeCall 必须失败，而不是旧的 ok=true, nil
+local ok_rep = Bus.SafeCall("reputation", "GetTrustSummary", "CID_1")
+assert(ok_rep == false,
+    "Bus.SafeCall('reputation') 应返回 false（服务已删除）；返回 true 说明占位服务被注册回来了")
+assert(Bus._services["funnel"] == nil,
+    "Bus._services 不应含 funnel（S2a 已删除占位服务）")
 
--- Chronicle stubs
-local ok_c, id = Bus.chronicle.RecordEvent({ title = "test" })
-assert(ok_c == false, "RecordEvent should return false stub")
-assert(Bus.chronicle.GetPlayerChronicle("a") == nil)
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-    def test_governance_stubs(self):
-        """Governance — Phase 3 stubs"""
-        result = run_deep_integration([BUS_LUA, CONTRACTS_LUA], """
-local ok, prop_id = Bus.governance.CreateProposal("server", nil, "rule_change", "Test", "Desc", "CID_1")
-assert(ok == false, "CreateProposal should return false stub")
-
-local ok_v, err_v = Bus.governance.Vote(1, "CID_1", "for")
-assert(err_v == "Phase 3", "Vote should return Phase 3: " .. tostring(err_v))
-
-assert(Bus.governance.GetProposal(1) == nil, "GetProposal should return nil stub")
-assert(#Bus.governance.GetActiveProposals("server", nil) == 0, "GetActiveProposals should return empty")
-""")
-        assert result['ok'], f"Lua error: {result['stderr']}"
-
-    def test_cosmetics_and_funnel_stubs(self):
-        """Cosmetics + Funnel — Phase 2-3 stubs"""
-        result = run_deep_integration([BUS_LUA, CONTRACTS_LUA], """
--- Cosmetics
-assert(#Bus.cosmetics.GetUnlockable("CID_1") == 0, "GetUnlockable should return empty")
-local ok_cos, err_cos = Bus.cosmetics.Purchase("CID_1", "badge_1")
-assert(err_cos == "Phase 2", "Purchase should return Phase 2: " .. tostring(err_cos))
-assert(Bus.cosmetics.Equip("CID_1", "badge_1", true) == false)
-assert(Bus.cosmetics.GetEquipped("CID_1") == nil)
-
--- Funnel
-assert(Bus.funnel.RecordSocialSignal("CID_1", "gang_joined", {}) == false)
-assert(Bus.funnel.GetRecommendations("CID_1") == nil)
-assert(Bus.funnel.GetFunnelStage("CID_1") == "tutorial")
+-- 正向控制：注册 probe 后 SafeCall 返回真实值，证明机制没坏
+Bus.RegisterService("probe", { Ping = function() return "pong" end })
+local ok_probe, pong = Bus.SafeCall("probe", "Ping")
+assert(ok_probe == true and pong == "pong",
+    "Bus.SafeCall('probe','Ping') 应返回 true,'pong'；失败说明 SafeCall/注册机制坏了，"
+    .. "而不是占位服务的问题")
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 
     def test_safe_call_contract_services(self):
-        """通过 SafeCall 调用契约服务"""
+        """已删除/不存在的服务 SafeCall 必须 false；注册过的服务仍返回真实结果。"""
         result = run_deep_integration([BUS_LUA, CONTRACTS_LUA], """
--- SafeCall reputation
-local ok, result = Bus.SafeCall("reputation", "GetTrustSummary", "CID_1")
-assert(ok == true, "SafeCall should succeed (stub)")
-assert(result == nil, "stub should return nil")
+-- 反向：旧的 ok=true, nil 断言已不成立，必须 false
+local ok_rep, err_rep = Bus.SafeCall("reputation", "GetTrustSummary", "CID_1")
+assert(ok_rep == false,
+    "Bus.SafeCall('reputation') 应为 false；返回 true 说明占位服务被偷偷注册回来了"
+    .. "（err=" .. tostring(err_rep) .. "）")
 
--- SafeCall nonexistent service
-local ok2, result2 = Bus.SafeCall("nonexistent_svc", "method")
-assert(ok2 == false)
+local ok_missing = Bus.SafeCall("nonexistent_svc", "method")
+assert(ok_missing == false, "不存在的服务必须返回 false，不能假装成功")
+
+-- 正向控制：注册 probe 后 SafeCall 返回真实值
+Bus.RegisterService("probe", { Ping = function() return "pong" end })
+local ok_probe, pong = Bus.SafeCall("probe", "Ping")
+assert(ok_probe == true, "已注册的 probe 调用失败，SafeCall 机制坏了")
+assert(pong == "pong", "probe.Ping 应返回 'pong'，实际 " .. tostring(pong))
 """)
         assert result['ok'], f"Lua error: {result['stderr']}"
 

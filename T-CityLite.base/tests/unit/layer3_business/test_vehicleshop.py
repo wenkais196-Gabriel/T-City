@@ -939,17 +939,17 @@ assert(state == nil, "should return nil when Bus.vehicles not available")
         assert r['ok'], f"Lua error: {r['stderr']}"  
     
     def test_get_vehicle_state_with_mock_bus(self):
-        """Bus.vehicles 可用时获取状态"""
+        """custom-vehicles owner 导出可用时获取状态"""
         r = run_vehicleshop_test([BUS_LUA, INTEGRATION_LUA], """
--- Mock Bus.vehicles
-Bus.vehicles = {
-    GetState = function(plate)
+-- Mock owner export（S2a 起状态由 exports['custom-vehicles'] 提供，不再读 Bus.vehicles）
+exports['custom-vehicles'] = {
+    GetVehicleState = function(plate)
         return { distance = 50000, components = { radiator = 80, axle = 85, brakes = 90, clutch = 95, fuel = 100 } }
     end
 }
 local svc = Bus._services['dealership']
 local state = svc.GetVehicleState('ABC123')
-assert(state ~= nil, "should return state from Bus.vehicles")
+assert(state ~= nil, "should return state from the custom-vehicles export")
 assert(state.distance == 50000, "mileage wrong: " .. tostring(state.distance))
 """)
         assert r['ok'], f"Lua error: {r['stderr']}"  

@@ -92,7 +92,7 @@ RegisterNetEvent('police:server:FlaggedPlateTriggered', function(coords, plate)
         x = coords and coords.x, y = coords and coords.y, z = coords and coords.z,
     })
     -- 🌐 Atmosphere: chase scene on flagged vehicle pursuit
-    if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', source, 'chase') end
+    pcall(function() exports['tcity-atmosphere']:service_atmosphere_PlayScene(source, 'chase') end)
 end)
 
 -- Commands

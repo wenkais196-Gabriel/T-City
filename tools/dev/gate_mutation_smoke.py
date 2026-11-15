@@ -933,6 +933,20 @@ MUTATIONS += [
 ]
 
 
+# S2a：跨资源 Bus 读取 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_bus_scope.py::"
+              "test_no_cross_resource_bus_reads"),
+        # 注入点必须在扫描根里，否则这条用例只会证明"没人看的地方没红"。
+        # custom-vehicles 是 owner 根（S2a 扫描根），storage 归 custom-storage。
+        path="resources/[custom]/custom-vehicles/server/__mutant_bus.lua",
+        content="Bus.storage.CanAccess(1, 'org')\n",
+        what="在 owner 根里读别的资源的 Bus service（跨资源恒 nil，分支永远不执行）",
+    ),
+]
+
+
 if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv))

@@ -117,7 +117,7 @@ RegisterNetEvent('hospital:server:RespawnAtHospital', function(hospitalIndex)
 	if not Config.Locations['hospital'][hospitalIndex] then hospitalIndex = 1 end
 	markRevived(src)
 	-- 🌐 Atmosphere: return to default on respawn
-	if Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'default') end
+	pcall(function() exports['tcity-atmosphere']:service_atmosphere_PlayScene(src, 'default') end)
 	if Player.PlayerData.metadata['injail'] > 0 then
 		for i = 1, #Config.Locations['jailbeds'] do
 			local v = Config.Locations['jailbeds'][i]
@@ -281,7 +281,7 @@ RegisterNetEvent('hospital:server:SetDeathStatus', function(isDead)
 		-- 但 [E] 施救提示必须知道"身边这个人要不要救"。
 		pcall(function() Player(src).state:set('isdead', isDead, true) end)
 		-- 🌐 Atmosphere: respawn scene on death
-		if isDead and Bus and Bus.SafeCall then Bus.SafeCall('atmosphere', 'PlayScene', src, 'respawn') end
+		if isDead then pcall(function() exports['tcity-atmosphere']:service_atmosphere_PlayScene(src, 'respawn') end) end
 	end
 end)
 
