@@ -10,7 +10,7 @@ lua54 'yes'
 shared_scripts {
     '@qb-core/shared/locale.lua',
     'config.lua',
-    'shared/money_format.lua'
+    '@core-framework/shared/money_aliases.lua'
 }
 
 client_scripts {

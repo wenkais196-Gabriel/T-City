@@ -22,6 +22,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from lua_source import blank_noise, line_of
+
 BASE = Path(__file__).resolve().parents[2]
 CUSTOM = BASE / "resources" / "[custom]"
 
@@ -56,61 +58,6 @@ _EXIT_RE = re.compile(
 
 #: 循环体里会开合块的 Lua 关键字（`else`/`elseif` 不改变深度）。
 _LUA_TOKEN = re.compile(r"\b(?:function|if|for|while|repeat|do|end|until)\b")
-_LONG_BRACKET = re.compile(r"\[(=*)\[")
-
-
-def _blank(text: str) -> str:
-    """用空格替换注释/字符串，保留换行（行号仍然对得上）。"""
-    return "".join("\n" if char == "\n" else " " for char in text)
-
-
-def strip_lua_noise(source: str) -> str:
-    """去掉 Lua 的注释与字符串字面量，只留代码（长度/行号不变）。"""
-    out: list[str] = []
-    index, size = 0, len(source)
-    while index < size:
-        char = source[index]
-        if char == "-" and source.startswith("--", index):
-            long_match = _LONG_BRACKET.match(source, index + 2)
-            if long_match:
-                close = "]" + long_match.group(1) + "]"
-                end = source.find(close, long_match.end())
-                end = size if end == -1 else end + len(close)
-            else:
-                end = source.find("\n", index)
-                end = size if end == -1 else end
-            out.append(_blank(source[index:end]))
-            index = end
-            continue
-        if char == "[":
-            long_match = _LONG_BRACKET.match(source, index)
-            if long_match:
-                close = "]" + long_match.group(1) + "]"
-                end = source.find(close, long_match.end())
-                end = size if end == -1 else end + len(close)
-                out.append(_blank(source[index:end]))
-                index = end
-                continue
-        if char in "\"'":
-            cursor = index + 1
-            while cursor < size:
-                if source[cursor] == "\\":
-                    cursor += 2
-                    continue
-                if source[cursor] == char:
-                    cursor += 1
-                    break
-                cursor += 1
-            out.append(_blank(source[index:cursor]))
-            index = cursor
-            continue
-        out.append(char)
-        index += 1
-    return "".join(out)
-
-
-def line_of(source: str, index: int) -> int:
-    return source.count("\n", 0, index) + 1
 
 
 def _loop_end(code: str, body_start: int) -> int:
@@ -144,7 +91,7 @@ def _loop_end(code: str, body_start: int) -> int:
 
 def unbounded_model_loops(source: str) -> list[int]:
     """返回无退出条件的 `while not HasModelLoaded` 循环的行号（1 起）。"""
-    code = strip_lua_noise(source)
+    code = blank_noise(source)
     hits: list[int] = []
     for match in WHILE_RE.finditer(code):
         if not NEGATED_LOADED_RE.search(match.group("cond")):
@@ -174,7 +121,7 @@ def test_no_local_loadmodel_loops():
     for path in _client_files():
         relative = _label(path)
         source = path.read_text(encoding="utf-8", errors="ignore")
-        code = strip_lua_noise(source)
+        code = blank_noise(source)
         for line in unbounded_model_loops(source):
             problems.append(
                 f"{relative}:{line}: 无退出条件的本地模型加载循环 —— "
@@ -189,7 +136,7 @@ def test_no_local_loadmodel_loops():
     if not util.is_file():
         problems.append(f"{ENTITY_UTIL}: 文件不存在（应保留 EntityUtil.Delete）")
     else:
-        util_code = strip_lua_noise(util.read_text(encoding="utf-8", errors="ignore"))
+        util_code = blank_noise(util.read_text(encoding="utf-8", errors="ignore"))
         local_loop = any(
             LOADED_RE.search(match.group("cond")) for match in WHILE_RE.finditer(util_code))
         if LOCAL_DEF_RE.search(util_code) or local_loop:
@@ -202,7 +149,7 @@ def test_no_local_loadmodel_loops():
         if not path.is_file():
             problems.append(f"{relative}: 迁移文件不存在")
             continue
-        code = strip_lua_noise(path.read_text(encoding="utf-8", errors="ignore"))
+        code = blank_noise(path.read_text(encoding="utf-8", errors="ignore"))
         if "CFShared.LoadModel" not in code:
             request = REQUEST_RE.search(code)
             where = f"{relative}:{line_of(code, request.start())}" if request else relative
