@@ -88,6 +88,29 @@ def match_paren(source: str, open_index: int) -> int:
     return size
 
 
+def argument_spans(source: str, open_index: int, close_index: int | None = None) -> list[tuple[int, int]]:
+    """按顶层逗号切参数，返回每个参数的 `(start, end)` 偏移。
+
+    `source` 应是 `blank_noise(...)` 之后的结构化视图：注释已抹白、字符串可保留，
+    所以括号/逗号只可能来自真代码。三个闸门共用这一份切分（各抄一遍会被 Sonar 判重复）。
+    """
+    if close_index is None:
+        close_index = match_paren(source, open_index)
+    bounds: list[tuple[int, int]] = []
+    start, depth = open_index + 1, 0
+    for index in range(open_index + 1, max(close_index - 1, open_index + 1)):
+        char = source[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            bounds.append((start, index))
+            start = index + 1
+    bounds.append((start, close_index - 1))
+    return bounds
+
+
 def line_of(source: str, index: int) -> int:
     return source.count("\n", 0, index) + 1
 

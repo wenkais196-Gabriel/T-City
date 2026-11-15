@@ -41,24 +41,6 @@ _QUOTED = re.compile(r"(['\"])(.*?)\1", re.S)
 _NUMBER = re.compile(r"^[0-9]+(?:\.[0-9]+)?$")
 
 
-def _arguments(code: str, open_index: int) -> list[tuple[int, int]]:
-    """按顶层逗号切参数，返回每个参数的 `(start, end)` 偏移。"""
-    close_index = lua_source.match_paren(code, open_index)
-    bounds: list[tuple[int, int]] = []
-    start, depth = open_index + 1, 0
-    for index in range(open_index + 1, close_index - 1):
-        char = code[index]
-        if char in "([{":
-            depth += 1
-        elif char in ")]}":
-            depth -= 1
-        elif char == "," and depth == 0:
-            bounds.append((start, index))
-            start = index + 1
-    bounds.append((start, close_index - 1))
-    return bounds
-
-
 def _literal(raw: str) -> str | None:
     match = _QUOTED.fullmatch(raw.strip())
     return match.group(2) if match else None
@@ -74,7 +56,7 @@ def _scan_source(source: str, rel: str = "<probe>") -> tuple[list[dict], list[di
     for match in _CALL.finditer(code):
         function = match.group(1)
         open_index = match.end() - 1
-        arguments = _arguments(code, open_index)
+        arguments = lua_source.argument_spans(code, open_index)
         raw = [text[slice(*span)].strip() for span in arguments]
         plain = [code[slice(*span)].strip() for span in arguments]
         line = lua_source.line_of(code, match.start())
