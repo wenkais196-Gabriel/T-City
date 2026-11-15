@@ -363,13 +363,16 @@ function P.SetIncidentStatus(source, incidentId, status, disposition, reason)
         -- 现象是：审计 incident.close 写了、世界痕迹也写了，但警情还是 on_scene，
         -- 于是可以反复"关"同一张单。所以这里不能把 nil 塞进参数，用空串占位。
         local closedReason = trim(reason):sub(1, 255)
-        local affected = MySQL.update.await([[
+        local affected, dbErr = Db.Update([[
             UPDATE police_incidents
                SET status = 'closed', closed_at = NOW(), disposition = ?, closed_by = ?,
                    closed_reason = ?, last_activity_at = NOW(), updated_at = NOW()
              WHERE id = ?
         ]], { closeDisposition, actor.citizenid, closedReason, id })
-        if type(affected) == 'table' then affected = affected.affectedRows end
+        if not affected then
+            print(('[custom-police] [db] incident.close update failed for #%s: %s'):format(
+                tostring(id), tostring(dbErr)))
+        end
         affected = tonumber(affected) or 0
         releaseIncidentUnits(id)
         if not audit(actor.citizenid, 'incident.close', tostring(id), closeDisposition) then
@@ -466,21 +469,15 @@ end)
 
 -- 平民 911：任何玩家都能打，所以只接受 table、按 source 限流（5 秒 1 条），
 -- 其余校验（title/description 长度、priority 夹取）在 CreateIncident 里。
-local call911Cooldown = {}
-
+-- 冷却与过期清理都在限流 owner：src 键由 main.lua 的 playerDropped 一次清掉。
 local CALL_911_COOLDOWN = 5
 
 RegisterNetEvent('custom-police:server:911', function(payload)
     local src = source
     if type(payload) ~= 'table' then return end
     if not pd(src) then return end
-    local now = os.time()
-    for otherSrc, lastAt in pairs(call911Cooldown) do
-        if now - lastAt > 60 then call911Cooldown[otherSrc] = nil end
-    end
-    local last = call911Cooldown[src]
-    if last and now - last < CALL_911_COOLDOWN then return end
-    call911Cooldown[src] = now
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:911'):format(src), CALL_911_COOLDOWN * 1000) then return end
     P.CreateIncident(src, payload)
 end)
 
@@ -540,14 +537,18 @@ function P.DiscardDraft(source, incidentId)
     if grade(actor) < 2 then return false, 'grade_too_low' end
     local id = tonumber(incidentId)
     if not id then return false, 'invalid_incident' end
-    local changed = MySQL.update.await([[
+    local changed, dbErr = Db.Update([[
         UPDATE police_incidents
            SET status = 'closed', disposition = 'cancelled', closed_at = NOW(),
                closed_by = ?, closed_reason = 'draft_discarded'
          WHERE id = ? AND status = 'draft'
     ]], { tostring(actor.citizenid), id })
-    if type(changed) == 'table' then changed = changed.affectedRows or changed[1] end
-    if not changed or changed == 0 then
+    if not changed then
+        print(('[custom-police] [db] draft discard update failed for #%s: %s'):format(
+            tostring(id), tostring(dbErr)))
+    end
+    changed = tonumber(changed) or 0
+    if changed == 0 then
         return false, 'not_draft'
     end
     if not audit(actor.citizenid, 'incident.discard', tostring(id), nil) then
@@ -564,11 +565,13 @@ function P.AdoptDraft(source, incidentId)
     if not allowed then return false, reason end
     local id = tonumber(incidentId)
     if not id then return false, 'invalid_incident' end
-    local ok, reason2 = P.SetIncidentStatus(source, id, 'open')
-    if not ok then return false, reason2 or 'adopt_failed' end
+    -- 审计必须**先于**状态变更：原来是先 SetIncidentStatus（已落库）再审计，
+    -- 审计写不进去时返回 false，但警情已经被打开了 —— 承诺与实现相反。
     if not audit(actor.citizenid, 'incident.adopt', tostring(id), nil) then
         return false, 'audit_unavailable'
     end
+    local ok, reason2 = P.SetIncidentStatus(source, id, 'open')
+    if not ok then return false, reason2 or 'adopt_failed' end
     return { id = id, status = 'open' }
 end
 

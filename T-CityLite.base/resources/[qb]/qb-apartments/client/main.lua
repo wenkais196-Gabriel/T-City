@@ -565,13 +565,17 @@ RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
 end)
 
 RegisterNetEvent('apartments:client:setupSpawnUI', function(cData)
+    -- I-3：判据从"有没有公寓"改成"是不是新角色"。
+    -- 原来无房老角色会命中 Apartments.Starting 分支，被当成新角色丢进公寓选择流程
+    -- （高空调镜头 + 公寓列表），而不是回到上次位置。
+    local isNewCharacter = type(cData) == 'table' and cData.isNew == true
     QBCore.Functions.TriggerCallback('apartments:GetOwnedApartment', function(result)
         if result then
             TriggerEvent('qb-spawn:client:setupSpawns', cData, false, nil)
             TriggerEvent('qb-spawn:client:openUI', true)
             TriggerEvent('apartments:client:SetHomeBlip', result.type)
         else
-            if Apartments.Starting then
+            if isNewCharacter and Apartments.Starting then
                 TriggerEvent('qb-spawn:client:setupSpawns', cData, true, Apartments.Locations)
                 TriggerEvent('qb-spawn:client:openUI', true)
             else

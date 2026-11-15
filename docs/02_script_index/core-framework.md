@@ -21,7 +21,7 @@ review_by: 2027-01-30
 |:---|:---|
 | `fxmanifest.lua` | 资源清单 |
 | `bus.lua` | 全局服务总线 — 注册/查找/发布/订阅 |
-| `compat.lua` | QBCore API 向后兼容包装器 |
+| ~~`compat.lua`~~ | 已删除（P1-4 阶段 D，2026-11-01）；QBCore API 不再有任何包装层 |
 | `cache/dirty_flush.lua` | 脏数据异步刷盘管道 |
 | `services/economy_service.lua` | 经济服务（AddScaled + Transfer） |
 | `services/job_service.lua` | 职业/帮派服务 |
@@ -80,7 +80,9 @@ review_by: 2027-01-30
 
 ---
 
-## Compat 向后兼容 (`compat.lua`)
+## Compat 向后兼容（已下线，2026-11-01）
+
+> 本节描述的 compat.lua 已按 P1-4 阶段 B/C/D 逐步拆除（GetPlayer 缓存 → AddMoney 包装 → Notify 包装 → 文件删除）。以下内容仅作历史说明；现行规则见 `docs/engineering/STANDARDS.md` 的「禁止猴补」条，由 `tests/architecture/test_no_monkey_patch.py` 强制。
 
 ### GetPlayer 缓存包装
 ```lua

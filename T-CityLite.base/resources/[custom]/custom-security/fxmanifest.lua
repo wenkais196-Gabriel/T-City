@@ -8,6 +8,7 @@ version '1.0.0'
 lua54 'yes'
 
 shared_scripts {
+    '@core-framework/shared/money_aliases.lua',
     '@qb-core/shared/locale.lua',
     'config.lua'
 }

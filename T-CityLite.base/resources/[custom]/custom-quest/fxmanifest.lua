@@ -21,10 +21,14 @@ description 'Data-driven quest/mission system with state machine, security guard
 version '0.7.0'
 
 -- v0.7.0: 声明外部任务配置文件（使其可通过 LoadResourceFile 访问）
+ui_page 'html/vendor.html'
+
 files {
     'config/quests/quest_miner.lua',
     'config/quests/quest_chain_miner.lua',
     'config/quests/quest_logistics.lua',
+    'config/quests/quest_hotdog.lua',      -- S1 dev：租借原语验收（convar quest_hotdog_dev）
+    'config/quests/hotdog_roads.json',      -- 生成物：摆摊「挡车道」判据用的路面点（tools/dev/booth_roads.py）
     'config/quests/quest_cartel_initiation.lua',
     'config/quests/quest_cartel_drug_run.lua',
     'config/quests/quest_chain_cartel.lua',
@@ -34,6 +38,8 @@ files {
     'config/quests/quest_driver_exam.lua',
     'config/quests/quest_pilot_exam.lua',
     'config/quests/quest_public_services.lua',
+    'config/quests/quest_garbage.lua',
+    'config/quests/quest_bus.lua',
     'config/quests/quest_legal_aviation.lua',
     'config/quests/quest_civilian_misc.lua',
     -- v0.8b: 配送地址池
@@ -60,10 +66,15 @@ files {
     'config/quests/quest_civilian_ch4_mogul.lua',
     'config/quests/quest_civilian_ch4_artisan.lua',
     'config/quests/quest_civilian_ch4_survivor.lua',
+
+    'fonts/hotdog_ui.ttf',   -- 中文字形子集（GTA 原生字体没有 CJK，见 tools/dev/build_quest_font.py）
+
+    'html/vendor.html',   -- 摊位/报价/购买菜单（CEF 渲染中文；原生 DrawText 没有 CJK 字形）
 }
 
 shared_scripts {
     'config.lua',
+    '@core-framework/shared/money_aliases.lua',
 }
 
 server_scripts {
@@ -73,12 +84,21 @@ server_scripts {
     'server/quest_db.lua',
     'server/quest_registry.lua',
     'server/quest_validators.lua',
+    'server/quest_step_gate.lua',            -- 阶段D C1: validator 步骤的服务端闸（纯函数）
+    'server/quest_route_validators.lua',      -- R1: 多站路线校验器（validate_route_stop）
+    'server/quest_rental.lua',
+    'server/quest_minigame.lua',           -- S3 内核：小游戏 nonce + 品质映射（CC 实现）
+    'server/quest_booth.lua',              -- S2：摊位摆放判定（服务端权威）+ 实体登记/回收
+    'server/quest_vendor.lua',             -- S4：顾客会话（NPC 报价 / 玩家购买 / Tick 推进）
+    'server/quest_vendor_bridge.lua',      -- S4 接线：开卖/Tick/动作事件（只开一条 vendorAction）
+    'server/quest_settle.lua',              -- S5：结算账单（六行 + 幂等回执）
     'server/quest_logistics_validators.lua',
     'server/quest_entity_tracker.lua',       -- v0.9: 实体追踪（脱钩/下车倒计时）
     'server/quest_entity_registry.lua',       -- v0.10: 实体注册表 + 延迟回收策略
     'server/quest_entity_placement.lua',      -- v0.10: placement 节点服务端
     'server/quest_address_resolver.lua',
     'server/quest_cooldown.lua',
+    'server/quest_daily_limit.lua',       -- R2：把 conditions.daily_limit 接上（之前是死字段）
     'server/quest_rewards.lua',
     'server/quest_security.lua',
     -- v1.0.0: 新增模块 — 排他锁 / 组队
@@ -98,6 +118,8 @@ client_scripts {
     'client/quest_pos_collector.lua',         -- v0.11: 航空坐标采集工具
     'client/quest_logistics_client.lua',
     'client/quest_entity_placement.lua',     -- v0.10: placement 节点客户端
+    'client/quest_hotdog_client.lua',        -- S2: 热狗推车生成/推车/摆放预览（服务端 quest_booth.lua 裁决）
+    'client/quest_hotdog_vendor_client.lua', -- S4: 顾客报价 / 玩家购买 / 摊位状态条（原生 DrawText）
     'client/quest_cargo_damage.lua',
 }
 

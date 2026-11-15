@@ -1,0 +1,164 @@
+---
+id: p1-4-plan
+type: plan
+status: active
+system: infra
+owner: hermes
+updated: 2026-11-01
+review_by: 2026-12-31
+---
+
+# P1-4 开发计划与交付标准（实施方 + 验收方联合定稿）
+
+> 两份**独立**调研：实施方 `docs/engineering/2026-11-foundation-p1-4-research.md`；
+> 验收方（CC）在同一天未读该文档前独立完成另一份。本文件是合并结论，冲突处标注取舍。
+> 结论：**不是"迁 900 多处调用"，而是删掉 3 个猴补点**；其中 `AddMoney` 包装今天是**死代码**，
+> 真正有生产风险的是 `GetPlayer` 缓存与"core-framework 重启后 funcref 悬空"。
+
+## 1. 决策摘要
+
+1. `core-framework` 的 compat 只覆盖三个符号：`QBCore.Functions.GetPlayer`（活）、
+   `QBCore.Functions.Notify`（活）、`Player.Functions.AddMoney`（**死代码**）。
+2. **`_G` 不跨 FiveM 资源**。`_G.Bus` 是各资源自己的表：qb-core 把 `EconomyService` 写进**自己状态**的
+   `_G.Bus`，core-framework 的 compat 里 `_G.Bus.EconomyService` 恒为 `nil` → ES 分支永不成立。
+   `bus.lua:14` 那句"显式 _G 确保跨资源可见"的注释是错的。
+3. `AddMoney` 包装即使被"修好"也是三重错位（`ES` 多传一参、`self` 形参与 3 参 dot 调用不匹配、
+   跨资源取不到 ES）→ **只能纯删除，不能修好再删**：修好会把死代码变成全服 SCRIPT ERROR
+   或"先加钱后抛错 + pcall 回落"的**双倍加钱**。
+4. `GetPlayer` 缓存是净负数：qb-core 本来就是一次表查，缓存命中反而多一次 `GetPlayerName` native；
+   且 **Logout 后不清**（`OnPlayerUnload` 没监听）→ 选人界面期间全服拿到已登出的 Player 表。
+5. 经济链路的唯一写入口是 **qb-core 的 `_G.Bus.EconomyService`**；core-framework 那份只注册成
+   `Bus.economy` + `service_economy_*` exports，两者命名空间不交叉。**不得**把后者挂到前者
+   （它内部回调 `Player.Functions.AddMoney` → 无限递归）。
+6. `Notify` 包装是活的，但会**静默改变语义**（每源 200ms 一条、超时丢弃、正文截断 300 字符），
+   且让 `QBCore.Functions.Notify` 依赖 core-framework 的运行状态。
+
+## 2. 最终范围
+
+口径：`grep -rho` **出现次数** / 文件数，范围 `T-CityLite.base/resources/**/*.lua`。
+（验收方独立测量为 GetPlayer 703/120，差异来自是否计入 `[qb]` 上游与测试；本计划不依赖精确值。）
+
+| 猴补点 | 位置 | 活的？ | 依赖量 | 删除后谁接管 |
+|---|---|---|---|---|
+| `QBCore.Functions.GetPlayer` | core-framework 的 compat.lua:77 | 活（缓存） | 936 处 / 164 文件 | qb-core `server/functions.lua:46`（一次表查） |
+| `QBCore.Functions.Notify` | 同文件:111 | 活（转发 Bus.notify） | 服务端 17 处 / 6 文件（客户端是另一个对象，够不着） | qb-core `server/functions.lua:739`（原五层校验） |
+| `Player.Functions.AddMoney` | 同文件:25 | **死**（三条独立原因都指向回落） | 60 处 / 27 文件 | qb-core `player.lua:357`（已路由 ES） |
+| `QBCore.Debug / ShowError / ShowSuccess` | production-freeze/server/main.lua:26-32 | 活（生产模式静音） | 该资源自身（测试工具） | 单列为 dev-only，不在本计划删除 |
+
+## 3. 缺陷清单（D 编号为本文档统一口径）
+
+| 编号 | 缺陷 | 触发条件 → 后果 | 来源 |
+|---|---|---|---|
+| D1 | `AddMoney` 包装三条独立死因：① ES 跨资源恒 nil（`compat.lua:29` 的 `_G.Bus.EconomyService`）；② 若可见，`pcall(ES.AddMoney, ES, cid, …)` 多传一个 `ES` 实参 → 参数整体错位（qb-core 的 ES 是 dot 定义，`qb-core/server/services/economy_service.lua:93`）；③ 即使传参正确，compat 的形参是 `function(self, moneytype, amount, reason)`（`compat.lua:25`）而 60 处调用点是 3 参 dot 调用 → `self='cash'`，`self.PlayerData` 为 nil | **今天**：① 使 `if ES then` 整段跳过，**不执行 pcall**，直接回落 orig（行为等于原生直调，只是多一次 `if`）；**若把可见性"修好"**：② 生效 → 恒 false 无害，或③生效 → 全服加钱点 SCRIPT ERROR；若同时修好 ②③ → ES 内 `fireAuditLog`（`qb-core/.../economy_service.lua:66-76`，`%d` 格式化小数会抛）先加钱后抛错，pcall 吞错回落原生再调 ES = **双倍加钱** | 双方（②③ 的机制与 `%d` 出处由验收方给出） |
+| D2 | Logout 后缓存返回前任角色 | `QBCore.Player.Logout` → `OnPlayerUnload` → **200ms 后**才置 nil，compat 不监听 `OnPlayerUnload`，且 `isOnline` 用 `GetPlayerName` 恒真 → 玩家停在选人界面时 `GetPlayer(src)` 返回**已登出**的表，`if not Player then return end` 全线失效 | 双方（实施方初稿的触发路径写错，已按验收方更正） |
+| D3 | `isOnline` 对字符串 source 抛错 | `source <= 0` 与 `"1"` 比较 → `attempt to compare string with number`；发生在 orig 已成功**之后** → 从"返回玩家"变成"抛错" | 验收方 |
+| D4 | core-framework 重启后 funcref 悬空 | 加载时捕获 `origGetPlayer/origNotifyFn`；`restart core-framework` 后 qb-core 表里留着旧 shim → 新实例捕获到失效引用 | 验收方 |
+| D5 | 重复加载叠层 | 同一进程多次重启 → shim2→shim1→qb-core，两层缓存、两次 native | 验收方 |
+| D6 | Notify 静默改语义 | `notify_service.lua:15-16` 每源 200ms 仅 1 条、`:125` 超限静默丢弃、`:131` 正文截断 300 字符并去 HTML、`:119` `GetPlayerPing==0` 直接丢；**没有丢弃计数** | 验收方 |
+| D7 | `Bus.RegisterService` 无重名守卫 | `bus.lua:22-37` 同名再注册会静默覆盖 `Bus[name]` 并再次 `exports(...)`（重复 exports 的行为**预期如此、未在 FiveM 层验证**） | 验收方 |
+| D8 | compat 统计日志混合指标 | `shimmed_count` 被 Notify 与（永不成立的）AddMoney 共用 → 日志"X% 直连"误导运维 | 验收方 |
+
+## 4. 分阶段施工
+
+每个阶段 = 一个可独立合并/回滚的 PR。**B、C、D 按顺序**（同改一个文件）。
+
+### 阶段 A：静态闸门冻结新增猴补  ✅ 2026-11-01 完成
+- 新增 tests/architecture 下的 monkey_patch_scan.py（唯一扫描器）+ test_no_monkey_patch.py + monkey_patches_allowlist.json；
+- 扫描根：`T-CityLite.base/resources/**/*.lua`；**排除** `[qb]/qb-core/**`（API owner）、任何 `tests/`、`docs/`；
+- 覆盖三种写法 × 三个前缀：`function <prefix>.<Name>(`、`<prefix>.<Name> =`、`<prefix>["<Name>"] =` 与
+  `<prefix>['<Name>'] =`（单双引号都要）；`<prefix> ∈ {QBCore, QBCore.Functions, Player.Functions}`。
+  `QBCore.<Name> =` 由 `QBCore` 前缀的 assign 形态覆盖（不再单列 `bare` 分支）；
+  **`_G.Bus.<X> =` 显式排除**——那是总线服务注册，不是猴补；
+- 登记项 `{file, symbol, owner, reason, expires}`；三条失败条件：**未登记命中 / 登记已过期 / 登记项 0 命中（死条目）**；
+- 自证用例：`tmp_path` 造 5 个正例（function / assign / 单引号下标 / 双引号下标 / 裸命名空间）+ 4 个反例
+  （qb-core 目录、tests 目录、注释、`== nil` 比较）+ 2 个边界（文档字符串里贴的代码片段、server 目录下的 client_bridge.lua 之类），
+  断言正例全中、反例全不中、`server/` 下的 `client_*.lua` **仍要被抓到**。
+- **实测存量 8 处命中 / 7 个 (file,symbol)**：core-framework compat 三条（GetPlayer / Notify / AddMoney）、
+  custom-vehicles 的 `QBCore.Functions.OnGiveKeys`（2 处赋值）、production-freeze 三条（Debug / ShowError / ShowSuccess）。
+  两条边界写进了扫描器：`_G.Bus.X =` 是服务注册不算猴补；客户端文件的裸 `QBCore.X =`（qb-fuel 的 `QBCore.PlayerData = pData`）
+  是玩家数据快照不算。
+
+### 阶段 B：删 `GetPlayer` 缓存  ✅ 2026-11-01 完成
+- 落地：compat.lua 只留一段说明性注释（为什么不打这个补丁），登记表 7 → 6 条；
+- 测试 tests/unit/layer1_core/test_compat_no_player_cache.py：G4 断言**函数本身**仍是 qb-core 那一个
+  （不是「返回值相等」——缓存层两次调用返回同一张表也能骗过），G3 断言 Players[src] 清空后返回 nil，
+  G5 断言 GetPlayer('1') 不抛错。红绿已验证：换回旧实现该用例 1 红 1 绿。
+- 删 compat 里 origGetPlayer / playerCache / isOnline / `function QBCore.Functions.GetPlayer` 及两个 handler；
+- 判据见 G3–G5；allowlist 删对应行且不留死条目。
+
+### 阶段 C：删 `AddMoney` 包装（**一行不修**）  ✅ 2026-11-01 完成
+- 落地：compat.lua 删掉 `PlayerLoaded` 里的整个包装（含计数与首次路由提示），登记表 6 → 5 条；
+- 测试 tests/unit/layer1_core/test_compat_no_addmoney_wrapper.py：G6 断言 PlayerLoaded 之后
+  `Player.Functions.AddMoney` **仍是玩家自己那个函数**，且调用落在它上面（被中间闭包截走即红）。
+  换回旧实现该用例 1 红。
+- 删 compat 里 PlayerLoaded 内的包装与相关计数；
+- 不动 qb-core 的 `player.lua`（它本来就路由 ES）；
+- 判据见 G6–G8。
+
+### 阶段 D：删 `Notify` 包装并下线 compat.lua  ✅ 2026-11-01 完成
+- 落地：整份 compat.lua 删除、fxmanifest 去掉该行、登记表 5 → 4 条（只剩 custom-vehicles 的 OnGiveKeys
+  与 production-freeze 三条）；阶段 B/C 的两个包装级单元测试随文件一起退休（被测对象不存在了）；
+- 测试 tests/architecture/test_compat_notify_removed.py 三条：文件已删 / manifest 不再引用 /
+  **没有 `_G.Bus` 时 qb-core 的 Notify 仍把 `QBCore:Notify` 发出去**（qb-core 从未注册 `Bus.notify`，
+  恒走第 5 层回退 —— 这条把「删掉 compat 通知不会静默消失」变成可执行断言）。三条各配一条变异，
+  实测「注入红、对照绿」。
+- 反例：改 export + `GetResourceState` 守卫被否 —— export 到已停止的资源一样失败，只是换了个报错位置，
+  而且会多出第二个 Notify 入口。
+- 删 Notify 包装与统计线程 → 删除 compat.lua → 从 core-framework 的 fxmanifest 移除该行；
+- **显式不做**：不改 17 处服务端调用点、不新增 `exports['core-framework']:Notify` 第二入口；
+  若日后要保留 `notify_service` 的限流收益，应在 qb-core 的 `Notify`（owner）里实现，另开 PR；
+- 判据见 G10–G11。
+
+## 5. 交付标准（DoD）与结项状态
+
+> 结项日期 2026-11-01。状态只有三种：✅ 已证明（有可执行证据）/ ⚪ 结构上已成立（被测对象已删除，
+> 由更粗的断言兜住）/ ⛔ 未验证（写清缺什么，不冒充已做）。
+
+| 编号 | 断言 | 验证方式 | 状态 |
+|---|---|---|---|
+| G1 | 闸门覆盖猴补的**三种写法 × 三个前缀**（`function X.Y(` / `X.Y =` / `X["Y"] =` × `QBCore` / `QBCore.Functions` / `Player.Functions`） | 扫描器自证：5 个正例 + 4 个反例（qb-core 目录、tests 目录、注释、`== nil`）+ 2 个边界（docstring 代码片段不报、服务端目录下 client_ 前缀的 bridge 文件必须报），断言 `len(hits) == 6` | ✅ 已证明（`test_no_monkey_patch.py::test_scanner_catches_all_four_forms_and_skips_excluded`；原写「4 种形态」是错的——`QBCore.X =` 被 assign 形态覆盖，`bare` 分支是死代码，已删） |
+| G2 | 登记表无死条目、无过期、每条命中 ≥1 | 扫描结果与 allowlist 双向 diff | ✅ 已证明（三条独立用例 + 三条变异「注入红、对照绿」） |
+| G3 | Logout 之后、下一次 PlayerLoaded 之前，`GetPlayer(src) == nil` | Lua 单测（当时返回前任表） | ⚪ 结构成立：`GetPlayer` 就是 qb-core 的 `Players[src]` 表查，没有缓存层。阶段 B 的用例在文件删除时退休（`git show 2c3fce42` 可复现其红绿） |
+| G4 | `GetPlayer(src) == QBCore.Players[src]`（同一引用） | identity 断言 | ⚪ 同上（引用相等由"函数没被替换"直接推出） |
+| G5 | `GetPlayer('1')` 不抛错 | 单测 | ⚪ 同上（抛错来自 compat 的 `source <= 0`，那段代码已不存在；qb-core 用 `tonumber`） |
+| G6 | `PlayerLoaded` 后 `Player.Functions.AddMoney` 引用不变 | identity 断言 | ⚪ 同上（阶段 C 用例 `b5218ec4` 红绿可复现） |
+| G7 | 一次 AddMoney = ES 调 1 次、余额 +1；ES「先写后抛错」时余额仍只 +1 | 抽出 player.lua 真实的 `self.Functions.AddMoney` 函数体，在 mock ES 下跑三种场景 | ✅ 已证明（`tests/unit/layer1_core/test_addmoney_single_route.py`）。反向验证：注入「ES 失败就 pcall 回落再写一次」→ 该用例红） |
+| G8 | `_G.Bus.EconomyService =` 全仓唯一写入点在 qb-core | 静态扫描（去注释） | ✅ 已证明（`test_economy_service_single_registrar.py`，变异：往 core-framework 塞一行写者 → 红） |
+| G9 | core-framework 的 ES 挂到 `_G.Bus.EconomyService` 会递归 → 必须有保护 | 单测 | ⚪ 由 G8 前置拦截：静态禁止"第二个写者"，比运行时计数上限更早、更确定。运行时保护不再需要 |
+| G10 | `_G.Bus.notify = nil` 时 `QBCore.Functions.Notify` 仍 `TriggerClientEvent` | Lua 单测（抽真实函数体执行）+ 前提断言（qb-core 里不许出现 `_G.Bus.notify` 写者，含下标与别名形态） | ✅ 已证明（`test_compat_notify_removed.py`，两条变异：改成 `return` → 红；改事件名 → 红；注入写者 → 红） |
+| G11 | manifest 不含 `compat.lua` 且文件已删除 | 静态断言 | ✅ 已证明（两条用例 + 两条变异） |
+| G12 | 既有回归全绿 | `pytest tests/unit tests/architecture tests/integration` | ✅ 已证明：**1186 passed / 147 skipped / 51 subtests**；`gate_coverage` 276 = 预算（未抬高） |
+| G14 | 同名 `Bus.RegisterService` 再注册的现状语义被显式钉死 | 单测：注册两次，断言 `Bus[name]` 只剩第二批方法（覆盖） | ✅ 已证明（`test_bus.py::TestBusRegisterService::test_register_service_twice_overwrites`；变异「改成合并」→ 红） |
+| G15 | 删除 compat 后 `QBCore.Functions.Notify` 与 qb-core 原函数同一引用 | identity 断言 | ⚪ 结构成立：文件已删除、manifest 不再加载、全仓无 `QBCore.Functions.Notify =` 赋值（猴补闸门 + G15 静态扫描双重兜底） |
+| G13 | 真机观察点 ① 选人界面停 5 分钟 0 SCRIPT ERROR、无幽灵钱变动；② 换角色后余额/职业/物品正确；③ `restart core-framework` 后 GetPlayer/Notify 正常；④ 连续 10 次加钱（含小数 commission）无错 | 真机（需真人客户端） | ⛔ **未验证**。已做的部分：`refresh` + `restart core-framework` 后 **85 个资源、0 条 SCRIPT ERROR**；`restart qb-core` 后同样干净。缺的部分：没有任何玩家在线，①②④ 需要真人客户端才能观察 → 记为遗留项，不写成"已验证" |
+
+**已知局限**（不在本轮范围）：`custom-testing` 的两个压测脚本仍读旧的 persistence 字段（`dirty_count` 已移除）；
+P1-3 最后 13 个 net event（含需要服务端验高的 `aviationHeightMonitorComplete`）仍挂着 2027-03-31 的到期日。
+
+## 6. 施工纪律
+
+1. **先删不修**：C 阶段必须纯删除。任何"顺手修好 ES 可见性/传参"的行为都会把死代码变成生产故障。
+2. **验证时点**：缓存类断言必须卡在 **Logout 之后、下一次 PlayerLoaded 之前**；写成"换角色后立刻读"当前代码就能过。
+3. **把 `_G` 当资源私有**：跨资源只走 `exports`；不要用 `_G.Bus` 传服务。
+4. **闸门先行**：A 先合，B/C/D 的删除才能在闸门可见的 diff 里发生（allowlist 逐条减到**只剩 dev-only 登记项**，不是 0）。
+5. **每阶段更新文档数字**（`research` / `plan` / `CHANGELOG` / AS-IS 四处），否则验收方会以"数字自相矛盾"打回。
+
+## 7. 已知局限与不在范围内
+
+- **不在范围内**：`[qb]` 上游资源的兼容事件（qb-vehiclekeys / qb-mechanicjob 旧事件桥，属 P1-3 的兼容面）；
+  930+ 处调用点的批量改写；`production-freeze` 的 `QBCore.Debug/ShowError/ShowSuccess`（另开 dev-only 收敛）。
+- **已知局限**：D4（重启后失效 funcref）**没有静态判据**，只能真机观察；D7 的 `exports` 重复注册行为
+  未在 FiveM 源码层验证，G14 只固定"当前的覆盖语义"，不构成对未来的保护。
+- **不做性能基准**：删除缓存只给出结构性结论（少一次 native），不编造数字。
+
+## 8. 两方差异与取舍
+
+| 议题 | 实施方初稿 | 验收方 | 采纳 |
+|---|---|---|---|
+| 换角色触发路径 | 写成 `playerDropped` 顺序问题 | 指出 `PlayerLoaded` 会覆盖，真实窗口是 `Logout/OnPlayerUnload` | **采纳验收方**（已更正） |
+| AddMoney 风险 | 初稿只指出"两条路径 + 一个回落，调试看不出"（二次加钱是 e458 按验收意见补的） | 给出三条独立死因 + `%d` 浮点审计"先加后抛"（`economy_service.lua:66-76`） | **采纳验收方**，并据此得出"只能纯删除" |
+| `_G` 跨资源 | 未识别（曾以为 `Bus = _G.Bus` 可跨资源） | 明确指出 `_G` 资源私有、`_G.Bus.EconomyService` 恒 nil | **采纳验收方** |
+| 重启后 funcref | 未覆盖 | D4/D5 | **采纳验收方** |
+| 阶段划分 | 4 阶段（含"AddMoney 路由下沉"） | 4 阶段（A 闸门 → B GetPlayer → C AddMoney 纯删 → D Notify+下线） | **采纳验收方**：C 改成纯删除，取消"路由下沉" |
+| Notify 处理 | 初稿即主张"521 处不必全改，回退 qb-core 原实现" | 补充"改 export 不算守卫"，且会新增第二入口 | **双方一致**：回退 qb-core；验收方追加否掉 export-as-guard |
+| 闸门形态 | 初稿 = `=` + `function` 两种 | 补 `['X']=`（单双引号）、排除 `[qb]/qb-core`、裸 `QBCore.X =`（production-freeze） | **合并**：`function` 形态两边都有；其余按验收方补齐（现存两处猴补正是 `function` 写法，只写 `=` 的闸门会全绿） |

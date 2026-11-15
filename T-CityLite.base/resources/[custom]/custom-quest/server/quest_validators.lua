@@ -44,17 +44,19 @@ function QuestValidators.Run(validatorId, source, stepData, questData)
         return false, ('Validator not found: %s'):format(validatorId)
     end
 
-    local ok, result = pcall(fn, source, stepData, questData)
+    -- 必须同时接住第二返回值：只写 `local ok, result` 会把拒绝原因（wrong_job /
+    -- too_far / no_player_coords …）全压成 'failed'，玩家和日志两侧都失去可诊断性。
+    local ok, passed, message = pcall(fn, source, stepData, questData)
     if not ok then
-        return false, ('Validator error: %s'):format(tostring(result))
+        return false, ('Validator error: %s'):format(tostring(passed))
     end
 
     -- 校验器应返回 (boolean, string)
-    if type(result) == 'boolean' then
-        return result, result and 'passed' or 'failed'
+    if type(passed) ~= 'boolean' then
+        return false, 'Validator returned unexpected type'
     end
 
-    return false, 'Validator returned unexpected type'
+    return passed, message or (passed and 'passed' or 'failed')
 end
 
 print('[quest-validators] ✅ 校验器注册系统已加载')

@@ -42,7 +42,9 @@ end
 local function spawn(station)
     local guardHash = GetHashKey(GUARD_MODEL)
     local patrolHash = GetHashKey(PATROL_MODEL)
-    if not EntityUtil.LoadModel(guardHash) or not EntityUtil.LoadModel(patrolHash) then return end
+    if not CFShared.LoadModel(guardHash, 5000) or not CFShared.LoadModel(patrolHash, 5000) then
+        return
+    end
 
     local state = { station = station, peds = {}, loop = {}, index = 1 }
     for index = 1, MAX_GUARDS do

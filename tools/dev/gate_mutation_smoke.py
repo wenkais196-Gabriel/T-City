@@ -33,6 +33,11 @@ REPO = Path(__file__).resolve().parents[2]
 BASE = REPO / "T-CityLite.base"
 ARCH = BASE / "tests" / "architecture"
 
+#: 变异用例反复引用的目标路径（同一字面量出现 3 次以上就命名，改路径时只改一处）
+LOGS_LUA = "resources/[custom]/custom-logs/server/logs.lua"
+NET_EVENT_SCAN = "tests/architecture/net_event_scan.py"
+NET_EVENTS_BASELINE = "tests/architecture/net_events_baseline.json"
+
 
 @dataclass(frozen=True)
 class Mutation:
@@ -122,6 +127,13 @@ MUTATIONS: list[Mutation] = [
                  "local UserCooldowns = {}\n"
                  "local function rl(src, action, ms) return true end\n"),
         what="自建限流表",
+    ),
+    Mutation(
+        gate="tests/architecture/test_rate_limit_single_owner.py::test_no_new_rate_limiter_grows",
+        path="resources/[custom]/custom-vehicles/server/__mutant_ratelimit2.lua",
+        content=("-- 变异注入：令牌桶换了个别名又长出来\n"
+                 "local liveBuckets = {}\n"),
+        what="自建限流表（S3 新增的 liveBuckets 别名）",
     ),
     Mutation(
         gate="tests/architecture/test_plane_boundaries.py::test_planes_do_not_leak_across_boundaries",
@@ -275,6 +287,318 @@ MUTATIONS += [
     ),
 ]
 
+# P1-3：全仓 net event 基线（批次① 100% + 存量棘轮）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_baseline_matches_live_inventory"),
+        path="resources/[custom]/__mutant_net/server/__mutant.lua",
+        content="""-- 变异注入：全仓范围内新冒出一个未鉴权的 net event
+RegisterNetEvent('mutant:server:verb', function(payload)
+    print(payload)
+end)
+""",
+        what="未鉴权 net event 悄悄落进某个非强制资源（基线棘轮必须拦住）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_enforced_batch_has_zero_unguarded_events"),
+        path="resources/[qb]/qb-core/server/__mutant_net.lua",
+        content="""-- 变异注入：引擎层出现未鉴权的 net event
+RegisterNetEvent('QBCore:Server:MutantVerb', function(payload)
+    print(payload)
+end)
+""",
+        what="批次①（引擎层）从 100% 掉下来",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_non_literal_registrations_match_the_baseline"),
+        path="resources/[custom]/__mutant_net/server/__mutant_literal.lua",
+        content="""-- 变异注入：变量名注册（闸门看不见事件名）
+local EVENT_NAME = 'mutant:server:hidden'
+RegisterNetEvent(EVENT_NAME, function() end)
+""",
+        what="变量名注册的 net event（对扫描器不可见）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_unparsed_handlers_match_the_baseline"),
+        path="resources/[custom]/__mutant_net/server/__mutant_unparsed.lua",
+        content="""-- 变异注入：handler 没有行首 end)，扫描器解析不了
+RegisterNetEvent('mutant:server:unparsed', function()
+    if true then print('x') end
+end
+""",
+        what="解析不了的 handler（等于没有任何闸门看得见它）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_every_resource_with_debt_has_an_owner_and_a_future_expiry"),
+        path=NET_EVENTS_BASELINE,
+        content=None,
+        replace_from='"expires": "2027-03-31"',
+        replace_to='"expires": "2020-01-01"',
+        what="债的到期日已经过去（清单变成永不过期的白名单）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_net_event_inventory.py::test_batch_totals_add_up",
+        path=NET_EVENTS_BASELINE,
+        content=None,
+        replace_from='"events": 15,',
+        replace_to='"events": 99,',
+        what="批次数字与清单对不上（被手改过）",
+    ),
+]
+
+# P1-3 第二批：回调分发器的高危目标 + 基线数字的可信度
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_auth.py::"
+              "test_relay_callbacks_that_spawn_vehicles_are_guarded_somewhere"),
+        path="resources/[custom]/custom-security/server/security.lua",
+        content=None,
+        replace_from="QBCore.ServerCallbacks['QBCore:Server:SpawnVehicle'] = function(source, cb, model, coords, warp)",
+        replace_to="QBCore.ServerCallbacks['SpawnVehicle'] = function(source, cb, model, coords, warp)",
+        what="custom-security 不再劫持刷车回调（任何客户端都能通过 TriggerCallback 让服务端 CreateVehicle）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_recorded_counts_match_the_live_scan"),
+        path=NET_EVENTS_BASELINE,
+        content=None,
+        # 锚点必须是当前基线里**真实存在**的数字：原锚点 'guarded: 19' 随 P1-3 清债消失后
+        # 这条变异就静默失效了（CC 2026-11-08 复核发现）。改成 qb 批次的 guarded 总数。
+        # 锚在 qb 批次的**事件总数**上：guarded/unguarded 每清一批就变（历史锚点已两次失效），
+        # 事件总数只有增删资源时才变，且基线里确实存在这个字段。
+        replace_from='"events": 216,',
+        replace_to='"events": 217,',
+        what="手改基线里 qb 批次的 guarded 数字（与实测对不上）",
+    ),
+]
+
+# P1-3 第三批：`src == 0` 不是鉴权
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_inventory.py::"
+              "test_system_source_token_only_counts_the_server_only_shape"),
+        path=NET_EVENT_SCAN,
+        content=None,
+        replace_from='"system_source": re.compile(r"\\bsrc\\s*~=\\s*0\\s+then\\s+return\\b|\\bsource\\s*~=\\s*0\\s+then\\s+return\\b"),',
+        replace_to='"system_source": re.compile(r"\\bsrc\\s*==?\\s*0\\b"),',
+        what="把 src == 0（只排除控制台）又当成鉴权 token —— 任何玩家照样能触发",
+    ),
+]
+
+# P1-4 阶段 D（续）：manifest 不许把 compat 挂回去 / Notify 不许静默丢弃
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_compat_notify_removed.py::test_manifest_no_longer_loads_compat",
+        path="resources/[standalone]/core-framework/fxmanifest.lua",
+        content=None,
+        replace_from="    'bus.lua',",
+        replace_to="    'bus.lua',\n    'compat.lua',",
+        what="文件删了但 manifest 又把 compat.lua 挂回去（restart 报找不到文件）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_compat_notify_removed.py::test_qb_core_notify_still_delivers_without_the_bus",
+        path="resources/[qb]/qb-core/server/functions.lua",
+        content=None,
+        replace_from="    TriggerClientEvent('QBCore:Notify', source, safeText, texttype, length)",
+        replace_to="    return -- 变异注入：没有 Bus 就静默丢消息",
+        what="Notify 在无 Bus 时静默丢弃（通知消失了但没人知道）",
+    ),
+]
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_cross_resource_callbacks.py::test_scanner_ignores_strings_comments_and_await_calls",
+        path="tests/architecture/lua_source.py",
+        content=None,
+        replace_from="        if start <= index < end:",
+        replace_to="        if False:  # 变异注入：不再跳过字符串区间",
+        what="扫描器不再跳过字符串/注释（文案里的示例代码会被当成真调用）",
+    ),
+]
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_money_format.py::test_money_format_debt_does_not_grow",
+        path="resources/[custom]/custom-taxes/server/__mutant_money.lua",
+        content="TriggerClientEvent('QBCore:Notify', src, ('税: $%d'):format(0.5), 'primary')",
+        what="新增一处 $%d 金额格式化（小数金额会抛 format 错）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_money_format.py::test_baseline_metadata_is_valid",
+        path="tests/architecture/money_format_baseline.json",
+        content=None,
+        replace_from='"owner": "hermes",',
+        replace_to='"owner": "",',
+        what="基线没有 owner（债无主，等于永久豁免）",
+    ),
+]
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_audit_bridge.py::test_log_sink_does_not_use_a_bare_relative_logs_path",
+        path=LOGS_LUA,
+        content=None,
+        replace_from="                local file = io.open(resourcePath .. 'logs/' .. filename, \"a\")",
+        replace_to="                local file = io.open(\"logs/\" .. filename, \"a\")  -- 变异注入：裸相对路径",
+        what="审计落盘退回裸相对路径（cwd 不是数据目录时静默丢日志）",
+    ),
+]
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_audit_retention.py::test_sweep_deletes_expired_shards_keeps_today_and_is_idempotent",
+        path=LOGS_LUA,
+        content=None,
+        replace_from="            if offset > RETENTION_DAYS and day ~= today then",
+        replace_to="            if day ~= today then  -- 变异注入：不看 retention，能探到就删",
+        what="清理连当天分片一起删（审计数据丢失）",
+    ),
+]
+
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_no_stale_core_cache.py::test_scanner_rejects_the_bypass_shapes",
+        path="tests/architecture/stale_core_cache_scan.py",
+        content=None,
+        replace_from="def _has_rehook(source: str, variable: str) -> bool:",
+        replace_to="def _has_rehook(source: str, variable: str) -> bool:\n    return True  # 变异注入：任何 handler 都当作已重挂",
+        what="任何 handler 都当作已重挂（五种绕过全部放行）",
+    ),
+]
+
+# P1-6：顶层缓存 QBCore 必须能自愈
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_no_stale_core_cache.py::test_no_new_stale_core_cache_files",
+        path="resources/[qb]/qb-shops/server/__mutant_stale.lua",
+        content="local QBCore = exports['qb-core']:GetCoreObject()\nQBCore.Functions.GetPlayer(1)\n",
+        what="新增顶层缓存且无重解析（restart qb-core 后函数引用失效）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_no_stale_core_cache.py::test_baseline_metadata_is_valid",
+        path="tests/architecture/stale_core_cache_baseline.json",
+        content=None,
+        replace_from="  \"client_count\": 19,",
+        replace_to="  \"client_count\": 0,",
+        what="基线 count 与实际条目脱节（元数据失真）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_no_stale_core_cache.py::test_scanner_classifies_the_three_safe_shapes",
+        path="tests/architecture/stale_core_cache_scan.py",
+        content=None,
+        replace_from="def _has_rehook(source: str, variable: str) -> bool:",
+        replace_to="def _has_rehook(source: str) -> bool:\n    return True  # 变异注入：所有文件都当作已重挂",
+        what="扫描器把所有文件都当已自愈（风险集永远为空）",
+    ),
+]
+
+# P1-5 阶段 C：审计桥接必须可信且脱敏
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_audit_bridge.py::test_bridge_is_trusted_and_sanitizes_before_writing",
+        path=LOGS_LUA,
+        content=None,
+        replace_from="AddEventHandler('qb-log:server:CreateLog'",
+        replace_to="RegisterNetEvent('qb-log:server:CreateLog'",
+        what="把审计桥接注册成 NetEvent（客户端可伪造审计）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_audit_bridge.py::test_sanitizer_masks_identifiers_and_keeps_plain_text",
+        path="resources/[custom]/custom-logs/shared/sanitize.lua",
+        content=None,
+        replace_from="    if type(value) ~= 'string' or value == '' then return '***' end",
+        replace_to="    if value ~= nil then return value end  -- 变异注入：不再掩码",
+        what="脱敏函数不再掩码 citizenid（PII 直接落盘）",
+    ),
+]
+
+# P1-5 阶段 A：MySQL 回调里不许调跨资源函数引用
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_cross_resource_callbacks.py::test_no_cross_resource_reference_inside_mysql_callbacks",
+        path="resources/[qb]/qb-garages/server/main.lua",
+        content=None,
+        replace_from="            Player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot')",
+        replace_to="            MySQL.scalar('SELECT depotprice FROM player_vehicles WHERE plate = ?', { data.plate }, function(r)\n                Player.Functions.RemoveMoney('cash', r, 'paid-depot') -- 变异注入\n            end)",
+        what="回调里调 Player.Functions.*（真机取抵押车崩因）",
+    ),
+]
+
+# P1-4 阶段 D：compat.lua 下线后不许复活
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_compat_notify_removed.py::test_compat_file_is_gone",
+        path="resources/[standalone]/core-framework/compat.lua",
+        content="QBCore.Functions.Notify = function() end\n",
+        what="compat.lua 复活（Notify 猴补重新出现）",
+    ),
+]
+
+# P1-4 阶段 C：经济服务只能有一个注册者
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_economy_service_single_registrar.py::"
+              "test_economy_service_has_a_single_registrar"),
+        path="resources/[standalone]/core-framework/services/__mutant_economy.lua",
+        content="_G.Bus.EconomyService = {}\n",
+        what="出现第二个 EconomyService 注册者（挂错就是 包装→ES→包装 的无限递归）",
+    ),
+]
+
+# P1-4 阶段 A：猴补闸门
+MUTATIONS += [
+    Mutation(
+        gate="tests/architecture/test_no_monkey_patch.py::test_no_unregistered_monkey_patch",
+        path="resources/[custom]/__mutant_patch/server/__mutant.lua",
+        content="QBCore.Functions.GetPlayer = function(source) return nil end",
+        what="新增一处未登记的猴补（往 QBCore.Functions 上赋值）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_no_monkey_patch.py::"
+              "test_allowlist_entries_are_complete_and_not_expired"),
+        path="tests/architecture/monkey_patches_allowlist.json",
+        content=None,
+        replace_from='"expires": "2027-03-31"',
+        replace_to='"expires": "2020-01-01"',
+        what="登记项已过期（猴补变成永不过期的白名单）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_no_monkey_patch.py::test_allowlist_has_no_dead_entries",
+        path="tests/architecture/monkey_patches_allowlist.json",
+        content=None,
+        replace_from='"symbol": "QBCore.Debug"',
+        replace_to='"symbol": "QBCore.DebugNope"',
+        what="登记项指向不存在的符号（死条目：删了猴补没清登记）",
+    ),
+]
+
+# P1-3 第四批：helper 登记表只认"看了返回值的调用"
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_auth.py::"
+              "test_registered_guard_helpers_are_proven"),
+        path="resources/[custom]/custom-vehicles/server/vehicle_state.lua",
+        content=None,
+        replace_from="    if not CanModifyPlate(source, plate) then return end",
+        replace_to="    CanModifyPlate(source, plate) -- 变异：调用了但忽略返回值",
+        what="鉴权 helper 被调用但不看返回值（等于没有任何保护）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_net_event_auth.py::"
+              "test_shapes_that_look_like_guards_are_not_counted"),
+        path=NET_EVENT_SCAN,
+        content=None,
+        replace_from='if inner.startswith("return"):',
+        replace_to='if False:',
+        what="否定分支不再要求 return（‘判了但没拦住’会被当成已鉴权）",
+    ),
+]
+
 
 def run_gate(nodeid: str) -> tuple[bool, str]:
     """返回 (passed, 最后一行输出)。passed=True 表示这条闸门**没红**。"""
@@ -289,47 +613,101 @@ def run_gate(nodeid: str) -> tuple[bool, str]:
     return proc.returncode == 0, (tail[-1] if tail else "")
 
 
+def _skip(mutation: Mutation, detail: str) -> dict:
+    return {"gate": mutation.gate, "what": mutation.what, "status": "skipped", "detail": detail}
+
+
+def _create_parent_dirs(target: Path) -> list[Path]:
+    """新建目标目录层级，返回真正新建的目录（由深到浅）—— 撤注入后要删掉，
+    否则空目录会让 `test_no_orphan_scripts`（每个 [custom] 目录必须有 fxmanifest）误红。"""
+    created: list[Path] = []
+    parent = target.parent
+    while not parent.exists() and parent != BASE.parent:
+        created.append(parent)
+        parent = parent.parent
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return created
+
+
+def _inject(mutation: Mutation) -> tuple[str | None, list[Path], str | None]:
+    """注入变异，返回 (backup, 新建目录, 不适用原因)。原因非空时不写入任何东西。"""
+    target = mutation.target
+    if mutation.content is None and mutation.replace_from:
+        backup = target.read_text(encoding="utf-8")
+        if mutation.replace_from not in backup:
+            return None, [], (f"要替换的片段在 {target.relative_to(REPO)} 里找不到"
+                              "（代码变了，更新用例）")
+        payload = backup.replace(mutation.replace_from, mutation.replace_to, 1)
+        target.write_text(payload, encoding="utf-8")  # NOSONAR 目标路径来自 MUTATIONS 硬编码 path
+        return backup, [], None
+    if mutation.content is None:            # 就地追加（历史形状）
+        backup = target.read_text(encoding="utf-8")
+        payload = backup.rstrip("\n") + "\n\n    'core-framework'\nend\n"
+        target.write_text(payload, encoding="utf-8")  # NOSONAR 固定目标 + 原地追加，无路径拼接
+        return backup, [], None
+    created = _create_parent_dirs(target)
+    target.write_text(mutation.content, encoding="utf-8")  # NOSONAR 内容/路径都来自常量表
+    return None, created, None
+
+
+def _restore(target: Path, backup: str | None, created: list[Path]) -> None:
+    """撤掉注入：有备份就写回，否则删文件并回收自己建的目录。"""
+    if backup is not None:
+        target.write_text(backup, encoding="utf-8")  # NOSONAR 同文件原内容写回同一路径
+        return
+    target.unlink(missing_ok=True)
+    for directory in created:               # 由深到浅，只删空目录
+        try:
+            directory.rmdir()
+        except OSError:
+            break
+
+
+def _verdict(passed_after_injection: bool, passed_after_cleanup: bool) -> str:
+    if passed_after_injection:
+        return "gate-dead"                  # 注入后仍然通过 → 规则没生效
+    if passed_after_cleanup:
+        return "ok"
+    return "always-red"                     # 撤掉注入还红 → 规则本身坏了，或有别的脏东西
+
+
 def run_once(mutation: Mutation) -> dict:
     target = mutation.target
     if mutation.content is not None and target.exists():
-        return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
-                "detail": f"目标文件已存在，不覆盖：{target.relative_to(REPO)}"}
+        return _skip(mutation, f"目标文件已存在，不覆盖：{target.relative_to(REPO)}")
     if mutation.content is None and not target.exists():
-        return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
-                "detail": f"要篡改的文件不存在：{target.relative_to(REPO)}"}
+        return _skip(mutation, f"要篡改的文件不存在：{target.relative_to(REPO)}")
 
-    backup = None
-    if mutation.content is None and mutation.replace_from:   # 就地替换片段
-        backup = target.read_text(encoding="utf-8")
-        if mutation.replace_from not in backup:
-            return {"gate": mutation.gate, "what": mutation.what, "status": "skipped",
-                    "detail": f"要替换的片段在 {target.relative_to(REPO)} 里找不到（代码变了，更新用例）"}
-        target.write_text(backup.replace(mutation.replace_from, mutation.replace_to, 1), encoding="utf-8")
-    elif mutation.content is None:          # 就地追加（历史形状）
-        backup = target.read_text(encoding="utf-8")
-        target.write_text(backup.rstrip("\n") + "\n\n    'core-framework'\nend\n", encoding="utf-8")
-    else:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(mutation.content, encoding="utf-8")
+    backup, created, reason = _inject(mutation)
+    if reason:
+        return _skip(mutation, reason)
 
     try:
         passed_after_injection, injected_line = run_gate(mutation.gate)
     finally:
-        if backup is not None:
-            target.write_text(backup, encoding="utf-8")
-        else:
-            target.unlink(missing_ok=True)
+        _restore(target, backup, created)
 
     passed_after_cleanup, control_line = run_gate(mutation.gate)   # 对照：撤掉注入必须恢复绿
-    if (not passed_after_injection) and passed_after_cleanup:
-        status = "ok"
-    elif passed_after_injection:
-        status = "gate-dead"          # 注入后仍然通过 → 规则没生效
-    else:
-        status = "always-red"         # 撤掉注入还红 → 规则本身坏了，或有别的脏东西
-
-    return {"gate": mutation.gate, "what": mutation.what, "status": status,
+    return {"gate": mutation.gate, "what": mutation.what,
+            "status": _verdict(passed_after_injection, passed_after_cleanup),
             "injected": injected_line, "control": control_line}
+
+
+_VERDICT_LABEL = {"ok": "会红 ✓", "gate-dead": "没红 ✗（规则失效）",
+                  "always-red": "常红 ✗（规则坏了）", "skipped": "跳过"}
+
+
+def _print_header(results: list[dict]) -> int:
+    width = max(len(r["gate"].split("::")[-1]) for r in results)
+    print(f"{'闸门用例'.ljust(width)}  注入后   对照   判定")
+    return width
+
+
+def _print_row(result: dict, width: int) -> None:
+    inj = "红" if "failed" in str(result.get("injected", "")) else "绿"
+    ctl = "绿" if "passed" in str(result.get("control", "")) else "红"
+    name = result["gate"].split("::")[-1]
+    print(f"{name.ljust(width)}  {inj:^6}  {ctl:^4}   {_VERDICT_LABEL[result['status']]}")
 
 
 def main(argv: list[str]) -> int:
@@ -357,20 +735,342 @@ def main(argv: list[str]) -> int:
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
-        width = max(len(r["gate"].split("::")[-1]) for r in results)
-        print(f"{'闸门用例'.ljust(width)}  注入后   对照   判定")
+        width = _print_header(results)
         for r in results:
-            verdict = {"ok": "会红 ✓", "gate-dead": "没红 ✗（规则失效）",
-                       "always-red": "常红 ✗（规则坏了）", "skipped": "跳过"}[r["status"]]
-            inj = "红" if "failed" in str(r.get("injected", "")) else "绿"
-            ctl = "绿" if "passed" in str(r.get("control", "")) else "红"
-            print(f"{r['gate'].split('::')[-1].ljust(width)}  {inj:^6}  {ctl:^4}   {verdict}")
+            _print_row(r, width)
         dead = [r for r in results if r["status"] in ("gate-dead", "always-red")]
         print(f"\n{len(results)} 条用例：{len(results)-len(dead)} 条证明会红，{len(dead)} 条有问题")
         for r in dead:
             print(f"  ! {r['gate']}: {r['status']} — {r.get('injected') or r.get('detail')}")
 
     return 0 if all(r["status"] in ("ok", "skipped") for r in results) else 1
+
+
+# P1-5 二期：金额写路径收敛（三个写入口共用一条校验）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_money_write_path.py::"
+              "test_money_table_is_written_only_by_the_convergence_layer"),
+        path="resources/[custom]/custom-shop/server/money_probe.lua",
+        content=(
+            "QBCore = exports['qb-core']:GetCoreObject()\n"
+            "AddEventHandler('probe', function(player, amount)\n"
+            "    player.PlayerData.money['cash'] = amount\n"
+            "end)\n"
+        ),
+        what="资源绕过 Player.Functions 直接写 PlayerData.money（收敛层被旁路）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_money_write_path.py::"
+              "test_single_transaction_threshold_is_defined_exactly_once"),
+        path="resources/[custom]/custom-shop/server/threshold_probe.lua",
+        content="CustomLimit = {}\nCustomLimit.MONEY_MAX_SINGLE_TRANSACTION = 1000000\n",
+        what="单笔阈值出现第二份定义（两个上限，规则分叉）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_money_write_path.py::"
+              "test_every_money_entry_calls_the_shared_validator"),
+        path="resources/[qb]/qb-core/server/services/economy_service.lua",
+        content=None,
+        replace_from=(
+            "    local amountOk, cleanedAmount = Security.ValidateAmount(amount, { allowZero = false })\n"
+            "    if not amountOk then return false end\n"
+            "    amount = cleanedAmount"
+        ),
+        replace_to="    amount = tonumber(amount)  -- 变异注入：校验被摘掉",
+        what="AddMoney 摘掉唯一校验（NaN/inf/超阈值又能进账）",
+    ),
+]
+
+# P2-3：迁移版本号唯一（重号会让「哪个先跑」变成文件名字母序的意外结果）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_migration_versions.py::"
+              "test_every_migration_version_is_unique"),
+        path="migrations/v3.11_probe_duplicate.sql",
+        content="-- probe: 重号迁移（v3.11 下第二条）\n",
+        what="同一版本号下再塞一条迁移（v3.11_probe 与 v3.11.1_police_case_verdict 重号）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_migration_versions.py::"
+              "test_migration_filenames_are_well_formed"),
+        path="migrations/v3.16.Probe_Bad_Name.sql",
+        content="-- probe: 文件名里带点分与大写\n",
+        what="迁移文件名不合规（点分名 + 大写，扫描器应拒绝）",
+    ),
+]
+
+# P2-1：服务端不许新增 Citizen.Await
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_no_server_await.py::"
+              "test_no_new_server_side_citizen_await"),
+        path="resources/[custom]/custom-justice/server/main.lua",
+        content=None,
+        replace_from="JusticeService = {}",
+        replace_to=("JusticeService = {}\n"
+                     "local _probe_promise = promise.new()\n"
+                     "Citizen.Await(_probe_promise)"),
+        what="服务端读路径上 Await DB（旧 patron_service 的形态）",
+    ),
+]
+
+# P2-2：启动顺序必须按 fxmanifest 依赖排（qb-core 依赖 oxmysql）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_boot_order.py::"
+              "test_real_boot_order_respects_manifest_dependencies"),
+        path="configs/modules/core.cfg",
+        content=None,
+        replace_from="ensure oxmysql\nensure qb-core",
+        replace_to="ensure qb-core\nensure oxmysql",
+        what="启动顺序把依赖方 qb-core 排在被依赖的 oxmysql 之前",
+    ),
+]
+
+
+# P2-4：新增一条 50ms 轮询循环（≈1200 次/分钟）必须撞预算
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_budget.py::"
+              "test_current_numbers_are_within_budget"),
+        path="resources/[custom]/custom-justice/server/main.lua",
+        content=None,
+        replace_from="JusticeService = {}",
+        replace_to=("JusticeService = {}\n"
+                     "CreateThread(function()\n"
+                     "    while true do\n"
+                     "        Wait(50)\n"
+                     "    end\n"
+                     "end)"),
+        what="新增 50ms 轮询循环",
+    ),
+]
+
+# 口径校准：去掉"归属判定"这一类证据后，本仓库应当立刻出现未鉴权事件
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_net_event_scope.py::"
+              "test_own_resources_have_no_unguarded_events"),
+        path=NET_EVENT_SCAN,
+        content=None,
+        replace_from=("    if self_scope_guard(code):\n        return True\n"),
+        replace_to="",
+        what="把 self_scope（归属判定）从 is_guarded 里摘掉",
+    ),
+]
+
+# 可消耗物品契约：表里写一个不存在的 item 名 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_consumables_contract.py::"
+              "test_consumable_names_exist_in_items"),
+        path="resources/[custom]/custom-consumables/config.lua",
+        content=None,
+        replace_from="water_bottle = { thirst = 35",
+        replace_to="water = { thirst = 35",
+        what="把 water_bottle 写回不存在的 water（2026-11-10 真机：喝水没反应）",
+    ),
+]
+
+# 可消耗物品契约：把注册入口摘掉 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_consumables_contract.py::"
+              "test_consumables_are_registered_as_useable_items"),
+        path="resources/[custom]/custom-consumables/server/main.lua",
+        content=None,
+        replace_from="QBCore.Functions.CreateUseableItem(itemName, function(src)",
+        replace_to="-- MUTATION: 注册入口被摘掉\nlocal _unused = (function(src)",
+        what="把 CreateUseableItem 注册摘掉（qb-inventory 又变成走不到）",
+    ),
+]
+
+# 三层通知：kind 两侧不一致 / phone 上屏 / 限流太细 / 没进启动集 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_kind_sets_match_on_both_sides"),
+        path="resources/[custom]/custom-notify/client/main.lua",
+        content=None,
+        replace_from="local KINDS = { feed = true, toast = true, error = true }",
+        replace_to="local KINDS = { feed = true, toast = true }",
+        what="客户端少认一个 kind（error 通知会静默消失）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_phone_kind_is_not_rendered_on_screen"),
+        path="resources/[custom]/custom-notify/client/main.lua",
+        content=None,
+        replace_from="local KINDS = { feed = true, toast = true, error = true }",
+        replace_to="local KINDS = { feed = true, toast = true, error = true, phone = true }",
+        what="把 phone（IC 内容）也当成屏幕通知渲染",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_push_rate_limit_is_wider_than_send"),
+        path="resources/[custom]/custom-notify/server/main.lua",
+        content=None,
+        replace_from="local MAX_PER_WINDOW = 12",
+        replace_to="local MAX_PER_WINDOW = 1",
+        what="把分派限流收紧到比业务还细（一次交易第二条会被丢）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_resource_is_in_default_boot"),
+        path="configs/modules/custom.cfg",
+        content=None,
+        replace_from="ensure custom-notify\n",
+        replace_to="",
+        what="把通知渲染器从启动集里摘掉（通知发出去没人渲染）",
+    ),
+]
+
+# 三层通知去重：把 key 下发摘掉 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_notify_contract.py::"
+              "test_dedupe_and_merge_are_wired"),
+        path="resources/[custom]/custom-notify/server/main.lua",
+        content=None,
+        replace_from="        key = key,\n",
+        replace_to="",
+        what="Push 不再下发 key（去重失效，同文案继续刷屏）",
+    ),
+]
+
+# 开服就绪：把调试资源塞回默认启动集 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_launch_readiness.py::"
+              "test_launch_readiness_repo_half_is_green"),
+        path="configs/modules/core.cfg",
+        content=None,
+        replace_from="ensure oxmysql\nensure qb-core",
+        replace_to="ensure oxmysql\nensure qb-core\nensure custom-testing",
+        what="把 custom-testing 塞回默认启动集（生产会给玩家开 /test）",
+    ),
+]
+
+# 方法级导出契约：调一个 owner 没声明的导出方法 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_service_contracts.py::"
+              "test_every_export_call_resolves"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_export_call.lua",
+        content="exports['custom-main']:AddScaledMoney(1, 'cash', 1, 'probe')\n",
+        what="跨资源调用了未声明的导出方法（真机上只在调用点抛 No such export）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_service_contracts.py::"
+              "test_every_export_call_resolves"),
+        path="tests/architecture/service_contracts.json",
+        content=None,
+        replace_from='"in_tree_missing_exports": {\n    "safecracker": {',
+        replace_to=('"in_tree_missing_exports": {\n'
+                    '    "custom-main": {\n'
+                    '      "methods": ["LogEconomy"],\n'
+                    '      "owner": "probe",\n'
+                    '      "why": "probe",\n'
+                    '      "source": "probe",\n'
+                    '      "follow_up": "probe",\n'
+                    '      "expires": "2099-01-01"\n'
+                    '    },\n'
+                    '    "safecracker": {'),
+        what="把树内已有声明的方法登记成「缺失导出」（放行表想堵住闸门的嘴）",
+    ),
+]
+
+
+# S2a：跨资源 Bus 读取 → 闸门必须红
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_bus_scope.py::"
+              "test_no_cross_resource_bus_reads"),
+        # 注入点必须在扫描根里，否则这条用例只会证明"没人看的地方没红"。
+        # custom-vehicles 是 owner 根（S2a 扫描根），storage 归 custom-storage。
+        path="resources/[custom]/custom-vehicles/server/__mutant_bus.lua",
+        content="Bus.storage.CanAccess(1, 'org')\n",
+        what="在 owner 根里读别的资源的 Bus service（跨资源恒 nil，分支永远不执行）",
+    ),
+]
+
+# S4：DB 结果归一化只许在 core-framework/server/db.lua
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_db_result_adapter.py::"
+              "test_result_normalisation_only_in_db_adapter"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_db.lua",
+        content=("-- 变异注入：绕过 Db 适配器自己解 oxmysql 返回形状\n"
+                 "local id = type(res) == 'table' and (res.affectedRows or res[1]) or res\n"),
+        what="调用点自己归一化 insertId/affectedRows（affectedRows 会被当成 id）",
+    ),
+]
+
+# S5：模型加载收口到 CFShared.LoadModel
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_load_model_single_owner.py::"
+              "test_no_local_loadmodel_loops"),
+        path="resources/[custom]/custom-vehicles/client/__mutant_model.lua",
+        content=("-- 变异注入：无退出条件的本地模型加载循环\n"
+                 "RequestModel(hash)\nwhile not HasModelLoaded(hash) do Wait(10) end\n"),
+        what="本地模型加载没有超时（模型缺失时客户端线程永远不退出）",
+    ),
+]
+
+# S6：金额格式化只许一份实现（core-framework/shared/util.lua 的 FormatMoney）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_money_format_single_owner.py::"
+              "test_money_format_has_a_single_implementation"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_money_format.lua",
+        content=("-- 变异注入：又抄一份金额格式化实现\n"
+                 "local function PhoneMoney(v)\n"
+                 "    local n = tonumber(v)\n"
+                 "    if n % 1 == 0 then return ('%d'):format(n) end\n"
+                 "    return ('%.2f'):format(n)\n"
+                 "end\n"),
+        what="第二份金额格式化实现（小数金额的格式语义分叉）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_money_format_single_owner.py::"
+              "test_money_alias_users_load_the_alias_file"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_money_alias.lua",
+        content=("-- 变异注入：调用金额别名，但本资源 fxmanifest 没 include 别名文件\n"
+                 "CreateThread(function() print(Money(1)) end)\n"),
+        what="别名调用点没接线（运行时会 attempt to call a nil value (global 'Money')）",
+    ),
+]
+
+# S7：受众广播登记闸门（[custom] 里未登记的 -1 全服广播必须被拦住）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_broadcast_scope.py::"
+              "test_every_custom_broadcast_is_registered"),
+        path="resources/[custom]/custom-vehicles/server/__mutant_broadcast.lua",
+        content=("-- 变异注入：未登记的全服广播\n"
+                 "TriggerClientEvent('probe:client:all', -1)\n"),
+        what="未登记的 TriggerClientEvent(..., -1, ...) 全服广播",
+    ),
+]
+
+# 热狗：Lua 局部函数必须先定义后调用（luac -p 查不出来，运行时才崩）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_lua_local_order.py::"
+              "test_local_functions_are_declared_before_they_are_called"),
+        path="resources/[custom]/custom-quest/client/__mutant_local_order.lua",
+        content=("-- 变异注入：局部函数在定义之前被调用\n"
+                 "local function boot()\n"
+                 "    return helper()\n"
+                 "end\n"
+                 "local function helper()\n"
+                 "    return 1\n"
+                 "end\n"),
+        what="local function 在同一文件里先被调用、后定义",
+    ),
+]
 
 
 if __name__ == "__main__":

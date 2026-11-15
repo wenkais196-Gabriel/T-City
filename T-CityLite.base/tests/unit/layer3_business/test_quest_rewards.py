@@ -16,6 +16,8 @@ import pytest
 
 BASE = Path(__file__).resolve().parents[3]
 REWARDS_LUA = str(BASE / 'resources' / '[custom]' / 'custom-quest' / 'server' / 'quest_rewards.lua')
+ALIASES_LUA = str(BASE / 'resources' / '[standalone]' / 'core-framework' / 'shared' / 'money_aliases.lua')
+UTIL_LUA = str(BASE / 'resources' / '[standalone]' / 'core-framework' / 'shared' / 'util.lua')
 
 
 MOCK = r'''
@@ -55,8 +57,20 @@ _G.Config = {
     },
 }
 
+-- S6：money_format.lua 变成只转调 core-framework:FormatMoney 的门面。
+-- 桩要同时支持 exports('Name', fn) 注册与 exports['res']:Method(...) 调用；
+-- 冒号调用会多传方法表，包装器把它剥掉（与 FiveM 导出调用语义一致）。
+__framework = {}
+local function __colonSafe(fn)
+    return function(self, ...)
+        if self == __framework then return fn(...) end
+        return fn(self, ...)
+    end
+end
 exports = setmetatable({}, {
+    __call = function(_, name, fn) __framework[name] = __colonSafe(fn) end,
     __index = function(_, k)
+        if k == 'core-framework' then return __framework end
         if k == 'qb-core' then
             return { GetCoreObject = function() return _G.QBCore end }
         end
@@ -66,6 +80,8 @@ exports = setmetatable({}, {
     end,
 })
 
+IsDuplicityVersion = function() return true end
+GetResourceState = function(resource) return resource == 'core-framework' and 'started' or 'stopped' end
 GetPlayerName = function() return 'Tester' end
 TriggerClientEvent = function() end
 RegisterNetEvent = function() end
@@ -85,7 +101,13 @@ end
 def run_rewards_test(test_code: str) -> dict:
     source = open(REWARDS_LUA, encoding='utf-8').read()
     source = source.replace("exports['qb-core']:GetCoreObject()", "QBCore")
-    script = MOCK + '\n' + source + '\n' + test_code
+    # 金额别名住在 core-framework/shared/money_aliases.lua（fxmanifest 的
+    # shared_scripts 里以 '@core-framework/...' 加载），harness 只抽 server 脚本，
+    # 所以要把它一起注入，否则 QuestMoney 是 nil；别名转调 FormatMoney，
+    # 所以先加载真实 util.lua。
+    util = open(UTIL_LUA, encoding='utf-8').read()
+    shared = open(ALIASES_LUA, encoding='utf-8').read()
+    script = MOCK + '\n' + util + '\n' + shared + '\n' + source + '\n' + test_code
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False) as f:
         f.write(script)

@@ -37,6 +37,14 @@ local function Trim(s)
     return (s:gsub('^%s*(.-)%s*$', '%1'))
 end
 
+--- 玩家是否坐在指定载具里（氮气火焰是广播事件，只允许车内的人触发）
+local function IsSeatedIn(src, veh)
+    if not veh or veh == 0 or not DoesEntityExist(veh) then return false end
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false end
+    return GetVehiclePedIsIn(ped, false) == veh
+end
+
 --- 车辆状态写权限：车主，或执勤中的机修
 local function CanModifyPlate(src, plate)
     local Player = QBCore.Functions.GetPlayer(src)
@@ -258,11 +266,16 @@ end)
 
 --- 氮气火焰广播 (客户端 → 全服广播)
 RegisterNetEvent('custom-vehicles:server:syncNitrousFlames', function(netId, toggle)
+    -- 火焰是广播给全服的：只允许车里的人触发，否则任何人能对任意载具刷特效
+    local veh = NetworkGetEntityFromNetworkId(netId or 0)
+    if not IsSeatedIn(source, veh) then return end
     TriggerClientEvent('custom-vehicles:client:syncNitrousFlames', -1, netId, toggle)
 end)
 
 -- 兼容旧事件名
 RegisterNetEvent('qb-mechanicjob:server:syncNitrousFlames', function(netId, toggle)
+    local veh = NetworkGetEntityFromNetworkId(netId or 0)
+    if not IsSeatedIn(source, veh) then return end
     TriggerClientEvent('custom-vehicles:client:syncNitrousFlames', -1, netId, toggle)
 end)
 
@@ -288,6 +301,8 @@ end)
 -- ==============================================================
 
 RegisterNetEvent('qb-mechanicjob:server:updateDrivingDistance', function(plate, distance)
+    -- 2026-11-01: 这条旧兼容事件原来**没有任何校验** —— 任何客户端可以给任意车牌刷里程。
+    if not CanModifyPlate(source, plate) then return end
     AddDistance(plate, distance)
 end)
 

@@ -35,12 +35,29 @@ CALLERS = [
     RESOURCES / "[custom]" / "custom-security" / "server" / "security.lua",
     RESOURCES / "[custom]" / "custom-vehicles" / "server" / "dashboard_api.lua",
     RESOURCES / "[custom]" / "custom-phone" / "server" / "core" / "rate_limit.lua",
+    # S3：custom-police 的 7 份本地表 + custom-director 的令牌桶
+    RESOURCES / "[custom]" / "custom-police" / "server" / "forensics.lua",
+    RESOURCES / "[custom]" / "custom-police" / "server" / "tow.lua",
+    RESOURCES / "[custom]" / "custom-police" / "server" / "coroner.lua",
+    RESOURCES / "[custom]" / "custom-police" / "server" / "evidence.lua",
+    RESOURCES / "[custom]" / "custom-police" / "server" / "p2_system.lua",
+    RESOURCES / "[custom]" / "custom-police" / "server" / "p0_incidents.lua",
+    RESOURCES / "[custom]" / "custom-police" / "server" / "main.lua",
+    RESOURCES / "[custom]" / "custom-director" / "server" / "live_api.lua",
 ]
 
 # 自建限流表/循环的典型痕迹 —— 出现即视为"又写了一份限流"
+# S3 扩了 7 个本地表别名（liveBuckets/custom-police 的 6 张冷却表），另外
+# forensics 的裸 `cooldown = {}`、evidence 的 pickupAt/pickupWrites 计数器
+# 没有别名可认，用两个窄形状补上；不要改成单个 `cooldown`，那会把
+# shared/alert_budget.lua 的 owner 门面误报成第二份实现。
 IMPL_MARKERS = re.compile(
     r"\bUserCooldowns\b|\bopCooldowns\b|\brateLimits\s*\[\s*src\s*\]|\brateLimiter\s*=\s*\{"
     r"|\brequestWindowStart\b|\bbuckets\s*=\s*\{"
+    r"|\bliveBuckets\b|\bpoliceAlertCooldown\b|\bautoAlertCooldown\b|\bcall911Cooldown\b"
+    r"|\btowCooldown\b|\bcoronerCooldown\b|\bbackupCooldown\b"
+    r"|\bpickupAt\b|\bpickupWrites\b"
+    r"|\bcooldown\s*=\s*\{\s*\}"
 )
 
 
@@ -133,9 +150,19 @@ def test_rules_fire_on_bad_shapes(tmp_path: Path):
     commented.write_text("-- 以前这里有 local UserCooldowns = {}\n", encoding="utf-8")
     clean = tmp_path / "clean.lua"
     clean.write_text("local ok = exports['core-framework']:RateLimitCooldown(key, 1000)\n", encoding="utf-8")
+    rogue_live = tmp_path / "rogue_live.lua"
+    rogue_live.write_text("local liveBuckets = {}\n", encoding="utf-8")
+    rogue_backup = tmp_path / "rogue_backup.lua"
+    rogue_backup.write_text("local backupCooldown = {}\n", encoding="utf-8")
+    clean_bucket = tmp_path / "clean_bucket.lua"
+    clean_bucket.write_text(
+        "local ok = exports['core-framework']:RateLimitTokenBucket(key, 60, 10)\n", encoding="utf-8")
 
     assert rogue_implementations([rogue], OWNER, {}) == ["rogue.lua"]
     assert rogue_implementations([commented], OWNER, {}) == [], "注释里的旧实现不该误报"
     assert rogue_implementations([clean], OWNER, {}) == []
+    assert rogue_implementations([rogue_live], OWNER, {}) == ["rogue_live.lua"]
+    assert rogue_implementations([rogue_backup], OWNER, {}) == ["rogue_backup.lua"]
+    assert rogue_implementations([clean_bucket], OWNER, {}) == []
     # 登记的例外不算违规
     assert rogue_implementations([rogue], OWNER, {rogue: ("理由", "UserCooldowns")}) == []

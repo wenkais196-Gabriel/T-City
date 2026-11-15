@@ -219,10 +219,14 @@ function EV.BindPendingFor(caseId, actorCid)
         { subject }) or {}
     local bound = 0
     for _, row in ipairs(rows) do
-        local changed = MySQL.update.await(
+        local changed, dbErr = Db.Update(
             'UPDATE police_evidence SET case_id = ? WHERE id = ? AND case_id IS NULL', { cid, row.id })
-        if type(changed) == 'table' then changed = changed.affectedRows or changed[1] end
-        if changed and changed ~= 0 then
+        if not changed then
+            print(('[custom-police] [db] evidence bind update failed for #%s: %s'):format(
+                tostring(row.id), tostring(dbErr)))
+        end
+        changed = tonumber(changed) or 0
+        if changed ~= 0 then
             chain(row.id, 'auto_bound', tostring(actorCid or 'system'), ('case:%s'):format(tostring(cid)))
             bound = bound + 1
         end

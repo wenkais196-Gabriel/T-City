@@ -1,0 +1,108 @@
+-- config/quests/quest_hotdog.lua — 热狗摊（S1 开发模板：只验证「押金租借」这一段）
+--
+-- 为什么单独一条 dev 模板而不是直接写正式任务：
+--   S1 只做完了「租借原语」（押金 / 计租 / 关闭 / 重启补退），摆摊、小游戏、顾客、结算
+--   分别排在 S2–S5。现在就把「租 → 站桩 → 还」写进正式内容，等于上线一条「交了押金什么也不用干」
+--   的任务，玩家会拿它刷押金流水。
+--   所以这条模板由 convar `quest_hotdog_dev` 控制，默认不加载；真机验收时打开。
+--
+-- 坐标来自 docs/plan/jobs-content/12-hotdog-coordinates.md（S0 踏勘）：
+--   摆位 A 是真机验证过的旧热狗壳点位，其余是卫星图 + 路网判据确认的铺装。
+--
+-- 开关：setr quest_hotdog_dev 1（改完要 refresh 再 restart custom-quest）
+
+if GetConvar('quest_hotdog_dev', '0') ~= '1' then
+    return {}
+end
+
+local RENT_POINT   = { x = 215.0,  y = -772.0, z = 30.5 }   -- 租赁点 / 归还区
+local STAND_A      = { x = 215.8,  y = -810.3, z = 30.7 }   -- 摆位 A（真机已验证；摆摊是自由选点，这里只作参考）
+
+return {
+    {
+        id = 'hotdog_dev_rental',
+        title = '热狗摊 · 租借验收（dev）',
+        description = '租一辆热狗车 → 推到广场放下 → 回来还车。只用于验证押金、计租与摆放判定。',
+        category = 'test',      -- 不是 civilian：收益闸不按 $/h 判它（它本来就不该有收益）
+        level = 1,
+        required_tags = { role = 'civilian' },
+        conditions = {
+            cooldown_hours = 0,
+            min_police = 0,
+            daily_limit = 20,   -- 真机反复验收用
+        },
+        rewards = {
+            money = { type = 'bank', min = 1, max = 1 },   -- 象征性：这条线不靠任务本身发钱
+        },
+        steps = {
+            {
+                id = 'step_rent_cart',
+                title = '租借热狗车',
+                description = '在租赁点交付押金，领走推车。',
+                type = 'rental',
+                data = {
+                    coords = RENT_POINT,
+                    radius = 3.0,
+                    duration = 1500,
+                    label = '租借热狗车',
+                    validator_id = 'validate_rental_open',
+                    -- 押金 250、每分钟 6 块、前 60 秒免租、最多计 60 分钟：
+                    -- 满一小时 = 250 押金全部抵扣（退 0），符合 UX 规格 §3.1 的预期
+                    validator_data = {
+                        deposit = 250,
+                        rate_per_min = 6,
+                        grace_sec = 60,
+                        max_minutes = 60,
+                    },
+                },
+            },
+            {
+                id = 'step_place_stand',
+                title = '摆摊',
+                description = '把推车推到 Legion Square 东侧广场，选个不挡路的位置放下。',
+                type = 'booth',
+                data = {
+                    model = 'prop_hotdogstand_01',
+                    rental_point = RENT_POINT,
+                    max_distance = 200.0,     -- 离租赁点
+                    road_clearance = 6.0,     -- 离路面节点（离线点，见 hotdog_roads.lua）
+                    min_separation = 15.0,    -- 离别人的摊位
+                    label = '放下推车',
+                    validator_id = 'validate_booth_place',
+                    -- 开卖参数：摊位一摆好就开张，价格与节奏都由服务端掌握
+                    vendor = {
+                        prices = { common = 6, rare = 9, exotic = 14 },
+                        first_customer_ms = { 8000, 15000 },
+                        interval_ms = { 15000, 40000 },
+                        patience_ms = 45000,
+                        max_global_npcs = 8,
+                        reject_cooldown_ms = 60000,
+                        max_rejects = 3,
+                        max_offers_per_session = 32,
+                        -- 起始库存（S3 做热狗接进客户端后删掉这一行）
+                        starting_stock = { common = 6, rare = 3, exotic = 1 },
+                    },
+                },
+            },
+            {
+                id = 'step_sell',
+                title = '开卖',
+                description = '在摊位按 E 收摊；顾客来了会弹报价，Y 成交 / N 拒绝。',
+                type = 'vendor',
+                data = {
+                    coords = STAND_A,
+                    radius = 3.0,
+                    label = '收摊',
+                    duration = 800,
+                },
+            },
+            {
+                id = 'step_return_cart',
+                title = '还车结算',
+                description = '把推车放回租赁点，押金按已用时长结算。',
+                type = 'reach',
+                data = { coords = RENT_POINT, radius = 4.0 },
+            },
+        },
+    },
+}

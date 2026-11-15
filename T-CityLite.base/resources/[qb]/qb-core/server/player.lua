@@ -6,6 +6,16 @@ QBCore.Player = {}
 -- Will cause major issues!
 
 local resourceName = GetCurrentResourceName()
+
+-- 金额校验的唯一实现（security_service.lua 在 fxmanifest 里先加载，文件尾部就挂到 _G.Bus）；
+-- 三个写入口的 offline 分支与 Bus 缺失时的 fallback 分支都走它，不再各写一份。
+local Security = _G.Bus and _G.Bus.SecurityService
+if type(Security) ~= 'table' or type(Security.ValidateAmount) ~= 'function' then
+    -- 不 assert：assert 会让整个 player.lua（QBCore.Player 全部定义）加载失败，
+    -- 故障面远大于经济模块。改成"告警 + 全拒绝"桩 —— 宁可一分钱都动不了，也不要未校验地写钱。
+    print('[player] ⚠️ SecurityService 未注册（检查 fxmanifest 加载顺序）—— 本会话拒绝所有金额变动')
+    Security = { ValidateAmount = function() return false end }
+end
 function QBCore.Player.Login(source, citizenid, newData)
     if source and source ~= '' then
         if citizenid then
@@ -357,12 +367,16 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
     function self.Functions.AddMoney(moneytype, amount, reason)
         -- 🔄 桥接层: 底层路由到 EconomyService (内存优先 + DirtyFlush 管道)
         -- 外部 API 签名完全不变 — 第三方插件零改动
+        -- 金额校验统一走 Security.ValidateAmount（唯一实现）：非数字/NaN/inf/负数/0/超阈值都拒绝
+        local amountOk, cleanedAmount = Security.ValidateAmount(amount, { allowZero = false })
+        if not amountOk then return false end
+        amount = cleanedAmount
+
         if self.Offline then
             -- 离线玩家: 保留原始内存操作逻辑 (EconomyService 仅操作在线玩家)
             reason = reason or 'unknown'
+            if type(moneytype) ~= 'string' then return false end
             moneytype = moneytype:lower()
-            amount = tonumber(amount)
-            if amount < 0 then return false end
             if not self.PlayerData.money[moneytype] then return false end
             self.PlayerData.money[moneytype] = self.PlayerData.money[moneytype] + amount
             self.IsDirty = true
@@ -380,11 +394,14 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
 
     function self.Functions.RemoveMoney(moneytype, amount, reason)
         -- 🔄 桥接层: 底层路由到 EconomyService (内存优先 + DirtyFlush 管道)
+        local amountOk, cleanedAmount = Security.ValidateAmount(amount, { allowZero = false })
+        if not amountOk then return false end
+        amount = cleanedAmount
+
         if self.Offline then
             reason = reason or 'unknown'
+            if type(moneytype) ~= 'string' then return false end
             moneytype = moneytype:lower()
-            amount = tonumber(amount)
-            if amount < 0 then return false end
             if not self.PlayerData.money[moneytype] then return false end
             for _, mtype in pairs(QBCore.Config.Money.DontAllowMinus) do
                 if mtype == moneytype then
@@ -409,19 +426,15 @@ function QBCore.Player.CreatePlayer(PlayerData, Offline)
 
     function self.Functions.SetMoney(moneytype, amount, reason)
         -- 🔄 桥接层: 底层路由到 EconomyService (含 SecurityService 安全校验)
+        local amountOk, cleanedSetAmount = Security.ValidateAmount(amount, { allowZero = true })
+        if not amountOk then return false end
+        amount = cleanedSetAmount
+
         if self.Offline then
             reason = reason or 'unknown'
+            if type(moneytype) ~= 'string' then return false end
             moneytype = moneytype:lower()
-            amount = tonumber(amount)
-            if amount < 0 then return false end
             if not self.PlayerData.money[moneytype] then return false end
-            if Bus and Bus.SecurityService then
-                local ok, cleaned = Bus.SecurityService.ValidateMoneyEvent(
-                    self.PlayerData.source, amount, moneytype, reason
-                )
-                if not ok then return false end
-                amount = cleaned
-            end
             self.PlayerData.money[moneytype] = amount
             self.IsDirty = true
             return true
@@ -558,78 +571,82 @@ end
 
 -- Save player info to database (make sure citizenid is the primary key in your database)
 
+-- ⚠️ 跨资源「函数引用」在数据库回调里不可用 —— 必须传数据，不能传 source。
+-- 真机证据（2026-11-01，玩家进角色时刷红字）：
+--   `QBCore.Player.Save` 是从 `QBCore.Player.CheckPlayerData` 的 oxmysql 回调里被调到的；
+--   那时再调 `exports['qb-inventory']:SaveInventory(source)`，qb-inventory 内部会用
+--   `QBCore.Functions.GetPlayer(source)`（qb-core 的**函数引用**）→
+--     SCRIPT ERROR: Execution of function reference in script host failed
+--   oxmysql 侧的对应报错更直白：`oxmysql tried to call a function reference in qb-core
+--   but the reference wasn't valid. (did qb-core restart recently?)`
+-- 只用 CreateThread 把它挪出回调**不够**（实测仍失败）。根治办法是压根不产生那次
+-- 跨资源函数调用：SaveInventory 本来就支持 offline 形态（第一个参数直接给 PlayerData），
+-- 而 Save() 手里正好有 PlayerData —— 传数据即可，既躲开函数引用，也少一次 GetPlayer。
+local function saveInventoryDeferred(PlayerData)
+    if GetResourceState('qb-inventory') == 'missing' then return end
+    if type(PlayerData) ~= 'table' or not PlayerData.citizenid then return end
+    local ok, err = pcall(function()
+        exports['qb-inventory']:SaveInventory(PlayerData, true)
+    end)
+    if not ok then
+        print(('[qb-core] SaveInventory 失败 (cid=%s): %s'):format(tostring(PlayerData.citizenid), tostring(err)))
+    end
+end
+
 function QBCore.Player.Save(source, force)
     local Player = QBCore.Players[source]
-    if not Player then return end
+    if not Player then return false end
     local PlayerData = Player.PlayerData
-    if PlayerData then
-        local ped = GetPlayerPed(source)
-        local pcoords
-        if ped and ped ~= 0 then
-            pcoords = GetEntityCoords(ped)
-            local phealth = GetEntityHealth(ped)
-            if phealth > 0 then
-                PlayerData.metadata['health'] = phealth
-            end
-        else
-            -- 断线时 ped 可能已销毁，回退到上次持久化位置，避免写入 0,0,0
-            local pos = PlayerData.position
-            pcoords = pos and vector3(pos.x or 0.0, pos.y or 0.0, pos.z or 0.0) or vector3(0.0, 0.0, 0.0)
-        end
-
-        -- 物理位移增量检测：若位移差大于 5.0 米，同样标记为脏数据需要入库
-        local lastCoords = Player.LastSavedCoords
-        if not lastCoords or #(pcoords - lastCoords) > 5.0 then
-            Player.IsDirty = true
-        end
-
-        -- 核心性能阻断：如果数据干净（IsDirty = false）且非强制（force = false），直接跳过物理落盘以节约 70% I/O！
-        if not Player.IsDirty and not force then
-            return
-        end
-
-        -- ⚡ Performance Fix: 接入 DirtyFlush 管道
-        -- 非强制存盘 → 仅标记脏数据，由 DirtyFlush 定时批量落盘（默认 15 分钟一批）
-        -- 强制存盘 → 立即 Flush 单个玩家
-        -- 此举将每 5 分钟 100 次全字段 UPDATE 降低为每 15 分钟一次的批量写入，IO 削减 ~66%
-        local useDirtyFlush = DirtyFlush ~= nil
-        
-        if useDirtyFlush then
-            -- 标记脏数据到管道
-            DirtyFlush.MarkDirty(PlayerData.citizenid, 'all')
-            if force then
-                -- 强制存盘：立即刷盘（下线/重启/管理员手动存档）
-                DirtyFlush.ForceFlush(PlayerData.citizenid)
-            end
-        else
-            -- Fallback: DirtyFlush 不可用时走原始直接 SQL
-            MySQL.insert('INSERT INTO players (citizenid, cid, license, name, money, charinfo, job, gang, position, metadata) VALUES (:citizenid, :cid, :license, :name, :money, :charinfo, :job, :gang, :position, :metadata) ON DUPLICATE KEY UPDATE cid = :cid, name = :name, money = :money, charinfo = :charinfo, job = :job, gang = :gang, position = :position, metadata = :metadata', {
-                citizenid = PlayerData.citizenid,
-                cid = tonumber(PlayerData.cid),
-                license = PlayerData.license,
-                name = PlayerData.name,
-                money = json.encode(PlayerData.money),
-                charinfo = json.encode(PlayerData.charinfo),
-                job = json.encode(PlayerData.job),
-                gang = json.encode(PlayerData.gang),
-                position = json.encode(pcoords),
-                metadata = json.encode(PlayerData.metadata)
-            }, function()
-                -- 显式异步回调，防止数据库操作同步阻塞服务端主线程
-            end)
-        end
-        
-        if GetResourceState('qb-inventory') ~= 'missing' then exports['qb-inventory']:SaveInventory(source) end
-        
-        -- 保存完成，重置脏标记并缓存当前保存坐标位置
-        Player.IsDirty = false
-        Player.LastSavedCoords = pcoords
-        if not useDirtyFlush or force then
-            QBCore.ShowSuccess(resourceName, PlayerData.name .. ' PLAYER SAVED! (FORCE=' .. tostring(not not force) .. ')')
-        end
-    else
+    if not PlayerData then
         QBCore.ShowError(resourceName, 'ERROR QBCORE.PLAYER.SAVE - PLAYERDATA IS EMPTY!')
+        return false
     end
+
+    -- 坐标/血量：ped 已销毁（下线）时回落到上次持久化位置，不写 0,0,0
+    local store = PlayerStore or DirtyFlush
+    local pcoords = store and store.ResolveCoords and store.ResolveCoords(PlayerData)
+        or vector3(0.0, 0.0, 0.0)
+
+    -- 物理位移增量检测：若位移差大于 5.0 米，同样标记为脏数据需要入库
+    local lastCoords = Player.LastSavedCoords
+    if not lastCoords or #(pcoords - lastCoords) > 5.0 then
+        Player.IsDirty = true
+    end
+
+    -- 数据干净且非强制：没有东西要写
+    if not Player.IsDirty and not force then
+        return true
+    end
+
+    -- ① 记账：进唯一脏池（带 PlayerData 快照 —— 玩家离线后仍能补写）
+    local pooled = false
+    if store then
+        pooled = store.MarkDirty(PlayerData.citizenid, 'all', PlayerData) and true or false
+    end
+
+    -- ② 非强制 = 只标脏，等定时批量刷。
+    --    债务已经进了池子，`IsDirty` 只表示"还有没进池的改动"，这里清掉，
+    --    否则 5 分钟一次的心跳存档每次都会重跑 SaveInventory（多一倍 UPDATE）。
+    if not force then
+        if pooled then Player.IsDirty = false end
+        saveInventoryDeferred(PlayerData)
+        return true
+    end
+
+    -- ③ 强制 = 背包 + 立刻写一次。
+    --    这里**直接调 Store.SaveNow**，不再 DirtyFlush.ForceFlush → 避免
+    --    Save(true) → ForceFlush → Save(true) 的环（P1-2）。
+    saveInventoryDeferred(PlayerData)
+    if not store then return false, 'store_unavailable' end
+
+    local ok, err = store.SaveNow(Player, 'save_force')
+    if ok then
+        QBCore.ShowSuccess(resourceName, PlayerData.name .. ' PLAYER SAVED! (FORCE=true)')
+    else
+        -- 写失败不清脏：留着重试，绝不假装成功
+        QBCore.ShowError(resourceName, ('PLAYER SAVE FAILED (%s) — 脏标记保留，退避重试'):format(tostring(err)))
+    end
+    return ok, err
 end
 
 function QBCore.Player.SaveOffline(PlayerData)

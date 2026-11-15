@@ -79,6 +79,8 @@ exports('HasKeys', function(plate)
 end)
 
 --- qb-vehiclekeys 旧版 export: GiveKeys(id, plate)
+--- 注意：exports 是**给可信服务端资源**用的（代客给钥匙、机修交车），所以这里不做
+--- 归属校验 —— 客户端入口一律走 `qb-vehiclekeys:server:GiveKeys` 事件（那里过 CanClaimPlate）。
 exports('GiveKeys', function(id, plate)
     local src = source
     local Player = QBCore.Functions.GetPlayer(id or src)
@@ -100,33 +102,46 @@ end)
 -- 兼容网络事件
 -- ==============================================================
 
+
+--- 车牌认领权限（唯一实现）：会话车主 / 数据库车主一致，或"无主车且人在车旁"。
+--- 抽出来的原因：GiveKeys 与 AcquireVehicleKeys 各写了一遍同语义校验，
+--- 而 Acquire 那份比 Give 严（多了数据库车主与距离），两份迟早分叉。
+---@return boolean ok, string|nil reason
+local function CanClaimPlate(src, cid, plate)
+    local owner = KeyManager.GetOwner(plate)
+    if owner and owner ~= cid then
+        return false, '会话车主: ' .. tostring(owner)
+    end
+    local dbOwner = MySQL.scalar.await('SELECT citizenid FROM player_vehicles WHERE plate = ?', { plate })
+    if dbOwner and dbOwner ~= cid then
+        return false, '数据库车主: ' .. tostring(dbOwner)
+    end
+    if not dbOwner and not IsNearVehicleWithPlate(src, plate) then
+        return false, '无主载具不在附近'
+    end
+    return true
+end
+
 --- qb-vehiclekeys 旧版事件: qb-vehiclekeys:server:GiveKeys
 RegisterNetEvent('qb-vehiclekeys:server:GiveKeys', function(plate)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
-    if type(plate) ~= 'string' or #plate == 0 then return end
+    plate = NormalizePlate(plate)
+    if not plate then return end
+    -- 客户端入口必须限频：这条事件会查 KeyManager + 数据库，不限频就是放大器
+    if not AllowClaim(src) then return end
 
-    -- 🔒 车主校验：知道车牌不等于能拿钥匙
+    -- 🔒 车主校验：知道车牌不等于能拿钥匙（与 AcquireVehicleKeys 共用一份实现）
     local cid = Player.PlayerData.citizenid
-    local owner = KeyManager.GetOwner(plate)
-    if owner and owner ~= cid then
+    local claimOk, reason = CanClaimPlate(src, cid, plate)
+    if not claimOk then
         if exports['custom-logs'] then
             exports['custom-logs']:LogSecurity('钥匙冒领拦截',
-                ('**%s** (%s) | Plate: %s | Owner: %s'):format(
-                    GetPlayerName(src), cid, plate, owner), 16711680)
+                ('**%s** (%s) | Plate: %s | %s'):format(
+                    GetPlayerName(src), cid, plate, reason), 16711680)
         end
         return
-    end
-
-    -- 无主车辆（任务/警车等）只允许在车内授权，防止远程刷钥匙
-    if not owner then
-        local ped = GetPlayerPed(src)
-        local veh = ped ~= 0 and GetVehiclePedIsIn(ped, false) or 0
-        if veh == 0 then return end
-        local vehPlate = GetVehicleNumberPlateText(veh)
-        vehPlate = vehPlate and vehPlate:gsub('^%s+', ''):gsub('%s+$', ''):upper() or ''
-        if vehPlate ~= plate:gsub('^%s+', ''):gsub('%s+$', ''):upper() then return end
     end
 
     KeyManager.GiveKeys(plate, cid, 'shared')
@@ -169,25 +184,9 @@ RegisterNetEvent('qb-vehiclekeys:server:AcquireVehicleKeys', function(plate)
     end
 
     -- 🛡️ 安全: 服务端权威校验（客户端车牌不可信，可随意伪造）
-    -- 1. 会话内已有车主 → 仅原车主可重新声明
-    local owner = KeyManager.GetOwner(plate)
-    if owner and owner ~= cid then
-        Deny('会话车主: ' .. owner)
-        return
-    end
-
-    -- 2. player_vehicles 登记车辆 → 以数据库车主为准
-    --    不校验物理距离，保留上线加载 / 远程取车的合法流程
-    local dbOwner = MySQL.scalar.await('SELECT citizenid FROM player_vehicles WHERE plate = ?', { plate })
-    if dbOwner and dbOwner ~= cid then
-        Deny('数据库车主: ' .. dbOwner)
-        return
-    end
-
-    -- 3. 未登记载具（警车 / 任务车 / NPC 车）→ 必须在载具旁
-    --    此前无任何校验，任何人可远程认领任意车牌
-    if not dbOwner and not IsNearVehicleWithPlate(src, plate) then
-        Deny('无主载具不在附近')
+    local claimOk, reason = CanClaimPlate(src, cid, plate)
+    if not claimOk then
+        Deny(reason or '认领被拒')
         return
     end
 

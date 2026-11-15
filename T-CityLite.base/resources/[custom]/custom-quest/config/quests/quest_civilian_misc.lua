@@ -20,7 +20,7 @@ return {
             daily_limit = 15,
         },
         rewards = {
-            money = { type = 'cash', min = 150, max = 350 },
+            money = { type = 'cash', min = 22, max = 40 },
         },
         steps = {
             {
@@ -29,8 +29,8 @@ return {
                 description = '前往市区的热狗摊位',
                 type = 'reach',
                 data = {
-                    coords = { x = -150.0, y = -250.0, z = 44.0 },
-                    radius = 5.0,
+                    coords = { x = 215.8, y = -810.3, z = 30.7 },
+                    radius = 8.0,
                 },
             },
             {
@@ -39,8 +39,8 @@ return {
                 description = '从冰箱取出热狗和面包',
                 type = 'interact',
                 data = {
-                    coords = { x = -150.0, y = -250.0, z = 44.0 },
-                    radius = 5.0,
+                    coords = { x = 215.8, y = -810.3, z = 30.7 },
+                    radius = 8.0,
                     duration = 3000,
                     label = '准备食材...',
                 },
@@ -51,8 +51,8 @@ return {
                 description = '在烤架上翻烤热狗至金黄',
                 type = 'interact',
                 data = {
-                    coords = { x = -150.0, y = -250.0, z = 44.0 },
-                    radius = 3.0,
+                    coords = { x = 215.8, y = -810.3, z = 30.7 },
+                    radius = 5.0,
                     duration = 5000,
                     label = '烤制热狗...',
                 },
@@ -63,8 +63,8 @@ return {
                 description = '等待顾客购买并收款',
                 type = 'interact',
                 data = {
-                    coords = { x = -150.0, y = -250.0, z = 44.0 },
-                    radius = 3.0,
+                    coords = { x = 215.8, y = -810.3, z = 30.7 },
+                    radius = 5.0,
                     duration = 4000,
                     label = '售卖中...',
                 },
@@ -88,7 +88,7 @@ return {
             daily_limit = 8,
         },
         rewards = {
-            money = { type = 'bank', min = 300, max = 600 },
+            money = { type = 'bank', min = 85, max = 130 },
             rep = { reporter = 30 },
         },
         steps = {
@@ -98,7 +98,7 @@ return {
                 description = '前往洛圣都新闻社领取采访任务',
                 type = 'reach',
                 data = {
-                    coords = { x = -600.0, y = -930.0, z = 23.0 },
+                    coords = { x = -591.8, y = -901.0, z = 24.7 },
                     radius = 10.0,
                 },
             },
@@ -108,7 +108,7 @@ return {
                 description = '从编辑处获取今日采访线索',
                 type = 'interact',
                 data = {
-                    coords = { x = -600.0, y = -930.0, z = 23.0 },
+                    coords = { x = -591.8, y = -901.0, z = 24.7 },
                     radius = 5.0,
                     duration = 3000,
                     label = '领取采访任务...',
@@ -120,7 +120,7 @@ return {
                 description = '驾车前往新闻事件现场',
                 type = 'reach',
                 data = {
-                    coords = { x = 200.0, y = -900.0, z = 30.0 },
+                    coords = { x = 246.0, y = -899.2, z = 28.1 },
                     radius = 15.0,
                 },
             },
@@ -130,7 +130,7 @@ return {
                 description = '在事件现场拍摄新闻照片',
                 type = 'interact',
                 data = {
-                    coords = { x = 200.0, y = -900.0, z = 30.0 },
+                    coords = { x = 246.0, y = -899.2, z = 28.1 },
                     radius = 15.0,
                     duration = 4000,
                     label = '拍摄新闻照片...',
@@ -142,7 +142,7 @@ return {
                 description = '返回新闻社提交稿件和照片',
                 type = 'reach',
                 data = {
-                    coords = { x = -600.0, y = -930.0, z = 23.0 },
+                    coords = { x = -591.8, y = -901.0, z = 24.7 },
                     radius = 10.0,
                 },
             },
@@ -152,7 +152,7 @@ return {
                 description = '将照片和稿件提交给编辑',
                 type = 'interact',
                 data = {
-                    coords = { x = -600.0, y = -930.0, z = 23.0 },
+                    coords = { x = -591.8, y = -901.0, z = 24.7 },
                     radius = 5.0,
                     duration = 3000,
                     label = '提交稿件...',
@@ -177,7 +177,7 @@ return {
             daily_limit = 10,
         },
         rewards = {
-            money = { type = 'bank', min = 200, max = 450 },
+            money = { type = 'bank', min = 50, max = 75 },
             items = { { name = 'plastic', count = 3 } },
             rep = { recycle = 25 },
         },

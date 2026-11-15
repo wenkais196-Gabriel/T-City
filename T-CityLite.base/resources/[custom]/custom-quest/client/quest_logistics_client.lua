@@ -42,6 +42,7 @@ local EntityTracker = {
 
 local heightMonitor = {
     active = false,
+    questId = nil,          -- 服务端要用它确认"这个玩家真的在跑这单任务"
     maxHeight = 150.0,
     requiredDuration = 45,
     lowAltitudeTime = 0,      -- 累计低空时间（秒）
@@ -57,6 +58,7 @@ RegisterNetEvent('quest:client:activateHeightMonitor', function(data)
     if not data then return end
 
     heightMonitor.active = true
+    heightMonitor.questId = data.questId
     heightMonitor.maxHeight = data.max_height or 150.0
     heightMonitor.requiredDuration = data.check_duration_sec or 45
     heightMonitor.lowAltitudeTime = 0
@@ -142,7 +144,7 @@ Citizen.CreateThread(function()
                 QBCore.Functions.Notify('✅ 已成功穿越雷达网！', 'success')
 
                 -- 发送事件让 quest 系统推进步骤
-                TriggerServerEvent('quest:server:aviationHeightMonitorComplete')
+                TriggerServerEvent('quest:server:aviationHeightMonitorComplete', heightMonitor.questId)
                 break
             elseif heightMonitor.lowAltitudeTime >= heightMonitor.requiredDuration - 10 then
                 -- 快完成了，给提示
@@ -234,6 +236,10 @@ RegisterNetEvent('quest:client:nodeValidator', function(data)
                         },
                     }, function(cancelled)
                         if not cancelled and activeNode and activeNode.stepId == data.stepId then
+                            -- 上报后必须退出这个节点：否则线程会活到下一站。
+                            -- 下一步如果是 reach（没有节点事件覆盖它），玩家再按一次 E 就会
+                            -- 给已经完成的校验步骤补报一次 → 顺序校验失败 → 弹红字。
+                            activeNode = nil
                             TriggerServerEvent('quest:server:nodeComplete',
                                 data.questId, data.stepId, 'VALIDATOR',
                                 { position = targetVec, vehicleNetId = vehNetId }
@@ -243,6 +249,7 @@ RegisterNetEvent('quest:client:nodeValidator', function(data)
                 else
                     Citizen.Wait(data.duration or 3000)
                     if activeNode and activeNode.stepId == data.stepId then
+                        activeNode = nil
                         TriggerServerEvent('quest:server:nodeComplete',
                             data.questId, data.stepId, 'VALIDATOR',
                             { position = targetVec, vehicleNetId = vehNetId }
@@ -405,14 +412,8 @@ RegisterNetEvent('quest:client:monitorTrailerHitch', function(data)
     trailerMonitor.spawnedTrailerNetId = nil
 
     local modelHash = GetHashKey(trailerMonitor.trailerModel)
-    RequestModel(modelHash)
-    local timeout = 0
-    while not HasModelLoaded(modelHash) and timeout < 50 do
-        Citizen.Wait(100)
-        timeout = timeout + 1
-    end
-
-    if not HasModelLoaded(modelHash) then
+    -- 旧实现是 50×100ms 的本地轮询；失败经 CFShared.Report 上报一次。
+    if not CFShared.LoadModel(modelHash, 5000) then
         QBCore.Functions.Notify('⚠️ 挂车模型加载失败: ' .. trailerMonitor.trailerModel, 'error')
         return
     end
@@ -711,9 +712,9 @@ Citizen.CreateThread(function()
                 local mins = math.floor(rem / 60)
                 local secs = rem % 60
                 QBCore.Functions.Notify(('⏰ 剩余时间: %d:%02d（恢复运输可暂停）'):format(mins, secs), 'error', 4000)
-            elseif rem <= 10 and rem > 0 and rem ~= EntityTracker.lastNotifySec then
+            elseif (rem == 10 or rem == 5) and rem ~= EntityTracker.lastNotifySec then
                 EntityTracker.lastNotifySec = rem
-                QBCore.Functions.Notify(('🚨 最后 %d 秒！'):format(rem), 'error', 3000)
+                QBCore.Functions.Notify(('🚨 只剩 %d 秒！'):format(rem), 'error', 3000)
             end
 
             if rem <= 0 then

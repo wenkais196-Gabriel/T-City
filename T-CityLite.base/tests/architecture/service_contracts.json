@@ -1,0 +1,1601 @@
+{
+  "schema_version": 1,
+  "note": "方法级导出契约登记表。services 由 tools/dev/service_contracts_scan.py --update 从代码生成（Bus.RegisterService 方法 + 字面量 service_* 导出），review diff 后再提交。放行分三段：dynamic_exports（运行时循环注册，静态扫不到方法名）、external_exports（只放树外资源，本地无法证明）、in_tree_missing_exports（树内资源确实缺的导出，逐条带到期日与 follow_up；树内已有声明的方法不许登记）。review.allowlisted_call_sites 是三段放行实际覆盖的调用点总数，任何人加一条放行都必须同步改它。",
+  "services": {
+    "atmosphere": {
+      "status": "implemented",
+      "owner": "tcity-atmosphere",
+      "methods": {
+        "GetCurrentScene": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "PlayScene": {
+          "args": [
+            "source",
+            "scene",
+            "volume"
+          ],
+          "returns": "true（成功）",
+          "failure": "false, '<reason>'（cooldown / config_missing / security 拒绝码）",
+          "reviewed": true
+        },
+        "SetVolume": {
+          "args": [
+            "source",
+            "volume"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "StopBGM": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "cartel": {
+      "status": "implemented",
+      "owner": "custom-cartel",
+      "methods": {
+        "CheckProductionCooldown": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "CheckRaidConditions": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetOnlineCount": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetOnlineMembers": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "IsMember": {
+          "args": [
+            "source"
+          ],
+          "returns": "true, gradeLevel（cartel 成员）",
+          "failure": "false（非成员或玩家离线；无第二返回值）",
+          "reviewed": true
+        },
+        "OpenStorage": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetProductionCooldown": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "dashboard": {
+      "status": "implemented",
+      "owner": "tcity-dashboard",
+      "methods": {
+        "GetTemplate": {
+          "args": [
+            "class"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetTheme": {
+          "args": [
+            "template"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "HasFeature": {
+          "args": [
+            "template",
+            "feature"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "dealership": {
+      "status": "implemented",
+      "owner": "qb-vehicleshop",
+      "methods": {
+        "CalculateFinance": {
+          "args": [
+            "vehiclePrice",
+            "downPayment",
+            "paymentCount"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "CheckLicense": {
+          "args": [
+            "player",
+            "vehicleModel"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "EstimateUsedPrice": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetLicenseName": {
+          "args": [
+            "vehicleModel"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetShopConfig": {
+          "args": [
+            "shopName"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetShopList": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetVehicleState": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "RecalculateFinance": {
+          "args": [
+            "paymentAmount",
+            "vehData"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "dealership_client": {
+      "status": "implemented",
+      "owner": "qb-vehicleshop",
+      "methods": {
+        "BuildMenu": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetClosestVehicle": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetCurrentShop": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetCurrentVehicle": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetShopVehicles": {
+          "args": [
+            "shopName"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "IsTestDriving": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "economy": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "AddMoney": {
+          "args": [
+            "citizenid",
+            "moneytype",
+            "amount",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "AddScaled": {
+          "args": [
+            "source",
+            "accountType",
+            "amount",
+            "reason"
+          ],
+          "returns": "scaledAmount:number, multiplier:number",
+          "failure": "0, 1.0（离线/非法金额）；0, multiplier（AddMoney 失败）",
+          "reviewed": true
+        },
+        "GetBalance": {
+          "args": [
+            "source",
+            "accountType"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "Transfer": {
+          "args": [
+            "fromSource",
+            "toCitizenId",
+            "amount",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "job": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "GetGang": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetGangOnlineCount": {
+          "args": [
+            "gangName"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetJob": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetOnDutyCount": {
+          "args": [
+            "jobName"
+          ],
+          "returns": "number（在线且 on duty 的人数；0 = 无人）",
+          "failure": "0（无异常路径）",
+          "reviewed": true
+        },
+        "GetOnlinePlayersByGang": {
+          "args": [
+            "gangName"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetOnlinePlayersByJob": {
+          "args": [
+            "jobName"
+          ],
+          "returns": "number[]（在线玩家 source 列表；空表 = 无人）",
+          "failure": "{}（无异常路径）",
+          "reviewed": true
+        },
+        "RemoveJob": {
+          "args": [
+            "source",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetGang": {
+          "args": [
+            "source",
+            "gangName",
+            "grade",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetJob": {
+          "args": [
+            "source",
+            "jobName",
+            "grade",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetOnDuty": {
+          "args": [
+            "source",
+            "onDuty"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "justice": {
+      "status": "implemented",
+      "owner": "custom-justice",
+      "methods": {
+        "AssignLawyer": {
+          "args": [
+            "caseId",
+            "lawyerSrc"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "CreateCase": {
+          "args": [
+            "suspectSrc",
+            "officerSrc",
+            "crimes"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetActiveCases": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetCase": {
+          "args": [
+            "caseId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetInmate": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetInmates": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetOnlineJobCount": {
+          "args": [
+            "jobName"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "OpenCase": {
+          "args": [
+            "citizenid",
+            "officerSrc",
+            "crimes"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ReleaseInmate": {
+          "args": [
+            "citizenid",
+            "reason",
+            "status"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetVerdict": {
+          "args": [
+            "caseId",
+            "verdict",
+            "minutes"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "market": {
+      "status": "implemented",
+      "owner": "custom-market",
+      "methods": {
+        "Buy": {
+          "args": [
+            "source",
+            "itemName",
+            "quantity"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetCategory": {
+          "args": [
+            "category"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetCommodityInfo": {
+          "args": [
+            "itemName"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetMarketStats": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetPrice": {
+          "args": [
+            "itemName"
+          ],
+          "returns": "number|nil（当前市价；运行时覆盖优先）",
+          "failure": "nil（未知商品且无法初始化订单簿）",
+          "reviewed": true
+        },
+        "GetPrices": {
+          "args": [
+            "itemNames"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "Sell": {
+          "args": [
+            "source",
+            "itemName",
+            "quantity"
+          ],
+          "returns": "true, unitPrice:number, nil",
+          "failure": "false, 0|currentPrice, '<reason>'（离线/数量非法/未知商品/库存不足）",
+          "reviewed": true
+        }
+      }
+    },
+    "metadata": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "GetGang": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetJob": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetMetadata": {
+          "args": [
+            "source",
+            "key"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SaveAll": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetJob": {
+          "args": [
+            "source",
+            "job",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetMetadata": {
+          "args": [
+            "source",
+            "key",
+            "value"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "mining": {
+      "status": "implemented",
+      "owner": "custom-mining",
+      "methods": {
+        "GetSites": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetSmeltRecipes": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetToolStats": {
+          "args": [
+            "toolName"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "notify": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "Broadcast": {
+          "args": [
+            "text",
+            "texttype",
+            "length",
+            "icon"
+          ],
+          "returns": "nil（只下发 QBCore:Notify 给 -1）",
+          "failure": "nil（无失败返回）",
+          "reviewed": true
+        },
+        "GetRegisteredTypes": {
+          "args": [],
+          "returns": "table（typeName → {plugin, icon, channel, label}）",
+          "failure": "nil（无失败返回）",
+          "reviewed": true
+        },
+        "RegisterType": {
+          "args": [
+            "pluginName",
+            "typeDef"
+          ],
+          "returns": "true",
+          "failure": "false, 'pluginName required' | 'typeDef.type required' | 'Notification type ... already registered by ...'",
+          "reviewed": true
+        },
+        "Send": {
+          "args": [
+            "source",
+            "text",
+            "texttype",
+            "length",
+            "icon"
+          ],
+          "returns": "nil（路由到 QBCore:Notify）",
+          "failure": "nil（非法 source / 玩家离线 / 限流 → 静默丢弃）",
+          "reviewed": true
+        },
+        "SendAdvanced": {
+          "args": [
+            "source",
+            "title",
+            "subject",
+            "text",
+            "icon",
+            "length"
+          ],
+          "returns": "nil（下发 QBCore:Notify:Advanced）",
+          "failure": "nil（无失败返回）",
+          "reviewed": true
+        },
+        "Subscribe": {
+          "args": [
+            "callback"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "UnregisterType": {
+          "args": [
+            "typeName"
+          ],
+          "returns": "nil",
+          "failure": "nil（类型不存在时静默）",
+          "reviewed": true
+        }
+      }
+    },
+    "patron": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "GetTier": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetTierAsync": {
+          "args": [
+            "citizenid",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetTierBySource": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "IsActive": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetTier": {
+          "args": [
+            "citizenid",
+            "tier",
+            "external_data"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "persistence": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "FlushAll": {
+          "args": [
+            "reason",
+            "ignoreBackoff"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ForceFlush": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ForceFlushPlayer": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "MarkDirty": {
+          "args": [
+            "citizenid",
+            "dataType"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SaveNow": {
+          "args": [
+            "citizenid",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "StartFlushTick": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "StartHealthReport": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "Stats": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "police": {
+      "status": "implemented",
+      "owner": "tcity-dashboard",
+      "methods": {
+        "FlagPlate": {
+          "args": [
+            "plate",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetInfo": {
+          "args": [
+            "plate"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "IsFlagged": {
+          "args": [
+            "plate"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "UnflagPlate": {
+          "args": [
+            "plate"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "quest": {
+      "status": "implemented",
+      "owner": "custom-quest",
+      "methods": {
+        "AbandonQuest": {
+          "args": [
+            "source",
+            "questId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "CompleteStep": {
+          "args": [
+            "source",
+            "questId",
+            "stepId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "FailQuest": {
+          "args": [
+            "source",
+            "questId",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GenerateNonce": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetActiveQuests": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetCatalog": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetQuestProgress": {
+          "args": [
+            "source",
+            "questId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetQuestStep": {
+          "args": [
+            "source",
+            "questId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "IsQuestActive": {
+          "args": [
+            "source",
+            "questId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "RegisterValidator": {
+          "args": [
+            "validatorId",
+            "validatorFn"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "TriggerQuest": {
+          "args": [
+            "source",
+            "questId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "rateLimit": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "Cooldown": {
+          "args": [
+            "key",
+            "cooldownMs",
+            "now"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "Reset": {
+          "args": [
+            "prefix"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "TokenBucket": {
+          "args": [
+            "key",
+            "ratePerMinute",
+            "burst",
+            "now"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "Window": {
+          "args": [
+            "key",
+            "limit",
+            "windowMs",
+            "now"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "security": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "CheckCumulativeThreshold": {
+          "args": [
+            "source",
+            "action",
+            "amount",
+            "windowSec",
+            "maxCumulative"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "CheckSingleThreshold": {
+          "args": [
+            "source",
+            "amount",
+            "eventType"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "IsSecurityEnabled": {
+          "args": [
+            "category"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SanitizeInput": {
+          "args": [
+            "value",
+            "options"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SanitizeNumber": {
+          "args": [
+            "value",
+            "bounds"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SanitizeString": {
+          "args": [
+            "value",
+            "bounds"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ValidateGangEvent": {
+          "args": [
+            "source",
+            "gang",
+            "grade"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ValidateItemEvent": {
+          "args": [
+            "source",
+            "itemName",
+            "count"
+          ],
+          "returns": "true, cleanedItem, cleanedCount:number, nil",
+          "failure": "false, '', 0, err | false, cleanedItem, 0, countErr",
+          "reviewed": true
+        },
+        "ValidateJobEvent": {
+          "args": [
+            "source",
+            "job",
+            "grade"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ValidateMoneyEvent": {
+          "args": [
+            "source",
+            "amount",
+            "moneytype",
+            "reason"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ValidateQualificationEvent": {
+          "args": [
+            "source",
+            "qualification",
+            "action"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ValidateSource": {
+          "args": [
+            "source"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ValidateSourceWithJob": {
+          "args": [
+            "source",
+            "allowedJobs",
+            "requireOnDuty"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "storage": {
+      "status": "implemented",
+      "owner": "custom-storage",
+      "methods": {
+        "AddItem": {
+          "args": [
+            "orgId",
+            "itemName",
+            "amount",
+            "slot",
+            "info"
+          ],
+          "returns": "boolean（qb-inventory AddItem 的返回值）",
+          "failure": "false（qb-inventory export 不可用 / 物品非法 / 背包满）",
+          "reviewed": true
+        },
+        "CanAccess": {
+          "args": [
+            "source",
+            "orgId"
+          ],
+          "returns": "true, nil",
+          "failure": "false, '<reason>'（玩家离线/组织不存在/无权限）",
+          "reviewed": true
+        },
+        "FindPlayerOrg": {
+          "args": [
+            "job",
+            "gang"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetOrgConfig": {
+          "args": [
+            "orgId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetOrgStorage": {
+          "args": [
+            "orgId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetStorageId": {
+          "args": [
+            "orgId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ListAllStorages": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "OpenOrgStorage": {
+          "args": [
+            "source",
+            "orgId"
+          ],
+          "returns": "true, nil",
+          "failure": "false, '<reason>'（CanAccess 拒绝/组织不存在）",
+          "reviewed": true
+        },
+        "RemoveItem": {
+          "args": [
+            "orgId",
+            "itemName",
+            "amount",
+            "slot"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "ValidateAndGetCapacity": {
+          "args": [
+            "source",
+            "orgId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "story": {
+      "status": "implemented",
+      "owner": "story-engine",
+      "methods": {
+        "CheckChoiceCondition": {
+          "args": [
+            "source",
+            "condition",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetAllChoices": {
+          "args": [
+            "source",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetArcChoices": {
+          "args": [
+            "source",
+            "arcId",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetDecision": {
+          "args": [
+            "decisionId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "IsArcCompleted": {
+          "args": [
+            "source",
+            "arcId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "IsArcEnabled": {
+          "args": [
+            "arcId"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "RegisterDecision": {
+          "args": [
+            "decision"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "vehicles": {
+      "status": "implemented",
+      "owner": "custom-vehicles",
+      "methods": {
+        "ClearTempKeys": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetKeyHolders": {
+          "args": [
+            "plate"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetOwner": {
+          "args": [
+            "plate"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GiveKeys": {
+          "args": [
+            "plate",
+            "citizenid",
+            "keyType"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GiveTempKeys": {
+          "args": [
+            "plate",
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "HasKeys": {
+          "args": [
+            "plate",
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "RemoveKeys": {
+          "args": [
+            "plate",
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetOwner": {
+          "args": [
+            "plate",
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "Stats": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "world_state": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "ClearCache": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetActiveNotifications": {
+          "args": [
+            "citizenid"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetPlayerTraces": {
+          "args": [
+            "citizenid",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetRegionSnapshot": {
+          "args": [
+            "region_id"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetRegionSnapshotAsync": {
+          "args": [
+            "region_id",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetRegionState": {
+          "args": [
+            "region_id",
+            "state_key"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "GetRegionStateAsync": {
+          "args": [
+            "region_id",
+            "state_key",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "SetRegionState": {
+          "args": [
+            "region_id",
+            "state_key",
+            "value",
+            "changed_by",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    },
+    "world_trace": {
+      "status": "implemented",
+      "owner": "core-framework",
+      "methods": {
+        "ClearDebounce": {
+          "args": [],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "CountWithin": {
+          "args": [
+            "recent",
+            "now",
+            "window"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "Record": {
+          "args": [
+            "region_id",
+            "state_key",
+            "payload",
+            "changed_by",
+            "cb"
+          ],
+          "returns": "true（已受理；落盘结果通过 cb(ok, detail) 异步回报）",
+          "failure": "false, 'regions_unavailable'|'invalid_region'|'invalid_state_key'|'invalid_payload'|'invalid_actor'|'debounced'|'world_state_unavailable'",
+          "reviewed": true
+        },
+        "RecordAt": {
+          "args": [
+            "x",
+            "y",
+            "state_key",
+            "payload",
+            "changed_by",
+            "cb"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        },
+        "Summarize": {
+          "args": [
+            "value",
+            "now"
+          ],
+          "returns": "unverified",
+          "failure": "unverified",
+          "reviewed": false
+        }
+      }
+    }
+  },
+  "planned_services": [],
+  "dynamic_exports": {
+    "qb-core": {
+      "mode": "resource",
+      "reason": "QBCore.Functions 用 pairs() 循环逐个导出（server/functions.lua:812-816；client/functions.lua 同形），方法名来自运行时表，静态扫描不可见。已知盲区：本闸门不能证明 qb-core 静态导出的具体方法名。",
+      "source": "resources/[qb]/qb-core/server/functions.lua:812"
+    },
+    "qb-fuel": {
+      "mode": "resource",
+      "reason": "client/exports.lua 用 newExports(funcName, func) 包装注册（第 1-6 行），export 名是运行时参数；GetFuel/SetFuel 由第 18/26 行传入。",
+      "source": "resources/[qb]/qb-fuel/client/exports.lua:1"
+    },
+    "custom-vehicles": {
+      "mode": "methods",
+      "methods": [
+        "service_vehicles_GetState",
+        "service_vehicles_UpdateComponent",
+        "service_vehicles_ResetComponents",
+        "service_vehicles_SetNitrous",
+        "service_vehicles_GetNitrous",
+        "service_vehicles_SetTuned",
+        "service_vehicles_CheckTune",
+        "service_vehicles_AddDistance",
+        "service_vehicles_SaveMods"
+      ],
+      "reason": "vehicle_state.lua:414-428 用 pairs({...}) 表循环注册 service_vehicles_*；生成器解析表里的 9 个方法名，按方法逐条放行，不整包放行。",
+      "source": "resources/[custom]/custom-vehicles/server/vehicle_state.lua:415"
+    }
+  },
+  "external_exports": {
+    "LegacyFuel": {
+      "methods": [
+        "GetFuel",
+        "SetFuel"
+      ],
+      "reason": "树外资源（本服以 qb-fuel 提供同语义 export，但上游 qb-vehicleshop/qb-ambulancejob/qb-hud 仍调用 LegacyFuel）。",
+      "source": "resources/[qb]/qb-vehicleshop/client/testdrive.lua:65"
+    },
+    "qb-vehiclekeys": {
+      "methods": [
+        "HasKeys"
+      ],
+      "reason": "树外资源；调用点在 custom-vehicles/qb-core 的兼容分支，缺失时由调用方回落。",
+      "source": "resources/[qb]/qb-core/client/events.lua:175"
+    }
+  },
+  "in_tree_missing_exports": {
+    "safecracker": {
+      "methods": [
+        "StartSafeCracker"
+      ],
+      "owner": "custom-cartel",
+      "why": "safecracker 资源只有 net event（SafeCracker:StartMinigame），没有任何 exports()；custom-cartel/client/main.lua:338 的调用会抛 No such export（client 已用 pcall 降级到 progressbar，但配方仍没有 safecracker 小游戏）。config.lua:59 让该配方默认走 safecracker 分支。",
+      "source": "resources/[custom]/custom-cartel/client/main.lua:338",
+      "follow_up": "把 cartel 的 safecracker 分支改成事件式小游戏（SafeCracker:StartMinigame），或把 config.lua:59 的 minigame 改回 progressbar",
+      "expires": "2027-03-31"
+    },
+    "qb-interior": {
+      "methods": [
+        "CreateFurniMotelStandard"
+      ],
+      "owner": "qb-interior",
+      "why": "vendored 上游 qb-interior 没有该 shell 导出；调用点在 vendored qb-houses/client/main.lua:732 的 tier 16 分支。",
+      "source": "resources/[qb]/qb-houses/client/main.lua:732",
+      "follow_up": "上游后续版本带该导出时删除本条",
+      "expires": "2027-03-31"
+    }
+  },
+  "plugin_contract": {
+    "status": "planned",
+    "reason": "全仓 0 个 Bus.Plugin.Register 调用"
+  },
+  "review": {
+    "external_call_sites": 37,
+    "allowlisted_call_sites": 11,
+    "services": [
+      "atmosphere",
+      "cartel",
+      "economy",
+      "job",
+      "market",
+      "notify",
+      "security",
+      "storage",
+      "world_trace"
+    ]
+  }
+}

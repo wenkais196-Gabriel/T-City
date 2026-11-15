@@ -15,7 +15,7 @@
 | NUI → 客户端 | `RegisterNUICallback(name, function(data, cb) … end)`；应答一律 `PhoneBridge.AnswerFn(cb)` |
 | 客户端 → 服务端 | `PhoneBridge.Request(event, payload, cb, timeoutMs, responseEvent, trace)` |
 | 服务端 → 客户端 | `TriggerClientEvent('phone:client:…')` / 各资源自己的 `:client:` 事件 |
-| 服务端 → DB | 本资源的 `*Db` helper（如 `PhoneDb.InsertId/AffectedRows`），不直接 `MySQL.*` |
+| 服务端 → DB | `Db.Insert/Update/Query/Single/Scalar`（`T-CityLite.base/resources/[standalone]/core-framework/server/db.lua`），不直接 `MySQL.*`；`PhoneDb.*`/`InsertId` 只是门面 |
 | 钱/物品 | `Player.Functions.*`、`core_economy:TriggerReward` |
 
 ## 禁止
@@ -66,7 +66,8 @@
   而且失败得很安静：命令只回 `not_allowed`，看起来像"白名单没加"。长度用 `#cmd` 判。
 - `_G.QBCore` 在资源内不保证存在：用 `exports['qb-core']:GetCoreObject()` 惰性解析并缓存。
 - `PlayerData.source` 不可靠，roster key 才是 source；重连后 id 会变。
-- oxmysql 定制版 `insert` 可能返回 `{insertId, affectedRows}`：用 helper 取，不要当裸数字。
+- oxmysql 定制版 `insert/update` 可能返回数字，也可能返回 `{insertId, affectedRows}`：
+  统一走 `Db.Insert/Db.Update`，不要自己解形状（`affectedRows` 不是记录 id）。
 - 服务端 `DoesEntityExist` 对远程 ped 可能 false，坐标采样不能以它为前提。
 - 命令处理器（`QBCore.Commands.Add` / `RegisterCommand`）里 `GetPlayer(source)` 可能是 nil
   （控制台 `source = 0`，或玩家本帧掉线），索引 `PlayerData` 前必须判空。
@@ -77,7 +78,7 @@
 
 ```bash
 cd T-CityLite.base && /usr/bin/python3 -m pytest tests/unit tests/architecture -q
-luac5.4 -p resources/[custom]/<res>/server/main.lua      # 全部改过的 Lua
+luac5.4 -p resources/[custom]/<res>/server/main.lua      # 全部改过的 Lua（PowerShell 里写 luac5.4.exe）
 tcity-cmd -w 8 "restart <res>"                            # 控制台应无 SCRIPT ERROR
 tcity-cmd --page | grep -a "\\[custom-<res>\\]"            # 资源自检日志
 ```

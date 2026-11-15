@@ -98,4 +98,4 @@ T-City Lite 采用**微服务解耦 + 服务总线**的设计模式，所有资�
 
 ### 4. 可拓展 (Extensibility)
 > [!NOTE]
-> - 引入新资源时，需在 `compat.lua` 或相关 `shim` 中为老代码提供 Legacy Wrapper。确保历史脚本可以零修改运行，同时享受新架构的安全与性能红利。
+> - **不要再引入 Legacy Wrapper / 猴补**（原规则已被 P1-4 推翻，2026-11-01）：往 `QBCore.*` / `Player.Functions.*` 上赋值会被 `tests/architecture/test_no_monkey_patch.py` 拦下。老代码要改就改调用方；确实需要过渡期的，登记到猴补白名单并写到期日。

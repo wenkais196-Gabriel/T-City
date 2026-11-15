@@ -1,11 +1,11 @@
--- integration.lua — Phase 3: 深度集成 custom-vehicles Bus
+-- integration.lua — Phase 3: 深度集成 custom-vehicles（静态导出）
 --
 -- 模块化·高性能·安全·可拓展 — 四原则设计
 --
 -- 职责:
---   1. 对接 custom-vehicles Bus 获取车辆里程/车况
+--   1. 通过 exports['custom-vehicles']:GetVehicleState 获取车辆里程/车况
 --   2. 二手车估值公式
---   3. 增强 Bus.dealership 服务方法
+--   3. 追加 service_dealership_EstimateUsedPrice / service_dealership_GetVehicleState
 
 local QBCore   = exports['qb-core']:GetCoreObject()
 local shopUtil = _G._vehicleshop
@@ -19,7 +19,7 @@ local shopUtil = _G._vehicleshop
 ---   mileageFactor  = max(0.3, 1 - mileage / 500000)
 ---   conditionFactor = avg(radiator, axle, brakes, clutch, fuel) / 100
 ---@param basePrice number 新车价格
----@param vehicleState table|nil { distance, components } 来自 Bus.vehicles.GetState
+---@param vehicleState table|nil { distance, components } 来自 exports['custom-vehicles']:GetVehicleState
 ---@return number estimatedPrice, number mileage, number conditionPct
 function EstimateUsedVehiclePrice(basePrice, vehicleState)
     if not vehicleState then
@@ -60,45 +60,29 @@ end
 ---@return table|nil
 function GetVehicleStateSafe(plate)
     if not plate then return nil end
+    if GetResourceState('custom-vehicles') ~= 'started' then return nil end
     local ok, state = pcall(function()
-        -- 尝试 Bus.vehicles.GetState
-        if Bus and Bus.vehicles and Bus.vehicles.GetState then
-            return Bus.vehicles.GetState(plate)
-        end
-        -- fallback: 尝试直接 exports
-        if GetResourceState('custom-vehicles') == 'started' then
-            return exports['custom-vehicles']:GetVehicleState(plate)
-        end
+        return exports['custom-vehicles']:GetVehicleState(plate)
     end)
     if ok and state then return state end
     return nil
 end
 
 -- ==============================================================
--- 扩展 Bus.dealership 服务
+-- 扩展 dealership 服务（静态导出，不依赖 Bus）
 -- ==============================================================
 
-if Bus and Bus._services and Bus._services['dealership'] then
-    local dealBus = Bus._services['dealership']
+-- 同一张服务表（server/bus.lua 通过 _G._vehicleshop.Dealership 暴露）
+local dealService = shopUtil.Dealership
+dealService.EstimateUsedPrice = EstimateUsedVehiclePrice
+dealService.GetVehicleState   = GetVehicleStateSafe
 
-    -- 追加方法
-    dealBus.EstimateUsedPrice  = EstimateUsedVehiclePrice
-    dealBus.GetVehicleState    = GetVehicleStateSafe
+exports('service_dealership_EstimateUsedPrice', EstimateUsedVehiclePrice)
+exports('service_dealership_GetVehicleState', GetVehicleStateSafe)
 
-    -- 更新 Bus.dealership 速记
-    if Bus.dealership then
-        Bus.dealership.EstimateUsedPrice = EstimateUsedVehiclePrice
-        Bus.dealership.GetVehicleState   = GetVehicleStateSafe
-    end
-
-    -- 注册为独立 exports
-    exports('service_dealership_EstimateUsedPrice', EstimateUsedVehiclePrice)
-    exports('service_dealership_GetVehicleState', GetVehicleStateSafe)
-
-    print('[qb-vehicleshop] 🔗 深度集成 custom-vehicles Bus 已完成 (integration.lua)')
-    print('[qb-vehicleshop]   + EstimateUsedPrice: 二手车估值 (里程×车况)')
-    print('[qb-vehicleshop]   + GetVehicleState: 安全获取车辆状态')
-end
+print('[qb-vehicleshop] 🔗 深度集成 custom-vehicles 已完成 (integration.lua)')
+print('[qb-vehicleshop]   + EstimateUsedPrice: 二手车估值 (里程×车况)')
+print('[qb-vehicleshop]   + GetVehicleState: 安全获取车辆状态')
 
 -- ==============================================================
 -- NUI 回调: 获取车辆详情 (含里程/车况)

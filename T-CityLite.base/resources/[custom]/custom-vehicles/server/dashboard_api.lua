@@ -11,6 +11,40 @@
 
 local QBCore = exports['qb-core']:GetCoreObject()
 
+--- 紧急服务（警察/医疗/消防）：PA 喊话、警笛、测速雷达、锚定只对这些职业开放。
+--- 抽出来的原因：同一段职业判断在三个事件里重复了三遍，其中两个事件压根没有。
+
+--- 该玩家是否有进行中的**物流**任务（电子印章交单的前置条件）。
+--- 与 HasActiveQuest 的区别：这里要求具体任务模板，不是"随便有个任务"。
+local LOGISTICS_QUESTS = {
+    euro_trucking_steel = true,
+    euro_trucking_heavy_trailer = true,
+    aviation_smuggling_flight = true,
+}
+
+local function FindLogisticsQuest(src)
+    local ok, quests = pcall(function() return exports['custom-quest']:GetActiveQuests(src) end)
+    if not ok or type(quests) ~= 'table' then return nil end
+    for _, quest in ipairs(quests) do
+        if LOGISTICS_QUESTS[quest.quest_id] then return quest end
+    end
+    return nil
+end
+
+--- 该玩家是否有进行中的任务（快捷装货的前置条件）。
+--- pcall：custom-quest 重启的空窗期里 exports 会抛错，不能把守卫变成运行时错误。
+local function HasActiveQuest(src)
+    local ok, quests = pcall(function() return exports['custom-quest']:GetActiveQuests(src) end)
+    return ok and type(quests) == 'table' and #quests > 0
+end
+
+local function IsEmergencyService(src)
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return false end
+    local job = Player.PlayerData.job
+    return job ~= nil and (job.name == 'police' or job.name == 'ambulance' or job.name == 'fire')
+end
+
 -- ==============================================================
 -- 外部 App 注册 API (可拓展)
 -- ==============================================================
@@ -110,9 +144,8 @@ RegisterNetEvent('custom-vehicles:server:megaphone', function(data)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
-    -- 职业鉴权：必须是警察
-    local job = Player.PlayerData.job
-    if not job or (job.name ~= 'police' and job.name ~= 'ambulance' and job.name ~= 'fire') then
+    -- 职业鉴权：必须是紧急服务（警察/医疗/消防）
+    if not IsEmergencyService(src) then
         if exports['custom-logs'] then
             exports['custom-logs']:LogSecurity('非法PA喊话',
                 ('**%s** (%s) 试图使用紧急喊话'):format(GetPlayerName(src), Player.PlayerData.citizenid), 16711680)
@@ -150,6 +183,9 @@ RegisterNetEvent('custom-vehicles:server:megaphone', function(data)
     local coords = GetEntityCoords(ped)
 
     -- 广播给附近玩家（通过 pma-voice 或其他方式）
+    -- 注意：job 必须是本作用域的变量。抽 IsEmergencyService 时曾把 `local job` 一起删掉，
+    -- 结果这里引用全局 job → 通过鉴权后必抛 attempt to index a nil value。
+    local job = Player.PlayerData.job or {}
     local title = '紧急人员'
     if job.name == 'police' then title = '警官'
     elseif job.name == 'ambulance' then title = '急救员'
@@ -175,11 +211,7 @@ RegisterNetEvent('custom-vehicles:server:sirenControl', function(data, legacyVeh
 
     if not checkOpRateLimit(src, 'siren') then return end
 
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
-
-    local job = Player.PlayerData.job
-    if not job or (job.name ~= 'police' and job.name ~= 'ambulance' and job.name ~= 'fire') then return end
+    if not IsEmergencyService(src) then return end
 
     -- 兼容新旧两种调用约定:
     --   新(tcity-dashboard controller): data = { mode, vehNetId }
@@ -209,6 +241,8 @@ RegisterNetEvent('custom-vehicles:server:policeRadarLog', function(targetPlate, 
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
+    -- 雷达日志会被当成执法记录：限制在紧急服务内，否则任何人能伪造"某某超速"
+    if not IsEmergencyService(src) then return end
 
     -- 超速记录
     if targetSpeed > limitSpeed then
@@ -228,6 +262,7 @@ RegisterNetEvent('custom-vehicles:server:anchorControl', function(data, legacyVe
     local src = source
 
     if not checkOpRateLimit(src, 'anchor') then return end
+    if not IsEmergencyService(src) then return end
 
     -- 兼容新旧调用约定
     local action, veh
@@ -268,6 +303,7 @@ end)
 RegisterNetEvent('custom-vehicles:server:logisticsQuickLoad', function()
     local src = source
     if not checkOpRateLimit(src, 'logistics') then return end
+    if not HasActiveQuest(src) then return end
     exports['custom-quest']:OnCustomEvent(src, 'dashboard_quick_load', {})
 end)
 
@@ -294,20 +330,9 @@ RegisterNetEvent('custom-vehicles:server:logisticsStampDelivery', function(veh)
     end
 
     -- 三合一电子戳校验:
-    -- 1. 获取当前活跃物流任务
+    -- 1. 当前活跃物流任务（只认真实物流模板）
     local citizenid = Player.PlayerData.citizenid
-    local activeQuests = exports['custom-quest']:GetActiveQuests(src) or {}
-
-    local logisticsQuest = nil
-    for _, q in ipairs(activeQuests) do
-        if q.quest_id == 'euro_trucking_steel'
-            or q.quest_id == 'euro_trucking_heavy_trailer'
-            or q.quest_id == 'aviation_smuggling_flight' then
-            logisticsQuest = q
-            break
-        end
-    end
-
+    local logisticsQuest = FindLogisticsQuest(src)
     if not logisticsQuest then
         TriggerClientEvent('QBCore:Notify', src, '没有进行中的物流任务', 'error')
         return

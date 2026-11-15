@@ -13,7 +13,6 @@ local CORONER_COOLDOWN_SECONDS = 60
 local CORONER_SWEEP_MS = 10000
 
 local coronerRequests = {}   -- [requestId] = { cid, source, at }
-local coronerCooldown = {}   -- [cid] = os.time()
 local coronerSequence = 0
 
 local function nextRequestId()
@@ -49,11 +48,25 @@ local function releaseRequest(requestId, reason)
 end
 
 --- 客户端上报完成（或失败）。只认自己名下的单号。
+--- 验尸官请求的反馈（P-2）：以前失败全是静默 return，玩家体感就是"按了没反应"。
+--- 走 custom-notify 的三层分派：成功 feed、失败 error（error 永不 toast）。
+local function coronerFeedback(src, kind, title, body)
+    pcall(function()
+        exports['custom-notify']:Push(src, kind, title, body)
+    end)
+end
+-- ⚠️ 定义必须在**使用点之前**：Lua 的 local 不做前向声明，
+-- 写在后面的话前面那次调用会解析成全局 nil —— 静默到运行时才炸。
+-- （2026-11-14 由 tests/architecture/test_lua_local_order.py 抓出）
+
 RegisterNetEvent('police:server:coronerDone', function(requestId, reason)
     local src = tonumber(source) or 0
     local player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(src)
     local data = player and player.PlayerData
-    if not data or not PolicePolicy.Can(data, 'incident.update') then return end
+    if not data or not PolicePolicy.Can(data, 'incident.update') then
+        coronerFeedback(src, 'error', '没有权限呼叫验尸官')
+        return
+    end
     local entry = type(requestId) == 'string' and coronerRequests[requestId]
     if not entry or entry.source ~= src then return end
     local normalized = type(reason) == 'string' and #reason <= 24 and reason or 'done'
@@ -62,32 +75,46 @@ end)
 
 --- 玩家叫验尸官。`corpseNet` 由客户端提供（它才看得到那一具尸体是哪一个），
 --- 服务端不复验实体归属：这是纯表现层动作，真正的权威是"谁在岗、有没有名额"。
+
 RegisterNetEvent('police:server:coronerRequest', function(corpseNet)
     local src = tonumber(source) or 0
     local player = QBCore and QBCore.Functions and QBCore.Functions.GetPlayer(src)
     local data = player and player.PlayerData
     if not data or not PolicePolicy.Can(data, 'incident.update') then return end
-    if not data.job or data.job.onduty ~= true then return end
+    if not data.job or data.job.onduty ~= true then
+        coronerFeedback(src, 'error', '上班状态才能呼叫验尸官')
+        return
+    end
     local cid = type(data.citizenid) == 'string' and data.citizenid or ''
-    if cid == '' then return end
+    if cid == '' then
+        coronerFeedback(src, 'error', '角色数据异常，请重新登录')
+        return
+    end
 
-    local last = coronerCooldown[cid] or 0
-    if os.time() - last < CORONER_COOLDOWN_SECONDS then return end
+    if not exports['core-framework']:RateLimitCooldown(
+            ('police:%s:coroner'):format(cid), CORONER_COOLDOWN_SECONDS * 1000) then
+        -- owner 只回 boolean（没有剩余秒数），提示固定成完整冷却时长。
+        coronerFeedback(src, 'error', ('验尸官正在路上，%d 秒后可再叫'):format(CORONER_COOLDOWN_SECONDS))
+        return
+    end
 
     local requestId = nextRequestId()
     local admitted = NPCBudget and NPCBudget.Acquire and NPCBudget.Acquire('coroner', requestId, cid)
     if not admitted then
+        -- 与旧表一致：预算拒绝不占冷却（owner 的 Cooldown 已记账，这里撤回）。
+        exports['core-framework']:RateLimitReset(('police:%s:coroner'):format(cid))
+        coronerFeedback(src, 'error', '验尸官暂时忙不过来（名额已满）')
         if not audit(cid, 'coroner.rejected', requestId, 'budget') then
             print(('[custom-police] coroner.rejected audit failed: %s'):format(tostring(requestId)))
         end
         return
     end
 
-    coronerCooldown[cid] = os.time()
     coronerRequests[requestId] = { cid = cid, source = src, at = os.time() }
     if not audit(cid, 'coroner.request', requestId, '') then
         print(('[custom-police] coroner.request audit failed: %s'):format(tostring(requestId)))
     end
+    coronerFeedback(src, 'feed', '验尸官已在路上', '约 2 分钟到达现场')
     TriggerClientEvent('police:client:SpawnCoroner', src, requestId, tonumber(corpseNet) or 0)
 end)
 

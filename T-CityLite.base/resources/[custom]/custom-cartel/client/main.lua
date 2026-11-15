@@ -39,19 +39,15 @@ end)
 
 function spawnNPC(npcCfg)
     local hash = GetHashKey(npcCfg.model)
-    RequestModel(hash)
-    local timeout = 0
-    while not HasModelLoaded(hash) do
-        Wait(10)
-        timeout = timeout + 1
-        if timeout > 300 then
-            print('[cartel] ❌ NPC模型加载失败: ' .. npcCfg.model)
-            return
-        end
+    -- 旧实现是 300×10ms 的本地轮询；失败时经 CFShared.Report 上报一次。
+    if not CFShared.LoadModel(hash, 5000) then
+        print('[cartel] ❌ NPC模型加载失败: ' .. tostring(npcCfg.model))
+        return
     end
 
     local ped = CreatePed(0, hash, npcCfg.coords.x, npcCfg.coords.y, npcCfg.coords.z - 1.0,
         npcCfg.coords.w, false, true)
+    CFShared.ReleaseModel(hash)
     if DoesEntityExist(ped) then
         FreezeEntityPosition(ped, true)
         SetEntityInvincible(ped, true)
@@ -132,7 +128,7 @@ RegisterNetEvent('cartel:client:openSupplierMenu', function(data)
     local menuItems = {}
     for _, item in ipairs(items) do
         table.insert(menuItems, {
-            header = ('%s — $%d/pc (Stock: %d)'):format(L(item.label) or item.name, item.price, item.stock),
+            header = ('%s — $%s/pc (Stock: %d)'):format(L(item.label) or item.name, Money(item.price), item.stock),
             txt = ('Buy %s'):format(L(item.label) or item.name),
             params = {
                 event = 'cartel:client:buyItem',
@@ -161,7 +157,7 @@ end)
 
 RegisterNetEvent('cartel:client:buyItem', function(data)
     local dialog = exports['qb-input']:ShowInput({
-        header = ('Buy %s ($%d/pc)'):format(data.itemLabel, data.price),
+        header = ('Buy %s ($%s/pc)'):format(data.itemLabel, Money(data.price)),
         submitText = 'Confirm Purchase',
         inputs = {
             {
@@ -193,7 +189,7 @@ RegisterNetEvent('cartel:client:openDealerMenu', function(data)
     local menuItems = {}
     for itemName, price in pairs(buyPrices) do
         table.insert(menuItems, {
-            header = ('%s — $%d/pc'):format(itemName, price),
+            header = ('%s — $%s/pc'):format(itemName, Money(price)),
             txt = ('Sell %s'):format(itemName),
             params = {
                 event = 'cartel:client:sellItem',
@@ -216,7 +212,7 @@ end)
 
 RegisterNetEvent('cartel:client:sellItem', function(data)
     local dialog = exports['qb-input']:ShowInput({
-        header = ('Sell %s ($%d/pc)'):format(data.itemName, data.price),
+        header = ('Sell %s ($%s/pc)'):format(data.itemName, Money(data.price)),
         submitText = 'Confirm Sale',
         inputs = {
             {
@@ -333,29 +329,30 @@ RegisterNetEvent('cartel:client:productionStarted', function(data)
 
     -- 根据配方使用不同的交互方式
     if data.minigame == 'safecracker' then
-        -- 使用 safecracker 小游戏
-        local success = exports['safecracker']:StartSafeCracker()
-        if success then
+        -- safecracker 资源只有 net event（SafeCracker:StartMinigame），没有 StartSafeCracker 导出；
+        -- 导出缺失时不许静默失败：打一行日志并降级到 progressbar 分支，保证配方可产出。
+        local ok, success = pcall(function() return exports['safecracker']:StartSafeCracker() end)
+        if ok and success then
             TriggerServerEvent('cartel:server:finishProduction', data.recipeId)
-        else
-            QBCore.Functions.Notify(_L('cartel_production_fail'), 'error')
+            return
         end
-    else
-        -- 使用 progressbar
-        QBCore.Functions.Progressbar('cartel_production', ('Producing: %s'):format(L(data.label)),
-            data.duration * 1000, false, true, {
-                disableMovement = true,
-                disableCarMovement = true,
-                disableMouse = false,
-                disableCombat = true,
-            }, {}, {}, {}, function()
-                -- 完成 → 通知服务端
-                TriggerServerEvent('cartel:server:finishProduction', data.recipeId)
-            end, function()
-                -- 取消 → 不通知服务端，原料不消耗
-                QBCore.Functions.Notify(_L('cartel_production_cancel'), 'error')
-            end)
+        print(('[custom-cartel] safecracker 导出不可用（ok=%s），降级到 progressbar：%s')
+            :format(tostring(ok), tostring(data.label)))
     end
+    -- 落到下面的 progressbar 分支（保持原有进度条逻辑不变）
+    QBCore.Functions.Progressbar('cartel_production', ('Producing: %s'):format(L(data.label)),
+        data.duration * 1000, false, true, {
+            disableMovement = true,
+            disableCarMovement = true,
+            disableMouse = false,
+            disableCombat = true,
+        }, {}, {}, {}, function()
+            -- 完成 → 通知服务端
+            TriggerServerEvent('cartel:server:finishProduction', data.recipeId)
+        end, function()
+            -- 取消 → 不通知服务端，原料不消耗
+            QBCore.Functions.Notify(_L('cartel_production_cancel'), 'error')
+        end)
 end)
 
 -- ==============================================================

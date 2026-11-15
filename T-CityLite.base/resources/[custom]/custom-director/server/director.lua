@@ -96,31 +96,26 @@ local function dbSingle(sql, params)
 end
 
 local function dbInsert(sql, params)
-    local ok, insertId = pcall(function()
-        return MySQL.insert.await(sql, params or {})
-    end)
-    if not ok then
-        print(('[director] DB insert failed: %s'):format(truncate(insertId, 200)))
-        return nil, tostring(insertId)
+    local id, err = Db.Insert(sql, params)
+    if err then
+        -- 本文件唯一的 insert 是 `INSERT IGNORE INTO agent_director_state`：
+        -- 行已存在时 affectedRows=0、没有 insertId，这是"状态已在"而不是失败。
+        -- Db.Insert 仍然拒绝把 affectedRows 当 id（本片修的真 bug）；这里只把
+        -- "没有 id" 映射回旧调用点期待的成功哨兵 0。
+        if err == 'no_insert_id' then return 0, nil end
+        print(('[director] DB insert failed: %s'):format(truncate(err, 200)))
+        return nil, err
     end
-    if type(insertId) == 'table' then
-        insertId = insertId.insertId or insertId.affectedRows or 0
-    end
-    return tonumber(insertId) or 0, nil
+    return id, nil
 end
 
 local function dbUpdate(sql, params)
-    local ok, affected = pcall(function()
-        return MySQL.update.await(sql, params or {})
-    end)
-    if not ok then
-        print(('[director] DB update failed: %s'):format(truncate(affected, 200)))
-        return 0, tostring(affected)
+    local affected, err = Db.Update(sql, params)
+    if err then
+        print(('[director] DB update failed: %s'):format(truncate(err, 200)))
+        return nil, err
     end
-    if type(affected) == 'table' then
-        affected = affected.affectedRows or 0
-    end
-    return tonumber(affected) or 0, nil
+    return affected, nil
 end
 
 -- ---------------------------------------------------------------------------

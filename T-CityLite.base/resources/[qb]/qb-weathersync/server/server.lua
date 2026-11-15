@@ -1,5 +1,23 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- qb-core 重启后，上面这份快照里的函数引用会全部失效（P1-6，PR #196）：
+-- 本资源没有声明 qb-core 依赖，不会被重启级联带走，所以在 qb-core 起来时重解析一次。
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= 'qb-core' then return end
+    -- ⚠️ 不能在事件里同步调：真机实测此刻 export 引用可能还指向 qb-core 旧 script host，
+    -- 会抛 `Execution of function reference in script host failed`。放线程里重试到拿到新表。
+    CreateThread(function()
+        for _ = 1, 30 do
+            local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+            if ok and core then
+                QBCore = core
+                return
+            end
+            Wait(500)
+        end
+    end)
+end)
+
 -- ============================================================
 --  状态模型：gameMinutes(整数 分钟) + frozen(bool) + timerStart(ms)
 --  1 真实秒 = TIME_SCALE 游戏分钟 (GTA V 默认 2.0)
@@ -118,7 +136,14 @@ end
 -- ============================================================
 --  网络事件（保留所有原有接口）
 -- ============================================================
+local lastStateSync = {}
 RegisterNetEvent('qb-weathersync:server:RequestStateSync', function()
+    local src = source
+    if type(src) ~= 'number' then return end
+    -- 🔒 这个事件会向全服（-1）广播两条同步包：按玩家 5 秒冷却，避免一个人连点刷屏
+    local now = os.time()
+    if lastStateSync[src] and now - lastStateSync[src] < 5 then return end
+    lastStateSync[src] = now
     local cur = getCurrentGameMinutes()
     TriggerClientEvent('qb-weathersync:client:SyncWeather', -1, CurrentWeather, blackout)
     TriggerClientEvent('qb-weathersync:client:SyncTime', -1, cur, frozen)
@@ -126,7 +151,8 @@ end)
 
 RegisterNetEvent('qb-weathersync:server:setWeather', function(weather)
     local src = getSource(source)
-    if isAllowedToChange(src) then
+    if not isAllowedToChange(src) then return end
+    do
         local success = setWeather(weather)
         if src > 0 then
             if success then TriggerClientEvent('QBCore:Notify', src, Lang:t('weather.updated'))
@@ -137,7 +163,8 @@ end)
 
 RegisterNetEvent('qb-weathersync:server:setTime', function(hour, minute)
     local src = getSource(source)
-    if isAllowedToChange(src) then
+    if not isAllowedToChange(src) then return end
+    do
         local success = setTime(hour, minute)
         if src > 0 then
             if success then TriggerClientEvent('QBCore:Notify', src, Lang:t('time.change', {value = hour, value2 = minute or "00"}))
@@ -148,7 +175,8 @@ end)
 
 RegisterNetEvent('qb-weathersync:server:toggleBlackout', function(state)
     local src = getSource(source)
-    if isAllowedToChange(src) then
+    if not isAllowedToChange(src) then return end
+    do
         local newstate = setBlackout(state)
         if src > 0 then
             if newstate then TriggerClientEvent('QBCore:Notify', src, Lang:t('blackout.enabled'))
@@ -159,7 +187,8 @@ end)
 
 RegisterNetEvent('qb-weathersync:server:toggleFreezeTime', function(state)
     local src = getSource(source)
-    if isAllowedToChange(src) then
+    if not isAllowedToChange(src) then return end
+    do
         local newstate = setTimeFreeze(state)
         if src > 0 then
             if newstate then TriggerClientEvent('QBCore:Notify', src, Lang:t('time.now_frozen'))
@@ -170,7 +199,8 @@ end)
 
 RegisterNetEvent('qb-weathersync:server:toggleDynamicWeather', function(state)
     local src = getSource(source)
-    if isAllowedToChange(src) then
+    if not isAllowedToChange(src) then return end
+    do
         local newstate = setDynamicWeather(state)
         if src > 0 then
             if newstate then TriggerClientEvent('QBCore:Notify', src, Lang:t('weather.now_unfrozen'))
@@ -333,6 +363,8 @@ end)
 -- ============================================================
 RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     local src = source
+    -- 🔒 这个名字是服务端内部事件，客户端不该能触发（会额外跑一次 2 秒等待 + 同步）
+    if src ~= 0 then return end
     Wait(2000)  -- 等客户端初始化
     local cur = getCurrentGameMinutes()
     TriggerClientEvent('qb-weathersync:client:SyncWeather', src, CurrentWeather, blackout)

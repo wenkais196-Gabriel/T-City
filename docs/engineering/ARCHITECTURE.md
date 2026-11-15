@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-10-25
+updated: 2026-11-15
 review_by: 2027-04-30
 ---
 
@@ -69,7 +69,9 @@ review_by: 2027-04-30
 | 前端拿数据 | `fetchNui('<callback>', payload)` → 客户端回调 → `PhoneBridge.Request` → 服务端 | 页面里 `fetch('https://cfx-nui-...')` |
 | 前端做动作 | `requestAppAction` → 服务端 `appAction` 分支（带限流与权限） | 前端拼 SQL / 直接改 store 当成已生效 |
 | 客户端拿数据 | `PhoneBridge.Request(event, payload, cb, timeoutMs)` | 自己维护 request id 表 |
+| 跨资源服务调用 | `exports['<owner>']:service_<name>_<method>`，方法必须登记在 `service_contracts.json` | `Bus.<service>.<method>`（跨资源恒 nil） |
 | 服务端推 UI | `TriggerClientEvent('phone:client:...')` → 客户端 `SendNUIMessage` | 服务端直接发 NUI 消息（不存在） |
+| 跨资源/全服广播 | `Broadcast.Scope(event, audience, ...)`（server include） | `TriggerClientEvent(event, -1, ...)`（未登记会被闸门拦） |
 | 改钱/物品 | `Player.Functions.AddMoney` / `core_economy:TriggerReward` | `UPDATE players SET money` |
 | 新增表 | `migrations/v*.sql`（幂等）+ `table_owners.json` + `tests/fixtures/tcity_schema.sql` | 直接改库 |
 
@@ -79,7 +81,14 @@ review_by: 2027-04-30
 
 - `net_events_allowlist.json`：事件名 → 类别（`auth` / `diagnostic`）/ owner / 到期日；
 - `table_owners.json`：表 → owner 资源，跨资源写必须走 owner；
-- `resource_wiring_allowlist.json`：资源级引用（`exports` / 资源名硬编码）的豁免登记。
+- `resource_wiring_allowlist.json`：资源级引用（`exports` / 资源名硬编码）的豁免登记；
+- `broadcast_allowlist.json` 是债务清单，不是白名单：新增 `TriggerClientEvent(..., -1, ...)`
+  必须登记（闸门 `test_broadcast_scope.py`），要收窄受众就改走 `Broadcast.Scope`。
+
+跨资源服务调用只走 `exports['<owner>']:service_<name>_<method>`；`Bus` 只是 owner 侧的
+注册辅助，跨资源不可见（`_G.Bus` 是每个 resource 私有的 Lua 状态）。`Bus.Plugin` 在
+`service_contracts.json` 里标 `planned`（全仓 0 个 `Bus.Plugin.Register` 调用），不对外宣传；
+闸门是 `tests/architecture/test_bus_scope.py`。
 
 组件的复用规则（共享代码放哪、什么不该合并、棘轮怎么收敛）见 `docs/engineering/REUSE.md`，
 闸门是 `tests/architecture/test_reuse_budget.py`。

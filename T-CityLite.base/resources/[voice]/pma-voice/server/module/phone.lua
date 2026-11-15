@@ -72,5 +72,6 @@ end
 exports('setPlayerCall', setPlayerCall)
 
 RegisterNetEvent('pma-voice:setPlayerCall', function(callChannel)
-	setPlayerCall(source, callChannel)
+	local src = source
+	setPlayerCall(src, callChannel)
 end)

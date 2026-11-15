@@ -4,11 +4,15 @@
 构建产物 → 无头 NUI → 真服务器启动。
 
 ```bash
-luac5.4 -p client/main.lua server/main.lua                     # 语法
+luac5.4 -p client/main.lua server/main.lua                     # 语法（PowerShell 里写 luac5.4.exe）
 /usr/bin/python3 -m pytest tests/unit tests/architecture -q    # 单测 + 架构闸门
 npx svelte-check --tsconfig ./tsconfig.app.json                # 类型（0 error 再构建）
 node tests/nui/run.mjs                                         # 无头 NUI
 ```
+
+> PowerShell 下裸名 `luac5.4` 不报错、也不执行：Windows 把 `.4` 当扩展名，无关联程序 → 命令被交给
+> ShellExecute，弹「选择一个应用以打开此 .4 文件」并一直阻塞（每调一次弹一个）。无输出 + 超时 +
+> 残留 `OpenWith.exe` 就是它的指纹。写 `luac5.4.exe`；bash 与 Python `subprocess` 不受影响。
 
 - `svelte-check` is a real gate, not decoration: it catches a duplicate key in an error-code table
   that the runtime silently resolves to the last entry, and mock-array typing that `never[]`-infers

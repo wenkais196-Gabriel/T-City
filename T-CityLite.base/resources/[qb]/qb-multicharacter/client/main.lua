@@ -373,8 +373,18 @@ local function GetDecoratedStreetName(citizenid, coords)
     return fullLabel
 end
 
+-- I-7：选人菜单每开一次就拉一次角色列表，回调没有序号 —— 两次请求交错时
+-- 旧回包会覆盖新卡片（玩家看到的是上一次打开的列表）。用递增序号让 NUI 丢弃过期回包。
+local charRequestSeq = 0
+
 RegisterNUICallback('setupCharacters', function(_, cb)
+    charRequestSeq = charRequestSeq + 1
+    local mySeq = charRequestSeq
     QBCore.Functions.TriggerCallback('qb-multicharacter:server:setupCharacters', function(result)
+        if mySeq ~= charRequestSeq then
+            cb('stale')
+            return
+        end
         cached_player_skins = {}
         for i = 1, #result do
             if result[i].position then
@@ -385,6 +395,7 @@ RegisterNUICallback('setupCharacters', function(_, cb)
         end
         SendNUIMessage({
             action = 'setupCharacters',
+            seq = mySeq,
             characters = result
         })
         cb('ok')

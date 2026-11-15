@@ -1,5 +1,23 @@
 -- Variables
 local QBCore = exports['qb-core']:GetCoreObject()
+
+-- qb-core 重启后，上面这份快照里的函数引用会全部失效（P1-6，PR #196）：
+-- 本资源没有声明 qb-core 依赖，不会被重启级联带走，所以在 qb-core 起来时重解析一次。
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= 'qb-core' then return end
+    -- ⚠️ 不能在事件里同步调：真机实测此刻 export 引用可能还指向 qb-core 旧 script host，
+    -- 会抛 `Execution of function reference in script host failed`。放线程里重试到拿到新表。
+    CreateThread(function()
+        for _ = 1, 30 do
+            local ok, core = pcall(function() return exports['qb-core']:GetCoreObject() end)
+            if ok and core then
+                QBCore = core
+                return
+            end
+            Wait(500)
+        end
+    end)
+end)
 local frozen = false
 local permissions = {
     ['kill'] = 'admin',
@@ -86,6 +104,10 @@ end
 -- Events
 RegisterNetEvent('qb-admin:server:GetPlayersForBlips', function()
     local src = source
+    -- 这个 handler 下发的 `qb-admin:client:Show` 是**全服玩家的名字 + 坐标**（wallhack 级信息），
+    -- 原来没有任何权限校验：任何玩家发一条就能每 8 秒拿到所有人的实时位置。
+    -- 客户端只在管理员打开 blips/names 开关时才会轮询（qb-admin:isAdmin 回调），所以这里按 admin 权限对齐。
+    if not QBCore.Functions.HasPermission(src, 'admin') and not IsPlayerAceAllowed(src, 'command') then return end
     local players = GetQBPlayers()
     TriggerClientEvent('qb-admin:client:Show', src, players)
 end)

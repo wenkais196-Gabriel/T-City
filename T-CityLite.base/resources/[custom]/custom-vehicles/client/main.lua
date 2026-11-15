@@ -761,7 +761,7 @@ local function CarjackVehicle(target)
                 alertChance = Config.Vehicles.PoliceNightAlertChance
             end
             if math.random() <= alertChance then
-                TriggerServerEvent('police:server:policeAlert', '车辆抢夺')
+                TriggerServerEvent('police:server:policeAlert', '车辆抢夺', 'vehicle_theft')
             end
             SetTimeout(Config.Vehicles.AlertCooldown, function()
                 carjackAlertSent = false

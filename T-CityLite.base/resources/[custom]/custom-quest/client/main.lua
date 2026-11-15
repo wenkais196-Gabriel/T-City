@@ -17,6 +17,15 @@ local currentBlip = nil
 -- v0.7.0: 活跃的 PolyZone 实例
 local activeZone = nil
 
+-- 活跃节点状态：**必须声明在文件最顶部**。
+-- 之前它声明在 389 行，而 ClearZone / clearAllNodes / QUEST_COMPLETED / FAILED /
+-- ABANDONED 都定义在它之前 —— 那些函数里的 `activeNode = nil` 清的是**全局**，
+-- 而各节点线程读写的是**文件局部**。两套变量互不相干，于是完成/失败/放弃都清不掉
+-- 节点线程：玩家走回同一个坐标还能再按一次 E，给已结束的任务补发 nodeComplete
+-- （真机表现为「任务完成后弹出 任务节点校验失败」）。
+local activeNode = nil
+local nodeTimer = nil
+
 -- ==============================================================
 -- 路点管理
 -- ==============================================================
@@ -173,7 +182,8 @@ RegisterNetEvent(Config.Quest.Events.QUEST_ACCEPTED, function(data)
                             backup_coords = step.data.backup_coords,
                         })
                     end
-                elseif (step.type == 'validator' or step.type == 'interact') and step.data and step.data.coords then
+                elseif (step.type == 'validator' or step.type == 'interact' or step.type == 'rental'
+                    or step.type == 'booth') and step.data and step.data.coords then
                     SetNewBlip(step.data.coords, step.title)
                 end
                 break
@@ -222,7 +232,8 @@ RegisterNetEvent(Config.Quest.Events.QUEST_STEP_ADVANCED, function(data)
         elseif data.next_step_type == 'reach' and stepData.coords then
             SetNewBlip(stepData.coords, data.next_step_title)
             SetupReachZone(stepData, data.quest_id, data.to_step)
-        elseif (data.next_step_type == 'validator' or data.next_step_type == 'interact') and stepData.coords then
+        elseif (data.next_step_type == 'validator' or data.next_step_type == 'interact' or data.next_step_type == 'rental'
+                or data.next_step_type == 'booth') and stepData.coords then
             SetNewBlip(stepData.coords, data.next_step_title)
         elseif data.next_step_type == 'deliver' or data.next_step_type == 'DELIVER' then
             if stepData.destCoords then
@@ -257,7 +268,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_STEP_ADVANCED, function(data)
     end
 
     print(('[quest-client] ➡️ STEP: %s → %s (type=%s)'):format(data.from_step, data.to_step, data.next_step_type))
-    QBCore.Functions.Notify(('Step: %s'):format(data.next_step_title), 'primary')
+    -- J-3：步骤推进由服务端发一条，客户端不再重复
 end)
 
 -- ==============================================================
@@ -271,7 +282,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_COMPLETED, function(data)
     ClearZone()
     CheckpointManager.Clear()  -- v0.11
     activeQuest = nil
-    QBCore.Functions.Notify(('Quest completed: %s!'):format(data.title), 'success')
+    -- J-3：完成回执由服务端发，客户端只清理状态
 end)
 
 -- ==============================================================
@@ -284,7 +295,7 @@ RegisterNetEvent(Config.Quest.Events.QUEST_FAILED, function(data)
     ClearZone()
     CheckpointManager.Clear()  -- v0.11
     activeQuest = nil
-    QBCore.Functions.Notify(('Quest failed: %s'):format(data.reason or 'unknown'), 'error')
+    -- J-3：失败由服务端 FailQuest 统一发（带中文原因），客户端只清理状态
 end)
 
 -- ==============================================================
@@ -306,8 +317,9 @@ end)
 
 RegisterNetEvent(Config.Quest.Events.QUEST_PROGRESS, function(data)
     if not activeQuest or activeQuest.quest_id ~= data.quest_id then return end
-    QBCore.Functions.Notify(
-        ('Progress: %d/%d'):format(data.progress, data.required), 'primary')
+    -- J-1：进度不是通知。3/5 → 4/5 这种逐步刷新留在面板（手机 Quests App 的 current_step），
+    -- 屏幕只在跨阶段处由服务端发一条（见 quest_manager 的「进入下一步」）。
+    QuestPrint('progress %s %d/%d', tostring(data.quest_id), data.progress or 0, data.required or 0)
 end)
 
 -- ==============================================================
@@ -332,7 +344,8 @@ RegisterNetEvent(Config.Quest.Events.QUEST_STATE_RESTORE, function(data)
                 if step.type == 'reach' and step.data and step.data.coords then
                     SetNewBlip(step.data.coords, step.title)
                     SetupReachZone(step.data, data.quest_id, step.id)
-                elseif (step.type == 'validator' or step.type == 'interact') and step.data and step.data.coords then
+                elseif (step.type == 'validator' or step.type == 'interact' or step.type == 'rental'
+                    or step.type == 'booth') and step.data and step.data.coords then
                     -- v0.7.2: reconnect 时恢复 validator/interact 的 blip
                     SetNewBlip(step.data.coords, step.title)
                 elseif (step.type == 'deliver' or step.type == 'DELIVER') and step.data and step.data.destCoords then
@@ -384,9 +397,6 @@ end, false)
 -- v1.0.0: 原子节点客户端处理器
 -- ==============================================================
 
--- 活跃的节点状态 (每个玩家同时只有一个活跃节点)
-local activeNode = nil
-local nodeTimer = nil
 
 -- ── GOTO 节点 (已由 QUEST_ACCEPTED / QUEST_STEP_ADVANCED 处理) ────
 
@@ -484,6 +494,7 @@ RegisterNetEvent('quest:client:nodeInteract', function(data)
                                 local veh = GetVehiclePedIsIn(ped, false)
                                 if veh and veh ~= 0 then DetachVehicleFromTrailer(veh) end
                             end
+                            activeNode = nil   -- 上报后立刻退出这个节点，防止重复上报
                             TriggerServerEvent('quest:server:nodeComplete',
                                 data.questId, data.stepId, 'INTERACT',
                                 { position = targetVec, detachTrailer = data.detachTrailer }
@@ -492,15 +503,22 @@ RegisterNetEvent('quest:client:nodeInteract', function(data)
                     end)
                 else
                     Citizen.Wait(data.duration or 3000)
-                    if data.detachTrailer then
-                        local ped = PlayerPedId()
-                        local veh = GetVehiclePedIsIn(ped, false)
-                        if veh and veh ~= 0 then DetachVehicleFromTrailer(veh) end
+                    -- 与上面 progressbar 分支同样的两道护栏：
+                    -- ① 任务可能在等待期间已经完成（服务端把这一步算作最后一步时），此时不该再上报；
+                    -- ② 上报后立即把 activeNode 置空，避免同一节点被循环重复上报 ——
+                    --    以前重复上报会让服务端打到 SECURITY BLOCK（玩家看到「任务节点校验失败」红字）。
+                    if activeNode and activeNode.stepId == data.stepId then
+                        if data.detachTrailer then
+                            local ped = PlayerPedId()
+                            local veh = GetVehiclePedIsIn(ped, false)
+                            if veh and veh ~= 0 then DetachVehicleFromTrailer(veh) end
+                        end
+                        activeNode = nil
+                        TriggerServerEvent('quest:server:nodeComplete',
+                            data.questId, data.stepId, 'INTERACT',
+                            { position = targetVec, detachTrailer = data.detachTrailer }
+                        )
                     end
-                    TriggerServerEvent('quest:server:nodeComplete',
-                        data.questId, data.stepId, 'INTERACT',
-                        { position = targetVec, detachTrailer = data.detachTrailer }
-                    )
                 end
             end
             ::continue_interact::
@@ -572,13 +590,14 @@ RegisterNetEvent('quest:client:nodeCombat', function(data)
     -- 生成 NPC
     local spawnCoords = data.coords
     if spawnCoords then
-        RequestModel(GetHashKey(data.npcModel))
-        while not HasModelLoaded(GetHashKey(data.npcModel)) do Citizen.Wait(10) end
+        -- 旧实现无超时：模型缺失时节点线程永远不退出。10s 是修复，不是降级。
+        local npcHash = GetHashKey(data.npcModel)
+        if not CFShared.LoadModel(npcHash, 10000) then return end
 
         for i = 1, requiredKills do
             local offsetX = math.random(-20, 20)
             local offsetY = math.random(-20, 20)
-            local npc = CreatePed(4, GetHashKey(data.npcModel),
+            local npc = CreatePed(4, npcHash,
                 spawnCoords.x + offsetX, spawnCoords.y + offsetY, spawnCoords.z - 1.0,
                 0.0, true, true)
             if npc > 0 then
@@ -592,7 +611,7 @@ RegisterNetEvent('quest:client:nodeCombat', function(data)
             end
         end
 
-        SetModelAsNoLongerNeeded(GetHashKey(data.npcModel))
+        CFShared.ReleaseModel(npcHash)
     end
 
     -- 击杀监控线程
@@ -613,9 +632,14 @@ RegisterNetEvent('quest:client:nodeCombat', function(data)
             end
 
             if newKillCount > killCount then
+                local previous = killCount
                 killCount = newKillCount
-                QBCore.Functions.Notify(
-                    ('Enemies eliminated: %d/%d'):format(killCount, requiredKills), 'primary')
+                -- J-1：原来每杀一只一条；改成半程与完成各一条
+                local half = math.max(1, math.floor(requiredKills / 2))
+                if (previous < half and killCount >= half) or killCount >= requiredKills then
+                    QBCore.Functions.Notify(
+                        ('敌人已清除 %d/%d'):format(killCount, requiredKills), 'primary')
+                end
             end
 
             if aliveCount == 0 and killCount >= requiredKills then
@@ -698,8 +722,9 @@ RegisterNetEvent('quest:client:nodeWait', function(data)
                     data.questId, data.stepId, 'WAIT',
                     { elapsed = elapsed, duration = duration }
                 )
-            elseif remaining <= 10 then
-                QBCore.Functions.Notify(('Hold for %d more seconds...'):format(remaining), 'primary')
+            elseif remaining == 10 or remaining == 5 then
+                -- J-3b：原来 remaining<=10 每秒一条（10/9/8…），降为 10s 与 5s 各一条
+                QBCore.Functions.Notify(('还需坚持 %d 秒…'):format(remaining), 'primary')
             end
         end
     end)

@@ -212,8 +212,16 @@ exports('DirtyFlushMarkDirty', function(citizenid, dataType)
     if DirtyFlush then DirtyFlush.MarkDirty(citizenid, dataType) end
 end)
 exports('DirtyFlushStats', function()
-    if DirtyFlush then return DirtyFlush.Stats() end
-    return { dirty_count = 0 }
+    if DirtyFlush then
+        local stats = DirtyFlush.Stats()
+        if stats then
+            stats.available = true
+            return stats
+        end
+    end
+    -- 管线还没接入（DirtyFlush 全局未定义）：把这件事说清楚，别用一个永远为 0 的
+    -- dirty_count 让调用方以为"池是空的"。
+    return { dirty_count = 0, available = false }
 end)
 exports('DirtyFlushFlushAll', function()
     if DirtyFlush then DirtyFlush.FlushAll() end

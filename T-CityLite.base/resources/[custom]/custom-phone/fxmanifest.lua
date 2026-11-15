@@ -9,7 +9,8 @@ lua54 'yes'
 
 shared_scripts {
     '@qb-core/shared/locale.lua',
-    'config.lua'
+    'config.lua',
+    '@core-framework/shared/money_aliases.lua'
 }
 
 client_scripts {
@@ -30,6 +31,7 @@ client_scripts {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    '@core-framework/server/db.lua',
     'server/sms.lua',
     -- CityFeed 的纯规则（公告校验/作者归类），main.lua 之前加载
     'server/city_feed.lua',

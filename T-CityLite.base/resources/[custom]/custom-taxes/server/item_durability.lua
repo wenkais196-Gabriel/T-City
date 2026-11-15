@@ -117,7 +117,7 @@ function DegradeItem(source, itemName, slot)
 
     -- 更新耐久 metadata
     local newInfo = setDurability(itemData, newDurability)
-    exports['qb-inventory']:SetItemInfo(source, slot, newInfo)
+    exports['qb-inventory']:SetItemData(source, itemName, 'info', newInfo, slot)
 
     -- 低耐久警告 (20% 以下)
     local pct = newDurability / config.maxDurability
@@ -146,22 +146,21 @@ function RepairItem(source, itemName, slot)
     local Player = QBCore.Functions.GetPlayer(source)
     if not Player then return false, 0 end
 
-    if _G.Bus and _G.Bus.SinkService then
-        local ok = _G.Bus.SinkService.Withdraw(source, cost, 'weapon_repair',
-            ('repair:%s'):format(itemName))
-        if not ok then return false, 0 end
-    else
+    -- 走 qb-core 的 SinkWithdraw；失败时保留原有的直接扣款回落
+    local ok = exports['qb-core']:SinkWithdraw(source, cost, 'weapon_repair',
+        ('repair:%s'):format(itemName))
+    if not ok then
         Player.Functions.RemoveMoney('bank', cost, ('repair:%s'):format(itemName))
     end
 
     -- 恢复耐久
     if GetResourceState('qb-inventory') ~= 'missing' then
         local newInfo = { durability = config.maxDurability }
-        exports['qb-inventory']:SetItemInfo(source, slot, newInfo)
+        exports['qb-inventory']:SetItemData(source, itemName, 'info', newInfo, slot)
     end
 
     TriggerClientEvent('QBCore:Notify', source,
-        ('%s repaired to full durability for $%d'):format(itemName, cost), 'success')
+        ('%s repaired to full durability for $%s'):format(itemName, TCMoney(cost)), 'success')
     return true, cost
 end
 

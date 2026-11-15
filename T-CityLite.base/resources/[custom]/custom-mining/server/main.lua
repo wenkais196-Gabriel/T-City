@@ -7,6 +7,13 @@
 --   4. 注册 Bus.MiningService
 
 local QBCore = exports['qb-core']:GetCoreObject()
+
+--- 采矿服务端反馈（C-5）：同一套分派，服务端按 source 直推。
+local function feedback(src, text, kind)
+    local pushKind = (kind == 'error') and 'error' or 'feed'
+    pcall(function() exports['custom-notify']:Push(src, pushKind, tostring(text)) end)
+end
+
 MiningService = {}
 
 -- 采集冷却: citizenid → last_mine_time
@@ -21,16 +28,24 @@ RegisterNetEvent('mining:server:mineOre', function(siteId)
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
+    -- C-7（2026-11-12 PO 反馈"倒地后还能采矿"）：死亡/倒地状态下拒绝产出。
+    -- 客户端在倒地被本地复活时 Ped 是活的，IsEntityDead 不可靠，只认状态袋与 metadata。
+    local md = Player.PlayerData.metadata or {}
+    if md.isdead == true or md.inlaststand == true then
+        feedback(src, '你倒下了，无法采矿', 'error')
+        return
+    end
+
     -- 1. 职业校验 (必须是 miner)
     local job = Player.PlayerData.job
     if not job or job.name ~= 'miner' then
-        TriggerClientEvent('QBCore:Notify', src, _L(src, 'mining_staff_only'), 'error')
+        feedback(src, _L(src, 'mining_staff_only'), 'error')
         return
     end
 
     -- 2. 系统开关
     if not Config.Mining.Enabled then
-        TriggerClientEvent('QBCore:Notify', src, _L(src, 'mining_disabled'), 'error')
+        feedback(src, _L(src, 'mining_disabled'), 'error')
         return
     end
 
@@ -67,7 +82,7 @@ RegisterNetEvent('mining:server:mineOre', function(siteId)
     elseif QBCore.Functions.HasItem(src, 'pickaxe_pro', 1) then
         toolName = 'pickaxe_pro'
     elseif not QBCore.Functions.HasItem(src, 'pickaxe', 1) then
-        TriggerClientEvent('QBCore:Notify', src, _L(src, 'mining_need_pickaxe'), 'error')
+        feedback(src, _L(src, 'mining_need_pickaxe'), 'error')
         return
     end
 
