@@ -590,13 +590,14 @@ RegisterNetEvent('quest:client:nodeCombat', function(data)
     -- 生成 NPC
     local spawnCoords = data.coords
     if spawnCoords then
-        RequestModel(GetHashKey(data.npcModel))
-        while not HasModelLoaded(GetHashKey(data.npcModel)) do Citizen.Wait(10) end
+        -- 旧实现无超时：模型缺失时节点线程永远不退出。10s 是修复，不是降级。
+        local npcHash = GetHashKey(data.npcModel)
+        if not CFShared.LoadModel(npcHash, 10000) then return end
 
         for i = 1, requiredKills do
             local offsetX = math.random(-20, 20)
             local offsetY = math.random(-20, 20)
-            local npc = CreatePed(4, GetHashKey(data.npcModel),
+            local npc = CreatePed(4, npcHash,
                 spawnCoords.x + offsetX, spawnCoords.y + offsetY, spawnCoords.z - 1.0,
                 0.0, true, true)
             if npc > 0 then
@@ -610,7 +611,7 @@ RegisterNetEvent('quest:client:nodeCombat', function(data)
             end
         end
 
-        SetModelAsNoLongerNeeded(GetHashKey(data.npcModel))
+        CFShared.ReleaseModel(npcHash)
     end
 
     -- 击杀监控线程
