@@ -8,6 +8,7 @@ version '1.0.0'
 shared_scripts { 'config.lua' }
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    '@core-framework/server/db.lua',
     '@core-framework/bus.lua',
     'server/main.lua',
     'server/sentence.lua',

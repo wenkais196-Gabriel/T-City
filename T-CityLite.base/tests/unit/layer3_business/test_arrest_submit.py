@@ -1631,9 +1631,9 @@ def test_sentence_service_is_exported_and_uses_server_clock_set_and_add_modes():
 
     # Release is a conditional transition, so repeated calls are idempotent.
     assert "SET status = ?, released_at = NOW()" in src
-    assert "local function affectedRows(result)" in src
-    assert "result.affectedRows" in src
-    assert "if affectedRows(affected) == 0 then return false end" in src
+    # 形状归一化已收口到 core-framework/server/db.lua（S4）；这里只消费 Db.AffectedRows。
+    assert "Db.AffectedRows(affected)" in src
+    assert "result.affectedRows" not in src
 
     # Every statement is parameterised; no client value is concatenated.
     assert ".. citizenid" not in src
