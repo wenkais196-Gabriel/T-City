@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `QuestBooth.ValidatePlacement`（同样的距离/道路/遮挡判据），失败按 reason 提示。
 
 ### Fixed
+- **收摊后账单的售出 / 回收行恒为 0**：`T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor_bridge.lua`
+  里 `CloseFor` 返回的汇总原来只用来发一条聊天通知就被丢掉；任务完成路径
+  （`T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua` 的 `closeVendorFor`）
+  再调一次 `CloseFor` 时已无会话 → nil，`issueSettleReceipt` 拿到的 `vendorSummary` 是 nil，
+  于是售出 / 成品回收 / 原料回收（`soldTotal` / `leftover` / `raw`）全算成 0。
+  现在桥里按 citizenid 留一份最近一次 `CloseFor` 的汇总（30 分钟过期、同一人开新会话即清），
+  完成路径用 `TakeLastSummary` 取一次即删，同一份收摊数据不会开出第二张账单。
+  新增 `T-CityLite.base/tests/unit/layer3_business/test_quest_vendor_summary.py` 与
+  `T-CityLite.base/tests/unit/layer3_business/fixtures/vendor_summary_probe.lua`：真跑三个
+  `T-CityLite.base/resources/[custom]/custom-quest/server` 下的 Lua 实现，并用「删掉消费点」
+  的变异用例证明缓存不是只写不删。
 - **挪摊位推了一个不存在的方法**：`T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor_bridge.lua`
   的 `move` 分支调用 `QuestVendorBridge.PushFor(citizenid)`，而这个方法从未定义（真正的推送函数是
   `PushState`）——`MoveTo` 成功之后立刻 `attempt to call a nil value`，界面不刷新。
