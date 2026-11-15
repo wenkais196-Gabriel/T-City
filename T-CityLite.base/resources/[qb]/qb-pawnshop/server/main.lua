@@ -71,7 +71,7 @@ end
 
 RegisterNetEvent('qb-pawnshop:server:sellPawnItems', function(itemName, itemAmount)
     local src = source
-    if not exports['custom-main']:CheckRateLimit(src, "sell_pawn_item", 1500) then
+    if not exports['custom-security']:CheckRateLimit(src, "sell_pawn_item", 1500) then
         TriggerClientEvent('QBCore:Notify', src, "您的操作过于频繁，请慢一点", "error")
         return
     end
@@ -95,9 +95,17 @@ RegisterNetEvent('qb-pawnshop:server:sellPawnItems', function(itemName, itemAmou
         return
     end
     if exports['qb-inventory']:RemoveItem(src, itemName, tonumber(itemAmount), false, 'qb-pawnshop:server:sellPawnItems') then
-        local finalAmount = exports['custom-main']:AddScaledMoney(src, Config.BankMoney and 'bank' or 'cash', totalPrice, 'qb-pawnshop:server:sellPawnItems')
-        TriggerClientEvent('QBCore:Notify', src, Lang:t('success.sold', { value = tonumber(itemAmount), value2 = QBCore.Shared.Items[itemName].label, value3 = finalAmount }), 'success')
-        TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[itemName], 'remove')
+        -- 卖物品不是「活动奖励」：走原语写路径，不叠经济倍率/热度。
+        local paid = Player.Functions.AddMoney(
+            Config.BankMoney and 'bank' or 'cash', totalPrice, 'qb-pawnshop:server:sellPawnItems')
+        if paid then
+            TriggerClientEvent('QBCore:Notify', src, Lang:t('success.sold', { value = tonumber(itemAmount), value2 = QBCore.Shared.Items[itemName].label, value3 = totalPrice }), 'success')
+            TriggerClientEvent('qb-inventory:client:ItemBox', src, QBCore.Shared.Items[itemName], 'remove')
+        else
+            -- 钱没到就把物品加回去，避免「物品已扣、钱没到」
+            exports['qb-inventory']:AddItem(src, itemName, tonumber(itemAmount), false, false, 'qb-pawnshop:server:sellPawnItems:rollback')
+            TriggerClientEvent('QBCore:Notify', src, '交易失败，物品已退回', 'error')
+        end
     else
         TriggerClientEvent('QBCore:Notify', src, Lang:t('error.no_items'), 'error')
     end
