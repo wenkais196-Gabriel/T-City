@@ -148,3 +148,40 @@ S2a | wip  | - | -
         monkeypatch, capsys, files=("proof/evidence.txt",) if "/" in ev else ())
     assert code == 0, f"合法块被误判：\n{out}"
     assert "errors=0" in out, out
+
+
+# ---------------------------------------------------------------- BOARD 新鲜度
+
+def _run_tool(tmp_path: Path, argv: list[str], monkeypatch, capsys) -> tuple[int, str]:
+    module = _load_tool()
+    module.REPO = str(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["docs_lifecycle.py", *argv])
+    code = module.main()
+    return code, capsys.readouterr().out
+
+
+def test_board_staleness_detects_injected_edit_and_missing_file(tmp_path, monkeypatch, capsys):
+    """BOARD.md 是生成物：过期或手改，`--check` 必须报出来。
+
+    真实故障（2026-11-16，PR #320 与 #321 交叉）：另一个 PR 把一份 plan 改名，
+    BOARD 里那行链接指错，块校验全绿、看板却是错的。判据只有一条：重算 == 落盘。
+    """
+    doc = tmp_path / "docs" / "plan" / "fixture.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(_doc(extra="plan_status: 1\n"), encoding="utf-8")
+
+    code, out = _run_tool(tmp_path, ["--board"], monkeypatch, capsys)
+    assert code == 0 and (tmp_path / "docs/plan/BOARD.md").exists(), out
+
+    code, out = _run_tool(tmp_path, ["--check"], monkeypatch, capsys)
+    assert "BOARD.md 不是最新" not in out, out
+    assert "BOARD.md 不存在" not in out, out
+
+    board = tmp_path / "docs/plan/BOARD.md"
+    board.write_text(board.read_text(encoding="utf-8") + "\n| 手改一行 |\n", encoding="utf-8")
+    code, out = _run_tool(tmp_path, ["--check"], monkeypatch, capsys)
+    assert "BOARD.md 不是最新" in out, f"手改后没报：{out}"
+
+    board.unlink()
+    code, out = _run_tool(tmp_path, ["--check"], monkeypatch, capsys)
+    assert "BOARD.md 不存在" in out, f"删掉后没报：{out}"

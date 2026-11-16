@@ -62,6 +62,8 @@ SYSTEMS = [
 ]
 REQUIRED = ["id", "type", "status", "system", "updated"]
 REVIEW_REQUIRED = {"manual", "research", "runbook"}
+# 生成物：由本工具整体重写，不进文档生命周期校验（--check 只查它们是否最新）
+BOARD_REL = "docs/plan/BOARD.md"
 TYPE_LABEL = {
     "spec": "设计/施工图", "manual": "手册/接口", "adr": "决策记录", "plan": "路线与计划",
     "audit": "审计/验收", "research": "调研", "runbook": "运维 SOP", "meta": "规范/索引",
@@ -508,6 +510,13 @@ def check(docs: list[str], index_path: str) -> tuple[list[str], list[str], dict]
     else:
         warns.append("docs/INDEX.md 不存在（运行 --index 生成）")
 
+    board_path = os.path.join(REPO, BOARD_REL)
+    if os.path.exists(board_path):
+        if not board_is_current(docs):
+            warns.append(f"{BOARD_REL} 不是最新（运行 `python tools/docs_lifecycle.py --board`）")
+    else:
+        warns.append(f"{BOARD_REL} 不存在（运行 --board 生成）")
+
     stats = {
         "total": len(docs), "registered": registered, "unregistered": len(docs) - registered,
         "errors": len(errors), "warnings": len(warns),
@@ -598,6 +607,20 @@ def build_board(docs: list[str]) -> str:
 
 
 # ---------------------------------------------------------------- 索引
+
+def board_is_current(docs: list[str]) -> bool:
+    """BOARD.md 是否与当前文档树一致：生成物既不许手改，也不许过期。
+
+    实测过的真实故障：另一个 PR 把一份 md 改了名，BOARD 里那行链接立刻指错，
+    而块校验照样全绿 —— 所以新鲜度必须自己判，不能靠"生成过就算对"。
+    """
+    path = os.path.join(REPO, BOARD_REL)
+    try:
+        have = open(path, encoding="utf-8", errors="ignore").read()
+    except OSError:
+        return False
+    return build_board(docs).strip() == have.strip()
+
 
 def build_index(docs: list[str]) -> str:
     rows: dict[str, list[dict]] = {s: [] for s in SYSTEMS}
@@ -826,7 +849,7 @@ def main() -> int:
         print(f"wrote {rel(index_path)} ({len(docs)} docs)")
 
     if args.board:
-        board_path = os.path.join(REPO, "docs", "plan", "BOARD.md")
+        board_path = os.path.join(REPO, BOARD_REL)
         os.makedirs(os.path.dirname(board_path), exist_ok=True)
         open(board_path, "w", encoding="utf-8").write(build_board(docs))
         print(f"wrote {rel(board_path)}")
