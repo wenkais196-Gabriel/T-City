@@ -106,7 +106,6 @@ CI 里拿不到 base ref 时**fail-closed**（否则它就是一个可绕过的�
 
 ## 7. 存量豁免（不判，已登记）
 
-- `T-CityLite.base/tests/` 根现有 18 个 lua / 2 个 js：M7 搬迁中，批次见 `docs/plan/`；迁完后此条删除。
 - `docs/engineering/2026-11-*`、`docs/archive/**`：历史快照，绝对路径不回溯改写（理由见 `WORKTREE.md` §3）。
 - `tools/agent_*.py` + `agent_tools.json`：280 行引用 / 20 个文件，生成物路径写死。
 
