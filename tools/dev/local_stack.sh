@@ -10,6 +10,8 @@
 #   2. imports tests/fixtures/tcity_schema.sql when the DB is empty
 #   3. applies every migration in versions order (they are idempotent)
 #   4. creates the least-privilege agent_ro account (SELECT on the 5 agent views)
+#
+# 口令只从环境变量读，**没有任何默认值**：默认值会让真口令随文件进 git（2026-11 就是这样泄露的）。
 #   5. prints the exports for gateway + MCP, and probes the gateway if it runs
 #
 # It never touches server.cfg, tokens in git, or the live server; the DB lives
@@ -21,10 +23,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BASE="$REPO_ROOT/T-CityLite.base"
 CONTAINER="${TCITY_DEV_DB_CONTAINER:-tcity-mariadb}"
 PORT="${TCITY_DEV_DB_PORT:-3307}"
-ROOT_PW="${TCITY_DEV_DB_ROOT_PASSWORD:-tcityroot}"
+ROOT_PW="${TCITY_DEV_DB_ROOT_PASSWORD:?请先 export TCITY_DEV_DB_ROOT_PASSWORD（值与 T-CityLite.base/server.cfg 的 mysql_connection_string 一致）}"
 DB="${TCITY_DEV_DB_NAME:-TCityLite}"
 AGENT_USER="${TCITY_DEV_AGENT_USER:-agent_ro}"
-AGENT_PW="${TCITY_DEV_AGENT_PASSWORD:-agentro}"
+AGENT_PW="${TCITY_DEV_AGENT_PASSWORD:?请先 export TCITY_DEV_AGENT_PASSWORD（agent 只读账号口令，不得写进仓库）}"
 IMAGE="${TCITY_DEV_DB_IMAGE:-mariadb:11.8}"
 CHECK_ONLY=0
 [ "${1:-}" = "--check" ] && CHECK_ONLY=1
@@ -83,7 +85,8 @@ if [ "$CHECK_ONLY" -eq 0 ]; then
     # 迁移失败以前只是一行提示，脚本照样往下走 —— 结果警用终端起来后
     # police_units/police_incidents 根本不存在，board 端点 500，MDT 列表全空。
     say "→ verifying schema"
-    present=$(db_exec -N -e "SELECT table_name FROM information_schema.tables WHERE table_schema='$DB'" | tr -d '')
+    present=$(db_exec -N -e "SELECT table_name FROM information_schema.tables WHERE table_schema='$DB'" | tr -d '
+')
     for table in police_units police_incidents police_cases player_quests agent_actions agent_effects; do
         if ! printf '%s
 ' "$present" | grep -qx "$table"; then
