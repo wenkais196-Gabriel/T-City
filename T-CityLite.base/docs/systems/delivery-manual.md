@@ -66,7 +66,7 @@ ALTER TABLE player_vehicles ADD COLUMN current_mileage INT UNSIGNED DEFAULT 0;
 
 ### 1.3 内存标准数据结构
 
-**文件**: `T-CityLite.base/docs/playerdata_v2_schema.lua`
+**文件**: `T-CityLite.base/docs/architecture/playerdata-schema.lua`
 
 ```lua
 PlayerData = {
@@ -584,9 +584,9 @@ resources/[custom]/custom-quest/server/
 economy_baseline.json            — 全服定价基准表
 migrations/v2.0_trinity_schema.sql — 三位一体 DB Migration
 tools/sandbox_simulator.py       — 经济沙盒模拟器
-docs/playerdata_v2_schema.lua    — 标准 PlayerData 结构文档
-docs/refactoring_manifest_v2.md  — 删除/保留清单
-docs/refactoring_mining_before_after.lua — 采矿重构案例
+docs/architecture/playerdata-schema.lua — 标准 PlayerData 结构文档
+docs/archive/refactoring-manifest.md  — 删除/保留清单
+docs/archive/refactoring-mining-before-after.lua — 采矿重构案例
 ```
 
 ---
