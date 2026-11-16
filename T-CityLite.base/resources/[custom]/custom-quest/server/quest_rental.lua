@@ -199,6 +199,9 @@ function QuestRental.Close(player, reason, now, questId)
         capped = receipt.capped,
         idempotent = false,
         reason = reason,
+        -- 本班会话的起点：结算幂等键用它区分「同一班的重复结算」与「下一班的新账」。
+        -- Session 关闭后被清掉，所以这里必须往外带一份（quest_manager 的 runToken 依赖它）。
+        startedAt = session.startedAt,
     }
 end
 

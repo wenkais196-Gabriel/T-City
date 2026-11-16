@@ -27,6 +27,9 @@ local KEEP_PER_PLAYER = 5
 --- citizenid → { [questId] = { receipts = { ... } } }
 local Ledgers = {}
 
+-- 发单序号：issuedAt 只有秒级精度，同一秒内跨任务合并排序时用它定先后。
+local IssuedSeq = 0
+
 local function money(value)
     local num = tonumber(value)
     if not num then return 0 end
@@ -116,11 +119,37 @@ function QuestSettle.Compute(parts)
     }
 end
 
+local function copyTable(source)
+    local out = {}
+    for key, value in pairs(source) do out[key] = value end
+    return out
+end
+
+--- 回执副本：Recent / 导出的调用方改不坏内部账本。
+--- 六行明细与 context 都复制一层（context.leftover 也复制），否则前端一改就改到账本上。
+local function copyReceipt(receipt)
+    local out = copyTable(receipt)
+    if type(receipt.rows) == 'table' then
+        out.rows = {}
+        for index, row in ipairs(receipt.rows) do
+            out.rows[index] = copyTable(row)
+        end
+    end
+    if type(receipt.context) == 'table' then
+        out.context = copyTable(receipt.context)
+        if type(receipt.context.leftover) == 'table' then
+            out.context.leftover = copyTable(receipt.context.leftover)
+        end
+    end
+    out._seq = nil   -- 内部排序用，不进 DTO
+    return out
+end
+
 --- 发一张回执。同一个 settleKey 重复调用返回同一张（replayed = true）。
 ---@param citizenid string
 ---@param questId string
 ---@param settleKey string|nil 幂等键；不传就用 questId（一条任务一张）
----@param receipts table[]|nil 已算好的账单（不传就调用方自己算好再传）
+---@param receipt table|nil 已算好的账单（调用方先 Compute，再补 context）
 ---@return table|nil receipt
 function QuestSettle.Issue(citizenid, questId, settleKey, receipt)
     if type(citizenid) ~= 'string' or type(questId) ~= 'string' then return nil end
@@ -134,8 +163,7 @@ function QuestSettle.Issue(citizenid, questId, settleKey, receipt)
     -- 幂等：同一个 key 只发一次。重复的那次把上一张原样返回，并标 replayed。
     for _, existing in ipairs(ledger[questId].receipts) do
         if existing.key == key then
-            local replay = {}
-            for k, v in pairs(existing) do replay[k] = v end
+            local replay = copyReceipt(existing)
             replay.replayed = true
             return replay
         end
@@ -143,9 +171,23 @@ function QuestSettle.Issue(citizenid, questId, settleKey, receipt)
 
     local record = {}
     for k, v in pairs(receipt) do record[k] = v end
+    if type(receipt.rows) == 'table' then
+        record.rows = {}
+        for index, row in ipairs(receipt.rows) do
+            record.rows[index] = copyTable(row)
+        end
+    end
+    if type(receipt.context) == 'table' then
+        record.context = copyTable(receipt.context)
+        if type(receipt.context.leftover) == 'table' then
+            record.context.leftover = copyTable(receipt.context.leftover)
+        end
+    end
     record.key = key
     record.questId = questId
     record.issuedAt = os.time()
+    IssuedSeq = IssuedSeq + 1
+    record._seq = IssuedSeq
     record.replayed = false
 
     table.insert(ledger[questId].receipts, 1, record)   -- 新的在前
@@ -163,9 +205,55 @@ function QuestSettle.Last(citizenid, questId)
     return ledger[questId].receipts[1]
 end
 
+--- 历史账单：新的在前；只回 billable 的账；返回调用方改不坏的副本。
+---@param citizenid string
+---@param questId string|nil  nil / 空串 = 该角色全部任务
+---@param limit number|nil    缺省 KEEP_PER_PLAYER；上限也是 KEEP_PER_PLAYER
+---@return table[]
+function QuestSettle.Recent(citizenid, questId, limit)
+    if type(citizenid) ~= 'string' or citizenid == '' then return {} end
+    local ledger = Ledgers[citizenid]
+    if not ledger then return {} end
+
+    local wanted = tonumber(limit) or KEEP_PER_PLAYER
+    if wanted < 1 then wanted = KEEP_PER_PLAYER end
+    if wanted > KEEP_PER_PLAYER then wanted = KEEP_PER_PLAYER end
+
+    -- 只有「真的开了摊 / 真的结算了租借」的完成才有历史价值
+    -- （纯剧情任务的 0 元回执仍进聊天框，但不占「已结算」列表）。
+    local picked = {}
+    local function collect(receipts)
+        for _, receipt in ipairs(receipts or {}) do
+            if type(receipt.context) == 'table' and receipt.context.billable == true then
+                picked[#picked + 1] = receipt
+            end
+        end
+    end
+
+    if type(questId) == 'string' and questId ~= '' then
+        local entry = ledger[questId]
+        collect(entry and entry.receipts)
+    else
+        for _, entry in pairs(ledger) do collect(entry.receipts) end
+    end
+
+    -- issuedAt 只有秒级精度：同一秒内按发单顺序（_seq）排，新的在前。
+    table.sort(picked, function(a, b)
+        if a.issuedAt ~= b.issuedAt then return a.issuedAt > b.issuedAt end
+        return (a._seq or 0) > (b._seq or 0)
+    end)
+
+    local rows = {}
+    for index = 1, math.min(wanted, #picked) do
+        rows[index] = copyReceipt(picked[index])
+    end
+    return rows
+end
+
 --- 测试/运维用：清内存态
 function QuestSettle.Reset()
     Ledgers = {}
+    IssuedSeq = 0
 end
 
 print('[quest-settle] ready')
