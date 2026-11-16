@@ -20,7 +20,7 @@ review_by: 2027-04-30
 
 | 我要做的事 | 先读 | 再读 |
 |---|---|---|
-| **任何改动之前** | `docs/engineering/CONSTITUTION.md`（十条红线） | `docs/engineering/ARCHITECTURE.md`（四平面 + 依赖方向） |
+| **任何改动之前** | `docs/engineering/CONSTITUTION.md`（十条红线） | `docs/engineering/ARCHITECTURE.md`（四平面 + 依赖方向）；**新文件放哪**看 `docs/engineering/TREE.md` §2 |
 | 判断该走多重的流程 | 本文件 §3 分级表 | `docs/engineering/templates/` 对应模板 |
 | 改 `[custom]` 资源（手机 / 警务 / 剧情 / agent） | `T-CityLite.base/resources/[custom]/AGENTS.md` | `docs/client/PHONE_ARCHITECTURE.md`（手机） |
 | 改 `[qb]` 上游框架 | `T-CityLite.base/resources/[qb]/AGENTS.md` | 对应资源自身的 README |
@@ -94,9 +94,9 @@ python3 tools/dev/release_check.py                             # 交付前
 
 ## 6. 工作树与分支
 
-- `E:/T-City` = **唯一工作树 + 运行树**（FXServer 的 cwd 是它的 `T-CityLite.base`），永远从 `origin/master` 切分支；旧的 `E:/T-City-harness` 已归档到 `E:/archive/T-City-harness-20261101`（只读）。
+- **本克隆根即唯一工作树 + 运行树**（FXServer 的 cwd 是它的 `T-CityLite.base`），永远从 `origin/master` 切分支。路径只写"仓库根"、不写盘符：换机器只改 `docs/engineering/WORKTREE.md` §0 的环境表。
 - 新克隆不能直接起服：oxmysql 的 node_modules 是 gitignored，缺了每个资源都会报 `No such export query`，复制一份即可。
-- 禁止在 master 上直接改；切分支/合并前先停服；**绝不在 harness 里 `git clean -fdx`**。
+- 禁止在 master 上直接改；切分支/合并前先停服；**绝不在工作树里 `git clean -fdx`**（`server.cfg`、`alpine/`、`cache/`、`txData/` 都在 ignore 里）。
 - 完整流程与历史见 `docs/engineering/WORKTREE.md`；2026-11-01 那批 39 项本地改动已提取入库，原始快照打成 tag `archive/salvage-20261101`（分支已删）。
 
 ## 7. 不要做

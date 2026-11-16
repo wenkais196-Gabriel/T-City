@@ -29,7 +29,10 @@ MARKER = "LEGACY.md"
 IGNORED_DIRS = {"node_modules", ".git", "alpine", "txData", "cache", ".venv",
                  # 技能里的路径按"安装到 Hermes 之后的位置"写（技能自己的目录、资源内相对路径），
                  # 拿仓库根去解析必然全是断链 —— 它们不是给这个仓库读的。
-                 ".agents"}
+                 ".agents",
+                 # Hermes/agent 的本地工作区（.gitignore 里也是本地的）：里面的草稿引用的是
+                 # 待建/待搬的路径，判它等于把"计划"当成"现状"。rglob 不读 .gitignore，所以必须列在这里。
+                 ".hermes"}
 
 PATH_TOKEN = re.compile(r"`([^`\s]+)`")
 PATH_SUFFIXES = (".md", ".lua", ".py", ".json", ".sql", ".ts", ".svelte", ".cfg", ".sh", ".mjs", ".js", ".html")

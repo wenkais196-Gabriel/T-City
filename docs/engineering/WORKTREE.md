@@ -4,20 +4,34 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-01
+updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
 # 工作树与分支流程
 
-> 2026-11-01 起生效。根 `AGENTS.md` 只放指针，细节在这里。
+> 2026-11-01 起生效，2026-11-16 换机后修订（见 §0）。根 `AGENTS.md` 只放指针，细节在这里。
 
-## 1. 两个 worktree，各司其职
+## 0. 环境表（唯一写盘符的地方）
+
+换机器/换目录**只改这张表**：其余文档一律用"仓库根""`T-CityLite.base` 相对路径"表述，不写盘符。
+
+| 项 | 当前值 | 说明 |
+|---|---|---|
+| 仓库根（工作树 + 运行树） | `C:/tcity` | 2026-11-16 起；旧机 `E:/T-City` 已随机器退役 |
+| FXServer 数据目录 | 仓库根的 `T-CityLite.base` | FXServer 的 cwd 必须是这里 |
+| 起服入口 | Windows：仓库根 `.\start.cmd`（Docker 引擎 → MariaDB → 等 3307 → FXServer → 自检）；Linux：`./start.sh` | `start.cmd -Status / -Restart / -Stop` |
+| Lua 5.4（离线用例与语法检查） | 本机 `~/.local/bin`（`lua5.4` / `luac5.4`，同版本存于 `hermes/tools/lua-5.4.8`） | 约半数离线用例直接 `subprocess` 调 `lua5.4`；**文件名必须能被 `subprocess` 找到**（Windows 把 `.4` 当扩展名，只有 `lua5.4.exe` 反而找不到，需同时放无扩展名的 `lua5.4`）。缺了会看到大批"真红"其实全是 `FileNotFoundError` |
+| 服务器端口 | `30120/tcp+udp`（旧机为 30130） | 端口在 gitignored 的 `server.cfg` / `start-tcity.ps1` 里 |
+| 旧工作树归档 | 旧机 `E:/archive/T-City-harness-20261101`（只读） | 本机不存在；历史事实，不回溯改写 |
+| 整仓备份 | 旧机 `C:/Users/swkgb/AppData/Local/hermes/cache/backup/T-City-20261101.bundle`（352 MB） | 旧机用户名，本机无此文件 |
+
+## 1. 一棵工作树 + 一份历史归档
 
 | 目录 | 角色 | 规则 |
 |---|---|---|
-| `E:/T-City` | **唯一工作树 + 运行树**（FXServer 的 cwd 是它的 `T-CityLite.base`） | 永远从 `origin/master` 切新分支；同时只承载一个进行中的分支 |
-| `E:/archive/T-City-harness-20261101` | 2026-11-01 之前那棵 worktree 的只读归档（含当时未提交的两份草稿与运行日志） | 不得再改、不得再启服 |
+| 仓库根（§0） | **唯一工作树 + 运行树**（FXServer 的 cwd 是它的 `T-CityLite.base`） | 永远从 `origin/master` 切新分支；同时只承载一个进行中的分支 |
+| 旧机 `E:/archive/T-City-harness-20261101` | 2026-11-01 之前那棵 worktree 的只读归档（含当时未提交的两份草稿与运行日志） | 不得再改、不得再启服 |
 
 **为什么合并成一棵树**：2026-11-01 主仓库的 git 元数据目录（原 `E:/T-City`）在会话中被移除，
 `E:/T-City-harness` 立刻变成孤儿 worktree（`.git` 文件指向一个不存在的 `worktrees/T-City-harness`），
@@ -32,18 +46,18 @@ review_by: 2027-04-30
 ## 2. 开工 / 收工
 
 ```bash
-# 开工（先停服：RCON quit，等 30130 释放）
-git -C E:/T-City fetch --prune
-git -C E:/T-City switch -c <type>/<scope>-<slug> origin/master
+# 在仓库根执行（§0）。开工前先停服（`.\start.cmd -Stop`，等端口释放）
+git fetch --prune
+git switch -c <type>/<scope>-<slug> origin/master
 
 # 收工
-git -C E:/T-City push -u origin HEAD
+git push -u origin HEAD
 gh pr create --base master
 
 # 合并后
-git -C E:/T-City switch master
-git -C E:/T-City merge --ff-only origin/master
-git -C E:/T-City branch -d <branch>
+git switch master
+git merge --ff-only origin/master
+git branch -d <branch>
 ```
 
 ### 2.1 新克隆到能起服之间
@@ -55,8 +69,8 @@ gitignored 的运行时依赖不在仓库里，clone 完直接起服会看到每
 |---|---|
 | 1. 配置 | `cp T-CityLite.base/server.cfg.template T-CityLite.base/server.cfg`，填 license / DB / token |
 | 2. 补 oxmysql 依赖 | 从旧树或备份复制 `oxmysql` 的 `node_modules`（13 MB；缺了整库不可用） |
-| 3. 起服 | `cd T-CityLite.base && E:/FXServer/FXServer.exe +exec server.cfg`（本机 artifact 在 `E:/FXServer`） |
-| 4. 自检 | `curl -s 127.0.0.1:30130/info.json` 应返回 85 个资源；控制台无 `No such export` / `SCRIPT ERROR` |
+| 3. 起服 | Windows：仓库根 `.\start.cmd`（推荐，带 Docker/MariaDB 编排）；Linux：仓库根 `./start.sh`。FXServer 二进制不入库 |
+| 4. 自检 | `curl -s 127.0.0.1:<端口>/info.json`（端口见 §0）应返回全部启用资源；控制台无 `No such export` / `SCRIPT ERROR` |
 
 只改前端才需要 `custom-phone/web` 与 `tcity-dashboard/nui` 的 node_modules（89 MB / 99 MB），起服不需要。
 
@@ -67,6 +81,7 @@ gitignored 的运行时依赖不在仓库里，clone 完直接起服会看到每
 - **绝不在 harness 里 `git clean -fdx`**：`server.cfg`、`alpine/`、`cache/`、`txData/` 都在 ignore 里。
 - 实验资源（`zz-*` 之类）先 gitignore 或放 `scratch/`，别让它跟着提交进仓库。
 - 合并后立刻删远端与本地分支，别留着等下次"顺手"。
+- **盘符只出现在 §0 的环境表里**。操作性文档（AGENTS.md / 本文件 / 各分区 AGENTS.md / runbook）一律写"仓库根"或相对路径；`docs/engineering/2026-11-*` 这类历史计划与 `docs/archive/**` 是当时快照，**不回溯改写其绝对路径**——要修正现状就写进 §0，别去改历史记录。
 
 ## 4. 主树里那 39 项历史改动（2026-11-01 已结清）
 

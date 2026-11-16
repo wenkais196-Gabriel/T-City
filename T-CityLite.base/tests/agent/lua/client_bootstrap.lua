@@ -29,7 +29,7 @@ local function findRepoRoot(resource, firstFile)
         return false
     end
     -- Walk up from this file, then fall back to the process working directory
-    -- (that is what `cd E:/T-City && lua5.4 T-CityLite.base/...` gives us).
+    -- (that is what `cd <repo-root> && lua5.4 T-CityLite.base/...` gives us).
     local directory = HERE
     for _ = 1, 8 do
         if probe(directory) then return directory end

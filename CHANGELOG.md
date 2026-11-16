@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`docs/engineering/TREE.md` + 放置闸门（只判新增文件）**：仓库此前有"文档怎么写"的规范（`doc-lifecycle.md`）和
+  "红线/平面"的规范（`CONSTITUTION/ARCHITECTURE`），但**没有一条规则回答"新文件放哪"**——实测
+  `doc-lifecycle.md` §2 要求的 `spec/ manual/ adr/ research/ runbook/` 五个目录一个都不存在，而
+  `docs_lifecycle.py --check` 依然 0 error（它校验 frontmatter 与链接，不校验位置）。
+  TREE.md 补齐三件：①三个根的边界（仓库根 / `T-CityLite.base/` / `docs/`）；②「新文件放哪」决策树
+  （CI 检查→`tests/` 根白名单；pytest 用例→`tests/{unit,architecture,agent,integration}/`；控制台 exec 的 harness→
+  `tests/game/`；裸 `lua5.4` 脚本→`tests/lua/`；node 冒烟→`tests/js/`）；③命名禁令（`_v2/_v3/-final/-new/副本`，
+  日期只给 `audit/research`）。配套闸门 `T-CityLite.base/tests/architecture/test_tree_placement.py` 用
+  `git diff --diff-filter=AR` **只判新增与重命名**，存量按 §7 登记豁免——否则第一天就要做一次大搬迁，规则会被 review 成本拖死。
+  闸门自带 9 条反向校验，并实测两组注入变红（`tests/` 根新增 `.lua`、`base/docs` 根新增 `.md`）；同时修掉第一版正则的误报
+  （`new-note.md`、`09-new.md` 曾被判成版本号）。另外按 `tools/dev/gate_mutation_smoke.py` 的机制补了一条变异用例
+  （往 tests 根注入一个 .lua → 闸门红 → 撤回 → 绿），否则 `gate_coverage` 的棘轮会把这条新规则记成"未证明"
+  （CI 第一次就是这么红的：`未证明的规则从 278 涨到 279`）。§6 逐条写明它**拦不住**什么（存量、内容错位、同日放宽规则、
+  无 base ref、生成物、一次性语义），避免"有闸门"被读成"位置不会错"。
+- **`.hermes/` 进 `.gitignore` + 文档断链闸门显式忽略**：Hermes/agent 的本地计划草稿（`.hermes/plans/*.md`）引用的
+  是待建/待搬的路径，而 `test_docs_links.py` 走 `rglob` 遍历工作树、不读 `.gitignore`，会把"计划"当成"现状"判红。
+  按 `.agents` 已有的豁免写法把它加进 `IGNORED_DIRS`，并同步 `.gitignore`（换机器后无需再改 `.git/info/exclude`）。
+
 - **热狗摊音效（顾客上门 + 收银）**：只复用 interact-sound 现有的 doorbell / Shop 两个 ogg，
   不新增素材。顾客报价到达时，客户端用 `InteractSound_SV:PlayWithinDistance` 播 25 m 世界声
   （音量 0.3）；NPC 成交与玩家购买的成功分支由服务端用 `InteractSound_CL:PlayOnOne` 给摊主 /
@@ -88,6 +106,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
 
 ### Changed
+- **文档路径漂移收口（换机 2026-11-16）**：工作树从旧机 `E:/T-City` 换到本机 `C:\tcity`，而 `AGENTS.md` §6 与
+  `docs/engineering/WORKTREE.md` 仍把 `E:/T-City` 写成"唯一工作树"，新机器上照文档找不到树。处理：
+  `docs/engineering/WORKTREE.md` 新增 **§0 环境表**（仓库根 / FXServer 目录 / 起服入口 / 端口 / 旧树归档 / 备份）
+  作为**唯一写盘符的地方**，§1 改为"一棵工作树 + 一份历史归档"，§2 命令去掉 `git -C E:/T-City` 前缀，
+  §2.1 起服路径改指 `.\start.cmd` / `./start.sh`；根 `AGENTS.md` §6 同步改成"本克隆根即唯一工作树"（仍 ≤110 行，`test_agent_docs.py` 绿）。
+  配套规则写进 WORKTREE §3：**操作性文档只写"仓库根"或相对路径；`docs/engineering/2026-11-*` 与 `docs/archive/**` 是当时快照，不回溯改写其绝对路径**。
+  同步修掉 `docs/agent/police/BLUEPRINT.md` §0.2（`cd E:/T-City-harness` → 仓库根）、`docs/agent/police/ACCEPTANCE.md`
+  （旧机 Python312 绝对路径 → 以 `python -m pytest --version` 能跑通为准）、`T-CityLite.base/tests/agent/lua/client_bootstrap.lua` 注释里的示例路径。
+  `type: audit / status: final` 的 `T-CityLite.base/docs/agent/FIVEM_MCP_LIVE_TEST.md` 按规范不修改（快照）。
+- **`PROJECT_PROGRESS.md` 接回真源**：原文顶部说"以 2026-10-21 审计报告为准"，更新协议却指向一个**仓库里不存在的**
+  `manage_progress.py sync/complete/start`（已核实），且把"80 资源 / 17 模块"这类会漂的数字写进正文（`doc-lifecycle.md` §12 明确列为反模式）。
+  现在只保留"版本与任务进度"这一职责：数字交回 `check_cfgs.py` / `check_dependencies.py` / `docs/INDEX.md`，
+  状态真源指向 `2026-11-foundation-plan.md` §4.1、`T-CityLite.base/docs/agent/STATUS.md`、`CHANGELOG` 的 `[Unreleased]`；
+  同步时间更新到 2026-11-16，并补上「2026-11 基石加固 P0/P1/P2 ✅」与下一方向。
+- **`docs/README.md` 导航表去腐烂**：`design/` `audit/` `systems/` 三个条目指向**不存在的目录**（其中审查报告实际在
+  `T-CityLite.base/docs/audit/`），而真实存在的 `agent/` `client/` `ops/` `plan/` `police/` `server-design/` 六目录未登记。
+  按实际目录重排，并把 `docs/` 之外的三个常用入口单列一行。
+- **下一方向结论按代码重估**：`2026-11-01-next-epic-research.md` 推荐"世界痕迹收口"的第一条链**已经落地**——
+  `T-CityLite.base/resources/[standalone]/core-framework/services/world_trace_service.lua`（2026-11-01）是 `world_state` 的唯一写者，`T-CityLite.base/resources/[custom]/custom-police/server/p0_incidents.lua`
+  结案时写 `crime_pressure`。实测**读侧仍为 0 消费者**（`crime_pressure` 除写入点外全仓无引用，手机 `CityFeed` 未接），
+  所以下一方向应是"读侧接线"，不是再建写侧。
 - **热狗数值改成测试期占位档**（正式值等经济系统联动）：`T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_hotdog.lua`
   押金 250 → **50**、租金 6 → **1 每分钟**（免租 60 → 30 秒，计费上限 60 → 20 分钟，保证满时长也扣不穿押金）、
   单价 6/9/14 → **8/16/32**（取偶数，成品回收按 0.5 折价不会出 $7.5）、顾客节奏 8–15 s/15–40 s → **3–6 s/6–15 s**、

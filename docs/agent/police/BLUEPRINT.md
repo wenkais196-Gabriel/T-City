@@ -4,7 +4,7 @@ type: spec
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
@@ -40,7 +40,7 @@ review_by: 2027-04-30
 ### 0.2 基线（每次开新 Phase 前跑）
 
 ```bash
-cd E:/T-City-harness        # 日常在 worktree 里干活
+cd <仓库根>                 # 本机路径见 docs/engineering/WORKTREE.md §0
 git status --short && git log --oneline -3
 python -m pytest -q T-CityLite.base/tests/architecture T-CityLite.base/tests/unit tests/tools
 lua5.4 T-CityLite.base/tests/agent/lua/runner.lua          # 15 suites / 149 checks / 0 failed
@@ -48,7 +48,7 @@ lua5.4 T-CityLite.base/tests/agent/lua/runner_client.lua
 ```
 
 > 2026-10-30 实测：Python 侧 **1226 passed / 150 skipped / 714 subtests**。
-> 本机 python 在 `C:/Users/swkgb/AppData/Local/Programs/Python/Python312/python.exe`（系统 PATH 里没有 `python3`）。
+> 解释器以 `python -m pytest --version` 能跑通为准（旧机默认 python 无 pytest，曾另指 Python312；本机装了 pytest 与 lua5.4 即可）。
 > 原稿里的 tests/agent、`tools/agent_tools.py` 是老路径，现分别落在 `T-CityLite.base/tests/agent/`。
 
 ### 0.3 实现进度（2026-10-30）
