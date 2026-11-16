@@ -17,7 +17,9 @@
 --       state = 'open',
 --       stock = { exotic = 0, rare = 0, common = 0 },
 --       raw = 30,
---       sold = 0, revenue = 0,
+--       sold = 0, revenue = 0, served = 0,
+--       -- served = 本班“接待过”的顾客数（NPC 成交/拒绝、玩家顾客成交各算 1 位；
+--       -- 超时离开不算）；与 sold（售出份数，一单可能 2 份）分开，状态条显示的是顾客数。
 --       offers = { [offerId] = { item, count, unitPrice, price, expiresAt, npcNetId, state } },
 --       npc = { active, nextAt, consecutiveRejects, cooldownUntil },
 --       seq = 0,
@@ -402,6 +404,7 @@ function QuestVendor.Open(citizenid, questId, boothNetId, cfg)
         raw = config.initial_raw,
         sold = 0,
         revenue = 0,
+        served = 0,   -- 本班已接待的顾客数（NPC 成交/拒绝、玩家成交各 1；超时不加）
         offers = {},
         npc = {
             active = false,
@@ -618,6 +621,7 @@ function QuestVendor.SettleOffer(citizenid, offerId)
     offer.settledAt = now
     session.sold = session.sold + offer.count
     session.revenue = session.revenue + offer.price
+    session.served = session.served + 1   -- 一位顾客（不是一份热狗）
     session.npc.active = false
     session.npc.offerId = nil
     session.npc.spawnedAt = nil
@@ -663,6 +667,9 @@ function QuestVendor.RejectOffer(citizenid, offerId)
     session.npc.active = false
     session.npc.offerId = nil
     session.npc.spawnedAt = nil
+    -- 拒绝也是一次“接待”：玩家确实处理了这位顾客，只是没成交。
+    -- 超时离开（leaveCustomer）不计，因为玩家从头到尾没接手。
+    session.served = session.served + 1
     registerReject(session, now)
 
     return true, {
@@ -721,6 +728,8 @@ function QuestVendor.Purchase(citizenid, item, count)
 
     session.sold = session.sold + amount
     session.revenue = session.revenue + total
+    -- 玩家顾客也占一位（一次购买算一位顾客，不按份数累加）。
+    session.served = session.served + 1
 
     return true, {
         item = tier,

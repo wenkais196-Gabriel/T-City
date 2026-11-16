@@ -7,7 +7,7 @@
 --   * GetPlayerPed / 常用 native   → 占位（本内核不依赖实体）
 --   * QuestVendor._random = 0      → 所有区间取最小值，排期可预测
 --
--- 覆盖 10 条硬性不变量 + 边界（count<=0 / 未知 item / 会话不存在 / 原料耗尽）：
+-- 覆盖 11 条硬性不变量 + 边界（count<=0 / 未知 item / 会话不存在 / 原料耗尽）：
 --   1 报价金额服务端算（客户端多传的参数被忽略）
 --   2 offerId 一次性（第二次 already_settled，不重复加钱/扣库存）
 --   3 过期（expired，库存与钱不动）
@@ -18,6 +18,7 @@
 --   8 打烊后所有入口返回 closed
 --   9 钱只走 AddMoney('cash', ...) 且 reason 固定
 --  10 Close 后会话立即消失、重复 Close 返回 nil
+--  11 served 按“接待的顾客数”计数（NPC 成交/拒绝、玩家成交各 1；超时不算；与 sold 份数分开）
 --
 -- 用法:
 --   lua5.4 tests/unit/layer3_business/fixtures/vendor_probe.lua \
@@ -629,6 +630,40 @@ do
         ('err=%s stock=%s sold=%s money=%d'):format(
             tostring(err), tostring(session.stock.common),
             tostring(session.sold), #state.moneyCalls))
+end
+
+-- 20) served：本班“接待过”的顾客数，与 sold（份数）分开；超时离开不算
+do
+    newWorld()
+    addPlayer('cid-served')
+    local session = QuestVendor.Open('cid-served', 'quest-hotdog', 101, makeCfg())
+    QuestVendor.AddStock('cid-served', 'common', 5)
+
+    assert(arrive('cid-served'))
+    local offer1 = QuestVendor.CreateOffer('cid-served', 'common', 2)
+    local settled = QuestVendor.SettleOffer('cid-served', offer1.offerId)
+
+    state.now = state.now + 15000
+    assert(findAction(QuestVendor.Tick(state.now), 'spawn_customer', 'cid-served'))
+    local offer2 = QuestVendor.CreateOffer('cid-served', 'common', 1)
+    local rejected = QuestVendor.RejectOffer('cid-served', offer2.offerId)
+
+    state.now = state.now + 15000
+    assert(findAction(QuestVendor.Tick(state.now), 'spawn_customer', 'cid-served'))
+    local offer3 = QuestVendor.CreateOffer('cid-served', 'common', 1)
+    state.now = offer3.expiresAt + 1
+    QuestVendor.Tick(state.now)
+
+    -- 玩家顾客成交也算一位（一次购买 = 一位，不按份数）
+    local bought = QuestVendor.Purchase('cid-served', 'common', 1)
+
+    check('served_counts_customers',
+        settled == true and rejected == true and bought == true
+            and session.served == 3
+            and session.sold == 3
+            and session.revenue == 18,
+        ('served=%s sold=%s revenue=%s'):format(
+            tostring(session.served), tostring(session.sold), tostring(session.revenue)))
 end
 
 -- ---------------------------------------------------------------------------

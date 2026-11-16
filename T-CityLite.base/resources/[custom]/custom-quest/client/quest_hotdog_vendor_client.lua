@@ -38,6 +38,19 @@ do
     if ok then QBCore = core end
 end
 
+-- CEF 焦点：native 调用全部在 client/vendor_focus.lua（清单里排在本文件之前）。
+-- 本文件只登记/释放 owner，绝不直接调 SetNuiFocus。
+local Focus = VendorFocus
+if type(Focus) ~= 'table' then
+    -- 只有 fxmanifest 顺序被改坏才会走到这里：按钮点不了，但键盘路径仍然可用。
+    Focus = {
+        Acquire = function() end,
+        ReleaseOwner = function() end,
+        ReleaseAll = function() end,
+        IsActive = function() return false end,
+    }
+end
+
 -- ==============================================================
 -- 常量
 -- ==============================================================
@@ -344,9 +357,20 @@ local function PushStatus(booth, now)
         hint = '已收摊 · 回租赁点结算'
     end
 
-    local sig = ('%s|%d|%d|%d|%d|%d|%s|%s'):format(
+    -- 剩余时间：服务端给的是租借会话的绝对截止时刻（epoch ms）+ 发送时的服务端
+    -- 墙钟。客户端只做一次减法，之后由 HTML 本地倒计时；不每秒回服务端问。
+    -- 拿不到租借会话（expiresAtMs=nil）时不显示倒计时，而不是编一个 0。
+    local remainingMs = nil
+    if (booth.expiresAtMs or 0) > 0 then
+        local serverNow = (booth.serverNowMs or 0) > 0
+            and booth.serverNowMs or (os.time() * 1000)
+        remainingMs = math.max(0, booth.expiresAtMs - serverNow)
+    end
+
+    local sig = ('%s|%d|%d|%d|%d|%d|%d|%d|%d|%s|%s'):format(
         tostring(booth.state), booth.stock.exotic, booth.stock.rare, booth.stock.common,
-        booth.raw, booth.sold, Money(booth.revenue), hint)
+        booth.raw, booth.served, booth.sold, booth.deposit, booth.expiresAtMs,
+        Money(booth.revenue), hint)
     if sig == NuiMirror.statusSig and NuiMirror.statusVisible then return end
     NuiMirror.statusSig = sig
     NuiMirror.statusVisible = true
@@ -354,6 +378,8 @@ local function PushStatus(booth, now)
     NuiSend({
         action = 'status', visible = true, state = booth.state,
         stock = booth.stock, raw = booth.raw, sold = booth.sold,
+        served = booth.served, deposit = booth.deposit,
+        expiresAtMs = booth.expiresAtMs, remainingMs = remainingMs,
         revenue = tonumber(Money(booth.revenue)) or 0, hint = hint,
         questId = booth.questId,
     })
@@ -372,33 +398,42 @@ local function PushOffer()
     if not offer then
         if NuiMirror.offerId then
             NuiMirror.offerId = nil
+            NuiMirror.offerSig = ''
             NuiSend({ action = 'offer', visible = false })
         end
+        -- 报价被 ResolveOffer 直接置空时不会走 HideOffer；这里兜底放焦点。
+        Focus.ReleaseOwner('offer')
         return
     end
 
     local sig = ('%s|%d|%d'):format(tostring(offer.offerId), offer.count, offer.price)
-    if sig == NuiMirror.offerSig then return end
-    NuiMirror.offerSig = sig
-    NuiMirror.offerId = offer.offerId
+    if sig ~= NuiMirror.offerSig then
+        NuiMirror.offerSig = sig
+        NuiMirror.offerId = offer.offerId
 
-    local qualityLabel = ({ exotic = '异域热狗', rare = '稀有热狗', common = '普通热狗' })[offer.item]
-        or '热狗'
-    NuiSend({
-        action = 'offer', visible = true,
-        offerId = offer.offerId,
-        label = qualityLabel,
-        count = offer.count,
-        price = offer.price,
-        unitPrice = offer.unitPrice,
-        remainingMs = math.max(0, (offer.expiresAt or 0) - GetGameTimer()),
-    })
+        local qualityLabel = ({ exotic = '异域热狗', rare = '稀有热狗', common = '普通热狗' })[offer.item]
+            or '热狗'
+        NuiSend({
+            action = 'offer', visible = true,
+            offerId = offer.offerId,
+            label = qualityLabel,
+            count = offer.count,
+            price = offer.price,
+            unitPrice = offer.unitPrice,
+            remainingMs = math.max(0, (offer.expiresAt or 0) - GetGameTimer()),
+        })
+    end
+
+    -- 先渲染、再抢焦点（story-engine 的焦点顺序红线）。sig 没变也要登记一次：
+    -- 登记是幂等的，焦点被别的资源改掉后下一帧能补回来。
+    Focus.Acquire('offer')
 end
 
 local function HideOffer()
     NuiMirror.offerId = nil
     NuiMirror.offerSig = ''
     NuiSend({ action = 'offer', visible = false })
+    Focus.ReleaseOwner('offer')
 end
 
 --- 买家提示（ALT 购买 / 摊主不在 / 打烊）
@@ -453,6 +488,7 @@ local function ClearBuyMenu()
     BuyMenu = nil
     NuiMirror.menuSig = ''
     NuiSend({ action = 'menu', visible = false })
+    Focus.ReleaseOwner('menu')
 end
 
 --- 旁观者记录只在服务端广播半径内有效：离开之后不会再更新，必须清掉。
@@ -586,6 +622,15 @@ RegisterNetEvent('quest:client:vendorState', function(payload)
         },
         sold     = math.max(0, math.floor(NumberOr(payload.sold, 0))),
         revenue  = NumberOr(payload.revenue, 0),
+        -- S12 状态条新增三项：服务端数出来的已接待顾客数 / 押金托管额 /
+        -- 租借会话的绝对截止时刻。旧接线不带这些字段时沿用上一份值。
+        served     = math.max(0, math.floor(NumberOr(payload.served,
+            previous and previous.served or 0))),
+        deposit    = math.max(0, NumberOr(payload.deposit,
+            previous and previous.deposit or 0)),
+        expiresAtMs = math.max(0, NumberOr(payload.expiresAtMs,
+            previous and previous.expiresAtMs or 0)),
+        serverNowMs = math.max(0, NumberOr(payload.serverNowMs, 0)),
         ownerAway = payload.ownerAway == true or payload.owner_away == true
             or payload.state == 'away',
         isOwner = true,
@@ -727,7 +772,8 @@ end)
 -- ==============================================================
 
 local function HandleOwnerInteract()
-    if UiHasFocus() then return end
+    -- 报价面板拿着焦点时 E 不该穿透到摊位（面板里的 Y/N 才是当前动作）。
+    if UiHasFocus() or Focus.IsActive() then return end
 
     local now = GetGameTimer()
     local ped = PlayerPedId()
@@ -764,7 +810,7 @@ end
 local cookPending = false
 
 local function HandleCook(ped)
-    if UiHasFocus() then return end
+    if UiHasFocus() or Focus.IsActive() then return end
     local booth = NearestBooth(GetEntityCoords(ped), OWNER_DISTANCE, true)
     if not booth or booth.state ~= 'open' then return end
     if cookPending then return end
@@ -847,11 +893,12 @@ local function MenuBlockReason(booth, quality)
 end
 
 local function ToggleBuyMenu()
-    if UiHasFocus() then return end
+    -- ALT 在菜单打开时是“关”，所以先处理它；其余情况下别的面板拿着焦点就不抢。
     if BuyMenu then
         ClearBuyMenu()
         return
     end
+    if UiHasFocus() or Focus.IsActive() then return end
 
     local ped = PlayerPedId()
     if IsDeadPed(ped) then return end
@@ -942,16 +989,75 @@ local function DrawBuyMenu(booth, menu, now)
     end
     local sig = ('%s|%d|%s|%s'):format(tostring(menu.boothNetId), menu.selected,
         tostring(menu.flash or ''), table.concat(availability, ','))
-    if sig == NuiMirror.menuSig then return end
-    NuiMirror.menuSig = sig
+    if sig ~= NuiMirror.menuSig then
+        NuiMirror.menuSig = sig
 
-    NuiSend({
-        action = 'menu', visible = true,
-        selected = menu.selected - 1,   -- HTML 里是 0 基
-        rows = rows,
-        sub = '按上下键选择 · Enter 买 1 份 · 退格关闭',
-        foot = menu.flash or '',
-    })
+        NuiSend({
+            action = 'menu', visible = true,
+            selected = menu.selected - 1,   -- HTML 里是 0 基
+            rows = rows,
+            sub = '上下键选择 · Enter 买 1 份 · Esc 关闭',
+            foot = menu.flash or '',
+        })
+    end
+
+    -- 先渲染、再抢焦点；登记是幂等的，焦点被别的资源改掉后下一帧能补回来。
+    Focus.Acquire('menu')
+end
+
+-- ==============================================================
+-- 键盘动作去重：CEF keydown 与 Lua 原生按键是两条路径
+--
+-- 焦点开着（keepInput=true）时，同一颗键可能同时被：
+--   * HTML 的 keydown 收到 → post('vendorKey' / 'offerAction')
+--   * 游戏侧 RegisterKeyMapping / 控制号轮询收到 → 同一个 Lua 函数
+-- 两条都执行会双发（成交两次、菜单跳两格）。这里按“动作”做 250ms 去重：
+-- 先到的那条执行，后到的丢弃。只有一条路径能到时，它照常工作。
+-- ==============================================================
+
+local LastActionAt = {}
+local ACTION_DEDUPE_MS = 250
+
+local function DispatchAction(key, handler)
+    local now = GetGameTimer()
+    if now - (LastActionAt[key] or -1000000) < ACTION_DEDUPE_MS then
+        return false
+    end
+    LastActionAt[key] = now
+    handler()
+    return true
+end
+
+local function DispatchVendorAction(action)
+    local handler
+    if action == 'offer_accept' then
+        handler = function() ResolveOffer(true) end
+    elseif action == 'offer_reject' then
+        handler = function() ResolveOffer(false) end
+    elseif action == 'offer_close' then
+        handler = function() ClearOffer('nui_close') end
+    elseif action == 'menu_up' or action == 'menu_down' then
+        handler = function()
+            local menu = BuyMenu
+            if not menu then return end
+            local delta = action == 'menu_up' and -1 or 1
+            menu.selected = menu.selected + delta
+            if menu.selected < 1 then menu.selected = #MENU_ORDER end
+            if menu.selected > #MENU_ORDER then menu.selected = 1 end
+        end
+    elseif action == 'menu_buy' then
+        handler = function()
+            local menu = BuyMenu
+            if not menu then return end
+            local booth = Booths[menu.boothNetId]
+            local quality = MENU_ORDER[menu.selected]
+            if booth and quality then SendPurchase(booth, quality) end
+        end
+    elseif action == 'menu_close' then
+        handler = function() ClearBuyMenu() end
+    end
+    if not handler then return false end
+    return DispatchAction(action, handler)
 end
 
 local function UpdateBuyMenu(pedCoords, now)
@@ -977,20 +1083,20 @@ local function UpdateBuyMenu(pedCoords, now)
     DisableControlAction(0, CONTROL_FRONTEND_CANCEL2, true)
 
     if JustPressed(CONTROL_FRONTEND_UP) then
-        menu.selected = menu.selected - 1
-        if menu.selected < 1 then menu.selected = #MENU_ORDER end
+        DispatchVendorAction('menu_up')
     elseif JustPressed(CONTROL_FRONTEND_DOWN) then
-        menu.selected = menu.selected + 1
-        if menu.selected > #MENU_ORDER then menu.selected = 1 end
+        DispatchVendorAction('menu_down')
     end
 
     if JustPressed(CONTROL_FRONTEND_ACCEPT) then
-        SendPurchase(booth, MENU_ORDER[menu.selected])
+        DispatchVendorAction('menu_buy')
     elseif JustPressed(CONTROL_FRONTEND_CANCEL) or JustPressed(CONTROL_FRONTEND_CANCEL2) then
-        ClearBuyMenu()
-        return
+        DispatchVendorAction('menu_close')
+        -- CEF keydown 可能已经先一步关了菜单；别拿旧 table 再把它画回来。
+        if not BuyMenu then return end
     end
 
+    if not BuyMenu then return end
     DrawBuyMenu(booth, menu, now)
 end
 
@@ -1031,6 +1137,12 @@ CreateThread(function()
         local ped = PlayerPedId()
         local pedCoords = GetEntityCoords(ped)
         local dead = IsDeadPed(ped)
+
+        -- 死亡时焦点必须立刻释放（vendor_focus 自己也有一条 250ms 的兜底轮询，
+        -- 这里多一条是为了同一帧就把面板收掉，不让玩家复活后看到“点不动的面板”）。
+        if dead and Focus.IsActive() then
+            Focus.ReleaseAll('dead')
+        end
 
         -- 旁观者记录没有服务端更新来源之后（离开广播半径），必须清掉。
         PruneBystanderBooths(pedCoords)
@@ -1089,7 +1201,8 @@ end)
 --
 -- 为什么用 RegisterKeyMapping 而不是每帧 IsControlJustPressed(0, 38)：
 --   E / ALT 在别的资源里已经有绑定（qb-doorlock、qb-target），按键映射至少
---   允许玩家在设置里改键；菜单导航（上下/Enter/退格）仍走原生控制号。
+--   允许玩家在设置里改键。菜单导航同时支持 CEF keydown（上下/Enter/Esc）与
+--   原生控制号；两条路径都汇到 DispatchAction 做 250ms 去重，不会双发。
 -- ==============================================================
 
 RegisterCommand('quest_hotdog_vendor_interact', function()
@@ -1103,12 +1216,12 @@ end, false)
 RegisterKeyMapping('quest_hotdog_vendor_cook', '热狗摊 · 做热狗', 'keyboard', 'G')
 
 RegisterCommand('quest_hotdog_vendor_accept', function()
-    ResolveOffer(true)
+    DispatchVendorAction('offer_accept')
 end, false)
 RegisterKeyMapping('quest_hotdog_vendor_accept', '热狗摊 · 成交', 'keyboard', 'Y')
 
 RegisterCommand('quest_hotdog_vendor_decline', function()
-    ResolveOffer(false)
+    DispatchVendorAction('offer_reject')
 end, false)
 RegisterKeyMapping('quest_hotdog_vendor_decline', '热狗摊 · 拒绝', 'keyboard', 'N')
 
@@ -1166,9 +1279,18 @@ print('[quest-hotdog-vendor] 🌭 S4 客户端已就绪：状态条 / 报价面�
 RegisterNUICallback('offerAction', function(data, cb)
     local action = type(data) == 'table' and data.action or nil
     if action == 'accept' then
-        ResolveOffer(true)
+        DispatchVendorAction('offer_accept')
     elseif action == 'reject' then
-        ResolveOffer(false)
+        DispatchVendorAction('offer_reject')
+    end
+    cb({ ok = true })
+end)
+
+--- HTML keydown 的入口：Y/N、上下、Enter、Esc 都走同一套去重。
+RegisterNUICallback('vendorKey', function(data, cb)
+    local action = type(data) == 'table' and data.action or nil
+    if type(action) == 'string' and action ~= '' then
+        DispatchVendorAction(action)
     end
     cb({ ok = true })
 end)
@@ -1180,7 +1302,8 @@ RegisterNUICallback('buyRow', function(data, cb)
         local quality = MENU_ORDER[index + 1]
         local booth = Booths[menu.boothNetId]
         if quality and booth then
-            SendPurchase(booth, quality)
+            -- 与 Enter（menu_buy）共用一个去重键：鼠标点完再按 Enter 不会买两份。
+            DispatchAction('menu_buy', function() SendPurchase(booth, quality) end)
         end
     end
     cb({ ok = true })

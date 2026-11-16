@@ -30,8 +30,10 @@
     background:rgba(74,222,128,.16);color:var(--green)}
   #status .state.closed{background:rgba(161,161,170,.16);color:var(--muted)}
   #status .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 10px;font-size:12px}
-  #status .grid div{color:var(--muted)}
+  #status .grid div{color:var(--muted);white-space:nowrap}
   #status .grid b{color:var(--text);font-variant-numeric:tabular-nums;margin-left:4px}
+  #status .grid b.warn{color:var(--amber)}
+  #status .grid b.danger{color:var(--red)}
   #status .hint{margin-top:9px;padding-top:8px;border-top:1px solid var(--line);
     font-size:12px;color:var(--amber);letter-spacing:.02em}
 
@@ -79,7 +81,11 @@
   #menu .row.sold{opacity:.42;cursor:not-allowed}
   #menu .row .p{font-variant-numeric:tabular-nums;color:var(--green)}
   #menu .row.sold .p{color:var(--muted)}
-  #menu .foot{margin-top:10px;font-size:11px;color:var(--muted)}
+  #menu .foot{margin-top:10px;font-size:11px;color:var(--muted);
+    display:flex;align-items:center;justify-content:space-between;gap:8px}
+  #menu .foot button{padding:5px 9px;border-radius:7px;border:1px solid var(--line);
+    background:rgba(255,255,255,.05);color:var(--text);font-size:11px;cursor:pointer;
+    font-family:inherit;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -97,7 +103,10 @@
     <div>稀有<b id="st-rare">0</b></div>
     <div>普通<b id="st-common">0</b></div>
     <div>原料<b id="st-raw">0</b></div>
+    <div>顾客<b id="st-served">0</b></div>
     <div>已售<b id="st-sold">0</b></div>
+    <div>押金<b id="st-deposit">$0</b></div>
+    <div>剩余<b id="st-time">--:--</b></div>
     <div>收入<b id="st-revenue">$0</b></div>
   </div>
   <div class="hint" id="st-hint">[E] 收摊 · [G] 做热狗</div>
@@ -116,9 +125,12 @@
 
 <div id="menu" class="hide">
   <h3>今日菜单</h3>
-  <div class="sub" id="menu-sub">按上下键选择 · Enter 买 1 份 · 退格关闭</div>
+  <div class="sub" id="menu-sub">上下键选择 · Enter 买 1 份 · Esc 关闭</div>
   <div id="menu-rows"></div>
-  <div class="foot" id="menu-foot"></div>
+  <div class="foot">
+    <span id="menu-foot"></span>
+    <button id="menu-close" type="button">关闭 [Esc]</button>
+  </div>
 </div>
 
 <script>
@@ -139,6 +151,28 @@
   let offerEnds = 0;
   let offerTotal = 1;
 
+  // 摊位状态条的剩余时间：Lua 侧只给一次 remainingMs，之后完全本地倒计时，
+  // 不每秒回服务端问（也不在 CEF 里重新请求状态）。
+  let statusTimer = null;
+  let statusEnds = 0;
+  let statusHasDeadline = false;
+
+  function paintStatusTime() {
+    const el = $('st-time');
+    if (!statusHasDeadline) {
+      el.textContent = '--:--';
+      el.classList.remove('warn', 'danger');
+      return;
+    }
+    const left = Math.max(0, statusEnds - Date.now());
+    const total = Math.ceil(left / 1000);
+    const mm = String(Math.floor(total / 60)).padStart(2, '0');
+    const ss = String(total % 60).padStart(2, '0');
+    el.textContent = `${mm}:${ss}`;
+    el.classList.toggle('warn', total > 0 && total <= 300);
+    el.classList.toggle('danger', total <= 60);
+  }
+
   window.addEventListener('message', (e) => {
     const d = e.data || {};
     if (d.action === 'status') {
@@ -148,13 +182,24 @@
         $('st-rare').textContent = d.stock?.rare ?? 0;
         $('st-common').textContent = d.stock?.common ?? 0;
         $('st-raw').textContent = d.raw ?? 0;
+        $('st-served').textContent = d.served ?? 0;
         $('st-sold').textContent = d.sold ?? 0;
+        $('st-deposit').textContent = '$' + (d.deposit ?? 0);
         $('st-revenue').textContent = '$' + (d.revenue ?? 0);
+        statusHasDeadline = typeof d.remainingMs === 'number';
+        statusEnds = Date.now() + Math.max(0, d.remainingMs ?? 0);
+        clearInterval(statusTimer);
+        statusTimer = null;
+        paintStatusTime();
+        if (statusHasDeadline) statusTimer = setInterval(paintStatusTime, 250);
         const open = d.state === 'open';
         const badge = $('st-state');
         badge.textContent = open ? '营业中' : '已打烊';
         badge.classList.toggle('closed', !open);
         $('st-hint').textContent = d.hint || (open ? '[E] 收摊 · [G] 做热狗' : '回租赁点结算');
+      } else {
+        clearInterval(statusTimer);
+        statusTimer = null;
       }
     }
 
@@ -194,7 +239,7 @@
     if (d.action === 'menu') {
       if (d.visible === false) { show($('menu'), false); return; }
       show($('menu'), true);
-      $('menu-sub').textContent = d.sub || '按上下键选择 · Enter 买 1 份 · 退格关闭';
+      $('menu-sub').textContent = d.sub || '上下键选择 · Enter 买 1 份 · Esc 关闭';
       $('menu-foot').textContent = d.foot || '';
       const rows = $('menu-rows');
       rows.innerHTML = '';
@@ -210,6 +255,40 @@
 
   document.querySelectorAll('#offer button').forEach((b) => {
     b.onclick = () => post('offerAction', { action: b.dataset.act });
+  });
+
+  $('menu-close').onclick = () => post('vendorKey', { action: 'menu_close' });
+
+  // 焦点在 CEF 时优先用 keydown（比 Lua 原生命令更直接）。Lua 侧对同一个
+  // 动作有 250ms 去重，所以两条路径都到达时也只会执行一次。
+  document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    const offerVisible = !$('offer').classList.contains('hide');
+    const menuVisible = !$('menu').classList.contains('hide');
+
+    if (offerVisible) {
+      if (e.key === 'y' || e.key === 'Y') {
+        e.preventDefault(); post('offerAction', { action: 'accept' }); return;
+      }
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault(); post('offerAction', { action: 'reject' }); return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault(); post('vendorKey', { action: 'offer_close' }); return;
+      }
+    }
+
+    if (menuVisible) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault(); post('vendorKey', { action: 'menu_up' });
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault(); post('vendorKey', { action: 'menu_down' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); post('vendorKey', { action: 'menu_buy' });
+      } else if (e.key === 'Escape' || e.key === 'Backspace') {
+        e.preventDefault(); post('vendorKey', { action: 'menu_close' });
+      }
+    }
   });
 </script>
 </body>
