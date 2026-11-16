@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `INDEX.md`（本意是排除自动生成的文档总索引，否则孤儿恒为 0），结果把 `docs/client/ux/INDEX.md` 这种
   **手写导航宿主**也一起排除了——被它索引着的 5 篇文档被误报成孤儿。改为只排除生成的那一份
   （`docs/INDEX.md` 的绝对路径比较）。`--report` 实测孤儿 **11 → 6**，修完剩下 6 篇是真没人引用（见下条）。
+  顺手把语料遍历抽成 `_corpus_text()`、读文件抽成 `_read_for_corpus()`（只吞 `OSError`，不吞 `Exception`）：
+  `report()` 少了 10 行嵌套，异常范围也从"什么都吞"收到"只吞读不到"。
 
 ### Changed
 - **仓库打扫与文档沉淀（维护轮）**：三件事。
