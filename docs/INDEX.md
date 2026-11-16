@@ -75,11 +75,11 @@
 | [警察扮演流程调研（FLOW_RESEARCH）](police/FLOW_RESEARCH.md) | research | 📌 final | 2026-10-24 | 2027-01-30 |  | `docs/police/FLOW_RESEARCH.md` |
 | [GTA V 警察模组在 FiveM 服务器上的复现调研](police/GTA_MOD_RESEARCH.md) | research | 📌 final | 2026-10-24 | 2027-01-30 |  | `docs/police/GTA_MOD_RESEARCH.md` |
 | [外部警察 / 调度 / MDT / 监狱 / 法庭模组调研](police/research-external.md) | research | 📌 final | 2026-10-23 | 2027-01-30 |  | `docs/police/research-external.md` |
-| [警察模块验收标准（ACCEPTANCE）](agent/police/ACCEPTANCE.md) | spec | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/agent/police/ACCEPTANCE.md` |
+| [警察模块验收标准（ACCEPTANCE）](agent/police/ACCEPTANCE.md) | spec | ✅ active | 2026-11-16 | 2027-04-30 |  | `docs/agent/police/ACCEPTANCE.md` |
 | [警察道具层蓝图（Items & Props）](agent/police/BLUEPRINT-ITEMS-ARCHIVED.md) | spec | ♻️ superseded | 2026-11-01 | 2027-04-30 |  | `docs/agent/police/BLUEPRINT-ITEMS-ARCHIVED.md` |
 | [警察道具层蓝图（Claude Code 独立版）](agent/police/BLUEPRINT-ITEMS-CC.md) | spec | 🟡 draft | 2026-11-01 | 2027-04-30 |  | `docs/agent/police/BLUEPRINT-ITEMS-CC.md` |
 | [警察道具层蓝图（Items & Props）v2](agent/police/BLUEPRINT-ITEMS.md) | spec | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/agent/police/BLUEPRINT-ITEMS.md` |
-| [警察模块蓝图 v1（待开发）](agent/police/BLUEPRINT.md) | spec | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/agent/police/BLUEPRINT.md` |
+| [警察模块蓝图 v1（待开发）](agent/police/BLUEPRINT.md) | spec | ✅ active | 2026-11-16 | 2027-04-30 |  | `docs/agent/police/BLUEPRINT.md` |
 | [AI 调度员 MVP：agent 拿内容 → 解析 → call 卡草稿](agent/police/DISPATCHER-MVP.md) | spec | 🟡 draft | 2026-10-31 | 2027-04-30 |  | `docs/agent/police/DISPATCHER-MVP.md` |
 | [Agent Ops — 警察服务器实时观测与介入](police/AGENT_OPS.md) | spec | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/AGENT_OPS.md` |
 | [T-City 警察玩法与系统设计（Police Roleplay DESIGN）](police/DESIGN.md) | spec | ✅ active | 2026-10-23 | 2027-04-30 |  | `docs/police/DESIGN.md` |
@@ -361,7 +361,7 @@
 | [📘 T-City Lite 技术手册编写规范 (technical_manual_spec.md)](../T-CityLite.base/docs/standards/technical_manual_spec.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/standards/technical_manual_spec.md` |
 | [🧪 T-City Lite 测试手册编写规范 (testing_manual_spec.md)](../T-CityLite.base/docs/standards/testing_manual_spec.md) | meta | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/standards/testing_manual_spec.md` |
 | [历史归档（不维护）：docs/02_script_index](02_script_index/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/02_script_index/LEGACY.md` |
-| [docs/ — 项目级文档](README.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/README.md` |
+| [docs/ — 项目级文档](README.md) | meta | ✅ active | 2026-11-16 | 2027-04-30 |  | `docs/README.md` |
 | [历史归档（不维护）：docs/archive](archive/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/archive/LEGACY.md` |
 | [📋 T-City Lite 版本规划索引](archive/QBCore_Lite_versions/README.md) | meta | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/README.md` |
 | [历史归档（不维护）：docs/cleanup](cleanup/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/cleanup/LEGACY.md` |
@@ -371,7 +371,7 @@
 | [真机验证工作流（Live verification）](engineering/LIVE_VERIFICATION.md) | meta | ✅ active | 2026-10-30 | 2027-04-30 |  | `docs/engineering/LIVE_VERIFICATION.md` |
 | [REUSE — 共享代码放哪、什么该合并、怎么收敛](engineering/REUSE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/REUSE.md` |
 | [STANDARDS — 技术标准 v0.2（可执行、可验证）](engineering/STANDARDS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 | ★ | `docs/engineering/STANDARDS.md` |
-| [工作树与分支流程](engineering/WORKTREE.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/WORKTREE.md` |
+| [工作树与分支流程](engineering/WORKTREE.md) | meta | ✅ active | 2026-11-16 | 2027-04-30 |  | `docs/engineering/WORKTREE.md` |
 | [Agent 时代的工程运行模型（T-City 落地提案 v1）](engineering/agent-operating-model.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `docs/engineering/agent-operating-model.md` |
 | [LLM 通用工艺准则（原 CLAUDE.md，2026-10-25 归档）](engineering/llm-craft.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/llm-craft.md` |
 | [交付：<主题>](engineering/templates/delivery.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/delivery.md` |
@@ -381,7 +381,7 @@
 | [验证：<主题>](engineering/templates/verification.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/verification.md` |
 | [历史归档（不维护）：docs/police](police/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/police/LEGACY.md` |
 | [文档生命周期管理规范](standards/doc-lifecycle.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 | ★ | `docs/standards/doc-lifecycle.md` |
-| [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../PROJECT_PROGRESS.md) | plan | ✅ active | 2026-10-23 | 2027-04-30 |  | `PROJECT_PROGRESS.md` |
+| [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../PROJECT_PROGRESS.md) | plan | ✅ active | 2026-11-16 | 2027-04-30 |  | `PROJECT_PROGRESS.md` |
 | [⚙️ T-City Lite Career (职业身份) 系统重构技术方案](archive/QBCore_Lite_versions/career/refactor_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/refactor_plan.md` |
 | [仓库整理总方案（合并三份提案）](cleanup/PLAN.md) | plan | 📌 final | 2026-10-23 | 2027-04-30 |  | `docs/cleanup/PLAN.md` |
 | [抽象收敛施工计划（2026-11）](engineering/2026-11-abstraction-convergence-plan.md) | plan | ✅ active | 2026-11-15 | 2027-03-31 |  | `docs/engineering/2026-11-abstraction-convergence-plan.md` |

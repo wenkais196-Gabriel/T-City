@@ -88,6 +88,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
 
 ### Changed
+- **文档路径漂移收口（换机 2026-11-16）**：工作树从旧机 `E:/T-City` 换到本机 `C:\tcity`，而 `AGENTS.md` §6 与
+  `docs/engineering/WORKTREE.md` 仍把 `E:/T-City` 写成"唯一工作树"，新机器上照文档找不到树。处理：
+  `docs/engineering/WORKTREE.md` 新增 **§0 环境表**（仓库根 / FXServer 目录 / 起服入口 / 端口 / 旧树归档 / 备份）
+  作为**唯一写盘符的地方**，§1 改为"一棵工作树 + 一份历史归档"，§2 命令去掉 `git -C E:/T-City` 前缀，
+  §2.1 起服路径改指 `.\start.cmd` / `./start.sh`；根 `AGENTS.md` §6 同步改成"本克隆根即唯一工作树"（仍 ≤110 行，`test_agent_docs.py` 绿）。
+  配套规则写进 WORKTREE §3：**操作性文档只写"仓库根"或相对路径；`docs/engineering/2026-11-*` 与 `docs/archive/**` 是当时快照，不回溯改写其绝对路径**。
+  同步修掉 `docs/agent/police/BLUEPRINT.md` §0.2（`cd E:/T-City-harness` → 仓库根）、`docs/agent/police/ACCEPTANCE.md`
+  （旧机 Python312 绝对路径 → 以 `python -m pytest --version` 能跑通为准）、`T-CityLite.base/tests/agent/lua/client_bootstrap.lua` 注释里的示例路径。
+  `type: audit / status: final` 的 `T-CityLite.base/docs/agent/FIVEM_MCP_LIVE_TEST.md` 按规范不修改（快照）。
+- **`PROJECT_PROGRESS.md` 接回真源**：原文顶部说"以 2026-10-21 审计报告为准"，更新协议却指向一个**仓库里不存在的**
+  `manage_progress.py sync/complete/start`（已核实），且把"80 资源 / 17 模块"这类会漂的数字写进正文（`doc-lifecycle.md` §12 明确列为反模式）。
+  现在只保留"版本与任务进度"这一职责：数字交回 `check_cfgs.py` / `check_dependencies.py` / `docs/INDEX.md`，
+  状态真源指向 `2026-11-foundation-plan.md` §4.1、`T-CityLite.base/docs/agent/STATUS.md`、`CHANGELOG` 的 `[Unreleased]`；
+  同步时间更新到 2026-11-16，并补上「2026-11 基石加固 P0/P1/P2 ✅」与下一方向。
+- **`docs/README.md` 导航表去腐烂**：`design/` `audit/` `systems/` 三个条目指向**不存在的目录**（其中审查报告实际在
+  `T-CityLite.base/docs/audit/`），而真实存在的 `agent/` `client/` `ops/` `plan/` `police/` `server-design/` 六目录未登记。
+  按实际目录重排，并把 `docs/` 之外的三个常用入口单列一行。
+- **下一方向结论按代码重估**：`2026-11-01-next-epic-research.md` 推荐"世界痕迹收口"的第一条链**已经落地**——
+  `T-CityLite.base/resources/[standalone]/core-framework/services/world_trace_service.lua`（2026-11-01）是 `world_state` 的唯一写者，`T-CityLite.base/resources/[custom]/custom-police/server/p0_incidents.lua`
+  结案时写 `crime_pressure`。实测**读侧仍为 0 消费者**（`crime_pressure` 除写入点外全仓无引用，手机 `CityFeed` 未接），
+  所以下一方向应是"读侧接线"，不是再建写侧。
 - **热狗数值改成测试期占位档**（正式值等经济系统联动）：`T-CityLite.base/resources/[custom]/custom-quest/config/quests/quest_hotdog.lua`
   押金 250 → **50**、租金 6 → **1 每分钟**（免租 60 → 30 秒，计费上限 60 → 20 分钟，保证满时长也扣不穿押金）、
   单价 6/9/14 → **8/16/32**（取偶数，成品回收按 0.5 折价不会出 $7.5）、顾客节奏 8–15 s/15–40 s → **3–6 s/6–15 s**、
