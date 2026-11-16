@@ -195,7 +195,13 @@ jobs:
           python -m pip install --upgrade pip pytest mysql-connector-python
 
       - name: Import schema fixture
-        run: mariadb -h 127.0.0.1 -P 3306 -uroot -proot tcity_ci < tests/fixtures/tcity_schema.sql
+        env:
+          TCITY_DB_HOST: 127.0.0.1
+          TCITY_DB_PORT: "3306"
+          TCITY_DB_USER: root
+          TCITY_DB_PASS: root
+          TCITY_DB_NAME: tcity_ci
+        run: python ../tools/dev/import_schema_fixture.py
 
       - name: Run full test suite against MariaDB
         env:
