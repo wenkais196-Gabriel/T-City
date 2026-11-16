@@ -45,7 +45,7 @@ review_by: 2027-04-30
 9. 没有测试的修复不算完成（先红后绿）。
 10. 交付三件套：代码 + 文档 + `CHANGELOG.md`；push 前跑 `release_check.py`。
 
-## 3. 流程分级（避免"小改也写 spec"）
+## 3. 流程分级（CC 开发 / Hermes 验收整理，见 `docs/engineering/agent-operating-model.md` 的「L3 落地分工」）
 
 | 级别 | 判据 | 要做什么 |
 |---|---|---|
@@ -94,8 +94,7 @@ python3 tools/dev/release_check.py                             # 交付前
 
 ## 6. 工作树与分支
 
-- `E:/T-City` = **唯一工作树 + 运行树**（FXServer 的 cwd 是它的 `T-CityLite.base`），永远从 `origin/master` 切分支。
-  2026-11-01 之前的 `E:/T-City-harness` 已整体归档到 `E:/archive/T-City-harness-20261101`（只读备份，不再更新）。
+- `E:/T-City` = **唯一工作树 + 运行树**（FXServer 的 cwd 是它的 `T-CityLite.base`），永远从 `origin/master` 切分支；旧的 `E:/T-City-harness` 已归档到 `E:/archive/T-City-harness-20261101`（只读）。
 - 新克隆不能直接起服：oxmysql 的 node_modules 是 gitignored，缺了每个资源都会报 `No such export query`，复制一份即可。
 - 禁止在 master 上直接改；切分支/合并前先停服；**绝不在 harness 里 `git clean -fdx`**。
 - 完整流程与历史见 `docs/engineering/WORKTREE.md`；2026-11-01 那批 39 项本地改动已提取入库，原始快照打成 tag `archive/salvage-20261101`（分支已删）。

@@ -2,7 +2,7 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-15 ｜ **文档总数**：323 ｜ **已登记**：323 ｜ **未登记**：0
+**生成时间**：2026-11-16 ｜ **文档总数**：323 ｜ **已登记**：323 ｜ **未登记**：0
 
 **状态分布**：✅ active 186 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 45
 
@@ -372,7 +372,7 @@
 | [REUSE — 共享代码放哪、什么该合并、怎么收敛](engineering/REUSE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/REUSE.md` |
 | [STANDARDS — 技术标准 v0.2（可执行、可验证）](engineering/STANDARDS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 | ★ | `docs/engineering/STANDARDS.md` |
 | [工作树与分支流程](engineering/WORKTREE.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/engineering/WORKTREE.md` |
-| [Agent 时代的工程运行模型（T-City 落地提案 v1）](engineering/agent-operating-model.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/agent-operating-model.md` |
+| [Agent 时代的工程运行模型（T-City 落地提案 v1）](engineering/agent-operating-model.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `docs/engineering/agent-operating-model.md` |
 | [LLM 通用工艺准则（原 CLAUDE.md，2026-10-25 归档）](engineering/llm-craft.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/llm-craft.md` |
 | [交付：<主题>](engineering/templates/delivery.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/delivery.md` |
 | [计划：<主题>](engineering/templates/plan.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/plan.md` |
