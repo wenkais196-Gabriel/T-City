@@ -4,7 +4,7 @@ type: plan
 status: active
 system: quest
 owner: hermes
-updated: 2026-11-14
+updated: 2026-11-16
 review_by: 2027-02-28
 ---
 
@@ -13,6 +13,8 @@ review_by: 2027-02-28
 > 依据：`docs/plan/jobs-content/10-hotdog-ux-spec.md`（A1–A22 UX 验收 / V1–V8 真机剧本 / D1–D12 开发口径）
 > 与 `docs/plan/jobs-content/08-mature-scripts-survey.md`（四个原语）。
 > 约束：**0 个新资源、0 张新表**；新 net event 必须登记；NPC 不复用 police 预算。
+> **剩余状态**：以 [`13-hotdog-remaining-plan.md`](13-hotdog-remaining-plan.md) 的 `plan-status` 块为准；
+> 本文件只保留已收口的 S0–S5 设计与验收记录，不再维护逐片状态。
 
 ---
 

@@ -8,6 +8,10 @@ updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
+> [!WARNING]
+> **本文件不是进度真源**：片级状态见 [`docs/plan/BOARD.md`](docs/plan/BOARD.md)（自动生成）。
+> 本文件只保留版本路线图与历史段落；任务勾选已移到各计划的 `plan-status` 块。
+
 # 🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)
 
 > [!IMPORTANT]
@@ -56,43 +60,11 @@ review_by: 2027-04-30
 
 ---
 
-## 🚧 当前阶段任务清单 (v0.7a 载具重构与物流)
+## 🚧 当前阶段任务清单
 
-> 代码于 2026-06-22 完成，2026-10-21 打 tag `v0.7a`。以下为剩余验收清单。
-
-### 1. custom-vehicles（已替换 qb-vehiclekeys）
-- [x] 事件驱动钥匙系统，移除 qb-vehiclekeys 常驻 Tick
-- [x] O(1) 内存缓存 + 锁车/解锁/共享钥匙
-- [x] 兼容旧版 exports/events（车店、车库、警察无需改调用）
-- [x] 驾驶辅助：安全带、巡航、转向灯、氮气、车辆损耗
-
-### 2. qb-vehicleshop 改造
-- [x] Phase 1：`while insideShop` 轮询 → 事件驱动菜单（refreshMenu）
-- [x] Phase 2：`finance.lua` 拆分 `finance-lifecycle.lua` + `finance-payments.lua`
-- [x] Phase 3：NUI 模式接通（`Config.UseNui`）
-- [x] Phase 4：客户端 Bus 注册（`dealership_client`）
-- [x] Phase 5：试驾独立车牌 + 钥匙清理
-- [ ] 实机：NUI 购车 / 分期 / 试驾 / 换车全流程
-
-### 3. 物流与任务
-- [x] `quest_logistics` 配置（取货 → 运输 → 交付）
-- [x] 车辆校验 / 到达校验 / 货损
-- [ ] 实机：接单 → 装货 → 跨点运输 → 结算
-
-### 4. 质量门禁
-- [x] 修复 persistence / vehicleshop 失效测试夹具
-- [x] `pytest tests`：286 passed / 132 skipped（跳过项需 MySQL）
-- [x] GitHub Actions CI（CFG + 依赖 + 语法 + pytest + MariaDB schema + NUI 冒烟）
-- [x] NUI 无头冒烟 4/4（车店 / 中控屏 / 车库 / 手机，Playwright）
-- [x] 132 个 DB 用例在一次性库跑通（426 passed；schema fixture + CI MariaDB 任务）
-
-### 5. 发版收尾
-- [x] tag `v0.7a` 已推送
-- [x] 服务端 / 无头验收归档（`/test run all` 298 PASS / 0 FAIL / 9 SKIP（有玩家上下文）；无玩家时 225 PASS / 8 SKIP）
-- [ ] 真人客户端 UI 验收（车店 NUI / 车库 / 中控屏 / 物流）
-- [x] 构建产物入库（oxmysql/menuv/tcity-dashboard）
-- [x] CHANGELOG / README 与 tag 对齐（本次更新）
-- [验收报告](./T-CityLite.base/docs/archive/v0.7a-acceptance-report.md)
+> 已降级为指针：片级状态见 [`docs/plan/BOARD.md`](docs/plan/BOARD.md)（自动生成，
+> 数据源＝各计划的 `plan-status` 块）。本文件不再手工维护任务勾选；改状态请改计划正文的块，
+> 再跑 `python tools/docs_lifecycle.py --board`。
 
 ---
 
