@@ -85,7 +85,7 @@ node unit/layer0_js/test_flatten_json.cjs   # 需要 MYSQL_URL 或 TCITY_DB_URI
 以下测试需要真实服务器（含 `alpine/`、license key、DB）：
 
 - `custom-testing` 资源的 `/test`、`/stress`
-- `tests/*.lua`（`run_all_tests.lua`、`v0.5_e2e_test.lua` 等）
+- `tests/game/*.lua`（`run_all_tests.lua`、`v0.5_e2e_test.lua` 等）
 - `custom-quest/tests/*`
 
 生产环境不要 ensure `custom-testing`；本地开发在 `server.cfg` 里：
