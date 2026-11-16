@@ -179,3 +179,6 @@ server.*.local.cfg
 
 # Hermes/agent 本地工作区（计划草稿、派单记录；不入库）
 .hermes/
+
+# Lua 编译产物（luac5.4 <file> 的默认输出名，可再生）
+luac.out

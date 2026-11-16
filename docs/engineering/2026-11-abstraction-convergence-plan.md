@@ -10,7 +10,8 @@ review_by: 2027-03-31
 
 # 抽象收敛施工计划（2026-11）
 
-> 唯一来源：`abstraction-audit-report.md`（2026-11-15，已定稿）。本文件只把报告 §4/§5/§6
+> 唯一来源：[2026-11-abstraction-audit.md](../archive/2026-11-abstraction-audit.md)（2026-11-15，已定稿；
+> 该快照原在 `docs/` 根，已归档进 `docs/archive/`）。本文件只把报告 §4/§5/§6
 > 变成**可逐片验收**的施工计划；不新增报告之外的主题。
 >
 > 基线：`origin/master` @ `8e2d96c0`，worktree 为 `E:/T-City-abs`（干净）。
