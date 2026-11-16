@@ -4,8 +4,9 @@ type: plan
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-01
+updated: 2026-11-16
 review_by: 2026-12-31
+plan_status: 1
 topic: foundation-hardening
 tracks: [docs/engineering/STANDARDS.md, docs/engineering/FOUNDATION-AS-IS.md, docs/engineering/FOUNDATION-TO-BE.md]
 ---
@@ -30,6 +31,23 @@ tracks: [docs/engineering/STANDARDS.md, docs/engineering/FOUNDATION-AS-IS.md, do
 | **P0 止血** | 本周 | 现在就能被利用 / 现在就在算错钱的两处 | 两个 P0 判据全绿 + 闸门反向用例 + 改动前的红输出留档 |
 | **P1 收口** | 2–3 周 | 存档单写者、闸门扩面、死代码清除 | 覆盖率数字上升 + 真机判据 |
 | **P2 加固** | 后续 | 预算数字化、启动可复现、迁移幂等 | 探针有基线、重跑迁移不报错 |
+
+```plan-status
+Step 0 | done | - | -
+P0     | done | - | 2026-11-10
+P1     | wip  | - | -
+P2     | done | - | 2026-11-10
+P1-1   | done | docs/engineering/2026-11-foundation-p1-evidence.md | 2026-11-01
+P1-2   | done | docs/engineering/2026-11-foundation-p1-evidence.md | 2026-11-01
+P1-3   | done | T-CityLite.base/tests/architecture/net_events_baseline.json | 2026-11-08
+P1-4   | wip  | - | -
+P1-5   | done | T-CityLite.base/tests/architecture/money_write_path_scan.py | 2026-11-08
+P1-6   | done | T-CityLite.base/tests/architecture/stale_core_cache_baseline.json | -
+P2-1   | done | T-CityLite.base/tests/architecture/test_no_server_await.py | -
+P2-2   | done | T-CityLite.base/configs/boot.json | 2026-11-09
+P2-3   | done | T-CityLite.base/tests/architecture/test_migration_versions.py | 2026-11-08
+P2-4   | done | T-CityLite.base/tests/architecture/io_budget.json | 2026-11-09
+```
 
 ![落地路线图](assets/foundation/d7-roadmap.svg)
 

@@ -179,8 +179,8 @@
 | [custom-quest — 数据驱动任务系统](02_script_index/custom-quest.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-quest.md` |
 | [T-City 职业与组织任务情景建立手册 (Batch 1, Batch 2, Batch 3 & Batch 4)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_setup_manual.md) | manual | 📦 archived | 2026-10-23 | 2027-01-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_setup_manual.md` |
 | [热狗摊：真机验收清单（单人 / 多人分列）](plan/jobs-content/14-hotdog-live-checklist.md) | manual | ✅ active | 2026-11-15 | 2027-02-28 |  | `docs/plan/jobs-content/14-hotdog-live-checklist.md` |
-| [热狗摊：开发计划（据 UX 规格 §10 拆片）](plan/jobs-content/11-hotdog-dev-plan.md) | plan | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/11-hotdog-dev-plan.md` |
-| [热狗摊：剩余工作分片计划（2026-11-15 复核）](plan/jobs-content/13-hotdog-remaining-plan.md) | plan | ✅ active | 2026-11-15 | 2027-02-28 |  | `docs/plan/jobs-content/13-hotdog-remaining-plan.md` |
+| [热狗摊：开发计划（据 UX 规格 §10 拆片）](plan/jobs-content/11-hotdog-dev-plan.md) | plan | ✅ active | 2026-11-16 | 2027-02-28 |  | `docs/plan/jobs-content/11-hotdog-dev-plan.md` |
+| [热狗摊：剩余工作分片计划（2026-11-15 复核）](plan/jobs-content/13-hotdog-remaining-plan.md) | plan | ✅ active | 2026-11-16 | 2027-02-28 |  | `docs/plan/jobs-content/13-hotdog-remaining-plan.md` |
 | [任务节点与 UX 调研：以「热狗摊」为样本](plan/jobs-content/07-quest-ux-research.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/07-quest-ux-research.md` |
 | [成熟职业脚本调研：官方 9 个 job 的玩法循环拆解](plan/jobs-content/08-mature-scripts-survey.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/08-mature-scripts-survey.md` |
 | [热狗线坐标表（S0 踏勘结果）](plan/jobs-content/12-hotdog-coordinates.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/12-hotdog-coordinates.md` |
@@ -346,7 +346,7 @@
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
 | [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
 | [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `AGENTS.md` |
-| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CHANGELOG.md` |
+| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-16 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
 | [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CONTRIBUTING.md` |
 | [T-City Lite](../README.md) | meta | ✅ active | 2026-10-26 | 2027-04-30 |  | `README.md` |
@@ -377,17 +377,17 @@
 | [Agent 时代的工程运行模型（T-City 落地提案 v1）](engineering/agent-operating-model.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `docs/engineering/agent-operating-model.md` |
 | [LLM 通用工艺准则（原 CLAUDE.md，2026-10-25 归档）](engineering/llm-craft.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/llm-craft.md` |
 | [交付：<主题>](engineering/templates/delivery.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/delivery.md` |
-| [计划：<主题>](engineering/templates/plan.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/plan.md` |
+| [计划：<主题>](engineering/templates/plan.md) | meta | ✅ active | 2026-11-16 | 2027-04-30 |  | `docs/engineering/templates/plan.md` |
 | [调研：<主题>](engineering/templates/research.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/research.md` |
 | [任务清单：<主题>](engineering/templates/tasks.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/tasks.md` |
 | [验证：<主题>](engineering/templates/verification.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/verification.md` |
 | [历史归档（不维护）：docs/police](police/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/police/LEGACY.md` |
-| [文档生命周期管理规范](standards/doc-lifecycle.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 | ★ | `docs/standards/doc-lifecycle.md` |
+| [文档生命周期管理规范](standards/doc-lifecycle.md) | meta | ✅ active | 2026-11-16 | 2027-04-30 | ★ | `docs/standards/doc-lifecycle.md` |
 | [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../PROJECT_PROGRESS.md) | plan | ✅ active | 2026-11-16 | 2027-04-30 |  | `PROJECT_PROGRESS.md` |
 | [⚙️ T-City Lite Career (职业身份) 系统重构技术方案](archive/QBCore_Lite_versions/career/refactor_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/refactor_plan.md` |
 | [仓库整理总方案（合并三份提案）](cleanup/PLAN.md) | plan | 📌 final | 2026-10-23 | 2027-04-30 |  | `docs/cleanup/PLAN.md` |
-| [抽象收敛施工计划（2026-11）](engineering/2026-11-abstraction-convergence-plan.md) | plan | ✅ active | 2026-11-15 | 2027-03-31 |  | `docs/engineering/2026-11-abstraction-convergence-plan.md` |
-| [2026-11 基石加固计划（P0 / P1 / P2）](engineering/2026-11-foundation-plan.md) | plan | ✅ active | 2026-11-01 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-plan.md` |
+| [抽象收敛施工计划（2026-11）](engineering/2026-11-abstraction-convergence-plan.md) | plan | ✅ active | 2026-11-16 | 2027-03-31 |  | `docs/engineering/2026-11-abstraction-convergence-plan.md` |
+| [2026-11 基石加固计划（P0 / P1 / P2）](engineering/2026-11-foundation-plan.md) | plan | ✅ active | 2026-11-16 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-plan.md` |
 | [T-City 服务器系统覆盖与规划缺口调研](analysis/2026-10-31-systems-coverage-survey.md) | research | 📌 final | 2026-10-31 | 2027-04-30 | ★ | `docs/analysis/2026-10-31-systems-coverage-survey.md` |
 | [T-City 抽象设计审计（2026-11-15）](archive/2026-11-abstraction-audit.md) | research | 📦 archived | 2026-11-15 | 2027-03-31 |  | `docs/archive/2026-11-abstraction-audit.md` |
 | [T-City Lite — DevOps 工作流](DEVOPS.md) | runbook | ✅ active | 2026-10-23 | 2027-01-30 |  | `docs/DEVOPS.md` |

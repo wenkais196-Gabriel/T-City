@@ -125,6 +125,17 @@ S2a | wip  | - | -
         assert "未取证" in out, f"ev={ev}: 没有输出「未取证」\n{out}"
 
 
+def test_indented_example_detects_no_real_block(tmp_path, monkeypatch, capsys):
+    """规范/模板里 4 空格缩进的示例不是真实块：没有 `plan_status: 1` 也不该报错。"""
+    block = """    ```plan-status
+    S1 | todo | - | -
+    S2a | todo | - | -
+    ```"""
+    code, out = _run_check(tmp_path, _doc(extra="", block=block), monkeypatch, capsys)
+    assert code == 0, out
+    assert "plan_status 开关" not in out, out
+
+
 @pytest.mark.parametrize("ev", ["#302", "proof/evidence.txt"])
 def test_plan_status_good_shape_detects_no_error(ev, tmp_path, monkeypatch, capsys):
     """合法块（PR 号或仓内路径）→ 0 error。"""

@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-10-25
+updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
@@ -32,8 +32,20 @@ review_by: 2027-04-30
 
 | # | 切片 | 影响文件 | 验证 |
 |---|---|---|---|
-| 1 | | | |
-| 2 | | | |
+| S1 | | | |
+| S2 | | | |
+
+需要机器可读进度时，在 frontmatter 加 `plan_status: 1`，并在正文任意位置放一段
+`plan-status` 块（每行 4 列；ID 必须与上表首列完全一致，依赖/阻塞/拍板留在正文）：
+
+    ```plan-status
+    S1 | todo | - | -
+    S2 | todo | - | -
+    ```
+
+三档语义：**未登记**＝没有 `plan_status: 1` 或没有块；**未取证**＝`done` 但 `ev`
+不可复核（`-` 与 PR 区间都不算证据）；**未开始**＝显式 `todo`。`ev` 只接受单个
+`#PR` 或仓内存在的相对路径；看板由 `python tools/docs_lifecycle.py --board` 生成。
 
 ## 4. 架构对照
 
