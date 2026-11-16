@@ -346,7 +346,7 @@
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
 | [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
 | [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `AGENTS.md` |
-| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CHANGELOG.md` |
+| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-16 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
 | [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CONTRIBUTING.md` |
 | [T-City Lite](../README.md) | meta | ✅ active | 2026-10-26 | 2027-04-30 |  | `README.md` |

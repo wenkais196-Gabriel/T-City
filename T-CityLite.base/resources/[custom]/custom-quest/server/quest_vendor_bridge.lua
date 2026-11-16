@@ -84,11 +84,64 @@ local function vendorStepIdOf(questId)
     end
     return nil
 end
+
+--- 模板里租赁步骤的 validator_data（押金 / 时长）。
+--- 这是配置的唯一来源；开租时 QuestRental 会把同样的值抄进会话。
+local function rentalTermsOf(questId)
+    if type(QuestRegistry) ~= 'table' or type(QuestRegistry.GetTemplate) ~= 'function' then return nil end
+    local template = QuestRegistry.GetTemplate(questId)
+    for _, step in ipairs(template and template.steps or {}) do
+        if step.type == 'rental' and type(step.data) == 'table'
+            and type(step.data.validator_data) == 'table' then
+            return step.data.validator_data
+        end
+    end
+    return nil
+end
+
+--- 服务端墙钟（ms）。不能用 GetGameTimer：那是进程启动以来的单调时间，
+--- 和客户端的 Date.now() 不同源。expiresAtMs 必须是 Unix epoch。
+local function wallNowMs()
+    return os.time() * 1000
+end
+
+--- 状态条需要的押金 / 剩余时间。
+--- 押金优先用**实际开租会话**里的 deposit（玩家真的被扣的那笔），模板值做回落；
+--- 截止时刻 = rental.startedAt + max_minutes × 60s。没有租借会话就不编时间。
+---@return number deposit
+---@return number|nil expiresAtMs
+---@return number serverNowMs
+local function rentalStatusOf(citizenid, questId)
+    local terms = rentalTermsOf(questId)
+    local rental = nil
+    if type(QuestRental) == 'table' and type(QuestRental.Get) == 'function' then
+        rental = QuestRental.Get(citizenid)
+        -- 一个玩家同一时刻只有一个租借会话；questId 不符时不能拿别的任务的钱来显示。
+        if rental and rental.questId and rental.questId ~= questId then
+            rental = nil
+        end
+    end
+
+    local deposit = tonumber(rental and rental.deposit)
+        or tonumber(terms and terms.deposit) or 0
+
+    local expiresAtMs = nil
+    local startedAt = tonumber(rental and rental.startedAt)
+    local maxMinutes = tonumber(rental and rental.maxMinutes)
+        or tonumber(terms and terms.max_minutes)
+    if startedAt and maxMinutes and maxMinutes > 0 then
+        expiresAtMs = (startedAt + maxMinutes * 60) * 1000
+    end
+
+    return math.max(0, deposit), expiresAtMs, wallNowMs()
+end
+
 local function PushState(citizenid, reason)
     local player = ResolvePlayer(citizenid)
     if not player then return end
     local session = QuestVendor and QuestVendor.Get and QuestVendor.Get(citizenid)
     if not session then return end
+    local deposit, expiresAtMs, serverNowMs = rentalStatusOf(citizenid, session.questId)
     TriggerClientEvent('quest:client:vendorState', player.PlayerData.source, {
         questId = session.questId,
         stepId = StepIds[citizenid],
@@ -99,6 +152,11 @@ local function PushState(citizenid, reason)
         prices = session.cfg and session.cfg.prices or {},
         sold = session.sold,
         revenue = session.revenue,
+        -- S12 状态条六项：顾客 / 押金 / 剩余时间（其余三项沿用上面的 stock / raw / sold）
+        served = session.served or 0,
+        deposit = deposit,
+        expiresAtMs = expiresAtMs,
+        serverNowMs = serverNowMs,
         reason = reason,
     })
 end
