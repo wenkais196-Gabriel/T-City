@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`docs/plan/BOARD.md` 会静默过期**：PR #321 引入 `--board` 后，合并当天就踩到——另一个 PR（#320）
+  把一份 md 改名，BOARD 里那行链接立刻指错，而块校验全绿，`--check` 对此一无所知。
+  现在 `--check` 比对「重算 == 落盘」，过期或手改都报 `BOARD.md 不是最新`（WARN，与 `INDEX.md` 同口径），
+  缺文件报「不存在」。测试用临时仓库跑真实 `main()`：生成→不报 / 追加一行→报过期 / 删掉→报不存在。
 - **`docs_lifecycle.py` 的孤儿检测有盲点：手写的 `INDEX.md` 不算"有人引用"**。原实现按 basename 排除
   `INDEX.md`（本意是排除自动生成的文档总索引，否则孤儿恒为 0），结果把 `docs/client/ux/INDEX.md` 这种
   **手写导航宿主**也一起排除了——被它索引着的 5 篇文档被误报成孤儿。改为只排除生成的那一份
