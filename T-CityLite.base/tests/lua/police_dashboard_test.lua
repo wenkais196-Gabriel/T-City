@@ -1,4 +1,4 @@
--- tests/police_dashboard_test.lua — 警车中控屏 v2.1 集成测试
+-- tests/lua/police_dashboard_test.lua — 警车中控屏 v2.1 集成测试
 --
 -- 测试场景:
 --   1. Police/EMS 分离验证

@@ -1,4 +1,4 @@
--- tests/simulate_aviation_routes_v4.lua
+-- tests/lua/simulate_aviation_routes.lua
 -- v4: 读取真实 address_pools.lua + same-airport guard
 local src = io.open('T-CityLite.base/resources/[custom]/custom-quest/config/quests/address_pools.lua'):read('*all')
 

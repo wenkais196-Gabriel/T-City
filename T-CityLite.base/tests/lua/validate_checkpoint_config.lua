@@ -1,4 +1,4 @@
--- tests/validate_checkpoint_config.lua
+-- tests/lua/validate_checkpoint_config.lua
 -- 校验 3 个航空任务中所有 checkpoint 配置完整性
 
 local passed, failed = 0, 0
