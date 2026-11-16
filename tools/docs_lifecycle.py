@@ -2,8 +2,10 @@
 """文档生命周期工具（stdlib only）。
 
 子命令：
-  --check    校验 frontmatter/命名/链接/重复/索引是否最新（CI 用，退出码 1 = 有 ERROR）
+  --check    校验 frontmatter/命名/链接/重复/plan-status/索引是否最新
+             （CI 用，退出码 1 = 有 ERROR）
   --index    生成 docs/INDEX.md（唯一文档清单，含进度统计）
+  --board    生成 docs/plan/BOARD.md（计划看板；数据源＝各计划的 plan-status 块）
   --report   输出 docs/_lifecycle.json + 控制台摘要（未登记/过期/孤儿/重复）
   --adopt P  给指定文件补最小 frontmatter（--yes 直接写；否则只打印建议）
 
@@ -161,6 +163,208 @@ def first_heading(text: str) -> str:
     return "(无标题)"
 
 
+# ---------------------------------------------------------------- plan status
+#
+# 计划正文里的「✅ 完成 / 🟡 进行中」是散文，机器读不到。这里定义一段可校验的
+# 围栏块（frontmatter 用 `plan_status: 1` 开关），只放 id/state/ev/date 四列：
+# 依赖、阻塞、拍板仍留在正文，不进块。
+#
+# 三档语义（闸门文案与看板文案共用这三个词）：
+#   未登记 = 该计划没有 `plan_status: 1` 或没有块；
+#   未取证 = 标了 done，但 ev 不是单个 #PR、也不是仓内存在的相对路径；
+#   未开始 = 显式 todo。
+
+PLAN_STATUS_KEY = "plan_status"
+PLAN_STATUS_FENCE = "plan-status"
+PLAN_STATUS_STATES = ("todo", "wip", "done")
+SLICE_HEADERS = {"#", "片", "切片", "分片", "阶段", "步骤", "工作项"}
+SLICE_ID_RE = re.compile(r"(?:Step \d+|[A-Z]\d*[a-z]?(?:-\d+)?)")
+PR_ONE_RE = re.compile(r"#\d+")
+PR_RANGE_RE = re.compile(r"#\d+\s*[-–—]\s*#?\d+")
+PLAN_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+TIER_UNREGISTERED = "未登记"
+TIER_UNVERIFIED = "未取证"
+TIER_TODO = "未开始"
+
+
+def has_plan_status_block(body: str) -> bool:
+    fence = "```" + PLAN_STATUS_FENCE
+    return any(line.strip() == fence for line in body.splitlines())
+
+
+def parse_plan_status(body: str) -> tuple[list[dict], list[str]]:
+    """解析 `plan-status` 围栏块，返回 (rows, errors)。
+
+    rows 的每项：``{"id", "state", "ev", "date", "line"}``。这里只校验形状
+    （4 列 / state / date / id 唯一）；ev 是否可复核需要仓库路径，放在 --check 里判。
+    """
+    rows: list[dict] = []
+    errors: list[str] = []
+    blocks: list[list[tuple[int, str]]] = []
+    current: list[tuple[int, str]] | None = None
+    open_line = 0
+
+    for lineno, raw in enumerate(body.splitlines(), 1):
+        line = raw.strip()
+        if current is None:
+            if line == "```" + PLAN_STATUS_FENCE:
+                current = []
+                open_line = lineno
+            continue
+        if line == "```":
+            blocks.append(current)
+            current = None
+            continue
+        current.append((lineno, raw))
+    if current is not None:
+        errors.append(f"plan-status 块未闭合（第 {open_line} 行开栅栏）")
+        blocks.append(current)
+    if len(blocks) > 1:
+        errors.append(f"只允许一个 plan-status 块，实际 {len(blocks)} 个")
+
+    seen: set[str] = set()
+    for block in blocks:
+        for lineno, raw in block:
+            if not raw.strip():
+                continue
+            cells = [c.strip() for c in raw.split("|")]
+            if len(cells) != 4:
+                errors.append(
+                    f"plan-status 第 {lineno} 行：应有 4 列（id | state | ev | date），"
+                    f"实际 {len(cells)} 列")
+                continue
+            rid, state, ev, date = cells
+            if not rid:
+                errors.append(f"plan-status 第 {lineno} 行：id 为空")
+            elif not SLICE_ID_RE.fullmatch(rid):
+                errors.append(
+                    f"plan-status 第 {lineno} 行：id=`{rid}` 不是切片 ID 形状"
+                    "（如 S1 / P1-4 / Step 0）")
+            if state not in PLAN_STATUS_STATES:
+                errors.append(
+                    f"plan-status 第 {lineno} 行：state=`{state}` 不在 "
+                    f"{list(PLAN_STATUS_STATES)}")
+            if date != "-" and not (PLAN_DATE_RE.fullmatch(date) and parse_date(date)):
+                errors.append(
+                    f"plan-status 第 {lineno} 行：日期 date=`{date}` 不是 YYYY-MM-DD 或 -")
+            if rid:
+                if rid in seen:
+                    errors.append(f"plan-status 第 {lineno} 行：id=`{rid}` 重复")
+                seen.add(rid)
+            rows.append({"id": rid, "state": state, "ev": ev, "date": date, "line": lineno})
+    return rows, errors
+
+
+def _table_cells(line: str) -> list[str]:
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [c.strip() for c in s.split("|")]
+
+
+def _is_table_separator(line: str) -> bool:
+    cells = _table_cells(line)
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", c) for c in cells)
+
+
+def slice_ids_from_body(body: str) -> set[str]:
+    """正文切片表首列的 ID 集。只认首列表头在 SLICE_HEADERS 里的表，跳过代码块。"""
+    ids: set[str] = set()
+    lines = body.splitlines()
+    in_fence = False
+    i = 0
+    while i < len(lines) - 1:
+        stripped = lines[i].strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            i += 1
+            continue
+        if in_fence or not stripped.startswith("|"):
+            i += 1
+            continue
+        if _is_table_separator(lines[i + 1]):
+            header = _table_cells(stripped)
+            head = header[0].replace("*", "").replace("`", "").strip() if header else ""
+            if head in SLICE_HEADERS:
+                j = i + 2
+                while j < len(lines) and lines[j].strip().startswith("|"):
+                    cells = _table_cells(lines[j])
+                    cell = cells[0].replace("**", "").replace("__", "").replace("`", "").strip()
+                    match = SLICE_ID_RE.match(cell)
+                    if match:
+                        ids.add(match.group(0))
+                    j += 1
+                i = j
+                continue
+        i += 1
+    return ids
+
+
+def plan_evidence(ev: str) -> str:
+    """判断 ev 可复核性：``verified`` / ``unverified`` / ``invalid``。"""
+    ev = ev.strip().replace("\\", "/")
+    if ev == "-" or PR_RANGE_RE.fullmatch(ev):
+        return "unverified"          # `-` 与 PR 区间都不算证据
+    if PR_ONE_RE.fullmatch(ev):
+        return "verified"
+    if not ev or ev.startswith("/") or re.match(r"^[A-Za-z]:", ev):
+        return "invalid"
+    norm = os.path.normpath(ev)
+    if norm.startswith("..") or os.path.isabs(norm):
+        return "invalid"
+    return "verified" if os.path.exists(os.path.join(REPO, norm)) else "invalid"
+
+
+def check_plan_status(
+        rp: str, meta: dict, body: str, errors: list[str], warns: list[str]) -> None:
+    """只对带 `plan_status` 开关或块的文件追加校验；其余文档行为不变。"""
+    has_key = PLAN_STATUS_KEY in meta
+    has_block = has_plan_status_block(body)
+    if not has_key and not has_block:
+        return
+
+    if has_key and str(meta.get(PLAN_STATUS_KEY, "")).strip() != "1":
+        errors.append(
+            f"{rp}: `plan_status={meta.get(PLAN_STATUS_KEY)}` 不支持（只允许 1）")
+    if has_key and not has_block:
+        errors.append(
+            f"{rp}: {TIER_UNREGISTERED} plan-status：frontmatter 有 "
+            "`plan_status: 1`，正文缺少 ```plan-status 块")
+        return
+    if has_block and not has_key:
+        errors.append(
+            f"{rp}: {TIER_UNREGISTERED} plan_status 开关：正文有 plan-status 块，"
+            "frontmatter 缺少 `plan_status: 1`")
+
+    rows, parse_errors = parse_plan_status(body)
+    errors.extend(f"{rp}: {e}" for e in parse_errors)
+
+    table_ids = slice_ids_from_body(body)
+    row_ids = [r["id"] for r in rows if r["id"]]
+    missing = sorted(table_ids - set(row_ids))
+    extra = sorted(set(row_ids) - table_ids)
+    if missing:
+        errors.append(f"{rp}: plan-status 缺少切片 ID：{', '.join(missing)}")
+    if extra:
+        errors.append(f"{rp}: plan-status 切片 ID 不在正文切片表：{', '.join(extra)}")
+
+    for row in rows:
+        if row["state"] != "done":
+            continue
+        verdict = plan_evidence(row["ev"])
+        if verdict == "unverified":
+            warns.append(
+                f"{rp}: {TIER_UNVERIFIED}：`{row['id']}` 标 done 但 ev=`{row['ev']}`"
+                "（需要单个 #PR 或仓内存在的相对路径；PR 区间不算证据）")
+        elif verdict == "invalid":
+            errors.append(
+                f"{rp}: plan-status `{row['id']}` 的 ev 不可复核：`{row['ev']}`"
+                "（应为单个 #PR 或仓内存在的相对路径）")
+
+
 # ---------------------------------------------------------------- 校验
 
 def today() -> dt.date:
@@ -186,12 +390,14 @@ def check(docs: list[str], index_path: str) -> tuple[list[str], list[str], dict]
 
     for p in docs:
         rp = rel(p)
-        meta, text, _ = load(p)
+        meta, text, offset = load(p)
         meta_cache[rp] = meta
         title = first_heading(text)
         if title in titles and title != "(无标题)":
             warns.append(f"重复标题：「{title}」{titles[title]} ↔ {rp}")
         titles.setdefault(title, rp)
+
+        check_plan_status(rp, meta, text[offset:], errors, warns)
 
         if not meta:
             warns.append(f"未登记（无 frontmatter）：{rp}")
@@ -299,6 +505,88 @@ def check(docs: list[str], index_path: str) -> tuple[list[str], list[str], dict]
         "errors": len(errors), "warnings": len(warns),
     }
     return errors, warns, stats
+
+
+# ---------------------------------------------------------------- 看板
+
+BOARD_MARKER = "<!-- @generated by tools/docs_lifecycle.py --board；不要手改 -->"
+
+
+def board_link(path: str) -> str:
+    """BOARD.md 位于 docs/plan/，把仓内路径转成相对链接。"""
+    target = os.path.relpath(
+        os.path.join(REPO, path), os.path.join(REPO, "docs", "plan"))
+    return target.replace("\\", "/")
+
+
+def plan_status_counts(rows: list[dict]) -> tuple[int, int, str, str]:
+    """返回 (已证明, 未取证, 当前片, 最后更新)。只读块，不猜散文。"""
+    proven = unverified = 0
+    dates: list[str] = []
+    current = "-"
+    for row in rows:
+        if row["state"] == "done":
+            if plan_evidence(row["ev"]) == "verified":
+                proven += 1
+            else:
+                unverified += 1
+        if row["date"] != "-" and PLAN_DATE_RE.fullmatch(row["date"]):
+            dates.append(row["date"])
+    for row in rows:
+        if row["state"] != "done":
+            label = TIER_TODO if row["state"] == "todo" else row["state"]
+            current = f"{row['id']} {label}"
+            break
+    return proven, unverified, current, max(dates) if dates else "-"
+
+
+def build_board(docs: list[str]) -> str:
+    """生成 docs/plan/BOARD.md：active 在前、未登记在最后，同组按路径。"""
+    plans: list[dict] = []
+    for p in docs:
+        meta, text, offset = load(p)
+        if meta.get("type") != "plan":
+            continue
+        body = text[offset:]
+        has_block = has_plan_status_block(body)
+        rows = parse_plan_status(body)[0] if has_block else []
+        plans.append({
+            "path": rel(p), "title": first_heading(text),
+            "status": meta.get("status", TIER_UNREGISTERED),
+            "has_block": has_block, "rows": rows,
+        })
+
+    def group(item: dict) -> int:
+        if not item["has_block"]:
+            return 2
+        return 0 if item["status"] == "active" else 1
+
+    plans.sort(key=lambda item: (group(item), item["path"]))
+
+    out = [
+        BOARD_MARKER,
+        "# 计划看板（自动生成）",
+        "",
+        "> 数据源＝各计划正文的 plan-status 块。未登记＝该计划没有块；"
+        "未取证＝done 但 ev 不可复核。",
+        "> 手改无效：下次 --board 会覆盖。",
+        "",
+        "| 计划 | 状态 | 片 | 已证明 | 未取证 | 当前片 | 最后更新 |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for item in plans:
+        if item["has_block"]:
+            proven, unverified, current, updated = plan_status_counts(item["rows"])
+            slices = str(len(item["rows"]))
+        else:
+            proven = unverified = 0
+            current = updated = "-"
+            slices = TIER_UNREGISTERED
+        title = item["title"].replace("|", "\\|")
+        out.append(
+            f"| [{title}]({board_link(item['path'])}) | {item['status']} | {slices} | "
+            f"{proven} | {unverified} | {current} | {updated} |")
+    return "\n".join(out).rstrip() + "\n"
 
 
 # ---------------------------------------------------------------- 索引
@@ -487,6 +775,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="T-City 文档生命周期工具")
     ap.add_argument("--check", action="store_true", help="校验并返回退出码")
     ap.add_argument("--index", action="store_true", help="生成 docs/INDEX.md")
+    ap.add_argument("--board", action="store_true", help="生成 docs/plan/BOARD.md")
     ap.add_argument("--report", action="store_true", help="生成 docs/_lifecycle.json 与摘要")
     ap.add_argument("--adopt", nargs="*", help="为指定文档补最小 frontmatter")
     ap.add_argument("--yes", action="store_true", help="配合 --adopt 直接写入")
@@ -504,6 +793,12 @@ def main() -> int:
         os.makedirs(os.path.dirname(index_path), exist_ok=True)
         open(index_path, "w", encoding="utf-8").write(build_index(docs))
         print(f"wrote {rel(index_path)} ({len(docs)} docs)")
+
+    if args.board:
+        board_path = os.path.join(REPO, "docs", "plan", "BOARD.md")
+        os.makedirs(os.path.dirname(board_path), exist_ok=True)
+        open(board_path, "w", encoding="utf-8").write(build_board(docs))
+        print(f"wrote {rel(board_path)}")
 
     if args.report:
         out = os.path.join(REPO, "docs", "_lifecycle.json")
@@ -529,7 +824,7 @@ def main() -> int:
               f"unregistered={stats['unregistered']} errors={stats['errors']} warnings={stats['warnings']}")
         return 1 if errors else 0
 
-    if not (args.index or args.report or args.check):
+    if not (args.index or args.report or args.check or args.board):
         ap.print_help()
     return 0
 
