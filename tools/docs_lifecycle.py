@@ -398,6 +398,43 @@ def guess_type(path: str) -> str:
 
 # ---------------------------------------------------------------- 报告
 
+def _read_for_corpus(path: str) -> str:
+    """读一份文本作为"谁引用过"的语料。读不了就返回空串——
+
+    缺文件/编码异常不该让整份报告挂掉；但这里只吞 `OSError`（含 UnicodeDecodeError 之外的 IO 问题），
+    不吞 `Exception`：真正的编程错误要冒出来，而不是被当成"这份文件没人引用"。
+    """
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def _corpus_text() -> str:
+    """把「谁引用过」的语料拼起来：范围内的 md/py/lua/yml/cfg + 根文件。
+
+    只排除**自动生成**的文档总索引（`docs/INDEX.md`）——它列了全部文档，把它算进语料会让
+    孤儿恒为 0、指标失效。手写的 `INDEX.md`（如 `docs/client/ux/INDEX.md`）是真正的导航宿主，
+    必须计入，否则"被人索引着的文档"会被误报成孤儿（2026-11-16 实测误报 5 篇）。
+    """
+    generated = os.path.normpath(os.path.join(REPO, "docs", "INDEX.md"))
+    suffixes = (".md", ".py", ".lua", ".yml", ".cfg")
+    chunks: list[str] = []
+    for root in ROOTS:
+        for dirpath, dirnames, filenames in os.walk(os.path.join(REPO, root)):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_PARTS]
+            for name in filenames:
+                path = os.path.join(dirpath, name)
+                if name.endswith(suffixes) and os.path.normpath(path) != generated:
+                    chunks.append(_read_for_corpus(path))
+    for name in ROOT_FILES:
+        path = os.path.join(REPO, name)
+        if os.path.isfile(path):
+            chunks.append(_read_for_corpus(path))
+    return "".join(chunks)
+
+
 def report(docs: list[str], out_json: str) -> dict:
     records = []
     for p in docs:
@@ -417,22 +454,8 @@ def report(docs: list[str], out_json: str) -> dict:
     for r in records:
         seen.setdefault(r["sha256"], []).append(r["path"])
     dups = [v for v in seen.values() if len(v) > 1]
-    # 孤儿：basename 不出现在任何 md/代码里
-    haystack = ""
-    for root in ROOTS:
-        base = os.path.join(REPO, root)
-        for dp, dn, fs in os.walk(base):
-            dn[:] = [d for d in dn if d not in SKIP_PARTS]
-            for f in fs:
-                if f.endswith((".md", ".py", ".lua", ".yml", ".cfg")) and f != "INDEX.md":
-                    try:
-                        haystack += open(os.path.join(dp, f), encoding="utf-8", errors="ignore").read()
-                    except Exception:
-                        pass
-    for f in ROOT_FILES:
-        p = os.path.join(REPO, f)
-        if os.path.isfile(p):
-            haystack += open(p, encoding="utf-8", errors="ignore").read()
+    # 孤儿：basename 不出现在任何 md/代码里（语料构建见 _corpus_text）。
+    haystack = _corpus_text()
     orphans = [r["path"] for r in records if os.path.basename(r["path"]) not in haystack]
 
     summary = {
