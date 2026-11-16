@@ -38,6 +38,15 @@ QuestManager._currentSteps = {}
 -- v1.1: 完成去重锁 — citizenid_questId → true（DB 完成回调返回前有效，防止重复发奖）
 QuestManager._completing = {}
 
+-- 单趟计时：TriggerQuest 时记开始时间。
+--   QuestRunStarted — 当前这趟，takeRunElapsed 取走即清（耗时日志用）；
+--   QuestRunLatest  — 最近一趟的起点，**不随 take 清掉**，结算幂等键用它区分
+--                     「同一班的重复结算」与「下一班的新账」。
+-- 必须声明在文件顶部：issueSettleReceipt 在 ≈100 行就要用 QuestRunLatest，
+-- 而 Lua 的 local 只在声明之后可见（声明在 400 行 = 那里读到的是全局 nil）。
+local QuestRunStarted = {}
+local QuestRunLatest = {}
+
 -- ══════════════════════════════════════════════════════════════
 -- 任务终结时的清理助手
 --
@@ -92,12 +101,39 @@ local function vendorPricesOf(questId)
     return nil
 end
 
+--- 本班结算 token：同一班内稳定、跨班必须不同。
+--- 优先用租赁会话的 startedAt（QuestRental.Close 的返回值）；同一流程被重复调用时
+--- 会话已关、拿不到 startedAt，回落到接取时记下的最近一趟起点。
+--- **绝不能用 os.time()**：同一次完成被调用两次会算出两个 token → 两张账。
+---@param citizenid string
+---@param questId string
+---@param rentalResult table|nil
+---@return string|nil
+local function settleRunToken(citizenid, questId, rentalResult)
+    local key = tostring(citizenid) .. ':' .. tostring(questId)
+    local startedAt = type(rentalResult) == 'table' and tonumber(rentalResult.startedAt) or nil
+    if startedAt then
+        -- 固定本班身份：同一流程的第二次调用（rentalResult 为 nil）也必须命中同一个 key。
+        QuestRunLatest[key] = startedAt
+        return tostring(startedAt)
+    end
+    local latest = QuestRunLatest[key]
+    if latest then return tostring(latest) end
+    return nil
+end
+
 --- 结算回执：六行明细推到玩家聊天框。
 -- 为什么用 chat 而不是新开一条 net event：S5 只负责「算对 + 只发一次」，
 -- 账单 UI（手机里的卡片）属于 S6 的 UX 收口；先让数据能到玩家眼前，
 -- 而且 chat:addMessage 是全仓既有的通道，不增加事件面。
 local function issueSettleReceipt(src, citizenid, questId, rentalResult, vendorSummary)
     if type(QuestSettle) ~= 'table' or type(QuestSettle.Compute) ~= 'function' then return end
+
+    local template = nil
+    if type(QuestRegistry) == 'table' and type(QuestRegistry.GetTemplate) == 'function' then
+        local ok, resolved = pcall(QuestRegistry.GetTemplate, questId)
+        if ok then template = resolved end
+    end
 
     local receipt = QuestSettle.Compute({
         depositRefund = rentalResult and rentalResult.refund or 0,
@@ -109,7 +145,23 @@ local function issueSettleReceipt(src, citizenid, questId, rentalResult, vendorS
         taxRate = 0,   -- 还没有税率来源；有税率时这里换成配置
     })
 
-    local issued = QuestSettle.Issue(citizenid, questId, questId .. ':complete', receipt)
+    -- 账单上下文：手机端只渲染这些字段，不自己算钱、也不自己格式化金额。
+    -- Compute 保持纯钱计算；展示所需的事实由调用方组装（A19 的净额口径不受影响）。
+    receipt.context = {
+        quest_title = (type(template) == 'table' and template.title) or questId,
+        minutes = rentalResult and tonumber(rentalResult.minutes) or 0,
+        sold_count = vendorSummary and tonumber(vendorSummary.sold) or 0,
+        leftover = vendorSummary and vendorSummary.stock or nil,
+        raw_count = vendorSummary and tonumber(vendorSummary.raw) or 0,
+        -- 只有真的开了摊 / 真的结算了租借，才算一张「已结算」历史账单；
+        -- 纯剧情任务的 0 元回执仍进聊天框，但不进 Recent 列表。
+        billable = (vendorSummary ~= nil)
+            or (type(rentalResult) == 'table' and rentalResult.idempotent == false),
+    }
+
+    local runToken = settleRunToken(citizenid, questId, rentalResult)
+    local settleKey = questId .. ':complete:' .. (runToken or 'unknown')
+    local issued = QuestSettle.Issue(citizenid, questId, settleKey, receipt)
     if not issued then return end
 
     local lines = { '**本班账单**' }
@@ -390,11 +442,14 @@ end
 -- ── 单趟耗时（数值卡的真实数据源）──────────────────────────────────────────
 -- 04-numbers.md 的时薪是「站数 × 单站耗时 × 收益」三条假设叠出来的，任何一条错，定价整体偏。
 -- 这里只记内存 + 一行日志（0 新表 / 0 新事件），键与其它内存态一致：citizenid:questId。
-local QuestRunStarted = {}
+-- QuestRunStarted / QuestRunLatest 的声明在文件顶部（issueSettleReceipt 要用）。
 
 --- 记一趟的开始时间（TriggerQuest 成功时）
 local function markRunStart(citizenid, questId)
-    QuestRunStarted[tostring(citizenid) .. ':' .. tostring(questId)] = os.time()
+    local key = tostring(citizenid) .. ':' .. tostring(questId)
+    local startedAt = os.time()
+    QuestRunStarted[key] = startedAt
+    QuestRunLatest[key] = startedAt
 end
 
 --- 取走这趟的耗时（分钟，保留一位小数）；没有记录时返回 nil

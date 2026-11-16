@@ -38,6 +38,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   是待建/待搬的路径，而 `test_docs_links.py` 走 `rglob` 遍历工作树、不读 `.gitignore`，会把"计划"当成"现状"判红。
   按 `.agents` 已有的豁免写法把它加进 `IGNORED_DIRS`，并同步 `.gitignore`（换机器后无需再改 `.git/info/exclude`）。
 
+- **热狗账单 P1a（服务端内存版）**：`T-CityLite.base/resources/[custom]/custom-quest/server/main.lua`
+  新增字面量导出 `GetQuestReceipts(citizenid, opts)`，返回
+  `{ rows, count }`（坏 id 返回 `{ rows = {}, count = 0, error = 'bad_id' }`，不抛异常）。
+  行内金额除原始数字外附带 `amount_text` / `net_text`，统一由 `QuestMoney`（core-framework
+  `FormatMoney`）生成，手机端只加 `$` 与正负号；不返回 citizenid、不新增 net event /
+  `TriggerClientEvent(..., -1, ...)`、不碰 DB。
+  `T-CityLite.base/resources/[custom]/custom-quest/server/quest_settle.lua` 新增
+  `QuestSettle.Recent(citizenid, questId, limit)`：新的在前（同秒按发单序号）、缺省 5 张、
+  上限 `KEEP_PER_PLAYER`、`questId` 为空表示该角色全部任务、只回 `billable` 的账，
+  并返回浅拷贝（含六行明细与 context，调用方改不坏内部账本）。
+  `T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua` 的
+  `issueSettleReceipt` 现组装 `context`（`quest_title` / `minutes` / `sold_count` /
+  `leftover` / `raw_count` / `billable`）；`QuestSettle.Compute` 仍是纯钱计算。
+  测试：扩 `T-CityLite.base/tests/unit/layer3_business/fixtures/settle_probe.lua`
+  （37 项，含 per-run key / Recent / context）与
+  `T-CityLite.base/tests/architecture/test_quest_entrypoint.py`（守卫先后 + 两处反向注入）。
 - **热狗摊音效（顾客上门 + 收银）**：只复用 interact-sound 现有的 doorbell / Shop 两个 ogg，
   不新增素材。顾客报价到达时，客户端用 `InteractSound_SV:PlayWithinDistance` 播 25 m 世界声
   （音量 0.3）；NPC 成交与玩家购买的成功分支由服务端用 `InteractSound_CL:PlayOnOne` 给摊主 /
@@ -58,6 +74,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `QuestBooth.ValidatePlacement`（同样的距离/道路/遮挡判据），失败按 reason 提示。
 
 ### Fixed
+- **可重复任务（热狗）第二班账单被判成第一班回放**：
+  `T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua` 原来用
+  `questId .. ':complete'` 做幂等键，热狗 cooldown 0 / daily_limit 20，第二班完成时
+  `QuestSettle.Issue` 直接返回第一班的副本并标 `replayed`，历史里永远只有一张账。
+  现在键改成 `questId .. ':complete:' .. runToken`：优先取
+  `QuestRental.Close` 返回值里新增的 `startedAt`
+  （`T-CityLite.base/resources/[custom]/custom-quest/server/quest_rental.lua` 的会话起点，
+  关闭后会话即清，所以必须往外带），同一流程重复调用时回落到接取时记下的本班起点
+  （`QuestRunLatest`，`markRunStart` 写入、`takeRunElapsed` 不清），保证同班稳定、跨班不同；
+  没有用 `os.time()` 当 token。新增探针用例证明「同 run 两次 → 同一张 + replayed」「跨 run →
+  两张不同 key」「Last 返回最新」。
 - **热狗收摊按一次 E 推进两次（Step order violation）**：`quest_hotdog.lua` 的 `step_sell`
   （`type = 'vendor'`）同时带了 `coords / radius / duration`，于是既走服务端 `close` 分支的
   `AdvanceStep`，又被 `quest_manager.lua` 的 `_eventMap.VENDOR` 映射成通用 `nodeInteract`
