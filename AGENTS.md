@@ -20,7 +20,7 @@ review_by: 2027-04-30
 
 | 我要做的事 | 先读 | 再读 |
 |---|---|---|
-| **任何改动之前** | `docs/engineering/CONSTITUTION.md`（十条红线） | `docs/engineering/ARCHITECTURE.md`（四平面 + 依赖方向） |
+| **任何改动之前** | `docs/engineering/CONSTITUTION.md`（十条红线） | `docs/engineering/ARCHITECTURE.md`（四平面 + 依赖方向）；**新文件放哪**看 `docs/engineering/TREE.md` §2 |
 | 判断该走多重的流程 | 本文件 §3 分级表 | `docs/engineering/templates/` 对应模板 |
 | 改 `[custom]` 资源（手机 / 警务 / 剧情 / agent） | `T-CityLite.base/resources/[custom]/AGENTS.md` | `docs/client/PHONE_ARCHITECTURE.md`（手机） |
 | 改 `[qb]` 上游框架 | `T-CityLite.base/resources/[qb]/AGENTS.md` | 对应资源自身的 README |

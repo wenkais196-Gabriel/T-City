@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`docs/engineering/TREE.md` + 放置闸门（只判新增文件）**：仓库此前有"文档怎么写"的规范（`doc-lifecycle.md`）和
+  "红线/平面"的规范（`CONSTITUTION/ARCHITECTURE`），但**没有一条规则回答"新文件放哪"**——实测
+  `doc-lifecycle.md` §2 要求的 `spec/ manual/ adr/ research/ runbook/` 五个目录一个都不存在，而
+  `docs_lifecycle.py --check` 依然 0 error（它校验 frontmatter 与链接，不校验位置）。
+  TREE.md 补齐三件：①三个根的边界（仓库根 / `T-CityLite.base/` / `docs/`）；②「新文件放哪」决策树
+  （CI 检查→`tests/` 根白名单；pytest 用例→`tests/{unit,architecture,agent,integration}/`；控制台 exec 的 harness→
+  `tests/game/`；裸 `lua5.4` 脚本→`tests/lua/`；node 冒烟→`tests/js/`）；③命名禁令（`_v2/_v3/-final/-new/副本`，
+  日期只给 `audit/research`）。配套闸门 `T-CityLite.base/tests/architecture/test_tree_placement.py` 用
+  `git diff --diff-filter=AR` **只判新增与重命名**，存量按 §7 登记豁免——否则第一天就要做一次大搬迁，规则会被 review 成本拖死。
+  闸门自带 9 条反向校验，并实测两组注入变红（`tests/` 根新增 `.lua`、`base/docs` 根新增 `.md`）；同时修掉第一版正则的误报
+  （`new-note.md`、`09-new.md` 曾被判成版本号）。另外按 `tools/dev/gate_mutation_smoke.py` 的机制补了一条变异用例
+  （往 tests 根注入一个 .lua → 闸门红 → 撤回 → 绿），否则 `gate_coverage` 的棘轮会把这条新规则记成"未证明"
+  （CI 第一次就是这么红的：`未证明的规则从 278 涨到 279`）。§6 逐条写明它**拦不住**什么（存量、内容错位、同日放宽规则、
+  无 base ref、生成物、一次性语义），避免"有闸门"被读成"位置不会错"。
+- **`.hermes/` 进 `.gitignore` + 文档断链闸门显式忽略**：Hermes/agent 的本地计划草稿（`.hermes/plans/*.md`）引用的
+  是待建/待搬的路径，而 `test_docs_links.py` 走 `rglob` 遍历工作树、不读 `.gitignore`，会把"计划"当成"现状"判红。
+  按 `.agents` 已有的豁免写法把它加进 `IGNORED_DIRS`，并同步 `.gitignore`（换机器后无需再改 `.git/info/exclude`）。
+
 - **热狗摊音效（顾客上门 + 收银）**：只复用 interact-sound 现有的 doorbell / Shop 两个 ogg，
   不新增素材。顾客报价到达时，客户端用 `InteractSound_SV:PlayWithinDistance` 播 25 m 世界声
   （音量 0.3）；NPC 成交与玩家购买的成功分支由服务端用 `InteractSound_CL:PlayOnOne` 给摊主 /

@@ -1118,6 +1118,17 @@ MUTATIONS += [
     ),
 ]
 
+# TREE-01：新文件必须放对位置（TREE.md §2 决策树 + §3 tests 根白名单）
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_tree_placement.py::"
+              "test_new_and_renamed_files_are_placed_correctly"),
+        path="tests/__mutant_placement.lua",
+        content="-- 变异注入：新测试脚本直接扔在 tests/ 根（绕过 TREE.md §2 决策树）\n",
+        what="tests/ 根新增 .lua：应当进 tests/game/、tests/lua/ 或 tests/js/",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:
