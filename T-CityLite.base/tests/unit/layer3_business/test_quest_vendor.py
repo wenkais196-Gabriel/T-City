@@ -1,7 +1,7 @@
 """顾客会话（quest_vendor.lua）的服务端契约闸门（热狗线 S4）。
 
 三层闸门：
-  • 运行时探针跑**真实实现**（标记块抽取，不复制逻辑），覆盖 10 条硬性不变量
+  • 运行时探针跑**真实实现**（标记块抽取，不复制逻辑），覆盖 11 条硬性不变量
     + 边界（count<=0 / 未知 item / 会话不存在 / 原料耗尽）；
   • 反向校验：把 `already_settled` 那条判断删掉（改成直接重算），探针必须红 ——
     这条专门防「幂等只剩一个返回码、却仍然重复加钱」的坏形状；
@@ -29,7 +29,7 @@ PROBE = Path(__file__).resolve().parent / "fixtures" / "vendor_probe.lua"
 # 和 lua5.4.exe，subprocess 只能直接执行后者。
 LUA = shutil.which("lua5.4.exe") or shutil.which("lua5.4")
 
-EXPECTED_CHECKS = 19
+EXPECTED_CHECKS = 20
 
 
 def read(path: Path) -> str:

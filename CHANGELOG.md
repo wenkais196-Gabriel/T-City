@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-15
+updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
@@ -87,6 +87,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `QuestBooth.ValidatePlacement`（同样的距离/道路/遮挡判据），失败按 reason 提示。
 
 ### Fixed
+- **热狗摊位 CEF 焦点 + 状态条六项（S12/S13 验收前置）**：
+  `T-CityLite.base/resources/[custom]/custom-quest/client/vendor_focus.lua`（新增）成为本资源唯一的
+  `SetNuiFocus` / `SetNuiFocusKeepInput` 所有者：报价/购买菜单可见时先渲染再
+  `SetNuiFocusKeepInput(true)` → `SetNuiFocus(true,true)`，最后一个 owner 释放时只
+  `SetNuiFocus(false,false)`（保留 keepInput）；死亡轮询、`onResourceStop` 额外复位 keepInput。
+  六条退出路径（Esc/菜单关闭、收摊、任务完成/放弃、死亡/掉线兜底、离开摊位范围、资源停止）都会释放。
+  `T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua` 只登记
+  `VendorFocus.Acquire/ReleaseOwner`；HTML keydown 与 Lua 原生命令共用 250ms 动作去重（不双发）。
+  `T-CityLite.base/resources/[custom]/custom-quest/html/vendor.html` 增加顾客 / 押金 / 剩余时间三格
+  与本地倒计时（`paintStatusTime`）、菜单关闭按钮与 Esc。
+  `T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor.lua` 新增会话级 `served`
+  （NPC 成交/拒绝、玩家成交各算 1 位顾客，超时离开不算；与 `sold` 的份数分开）；
+  `T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor_bridge.lua` 的
+  `quest:client:vendorState` **同事件扩字段** `served/deposit/expiresAtMs/serverNowMs`
+  （押金取实际租借会话，模板 `validator_data.deposit` 回落；不新增 net event）。
+  `T-CityLite.base/resources/[custom]/custom-quest/fxmanifest.lua` 在 vendor client 之前加载焦点模块。
+  测试：`T-CityLite.base/tests/architecture/test_hotdog_vendor_focus_and_hud.py`（焦点单点/成对/
+  六条退出路径/状态条字段 + 反向变异）、`T-CityLite.base/tests/architecture/fixtures/vendor_focus_probe.lua`
+  （运行时开关顺序与 owner 计数）、`T-CityLite.base/tests/architecture/test_nui_client_contracts.py`
+  把 `focus_unpaired` 扩成按文件配对并新增 `focus_outside_owner`；
+  `T-CityLite.base/tests/unit/layer3_business/fixtures/vendor_probe.lua` 增加 `served` 用例。
+  字体按新字符集重建（`tools/dev/build_quest_font.py`，1567 字形）。
 - **可重复任务（热狗）第二班账单被判成第一班回放**：
   `T-CityLite.base/resources/[custom]/custom-quest/server/quest_manager.lua` 原来用
   `questId .. ':complete'` 做幂等键，热狗 cooldown 0 / daily_limit 20，第二班完成时
@@ -360,7 +382,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `service_contracts.json` 的 `planned_services` 清空。
   新增闸门 `tests/architecture/test_bus_scope.py`：跨资源 Bus 读取 + `Bus.RegisterService`
   的 manifest 接线双判据，变异冒烟证明会红。
-- **PowerShell 下 Lua 检查必须写 `.exe`**：`luac5.4` / `lua5.4` 的扩展名被 Windows 读成 `.4`（无关联程序），PowerShell 会把该文件当“文档”交给 ShellExecute → 弹「选择一个应用以打开此 .4 文件」并**阻塞命令**，表现是「每改一个 Lua 文件弹一个框」而语法检查其实一次都没跑。约定层同步到 `AGENTS.md §5`、`CONTRIBUTING.md`、PR 模板与 `.agents/skills/fivem-resource-development/{SKILL.md,references/verification.md}`：PowerShell 写 `luac5.4.exe` / `lua5.4.exe`，bash/MSYS 与 Python `subprocess` 继续用裸名。加 `.cmd` 包装无效（`where` 顺序：字面文件 → `.cmd` → `.exe`），要根治只能在 `PATHEXT` 追加 `.4`。
+- **PowerShell 下 Lua 检查必须写 `.exe`**：`luac5.4` / `lua5.4` 的扩展名被 Windows 读成 `.4`（无关联程序），PowerShell 会把该文件当“文档”交给 ShellExecute → 弹「选择一个应用以打开此 .4 文件」并**阻塞命令**，表现是「每改一个 Lua 文件弹一个框」而语法检查其实一次都没跑。约定层同步到 `AGENTS.md §5`、`CONTRIBUTING.md`、PR 模板与 `.agents/skills/fivem-resource-development/{SKILL.md,references/verification.md}`：PowerShell 写 `luac5.4.exe` / `lua5.4.exe`，bash/MSYS 与 Python `subprocess` 继续用裸名。加 `.cmd` 包装无效（`where` 顺序：字面文件 → `.cmd` → `.exe`）。**已在本机落地根因修复**（2026-11-16）：用户级 `PATHEXT` 追加 `.4`（`.COM;…;.lexe;.4`，`reg add HKCU\Environment /v PATHEXT`），此后 PowerShell 与 cmd 的裸名都正常执行；仅新进程生效，已开终端与 Hermes gateway 重启后继承。
 - **送货循环归 trucker，结算额回到带内（R0.3）**：qb-shops 的 `Config.DeliveryPrice` 从 **$500/站降到 $70/站**。
   原值 20 站/趟 = $10,000，按 25–40 分钟折算 **$15k–24k/h**，比低技能带（$1.8k–2.5k/h）高 6–13 倍；
   现值 ≈ $1,400/趟 ≈ $2.4k/h。同时新增 `Config.DeliveryJob = { name = 'trucker', requireDuty = true }`：

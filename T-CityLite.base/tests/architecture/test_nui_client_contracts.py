@@ -15,8 +15,10 @@ Offline, deterministic, no FXServer / no DB / no network. Exercises the rules in
   ``callback_not_analyzable``  the handler must be an inline ``function`` so the
                                body can be inspected; otherwise it needs an
                                allowlist entry
-  ``focus_unpaired``           a resource that calls ``SetNuiFocus(true`` must also
-                               call ``SetNuiFocus(false``
+  ``focus_unpaired``           a client file that calls ``SetNuiFocus(true`` must
+                               also call ``SetNuiFocus(false`` in the same file
+  ``focus_outside_owner``      a resource that declares ``NUI_FOCUS_OWNER = true``
+                               may only call focus natives from declaring files
   ``focus_keepinput_unpaired`` ``SetNuiFocusKeepInput(true`` must have a matching
                                ``SetNuiFocusKeepInput(false`` in the same resource
   ``focus_no_resource_stop``   a resource with ``ui_page`` that takes focus must
@@ -47,7 +49,15 @@ Offline, deterministic, no FXServer / no DB / no network. Exercises the rules in
 ``focus_unpaired`` is a presence/pairing check, not a balanced-count check:
 one close path can legitimately serve several open paths (phone's open +
 watchdog re-asserts), so counting ``true`` vs ``false`` would false-positive on
-good code. What cannot be decided statically goes to the allowlist.
+good code. The pairing is checked per file: an open in one script and a close in
+another is exactly the shape that leaks focus when the opener is unloaded. What
+cannot be decided statically goes to the allowlist.
+
+``focus_outside_owner`` is opt-in: a resource that wants a single focus owner
+puts ``local NUI_FOCUS_OWNER = true`` in that module. From then on every
+``SetNuiFocus`` / ``SetNuiFocusKeepInput`` call in the resource must live in a
+file carrying the marker. Resources without the marker keep the legacy
+resource-wide pairing rule.
 
 Everything the scanner cannot decide statically (or cannot fix because it is
 business code we are auditing, not editing) is registered in
@@ -92,6 +102,7 @@ KNOWN_CHECKS = {
     "callback_early_return",
     "callback_not_analyzable",
     "focus_unpaired",
+    "focus_outside_owner",
     "focus_keepinput_unpaired",
     "focus_no_resource_stop",
     "web_fetch",
@@ -116,6 +127,8 @@ NUIFOCUS_TRUE_RE = re.compile(r"\bSetNuiFocus\s*\(\s*true\b")
 NUIFOCUS_FALSE_RE = re.compile(r"\bSetNuiFocus\s*\(\s*false\b")
 KEEPINPUT_TRUE_RE = re.compile(r"\bSetNuiFocusKeepInput\s*\(\s*true\b")
 KEEPINPUT_FALSE_RE = re.compile(r"\bSetNuiFocusKeepInput\s*\(\s*false\b")
+FOCUS_CALL_RE = re.compile(r"\bSetNuiFocus(?:KeepInput)?\s*\(")
+FOCUS_OWNER_RE = re.compile(r"\bNUI_FOCUS_OWNER\s*=\s*true\b")
 # 两种合法应答：直接 cb(...)，或走 PhoneBridge.AnswerFn(cb)(...) —— AGENTS.md 要求后者，
 # 因为本 build 的 cb 可能是可调用表，`type(cb) ~= 'function'` 守卫会把应答静默丢掉。
 CB_CALL_RE = re.compile(r"\bcb\s*\(|AnswerFn\s*\(\s*cb\s*\)")
@@ -434,28 +447,52 @@ def _resource_client_text(resource_dir: Path, manifest: Manifest) -> str:
 def scan_focus(root: Path) -> list[Violation]:
     violations: list[Violation] = []
     for resource, resource_dir, manifest in iter_resources(root):
-        text = _resource_client_text(resource_dir, manifest)
+        files = _client_lua_files(resource_dir, manifest)
+        if not files:
+            continue
+        masked_by_file = {
+            path: mask_lua(path.read_text(encoding="utf-8", errors="ignore"))
+            for path in files
+        }
+        text = "\n".join(masked_by_file.values())
         if not text:
             continue
-        opens = len(NUIFOCUS_TRUE_RE.findall(text))
-        closes = len(NUIFOCUS_FALSE_RE.findall(text))
-        if opens and not closes:
-            first = next(
-                (path for path in _client_lua_files(resource_dir, manifest)
-                 if NUIFOCUS_TRUE_RE.search(mask_lua(path.read_text(encoding="utf-8", errors="ignore")))),
-                None,
-            )
-            rel = first.relative_to(resource_dir).as_posix() if first else "client/"
-            line = _first_match_line(first, NUIFOCUS_TRUE_RE) if first else 1
-            violations.append(
-                Violation("focus_unpaired", resource, rel, line, "SetNuiFocus",
-                          f"{opens} SetNuiFocus(true, ...) call(s) and 0 "
-                          "SetNuiFocus(false, ...): focus is never released")
-            )
+
+        owner_files = {
+            path for path, masked in masked_by_file.items()
+            if FOCUS_OWNER_RE.search(masked)
+        }
+
+        # Pairing is per file: an open in file A and a close in file B is not a
+        # pair — unloading A while B stays loaded leaks the focus. It also makes
+        # "delete the close branch" mutations visible even when a second close
+        # (e.g. onResourceStop) still exists in the same file... unless the
+        # mutation is inside the release function, which the focus-module
+        # contract in tests/architecture/test_hotdog_vendor_focus_and_hud.py
+        # checks structurally.
+        for path, masked in masked_by_file.items():
+            rel = path.relative_to(resource_dir).as_posix()
+            opens = len(NUIFOCUS_TRUE_RE.findall(masked))
+            closes = len(NUIFOCUS_FALSE_RE.findall(masked))
+            if opens and not closes:
+                line = _first_match_line(path, NUIFOCUS_TRUE_RE)
+                violations.append(
+                    Violation("focus_unpaired", resource, rel, line, "SetNuiFocus",
+                              f"{opens} SetNuiFocus(true, ...) call(s) and 0 "
+                              "SetNuiFocus(false, ...) in this file: focus is never released")
+                )
+            if owner_files and path not in owner_files and FOCUS_CALL_RE.search(masked):
+                line = _first_match_line(path, FOCUS_CALL_RE)
+                violations.append(
+                    Violation("focus_outside_owner", resource, rel, line, "",
+                              "resource declares NUI_FOCUS_OWNER but this file calls a "
+                              "focus native; move it into the owner module")
+                )
+
         if len(KEEPINPUT_TRUE_RE.findall(text)) and not KEEPINPUT_FALSE_RE.findall(text):
             first = next(
-                (path for path in _client_lua_files(resource_dir, manifest)
-                 if KEEPINPUT_TRUE_RE.search(mask_lua(path.read_text(encoding="utf-8", errors="ignore")))),
+                (path for path in files
+                 if KEEPINPUT_TRUE_RE.search(masked_by_file[path])),
                 None,
             )
             rel = first.relative_to(resource_dir).as_posix() if first else "client/"
@@ -464,13 +501,14 @@ def scan_focus(root: Path) -> list[Violation]:
                 Violation("focus_keepinput_unpaired", resource, rel, line, "SetNuiFocusKeepInput",
                           "SetNuiFocusKeepInput(true) is never reset; every later NUI inherits it")
             )
+        opens = len(NUIFOCUS_TRUE_RE.findall(text))
         if not opens or not manifest.ui_page:
             continue
         stop_blocks = _on_resource_stop_blocks(text)
         if not any(NUIFOCUS_FALSE_RE.search(block) for block in stop_blocks):
             first = next(
-                (path for path in _client_lua_files(resource_dir, manifest)
-                 if NUIFOCUS_TRUE_RE.search(mask_lua(path.read_text(encoding="utf-8", errors="ignore")))),
+                (path for path in files
+                 if NUIFOCUS_TRUE_RE.search(masked_by_file[path])),
                 None,
             )
             rel = first.relative_to(resource_dir).as_posix() if first else "client/"
