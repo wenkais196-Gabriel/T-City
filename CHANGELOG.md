@@ -146,6 +146,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
 
 ### Changed
+- **`T-CityLite.base/docs/` 根级两份 `.lua` 文档归位（M8c）**：M8b 之后根级只剩 `README.md` 与两份非 Markdown 文档——
+  `playerdata_v2_schema.lua`（内存 PlayerData 结构的 LuaLS 注解式定义，字段与现行代码对得上，**是活文档**）与
+  `refactoring_mining_before_after.lua`（采矿重构前后对照，**历史案例**）。处置：前者进 `docs/architecture/playerdata-schema.lua`
+  （去版本号——`_v2` 会给重命名撞上 `TREE.md` §4 的版本号禁令），后者进 `docs/archive/refactoring-mining-before-after.lua`
+  （已登记 legacy 的历史目录）。顺带修掉 `docs/systems/delivery-manual.md` 的三条过期路径：其中
+  refactoring_manifest_v2.md 那条是 M8 把该文件改名归档后的遗漏（该文件已不存在），另两条只是随搬迁更新。
+  现在 `T-CityLite.base/docs/` 根级**只剩 `README.md` 一个文件**（连非 Markdown 也算），`TREE.md` §6 的存量描述字面成立。
+  实测：两条文档闸门 **20 passed**；`docs_lifecycle --check` **325 / 0 error / 0 warning**；`luac5.4 -p` 两份均通过；
+  `docs/INDEX.md` 无变化（索引只收 `.md`）。
 - **`T-CityLite.base/docs/` 根级 10 篇收口（M8b）**：M8 留根的 10 篇按 type 分流，最后只留人工入口 `README.md`：
   **3 篇 spec → `design/`**（interaction-memo、menu-interaction-design、vehicleshop-purchase-sequence，
   首篇由下划线改名）、**5 篇 manual → `systems/`**（blip-i18n-guide、blip-i18n-quickref、bus-api-reference、
