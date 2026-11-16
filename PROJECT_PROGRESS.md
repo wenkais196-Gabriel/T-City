@@ -263,6 +263,6 @@ Active resources detected in codebase (**78** unique resources across **17** mod
 - [v0.7a 验收报告](./T-CityLite.base/docs/archive/v0.7a-acceptance-report.md)
 - [v0.7b 收尾 vs v1.0 联调建议](./T-CityLite.base/docs/archive/v0.7b-v1.0-decision.md)
 - [注意项解决方案](./T-CityLite.base/docs/archive/attention-items-solutions.md)
-- [菜单交互设计规范](./T-CityLite.base/docs/menu-interaction-design.md)
+- [菜单交互设计规范](./T-CityLite.base/docs/design/menu-interaction-design.md)
 - [v0.7 集成测试手册](./T-CityLite.base/docs/archive/v0.7-integration-test-manual.md)
 - [**v0.6-quest 通用任务系统设计方案**](./docs/archive/QBCore_Lite_versions/v0.6-quest-system.md)

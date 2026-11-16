@@ -143,7 +143,7 @@
 | [✈️ T-City Lite 飞行员与航空系统 (Pilot) 细化规划](archive/QBCore_Lite_versions/career/pilot_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/pilot_plan.md` |
 | [T-City2 改装店玩法分析报告](analysis/tuning_shop_analysis.md) | research | 📌 final | 2026-10-25 | 2027-01-30 |  | `docs/analysis/tuning_shop_analysis.md` |
 | [T-City2 改装店玩家体验流程设计](analysis/tuning_shop_player_experience.md) | research | 📌 final | 2026-06-21 | 2027-01-30 |  | `docs/analysis/tuning_shop_player_experience.md` |
-| [qb-vehicleshop 购车流程梳理（v0.7a 实测后）](../T-CityLite.base/docs/vehicleshop-purchase-sequence.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/vehicleshop-purchase-sequence.md` |
+| [qb-vehicleshop 购车流程梳理（v0.7a 实测后）](../T-CityLite.base/docs/design/vehicleshop-purchase-sequence.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/vehicleshop-purchase-sequence.md` |
 
 ### items（1）
 
@@ -226,8 +226,8 @@
 | [NUI POST 未到达客户端 Lua 回调 —— 系统排查手册](client/research/nui-debug-playbook.md) | research | ✅ active | 2026-10-27 | 2027-01-30 |  | `docs/client/research/nui-debug-playbook.md` |
 | [QBCore 客户端代码面分析（T-City 实测 + 上游对照）](qbcore-client-code-analysis.md) | research | 📌 final | 2026-10-27 | 2027-01-30 |  | `docs/qbcore-client-code-analysis.md` |
 | [真机验证清单（按模块）](client/ux/PLAYTEST.md) | runbook | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/PLAYTEST.md` |
-| [T-City Lite 交互设计规范备忘录 (Interaction Design Memo)](../T-CityLite.base/docs/interaction_memo.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/interaction_memo.md` |
-| [菜单交互设计规范（NUI / 世界交互）](../T-CityLite.base/docs/menu-interaction-design.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/menu-interaction-design.md` |
+| [T-City Lite 交互设计规范备忘录 (Interaction Design Memo)](../T-CityLite.base/docs/design/interaction-memo.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/interaction-memo.md` |
+| [菜单交互设计规范（NUI / 世界交互）](../T-CityLite.base/docs/design/menu-interaction-design.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/menu-interaction-design.md` |
 | [NUI 现代化标准与测试手册](../T-CityLite.base/docs/standards/nui-standard.md) | spec | ✅ active | 2026-11-16 | 2027-04-30 |  | `T-CityLite.base/docs/standards/nui-standard.md` |
 | [v0.4 复杂 UI 样板](archive/QBCore_Lite_versions/v0.4-ui-template.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.4-ui-template.md` |
 | [v0.7b 智能车载中控屏与诊断系统 (Sleek Glassmorphic Dashboard NUI)](archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md` |
