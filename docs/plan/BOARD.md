@@ -7,7 +7,7 @@
 | 计划 | 状态 | 片 | 已证明 | 未取证 | 当前片 | 最后更新 |
 |---|---|---|---|---|---|---|
 | [抽象收敛施工计划（2026-11）](../engineering/2026-11-abstraction-convergence-plan.md) | active | 8 | 0 | 8 | - | 2026-11-15 |
-| [2026-11 基石加固计划（P0 / P1 / P2）](../engineering/2026-11-foundation-plan.md) | active | 14 | 9 | 3 | P1 wip | 2026-11-10 |
+| [2026-11 基石加固计划（P0 / P1 / P2）](../engineering/2026-11-foundation-plan.md) | active | 14 | 10 | 4 | - | 2026-11-10 |
 | [热狗摊：剩余工作分片计划（2026-11-15 复核）](jobs-content/13-hotdog-remaining-plan.md) | active | 7 | 3 | 0 | C 未开始 | - |
 | [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../../PROJECT_PROGRESS.md) | active | 未登记 | 0 | 0 | - | - |
 | [重构删除清单 & 保留清单 v2.0](../../T-CityLite.base/docs/archive/refactoring-manifest.md) | final | 未登记 | 0 | 0 | - | - |
