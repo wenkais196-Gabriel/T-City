@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   两条文档闸门 20 passed；`release_check` 通过。
 
 ### Added
+- **计划状态的机器可读块（`plan_status: 1` + `plan-status` 块）**：`tools/docs_lifecycle.py`
+  新增块解析、`--check` 形状/取证校验与 `--board` 看板生成（`docs/plan/BOARD.md`，幂等）。
+  首批登记 foundation / abstraction-convergence / hotdog-remaining 三份计划；`done` 但 `ev` 为
+  `-` 或 PR 区间的片在 `--check` 记 `未取证`（WARN，不阻断），看板单列。规范见
+  `docs/standards/doc-lifecycle.md` §4.1，`PROJECT_PROGRESS.md` 的任务清单降级为指针。
 - **热狗账单 P1a（手机端：第三个 tab + 账单卡）**：`T-CityLite.base/resources/[custom]/custom-phone/server/apps/quests.lua`
   新增 `receipts` 查询，走既有 `questExport('GetQuestReceipts', ...)` 读取 custom-quest 的内存账本
   （`questId` 可选；导出缺失/返回非表时回 `{ rows = {}, count = 0, error = 'receipt_unavailable' }`，不抛异常），

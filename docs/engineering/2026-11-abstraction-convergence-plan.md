@@ -4,8 +4,9 @@ type: plan
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-15
+updated: 2026-11-16
 review_by: 2027-03-31
+plan_status: 1
 ---
 
 # 抽象收敛施工计划（2026-11）
@@ -81,6 +82,17 @@ review_by: 2027-03-31
 | S5 | `CFShared.LoadModel` 采纳 | §4.3 | 12 | 8 个迁移文件不再有无退出条件的本地模型循环 |
 | S6 | `FormatMoney` 合并 + `$%d` 基线下降 | §4.4 | 17 | 8 份实现变 1 个 `money_aliases.lua`（4 个别名）+ 8 个 manifest include；`$%d` 基线 66→59 |
 | S7 | 受众感知广播收口 | §4.6 | 11 | `evidence.lua` 9 处 `-1` 改 `Broadcast.Scope`；其余 19 处全部登记 |
+
+```plan-status
+S1  | done | - | 2026-11-15
+S2a | done | - | 2026-11-15
+S2b | done | - | 2026-11-15
+S3  | done | - | 2026-11-15
+S4  | done | - | 2026-11-15
+S5  | done | - | 2026-11-15
+S6  | done | - | 2026-11-15
+S7  | done | - | 2026-11-15
+```
 
 > 文件数含新增测试、登记表、`CHANGELOG.md`、文档；不含 `git revert` 之类的回滚操作。
 > 超过 12 文件的片在 §3 写明为什么不能再切。
