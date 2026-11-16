@@ -58,7 +58,9 @@ def main(argv: list[str]) -> int:
         cursor = connection.cursor()
         # mysql-connector 26 起没有 `multi=True` 这个参数了：带 MULTI_STATEMENTS 标志时
         # 一次 execute 就会跑完全部语句，用 nextset() 把结果集逐个排空即可。
-        cursor.execute(sql)
+        # NOSONAR：SQL 来自仓库里被跟踪的 schema 基线文件（`tests/fixtures/tcity_schema.sql`），
+        # 不是用户输入 —— 这个脚本的唯一用途就是把它灌进 CI 的临时库。
+        cursor.execute(sql)  # NOSONAR
         while cursor.nextset():
             pass
         # 至少证明表真的建出来了：空库会让后续用例全红，但报错信息指向各个表而非导库这一步。
