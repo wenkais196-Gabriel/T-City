@@ -106,6 +106,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
 
 ### Changed
+- **`T-CityLite.base/docs/` 根级 40 篇按状态归位（M8）**：**26 篇归档**（20 篇 `audit/final` 快照原样移入
+  `T-CityLite.base/docs/archive/`，其中 `refactoring_manifest_v2.md` 同批改名为 `refactoring-manifest.md`；
+  6 篇版本名 `active` 维护/迁移手册先改 `status: archived` 并加"已归档"横幅）、**4 篇去版本号移入现有子目录**
+  （`T-CityLite.base/docs/systems/database-persistence.md`、`T-CityLite.base/docs/standards/nui-standard.md`、
+  `T-CityLite.base/docs/design/career-reputation-design.md`、`T-CityLite.base/docs/design/mission-template-design.md`，
+  后两篇因 API 未落地同时由 `active` 回退为 `draft`）、**10 篇留根**（M8b 再分流）。
+  归档目录补 `LEGACY.md` 并在 `legacy_docs.json` 登记（`broken_at_marking: 3`，均来自归档文档内部的当时路径，
+  按历史不改写）；活跃文档里的旧路径 token/链接同步修正，`docs/INDEX.md` 重生成。
+  实测验收：`test_docs_links.py` + `test_tree_placement.py` **20 passed**；
+  `python tools/docs_lifecycle.py --check` → `total=325 registered=325 unregistered=0 errors=0 warnings=0`。
 - **`T-CityLite.base/tests/` 根级归位（结构提案 M7 收口）**：根目录从 29 个文件清到 **12 个**
   （10 个 `TREE.md` §3 白名单脚本 + `AGENTS.md` + `README.md`），三个独立提交、各自可回滚：
   ① **A**：10 个游戏内 harness → `tests/game/`（`architecture_stress_test`、`integration_test`、`run_all_tests`、
