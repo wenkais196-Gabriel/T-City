@@ -197,4 +197,4 @@ local Player = QBCore.Functions.GetPlayer(source)
 Player.Functions.AddMoney('bank', 5000, 'quest_reward')
 ```
 
-详见 `docs/bus-api-reference.md`。
+详见 `T-CityLite.base/docs/systems/bus-api-reference.md`。

@@ -143,7 +143,7 @@
 | [✈️ T-City Lite 飞行员与航空系统 (Pilot) 细化规划](archive/QBCore_Lite_versions/career/pilot_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/pilot_plan.md` |
 | [T-City2 改装店玩法分析报告](analysis/tuning_shop_analysis.md) | research | 📌 final | 2026-10-25 | 2027-01-30 |  | `docs/analysis/tuning_shop_analysis.md` |
 | [T-City2 改装店玩家体验流程设计](analysis/tuning_shop_player_experience.md) | research | 📌 final | 2026-06-21 | 2027-01-30 |  | `docs/analysis/tuning_shop_player_experience.md` |
-| [qb-vehicleshop 购车流程梳理（v0.7a 实测后）](../T-CityLite.base/docs/vehicleshop-purchase-sequence.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/vehicleshop-purchase-sequence.md` |
+| [qb-vehicleshop 购车流程梳理（v0.7a 实测后）](../T-CityLite.base/docs/design/vehicleshop-purchase-sequence.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/vehicleshop-purchase-sequence.md` |
 
 ### items（1）
 
@@ -162,9 +162,9 @@
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [custom-phone 审计报告（性能 + 当前故障）](../T-CityLite.base/docs/agent/phone/custom-phone-audit.md) | audit | 📌 final | 2026-10-25 | — |  | `T-CityLite.base/docs/agent/phone/custom-phone-audit.md` |
-| [地图 Blip 配置与本地化 — 技术文档](../T-CityLite.base/docs/BLIP_I18N_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/BLIP_I18N_GUIDE.md` |
-| [Blip 本地化维护速查卡](../T-CityLite.base/docs/BLIP_I18N_QUICKREF.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/BLIP_I18N_QUICKREF.md` |
-| [GPS 任务消息模式 — 模板文档](../T-CityLite.base/docs/gps-message-pattern.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/gps-message-pattern.md` |
+| [地图 Blip 配置与本地化 — 技术文档](../T-CityLite.base/docs/systems/blip-i18n-guide.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/systems/blip-i18n-guide.md` |
+| [Blip 本地化维护速查卡](../T-CityLite.base/docs/systems/blip-i18n-quickref.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/systems/blip-i18n-quickref.md` |
+| [GPS 任务消息模式 — 模板文档](../T-CityLite.base/docs/systems/gps-message-pattern.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/systems/gps-message-pattern.md` |
 | [custom-phone — 高性能 Phone-First 手机系统](02_script_index/custom-phone.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-phone.md` |
 | [手机架构（目标态 v2）](client/PHONE_ARCHITECTURE.md) | manual | ✅ active | 2026-10-27 | 2027-01-30 |  | `docs/client/PHONE_ARCHITECTURE.md` |
 | [qb-phone 调研报告](../T-CityLite.base/docs/agent/phone/qb-phone-research.md) | research | 📌 final | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/agent/phone/qb-phone-research.md` |
@@ -226,8 +226,8 @@
 | [NUI POST 未到达客户端 Lua 回调 —— 系统排查手册](client/research/nui-debug-playbook.md) | research | ✅ active | 2026-10-27 | 2027-01-30 |  | `docs/client/research/nui-debug-playbook.md` |
 | [QBCore 客户端代码面分析（T-City 实测 + 上游对照）](qbcore-client-code-analysis.md) | research | 📌 final | 2026-10-27 | 2027-01-30 |  | `docs/qbcore-client-code-analysis.md` |
 | [真机验证清单（按模块）](client/ux/PLAYTEST.md) | runbook | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/PLAYTEST.md` |
-| [T-City Lite 交互设计规范备忘录 (Interaction Design Memo)](../T-CityLite.base/docs/interaction_memo.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/interaction_memo.md` |
-| [菜单交互设计规范（NUI / 世界交互）](../T-CityLite.base/docs/menu-interaction-design.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/menu-interaction-design.md` |
+| [T-City Lite 交互设计规范备忘录 (Interaction Design Memo)](../T-CityLite.base/docs/design/interaction-memo.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/interaction-memo.md` |
+| [菜单交互设计规范（NUI / 世界交互）](../T-CityLite.base/docs/design/menu-interaction-design.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/menu-interaction-design.md` |
 | [NUI 现代化标准与测试手册](../T-CityLite.base/docs/standards/nui-standard.md) | spec | ✅ active | 2026-11-16 | 2027-04-30 |  | `T-CityLite.base/docs/standards/nui-standard.md` |
 | [v0.4 复杂 UI 样板](archive/QBCore_Lite_versions/v0.4-ui-template.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.4-ui-template.md` |
 | [v0.7b 智能车载中控屏与诊断系统 (Sleek Glassmorphic Dashboard NUI)](archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md` |
@@ -311,7 +311,6 @@
 | [T-City Lite — 全局审查、修复与三阶段路线图](../T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md) | audit | 📌 final | 2026-10-21 | — |  | `T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md` |
 | [自审记录 — Phase 1 审查与修复分支合并](../T-CityLite.base/docs/audit/2026-10-21-self-review.md) | audit | 📌 final | 2026-10-21 | — |  | `T-CityLite.base/docs/audit/2026-10-21-self-review.md` |
 | [测试报告 — 2026-10-21](../T-CityLite.base/docs/audit/2026-10-21-test-report.md) | audit | 📌 final | 2026-10-22 | — |  | `T-CityLite.base/docs/audit/2026-10-21-test-report.md` |
-| [T-City Lite — 服务器重构项目交付与长期维护手册](../T-CityLite.base/docs/DELIVERY_MANUAL.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/DELIVERY_MANUAL.md` |
 | [T-City Lite 开发工作流指南](../T-CityLite.base/docs/archive/dev-workflow-guide-2026-06-01.md) | manual | 📦 archived | 2026-10-23 | 2027-01-30 |  | `T-CityLite.base/docs/archive/dev-workflow-guide-2026-06-01.md` |
 | [T-City Lite v0.1 技术维护文档](../T-CityLite.base/docs/archive/v0.1-maintenance.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.1-maintenance.md` |
 | [T-City Lite v0.2 - 医院地图与美术资产长期优化指南 (方案 A)](../T-CityLite.base/docs/archive/v0.2-hospital-optimization-guide.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.2-hospital-optimization-guide.md` |
@@ -319,8 +318,9 @@
 | [T-City Lite v0.3 基础设施层技术维护手册 (Technical Manual)](../T-CityLite.base/docs/archive/v0.3-technical-manual.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.3-technical-manual.md` |
 | [🔧 T-City Lite v0.5 技术维护手册](../T-CityLite.base/docs/archive/v0.5-maintenance-guide.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.5-maintenance-guide.md` |
 | [存盘性能优化与数据库异步落盘](../T-CityLite.base/docs/systems/database-persistence.md) | manual | ✅ active | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/systems/database-persistence.md` |
-| [🧪 T-City Lite 自动化测试方案](../T-CityLite.base/docs/automated-testing-plan.md) | plan | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/automated-testing-plan.md` |
+| [T-City Lite — 服务器重构项目交付与长期维护手册](../T-CityLite.base/docs/systems/delivery-manual.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/systems/delivery-manual.md` |
 | [v1.0 Open Beta 上线验收与发布清单](archive/QBCore_Lite_versions/v1.0-beta-launch.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v1.0-beta-launch.md` |
+| [🧪 T-City Lite 自动化测试方案](plan/automated-testing-plan.md) | plan | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/plan/automated-testing-plan.md` |
 | [维护与排障手册](03_maintenance_manuals/maintenance_guide.md) | runbook | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/03_maintenance_manuals/maintenance_guide.md` |
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
@@ -402,7 +402,7 @@
 | [设计文档: 移除 escape_sqli 手动转义，改为全参数化查询](archive/design-notes/refactor-escape-sqli-20260601.md) | audit | 📦 archived | 2026-10-23 | — |  | `docs/archive/design-notes/refactor-escape-sqli-20260601.md` |
 | [安全重构: 移除 escape_sqli 手动转义](refactor-escape-sqli-20260601.md) | audit | 📌 final | 2026-10-25 | — |  | `docs/refactor-escape-sqli-20260601.md` |
 | [🏗️ T-City Lite v0.5 架构重构交付报告](../T-CityLite.base/docs/archive/v0.5-architecture-migration.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.5-architecture-migration.md` |
-| [T-City Lite — Bus API 插件开发手册](../T-CityLite.base/docs/bus-api-reference.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/bus-api-reference.md` |
+| [T-City Lite — Bus API 插件开发手册](../T-CityLite.base/docs/systems/bus-api-reference.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/systems/bus-api-reference.md` |
 | [Module 1: 核心基础设施 (core.cfg / player.cfg / voice.cfg)](01_module_manuals/01_core_infrastructure.md) | manual | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/01_module_manuals/01_core_infrastructure.md` |
 | [Module 2: 自研核心框架 (custom.cfg)](01_module_manuals/02_custom_framework.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/01_module_manuals/02_custom_framework.md` |
 | [T-CityLite 全项目资源清单与启用矩阵](01_resource_inventory.md) | manual | 📦 archived | 2026-10-21 | 2027-01-30 |  | `docs/01_resource_inventory.md` |
