@@ -106,6 +106,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
 
 ### Changed
+- **`T-CityLite.base/tests/` 根级归位（结构提案 M7 收口）**：根目录从 29 个文件清到 **12 个**
+  （10 个 `TREE.md` §3 白名单脚本 + `AGENTS.md` + `README.md`），三个独立提交、各自可回滚：
+  ① **A**：10 个游戏内 harness → `tests/game/`（`architecture_stress_test`、`integration_test`、`run_all_tests`、
+  `v0.5_e2e_test`、6 个 `vehicle_*_test`），同批改 `run_all_tests.lua` 的 13 行内部 `exec` 串与 3 处自述路径、
+  `v0.5-architecture-migration.md` 两处、`RESEARCH-2026-10.md` 两处、`tests/README.md` 的游戏内测试段；
+  ② **B**：`db_check.js`、`db_chain_check.js`、`package.json`、`package-lock.json` → `tests/js/`，README 的 `cd`
+  改到 `tests/js` 并补 `NODE_PATH` 与 `../unit/layer0_js/…`（`npm install` 落点变了，原命令会找不到模块）；
+  ③ **C**：`police_dashboard_test`、`validate_checkpoint_config` → `tests/lua/`，
+  `simulate_aviation_routes_v4` / `validate_aviation_medical_airlift_v2` 去版本号改名进 `tests/lua/`，
+  **删除**被高版实质替代且全仓 0 引用的 4 个旧版（`simulate_aviation_routes{,_v2,_v3}`、
+  `validate_aviation_medical_airlift`）——git 历史保留，需要时 `git show` 可取。
+  **为什么分 `game/` 与 `lua/`**：前者只能在 FXServer 控制台 `exec`，后者能直接 `lua5.4 <file>` 跑；混在一起后
+  "这个脚本能不能本地跑"会重新变成猜测（旧提案把 18 个全归 `game/`，实测其中 8 个不依赖 FiveM 全局）。
+  验证：`pytest tests/architecture/{test_docs_links,test_tree_placement,test_gate_coverage}.py` → 25 passed；
+  `luac5.4 -p` 14/14 OK；`docs_lifecycle --check` 0 error 0 warning；活跃文档已无指向旧路径的引用。
+  **顺手记一条存量缺陷（不是本次引入）**：`tests/lua/simulate_aviation_routes.lua:142` 给 `string.rep` 传了非整数
+  （`bad argument #2 … number has no integer representation`），**master 上的原文件同样崩这一行**（已用
+  `git show master:…` 复现确认）。本次只搬家不动行为，修它属于另一件事。
 - **文档路径漂移收口（换机 2026-11-16）**：工作树从旧机 `E:/T-City` 换到本机 `C:\tcity`，而 `AGENTS.md` §6 与
   `docs/engineering/WORKTREE.md` 仍把 `E:/T-City` 写成"唯一工作树"，新机器上照文档找不到树。处理：
   `docs/engineering/WORKTREE.md` 新增 **§0 环境表**（仓库根 / FXServer 目录 / 起服入口 / 端口 / 旧树归档 / 备份）

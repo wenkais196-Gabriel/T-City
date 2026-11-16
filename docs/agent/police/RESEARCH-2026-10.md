@@ -72,7 +72,7 @@ supersedes: [agent-police-research-2026-10-v1]
 
 **② 司法链既没跑过，也存不住。**
 - `justice:server:registerArrest` 跨资源 grep = 0 命中；`justice:server:imprison` 同样没有调用方。
-- 架构测试 `T-CityLite.base/tests/architecture_stress_test.lua:337` 对这块的"验证"原文是 *"verified in code review"* —— 只被读过，没被跑过。
+- 架构测试 `T-CityLite.base/tests/game/architecture_stress_test.lua:337` 对这块的"验证"原文是 *"verified in code review"* —— 只被读过，没被跑过。
 - 案卷与刑期都在 `activeCases` / `inmates` 两个内存表里；fxmanifest.lua 声明了 `oxmysql` 却没有任何查询。**重启服务器 = 所有案子消失。**
 
 **③ 有入口没有出口。** 7 个第三方资源在发 `police:server:policeAlert`，7 个发件方共用一个接收方，接收方只做 `TriggerClientEvent` 发 blip。没有 call 表，所以"接了几起、谁接了、到没到、结没结"这四个问题在系统里无解。
@@ -347,4 +347,4 @@ GTA 里**没有"让 AI 躲开我"的原生开关**。真正起作用的是 vehic
 
 **外部事实**：bejoijo.com（stop-the-ped / ultimate-backup / compulite / alprlite / speed-radar-lite）；github.com/Project-Sloth/ps-mdt、ps-dispatch；github.com/qbox-project/qbx_policejob；github.com/overextended/ox_mdt；docs.wasabiscripts.com（wasabi-police-v2、wasabi_mdt）；lcpdfr.com 脚本索引及 10-21-police-phone / apxradio-ui / evidencesystem / cryptic-evidence / lspdfr-enhanced-reborn / air-one；gtamods.com/wiki/Vehicles.meta（flag 31 / flag 1 原文）；docs.fivem.net vehicle-flags；github.com/scripthookvdotnet（`VehicleDrivingFlags` 位掩码语义）；ybnlimax.com MDT 对比；docs.sonoransoftware.com/store/bodycam；vicedrip.com/fivem-chain-of-custody-script；oxidestudios.dev/docs/oxide-police；forum.cfx.re（Pickle's Police Job、Realistic Evidence System V2、Officer Job V2、traffic / emergency-vehicle 相关讨论）。
 
-**仓库证据**：qb-policejob/{config.lua,server/*,client/*,html/index.html}、custom-justice/{config.lua,server/main.lua,server/arrest.lua}、`T-CityLite.base/resources/[custom]/custom-crime/server/crime.lua`、custom-phone/{server/faction.lua,web/src/App.svelte,web/src/apps/leader/SheriffApp.svelte,web/src/apps/Hotlines.svelte}、`T-CityLite.base/resources/[custom]/custom-vehicles/server/dashboard_api.lua`、`T-CityLite.base/resources/[custom]/custom-logs/server/logs.lua`、`T-CityLite.base/resources/[custom]/custom-career/configs.lua`、custom-certificates/server/*、`T-CityLite.base/resources/[qb]/qb-core/shared/jobs.lua`、`T-CityLite.base/tests/architecture_stress_test.lua`、`T-CityLite.base/tests/fixtures/tcity_schema.sql`。
+**仓库证据**：qb-policejob/{config.lua,server/*,client/*,html/index.html}、custom-justice/{config.lua,server/main.lua,server/arrest.lua}、`T-CityLite.base/resources/[custom]/custom-crime/server/crime.lua`、custom-phone/{server/faction.lua,web/src/App.svelte,web/src/apps/leader/SheriffApp.svelte,web/src/apps/Hotlines.svelte}、`T-CityLite.base/resources/[custom]/custom-vehicles/server/dashboard_api.lua`、`T-CityLite.base/resources/[custom]/custom-logs/server/logs.lua`、`T-CityLite.base/resources/[custom]/custom-career/configs.lua`、custom-certificates/server/*、`T-CityLite.base/resources/[qb]/qb-core/shared/jobs.lua`、`T-CityLite.base/tests/game/architecture_stress_test.lua`、`T-CityLite.base/tests/fixtures/tcity_schema.sql`。

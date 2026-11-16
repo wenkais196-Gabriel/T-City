@@ -1,4 +1,4 @@
--- tests/vehicle_stress_test.lua
+-- tests/game/vehicle_stress_test.lua
 -- v0.7a 载具系统 + 物流任务集成压力测试
 --
 -- 模拟场景:
@@ -7,7 +7,7 @@
 --   3. 异常断线（临时钥匙清理）
 --   4. 恶意客户端伪造钥匙注入拦截
 --
--- 运行方式: 在服务器控制台执行 /run tests/vehicle_stress_test.lua
+-- 运行方式: 在服务器控制台执行 /run tests/game/vehicle_stress_test.lua
 -- 或作为 test_runner 套件: exec @custom-testing/suites/vehicle_test.lua
 
 local QBCore = exports['qb-core']:GetCoreObject()

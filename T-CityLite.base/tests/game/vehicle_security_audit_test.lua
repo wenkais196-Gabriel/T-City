@@ -1,4 +1,4 @@
--- tests/vehicle_security_audit_test.lua
+-- tests/game/vehicle_security_audit_test.lua
 -- 载具命令安全审计修复验证脚本 (v1.0)
 --
 -- 验证所有安全修复点均已正确落地：

@@ -1,4 +1,4 @@
--- tests/validate_aviation_medical_airlift_v2.lua
+-- tests/lua/validate_aviation_medical_airlift.lua
 -- 深度校验 quest_legal_aviation.lua — aviation_medical_airlift
 
 local passed, failed = 0, 0
