@@ -73,11 +73,11 @@ python3 -m pytest -q tests/integration
 ## 5. JavaScript DB 冒烟
 
 ```bash
-cd T-CityLite.base/tests
+cd T-CityLite.base/tests/js
 npm install                 # 仅首次
 TCITY_DB_URI="mysql://user:pass@localhost:3306/TCityLite" node db_check.js
 TCITY_DB_URI="mysql://user:pass@localhost:3306/TCityLite" node db_chain_check.js
-node unit/layer0_js/test_flatten_json.cjs   # 需要 MYSQL_URL 或 TCITY_DB_URI
+NODE_PATH="$PWD/node_modules" node ../unit/layer0_js/test_flatten_json.cjs   # 需要 MYSQL_URL 或 TCITY_DB_URI
 ```
 
 ## 6. 游戏内测试（需要 FXServer）
