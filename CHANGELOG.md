@@ -100,7 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **凭据泄露收口（2026-11-16）**：`tools/dev/local_stack.sh` 用 shell 默认值的形式带着开发库的
   root 与 agent 只读账号口令，而这个文件自 2026-10-27 起就在被跟踪的代码里（`release_check.py` 的
   连接串规则只认 `mysql://user:pass@`，看不见 `${VAR:-口令}` 这种形状）。处理：
-  ① 两个账号的口令已**轮换**（库里 `ALTER USER`，新值只写进 gitignored 的 `T-CityLite.base/server.cfg` 与环境变量）；
+  ① 两个账号的口令已**轮换**（库里 `ALTER USER`，新值只写进 gitignored 的 server.cfg（T-CityLite.base 下那份）与环境变量）；
   ② `local_stack.sh` 改成缺环境变量直接报错，不再有任何默认口令；
   ③ `release_check.py` 新增两条规则——shell 默认口令（`${*PASS*:-字面量}`）与命令行内联口令，报告里只出现变量名、不回显值。
      旧形状的反向验证在本地跑过：喂一个 `VAR="${X:-真口令}"` 必须命中。
