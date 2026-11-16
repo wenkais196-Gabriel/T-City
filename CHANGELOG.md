@@ -133,6 +133,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
 
 ### Changed
+- **`T-CityLite.base/docs/` 根级 10 篇收口（M8b）**：M8 留根的 10 篇按 type 分流，最后只留人工入口 `README.md`：
+  **3 篇 spec → `design/`**（interaction-memo、menu-interaction-design、vehicleshop-purchase-sequence，
+  首篇由下划线改名）、**5 篇 manual → `systems/`**（blip-i18n-guide、blip-i18n-quickref、bus-api-reference、
+  delivery-manual、gps-message-pattern，其中三篇由全大写改名）、**1 篇 plan → `docs/plan/automated-testing-plan.md`**。
+  `standards/` **零新增**：它的契约是 meta 规范目录（README 写明“6 个独立的指导手册”），混入 manual/spec/plan
+  后读者无法从目录判断“必须遵守的规则”与“随代码过期的现状”，也打开“不好分类就放这里”的垃圾桶先例；
+  因此 manual 统一进唯一 type 一致的 `systems/`，plan 回项目级 `docs/plan/`。跨文件 token/链接（9 个 blocking）
+  与 `T-CityLite.base/docs/README.md` 索引同批修正；frontmatter（type/status/id/updated/review_by）全部未动，
+  根级两个 `.lua` 不在本次口径。4 个切片各自一个原子 commit，索引 hunk 与 `git mv` 同 commit，可独立 revert。
+  实测验收：`test_docs_links.py` + `test_tree_placement.py` **20 passed**；
+  `python tools/docs_lifecycle.py --check` → `total=325 registered=325 unregistered=0 errors=0 warnings=0`；
+  `docs/INDEX.md` 重生成后 `git diff --exit-code` 无输出；根级 `*.md` = **1**（`README.md`）。
 - **`T-CityLite.base/docs/` 根级 40 篇按状态归位（M8）**：**26 篇归档**（20 篇 `audit/final` 快照原样移入
   `T-CityLite.base/docs/archive/`，其中 `refactoring_manifest_v2.md` 同批改名为 `refactoring-manifest.md`；
   6 篇版本名 `active` 维护/迁移手册先改 `status: archived` 并加"已归档"横幅）、**4 篇去版本号移入现有子目录**
