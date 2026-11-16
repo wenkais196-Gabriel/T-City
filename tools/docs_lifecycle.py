@@ -189,8 +189,9 @@ TIER_TODO = "未开始"
 
 
 def has_plan_status_block(body: str) -> bool:
+    # 只认顶格的围栏；文档里用 4 空格缩进展示示例时不会被当成真实块。
     fence = "```" + PLAN_STATUS_FENCE
-    return any(line.strip() == fence for line in body.splitlines())
+    return any(line.rstrip() == fence for line in body.splitlines())
 
 
 def parse_plan_status(body: str) -> tuple[list[dict], list[str]]:
@@ -206,7 +207,7 @@ def parse_plan_status(body: str) -> tuple[list[dict], list[str]]:
     open_line = 0
 
     for lineno, raw in enumerate(body.splitlines(), 1):
-        line = raw.strip()
+        line = raw.rstrip()
         if current is None:
             if line == "```" + PLAN_STATUS_FENCE:
                 current = []
@@ -270,6 +271,10 @@ def _is_table_separator(line: str) -> bool:
     return bool(cells) and all(re.fullmatch(r":?-{3,}:?", c) for c in cells)
 
 
+def _clean_cell(cell: str) -> str:
+    return cell.replace("**", "").replace("__", "").replace("`", "").strip()
+
+
 def slice_ids_from_body(body: str) -> set[str]:
     """正文切片表首列的 ID 集。只认首列表头在 SLICE_HEADERS 里的表，跳过代码块。"""
     ids: set[str] = set()
@@ -286,13 +291,16 @@ def slice_ids_from_body(body: str) -> set[str]:
             i += 1
             continue
         if _is_table_separator(lines[i + 1]):
-            header = _table_cells(stripped)
-            head = header[0].replace("*", "").replace("`", "").strip() if header else ""
-            if head in SLICE_HEADERS:
+            header = [_clean_cell(c) for c in _table_cells(stripped)]
+            head = header[0] if header else ""
+            # `#` 是通用序号表头：只有同时出现「任务/切片/状态」列时才算切片表，
+            # 否则判据清单（如 G1..G18）会被误当成切片。
+            numbered_work = head == "#" and bool({"任务", "切片", "状态"} & set(header[1:]))
+            if head in SLICE_HEADERS and (head != "#" or numbered_work):
                 j = i + 2
                 while j < len(lines) and lines[j].strip().startswith("|"):
                     cells = _table_cells(lines[j])
-                    cell = cells[0].replace("**", "").replace("__", "").replace("`", "").strip()
+                    cell = _clean_cell(cells[0]) if cells else ""
                     match = SLICE_ID_RE.match(cell)
                     if match:
                         ids.add(match.group(0))

@@ -4,8 +4,9 @@ type: plan
 status: active
 system: quest
 owner: hermes
-updated: 2026-11-15
+updated: 2026-11-16
 review_by: 2027-02-28
+plan_status: 1
 ---
 
 # 热狗摊：剩余工作分片计划（2026-11-15 复核）
@@ -52,6 +53,16 @@ review_by: 2027-02-28
 
 **顺序**：B0 → B 可立刻做（互不共享文件）；A 的原型可与 B 并行，但**实现必须等 B0**（否则卡片上售出永远是 0）；
 E → D1 → D2 串行；C 随时可做，产出一份调查文档。
+
+```plan-status
+B0 | done | #302 | -
+B  | done | #302 | -
+A  | done | #316 | -
+C  | todo | - | -
+D1 | todo | - | -
+D2 | todo | - | -
+E  | wip  | - | -
+```
 
 ## 3. 阻塞项
 
