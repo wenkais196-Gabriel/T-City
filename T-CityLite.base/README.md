@@ -163,9 +163,7 @@ T-CityLite.base/
 │   ├── check_lua_syntax.py  # Lua 语法
 │   ├── check_db_schema.py   # 数据库结构
 │   └── check_dependencies.py # 依赖图
-└── docs/                    # 文档
-    ├── automated-testing-plan.md   # 测试方案
-    └── test-report-v0.1-v0.4.md    # 测试报告
+└── docs/                    # 文档：design/ systems/ standards/ agent/ audit/ archive/
 ```
 
 ---

@@ -20,7 +20,7 @@ Date: 2026-06
 - **qb-phone 缓存层**: 新增 `PhoneCache` + GetInvoices 异步化 + mail 缓存失效
 
 ### 🧱 基础设施 (Infrastructure)
-- **Bus API 手册**: 新建 `docs/bus-api-reference.md`，完整记录 Economy / JobService / SecurityService / PersistenceService / DirtyFlush 接口
+- **Bus API 手册**: 新建 `T-CityLite.base/docs/systems/bus-api-reference.md`，完整记录 Economy / JobService / SecurityService / PersistenceService / DirtyFlush 接口
 
 ### 📝 修改文件清单
 | 文件 | 改动 |
@@ -35,7 +35,7 @@ Date: 2026-06
 | `resources/[qb]/qb-vehicleshop/server/main.lua` | 异步化 |
 | `resources/[qb]/qb-banking/server.lua` | Rate Limit |
 | `resources/[compat]/qb-phone/server/main.lua` | PhoneCache + 异步化 |
-| `docs/bus-api-reference.md` | 新建 |
+| `T-CityLite.base/docs/systems/bus-api-reference.md` | 新建 |
 
 ---
 

@@ -153,8 +153,8 @@ review_by: 2027-04-30
 - [x] 移除 qb-apartments/qb-houserobbery/qb-multicharacter 中的 DisableSync/EnableSync 调用
 - [x] qb-houses EnableSync 向后兼容别名
 
-### 7. 自动化测试体系建设（参考 `docs/automated-testing-plan.md`）
-- [x] 自动化测试方案文档完成（`docs/automated-testing-plan.md`）
+### 7. 自动化测试体系建设（参考 `docs/plan/automated-testing-plan.md`）
+- [x] 自动化测试方案文档完成（`docs/plan/automated-testing-plan.md`）
 - [x] Phase 1: 离线检测脚本（`tests/check_cfgs.py`, `check_lua_syntax.py`, `check_db_schema.py`, `run_all.py`）
 - [x] Phase 2: 游戏内测试资源框架（`[custom]/custom-testing` + `test_runner.lua`）
 - [x] Phase 3: 银行系统测试套件（`01_banking_test.lua`）
@@ -263,6 +263,6 @@ Active resources detected in codebase (**78** unique resources across **17** mod
 - [v0.7a 验收报告](./T-CityLite.base/docs/archive/v0.7a-acceptance-report.md)
 - [v0.7b 收尾 vs v1.0 联调建议](./T-CityLite.base/docs/archive/v0.7b-v1.0-decision.md)
 - [注意项解决方案](./T-CityLite.base/docs/archive/attention-items-solutions.md)
-- [菜单交互设计规范](./T-CityLite.base/docs/menu-interaction-design.md)
+- [菜单交互设计规范](./T-CityLite.base/docs/design/menu-interaction-design.md)
 - [v0.7 集成测试手册](./T-CityLite.base/docs/archive/v0.7-integration-test-manual.md)
 - [**v0.6-quest 通用任务系统设计方案**](./docs/archive/QBCore_Lite_versions/v0.6-quest-system.md)
