@@ -1815,7 +1815,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - `T-CityLite.base/docs/archive/v0.4-validation-plan.md`
 - `T-CityLite.base/docs/archive/v0.4-joint-test-scenarios.md`
-- `docs/v0.4-nui-standard.md`
+- `T-CityLite.base/docs/standards/nui-standard.md`
 
 ---
 
@@ -1871,7 +1871,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `T-CityLite.base/docs/archive/v0.2-maintenance.md` / `T-CityLite.base/docs/archive/v0.2-test-checklist.md` / `T-CityLite.base/docs/archive/v0.2-master-test-manual.md`
 - `T-CityLite.base/docs/archive/v0.2-wanted-handover-technical-memo.md` / `T-CityLite.base/docs/archive/v0.2-wanted-handover-test-guide.md`
 - `T-CityLite.base/docs/archive/v0.2-status-persistence-technical-memo.md`
-- `docs/v0.2-database-performance-maintenance-guide.md` / `T-CityLite.base/docs/archive/v0.2-hospital-optimization-guide.md`
+- `T-CityLite.base/docs/systems/database-persistence.md` / `T-CityLite.base/docs/archive/v0.2-hospital-optimization-guide.md`
 
 ---
 

@@ -4,7 +4,7 @@
 
 **生成时间**：2026-11-16 ｜ **文档总数**：325 ｜ **已登记**：325 ｜ **未登记**：0
 
-**状态分布**：✅ active 181 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 179 ・ 🟡 draft 15 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -128,7 +128,7 @@
 | [内容填充总规划（职业优先，R0–R6）](plan/jobs-content-roadmap.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content-roadmap.md` |
 | [计划：R1 多站驾驶（garbage + bus）](plan/jobs-content/03-plan.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/03-plan.md` |
 | [调研：职业内容填充（阶段 R）](plan/jobs-content/01-research.md) | research | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/01-research.md` |
-| [T-City Lite — 职业声望与进阶养成系统设计](../T-CityLite.base/docs/v0.7-career-reputation-design.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/v0.7-career-reputation-design.md` |
+| [T-City Lite — 职业声望与进阶养成系统设计](../T-CityLite.base/docs/design/career-reputation-design.md) | spec | 🟡 draft | 2026-11-16 | 2027-04-30 |  | `T-CityLite.base/docs/design/career-reputation-design.md` |
 | [v0.7a 载具系统重构与通用物流任务系统集成](archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md` |
 | [设计：职业内容填充（阶段 D）](plan/jobs-content/02-design.md) | spec | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/02-design.md` |
 | [数值卡：R0/R1 三个职业（阶段 P4 输入）](plan/jobs-content/04-numbers.md) | spec | 🟡 draft | 2026-11-13 | 2027-04-30 |  | `docs/plan/jobs-content/04-numbers.md` |
@@ -184,7 +184,7 @@
 | [任务节点与 UX 调研：以「热狗摊」为样本](plan/jobs-content/07-quest-ux-research.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/07-quest-ux-research.md` |
 | [成熟职业脚本调研：官方 9 个 job 的玩法循环拆解](plan/jobs-content/08-mature-scripts-survey.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/08-mature-scripts-survey.md` |
 | [热狗线坐标表（S0 踏勘结果）](plan/jobs-content/12-hotdog-coordinates.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/12-hotdog-coordinates.md` |
-| [T-City Lite — 通用任务模板系统设计](../T-CityLite.base/docs/v0.7-mission-template-design.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/v0.7-mission-template-design.md` |
+| [T-City Lite — 通用任务模板系统设计](../T-CityLite.base/docs/design/mission-template-design.md) | spec | 🟡 draft | 2026-11-16 | 2027-04-30 |  | `T-CityLite.base/docs/design/mission-template-design.md` |
 | [🎭 T-City · 中东翻版剧情线 — 叙事设计全案](07_narrative/middle-east-narrative-design.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/07_narrative/middle-east-narrative-design.md` |
 | [T-City 职业、资质与组织任务重构讨论蓝图 (v1.0)](archive/QBCore_Lite_versions/career/careers_quest_designe/career_task_discussion_blueprint.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/career_task_discussion_blueprint.md` |
 | [T-City通用任务系统：原子节点设计与配置规范手册 (v2.0.0 — 解耦重构版)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_atomic_nodes_spec.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_atomic_nodes_spec.md` |
@@ -228,7 +228,7 @@
 | [真机验证清单（按模块）](client/ux/PLAYTEST.md) | runbook | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/PLAYTEST.md` |
 | [T-City Lite 交互设计规范备忘录 (Interaction Design Memo)](../T-CityLite.base/docs/interaction_memo.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/interaction_memo.md` |
 | [菜单交互设计规范（NUI / 世界交互）](../T-CityLite.base/docs/menu-interaction-design.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/menu-interaction-design.md` |
-| [v0.4 NUI 现代化标准与测试手册](../T-CityLite.base/docs/v0.4-nui-standard.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/v0.4-nui-standard.md` |
+| [NUI 现代化标准与测试手册](../T-CityLite.base/docs/standards/nui-standard.md) | spec | ✅ active | 2026-11-16 | 2027-04-30 |  | `T-CityLite.base/docs/standards/nui-standard.md` |
 | [v0.4 复杂 UI 样板](archive/QBCore_Lite_versions/v0.4-ui-template.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.4-ui-template.md` |
 | [v0.7b 智能车载中控屏与诊断系统 (Sleek Glassmorphic Dashboard NUI)](archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md` |
 | [v0.8 客户端自适应多语言本土化架构系统](archive/QBCore_Lite_versions/v0.8-localization-adaptation.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.8-localization-adaptation.md` |
@@ -318,7 +318,7 @@
 | [T-City Lite v0.2 技术维护文档](../T-CityLite.base/docs/archive/v0.2-maintenance.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.2-maintenance.md` |
 | [T-City Lite v0.3 基础设施层技术维护手册 (Technical Manual)](../T-CityLite.base/docs/archive/v0.3-technical-manual.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.3-technical-manual.md` |
 | [🔧 T-City Lite v0.5 技术维护手册](../T-CityLite.base/docs/archive/v0.5-maintenance-guide.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.5-maintenance-guide.md` |
-| [T-City Lite v0.2 存盘性能优化与数据库异步落盘技术维护文档](../T-CityLite.base/docs/v0.2-database-performance-maintenance-guide.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/v0.2-database-performance-maintenance-guide.md` |
+| [存盘性能优化与数据库异步落盘](../T-CityLite.base/docs/systems/database-persistence.md) | manual | ✅ active | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/systems/database-persistence.md` |
 | [🧪 T-City Lite 自动化测试方案](../T-CityLite.base/docs/automated-testing-plan.md) | plan | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/automated-testing-plan.md` |
 | [v1.0 Open Beta 上线验收与发布清单](archive/QBCore_Lite_versions/v1.0-beta-launch.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v1.0-beta-launch.md` |
 | [维护与排障手册](03_maintenance_manuals/maintenance_guide.md) | runbook | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/03_maintenance_manuals/maintenance_guide.md` |

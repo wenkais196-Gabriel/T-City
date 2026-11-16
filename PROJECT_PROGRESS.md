@@ -258,7 +258,7 @@ Active resources detected in codebase (**78** unique resources across **17** mod
 - [v0.5 联合测试手册](./T-CityLite.base/docs/archive/v0.5-joint-test-manual.md)
 - [v0.5 代码审查报告](./T-CityLite.base/docs/archive/v0.5-code-review-report.md)
 - [v0.5 架构重构交付报告](./T-CityLite.base/docs/archive/v0.5-architecture-migration.md)
-- [NUI 前端开发标准规范](./T-CityLite.base/docs/v0.4-nui-standard.md)
+- [NUI 前端开发标准规范](./T-CityLite.base/docs/standards/nui-standard.md)
 - [**v0.7a 载具重构与物流**](./docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md)
 - [v0.7a 验收报告](./T-CityLite.base/docs/archive/v0.7a-acceptance-report.md)
 - [v0.7b 收尾 vs v1.0 联调建议](./T-CityLite.base/docs/archive/v0.7b-v1.0-decision.md)
