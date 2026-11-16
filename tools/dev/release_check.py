@@ -41,6 +41,13 @@ SECRET_PATTERNS = {
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 }
 MYSQL_DSN = re.compile(r"mysql://([^\s:/@]+):([^\s@/]+)@")
+# shell 里的「环境变量默认口令」：2026-11 的真口令就是这样躺在被跟踪的脚本里（VAR="${X:-真口令}"），
+# 而 MYSQL_DSN 只认 mysql://user:pass@ 这种形状，完全看不见。
+SHELL_DEFAULT_SECRET = re.compile(
+    r"\$\{(?P<name>[A-Za-z0-9_]*(?:PASS|PASSWORD|PWD|PW|SECRET|TOKEN|KEY)[A-Za-z0-9_]*):-(?P<value>[^}\s]+)"
+)
+# 拆成两段拼接：否则扫描器会把自己的规则文本当成一次命中（自指）。
+CLI_PASSWORD = re.compile("--" + r"password=(?P<value>[^\s'\"]+)")
 PLACEHOLDER = re.compile(
     r"^(\*\*\*|YOUR_\w+|your_\w+|<[^>]+>|xxx+|password|pass|changeme|example|密码|口令|用户名)$",
     re.I,
@@ -65,6 +72,14 @@ def tracked_files() -> list[Path]:
     return [REPO / f for f in out if f]
 
 
+def _display(path: Path) -> str:
+    """仓库内显示相对路径；仓库外的探针文件显示全路径（反向验证会传临时文件）。"""
+    try:
+        return path.relative_to(REPO).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def scan_secrets(paths: list[Path]) -> list[str]:
     hits: list[str] = []
     for path in paths:
@@ -78,12 +93,22 @@ def scan_secrets(paths: list[Path]) -> list[str]:
             continue
         for name, rx in SECRET_PATTERNS.items():
             for m in rx.finditer(text):
-                hits.append(f"{path.relative_to(REPO)}: {name} — {m.group(0)[:60]}")
+                hits.append(f"{_display(path)}: {name} — {m.group(0)[:60]}")
         for m in MYSQL_DSN.finditer(text):
             password = m.group(2)
             if is_placeholder(password):
                 continue
-            hits.append(f"{path.relative_to(REPO)}: mysql dsn with a real password")
+            hits.append(f"{_display(path)}: mysql dsn with a real password")
+        for m in SHELL_DEFAULT_SECRET.finditer(text):
+            if is_placeholder(m.group("value")):
+                continue
+            # 只报变量名，**不回显值**：报告本身不能变成新的泄露面。
+            hits.append(f"{_display(path)}: shell default credential ({m.group('name')})")
+        for m in CLI_PASSWORD.finditer(text):
+            value = m.group("value")
+            if is_placeholder(value) or value.startswith("$"):
+                continue
+            hits.append(f"{_display(path)}: password on the command line")
     return hits
 
 
