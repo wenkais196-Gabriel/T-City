@@ -10,6 +10,10 @@
 --   7 幂等：同 key 第二次返回同一张，replayed=true
 --   8 回看：Last 返回最近一张；最多留 5 张
 --   9 负数净额（租金 > 押金）不炸
+--  10 空输入不炸
+--  11 按班次(per-run)的幂等键：同班重复 → 同一张；跨班 → 两张不同 key
+--  12 context 随回执保存，且是副本（调用方改不到账本）
+--  13 Recent：新的在前、questId 过滤、limit 缺省/上限、只回 billable、副本安全
 
 local SOURCE = arg[1]
 if not SOURCE then error('用法: lua5.4 settle_probe.lua <quest_settle.lua>') end
@@ -109,6 +113,95 @@ check('NEGATIVE_NET', negative.net == -150, negative.net)
 -- 10) 空输入不炸
 local empty = QuestSettle.Compute(nil)
 check('EMPTY_INPUT_SAFE', empty.net == 0 and #empty.rows == 6, empty.net)
+
+--- 造一张带 context 的「可计费」账单：Recent 只收 billable 的账。
+local function billableReceipt(net, leftover)
+    local receipt = QuestSettle.Compute({
+        depositRefund = net, rent = 0, soldTotal = 0, raw = 0, taxRate = 0,
+    })
+    receipt.context = {
+        quest_title = '热狗摊',
+        minutes = 14,
+        sold_count = 9,
+        leftover = leftover or { common = 1, rare = 0, exotic = 0 },
+        raw_count = 3,
+        billable = true,
+    }
+    return receipt
+end
+
+-- 11) 幂等键按「班次」：同班重复 → 同一张；跨班 → 两张不同 key
+QuestSettle.Reset()
+local runKeyA = 'hotdog:complete:1700000000'
+local runKeyB = 'hotdog:complete:1700003600'
+local receiptA = billableReceipt(10)
+local firstA = QuestSettle.Issue('cid-run', 'hotdog', runKeyA, receiptA)
+local replayA = QuestSettle.Issue('cid-run', 'hotdog', runKeyA, receiptA)
+check('PER_RUN_REPLAYS_SAME_RECEIPT', replayA.replayed == true and replayA.key == firstA.key)
+check('PER_RUN_REPLAY_SAME_ISSUED_AT', replayA.issuedAt == firstA.issuedAt)
+local firstB = QuestSettle.Issue('cid-run', 'hotdog', runKeyB, billableReceipt(20))
+check('PER_RUN_DISTINCT_KEY', firstB.key ~= firstA.key and firstB.replayed == false)
+check('PER_RUN_TWO_RECEIPTS', #QuestSettle.Recent('cid-run', 'hotdog', 5) == 2,
+    #QuestSettle.Recent('cid-run', 'hotdog', 5))
+local newestRun = QuestSettle.Last('cid-run', 'hotdog')
+check('PER_RUN_LAST_IS_NEWEST', newestRun ~= nil and newestRun.key == runKeyB,
+    newestRun and newestRun.key or 'nil')
+
+-- 12) context 随回执保存，并且是副本（调用方改不到账本）
+local ctxReceipt = billableReceipt(30)
+local issuedCtx = QuestSettle.Issue('cid-run', 'hotdog', 'hotdog:complete:ctx', ctxReceipt)
+check('CONTEXT_PASSTHROUGH',
+    issuedCtx.context.quest_title == '热狗摊'
+        and issuedCtx.context.minutes == 14
+        and issuedCtx.context.sold_count == 9
+        and issuedCtx.context.raw_count == 3
+        and issuedCtx.context.leftover.common == 1,
+    issuedCtx.context and issuedCtx.context.quest_title or 'nil')
+ctxReceipt.context.quest_title = '被改掉'
+ctxReceipt.context.leftover.common = 99
+check('CONTEXT_IS_COPIED',
+    issuedCtx.context.quest_title == '热狗摊' and issuedCtx.context.leftover.common == 1,
+    issuedCtx.context.quest_title .. '/' .. tostring(issuedCtx.context.leftover.common))
+
+-- 13) Recent：新的在前、questId 过滤、limit 缺省/上限、只回 billable、副本安全
+QuestSettle.Reset()
+QuestSettle.Issue('cid-recent', 'hotdog', 'hotdog:complete:1', billableReceipt(10))
+QuestSettle.Issue('cid-recent', 'hotdog', 'hotdog:complete:2', billableReceipt(20))
+QuestSettle.Issue('cid-recent', 'taxi', 'taxi:complete:1', billableReceipt(30))
+QuestSettle.Issue('cid-recent', 'civic', 'civic:complete:1', QuestSettle.Compute({}))
+
+local allRecent = QuestSettle.Recent('cid-recent', nil, nil)
+check('RECENT_ALL_QUESTS', #allRecent == 3, #allRecent)     -- civic 的 0 元账不计
+check('RECENT_NEWEST_FIRST',
+    allRecent[1].questId == 'taxi' and allRecent[2].net == 20 and allRecent[3].net == 10,
+    ('%s/%s/%s'):format(tostring(allRecent[1] and allRecent[1].questId),
+        tostring(allRecent[2] and allRecent[2].net), tostring(allRecent[3] and allRecent[3].net)))
+
+local hotdogRecent = QuestSettle.Recent('cid-recent', 'hotdog', 5)
+check('RECENT_QUEST_FILTER', #hotdogRecent == 2 and hotdogRecent[1].net == 20, #hotdogRecent)
+local limited = QuestSettle.Recent('cid-recent', nil, 1)
+check('RECENT_LIMIT', #limited == 1 and limited[1].questId == 'taxi', #limited)
+check('RECENT_ONLY_BILLABLE', #QuestSettle.Recent('cid-recent', 'civic', 5) == 0)
+check('RECENT_EMPTY_QUEST_ID_IS_ALL', #QuestSettle.Recent('cid-recent', '', nil) == 3)
+
+-- 副本安全：改返回值不能改到内部账本（含六行明细与 context）
+allRecent[1].net = 9999
+allRecent[1].rows[1].amount = 9999
+allRecent[1].context.quest_title = '被改掉'
+local taxiInternal = QuestSettle.Last('cid-recent', 'taxi')
+check('RECENT_COPY_SAFE',
+    taxiInternal.net == 30 and taxiInternal.rows[1].amount == 30
+        and taxiInternal.context.quest_title == '热狗摊',
+    ('%s/%s/%s'):format(tostring(taxiInternal.net), tostring(taxiInternal.rows[1].amount),
+        tostring(taxiInternal.context.quest_title)))
+
+-- limit 上限：8 张 billable，limit=99 也只能回 KEEP_PER_PLAYER(5) 张
+for i = 1, 5 do
+    QuestSettle.Issue('cid-recent', 'extra_' .. i, 'extra_' .. i .. ':complete:1',
+        billableReceipt(40 + i))
+end
+check('RECENT_LIMIT_CAP', #QuestSettle.Recent('cid-recent', nil, 99) == 5,
+    #QuestSettle.Recent('cid-recent', nil, 99))
 
 local passed = 0
 for _, r in ipairs(results) do if r.ok then passed = passed + 1 end end
