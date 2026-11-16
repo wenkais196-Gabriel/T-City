@@ -176,3 +176,6 @@ server.*.local.cfg
 
 # 离线地图渲染的瓦片缓存（tools/dev/quest_map.py）
 .cache/
+
+# Hermes/agent 本地工作区（计划草稿、派单记录；不入库）
+.hermes/

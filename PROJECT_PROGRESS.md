@@ -4,31 +4,34 @@ type: plan
 status: active
 system: meta
 owner: hermes
-updated: 2026-10-23
+updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
 # 🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)
 
 > [!IMPORTANT]
-> **2026-10-21 全局审查更新**：本文件的资源清单与版本状态已落后于代码（实际 80 个启用资源 / 17 个模块）。
-> 最新审计结论、已修复缺陷与三阶段路线图见
-> [`T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md`](T-CityLite.base/docs/audit/2026-10-21-review-and-three-phase-plan.md)。
-> 在下一次 `manage_progress.py sync` 前，请以该报告为准。
+> **本文件只负责「版本与任务进度」**（做了什么、卡在哪）。资源清单数字、用例数这类会天天漂的量一律不抄进来——
+> 现场跑 `T-CityLite.base/tests/check_cfgs.py`（资源/manifest 对账）与 `python tools/docs_lifecycle.py --index`（文档资产）即可。
+> 状态真源三件套：**`docs/engineering/2026-11-foundation-plan.md` §4.1**（基石加固 P0/P1/P2 收口，带实测数字）、
+> **`T-CityLite.base/docs/agent/STATUS.md`**（agent 栈一页现状）、**`CHANGELOG.md` 的 `[Unreleased]`**（逐条交付记录）。
+> 三者与本节冲突时，以代码与测试为准。
 
-本文件是 T-City Lite 项目的 **单一数据源 (Single Source of Truth)**，汇总了项目当前的整体状态、路线图、当前阶段任务清单，以及当前代码库中实际处于启用状态的模块与资源。
+本文件是 T-City Lite 项目的**版本路线图与当前阶段任务清单**；"哪些资源在跑"由 cfg 对账脚本回答，"有哪些文档"由 `docs/INDEX.md` 回答（分工见 `docs/standards/doc-lifecycle.md` §9.2）。
 
 > [!NOTE]
 > **更新协议 (Sync Protocol)**
-> 1. **手动部分**：当项目任务（如接口实现、数据库建表等）发生变动时，可以使用 `python manage_progress.py complete "<任务关键字>"` / `start "<任务关键字>"` 快捷命令，或者直接修改本文件中的【当前阶段任务清单】。
-> 2. **自动部分**：当资源启用状态或模块 cfg 文件发生变动时，运行根目录下的 `python manage_progress.py sync` 命令，它会自动扫描 `T-CityLite.base\configs\modules\` 目录，并将实际运行的资源同步写入下方的【代码库活动资源清单】中。
+> 1. **任务状态**：手工改【当前阶段任务清单】，改动日期同步到本文 frontmatter 的 `updated` 与下方【同步时间】。
+> 2. **资源清单**：不手工维护。`python T-CityLite.base/tests/check_cfgs.py` 与 `check_dependencies.py` 现场核对 cfg ↔ manifest ↔ 文件。
+> 3. 历史上有一个 `manage_progress.py sync/complete/start` 的命令行，**该脚本已不在仓库里**（2026-11-16 核实），别再照抄。
 
 ---
 
 ## 📅 项目最新同步时间
-- **最后更新时间**: 2026-10-21
-- **当前开发阶段**: `v0.7a 载具重构与物流` 🚧 代码完成，待实机验收
-- **已完成前置**: v0.1–v0.6 ✅；v0.5 主体 ✅（3 项历史遗留待确认）；v0.6-quest ✅
+- **最后更新时间**: 2026-11-16
+- **当前开发阶段**: `v0.7a 载具重构与物流` 🚧 代码完成，待实机验收（tag 已打，缺验收记录）
+- **已完成前置**: v0.1–v0.6 ✅；v0.5 主体 ✅（3 项历史遗留待确认）；v0.6-quest ✅；**2026-11 基石加固 P0/P1/P2 ✅**（见 foundation-plan §4.1）
+- **下一方向**: 世界痕迹**写侧已落地、读侧仍空** —— `world_trace_service` 是 `world_state` 的唯一写者，`custom-police` 结案时写 `crime_pressure`（2026-11-01）；但读侧 0 消费者（手机 `CityFeed` 未接），候选见 `docs/engineering/2026-11-01-next-epic-research.md`（该文推荐的第一条链已实现，结论需按现状重估）
 - **开发策略**: **完成度优先，周期不限** — 每个版本以验收标准为准，不设硬性截止日期
 
 ---

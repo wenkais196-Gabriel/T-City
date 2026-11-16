@@ -4,7 +4,7 @@ type: spec
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
@@ -91,9 +91,9 @@ ISO/IEC 25010 给了九个产品质量特性（2023 版：功能适合性、性�
 
 ## 2. 通用 DoD（每个 PR 都要过）
 
-来自仓库既有基线，**数字以实测为准**（下表为 2026-10-30 在本机 `E:\T-City` 跑出的结果）；**任一项下降即 FAIL，除非 PR 里写明理由并获准**。
+来自仓库既有基线，**数字以实测为准**（下表为 2026-10-30 在旧机仓库根跑出的结果）；**任一项下降即 FAIL，除非 PR 里写明理由并获准**。
 
-> 环境注：本机默认 `python`（3.14.7）**没有 pytest**；用 `C:/Users/swkgb/AppData/Local/Programs/Python/Python312/python.exe`（下文简称 PY）。Lua 与工具注册表不需要。
+> 环境注：解释器一律用 `python -m pytest --version` 能跑通的那个（下文简称 PY）；旧机默认 `python` 无 pytest，曾另指 Python312。Lua 与工具注册表不需要。
 
 | # | 条件 | 判定 |
 |---|---|---|
