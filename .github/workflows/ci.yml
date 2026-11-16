@@ -194,6 +194,9 @@ jobs:
           sudo apt-get install -y mariadb-client lua5.4
           python -m pip install --upgrade pip pytest mysql-connector-python
 
+      - name: Import schema fixture
+        run: mariadb -h 127.0.0.1 -P 3306 -uroot -proot tcity_ci < tests/fixtures/tcity_schema.sql
+
       - name: Run full test suite against MariaDB
         env:
           TCITY_DB_HOST: 127.0.0.1
@@ -201,11 +204,7 @@ jobs:
           TCITY_DB_USER: root
           TCITY_DB_PASS: root
           TCITY_DB_NAME: tcity_ci
-        run: |
-          # 先灌 schema 基线，再跑用例：客户端用 mysql-connector（与测试同一份库），
-          # 不再依赖 runner 上 CLI 客户端的版本（曾漂移成强制 TLS，连不上未开 TLS 的服务容器）。
-          python ../tools/dev/import_schema_fixture.py   # 这一步的 cwd 是 T-CityLite.base
-          python -m pytest tests -q
+        run: python -m pytest tests -q
 
   nui:
     name: NUI smoke tests
