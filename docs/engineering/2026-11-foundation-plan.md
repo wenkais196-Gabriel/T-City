@@ -35,12 +35,12 @@ tracks: [docs/engineering/STANDARDS.md, docs/engineering/FOUNDATION-AS-IS.md, do
 ```plan-status
 Step 0 | done | - | -
 P0     | done | - | 2026-11-10
-P1     | wip  | - | -
+P1     | done | - | 2026-11-10
 P2     | done | - | 2026-11-10
 P1-1   | done | docs/engineering/2026-11-foundation-p1-evidence.md | 2026-11-01
 P1-2   | done | docs/engineering/2026-11-foundation-p1-evidence.md | 2026-11-01
 P1-3   | done | T-CityLite.base/tests/architecture/net_events_baseline.json | 2026-11-08
-P1-4   | wip  | - | -
+P1-4   | done | docs/engineering/2026-11-foundation-p1-4-plan.md | 2026-11-01
 P1-5   | done | T-CityLite.base/tests/architecture/money_write_path_scan.py | 2026-11-08
 P1-6   | done | T-CityLite.base/tests/architecture/stale_core_cache_baseline.json | -
 P2-1   | done | T-CityLite.base/tests/architecture/test_no_server_await.py | -
@@ -111,6 +111,7 @@ P0 / P1 / P2 全部完成。这一节只放**能被复核的数字**，不放"�
 |---|---|---|---|
 | P0 | 引擎层无鉴权的日志写入口 | 两个 P0 判据全绿 + 反向用例 | 闸门 + 先红后绿留档（PR #1xx） |
 | P0 | 经济倍率单位 | 同上 | `test_economy_multiplier` 系列 |
+| P1-4 | `GetPlayer`/`AddMoney`/`Notify` 三层包装收敛 | 猴补闸门 + 缓存/包装删除，DoD 三态表 | 结项 2026-11-01：`docs/engineering/2026-11-foundation-p1-4-plan.md` §5（G1/G2 均✅ 已证明，含变异注入）；**本节此前漏记此项** |
 | P1-3 | net event 鉴权扩面 | `[qb]` / `[custom]` 归零 | **439 事件 / 已鉴权 204 / 已登记 249 / 未登记 0**（`net_events_baseline.json`：0 resources with debt） |
 | P1-5 | 金额写路径收敛 | 唯一 `ValidateAmount` + 静态闸门 | Add/Remove/Set + offline + fallback 全部走它；`money_write_path_scan.py` 三条判据 |
 | P1-6 | stale-core 缓存 | server 17 条棘轮 / client 19 条登记 | `stale_core_cache_baseline.json`（owner/expires 齐，只许减） |
