@@ -3,7 +3,7 @@
 // 这套断言回答两个问题：
 //   1. 30 个任务模板真的能从手机里看到吗（列表渲染、不可接的原因摆出来）；
 //   2. 点「接取」是不是真的发出 appAction（而不是只在本地把状态改了）。
-import { checkEqual, checkIncludes, checkTruthy, openPhone, openQuests, waitFor } from './harness.mjs';
+import { checkEqual, checkIncludes, checkTruthy, openPhone, openQuests, waitFor, waitText } from './harness.mjs';
 
 const QUEST_FREE = {
   id: 'euro_trucking_steel',
@@ -37,9 +37,46 @@ const QUESTS_APP = {
   id: 'quests',
   label: '任务',
   icon: '📜',
-  queries: ['list', 'active'],
+  queries: ['list', 'active', 'receipts'],
   actions: ['accept', 'abandon'],
 };
+
+// GetQuestReceipts 的真实 DTO 形状（camelCase：questId / issuedAt）。
+// 关键点：net_text 是服务端算好的 35，非售出五行之和 50-28+19+3 = 44 ——
+// UI 必须显示 35；前端一旦自己求和就会露馅。
+const RECEIPT = {
+  questId: 'hotdog',
+  issuedAt: 1794787200, // 2026-11-16T00:00:00Z（本地化后仍落在 2026）
+  net: 35,
+  net_text: '35',
+  replayed: false,
+  context: {
+    quest_title: '热狗摊',
+    minutes: 14,
+    sold_count: 9,
+    leftover: { common: 2, rare: 1, exotic: 0 },
+    raw_count: 3,
+    billable: true,
+  },
+  rows: [
+    { id: 'deposit', label: '押金退回', amount: 50, amount_text: '50', kind: 'in' },
+    { id: 'rent', label: '租金（按时长）', amount: -28, amount_text: '28', kind: 'out' },
+    { id: 'sold', label: '售出（已付现）', amount: 115, amount_text: '115', kind: 'cash', counted: false },
+    { id: 'leftover', label: '成品回收', amount: 19, amount_text: '19', kind: 'in' },
+    { id: 'raw', label: '原料回收', amount: 3, amount_text: '3', kind: 'in' },
+    { id: 'tax', label: '税（0% · 未启用）', amount: 0, amount_text: '0', kind: 'out', muted: true },
+  ],
+};
+
+function withReceipts(world) {
+  world.apps = [...world.apps, QUESTS_APP];
+  world.quests = [];
+  world.questActive = [];
+}
+
+async function openSettledTab(page) {
+  await page.locator('.quests-app .tabs button', { hasText: '已结算' }).click();
+}
 
 export const questScenarios = [
   {
@@ -330,6 +367,140 @@ export const questScenarios = [
       );
       checkTruthy('右栏不该残留进行中的任务',
         !((await page.locator('[data-pane="quest"]').textContent()) ?? '').includes('蓝墙内外'));
+    },
+  },
+
+  {
+    surfaces: ['phone'],
+    name: '已结算：手机点行内联展开六行账单，净额用服务端 net_text',
+    async run({ page, world }) {
+      withReceipts(world);
+      world.questReceipts = [RECEIPT];
+
+      await openQuests(page, 'phone');
+      await openSettledTab(page);
+      await waitFor(
+        async () => (await page.locator('li[data-receipt-id]').count()) === 1,
+        5000,
+        '「已结算」列表要出现一张账单',
+      );
+
+      const rowText = (await page.locator('li[data-receipt-id]').textContent()) ?? '';
+      checkIncludes('列表行有任务标题', rowText, '热狗摊');
+      checkIncludes('列表行有净额文本', rowText, '$35');
+      const dateText = (await page.locator('.receipt-date').first().textContent()) ?? '';
+      checkTruthy('列表行的日期已本地化', /2026/.test(dateText));
+
+      await page.locator('li[data-receipt-id]').click();
+      await waitFor(
+        async () => (await page.locator('[data-pane="list"] .bill-card').count()) === 1,
+        5000,
+        '手机点账单行应在 list 内联展开账单卡',
+      );
+      checkEqual('手机的 detail pane 不塞账单卡',
+        await page.locator('[data-pane="quest"] .bill-card').count(), 0);
+      checkEqual('账单卡恰好六行', await page.locator('.bill-card .bill-row').count(), 6);
+
+      const card = (await page.locator('.bill-card').textContent()) ?? '';
+      checkIncludes('售出行标「已付现 · 不计入净额」', card, '已付现 · 不计入净额');
+      checkIncludes('税行标「未启用」', card, '未启用');
+      checkIncludes('税行金额显示破折号',
+        await page.locator('.bill-row[data-row-id="tax"] .bill-amount').textContent(), '—');
+      checkIncludes('净额直接显示 net_text', await page.locator('.bill-net').textContent(), '$35');
+      checkTruthy('净额不是 rows 求和（44）',
+        !((await page.locator('.bill-net').textContent()) ?? '').includes('44'));
+      checkTruthy('不显示「手头现金」', !card.includes('手头现金'));
+    },
+  },
+  {
+    surfaces: ['phone'],
+    name: '已结算空态：没有账单时给说明，不摆一张假卡',
+    async run({ page, world }) {
+      withReceipts(world);
+      world.questReceipts = [];
+
+      await openQuests(page, 'phone');
+      await openSettledTab(page);
+      const text = await waitText(
+        page.locator('[data-pane="list"]'),
+        5000,
+        '空态文案要出现',
+        (value) => value.includes('还没有已结算的班次'),
+      );
+      checkIncludes('空态解释下一步', text, '收摊结算后');
+      checkIncludes('空态说明回看期限', text, '账单在本次服务器运行期间可回看');
+      checkEqual('空态不摆账单卡', await page.locator('.bill-card').count(), 0);
+    },
+  },
+  {
+    surfaces: ['phone'],
+    name: '已结算：replayed 的账单标「已结算（重复查看）」',
+    async run({ page, world }) {
+      withReceipts(world);
+      world.questReceipts = [{ ...RECEIPT, replayed: true }];
+
+      await openQuests(page, 'phone');
+      await openSettledTab(page);
+      await waitFor(
+        async () => (await page.locator('li[data-receipt-id]').count()) === 1,
+        5000,
+        'replayed 账单也要进列表',
+      );
+      checkIncludes('列表行标重复查看',
+        await page.locator('li[data-receipt-id]').textContent(), '已结算（重复查看）');
+
+      await page.locator('li[data-receipt-id]').click();
+      await waitFor(async () => (await page.locator('.bill-card').count()) === 1, 5000, '账单卡展开');
+      checkIncludes('账单卡也标重复查看',
+        await page.locator('.bill-card').textContent(), '已结算（重复查看）');
+    },
+  },
+  {
+    surfaces: ['tablet'],
+    name: '平板：已结算列表 + 右栏账单卡（list 不内联）',
+    async run({ page, world }) {
+      withReceipts(world);
+      world.questReceipts = [RECEIPT];
+
+      await openQuests(page, 'tablet');
+      await waitFor(
+        async () => (await page.locator('.quests-app [data-pane]:visible').count()) === 2,
+        5000,
+        '平板应并出两栏',
+      );
+      await openSettledTab(page);
+      await waitFor(
+        async () => (await page.locator('li[data-receipt-id]').count()) === 1,
+        5000,
+        '平板列表要出现账单行',
+      );
+      await page.locator('li[data-receipt-id]').click();
+      await waitFor(
+        async () => (await page.locator('[data-pane="quest"] .bill-card').count()) === 1,
+        5000,
+        '平板右栏要渲染账单卡',
+      );
+      checkEqual('平板 list 里不内联账单卡',
+        await page.locator('[data-pane="list"] .bill-card').count(), 0);
+      checkEqual('右栏账单六行',
+        await page.locator('[data-pane="quest"] .bill-row').count(), 6);
+    },
+  },
+  {
+    surfaces: ['phone'],
+    name: '已结算：导出缺失时错误可见（receipt_unavailable）',
+    async run({ page, world }) {
+      withReceipts(world);
+      world.questReceiptsError = 'receipt_unavailable';
+
+      await openQuests(page, 'phone');
+      await openSettledTab(page);
+      await waitText(
+        page.locator('[data-pane="list"]'),
+        5000,
+        '导出缺失不能静默成空列表',
+        (value) => value.includes('账单暂时不可用'),
+      );
     },
   },
 ];
