@@ -340,7 +340,7 @@ function Store.Stats()
         last_error = stats.last_error,
         dirty_pool_size = Store.DirtyCount(),
         -- 兼容旧字段：bus.lua 的 DirtyFlushStats 以前返回 dirty_count，
-        -- custom-testing/stress_test.lua 与 tests/architecture_stress_test.lua 还在读它。
+        -- custom-testing/stress_test.lua 与 tests/game/architecture_stress_test.lua 还在读它。
         dirty_count = Store.DirtyCount(),
     }
 end

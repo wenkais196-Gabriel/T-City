@@ -16,22 +16,22 @@ print('\n📋 套件 1/4: vehicle_state_test.lua (服务端 exports/Bus/callback
 -- 通过 dofile 或直接 exec 方式加载
 pcall(function()
     -- 内联的核心逻辑已在 vehicle_state_test.lua 中
-    print('  → 请在服务端控制台执行: exec tests/vehicle_state_test.lua')
+    print('  → 请在服务端控制台执行: exec tests/game/vehicle_state_test.lua')
 end)
 
 print('\n📋 套件 2/4: integration_test.lua (跨模块: qb-garages/repair/tuner/nitrous 全链路)\n')
 pcall(function()
-    print('  → 请在服务端控制台执行: exec tests/integration_test.lua')
+    print('  → 请在服务端控制台执行: exec tests/game/integration_test.lua')
 end)
 
 print('\n📋 套件 3/4: vehicle_degradation_test.lua (客户端损耗逻辑验证)\n')
 pcall(function()
-    print('  → 请在客户端控制台执行: exec tests/vehicle_degradation_test.lua')
+    print('  → 请在客户端控制台执行: exec tests/game/vehicle_degradation_test.lua')
 end)
 
 print('\n📋 套件 4/4: vehicle_nitrous_test.lua (客户端氮气状态机验证)\n')
 pcall(function()
-    print('  → 请在客户端控制台执行: exec tests/vehicle_nitrous_test.lua')
+    print('  → 请在客户端控制台执行: exec tests/game/vehicle_nitrous_test.lua')
 end)
 
 -- ==============================================================
@@ -134,14 +134,14 @@ print('')
 -- 测试文件清单
 -- ==============================================================
 print('📁 测试文件:')
-print('   tests/vehicle_state_test.lua        — 服务端: 69 用例 (exports/Bus/callback/边界/事件桥接)')
-print('   tests/vehicle_degradation_test.lua  — 客户端逻辑: 46 用例 (损耗/防重复/部件/事件)')
-print('   tests/vehicle_nitrous_test.lua      — 客户端逻辑: 38 用例 (状态机/安装/火焰/事件配对)')
-print('   tests/integration_test.lua          — 跨模块: 32 用例 (qb-garages/repair/tuner/nitrous/并发)')
-print('   tests/run_all_tests.lua             — 本文件 (主入口 + 覆盖率矩阵)')
+print('   tests/game/vehicle_state_test.lua        — 服务端: 69 用例 (exports/Bus/callback/边界/事件桥接)')
+print('   tests/game/vehicle_degradation_test.lua  — 客户端逻辑: 46 用例 (损耗/防重复/部件/事件)')
+print('   tests/game/vehicle_nitrous_test.lua      — 客户端逻辑: 38 用例 (状态机/安装/火焰/事件配对)')
+print('   tests/game/integration_test.lua          — 跨模块: 32 用例 (qb-garages/repair/tuner/nitrous/并发)')
+print('   tests/game/run_all_tests.lua             — 本文件 (主入口 + 覆盖率矩阵)')
 print('')
 print('🚀 运行方式:')
-print('   服务端: exec tests/vehicle_state_test.lua')
-print('   服务端: exec tests/integration_test.lua')
-print('   客户端: exec tests/vehicle_degradation_test.lua')
-print('   客户端: exec tests/vehicle_nitrous_test.lua')
+print('   服务端: exec tests/game/vehicle_state_test.lua')
+print('   服务端: exec tests/game/integration_test.lua')
+print('   客户端: exec tests/game/vehicle_degradation_test.lua')
+print('   客户端: exec tests/game/vehicle_nitrous_test.lua')

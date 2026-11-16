@@ -1,6 +1,6 @@
--- tests/vehicle_features_test.lua — 载具功能全量测试 (v0.7b)
+-- tests/game/vehicle_features_test.lua — 载具功能全量测试 (v0.7b)
 --
--- exec tests/vehicle_features_test.lua  加载
+-- exec tests/game/vehicle_features_test.lua  加载
 -- /vtest                                 服务端 KeyManager 单元测试
 -- /vtest_client                          客户端载具功能测试
 
