@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-16 ｜ **文档总数**：324 ｜ **已登记**：324 ｜ **未登记**：0
+**生成时间**：2026-11-16 ｜ **文档总数**：325 ｜ **已登记**：325 ｜ **未登记**：0
 
-**状态分布**：✅ active 187 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 76 ・ ♻️ superseded 3 ・ 📦 archived 45
+**状态分布**：✅ active 187 ・ 🟡 draft 13 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 45
 
 ## 按系统
 
@@ -325,7 +325,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（64）
+### meta（65）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -352,6 +352,7 @@
 | [T-City Lite](../README.md) | meta | ✅ active | 2026-10-26 | 2027-04-30 |  | `README.md` |
 | [Security Policy](../SECURITY.md) | meta | ✅ active | 2026-10-21 | 2027-04-30 |  | `SECURITY.md` |
 | [T-CityLite.base/docs/ — 服务器与 agent 技术文档](../T-CityLite.base/docs/README.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/README.md` |
+| [历史归档（不维护）：T-CityLite.base/docs/archive](../T-CityLite.base/docs/archive/LEGACY.md) | meta | 📌 final | 2026-11-16 | 2027-05-31 |  | `T-CityLite.base/docs/archive/LEGACY.md` |
 | [历史归档（不维护）：T-CityLite.base/docs/audit](../T-CityLite.base/docs/audit/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/audit/LEGACY.md` |
 | [🏛️ T-City Lite 统一开发标准与规范索引 (README.md)](../T-CityLite.base/docs/standards/README.md) | meta | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/standards/README.md` |
 | [🚀 T-City Lite 开发与维护工作流规范 (dev_workflow.md)](../T-CityLite.base/docs/standards/dev_workflow.md) | meta | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/standards/dev_workflow.md` |
