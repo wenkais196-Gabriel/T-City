@@ -1368,7 +1368,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **结案从来没真的写进库（nil 参数让整条 UPDATE 静默失效）**（`custom-police` / `core-framework`）：真机排查发现本 build 的 oxmysql 是**客户端插值**的 —— 参数里出现 `nil` 时它不会绑成 `NULL`，而是把占位符 `?` 原样留在 SQL 里，于是语句语法错误、`.await` 也不报错。两处踩中：① MDT「清场」不带 reason，`closed_reason` 传 nil → 警情状态一直是 `on_scene`，而 `incident.close` 审计照写（"审计说关了、其实没关"，同一张单可以被反复"关"）；② `world_state` 落盘时 `previous_value` 传 nil → 首写静默丢失。现在 `closed_reason` 用空串、`previous_value` 传 JSON 的 `null`；并且**痕迹只在 `affected > 0` 时写**（`affected=0` 打日志不落痕迹），避免"警情没关、痕迹却 +1"。
 - **城市公告在冷缓存下会丢**（`custom-police`）：原节流规则是「该区 24 小时内第一起结案」，靠 `world_state` 的 `closed_24h` 判断 —— 而 `Record` 在缓存冷时是异步落写，读回来是 `nil` → `closed_24h=0` → 公告静默不发（CC 评审 2026-11-01 指出）。改成调用方自己的**每区域 30 分钟冷却**（内存计时，重启清零，宁可多一条不漏），不再依赖跨资源读值。
 - **`QBCore:DebugSomething` 是裸的 RegisterServerEvent（任意客户端可刷服务端日志）**（qb-core）：handler 的 `tbl` / `indent` / `resource` 全由客户端给，服务端直接 `print`，既能刷屏也能用深层表放大内存与 IO。现在用 `GetInvokingResource()` 区分「服务端自己 `QBCore.Debug`」与「客户端触发」，后者要求 `IsPlayerAceAllowed(src, 'qb.debug')`；`indent` 先 `tonumber` 再钳到 `MAX_DEBUG_INDENT = 8`（原来直接透传，可递归到栈溢出）。ACE 示例写进 `server.cfg.template`，不授予也不影响任何现有功能。闸门：`tests/architecture/test_engine_event_guards.py`（静态契约 + 剥守卫反向用例 + 跑真实文件的 Lua 行为验证：无 ACE 客户端 0 次打印、30 层嵌套表被截断）。
-- **经济倍率一个 convar 两种单位（最多差 100 倍）**（core_economy / qb-shops / economy-dashboard）：`economy_reward_scale` 被三个整数读者按 `/100` 解析、被两个浮点读者直接当倍率，而 `economy.cfg` 写的是 `1.0` —— 走网关的奖励与商店价会变成 1%。统一为**浮点倍率**（`1.0 = 1x`），三处改 `GetConvarFloat`；`0 / 负数 / 未设置` 一律回落 `1.0`。`economy.cfg` 补单位注释，`T-CityLite.base/docs/DELIVERY_MANUAL.md` 里 `/100` 的公式说明与 `80 / 120` 的示例命令同步改成倍率写法（否则运维照着旧文档敲 `80` 就是 80 倍）。闸门：`tests/unit/layer1_core/test_economy_multiplier.py`（真实加载源码跑 Lua 沙箱，含三读者单位一致性断言）。
+- **经济倍率一个 convar 两种单位（最多差 100 倍）**（core_economy / qb-shops / economy-dashboard）：`economy_reward_scale` 被三个整数读者按 `/100` 解析、被两个浮点读者直接当倍率，而 `economy.cfg` 写的是 `1.0` —— 走网关的奖励与商店价会变成 1%。统一为**浮点倍率**（`1.0 = 1x`），三处改 `GetConvarFloat`；`0 / 负数 / 未设置` 一律回落 `1.0`。`economy.cfg` 补单位注释，`T-CityLite.base/docs/systems/delivery-manual.md` 里 `/100` 的公式说明与 `80 / 120` 的示例命令同步改成倍率写法（否则运维照着旧文档敲 `80` 就是 80 倍）。闸门：`tests/unit/layer1_core/test_economy_multiplier.py`（真实加载源码跑 Lua 沙箱，含三读者单位一致性断言）。
 
 ### Fixed
 - **`world_state` 读路径（审计 R7 挂了一个多月的那条债）**（`core-framework`）：旧实现用 `promise.new` + `Citizen.Await` 同步查库（首次读卡住主线程），且 `prepare` 取三列后直接 `local value = row` —— 拿到的是**整行**，还把 `changed_by` 硬写成 `nil`（注释说 not in this query，查询里明明有）。现在：`GetRegionState` 只读内存缓存、未命中返回 `nil` 并后台预热（绝不阻塞）；新增 `GetRegionStateAsync` / `GetRegionSnapshotAsync` / `GetPlayerTraces(cid, cb)` 走回调；`saveToDB` 把落盘的异步结果通过 `cb(ok, code)` 回报（`save_failed` 不再被静默吞掉）。证据：`tests/unit/layer1_core/test_world_traces.py` 的 `Citizen.Await` / `promise.new` / `local value = row` 三条回归断言 + 行为 harness（冷启动续写、落盘失败回报）。
@@ -1812,7 +1812,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **qb-phone 缓存层**: 新增 `PhoneCache` + GetInvoices 异步化 + mail 缓存失效
 
 ### Documentation
-- 新建 `docs/bus-api-reference.md`，完整记录 Economy / JobService / SecurityService / PersistenceService / DirtyFlush 接口
+- 新建 `T-CityLite.base/docs/systems/bus-api-reference.md`，完整记录 Economy / JobService / SecurityService / PersistenceService / DirtyFlush 接口
 
 ---
 

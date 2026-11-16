@@ -18,14 +18,14 @@ review_by: 2027-04-30
 | `agent/design/01..05` | 感知、效果、契约、写操作、测试设计 |
 | `agent/reviews/01..08` | 对抗评审记录 |
 | `agent/phone/` | qb-phone 调研、custom-phone 审计、职业 App 设计 |
-| `bus-api-reference.md` | Bus / Service API 手册 |
+| `systems/bus-api-reference.md` | Bus / Service API 手册 |
 | `standards/` | 开发与维护规范 |
 
 ## 其他入口（按主题，不在上面的主线里）
 
 | 路径 | 内容 |
 |---|---|
-| `BLIP_I18N_QUICKREF.md` | Blip/文本本地化速查（配合 `BLIP_I18N_GUIDE.md`） |
+| `systems/blip-i18n-quickref.md` | Blip/文本本地化速查（配合 `systems/blip-i18n-guide.md`） |
 | `architecture/economic-simulation-blueprint.md` | 经济仿真施工图 |
 | `design/tcity-deployment-design-spec.md` | 部署形态设计（单机/容器/CI） |
 | `design/tcity-wiki-design-spec.md` | 文档站设计稿（`draft`，未开工） |

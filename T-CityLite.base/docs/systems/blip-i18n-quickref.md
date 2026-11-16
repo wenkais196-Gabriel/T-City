@@ -11,7 +11,7 @@ review_by: 2027-01-30
 # Blip 本地化维护速查卡
 
 > **适用人员**: 翻译 / 策划 / 运维  
-> **前置阅读**: `docs/BLIP_I18N_GUIDE.md`（技术文档）
+> **前置阅读**: `T-CityLite.base/docs/systems/blip-i18n-guide.md`（技术文档）
 
 ---
 

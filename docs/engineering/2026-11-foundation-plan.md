@@ -54,7 +54,7 @@ tracks: [docs/engineering/STANDARDS.md, docs/engineering/FOUNDATION-AS-IS.md, do
 | 问题 | 同一个 convar `economy_reward_scale` 被两套单位读取：整数读者按 `/100`（core_economy、qb-shops、economy-dashboard），浮点读者直接当倍率（custom-economy）。cfg 里写的是 `1.0`，至少一边必然错，最多可差 100 倍。 |
 | 证据 | core_economy/server/main.lua:116；qb-shops/server/main.lua:41；economy-dashboard/server/main.lua:211；custom-economy/config.lua:25；configs/modules/economy.cfg:5 |
 | 决策 | 统一为**浮点倍率**（`1.0 = 1x`），因为它与 cfg、文档、自定义配置三处一致；整数百分号写法在本仓没有被任何写入方使用 |
-| 改动面 | 3 个读取点改为 `GetConvarFloat`、1 处 cfg 注释写明单位、`getGlobalMultiplier` 加可测边界；**外加运维面**：`T-CityLite.base/docs/DELIVERY_MANUAL.md` 里 `/100` 的公式说明与 `80 / 120` 的示例命令（不迁移就会把「打八折」执行成「80 倍」） |
+| 改动面 | 3 个读取点改为 `GetConvarFloat`、1 处 cfg 注释写明单位、`getGlobalMultiplier` 加可测边界；**外加运维面**：`T-CityLite.base/docs/systems/delivery-manual.md` 里 `/100` 的公式说明与 `80 / 120` 的示例命令（不迁移就会把「打八折」执行成「80 倍」） |
 | 测试 | 新增 `tests/unit/layer1_core/test_economy_multiplier.py`：用 Lua 沙箱加载真实文件（stub `exports` / `CreateThread` / convar），断言 `1.0 → 1.0`、`0.8 → 0.8`、未设置 → `1.0`、`0` 或负数 → `1.0` |
 | 真机判据 | 固定 heat=1、bonus=1、倍率=1.0 后，`baseReward=1000` 的钱包 delta 精确 `+1000`；`exports['core_economy']:GetGlobalMultiplier()` 返回 `1.0` |
 | 回滚 | 三行读取点 revert，无数据影响 |
