@@ -19,6 +19,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`docs_lifecycle.py` 的孤儿检测有盲点：手写的 `INDEX.md` 不算"有人引用"**。原实现按 basename 排除
+  `INDEX.md`（本意是排除自动生成的文档总索引，否则孤儿恒为 0），结果把 `docs/client/ux/INDEX.md` 这种
+  **手写导航宿主**也一起排除了——被它索引着的 5 篇文档被误报成孤儿。改为只排除生成的那一份
+  （`docs/INDEX.md` 的绝对路径比较）。`--report` 实测孤儿 **11 → 6**，修完剩下 6 篇是真没人引用（见下条）。
+  顺手把语料遍历抽成 `_corpus_text()`、读文件抽成 `_read_for_corpus()`（只吞 `OSError`，不吞 `Exception`）：
+  `report()` 少了 10 行嵌套，异常范围也从"什么都吞"收到"只吞读不到"。
+
+### Changed
+- **仓库打扫与文档沉淀（维护轮）**：三件事。
+  ① **孤儿清零**：修完上面的检测盲点后，剩余 6 篇逐个挂进正经宿主——
+  `T-CityLite.base/docs/design/interaction-memo.md` → `T-CityLite.base/docs/README.md` 的文档表；
+  `2026-11-foundation-p1-4-plan.md` / `-p1-6-plan.md` → 父计划 `2026-11-foundation-plan.md` 的 P1 表对应行；
+  `docs/plan/jobs-content/03-plan.md` → `docs/plan/jobs-content-roadmap.md` §5「分批」；
+  `2026-11-abstraction-audit.md` → 收敛计划的首行"唯一来源"（原文写的是 `abstraction-audit-report.md`，
+  一个解析不到的名字，且该快照已归档）；
+  另新建 `docs/plan/README.md` 作为计划目录索引（`agent-module-execution.md` 此前无宿主）。
+  最终 `orphans=0 / dup_groups=0`，文档数 326。
+  ② **`luac.out` 移出版本库**：Lua 字节码（3950 B，`luac5.4 <file>` 的默认输出名），自初始提交起被跟踪、
+  全仓 0 引用、可再生产。`git rm --cached` + `.gitignore` 增加 `luac.out`。
+  ③ `PROJECT_PROGRESS.md` 补记「2026-11 结构治理 ✅」。
+  验证：`docs_lifecycle --check` 326/0 error/0 warning；`--index` 后 `docs/INDEX.md` 无 diff；
+  两条文档闸门 20 passed；`release_check` 通过。
+
 ### Added
 - **热狗账单 P1a（手机端：第三个 tab + 账单卡）**：`T-CityLite.base/resources/[custom]/custom-phone/server/apps/quests.lua`
   新增 `receipts` 查询，走既有 `questExport('GetQuestReceipts', ...)` 读取 custom-quest 的内存账本

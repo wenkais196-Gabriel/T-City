@@ -30,8 +30,14 @@ review_by: 2027-04-30
 | `design/tcity-deployment-design-spec.md` | 部署形态设计（单机/容器/CI） |
 | `design/tcity-wiki-design-spec.md` | 文档站设计稿（`draft`，未开工） |
 | `systems/atmosphere.md` | 氛围系统（天气/电台/时段）说明 |
+| `systems/database-persistence.md` | 存盘性能优化与数据库异步落盘 |
+| `systems/delivery-manual.md` | 交付 / 打包流程与长期维护手册 |
+| `systems/gps-message-pattern.md` | GPS 任务消息模式（可复用模板） |
 | `design/career-reputation-design.md` | 职业声望设计 |
 | `design/mission-template-design.md` | 任务模板设计 |
+| `design/interaction-memo.md` | 交互设计规范（ALT/E 混合交互） |
+| `design/menu-interaction-design.md` | 菜单交互设计规范（NUI / 世界交互） |
+| `design/vehicleshop-purchase-sequence.md` | qb-vehicleshop 购车流程梳理 |
 | `audit/2026-10-21-ingame-test-plan.md` | 真机测试计划（快照，结论已进审计报告） |
 | `agent/design/08-client-state-probe.md` | 客户端状态探针设计 |
 

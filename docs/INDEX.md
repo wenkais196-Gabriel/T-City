@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**生成时间**：2026-11-16 ｜ **文档总数**：325 ｜ **已登记**：325 ｜ **未登记**：0
+**生成时间**：2026-11-16 ｜ **文档总数**：326 ｜ **已登记**：326 ｜ **未登记**：0
 
-**状态分布**：✅ active 179 ・ 🟡 draft 15 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 180 ・ 🟡 draft 15 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -325,7 +325,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（65）
+### meta（66）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -381,6 +381,7 @@
 | [调研：<主题>](engineering/templates/research.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/research.md` |
 | [任务清单：<主题>](engineering/templates/tasks.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/tasks.md` |
 | [验证：<主题>](engineering/templates/verification.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/templates/verification.md` |
+| [docs/plan/ — 计划与路线图索引](plan/README.md) | meta | ✅ active | 2026-11-16 | 2027-05-31 |  | `docs/plan/README.md` |
 | [历史归档（不维护）：docs/police](police/LEGACY.md) | meta | 📌 final | 2026-10-25 | 2027-04-30 |  | `docs/police/LEGACY.md` |
 | [文档生命周期管理规范](standards/doc-lifecycle.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 | ★ | `docs/standards/doc-lifecycle.md` |
 | [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../PROJECT_PROGRESS.md) | plan | ✅ active | 2026-11-16 | 2027-04-30 |  | `PROJECT_PROGRESS.md` |

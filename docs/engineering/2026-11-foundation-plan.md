@@ -73,7 +73,7 @@ tracks: [docs/engineering/STANDARDS.md, docs/engineering/FOUNDATION-AS-IS.md, do
 | P1-2 | **先做**：拆掉 `ForceFlush → Save(true)` 这条环，改为 `Store.SaveNow(player, reason)` | 等价复现脚本从 stack overflow 变单次写 | ✅ 2026-11-01（evidence §2→§3） | 与 qb-core 上游 `Save` 语义耦合 |
 | P1-1 | **后做**：存档收敛为单一 owner：一个池、一个定时器、失败保留 + 退避 + ack | 失败 fake DB 后 dirty 仍在且 `failed_flushes` 增长；停服刷盘有 ack | ✅ 2026-11-01（evidence §1、§4） | 停机时阻塞刷盘可能拖慢关服 |
 | P1-3 | net event 闸门扩到 qb-core 与全仓，存量按三批登记 | 分三批：① 引擎层（qb-core）100% ② `[custom]` ≥ 80% ③ `[qb]` 登记为带 expires 的债务 | ✅ 完成（2026-11-08）：① 100%；② **133/133 = 100%**；③ `[qb]` **216/216 归零**。剩余 59 条全在 `other` 的 vendored 资源（`monitor` 33 条 txAdmin 自带 + 26 条 FiveM 基础库），按基线文档 §6 口径不改。共 20 批，PR #204–#221 |
-| P1-4 | 删掉 compat 的全局猴补，缓存收回框架内部 | 离线单测：换角色后同 tick 读 job 得新值；静态断言 compat 不再赋值 `QBCore.Functions.GetPlayer`；3 处 `Bus.SafeCall` 改 export 且含 `GetResourceState` 守卫 | 🟡 2026-11-01 调研完成（`docs/engineering/2026-11-foundation-p1-4-research.md`），待施工 | **实测 930 处 / 164 文件**引用 `QBCore.Functions.GetPlayer`；真实范围是 **3 个猴补点**（GetPlayer / AddMoney / Notify）+ 930 处调用方，调用方签名不变、零改动 |
+| P1-4 | 删掉 compat 的全局猴补，缓存收回框架内部 | 离线单测：换角色后同 tick 读 job 得新值；静态断言 compat 不再赋值 `QBCore.Functions.GetPlayer`；3 处 `Bus.SafeCall` 改 export 且含 `GetResourceState` 守卫 | 🟡 2026-11-01 调研完成（`docs/engineering/2026-11-foundation-p1-4-research.md`）；施工清单 `docs/engineering/2026-11-foundation-p1-4-plan.md`，待施工 | **实测 930 处 / 164 文件**引用 `QBCore.Functions.GetPlayer`；真实范围是 **3 个猴补点**（GetPlayer / AddMoney / Notify）+ 930 处调用方，调用方签名不变、零改动 |
 | P1-5 | 安全校验收敛一份并接进写路径（拒绝语义，不是 clamp） | `amount=999999` 返回拒绝；5,000,000 上限只剩一处 | ✅ 完成（2026-11-08）：`SecurityService.ValidateAmount` 是唯一实现，`AddMoney` / `RemoveMoney` / `SetMoney` × (economy_service + player.lua 的 offline/fallback 分支) 全部走它；NaN/inf/负数/0/超阈值一律拒绝（不 clamp）。新增闸门 `test_money_write_path.py` + 3 条变异用例。计划见 `2026-11-foundation-p1-5b-money-path-plan.md` |
 
 ## 4. P2（后续，4 项）
@@ -95,7 +95,7 @@ P0 / P1 / P2 全部完成。这一节只放**能被复核的数字**，不放"�
 | P0 | 经济倍率单位 | 同上 | `test_economy_multiplier` 系列 |
 | P1-3 | net event 鉴权扩面 | `[qb]` / `[custom]` 归零 | **439 事件 / 已鉴权 204 / 已登记 249 / 未登记 0**（`net_events_baseline.json`：0 resources with debt） |
 | P1-5 | 金额写路径收敛 | 唯一 `ValidateAmount` + 静态闸门 | Add/Remove/Set + offline + fallback 全部走它；`money_write_path_scan.py` 三条判据 |
-| P1-6 | stale-core 缓存 | server 17 条棘轮 / client 19 条登记 | `stale_core_cache_baseline.json`（owner/expires 齐，只许减） |
+| P1-6 | stale-core 缓存 | server 17 条棘轮 / client 19 条登记 | `stale_core_cache_baseline.json`（owner/expires 齐，只许减）；施工清单 `docs/engineering/2026-11-foundation-p1-6-plan.md` |
 | P2-1 | 主线程 `Citizen.Await` 清零 | 服务端读路径无 Await | `patron_service` 改缓存 + 后台预热；`server_await_allowlist.json` 5 条（每条写明为何不是阻塞） |
 | P2-2 | 启动顺序进版本库 | 删掉顺序注释后仍能拦住错序 | `configs/boot.json` + `boot_cfg.py --check`（84 资源 / 17 模块 / 0 错序） |
 | P2-3 | 迁移幂等 + 版本唯一 | 重跑不报错；重号判红 | 4 组重号修复；`migrations_double_apply.py` 35/35 × 2 遍无错误 |
