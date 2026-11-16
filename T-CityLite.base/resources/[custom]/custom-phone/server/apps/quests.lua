@@ -55,6 +55,22 @@ PhoneApps.Register({
             end
             return { rows = { detail }, count = 1 }
         end,
+        -- 已结算账单：custom-quest 内存账本的只读快照（本次服务器运行期间可回看）。
+        -- questId 可选；不传就是该角色全部任务的账。金额文本（amount_text / net_text）
+        -- 由服务端生成，这里原样透传 —— 手机端只加 $ 与正负号，不重新格式化。
+        receipts = function(source, params)
+            local opts
+            if type(params) == 'table' and params.questId ~= nil then
+                local questId = validQuestId(params.questId)
+                if not questId then return { rows = {}, count = 0, error = 'bad_id' } end
+                opts = { quest_id = questId }
+            end
+            local result = questExport('GetQuestReceipts', source, opts)
+            if type(result) ~= 'table' or type(result.rows) ~= 'table' then
+                return { rows = {}, count = 0, error = 'receipt_unavailable' }
+            end
+            return result
+        end,
     },
     actions = {
         accept = function(source, params)

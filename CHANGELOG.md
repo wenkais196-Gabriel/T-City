@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **热狗账单 P1a（手机端：第三个 tab + 账单卡）**：`T-CityLite.base/resources/[custom]/custom-phone/server/apps/quests.lua`
+  新增 `receipts` 查询，走既有 `questExport('GetQuestReceipts', ...)` 读取 custom-quest 的内存账本
+  （`questId` 可选；导出缺失/返回非表时回 `{ rows = {}, count = 0, error = 'receipt_unavailable' }`，不抛异常），
+  `amount_text` / `net_text` 原样透传。
+  `T-CityLite.base/resources/[custom]/custom-phone/web/src/apps/Quests.svelte` 增加第三个「已结算」tab 与账单卡：
+  手机（stack）在 list 内联展开、平板（grid）在右栏渲染；六行明细用 `row.id → 短标签` 映射（缺省回落 `row.label`），
+  售出标「已付现 · 不计入净额」、`muted` 行标「未启用」且金额显示 `—`，金额带 `+` / `−` 与 tabular-nums，
+  底部只显示「本班净额」并直接使用服务端 `net_text`（前端不对 rows 求和、不显示「手头现金」）；
+  空态为「还没有已结算的班次」，`replayed` 行标「已结算（重复查看）」，页脚写明「账单在本次服务器运行期间可回看」。
+  `T-CityLite.base/resources/[custom]/custom-phone/html/` 同步重建。
+  测试：`T-CityLite.base/resources/[custom]/custom-phone/web/tests/nui/harness.mjs` 增加 `world.questReceipts`
+  与 `receipts` case；`T-CityLite.base/resources/[custom]/custom-phone/web/tests/nui/quests.spec.mjs` 增加 5 个场景
+  （六行/售出/税/净额≠求和、空态、replayed、平板两栏、导出缺失）。
 - **`docs/engineering/TREE.md` + 放置闸门（只判新增文件）**：仓库此前有"文档怎么写"的规范（`doc-lifecycle.md`）和
   "红线/平面"的规范（`CONSTITUTION/ARCHITECTURE`），但**没有一条规则回答"新文件放哪"**——实测
   `doc-lifecycle.md` §2 要求的 `spec/ manual/ adr/ research/ runbook/` 五个目录一个都不存在，而

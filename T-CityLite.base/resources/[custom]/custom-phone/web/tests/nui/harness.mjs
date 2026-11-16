@@ -308,6 +308,10 @@ export function createWorld() {
     /** 任务 App 的假数据：list 里刻意混入一条不可接的，验证 UI 会摆出原因。 */
     quests: [],
     questActive: [],
+    /** 「已结算」账单（custom-quest GetQuestReceipts 的 DTO）：newest first。 */
+    questReceipts: [],
+    /** 非空时模拟导出缺失：receipts 查询带结构化 error 返回（success 仍为 true）。 */
+    questReceiptsError: null,
     /** One-shot query failures; consumed so the next refresh succeeds. */
     failQueries: new Set(),
     failStatus: 500,
@@ -349,6 +353,11 @@ function questData(world, query) {
       return { rows: world.quests, count: world.quests.length };
     case 'active':
       return { rows: world.questActive, count: world.questActive.length };
+    case 'receipts':
+      if (world.questReceiptsError) {
+        return { rows: [], count: 0, error: world.questReceiptsError };
+      }
+      return { rows: world.questReceipts, count: world.questReceipts.length };
     default:
       return { rows: [], count: 0 };
   }
