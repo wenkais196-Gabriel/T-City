@@ -153,8 +153,8 @@ review_by: 2027-04-30
 - [x] 移除 qb-apartments/qb-houserobbery/qb-multicharacter 中的 DisableSync/EnableSync 调用
 - [x] qb-houses EnableSync 向后兼容别名
 
-### 7. 自动化测试体系建设（参考 `docs/automated-testing-plan.md`）
-- [x] 自动化测试方案文档完成（`docs/automated-testing-plan.md`）
+### 7. 自动化测试体系建设（参考 `docs/plan/automated-testing-plan.md`）
+- [x] 自动化测试方案文档完成（`docs/plan/automated-testing-plan.md`）
 - [x] Phase 1: 离线检测脚本（`tests/check_cfgs.py`, `check_lua_syntax.py`, `check_db_schema.py`, `run_all.py`）
 - [x] Phase 2: 游戏内测试资源框架（`[custom]/custom-testing` + `test_runner.lua`）
 - [x] Phase 3: 银行系统测试套件（`01_banking_test.lua`）

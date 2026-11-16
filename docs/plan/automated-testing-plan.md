@@ -100,7 +100,7 @@ T-CityLite.base/
 │       ├── test_runner.lua             # 断言 + 报告引擎
 │       └── mock_events.lua             # 事件模拟工具
 │
-└── docs/automated-testing-plan.md      # 【本次产出】本文件
+└── docs/plan/automated-testing-plan.md # 【本次产出】本文件
 ```
 
 ---

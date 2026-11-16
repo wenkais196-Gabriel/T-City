@@ -319,8 +319,8 @@
 | [T-City Lite v0.3 基础设施层技术维护手册 (Technical Manual)](../T-CityLite.base/docs/archive/v0.3-technical-manual.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.3-technical-manual.md` |
 | [🔧 T-City Lite v0.5 技术维护手册](../T-CityLite.base/docs/archive/v0.5-maintenance-guide.md) | manual | 📦 archived | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/archive/v0.5-maintenance-guide.md` |
 | [存盘性能优化与数据库异步落盘](../T-CityLite.base/docs/systems/database-persistence.md) | manual | ✅ active | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/systems/database-persistence.md` |
-| [🧪 T-City Lite 自动化测试方案](../T-CityLite.base/docs/automated-testing-plan.md) | plan | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/automated-testing-plan.md` |
 | [v1.0 Open Beta 上线验收与发布清单](archive/QBCore_Lite_versions/v1.0-beta-launch.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v1.0-beta-launch.md` |
+| [🧪 T-City Lite 自动化测试方案](plan/automated-testing-plan.md) | plan | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/plan/automated-testing-plan.md` |
 | [维护与排障手册](03_maintenance_manuals/maintenance_guide.md) | runbook | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/03_maintenance_manuals/maintenance_guide.md` |
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |

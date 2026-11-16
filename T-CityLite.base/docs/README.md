@@ -21,7 +21,7 @@ review_by: 2027-04-30
 | `bus-api-reference.md` | Bus / Service API 手册 |
 | `standards/` | 开发与维护规范 |
 
-## 根级补遗（按主题，不在上面的主线里）
+## 其他入口（按主题，不在上面的主线里）
 
 | 路径 | 内容 |
 |---|---|
