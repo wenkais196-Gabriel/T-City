@@ -10,7 +10,8 @@ review_by: 2027-04-30
 
 # 计划：<主题>
 
-> 阶段 P。产物放 `docs/<area>/plans/<YYYY-MM-DD>-<slug>.md`。L1/L2 改动可以只写进 commit message，
+> 阶段 P。产物放 `docs/<area>/plans/<slug>.md`（文件名不带日期：日期只给 audit/research，
+> 见 `standards/doc-lifecycle.md` §3 与 `engineering/TREE.md` §4）。L1/L2 改动可以只写进 commit message，
 > 但**验收标准与回滚方式**不能省。
 
 ## 1. 范围

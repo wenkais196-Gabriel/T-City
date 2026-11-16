@@ -1,14 +1,16 @@
 ---
 id: base-v0-7-mission-template-design
 type: spec
-status: active
+status: draft
 system: quest
 owner: hermes
-updated: 2026-10-25
+updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
 # T-City Lite — 通用任务模板系统设计
+
+> 现状（2026-11-16）：文中的 `Bus.MissionTemplate` API 未落地，但同思路的模板注册表已由 custom-quest 的 `QuestRegistry.AutoLoad/GetTemplate` 实现。
 
 > **版本**: v0.7-draft  
 > **状态**: 设计阶段  

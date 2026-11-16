@@ -21,6 +21,10 @@
     "T-CityLite.base/docs/audit": {
       "reason": "阶段性审计报告快照",
       "broken_at_marking": 88
+    },
+    "T-CityLite.base/docs/archive": {
+      "reason": "v0.x 阶段审计/验收快照与已退役维护手册（M8 从 base docs 根归入）",
+      "broken_at_marking": 3
     }
   }
 }

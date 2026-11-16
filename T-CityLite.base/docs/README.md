@@ -30,8 +30,8 @@ review_by: 2027-04-30
 | `design/tcity-deployment-design-spec.md` | 部署形态设计（单机/容器/CI） |
 | `design/tcity-wiki-design-spec.md` | 文档站设计稿（`draft`，未开工） |
 | `systems/atmosphere.md` | 氛围系统（天气/电台/时段）说明 |
-| `v0.7-career-reputation-design.md` | 职业声望设计 |
-| `v0.7-mission-template-design.md` | 任务模板设计 |
+| `design/career-reputation-design.md` | 职业声望设计 |
+| `design/mission-template-design.md` | 任务模板设计 |
 | `audit/2026-10-21-ingame-test-plan.md` | 真机测试计划（快照，结论已进审计报告） |
 | `agent/design/08-client-state-probe.md` | 客户端状态探针设计 |
 

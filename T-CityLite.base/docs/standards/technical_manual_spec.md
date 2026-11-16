@@ -19,7 +19,7 @@ review_by: 2027-04-30
 
 *   **路径**：所有的技术手册统一存放于 `T-CityLite.base/docs/` 目录下。
 *   **命名格式**：`<版本号>-<资源名称>-technical-manual.md`  
-    *   例如：`docs/v0.3-technical-manual.md`（旧命名，未带 technical-manual 后缀）。
+    *   例如：`T-CityLite.base/docs/archive/v0.3-technical-manual.md`（旧命名，未带 technical-manual 后缀；已归档）。
 
 ---
 

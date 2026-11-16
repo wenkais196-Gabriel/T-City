@@ -1,10 +1,10 @@
 ---
 id: base-v0-7-career-reputation-design
 type: spec
-status: active
+status: draft
 system: jobs
 owner: hermes
-updated: 2026-06-21
+updated: 2026-11-16
 review_by: 2027-04-30
 ---
 
