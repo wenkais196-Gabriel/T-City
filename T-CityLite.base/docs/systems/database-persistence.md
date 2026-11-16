@@ -4,11 +4,11 @@ type: manual
 status: active
 system: delivery
 owner: hermes
-updated: 2026-10-25
+updated: 2026-11-16
 review_by: 2027-01-30
 ---
 
-# T-City Lite v0.2 存盘性能优化与数据库异步落盘技术维护文档
+# 存盘性能优化与数据库异步落盘
 
 本文档详细记录了在 T-City Lite v0.2 版本中，针对“自动存盘导致服务端主线程卡顿（Server Thread Hitch Warning）”的性能问题进行的重构细节。编写此文档旨在方便后续维护、例行排查和二次开发。
 
@@ -69,7 +69,7 @@ sequenceDiagram
   为 `QBCore.Player.Save`（在线自动保存）和 `QBCore.Player.SaveOffline`（离线登出保存）所调用的 `MySQL.insert` 追加**显式异步回调函数**，打断同步等待链。
 
 ```diff
--- 修改前 (player.lua L526/L551)
+-- 修改前 (player.lua L606/L624；SaveOffline 在 L652)
         MySQL.insert('INSERT INTO players ... ', {
             citizenid = PlayerData.citizenid,
             -- ... (基本参量)
@@ -95,7 +95,7 @@ sequenceDiagram
   2. 同样对 `SaveInventory` 和 `ClearStash` 追加显式异步回调。
 
 ```diff
--- 修改前 (functions.lua L120)
+-- 修改前 (functions.lua L126/L130)
 -       MySQL.prepare('UPDATE players SET inventory = ? WHERE citizenid = ?', { json.encode(ItemsJson), PlayerData.citizenid })
 -   else
 -       MySQL.prepare('UPDATE players SET inventory = ? WHERE citizenid = ?', { '[]', PlayerData.citizenid })
@@ -110,7 +110,7 @@ sequenceDiagram
 +       end)
 ```
 ```diff
--- 修改前 (ClearStash 垃圾箱清空落盘 L543)
+-- 修改前 (ClearStash 垃圾箱清空落盘 L564)
 -   MySQL.prepare('UPDATE inventories SET items = ? WHERE identifier = ?', { json.encode(inventory.items), identifier })
 
 -- 修改后 (更换为 MySQL.update 并在末尾注入空回调)

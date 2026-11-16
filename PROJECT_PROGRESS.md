@@ -92,7 +92,7 @@ review_by: 2027-04-30
 - [ ] 真人客户端 UI 验收（车店 NUI / 车库 / 中控屏 / 物流）
 - [x] 构建产物入库（oxmysql/menuv/tcity-dashboard）
 - [x] CHANGELOG / README 与 tag 对齐（本次更新）
-- [验收报告](./T-CityLite.base/docs/v0.7a-acceptance-report.md)
+- [验收报告](./T-CityLite.base/docs/archive/v0.7a-acceptance-report.md)
 
 ---
 
@@ -210,7 +210,7 @@ Active resources detected in codebase (**78** unique resources across **17** mod
   - **任务与剧情**: `custom-quest` 状态机 + 安全门控；`story-engine` 决策树
   - **质量门禁**: 修复 5 个失效测试夹具；`pytest tests` 286 passed / 132 skipped；新增 GitHub Actions CI
 - **待办**: 实机验收；132 个依赖 MySQL 的用例在带库环境跑通
-- **详见文档**: [v0.7a Spec](./docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | [v0.7a 维护手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
+- **详见文档**: [v0.7a Spec](./docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md) | [v0.7a 维护手册](./T-CityLite.base/docs/archive/v0.7-integration-test-manual.md)
 
 ### v0.4 — 自研手机系统验证与完善
 - **日期**: 2026-06-01
@@ -226,8 +226,8 @@ Active resources detected in codebase (**78** unique resources across **17** mod
   - **数据库完整性**：新增 4 张表 `CREATE TABLE IF NOT EXISTS`（原仅 2 张，依赖 qb-phone 建表）
   - **测试自动化重写**：`08_phone_test.lua` 从 23 个占位断言重写为 38 个真实断言，覆盖 10 个测试组
   - **性能基线**：打包产物 gzip 42KB << 250KB 目标 ✅
-  - **架构文档**：`docs/v0.4-validation-plan.md` 完整交付
-- **详见文档**: [v0.4 验证计划](./T-CityLite.base/docs/v0.4-validation-plan.md)
+  - **架构文档**：`T-CityLite.base/docs/archive/v0.4-validation-plan.md` 完整交付
+- **详见文档**: [v0.4 验证计划](./T-CityLite.base/docs/archive/v0.4-validation-plan.md)
 
 ### v0.2 - 基础 RP 闭环
 - **日期**: 2026-05-28
@@ -238,7 +238,7 @@ Active resources detected in codebase (**78** unique resources across **17** mod
   - 修复了 NUI shared users 列表的 JSON 解析错误，实现了 shared users 的 Lua table 转换。
   - ** wantedlevel 接管系统**：自研 wantedlevel Dispatch 系统，当 Wanted >= 3 时屏蔽 AI 警车并派单给在线玩家警员，并在 Cop HUD 上生成每 8 秒一次的红圈追踪 blip。伴随 25 米范围内平民 NPC 尖叫逃跑、司机制动加速逃离的恐慌逻辑。
   - **duty 一键切换**：新增 `/duty` 聊天命令，允许警员、医生、机修、出租车司机免去跑回原大楼 marker 的烦恼，实时一键上下岗。
-- **详见文档**: [v0.2 维护指南](./T-CityLite.base/docs/v0.2-maintenance.md) | [wantedlevel 接管技术备忘录](./T-CityLite.base/docs/v0.2-wanted-handover-technical-memo.md)
+- **详见文档**: [v0.2 维护指南](./T-CityLite.base/docs/archive/v0.2-maintenance.md) | [wantedlevel 接管技术备忘录](./T-CityLite.base/docs/archive/v0.2-wanted-handover-technical-memo.md)
 
 ### v0.1 - 精简启动链
 - **日期**: 2026-05-28
@@ -247,22 +247,22 @@ Active resources detected in codebase (**78** unique resources across **17** mod
   - 创建了 `T-CityLite.base`，重构 `server.cfg`，彻底废除 `ensure [qb]`，改由模块化 `.cfg` 白名单加载。
   - 实现了 **Spawn Death Fallback** 应急处理，当医疗模块尚未启用时，若玩家出生判定为死亡状态，由 `custom-main` 自动恢复血量并复活，防止进入无限死亡卡死。
   - 补充了 `PolyZone`, `qb-interior`, `qb-clothing`, `qb-weapons` 等作为核心玩家流动的必要前置依赖加载。
-- **详见文档**: [v0.1 维护指南](./T-CityLite.base/docs/v0.1-maintenance.md)
+- **详见文档**: [v0.1 维护指南](./T-CityLite.base/docs/archive/v0.1-maintenance.md)
 
 ---
 
 ## 🔗 项目核心参考文档链接
 - [QBCore Lite 技术讨论记录](./QBCore_Lite_技术讨论.md)
 - [LITE_CHANGELOG.md](./T-CityLite.base/LITE_CHANGELOG.md)
-- [v0.5 技术维护手册](./T-CityLite.base/docs/v0.5-maintenance-guide.md)
-- [v0.5 联合测试手册](./T-CityLite.base/docs/v0.5-joint-test-manual.md)
-- [v0.5 代码审查报告](./T-CityLite.base/docs/v0.5-code-review-report.md)
-- [v0.5 架构重构交付报告](./T-CityLite.base/docs/v0.5-architecture-migration.md)
-- [NUI 前端开发标准规范](./T-CityLite.base/docs/v0.4-nui-standard.md)
+- [v0.5 技术维护手册](./T-CityLite.base/docs/archive/v0.5-maintenance-guide.md)
+- [v0.5 联合测试手册](./T-CityLite.base/docs/archive/v0.5-joint-test-manual.md)
+- [v0.5 代码审查报告](./T-CityLite.base/docs/archive/v0.5-code-review-report.md)
+- [v0.5 架构重构交付报告](./T-CityLite.base/docs/archive/v0.5-architecture-migration.md)
+- [NUI 前端开发标准规范](./T-CityLite.base/docs/standards/nui-standard.md)
 - [**v0.7a 载具重构与物流**](./docs/archive/QBCore_Lite_versions/v0.7a-civilian-logistics.md)
-- [v0.7a 验收报告](./T-CityLite.base/docs/v0.7a-acceptance-report.md)
-- [v0.7b 收尾 vs v1.0 联调建议](./T-CityLite.base/docs/v0.7b-v1.0-decision.md)
-- [注意项解决方案](./T-CityLite.base/docs/attention-items-solutions.md)
+- [v0.7a 验收报告](./T-CityLite.base/docs/archive/v0.7a-acceptance-report.md)
+- [v0.7b 收尾 vs v1.0 联调建议](./T-CityLite.base/docs/archive/v0.7b-v1.0-decision.md)
+- [注意项解决方案](./T-CityLite.base/docs/archive/attention-items-solutions.md)
 - [菜单交互设计规范](./T-CityLite.base/docs/menu-interaction-design.md)
-- [v0.7 集成测试手册](./T-CityLite.base/docs/v0.7-integration-test-manual.md)
+- [v0.7 集成测试手册](./T-CityLite.base/docs/archive/v0.7-integration-test-manual.md)
 - [**v0.6-quest 通用任务系统设计方案**](./docs/archive/QBCore_Lite_versions/v0.6-quest-system.md)

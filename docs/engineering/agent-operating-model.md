@@ -119,7 +119,7 @@ Spec Kit 把 SDD 的核心过程固化成 `Specify → Plan → Tasks → Implem
 | 阶段 | 产物（放哪） | 退出条件（缺一不可） |
 |---|---|---|
 | **R 调研** | `docs/<area>/research/<date>-<topic>.md` | 影响面清单（文件:行）+ 证据（日志/源码/文档链接）+ 至少 1 条"排除掉的假设" |
-| **P 计划** | `docs/<area>/plans/<date>-<topic>.md` | 范围 / 非范围 / 验收标准 / 回滚方式 / 风险 |
+| **P 计划** | `docs/<area>/plans/<topic>.md` | 范围 / 非范围 / 验收标准 / 回滚方式 / 风险 |
 | **D 开发** | 代码 + 测试 | 每个切片可运行；先红后绿有记录 |
 | **V 审查** | `verification.md` 或 PR 描述 | 测试输出原文、反向校验、`luac -p`/`svelte-check`、真机证据 |
 | **S 交付** | commit + CHANGELOG + 文档 | push 前密钥扫描、allowlist 到期检查、文档同步 |

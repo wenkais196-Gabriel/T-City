@@ -133,6 +133,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并在 `tools/dev/gate_mutation_smoke.py` 里加了变异用例证明会红。
 
 ### Changed
+- **`T-CityLite.base/docs/` 根级 40 篇按状态归位（M8）**：**26 篇归档**（20 篇 `audit/final` 快照原样移入
+  `T-CityLite.base/docs/archive/`，其中 `refactoring_manifest_v2.md` 同批改名为 `refactoring-manifest.md`；
+  6 篇版本名 `active` 维护/迁移手册先改 `status: archived` 并加"已归档"横幅）、**4 篇去版本号移入现有子目录**
+  （`T-CityLite.base/docs/systems/database-persistence.md`、`T-CityLite.base/docs/standards/nui-standard.md`、
+  `T-CityLite.base/docs/design/career-reputation-design.md`、`T-CityLite.base/docs/design/mission-template-design.md`，
+  后两篇因 API 未落地同时由 `active` 回退为 `draft`）、**10 篇留根**（M8b 再分流）。
+  归档目录补 `LEGACY.md` 并在 `legacy_docs.json` 登记（`broken_at_marking: 3`，均来自归档文档内部的当时路径，
+  按历史不改写）；活跃文档里的旧路径 token/链接同步修正，`docs/INDEX.md` 重生成。
+  实测验收：`test_docs_links.py` + `test_tree_placement.py` **20 passed**；
+  `python tools/docs_lifecycle.py --check` → `total=325 registered=325 unregistered=0 errors=0 warnings=0`。
 - **`T-CityLite.base/tests/` 根级归位（结构提案 M7 收口）**：根目录从 29 个文件清到 **12 个**
   （10 个 `TREE.md` §3 白名单脚本 + `AGENTS.md` + `README.md`），三个独立提交、各自可回滚：
   ① **A**：10 个游戏内 harness → `tests/game/`（`architecture_stress_test`、`integration_test`、`run_all_tests`、
@@ -1775,7 +1785,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pytest tests`：**426 passed**（含 MariaDB schema；无 DB 连接时 286 passed / 132 skipped）
 - oxmysql JS 单测：**148 passed**
 - NUI 冒烟：**4/4 passed**（Playwright Chromium）
-- 游戏内 `/test run all`：**298 PASS / 0 FAIL / 9 SKIP**（有玩家上下文；无玩家时 225 PASS / 8 SKIP；见 `docs/v0.7a-acceptance-report.md`）
+- 游戏内 `/test run all`：**298 PASS / 0 FAIL / 9 SKIP**（有玩家上下文；无玩家时 225 PASS / 8 SKIP；见 `T-CityLite.base/docs/archive/v0.7a-acceptance-report.md`）
 - 离线检查：CFG / 依赖图 PASS；`light_lint` 仍为 advisory（vendor 资源遗留 ~250 条 `Wait(0)` / `MySQL.Sync`）
 
 ### Known
@@ -1840,9 +1850,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 覆盖 10 组: UI / DB / API / 消息 / 联系人 / 银行 / JobBoard / 安全 / 事件 / 架构
 
 ### Documentation
-- `docs/v0.4-validation-plan.md`
-- `docs/v0.4-joint-test-scenarios.md`
-- `docs/v0.4-nui-standard.md`
+- `T-CityLite.base/docs/archive/v0.4-validation-plan.md`
+- `T-CityLite.base/docs/archive/v0.4-joint-test-scenarios.md`
+- `T-CityLite.base/docs/standards/nui-standard.md`
 
 ---
 
@@ -1855,7 +1865,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **多标签职业** (`custom-career`): 支持多职业切换
 - **管理面板** (`custom-admin`): 服务端命令集
 - 模块化 CFG: `economy.cfg` / `security.cfg` / `career.cfg` / `admin.cfg`
-- `docs/v0.3-technical-manual.md` / `docs/v0.3-banking-refactor.md` / `docs/v0.3-test-checklist.md` / `docs/v0.3-test-manual.md`
+- `T-CityLite.base/docs/archive/v0.3-technical-manual.md` / `T-CityLite.base/docs/archive/v0.3-banking-refactor.md` / `T-CityLite.base/docs/archive/v0.3-test-checklist.md` / `T-CityLite.base/docs/archive/v0.3-test-manual.md`
 
 ### Testing
 - 双层自动化测试框架 (`custom-testing`):
@@ -1895,10 +1905,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NUI 共享用户列表 bug 修复：`openBank` / `openATM` 回调中 `users` JSON 字符串解码为 Lua table
 
 ### Documentation
-- `docs/v0.2-maintenance.md` / `docs/v0.2-test-checklist.md` / `docs/v0.2-master-test-manual.md`
-- `docs/v0.2-wanted-handover-technical-memo.md` / `docs/v0.2-wanted-handover-test-guide.md`
-- `docs/v0.2-status-persistence-technical-memo.md`
-- `docs/v0.2-database-performance-maintenance-guide.md` / `docs/v0.2-hospital-optimization-guide.md`
+- `T-CityLite.base/docs/archive/v0.2-maintenance.md` / `T-CityLite.base/docs/archive/v0.2-test-checklist.md` / `T-CityLite.base/docs/archive/v0.2-master-test-manual.md`
+- `T-CityLite.base/docs/archive/v0.2-wanted-handover-technical-memo.md` / `T-CityLite.base/docs/archive/v0.2-wanted-handover-test-guide.md`
+- `T-CityLite.base/docs/archive/v0.2-status-persistence-technical-memo.md`
+- `T-CityLite.base/docs/systems/database-persistence.md` / `T-CityLite.base/docs/archive/v0.2-hospital-optimization-guide.md`
 
 ---
 
@@ -1919,7 +1929,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 依赖例外发现并添加: `PolyZone` / `qb-interior` / `qb-clothing` / `qb-weapons`
 - 禁用资源追踪: `disabled-resources-v0.1.md`
 - `server.cfg.template` 模板配置
-- `docs/v0.1-maintenance.md`
+- `T-CityLite.base/docs/archive/v0.1-maintenance.md`
 
 ### Testing
 - 基础客户端测试通过

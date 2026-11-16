@@ -37,11 +37,11 @@ review_by: 2027-04-30
 |------|------|------|------|
 | `[test]/example-loadscreen` | Cfx 默认资源 | ❌ 不可用 | 仅加载画面模板，无测试逻辑 |
 | `[test]/fivem` | Cfx 默认资源 | ❌ 不可用 | basic-gamemode 兼容包装，无测试逻辑 |
-| `docs/v0.2-master-test-manual.md` | 手动测试手册 | ✅ 已存在 | 126 行，涵盖多模块测试入口 |
-| `docs/v0.2-test-checklist.md` | 手动测试清单 | ✅ 已存在 | 118 行，分模块的手动清单 |
-| `docs/v0.2-wanted-handover-test-guide.md` | 手动测试指南 | ✅ 已存在 | 警星移交 7 深度用例 |
-| `docs/v0.3-test-manual.md` | 手动测试验收手册 | ✅ 已存在 | 267 行，基础设施层详细用例 |
-| `docs/v0.3-test-checklist.md` | 手动测试清单 | ✅ 已存在 | v0.3 模块清单 |
+| `T-CityLite.base/docs/archive/v0.2-master-test-manual.md` | 手动测试手册 | ✅ 已存在 | 126 行，涵盖多模块测试入口 |
+| `T-CityLite.base/docs/archive/v0.2-test-checklist.md` | 手动测试清单 | ✅ 已存在 | 118 行，分模块的手动清单 |
+| `T-CityLite.base/docs/archive/v0.2-wanted-handover-test-guide.md` | 手动测试指南 | ✅ 已存在 | 警星移交 7 深度用例 |
+| `T-CityLite.base/docs/archive/v0.3-test-manual.md` | 手动测试验收手册 | ✅ 已存在 | 267 行，基础设施层详细用例 |
+| `T-CityLite.base/docs/archive/v0.3-test-checklist.md` | 手动测试清单 | ✅ 已存在 | v0.3 模块清单 |
 | logs/v0.1-startup-test.md（报告未入库） | 测试报告 | ✅ 已记录 | 9 项玩家流程检查 PASS |
 | logs/v0.2-status-persistence-test-report.md（报告未入库） | 测试报告 | ✅ 已记录 | 5 用例全部 PASS |
 
