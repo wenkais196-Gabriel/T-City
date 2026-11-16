@@ -22,6 +22,7 @@ MANAGER = BASE / "resources/[custom]/custom-quest/server/quest_manager.lua"
 MANIFEST = BASE / "resources/[custom]/custom-quest/fxmanifest.lua"
 
 LUA = shutil.which("lua5.4")  # NOSONAR
+RENTAL = BASE / "resources/[custom]/custom-quest/server/quest_rental.lua"
 
 
 def run_probe(source: Path) -> subprocess.CompletedProcess:
@@ -35,7 +36,7 @@ def run_probe(source: Path) -> subprocess.CompletedProcess:
 def test_bill_rules_hold():
     proc = run_probe(SETTLE)
     assert proc.returncode == 0, f"探针失败：\n{proc.stdout}\n{proc.stderr}"
-    assert "SUMMARY 22/22" in proc.stdout
+    assert "SUMMARY 37/37" in proc.stdout
 
 
 @pytest.mark.skipif(LUA is None, reason="需要 lua5.4")
@@ -57,6 +58,63 @@ def test_probe_goes_red_when_sold_starts_counting_into_net(tmp_path: Path):
     assert "FAIL SOLD_NOT_IN_NET" in proc.stdout
 
 
+@pytest.mark.skipif(LUA is None, reason="需要 lua5.4")
+@pytest.mark.parametrize(
+    ("old", "new", "expected_fail"),
+    [
+        # 1. 历史列表不再过滤 billable：0 元剧情回执也会混进「已结算」。
+        ("if type(receipt.context) == 'table' and receipt.context.billable == true then",
+         "if true then",
+         "FAIL RECENT_ONLY_BILLABLE"),
+        # 2. 排序反转/去掉：新的不在前。
+        ("        if a.issuedAt ~= b.issuedAt then return a.issuedAt > b.issuedAt end\n"
+         "        return (a._seq or 0) > (b._seq or 0)",
+         "        return (a._seq or 0) < (b._seq or 0)",
+         "FAIL RECENT_NEWEST_FIRST"),
+        # 3. 返回内部账本而不是副本：前端改一下金额就改坏了钱账。
+        ("    out._seq = nil   -- 内部排序用，不进 DTO\n    return out\n",
+         "    out._seq = nil   -- 内部排序用，不进 DTO\n    return receipt\n",
+         "FAIL RECENT_COPY_SAFE"),
+    ],
+    ids=["billable-filter", "newest-first", "copy-safety"],
+)
+def test_probe_goes_red_when_recent_contract_breaks(
+        tmp_path: Path, old: str, new: str, expected_fail: str):
+    """反向校验：Recent 的三条契约（过滤 / 排序 / 副本）任一被改坏，探针必须红。"""
+    src = SETTLE.read_text(encoding="utf-8")
+    assert old in src, f"变异锚点不存在，规则已与实现脱节：{old!r}"
+    target = tmp_path / "quest_settle_broken.lua"
+    target.write_text(src.replace(old, new, 1), encoding="utf-8")
+    proc = run_probe(target)
+    assert proc.returncode != 0, f"{expected_fail}: 契约被改坏后探针仍然全绿"
+    assert expected_fail in proc.stdout, f"期望探针报 {expected_fail}：\n{proc.stdout}"
+
+
+def per_run_key_problems(manager: str) -> list[str]:
+    """静态判据：结算键必须按班次（runToken）而不是每任务一张。"""
+    problems: list[str] = []
+    if "':complete:'" not in manager:
+        problems.append("结算键里没有 ':complete:' 分隔符")
+    if "questId .. ':complete', receipt" in manager:
+        problems.append("结算键退回成每任务一张 —— 第二班会被判成第一班的回放")
+    if "local function settleRunToken(" not in manager:
+        problems.append("缺少 settleRunToken")
+    if "rentalResult.startedAt" not in manager or "QuestRunLatest" not in manager:
+        problems.append("runToken 既没取租赁起点、也没有本班起点兜底")
+    return problems
+
+
+def test_settlement_key_is_per_run_with_reverse_check():
+    """同一班稳定、跨班不同；把键改回每任务一张必须判红。"""
+    manager = MANAGER.read_text(encoding="utf-8")
+    assert not per_run_key_problems(manager), "\n".join(per_run_key_problems(manager))
+
+    broken = manager.replace(
+        "questId .. ':complete:' .. (runToken or 'unknown')",
+        "questId .. ':complete'", 1)
+    assert per_run_key_problems(broken), "把结算键改回每任务一张后判据仍然绿"
+
+
 def test_receipt_is_wired_into_the_completion_path():
     """完成路径必须真的开一张回执，否则这套算式没人调用。"""
     manager = MANAGER.read_text(encoding="utf-8")
@@ -65,6 +123,26 @@ def test_receipt_is_wired_into_the_completion_path():
     # 押金 / 售出两边的数据必须真的取到（取不到就会算出一张全 0 的账单）
     assert "rentalResult and rentalResult.refund" in manager
     assert "vendorSummary and vendorSummary.revenue" in manager
+
+    # 账单上下文：前端要渲染这些事实，服务端负责组装（Compute 仍只算钱）。
+    block = manager[manager.index("local function issueSettleReceipt"):]
+    block = block[:block.index("\nend\n")]
+    for field in ("quest_title", "minutes", "sold_count", "leftover", "raw_count", "billable"):
+        assert f"{field} = " in block, f"回执 context 缺少 {field}"
+    assert "template.title" in block
+    assert "rentalResult.minutes" in block
+    assert "vendorSummary.sold" in block
+    assert "vendorSummary.stock" in block
+    assert "vendorSummary.raw" in block
+    assert "rentalResult.idempotent == false" in block
+
+
+def test_rental_close_exposes_the_session_start_for_the_settle_key():
+    """runToken 的事实来源：Close 必须把本班会话起点往外带（会话随后就被清掉）。"""
+    rental = RENTAL.read_text(encoding="utf-8")
+    block = rental[rental.index("function QuestRental.Close("):]
+    block = block[:block.index("\nend\n")]
+    assert "startedAt = session.startedAt" in block
 
 
 def test_settle_module_is_declared_in_the_manifest():

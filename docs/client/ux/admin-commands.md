@@ -264,11 +264,11 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `abandonquest` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1064 |
-| `debugquest` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1131 |
+| `abandonquest` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1107 |
+| `debugquest` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1174 |
 | `getpos` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_pos_collector.lua:150 |
-| `grantheavy` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1090 |
-| `listquests` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1220 |
+| `grantheavy` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1133 |
+| `listquests` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1263 |
 | `quest` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:386 |
 | `quest_client_test` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/tests/client/quest_client_test.lua:337 |
 | `quest_flow_test` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/tests/server/quest_flow_test.lua:323 |
@@ -279,11 +279,11 @@ review_by: 2027-02-28
 | `quest_hotdog_vendor_menu` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua:1115 |
 | `quest_reenode` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:430 |
 | `questrestore` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/main.lua:330 |
-| `queststep` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1258 |
+| `queststep` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1301 |
 | `reloadquests` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/quest_registry.lua:424 |
-| `revokeheavy` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1111 |
+| `revokeheavy` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1154 |
 | `savepos` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_pos_collector.lua:29 |
-| `startquest` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1040 |
+| `startquest` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-quest/server/main.lua:1083 |
 | `testplacement` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-quest/client/quest_entity_placement.lua:337 |
 
 ### custom-storage
