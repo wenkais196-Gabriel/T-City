@@ -683,9 +683,52 @@ exports('GetQuestDetail', function(source, questId)
     return detail, why
 end)
 
+-- 9d. 手机任务 App：本角色最近结算账单（P1a 内存版；服务器/资源重启即清）。
+-- 入参只有 citizenid + opts（quest_id / questId、limit）；金额文本在这里生成，
+-- 前端只负责加 `$` 与正负号 —— 不允许再写第二份金额格式化
+-- （tests/architecture/test_money_format_single_owner.py 的同一原则适用于 DTO）。
+-- 不返回 citizenid、不查库、不发事件：这是 custom-quest 内存账本的**只读快照**。
+local function receiptMoneyText(value)
+    local amount = math.abs(tonumber(value) or 0)
+    if type(QuestMoney) == 'function' then return QuestMoney(amount) end
+    return tostring(amount)
+end
+
+exports('GetQuestReceipts', function(citizenid, opts)
+    -- 参数守卫必须在取账之前：坏 id 结构化返回，不抛异常、也不去碰账本。
+    if type(citizenid) ~= 'string' or citizenid == '' then
+        return { rows = {}, count = 0, error = 'bad_id' }
+    end
+
+    opts = type(opts) == 'table' and opts or {}
+    local questId = opts.quest_id
+    if questId == nil then questId = opts.questId end
+    if questId ~= nil and type(questId) ~= 'string' then
+        return { rows = {}, count = 0, error = 'bad_quest_id' }
+    end
+    if type(QuestSettle) ~= 'table' or type(QuestSettle.Recent) ~= 'function' then
+        return { rows = {}, count = 0, error = 'unavailable' }
+    end
+
+    -- 读路径 fail-soft：账本快照出错不能穿透成 export 异常（手机整页空白 + 日志刷屏）。
+    local ok, rows = pcall(QuestSettle.Recent, citizenid, questId, opts.limit)
+    if not ok or type(rows) ~= 'table' then
+        print(('[quest] GetQuestReceipts failed (soft): %s'):format(tostring(rows)))
+        return { rows = {}, count = 0, error = 'unavailable' }
+    end
+
+    for _, receipt in ipairs(rows) do
+        receipt.net_text = receiptMoneyText(receipt.net)
+        for _, row in ipairs(receipt.rows or {}) do
+            row.amount_text = receiptMoneyText(row.amount)
+        end
+    end
+    return { rows = rows, count = #rows }
+end)
+
 -- 启动自证：健康自检按这一行确认「玩家能接到任务」这条链路已就绪。
 -- 没有它，任务入口挂了和任务入口没写，从日志上看起来完全一样。
-print('[quest] ✅ 手机任务入口已就绪 (GetAvailableQuests / GetQuestDetail)')
+print('[quest] ✅ 手机任务入口已就绪 (GetAvailableQuests / GetQuestDetail / GetQuestReceipts)')
 
 -- 10. v0.7.0: 检查指定任务是否活跃
 exports('IsQuestActive', function(source, questId)

@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[2]
@@ -17,6 +18,60 @@ WEB = PHONE / "web/src"
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def export_block(source: str, name: str) -> str:
+    """取 `exports('name', function ... end)` 的整段实现（到第一个顶格 `end)`）。"""
+    start = source.index(f"exports('{name}'")
+    end = source.index("\nend)", start) + len("\nend)")
+    return source[start:end]
+
+
+def receipt_export_problems(source: str) -> list[str]:
+    """GetQuestReceipts 的接线判据。
+
+    这里刻意检查**守卫与调用的先后关系**，而不是只查名字是否出现：
+    上一片踩过「只查子串，把实现短路掉仍然绿」——所以守卫被 `if false` 短路、
+    或者只留下 `QuestSettle.Recent` 的名字却不调用，都必须判红。
+    """
+    if "exports('GetQuestReceipts'" not in source:
+        return ["缺少 GetQuestReceipts 导出"]
+    if "local function receiptMoneyText" not in source:
+        return ["缺少金额文本助手 receiptMoneyText"]
+    helper = source[source.index("local function receiptMoneyText"):]
+    helper = helper[:helper.index("\nend\n")]
+    if "QuestMoney(amount)" not in helper:
+        return ["金额文本没有走 QuestMoney（core-framework FormatMoney）"]
+
+    block = export_block(source, "GetQuestReceipts")
+    problems: list[str] = []
+    guard = block.find("if type(citizenid) ~= 'string'")
+    # 必须是**带参数的真实调用**；只出现 `type(QuestSettle.Recent) == 'function'`
+    # 这种存在性探针不算（否则把实现短路掉仍然绿）。
+    recent = block.find("pcall(QuestSettle.Recent, citizenid")
+    if recent < 0:
+        recent = block.find("QuestSettle.Recent(citizenid")
+    if guard < 0:
+        problems.append("GetQuestReceipts 没有 citizenid 类型守卫")
+    if recent < 0:
+        problems.append("GetQuestReceipts 没有调用 QuestSettle.Recent")
+    if 0 <= guard < recent:
+        guard_body = block[guard:block.find("\n    end", guard)]
+        for needle in ("rows = {}", "count = 0", "error = 'bad_id'"):
+            if needle not in guard_body:
+                problems.append(f"bad_id 分支缺少 {needle}")
+    elif 0 <= recent < guard:
+        problems.append("参数守卫写在取账之后 —— 坏 id 会先碰账本")
+    if "receipt.net_text = receiptMoneyText(" not in block:
+        problems.append("导出没有生成 net_text")
+    if "row.amount_text = receiptMoneyText(" not in block:
+        problems.append("六行明细没有生成 amount_text")
+    for forbidden in ("MySQL", "TriggerClientEvent"):
+        if forbidden in block:
+            problems.append(f"只读导出里出现 {forbidden}")
+    if re.search(r"citizenid\s*=(?!=)", block):
+        problems.append("只读导出回传了 citizenid 字段")
+    return problems
 
 
 def test_quest_entrypoint_wiring_detects_bypasses_and_missing_links():
@@ -80,4 +135,23 @@ def test_quest_entrypoint_wiring_detects_bypasses_and_missing_links():
     assert "row.requirements" in quests_svelte, "Quests.svelte 没消费服务端的 requirements"
     assert ".reqs" in quests_svelte and "req.met === false" in quests_svelte, (
         "未满足的需求必须与满足的区分开（否则玩家看不出差在哪）"
+    )
+
+    # 9. 账单历史导出（P1a）：只读投影 + 参数守卫 + 服务端金额文本。
+    #    守卫必须真的在取账之前，而不是"名字出现过"就算 —— 用两处反向注入钉住。
+    problems = receipt_export_problems(main_lua)
+    assert not problems, "GetQuestReceipts 接线不完整：\n  " + "\n  ".join(problems)
+
+    short_circuited = main_lua.replace(
+        "if type(citizenid) ~= 'string' or citizenid == '' then",
+        "if false then", 1)
+    assert receipt_export_problems(short_circuited), (
+        "citizenid 守卫被短路后判据仍然绿 —— 这条断言没在防坏 id 进账本"
+    )
+
+    name_only = main_lua.replace(
+        "local ok, rows = pcall(QuestSettle.Recent, citizenid, questId, opts.limit)",
+        "local ok, rows = true, {}", 1)
+    assert receipt_export_problems(name_only), (
+        "只留下 QuestSettle.Recent 的名字、却不调用，判据仍然绿"
     )
