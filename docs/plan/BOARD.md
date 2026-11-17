@@ -16,7 +16,7 @@
 | [Agent 控制平面升级计划](agent-control-plane-upgrade.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [🧪 T-City Lite 自动化测试方案](automated-testing-plan.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 7 | 6 | 0 | S6 wip | 2026-11-17 |
-| [热狗摊：剩余工作分片计划（2026-11-17 分工版）](jobs-content/13-hotdog-remaining-plan.md) | active | 10 | 4 | 0 | C 未开始 | - |
+| [热狗摊：剩余工作分片计划（2026-11-17 分工版）](jobs-content/13-hotdog-remaining-plan.md) | active | 10 | 5 | 0 | C 未开始 | - |
 | [方案 B 落地计划（已拍板）](../police/B_PLAN.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [优化批次（P6）调研与方案](../police/OPTIMIZATION_PLAN.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [P4 — 警察调度 Agent 工具（实现清单）](../police/P4_AGENT.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
