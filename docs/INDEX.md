@@ -178,7 +178,7 @@
 |---|---|---|---|---|---|---|
 | [custom-quest — 数据驱动任务系统](02_script_index/custom-quest.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/custom-quest.md` |
 | [T-City 职业与组织任务情景建立手册 (Batch 1, Batch 2, Batch 3 & Batch 4)](archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_setup_manual.md) | manual | 📦 archived | 2026-10-23 | 2027-01-30 |  | `docs/archive/QBCore_Lite_versions/career/careers_quest_designe/task_scenarios_setup_manual.md` |
-| [热狗摊：真机验收清单（单人 / 多人分列）](plan/jobs-content/14-hotdog-live-checklist.md) | manual | ✅ active | 2026-11-15 | 2027-02-28 |  | `docs/plan/jobs-content/14-hotdog-live-checklist.md` |
+| [热狗摊：真机验收清单（单人 / 多人分列）](plan/jobs-content/14-hotdog-live-checklist.md) | manual | ✅ active | 2026-11-17 | 2027-02-28 |  | `docs/plan/jobs-content/14-hotdog-live-checklist.md` |
 | [热狗摊：开发计划（据 UX 规格 §10 拆片）](plan/jobs-content/11-hotdog-dev-plan.md) | plan | ✅ active | 2026-11-17 | 2027-02-28 |  | `docs/plan/jobs-content/11-hotdog-dev-plan.md` |
 | [热狗摊：剩余工作分片计划（2026-11-17 分工版）](plan/jobs-content/13-hotdog-remaining-plan.md) | plan | ✅ active | 2026-11-17 | 2027-02-28 |  | `docs/plan/jobs-content/13-hotdog-remaining-plan.md` |
 | [任务节点与 UX 调研：以「热狗摊」为样本](plan/jobs-content/07-quest-ux-research.md) | research | ✅ active | 2026-11-14 | 2027-02-28 |  | `docs/plan/jobs-content/07-quest-ux-research.md` |

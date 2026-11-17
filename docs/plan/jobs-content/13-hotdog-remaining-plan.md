@@ -74,7 +74,7 @@ C  | todo | - | -
 D1 | todo | - | -
 D2 | todo | - | -
 E  | wip  | - | -
-F  | todo | - | -
+F  | done | T-CityLite.base/tests/unit/layer3_business/test_quest_booth.py | -
 G  | todo | - | -
 H  | todo | - | -
 ```
@@ -83,10 +83,12 @@ H  | todo | - | -
 
 | 阻塞 | 卡在哪 | 谁能解 |
 |---|---|---|
-| 摊位坐标未与实体真坐标比对（红线①） | `T-CityLite.base/resources/[custom]/custom-quest/server/quest_booth.lua:196-247` 只校验实体/模型/玩家 50 m，`pos` 原样入库；`:296-304` 直接覆盖 | 开发（F 片） |
-| 顾客原地生成，没有 25–40 m 走位 | `T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua` 的 `SpawnCustomerPed`（2.2 m） | 开发（G 片） |
+| 顾客原地生成，没有 25–40 m 走位（连带服务端报价时机） | `T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua` 的 `SpawnCustomerPed`（2.2 m）；`T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor.lua:551` 在 spawn 同一 tick 开价 | 开发（G 片） |
 | 数值未定稿 | 老板决定 | 老板 |
 | 旧壳 DB 残留未知 | 无库权限 | 有库权限的人 |
+
+> 摊位坐标未复验（红线①）**已解**：`QuestBooth.VerifyEntity` 集中判据、入库存实体真坐标、`move` 用服务端 `booth.netId`；
+> 证据见 `docs/plan/jobs-content/14-hotdog-live-checklist.md` §4（真机部分仍是 ⛔）。
 
 ## 4. 本轮已修（可点回 commit）
 

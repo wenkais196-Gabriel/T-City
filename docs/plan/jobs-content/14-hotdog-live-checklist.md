@@ -4,7 +4,7 @@ type: manual
 status: active
 system: quest
 owner: hermes
-updated: 2026-11-15
+updated: 2026-11-17
 review_by: 2027-02-28
 ---
 
@@ -86,3 +86,14 @@ curl -s 127.0.0.1:30130/info.json | head -c 200
 
 真机进游戏唯一可行的路径是 `tools/dev/fivem_console.py --key`（合成键）+ `adc <src> <cmd>` 直达 App；
 OS 光标被 GTA 锁在屏幕角，合成鼠标点击进不了 NUI。
+
+## 4. F 片（摊位坐标复验）的验收记录 — 2026-11-17
+
+| 项 | 态 | 证据 |
+|---|---|---|
+| 偏 5 m 的申报点被拒（`bad_coords`） | ✅ | 探针 `REGISTER_CLAIM_OFF_BY_5M_REJECTED`；注入掉守卫后 21/23 |
+| 在 50 m 内但离实体 40 m 被拒 | ✅ | 探针 `REGISTER_CLAIM_NEAR_PLAYER_BUT_FAR_FROM_ENTITY_REJECTED` |
+| 首次摆放入库写**实体真坐标** | ✅ | 探针 `REGISTER_STORES_ENTITY_COORDS_NOT_CLAIM`；把入库改回 `pos` 后 22/23 |
+| 挪位入库写**实体真坐标** | ✅ | 探针 `MOVE_STORES_ENTITY_COORDS_NOT_CLAIM`；改回 `pos` 后 22/23 |
+| 探针距离桩真的在算距离（不是空转） | ✅ | 修前 `#` 恒 0；修后 `SUMMARY 23/23`，四条注入分别 21/23、21/23、22/23、22/23 |
+| 真机：客户端创建的推车在服务端取到的坐标，与申报点差 ≤3 m | ⛔ | 需要服务器 + 一个客户端。缺：摆一次、挪一次，对照日志 `[quest-booth] 📋 摊位登记 … (x,y,z)` 与推车实体坐标 |
