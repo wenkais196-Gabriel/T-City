@@ -4,11 +4,12 @@ type: plan
 status: active
 system: agent
 owner: hermes
-updated: 2026-11-12
+updated: 2026-11-17
 review_by: 2027-03-31
 tracks: [custom-director, custom-agent-client, agent-tools]
 topic: agent-control-plane-upgrade
 source_of_truth: true
+plan_status: 1
 ---
 
 # Agent 控制平面升级计划
@@ -17,6 +18,10 @@ source_of_truth: true
 > **Issue**：Epic #234 ｜ 执行项 #235–#240 ｜ 检索专题 #233
 > **盘点基线**：master `86b9993`（2026-11-12），静态代码分析；`tools/` 测试已实测（239 passed）。
 > **定位**：本仓是企业级 Agent 控制平面的一个**真实部署案例**，FiveM 是宿主环境而非主题。
+
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 
 ---
 

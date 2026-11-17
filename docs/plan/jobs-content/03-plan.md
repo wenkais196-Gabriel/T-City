@@ -4,15 +4,23 @@ type: plan
 status: draft
 system: jobs
 owner: hermes
-updated: 2026-11-13
+updated: 2026-11-17
 review_by: 2027-02-28
 stage: P
+plan_status: 1
 ---
 
 # 计划：R1 多站驾驶（garbage + bus）
 
 > 阶段 P 的产物。上游：[01-research.md](./01-research.md)（R）、[02-design.md](./02-design.md)（D）。
 > 本计划只覆盖 **R1**；R0（trucker 收编）与 C1（validator 闸）已合并进 master。
+
+```plan-status
+P1 | done | #248 | 2026-11-17
+P2 | done | T-CityLite.base/tests/unit/layer3_business/test_garbage_route_config.py | 2026-11-17
+P3 | wip  | - | 2026-11-17
+P4 | wip  | - | 2026-11-17
+```
 
 ---
 
