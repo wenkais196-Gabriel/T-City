@@ -4,12 +4,17 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-24
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
+
 
 # P4 — 警察调度 Agent 工具（实现清单）
 
+```plan-status
+ALL | done | tools/agent_tools.json | 2026-11-17
+```
 已上线：`get_police_board`（L0，live token，只读，无 PII）。
 
 ## 目标动作

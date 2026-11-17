@@ -52,13 +52,13 @@
 | [警察系统 · 入口与沉淀（2026-10-31）](agent/police/README.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/agent/police/README.md` |
 | [警察扮演（Police Roleplay）](police/README.md) | meta | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/README.md` |
 | [警察系统架构基线](police/architecture/README.md) | meta | ✅ active | 2026-10-29 | 2027-04-30 |  | `docs/police/architecture/README.md` |
-| [警察系统现状与缺口（2026-10-31）](agent/police/STATUS-2026-10-31.md) | plan | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/agent/police/STATUS-2026-10-31.md` |
+| [警察系统现状与缺口（2026-10-31）](agent/police/STATUS-2026-10-31.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/agent/police/STATUS-2026-10-31.md` |
 | [👮 T-City Lite 警察职业与司法系统 (LSPD) 细化规划](archive/QBCore_Lite_versions/career/police_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/police_plan.md` |
-| [方案 B 落地计划（已拍板）](police/B_PLAN.md) | plan | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/B_PLAN.md` |
-| [优化批次（P6）调研与方案](police/OPTIMIZATION_PLAN.md) | plan | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/OPTIMIZATION_PLAN.md` |
-| [P4 — 警察调度 Agent 工具（实现清单）](police/P4_AGENT.md) | plan | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/P4_AGENT.md` |
-| [警察系统实现状态（2026-10-23）](police/STATUS.md) | plan | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/STATUS.md` |
-| [警察系统技术债](police/TECH_DEBT.md) | plan | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/TECH_DEBT.md` |
+| [方案 B 落地计划（已拍板）](police/B_PLAN.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/B_PLAN.md` |
+| [优化批次（P6）调研与方案](police/OPTIMIZATION_PLAN.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/OPTIMIZATION_PLAN.md` |
+| [P4 — 警察调度 Agent 工具（实现清单）](police/P4_AGENT.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/P4_AGENT.md` |
+| [警察系统实现状态（2026-10-23）](police/STATUS.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/STATUS.md` |
+| [警察系统技术债](police/TECH_DEBT.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/TECH_DEBT.md` |
 | [计划：支援单位的生成点与到场（spawn v3）](police/plans/2026-10-29-backup-spawn-v3.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-29-backup-spawn-v3.md` |
 | [计划：SM-06 NPC 支援 v2（生命周期 ack + 统一 TTL + 结束审计）](police/plans/2026-10-29-backup-v2.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-29-backup-v2.md` |
 | [任务：小地图回原生 + 车载面板诊断（给 Claude Code）](police/plans/2026-10-31-cc-brief-minimap-dashboard.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-31-cc-brief-minimap-dashboard.md` |
