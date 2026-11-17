@@ -188,6 +188,15 @@ local off2, off2Reason = QuestBooth.Register(1, 'cid-claim-2m', 'hotdog_dev',
     { x = 217.0, y = -810.0, z = 30.7 }, 11, 'prop_hotdogstand_01')
 check('REGISTER_CLAIM_OFF_BY_2M_OK', off2 == true, off2Reason)
 
+-- 12b 入库的是实体真坐标，不是申报值。反向语义：把 Register 的
+-- `x = trueCoords.x` 改回 `x = pos.x`（Hermes 的注入）时，这条必须红。
+local claim2mBooth = QuestBooth.Get('cid-claim-2m')
+check('REGISTER_STORES_ENTITY_COORDS_NOT_CLAIM',
+    claim2mBooth ~= nil
+        and claim2mBooth.x == 215.0 and claim2mBooth.y == -810.0 and claim2mBooth.z == 30.7,
+    claim2mBooth and ('%.1f, %.1f, %.1f'):format(claim2mBooth.x, claim2mBooth.y, claim2mBooth.z)
+        or 'no booth')
+
 -- 13 申报点偏 5 m → 拒，bad_coords（旧版会把 5 m 外的值原样入库）
 local off5, off5Reason = QuestBooth.Register(1, 'cid-claim-5m', 'hotdog_dev',
     { x = 220.0, y = -810.0, z = 30.7 }, 11, 'prop_hotdogstand_01')

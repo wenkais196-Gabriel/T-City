@@ -41,7 +41,7 @@ def run_probe(source: Path, probe: Path = PROBE) -> subprocess.CompletedProcess:
 def test_placement_rules_hold():
     proc = run_probe(BOOTH)
     assert proc.returncode == 0, f"探针失败：\n{proc.stdout}\n{proc.stderr}"
-    assert "SUMMARY 22/22" in proc.stdout
+    assert "SUMMARY 23/23" in proc.stdout
 
 
 @pytest.mark.skipif(LUA is None, reason="需要 lua5.4")

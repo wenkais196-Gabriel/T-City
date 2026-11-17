@@ -298,7 +298,7 @@ end
 ---@return string
 function QuestBooth.ReasonText(reason)
     if reason == QuestBooth.REASON.COORDS_MISMATCH then
-        return 'bad_coords：摊位位置对不上，靠近推车再试'
+        return '摊位位置对不上，靠近推车再试'
     end
     return reason or '这里放不了'
 end
