@@ -4,8 +4,9 @@ type: plan
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-16
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 > [!WARNING]
@@ -37,6 +38,10 @@ review_by: 2027-04-30
 - **已完成前置**: v0.1–v0.6 ✅；v0.5 主体 ✅（3 项历史遗留待确认）；v0.6-quest ✅；**2026-11 基石加固 P0/P1/P2 ✅**（见 foundation-plan §4.1）；**2026-11 结构治理 ✅**（M7/M8/M8b/M8c：`tests/` 根 29→12、`base/docs` 根 40→1，规矩与闸门见 `docs/engineering/TREE.md`）
 - **下一方向**: 世界痕迹**写侧已落地、读侧仍空** —— `world_trace_service` 是 `world_state` 的唯一写者，`custom-police` 结案时写 `crime_pressure`（2026-11-01）；但读侧 0 消费者（手机 `CityFeed` 未接），候选见 `docs/engineering/2026-11-01-next-epic-research.md`（该文推荐的第一条链已实现，结论需按现状重估）
 - **开发策略**: **完成度优先，周期不限** — 每个版本以验收标准为准，不设硬性截止日期
+
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 
 ---
 

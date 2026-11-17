@@ -4,8 +4,9 @@ type: plan
 status: active
 system: quest
 owner: hermes
-updated: 2026-11-16
+updated: 2026-11-17
 review_by: 2027-02-28
+plan_status: 1
 ---
 
 # 热狗摊：开发计划（据 UX 规格 §10 拆片）
@@ -15,6 +16,16 @@ review_by: 2027-02-28
 > 约束：**0 个新资源、0 张新表**；新 net event 必须登记；NPC 不复用 police 预算。
 > **剩余状态**：以 [`13-hotdog-remaining-plan.md`](13-hotdog-remaining-plan.md) 的 `plan-status` 块为准；
 > 本文件只保留已收口的 S0–S5 设计与验收记录，不再维护逐片状态。
+
+```plan-status
+S0 | done | T-CityLite.base/tests/architecture/test_quest_coords.py | 2026-11-17
+S1 | done | T-CityLite.base/tests/unit/layer3_business/test_quest_rental.py | 2026-11-17
+S2 | done | T-CityLite.base/tests/unit/layer3_business/test_quest_booth.py | 2026-11-17
+S3 | done | T-CityLite.base/tests/unit/layer3_business/test_quest_minigame.py | 2026-11-17
+S4 | done | T-CityLite.base/tests/unit/layer3_business/test_quest_vendor.py | 2026-11-17
+S5 | done | T-CityLite.base/tests/unit/layer3_business/test_quest_settle.py | 2026-11-17
+S6 | wip  | - | 2026-11-17
+```
 
 ---
 

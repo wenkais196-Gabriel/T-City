@@ -4,14 +4,19 @@ type: plan
 status: active
 system: infra
 owner: hermes
-updated: 2026-11-07
+updated: 2026-11-17
 review_by: 2026-12-31
+plan_status: 1
 ---
 
 # P1-6 施工计划：重启后的「失效函数引用」与审计留存
 
 > 来源：2026-11-07 真机 `qb-clothing` 报 `Execution of function reference in script host failed`。
 > 验收方（CC）独立调研 + 实施方裁决，本文件记录结论与取舍。
+
+```plan-status
+ALL | done | T-CityLite.base/tests/architecture/test_no_stale_core_cache.py | 2026-11-17
+```
 
 ## 1. 结论摘要
 

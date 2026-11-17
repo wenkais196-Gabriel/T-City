@@ -6,10 +6,16 @@
 
 | 计划 | 状态 | 片 | 已证明 | 未取证 | 当前片 | 最后更新 |
 |---|---|---|---|---|---|---|
+| [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../../PROJECT_PROGRESS.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [抽象收敛施工计划（2026-11）](../engineering/2026-11-abstraction-convergence-plan.md) | active | 8 | 0 | 8 | - | 2026-11-15 |
+| [P1-4 开发计划与交付标准（实施方 + 验收方联合定稿）](../engineering/2026-11-foundation-p1-4-plan.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
+| [P1-5 施工计划：真机缺陷（跨资源引用 / 金额格式化 / 审计与运维）](../engineering/2026-11-foundation-p1-5-plan.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [P1-6 施工计划：重启后的「失效函数引用」与审计留存](../engineering/2026-11-foundation-p1-6-plan.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
 | [2026-11 基石加固计划（P0 / P1 / P2）](../engineering/2026-11-foundation-plan.md) | active | 14 | 10 | 4 | - | 2026-11-10 |
+| [Agent 控制平面升级计划](agent-control-plane-upgrade.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 7 | 6 | 0 | S6 wip | 2026-11-17 |
 | [热狗摊：剩余工作分片计划（2026-11-15 复核）](jobs-content/13-hotdog-remaining-plan.md) | active | 7 | 3 | 0 | C 未开始 | - |
-| [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../../PROJECT_PROGRESS.md) | active | 未登记 | 0 | 0 | - | - |
+| [计划：R1 多站驾驶（garbage + bus）](jobs-content/03-plan.md) | draft | 4 | 2 | 0 | P3 wip | 2026-11-17 |
 | [重构删除清单 & 保留清单 v2.0](../../T-CityLite.base/docs/archive/refactoring-manifest.md) | final | 未登记 | 0 | 0 | - | - |
 | [警察系统现状与缺口（2026-10-31）](../agent/police/STATUS-2026-10-31.md) | active | 未登记 | 0 | 0 | - | - |
 | [🚗 T-City Lite 驾驶员与驾考系统 (Driver) 细化规划](../archive/QBCore_Lite_versions/career/driver_plan.md) | archived | 未登记 | 0 | 0 | - | - |
@@ -25,16 +31,10 @@
 | [输入分层提案：让 UI 像 GTA 暂停菜单那样接管输入](../client/plans/2026-10-27-input-layering.md) | archived | 未登记 | 0 | 0 | - | - |
 | [调研 + 计划：任务 App 的「可发现性」与平板详情栏](../client/plans/2026-10-27-quests-app-review.md) | archived | 未登记 | 0 | 0 | - | - |
 | [车机中控的输入管线审查（2026-10-31）](../client/plans/2026-10-31-dashboard-input-pipeline.md) | archived | 未登记 | 0 | 0 | - | - |
-| [P1-4 开发计划与交付标准（实施方 + 验收方联合定稿）](../engineering/2026-11-foundation-p1-4-plan.md) | active | 未登记 | 0 | 0 | - | - |
-| [P1-5 施工计划：真机缺陷（跨资源引用 / 金额格式化 / 审计与运维）](../engineering/2026-11-foundation-p1-5-plan.md) | active | 未登记 | 0 | 0 | - | - |
 | [P1-5 二期施工计划：金额写路径收敛（拒绝语义）](../engineering/2026-11-foundation-p1-5b-money-path-plan.md) | final | 未登记 | 0 | 0 | - | - |
-| [P1-6 施工计划：重启后的「失效函数引用」与审计留存](../engineering/2026-11-foundation-p1-6-plan.md) | active | 未登记 | 0 | 0 | - | - |
-| [Agent 控制平面升级计划](agent-control-plane-upgrade.md) | active | 未登记 | 0 | 0 | - | - |
 | [Agent 模块化施工计划（M1–M7）](agent-module-execution.md) | draft | 未登记 | 0 | 0 | - | - |
 | [🧪 T-City Lite 自动化测试方案](automated-testing-plan.md) | active | 未登记 | 0 | 0 | - | - |
 | [内容填充总规划（职业优先，R0–R6）](jobs-content-roadmap.md) | draft | 未登记 | 0 | 0 | - | - |
-| [计划：R1 多站驾驶（garbage + bus）](jobs-content/03-plan.md) | draft | 未登记 | 0 | 0 | - | - |
-| [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 未登记 | 0 | 0 | - | - |
 | [方案 B 落地计划（已拍板）](../police/B_PLAN.md) | active | 未登记 | 0 | 0 | - | - |
 | [优化批次（P6）调研与方案](../police/OPTIMIZATION_PLAN.md) | active | 未登记 | 0 | 0 | - | - |
 | [P4 — 警察调度 Agent 工具（实现清单）](../police/P4_AGENT.md) | active | 未登记 | 0 | 0 | - | - |

@@ -4,8 +4,9 @@ type: plan
 status: active
 system: infra
 owner: hermes
-updated: 2026-11-01
+updated: 2026-11-17
 review_by: 2026-12-31
+plan_status: 1
 ---
 
 # P1-4 开发计划与交付标准（实施方 + 验收方联合定稿）
@@ -14,6 +15,10 @@ review_by: 2026-12-31
 > 验收方（CC）在同一天未读该文档前独立完成另一份。本文件是合并结论，冲突处标注取舍。
 > 结论：**不是"迁 900 多处调用"，而是删掉 3 个猴补点**；其中 `AddMoney` 包装今天是**死代码**，
 > 真正有生产风险的是 `GetPlayer` 缓存与"core-framework 重启后 funcref 悬空"。
+
+```plan-status
+ALL | done | T-CityLite.base/tests/architecture/test_no_monkey_patch.py | 2026-11-17
+```
 
 ## 1. 决策摘要
 
