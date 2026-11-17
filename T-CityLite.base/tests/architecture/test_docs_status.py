@@ -262,3 +262,35 @@ def test_index_freshness_detects_content_drift_and_has_no_timestamp(
     index.write_text(first.replace("**已登记**：1", "**已登记**：0", 1), encoding="utf-8")
     code, out = _run_tool(tmp_path, ["--check"], monkeypatch, capsys)
     assert "INDEX.md 不是最新" in out, f"内容漂移没报：{out}"
+
+
+PHASE_TABLE = """| 阶段 | 内容 |
+|---|---|
+| **Phase 1** | 离线脚本 |
+| **Phase 2** | 游戏内框架 |
+"""
+
+
+def test_slice_ids_detects_whole_tokens_only(tmp_path, monkeypatch, capsys):
+    """`Phase 1` 不是切片 ID：ID 必须是一个完整 token。
+
+    原来的 `.match` 把 `Phase 1` 截成 `Ph`，于是一份普通 Roadmap 表被当成切片表，
+    闸门要求登记一个叫 `Ph` 的片 —— 补块的人只能跳过整份文档（实测
+    `docs/plan/automated-testing-plan.md` 卡在这里）。修好后该表 ID 集为空，用 `ALL` 即可。
+    """
+    module = _load_tool()
+    body = f"## 1. 路线\n\n{PHASE_TABLE}\n"
+    assert module.slice_ids_from_body(body) == set()
+
+    # 真正的切片表不受影响（含带说明的单元格）
+    ok = "| 片 | 内容 |\n|---|---|\n| S1 收口 | a |\n| **Step 0** 前置 | b |\n"
+    assert module.slice_ids_from_body(ok) == {"S1", "Step 0"}
+
+    # 端到端：Phase 表 + ALL 行 → 0 error（不再要求 `Ph`）
+    code, out = _run_check(
+        tmp_path,
+        _doc(extra="plan_status: 1\n",
+             block="```plan-status\nALL | wip | - | 2026-11-17\n```",
+             table=PHASE_TABLE),
+        monkeypatch, capsys)
+    assert code == 0, f"Phase 表被误判成切片表：\n{out}"

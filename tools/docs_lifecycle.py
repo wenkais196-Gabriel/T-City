@@ -280,6 +280,27 @@ def _clean_cell(cell: str) -> str:
     return cell.replace("**", "").replace("__", "").replace("`", "").strip()
 
 
+def _slice_id_of(cell: str) -> str | None:
+    """从表格首列取切片 ID；**ID 必须是一个完整 token**。
+
+    踩过的坑：`Phase 1` 用 `.match` 会被截成 `Ph`（P + 一个字母），于是一份普通 Roadmap 表
+    被当成切片表，闸门要求计划登记一个叫 `Ph` 的片，补块的人只能要么编造、要么跳过整份文档
+    （2026-11-17 实测 `docs/plan/automated-testing-plan.md` 就是这么被堵死的）。
+    规则：ID 之后必须紧跟空白或分隔符（`-`/`(`/`:`），否则不算 ID。
+    """
+    cell = cell.strip()
+    if not cell:
+        return None
+    match = SLICE_ID_RE.match(cell)
+    if not match:
+        return None
+    tok = match.group(0)
+    rest = cell[len(tok):]
+    if rest and not rest[0].isspace() and rest[0] not in "-–—(（:：":
+        return None
+    return tok
+
+
 def slice_ids_from_body(body: str) -> set[str]:
     """正文切片表首列的 ID 集。只认首列表头在 SLICE_HEADERS 里的表，跳过代码块。"""
     ids: set[str] = set()
@@ -306,9 +327,9 @@ def slice_ids_from_body(body: str) -> set[str]:
                 while j < len(lines) and lines[j].strip().startswith("|"):
                     cells = _table_cells(lines[j])
                     cell = _clean_cell(cells[0]) if cells else ""
-                    match = SLICE_ID_RE.match(cell)
-                    if match:
-                        ids.add(match.group(0))
+                    sid = _slice_id_of(cell)
+                    if sid:
+                        ids.add(sid)
                     j += 1
                 i = j
                 continue
