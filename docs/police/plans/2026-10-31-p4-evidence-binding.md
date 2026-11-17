@@ -4,13 +4,18 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 # P4 证据收口：盘查读数延迟绑定（研究与施工图）
 
 > 目标：酒测/药检的读数**不再读完就散**，能随后续立案挂到案卷上，并且保持证据链只增不改。
+
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 
 ## 1. 现状（代码查证）
 

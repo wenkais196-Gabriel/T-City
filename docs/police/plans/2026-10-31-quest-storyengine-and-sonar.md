@@ -4,11 +4,16 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 # 两个遗留问题：调研 → 方案 → 验证（2026-10-31）
+
+```plan-status
+ALL | done | #165 | 2026-11-17
+```
 
 ## 1. `No such export IsArcEnabled in resource story-engine`
 

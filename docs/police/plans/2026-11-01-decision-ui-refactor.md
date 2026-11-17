@@ -4,14 +4,19 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-11-01
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 # 计划：剧情抉择 UI 重构（decision surface）
 
 > 阶段：L3（跨资源、改契约）。产物：本文 + 后续切片 PR。
 > 起因：`story-engine` 独立 `ui_page` 的面板**能显示、不能输入**，玩家只能等 120s 超时。
+
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 
 ## 0. 结论（已修正，2026-11-01 真机）
 

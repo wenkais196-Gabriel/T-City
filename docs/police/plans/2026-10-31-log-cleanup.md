@@ -4,14 +4,19 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 # 日志清理：两个还在复发的脚本错误（研究 → 计划 → 施工）
 
 > 数据来源：`scratch/fxserver-live.log`（8524 行，本机 FXServer @30130）。
 > 只挑**仍在复发**的；历史残留（已修的）不重复处理。
+
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 
 ## 1. 日志里的错误分布
 

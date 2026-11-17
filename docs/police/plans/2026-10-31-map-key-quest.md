@@ -4,13 +4,18 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 # 三个体感问题：小地图 / I 键 / 序章 node（研究 → 计划）
 
 > 用户观察到的三件事，逐个溯源。全部先给证据，再给改法。
+
+```plan-status
+ALL | done | #172 | 2026-11-17
+```
 
 ## 1. 左下角小地图「大小、边界、位置都变了」
 
