@@ -4,14 +4,19 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 # P6-4 AI 调度员：文本报案 → call 卡草稿（研究与施工图）
 
 > 目标：一段人话（玩家 911 描述、短信、Discord 转述）进来，agent 把它**解析成结构化 call 卡**，
 > 但**不直接上板**。人看一眼、点确认，才真正变成一条会响铃的警情。
+
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 
 ## 1. 现状（为什么要做这一层）
 

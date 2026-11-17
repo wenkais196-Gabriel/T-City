@@ -4,11 +4,16 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 # 任务：小地图回原生 + 车载面板诊断（给 Claude Code）
+
+```plan-status
+ALL | done | #173 | 2026-11-17
+```
 
 ## 背景（已完成的调研，别重复）
 

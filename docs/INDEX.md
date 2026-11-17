@@ -59,16 +59,16 @@
 | [P4 — 警察调度 Agent 工具（实现清单）](police/P4_AGENT.md) | plan | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/P4_AGENT.md` |
 | [警察系统实现状态（2026-10-23）](police/STATUS.md) | plan | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/STATUS.md` |
 | [警察系统技术债](police/TECH_DEBT.md) | plan | ✅ active | 2026-10-24 | 2027-04-30 |  | `docs/police/TECH_DEBT.md` |
-| [计划：支援单位的生成点与到场（spawn v3）](police/plans/2026-10-29-backup-spawn-v3.md) | plan | ✅ active | 2026-10-30 | 2027-04-30 |  | `docs/police/plans/2026-10-29-backup-spawn-v3.md` |
-| [计划：SM-06 NPC 支援 v2（生命周期 ack + 统一 TTL + 结束审计）](police/plans/2026-10-29-backup-v2.md) | plan | ✅ active | 2026-10-29 | 2027-04-30 |  | `docs/police/plans/2026-10-29-backup-v2.md` |
-| [任务：小地图回原生 + 车载面板诊断（给 Claude Code）](police/plans/2026-10-31-cc-brief-minimap-dashboard.md) | plan | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/police/plans/2026-10-31-cc-brief-minimap-dashboard.md` |
-| [日志清理：两个还在复发的脚本错误（研究 → 计划 → 施工）](police/plans/2026-10-31-log-cleanup.md) | plan | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/police/plans/2026-10-31-log-cleanup.md` |
-| [三个体感问题：小地图 / I 键 / 序章 node（研究 → 计划）](police/plans/2026-10-31-map-key-quest.md) | plan | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/police/plans/2026-10-31-map-key-quest.md` |
-| [P4 证据收口：盘查读数延迟绑定（研究与施工图）](police/plans/2026-10-31-p4-evidence-binding.md) | plan | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/police/plans/2026-10-31-p4-evidence-binding.md` |
-| [P6-4 AI 调度员：文本报案 → call 卡草稿（研究与施工图）](police/plans/2026-10-31-p6-4-ai-dispatcher.md) | plan | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/police/plans/2026-10-31-p6-4-ai-dispatcher.md` |
-| [P6 Agent 动作 · 研究与施工图（2026-10-31）](police/plans/2026-10-31-p6-agent-tools.md) | plan | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/police/plans/2026-10-31-p6-agent-tools.md` |
-| [两个遗留问题：调研 → 方案 → 验证（2026-10-31）](police/plans/2026-10-31-quest-storyengine-and-sonar.md) | plan | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/police/plans/2026-10-31-quest-storyengine-and-sonar.md` |
-| [计划：剧情抉择 UI 重构（decision surface）](police/plans/2026-11-01-decision-ui-refactor.md) | plan | ✅ active | 2026-11-01 | 2027-04-30 |  | `docs/police/plans/2026-11-01-decision-ui-refactor.md` |
+| [计划：支援单位的生成点与到场（spawn v3）](police/plans/2026-10-29-backup-spawn-v3.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-29-backup-spawn-v3.md` |
+| [计划：SM-06 NPC 支援 v2（生命周期 ack + 统一 TTL + 结束审计）](police/plans/2026-10-29-backup-v2.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-29-backup-v2.md` |
+| [任务：小地图回原生 + 车载面板诊断（给 Claude Code）](police/plans/2026-10-31-cc-brief-minimap-dashboard.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-31-cc-brief-minimap-dashboard.md` |
+| [日志清理：两个还在复发的脚本错误（研究 → 计划 → 施工）](police/plans/2026-10-31-log-cleanup.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-31-log-cleanup.md` |
+| [三个体感问题：小地图 / I 键 / 序章 node（研究 → 计划）](police/plans/2026-10-31-map-key-quest.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-31-map-key-quest.md` |
+| [P4 证据收口：盘查读数延迟绑定（研究与施工图）](police/plans/2026-10-31-p4-evidence-binding.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-31-p4-evidence-binding.md` |
+| [P6-4 AI 调度员：文本报案 → call 卡草稿（研究与施工图）](police/plans/2026-10-31-p6-4-ai-dispatcher.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-31-p6-4-ai-dispatcher.md` |
+| [P6 Agent 动作 · 研究与施工图（2026-10-31）](police/plans/2026-10-31-p6-agent-tools.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-31-p6-agent-tools.md` |
+| [两个遗留问题：调研 → 方案 → 验证（2026-10-31）](police/plans/2026-10-31-quest-storyengine-and-sonar.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-10-31-quest-storyengine-and-sonar.md` |
+| [计划：剧情抉择 UI 重构（decision surface）](police/plans/2026-11-01-decision-ui-refactor.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/police/plans/2026-11-01-decision-ui-refactor.md` |
 | [T-City Lite 警察模块调研：功能清单 + UX 设计](agent/police/RESEARCH-2026-10-ARCHIVED.md) | research | ♻️ superseded | 2026-10-30 | 2027-01-30 |  | `docs/agent/police/RESEARCH-2026-10-ARCHIVED.md` |
 | [T-City Lite 警察模块调研 v2](agent/police/RESEARCH-2026-10.md) | research | ✅ active | 2026-10-30 | 2027-01-30 |  | `docs/agent/police/RESEARCH-2026-10.md` |
 | [Agent 全面接管服务器与自动化测试调研](police/AGENT_CONTROL_RESEARCH.md) | research | 📌 final | 2026-10-24 | 2027-01-30 |  | `docs/police/AGENT_CONTROL_RESEARCH.md` |

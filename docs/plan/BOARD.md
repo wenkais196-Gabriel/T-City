@@ -15,6 +15,16 @@
 | [Agent 控制平面升级计划](agent-control-plane-upgrade.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 7 | 6 | 0 | S6 wip | 2026-11-17 |
 | [热狗摊：剩余工作分片计划（2026-11-15 复核）](jobs-content/13-hotdog-remaining-plan.md) | active | 7 | 3 | 0 | C 未开始 | - |
+| [计划：支援单位的生成点与到场（spawn v3）](../police/plans/2026-10-29-backup-spawn-v3.md) | active | 3 | 3 | 0 | - | 2026-11-17 |
+| [计划：SM-06 NPC 支援 v2（生命周期 ack + 统一 TTL + 结束审计）](../police/plans/2026-10-29-backup-v2.md) | active | 6 | 6 | 0 | - | 2026-11-17 |
+| [任务：小地图回原生 + 车载面板诊断（给 Claude Code）](../police/plans/2026-10-31-cc-brief-minimap-dashboard.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
+| [日志清理：两个还在复发的脚本错误（研究 → 计划 → 施工）](../police/plans/2026-10-31-log-cleanup.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [三个体感问题：小地图 / I 键 / 序章 node（研究 → 计划）](../police/plans/2026-10-31-map-key-quest.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
+| [P4 证据收口：盘查读数延迟绑定（研究与施工图）](../police/plans/2026-10-31-p4-evidence-binding.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [P6-4 AI 调度员：文本报案 → call 卡草稿（研究与施工图）](../police/plans/2026-10-31-p6-4-ai-dispatcher.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [P6 Agent 动作 · 研究与施工图（2026-10-31）](../police/plans/2026-10-31-p6-agent-tools.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
+| [两个遗留问题：调研 → 方案 → 验证（2026-10-31）](../police/plans/2026-10-31-quest-storyengine-and-sonar.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
+| [计划：剧情抉择 UI 重构（decision surface）](../police/plans/2026-11-01-decision-ui-refactor.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [计划：R1 多站驾驶（garbage + bus）](jobs-content/03-plan.md) | draft | 4 | 2 | 0 | P3 wip | 2026-11-17 |
 | [重构删除清单 & 保留清单 v2.0](../../T-CityLite.base/docs/archive/refactoring-manifest.md) | final | 未登记 | 0 | 0 | - | - |
 | [警察系统现状与缺口（2026-10-31）](../agent/police/STATUS-2026-10-31.md) | active | 未登记 | 0 | 0 | - | - |
@@ -40,13 +50,3 @@
 | [P4 — 警察调度 Agent 工具（实现清单）](../police/P4_AGENT.md) | active | 未登记 | 0 | 0 | - | - |
 | [警察系统实现状态（2026-10-23）](../police/STATUS.md) | active | 未登记 | 0 | 0 | - | - |
 | [警察系统技术债](../police/TECH_DEBT.md) | active | 未登记 | 0 | 0 | - | - |
-| [计划：支援单位的生成点与到场（spawn v3）](../police/plans/2026-10-29-backup-spawn-v3.md) | active | 未登记 | 0 | 0 | - | - |
-| [计划：SM-06 NPC 支援 v2（生命周期 ack + 统一 TTL + 结束审计）](../police/plans/2026-10-29-backup-v2.md) | active | 未登记 | 0 | 0 | - | - |
-| [任务：小地图回原生 + 车载面板诊断（给 Claude Code）](../police/plans/2026-10-31-cc-brief-minimap-dashboard.md) | active | 未登记 | 0 | 0 | - | - |
-| [日志清理：两个还在复发的脚本错误（研究 → 计划 → 施工）](../police/plans/2026-10-31-log-cleanup.md) | active | 未登记 | 0 | 0 | - | - |
-| [三个体感问题：小地图 / I 键 / 序章 node（研究 → 计划）](../police/plans/2026-10-31-map-key-quest.md) | active | 未登记 | 0 | 0 | - | - |
-| [P4 证据收口：盘查读数延迟绑定（研究与施工图）](../police/plans/2026-10-31-p4-evidence-binding.md) | active | 未登记 | 0 | 0 | - | - |
-| [P6-4 AI 调度员：文本报案 → call 卡草稿（研究与施工图）](../police/plans/2026-10-31-p6-4-ai-dispatcher.md) | active | 未登记 | 0 | 0 | - | - |
-| [P6 Agent 动作 · 研究与施工图（2026-10-31）](../police/plans/2026-10-31-p6-agent-tools.md) | active | 未登记 | 0 | 0 | - | - |
-| [两个遗留问题：调研 → 方案 → 验证（2026-10-31）](../police/plans/2026-10-31-quest-storyengine-and-sonar.md) | active | 未登记 | 0 | 0 | - | - |
-| [计划：剧情抉择 UI 重构（decision surface）](../police/plans/2026-11-01-decision-ui-refactor.md) | active | 未登记 | 0 | 0 | - | - |

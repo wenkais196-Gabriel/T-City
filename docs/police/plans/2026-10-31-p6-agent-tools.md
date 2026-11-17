@@ -4,14 +4,19 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-31
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
 
 # P6 Agent 动作 · 研究与施工图（2026-10-31）
 
 > 第一次尝试把 `police_query_case` 做成 **director action**，被注册表校验器当场否掉。
 > 这份文档记录否决原因、正确的通道划分，以及三块施工的顺序。
+
+```plan-status
+ALL | done | tools/agent_tools.json | 2026-11-17
+```
 
 ## 1. 否决原因（这次踩到的硬约束）
 
