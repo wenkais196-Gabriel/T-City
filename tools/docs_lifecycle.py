@@ -179,6 +179,9 @@ def first_heading(text: str) -> str:
 PLAN_STATUS_KEY = "plan_status"
 PLAN_STATUS_FENCE = "plan-status"
 PLAN_STATUS_STATES = ("todo", "wip", "done")
+#: 单片计划的唯一合法行 id：正文没有切片表时，整份计划就是一个不可再分的单位。
+#: 不强制"先划片再登记"——为一次性计划发明切片只会制造假粒度（35 份 plan 里 15 份如此）。
+SINGLE_UNIT_ID = "ALL"
 SLICE_HEADERS = {"#", "片", "切片", "分片", "阶段", "步骤", "工作项"}
 SLICE_ID_RE = re.compile(r"(?:Step \d+|[A-Z]\d*[a-z]?(?:-\d+)?)")
 PR_ONE_RE = re.compile(r"#\d+")
@@ -240,10 +243,10 @@ def parse_plan_status(body: str) -> tuple[list[dict], list[str]]:
             rid, state, ev, date = cells
             if not rid:
                 errors.append(f"plan-status 第 {lineno} 行：id 为空")
-            elif not SLICE_ID_RE.fullmatch(rid):
+            elif rid != SINGLE_UNIT_ID and not SLICE_ID_RE.fullmatch(rid):
                 errors.append(
                     f"plan-status 第 {lineno} 行：id=`{rid}` 不是切片 ID 形状"
-                    "（如 S1 / P1-4 / Step 0）")
+                    f"（如 S1 / P1-4 / Step 0；单片计划用 `{SINGLE_UNIT_ID}`）")
             if state not in PLAN_STATUS_STATES:
                 errors.append(
                     f"plan-status 第 {lineno} 行：state=`{state}` 不在 "
@@ -354,12 +357,20 @@ def check_plan_status(
 
     table_ids = slice_ids_from_body(body)
     row_ids = [r["id"] for r in rows if r["id"]]
-    missing = sorted(table_ids - set(row_ids))
-    extra = sorted(set(row_ids) - table_ids)
-    if missing:
-        errors.append(f"{rp}: plan-status 缺少切片 ID：{', '.join(missing)}")
-    if extra:
-        errors.append(f"{rp}: plan-status 切片 ID 不在正文切片表：{', '.join(extra)}")
+    if not table_ids:
+        # 单片计划（15/35 份 active 没有切片表）：只允许一行 `ALL`。
+        # 不强制它们先划片——为了一份一次性的 police 计划发明切片只会制造假粒度。
+        if row_ids != [SINGLE_UNIT_ID]:
+            errors.append(
+                f"{rp}: 正文没有切片表 —— plan-status 只允许单行 "
+                f"`{SINGLE_UNIT_ID} | state | ev | date`（当前 {len(row_ids)} 行）")
+    else:
+        missing = sorted(table_ids - set(row_ids))
+        extra = sorted(set(row_ids) - table_ids)
+        if missing:
+            errors.append(f"{rp}: plan-status 缺少切片 ID：{', '.join(missing)}")
+        if extra:
+            errors.append(f"{rp}: plan-status 切片 ID 不在正文切片表：{', '.join(extra)}")
 
     for row in rows:
         if row["state"] != "done":
@@ -501,11 +512,9 @@ def check(docs: list[str], index_path: str) -> tuple[list[str], list[str], dict]
             if not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(p), target))):
                 warns.append(f"断链：{rp} → {target}")
 
-    # 索引是否最新
+    # 索引是否最新（比内容，不比「生成时间」——否则每天零点后无改动也报过期）
     if os.path.exists(index_path):
-        want = build_index(docs)
-        have = open(index_path, encoding="utf-8", errors="ignore").read()
-        if want.strip() != have.strip():
+        if not index_is_current(docs):
             warns.append("docs/INDEX.md 不是最新（运行 `python tools/docs_lifecycle.py --index`）")
     else:
         warns.append("docs/INDEX.md 不存在（运行 --index 生成）")
@@ -552,7 +561,8 @@ def plan_status_counts(rows: list[dict]) -> tuple[int, int, str, str]:
     for row in rows:
         if row["state"] != "done":
             label = TIER_TODO if row["state"] == "todo" else row["state"]
-            current = f"{row['id']} {label}"
+            who = "整体" if row["id"] == SINGLE_UNIT_ID else row["id"]
+            current = f"{who} {label}"
             break
     return proven, unverified, current, max(dates) if dates else "-"
 
@@ -594,7 +604,8 @@ def build_board(docs: list[str]) -> str:
     for item in plans:
         if item["has_block"]:
             proven, unverified, current, updated = plan_status_counts(item["rows"])
-            slices = str(len(item["rows"]))
+            only = len(item["rows"]) == 1 and item["rows"][0]["id"] == SINGLE_UNIT_ID
+            slices = "单片" if only else str(len(item["rows"]))
         else:
             proven = unverified = 0
             current = updated = "-"
@@ -607,6 +618,21 @@ def build_board(docs: list[str]) -> str:
 
 
 # ---------------------------------------------------------------- 索引
+
+def index_is_current(docs: list[str]) -> bool:
+    """INDEX 是否与当前文档树一致（纯内容比较，生成物里不再有"生成时间"）。
+
+    为什么去掉日期：INDEX 是生成物，CI 用 `--index` 后 `git diff --quiet` 判它是否最新；
+    带时间戳的生成物**永远**在跨天时 diff 非空，CI 每天红一次，且只能靠重新生成消掉。
+    同一类问题在本仓已有先例（`tools/agent_tools.json` 的 `generated` 字段被记过 F-17）。
+    """
+    path = os.path.join(REPO, "docs", "INDEX.md")
+    try:
+        have = open(path, encoding="utf-8", errors="ignore").read()
+    except OSError:
+        return False
+    return build_index(docs).strip() == have.strip()
+
 
 def board_is_current(docs: list[str]) -> bool:
     """BOARD.md 是否与当前文档树一致：生成物既不许手改，也不许过期。
@@ -650,7 +676,7 @@ def build_index(docs: list[str]) -> str:
         "> 由 `python tools/docs_lifecycle.py --index` 生成。规范："
         "[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。",
         "",
-        f"**生成时间**：{today().isoformat()} ｜ **文档总数**：{total} ｜ "
+        f"**文档总数**：{total} ｜ "
         f"**已登记**：{reg} ｜ **未登记**：{len(unregistered)}",
         "",
         f"**状态分布**：✅ active {cnt('active')} ・ 🟡 draft {cnt('draft')} ・ "

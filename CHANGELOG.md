@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **单片计划的 `ALL` 行**：35 份 `type: plan` 里 15 份没有切片表（多是一次性的 police 施工图）。
+  强制它们「先划片再登记」只会发明假粒度，所以规范补一条：**正文没有切片表时，`plan-status`
+  只允许一行 `ALL | state | ev | date`**；有切片表时写 `ALL` 会按「ID 不在正文切片表」判红。
+  看板对这类计划「片」列显示 `单片`、「当前片」显示 `整体 wip`。`gate_coverage` 预算 278 → 281
+  （3 条前向规则，已在预算文件里写明到期条件）。
+
 ### Fixed
 - **`docs/plan/BOARD.md` 会静默过期**：PR #321 引入 `--board` 后，合并当天就踩到——另一个 PR（#320）
   把一份 md 改名，BOARD 里那行链接立刻指错，而块校验全绿，`--check` 对此一无所知。

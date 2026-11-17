@@ -185,3 +185,80 @@ def test_board_staleness_detects_injected_edit_and_missing_file(tmp_path, monkey
     board.unlink()
     code, out = _run_tool(tmp_path, ["--check"], monkeypatch, capsys)
     assert "BOARD.md 不存在" in out, f"删掉后没报：{out}"
+
+
+# ---------------------------------------------------------------- 单片计划（ALL）
+
+def test_single_unit_plan_accepts_all_row(tmp_path, monkeypatch, capsys):
+    """没有切片表的计划：一行 `ALL` 就够，不必为了登记而发明切片。"""
+    block = "```plan-status\nALL | wip | - | 2026-11-16\n```"
+    code, out = _run_check(tmp_path, _doc(extra="plan_status: 1\n", block=block, table=""),
+                           monkeypatch, capsys)
+    assert code == 0, f"单片计划被误判：\n{out}"
+    assert "errors=0" in out, out
+
+
+SINGLE_UNIT_BAD = [
+    pytest.param("ALL | done | #302 | 2026-11-16\nB   | wip  | - | -",
+                 "只允许单行", id="two-rows-without-table"),
+    pytest.param("S1 | wip | - | -", "只允许单行", id="slice-id-without-table"),
+]
+
+
+@pytest.mark.parametrize("rows,needle", SINGLE_UNIT_BAD)
+def test_single_unit_plan_rejects_other_shapes(rows, needle, tmp_path, monkeypatch, capsys):
+    """没有切片表却写了多行/切片 id → ERROR。形状错了不能悄悄放过。"""
+    block = f"```plan-status\n{rows}\n```"
+    code, out = _run_check(tmp_path, _doc(extra="plan_status: 1\n", block=block, table=""),
+                           monkeypatch, capsys)
+    assert code == 1, out
+    assert needle in out, out
+
+
+def test_all_row_is_rejected_when_slice_table_exists(tmp_path, monkeypatch, capsys):
+    """有切片表时 `ALL` 属于「ID 不在正文切片表」，不能拿它偷懒。"""
+    block = "```plan-status\nALL | done | #302 | 2026-11-16\n```"
+    code, out = _run_check(tmp_path, _doc(extra="plan_status: 1\n", block=block),
+                           monkeypatch, capsys)
+    assert code == 1, out
+    assert "不在正文切片表" in out, out
+
+
+def test_board_labels_single_unit_plan(tmp_path, monkeypatch, capsys):
+    """看板对单片计划显示 `单片` 与 `整体 wip`，而不是一个假的「1 片」。"""
+    doc = tmp_path / "docs" / "plan" / "single.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(_doc(extra="plan_status: 1\n",
+                        block="```plan-status\nALL | wip | - | 2026-11-16\n```",
+                        table=""), encoding="utf-8")
+    code, out = _run_tool(tmp_path, ["--board"], monkeypatch, capsys)
+    assert code == 0, out
+    board = (tmp_path / "docs/plan/BOARD.md").read_text(encoding="utf-8")
+    assert "| 单片 |" in board, board
+    assert "整体 wip" in board, board
+
+
+def test_index_freshness_detects_content_drift_and_has_no_timestamp(
+        tmp_path, monkeypatch, capsys):
+    """INDEX 是生成物：内容漂移必须报，且生成物里不许有时间戳。
+
+    踩过的两个坑：① 原来整份文本比对包含「生成时间」，CI 每天先跑 `--index` 再 `git diff --quiet`，
+    跨天必然非空 → docs 任务天天红；② 想靠"只抹日期"绕过去时，因为统计数和日期在**同一行**，
+    按整行剔除会连总数一起剔掉（实测注入 326→325 静默放过）。结论：生成物里干脆不写时间。
+    """
+    doc = tmp_path / "docs" / "plan" / "one.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(_doc(extra="plan_status: 1\n"), encoding="utf-8")
+    code, out = _run_tool(tmp_path, ["--index"], monkeypatch, capsys)
+    assert code == 0, out
+
+    index = tmp_path / "docs" / "INDEX.md"
+    first = index.read_text(encoding="utf-8")
+    assert "生成时间" not in first, first[:200]
+    # 幂等：同一天再生成一次，字节完全相同（CI 的 `git diff --quiet` 依赖这一条）
+    code, out = _run_tool(tmp_path, ["--index"], monkeypatch, capsys)
+    assert index.read_text(encoding="utf-8") == first
+
+    index.write_text(first.replace("**已登记**：1", "**已登记**：0", 1), encoding="utf-8")
+    code, out = _run_tool(tmp_path, ["--check"], monkeypatch, capsys)
+    assert "INDEX.md 不是最新" in out, f"内容漂移没报：{out}"
