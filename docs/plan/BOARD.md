@@ -7,6 +7,7 @@
 | 计划 | 状态 | 片 | 已证明 | 未取证 | 当前片 | 最后更新 |
 |---|---|---|---|---|---|---|
 | [🌟 T-City Lite 项目总进度看板 (PROJECT_PROGRESS.md)](../../PROJECT_PROGRESS.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [警察系统现状与缺口（2026-10-31）](../agent/police/STATUS-2026-10-31.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [抽象收敛施工计划（2026-11）](../engineering/2026-11-abstraction-convergence-plan.md) | active | 8 | 0 | 8 | - | 2026-11-15 |
 | [P1-4 开发计划与交付标准（实施方 + 验收方联合定稿）](../engineering/2026-11-foundation-p1-4-plan.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
 | [P1-5 施工计划：真机缺陷（跨资源引用 / 金额格式化 / 审计与运维）](../engineering/2026-11-foundation-p1-5-plan.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
@@ -15,6 +16,11 @@
 | [Agent 控制平面升级计划](agent-control-plane-upgrade.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 7 | 6 | 0 | S6 wip | 2026-11-17 |
 | [热狗摊：剩余工作分片计划（2026-11-15 复核）](jobs-content/13-hotdog-remaining-plan.md) | active | 7 | 3 | 0 | C 未开始 | - |
+| [方案 B 落地计划（已拍板）](../police/B_PLAN.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [优化批次（P6）调研与方案](../police/OPTIMIZATION_PLAN.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [P4 — 警察调度 Agent 工具（实现清单）](../police/P4_AGENT.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
+| [警察系统实现状态（2026-10-23）](../police/STATUS.md) | active | 3 | 3 | 0 | - | 2026-11-17 |
+| [警察系统技术债](../police/TECH_DEBT.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [计划：支援单位的生成点与到场（spawn v3）](../police/plans/2026-10-29-backup-spawn-v3.md) | active | 3 | 3 | 0 | - | 2026-11-17 |
 | [计划：SM-06 NPC 支援 v2（生命周期 ack + 统一 TTL + 结束审计）](../police/plans/2026-10-29-backup-v2.md) | active | 6 | 6 | 0 | - | 2026-11-17 |
 | [任务：小地图回原生 + 车载面板诊断（给 Claude Code）](../police/plans/2026-10-31-cc-brief-minimap-dashboard.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
@@ -27,7 +33,6 @@
 | [计划：剧情抉择 UI 重构（decision surface）](../police/plans/2026-11-01-decision-ui-refactor.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [计划：R1 多站驾驶（garbage + bus）](jobs-content/03-plan.md) | draft | 4 | 2 | 0 | P3 wip | 2026-11-17 |
 | [重构删除清单 & 保留清单 v2.0](../../T-CityLite.base/docs/archive/refactoring-manifest.md) | final | 未登记 | 0 | 0 | - | - |
-| [警察系统现状与缺口（2026-10-31）](../agent/police/STATUS-2026-10-31.md) | active | 未登记 | 0 | 0 | - | - |
 | [🚗 T-City Lite 驾驶员与驾考系统 (Driver) 细化规划](../archive/QBCore_Lite_versions/career/driver_plan.md) | archived | 未登记 | 0 | 0 | - | - |
 | [🚚 T-City Lite 货运司机与物流系统 (Logistics) 细化规划](../archive/QBCore_Lite_versions/career/logistics_plan.md) | archived | 未登记 | 0 | 0 | - | - |
 | [🏥 T-City Lite 医护职业与救援系统 (EMS) 细化规划](../archive/QBCore_Lite_versions/career/medical_plan.md) | archived | 未登记 | 0 | 0 | - | - |
@@ -45,8 +50,3 @@
 | [Agent 模块化施工计划（M1–M7）](agent-module-execution.md) | draft | 未登记 | 0 | 0 | - | - |
 | [🧪 T-City Lite 自动化测试方案](automated-testing-plan.md) | active | 未登记 | 0 | 0 | - | - |
 | [内容填充总规划（职业优先，R0–R6）](jobs-content-roadmap.md) | draft | 未登记 | 0 | 0 | - | - |
-| [方案 B 落地计划（已拍板）](../police/B_PLAN.md) | active | 未登记 | 0 | 0 | - | - |
-| [优化批次（P6）调研与方案](../police/OPTIMIZATION_PLAN.md) | active | 未登记 | 0 | 0 | - | - |
-| [P4 — 警察调度 Agent 工具（实现清单）](../police/P4_AGENT.md) | active | 未登记 | 0 | 0 | - | - |
-| [警察系统实现状态（2026-10-23）](../police/STATUS.md) | active | 未登记 | 0 | 0 | - | - |
-| [警察系统技术债](../police/TECH_DEBT.md) | active | 未登记 | 0 | 0 | - | - |

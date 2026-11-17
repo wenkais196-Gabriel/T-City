@@ -4,12 +4,17 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-24
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
+
 
 # 优化批次（P6）调研与方案
 
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 范围（用户指定五项）：
 1. 法庭 `/trial`、`/plea` 实机联调
 2. 案件详情显示 justice 案件号与判决

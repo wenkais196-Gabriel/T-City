@@ -4,12 +4,17 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-24
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
+
 
 # 方案 B 落地计划（已拍板）
 
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 决策：B 平衡；接受一次逮捕提交；证据/BOLO 降级为报告附件/标签；法庭保留但降级；
 罚单金额由罪名目录自动 + ±20% 滑轨；MDT 压到 5 页。
 

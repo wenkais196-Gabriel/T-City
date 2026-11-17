@@ -4,12 +4,19 @@ type: plan
 status: active
 system: justice
 owner: hermes
-updated: 2026-10-24
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
+
 
 # 警察系统实现状态（2026-10-23）
 
+```plan-status
+P0 | done | T-CityLite.base/resources/[custom]/custom-police/server/p0.lua | 2026-11-17
+P1 | done | T-CityLite.base/resources/[custom]/custom-police/server/p1.lua | 2026-11-17
+P2 | done | T-CityLite.base/resources/[custom]/custom-police/server/p3_cases.lua | 2026-11-17
+```
 ## 已交付
 
 | 阶段 | 内容 | 代码 | 数据表 |
