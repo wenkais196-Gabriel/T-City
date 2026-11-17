@@ -48,6 +48,8 @@ QuestVendor.DEFAULTS = {
     item_ids = { common = 'hotdog_common', rare = 'hotdog_rare', exotic = 'hotdog_exotic' },
     first_customer_ms = { 8000, 15000 },
     interval_ms = { 15000, 40000 },
+    -- 顾客走位时间：从 25–40 m 走过来。默认 45 s 覆盖 40 m 步行 + 绕路余量。
+    inbound_budget_ms = 45000,
     patience_ms = 45000,
     max_global_npcs = 8,
     reject_cooldown_ms = 60000,
@@ -179,6 +181,7 @@ local function normalizeConfig(config)
         item_ids = itemIds,
         first_customer_ms = rangeOr(config.first_customer_ms, defaults.first_customer_ms),
         interval_ms = rangeOr(config.interval_ms, defaults.interval_ms),
+        inbound_budget_ms = intOr(config.inbound_budget_ms, defaults.inbound_budget_ms, false),
         patience_ms = intOr(config.patience_ms, defaults.patience_ms, false),
         max_global_npcs = intOr(config.max_global_npcs, defaults.max_global_npcs, false),
         reject_cooldown_ms = intOr(config.reject_cooldown_ms, defaults.reject_cooldown_ms, false),
@@ -502,6 +505,20 @@ end
 -- 报价（NPC 路径）
 -- ---------------------------------------------------------------------------
 
+-- [quest-vendor-offer-lifetime] begin
+--- 报价生命周期 = 走位时间 + 决策耐心。
+--- 顾客在 25–40 m 外生成、走到摊位前才看得到面板；如果 expiresAt 只加 patience，
+--- 走位会吃掉玩家一大半决策时间。cfg 来自 normalizeConfig，两段都已归一化成正整数。
+--- 服务端仍然只有一个绝对过期时刻 —— 客户端不报到位也不会让报价永远活着。
+---@param cfg table|nil
+---@return number
+local function offerLifetimeMs(cfg)
+    local inbound = math.max(0, math.floor(tonumber(cfg and cfg.inbound_budget_ms) or 0))
+    local patience = math.max(0, math.floor(tonumber(cfg and cfg.patience_ms) or 0))
+    return inbound + patience
+end
+-- [quest-vendor-offer-lifetime] end
+
 --- 生成报价。客户端/接线方只能给 item + count，金额一律按会话配置算。
 ---@param citizenid string
 ---@param item string 'exotic' | 'rare' | 'common'（也接受 hotdog_* 物品 id）
@@ -548,7 +565,8 @@ function QuestVendor.CreateOffer(citizenid, item, count, npcNetId)
         count = amount,
         unitPrice = unit,
         price = unit * amount,
-        expiresAt = now + session.cfg.patience_ms,
+        -- 生命周期 = 走位时间 + 决策耐心：走位不能吃掉玩家的决策窗口。
+        expiresAt = now + offerLifetimeMs(session.cfg),
         npcNetId = tonumber(npcNetId) or nil,
         state = 'open',
         createdAt = now,
@@ -563,6 +581,8 @@ function QuestVendor.CreateOffer(citizenid, item, count, npcNetId)
         unitPrice = unit,
         price = unit * amount,
         expiresAt = offer.expiresAt,
+        inboundMs = session.cfg.inbound_budget_ms,
+        patienceMs = session.cfg.patience_ms,
         npcNetId = offer.npcNetId,
     }
 end

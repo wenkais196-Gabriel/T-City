@@ -317,12 +317,20 @@ function QuestVendorBridge.OfferToOwner(citizenid)
     TriggerClientEvent('quest:client:vendorOffer', player.PlayerData.source, {
         questId = session.questId,
         stepId = StepIds[citizenid],
-        offerId = offer.id,
+        -- CreateOffer 返回的是 offerId（不是 id）；写成 offer.id 会被序列化丢掉，
+        -- 客户端拿不到对单键，整条报价被忽略。
+        offerId = offer.offerId,
         item = offer.item,
         count = offer.count,
         unitPrice = offer.unitPrice,
         price = offer.price,
         expiresAt = offer.expiresAt,
+        -- 服务端时钟 → 客户端时钟：面板用 remainingMs 换算本地截止。
+        remainingMs = math.max(0, offer.expiresAt - QuestVendor.Now()),
+        inboundMs = offer.inboundMs,
+        patienceMs = offer.patienceMs,
+        -- 客户端靠 netId 反查摊位实体坐标，才能算出 25–40 m 的走位生成点。
+        boothNetId = session.boothNetId,
     })
 end
 
