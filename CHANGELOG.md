@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   （3 条前向规则，已在预算文件里写明到期条件）。
 
 ### Fixed
+- **摊位坐标服务端复验（红线①）**：`QuestBooth.Register` / `MoveTo` 之前把客户端申报的
+  `pos` 原样入库，买家的 6 m 交互半径与 10 m 旁观者广播都按这条坐标算。现在服务端用
+  实体真坐标复验申报点（容差 ≤3 m，失败返回 `bad_coords`），**入库/挪位只写实体真坐标**；
+  `move` 分支的实体句柄取服务端记录里的 `booth.netId`，忽略 `payload.netId`。同时修好
+  探针距离桩（`__len` 曾被当普通字段，Lua 的 `#` 恒为 0，距离判据从未执行），新增 5 条
+  坐标复验用例 + 1 条「桩失效必须红」的反向用例。
 - **`docs/plan/BOARD.md` 会静默过期**：PR #321 引入 `--board` 后，合并当天就踩到——另一个 PR（#320）
   把一份 md 改名，BOARD 里那行链接立刻指错，而块校验全绿，`--check` 对此一无所知。
   现在 `--check` 比对「重算 == 落盘」，过期或手改都报 `BOARD.md 不是最新`（WARN，与 `INDEX.md` 同口径），
