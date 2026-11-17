@@ -80,6 +80,8 @@ return {
                         prices = { common = 8, rare = 16, exotic = 32 },
                         first_customer_ms = { 3000, 6000 },
                         interval_ms = { 6000, 15000 },
+                        -- 顾客从 25–40 m 走过来最多 45 秒。【测试期占位，E 片再定】
+                        inbound_budget_ms = 45000,
                         patience_ms = 30000,
                         max_global_npcs = 8,
                         reject_cooldown_ms = 60000,

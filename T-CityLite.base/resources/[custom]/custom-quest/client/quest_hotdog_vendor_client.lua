@@ -17,7 +17,8 @@
 -- 事件契约（只接收两条下行事件）：
 --   quest:client:vendorState { questId, boothNetId, coords, state, stock, raw,
 --                              prices, sold, revenue }
---   quest:client:vendorOffer { questId, offerId, npcNetId, item, count, price, expiresAt }
+--   quest:client:vendorOffer { questId, offerId, boothNetId, item, count, price,
+--                              expiresAt, remainingMs, inboundMs, patienceMs }
 --
 -- 键位（RegisterKeyMapping，玩家可在游戏设置里改）：
 --   E = 摊主开卖/收摊；Y = 成交；N = 拒绝；ALT = 玩家购买菜单。
@@ -297,9 +298,53 @@ end
 
 local CUSTOMER_MODELS = { 'a_m_m_farmer_01', 'a_m_y_business_01', 'a_f_y_tourist_01' }
 
+-- 走位区间：远处生成、走到摊位前，不再原地出现（UX 的 NONE → INBOUND → WAITING）。
+-- [quest-hotdog-inbound] begin
+local INBOUND_MIN_M = 25.0
+local INBOUND_MAX_M = 40.0
+
+--- 走位生成点：纯几何，不碰 native（单测探针可以脱离 FiveM 跑）。
+--- 距离夹到 [25, 40]（越界参数夹紧而不是报错），z 用摊位高度。
+---@param boothCoords table|vector3
+---@param angleDeg number|nil
+---@param distanceM number|nil
+---@return table { x, y, z }
+local function PickSpawnPoint(boothCoords, angleDeg, distanceM)
+    local bx = tonumber(boothCoords and boothCoords.x) or 0.0
+    local by = tonumber(boothCoords and boothCoords.y) or 0.0
+    local bz = tonumber(boothCoords and boothCoords.z) or 0.0
+
+    local distance = tonumber(distanceM)
+    if not distance or distance ~= distance then distance = INBOUND_MIN_M end
+    if distance < INBOUND_MIN_M then distance = INBOUND_MIN_M end
+    if distance > INBOUND_MAX_M then distance = INBOUND_MAX_M end
+
+    local angle = tonumber(angleDeg)
+    if not angle or angle ~= angle then angle = 0.0 end
+    angle = angle % 360.0
+    local radians = math.rad(angle)
+
+    return {
+        x = bx + math.cos(radians) * distance,
+        y = by + math.sin(radians) * distance,
+        z = bz,
+    }
+end
+-- [quest-hotdog-inbound] end
+
+local INBOUND_ARRIVE_M = 2.4          -- 走到摊位外这么远就进 WAITING
+local INBOUND_TIMEOUT_MS = 45000      -- 走位上限；超时拉到位，不让面板永远等
+local INBOUND_POLL_MS = 500           -- SetTimeout 链的检查间隔（不新开 Wait(0) 循环）
+local INBOUND_NO_COLLISION_MS = 3000  -- 刚出现的 3 秒内不跟玩家碰撞，避免被挤飞
+
 ---@return number|nil ped
+---@return table|nil inbound 走位信息 { angleDeg, distance, target }
 local function SpawnCustomerPed(boothCoords)
-    if type(boothCoords) ~= 'table' or type(boothCoords.x) ~= 'number' then return nil end
+    -- vector3 在 FiveM 里 type() 是 'vector3'，不是 'table'：两种都要收。
+    if (type(boothCoords) ~= 'table' and type(boothCoords) ~= 'vector3')
+        or type(boothCoords.x) ~= 'number' then
+        return nil
+    end
 
     local model = joaat(CUSTOMER_MODELS[math.random(#CUSTOMER_MODELS)])
     RequestModel(model)
@@ -312,20 +357,44 @@ local function SpawnCustomerPed(boothCoords)
         return nil
     end
 
-    -- 站在摊位前 2.2 m 的随机方位，朝向摊主（不是朝向摊位：他是来跟人说话的）
-    local angle = math.rad(math.random(0, 359))
-    local x = boothCoords.x + math.cos(angle) * 2.2
-    local y = boothCoords.y + math.sin(angle) * 2.2
-    local ped = CreatePed(4, model, x, y, boothCoords.z, 0.0, true, true)
+    -- 在 25–40 m 外挑一个方向生成，然后走过去。
+    local angleDeg = math.random(0, 359)
+    local distance = math.random(math.floor(INBOUND_MIN_M), math.floor(INBOUND_MAX_M))
+    local spawn = PickSpawnPoint(boothCoords, angleDeg, distance)
+
+    local ped = CreatePed(4, model, spawn.x, spawn.y, spawn.z, 0.0, true, true)
     SetModelAsNoLongerNeeded(model)
     if not ped or ped == 0 or not NativeBool(DoesEntityExist(ped)) then return nil end
 
     SetEntityAsMissionEntity(ped, true, true)
-    FreezeEntityPosition(ped, true)
     SetEntityInvincible(ped, true)
     SetBlockingOfNonTemporaryEvents(ped, true)
-    pcall(function() TaskTurnPedToFaceEntity(ped, PlayerPedId(), 1500) end)
-    return ped
+
+    -- 前 3 秒不跟玩家碰撞：刚出现的远程 ped 如果正好在玩家身边，会把玩家挤飞。
+    -- 第三参是 thisFrameOnly，所以这 3 秒由主循环每帧续期（见 SustainInboundNoCollision），
+    -- 不新开轮询循环；这里只负责到期恢复 ragdoll。
+    pcall(function()
+        SetEntityNoCollisionEntity(ped, PlayerPedId(), true)
+        SetPedCanRagdoll(ped, false)
+    end)
+    SetTimeout(INBOUND_NO_COLLISION_MS, function()
+        if NativeBool(DoesEntityExist(ped)) then
+            pcall(function() SetPedCanRagdoll(ped, true) end)
+        end
+    end)
+
+    -- 目标点在摊位外 2.4 m（与生成点同方向）。AnyMeans 不要求直线可达，会自己绕。
+    local radians = math.rad(angleDeg)
+    local target = {
+        x = boothCoords.x + math.cos(radians) * INBOUND_ARRIVE_M,
+        y = boothCoords.y + math.sin(radians) * INBOUND_ARRIVE_M,
+        z = boothCoords.z,
+    }
+    pcall(function()
+        TaskGoToCoordAnyMeans(ped, target.x, target.y, target.z, 1.0, 0, false, 786603, 0.0)
+    end)
+
+    return ped, { angleDeg = angleDeg, distance = distance, target = target }
 end
 -- ==============================================================
 -- NUI 镜像：界面文字改由 html/vendor.html 画
@@ -346,10 +415,25 @@ local function NuiSend(payload)
 end
 
 --- 摊主状态条
+local function InboundHint(distance)
+    local meters = tonumber(distance)
+    if not meters or meters ~= meters then
+        return '顾客正在走来'
+    end
+    -- 四舍五入到 5 m 档：报一个大致距离就够，别让状态条每 500 ms 跳一个数。
+    local rounded = math.max(5, math.floor((meters + 2.5) / 5) * 5)
+    return ('顾客正在走来（约 %d 米）'):format(rounded)
+end
+
 local function PushStatus(booth, now)
     local pending = booth.pendingUntil and now < booth.pendingUntil
+    local inbound = ActiveOffer and not ActiveOffer.arrived
+        and (not ActiveOffer.boothNetId or ActiveOffer.boothNetId == 0
+            or ActiveOffer.boothNetId == booth.boothNetId)
     local hint
-    if pending then
+    if inbound then
+        hint = InboundHint(ActiveOffer.inboundDistance)
+    elseif pending then
         hint = '[E] 收摊中…'
     elseif booth.state == 'open' then
         hint = booth.raw > 0 and '[E] 收摊 · [G] 做热狗' or '[E] 收摊（原料用完了）'
@@ -392,6 +476,13 @@ local function HideStatus()
     NuiSend({ action = 'status', visible = false })
 end
 
+local function HideOffer()
+    NuiMirror.offerId = nil
+    NuiMirror.offerSig = ''
+    NuiSend({ action = 'offer', visible = false })
+    Focus.ReleaseOwner('offer')
+end
+
 --- 顾客报价（HTML 里自己跑倒计时条，所以只在换人时发一次）
 local function PushOffer()
     local offer = ActiveOffer
@@ -403,6 +494,12 @@ local function PushOffer()
         end
         -- 报价被 ResolveOffer 直接置空时不会走 HideOffer；这里兜底放焦点。
         Focus.ReleaseOwner('offer')
+        return
+    end
+
+    -- INBOUND 阶段只走状态条（见 PushStatus），不出面板、不抢焦点、不显示倒计时。
+    if not offer.arrived then
+        if NuiMirror.offerId then HideOffer() end
         return
     end
 
@@ -420,6 +517,7 @@ local function PushOffer()
             count = offer.count,
             price = offer.price,
             unitPrice = offer.unitPrice,
+            -- 到位后 expiresAt 已经换成「到位 + 耐心」，这里只显示决策窗口那一段。
             remainingMs = math.max(0, (offer.expiresAt or 0) - GetGameTimer()),
         })
     end
@@ -427,13 +525,6 @@ local function PushOffer()
     -- 先渲染、再抢焦点（story-engine 的焦点顺序红线）。sig 没变也要登记一次：
     -- 登记是幂等的，焦点被别的资源改掉后下一帧能补回来。
     Focus.Acquire('offer')
-end
-
-local function HideOffer()
-    NuiMirror.offerId = nil
-    NuiMirror.offerSig = ''
-    NuiSend({ action = 'offer', visible = false })
-    Focus.ReleaseOwner('offer')
 end
 
 --- 买家提示（ALT 购买 / 摊主不在 / 打烊）
@@ -464,9 +555,8 @@ local function ClearOffer(reason)
     HideOffer()
     if not offer then return end
 
-    -- 本文件目前不生成顾客 ped（npcNetId 由接线方给）。保留这条路径是为了
-    -- “如果生成了”时不会漏删：localPed 归客户端；npcOwned 是接线方明确
-    -- 把网络 ped 的删除权交给客户端时才动，避免和服务端生成方重复删除打架。
+    -- localPed 归客户端（走位顾客）；npcOwned 是接线方明确把网络 ped 的
+    -- 删除权交给客户端时才动，避免和服务端生成方重复删除打架。
     if offer.localPed and NativeBool(DoesEntityExist(offer.localPed)) then
         DeleteEntity(offer.localPed)
     end
@@ -482,6 +572,82 @@ local function ClearOffer(reason)
         print(('[quest-hotdog-vendor] 报价清理：%s (%s)')
             :format(tostring(offer.offerId), tostring(reason)))
     end
+end
+
+-- ==============================================================
+-- INBOUND：顾客从 25–40 m 外走到摊位前才进入 WAITING
+--
+-- 不能用 `while true … Wait(0)`：主循环已经有一条逐帧路径，再开一条会吃满 tick。
+-- 这里用 SetTimeout 链（500 ms 一次，最多 45 s），每次只做「还在同一张报价吗 →
+-- 距离够近了吗」两件事。报价被清掉 / 换人时链自然停（ActiveOffer 校验）。
+-- ==============================================================
+
+--- 进入 WAITING：把倒计时换成「到位 + 耐心」，面板这一刻才允许出现。
+local function FinishInbound(offer, ped, inbound, reason, distance)
+    local now = GetGameTimer()
+    local patience = math.max(1000, NumberOr(offer.patienceMs, FALLBACK_PATIENCE_MS))
+
+    offer.arrived = true
+    offer.inboundDistance = nil
+    -- 服务端仍有绝对过期时刻：这里取 min(服务端截止, 到位 + 耐心)，客户端不能比服务端活得久。
+    local absolute = NumberOr(offer.absoluteExpiresAt, now + patience)
+    if absolute <= 0 then absolute = now + patience end
+    offer.expiresAt = math.min(absolute, now + patience)
+
+    if ped and NativeBool(DoesEntityExist(ped)) then
+        if reason == 'timeout' and inbound and inbound.target then
+            SetEntityCoords(ped, inbound.target.x, inbound.target.y, inbound.target.z,
+                false, false, false, false)
+        end
+        pcall(function() TaskTurnPedToFaceEntity(ped, PlayerPedId(), 1500) end)
+        -- 到位后才冻结：走位期间冻结会让 ped 原地踏步。
+        pcall(function() FreezeEntityPosition(ped, true) end)
+        -- 到位这一刻也可能正好在玩家身边：再关掉碰撞 3 秒，避免把玩家挤开。
+        offer.noCollisionUntil = now + INBOUND_NO_COLLISION_MS
+    end
+
+    if reason == 'timeout' then
+        print(('[quest-hotdog-vendor] 顾客走位超时（%.1f m），已拉到摊位前')
+            :format(NumberOr(distance, 0)))
+    elseif reason == 'lost' then
+        print(('[quest-hotdog-vendor] 顾客实体不在（%.1f m），面板直接进入等待')
+            :format(NumberOr(distance, 0)))
+    end
+
+    -- 到位后状态条切回正常提示，报价面板由下一次 PushOffer 推出去。
+    NuiMirror.offerSig = ''
+end
+
+--- 走位检查链。只由 SetTimeout 驱动，不新开轮询循环。
+local function WatchInbound(offerId, ped, boothCoords, inbound, startedAt)
+    local offer = ActiveOffer
+    if not offer or offer.offerId ~= offerId or offer.localPed ~= ped or offer.arrived then
+        return
+    end
+
+    local exists = ped ~= nil and NativeBool(DoesEntityExist(ped))
+    local distance = inbound and inbound.distance or 0.0
+    if exists then
+        distance = #(GetEntityCoords(ped) - boothCoords)
+        offer.inboundDistance = distance
+    end
+
+    if exists and distance <= INBOUND_ARRIVE_M then
+        FinishInbound(offer, ped, inbound, nil, distance)
+        return
+    end
+    if not exists then
+        FinishInbound(offer, nil, inbound, 'lost', distance)
+        return
+    end
+    if GetGameTimer() - startedAt >= INBOUND_TIMEOUT_MS then
+        FinishInbound(offer, ped, inbound, 'timeout', distance)
+        return
+    end
+
+    SetTimeout(INBOUND_POLL_MS, function()
+        WatchInbound(offerId, ped, boothCoords, inbound, startedAt)
+    end)
 end
 
 local function ClearBuyMenu()
@@ -722,6 +888,21 @@ RegisterNetEvent('quest:client:vendorOffer', function(payload)
     end
     expiresAt = now + remaining
 
+    -- 服务端把报价生命周期拆成「走位预算 + 决策耐心」两段发下来：
+    --   * inboundMs：顾客从 25–40 m 走过来的预算；
+    --   * patienceMs：到位后才开始算的决策窗口。
+    -- 旧接线没有这两个字段时，用 remaining 近似（面板仍然可用，只是不拆段）。
+    local inboundMs = math.max(0, NumberOr(payload.inboundMs or payload.inbound_ms, 0))
+    local patienceMs = NumberOr(payload.patienceMs or payload.patience_ms, 0)
+    if patienceMs <= 0 then
+        if inboundMs > 0 and remaining > inboundMs then
+            patienceMs = remaining - inboundMs
+        else
+            patienceMs = remaining
+        end
+    end
+    patienceMs = math.max(1000, patienceMs)
+
     local unitPrice = NumberOr(payload.unitPrice or payload.unit_price, 0)
     if unitPrice <= 0 and count > 0 then
         -- 仅用于显示「$9/份」；成交金额仍以服务端返回的 price 为准。
@@ -737,12 +918,20 @@ RegisterNetEvent('quest:client:vendorOffer', function(payload)
     ActiveOffer = {
         offerId = offerId,
         questId = type(payload.questId) == 'string' and payload.questId or nil,
+        -- 状态条要用它判断「这张报价是不是我这个摊的」
+        boothNetId = math.floor(NumberOr(payload.boothNetId, 0)),
         npcNetId = math.floor(NumberOr(payload.npcNetId, 0)),
         item = NormalizeQuality(payload.item),
         count = count,
         unitPrice = unitPrice,
         price = NumberOr(payload.price, 0),
+        -- 到位前用服务端给的绝对截止（走位预算 + 耐心）；到位后改成「到位 + 耐心」。
         expiresAt = expiresAt,
+        absoluteExpiresAt = expiresAt,
+        patienceMs = patienceMs,
+        inboundMs = inboundMs,
+        arrived = false,
+        inboundDistance = nil,
         receivedAt = now,
         initialMs = math.max(1000, remaining),
         npcOwned = payload.npcOwned == true or payload.npc_owned == true,
@@ -755,8 +944,15 @@ RegisterNetEvent('quest:client:vendorOffer', function(payload)
     local wantOfferId = offerId
     local boothCoords = CoordsFromPayload(payload, math.floor(NumberOr(payload.boothNetId, 0)))
     CreateThread(function()
-        local ped = SpawnCustomerPed(boothCoords)
-        if not ped then return end
+        local ped, inbound = SpawnCustomerPed(boothCoords)
+        if not ped then
+            -- 实体生成失败（模型没加载 / 摊位实体没流进来）不能把面板一起吞掉：
+            -- 服务端已经开了报价，玩家至少要有 Y/N。记一行日志再直接进 WAITING。
+            if ActiveOffer and ActiveOffer.offerId == wantOfferId then
+                FinishInbound(ActiveOffer, nil, nil, 'lost', 0)
+            end
+            return
+        end
         if not ActiveOffer or ActiveOffer.offerId ~= wantOfferId then
             -- 报价已经换人/结束了：这份 ped 立刻删，别留一个没人管的 NPC 站街上
             SetEntityAsMissionEntity(ped, true, true)
@@ -764,6 +960,11 @@ RegisterNetEvent('quest:client:vendorOffer', function(payload)
             return
         end
         ActiveOffer.localPed = ped
+        ActiveOffer.inboundDistance = inbound and inbound.distance or nil
+        -- 生成后的前 3 秒由主循环每帧续期「不与玩家碰撞」，避免把玩家挤飞。
+        ActiveOffer.noCollisionUntil = GetGameTimer() + INBOUND_NO_COLLISION_MS
+        -- 从生成那一刻开始算走位预算；到位/超时后面板才会出现。
+        WatchInbound(wantOfferId, ped, boothCoords, inbound, GetGameTimer())
     end)
 end)
 
@@ -855,6 +1056,8 @@ local function ResolveOffer(accept)
 
     local offer = ActiveOffer
     if not offer then return end
+    -- INBOUND 阶段没有面板，Y/N 不该生效（顾客还没到摊位前）。
+    if not offer.arrived then return end
 
     -- 到点就自然消失，不替玩家成交；服务端 Tick 也会把这条报价判过期。
     if GetGameTimer() >= offer.expiresAt then
@@ -1117,6 +1320,24 @@ local function DrawBuyerPrompt(booth)
     PushBuyerHint(booth)
 end
 
+--- 刚出现的 INBOUND_NO_COLLISION_MS 内，每帧续期「不与玩家碰撞」。
+--- SetEntityNoCollisionEntity 的第三参是 thisFrameOnly，所以不能只调一次；
+--- 主循环在 ActiveOffer 期间本来就是逐帧的，复用它，不新开轮询循环。
+local function SustainInboundNoCollision(now)
+    local offer = ActiveOffer
+    local untilMs = offer and offer.noCollisionUntil
+    if not untilMs then return end
+    if now >= untilMs then
+        offer.noCollisionUntil = nil
+        return
+    end
+
+    local ped = offer.localPed
+    if ped and NativeBool(DoesEntityExist(ped)) then
+        pcall(function() SetEntityNoCollisionEntity(ped, PlayerPedId(), true) end)
+    end
+end
+
 -- ==============================================================
 -- 主线程：只在有摊位/报价/菜单时醒着
 -- ==============================================================
@@ -1156,6 +1377,7 @@ CreateThread(function()
         end
 
         if ActiveOffer then
+            SustainInboundNoCollision(now)
             DrawOffer(now)
         end
 

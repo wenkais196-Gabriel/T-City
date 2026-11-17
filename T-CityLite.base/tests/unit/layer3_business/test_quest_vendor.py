@@ -229,14 +229,27 @@ def test_customer_ped_is_created_and_deleted_by_the_client():
     assert "DeleteEntity(offer.localPed)" in clear
 
 
-def test_customer_ped_does_not_block_the_road():
-    """顾客是冻结的无敌 ped：不挡车、不被误伤、不被事件打断。"""
+def test_customer_ped_walks_in_and_does_not_block_the_road():
+    """G 片：顾客从远处走来 —— 走位期间不冻结，到位后才冻结。
+
+    冻结的无敌 ped 是原地生成时代的写法；现在 ped 必须能走完 25–40 m。
+    前 3 秒不跟玩家碰撞（刚出现的远程 ped 贴脸会把玩家挤飞），到位后
+    FinishInbound 再 TaskTurnPedToFaceEntity + FreezeEntityPosition。
+    """
     client = VENDOR_CLIENT.read_text(encoding="utf-8")
     block = client[client.index("local function SpawnCustomerPed"):]
     block = block[:block.index("\nend\n")]
-    assert "FreezeEntityPosition(ped, true)" in block
+    assert "TaskGoToCoordAnyMeans(ped" in block, "顾客必须走向摊位，而不是原地出现"
+    assert "FreezeEntityPosition(ped, true)" not in block, "走位期间冻结会让 ped 原地踏步"
     assert "SetEntityInvincible(ped, true)" in block
     assert "SetBlockingOfNonTemporaryEvents(ped, true)" in block
+    assert "SetEntityNoCollisionEntity(ped, PlayerPedId(), true)" in block
+    assert "SetPedCanRagdoll(ped, false)" in block
+
+    finish = client[client.index("local function FinishInbound"):]
+    finish = finish[:finish.index("\nend\n")]
+    assert "TaskTurnPedToFaceEntity(ped, PlayerPedId(), 1500)" in finish
+    assert "FreezeEntityPosition(ped, true)" in finish, "到位后要站定，否则报价时还在走"
 
 
 # ---------------------------------------------------------------------------

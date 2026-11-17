@@ -75,7 +75,7 @@ D1 | todo | - | -
 D2 | todo | - | -
 E  | wip  | - | -
 F  | done | T-CityLite.base/tests/unit/layer3_business/test_quest_booth.py | -
-G  | todo | - | -
+G  | done | T-CityLite.base/tests/unit/layer3_business/test_hotdog_inbound.py | -
 H  | todo | - | -
 ```
 
@@ -83,12 +83,12 @@ H  | todo | - | -
 
 | 阻塞 | 卡在哪 | 谁能解 |
 |---|---|---|
-| 顾客原地生成，没有 25–40 m 走位（连带服务端报价时机） | `T-CityLite.base/resources/[custom]/custom-quest/client/quest_hotdog_vendor_client.lua` 的 `SpawnCustomerPed`（2.2 m）；`T-CityLite.base/resources/[custom]/custom-quest/server/quest_vendor.lua:551` 在 spawn 同一 tick 开价 | 开发（G 片） |
 | 数值未定稿 | 老板决定 | 老板 |
 | 旧壳 DB 残留未知 | 无库权限 | 有库权限的人 |
 
 > 摊位坐标未复验（红线①）**已解**：`QuestBooth.VerifyEntity` 集中判据、入库存实体真坐标、`move` 用服务端 `booth.netId`；
-> 证据见 `docs/plan/jobs-content/14-hotdog-live-checklist.md` §4（真机部分仍是 ⛔）。
+> 顾客原地生成 **已解**：25–40 m 走位 + 报价生命周期 = 走位预算 + 决策耐心。
+> 两者的离线证据见 `docs/plan/jobs-content/14-hotdog-live-checklist.md` §4 / §5（真机部分仍是 ⛔）。
 
 ## 4. 本轮已修（可点回 commit）
 
@@ -98,6 +98,7 @@ H  | todo | - | -
 | **B** | 顾客上门 / 收银音效 | #302 |
 | **A** | 手机账单卡（第三个 tab + 已结算） | #316 |
 | — | 买家看不到他人摊位 → `Broadcast.Scope` 10 m 白名单推送 | #304 |
+| — | **NPC 报价面板从未弹出**：桥接写 `offer.id`，而 `CreateOffer` 返回的键是 `offerId` → 客户端判缺 id 整条忽略（G 片顺手修掉） | 9ef32d1e |
 | — | `vendor` 步骤同时挂通用 interact（收摊推进两次） | #305 |
 | — | CEF 焦点单点 + 状态条六项 | #319 |
 | — | 摊位 CEF 菜单（中文不再方块）+ 摊位微调 | 40e7c4a7 |

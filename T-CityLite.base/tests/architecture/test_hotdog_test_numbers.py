@@ -10,7 +10,8 @@ docs/plan/jobs-content/13-hotdog-remaining-plan.md 的 E 片）。临时数字�
     grace_sec < max_minutes × 60            （免租期不能长过整个计费期）
     common < rare < exotic，且都是偶数        （成品回收按 0.5 折价，避免出现 $7.5）
     0 < first_customer_ms[0] <= first_customer_ms[1] < interval_ms[1]
-    0 < patience_ms，三档起始库存 >= 0
+    inbound_budget_ms >= 25000（覆盖 40 m 步行）、patience_ms >= 20000（决策窗口）
+    三档起始库存 >= 0
 """
 from __future__ import annotations
 
@@ -31,12 +32,13 @@ PROBE = Path(__file__).with_name("fixtures") / "hotdog_numbers_probe.lua"
 #: 探针输出顺序（与 fixture 里 table.concat 的顺序一一对应）
 KEYS = ["deposit", "rate_per_min", "grace_sec", "max_minutes",
         "price_common", "price_rare", "price_exotic",
-        "first_lo", "first_hi", "interval_lo", "interval_hi", "patience_ms",
+        "first_lo", "first_hi", "interval_lo", "interval_hi",
+        "inbound_budget_ms", "patience_ms",
         "stock_common", "stock_rare", "stock_exotic"]
 
 
 def load_numbers(path: Path = CONFIG) -> dict[str, float]:
-    """真跑模板表（fixture 探针），返回 15 个数值。"""
+    """真跑模板表（fixture 探针），返回 16 个数值。"""
     assert LUA, "需要 lua5.4 / lua5.4.exe"
     proc = subprocess.run([LUA, str(PROBE), str(path)],
                           capture_output=True, encoding="utf-8", errors="replace",
@@ -65,8 +67,14 @@ def check(numbers: dict[str, float]) -> list[str]:
     if not 0 < numbers["first_lo"] <= numbers["first_hi"] < numbers["interval_hi"]:
         problems.append(f"顾客节奏不自洽：第一位 {numbers['first_lo']:.0f}–{numbers['first_hi']:.0f}ms，"
                         f"间隔上界 {numbers['interval_hi']:.0f}ms")
-    if numbers["patience_ms"] <= 0:
-        problems.append("耐心时间必须为正")
+    # 顾客从 25–40 m 外走来：40 m 步行约 29 s，走位预算低于 25 s 会让顾客还没到
+    # 报价就过期；决策耐心低于 20 s 则玩家刚看到面板就要做决定。
+    if numbers["inbound_budget_ms"] < 25000:
+        problems.append(f"走位时间 {numbers['inbound_budget_ms']:.0f}ms < 25000ms"
+                        "（覆盖不了 40 m 步行）")
+    if numbers["patience_ms"] < 20000:
+        problems.append(f"决策耐心 {numbers['patience_ms']:.0f}ms < 20000ms"
+                        "（玩家来不及看完报价）")
     stocks = [numbers["stock_common"], numbers["stock_rare"], numbers["stock_exotic"]]
     if any(s < 0 for s in stocks):
         problems.append(f"起始库存不能为负：{stocks}")
@@ -92,3 +100,19 @@ def test_rule_catches_fractional_recycle_prices():
     numbers["price_rare"] = numbers["price_common"] + 1
     problems = check(numbers)
     assert any("偶数" in problem for problem in problems), problems
+
+
+def test_rule_catches_an_inbound_budget_that_cannot_cover_40m():
+    """反向控制：走位时间压到 25 s 以下 -> 40 m 步行会吃掉整段报价。"""
+    numbers = load_numbers()
+    numbers["inbound_budget_ms"] = 24999
+    problems = check(numbers)
+    assert any("走位" in problem for problem in problems), problems
+
+
+def test_rule_catches_a_patience_window_too_short_to_decide():
+    """反向控制：决策耐心压到 20 s 以下 -> 面板刚出现就要做决定。"""
+    numbers = load_numbers()
+    numbers["patience_ms"] = 19999
+    problems = check(numbers)
+    assert any("耐心" in problem for problem in problems), problems

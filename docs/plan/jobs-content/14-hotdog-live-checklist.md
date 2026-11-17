@@ -97,3 +97,14 @@ OS 光标被 GTA 锁在屏幕角，合成鼠标点击进不了 NUI。
 | 挪位入库写**实体真坐标** | ✅ | 探针 `MOVE_STORES_ENTITY_COORDS_NOT_CLAIM`；改回 `pos` 后 22/23 |
 | 探针距离桩真的在算距离（不是空转） | ✅ | 修前 `#` 恒 0；修后 `SUMMARY 23/23`，四条注入分别 21/23、21/23、22/23、22/23 |
 | 真机：客户端创建的推车在服务端取到的坐标，与申报点差 ≤3 m | ⛔ | 需要服务器 + 一个客户端。缺：摆一次、挪一次，对照日志 `[quest-booth] 📋 摊位登记 … (x,y,z)` 与推车实体坐标 |
+
+## 5. G 片（顾客 INBOUND 走位 + 报价时机）的验收记录 — 2026-11-17
+
+| 项 | 态 | 证据 |
+|---|---|---|
+| 生成点在 25–40 m（扫 0–360° / 每 15°） | ✅ | `hotdog_inbound_probe` client 5/5；把距离改回 2.2 m → 1/55 |
+| 越界参数夹紧（5 / 100 → 25 / 40），z 跟随摊位 | ✅ | 探针 `clamps_below_range` / `clamps_above_range` / `z_follows_booth` |
+| 报价生命周期 = `inbound_budget_ms + patience_ms` | ✅ | server 探针 4/4；只返回 patience → 1/4 |
+| `CreateOffer.expiresAt` 真的接这条算式 | ✅ | 探针 `create_offer_uses_lifetime`；改回 `now + patience` → 3/4 |
+| **NPC 报价面板此前从不弹出**（`offerId = offer.id`，键名不存在 → 客户端判缺 id 整条忽略） | ✅ 已修 | 桥接改成 `offer.offerId`；master 历史版本确认旧写法 |
+| 顾客真的走过来、不挡路、面板在到位后出现、45 s 兜底 | ⛔ | 需要真机 + 一个客户端。缺：摆摊后等一位顾客，看走位、前 3 s 不碰撞、倒计时从 30 s 起算 |

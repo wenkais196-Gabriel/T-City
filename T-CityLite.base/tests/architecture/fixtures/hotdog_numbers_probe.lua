@@ -4,7 +4,7 @@
 -- 仓库里其它探针（vendor_summary_probe / vendor_bystander_probe）也都是文件 + 路径参数。
 --
 -- 用法：lua5.4 lua hotdog_numbers_probe.lua <quest_hotdog.lua 的路径>
--- 输出：一行 15 个数字，空格分隔，顺序见 test_hotdog_test_numbers.py 的 KEYS
+-- 输出：一行 16 个数字，空格分隔，顺序见 test_hotdog_test_numbers.py 的 KEYS
 
 -- 模板文件带 convar 开关（默认返回 {}），这里打开再取表
 GetConvar = function(_, _) return '1' end
@@ -35,6 +35,7 @@ print(table.concat({
     n(rental.deposit), n(rental.rate_per_min), n(rental.grace_sec), n(rental.max_minutes),
     n(vendor.prices.common), n(vendor.prices.rare), n(vendor.prices.exotic),
     n(vendor.first_customer_ms[1]), n(vendor.first_customer_ms[2]),
-    n(vendor.interval_ms[1]), n(vendor.interval_ms[2]), n(vendor.patience_ms),
+    n(vendor.interval_ms[1]), n(vendor.interval_ms[2]),
+    n(vendor.inbound_budget_ms), n(vendor.patience_ms),
     n(vendor.starting_stock.common), n(vendor.starting_stock.rare), n(vendor.starting_stock.exotic),
 }, ' '))

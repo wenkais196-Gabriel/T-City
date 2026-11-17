@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   （3 条前向规则，已在预算文件里写明到期条件）。
 
 ### Fixed
+- **热狗顾客 INBOUND 走位 + 服务端报价时机**：顾客不再在摊位旁 2.2 m 原地出现，改在
+  25–40 m 外生成并走到摊位前 2.4 m；服务端报价生命周期从 `now + patience_ms` 改成
+  `now + inbound_budget_ms + patience_ms`（走位不再吃掉决策窗口），payload 下发
+  `inboundMs` / `patienceMs` / `remainingMs` / `boothNetId`，并修掉接线方 `offerId = offer.id`
+  （应为 `offer.offerId`，此前整条报价会被客户端忽略）。到位前状态条只显示「顾客正在走来
+  （约 N 米）」，到位后才出 Y/N 面板与耐心倒计时；新增 `hotdog_inbound_probe.lua` 探针与
+  5 条用例（含 2 条反向校验）。
 - **摊位坐标服务端复验（红线①）**：`QuestBooth.Register` / `MoveTo` 之前把客户端申报的
   `pos` 原样入库，买家的 6 m 交互半径与 10 m 旁观者广播都按这条坐标算。现在服务端用
   实体真坐标复验申报点（容差 ≤3 m，失败返回 `bad_coords`），**入库/挪位只写实体真坐标**；
