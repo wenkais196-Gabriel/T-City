@@ -4,12 +4,14 @@ type: plan
 status: draft
 system: agent
 owner: hermes
-updated: 2026-11-13
+updated: 2026-11-17
 review_by: 2027-02-28
 tracks: [custom-director, agent-tools, agent-runtime]
 topic: agent-module-execution
 source_of_truth: false
+plan_status: 1
 ---
+
 
 # Agent 模块化施工计划（M1–M7）
 
@@ -17,6 +19,9 @@ source_of_truth: false
 > 按 M1→M6 串行推进（#233 检索作为并行轨道）。每个模块结束都必须能拿出一条可判定的数字或一次可复现的演示。
 > **本文不改上游的范围判断**，只回答三件事：先做什么、每个模块改哪里、怎么算做完。
 
+```plan-status
+ALL | todo | - | 2026-11-17
+```
 ---
 
 ## 0. 事实基线（2026-11-13 实测，不引用二手数字）

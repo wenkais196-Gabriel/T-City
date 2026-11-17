@@ -125,7 +125,7 @@
 | [🚗 T-City Lite 驾驶员与驾考系统 (Driver) 细化规划](archive/QBCore_Lite_versions/career/driver_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/driver_plan.md` |
 | [🚚 T-City Lite 货运司机与物流系统 (Logistics) 细化规划](archive/QBCore_Lite_versions/career/logistics_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/logistics_plan.md` |
 | [🎭 T-City Lite 职业身份与扮演体验（Career）总规划](archive/QBCore_Lite_versions/career/overall_plan.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/career/overall_plan.md` |
-| [内容填充总规划（职业优先，R0–R6）](plan/jobs-content-roadmap.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content-roadmap.md` |
+| [内容填充总规划（职业优先，R0–R6）](plan/jobs-content-roadmap.md) | plan | 🟡 draft | 2026-11-17 | 2027-02-28 |  | `docs/plan/jobs-content-roadmap.md` |
 | [计划：R1 多站驾驶（garbage + bus）](plan/jobs-content/03-plan.md) | plan | 🟡 draft | 2026-11-17 | 2027-02-28 |  | `docs/plan/jobs-content/03-plan.md` |
 | [调研：职业内容填充（阶段 R）](plan/jobs-content/01-research.md) | research | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/jobs-content/01-research.md` |
 | [T-City Lite — 职业声望与进阶养成系统设计](../T-CityLite.base/docs/design/career-reputation-design.md) | spec | 🟡 draft | 2026-11-16 | 2027-04-30 |  | `T-CityLite.base/docs/design/career-reputation-design.md` |
@@ -272,7 +272,7 @@
 | [加 / 改一个 agent 动作：检查清单](agent/police/ATOOLS-DISCIPLINE.md) | manual | ✅ active | 2026-11-15 | 2027-01-30 |  | `docs/agent/police/ATOOLS-DISCIPLINE.md` |
 | [Agent Read Layer (Phase 3 / P1)](../T-CityLite.base/docs/agent/README.md) | meta | ✅ active | 2026-10-27 | 2027-04-30 |  | `T-CityLite.base/docs/agent/README.md` |
 | [Agent 控制平面升级计划](plan/agent-control-plane-upgrade.md) | plan | ✅ active | 2026-11-17 | 2027-03-31 | ★ | `docs/plan/agent-control-plane-upgrade.md` |
-| [Agent 模块化施工计划（M1–M7）](plan/agent-module-execution.md) | plan | 🟡 draft | 2026-11-13 | 2027-02-28 |  | `docs/plan/agent-module-execution.md` |
+| [Agent 模块化施工计划（M1–M7）](plan/agent-module-execution.md) | plan | 🟡 draft | 2026-11-17 | 2027-02-28 |  | `docs/plan/agent-module-execution.md` |
 | [2026-11-01 · 下一步开发方向调研（Hermes + Claude Code 双份意见）](engineering/2026-11-01-next-epic-research.md) | research | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/2026-11-01-next-epic-research.md` |
 | [客户端双端测试 Harness（MCP）](../T-CityLite.base/docs/agent/CLIENT_HARNESS.md) | spec | ✅ active | 2026-10-26 | 2027-04-30 |  | `T-CityLite.base/docs/agent/CLIENT_HARNESS.md` |
 | [客户端可观测性：服务端能看见客户端](../T-CityLite.base/docs/agent/CLIENT_OBSERVABILITY.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/agent/CLIENT_OBSERVABILITY.md` |
@@ -320,7 +320,7 @@
 | [存盘性能优化与数据库异步落盘](../T-CityLite.base/docs/systems/database-persistence.md) | manual | ✅ active | 2026-11-16 | 2027-01-30 |  | `T-CityLite.base/docs/systems/database-persistence.md` |
 | [T-City Lite — 服务器重构项目交付与长期维护手册](../T-CityLite.base/docs/systems/delivery-manual.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `T-CityLite.base/docs/systems/delivery-manual.md` |
 | [v1.0 Open Beta 上线验收与发布清单](archive/QBCore_Lite_versions/v1.0-beta-launch.md) | plan | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v1.0-beta-launch.md` |
-| [🧪 T-City Lite 自动化测试方案](plan/automated-testing-plan.md) | plan | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/plan/automated-testing-plan.md` |
+| [🧪 T-City Lite 自动化测试方案](plan/automated-testing-plan.md) | plan | ✅ active | 2026-11-17 | 2027-04-30 |  | `docs/plan/automated-testing-plan.md` |
 | [维护与排障手册](03_maintenance_manuals/maintenance_guide.md) | runbook | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/03_maintenance_manuals/maintenance_guide.md` |
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |

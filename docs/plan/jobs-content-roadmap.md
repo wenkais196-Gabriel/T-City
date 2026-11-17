@@ -4,11 +4,13 @@ type: plan
 status: draft
 system: jobs
 owner: hermes
-updated: 2026-11-13
+updated: 2026-11-17
 review_by: 2027-02-28
 topic: content-fill
 source_of_truth: false
+plan_status: 1
 ---
+
 
 # 内容填充总规划（职业优先，R0–R6）
 
@@ -16,6 +18,9 @@ source_of_truth: false
 > 把 22 个只有名字的职业，变成「每个职业要么有一条能重复玩的循环，要么有一套只有它能做的事」。
 > 硬约束：**0 个新资源、0 张新表、0 个新 net event**（新增任何一项都要按 `tests/architecture` 的闸门重新计价）。
 
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 ---
 
 ## 0. 两轮独立判断（本文 + Claude Code 只读复盘）

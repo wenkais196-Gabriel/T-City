@@ -4,9 +4,11 @@ type: plan
 status: active
 system: delivery
 owner: hermes
-updated: 2026-10-25
+updated: 2026-11-17
 review_by: 2027-04-30
+plan_status: 1
 ---
+
 
 # 🧪 T-City Lite 自动化测试方案
 
@@ -15,6 +17,9 @@ review_by: 2027-04-30
 > **关联版本**: v0.5 犯罪玩法系统（开发中）
 > **本文档由 `//goal 创建自动化测试方案文档` 生成**
 
+```plan-status
+ALL | wip | - | 2026-11-17
+```
 ---
 
 ## 目录
