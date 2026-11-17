@@ -30,9 +30,9 @@ ROADS = BASE / "resources/[custom]/custom-quest/config/quests/hotdog_roads.json"
 LUA = shutil.which("lua5.4")  # NOSONAR
 
 
-def run_probe(source: Path) -> subprocess.CompletedProcess:
+def run_probe(source: Path, probe: Path = PROBE) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [LUA, str(PROBE), str(source)],  # NOSONAR 固定名字的解释器，路径不来自外部输入
+        [LUA, str(probe), str(source)],  # NOSONAR 固定名字的解释器，路径不来自外部输入
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90,
     )
 
@@ -41,7 +41,7 @@ def run_probe(source: Path) -> subprocess.CompletedProcess:
 def test_placement_rules_hold():
     proc = run_probe(BOOTH)
     assert proc.returncode == 0, f"探针失败：\n{proc.stdout}\n{proc.stderr}"
-    assert "SUMMARY 17/17" in proc.stdout
+    assert "SUMMARY 23/23" in proc.stdout
 
 
 @pytest.mark.skipif(LUA is None, reason="需要 lua5.4")
@@ -65,6 +65,28 @@ def test_probe_goes_red_when_the_road_check_is_removed(tmp_path: Path):
     proc = run_probe(target)
     assert proc.returncode != 0, "删掉压路面判据后探针仍然全绿 —— 这条用例没在防什么"
     assert "FAIL RV_ON_ROAD" in proc.stdout
+
+
+@pytest.mark.skipif(LUA is None, reason="需要 lua5.4")
+def test_probe_goes_red_when_distance_stub_loses_its_len_metamethod(tmp_path: Path):
+    """反向校验：距离桩的 `#` 恒为 0 时，5 m 那条必须红。
+
+    原来的探针把 `__len` 当普通字段塞进 `__sub` 的返回值，而 Lua 的 `#` 只认
+    元方法、不认同名字段 —— 所有 `#(a - b)` 判据从来没执行过（实体离「玩家」838 m
+    也能过 50 m 判据）。把 `__sub` 改回普通表，5 m 申报点就会混过 3 m 复验。
+    """
+    src = PROBE.read_text(encoding="utf-8")
+    assert "return Vec(dx, dy, dz)" in src
+    broken = src.replace(
+        "return Vec(dx, dy, dz)",
+        "return { x = dx, y = dy, z = dz, "
+        "__len = math.sqrt(dx * dx + dy * dy + dz * dz) }", 1)
+    target = tmp_path / "booth_probe_broken_vec.lua"
+    target.write_text(broken, encoding="utf-8")
+
+    proc = run_probe(BOOTH, target)
+    assert proc.returncode != 0, f"距离桩失效后探针仍然全绿 —— 坐标复验是空转：\n{proc.stdout}"
+    assert "FAIL REGISTER_CLAIM_OFF_BY_5M_REJECTED" in proc.stdout
 
 
 def test_booth_step_is_wired_into_the_validator_gate():

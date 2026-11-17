@@ -11,6 +11,9 @@
 --   8 netId 不存在                   → 找不到那辆推车
 --   9 模型对不上                     → 找不到那辆推车
 --  10 Release 之后记录为空（同任务不会堆实体）
+--  11 申报坐标复验（红线①）：=实体点 / 偏2m 通过，偏5m / 远40m 拒（bad_coords），
+--     以及挪位后 Booths 里是**实体真坐标**而不是申报值。
+--     距离桩用真元表（`__sub`/`__len`）：`#` 必须真的算欧氏距离，否则这些判据全是空转。
 
 local SOURCE = arg[1]
 if not SOURCE then error('用法: lua5.4 booth_probe.lua <quest_booth.lua>') end
@@ -33,6 +36,23 @@ LoadResourceFile = function(_, path)
     return nil
 end
 
+-- vector3 桩：`#(a - b)` 必须真的算欧氏距离。
+-- 反例（本次修复前）：`__sub` 返回普通表并把 `__len` 当成普通字段 —— Lua 的 `#`
+-- 只认元方法、不认同名字段，于是 `#` 恒为 0，所有距离判据都被静默绕过。
+local function Vec(x, y, z)
+    return setmetatable({ x = x, y = y, z = z }, {
+        __sub = function(a, b)
+            local dx, dy, dz = a.x - b.x, a.y - b.y, a.z - b.z
+            return Vec(dx, dy, dz)
+        end,
+        __len = function(v) return math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) end,
+    })
+end
+vector3 = Vec
+
+-- 玩家 ped 站在实体 11 旁 2 m：距离桩修好后，50 m 判据要能通过（而不是被 838 m 误拒）。
+local PLAYER_COORDS = { x = 217.0, y = -810.0, z = 30.7 }
+
 -- 实体世界：netId → { coords, model }
 local Ents = {
     [11] = { coords = { x = 215.0, y = -810.0, z = 30.7 }, model = 'prop_hotdogstand_01' },
@@ -41,17 +61,16 @@ local Ents = {
 }
 GetPlayerPed = function() return 1 end
 GetEntityCoords = function(ent)
-    local record = Ents[ent]
-    local c = record and record.coords or { x = 0, y = 0, z = 0 }
-    return setmetatable({ x = c.x, y = c.y, z = c.z }, {
-        __sub = function(a, b)
-            local dx, dy, dz = a.x - b.x, a.y - b.y, a.z - b.z
-            return { x = dx, y = dy, z = dz,
-                     __len = math.sqrt(dx * dx + dy * dy + dz * dz) }
-        end,
-        __len = function(a) return math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z) end,
-    })
+    local c
+    if ent == 1 then
+        c = PLAYER_COORDS
+    else
+        local record = Ents[ent]
+        c = record and record.coords or { x = 0, y = 0, z = 0 }
+    end
+    return Vec(c.x, c.y, c.z)
 end
+DoesEntityExist = function(ent) return Ents[ent] ~= nil end
 GetEntityModel = function(ent)
     local record = Ents[ent]
     return record and record.model or 'unknown'
@@ -153,6 +172,51 @@ check('RELEASE_CLEARS', released == true and QuestBooth.Get('cid-1') == nil and 
 check('RELEASE_RECYCLES_ENTITY', #QuestEntityRegistry.recycled == 1,
     #QuestEntityRegistry.recycled > 0 and QuestEntityRegistry.recycled[1].qid or 'none')
 check('RELEASE_IS_IDEMPOTENT', QuestBooth.RemoveBooth('cid-1', 'hotdog_dev', 'again') == false)
+
+-- ==============================================================
+-- 红线①：申报坐标必须用实体真坐标复验（F 片）
+-- ==============================================================
+-- 实体 11 在 (215, -810, 30.7)；玩家 ped 在 (217, -810, 30.7)，即实体旁 2 m。
+
+-- 11 申报点 = 实体点 → 通过（正控：3 m 容差没有把正常摆放卡死）
+local atEntity, atEntityReason = QuestBooth.Register(1, 'cid-claim-ok', 'hotdog_dev',
+    { x = 215.0, y = -810.0, z = 30.7 }, 11, 'prop_hotdogstand_01')
+check('REGISTER_CLAIM_AT_ENTITY_OK', atEntity == true, atEntityReason)
+
+-- 12 申报点偏 2 m → 通过（容差内）
+local off2, off2Reason = QuestBooth.Register(1, 'cid-claim-2m', 'hotdog_dev',
+    { x = 217.0, y = -810.0, z = 30.7 }, 11, 'prop_hotdogstand_01')
+check('REGISTER_CLAIM_OFF_BY_2M_OK', off2 == true, off2Reason)
+
+-- 12b 入库的是实体真坐标，不是申报值。反向语义：把 Register 的
+-- `x = trueCoords.x` 改回 `x = pos.x`（Hermes 的注入）时，这条必须红。
+local claim2mBooth = QuestBooth.Get('cid-claim-2m')
+check('REGISTER_STORES_ENTITY_COORDS_NOT_CLAIM',
+    claim2mBooth ~= nil
+        and claim2mBooth.x == 215.0 and claim2mBooth.y == -810.0 and claim2mBooth.z == 30.7,
+    claim2mBooth and ('%.1f, %.1f, %.1f'):format(claim2mBooth.x, claim2mBooth.y, claim2mBooth.z)
+        or 'no booth')
+
+-- 13 申报点偏 5 m → 拒，bad_coords（旧版会把 5 m 外的值原样入库）
+local off5, off5Reason = QuestBooth.Register(1, 'cid-claim-5m', 'hotdog_dev',
+    { x = 220.0, y = -810.0, z = 30.7 }, 11, 'prop_hotdogstand_01')
+check('REGISTER_CLAIM_OFF_BY_5M_REJECTED',
+    off5 == false and off5Reason == QuestBooth.REASON.COORDS_MISMATCH, off5Reason)
+
+-- 14 申报点在玩家 50 m 内、但离实体 40 m → 拒（旧的 50 m 判据会放行）
+local nearPlayerFarEntity, farReason = QuestBooth.Register(1, 'cid-claim-40m', 'hotdog_dev',
+    { x = 255.0, y = -810.0, z = 30.7 }, 11, 'prop_hotdogstand_01')
+check('REGISTER_CLAIM_NEAR_PLAYER_BUT_FAR_FROM_ENTITY_REJECTED',
+    nearPlayerFarEntity == false and farReason == QuestBooth.REASON.COORDS_MISMATCH, farReason)
+
+-- 15 挪位：落库的是实体真坐标，不是传进来的申报值
+local moved = QuestBooth.MoveTo('cid-claim-ok', { x = 999.0, y = 999.0, z = 999.0 })
+local movedBooth = QuestBooth.Get('cid-claim-ok')
+check('MOVE_STORES_ENTITY_COORDS_NOT_CLAIM',
+    moved == true and movedBooth ~= nil
+        and movedBooth.x == 215.0 and movedBooth.y == -810.0 and movedBooth.z == 30.7,
+    movedBooth and ('%.1f, %.1f, %.1f'):format(movedBooth.x, movedBooth.y, movedBooth.z)
+        or 'no booth')
 
 -- 路网点是真的被读进来了（不是走降级路径）
 check('ROAD_INDEX_LOADED', type(QuestBooth.NearestRoadDistance(215.0, -805.0)) == 'number',

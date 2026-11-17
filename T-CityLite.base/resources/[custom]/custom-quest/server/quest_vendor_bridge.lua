@@ -598,24 +598,43 @@ RegisterNetEvent('quest:server:vendorAction', function(action, payload)
         return
     end
 
-    -- 挪摊位：玩家放下车之后想微调位置。校验与首次摆放**同一条判据**，
-    -- 只是不再登记实体（车还是那辆，netId 不变）。
+    -- 挪摊位：玩家放下车之后想微调位置。校验与首次摆放**同一条判据**
+    -- （QuestBooth.VerifyEntity），只是不再登记实体（车还是那辆，netId 不变）。
+    -- 实体句柄取服务端记录里的 booth.netId：payload.netId 是客户端说的，不能信。
     if action == 'move' then
         local booth = QuestBooth.Get(citizenid)
         if not booth then return end
         local pos = { x = tonumber(payload.x), y = tonumber(payload.y), z = tonumber(payload.z) }
-        if not pos.x or not pos.y then return end
+        if not pos.x or not pos.y then
+            TriggerClientEvent('QBCore:Notify', src, QuestBooth.REASON.BAD_PAYLOAD, 'error', 4000)
+            return
+        end
+
+        local verified, verifyReason, trueCoords =
+            QuestBooth.VerifyEntity(src, pos, booth.netId, booth.model)
+        if not verified then
+            local reason = QuestBooth.ReasonText(verifyReason)
+            TriggerClientEvent('QBCore:Notify', src, reason, 'error', 4000)
+            return
+        end
 
         local cfg = boothStepCfgOf(booth.questId)
         if cfg then
-            local ok, reason = QuestBooth.ValidatePlacement(citizenid, cfg, pos, payload.hints)
+            local ok, reason = QuestBooth.ValidatePlacement(citizenid, cfg, trueCoords, payload.hints)
             if not ok then
-                TriggerClientEvent('QBCore:Notify', src, reason or '这里放不了', 'error', 4000)
+                reason = QuestBooth.ReasonText(reason)
+                TriggerClientEvent('QBCore:Notify', src, reason, 'error', 4000)
                 return
             end
         end
 
-        QuestBooth.MoveTo(citizenid, pos)
+        -- MoveTo 内部重新取实体真坐标落库；pos 只是已复验的申报点。
+        local moved, moveReason = QuestBooth.MoveTo(citizenid, pos)
+        if not moved then
+            local reason = QuestBooth.ReasonText(moveReason)
+            TriggerClientEvent('QBCore:Notify', src, reason, 'error', 4000)
+            return
+        end
         -- 推一次状态给摊主，UI 才能知道摊位换了位置（这里曾经写成未定义的 PushFor，
         -- 运行期 attempt to call a nil value，挪位后界面不刷新）。
         PushState(citizenid, 'moved')
