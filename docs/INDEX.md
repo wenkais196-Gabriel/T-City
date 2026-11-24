@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：326 ｜ **已登记**：326 ｜ **未登记**：0
+**文档总数**：327 ｜ **已登记**：327 ｜ **未登记**：0
 
-**状态分布**：✅ active 180 ・ 🟡 draft 15 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 180 ・ 🟡 draft 16 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -235,7 +235,7 @@
 | [手机四段往返可观测设计（`phone:server:diag`）](client/research/client-observability-design.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/client/research/client-observability-design.md` |
 | [11 · 工作平板：一台设备的两种形态](server-design/11-work-tablet.md) | spec | ✅ active | 2026-10-26 | 2027-04-30 |  | `docs/server-design/11-work-tablet.md` |
 
-### world（11）
+### world（12）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -250,6 +250,7 @@
 | [02 — 世界痕迹系统：让玩家行为留下可见、持久的世界后果](server-design/02-world-traces.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/02-world-traces.md` |
 | [03 — 不可替代性与声誉：让玩家成为"基础设施"](server-design/03-irreplaceability-reputation.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/03-irreplaceability-reputation.md` |
 | [04 — 共治系统：让玩家成为规则的共同制定者](server-design/04-co-governance.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `docs/server-design/04-co-governance.md` |
+| [12 — 产业运营与组织运营（MVP 基础方案）](server-design/12-industry-operations.md) | spec | 🟡 draft | 2026-11-24 | 2027-04-30 |  | `docs/server-design/12-industry-operations.md` |
 
 ### agent（35）
 
