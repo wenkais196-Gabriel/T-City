@@ -87,8 +87,8 @@ P6 | todo | - | -
 |---|---|---|---|
 | **P1** | 迁移 + 三处登记 | 新增 `T-CityLite.base/migrations/v4.0_industry_treasury.sql`；改 `T-CityLite.base/tests/fixtures/tcity_schema.sql`；改 `T-CityLite.base/tests/architecture/table_owners.json` | 标准 1–3 |
 | **P2** | 资源骨架 + 启动接线 | 新增 `T-CityLite.base/resources/[custom]/custom-industry/{fxmanifest.lua,config.lua,server/main.lua}`；改 `T-CityLite.base/configs/modules/economy.cfg` | `tools/dev/boot_cfg.py --check`；起服后资源在列表 |
-| **P3** | 金库单一写入口 | 新增 `server/treasury.lua`、`server/audit.lua` | 标准 4–7（单测） |
-| **P4** | 命令层 | 新增 `server/commands.lua`，改 `server/main.lua` 接线 | 标准 8 |
+| **P3** | 金库单一写入口 | 新增 server/treasury.lua、server/audit.lua | 标准 4–7（单测） |
+| **P4** | 命令层 | 新增 server/commands.lua，改 server/main.lua 接线 | 标准 8 |
 | **P5** | 测试（先红后绿） | 新增 `tests/unit/layer3_business/fixtures/industry_treasury_probe.lua`、`tests/unit/layer3_business/test_industry_treasury.py` | 标准 4–9 |
 | **P6** | 真机验收 | 无代码改动（只跑） | 标准 10 |
 
@@ -146,6 +146,10 @@ P6 | todo | - | -
 - [ ] `T-CityLite.base/tests/fixtures/tcity_schema.sql`：建三张表
 - [ ] `T-CityLite.base/configs/modules/economy.cfg`：`ensure custom-industry`
 - [ ] `CHANGELOG.md`：Unreleased → Added
+- [ ] `T-CityLite.base/tests/architecture/test_cross_resource_writes.py`：`RESOURCE_DIRS` 加一行
+      （`scan` 认这个映射，不加则 FIT-02 直接 KeyError）——**施工时才发现，原计划漏了**
+- [ ] `docs/client/ux/admin-commands.md`：跑 `python tools/dev/scan_commands.py` 重生成
+      （新命令要进清单；文档里是**生成物**，手改会被下一次重生成覆盖）——**施工时才发现，原计划漏了**
 - [ ] 不需要动：`net_events_*`（无事件）、`service_contracts.json`（无导出）、
       `resource_wiring_allowlist.json`（无跨资源硬引用）、预算文件（无新闸门）
 
