@@ -12,7 +12,8 @@
     "custom-career",
     "custom-agent-client",
     "story-engine",
-    "tcity-dashboard"
+    "tcity-dashboard",
+    "custom-industry"
   ],
   "owners": [
     {
@@ -85,6 +86,14 @@
       "tables": [
         "world_state",
         "world_events"
+      ]
+    },
+    {
+      "owner": "custom-industry",
+      "tables": [
+        "org_treasury",
+        "org_ledger",
+        "industry_audit"
       ]
     }
   ],

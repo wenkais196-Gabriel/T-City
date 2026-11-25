@@ -1149,6 +1149,42 @@ CREATE TABLE IF NOT EXISTS `quest_event_log` (
   KEY `idx_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- v4.0_industry_treasury.sql — S1 组织金库
+CREATE TABLE IF NOT EXISTS `org_treasury` (
+  `org_id` varchar(64) NOT NULL,
+  `balance` bigint(20) NOT NULL DEFAULT 0,
+  `prestige` int(11) NOT NULL DEFAULT 0,
+  `cycle_no` int(11) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`org_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `org_ledger` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `org_id` varchar(64) NOT NULL,
+  `delta` bigint(20) NOT NULL,
+  `balance_after` bigint(20) NOT NULL,
+  `reason` varchar(64) NOT NULL,
+  `actor_cid` varchar(64) DEFAULT NULL,
+  `ref` varchar(96) NOT NULL,
+  `cycle_no` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_org_ref` (`org_id`,`ref`),
+  KEY `idx_org_created` (`org_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `industry_audit` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `org_id` varchar(64) NOT NULL,
+  `actor_cid` varchar(64) DEFAULT NULL,
+  `action` varchar(48) NOT NULL,
+  `payload` longtext DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_org_created` (`org_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

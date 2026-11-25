@@ -14,7 +14,7 @@ review_by: 2027-02-28
 
 # 管理员命令清单
 
-共 **342** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
+共 **346** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
 
 ## 危险命令但没有判权：0 条
 
@@ -25,10 +25,10 @@ review_by: 2027-02-28
 | 权限来源 | 命令数 |
 |---|---|
 | — | 158 |
-| QBCore | 101 |
+| QBCore | 104 |
 | restricted=true | 40 |
 | job/gang 判定 | 35 |
-| handler 内判定 | 8 |
+| handler 内判定 | 9 |
 
 ## 按资源分组
 
@@ -143,6 +143,15 @@ review_by: 2027-02-28
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
 | `agentapprove` | RegisterCommand | handler 内判定: IsPlayerAceAllowed | T-CityLite.base/resources/[custom]/custom-director/server/main.lua:2075 |
+
+### custom-industry
+
+| 命令 | API | 权限 | 位置 |
+|---|---|---|---|
+| `orgfund` | QBCore.Commands.Add | handler 内判定: HasPermission | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:88 |
+| `orgfunddeposit` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:140 |
+| `orgfundgrant` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:246 |
+| `orgfundwithdraw` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:189 |
 
 ### custom-justice
 

@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-16
+updated: 2026-11-25
 review_by: 2027-04-30
 ---
 
@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **S1 组织金库（`custom-industry`）**：`org_treasury` / `org_ledger` / `industry_audit` 三张表，
+  余额扣减守卫写在单条 `UPDATE … WHERE balance + ? >= 0` 里（affectedRows 裁决，无 TOCTOU），
+  流水以 `UNIQUE(org_id, ref)` 做幂等键，插流水失败会把余额补偿回去。命令层只有
+  `/orgfund`、`/orgfunddeposit`、`/orgfundwithdraw`、`/orgfundgrant` 四条服务端命令，
+  convar `industry_enable` 默认关闭。迁移 `v4.0_industry_treasury.sql`；无 net event / NUI / exports。
 - **`docs/server-design/12-industry-operations.md`：产业运营 / 组织运营的 MVP 基础方案**（design-only，
   无代码）。Hermes 与 Claude Code 各出一版独立设计后合并，产出四样东西：① 五条**事实纠错**
   （组织钱包不是"不存在"而是 qb-banking 的 `bank_accounts` 半成品——缺负余额闸 / 幂等 ref /
