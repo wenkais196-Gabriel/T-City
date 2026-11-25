@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：329 ｜ **已登记**：329 ｜ **未登记**：0
+**文档总数**：330 ｜ **已登记**：330 ｜ **未登记**：0
 
-**状态分布**：✅ active 180 ・ 🟡 draft 18 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 180 ・ 🟡 draft 19 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 

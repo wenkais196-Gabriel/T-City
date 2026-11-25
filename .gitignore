@@ -182,3 +182,7 @@ server.*.local.cfg
 
 # Lua 编译产物（luac5.4 <file> 的默认输出名，可再生）
 luac.out
+
+# agy (Antigravity) 运行目录：委派产生的 status/result，不入库
+.agy-runs/
+**/.agy-runs/

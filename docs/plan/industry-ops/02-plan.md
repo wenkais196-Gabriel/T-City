@@ -17,12 +17,12 @@ plan_status: 1
 > 施工单元：[#334](https://github.com/wenkais196-Gabriel/T-City/issues/334)。
 
 ```plan-status
-Q1 | todo | - | -
-Q2 | todo | - | -
-Q3 | todo | - | -
-Q4 | todo | - | -
-Q5 | todo | - | -
-Q6 | todo | - | -
+Q1 | done | #350 | 2026-11-25
+Q2 | done | #350 | 2026-11-25
+Q3 | done | #350 | 2026-11-25
+Q4 | done | #350 | 2026-11-25
+Q5 | done | #350 | 2026-11-25
+Q6 | done | #350 | 2026-11-25
 ```
 
 ---
@@ -141,3 +141,18 @@ Q6 | todo | - | -
 - **代码**：`industry_enable` 默认 `false`，关掉后新命令不注册；`git revert`
 - **数据**：`industry_facility` 保留不读即可
 - **运行时**：`restart custom-industry`
+
+---
+
+## 10. 施工记录
+
+| 日期 | 事件 |
+|---|---|
+| 2026-11-25 | Q1–Q5 交付（`800f7ee1`）。单测 9 条 + S1 的 16 条共 **25 passed**；`architecture` 880 passed。 |
+| 2026-11-25 | **四段反向注入全部变红**（CC 报告）：删上限守卫 / 成本改线性 / 先扣钱后判上限 / 删 main.lua 注册。第 1 条的行为用例逻辑上与「预读 + 乐观锁」重叠，故额外断言**实际执行的 UPDATE SQL** 含守卫——这是有意为之，写在用例 docstring。 |
+| 2026-11-25 | Hermes 独立复核：自己把成本公式改成线性 → `test_workstation_cost_curve_is_exponential` 红；还原 → 绿。 |
+| 2026-11-25 | **Q6 真机通过**（玩家实测 + 库对账）。`orgbuild mining_co mine` 扣 50000；`orghire mining_co 3` 扣 **208625 = 50000+67500+91125**，与 `base × 1.35^(n-1)` 完全一致；`industry_facility` = `mine/L1/workstations=3/stock=0`；`org_ledger` 4 行 `balance_after` 连续（306300→256300→206300→138800→47675）；`industry_audit` build + 3 次 hire，每条带 ref 与 workstations 序号。 |
+
+**真机顺手暴露的一条设计约束**：`orgbuild` / `orghire` 都需要 **actor citizenid + Grade 4**，因此**控制台跑不了**（返回「该命令只能由在线玩家执行」），
+与 S1 的 grant/query 不同。这意味着 S3（生产）/ S4（销售）/ S6（周期）的真机验收都会卡在「需要有人在键盘前」。
+→ 已作为待定项记录：是否给后续分片补一条 convar 门控的后台命令（默认关、仅 `source == 0`、调**同一个**生产入口）。
