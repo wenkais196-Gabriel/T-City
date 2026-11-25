@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`docs/server-design/12-industry-operations.md`：产业运营 / 组织运营的 MVP 基础方案**（design-only，
+  无代码）。Hermes 与 Claude Code 各出一版独立设计后合并，产出四样东西：① 五条**事实纠错**
+  （组织钱包不是"不存在"而是 qb-banking 的 `bank_accounts` 半成品——缺负余额闸 / 幂等 ref /
+  gang 账户预建 / 异步写；`custom-economy` 的服务端脚本是空的，所谓"自适应通胀刹车"不存在；
+  组织是 25 条不是 19 条；周期状态不能住 `world_state`——它是 `(region_id, state_key)` 键且冷缓存
+  返回 nil；组织入账走不了 `TriggerReward`——它第一步就 `GetPlayer(source)`）；② 向下依赖树
+  （组织金库是唯一承重柱）；③ S1–S7 分片与两个里程碑（M1 闭环 / M2 周期+结算，S6 与 S7 必须同 PR）；
+  ④ 8 张新表 + 三道通胀闸 + prestige 折算。另附 13 条读代码顺手发现的既有缺陷（4 条已复核：
+  组织仓 `OpenInventoryById` 传字符串 id 导致打不开、`RemoveMoney` 不查余额、启动不建 gang 账户、
+  v0.8 建的 9 张表里 7 张没有 owner）。配图三张在 `docs/server-design/assets/industry-ops/`。
+
+### Added
 - **单片计划的 `ALL` 行**：35 份 `type: plan` 里 15 份没有切片表（多是一次性的 police 施工图）。
   强制它们「先划片再登记」只会发明假粒度，所以规范补一条：**正文没有切片表时，`plan-status`
   只允许一行 `ALL | state | ev | date`**；有切片表时写 `ALL` 会按「ID 不在正文切片表」判红。
