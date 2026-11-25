@@ -219,8 +219,12 @@ UI-Boss（Boss 菜单加一项）/ UI-Phone（DynamicApp 只读快照）
    不许产业自己写一份"看起来差不多"的公式。
 2. **出口有两条**：玩家 → `TriggerReward`（已有）；组织 → 新增 `SettleSale(org_id, item, qty, ref)`，
    它是**全仓唯一一个"无对应玩家扣款"的净增货币点**，因此必须带幂等键、必须写审计、必须出现在 dashboard。
-3. **仪表盘必须看见组织钱**：`economy-dashboard` 现在只统计玩家 `OnMoneyChange`，
+3. **仪表盘必须看见组织钱**：`economy-dashboard` 只统计玩家 `OnMoneyChange`，
    组织入账是通胀盲区——S4 必须同 PR 补一条，否则你会有一个看不见的钱源。
+4. **玩家侧也没有逐笔账**（S1 真机对账时实测）：`Player.Functions.AddMoney/RemoveMoney` **不写**
+   `bank_statements`，而 `agent_economy_metrics` 只有按职业聚合的四列。所以「这条命令到底有没有
+   从个人账户扣钱」在库里**无法证明**，只能靠前后余额对比。S4 若要做对账（或任何纠纷仲裁），
+   必须先补一条逐笔流水。
 
 > 注意：`custom-economy` 的"自适应通胀刹车"**并不存在**（§2 第 2 行）。所以产业的净增必须自己埋点，
 > 不要假设有一个自动旋钮在兜底。
@@ -357,7 +361,7 @@ UI-Boss（Boss 菜单加一项）/ UI-Phone（DynamicApp 只读快照）
 | 2 | `qb-banking` 的 `RemoveMoney` **不查余额**，且 Add/Remove 在游戏线程 `await` | qb-banking 的 server.lua 第 143 / 151 / 165 行 | ✅ 已复核 |
 | 3 | `qb-banking` 启动**只建 job 账户，不建 gang 账户** → 帮派首次入账返回 false | qb-banking 的 server.lua 第 688 行 | ✅ 已复核 |
 | 4 | `table_owners.json` 只登记了 `world_state` / `world_events`，但 v0.8 建了 **9 张表** → 7 张无 owner，跨表写不被拦 | `tests/architecture/table_owners.json`；`migrations/v0.8_ownership_engine.sql` | ✅ 已复核 |
-| 5 | `economy-dashboard` 只统计玩家钱 → 组织入账是通胀盲区 | economy-dashboard 的 server/main.lua 第 59–83 行 | ⛔ 未复核 |
+| 5 | `economy-dashboard` 只统计玩家钱 → 组织入账是通胀盲区（`agent_economy_metrics` 只有 job 维度聚合，无组织维度、无逐笔） | economy-dashboard 的 server/main.lua 第 59–83 行；`SHOW COLUMNS FROM agent_economy_metrics` | ✅ 已复核（S1 真机对账） |
 | 6 | `world_events` 全仓 0 写者，上线通知恒为空 | `world_state_service.lua` 第 263–268 行 | ⛔ 未复核 |
 | 7 | `custom-market` 价格只在内存、无落盘；重启价格回 base | custom-market 的 server/main.lua 第 25–55 行 | ⛔ 未复核 |
 | 8 | market 卖货走 `AddScaled`（工资倍率）而不是奖励倍率 → 同样是"卖东西"，两套倍率 | custom-market 的 server/main.lua 第 270–275 行 | ⛔ 未复核 |
@@ -366,6 +370,7 @@ UI-Boss（Boss 菜单加一项）/ UI-Phone（DynamicApp 只读快照）
 | 11 | `production-freeze` 在定义前调用 `getBusServiceList` | production-freeze 的 server/main.lua 第 140 / 144 行 | ⛔ 未复核 |
 | 12 | `world_state_service` 把 region key 当 citizenid 传给 `DirtyFlush` | `world_state_service.lua` 第 181–183 行 | ⛔ 未复核 |
 | 13 | cartel 的 safecracker 配方没有对应导出 → 小游戏分支永远不生效 | custom-cartel 的 config.lua 第 59 行 | ⛔ 未复核 |
+| 14 | **玩家资金没有逐笔账**：`bank_statements` 只由 ATM 路径写，`Player.Functions.AddMoney/RemoveMoney` 不写；dashboard 表只有按职业聚合。任何「这条命令有没有扣钱」都只能靠前后余额对比 | `SHOW TABLES LIKE '%transaction%'`；`bank_statements` 无当日行；`agent_economy_metrics` 列结构 | ✅ 已复核（S1 真机对账） |
 
 > 1–4 影响本设计（组织仓能不能复用、金库能不能借用、新表登记全不全），其余与本设计无关，进 backlog。
 
