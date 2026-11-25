@@ -18,6 +18,7 @@ client_scripts {
     'client/noclip.lua',
     'client/entity_view.lua',
     'client/blipsnames.lua',
+    'client/menu_shim.lua',
     'client/client.lua',
     'client/events.lua',
     'entityhashes/entity.lua',

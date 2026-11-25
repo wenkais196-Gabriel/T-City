@@ -134,8 +134,12 @@ RegisterNetEvent('qb-admin:client:SetSpeed', function(speed)
     end)
 end)
 
+-- #353：NUI 焦点只能由 custom-ui 的输入栈仲裁（它是全仓唯一允许调 SetNuiFocus 的资源）。
+-- `/givenuifocus` 是 qb-adminmenu 的遗留调试入口；直接 SetNuiFocus 会绕过栈、抢走 menuv
+-- 的键盘输入。命令与权限保持不变（见 server/server.lua 与命令清单），这里只停用焦点写入。
 RegisterNetEvent('qb-admin:client:GiveNuiFocus', function(focus, mouse)
-    SetNuiFocus(focus, mouse)
+    print(('[qb-adminmenu] /givenuifocus 已停用（focus=%s mouse=%s）：NUI 焦点统一由 custom-ui 管理（#353）'):format(
+        tostring(focus), tostring(mouse)))
 end)
 
 local performanceModIndices = { 11, 12, 13, 15, 16 }

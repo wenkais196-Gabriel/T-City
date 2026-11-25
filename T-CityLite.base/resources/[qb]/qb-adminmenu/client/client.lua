@@ -26,7 +26,8 @@ local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuL
 local menu15 = MenuV:CreateMenu(false, Lang:t('menu.spawn_weapons'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test15')
 
 RegisterNetEvent('qb-admin:client:openMenu', function()
-    MenuV:OpenMenu(menu1)
+    -- #353: 先问 custom-ui 的输入栈（手机/中控开着时拒绝叠窗），再入栈
+    AdminMenuShim.OpenMenu(menu1)
 end)
 
 --[[
@@ -446,7 +447,7 @@ local function OpenPermsMenu(permsply)
     QBCore.Functions.TriggerCallback('qb-admin:server:getrank', function(rank)
         if rank then
             local selectedgroup = 'Unknown'
-            MenuV:OpenMenu(menu11)
+            AdminMenuShim.OpenMenu(menu11)
             menu11:ClearItems()
             menu11:AddSlider({
                 icon = '',
@@ -502,7 +503,7 @@ local function OpenPermsMenu(permsply)
 end
 
 local function OpenKickMenu(kickplayer)
-    MenuV:OpenMenu(menu10)
+    AdminMenuShim.OpenMenu(menu10)
     menu10:ClearItems()
     menu10:AddButton({
         icon = '',
@@ -531,7 +532,7 @@ local function OpenKickMenu(kickplayer)
 end
 
 local function OpenBanMenu(banplayer)
-    MenuV:OpenMenu(menu9)
+    AdminMenuShim.OpenMenu(menu9)
     menu9:ClearItems()
     menu9:AddButton({
         icon = '',
@@ -625,7 +626,7 @@ end
 local function OpenPlayerMenus(player)
     local Players = MenuV:CreateMenu(false, player.cid .. Lang:t('info.options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv') -- Players Sub Menu
     Players:ClearItems()
-    MenuV:OpenMenu(Players)
+    AdminMenuShim.OpenMenu(Players)
     local elements = {
         [1] = {
             icon = '💀',
@@ -878,7 +879,7 @@ end
 -- Car Categories
 local function OpenCarModelsMenu(category)
     menu13:ClearItems()
-    MenuV:OpenMenu(menu13)
+    AdminMenuShim.OpenMenu(menu13)
     for k, v in pairs(category) do
         menu13:AddButton({
             label = v['name'],
@@ -1199,7 +1200,7 @@ end)
 local function OpenDealerMenu(dealer)
     local EditDealer = MenuV:CreateMenu(false, Lang:t('menu.edit_dealer') .. dealer['name'], menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv')
     EditDealer:ClearItems()
-    MenuV:OpenMenu(EditDealer)
+    AdminMenuShim.OpenMenu(EditDealer)
     local elements = {
         [1] = {
             icon = '➡️',
