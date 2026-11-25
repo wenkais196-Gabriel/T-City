@@ -1,0 +1,366 @@
+"""组织金库（S1）：真跑 Lua，桩只替换 MySQL。
+
+这里钉四件在并发/故障下最容易写错的事：
+
+1. **余额判断与扣减是一条 UPDATE**（affectedRows 是唯一裁决依据）。两个并发取款
+   各自都"看起来够"，但守卫必须在数据库里，不能先 `Db.Single` 再比较。
+2. **幂等键是数据库的 UNIQUE(org_id, ref)**。测试从迁移文件读这条约束是否还在；
+   删掉迁移里的唯一键，幂等用例必须真的变红（桩不会替数据库撒谎）。
+3. **先改余额、成功后才插流水**；插流水失败要把余额补偿回去，返回 db_error。
+4. 守卫不能误伤正常流程：合法的第二个不同 ref 必须成功（正向控制）。
+
+跑法：``uv run --with pytest python -m pytest tests/unit/layer3_business/test_industry_treasury.py -q``
+"""
+
+from __future__ import annotations
+
+import re
+import shutil
+import subprocess
+import textwrap
+from pathlib import Path
+
+import pytest
+
+from lua_probe import BASE, load_with_db
+
+RES = BASE / "resources" / "[custom]" / "custom-industry"
+SRC = RES / "server" / "treasury.lua"
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "industry_treasury_probe.lua"
+MIGRATION = BASE / "migrations" / "v4.0_industry_treasury.sql"
+SCHEMA_FIXTURE = BASE / "tests" / "fixtures" / "tcity_schema.sql"
+
+TABLES = ("org_treasury", "org_ledger", "industry_audit")
+UNIQUE_KEY = re.compile(
+    r"UNIQUE\s+KEY\s+`uniq_org_ref`\s*\(\s*`org_id`\s*,\s*`ref`\s*\)", re.I
+)
+
+
+def _strip_sql_comments(sql: str) -> str:
+    return re.sub(r"--[^\n]*", "", re.sub(r"/\*.*?\*/", "", sql, flags=re.S))
+
+
+def _migration_sql() -> str:
+    return _strip_sql_comments(MIGRATION.read_text(encoding="utf-8"))
+
+
+def unique_ref_declared() -> bool:
+    """幂等键是否真的写在迁移里 —— 桩的唯一性开关由这个事实驱动。"""
+    return UNIQUE_KEY.search(_migration_sql()) is not None
+
+
+def lua() -> str:
+    exe = shutil.which("lua5.4") or shutil.which("lua")
+    if not exe:
+        pytest.skip("lua5.4 不可用")
+    return exe
+
+
+def run(body: str) -> dict[str, str]:
+    """把探针桩 + db.lua + treasury.lua + body 拼成一次 Lua 运行。"""
+    stubs = FIXTURE.read_text(encoding="utf-8")
+    flag = "true" if unique_ref_declared() else "false"
+    script = load_with_db(stubs, SRC, f"__uniqueRef = {flag}\n" + textwrap.dedent(body))
+    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
+
+    out: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        if "|" not in line:
+            continue
+        key, _, value = line.partition("|")
+        out.setdefault(key.strip(), value.strip())
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════
+# 存款 / 取款
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_deposit_credits_balance_and_writes_one_ledger_row():
+    out = run("""
+        __reset()
+        __seed('mining_co', 0)
+        local ok, err = Treasury.Deposit('mining_co', 1000, 'deposit', { actor = 'cid1', ref = 'r1' })
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+        __emit('DELTA', tostring(__ledger[1] and __ledger[1].delta))
+        __emit('AFTER', tostring(__ledger[1] and __ledger[1].balance_after))
+        __emit('REF', tostring(__ledger[1] and __ledger[1].ref))
+    """)
+    assert out["OK"] == "true", f"正常存款被拒了：{out}"
+    assert out["ERR"] == "nil", "成功时不应带错误码"
+    assert out["BAL"] == "1000", "组织余额没有 +1000"
+    assert out["LEDGER"] == "1", "成功存款必须恰好写一行流水"
+    assert out["DELTA"] == "1000", "流水 delta 与入账金额不一致"
+    assert out["AFTER"] == "1000", "流水 balance_after 必须是入账后的余额"
+    assert out["REF"] == "r1", "调用方给的合法 ref 必须原样落库（幂等键不能悄悄换掉）"
+
+
+def test_withdraw_beyond_balance_is_rejected_without_moving_money():
+    out = run("""
+        __reset()
+        __seed('mining_co', 500)
+        local ok, err = Treasury.Withdraw('mining_co', 9999, 'withdraw', { actor = 'cid1', ref = 'w1' })
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+        __emit('INSERTS', tostring(__calls.insert))
+    """)
+    assert out["OK"] == "false", "余额 500 取 9999 竟然成功 —— 余额守卫没生效"
+    assert out["ERR"] == "insufficient_funds", f"错误码必须是 insufficient_funds，实际 {out['ERR']}"
+    assert out["BAL"] == "500", "被拒绝的取款动了余额"
+    assert out["LEDGER"] == "0", "被拒绝的取款写了流水"
+    assert out["INSERTS"] == "0", "余额判断失败后不应再尝试插流水"
+
+
+def test_deposit_to_missing_account_is_no_account_and_creates_nothing():
+    out = run("""
+        __reset()
+        local ok, err = Treasury.Deposit('cartel', 1000, 'deposit', { ref = 'nc1' })
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('BAL', tostring(__balance('cartel')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+    assert out["OK"] == "false", "S1 不自动开户，入账到不存在的组织必须失败"
+    assert out["ERR"] == "no_account", f"错误码必须是 no_account，实际 {out['ERR']}"
+    assert out["BAL"] == "nil", "失败的入账不该凭空建出账户"
+    assert out["LEDGER"] == "0", "失败的入账不该写流水"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 幂等：同一 ref 只成功一次
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_duplicate_ref_is_rejected_and_balance_is_rolled_back():
+    out = run("""
+        __reset()
+        __seed('mining_co', 0)
+        local ok1, err1 = Treasury.Deposit('mining_co', 1000, 'deposit', { actor = 'cid1', ref = 'same' })
+        local ok2, err2 = Treasury.Deposit('mining_co', 1000, 'deposit', { actor = 'cid1', ref = 'same' })
+        __emit('OK1', tostring(ok1))
+        __emit('ERR1', tostring(err1 or 'nil'))
+        __emit('OK2', tostring(ok2))
+        __emit('ERR2', tostring(err2 or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+    assert out["OK1"] == "true", "第一次入账应当成功"
+    assert out["ERR1"] == "nil"
+    assert out["OK2"] == "false", "同一 ref 第二次入账竟然成功 —— 唯一键/idempotency 没生效"
+    assert out["ERR2"] == "duplicate_ref", f"错误码必须是 duplicate_ref，实际 {out['ERR2']}"
+    assert out["BAL"] == "1000", "重复入账的余额没有被补偿回去"
+    assert out["LEDGER"] == "1", "重复 ref 不应产生第二行流水"
+
+
+def test_opaque_driver_error_on_duplicate_still_maps_to_duplicate_ref():
+    """有的 oxmysql 构建把唯一键冲突当字符串回包，db.lua 会丢掉原文。
+
+    这种情况下仍要返回 duplicate_ref（靠一次失败后的存在性检查），不能报 db_error
+    —— 否则调用方会把它当成可重试的故障，反复入账。
+    """
+    out = run("""
+        __reset()
+        __seed('mining_co', 0)
+        local ok1 = Treasury.Deposit('mining_co', 1000, 'deposit', { actor = 'cid1', ref = 'same' })
+        __opaqueInsertError = true
+        local ok2, err2 = Treasury.Deposit('mining_co', 500, 'deposit', { actor = 'cid1', ref = 'same' })
+        __emit('OK1', tostring(ok1))
+        __emit('OK2', tostring(ok2))
+        __emit('ERR2', tostring(err2 or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+    assert out["OK1"] == "true"
+    assert out["OK2"] == "false", "驱动回包形态不同，重复 ref 也不能成功"
+    assert out["ERR2"] == "duplicate_ref", (
+        f"唯一键冲突被误报成 {out['ERR2']}（调用方会重试）"
+    )
+    assert out["BAL"] == "1000", "重复入账的余额没有补偿回去"
+    assert out["LEDGER"] == "1"
+
+
+def test_concurrent_same_ref_applies_exactly_once():
+    """A 的 UPDATE 尚未落库时让 B 用同一 ref 插进来。"""
+    out = run("""
+        __reset()
+        __seed('mining_co', 0)
+        local results = {}
+        __race = function()
+            local ok, err = Treasury.Deposit('mining_co', 1000, 'deposit', { actor = 'cid1', ref = 'race' })
+            results[#results + 1] = tostring(ok) .. ':' .. tostring(err or 'nil')
+        end
+        local ok, err = Treasury.Deposit('mining_co', 1000, 'deposit', { actor = 'cid1', ref = 'race' })
+        results[#results + 1] = tostring(ok) .. ':' .. tostring(err or 'nil')
+        table.sort(results)
+        __emit('RESULTS', table.concat(results, ','))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+    assert out["RESULTS"] == "false:duplicate_ref,true:nil", (
+        f"并发同 ref 必须一成一败，实际 {out['RESULTS']}"
+    )
+    assert out["BAL"] == "1000", "并发同 ref 只能入账一次"
+    assert out["LEDGER"] == "1", "并发同 ref 只能留下一行流水"
+
+
+def test_positive_control_second_distinct_ref_still_succeeds():
+    """守卫不能把正常流程也拒了：换一个 ref 必须能继续入账。"""
+    out = run("""
+        __reset()
+        __seed('mining_co', 0)
+        local ok1, err1 = Treasury.Deposit('mining_co', 1000, 'deposit', { actor = 'cid1', ref = 'a' })
+        local ok2, err2 = Treasury.Deposit('mining_co', 1000, 'deposit', { actor = 'cid1', ref = 'b' })
+        __emit('OK1', tostring(ok1))
+        __emit('ERR1', tostring(err1 or 'nil'))
+        __emit('OK2', tostring(ok2))
+        __emit('ERR2', tostring(err2 or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+    assert out["OK1"] == "true" and out["OK2"] == "true", (
+        f"不同 ref 的第二次入账被误伤：{out}"
+    )
+    assert out["BAL"] == "2000", "两笔合法入账应累计到 2000"
+    assert out["LEDGER"] == "2", "两笔合法入账应有两行流水"
+
+
+# ══════════════════════════════════════════════════════════════════
+# TOCTOU：两个取款交错，不能透支
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_concurrent_withdrawals_cannot_overdraw():
+    """余额 150，两笔各取 100：交错后必须只成功一笔，余额不得为负。
+
+    这条用例专门咬「先 Db.Single 再比较」的写法：两边都读到 150、都判够，
+    再把余额扣成 -50。把余额判断挪回一条带守卫的 UPDATE 才会绿。
+    """
+    out = run("""
+        __reset()
+        __seed('mining_co', 150)
+        local results = {}
+        __race = function()
+            local ok, err = Treasury.Withdraw('mining_co', 100, 'withdraw', { actor = 'cid1', ref = 'race-b' })
+            results[#results + 1] = tostring(ok) .. ':' .. tostring(err or 'nil')
+        end
+        local ok, err = Treasury.Withdraw('mining_co', 100, 'withdraw', { actor = 'cid1', ref = 'race-a' })
+        results[#results + 1] = tostring(ok) .. ':' .. tostring(err or 'nil')
+        table.sort(results)
+        __emit('RESULTS', table.concat(results, ','))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+    assert out["RESULTS"] == "false:insufficient_funds,true:nil", (
+        f"两笔各 100 的取款在余额 150 上只能成功一笔，实际 {out['RESULTS']}"
+    )
+    assert out["BAL"] == "50", f"余额被扣成 {out['BAL']}（透支了）"
+    assert out["LEDGER"] == "1", "失败的那笔不应留下流水"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 故障与输入校验
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_ledger_insert_failure_rolls_balance_back():
+    out = run("""
+        __reset()
+        __seed('mining_co', 0)
+        __failLedgerInsert = true
+        local ok, err = Treasury.Deposit('mining_co', 1000, 'deposit', { ref = 'f1' })
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+    assert out["OK"] == "false", "流水写失败时不能向调用方报成功"
+    assert out["ERR"] == "db_error", f"流水写失败应返回 db_error，实际 {out['ERR']}"
+    assert out["BAL"] == "0", "流水写失败后余额必须补偿回原值（钱少了流水没记是禁区）"
+    assert out["LEDGER"] == "0"
+
+
+def test_input_validation_error_codes():
+    out = run("""
+        __reset()
+        __seed('mining_co', 100)
+        local _, e1 = Treasury.Deposit('', 1000, 'deposit', {})
+        local _, e2 = Treasury.Deposit('mining_co', 0, 'deposit', {})
+        local _, e3 = Treasury.Withdraw('mining_co', -5, 'withdraw', {})
+        local _, e4 = Treasury.Deposit('mining_co', 'abc', 'deposit', {})
+        __emit('E1', tostring(e1))
+        __emit('E2', tostring(e2))
+        __emit('E3', tostring(e3))
+        __emit('E4', tostring(e4))
+        __emit('BAL', tostring(__balance('mining_co')))
+    """)
+    assert out["E1"] == "bad_org", "空 orgId 必须是 bad_org"
+    assert out["E2"] == "bad_amount", "0 金额必须是 bad_amount"
+    assert out["E3"] == "bad_amount", "负数金额必须是 bad_amount"
+    assert out["E4"] == "bad_amount", "非数字金额必须是 bad_amount"
+    assert out["BAL"] == "100", "非法输入不应改动余额"
+
+
+def test_malformed_ref_is_not_used_as_the_idempotency_key():
+    out = run("""
+        __reset()
+        __seed('mining_co', 0)
+        local ok = Treasury.Deposit('mining_co', 100, 'deposit', {
+            ref = "evil'); DROP TABLE org_treasury; --",
+        })
+        local ref = tostring(__ledger[1] and __ledger[1].ref)
+        __emit('OK', tostring(ok))
+        __emit('REF', ref)
+        __emit('USED_BAD_REF', tostring(ref:find('DROP', 1, true) ~= nil))
+    """)
+    assert out["OK"] == "true", "ref 形状不合法时应当改用服务端 ref，而不是让正常入账失败"
+    assert out["USED_BAD_REF"] == "false", f"不合形状的 ref 被当成唯一键：{out['REF']}"
+    assert out["REF"].startswith("sys:"), f"服务端生成的 ref 应以 sys: 开头，实际 {out['REF']}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 查询纪律 + 迁移契约
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_get_ledger_uses_explicit_columns_and_limit():
+    out = run("""
+        __reset()
+        __seed('mining_co', 0)
+        Treasury.Deposit('mining_co', 100, 'deposit', { ref = 'l1' })
+        Treasury.Deposit('mining_co', 200, 'deposit', { ref = 'l2' })
+        Treasury.Deposit('mining_co', 300, 'deposit', { ref = 'l3' })
+        local rows = Treasury.GetLedger('mining_co', 2)
+        __emit('ROWS', tostring(rows and #rows or 'nil'))
+        __emit('REF1', tostring(rows and rows[1] and rows[1].ref))
+        __emit('SQL', tostring(__lastQuerySql))
+    """)
+    assert out["ROWS"] == "2", "GetLedger(limit=2) 没有按 LIMIT 截断"
+    assert out["REF1"] == "l3", "流水应按新→旧返回"
+    sql = out["SQL"]
+    assert "LIMIT" in sql.upper(), f"列表查询必须带 LIMIT：{sql}"
+    assert "SELECT *" not in sql.upper(), f"列表查询禁止 SELECT *：{sql}"
+    for column in ("org_id", "delta", "balance_after", "reason", "ref", "cycle_no"):
+        assert column in sql, f"GetLedger 缺少显式列 {column}：{sql}"
+
+
+def test_migration_and_fixture_declare_tables_and_idempotency_key():
+    """迁移删掉 UNIQUE KEY 时，这条与幂等用例都应红（见 test_duplicate_ref...）。"""
+    migration = _migration_sql()
+    fixture = _strip_sql_comments(SCHEMA_FIXTURE.read_text(encoding="utf-8"))
+
+    for table in TABLES:
+        pattern = rf"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+`{table}`"
+        assert re.search(pattern, migration, re.I), f"迁移里没有建 {table}"
+        assert re.search(pattern, fixture, re.I), f"测试 fixture 里没有建 {table}"
+
+    assert UNIQUE_KEY.search(migration), (
+        "迁移缺少 UNIQUE(org_id, ref) —— 幂等就会退化成调用方自觉"
+    )
+    assert UNIQUE_KEY.search(fixture), "测试 fixture 与迁移不一致：缺少 uniq_org_ref"

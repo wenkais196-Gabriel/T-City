@@ -49,6 +49,9 @@ RESOURCE_DIRS = {
     "custom-agent-client": CUSTOM / "custom-agent-client" / "server",
     "story-engine": CUSTOM / "story-engine" / "server",
     "tcity-dashboard": RESOURCES / "[system]" / "tcity-dashboard" / "server",
+    # table_owners.json 的 scan 清单只认这里登记过的目录；新增 owner 时必须同时加一行，
+    # 否则 FIT-02 会以 KeyError 的形式红（scan 想覆盖新资源，目录映射却没跟上）。
+    "custom-industry": CUSTOM / "custom-industry" / "server",
 }
 
 WRITE_RES = (
