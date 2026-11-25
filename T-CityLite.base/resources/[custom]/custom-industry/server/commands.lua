@@ -57,28 +57,6 @@ local function makeRef(kind, orgId, cid)
         kind, orgId, tostring(cid or 'console'), os.time(), refSeq)
 end
 
---- 玩家是否属于 orgId 且达到 Grade4。org 的 job/gang 映射来自 Config.Industry.OrgWhitelist。
-local function isOrgBoss(Player, orgId)
-    local def = Config.Industry.OrgWhitelist[orgId]
-    if not def then return false end
-
-    local data = Player.PlayerData
-    local level = 0
-    if def.kind == 'job' then
-        local job = data.job
-        if not job or job.name ~= def.name then return false end
-        level = tonumber(job.grade and job.grade.level) or 0
-    elseif def.kind == 'gang' then
-        local gang = data.gang
-        if not gang or gang.name ~= def.name then return false end
-        level = tonumber(gang.grade and gang.grade.level) or 0
-    else
-        return false
-    end
-
-    return level >= (Config.Industry.BossGrade or 4)
-end
-
 local function audit(orgId, actorCid, action, amount, result, ref)
     IndustryAudit.Write(orgId, actorCid, action, IndustryAudit.Payload(amount, result, ref))
 end
@@ -105,7 +83,7 @@ function IndustryCommands.Register()
             end
             local admin = QBCore.Functions.HasPermission(src, 'admin')
                 or QBCore.Functions.HasPermission(src, 'god')
-            allowed = admin or isOrgBoss(Player, orgId)
+            allowed = admin or IndustryAccess.IsOrgBoss(Player, orgId)
         else
             allowed = true
         end
@@ -161,7 +139,7 @@ function IndustryCommands.Register()
             reply(src, '金额必须是正整数')
             return
         end
-        if not isOrgBoss(Player, orgId) then
+        if not IndustryAccess.IsOrgBoss(Player, orgId) then
             audit(orgId, cid, 'fund.deposit', amount, 'not_boss', nil)
             reply(src, 'not_boss')
             return
@@ -210,7 +188,7 @@ function IndustryCommands.Register()
             reply(src, '金额必须是正整数')
             return
         end
-        if not isOrgBoss(Player, orgId) then
+        if not IndustryAccess.IsOrgBoss(Player, orgId) then
             audit(orgId, cid, 'fund.withdraw', amount, 'not_boss', nil)
             reply(src, 'not_boss')
             return

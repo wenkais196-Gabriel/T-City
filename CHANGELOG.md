@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   流水以 `UNIQUE(org_id, ref)` 做幂等键，插流水失败会把余额补偿回去。命令层只有
   `/orgfund`、`/orgfunddeposit`、`/orgfundwithdraw`、`/orgfundgrant` 四条服务端命令，
   convar `industry_enable` 默认关闭。迁移 `v4.0_industry_treasury.sql`；无 net event / NUI / exports。
+- **S2 设施 / 工位（`custom-industry`）**：新增 `industry_facility`（一组织一设施）与
+  `mine` 设施 / 铁矿石精炼配方配置。`Facility.Build` / `AddWorkstation` / `Get` 全部经
+  `Treasury.Withdraw` 付款；工位成本 `floor(base × 1.35^(n-1))`，上限与乐观锁写在同一
+  条 `UPDATE … WHERE workstations = ? AND workstations < ?` 里，写行失败/冲突会退款。
+  命令 `/orgbuild`、`/orghire`、`/orgfacility`（Grade4，复用共享 `IndustryAccess.IsOrgBoss`）。
+  迁移 `v4.1_industry_facility.sql`；无 net event / NUI / exports。
 - **`docs/server-design/12-industry-operations.md`：产业运营 / 组织运营的 MVP 基础方案**（design-only，
   无代码）。Hermes 与 Claude Code 各出一版独立设计后合并，产出四样东西：① 五条**事实纠错**
   （组织钱包不是"不存在"而是 qb-banking 的 `bank_accounts` 半成品——缺负余额闸 / 幂等 ref /
