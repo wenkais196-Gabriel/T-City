@@ -155,8 +155,8 @@ qb-target 的 client.lua 第 293 行确以 `IsNuiFocused()` 作门卫、第 308 
 | **M1** | `custom-ui` 升级为唯一焦点栈 + 修跨资源关闭 + 接管单点键泵 | `T-CityLite.base/resources/[custom]/custom-ui/**`、`T-CityLite.base/configs/modules/core.cfg`、`T-CityLite.base/configs/modules/custom.cfg`、`T-CityLite.base/tests/architecture/test_input_layer_contracts.py` | 无 | `test_input_layer_contracts.py` 绿；栈非空时全客户端仅 1 条 `Wait(0)`，关闭后栈为空 |
 | **M2** | 新建 P0 `MenuSpec` + 轻量 CEF 宿主 `custom-menu` | `T-CityLite.base/resources/[custom]/custom-menu/**`、`T-CityLite.base/configs/modules/player.cfg`、新增的 MenuSpec 单测（tests/unit 下的 test_menu_schema.py） | M1 | `npm run build` 退出 0，产物含 0 处 `backdrop-filter` / `https://` |
 | **M3** | qb-menu / qb-input 零破坏适配，停用各自旧页面 | `T-CityLite.base/resources/[qb]/qb-menu/**`、`T-CityLite.base/resources/[qb]/qb-input/**` | M1, M2 | `luac5.4.exe -p` 全过；qb-input 不再有单参 `SetNuiFocus(false)` |
-| **M4** | qb-target / qb-inventory / qb-hud / story-engine 接入焦点栈并清掉每帧禁控 | `T-CityLite.base/resources/[qb]/qb-target/**`、`T-CityLite.base/resources/[qb]/qb-inventory/**`、`T-CityLite.base/resources/[qb]/qb-hud/**`、`T-CityLite.base/resources/[custom]/story-engine/**` | M1 | 四个目录内 `IsNuiFocused()` 门卫与 `DisableAllControlActions` 出现数 = 0 |
-| **M5** | 清 `backdrop-filter` 与重复监听 | `T-CityLite.base/resources/[system]/tcity-dashboard/**`、`T-CityLite.base/resources/[qb]/qb-banking/**`、`T-CityLite.base/resources/[custom]/hud-position-tool/**`、`T-CityLite.base/tests/architecture/test_dashboard_focus.py` | M1 | 三资源源码与产物中 `backdrop-filter` = 0；看板构建成功 |
+| **M4** | qb-target / qb-inventory / qb-hud / story-engine 接入焦点栈 | `T-CityLite.base/resources/[qb]/qb-target/**`、`T-CityLite.base/resources/[qb]/qb-inventory/**`、`T-CityLite.base/resources/[qb]/qb-hud/**`、`T-CityLite.base/resources/[custom]/story-engine/**` | M1 | 四目录内**门卫用途**的 `IsNuiFocused()` = 0（诊断用途逐条进 allowlist）；**菜单路径上**无 `DisableAllControlActions`（`noclip` / 死亡 / `spawn` 等合法调用点进 allowlist） |
+| **M5** | 清 `backdrop-filter` 与重复监听（**排除 `[system]/monitor` 这个第三方面板**） | `T-CityLite.base/resources/[system]/tcity-dashboard/**`、`T-CityLite.base/resources/[qb]/qb-banking/**`、`T-CityLite.base/resources/[custom]/hud-position-tool/**`、`T-CityLite.base/tests/architecture/test_dashboard_focus.py` | M1 | 三资源源码与产物中 `backdrop-filter` = 0；看板构建成功；基线里 monitor 的 6 处**显式登记为排除项** |
 | **M6** | qb-adminmenu 迁出 menuv + 冻结 menuv + 收敛 qb-management | `T-CityLite.base/resources/[qb]/qb-adminmenu/**`、`T-CityLite.base/resources/[qb]/qb-management/**`、`T-CityLite.base/resources/[standalone]/menuv/**` | M2, M3 | 除 menuv 自身外全仓 menuv 引用归 0；qb-management 仅留 `cl_org.lua` |
 | **M7** | 收敛手机双 `Wait(0)` + prompt 去重 + 固化架构闸门 | `T-CityLite.base/resources/[custom]/custom-phone/**`、`T-CityLite.base/resources/[custom]/custom-prompt/**`、新增的菜单架构闸门（tests/architecture 下的 test_menu_architecture.py）、`T-CityLite.base/configs/boot.json` | M1, M2, M4, M5, M6 | 全量 pytest 绿；手机 NUI harness 通过；平板态仅 1 条屏蔽循环 |
 
@@ -185,3 +185,44 @@ qb-target 的 client.lua 第 293 行确以 `IsNuiFocused()` 作门卫、第 308 
 2. **M2** 与 M1 可并行开工（文件不重叠），但 `custom-menu` 的渲染器要等 M1 的 `IsTaken/ForceClose` 契约定稿。
 3. M3–M7 在 M1/M2 定稿后可以多片并行；每片的验收判据都是命令或计数，不依赖真机。
 4. 真机项（§8 的 ⛔ 四条）攒成一次客户端验收，一次跑完。
+
+---
+
+## 10. 取证结果（排期前实测，2026-11-25）
+
+基线由 `tools/dev/menu_surface_census.py` 生成，落在 `T-CityLite.base/tests/architecture/menu_surface_baseline.json`（12 类、1560 处命中）。
+**这是取证，不是闸门**：M1–M7 每落地一片，这个基线该变小；M7 的闸门拿它当棘轮。
+
+| 类别 | 命中数 | 涉及资源数 | 主要资源（命中数） |
+|---|---|---|---|
+| `setnui_focus` | **197** | 28 | qb-minigames 26 / story-engine 23 / custom-phone 15 |
+| `setnui_single_arg`（单参 `SetNuiFocus(false)`） | **8** | 6 | monitor 2 / qb-input 2 / qb-menu 1 |
+| `isnuifocused_read` | **34** | 8 | custom-phone 18 / story-engine 8 / qb-inventory 2 |
+| `disable_all_controls` | **10** | 6 | qb-adminmenu 5 / qb-spawn 1 / qb-target 1 |
+| `backdrop_filter` | **24** | 9 | monitor 6 / qb-banking 5 / tcity-dashboard 4 |
+| `cdn_ref` | 829 | 35 | `[system]` 429 / monitor 130 / qb-hud 42（多为 vendor 与注释） |
+| `qb_menu_entry` | 145 | 20 | qb-management 22 / qb-mechanicjob 19 / qb-vehicleshop 14 |
+| `qb_input_entry` | 19 | 7 | qb-mechanicjob 5 / qb-vehicleshop 4 / qb-pawnshop 3 |
+| `menuv_entry` | 53 | 2 | menuv 29 / qb-adminmenu 24 |
+| `customui_entry` | **16** | 7 | tcity-dashboard 4 / custom-ui 3 |
+| `orgmenu_export` | **8** | 1 | qb-management（`cl_boss` / `cl_gang` / `cl_org` 三套并存） |
+| `client_wait_zero` | 217 | 48 | qb-core 21 / monitor 15（宽口径，只作风险参考） |
+
+### 10.1 取证改掉了方案里的四个错判（这是本轮最重要的产出）
+
+| # | 原方案 | 实测后必须改 | 依据 |
+|---|---|---|---|
+| 1 | M5 把 `backdrop-filter` 清零 | **必须显式排除 `[system]/monitor`**（第三方管理面板的打包 CSS/JS，24 处里占 6 处），否则闸门永远红 | 基线 `backdrop_filter.resources.monitor = 6` |
+| 2 | M4 把 `DisableAllControlActions` 清零 | **不能清零**：`qb-adminmenu` 的 noclip、`qb-ambulancejob` 的死亡态、`qb-spawn` 都是合法用法。规则要改成「**菜单路径上不许每帧调用**」，并用 allowlist 点名合法调用点 | 基线 10 处分布在 6 个资源，含 `noclip.lua` / `dead.lua` |
+| 3 | M4 把 `IsNuiFocused()` 清零 | **不能清零**：`custom-phone` 的 18 处里含诊断用的读取，不是门卫。要做的是「**门卫用途**清零 + 诊断用途进 allowlist」 | 基线 `isnuifocused_read` 8 个资源 34 处 |
+| 4 | M1 只改 5 个资源就完成焦点收编 | **`SetNuiFocus` 有 197 处在 28 个资源**：一片做不完。M1 必须先出**兼容层**（`custom-ui:ApplyFocus` 转发），让旧调用点不改也能跑；全量清扫拆成独立的棘轮任务 | 基线 `setnui_focus = 197 / 28 资源` |
+
+### 10.2 仍然没证的（只能真机）
+
+| 项 | 前置 |
+|---|---|
+| `IsNuiFocused()` / `IsNuiFocusKeepingInput()` 的原始返回值（项目内多处注释称恒 false） | 客户端进服 + 打开手机时读一次原生 |
+| 跨资源 `close` 回调是否为 CfxLua 函数引用表（导致 `type()=='function'` 恒假） | 客户端进服 + 开中控按 Esc |
+| 删 `backdrop-filter` 的帧率收益 | 客户端 + CEF 性能采样 |
+
+这三条攒成一次客户端验收，不阻塞 M1/M2 开工（它们的验收都能离线判）。
