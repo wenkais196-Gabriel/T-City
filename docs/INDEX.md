@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：328 ｜ **已登记**：328 ｜ **未登记**：0
+**文档总数**：329 ｜ **已登记**：329 ｜ **未登记**：0
 
-**状态分布**：✅ active 180 ・ 🟡 draft 17 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 180 ・ 🟡 draft 18 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -14,13 +14,14 @@
 |---|---|---|---|---|---|---|
 | [角色与出生 · UX 设计](client/ux/modules/identity.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/identity.md` |
 
-### economy（7）
+### economy（8）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
 | [Module 3: 经济系统 (economy.cfg / banking.cfg / security.cfg)](01_module_manuals/03_economy_system.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/01_module_manuals/03_economy_system.md` |
 | [core_economy + economy-dashboard — 经济网关与仪表盘](02_script_index/economy-systems.md) | manual | 📦 archived | 2026-06-21 | 2027-01-30 |  | `docs/02_script_index/economy-systems.md` |
 | [计划：S1 组织金库地基（industry treasury）](plan/industry-ops/01-plan.md) | plan | 🟡 draft | 2026-11-25 | 2027-02-28 |  | `docs/plan/industry-ops/01-plan.md` |
+| [计划：S2 设施 / 工位 / 库存（industry facility）](plan/industry-ops/02-plan.md) | plan | 🟡 draft | 2026-11-25 | 2027-02-28 |  | `docs/plan/industry-ops/02-plan.md` |
 | [🏙️ T-City 宏观经济模拟层 — 施工蓝图](../T-CityLite.base/docs/architecture/economic-simulation-blueprint.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/architecture/economic-simulation-blueprint.md` |
 | [v0.3 基础设施层](archive/QBCore_Lite_versions/v0.3-economy.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.3-economy.md` |
 | [v0.6a 民间经济职业生态（Civilian Economy）](archive/QBCore_Lite_versions/v0.6a-civilian-economy.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.6a-civilian-economy.md` |
