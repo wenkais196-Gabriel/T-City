@@ -226,3 +226,50 @@ qb-target 的 client.lua 第 293 行确以 `IsNuiFocused()` 作门卫、第 308 
 | 删 `backdrop-filter` 的帧率收益 | 客户端 + CEF 性能采样 |
 
 这三条攒成一次客户端验收，不阻塞 M1/M2 开工（它们的验收都能离线判）。
+
+### 10.4 取证第 1 项：`IsNuiFocused()` 是**活的**（原判被推翻）
+
+`/watchscreen` 每 2 秒打印一次 `nuiFocus=<IsNuiFocused()>`，客户端日志（`FiveM.app/logs/CitizenFX_log_*.log`）实录 24 个采样点：
+
+| 采样 | 场景 | `nuiFocus` |
+|---|---|---|
+| #1–#7 | 什么都不开 | **-1** |
+| #8–#10 | 手机打开（日志同期出现 `[phone] GameTime=12:53`） | **1** |
+| #11 | 手机关闭 | -1 |
+| #12–#16 | 另一个界面打开 | **1** |
+| #17–#24 | 全部关闭 | -1 |
+
+**结论：`IsNuiFocused()` 在这个 build 上工作正常**——界面打开时返回真值，关闭时返回假值
+（`-1` 是 `custom-debug` 里 `IsNuiFocused and IsNuiFocused() or -1` 这个写法的显示产物，不是原生缺失）。
+
+**这一条推翻了两处既有判断**：
+
+1. 设计稿原来写「qb-target 拿**恒假**的 `IsNuiFocused()` 当门卫」——**错**。
+   `qb-target/client.lua:293` 的 `... or IsNuiFocused() or ...` 是**有效**门卫，玩家实测「手机开着按 Alt 打不开」正是它生效的证据。
+   → **M4 不再需要"修恒假门卫"**，工作量与风险都下降。
+2. 「`IsNuiFocused()` 读数不可信，所以只能读自己的账」这个论证的**前提不成立**。
+   结论仍然成立，但理由要换：原生只反映**NUI 焦点**，不反映「栈里有菜单但没设焦点」的状态（menuv 就是这种），
+   所以「读自己的账」的理由是**覆盖面**，不是「原生坏了」。
+
+> 取证方法论记一笔：**代码事实**（谁调了谁）和**运行时事实**（原生返回什么）必须分开取证。
+> 前者 grep 就能定，后者只能真机；把 grep 出来的调用点当成运行时行为，就会写出这种结论。
+
+### 10.5 M1 的底座比预计厚：`custom-ui` 已经有栈
+
+custom-ui 的 client/main.lua 已导出（第 382–395 行）：
+
+```
+ApplyFocus / OpenMenu / CloseMenu / GuardControls / IsMenuOpen
+Push / Pop / Top / Path / IsTaken / Owns / ResetInput / RefreshFocus / FocusTrace / DistanceToCoords
+```
+
+**缺的只有三样**（M1 的真实工作量）：
+
+| 缺口 | 现状 |
+|---|---|
+| `ForceClose(frameId, reason)` 跨资源关闭 | **不存在**（现在的关闭靠各资源自己调 `CloseMenu`） |
+| `onClientResourceStop` 自动弹栈 | **不存在**（资源崩了帧会留在栈里） |
+| 单点键泵（菜单开着时全客户端一条 `Wait(0)`） | **不存在**（`IsRawKeyDown` 零命中） |
+
+所以 M1 的定位从「**建**一个焦点栈」改成「**收口**已有的栈 + 清扫 197 处回头路」。
+这一点直接降低了 M1 的风险：不变量已经在代码里跑着，本片是补齐 + 上闸门。
