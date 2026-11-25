@@ -148,10 +148,10 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `orgfund` | QBCore.Commands.Add | handler 内判定: HasPermission | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:76 |
-| `orgfunddeposit` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:128 |
-| `orgfundgrant` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:234 |
-| `orgfundwithdraw` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:177 |
+| `orgfund` | QBCore.Commands.Add | handler 内判定: HasPermission | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:88 |
+| `orgfunddeposit` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:140 |
+| `orgfundgrant` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:246 |
+| `orgfundwithdraw` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:189 |
 
 ### custom-justice
 

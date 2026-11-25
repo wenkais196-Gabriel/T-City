@@ -11,6 +11,17 @@
 
 IndustryCommands = {}
 
+-- 本资源没有全局 QBCore：qb-core 是另一个资源，FiveM 不跨资源共享 Lua 全局；
+-- main.lua 里就算写 local 也看不见。按 [custom]/AGENTS.md 的已知坑，惰性解析
+-- 一次并缓存。Register() 开头把它取成局部变量，命令闭包会一起捕获。
+local QBCore
+local function core()
+    if not QBCore then
+        QBCore = exports['qb-core']:GetCoreObject()
+    end
+    return QBCore
+end
+
 local MAX_AMOUNT = 1000000000000000
 local MAX_REASON_LEN = 64
 local refSeq = 0
@@ -73,6 +84,7 @@ local function audit(orgId, actorCid, action, amount, result, ref)
 end
 
 function IndustryCommands.Register()
+    local QBCore = core()
     QBCore.Commands.Add('orgfund', '查看组织金库余额与最近流水', {
         { name = 'orgId', help = '组织名，例如 mining_co' },
         { name = 'limit', help = '流水条数，默认 20' },

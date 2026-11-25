@@ -26,6 +26,8 @@ from lua_probe import BASE, load_with_db
 
 RES = BASE / "resources" / "[custom]" / "custom-industry"
 SRC = RES / "server" / "treasury.lua"
+COMMANDS = RES / "server" / "commands.lua"
+AUDIT = RES / "server" / "audit.lua"
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "industry_treasury_probe.lua"
 MIGRATION = BASE / "migrations" / "v4.0_industry_treasury.sql"
 SCHEMA_FIXTURE = BASE / "tests" / "fixtures" / "tcity_schema.sql"
@@ -348,6 +350,109 @@ def test_get_ledger_uses_explicit_columns_and_limit():
     assert "SELECT *" not in sql.upper(), f"列表查询禁止 SELECT *：{sql}"
     for column in ("org_id", "delta", "balance_after", "reason", "ref", "cycle_no"):
         assert column in sql, f"GetLedger 缺少显式列 {column}：{sql}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 命令注册：不能依赖不存在的全局 QBCore
+# ══════════════════════════════════════════════════════════════════
+
+#: 故意**不**定义全局 QBCore。真机事故：commands.lua 直接索引全局 QBCore，
+#: 资源加载成功、日志一行 SCRIPT ERROR、四条命令全空。这里只提供 qb-core
+#: 的导出入口，让「惰性解析」成为唯一能通过的形状。
+COMMAND_STUBS = """
+Config = {
+    Industry = {
+        OrgWhitelist = {
+            mining_co = { kind = 'job', name = 'miner' },
+            cartel = { kind = 'gang', name = 'cartel' },
+        },
+        BossGrade = 4,
+        LedgerDefaultLimit = 20,
+        LedgerMaxLimit = 100,
+    },
+}
+
+__registered = {}
+__coreCalls = 0
+local coreObject = {
+    Commands = {
+        Add = function(name)
+            __registered[#__registered + 1] = name
+        end,
+    },
+    Functions = {
+        GetPlayer = function() return nil end,
+        HasPermission = function() return false end,
+    },
+}
+
+exports = setmetatable({}, {
+    __index = function(_, resource)
+        if resource ~= 'qb-core' then return nil end
+        return {
+            GetCoreObject = function()
+                __coreCalls = __coreCalls + 1
+                return coreObject
+            end,
+        }
+    end,
+})
+
+MySQL = {}
+
+function __emit(key, value)
+    io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
+end
+"""
+
+
+def run_commands(body: str) -> dict[str, str]:
+    """stubs + db.lua + audit.lua（真加载）+ commands.lua（真加载）+ body。"""
+    script = load_with_db(
+        COMMAND_STUBS,
+        AUDIT,
+        COMMANDS.read_text(encoding="utf-8") + "\n" + textwrap.dedent(body),
+    )
+    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
+
+    out: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        if "|" not in line:
+            continue
+        key, _, value = line.partition("|")
+        out.setdefault(key.strip(), value.strip())
+    return out
+
+
+def test_commands_register_without_a_global_qbcore():
+    """真机 P0：资源里没有全局 QBCore，Register() 必须靠 exports['qb-core'] 解析。
+
+    这条用例故意不提供全局 QBCore（stub 里只有 exports 入口）。如果 commands.lua
+    退回直接索引全局 QBCore，Register() 会在第一条 Commands.Add 抛 nil，Lua 进程
+    非零退出，用例红 —— 而不是"命令表为空"这种更容易被忽略的形状。
+    """
+    out = run_commands("""
+        IndustryCommands.Register()
+        __emit('COUNT', tostring(#__registered))
+        __emit('NAMES', table.concat(__registered, ','))
+        __emit('CORE_CALLS', tostring(__coreCalls))
+        __emit('HAS_GLOBAL', tostring(rawget(_G, 'QBCore') ~= nil))
+    """)
+
+    expected = ["orgfund", "orgfunddeposit", "orgfundwithdraw", "orgfundgrant"]
+    assert out["COUNT"] == "4", (
+        f"命令没有全部注册（生产表现：资源 Started，但 /orgfund* 全部为空）：{out}"
+    )
+    assert sorted(out["NAMES"].split(",")) == sorted(expected), (
+        f"注册的命令名不对：{out['NAMES']}"
+    )
+    assert out["CORE_CALLS"] == "1", (
+        "GetCoreObject 应惰性解析一次并缓存；重复解析会在启动路径上制造额外导出调用"
+    )
+    assert out["HAS_GLOBAL"] == "false", (
+        "用例自己定义了全局 QBCore —— 这样生产环境缺它的 bug 会被永远掩盖"
+    )
 
 
 def test_migration_and_fixture_declare_tables_and_idempotency_key():
