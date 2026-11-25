@@ -93,7 +93,8 @@
       "tables": [
         "org_treasury",
         "org_ledger",
-        "industry_audit"
+        "industry_audit",
+        "industry_facility"
       ]
     }
   ],

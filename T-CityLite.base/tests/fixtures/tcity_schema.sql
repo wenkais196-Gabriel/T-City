@@ -1185,6 +1185,20 @@ CREATE TABLE IF NOT EXISTS `industry_audit` (
   KEY `idx_org_created` (`org_id`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- v4.1_industry_facility.sql — S2 设施 / 工位 / 库存
+CREATE TABLE IF NOT EXISTS `industry_facility` (
+  `org_id` varchar(64) NOT NULL,
+  `facility_type` varchar(48) NOT NULL,
+  `level` int(11) NOT NULL DEFAULT 1,
+  `workstations` int(11) NOT NULL DEFAULT 0,
+  `recipe_id` varchar(48) DEFAULT NULL,
+  `stock` bigint(20) NOT NULL DEFAULT 0,
+  `last_tick_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`org_id`),
+  KEY `idx_facility_type` (`facility_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
