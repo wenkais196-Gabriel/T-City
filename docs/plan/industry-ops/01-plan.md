@@ -17,12 +17,12 @@ plan_status: 1
 > 本计划**只覆盖 S1**；S2–S7 见各自 issue。
 
 ```plan-status
-P1 | todo | - | -
-P2 | todo | - | -
-P3 | todo | - | -
-P4 | todo | - | -
-P5 | todo | - | -
-P6 | todo | - | -
+P1 | done | #339 | 2026-11-25
+P2 | done | #339 | 2026-11-25
+P3 | done | #339 | 2026-11-25
+P4 | done | #339 | 2026-11-25
+P5 | done | #339 | 2026-11-25
+P6 | done | #339 | 2026-11-25
 ```
 
 ---
@@ -160,3 +160,17 @@ P6 | todo | - | -
 - **代码**：`configs/modules/economy.cfg` 删掉 `ensure` 行 + `git revert`；convar `industry_enable` 默认 `false`，关掉后命令返回"未开放"
 - **数据**：三张表保留不读即可（不写破坏性 down 迁移）
 - **运行时**：`restart custom-industry`；不改动任何现有资源，所以停用后全是空操作
+
+---
+
+## 10. 施工记录
+
+| 日期 | 事件 |
+|---|---|
+| 2026-11-25 | P1–P5 交付（`be684252`）。`architecture` 全绿、单测 13 条。 |
+| 2026-11-25 | **真机 P0 #1**：`commands.lua` 用未定义的全局 `QBCore`，资源启动成功但四条命令全没注册（单测只加载 treasury，看不见）。修复 `30f689dc` + 不提供全局的注册用例。 |
+| 2026-11-25 | **真机 P0 #2**：没有任何命令会创建 `org_treasury` 行，`grant` 恒 `no_account`，验收「存 1000 → 余额 1000」在真机不成立。修复 `8904986e`（`EnsureAccount` + 仅控制台 grant 开户）。 |
+| 2026-11-25 | P6 真机读数：grant/查询/控制台拒绝取款/`restart` 后余额不变；`cartel` 首次 grant 自动开户并留 `fund.open` + `fund.grant` 两条审计。玩家侧 Grade4 授权路径 ⛔ 仍需客户端。 |
+
+**两条 P0 的共同教训**：静态闸门与只加载单个文件的单测，都看不见「跨脚本作用域」与「真机链路完整性」。
+S2 起，每个分片必须有一条**加载全部 server 脚本**的注册/接线用例，而不是只测纯逻辑模块。

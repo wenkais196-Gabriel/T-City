@@ -33,6 +33,7 @@
 | [两个遗留问题：调研 → 方案 → 验证（2026-10-31）](../police/plans/2026-10-31-quest-storyengine-and-sonar.md) | active | 单片 | 1 | 0 | - | 2026-11-17 |
 | [计划：剧情抉择 UI 重构（decision surface）](../police/plans/2026-11-01-decision-ui-refactor.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [Agent 模块化施工计划（M1–M7）](agent-module-execution.md) | draft | 单片 | 0 | 0 | 整体 未开始 | 2026-11-17 |
+| [计划：S1 组织金库地基（industry treasury）](industry-ops/01-plan.md) | draft | 6 | 6 | 0 | - | 2026-11-25 |
 | [内容填充总规划（职业优先，R0–R6）](jobs-content-roadmap.md) | draft | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [计划：R1 多站驾驶（garbage + bus）](jobs-content/03-plan.md) | draft | 4 | 2 | 0 | P3 wip | 2026-11-17 |
 | [重构删除清单 & 保留清单 v2.0](../../T-CityLite.base/docs/archive/refactoring-manifest.md) | final | 未登记 | 0 | 0 | - | - |
