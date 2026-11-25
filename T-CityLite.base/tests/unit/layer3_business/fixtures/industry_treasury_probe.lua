@@ -24,6 +24,8 @@ __race = nil
 __raceFired = false
 __calls = { update = 0, single = 0, insert = 0, query = 0 }
 __lastQuerySql = nil
+__sqlLog = {}
+__audits = {}
 
 function __reset()
     __orgs = {}
@@ -36,6 +38,12 @@ function __reset()
     __raceFired = false
     __calls = { update = 0, single = 0, insert = 0, query = 0 }
     __lastQuerySql = nil
+    __sqlLog = {}
+    __audits = {}
+end
+
+local function logSql(kind, sql)
+    __sqlLog[#__sqlLog + 1] = kind .. ':' .. sql
 end
 
 function __seed(orgId, balance)
@@ -65,6 +73,7 @@ MySQL = {}
 
 MySQL.update = { await = function(sql, values)
     __calls.update = __calls.update + 1
+    logSql('update', sql)
     if not sql:find('org_treasury', 1, true) then
         return { affectedRows = 0 }
     end
@@ -92,6 +101,7 @@ end }
 
 MySQL.single = { await = function(sql, values)
     __calls.single = __calls.single + 1
+    logSql('single', sql)
     if sql:find('org_treasury', 1, true) then
         local orgId = values[1]
         if __orgs[orgId] == nil then return nil end
@@ -108,6 +118,7 @@ end }
 
 MySQL.query = { await = function(sql, values)
     __calls.query = __calls.query + 1
+    logSql('query', sql)
     __lastQuerySql = sql
     if sql:find('org_ledger', 1, true) then
         local orgId = values[1]
@@ -126,6 +137,17 @@ end }
 
 MySQL.insert = { await = function(sql, values)
     __calls.insert = __calls.insert + 1
+    logSql('insert', sql)
+
+    if sql:find('INSERT IGNORE INTO org_treasury', 1, true) then
+        -- org_treasury 没有 AUTO_INCREMENT：真实驱动也只回 affectedRows，不回 insertId。
+        local orgId = values[1]
+        if __orgs[orgId] == nil then
+            __orgs[orgId] = 0
+            return { affectedRows = 1 }
+        end
+        return { affectedRows = 0 }
+    end
 
     if sql:find('org_ledger', 1, true) then
         local orgId = values[1]
@@ -158,6 +180,15 @@ MySQL.insert = { await = function(sql, values)
     end
 
     if sql:find('industry_audit', 1, true) then
+        if #values == 4 then
+            __audits[#__audits + 1] = {
+                org_id = values[1], actor_cid = values[2], action = values[3], payload = values[4],
+            }
+        else
+            __audits[#__audits + 1] = {
+                org_id = values[1], actor_cid = nil, action = values[2], payload = values[3],
+            }
+        end
         __nextLedgerId = __nextLedgerId + 1
         return { insertId = __nextLedgerId }
     end

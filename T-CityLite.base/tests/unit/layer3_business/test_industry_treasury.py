@@ -373,11 +373,13 @@ Config = {
 }
 
 __registered = {}
+__handlers = {}
 __coreCalls = 0
 local coreObject = {
     Commands = {
-        Add = function(name)
+        Add = function(name, help, args, required, handler)
             __registered[#__registered + 1] = name
+            __handlers[name] = handler
         end,
     },
     Functions = {
@@ -397,8 +399,6 @@ exports = setmetatable({}, {
         }
     end,
 })
-
-MySQL = {}
 
 function __emit(key, value)
     io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
@@ -423,6 +423,128 @@ def run_commands(body: str) -> dict[str, str]:
         key, _, value = line.partition("|")
         out.setdefault(key.strip(), value.strip())
     return out
+
+
+#: 假 DB（fixture）+ 命令依赖（Config/exports）。两边都真加载 audit.lua / treasury.lua /
+#: commands.lua，所以 grant 的整条路径（EnsureAccount → Deposit → 审计）都被覆盖。
+GRANT_STUBS = FIXTURE.read_text(encoding="utf-8") + "\n" + COMMAND_STUBS
+
+
+def run_grant(body: str) -> dict[str, str]:
+    """fixture + db.lua + treasury.lua + audit.lua + commands.lua + body。"""
+    script = load_with_db(
+        GRANT_STUBS,
+        SRC,
+        AUDIT.read_text(encoding="utf-8") + "\n"
+        + COMMANDS.read_text(encoding="utf-8") + "\n"
+        + textwrap.dedent(body),
+    )
+    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
+
+    out: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        if "|" not in line:
+            continue
+        key, _, value = line.partition("|")
+        out.setdefault(key.strip(), value.strip())
+    return out
+
+
+def test_ensure_account_creates_missing_row_and_keeps_existing_balance():
+    """EnsureAccount：不存在则建行（余额 0），已存在则不动余额、不报错。"""
+    out = run("""
+        __reset()
+        local ok1, err1, created1 = Treasury.EnsureAccount('mining_co')
+        __emit('OK1', tostring(ok1))
+        __emit('ERR1', tostring(err1 or 'nil'))
+        __emit('CREATED1', tostring(created1))
+        __emit('BAL1', tostring(__balance('mining_co')))
+        local hasOpen = false
+        for _, entry in ipairs(__sqlLog) do
+            if entry:find('INSERT IGNORE INTO org_treasury', 1, true) then
+                hasOpen = true
+                break
+            end
+        end
+        __emit('INSERT_IGNORE', tostring(hasOpen))
+
+        __seed('mining_co', 500)
+        local ok2, err2, created2 = Treasury.EnsureAccount('mining_co')
+        __emit('OK2', tostring(ok2))
+        __emit('ERR2', tostring(err2 or 'nil'))
+        __emit('CREATED2', tostring(created2))
+        __emit('BAL2', tostring(__balance('mining_co')))
+
+        local ok3, err3 = Treasury.EnsureAccount('bad org!')
+        __emit('OK3', tostring(ok3))
+        __emit('ERR3', tostring(err3 or 'nil'))
+    """)
+
+    assert out["OK1"] == "true", f"开户失败：{out}"
+    assert out["ERR1"] == "nil"
+    assert out["CREATED1"] == "true", "首次开户必须报告 created=true（fund.open 审计依赖它）"
+    assert out["BAL1"] == "0", "新账户余额必须是 0"
+    assert out["INSERT_IGNORE"] == "true", "必须走 INSERT IGNORE（Db.Insert），不能先读后写建行"
+    assert out["OK2"] == "true", "已存在的账户上再 Ensure 不应报错"
+    assert out["CREATED2"] == "false", "已存在的账户被误报成新建 → 会重复写 fund.open"
+    assert out["BAL2"] == "500", "EnsureAccount 不许重置已有余额"
+    assert out["OK3"] == "false" and out["ERR3"] == "bad_org", f"非法 orgId 必须 bad_org：{out}"
+
+
+def test_orgfundgrant_opens_account_before_first_deposit():
+    """真机缺口：控制台 grant 到不存在的组织必须先开户，否则永远 no_account。
+
+    SQL 序列断言「INSERT IGNORE org_treasury 在第一条 UPDATE 之前」；审计断言
+    fund.open 只在首次建行时写一次。
+    """
+    out = run_grant("""
+        __reset()
+        IndustryCommands.Register()
+        __handlers.orgfundgrant(0, { 'cartel', '1000', 'smoke_seed' })
+        __emit('BAL1', tostring(__balance('cartel')))
+        __emit('LEDGER1', tostring(__ledgerCount()))
+
+        local actions = {}
+        for _, entry in ipairs(__audits) do
+            actions[#actions + 1] = entry.action
+        end
+        __emit('ACTIONS1', table.concat(actions, ','))
+
+        local openAt, updateAt
+        for index, entry in ipairs(__sqlLog) do
+            if entry:find('INSERT IGNORE INTO org_treasury', 1, true) and not openAt then
+                openAt = index
+            end
+            if entry:find('UPDATE org_treasury', 1, true) and not updateAt then
+                updateAt = index
+            end
+        end
+        __emit('OPEN_BEFORE_UPDATE', tostring(openAt ~= nil and updateAt ~= nil and openAt < updateAt))
+
+        __handlers.orgfundgrant(0, { 'cartel', '500', 'second' })
+        __emit('BAL2', tostring(__balance('cartel')))
+        __emit('LEDGER2', tostring(__ledgerCount()))
+        local openAudits = 0
+        for _, entry in ipairs(__audits) do
+            if entry.action == 'fund.open' then openAudits = openAudits + 1 end
+        end
+        __emit('OPEN_AUDITS', tostring(openAudits))
+    """)
+
+    assert out["BAL1"] == "1000", (
+        f"grant 到不存在的组织没有开户/入账（真机表现：no_account）：{out}"
+    )
+    assert out["LEDGER1"] == "1", "grant 应写一条流水"
+    assert out["ACTIONS1"] == "fund.open,fund.grant", (
+        f"首次 grant 必须先记 fund.open 再记 fund.grant：{out['ACTIONS1']}"
+    )
+    assert out["OPEN_BEFORE_UPDATE"] == "true", (
+        "开户 SQL 必须发生在第一笔余额更新之前，否则 Deposit 一定 no_account"
+    )
+    assert out["BAL2"] == "1500", "第二次 grant 应继续累加"
+    assert out["LEDGER2"] == "2"
+    assert out["OPEN_AUDITS"] == "1", "fund.open 只在首次建行时写，第二次 grant 不该重复"
 
 
 def test_commands_register_without_a_global_qbcore():

@@ -176,6 +176,35 @@ local function apply(orgId, delta, reason, opts)
     return true, nil
 end
 
+--- 确保组织金库账户存在（只建行，不改余额）。
+--- S1 只有控制台 /orgfundgrant 走这里；玩家侧存/取仍要求账户已存在，
+--- 避免打错一个 orgId 就凭空建账户。
+---
+--- 第三个返回值 created 只给审计用（fund.open 只在首次建行时写）。
+---@param orgId string
+---@return boolean ok, string|nil errcode, boolean created
+function Treasury.EnsureAccount(orgId)
+    if not validOrg(orgId) then return false, 'bad_org', false end
+
+    -- 先读一次只为区分「本次新建」；真正的判据是插入后再读一次余额。
+    local existing, lookupErr = Db.Single(
+        'SELECT org_id FROM org_treasury WHERE org_id = ? LIMIT 1',
+        { orgId })
+
+    -- INSERT IGNORE：已存在时 affectedRows=0；org_treasury 没有 AUTO_INCREMENT，
+    -- Db.Insert 会把这两种回包都归一成 no_insert_id —— 那不是错误。成功与否
+    -- 统一用「插入后能读到余额」判定。
+    Db.Insert(
+        'INSERT IGNORE INTO org_treasury (org_id, balance) VALUES (?, 0)',
+        { orgId })
+
+    local balance = readBalance(orgId)
+    if balance == nil then return false, 'db_error', false end
+
+    local created = lookupErr == nil and existing == nil
+    return true, nil, created
+end
+
 --- 组织入账。
 ---@param orgId string
 ---@param amount number 正整数

@@ -271,6 +271,18 @@ function IndustryCommands.Register()
             return
         end
 
+        -- 只有控制台注入会开户：玩家侧存/取保持 no_account，避免打错 orgId 凭空建账户。
+        local opened, openErr, created = Treasury.EnsureAccount(orgId)
+        if not opened then
+            audit(orgId, nil, 'fund.grant', amount, openErr or 'db_error', nil)
+            print(('[custom-industry] grant open failed org=%s err=%s'):format(
+                orgId, tostring(openErr or 'db_error')))
+            return
+        end
+        if created then
+            audit(orgId, nil, 'fund.open', 0, 'ok', nil)
+        end
+
         local ref = makeRef('grant', orgId, 'console')
         local ok, err = Treasury.Deposit(orgId, amount, reason, { ref = ref })
         audit(orgId, nil, 'fund.grant', amount, ok and 'ok' or (err or 'db_error'), ref)
