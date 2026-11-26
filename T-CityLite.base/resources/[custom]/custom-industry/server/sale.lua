@@ -109,6 +109,30 @@ local function audit(orgId, amount, result, ref, item, qty)
     IndustryAudit.Write(orgId, nil, 'industry.sale', auditPayload(amount, result, ref, item, qty))
 end
 
+--- 全服配额漂移（计数器欠账）：条件回填到流水合计，并在真正改到行时写一条审计。
+--- `quota_used < ?` 是幂等闸：并发 / 重复读取只有一次 affectedRows = 1，不会重复留痕。
+--- payload 只放数字，不含玩家身份；漂移没有归属组织，org_id 用 '*'（IndustryOrgId
+--- 不允许 '*'，不会与真实组织撞名）。
+local function reconcileQuotaDrift(cfg, item, total, counter, flow)
+    local affected, err = Db.Update(
+        'UPDATE industry_demand SET quota_used = ? '
+            .. 'WHERE cycle_no = ? AND phase = ? AND item_name = ? AND quota_used < ?',
+        { flow, cfg.CycleNo, cfg.Phase, item, flow })
+    if err then
+        print(('[custom-industry] quota drift reconcile failed item=%s used=%d sales=%d err=%s'):format(
+            tostring(item), counter, flow, tostring(err)))
+        return
+    end
+    if affected ~= 1 then return end
+
+    IndustryAudit.Write('*', nil, 'quota_drift',
+        ('{"cycle_no":%d,"quota_total":%d,"quota_used":%d,"sales_sum":%d}'):format(
+            cfg.CycleNo, total, counter, flow))
+end
+
+--- 全服已用取「可变计数器」与「卖单流水合计」的较大值。
+--- 正常路径两者严格同步（先 CAS 计数器、再插卖单；失败逐级退回）；只有写入中途
+--- 失败或被直接改库时计数器才会欠账，此时以不可篡改的流水为准并从读路径修正。
 ---@return table|nil demand { total = int, used = int }, string|nil errcode
 local function readDemand(cfg, item)
     local row, err = Db.Single(
@@ -119,9 +143,24 @@ local function readDemand(cfg, item)
     if not row then return nil, 'no_demand' end
 
     local total = toInt(row.quota_total)
-    local used = toInt(row.quota_used)
-    if not total or not used or total < 0 or used < 0 then return nil, 'db_error' end
-    return { total = total, used = used }, nil
+    local counter = toInt(row.quota_used)
+    if not total or not counter or total < 0 or counter < 0 then return nil, 'db_error' end
+
+    -- 流水合计按 (cycle_no, item_name) 统计全服；phase 不属于 industry_sales 的维度。
+    local flowRow, flowErr = Db.Single(
+        'SELECT COALESCE(SUM(qty), 0) AS used FROM industry_sales '
+            .. 'WHERE cycle_no = ? AND item_name = ? LIMIT 1',
+        { cfg.CycleNo, item })
+    if flowErr then return nil, 'db_error' end
+
+    local flow = toInt(flowRow and flowRow.used or 0)
+    if not flow or flow < 0 then return nil, 'db_error' end
+
+    if counter < flow then
+        reconcileQuotaDrift(cfg, item, total, counter, flow)
+    end
+
+    return { total = total, used = math.max(counter, flow) }, nil
 end
 
 ---@return number|nil stock, string|nil errcode
@@ -393,8 +432,9 @@ end
 --- 只读快照：库存 / 全服配额 / 本组织配额 / 单价 / 可卖上限。
 ---
 --- 与 settleLocked 使用同一个 readDemand / readStock / readOrgUsed / orgCap 与
---- cfg.UnitPrices；不写库、不占配额、不拿组织锁。S5 的 Snapshot / EstimateSale 都走这里，
---- 前端因此不需要自己算 maxQty 或 orgRemaining。
+--- cfg.UnitPrices；不占配额、不拿组织锁。唯一的写库是 readDemand 的**数据修复**：
+--- 计数器欠账时条件回填 quota_used 并写一条 quota_drift 审计（#364），正常数据零写入。
+--- S5 的 Snapshot / EstimateSale 都走这里，前端因此不需要自己算 maxQty 或 orgRemaining。
 ---@param orgId string
 ---@param item string
 ---@return table|nil info, string|nil errcode
@@ -419,7 +459,8 @@ function IndustrySales.Inspect(orgId, item)
 
     local cap = orgCap(demand.total, cfg.OrgCapRatio)
     local globalRemaining = math.max(demand.total - demand.used, 0)
-    local orgRemaining = math.max(cap - orgUsed, 0)
+    -- 单组织剩余不能超过全服剩余：结构上排除「全服剩 0、本组织还有额度」。
+    local orgRemaining = math.min(math.max(cap - orgUsed, 0), globalRemaining)
 
     local maxQty = math.min(stock, orgRemaining, globalRemaining)
     local configMax = toInt(cfg.MaxQty) or MAX_QTY

@@ -119,6 +119,32 @@ function __auditActions()
     return table.concat(actions, ',')
 end
 
+function __auditCount(action)
+    local count = 0
+    for _, entry in ipairs(__audits) do
+        if entry.action == action then count = count + 1 end
+    end
+    return count
+end
+
+function __auditPayload(action)
+    for _, entry in ipairs(__audits) do
+        if entry.action == action then return entry.payload end
+    end
+    return nil
+end
+
+--- 已执行的 UPDATE 里 SQL 文本包含 needle 的条数（证明正常路径没有多写库）。
+function __sqlUpdateCount(needle)
+    local count = 0
+    for _, entry in ipairs(__sqlLog) do
+        if entry:sub(1, 6) == 'update' and entry:find(needle, 1, true) then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 function __saleEventCount()
     return #__saleEvents
 end
@@ -161,10 +187,12 @@ local function logSql(kind, sql)
     __sqlLog[#__sqlLog + 1] = kind .. ':' .. sql
 end
 
-local function orgSaleQty(orgId, cycleNo, item)
+--- 卖单流水合计。orgId 为 nil 时统计全服（读路径对账用），否则只统计该组织。
+local function saleQty(orgId, cycleNo, item)
     local total = 0
     for _, row in ipairs(__sales) do
-        if tostring(row.org_id) == tostring(orgId)
+        local sameOrg = orgId == nil or tostring(row.org_id) == tostring(orgId)
+        if sameOrg
             and tostring(row.cycle_no) == tostring(cycleNo)
             and tostring(row.item_name) == tostring(item) then
             total = total + (tonumber(row.qty) or 0)
@@ -224,7 +252,7 @@ MySQL.update = { await = function(sql, values)
             local saleItem = values[8]
             local ratio = tonumber(values[10]) or 0.5
             local cap = math.floor(row.quota_total * ratio + 1e-9)
-            if orgSaleQty(orgId, saleCycle, saleItem) + qty > cap then
+            if saleQty(orgId, saleCycle, saleItem) + qty > cap then
                 return { affectedRows = 0 }
             end
         end
@@ -241,6 +269,20 @@ MySQL.update = { await = function(sql, values)
         local row = __demands[demandKey(cycleNo, phase, item)]
         if not row or row.quota_used < qty then return { affectedRows = 0 } end
         row.quota_used = row.quota_used - qty
+        return { affectedRows = 1 }
+    end
+
+    -- 配额对账：只有计数器真的落后于流水时才条件回填（quota_used < ? 是幂等守卫）。
+    -- 没有这条短路时，重复读会重复 UPDATE；探针直接判红。
+    if sql:find('UPDATE industry_demand SET quota_used = ?', 1, true) then
+        if not sql:find('quota_used < ?', 1, true) then
+            error('probe: 对账 UPDATE 缺 quota_used < ? 幂等守卫')
+        end
+        local flow = tonumber(values[1]) or 0
+        local row = __demands[demandKey(values[2], values[3], values[4])]
+        local guard = tonumber(values[5]) or 0
+        if not row or row.quota_used >= guard then return { affectedRows = 0 } end
+        row.quota_used = flow
         return { affectedRows = 1 }
     end
 
@@ -301,7 +343,11 @@ MySQL.single = { await = function(sql, values)
 
     if sql:find('FROM industry_sales', 1, true) then
         if sql:find('SUM(qty)', 1, true) then
-            return { used = orgSaleQty(values[1], values[2], values[3]) }
+            -- 带 org_id 的是单组织累计；不带的是全服流水（读路径对账）。
+            if sql:find('org_id = ?', 1, true) then
+                return { used = saleQty(values[1], values[2], values[3]) }
+            end
+            return { used = saleQty(nil, values[1], values[2]) }
         end
         local key = tostring(values[1]) .. '\0' .. tostring(values[2])
         local sale = __saleRefs[key]
