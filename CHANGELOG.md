@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   新增闸门 `tests/architecture/test_adminmenu_input_shim.py`（三条规则 + 反向注入）。
 
 ### Added
+- **S4 销售 / 配额（`custom-industry`）**：`industry_demand`（`cycle_no/phase/item_name` 主键，全服配额）与
+  `industry_sales`（卖单流水，`UNIQUE(org_id, ref)` 幂等）。`SettleSale` 是**全仓唯一一个「无对应玩家扣款」的
+  净增货币点**：服务端定价 × `core_economy:GetGlobalMultiplier()`，库存 CAS → 配额 CAS（全服剩余与本组织
+  `SUM(s.qty) + ? <= FLOOR(quota_total × 0.5)` 写在**同一条 UPDATE**）→ 卖单落库 → `Treasury.Deposit`；
+  任一步失败逐级回退，退不掉打 `CRITICAL` 并审计 `rollback_failed`。命令层只有控制台入口 `/orgsell`
+  （convar `industry_sales_debug` 默认关、`restricted`、`source==0`）；`economy-dashboard` 新增
+  `industrySaleInflow`（此前组织入账是通胀盲区）。迁移 `v4.3_industry_sales.sql`；无新增 NUI。
+  真机：卖 5 件入账 $250、超 50% 得 `org_cap_reached`、同一 ref 只入账一次、全服剩余不足时按剩余截断。
+- **组织 id 校验合并（`custom-industry` 的 server/org_id.lua）**：原本 S1–S4 各抄一份的校验（非空 / ≤64 / `^[%w_%-]+$`）从 S1–S4 各抄的
+  合并为单一模块 `IndustryOrgId.IsValid`，`fxmanifest` 排在金库之前。
+
 - **S1 组织金库（`custom-industry`）**：`org_treasury` / `org_ledger` / `industry_audit` 三张表，
   余额扣减守卫写在单条 `UPDATE … WHERE balance + ? >= 0` 里（affectedRows 裁决，无 TOCTOU），
   流水以 `UNIQUE(org_id, ref)` 做幂等键，插流水失败会把余额补偿回去。命令层只有
