@@ -128,7 +128,10 @@ def test_host_lua_input_layer_handshake_and_intents() -> None:
     for target in ("'client'", "'server'", "'command'", "'submenu'"):
         assert target in src, f"client/host.lua must support intent type {target}"
 
-    assert "type(cb) ~= 'function'" not in src and 'type(cb) ~= "function"' not in src, (
+    assert "type(cb) ~= 'function'" not in src, (
+        "Never use type(cb) ~= 'function' on NUI callbacks (callable table risk)"
+    )
+    assert 'type(cb) ~= "function"' not in src, (
         "Never use type(cb) ~= 'function' on NUI callbacks (callable table risk)"
     )
 
@@ -136,7 +139,10 @@ def test_host_lua_input_layer_handshake_and_intents() -> None:
     assert "'@core-framework/client/shared.lua'" in manifest, (
         "fxmanifest.lua must load @core-framework/client/shared.lua first for CLI-01 observability"
     )
-    assert "'custom-ui'" not in manifest and '"custom-ui"' not in manifest, (
+    assert "'custom-ui'" not in manifest, (
+        "fxmanifest.lua must not declare static dependency on custom-ui (player.cfg starts before custom.cfg)"
+    )
+    assert '"custom-ui"' not in manifest, (
         "fxmanifest.lua must not declare static dependency on custom-ui (player.cfg starts before custom.cfg)"
     )
 
@@ -146,7 +152,9 @@ def test_server_intent_gate_and_allowlist() -> None:
     srv = SERVER_LUA.read_text(encoding="utf-8")
 
     assert "RegisterNetEvent('custom-menu:server:intent'" in srv
-    assert "menuId" in srv and "itemId" in srv and "intent" in srv
+    assert "menuId" in srv
+    assert "itemId" in srv
+    assert "intent" in srv
     assert "denied" in srv
     assert "custom-menu:server:registerIntent" in srv or "exports('RegisterIntent'" in srv
 
@@ -163,7 +171,9 @@ def test_server_intent_gate_and_allowlist() -> None:
 
 
 def test_renderer_framework_agnostic_and_tokens() -> None:
-    assert RENDERER_JS.is_file() and STYLES_CSS.is_file() and INDEX_HTML.is_file()
+    assert RENDERER_JS.is_file()
+    assert STYLES_CSS.is_file()
+    assert INDEX_HTML.is_file()
     js = RENDERER_JS.read_text(encoding="utf-8")
     css = STYLES_CSS.read_text(encoding="utf-8")
     html = INDEX_HTML.read_text(encoding="utf-8")
@@ -183,6 +193,21 @@ def test_renderer_framework_agnostic_and_tokens() -> None:
         assert density in css, f"styles.css missing density token {density}"
     for key in ("Escape", "Backspace", "Enter", "ArrowDown", "ArrowUp"):
         assert key in js, f"renderer.js must handle keyboard key {key}"
+
+    # 方向键不许整表重渲染（2026-11-26 真机：每移动一格菜单闪一下；表单里的 <input>
+    # 被换成新节点，于是"选中输入框后打不了字"）。选中态只改 class。
+    assert "applyFocusClass" in js, "renderer.js 需要选中态就地更新（applyFocusClass）"
+
+    def _key_branch(source: str, key: str) -> str:
+        """截出某个按键分支（到它自己的 `return;` 为止）。"""
+        start = source.index(f"key === '{key}'")
+        end = source.index("return;", start)
+        return source[start:end]
+
+    for key in ("ArrowDown", "ArrowUp"):
+        assert "renderCurrent()" not in _key_branch(js, key), (
+            f"{key} 分支里不许调用 renderCurrent()：整表重渲染会闪屏并打断输入框焦点"
+        )
 
 
 def test_reverse_injection_detectors_catch_violations(tmp_path: pathlib.Path) -> None:
