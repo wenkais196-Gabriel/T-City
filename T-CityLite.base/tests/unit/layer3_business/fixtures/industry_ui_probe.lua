@@ -53,7 +53,6 @@ function __emitWriteState()
 end
 
 --- 写操作类用例的通用种子（余额 0、库存 10、工位 3、配额 20/0）。
---- 单独抽出来是因为 5 个用例原本各抄一份，Sonar 新代码重复率因此超标。
 function __seedBasic(opts)
     opts = opts or {}
     __reset()
@@ -65,7 +64,7 @@ end
 --- 模拟「本周期已经卖过 qty 件」：orgUsed 的分子来自 industry_sales。
 function __seedSale(orgId, item, qty)
     local id = 1000 + #__sales + 1
-    local row = {
+    local row = __industrySaleRow({
         id = id,
         org_id = orgId,
         cycle_no = 0,
@@ -74,7 +73,7 @@ function __seedSale(orgId, item, qty)
         unit_price = 50,
         revenue = 0,
         ref = 'seed:' .. tostring(id),
-    }
+    })
     __sales[#__sales + 1] = row
     __saleRefs[tostring(orgId) .. '\0' .. row.ref] = row
 end
@@ -85,10 +84,9 @@ MySQL.single = { await = function(sql, values)
         local orgId = values[1]
         local row = __facilityRows[orgId]
         if not row then return nil end
-        local copy = {}
-        for key, value in pairs(row) do copy[key] = value end
-        copy.stock = __facilities[orgId] or 0
-        return copy
+        local result = __industryCopy(row)
+        result.stock = __facilities[orgId] or 0
+        return result
     end
     return __baseUiSingle(sql, values)
 end }
