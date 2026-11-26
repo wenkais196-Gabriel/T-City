@@ -15,19 +15,30 @@ import SeatPicker from './components/SeatPicker.vue'
 
 const store = useDashboardStore()
 
-// ── 键盘：方向键换页签、Enter 交给当前页、Esc/Backspace 关闭（与手机同一条语义） ──
+// ── 键盘：方向键换页签、Esc/Backspace/I 关闭（合并原 document 监听，避免重复注册与泄漏） ──
 const TAB_ORDER = ['diag', 'ctrl', 'drive', 'prof']
 
 function onKeydown(e: KeyboardEvent) {
-  if (!store.visible) return
+  if (!store.visible && !store.seatPickerVisible) return
   const key = e.key
   // Esc 必须在这里处理：面板有焦点时键盘归 CEF，Lua 侧的 IsDisabledControlJustPressed
   // 读不到（真机验证）。关闭时 Lua 会 GuardControls(400) 挡住暂停菜单。
-  if (key === 'Escape' || key === 'Backspace') {
+  if (key === 'Escape' || key === 'Backspace' || key === 'i' || key === 'I') {
+    if (key !== 'Escape') {
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+        return
+      }
+    }
     e.preventDefault()
+    e.stopPropagation()
+    if (store.seatPickerVisible) {
+      store.closeSeatPicker()
+    }
     closeDashboard()
     return
   }
+  if (!store.visible) return
   if (key === 'ArrowLeft' || key === 'ArrowRight') {
     const order = TAB_ORDER.filter((id) => {
       if (id !== 'prof') return true
@@ -42,12 +53,22 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+function onContextMenu(e: Event) {
+  if (!store.visible && !store.seatPickerVisible) return
+  closeDashboard()
+  e.preventDefault()
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
+  document.addEventListener('contextmenu', onContextMenu)
   // 页面真正就绪后再让 Lua 施一次焦点（固定延时在慢机器上不够）
   sendNui('dashboardReady', {})
 })
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('contextmenu', onContextMenu)
+})
 
 useNui((msg) => {
   switch (msg.type) {
@@ -85,29 +106,6 @@ useNui((msg) => {
       break
   }
 })
-
-// I / Backspace → 关闭。**Escape 不在这里处理**：keepInput 模式下游戏也看得到 Esc，
-// NUI 先关会让帧提前弹出、屏蔽线程停掉，同一帧游戏就把暂停菜单打开了。
-// Esc 由 custom-ui 的交互路径栈在屏蔽状态下读取并调 close（帧里 esc = true）。
-function onKeyDown(e: KeyboardEvent) {
-  if (e.key === 'i' || e.key === 'I' || e.key === 'Escape' || e.key === 'Backspace') {
-    if (store.seatPickerVisible) {
-      store.closeSeatPicker()
-      closeDashboard()
-    } else {
-      closeDashboard()
-    }
-    e.preventDefault()
-    e.stopPropagation()
-  }
-}
-function onContextMenu(e: Event) {
-  closeDashboard()
-  e.preventDefault()
-}
-
-document.addEventListener('keydown', onKeyDown)
-document.addEventListener('contextmenu', onContextMenu)
 </script>
 
 <template>

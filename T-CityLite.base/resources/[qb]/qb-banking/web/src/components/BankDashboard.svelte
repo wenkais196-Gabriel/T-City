@@ -807,11 +807,9 @@
     height: 780px;
     display: flex;
     flex-direction: column;
-    background: rgba(10, 15, 26, 0.85);
-    backdrop-filter: blur(25px);
-    -webkit-backdrop-filter: blur(25px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, rgba(19, 28, 46, 0.92), rgba(10, 15, 26, 0.96));
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 20px 50px rgba(0, 0, 0, 0.5);
     border-radius: 24px;
     overflow: hidden;
     position: relative;

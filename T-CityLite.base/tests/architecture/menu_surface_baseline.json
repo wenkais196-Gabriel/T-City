@@ -114,31 +114,44 @@
     ]
   },
   "backdrop_filter": {
-    "total": 24,
+    "total": 15,
+    "non_excluded_total": 9,
     "resources": {
       "monitor": 6,
-      "qb-banking": 5,
-      "tcity-dashboard": 4,
       "qb-multicharacter": 3,
       "qb-core": 2,
-      "qb-vehicleshop": 1,
-      "hud-position-tool": 1,
+      "custom-notify": 1,
       "custom-phone": 1,
-      "custom-notify": 1
+      "qb-banking": 1,
+      "qb-vehicleshop": 1
+    },
+    "excluded": {
+      "monitor": {
+        "resource": "monitor",
+        "path": "resources/[system]/monitor",
+        "count": 6,
+        "reason": "第三方管理面板（txAdmin）打包产物（panel/ 与 web/public/css/），不在本 epic 改造范围",
+        "files": [
+          "resources/[system]/monitor/panel/index-f9doidst.v800.js",
+          "resources/[system]/monitor/panel/index-iqd44fe8.v800.css",
+          "resources/[system]/monitor/web/public/css/coreui.css",
+          "resources/[system]/monitor/web/public/css/coreui.min.css"
+        ]
+      }
     },
     "samples": [
+      "resources/[custom]/custom-notify/html/index.html:10",
+      "resources/[custom]/custom-phone/web/src/app.css:92",
+      "resources/[qb]/qb-banking/html/assets/index-CFowxLEI.css:1",
+      "resources/[qb]/qb-core/html/css/style.css:75",
+      "resources/[qb]/qb-core/html/css/style.css:76",
+      "resources/[qb]/qb-multicharacter/html/style.css:435",
+      "resources/[qb]/qb-multicharacter/html/style.css:494",
       "resources/[qb]/qb-multicharacter/html/style.css:86",
       "resources/[qb]/qb-vehicleshop/html/nui.css:17",
       "resources/[system]/monitor/panel/index-f9doidst.v800.js:809",
       "resources/[system]/monitor/panel/index-f9doidst.v800.js:88",
-      "resources/[system]/monitor/panel/index-iqd44fe8.v800.css:1",
-      "resources/[system]/monitor/web/public/css/coreui.css:11418",
-      "resources/[system]/monitor/web/public/css/coreui.css:11419",
-      "resources/[system]/monitor/web/public/css/coreui.min.css:7",
-      "resources/[system]/tcity-dashboard/nui/src/components/SeatPicker.vue:92",
-      "resources/[system]/tcity-dashboard/nui/src/components/SeatPicker.vue:93",
-      "resources/[system]/tcity-dashboard/nui/src/style.css:39",
-      "resources/[system]/tcity-dashboard/nui/src/style.css:40"
+      "resources/[system]/monitor/panel/index-iqd44fe8.v800.css:1"
     ]
   },
   "cdn_ref": {
