@@ -144,6 +144,11 @@ exports = setmetatable({}, {
             GetActivityHeat = function() return __activityHeat end,
         }
     end,
+    -- S5 的 ui.lua 在加载期注册只读导出；fixture 必须同时支持 exports('name', fn)。
+    __call = function(_, name, fn)
+        __exportFns = __exportFns or {}
+        __exportFns[name] = fn
+    end,
 })
 
 function GetConvar(name, default)

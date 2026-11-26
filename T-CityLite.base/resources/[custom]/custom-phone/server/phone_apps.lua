@@ -36,16 +36,45 @@ local function playerData(source)
     return Player.PlayerData
 end
 
-local function audienceAllows(app, data)
+--- Audience 支持三种形态（可组合，任一命中即可见）：
+---   jobs    = { 'police' }   —— job.name 白名单
+---   gangs   = { 'cartel' }   —— gang.name 白名单
+---   visible = function(source, data) -> boolean —— 资源自定义判定（例如产业按 org 成员）
+--- 三者都不写 = 所有玩家可见（沿用原语义）；写了任意一项就按白名单/回调拒绝未命中者。
+local function audienceAllows(app, data, source)
     local audience = app.audience or {}
-    local jobs = audience.jobs
-    if type(jobs) ~= 'table' or #jobs == 0 then return true end
+    local jobs = type(audience.jobs) == 'table' and audience.jobs or nil
+    local gangs = type(audience.gangs) == 'table' and audience.gangs or nil
+    local hasJobs = jobs ~= nil and #jobs > 0
+    local hasGangs = gangs ~= nil and #gangs > 0
+    local hasVisible = type(audience.visible) == 'function'
+
     local job = type(data.job) == 'table' and data.job or {}
-    local name = type(job.name) == 'string' and job.name or ''
-    local allowed = false
-    for _, wanted in ipairs(jobs) do
-        if wanted == name then allowed = true break end
+    local gang = type(data.gang) == 'table' and data.gang or {}
+
+    local allowed
+    if not hasJobs and not hasGangs and not hasVisible then
+        allowed = true
+    else
+        allowed = false
+        if hasJobs then
+            local name = type(job.name) == 'string' and job.name or ''
+            for _, wanted in ipairs(jobs) do
+                if wanted == name then allowed = true break end
+            end
+        end
+        if not allowed and hasGangs then
+            local name = type(gang.name) == 'string' and gang.name or ''
+            for _, wanted in ipairs(gangs) do
+                if wanted == name then allowed = true break end
+            end
+        end
+        if not allowed and hasVisible then
+            local ok, visible = pcall(audience.visible, source, data)
+            allowed = ok and visible == true
+        end
     end
+
     if not allowed then return false end
     if audience.onduty and job.onduty ~= true then return false end
     return true
@@ -84,7 +113,7 @@ function PhoneApps.ForPlayer(source)
     if not data then return {} end
     local list = {}
     for _, app in pairs(apps) do
-        if audienceAllows(app, data) then
+        if audienceAllows(app, data, source) then
             local queries, actions = {}, {}
             for name in pairs(app.queries) do queries[#queries + 1] = name end
             for name in pairs(app.actions) do actions[#actions + 1] = name end
@@ -107,7 +136,7 @@ local function resolve(source, appId)
     if not data then return nil, nil, 'player_not_ready' end
     local app = apps[appId]
     if not app then return nil, nil, 'app_not_found' end
-    if not audienceAllows(app, data) then return nil, nil, 'app_forbidden' end
+    if not audienceAllows(app, data, source) then return nil, nil, 'app_forbidden' end
     return app, data, nil
 end
 

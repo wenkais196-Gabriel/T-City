@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **S5 真机跑起来的四个缺陷（`custom-industry` / `qb-management`）**：
+  ① 服务端与客户端都用 `type(qb.Functions.X) == 'function'` 判 QBCore 的函数，而本 build 里
+  `exports['qb-core']:GetCoreObject()` 交出来的函数是**可调用表**（`type == 'table'`，靠 `__call` 调用），
+  守卫恒假 —— 服务端 5 个 callback 一个都没注册（只留一行日志），客户端 `uiEnabled` 永远是 false
+  （注入被自己挡掉）。改为只判 nil + `pcall`，并给注册加有界重试（500ms×60）。
+  ② 客户端 `Money()` 是 qb-core 的客户端全局，本资源没 import，渲染第一行就
+  `attempt to call a nil value (global 'Money')`。换成本地千分位实现（从右往左每 3 位分组；
+  左侧贪婪正则会在长数字上反复插入逗号直到死循环）。
+  ③ qb-management 的 Boss 菜单是**世界坐标触发区**，`Config.BossMenus` 里没有 `miner`，
+  注入的菜单项没有任何入口可达；同时 `cl_boss.lua` 与 `cl_org.lua` 会遍历同一份坐标表在**同一坐标**
+  注册两个菜单，玩家按 E 随机进其中一个。改为给组织菜单一个确定入口 `/orgmenu`（服务端校验成员身份），
+  并新增 `/industry` 直开面板。
+  ④ `cl_org.lua` 的提示循环会在「菜单开着但玩家不在 1.5m 内」时调 `qb-menu:closeMenu()`，
+  这会关掉**任何**用 qb-menu 打开的界面。`/industry` 直开不置 `shownMenu`，因此不受影响。
 - **`qb-adminmenu` 接入 `custom-ui` 输入栈（#353）**：`/admin` 原先既不查栈也不入栈，真机表现为
   ① 手机开着时仍能叠开、② 菜单开着按 `Esc` 关不掉反而呼出游戏暂停菜单。新增垫片
   （qb-adminmenu 的 client/menu_shim.lua）：打开前问 `custom-ui:IsTaken()`（被占用则拒绝并提示），打开时
@@ -31,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   新增闸门 `tests/architecture/test_adminmenu_input_shim.py`（三条规则 + 反向注入）。
 
 ### Added
+- **S5 产业 UI（`custom-industry` + `custom-phone`）**：新增唯一读模型（custom-industry 的 server/ui.lua）
+  （`Snapshot` / `EstimateSale` / `Sell` / `HireWorkstation`）——快照里配额是**两个数**
+  （全服 `globalRemaining` 与单组织 `orgRemaining`，后者 = `floor(total × 0.5) − 已卖`），
+  卖出上限 `maxQty = min(库存, 本组织剩余, 全服剩余)`，拒绝原因分 `stock_empty` / `org_cap_reached` /
+  `demand_exhausted` 三种。Boss 菜单注入一项「产业」（qb-management `AddBossMenuItem`）：非 Boss 只看数、
+  不出现写操作；未建厂只显示「尚未建设施」。手机侧注册 `industry` App（只读快照，按组织成员可见），
+  **不改 `custom-phone/web/src`、无新增构建产物**。鉴权在 UI 层与销售层各复验一次（本片补了
+  「非 Boss 到不了销售层」的短路用例），前端上送 `price/revenue/multiplier` 一律只记录不参与计算。
+  无新增 net event（走 QBCore callback + export）。
+
 - **S4 销售 / 配额（`custom-industry`）**：`industry_demand`（`cycle_no/phase/item_name` 主键，全服配额）与
   `industry_sales`（卖单流水，`UNIQUE(org_id, ref)` 幂等）。`SettleSale` 是**全仓唯一一个「无对应玩家扣款」的
   净增货币点**：服务端定价 × `core_economy:GetGlobalMultiplier()`，库存 CAS → 配额 CAS（全服剩余与本组织

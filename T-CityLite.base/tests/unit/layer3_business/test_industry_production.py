@@ -471,15 +471,18 @@ local coreObject = {
     Functions = {
         GetPlayer = function() return nil end,
         HasPermission = function() return false end,
+        CreateCallback = function() end,
     },
 }
 
 -- 故意不定义全局 QBCore：所有命令文件都必须走 exports['qb-core']。
+-- __call 也必须支持：S5 的 ui.lua 在加载期注册只读导出。
 exports = setmetatable({}, {
     __index = function(_, resource)
         if resource ~= 'qb-core' then return nil end
         return { GetCoreObject = function() return coreObject end }
     end,
+    __call = function() end,
 })
 
 MySQL = {}

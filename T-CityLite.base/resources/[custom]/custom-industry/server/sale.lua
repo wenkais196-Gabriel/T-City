@@ -390,6 +390,76 @@ local function settleLocked(cfg, orgId, item, requested, ref)
     }
 end
 
+--- 只读快照：库存 / 全服配额 / 本组织配额 / 单价 / 可卖上限。
+---
+--- 与 settleLocked 使用同一个 readDemand / readStock / readOrgUsed / orgCap 与
+--- cfg.UnitPrices；不写库、不占配额、不拿组织锁。S5 的 Snapshot / EstimateSale 都走这里，
+--- 前端因此不需要自己算 maxQty 或 orgRemaining。
+---@param orgId string
+---@param item string
+---@return table|nil info, string|nil errcode
+function IndustrySales.Inspect(orgId, item)
+    if not validOrg(orgId) then return nil, 'bad_org' end
+    if not validItem(item) then return nil, 'bad_item' end
+
+    local cfg = salesConfig()
+    local prices = cfg.UnitPrices
+    if type(prices) ~= 'table' then return nil, 'bad_price' end
+    local unitPrice = positiveNumber(prices[item], nil)
+    if not unitPrice or unitPrice ~= math.floor(unitPrice) then return nil, 'bad_price' end
+
+    local demand, demandErr = readDemand(cfg, item)
+    if not demand then return nil, demandErr end
+
+    local stock, stockErr = readStock(orgId)
+    if not stock then return nil, stockErr end
+
+    local orgUsed, usedErr = readOrgUsed(orgId, cfg, item)
+    if not orgUsed then return nil, usedErr end
+
+    local cap = orgCap(demand.total, cfg.OrgCapRatio)
+    local globalRemaining = math.max(demand.total - demand.used, 0)
+    local orgRemaining = math.max(cap - orgUsed, 0)
+
+    local maxQty = math.min(stock, orgRemaining, globalRemaining)
+    local configMax = toInt(cfg.MaxQty) or MAX_QTY
+    if maxQty > configMax then maxQty = configMax end
+    if maxQty < 0 then maxQty = 0 end
+
+    return {
+        item = item,
+        unitPrice = math.floor(unitPrice),
+        stock = stock,
+        demand = {
+            total = demand.total,
+            used = demand.used,
+            remaining = globalRemaining,
+        },
+        org = {
+            cap = cap,
+            used = orgUsed,
+            remaining = orgRemaining,
+        },
+        maxQty = maxQty,
+    }, nil
+end
+
+--- 只读报价：收益公式与 settleLocked 最后一段完全一致
+--- （floor(unitPrice × qty × globalMultiplier × heat)），系数只从 core_economy 拿。
+---@param unitPrice number
+---@param qty number 正整数
+---@return number|nil revenue, string|nil errcode
+function IndustrySales.QuoteRevenue(unitPrice, qty)
+    local price = positiveNumber(unitPrice, nil)
+    local count = toInt(qty)
+    if not price or not count or count <= 0 then return nil, 'bad_qty' end
+
+    local globalMultiplier, heat = economyCoefficients(salesConfig().ActivityId)
+    local revenue = math.floor(math.floor(price) * count * globalMultiplier * heat + 1e-9)
+    if revenue <= 0 or revenue > MAX_REVENUE then return nil, 'bad_amount' end
+    return revenue, nil
+end
+
 --- 组织卖货。全仓唯一的净增货币出口。
 ---@param orgId string
 ---@param item string 配置里有价格的可卖物品（S4 只有 iron_ore）
