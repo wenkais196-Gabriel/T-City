@@ -1230,6 +1230,44 @@ CREATE TABLE IF NOT EXISTS `industry_sales` (
 INSERT IGNORE INTO `industry_demand` (`cycle_no`, `phase`, `item_name`, `quota_total`, `quota_used`)
 VALUES (0, 'static', 'iron_ore', 10, 0);
 
+-- v4.4_industry_cycle.sql — S6 周期状态机（单行） / S7 结算结果（幂等键 org+cycle）
+CREATE TABLE IF NOT EXISTS `industry_state` (
+  `id` tinyint(4) NOT NULL,
+  `cycle_no` int(11) NOT NULL DEFAULT 0,
+  `phase` varchar(24) NOT NULL DEFAULT 'uninitialized',
+  `phase_started_at` datetime NOT NULL DEFAULT '1970-01-02 00:00:00',
+  `phase_ends_at` datetime NOT NULL DEFAULT '1970-01-02 00:00:00',
+  `warning_announced_at` datetime DEFAULT NULL,
+  `settled_cycle_no` int(11) NOT NULL DEFAULT 0,
+  `result_announced_cycle` int(11) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `chk_industry_state_single` CHECK (`id` = 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `industry_cycle_results` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `org_id` varchar(64) NOT NULL,
+  `cycle_no` int(11) NOT NULL,
+  `revenue` bigint(20) NOT NULL DEFAULT 0,
+  `produced_units` bigint(20) NOT NULL DEFAULT 0,
+  `score` bigint(20) NOT NULL DEFAULT 0,
+  `prestige_awarded` int(11) NOT NULL DEFAULT 0,
+  `prestige_before` int(11) NOT NULL DEFAULT 0,
+  `prestige_after` int(11) NOT NULL DEFAULT 0,
+  `balance_cleared` bigint(20) NOT NULL DEFAULT 0,
+  `applied` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `applied_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_org_cycle` (`org_id`,`cycle_no`),
+  KEY `idx_cycle` (`cycle_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `industry_state`
+  (`id`, `cycle_no`, `phase`, `phase_started_at`, `phase_ends_at`)
+VALUES (1, 0, 'uninitialized', '1970-01-02 00:00:00', '1970-01-02 00:00:00');
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

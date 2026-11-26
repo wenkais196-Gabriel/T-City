@@ -14,7 +14,7 @@ review_by: 2027-02-28
 
 # 管理员命令清单
 
-共 **354** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
+共 **356** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
 
 ## 危险命令但没有判权：0 条
 
@@ -26,7 +26,7 @@ review_by: 2027-02-28
 |---|---|
 | — | 161 |
 | QBCore | 106 |
-| restricted=true | 42 |
+| restricted=true | 44 |
 | job/gang 判定 | 35 |
 | handler 内判定 | 10 |
 
@@ -149,6 +149,8 @@ review_by: 2027-02-28
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
 | `industry` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-industry/client/main.lua:222 |
+| `industry_setphase` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-industry/server/commands_cycle.lua:87 |
+| `industry_settle` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-industry/server/commands_cycle.lua:103 |
 | `orgbuild` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands_facility.lua:52 |
 | `orgfacility` | QBCore.Commands.Add | handler 内判定: HasPermission | T-CityLite.base/resources/[custom]/custom-industry/server/commands_facility.lua:156 |
 | `orgfund` | QBCore.Commands.Add | handler 内判定: HasPermission | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:66 |

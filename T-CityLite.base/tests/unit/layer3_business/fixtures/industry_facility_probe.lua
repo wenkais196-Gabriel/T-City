@@ -24,15 +24,7 @@ function __reset()
 end
 
 function __facilitySeed(orgId, values)
-    values = values or {}
-    __facilities[orgId] = {
-        org_id = orgId,
-        facility_type = values.facility_type or 'mine',
-        level = values.level or 1,
-        workstations = values.workstations or 0,
-        recipe_id = values.recipe_id,
-        stock = values.stock or 0,
-    }
+    __facilities[orgId] = __industryFacilityRow(orgId, values)
 end
 
 function __facility(orgId)

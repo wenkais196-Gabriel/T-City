@@ -56,6 +56,19 @@ local function insertLikelySucceeded(id, err)
     return err == 'no_insert_id'
 end
 
+--- 购置闸：衰退期只关「买」，不关「卖」（卖在 sale.lua，本函数不碰）。
+--- 读不到周期状态时 fail closed（返回 db_error），不把阶段限制静默跳过。
+---@return boolean ok, string|nil errcode
+local function purchaseGate()
+    if type(IndustryCycle) ~= 'table' or not IndustryCycle.CanPurchase then
+        return false, 'db_error'
+    end
+    local open, err = IndustryCycle.CanPurchase()
+    if open == nil then return false, err or 'db_error' end
+    if open ~= true then return false, 'purchases_closed' end
+    return true, nil
+end
+
 --- 第 n 个工位成本：n = 当前 workstations + 1。
 --- 即 WorkstationCost(type, 0) = baseCost（第 1 个工位）。
 ---@return number|nil cost, string|nil errcode
@@ -97,6 +110,13 @@ function Facility.Build(orgId, facilityType, opts)
         audit(orgId, actor, 'facility.build', 0, 'bad_type', ref, 0)
         return false, 'bad_type'
     end
+
+    local purchasable, gateErr = purchaseGate()
+    if not purchasable then
+        audit(orgId, actor, 'facility.build', 0, gateErr or 'purchases_closed', ref, 0)
+        return false, gateErr or 'purchases_closed'
+    end
+
     local cost = config.baseCost
 
     local existing, lookupErr = Db.Single(
@@ -165,6 +185,12 @@ function Facility.AddWorkstation(orgId, opts)
 
     opts = opts or {}
     local actor = normalizeActor(opts.actor)
+
+    local purchasable, gateErr = purchaseGate()
+    if not purchasable then
+        audit(orgId, actor, 'facility.hire', 0, gateErr or 'purchases_closed', opts.ref, 0)
+        return false, gateErr or 'purchases_closed'
+    end
 
     local row, readErr = Db.Single(
         'SELECT facility_type, workstations FROM industry_facility WHERE org_id = ? LIMIT 1',

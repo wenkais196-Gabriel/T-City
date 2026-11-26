@@ -38,6 +38,8 @@ IndustryCommands.Register()
 IndustryFacilityCommands.Register()
 IndustryProductionCommands.Register()
 IndustrySalesCommands.Register()
+-- S6/S7：控制台换阶段 / 结算（restricted + source == 0）。
+IndustryCycleCommands.Register()
 
 -- QBCore 的 export 在**资源重启的瞬间可能还不可用**（实测：`restart qb-management` 紧接着
 -- `restart custom-industry` 会打一行 "UI callbacks not registered: qb-core unavailable"，
@@ -55,6 +57,9 @@ local function registerUi()
 end
 registerUi()
 
-IndustryProduction.Start()
--- 只做一次种子需求行校准（不新增调度）。
+-- 周期状态先初始化（缺失/种子行 → cycle 1 expansion；已有真实阶段则原样续跑）。
+IndustryCycle.Start()
+-- 周期 tick 挂到 S3 已有的生产心跳上：one scheduler, 30 秒一次；不新增线程。
+IndustryProduction.Start({ onTick = IndustryCycle.Tick })
+-- 只做一次种子需求行校准（不新增调度）；此时 cycle 状态已可用。
 IndustrySales.Start()

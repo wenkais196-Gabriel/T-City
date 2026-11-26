@@ -183,6 +183,13 @@ function IndustryProduction.SettleFacility(orgId, opts)
         local facility = Config.Industry.Facilities[facilityType]
         if not facility then return false, 'bad_type' end
 
+        -- 阶段倍率只从 cycle 状态拿；读不到就 fail closed，不按 1 倍继续产。
+        if type(IndustryCycle) ~= 'table' or not IndustryCycle.Current then
+            return false, 'db_error'
+        end
+        local cycleState, cycleErr = IndustryCycle.Current()
+        if not cycleState then return false, cycleErr or 'db_error' end
+
         local config = productionConfig()
         local cap = nonNegativeInt(facility.stockCap, 0)
         local plan = IndustryProduction.Compute({
@@ -192,7 +199,7 @@ function IndustryProduction.SettleFacility(orgId, opts)
             stock = row.stock,
             cap = cap,
             unitsPerHour = config.UnitsPerHour,
-            multiplier = config.Multiplier,
+            multiplier = config.Multiplier * (tonumber(cycleState.production) or 1),
             maxCatchup = config.MaxCatchupSeconds,
         })
 
@@ -265,8 +272,15 @@ function IndustryProduction.SettleForPlayer(Player)
     return settled
 end
 
---- 启动接线：玩家上线补算 + 周期心跳。main.lua 只在 industry_enable 打开时调用。
-function IndustryProduction.Start()
+--- 启动接线：玩家上线补算 + 周期心跳。
+---
+--- 周期状态机不另起线程：main.lua 把 `IndustryCycle.Tick` 作为 hooks.onTick
+--- 挂到这条 30 秒心跳上（少一条轮询线程 = 不涨 io_budget 的 unknown-interval 档）。
+--- tick 顺序：先推进周期（可能换阶段/结算），再结算生产 —— 新阶段倍率当轮生效。
+---@param hooks table|nil { onTick = function(now) end }
+function IndustryProduction.Start(hooks)
+    hooks = hooks or {}
+
     AddEventHandler('QBCore:Server:PlayerLoaded', function(Player)
         IndustryProduction.SettleForPlayer(Player)
     end)
@@ -275,6 +289,13 @@ function IndustryProduction.Start()
         local waitMs = math.max(1, math.floor(tonumber(productionConfig().TickSeconds) or 30)) * 1000
         while true do
             Wait(waitMs)
+            if hooks.onTick then
+                local called, tickErr = pcall(hooks.onTick, os.time())
+                if not called then
+                    print(('[custom-industry] CRITICAL cycle tick failed: %s'):format(
+                        tostring(tickErr)))
+                end
+            end
             local ok, err = IndustryProduction.SettleAll({ trigger = 'tick' })
             if not ok then
                 -- 只在数据库失败时留一行；满仓/无工位是正常状态，不刷屏。

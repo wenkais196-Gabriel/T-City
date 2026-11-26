@@ -16,6 +16,7 @@ local BLOCK_TEXT = {
     none = '当前不可卖出',
     cap = '工位已满',
     funds = '金库余额不足',
+    phase = '当前阶段不可购置',
 }
 
 local function validOrgId(value)

@@ -96,7 +96,9 @@
         "industry_audit",
         "industry_facility",
         "industry_demand",
-        "industry_sales"
+        "industry_sales",
+        "industry_state",
+        "industry_cycle_results"
       ]
     }
   ],

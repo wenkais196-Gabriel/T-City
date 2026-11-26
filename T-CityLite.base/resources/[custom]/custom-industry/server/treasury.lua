@@ -216,6 +216,67 @@ function Treasury.Withdraw(orgId, amount, reason, opts)
     return apply(orgId, -amount, reason, opts)
 end
 
+--- S7 结算专用：余额归零 + prestige 写**绝对值**。
+---
+--- 为什么不是 Withdraw(balance)：结算没有「失败方向」，它必须可重试，而
+--- `balance + delta >= 0` 的增量语义在余额已经归零后无法区分「已扣过」与
+--- 「还没扣」。所以这里写 `balance = 0` / `prestige = 绝对值`：
+--- 同一周期重试只会得到同一行状态。
+---
+--- 清掉的余额写一条 `settlement-clear` 流水（ref = settle:<cycle>，UNIQUE 幂等）；
+--- 余额快照由结算结果表提供，崩溃重试时即使余额已经是 0 也能补写。
+---@param orgId string
+---@param opts table { prestigeAfter = int, cycleNo = int, clearedBalance = int, ref = string|nil }
+---@return boolean ok, string|nil errcode
+function Treasury.ApplySettlement(orgId, opts)
+    if not validOrg(orgId) then return false, 'bad_org' end
+
+    opts = opts or {}
+    local prestige = math.floor(tonumber(opts.prestigeAfter) or 0)
+    if prestige < 0 then prestige = 0 end
+    if prestige > 2147483647 then prestige = 2147483647 end
+    local cycleNo = normalizeCycle(opts.cycleNo)
+    local cleared = math.floor(tonumber(opts.clearedBalance) or 0)
+    if cleared < 0 then cleared = 0 end
+    local ref = normalizeRef(orgId, 'settlement', opts.ref)
+
+    -- 账户可能不存在（只有控制台 grant 才建户）；结算必须能收尾。
+    Db.Insert(
+        'INSERT IGNORE INTO org_treasury (org_id, balance, prestige, cycle_no) '
+            .. 'VALUES (?, 0, ?, ?)',
+        { orgId, prestige, cycleNo })
+
+    local affected, updateErr = Db.Update(
+        'UPDATE org_treasury SET balance = 0, prestige = ?, cycle_no = ? WHERE org_id = ?',
+        { prestige, cycleNo, orgId })
+    if updateErr then return false, 'db_error' end
+    if affected ~= 1 then return false, 'no_account' end
+
+    if cleared > 0 then
+        local id, insertErr = Db.Insert(
+            'INSERT IGNORE INTO org_ledger '
+                .. '(org_id, delta, balance_after, reason, actor_cid, ref, cycle_no) '
+                .. 'VALUES (?, ?, 0, ?, NULL, ?, ?)',
+            { orgId, -cleared, 'settlement-clear', ref, cycleNo })
+        if not id and insertErr ~= 'no_insert_id' then
+            return false, 'db_error'
+        end
+        if not id then
+            -- INSERT IGNORE 的两种落空：已存在（幂等）与驱动没回 id。用存在性认回来。
+            local row, lookupErr = Db.Single(
+                'SELECT id FROM org_ledger WHERE org_id = ? AND ref = ? LIMIT 1',
+                { orgId, ref })
+            if lookupErr or not row then
+                print(('[custom-industry] CRITICAL settlement ledger failed org=%s ref=%s'):format(
+                    orgId, ref))
+                return false, 'db_error'
+            end
+        end
+    end
+
+    return true, nil
+end
+
 ---@return number|nil balance, string|nil errcode
 function Treasury.GetBalance(orgId)
     if not validOrg(orgId) then return nil, 'bad_org' end

@@ -26,9 +26,10 @@ BASE = Path(__file__).resolve().parents[3]
 DB_ADAPTER = BASE / "resources" / "[standalone]" / "core-framework" / "server" / "db.lua"
 
 
-#: custom-industry 的共享模块（`server/org_id.lua`）。它必须排在 treasury / facility /
-#: production / sale 之前加载——拼装顺序要与该资源 fxmanifest 的 server_scripts 一致。
+#: custom-industry 的共享模块。加载顺序与 fxmanifest 的 server_scripts 一致：
+#: org_id → cycle（S6 起 facility / production / sale 都要读阶段状态）。
 INDUSTRY_ORG_ID = BASE / "resources" / "[custom]" / "custom-industry" / "server" / "org_id.lua"
+INDUSTRY_CYCLE = BASE / "resources" / "[custom]" / "custom-industry" / "server" / "cycle.lua"
 
 
 def load_with_db(stubs: str, source: Path, body: str, prereqs: tuple[Path, ...] = ()) -> str:
@@ -49,8 +50,21 @@ def load_with_db(stubs: str, source: Path, body: str, prereqs: tuple[Path, ...] 
 
 
 def load_industry(stubs: str, source: Path, body: str) -> str:
-    """custom-industry 专用：先加载 `server/org_id.lua` 再加载被测文件。"""
-    return load_with_db(stubs, source, body, prereqs=(INDUSTRY_ORG_ID,))
+    """custom-industry 专用：先加载 `server/org_id.lua` 与 `server/cycle.lua`，再加载被测文件。"""
+    return load_with_db(stubs, source, body, prereqs=(INDUSTRY_ORG_ID, INDUSTRY_CYCLE))
+
+
+def parse_output(out_text: str) -> dict[str, str]:
+    """解析 `KEY|VALUE` 行；同名键保留第一条。
+
+    各测试文件原本各抄一份 `parse()`（6 行 × 6 份），SonarCloud 会算成新代码重复。
+    """
+    data: dict[str, str] = {}
+    for line in out_text.splitlines():
+        key, sep, value = line.partition("|")
+        if sep:
+            data.setdefault(key.strip(), value.strip())
+    return data
 
 
 def run_probe(
@@ -76,13 +90,7 @@ def run_probe(
     )
     assert proc.returncode == 0, f"probe 失败：{proc.stderr} / {proc.stdout}"
 
-    data: dict[str, str] = {}
-    for line in proc.stdout.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        data.setdefault(key, value)
-
+    data = parse_output(proc.stdout)
     if "HANDLER_ERROR" in data:
         raise AssertionError(f"handler 抛错：{data['HANDLER_ERROR']}")
     return data

@@ -20,11 +20,8 @@ __productionUpdates = 0
 __raceBeforeUpdate = nil
 __raceFired = false
 
-local function copy(row)
-    local out = {}
-    for key, value in pairs(row) do out[key] = value end
-    return out
-end
+-- 构造器来自 industry_probe_common.lua（industry_harness 负责注入）。
+local copy = __industryCopy
 
 function __reset()
     __facilities = {}
@@ -34,17 +31,7 @@ function __reset()
 end
 
 function __facilitySeed(orgId, values)
-    values = values or {}
-    __facilities[orgId] = {
-        org_id = orgId,
-        facility_type = values.facility_type or 'mine',
-        level = values.level or 1,
-        workstations = values.workstations or 0,
-        recipe_id = values.recipe_id,
-        stock = values.stock or 0,
-        produced_units = values.produced_units or 0,
-        last_tick_epoch = values.last_tick_epoch or 0,
-    }
+    __facilities[orgId] = __industryFacilityRow(orgId, values)
 end
 
 function __facility(orgId)

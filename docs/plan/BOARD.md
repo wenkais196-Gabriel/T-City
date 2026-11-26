@@ -15,6 +15,8 @@
 | [2026-11 基石加固计划（P0 / P1 / P2）](../engineering/2026-11-foundation-plan.md) | active | 14 | 10 | 4 | - | 2026-11-10 |
 | [Agent 控制平面升级计划](agent-control-plane-upgrade.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [🧪 T-City Lite 自动化测试方案](automated-testing-plan.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
+| [计划：S5 产业 UI（快照 + Boss 菜单 + 手机只读 App）](industry-ops/05-plan.md) | active | 6 | 6 | 0 | - | 2026-11-26 |
+| [计划：S6 周期状态机 + S7 结算转生（同一片）](industry-ops/06-plan.md) | active | 6 | 6 | 0 | - | 2026-11-26 |
 | [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 7 | 6 | 0 | S6 wip | 2026-11-17 |
 | [热狗摊：剩余工作分片计划（2026-11-17 分工版）](jobs-content/13-hotdog-remaining-plan.md) | active | 10 | 5 | 0 | C 未开始 | - |
 | [方案 B 落地计划（已拍板）](../police/B_PLAN.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |

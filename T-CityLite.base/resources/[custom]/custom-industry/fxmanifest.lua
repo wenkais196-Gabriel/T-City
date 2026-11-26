@@ -3,8 +3,8 @@ game 'gta5'
 lua54 'yes'
 
 author 'T-City'
-description 'Industry S1-S5: treasury, facilities, lazy production, demand quotas, sales and the shared UI snapshot (Boss menu + phone app)'
-version '0.5.0'
+description 'Industry S1-S7: treasury, facilities, production, quotas, sales, UI snapshot, 4-phase cycle and settlement'
+version '0.7.0'
 
 client_scripts {
     -- 加载期包含必须排第一（CLI-01）：错误上报 + 就绪信标。
@@ -25,10 +25,14 @@ server_scripts {
     'config/facility.lua',
     'config/production.lua',
     'config/sales.lua',
+    'config/cycle.lua',
     'server/org_id.lua',
     'server/treasury.lua',
     'server/audit.lua',
     'server/access.lua',
+    'server/announce.lua',
+    'server/cycle.lua',
+    'server/settlement.lua',
     'server/facility.lua',
     'server/production.lua',
     'server/sale.lua',
@@ -37,6 +41,7 @@ server_scripts {
     'server/commands_facility.lua',
     'server/commands_production.lua',
     'server/commands_sales.lua',
+    'server/commands_cycle.lua',
     'server/main.lua',
 }
 

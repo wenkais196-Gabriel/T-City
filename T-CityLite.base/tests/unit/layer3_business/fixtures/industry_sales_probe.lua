@@ -37,15 +37,9 @@ __failTreasuryUpdate = false
 __raceBeforeStockUpdate = nil
 __raceFired = false
 
-local function copy(row)
-    local out = {}
-    for key, value in pairs(row) do out[key] = value end
-    return out
-end
-
-local function demandKey(cycleNo, phase, item)
-    return tostring(cycleNo) .. '\0' .. tostring(phase) .. '\0' .. tostring(item)
-end
+-- 构造器来自 industry_probe_common.lua（industry_harness 负责注入）。
+local copy = __industryCopy
+local demandKey = __industryDemandKey
 
 function __reset()
     __orgs = {}
@@ -426,27 +420,13 @@ MySQL.insert = { await = function(sql, values)
         end
         __nextLedgerId = __nextLedgerId + 1
         __ledgerRefs[key] = __nextLedgerId
-        __ledger[#__ledger + 1] = {
-            id = __nextLedgerId,
-            org_id = orgId,
-            delta = values[2],
-            balance_after = values[3],
-            reason = values[4],
-            ref = ref,
-        }
+        __ledger[#__ledger + 1] = __industryLedgerRow(
+            __nextLedgerId, orgId, values[2], values[3], values[4], ref)
         return { insertId = __nextLedgerId }
     end
 
     if sql:find('INSERT INTO industry_audit', 1, true) then
-        if #values == 4 then
-            __audits[#__audits + 1] = {
-                org_id = values[1], actor_cid = values[2], action = values[3], payload = values[4],
-            }
-        else
-            __audits[#__audits + 1] = {
-                org_id = values[1], actor_cid = nil, action = values[2], payload = values[3],
-            }
-        end
+        __audits[#__audits + 1] = __industryAuditEntry(values)
         return { insertId = 1 }
     end
 

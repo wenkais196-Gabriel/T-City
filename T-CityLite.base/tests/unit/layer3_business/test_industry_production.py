@@ -22,66 +22,18 @@
 
 from __future__ import annotations
 
-import re
-import shutil
-import subprocess
-import textwrap
-from pathlib import Path
-
-import pytest
-
-from lua_probe import BASE, load_industry
-
-RES = BASE / "resources" / "[custom]" / "custom-industry"
-PRODUCTION_SRC = RES / "server" / "production.lua"
-COMMANDS_PRODUCTION_SRC = RES / "server" / "commands_production.lua"
-CONFIG_SRC = RES / "config.lua"
-FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
-PRODUCTION_CONFIG_SRC = RES / "config" / "production.lua"
-MANIFEST = RES / "fxmanifest.lua"
-PRODUCTION_FIXTURE = (
-    Path(__file__).resolve().parent / "fixtures" / "industry_production_probe.lua"
+from industry_harness import (
+    COMMANDS_PRODUCTION_SRC,
+    PRODUCTION_SRC,
+    run_production as run,
+    run_production_db as run_db,
+    run_wiring as _run_wiring,
 )
 
-STUBS = """
-function GetConvar(_, default) return default end
 
-function __emit(key, value)
-    io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
-end
-"""
-
-
-def lua() -> str:
-    exe = shutil.which("lua5.4") or shutil.which("lua")
-    if not exe:
-        pytest.skip("lua5.4 不可用")
-    return exe
-
-
-def parse(out_text: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for line in out_text.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        out.setdefault(key.strip(), value.strip())
-    return out
-
-
-def config_text() -> str:
-    return "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (CONFIG_SRC, PRODUCTION_CONFIG_SRC, FACILITY_CONFIG_SRC)
-    )
-
-
-def run(body: str) -> dict[str, str]:
-    """stubs + db.lua + production.lua + 真实配置 + body。"""
-    script = load_industry(STUBS, PRODUCTION_SRC, config_text() + "\n" + textwrap.dedent(body))
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
+def run_wiring(debug: bool) -> dict[str, str]:
+    """生产后台入口的 convar 是 industry_production_debug（S4 卖单的另一个开关不动）。"""
+    return _run_wiring(debug, debug_convar="industry_production_debug")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -345,18 +297,6 @@ def test_client_supplied_dt_and_amount_cannot_change_the_result():
 # ══════════════════════════════════════════════════════════════════
 
 
-def run_db(body: str) -> dict[str, str]:
-    """假 MySQL + db.lua + production.lua + 真实配置 + body。"""
-    stubs = (
-        PRODUCTION_FIXTURE.read_text(encoding="utf-8")
-        + "\nfunction GetConvar(_, default) return default end\n"
-    )
-    script = load_industry(stubs, PRODUCTION_SRC, config_text() + "\n" + textwrap.dedent(body))
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
-
-
 def test_settle_facility_materializes_stock_and_produced_units_once():
     out = run_db("""
         __reset()
@@ -453,84 +393,6 @@ def test_settle_facility_full_stock_advances_time_without_touching_units():
 # 7. 接线：加载全部 server 脚本，不提供全局 QBCore
 # ══════════════════════════════════════════════════════════════════
 
-WIRING_STUBS = """
-GetConvar = function(name, default)
-    if name == 'industry_enable' then return 'true' end
-    if name == 'industry_production_debug' then return '__DEBUG__' end
-    return default
-end
-
-__registered = {}
-__native = {}
-__events = 0
-__threads = 0
-local coreObject = {
-    Commands = {
-        Add = function(name) __registered[#__registered + 1] = name end,
-    },
-    Functions = {
-        GetPlayer = function() return nil end,
-        HasPermission = function() return false end,
-        CreateCallback = function() end,
-    },
-}
-
--- 故意不定义全局 QBCore：所有命令文件都必须走 exports['qb-core']。
--- __call 也必须支持：S5 的 ui.lua 在加载期注册只读导出。
-exports = setmetatable({}, {
-    __index = function(_, resource)
-        if resource ~= 'qb-core' then return nil end
-        return { GetCoreObject = function() return coreObject end }
-    end,
-    __call = function() end,
-})
-
-MySQL = {}
-
-AddEventHandler = function() __events = __events + 1 end
-CreateThread = function() __threads = __threads + 1 end
-Wait = function() end
-RegisterCommand = function(name, _, restricted)
-    __native[#__native + 1] = name .. ':' .. tostring(restricted)
-end
-
-function __emit(key, value)
-    io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
-end
-"""
-
-
-def server_script_files() -> list[Path]:
-    text = MANIFEST.read_text(encoding="utf-8")
-    match = re.search(r"server_scripts\s*\{(.*?)\}", text, re.S)
-    assert match, "fxmanifest 里找不到 server_scripts 块"
-    entries = re.findall(r"['\"]([^'\"]+)['\"]", match.group(1))
-    files = [RES / entry for entry in entries if not entry.startswith("@")]
-    assert files, "server_scripts 里没有任何本地文件"
-    for path in files:
-        assert path.is_file(), f"manifest 列出的文件不存在：{path}"
-    return files
-
-
-def run_wiring(debug: bool) -> dict[str, str]:
-    files = server_script_files()
-    first, rest = files[0], files[1:]
-    body = "\n".join(path.read_text(encoding="utf-8") for path in rest) + "\n" + """
-        local names = table.concat(__registered, ',')
-        __emit('COUNT', tostring(#__registered))
-        __emit('NAMES', names)
-        __emit('NATIVE', table.concat(__native, ','))
-        __emit('EVENTS', tostring(__events))
-        __emit('THREADS', tostring(__threads))
-        __emit('HAS_GLOBAL', tostring(rawget(_G, 'QBCore') ~= nil))
-    """
-    stubs = WIRING_STUBS.replace("__DEBUG__", "true" if debug else "false")
-    script = load_industry(stubs, first, body)
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
-
-
 def test_all_server_scripts_wire_player_loaded_and_tick_without_global_qbcore():
     out = run_wiring(debug=False)
     expected = {
@@ -542,9 +404,11 @@ def test_all_server_scripts_wire_player_loaded_and_tick_without_global_qbcore():
     assert out["EVENTS"] == "1", (
         f"必须挂且只挂一个 PlayerLoaded 处理器（离线补产走同一条惰性结算）：{out}"
     )
-    assert out["THREADS"] == "1", f"生产心跳线程没有启动：{out}"
-    assert out["NATIVE"] == "", (
-        f"后台入口默认必须关闭（industry_production_debug=false）：{out}"
+    assert out["THREADS"] == "1", (
+        f"生产心跳线程没有启动（周期 tick 必须挂到同一条线程，不能新增线程）：{out}"
+    )
+    assert out["NATIVE"] == "industry_setphase:true,industry_settle:true", (
+        f"S6/S7 控制台命令必须常驻且 restricted；调试卖出/生产入口默认关闭：{out}"
     )
     assert out["HAS_GLOBAL"] == "false", (
         "用例自己定义了全局 QBCore —— 生产环境缺它的 bug 会被永远掩盖"
@@ -553,8 +417,8 @@ def test_all_server_scripts_wire_player_loaded_and_tick_without_global_qbcore():
 
 def test_console_entry_registers_only_when_the_convar_is_on():
     out = run_wiring(debug=True)
-    assert out["NATIVE"] == "orgproduce:true", (
-        f"后台入口必须是 restricted 的原生命令（仅控制台）：{out}"
-    )
+    assert out["NATIVE"] == (
+        "orgproduce:true,industry_setphase:true,industry_settle:true"
+    ), f"后台入口必须是 restricted 的原生命令（仅控制台）：{out}"
     assert out["COUNT"] == "7", "后台入口不该污染 QBCore 命令表"
     assert out["EVENTS"] == "1" and out["THREADS"] == "1"

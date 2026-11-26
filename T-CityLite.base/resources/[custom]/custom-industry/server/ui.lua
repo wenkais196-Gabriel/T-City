@@ -155,6 +155,10 @@ function IndustryUi.Snapshot(value, orgId)
 
     local orgLabel, gradeName = orgIdentity(Player, resolved)
 
+    -- 阶段只用于展示与「购置是否开放」；价格/配额倍率由 sale.lua 在服务端算。
+    local cycleState, cycleErr = IndustryCycle.Current()
+    if not cycleState then return nil, cycleErr or 'db_error' end
+
     local balance, balanceErr = Treasury.GetBalance(resolved)
     if balance == nil then
         if balanceErr == 'no_account' then
@@ -171,6 +175,16 @@ function IndustryUi.Snapshot(value, orgId)
         isBoss = level >= bossGrade(),
         balance = balance,
         producedUnits = 0,
+        phase = {
+            key = cycleState.phase,
+            label = cycleState.label,
+            cycleNo = cycleState.cycle_no,
+            endsAt = cycleState.ends_epoch,
+            productionMultiplier = cycleState.production,
+            priceMultiplier = cycleState.price,
+            quotaMultiplier = cycleState.quota,
+            purchasable = cycleState.purchasable == true,
+        },
     }
 
     local row, facilityErr = Facility.Get(resolved)
@@ -194,7 +208,9 @@ function IndustryUi.Snapshot(value, orgId)
     local nextCost = Facility.WorkstationCost(facilityType, workstations)
 
     local hireBlocked
-    if workstations >= workstationCap then
+    if cycleState.purchasable ~= true then
+        hireBlocked = 'phase' -- 衰退期：买不了，但卖得掉
+    elseif workstations >= workstationCap then
         hireBlocked = 'cap'
     elseif nextCost == nil or balance < nextCost then
         hireBlocked = 'funds'
