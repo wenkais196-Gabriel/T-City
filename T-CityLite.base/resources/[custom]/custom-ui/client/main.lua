@@ -1,17 +1,40 @@
 -- client/main.lua — T-City 通用菜单/焦点工具
 --
 -- 解决所有 NUI 菜单的共性问题：
---   1. SetNuiFocus / SetNuiFocusKeepInput 成对管理
+--   1. SetNuiFocus / SetNuiFocusKeepInput 成对管理与栈式焦点仲裁
 --   2. 关闭菜单后短时间屏蔽攻击/瞄准/武器轮盘，避免"点关闭打一拳"
 --   3. 统一的距离判断
+--   4. ForceClose(frameId, reason) 跨资源关闭：按 frameId 命中栈内帧后弹栈并通知
+--      exports[owner]:ForceClose(frameId, reason)（不传 Lua 闭包），返回是否命中
+--   5. onClientResourceStop 自动弹栈：资源停用/重启时移除该 owner 全部帧并恢复焦点
+--   6. 单点键泵：栈非空时仅由本模块单条 Wait(0) 循环统一轮询 IsRawKeyDown(VK) 并派发
+--   7. convar 回退：menu_focus_owner（默认 1；置 0 时退回旧行为并打印一行警告）
 --
 -- 用法:
 --   exports['custom-ui']:OpenMenu({ keepInput = false })
 --   exports['custom-ui']:CloseMenu()
+--   exports['custom-ui']:ForceClose(frameId, reason)
+--   exports['custom-ui']:RegisterKeyPump(frameId, vks, opts)
+--   exports['custom-ui']:UnregisterKeyPump(frameId)
 --   exports['custom-ui']:GuardControls(300)
 --   exports['custom-ui']:DistanceToCoords(vector3(...), 3.0)
 
 local isOpen = false
+local legacyFallbackWarned = false
+
+local function isFocusOwnerEnabled()
+    if GetConvar ~= nil then
+        local val = GetConvar('menu_focus_owner', '1')
+        if val == '0' or val == 'false' then
+            if not legacyFallbackWarned then
+                legacyFallbackWarned = true
+                print('[custom-ui] ⚠️ menu_focus_owner=0：已退回旧焦点行为（停用栈 ForceClose / 停资源弹栈 / 单点键泵）')
+            end
+            return false
+        end
+    end
+    return true
+end
 
 local GUARD_CONTROLS = {
     24,  -- INPUT_ATTACK
@@ -53,16 +76,13 @@ function OpenMenu(opts)
     -- （本文件 :122-125 就是这么写的，只是 OpenMenu 这条老路径一直没照做）。
     -- 所以调用方必须传 `owner = GetCurrentResourceName()`，栈会把焦点转给**拥有页面**的资源，
     -- 由它自己的 `exports('ApplyFocus')` 执行真正的 SetNuiFocus。
-    if type(opts.owner) == 'string' and opts.owner ~= '' then
+    if isFocusOwnerEnabled() and type(opts.owner) == 'string' and opts.owner ~= '' then
         local id = opts.id or ('menu:' .. opts.owner)
         Input.Push({
             id = id,
             owner = opts.owner,
             keepInput = opts.keepInput == true,
             cursor = true,
-            close = function()
-                pcall(function() exports['custom-ui']:CloseMenu() end)
-            end,
         })
         -- 栈里若已有别的层，我们插在栈顶；关的时候只弹自己这层
         return true
@@ -217,6 +237,106 @@ local function inList(list, value)
     return false
 end
 
+local VK_ESCAPE = 0x1B
+local keyPumpPrev = {}
+local keyPumpConsumers = {}
+
+local function rawKeyDown(vk)
+    if IsRawKeyDown ~= nil then
+        return IsRawKeyDown(vk) == true
+    end
+    return false
+end
+
+local function seedKeyPrev(vks)
+    if type(vks) ~= 'table' then return end
+    for _, vk in ipairs(vks) do
+        if type(vk) == 'number' then
+            keyPumpPrev[vk] = rawKeyDown(vk)
+        end
+    end
+end
+
+local function clearKeyPumpForOwner(owner)
+    if type(owner) ~= 'string' or owner == '' then return end
+    for frameId, consumer in pairs(keyPumpConsumers) do
+        if consumer.owner == owner then
+            keyPumpConsumers[frameId] = nil
+        end
+    end
+end
+
+--- 注册键泵监听（不传 Lua 闭包，仅传帧 id / VK 数组 / owner 或本地事件名）
+---@param frameId string
+---@param vks number[]
+---@param opts table|nil { owner = string|nil, event = string|nil, graceMs = number|nil }
+---@return boolean
+function Input.RegisterKeyPump(frameId, vks, opts)
+    if not isFocusOwnerEnabled() then return false end
+    if type(frameId) ~= 'string' or frameId == '' or type(vks) ~= 'table' then
+        return false
+    end
+    opts = opts or {}
+    local list = {}
+    for _, vk in ipairs(vks) do
+        if type(vk) == 'number' then
+            list[#list + 1] = vk
+        end
+    end
+    if #list == 0 then return false end
+    local now = GetGameTimer ~= nil and GetGameTimer() or 0
+    keyPumpConsumers[frameId] = {
+        vks = list,
+        owner = type(opts.owner) == 'string' and opts.owner ~= '' and opts.owner or nil,
+        event = type(opts.event) == 'string' and opts.event ~= '' and opts.event or nil,
+        graceUntil = now + (tonumber(opts.graceMs) or 0),
+    }
+    seedKeyPrev(list)
+    return true
+end
+
+--- 注销键泵监听
+---@param frameId string
+function Input.UnregisterKeyPump(frameId)
+    if type(frameId) ~= 'string' or frameId == '' then return false end
+    keyPumpConsumers[frameId] = nil
+    return true
+end
+
+local function pollKeyEdge(vk)
+    local down = rawKeyDown(vk)
+    local pressed = down and not keyPumpPrev[vk]
+    keyPumpPrev[vk] = down
+    return pressed
+end
+
+local function pumpRawKeys(current)
+    if not current or not isFocusOwnerEnabled() then return false end
+    local escEdge = false
+    if current.esc == true then
+        escEdge = pollKeyEdge(VK_ESCAPE)
+    end
+    local consumer = keyPumpConsumers[current.id]
+    if consumer then
+        local now = GetGameTimer ~= nil and GetGameTimer() or 0
+        local ready = now >= (consumer.graceUntil or 0)
+        for _, vk in ipairs(consumer.vks) do
+            local fired = (vk == VK_ESCAPE and current.esc == true) and escEdge or pollKeyEdge(vk)
+            if fired and ready then
+                if consumer.owner then
+                    pcall(function()
+                        exports[consumer.owner]:OnKeyPump(current.id, vk)
+                    end)
+                end
+                if consumer.event and TriggerEvent ~= nil then
+                    TriggerEvent(consumer.event, current.id, vk)
+                end
+            end
+        end
+    end
+    return escEdge
+end
+
 local function apply()
     local frame = topFrame()
     if not frame then
@@ -228,10 +348,14 @@ local function apply()
             state.keepInput = false
         end
         if lastOwner then
-            ownerApply(lastOwner, false, false, false)
+            local releasedByOwner = ownerApply(lastOwner, false, false, false)
             lastOwner = nil
-            focusTrace[#focusTrace + 1] = 'owner:0,0'
-            if #focusTrace > 8 then table.remove(focusTrace, 1) end
+            if releasedByOwner then
+                focusTrace[#focusTrace + 1] = 'owner:0,0'
+                if #focusTrace > 8 then table.remove(focusTrace, 1) end
+            else
+                setFocus(false, false, 'owner-fallback')
+            end
         else
             setFocus(false, false, 'empty')
         end
@@ -271,22 +395,23 @@ local function apply()
                     DisableControlAction(0, control, true)
                 end
             end
-            -- Esc 关闭：只有显式声明 esc = true 的帧才接管（车机中控）。
-            -- 控制已经被上面屏蔽，但仍能用 IsDisabledControlJustPressed 读到。
+            -- 单点键泵：仅此一条 Wait(0) 循环统一轮询 IsRawKeyDown 并派发给栈顶；
+            -- Esc 消费者同时兜底暂停控制 199/200，关闭走 ForceClose（不依赖 Lua 闭包）。
+            local rawEsc = pumpRawKeys(current)
             if current and current.esc == true then
-                if IsDisabledControlJustPressed(0, 199) or IsDisabledControlJustPressed(0, 200) then
-                    if type(current.close) == 'function' then current.close() end
+                if rawEsc or IsDisabledControlJustPressed(0, 199) or IsDisabledControlJustPressed(0, 200) then
+                    Input.ForceClose(current.id, 'esc')
                 end
             end
             Wait(0)
         end
+        keyPumpPrev = {}
         captureThread = false
     end)
 end
 
 --- 压入一帧
----@param frame table { id = string, kind = 'modal'|'text'|nil, allow = table|nil, keepInput = boolean|nil, close = function|nil,
----                      applyFocus = fun(hasFocus:boolean, hasCursor:boolean, keepInput:boolean)|nil }
+---@param frame table { id = string, owner = string|nil, kind = 'modal'|'text'|nil, allow = table|nil, keepInput = boolean|nil, keys = number[]|nil }
 ---@return boolean ok, string|nil err
 function Input.Push(frame)
     if type(frame) ~= 'table' or type(frame.id) ~= 'string' or frame.id == '' then
@@ -298,13 +423,33 @@ function Input.Push(frame)
     -- 已经在这条路径上（比如重复打开手机）就先弹到它，避免套娃
     for index = #path, 1, -1 do
         if path[index].id == frame.id then
-            for _ = #path, index + 1, -1 do table.remove(path) end
+            for removeIdx = #path, index + 1, -1 do
+                keyPumpConsumers[path[removeIdx].id] = nil
+                table.remove(path)
+            end
             path[index] = frame
+            if type(frame.keys) == 'table' then
+                Input.RegisterKeyPump(frame.id, frame.keys, {
+                    owner = frame.owner,
+                    event = frame.keyEvent,
+                    graceMs = frame.keyGraceMs,
+                })
+            end
             apply()
             return true
         end
     end
     path[#path + 1] = frame
+    if frame.esc == true then
+        keyPumpPrev[VK_ESCAPE] = rawKeyDown(VK_ESCAPE)
+    end
+    if type(frame.keys) == 'table' then
+        Input.RegisterKeyPump(frame.id, frame.keys, {
+            owner = frame.owner,
+            event = frame.keyEvent,
+            graceMs = frame.keyGraceMs,
+        })
+    end
     apply()
     return true
 end
@@ -316,18 +461,58 @@ function Input.Pop(id)
     if #path == 0 then return nil end
     if id == nil then
         local removed = table.remove(path)
+        if removed then keyPumpConsumers[removed.id] = nil end
+        if #path == 0 then keyPumpPrev = {} end
         apply()
         return removed and removed.id or nil
     end
     for index = #path, 1, -1 do
         if path[index].id == id then
             local removed = path[index]
-            for _ = #path, index, -1 do table.remove(path) end
+            for removeIdx = #path, index, -1 do
+                keyPumpConsumers[path[removeIdx].id] = nil
+                table.remove(path)
+            end
+            if #path == 0 then keyPumpPrev = {} end
             apply()
             return removed.id
         end
     end
     return nil
+end
+
+--- 跨资源强制关闭指定帧（不传 Lua 闭包，仅通过 owner 的 ForceClose 导出通知）
+---@param frameId string
+---@param reason string|nil
+---@return boolean hit 是否命中栈内帧
+function Input.ForceClose(frameId, reason)
+    if not isFocusOwnerEnabled() then return false end
+    if type(frameId) ~= 'string' or frameId == '' then return false end
+    local target = nil
+    for index = #path, 1, -1 do
+        if path[index].id == frameId then
+            target = path[index]
+            break
+        end
+    end
+    if not target then return false end
+
+    local owner = target.owner
+    local closeReason = (type(reason) == 'string' and reason ~= '') and reason or 'force_close'
+    Input.Pop(frameId)
+    focusTrace[#focusTrace + 1] = ('forceClose(%s/%s):%s'):format(
+        tostring(owner), frameId, closeReason)
+    if #focusTrace > 8 then table.remove(focusTrace, 1) end
+
+    if type(owner) == 'string' and owner ~= '' then
+        pcall(function()
+            exports[owner]:ForceClose(frameId, closeReason)
+        end)
+    end
+    if TriggerEvent ~= nil then
+        TriggerEvent('custom-ui:forceClosed', frameId, closeReason, owner)
+    end
+    return true
 end
 
 --- 栈顶帧（nil = 没有 UI 占用）
@@ -366,7 +551,45 @@ end
 --- 强制清空（资源停止、/phonefix 这类硬复位）
 function Input.Reset()
     path = {}
+    keyPumpConsumers = {}
+    keyPumpPrev = {}
     apply()
+end
+
+local function onClientResourceStopped(resourceName)
+    if not isFocusOwnerEnabled() then return end
+    if type(resourceName) ~= 'string' or resourceName == '' then return end
+    if GetCurrentResourceName ~= nil and resourceName == GetCurrentResourceName() then
+        Input.Reset()
+        return
+    end
+
+    local changed = false
+    local menuFrameId = 'menu:' .. resourceName
+    for index = #path, 1, -1 do
+        local frame = path[index]
+        if frame.owner == resourceName or frame.id == menuFrameId then
+            keyPumpConsumers[frame.id] = nil
+            table.remove(path, index)
+            changed = true
+        end
+    end
+    clearKeyPumpForOwner(resourceName)
+    if #path == 0 then
+        keyPumpPrev = {}
+    end
+    if changed then
+        if lastOwner == resourceName then
+            lastOwner = nil
+        end
+        focusTrace[#focusTrace + 1] = ('stop(%s)'):format(resourceName)
+        if #focusTrace > 8 then table.remove(focusTrace, 1) end
+        apply()
+    end
+end
+
+if AddEventHandler ~= nil then
+    AddEventHandler('onClientResourceStop', onClientResourceStopped)
 end
 
 --- 玩家与坐标的距离
@@ -391,11 +614,15 @@ exports('IsTaken', Input.IsTaken)
 exports('Owns', Input.Owns)
 exports('ResetInput', Input.Reset)
 exports('RefreshFocus', Input.Refresh)
+exports('ForceClose', Input.ForceClose)
+exports('RegisterKeyPump', Input.RegisterKeyPump)
+exports('UnregisterKeyPump', Input.UnregisterKeyPump)
 exports('FocusTrace', function() return focusTrace end)
 exports('DistanceToCoords', DistanceToCoords)
 
 -- 资源启动先硬复位一次：上一次运行可能留下 keepInput=true 的粘住状态，
 -- 那会让之后所有 UI 都拿不到光标（真机现象：背包/目标盘有游标，手机没有）。
+isFocusOwnerEnabled()
 SetNuiFocus(false, false)
 SetNuiFocusKeepInput(false)
 

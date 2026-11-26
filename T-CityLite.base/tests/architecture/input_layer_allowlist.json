@@ -1,0 +1,49 @@
+{
+  "$comment": "M1 输入层契约债务/排除清单（tests/architecture/test_input_layer_contracts.py）：单参 SetNuiFocus 排除项与未接入菜单（menuv 垫片）的唯一记账位置。过期或已修复未删均判红。",
+  "version": 1,
+  "single_arg_setnui_focus": [
+    {
+      "id": "monitor-menu-cl-base",
+      "file": "resources/[system]/monitor/resource/menu/client/cl_base.lua",
+      "count": 1,
+      "kind": "vendor_exclusion",
+      "reason": "第三方 vendor（txAdmin 内置面板），不在 T-City 菜单改造范围（docs/client/ux/menu-system-design.md §10.1）",
+      "owner": "monitor",
+      "expires": null
+    },
+    {
+      "id": "monitor-menu-cl-functions",
+      "file": "resources/[system]/monitor/resource/menu/client/cl_functions.lua",
+      "count": 1,
+      "kind": "vendor_exclusion",
+      "reason": "第三方 vendor（txAdmin 内置面板），不在 T-City 菜单改造范围（docs/client/ux/menu-system-design.md §10.1）",
+      "owner": "monitor",
+      "expires": null
+    },
+    {
+      "id": "qb-input-legacy-single-arg",
+      "file": "resources/[qb]/qb-input/client/main.lua",
+      "count": 2,
+      "kind": "legacy_debt",
+      "reason": "存量单参 SetNuiFocus(false)（第 22/29 行），归属 M3（docs/client/ux/menu-system-design.md §7 M3）；M1 禁止修改 custom-ui 以外资源，用棘轮锁死 <= 2 处，M3 清理后删此条目",
+      "owner": "qb-input",
+      "expires": "2027-02-28"
+    }
+  ],
+  "unintegrated_menu_ledger": {
+    "$comment": "全仓「未接入/垫片过渡」菜单系统的唯一记账位置。",
+    "entries": [
+      {
+        "id": "qb-adminmenu-menuv-shim",
+        "resource": "qb-adminmenu",
+        "file": "resources/[qb]/qb-adminmenu/client/menu_shim.lua",
+        "status": "shimmed",
+        "issue": "#353",
+        "target_milestone": "M6(#348)",
+        "reason": "qb-adminmenu 仍依赖第三方 menuv，但已通过 qb-adminmenu/client/menu_shim.lua 接入 custom-ui 输入栈（#353 止血垫片）；M6 下线 menuv 后随之一并删除",
+        "owner": "qb-adminmenu",
+        "expires": "2027-02-28"
+      }
+    ]
+  }
+}
