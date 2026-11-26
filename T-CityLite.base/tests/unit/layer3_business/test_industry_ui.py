@@ -434,14 +434,11 @@ def test_client_supplied_price_fields_are_ignored():
 # ══════════════════════════════════════════════════════════════════
 
 
-def run_phone(body: str) -> dict[str, str]:
-    """加载 custom-phone 注册表 + industry app，QBCore/exports 用最小桩。"""
-    stub = """
-_G.QBCore = {
-  Functions = {
-    GetPlayer = function(source)
+#: 两个手机 harness 共用的玩家表。job / gang 各一个 Boss，source=2 是「无组织」对照。
+_PLAYER_STUB = """    GetPlayer = function(source)
       if source == 1 then
-        return { PlayerData = { job = { name = 'miner', grade = { level = 4 } } } }
+        return { PlayerData = { job = { name = 'miner', label = '洛圣都矿业公司',
+                 grade = { level = 4, name = 'Mine Owner' } } } }
       end
       if source == 2 then
         return { PlayerData = { job = { name = 'police', grade = { level = 4 } } } }
@@ -451,7 +448,30 @@ _G.QBCore = {
       end
       return nil
     end,
-  },
+"""
+
+def _run_phone_chunks(stub: str, mids: list[str], body: str) -> dict[str, str]:
+    """拼装 custom-phone 注册表 + industry app 并执行。
+
+    `phone_apps.lua` 以 `return PhoneApps` 结尾；拼进同一个 chunk 会让后面的代码不可达，
+    所以 harness 里按 chunk 分隔，等价于 FiveM 的加载方式。两个手机 harness 共用这一段，
+    避免同一份拼装逻辑抄两遍（Sonar 新代码重复率会因此超标）。
+    """
+    registry = PHONE_REGISTRY.read_text(encoding="utf-8").rsplit("return PhoneApps", 1)[0]
+    script = "\n".join(
+        [stub, registry, *mids, PHONE_APP.read_text(encoding="utf-8"), textwrap.dedent(body)]
+    )
+    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
+    return parse(proc.stdout)
+
+
+def run_phone(body: str) -> dict[str, str]:
+    """加载 custom-phone 注册表 + industry app，QBCore/exports 用最小桩。"""
+    stub = """
+_G.QBCore = {
+  Functions = {
+""" + _PLAYER_STUB + """  },
 }
 __calls = {}
 _G.exports = {
@@ -487,19 +507,7 @@ end
 """
     # phone_apps.lua 以 `return PhoneApps` 结尾；拼进同一个 chunk 会让后面的
     # adapter 不可达。harness 里把它当独立文件：按 chunk 分隔，等价于 FiveM 的加载。
-    registry = PHONE_REGISTRY.read_text(encoding="utf-8").rsplit("return PhoneApps", 1)[0]
-    script = (
-        stub
-        + "\n"
-        + registry
-        + "\n"
-        + PHONE_APP.read_text(encoding="utf-8")
-        + "\n"
-        + textwrap.dedent(body)
-    )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
+    return _run_phone_chunks(stub, [], body)
 
 
 def run_phone_with_real_access(body: str) -> dict[str, str]:
@@ -517,20 +525,7 @@ end
 __industryExports = {}
 local coreObject = {
   Functions = {
-    GetPlayer = function(source)
-      if source == 1 then
-        return { PlayerData = { job = { name = 'miner', label = '洛圣都矿业公司',
-                 grade = { level = 4, name = 'Mine Owner' } } } }
-      end
-      if source == 2 then
-        return { PlayerData = { job = { name = 'police', grade = { level = 4 } } } }
-      end
-      if source == 3 then
-        return { PlayerData = { gang = { name = 'cartel', grade = { level = 4 } } } }
-      end
-      return nil
-    end,
-  },
+""" + _PLAYER_STUB + """  },
 }
 _G.QBCore = coreObject
 exports = setmetatable({}, {
@@ -547,26 +542,22 @@ function __emit(key, value)
   io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
 end
 """
-    registry = PHONE_REGISTRY.read_text(encoding="utf-8").rsplit("return PhoneApps", 1)[0]
-    script = (
-        stub
-        + "\n"
-        + CONFIG_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + ORG_ID_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + ACCESS_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + UI_SRC.read_text(encoding="utf-8")
-        # 模拟 FiveM 导出调用把 self 吃掉：adapter 用 `exports['x']:Fn(src)`。
-        + "\n"
-        + "local realCanAccess = __industryExports.CanAccessIndustry\n"
-        + "__industryExports.CanAccessIndustry = function(_, source) return realCanAccess(source) end\n"
-        + registry
-        + "\n"
-        + PHONE_APP.read_text(encoding="utf-8")
-        + "\n"
-        + textwrap.dedent(body)
+    # 模拟 FiveM 导出调用把 self 吃掉：adapter 用 `exports['x']:Fn(src)`。
+    wrap = (
+        "local realCanAccess = __industryExports.CanAccessIndustry\n"
+        "__industryExports.CanAccessIndustry = function(_, source) return realCanAccess(source) end\n"
+    )
+    return _run_phone_chunks(
+        stub,
+        [
+            CONFIG_SRC.read_text(encoding="utf-8"),
+            ORG_ID_SRC.read_text(encoding="utf-8"),
+            ACCESS_SRC.read_text(encoding="utf-8"),
+            UI_SRC.read_text(encoding="utf-8"),
+            # wrap 必须排在 ui.lua 之后：它要拿到真实的 CanAccessIndustry 再包一层。
+            wrap,
+        ],
+        body,
     )
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
