@@ -36,6 +36,7 @@
 | [计划：S1 组织金库地基（industry treasury）](industry-ops/01-plan.md) | draft | 6 | 6 | 0 | - | 2026-11-25 |
 | [计划：S2 设施 / 工位 / 库存（industry facility）](industry-ops/02-plan.md) | draft | 6 | 6 | 0 | - | 2026-11-25 |
 | [计划：S3 离线生产（惰性结算 + 库存上限）](industry-ops/03-plan.md) | draft | 6 | 6 | 0 | - | 2026-11-26 |
+| [计划：S4 销售 / 配额（第一次造钱）](industry-ops/04-plan.md) | draft | 6 | 6 | 0 | - | 2026-11-26 |
 | [内容填充总规划（职业优先，R0–R6）](jobs-content-roadmap.md) | draft | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [计划：R1 多站驾驶（garbage + bus）](jobs-content/03-plan.md) | draft | 4 | 2 | 0 | P3 wip | 2026-11-17 |
 | [重构删除清单 & 保留清单 v2.0](../../T-CityLite.base/docs/archive/refactoring-manifest.md) | final | 未登记 | 0 | 0 | - | - |
