@@ -1,0 +1,73 @@
+{
+  "$comment": "M4 焦点栈收口（#346）允许清单：只登记四目录内的诊断用途 IsNuiFocused/IsNuiFocusKeepingInput 读取，以及全仓合法非菜单 DisableAllControlActions 调用点（noclip / 死亡态 / spawn / 押送 / 原生键盘）。过期或失效即红。",
+  "version": 1,
+  "rule": "M4-FOCUS-STACK",
+  "entries": [
+    {
+      "id": "story-engine-diagnostic-nui-focus-reads",
+      "kind": "diagnostic_read",
+      "resource": "story-engine",
+      "file": "resources/[custom]/story-engine/client/main.lua",
+      "count": 6,
+      "reason": "仅用于遥测上报（telemetry('nui.focus', ...)）与 /nuifocus 调试命令打印/遥测对照原生返回值，不作门卫或控制流分支判断（menu-system-design.md §7 M4 / §10.4）。",
+      "owner": "story-engine",
+      "added": "2026-11-26",
+      "expires": "2027-04-30"
+    },
+    {
+      "id": "qb-adminmenu-noclip-disable-all",
+      "kind": "legitimate_disable_all",
+      "resource": "qb-adminmenu",
+      "file": "resources/[qb]/qb-adminmenu/client/noclip.lua",
+      "count": 3,
+      "reason": "noclip 飞行模式需屏蔽控制组 0/1/2 原生操作并显式放行视角/聊天/移动，非菜单路径（menu-system-design.md §10.1 #2）。",
+      "owner": "qb-adminmenu",
+      "added": "2026-11-26",
+      "expires": "2027-04-30"
+    },
+    {
+      "id": "qb-adminmenu-local-input-disable-all",
+      "kind": "legitimate_disable_all",
+      "resource": "qb-adminmenu",
+      "file": "resources/[qb]/qb-adminmenu/client/client.lua",
+      "count": 2,
+      "reason": "GTA 原生屏幕键盘输入循环（LocalInput / LocalInputInt，UpdateOnscreenKeyboard == 0 期间），M6(#348) 迁出 menuv 与原生键盘时一并清理。",
+      "owner": "qb-adminmenu",
+      "added": "2026-11-26",
+      "expires": "2027-02-28"
+    },
+    {
+      "id": "qb-ambulancejob-dead-disable-all",
+      "kind": "legitimate_disable_all",
+      "resource": "qb-ambulancejob",
+      "file": "resources/[qb]/qb-ambulancejob/client/dead.lua",
+      "count": 1,
+      "reason": "玩家死亡/濒死倒地态（isDead or InLaststand）屏蔽角色操作并放行视角/呼叫/复活等控制，非菜单路径（menu-system-design.md §10.1 #2）。",
+      "owner": "qb-ambulancejob",
+      "added": "2026-11-26",
+      "expires": "2027-04-30"
+    },
+    {
+      "id": "qb-spawn-choosing-disable-all",
+      "kind": "legitimate_disable_all",
+      "resource": "qb-spawn",
+      "file": "resources/[qb]/qb-spawn/client.lua",
+      "count": 1,
+      "reason": "选点出生镜头锁定期间（choosingSpawn）禁止角色移动与动作输入，非游戏内菜单路径（menu-system-design.md §10.1 #2）。",
+      "owner": "qb-spawn",
+      "added": "2026-11-26",
+      "expires": "2027-04-30"
+    },
+    {
+      "id": "custom-police-escort-disable-all",
+      "kind": "legitimate_disable_all",
+      "resource": "custom-police",
+      "file": "resources/[custom]/custom-police/client/interactions.lua",
+      "count": 1,
+      "reason": "被押送态（isEscorted）限制自由移动与攻击并仅放行视角/语音/聊天控制，属于状态锁而非菜单路径。",
+      "owner": "custom-police",
+      "added": "2026-11-26",
+      "expires": "2027-04-30"
+    }
+  ]
+}

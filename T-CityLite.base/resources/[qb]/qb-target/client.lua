@@ -4,7 +4,6 @@ local IsDisabledControlPressed = IsDisabledControlPressed
 local GetEntityBoneIndexByName = GetEntityBoneIndexByName
 local GetWorldPositionOfEntityBone = GetWorldPositionOfEntityBone
 local SetPauseMenuActive = SetPauseMenuActive
-local DisableAllControlActions = DisableAllControlActions
 local EnableControlAction = EnableControlAction
 local NetworkGetEntityIsNetworked = NetworkGetEntityIsNetworked
 local NetworkGetNetworkIdFromEntity = NetworkGetNetworkIdFromEntity
@@ -32,6 +31,90 @@ local pcall = pcall
 local CheckOptions = CheckOptions
 local Bones = Load('bones')
 local listSprite = {}
+
+-- T-City: custom-ui 焦点栈与眼标控制表
+local TARGET_FRAME_ID = 'target'
+local TARGET_ALLOW_CONTROLS = { 19, 30, 31, 32, 33, 34, 35 }
+local TARGET_AIM_BLOCKED_CONTROLS = {
+	14, 15, 16, 17, 24, 25, 37, 38, 44, 45, 47,
+	140, 141, 142, 143, 199, 200, 257, 263,
+}
+local nuiFocused = false
+
+local function isUiTaken()
+	if GetResourceState('custom-ui') ~= 'started' then return false end
+	local ok, taken = pcall(function() return exports['custom-ui']:IsTaken() end)
+	return ok and taken == true
+end
+
+local function applyTargetFocus(focus, cursor, keepInput)
+	if not focus then
+		nuiFocused = false
+		SetNuiFocusKeepInput(false)
+		SetNuiFocus(false, false)
+		return true
+	end
+	SetNuiFocusKeepInput(keepInput == true)
+	if not nuiFocused then
+		SetNuiFocus(false, false)
+	end
+	SetNuiFocus(true, cursor ~= false)
+	nuiFocused = true
+	return true
+end
+
+local function acquireTargetFocus()
+	if GetResourceState('custom-ui') == 'started' then
+		local ok = pcall(function()
+			exports['custom-ui']:Push({
+				id = TARGET_FRAME_ID,
+				owner = currentResourceName,
+				cursor = true,
+				keepInput = true,
+				allow = TARGET_ALLOW_CONTROLS,
+			})
+		end)
+		if ok then return true end
+	end
+	return applyTargetFocus(true, true, true)
+end
+
+local function releaseTargetFocus()
+	if GetResourceState('custom-ui') == 'started' then
+		local okPath, path = pcall(function() return exports['custom-ui']:Path() end)
+		local inStack = false
+		if okPath and type(path) == 'table' then
+			for _, frameId in ipairs(path) do
+				if frameId == TARGET_FRAME_ID then
+					inStack = true
+					break
+				end
+			end
+		end
+		if inStack then
+			local okPop = pcall(function() exports['custom-ui']:Pop(TARGET_FRAME_ID) end)
+			if okPop then
+				pcall(function() exports['custom-ui']:GuardControls(200) end)
+				return true
+			end
+		end
+	end
+	if nuiFocused then
+		return applyTargetFocus(false, false, false)
+	end
+	return false
+end
+
+exports('ApplyFocus', function(focus, cursor, keepInput)
+	return applyTargetFocus(focus, cursor, keepInput)
+end)
+
+exports('ForceClose', function(_frameId, _reason)
+	targetActive, success, hasFocus = false, false, false
+	table_wipe(sendData)
+	SendNUIMessage({ response = 'closeTarget' })
+	return true
+end)
 
 ---------------------------------------
 --- Source: https://github.com/citizenfx/lua/blob/luaglm-dev/cfx/libs/scripts/examples/scripting_gta.lua
@@ -155,8 +238,7 @@ end
 exports('RaycastCamera', RaycastCamera)
 
 local function DisableNUI()
-	SetNuiFocus(false, false)
-	SetNuiFocusKeepInput(false)
+	releaseTargetFocus()
 	hasFocus = false
 end
 
@@ -165,17 +247,17 @@ exports('DisableNUI', DisableNUI)
 local function EnableNUI(options)
 	if not targetActive or hasFocus then return end
 	SetCursorLocation(0.5, 0.5)
-	SetNuiFocus(true, true)
-	SetNuiFocusKeepInput(true)
 	hasFocus = true
 	SendNUIMessage({ response = 'validTarget', data = options })
+	acquireTargetFocus()
 end
 
 exports('EnableNUI', EnableNUI)
 
 local function LeftTarget()
-	SetNuiFocus(false, false)
-	SetNuiFocusKeepInput(false)
+	if hasFocus or nuiFocused then
+		releaseTargetFocus()
+	end
 	success, hasFocus = false, false
 	table_wipe(sendData)
 	SendNUIMessage({ response = 'leftTarget' })
@@ -185,8 +267,7 @@ exports('LeftTarget', LeftTarget)
 
 local function DisableTarget(forcedisable)
 	if (not targetActive and hasFocus and not Config.Toggle) or not forcedisable then return end
-	SetNuiFocus(false, false)
-	SetNuiFocusKeepInput(false)
+	releaseTargetFocus()
 	Wait(100)
 	targetActive, success, hasFocus = false, false, false
 	SendNUIMessage({ response = 'closeTarget' })
@@ -290,7 +371,7 @@ end
 exports('CheckBones', CheckBones)
 
 local function EnableTarget()
-	if not allowTarget or success or (not Config.Standalone and not LocalPlayer.state['isLoggedIn']) or IsNuiFocused() or (Config.DisableInVehicle and IsPedInAnyVehicle(playerPed or PlayerPedId(), false)) then return end
+	if not allowTarget or success or (not Config.Standalone and not LocalPlayer.state['isLoggedIn']) or isUiTaken() or (Config.DisableInVehicle and IsPedInAnyVehicle(playerPed or PlayerPedId(), false)) then return end
 	if LocalPlayer.state['isDead'] or LocalPlayer.state['inLaststand'] then return end
 	if targetActive then return end
 
@@ -304,9 +385,17 @@ local function EnableTarget()
 	CreateThread(function()
 		repeat
 			SetPauseMenuActive(false)
-			if Config.DisableControls then
-				DisableAllControlActions(0)
-			else
+			if not hasFocus then
+				DisableControlAction(0, Config.MenuControlKey, true)
+				if Config.DisableControls then
+					for _, control in ipairs(TARGET_AIM_BLOCKED_CONTROLS) do
+						DisableControlAction(0, control, true)
+					end
+				else
+					DisableControlAction(0, 25, true) -- input aim
+					DisableControlAction(0, 24, true) -- attack
+				end
+			elseif GetResourceState('custom-ui') ~= 'started' then
 				DisableControlAction(0, 1, true) -- look left/right
 				DisableControlAction(0, 2, true) -- look up/down
 				DisableControlAction(0, 4, true) -- look down only
@@ -314,13 +403,6 @@ local function EnableTarget()
 				DisableControlAction(0, 6, true) -- look right only
 				DisableControlAction(0, 25, true) -- input aim
 				DisableControlAction(0, 24, true) -- attack
-			end
-			EnableControlAction(0, 30, true) -- move left/right
-			EnableControlAction(0, 31, true) -- move forward/back
-
-			if not hasFocus then
-				EnableControlAction(0, 1, true) -- look left/right
-				EnableControlAction(0, 2, true) -- look up/down
 			end
 
 			Wait(0)
@@ -1206,8 +1288,7 @@ exports('AllowTargeting', AllowTargeting)
 
 RegisterNUICallback('selectTarget', function(option, cb)
 	option = tonumber(option) or option
-	SetNuiFocus(false, false)
-	SetNuiFocusKeepInput(false)
+	releaseTargetFocus()
 	Wait(100)
 	targetActive, success, hasFocus = false, false, false
 	if not next(sendData) then return end
@@ -1241,8 +1322,7 @@ RegisterNUICallback('selectTarget', function(option, cb)
 end)
 
 RegisterNUICallback('closeTarget', function(_, cb)
-	SetNuiFocus(false, false)
-	SetNuiFocusKeepInput(false)
+	releaseTargetFocus()
 	Wait(100)
 	targetActive, success, hasFocus = false, false, false
 	cb('ok')
@@ -1250,8 +1330,7 @@ end)
 
 RegisterNUICallback('leftTarget', function(_, cb)
 	if Config.Toggle then
-		SetNuiFocus(false, false)
-		SetNuiFocusKeepInput(false)
+		releaseTargetFocus()
 		Wait(100)
 		table_wipe(sendData)
 		success, hasFocus = false, false
@@ -1373,6 +1452,12 @@ end)
 AddEventHandler('onResourceStop', function(resource)
 	if resource ~= currentResourceName then return end
 	DeletePeds()
+	if hasFocus or nuiFocused then
+		targetActive, success, hasFocus = false, false, false
+		nuiFocused = false
+		SetNuiFocusKeepInput(false)
+		SetNuiFocus(false, false)
+	end
 end)
 
 -- Debug Option

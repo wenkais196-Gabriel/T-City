@@ -4,7 +4,7 @@ type: spec
 status: draft
 system: ux
 owner: hermes
-updated: 2026-11-25
+updated: 2026-11-26
 review_by: 2027-02-28
 ---
 
@@ -155,7 +155,7 @@ qb-target 的 client.lua 第 293 行确以 `IsNuiFocused()` 作门卫、第 308 
 | **M1** | `custom-ui` 升级为唯一焦点栈 + 修跨资源关闭 + 接管单点键泵 | `T-CityLite.base/resources/[custom]/custom-ui/**`、`T-CityLite.base/configs/modules/core.cfg`、`T-CityLite.base/configs/modules/custom.cfg`、`T-CityLite.base/tests/architecture/test_input_layer_contracts.py` | 无 | `test_input_layer_contracts.py` 绿；栈非空时全客户端仅 1 条 `Wait(0)`，关闭后栈为空 |
 | **M2** | 新建 P0 `MenuSpec` + 轻量 CEF 宿主 `custom-menu` | `T-CityLite.base/resources/[custom]/custom-menu/**`、`T-CityLite.base/configs/modules/player.cfg`、新增的 MenuSpec 单测（tests/unit 下的 test_menu_schema.py） | M1 | `npm run build` 退出 0，产物含 0 处 `backdrop-filter` / `https://` |
 | **M3** | qb-menu / qb-input 零破坏适配，停用各自旧页面 | `T-CityLite.base/resources/[qb]/qb-menu/**`、`T-CityLite.base/resources/[qb]/qb-input/**` | M1, M2 | `luac5.4.exe -p` 全过；qb-input 不再有单参 `SetNuiFocus(false)` |
-| **M4** | qb-target / qb-inventory / qb-hud / story-engine 接入焦点栈 | `T-CityLite.base/resources/[qb]/qb-target/**`、`T-CityLite.base/resources/[qb]/qb-inventory/**`、`T-CityLite.base/resources/[qb]/qb-hud/**`、`T-CityLite.base/resources/[custom]/story-engine/**` | M1 | 四目录内**门卫用途**的 `IsNuiFocused()` = 0（诊断用途逐条进 allowlist）；**菜单路径上**无 `DisableAllControlActions`（`noclip` / 死亡 / `spawn` 等合法调用点进 allowlist） |
+| **M4**（✅ 已收口 #346） | qb-target / qb-inventory / qb-hud / story-engine 接入焦点栈 | `T-CityLite.base/resources/[qb]/qb-target/**`、`T-CityLite.base/resources/[qb]/qb-inventory/**`、`T-CityLite.base/resources/[qb]/qb-hud/**`、`T-CityLite.base/resources/[custom]/story-engine/**` | M1 | 四目录内**门卫用途**的 `IsNuiFocused()` = 0（诊断用途逐条进 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json`）；**菜单路径上**无 `DisableAllControlActions`（`noclip` / 死亡 / `spawn` 等合法调用点进同一份 allowlist）；闸门 `T-CityLite.base/tests/architecture/test_m4_focus_stack.py` |
 | **M5** | 清 `backdrop-filter` 与重复监听（**排除 `[system]/monitor` 这个第三方面板**） | `T-CityLite.base/resources/[system]/tcity-dashboard/**`、`T-CityLite.base/resources/[qb]/qb-banking/**`、`T-CityLite.base/resources/[custom]/hud-position-tool/**`、`T-CityLite.base/tests/architecture/test_dashboard_focus.py` | M1 | 三资源源码与产物中 `backdrop-filter` = 0；看板构建成功；基线里 monitor 的 6 处**显式登记为排除项** |
 | **M6** | qb-adminmenu 迁出 menuv + 冻结 menuv + 收敛 qb-management | `T-CityLite.base/resources/[qb]/qb-adminmenu/**`、`T-CityLite.base/resources/[qb]/qb-management/**`、`T-CityLite.base/resources/[standalone]/menuv/**` | M2, M3 | 除 menuv 自身外全仓 menuv 引用归 0；qb-management 仅留 `cl_org.lua` |
 | **M7** | 收敛手机双 `Wait(0)` + prompt 去重 + 固化架构闸门 | `T-CityLite.base/resources/[custom]/custom-phone/**`、`T-CityLite.base/resources/[custom]/custom-prompt/**`、新增的菜单架构闸门（tests/architecture 下的 test_menu_architecture.py）、`T-CityLite.base/configs/boot.json` | M1, M2, M4, M5, M6 | 全量 pytest 绿；手机 NUI harness 通过；平板态仅 1 条屏蔽循环 |
@@ -426,3 +426,18 @@ SetNuiFocus(true, true)
 
 跟踪在 issue #369：把身份改成「名字 + 资源 + 类型」，行号降级或去掉。
 在那之前，改过含命令的 Lua 文件就记得重跑扫描器。
+
+---
+
+## 13. M4 消费者接入焦点栈（#346，2026-11-26）
+
+`qb-target`、`qb-inventory`、`qb-hud`、`story-engine` 四个目录已收口到 `custom-ui` 焦点栈（门卫 `IsTaken()`、入出栈 `Push`/`Pop`、资源侧 `ApplyFocus`/`ForceClose` + `onResourceStop` 兜底释放）：
+
+| 类别 | 资源 / 位置 | 处理方式 |
+|---|---|---|
+| 门卫 | `qb-target` 眼标开启、`qb-inventory` 开背包命令、`story-engine` 看护恢复、`qb-hud` 设置命令 | 统一走调用期 `exports['custom-ui']:IsTaken()`；门卫用途 `IsNuiFocused()` 归 0 |
+| 诊断 | `story-engine` 遥测上报与 `/nuifocus` 调试命令（6 处读取） | 保留读取仅作诊断对比，登记入 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json`（与门卫互斥） |
+| 菜单禁控 | `qb-target` 眼标循环 `DisableAllControlActions(0)` | 已移除；瞄准期定向屏蔽攻击/武器/菜单键，打开菜单后由 `custom-ui` 帧 `allow` 放行 |
+| 合法禁控 | `qb-adminmenu`（noclip 3、原生键盘 2）、`qb-ambulancejob`（死亡态 1）、`qb-spawn`（出生选点 1）、`custom-police`（押送态 1） | 逐条写明理由与到期日进 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json` |
+
+闸门与反向校验落在 `T-CityLite.base/tests/architecture/test_m4_focus_stack.py`（限域四目录，反向把 `IsTaken()` 换回 `IsNuiFocused()` 必红），并同步清理 `T-CityLite.base/tests/architecture/nui_client_allowlist.json` 中已解决的 `story-focus-no-stop-cleanup`。

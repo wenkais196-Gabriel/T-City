@@ -223,12 +223,99 @@ end)
 -- 代码里删掉 RegisterKeyMapping **不会**删掉玩家本机那条 —— 实测删了之后按 I 仍然弹 HUD 设置，
 -- 和载具中控屏抢同一个键。命令改名后，旧绑定指向一个空操作（见下方 `hud`），
 -- I 就只剩 tcity-dashboard 的中控屏一条路径。
+local HUD_FRAME_ID = 'hud-settings'
+local hudUiFocused = false
+
+local function isUiTaken()
+    if GetResourceState('custom-ui') ~= 'started' then return false end
+    local ok, taken = pcall(function() return exports['custom-ui']:IsTaken() end)
+    return ok and taken == true
+end
+
+local function applyHudFocus(hasFocus, hasCursor, keepInput)
+    if not hasFocus then
+        hudUiFocused = false
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+        return true
+    end
+    SetNuiFocusKeepInput(keepInput == true)
+    if not hudUiFocused then
+        SetNuiFocus(false, false)
+    end
+    SetNuiFocus(true, hasCursor ~= false)
+    hudUiFocused = true
+    return true
+end
+
+local function acquireHudFocus()
+    if GetResourceState('custom-ui') == 'started' then
+        local ok = pcall(function()
+            exports['custom-ui']:Push({
+                id = HUD_FRAME_ID,
+                owner = GetCurrentResourceName(),
+                cursor = true,
+                keepInput = false,
+            })
+        end)
+        if ok then return true end
+    end
+    return applyHudFocus(true, true, false)
+end
+
+local function releaseHudFocus()
+    if GetResourceState('custom-ui') == 'started' then
+        local okPath, path = pcall(function() return exports['custom-ui']:Path() end)
+        local inStack = false
+        if okPath and type(path) == 'table' then
+            for _, frameId in ipairs(path) do
+                if frameId == HUD_FRAME_ID then
+                    inStack = true
+                    break
+                end
+            end
+        end
+        if inStack then
+            local okPop = pcall(function() exports['custom-ui']:Pop(HUD_FRAME_ID) end)
+            if okPop then
+                pcall(function() exports['custom-ui']:GuardControls(300) end)
+                return true
+            end
+        end
+    end
+    if hudUiFocused then
+        return applyHudFocus(false, false, false)
+    end
+    return false
+end
+
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    return applyHudFocus(hasFocus, hasCursor, keepInput)
+end)
+
+exports('ForceClose', function(_frameId, _reason)
+    if not showMenu then return true end
+    showMenu = false
+    SendNUIMessage({ action = 'close' })
+    return true
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    if showMenu or hudUiFocused then
+        showMenu = false
+        hudUiFocused = false
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+    end
+end)
+
 RegisterCommand('hudsettings', function()
     Wait(50)
-    if showMenu then return end
+    if showMenu or isUiTaken() then return end
     TriggerEvent('hud:client:playOpenMenuSounds')
-    SetNuiFocus(true, true)
     SendNUIMessage({ action = 'open' })
+    acquireHudFocus()
     showMenu = true
 end)
 
@@ -240,7 +327,7 @@ RegisterNUICallback('closeMenu', function(_, cb)
     Wait(50)
     TriggerEvent('hud:client:playCloseMenuSounds')
     showMenu = false
-    SetNuiFocus(false, false)
+    releaseHudFocus()
     cb('ok')
 end)
 

@@ -109,6 +109,91 @@ exports('HasItem', HasItem)
 local inventoryOpen = false
 exports('IsOpen', function() return inventoryOpen end)
 
+local INV_FRAME_ID = 'inventory'
+local invUiFocused = false
+
+local function applyInventoryFocus(hasFocus, hasCursor, keepInput)
+    if not hasFocus then
+        invUiFocused = false
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+        return true
+    end
+    SetNuiFocusKeepInput(keepInput == true)
+    if not invUiFocused then
+        SetNuiFocus(false, false)
+    end
+    SetNuiFocus(true, hasCursor ~= false)
+    invUiFocused = true
+    return true
+end
+
+local function acquireInventoryFocus()
+    if GetResourceState('custom-ui') == 'started' then
+        local ok = pcall(function()
+            exports['custom-ui']:Push({
+                id = INV_FRAME_ID,
+                owner = GetCurrentResourceName(),
+                cursor = true,
+                keepInput = false,
+            })
+        end)
+        if ok then return true end
+    end
+    return applyInventoryFocus(true, true, false)
+end
+
+local function releaseInventoryFocus()
+    if GetResourceState('custom-ui') == 'started' then
+        local okPath, path = pcall(function() return exports['custom-ui']:Path() end)
+        local inStack = false
+        if okPath and type(path) == 'table' then
+            for _, frameId in ipairs(path) do
+                if frameId == INV_FRAME_ID then
+                    inStack = true
+                    break
+                end
+            end
+        end
+        if inStack then
+            local okPop = pcall(function() exports['custom-ui']:Pop(INV_FRAME_ID) end)
+            if okPop then
+                pcall(function() exports['custom-ui']:GuardControls(300) end)
+                return true
+            end
+        end
+    end
+    if invUiFocused then
+        return applyInventoryFocus(false, false, false)
+    end
+    return false
+end
+
+exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
+    return applyInventoryFocus(hasFocus, hasCursor, keepInput)
+end)
+
+exports('ForceClose', function(_frameId, _reason)
+    if not inventoryOpen then return true end
+    inventoryOpen = false
+    SendNUIMessage({ action = 'close' })
+    if CurrentDrop then
+        TriggerServerEvent('qb-inventory:server:closeInventory', CurrentDrop)
+        CurrentDrop = nil
+    end
+    return true
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    if inventoryOpen or invUiFocused then
+        inventoryOpen = false
+        invUiFocused = false
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+    end
+end)
+
 -- Events
 
 RegisterNetEvent('qb-inventory:client:requiredItems', function(items, bool)
@@ -141,6 +226,7 @@ end)
 
 RegisterNetEvent('qb-inventory:client:closeInv', function()
     inventoryOpen = false
+    releaseInventoryFocus()
     SendNUIMessage({
         action = 'close',
     })
@@ -177,7 +263,6 @@ end)
 RegisterNetEvent('qb-inventory:client:openInventory', function(items, other)
     if not PlayerData or not PlayerData.metadata or PlayerData.metadata['isdead'] or PlayerData.metadata['inlaststand'] then return end
     inventoryOpen = true
-    SetNuiFocus(true, true)
     SendNUIMessage({
         action = 'open',
         inventory = items,
@@ -185,6 +270,7 @@ RegisterNetEvent('qb-inventory:client:openInventory', function(items, other)
         maxweight = Config.MaxWeight,
         other = other
     })
+    acquireInventoryFocus()
 end)
 
 RegisterNetEvent('qb-inventory:client:giveAnim', function()
@@ -208,7 +294,7 @@ end)
 
 RegisterNUICallback('CloseInventory', function(data, cb)
     inventoryOpen = false
-    SetNuiFocus(false, false)
+    releaseInventoryFocus()
     if data.name then
         if data.name:find('trunk-') then
             CloseTrunk()
@@ -305,15 +391,15 @@ end)
 
 -- Commands
 
--- T-City: 本 build 的 IsNuiFocused() 恒 false，挡不住"手机开着还能开背包"。
--- 问输入仲裁者（custom-ui 的交互路径栈），它才知道现在谁占着键盘。
+-- T-City: 问输入仲裁者（custom-ui 的交互路径栈），避免与其他 UI 叠窗。
 local function tcityUiHasInput()
+    if GetResourceState('custom-ui') ~= 'started' then return false end
     local ok, taken = pcall(function() return exports['custom-ui']:IsTaken() end)
     return ok and taken == true
 end
 
 RegisterCommand('openInv', function()
-    if tcityUiHasInput() or IsNuiFocused() or IsPauseMenuActive() then return end
+    if tcityUiHasInput() or IsPauseMenuActive() then return end
     if not PlayerData or not PlayerData.metadata or PlayerData.metadata['isdead'] or PlayerData.metadata['inlaststand'] then return end
     ExecuteCommand('inventory')
 end, false)
