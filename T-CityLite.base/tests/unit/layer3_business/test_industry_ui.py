@@ -59,6 +59,13 @@ def lua() -> str:
     return exe
 
 
+def _exec_lua(script: str) -> dict[str, str]:
+    """跑一段拼好的 Lua 并解析 key|value 输出（三个 harness 共用）。"""
+    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
+    return parse(proc.stdout)
+
+
 def parse(out_text: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for line in out_text.splitlines():
@@ -143,9 +150,7 @@ def run(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
         + "\n"
         + textwrap.dedent(body)
     )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
+    return _exec_lua(script)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -166,10 +171,7 @@ def test_snapshot_fields_match_seeded_sql():
         __emit('OK', tostring(snap ~= nil))
         __emit('ERR', tostring(err or 'nil'))
         __emit('ORGID', tostring(snap and snap.orgId))
-        __emit('ORG', tostring(snap and snap.orgLabel))
-        __emit('GRADE', tostring(snap and snap.gradeName))
-        __emit('ISBOSS', tostring(snap and snap.isBoss))
-        __emit('BAL', tostring(snap and snap.balance))
+        __emitSnapshotIdentity(snap)
         __emit('TYPE', tostring(snap and snap.facility and snap.facility.type))
         __emit('LABEL', tostring(snap and snap.facility and snap.facility.label))
         __emit('LEVEL', tostring(snap and snap.facility and snap.facility.level))
@@ -293,10 +295,7 @@ def test_estimate_sale_matches_settle_sale_revenue_and_writes_nothing():
 
 def test_non_member_and_non_boss_are_rejected_without_writes():
     out = run("""
-        __reset()
-        __seedOrg('mining_co', 0)
-        __seedFacilityRow('mining_co', 10, { workstations = 1 })
-        __seedDemand('iron_ore', 20, 0)
+        __seedBasic({ workstations = 1 })
 
         local snap, snapErr = IndustryUi.Snapshot(outsider(), 'mining_co')
         __emit('OUT_SNAP', tostring(snap))
@@ -311,10 +310,7 @@ def test_non_member_and_non_boss_are_rejected_without_writes():
         __emit('SELL_MEMBER', tostring(ok2) .. ':' .. tostring(err2))
         __emit('HIRE_MEMBER', tostring(ok3) .. ':' .. tostring(err3))
         __emit('MEMBER_ISBOSS', tostring(memberSnap and memberSnap.isBoss))
-        __emit('SALES', tostring(__salesCount()))
-        __emit('STOCK', tostring(__stock('mining_co')))
-        __emit('BAL', tostring(__balance('mining_co')))
-        __emit('WS', tostring(__facilityRows['mining_co'].workstations))
+        __emitWriteState()
     """)
     assert out["OUT_SNAP"] == "nil" and out["OUT_SNAP_ERR"] == "not_member"
     assert out["SELL_OUT"] == "false:not_member"
@@ -332,10 +328,7 @@ def test_non_member_and_non_boss_are_rejected_without_writes():
 
 def test_forged_qty_is_clamped_or_rejected_without_extra_writes():
     out = run("""
-        __reset()
-        __seedOrg('mining_co', 0)
-        __seedFacilityRow('mining_co', 10, { workstations = 3 })
-        __seedDemand('iron_ore', 20, 0)
+        __seedBasic()
 
         local estimate = IndustryUi.EstimateSale(boss(), 'mining_co', 999)
         __emit('EST_QTY', tostring(estimate and estimate.qty))
@@ -350,10 +343,7 @@ def test_forged_qty_is_clamped_or_rejected_without_extra_writes():
         __emit('OVER_STOCK', tostring(__stock('mining_co')))
         __emit('OVER_BAL', tostring(__balance('mining_co')))
 
-        __reset()
-        __seedOrg('mining_co', 0)
-        __seedFacilityRow('mining_co', 10, { workstations = 3 })
-        __seedDemand('iron_ore', 20, 0)
+        __seedBasic()
 
         local okNeg, errNeg = IndustryUi.Sell(boss(), 'mining_co', -5)
         local okText, errText = IndustryUi.Sell(boss(), 'mining_co', 'abc')
@@ -388,10 +378,7 @@ def test_forged_qty_is_clamped_or_rejected_without_extra_writes():
 
 def test_client_supplied_price_fields_are_ignored():
     out = run("""
-        __reset()
-        __seedOrg('mining_co', 0)
-        __seedFacilityRow('mining_co', 10, { workstations = 3 })
-        __seedDemand('iron_ore', 20, 0)
+        __seedBasic()
         __globalMultiplier = 1.0
         __activityHeat = 1.0
 
@@ -406,10 +393,7 @@ def test_client_supplied_price_fields_are_ignored():
         __emit('FORGED_BAL', tostring(__balance('mining_co')))
         __emit('FORGED_QUOTA', tostring(__demandRow('iron_ore').quota_used))
 
-        __reset()
-        __seedOrg('mining_co', 0)
-        __seedFacilityRow('mining_co', 10, { workstations = 3 })
-        __seedDemand('iron_ore', 20, 0)
+        __seedBasic()
         __globalMultiplier = 1.0
         __activityHeat = 1.0
 
@@ -432,6 +416,13 @@ def test_client_supplied_price_fields_are_ignored():
 # ══════════════════════════════════════════════════════════════════
 # 7. 手机 App 可见性（job + gang）
 # ══════════════════════════════════════════════════════════════════
+
+
+#: 两个手机 harness 共用的输出助手（io.write 的 key|value 协议）。
+_EMIT_STUB = """function __emit(key, value)
+  io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
+end
+"""
 
 
 #: 两个手机 harness 共用的玩家表。job / gang 各一个 Boss，source=2 是「无组织」对照。
@@ -461,9 +452,7 @@ def _run_phone_chunks(stub: str, mids: list[str], body: str) -> dict[str, str]:
     script = "\n".join(
         [stub, registry, *mids, PHONE_APP.read_text(encoding="utf-8"), textwrap.dedent(body)]
     )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
+    return _exec_lua(script)
 
 
 def run_phone(body: str) -> dict[str, str]:
@@ -559,9 +548,7 @@ end
         ],
         body,
     )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
+    return _exec_lua(script)
 
 
 def test_phone_app_is_visible_only_to_org_members():
@@ -626,10 +613,7 @@ def test_gang_org_uses_same_snapshot_and_access_rules():
         local snap, err = IndustryUi.Snapshot(gangBoss(), 'cartel')
         __emit('OK', tostring(snap ~= nil))
         __emit('ERR', tostring(err or 'nil'))
-        __emit('ORG', tostring(snap and snap.orgLabel))
-        __emit('GRADE', tostring(snap and snap.gradeName))
-        __emit('ISBOSS', tostring(snap and snap.isBoss))
-        __emit('BAL', tostring(snap and snap.balance))
+        __emitSnapshotIdentity(snap)
         __emit('MAXQTY', tostring(snap and snap.sellable and snap.sellable.maxQty))
         __emit('PRODUCED', tostring(snap and snap.producedUnits))
 
@@ -664,10 +648,7 @@ def test_disabled_industry_returns_disabled_and_never_writes():
         __emit('SELL', tostring(okSell) .. ':' .. tostring(sellErr))
         __emit('HIRE', tostring(okHire) .. ':' .. tostring(hireErr))
         __emit('CAN_ACCESS', tostring(IndustryUi.CanAccess(boss())))
-        __emit('SALES', tostring(__salesCount()))
-        __emit('STOCK', tostring(__stock('mining_co')))
-        __emit('BAL', tostring(__balance('mining_co')))
-        __emit('WS', tostring(__facilityRows['mining_co'].workstations))
+        __emitWriteState()
     """, convars={"industry_enable": "false"})
     assert out["SNAP"] == "nil:disabled"
     assert out["ESTIMATE"] == "nil:disabled"
@@ -726,10 +707,7 @@ def test_ui_layer_boss_guard_short_circuits_before_the_sales_layer():
     断言非 Boss 根本到不了内层，而 Boss 能到。
     """
     out = run("""
-        __reset()
-        __seedOrg('mining_co', 0)
-        __seedFacilityRow('mining_co', 10, { workstations = 1 })
-        __seedDemand('iron_ore', 20, 0)
+        __seedBasic({ workstations = 1 })
 
         local reached = 0
         local realSell = IndustrySales.SellForPlayer

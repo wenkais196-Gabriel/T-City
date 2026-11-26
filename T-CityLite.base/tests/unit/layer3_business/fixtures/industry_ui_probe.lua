@@ -36,6 +36,32 @@ function __seedFacilityRow(orgId, stock, opts)
     }
 end
 
+--- 快照身份字段的统一回显（多个用例原本各抄一遍）。
+function __emitSnapshotIdentity(snap)
+    __emit('ORG', tostring(snap and snap.orgLabel))
+    __emit('GRADE', tostring(snap and snap.gradeName))
+    __emit('ISBOSS', tostring(snap and snap.isBoss))
+    __emit('BAL', tostring(snap and snap.balance))
+end
+
+--- 「这次到底写没写库」的统一回显（销售笔数 / 库存 / 金库 / 工位）。
+function __emitWriteState()
+    __emit('SALES', tostring(__salesCount()))
+    __emit('STOCK', tostring(__stock('mining_co')))
+    __emit('BAL', tostring(__balance('mining_co')))
+    __emit('WS', tostring(__facilityRows['mining_co'].workstations))
+end
+
+--- 写操作类用例的通用种子（余额 0、库存 10、工位 3、配额 20/0）。
+--- 单独抽出来是因为 5 个用例原本各抄一份，Sonar 新代码重复率因此超标。
+function __seedBasic(opts)
+    opts = opts or {}
+    __reset()
+    __seedOrg('mining_co', opts.balance or 0)
+    __seedFacilityRow('mining_co', opts.stock or 10, { workstations = opts.workstations or 3 })
+    __seedDemand('iron_ore', opts.total or 20, opts.used or 0)
+end
+
 --- 模拟「本周期已经卖过 qty 件」：orgUsed 的分子来自 industry_sales。
 function __seedSale(orgId, item, qty)
     local id = 1000 + #__sales + 1
