@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="noir" data-density="comfortable">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>T-City Custom Menu</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="cm-stage" id="cm-stage">
+    <div class="toast-stack" id="cm-toast-stack" aria-live="polite"></div>
+    <div class="viewport-guard" id="cm-viewport-guard">
+      <span class="badge tone-warning">VIEWPORT GUARD</span>
+      <div class="menu-title" style="font-size:18px;">窗口空间不足</div>
+      <div class="row-sub">建议分辨率不低于 1280x720。</div>
+    </div>
+    <section class="cm-mount is-hidden" id="cm-mount" aria-label="Interaction Menu"></section>
+  </main>
+
+  <script src="./renderer.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      if (typeof window === 'undefined' || !window.CustomMenu) return;
+      var mountEl = document.getElementById('cm-mount');
+      var toastEl = document.getElementById('cm-toast-stack');
+      window.CustomMenuHost = window.CustomMenu.attachHostApp({
+        doc: document,
+        mountEl: mountEl,
+        toastEl: toastEl
+      });
+    })();
+  </script>
+</body>
+</html>

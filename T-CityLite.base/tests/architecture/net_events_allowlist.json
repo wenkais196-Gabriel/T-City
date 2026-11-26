@@ -2264,6 +2264,15 @@
       "evidence": "handler 只读 source，不接 target；10 秒/人限流（reviveRestoreAt）；写入走 RestoreAfterRevive 的 clamp",
       "owner": "custom-consumables",
       "expires": "2027-06-30"
+    },
+    {
+      "name": "custom-menu:server:intent",
+      "file": "[custom]/custom-menu/server/main.lua",
+      "category": "civilian",
+      "reason": "custom-menu 统一菜单服务端动作唯一网关：仅接受服务端通过 AddEventHandler('custom-menu:server:registerIntent') 或 RegisterIntent export 显式注册的白名单 intent，未注册 intent 明确拒绝。",
+      "evidence": "handler 校验 payload 类型与 menuId/itemId/intent 字符串长度、基于 source 做 200ms COOLDOWN 限流，并在 serverIntents 注册表查不到或 handler 返回 false 时回传 status='denied'，不采信客户端 disabled 字段。",
+      "owner": "custom-menu",
+      "expires": "2027-06-30"
     }
   ]
 }
