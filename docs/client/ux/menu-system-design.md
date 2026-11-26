@@ -316,3 +316,11 @@ Push / Pop / Top / Path / IsTaken / Owns / ResetInput / RefreshFocus / FocusTrac
 本片只加棘轮禁止新增。垫片本身 0 处。
 
 垫片是**临时件**，M6 把 menuv 下线时随之一并删除（代码里已留 `M6(#348)` 标记）。
+
+**真机验收（2026-11-25，玩家实测）**：两条全部通过 —— ① 手机开着 `/admin` 不打开并提示
+「Close the current menu first」；② `/admin` 开着按 `Esc` 菜单关闭、**没有**呼出暂停菜单。
+对照：手机开着按 `Alt` 打不开、按 `I` 提示必须先关当前菜单。
+
+结论：`DisableControlAction(0, 199/200)` + `IsDisabledControlJustPressed` 足够拦住暂停菜单，
+**不需要** fallback 到 `DisableFrontendThisFrame()` / `SetFrontendActive`。
+同一轮玩家未报「方向键失灵」或「人物被冻住」，这两条按随主流程通过记录。
