@@ -13,7 +13,22 @@ IndustryCommands.Register()
 IndustryFacilityCommands.Register()
 IndustryProductionCommands.Register()
 IndustrySalesCommands.Register()
-IndustryUi.Register()
+
+-- QBCore 的 export 在**资源重启的瞬间可能还不可用**（实测：`restart qb-management` 紧接着
+-- `restart custom-industry` 会打一行 "UI callbacks not registered: qb-core unavailable"，
+-- 而资源照常 started —— 菜单从此静默失效，只有那一行日志能看出来）。
+-- 这里做有界重试，别让一次瞬态把整块 UI 打死。
+local uiAttempts = 0
+local function registerUi()
+    if IndustryUi.Register() then return end
+    uiAttempts = uiAttempts + 1
+    if uiAttempts >= 60 then
+        print('[custom-industry] UI callbacks failed after 60 attempts (30s); industry menu unavailable')
+        return
+    end
+    SetTimeout(500, registerUi)
+end
+registerUi()
 
 IndustryProduction.Start()
 -- 只做一次种子需求行校准（不新增调度）。

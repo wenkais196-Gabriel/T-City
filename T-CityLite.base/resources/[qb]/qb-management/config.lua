@@ -19,6 +19,11 @@ Config.BossMenus = {
     mechanic = {
         vector3(-347.59, -133.35, 39.01),
     },
+    -- 临时测试点（Davis Quarry 矿区入口）：产业组织（S5）的老板菜单入口。
+    -- 正式版应改到矿业公司办公室室内；这里只是让 /orgmenu 的注入项可达，验完可换坐标。
+    miner = {
+        vector3(2955.0, 2786.0, 41.5),
+    },
 }
 
 Config.GangMenus = {

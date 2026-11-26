@@ -21,6 +21,8 @@ local BOSS_GRADE_FALLBACK = 4
 -- 与 commands.lua 相同的惰性解析：FiveM 不跨资源共享 Lua 全局，qb-core 的导出
 -- 只能在第一次使用时取一次并缓存（见 [custom]/AGENTS.md 的已知坑）。
 local QBCore
+local coreLastError = nil
+
 local function core()
     if QBCore then return QBCore end
     local ok, value = pcall(function() return exports['qb-core']:GetCoreObject() end)
@@ -28,6 +30,7 @@ local function core()
         QBCore = value
         return value
     end
+    coreLastError = ok and ('not a table: ' .. type(value)) or tostring(value)
     return nil
 end
 
@@ -374,9 +377,14 @@ end
 --- 服务端接线：只在 industry_enable 打开时由 main.lua 调用。
 function IndustryUi.Register()
     local qb = core()
-    if not qb or type(qb.Functions) ~= 'table'
-        or type(qb.Functions.CreateCallback) ~= 'function' then
-        print('[custom-industry] UI callbacks not registered: qb-core unavailable')
+    -- ⚠️ 跨资源导出的函数在本 build 是**可调用表**（`type(fn) == 'table'`，靠 __call 调用）。
+    -- 所以不能写 `type(qb.Functions.CreateCallback) ~= 'function'` —— 那条守卫恒真，
+    -- 会把整套 UI 回调静默掉（实测：qb=table functions=table createCallback=table）。
+    -- 同一个坑在 AGENTS.md 的 NUI `cb` 一条里记过；这里只判 nil 与可调用性。
+    local createCallback = qb and qb.Functions and qb.Functions.CreateCallback
+    if not createCallback then
+        print(('[custom-industry] UI callbacks not registered: qb=%s err=%s'):format(
+            type(qb), tostring(coreLastError)))
         return false
     end
 
