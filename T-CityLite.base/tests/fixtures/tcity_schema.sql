@@ -1186,6 +1186,7 @@ CREATE TABLE IF NOT EXISTS `industry_audit` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- v4.1_industry_facility.sql — S2 设施 / 工位 / 库存
+-- v4.2_industry_production.sql — S3 累计产出埋点 produced_units
 CREATE TABLE IF NOT EXISTS `industry_facility` (
   `org_id` varchar(64) NOT NULL,
   `facility_type` varchar(48) NOT NULL,
@@ -1193,6 +1194,7 @@ CREATE TABLE IF NOT EXISTS `industry_facility` (
   `workstations` int(11) NOT NULL DEFAULT 0,
   `recipe_id` varchar(48) DEFAULT NULL,
   `stock` bigint(20) NOT NULL DEFAULT 0,
+  `produced_units` bigint(20) NOT NULL DEFAULT 0,
   `last_tick_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`org_id`),

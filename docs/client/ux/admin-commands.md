@@ -14,7 +14,7 @@ review_by: 2027-02-28
 
 # 管理员命令清单
 
-共 **349** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
+共 **350** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
 
 ## 危险命令但没有判权：0 条
 
@@ -26,7 +26,7 @@ review_by: 2027-02-28
 |---|---|
 | — | 158 |
 | QBCore | 106 |
-| restricted=true | 40 |
+| restricted=true | 41 |
 | job/gang 判定 | 35 |
 | handler 内判定 | 10 |
 
@@ -155,6 +155,7 @@ review_by: 2027-02-28
 | `orgfundgrant` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:224 |
 | `orgfundwithdraw` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:167 |
 | `orghire` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands_facility.lua:91 |
+| `orgproduce` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-industry/server/commands_production.lua:27 |
 
 ### custom-justice
 

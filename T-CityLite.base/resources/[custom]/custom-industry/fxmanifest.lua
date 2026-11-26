@@ -3,8 +3,8 @@ game 'gta5'
 lua54 'yes'
 
 author 'T-City'
-description 'Industry S1/S2: treasury, ledger, audit, facilities and workstations (server only)'
-version '0.2.0'
+description 'Industry S1-S3: treasury, ledger, audit, facilities, workstations and lazy production (server only)'
+version '0.3.0'
 
 server_only 'yes'
 
@@ -16,12 +16,15 @@ server_scripts {
     '@core-framework/shared/money_aliases.lua',
     'config.lua',
     'config/facility.lua',
+    'config/production.lua',
     'server/treasury.lua',
     'server/audit.lua',
     'server/access.lua',
     'server/facility.lua',
+    'server/production.lua',
     'server/commands.lua',
     'server/commands_facility.lua',
+    'server/commands_production.lua',
     'server/main.lua',
 }
 

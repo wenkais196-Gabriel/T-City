@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-25
+updated: 2026-11-26
 review_by: 2027-04-30
 ---
 
@@ -42,6 +42,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   条 `UPDATE … WHERE workstations = ? AND workstations < ?` 里，写行失败/冲突会退款。
   命令 `/orgbuild`、`/orghire`、`/orgfacility`（Grade4，复用共享 `IndustryAccess.IsOrgBoss`）。
   迁移 `v4.1_industry_facility.sql`；无 net event / NUI / exports。
+- **S3 离线生产（`custom-industry`）**：`IndustryProduction.Compute` 是纯函数
+  （`dt = now - last_tick_at`，`effectiveDt = min(dt, max_catchup)`，
+  `produced = floor(workstations × unitsPerHour × 倍率 × effectiveDt / 3600)`，
+  库存截断 `min(期望产出, cap - stock)`）；tick / 玩家上线 / 控制台 `orgproduce`
+  三条入口都走同一个 `SettleFacility`，没有离线专用公式。写库只走 `Db.Update`，
+  以 `last_tick_at` 做 CAS，并发 tick 不会双算；产出只进 `industry_facility.stock`，
+  满仓冻结且不产生任何通知/回执；`produced_units` 累计列供 S7 结算（迁移
+  `v4.2_industry_production.sql`，幂等 `ADD COLUMN IF NOT EXISTS`）。新增 convar：
+  `industry_tick_seconds`（默认 30）、`industry_max_catchup`（默认 3600）、
+  `industry_units_per_hour`（默认 12）、`industry_production_debug`（默认 false，
+  只注册 restricted 原生命令 `orgproduce`，仅控制台）。无 net event / NUI / exports，
+  不碰 `Treasury`。
 - **`docs/server-design/12-industry-operations.md`：产业运营 / 组织运营的 MVP 基础方案**（design-only，
   无代码）。Hermes 与 Claude Code 各出一版独立设计后合并，产出四样东西：① 五条**事实纠错**
   （组织钱包不是"不存在"而是 qb-banking 的 `bank_accounts` 半成品——缺负余额闸 / 幂等 ref /
