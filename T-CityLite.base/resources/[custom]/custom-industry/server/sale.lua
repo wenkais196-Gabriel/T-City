@@ -427,3 +427,13 @@ function IndustrySales.SettleSale(orgId, item, qty, ref)
     end
     return ok, err, result
 end
+
+--- 玩家侧唯一入口（S5 的菜单 / 回调调这个，而不是直接调 SettleSale）。
+--- 授权沿用 S1/S2 的同一份 IndustryAccess.IsOrgBoss；分级授权留给 S5/治理。
+---@param Player table QBCore 玩家对象
+---@return boolean ok, string|nil errcode, table|nil result
+function IndustrySales.SellForPlayer(Player, orgId, item, qty, ref)
+    if not Player or not Player.PlayerData then return false, 'not_player' end
+    if not IndustryAccess.IsOrgBoss(Player, orgId) then return false, 'not_boss' end
+    return IndustrySales.SettleSale(orgId, item, qty, ref)
+end

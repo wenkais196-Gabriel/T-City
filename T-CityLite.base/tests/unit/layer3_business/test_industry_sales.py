@@ -48,6 +48,7 @@ SALE_SRC = RES / "server" / "sale.lua"
 COMMANDS_SALES_SRC = RES / "server" / "commands_sales.lua"
 TREASURY_SRC = RES / "server" / "treasury.lua"
 AUDIT_SRC = RES / "server" / "audit.lua"
+ACCESS_SRC = RES / "server" / "access.lua"
 CONFIG_SRC = RES / "config.lua"
 SALES_CONFIG_SRC = RES / "config" / "sales.lua"
 FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
@@ -103,6 +104,8 @@ def run(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
         + TREASURY_SRC.read_text(encoding="utf-8")
         + "\n"
         + AUDIT_SRC.read_text(encoding="utf-8")
+        + "\n"
+        + ACCESS_SRC.read_text(encoding="utf-8")
         + "\n"
         + SALE_SRC.read_text(encoding="utf-8")
         + "\n"
@@ -466,6 +469,48 @@ def test_multiplier_and_heat_come_from_core_economy_only():
     assert "GetGlobalMultiplier" in source and "GetActivityHeat" in source
     assert "economy_reward_scale" not in source, (
         "sale.lua 自己读了全局倍率 convar —— 系数必须只从 core_economy 拿"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
+# 7b. 玩家侧入口：只复用 IndustryAccess.IsOrgBoss（S5 调这个）
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_player_entry_reuses_is_org_boss_and_sells_through_settle_sale():
+    out = run("""
+        __reset()
+        __seedOrg('mining_co', 0)
+        __seedFacility('mining_co', 10)
+        __seedDemand('iron_ore', 20, 0)
+
+        local boss = { PlayerData = { job = { name = 'miner', grade = { level = 4 } } } }
+        local member = { PlayerData = { job = { name = 'miner', grade = { level = 1 } } } }
+
+        local okBoss, errBoss = IndustrySales.SellForPlayer(
+            boss, 'mining_co', 'iron_ore', 1, 'boss')
+        local okMember, errMember = IndustrySales.SellForPlayer(
+            member, 'mining_co', 'iron_ore', 1, 'member')
+        local okNil, errNil = IndustrySales.SellForPlayer(
+            nil, 'mining_co', 'iron_ore', 1, 'nil')
+
+        __emit('BOSS', tostring(okBoss))
+        __emit('BOSS_ERR', tostring(errBoss or 'nil'))
+        __emit('MEMBER', tostring(okMember))
+        __emit('MEMBER_ERR', tostring(errMember or 'nil'))
+        __emit('NIL', tostring(okNil))
+        __emit('NIL_ERR', tostring(errNil or 'nil'))
+        __emit('SALES', tostring(__salesCount()))
+        __emit('STOCK', tostring(__stock('mining_co')))
+        __emit('BAL', tostring(__balance('mining_co')))
+    """)
+    assert out["BOSS"] == "true" and out["BOSS_ERR"] == "nil", f"Boss 卖单失败：{out}"
+    assert out["MEMBER"] == "false" and out["MEMBER_ERR"] == "not_boss", (
+        f"非 Boss 必须 not_boss：{out}"
+    )
+    assert out["NIL"] == "false" and out["NIL_ERR"] == "not_player"
+    assert out["SALES"] == "1" and out["STOCK"] == "9" and out["BAL"] == "50", (
+        "被拒绝的玩家请求动了库存/金库"
     )
 
 
