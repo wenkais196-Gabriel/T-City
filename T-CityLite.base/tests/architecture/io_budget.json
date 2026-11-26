@@ -22,8 +22,8 @@
       "note": "**等条件**循环（while <cond> / for / repeat-until-cond）+ Wait(0)：等到就退出，本身是正常写法（qb-core 的 while not DoesEntityExist(veh) 这类）。计数是为了让「等一个永远不会成立的条件」和「for 里的忙等」显形。（12→13 是因为分类器把 connectqueue / monitor 里两个 for+Wait(0) 认了进来，判据更严，不是新债。）"
     },
     "polling_loops_unknown_interval": {
-      "budget": 21,
-      "note": "无限循环里 Wait 的间隔由配置/变量决定（如 Wait(Config.DecayIntervalMs)），静态看不到真实频率。单独计数是为了让「把 Wait(50) 改成 Wait(ms)」不能静默绕过 fast/warm；改这些配置值时请人看一眼。"
+      "budget": 22,
+      "note": "无限循环里 Wait 的间隔由配置/变量决定（如 Wait(Config.DecayIntervalMs)），静态看不到真实频率。单独计数是为了让「把 Wait(50) 改成 Wait(ms)」不能静默绕过 fast/warm；改这些配置值时请人看一眼。2026-11-26 S3 由 21 提到 22：custom-industry 的生产 tick（Wait(math.max(1, TickSeconds) * 1000)）——间隔下限被 math.max 钉死在 1 秒，不是热轮询；离线追赶必须周期性跑，没有事件驱动替代。owner=custom-industry expires=2027-03-31"
     },
     "broadcast_sites": {
       "budget": 143,
