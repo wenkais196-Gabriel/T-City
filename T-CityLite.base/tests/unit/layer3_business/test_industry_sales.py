@@ -29,101 +29,28 @@ quota_total = 20（单组织上限 10）来验证 `10 × 50 × 倍率`；quota_t
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 import sys
-import textwrap
 from pathlib import Path
 
-import pytest
-
-from lua_probe import BASE, DB_ADAPTER
+from industry_harness import (
+    BASE,
+    COMMANDS_SALES_SRC,
+    DASHBOARD,
+    MIGRATION_SALES,
+    RES,
+    RESOURCES,
+    SALE_SRC,
+    SCHEMA_FIXTURE,
+    run_sales as run,
+    run_wiring,
+    strip_sql_comments,
+)
 
 # 复用架构闸门的 Lua 词法工具（剥注释但保留字符串），避免再抄一份扫描器。
 sys.path.insert(0, str(BASE / "tests" / "architecture"))
 import lua_source  # noqa: E402
 
-RES = BASE / "resources" / "[custom]" / "custom-industry"
-SALE_SRC = RES / "server" / "sale.lua"
-ORG_ID_SRC = SALE_SRC.parent / "org_id.lua"  # 共享模块，必须排在 treasury 之前
-COMMANDS_SALES_SRC = RES / "server" / "commands_sales.lua"
-TREASURY_SRC = RES / "server" / "treasury.lua"
-AUDIT_SRC = RES / "server" / "audit.lua"
-ACCESS_SRC = RES / "server" / "access.lua"
-CONFIG_SRC = RES / "config.lua"
-SALES_CONFIG_SRC = RES / "config" / "sales.lua"
-CYCLE_CONFIG_SRC = RES / "config" / "cycle.lua"
-FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
-PRODUCTION_CONFIG_SRC = RES / "config" / "production.lua"
-CYCLE_SRC = RES / "server" / "cycle.lua"
-MANIFEST = RES / "fxmanifest.lua"
-DASHBOARD = BASE / "resources" / "[system]" / "economy-dashboard" / "server" / "main.lua"
-MIGRATION = BASE / "migrations" / "v4.3_industry_sales.sql"
-SCHEMA_FIXTURE = BASE / "tests" / "fixtures" / "tcity_schema.sql"
-PROBE = Path(__file__).resolve().parent / "fixtures" / "industry_sales_probe.lua"
-
-RESOURCES = BASE / "resources"
-
-
-def lua() -> str:
-    exe = shutil.which("lua5.4") or shutil.which("lua")
-    if not exe:
-        pytest.skip("lua5.4 不可用")
-    return exe
-
-
-def parse(out_text: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for line in out_text.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        out.setdefault(key.strip(), value.strip())
-    return out
-
-
-def config_text() -> str:
-    return "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (
-            CONFIG_SRC, FACILITY_CONFIG_SRC, PRODUCTION_CONFIG_SRC,
-            SALES_CONFIG_SRC, CYCLE_CONFIG_SRC,
-        )
-    )
-
-
-def lua_table(values: dict[str, str]) -> str:
-    return "{ " + ", ".join(f"{key} = '{value}'" for key, value in values.items()) + " }"
-
-
-def run(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
-    """fixture（假 DB）→ db.lua → 可选 convar → 真实配置/模块 → body。"""
-    prelude = f"__convars = {lua_table(convars)}\n" if convars else ""
-    script = (
-        PROBE.read_text(encoding="utf-8")
-        + "\n"
-        + DB_ADAPTER.read_text(encoding="utf-8")
-        + "\n"
-        + prelude
-        + config_text()
-        + "\n"
-        + ORG_ID_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + CYCLE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + TREASURY_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + AUDIT_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + ACCESS_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + SALE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + textwrap.dedent(body)
-    )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
+MIGRATION = MIGRATION_SALES
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -608,11 +535,8 @@ def test_ensure_seed_uses_convar_and_never_shrinks_used_quota():
 
 
 def test_migration_and_schema_fixture_declare_tables_and_idempotency_key():
-    def strip(sql: str) -> str:
-        return re.sub(r"--[^\n]*", "", re.sub(r"/\*.*?\*/", "", sql, flags=re.S))
-
-    migration = strip(MIGRATION.read_text(encoding="utf-8"))
-    fixture = strip(SCHEMA_FIXTURE.read_text(encoding="utf-8"))
+    migration = strip_sql_comments(MIGRATION.read_text(encoding="utf-8"))
+    fixture = strip_sql_comments(SCHEMA_FIXTURE.read_text(encoding="utf-8"))
 
     for table in ("industry_demand", "industry_sales"):
         pattern = rf"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+`{table}`"
@@ -753,96 +677,6 @@ def test_dashboard_subscribes_to_industry_sale_inflow():
 # ══════════════════════════════════════════════════════════════════
 # 12. 接线：manifest 全加载 + 后台入口默认关闭
 # ══════════════════════════════════════════════════════════════════
-
-WIRING_STUBS = """
-GetConvar = function(name, default)
-    if name == 'industry_enable' then return 'true' end
-    if name == 'industry_sales_debug' then return '__DEBUG__' end
-    if name == 'industry_production_debug' then return 'false' end
-    return default
-end
-
-__registered = {}
-__native = {}
-__callbacks = {}
-__exportNames = {}
-__events = 0
-__threads = 0
-local coreObject = {
-    Commands = {
-        Add = function(name) __registered[#__registered + 1] = name end,
-    },
-    Functions = {
-        GetPlayer = function() return nil end,
-        HasPermission = function() return false end,
-        CreateCallback = function(name) __callbacks[#__callbacks + 1] = name end,
-    },
-}
-
-exports = setmetatable({}, {
-    __index = function(_, resource)
-        if resource ~= 'qb-core' then return nil end
-        return { GetCoreObject = function() return coreObject end }
-    end,
-    __call = function(_, name)
-        __exportNames[#__exportNames + 1] = name
-    end,
-})
-
-MySQL = {}
-
-AddEventHandler = function() __events = __events + 1 end
-CreateThread = function() __threads = __threads + 1 end
-Wait = function() end
-RegisterCommand = function(name, _, restricted)
-    __native[#__native + 1] = name .. ':' .. tostring(restricted)
-end
-
-function __emit(key, value)
-    io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
-end
-"""
-
-
-def server_script_files() -> list[Path]:
-    text = MANIFEST.read_text(encoding="utf-8")
-    match = re.search(r"server_scripts\s*\{(.*?)\}", text, re.S)
-    assert match, "fxmanifest 里找不到 server_scripts 块"
-    entries = re.findall(r"['\"]([^'\"]+)['\"]", match.group(1))
-    files = [RES / entry for entry in entries if not entry.startswith("@")]
-    assert files, "server_scripts 里没有任何本地文件"
-    for path in files:
-        assert path.is_file(), f"manifest 列出的文件不存在：{path}"
-    return files
-
-
-def run_wiring(debug: bool) -> dict[str, str]:
-    files = server_script_files()
-    first, rest = files[0], files[1:]
-    body = "\n".join(path.read_text(encoding="utf-8") for path in rest) + "\n" + """
-        __emit('QBCORE_COUNT', tostring(#__registered))
-        __emit('QBCORE_NAMES', table.concat(__registered, ','))
-        __emit('CALLBACKS', table.concat(__callbacks, ','))
-        __emit('EXPORTS', table.concat(__exportNames, ','))
-        __emit('NATIVE', table.concat(__native, ','))
-        __emit('EVENTS', tostring(__events))
-        __emit('THREADS', tostring(__threads))
-        __emit('HAS_GLOBAL', tostring(rawget(_G, 'QBCore') ~= nil))
-    """
-    stubs = WIRING_STUBS.replace("__DEBUG__", "true" if debug else "false")
-    script = (
-        stubs
-        + "\n"
-        + DB_ADAPTER.read_text(encoding="utf-8")
-        + "\n"
-        + first.read_text(encoding="utf-8")
-        + "\n"
-        + body
-    )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
-
 
 def test_all_server_scripts_wire_without_global_qbcore_and_debug_command_is_off():
     out = run_wiring(debug=False)

@@ -1,4 +1,4 @@
-﻿-- fixtures/industry_cycle_probe.lua — S6/S7 的离线假数据库（真跑 Lua，只替换 MySQL）。
+-- fixtures/industry_cycle_probe.lua — S6/S7 的离线假数据库（真跑 Lua，只替换 MySQL）。
 --
 -- 覆盖 cycle.lua / settlement.lua / announce.lua / commands_cycle.lua 以及
 -- sale.lua / facility.lua / production.lua 的**读点**：

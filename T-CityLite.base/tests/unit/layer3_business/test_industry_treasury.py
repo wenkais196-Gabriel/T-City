@@ -15,64 +15,20 @@
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
-import textwrap
-from pathlib import Path
 
-import pytest
-
-from lua_probe import BASE, load_industry
-
-RES = BASE / "resources" / "[custom]" / "custom-industry"
-SRC = RES / "server" / "treasury.lua"
-COMMANDS = RES / "server" / "commands.lua"
-AUDIT = RES / "server" / "audit.lua"
-FIXTURE = Path(__file__).resolve().parent / "fixtures" / "industry_treasury_probe.lua"
-MIGRATION = BASE / "migrations" / "v4.0_industry_treasury.sql"
-SCHEMA_FIXTURE = BASE / "tests" / "fixtures" / "tcity_schema.sql"
-
-TABLES = ("org_treasury", "org_ledger", "industry_audit")
-UNIQUE_KEY = re.compile(
-    r"UNIQUE\s+KEY\s+`uniq_org_ref`\s*\(\s*`org_id`\s*,\s*`ref`\s*\)", re.I
+from industry_harness import (
+    MIGRATION_TREASURY,
+    SCHEMA_FIXTURE,
+    UNIQUE_REF_KEY,
+    run_grant,
+    run_treasury as run,
+    run_treasury_commands as run_commands,
+    strip_sql_comments,
 )
 
-
-def _strip_sql_comments(sql: str) -> str:
-    return re.sub(r"--[^\n]*", "", re.sub(r"/\*.*?\*/", "", sql, flags=re.S))
-
-
-def _migration_sql() -> str:
-    return _strip_sql_comments(MIGRATION.read_text(encoding="utf-8"))
-
-
-def unique_ref_declared() -> bool:
-    """幂等键是否真的写在迁移里 —— 桩的唯一性开关由这个事实驱动。"""
-    return UNIQUE_KEY.search(_migration_sql()) is not None
-
-
-def lua() -> str:
-    exe = shutil.which("lua5.4") or shutil.which("lua")
-    if not exe:
-        pytest.skip("lua5.4 不可用")
-    return exe
-
-
-def run(body: str) -> dict[str, str]:
-    """把探针桩 + db.lua + treasury.lua + body 拼成一次 Lua 运行。"""
-    stubs = FIXTURE.read_text(encoding="utf-8")
-    flag = "true" if unique_ref_declared() else "false"
-    script = load_industry(stubs, SRC, f"__uniqueRef = {flag}\n" + textwrap.dedent(body))
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-
-    out: dict[str, str] = {}
-    for line in proc.stdout.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        out.setdefault(key.strip(), value.strip())
-    return out
+MIGRATION = MIGRATION_TREASURY
+TABLES = ("org_treasury", "org_ledger", "industry_audit")
+UNIQUE_KEY = UNIQUE_REF_KEY
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -356,100 +312,6 @@ def test_get_ledger_uses_explicit_columns_and_limit():
 # 命令注册：不能依赖不存在的全局 QBCore
 # ══════════════════════════════════════════════════════════════════
 
-#: 故意**不**定义全局 QBCore。真机事故：commands.lua 直接索引全局 QBCore，
-#: 资源加载成功、日志一行 SCRIPT ERROR、四条命令全空。这里只提供 qb-core
-#: 的导出入口，让「惰性解析」成为唯一能通过的形状。
-COMMAND_STUBS = """
-Config = {
-    Industry = {
-        OrgWhitelist = {
-            mining_co = { kind = 'job', name = 'miner' },
-            cartel = { kind = 'gang', name = 'cartel' },
-        },
-        BossGrade = 4,
-        LedgerDefaultLimit = 20,
-        LedgerMaxLimit = 100,
-    },
-}
-
-__registered = {}
-__handlers = {}
-__coreCalls = 0
-local coreObject = {
-    Commands = {
-        Add = function(name, help, args, required, handler)
-            __registered[#__registered + 1] = name
-            __handlers[name] = handler
-        end,
-    },
-    Functions = {
-        GetPlayer = function() return nil end,
-        HasPermission = function() return false end,
-    },
-}
-
-exports = setmetatable({}, {
-    __index = function(_, resource)
-        if resource ~= 'qb-core' then return nil end
-        return {
-            GetCoreObject = function()
-                __coreCalls = __coreCalls + 1
-                return coreObject
-            end,
-        }
-    end,
-})
-
-function __emit(key, value)
-    io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
-end
-"""
-
-
-def run_commands(body: str) -> dict[str, str]:
-    """stubs + db.lua + audit.lua（真加载）+ commands.lua（真加载）+ body。"""
-    script = load_industry(
-        COMMAND_STUBS,
-        AUDIT,
-        COMMANDS.read_text(encoding="utf-8") + "\n" + textwrap.dedent(body),
-    )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-
-    out: dict[str, str] = {}
-    for line in proc.stdout.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        out.setdefault(key.strip(), value.strip())
-    return out
-
-
-#: 假 DB（fixture）+ 命令依赖（Config/exports）。两边都真加载 audit.lua / treasury.lua /
-#: commands.lua，所以 grant 的整条路径（EnsureAccount → Deposit → 审计）都被覆盖。
-GRANT_STUBS = FIXTURE.read_text(encoding="utf-8") + "\n" + COMMAND_STUBS
-
-
-def run_grant(body: str) -> dict[str, str]:
-    """fixture + db.lua + treasury.lua + audit.lua + commands.lua + body。"""
-    script = load_industry(
-        GRANT_STUBS,
-        SRC,
-        AUDIT.read_text(encoding="utf-8") + "\n"
-        + COMMANDS.read_text(encoding="utf-8") + "\n"
-        + textwrap.dedent(body),
-    )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-
-    out: dict[str, str] = {}
-    for line in proc.stdout.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        out.setdefault(key.strip(), value.strip())
-    return out
-
 
 def test_ensure_account_creates_missing_row_and_keeps_existing_balance():
     """EnsureAccount：不存在则建行（余额 0），已存在则不动余额、不报错。"""
@@ -579,8 +441,8 @@ def test_commands_register_without_a_global_qbcore():
 
 def test_migration_and_fixture_declare_tables_and_idempotency_key():
     """迁移删掉 UNIQUE KEY 时，这条与幂等用例都应红（见 test_duplicate_ref...）。"""
-    migration = _migration_sql()
-    fixture = _strip_sql_comments(SCHEMA_FIXTURE.read_text(encoding="utf-8"))
+    migration = strip_sql_comments(MIGRATION.read_text(encoding="utf-8"))
+    fixture = strip_sql_comments(SCHEMA_FIXTURE.read_text(encoding="utf-8"))
 
     for table in TABLES:
         pattern = rf"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+`{table}`"

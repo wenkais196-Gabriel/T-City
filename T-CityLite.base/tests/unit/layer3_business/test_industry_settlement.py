@@ -17,112 +17,26 @@
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 import sys
-import textwrap
-from pathlib import Path
 
-import pytest
-
-from lua_probe import BASE, DB_ADAPTER
+from industry_harness import (
+    BASE,
+    CYCLE_SRC,
+    ANNOUNCE_SRC,
+    COMMANDS_CYCLE_SRC,
+    MIGRATION_CYCLE,
+    SCHEMA_FIXTURE,
+    SETTLEMENT_SRC,
+    TABLE_OWNERS,
+    TRUE,
+    run_full as run,
+    strip_sql_comments,
+)
 
 sys.path.insert(0, str(BASE / "tests" / "architecture"))
 import lua_source  # noqa: E402
 
-RES = BASE / "resources" / "[custom]" / "custom-industry"
-CONFIG_SRC = RES / "config.lua"
-FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
-PRODUCTION_CONFIG_SRC = RES / "config" / "production.lua"
-SALES_CONFIG_SRC = RES / "config" / "sales.lua"
-CYCLE_CONFIG_SRC = RES / "config" / "cycle.lua"
-ORG_ID_SRC = RES / "server" / "org_id.lua"
-TREASURY_SRC = RES / "server" / "treasury.lua"
-AUDIT_SRC = RES / "server" / "audit.lua"
-ACCESS_SRC = RES / "server" / "access.lua"
-ANNOUNCE_SRC = RES / "server" / "announce.lua"
-CYCLE_SRC = RES / "server" / "cycle.lua"
-SETTLEMENT_SRC = RES / "server" / "settlement.lua"
-FACILITY_SRC = RES / "server" / "facility.lua"
-PRODUCTION_SRC = RES / "server" / "production.lua"
-SALE_SRC = RES / "server" / "sale.lua"
-COMMANDS_CYCLE_SRC = RES / "server" / "commands_cycle.lua"
-MIGRATION = BASE / "migrations" / "v4.4_industry_cycle.sql"
-SCHEMA_FIXTURE = BASE / "tests" / "fixtures" / "tcity_schema.sql"
-TABLE_OWNERS = BASE / "tests" / "architecture" / "table_owners.json"
-PROBE = Path(__file__).resolve().parent / "fixtures" / "industry_cycle_probe.lua"
-
-TRUE = "true"
-FALSE = "false"
-
-
-def lua() -> str:
-    exe = shutil.which("lua5.4") or shutil.which("lua")
-    if not exe:
-        pytest.skip("lua5.4 不可用")
-    return exe
-
-
-def parse(out_text: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for line in out_text.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        out.setdefault(key.strip(), value.strip())
-    return out
-
-
-def config_text() -> str:
-    return "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (
-            CONFIG_SRC, FACILITY_CONFIG_SRC, PRODUCTION_CONFIG_SRC,
-            SALES_CONFIG_SRC, CYCLE_CONFIG_SRC,
-        )
-    )
-
-
-def run(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
-    prelude = ""
-    if convars:
-        pairs = ", ".join(f"{key} = '{value}'" for key, value in convars.items())
-        prelude = f"__convars = {{ {pairs} }}\n"
-    script = (
-        PROBE.read_text(encoding="utf-8")
-        + "\n"
-        + DB_ADAPTER.read_text(encoding="utf-8")
-        + "\n"
-        + prelude
-        + config_text()
-        + "\n"
-        + ORG_ID_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + TREASURY_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + AUDIT_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + ACCESS_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + ANNOUNCE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + CYCLE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + SETTLEMENT_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + FACILITY_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + PRODUCTION_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + SALE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + COMMANDS_CYCLE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + textwrap.dedent(body)
-    )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
+MIGRATION = MIGRATION_CYCLE
 
 
 SEED = """
@@ -449,11 +363,8 @@ def test_prestige_formula_matches_the_spec():
 
 
 def test_migration_and_fixture_declare_the_settlement_idempotency_key():
-    def strip(sql: str) -> str:
-        return re.sub(r"--[^\n]*", "", re.sub(r"/\*.*?\*/", "", sql, flags=re.S))
-
-    migration = strip(MIGRATION.read_text(encoding="utf-8"))
-    fixture = strip(SCHEMA_FIXTURE.read_text(encoding="utf-8"))
+    migration = strip_sql_comments(MIGRATION.read_text(encoding="utf-8"))
+    fixture = strip_sql_comments(SCHEMA_FIXTURE.read_text(encoding="utf-8"))
 
     unique = re.compile(
         r"UNIQUE\s+KEY\s+`uniq_org_cycle`\s*\(\s*`org_id`\s*,\s*`cycle_no`\s*\)", re.I

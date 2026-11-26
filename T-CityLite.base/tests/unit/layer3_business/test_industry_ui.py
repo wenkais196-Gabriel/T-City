@@ -22,151 +22,25 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 import textwrap
-from pathlib import Path
 
-import pytest
-
-from lua_probe import BASE, DB_ADAPTER
-
-RES = BASE / "resources" / "[custom]" / "custom-industry"
-PHONE = BASE / "resources" / "[custom]" / "custom-phone"
-SALE_SRC = RES / "server" / "sale.lua"
-FACILITY_SRC = RES / "server" / "facility.lua"
-TREASURY_SRC = RES / "server" / "treasury.lua"
-AUDIT_SRC = RES / "server" / "audit.lua"
-ACCESS_SRC = RES / "server" / "access.lua"
-ORG_ID_SRC = RES / "server" / "org_id.lua"
-#: 断言里反复出现的协议字面量（Sonar 的重复字面量规则会盯 "true" / "nil"）。
-TRUE = "true"
-FALSE = "false"
-NIL = "nil"
-
-
-UI_SRC = RES / "server" / "ui.lua"
-CONFIG_SRC = RES / "config.lua"
-FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
-PRODUCTION_CONFIG_SRC = RES / "config" / "production.lua"
-SALES_CONFIG_SRC = RES / "config" / "sales.lua"
-CYCLE_CONFIG_SRC = RES / "config" / "cycle.lua"
-CYCLE_SRC = RES / "server" / "cycle.lua"
-MANIFEST = RES / "fxmanifest.lua"
-
-PHONE_REGISTRY = PHONE / "server" / "phone_apps.lua"
-PHONE_APP = PHONE / "server" / "apps" / "industry.lua"
-PHONE_MANIFEST = PHONE / "fxmanifest.lua"
-
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
-SALES_PROBE = FIXTURES / "industry_sales_probe.lua"
-UI_PROBE = FIXTURES / "industry_ui_probe.lua"
-
-
-def lua() -> str:
-    exe = shutil.which("lua5.4") or shutil.which("lua")
-    if not exe:
-        pytest.skip("lua5.4 不可用")
-    return exe
-
-
-def _exec_lua(script: str) -> dict[str, str]:
-    """跑一段拼好的 Lua 并解析 key|value 输出（三个 harness 共用）。"""
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
-
-
-def parse(out_text: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for line in out_text.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        out.setdefault(key.strip(), value.strip())
-    return out
-
-
-def config_text() -> str:
-    return "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (
-            CONFIG_SRC, FACILITY_CONFIG_SRC, PRODUCTION_CONFIG_SRC,
-            SALES_CONFIG_SRC, CYCLE_CONFIG_SRC,
-        )
-    )
-
-
-def lua_table(values: dict[str, str]) -> str:
-    return "{ " + ", ".join(f"{key} = '{value}'" for key, value in values.items()) + " }"
-
-
-PLAYERS = """
-local function boss()
-    return { PlayerData = {
-        citizenid = 'cid-boss',
-        job = { name = 'miner', label = '洛圣都矿业公司',
-                grade = { level = 4, name = 'Mine Owner' } },
-    } }
-end
-local function member()
-    return { PlayerData = {
-        citizenid = 'cid-member',
-        job = { name = 'miner', label = '洛圣都矿业公司',
-                grade = { level = 1, name = '矿工' } },
-    } }
-end
-local function outsider()
-    return { PlayerData = {
-        citizenid = 'cid-out',
-        job = { name = 'police', label = '警察',
-                grade = { level = 4, name = 'Chief' } },
-    } }
-end
-local function gangBoss()
-    return { PlayerData = {
-        citizenid = 'cid-gang',
-        gang = { name = 'cartel', label = '卡特尔',
-                 grade = { level = 4, name = 'Boss' } },
-    } }
-end
-"""
-
-
-def run(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
-    """S4 假 DB → S5 扩展 → db.lua → convar → 真实配置/模块 → body。"""
-    prelude = f"__convars = {lua_table(convars)}\n" if convars else "__convars = { industry_enable = 'true' }\n"
-    script = (
-        SALES_PROBE.read_text(encoding="utf-8")
-        + "\n"
-        + UI_PROBE.read_text(encoding="utf-8")
-        + "\n"
-        + DB_ADAPTER.read_text(encoding="utf-8")
-        + "\n"
-        + prelude
-        + config_text()
-        + "\n"
-        + ORG_ID_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + CYCLE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + TREASURY_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + AUDIT_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + ACCESS_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + FACILITY_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + SALE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + UI_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + PLAYERS
-        + "\n"
-        + textwrap.dedent(body)
-    )
-    return _exec_lua(script)
+from industry_harness import (
+    ACCESS_SRC,
+    CONFIG_SRC,
+    FALSE,
+    MANIFEST,
+    NIL,
+    ORG_ID_SRC,
+    PHONE_APP,
+    PHONE_MANIFEST,
+    PHONE_REGISTRY,
+    SALE_SRC,
+    TRUE,
+    UI_SRC,
+    run_script,
+    run_ui as run,
+    run_wiring,
+)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -499,7 +373,7 @@ def _run_phone_chunks(stub: str, mids: list[str], body: str) -> dict[str, str]:
     script = "\n".join(
         [stub, registry, *mids, PHONE_APP.read_text(encoding="utf-8"), textwrap.dedent(body)]
     )
-    return _exec_lua(script)
+    return run_script(script)
 
 
 def run_phone(body: str) -> dict[str, str]:
@@ -595,7 +469,6 @@ end
         ],
         body,
     )
-    return _exec_lua(script)
 
 
 def test_phone_app_is_visible_only_to_org_members():
@@ -720,9 +593,7 @@ def test_disabled_industry_returns_disabled_and_never_writes():
 
 
 def test_ui_wiring_registers_callbacks_and_exports():
-    import test_industry_sales as sales_tests
-
-    out = sales_tests.run_wiring(False)
+    out = run_wiring(False)
     callbacks = set(filter(None, out["CALLBACKS"].split(",")))
     exports = set(filter(None, out["EXPORTS"].split(",")))
     assert callbacks == {
@@ -792,41 +663,10 @@ def test_disabled_resource_still_answers_the_ui_probe():
     —— 每个玩家每次上线一条，而且是在**支持配置**下出现的噪音。
     关闸分支只允许注册这一个回调，其余命令 / 导出 / 事件一个都不能有。
     """
-    import subprocess
-
-    import test_industry_sales as sales_tests
-
-    stubs = sales_tests.WIRING_STUBS.replace(
-        "if name == 'industry_enable' then return 'true' end",
-        "if name == 'industry_enable' then return 'false' end",
-    )
-    files = sales_tests.server_script_files()
     # 关闸分支里有顶层的 `return`。这些文件是被拼成**一个 chunk** 执行的，
     # 顶层 return 会结束整个 chunk —— 后面的 emit 全被跳过（接线用例在启用分支下才碰不到这问题）。
     # 所以整段包进 pcall：return 只退出这个函数，统计照样打出来。
-    script = (
-        stubs
-        + "\n"
-        + sales_tests.DB_ADAPTER.read_text(encoding="utf-8")
-        + "\n"
-        + "local __ok, __err = pcall(function()\n"
-        + "\n".join(path.read_text(encoding="utf-8") for path in files)
-        + "\nend)\n"
-        + """
-        __emit('LOAD_OK', tostring(__ok) .. ':' .. tostring(__err))
-        __emit('CALLBACKS', table.concat(__callbacks, ','))
-        __emit('EXPORTS', table.concat(__exportNames, ','))
-        __emit('QBCORE_COUNT', tostring(#__registered))
-        __emit('NATIVE', table.concat(__native, ','))
-        __emit('THREADS', tostring(__threads))
-        __emit('EVENTS', tostring(__events))
-        """
-    )
-    proc = subprocess.run(
-        [sales_tests.lua(), "-"], input=script, capture_output=True, text=True, timeout=60
-    )
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    out = sales_tests.parse(proc.stdout)
+    out = run_wiring(enabled=False, pcall=True)
 
     assert out["LOAD_OK"] == "true:nil", f"关闸分支加载失败：{out.get('LOAD_OK')}"
     assert out["CALLBACKS"] == "industry:server:uiState", (

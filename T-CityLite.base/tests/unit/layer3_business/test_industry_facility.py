@@ -15,73 +15,15 @@
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
-import textwrap
-from pathlib import Path
 
-import pytest
-
-from lua_probe import BASE, load_industry
-
-RES = BASE / "resources" / "[custom]" / "custom-industry"
-TREASURY_SRC = RES / "server" / "treasury.lua"
-AUDIT_SRC = RES / "server" / "audit.lua"
-FACILITY_SRC = RES / "server" / "facility.lua"
-CONFIG_SRC = RES / "config.lua"
-FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
-CYCLE_CONFIG_SRC = RES / "config" / "cycle.lua"
-MANIFEST = RES / "fxmanifest.lua"
-TREASURY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "industry_treasury_probe.lua"
-FACILITY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "industry_facility_probe.lua"
-MIGRATION = BASE / "migrations" / "v4.1_industry_facility.sql"
-SCHEMA_FIXTURE = BASE / "tests" / "fixtures" / "tcity_schema.sql"
-
-STUBS = (
-    TREASURY_FIXTURE.read_text(encoding="utf-8")
-    + "\n"
-    + FACILITY_FIXTURE.read_text(encoding="utf-8")
-    + "\nfunction GetConvar(_, default) return default end\n"
+from industry_harness import (
+    MIGRATION_FACILITY,
+    SCHEMA_FIXTURE,
+    run_facility as run,
+    run_wiring,
 )
 
-
-def lua() -> str:
-    exe = shutil.which("lua5.4") or shutil.which("lua")
-    if not exe:
-        pytest.skip("lua5.4 不可用")
-    return exe
-
-
-def parse(out_text: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for line in out_text.splitlines():
-        if "|" not in line:
-            continue
-        key, _, value = line.partition("|")
-        out.setdefault(key.strip(), value.strip())
-    return out
-
-
-def run(body: str) -> dict[str, str]:
-    """stubs + db.lua + treasury.lua + config/audit/facility + body。"""
-    script = load_industry(
-        STUBS,
-        TREASURY_SRC,
-        CONFIG_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + FACILITY_CONFIG_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + CYCLE_CONFIG_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + AUDIT_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + FACILITY_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + textwrap.dedent(body),
-    )
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    return parse(proc.stdout)
+MIGRATION = MIGRATION_FACILITY
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -353,76 +295,9 @@ def test_migration_and_fixture_declare_industry_facility():
 # Q5 接线：加载 fxmanifest 的全部 server 脚本，不提供全局 QBCore
 # ══════════════════════════════════════════════════════════════════
 
-WIRING_STUBS = """
-GetConvar = function(name, default)
-    if name == 'industry_enable' then return 'true' end
-    return default
-end
-
-__registered = {}
-local coreObject = {
-    Commands = {
-        Add = function(name) __registered[#__registered + 1] = name end,
-    },
-    Functions = {
-        GetPlayer = function() return nil end,
-        HasPermission = function() return false end,
-        CreateCallback = function() end,
-    },
-}
-
--- 故意不定义全局 QBCore：两个命令文件都必须走 exports['qb-core']。
--- __call 也必须支持：S5 的 ui.lua 在加载期注册只读导出。
-exports = setmetatable({}, {
-    __index = function(_, resource)
-        if resource ~= 'qb-core' then return nil end
-        return { GetCoreObject = function() return coreObject end }
-    end,
-    __call = function() end,
-})
-
-MySQL = {}
-
--- S3 起 main.lua 会启动生产心跳并挂 PlayerLoaded；这里只要求「能加载」，
--- 不执行线程体（否则 while true 会卡住 Lua）。
-AddEventHandler = function() end
-CreateThread = function() end
-Wait = function() end
--- S6/S7 的控制台命令走原生命令注册（restricted），不在 QBCore 命令表里。
-RegisterCommand = function() end
-
-function __emit(key, value)
-    io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
-end
-"""
-
-
-def server_script_files() -> list[Path]:
-    """按 fxmanifest 的 server_scripts 顺序返回本资源的本地脚本。"""
-    text = MANIFEST.read_text(encoding="utf-8")
-    match = re.search(r"server_scripts\s*\{(.*?)\}", text, re.S)
-    assert match, "fxmanifest 里找不到 server_scripts 块"
-    entries = re.findall(r"['\"]([^'\"]+)['\"]", match.group(1))
-    files = [RES / entry for entry in entries if not entry.startswith("@")]
-    assert files, "server_scripts 里没有任何本地文件"
-    for path in files:
-        assert path.is_file(), f"manifest 列出的文件不存在：{path}"
-    return files
-
-
 def test_all_server_scripts_register_all_commands_without_global_qbcore():
     """S1 真机教训：只加载单个文件看不见跨脚本作用域；这里按 manifest 全加载。"""
-    files = server_script_files()
-    first, rest = files[0], files[1:]
-    body = "\n".join(path.read_text(encoding="utf-8") for path in rest) + "\n" + """
-        __emit('COUNT', tostring(#__registered))
-        __emit('NAMES', table.concat(__registered, ','))
-        __emit('HAS_GLOBAL', tostring(rawget(_G, 'QBCore') ~= nil))
-    """
-    script = load_industry(WIRING_STUBS, first, body)
-    proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
-    out = parse(proc.stdout)
+    out = run_wiring(debug=False)
 
     expected = {
         "orgfund", "orgfunddeposit", "orgfundwithdraw", "orgfundgrant",

@@ -168,27 +168,13 @@ MySQL.insert = { await = function(sql, values)
 
         __refs[key] = true
         __nextLedgerId = __nextLedgerId + 1
-        __ledger[#__ledger + 1] = {
-            id = __nextLedgerId,
-            org_id = orgId,
-            delta = values[2],
-            balance_after = values[3],
-            reason = values[4],
-            ref = ref,
-        }
+        __ledger[#__ledger + 1] = __industryLedgerRow(
+            __nextLedgerId, orgId, values[2], values[3], values[4], ref)
         return { insertId = __nextLedgerId }
     end
 
     if sql:find('industry_audit', 1, true) then
-        if #values == 4 then
-            __audits[#__audits + 1] = {
-                org_id = values[1], actor_cid = values[2], action = values[3], payload = values[4],
-            }
-        else
-            __audits[#__audits + 1] = {
-                org_id = values[1], actor_cid = nil, action = values[2], payload = values[3],
-            }
-        end
+        __audits[#__audits + 1] = __industryAuditEntry(values)
         __nextLedgerId = __nextLedgerId + 1
         return { insertId = __nextLedgerId }
     end

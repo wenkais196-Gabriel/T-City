@@ -53,7 +53,11 @@ exports = setmetatable({}, {
         })
     end,
 })
-GetGameTimer = GetGameTimer or function() return os.time() * 1000 end
+-- 假时钟：令牌桶按毫秒回填，而 os.time() 只有 1 秒粒度。CI 上 40 次连调的循环
+-- 一旦跨过整秒就会回填 2 个令牌，第 41 次被放行 → 断言假红（2026-11-26 CI 实测）。
+-- 这里把时间钉死成可控变量：需要回填的用例自己 FAKE_NOW = FAKE_NOW + N。
+FAKE_NOW_MS = 1700000000000
+GetGameTimer = function() return FAKE_NOW_MS end
 """
 MAIN = PHONE / "server" / "main.lua"
 MANIFEST = PHONE / "fxmanifest.lua"
