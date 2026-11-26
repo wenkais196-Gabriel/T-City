@@ -7,41 +7,18 @@
 --   industry_cycle_results  UNIQUE(org_id, cycle_no) 由 `__results` 模拟
 --   industry_facility / industry_sales / industry_demand / org_treasury / org_ledger
 --
--- 关键约束：
+-- 公共 SQL 求值（设施 / 配额 / 卖单 / 金库 / 流水 / 审计）在
+-- industry_probe_common.lua。本文件只保留周期特有的形状与状态机：
+--
 --   * 任何 SQL 提到 `players` 都会直接 error —— 结算触碰个人层时用例必须大声失败。
 --   * `__sqlWrites` 统计真正的写语句；dry-run 用例断言它为 0。
 --   * `__raceBeforeStateUpdate` 在推进 UPDATE 落库前触发一次，用来制造
 --     「读到的旧阶段 + 别人先改了」的交错（affectedRows = 0 是唯一推进许可）。
---   * `__failNextSettlementUpdate` / `__failNextAppliedUpdate` 用来模拟结算中途崩溃。
+--   * `__failNextSettlementUpdate` / `__failNextAppliedUpdate` 模拟结算中途崩溃。
+--   * 推进语句必须四道闸齐全（SET 子句 + 三个 WHERE 条件）；缺任何一道就按 0 行
+--     拒绝 —— 否则删掉 WHERE 里的闸门在测试里完全看不出来。
 
 __convars = {}
-__state = nil
-__facilities = {}
-__sales = {}
-__demands = {}
-__treasuries = {}
-__ledger = {}
-__ledgerRefs = {}
-__results = {}
-__audits = {}
-__players = {}
-__bulletins = {}
-__saleEvents = {}
-__sqlLog = {}
-__writeCount = 0
-__nextSaleId = 0
-__nextLedgerId = 0
-__nextResultId = 0
-__raceBeforeStateUpdate = nil
-__raceFired = false
-__failNextSettlementUpdate = false
-__failNextAppliedUpdate = false
-__failBulletins = false
-__personalTouched = false
-__globalMultiplier = 1.0
-__activityHeat = 1.0
-__handlers = {}
-__native = {}
 
 -- 构造器来自 industry_probe_common.lua（industry_harness 负责注入）。
 local copy = __industryCopy
@@ -49,13 +26,6 @@ local demandKey = __industryDemandKey
 
 local function resultKey(orgId, cycleNo)
     return tostring(orgId) .. '\0' .. tostring(cycleNo)
-end
-
-local function logSql(kind, sql)
-    __sqlLog[#__sqlLog + 1] = kind .. ':' .. sql
-    if kind == 'update' or kind == 'insert' or kind == 'delete' then
-        __writeCount = __writeCount + 1
-    end
 end
 
 local function guardPersonal(sql)
@@ -97,6 +67,9 @@ function __reset()
     __native = {}
 end
 
+-- 初始状态与 reset 共用一份赋值（避免模块级初始化块再抄一遍）。
+__reset()
+
 function __seedState(values)
     values = values or {}
     __state = {
@@ -114,35 +87,9 @@ function __stateRow()
     return __state and copy(__state) or nil
 end
 
-function __seedFacility(orgId, values)
-    __facilities[orgId] = __industryFacilityRow(orgId, values)
-end
-
-function __facility(orgId)
-    return __facilities[orgId]
-end
-
-function __facilityCount()
-    local count = 0
-    for _ in pairs(__facilities) do count = count + 1 end
-    return count
-end
-
-function __seedTreasury(orgId, balance, prestige)
-    __treasuries[orgId] = {
-        balance = tonumber(balance) or 0,
-        prestige = tonumber(prestige) or 0,
-        cycle_no = 0,
-    }
-end
-
-function __treasury(orgId)
-    return __treasuries[orgId]
-end
-
 function __seedSale(orgId, cycleNo, item, qty, unitPrice, revenue)
     __nextSaleId = __nextSaleId + 1
-    __sales[#__sales + 1] = {
+    __sales[#__sales + 1] = __industrySaleRow({
         id = __nextSaleId,
         org_id = orgId,
         cycle_no = cycleNo,
@@ -151,11 +98,7 @@ function __seedSale(orgId, cycleNo, item, qty, unitPrice, revenue)
         unit_price = unitPrice or 50,
         revenue = revenue or 0,
         ref = 'seed-sale-' .. __nextSaleId,
-    }
-end
-
-function __salesCount()
-    return #__sales
+    })
 end
 
 function __salesFor(orgId, cycleNo)
@@ -170,13 +113,8 @@ function __salesFor(orgId, cycleNo)
 end
 
 function __seedDemand(cycleNo, phase, item, total, used)
-    __demands[demandKey(cycleNo, phase, item)] = {
-        cycle_no = cycleNo,
-        phase = phase,
-        item_name = item,
-        quota_total = tonumber(total) or 0,
-        quota_used = tonumber(used) or 0,
-    }
+    __demands[demandKey(cycleNo, phase, item)] =
+        __industryDemandRow(cycleNo, phase, item, total, used)
 end
 
 function __demandRow(cycleNo, phase, item)
@@ -242,33 +180,6 @@ function __resultCount(cycleNo)
     return count
 end
 
-function __auditCount(action)
-    local count = 0
-    for _, entry in ipairs(__audits) do
-        if entry.action == action then count = count + 1 end
-    end
-    return count
-end
-
-function __auditPayload(action)
-    for _, entry in ipairs(__audits) do
-        if entry.action == action then return entry.payload end
-    end
-    return nil
-end
-
-function __lastAuditPayload(action)
-    local found
-    for _, entry in ipairs(__audits) do
-        if entry.action == action then found = entry.payload end
-    end
-    return found
-end
-
-function __ledgerCount()
-    return #__ledger
-end
-
 function __ledgerRow(ref)
     for _, row in ipairs(__ledger) do
         if row.ref == ref then return row end
@@ -292,55 +203,25 @@ function __personalViolations()
     return __personalTouched and 1 or 0
 end
 
-function __emit(key, value)
-    io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
-end
-
-function GetConvar(name, default)
-    local value = __convars[name]
-    if value == nil then return default end
-    return tostring(value)
-end
-
 function RegisterCommand(name, handler, restricted)
     __native[#__native + 1] = { name = name, restricted = restricted }
     __handlers[name] = handler
 end
 
-function TriggerEvent(name, ...)
-    if name ~= 'industry:sale' then return end
-    __saleEvents[#__saleEvents + 1] = { ... }
-end
-
-exports = setmetatable({}, {
-    __index = function(_, resource)
-        if resource == 'core_economy' then
-            return {
-                GetGlobalMultiplier = function() return __globalMultiplier end,
-                GetActivityHeat = function() return __activityHeat end,
-            }
-        end
-        if resource == 'custom-phone' then
-            return {
-                PostCityBulletin = function(_, text)
-                    if __failBulletins then return false, 'db_error' end
-                    __bulletins[#__bulletins + 1] = tostring(text)
-                    return true, #__bulletins
-                end,
-            }
-        end
-        return nil
-    end,
-    __call = function(_, name, fn)
-        __exportFns = __exportFns or {}
-        __exportFns[name] = fn
-    end,
+exports = __industryExports({
+    ['custom-phone'] = {
+        PostCityBulletin = function(_, text)
+            if __failBulletins then return false, 'db_error' end
+            __bulletins[#__bulletins + 1] = tostring(text)
+            return true, #__bulletins
+        end,
+    },
 })
 
 MySQL = {}
 
 MySQL.update = { await = function(sql, values)
-    logSql('update', sql)
+    __industryLogSql('update', sql)
     guardPersonal(sql)
 
     -- ── industry_state ────────────────────────────────────────────
@@ -447,7 +328,7 @@ MySQL.update = { await = function(sql, values)
         return { affectedRows = 1 }
     end
 
-    -- ── org_treasury ─────────────────────────────────────────────
+    -- ── org_treasury：结算清零（S7 转生），其余走公共语义 ─────────
     if sql:find('UPDATE org_treasury SET balance = 0', 1, true) then
         if __failNextSettlementUpdate then
             __failNextSettlementUpdate = false
@@ -462,126 +343,11 @@ MySQL.update = { await = function(sql, values)
         return { affectedRows = 1 }
     end
 
-    if sql:find('UPDATE org_treasury', 1, true) then
-        local delta = tonumber(values[1]) or 0
-        local orgId = values[2]
-        local row = __treasuries[orgId]
-        if not row then return { affectedRows = 0 } end
-        if sql:find('balance + ? >= 0', 1, true) and row.balance + delta < 0 then
-            return { affectedRows = 0 }
-        end
-        row.balance = row.balance + delta
-        return { affectedRows = 1 }
-    end
-
-    -- ── industry_facility ────────────────────────────────────────
-    if sql:find('UPDATE industry_facility SET stock = stock - ?', 1, true) then
-        local qty = tonumber(values[1]) or 0
-        local row = __facilities[values[2]]
-        if not row or row.stock < qty then return { affectedRows = 0 } end
-        row.stock = row.stock - qty
-        return { affectedRows = 1 }
-    end
-
-    if sql:find('UPDATE industry_facility', 1, true)
-        and sql:find('produced_units', 1, true) then
-        -- 生产结算：stock/produced_units/last_tick_at 双条件 CAS。
-        local produced = tonumber(values[1]) or 0
-        local newLast = tonumber(values[3]) or 0
-        local row = __facilities[values[4]]
-        if not row then return { affectedRows = 0 } end
-        if tonumber(row.last_tick_epoch) ~= tonumber(values[5]) then
-            return { affectedRows = 0 }
-        end
-        if tonumber(row.stock) ~= tonumber(values[6]) then return { affectedRows = 0 } end
-        row.stock = row.stock + produced
-        row.produced_units = row.produced_units + produced
-        row.last_tick_epoch = newLast
-        return { affectedRows = 1 }
-    end
-
-    if sql:find('UPDATE industry_facility SET stock = stock + ?', 1, true) then
-        local row = __facilities[values[2]]
-        if not row then return { affectedRows = 0 } end
-        row.stock = row.stock + (tonumber(values[1]) or 0)
-        return { affectedRows = 1 }
-    end
-
-    if sql:find('DELETE FROM industry_facility', 1, true) then
-        local orgId = values[1]
-        if not __facilities[orgId] then return { affectedRows = 0 } end
-        __facilities[orgId] = nil
-        return { affectedRows = 1 }
-    end
-
-    -- ── industry_sales ───────────────────────────────────────────
-    if sql:find('DELETE FROM industry_sales', 1, true) then
-        local removed = 0
-        for index = #__sales, 1, -1 do
-            local row = __sales[index]
-            if tostring(row.org_id) == tostring(values[1])
-                and tostring(row.cycle_no) == tostring(values[2]) then
-                table.remove(__sales, index)
-                removed = removed + 1
-            end
-        end
-        return { affectedRows = removed }
-    end
-
-    -- ── industry_demand ──────────────────────────────────────────
-    if sql:find('DELETE FROM industry_demand', 1, true) then
-        local removed = 0
-        for key, row in pairs(__demands) do
-            if tostring(row.cycle_no) == tostring(values[1]) then
-                __demands[key] = nil
-                removed = removed + 1
-            end
-        end
-        return { affectedRows = removed }
-    end
-
-    if sql:find('UPDATE industry_demand SET quota_used = quota_used + ?', 1, true) then
-        local qty = tonumber(values[1]) or 0
-        local row = __demands[demandKey(values[2], values[3], values[4])]
-        if not row then return { affectedRows = 0 } end
-        if row.quota_used + qty > row.quota_total then return { affectedRows = 0 } end
-        if sql:find('SUM(s.qty)', 1, true) then
-            local orgId = values[6]
-            local used = qty
-            for _, sale in ipairs(__sales) do
-                if tostring(sale.org_id) == tostring(orgId)
-                    and tostring(sale.cycle_no) == tostring(values[7])
-                    and sale.item_name == values[8] then
-                    used = used + (tonumber(sale.qty) or 0)
-                end
-            end
-            local cap = math.floor(row.quota_total * (tonumber(values[10]) or 0.5) + 1e-9)
-            if used > cap then return { affectedRows = 0 } end
-        end
-        row.quota_used = row.quota_used + qty
-        return { affectedRows = 1 }
-    end
-
-    if sql:find('UPDATE industry_demand SET quota_used = quota_used - ?', 1, true) then
-        local qty = tonumber(values[1]) or 0
-        local row = __demands[demandKey(values[2], values[3], values[4])]
-        if not row or row.quota_used < qty then return { affectedRows = 0 } end
-        row.quota_used = row.quota_used - qty
-        return { affectedRows = 1 }
-    end
-
-    if sql:find('UPDATE industry_demand SET quota_total = ?', 1, true) then
-        local row = __demands[demandKey(values[2], values[3], values[4])]
-        if not row or row.quota_used ~= 0 then return { affectedRows = 0 } end
-        row.quota_total = tonumber(values[1]) or 0
-        return { affectedRows = 1 }
-    end
-
-    return { affectedRows = 0 }
+    return __industryUpdate(sql, values) or { affectedRows = 0 }
 end }
 
 MySQL.single = { await = function(sql, values)
-    logSql('single', sql)
+    __industryLogSql('single', sql)
     guardPersonal(sql)
 
     if sql:find('FROM industry_state', 1, true) then
@@ -621,100 +387,11 @@ MySQL.single = { await = function(sql, values)
         return row and copy(row) or nil
     end
 
-    if sql:find('FROM industry_sales', 1, true) then
-        if sql:find('COUNT(*)', 1, true) then
-            local count = 0
-            for _, row in ipairs(__sales) do
-                if tostring(row.cycle_no) == tostring(values[1]) then
-                    count = count + 1
-                end
-            end
-            return { n = count }
-        end
-        if sql:find('SUM(revenue)', 1, true) then
-            local total = 0
-            for _, row in ipairs(__sales) do
-                if tostring(row.org_id) == tostring(values[1])
-                    and tostring(row.cycle_no) == tostring(values[2]) then
-                    total = total + (tonumber(row.revenue) or 0)
-                end
-            end
-            return { total = total }
-        end
-        if sql:find('SUM(qty)', 1, true) then
-            local sameOrg = sql:find('org_id = ?', 1, true) ~= nil
-            local total = 0
-            for _, row in ipairs(__sales) do
-                local matches
-                if sameOrg then
-                    matches = tostring(row.org_id) == tostring(values[1])
-                        and tostring(row.cycle_no) == tostring(values[2])
-                        and row.item_name == values[3]
-                else
-                    matches = tostring(row.cycle_no) == tostring(values[1])
-                        and row.item_name == values[2]
-                end
-                if matches then total = total + (tonumber(row.qty) or 0) end
-            end
-            return { used = total }
-        end
-        for _, row in ipairs(__sales) do
-            if tostring(row.org_id) == tostring(values[1]) and row.ref == values[2] then
-                return { id = row.id }
-            end
-        end
-        return nil
-    end
-
-    if sql:find('FROM industry_demand', 1, true) then
-        if sql:find('COUNT(*)', 1, true) then
-            local count = 0
-            for _, row in pairs(__demands) do
-                if tostring(row.cycle_no) == tostring(values[1]) then
-                    count = count + 1
-                end
-            end
-            return { n = count }
-        end
-        local row = __demands[demandKey(values[1], values[2], values[3])]
-        return row and { quota_total = row.quota_total, quota_used = row.quota_used } or nil
-    end
-
-    if sql:find('FROM industry_facility', 1, true) then
-        if sql:find('COUNT(*)', 1, true) then
-            return { n = __facilities[values[1]] and 1 or 0 }
-        end
-        local row = __facilities[values[1]]
-        if not row then return nil end
-        if sql:find('UNIX_TIMESTAMP(last_tick_at)', 1, true) then
-            return copy(row)
-        end
-        if sql:find('produced_units', 1, true) and not sql:find('facility_type', 1, true) then
-            return { produced_units = row.produced_units }
-        end
-        return { stock = row.stock }
-    end
-
-    if sql:find('FROM org_treasury', 1, true) then
-        if sql:find('COUNT(*)', 1, true) then
-            return { n = __treasuries[values[1]] and 1 or 0 }
-        end
-        local row = __treasuries[values[1]]
-        if not row then return nil end
-        return { balance = row.balance, prestige = row.prestige }
-    end
-
-    if sql:find('FROM org_ledger', 1, true) then
-        local key = tostring(values[1]) .. '\0' .. tostring(values[2])
-        if __ledgerRefs[key] then return { id = __ledgerRefs[key] } end
-        return nil
-    end
-
-    return nil
+    return __industrySingle(sql, values, { facility = 'cycle' })
 end }
 
 MySQL.query = { await = function(sql, values)
-    logSql('query', sql)
+    __industryLogSql('query', sql)
     guardPersonal(sql)
 
     if sql:find('UNION', 1, true) and sql:find('industry_facility', 1, true) then
@@ -742,7 +419,7 @@ MySQL.query = { await = function(sql, values)
 end }
 
 MySQL.insert = { await = function(sql, values)
-    logSql('insert', sql)
+    __industryLogSql('insert', sql)
     guardPersonal(sql)
 
     if sql:find('INSERT IGNORE INTO industry_state', 1, true) then
@@ -781,84 +458,7 @@ MySQL.insert = { await = function(sql, values)
         return { insertId = __nextResultId }
     end
 
-    if sql:find('INSERT IGNORE INTO org_treasury', 1, true) then
-        if __treasuries[values[1]] then return { affectedRows = 0 } end
-        __treasuries[values[1]] = {
-            balance = 0,
-            prestige = tonumber(values[2]) or 0,
-            cycle_no = tonumber(values[3]) or 0,
-        }
-        return { affectedRows = 1 }
-    end
-
-    if sql:find('INSERT IGNORE INTO org_ledger', 1, true) then
-        local key = tostring(values[1]) .. '\0' .. tostring(values[4])
-        if __ledgerRefs[key] then return { affectedRows = 0 } end
-        __nextLedgerId = __nextLedgerId + 1
-        __ledgerRefs[key] = __nextLedgerId
-        __ledger[#__ledger + 1] = __industryLedgerRow(
-            __nextLedgerId, values[1], tonumber(values[2]), 0, values[3], values[4])
-        return { insertId = __nextLedgerId }
-    end
-
-    if sql:find('INSERT INTO org_ledger', 1, true) then
-        local orgId = values[1]
-        local ref = tostring(#values == 7 and values[6] or values[5])
-        local key = orgId .. '\0' .. ref
-        if __ledgerRefs[key] then
-            error("Duplicate entry for key 'org_ledger.uniq_org_ref'")
-        end
-        __nextLedgerId = __nextLedgerId + 1
-        __ledgerRefs[key] = __nextLedgerId
-        __ledger[#__ledger + 1] = __industryLedgerRow(
-            __nextLedgerId, orgId, tonumber(values[2]), tonumber(values[3]), values[4], ref)
-        return { insertId = __nextLedgerId }
-    end
-
-    if sql:find('INSERT IGNORE INTO industry_demand', 1, true) then
-        local key = demandKey(values[1], values[2], values[3])
-        if __demands[key] then return { affectedRows = 0 } end
-        __demands[key] = {
-            cycle_no = values[1],
-            phase = values[2],
-            item_name = values[3],
-            quota_total = tonumber(values[4]) or 0,
-            quota_used = 0,
-        }
-        return { affectedRows = 1 }
-    end
-
-    if sql:find('INSERT INTO industry_sales', 1, true) then
-        __nextSaleId = __nextSaleId + 1
-        __sales[#__sales + 1] = {
-            id = __nextSaleId,
-            org_id = values[1],
-            cycle_no = values[2],
-            item_name = values[3],
-            qty = tonumber(values[4]),
-            unit_price = tonumber(values[5]),
-            revenue = tonumber(values[6]),
-            ref = values[7],
-        }
-        return { insertId = __nextSaleId }
-    end
-
-    if sql:find('INSERT INTO industry_audit', 1, true) then
-        __audits[#__audits + 1] = __industryAuditEntry(values)
-        return { insertId = 1 }
-    end
-
-    if sql:find('INSERT INTO industry_facility', 1, true) then
-        if __facilities[values[1]] then error('Duplicate entry for key PRIMARY') end
-        __facilities[values[1]] = {
-            org_id = values[1], facility_type = values[2], level = 1,
-            workstations = 0, stock = 0, produced_units = 0, last_tick_epoch = 0,
-        }
-        return { affectedRows = 1 }
-    end
-
-    return { insertId = 0 }
+    return __industryInsert(sql, values) or { insertId = 0 }
 end }
 
-MySQL.scalar = { await = function() return 0 end }
-MySQL.execute = { await = function() return 1 end }
+__industryMysqlTail()

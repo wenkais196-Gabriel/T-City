@@ -9,6 +9,7 @@
 --            last_tick_at = FROM_UNIXTIME(?)
 --      WHERE org_id = ? AND last_tick_at = FROM_UNIXTIME(?) AND stock = ?
 --
+-- 行构造与 CAS 求值在 industry_probe_common.lua。本文件保留 S3 特有的判据：
 -- UPDATE 必须带 produced_units 与 last_tick_at / stock 两个 CAS 条件；
 -- 少任何一个，探针直接报错 —— 不允许静默退化成「无守卫更新」。
 --
@@ -20,26 +21,11 @@ __productionUpdates = 0
 __raceBeforeUpdate = nil
 __raceFired = false
 
--- 构造器来自 industry_probe_common.lua（industry_harness 负责注入）。
-local copy = __industryCopy
-
 function __reset()
     __facilities = {}
     __productionUpdates = 0
     __raceBeforeUpdate = nil
     __raceFired = false
-end
-
-function __facilitySeed(orgId, values)
-    __facilities[orgId] = __industryFacilityRow(orgId, values)
-end
-
-function __facility(orgId)
-    return __facilities[orgId]
-end
-
-function __emit(key, value)
-    io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
 end
 
 MySQL = {}
@@ -51,7 +37,7 @@ MySQL.single = { await = function(sql, values)
     end
     local row = __facilities[values[1]]
     if not row then return nil end
-    return copy(row)
+    return __industryCopy(row)
 end }
 
 MySQL.update = { await = function(sql, values)
@@ -75,24 +61,9 @@ MySQL.update = { await = function(sql, values)
         hook()
     end
 
-    local produced = tonumber(values[1]) or 0
-    local newLast = tonumber(values[3]) or 0
-    local orgId = values[4]
-    local oldLast = tonumber(values[5]) or 0
-    local oldStock = tonumber(values[6]) or 0
-
-    local row = __facilities[orgId]
-    if not row then return { affectedRows = 0 } end
-    if tonumber(row.last_tick_epoch) ~= oldLast then return { affectedRows = 0 } end
-    if tonumber(row.stock) ~= oldStock then return { affectedRows = 0 } end
-
-    row.stock = tonumber(row.stock) + produced
-    row.produced_units = tonumber(row.produced_units) + produced
-    row.last_tick_epoch = newLast
-    return { affectedRows = 1 }
+    return __industryApplyFacilityProduction(values)
 end }
 
 MySQL.query = { await = function() return {} end }
 MySQL.insert = { await = function() return { affectedRows = 1 } end }
-MySQL.scalar = { await = function() return 0 end }
-MySQL.execute = { await = function() return 1 end }
+__industryMysqlTail()
