@@ -520,3 +520,131 @@ assert(#clientReplies == 2 and clientReplies[2].data.status == 'accepted' and cl
     )
     assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
 
+
+def test_info_row_contract_rejects_action_fields_and_handles_missing_hint() -> None:
+    """Scheme A info rows: valid info, info+action/params/intent rejected, missing hint handled cleanly."""
+    import subprocess
+
+    lua_bin = _find_lua54()
+    spec_path = (MENU_DIR / "shared" / "menu_spec.lua").as_posix()
+    host_path = HOST_LUA.as_posix()
+
+    lua_script = f"""
+local nuiSent = {{}}
+local menuExports = {{}}
+GetResourceState = function(name) return name == 'custom-ui' and 'started' or 'missing' end
+GetCurrentResourceName = function() return 'custom-menu' end
+GetGameTimer = function() return 100 end
+SendNUIMessage = function(msg) nuiSent[#nuiSent + 1] = msg end
+RegisterNUICallback = function() end
+RegisterNetEvent = function() end
+AddEventHandler = function() end
+TriggerEvent = function() end
+TriggerServerEvent = function() end
+GetConvar = function(_n, d) return d end
+RegisterCommand = function() end
+ExecuteCommand = function() end
+CreateThread = function() end
+Wait = function() end
+SetNuiFocus = function() end
+SetNuiFocusKeepInput = function() end
+exports = setmetatable({{
+  ['custom-ui'] = {{
+    IsTaken = function() return false end,
+    Owns = function() return false end,
+    Push = function() return true end,
+    Pop = function() return true end,
+    GuardControls = function() end,
+  }},
+}}, {{
+  __call = function(_self, name, fn) menuExports[name] = fn end,
+}})
+
+dofile({spec_path!r})
+dofile({host_path!r})
+
+assert(MenuSpec.KINDS.info == true, 'MenuSpec.KINDS must include info = true')
+assert(menuExports.RegisterIntent('test:act', {{ type = 'server' }}))
+
+-- 1. Valid info row with label + string hint + missing hint
+local okValid, errValid = menuExports.Open({{
+  id = 'info_ok', title = 'Industry', surface = 'list',
+  items = {{
+    {{ id = 'bal', kind = 'info', label = '金库余额', hint = '$4,195,095' }},
+    {{ id = 'empty_hint', kind = 'info', label = '尚未建设施' }},
+    {{ id = 'act', kind = 'action', label = '返回', intent = 'test:act' }},
+  }},
+}})
+assert(okValid == true and errValid == nil, 'info rows with and without hint must pass: ' .. tostring(errValid))
+
+-- 2. Reverse / invalid: info + intent must be rejected
+local okIntent, errIntent = MenuSpec.Validate({{
+  id = 'bad_info_intent', title = 'Bad', surface = 'list',
+  items = {{ {{ id = 'i1', kind = 'info', label = '余额', hint = '$10', intent = 'test:act' }} }},
+}}, {{ knownIntents = {{ ['test:act'] = true }} }})
+assert(okIntent == false and type(errIntent) == 'string', 'info + intent must be rejected')
+
+-- 3. Reverse / invalid: info + action must be rejected
+local okAction, errAction = MenuSpec.Validate({{
+  id = 'bad_info_action', title = 'Bad', surface = 'list',
+  items = {{ {{ id = 'i1', kind = 'info', label = '余额', hint = '$10', action = function() end }} }},
+}})
+assert(okAction == false and type(errAction) == 'string', 'info + action must be rejected')
+
+-- 4. Reverse / invalid: info + params must be rejected
+local okParams, errParams = MenuSpec.Validate({{
+  id = 'bad_info_params', title = 'Bad', surface = 'list',
+  items = {{ {{ id = 'i1', kind = 'info', label = '余额', hint = '$10', params = {{ event = 'x' }} }} }},
+}})
+assert(okParams == false and type(errParams) == 'string', 'info + params must be rejected')
+
+-- 5. Reverse / invalid: info with non-string hint must be rejected
+local okHintType, errHintType = MenuSpec.Validate({{
+  id = 'bad_info_hint', title = 'Bad', surface = 'list',
+  items = {{ {{ id = 'i1', kind = 'info', label = '余额', hint = 123 }} }},
+}})
+assert(okHintType == false and type(errHintType) == 'string', 'info with non-string hint must be rejected')
+
+print('OK')
+"""
+    proc = subprocess.run(
+        [lua_bin, "-e", lua_script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=10,
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    assert "OK" in proc.stdout
+
+
+def test_renderer_info_rows_rejects_disabled_class_and_skips_focus() -> None:
+    """Run custom-menu NUI renderer suite (no disabled class, click noop, arrow-key skip, 300px, >=12px)."""
+    import shutil
+    import subprocess
+
+    css = STYLES_CSS.read_text(encoding="utf-8")
+    assert "width: 300px;" in css, "styles.css must constrain .menu-shell card width to 300px"
+    assert not re.search(r"font-size:\s*(?:[0-9]|1[01])(?:\.[0-9]+)?px", css), (
+        "styles.css must keep all font sizes >= 12px"
+    )
+    assert not re.search(r"--text-xs:\s*(?:[0-9]|1[01])(?:\.[0-9]+)?px", css), (
+        "styles.css --text-xs must be >= 12px"
+    )
+
+    node_bin = shutil.which("node")
+    assert node_bin, "node binary is required to run custom-menu NUI tests"
+    nui_runner = MENU_DIR / "tests" / "nui" / "run.mjs"
+    assert nui_runner.is_file(), f"Missing {nui_runner}"
+
+    proc = subprocess.run(
+        [node_bin, "tests/nui/run.mjs"],
+        cwd=MENU_DIR,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=45,
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+
+

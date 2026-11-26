@@ -138,7 +138,7 @@ local function render(snapshot)
                     header = ('雇工位（$%s）'):format(money(facility.nextWorkstationCost)),
                     txt = BLOCK_TEXT[facility.hireBlocked] or '当前不可雇佣',
                     icon = 'fa-solid fa-user-plus',
-                    disabled = true,
+                    disabled = true, params = { event = 'industry:client:hire' },
                 }
             else
                 menu[#menu + 1] = {
@@ -161,7 +161,7 @@ local function render(snapshot)
                     header = '卖出…（最多 0 件）',
                     txt = BLOCK_TEXT[sellable.blocked] or '当前不可卖出',
                     icon = 'fa-solid fa-hand-holding-dollar',
-                    disabled = true,
+                    disabled = true, params = { event = 'industry:client:sell' },
                 }
             end
         end

@@ -362,3 +362,42 @@ assert(pureSpec.items[1].args.count == 2 and pureSpec.extra == nil, 'Validate mu
 """
     )
     assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+
+
+def test_info_row_rejects_action_fields_and_handles_hint_contract() -> None:
+    proc = _run_lua(
+        """
+local known = { ['known:ok'] = true }
+
+-- Valid info row with label + string hint
+expect_ok({
+  id = 'ind_1', title = 'Industry', surface = 'list',
+  items = {
+    { id = 'bal', kind = 'info', label = '金库余额', hint = '$4,195,095' },
+    { id = 'no_hint', kind = 'info', label = '尚未建设施' },
+  },
+}, { knownIntents = known }, 'info_valid_with_and_without_hint')
+
+-- Info row must reject intent / action / params / non-string hint
+expect_fail({
+  id = 'ind_bad_intent', title = 'Industry', surface = 'list',
+  items = { { id = 'i1', kind = 'info', label = '余额', hint = '$10', intent = 'known:ok' } },
+}, { knownIntents = known }, 'intent', 'info_with_intent')
+
+expect_fail({
+  id = 'ind_bad_action', title = 'Industry', surface = 'list',
+  items = { { id = 'i1', kind = 'info', label = '余额', hint = '$10', action = 'foo' } },
+}, { knownIntents = known }, 'action', 'info_with_action')
+
+expect_fail({
+  id = 'ind_bad_params', title = 'Industry', surface = 'list',
+  items = { { id = 'i1', kind = 'info', label = '余额', hint = '$10', params = { event = 'foo' } } },
+}, { knownIntents = known }, 'params', 'info_with_params')
+
+expect_fail({
+  id = 'ind_bad_hint_type', title = 'Industry', surface = 'list',
+  items = { { id = 'i1', kind = 'info', label = '余额', hint = 42 } },
+}, { knownIntents = known }, 'hint', 'info_non_string_hint')
+"""
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"

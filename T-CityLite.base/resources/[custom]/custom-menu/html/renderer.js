@@ -215,15 +215,48 @@
       '</div>';
     }
 
+    function isFocusableItem(item) {
+      return Boolean(item && item.kind !== 'info');
+    }
+
+    function findFirstFocusableIndex(items) {
+      if (!Array.isArray(items) || items.length === 0) return -1;
+      for (var i = 0; i < items.length; i++) {
+        if (isFocusableItem(items[i])) return i;
+      }
+      return -1;
+    }
+
+    function findNextFocusableIndex(items, currentIndex, delta) {
+      if (!Array.isArray(items) || items.length === 0) return -1;
+      var len = items.length;
+      var start = (typeof currentIndex === 'number' && currentIndex >= 0 && currentIndex < len)
+        ? currentIndex
+        : (delta > 0 ? -1 : 0);
+      for (var step = 1; step <= len; step++) {
+        var candidate = (start + delta * step + len * 2) % len;
+        if (isFocusableItem(items[candidate])) {
+          return candidate;
+        }
+      }
+      return -1;
+    }
+
     function renderListRow(it, idx, focused) {
+      var isInfo = it.kind === 'info';
       var isDanger = it.tone === 'danger' || it.danger === true;
       var cls = 'menu-row' +
-        (focused ? ' focused' : '') +
+        (isInfo ? ' info-row' : '') +
+        (!isInfo && focused ? ' focused' : '') +
         (isDanger ? ' tone-danger' : '') +
-        (it.disabled ? ' disabled' : '');
+        (!isInfo && it.disabled ? ' disabled' : '');
 
       var rightHtml = '';
-      if (it.kind === 'toggle') {
+      if (isInfo) {
+        if (it.hint !== undefined && it.hint !== null && it.hint !== '') {
+          rightHtml = '<span class="row-hint tabular">' + escapeHtml(it.hint) + '</span>';
+        }
+      } else if (it.kind === 'toggle') {
         var on = Boolean(it.checked !== undefined ? it.checked : it.value);
         rightHtml = '<span class="hud-switch' + (on ? ' on' : '') + '"><span class="hud-switch-knob"></span></span>';
       } else if (it.kind === 'progress') {
@@ -241,7 +274,7 @@
       }
 
       var subHtml = '';
-      if (it.disabled && it.disabledReason) {
+      if (!isInfo && it.disabled && it.disabledReason) {
         subHtml = '<div class="row-disabled-reason">' + escapeHtml(it.disabledReason) + '</div>';
       } else if (it.description || it.subtitle) {
         subHtml = '<div class="row-sub">' + escapeHtml(it.description || it.subtitle) + '</div>';
@@ -254,7 +287,9 @@
         progressBar = '<div class="progress-track"><div class="progress-fill" style="transform:scaleX(' + (pVal / pMax).toFixed(4) + ');"></div></div>';
       }
 
-      return '<div class="' + cls + '" data-item-index="' + idx + '" data-item-id="' + escapeHtml(it.id) + '">' +
+      var rightWrap = (!isInfo || rightHtml) ? ('<div class="row-right">' + rightHtml + '</div>') : '';
+
+      return '<div class="' + cls + '" data-item-index="' + idx + '" data-item-id="' + escapeHtml(it.id) + '" data-item-kind="' + escapeHtml(it.kind || 'action') + '">' +
         '<div class="row-left">' +
           '<span class="icon-box">' + iconSvg(it.icon) + '</span>' +
           '<div class="row-text">' +
@@ -266,7 +301,7 @@
             progressBar +
           '</div>' +
         '</div>' +
-        '<div class="row-right">' + rightHtml + '</div>' +
+        rightWrap +
       '</div>';
     }
 
@@ -303,14 +338,20 @@
       var html = '';
       for (var i = startIdx; i <= endIdx; i++) {
         var it = items[i];
-        var focused = i === state.focusIndex;
-        html += '<div class="vlist-row' + (focused ? ' focused' : '') + (it.disabled ? ' disabled' : '') + '" style="height:' + rowH + 'px;" data-item-index="' + i + '" data-item-id="' + escapeHtml(it.id) + '">' +
+        var isInfo = it.kind === 'info';
+        var focused = !isInfo && i === state.focusIndex;
+        var vcls = 'vlist-row' +
+          (isInfo ? ' info-row' : '') +
+          (focused ? ' focused' : '') +
+          (!isInfo && it.disabled ? ' disabled' : '');
+        var vHint = isInfo ? (it.hint || '') : (it.disabled && it.disabledReason ? it.disabledReason : (it.hint || ''));
+        html += '<div class="' + vcls + '" style="height:' + rowH + 'px;" data-item-index="' + i + '" data-item-id="' + escapeHtml(it.id) + '" data-item-kind="' + escapeHtml(it.kind || 'action') + '">' +
           '<div class="row-left">' +
             '<span class="icon-box" style="width:24px;height:24px;">' + iconSvg(it.icon) + '</span>' +
             '<span class="row-label">' + escapeHtml(it.label) + '</span>' +
             renderBadge(it.badge, it.badgeTone) +
           '</div>' +
-          '<span class="row-hint tabular">' + escapeHtml(it.disabled && it.disabledReason ? it.disabledReason : (it.hint || '')) + '</span>' +
+          '<span class="row-hint tabular">' + escapeHtml(vHint) + '</span>' +
         '</div>';
       }
       win.innerHTML = html;
@@ -663,7 +704,7 @@
       var spec = state.spec;
       if (!spec || !Array.isArray(spec.items)) return;
       var item = spec.items[idx];
-      if (!item) return;
+      if (!item || item.kind === 'info') return;
 
       if (item.disabled) {
         triggerNudge();
@@ -695,7 +736,7 @@
         renderCurrent();
       }
 
-      if (item.kind === 'info' || item.kind === 'progress') {
+      if (item.kind === 'progress') {
         return;
       }
 
@@ -784,7 +825,7 @@
       state.spec = spec;
       if (opts && typeof opts.stackDepth === 'number') state.stackDepth = opts.stackDepth;
       if (isNewSpec) {
-        state.focusIndex = 0;
+        state.focusIndex = findFirstFocusableIndex(spec.items);
         state.armedItemId = null;
         state.armedConfirm = false;
         state.virtualScrollTop = 0;
@@ -806,7 +847,7 @@
 
       var totalCount = Array.isArray(spec.items) ? spec.items.length : 0;
       var counterText = spec.surface === 'list' && totalCount > 0
-        ? String(Math.min(state.focusIndex + 1, totalCount)) + ' / ' + String(totalCount)
+        ? String(state.focusIndex >= 0 ? Math.min(state.focusIndex + 1, totalCount) : 0) + ' / ' + String(totalCount)
         : (state.stackDepth > 1 ? ('L' + state.stackDepth) : 'HUD');
 
       var shellHtml = '<div class="menu-shell' + (spec.danger ? ' danger-shell' : '') + '">' +
@@ -860,11 +901,14 @@
       var rows = mountEl.querySelectorAll('[data-item-index]');
       for (var i = 0; i < rows.length; i++) {
         var idx = Number(rows[i].getAttribute('data-item-index'));
-        var on = idx === state.focusIndex;
+        var kind = rows[i].getAttribute('data-item-kind');
+        var on = kind !== 'info' && idx === state.focusIndex;
         if (on) { rows[i].classList.add('focused'); } else { rows[i].classList.remove('focused'); }
-        rows[i].setAttribute('aria-selected', on ? 'true' : 'false');
+        if (kind !== 'info') {
+          rows[i].setAttribute('aria-selected', on ? 'true' : 'false');
+        }
       }
-      var cur = mountEl.querySelector('[data-item-index="' + state.focusIndex + '"]');
+      var cur = state.focusIndex >= 0 ? mountEl.querySelector('[data-item-index="' + state.focusIndex + '"]') : null;
       if (cur && typeof cur.scrollIntoView === 'function') {
         cur.scrollIntoView({ block: 'nearest' });
       }
@@ -962,10 +1006,10 @@
 
       if (key === 'ArrowDown' && items.length > 0 && spec.surface !== 'confirm' && spec.surface !== 'range') {
         e.preventDefault();
-        state.focusIndex = (state.focusIndex + 1) % items.length;
+        state.focusIndex = findNextFocusableIndex(items, state.focusIndex, 1);
         state.armedItemId = null;
         if (spec.surface === 'list' && items.length >= VIRTUAL_THRESHOLD) {
-          ensureVirtualVisible(state.focusIndex);
+          if (state.focusIndex >= 0) ensureVirtualVisible(state.focusIndex);
           updateVirtualWindow(spec);
           applyFocusClass();
         } else {
@@ -977,10 +1021,10 @@
 
       if (key === 'ArrowUp' && items.length > 0 && spec.surface !== 'confirm' && spec.surface !== 'range') {
         e.preventDefault();
-        state.focusIndex = (state.focusIndex - 1 + items.length) % items.length;
+        state.focusIndex = findNextFocusableIndex(items, state.focusIndex, -1);
         state.armedItemId = null;
         if (spec.surface === 'list' && items.length >= VIRTUAL_THRESHOLD) {
-          ensureVirtualVisible(state.focusIndex);
+          if (state.focusIndex >= 0) ensureVirtualVisible(state.focusIndex);
           updateVirtualWindow(spec);
           applyFocusClass();
         } else {
@@ -1091,9 +1135,12 @@
         if (row && state.spec) {
           var idx = Number(row.getAttribute('data-item-index'));
           if (isFinite(idx)) {
-            state.focusIndex = idx;
             var clickedItem = (state.spec.items || [])[idx];
-            if (clickedItem && clickedItem.kind !== 'input' && clickedItem.kind !== 'range') {
+            if (!clickedItem || clickedItem.kind === 'info') {
+              return;
+            }
+            state.focusIndex = idx;
+            if (clickedItem.kind !== 'input' && clickedItem.kind !== 'range') {
               activateItem(idx);
             } else {
               renderCurrent();
