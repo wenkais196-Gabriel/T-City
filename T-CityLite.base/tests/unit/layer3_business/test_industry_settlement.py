@@ -20,10 +20,10 @@ import re
 import sys
 
 from industry_harness import (
-    BASE,
-    CYCLE_SRC,
     ANNOUNCE_SRC,
+    BASE,
     COMMANDS_CYCLE_SRC,
+    CYCLE_SRC,
     MIGRATION_CYCLE,
     SCHEMA_FIXTURE,
     SETTLEMENT_SRC,

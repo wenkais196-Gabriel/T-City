@@ -12,7 +12,12 @@ SonarCloud 把 PR #373 的新代码重复率算到 20.8%（issue #377）。
 （周期守卫 / 配额截断 / 结算水位）也因此不受影响。
 
 装配顺序按 fxmanifest（server_scripts）和既有用例的实际加载顺序照搬，没有
-重新排序；探针共用的纯构造器在 `fixtures/industry_probe_common.lua`。
+重新排序；探针共用的纯构造器在 `fixtures/industry_probe_common.lua`，由本模块
+在探针前注入（**不要**直接 read_text 探针后拼脚本，否则公共构造器缺失）。
+
+S8 的 `test_industry_prestige.py` 只需把本地的 `run()` 换成
+`from industry_harness import run_full as run`：body / convars 签名一致，
+完整模块链（含 settlement / commands_cycle）由 `FULL_MODULES` 提供。
 """
 
 from __future__ import annotations
@@ -334,11 +339,6 @@ def read_text(*paths: Path) -> str:
 
 def lua_table(values: dict[str, str] | None) -> str:
     return "{ " + ", ".join(f"{key} = '{value}'" for key, value in (values or {}).items()) + " }"
-
-
-def config_text() -> str:
-    """五个 config 文件的默认拼接（S4–S7 的装载顺序）。"""
-    return read_text(*CONFIG_MODULES)
 
 
 def run_script(script: str) -> dict[str, str]:

@@ -43,15 +43,9 @@ __activityHeat = 1.0
 __handlers = {}
 __native = {}
 
-local function copy(row)
-    local out = {}
-    for key, value in pairs(row) do out[key] = value end
-    return out
-end
-
-local function demandKey(cycleNo, phase, item)
-    return tostring(cycleNo) .. '\0' .. tostring(phase) .. '\0' .. tostring(item)
-end
+-- 构造器来自 industry_probe_common.lua（industry_harness 负责注入）。
+local copy = __industryCopy
+local demandKey = __industryDemandKey
 
 local function resultKey(orgId, cycleNo)
     return tostring(orgId) .. '\0' .. tostring(cycleNo)
@@ -121,17 +115,7 @@ function __stateRow()
 end
 
 function __seedFacility(orgId, values)
-    values = values or {}
-    __facilities[orgId] = {
-        org_id = orgId,
-        facility_type = values.facility_type or 'mine',
-        level = values.level or 1,
-        workstations = values.workstations or 0,
-        recipe_id = values.recipe_id,
-        stock = values.stock or 0,
-        produced_units = values.produced_units or 0,
-        last_tick_epoch = values.last_tick_epoch or 0,
-    }
+    __facilities[orgId] = __industryFacilityRow(orgId, values)
 end
 
 function __facility(orgId)
@@ -812,14 +796,8 @@ MySQL.insert = { await = function(sql, values)
         if __ledgerRefs[key] then return { affectedRows = 0 } end
         __nextLedgerId = __nextLedgerId + 1
         __ledgerRefs[key] = __nextLedgerId
-        __ledger[#__ledger + 1] = {
-            id = __nextLedgerId,
-            org_id = values[1],
-            delta = tonumber(values[2]),
-            balance_after = 0,
-            reason = values[3],
-            ref = values[4],
-        }
+        __ledger[#__ledger + 1] = __industryLedgerRow(
+            __nextLedgerId, values[1], tonumber(values[2]), 0, values[3], values[4])
         return { insertId = __nextLedgerId }
     end
 
@@ -832,14 +810,8 @@ MySQL.insert = { await = function(sql, values)
         end
         __nextLedgerId = __nextLedgerId + 1
         __ledgerRefs[key] = __nextLedgerId
-        __ledger[#__ledger + 1] = {
-            id = __nextLedgerId,
-            org_id = orgId,
-            delta = tonumber(values[2]),
-            balance_after = tonumber(values[3]),
-            reason = values[4],
-            ref = ref,
-        }
+        __ledger[#__ledger + 1] = __industryLedgerRow(
+            __nextLedgerId, orgId, tonumber(values[2]), tonumber(values[3]), values[4], ref)
         return { insertId = __nextLedgerId }
     end
 
@@ -872,17 +844,7 @@ MySQL.insert = { await = function(sql, values)
     end
 
     if sql:find('INSERT INTO industry_audit', 1, true) then
-        if #values == 4 then
-            __audits[#__audits + 1] = {
-                org_id = values[1], actor_cid = values[2],
-                action = values[3], payload = values[4],
-            }
-        else
-            __audits[#__audits + 1] = {
-                org_id = values[1], actor_cid = nil,
-                action = values[2], payload = values[3],
-            }
-        end
+        __audits[#__audits + 1] = __industryAuditEntry(values)
         return { insertId = 1 }
     end
 
