@@ -34,7 +34,7 @@ local function sortData(data, skipfirst)
     return tempData
 end
 
-local function openMenu(data, sort, skipFirst)
+local function openMenuLegacy(data, sort, skipFirst)
     if not data or not next(data) then return end
     if sort then data = sortData(data, skipFirst) end
 	for _,v in pairs(data) do
@@ -55,7 +55,7 @@ local function openMenu(data, sort, skipFirst)
     })
 end
 
-local function closeMenu()
+local function closeMenuLegacy()
     sendData = nil
     headerShown = false
     uiClose()
@@ -64,7 +64,7 @@ local function closeMenu()
     })
 end
 
-local function showHeader(data)
+local function showHeaderLegacy(data)
     if not data or not next(data) then return end
     headerShown = true
     sendData = data
@@ -72,6 +72,32 @@ local function showHeader(data)
         action = 'SHOW_HEADER',
         data = table.clone(data)
     })
+end
+
+-- 适配层入口（issue #366）：convar `qb_menu_use_custom_menu` 打开时
+-- client/adapter.lua 才会定义 QBMenuAdapter；关着时下面三个函数与改造前完全一致。
+local function openMenu(data, sort, skipFirst)
+    local adapter = _G.QBMenuAdapter
+    if adapter then
+        return adapter.openMenu(data, sort, skipFirst, openMenuLegacy)
+    end
+    return openMenuLegacy(data, sort, skipFirst)
+end
+
+local function closeMenu()
+    local adapter = _G.QBMenuAdapter
+    if adapter then
+        return adapter.closeMenu()
+    end
+    return closeMenuLegacy()
+end
+
+local function showHeader(data)
+    local adapter = _G.QBMenuAdapter
+    if adapter then
+        return adapter.showHeader(data, showHeaderLegacy)
+    end
+    return showHeaderLegacy(data)
 end
 
 -- Events

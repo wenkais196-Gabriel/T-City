@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：333 ｜ **已登记**：333 ｜ **未登记**：0
+**文档总数**：334 ｜ **已登记**：334 ｜ **未登记**：0
 
-**状态分布**：✅ active 181 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 182 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -206,7 +206,7 @@
 | [管理与审计 · UX 设计](client/ux/modules/admin.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/admin.md` |
 | [Reasonix 通知声音配置](reasonix-hooks-config.md) | runbook | ✅ active | 2026-06-21 | 2027-01-30 |  | `docs/reasonix-hooks-config.md` |
 
-### ux（30）
+### ux（31）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -231,6 +231,7 @@
 | [NUI POST 未到达客户端 Lua 回调 —— 系统排查手册](client/research/nui-debug-playbook.md) | research | ✅ active | 2026-10-27 | 2027-01-30 |  | `docs/client/research/nui-debug-playbook.md` |
 | [QBCore 客户端代码面分析（T-City 实测 + 上游对照）](qbcore-client-code-analysis.md) | research | 📌 final | 2026-10-27 | 2027-01-30 |  | `docs/qbcore-client-code-analysis.md` |
 | [真机验证清单（按模块）](client/ux/PLAYTEST.md) | runbook | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/PLAYTEST.md` |
+| [qb-menu / qb-input 适配层 · 20 条最小真机清单](client/ux/menu-regression-checklist.md) | runbook | ✅ active | 2026-11-26 | 2027-02-28 |  | `docs/client/ux/menu-regression-checklist.md` |
 | [T-City Lite 交互设计规范备忘录 (Interaction Design Memo)](../T-CityLite.base/docs/design/interaction-memo.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/interaction-memo.md` |
 | [菜单交互设计规范（NUI / 世界交互）](../T-CityLite.base/docs/design/menu-interaction-design.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/menu-interaction-design.md` |
 | [NUI 现代化标准与测试手册](../T-CityLite.base/docs/standards/nui-standard.md) | spec | ✅ active | 2026-11-16 | 2027-04-30 |  | `T-CityLite.base/docs/standards/nui-standard.md` |
