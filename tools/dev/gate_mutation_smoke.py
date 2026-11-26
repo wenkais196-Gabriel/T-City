@@ -54,6 +54,65 @@ class Mutation:
 
 
 MUTATIONS: list[Mutation] = [
+
+    # ── custom-menu（M2 #344）：这些闸门全是"必须存在/必须为零"的静态判据，
+    # 只有把它们各自打红一次，才能证明它们不是永远绿。
+    Mutation(
+        gate="tests/architecture/test_menu_host.py::test_zero_set_nui_focus_across_custom_menu",
+        path="resources/[custom]/custom-menu/client/host.lua",
+        content=None,
+        replace_from="exports('Open', menuOpen)",
+        replace_to="exports('Open', menuOpen)\nSetNuiFocus(true, true) -- 变异注入",
+        what="custom-menu 自己抢焦点（绕过 custom-ui 的 Push），手机开着时两套 UI 抢输入",
+    ),
+    Mutation(
+        gate="tests/architecture/test_menu_host.py::test_zero_external_urls_and_backdrop_filter_in_html",
+        path="resources/[custom]/custom-menu/html/index.html",
+        content=None,
+        replace_from="<title>T-City Custom Menu</title>",
+        replace_to='<title>T-City Custom Menu</title>\n  <script src="https://cdn.example.com/evil.js"></script>',
+        what="CEF 页面引外链 CDN（离线时整页白屏，也是供应链入口）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_menu_host.py::test_host_lua_input_layer_handshake_and_intents",
+        path="resources/[custom]/custom-menu/client/host.lua",
+        content=None,
+        replace_from="exports('Open', menuOpen)",
+        replace_to="local _openUnused = menuOpen",
+        what="去掉 Open 导出（别的资源再也开不了菜单，Push 路径整条断）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_menu_host.py::test_server_intent_gate_and_allowlist",
+        path="tests/architecture/net_events_allowlist.json",
+        content=None,
+        replace_from='\"custom-menu:server:intent\"',
+        replace_to='\"custom-menu:server:intent_renamed\"',
+        what="新 net event 没登记 allowlist（谁都能往网关打 payload）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_menu_host.py::test_renderer_framework_agnostic_and_tokens",
+        path="resources/[custom]/custom-menu/html/styles.css",
+        content=None,
+        replace_from="noir",
+        replace_to="noirx",
+        what="主题 token 改名（data-theme=noir 找不到样式，菜单变透明）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_menu_host.py::test_host_lua_runtime_contracts_in_sandbox",
+        path="resources/[custom]/custom-menu/client/host.lua",
+        content=None,
+        replace_from="alreadyOwns = okOwns and owns == true",
+        replace_to="alreadyOwns = true",
+        what="无视 custom-ui 的占用状态（手机开着时菜单照样 Push，两套 UI 抢焦点）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_menu_host.py::test_server_lua_runtime_contracts_in_sandbox",
+        path="resources/[custom]/custom-menu/server/main.lua",
+        content=None,
+        replace_from="    local entry = serverIntents[intent]",
+        replace_to="    local entry = serverIntents[intent] or { handler = function() end }",
+        what="未注册的 intent 也能执行（白名单形同虚设）",
+    ),
     Mutation(
         gate=("tests/architecture/test_backup_lifetime_owner.py::"
               "test_client_lifetime_requires_the_server_owner_guard"),

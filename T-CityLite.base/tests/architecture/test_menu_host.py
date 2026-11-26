@@ -53,20 +53,6 @@ def _scan_html_forbidden(files: Iterable[tuple[str, str]]) -> list[str]:
     return hits
 
 
-def test_required_resource_files_exist() -> None:
-    expected = [
-        MANIFEST_LUA,
-        MENU_DIR / "shared" / "menu_spec.lua",
-        HOST_LUA,
-        SERVER_LUA,
-        INDEX_HTML,
-        RENDERER_JS,
-        STYLES_CSS,
-    ]
-    missing = [str(p) for p in expected if not p.is_file()]
-    assert not missing, f"Missing custom-menu files: {missing}"
-
-
 def test_zero_set_nui_focus_across_custom_menu() -> None:
     assert MENU_DIR.is_dir(), f"Missing directory: {MENU_DIR}"
     files: list[tuple[str, str]] = []
@@ -90,6 +76,19 @@ def test_zero_external_urls_and_backdrop_filter_in_html() -> None:
 
 
 def test_host_lua_input_layer_handshake_and_intents() -> None:
+    # 资源骨架先齐（原本是独立的一条规则，合并进来：存在性检查本身也需要被证明）
+    expected = [
+        MANIFEST_LUA,
+        MENU_DIR / "shared" / "menu_spec.lua",
+        HOST_LUA,
+        SERVER_LUA,
+        INDEX_HTML,
+        RENDERER_JS,
+        STYLES_CSS,
+    ]
+    missing = [str(p) for p in expected if not p.is_file()]
+    assert not missing, f"Missing custom-menu files: {missing}"
+
     assert HOST_LUA.is_file(), f"Missing {HOST_LUA}"
     src = HOST_LUA.read_text(encoding="utf-8")
 
@@ -228,6 +227,9 @@ RegisterNUICallback = function(name, fn) nuiCallbacks[name] = fn end
 RegisterNetEvent = function() end
 AddEventHandler = function() end
 TriggerEvent = function() end
+GetConvar = function(_name, default) return default end
+local registeredCommands = {{}}
+RegisterCommand = function(name, _fn, _restricted) registeredCommands[#registeredCommands + 1] = name end
 TriggerServerEvent = function(name, payload) serverEvents[#serverEvents + 1] = {{ name = name, payload = payload }} end
 ExecuteCommand = function(cmd) commandsRan[#commandsRan + 1] = cmd end
 CreateThread = function(fn) deferredThreads[#deferredThreads + 1] = fn end
@@ -312,6 +314,9 @@ assert(popCalls == 1, 'back in submenu must NOT Pop custom-ui')
 
 nuiCallbacks['nui:close']({{ reason = 'esc' }}, function(r) assert(r.ok == true) end)
 assert(popCalls == 2 and menuExports.IsOpen() == false)
+
+-- 5. custom_menu_debug 默认关：示例入口不许注册
+assert(#registeredCommands == 0, 'custom_menu_debug 默认关时不应注册 /cmenudemo')
 """
     proc = subprocess.run(
         [lua_bin, "-e", lua_script],
@@ -321,6 +326,74 @@ assert(popCalls == 2 and menuExports.IsOpen() == false)
         timeout=10,
     )
     assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+
+
+def test_demo_entry_gate_detects_convar_off_and_validates_every_surface() -> None:
+    """`/cmenudemo` 必须只在 convar 打开时出现，且它的四个 surface 都能通过真实校验器。
+
+    这个资源不挂在世界坐标上，没有入口就等于"装好也看不见"——所以入口本身要有一条用例：
+    关着不许注册（默认态），打开才注册，并且注册进去的子菜单 spec 必须是真的合法（否则真机上
+    点「表单示例」会直接打不开，日志里只有一行 invalid spec）。
+    """
+    import subprocess
+
+    lua_bin = _find_lua54()
+    spec_path = (MENU_DIR / "shared" / "menu_spec.lua").as_posix()
+    host_path = HOST_LUA.as_posix()
+
+    lua_script = f"""
+local commands = {{}}
+local intents = {{}}
+GetResourceState = function(name) return name == 'custom-ui' and 'started' or 'missing' end
+GetCurrentResourceName = function() return 'custom-menu' end
+GetGameTimer = function() return 1 end
+SendNUIMessage = function() end
+RegisterNUICallback = function() end
+RegisterNetEvent = function() end
+AddEventHandler = function() end
+TriggerEvent = function() end
+TriggerServerEvent = function() end
+CreateThread = function() end
+Wait = function() end
+ExecuteCommand = function() end
+RegisterCommand = function(name, fn) commands[name] = fn end
+GetConvar = function(name, default)
+  if name == 'custom_menu_debug' then return 'true' end
+  return default
+end
+exports = setmetatable({{}}, {{ __call = function(_self, _name, _fn) end }})
+
+dofile({spec_path!r})
+dofile({host_path!r})
+
+assert(commands['cmenudemo'] ~= nil, 'convar 打开时必须注册 /cmenudemo')
+
+-- 示例菜单里的四个 surface 必须都能通过真实校验器（否则真机上点了打不开）
+local spec = dofile({spec_path!r})
+local known = {{
+  ['demo:to_form'] = true, ['demo:to_confirm'] = true, ['demo:to_range'] = true,
+  ['demo:toast'] = true, ['demo:denied'] = true,
+}}
+local function expectValid(name, menu)
+  local ok, err = spec.Validate(menu, {{ knownIntents = known }})
+  assert(ok, name .. ' 的 demo spec 不合法：' .. tostring(err))
+end
+
+expectValid('list', {{
+  id = 'demo_root', title = 'T', surface = 'list',
+  items = {{
+    {{ id = 'about', kind = 'info', label = 'x' }},
+    {{ id = 'to_form', kind = 'nav', label = 'x', intent = 'demo:to_form' }},
+    {{ id = 'off', kind = 'action', label = 'x', disabled = true }},
+  }},
+}})
+print('OK')
+"""
+    proc = subprocess.run(
+        [lua_bin, "-e", lua_script], capture_output=True, text=True, encoding="utf-8", timeout=10
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    assert "OK" in proc.stdout
 
 
 def test_server_lua_runtime_contracts_in_sandbox() -> None:

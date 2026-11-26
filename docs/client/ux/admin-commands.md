@@ -14,7 +14,7 @@ review_by: 2027-02-28
 
 # 管理员命令清单
 
-共 **353** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
+共 **354** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
 
 ## 危险命令但没有判权：0 条
 
@@ -24,7 +24,7 @@ review_by: 2027-02-28
 
 | 权限来源 | 命令数 |
 |---|---|
-| — | 160 |
+| — | 161 |
 | QBCore | 106 |
 | restricted=true | 42 |
 | job/gang 判定 | 35 |
@@ -185,6 +185,12 @@ review_by: 2027-02-28
 |---|---|---|---|
 | `market` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-market/server/main.lua:406 |
 | `marketsetprice` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[custom]/custom-market/server/main.lua:439 |
+
+### custom-menu
+
+| 命令 | API | 权限 | 位置 |
+|---|---|---|---|
+| `cmenudemo` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-menu/client/host.lua:504 |
 
 ### custom-mining
 

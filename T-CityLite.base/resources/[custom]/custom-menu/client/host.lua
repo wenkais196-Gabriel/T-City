@@ -397,3 +397,114 @@ AddEventHandler('onResourceStop', function(resName)
         menuCloseInternal('resource_stop', false)
     end
 end)
+
+
+-- ══════════════════════════════════════════════════════════════════
+-- 开发示例菜单（convar custom_menu_debug，默认关）
+--
+-- 为什么要有这段：这个资源本身不挂在任何世界坐标上，没有入口就等于"装好了也看不见"。
+-- 它给真机验（焦点 / 按键 / Esc / 叠栈）一个可点开的最小入口，也是后续把老资源迁过来时
+-- 可以直接照抄的用法示例。
+-- ══════════════════════════════════════════════════════════════════
+
+if GetConvar('custom_menu_debug', 'false') == 'true' then
+    local function demoToast(message, tone)
+        SendNUIMessage({
+            action = 'toast:push',
+            title = '演示',
+            message = tostring(message),
+            tone = tone or 'info',
+            durationMs = 3000,
+        })
+    end
+
+    local demoScreens = {}
+
+    demoScreens.form = {
+        id = 'demo_form',
+        title = '表单示例',
+        subtitle = '输入框 / 滑杆 / 单选',
+        surface = 'form',
+        breadcrumbs = { '演示', '表单' },
+        submitLabel = '提交',
+        cancelLabel = '取消',
+        items = {
+            { id = 'plate', kind = 'input', label = '车牌号', placeholder = 'ABC123', maxLength = 8, required = true },
+            { id = 'note', kind = 'input', label = '备注', placeholder = '可不填', maxLength = 40 },
+            { id = 'volume', kind = 'range', label = '音量', min = 0, max = 100, step = 5, defaultValue = 60, unit = '%' },
+        },
+    }
+
+    demoScreens.confirm = {
+        id = 'demo_confirm',
+        title = '确认示例',
+        surface = 'confirm',
+        breadcrumbs = { '演示', '确认' },
+        message = '这一步会把示例数据写进去（不会真的写库）。',
+        confirmLabel = '确认',
+        cancelLabel = '取消',
+        items = {
+            { id = 'yes', kind = 'confirm', label = '确认执行', intent = 'demo:toast', args = { message = '已确认' } },
+        },
+    }
+
+    demoScreens.range = {
+        id = 'demo_range',
+        title = '滑杆示例',
+        surface = 'range',
+        breadcrumbs = { '演示', '滑杆' },
+        items = {
+            { id = 'vol', kind = 'range', label = '界面音量', min = 0, max = 100, step = 10, defaultValue = 50, unit = '%', intent = 'demo:toast' },
+        },
+    }
+
+    local function registerDemoIntents()
+        for name, spec in pairs(demoScreens) do
+            local ok, err = menuRegisterIntent('demo:to_' .. name, { type = 'submenu', spec = spec })
+            if not ok then
+                print(('[custom-menu] demo intent %s 注册失败：%s'):format(name, tostring(err)))
+            end
+        end
+
+        menuRegisterIntent('demo:toast', {
+            type = 'client',
+            handler = function(ctx)
+                local message = type(ctx) == 'table' and type(ctx.args) == 'table'
+                    and ctx.args.message or '点了这一项'
+                demoToast(message, 'info')
+                return { ok = true }
+            end,
+        })
+
+        -- 故意打一个服务端没注册的 intent：用来验「拒绝路径」在界面上是否可见。
+        menuRegisterIntent('demo:denied', {
+            type = 'server',
+        })
+    end
+
+    local demoRoot = {
+        id = 'demo_root',
+        title = 'T-City 交互菜单',
+        subtitle = 'custom-menu 宿主 · 开发示例',
+        surface = 'list',
+        breadcrumbs = { '演示' },
+        items = {
+            { id = 'about', kind = 'info', label = 'custom-menu', description = '一套 MenuSpec + 唯一焦点栈' },
+            { id = 'to_form', kind = 'nav', label = '表单示例', description = '输入 / 滑杆', intent = 'demo:to_form' },
+            { id = 'to_confirm', kind = 'nav', label = '确认示例', description = '二次确认', intent = 'demo:to_confirm' },
+            { id = 'to_range', kind = 'nav', label = '滑杆示例', description = '独立 surface', intent = 'demo:to_range' },
+            { id = 'toast', kind = 'action', label = '弹一条提示', intent = 'demo:toast' },
+            { id = 'denied', kind = 'action', label = '触发服务端拒绝', description = '未注册的 intent 应被拒', intent = 'demo:denied' },
+            { id = 'off', kind = 'action', label = '禁用项示例', description = 'disabled = true', disabled = true },
+        },
+    }
+
+    registerDemoIntents()
+
+    RegisterCommand('cmenudemo', function()
+        local ok, err = menuOpen(demoRoot)
+        if not ok then
+            print(('[custom-menu] demo 打开失败：%s'):format(tostring(err)))
+        end
+    end, false)
+end
