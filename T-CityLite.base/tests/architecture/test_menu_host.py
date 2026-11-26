@@ -33,10 +33,28 @@ EXTERNAL_URL_RE = re.compile(r"https?://", re.IGNORECASE)
 BACKDROP_FILTER_RE = re.compile(r"backdrop-filter", re.IGNORECASE)
 
 
+#: `SetNuiFocus` 是**按资源**的：custom-ui 自己没有 ui_page，栈推帧时反调帧 owner 的
+#: `ApplyFocus`，由拥有页面的资源真正设置焦点（custom-ui 的 V-10 注释）。所以
+#: 「custom-menu 里一个 SetNuiFocus 都不许有」这条判据是错的——真机会表现成"菜单画出来了，
+#: 键盘鼠标全无反应"（2026-11-26 实测）。正确规则：只允许出现在 ApplyFocus 这一段里。
+APPLY_FOCUS_BLOCK = re.compile(
+    r"exports\('ApplyFocus', function\(.*?\n^end\)", re.MULTILINE | re.DOTALL
+)
+#: 资源卸载时也必须能放焦点（页面已消失，栈状态可能来不及走），NUI-CLIENT-01 要求这一条。
+RESOURCE_STOP_BLOCK = re.compile(
+    r"AddEventHandler\('onResourceStop', function\(.*?\n^end\)", re.MULTILINE | re.DOTALL
+)
+
+
 def _scan_set_nui_focus(files: Iterable[tuple[str, str]]) -> list[str]:
     hits: list[str] = []
     for name, content in files:
-        for lineno, line in enumerate(content.splitlines(), start=1):
+        scanned = content
+        if name.replace("\\", "/").endswith("client/host.lua"):
+            scanned = RESOURCE_STOP_BLOCK.sub("", APPLY_FOCUS_BLOCK.sub("", content))
+        for lineno, line in enumerate(scanned.splitlines(), start=1):
+            if line.lstrip().startswith("--"):
+                continue          # 注释里提到这个原生不算违规（本文件就靠注释解释约定）
             if SET_NUI_FOCUS_RE.search(line):
                 hits.append(f"{name}:{lineno}: {line.strip()}")
     return hits
@@ -53,7 +71,7 @@ def _scan_html_forbidden(files: Iterable[tuple[str, str]]) -> list[str]:
     return hits
 
 
-def test_zero_set_nui_focus_across_custom_menu() -> None:
+def test_set_nui_focus_only_at_sanctioned_boundaries() -> None:
     assert MENU_DIR.is_dir(), f"Missing directory: {MENU_DIR}"
     files: list[tuple[str, str]] = []
     for p in sorted(MENU_DIR.rglob("*")):
@@ -61,7 +79,10 @@ def test_zero_set_nui_focus_across_custom_menu() -> None:
             files.append((str(p.relative_to(MENU_DIR)), p.read_text(encoding="utf-8")))
     assert files, "No files found under custom-menu"
     hits = _scan_set_nui_focus(files)
-    assert not hits, f"SetNuiFocus must never appear in custom-menu:\n" + "\n".join(hits)
+    assert not hits, (
+        "SetNuiFocus 只允许出现在 ApplyFocus（授予/回收）与 onResourceStop（卸载兜底）里：\n"
+        + "\n".join(hits)
+    )
 
 
 def test_zero_external_urls_and_backdrop_filter_in_html() -> None:
@@ -111,7 +132,10 @@ def test_host_lua_input_layer_handshake_and_intents() -> None:
     for target in ("'client'", "'server'", "'command'", "'submenu'"):
         assert target in src, f"client/host.lua must support intent type {target}"
 
-    assert "type(cb) ~= 'function'" not in src and 'type(cb) ~= "function"' not in src, (
+    assert "type(cb) ~= 'function'" not in src, (
+        "Never use type(cb) ~= 'function' on NUI callbacks (callable table risk)"
+    )
+    assert 'type(cb) ~= "function"' not in src, (
         "Never use type(cb) ~= 'function' on NUI callbacks (callable table risk)"
     )
 
@@ -119,7 +143,10 @@ def test_host_lua_input_layer_handshake_and_intents() -> None:
     assert "'@core-framework/client/shared.lua'" in manifest, (
         "fxmanifest.lua must load @core-framework/client/shared.lua first for CLI-01 observability"
     )
-    assert "'custom-ui'" not in manifest and '"custom-ui"' not in manifest, (
+    assert "'custom-ui'" not in manifest, (
+        "fxmanifest.lua must not declare static dependency on custom-ui (player.cfg starts before custom.cfg)"
+    )
+    assert '"custom-ui"' not in manifest, (
         "fxmanifest.lua must not declare static dependency on custom-ui (player.cfg starts before custom.cfg)"
     )
 
@@ -129,7 +156,9 @@ def test_server_intent_gate_and_allowlist() -> None:
     srv = SERVER_LUA.read_text(encoding="utf-8")
 
     assert "RegisterNetEvent('custom-menu:server:intent'" in srv
-    assert "menuId" in srv and "itemId" in srv and "intent" in srv
+    assert "menuId" in srv
+    assert "itemId" in srv
+    assert "intent" in srv
     assert "denied" in srv
     assert "custom-menu:server:registerIntent" in srv or "exports('RegisterIntent'" in srv
 
@@ -146,7 +175,9 @@ def test_server_intent_gate_and_allowlist() -> None:
 
 
 def test_renderer_framework_agnostic_and_tokens() -> None:
-    assert RENDERER_JS.is_file() and STYLES_CSS.is_file() and INDEX_HTML.is_file()
+    assert RENDERER_JS.is_file()
+    assert STYLES_CSS.is_file()
+    assert INDEX_HTML.is_file()
     js = RENDERER_JS.read_text(encoding="utf-8")
     css = STYLES_CSS.read_text(encoding="utf-8")
     html = INDEX_HTML.read_text(encoding="utf-8")
@@ -166,6 +197,21 @@ def test_renderer_framework_agnostic_and_tokens() -> None:
         assert density in css, f"styles.css missing density token {density}"
     for key in ("Escape", "Backspace", "Enter", "ArrowDown", "ArrowUp"):
         assert key in js, f"renderer.js must handle keyboard key {key}"
+
+    # 方向键不许整表重渲染（2026-11-26 真机：每移动一格菜单闪一下；表单里的 <input>
+    # 被换成新节点，于是"选中输入框后打不了字"）。选中态只改 class。
+    assert "applyFocusClass" in js, "renderer.js 需要选中态就地更新（applyFocusClass）"
+
+    def _key_branch(source: str, key: str) -> str:
+        """截出某个按键分支（到它自己的 `return;` 为止）。"""
+        start = source.index(f"key === '{key}'")
+        end = source.index("return;", start)
+        return source[start:end]
+
+    for key in ("ArrowDown", "ArrowUp"):
+        assert "renderCurrent()" not in _key_branch(js, key), (
+            f"{key} 分支里不许调用 renderCurrent()：整表重渲染会闪屏并打断输入框焦点"
+        )
 
 
 def test_reverse_injection_detectors_catch_violations(tmp_path: pathlib.Path) -> None:
@@ -234,6 +280,9 @@ TriggerServerEvent = function(name, payload) serverEvents[#serverEvents + 1] = {
 ExecuteCommand = function(cmd) commandsRan[#commandsRan + 1] = cmd end
 CreateThread = function(fn) deferredThreads[#deferredThreads + 1] = fn end
 Wait = function(ms) timerNow = timerNow + (ms or 0) end
+local focusCalls, keepInputCalls = {{}}, {{}}
+SetNuiFocus = function(hasFocus, hasCursor) focusCalls[#focusCalls + 1] = {{ hasFocus, hasCursor }} end
+SetNuiFocusKeepInput = function(v) keepInputCalls[#keepInputCalls + 1] = v end
 
 local customUi = {{
   IsTaken = function() return uiTaken end,
@@ -298,6 +347,11 @@ assert(menuExports.Open({{
   items = {{ {{ id = 'a1', kind = 'nav', label = 'Open Sub', intent = 'test:sub' }} }},
 }}))
 assert(pushCalls == 2 and menuExports.ApplyFocus(true, true, false) == true)
+-- 焦点必须真的设上：custom-ui 没有 ui_page，它只负责反调本导出（真机踩过"菜单画出来但输入无反应"）
+assert(#focusCalls >= 2, 'ApplyFocus 必须真的调用 SetNuiFocus（custom-ui 只负责反调）')
+local lastFocus = focusCalls[#focusCalls]
+assert(lastFocus[1] == true and lastFocus[2] == true, 'ApplyFocus 必须授予焦点且带光标')
+assert(keepInputCalls[1] == false, 'keepInput 必须在 SetNuiFocus 之前按约定设置')
 local acked = false
 nuiCallbacks['nui:ack']({{ ackToken = nuiSent[#nuiSent].ackToken }}, function(r) acked = r.ok end)
 assert(acked == true)

@@ -316,10 +316,37 @@ local function menuOpen(spec, opts)
 end
 
 -- Focus contract owned by custom-ui; custom-menu never writes focus natives directly.
+--- custom-ui 的栈在推帧/弹帧时会反调本导出，由**拥有 NUI 页面**的资源真正设置焦点。
+--- ⚠️ 这一段不能省：`SetNuiFocus` 是按资源的，custom-ui 自己没有 ui_page（它 :74 的 V-10 注释
+--- 写明了）。少了它，真机表现是「菜单画出来了，但键盘和鼠标全都没反应」——2026-11-26 实测。
+--- 顺序与重试照抄 custom-ui 的约定（:92-112）：keepInput 先设 → false,false 清掉别处留下的
+--- 半聚焦 → true,true，并在下一帧与 100ms 后各补一次（有些 build 同帧授予焦点会丢光标）。
 exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
     hostState.hasFocus = hasFocus == true
     hostState.hasCursor = hasCursor == true
     hostState.keepInput = keepInput == true
+
+    if not hostState.hasFocus then
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+        return true
+    end
+
+    SetNuiFocusKeepInput(hostState.keepInput)
+    SetNuiFocus(false, false)
+    SetNuiFocus(true, true)
+
+    local seq = hostState.seq
+    CreateThread(function()
+        Wait(0)
+        if hostState.open and hostState.hasFocus and hostState.seq == seq then
+            SetNuiFocus(true, true)
+        end
+        Wait(100)
+        if hostState.open and hostState.hasFocus and hostState.seq == seq then
+            SetNuiFocus(true, true)
+        end
+    end)
     return true
 end)
 
@@ -393,9 +420,16 @@ RegisterNetEvent('custom-menu:client:intentResult', function(res)
 end)
 
 AddEventHandler('onResourceStop', function(resName)
-    if resName == GetCurrentResourceName() and hostState.open then
+    if resName ~= GetCurrentResourceName() then return end
+    if hostState.open then
         menuCloseInternal('resource_stop', false)
     end
+    -- 资源卸载时页面已经消失，必须**无条件**把焦点还出去：custom-ui 的 Pop 可能因为栈状态
+    -- 走不到（例如 custom-ui 自己在重启），而 SetNuiFocus 是本资源自己的，
+    -- 漏了这一步就会留下"游戏拿不到键盘"的僵尸状态（闸门 NUI-CLIENT-01 也要求这条）。
+    hostState.hasFocus = false
+    SetNuiFocusKeepInput(false)
+    SetNuiFocus(false, false)
 end)
 
 

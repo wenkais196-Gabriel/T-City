@@ -34,6 +34,7 @@ BASE = REPO / "T-CityLite.base"
 ARCH = BASE / "tests" / "architecture"
 
 #: 变异用例反复引用的目标路径（同一字面量出现 3 次以上就命名，改路径时只改一处）
+MENU_HOST_LUA = "resources/[custom]/custom-menu/client/host.lua"
 LOGS_LUA = "resources/[custom]/custom-logs/server/logs.lua"
 NET_EVENT_SCAN = "tests/architecture/net_event_scan.py"
 NET_EVENTS_BASELINE = "tests/architecture/net_events_baseline.json"
@@ -58,8 +59,16 @@ MUTATIONS: list[Mutation] = [
     # ── custom-menu（M2 #344）：这些闸门全是"必须存在/必须为零"的静态判据，
     # 只有把它们各自打红一次，才能证明它们不是永远绿。
     Mutation(
-        gate="tests/architecture/test_menu_host.py::test_zero_set_nui_focus_across_custom_menu",
-        path="resources/[custom]/custom-menu/client/host.lua",
+        gate="tests/architecture/test_menu_host.py::test_renderer_framework_agnostic_and_tokens",
+        path="resources/[custom]/custom-menu/html/renderer.js",
+        content=None,
+        replace_from="          applyFocusClass();\n        }\n        return;\n      }\n\n      if (key === 'ArrowUp'",
+        replace_to="          renderCurrent();\n        }\n        return;\n      }\n\n      if (key === 'ArrowUp'",
+        what="方向键改回整表重渲染（闪屏 + 表单输入框丢焦点）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_menu_host.py::test_set_nui_focus_only_at_sanctioned_boundaries",
+        path=MENU_HOST_LUA,
         content=None,
         replace_from="exports('Open', menuOpen)",
         replace_to="exports('Open', menuOpen)\nSetNuiFocus(true, true) -- 变异注入",
@@ -75,7 +84,7 @@ MUTATIONS: list[Mutation] = [
     ),
     Mutation(
         gate="tests/architecture/test_menu_host.py::test_host_lua_input_layer_handshake_and_intents",
-        path="resources/[custom]/custom-menu/client/host.lua",
+        path=MENU_HOST_LUA,
         content=None,
         replace_from="exports('Open', menuOpen)",
         replace_to="local _openUnused = menuOpen",
@@ -99,7 +108,7 @@ MUTATIONS: list[Mutation] = [
     ),
     Mutation(
         gate="tests/architecture/test_menu_host.py::test_host_lua_runtime_contracts_in_sandbox",
-        path="resources/[custom]/custom-menu/client/host.lua",
+        path=MENU_HOST_LUA,
         content=None,
         replace_from="alreadyOwns = okOwns and owns == true",
         replace_to="alreadyOwns = true",
