@@ -204,22 +204,32 @@ def test_snapshot_fields_match_seeded_sql():
         __emit('PRODUCED', tostring(snap and snap.producedUnits))
     """)
 
-    assert out["OK"] == TRUE and out["ERR"] == NIL, f"Snapshot 失败：{out}"
+    assert out["OK"] == TRUE
+    assert out["ERR"] == NIL, f"Snapshot 失败：{out}"
     assert out["ORGID"] == "mining_co"
     assert out["ORG"] == "洛圣都矿业公司"
     assert out["GRADE"] == "Mine Owner"
     assert out["ISBOSS"] == TRUE
     assert out["BAL"] == "47675"
-    assert out["TYPE"] == "mine" and out["LABEL"] == "矿业设施"
-    assert out["LEVEL"] == "1" and out["MAXLEVEL"] == "5"
-    assert out["WS"] == "3" and out["WSCAP"] == "10"
-    assert out["STOCK"] == "45" and out["STOCKCAP"] == "144"
+    assert out["TYPE"] == "mine"
+    assert out["LABEL"] == "矿业设施"
+    assert out["LEVEL"] == "1"
+    assert out["MAXLEVEL"] == "5"
+    assert out["WS"] == "3"
+    assert out["WSCAP"] == "10"
+    assert out["STOCK"] == "45"
+    assert out["STOCKCAP"] == "144"
     # floor(50000 × 1.35^3) = 123018
     assert out["NEXTCOST"] == "123018", "工位成本曲线变了"
     assert out["HIREBLOCK"] == "funds", "余额 47675 < 123018 时应置灰 + funds"
-    assert out["ITEM"] == "iron_ore" and out["UNIT"] == "50"
-    assert out["GTOTAL"] == "10" and out["GUSED"] == "5" and out["GREM"] == "5"
-    assert out["ORGCAP"] == "5" and out["ORGUSED"] == "5" and out["ORGREM"] == "0"
+    assert out["ITEM"] == "iron_ore"
+    assert out["UNIT"] == "50"
+    assert out["GTOTAL"] == "10"
+    assert out["GUSED"] == "5"
+    assert out["GREM"] == "5"
+    assert out["ORGCAP"] == "5"
+    assert out["ORGUSED"] == "5"
+    assert out["ORGREM"] == "0"
     assert out["MAXQTY"] == "0", "maxQty 必须是 min(stock, orgRemaining, globalRemaining)"
     assert out["SELLBLOCK"] == "org_cap", "本组织配额用完时原因必须是 org_cap（不是 demand）"
     assert out["PRODUCED"] == "777"
@@ -245,9 +255,14 @@ def test_unbuilt_facility_returns_snapshot_without_subsections():
         __emit('BAL', tostring(snap and snap.balance))
         __emit('ISBOSS', tostring(snap and snap.isBoss))
     """)
-    assert out["OK"] == TRUE and out["ERR"] == NIL, f"未建厂不应报错：{out}"
-    assert out["FACILITY"] == NIL and out["DEMAND"] == NIL and out["SELLABLE"] == NIL
-    assert out["PRODUCED"] == "0" and out["BAL"] == "500" and out["ISBOSS"] == TRUE
+    assert out["OK"] == TRUE
+    assert out["ERR"] == NIL, f"未建厂不应报错：{out}"
+    assert out["FACILITY"] == NIL
+    assert out["DEMAND"] == NIL
+    assert out["SELLABLE"] == NIL
+    assert out["PRODUCED"] == "0"
+    assert out["BAL"] == "500"
+    assert out["ISBOSS"] == TRUE
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -283,13 +298,18 @@ def test_estimate_sale_matches_settle_sale_revenue_and_writes_nothing():
         __emit('SETTLE_REV', tostring(result and result.revenue))
     """)
     # floor(10 × 50 × 1.25 × 1.2) = 750
-    assert out["EST_OK"] == TRUE and out["EST_ERR"] == NIL, f"{out}"
-    assert out["EST_QTY"] == "10" and out["EST_UNIT"] == "50" and out["EST_REV"] == "750"
+    assert out["EST_OK"] == TRUE
+    assert out["EST_ERR"] == NIL, f"{out}"
+    assert out["EST_QTY"] == "10"
+    assert out["EST_UNIT"] == "50"
+    assert out["EST_REV"] == "750"
     assert out["EST_BLOCK"] == NIL
-    assert out["PRE_SALES"] == "0" and out["PRE_STOCK"] == "100"
-    assert out["PRE_QUOTA"] == "0" and out["PRE_BAL"] == "0", "EstimateSale 不能写库/占配额"
-    assert out["SETTLE_OK"] == TRUE and out["SETTLE_REV"] == "750", (
-        "EstimateSale 与 SettleSale 不是同一套系数/取整")
+    assert out["PRE_SALES"] == "0"
+    assert out["PRE_STOCK"] == "100"
+    assert out["PRE_QUOTA"] == "0"
+    assert out["PRE_BAL"] == "0", "EstimateSale 不能写库/占配额"
+    assert out["SETTLE_OK"] == TRUE
+    assert out["SETTLE_REV"] == "750", "EstimateSale 与 SettleSale 不是同一套系数/取整"
 
     source = SALE_SRC.read_text(encoding="utf-8")
     assert "function IndustrySales.QuoteRevenue" in source
@@ -321,13 +341,16 @@ def test_non_member_and_non_boss_are_rejected_without_writes():
         __emit('MEMBER_ISBOSS', tostring(memberSnap and memberSnap.isBoss))
         __emitWriteState()
     """)
-    assert out["OUT_SNAP"] == NIL and out["OUT_SNAP_ERR"] == "not_member"
+    assert out["OUT_SNAP"] == NIL
+    assert out["OUT_SNAP_ERR"] == "not_member"
     assert out["SELL_OUT"] == "false:not_member"
     assert out["SELL_MEMBER"] == "false:not_boss"
     assert out["HIRE_MEMBER"] == "false:not_boss"
     assert out["MEMBER_ISBOSS"] == FALSE, "普通成员的快照必须带 isBoss=false"
-    assert out["SALES"] == "0" and out["STOCK"] == "10"
-    assert out["BAL"] == "0" and out["WS"] == "1", "被拒绝的请求写库了"
+    assert out["SALES"] == "0"
+    assert out["STOCK"] == "10"
+    assert out["BAL"] == "0"
+    assert out["WS"] == "1", "被拒绝的请求写库了"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -368,15 +391,19 @@ def test_forged_qty_is_clamped_or_rejected_without_extra_writes():
     assert out["EST_QTY"] == "10", "EstimateSale 没有按 maxQty 夹紧"
     assert out["EST_REV"] == "500"
     assert out["EST_BLOCK"] == "stock"
-    assert out["OVER_OK"] == TRUE and out["OVER_ERR"] == NIL
-    assert out["OVER_QTY"] == "10" and out["OVER_REQUESTED"] == "999"
-    assert out["OVER_STOCK"] == "0" and out["OVER_BAL"] == "500"
+    assert out["OVER_OK"] == TRUE
+    assert out["OVER_ERR"] == NIL
+    assert out["OVER_QTY"] == "10"
+    assert out["OVER_REQUESTED"] == "999"
+    assert out["OVER_STOCK"] == "0"
+    assert out["OVER_BAL"] == "500"
 
     assert out["NEG"] == "false:bad_qty"
     assert out["TEXT"] == "false:bad_qty"
     assert out["FLOAT"] == "false:bad_qty"
     assert out["BAD_SALES"] == "0", "非法 qty 产生了卖单"
-    assert out["BAD_STOCK"] == "10" and out["BAD_BAL"] == "0"
+    assert out["BAD_STOCK"] == "10"
+    assert out["BAD_BAL"] == "0"
     assert out["BAD_QUOTA"] == "0"
 
 
@@ -414,10 +441,14 @@ def test_client_supplied_price_fields_are_ignored():
         __emit('PLAIN_BAL', tostring(__balance('mining_co')))
         __emit('PLAIN_QUOTA', tostring(__demandRow('iron_ore').quota_used))
     """)
-    assert out["FORGED_OK"] == TRUE and out["FORGED_ERR"] == NIL
-    assert out["PLAIN_OK"] == TRUE and out["PLAIN_ERR"] == NIL
-    assert out["FORGED_REV"] == "100" and out["PLAIN_REV"] == "100"
-    assert out["FORGED_UNIT"] == "50" and out["PLAIN_UNIT"] == "50"
+    assert out["FORGED_OK"] == TRUE
+    assert out["FORGED_ERR"] == NIL
+    assert out["PLAIN_OK"] == TRUE
+    assert out["PLAIN_ERR"] == NIL
+    assert out["FORGED_REV"] == "100"
+    assert out["PLAIN_REV"] == "100"
+    assert out["FORGED_UNIT"] == "50"
+    assert out["PLAIN_UNIT"] == "50"
     assert out["FORGED_BAL"] == out["PLAIN_BAL"] == "100"
     assert out["FORGED_QUOTA"] == out["PLAIN_QUOTA"] == "2"
 
@@ -603,7 +634,8 @@ def test_phone_snapshot_projection_and_sell_calls_estimate_first():
     assert out["ROW_STOCK"] == "3 / 144"
     assert out["ROW_QUOTA"] == "全服剩 5 / 10 · 本组织剩 5 / 5"
     assert out["RAW_BAL"] == "100", "手机查询必须把原始快照一起给专用皮肤"
-    assert out["SELL_OK"] == TRUE and out["SELL_QTY"] == "2"
+    assert out["SELL_OK"] == TRUE
+    assert out["SELL_QTY"] == "2"
     assert out["CALLS"] == "estimate,sell", "卖单必须先 EstimateSale 再 SellIndustryStock"
 
 
@@ -630,9 +662,14 @@ def test_gang_org_uses_same_snapshot_and_access_rules():
         local cross, crossErr = IndustryUi.Snapshot(gangBoss(), 'mining_co')
         __emit('CROSS', tostring(cross) .. ':' .. tostring(crossErr))
     """)
-    assert out["OK"] == TRUE and out["ERR"] == NIL, f"{out}"
-    assert out["ORG"] == "卡特尔" and out["GRADE"] == "Boss" and out["ISBOSS"] == TRUE
-    assert out["BAL"] == "250" and out["MAXQTY"] == "5" and out["PRODUCED"] == "9"
+    assert out["OK"] == TRUE
+    assert out["ERR"] == NIL, f"{out}"
+    assert out["ORG"] == "卡特尔"
+    assert out["GRADE"] == "Boss"
+    assert out["ISBOSS"] == TRUE
+    assert out["BAL"] == "250"
+    assert out["MAXQTY"] == "5"
+    assert out["PRODUCED"] == "9"
     assert out["CROSS"] == "nil:not_member"
 
 
@@ -664,8 +701,10 @@ def test_disabled_industry_returns_disabled_and_never_writes():
     assert out["SELL"] == "false:disabled"
     assert out["HIRE"] == "false:disabled"
     assert out["CAN_ACCESS"] == FALSE
-    assert out["SALES"] == "0" and out["STOCK"] == "10"
-    assert out["BAL"] == "1000" and out["WS"] == "1", "关闭状态下写库了"
+    assert out["SALES"] == "0"
+    assert out["STOCK"] == "10"
+    assert out["BAL"] == "1000"
+    assert out["WS"] == "1", "关闭状态下写库了"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -695,7 +734,8 @@ def test_ui_wiring_registers_callbacks_and_exports():
     }, f"export 注册面变了：{sorted(exports)}"
     # S5 只加 callback/export，不新增服务端事件或线程。
     assert out["QBCORE_COUNT"] == "7"
-    assert out["EVENTS"] == "1" and out["THREADS"] == "1"
+    assert out["EVENTS"] == "1"
+    assert out["THREADS"] == "1"
     assert out["HAS_GLOBAL"] == FALSE
 
     manifest = MANIFEST.read_text(encoding="utf-8")
@@ -821,10 +861,12 @@ def test_snapshot_uses_sales_sum_when_counter_is_behind():
         __emit('QUOTA', tostring(__demandRow('iron_ore').quota_used))
         __emit('DRIFT_AUDITS', tostring(__auditCount('quota_drift')))
     """)
-    assert out["OK"] == TRUE and out["ERR"] == NIL, f"Snapshot 失败：{out}"
+    assert out["OK"] == TRUE
+    assert out["ERR"] == NIL, f"Snapshot 失败：{out}"
     assert out["GUSED"] == "5", "全服已用没有取计数器与流水合计的较大值"
     assert out["GREM"] == "15", "旧实现会给 20：计数器欠账时必须用流水合计"
-    assert out["ORGUSED"] == "5" and out["OREM"] == "5"
+    assert out["ORGUSED"] == "5"
+    assert out["OREM"] == "5"
     assert out["MAXQTY"] == "5", "maxQty 必须落到流水算出的全服剩余"
     assert out["QUOTA"] == "5", "读路径没有把计数器对账回流水合计"
     assert out["DRIFT_AUDITS"] == "1"
@@ -846,7 +888,8 @@ def test_org_remaining_is_capped_by_global_remaining():
         __emit('MAXQTY', tostring(snap and snap.sellable.maxQty))
         __emit('BLOCK', tostring(snap and snap.sellable.blocked))
     """)
-    assert out["OK"] == TRUE and out["ERR"] == NIL, f"Snapshot 失败：{out}"
+    assert out["OK"] == TRUE
+    assert out["ERR"] == NIL, f"Snapshot 失败：{out}"
     assert out["GREM"] == "0", "全服已用必须等于流水合计 20"
     assert out["ORGUSED"] == "5"
     assert out["OREM"] == "0", "全服剩 0 时本组织剩余必须也是 0（旧实现会给 5）"
@@ -879,12 +922,14 @@ def test_drift_reconciliation_writes_one_numeric_audit_and_is_idempotent():
         __emit('RECONCILE_UPDATES', tostring(__sqlUpdateCount(
             'UPDATE industry_demand SET quota_used = ?')))
     """)
-    assert out["USED1"] == "5" and out["QUOTA1"] == "5", "读路径没有按流水回填计数器"
+    assert out["USED1"] == "5"
+    assert out["QUOTA1"] == "5", "读路径没有按流水回填计数器"
     assert out["AUDITS1"] == "1", "漂移必须恰好写一条 quota_drift 审计"
     assert out["PAYLOAD"] == (
         '{"cycle_no":0,"quota_total":20,"quota_used":0,"sales_sum":5}'
     ), f"审计 payload 必须只放数字：{out['PAYLOAD']}"
-    assert out["USED2"] == "5" and out["QUOTA2"] == "5"
+    assert out["USED2"] == "5"
+    assert out["QUOTA2"] == "5"
     assert out["AUDITS2"] == "1", "重复读重复写了审计"
     assert out["RECONCILE_UPDATES"] == "1", "幂等对账只应执行一次条件 UPDATE"
 
@@ -906,11 +951,13 @@ def test_normal_sale_adds_no_reconcile_update_or_drift_audit():
         __emit('QUOTA_CAS', tostring(__sqlUpdateCount(
             'UPDATE industry_demand SET quota_used = quota_used + ?')))
     """)
-    assert out["OK"] == TRUE and out["ERR"] == NIL, f"正常卖单失败：{out}"
-    assert out["SALES"] == "1" and out["STOCK"] == "8" and out["BAL"] == "100"
+    assert out["OK"] == TRUE
+    assert out["ERR"] == NIL, f"正常卖单失败：{out}"
+    assert out["SALES"] == "1"
+    assert out["STOCK"] == "8"
+    assert out["BAL"] == "100"
     assert out["QUOTA"] == "2"
-    assert out["SALE_AUDITS"] == "1" and out["DRIFT_AUDITS"] == "0", (
-        f"正常卖单写了漂移审计：{out}"
-    )
+    assert out["SALE_AUDITS"] == "1"
+    assert out["DRIFT_AUDITS"] == "0", f"正常卖单写了漂移审计：{out}"
     assert out["RECONCILE_UPDATES"] == "0", "正常卖单多了一次对账 UPDATE"
     assert out["QUOTA_CAS"] == "1", "配额 CAS 必须仍然只有一条"
