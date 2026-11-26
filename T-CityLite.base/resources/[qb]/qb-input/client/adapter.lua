@@ -34,12 +34,20 @@ local state = {
 
 local function callMenu(method, ...)
     local api = exports[CUSTOM_MENU]
-    local ok, result, extra = pcall(api[method], api, ...)
-    if ok then
-        return result, extra
-    end
-    print(('[qb-input] custom-menu:%s 调用失败：%s'):format(method, tostring(result)))
-    return false, 'call_failed'
+    if not api then return false, 'missing_export' end
+    local fn = api[method]
+    if type(fn) ~= 'function' then return false, 'missing_export' end
+    -- FiveM 的 exports 代理对「第一个实参」的语义在不同 build 上不一致：
+    -- 有的代理会把它当 self 吃掉，有的会原样转给导出函数。所以两种形状都试一次，
+    -- 取第一个「成功且没返回 false」的结果。2026-11-26 真机就是栽在这里：
+    -- 显式传 self 时 RegisterIntent 收到 table 当 intent 名，注册静默失败 → 回退旧 NUI。
+    local ok, a, b = pcall(fn, ...)
+    if ok and a ~= false then return a, b end
+    local ok2, c, d = pcall(fn, api, ...)
+    if ok2 and c ~= false then return c, d end
+    local reason = (ok and a) or (ok2 and c) or (not ok and a) or 'call_failed'
+    print(('[%s] custom-menu:%s 调用失败：%s'):format(RESOURCE, method, tostring(reason)))
+    return false, tostring(reason)
 end
 
 local function hasText(value)
