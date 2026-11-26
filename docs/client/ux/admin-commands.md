@@ -142,7 +142,7 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `agentapprove` | RegisterCommand | handler 内判定: IsPlayerAceAllowed | T-CityLite.base/resources/[custom]/custom-director/server/main.lua:2075 |
+| `agentapprove` | RegisterCommand | handler 内判定: IsPlayerAceAllowed | T-CityLite.base/resources/[custom]/custom-director/server/main.lua:2077 |
 
 ### custom-industry
 

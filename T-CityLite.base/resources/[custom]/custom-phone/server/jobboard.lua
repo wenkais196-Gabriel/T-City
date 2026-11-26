@@ -182,10 +182,13 @@ local function GrantJobReward(src, job)
 
     -- Some QBCore builds expose a top-level helper; otherwise use the
     -- per-player API (the one this server actually ships).
-    if type(QBCore.Functions.AddMoney) == 'function' then
-        local ok, paid = pcall(QBCore.Functions.AddMoney, src, 'bank', base, reason)
-        if ok and paid then return true, base, 1.0 end
-    end
+    -- 本 build 里 QBCore.Functions.AddMoney 是可调用表（type == 'table'），
+    -- 所以这里不能用 type(...) == 'function' 判断可用性 —— 直接试调用，失败就走下面
+    -- 的玩家侧 API。之前那条守卫恒假，这整段是死分支。
+    local topOk, paidTop = pcall(function()
+        return QBCore.Functions.AddMoney(src, 'bank', base, reason)
+    end)
+    if topOk and paidTop then return true, base, 1.0 end
 
     local ok, paid = pcall(function()
         return Player.Functions.AddMoney('bank', base, reason)

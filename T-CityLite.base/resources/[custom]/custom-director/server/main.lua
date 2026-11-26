@@ -845,8 +845,10 @@ local function executeAnnounce(actionId, params)
         if src then
             local playerOk, player = pcall(QBCore.Functions.GetPlayer, src)
             if playerOk and type(player) == 'table'
-                and type(player.Functions) == 'table'
-                and type(player.Functions.Notify) == 'function' then
+                and type(player.Functions) == 'table' then
+                -- player.Functions.Notify 是跨资源导出的「可调用表」(type == 'table')，
+                -- 不能写 type(...) == 'function' —— 那条守卫恒假，广播会静默变成
+                -- delivered=0（2026-11-26 真机发现）。直接 pcall 调用即可。
                 if pcall(player.Functions.Notify, params.message, params.kind, 5000) then
                     delivered = delivered + 1
                 end

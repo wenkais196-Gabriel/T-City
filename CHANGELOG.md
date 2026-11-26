@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并新增 `/industry` 直开面板。
   ④ `cl_org.lua` 的提示循环会在「菜单开着但玩家不在 1.5m 内」时调 `qb-menu:closeMenu()`，
   这会关掉**任何**用 qb-menu 打开的界面。`/industry` 直开不置 `shownMenu`，因此不受影响。
+- **三处 `type(x.Functions.y) == 'function'` 造成的静默故障（#364）**：本 build 里
+  `exports['qb-core']:GetCoreObject()` 交出来的函数是**可调用表**（`type == 'table'`），
+  那条守卫恒假。① custom-director 的广播通知：`delivered` 永远 0，**通知从未送达**；
+  ② custom-quest 的 vendor `payCash`：守卫恒真 → 永远返回 false，**卖东西从不付款**（库存照扣）；
+  ③ custom-phone 的 jobboard：只让顶层的 `AddMoney` 分支变成死代码（有玩家侧回退，无行为影响）。
+  三处都改为只判 nil + `pcall` 调用。新增闸门
+  `tests/architecture/test_qbcore_callable_table_guards.py`：全 [custom] 树静态零命中 +
+  反向注入 3 种形状必须判红 + **行为对照**（把 `payCash` 抽出来，用 `__call` 元表模拟可调用表，
+  断言真的付了钱且只调一次）。恢复事故前的写法 → 形状闸门与行为用例同时变红。
 - **`qb-adminmenu` 接入 `custom-ui` 输入栈（#353）**：`/admin` 原先既不查栈也不入栈，真机表现为
   ① 手机开着时仍能叠开、② 菜单开着按 `Esc` 关不掉反而呼出游戏暂停菜单。新增垫片
   （qb-adminmenu 的 client/menu_shim.lua）：打开前问 `custom-ui:IsTaken()`（被占用则拒绝并提示），打开时

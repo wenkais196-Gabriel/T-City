@@ -362,10 +362,12 @@ end
 local function payCash(player, amount)
     amount = math.floor(tonumber(amount) or 0)
     if amount <= 0 then return true end
-    if type(player) ~= 'table' or type(player.Functions) ~= 'table'
-        or type(player.Functions.AddMoney) ~= 'function' then
+    if type(player) ~= 'table' or type(player.Functions) ~= 'table' then
         return false
     end
+    -- ⚠️ 不能再加 `or type(player.Functions.AddMoney) ~= 'function'`：
+    -- 本 build 里 player.Functions.AddMoney 是跨资源导出的**可调用表**（type == 'table'），
+    -- 那条守卫恒真 → payCash 永远 false → 卖东西从不付款（2026-11-26 真机发现）。
     -- 用 pcall 包住是给「未来 AddMoney 内部接 DB」留的保险：抛错时调用方会回滚库存。
     local ok, paid = pcall(function()
         return player.Functions.AddMoney('cash', amount, 'quest-vendor-sale')
