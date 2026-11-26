@@ -551,10 +551,10 @@ review_by: 2027-02-28
 | `bank` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:31 |
 | `cash` | QBCore.Commands.Add | — | T-CityLite.base/resources/[qb]/qb-hud/server.lua:24 |
 | `dev` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-hud/server.lua:38 |
-| `hud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:237 |
-| `hudsettings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:226 |
-| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:273 |
-| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:278 |
+| `hud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:324 |
+| `hudsettings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:313 |
+| `resethud` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:360 |
+| `rings` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-hud/client.lua:365 |
 
 ### qb-inventory
 
@@ -565,10 +565,10 @@ review_by: 2027-02-28
 | `giveitem` | QBCore.Commands.Add | QBCore: admin | T-CityLite.base/resources/[qb]/qb-inventory/server/commands.lua:3 |
 | `hotbar` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/server/commands.lua:101 |
 | `inventory` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/server/commands.lua:116 |
-| `openInv` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:315 |
+| `openInv` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:401 |
 | `randomitems` | QBCore.Commands.Add | QBCore: god | T-CityLite.base/resources/[qb]/qb-inventory/server/commands.lua:51 |
-| `slot_` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:326 |
-| `toggleHotbar` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:321 |
+| `slot_` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:412 |
+| `toggleHotbar` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-inventory/client/main.lua:407 |
 
 ### qb-lapraces
 
@@ -629,8 +629,8 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `-playerTarget` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-target/client.lua:1281 |
-| `playerTarget` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-target/client.lua:1268 |
+| `-playerTarget` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-target/client.lua:1360 |
+| `playerTarget` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-target/client.lua:1347 |
 
 ### qb-vehicleshop
 
@@ -666,11 +666,11 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `decision` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:392 |
-| `fixui` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:431 |
-| `nuifocus` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:423 |
-| `nuitest` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:417 |
-| `story_choose` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:260 |
+| `decision` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:424 |
+| `fixui` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:461 |
+| `nuifocus` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:454 |
+| `nuitest` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:448 |
+| `story_choose` | RegisterCommand | — | T-CityLite.base/resources/[custom]/story-engine/client/main.lua:297 |
 | `story_nui_ping` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/story-engine/server/main.lua:269 |
 | `story_offer_dev` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/story-engine/server/main.lua:278 |
 

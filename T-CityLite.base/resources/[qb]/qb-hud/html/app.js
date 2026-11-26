@@ -606,6 +606,9 @@ $(document).ready(function () {
             case "open":
                 Open(event.data);
                 break;
+            case "close":
+                $("#openmenu").fadeOut(150);
+                break;
         }
     });
 });

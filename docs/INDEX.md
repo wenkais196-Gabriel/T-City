@@ -239,7 +239,7 @@
 | [v0.7b 智能车载中控屏与诊断系统 (Sleek Glassmorphic Dashboard NUI)](archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.7b-vehicle-dashboard.md` |
 | [v0.8 客户端自适应多语言本土化架构系统](archive/QBCore_Lite_versions/v0.8-localization-adaptation.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.8-localization-adaptation.md` |
 | [手机四段往返可观测设计（`phone:server:diag`）](client/research/client-observability-design.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/client/research/client-observability-design.md` |
-| [游戏内菜单系统：从五套并存收敛到一个契约 + 三个平面](client/ux/menu-system-design.md) | spec | 🟡 draft | 2026-11-25 | 2027-02-28 |  | `docs/client/ux/menu-system-design.md` |
+| [游戏内菜单系统：从五套并存收敛到一个契约 + 三个平面](client/ux/menu-system-design.md) | spec | 🟡 draft | 2026-11-26 | 2027-02-28 |  | `docs/client/ux/menu-system-design.md` |
 | [11 · 工作平板：一台设备的两种形态](server-design/11-work-tablet.md) | spec | ✅ active | 2026-10-26 | 2027-04-30 |  | `docs/server-design/11-work-tablet.md` |
 
 ### world（12）

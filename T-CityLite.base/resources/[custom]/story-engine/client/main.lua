@@ -22,33 +22,93 @@ end
 -- 事件: quest 步骤 decision 触发 → 打开 NUI
 -- ==============================================================
 
+local STORY_FRAME_ID = 'story-decision'
+local nuiFocused = false
+
+local function isUiTaken()
+    if GetResourceState('custom-ui') ~= 'started' then return false end
+    local ok, taken = pcall(function() return exports['custom-ui']:IsTaken() end)
+    return ok and taken == true
+end
+
+local function applyStoryFocus(hasFocus, hasCursor, keepInput)
+    if not hasFocus then
+        nuiFocused = false
+        SetNuiFocusKeepInput(false)
+        SetNuiFocus(false, false)
+        return true
+    end
+    SetNuiFocusKeepInput(keepInput == true)
+    if not nuiFocused then
+        SetNuiFocus(false, false)
+    end
+    SetNuiFocus(true, hasCursor ~= false)
+    nuiFocused = true
+    return true
+end
+
+local function acquireDecisionFocus()
+    if GetResourceState('custom-ui') == 'started' then
+        local ok = pcall(function()
+            exports['custom-ui']:Push({
+                id = STORY_FRAME_ID,
+                owner = GetCurrentResourceName(),
+                cursor = true,
+                keepInput = false,
+            })
+        end)
+        if ok then return true end
+    end
+    return applyStoryFocus(true, true, false)
+end
+
+local function releaseDecisionFocus()
+    if GetResourceState('custom-ui') == 'started' then
+        local okPath, path = pcall(function() return exports['custom-ui']:Path() end)
+        local inStack = false
+        if okPath and type(path) == 'table' then
+            for _, frameId in ipairs(path) do
+                if frameId == STORY_FRAME_ID then
+                    inStack = true
+                    break
+                end
+            end
+        end
+        if inStack then
+            local okPop = pcall(function() exports['custom-ui']:Pop(STORY_FRAME_ID) end)
+            if okPop then
+                pcall(function() exports['custom-ui']:GuardControls(300) end)
+                return true
+            end
+        end
+    end
+    if nuiFocused then
+        return applyStoryFocus(false, false, false)
+    end
+    return false
+end
+
 -- 焦点由 custom-ui 的输入栈统一分派（SetNuiFocus 是**按资源**的，
 -- 只有拥有 ui_page 的资源调用才有效）。栈顶是本资源时它会回调这里。
 exports('ApplyFocus', function(hasFocus, hasCursor, keepInput)
-    if hasFocus then
-        SetNuiFocus(true, hasCursor ~= false)
-        SetNuiFocusKeepInput(keepInput ~= false)
-    else
-        if IsNuiFocusKeepingInput() then SetNuiFocusKeepInput(false) end
-        SetNuiFocus(false, false)
-        SetTimeout(100, function() SetNuiFocus(false, false) end)
-    end
+    return applyStoryFocus(hasFocus, hasCursor, keepInput)
+end)
+
+exports('ForceClose', function(_frameId, reason)
+    if not isNuiOpen and not pendingDecision then return true end
+    isNuiOpen = false
+    nuiOpenedAt = 0
+    nuiClosedByPlayer = true
+    openToken = (openToken or 0) + 1
+    SendNUIMessage({ type = 'closeDecision' })
+    telemetry('nui.forceClose', { reason = reason or 'force_close' })
     return true
 end)
 
 -- 关闭决策弹窗的唯一出口：释放焦点 + 恢复 keepInput + 清状态
 function closeDecisionSurface(reason, keepPending)
     if not isNuiOpen and not pendingDecision then return end
-    -- 顺序照抄 custom-phone 的 ApplyFocus(false)：**先撤 keepInput，再释放焦点**。
-    -- 反过来（先 SetNuiFocus(false,false) 再 KeepInput(true)）真机表现是：
-    -- 焦点放了，但鼠标游标留在屏幕上不走。
-    local popped = pcall(function() exports['custom-ui']:Pop('story-decision') end)
-    if not popped then
-        if IsNuiFocusKeepingInput() then SetNuiFocusKeepInput(false) end
-        SetNuiFocus(false, false)
-    end
-    -- 兜底：无论走哪条路，100ms 后再按一次关，防止 keepInput 打断收尾
-    SetTimeout(100, function() SetNuiFocus(false, false) end)
+    releaseDecisionFocus()
     isNuiOpen = false
     nuiOpenedAt = 0
     -- 只有"玩家真的做了选择"才丢掉 pending；界面被看门狗收走时保留，
@@ -169,33 +229,10 @@ RegisterNetEvent('story:client:offerDecision', function(data)
         lastDecisionPayload = earlyPayload
         SendNUIMessage(earlyPayload)
         print(('[story-engine] 🧪 early SendNUIMessage options=%d'):format(#options))
-        -- 防止其他 NUI（如手机）留下的 KeepInput=true 抢走键盘/鼠标；
-        -- 但**必须记住原值**，否则关闭后玩家控制回不来（手机那套 keepInput 语义）。
-        -- 按项目红线：开 = SetNuiFocus(true,true) **再** KeepInput(true)。
-        -- 之前写成 KeepInput(false) 在前，等于把键盘让给游戏，CEF 拿不到鼠标事件
-        -- （真机表现：面板看得见、点不动，只能等超时）。
-        keepInputBefore = IsNuiFocusKeepingInput()
         -- 走 custom-ui 的输入栈：它决定"谁是顶层"，再回调我们的 ApplyFocus。
         -- 绕过它直接 SetNuiFocus 会被别的资源（手机/UI 层）随时改回去 ——
         -- 真机症状正是"面板看得见、键盘能用（Lua 原始按键）、鼠标点击全丢"。
-        local pushed = pcall(function()
-            -- keepInput = false：决策是**模态**，打开期间把输入完全交给 CEF。
-            -- 这是鼠标能点动的前提——keepInput=true 时游戏继续持有鼠标，
-            -- CEF 只拿到游标、拿不到按键事件（真机：游标在、点不动）。
-            -- 页面自己处理 1/2/Esc（decision_nui.html 的 keydown）。
-            exports['custom-ui']:Push({
-                id = 'story-decision', owner = 'story-engine',
-                cursor = true, keepInput = true,
-            })
-        end)
-        -- 本资源是 ui_page 的拥有者，必须自己按焦点；custom-ui 的栈只决定归谁。
-        SetNuiFocusKeepInput(false)   -- 先 keepInput，再按焦点（顺序反了会丢光标）
-        SetNuiFocus(true, true)
-        print(('[story-engine] 🎯 own focus applied, top=%s'):format(tostring((function() local okk, t = pcall(function() return exports['custom-ui']:Top() end) return okk and t or '?' end)())))
-        if not pushed then
-            SetNuiFocus(true, true)
-            SetNuiFocusKeepInput(true)
-        end
+        acquireDecisionFocus()
         isNuiOpen = true
         openToken = (openToken or 0) + 1
         local myToken = openToken
@@ -353,21 +390,19 @@ RegisterNUICallback('decisionTimeout', function(data, cb)
     telemetry('nui.timeout', data or {})
     cb('ok')
 
-    SetNuiFocus(false, false)
-    isNuiOpen = false
-    nuiOpenedAt = 0
+    local pd = pendingDecision
+    pendingDecision = nil
+    closeDecisionSurface('timeout', true)
 
-    if not pendingDecision then return end
+    if not pd then return end
 
     -- 超时 → 发送一个默认跳过信号
     TriggerServerEvent('story:server:makeDecision',
-        pendingDecision.questId,
-        pendingDecision.stepId,
-        pendingDecision.decisionId,
+        pd.questId,
+        pd.stepId,
+        pd.decisionId,
         'timeout'
     )
-
-    pendingDecision = nil
 end)
 
 -- ==============================================================
@@ -376,11 +411,8 @@ end)
 
 RegisterNetEvent('story:client:closeDecision', function()
     telemetry('nui.serverClose', { wasOpen = isNuiOpen })
-    if isNuiOpen then
+    if isNuiOpen or pendingDecision then
         closeDecisionSurface('server.close')
-        isNuiOpen = false
-        nuiOpenedAt = 0
-        pendingDecision = nil
         SendNUIMessage({ type = 'closeDecision' })
     end
 end)
@@ -403,14 +435,13 @@ RegisterCommand('decision', function(_, args)
         print('[story-engine] usage: decision <optionId> | options: ' .. table.concat(ids, ', '))
         return
     end
-    SetNuiFocus(false, false)
-    isNuiOpen = false
-    nuiOpenedAt = 0
+    local pd = pendingDecision
+    pendingDecision = nil
+    closeDecisionSurface('command.decision', true)
     telemetry('command.decision', { choice = choice })
     TriggerServerEvent('story:server:makeDecision',
-        pendingDecision.questId, pendingDecision.stepId,
-        pendingDecision.decisionId, choice)
-    pendingDecision = nil
+        pd.questId, pd.stepId,
+        pd.decisionId, choice)
     SendNUIMessage({ type = 'closeDecision' })
 end, false)
 
@@ -421,8 +452,7 @@ RegisterCommand('nuitest', function(_, args)
 end, false)
 
 RegisterCommand('nuifocus', function()
-    SetNuiFocusKeepInput(false)
-    SetNuiFocus(true, true)
+    acquireDecisionFocus()
     print(('[story-engine] nuifocus focused=%s keepInput=%s'):format(
         tostring(IsNuiFocused()), tostring(IsNuiFocusKeepingInput())))
     telemetry('command.nuifocus', { focused = IsNuiFocused(), keepInput = IsNuiFocusKeepingInput() })
@@ -430,7 +460,8 @@ end, false)
 
 RegisterCommand('fixui', function()
     telemetry('command.fixui', { wasOpen = isNuiOpen })
-    SetNuiFocus(false, false)
+    closeDecisionSurface('command.fixui')
+    releaseDecisionFocus()
     isNuiOpen = false
     nuiOpenedAt = 0
     pendingDecision = nil
@@ -455,9 +486,7 @@ CreateThread(function()
         Wait(1000)
         if isNuiOpen and nuiOpenedAt > 0 and (GetGameTimer() - nuiOpenedAt) > 300000 then
             telemetry('nui.watchdog', { decisionId = pendingDecision and pendingDecision.decisionId or nil })
-            SetNuiFocus(false, false)
-            isNuiOpen = false
-            nuiOpenedAt = 0
+            closeDecisionSurface('watchdog', true)
             SendNUIMessage({ type = 'closeDecision' })
             print('[story-engine] ⚠️ NUI watchdog released focus after 300s')
         end
@@ -475,18 +504,27 @@ CreateThread(function()
         -- 于是这个"看护"每 2 秒就重发一次面板，openDecision 会重建所有按钮 ——
         -- 玩家的鼠标点击落在被销毁的 DOM 节点上 → makeChoice 永远不触发，
         -- 面板却一直挂着，只能等服务端 120s 超时（真机症状完全吻合）。
-        -- 正确条件：只在"界面确实没了"时补一次，绝不在开着的时候重发。
-        if pendingDecision and not isNuiOpen and not nuiClosedByPlayer then
-            if true then
-                keepInputBefore = IsNuiFocusKeepingInput()
-                SetNuiFocusKeepInput(false)
-                SetNuiFocus(true, true)
-                isNuiOpen = true
-                if lastDecisionPayload then
-                    SendNUIMessage(lastDecisionPayload)
-                    print('[story-engine] 🔁 焦点被抢，已重新下发决策面板')
-                end
+        -- 正确条件：只在"界面确实没了"且输入栈空闲时补一次，绝不在开着的时候重发。
+        if pendingDecision and not isNuiOpen and not nuiClosedByPlayer and not isUiTaken() then
+            if lastDecisionPayload then
+                SendNUIMessage(lastDecisionPayload)
+                print('[story-engine] 🔁 焦点被抢，已重新下发决策面板')
             end
+            acquireDecisionFocus()
+            isNuiOpen = true
+            nuiOpenedAt = GetGameTimer()
         end
     end
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    if isNuiOpen or nuiFocused then
+        SendNUIMessage({ type = 'closeDecision' })
+        SetNuiFocusKeepInput(false)
+    end
+    isNuiOpen = false
+    pendingDecision = nil
+    nuiFocused = false
+    SetNuiFocus(false, false)
 end)

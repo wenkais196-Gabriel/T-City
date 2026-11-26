@@ -37,17 +37,6 @@
       "expires": "2027-03-31"
     },
     {
-      "id": "story-focus-no-stop-cleanup",
-      "check": "focus_no_resource_stop",
-      "resource": "story-engine",
-      "file": "client/main.lua",
-      "name": "SetNuiFocus",
-      "owner": "story-engine",
-      "reason": "决策弹窗 SetNuiFocus(true,true)（client/main.lua:69），但资源没有 onResourceStop；300s watchdog（client/main.lua:249-261）只覆盖运行中卡死，不覆盖 restart。需在 onResourceStop 里 SetNuiFocus(false,false)+SetNuiFocusKeepInput(false)。审计 Medium O-04。",
-      "added": "2026-10-25",
-      "expires": "2027-03-31"
-    },
-    {
       "id": "debug-origin-hardcoded",
       "check": "nui_origin_hardcoded",
       "resource": "custom-debug",

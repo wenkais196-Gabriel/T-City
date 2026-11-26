@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **qb-target 的 client 脚本里 8 处 JS 可选链让整个资源解析失败**：`zone.targetoptions.drawColor?[1]` 不是合法 Lua（`unexpected symbol near '?'`），却从 2026-11 的架构重构一直留到现在 —— CI 的 `Lua syntax (changed files)` 只解析**改动过的**文件，存量错误永远检查不到；线上看起来没事是因为 FXServer 用编译缓存里的旧字节码，**重启就会整个 qb-target 不加载**。已改为 `(x or {})[n]`，并新增闸门 `T-CityLite.base/tests/architecture/test_lua_js_syntax_rejects.py`：剥掉字符串与注释后全仓扫描 JS 专有形（带自证用例：真实事故形状必须被抓到、字符串里的问号不许误报）。
 
 - **qb-menu / qb-input 适配层跨资源注册 intent 失败（#366）**：custom-menu 的 intent 路由携带 `handler`/`builder` 闭包，跨资源边界被序列化丢弃（对面收到 nil），注册静默失败并回退旧 NUI。新增 `type='resource'` 路由（只带 `resource`/`method` 两个字符串，回调走对方资源导出的 `MenuIntent`），并把「路由不许带函数」写成自证闸门。同时修正：适配层开关改为**调用时**判断（`GlobalState` 优先、convar 兜底），避免事后 `setr` 必须重连才生效；关闭态回落到老路径（`closeMenu` 补传 `closeMenuLegacy`）。
+- **M4 消费者接入 `custom-ui` 焦点栈（`qb-target` / `qb-inventory` / `qb-hud` / `story-engine`，#346）**：
+  ① 四目录内门卫用途的原生焦点判重全部收口到调用期 `custom-ui:IsTaken()`（`qb-target` 开启眼标、`qb-inventory` `/openInv`、`qb-hud` `/hudsettings`、`story-engine` 看护恢复），门卫用途 `IsNuiFocused()` 清零；
+  ② 四个资源统一通过 `custom-ui:Push`/`Pop` + `GuardControls` 管理焦点并导出 `ApplyFocus` 与 `ForceClose`、补齐 `onResourceStop` 焦点兜底释放，移除业务路径上的裸 `SetNuiFocus*` 调用，同时删除 `T-CityLite.base/tests/architecture/nui_client_allowlist.json` 中已修复的 `story-focus-no-stop-cleanup` 条目；
+  ③ 移除 `qb-target` 菜单/眼标路径的每帧 `DisableAllControlActions(0)`，改为瞄准期定向屏蔽攻击/武器/交互/菜单键、打开菜单后由 `custom-ui` 帧 `allow` 白名单（行走 30–35 与 Alt 19）接管；
+  ④ 新增 M4 架构闸门 `T-CityLite.base/tests/architecture/test_m4_focus_stack.py` 与allowlist `T-CityLite.base/tests/architecture/m4_focus_allowlist.json`（登记 `story-engine` 6 处诊断读取与 `noclip` / 死亡态 / `spawn` / 押送 / 原生键盘 8 处合法 `DisableAllControlActions`，逐条附理由与到期日，且按四目录范围做反向注入校验）。
 - **配额双源对账（`custom-industry`，S6 前置，#364）**：全服已用原先只信可变计数器
   `industry_demand.quota_used`，单组织已用却由 `SUM(industry_sales.qty)` 派生；真机手动重置计数器后
   出现「全服剩 10、本组织剩 0」这种数学上不可能的状态。读取改为
