@@ -91,11 +91,11 @@ MUTATIONS: list[Mutation] = [
     ),
     Mutation(
         gate="tests/architecture/test_menu_host.py::test_renderer_framework_agnostic_and_tokens",
-        path="resources/[custom]/custom-menu/html/styles.css",
+        path="resources/[custom]/custom-menu/html/index.html",
         content=None,
-        replace_from="noir",
-        replace_to="noirx",
-        what="主题 token 改名（data-theme=noir 找不到样式，菜单变透明）",
+        replace_from="<title>T-City Custom Menu</title>",
+        replace_to="<title>T-City Custom Menu</title>\n  <dialog open></dialog>",
+        what="依赖 <dialog>（老版本 FiveM CEF 没有这个元素，菜单整块不显示）",
     ),
     Mutation(
         gate="tests/architecture/test_menu_host.py::test_host_lua_runtime_contracts_in_sandbox",
