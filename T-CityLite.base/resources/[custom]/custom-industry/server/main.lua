@@ -13,6 +13,7 @@ IndustryCommands.Register()
 IndustryFacilityCommands.Register()
 IndustryProductionCommands.Register()
 IndustrySalesCommands.Register()
+IndustryUi.Register()
 
 IndustryProduction.Start()
 -- 只做一次种子需求行校准（不新增调度）。

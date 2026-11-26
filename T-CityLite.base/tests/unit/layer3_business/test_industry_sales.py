@@ -757,6 +757,8 @@ end
 
 __registered = {}
 __native = {}
+__callbacks = {}
+__exportNames = {}
 __events = 0
 __threads = 0
 local coreObject = {
@@ -766,6 +768,7 @@ local coreObject = {
     Functions = {
         GetPlayer = function() return nil end,
         HasPermission = function() return false end,
+        CreateCallback = function(name) __callbacks[#__callbacks + 1] = name end,
     },
 }
 
@@ -773,6 +776,9 @@ exports = setmetatable({}, {
     __index = function(_, resource)
         if resource ~= 'qb-core' then return nil end
         return { GetCoreObject = function() return coreObject end }
+    end,
+    __call = function(_, name)
+        __exportNames[#__exportNames + 1] = name
     end,
 })
 
@@ -809,6 +815,8 @@ def run_wiring(debug: bool) -> dict[str, str]:
     body = "\n".join(path.read_text(encoding="utf-8") for path in rest) + "\n" + """
         __emit('QBCORE_COUNT', tostring(#__registered))
         __emit('QBCORE_NAMES', table.concat(__registered, ','))
+        __emit('CALLBACKS', table.concat(__callbacks, ','))
+        __emit('EXPORTS', table.concat(__exportNames, ','))
         __emit('NATIVE', table.concat(__native, ','))
         __emit('EVENTS', tostring(__events))
         __emit('THREADS', tostring(__threads))

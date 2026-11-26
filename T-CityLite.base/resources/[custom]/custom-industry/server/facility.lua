@@ -72,8 +72,8 @@ end
 function Facility.Get(orgId)
     if not validOrg(orgId) then return nil, 'bad_org' end
     local row, err = Db.Single(
-        'SELECT org_id, facility_type, level, workstations, recipe_id, stock, last_tick_at, created_at '
-            .. 'FROM industry_facility WHERE org_id = ? LIMIT 1',
+        'SELECT org_id, facility_type, level, workstations, recipe_id, stock, last_tick_at, created_at, '
+            .. 'produced_units FROM industry_facility WHERE org_id = ? LIMIT 1',
         { orgId })
     if err then return nil, 'db_error' end
     if not row then return nil, 'not_built' end

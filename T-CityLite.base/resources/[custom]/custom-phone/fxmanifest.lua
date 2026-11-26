@@ -45,6 +45,7 @@ server_scripts {
     'server/phone_apps.lua',
     'server/apps/police_mdt.lua',
     'server/apps/quests.lua',
+    'server/apps/industry.lua',
     'server/qb_phone_compat.lua',
     'server/main.lua',
     'server/banking.lua',
