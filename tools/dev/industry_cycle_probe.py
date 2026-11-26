@@ -907,15 +907,11 @@ class CycleProbe:
         except Exception as error:  # noqa: BLE001 - 收尾要尽力而为
             self.cleanup_errors.append(f"stop custom-industry: {error}")
 
-        base_cycle = self.start_cycle
-        if base_cycle <= 0 and self.snapshot.state:
-            try:
-                base_cycle = int(self.snapshot.state.get("cycle_no") or 0)
-            except ValueError:
-                base_cycle = 0
+        # start_cycle 只在 prepare_cycle 里选定（全新周期号）。没选过就说明还没动
+        # 结果/卖单/配额，绝不能拿快照里的真实周期号去删历史行。
         probe_cycles = (
-            list(range(base_cycle, base_cycle + max(1, self.cycle_count)))
-            if base_cycle > 0 else []
+            list(range(self.start_cycle, self.start_cycle + max(1, self.cycle_count)))
+            if self.start_cycle > 0 else []
         )
 
         try:
