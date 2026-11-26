@@ -504,10 +504,17 @@ function Input.ForceClose(frameId, reason)
         tostring(owner), frameId, closeReason)
     if #focusTrace > 8 then table.remove(focusTrace, 1) end
 
+    -- 兼容层（M1）：只有实现了 ForceClose 导出的 owner 才走新契约；
+    -- 其余 owner（如 tcity-dashboard 的 esc=true 帧、M3 之前的 qb-*）退回帧自带的 close，
+    -- 否则弹栈成功、UI 却留在屏幕上（真机表现：按 Esc 面板不消失且鼠标被夺）。
+    local delivered = false
     if type(owner) == 'string' and owner ~= '' then
-        pcall(function()
+        delivered = pcall(function()
             exports[owner]:ForceClose(frameId, closeReason)
         end)
+    end
+    if not delivered and target.close ~= nil then
+        pcall(function() target.close() end)
     end
     if TriggerEvent ~= nil then
         TriggerEvent('custom-ui:forceClosed', frameId, closeReason, owner)

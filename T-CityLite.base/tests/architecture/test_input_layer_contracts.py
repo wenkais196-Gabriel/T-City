@@ -469,3 +469,45 @@ def test_unintegrated_menu_ledger_detects_missing_shim_entry():
         if p.name != ALLOWLIST_PATH.name and "unintegrated_menu_ledger" in p.read_text(encoding="utf-8")
     ]
     assert other_ledgers == [], f"duplicate unintegrated menu ledgers: {other_ledgers}"
+
+
+# --------------------------------------------------------------------------- #
+# M1 兼容层：ForceClose 必须给「没有实现 ForceClose 导出」的 owner 留退路
+# --------------------------------------------------------------------------- #
+
+def violations_in_force_close_legacy_fallback(source: str) -> list[str]:
+    """弹栈之后必须有一条退路，否则 UI 留在屏幕上。
+
+    真机背景（2026-11-25）：`tcity-dashboard` 是唯一 `esc = true` 的帧，它只传了 `close`
+    闭包、**没有导出 `ForceClose`**。旧的 Esc 路径调的就是那个闭包；改成只走
+    `exports[owner]:ForceClose` 之后，按 Esc 会弹栈成功、面板却还在（鼠标被夺），
+    属于比原问题更糟的回归。所以：owner 有导出 → 走新契约；没有 → 退回帧自带的 close。
+    """
+    code = blank_noise(source)
+    match = re.search(r"\bfunction\s+(?:Input\.)?ForceClose\s*\(", code)
+    if not match:
+        return ["missing function ForceClose definition"]
+
+    body = code[match.start():match.start() + 1200]
+    bad: list[str] = []
+    if "delivered" not in body:
+        bad.append("ForceClose does not track whether the owner export actually handled the close")
+    if ".close" not in body:
+        bad.append("ForceClose has no legacy close fallback for owners without the export")
+    return bad
+
+
+def test_force_close_fallback_detects_a_missing_legacy_path():
+    real = read("custom-ui/client/main.lua")
+    assert violations_in_force_close_legacy_fallback(real) == [], \
+        "\n".join(violations_in_force_close_legacy_fallback(real))
+
+    # 反向注入：把回退块整段删掉（只留 owner 导出一路）必须红
+    fallback = "    if not delivered and target.close ~= nil then"
+    assert fallback in real, "夹具没命中：ForceClose 的回退块形状变了？"
+    start = real.index(fallback)
+    end = real.index("    if TriggerEvent ~= nil then", start)
+    without_fallback = real[:start] + real[end:]
+    assert without_fallback != real
+    caught = violations_in_force_close_legacy_fallback(without_fallback)
+    assert caught and any("fallback" in item for item in caught), caught
