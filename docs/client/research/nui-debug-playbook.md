@@ -230,6 +230,15 @@ env，只有普通读取才走 `__index` 回退到共享表）。跨文件取模
 `focused=true` **0 条**；而同一时刻通过 NUI 导出读到的 `PhoneFocus.State().focus` 是 true，
 手机也确实在屏幕上、可点。
 
+**2026-11-25 补充取证（同一 build，`/watchscreen` 每 2 秒采样 24 个点）**：
+手机打开期间 `IsNuiFocused()` 返回 **1**，界面全部关闭时返回假。也就是说它**不是常量**，
+而是"有 NUI 焦点时为真"。2026-10-27 那 61 条 `focused=false` 应当读作**调用时机与状态不同步**
+（`SetNuiFocus` 之后同帧/近帧读取可能还没生效），不是"原生恒假"。
+
+结论不变——**仍然不许拿它当状态机输入**——但理由要换：它只反映"NUI 有没有焦点"这一件事，
+看不见"栈里有菜单但没设 NUI 焦点"的状态（menuv 就是这种），也可能与 `SetNuiFocus` 差一帧。
+判开关用 `Surface.IsOpen()` / `custom-ui:IsTaken()`，原生继续只当诊断字段。
+
 **签名**
 - 手机"打开了"但按 M 关不掉，或者按一次闪一下又回来。
 - 服务端 focus 遥测里 `focused=false` 是常量，`keepInput=false` 也是常量。
