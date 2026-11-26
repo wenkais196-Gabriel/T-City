@@ -119,6 +119,18 @@ local function menuCloseInternal(reason, skipPop)
     return true
 end
 
+-- 焦点宿主被重启（`restart custom-ui`）时我们收不到自己的 onResourceStop：
+-- 帧跟着宿主的栈一起没了，但 hostState.open 还是 true、NUI 焦点也还挂着 ——
+-- 表现就是「菜单看不见、人也动不了」。这里主动收摊，且 skipPop=true（宿主已经没有栈可弹）。
+AddEventHandler('onClientResourceStop', function(resName)
+    if resName ~= CUSTOM_UI_RESOURCE then return end
+    if hostState.open then
+        menuCloseInternal('focus_owner_stopped', true)
+    end
+    SetNuiFocusKeepInput(false)
+    SetNuiFocus(false, false)
+end)
+
 --- resource 路由的回调结果解析：
 --- - `{ ok = false, reason = ... }` → 原样返回（动作被拒）
 --- - `{ ok = true, spec = <MenuSpec> }` → 关掉当前视图、把 spec 压进同一层并 menu:update
