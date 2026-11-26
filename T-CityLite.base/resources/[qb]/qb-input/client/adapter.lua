@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     qb-input → custom-menu 表单适配层（issue #366）
 
     convar `qb_menu_use_custom_menu` 默认 false：关着时本文件直接返回，main.lua 的

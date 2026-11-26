@@ -167,18 +167,20 @@ local function ensureRoutes(owner)
     if #itemIntent > 128 or #menuIntent > 128 then
         return false
     end
-    local okItem = invoke('RegisterIntent', itemIntent, {
+    local okItem, itemReason = invoke('RegisterIntent', itemIntent, {
         type = 'client',
         handler = function(ctx) handleItemIntent(owner, ctx) end,
     })
     if okItem ~= true then
+        print(('[qb-menu] RegisterIntent(%s) 失败：%s'):format(itemIntent, tostring(itemReason)))
         return false
     end
-    local okMenu = invoke('RegisterIntent', menuIntent, {
+    local okMenu, menuReason = invoke('RegisterIntent', menuIntent, {
         type = 'submenu',
         builder = function(ctx) return handleMenuIntent(owner, ctx) end,
     })
     if okMenu ~= true then
+        print(('[qb-menu] RegisterIntent(%s) 失败：%s'):format(menuIntent, tostring(menuReason)))
         return false
     end
     state.routes[owner] = true

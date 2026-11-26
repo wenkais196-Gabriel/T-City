@@ -577,3 +577,20 @@ def test_adapter_code_never_writes_focus_or_registers_net_events() -> None:
     bad = [("fake.lua", "SetNuiFocus(true, true)\nRegisterNetEvent('evil:event', function() end)\n")]
     assert len(_scan(FOCUS_RE, bad)) == 1
     assert len(_scan(NET_EVENT_RE, bad)) == 1
+
+def test_no_bom_in_new_lua_files_detects_a_bom(tmp_path) -> None:
+    """Lua 文件开头带 UTF-8 BOM 会让 `luac`/FiveM 解析直接失败（症状极难认）。
+
+    2026-11-26 真机：`qb-input/client/adapter.lua:1: unexpected symbol near '<239>'`，
+    原因是文件以 `EF BB BF` 开头 —— 而 `luac -p` 在 Windows 上按字节读也会拒它，
+    但只对**被改过的**文件生效，没人会为每条命令重跑语法检查。所以加一条全树扫描。
+    """
+    import pathlib as _pl
+
+    resources = _pl.Path(__file__).resolve().parents[2] / "resources"
+    bad = []
+    for lua in resources.rglob("*.lua"):
+        with lua.open("rb") as fh:
+            if fh.read(3) == b"\xef\xbb\xbf":
+                bad.append(str(lua.relative_to(resources)))
+    assert bad == [], "以下 Lua 文件带 UTF-8 BOM，FiveM 会解析失败：\n" + "\n".join(bad)
