@@ -420,9 +420,16 @@ RegisterNetEvent('custom-menu:client:intentResult', function(res)
 end)
 
 AddEventHandler('onResourceStop', function(resName)
-    if resName == GetCurrentResourceName() and hostState.open then
+    if resName ~= GetCurrentResourceName() then return end
+    if hostState.open then
         menuCloseInternal('resource_stop', false)
     end
+    -- 资源卸载时页面已经消失，必须**无条件**把焦点还出去：custom-ui 的 Pop 可能因为栈状态
+    -- 走不到（例如 custom-ui 自己在重启），而 SetNuiFocus 是本资源自己的，
+    -- 漏了这一步就会留下"游戏拿不到键盘"的僵尸状态（闸门 NUI-CLIENT-01 也要求这条）。
+    hostState.hasFocus = false
+    SetNuiFocusKeepInput(false)
+    SetNuiFocus(false, false)
 end)
 
 

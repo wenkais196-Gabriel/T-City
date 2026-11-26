@@ -67,7 +67,7 @@ MUTATIONS: list[Mutation] = [
         what="方向键改回整表重渲染（闪屏 + 表单输入框丢焦点）",
     ),
     Mutation(
-        gate="tests/architecture/test_menu_host.py::test_set_nui_focus_only_inside_apply_focus",
+        gate="tests/architecture/test_menu_host.py::test_set_nui_focus_only_at_sanctioned_boundaries",
         path=MENU_HOST_LUA,
         content=None,
         replace_from="exports('Open', menuOpen)",

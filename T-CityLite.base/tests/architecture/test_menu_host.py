@@ -40,6 +40,10 @@ BACKDROP_FILTER_RE = re.compile(r"backdrop-filter", re.IGNORECASE)
 APPLY_FOCUS_BLOCK = re.compile(
     r"exports\('ApplyFocus', function\(.*?\n^end\)", re.MULTILINE | re.DOTALL
 )
+#: 资源卸载时也必须能放焦点（页面已消失，栈状态可能来不及走），NUI-CLIENT-01 要求这一条。
+RESOURCE_STOP_BLOCK = re.compile(
+    r"AddEventHandler\('onResourceStop', function\(.*?\n^end\)", re.MULTILINE | re.DOTALL
+)
 
 
 def _scan_set_nui_focus(files: Iterable[tuple[str, str]]) -> list[str]:
@@ -47,7 +51,7 @@ def _scan_set_nui_focus(files: Iterable[tuple[str, str]]) -> list[str]:
     for name, content in files:
         scanned = content
         if name.replace("\\", "/").endswith("client/host.lua"):
-            scanned = APPLY_FOCUS_BLOCK.sub("", content)
+            scanned = RESOURCE_STOP_BLOCK.sub("", APPLY_FOCUS_BLOCK.sub("", content))
         for lineno, line in enumerate(scanned.splitlines(), start=1):
             if line.lstrip().startswith("--"):
                 continue          # 注释里提到这个原生不算违规（本文件就靠注释解释约定）
@@ -67,7 +71,7 @@ def _scan_html_forbidden(files: Iterable[tuple[str, str]]) -> list[str]:
     return hits
 
 
-def test_set_nui_focus_only_inside_apply_focus() -> None:
+def test_set_nui_focus_only_at_sanctioned_boundaries() -> None:
     assert MENU_DIR.is_dir(), f"Missing directory: {MENU_DIR}"
     files: list[tuple[str, str]] = []
     for p in sorted(MENU_DIR.rglob("*")):
@@ -76,7 +80,7 @@ def test_set_nui_focus_only_inside_apply_focus() -> None:
     assert files, "No files found under custom-menu"
     hits = _scan_set_nui_focus(files)
     assert not hits, (
-        "SetNuiFocus 只允许出现在 ApplyFocus 里（custom-ui 委托给拥有页面的资源）：\n"
+        "SetNuiFocus 只允许出现在 ApplyFocus（授予/回收）与 onResourceStop（卸载兜底）里：\n"
         + "\n".join(hits)
     )
 
