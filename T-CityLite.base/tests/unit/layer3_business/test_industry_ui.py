@@ -1,6 +1,6 @@
 """S5 产业 UI：服务端只读快照 + 玩家侧入口 + 手机 App 可见性。
 
-这里钉住八件事（真跑 Lua + 离线假 DB，MySQL 之外不 mock）：
+这里钉住九件事（真跑 Lua + 离线假 DB，MySQL 之外不 mock）：
 
 1. **Snapshot 逐字段来自 SQL/配置**：余额、设施、库存、配额、售价、`orgRemaining`
    与 `maxQty` 的算式（`min(stock, orgRemaining, globalRemaining)`）全部由服务端算好；
@@ -12,9 +12,12 @@
 6. **不可信价格字段**：price/revenue/multiplier 被忽略并记录，结果与不传完全一致；
 7. **手机可见性**：`PhoneApps.ForPlayer` 只给 org 成员 industry 瓦片（job 与 gang 都覆盖）；
 8. **接线**：manifest 全加载后 5 个 callback + 4 个 export 都在，且不新增事件/线程。
+9. **配额双源对账（S6 前置，#364）**：全服已用取 `max(quota_used, SUM(industry_sales.qty))`，
+   单组织剩余再与全服剩余取 min；计数器欠账时条件回填并只写一条 `quota_drift` 审计。
 
 反向注入：把 Snapshot 的 `orgRemaining = info.org.remaining` 改成
-`info.demand.remaining`，第 1 条必须变红。
+`info.demand.remaining`，第 1 条必须变红。把 `readDemand` 的 `max()` 改回直接用
+计数器，第 12 节的前两条必须变红。
 """
 
 from __future__ import annotations
@@ -784,3 +787,124 @@ def test_disabled_resource_still_answers_the_ui_probe():
     assert out["QBCORE_COUNT"] == "0", f"关闸时不该注册命令：{out}"
     assert out["NATIVE"] == "", f"关闸时不该注册原生命令：{out['NATIVE']}"
     assert out["THREADS"] == "0", f"关闸时不该有调度：{out['THREADS']}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 12. 配额双源对账（S6 前置，#364）
+#
+# 全服已用不能只信可变计数器：`quota_used` 可以被中途失败或被直接改库落下，
+# `SUM(industry_sales.qty)` 才是不可篡改的真相。读取时取两者较大值，并把
+# 计数器条件回填；单组织剩余再与全服剩余取 min，结构上排除「全服剩 0、本组织还有额度」。
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_snapshot_uses_sales_sum_when_counter_is_behind():
+    """计数器被置 0、流水 5、total=20 → 全服剩 15（不是 20），本组织剩 5。"""
+    out = run("""
+        __seedBasic({ total = 20, used = 0 })
+        __seedSale('mining_co', 'iron_ore', 5)
+
+        local snap, err = IndustryUi.Snapshot(boss(), 'mining_co')
+        __emit('OK', tostring(snap ~= nil))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('GUSED', tostring(snap and snap.demand.globalUsed))
+        __emit('GREM', tostring(snap and snap.demand.globalRemaining))
+        __emit('ORGUSED', tostring(snap and snap.demand.orgUsed))
+        __emit('OREM', tostring(snap and snap.demand.orgRemaining))
+        __emit('MAXQTY', tostring(snap and snap.sellable.maxQty))
+        __emit('QUOTA', tostring(__demandRow('iron_ore').quota_used))
+        __emit('DRIFT_AUDITS', tostring(__auditCount('quota_drift')))
+    """)
+    assert out["OK"] == "true" and out["ERR"] == "nil", f"Snapshot 失败：{out}"
+    assert out["GUSED"] == "5", "全服已用没有取计数器与流水合计的较大值"
+    assert out["GREM"] == "15", "旧实现会给 20：计数器欠账时必须用流水合计"
+    assert out["ORGUSED"] == "5" and out["OREM"] == "5"
+    assert out["MAXQTY"] == "5", "maxQty 必须落到流水算出的全服剩余"
+    assert out["QUOTA"] == "5", "读路径没有把计数器对账回流水合计"
+    assert out["DRIFT_AUDITS"] == "1"
+
+
+def test_org_remaining_is_capped_by_global_remaining():
+    """流水 20 / total 20 / cap 10：全服耗尽时本组织也不许还有额度。"""
+    out = run("""
+        __seedBasic({ total = 20, used = 0 })
+        __seedSale('mining_co', 'iron_ore', 5)
+        __seedSale('cartel', 'iron_ore', 15)
+
+        local snap, err = IndustryUi.Snapshot(boss(), 'mining_co')
+        __emit('OK', tostring(snap ~= nil))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('GREM', tostring(snap and snap.demand.globalRemaining))
+        __emit('ORGUSED', tostring(snap and snap.demand.orgUsed))
+        __emit('OREM', tostring(snap and snap.demand.orgRemaining))
+        __emit('MAXQTY', tostring(snap and snap.sellable.maxQty))
+        __emit('BLOCK', tostring(snap and snap.sellable.blocked))
+    """)
+    assert out["OK"] == "true" and out["ERR"] == "nil", f"Snapshot 失败：{out}"
+    assert out["GREM"] == "0", "全服已用必须等于流水合计 20"
+    assert out["ORGUSED"] == "5"
+    assert out["OREM"] == "0", "全服剩 0 时本组织剩余必须也是 0（旧实现会给 5）"
+    assert out["MAXQTY"] == "0"
+    assert out["BLOCK"] in ("org_cap", "demand"), f"全服耗尽时 blocked 原因异常：{out}"
+
+
+def test_drift_reconciliation_writes_one_numeric_audit_and_is_idempotent():
+    """quota_used 落后流水 → 条件回填 + 一条 quota_drift；重复读不再写。"""
+    out = run("""
+        __seedBasic({ total = 20, used = 0 })
+        __seedSale('mining_co', 'iron_ore', 5)
+
+        local info1 = IndustrySales.Inspect('mining_co', 'iron_ore')
+        local quota1 = __demandRow('iron_ore').quota_used
+        local audits1 = __auditCount('quota_drift')
+        local payload = __auditPayload('quota_drift')
+
+        local info2 = IndustrySales.Inspect('mining_co', 'iron_ore')
+        local quota2 = __demandRow('iron_ore').quota_used
+        local audits2 = __auditCount('quota_drift')
+
+        __emit('USED1', tostring(info1 and info1.demand.used))
+        __emit('QUOTA1', tostring(quota1))
+        __emit('AUDITS1', tostring(audits1))
+        __emit('PAYLOAD', tostring(payload))
+        __emit('USED2', tostring(info2 and info2.demand.used))
+        __emit('QUOTA2', tostring(quota2))
+        __emit('AUDITS2', tostring(audits2))
+        __emit('RECONCILE_UPDATES', tostring(__sqlUpdateCount(
+            'UPDATE industry_demand SET quota_used = ?')))
+    """)
+    assert out["USED1"] == "5" and out["QUOTA1"] == "5", "读路径没有按流水回填计数器"
+    assert out["AUDITS1"] == "1", "漂移必须恰好写一条 quota_drift 审计"
+    assert out["PAYLOAD"] == (
+        '{"cycle_no":0,"quota_total":20,"quota_used":0,"sales_sum":5}'
+    ), f"审计 payload 必须只放数字：{out['PAYLOAD']}"
+    assert out["USED2"] == "5" and out["QUOTA2"] == "5"
+    assert out["AUDITS2"] == "1", "重复读重复写了审计"
+    assert out["RECONCILE_UPDATES"] == "1", "幂等对账只应执行一次条件 UPDATE"
+
+
+def test_normal_sale_adds_no_reconcile_update_or_drift_audit():
+    """无漂移的正常卖单：只写一条 industry.sale，不触发对账 UPDATE。"""
+    out = run("""
+        __seedBasic({ total = 20, used = 0 })
+
+        local ok, err = IndustryUi.Sell(boss(), 'mining_co', 2)
+        __emitWriteState()
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('QUOTA', tostring(__demandRow('iron_ore').quota_used))
+        __emit('SALE_AUDITS', tostring(__auditCount('industry.sale')))
+        __emit('DRIFT_AUDITS', tostring(__auditCount('quota_drift')))
+        __emit('RECONCILE_UPDATES', tostring(__sqlUpdateCount(
+            'UPDATE industry_demand SET quota_used = ?')))
+        __emit('QUOTA_CAS', tostring(__sqlUpdateCount(
+            'UPDATE industry_demand SET quota_used = quota_used + ?')))
+    """)
+    assert out["OK"] == "true" and out["ERR"] == "nil", f"正常卖单失败：{out}"
+    assert out["SALES"] == "1" and out["STOCK"] == "8" and out["BAL"] == "100"
+    assert out["QUOTA"] == "2"
+    assert out["SALE_AUDITS"] == "1" and out["DRIFT_AUDITS"] == "0", (
+        f"正常卖单写了漂移审计：{out}"
+    )
+    assert out["RECONCILE_UPDATES"] == "0", "正常卖单多了一次对账 UPDATE"
+    assert out["QUOTA_CAS"] == "1", "配额 CAS 必须仍然只有一条"

@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **配额双源对账（`custom-industry`，S6 前置，#364）**：全服已用原先只信可变计数器
+  `industry_demand.quota_used`，单组织已用却由 `SUM(industry_sales.qty)` 派生；真机手动重置计数器后
+  出现「全服剩 10、本组织剩 0」这种数学上不可能的状态。读取改为
+  `max(quota_used, SUM(qty))`，`Inspect` 的 `orgRemaining` 再与 `globalRemaining` 取 min；
+  计数器欠账时用 `UPDATE ... WHERE quota_used < ?` 条件回填（幂等）并写一条 `quota_drift`
+  审计（payload 只含数字，不含玩家身份）。`SettleSale` 的原子预留 CAS、表结构与正常卖出路径的
+  写入次数均不变。
 - **S5 真机跑起来的四个缺陷（`custom-industry` / `qb-management`）**：
   ① 服务端与客户端都用 `type(qb.Functions.X) == 'function'` 判 QBCore 的函数，而本 build 里
   `exports['qb-core']:GetCoreObject()` 交出来的函数是**可调用表**（`type == 'table'`，靠 `__call` 调用），
