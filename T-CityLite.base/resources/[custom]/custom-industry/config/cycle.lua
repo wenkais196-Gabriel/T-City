@@ -68,6 +68,15 @@ Config.Industry.Cycle = {
     -- prestige 公式的分母。
     PrestigeK = integerConvar('industry_prestige_k', 500, 1),
 
+    -- S8 永久加成（spec §10：每级 +2%，第 10 级封顶 +20%）。
+    -- 等级 = prestige 点数；只乘**产能**，不乘售价：
+    --   * 售价已经叠了 core_economy 的全局/热度与阶段倍率，再加一层货币倍率会把通胀
+    --     从「库存上限 × 配额」挪到价格上，而价格没有第二道闸；
+    --   * 产能加成仍受库存上限与每周期配额约束，且设计 §10 的意图是「让下一轮更快」。
+    -- 两个值都在读取时参与计算，不写进设施/卖单行。
+    PrestigeBonusPerLevel = numberConvar('industry_prestige_bonus_per_level', 0.02, 0),
+    PrestigeBonusMaxLevel = integerConvar('industry_prestige_max_level', 10, 0),
+
     -- 单次结算最多处理多少组织（查询带 LIMIT；MVP 只有 2 个组织）。
     MaxOrgsPerSettle = integerConvar('industry_settle_org_limit', 500, 1),
 }

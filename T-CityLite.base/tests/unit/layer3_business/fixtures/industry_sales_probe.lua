@@ -17,6 +17,7 @@
 --   * `__failTreasuryUpdate` 让 Treasury.Deposit 的第一步 UPDATE 失败，
 --     用来验证「Deposit 失败 → 库存与配额都退回」。
 --   * `__raceBeforeStockUpdate` 在第一次扣库存落库前触发一次，制造 await 交错。
+--   * `__seedPrestige(orgId, points)` 种 S8 的 `org_treasury.prestige` 读取路径。
 --
 -- 事件：`TriggerEvent('industry:sale', ...)` 被记进 __saleEvents（已入账才发）。
 
@@ -24,6 +25,7 @@ __convars = {}
 
 function __reset()
     __orgs = {}
+    __prestige = {}
     __ledger = {}
     __ledgerRefs = {}
     __sales = {}
@@ -44,6 +46,11 @@ end
 
 -- 初始状态与 reset 共用一份赋值（避免模块级初始化块再抄一遍）。
 __reset()
+
+--- S8：org_treasury.prestige（永久加成读取路径）。
+function __seedPrestige(orgId, points)
+    __prestige[orgId] = tonumber(points) or 0
+end
 
 -- 构造器来自 industry_probe_common.lua（industry_harness 负责注入）。
 function __seedDemand(item, total, used, cycleNo, phase)

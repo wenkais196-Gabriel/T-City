@@ -327,9 +327,11 @@ function __industryReadTreasury(sql, values)
         if not row then return nil end
         return { balance = row.balance, prestige = row.prestige }
     end
+    -- S4/S5 的金库是数字表，prestige 另存 `__prestige`（S8 读取路径用）；
+    -- 没种过 prestige 的组织按 0 返回，与真库「列有默认值」一致。
     local balance = __orgs and __orgs[orgId]
     if balance == nil then return nil end
-    return { balance = balance }
+    return { balance = balance, prestige = __prestige and __prestige[orgId] or 0 }
 end
 
 --- `INSERT IGNORE INTO org_treasury`：已存在 → 0 行；否则建行（插的是余额 0）。
