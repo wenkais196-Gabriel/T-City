@@ -52,8 +52,10 @@ AUDIT_SRC = RES / "server" / "audit.lua"
 ACCESS_SRC = RES / "server" / "access.lua"
 CONFIG_SRC = RES / "config.lua"
 SALES_CONFIG_SRC = RES / "config" / "sales.lua"
+CYCLE_CONFIG_SRC = RES / "config" / "cycle.lua"
 FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
 PRODUCTION_CONFIG_SRC = RES / "config" / "production.lua"
+CYCLE_SRC = RES / "server" / "cycle.lua"
 MANIFEST = RES / "fxmanifest.lua"
 DASHBOARD = BASE / "resources" / "[system]" / "economy-dashboard" / "server" / "main.lua"
 MIGRATION = BASE / "migrations" / "v4.3_industry_sales.sql"
@@ -83,7 +85,10 @@ def parse(out_text: str) -> dict[str, str]:
 def config_text() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (CONFIG_SRC, FACILITY_CONFIG_SRC, PRODUCTION_CONFIG_SRC, SALES_CONFIG_SRC)
+        for path in (
+            CONFIG_SRC, FACILITY_CONFIG_SRC, PRODUCTION_CONFIG_SRC,
+            SALES_CONFIG_SRC, CYCLE_CONFIG_SRC,
+        )
     )
 
 
@@ -103,6 +108,8 @@ def run(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
         + config_text()
         + "\n"
         + ORG_ID_SRC.read_text(encoding="utf-8")
+        + "\n"
+        + CYCLE_SRC.read_text(encoding="utf-8")
         + "\n"
         + TREASURY_SRC.read_text(encoding="utf-8")
         + "\n"
@@ -845,8 +852,8 @@ def test_all_server_scripts_wire_without_global_qbcore_and_debug_command_is_off(
     }
     assert out["QBCORE_COUNT"] == "7", f"QBCore 命令表被 S4 污染了：{out}"
     assert sorted(filter(None, out["QBCORE_NAMES"].split(","))) == sorted(expected)
-    assert out["NATIVE"] == "", (
-        f"industry_sales_debug 默认必须关闭（orgsell 不该注册）：{out}"
+    assert out["NATIVE"] == "industry_setphase:true,industry_settle:true", (
+        f"industry_sales_debug 默认关闭（orgsell 不该注册）；S6/S7 控制台命令常驻：{out}"
     )
     assert out["EVENTS"] == "1", "S4 不该新增事件处理器（只有 S3 的 PlayerLoaded）"
     assert out["THREADS"] == "1", "S4 不该新增调度（只有 S3 的生产心跳）"
@@ -855,9 +862,9 @@ def test_all_server_scripts_wire_without_global_qbcore_and_debug_command_is_off(
 
 def test_debug_sale_command_registers_only_when_convar_is_on_and_is_console_only():
     out = run_wiring(debug=True)
-    assert out["NATIVE"] == "orgsell:true", (
-        f"后台入口必须是 restricted 原生命令（仅控制台）：{out}"
-    )
+    assert out["NATIVE"] == (
+        "orgsell:true,industry_setphase:true,industry_settle:true"
+    ), f"后台入口必须是 restricted 原生命令（仅控制台）：{out}"
     assert out["QBCORE_COUNT"] == "7", "后台入口不该污染 QBCore 命令表"
     assert out["EVENTS"] == "1" and out["THREADS"] == "1"
 

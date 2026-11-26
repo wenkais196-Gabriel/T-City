@@ -43,6 +43,25 @@ local function salesConfig()
     return Config.Industry.Sales or {}
 end
 
+--- 当前生效的销售配置：静态配置 + industry_state 的 (cycle_no, phase) 与阶段倍率。
+--- 读不到状态时返回 nil（fail closed），不再按扩张期价格发钱。
+---@return table|nil cfg, string|nil errcode
+local function activeConfig()
+    if type(IndustryCycle) ~= 'table' or not IndustryCycle.Current then
+        return nil, 'db_error'
+    end
+    local state, err = IndustryCycle.Current()
+    if not state then return nil, err or 'db_error' end
+
+    local cfg = {}
+    for key, value in pairs(salesConfig()) do cfg[key] = value end
+    cfg.CycleNo = state.cycle_no
+    cfg.Phase = state.phase
+    cfg.PriceMultiplier = tonumber(state.price) or 1
+    cfg.QuotaMultiplier = tonumber(state.quota) or 1
+    return cfg, nil
+end
+
 local function toInt(value)
     local number = tonumber(value)
     if not number or number ~= number or number ~= math.floor(number) then return nil end
@@ -273,22 +292,28 @@ end
 --- 这不是调度：只在资源启动时跑一次。
 ---@return boolean ok, string|nil errcode
 function IndustrySales.EnsureSeed()
-    local cfg = salesConfig()
+    local cfg, cfgErr = activeConfig()
+    if not cfg then return false, cfgErr or 'db_error' end
     if not validItem(cfg.SeedItem) then return false, 'bad_item' end
 
     local quota = toInt(cfg.SeedQuota)
     if not quota or quota < 0 then return false, 'bad_qty' end
 
+    -- 配额倍率在**写种子行时**落地：S4 的 CAS / 50% 上限不需要感知阶段。
+    local multiplier = tonumber(cfg.QuotaMultiplier) or 1
+    if multiplier < 0 then multiplier = 0 end
+    local scaled = math.floor(quota * multiplier + 1e-9)
+
     Db.Insert(
         'INSERT IGNORE INTO industry_demand (cycle_no, phase, item_name, quota_total, quota_used) '
             .. 'VALUES (?, ?, ?, ?, 0)',
-        { cfg.CycleNo, cfg.Phase, cfg.SeedItem, quota })
+        { cfg.CycleNo, cfg.Phase, cfg.SeedItem, scaled })
 
     -- 只覆盖还没卖过的行：旋钮可以调，但不会把已经卖掉的配额改小。
     local _, err = Db.Update(
         'UPDATE industry_demand SET quota_total = ? '
             .. 'WHERE cycle_no = ? AND phase = ? AND item_name = ? AND quota_used = 0',
-        { quota, cfg.CycleNo, cfg.Phase, cfg.SeedItem })
+        { scaled, cfg.CycleNo, cfg.Phase, cfg.SeedItem })
     if err then return false, 'db_error' end
     return true, nil
 end
@@ -308,8 +333,11 @@ local function settleLocked(cfg, orgId, item, requested, ref)
     local unitPrice = positiveNumber(prices[item], nil)
     if not unitPrice or unitPrice ~= math.floor(unitPrice) then return false, 'bad_price' end
 
-    -- 系数只从 core_economy 拿；这里拿到的值只用于报价，不落库。
+    -- 系数只从 core_economy 拿；阶段售价倍率只从 cycle 状态拿。
+    -- 两者都只用于报价，不落库。
     local globalMultiplier, heat = economyCoefficients(cfg.ActivityId)
+    local phasePrice = tonumber(cfg.PriceMultiplier) or 1
+    if phasePrice < 0 then phasePrice = 0 end
 
     local demand, demandErr = readDemand(cfg, item)
     if not demand then return false, demandErr end
@@ -342,7 +370,7 @@ local function settleLocked(cfg, orgId, item, requested, ref)
     if sellable <= 0 then return false, 'demand_exhausted' end
 
     local unit = math.floor(unitPrice)
-    local revenue = math.floor(unit * sellable * globalMultiplier * heat + 1e-9)
+    local revenue = math.floor(unit * sellable * globalMultiplier * heat * phasePrice + 1e-9)
     if revenue <= 0 or revenue > MAX_REVENUE then return false, 'bad_amount' end
 
     local saleRef = normalizeRef(orgId, ref)
@@ -442,7 +470,8 @@ function IndustrySales.Inspect(orgId, item)
     if not validOrg(orgId) then return nil, 'bad_org' end
     if not validItem(item) then return nil, 'bad_item' end
 
-    local cfg = salesConfig()
+    local cfg, cfgErr = activeConfig()
+    if not cfg then return nil, cfgErr or 'db_error' end
     local prices = cfg.UnitPrices
     if type(prices) ~= 'table' then return nil, 'bad_price' end
     local unitPrice = positiveNumber(prices[item], nil)
@@ -470,6 +499,7 @@ function IndustrySales.Inspect(orgId, item)
     return {
         item = item,
         unitPrice = math.floor(unitPrice),
+        priceMultiplier = tonumber(cfg.PriceMultiplier) or 1,
         stock = stock,
         demand = {
             total = demand.total,
@@ -495,8 +525,14 @@ function IndustrySales.QuoteRevenue(unitPrice, qty)
     local count = toInt(qty)
     if not price or not count or count <= 0 then return nil, 'bad_qty' end
 
-    local globalMultiplier, heat = economyCoefficients(salesConfig().ActivityId)
-    local revenue = math.floor(math.floor(price) * count * globalMultiplier * heat + 1e-9)
+    local cfg, cfgErr = activeConfig()
+    if not cfg then return nil, cfgErr or 'db_error' end
+    local phasePrice = tonumber(cfg.PriceMultiplier) or 1
+    if phasePrice < 0 then phasePrice = 0 end
+
+    local globalMultiplier, heat = economyCoefficients(cfg.ActivityId)
+    local revenue = math.floor(
+        math.floor(price) * count * globalMultiplier * heat * phasePrice + 1e-9)
     if revenue <= 0 or revenue > MAX_REVENUE then return nil, 'bad_amount' end
     return revenue, nil
 end
@@ -511,7 +547,8 @@ function IndustrySales.SettleSale(orgId, item, qty, ref)
     if not validOrg(orgId) then return false, 'bad_org' end
     if not validItem(item) then return false, 'bad_item' end
 
-    local cfg = salesConfig()
+    local cfg, cfgErr = activeConfig()
+    if not cfg then return false, cfgErr or 'db_error' end
     local maxQty = toInt(cfg.MaxQty) or MAX_QTY
     local requested = toInt(qty)
     if not requested or requested <= 0 or requested > maxQty then return false, 'bad_qty' end

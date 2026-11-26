@@ -30,6 +30,7 @@ AUDIT_SRC = RES / "server" / "audit.lua"
 FACILITY_SRC = RES / "server" / "facility.lua"
 CONFIG_SRC = RES / "config.lua"
 FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
+CYCLE_CONFIG_SRC = RES / "config" / "cycle.lua"
 MANIFEST = RES / "fxmanifest.lua"
 TREASURY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "industry_treasury_probe.lua"
 FACILITY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "industry_facility_probe.lua"
@@ -69,6 +70,8 @@ def run(body: str) -> dict[str, str]:
         CONFIG_SRC.read_text(encoding="utf-8")
         + "\n"
         + FACILITY_CONFIG_SRC.read_text(encoding="utf-8")
+        + "\n"
+        + CYCLE_CONFIG_SRC.read_text(encoding="utf-8")
         + "\n"
         + AUDIT_SRC.read_text(encoding="utf-8")
         + "\n"
@@ -385,6 +388,8 @@ MySQL = {}
 AddEventHandler = function() end
 CreateThread = function() end
 Wait = function() end
+-- S6/S7 的控制台命令走原生命令注册（restricted），不在 QBCore 命令表里。
+RegisterCommand = function() end
 
 function __emit(key, value)
     io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))

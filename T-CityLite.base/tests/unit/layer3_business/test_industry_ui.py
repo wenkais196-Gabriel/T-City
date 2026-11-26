@@ -50,6 +50,8 @@ CONFIG_SRC = RES / "config.lua"
 FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
 PRODUCTION_CONFIG_SRC = RES / "config" / "production.lua"
 SALES_CONFIG_SRC = RES / "config" / "sales.lua"
+CYCLE_CONFIG_SRC = RES / "config" / "cycle.lua"
+CYCLE_SRC = RES / "server" / "cycle.lua"
 MANIFEST = RES / "fxmanifest.lua"
 
 PHONE_REGISTRY = PHONE / "server" / "phone_apps.lua"
@@ -88,7 +90,10 @@ def parse(out_text: str) -> dict[str, str]:
 def config_text() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (CONFIG_SRC, FACILITY_CONFIG_SRC, PRODUCTION_CONFIG_SRC, SALES_CONFIG_SRC)
+        for path in (
+            CONFIG_SRC, FACILITY_CONFIG_SRC, PRODUCTION_CONFIG_SRC,
+            SALES_CONFIG_SRC, CYCLE_CONFIG_SRC,
+        )
     )
 
 
@@ -142,6 +147,8 @@ def run(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
         + config_text()
         + "\n"
         + ORG_ID_SRC.read_text(encoding="utf-8")
+        + "\n"
+        + CYCLE_SRC.read_text(encoding="utf-8")
         + "\n"
         + TREASURY_SRC.read_text(encoding="utf-8")
         + "\n"

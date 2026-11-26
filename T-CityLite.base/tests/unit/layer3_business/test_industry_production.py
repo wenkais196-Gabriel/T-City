@@ -38,6 +38,7 @@ COMMANDS_PRODUCTION_SRC = RES / "server" / "commands_production.lua"
 CONFIG_SRC = RES / "config.lua"
 FACILITY_CONFIG_SRC = RES / "config" / "facility.lua"
 PRODUCTION_CONFIG_SRC = RES / "config" / "production.lua"
+CYCLE_CONFIG_SRC = RES / "config" / "cycle.lua"
 MANIFEST = RES / "fxmanifest.lua"
 PRODUCTION_FIXTURE = (
     Path(__file__).resolve().parent / "fixtures" / "industry_production_probe.lua"
@@ -72,7 +73,7 @@ def parse(out_text: str) -> dict[str, str]:
 def config_text() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (CONFIG_SRC, PRODUCTION_CONFIG_SRC, FACILITY_CONFIG_SRC)
+        for path in (CONFIG_SRC, PRODUCTION_CONFIG_SRC, FACILITY_CONFIG_SRC, CYCLE_CONFIG_SRC)
     )
 
 
@@ -542,9 +543,11 @@ def test_all_server_scripts_wire_player_loaded_and_tick_without_global_qbcore():
     assert out["EVENTS"] == "1", (
         f"必须挂且只挂一个 PlayerLoaded 处理器（离线补产走同一条惰性结算）：{out}"
     )
-    assert out["THREADS"] == "1", f"生产心跳线程没有启动：{out}"
-    assert out["NATIVE"] == "", (
-        f"后台入口默认必须关闭（industry_production_debug=false）：{out}"
+    assert out["THREADS"] == "1", (
+        f"生产心跳线程没有启动（周期 tick 必须挂到同一条线程，不能新增线程）：{out}"
+    )
+    assert out["NATIVE"] == "industry_setphase:true,industry_settle:true", (
+        f"S6/S7 控制台命令必须常驻且 restricted；调试卖出/生产入口默认关闭：{out}"
     )
     assert out["HAS_GLOBAL"] == "false", (
         "用例自己定义了全局 QBCore —— 生产环境缺它的 bug 会被永远掩盖"
@@ -553,8 +556,8 @@ def test_all_server_scripts_wire_player_loaded_and_tick_without_global_qbcore():
 
 def test_console_entry_registers_only_when_the_convar_is_on():
     out = run_wiring(debug=True)
-    assert out["NATIVE"] == "orgproduce:true", (
-        f"后台入口必须是 restricted 的原生命令（仅控制台）：{out}"
-    )
+    assert out["NATIVE"] == (
+        "orgproduce:true,industry_setphase:true,industry_settle:true"
+    ), f"后台入口必须是 restricted 的原生命令（仅控制台）：{out}"
     assert out["COUNT"] == "7", "后台入口不该污染 QBCore 命令表"
     assert out["EVENTS"] == "1" and out["THREADS"] == "1"

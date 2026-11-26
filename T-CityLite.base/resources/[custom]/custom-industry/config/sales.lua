@@ -3,7 +3,8 @@
 -- 口径（写死在这里，不在 sale.lua 里再算一遍）：
 --   * 价格由服务端决定：客户端只能说「卖 N 件」，任何价格/倍率字段都不读。
 --   * 单组织累计上限 = floor(quota_total × OrgCapRatio)，OrgCapRatio = 0.5。
---   * 周期占位：S4 固定 cycle_no = 0 / phase = 'static'，S6 只改这两个值。
+--   * 周期：S6 起 (cycle_no, phase) 由 industry_state 决定；下面的 CycleNo / Phase
+--     只作为**静态回落值**（industry_state 表还没有行 / 迁移刚落地时使用）。
 --
 -- 真机验收旋钮：
 --   set industry_demand_seed 10     -- 需求总量（启动时校准未使用的配额）
@@ -18,7 +19,7 @@ local function integerConvar(name, default, minimum)
 end
 
 Config.Industry.Sales = {
-    -- S6 之前不推进周期；S6 只改值，不动表结构。
+    -- 静态回落值：只有 industry_state 不可用时才会被读到（倍率按 1 处理）。
     CycleNo = 0,
     Phase = 'static',
 

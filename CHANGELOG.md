@@ -75,6 +75,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   新增行为闸门 `test_qb_menu_adapter.py`（Lua 沙箱跑真实源码：跨资源误关、重复 open、
   三层嵌套返回、表单提交/取消、convar 关闭对照）+ 静态红线（适配层 0 处 `SetNuiFocus`、
   0 个新 net event，均带反向注入）；真机清单 `docs/client/ux/menu-regression-checklist.md`。
+- **S6 周期状态机 + S7 结算转生（`custom-industry`，#338，同一片）**：
+  `industry_state` 单行表（`CHECK id = 1`）以绝对时间驱动四阶段（扩张/竞争/成熟/衰退）。
+  推进线程挂在 S3 已有的 30 秒生产心跳上；`guarded UPDATE` 的 `affected == 1` 是唯一推进许可，
+  停机跨边界按顺序**一次补推一格、不跳段**，重启从 DB 续跑。四阶段倍率接到既有读点：
+  产能（S3）× 1.25/1.00/1.00/0.70，售价（S4）× 1.00/0.95/1.10/0.80，
+  配额种子 × 1.00/0.85/0.70/0.40，购置在衰退期返回 `purchases_closed`（**卖出仍开放**）。
+  压缩旋钮 `industry_cycle_scale` / `industry_phase_seconds`；唯一人为手段是控制台
+  `industry_setphase`（restricted + `source == 0` + 审计）。
+  结算 `industry_cycle_results`（`UNIQUE(org_id, cycle_no)`）按 `prestige = floor(sqrt(累计销售额 / K))`
+  发威望；清分边界是**表级显式清单**：设施/库存、卖单、配额、金库余额全清，
+  **个人层（`players` / 物品 / 车辆）一个字节不动**（静态扫描 + fixture 越界标记 + 前后 checksum 三层证明），
+  `org_ledger` 补一条 `settlement-clear` 流水。`applied` 水位 + prestige 绝对值让结算中途崩溃可重试、
+  不重复入账。`industry_settle [dry|confirm]` 默认 dry-run（只打印将删/将写行数，零写入）；
+  结算前 7 天与结算结果各发一条 CityFeed 公告（每周期一次，失败不阻断结算）。
+  迁移 `v4.4_industry_cycle.sql`；无新增 net event、无新增轮询线程。
+
 - **S5 产业 UI（`custom-industry` + `custom-phone`）**：新增唯一读模型（custom-industry 的 server/ui.lua）
   （`Snapshot` / `EstimateSale` / `Sell` / `HireWorkstation`）——快照里配额是**两个数**
   （全服 `globalRemaining` 与单组织 `orgRemaining`，后者 = `floor(total × 0.5) − 已卖`），
