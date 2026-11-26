@@ -273,3 +273,26 @@ Push / Pop / Top / Path / IsTaken / Owns / ResetInput / RefreshFocus / FocusTrac
 
 所以 M1 的定位从「**建**一个焦点栈」改成「**收口**已有的栈 + 清扫 197 处回头路」。
 这一点直接降低了 M1 的风险：不变量已经在代码里跑着，本片是补齐 + 上闸门。
+
+### 10.6 止血垫片已落地（#353，先于 M1/M6）
+
+真机那两条症状（叠窗 + `Esc` 呼出暂停菜单）在 M6 之前先修掉了，做法是给 `qb-adminmenu` 加一层垫片，
+**不改 menuv 本体、不新增第二处 `SetNuiFocus`**：
+
+| 动作 | 实现 |
+|---|---|
+| 打开前问栈 | `custom-ui:IsTaken()`，被占用则拒绝并提示「Close the current menu first」 |
+| 入栈/出栈 | 打开 `Push('adminmenu')`；关闭、强制关闭、`onResourceStop` 都 `Pop`（`Owns`/`Path` 判幂等） |
+| `Esc` | 只屏蔽暂停控制 `199/200`，用 `IsDisabledControlJustPressed` 消费；关闭后再挡 300ms，吞掉同一次按键 |
+
+两个设计点值得记住：
+
+1. **垫片要向栈认领帧但不按焦点**：注册一个 `ApplyFocus` 导出直接 `return true`。否则栈会自己按
+   `SetNuiFocus`，把键盘从「没有 `ui_page` 的 menuv」手里抢走——菜单还在，键全不响应。
+2. **`allow` 名单要放导航键**：menuv 走的是 `RegisterKeyMapping`（方向/确认/返回），把 172–177 / 186–189
+   一起禁掉菜单就没法用；`allow` 只保留这几个，其余照禁。
+
+存量 5 处 `DisableAllControlActions`（输入框循环 2、noclip 3）**没动**——那是 #346（M4）的账，
+本片只加棘轮禁止新增。垫片本身 0 处。
+
+垫片是**临时件**，M6 把 menuv 下线时随之一并删除（代码里已留 `M6(#348)` 标记）。

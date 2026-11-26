@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`qb-adminmenu` 接入 `custom-ui` 输入栈（#353）**：`/admin` 原先既不查栈也不入栈，真机表现为
+  ① 手机开着时仍能叠开、② 菜单开着按 `Esc` 关不掉反而呼出游戏暂停菜单。新增垫片
+  （qb-adminmenu 的 client/menu_shim.lua）：打开前问 `custom-ui:IsTaken()`（被占用则拒绝并提示），打开时
+  `Push('adminmenu')`、关闭/强制关闭/资源卸载时 `Pop`；菜单开着期间只屏蔽暂停控制 `199/200`
+  并用 `IsDisabledControlJustPressed` 消费 `Esc`。**不改 menuv 本体、不新增第二处 `SetNuiFocus`**。
+  同轮停用 `/givenuifocus` 的焦点写入（命令与权限保留，只打印说明）——它是 qb-adminmenu 里唯一
+  绕过栈直接写焦点的入口。存量 5 处 `DisableAllControlActions`（输入框循环、noclip）按 `#346` 的
+  账保留，棘轮禁止新增。真机需 `refresh` 后再 `restart qb-adminmenu`（fxmanifest 改了）。
+  新增闸门 `tests/architecture/test_adminmenu_input_shim.py`（三条规则 + 反向注入）。
+
 ### Added
 - **S1 组织金库（`custom-industry`）**：`org_treasury` / `org_ledger` / `industry_audit` 三张表，
   余额扣减守卫写在单条 `UPDATE … WHERE balance + ? >= 0` 里（affectedRows 裁决，无 TOCTOU），
