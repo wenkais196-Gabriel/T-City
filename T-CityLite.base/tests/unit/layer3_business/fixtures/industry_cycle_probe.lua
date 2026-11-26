@@ -399,7 +399,21 @@ MySQL.update = { await = function(sql, values)
             return { affectedRows = 1 }
         end
 
-        if sql:find('phase_ends_at <= FROM_UNIXTIME(?)', 1, true) then
+        -- 用 SET 子句识别「推进」这条语句（而不是按时间闸门的文本识别）：
+        -- 假 DB 必须像真库一样要求四道闸都在，缺任何一道就当 0 行被拒。
+        -- 否则「把 WHERE 里的条件删掉」在测试里完全看不出来 —— 2026-11-26 实测：
+        -- 删掉 phase_ends_at 闸门后 25 条用例全绿，因为它们都走不进这条分支，
+        -- 落到了下面的 SetPhase 兜底（无条件 affectedRows = 1）。
+        local hasTimeGate = sql:find('phase_ends_at <= FROM_UNIXTIME(?)', 1, true) ~= nil
+        local hasCycleGuard = sql:find('AND cycle_no = ?', 1, true) ~= nil
+        local hasPhaseGuard = sql:find('AND phase = ?', 1, true) ~= nil
+        local isAdvance = hasTimeGate or hasCycleGuard or hasPhaseGuard
+        if isAdvance and not (hasTimeGate and hasCycleGuard and hasPhaseGuard) then
+            -- 残缺的推进语句。真库会照它剩下的条件执行，假 DB 无法可靠求值 —— 直接当 0 行拒绝，
+            -- 这样「删掉任何一道闸」都会在测试里显形（2026-11-26：只删时间闸门时 25 条全绿）。
+            return { affectedRows = 0 }
+        end
+        if isAdvance then
             if __raceBeforeStateUpdate and not __raceFired then
                 __raceFired = true
                 local hook = __raceBeforeStateUpdate
@@ -424,7 +438,12 @@ MySQL.update = { await = function(sql, values)
             return { affectedRows = 1 }
         end
 
-        -- SetPhase：无 phase 守卫的控制台覆盖（保留 warning 水位）。
+        -- SetPhase：无 cycle/phase 守卫的控制台覆盖（保留 warning 水位）。
+        -- 注意：走到这里必须是**控制台**那条语句；带守卫的推进语句已经在上面被识别，
+        -- 不认识的形状返回 0，别用"无条件成功"兜住它。
+        if sql:find('AND cycle_no = ?', 1, true) or sql:find('AND phase = ?', 1, true) then
+            return { affectedRows = 0 }
+        end
         row.cycle_no = tonumber(values[1])
         row.phase = values[2]
         row.started_epoch = tonumber(values[3])
