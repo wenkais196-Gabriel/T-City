@@ -851,6 +851,65 @@
       return { ok: true, html: shellHtml };
     }
 
+    // ── 选中态就地更新：方向键只改 class，不重建 DOM ─────────────────────
+    // 为什么：每次移动都整表重渲染会闪一下（肉眼可见），而且表单里的 <input> 会被换成
+    // 新节点 → 光标丢失、输入直接断掉（2026-11-26 真机反馈）。列表行本来就带
+    // data-item-index，改一个 class 就够了。
+    function applyFocusClass() {
+      if (!mountEl) return;
+      var rows = mountEl.querySelectorAll('[data-item-index]');
+      for (var i = 0; i < rows.length; i++) {
+        var idx = Number(rows[i].getAttribute('data-item-index'));
+        var on = idx === state.focusIndex;
+        if (on) { rows[i].classList.add('focused'); } else { rows[i].classList.remove('focused'); }
+        rows[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+      var cur = mountEl.querySelector('[data-item-index="' + state.focusIndex + '"]');
+      if (cur && typeof cur.scrollIntoView === 'function') {
+        cur.scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    // ── 重渲染时保住输入焦点 ────────────────────────────────────────────
+    // 有些重渲染躲不掉（toggle / 二次确认 / 校验失败）。这类重渲染必须把焦点和光标
+    // 位置还回去，否则玩家正在输的车牌号会在按 Enter 之后丢一半。
+    function focusKeyOf(el) {
+      if (!el) return null;
+      if (el.getAttribute && el.getAttribute('data-form-id')) return 'form:' + el.getAttribute('data-form-id');
+      if (el.getAttribute && el.getAttribute('data-range-id')) return 'range:' + el.getAttribute('data-range-id');
+      if (el.id) return 'id:' + el.id;
+      return null;
+    }
+
+    function captureFocus() {
+      if (!doc || !doc.activeElement || !mountEl || !mountEl.contains(doc.activeElement)) return null;
+      var el = doc.activeElement;
+      return {
+        key: focusKeyOf(el),
+        start: typeof el.selectionStart === 'number' ? el.selectionStart : null,
+        end: typeof el.selectionEnd === 'number' ? el.selectionEnd : null
+      };
+    }
+
+    function restoreFocus(snap) {
+      if (!snap || !snap.key || !mountEl) return;
+      var sel = null;
+      if (snap.key.indexOf('form:') === 0) {
+        sel = '[data-form-id="' + snap.key.slice(5) + '"]';
+      } else if (snap.key.indexOf('range:') === 0) {
+        sel = '[data-range-id="' + snap.key.slice(6) + '"]';
+      } else if (snap.key.indexOf('id:') === 0) {
+        sel = '#' + snap.key.slice(3);
+      }
+      if (!sel) return;
+      var el = mountEl.querySelector(sel);
+      if (!el || typeof el.focus !== 'function') return;
+      el.focus({ preventScroll: true });
+      if (snap.start !== null && typeof el.setSelectionRange === 'function') {
+        try { el.setSelectionRange(snap.start, snap.end === null ? snap.start : snap.end); } catch (err) { /* range 不支持 */ }
+      }
+    }
+
     function renderCurrent() {
       if (!mountEl) return { ok: false, error: 'no_mount' };
       if (!state.open || !state.spec) {
@@ -858,7 +917,10 @@
         mountEl.innerHTML = '';
         return { ok: true, closed: true };
       }
-      return render(mountEl, state.spec);
+      var snap = captureFocus();
+      var out = render(mountEl, state.spec);
+      restoreFocus(snap);
+      return out;
     }
 
     function setState(viewState, meta) {
@@ -905,8 +967,10 @@
         if (spec.surface === 'list' && items.length >= VIRTUAL_THRESHOLD) {
           ensureVirtualVisible(state.focusIndex);
           updateVirtualWindow(spec);
+          applyFocusClass();
         } else {
-          renderCurrent();
+          // 就地改 class：整表重渲染会闪一下，并且会换掉表单里的 <input>（光标丢失）
+          applyFocusClass();
         }
         return;
       }
@@ -918,8 +982,9 @@
         if (spec.surface === 'list' && items.length >= VIRTUAL_THRESHOLD) {
           ensureVirtualVisible(state.focusIndex);
           updateVirtualWindow(spec);
+          applyFocusClass();
         } else {
-          renderCurrent();
+          applyFocusClass();
         }
         return;
       }
