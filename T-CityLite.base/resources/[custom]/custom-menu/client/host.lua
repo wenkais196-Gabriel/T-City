@@ -119,6 +119,32 @@ local function menuCloseInternal(reason, skipPop)
     return true
 end
 
+--- resource 路由的回调结果解析：
+--- - `{ ok = false, reason = ... }` → 原样返回（动作被拒）
+--- - `{ ok = true, spec = <MenuSpec> }` → 关掉当前视图、把 spec 压进同一层并 menu:update
+---   （子菜单语义与 `submenu` 路由完全一致，只是 spec 由对方资源同步返回而不是 builder）
+--- - 其余 → `{ ok = true, dispatched = 'resource' }`
+local function menuResolveResourceResult(intent, ret)
+    if type(ret) ~= 'table' then
+        return { ok = true, dispatched = 'resource' }
+    end
+    if ret.ok == false then
+        return ret
+    end
+    if type(ret.spec) ~= 'table' then
+        return ret
+    end
+    local known = hostState.knownIntents or menuBuildKnownIntents(nil)
+    local okValid, errValid = MenuSpec.Validate(ret.spec, { knownIntents = known })
+    if not okValid then
+        print(('[custom-menu] resource intent %s 返回的子菜单不合法：%s'):format(intent, tostring(errValid)))
+        return { ok = false, reason = errValid }
+    end
+    hostState.stack[#hostState.stack + 1] = menuCloneTable(ret.spec)
+    menuSendUpdate(hostState.stack[#hostState.stack])
+    return { ok = true, dispatched = 'submenu', depth = #hostState.stack }
+end
+
 local function menuRegisterIntent(intentId, route)
     if type(intentId) ~= 'string' or #intentId == 0 or #intentId > 128 then
         return false, 'invalid_intent_id'
@@ -142,6 +168,18 @@ local function menuRegisterIntent(intentId, route)
     elseif kind == 'submenu' then
         if type(route.spec) ~= 'table' and type(route.builder) ~= 'function' then
             return false, 'submenu_requires_spec_or_builder'
+        end
+    elseif kind == 'resource' then
+        -- 跨资源回调专用：路由**只带字符串**，一个函数都不带。
+        -- 原因：exports 跨资源传参走序列化，表里的函数字段会在对面变成 nil
+        -- （2026-11-26 真机：qb-menu 传 handler 闭包，registry 侧收到 route.handler=nil，
+        -- 被判定成 client_route_requires_event_or_handler）。所以回调改成
+        -- 「叫对方资源导出的方法」，参数只有 intentId + JSON-safe 的 ctx。
+        if type(route.resource) ~= 'string' or #route.resource == 0 then
+            return false, 'resource_route_requires_resource'
+        end
+        if type(route.method) ~= 'string' or #route.method == 0 then
+            return false, 'resource_route_requires_method'
         end
     else
         return false, 'unsupported_route_type'
@@ -203,6 +241,25 @@ local function menuDispatchIntent(data)
             TriggerEvent(route.event, ctx)
         end
         return { ok = true, dispatched = 'client' }
+    elseif route.type == 'resource' then
+        local target, fn
+        local okLookup, lookupErr = pcall(function()
+            target = exports[route.resource]
+            fn = target and target[route.method]
+        end)
+        if not okLookup or type(fn) ~= 'function' then
+            print(('[custom-menu] resource intent %s 失败：exports[%s]:%s 不可用（%s）'):format(
+                intent, tostring(route.resource), tostring(route.method),
+                tostring(lookupErr or 'missing_export')))
+            return { ok = false, reason = 'resource_export_missing' }
+        end
+        -- 显式传 self（exports 代理会吃掉第一个实参）；参数里只有字符串和 JSON-safe 表。
+        local okCall, ret = pcall(fn, target, intent, ctx)
+        if not okCall then
+            print(('[custom-menu] resource intent %s 执行失败：%s'):format(intent, tostring(ret)))
+            return { ok = false, reason = 'resource_handler_error' }
+        end
+        return menuResolveResourceResult(intent, ret)
     elseif route.type == 'server' then
         TriggerServerEvent('custom-menu:server:intent', {
             menuId = menuId,

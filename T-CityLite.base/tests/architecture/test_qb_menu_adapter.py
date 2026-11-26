@@ -594,3 +594,36 @@ def test_no_bom_in_new_lua_files_detects_a_bom(tmp_path) -> None:
             if fh.read(3) == b"\xef\xbb\xbf":
                 bad.append(str(lua.relative_to(resources)))
     assert bad == [], "以下 Lua 文件带 UTF-8 BOM，FiveM 会解析失败：\n" + "\n".join(bad)
+
+# --------------------------------------------------------------------------- #
+# 跨资源序列化闸门（真机 #366 事故）
+# --------------------------------------------------------------------------- #
+
+def _non_json_route_fields(source: str) -> list[str]:
+    """返回路由表里出现的函数字段（跨资源必丢）以及非 resource 的路由类型。"""
+    problems: list[str] = []
+    for match in re.finditer(r"RegisterIntent',\s*[^,]+,\s*\{(.*?)\n\s*\}\)", source, re.S):
+        body = match.group(1)
+        if re.search(r"\b(handler|builder)\s*=\s*function", body):
+            problems.append("route carries a function: " + body.strip().splitlines()[0])
+        if not re.search(r"type\s*=\s*'resource'", body):
+            problems.append("route is not type='resource': " + body.strip().splitlines()[0])
+    return problems
+
+
+def test_intent_routes_are_json_safe_and_self_proving() -> None:
+    """跨资源注册的 route 不许带函数，且必须走 type='resource'。
+
+    2026-11-26 真机：qb-menu 往 custom-menu 注册 `{type='client', handler=<闭包>}`。
+    闭包穿过资源边界时被序列化丢弃 → 对面收到 route.handler=nil →
+    判定 `client_route_requires_event_or_handler` → 注册失败 → 静默回退旧 NUI。
+    沙箱里函数能过界，所以原来的单测全绿。现在两条都钉住：
+    路由只带字符串（resource/method），回调走对方资源的导出。
+    """
+    for name in ("qb-menu/client/adapter.lua", "qb-input/client/adapter.lua"):
+        src = (BASE / "resources" / "[qb]" / name).read_text(encoding="utf-8")
+        assert _non_json_route_fields(src) == [], f"{name}: {_non_json_route_fields(src)}"
+
+    # 自证：把一条带闭包的路由喂进校验器，必须被识别
+    poisoned = "callMenu('RegisterIntent', intentId, {\n        type = 'client',\n        handler = function(ctx) end,\n    })"
+    assert _non_json_route_fields(poisoned) != [], "校验器抓不住函数路由，等于没有闸门"

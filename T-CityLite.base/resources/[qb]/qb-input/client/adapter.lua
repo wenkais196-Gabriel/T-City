@@ -37,19 +37,18 @@ local function callMenu(method, ...)
     if not api then return false, 'missing_export' end
     local fn = api[method]
     if type(fn) ~= 'function' then return false, 'missing_export' end
-    -- FiveM exports 代理对第一个实参的语义在不同 build 上不一致，两种形状都试。
-    -- 注意：reason 必须用 type 判断取，不能写 `a or b or c` —— 失败时返回值本身就是
-    -- boolean false，`false or x` 会把真正的拒绝原因丢掉（2026-11-26 就栽在这，
-    -- 日志只剩一句没信息量的 call_failed）。
-    local ok1, r1, why1 = pcall(fn, ...)
-    if ok1 and r1 == true then return true, why1 end
-    local ok2, r2, why2 = pcall(fn, api, ...)
-    if ok2 and r2 == true then return true, why2 end
-    local detail = ('shape1[ok=%s ret=%s why=%s] shape2[ok=%s ret=%s why=%s]'):format(
-        tostring(ok1), tostring(r1), tostring(why1),
-        tostring(ok2), tostring(r2), tostring(why2))
-    print(('[%s] custom-menu:%s 两种调用形状都失败 → %s'):format(RESOURCE, method, detail))
-    return false, detail
+    -- 显式传 self：FiveM 的 exports 代理会把第一个实参当 self 吃掉
+    -- （2026-11-26 实测：不传 self 时导出函数少收一个参数，intentId 变成 route 表）。
+    local ok, ret, why = pcall(fn, api, ...)
+    if not ok then
+        print(('[%s] custom-menu:%s 调用抛错：%s'):format(RESOURCE, method, tostring(ret)))
+        return false, tostring(ret)
+    end
+    if ret ~= true then
+        print(('[%s] custom-menu:%s 被拒：%s'):format(RESOURCE, method, tostring(why)))
+        return false, tostring(why or ret)
+    end
+    return true, why
 end
 
 local function hasText(value)
@@ -109,6 +108,34 @@ local function buildSpec(data, owner)
     }
 end
 
+local function handleSubmit(owner, ctx)
+    local pending = state.pending
+    if not pending or pending.owner ~= owner or pending.specId ~= ctx.menuId then
+        return { ok = true, skipped = 'stale_pending' }
+    end
+    local values = {}
+    if type(ctx.values) == 'table' then
+        for key, value in pairs(ctx.values) do
+            values[key] = value
+        end
+    end
+    -- form surface 提交后不会自动关菜单；旧 qb-input 是提交即关
+    callMenu('Close', 'qb_input_submit')
+    settleDialog(values)
+    return { ok = true, dispatched = 'submit' }
+end
+
+exports('MenuIntent', function(intentId, ctx)
+    if type(intentId) ~= 'string' or type(ctx) ~= 'table' then
+        return { ok = false, reason = 'bad_intent_args' }
+    end
+    local owner = intentId:match('^qb%-input:(.+):submit$')
+    if not owner then
+        return { ok = false, reason = 'unknown_intent' }
+    end
+    return handleSubmit(owner, ctx)
+end)
+
 local function ensureRoute(owner)
     if state.routes[owner] then
         return true
@@ -117,23 +144,11 @@ local function ensureRoute(owner)
     if #intentId > 128 then
         return false
     end
+    -- resource 路由：只带字符串，不带函数（跨资源传的闭包会在对面变成 nil）。
     local ok = callMenu('RegisterIntent', intentId, {
-        type = 'client',
-        handler = function(ctx)
-            local pending = state.pending
-            if not pending or pending.owner ~= owner or pending.specId ~= ctx.menuId then
-                return
-            end
-            local values = {}
-            if type(ctx.values) == 'table' then
-                for key, value in pairs(ctx.values) do
-                    values[key] = value
-                end
-            end
-            -- form surface 提交后不会自动关菜单；旧 qb-input 是提交即关
-            callMenu('Close', 'qb_input_submit')
-            settleDialog(values)
-        end,
+        type = 'resource',
+        resource = RESOURCE,
+        method = 'MenuIntent',
     })
     if ok ~= true then
         return false

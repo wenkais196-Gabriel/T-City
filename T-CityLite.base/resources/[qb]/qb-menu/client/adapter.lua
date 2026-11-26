@@ -42,19 +42,18 @@ local function invoke(method, ...)
     if not api then return false, 'missing_export' end
     local fn = api[method]
     if type(fn) ~= 'function' then return false, 'missing_export' end
-    -- FiveM exports 代理对第一个实参的语义在不同 build 上不一致，两种形状都试。
-    -- 注意：reason 必须用 type 判断取，不能写 `a or b or c` —— 失败时返回值本身就是
-    -- boolean false，`false or x` 会把真正的拒绝原因丢掉（2026-11-26 就栽在这，
-    -- 日志只剩一句没信息量的 call_failed）。
-    local ok1, r1, why1 = pcall(fn, ...)
-    if ok1 and r1 == true then return true, why1 end
-    local ok2, r2, why2 = pcall(fn, api, ...)
-    if ok2 and r2 == true then return true, why2 end
-    local detail = ('shape1[ok=%s ret=%s why=%s] shape2[ok=%s ret=%s why=%s]'):format(
-        tostring(ok1), tostring(r1), tostring(why1),
-        tostring(ok2), tostring(r2), tostring(why2))
-    print(('[%s] custom-menu:%s 两种调用形状都失败 → %s'):format(RESOURCE, method, detail))
-    return false, detail
+    -- 显式传 self：FiveM 的 exports 代理会把第一个实参当 self 吃掉
+    -- （2026-11-26 实测：不传 self 时导出函数少收一个参数，intentId 变成 route 表）。
+    local ok, ret, why = pcall(fn, api, ...)
+    if not ok then
+        print(('[%s] custom-menu:%s 调用抛错：%s'):format(RESOURCE, method, tostring(ret)))
+        return false, tostring(ret)
+    end
+    if ret ~= true then
+        print(('[%s] custom-menu:%s 被拒：%s'):format(RESOURCE, method, tostring(why)))
+        return false, tostring(why or ret)
+    end
+    return true, why
 end
 
 local function customMenuStarted()
@@ -178,16 +177,18 @@ local function ensureRoutes(owner)
         return false
     end
     local okItem, itemReason = invoke('RegisterIntent', itemIntent, {
-        type = 'client',
-        handler = function(ctx) handleItemIntent(owner, ctx) end,
+        type = 'resource',
+        resource = RESOURCE,
+        method = 'MenuIntent',
     })
     if okItem ~= true then
         print(('[qb-menu] RegisterIntent(%s) 失败：%s'):format(itemIntent, tostring(itemReason)))
         return false
     end
     local okMenu, menuReason = invoke('RegisterIntent', menuIntent, {
-        type = 'submenu',
-        builder = function(ctx) return handleMenuIntent(owner, ctx) end,
+        type = 'resource',
+        resource = RESOURCE,
+        method = 'MenuIntent',
     })
     if okMenu ~= true then
         print(('[qb-menu] RegisterIntent(%s) 失败：%s'):format(menuIntent, tostring(menuReason)))
@@ -385,6 +386,32 @@ AddEventHandler('onClientResourceStop', function(resourceName)
     if resourceName == CUSTOM_MENU or resourceName == 'custom-ui' then
         clearState()
     end
+end)
+
+-- custom-menu 用 `resource` 路由回调到这里：intentId 与 ctx 都是 JSON-safe，
+-- 不跨资源传函数（唯一可行的跨资源形状，见 custom-menu/client/host.lua 的 resource 分支）。
+exports('MenuIntent', function(intentId, ctx)
+    if type(intentId) ~= 'string' or type(ctx) ~= 'table' then
+        return { ok = false, reason = 'bad_intent_args' }
+    end
+    local owner, kind = intentId:match('^qb%-menu:(.+):(item)$')
+    if not owner then
+        owner, kind = intentId:match('^qb%-menu:(.+):(menu)$')
+    end
+    if not owner then
+        return { ok = false, reason = 'unknown_intent' }
+    end
+    if kind == 'menu' then
+        -- 子菜单：事件里同步再开一次 qb-menu 时，capture 会带回子 spec，
+        -- 交回宿主压栈（等价于老的 submenu 路由，只是 builder 变成导出返回值）。
+        local childSpec = handleMenuIntent(owner, ctx)
+        if type(childSpec) == 'table' then
+            return { ok = true, spec = childSpec }
+        end
+        return { ok = true, dispatched = 'menu_closed' }
+    end
+    handleItemIntent(owner, ctx)
+    return { ok = true, dispatched = kind }
 end)
 
 _G.QBMenuAdapter = {
