@@ -190,7 +190,7 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `cmenudemo` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-menu/client/host.lua:595 |
+| `cmenudemo` | RegisterCommand | — | T-CityLite.base/resources/[custom]/custom-menu/client/host.lua:607 |
 
 ### custom-mining
 
