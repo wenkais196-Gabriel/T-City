@@ -1187,6 +1187,7 @@ CREATE TABLE IF NOT EXISTS `industry_audit` (
 
 -- v4.1_industry_facility.sql — S2 设施 / 工位 / 库存
 -- v4.2_industry_production.sql — S3 累计产出埋点 produced_units
+-- v4.3_industry_sales.sql — S4 需求配额 / 卖单流水
 CREATE TABLE IF NOT EXISTS `industry_facility` (
   `org_id` varchar(64) NOT NULL,
   `facility_type` varchar(48) NOT NULL,
@@ -1200,6 +1201,34 @@ CREATE TABLE IF NOT EXISTS `industry_facility` (
   PRIMARY KEY (`org_id`),
   KEY `idx_facility_type` (`facility_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `industry_demand` (
+  `cycle_no` int(11) NOT NULL DEFAULT 0,
+  `phase` varchar(24) NOT NULL DEFAULT 'static',
+  `item_name` varchar(64) NOT NULL,
+  `quota_total` int(11) NOT NULL DEFAULT 0,
+  `quota_used` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`cycle_no`,`phase`,`item_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `industry_sales` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `org_id` varchar(64) NOT NULL,
+  `cycle_no` int(11) NOT NULL DEFAULT 0,
+  `item_name` varchar(64) NOT NULL,
+  `qty` int(11) NOT NULL,
+  `unit_price` bigint(20) NOT NULL,
+  `revenue` bigint(20) NOT NULL,
+  `ref` varchar(96) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_org_ref` (`org_id`,`ref`),
+  KEY `idx_org_cycle_item` (`org_id`,`cycle_no`,`item_name`),
+  KEY `idx_cycle_item` (`cycle_no`,`item_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `industry_demand` (`cycle_no`, `phase`, `item_name`, `quota_total`, `quota_used`)
+VALUES (0, 'static', 'iron_ore', 10, 0);
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
