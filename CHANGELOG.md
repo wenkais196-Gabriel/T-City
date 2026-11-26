@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   并新增 `/industry` 直开面板。
   ④ `cl_org.lua` 的提示循环会在「菜单开着但玩家不在 1.5m 内」时调 `qb-menu:closeMenu()`，
   这会关掉**任何**用 qb-menu 打开的界面。`/industry` 直开不置 `shownMenu`，因此不受影响。
-- **三处 `type(x.Functions.y) == 'function'` 造成的静默故障（#364）**：本 build 里
+- **三处 `type(x.Functions.y) == 'function'` 造成的静默故障（#363）**：本 build 里
   `exports['qb-core']:GetCoreObject()` 交出来的函数是**可调用表**（`type == 'table'`），
   那条守卫恒假。① custom-director 的广播通知：`delivered` 永远 0，**通知从未送达**；
   ② custom-quest 的 vendor `payCash`：守卫恒真 → 永远返回 false，**卖东西从不付款**（库存照扣）；
