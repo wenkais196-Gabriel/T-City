@@ -522,7 +522,7 @@ print('OK')
     )
 
 
-def test_global_state_enables_adapter_when_convar_is_unreadable() -> None:
+def test_global_state_enables_adapter_and_rejects_when_both_signals_off() -> None:
     """真机事故复现：服务端 convar=true、客户端 `GetConvar` 读不到 → 旧 UI。
 
     适配层因此改成「GlobalState 优先、convar 兜底」，并且**在调用时判断**。
@@ -539,6 +539,18 @@ assert(lastNui('OPEN_MENU') == nil, '接管后老 NUI 不许再收到 OPEN_MENU'
 print('OK')
 """.replace("__ROOT_MENU__", ROOT_MENU),
         use_adapter=False,   # convar 侧是 false —— 只有 GlobalState 为真
+    )
+    # 反向：两个信号都关时必须**拒绝接管**并回退老路径（否则就是"永远接管"的假绿）
+    _run(
+        """
+GlobalState.qb_menu_use_custom_menu = false
+INVOKING = 'resource-a'
+exports['qb-menu']:openMenu({ __ROOT_MENU__ })
+assert(exports['custom-menu']:IsOpen() == false, '两个信号都关时不许接管')
+assert(lastNui('OPEN_MENU') ~= nil, '必须回退老 NUI')
+print('OK')
+""".replace("__ROOT_MENU__", ROOT_MENU),
+        use_adapter=False,
     )
 
 
@@ -611,7 +623,7 @@ def _non_json_route_fields(source: str) -> list[str]:
     return problems
 
 
-def test_intent_routes_are_json_safe_and_self_proving() -> None:
+def test_intent_routes_rejects_function_fields_and_non_resource_types() -> None:
     """跨资源注册的 route 不许带函数，且必须走 type='resource'。
 
     2026-11-26 真机：qb-menu 往 custom-menu 注册 `{type='client', handler=<闭包>}`。
