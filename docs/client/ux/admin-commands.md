@@ -14,7 +14,7 @@ review_by: 2027-02-28
 
 # 管理员命令清单
 
-共 **350** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
+共 **351** 条命令。`权限` 列是扫描器从调用里读到的判定；`—` 表示没读到（**新命令默认不该是 `—`**）。
 
 ## 危险命令但没有判权：0 条
 
@@ -26,7 +26,7 @@ review_by: 2027-02-28
 |---|---|
 | — | 158 |
 | QBCore | 106 |
-| restricted=true | 41 |
+| restricted=true | 42 |
 | job/gang 判定 | 35 |
 | handler 内判定 | 10 |
 
@@ -156,6 +156,7 @@ review_by: 2027-02-28
 | `orgfundwithdraw` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua:167 |
 | `orghire` | QBCore.Commands.Add | QBCore: user | T-CityLite.base/resources/[custom]/custom-industry/server/commands_facility.lua:91 |
 | `orgproduce` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-industry/server/commands_production.lua:27 |
+| `orgsell` | RegisterCommand | restricted=true | T-CityLite.base/resources/[custom]/custom-industry/server/commands_sales.lua:18 |
 
 ### custom-justice
 
@@ -339,10 +340,10 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `assets` | RegisterCommand | restricted=true | T-CityLite.base/resources/[system]/economy-dashboard/server/main.lua:136 |
-| `econ` | RegisterCommand | restricted=true | T-CityLite.base/resources/[system]/economy-dashboard/server/main.lua:262 |
-| `econreport` | RegisterCommand | restricted=true | T-CityLite.base/resources/[system]/economy-dashboard/server/main.lua:299 |
-| `hotrank` | RegisterCommand | restricted=true | T-CityLite.base/resources/[system]/economy-dashboard/server/main.lua:108 |
+| `assets` | RegisterCommand | restricted=true | T-CityLite.base/resources/[system]/economy-dashboard/server/main.lua:155 |
+| `econ` | RegisterCommand | restricted=true | T-CityLite.base/resources/[system]/economy-dashboard/server/main.lua:284 |
+| `econreport` | RegisterCommand | restricted=true | T-CityLite.base/resources/[system]/economy-dashboard/server/main.lua:323 |
+| `hotrank` | RegisterCommand | restricted=true | T-CityLite.base/resources/[system]/economy-dashboard/server/main.lua:127 |
 
 ### hud-position-tool
 

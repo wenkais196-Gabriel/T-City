@@ -32,7 +32,8 @@ local state = {
         totalInflow = 0,        -- 本周总流入
         totalOutflow = 0,       -- 本周总流出 (含 Sink)
         totalSinkFlow = 0,      -- 本周 SinkService 回收
-        hourlySnapshots = {},   -- 每小时的快照 { [hourKey] = {inflow, outflow, sink} }
+        industrySaleInflow = 0, -- 本周组织产业入账（S4 唯一的无扣款净增口）
+        hourlySnapshots = {},   -- 每小时的快照 { [hourKey] = {inflow, outflow, sink, industrySale} }
     },
 
     -- KPI 2: 活动热度
@@ -80,6 +81,24 @@ AddEventHandler('QBCore:Server:OnMoneyChange', function(src, moneytype, amount, 
         state.activityHeat[activityId].count = state.activityHeat[activityId].count + 1
         state.activityHeat[activityId].totalReward = state.activityHeat[activityId].totalReward + amount
     end
+end)
+
+-- ── KPI 1b: 组织金库入账（S4 industry:sale） ─────────────────────────
+-- 组织入账不经过 QBCore:Server:OnMoneyChange（它写的是 org_treasury，不是玩家 money），
+-- 必须单独埋点；否则这是一个看不见的钱源。事件只上报成功入账后的金额。
+AddEventHandler('industry:sale', function(_orgId, _itemName, _qty, amount)
+    amount = tonumber(amount) or 0
+    if amount <= 0 then return end
+
+    state.cashFlow.totalInflow = state.cashFlow.totalInflow + amount
+    state.cashFlow.industrySaleInflow = state.cashFlow.industrySaleInflow + amount
+
+    local activityId = 'industry:sale'
+    if not state.activityHeat[activityId] then
+        state.activityHeat[activityId] = { count = 0, totalReward = 0 }
+    end
+    state.activityHeat[activityId].count = state.activityHeat[activityId].count + 1
+    state.activityHeat[activityId].totalReward = state.activityHeat[activityId].totalReward + amount
 end)
 
 -- ── KPI 2: 活动热度排行查询 ──────────────────────────────────────────
@@ -158,6 +177,7 @@ CreateThread(function()
             inflow = state.cashFlow.totalInflow,
             outflow = state.cashFlow.totalOutflow,
             sink = state.cashFlow.totalSinkFlow,
+            industrySale = state.cashFlow.industrySaleInflow,
         }
 
         -- 刷新资产数据
@@ -202,6 +222,7 @@ local function weeklyReport()
             totalInflow = state.cashFlow.totalInflow,
             totalOutflow = state.cashFlow.totalOutflow,
             totalSinkFlow = state.cashFlow.totalSinkFlow,
+            industrySaleInflow = state.cashFlow.industrySaleInflow,
             netFlow = state.cashFlow.totalInflow - state.cashFlow.totalOutflow,
             sinkRatio = state.cashFlow.totalInflow > 0
                 and math.floor(state.cashFlow.totalSinkFlow / state.cashFlow.totalInflow * 1000) / 10
@@ -241,6 +262,7 @@ local function weeklyReport()
     state.cashFlow.totalInflow = 0
     state.cashFlow.totalOutflow = 0
     state.cashFlow.totalSinkFlow = 0
+    state.cashFlow.industrySaleInflow = 0
     state.activityHeat = {}
     state.weekStart = now
 end
@@ -276,6 +298,8 @@ RegisterCommand('econ', function(source)
         '',
         ('💰 Cash Flow: In $%d | Out $%d | Net $%d | Sink %.1f%%')
             :format(state.cashFlow.totalInflow, state.cashFlow.totalOutflow, netFlow, sinkRatio),
+        ('🏭 Industry sales: $%s (organization treasury)')
+            :format(tostring(math.floor(state.cashFlow.industrySaleInflow))),
         ('📈 Global Multiplier: %.2f'):format(globalMult),
         ('🏠 Houses: %d | 🚗 Vehicles: %d')
             :format(state.assetDistribution.houseCount, state.assetDistribution.vehicleCount),
@@ -336,6 +360,7 @@ exports('GetDashboard', function()
             inflow = state.cashFlow.totalInflow,
             outflow = state.cashFlow.totalOutflow,
             sink = state.cashFlow.totalSinkFlow,
+            industrySale = state.cashFlow.industrySaleInflow,
             net = netFlow,
             sinkRatio = sinkRatio,
         },

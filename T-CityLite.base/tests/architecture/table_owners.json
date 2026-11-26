@@ -94,7 +94,9 @@
         "org_treasury",
         "org_ledger",
         "industry_audit",
-        "industry_facility"
+        "industry_facility",
+        "industry_demand",
+        "industry_sales"
       ]
     }
   ],

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from lua_probe import BASE, load_with_db
+from lua_probe import BASE, load_industry
 
 RES = BASE / "resources" / "[custom]" / "custom-industry"
 SRC = RES / "server" / "treasury.lua"
@@ -62,7 +62,7 @@ def run(body: str) -> dict[str, str]:
     """把探针桩 + db.lua + treasury.lua + body 拼成一次 Lua 运行。"""
     stubs = FIXTURE.read_text(encoding="utf-8")
     flag = "true" if unique_ref_declared() else "false"
-    script = load_with_db(stubs, SRC, f"__uniqueRef = {flag}\n" + textwrap.dedent(body))
+    script = load_industry(stubs, SRC, f"__uniqueRef = {flag}\n" + textwrap.dedent(body))
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
 
@@ -408,7 +408,7 @@ end
 
 def run_commands(body: str) -> dict[str, str]:
     """stubs + db.lua + audit.lua（真加载）+ commands.lua（真加载）+ body。"""
-    script = load_with_db(
+    script = load_industry(
         COMMAND_STUBS,
         AUDIT,
         COMMANDS.read_text(encoding="utf-8") + "\n" + textwrap.dedent(body),
@@ -432,7 +432,7 @@ GRANT_STUBS = FIXTURE.read_text(encoding="utf-8") + "\n" + COMMAND_STUBS
 
 def run_grant(body: str) -> dict[str, str]:
     """fixture + db.lua + treasury.lua + audit.lua + commands.lua + body。"""
-    script = load_with_db(
+    script = load_industry(
         GRANT_STUBS,
         SRC,
         AUDIT.read_text(encoding="utf-8") + "\n"

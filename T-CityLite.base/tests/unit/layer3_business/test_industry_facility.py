@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from lua_probe import BASE, load_with_db
+from lua_probe import BASE, load_industry
 
 RES = BASE / "resources" / "[custom]" / "custom-industry"
 TREASURY_SRC = RES / "server" / "treasury.lua"
@@ -63,7 +63,7 @@ def parse(out_text: str) -> dict[str, str]:
 
 def run(body: str) -> dict[str, str]:
     """stubs + db.lua + treasury.lua + config/audit/facility + body。"""
-    script = load_with_db(
+    script = load_industry(
         STUBS,
         TREASURY_SRC,
         CONFIG_SRC.read_text(encoding="utf-8")
@@ -411,7 +411,7 @@ def test_all_server_scripts_register_all_commands_without_global_qbcore():
         __emit('NAMES', table.concat(__registered, ','))
         __emit('HAS_GLOBAL', tostring(rawget(_G, 'QBCore') ~= nil))
     """
-    script = load_with_db(WIRING_STUBS, first, body)
+    script = load_industry(WIRING_STUBS, first, body)
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
     out = parse(proc.stdout)
