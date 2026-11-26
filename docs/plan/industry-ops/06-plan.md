@@ -78,6 +78,9 @@ S6 与 S7 **必须同一个 PR**：阶段机本身没有清空能力，先上线
 | R4 | `resources/[custom]/custom-industry/server/settlement.lua`：显式表级清分、prestige、dry-run、`applied` 崩溃恢复、审计 | ✅ |
 | R5 | `resources/[custom]/custom-industry/server/announce.lua` + `commands_cycle.lua`：CityFeed 两段公告、控制台换阶段/结算 | ✅ |
 | R6 | 25 条新单测（含 4 条反例、个人层 checksum、幂等、补推不跳段）+ 结构闸门 | ✅ |
+| R7 | prestige 永久加成接线：每级 +2%、上限 +20%，**只走读取路径**（生产结算 + 快照现读 `org_treasury.prestige`），无账户=无加成，读库失败 fail closed | ✅ |
+| R8 | `tools/dev/industry_cycle_probe.py --scale 60 --cycles 2`：四阶段顺序 / 不跳段 / 重启续跑 / 结算前后 `CHECKSUM TABLE players` / 幂等，跑完自清理 | ✅ |
+| R9 | 结算崩溃恢复演练：删一半进程没了 → 重跑收敛、审计只剩一条 `applied` | ✅ |
 
 ## 5. 关键实现约束（写错就白写）
 
