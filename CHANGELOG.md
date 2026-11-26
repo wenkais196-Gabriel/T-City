@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **qb-menu / qb-input 适配层跨资源注册 intent 失败（#366）**：custom-menu 的 intent 路由携带 `handler`/`builder` 闭包，跨资源边界被序列化丢弃（对面收到 nil），注册静默失败并回退旧 NUI。新增 `type='resource'` 路由（只带 `resource`/`method` 两个字符串，回调走对方资源导出的 `MenuIntent`），并把「路由不许带函数」写成自证闸门。同时修正：适配层开关改为**调用时**判断（`GlobalState` 优先、convar 兜底），避免事后 `setr` 必须重连才生效；关闭态回落到老路径（`closeMenu` 补传 `closeMenuLegacy`）。
 - **配额双源对账（`custom-industry`，S6 前置，#364）**：全服已用原先只信可变计数器
   `industry_demand.quota_used`，单组织已用却由 `SUM(industry_sales.qty)` 派生；真机手动重置计数器后
   出现「全服剩 10、本组织剩 0」这种数学上不可能的状态。读取改为
