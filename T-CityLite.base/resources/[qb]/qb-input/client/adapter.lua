@@ -37,17 +37,19 @@ local function callMenu(method, ...)
     if not api then return false, 'missing_export' end
     local fn = api[method]
     if type(fn) ~= 'function' then return false, 'missing_export' end
-    -- FiveM 的 exports 代理对「第一个实参」的语义在不同 build 上不一致：
-    -- 有的代理会把它当 self 吃掉，有的会原样转给导出函数。所以两种形状都试一次，
-    -- 取第一个「成功且没返回 false」的结果。2026-11-26 真机就是栽在这里：
-    -- 显式传 self 时 RegisterIntent 收到 table 当 intent 名，注册静默失败 → 回退旧 NUI。
-    local ok, a, b = pcall(fn, ...)
-    if ok and a ~= false then return a, b end
-    local ok2, c, d = pcall(fn, api, ...)
-    if ok2 and c ~= false then return c, d end
-    local reason = (ok and a) or (ok2 and c) or (not ok and a) or 'call_failed'
-    print(('[%s] custom-menu:%s 调用失败：%s'):format(RESOURCE, method, tostring(reason)))
-    return false, tostring(reason)
+    -- FiveM exports 代理对第一个实参的语义在不同 build 上不一致，两种形状都试。
+    -- 注意：reason 必须用 type 判断取，不能写 `a or b or c` —— 失败时返回值本身就是
+    -- boolean false，`false or x` 会把真正的拒绝原因丢掉（2026-11-26 就栽在这，
+    -- 日志只剩一句没信息量的 call_failed）。
+    local ok1, r1, why1 = pcall(fn, ...)
+    if ok1 and r1 == true then return true, why1 end
+    local ok2, r2, why2 = pcall(fn, api, ...)
+    if ok2 and r2 == true then return true, why2 end
+    local detail = ('shape1[ok=%s ret=%s why=%s] shape2[ok=%s ret=%s why=%s]'):format(
+        tostring(ok1), tostring(r1), tostring(why1),
+        tostring(ok2), tostring(r2), tostring(why2))
+    print(('[%s] custom-menu:%s 两种调用形状都失败 → %s'):format(RESOURCE, method, detail))
+    return false, detail
 end
 
 local function hasText(value)
