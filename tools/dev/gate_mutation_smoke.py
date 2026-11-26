@@ -58,7 +58,7 @@ MUTATIONS: list[Mutation] = [
     # ── custom-menu（M2 #344）：这些闸门全是"必须存在/必须为零"的静态判据，
     # 只有把它们各自打红一次，才能证明它们不是永远绿。
     Mutation(
-        gate="tests/architecture/test_menu_host.py::test_zero_set_nui_focus_across_custom_menu",
+        gate="tests/architecture/test_menu_host.py::test_set_nui_focus_only_inside_apply_focus",
         path="resources/[custom]/custom-menu/client/host.lua",
         content=None,
         replace_from="exports('Open', menuOpen)",
