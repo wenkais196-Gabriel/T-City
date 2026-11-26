@@ -268,6 +268,70 @@ def test_retry_after_crash_before_treasury_applies_prestige_once():
     assert out["RESULTS"] == "1", "重试插了第二行结果"
 
 
+def test_retry_after_crash_between_deletes_converges_and_writes_exactly_one_audit():
+    """「删到一半进程没了」：设施已删、卖单还没删，applied 仍是 0。
+
+    重跑必须收敛到同一结果（设施/卖单/配额/余额全 0、prestige 只发一次），
+    且审计里 `cycle.settle` **恰好一条** —— 第一次失败不能留半条成功审计。
+    """
+    out = run(SEED + """
+        local before = __playersChecksum()
+
+        __failNextSalesDelete = true
+        local first, firstErr = IndustrySettlement.SettleCycle(
+            1, { trigger = 'crash-mid-delete' })
+        __emit('FIRST', tostring(first) .. ':' .. tostring(firstErr or 'nil'))
+        __emit('FACILITY_AFTER_FIRST', tostring(__facilityCount()))
+        __emit('SALES_AFTER_FIRST', tostring(__salesCount()))
+        __emit('DEMAND_AFTER_FIRST', tostring(__demandCount(1)))
+        __emit('BALANCE_AFTER_FIRST', tostring(__treasury('mining_co').balance))
+        __emit('PRESTIGE_AFTER_FIRST', tostring(__treasury('mining_co').prestige))
+        __emit('APPLIED_AFTER_FIRST', tostring(__result('mining_co', 1).applied))
+        __emit('SETTLED_AFTER_FIRST', tostring(__stateRow().settled_cycle_no))
+        __emit('AUDIT_AFTER_FIRST', tostring(__auditCount('cycle.settle')))
+
+        local second, secondErr = IndustrySettlement.SettleCycle(1, { trigger = 'retry' })
+        local after = __playersChecksum()
+        __emit('SECOND', tostring(second) .. ':' .. tostring(secondErr or 'nil'))
+        __emit('FACILITY', tostring(__facilityCount()))
+        __emit('SALES', tostring(__salesCount()))
+        __emit('DEMAND', tostring(__demandCount(1)))
+        __emit('BALANCE', tostring(__treasury('mining_co').balance))
+        __emit('PRESTIGE', tostring(__treasury('mining_co').prestige))
+        __emit('RESULTS', tostring(__resultCount(1)))
+        __emit('APPLIED', tostring(__result('mining_co', 1).applied))
+        __emit('SETTLED', tostring(__stateRow().settled_cycle_no))
+        __emit('AUDIT', tostring(__auditCount('cycle.settle')))
+        __emit('PLAYERS_BEFORE', before)
+        __emit('PLAYERS_AFTER', after)
+    """, convars=PRESTIGE_CONVARS)
+
+    assert out["FIRST"] == "false:db_error", f"注入的删除失败没有生效：{out}"
+    assert out["FACILITY_AFTER_FIRST"] == "0", "崩溃前已完成的设施删除不该回滚"
+    assert out["SALES_AFTER_FIRST"] == "2", "卖单删除失败后不应被标记为完成"
+    assert out["DEMAND_AFTER_FIRST"] == "2", "失败时不该清全服配额"
+    assert out["BALANCE_AFTER_FIRST"] == "0", "金库清零是幂等绝对值，崩溃后保持 0"
+    assert out["PRESTIGE_AFTER_FIRST"] == "10", "prestige 是绝对值，崩溃后保持 10"
+    assert out["APPLIED_AFTER_FIRST"] == "0", "崩溃后结果行必须保持未完成"
+    assert out["SETTLED_AFTER_FIRST"] == "0", "失败时推进了 settled_cycle_no"
+    assert out["AUDIT_AFTER_FIRST"] == "0", "失败路径写了成功审计"
+
+    assert out["SECOND"] == "true:nil", f"重跑没有收敛：{out}"
+    assert out["FACILITY"] == "0"
+    assert out["SALES"] == "0"
+    assert out["DEMAND"] == "0"
+    assert out["BALANCE"] == "0"
+    assert out["PRESTIGE"] == "10", "重跑重复发了 prestige"
+    assert out["RESULTS"] == "1", "重跑插了第二行结果"
+    assert out["APPLIED"] == "1"
+    assert out["SETTLED"] == "1"
+    assert out["AUDIT"] == "1", "审计里必须恰好一条 cycle.settle"
+    assert out["PLAYERS_BEFORE"] == out["PLAYERS_AFTER"], (
+        "崩溃恢复路径改动了个人层："
+        f"{out['PLAYERS_BEFORE']} != {out['PLAYERS_AFTER']}"
+    )
+
+
 def test_retry_after_crash_before_applied_marker_does_not_double_prestige():
     out = run(SEED + """
         __failNextAppliedUpdate = true

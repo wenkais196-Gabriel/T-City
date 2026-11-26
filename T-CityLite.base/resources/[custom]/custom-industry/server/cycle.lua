@@ -35,6 +35,61 @@ function IndustryCycle.PhaseOrder()
     return order
 end
 
+-- ── S8 永久加成（prestige → 下一轮产能） ──────────────────────────────
+-- 等级 = prestige 点数，每级 +2%，第 10 级封顶 +20%。加成**只从存量推导**：
+-- 不写回设施 / 卖单 / 结果表的任何倍率列，结算只写 prestige 绝对值。
+-- 生产结算与销售快照每次读取当前值，所以结算后的下一轮自动生效。
+
+local function prestigeConfig()
+    local cycle = cycleConfig()
+
+    local perLevel = tonumber(cycle.PrestigeBonusPerLevel)
+    if not perLevel or perLevel ~= perLevel or perLevel < 0 then perLevel = 0.02 end
+    if perLevel > 1 then perLevel = 1 end
+
+    local maxLevel = tonumber(cycle.PrestigeBonusMaxLevel)
+    if not maxLevel or maxLevel ~= maxLevel or maxLevel < 0 then maxLevel = 10 end
+    return perLevel, math.floor(maxLevel)
+end
+
+--- 纯函数：把 prestige 点数折算成永久加成。
+--- 百分比按整数收敛（+2%/级），避免 0.02 × N × 100 的浮点尾巴进生产公式。
+---@param points number|nil
+---@return table { points, level, maxLevel, bonusPercent, multiplier }
+function IndustryCycle.PrestigeBonus(points)
+    local perLevel, maxLevel = prestigeConfig()
+
+    local raw = tonumber(points)
+    if not raw or raw ~= raw or raw < 0 then raw = 0 end -- NaN / 负数兜底
+    raw = math.floor(raw)
+
+    local level = raw
+    if level > maxLevel then level = maxLevel end
+    local percent = math.floor(level * perLevel * 100 + 1e-9)
+
+    return {
+        points = raw,
+        level = level,
+        maxLevel = maxLevel,
+        bonusPercent = percent,
+        multiplier = 1 + percent / 100,
+    }
+end
+
+--- 读取组织的永久加成（读取路径专用）。
+--- 没有 `org_treasury` 行 = 还没攒过 prestige = 无加成，不是错误；
+--- 读库失败返回 nil, 'db_error'，调用方必须 fail closed。
+---@param orgId string
+---@return table|nil bonus, string|nil errcode
+function IndustryCycle.PrestigeForOrg(orgId)
+    if type(orgId) ~= 'string' or orgId == '' then return nil, 'bad_org' end
+
+    local row, err = Db.Single(
+        'SELECT prestige FROM org_treasury WHERE org_id = ? LIMIT 1', { orgId })
+    if err then return nil, 'db_error' end
+    return IndustryCycle.PrestigeBonus(row and row.prestige or 0), nil
+end
+
 --- 阶段真实秒数：PhaseSeconds 覆盖优先，否则 design_days / Scale。
 ---@param phase string
 ---@return number|nil

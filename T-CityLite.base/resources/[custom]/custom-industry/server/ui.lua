@@ -168,6 +168,10 @@ function IndustryUi.Snapshot(value, orgId)
         end
     end
 
+    -- S8 永久加成：未建厂也要能看见等级与加成（读路径，不落库）。
+    local prestige, prestigeErr = IndustryCycle.PrestigeForOrg(resolved)
+    if not prestige then return nil, prestigeErr or 'db_error' end
+
     local snapshot = {
         orgId = resolved,
         orgLabel = orgLabel,
@@ -175,6 +179,7 @@ function IndustryUi.Snapshot(value, orgId)
         isBoss = level >= bossGrade(),
         balance = balance,
         producedUnits = 0,
+        prestige = prestige,
         phase = {
             key = cycleState.phase,
             label = cycleState.label,

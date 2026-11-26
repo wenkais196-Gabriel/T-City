@@ -12,6 +12,8 @@ plan_status: 1
 
 # 计划：S6 周期状态机 + S7 结算转生（同一片）
 
+> **S8 上线前收口（#375）追加在 §12**；S6/S7 的既有契约不变（`SettleSale` 仍是唯一组织入账点）。
+>
 > 阶段 P 的产物。上游：[12 — 产业运营与组织运营](../../server-design/12-industry-operations.md)（spec §5/§12），
 > 前一片：[05-plan.md](./05-plan.md)（S5 产业 UI，已合并 #362）。
 > 施工单元：[#338](https://github.com/wenkais196-Gabriel/T-City/issues/338)；
@@ -24,6 +26,9 @@ R3 | done | #338 | 2026-11-26
 R4 | done | #338 | 2026-11-26
 R5 | done | #338 | 2026-11-26
 R6 | done | #338 | 2026-11-26
+R7 | done | #375 | 2026-11-26
+R8 | done | #375 | 2026-11-26
+R9 | done | #375 | 2026-11-26
 ```
 
 ---
@@ -156,4 +161,96 @@ FAILED test_industry_settlement.py::test_second_settlement_of_same_org_and_cycle
 | 公告失败不阻断结算 | 结果表是权威事实；公告失败只记日志，下一 tick 补发 | 运营告警接入 dashboard |
 | 控制台可提前结算当前周期 | `industry_settle confirm` 会清空设施但周期继续；下一轮结算前玩家无产出 | 命令仅控制台；后续可加二次确认参数 |
 | 阶段切换瞬间的读数窗口 | `Current()` 每 tick/请求实时读库；同一请求内只读一次，但不同请求可能跨越边界 | 可接受（秒级窗口，金额仍由服务端算） |
-| 永久加成未接线 | `org_treasury.prestige` 已累积，+2%/级、+20% 上限尚未进入任何倍率 | 第二轮数值片 |
+| ~~永久加成未接线~~ | **S8 已接线（#375）**：每级 +2% 产能、第 10 级封顶 +20%；读取路径生效（生产结算 / `Inspect` / 快照），不写进任何行 | 已解决；数值仍待真人试玩标定（见 §12.5） |
+
+---
+
+## 12. S8 上线前收口（#375）
+
+三件事都是「上线前必须有」：prestige 看得见、周期能被一条命令验收、结算崩一半能收敛。
+S1–S7 的契约不变：`SettleSale` 仍是唯一组织入账点、结算仍不碰个人层、SQL 仍走
+`Db.*` + 显式列 + `LIMIT`。
+
+### 12.1 prestige 永久加成：只乘产能，读取时生效
+
+| 项 | 决定 | 理由 |
+|---|---|---|
+| 加成对象 | **产能**（`IndustryProduction.Compute` 的 `multiplier`） | ① spec §10 的意图是「让下一轮更快」；② 售价已叠 `core_economy` 全局/热度与阶段倍率，再加货币倍率会把通胀从「库存上限 × 配额」挪到没有第二道闸的价格上；③ 产能仍受库存上限与每周期配额约束 |
+| 等级 | `prestige` 点数，1 点 = 1 级 | 与结算公式 `floor(sqrt(销售额 / K))` 直接对齐，不需要第二张等级表 |
+| 数值 | 每级 +2%，`min(points, 10)` 级封顶 +20% | spec §10；第 10 级之后不再增长 |
+| 读点 | `T-CityLite.base/resources/[custom]/custom-industry/server/cycle.lua` 的 `IndustryCycle.PrestigeForOrg(orgId)`；生产结算与 `IndustrySales.Inspect` 调用 | 每次结算读当前值；结算后的下一轮自动生效 |
+| 写点 | 无 | 设施 / 卖单 / 结果表不新增倍率列；结算只写 `prestige` 绝对值 |
+| 缺账户 | 无加成（不是错误） | 新组织还没攒过 prestige，生产必须照常跑 |
+| 读库失败 | `db_error`，本次结算不写库存 | 与阶段倍率同一条 fail-closed 方向，不按 1 倍继续产 |
+| 展示 | `Inspect` / UI 快照返回 `prestige = { points, level, maxLevel, bonusPercent, multiplier }` | 玩家能看见等级与加成；快照只展示，不参与报价 |
+
+配置在 `T-CityLite.base/resources/[custom]/custom-industry/config/cycle.lua`：`PrestigeBonusPerLevel`
+（convar `industry_prestige_bonus_per_level`，默认 0.02）与 `PrestigeBonusMaxLevel`
+（convar `industry_prestige_max_level`，默认 10）。生产公式的 `floor` 补了 `1e-9`：
+`1.2 × 150` 在 IEEE754 里会落到 179.999…，不补会少产 1 单位；整数倍率下结果不变。
+
+### 12.2 真机脚本：一条命令，自己清理
+
+```
+python3 tools/dev/industry_cycle_probe.py --scale 60 --cycles 2
+```
+
+| 检查 | 判据 |
+|---|---|
+| 四阶段依次推进 | `industry_audit` 的 `cycle.advance` 序列 = 每周期 `expansion→competition→maturity→recession`，跨周期 `recession→expansion` |
+| 不跳段 | 第二个周期的 `phase_ends_at` 被改到过去后，仍逐格补推（序列与上一条完全一致） |
+| 重启续跑 | 竞争期 `restart custom-industry`，`cycle_no / phase / phase_started_at / phase_ends_at` 不回退、不重算 |
+| 个人层零改动 | 结算前后 `CHECKSUM TABLE players / player_vehicles / inventories / player_houses` 完全一致；不一致打印差异表并失败 |
+| 幂等 | 衰退期连发两次 `industry_settle confirm <cycle>`：第二次打印 `already settled`，结果表恰好 1 行 `applied=1`、无 `applied=0` 残行、`cycle.settle` 审计恰好 1 条 |
+
+脚本边界：
+
+* 周期号取 `max(当前 cycle, settled_cycle_no, 结果/卖单/配额的最大 cycle) + 1`，不会撞历史结果行；
+* 种一个临时设施 `probe_org`，让结算真的有设施要删；
+* SQL 静态守卫：任何 `UPDATE/INSERT/DELETE` 个人层的语句直接失败；个人表只允许
+  `CHECKSUM TABLE` / `SELECT COUNT(*)`；
+* 默认拒绝「有玩家在线」或「库里已有设施/金库数据」；确认是空库验收后分别加
+  `--allow-players-online` / `--allow-industry-data`；
+* 结束时 `stop custom-industry` → 恢复 `industry_state` / 结果 / 配额 / 设施 / 金库 →
+  恢复 convar → `start custom-industry`；`industry_audit` 保留为验收痕迹（append-only，不删）。
+
+### 12.3 结算崩溃恢复演练
+
+新增假 DB 钩子 `__failNextSalesDelete`：结算顺序是「结果行 → 金库绝对值 → 删设施 →
+删卖单 → `applied=1`」，在**删完设施、还没删卖单**时抛错，模拟「删到一半进程没了」。
+用例断言：
+
+1. 第一次返回 `false:db_error`；设施已删（0 行）、卖单还在（2 行）、配额未清（2 行）、
+   金库 0、prestige 10（绝对值）、结果行 `applied=0`、`settled_cycle_no=0`、审计 0 条；
+2. 重跑返回成功，最终设施/卖单/配额/余额全 0、prestige 仍 10、结果表 1 行 `applied=1`、
+   `cycle.settle` 审计**恰好 1 条**、个人层 checksum 前后一致。
+
+### 12.4 测试与反向注入（实际输出）
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| prestige 新用例 | `pytest tests/unit/layer3_business/test_industry_prestige.py -q` | **5 passed** |
+| 结算（含新崩溃用例） | `pytest tests/unit/layer3_business/test_industry_settlement.py -q` | **14 passed** |
+| 探针离线契约 | `pytest -q tests/tools/test_industry_cycle_probe.py` | **45 passed** |
+
+| 反向注入 | 期望 | 实际 |
+|---|---|---|
+| 删掉 `min(points, maxLevel)`（+20% 上限） | 封顶用例红 | **1 failed**（`11|11|22|122` ≠ `11|10|20|120`） |
+| 删掉生产 `multiplier` 里的 `prestige.multiplier` | 生产读取路径红 | **2 failed**（库存 25 ≠ 30；重试后 25 ≠ 30） |
+| 删掉推进 UPDATE 的 `AND phase = ?`（阶段顺序守卫） | 周期用例红 | **6 failed**（`false:conflict`、无推进） |
+
+三次注入都已恢复；恢复后 `test_industry_cycle.py + test_industry_prestige.py` **17 passed**。
+
+### 12.5 验收记录 / 未验证
+
+* 2026-11-26：离线用例与反向注入按上表跑过。
+* **真机 `industry_cycle_probe.py --scale 60 --cycles 2` 未在本次施工环境执行**（本 worktree
+  没有运行中的 FXServer / MariaDB）。脚本的离线契约、`--help`、语法已验；真机结论以实际跑完的
+  输出为准，跑完后把报告表贴进 PR。
+
+### 12.6 回滚
+
+* 代码：`set industry_prestige_bonus_per_level 0`（或 `industry_prestige_max_level 0`）后
+  `restart custom-industry`，加成归零；不需要改数据。
+* 探针：纯工具，不参与运行时；`stop/start` 与恢复逻辑只在显式运行时生效。
+* 结算崩溃：仍保持「`applied=0` 下一 tick 重试」的既有方向，无 schema 变化。

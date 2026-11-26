@@ -48,6 +48,7 @@ explorer.exe "fivem://connect/127.0.0.1:30130"  # 3) 客户端必须经 shell �
 | `police_live_probe.py` | 一次打印客户端 phone 状态 + 资源数 + 审计尾巴 | `police_live_probe.py --audit 5` |
 | `police_backup_metrics.py` | 从 `police_audit` 聚合支援指标（成功率/耗时/存活/异常率） | `police_backup_metrics.py --hours 24` |
 | `police_request_backup.py` | 按 M → 直达 MDT → 逐格走到「请求支援」→ Enter（每步读回焦点） | `police_request_backup.py --verbose` |
+| `industry_cycle_probe.py` | 产业周期一键验收：四阶段/补推/重启续跑/个人层 checksum/结算幂等，跑完自己恢复 | `industry_cycle_probe.py --scale 60 --cycles 2` |
 | `check_module_resources.py` | 模块声明 vs 实跑，缺口退出码 1 | `check_module_resources.py --url ... --token ...` |
 | `resync_modules.sh` | 重新 exec 全部模块 cfg | `./tools/dev/resync_modules.sh` |
 

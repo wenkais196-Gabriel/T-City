@@ -457,7 +457,8 @@ local function settleLocked(cfg, orgId, item, requested, ref)
     }
 end
 
---- 只读快照：库存 / 全服配额 / 本组织配额 / 单价 / 可卖上限。
+--- 只读快照：库存 / 全服配额 / 本组织配额 / 单价 / 可卖上限 / 永久加成。
+--- 永久加成只随快照展示（乘产能，不乘售价），不参与本文件的 revenue 公式。
 ---
 --- 与 settleLocked 使用同一个 readDemand / readStock / readOrgUsed / orgCap 与
 --- cfg.UnitPrices；不占配额、不拿组织锁。唯一的写库是 readDemand 的**数据修复**：
@@ -476,6 +477,14 @@ function IndustrySales.Inspect(orgId, item)
     if type(prices) ~= 'table' then return nil, 'bad_price' end
     local unitPrice = positiveNumber(prices[item], nil)
     if not unitPrice or unitPrice ~= math.floor(unitPrice) then return nil, 'bad_price' end
+
+    -- S8：只读永久加成，随快照返回给玩家看。加成只乘**产能**，不乘售价
+    -- （见 config/cycle.lua 的理由）；这里不参与下面的 revenue 公式。
+    if type(IndustryCycle) ~= 'table' or not IndustryCycle.PrestigeForOrg then
+        return nil, 'db_error'
+    end
+    local prestige, prestigeErr = IndustryCycle.PrestigeForOrg(orgId)
+    if not prestige then return nil, prestigeErr or 'db_error' end
 
     local demand, demandErr = readDemand(cfg, item)
     if not demand then return nil, demandErr end
@@ -500,6 +509,7 @@ function IndustrySales.Inspect(orgId, item)
         item = item,
         unitPrice = math.floor(unitPrice),
         priceMultiplier = tonumber(cfg.PriceMultiplier) or 1,
+        prestige = prestige,
         stock = stock,
         demand = {
             total = demand.total,

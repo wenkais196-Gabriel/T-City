@@ -114,6 +114,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   新增行为闸门 `test_qb_menu_adapter.py`（Lua 沙箱跑真实源码：跨资源误关、重复 open、
   三层嵌套返回、表单提交/取消、convar 关闭对照）+ 静态红线（适配层 0 处 `SetNuiFocus`、
   0 个新 net event，均带反向注入）；真机清单 `docs/client/ux/menu-regression-checklist.md`。
+- **S8 上线前收口（`custom-industry` + `tools/dev`，#375）**：
+  ① **prestige 永久加成接线**：`org_treasury.prestige` 每 1 点 = 1 级、每级 **+2% 产能**，
+  第 10 级封顶 **+20%**。加成只乘产能、不乘售价——售价已叠 `core_economy` 全局/热度与阶段倍率，
+  再加一层货币倍率会把通胀从「库存上限 × 配额」挪到价格上；产能仍受这两道闸约束。
+  加成在**读取路径**生效：生产结算每次从 `org_treasury` 读当前值（无账户 = 无加成，读库失败
+  fail closed），`IndustrySales.Inspect` / UI 快照把等级与百分比随快照返回（只展示、不参与报价）；
+  设施/卖单/结果表不新增任何倍率列，结算仍只写 prestige 绝对值。新增 convar
+  `industry_prestige_bonus_per_level`（默认 0.02）与 `industry_prestige_max_level`（默认 10）。
+  ② **真机周期验收脚本** `tools/dev/industry_cycle_probe.py --scale 60 --cycles 2`：
+  自动压阶段/心跳、`restart custom-industry` 一次验证重启续跑、在衰退期连发两次
+  `industry_settle confirm` 验证幂等、把 `phase_ends_at` 改到过去验证补推不跳段，
+  结算前后对 `players` / `player_vehicles` / `inventories` / `player_houses` 做
+  `CHECKSUM TABLE` 全等断言；脚本自带 SQL 静态守卫（个人层只允许读）并在结束时恢复
+  `industry_state` / 结果 / 配额 / 设施 / 金库，只留 `industry_audit` 作为验收痕迹。
+  ③ **结算崩溃恢复演练**：新增「设施已删、卖单还没删」的离线用例——重跑收敛到
+  设施/卖单/配额/余额全 0、prestige 只发一次，`cycle.settle` 审计恰好一条。
+  验证：新增 5 条 prestige 用例 + 1 条删一半崩溃用例 + 45 条探针离线契约；
+  三条反向注入（删 +20% 上限、删生产读取倍率、删阶段顺序守卫）均实际变红后恢复。
 - **S6 周期状态机 + S7 结算转生（`custom-industry`，#338，同一片）**：
   `industry_state` 单行表（`CHECK id = 1`）以绝对时间驱动四阶段（扩张/竞争/成熟/衰退）。
   推进线程挂在 S3 已有的 30 秒生产心跳上；`guarded UPDATE` 的 `affected == 1` 是唯一推进许可，

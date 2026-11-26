@@ -15,6 +15,8 @@
 --   * `__raceBeforeStateUpdate` 在推进 UPDATE 落库前触发一次，用来制造
 --     「读到的旧阶段 + 别人先改了」的交错（affectedRows = 0 是唯一推进许可）。
 --   * `__failNextSettlementUpdate` / `__failNextAppliedUpdate` 模拟结算中途崩溃。
+--   * `__failNextSalesDelete` 模拟「设施已删、卖单未删」；`__failPrestigeRead`
+--     只让 S8 的 `SELECT prestige FROM org_treasury` 失败（生产结算 fail closed）。
 --   * 推进语句必须四道闸齐全（SET 子句 + 三个 WHERE 条件）；缺任何一道就按 0 行
 --     拒绝 —— 否则删掉 WHERE 里的闸门在测试里完全看不出来。
 
@@ -59,6 +61,8 @@ function __reset()
     __raceFired = false
     __failNextSettlementUpdate = false
     __failNextAppliedUpdate = false
+    __failNextSalesDelete = false
+    __failPrestigeRead = false
     __failBulletins = false
     __personalTouched = false
     __globalMultiplier = 1.0
@@ -343,6 +347,12 @@ MySQL.update = { await = function(sql, values)
         return { affectedRows = 1 }
     end
 
+    -- S8：模拟「设施已删、卖单还没删」的进程崩溃 —— 删除卖单这一步失败。
+    if __failNextSalesDelete and sql:find('DELETE FROM industry_sales', 1, true) then
+        __failNextSalesDelete = false
+        error('probe: forced sales delete failure')
+    end
+
     return __industryUpdate(sql, values) or { affectedRows = 0 }
 end }
 
@@ -385,6 +395,13 @@ MySQL.single = { await = function(sql, values)
         end
         local row = __results[resultKey(values[1], values[2])]
         return row and copy(row) or nil
+    end
+
+    -- S8：只命中加成读取（settlement 的读是 `balance, prestige`），
+    -- 用来证明读库失败时生产结算 fail closed。
+    if __failPrestigeRead and sql:find('SELECT prestige FROM org_treasury', 1, true) then
+        __failPrestigeRead = false
+        error('probe: forced prestige read failure')
     end
 
     return __industrySingle(sql, values, { facility = 'cycle' })

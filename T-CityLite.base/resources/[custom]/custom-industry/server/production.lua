@@ -13,6 +13,8 @@
 --   4. produced_units 只增不减（S7 结算要读它）；S4 卖掉库存也不回退它。
 --   5. 停机追赶：单次结算最多前进 max_catchup_seconds 秒；超出部分留给下一次
 --      tick，不跳段、也不一次算完。真正的离线通胀闸是库存上限。
+--   6. 永久加成（S8）只走读取路径：每次结算从 org_treasury.prestige 读当前值，
+--      不把倍率写进设施行；无账户 = 无加成，读库失败 fail closed。
 
 IndustryProduction = {}
 
@@ -111,7 +113,9 @@ function IndustryProduction.Compute(opts)
     local ratePerHour = workstations * unitsPerHour * multiplier
     if ratePerHour <= 0 then return advanceWithoutProduction('no_rate') end
 
-    local expected = math.floor(ratePerHour * effectiveDt / SECONDS_PER_HOUR)
+    -- 倍率可能是浮点（prestige +2%/级、convar）：1.2 × 150 在 IEEE754 里会落到
+    -- 179.999…，不补 epsilon 会少产 1 单位。整数倍率下 epsilon 不改变任何结果。
+    local expected = math.floor(ratePerHour * effectiveDt / SECONDS_PER_HOUR + 1e-9)
     plan.expected = expected
     if expected <= 0 then
         -- 不足一个单位：不前进 last_tick_at，时间继续累计。
@@ -131,7 +135,7 @@ function IndustryProduction.Compute(opts)
 
     -- 只前进「产出这些整数单位所需的时间」，不足一个单位的时间留在
     -- last_tick_at 里。这样 1 秒 tick + 12 单位/小时也不会永远产不出。
-    local consumed = math.floor((produced * SECONDS_PER_HOUR) / ratePerHour)
+    local consumed = math.floor((produced * SECONDS_PER_HOUR) / ratePerHour + 1e-9)
     local advanced = math.min(consumed, effectiveDt)
     if advanced < 1 then advanced = effectiveDt end -- 高倍率下 1 秒产多单位
     plan.newLastTickAt = lastTickAt + advanced
@@ -190,6 +194,12 @@ function IndustryProduction.SettleFacility(orgId, opts)
         local cycleState, cycleErr = IndustryCycle.Current()
         if not cycleState then return false, cycleErr or 'db_error' end
 
+        -- S8 永久加成：只读当前 prestige（不落库）。无账户 = 无加成；
+        -- 读库失败 fail closed，不按 1 倍继续产。
+        if not IndustryCycle.PrestigeForOrg then return false, 'db_error' end
+        local prestige, prestigeErr = IndustryCycle.PrestigeForOrg(orgId)
+        if not prestige then return false, prestigeErr or 'db_error' end
+
         local config = productionConfig()
         local cap = nonNegativeInt(facility.stockCap, 0)
         local plan = IndustryProduction.Compute({
@@ -199,7 +209,9 @@ function IndustryProduction.SettleFacility(orgId, opts)
             stock = row.stock,
             cap = cap,
             unitsPerHour = config.UnitsPerHour,
-            multiplier = config.Multiplier * (tonumber(cycleState.production) or 1),
+            multiplier = config.Multiplier
+                * (tonumber(cycleState.production) or 1)
+                * (tonumber(prestige.multiplier) or 1),
             maxCatchup = config.MaxCatchupSeconds,
         })
 
