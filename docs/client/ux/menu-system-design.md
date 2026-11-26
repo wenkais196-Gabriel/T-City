@@ -324,3 +324,74 @@ Push / Pop / Top / Path / IsTaken / Owns / ResetInput / RefreshFocus / FocusTrac
 结论：`DisableControlAction(0, 199/200)` + `IsDisabledControlJustPressed` 足够拦住暂停菜单，
 **不需要** fallback 到 `DisableFrontendThisFrame()` / `SetFrontendActive`。
 同一轮玩家未报「方向键失灵」或「人物被冻住」，这两条按随主流程通过记录。
+
+---
+
+## 11. M1/M2 真机验出来的五条（2026-11-26）
+
+这一节只记**真机撞出来的**，不是设计推演。每条都附了当时的现象——后来者按现象能一眼认出自己踩的是同一个坑。
+
+### 11.1 焦点是「拥有页面的资源」设的，不是 custom-ui 设的
+
+**现象**：`/cmenudemo` 打开后菜单画得出来，但**键盘鼠标全无反应**，人物也停住。
+
+**原因**：`custom-ui` 自己没有 `ui_page`（它的 V-10 注释写明了），推帧时**反调帧 owner 的
+`exports('ApplyFocus')`**，由拥有 CEF 页面的资源执行真正的 `SetNuiFocus`。
+`custom-menu` 的 `ApplyFocus` 只记了 `hasFocus/hasCursor/keepInput` 三个状态，**一次 `SetNuiFocus` 都没调**。
+
+**规矩**：任何接进焦点栈的资源，`ApplyFocus` 必须真的设焦点，顺序照抄 custom-ui：
+
+```
+SetNuiFocusKeepInput(keepInput)   -- 必须先设，之后设会丢光标
+SetNuiFocus(false, false)         -- 清掉别处留下的半聚焦（qb-menu 的一参调用会留）
+SetNuiFocus(true, true)
+-- 下一帧与 100ms 后各补一次：有些 build 同帧授予焦点会丢光标
+```
+
+**连带纠正**：原闸门「custom-menu 里 `SetNuiFocus` 必须为 0」是**错的判据**，它把委托约定理解反了。
+现在是「只允许出现在 `ApplyFocus`（授予/回收）与 `onResourceStop`（卸载兜底）这两段里」。
+
+### 11.2 导航不许整表重渲染
+
+**现象**：每按一下 `↓`/`↑` 菜单**闪一下**；表单里选中输入框后**打不了字**。
+
+**原因**：同一个根因 —— 方向键走 `renderCurrent()`，`mount.innerHTML` 整个换掉。
+视觉上是重排 + 入场动画重播；功能上 `<input>` 变成新节点，光标随之消失。
+
+**规矩**：选中态只改 class（`applyFocusClass()`），不重建 DOM。
+躲不掉的重渲染（toggle / 二次确认 / 校验失败）必须 `captureFocus()` → 渲染 → `restoreFocus()`
+（按 `data-form-id` / `data-range-id` / `id` 找回元素并恢复选区）。
+
+### 11.3 资源卸载必须无条件放焦点
+
+**现象**：CI 闸门 `NUI-CLIENT-01` 抓到的——资源拿了焦点但 `onResourceStop` 没释放。
+
+**为什么必须自己放**：`custom-ui` 的 `Pop` 在它自己重启时走不到，而 `SetNuiFocus` 是**本资源**的。
+漏掉就留下「游戏拿不到键盘」的僵尸状态，且玩家无法自救。
+
+### 11.4 qb-management 有两套菜单在抢同坐标，而且会关别人的界面
+
+两个独立缺陷，都属于「qb-menu 是全局单例」的后果：
+
+| 缺陷 | 表现 | 位置 |
+|---|---|---|
+| 同坐标注册两个交互 | 按 `E` 随机进「老板菜单」或「组织菜单」，注入到组织菜单的项点不到 | `cl_boss.lua` 与 `cl_org.lua` **都**遍历 `Config.BossMenus` |
+| 越界关闭别人的菜单 | 产业面板开几秒自己关 | `cl_org.lua` 提示循环：`if not nearMenu and shownMenu then CloseMenuFull() end` |
+
+**规矩**：`qb-menu:closeMenu()` 关的是"当前那个"，没有 owner、不归因。任何要长期驻留或需要被别人
+接管/关闭的界面，都必须走 `custom-menu`（有 session 概念），不要寄居在 qb-menu 上。
+
+### 11.5 这个资源没有世界入口
+
+`custom-menu` 不挂任何坐标。所以 `/cmenudemo`（convar `custom_menu_debug`，默认 **false**）
+不是玩具，它是唯一能在游戏里看见它的路径，也是后续迁移资源时可照抄的最小用法示例。
+
+---
+
+## 12. 命令清单的行号噪音
+
+`docs/client/ux/admin-commands.md` 由 `tools/dev/scan_commands.py` 生成，每条命令记的是 `文件:行号`。
+**任何一次改 Lua 都会让行号漂移**，闸门随即变红 —— 2026-11-26 一天内为此跑了 3 次 CI。
+
+跟踪在 issue #369：把身份改成「名字 + 资源 + 类型」，行号降级或去掉。
+在那之前，改过含命令的 Lua 文件就记得重跑扫描器。
