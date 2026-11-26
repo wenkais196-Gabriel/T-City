@@ -88,15 +88,13 @@ function switchTo(s: SeatInfo) {
   /* 无背景遮罩 — 轻量浮层 */
 }
 .seat-picker-card {
-  background: rgba(10, 10, 15, 0.92);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--tcity-border, rgba(255,255,255,0.12));
+  background: linear-gradient(180deg, rgba(24, 26, 36, 0.94), rgba(10, 10, 15, 0.96));
+  border: 1px solid var(--tcity-border, rgba(255,255,255,0.14));
   border-radius: 16px;
   padding: 18px 20px;
   min-width: 200px;
   max-width: 260px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 32px rgba(0,0,0,0.55);
 }
 .picker-title {
   font-size: 14px; font-weight: 700;

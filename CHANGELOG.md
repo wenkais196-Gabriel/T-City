@@ -20,6 +20,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **M5 收尾：把剩下的 6 处 `backdrop-filter` 也清掉（@qb 三处）**：`qb-core` 通知容器、
+  `qb-multicharacter` 三处面板、`qb-vehicleshop` 的 overdrive overlay。做法与 dashboard/banking 一致
+  ——去掉模糊、提一点底色不透明度补偿层次。清完非排除资源真的为零（只剩 monitor 6 处，
+  第三方打包产物，已登记在基线的 `excluded` 段）。
+  同轮修两个**会让闸门假绿**的问题：① 闸门原来只扫 `src/`，而游戏加载的是 `html/` 与 `nui/dist/`
+  ——源码干净、线上仍模糊（本次实测：改完不重建产物就等于没改），现在两处都扫；
+  ② `menu_surface_census.py --json` 会把人手维护的 `excluded` 段冲掉，加 `carry_exclusions()`
+  保留并重算 `non_excluded_total`。
+  `backdrop-filter` 的判据也从「词出现」改成「真的在声明模糊」：Tailwind 产出的
+  `transition-property: backdrop-filter, …` 与 `filter: var(--tw-blur,)` 不算违规（否则闸门被误报关掉）。
+
+### Changed
+- **M5 清理 `backdrop-filter` 与合并车机重复键盘监听（#347）**：
+  ① **样式替换（源码层）**：将三项任务指定资源源码里的 `backdrop-filter` / `-webkit-backdrop-filter`
+  替换为半透明深色渐变 + 顶部内高光（`inset 0 1px 0`）+ 边框，不改动 HTML/DOM 结构、按钮 id 与外链 CDN：
+  `T-CityLite.base/resources/[system]/tcity-dashboard/nui/src/style.css`（`.dash-shell` 2 处，并移除 `--tcity-blur`，保留 `--tcity-bg-primary` 主题变量叠层）、
+  `T-CityLite.base/resources/[system]/tcity-dashboard/nui/src/components/SeatPicker.vue`（`.seat-picker-card` 2 处）、
+  `T-CityLite.base/resources/[qb]/qb-banking/web/src/app.css`（`.glass-panel` 2 处）、
+  `T-CityLite.base/resources/[qb]/qb-banking/web/src/components/BankDashboard.svelte`（`.bank-container` 2 处）、
+  `T-CityLite.base/resources/[custom]/hud-position-tool/html/overlay.html`（`#panel` 1 处）。
+  ② **车机 `keydown` 监听去重**：合并 `T-CityLite.base/resources/[system]/tcity-dashboard/nui/src/App.vue` 中
+  重复注册的 `document` 级 `onKeyDown` 监听到单一 `window` 级 `onKeydown`（并在 `onUnmounted` 同步清理
+  `keydown` 与 `contextmenu`，同时保留 `SeatPicker` 可见时按 `Escape`/`Backspace`/`I` 关闭，避免输入框内误关），
+  `T-CityLite.base/tests/architecture/test_dashboard_focus.py` 新增重复监听守卫。
+  ③ **基线与架构闸门**：`T-CityLite.base/tests/architecture/menu_surface_baseline.json` 的 `backdrop_filter`
+  新增 `excluded.monitor`（第三方 txAdmin 打包产物 6 处及理由）并更新实时计数（`24 → 15`，非排除 `9`）；
+  新增 `T-CityLite.base/tests/architecture/test_no_backdrop_filter.py`（剥离注释、校验三项目标源码为 0、
+  验证 `monitor` 排除正例与 `tmp_path` 反向注入变红、对全仓非排除资源设 0 命中门禁）。
+  注：当前 worktree 未安装 `node_modules`，`tcity-dashboard/nui` 与 `qb-banking/web` 的构建产物待重编；
+  另全仓仍存在未点名的 `qb-multicharacter`（3）、`qb-core`（2）、`qb-vehicleshop`（1）共 6 处存量 CSS 命中。
+
+### Fixed
 - **qb-target 的 client 脚本里 8 处 JS 可选链让整个资源解析失败**：`zone.targetoptions.drawColor?[1]` 不是合法 Lua（`unexpected symbol near '?'`），却从 2026-11 的架构重构一直留到现在 —— CI 的 `Lua syntax (changed files)` 只解析**改动过的**文件，存量错误永远检查不到；线上看起来没事是因为 FXServer 用编译缓存里的旧字节码，**重启就会整个 qb-target 不加载**。已改为 `(x or {})[n]`，并新增闸门 `T-CityLite.base/tests/architecture/test_lua_js_syntax_rejects.py`：剥掉字符串与注释后全仓扫描 JS 专有形（带自证用例：真实事故形状必须被抓到、字符串里的问号不许误报）。
 
 - **qb-menu / qb-input 适配层跨资源注册 intent 失败（#366）**：custom-menu 的 intent 路由携带 `handler`/`builder` 闭包，跨资源边界被序列化丢弃（对面收到 nil），注册静默失败并回退旧 NUI。新增 `type='resource'` 路由（只带 `resource`/`method` 两个字符串，回调走对方资源导出的 `MenuIntent`），并把「路由不许带函数」写成自证闸门。同时修正：适配层开关改为**调用时**判断（`GlobalState` 优先、convar 兜底），避免事后 `setr` 必须重连才生效；关闭态回落到老路径（`closeMenu` 补传 `closeMenuLegacy`）。

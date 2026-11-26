@@ -83,7 +83,6 @@ html {
     width: clamp(340px, 22vw, 420px); /* 响应式自适应宽度：在大分辨率下自动等比放大 */
     height: clamp(550px, 62vh, 680px); /* 响应式自适应高度 */
     background-color: rgba(15, 15, 20, 0.88) !important; /* 提高底色对比度，让白色字体极其清晰刺眼 */
-    backdrop-filter: blur(25px);
     border: 1px solid rgba(255, 255, 255, 0.12); /* 亮化边框，增加轮廓清晰度 */
     border-radius: 20px;
     cursor: pointer;
@@ -432,7 +431,6 @@ html {
     width: 300px;
     padding: 25px;
     background-color: rgba(28, 27, 31, 0.88) !important;
-    backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--md-radius-medium);
     top: 50%;
@@ -491,7 +489,6 @@ html {
     width: 400px;
     padding: 30px;
     background-color: rgba(28, 27, 31, 0.88) !important;
-    backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--md-radius-medium);
     top: 50%;

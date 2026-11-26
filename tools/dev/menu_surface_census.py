@@ -131,6 +131,30 @@ def resolve_out(raw: str) -> Path:
     return candidate
 
 
+
+def carry_exclusions(data: dict, target: Path) -> None:
+    """重新扫描时保留已有基线里的 `excluded` 段（人工维护的排除项，扫不出来）。
+
+    没有这一步，任何人跑一次 `--json` 都会把「monitor 是第三方打包产物，不计入」这条
+    人工判断冲掉，闸门随即开始对 monitor 报红 —— 2026-11-26 实际发生过。
+    同时按保留了排除项的事实重算 `non_excluded_total`。
+    """
+    if not target.exists():
+        return
+    try:
+        previous = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    for feature, fresh in data.items():
+        old_block = previous.get(feature)
+        if not isinstance(fresh, dict) or not isinstance(old_block, dict):
+            continue
+        excluded = old_block.get("excluded")
+        if excluded:
+            fresh["excluded"] = excluded
+            excluded_total = sum(int(item.get("count") or 0) for item in excluded.values())
+            fresh["non_excluded_total"] = max(int(fresh.get("total") or 0) - excluded_total, 0)
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default="", help="把基线写到仓库内的 .json 路径")
@@ -139,6 +163,7 @@ def main() -> int:
     if args.json:
         target = resolve_out(args.json)
         target.parent.mkdir(parents=True, exist_ok=True)
+        carry_exclusions(data, target)
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(to_md(data))
     return 0

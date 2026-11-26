@@ -62,7 +62,7 @@ html::-webkit-scrollbar {
 
 /* ---- 通知容器: 覆盖 Quasar 默认 ---- */
 .q-notification {
-    background: rgba(0, 0, 0, 0.78) !important;    /* GTA 原生黑底 */
+    background: rgba(0, 0, 0, 0.84) !important;    /* GTA 原生黑底（原 0.78 + 毛玻璃，去掉模糊后略提不透明补偿层次） */
     color: #ffffff !important;                      /* 白字 */
     font-family: 'Exo 2', sans-serif;
     font-size: 14px;
@@ -72,8 +72,7 @@ html::-webkit-scrollbar {
     box-shadow: none !important;                    /* 去掉 Material 阴影 */
     min-width: 240px;
     max-width: 380px;
-    backdrop-filter: blur(6px);                     /* 毛玻璃微效果 */
-    -webkit-backdrop-filter: blur(6px);
+    /* 不用 backdrop-filter：CEF 里毛玻璃会在整块区域重算模糊，实机掉帧；改用更实的底色 */
 }
 
 /* ---- 类型色条 (左侧 3px 细线) ---- */

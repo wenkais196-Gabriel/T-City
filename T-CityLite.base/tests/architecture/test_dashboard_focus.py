@@ -84,6 +84,29 @@ def test_dashboard_has_keyboard_navigation() -> None:
     assert "ArrowDown" in console and "ArrowUp" in console, "警情列表要能上下选"
 
 
+def _duplicate_keydown_violations(app_source: str) -> list[str]:
+    """App.vue 中只能存在一份 keydown 注册，且必须有对应的卸载清理。"""
+    import re
+    adds = re.findall(r"addEventListener\(\s*['\"]keydown['\"]", app_source)
+    removes = re.findall(r"removeEventListener\(\s*['\"]keydown['\"]", app_source)
+    problems: list[str] = []
+    if len(adds) != 1:
+        problems.append(f"expected 1 keydown listener registration, found {len(adds)}")
+    if len(removes) != 1:
+        problems.append(f"expected 1 keydown listener removal, found {len(removes)}")
+    return problems
+
+
+def test_dashboard_detects_duplicate_keydown_listener() -> None:
+    app = APP.read_text(encoding="utf-8")
+    assert _duplicate_keydown_violations(app) == []
+    duplicated = (
+        app
+        + "\ndocument.addEventListener('keydown', onKeyDown)\n"
+    )
+    assert _duplicate_keydown_violations(duplicated) != []
+
+
 def test_dashboard_keeps_driving_input_while_open() -> None:
     """中控是「边开边看」的终端：默认保留游戏输入，但视角仍被栈屏蔽。"""
     src = DASH.read_text(encoding="utf-8")
