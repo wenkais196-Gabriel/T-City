@@ -19,14 +19,23 @@ BASELINE = Path(__file__).with_name("menu_surface_baseline.json")
 
 SCAN_EXTS = {".lua", ".js", ".ts", ".html", ".css", ".scss", ".svelte", ".vue"}
 SKIP_DIRS = {"node_modules", ".git", "cache", ".pytest_cache"}
+#: 只认「真的在声明模糊」的写法，不认属性名出现。构建产物里 Tailwind 会输出
+#: `transition-property: backdrop-filter, backdrop-filter, …` 这种列表（没有冒号紧跟值），
+#: 也不能把 `filter: var(--tw-blur,)` 这种空默认的滤镜管线算成模糊。误报会让闸门被关掉。
 BACKDROP_RE = re.compile(
-    r"(?:(?:-webkit-)?backdrop-filter\b|backdropFilter\s*:|filter\s*:\s*blur\()",
+    r"(?:-webkit-)?backdrop-filter\s*:(?!\s*none)[^;}]+"
+    r"|backdropFilter\s*:\s*[\"\'][^\"\']*blur"
+    r"|(?<!backdrop-)\bfilter\s*:\s*[^;}]*\bblur\(",
     re.IGNORECASE,
 )
 
+#: 源码 **和构建产物** 都要扫：游戏运行时加载的是 `html/` 与 `nui/dist/`，
+#: 只扫 `src/` 会出现「源码干净、线上仍然模糊」——2026-11-26 实测就是漏了这一步。
 TARGET_SOURCE_DIRS = (
     RESOURCES / "[system]" / "tcity-dashboard" / "nui" / "src",
+    RESOURCES / "[system]" / "tcity-dashboard" / "nui" / "dist",
     RESOURCES / "[qb]" / "qb-banking" / "web" / "src",
+    RESOURCES / "[qb]" / "qb-banking" / "html",
     RESOURCES / "[custom]" / "hud-position-tool" / "html",
 )
 

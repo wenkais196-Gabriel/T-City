@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **M5 收尾：把剩下的 6 处 `backdrop-filter` 也清掉（@qb 三处）**：`qb-core` 通知容器、
+  `qb-multicharacter` 三处面板、`qb-vehicleshop` 的 overdrive overlay。做法与 dashboard/banking 一致
+  ——去掉模糊、提一点底色不透明度补偿层次。清完非排除资源真的为零（只剩 monitor 6 处，
+  第三方打包产物，已登记在基线的 `excluded` 段）。
+  同轮修两个**会让闸门假绿**的问题：① 闸门原来只扫 `src/`，而游戏加载的是 `html/` 与 `nui/dist/`
+  ——源码干净、线上仍模糊（本次实测：改完不重建产物就等于没改），现在两处都扫；
+  ② `menu_surface_census.py --json` 会把人手维护的 `excluded` 段冲掉，加 `carry_exclusions()`
+  保留并重算 `non_excluded_total`。
+  `backdrop-filter` 的判据也从「词出现」改成「真的在声明模糊」：Tailwind 产出的
+  `transition-property: backdrop-filter, …` 与 `filter: var(--tw-blur,)` 不算违规（否则闸门被误报关掉）。
+
 ### Changed
 - **M5 清理 `backdrop-filter` 与合并车机重复键盘监听（#347）**：
   ① **样式替换（源码层）**：将三项任务指定资源源码里的 `backdrop-filter` / `-webkit-backdrop-filter`
