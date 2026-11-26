@@ -254,6 +254,11 @@ def test_quota_update_carries_both_global_and_org_cap_cas():
     assert "SUM(s.qty)" in source and "FLOOR(quota_total * ?)" in source, (
         "本组织 50% 上限没有进同一条配额 UPDATE —— 并发下会被绕过"
     )
+    # 参数也必须真的把配置的比例喂进去：只钉 SQL 文本会放过「SQL 里写着 ? 但传 1.0」——
+    # 那种改动在顺序用例里看不出来（Lua 侧的 orgCap 还拦着），并发下 50% 闸门就没了。
+    assert re.search(r"sellable,\s*cfg\.OrgCapRatio,", source), (
+        "本组织比例没有作为参数喂给配额 CAS（被写成常量就等于去掉 50% 上限）"
+    )
     assert "restoreStock" in source and "restoreQuota" in source, "失败补偿路径不见了"
 
 
