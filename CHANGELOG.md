@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   新增闸门 `tests/architecture/test_adminmenu_input_shim.py`（三条规则 + 反向注入）。
 
 ### Added
+- **S5 产业 UI（`custom-industry` + `custom-phone`）**：新增唯一读模型（custom-industry 的 server/ui.lua）
+  （`Snapshot` / `EstimateSale` / `Sell` / `HireWorkstation`）——快照里配额是**两个数**
+  （全服 `globalRemaining` 与单组织 `orgRemaining`，后者 = `floor(total × 0.5) − 已卖`），
+  卖出上限 `maxQty = min(库存, 本组织剩余, 全服剩余)`，拒绝原因分 `stock_empty` / `org_cap_reached` /
+  `demand_exhausted` 三种。Boss 菜单注入一项「产业」（qb-management `AddBossMenuItem`）：非 Boss 只看数、
+  不出现写操作；未建厂只显示「尚未建设施」。手机侧注册 `industry` App（只读快照，按组织成员可见），
+  **不改 `custom-phone/web/src`、无新增构建产物**。鉴权在 UI 层与销售层各复验一次（本片补了
+  「非 Boss 到不了销售层」的短路用例），前端上送 `price/revenue/multiplier` 一律只记录不参与计算。
+  无新增 net event（走 QBCore callback + export）。
+
 - **S4 销售 / 配额（`custom-industry`）**：`industry_demand`（`cycle_no/phase/item_name` 主键，全服配额）与
   `industry_sales`（卖单流水，`UNIQUE(org_id, ref)` 幂等）。`SettleSale` 是**全仓唯一一个「无对应玩家扣款」的
   净增货币点**：服务端定价 × `core_economy:GetGlobalMultiplier()`，库存 CAS → 配额 CAS（全服剩余与本组织

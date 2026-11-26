@@ -724,3 +724,35 @@ def test_ui_wiring_registers_callbacks_and_exports():
     phone_manifest = PHONE_MANIFEST.read_text(encoding="utf-8")
     assert "server/apps/industry.lua" in phone_manifest
     assert phone_manifest.index("server/apps/industry.lua") < phone_manifest.index("server/main.lua")
+
+
+def test_ui_layer_boss_guard_short_circuits_before_the_sales_layer():
+    """UI 层的 Boss 复验必须**自己**挡住，而不是靠 S4 内层兜底。
+
+    S4 的 `SellForPlayer` 也会复验 Boss，所以「删掉 UI 层这一句」在行为用例里看不出来——
+    但那样就少了一层防御，且安全审查时无法证明这一段真的执行过。这里用桩把内层替换掉，
+    断言非 Boss 根本到不了内层，而 Boss 能到。
+    """
+    out = run("""
+        __reset()
+        __seedOrg('mining_co', 0)
+        __seedFacilityRow('mining_co', 10, { workstations = 1 })
+        __seedDemand('iron_ore', 20, 0)
+
+        local reached = 0
+        local realSell = IndustrySales.SellForPlayer
+        IndustrySales.SellForPlayer = function(...) reached = reached + 1; return true end
+
+        local ok1, err1 = IndustryUi.Sell(member(), 'mining_co', 1)
+        __emit('MEMBER_SELL', tostring(ok1) .. ':' .. tostring(err1))
+        __emit('MEMBER_REACHED', tostring(reached))
+
+        reached = 0
+        IndustryUi.Sell(boss(), 'mining_co', 1)
+        __emit('BOSS_REACHED', tostring(reached))
+
+        IndustrySales.SellForPlayer = realSell
+    """)
+    assert out["MEMBER_SELL"] == "false:not_boss"
+    assert out["MEMBER_REACHED"] == "0", "非 Boss 的请求到达了销售层：UI 层的 Boss 复验没有短路"
+    assert out["BOSS_REACHED"] == "1", "Boss 的请求应该到达销售层（正向对照）"
