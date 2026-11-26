@@ -29,15 +29,23 @@ local lastSnapshot = nil
 -- 避免 industry_enable=false 时因为一次资源重启把菜单项塞回去。
 local uiEnabled = false
 
+-- 本地千分位格式化。别用 qb-core 的全局 `Money()` —— 它只在 import 过
+-- @qb-core/shared/main.lua 的资源里存在，本资源 client 没 import，调用会直接
+-- SCRIPT ERROR: attempt to call a nil value (global 'Money')，整个面板渲染中断。
+-- 实现按「从右往左每 3 位插逗号」写：正则在左侧贪心匹配会在长数字上重复插入逗号
+-- （"1234,567" → "1234,,567" → 死循环），别再用那种写法。
 local function money(value)
-    return Money(value)
+    local n = math.floor(tonumber(value) or 0)
+    local sign = n < 0 and '-' or ''
+    local digits = tostring(math.abs(n))
+    local grouped = digits:reverse():gsub('(%d%d%d)', '%1,'):reverse():gsub('^,', '')
+    return sign .. grouped
 end
 
 local function notify(message, kind)
     local qb = core()
-    if qb and type(qb.Functions.Notify) == 'function' then
-        qb.Functions.Notify(message, kind)
-    else
+    local ok = qb and pcall(function() qb.Functions.Notify(message, kind) end)
+    if not ok then
         print(('[custom-industry] %s'):format(tostring(message)))
     end
 end
@@ -206,6 +214,35 @@ local function injectMenu()
     end
 end
 
+-- 产业面板直开入口：/industry。
+-- 为什么不走 /orgmenu：qb-management 的提示循环里有一条
+-- 「shownMenu 为真但玩家不在 1.5m 内 → CloseMenuFull()」，它会把任何用 qb-menu
+-- 打开的界面一起关掉（我们撤掉临时坐标点后就恒不在范围内，菜单开几秒自己关）。
+-- 直接渲染产业面板不会置 shownMenu，那个循环就不会来收；组织菜单里的「产业」项仍然保留。
+RegisterCommand('industry', function()
+    refresh()
+end, false)
+
+-- 组织菜单入口：/orgmenu。
+-- 为什么需要它：qb-management 里 qb-bossmenu（cl_boss.lua）与 qb-orgmenu（cl_org.lua）
+-- 都会遍历 Config.BossMenus 在**同一坐标**注册交互，玩家按 E 会随机进其中一个；
+-- 而「产业」项只能注入组织菜单（qb-menu 那套）。给组织菜单一个确定入口，避免和二选一赌博。
+-- 授权仍在服务端：不在组织里就没有 org，直接拒绝。
+RegisterCommand('orgmenu', function()
+    local qb = core()
+    if not qb then return end
+    local ok = pcall(function()
+        qb.Functions.TriggerCallback('industry:server:canOpenOrgMenu', function(state)
+            if state and state.ok == true then
+                TriggerEvent('qb-orgmenu:client:OpenMenu')
+            else
+                notify('你不在任何组织里，无法打开组织菜单', 'error')
+            end
+        end)
+    end)
+    if not ok then notify('组织菜单不可用（qb-management 未启动）', 'error') end
+end, false)
+
 RegisterNetEvent('industry:client:open', function()
     refresh()
 end)
@@ -332,11 +369,14 @@ end)
 -- industry_enable=false 时服务端不注册 uiState，回调不会回来，也就不注入菜单。
 removeMenu()
 local qb = core()
-if qb and type(qb.Functions.TriggerCallback) == 'function' then
-    qb.Functions.TriggerCallback('industry:server:uiState', function(state)
+-- 同上：TriggerCallback 也是可调用表，`type(...) == 'function'` 恒假 ——
+-- 这条曾经让 uiEnabled 永远 false，注入被自己挡掉（真机：菜单里看不到「产业」）。
+if qb then
+    local ok = pcall(function() qb.Functions.TriggerCallback('industry:server:uiState', function(state)
         if state and state.ok == true and state.enabled == true then
             uiEnabled = true
             injectMenu()
         end
-    end)
+    end) end)
+    if not ok then print('[custom-industry] uiState bootstrap failed') end
 end

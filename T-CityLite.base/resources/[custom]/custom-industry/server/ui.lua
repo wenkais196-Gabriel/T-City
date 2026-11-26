@@ -393,6 +393,17 @@ function IndustryUi.Register()
         cb({ ok = true, enabled = true })
     end)
 
+    -- 组织菜单入口（/orgmenu）：qb-management 的两个菜单（qb-bossmenu 与 qb-orgmenu）
+    -- 会在同一坐标抢交互，玩家会随机进其中一个，而「产业」项只注入组织菜单。
+    -- 给组织菜单一个确定入口；这里只校验「在某个组织里」，是否 Boss 由各动作自己复验。
+    qb.Functions.CreateCallback('industry:server:canOpenOrgMenu', function(source, cb)
+        local Player = resolvePlayer(source)
+        if not Player then cb({ ok = false, error = 'no_player' }) return end
+        local resolved = resolveOrgId(Player, nil)
+        if not resolved then cb({ ok = false, error = 'no_org' }) return end
+        cb({ ok = true, orgId = resolved, isBoss = IndustryAccess.IsOrgBoss(Player, resolved) })
+    end)
+
     qb.Functions.CreateCallback('industry:server:snapshot', function(source, cb, orgId)
         local snapshot, err = IndustryUi.Snapshot(source, orgId)
         respond(cb, snapshot ~= nil, snapshot, err)
