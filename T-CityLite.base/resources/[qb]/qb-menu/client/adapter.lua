@@ -16,8 +16,17 @@
 local RESOURCE = GetCurrentResourceName()
 local CUSTOM_MENU = 'custom-menu'
 
-if GetConvar('qb_menu_use_custom_menu', 'false') ~= 'true' then
-    return
+--- 是否接管：GlobalState（服务端下发，跨客户端最可靠）或 convar 任一为真。
+---
+--- 关键：**在调用时判断，不在加载时判断**。加载时判断的话，运维事后 `setr` 打开开关
+--- 必须重启资源甚至重连客户端才生效 —— 2026-11-26 真机实测：服务端 convar 是 true、
+--- 客户端 `GetConvar` 读不到，适配层静默不接管，玩家侧表现就是"还是旧 UI"。
+--- 所以：文件永远加载，`adaptOpen` 里再问一次。
+local function isEnabled()
+    local shared = GlobalState and GlobalState.qb_menu_use_custom_menu
+    if shared == true then return true end
+    if shared == false then return false end
+    return GetConvar('qb_menu_use_custom_menu', 'false') == 'true'
 end
 
 local state = {
@@ -280,6 +289,13 @@ local function buildSpec(list, owner)
 end
 
 local function adaptOpen(data, sort, skipFirst, legacyOpen)
+    if not isEnabled() then
+        -- 回滚路径：与改造前完全一致，一行行为都不变。
+        if type(legacyOpen) == 'function' then
+            return legacyOpen(data, sort, skipFirst)
+        end
+        return
+    end
     if type(data) ~= 'table' or next(data) == nil then
         return
     end
@@ -323,7 +339,10 @@ local function adaptOpen(data, sort, skipFirst, legacyOpen)
     end
 end
 
-local function adaptClose()
+local function adaptClose(legacyClose)
+    if not isEnabled() and type(legacyClose) == 'function' then
+        return legacyClose()
+    end
     return closeSession(invokingResource(), 'qb_menu_close')
 end
 

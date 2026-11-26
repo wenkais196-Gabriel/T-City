@@ -87,7 +87,8 @@ end
 local function closeMenu()
     local adapter = _G.QBMenuAdapter
     if adapter then
-        return adapter.closeMenu()
+        -- 必须把老路径传进去：适配层在关闭 convar 时要回落到它（否则关不掉老 NUI）。
+        return adapter.closeMenu(closeMenuLegacy)
     end
     return closeMenuLegacy()
 end

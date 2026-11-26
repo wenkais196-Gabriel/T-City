@@ -12,8 +12,12 @@
 local RESOURCE = GetCurrentResourceName()
 local CUSTOM_MENU = 'custom-menu'
 
-if GetConvar('qb_menu_use_custom_menu', 'false') ~= 'true' then
-    return
+--- 与 qb-menu 的适配层同一条规则：**调用时**判断是否接管，不在加载时判断。
+local function isEnabled()
+    local shared = GlobalState and GlobalState.qb_menu_use_custom_menu
+    if shared == true then return true end
+    if shared == false then return false end
+    return GetConvar('qb_menu_use_custom_menu', 'false') == 'true'
 end
 
 local SUPPORTED_INPUT = {
@@ -145,6 +149,13 @@ local function watchClosed(pending)
 end
 
 local function show(data, legacy, legacyBusy)
+    if not isEnabled() then
+        -- 回滚路径：与改造前完全一致（包括它自己那两处 SetNuiFocus）。
+        if type(legacy) == 'function' then
+            return legacy(data)
+        end
+        return nil
+    end
     if type(data) ~= 'table' or type(data.inputs) ~= 'table' then
         return legacy(data)
     end

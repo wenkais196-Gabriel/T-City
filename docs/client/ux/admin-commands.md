@@ -588,7 +588,7 @@ review_by: 2027-02-28
 
 | 命令 | API | 权限 | 位置 |
 |---|---|---|---|
-| `playerfocus` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-menu/client/main.lua:161 |
+| `playerfocus` | RegisterCommand | — | T-CityLite.base/resources/[qb]/qb-menu/client/main.lua:162 |
 
 ### qb-multicharacter
 

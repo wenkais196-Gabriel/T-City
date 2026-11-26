@@ -38,6 +38,7 @@ table.clone = table.clone or function(src)
   return copy
 end
 
+GlobalState = {}
 local USE_ADAPTER = __USE_ADAPTER__
 local CURRENT = 'custom-menu'
 local INVOKING = nil
@@ -518,6 +519,26 @@ assert(exports['custom-menu']:IsOpen() == false)
 print('OK')
 """.replace("__ROOT_MENU__", ROOT_MENU),
         use_adapter=False,
+    )
+
+
+def test_global_state_enables_adapter_when_convar_is_unreadable() -> None:
+    """真机事故复现：服务端 convar=true、客户端 `GetConvar` 读不到 → 旧 UI。
+
+    适配层因此改成「GlobalState 优先、convar 兜底」，并且**在调用时判断**。
+    这条用例故意把 convar 置 false（模拟客户端读不到），只把 GlobalState 置 true：
+    适配层必须接管，老 NUI 一条消息都不许发。
+    """
+    _run(
+        """
+GlobalState.qb_menu_use_custom_menu = true
+INVOKING = 'resource-a'
+exports['qb-menu']:openMenu({ __ROOT_MENU__ })
+assert(exports['custom-menu']:IsOpen() == true, 'GlobalState 打开时必须接管')
+assert(lastNui('OPEN_MENU') == nil, '接管后老 NUI 不许再收到 OPEN_MENU')
+print('OK')
+""".replace("__ROOT_MENU__", ROOT_MENU),
+        use_adapter=False,   # convar 侧是 false —— 只有 GlobalState 为真
     )
 
 

@@ -10,6 +10,10 @@ client_scripts {
     'client/main.lua',
 }
 
+server_scripts {
+    'server/adapter_state.lua',
+}
+
 ui_page 'html/index.html'
 
 files {
