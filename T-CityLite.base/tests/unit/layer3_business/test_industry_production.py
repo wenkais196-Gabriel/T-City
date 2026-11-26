@@ -30,7 +30,7 @@ from pathlib import Path
 
 import pytest
 
-from lua_probe import BASE, load_with_db
+from lua_probe import BASE, load_industry
 
 RES = BASE / "resources" / "[custom]" / "custom-industry"
 PRODUCTION_SRC = RES / "server" / "production.lua"
@@ -78,7 +78,7 @@ def config_text() -> str:
 
 def run(body: str) -> dict[str, str]:
     """stubs + db.lua + production.lua + 真实配置 + body。"""
-    script = load_with_db(STUBS, PRODUCTION_SRC, config_text() + "\n" + textwrap.dedent(body))
+    script = load_industry(STUBS, PRODUCTION_SRC, config_text() + "\n" + textwrap.dedent(body))
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
     return parse(proc.stdout)
@@ -351,7 +351,7 @@ def run_db(body: str) -> dict[str, str]:
         PRODUCTION_FIXTURE.read_text(encoding="utf-8")
         + "\nfunction GetConvar(_, default) return default end\n"
     )
-    script = load_with_db(stubs, PRODUCTION_SRC, config_text() + "\n" + textwrap.dedent(body))
+    script = load_industry(stubs, PRODUCTION_SRC, config_text() + "\n" + textwrap.dedent(body))
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
     return parse(proc.stdout)
@@ -522,7 +522,7 @@ def run_wiring(debug: bool) -> dict[str, str]:
         __emit('HAS_GLOBAL', tostring(rawget(_G, 'QBCore') ~= nil))
     """
     stubs = WIRING_STUBS.replace("__DEBUG__", "true" if debug else "false")
-    script = load_with_db(stubs, first, body)
+    script = load_industry(stubs, first, body)
     proc = subprocess.run([lua(), "-"], input=script, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
     return parse(proc.stdout)

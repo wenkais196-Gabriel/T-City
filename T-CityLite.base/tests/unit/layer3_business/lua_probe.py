@@ -26,18 +26,31 @@ BASE = Path(__file__).resolve().parents[3]
 DB_ADAPTER = BASE / "resources" / "[standalone]" / "core-framework" / "server" / "db.lua"
 
 
-def load_with_db(stubs: str, source: Path, body: str) -> str:
-    """拼出「stubs → db.lua → 被测源码 → body」的 Lua 脚本。
+#: custom-industry 的共享模块（`server/org_id.lua`）。它必须排在 treasury / facility /
+#: production / sale 之前加载——拼装顺序要与该资源 fxmanifest 的 server_scripts 一致。
+INDUSTRY_ORG_ID = BASE / "resources" / "[custom]" / "custom-industry" / "server" / "org_id.lua"
+
+
+def load_with_db(stubs: str, source: Path, body: str, prereqs: tuple[Path, ...] = ()) -> str:
+    """拼出「stubs → db.lua → prereqs → 被测源码 → body」的 Lua 脚本。
 
     这段拼装原本在 test_police_records/citations/evidence_writer 里各写一遍
     （同一段 10 行 × 3），SonarCloud 会算成新代码重复。
+
+    `prereqs` 是被测源码依赖的**同资源共享模块**（先加载，顺序照 manifest）。
     """
     return (
         stubs + "\n"
         + DB_ADAPTER.read_text(encoding="utf-8") + "\n"
+        + "".join(prereq.read_text(encoding="utf-8") + "\n" for prereq in prereqs)
         + source.read_text(encoding="utf-8") + "\n"
         + body
     )
+
+
+def load_industry(stubs: str, source: Path, body: str) -> str:
+    """custom-industry 专用：先加载 `server/org_id.lua` 再加载被测文件。"""
+    return load_with_db(stubs, source, body, prereqs=(INDUSTRY_ORG_ID,))
 
 
 def run_probe(

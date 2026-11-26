@@ -45,6 +45,7 @@ import lua_source  # noqa: E402
 
 RES = BASE / "resources" / "[custom]" / "custom-industry"
 SALE_SRC = RES / "server" / "sale.lua"
+ORG_ID_SRC = SALE_SRC.parent / "org_id.lua"  # 共享模块，必须排在 treasury 之前
 COMMANDS_SALES_SRC = RES / "server" / "commands_sales.lua"
 TREASURY_SRC = RES / "server" / "treasury.lua"
 AUDIT_SRC = RES / "server" / "audit.lua"
@@ -100,6 +101,8 @@ def run(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
         + "\n"
         + prelude
         + config_text()
+        + "\n"
+        + ORG_ID_SRC.read_text(encoding="utf-8")
         + "\n"
         + TREASURY_SRC.read_text(encoding="utf-8")
         + "\n"

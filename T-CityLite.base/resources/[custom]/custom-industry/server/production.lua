@@ -17,17 +17,10 @@
 IndustryProduction = {}
 
 local SECONDS_PER_HOUR = 3600
-local MAX_ORG_LEN = 64
-local ORG_PATTERN = '^[%w_%-]+$'
 local MAX_SETTLE_ATTEMPTS = 3
 local SETTLE_BATCH_LIMIT = 200
 
-local function validOrg(orgId)
-    return type(orgId) == 'string'
-        and #orgId > 0
-        and #orgId <= MAX_ORG_LEN
-        and orgId:match(ORG_PATTERN) ~= nil
-end
+local validOrg = IndustryOrgId.IsValid -- 统一在 server/org_id.lua（S4 合并 4 份重复实现）
 
 local function nonNegativeNumber(value, fallback)
     local number = tonumber(value)

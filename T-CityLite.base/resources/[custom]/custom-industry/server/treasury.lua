@@ -16,24 +16,17 @@
 
 Treasury = {}
 
-local MAX_ORG_LEN = 64
 local MAX_REF_LEN = 96
 local MAX_REASON_LEN = 64
 -- 1e15 小于 2^53：金额在 Lua number 里仍然精确，也远在 bigint 范围内。
 local MAX_AMOUNT = 1000000000000000
 
-local ORG_PATTERN = '^[%w_%-]+$'
 -- ref 是唯一性键，只接受可读的安全字符；不合形状的 ref 不会被当成幂等键。
 local REF_PATTERN = '^[%w:_%-%.]+$'
 
 local seq = 0
 
-local function validOrg(orgId)
-    return type(orgId) == 'string'
-        and #orgId > 0
-        and #orgId <= MAX_ORG_LEN
-        and orgId:match(ORG_PATTERN) ~= nil
-end
+local validOrg = IndustryOrgId.IsValid -- 统一在 server/org_id.lua（S4 合并 4 份重复实现）
 
 local function validAmount(amount)
     return type(amount) == 'number'

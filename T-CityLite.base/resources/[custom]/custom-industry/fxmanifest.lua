@@ -18,6 +18,7 @@ server_scripts {
     'config/facility.lua',
     'config/production.lua',
     'config/sales.lua',
+    'server/org_id.lua',
     'server/treasury.lua',
     'server/audit.lua',
     'server/access.lua',

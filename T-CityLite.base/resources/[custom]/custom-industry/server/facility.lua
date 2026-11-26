@@ -12,16 +12,9 @@
 
 Facility = {}
 
-local MAX_ORG_LEN = 64
-local ORG_PATTERN = '^[%w_%-]+$'
 local seq = 0
 
-local function validOrg(orgId)
-    return type(orgId) == 'string'
-        and #orgId > 0
-        and #orgId <= MAX_ORG_LEN
-        and orgId:match(ORG_PATTERN) ~= nil
-end
+local validOrg = IndustryOrgId.IsValid -- 统一在 server/org_id.lua（S4 合并 4 份重复实现）
 
 local function normalizeActor(actor)
     if type(actor) == 'string' and #actor > 0 and #actor <= 64 then return actor end
