@@ -78,16 +78,16 @@ local function DrawTarget()
 			for _, zone in pairs(listSprite) do
 				sleep = 0
 
-				r = zone.targetoptions.drawColor?[1] or Config.DrawColor[1]
-				g = zone.targetoptions.drawColor?[2] or Config.DrawColor[2]
-				b = zone.targetoptions.drawColor?[3] or Config.DrawColor[3]
-				a = zone.targetoptions.drawColor?[4] or Config.DrawColor[4]
+				r = (zone.targetoptions.drawColor or {})[1] or Config.DrawColor[1]
+				g = (zone.targetoptions.drawColor or {})[2] or Config.DrawColor[2]
+				b = (zone.targetoptions.drawColor or {})[3] or Config.DrawColor[3]
+				a = (zone.targetoptions.drawColor or {})[4] or Config.DrawColor[4]
 
 				if zone.success then
-					r = zone.targetoptions.successDrawColor?[1] or Config.SuccessDrawColor[1]
-					g = zone.targetoptions.successDrawColor?[2] or Config.SuccessDrawColor[2]
-					b = zone.targetoptions.successDrawColor?[3] or Config.SuccessDrawColor[3]
-					a = zone.targetoptions.successDrawColor?[4] or Config.SuccessDrawColor[4]
+					r = (zone.targetoptions.successDrawColor or {})[1] or Config.SuccessDrawColor[1]
+					g = (zone.targetoptions.successDrawColor or {})[2] or Config.SuccessDrawColor[2]
+					b = (zone.targetoptions.successDrawColor or {})[3] or Config.SuccessDrawColor[3]
+					a = (zone.targetoptions.successDrawColor or {})[4] or Config.SuccessDrawColor[4]
 				end
 
 				SetDrawOrigin(zone.center.x, zone.center.y, zone.center.z, 0)

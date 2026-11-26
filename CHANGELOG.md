@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`qb-target/client.lua` 里 8 处 JS 可选链让整个资源解析失败**：`zone.targetoptions.drawColor?[1]`
+  不是合法 Lua（`unexpected symbol near '?'`），却从 2026-11 的架构重构一直留到现在 —— CI 的
+  `Lua syntax (changed files)` 只解析**改动过的**文件，存量错误永远检查不到；线上看起来没事是因为
+  FXServer 用 `cache/` 里的旧字节码，**重启就会整个 qb-target 不加载**。已改为 `(x or {})[n]`，
+  并新增闸门 `tests/architecture/test_lua_js_syntax_rejects.py`：剥掉字符串与注释后全仓扫描 JS 专有形
+  （带自证用例：真实事故形状必须被抓到、字符串里的 `??` 不许误报）。
+
 - **qb-menu / qb-input 适配层跨资源注册 intent 失败（#366）**：custom-menu 的 intent 路由携带 `handler`/`builder` 闭包，跨资源边界被序列化丢弃（对面收到 nil），注册静默失败并回退旧 NUI。新增 `type='resource'` 路由（只带 `resource`/`method` 两个字符串，回调走对方资源导出的 `MenuIntent`），并把「路由不许带函数」写成自证闸门。同时修正：适配层开关改为**调用时**判断（`GlobalState` 优先、convar 兜底），避免事后 `setr` 必须重连才生效；关闭态回落到老路径（`closeMenu` 补传 `closeMenuLegacy`）。
 - **配额双源对账（`custom-industry`，S6 前置，#364）**：全服已用原先只信可变计数器
   `industry_demand.quota_used`，单组织已用却由 `SUM(industry_sales.qty)` 派生；真机手动重置计数器后
