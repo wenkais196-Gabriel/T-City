@@ -377,6 +377,12 @@ exports = setmetatable({}, {
 
 MySQL = {}
 
+-- S3 起 main.lua 会启动生产心跳并挂 PlayerLoaded；这里只要求「能加载」，
+-- 不执行线程体（否则 while true 会卡住 Lua）。
+AddEventHandler = function() end
+CreateThread = function() end
+Wait = function() end
+
 function __emit(key, value)
     io.write(tostring(key) .. '|' .. tostring(value) .. string.char(10))
 end

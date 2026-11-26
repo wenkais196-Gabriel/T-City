@@ -11,3 +11,5 @@ end
 
 IndustryCommands.Register()
 IndustryFacilityCommands.Register()
+IndustryProductionCommands.Register()
+IndustryProduction.Start()

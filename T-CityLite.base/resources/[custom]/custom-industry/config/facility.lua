@@ -13,6 +13,10 @@ Config.Industry.Facilities = {
         workstationCap = 10,
         maxLevel = 5,
 
+        -- S3 库存上限：设计 §10 的「12 小时满产」起点值。
+        -- 满了就冻结，不产生任何回执；离线通胀闸靠这一列。
+        stockCap = 144,
+
         recipes = {
             {
                 id = 'iron_smelt',
