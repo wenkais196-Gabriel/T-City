@@ -704,6 +704,7 @@ def test_ui_wiring_registers_callbacks_and_exports():
         "industry:server:estimate",
         "industry:server:sell",
         "industry:server:hire",
+        "industry:server:canOpenOrgMenu",
     }, f"callback 注册面变了：{sorted(callbacks)}"
     assert exports == {
         "CanAccessIndustry",
@@ -756,3 +757,61 @@ def test_ui_layer_boss_guard_short_circuits_before_the_sales_layer():
     assert out["MEMBER_SELL"] == "false:not_boss"
     assert out["MEMBER_REACHED"] == "0", "非 Boss 的请求到达了销售层：UI 层的 Boss 复验没有短路"
     assert out["BOSS_REACHED"] == "1", "Boss 的请求应该到达销售层（正向对照）"
+
+
+def test_disabled_resource_still_answers_the_ui_probe():
+    """`industry_enable=false` 时也必须能回答「产业开没开」。
+
+    否则客户端一启动就问 `industry:server:uiState`，服务端没有这个回调，
+    qb-core 会打 `SCRIPT ERROR: Execution of function reference in script host failed`
+    —— 每个玩家每次上线一条，而且是在**支持配置**下出现的噪音。
+    关闸分支只允许注册这一个回调，其余命令 / 导出 / 事件一个都不能有。
+    """
+    import subprocess
+
+    import test_industry_sales as sales_tests
+
+    stubs = sales_tests.WIRING_STUBS.replace(
+        "if name == 'industry_enable' then return 'true' end",
+        "if name == 'industry_enable' then return 'false' end",
+    )
+    files = sales_tests.server_script_files()
+    # 关闸分支里有顶层的 `return`。这些文件是被拼成**一个 chunk** 执行的，
+    # 顶层 return 会结束整个 chunk —— 后面的 emit 全被跳过（接线用例在启用分支下才碰不到这问题）。
+    # 所以整段包进 pcall：return 只退出这个函数，统计照样打出来。
+    script = (
+        stubs
+        + "\n"
+        + sales_tests.DB_ADAPTER.read_text(encoding="utf-8")
+        + "\n"
+        + "local __ok, __err = pcall(function()\n"
+        + "\n".join(path.read_text(encoding="utf-8") for path in files)
+        + "\nend)\n"
+        + """
+        __emit('LOAD_OK', tostring(__ok) .. ':' .. tostring(__err))
+        __emit('CALLBACKS', table.concat(__callbacks, ','))
+        __emit('EXPORTS', table.concat(__exportNames, ','))
+        __emit('QBCORE_COUNT', tostring(#__registered))
+        __emit('NATIVE', table.concat(__native, ','))
+        __emit('THREADS', tostring(__threads))
+        __emit('EVENTS', tostring(__events))
+        """
+    )
+    proc = subprocess.run(
+        [sales_tests.lua(), "-"], input=script, capture_output=True, text=True, timeout=60
+    )
+    assert proc.returncode == 0, f"Lua 执行失败:\n{proc.stderr}\n{proc.stdout}"
+    out = sales_tests.parse(proc.stdout)
+
+    assert out["LOAD_OK"] == "true:nil", f"关闸分支加载失败：{out.get('LOAD_OK')}"
+    assert out["CALLBACKS"] == "industry:server:uiState", (
+        f"关闸时只该留 uiState 回答器，实际：{out['CALLBACKS']}"
+    )
+    # 导出是在文件顶层注册的（不经 Register()），关闸时依然存在；它们内部各自判 enabled()，
+    # 所以在关闭状态下调用只会拿到 disabled 错误码，不会真的读库或给钱。
+    assert out["EXPORTS"] == (
+        "CanAccessIndustry,GetIndustrySnapshot,EstimateIndustrySale,SellIndustryStock"
+    ), f"导出面变了：{out['EXPORTS']}"
+    assert out["QBCORE_COUNT"] == "0", f"关闸时不该注册命令：{out}"
+    assert out["NATIVE"] == "", f"关闸时不该注册原生命令：{out['NATIVE']}"
+    assert out["THREADS"] == "0", f"关闸时不该有调度：{out['THREADS']}"

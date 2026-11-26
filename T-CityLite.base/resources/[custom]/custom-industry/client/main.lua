@@ -220,6 +220,9 @@ end
 -- 打开的界面一起关掉（我们撤掉临时坐标点后就恒不在范围内，菜单开几秒自己关）。
 -- 直接渲染产业面板不会置 shownMenu，那个循环就不会来收；组织菜单里的「产业」项仍然保留。
 RegisterCommand('industry', function()
+    -- 关闸时不打服务端：uiState 回答 enabled=false 之后 uiEnabled 一直是 false，
+    -- 再调 snapshot 会撞 qb-core 的「回调不存在」错误。
+    if not uiEnabled then notify('产业功能未开启', 'error') return end
     refresh()
 end, false)
 
@@ -229,6 +232,7 @@ end, false)
 -- 而「产业」项只能注入组织菜单（qb-menu 那套）。给组织菜单一个确定入口，避免和二选一赌博。
 -- 授权仍在服务端：不在组织里就没有 org，直接拒绝。
 RegisterCommand('orgmenu', function()
+    if not uiEnabled then notify('产业功能未开启', 'error') return end
     local qb = core()
     if not qb then return end
     local ok = pcall(function()
