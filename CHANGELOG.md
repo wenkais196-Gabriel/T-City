@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **qb-menu / qb-input 适配层跨资源注册 intent 失败（#366）**：custom-menu 的 intent 路由携带 `handler`/`builder` 闭包，跨资源边界被序列化丢弃（对面收到 nil），注册静默失败并回退旧 NUI。新增 `type='resource'` 路由（只带 `resource`/`method` 两个字符串，回调走对方资源导出的 `MenuIntent`），并把「路由不许带函数」写成自证闸门。同时修正：适配层开关改为**调用时**判断（`GlobalState` 优先、convar 兜底），避免事后 `setr` 必须重连才生效；关闭态回落到老路径（`closeMenu` 补传 `closeMenuLegacy`）。
 - **配额双源对账（`custom-industry`，S6 前置，#364）**：全服已用原先只信可变计数器
   `industry_demand.quota_used`，单组织已用却由 `SUM(industry_sales.qty)` 派生；真机手动重置计数器后
   出现「全服剩 10、本组织剩 0」这种数学上不可能的状态。读取改为
@@ -61,6 +62,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   新增闸门 `tests/architecture/test_adminmenu_input_shim.py`（三条规则 + 反向注入）。
 
 ### Added
+- **qb-menu / qb-input 适配层（#366）**：`qb-menu` 与 `qb-input` 的 export 在 convar
+  `qb_menu_use_custom_menu`（默认 **false**）打开时翻译成 `MenuSpec` 交给 `custom-menu`，
+  存量 145 处调用点（20 个资源，`tests/architecture/menu_surface_baseline.json`）**一行不改**；
+  convar 关着时走原路径，行为与改造前完全一致（回滚路径）。
+  ① 归因：每次 open 用 `GetInvokingResource()` 记调用方，`closeMenu()` 只关调用方自己的
+  session —— A 开菜单时 B 调 `closeMenu()` 不再误关 A（旧实现是全局单例）；
+  ② 二级菜单：`params.event` 里同步再调 `openMenu` 的，走 custom-menu 的 submenu builder
+  压栈，`Backspace` 能回上一级（异步 reopen 仍是新的根菜单，见清单 §4）；
+  ③ `qb-input:ShowInput` → form surface，取消回传 `nil`；`select/radio/color/checkbox`
+  MenuSpec 表达不了，整张对话框回退旧 NUI（行为不变）。
+  新增行为闸门 `test_qb_menu_adapter.py`（Lua 沙箱跑真实源码：跨资源误关、重复 open、
+  三层嵌套返回、表单提交/取消、convar 关闭对照）+ 静态红线（适配层 0 处 `SetNuiFocus`、
+  0 个新 net event，均带反向注入）；真机清单 `docs/client/ux/menu-regression-checklist.md`。
 - **S5 产业 UI（`custom-industry` + `custom-phone`）**：新增唯一读模型（custom-industry 的 server/ui.lua）
   （`Snapshot` / `EstimateSale` / `Sell` / `HireWorkstation`）——快照里配额是**两个数**
   （全服 `globalRemaining` 与单组织 `orgRemaining`，后者 = `floor(total × 0.5) − 已卖`），

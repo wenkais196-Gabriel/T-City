@@ -188,6 +188,37 @@ qb-target 的 client.lua 第 293 行确以 `IsNuiFocused()` 作门卫、第 308 
 
 ---
 
+## 9.5 跨资源 intent 契约（2026-11-26 真机定为硬约束）
+
+**结论：intent 路由不许携带函数。**
+
+真机证据（qb-menu 往 custom-menu 注册路由）：
+
+| 调用形状 | 对面收到 | 结果 |
+|---|---|---|
+| `fn(id, route)` | `intentId` 是路由表 | `invalid_intent_id` |
+| `fn(api, id, route)` | `intentId` 正确，`route.handler` 为 nil | `client_route_requires_event_or_handler` |
+
+两条合起来只解释得通一种模型：exports 代理**吃掉第一个实参（self）**，且**表跨资源被序列化复制，函数字段变 nil**。所以 `type='client'` 的 `handler`、`type='submenu'` 的 `builder` 只能同资源使用（custom-menu 自己的 `/cmenudemo` 就是这样）。
+
+跨资源回调统一走新路由：
+
+```lua
+-- 注册方（qb-menu / qb-input）
+exports['custom-menu']:RegisterIntent('qb-menu:<owner>:item', {
+    type = 'resource',          -- 只有字符串
+    resource = 'qb-menu',
+    method = 'MenuIntent',
+})
+
+-- 分发方（custom-menu）→ 调对方导出，参数只有 intentId + JSON-safe ctx
+exports['custom-menu']:RegisterIntent(...)  -- 内部：exports[route.resource][route.method](intent, ctx)
+```
+
+- 导出返回值 `{ ok = false, reason = ... }` 表示动作被拒；`{ ok = true, spec = <MenuSpec> }` 表示子菜单，宿主压栈 + `menu:update`（`dispatched` 归一为 `submenu`）。
+- 闸门：`test_intent_routes_rejects_function_fields_and_non_resource_types`（带自证：把带闭包的路由喂进校验器必须被识别）。
+- 教训：**测试替身必须复刻真机的限制**。沙箱里函数能过资源边界，所以这条缺陷在单测里完全隐形。
+
 ## 10. 取证结果（排期前实测，2026-11-25）
 
 基线由 `tools/dev/menu_surface_census.py` 生成，落在 `T-CityLite.base/tests/architecture/menu_surface_baseline.json`（12 类、1560 处命中）。

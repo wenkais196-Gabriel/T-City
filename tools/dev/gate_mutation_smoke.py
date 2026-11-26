@@ -1197,6 +1197,105 @@ MUTATIONS += [
     ),
 ]
 
+# M3 #366：qb-menu / qb-input 适配层 —— 每条行为用例都要证明"改坏了会红"
+QB_MENU_ADAPTER = "resources/[qb]/qb-menu/client/adapter.lua"
+QB_INPUT_ADAPTER = "resources/[qb]/qb-input/client/adapter.lua"
+
+MUTATIONS += [
+    Mutation(
+        gate=("tests/architecture/test_qb_menu_adapter.py::"
+              "test_cross_resource_close_does_not_touch_other_resources_menu"),
+        path=QB_MENU_ADAPTER,
+        content=None,
+        replace_from=("    if owner ~= nil and current.owner ~= owner then\n"
+                      "        return false\n"
+                      "    end"),
+        replace_to=("    if false then -- 变异注入：归因改回『关当前那个』\n"
+                    "        return false\n"
+                    "    end"),
+        what="closeMenu 不看调用方（B 能关掉 A 的菜单，issue 里的跨资源误关）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_qb_menu_adapter.py::test_duplicate_open_keeps_single_frame",
+        path=QB_MENU_ADAPTER,
+        content=None,
+        replace_from=("    local owner = invokingResource()\n"
+                      "    local ordered = sortItems(data, sort, skipFirst)"),
+        replace_to=("    if state.current ~= nil then return end -- 变异注入：第二次 open 被吞\n"
+                    "    local owner = invokingResource()\n"
+                    "    local ordered = sortItems(data, sort, skipFirst)"),
+        what="同一资源第二次 open 被忽略（菜单不替换，玩家点了没反应）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_qb_menu_adapter.py::"
+              "test_nested_menus_push_and_back_returns_to_parent"),
+        path=QB_MENU_ADAPTER,
+        content=None,
+        replace_from="            capture.spec = spec",
+        replace_to="            capture.spec = nil -- 变异注入：子菜单不交回 builder",
+        what="二级菜单 reopen 没有被 builder 捕获（子菜单变成新的根，Backspace 回不去）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_qb_menu_adapter.py::test_qb_input_submit_returns_form_values",
+        path=QB_INPUT_ADAPTER,
+        content=None,
+        replace_from=("            callMenu('Close', 'qb_input_submit')\n"
+                      "            settleDialog(values)"),
+        replace_to=("            invoke('Close', 'qb_input_submit')\n"
+                    "            settleDialog(nil) -- 变异注入：提交不返回值"),
+        what="表单提交回传 nil（老调用方的 `if not result then` 全部走失败分支）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_qb_menu_adapter.py::test_qb_input_cancel_resolves_nil",
+        path=QB_INPUT_ADAPTER,
+        content=None,
+        replace_from=("            local open = callMenu('IsOpen')\n"
+                      "            if open ~= true then\n"
+                      "                settleDialog(nil)\n"
+                      "            end"),
+        replace_to=("            local open = invoke('IsOpen')\n"
+                    "            if open ~= true then\n"
+                    "                -- 变异注入：取消路径不 resolve\n"
+                    "            end"),
+        what="取消后 ShowInput 永不返回（调用方线程悬挂，人卡在菜单里）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_qb_menu_adapter.py::"
+              "test_qb_input_unsupported_types_fall_back_to_legacy_dialog"),
+        path=QB_INPUT_ADAPTER,
+        content=None,
+        replace_from=("        if type(input) ~= 'table' or not SUPPORTED_INPUT[input.type] then\n"
+                      "            return nil\n"
+                      "        end"),
+        replace_to=("        if type(input) ~= 'table' then\n"
+                    "            return nil\n"
+                    "        end"),
+        what="select/radio 硬翻译成 input（MenuSpec 校验失败，对话框直接打不开）",
+    ),
+    Mutation(
+        gate="tests/architecture/test_qb_menu_adapter.py::test_convar_off_keeps_legacy_behavior",
+        path=QB_MENU_ADAPTER,
+        content=None,
+        replace_from=("if GetConvar('qb_menu_use_custom_menu', 'false') ~= 'true' then\n"
+                      "    return\n"
+                      "end"),
+        replace_to=("if false then -- 变异注入：convar 关了适配层仍然生效\n"
+                    "    return\n"
+                    "end"),
+        what="convar 关闭时适配层仍然接管（回滚路径失效）",
+    ),
+    Mutation(
+        gate=("tests/architecture/test_qb_menu_adapter.py::"
+              "test_adapter_code_never_writes_focus_or_registers_net_events"),
+        path=QB_INPUT_ADAPTER,
+        content=None,
+        replace_from="_G.QBInputAdapter = {",
+        replace_to=("SetNuiFocus(true, true) -- 变异注入：适配层自己抢焦点\n\n"
+                    "_G.QBInputAdapter = {"),
+        what="适配层直接写 SetNuiFocus（绕过 custom-ui 的唯一焦点栈）",
+    ),
+]
+
 
 if __name__ == "__main__":
     try:

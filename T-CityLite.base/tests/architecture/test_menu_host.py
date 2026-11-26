@@ -44,6 +44,12 @@ APPLY_FOCUS_BLOCK = re.compile(
 RESOURCE_STOP_BLOCK = re.compile(
     r"AddEventHandler\('onResourceStop', function\(.*?\n^end\)", re.MULTILINE | re.DOTALL
 )
+#: 第三个合法边界：**焦点宿主自己**被重启（`restart custom-ui`）。此时帧随宿主的栈一起消失，
+#: 我们自己的 onResourceStop 不会触发，但 NUI 焦点仍挂在已死掉的宿主上 —— 不收摊就是
+#: 「菜单看不见、人也动不了」。规则原先只认自己卸载，漏了宿主卸载这条路径（2026-11-26 真机）。
+FOCUS_OWNER_STOP_BLOCK = re.compile(
+    r"AddEventHandler\('onClientResourceStop', function\(.*?\n^end\)", re.MULTILINE | re.DOTALL
+)
 
 
 def _scan_set_nui_focus(files: Iterable[tuple[str, str]]) -> list[str]:
@@ -51,7 +57,9 @@ def _scan_set_nui_focus(files: Iterable[tuple[str, str]]) -> list[str]:
     for name, content in files:
         scanned = content
         if name.replace("\\", "/").endswith("client/host.lua"):
-            scanned = RESOURCE_STOP_BLOCK.sub("", APPLY_FOCUS_BLOCK.sub("", content))
+            scanned = FOCUS_OWNER_STOP_BLOCK.sub(
+                "", RESOURCE_STOP_BLOCK.sub("", APPLY_FOCUS_BLOCK.sub("", content))
+            )
         for lineno, line in enumerate(scanned.splitlines(), start=1):
             if line.lstrip().startswith("--"):
                 continue          # 注释里提到这个原生不算违规（本文件就靠注释解释约定）
@@ -80,7 +88,8 @@ def test_set_nui_focus_only_at_sanctioned_boundaries() -> None:
     assert files, "No files found under custom-menu"
     hits = _scan_set_nui_focus(files)
     assert not hits, (
-        "SetNuiFocus 只允许出现在 ApplyFocus（授予/回收）与 onResourceStop（卸载兜底）里：\n"
+        "SetNuiFocus 只允许出现在 ApplyFocus（授予/回收）、onResourceStop（自己卸载）、"
+        "onClientResourceStop（焦点宿主卸载）三个边界里：\n"
         + "\n".join(hits)
     )
 
