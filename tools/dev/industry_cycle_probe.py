@@ -445,10 +445,38 @@ def restore_snapshot(sql: Sql, snapshot: Snapshot, probe_cycles: list[int]) -> N
 
 
 class Console:
-    def __init__(self) -> None:
+    """发命令；有 `--console-log` 时**同时**把服务端日志里新增的行读回来。
+
+    为什么需要这个：RCON 只回"命令本身"的回显，资源里的 `print()` 是异步写进服务端日志的。
+    例如 `industry_settle dry` 的 `settlement dry-run ...` 那一行永远不在 RCON 的返回值里，
+    于是"输出里必须含 settlement dry-run"这种检查会永远失败 —— 看起来像功能没开，
+    实际只是拿错了回显通道（2026-11-26 真机实测）。
+    """
+
+    def __init__(self, log_path: str | None = None) -> None:
         self.last_call = 0.0
+        self.log_path = Path(log_path) if log_path else None
+        self._offset = self.log_path.stat().st_size if self.log_path and self.log_path.exists() else 0
         if not os.environ.get("FIVEM_RCON_PASSWORD"):
             os.environ["FIVEM_RCON_PASSWORD"] = rcon_password()
+
+    def _drain_log(self, wait_seconds: float = 3.0) -> str:
+        if not self.log_path:
+            return ""
+        deadline = time.time() + wait_seconds
+        while time.time() < deadline:
+            try:
+                size = self.log_path.stat().st_size
+            except OSError:
+                return ""
+            if size > self._offset:
+                with self.log_path.open("r", encoding="utf-8", errors="replace") as fh:
+                    fh.seek(self._offset)
+                    chunk = fh.read()
+                self._offset = size
+                return chunk
+            time.sleep(0.2)
+        return ""
 
     def __call__(self, command: str, timeout: float = 60.0) -> str:
         # fivem-mcp-server 的 server-side 限流约 5 次/秒；保守一点，逐条隔开。
@@ -457,14 +485,19 @@ class Console:
             time.sleep(wait)
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import fivem_console
+        rcon_out = ""
         try:
-            return fivem_console.call_tool(
+            rcon_out = fivem_console.call_tool(
                 "server_command", {"command": command}, timeout
             )
         except SystemExit as error:
             raise ProbeError(f"控制台命令失败（{command}）：{error}") from error
         finally:
             self.last_call = time.time()
+        log_tail = self._drain_log()
+        if log_tail:
+            return (rcon_out or "") + "\n" + log_tail
+        return rcon_out
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -475,7 +508,7 @@ class Console:
 class CycleProbe:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
-        self.console = Console()
+        self.console = Console(args.console_log)
         cfg = SERVER_CFG.read_text(encoding="utf-8", errors="ignore")
         self.sql = Sql(parse_dsn(cfg), args.container)
         self.snapshot: Snapshot | None = None
@@ -1037,6 +1070,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--allow-players-online", action="store_true",
         help="允许有玩家在线时跑（不推荐：会临时清空产业层）",
+    )
+    parser.add_argument(
+        "--console-log", default=os.environ.get("TCITY_CONSOLE_LOG"),
+        help="服务端控制台日志文件；给了就把资源 print() 的回显也读回来（RCON 只有命令回显）",
     )
     parser.add_argument("--json", action="store_true", help="机读输出")
     args = parser.parse_args(argv)
