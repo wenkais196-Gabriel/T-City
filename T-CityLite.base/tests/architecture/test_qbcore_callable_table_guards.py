@@ -53,13 +53,30 @@ def scan(root: Path) -> list[str]:
     found: list[str] = []
     for lua in sorted(root.rglob("*.lua")):
         hits = violations_in(lua.read_text(encoding="utf-8", errors="replace"))
-        if hits:
-            found.extend(f"{lua.relative_to(BASE).as_posix()}: {hit}" for hit in hits)
+        if not hits:
+            continue
+        # 自证用例会拿临时目录来跑，那里不在 BASE 下面，不能直接 relative_to。
+        try:
+            where = lua.relative_to(BASE).as_posix()
+        except ValueError:
+            where = lua.as_posix()
+        found.extend(f"{where}: {hit}" for hit in hits)
     return found
 
 
-def test_custom_resources_do_not_type_check_qbcore_functions():
-    """全 [custom] 树零命中。"""
+def test_scan_detects_a_bad_shape_in_a_tree_then_reports_the_real_tree_clean(tmp_path):
+    """扫描器本身先被证明会响，再报真树状态。
+
+    只写「全树零命中」的闸门有两种 0：真干净，或者扫描器根本不工作。这里先在临时目录
+    放一个含违规形状的文件，断言 `scan()` 抓得到；再对真实的 [custom] 树断言零命中。
+    """
+    bad_file = tmp_path / "resources" / "[custom]" / "bad" / "server" / "main.lua"
+    bad_file.parent.mkdir(parents=True)
+    bad_file.write_text(
+        "if type(QBCore.Functions.AddMoney) ~= 'function' then return end\n",
+        encoding="utf-8",
+    )
+    assert scan(tmp_path), "扫描器对临时目录里的违规形状没有反应（闸门是空的）"
     assert scan(CUSTOM_ROOT) == []
 
 
@@ -74,9 +91,8 @@ def test_gate_catches_the_real_regression():
     """
     assert len(violations_in(bad)) == 3
 
-
-def test_gate_accepts_the_fixed_shape_and_comments():
-    """修好之后的写法（只判 nil + pcall）与注释里的反例都不能误报。"""
+    # 负对照：修好后的写法（只判 nil + pcall）、注释里的反例、全局原生都不能误报，
+    # 否则这条规则会因为噪音被关掉。放在同一条用例里，规则与证明不分离。
     good = """
     -- 不能写 type(qb.Functions.CreateCallback) ~= 'function'（恒假）
     local createCallback = qb and qb.Functions and qb.Functions.CreateCallback
@@ -108,7 +124,7 @@ def _run_lua(script: str) -> str:
     return proc.stdout.strip()
 
 
-def test_paycash_pays_when_addmoney_is_a_callable_table():
+def test_paycash_detects_a_callable_table_addmoney_and_pays():
     """真机事故复现：AddMoney 是可调用表时，payCash 必须返回真并真的调一次。
 
     这条不是静态形状检查 —— 它把那笔账走一遍：旧写法（多一条 `type(...) ~= 'function'`）
