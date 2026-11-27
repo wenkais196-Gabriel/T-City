@@ -51,6 +51,22 @@ local function callMenu(method, ...)
     return true, why
 end
 
+--- 查询型导出（IsOpen / Top 之类）：返回值就是答案，**false 不是"被拒"**。
+--- 不走 callMenu 是因为那里把 `ret ~= true` 当成拒绝 —— 菜单关着时 IsOpen 返回 false，
+--- 于是每次关表单都刷一条 `custom-menu:IsOpen 被拒：nil`（2026-11-27 真机日志）。
+local function callQuery(method, ...)
+    local api = exports[CUSTOM_MENU]
+    if not api then return nil end
+    local fn = api[method]
+    if type(fn) ~= 'function' then return nil end
+    local ok, ret = pcall(fn, api, ...)
+    if not ok then
+        print(('[%s] custom-menu:%s 调用抛错：%s'):format(RESOURCE, method, tostring(ret)))
+        return nil
+    end
+    return ret
+end
+
 local function hasText(value)
     return type(value) == 'string' and #value > 0
 end
@@ -165,7 +181,7 @@ local function watchClosed(pending)
             if pending.done then
                 return
             end
-            local open = callMenu('IsOpen')
+            local open = callQuery('IsOpen')
             if open ~= true then
                 settleDialog(nil)
             end
