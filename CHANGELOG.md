@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **通知时间回退成 `--:--` + qb-input 把「菜单关着」当成「被拒」（`custom-phone` / `qb-input`）**：
+  ① 真机日志 `[phone] notifications: 时间字段无法解析 … "2026-11-27T18:49:23.000Z"` —— 值本身是合法
+  ISO，node 与 Chrome 都能解析；实测**只有被多包一层 JSON 引号**的字符串会 `NaN`
+  （`new Date('"…Z"')`）。`T-CityLite.base/resources/[custom]/custom-phone/web/src/utils/time.ts`
+  在既有「剥不可见字符」之后补一层「剥成对引号」，界面上恢复正常 HH:MM；产生端的双重编码另记
+  issue 追踪（显示层容错不替代根因）。`T-CityLite.base/resources/[custom]/custom-phone/web/tests/nui/notify.spec.mjs` 增加带引号时间戳的用例。
+  ② `qb-input` 的 `callMenu('IsOpen')` 把 `ret ~= true` 当拒绝，而菜单**关着**时 `IsOpen`
+  正常返回 false —— 于是每次收起表单都刷一条 `[qb-input] custom-menu:IsOpen 被拒：nil`。
+  新增查询型 `callQuery`（返回值就是答案），轮询改用 `callQuery('IsOpen')`。
+
+### Fixed
 - **菜单宽度被静默压窄 + 适配层重启后菜单全打不开（`custom-menu` / `qb-menu`）**：
   ① **宽度回归**：#383 的标题是「产业面板方案 A —— 信息行语义」，却顺手把共享的
   `.menu-shell` 宽度从 **520px 改成 300px**，所有走新菜单的界面一起变窄（标题折行、配额折行、

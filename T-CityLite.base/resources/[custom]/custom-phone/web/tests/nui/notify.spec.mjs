@@ -30,7 +30,10 @@ export const notifyScenarios = [
       // 界面显示 --:--。这三种都必须照常渲染成 HH:MM。
       const ISO_BOM = { ...ISO_OK, id: 9901, timestamp: '﻿2026-10-27T18:15:16.000Z' };
       const ISO_ZWSP = { ...ISO_OK, id: 9902, timestamp: '2026-10-27T18:15:16.000Z​' };
-      world.notifications = [ISO_OK, NO_TS, ISO_BOM, ISO_ZWSP];
+      // 2026-11-27 真机：值被多包了一层 JSON 引号 → new Date() 必 NaN → 界面回退 --:--。
+      // 这条守住"剥一层引号"的容错（产生端的双重编码另记 issue）。
+      const ISO_QUOTED = { ...ISO_OK, id: 9903, timestamp: '"2026-11-27T18:49:23.000Z"' };
+      world.notifications = [ISO_OK, NO_TS, ISO_BOM, ISO_ZWSP, ISO_QUOTED];
       await openNotifications(page);
 
       const text = (await page.locator('.notifications-app').textContent()) ?? '';
