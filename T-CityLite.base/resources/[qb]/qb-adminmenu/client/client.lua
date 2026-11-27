@@ -102,7 +102,6 @@ local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 
 local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
 
 --Sub Menus
-local menu11 = MenuV:CreateMenu(false, Lang:t('menu.permissions'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test11')
 local menu12 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_categories'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test12')
 local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test13')
 local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
@@ -202,6 +201,7 @@ end
 local playersByKey = {}
 local activePlayer = nil
 local pendingBan = nil
+local pendingPermsGroup = nil
 
 local function runSyncOrAsyncCallback(cbName, args, buildSpecFn)
     local resolvedSpec = nil
@@ -334,6 +334,42 @@ customMenuHandlers['adminmenu:action:ban_submit'] = function(ctx)
     pendingBan = nil
     closeCustomMenu('ban_submitted')
     return { ok = true, dispatched = 'ban' }
+end
+
+customMenuHandlers['adminmenu:open:menu11'] = function()
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    return runSyncOrAsyncCallback('qb-admin:server:getrank', nil, function(rank)
+        if not rank then
+            return nil, false
+        end
+        pendingPermsGroup = nil
+        return AdminMenuSpecs.BuildMenu11(Lang, activePlayer), true
+    end)
+end
+
+customMenuHandlers['adminmenu:open:menu11_confirm'] = function(ctx)
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    local args = type(ctx.args) == 'table' and ctx.args or {}
+    if type(args.rank) ~= 'string' or #args.rank == 0 then
+        return { ok = false, reason = 'missing_rank' }
+    end
+    pendingPermsGroup = { { rank = args.rank, label = args.label or args.rank } }
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu11Confirm(Lang, activePlayer, args) }
+end
+
+customMenuHandlers['adminmenu:action:perms_confirm'] = function()
+    if not activePlayer or type(pendingPermsGroup) ~= 'table' then
+        QBCore.Functions.Notify(Lang:t('error.changed_perm_failed'), 'error')
+        return { ok = false, reason = 'missing_perm_group' }
+    end
+    TriggerServerEvent('qb-admin:server:setPermissions', activePlayer.id, pendingPermsGroup)
+    QBCore.Functions.Notify(Lang:t('success.changed_perm'), 'success')
+    pendingPermsGroup = nil
+    return { ok = true, dispatched = 'set_permissions' }
 end
 
 legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
@@ -537,69 +573,7 @@ toggleOptionHandlers.godmode = function(ctx)
 end
 
 -- Player Management Options functions
--- Player List
-local function OpenPermsMenu(permsply)
-    QBCore.Functions.TriggerCallback('qb-admin:server:getrank', function(rank)
-        if rank then
-            local selectedgroup = 'Unknown'
-            AdminMenuShim.OpenMenu(menu11)
-            menu11:ClearItems()
-            menu11:AddSlider({
-                icon = '',
-                label = 'Group',
-                value = 'user',
-                values = { {
-                    label = 'User',
-                    value = 'user',
-                    description = 'Group'
-                }, {
-                    label = 'Admin',
-                    value = 'admin',
-                    description = 'Group'
-                }, {
-                    label = 'God',
-                    value = 'god',
-                    description = 'Group'
-                } },
-                change = function(_, newValue, _)
-                    local vcal = newValue
-                    if vcal == 1 then
-                        selectedgroup = {}
-                        selectedgroup[#selectedgroup + 1] = { rank = 'user', label = 'User' }
-                    elseif vcal == 2 then
-                        selectedgroup = {}
-                        selectedgroup[#selectedgroup + 1] = { rank = 'admin', label = 'Admin' }
-                    elseif vcal == 3 then
-                        selectedgroup = {}
-                        selectedgroup[#selectedgroup + 1] = { rank = 'god', label = 'God' }
-                    end
-                end
-            })
-
-            menu11:AddButton({
-                icon = '',
-                label = Lang:t('info.confirm'),
-                value = 'giveperms',
-                description = 'Give the permission group',
-                select = function(_)
-                    if selectedgroup ~= 'Unknown' then
-                        TriggerServerEvent('qb-admin:server:setPermissions', permsply.id, selectedgroup)
-                        QBCore.Functions.Notify(Lang:t('success.changed_perm'), 'success')
-                        selectedgroup = 'Unknown'
-                    else
-                        QBCore.Functions.Notify(Lang:t('error.changed_perm_failed'), 'error')
-                    end
-                end
-            })
-        else
-            AdminMenuShim.Close('perms_denied')
-        end
-    end)
-end
-
-legacyBridges['adminmenu:open:menu11'] = function()
-    if activePlayer then OpenPermsMenu(activePlayer) end
-end
+-- Player Management migrated to custom-menu (menu4 / Players / menu9 / menu10 / menu11).
 
 
 --[[

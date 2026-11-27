@@ -628,4 +628,78 @@ function AdminMenuSpecs.BuildMenu9Form(lang, player, opts)
     }
 end
 
+local PERMISSION_GROUPS = {
+    { id = 'perm_user', rank = 'user', label = 'User' },
+    { id = 'perm_admin', rank = 'admin', label = 'Admin' },
+    { id = 'perm_god', rank = 'god', label = 'God' },
+}
+
+function AdminMenuSpecs.BuildMenu11(lang, player)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local p = type(player) == 'table' and player or {}
+    local cid = tostring(p.cid or p.name or p.id or 'Player')
+    local items = {}
+
+    for _, g in ipairs(PERMISSION_GROUPS) do
+        items[#items + 1] = {
+            id = g.id,
+            kind = 'nav',
+            icon = '🎟️',
+            label = g.label,
+            description = 'Give the permission group',
+            intent = 'adminmenu:open:menu11_confirm',
+            args = { rank = g.rank, label = g.label },
+        }
+    end
+    items[#items + 1] = {
+        id = 'back_to_player',
+        kind = 'nav',
+        icon = '↩️',
+        label = cid .. tr('info.options'),
+        intent = 'adminmenu:open:player',
+    }
+
+    return {
+        id = 'qb_adminmenu_menu11',
+        title = tr('menu.permissions'),
+        subtitle = cid,
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.online_players'), cid, tr('menu.permissions') },
+        items = items,
+    }
+end
+
+function AdminMenuSpecs.BuildMenu11Confirm(lang, player, group)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local p = type(player) == 'table' and player or {}
+    local g = type(group) == 'table' and group or {}
+    local cid = tostring(p.cid or p.name or p.id or 'Player')
+    local groupLabel = tostring(g.label or g.rank or 'User')
+    local confirmLabel = tr('info.confirm')
+
+    return {
+        id = 'qb_adminmenu_menu11_confirm',
+        title = tr('menu.permissions'),
+        subtitle = cid .. ' · ' .. groupLabel,
+        surface = 'confirm',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.online_players'), cid, tr('menu.permissions') },
+        message = ('%s -> %s'):format(cid, groupLabel),
+        confirmLabel = confirmLabel,
+        intent = 'adminmenu:action:perms_confirm',
+        items = {
+            {
+                id = 'giveperms',
+                kind = 'confirm',
+                label = confirmLabel,
+                description = 'Give the permission group',
+                intent = 'adminmenu:action:perms_confirm',
+            },
+        },
+    }
+end
+
 return AdminMenuSpecs
