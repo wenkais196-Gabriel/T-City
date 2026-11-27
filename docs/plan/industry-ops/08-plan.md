@@ -24,7 +24,7 @@ W1 补上两个动作，让管理者不必跑到 Boss 菜单的世界坐标：
 
 | 面 | 内容 |
 |---|---|
-| 导出 | `custom-industry` 的 `HireIndustryWorkstation(orgId)` —— **直接**转发 `IndustryUi.HireWorkstation`，不复制 Boss 判定 |
+| 导出 | custom-industry 的 `HireIndustryWorkstation(orgId)` —— **直接**转发 `IndustryUi.HireWorkstation`，不复制 Boss 判定 |
 | 手机动作 | `requestAppAction` 的 `app='industry'`，`action ∈ {sell, hire}`；**参数只带 orgId**（+ 卖出的 qty） |
 | 前端 | `Industry.svelte` + `appRegistry` 注册；**`DynamicApp` 回退保留**（注册缺失时仍是只读列表） |
 | 新 net event | **0**（全部走既有 `PhoneApps.Action` → `requestAppAction`） |
@@ -64,7 +64,7 @@ W1 补上两个动作，让管理者不必跑到 Boss 菜单的世界坐标：
 
 | 项 | 为什么 |
 |---|---|
-| **雇工位的真机路径** | 当日 `org_ledger` 没有新的 `reason=workstation-hire` 行（最近一条是 2026-11-25 的 `cmd:hire:mining_co:3:179`）—— 手机上的 hire 这次没被执行，或资金不足被前端挡住 |
+| **雇工位的真机成功路径** | 当日 `org_ledger` 没有新的 `reason=workstation-hire` 行。**原因已确认：金库余额 57,375，第 4 个工位按 `floor(base×1.35^(n-1))` 约 16 万 —— 资金不足被前端 `hireBlocked` 挡住，属预期行为**（用户 2026-11-27 确认）。因此「资金不足」这条分支实际被真机覆盖了，「成功雇到工位」没有 |
 | **非 Boss 只读** | 没有换 Grade1 角色实测；离线 NUI 场景覆盖了（"非 Boss 只读、不渲染动作按钮"） |
 | 平板面 | CI 与本地跑的是同一套场景，真机只验了手机 |
 
@@ -81,12 +81,12 @@ W1 补上两个动作，让管理者不必跑到 Boss 菜单的世界坐标：
 
 | 文件 | 变化 |
 |---|---|
-| `custom-industry/server/ui.lua` | 导出 `HireIndustryWorkstation` |
-| `custom-phone/server/apps/industry.lua` | `hire` 动作（只收 orgId） |
-| `custom-phone/web/src/apps/Industry.svelte` | 新增（377 行） |
-| `custom-phone/web/src/lib/appRegistry.ts` | 注册 industry |
-| `custom-phone/html/*` | 重新构建的产物 |
-| `custom-phone/web/tests/nui/{harness,industry.spec}.mjs` | 场景 + 等快照落地 |
+| `T-CityLite.base/resources/[custom]/custom-industry/server/ui.lua` | 导出 `HireIndustryWorkstation` |
+| `T-CityLite.base/resources/[custom]/custom-phone/server/apps/industry.lua` | `hire` 动作（只收 orgId） |
+| `T-CityLite.base/resources/[custom]/custom-phone/web/src/apps/Industry.svelte` | 新增（377 行） |
+| `T-CityLite.base/resources/[custom]/custom-phone/web/src/core/appRegistry.ts` | 注册 industry |
+| 重新构建的 `T-CityLite.base/resources/[custom]/custom-phone/html/` 产物 | 重新构建的产物 |
+| `T-CityLite.base/resources/[custom]/custom-phone/web/tests/nui/harness.mjs` 与同目录 `industry.spec.mjs` | 场景 + 等快照落地 |
 
 ## 7. 回滚
 
