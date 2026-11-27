@@ -244,3 +244,63 @@ def test_settle_output_helpers():
     assert module.is_already_settled("industry_settle cycle=2 already settled")
     assert module.is_already_settled('{"already_settled":true}')
     assert not module.is_already_settled("settlement done")
+
+# ══════════════════════════════════════════════════════════════════
+# 4. preflight：就绪判据必须走 DB 事实，不能只靠控制台文本
+# ══════════════════════════════════════════════════════════════════
+
+class _FakeSql:
+    def __init__(self, state_rows: int) -> None:
+        self.state_rows = state_rows
+        self.queries: list[str] = []
+
+    def query(self, sql: str):
+        self.queries.append(sql)
+        if "industry_state" in sql:
+            return [{"n": self.state_rows}]
+        return []
+
+
+class _FakeConsole:
+    def __init__(self, output: str) -> None:
+        self.output = output
+
+    def __call__(self, command: str, timeout: float = 60.0) -> str:
+        return self.output
+
+
+class _ProbeShell:
+    """只借 preflight 需要的那几个属性；不触发网络/DB/控制台。"""
+
+    preflight = None  # 由用例注入
+
+    def __init__(self, module, *, state_rows: int, console_output: str) -> None:
+        self.module = module
+        self.args = type("A", (), {"allow_players_online": True, "allow_industry_data": True})()
+        self.sql = _FakeSql(state_rows)
+        self.console = _FakeConsole(console_output)
+        self.snapshot = type("S", (), {"facilities": [], "treasuries": []})()
+        self.logs: list[str] = []
+
+    def log(self, message: str) -> None:
+        self.logs.append(message)
+
+
+def test_preflight_accepts_db_ready_when_console_echo_is_buffered() -> None:
+    """块缓冲下控制台回显可能迟到 —— 只要 DB 里有 industry_state 行，就必须判就绪。
+
+    真机复现过两次：功能明明正常，preflight 拿到 `(no output)` 就报「industry_enable 未开」。
+    """
+    module = load()
+    shell = _ProbeShell(module, state_rows=1, console_output="(no output)")
+    module.CycleProbe.preflight(shell)  # 不抛 = 通过
+    assert any("DB 事实" in line for line in shell.logs), shell.logs
+
+
+def test_preflight_rejects_when_db_has_no_state_row() -> None:
+    """真的没就绪（industry_state 无行）时必须报错，不能因为放宽判据而放过。"""
+    module = load()
+    shell = _ProbeShell(module, state_rows=0, console_output="(no output)")
+    with pytest.raises(module.ProbeError):
+        module.CycleProbe.preflight(shell)
+

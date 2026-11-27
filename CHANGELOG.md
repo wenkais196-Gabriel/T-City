@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ④ **测试与反向校验**：新增 `T-CityLite.base/resources/[custom]/custom-menu/tests/nui/run.mjs`（Node DOM 单元 + 无头 Chromium CDP 实测）、`T-CityLite.base/tests/unit/test_menu_schema.py` / `T-CityLite.base/tests/architecture/test_menu_host.py` / `T-CityLite.base/tests/architecture/test_qb_menu_adapter.py` 自证用例与 `tools/dev/gate_mutation_smoke.py` 适配层回归变异用例。
 
 ### Fixed
+- **周期探针的就绪判据改走 DB 事实（#392）**：preflight 原来要求控制台输出里出现 `settlement dry-run`，但 FXServer 的 stdout 重定向到文件是**块缓冲**，`print()` 可能几秒后才落盘，而 `--console-log` 只等 3 秒 → 真机上两次误报「industry_enable 未开」（功能其实正常）。改为：`industry_state` 有行即判就绪，控制台文本降级为提示；两处行为各有一条用例（有行必须过、无行必须报错）。
 - **产业面板改为「信息行 + 动作行」两分（方案 A，#374）**：`MenuSpec.KINDS` 新增 `info` —— 只读信息行（标签 + 右对齐数值，不压暗、不进焦点、点击无反应），校验禁止它带 `action`/`params`/`intent`；qb-menu 适配层按「`disabled` 且无 `params.event` → 信息行」映射，所以 `custom-industry` 的信息行一行没改就变成信息行。真机 2026-11-27 通过。
 - **M5 收尾：把剩下的 6 处 `backdrop-filter` 也清掉（@qb 三处）**：`qb-core` 通知容器、
   `qb-multicharacter` 三处面板、`qb-vehicleshop` 的 overdrive overlay。做法与 dashboard/banking 一致
