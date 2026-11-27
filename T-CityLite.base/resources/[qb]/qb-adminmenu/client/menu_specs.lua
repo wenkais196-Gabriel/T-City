@@ -910,4 +910,66 @@ function AdminMenuSpecs.BuildMenu6(lang, dealers)
     }
 end
 
+function AdminMenuSpecs.BuildDealerMenu(lang, dealer)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local d = type(dealer) == 'table' and dealer or {}
+    local name = tostring(d['name'] or 'Dealer')
+    return {
+        id = 'qb_adminmenu_dealer',
+        title = tr('menu.edit_dealer') .. name,
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.dealer_list'), name },
+        items = {
+            {
+                id = 'dealer_goto',
+                kind = 'action',
+                icon = '➡️',
+                label = ' ' .. tr('info.go_to') .. ' ' .. name,
+                description = tr('desc.dealergoto_desc') .. ' ' .. name,
+                intent = 'adminmenu:action:dealer_goto',
+            },
+            {
+                id = 'dealer_remove',
+                kind = 'nav',
+                icon = '☠',
+                label = ' ' .. tr('info.remove') .. ' ' .. name,
+                description = tr('desc.dealerremove_desc') .. ' ' .. name,
+                tone = 'danger',
+                danger = true,
+                intent = 'adminmenu:open:dealer_delete_confirm',
+            },
+        },
+    }
+end
+
+function AdminMenuSpecs.BuildDealerDeleteConfirm(lang, dealer)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local d = type(dealer) == 'table' and dealer or {}
+    local name = tostring(d['name'] or 'Dealer')
+    local confirmLabel = tr('info.confirm')
+    return {
+        id = 'qb_adminmenu_dealer_delete_confirm',
+        title = tr('info.remove') .. ' ' .. name,
+        surface = 'confirm',
+        danger = true,
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.dealer_list'), name },
+        message = tr('desc.dealerremove_desc') .. ' ' .. name,
+        confirmLabel = confirmLabel,
+        intent = 'adminmenu:action:dealer_delete',
+        items = {
+            {
+                id = 'confirm_delete_dealer',
+                kind = 'confirm',
+                label = confirmLabel,
+                danger = true,
+                intent = 'adminmenu:action:dealer_delete',
+            },
+        },
+    }
+end
+
 return AdminMenuSpecs

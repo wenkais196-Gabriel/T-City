@@ -398,6 +398,46 @@ customMenuHandlers['adminmenu:open:menu6'] = function()
     end)
 end
 
+customMenuHandlers['adminmenu:open:dealer'] = function(ctx)
+    local name = type(ctx.args) == 'table' and ctx.args.dealerName or nil
+    if name ~= nil then
+        local selected = dealersByName[tostring(name)]
+        if not selected then
+            return { ok = false, reason = 'dealer_not_found' }
+        end
+        activeDealer = selected
+    end
+    if not activeDealer then
+        return { ok = false, reason = 'no_active_dealer' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildDealerMenu(Lang, activeDealer) }
+end
+
+customMenuHandlers['adminmenu:open:dealer_delete_confirm'] = function()
+    if not activeDealer then
+        return { ok = false, reason = 'no_active_dealer' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildDealerDeleteConfirm(Lang, activeDealer) }
+end
+
+customMenuHandlers['adminmenu:action:dealer_goto'] = function()
+    if not activeDealer then
+        return { ok = false, reason = 'no_active_dealer' }
+    end
+    TriggerServerEvent('QBCore:CallCommand', 'dealergoto', { activeDealer['name'] })
+    return { ok = true, dispatched = 'dealer_goto' }
+end
+
+customMenuHandlers['adminmenu:action:dealer_delete'] = function()
+    if not activeDealer then
+        return { ok = false, reason = 'no_active_dealer' }
+    end
+    TriggerServerEvent('QBCore:CallCommand', 'deletedealer', { activeDealer['name'] })
+    activeDealer = nil
+    closeCustomMenu('dealer_deleted')
+    return { ok = true, dispatched = 'dealer_delete' }
+end
+
 customMenuHandlers['adminmenu:action:veh_command'] = function(ctx)
     local args = type(ctx.args) == 'table' and ctx.args or {}
     local cmd = args.cmd
@@ -868,48 +908,4 @@ end)
 --[[
     Dealer List
 --]]
-local function OpenDealerMenu(dealer)
-    local EditDealer = MenuV:CreateMenu(false, Lang:t('menu.edit_dealer') .. dealer['name'], menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv')
-    EditDealer:ClearItems()
-    AdminMenuShim.OpenMenu(EditDealer)
-    local elements = {
-        [1] = {
-            icon = '➡️',
-            label = Lang:t('info.go_to') .. ' ' .. dealer['name'],
-            value = 'goto',
-            description = Lang:t('desc.dealergoto_desc') .. ' ' .. dealer['name']
-        },
-        [2] = {
-            icon = '☠',
-            label = Lang:t('info.remove') .. ' ' .. dealer['name'],
-            value = 'remove',
-            description = Lang:t('desc.dealerremove_desc') .. ' ' .. dealer['name']
-        }
-    }
-    for _, v in ipairs(elements) do
-        EditDealer:AddButton({
-            icon = v.icon,
-            label = ' ' .. v.label,
-            value = v.value,
-            description = v.description,
-            select = function(btn)
-                local values = btn.Value
-                if values == 'goto' then
-                    TriggerServerEvent('QBCore:CallCommand', 'dealergoto', { dealer['name'] })
-                elseif values == 'remove' then
-                    TriggerServerEvent('QBCore:CallCommand', 'deletedealer', { dealer['name'] })
-                    EditDealer:Close()
-                    AdminMenuShim.Close('dealer_deleted')
-                end
-            end
-        })
-    end
-end
-
-legacyBridges['adminmenu:open:dealer'] = function(ctx)
-    local name = type(ctx.args) == 'table' and ctx.args.dealerName or nil
-    local selected = name and dealersByName[tostring(name)] or nil
-    if selected then
-        OpenDealerMenu(selected)
-    end
-end
+-- Dealer List migrated to custom-menu (menu6 / EditDealer).
