@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：340 ｜ **已登记**：340 ｜ **未登记**：0
+**文档总数**：341 ｜ **已登记**：341 ｜ **未登记**：0
 
-**状态分布**：✅ active 188 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 189 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -335,7 +335,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（70）
+### meta（71）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -355,6 +355,7 @@
 | [T-CityLite 服务器总领手册](00-server-master-manual.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/00-server-master-manual.md` |
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
 | [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
+| [Issue 标准（标签 / 标题 / 正文）](engineering/ISSUE_STANDARD.md) | manual | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/engineering/ISSUE_STANDARD.md` |
 | [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `AGENTS.md` |
 | [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-26 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
