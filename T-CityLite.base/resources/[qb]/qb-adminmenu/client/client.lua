@@ -205,6 +205,7 @@ customMenuHandlers['adminmenu:action:set_time'] = function(ctx)
 end
 
 local playersByKey = {}
+local activePlayer = nil
 
 local function runSyncOrAsyncCallback(cbName, args, buildSpecFn)
     local resolvedSpec = nil
@@ -253,6 +254,30 @@ customMenuHandlers['adminmenu:open:menu4'] = function()
         end
         return AdminMenuSpecs.BuildMenu4(Lang, players), true
     end)
+end
+
+customMenuHandlers['adminmenu:open:player'] = function(ctx)
+    local key = type(ctx.args) == 'table' and ctx.args.playerKey or nil
+    if key ~= nil then
+        local selected = playersByKey[tostring(key)]
+        if not selected then
+            return { ok = false, reason = 'player_not_found' }
+        end
+        activePlayer = selected
+    end
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildPlayerMenu(Lang, activePlayer) }
+end
+
+customMenuHandlers['adminmenu:action:player_action'] = function(ctx)
+    local act = type(ctx.args) == 'table' and ctx.args.action or nil
+    if type(act) ~= 'string' or #act == 0 or not activePlayer then
+        return { ok = false, reason = 'missing_player_action' }
+    end
+    TriggerServerEvent('qb-admin:server:' .. act, activePlayer)
+    return { ok = true, dispatched = 'player_action', action = act }
 end
 
 legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
@@ -637,112 +662,14 @@ local function OpenBanMenu(banplayer)
     })
 end
 
-local function OpenPlayerMenus(player)
-    local Players = MenuV:CreateMenu(false, player.cid .. Lang:t('info.options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv') -- Players Sub Menu
-    Players:ClearItems()
-    AdminMenuShim.OpenMenu(Players)
-    local elements = {
-        [1] = {
-            icon = '💀',
-            label = Lang:t('menu.kill'),
-            value = 'kill',
-            description = Lang:t('menu.kill') .. ' ' .. player.cid
-        },
-        [2] = {
-            icon = '🏥',
-            label = Lang:t('menu.revive'),
-            value = 'revive',
-            description = Lang:t('menu.revive') .. ' ' .. player.cid
-        },
-        [3] = {
-            icon = '🥶',
-            label = Lang:t('menu.freeze'),
-            value = 'freeze',
-            description = Lang:t('menu.freeze') .. ' ' .. player.cid
-        },
-        [4] = {
-            icon = '👀',
-            label = Lang:t('menu.spectate'),
-            value = 'spectate',
-            description = Lang:t('menu.spectate') .. ' ' .. player.cid
-        },
-        [5] = {
-            icon = '➡️',
-            label = Lang:t('info.go_to'),
-            value = 'goto',
-            description = Lang:t('info.go_to') .. ' ' .. player.cid .. Lang:t('info.position')
-        },
-        [6] = {
-            icon = '⬅️',
-            label = Lang:t('menu.bring'),
-            value = 'bring',
-            description = Lang:t('menu.bring') .. ' ' .. player.cid .. ' ' .. Lang:t('info.your_position')
-        },
-        [7] = {
-            icon = '🚗',
-            label = Lang:t('menu.sit_in_vehicle'),
-            value = 'intovehicle',
-            description = Lang:t('desc.sit_in_veh_desc') .. ' ' .. player.cid .. ' ' .. Lang:t('desc.sit_in_veh_desc2')
-        },
-        [8] = {
-            icon = '🎒',
-            label = Lang:t('menu.open_inv'),
-            value = 'inventory',
-            description = Lang:t('info.open') .. ' ' .. player.cid .. Lang:t('info.inventories')
-        },
-        [9] = {
-            icon = '👕',
-            label = Lang:t('menu.give_clothing_menu'),
-            value = 'cloth',
-            description = Lang:t('desc.clothing_menu_desc') .. ' ' .. player.cid
-        },
-        [10] = {
-            icon = '🥾',
-            label = Lang:t('menu.kick'),
-            value = 'kick',
-            description = Lang:t('menu.kick') .. ' ' .. player.cid .. ' ' .. Lang:t('info.reason')
-        },
-        [11] = {
-            icon = '🚫',
-            label = Lang:t('menu.ban'),
-            value = 'ban',
-            description = Lang:t('menu.ban') .. ' ' .. player.cid .. ' ' .. Lang:t('info.reason')
-        },
-        [12] = {
-            icon = '🎟️',
-            label = Lang:t('menu.permissions'),
-            value = 'perms',
-            description = Lang:t('info.give') .. ' ' .. player.cid .. ' ' .. Lang:t('menu.permissions')
-        }
-    }
-    for _, v in ipairs(elements) do
-        Players:AddButton({
-            icon = v.icon,
-            label = ' ' .. v.label,
-            value = v.value,
-            description = v.description,
-            select = function(btn)
-                local values = btn.Value
-                if values ~= 'ban' and values ~= 'kick' and values ~= 'perms' then
-                    TriggerServerEvent('qb-admin:server:' .. values, player)
-                elseif values == 'ban' then
-                    OpenBanMenu(player)
-                elseif values == 'kick' then
-                    OpenKickMenu(player)
-                elseif values == 'perms' then
-                    OpenPermsMenu(player)
-                end
-            end
-        })
-    end
+legacyBridges['adminmenu:open:menu10'] = function()
+    if activePlayer then OpenKickMenu(activePlayer) end
 end
-
-legacyBridges['adminmenu:open:player'] = function(ctx)
-    local key = type(ctx.args) == 'table' and ctx.args.playerKey or nil
-    local selected = key and playersByKey[tostring(key)] or nil
-    if selected then
-        OpenPlayerMenus(selected)
-    end
+legacyBridges['adminmenu:open:menu9'] = function()
+    if activePlayer then OpenBanMenu(activePlayer) end
+end
+legacyBridges['adminmenu:open:menu11'] = function()
+    if activePlayer then OpenPermsMenu(activePlayer) end
 end
 
 

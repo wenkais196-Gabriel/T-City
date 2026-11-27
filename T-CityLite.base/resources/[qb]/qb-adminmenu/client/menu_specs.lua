@@ -429,4 +429,71 @@ function AdminMenuSpecs.BuildMenu4(lang, players)
     }
 end
 
+function AdminMenuSpecs.BuildPlayerMenu(lang, player)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local p = type(player) == 'table' and player or {}
+    local cid = tostring(p.cid or p.name or p.id or 'Player')
+    local title = cid .. tr('info.options')
+
+    local actions = {
+        { id = 'kill', icon = '💀', label = tr('menu.kill'), desc = tr('menu.kill') .. ' ' .. cid },
+        { id = 'revive', icon = '🏥', label = tr('menu.revive'), desc = tr('menu.revive') .. ' ' .. cid },
+        { id = 'freeze', icon = '🥶', label = tr('menu.freeze'), desc = tr('menu.freeze') .. ' ' .. cid },
+        { id = 'spectate', icon = '👀', label = tr('menu.spectate'), desc = tr('menu.spectate') .. ' ' .. cid },
+        { id = 'goto', icon = '➡️', label = tr('info.go_to'), desc = tr('info.go_to') .. ' ' .. cid .. tr('info.position') },
+        { id = 'bring', icon = '⬅️', label = tr('menu.bring'), desc = tr('menu.bring') .. ' ' .. cid .. ' ' .. tr('info.your_position') },
+        { id = 'intovehicle', icon = '🚗', label = tr('menu.sit_in_vehicle'), desc = tr('desc.sit_in_veh_desc') .. ' ' .. cid .. ' ' .. tr('desc.sit_in_veh_desc2') },
+        { id = 'inventory', icon = '🎒', label = tr('menu.open_inv'), desc = tr('info.open') .. ' ' .. cid .. tr('info.inventories') },
+        { id = 'cloth', icon = '👕', label = tr('menu.give_clothing_menu'), desc = tr('desc.clothing_menu_desc') .. ' ' .. cid },
+    }
+
+    local items = {}
+    for _, act in ipairs(actions) do
+        items[#items + 1] = {
+            id = act.id,
+            kind = 'action',
+            icon = act.icon,
+            label = act.label,
+            description = act.desc,
+            intent = 'adminmenu:action:player_action',
+            args = { action = act.id },
+        }
+    end
+
+    items[#items + 1] = {
+        id = 'kick',
+        kind = 'nav',
+        icon = '🥾',
+        label = tr('menu.kick'),
+        description = tr('menu.kick') .. ' ' .. cid .. ' ' .. tr('info.reason'),
+        intent = 'adminmenu:open:menu10',
+    }
+    items[#items + 1] = {
+        id = 'ban',
+        kind = 'nav',
+        icon = '🚫',
+        label = tr('menu.ban'),
+        description = tr('menu.ban') .. ' ' .. cid .. ' ' .. tr('info.reason'),
+        intent = 'adminmenu:open:menu9',
+    }
+    items[#items + 1] = {
+        id = 'perms',
+        kind = 'nav',
+        icon = '🎟️',
+        label = tr('menu.permissions'),
+        description = tr('info.give') .. ' ' .. cid .. ' ' .. tr('menu.permissions'),
+        intent = 'adminmenu:open:menu11',
+    }
+
+    return {
+        id = 'qb_adminmenu_player',
+        title = title,
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.online_players'), cid },
+        items = items,
+    }
+end
+
 return AdminMenuSpecs
