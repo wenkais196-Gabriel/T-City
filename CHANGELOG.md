@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ④ **测试与反向校验**：新增 `T-CityLite.base/resources/[custom]/custom-menu/tests/nui/run.mjs`（Node DOM 单元 + 无头 Chromium CDP 实测）、`T-CityLite.base/tests/unit/test_menu_schema.py` / `T-CityLite.base/tests/architecture/test_menu_host.py` / `T-CityLite.base/tests/architecture/test_qb_menu_adapter.py` 自证用例与 `tools/dev/gate_mutation_smoke.py` 适配层回归变异用例。
 
 ### Fixed
+- **产业面板改为「信息行 + 动作行」两分（方案 A，#374）**：`MenuSpec.KINDS` 新增 `info` —— 只读信息行（标签 + 右对齐数值，不压暗、不进焦点、点击无反应），校验禁止它带 `action`/`params`/`intent`；qb-menu 适配层按「`disabled` 且无 `params.event` → 信息行」映射，所以 `custom-industry` 的信息行一行没改就变成信息行。真机 2026-11-27 通过。
 - **M5 收尾：把剩下的 6 处 `backdrop-filter` 也清掉（@qb 三处）**：`qb-core` 通知容器、
   `qb-multicharacter` 三处面板、`qb-vehicleshop` 的 overdrive overlay。做法与 dashboard/banking 一致
   ——去掉模糊、提一点底色不透明度补偿层次。清完非排除资源真的为零（只剩 monitor 6 处，

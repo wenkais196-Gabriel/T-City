@@ -219,6 +219,23 @@ exports['custom-menu']:RegisterIntent(...)  -- 内部：exports[route.resource][
 - 闸门：`test_intent_routes_rejects_function_fields_and_non_resource_types`（带自证：把带闭包的路由喂进校验器必须被识别）。
 - 教训：**测试替身必须复刻真机的限制**。沙箱里函数能过资源边界，所以这条缺陷在单测里完全隐形。
 
+### 9.6 信息行（`kind = 'info'`，2026-11-27）
+
+产业面板暴露出一个缺口：**只读信息没有自己的语义**。以前只能写成 `disabled`，渲染层就把整行压暗 ——
+一屏状态信息看起来像"整屏功能都坏了"。
+
+现在 `MenuSpec.KINDS` 有 `info`：
+
+| 规则 | 内容 |
+|---|---|
+| 必填 | `label`；值放 `hint` |
+| 禁止 | `action` / `params` / `intent`（带了直接校验失败，防止"只读"偷偷可点） |
+| 渲染 | 左标签正常字重 + 右对齐数值；无 hover、无焦点描边、不压暗 |
+| 焦点 | 方向键跳过；点击不发 intent、不弹 toast |
+
+qb-menu 适配层的映射规则：legacy 行 `disabled = true` **且没有** `params.event` → `info`；
+`disabled` 但有 event → 仍是 disabled action（带 `disabledReason`）。这样调用方零改动。
+
 ## 10. 取证结果（排期前实测，2026-11-25）
 
 基线由 `tools/dev/menu_surface_census.py` 生成，落在 `T-CityLite.base/tests/architecture/menu_surface_baseline.json`（12 类、1560 处命中）。
