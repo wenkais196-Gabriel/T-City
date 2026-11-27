@@ -101,7 +101,6 @@ local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 
 local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
 
 --Sub Menus
-local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test13')
 local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
 
 local toggleState = {
@@ -378,6 +377,14 @@ customMenuHandlers['adminmenu:open:menu12'] = function()
     return { ok = true, spec = AdminMenuSpecs.BuildMenu12(Lang, QBCore and QBCore.Shared) }
 end
 
+customMenuHandlers['adminmenu:open:menu13'] = function(ctx)
+    local catName = type(ctx.args) == 'table' and ctx.args.category or nil
+    if type(catName) ~= 'string' or #catName == 0 then
+        return { ok = false, reason = 'missing_vehicle_category' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu13(Lang, catName, QBCore and QBCore.Shared) }
+end
+
 customMenuHandlers['adminmenu:action:veh_command'] = function(ctx)
     local args = type(ctx.args) == 'table' and ctx.args or {}
     local cmd = args.cmd
@@ -572,38 +579,7 @@ end
     Vehicle Spawner functions
 --]]
 
--- Set vehicle Categories
-local vehicles = {}
-for k, v in pairs(QBCore.Shared.Vehicles) do
-    local category = v['category']
-    if vehicles[category] == nil then
-        vehicles[category] = {}
-    end
-    vehicles[category][k] = v
-end
-
--- Car Categories
-local function OpenCarModelsMenu(category)
-    menu13:ClearItems()
-    AdminMenuShim.OpenMenu(menu13)
-    for k, v in pairs(category) do
-        menu13:AddButton({
-            label = v['name'],
-            value = k,
-            description = 'Spawn ' .. v['name'],
-            select = function(_)
-                TriggerServerEvent('QBCore:CallCommand', 'car', { k })
-            end
-        })
-    end
-end
-
-legacyBridges['adminmenu:open:menu13'] = function(ctx)
-    local catName = type(ctx.args) == 'table' and ctx.args.category or nil
-    if catName and vehicles[catName] then
-        OpenCarModelsMenu(vehicles[catName])
-    end
-end
+-- Vehicle Spawner migrated to custom-menu (menu5 / menu12 / menu13).
 
 --[[
     Developer Options functions

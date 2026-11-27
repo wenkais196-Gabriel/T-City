@@ -823,4 +823,45 @@ function AdminMenuSpecs.BuildMenu12(lang, qbShared)
     }
 end
 
+function AdminMenuSpecs.BuildMenu13(lang, categoryName, qbShared)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local shared = qbShared or (QBCore and QBCore.Shared) or {}
+    local byCat = AdminMenuSpecs.CollectVehicleCategories(shared.Vehicles)
+    local cat = type(categoryName) == 'string' and byCat[categoryName] or {}
+    local entries = {}
+    for k, v in pairs(cat) do
+        local label = AdminMenuSpecs.SafeLabel(v and v['name'], tostring(k))
+        entries[#entries + 1] = { model = tostring(k), label = label }
+    end
+    table.sort(entries, function(a, b)
+        return a.label:lower() < b.label:lower()
+    end)
+
+    local items = {}
+    for idx, entry in ipairs(entries) do
+        items[#items + 1] = {
+            id = AdminMenuSpecs.SafeId('veh', idx),
+            kind = 'action',
+            icon = '🚗',
+            label = entry.label,
+            description = 'Spawn ' .. entry.label,
+            intent = 'adminmenu:action:veh_command',
+            args = { cmd = 'car', model = entry.model },
+        }
+    end
+
+    local catLabel = categoryName and firstToUpper(categoryName, shared) or tr('menu.vehicle_models')
+    return {
+        id = 'qb_adminmenu_menu13',
+        title = tr('menu.vehicle_models'),
+        subtitle = catLabel,
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.vehicle_options'), tr('menu.vehicle_categories'), catLabel },
+        emptyMessage = tr('menu.vehicle_models'),
+        items = items,
+    }
+end
+
 return AdminMenuSpecs
