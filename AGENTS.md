@@ -28,9 +28,8 @@ review_by: 2027-04-30
 | 改手机前端（Svelte/Vite） | `resources/[custom]/custom-phone/web/AGENTS.md` | `docs/client/research/nui-debug-playbook.md` |
 | 新增 net event / 表 / 跨资源调用 | `ARCHITECTURE.md §4` | `tests/architecture/*.json` 三份登记表 |
 | 想复用 / 合并重复实现 | `docs/engineering/REUSE.md` | `python3 tools/dev/reuse_scan.py --min 3` |
-| 交付 / 发版 | `docs/engineering/templates/delivery.md` | `tools/dev/release_check.py` |
+| 交付 / 发版 / **建 issue** | `docs/engineering/templates/delivery.md`、`docs/engineering/ISSUE_STANDARD.md` | `tools/dev/release_check.py`、`tools/dev/issue_lint.py` |
 | **要上真机验证**（NUI / 输入 / 实体 / 时序） | `docs/engineering/LIVE_VERIFICATION.md` | `tools/dev/police_live_probe.py` + `tools/dev/fivem_console.py` |
-| 建 issue / 改标签 | `docs/engineering/ISSUE_STANDARD.md`（标签三件套 + 五段正文） | `python3 tools/dev/issue_lint.py <gh 导出的 json>` |
 | 找某份文档在哪、什么状态 | `docs/INDEX.md`（自动生成的全量清单） | `docs/README.md`（人工导航） |
 
 ## 2. 十条红线（违反 = 打回，全文见 CONSTITUTION）
