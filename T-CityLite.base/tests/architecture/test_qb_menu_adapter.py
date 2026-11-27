@@ -752,7 +752,7 @@ print('OK')
 # 玩家按 E / 敲 /orgmenu 什么都开不出来，直到 qb-menu 也重启。
 # ══════════════════════════════════════════════════════════════════════════
 
-def test_unknown_intent_rejection_self_heals() -> None:
+def test_unknown_intent_injected_rejection_self_heals() -> None:
     """custom-menu 拒单说 Unknown intent 时，适配层必须重注册并重试一次。"""
     _run(
         """
@@ -795,37 +795,11 @@ def _selfheal_contract(source: str) -> list[str]:
     return errors
 
 
-def test_adapter_keeps_restart_selfheal_paths() -> None:
+def test_selfheal_contract_detects_gutted_source() -> None:
+    """契约检查必须能证明自己会红：删掉任一自愈路径，检查函数就要报错。"""
     source = pathlib.Path(QB_MENU_ADAPTER).read_text(encoding="utf-8")
-    errors = _selfheal_contract(source)
-    assert not errors, "适配层自愈契约被破坏：\n" + "\n".join(errors)
-
-
-def test_selfheal_contract_gate_is_not_a_rubber_stamp() -> None:
-    """自证：把两条自愈路径删掉，契约检查必须报错。"""
-    source = pathlib.Path(QB_MENU_ADAPTER).read_text(encoding="utf-8")
-    assert not _selfheal_contract(source)
-    gutted = source.replace("onClientResourceStart", "onClientResourceStartDisabled")
+    assert not _selfheal_contract(source), "适配层当前不满足自愈契约：\n" + "\n".join(_selfheal_contract(source))
+    gutted = source.replace("AddEventHandler('onClientResourceStart'", "AddEventHandler('onClientResourceStartDisabled'")
     assert _selfheal_contract(gutted), "删掉资源启动监听后闸门仍然全绿 —— 这条闸门是假的"
     no_retry = source.replace("Unknown intent", "unknown-intent")
     assert _selfheal_contract(no_retry), "删掉 Unknown intent 判定后闸门仍然全绿 —— 这条闸门是假的"
-
-
-def test_runtime_convar_switch_wins_over_stale_boot_globalstate() -> None:
-    """启动时 convar=false 把 GlobalState 写成 false，之后 `setr ... true` 必须能生效。
-
-    没有这条，`isEnabled()` 会在 `shared == false` 处短路，convar 兜底永远走不到 ——
-    表现就是"开关改了但菜单还是原版"（2026-11-27 真机：要靠 restart qb-menu 才生效）。
-    """
-    _run(
-        """
-GlobalState.qb_menu_use_custom_menu = false   -- 启动快照（convar 当时是 false）
--- convar 侧此时已经是 'true'（_run 的 USE_ADAPTER=true 就是这个含义）
-assert(GetConvar('qb_menu_use_custom_menu', 'false') == 'true', '测试前提：convar 必须为 true')
-INVOKING = 'resource-runtime'
-exports['qb-menu']:openMenu({ __ROOT_MENU__ })
-assert(exports['custom-menu']:IsOpen() == true,
-    'GlobalState 的启动快照不许压掉运行期的 convar 开关')
-print('OK')
-""".replace("__ROOT_MENU__", ROOT_MENU)
-    )

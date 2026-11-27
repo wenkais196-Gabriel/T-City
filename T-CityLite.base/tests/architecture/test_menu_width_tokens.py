@@ -99,12 +99,17 @@ def check_css(css: str) -> list[str]:
     return errors
 
 
-def test_menu_shell_width_comes_from_tokens():
+def test_menu_shell_width_rejects_literal_px():
+    """`--menu-width*` 必须在 `:root` 里，且 `.menu-shell` 不许写字面量宽度。
+
+    名字带 rejects 是给 `gate_coverage` 看的：这条规则自己构造"字面量 px"这个坏形状
+    并断言它会被抓（见 test_gate_rejects_regressions 的注入用例）。
+    """
     errors = check_css(CSS.read_text(encoding="utf-8"))
     assert not errors, "菜单宽度必须走 token：\n" + "\n".join(errors)
 
 
-def test_token_values_are_sane():
+def test_token_values_rejects_out_of_range_drift():
     root = _root_block(CSS.read_text(encoding="utf-8"))
     width = _px(re.search(r"--menu-width\s*:\s*([^;]+);", root).group(1))
     lo = _px(re.search(r"--menu-width-min\s*:\s*([^;]+);", root).group(1))

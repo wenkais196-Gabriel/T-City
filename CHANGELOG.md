@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   现在 `onClientResourceStart('custom-menu')` 会清空记忆，且 `Open` 因 `Unknown intent`
   失败时会重注册并重试一次。
   ③ **运行期开关生效**：`isEnabled()` 原来在 `GlobalState == false` 处短路，而
-  `server/adapter_state.lua` 是启动时把 convar 快照写进 `GlobalState` —— 于是运维
+  `T-CityLite.base/resources/[qb]/qb-menu/server/adapter_state.lua` 是启动时把 convar 快照写进 `GlobalState` —— 于是运维
   `setr qb_menu_use_custom_menu true` 之后不重启就永远不生效（convar 兜底成死代码）。
   现在 `false` 不再短路，`setr` 即时生效。
 

@@ -624,7 +624,16 @@ def test_renderer_info_rows_rejects_disabled_class_and_skips_focus() -> None:
     import subprocess
 
     css = STYLES_CSS.read_text(encoding="utf-8")
-    assert "width: 300px;" in css, "styles.css must constrain .menu-shell card width to 300px"
+    # 宽度改由 token 声明（#402）：这条断言原来写死 300px，正是 #383 把 520 改窄后
+    # 没人发现的原因 —— 闸门跟着错的值一起被改了。现在改为"与基线一致"，
+    # 想改宽度必须同时改 menu_theme_baseline.json（review 时看得见）。
+    baseline_path = HTML_DIR.parents[3] / "tests" / "architecture" / "menu_theme_baseline.json"
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    want = baseline["menu_width"]
+    assert f"--menu-width: {want}px;" in css, f"styles.css 的 --menu-width 必须等于基线 {want}px"
+    assert re.search(r"\.menu-shell\s*\{[^}]*width:\s*var\(--menu-width\)", css), (
+        "styles.css .menu-shell 的宽度必须引用 var(--menu-width)"
+    )
     assert not re.search(r"font-size:\s*(?:[0-9]|1[01])(?:\.[0-9]+)?px", css), (
         "styles.css must keep all font sizes >= 12px"
     )

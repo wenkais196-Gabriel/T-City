@@ -732,7 +732,14 @@ async function runBrowserTests() {
     `);
 
     assert.equal(metrics.missingShell, undefined);
-    assert.equal(metrics.shellWidth, 300, `menu-shell width must be 300px, got ${metrics.shellWidth}`);
+    // 宽度的事实源是 styles.css 的 `--menu-width` token（#402）。这里跟着 token 走，
+    // 免得再出现「闸门写死 300px、样式被改成 300px、两边一起错」的沉默回归。
+    // 防止"有人偷偷改宽度"的是 test_menu_width_tokens.py（与基线比对）。
+    const widthToken = readFileSync(path.join(HTML_DIR, 'styles.css'), 'utf8').match(/--menu-width:\s*(\d+)px/);
+    assert.ok(widthToken, 'styles.css 必须声明 --menu-width');
+    const expectedWidth = Number(widthToken[1]);
+    assert.equal(metrics.shellWidth, expectedWidth,
+      `menu-shell width must equal --menu-width (${expectedWidth}px), got ${metrics.shellWidth}`);
     assert.deepEqual(metrics.fontViolations, [], `All text font sizes must be >= 12px: ${JSON.stringify(metrics.fontViolations)}`);
     assert.equal(metrics.infoDisabled, false, 'info row must not have disabled class');
     assert.equal(metrics.infoFocused, false, 'info row must not start focused');
