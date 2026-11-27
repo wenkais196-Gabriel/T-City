@@ -19,6 +19,7 @@ client_scripts {
     'client/entity_view.lua',
     'client/blipsnames.lua',
     'client/menu_shim.lua',
+    'client/menu_specs.lua',
     'client/client.lua',
     'client/events.lua',
     'entityhashes/entity.lua',

@@ -6,8 +6,100 @@ local banreason = 'Unknown'
 local kickreason = 'Unknown'
 local menuLocation = 'topright' -- e.g. topright (default), topleft, bottomright, bottomleft
 
--- Main Menus
-local menu1 = MenuV:CreateMenu(false, Lang:t('menu.admin_menu'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test1')
+local CUSTOM_MENU_RESOURCE = 'custom-menu'
+local customMenuHandlers = {}
+local legacyBridges = {}
+
+local function getCustomMenuApi()
+    if type(GetResourceState) == 'function' and GetResourceState(CUSTOM_MENU_RESOURCE) ~= 'started' then
+        return nil
+    end
+    local ok, api = pcall(function()
+        return exports[CUSTOM_MENU_RESOURCE]
+    end)
+    if ok and api then
+        return api
+    end
+    return nil
+end
+
+local function ensureCustomMenuIntents()
+    local api = getCustomMenuApi()
+    if not api or type(api.RegisterIntent) ~= 'function' then
+        return false
+    end
+    for _, intentId in ipairs(AdminMenuSpecs.INTENTS) do
+        local route = {
+            type = 'resource',
+            resource = AdminMenuSpecs.RESOURCE,
+            method = AdminMenuSpecs.EXPORT_METHOD,
+        }
+        local ok, regOk = pcall(api.RegisterIntent, api, intentId, route)
+        if not ok or regOk == false then
+            return false
+        end
+    end
+    return true
+end
+
+local function isCustomMenuOpen()
+    local api = getCustomMenuApi()
+    if not api or type(api.IsOpen) ~= 'function' then
+        return false
+    end
+    local ok, open = pcall(api.IsOpen, api)
+    return ok and open == true
+end
+
+local function closeCustomMenu(reason)
+    local api = getCustomMenuApi()
+    if not api or type(api.Close) ~= 'function' then
+        return false
+    end
+    local ok, closed = pcall(api.Close, api, reason or 'qb_adminmenu_close')
+    return ok and closed == true
+end
+
+local function openCustomMenu(spec)
+    local api = getCustomMenuApi()
+    if not api or type(api.Open) ~= 'function' then
+        return false, 'custom_menu_unavailable'
+    end
+    ensureCustomMenuIntents()
+    local okCall, opened, err = pcall(api.Open, api, spec, {
+        knownIntents = AdminMenuSpecs.KnownIntents(),
+    })
+    if not okCall then
+        return false, tostring(opened)
+    end
+    if not opened then
+        if err == 'custom_ui_taken' and QBCore and QBCore.Functions and QBCore.Functions.Notify then
+            QBCore.Functions.Notify('Close the active UI before opening Admin Menu', 'error')
+        end
+        return false, err
+    end
+    return true, nil
+end
+
+local function dispatchAdminMenuIntent(intent, ctx)
+    local handler = customMenuHandlers[intent]
+    if handler then
+        return handler(ctx or {})
+    end
+    local legacy = legacyBridges[intent]
+    if legacy then
+        closeCustomMenu('to_legacy_screen')
+        legacy(ctx or {})
+        return { ok = true, dispatched = 'legacy_menuv' }
+    end
+    return { ok = false, reason = 'unhandled_intent' }
+end
+
+if type(exports) == 'function' then
+    exports(AdminMenuSpecs.EXPORT_METHOD, dispatchAdminMenuIntent)
+end
+
+-- Main Menus (pending per-screen migration)
 local menu2 = MenuV:CreateMenu(false, Lang:t('menu.admin_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test2')
 local menu3 = MenuV:CreateMenu(false, Lang:t('menu.manage_server'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test3')
 local menu4 = MenuV:CreateMenu(false, Lang:t('menu.online_players'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test4')
@@ -25,61 +117,18 @@ local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocati
 local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
 local menu15 = MenuV:CreateMenu(false, Lang:t('menu.spawn_weapons'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test15')
 
+customMenuHandlers['adminmenu:open:menu1'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu1(Lang) }
+end
+
+legacyBridges['adminmenu:open:menu2'] = function() AdminMenuShim.OpenMenu(menu2) end
+legacyBridges['adminmenu:open:menu3'] = function() AdminMenuShim.OpenMenu(menu3) end
+legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
+legacyBridges['adminmenu:open:menu7'] = function() AdminMenuShim.OpenMenu(menu7) end
+
 RegisterNetEvent('qb-admin:client:openMenu', function()
-    -- #353: 先问 custom-ui 的输入栈（手机/中控开着时拒绝叠窗），再入栈
-    AdminMenuShim.OpenMenu(menu1)
+    openCustomMenu(AdminMenuSpecs.BuildMenu1(Lang))
 end)
-
---[[
-    Main menu buttons
---]]
--- Admin options
-menu1:AddButton({
-    icon = '😃',
-    label = Lang:t('menu.admin_options'),
-    value = menu2,
-    description = Lang:t('desc.admin_options_desc')
-})
-
---player management
-local player_management = menu1:AddButton({
-    icon = '🙍‍♂️',
-    label = Lang:t('menu.player_management'),
-    value = menu4,
-    description = Lang:t('desc.player_management_desc')
-})
-
---server management
-menu1:AddButton({
-    icon = '🎮',
-    label = Lang:t('menu.server_management'),
-    value = menu3,
-    description = Lang:t('desc.server_management_desc')
-})
-
---vehicle spawner
-menu1:AddButton({
-    icon = '🚗',
-    label = Lang:t('menu.vehicles'),
-    value = menu5,
-    description = Lang:t('desc.vehicles_desc')
-})
-
---dealer list
-local menu1_dealer_list = menu1:AddButton({
-    icon = '💊',
-    label = Lang:t('menu.dealer_list'),
-    value = menu6,
-    description = Lang:t('desc.dealer_desc')
-})
-
---developer options
-menu1:AddButton({
-    icon = '🔧',
-    label = Lang:t('menu.developer_options'),
-    value = menu7,
-    description = Lang:t('desc.developer_desc')
-})
 
 --[[
     Sub Menus for the above main menu's
@@ -497,7 +546,7 @@ local function OpenPermsMenu(permsply)
                 end
             })
         else
-            MenuV:CloseMenu(menu1)
+            AdminMenuShim.Close('perms_denied')
         end
     end)
 end
@@ -723,7 +772,7 @@ local function OpenPlayerMenus(player)
     end
 end
 
-player_management:On('select', function(_)
+legacyBridges['adminmenu:open:menu4'] = function()
     menu4:ClearItems()
     QBCore.Functions.TriggerCallback('test:getplayers', function(players)
         for _, v in pairs(players) do
@@ -738,7 +787,8 @@ player_management:On('select', function(_)
             })                               -- WORKS
         end
     end)
-end)
+    AdminMenuShim.OpenMenu(menu4)
+end
 
 
 --[[
@@ -1235,7 +1285,7 @@ local function OpenDealerMenu(dealer)
     end
 end
 
-menu1_dealer_list:On('Select', function(_)
+legacyBridges['adminmenu:open:menu6'] = function()
     menu6:ClearItems()
     QBCore.Functions.TriggerCallback('test:getdealers', function(dealers)
         for _, v in pairs(dealers) do
@@ -1250,4 +1300,5 @@ menu1_dealer_list:On('Select', function(_)
             })
         end
     end)
-end)
+    AdminMenuShim.OpenMenu(menu6)
+end
