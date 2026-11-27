@@ -96,10 +96,7 @@ if type(exports) == 'function' then
     exports(AdminMenuSpecs.EXPORT_METHOD, dispatchAdminMenuIntent)
 end
 
--- Main Menus (pending per-screen migration)
-local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
-
---Sub Menus
+--Sub Menus (pending per-screen migration)
 local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
 
 local toggleState = {
@@ -455,73 +452,23 @@ customMenuHandlers['adminmenu:action:veh_command'] = function(ctx)
     return { ok = true, dispatched = 'veh_command', cmd = cmd }
 end
 
-legacyBridges['adminmenu:open:menu7'] = function() AdminMenuShim.OpenMenu(menu7) end
+customMenuHandlers['adminmenu:open:menu7'] = function()
+    return {
+        ok = true,
+        spec = AdminMenuSpecs.BuildMenu7(Lang, {
+            coords = showCoords,
+            veh_dev = vehicleDevMode,
+            hud_dev = developermode,
+            noclip = toggleState.noclip,
+        }),
+    }
+end
+
+legacyBridges['adminmenu:open:menu14'] = function() AdminMenuShim.OpenMenu(menu14) end
 
 RegisterNetEvent('qb-admin:client:openMenu', function()
     openCustomMenu(AdminMenuSpecs.BuildMenu1(Lang))
 end)
-
---[[
-    Sub Menus for the above main menu's
---]]
-
--- Developer Options Menu Buttons
-local menu7_dev_copy_vec3 = menu7:AddButton({
-    icon = '📋',
-    label = Lang:t('menu.copy_vector3'),
-    value = 'coords',
-    description = Lang:t('desc.vector3_desc')
-})
-
-local menu7_dev_copy_vec4 = menu7:AddButton({
-    icon = '📋',
-    label = Lang:t('menu.copy_vector4'),
-    value = 'coords',
-    description = Lang:t('desc.vector4_desc')
-})
-
-local menu7_dev_copy_heading = menu7:AddButton({
-    icon = '📋',
-    label = Lang:t('menu.copy_heading'),
-    value = 'heading',
-    description = Lang:t('desc.copy_heading_desc')
-})
-
-local menu7_dev_toggle_coords = menu7:AddCheckbox({
-    icon = '📍',
-    label = Lang:t('menu.display_coords'),
-    value = nil,
-    description = Lang:t('desc.display_coords_desc')
-})
-
-local menu7_dev_vehicle_mode = menu7:AddCheckbox({
-    icon = '🚘',
-    label = Lang:t('menu.vehicle_dev_mode'),
-    value = nil,
-    description = Lang:t('desc.vehicle_dev_mode_desc')
-})
-
-local menu7_dev_info_mode = menu7:AddCheckbox({
-    icon = '⚫',
-    label = Lang:t('menu.hud_dev_mode'),
-    value = nil,
-    description = Lang:t('desc.hud_dev_mode_desc')
-})
-
-local menu7_dev_noclip = menu7:AddCheckbox({
-    icon = '🎥',
-    label = Lang:t('menu.noclip'),
-    value = nil,
-    description = Lang:t('desc.noclip_desc')
-})
-
---create dev entity view
-menu7:AddButton({
-    icon = '🔍',
-    label = Lang:t('menu.entity_view_options'),
-    value = menu14,
-    description = Lang:t('desc.entity_view_desc')
-})
 
 --[[
     QB Core Admin Menu button functions below.
@@ -719,16 +666,6 @@ local entity_view_object = menu14:AddCheckbox({
     description = Lang:t('desc.entity_view_objects_desc')
 })
 
-menu7_dev_info_mode:On('change', function(_, _, _)
-    developermode = not developermode
-    TriggerEvent('qb-admin:client:ToggleDevmode')
-    if developermode then
-        SetPlayerInvincible(PlayerId(), true)
-    else
-        SetPlayerInvincible(PlayerId(), false)
-    end
-end)
-
 entity_view_freeaim:On('change', function(_, _, _)
     ToggleEntityFreeView()
 end)
@@ -860,32 +797,40 @@ RegisterNetEvent('qb-admin:client:ToggleCoords', function()
     ToggleShowCoordinates()
 end)
 
-menu7_dev_copy_vec3:On('select', function()
-    CopyToClipboard('coords3')
-end)
+customMenuHandlers['adminmenu:action:copy'] = function(ctx)
+    local dataType = type(ctx.args) == 'table' and ctx.args.dataType or nil
+    if type(dataType) ~= 'string' or #dataType == 0 then
+        return { ok = false, reason = 'missing_copy_type' }
+    end
+    CopyToClipboard(dataType)
+    return { ok = true, dispatched = 'copy', dataType = dataType }
+end
 
-menu7_dev_copy_vec4:On('select', function()
-    CopyToClipboard('coords4')
-end)
+toggleOptionHandlers.coords = function(ctx)
+    local nextVal = resolveNextBool(showCoords, ctx)
+    if nextVal ~= showCoords then
+        ToggleShowCoordinates()
+    end
+end
 
-menu7_dev_copy_heading:On('select', function()
-    CopyToClipboard('heading')
-end)
+toggleOptionHandlers.veh_dev = function(ctx)
+    local nextVal = resolveNextBool(vehicleDevMode, ctx)
+    if nextVal ~= vehicleDevMode then
+        ToggleVehicleDeveloperMode()
+    end
+end
+
+toggleOptionHandlers.hud_dev = function(ctx)
+    local nextVal = resolveNextBool(developermode, ctx)
+    if nextVal ~= developermode then
+        developermode = nextVal
+        TriggerEvent('qb-admin:client:ToggleDevmode')
+        SetPlayerInvincible(PlayerId(), developermode == true)
+    end
+end
 
 entity_view_copy_info:On('select', function()
     CopyToClipboard('freeaimEntity')
-end)
-
-menu7_dev_vehicle_mode:On('change', function()
-    ToggleVehicleDeveloperMode()
-end)
-
-menu7_dev_noclip:On('change', function(_, _, _)
-    ToggleNoClip()
-end)
-
-menu7_dev_toggle_coords:On('change', function()
-    ToggleShowCoordinates()
 end)
 
 entity_view_distance:On('select', function(_, value)

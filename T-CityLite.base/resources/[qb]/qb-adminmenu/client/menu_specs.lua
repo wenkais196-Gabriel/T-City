@@ -972,4 +972,94 @@ function AdminMenuSpecs.BuildDealerDeleteConfirm(lang, dealer)
     }
 end
 
+function AdminMenuSpecs.BuildMenu7(lang, state)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local s = state or {}
+    return {
+        id = 'qb_adminmenu_menu7',
+        title = tr('menu.developer_options'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.developer_options') },
+        items = {
+            {
+                id = 'copy_vec3',
+                kind = 'action',
+                icon = '📋',
+                label = tr('menu.copy_vector3'),
+                description = tr('desc.vector3_desc'),
+                intent = 'adminmenu:action:copy',
+                args = { dataType = 'coords3' },
+            },
+            {
+                id = 'copy_vec4',
+                kind = 'action',
+                icon = '📋',
+                label = tr('menu.copy_vector4'),
+                description = tr('desc.vector4_desc'),
+                intent = 'adminmenu:action:copy',
+                args = { dataType = 'coords4' },
+            },
+            {
+                id = 'copy_heading',
+                kind = 'action',
+                icon = '📋',
+                label = tr('menu.copy_heading'),
+                description = tr('desc.copy_heading_desc'),
+                intent = 'adminmenu:action:copy',
+                args = { dataType = 'heading' },
+            },
+            {
+                id = 'display_coords',
+                kind = 'toggle',
+                icon = '📍',
+                label = tr('menu.display_coords'),
+                description = tr('desc.display_coords_desc'),
+                checked = s.coords == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'coords' },
+            },
+            {
+                id = 'vehicle_dev_mode',
+                kind = 'toggle',
+                icon = '🚘',
+                label = tr('menu.vehicle_dev_mode'),
+                description = tr('desc.vehicle_dev_mode_desc'),
+                checked = s.veh_dev == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'veh_dev' },
+            },
+            {
+                id = 'hud_dev_mode',
+                kind = 'toggle',
+                icon = '⚫',
+                label = tr('menu.hud_dev_mode'),
+                description = tr('desc.hud_dev_mode_desc'),
+                checked = s.hud_dev == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'hud_dev' },
+            },
+            {
+                id = 'dev_noclip',
+                kind = 'toggle',
+                icon = '🎥',
+                label = tr('menu.noclip'),
+                description = tr('desc.noclip_desc'),
+                checked = s.noclip == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'noclip' },
+            },
+            {
+                id = 'entity_view_options',
+                kind = 'nav',
+                icon = '🔍',
+                label = tr('menu.entity_view_options'),
+                description = tr('desc.entity_view_desc'),
+                intent = 'adminmenu:open:menu14',
+            },
+        },
+    }
+end
+
 return AdminMenuSpecs
