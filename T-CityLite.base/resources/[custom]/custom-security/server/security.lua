@@ -71,7 +71,13 @@ AddEventHandler('playerDropped', function(reason)
             'UPDATE players SET metadata = ? WHERE citizenid = ?', 
             { json.encode(currentMetadata), cid }, 
             function(rowsChanged)
-                if rowsChanged and rowsChanged > 0 then
+                -- oxmysql 定制版 update 的返回**两种形状**：数字，或 { affectedRows = n }。
+                -- 直接 `rowsChanged > 0` 拿表比数字会抛错，继而连锁成
+                -- `oxmysql Error in nested ref call ... the reference wasn't valid`
+                -- （2026-11-27 真机日志）。这里统一取数字。
+                local affected = type(rowsChanged) == 'number' and rowsChanged
+                    or (type(rowsChanged) == 'table' and tonumber(rowsChanged.affectedRows) or 0)
+                if affected and affected > 0 then
                     DebugPrint(("Persistent metadata saved for logged CID %s due to Combat Logging"):format(cid))
                 end
             end
