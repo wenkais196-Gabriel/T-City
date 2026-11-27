@@ -595,6 +595,14 @@ export async function openIndustry(page, surface = 'phone') {
   await tile.click();
   try {
     await page.locator('.industry-app').waitFor({ state: 'visible', timeout: 5000 });
+    // 光等容器出现不够：容器先画出"加载中…"，快照是下一轮 NUI 往返才填进来的。
+    // CI（慢 runner）上这一步常被读到 loading 态，断言就拿着"加载中…"去比文案了
+    // （2026-11-27 CI 实测 4 failed，本地 0 failed）。这里显式等快照落地。
+    await waitFor(
+      async () => !(((await page.locator('.industry-app').textContent()) ?? '').includes('加载中')),
+      10000,
+      '产业 App 必须结束加载态（快照来自 appQuery:snapshot）',
+    );
   } catch {
     throw new CheckError('点击产业图标后没有进入产业页', {
       期望: '出现 .industry-app（appRegistry 里 industry → Industry.svelte）',
