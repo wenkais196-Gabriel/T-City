@@ -1,1027 +1,573 @@
-local banlength = nil
 local developermode = false
 local showCoords = false
 local vehicleDevMode = false
-local banreason = 'Unknown'
-local kickreason = 'Unknown'
 local menuLocation = 'topright' -- e.g. topright (default), topleft, bottomright, bottomleft
 
--- Main Menus
-local menu1 = MenuV:CreateMenu(false, Lang:t('menu.admin_menu'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test1')
-local menu2 = MenuV:CreateMenu(false, Lang:t('menu.admin_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test2')
-local menu3 = MenuV:CreateMenu(false, Lang:t('menu.manage_server'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test3')
-local menu4 = MenuV:CreateMenu(false, Lang:t('menu.online_players'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test4')
-local menu5 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test5')
-local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test6')
-local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
+local CUSTOM_MENU_RESOURCE = 'custom-menu'
+local customMenuHandlers = {}
 
---Sub Menus
-local menu8 = MenuV:CreateMenu(false, Lang:t('menu.weather_conditions'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test8')
-local menu9 = MenuV:CreateMenu(false, Lang:t('menu.ban'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test9')
-local menu10 = MenuV:CreateMenu(false, Lang:t('menu.kick'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test10')
-local menu11 = MenuV:CreateMenu(false, Lang:t('menu.permissions'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test11')
-local menu12 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_categories'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test12')
-local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test13')
-local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
-local menu15 = MenuV:CreateMenu(false, Lang:t('menu.spawn_weapons'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test15')
+local function getCustomMenuApi()
+    if type(GetResourceState) == 'function' and GetResourceState(CUSTOM_MENU_RESOURCE) ~= 'started' then
+        return nil
+    end
+    local ok, api = pcall(function()
+        return exports[CUSTOM_MENU_RESOURCE]
+    end)
+    if ok and api then
+        return api
+    end
+    return nil
+end
+
+local function ensureCustomMenuIntents()
+    local api = getCustomMenuApi()
+    if not api or api.RegisterIntent == nil then
+        return false
+    end
+    for _, intentId in ipairs(AdminMenuSpecs.INTENTS) do
+        local route = {
+            type = 'resource',
+            resource = AdminMenuSpecs.RESOURCE,
+            method = AdminMenuSpecs.EXPORT_METHOD,
+        }
+        local ok, regOk = pcall(api.RegisterIntent, api, intentId, route)
+        if not ok or regOk == false then
+            return false
+        end
+    end
+    return true
+end
+
+local function isCustomMenuOpen()
+    local api = getCustomMenuApi()
+    if not api or api.IsOpen == nil then
+        return false
+    end
+    local ok, open = pcall(api.IsOpen, api)
+    return ok and open == true
+end
+
+local function closeCustomMenu(reason)
+    local api = getCustomMenuApi()
+    if not api or api.Close == nil then
+        return false
+    end
+    local ok, closed = pcall(api.Close, api, reason or 'qb_adminmenu_close')
+    return ok and closed == true
+end
+
+local function openCustomMenu(spec)
+    local api = getCustomMenuApi()
+    if not api or api.Open == nil then
+        return false, 'custom_menu_unavailable'
+    end
+    ensureCustomMenuIntents()
+    local okCall, opened, err = pcall(api.Open, api, spec, {
+        knownIntents = AdminMenuSpecs.KnownIntents(),
+    })
+    if not okCall then
+        return false, tostring(opened)
+    end
+    if not opened then
+        if err == 'custom_ui_taken' and QBCore and QBCore.Functions and QBCore.Functions.Notify then
+            QBCore.Functions.Notify('Close the active UI before opening Admin Menu', 'error')
+        end
+        return false, err
+    end
+    return true, nil
+end
+
+local function dispatchAdminMenuIntent(intent, ctx)
+    local handler = customMenuHandlers[intent]
+    if handler then
+        return handler(ctx or {})
+    end
+    return { ok = false, reason = 'unhandled_intent' }
+end
+
+if exports ~= nil then
+    exports(AdminMenuSpecs.EXPORT_METHOD, dispatchAdminMenuIntent)
+end
+
+local toggleState = {
+    noclip = false,
+    invisible = false,
+    godmode = false,
+    godmodeLoop = false,
+    names = false,
+    blips = false,
+    ev_freeaim = false,
+    ev_vehicle = false,
+    ev_ped = false,
+    ev_object = false,
+}
+local toggleOptionHandlers = {}
+
+local function resolveNextBool(current, ctx)
+    if ctx and type(ctx.values) == 'table' and type(ctx.values.checked) == 'boolean' then
+        return ctx.values.checked
+    end
+    return not current
+end
+
+customMenuHandlers['adminmenu:open:menu1'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu1(Lang) }
+end
+
+customMenuHandlers['adminmenu:open:menu2'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu2(Lang, toggleState) }
+end
+
+customMenuHandlers['adminmenu:action:toggle_option'] = function(ctx)
+    local option = type(ctx.args) == 'table' and ctx.args.option or nil
+    local fn = option and toggleOptionHandlers[option] or nil
+    if not fn then
+        return { ok = false, reason = 'unknown_toggle_option' }
+    end
+    fn(ctx)
+    return { ok = true, dispatched = 'toggle', option = option }
+end
+
+customMenuHandlers['adminmenu:action:revive_self'] = function()
+    TriggerEvent('hospital:client:Revive', PlayerPedId())
+    return { ok = true, dispatched = 'revive_self' }
+end
+
+customMenuHandlers['adminmenu:open:menu15'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu15(Lang) }
+end
+
+customMenuHandlers['adminmenu:action:give_weapon'] = function(ctx)
+    local weaponName = type(ctx.args) == 'table' and ctx.args.weapon or nil
+    if type(weaponName) ~= 'string' or #weaponName == 0 then
+        return { ok = false, reason = 'missing_weapon' }
+    end
+    TriggerServerEvent('qb-admin:giveWeapon', weaponName)
+    QBCore.Functions.Notify(Lang:t('success.spawn_weapon'))
+    return { ok = true, dispatched = 'give_weapon' }
+end
+
+customMenuHandlers['adminmenu:open:menu3'] = function()
+    local hour = type(GetClockHours) == 'function' and GetClockHours() or 12
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu3(Lang, hour) }
+end
+
+customMenuHandlers['adminmenu:open:menu3_time'] = function()
+    local hour = type(GetClockHours) == 'function' and GetClockHours() or 12
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu3Time(Lang, hour) }
+end
+
+customMenuHandlers['adminmenu:open:menu8'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu8(Lang) }
+end
+
+customMenuHandlers['adminmenu:action:set_weather'] = function(ctx)
+    local args = type(ctx.args) == 'table' and ctx.args or {}
+    if type(args.value) ~= 'string' or #args.value == 0 then
+        return { ok = false, reason = 'missing_weather' }
+    end
+    TriggerServerEvent('qb-weathersync:server:setWeather', args.value)
+    QBCore.Functions.Notify(Lang:t('weather.weather_changed', { value = args.label or args.value }))
+    return { ok = true, dispatched = 'set_weather', weather = args.value }
+end
+
+customMenuHandlers['adminmenu:action:set_time'] = function(ctx)
+    local rawVal = type(ctx.values) == 'table' and ctx.values.value or nil
+    local hr = tonumber(rawVal)
+    if not hr then
+        return { ok = false, reason = 'invalid_hour' }
+    end
+    hr = math.floor(hr + 0.5)
+    if hr < 0 then hr = 0 elseif hr > 23 then hr = 23 end
+    local timeStr = ('%02d'):format(hr)
+    TriggerServerEvent('qb-weathersync:server:setTime', timeStr, timeStr)
+    QBCore.Functions.Notify(Lang:t('time.changed', { time = timeStr }))
+    return { ok = true, dispatched = 'set_time', hour = timeStr }
+end
+
+local playersByKey = {}
+local activePlayer = nil
+local dealersByName = {}
+local activeDealer = nil
+local pendingBan = nil
+local pendingPermsGroup = nil
+
+local function runSyncOrAsyncCallback(cbName, args, buildSpecFn)
+    local resolvedSpec = nil
+    local callbackExited = false
+    local function handleResult(...)
+        local spec, ok = buildSpecFn(...)
+        if ok == false then
+            if not callbackExited then
+                resolvedSpec = false
+            else
+                closeCustomMenu('callback_denied')
+            end
+            return
+        end
+        if not callbackExited then
+            resolvedSpec = spec
+        elseif isCustomMenuOpen() then
+            openCustomMenu(spec)
+        end
+    end
+
+    if args ~= nil then
+        QBCore.Functions.TriggerCallback(cbName, handleResult, args)
+    else
+        QBCore.Functions.TriggerCallback(cbName, handleResult)
+    end
+    callbackExited = true
+
+    if resolvedSpec == false then
+        return { ok = false, reason = 'callback_denied' }
+    end
+    if resolvedSpec then
+        return { ok = true, spec = resolvedSpec }
+    end
+    return { ok = true, dispatched = 'async_pending' }
+end
+
+customMenuHandlers['adminmenu:open:menu4'] = function()
+    return runSyncOrAsyncCallback('test:getplayers', nil, function(players)
+        playersByKey = {}
+        for idx, v in pairs(players or {}) do
+            if type(v) == 'table' then
+                local key = tostring(v.id or idx)
+                playersByKey[key] = v
+            end
+        end
+        return AdminMenuSpecs.BuildMenu4(Lang, players), true
+    end)
+end
+
+customMenuHandlers['adminmenu:open:player'] = function(ctx)
+    local key = type(ctx.args) == 'table' and ctx.args.playerKey or nil
+    if key ~= nil then
+        local selected = playersByKey[tostring(key)]
+        if not selected then
+            return { ok = false, reason = 'player_not_found' }
+        end
+        activePlayer = selected
+    end
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildPlayerMenu(Lang, activePlayer) }
+end
+
+customMenuHandlers['adminmenu:action:player_action'] = function(ctx)
+    local act = type(ctx.args) == 'table' and ctx.args.action or nil
+    if type(act) ~= 'string' or #act == 0 or not activePlayer then
+        return { ok = false, reason = 'missing_player_action' }
+    end
+    TriggerServerEvent('qb-admin:server:' .. act, activePlayer)
+    return { ok = true, dispatched = 'player_action', action = act }
+end
+
+customMenuHandlers['adminmenu:open:menu10'] = function()
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu10(Lang, activePlayer) }
+end
+
+customMenuHandlers['adminmenu:action:kick_submit'] = function(ctx)
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    local rawReason = type(ctx.values) == 'table' and ctx.values.reason or ''
+    local reason = tostring(rawReason):match('^%s*(.-)%s*$')
+    if #reason == 0 or reason == 'Unknown' then
+        QBCore.Functions.Notify(Lang:t('error.missing_reason'), 'error')
+        return { ok = false, reason = 'missing_reason' }
+    end
+    TriggerServerEvent('qb-admin:server:kick', activePlayer, reason)
+    closeCustomMenu('kick_submitted')
+    return { ok = true, dispatched = 'kick' }
+end
+
+customMenuHandlers['adminmenu:open:menu9'] = function()
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    pendingBan = nil
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu9(Lang, activePlayer) }
+end
+
+customMenuHandlers['adminmenu:open:menu9_form'] = function(ctx)
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    local args = type(ctx.args) == 'table' and ctx.args or {}
+    pendingBan = {
+        custom = args.custom == true,
+        length = args.length,
+        label = args.label,
+    }
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu9Form(Lang, activePlayer, pendingBan) }
+end
+
+customMenuHandlers['adminmenu:action:ban_submit'] = function(ctx)
+    if not activePlayer or not pendingBan then
+        return { ok = false, reason = 'no_active_ban_target' }
+    end
+    local values = type(ctx.values) == 'table' and ctx.values or {}
+    local reason = tostring(values.reason or ''):match('^%s*(.-)%s*$')
+    local banLength = pendingBan.custom and tonumber(values.length) or pendingBan.length
+    if #reason == 0 or reason == 'Unknown' or banLength == nil or (type(banLength) == 'number' and banLength <= 0) then
+        QBCore.Functions.Notify(Lang:t('error.invalid_reason_length_ban'), 'error')
+        return { ok = false, reason = 'invalid_ban_input' }
+    end
+    TriggerServerEvent('qb-admin:server:ban', activePlayer, banLength, reason)
+    pendingBan = nil
+    closeCustomMenu('ban_submitted')
+    return { ok = true, dispatched = 'ban' }
+end
+
+customMenuHandlers['adminmenu:open:menu11'] = function()
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    return runSyncOrAsyncCallback('qb-admin:server:getrank', nil, function(rank)
+        if not rank then
+            return nil, false
+        end
+        pendingPermsGroup = nil
+        return AdminMenuSpecs.BuildMenu11(Lang, activePlayer), true
+    end)
+end
+
+customMenuHandlers['adminmenu:open:menu11_confirm'] = function(ctx)
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    local args = type(ctx.args) == 'table' and ctx.args or {}
+    if type(args.rank) ~= 'string' or #args.rank == 0 then
+        return { ok = false, reason = 'missing_rank' }
+    end
+    pendingPermsGroup = { { rank = args.rank, label = args.label or args.rank } }
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu11Confirm(Lang, activePlayer, args) }
+end
+
+customMenuHandlers['adminmenu:action:perms_confirm'] = function()
+    if not activePlayer or type(pendingPermsGroup) ~= 'table' then
+        QBCore.Functions.Notify(Lang:t('error.changed_perm_failed'), 'error')
+        return { ok = false, reason = 'missing_perm_group' }
+    end
+    TriggerServerEvent('qb-admin:server:setPermissions', activePlayer.id, pendingPermsGroup)
+    QBCore.Functions.Notify(Lang:t('success.changed_perm'), 'success')
+    pendingPermsGroup = nil
+    return { ok = true, dispatched = 'set_permissions' }
+end
+
+customMenuHandlers['adminmenu:open:menu5'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu5(Lang) }
+end
+
+customMenuHandlers['adminmenu:open:menu12'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu12(Lang, QBCore and QBCore.Shared) }
+end
+
+customMenuHandlers['adminmenu:open:menu13'] = function(ctx)
+    local catName = type(ctx.args) == 'table' and ctx.args.category or nil
+    if type(catName) ~= 'string' or #catName == 0 then
+        return { ok = false, reason = 'missing_vehicle_category' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu13(Lang, catName, QBCore and QBCore.Shared) }
+end
+
+customMenuHandlers['adminmenu:open:menu6'] = function()
+    return runSyncOrAsyncCallback('test:getdealers', nil, function(dealers)
+        dealersByName = {}
+        for _, v in pairs(dealers or {}) do
+            if type(v) == 'table' and v['name'] ~= nil then
+                dealersByName[tostring(v['name'])] = v
+            end
+        end
+        return AdminMenuSpecs.BuildMenu6(Lang, dealers), true
+    end)
+end
+
+customMenuHandlers['adminmenu:open:dealer'] = function(ctx)
+    local name = type(ctx.args) == 'table' and ctx.args.dealerName or nil
+    if name ~= nil then
+        local selected = dealersByName[tostring(name)]
+        if not selected then
+            return { ok = false, reason = 'dealer_not_found' }
+        end
+        activeDealer = selected
+    end
+    if not activeDealer then
+        return { ok = false, reason = 'no_active_dealer' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildDealerMenu(Lang, activeDealer) }
+end
+
+customMenuHandlers['adminmenu:open:dealer_delete_confirm'] = function()
+    if not activeDealer then
+        return { ok = false, reason = 'no_active_dealer' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildDealerDeleteConfirm(Lang, activeDealer) }
+end
+
+customMenuHandlers['adminmenu:action:dealer_goto'] = function()
+    if not activeDealer then
+        return { ok = false, reason = 'no_active_dealer' }
+    end
+    TriggerServerEvent('QBCore:CallCommand', 'dealergoto', { activeDealer['name'] })
+    return { ok = true, dispatched = 'dealer_goto' }
+end
+
+customMenuHandlers['adminmenu:action:dealer_delete'] = function()
+    if not activeDealer then
+        return { ok = false, reason = 'no_active_dealer' }
+    end
+    TriggerServerEvent('QBCore:CallCommand', 'deletedealer', { activeDealer['name'] })
+    activeDealer = nil
+    closeCustomMenu('dealer_deleted')
+    return { ok = true, dispatched = 'dealer_delete' }
+end
+
+customMenuHandlers['adminmenu:action:veh_command'] = function(ctx)
+    local args = type(ctx.args) == 'table' and ctx.args or {}
+    local cmd = args.cmd
+    if type(cmd) ~= 'string' or #cmd == 0 then
+        return { ok = false, reason = 'missing_veh_command' }
+    end
+    if cmd == 'car' then
+        if type(args.model) ~= 'string' or #args.model == 0 then
+            return { ok = false, reason = 'missing_vehicle_model' }
+        end
+        TriggerServerEvent('QBCore:CallCommand', 'car', { args.model })
+    else
+        TriggerServerEvent('QBCore:CallCommand', cmd, {})
+    end
+    return { ok = true, dispatched = 'veh_command', cmd = cmd }
+end
+
+customMenuHandlers['adminmenu:open:menu7'] = function()
+    return {
+        ok = true,
+        spec = AdminMenuSpecs.BuildMenu7(Lang, {
+            coords = showCoords,
+            veh_dev = vehicleDevMode,
+            hud_dev = developermode,
+            noclip = toggleState.noclip,
+        }),
+    }
+end
+
+local function currentEntityDistanceMeters()
+    local units = type(GetCurrentEntityViewDistance) == 'function' and GetCurrentEntityViewDistance() or 2
+    return (tonumber(units) or 2) * 5
+end
+
+customMenuHandlers['adminmenu:open:menu14'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu14(Lang, toggleState, currentEntityDistanceMeters()) }
+end
+
+customMenuHandlers['adminmenu:open:menu14_distance'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu14Distance(Lang, currentEntityDistanceMeters()) }
+end
+
+customMenuHandlers['adminmenu:action:set_entity_distance'] = function(ctx)
+    local raw = type(ctx.values) == 'table' and ctx.values.value or nil
+    local meters = tonumber(raw)
+    if not meters then
+        return { ok = false, reason = 'invalid_distance' }
+    end
+    meters = math.floor((meters + 2.5) / 5) * 5
+    if meters < 5 then meters = 5 elseif meters > 50 then meters = 50 end
+    SetEntityViewDistance(tostring(meters))
+    QBCore.Functions.Notify(Lang:t('info.entity_view_distance', { distance = tostring(meters) }))
+    return { ok = true, dispatched = 'set_entity_distance', distance = meters }
+end
 
 RegisterNetEvent('qb-admin:client:openMenu', function()
-    -- #353: 先问 custom-ui 的输入栈（手机/中控开着时拒绝叠窗），再入栈
-    AdminMenuShim.OpenMenu(menu1)
+    openCustomMenu(AdminMenuSpecs.BuildMenu1(Lang))
 end)
-
---[[
-    Main menu buttons
---]]
--- Admin options
-menu1:AddButton({
-    icon = '😃',
-    label = Lang:t('menu.admin_options'),
-    value = menu2,
-    description = Lang:t('desc.admin_options_desc')
-})
-
---player management
-local player_management = menu1:AddButton({
-    icon = '🙍‍♂️',
-    label = Lang:t('menu.player_management'),
-    value = menu4,
-    description = Lang:t('desc.player_management_desc')
-})
-
---server management
-menu1:AddButton({
-    icon = '🎮',
-    label = Lang:t('menu.server_management'),
-    value = menu3,
-    description = Lang:t('desc.server_management_desc')
-})
-
---vehicle spawner
-menu1:AddButton({
-    icon = '🚗',
-    label = Lang:t('menu.vehicles'),
-    value = menu5,
-    description = Lang:t('desc.vehicles_desc')
-})
-
---dealer list
-local menu1_dealer_list = menu1:AddButton({
-    icon = '💊',
-    label = Lang:t('menu.dealer_list'),
-    value = menu6,
-    description = Lang:t('desc.dealer_desc')
-})
-
---developer options
-menu1:AddButton({
-    icon = '🔧',
-    label = Lang:t('menu.developer_options'),
-    value = menu7,
-    description = Lang:t('desc.developer_desc')
-})
-
---[[
-    Sub Menus for the above main menu's
---]]
-
--- Admin Options Menu Buttons
-local menu2_admin_noclip = menu2:AddCheckbox({
-    icon = '🎥',
-    label = Lang:t('menu.noclip'),
-    value = nil,
-    description = Lang:t('desc.noclip_desc')
-})
-
-local menu2_admin_revive = menu2:AddButton({
-    icon = '🏥',
-    label = Lang:t('menu.revive'),
-    value = 'revive',
-    description = Lang:t('desc.revive_desc')
-})
-
-local menu2_admin_invisible = menu2:AddCheckbox({
-    icon = '👻',
-    label = Lang:t('menu.invisible'),
-    value = nil,
-    description = Lang:t('desc.invisible_desc')
-})
-
-local menu2_admin_god_mode = menu2:AddCheckbox({
-    icon = '⚡',
-    label = Lang:t('menu.god'),
-    value = nil,
-    description = Lang:t('desc.god_desc')
-})
-
-local menu2_admin_display_names = menu2:AddCheckbox({
-    icon = '📋',
-    label = Lang:t('menu.names'),
-    value = nil,
-    description = Lang:t('desc.names_desc')
-})
-
-local menu2_admin_display_blips = menu2:AddCheckbox({
-    icon = '📍',
-    label = Lang:t('menu.blips'),
-    value = nil,
-    description = Lang:t('desc.blips_desc')
-})
-
---give weapons
-menu2:AddButton({
-    icon = '🎁',
-    label = Lang:t('menu.spawn_weapons'),
-    value = menu15,
-    description = Lang:t('desc.spawn_weapons_desc')
-})
-
--- Server Options Menu Buttons
-local menu3_server_weather = menu3:AddButton({
-    icon = '🌡️',
-    label = Lang:t('menu.weather_options'),
-    value = menu8,
-    description = Lang:t('desc.weather_desc')
-})
-
-local menu3_server_time = menu3:AddSlider({
-    icon = '⏲️',
-    label = Lang:t('menu.server_time'),
-    value = GetClockHours(),
-    values = { {
-        label = '00',
-        value = '00',
-        description = Lang:t('menu.time')
-    }, {
-        label = '01',
-        value = '01',
-        description = Lang:t('menu.time')
-    }, {
-        label = '02',
-        value = '02',
-        description = Lang:t('menu.time')
-    }, {
-        label = '03',
-        value = '03',
-        description = Lang:t('menu.time')
-    }, {
-        label = '04',
-        value = '04',
-        description = Lang:t('menu.time')
-    }, {
-        label = '05',
-        value = '05',
-        description = Lang:t('menu.time')
-    }, {
-        label = '06',
-        value = '06',
-        description = Lang:t('menu.time')
-    }, {
-        label = '07',
-        value = '07',
-        description = Lang:t('menu.time')
-    }, {
-        label = '08',
-        value = '08',
-        description = Lang:t('menu.time')
-    }, {
-        label = '09',
-        value = '09',
-        description = Lang:t('menu.time')
-    }, {
-        label = '10',
-        value = '10',
-        description = Lang:t('menu.time')
-    }, {
-        label = '11',
-        value = '11',
-        description = Lang:t('menu.time')
-    }, {
-        label = '12',
-        value = '12',
-        description = Lang:t('menu.time')
-    }, {
-        label = '13',
-        value = '13',
-        description = Lang:t('menu.time')
-    }, {
-        label = '14',
-        value = '14',
-        description = Lang:t('menu.time')
-    }, {
-        label = '15',
-        value = '15',
-        description = Lang:t('menu.time')
-    }, {
-        label = '16',
-        value = '16',
-        description = Lang:t('menu.time')
-    }, {
-        label = '17',
-        value = '17',
-        description = Lang:t('menu.time')
-    }, {
-        label = '18',
-        value = '18',
-        description = Lang:t('menu.time')
-    }, {
-        label = '19',
-        value = '19',
-        description = Lang:t('menu.time')
-    }, {
-        label = '20',
-        value = '20',
-        description = Lang:t('menu.time')
-    }, {
-        label = '21',
-        value = '21',
-        description = Lang:t('menu.time')
-    }, {
-        label = '22',
-        value = '22',
-        description = Lang:t('menu.time')
-    }, {
-        label = '23',
-        value = '23',
-        description = Lang:t('menu.time')
-    } }
-})
-
--- Vehicle Spawner Menu Buttons
-local menu5_vehicles_spawn = menu5:AddButton({
-    icon = '🚗',
-    label = Lang:t('menu.spawn_vehicle'),
-    value = menu12,
-    description = Lang:t('desc.spawn_vehicle_desc')
-})
-
-local menu5_vehicles_fix = menu5:AddButton({
-    icon = '🔧',
-    label = Lang:t('menu.fix_vehicle'),
-    value = 'fix',
-    description = Lang:t('desc.fix_vehicle_desc')
-})
-
-local menu5_vehicles_buy = menu5:AddButton({
-    icon = '💲',
-    label = Lang:t('menu.buy'),
-    value = 'buy',
-    description = Lang:t('desc.buy_desc')
-})
-
-local menu5_vehicles_remove = menu5:AddButton({
-    icon = '🗑️',
-    label = Lang:t('menu.remove_vehicle'),
-    value = 'remove',
-    description = Lang:t('desc.remove_vehicle_desc')
-})
-
-local menu5_vehicles_max_upgrades = menu5:AddButton({
-    icon = '⚡️',
-    label = Lang:t('menu.max_mods'),
-    value = 'maxmods',
-    description = Lang:t('desc.max_mod_desc')
-})
-
--- Developer Options Menu Buttons
-local menu7_dev_copy_vec3 = menu7:AddButton({
-    icon = '📋',
-    label = Lang:t('menu.copy_vector3'),
-    value = 'coords',
-    description = Lang:t('desc.vector3_desc')
-})
-
-local menu7_dev_copy_vec4 = menu7:AddButton({
-    icon = '📋',
-    label = Lang:t('menu.copy_vector4'),
-    value = 'coords',
-    description = Lang:t('desc.vector4_desc')
-})
-
-local menu7_dev_copy_heading = menu7:AddButton({
-    icon = '📋',
-    label = Lang:t('menu.copy_heading'),
-    value = 'heading',
-    description = Lang:t('desc.copy_heading_desc')
-})
-
-local menu7_dev_toggle_coords = menu7:AddCheckbox({
-    icon = '📍',
-    label = Lang:t('menu.display_coords'),
-    value = nil,
-    description = Lang:t('desc.display_coords_desc')
-})
-
-local menu7_dev_vehicle_mode = menu7:AddCheckbox({
-    icon = '🚘',
-    label = Lang:t('menu.vehicle_dev_mode'),
-    value = nil,
-    description = Lang:t('desc.vehicle_dev_mode_desc')
-})
-
-local menu7_dev_info_mode = menu7:AddCheckbox({
-    icon = '⚫',
-    label = Lang:t('menu.hud_dev_mode'),
-    value = nil,
-    description = Lang:t('desc.hud_dev_mode_desc')
-})
-
-local menu7_dev_noclip = menu7:AddCheckbox({
-    icon = '🎥',
-    label = Lang:t('menu.noclip'),
-    value = nil,
-    description = Lang:t('desc.noclip_desc')
-})
-
---create dev entity view
-menu7:AddButton({
-    icon = '🔍',
-    label = Lang:t('menu.entity_view_options'),
-    value = menu14,
-    description = Lang:t('desc.entity_view_desc')
-})
-
---[[
-    QB Core Admin Menu button functions below.
---]]
-
---[[
-    General Functions
---]]
-local function LocalInput(text, number, windows)
-    AddTextEntry('FMMC_MPM_NA', text)
-    DisplayOnscreenKeyboard(1, 'FMMC_MPM_NA', '', windows or '', '', '', '', number or 30)
-    while (UpdateOnscreenKeyboard() == 0) do
-        DisableAllControlActions(0)
-        Wait(0)
-    end
-
-    if (GetOnscreenKeyboardResult()) then
-        local result = GetOnscreenKeyboardResult()
-        return result
-    end
-end
-
-local function LocalInputInt(text, number, windows)
-    AddTextEntry('FMMC_MPM_NA', text)
-    DisplayOnscreenKeyboard(1, 'FMMC_MPM_NA', '', windows or '', '', '', '', number or 30)
-    while (UpdateOnscreenKeyboard() == 0) do
-        DisableAllControlActions(0)
-        Wait(0)
-    end
-    if (GetOnscreenKeyboardResult()) then
-        local result = GetOnscreenKeyboardResult()
-        return tonumber(result)
-    end
-end
 
 --[[
     Admin Options functions
 --]]
--- Toggle player name display
-menu2_admin_display_names:On('change', function()
-    TriggerEvent('qb-admin:client:toggleNames')
+AddEventHandler('qb-admin:client:toggleNames', function()
+    toggleState.names = not toggleState.names
 end)
 
--- Toggle player blip display
-menu2_admin_display_blips:On('change', function()
-    TriggerEvent('qb-admin:client:toggleBlips')
+AddEventHandler('qb-admin:client:toggleBlips', function()
+    toggleState.blips = not toggleState.blips
 end)
 
--- Toggle NoClip
-menu2_admin_noclip:On('change', function(_, _, _)
-    ToggleNoClip()
+AddEventHandler('qb-admin:client:ToggleNoClip', function()
+    toggleState.noclip = not toggleState.noclip
 end)
 
--- Revive Self
-menu2_admin_revive:On('select', function(_)
-    TriggerEvent('hospital:client:Revive', PlayerPedId())
-end)
-
--- Invisible
-local invisible = false
-menu2_admin_invisible:On('change', function(_, _, _)
-    if not invisible then
-        invisible = true
-        SetEntityVisible(PlayerPedId(), false, 0)
-    else
-        invisible = false
-        SetEntityVisible(PlayerPedId(), true, 0)
+toggleOptionHandlers.names = function(ctx)
+    local nextVal = resolveNextBool(toggleState.names, ctx)
+    if nextVal ~= toggleState.names then
+        TriggerEvent('qb-admin:client:toggleNames')
     end
-end)
+end
 
--- Godmode
-local godmode = false
-menu2_admin_god_mode:On('change', function(_, _, _)
-    godmode = not godmode
+toggleOptionHandlers.blips = function(ctx)
+    local nextVal = resolveNextBool(toggleState.blips, ctx)
+    if nextVal ~= toggleState.blips then
+        TriggerEvent('qb-admin:client:toggleBlips')
+    end
+end
 
-    if godmode then
-        while godmode do
-            Wait(0)
-            SetPlayerInvincible(PlayerId(), true)
-        end
+toggleOptionHandlers.noclip = function(ctx)
+    local nextVal = resolveNextBool(toggleState.noclip, ctx)
+    if nextVal ~= toggleState.noclip then
+        toggleState.noclip = nextVal
+        ToggleNoClip()
+    end
+end
+
+toggleOptionHandlers.invisible = function(ctx)
+    local nextVal = resolveNextBool(toggleState.invisible, ctx)
+    toggleState.invisible = nextVal
+    SetEntityVisible(PlayerPedId(), not toggleState.invisible, 0)
+end
+
+toggleOptionHandlers.godmode = function(ctx)
+    local nextVal = resolveNextBool(toggleState.godmode, ctx)
+    toggleState.godmode = nextVal
+    if toggleState.godmode and not toggleState.godmodeLoop then
+        toggleState.godmodeLoop = true
+        CreateThread(function()
+            while toggleState.godmode do
+                Wait(0)
+                SetPlayerInvincible(PlayerId(), true)
+            end
+            SetPlayerInvincible(PlayerId(), false)
+            toggleState.godmodeLoop = false
+        end)
+    elseif not toggleState.godmode then
         SetPlayerInvincible(PlayerId(), false)
     end
-end)
-
--- Weapons list
-for _, v in pairs(QBCore.Shared.Weapons) do
-    menu15:AddButton({
-        icon = '🎁',
-        label = v.label,
-        value = v.value,
-        description = Lang:t('desc.spawn_weapons_desc'),
-        select = function(_)
-            TriggerServerEvent('qb-admin:giveWeapon', v.name)
-            QBCore.Functions.Notify(Lang:t('success.spawn_weapon'))
-        end
-    })
 end
 
-
---[[
-    Player Management Options functions
---]]
--- Player List
-local function OpenPermsMenu(permsply)
-    QBCore.Functions.TriggerCallback('qb-admin:server:getrank', function(rank)
-        if rank then
-            local selectedgroup = 'Unknown'
-            AdminMenuShim.OpenMenu(menu11)
-            menu11:ClearItems()
-            menu11:AddSlider({
-                icon = '',
-                label = 'Group',
-                value = 'user',
-                values = { {
-                    label = 'User',
-                    value = 'user',
-                    description = 'Group'
-                }, {
-                    label = 'Admin',
-                    value = 'admin',
-                    description = 'Group'
-                }, {
-                    label = 'God',
-                    value = 'god',
-                    description = 'Group'
-                } },
-                change = function(_, newValue, _)
-                    local vcal = newValue
-                    if vcal == 1 then
-                        selectedgroup = {}
-                        selectedgroup[#selectedgroup + 1] = { rank = 'user', label = 'User' }
-                    elseif vcal == 2 then
-                        selectedgroup = {}
-                        selectedgroup[#selectedgroup + 1] = { rank = 'admin', label = 'Admin' }
-                    elseif vcal == 3 then
-                        selectedgroup = {}
-                        selectedgroup[#selectedgroup + 1] = { rank = 'god', label = 'God' }
-                    end
-                end
-            })
-
-            menu11:AddButton({
-                icon = '',
-                label = Lang:t('info.confirm'),
-                value = 'giveperms',
-                description = 'Give the permission group',
-                select = function(_)
-                    if selectedgroup ~= 'Unknown' then
-                        TriggerServerEvent('qb-admin:server:setPermissions', permsply.id, selectedgroup)
-                        QBCore.Functions.Notify(Lang:t('success.changed_perm'), 'success')
-                        selectedgroup = 'Unknown'
-                    else
-                        QBCore.Functions.Notify(Lang:t('error.changed_perm_failed'), 'error')
-                    end
-                end
-            })
-        else
-            MenuV:CloseMenu(menu1)
-        end
-    end)
-end
-
-local function OpenKickMenu(kickplayer)
-    AdminMenuShim.OpenMenu(menu10)
-    menu10:ClearItems()
-    menu10:AddButton({
-        icon = '',
-        label = Lang:t('info.reason'),
-        value = 'reason',
-        description = Lang:t('desc.kick_reason'),
-        select = function(_)
-            kickreason = LocalInput(Lang:t('desc.kick_reason'), 255)
-        end
-    })
-
-    menu10:AddButton({
-        icon = '',
-        label = Lang:t('info.confirm'),
-        value = 'kick',
-        description = Lang:t('desc.confirm_kick'),
-        select = function(_)
-            if kickreason ~= 'Unknown' then
-                TriggerServerEvent('qb-admin:server:kick', kickplayer, kickreason)
-                kickreason = 'Unknown'
-            else
-                QBCore.Functions.Notify(Lang:t('error.missing_reason'), 'error')
-            end
-        end
-    })
-end
-
-local function OpenBanMenu(banplayer)
-    AdminMenuShim.OpenMenu(menu9)
-    menu9:ClearItems()
-    menu9:AddButton({
-        icon = '',
-        label = Lang:t('info.reason'),
-        value = 'reason',
-        description = Lang:t('desc.ban_reason'),
-        select = function(_)
-            banreason = LocalInput(Lang:t('desc.ban_reason'), 255)
-        end
-    })
-
-    menu9:AddSlider({
-        icon = '⏲️',
-        label = Lang:t('info.length'),
-        value = '3600',
-        values = { {
-            label = Lang:t('time.onehour'),
-            value = '3600',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.sixhour'),
-            value = '21600',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.twelvehour'),
-            value = '43200',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.oneday'),
-            value = '86400',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.threeday'),
-            value = '259200',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.oneweek'),
-            value = '604800',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.onemonth'),
-            value = '2678400',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.threemonth'),
-            value = '8035200',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.sixmonth'),
-            value = '16070400',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.oneyear'),
-            value = '32140800',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.permanent'),
-            value = '99999999999',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.self'),
-            value = 'self',
-            description = Lang:t('time.ban_length')
-        } },
-        select = function(_, newValue, _)
-            if newValue == 'self' then
-                banlength = LocalInputInt('Ban Length', 11)
-            else
-                banlength = newValue
-            end
-        end
-    })
-
-    menu9:AddButton({
-        icon = '',
-        label = Lang:t('info.confirm'),
-        value = 'ban',
-        description = Lang:t('desc.confirm_ban'),
-        select = function(_)
-            if banreason ~= 'Unknown' and banlength ~= nil then
-                TriggerServerEvent('qb-admin:server:ban', banplayer, banlength, banreason)
-                banreason = 'Unknown'
-                banlength = nil
-            else
-                QBCore.Functions.Notify(Lang:t('error.invalid_reason_length_ban'), 'error')
-            end
-        end
-    })
-end
-
-local function OpenPlayerMenus(player)
-    local Players = MenuV:CreateMenu(false, player.cid .. Lang:t('info.options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv') -- Players Sub Menu
-    Players:ClearItems()
-    AdminMenuShim.OpenMenu(Players)
-    local elements = {
-        [1] = {
-            icon = '💀',
-            label = Lang:t('menu.kill'),
-            value = 'kill',
-            description = Lang:t('menu.kill') .. ' ' .. player.cid
-        },
-        [2] = {
-            icon = '🏥',
-            label = Lang:t('menu.revive'),
-            value = 'revive',
-            description = Lang:t('menu.revive') .. ' ' .. player.cid
-        },
-        [3] = {
-            icon = '🥶',
-            label = Lang:t('menu.freeze'),
-            value = 'freeze',
-            description = Lang:t('menu.freeze') .. ' ' .. player.cid
-        },
-        [4] = {
-            icon = '👀',
-            label = Lang:t('menu.spectate'),
-            value = 'spectate',
-            description = Lang:t('menu.spectate') .. ' ' .. player.cid
-        },
-        [5] = {
-            icon = '➡️',
-            label = Lang:t('info.go_to'),
-            value = 'goto',
-            description = Lang:t('info.go_to') .. ' ' .. player.cid .. Lang:t('info.position')
-        },
-        [6] = {
-            icon = '⬅️',
-            label = Lang:t('menu.bring'),
-            value = 'bring',
-            description = Lang:t('menu.bring') .. ' ' .. player.cid .. ' ' .. Lang:t('info.your_position')
-        },
-        [7] = {
-            icon = '🚗',
-            label = Lang:t('menu.sit_in_vehicle'),
-            value = 'intovehicle',
-            description = Lang:t('desc.sit_in_veh_desc') .. ' ' .. player.cid .. ' ' .. Lang:t('desc.sit_in_veh_desc2')
-        },
-        [8] = {
-            icon = '🎒',
-            label = Lang:t('menu.open_inv'),
-            value = 'inventory',
-            description = Lang:t('info.open') .. ' ' .. player.cid .. Lang:t('info.inventories')
-        },
-        [9] = {
-            icon = '👕',
-            label = Lang:t('menu.give_clothing_menu'),
-            value = 'cloth',
-            description = Lang:t('desc.clothing_menu_desc') .. ' ' .. player.cid
-        },
-        [10] = {
-            icon = '🥾',
-            label = Lang:t('menu.kick'),
-            value = 'kick',
-            description = Lang:t('menu.kick') .. ' ' .. player.cid .. ' ' .. Lang:t('info.reason')
-        },
-        [11] = {
-            icon = '🚫',
-            label = Lang:t('menu.ban'),
-            value = 'ban',
-            description = Lang:t('menu.ban') .. ' ' .. player.cid .. ' ' .. Lang:t('info.reason')
-        },
-        [12] = {
-            icon = '🎟️',
-            label = Lang:t('menu.permissions'),
-            value = 'perms',
-            description = Lang:t('info.give') .. ' ' .. player.cid .. ' ' .. Lang:t('menu.permissions')
-        }
-    }
-    for _, v in ipairs(elements) do
-        Players:AddButton({
-            icon = v.icon,
-            label = ' ' .. v.label,
-            value = v.value,
-            description = v.description,
-            select = function(btn)
-                local values = btn.Value
-                if values ~= 'ban' and values ~= 'kick' and values ~= 'perms' then
-                    TriggerServerEvent('qb-admin:server:' .. values, player)
-                elseif values == 'ban' then
-                    OpenBanMenu(player)
-                elseif values == 'kick' then
-                    OpenKickMenu(player)
-                elseif values == 'perms' then
-                    OpenPermsMenu(player)
-                end
-            end
-        })
-    end
-end
-
-player_management:On('select', function(_)
-    menu4:ClearItems()
-    QBCore.Functions.TriggerCallback('test:getplayers', function(players)
-        for _, v in pairs(players) do
-            menu4:AddButton({
-                label = Lang:t('info.id') .. v['id'] .. ' | ' .. v['name'],
-                value = v,
-                description = Lang:t('info.player_name'),
-                select = function(btn)
-                    local select = btn.Value -- get all the values from v!
-                    OpenPlayerMenus(select)  -- only pass what i select nothing else
-                end
-            })                               -- WORKS
-        end
-    end)
-end)
+-- Player Management Options functions
+-- Player Management migrated to custom-menu (menu4 / Players / menu9 / menu10 / menu11).
 
 
 --[[
     Server Options functions
 --]]
 
--- Adjust weather on change
-menu3_server_weather:On('select', function()
-    menu8:ClearItems()
-    local elements = {
-        [1] = {
-            icon = '☀️',
-            label = Lang:t('weather.extra_sunny'),
-            value = 'EXTRASUNNY',
-            description = Lang:t('weather.extra_sunny_desc')
-        },
-        [2] = {
-            icon = '☀️',
-            label = Lang:t('weather.clear'),
-            value = 'CLEAR',
-            description = Lang:t('weather.clear_desc')
-        },
-        [3] = {
-            icon = '☀️',
-            label = Lang:t('weather.neutral'),
-            value = 'NEUTRAL',
-            description = Lang:t('weather.neutral_desc')
-        },
-        [4] = {
-            icon = '🌁',
-            label = Lang:t('weather.smog'),
-            value = 'SMOG',
-            description = Lang:t('weather.smog_desc')
-        },
-        [5] = {
-            icon = '🌫️',
-            label = Lang:t('weather.foggy'),
-            value = 'FOGGY',
-            description = Lang:t('weather.foggy_desc')
-        },
-        [6] = {
-            icon = '⛅',
-            label = Lang:t('weather.overcast'),
-            value = 'OVERCAST',
-            description = Lang:t('weather.overcast_desc')
-        },
-        [7] = {
-            icon = '☁️',
-            label = Lang:t('weather.clouds'),
-            value = 'CLOUDS',
-            description = Lang:t('weather.clouds_desc')
-        },
-        [8] = {
-            icon = '🌤️',
-            label = Lang:t('weather.clearing'),
-            value = 'CLEARING',
-            description = Lang:t('weather.clearing_desc')
-        },
-        [9] = {
-            icon = '☂️',
-            label = Lang:t('weather.rain'),
-            value = 'RAIN',
-            description = Lang:t('weather.rain_desc')
-        },
-
-        [10] = {
-            icon = '⛈️',
-            label = Lang:t('weather.thunder'),
-            value = 'THUNDER',
-            description = Lang:t('weather.thunder_desc')
-        },
-        [11] = {
-            icon = '❄️',
-            label = Lang:t('weather.snow'),
-            value = 'SNOW',
-            description = Lang:t('weather.snow_desc')
-        },
-        [12] = {
-            icon = '🌨️',
-            label = Lang:t('weather.blizzard'),
-            value = 'BLIZZARD',
-            description = Lang:t('weather.blizzed_desc')
-        },
-        [13] = {
-            icon = '❄️',
-            label = Lang:t('weather.light_snow'),
-            value = 'SNOWLIGHT',
-            description = Lang:t('weather.light_snow_desc')
-        },
-        [14] = {
-            icon = '🌨️',
-            label = Lang:t('weather.heavy_snow'),
-            value = 'XMAS',
-            description = Lang:t('weather.heavy_snow_desc')
-        },
-        [15] = {
-            icon = '🎃',
-            label = Lang:t('weather.halloween'),
-            value = 'HALLOWEEN',
-            description = Lang:t('weather.halloween_desc')
-        }
-    }
-    for _, v in ipairs(elements) do
-        menu8:AddButton({
-            icon = v.icon,
-            label = v.label,
-            value = v,
-            description = v.description,
-            select = function(btn)
-                local selection = btn.Value
-                TriggerServerEvent('qb-weathersync:server:setWeather', selection.value)
-                QBCore.Functions.Notify(Lang:t('weather.weather_changed', { value = selection.label }))
-            end
-        })
-    end
-end)
-
--- Adjust time on change
-menu3_server_time:On('select', function(_, value)
-    TriggerServerEvent('qb-weathersync:server:setTime', value, value)
-    QBCore.Functions.Notify(Lang:t('time.changed', { time = value }))
-end)
+-- Server Options migrated to custom-menu (menu3 / menu8).
 
 --[[
     Vehicle Spawner functions
 --]]
 
--- Set vehicle Categories
-local vehicles = {}
-for k, v in pairs(QBCore.Shared.Vehicles) do
-    local category = v['category']
-    if vehicles[category] == nil then
-        vehicles[category] = {}
-    end
-    vehicles[category][k] = v
-end
-
--- Car Categories
-local function OpenCarModelsMenu(category)
-    menu13:ClearItems()
-    AdminMenuShim.OpenMenu(menu13)
-    for k, v in pairs(category) do
-        menu13:AddButton({
-            label = v['name'],
-            value = k,
-            description = 'Spawn ' .. v['name'],
-            select = function(_)
-                TriggerServerEvent('QBCore:CallCommand', 'car', { k })
-            end
-        })
-    end
-end
-
-menu5_vehicles_spawn:On('Select', function(_)
-    menu12:ClearItems()
-    for k, v in pairs(vehicles) do
-        menu12:AddButton({
-            label = QBCore.Shared.FirstToUpper(k),
-            value = v,
-            description = Lang:t('menu.category_name'),
-            select = function(btn)
-                local select = btn.Value
-                OpenCarModelsMenu(select)
-            end
-        })
-    end
-end)
-
-menu5_vehicles_fix:On('Select', function(_)
-    TriggerServerEvent('QBCore:CallCommand', 'fix', {})
-end)
-
-menu5_vehicles_buy:On('Select', function(_)
-    TriggerServerEvent('QBCore:CallCommand', 'admincar', {})
-end)
-
-menu5_vehicles_remove:On('Select', function(_)
-    TriggerServerEvent('QBCore:CallCommand', 'dv', {})
-end)
-
-menu5_vehicles_max_upgrades:On('Select', function(_)
-    TriggerServerEvent('QBCore:CallCommand', 'maxmods', {})
-end)
+-- Vehicle Spawner migrated to custom-menu (menu5 / menu12 / menu13).
 
 --[[
     Developer Options functions
 --]]
-local entity_view_distance = menu14:AddSlider({
-    icon = '📏',
-    label = Lang:t('menu.entity_view_distance'),
-    value = GetCurrentEntityViewDistance(),
-    values = { {
-        label = '5',
-        value = '5',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '10',
-        value = '10',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '15',
-        value = '15',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '20',
-        value = '20',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '25',
-        value = '25',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '30',
-        value = '30',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '35',
-        value = '35',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '40',
-        value = '40',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '45',
-        value = '45',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '50',
-        value = '50',
-        description = Lang:t('menu.entity_view_distance')
-    } }
-})
-
-local entity_view_copy_info = menu14:AddButton({
-    icon = '📋',
-    label = Lang:t('menu.entity_view_freeaim_copy'),
-    value = 'freeaimEntity',
-    description = Lang:t('desc.entity_view_freeaim_copy_desc')
-})
-
-local entity_view_freeaim = menu14:AddCheckbox({
-    icon = '🔫',
-    label = Lang:t('menu.entity_view_freeaim'),
-    value = nil,
-    description = Lang:t('desc.entity_view_freeaim_desc')
-})
-
-local entity_view_vehicle = menu14:AddCheckbox({
-    icon = '🚗',
-    label = Lang:t('menu.entity_view_vehicles'),
-    value = nil,
-    description = Lang:t('desc.entity_view_vehicles_desc')
-})
-
-local entity_view_ped = menu14:AddCheckbox({
-    icon = '🧍‍♂‍',
-    label = Lang:t('menu.entity_view_peds'),
-    value = nil,
-    description = Lang:t('desc.entity_view_peds_desc')
-})
-
-local entity_view_object = menu14:AddCheckbox({
-    icon = '📦',
-    label = Lang:t('menu.entity_view_objects'),
-    value = nil,
-    description = Lang:t('desc.entity_view_objects_desc')
-})
-
-menu7_dev_info_mode:On('change', function(_, _, _)
-    developermode = not developermode
-    TriggerEvent('qb-admin:client:ToggleDevmode')
-    if developermode then
-        SetPlayerInvincible(PlayerId(), true)
-    else
-        SetPlayerInvincible(PlayerId(), false)
-    end
-end)
-
-entity_view_freeaim:On('change', function(_, _, _)
-    ToggleEntityFreeView()
-end)
-
 local function CopyToClipboard(dataType)
     local ped = PlayerPedId()
     if dataType == 'coords2' then
@@ -1149,105 +695,71 @@ RegisterNetEvent('qb-admin:client:ToggleCoords', function()
     ToggleShowCoordinates()
 end)
 
-menu7_dev_copy_vec3:On('select', function()
-    CopyToClipboard('coords3')
-end)
+customMenuHandlers['adminmenu:action:copy'] = function(ctx)
+    local dataType = type(ctx.args) == 'table' and ctx.args.dataType or nil
+    if type(dataType) ~= 'string' or #dataType == 0 then
+        return { ok = false, reason = 'missing_copy_type' }
+    end
+    CopyToClipboard(dataType)
+    return { ok = true, dispatched = 'copy', dataType = dataType }
+end
 
-menu7_dev_copy_vec4:On('select', function()
-    CopyToClipboard('coords4')
-end)
+toggleOptionHandlers.coords = function(ctx)
+    local nextVal = resolveNextBool(showCoords, ctx)
+    if nextVal ~= showCoords then
+        ToggleShowCoordinates()
+    end
+end
 
-menu7_dev_copy_heading:On('select', function()
-    CopyToClipboard('heading')
-end)
+toggleOptionHandlers.veh_dev = function(ctx)
+    local nextVal = resolveNextBool(vehicleDevMode, ctx)
+    if nextVal ~= vehicleDevMode then
+        ToggleVehicleDeveloperMode()
+    end
+end
 
-entity_view_copy_info:On('select', function()
-    CopyToClipboard('freeaimEntity')
-end)
+toggleOptionHandlers.hud_dev = function(ctx)
+    local nextVal = resolveNextBool(developermode, ctx)
+    if nextVal ~= developermode then
+        developermode = nextVal
+        TriggerEvent('qb-admin:client:ToggleDevmode')
+        SetPlayerInvincible(PlayerId(), developermode == true)
+    end
+end
 
-menu7_dev_vehicle_mode:On('change', function()
-    ToggleVehicleDeveloperMode()
-end)
+toggleOptionHandlers.ev_freeaim = function(ctx)
+    local nextVal = resolveNextBool(toggleState.ev_freeaim, ctx)
+    if nextVal ~= toggleState.ev_freeaim then
+        toggleState.ev_freeaim = nextVal
+        ToggleEntityFreeView()
+    end
+end
 
-menu7_dev_noclip:On('change', function(_, _, _)
-    ToggleNoClip()
-end)
+toggleOptionHandlers.ev_vehicle = function(ctx)
+    local nextVal = resolveNextBool(toggleState.ev_vehicle, ctx)
+    if nextVal ~= toggleState.ev_vehicle then
+        toggleState.ev_vehicle = nextVal
+        ToggleEntityVehicleView()
+    end
+end
 
-menu7_dev_toggle_coords:On('change', function()
-    ToggleShowCoordinates()
-end)
+toggleOptionHandlers.ev_object = function(ctx)
+    local nextVal = resolveNextBool(toggleState.ev_object, ctx)
+    if nextVal ~= toggleState.ev_object then
+        toggleState.ev_object = nextVal
+        ToggleEntityObjectView()
+    end
+end
 
-entity_view_distance:On('select', function(_, value)
-    SetEntityViewDistance(value)
-    QBCore.Functions.Notify(Lang:t('info.entity_view_distance', { distance = value }))
-end)
-
-entity_view_vehicle:On('change', function()
-    ToggleEntityVehicleView()
-end)
-
-entity_view_object:On('change', function()
-    ToggleEntityObjectView()
-end)
-
-entity_view_ped:On('change', function()
-    ToggleEntityPedView()
-end)
+toggleOptionHandlers.ev_ped = function(ctx)
+    local nextVal = resolveNextBool(toggleState.ev_ped, ctx)
+    if nextVal ~= toggleState.ev_ped then
+        toggleState.ev_ped = nextVal
+        ToggleEntityPedView()
+    end
+end
 
 --[[
     Dealer List
 --]]
-local function OpenDealerMenu(dealer)
-    local EditDealer = MenuV:CreateMenu(false, Lang:t('menu.edit_dealer') .. dealer['name'], menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv')
-    EditDealer:ClearItems()
-    AdminMenuShim.OpenMenu(EditDealer)
-    local elements = {
-        [1] = {
-            icon = '➡️',
-            label = Lang:t('info.go_to') .. ' ' .. dealer['name'],
-            value = 'goto',
-            description = Lang:t('desc.dealergoto_desc') .. ' ' .. dealer['name']
-        },
-        [2] = {
-            icon = '☠',
-            label = Lang:t('info.remove') .. ' ' .. dealer['name'],
-            value = 'remove',
-            description = Lang:t('desc.dealerremove_desc') .. ' ' .. dealer['name']
-        }
-    }
-    for _, v in ipairs(elements) do
-        EditDealer:AddButton({
-            icon = v.icon,
-            label = ' ' .. v.label,
-            value = v.value,
-            description = v.description,
-            select = function(btn)
-                local values = btn.Value
-                if values == 'goto' then
-                    TriggerServerEvent('QBCore:CallCommand', 'dealergoto', { dealer['name'] })
-                elseif values == 'remove' then
-                    TriggerServerEvent('QBCore:CallCommand', 'deletedealer', { dealer['name'] })
-                    EditDealer:Close()
-                    menu6:Close()
-                end
-            end
-        })
-    end
-end
-
-menu1_dealer_list:On('Select', function(_)
-    menu6:ClearItems()
-    QBCore.Functions.TriggerCallback('test:getdealers', function(dealers)
-        for _, v in pairs(dealers) do
-            menu6:AddButton({
-                label = v['name'],
-                value = v,
-                description = Lang:t('menu.dealer_name'),
-                select = function(btn)
-                    local select = btn.Value
-                    OpenDealerMenu(select)
-                end
-            })
-        end
-    end)
-end)
+-- Dealer List migrated to custom-menu (menu6 / EditDealer).

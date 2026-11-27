@@ -475,7 +475,7 @@ review_by: 2027-03-31
 **触及的文件与资源**
 
 - `T-CityLite.base/resources/[qb]/qb-adminmenu/client/client.lua` — 18 处 `MenuV` 入口（census 当前值）。
-- `T-CityLite.base/resources/[qb]/qb-adminmenu/client/menu_shim.lua` — #353 的临时垫片，M6 后随 menuv 一起删除。
+- qb-adminmenu 的 `menu_shim.lua`（#353 的临时垫片）—— **M6 已随 menuv 一起删除**，本条只作历史记录。
 - `T-CityLite.base/resources/[qb]/qb-adminmenu/client/noclip.lua` — 合法禁控，迁移时保留语义。
 - `T-CityLite.base/resources/[qb]/qb-management/client/cl_boss.lua`、`cl_gang.lua`、`cl_org.lua` — 三套并存，收敛到 `cl_org.lua`。
 - `T-CityLite.base/resources/[standalone]/menuv/menuv/menuv.lua`:157 — 14 次 `RegisterKey` 最终落到的唯一 `RegisterKeyMapping`。

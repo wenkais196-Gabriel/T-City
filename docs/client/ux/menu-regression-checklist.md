@@ -48,7 +48,7 @@ review_by: 2027-02-28
 | 12 | `qb-apartments` | 公寓入口 ALT → 公寓菜单 | 任一子项 | `Esc` | 菜单关；不误触传送 |
 | 13 | `qb-cityhall` | 市政厅 NPC 交互 | 身份/工作菜单项 | `Esc` | 菜单关；不重复发证件 |
 | 14 | `qb-ambulancejob` | 医院载具菜单 | 取车项 | `Esc` | 菜单关；可移动 |
-| 15 | `qb-adminmenu` | `/admin` | 任一子项 | `Esc` | 这是 menuv 垫片（M1 #353），不走本适配层；不许回归成"Esc 呼出暂停菜单" |
+| 15 | `qb-adminmenu` | `/admin` | 任一子项 / `Kick` 表单 / `Ban` 表单 | `Backspace` 后 `Esc` | 已迁入 `custom-menu`（M6a #348）：`Backspace` 逐级退栈，`Esc` 关菜单并归还焦点（不再呼出暂停菜单），`Kick`/`Ban` 走 `form` 无全禁循环 |
 | 16 | `custom-mining` | 冶炼厂交互 → 熔炼菜单 | 任一矿石 | `Esc` | 菜单关；焦点释放 |
 | 17 | `custom-justice` | 司法菜单（律师/减刑入口） | 减刑项 | `Esc` | 菜单关；不发二次请求 |
 | 18 | `custom-cartel` | 供应商/分销商 NPC 交互 | 买卖项 → 数量表单 | 表单「取消」 | 取消回传 `nil`；不交易 |

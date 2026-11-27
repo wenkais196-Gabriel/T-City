@@ -1,17 +1,19 @@
 {
   "setnui_focus": {
-    "total": 205,
+    "total": 195,
     "resources": {
       "qb-minigames": 26,
-      "story-engine": 23,
       "custom-phone": 15,
       "custom-ui": 14,
-      "qb-target": 14,
       "qb-houses": 12,
+      "custom-menu": 11,
       "custom-quest": 10,
       "monitor": 10,
-      "custom-menu": 9,
+      "story-engine": 8,
       "tcity-dashboard": 8,
+      "qb-hud": 7,
+      "qb-target": 7,
+      "qb-inventory": 7,
       "qb-menu": 7,
       "qb-vehicleshop": 7,
       "custom-police": 6,
@@ -22,11 +24,9 @@
       "[system]": 3,
       "qb-input": 3,
       "qb-banking": 2,
-      "qb-hud": 2,
       "qb-spawn": 2,
       "qb-clothing": 2,
       "qb-fuel": 2,
-      "qb-inventory": 2,
       "qb-mechanicjob": 2,
       "oxmysql": 2,
       "custom-testing": 1
@@ -39,11 +39,11 @@
       "resources/[custom]/custom-debug/client/debug.lua:133",
       "resources/[custom]/custom-debug/client/debug.lua:97",
       "resources/[custom]/custom-debug/client/debug.lua:98",
-      "resources/[custom]/custom-menu/client/host.lua:330",
-      "resources/[custom]/custom-menu/client/host.lua:331",
-      "resources/[custom]/custom-menu/client/host.lua:335",
-      "resources/[custom]/custom-menu/client/host.lua:336",
-      "resources/[custom]/custom-menu/client/host.lua:337"
+      "resources/[custom]/custom-menu/client/host.lua:130",
+      "resources/[custom]/custom-menu/client/host.lua:131",
+      "resources/[custom]/custom-menu/client/host.lua:399",
+      "resources/[custom]/custom-menu/client/host.lua:400",
+      "resources/[custom]/custom-menu/client/host.lua:404"
     ]
   },
   "setnui_single_arg": {
@@ -65,16 +65,14 @@
     ]
   },
   "isnuifocused_read": {
-    "total": 34,
+    "total": 27,
     "resources": {
       "custom-phone": 18,
-      "story-engine": 8,
+      "story-engine": 4,
       "custom-quest": 2,
-      "qb-inventory": 2,
       "custom-debug": 1,
       "custom-ui": 1,
-      "custom-vehicles": 1,
-      "qb-target": 1
+      "custom-vehicles": 1
     },
     "samples": [
       "resources/[custom]/custom-debug/client/debug.lua:25",
@@ -92,25 +90,21 @@
     ]
   },
   "disable_all_controls": {
-    "total": 10,
+    "total": 7,
     "resources": {
-      "qb-adminmenu": 5,
+      "qb-adminmenu": 3,
       "custom-police": 1,
       "qb-spawn": 1,
-      "qb-target": 1,
       "qb-ambulancejob": 1,
       "qb-houses": 1
     },
     "samples": [
       "resources/[custom]/custom-police/client/interactions.lua:362",
-      "resources/[qb]/qb-adminmenu/client/client.lua:355",
-      "resources/[qb]/qb-adminmenu/client/client.lua:369",
       "resources/[qb]/qb-adminmenu/client/noclip.lua:42",
       "resources/[qb]/qb-adminmenu/client/noclip.lua:43",
       "resources/[qb]/qb-adminmenu/client/noclip.lua:44",
       "resources/[qb]/qb-ambulancejob/client/dead.lua:142",
-      "resources/[qb]/qb-spawn/client.lua:580",
-      "resources/[qb]/qb-target/client.lua:308"
+      "resources/[qb]/qb-spawn/client.lua:580"
     ]
   },
   "backdrop_filter": {
@@ -203,14 +197,14 @@
     ]
   },
   "qb_menu_entry": {
-    "total": 149,
+    "total": 159,
     "resources": {
       "qb-management": 22,
+      "qb-menu": 21,
       "qb-mechanicjob": 19,
       "qb-vehicleshop": 14,
       "qb-pawnshop": 13,
       "qb-clothing": 12,
-      "qb-menu": 11,
       "custom-police": 10,
       "custom-cartel": 9,
       "qb-apartments": 7,
@@ -243,14 +237,14 @@
     ]
   },
   "qb_input_entry": {
-    "total": 20,
+    "total": 21,
     "resources": {
       "qb-mechanicjob": 5,
       "qb-vehicleshop": 4,
+      "qb-input": 3,
       "qb-pawnshop": 3,
       "custom-cartel": 2,
       "custom-police": 2,
-      "qb-input": 2,
       "custom-industry": 1,
       "qb-doorlock": 1
     },
@@ -261,60 +255,61 @@
       "resources/[custom]/custom-police/client/interactions.lua:142",
       "resources/[custom]/custom-police/client/job.lua:449",
       "resources/[qb]/qb-doorlock/client/main.lua:518",
-      "resources/[qb]/qb-input/client/main.lua:35",
-      "resources/[qb]/qb-input/client/main.lua:51",
+      "resources/[qb]/qb-input/client/adapter.lua:5",
+      "resources/[qb]/qb-input/client/main.lua:53",
+      "resources/[qb]/qb-input/client/main.lua:63",
       "resources/[qb]/qb-mechanicjob/client/cosmetic.lua:304",
       "resources/[qb]/qb-mechanicjob/client/cosmetic.lua:42",
-      "resources/[qb]/qb-mechanicjob/client/cosmetic.lua:438",
       "resources/[qb]/qb-mechanicjob/client/cosmetic.lua:89"
     ]
   },
   "menuv_entry": {
-    "total": 47,
+    "total": 29,
     "resources": {
-      "menuv": 29,
-      "qb-adminmenu": 18
+      "menuv": 29
     },
     "samples": [
-      "resources/[qb]/qb-adminmenu/client/client.lua:10",
-      "resources/[qb]/qb-adminmenu/client/client.lua:11",
-      "resources/[qb]/qb-adminmenu/client/client.lua:12",
-      "resources/[qb]/qb-adminmenu/client/client.lua:13",
-      "resources/[qb]/qb-adminmenu/client/client.lua:14",
-      "resources/[qb]/qb-adminmenu/client/client.lua:15",
-      "resources/[qb]/qb-adminmenu/client/client.lua:16",
-      "resources/[qb]/qb-adminmenu/client/client.lua:19",
-      "resources/[qb]/qb-adminmenu/client/client.lua:20",
-      "resources/[qb]/qb-adminmenu/client/client.lua:21",
-      "resources/[qb]/qb-adminmenu/client/client.lua:22",
-      "resources/[qb]/qb-adminmenu/client/client.lua:23"
+      "resources/[standalone]/menuv/menuv.lua:1627",
+      "resources/[standalone]/menuv/menuv.lua:1667",
+      "resources/[standalone]/menuv/menuv.lua:1735",
+      "resources/[standalone]/menuv/menuv.lua:2007",
+      "resources/[standalone]/menuv/menuv.lua:2083",
+      "resources/[standalone]/menuv/menuv.lua:2106",
+      "resources/[standalone]/menuv/menuv.lua:2398",
+      "resources/[standalone]/menuv/menuv.lua:613",
+      "resources/[standalone]/menuv/menuv/menuv.lua:132",
+      "resources/[standalone]/menuv/menuv/menuv.lua:255",
+      "resources/[standalone]/menuv/menuv/menuv.lua:256",
+      "resources/[standalone]/menuv/menuv/menuv.lua:257"
     ]
   },
   "customui_entry": {
-    "total": 17,
+    "total": 21,
     "resources": {
       "tcity-dashboard": 4,
       "custom-ui": 2,
       "story-engine": 2,
-      "qb-adminmenu": 2,
+      "qb-hud": 2,
+      "qb-target": 2,
       "qb-garages": 2,
+      "qb-inventory": 2,
       "qb-menu": 2,
       "qb-vehicleshop": 2,
       "custom-phone": 1
     },
     "samples": [
       "resources/[custom]/custom-phone/client/main.lua:168",
-      "resources/[custom]/story-engine/client/main.lua:186",
-      "resources/[custom]/story-engine/client/main.lua:45",
-      "resources/[qb]/qb-adminmenu/client/menu_shim.lua:60",
-      "resources/[qb]/qb-adminmenu/client/menu_shim.lua:65",
+      "resources/[custom]/story-engine/client/main.lua:53",
+      "resources/[custom]/story-engine/client/main.lua:78",
       "resources/[qb]/qb-garages/client/main.lua:346",
       "resources/[qb]/qb-garages/client/main.lua:90",
+      "resources/[qb]/qb-hud/client.lua:254",
+      "resources/[qb]/qb-hud/client.lua:279",
+      "resources/[qb]/qb-inventory/client/main.lua:134",
+      "resources/[qb]/qb-inventory/client/main.lua:159",
       "resources/[qb]/qb-menu/client/main.lua:10",
-      "resources/[qb]/qb-menu/client/main.lua:19",
-      "resources/[qb]/qb-vehicleshop/client/nui.lua:155",
-      "resources/[qb]/qb-vehicleshop/client/nui.lua:27",
-      "resources/[system]/tcity-dashboard/client/main.lua:87"
+      "resources/[qb]/qb-target/client.lua:69",
+      "resources/[qb]/qb-target/client.lua:95"
     ]
   },
   "orgmenu_export": {
@@ -337,16 +332,16 @@
     ]
   },
   "client_wait_zero": {
-    "total": 222,
+    "total": 219,
     "resources": {
       "qb-core": 21,
       "monitor": 15,
-      "qb-adminmenu": 14,
       "qb-target": 13,
       "PolyZone": 13,
       "custom-police": 11,
       "custom-vehicles": 11,
       "custom-quest": 10,
+      "qb-adminmenu": 10,
       "bob74_ipl": 9,
       "qb-doorlock": 8,
       "custom-ui": 6,
@@ -382,6 +377,7 @@
       "qb-cityhall": 1,
       "qb-fuel": 1,
       "qb-houses": 1,
+      "qb-input": 1,
       "qb-lapraces": 1,
       "qb-weathersync": 1,
       "cartel-gates": 1,

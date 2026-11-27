@@ -31,19 +31,7 @@
     }
   ],
   "unintegrated_menu_ledger": {
-    "$comment": "全仓「未接入/垫片过渡」菜单系统的唯一记账位置。",
-    "entries": [
-      {
-        "id": "qb-adminmenu-menuv-shim",
-        "resource": "qb-adminmenu",
-        "file": "resources/[qb]/qb-adminmenu/client/menu_shim.lua",
-        "status": "shimmed",
-        "issue": "#353",
-        "target_milestone": "M6(#348)",
-        "reason": "qb-adminmenu 仍依赖第三方 menuv，但已通过 qb-adminmenu/client/menu_shim.lua 接入 custom-ui 输入栈（#353 止血垫片）；M6 下线 menuv 后随之一并删除",
-        "owner": "qb-adminmenu",
-        "expires": "2027-02-28"
-      }
-    ]
+    "$comment": "全仓「未接入/垫片过渡」菜单系统的唯一记账位置。M6(#348) 已将 qb-adminmenu 迁入 custom-menu 并删除 menu_shim.lua，当前归零。",
+    "entries": []
   }
 }

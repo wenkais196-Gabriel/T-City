@@ -14,11 +14,10 @@ shared_scripts {
 }
 
 client_scripts {
-    '@menuv/menuv.lua',
     'client/noclip.lua',
     'client/entity_view.lua',
     'client/blipsnames.lua',
-    'client/menu_shim.lua',
+    'client/menu_specs.lua',
     'client/client.lua',
     'client/events.lua',
     'entityhashes/entity.lua',
@@ -33,5 +32,3 @@ files {
     'html/index.html',
     'html/index.js'
 }
-
-dependency 'menuv'
