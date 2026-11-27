@@ -337,4 +337,48 @@ function AdminMenuSpecs.BuildMenu3Time(lang, hour)
     }
 end
 
+local WEATHER_OPTIONS = {
+    { id = 'extrasunny', icon = '☀️', label = 'weather.extra_sunny', value = 'EXTRASUNNY', desc = 'weather.extra_sunny_desc' },
+    { id = 'clear', icon = '☀️', label = 'weather.clear', value = 'CLEAR', desc = 'weather.clear_desc' },
+    { id = 'neutral', icon = '☀️', label = 'weather.neutral', value = 'NEUTRAL', desc = 'weather.neutral_desc' },
+    { id = 'smog', icon = '🌁', label = 'weather.smog', value = 'SMOG', desc = 'weather.smog_desc' },
+    { id = 'foggy', icon = '🌫️', label = 'weather.foggy', value = 'FOGGY', desc = 'weather.foggy_desc' },
+    { id = 'overcast', icon = '⛅', label = 'weather.overcast', value = 'OVERCAST', desc = 'weather.overcast_desc' },
+    { id = 'clouds', icon = '☁️', label = 'weather.clouds', value = 'CLOUDS', desc = 'weather.clouds_desc' },
+    { id = 'clearing', icon = '🌤️', label = 'weather.clearing', value = 'CLEARING', desc = 'weather.clearing_desc' },
+    { id = 'rain', icon = '☂️', label = 'weather.rain', value = 'RAIN', desc = 'weather.rain_desc' },
+    { id = 'thunder', icon = '⛈️', label = 'weather.thunder', value = 'THUNDER', desc = 'weather.thunder_desc' },
+    { id = 'snow', icon = '❄️', label = 'weather.snow', value = 'SNOW', desc = 'weather.snow_desc' },
+    { id = 'blizzard', icon = '🌨️', label = 'weather.blizzard', value = 'BLIZZARD', desc = 'weather.blizzed_desc' },
+    { id = 'snowlight', icon = '❄️', label = 'weather.light_snow', value = 'SNOWLIGHT', desc = 'weather.light_snow_desc' },
+    { id = 'xmas', icon = '🌨️', label = 'weather.heavy_snow', value = 'XMAS', desc = 'weather.heavy_snow_desc' },
+    { id = 'halloween', icon = '🎃', label = 'weather.halloween', value = 'HALLOWEEN', desc = 'weather.halloween_desc' },
+}
+
+function AdminMenuSpecs.BuildMenu8(lang)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local items = {}
+    for _, opt in ipairs(WEATHER_OPTIONS) do
+        local label = tr(opt.label)
+        items[#items + 1] = {
+            id = opt.id,
+            kind = 'action',
+            icon = opt.icon,
+            label = label,
+            description = tr(opt.desc),
+            intent = 'adminmenu:action:set_weather',
+            args = { value = opt.value, label = label },
+        }
+    end
+    return {
+        id = 'qb_adminmenu_menu8',
+        title = tr('menu.weather_conditions'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.manage_server'), tr('menu.weather_conditions') },
+        items = items,
+    }
+end
+
 return AdminMenuSpecs

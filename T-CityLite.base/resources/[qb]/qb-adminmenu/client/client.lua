@@ -106,7 +106,6 @@ local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 
 local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
 
 --Sub Menus
-local menu8 = MenuV:CreateMenu(false, Lang:t('menu.weather_conditions'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test8')
 local menu9 = MenuV:CreateMenu(false, Lang:t('menu.ban'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test9')
 local menu10 = MenuV:CreateMenu(false, Lang:t('menu.kick'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test10')
 local menu11 = MenuV:CreateMenu(false, Lang:t('menu.permissions'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test11')
@@ -176,6 +175,20 @@ end
 customMenuHandlers['adminmenu:open:menu3_time'] = function()
     local hour = type(GetClockHours) == 'function' and GetClockHours() or 12
     return { ok = true, spec = AdminMenuSpecs.BuildMenu3Time(Lang, hour) }
+end
+
+customMenuHandlers['adminmenu:open:menu8'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu8(Lang) }
+end
+
+customMenuHandlers['adminmenu:action:set_weather'] = function(ctx)
+    local args = type(ctx.args) == 'table' and ctx.args or {}
+    if type(args.value) ~= 'string' or #args.value == 0 then
+        return { ok = false, reason = 'missing_weather' }
+    end
+    TriggerServerEvent('qb-weathersync:server:setWeather', args.value)
+    QBCore.Functions.Notify(Lang:t('weather.weather_changed', { value = args.label or args.value }))
+    return { ok = true, dispatched = 'set_weather', weather = args.value }
 end
 
 customMenuHandlers['adminmenu:action:set_time'] = function(ctx)
@@ -697,117 +710,7 @@ end
     Server Options functions
 --]]
 
--- Adjust weather on change
-legacyBridges['adminmenu:open:menu8'] = function()
-    menu8:ClearItems()
-    local elements = {
-        [1] = {
-            icon = '☀️',
-            label = Lang:t('weather.extra_sunny'),
-            value = 'EXTRASUNNY',
-            description = Lang:t('weather.extra_sunny_desc')
-        },
-        [2] = {
-            icon = '☀️',
-            label = Lang:t('weather.clear'),
-            value = 'CLEAR',
-            description = Lang:t('weather.clear_desc')
-        },
-        [3] = {
-            icon = '☀️',
-            label = Lang:t('weather.neutral'),
-            value = 'NEUTRAL',
-            description = Lang:t('weather.neutral_desc')
-        },
-        [4] = {
-            icon = '🌁',
-            label = Lang:t('weather.smog'),
-            value = 'SMOG',
-            description = Lang:t('weather.smog_desc')
-        },
-        [5] = {
-            icon = '🌫️',
-            label = Lang:t('weather.foggy'),
-            value = 'FOGGY',
-            description = Lang:t('weather.foggy_desc')
-        },
-        [6] = {
-            icon = '⛅',
-            label = Lang:t('weather.overcast'),
-            value = 'OVERCAST',
-            description = Lang:t('weather.overcast_desc')
-        },
-        [7] = {
-            icon = '☁️',
-            label = Lang:t('weather.clouds'),
-            value = 'CLOUDS',
-            description = Lang:t('weather.clouds_desc')
-        },
-        [8] = {
-            icon = '🌤️',
-            label = Lang:t('weather.clearing'),
-            value = 'CLEARING',
-            description = Lang:t('weather.clearing_desc')
-        },
-        [9] = {
-            icon = '☂️',
-            label = Lang:t('weather.rain'),
-            value = 'RAIN',
-            description = Lang:t('weather.rain_desc')
-        },
-
-        [10] = {
-            icon = '⛈️',
-            label = Lang:t('weather.thunder'),
-            value = 'THUNDER',
-            description = Lang:t('weather.thunder_desc')
-        },
-        [11] = {
-            icon = '❄️',
-            label = Lang:t('weather.snow'),
-            value = 'SNOW',
-            description = Lang:t('weather.snow_desc')
-        },
-        [12] = {
-            icon = '🌨️',
-            label = Lang:t('weather.blizzard'),
-            value = 'BLIZZARD',
-            description = Lang:t('weather.blizzed_desc')
-        },
-        [13] = {
-            icon = '❄️',
-            label = Lang:t('weather.light_snow'),
-            value = 'SNOWLIGHT',
-            description = Lang:t('weather.light_snow_desc')
-        },
-        [14] = {
-            icon = '🌨️',
-            label = Lang:t('weather.heavy_snow'),
-            value = 'XMAS',
-            description = Lang:t('weather.heavy_snow_desc')
-        },
-        [15] = {
-            icon = '🎃',
-            label = Lang:t('weather.halloween'),
-            value = 'HALLOWEEN',
-            description = Lang:t('weather.halloween_desc')
-        }
-    }
-    for _, v in ipairs(elements) do
-        menu8:AddButton({
-            icon = v.icon,
-            label = v.label,
-            value = v,
-            description = v.description,
-            select = function(btn)
-                local selection = btn.Value
-                TriggerServerEvent('qb-weathersync:server:setWeather', selection.value)
-                QBCore.Functions.Notify(Lang:t('weather.weather_changed', { value = selection.label }))
-            end
-        })
-    end
-    AdminMenuShim.OpenMenu(menu8)
-end
+-- Server Options migrated to custom-menu (menu3 / menu8).
 
 --[[
     Vehicle Spawner functions
