@@ -213,7 +213,7 @@
 |---|---|---|---|---|---|---|
 | [T-City 客户端（FiveM / QBCore / NUI）审计](client/CLIENT_AUDIT.md) | audit | 📌 final | 2026-10-25 | — |  | `docs/client/CLIENT_AUDIT.md` |
 | [UX 工作流：调研 → 设计 → 计划 → 验收](client/ux/00-workflow.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/00-workflow.md` |
-| [管理员命令清单](client/ux/admin-commands.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/admin-commands.md` |
+| [管理员命令清单](client/ux/admin-commands.md) | manual | ✅ active | 2026-11-26 | 2027-02-28 |  | `docs/client/ux/admin-commands.md` |
 | [经济与交易 · UX 设计](client/ux/modules/economy.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/economy.md` |
 | [HUD 与状态 · UX 设计](client/ux/modules/hud.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/hud.md` |
 | [医疗与急救 · UX 设计](client/ux/modules/medical.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/medical.md` |

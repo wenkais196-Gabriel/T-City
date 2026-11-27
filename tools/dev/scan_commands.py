@@ -48,7 +48,7 @@ type: manual
 status: active
 system: ux
 owner: hermes
-updated: 2026-11-11
+updated: 2026-11-26
 review_by: 2027-02-28
 ---
 
@@ -116,10 +116,8 @@ def scan() -> list[dict]:
         for match in CALL.finditer(text):
             api, name = match.group(1), match.group(2)
             call = balanced_call(text, text.index("(", match.start()))
-            line = text[: match.start()].count("\n") + 1
             rows.append({
                 "resource": resource_of(path),
-                "where": f"{path.relative_to(REPO).as_posix()}:{line}",
                 "command": name,
                 "api": api,
                 "permission": classify(call, api),
@@ -135,15 +133,19 @@ def render(rows: list[dict]) -> str:
     lines.append(f"共 **{len(rows)}** 条命令。`权限` 列是扫描器从调用里读到的判定；"
                  "`—` 表示没读到（**新命令默认不该是 `—`**）。")
     lines.append("")
+    lines.append("> 本表**只记身份**（命令名 + 所属资源 + API + 权限），不记 `文件:行号`："
+                 "行号是派生数据，改一行注释就会漂移，而它一漂移闸门就红 —— 一天里为此多跑三次 CI。"
+                 "需要定位时用 `rg` 现场查。")
+    lines.append("")
 
     dangerous_none = [r for r in rows if r["dangerous"] and r["permission"] == "—"]
     lines.append(f"## 危险命令但没有判权：{len(dangerous_none)} 条")
     lines.append("")
     if dangerous_none:
-        lines.append("| 命令 | 位置 |")
+        lines.append("| 命令 | 资源 |")
         lines.append("|---|---|")
         for row in dangerous_none:
-            lines.append(f"| `{row['command']}` | {row['where']} |")
+            lines.append(f"| `{row['command']}` | {row['resource']} |")
     else:
         lines.append("无。")
     lines.append("")
@@ -169,11 +171,11 @@ def render(rows: list[dict]) -> str:
     for resource in sorted(by_res):
         lines.append(f"### {resource}")
         lines.append("")
-        lines.append("| 命令 | API | 权限 | 位置 |")
-        lines.append("|---|---|---|---|")
+        lines.append("| 命令 | API | 权限 |")
+        lines.append("|---|---|---|")
         for row in sorted(by_res[resource], key=lambda r: r["command"]):
             flag = " ⚠️" if row["dangerous"] and row["permission"] == "—" else ""
-            lines.append(f"| `{row['command']}`{flag} | {row['api']} | {row['permission']} | {row['where']} |")
+            lines.append(f"| `{row['command']}`{flag} | {row['api']} | {row['permission']} |")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
