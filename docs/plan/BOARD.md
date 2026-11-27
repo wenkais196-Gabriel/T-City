@@ -16,7 +16,7 @@
 | [Agent 控制平面升级计划](agent-control-plane-upgrade.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [🧪 T-City Lite 自动化测试方案](automated-testing-plan.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [计划：S5 产业 UI（快照 + Boss 菜单 + 手机只读 App）](industry-ops/05-plan.md) | active | 6 | 6 | 0 | - | 2026-11-26 |
-| [计划：S6 周期状态机 + S7 结算转生（同一片）](industry-ops/06-plan.md) | active | 6 | 6 | 0 | - | 2026-11-26 |
+| [计划：S6 周期状态机 + S7 结算转生（同一片）](industry-ops/06-plan.md) | active | 9 | 9 | 0 | - | 2026-11-26 |
 | [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 7 | 6 | 0 | S6 wip | 2026-11-17 |
 | [热狗摊：剩余工作分片计划（2026-11-17 分工版）](jobs-content/13-hotdog-remaining-plan.md) | active | 10 | 5 | 0 | C 未开始 | - |
 | [方案 B 落地计划（已拍板）](../police/B_PLAN.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
@@ -56,3 +56,7 @@
 | [调研 + 计划：任务 App 的「可发现性」与平板详情栏](../client/plans/2026-10-27-quests-app-review.md) | archived | 未登记 | 0 | 0 | - | - |
 | [车机中控的输入管线审查（2026-10-31）](../client/plans/2026-10-31-dashboard-input-pipeline.md) | archived | 未登记 | 0 | 0 | - | - |
 | [P1-5 二期施工计划：金额写路径收敛（拒绝语义）](../engineering/2026-11-foundation-p1-5b-money-path-plan.md) | final | 未登记 | 0 | 0 | - | - |
+| [下一轮（2026-12 → 2027-01）：可运营化与收口](next-wave/00-index.md) | active | 未登记 | 0 | 0 | - | - |
+| [候选清单（2026-11-27 盘点）](next-wave/01-candidates.md) | active | 未登记 | 0 | 0 | - | - |
+| [分片建议：issue 草稿（按依赖排序）](next-wave/02-shards.md) | active | 未登记 | 0 | 0 | - | - |
+| [本轮闸门：复用、新增、棘轮](next-wave/03-gates.md) | active | 未登记 | 0 | 0 | - | - |

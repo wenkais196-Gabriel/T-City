@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：335 ｜ **已登记**：335 ｜ **未登记**：0
+**文档总数**：339 ｜ **已登记**：339 ｜ **未登记**：0
 
-**状态分布**：✅ active 183 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 187 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -334,7 +334,7 @@
 | [运维手册（RUNBOOK）— T-City Lite](ops/RUNBOOK.md) | runbook | ✅ active | 2026-10-26 | 2027-01-30 |  | `docs/ops/RUNBOOK.md` |
 | [🚀 T-City 生产部署架构设计书](../T-CityLite.base/docs/design/tcity-deployment-design-spec.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/design/tcity-deployment-design-spec.md` |
 
-### meta（66）
+### meta（70）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -398,6 +398,10 @@
 | [仓库整理总方案（合并三份提案）](cleanup/PLAN.md) | plan | 📌 final | 2026-10-23 | 2027-04-30 |  | `docs/cleanup/PLAN.md` |
 | [抽象收敛施工计划（2026-11）](engineering/2026-11-abstraction-convergence-plan.md) | plan | ✅ active | 2026-11-16 | 2027-03-31 |  | `docs/engineering/2026-11-abstraction-convergence-plan.md` |
 | [2026-11 基石加固计划（P0 / P1 / P2）](engineering/2026-11-foundation-plan.md) | plan | ✅ active | 2026-11-16 | 2026-12-31 |  | `docs/engineering/2026-11-foundation-plan.md` |
+| [下一轮（2026-12 → 2027-01）：可运营化与收口](plan/next-wave/00-index.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/next-wave/00-index.md` |
+| [候选清单（2026-11-27 盘点）](plan/next-wave/01-candidates.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/next-wave/01-candidates.md` |
+| [分片建议：issue 草稿（按依赖排序）](plan/next-wave/02-shards.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/next-wave/02-shards.md` |
+| [本轮闸门：复用、新增、棘轮](plan/next-wave/03-gates.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/next-wave/03-gates.md` |
 | [T-City 服务器系统覆盖与规划缺口调研](analysis/2026-10-31-systems-coverage-survey.md) | research | 📌 final | 2026-10-31 | 2027-04-30 | ★ | `docs/analysis/2026-10-31-systems-coverage-survey.md` |
 | [T-City 抽象设计审计（2026-11-15）](archive/2026-11-abstraction-audit.md) | research | 📦 archived | 2026-11-15 | 2027-03-31 |  | `docs/archive/2026-11-abstraction-audit.md` |
 | [T-City Lite — DevOps 工作流](DEVOPS.md) | runbook | ✅ active | 2026-10-23 | 2027-01-30 |  | `docs/DEVOPS.md` |
