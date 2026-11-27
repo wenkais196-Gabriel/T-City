@@ -1,8 +1,6 @@
-local banlength = nil
 local developermode = false
 local showCoords = false
 local vehicleDevMode = false
-local banreason = 'Unknown'
 local menuLocation = 'topright' -- e.g. topright (default), topleft, bottomright, bottomleft
 
 local CUSTOM_MENU_RESOURCE = 'custom-menu'
@@ -104,7 +102,6 @@ local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 
 local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
 
 --Sub Menus
-local menu9 = MenuV:CreateMenu(false, Lang:t('menu.ban'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test9')
 local menu11 = MenuV:CreateMenu(false, Lang:t('menu.permissions'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test11')
 local menu12 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_categories'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test12')
 local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test13')
@@ -204,6 +201,7 @@ end
 
 local playersByKey = {}
 local activePlayer = nil
+local pendingBan = nil
 
 local function runSyncOrAsyncCallback(cbName, args, buildSpecFn)
     local resolvedSpec = nil
@@ -298,6 +296,44 @@ customMenuHandlers['adminmenu:action:kick_submit'] = function(ctx)
     TriggerServerEvent('qb-admin:server:kick', activePlayer, reason)
     closeCustomMenu('kick_submitted')
     return { ok = true, dispatched = 'kick' }
+end
+
+customMenuHandlers['adminmenu:open:menu9'] = function()
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    pendingBan = nil
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu9(Lang, activePlayer) }
+end
+
+customMenuHandlers['adminmenu:open:menu9_form'] = function(ctx)
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    local args = type(ctx.args) == 'table' and ctx.args or {}
+    pendingBan = {
+        custom = args.custom == true,
+        length = args.length,
+        label = args.label,
+    }
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu9Form(Lang, activePlayer, pendingBan) }
+end
+
+customMenuHandlers['adminmenu:action:ban_submit'] = function(ctx)
+    if not activePlayer or not pendingBan then
+        return { ok = false, reason = 'no_active_ban_target' }
+    end
+    local values = type(ctx.values) == 'table' and ctx.values or {}
+    local reason = tostring(values.reason or ''):match('^%s*(.-)%s*$')
+    local banLength = pendingBan.custom and tonumber(values.length) or pendingBan.length
+    if #reason == 0 or reason == 'Unknown' or banLength == nil or (type(banLength) == 'number' and banLength <= 0) then
+        QBCore.Functions.Notify(Lang:t('error.invalid_reason_length_ban'), 'error')
+        return { ok = false, reason = 'invalid_ban_input' }
+    end
+    TriggerServerEvent('qb-admin:server:ban', activePlayer, banLength, reason)
+    pendingBan = nil
+    closeCustomMenu('ban_submitted')
+    return { ok = true, dispatched = 'ban' }
 end
 
 legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
@@ -561,101 +597,6 @@ local function OpenPermsMenu(permsply)
     end)
 end
 
-local function OpenBanMenu(banplayer)
-    AdminMenuShim.OpenMenu(menu9)
-    menu9:ClearItems()
-    menu9:AddButton({
-        icon = '',
-        label = Lang:t('info.reason'),
-        value = 'reason',
-        description = Lang:t('desc.ban_reason'),
-        select = function(_)
-            banreason = LocalInput(Lang:t('desc.ban_reason'), 255)
-        end
-    })
-
-    menu9:AddSlider({
-        icon = '⏲️',
-        label = Lang:t('info.length'),
-        value = '3600',
-        values = { {
-            label = Lang:t('time.onehour'),
-            value = '3600',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.sixhour'),
-            value = '21600',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.twelvehour'),
-            value = '43200',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.oneday'),
-            value = '86400',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.threeday'),
-            value = '259200',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.oneweek'),
-            value = '604800',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.onemonth'),
-            value = '2678400',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.threemonth'),
-            value = '8035200',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.sixmonth'),
-            value = '16070400',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.oneyear'),
-            value = '32140800',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.permanent'),
-            value = '99999999999',
-            description = Lang:t('time.ban_length')
-        }, {
-            label = Lang:t('time.self'),
-            value = 'self',
-            description = Lang:t('time.ban_length')
-        } },
-        select = function(_, newValue, _)
-            if newValue == 'self' then
-                banlength = LocalInputInt('Ban Length', 11)
-            else
-                banlength = newValue
-            end
-        end
-    })
-
-    menu9:AddButton({
-        icon = '',
-        label = Lang:t('info.confirm'),
-        value = 'ban',
-        description = Lang:t('desc.confirm_ban'),
-        select = function(_)
-            if banreason ~= 'Unknown' and banlength ~= nil then
-                TriggerServerEvent('qb-admin:server:ban', banplayer, banlength, banreason)
-                banreason = 'Unknown'
-                banlength = nil
-            else
-                QBCore.Functions.Notify(Lang:t('error.invalid_reason_length_ban'), 'error')
-            end
-        end
-    })
-end
-
-legacyBridges['adminmenu:open:menu9'] = function()
-    if activePlayer then OpenBanMenu(activePlayer) end
-end
 legacyBridges['adminmenu:open:menu11'] = function()
     if activePlayer then OpenPermsMenu(activePlayer) end
 end

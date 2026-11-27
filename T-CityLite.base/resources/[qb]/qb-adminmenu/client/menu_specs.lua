@@ -525,4 +525,107 @@ function AdminMenuSpecs.BuildMenu10(lang, player)
     }
 end
 
+local BAN_PRESETS = {
+    { id = '1h', key = 'time.onehour', value = '3600' },
+    { id = '6h', key = 'time.sixhour', value = '21600' },
+    { id = '12h', key = 'time.twelvehour', value = '43200' },
+    { id = '1d', key = 'time.oneday', value = '86400' },
+    { id = '3d', key = 'time.threeday', value = '259200' },
+    { id = '1w', key = 'time.oneweek', value = '604800' },
+    { id = '1m', key = 'time.onemonth', value = '2678400' },
+    { id = '3m', key = 'time.threemonth', value = '8035200' },
+    { id = '6m', key = 'time.sixmonth', value = '16070400' },
+    { id = '1y', key = 'time.oneyear', value = '32140800' },
+    { id = 'perm', key = 'time.permanent', value = '99999999999' },
+}
+
+function AdminMenuSpecs.BuildMenu9(lang, player)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local p = type(player) == 'table' and player or {}
+    local cid = tostring(p.cid or p.name or p.id or 'Player')
+    local desc = tr('time.ban_length')
+    local items = {}
+
+    for _, preset in ipairs(BAN_PRESETS) do
+        local label = tr(preset.key)
+        items[#items + 1] = {
+            id = 'ban_' .. preset.id,
+            kind = 'nav',
+            icon = '⏲️',
+            label = label,
+            description = desc,
+            intent = 'adminmenu:open:menu9_form',
+            args = { length = preset.value, label = label, custom = false },
+        }
+    end
+
+    local selfLabel = tr('time.self')
+    items[#items + 1] = {
+        id = 'ban_self',
+        kind = 'nav',
+        icon = '⌨️',
+        label = selfLabel,
+        description = desc,
+        intent = 'adminmenu:open:menu9_form',
+        args = { custom = true, label = selfLabel },
+    }
+
+    return {
+        id = 'qb_adminmenu_menu9',
+        title = tr('menu.ban'),
+        subtitle = cid .. ' · ' .. tr('info.length'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.online_players'), cid, tr('menu.ban') },
+        items = items,
+    }
+end
+
+function AdminMenuSpecs.BuildMenu9Form(lang, player, opts)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local p = type(player) == 'table' and player or {}
+    local o = type(opts) == 'table' and opts or {}
+    local cid = tostring(p.cid or p.name or p.id or 'Player')
+    local items = {}
+
+    if o.custom then
+        items[#items + 1] = {
+            id = 'length',
+            kind = 'input',
+            inputType = 'number',
+            label = tr('info.length'),
+            placeholder = '3600',
+            hint = tr('time.ban_length'),
+            min = 1,
+            maxLength = 11,
+            required = true,
+        }
+    end
+
+    items[#items + 1] = {
+        id = 'reason',
+        kind = 'input',
+        inputType = 'text',
+        label = tr('info.reason'),
+        placeholder = tr('desc.ban_reason'),
+        hint = tr('desc.confirm_ban'),
+        required = true,
+        maxLength = 255,
+    }
+
+    return {
+        id = 'qb_adminmenu_menu9_form',
+        title = tr('menu.ban'),
+        subtitle = cid .. ' · ' .. tostring(o.label or o.length or tr('time.ban_length')),
+        surface = 'form',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.online_players'), cid, tr('menu.ban') },
+        submitLabel = tr('info.confirm'),
+        intent = 'adminmenu:action:ban_submit',
+        items = items,
+    }
+end
+
 return AdminMenuSpecs
