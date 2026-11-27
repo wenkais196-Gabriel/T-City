@@ -114,7 +114,6 @@ local menu11 = MenuV:CreateMenu(false, Lang:t('menu.permissions'), menuLocation,
 local menu12 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_categories'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test12')
 local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test13')
 local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
-local menu15 = MenuV:CreateMenu(false, Lang:t('menu.spawn_weapons'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test15')
 
 local toggleState = {
     noclip = false,
@@ -156,7 +155,20 @@ customMenuHandlers['adminmenu:action:revive_self'] = function()
     return { ok = true, dispatched = 'revive_self' }
 end
 
-legacyBridges['adminmenu:open:menu15'] = function() AdminMenuShim.OpenMenu(menu15) end
+customMenuHandlers['adminmenu:open:menu15'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu15(Lang) }
+end
+
+customMenuHandlers['adminmenu:action:give_weapon'] = function(ctx)
+    local weaponName = type(ctx.args) == 'table' and ctx.args.weapon or nil
+    if type(weaponName) ~= 'string' or #weaponName == 0 then
+        return { ok = false, reason = 'missing_weapon' }
+    end
+    TriggerServerEvent('qb-admin:giveWeapon', weaponName)
+    QBCore.Functions.Notify(Lang:t('success.spawn_weapon'))
+    return { ok = true, dispatched = 'give_weapon' }
+end
+
 legacyBridges['adminmenu:open:menu3'] = function() AdminMenuShim.OpenMenu(menu3) end
 legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
 legacyBridges['adminmenu:open:menu7'] = function() AdminMenuShim.OpenMenu(menu7) end
@@ -469,24 +481,7 @@ toggleOptionHandlers.godmode = function(ctx)
     end
 end
 
--- Weapons list
-for _, v in pairs(QBCore.Shared.Weapons) do
-    menu15:AddButton({
-        icon = '🎁',
-        label = v.label,
-        value = v.value,
-        description = Lang:t('desc.spawn_weapons_desc'),
-        select = function(_)
-            TriggerServerEvent('qb-admin:giveWeapon', v.name)
-            QBCore.Functions.Notify(Lang:t('success.spawn_weapon'))
-        end
-    })
-end
-
-
---[[
-    Player Management Options functions
---]]
+-- Player Management Options functions
 -- Player List
 local function OpenPermsMenu(permsply)
     QBCore.Functions.TriggerCallback('qb-admin:server:getrank', function(rank)

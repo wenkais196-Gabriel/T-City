@@ -224,4 +224,45 @@ function AdminMenuSpecs.BuildMenu2(lang, state)
     }
 end
 
+function AdminMenuSpecs.BuildMenu15(lang, weapons)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local src = weapons or (QBCore and QBCore.Shared and QBCore.Shared.Weapons) or {}
+    local entries = {}
+    for k, v in pairs(src) do
+        if type(v) == 'table' then
+            local name = v.name or tostring(k)
+            local label = AdminMenuSpecs.SafeLabel(v.label, name)
+            entries[#entries + 1] = { name = name, label = label }
+        end
+    end
+    table.sort(entries, function(a, b)
+        return a.label:lower() < b.label:lower()
+    end)
+
+    local items = {}
+    local desc = tr('desc.spawn_weapons_desc')
+    for idx, entry in ipairs(entries) do
+        items[#items + 1] = {
+            id = AdminMenuSpecs.SafeId('wep', idx),
+            kind = 'action',
+            icon = '🎁',
+            label = entry.label,
+            description = desc,
+            intent = 'adminmenu:action:give_weapon',
+            args = { weapon = entry.name },
+        }
+    end
+
+    return {
+        id = 'qb_adminmenu_menu15',
+        title = tr('menu.spawn_weapons'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.admin_options'), tr('menu.spawn_weapons') },
+        emptyMessage = tr('menu.spawn_weapons'),
+        items = items,
+    }
+end
+
 return AdminMenuSpecs
