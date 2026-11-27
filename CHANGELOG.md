@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **M6a —— `qb-adminmenu` 迁出 `menuv` 接入 `custom-menu` + 下线 `menuv`（#348，`qb-management` 拆分至 #385）**：
+  ① **逐屏迁移（17 张原 MenuV 菜单 + 拆出子视图全部走 MenuSpec）**：新增 `T-CityLite.base/resources/[qb]/qb-adminmenu/client/menu_specs.lua` 纯构建器与 `AdminMenuIntent` 跨资源导出，按屏迁完 `menu1`–`menu15` 及动态 `Players` / `EditDealer`——`Server Time (00..23)` 与 `Entity View Distance (5..50)` 复用 `range` surface，`Permissions` 与删 dealer 复用 `confirm` surface，`Kick` 与 `Ban`（预设时长列表 + 自定义秒数/原因）复用 `form` surface，零新增 UI 组件；
+  ② **去除原生键盘与每帧禁控**：删掉 `T-CityLite.base/resources/[qb]/qb-adminmenu/client/client.lua` 的 `LocalInput` / `LocalInputInt`（`DisableAllControlActions(0)` 2 处清零，只保留 `T-CityLite.base/resources/[qb]/qb-adminmenu/client/noclip.lua` 飞行模式 3 处），删掉 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json` 的 `qb-adminmenu-local-input-disable-all` 条目，修复 `godmode` 在 NUI 回调线程里阻塞的隐患；
+  ③ **下线 `menuv` 与退场临时垫片**：删除 `#353` 过渡垫片 `menu_shim.lua`、去掉 `T-CityLite.base/resources/[qb]/qb-adminmenu/fxmanifest.lua` 的 `menuv` 引用和 `T-CityLite.base/configs/modules/core.cfg` 的 `ensure menuv`，清零 `T-CityLite.base/tests/architecture/input_layer_allowlist.json` 的 `unintegrated_menu_ledger`，`T-CityLite.base/tests/check_dependencies.py` 将 `menuv` 标为已下线延期，保留 `menuv` 资源目录只读；
+  ④ **闸门与反向注入**：更新 `T-CityLite.base/tests/architecture/test_adminmenu_input_shim.py`、`T-CityLite.base/tests/architecture/test_input_layer_contracts.py` 与 `T-CityLite.base/tests/architecture/menu_surface_baseline.json`（`menuv_entry` 47 → 29，仅剩只读 `menuv` 目录自身；非 `menuv` 引用清零），Lua 5.4 沙箱实测全部 17 屏通过 `MenuSpec.Validate`，且把任一屏改回 `MenuV` / 恢复 `menu_shim.lua` / `LocalInput` 均变红。
+
 - **产业面板方案 A —— 信息行语义落地（`custom-menu` / `qb-menu` / `custom-industry`，#374）**：
   ① **契约层（`T-CityLite.base/resources/[custom]/custom-menu/shared/menu_spec.lua`）**：巩固 `MenuSpec.KINDS.info = true` 语义——`info` 项为只读信息（必填 `label`，值放字符串 `hint`），校验显式拒绝 `action` / `params` / `intent`，缺失 `hint` 可正常通过，非字符串 `hint` 与非 JSON-safe 值均报错；
   ② **渲染与样式（`T-CityLite.base/resources/[custom]/custom-menu/html/renderer.js`、`T-CityLite.base/resources/[custom]/custom-menu/html/styles.css`）**：`info` 行左标签正常字重（`rgb(226,232,240)`）+ 右对齐亮值（`rgb(248,250,252)`）、无 hover、无焦点描边、无 `›` 箭头、不压暗、不加 `disabled` class（含虚拟列表分支）；方向键 `ArrowDown`/`ArrowUp` 与初始焦点跳过 `info` 行，点击无 intent/toast 副作用；卡片宽度收敛至 `300px` 且全量字号 `>= 12px`；不可用动作行维持压暗 + `disabledReason`；

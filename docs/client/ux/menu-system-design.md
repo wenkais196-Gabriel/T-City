@@ -157,7 +157,8 @@ qb-target 的 client.lua 第 293 行确以 `IsNuiFocused()` 作门卫、第 308 
 | **M3** | qb-menu / qb-input 零破坏适配，停用各自旧页面 | `T-CityLite.base/resources/[qb]/qb-menu/**`、`T-CityLite.base/resources/[qb]/qb-input/**` | M1, M2 | `luac5.4.exe -p` 全过；qb-input 不再有单参 `SetNuiFocus(false)` |
 | **M4**（✅ 已收口 #346） | qb-target / qb-inventory / qb-hud / story-engine 接入焦点栈 | `T-CityLite.base/resources/[qb]/qb-target/**`、`T-CityLite.base/resources/[qb]/qb-inventory/**`、`T-CityLite.base/resources/[qb]/qb-hud/**`、`T-CityLite.base/resources/[custom]/story-engine/**` | M1 | 四目录内**门卫用途**的 `IsNuiFocused()` = 0（诊断用途逐条进 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json`）；**菜单路径上**无 `DisableAllControlActions`（`noclip` / 死亡 / `spawn` 等合法调用点进同一份 allowlist）；闸门 `T-CityLite.base/tests/architecture/test_m4_focus_stack.py` |
 | **M5** | 清 `backdrop-filter` 与重复监听（**排除 `[system]/monitor` 这个第三方面板**） | `T-CityLite.base/resources/[system]/tcity-dashboard/**`、`T-CityLite.base/resources/[qb]/qb-banking/**`、`T-CityLite.base/resources/[custom]/hud-position-tool/**`、`T-CityLite.base/tests/architecture/test_dashboard_focus.py` | M1 | 三资源源码与产物中 `backdrop-filter` = 0；看板构建成功；基线里 monitor 的 6 处**显式登记为排除项** |
-| **M6** | qb-adminmenu 迁出 menuv + 冻结 menuv + 收敛 qb-management | `T-CityLite.base/resources/[qb]/qb-adminmenu/**`、`T-CityLite.base/resources/[qb]/qb-management/**`、`T-CityLite.base/resources/[standalone]/menuv/**` | M2, M3 | 除 menuv 自身外全仓 menuv 引用归 0；qb-management 仅留 `cl_org.lua` |
+| **M6a** | qb-adminmenu 迁出 menuv + 下线 menuv（#348） | `T-CityLite.base/resources/[qb]/qb-adminmenu/**`、`T-CityLite.base/resources/[standalone]/menuv/**`（只读保留） | M2, M3 | 除 menuv 自身外全仓 menuv 引用归 0；`client.lua` 清零 `LocalInput` |
+| **M6b** | 收敛 qb-management（#385，已拆独立 issue） | `T-CityLite.base/resources/[qb]/qb-management/**` | M3 | qb-management 仅留 `cl_org.lua`，修同坐标冲突与越界关界面 |
 | **M7** | 收敛手机双 `Wait(0)` + prompt 去重 + 固化架构闸门 | `T-CityLite.base/resources/[custom]/custom-phone/**`、`T-CityLite.base/resources/[custom]/custom-prompt/**`、新增的菜单架构闸门（tests/architecture 下的 test_menu_architecture.py）、`T-CityLite.base/configs/boot.json` | M1, M2, M4, M5, M6 | 全量 pytest 绿；手机 NUI harness 通过；平板态仅 1 条屏蔽循环 |
 
 ---
@@ -455,6 +456,6 @@ SetNuiFocus(true, true)
 | 门卫 | `qb-target` 眼标开启、`qb-inventory` 开背包命令、`story-engine` 看护恢复、`qb-hud` 设置命令 | 统一走调用期 `exports['custom-ui']:IsTaken()`；门卫用途 `IsNuiFocused()` 归 0 |
 | 诊断 | `story-engine` 遥测上报与 `/nuifocus` 调试命令（6 处读取） | 保留读取仅作诊断对比，登记入 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json`（与门卫互斥） |
 | 菜单禁控 | `qb-target` 眼标循环 `DisableAllControlActions(0)` | 已移除；瞄准期定向屏蔽攻击/武器/菜单键，打开菜单后由 `custom-ui` 帧 `allow` 放行 |
-| 合法禁控 | `qb-adminmenu`（noclip 3、原生键盘 2）、`qb-ambulancejob`（死亡态 1）、`qb-spawn`（出生选点 1）、`custom-police`（押送态 1） | 逐条写明理由与到期日进 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json` |
+| 合法禁控 | `qb-adminmenu`（noclip 3；原生键盘 2 处已随 M6a 清零）、`qb-ambulancejob`（死亡态 1）、`qb-spawn`（出生选点 1）、`custom-police`（押送态 1） | 逐条写明理由与到期日进 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json` |
 
 闸门与反向校验落在 `T-CityLite.base/tests/architecture/test_m4_focus_stack.py`（限域四目录，反向把 `IsTaken()` 换回 `IsNuiFocused()` 必红），并同步清理 `T-CityLite.base/tests/architecture/nui_client_allowlist.json` 中已解决的 `story-focus-no-stop-cleanup`。
