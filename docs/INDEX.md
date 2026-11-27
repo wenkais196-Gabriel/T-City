@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：342 ｜ **已登记**：342 ｜ **未登记**：0
+**文档总数**：343 ｜ **已登记**：343 ｜ **未登记**：0
 
-**状态分布**：✅ active 190 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 191 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|---|
 | [角色与出生 · UX 设计](client/ux/modules/identity.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/identity.md` |
 
-### economy（14）
+### economy（15）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -28,6 +28,7 @@
 | [计划：S6 周期状态机 + S7 结算转生（同一片）](plan/industry-ops/06-plan.md) | plan | ✅ active | 2026-11-26 | 2027-03-31 |  | `docs/plan/industry-ops/06-plan.md` |
 | [计划：W0 — 产业数值卡与真实周期长度（#387）](plan/industry-ops/07-plan.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/industry-ops/07-plan.md` |
 | [计划：W1 — 手机端产业动作入口（#388）](plan/industry-ops/08-plan.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/industry-ops/08-plan.md` |
+| [计划：W2 — 周期公告推送（警告 + 结果，#389）](plan/industry-ops/09-plan.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/industry-ops/09-plan.md` |
 | [🏙️ T-City 宏观经济模拟层 — 施工蓝图](../T-CityLite.base/docs/architecture/economic-simulation-blueprint.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/architecture/economic-simulation-blueprint.md` |
 | [v0.3 基础设施层](archive/QBCore_Lite_versions/v0.3-economy.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.3-economy.md` |
 | [v0.6a 民间经济职业生态（Civilian Economy）](archive/QBCore_Lite_versions/v0.6a-civilian-economy.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.6a-civilian-economy.md` |
@@ -381,7 +382,7 @@
 | [ARCHITECTURE — 四个平面与依赖方向](engineering/ARCHITECTURE.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `docs/engineering/ARCHITECTURE.md` |
 | [CONSTITUTION — T-City 的十条不变量](engineering/CONSTITUTION.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/CONSTITUTION.md` |
 | [消耗品与状态层（custom-consumables）](engineering/CONSUMABLES.md) | meta | ✅ active | 2026-10-31 | 2027-04-30 |  | `docs/engineering/CONSUMABLES.md` |
-| [真机验证工作流（Live verification）](engineering/LIVE_VERIFICATION.md) | meta | ✅ active | 2026-10-30 | 2027-04-30 |  | `docs/engineering/LIVE_VERIFICATION.md` |
+| [真机验证工作流（Live verification）](engineering/LIVE_VERIFICATION.md) | meta | ✅ active | 2026-11-27 | 2027-04-30 |  | `docs/engineering/LIVE_VERIFICATION.md` |
 | [REUSE — 共享代码放哪、什么该合并、怎么收敛](engineering/REUSE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `docs/engineering/REUSE.md` |
 | [STANDARDS — 技术标准 v0.2（可执行、可验证）](engineering/STANDARDS.md) | meta | ✅ active | 2026-11-01 | 2027-04-30 | ★ | `docs/engineering/STANDARDS.md` |
 | [TREE — 文件放哪的判据](engineering/TREE.md) | meta | ✅ active | 2026-11-16 | 2027-05-31 | ★ | `docs/engineering/TREE.md` |
