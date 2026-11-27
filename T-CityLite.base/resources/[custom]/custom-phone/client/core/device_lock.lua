@@ -4,7 +4,8 @@
 -- 后两个是"粘性"状态，循环一旦死掉人就永久卡住。逐帧禁用的最坏情况是"这一帧没禁住"，
 -- 下一帧不跑就等于自动解锁 —— 失败方向是安全的。
 --
--- 退出条件只有三个：DeviceLock.End()、实体死亡、ped 不存在。三者都会让线程自己结束。
+-- 不自建每帧线程，由 client/main.lua 单点主泵每帧调用 DeviceLock.Tick()；
+-- 退出条件只有三个：DeviceLock.End()、实体死亡、ped 不存在。
 
 DeviceLock = DeviceLock or {}
 
@@ -23,23 +24,23 @@ function DeviceLock.Begin(kind)
         active = false
         return false
     end
-    if active then return true end
     active = true
-    CreateThread(function()
-        while active do
-            local ped = PlayerPedId()
-            if not DoesEntityExist(ped) or IsEntityDead(ped) then
-                -- 死了还锁着就没法点重生按钮
-                active = false
-                break
-            end
-            for index = 1, #MOVE_CONTROLS do
-                DisableControlAction(0, MOVE_CONTROLS[index], true)
-            end
-            Wait(0)
-        end
+    return true
+end
+
+--- 单帧驱动：由 client/main.lua 主循环每帧调用一次，不自建循环线程。
+---@return boolean locked 本帧是否仍在锁定移动
+function DeviceLock.Tick()
+    if not active then return false end
+    local ped = PlayerPedId()
+    if not DoesEntityExist(ped) or IsEntityDead(ped) then
+        -- 死了还锁着就没法点重生按钮
         active = false
-    end)
+        return false
+    end
+    for index = 1, #MOVE_CONTROLS do
+        DisableControlAction(0, MOVE_CONTROLS[index], true)
+    end
     return true
 end
 

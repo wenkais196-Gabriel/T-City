@@ -59,7 +59,7 @@ New → Triaged → Ready → In Progress → In Review → Done
 |:---|:---|:---|
 | `type:` | `bug` `feature` `security` `refactor` `docs` `chore` | 变更类型 |
 | `priority:` | `P0` `P1` `P2` `P3` | P0 = 阻断启动/可刷钱/可破坏他人 |
-| `area:` | `boot` `quest` `story` `economy` `vehicle` `justice` `phone` `db` `nui` `ci` `docs` | 影响面 |
+| `area:` | `boot` `quest` `story` `economy` `vehicle` `justice` `phone` `menu` `db` `nui` `ci` `docs` | 影响面 |
 | `phase:` | `1` `2` `3` | 对应三阶段路线图 |
 | `status:` | `blocked` `needs-info` `needs-test` | 流程状态 |
 

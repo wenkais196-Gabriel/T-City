@@ -139,10 +139,70 @@ def test_the_lock_uses_per_frame_disabling_not_sticky_state() -> None:
     # 粘性状态会让一次异常死循环变成永久钉死
     assert "FreezeEntityPosition" not in lock
     assert "SetPlayerControl" not in lock
-    # 循环必须有退出条件，并且死亡/实体消失要主动解锁
-    assert "while active do" in lock
+    # 不自建 Wait(0) 线程，改为由 client/main.lua 单点每帧泵调用 DeviceLock.Tick()
+    assert "while active do" not in lock
+    assert "CreateThread" not in lock
+    assert not re.search(r"\bWait\s*\(", lock), "device_lock.lua 不应再自建 Wait(0) 循环"
+    assert "function DeviceLock.Tick()" in lock
     assert "IsEntityDead" in lock
     assert "DoesEntityExist" in lock
+
+    main_code = _lua_code(read(MAIN))
+    assert "DeviceLock.Tick()" in main_code
+    assert len(re.findall(r"\bWait\s*\(\s*0\s*\)", main_code)) == 1, (
+        "custom-phone 客户端必须保持唯一 Wait(0) 单点泵"
+    )
+
+
+@pytest.mark.skipif(LUA_BIN is None, reason="lua5.4 is not installed")
+def test_device_lock_ticks_only_for_tablet_and_unlocks_when_ped_gone(tmp_path: Path) -> None:
+    harness = tmp_path / "device_lock_harness.lua"
+    harness.write_text(
+        f"""
+local exists, dead = true, false
+local disabled = {{}}
+function PlayerPedId() return 101 end
+function DoesEntityExist(ped) return ped ~= 0 and exists end
+function IsEntityDead() return dead end
+function DisableControlAction(_, ctrl, flag)
+    if flag then disabled[ctrl] = true end
+end
+function CreateThread() error('DeviceLock must not spawn its own Wait(0) thread') end
+function Wait() error('DeviceLock must not call Wait directly') end
+
+dofile({json.dumps(str(LOCK))})
+
+assert(DeviceLock.Begin('phone') == false and not DeviceLock.IsLocked())
+assert(DeviceLock.Tick() == false and next(disabled) == nil)
+
+assert(DeviceLock.Begin('tablet') == true and DeviceLock.IsLocked())
+assert(DeviceLock.Tick() == true)
+for _, c in ipairs({{ 30, 31, 32, 33, 34, 35 }}) do
+    assert(disabled[c] == true, 'missing disabled control ' .. c)
+end
+
+dead = true
+disabled = {{}}
+assert(DeviceLock.Tick() == false and not DeviceLock.IsLocked() and next(disabled) == nil)
+
+dead = false
+DeviceLock.Begin('tablet')
+exists = false
+disabled = {{}}
+assert(DeviceLock.Tick() == false and not DeviceLock.IsLocked() and next(disabled) == nil)
+
+exists = true
+DeviceLock.Begin('tablet')
+DeviceLock.End()
+disabled = {{}}
+assert(DeviceLock.Tick() == false and not DeviceLock.IsLocked() and next(disabled) == nil)
+print('device lock ok')
+""",
+        encoding="utf-8",
+    )
+    result = subprocess.run([LUA_BIN, str(harness)], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert "device lock ok" in result.stdout
 
 
 def test_every_close_path_unlocks() -> None:

@@ -76,7 +76,7 @@
     },
     "samples": [
       "resources/[custom]/custom-debug/client/debug.lua:25",
-      "resources/[custom]/custom-phone/client/main.lua:1115",
+      "resources/[custom]/custom-phone/client/main.lua:1117",
       "resources/[custom]/custom-phone/client/main.lua:131",
       "resources/[custom]/custom-phone/client/main.lua:186",
       "resources/[custom]/custom-phone/client/main.lua:192",
@@ -84,9 +84,9 @@
       "resources/[custom]/custom-phone/client/main.lua:255",
       "resources/[custom]/custom-phone/client/main.lua:304",
       "resources/[custom]/custom-phone/client/main.lua:305",
-      "resources/[custom]/custom-phone/client/main.lua:524",
-      "resources/[custom]/custom-phone/client/main.lua:590",
-      "resources/[custom]/custom-phone/client/main.lua:603"
+      "resources/[custom]/custom-phone/client/main.lua:526",
+      "resources/[custom]/custom-phone/client/main.lua:592",
+      "resources/[custom]/custom-phone/client/main.lua:605"
     ]
   },
   "disable_all_controls": {
@@ -332,7 +332,7 @@
     ]
   },
   "client_wait_zero": {
-    "total": 219,
+    "total": 218,
     "resources": {
       "qb-core": 21,
       "monitor": 15,
@@ -358,7 +358,6 @@
       "safecracker": 4,
       "custom-director": 3,
       "qb-hud": 3,
-      "custom-phone": 2,
       "qb-spawn": 2,
       "qb-clothing": 2,
       "qb-garages": 2,
@@ -373,6 +372,7 @@
       "custom-documents": 1,
       "custom-justice": 1,
       "custom-menu": 1,
+      "custom-phone": 1,
       "qb-banking": 1,
       "qb-cityhall": 1,
       "qb-fuel": 1,
