@@ -36,6 +36,8 @@ DEFERRED_RESOURCES = {
     "example-loadscreen", "fivem", "yarn", "webpack",
     "custom-debug",
     "screenshot-basic", "qb-radio",
+    # M6(#348) 已迁移 qb-adminmenu 至 custom-menu 并停止 ensure menuv，目录保留只读防不可逆
+    "menuv",
 }
 
 

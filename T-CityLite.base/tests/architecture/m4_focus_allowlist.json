@@ -26,17 +26,6 @@
       "expires": "2027-04-30"
     },
     {
-      "id": "qb-adminmenu-local-input-disable-all",
-      "kind": "legitimate_disable_all",
-      "resource": "qb-adminmenu",
-      "file": "resources/[qb]/qb-adminmenu/client/client.lua",
-      "count": 2,
-      "reason": "GTA 原生屏幕键盘输入循环（LocalInput / LocalInputInt，UpdateOnscreenKeyboard == 0 期间），M6(#348) 迁出 menuv 与原生键盘时一并清理。",
-      "owner": "qb-adminmenu",
-      "added": "2026-11-26",
-      "expires": "2027-02-28"
-    },
-    {
       "id": "qb-ambulancejob-dead-disable-all",
       "kind": "legitimate_disable_all",
       "resource": "qb-ambulancejob",

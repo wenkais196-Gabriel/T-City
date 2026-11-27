@@ -381,17 +381,28 @@ def violations_in_unintegrated_menu_ledger(base_dir: Path, allowlist: dict) -> l
     ledger = allowlist.get("unintegrated_menu_ledger", {})
     entries = ledger.get("entries", [])
     bad: list[str] = []
-    if not entries:
-        return ["unintegrated_menu_ledger has no entries"]
-    shim_entries = [e for e in entries if e.get("file") == "resources/[qb]/qb-adminmenu/client/menu_shim.lua"]
-    if len(shim_entries) != 1:
-        bad.append("unintegrated_menu_ledger must account for qb-adminmenu/client/menu_shim.lua exactly once")
+    accounted_files: set[str] = set()
     for entry in entries:
         rel = entry.get("file", "")
         if not rel or not (base_dir / rel).is_file():
-            bad.append(f"{entry.get('id', '?')}: missing file {rel!r}")
+            bad.append(f"{entry.get('id', '?')}: stale or missing file {rel!r}")
         if not entry.get("reason") or not entry.get("issue"):
             bad.append(f"{entry.get('id', '?')}: missing reason/issue")
+        if rel:
+            if rel in accounted_files:
+                bad.append(f"duplicate unintegrated_menu_ledger entry for {rel!r}")
+            accounted_files.add(rel)
+
+    resources_root = base_dir / "resources"
+    if resources_root.is_dir():
+        for lua_path in sorted(resources_root.rglob("*.lua")):
+            rel = lua_path.relative_to(base_dir).as_posix()
+            if rel.startswith("resources/[standalone]/menuv/"):
+                continue
+            text = blank_noise(lua_path.read_text(encoding="utf-8", errors="ignore"))
+            if lua_path.name == "menu_shim.lua" or re.search(r"\bMenuV\s*[:.]", text):
+                if rel not in accounted_files:
+                    bad.append(f"{rel}: unintegrated menu/menuv reference missing from unintegrated_menu_ledger")
     return bad
 
 
@@ -457,12 +468,33 @@ def test_single_arg_setnui_focus_gate_detects_new_call_sites(tmp_path: Path):
     assert caught and "custom-ui" in caught[0], caught
 
 
-def test_unintegrated_menu_ledger_detects_missing_shim_entry():
+def test_unintegrated_menu_ledger_detects_missing_shim_entry(tmp_path: Path):
     allowlist = _load_allowlist()
     assert violations_in_unintegrated_menu_ledger(BASE, allowlist) == []
+    assert allowlist["unintegrated_menu_ledger"]["entries"] == [], (
+        "M6(#348) retired menuv shim; unintegrated_menu_ledger must stay empty"
+    )
 
-    # 反向：清空记账条目必须红
-    assert violations_in_unintegrated_menu_ledger(BASE, {"unintegrated_menu_ledger": {"entries": []}})
+    # 反向 1：保留过期条目（指向不存在的 menu_shim.lua）必须红
+    stale = {
+        "unintegrated_menu_ledger": {
+            "entries": [{
+                "id": "qb-adminmenu-menuv-shim",
+                "file": "resources/[qb]/qb-adminmenu/client/menu_shim.lua",
+                "issue": "#353",
+                "reason": "stale",
+            }]
+        }
+    }
+    assert violations_in_unintegrated_menu_ledger(BASE, stale)
+
+    # 反向 2：在未记账的情况下重新引入 MenuV 或 menu_shim.lua 必须红
+    rogue_dir = tmp_path / "resources" / "[qb]" / "qb-adminmenu" / "client"
+    rogue_dir.mkdir(parents=True)
+    (rogue_dir / "client.lua").write_text("local m = MenuV:CreateMenu(false, 'x')\n", encoding="utf-8")
+    caught = violations_in_unintegrated_menu_ledger(tmp_path, {"unintegrated_menu_ledger": {"entries": []}})
+    assert caught and "client.lua" in caught[0], caught
+
     # 确认没有第二份未接入菜单记账文件
     other_ledgers = [
         p.name for p in Path(__file__).parent.glob("*allowlist*.json")
