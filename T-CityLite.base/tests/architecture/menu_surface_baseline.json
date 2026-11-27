@@ -77,16 +77,16 @@
     "samples": [
       "resources/[custom]/custom-debug/client/debug.lua:25",
       "resources/[custom]/custom-phone/client/main.lua:1117",
+      "resources/[custom]/custom-phone/client/main.lua:1118",
+      "resources/[custom]/custom-phone/client/main.lua:1124",
+      "resources/[custom]/custom-phone/client/main.lua:1125",
+      "resources/[custom]/custom-phone/client/main.lua:1130",
       "resources/[custom]/custom-phone/client/main.lua:131",
       "resources/[custom]/custom-phone/client/main.lua:186",
       "resources/[custom]/custom-phone/client/main.lua:192",
       "resources/[custom]/custom-phone/client/main.lua:193",
       "resources/[custom]/custom-phone/client/main.lua:255",
-      "resources/[custom]/custom-phone/client/main.lua:304",
-      "resources/[custom]/custom-phone/client/main.lua:305",
-      "resources/[custom]/custom-phone/client/main.lua:526",
-      "resources/[custom]/custom-phone/client/main.lua:592",
-      "resources/[custom]/custom-phone/client/main.lua:605"
+      "resources/[custom]/custom-phone/client/main.lua:304"
     ]
   },
   "disable_all_controls": {
@@ -192,8 +192,8 @@
       "resources/[cfx-default]/[gameplay]/chat-theme-gtao/shadow.js:41",
       "resources/[cfx-default]/[gameplay]/chat-theme-gtao/shadow.js:47",
       "resources/[cfx-default]/[gameplay]/chat-theme-gtao/shadow.js:48",
-      "resources/[cfx-default]/[gameplay]/chat-theme-gtao/shadow.js:6",
-      "resources/[cfx-default]/[gameplay]/chat-theme-gtao/shadow.js:8"
+      "resources/[cfx-default]/[gameplay]/chat-theme-gtao/shadow.js:50",
+      "resources/[cfx-default]/[gameplay]/chat-theme-gtao/shadow.js:6"
     ]
   },
   "qb_menu_entry": {
@@ -232,8 +232,8 @@
       "resources/[custom]/custom-cartel/client/main.lua:307",
       "resources/[custom]/custom-cartel/client/main.lua:310",
       "resources/[custom]/custom-cartel/client/main.lua:320",
-      "resources/[custom]/custom-industry/client/main.lua:57",
-      "resources/[custom]/custom-industry/client/main.lua:58"
+      "resources/[custom]/custom-industry/client/main.lua:176",
+      "resources/[custom]/custom-industry/client/main.lua:325"
     ]
   },
   "qb_input_entry": {
@@ -260,7 +260,7 @@
       "resources/[qb]/qb-input/client/main.lua:63",
       "resources/[qb]/qb-mechanicjob/client/cosmetic.lua:304",
       "resources/[qb]/qb-mechanicjob/client/cosmetic.lua:42",
-      "resources/[qb]/qb-mechanicjob/client/cosmetic.lua:89"
+      "resources/[qb]/qb-mechanicjob/client/cosmetic.lua:438"
     ]
   },
   "menuv_entry": {
@@ -277,10 +277,10 @@
       "resources/[standalone]/menuv/menuv.lua:2106",
       "resources/[standalone]/menuv/menuv.lua:2398",
       "resources/[standalone]/menuv/menuv.lua:613",
-      "resources/[standalone]/menuv/menuv/menuv.lua:132",
-      "resources/[standalone]/menuv/menuv/menuv.lua:255",
-      "resources/[standalone]/menuv/menuv/menuv.lua:256",
-      "resources/[standalone]/menuv/menuv/menuv.lua:257"
+      "resources/[standalone]/menuv/menuv/components/item.lua:108",
+      "resources/[standalone]/menuv/menuv/components/menu.lua:849",
+      "resources/[standalone]/menuv/menuv/components/menu.lua:889",
+      "resources/[standalone]/menuv/menuv/components/menu.lua:957"
     ]
   },
   "customui_entry": {
@@ -308,8 +308,8 @@
       "resources/[qb]/qb-inventory/client/main.lua:134",
       "resources/[qb]/qb-inventory/client/main.lua:159",
       "resources/[qb]/qb-menu/client/main.lua:10",
-      "resources/[qb]/qb-target/client.lua:69",
-      "resources/[qb]/qb-target/client.lua:95"
+      "resources/[qb]/qb-menu/client/main.lua:19",
+      "resources/[qb]/qb-target/client.lua:69"
     ]
   },
   "orgmenu_export": {
@@ -397,7 +397,7 @@
       "resources/[cfx-default]/[system]/hardcap/client.lua:3",
       "resources/[cfx-default]/[system]/rconlog/rconlog_client.lua:17",
       "resources/[custom]/custom-agent-ops/server/main.lua:1172",
-      "resources/[custom]/hud-position-tool/client.lua:95"
+      "resources/[custom]/custom-director/server/main.lua:1042"
     ]
   }
 }
