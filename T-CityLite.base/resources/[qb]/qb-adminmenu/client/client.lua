@@ -100,7 +100,6 @@ if type(exports) == 'function' then
 end
 
 -- Main Menus (pending per-screen migration)
-local menu4 = MenuV:CreateMenu(false, Lang:t('menu.online_players'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test4')
 local menu5 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test5')
 local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test6')
 local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
@@ -203,6 +202,57 @@ customMenuHandlers['adminmenu:action:set_time'] = function(ctx)
     TriggerServerEvent('qb-weathersync:server:setTime', timeStr, timeStr)
     QBCore.Functions.Notify(Lang:t('time.changed', { time = timeStr }))
     return { ok = true, dispatched = 'set_time', hour = timeStr }
+end
+
+local playersByKey = {}
+
+local function runSyncOrAsyncCallback(cbName, args, buildSpecFn)
+    local resolvedSpec = nil
+    local callbackExited = false
+    local function handleResult(...)
+        local spec, ok = buildSpecFn(...)
+        if ok == false then
+            if not callbackExited then
+                resolvedSpec = false
+            else
+                closeCustomMenu('callback_denied')
+            end
+            return
+        end
+        if not callbackExited then
+            resolvedSpec = spec
+        elseif isCustomMenuOpen() then
+            openCustomMenu(spec)
+        end
+    end
+
+    if args ~= nil then
+        QBCore.Functions.TriggerCallback(cbName, handleResult, args)
+    else
+        QBCore.Functions.TriggerCallback(cbName, handleResult)
+    end
+    callbackExited = true
+
+    if resolvedSpec == false then
+        return { ok = false, reason = 'callback_denied' }
+    end
+    if resolvedSpec then
+        return { ok = true, spec = resolvedSpec }
+    end
+    return { ok = true, dispatched = 'async_pending' }
+end
+
+customMenuHandlers['adminmenu:open:menu4'] = function()
+    return runSyncOrAsyncCallback('test:getplayers', nil, function(players)
+        playersByKey = {}
+        for idx, v in pairs(players or {}) do
+            if type(v) == 'table' then
+                local key = tostring(v.id or idx)
+                playersByKey[key] = v
+            end
+        end
+        return AdminMenuSpecs.BuildMenu4(Lang, players), true
+    end)
 end
 
 legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
@@ -687,22 +737,12 @@ local function OpenPlayerMenus(player)
     end
 end
 
-legacyBridges['adminmenu:open:menu4'] = function()
-    menu4:ClearItems()
-    QBCore.Functions.TriggerCallback('test:getplayers', function(players)
-        for _, v in pairs(players) do
-            menu4:AddButton({
-                label = Lang:t('info.id') .. v['id'] .. ' | ' .. v['name'],
-                value = v,
-                description = Lang:t('info.player_name'),
-                select = function(btn)
-                    local select = btn.Value -- get all the values from v!
-                    OpenPlayerMenus(select)  -- only pass what i select nothing else
-                end
-            })                               -- WORKS
-        end
-    end)
-    AdminMenuShim.OpenMenu(menu4)
+legacyBridges['adminmenu:open:player'] = function(ctx)
+    local key = type(ctx.args) == 'table' and ctx.args.playerKey or nil
+    local selected = key and playersByKey[tostring(key)] or nil
+    if selected then
+        OpenPlayerMenus(selected)
+    end
 end
 
 

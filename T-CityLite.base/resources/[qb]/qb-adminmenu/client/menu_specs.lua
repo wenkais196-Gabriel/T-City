@@ -381,4 +381,52 @@ function AdminMenuSpecs.BuildMenu8(lang)
     }
 end
 
+function AdminMenuSpecs.BuildMenu4(lang, players)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local sorted = {}
+    for _, v in pairs(players or {}) do
+        if type(v) == 'table' then
+            sorted[#sorted + 1] = v
+        end
+    end
+    table.sort(sorted, function(a, b)
+        return (tonumber(a.id) or 0) < (tonumber(b.id) or 0)
+    end)
+
+    local items = {}
+    local idPrefix = tr('info.id')
+    local desc = tr('info.player_name')
+    for idx, v in ipairs(sorted) do
+        local pid = v.id
+        local pname = v.name or v.cid or tostring(pid or idx)
+        items[#items + 1] = {
+            id = AdminMenuSpecs.SafeId('ply', idx),
+            kind = 'nav',
+            icon = '👤',
+            label = idPrefix .. tostring(pid) .. ' | ' .. tostring(pname),
+            description = desc,
+            intent = 'adminmenu:open:player',
+            args = { playerKey = tostring(pid or idx) },
+        }
+    end
+    items[#items + 1] = {
+        id = 'back_to_main',
+        kind = 'nav',
+        icon = '↩️',
+        label = tr('menu.admin_menu'),
+        intent = 'adminmenu:open:menu1',
+    }
+
+    return {
+        id = 'qb_adminmenu_menu4',
+        title = tr('menu.online_players'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.online_players') },
+        emptyMessage = tr('menu.online_players'),
+        items = items,
+    }
+end
+
 return AdminMenuSpecs
