@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `industry_enable`）、哪些是**每次调用**读（`agent_devcmd_enabled`），以及
   `server.cfg` gitignored 所以必须落盘、`restart` 要配 `restart_sweep.py`、
   `restart custom-menu` 的菜单失效（已修）、驱动周期前先 dump 产业表。
+### Added
+- **真机验收入口 `/tpme x y z`（`custom-agent-client`）**：真机要站到 qb-target 的 box zone 上
+  （老板菜单等），但 GTA 把 OS 光标锁在屏幕角、合成鼠标点击进不了 CEF，仓里也没有传送命令 ——
+  没有它只能靠人跑图。命令与 devcmd 同一条门禁（`agent_devcmd_enabled`，默认关），
+  只接受服务端下发的 `adc`，且自己再判一次 convar。白名单 pattern 用 Lua 语法写
+  （`%-?` 可选负号、`%.?%d*` 可选小数），闸门见
+  `T-CityLite.base/tests/architecture/test_agent_devcmd_teleport.py`。
 
 ### Changed
 - **产业周期公告推送（警告 + 结果，`custom-industry` / `custom-phone`，#389）**：
