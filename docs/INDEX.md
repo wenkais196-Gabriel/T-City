@@ -233,7 +233,7 @@
 | [NUI POST 未到达客户端 Lua 回调 —— 系统排查手册](client/research/nui-debug-playbook.md) | research | ✅ active | 2026-10-27 | 2027-01-30 |  | `docs/client/research/nui-debug-playbook.md` |
 | [QBCore 客户端代码面分析（T-City 实测 + 上游对照）](qbcore-client-code-analysis.md) | research | 📌 final | 2026-10-27 | 2027-01-30 |  | `docs/qbcore-client-code-analysis.md` |
 | [真机验证清单（按模块）](client/ux/PLAYTEST.md) | runbook | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/PLAYTEST.md` |
-| [qb-menu / qb-input 适配层 · 20 条最小真机清单](client/ux/menu-regression-checklist.md) | runbook | ✅ active | 2026-11-26 | 2027-02-28 |  | `docs/client/ux/menu-regression-checklist.md` |
+| [qb-menu / qb-input 适配层 · 20 条最小真机清单](client/ux/menu-regression-checklist.md) | runbook | ✅ active | 2026-11-27 | 2027-02-28 |  | `docs/client/ux/menu-regression-checklist.md` |
 | [T-City Lite 交互设计规范备忘录 (Interaction Design Memo)](../T-CityLite.base/docs/design/interaction-memo.md) | spec | ✅ active | 2026-06-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/interaction-memo.md` |
 | [菜单交互设计规范（NUI / 世界交互）](../T-CityLite.base/docs/design/menu-interaction-design.md) | spec | ✅ active | 2026-10-21 | 2027-04-30 |  | `T-CityLite.base/docs/design/menu-interaction-design.md` |
 | [NUI 现代化标准与测试手册](../T-CityLite.base/docs/standards/nui-standard.md) | spec | ✅ active | 2026-11-16 | 2027-04-30 |  | `T-CityLite.base/docs/standards/nui-standard.md` |
@@ -356,7 +356,7 @@
 | [🏛️ T-City 统一组织建立指导手册](ORGANIZATION_GUIDE.md) | manual | ✅ active | 2026-10-25 | 2027-01-30 |  | `docs/ORGANIZATION_GUIDE.md` |
 | [基石现状（AS-IS）— 组件、三条主链路、已知缺口](engineering/FOUNDATION-AS-IS.md) | manual | ✅ active | 2026-11-01 | 2027-01-30 |  | `docs/engineering/FOUNDATION-AS-IS.md` |
 | [AGENTS.md — T-City 入口索引](../AGENTS.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `AGENTS.md` |
-| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-26 | 2027-04-30 |  | `CHANGELOG.md` |
+| [Changelog](../CHANGELOG.md) | meta | ✅ active | 2026-11-27 | 2027-04-30 |  | `CHANGELOG.md` |
 | [CLAUDE.md — 指针](../CLAUDE.md) | meta | ✅ active | 2026-10-25 | 2027-04-30 |  | `CLAUDE.md` |
 | [Contributing to T-City Lite](../CONTRIBUTING.md) | meta | ✅ active | 2026-11-15 | 2027-04-30 |  | `CONTRIBUTING.md` |
 | [T-City Lite](../README.md) | meta | ✅ active | 2026-10-26 | 2027-04-30 |  | `README.md` |
