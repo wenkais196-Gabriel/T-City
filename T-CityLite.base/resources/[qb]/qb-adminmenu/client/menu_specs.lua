@@ -143,4 +143,85 @@ function AdminMenuSpecs.BuildMenu1(lang)
     }
 end
 
+function AdminMenuSpecs.BuildMenu2(lang, state)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local s = state or {}
+    return {
+        id = 'qb_adminmenu_menu2',
+        title = tr('menu.admin_options'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.admin_options') },
+        items = {
+            {
+                id = 'noclip',
+                kind = 'toggle',
+                icon = '🎥',
+                label = tr('menu.noclip'),
+                description = tr('desc.noclip_desc'),
+                checked = s.noclip == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'noclip' },
+            },
+            {
+                id = 'revive',
+                kind = 'action',
+                icon = '🏥',
+                label = tr('menu.revive'),
+                description = tr('desc.revive_desc'),
+                intent = 'adminmenu:action:revive_self',
+            },
+            {
+                id = 'invisible',
+                kind = 'toggle',
+                icon = '👻',
+                label = tr('menu.invisible'),
+                description = tr('desc.invisible_desc'),
+                checked = s.invisible == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'invisible' },
+            },
+            {
+                id = 'godmode',
+                kind = 'toggle',
+                icon = '⚡',
+                label = tr('menu.god'),
+                description = tr('desc.god_desc'),
+                checked = s.godmode == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'godmode' },
+            },
+            {
+                id = 'names',
+                kind = 'toggle',
+                icon = '📋',
+                label = tr('menu.names'),
+                description = tr('desc.names_desc'),
+                checked = s.names == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'names' },
+            },
+            {
+                id = 'blips',
+                kind = 'toggle',
+                icon = '📍',
+                label = tr('menu.blips'),
+                description = tr('desc.blips_desc'),
+                checked = s.blips == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'blips' },
+            },
+            {
+                id = 'spawn_weapons',
+                kind = 'nav',
+                icon = '🎁',
+                label = tr('menu.spawn_weapons'),
+                description = tr('desc.spawn_weapons_desc'),
+                intent = 'adminmenu:open:menu15',
+            },
+        },
+    }
+end
+
 return AdminMenuSpecs

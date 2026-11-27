@@ -100,7 +100,6 @@ if type(exports) == 'function' then
 end
 
 -- Main Menus (pending per-screen migration)
-local menu2 = MenuV:CreateMenu(false, Lang:t('menu.admin_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test2')
 local menu3 = MenuV:CreateMenu(false, Lang:t('menu.manage_server'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test3')
 local menu4 = MenuV:CreateMenu(false, Lang:t('menu.online_players'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test4')
 local menu5 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test5')
@@ -117,11 +116,47 @@ local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocati
 local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
 local menu15 = MenuV:CreateMenu(false, Lang:t('menu.spawn_weapons'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test15')
 
+local toggleState = {
+    noclip = false,
+    invisible = false,
+    godmode = false,
+    godmodeLoop = false,
+    names = false,
+    blips = false,
+}
+local toggleOptionHandlers = {}
+
+local function resolveNextBool(current, ctx)
+    if ctx and type(ctx.values) == 'table' and type(ctx.values.checked) == 'boolean' then
+        return ctx.values.checked
+    end
+    return not current
+end
+
 customMenuHandlers['adminmenu:open:menu1'] = function()
     return { ok = true, spec = AdminMenuSpecs.BuildMenu1(Lang) }
 end
 
-legacyBridges['adminmenu:open:menu2'] = function() AdminMenuShim.OpenMenu(menu2) end
+customMenuHandlers['adminmenu:open:menu2'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu2(Lang, toggleState) }
+end
+
+customMenuHandlers['adminmenu:action:toggle_option'] = function(ctx)
+    local option = type(ctx.args) == 'table' and ctx.args.option or nil
+    local fn = option and toggleOptionHandlers[option] or nil
+    if not fn then
+        return { ok = false, reason = 'unknown_toggle_option' }
+    end
+    fn(ctx)
+    return { ok = true, dispatched = 'toggle', option = option }
+end
+
+customMenuHandlers['adminmenu:action:revive_self'] = function()
+    TriggerEvent('hospital:client:Revive', PlayerPedId())
+    return { ok = true, dispatched = 'revive_self' }
+end
+
+legacyBridges['adminmenu:open:menu15'] = function() AdminMenuShim.OpenMenu(menu15) end
 legacyBridges['adminmenu:open:menu3'] = function() AdminMenuShim.OpenMenu(menu3) end
 legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
 legacyBridges['adminmenu:open:menu7'] = function() AdminMenuShim.OpenMenu(menu7) end
@@ -133,57 +168,6 @@ end)
 --[[
     Sub Menus for the above main menu's
 --]]
-
--- Admin Options Menu Buttons
-local menu2_admin_noclip = menu2:AddCheckbox({
-    icon = '🎥',
-    label = Lang:t('menu.noclip'),
-    value = nil,
-    description = Lang:t('desc.noclip_desc')
-})
-
-local menu2_admin_revive = menu2:AddButton({
-    icon = '🏥',
-    label = Lang:t('menu.revive'),
-    value = 'revive',
-    description = Lang:t('desc.revive_desc')
-})
-
-local menu2_admin_invisible = menu2:AddCheckbox({
-    icon = '👻',
-    label = Lang:t('menu.invisible'),
-    value = nil,
-    description = Lang:t('desc.invisible_desc')
-})
-
-local menu2_admin_god_mode = menu2:AddCheckbox({
-    icon = '⚡',
-    label = Lang:t('menu.god'),
-    value = nil,
-    description = Lang:t('desc.god_desc')
-})
-
-local menu2_admin_display_names = menu2:AddCheckbox({
-    icon = '📋',
-    label = Lang:t('menu.names'),
-    value = nil,
-    description = Lang:t('desc.names_desc')
-})
-
-local menu2_admin_display_blips = menu2:AddCheckbox({
-    icon = '📍',
-    label = Lang:t('menu.blips'),
-    value = nil,
-    description = Lang:t('desc.blips_desc')
-})
-
---give weapons
-menu2:AddButton({
-    icon = '🎁',
-    label = Lang:t('menu.spawn_weapons'),
-    value = menu15,
-    description = Lang:t('desc.spawn_weapons_desc')
-})
 
 -- Server Options Menu Buttons
 local menu3_server_weather = menu3:AddButton({
@@ -427,51 +411,63 @@ end
 --[[
     Admin Options functions
 --]]
--- Toggle player name display
-menu2_admin_display_names:On('change', function()
-    TriggerEvent('qb-admin:client:toggleNames')
+AddEventHandler('qb-admin:client:toggleNames', function()
+    toggleState.names = not toggleState.names
 end)
 
--- Toggle player blip display
-menu2_admin_display_blips:On('change', function()
-    TriggerEvent('qb-admin:client:toggleBlips')
+AddEventHandler('qb-admin:client:toggleBlips', function()
+    toggleState.blips = not toggleState.blips
 end)
 
--- Toggle NoClip
-menu2_admin_noclip:On('change', function(_, _, _)
-    ToggleNoClip()
+AddEventHandler('qb-admin:client:ToggleNoClip', function()
+    toggleState.noclip = not toggleState.noclip
 end)
 
--- Revive Self
-menu2_admin_revive:On('select', function(_)
-    TriggerEvent('hospital:client:Revive', PlayerPedId())
-end)
-
--- Invisible
-local invisible = false
-menu2_admin_invisible:On('change', function(_, _, _)
-    if not invisible then
-        invisible = true
-        SetEntityVisible(PlayerPedId(), false, 0)
-    else
-        invisible = false
-        SetEntityVisible(PlayerPedId(), true, 0)
+toggleOptionHandlers.names = function(ctx)
+    local nextVal = resolveNextBool(toggleState.names, ctx)
+    if nextVal ~= toggleState.names then
+        TriggerEvent('qb-admin:client:toggleNames')
     end
-end)
+end
 
--- Godmode
-local godmode = false
-menu2_admin_god_mode:On('change', function(_, _, _)
-    godmode = not godmode
+toggleOptionHandlers.blips = function(ctx)
+    local nextVal = resolveNextBool(toggleState.blips, ctx)
+    if nextVal ~= toggleState.blips then
+        TriggerEvent('qb-admin:client:toggleBlips')
+    end
+end
 
-    if godmode then
-        while godmode do
-            Wait(0)
-            SetPlayerInvincible(PlayerId(), true)
-        end
+toggleOptionHandlers.noclip = function(ctx)
+    local nextVal = resolveNextBool(toggleState.noclip, ctx)
+    if nextVal ~= toggleState.noclip then
+        toggleState.noclip = nextVal
+        ToggleNoClip()
+    end
+end
+
+toggleOptionHandlers.invisible = function(ctx)
+    local nextVal = resolveNextBool(toggleState.invisible, ctx)
+    toggleState.invisible = nextVal
+    SetEntityVisible(PlayerPedId(), not toggleState.invisible, 0)
+end
+
+toggleOptionHandlers.godmode = function(ctx)
+    local nextVal = resolveNextBool(toggleState.godmode, ctx)
+    toggleState.godmode = nextVal
+    if toggleState.godmode and not toggleState.godmodeLoop then
+        toggleState.godmodeLoop = true
+        CreateThread(function()
+            while toggleState.godmode do
+                Wait(0)
+                SetPlayerInvincible(PlayerId(), true)
+            end
+            SetPlayerInvincible(PlayerId(), false)
+            toggleState.godmodeLoop = false
+        end)
+    elseif not toggleState.godmode then
         SetPlayerInvincible(PlayerId(), false)
     end
-end)
+end
 
 -- Weapons list
 for _, v in pairs(QBCore.Shared.Weapons) do
