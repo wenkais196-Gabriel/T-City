@@ -39,6 +39,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `T-CityLite.base/resources/[qb]/qb-menu/server/adapter_state.lua` 是启动时把 convar 快照写进 `GlobalState` —— 于是运维
   `setr qb_menu_use_custom_menu true` 之后不重启就永远不生效（convar 兜底成死代码）。
   现在 `false` 不再短路，`setr` 即时生效。
+### Docs
+- **W2 真机记录 + 开关类 convar 的"改了要重启"事实（`docs/plan/industry-ops/09-plan.md`、
+  `docs/engineering/LIVE_VERIFICATION.md` §2.1）**：09-plan 记下压缩周期验收的全部实测读数
+  （警告推送 id=81 / 结果推送 id=82 / `industry_cycle_results` $11,650 / `cycle_no` 1→2 /
+  两条 CityFeed 公告）与两处「CC 的用例删掉防护仍全绿」的补法；LIVE_VERIFICATION 新增一张表，
+  写清哪些 convar 是**启动时**读（`qb_menu_use_custom_menu`、`industry_phase_seconds`、
+  `industry_enable`）、哪些是**每次调用**读（`agent_devcmd_enabled`），以及
+  `server.cfg` gitignored 所以必须落盘、`restart` 要配 `restart_sweep.py`、
+  `restart custom-menu` 的菜单失效（已修）、驱动周期前先 dump 产业表。
 
 ### Changed
 - **产业周期公告推送（警告 + 结果，`custom-industry` / `custom-phone`，#389）**：

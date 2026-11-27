@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-10-30
+updated: 2026-11-27
 review_by: 2027-04-30
 ---
 
@@ -39,6 +39,26 @@ explorer.exe "fivem://connect/127.0.0.1:30130"  # 3) 客户端必须经 shell �
 | 客户端一直连不上、端口无人监听 | 旧 FXServer 进程还占着 30130 | `taskkill /F /IM FXServer.exe` 后重启 |
 | 资源只有七十几 | 某次 restart 连坐停掉了依赖资源 | `tools/dev/check_module_resources.py` 查缺口，逐个 ensure |
 | 玩家被踢下线 | `exec configs/modules/core.cfg` 之类会重启核心资源 | 重启后重新连客户端，别在验证中途 exec 核心模块 |
+
+## 2.1 开关类配置：**改完必须重启那个资源**（2026-11-27 三次踩坑）
+
+FiveM 的 convar 分两种读法，混了就表现为「改了没用」：
+
+| convar | 读法 | 改了之后 |
+|---|---|---|
+| `qb_menu_use_custom_menu` | `T-CityLite.base/resources/[qb]/qb-menu/server/adapter_state.lua` **启动时**快照进 `GlobalState` | `setr` → **`restart qb-menu`**；否则菜单还是原版 |
+| `industry_phase_seconds` | `T-CityLite.base/resources/[custom]/custom-industry/config/cycle.lua` **启动时**读进 Config | `setr` → **`restart custom-industry`**；否则阶段仍是 7/10 天 |
+| `industry_enable` | 同上 | 同上 |
+| `agent_devcmd_enabled` | `GetConvar` **每次调用**读 | `setr` 即时生效 |
+
+配套动作与坑：
+
+| 坑 | 处置 |
+|---|---|
+| `server.cfg` 是 gitignored，`setr` 只活在本次进程 | 把要长期生效的 convar **追加进本地 `server.cfg`**，否则每次重启回默认 |
+| `restart <资源>` 会连锁停依赖且不拉回 | `python tools/dev/restart_sweep.py` 补（输出 `仍缺 []` 才算好） |
+| `restart custom-menu` 会让所有菜单打不开（`Unknown intent`） | 2026-11-27 已修（`onClientResourceStart` 清记忆 + 重试）；验收时**故意重启一次**再开菜单 |
+| 驱动产业周期会**结算清产业层** | 先 dump：容器内 `mariadb-dump <db> industry_state industry_facility industry_demand industry_sales industry_audit industry_cycle_results org_ledger > /tmp/industry_snapshot.sql` |
 
 ## 3. 四个工具（都在 tools/dev）
 
