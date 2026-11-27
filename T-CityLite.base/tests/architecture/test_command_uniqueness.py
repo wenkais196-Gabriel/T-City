@@ -34,8 +34,8 @@ def _rows() -> list[dict]:
 def _duplicates(rows: list[dict]) -> dict[str, list[str]]:
     by_name: dict[str, list[str]] = {}
     for row in rows:
-        by_name.setdefault(row["command"], []).append(row["where"])
-    return {name: where for name, where in by_name.items() if len(where) > 1}
+        by_name.setdefault(row["command"], []).append(row["resource"])
+    return {name: owners for name, owners in by_name.items() if len(owners) > 1}
 
 
 def test_command_names_are_unique_detects_collision():
@@ -43,10 +43,10 @@ def test_command_names_are_unique_detects_collision():
     # 以下划线开头的是说明字段，不是债务条目
     known = {k for k in allowlist.get("known", {}) if not k.startswith("_")}
     dupes = _duplicates(_rows())
-    new_dupes = {name: where for name, where in dupes.items() if name not in known}
+    new_dupes = {name: owners for name, owners in dupes.items() if name not in known}
     assert not new_dupes, (
         "新增了同名命令（谁生效取决于启动顺序）："
-        + ", ".join(f"{name} @ {where[0]}" for name, where in new_dupes.items()))
+        + ", ".join(f"{name} @ {owners[0]}" for name, owners in new_dupes.items()))
 
     # 反向：把 /menu 塞回已知清单之外，规则必须红
     injected = dict(dupes)
