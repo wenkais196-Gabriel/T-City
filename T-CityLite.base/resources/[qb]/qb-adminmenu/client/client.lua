@@ -101,7 +101,6 @@ local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 
 local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
 
 --Sub Menus
-local menu12 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_categories'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test12')
 local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test13')
 local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
 
@@ -375,6 +374,10 @@ customMenuHandlers['adminmenu:open:menu5'] = function()
     return { ok = true, spec = AdminMenuSpecs.BuildMenu5(Lang) }
 end
 
+customMenuHandlers['adminmenu:open:menu12'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu12(Lang, QBCore and QBCore.Shared) }
+end
+
 customMenuHandlers['adminmenu:action:veh_command'] = function(ctx)
     local args = type(ctx.args) == 'table' and ctx.args or {}
     local cmd = args.cmd
@@ -595,20 +598,11 @@ local function OpenCarModelsMenu(category)
     end
 end
 
-legacyBridges['adminmenu:open:menu12'] = function()
-    menu12:ClearItems()
-    for k, v in pairs(vehicles) do
-        menu12:AddButton({
-            label = QBCore.Shared.FirstToUpper(k),
-            value = v,
-            description = Lang:t('menu.category_name'),
-            select = function(btn)
-                local select = btn.Value
-                OpenCarModelsMenu(select)
-            end
-        })
+legacyBridges['adminmenu:open:menu13'] = function(ctx)
+    local catName = type(ctx.args) == 'table' and ctx.args.category or nil
+    if catName and vehicles[catName] then
+        OpenCarModelsMenu(vehicles[catName])
     end
-    AdminMenuShim.OpenMenu(menu12)
 end
 
 --[[

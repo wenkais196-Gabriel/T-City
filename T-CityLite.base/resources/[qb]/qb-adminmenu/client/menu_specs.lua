@@ -760,4 +760,67 @@ function AdminMenuSpecs.BuildMenu5(lang)
     }
 end
 
+local function firstToUpper(str, qbShared)
+    if qbShared and type(qbShared.FirstToUpper) == 'function' then
+        local ok, out = pcall(qbShared.FirstToUpper, str)
+        if ok and type(out) == 'string' and #out > 0 then
+            return out
+        end
+    end
+    local s = tostring(str or '')
+    return (s:gsub('^%l', string.upper))
+end
+
+function AdminMenuSpecs.CollectVehicleCategories(vehiclesTable)
+    local byCat = {}
+    for k, v in pairs(vehiclesTable or {}) do
+        if type(v) == 'table' then
+            local cat = tostring(v['category'] or 'other')
+            if byCat[cat] == nil then
+                byCat[cat] = {}
+            end
+            byCat[cat][k] = v
+        end
+    end
+    return byCat
+end
+
+function AdminMenuSpecs.BuildMenu12(lang, qbShared)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local shared = qbShared or (QBCore and QBCore.Shared) or {}
+    local byCat = AdminMenuSpecs.CollectVehicleCategories(shared.Vehicles)
+    local catNames = {}
+    for cat, _ in pairs(byCat) do
+        catNames[#catNames + 1] = cat
+    end
+    table.sort(catNames, function(a, b)
+        return a:lower() < b:lower()
+    end)
+
+    local items = {}
+    local desc = tr('menu.category_name')
+    for idx, cat in ipairs(catNames) do
+        items[#items + 1] = {
+            id = AdminMenuSpecs.SafeId('vehcat', idx),
+            kind = 'nav',
+            icon = '🚗',
+            label = AdminMenuSpecs.SafeLabel(firstToUpper(cat, shared), cat),
+            description = desc,
+            intent = 'adminmenu:open:menu13',
+            args = { category = cat, label = firstToUpper(cat, shared) },
+        }
+    end
+
+    return {
+        id = 'qb_adminmenu_menu12',
+        title = tr('menu.vehicle_categories'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.vehicle_options'), tr('menu.vehicle_categories') },
+        emptyMessage = tr('menu.vehicle_categories'),
+        items = items,
+    }
+end
+
 return AdminMenuSpecs
