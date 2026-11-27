@@ -604,12 +604,25 @@ class CycleProbe:
             if players is None:
                 self.log("/players.json 不可达，无法确认在线人数（继续，但请自行确认）")
 
+        # 就绪判据走 **DB 事实**，不靠控制台文本：
+        # FXServer 的 stdout 重定向到文件是块缓冲，资源里 print() 的那行可能几秒后才落盘，
+        # 而 `--console-log` 只等 3 秒 —— 用"输出里必须出现某行"作判据会在真机上误报
+        # "industry_enable 未开"（2026-11-27 复现两次，两次功能都正常）。
         output = self.console("industry_settle dry")
+        ready_by_db = False
+        rows = self.sql.query("SELECT COUNT(*) AS n FROM industry_state")
+        if rows:
+            try:
+                ready_by_db = int(rows[0].get("n", 0)) >= 1
+            except (TypeError, ValueError):
+                ready_by_db = False
         if "settlement dry-run" not in output.lower():
-            raise ProbeError(
-                "custom-industry 的 industry_settle 不可用（industry_enable 未开？）："
-                f"{output[:200]}"
-            )
+            if not ready_by_db:
+                raise ProbeError(
+                    "custom-industry 没就绪（industry_state 无行，或 industry_enable 关着）："
+                    f"{output[:200]}"
+                )
+            self.log("控制台回显没到（块缓冲），已按 DB 事实判定 custom-industry 就绪")
 
         if not self.args.allow_industry_data:
             if self.snapshot.facilities or self.snapshot.treasuries:
