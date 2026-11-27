@@ -47,24 +47,45 @@ end
 
 --- 右侧上下文列表（≤3 条）
 ---@param entries table 数组：{ { key, label }, ... }
+local lastContext = nil   -- 上一次真正发出去的列表快照，同内容不重发
+local function sameContext(left, right)
+    if type(left) ~= 'table' or type(right) ~= 'table' then return false end
+    if #left ~= #right then return false end
+    for index = 1, #left do
+        if left[index].key ~= right[index].key or left[index].label ~= right[index].label then
+            return false
+        end
+    end
+    return true
+end
+
 local function SetContext(entries)
-    contextEntries = {}
+    local nextEntries = {}
     if type(entries) == 'table' then
         for index = 1, math.min(#entries, 3) do
             local entry = entries[index]
             if type(entry) == 'table' and entry.label then
-                contextEntries[#contextEntries + 1] = {
+                nextEntries[#nextEntries + 1] = {
                     key = tostring(entry.key or 'E'):sub(1, 12),
                     label = tostring(entry.label):sub(1, 48),
                 }
             end
         end
     end
+    if sameContext(nextEntries, lastContext) then
+        return
+    end
+    contextEntries = nextEntries
+    lastContext = {}
+    for index = 1, #nextEntries do
+        lastContext[index] = { key = nextEntries[index].key, label = nextEntries[index].label }
+    end
     SendNUIMessage({ action = 'prompt', list = contextEntries })
 end
 
 local function ClearContext()
     contextEntries = {}
+    lastContext = nil
     SendNUIMessage({ action = 'prompt', list = {} })
 end
 

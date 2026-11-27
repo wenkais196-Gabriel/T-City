@@ -85,7 +85,10 @@ def scan_file(path: Path, pattern: re.Pattern[str], samples: list[str]) -> int:
         if not pattern.search(raw):
             continue
         hits += 1
-        if len(samples) < MAX_SAMPLES and not raw.lstrip().startswith("--"):
+        # 先全收、排序后再截断：按 rglob 顺序截断会让"取哪 12 条"依赖文件系统遍历顺序，
+        # Windows 与 Linux 拿到不同样本 → 基线的 samples 无法在 CI 复算
+        # （2026-11-27 CI 实测 9 个分类全部 "samples 与 census 不一致"）。
+        if not raw.lstrip().startswith("--"):
             samples.append(f"{path.relative_to(BASE).as_posix()}:{line_no}")
     return hits
 
@@ -100,7 +103,7 @@ def scan_category(pattern: re.Pattern[str], exts: set[str]) -> dict:
     return {
         "total": sum(per_resource.values()),
         "resources": dict(sorted(per_resource.items(), key=lambda kv: -kv[1])),
-        "samples": sorted(samples),
+        "samples": sorted(samples)[:MAX_SAMPLES],
     }
 
 

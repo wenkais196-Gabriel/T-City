@@ -424,8 +424,10 @@ local function OpenPhone(forcedKind, reason)
                 end
             end
             PhoneNav.Tick() -- 键盘/手柄导航（每帧一次，不自建线程）
+            DeviceLock.Tick() -- 平板移动锁（并入主循环单点泵，不自建线程）
             Wait(0)
         end
+        DeviceLock.End()
         -- Clear animation when phone closes
         ClearPedTasks(GetPlayerPed(-1))
         TriggerServerEvent('phone:server:focusState', { phase = 'loop-exit' })
@@ -1133,6 +1135,7 @@ end, false)
 -- phone (or a probe) still holds NUI focus.
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
+    DeviceLock.End()
     PhoneFocus.Reset()
     -- Defensive: even if client/core/focus.lua somehow failed to load, the
     -- engine flags must be cleared. Reset already records this state.
@@ -1144,6 +1147,7 @@ end)
 -- notification, so cover both without duplicating the defensive natives.
 AddEventHandler('onClientResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
+    DeviceLock.End()
     PhoneFocus.Reset()
 end)
 

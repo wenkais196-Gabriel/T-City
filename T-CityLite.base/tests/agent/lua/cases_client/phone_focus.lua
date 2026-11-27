@@ -495,6 +495,41 @@ return {
             assert(after.surface == nil, 'surface must clear on close, got ' .. tostring(after.surface))
         end)
 
+        check('tablet_locks_movement_and_keeps_single_frame_tick_budget', function()
+            -- 双 Wait(0) 合一后，平板（开着移动锁）同样只占每帧 1 次主泵唤醒，不翻倍；
+            -- 死亡 / 退出时移动锁仍自动释放。
+            local state = env.registered_exports.GetUiState
+            env.Command('phonefix')
+            env.Step(100)
+            env.ped_dead = false
+            env.disabled_controls = {}
+
+            env.Command('tablet')
+            env.Step(200)
+            local opened = state()
+            assert(opened.open == true and opened.surface == 'tablet',
+                'tablet must open in tablet mode, got ' .. tostring(opened.surface))
+            for _, ctrl in ipairs({ 30, 31, 32, 33, 34, 35 }) do
+                assert(env.disabled_controls[ctrl] == true, 'tablet must disable move control ' .. ctrl)
+            end
+
+            local before = env.resumes
+            env.Step(1000)
+            local ticks = env.resumes - before
+            assert(ticks >= 900, ('tablet loop must poll per frame, saw %d ticks'):format(ticks))
+            assert(ticks <= 1500, ('tablet merged pump must not double Wait(0), saw %d ticks'):format(ticks))
+
+            env.ped_dead = true
+            env.Step(40)
+            env.disabled_controls = {}
+            env.Step(40)
+            assert(env.disabled_controls[30] == nil, 'dead ped must release tablet move lock')
+
+            env.ped_dead = false
+            env.Command('phonefix')
+            env.Step(100)
+        end)
+
         return {
             ok = failed == 0,
             data = { total = #results, failed = failed, cases = results, resumes = env.resumes },
