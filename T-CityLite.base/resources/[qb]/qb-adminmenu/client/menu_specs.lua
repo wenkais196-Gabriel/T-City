@@ -1062,4 +1062,116 @@ function AdminMenuSpecs.BuildMenu7(lang, state)
     }
 end
 
+local function normalizeDistanceMeters(distanceMeters)
+    local raw = clampNumber(distanceMeters, 5, 50, 10)
+    local snapped = math.floor((raw + 2.5) / 5) * 5
+    return clampNumber(snapped, 5, 50, 10)
+end
+
+function AdminMenuSpecs.BuildMenu14(lang, state, distanceMeters)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local s = state or {}
+    local dist = normalizeDistanceMeters(distanceMeters)
+    return {
+        id = 'qb_adminmenu_menu14',
+        title = tr('menu.entity_view_options'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.developer_options'), tr('menu.entity_view_options') },
+        items = {
+            {
+                id = 'entity_view_distance',
+                kind = 'nav',
+                icon = '📏',
+                label = tr('menu.entity_view_distance'),
+                badge = ('%dm'):format(dist),
+                intent = 'adminmenu:open:menu14_distance',
+            },
+            {
+                id = 'entity_view_copy_info',
+                kind = 'action',
+                icon = '📋',
+                label = tr('menu.entity_view_freeaim_copy'),
+                description = tr('desc.entity_view_freeaim_copy_desc'),
+                intent = 'adminmenu:action:copy',
+                args = { dataType = 'freeaimEntity' },
+            },
+            {
+                id = 'entity_view_freeaim',
+                kind = 'toggle',
+                icon = '🔫',
+                label = tr('menu.entity_view_freeaim'),
+                description = tr('desc.entity_view_freeaim_desc'),
+                checked = s.ev_freeaim == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'ev_freeaim' },
+            },
+            {
+                id = 'entity_view_vehicle',
+                kind = 'toggle',
+                icon = '🚗',
+                label = tr('menu.entity_view_vehicles'),
+                description = tr('desc.entity_view_vehicles_desc'),
+                checked = s.ev_vehicle == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'ev_vehicle' },
+            },
+            {
+                id = 'entity_view_ped',
+                kind = 'toggle',
+                icon = '🧍‍♂‍',
+                label = tr('menu.entity_view_peds'),
+                description = tr('desc.entity_view_peds_desc'),
+                checked = s.ev_ped == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'ev_ped' },
+            },
+            {
+                id = 'entity_view_object',
+                kind = 'toggle',
+                icon = '📦',
+                label = tr('menu.entity_view_objects'),
+                description = tr('desc.entity_view_objects_desc'),
+                checked = s.ev_object == true,
+                intent = 'adminmenu:action:toggle_option',
+                args = { option = 'ev_object' },
+            },
+        },
+    }
+end
+
+function AdminMenuSpecs.BuildMenu14Distance(lang, distanceMeters)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local dist = normalizeDistanceMeters(distanceMeters)
+    return {
+        id = 'qb_adminmenu_menu14_distance',
+        title = tr('menu.entity_view_distance'),
+        surface = 'range',
+        breadcrumbs = {
+            tr('menu.admin_menu'),
+            tr('menu.developer_options'),
+            tr('menu.entity_view_options'),
+            tr('menu.entity_view_distance'),
+        },
+        intent = 'adminmenu:action:set_entity_distance',
+        items = {
+            {
+                id = 'entity_distance',
+                kind = 'range',
+                label = tr('menu.entity_view_distance'),
+                min = 5,
+                max = 50,
+                step = 5,
+                value = dist,
+                defaultValue = dist,
+                unit = 'm',
+                intent = 'adminmenu:action:set_entity_distance',
+            },
+        },
+    }
+end
+
 return AdminMenuSpecs

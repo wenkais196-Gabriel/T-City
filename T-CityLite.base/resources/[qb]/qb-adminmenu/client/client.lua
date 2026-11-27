@@ -96,9 +96,6 @@ if type(exports) == 'function' then
     exports(AdminMenuSpecs.EXPORT_METHOD, dispatchAdminMenuIntent)
 end
 
---Sub Menus (pending per-screen migration)
-local menu14 = MenuV:CreateMenu(false, Lang:t('menu.entity_view_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test14')
-
 local toggleState = {
     noclip = false,
     invisible = false,
@@ -106,6 +103,10 @@ local toggleState = {
     godmodeLoop = false,
     names = false,
     blips = false,
+    ev_freeaim = false,
+    ev_vehicle = false,
+    ev_ped = false,
+    ev_object = false,
 }
 local toggleOptionHandlers = {}
 
@@ -464,7 +465,31 @@ customMenuHandlers['adminmenu:open:menu7'] = function()
     }
 end
 
-legacyBridges['adminmenu:open:menu14'] = function() AdminMenuShim.OpenMenu(menu14) end
+local function currentEntityDistanceMeters()
+    local units = type(GetCurrentEntityViewDistance) == 'function' and GetCurrentEntityViewDistance() or 2
+    return (tonumber(units) or 2) * 5
+end
+
+customMenuHandlers['adminmenu:open:menu14'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu14(Lang, toggleState, currentEntityDistanceMeters()) }
+end
+
+customMenuHandlers['adminmenu:open:menu14_distance'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu14Distance(Lang, currentEntityDistanceMeters()) }
+end
+
+customMenuHandlers['adminmenu:action:set_entity_distance'] = function(ctx)
+    local raw = type(ctx.values) == 'table' and ctx.values.value or nil
+    local meters = tonumber(raw)
+    if not meters then
+        return { ok = false, reason = 'invalid_distance' }
+    end
+    meters = math.floor((meters + 2.5) / 5) * 5
+    if meters < 5 then meters = 5 elseif meters > 50 then meters = 50 end
+    SetEntityViewDistance(tostring(meters))
+    QBCore.Functions.Notify(Lang:t('info.entity_view_distance', { distance = tostring(meters) }))
+    return { ok = true, dispatched = 'set_entity_distance', distance = meters }
+end
 
 RegisterNetEvent('qb-admin:client:openMenu', function()
     openCustomMenu(AdminMenuSpecs.BuildMenu1(Lang))
@@ -584,92 +609,6 @@ end
 --[[
     Developer Options functions
 --]]
-local entity_view_distance = menu14:AddSlider({
-    icon = '📏',
-    label = Lang:t('menu.entity_view_distance'),
-    value = GetCurrentEntityViewDistance(),
-    values = { {
-        label = '5',
-        value = '5',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '10',
-        value = '10',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '15',
-        value = '15',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '20',
-        value = '20',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '25',
-        value = '25',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '30',
-        value = '30',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '35',
-        value = '35',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '40',
-        value = '40',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '45',
-        value = '45',
-        description = Lang:t('menu.entity_view_distance')
-    }, {
-        label = '50',
-        value = '50',
-        description = Lang:t('menu.entity_view_distance')
-    } }
-})
-
-local entity_view_copy_info = menu14:AddButton({
-    icon = '📋',
-    label = Lang:t('menu.entity_view_freeaim_copy'),
-    value = 'freeaimEntity',
-    description = Lang:t('desc.entity_view_freeaim_copy_desc')
-})
-
-local entity_view_freeaim = menu14:AddCheckbox({
-    icon = '🔫',
-    label = Lang:t('menu.entity_view_freeaim'),
-    value = nil,
-    description = Lang:t('desc.entity_view_freeaim_desc')
-})
-
-local entity_view_vehicle = menu14:AddCheckbox({
-    icon = '🚗',
-    label = Lang:t('menu.entity_view_vehicles'),
-    value = nil,
-    description = Lang:t('desc.entity_view_vehicles_desc')
-})
-
-local entity_view_ped = menu14:AddCheckbox({
-    icon = '🧍‍♂‍',
-    label = Lang:t('menu.entity_view_peds'),
-    value = nil,
-    description = Lang:t('desc.entity_view_peds_desc')
-})
-
-local entity_view_object = menu14:AddCheckbox({
-    icon = '📦',
-    label = Lang:t('menu.entity_view_objects'),
-    value = nil,
-    description = Lang:t('desc.entity_view_objects_desc')
-})
-
-entity_view_freeaim:On('change', function(_, _, _)
-    ToggleEntityFreeView()
-end)
-
 local function CopyToClipboard(dataType)
     local ped = PlayerPedId()
     if dataType == 'coords2' then
@@ -829,26 +768,37 @@ toggleOptionHandlers.hud_dev = function(ctx)
     end
 end
 
-entity_view_copy_info:On('select', function()
-    CopyToClipboard('freeaimEntity')
-end)
+toggleOptionHandlers.ev_freeaim = function(ctx)
+    local nextVal = resolveNextBool(toggleState.ev_freeaim, ctx)
+    if nextVal ~= toggleState.ev_freeaim then
+        toggleState.ev_freeaim = nextVal
+        ToggleEntityFreeView()
+    end
+end
 
-entity_view_distance:On('select', function(_, value)
-    SetEntityViewDistance(value)
-    QBCore.Functions.Notify(Lang:t('info.entity_view_distance', { distance = value }))
-end)
+toggleOptionHandlers.ev_vehicle = function(ctx)
+    local nextVal = resolveNextBool(toggleState.ev_vehicle, ctx)
+    if nextVal ~= toggleState.ev_vehicle then
+        toggleState.ev_vehicle = nextVal
+        ToggleEntityVehicleView()
+    end
+end
 
-entity_view_vehicle:On('change', function()
-    ToggleEntityVehicleView()
-end)
+toggleOptionHandlers.ev_object = function(ctx)
+    local nextVal = resolveNextBool(toggleState.ev_object, ctx)
+    if nextVal ~= toggleState.ev_object then
+        toggleState.ev_object = nextVal
+        ToggleEntityObjectView()
+    end
+end
 
-entity_view_object:On('change', function()
-    ToggleEntityObjectView()
-end)
-
-entity_view_ped:On('change', function()
-    ToggleEntityPedView()
-end)
+toggleOptionHandlers.ev_ped = function(ctx)
+    local nextVal = resolveNextBool(toggleState.ev_ped, ctx)
+    if nextVal ~= toggleState.ev_ped then
+        toggleState.ev_ped = nextVal
+        ToggleEntityPedView()
+    end
+end
 
 --[[
     Dealer List
