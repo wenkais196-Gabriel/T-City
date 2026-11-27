@@ -20,13 +20,7 @@ review_by: 2027-03-31
 
 三句话：
 
-1. **产业默认数值仍是“证明机制”的取值，不能对玩家开放。** 默认 `industry_demand_seed=10`、单组织上限 50%，
-   一个周期最多卖 20 件、收入约 **$1,000**（20 × 单价 $50，不含市场波动）；而“设施 + 1 个工位”就要 **$100,000**。同一份配置里，
-   设计稿写 30 天周期（10/10/5/3/2），代码只有四个阶段（10/10/5/3 = **28 天**）。
-   见 `T-CityLite.base/resources/[custom]/custom-industry/config/sales.lua`:28、
-   `T-CityLite.base/resources/[custom]/custom-industry/config/facility.lua`:12、
-   `T-CityLite.base/resources/[custom]/custom-industry/config/cycle.lua`:37、
-   `docs/server-design/12-industry-operations.md`:103。
+1. **产业默认数值仍是「证明机制」的取值，不能对玩家开放。** 口径（已逐条核对代码）：`industry_demand` 按 `(cycle_no, phase, item)` 记账（`server/sale.lua:137-138`），配额是**每阶段**的 —— `industry_demand_seed=10` × `OrgCapRatio=0.5` = 每阶段 5 件，四阶段共 **20 件/周期**；再叠阶段价格倍率 1.00 / 0.95 / 1.10 / 0.80（`config/cycle.lua`）→ 单组织单周期收入约 **$962**（5×50×3.85）。而「设施 $50,000 + 首个工位 $50,000」（`config/facility.lua:12`，第 n 工位 = floor(base×1.35^(n-1))）= **$100,000** → **回本约 104 个周期**。另外设计稿写 30 天周期（10/10/5/3/2），代码只有四阶段 10+10+5+3 = **28 天**（`config/cycle.lua:35-37`）。
 
 2. **手机端产业只读、周期只发 CityFeed。** 卖出入口只有 Boss 菜单（S5 计划 §2 的明确取舍）；
    S7 的 issue 验收写了“CityFeed + 手机推送”，实现里只做了 CityFeed，代码注释也写明“留给后续片”。
