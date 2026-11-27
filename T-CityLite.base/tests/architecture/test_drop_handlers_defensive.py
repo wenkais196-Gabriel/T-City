@@ -23,12 +23,26 @@ QUEST_CACHE = BASE / "resources" / "[custom]" / "custom-quest" / "server" / "que
 SECURITY = BASE / "resources" / "[custom]" / "custom-security" / "server" / "security.lua"
 
 
+def _code_only(source: str) -> str:
+    """剥掉 `--` 行注释后再做形状判断。
+
+    踩过两次：注释里为了解释坑，会原样写出坏形状（`rowsChanged > 0`、`rentRes.idempotent`），
+    拿整段源码当判据就会命中注释 —— 代码改坏了闸门照样绿。
+    """
+    out = []
+    for line in source.splitlines():
+        cut = line.find("--")
+        out.append(line if cut < 0 else line[:cut])
+    return "\n".join(out)
+
+
 def check_quest(source: str) -> list[str]:
     errors: list[str] = []
-    at = source.find("AddEventHandler('playerDropped'")
+    code = _code_only(source)
+    at = code.find("AddEventHandler('playerDropped'")
     if at < 0:
         return ["找不到 playerDropped 处理器"]
-    body = source[at:at + 1800]
+    body = code[at:at + 1800]
     if "type(rentRes)" not in body:
         errors.append("rentRes 没有判类型：boolean 返回值会在 `.idempotent` 上索引抛错")
     if "rentRes.idempotent" not in body:
@@ -38,14 +52,17 @@ def check_quest(source: str) -> list[str]:
 
 def check_security(source: str) -> list[str]:
     errors: list[str] = []
-    at = source.find("UPDATE players SET metadata")
+    code = _code_only(source)
+    at = code.find("UPDATE players SET metadata")
     if at < 0:
         return ["找不到 metadata 落盘语句"]
-    body = source[max(0, at - 200):at + 900]
-    # 认代码里的 `rowsChanged.affectedRows`，不认注释里的词（注释里也有 affectedRows，
-    # 用它当判据的话，把代码改坏也照样全绿）。
-    if "rowsChanged.affectedRows" not in body:
-        errors.append("rowsChanged 没有归一：oxmysql 可能回 { affectedRows }，拿表比数字会抛错")
+    body = code[max(0, at - 200):at + 900]
+    # 合规形态只有一种：走 core-framework 的归一化出口（归一化只许在 db.lua 里，
+    # 架构闸门 test_db_result_adapter.py 也是这么要求的）。
+    if "Db.AffectedRows(rowsChanged)" not in body:
+        errors.append("rowsChanged 没有走 Db.AffectedRows：oxmysql 可能回 { affectedRows }，拿表比数字会抛错")
+    if "rowsChanged > 0" in body:
+        errors.append("仍在直接比较 rowsChanged > 0（表 > 数字会抛错）")
     return errors
 
 
@@ -66,5 +83,5 @@ def test_drop_handlers_gate_detects_gutted_guards():
     assert check_quest(q_gutted), "拿掉 rentRes 的类型守卫后闸门仍然全绿"
 
     # 必须拿掉代码里的那一处（注释里也有这个词，命中注释等于没注入）
-    s_gutted = ssrc.replace("rowsChanged.affectedRows", "rowsChanged.affected_row", 1)
+    s_gutted = ssrc.replace("Db.AffectedRows(rowsChanged) > 0", "rowsChanged > 0", 1)
     assert check_security(s_gutted), "拿掉 affectedRows 归一后闸门仍然全绿"

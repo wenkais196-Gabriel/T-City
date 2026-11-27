@@ -73,11 +73,10 @@ AddEventHandler('playerDropped', function(reason)
             function(rowsChanged)
                 -- oxmysql 定制版 update 的返回**两种形状**：数字，或 { affectedRows = n }。
                 -- 直接 `rowsChanged > 0` 拿表比数字会抛错，继而连锁成
-                -- `oxmysql Error in nested ref call ... the reference wasn't valid`
-                -- （2026-11-27 真机日志）。这里统一取数字。
-                local affected = type(rowsChanged) == 'number' and rowsChanged
-                    or (type(rowsChanged) == 'table' and tonumber(rowsChanged.affectedRows) or 0)
-                if affected and affected > 0 then
+                -- `oxmysql Error in nested ref call ... the reference wasn't valid`（真机日志）。
+                -- 归一化只许出现在 core-framework/server/db.lua，所以这里用 Db.AffectedRows，
+                -- 不自己解形状（架构闸门 test_db_result_adapter.py 会红）。
+                if Db and type(Db.AffectedRows) == 'function' and Db.AffectedRows(rowsChanged) > 0 then
                     DebugPrint(("Persistent metadata saved for logged CID %s due to Combat Logging"):format(cid))
                 end
             end
