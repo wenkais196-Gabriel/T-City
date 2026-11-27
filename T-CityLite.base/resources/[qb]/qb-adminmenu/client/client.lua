@@ -97,7 +97,6 @@ if type(exports) == 'function' then
 end
 
 -- Main Menus (pending per-screen migration)
-local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test6')
 local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
 
 --Sub Menus
@@ -197,6 +196,8 @@ end
 
 local playersByKey = {}
 local activePlayer = nil
+local dealersByName = {}
+local activeDealer = nil
 local pendingBan = nil
 local pendingPermsGroup = nil
 
@@ -383,6 +384,18 @@ customMenuHandlers['adminmenu:open:menu13'] = function(ctx)
         return { ok = false, reason = 'missing_vehicle_category' }
     end
     return { ok = true, spec = AdminMenuSpecs.BuildMenu13(Lang, catName, QBCore and QBCore.Shared) }
+end
+
+customMenuHandlers['adminmenu:open:menu6'] = function()
+    return runSyncOrAsyncCallback('test:getdealers', nil, function(dealers)
+        dealersByName = {}
+        for _, v in pairs(dealers or {}) do
+            if type(v) == 'table' and v['name'] ~= nil then
+                dealersByName[tostring(v['name'])] = v
+            end
+        end
+        return AdminMenuSpecs.BuildMenu6(Lang, dealers), true
+    end)
 end
 
 customMenuHandlers['adminmenu:action:veh_command'] = function(ctx)
@@ -886,27 +899,17 @@ local function OpenDealerMenu(dealer)
                 elseif values == 'remove' then
                     TriggerServerEvent('QBCore:CallCommand', 'deletedealer', { dealer['name'] })
                     EditDealer:Close()
-                    menu6:Close()
+                    AdminMenuShim.Close('dealer_deleted')
                 end
             end
         })
     end
 end
 
-legacyBridges['adminmenu:open:menu6'] = function()
-    menu6:ClearItems()
-    QBCore.Functions.TriggerCallback('test:getdealers', function(dealers)
-        for _, v in pairs(dealers) do
-            menu6:AddButton({
-                label = v['name'],
-                value = v,
-                description = Lang:t('menu.dealer_name'),
-                select = function(btn)
-                    local select = btn.Value
-                    OpenDealerMenu(select)
-                end
-            })
-        end
-    end)
-    AdminMenuShim.OpenMenu(menu6)
+legacyBridges['adminmenu:open:dealer'] = function(ctx)
+    local name = type(ctx.args) == 'table' and ctx.args.dealerName or nil
+    local selected = name and dealersByName[tostring(name)] or nil
+    if selected then
+        OpenDealerMenu(selected)
+    end
 end

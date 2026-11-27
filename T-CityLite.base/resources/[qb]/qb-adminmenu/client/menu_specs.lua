@@ -864,4 +864,50 @@ function AdminMenuSpecs.BuildMenu13(lang, categoryName, qbShared)
     }
 end
 
+function AdminMenuSpecs.BuildMenu6(lang, dealers)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local sorted = {}
+    for _, v in pairs(dealers or {}) do
+        if type(v) == 'table' and v['name'] ~= nil then
+            sorted[#sorted + 1] = v
+        end
+    end
+    table.sort(sorted, function(a, b)
+        return tostring(a['name']):lower() < tostring(b['name']):lower()
+    end)
+
+    local items = {}
+    local desc = tr('menu.dealer_name')
+    for idx, v in ipairs(sorted) do
+        local name = tostring(v['name'])
+        items[#items + 1] = {
+            id = AdminMenuSpecs.SafeId('dealer', idx),
+            kind = 'nav',
+            icon = '💊',
+            label = AdminMenuSpecs.SafeLabel(name, 'Dealer ' .. idx),
+            description = desc,
+            intent = 'adminmenu:open:dealer',
+            args = { dealerName = name },
+        }
+    end
+    items[#items + 1] = {
+        id = 'back_to_main',
+        kind = 'nav',
+        icon = '↩️',
+        label = tr('menu.admin_menu'),
+        intent = 'adminmenu:open:menu1',
+    }
+
+    return {
+        id = 'qb_adminmenu_menu6',
+        title = tr('menu.dealer_list'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.dealer_list') },
+        emptyMessage = tr('menu.dealer_list'),
+        items = items,
+    }
+end
+
 return AdminMenuSpecs
