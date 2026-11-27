@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **产业面板方案 A —— 信息行语义落地（`custom-menu` / `qb-menu` / `custom-industry`，#374）**：
+  ① **契约层（`T-CityLite.base/resources/[custom]/custom-menu/shared/menu_spec.lua`）**：巩固 `MenuSpec.KINDS.info = true` 语义——`info` 项为只读信息（必填 `label`，值放字符串 `hint`），校验显式拒绝 `action` / `params` / `intent`，缺失 `hint` 可正常通过，非字符串 `hint` 与非 JSON-safe 值均报错；
+  ② **渲染与样式（`T-CityLite.base/resources/[custom]/custom-menu/html/renderer.js`、`T-CityLite.base/resources/[custom]/custom-menu/html/styles.css`）**：`info` 行左标签正常字重（`rgb(226,232,240)`）+ 右对齐亮值（`rgb(248,250,252)`）、无 hover、无焦点描边、无 `›` 箭头、不压暗、不加 `disabled` class（含虚拟列表分支）；方向键 `ArrowDown`/`ArrowUp` 与初始焦点跳过 `info` 行，点击无 intent/toast 副作用；卡片宽度收敛至 `300px` 且全量字号 `>= 12px`；不可用动作行维持压暗 + `disabledReason`；
+  ③ **适配层与调用方（`T-CityLite.base/resources/[qb]/qb-menu/client/adapter.lua`、`T-CityLite.base/resources/[custom]/custom-industry/client/main.lua`）**：无 `params.event` 且 `disabled = true` 的 legacy 项映射为 `kind = 'info'`（`hint` 取 `txt`），带 `params.event` 的 `disabled = true` 项保持禁用动作并携带 `disabledReason`；为 `custom-industry` 两条真正受阻的写操作（雇工位 / 卖出）补回 `params.event` 使其保持禁用动作语义，信息行零改动自动生效，关闭 `qb_menu_use_custom_menu` 回退旧渲染；
+  ④ **测试与反向校验**：新增 `T-CityLite.base/resources/[custom]/custom-menu/tests/nui/run.mjs`（Node DOM 单元 + 无头 Chromium CDP 实测）、`T-CityLite.base/tests/unit/test_menu_schema.py` / `T-CityLite.base/tests/architecture/test_menu_host.py` / `T-CityLite.base/tests/architecture/test_qb_menu_adapter.py` 自证用例与 `tools/dev/gate_mutation_smoke.py` 适配层回归变异用例。
+
 ### Fixed
 - **M5 收尾：把剩下的 6 处 `backdrop-filter` 也清掉（@qb 三处）**：`qb-core` 通知容器、
   `qb-multicharacter` 三处面板、`qb-vehicleshop` 的 overdrive overlay。做法与 dashboard/banking 一致

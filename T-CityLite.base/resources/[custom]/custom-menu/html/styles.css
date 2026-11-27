@@ -10,7 +10,7 @@
   --font-body: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
   --font-mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
 
-  --text-xs: 11px;
+  --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 15px;
   --text-md: 17px;
@@ -200,7 +200,7 @@ button, input {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  width: 520px;
+  width: 300px;
   max-width: 100%;
   max-height: calc(100vh - 72px);
   background: var(--bg-surface);
@@ -277,10 +277,10 @@ button, input {
 .menu-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: var(--text-xl);
+  font-size: var(--text-md);
   font-weight: 700;
   letter-spacing: 0.02em;
-  line-height: 1.15;
+  line-height: 1.2;
   color: var(--text-primary);
 }
 
@@ -367,7 +367,7 @@ button, input {
   border-bottom-width: 2px;
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-primary);
 }
 
@@ -378,7 +378,7 @@ button, input {
   padding: 2px 7px;
   border-radius: 2px;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -556,6 +556,82 @@ button, input {
   color: var(--text-secondary);
 }
 
+/* Read-only info rows (Scheme A, issue #374): normal label + bright right-aligned value, no hover/focus/dimming */
+.menu-row.info-row {
+  min-height: 30px;
+  padding: 6px 4px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  cursor: default;
+  opacity: 1;
+  transition: none;
+}
+
+.menu-row.info-row + .menu-row.info-row {
+  margin-top: calc(-1 * var(--gap-item));
+}
+
+.menu-row.info-row + .menu-row:not(.info-row) {
+  margin-top: 4px;
+}
+
+.menu-row.info-row:hover,
+.menu-row.info-row.focused {
+  background: transparent;
+  border-color: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: none;
+  box-shadow: none;
+  transform: none;
+}
+
+.menu-row.info-row .row-left {
+  gap: 6px;
+  flex: 1 0 auto;
+  max-width: 100%;
+}
+
+.menu-row.info-row .icon-box {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  color: #7d90ab;
+}
+
+.menu-row.info-row .icon-svg {
+  width: 14px;
+  height: 14px;
+}
+
+.menu-row.info-row .row-label,
+.vlist-row.info-row .row-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgb(226, 232, 240);
+}
+
+.menu-row.info-row .row-right {
+  flex: 0 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.menu-row.info-row .row-right:empty {
+  display: none;
+}
+
+.menu-row.info-row .row-hint,
+.vlist-row.info-row .row-hint {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(248, 250, 252);
+  text-align: right;
+}
+
 .row-left {
   display: flex;
   align-items: center;
@@ -701,6 +777,15 @@ button, input {
 
 .vlist-row.disabled {
   opacity: 0.56;
+}
+
+.vlist-row.info-row,
+.vlist-row.info-row:hover,
+.vlist-row.info-row.focused {
+  background: transparent;
+  box-shadow: none;
+  cursor: default;
+  opacity: 1;
 }
 
 /* Form & Range Surfaces */
@@ -984,7 +1069,7 @@ button, input {
     padding: 20px 24px;
   }
   .menu-shell {
-    width: 470px;
+    width: 300px;
     max-height: calc(100vh - 40px);
   }
   .vlist-viewport {

@@ -256,6 +256,17 @@ local function validateItem(item, index, knownIntents, seenIds)
     if not isNonEmptyString(item.kind) or not MenuSpec.KINDS[item.kind] then
         return false, ('Invalid item kind %q at %s'):format(tostring(item.kind), path)
     end
+    if item.kind == 'info' then
+        if item.action ~= nil then
+            return false, ('Info item at %s must not specify action'):format(path)
+        end
+        if item.params ~= nil then
+            return false, ('Info item at %s must not specify params'):format(path)
+        end
+        if item.intent ~= nil then
+            return false, ('Info item at %s must not specify intent'):format(path)
+        end
+    end
     if not isNonEmptyString(item.label) then
         return false, ('Missing or invalid item label at %s'):format(path)
     end

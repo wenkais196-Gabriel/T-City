@@ -639,3 +639,106 @@ def test_intent_routes_rejects_function_fields_and_non_resource_types() -> None:
     # 自证：把一条带闭包的路由喂进校验器，必须被识别
     poisoned = "callMenu('RegisterIntent', intentId, {\n        type = 'client',\n        handler = function(ctx) end,\n    })"
     assert _non_json_route_fields(poisoned) != [], "校验器抓不住函数路由，等于没有闸门"
+
+
+def test_disabled_without_event_maps_to_info_and_rejects_all_disabled_regression() -> None:
+    """issue #374：disabled=true 且无 params.event 必须映射成 info（hint=txt）；带 event 保持 disabled action。"""
+    industry_menu = """
+    { header = '洛圣都矿业公司 · L1 · Mine Owner', isMenuHeader = true, icon = 'fa-solid fa-industry' },
+    { header = '金库余额', txt = '$4,195,095', icon = 'fa-solid fa-vault', disabled = true },
+    { header = '尚未建设施', icon = 'fa-solid fa-hammer', disabled = true },
+    { header = '雇工位（$123,018）', txt = '资金不足', icon = 'fa-solid fa-user-plus', disabled = true, params = { event = 'industry:client:hire' } },
+    { header = '返回', icon = 'fa-solid fa-angle-left', params = { event = 'qb-orgmenu:client:OpenMenu' } },
+"""
+    _run(
+        """
+INVOKING = 'custom-industry'
+exports['qb-menu']:openMenu({ __IND_MENU__ })
+local openMsg = lastNui('menu:open')
+assert(openMsg and openMsg.spec, 'custom-menu 必须收到 menu:open')
+local items = openMsg.spec.items
+assert(#items == 4, '应该有 4 行（标题进 title），实际 ' .. tostring(#items))
+
+-- 1. 信息行（带 txt）：kind=info、hint=txt、无 disabled/intent/args/description
+local infoRow = items[1]
+assert(infoRow.kind == 'info', '无 params.event 的 disabled 行必须映射成 kind=info，实际 ' .. tostring(infoRow.kind))
+assert(infoRow.hint == '$4,195,095', 'info.hint 必须取原来的 txt，实际 ' .. tostring(infoRow.hint))
+assert(infoRow.disabled == nil, 'info 行不许带 disabled')
+assert(infoRow.intent == nil, 'info 行不许带 intent')
+assert(infoRow.args == nil, 'info 行不许带 args')
+assert(infoRow.description == nil, 'info 行值应放 hint，不重复放 description')
+
+-- 2. 信息行（缺 txt）：kind=info、hint=nil、校验仍通过
+local emptyInfo = items[2]
+assert(emptyInfo.kind == 'info', '缺 txt 的无动作 disabled 行也应映射成 info')
+assert(emptyInfo.hint == nil, '缺 txt 时 hint 应为 nil')
+assert(emptyInfo.disabled == nil and emptyInfo.intent == nil)
+
+-- 3. 禁用动作行（带 params.event）：保持 disabled action，且带 disabledReason
+local disabledAct = items[3]
+assert(disabledAct.kind == 'action', '带 params.event 的 disabled 行必须保持 action，实际 ' .. tostring(disabledAct.kind))
+assert(disabledAct.disabled == true, '禁用动作行必须保留 disabled=true')
+assert(disabledAct.disabledReason == '资金不足', '禁用动作行必须带 disabledReason，实际 ' .. tostring(disabledAct.disabledReason))
+assert(type(disabledAct.intent) == 'string' and #disabledAct.intent > 0, '禁用动作行必须保留 intent')
+
+-- 4. 正常动作行
+local normalAct = items[4]
+assert(normalAct.kind == 'action' and normalAct.disabled == nil)
+print('OK')
+""".replace("__IND_MENU__", industry_menu)
+    )
+
+    # convar 关闭回滚路径：必须原样进老 NUI OPEN_MENU，保留 disabled = true
+    _run(
+        """
+INVOKING = 'custom-industry'
+exports['qb-menu']:openMenu({ __IND_MENU__ })
+assert(exports['custom-menu']:IsOpen() == false, 'convar 关闭时不许碰 custom-menu')
+local legacyMsg = lastNui('OPEN_MENU')
+assert(legacyMsg and legacyMsg.data[2].disabled == true, 'convar 关闭时老 NUI 必须保持原样')
+print('OK')
+""".replace("__IND_MENU__", industry_menu),
+        use_adapter=False,
+    )
+
+    # 反向自证：把适配层改回“全 disabled action”的旧写法，在真实 Lua 沙箱里跑同一套菜单必须红
+    adapter_src = pathlib.Path(QB_MENU_ADAPTER).read_text(encoding="utf-8")
+    anchor = "if legacy.isMenuHeader == true or (legacy.disabled == true and not hasLegacyAction(legacy)) then"
+    assert anchor in adapter_src, "未找到适配层信息行映射分支"
+    mutated_adapter = adapter_src.replace(anchor, "if legacy.isMenuHeader == true then", 1)
+    mutated_prelude = PRELUDE.replace("__USE_ADAPTER__", "true")
+    for key, path in {
+        "__MENU_SPEC__": MENU_SPEC,
+        "__MENU_HOST__": MENU_HOST,
+        "__QB_MENU_MAIN__": QB_MENU_MAIN,
+        "__QB_MENU_ADAPTER__": QB_MENU_ADAPTER,
+        "__QB_INPUT_MAIN__": QB_INPUT_MAIN,
+        "__QB_INPUT_ADAPTER__": QB_INPUT_ADAPTER,
+    }.items():
+        mutated_prelude = mutated_prelude.replace(key, path)
+    # 用临时篡改后的适配层源码替换 dofile(QB_MENU_ADAPTER)
+    mutated_prelude = mutated_prelude.replace(
+        f"dofile('{QB_MENU_ADAPTER}')",
+        f"assert(load({mutated_adapter!r}))()",
+    )
+    bad_proc = subprocess.run(
+        [
+            _find_lua54(),
+            "-e",
+            mutated_prelude
+            + """
+INVOKING = 'custom-industry'
+exports['qb-menu']:openMenu({ __IND_MENU__ })
+local items = lastNui('menu:open').spec.items
+assert(items[1].kind == 'info' and items[1].disabled == nil)
+print('OK')
+""".replace("__IND_MENU__", industry_menu),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=20,
+    )
+    assert bad_proc.returncode != 0, "反向注入失效：把适配层改回全 disabled 后用例竟然仍通过"
+

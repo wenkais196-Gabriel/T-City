@@ -209,10 +209,27 @@ local function itemDescription(item)
     if nonEmptyString(item.txt) then
         return item.txt
     end
+    if type(item.txt) == 'number' then
+        return tostring(item.txt)
+    end
     if nonEmptyString(item.text) then
         return item.text
     end
+    if type(item.text) == 'number' then
+        return tostring(item.text)
+    end
     return nil
+end
+
+local function hasLegacyAction(item)
+    if type(item.action) == 'function' then
+        return true
+    end
+    local params = paramsOf(item)
+    if type(params.event) == 'string' then
+        return #params.event > 0
+    end
+    return type(params.event) == 'function'
 end
 
 --- 普通客户端事件才可能是"再开一个 qb-menu 菜单"；带 isServer/isCommand/
@@ -263,21 +280,31 @@ local function buildSpec(list, owner)
     for i = startIndex, #list do
         local legacy = list[i]
         if type(legacy) == 'table' and legacy.hidden ~= true then
+            local desc = itemDescription(legacy)
             local mapped = {
                 id = ('i%d'):format(i),
                 label = itemTitle(legacy, i),
             }
-            if legacy.isMenuHeader == true then
+            if legacy.isMenuHeader == true or (legacy.disabled == true and not hasLegacyAction(legacy)) then
+                -- 无动作的 disabled 行与次级标题行都是只读信息行（issue #374）：
+                -- 映射成 kind='info'、值放 hint，不带 intent/args/disabled。
                 mapped.kind = 'info'
+                if desc ~= nil then
+                    mapped.hint = desc
+                end
             else
                 mapped.kind = 'action'
                 mapped.intent = reopensMenu(legacy) and menuIntent or itemIntent
                 mapped.args = { slot = i }
                 if legacy.disabled == true then
                     mapped.disabled = true
+                    if desc ~= nil then
+                        mapped.disabledReason = desc
+                    end
+                elseif desc ~= nil then
+                    mapped.description = desc
                 end
             end
-            mapped.description = itemDescription(legacy)
             if nonEmptyString(legacy.icon) then
                 mapped.icon = legacy.icon
             end

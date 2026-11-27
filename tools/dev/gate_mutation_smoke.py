@@ -123,6 +123,14 @@ MUTATIONS: list[Mutation] = [
         what="未注册的 intent 也能执行（白名单形同虚设）",
     ),
     Mutation(
+        gate="tests/architecture/test_qb_menu_adapter.py::test_disabled_without_event_maps_to_info_and_rejects_all_disabled_regression",
+        path="resources/[qb]/qb-menu/client/adapter.lua",
+        content=None,
+        replace_from="            if legacy.isMenuHeader == true or (legacy.disabled == true and not hasLegacyAction(legacy)) then",
+        replace_to="            if legacy.isMenuHeader == true then -- 变异注入：disabled 无 event 回退成禁用动作",
+        what="qb-menu 适配层把无动作 disabled 行改回禁用动作（产业信息行整屏发灰）",
+    ),
+    Mutation(
         gate=("tests/architecture/test_backup_lifetime_owner.py::"
               "test_client_lifetime_requires_the_server_owner_guard"),
         path="resources/[custom]/custom-police/client/backup.lua",
