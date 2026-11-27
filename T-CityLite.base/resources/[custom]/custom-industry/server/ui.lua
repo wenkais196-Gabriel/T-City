@@ -11,8 +11,8 @@
 --   * 价格 / 倍率 / 收益 / 配额字段收到就忽略并记录，不参与任何计算。
 --
 -- 本文件没有 net event；对客户端只暴露 QBCore callback（Register 时注册）。
--- 跨资源只读入口是 exports：CanAccessIndustry / GetIndustrySnapshot /
--- EstimateIndustrySale / SellIndustryStock。
+-- 跨资源入口是 exports：CanAccessIndustry / GetIndustrySnapshot /
+-- EstimateIndustrySale / SellIndustryStock / HireIndustryWorkstation。
 
 IndustryUi = {}
 
@@ -386,6 +386,9 @@ exports('CanAccessIndustry', IndustryUi.CanAccess)
 exports('GetIndustrySnapshot', IndustryUi.Snapshot)
 exports('EstimateIndustrySale', IndustryUi.EstimateSale)
 exports('SellIndustryStock', IndustryUi.Sell)
+-- 手机 App 的雇工位入口：与 Boss 菜单回调复用同一个玩家侧函数，
+-- 成员/Boss 判定只在 IndustryUi.HireWorkstation 里执行一次。
+exports('HireIndustryWorkstation', IndustryUi.HireWorkstation)
 
 local function respond(cb, ok, data, errcode)
     if ok then

@@ -312,6 +312,10 @@ export function createWorld() {
     questReceipts: [],
     /** 非空时模拟导出缺失：receipts 查询带结构化 error 返回（success 仍为 true）。 */
     questReceiptsError: null,
+    /** 产业 App 的假快照（custom-industry Snapshot 的原样投影）。 */
+    industry: null,
+    /** 非空时 snapshot 查询带结构化 error 返回（success 仍为 true）。 */
+    industrySnapshotError: null,
     /** One-shot query failures; consumed so the next refresh succeeds. */
     failQueries: new Set(),
     failStatus: 500,
@@ -341,6 +345,9 @@ function queryData(world, query) {
       return { rows: [world.me], count: 1 };
     case 'charges':
       return { rows: [{ id: 1, label: 'Reckless Driving', minutes: 5, fine: 500 }], count: 1 };
+    // 未注册专用页面的 App（dyn:industry_stale）用它验证 DynamicApp 还能读只读行。
+    case 'snapshot':
+      return { rows: [{ 组织: '洛圣都矿业公司' }], count: 1 };
     default:
       return { rows: [], count: 0 };
   }
@@ -361,6 +368,30 @@ function questData(world, query) {
     default:
       return { rows: [], count: 0 };
   }
+}
+
+/** 产业 App 的假后端：snapshot / snapshot_estimate。 */
+function industryData(world, payload) {
+  if (payload?.query === 'snapshot_estimate') {
+    const qty = Math.max(1, Math.floor(Number(payload?.params?.qty) || 1));
+    const maxQty = Math.max(0, world.industry?.sellable?.maxQty ?? qty);
+    const effective = Math.min(qty, maxQty);
+    return {
+      ok: effective > 0,
+      estimate: {
+        ok: effective > 0,
+        qty: effective,
+        unitPrice: world.industry?.demand?.unitPrice ?? 50,
+        revenue: effective * (world.industry?.demand?.unitPrice ?? 50),
+        blocked: qty > effective ? 'stock' : null,
+        maxQty,
+      },
+    };
+  }
+  if (world.industrySnapshotError) {
+    return { rows: [], count: 0, error: world.industrySnapshotError };
+  }
+  return { rows: [], count: world.industry ? 1 : 0, snapshot: world.industry ?? undefined };
 }
 
 export function handleNui(world, callback, payload) {
@@ -393,6 +424,9 @@ export function handleNui(world, callback, payload) {
       if (payload?.app_id === 'quests') {
         return ok({ success: true, data: questData(world, query) });
       }
+      if (payload?.app_id === 'industry') {
+        return ok({ success: true, data: industryData(world, payload) });
+      }
       if (world.failQueries.has(query)) {
         world.failQueries.delete(query);
         return { status: world.failStatus, body: { success: false, error: world.failError } };
@@ -411,6 +445,13 @@ export function handleNui(world, callback, payload) {
       const action = payload?.action;
       if (world.actionErrors[action]) {
         return ok({ success: false, error: world.actionErrors[action] });
+      }
+      if (payload?.app_id === 'industry' && action === 'sell') {
+        const qty = Math.max(1, Math.floor(Number(payload?.params?.qty) || 1));
+        return ok({ success: true, data: { qty, revenue: qty * 50 } });
+      }
+      if (payload?.app_id === 'industry' && action === 'hire') {
+        return ok({ success: true, data: { cost: 67500, workstations: 2 } });
       }
       return ok({ success: true, data: {} });
     }
@@ -535,6 +576,37 @@ export async function openQuests(page, surface = 'phone') {
     throw new CheckError('点击任务图标后没有进入任务页', {
       期望: '出现 .quests-app（appRegistry 里 quests → Quests.svelte）',
       实际: '5s 内 .quests-app 不可见（DynamicApp 兜底？组件没注册？）',
+    });
+  }
+}
+
+/** 打开手机里的「产业」瓦片（服务端注册的 industry app）。 */
+export async function openIndustry(page, surface = 'phone') {
+  await openPhone(page, surface);
+  const tile = page.locator('button[aria-label="产业"]');
+  try {
+    await tile.waitFor({ state: 'visible', timeout: 10000 });
+  } catch {
+    throw new CheckError('手机主页没有产业图标', {
+      期望: 'getPhoneApps 返回 industry 后渲染一个 aria-label="产业" 的按钮',
+      实际: '5s 内没有找到 button[aria-label="产业"]',
+    });
+  }
+  await tile.click();
+  try {
+    await page.locator('.industry-app').waitFor({ state: 'visible', timeout: 5000 });
+    // 光等容器出现不够：容器先画出"加载中…"，快照是下一轮 NUI 往返才填进来的。
+    // CI（慢 runner）上这一步常被读到 loading 态，断言就拿着"加载中…"去比文案了
+    // （2026-11-27 CI 实测 4 failed，本地 0 failed）。这里显式等快照落地。
+    await waitFor(
+      async () => !(((await page.locator('.industry-app').textContent()) ?? '').includes('加载中')),
+      10000,
+      '产业 App 必须结束加载态（快照来自 appQuery:snapshot）',
+    );
+  } catch {
+    throw new CheckError('点击产业图标后没有进入产业页', {
+      期望: '出现 .industry-app（appRegistry 里 industry → Industry.svelte）',
+      实际: '5s 内 .industry-app 不可见（DynamicApp 兜底？组件没注册？）',
     });
   }
 }

@@ -1098,3 +1098,57 @@ def test_queries_distinguish_not_loaded_from_not_found() -> None:
 
     mdt = (phone / "web/src/apps/PoliceMDT.svelte").read_text(encoding="utf-8")
     assert "player_not_ready: '角色还在加载，稍等一下'" in mdt
+
+
+# ---------------------------------------------------------------------------
+# W1 #388: 手机端产业动作入口（卖出 / 雇工位）
+# ---------------------------------------------------------------------------
+
+
+def test_industry_app_declares_hire_without_client_pricing():
+    app = read(PHONE / "server/apps/industry.lua")
+    assert "hire = function(source, params)" in app
+    assert "exports['custom-industry']:HireIndustryWorkstation(source, orgId)" in app
+    # 手机只给 orgId；金额 / 工位号不接受、不转发。
+    assert "params.cost" not in app
+    assert "params.workstations" not in app
+    assert "params.amount" not in app
+
+
+def test_industry_dedicated_page_is_registered_and_dynamic_fallback_stays():
+    registry = read(PHONE / "web/src/core/appRegistry.ts")
+    assert "import Industry from '../apps/Industry.svelte'" in registry
+    assert "INDUSTRY_APP_ID = 'industry'" in registry
+    assert "component: Industry" in registry
+    app = read(PHONE / "web/src/App.svelte")
+    # dyn:<id> 先查专用页面；查不到（注册缺失 / 旧构建）仍回落 DynamicApp 只读列表。
+    assert "getApp($activeApp.slice(4))" in app
+    assert "<DynamicApp appId={$activeApp.slice(4)} />" in app
+
+
+def test_industry_page_estimates_before_it_sells():
+    ui = read(PHONE / "web/src/apps/Industry.svelte")
+    for token in (
+        "snapshot_estimate",
+        "nextWorkstationCost",
+        "hireBlocked",
+        "确认卖出",
+        "appAction('industry', 'sell'",
+    ):
+        assert token in ui, token
+    # estimate → 确认 → sell 三段：估价请求必须早于 sell 动作。
+    assert ui.index("snapshot_estimate") < ui.index("appAction('industry', 'sell'")
+    # 雇工位只发送 orgId（金额/工位号由服务端算）。
+    hire_call = ui[ui.index("appAction('industry', 'hire'"):]
+    assert "orgId" in hire_call[:120]
+    assert "cost" not in hire_call[:120]
+    assert "workstations" not in hire_call[:120]
+
+
+def test_built_bundle_ships_the_industry_actions():
+    bundle = "\n".join(
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in sorted((PHONE / "html/assets").glob("*.js"))
+    )
+    for token in ("snapshot_estimate", "nextWorkstationCost", "hireBlocked", "确认卖出", "雇工位"):
+        assert token in bundle, token

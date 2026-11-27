@@ -195,6 +195,50 @@ local function gangBoss()
 end
 """
 
+#: W1 手机动作的导出接线：把 `exports['custom-industry']` 指向**真实** ui.lua 的导出，
+#: 并把 QBCore.Functions.GetPlayer 映射到 UI_PLAYERS 的四类玩家。
+#: 测试的 fake exports 用 `:` 调用时会把 self 一起传进来；真实 FiveM 会吃掉 self。
+#: 适配器显式吃掉 self，让同一份手机代码在两边拿到相同的参数形状。
+PHONE_UI_WIRING = """
+function GetResourceState(name)
+    return name == 'custom-industry' and 'started' or 'missing'
+end
+function Money(value) return tostring(value) end
+
+local __phoneSources = { [1] = boss(), [2] = outsider(), [3] = gangBoss(), [4] = member() }
+local __phoneCore = {
+    Functions = { GetPlayer = function(source) return __phoneSources[source] end },
+}
+_G.QBCore = __phoneCore
+
+local __baseExports = exports
+local __phoneIndustryExports = {
+    CanAccessIndustry = function(_, value) return __exportFns.CanAccessIndustry(value) end,
+    GetIndustrySnapshot = function(_, value, orgId)
+        return __exportFns.GetIndustrySnapshot(value, orgId)
+    end,
+    EstimateIndustrySale = function(_, value, orgId, qty)
+        return __exportFns.EstimateIndustrySale(value, orgId, qty)
+    end,
+    SellIndustryStock = function(_, value, orgId, qty, untrusted)
+        return __exportFns.SellIndustryStock(value, orgId, qty, untrusted)
+    end,
+    HireIndustryWorkstation = function(_, value, orgId)
+        return __exportFns.HireIndustryWorkstation(value, orgId)
+    end,
+}
+exports = setmetatable({}, {
+    __index = function(_, resource)
+        if resource == 'custom-industry' then return __phoneIndustryExports end
+        if resource == 'qb-core' then
+            return { GetCoreObject = function() return __phoneCore end }
+        end
+        return __baseExports[resource]
+    end,
+    __call = function(_, name, fn) return __baseExports(name, fn) end,
+})
+"""
+
 #: S3 纯函数用例的最小桩：只替掉 convar 与输出。
 PRODUCTION_STUBS = """
 function GetConvar(_, default) return default end
@@ -412,6 +456,25 @@ def run_ui(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
         convars=convars,
         default_convars={"industry_enable": "true"},
         suffix=UI_PLAYERS,
+    )
+
+
+def run_ui_phone(body: str, convars: dict[str, str] | None = None) -> dict[str, str]:
+    """W1：真实 IndustryUi/写路径 + custom-phone 注册表与 industry App。
+
+    与 `run_phone` 的区别：这里的 `HireIndustryWorkstation` / `SellIndustryStock`
+    是 ui.lua 注册的真实导出，因此覆盖「手机动作 → 服务端复验 → 扣款/写库」整条链。
+    """
+    registry = PHONE_REGISTRY.read_text(encoding="utf-8").rsplit("return PhoneApps", 1)[0]
+    prefix = registry + "\n" + PHONE_APP.read_text(encoding="utf-8") + "\n"
+    return _run(
+        body,
+        stubs=read_text(PROBE_COMMON, SALES_PROBE, UI_PROBE),
+        modules=UI_MODULES,
+        convars=convars,
+        default_convars={"industry_enable": "true"},
+        suffix=UI_PLAYERS + PHONE_UI_WIRING,
+        prefix=prefix,
     )
 
 

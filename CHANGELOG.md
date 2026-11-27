@@ -4,7 +4,7 @@ type: meta
 status: active
 system: meta
 owner: hermes
-updated: 2026-11-26
+updated: 2026-11-27
 review_by: 2027-04-30
 ---
 
@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **手机端产业动作入口（卖出 / 雇工位，`custom-phone` / `custom-industry`，#388）**：
+  ① **服务端**：`T-CityLite.base/resources/[custom]/custom-industry/server/ui.lua` 新增导出
+  `HireIndustryWorkstation`，直接复用 `IndustryUi.HireWorkstation`——成员身份与
+  `IndustryAccess.IsOrgBoss` 判定仍只有这一份；手机 App
+  `T-CityLite.base/resources/[custom]/custom-phone/server/apps/industry.lua` 新增 `hire` 动作，
+  参数只收 `orgId`，金额/工位号一律由服务端从配置与 SQL 计算（客户端传了也不读）；
+  ② **前端**：新增 `T-CityLite.base/resources/[custom]/custom-phone/web/src/apps/Industry.svelte`
+  （快照只读、卖出 estimate → 确认 → sell、雇工位显示 `nextWorkstationCost` / `hireBlocked`），
+  `T-CityLite.base/resources/[custom]/custom-phone/web/src/core/appRegistry.ts` 注册 `industry`；
+  `dyn:industry` 仍先查专用页面，注册缺失（旧构建 / 构建失败）时回落 `DynamicApp` 只读列表；
+  ③ **回退修复**：`T-CityLite.base/resources/[custom]/custom-phone/web/src/apps/DynamicApp.svelte`
+  在 runes 模式下把 `rows` / `loading` / `error` / `message` / `feedback` 改成 `$state`，
+  否则异步结果永不触发重渲染，回退列表实际停在「暂无数据」；
+  ④ **测试**：`T-CityLite.base/tests/unit/layer3_business/test_industry_ui.py` 新增端到端用例
+  （非成员不可见、Boss 卖 5 件时 `industry_sales` / `org_ledger` 各一行、非 Boss 伪造
+  `sell` / `hire` 返回 `not_boss`、越权 orgId 返回 `not_member`、被拒请求零写入），
+  `T-CityLite.base/tests/unit/layer3_business/test_phone_apps.py` 增加页面注册/回退与参数契约断言，
+  NUI harness 新增 5 条产业场景（含注册缺失回落 `DynamicApp`）；导出面接线断言更新为 5 个 export。
+  构建产物 `T-CityLite.base/resources/[custom]/custom-phone/html/` 已重建并提交。
 - **M6a —— `qb-adminmenu` 迁出 `menuv` 接入 `custom-menu` + 下线 `menuv`（#348，`qb-management` 拆分至 #385）**：
   ① **逐屏迁移（17 张原 MenuV 菜单 + 拆出子视图全部走 MenuSpec）**：新增 `T-CityLite.base/resources/[qb]/qb-adminmenu/client/menu_specs.lua` 纯构建器与 `AdminMenuIntent` 跨资源导出，按屏迁完 `menu1`–`menu15` 及动态 `Players` / `EditDealer`——`Server Time (00..23)` 与 `Entity View Distance (5..50)` 复用 `range` surface，`Permissions` 与删 dealer 复用 `confirm` surface，`Kick` 与 `Ban`（预设时长列表 + 自定义秒数/原因）复用 `form` surface，零新增 UI 组件；
   ② **去除原生键盘与每帧禁控**：删掉 `T-CityLite.base/resources/[qb]/qb-adminmenu/client/client.lua` 的 `LocalInput` / `LocalInputInt`（`DisableAllControlActions(0)` 2 处清零，只保留 `T-CityLite.base/resources/[qb]/qb-adminmenu/client/noclip.lua` 飞行模式 3 处），删掉 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json` 的 `qb-adminmenu-local-input-disable-all` 条目，修复 `godmode` 在 NUI 回调线程里阻塞的隐患；

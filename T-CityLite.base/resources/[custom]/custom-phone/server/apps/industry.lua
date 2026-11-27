@@ -3,11 +3,12 @@
 -- 事实源全部在 custom-industry：本文件只做
 --   1) 可见性：audience.visible 调 CanAccessIndustry（与 IndustryAccess 同一套 job/gang）；
 --   2) 把 Snapshot 投影成 DynamicApp 能渲染的一行 KV（数字不再加工）；
---   3) sell 先调 EstimateIndustrySale（只读），再调 SellIndustryStock（服务端复验 Boss）。
+--   3) sell 先调 EstimateIndustrySale（只读），再调 SellIndustryStock（服务端复验 Boss）；
+--   4) hire 只把 orgId 交给 HireIndustryWorkstation（服务端复验成员 + Boss 后才扣款）。
 --
--- 没有新增 NUI：第一查询必须叫 snapshot（DynamicApp 调 meta.queries[0]，注册表按
--- 名字排序；"snapshot" 是 "snapshot_estimate" 的前缀，排在最前），否则兜底列表会拿到
--- 报价而不是快照。
+-- 没有新增 NUI 回调/net event：专用页面用 snapshot / snapshot_estimate，兜底 DynamicApp
+-- 仍只调 meta.queries[0]。所以第一查询必须叫 snapshot（注册表按名字排序；"snapshot" 是
+-- "snapshot_estimate" 的前缀，排在最前），否则兜底列表会拿到报价而不是快照。
 
 local BLOCK_TEXT = {
     stock = '库存不足',
@@ -17,6 +18,13 @@ local BLOCK_TEXT = {
     cap = '工位已满',
     funds = '金库余额不足',
     phase = '当前阶段不可购置',
+    cap_reached = '工位已满',
+    insufficient_funds = '金库余额不足',
+    purchases_closed = '当前阶段不可购置',
+    not_built = '尚未建设施',
+    conflict = '工位状态已变化，请重试',
+    not_boss = '只有 Boss 能操作',
+    not_member = '不是该组织成员',
 }
 
 local function validOrgId(value)
@@ -66,6 +74,14 @@ local function sellStock(source, orgId, qty, params)
     end)
     if not ok then missingExport() return false, 'unavailable' end
     return sold, err, result
+end
+
+local function hireWorkstation(source, orgId)
+    local ok, hired, err, cost, workstations = pcall(function()
+        return exports['custom-industry']:HireIndustryWorkstation(source, orgId)
+    end)
+    if not ok then missingExport() return false, 'unavailable' end
+    return hired, err, cost, workstations
 end
 
 --- DynamicApp 的兜底渲染是「key → value」列表；这里只做展示，不带写操作。
@@ -167,6 +183,19 @@ PhoneApps.Register({
                 unit_price = result and result.unit_price or estimate.unitPrice,
                 estimate = estimate,
             }
+        end,
+        hire = function(source, params)
+            -- 只收 orgId：成本与工位号由服务端从配置/SQL 计算，客户端传了也不读。
+            local orgId = orgParam(params)
+            local hired, hireErr, cost, workstations = hireWorkstation(source, orgId)
+            if not hired then
+                return {
+                    ok = false,
+                    error = hireErr or 'rejected',
+                    detail = BLOCK_TEXT[hireErr] or '',
+                }
+            end
+            return { ok = true, cost = cost, workstations = workstations }
         end,
     },
 })

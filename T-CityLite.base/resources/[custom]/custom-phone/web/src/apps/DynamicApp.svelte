@@ -4,11 +4,13 @@
 
   let { appId }: { appId: string } = $props();
 
-  let rows: Record<string, unknown>[] = [];
-  let loading = false;
-  let error = '';
-  let message = '';
-  let feedback = '';
+  // 组件用了 `$props()`（runes 模式）：普通 let 的赋值不会触发重渲染，
+  // 回退列表会永远停在「暂无数据」。异步结果必须用 $state。
+  let rows = $state<Record<string, unknown>[]>([]);
+  let loading = $state(false);
+  let error = $state('');
+  let message = $state('');
+  let feedback = $state('');
   let meta = $derived($dynamicApps.find((app) => app.id === appId));
 
   async function refresh() {
