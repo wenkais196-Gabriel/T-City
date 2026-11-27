@@ -5,7 +5,6 @@ local menuLocation = 'topright' -- e.g. topright (default), topleft, bottomright
 
 local CUSTOM_MENU_RESOURCE = 'custom-menu'
 local customMenuHandlers = {}
-local legacyBridges = {}
 
 local function getCustomMenuApi()
     if type(GetResourceState) == 'function' and GetResourceState(CUSTOM_MENU_RESOURCE) ~= 'started' then
@@ -82,12 +81,6 @@ local function dispatchAdminMenuIntent(intent, ctx)
     local handler = customMenuHandlers[intent]
     if handler then
         return handler(ctx or {})
-    end
-    local legacy = legacyBridges[intent]
-    if legacy then
-        closeCustomMenu('to_legacy_screen')
-        legacy(ctx or {})
-        return { ok = true, dispatched = 'legacy_menuv' }
     end
     return { ok = false, reason = 'unhandled_intent' }
 end
@@ -494,40 +487,6 @@ end
 RegisterNetEvent('qb-admin:client:openMenu', function()
     openCustomMenu(AdminMenuSpecs.BuildMenu1(Lang))
 end)
-
---[[
-    QB Core Admin Menu button functions below.
---]]
-
---[[
-    General Functions
---]]
-local function LocalInput(text, number, windows)
-    AddTextEntry('FMMC_MPM_NA', text)
-    DisplayOnscreenKeyboard(1, 'FMMC_MPM_NA', '', windows or '', '', '', '', number or 30)
-    while (UpdateOnscreenKeyboard() == 0) do
-        DisableAllControlActions(0)
-        Wait(0)
-    end
-
-    if (GetOnscreenKeyboardResult()) then
-        local result = GetOnscreenKeyboardResult()
-        return result
-    end
-end
-
-local function LocalInputInt(text, number, windows)
-    AddTextEntry('FMMC_MPM_NA', text)
-    DisplayOnscreenKeyboard(1, 'FMMC_MPM_NA', '', windows or '', '', '', '', number or 30)
-    while (UpdateOnscreenKeyboard() == 0) do
-        DisableAllControlActions(0)
-        Wait(0)
-    end
-    if (GetOnscreenKeyboardResult()) then
-        local result = GetOnscreenKeyboardResult()
-        return tonumber(result)
-    end
-end
 
 --[[
     Admin Options functions
