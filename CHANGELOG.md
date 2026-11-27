@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **产业周期公告推送（警告 + 结果，`custom-industry` / `custom-phone`，#389）**：
+  ① `T-CityLite.base/resources/[custom]/custom-industry/server/announce.lua` 在既有公告水位
+  （`warning_announced_at` / `result_announced_cycle`）之后按在线组织成员调用 `custom-phone`
+  的 `Notify` 导出：`app_id = industry`、`meta.source` 取 `Player.PlayerData.source`，
+  组织判定只走 `IndustryAccess.OrgMembership`；推送没有自己的水位，同一周期只发一次；
+  ② `T-CityLite.base/resources/[custom]/custom-phone/server/core/notify.lua` 的
+  `NOTIFY_APP_IDS` 放行 `industry`，通知因此能深链进产业 App；
+  ③ **边界**：只有**在线**且属于 `Config.Industry.OrgWhitelist` 的成员会收到推送，
+  离线成员靠 CityFeed 历史公告补看，不做全服广播、不伪造离线推送；推送失败
+  （导出缺失 / 抛错 / 写库失败）只打日志，不阻断公告与结算；标题/正文只含周期号、
+  组织名、金额、时间，不含玩家名、坐标、citizenid、余额明细。
+  新增 `T-CityLite.base/tests/unit/layer3_business/test_industry_push.py` 7 条用例
+  （2 成员 + 1 非成员 → 恰好 2 条、重复 tick → 0 条新增、`industry_enable=false` → 0 条、
+  推送抛错结算照常完成、`app_id` 与 PII、结果推送）；反向注入删掉 warning 水位后
+  重复 tick 用例变红（2 → 6），还原后绿。
 - **手机端产业动作入口（卖出 / 雇工位，`custom-phone` / `custom-industry`，#388）**：
   ① **服务端**：`T-CityLite.base/resources/[custom]/custom-industry/server/ui.lua` 新增导出
   `HireIndustryWorkstation`，直接复用 `IndustryUi.HireWorkstation`——成员身份与

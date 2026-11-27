@@ -38,6 +38,7 @@ end
 local NOTIFY_APP_IDS = {
     banking = true,
     police_mdt = true,
+    industry = true,
 }
 
 --- Normalise the persisted part of a notification once, so Store, the Notify
