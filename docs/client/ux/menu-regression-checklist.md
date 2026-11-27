@@ -4,7 +4,7 @@ type: runbook
 status: active
 system: ux
 owner: hermes
-updated: 2026-11-26
+updated: 2026-11-27
 review_by: 2027-02-28
 ---
 
@@ -29,6 +29,14 @@ review_by: 2027-02-28
 | 3 | `qb-vehicleshop` | 展厅载具 ALT →「购买」 | 一台车 → 进入分期表单 | 表单 `Esc` | 不产生订单；光标释放、人物可移动 |
 | 4 | `qb-management` | `/orgmenu`（或组织坐标区按 E） | 任意二级菜单 | `Backspace` 再 `Esc` | 第一次返回上一级（内容正确，不是回到最外层）；`Esc` 后焦点回游戏 |
 | 5 | `qb-input`（表单面） | 任一 `ShowInput`：如当铺卖出、`custom-industry` 卖出 | 填一个数字 → 提交 | 再开一次 → `Esc` | 提交的值与旧表单一致（字符串数字）；取消那次调用方拿到 `nil` |
+
+**手机端产业动作（#388，不经过 qb-menu，单独一条）**：组织成员打开手机「产业」——
+
+- 普通成员只读：看得到库存/配额，但**没有**「估价 / 卖出 / 雇工位」按钮；
+- Boss：填数量 →「估价」看到服务端报价 →「确认卖出」；卖出 5 件后 `industry_sales` 与
+  `org_ledger` 各多一行；
+- Boss：点「雇工位」后金库扣款、工位数 +1；`hireBlocked`（满员/余额不足/阶段关闭）时按钮不出现并给原因；
+- 非 Boss 在 devtools 里伪造 `appAction(industry, sell/hire)` 必须返回 `not_boss`，且零扣款、零写库。
 
 ## 2. 20 条最小路径（每个调用资源至少一条）
 

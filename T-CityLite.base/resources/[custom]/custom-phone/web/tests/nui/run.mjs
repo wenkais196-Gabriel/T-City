@@ -21,11 +21,19 @@ import {
 } from './harness.mjs';
 import { scenarios as mdtScenarios } from './mdt.spec.mjs';
 import { questScenarios } from './quests.spec.mjs';
+import { industryScenarios } from './industry.spec.mjs';
 import { notifyScenarios } from './notify.spec.mjs';
 import { emergencyScenarios } from './emergency.spec.mjs';
 import { surfaceScenarios } from './surface.spec.mjs';
 
-const scenarios = [...surfaceScenarios, ...mdtScenarios, ...questScenarios, ...notifyScenarios, ...emergencyScenarios];
+const scenarios = [
+  ...surfaceScenarios,
+  ...mdtScenarios,
+  ...questScenarios,
+  ...industryScenarios,
+  ...notifyScenarios,
+  ...emergencyScenarios,
+];
 
 // 默认只跑手机形态：这台机器（3.3GB）跑 26 个浏览器场景会 OOM。
 // 平板形态用显式开关跑：

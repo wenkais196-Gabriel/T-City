@@ -5,6 +5,7 @@
 // only looked up when the user opens `dyn:<id>`, and the server still decides
 // which tiles a player receives.
 import type { Component } from 'svelte';
+import Industry from '../apps/Industry.svelte';
 import PoliceMDT from '../apps/PoliceMDT.svelte';
 import Quests from '../apps/Quests.svelte';
 
@@ -58,6 +59,19 @@ registerApp({
   label: '任务',
   icon: '📜',
   component: Quests,
+  audience: {},
+  schemaVersion: 1,
+});
+
+// 产业 App：服务端（server/apps/industry.lua）决定谁能看到瓦片；
+// 这里只提供专用页面。查不到注册项时 App.svelte 会回退 DynamicApp 只读列表。
+export const INDUSTRY_APP_ID = 'industry';
+
+registerApp({
+  id: INDUSTRY_APP_ID,
+  label: '产业',
+  icon: '⛏️',
+  component: Industry,
   audience: {},
   schemaVersion: 1,
 });

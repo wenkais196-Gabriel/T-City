@@ -39,6 +39,7 @@ from industry_harness import (
     UI_SRC,
     run_script,
     run_ui as run,
+    run_ui_phone,
     run_wiring,
 )
 
@@ -407,6 +408,11 @@ _G.exports = {
       __calls[#__calls + 1] = 'sell'
       return true, nil, { qty = tonumber(qty) or 1, revenue = 50, unit_price = 50 }
     end,
+    HireIndustryWorkstation = function(_, source, orgId)
+      __calls[#__calls + 1] = 'hire'
+      __hireArgs = { source = source, orgId = orgId }
+      return true, nil, 67500, 3
+    end,
   },
 }
 function Money(value) return tostring(value) end
@@ -609,6 +615,7 @@ def test_ui_wiring_registers_callbacks_and_exports():
         "GetIndustrySnapshot",
         "EstimateIndustrySale",
         "SellIndustryStock",
+        "HireIndustryWorkstation",
     }, f"export 注册面变了：{sorted(exports)}"
     # S5 只加 callback/export，不新增服务端事件或线程。
     assert out["QBCORE_COUNT"] == "7"
@@ -675,7 +682,8 @@ def test_disabled_resource_still_answers_the_ui_probe():
     # 导出是在文件顶层注册的（不经 Register()），关闸时依然存在；它们内部各自判 enabled()，
     # 所以在关闭状态下调用只会拿到 disabled 错误码，不会真的读库或给钱。
     assert out["EXPORTS"] == (
-        "CanAccessIndustry,GetIndustrySnapshot,EstimateIndustrySale,SellIndustryStock"
+        "CanAccessIndustry,GetIndustrySnapshot,EstimateIndustrySale,"
+        "SellIndustryStock,HireIndustryWorkstation"
     ), f"导出面变了：{out['EXPORTS']}"
     assert out["QBCORE_COUNT"] == "0", f"关闸时不该注册命令：{out}"
     assert out["NATIVE"] == "", f"关闸时不该注册原生命令：{out['NATIVE']}"
@@ -808,3 +816,140 @@ def test_normal_sale_adds_no_reconcile_update_or_drift_audit():
     assert out["DRIFT_AUDITS"] == "0", f"正常卖单写了漂移审计：{out}"
     assert out["RECONCILE_UPDATES"] == "0", "正常卖单多了一次对账 UPDATE"
     assert out["QUOTA_CAS"] == "1", "配额 CAS 必须仍然只有一条"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 13. W1 手机动作入口：卖出 / 雇工位（#388）
+#
+# 手机侧不新增权限判定、不收金额/工位号：动作只把「自己的 orgId」交给
+# custom-industry 的玩家侧入口，Boss 判定仍在 IndustryAccess.IsOrgBoss。
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_hire_export_reuses_the_gated_player_entry():
+    """HireIndustryWorkstation 必须是 ui.lua 既有玩家侧入口的导出，不是第二份判定。"""
+    src = UI_SRC.read_text(encoding="utf-8")
+    assert "exports('HireIndustryWorkstation', IndustryUi.HireWorkstation)" in src
+    assert "function IndustryUi.HireWorkstation" in src
+    # 导出本身不再复制 Boss 判定；判定只在 HireWorkstation 里出现一次。
+    export_block = src[src.index("exports('HireIndustryWorkstation'"):]
+    assert "IsOrgBoss" not in export_block.split("\n", 1)[0]
+
+
+def test_phone_hire_forwards_only_org_id_and_returns_server_cost():
+    """客户端塞的 cost/workstations/amount 不能进导出；结果只认服务端返回值。"""
+    out = run_phone("""
+        local ok, result = PhoneApps.Action(1, 'industry', 'hire', {
+            orgId = 'mining_co', cost = 1, workstations = 999, amount = 1,
+        })
+        __emit('OK', tostring(ok))
+        __emit('COST', tostring(result and result.cost))
+        __emit('WS', tostring(result and result.workstations))
+        __emit('CALLS', table.concat(__calls, ','))
+        __emit('ARG_ORG', tostring(__hireArgs and __hireArgs.orgId))
+        __emit('ARG_SRC', tostring(__hireArgs and __hireArgs.source))
+    """)
+    assert out["OK"] == TRUE, f"{out}"
+    assert out["COST"] == "67500", "手机动作必须回服务端算出的成本"
+    assert out["WS"] == "3", "手机动作必须回服务端算出的工位数"
+    assert out["CALLS"] == "hire"
+    assert out["ARG_ORG"] == "mining_co"
+    assert out["ARG_SRC"] == "1"
+
+
+def test_phone_actions_forward_not_boss_from_the_server():
+    """服务端拒绝码必须原样穿过手机动作层（不能被折叠成 action_rejected）。"""
+    out = run_phone("""
+        local industry = exports['custom-industry']
+        industry.SellIndustryStock = function() return false, 'not_boss' end
+        industry.HireIndustryWorkstation = function() return false, 'not_boss' end
+
+        local okSell, sellErr = PhoneApps.Action(1, 'industry', 'sell', { qty = 2 })
+        local okHire, hireErr = PhoneApps.Action(1, 'industry', 'hire', { orgId = 'mining_co' })
+        __emit('SELL', tostring(okSell) .. ':' .. tostring(sellErr))
+        __emit('HIRE', tostring(okHire) .. ':' .. tostring(hireErr))
+    """)
+    assert out["SELL"] == "false:not_boss"
+    assert out["HIRE"] == "false:not_boss"
+
+
+def test_phone_hire_against_real_ui_pays_once_and_rejects_non_boss():
+    """真实链路：Boss 雇工位扣一次款、工位 +1；成员 / 越权 orgId 零写入。"""
+    out = run_ui_phone("""
+        __seedBasic({ balance = 100000, workstations = 1 })
+
+        local okBoss, hire = PhoneApps.Action(1, 'industry', 'hire', { orgId = 'mining_co' })
+        __emit('BOSS_OK', tostring(okBoss))
+        __emit('BOSS_COST', tostring(hire and hire.cost))
+        __emit('BOSS_WS', tostring(hire and hire.workstations))
+        __emit('WS_AFTER_BOSS', tostring(__facilityRows['mining_co'].workstations))
+        __emit('BAL_AFTER_BOSS', tostring(__balance('mining_co')))
+
+        local okMember, memberErr = PhoneApps.Action(4, 'industry', 'hire', { orgId = 'mining_co' })
+        local okForged, forgedErr = PhoneApps.Action(1, 'industry', 'hire', { orgId = 'cartel' })
+        __emit('MEMBER', tostring(okMember) .. ':' .. tostring(memberErr))
+        __emit('FORGED_ORG', tostring(okForged) .. ':' .. tostring(forgedErr))
+        __emit('WS_FINAL', tostring(__facilityRows['mining_co'].workstations))
+        __emit('BAL_FINAL', tostring(__balance('mining_co')))
+    """)
+    assert out["BOSS_OK"] == TRUE, f"{out}"
+    assert out["BOSS_COST"] == "67500"
+    assert out["BOSS_WS"] == "2"
+    assert out["WS_AFTER_BOSS"] == "2"
+    assert out["BAL_AFTER_BOSS"] == "32500", "雇工位必须只扣一次 67500"
+    assert out["MEMBER"] == "false:not_boss", "普通成员伪造 hire 必须被服务端拒绝"
+    assert out["FORGED_ORG"] == "false:not_member", "orgId 不是自己的组织时必须拒绝"
+    assert out["WS_FINAL"] == "2", "被拒绝的 hire 写库了"
+    assert out["BAL_FINAL"] == "32500", "被拒绝的 hire 扣钱了"
+
+
+def test_phone_sell_against_real_ui_writes_one_sale_and_one_ledger_row():
+    """真实链路：Boss 卖 5 件 → industry_sales 与 org_ledger 各一行。"""
+    out = run_ui_phone("""
+        __seedBasic({ balance = 0, stock = 10, workstations = 1 })
+        __seedDemand('iron_ore', 20, 0)
+        __emit('LEDGER_BEFORE', tostring(#__ledger))
+        __emit('SALES_BEFORE', tostring(__salesCount()))
+
+        local ok, result = PhoneApps.Action(1, 'industry', 'sell', {
+            orgId = 'mining_co', qty = 5,
+        })
+        __emit('OK', tostring(ok))
+        __emit('QTY', tostring(result and result.qty))
+        __emit('REV', tostring(result and result.revenue))
+        __emit('LEDGER_AFTER', tostring(#__ledger))
+        __emit('SALES_AFTER', tostring(__salesCount()))
+        __emit('STOCK_AFTER', tostring(__stock('mining_co')))
+        __emit('BAL_AFTER', tostring(__balance('mining_co')))
+    """)
+    assert out["OK"] == TRUE, f"{out}"
+    assert out["QTY"] == "5"
+    assert out["REV"] == "250"
+    assert out["LEDGER_BEFORE"] == "0"
+    assert out["SALES_BEFORE"] == "0"
+    assert out["LEDGER_AFTER"] == "1", "卖出必须在 org_ledger 恰好写一行"
+    assert out["SALES_AFTER"] == "1", "卖出必须在 industry_sales 恰好写一行"
+    assert out["STOCK_AFTER"] == "5"
+    assert out["BAL_AFTER"] == "250"
+
+
+def test_phone_member_forged_sell_returns_not_boss_without_writes():
+    """成员伪造 sell：estimate 只读可通过，写路径必须被 not_boss 挡住。"""
+    out = run_ui_phone("""
+        __seedBasic({ stock = 10, workstations = 1 })
+        __seedDemand('iron_ore', 20, 0)
+
+        local ok, err = PhoneApps.Action(4, 'industry', 'sell', {
+            orgId = 'mining_co', qty = 5,
+        })
+        __emit('SELL', tostring(ok) .. ':' .. tostring(err))
+        __emit('SALES', tostring(__salesCount()))
+        __emit('STOCK', tostring(__stock('mining_co')))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('QUOTA', tostring(__demandRow('iron_ore').quota_used))
+    """)
+    assert out["SELL"] == "false:not_boss", "普通成员的伪造卖单没有被拒绝"
+    assert out["SALES"] == "0"
+    assert out["STOCK"] == "10"
+    assert out["BAL"] == "0"
+    assert out["QUOTA"] == "0", "被拒绝的卖单占了配额"
