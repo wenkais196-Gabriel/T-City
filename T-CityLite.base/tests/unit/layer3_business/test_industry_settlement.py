@@ -409,21 +409,22 @@ def test_settlement_never_writes_the_personal_layer():
 
 
 def test_prestige_formula_matches_the_spec():
+    """默认 K=50,000（#387）：$5M 累计正好 10 点 = +20% 封顶。"""
     out = run("""
         __emit('ZERO', tostring(IndustrySettlement.PrestigeFor(0)))
         __emit('SMALL', tostring(IndustrySettlement.PrestigeFor(499)))
         __emit('ONE', tostring(IndustrySettlement.PrestigeFor(500)))
-        __emit('TEN', tostring(IndustrySettlement.PrestigeFor(50000)))
-        __emit('FIFTY', tostring(IndustrySettlement.PrestigeFor(1250000)))
+        __emit('K', tostring(IndustrySettlement.PrestigeFor(50000)))
+        __emit('QUARTER', tostring(IndustrySettlement.PrestigeFor(1250000)))
         __emit('HUGE', tostring(IndustrySettlement.PrestigeFor(5000000)))
-    """, convars=PRESTIGE_CONVARS)
+    """)
 
     assert out["ZERO"] == "0"
     assert out["SMALL"] == "0"
-    assert out["ONE"] == "1"
-    assert out["TEN"] == "10"
-    assert out["FIFTY"] == "50"
-    assert out["HUGE"] == "100", "$5M / K=500 → 100 点（spec §10）"
+    assert out["ONE"] == "0"
+    assert out["K"] == "1"
+    assert out["QUARTER"] == "5"
+    assert out["HUGE"] == "10", "$5M / K=50,000 → 10 点 = +20% 封顶（#387）"
 
 
 def test_migration_and_fixture_declare_the_settlement_idempotency_key():

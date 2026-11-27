@@ -99,7 +99,7 @@ def test_snapshot_fields_match_seeded_sql():
     assert out["WS"] == "3"
     assert out["WSCAP"] == "10"
     assert out["STOCK"] == "45"
-    assert out["STOCKCAP"] == "144"
+    assert out["STOCKCAP"] == "540"
     # floor(50000 × 1.35^3) = 123018
     assert out["NEXTCOST"] == "123018", "工位成本曲线变了"
     assert out["HIREBLOCK"] == "funds", "余额 47675 < 123018 时应置灰 + funds"
@@ -392,7 +392,7 @@ _G.exports = {
         orgLabel = '洛圣都矿业公司', gradeName = 'Mine Owner', isBoss = true, balance = 100,
         producedUnits = 7,
         facility = { label = '矿业设施', level = 1, workstations = 2, workstationCap = 10,
-                     stock = 3, stockCap = 144 },
+                     stock = 3, stockCap = 540 },
         demand = { unitPrice = 50, globalTotal = 10, globalUsed = 5, globalRemaining = 5,
                    orgCap = 5, orgUsed = 0, orgRemaining = 5 },
         sellable = { maxQty = 3, blocked = nil },
@@ -511,7 +511,7 @@ def test_phone_snapshot_projection_and_sell_calls_estimate_first():
         __emit('CALLS', table.concat(__calls, ','))
     """)
     assert out["SNAP_OK"] == TRUE, f"{out}"
-    assert out["ROW_STOCK"] == "3 / 144"
+    assert out["ROW_STOCK"] == "3 / 540"
     assert out["ROW_QUOTA"] == "全服剩 5 / 10 · 本组织剩 5 / 5"
     assert out["RAW_BAL"] == "100", "手机查询必须把原始快照一起给专用皮肤"
     assert out["SELL_OK"] == TRUE

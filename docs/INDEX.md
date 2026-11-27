@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：339 ｜ **已登记**：339 ｜ **未登记**：0
+**文档总数**：340 ｜ **已登记**：340 ｜ **未登记**：0
 
-**状态分布**：✅ active 187 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 188 ・ 🟡 draft 21 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|---|
 | [角色与出生 · UX 设计](client/ux/modules/identity.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/identity.md` |
 
-### economy（12）
+### economy（13）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -26,6 +26,7 @@
 | [计划：S4 销售 / 配额（第一次造钱）](plan/industry-ops/04-plan.md) | plan | 🟡 draft | 2026-11-26 | 2027-03-31 |  | `docs/plan/industry-ops/04-plan.md` |
 | [计划：S5 产业 UI（快照 + Boss 菜单 + 手机只读 App）](plan/industry-ops/05-plan.md) | plan | ✅ active | 2026-11-26 | 2027-03-31 |  | `docs/plan/industry-ops/05-plan.md` |
 | [计划：S6 周期状态机 + S7 结算转生（同一片）](plan/industry-ops/06-plan.md) | plan | ✅ active | 2026-11-26 | 2027-03-31 |  | `docs/plan/industry-ops/06-plan.md` |
+| [计划：W0 — 产业数值卡与真实周期长度（#387）](plan/industry-ops/07-plan.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/industry-ops/07-plan.md` |
 | [🏙️ T-City 宏观经济模拟层 — 施工蓝图](../T-CityLite.base/docs/architecture/economic-simulation-blueprint.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/architecture/economic-simulation-blueprint.md` |
 | [v0.3 基础设施层](archive/QBCore_Lite_versions/v0.3-economy.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.3-economy.md` |
 | [v0.6a 民间经济职业生态（Civilian Economy）](archive/QBCore_Lite_versions/v0.6a-civilian-economy.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.6a-civilian-economy.md` |
