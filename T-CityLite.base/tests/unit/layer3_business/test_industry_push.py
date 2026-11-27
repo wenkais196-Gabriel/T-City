@@ -100,6 +100,15 @@ __testPlayers = {
 }
 """
 
+#: 畸形玩家对象：访问 `PlayerData` 直接抛错。异常发生在 `PushToMembers` 的循环里、
+#: **不在** per-player 的 `pcall` 内部，所以只有 `pushSafely` 那层 pcall 能挡住它 ——
+#: 这正是"推送崩了也不许阻断结算"的最后一道闸。
+MALFORMED_PLAYERS = """
+__testPlayers = {
+    [1] = setmetatable({}, { __index = function() error('probe: malformed player') end }),
+}
+"""
+
 #: 压缩周期：60 秒/阶段，提前量 60 秒，公告重试冷却 1 秒。
 DEFAULT_CONVARS = {
     "industry_enable": "true",
@@ -238,6 +247,42 @@ def test_push_failure_never_blocks_the_bulletin_or_settlement():
 
 
 # ══════════════════════════════════════════════════════════════════
+# 4b. 推送**自身**崩溃（不是 Notify 抛错）也不阻断结算
+# ══════════════════════════════════════════════════════════════════
+
+def test_push_crashing_inside_the_loop_never_blocks_settlement():
+    """Player 对象畸形导致 `PushToMembers` 自己抛错。
+
+    这条路和 4 号用例不同：Notify 抛错发生在 per-player 的 `pcall` 内部（挡住它的是内层），
+    而这里异常发生在遍历循环里、内层 pcall 之外 —— 只有 `pushSafely` 的外层 pcall 能挡。
+    没有这条用例，删掉外层 pcall 也全绿（2026-11-27 实测：删了仍 7 passed）。
+    """
+    out = run_push("""
+        __reset()
+        __seedState({ cycle_no = 1, phase = 'recession', started_epoch = 0, ends_epoch = 1000 })
+
+        local warned = IndustryCycle.Tick(950)
+        __emit('WARN_OK', tostring(warned))
+
+        local ok, err = IndustryCycle.Tick(1000)
+        __emit('SETTLE_OK', tostring(ok) .. ':' .. tostring(err or 'nil'))
+
+        local state = __stateRow()
+        __emit('PHASE', state.phase)
+        __emit('CYCLE', tostring(state.cycle_no))
+        __emit('SETTLED', tostring(state.settled_cycle_no))
+        __emit('BULLETINS', tostring(__bulletinCount()))
+    """, players=MALFORMED_PLAYERS)
+
+    assert out["WARN_OK"] == TRUE, f"PushToMembers 崩溃让 warning 公告报告失败：{out}"
+    assert out["SETTLE_OK"] == "true:nil", f"PushToMembers 崩溃阻断了结算：{out}"
+    assert out["PHASE"] == "expansion", "结算后没有进入下一轮扩张期"
+    assert out["CYCLE"] == "2"
+    assert out["SETTLED"] == "1", "结算水位没有推进"
+    assert out["BULLETINS"] == "2", "推送崩溃把两条 CityFeed 公告一起吞掉了"
+
+
+# ══════════════════════════════════════════════════════════════════
 # 5. 深链参数与 PII：app_id = industry，正文不含 citizenid
 # ══════════════════════════════════════════════════════════════════
 
@@ -299,3 +344,37 @@ def test_result_push_reaches_online_members_once():
     ]
     assert len(result_titles) == 2, f"结果推送条数不对：{result_titles}"
     assert all(record[0] != "cid-officer" for record in records), "非成员收到了结果推送"
+
+# ══════════════════════════════════════════════════════════════════
+# 6. 结果公告按周期幂等（结算重试 / 手工重跑都不许再喊一遍）
+# ══════════════════════════════════════════════════════════════════
+
+def test_result_announce_is_idempotent_per_cycle():
+    """同一周期重复调用 `IndustryAnnounce.Result` 只推一次。
+
+    为什么单独立一条：`test_result_push_reaches_online_members_once` 里 Tick(1001)
+    到不了结果公告 —— 结算后阶段已经翻页成 expansion，是**阶段**把它挡住的，不是水位。
+    所以删掉 `result_announced_cycle` 那道闸，旧用例照样全绿（2026-11-27 实测 8 passed）。
+    结算重试与 `industry_settle` 手工重跑走的正是这条路，必须单独钉住。
+    """
+    out = run_push("""
+        __reset()
+        __seedState({ cycle_no = 1, phase = 'recession', started_epoch = 0, ends_epoch = 1000 })
+
+        IndustryAnnounce.Result(1)   -- 首次：2 条推送
+        __emit('AFTER_FIRST', tostring(__pushCount()))
+        IndustryAnnounce.Result(1)   -- 同周期重试：水位应挡住
+        __emit('AFTER_REPEAT', tostring(__pushCount()))
+        IndustryAnnounce.Result(2)   -- 下一周期：新的 2 条
+        __emit('AFTER_NEXT', tostring(__pushCount()))
+        __emit('BULLETINS', tostring(__bulletinCount()))
+    """)
+
+    assert out["AFTER_FIRST"] == "2", f"首次结果公告没推送：{out}"
+    assert out["AFTER_REPEAT"] == "2", (
+        f"同一周期重试又推了一次，result_announced_cycle 水位失效：{out['AFTER_REPEAT']}"
+    )
+    assert out["AFTER_NEXT"] == "4", f"下一周期没有重新推送：{out['AFTER_NEXT']}"
+    assert out["BULLETINS"] == "2", (
+        f"结果公告的 CityFeed 条数不对（周期 1 调两次只该发 1 条，周期 2 再发 1 条）：{out['BULLETINS']}"
+    )
