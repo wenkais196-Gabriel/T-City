@@ -21,7 +21,7 @@ end
 
 local function ensureCustomMenuIntents()
     local api = getCustomMenuApi()
-    if not api or type(api.RegisterIntent) ~= 'function' then
+    if not api or api.RegisterIntent == nil then
         return false
     end
     for _, intentId in ipairs(AdminMenuSpecs.INTENTS) do
@@ -40,7 +40,7 @@ end
 
 local function isCustomMenuOpen()
     local api = getCustomMenuApi()
-    if not api or type(api.IsOpen) ~= 'function' then
+    if not api or api.IsOpen == nil then
         return false
     end
     local ok, open = pcall(api.IsOpen, api)
@@ -49,7 +49,7 @@ end
 
 local function closeCustomMenu(reason)
     local api = getCustomMenuApi()
-    if not api or type(api.Close) ~= 'function' then
+    if not api or api.Close == nil then
         return false
     end
     local ok, closed = pcall(api.Close, api, reason or 'qb_adminmenu_close')
@@ -58,7 +58,7 @@ end
 
 local function openCustomMenu(spec)
     local api = getCustomMenuApi()
-    if not api or type(api.Open) ~= 'function' then
+    if not api or api.Open == nil then
         return false, 'custom_menu_unavailable'
     end
     ensureCustomMenuIntents()
@@ -85,7 +85,7 @@ local function dispatchAdminMenuIntent(intent, ctx)
     return { ok = false, reason = 'unhandled_intent' }
 end
 
-if type(exports) == 'function' then
+if exports ~= nil then
     exports(AdminMenuSpecs.EXPORT_METHOD, dispatchAdminMenuIntent)
 end
 

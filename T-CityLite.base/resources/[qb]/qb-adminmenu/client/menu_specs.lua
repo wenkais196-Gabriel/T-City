@@ -71,7 +71,7 @@ function AdminMenuSpecs.SafeId(prefix, idx)
 end
 
 function AdminMenuSpecs.Translate(lang, key, subs)
-    if lang and type(lang.t) == 'function' then
+    if lang and lang.t ~= nil then
         local ok, out = pcall(lang.t, lang, key, subs)
         if ok and type(out) == 'string' and #out > 0 then
             return out
