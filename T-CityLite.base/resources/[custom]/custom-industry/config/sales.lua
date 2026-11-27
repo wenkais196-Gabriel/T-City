@@ -6,8 +6,8 @@
 --   * 周期：S6 起 (cycle_no, phase) 由 industry_state 决定；下面的 CycleNo / Phase
 --     只作为**静态回落值**（industry_state 表还没有行 / 迁移刚落地时使用）。
 --
--- 真机验收旋钮：
---   set industry_demand_seed 10     -- 需求总量（启动时校准未使用的配额）
+-- 真机验收旋钮（默认值即 #387 数值卡的正式值）：
+--   set industry_demand_seed 11000  -- 每阶段全服配额（启动时校准未使用的配额）
 --   set industry_sale_price 50      -- iron_ore 单价
 --   set industry_sales_debug true   -- /orgsell 后台入口（仅控制台）
 
@@ -24,8 +24,11 @@ Config.Industry.Sales = {
     Phase = 'static',
 
     -- 种子需求行由迁移插入；启动时用这个 convar 校准 quota_total（quota_used = 0 时）。
+    -- #387 数值卡：每阶段 11,000。理论上限 11,340（满建 10 工位在**最差阶段（衰退）**
+    -- 刚好能吃掉单组织 50% 上限），取整到 11,000 留一点余量；再高满建也卖不完，
+    -- 再低配额会先于产能触顶。单组织每阶段上限 = 5,500 / 4,675 / 3,850 / 2,200。
     SeedItem = 'iron_ore',
-    SeedQuota = integerConvar('industry_demand_seed', 10, 0),
+    SeedQuota = integerConvar('industry_demand_seed', 11000, 0),
 
     -- 服务端定价。新增可卖物品时在这里加一行（没有价格 = 不可卖）。
     UnitPrices = {

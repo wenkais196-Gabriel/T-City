@@ -67,7 +67,7 @@ def test_production_reads_stored_prestige_on_every_settlement():
         __reset()
         __seedState({ cycle_no = 1, phase = 'expansion', started_epoch = 0, ends_epoch = 100000 })
 
-        -- 10 工位 × 12/h × 扩张 1.25 = 150/h；600 秒 = 25；prestige 10 → ×1.2 = 30。
+        -- 10 工位 × 4.5/h × 扩张 1.25 = 56.25/h；600 秒 = 9；prestige 10 → ×1.2 = 11。
         __seedTreasury('mining_co', 0, 10)
         __seedFacility('mining_co', { stock = 0, workstations = 10, last_tick_epoch = 0 })
         local ok, err, result = IndustryProduction.SettleFacility('mining_co', { now = 600 })
@@ -78,7 +78,7 @@ def test_production_reads_stored_prestige_on_every_settlement():
         __emit('BAKED_FIELD', tostring(
             boosted.multiplier ~= nil or boosted.prestige ~= nil or boosted.bonus ~= nil))
 
-        -- 同一段时间把 prestige 归零重跑：产量必须回到 25（倍率只在读取时生效）。
+        -- 同一段时间把 prestige 归零重跑：产量必须回到 9（倍率只在读取时生效）。
         __seedFacility('mining_co', { stock = 0, workstations = 10, last_tick_epoch = 0 })
         __seedTreasury('mining_co', 0, 0)
         local ok2, err2 = IndustryProduction.SettleFacility('mining_co', { now = 600 })
@@ -87,9 +87,9 @@ def test_production_reads_stored_prestige_on_every_settlement():
     """)
 
     assert out["BOOSTED_OK"] == "true:nil", f"带加成结算失败：{out}"
-    assert out["BOOSTED_STOCK"] == "30", f"+20% 产能没有进生产公式：{out}"
-    assert out["BOOSTED_RESULT"] == "30"
-    assert out["BASELINE_STOCK"] == "25", (
+    assert out["BOOSTED_STOCK"] == "11", f"+20% 产能没有进生产公式：{out}"
+    assert out["BOOSTED_RESULT"] == "11"
+    assert out["BASELINE_STOCK"] == "9", (
         f"清零 prestige 后仍按旧倍率产出（倍率被写死了）：{out}"
     )
     assert out["BAKED_FIELD"] == FALSE, "设施行里出现了倍率/加成列，违背读取路径约束"
@@ -106,7 +106,7 @@ def test_missing_treasury_account_means_no_bonus_not_an_error():
     """)
 
     assert out["OK"] == "true:nil", f"没有金库账户不该阻断生产：{out}"
-    assert out["STOCK"] == "25", f"无账户时应按 1 倍产出：{out}"
+    assert out["STOCK"] == "9", f"无账户时应按 1 倍产出：{out}"
 
 
 def test_prestige_read_failure_fails_closed():
@@ -131,7 +131,7 @@ def test_prestige_read_failure_fails_closed():
     assert out["STOCK_AFTER_FAIL"] == "0", "读失败后仍写了库存"
     assert out["UNITS_AFTER_FAIL"] == "0", "读失败后仍累计了 produced_units"
     assert out["RETRY"] == "true:nil", f"瞬时读失败后重试没有恢复：{out}"
-    assert out["STOCK_AFTER_RETRY"] == "30"
+    assert out["STOCK_AFTER_RETRY"] == "11"
 
 
 # ══════════════════════════════════════════════════════════════════

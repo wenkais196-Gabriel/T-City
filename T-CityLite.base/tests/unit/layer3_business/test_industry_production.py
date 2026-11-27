@@ -51,12 +51,12 @@ def test_production_config_defaults_and_mine_stock_cap():
         __emit('DEBUG', tostring(production.DebugCommand))
         __emit('STOCK_CAP', tostring(Config.Industry.Facilities.mine.stockCap))
     """)
-    assert out["UNITS"] == "12", "单工位速率默认值应为 12 单位/小时（设计 §10）"
+    assert out["UNITS"] == "4.5", "#387 数值卡：单工位速率默认值应为 4.5 单位/小时"
     assert out["MULT"] == "1"
     assert out["TICK"] == "30", "默认 30 秒心跳，不跑每秒循环"
     assert out["CATCHUP"] == "3600", "默认单次最多追赶 1 小时"
     assert out["DEBUG"] == "false", "后台入口默认必须关闭"
-    assert out["STOCK_CAP"] == "144", "mine 的库存上限应为设计 §10 的 144"
+    assert out["STOCK_CAP"] == "540", "#387 数值卡：mine 库存上限 = 10 × 4.5 × 12h = 540"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -320,21 +320,21 @@ def test_settle_facility_materializes_stock_and_produced_units_once():
         __emit('UPDATES', tostring(__productionUpdates))
     """)
     assert out["OK"] == "true" and out["ERR"] == "nil", f"正常结算失败：{out}"
-    # 10 工位 × 12/h × 600 秒 = 20
-    assert out["FIRST_PRODUCED"] == "20"
-    assert out["STOCK1"] == "20" and out["UNITS1"] == "20", (
+    # 10 工位 × 4.5/h × 600 秒 = 7（向下取整）；7 件只消耗 560 秒。
+    assert out["FIRST_PRODUCED"] == "7"
+    assert out["STOCK1"] == "7" and out["UNITS1"] == "7", (
         f"产出必须同时进 stock 与 produced_units：{out}"
     )
-    assert out["LAST1"] == "600"
+    assert out["LAST1"] == "560"
     assert out["SECOND_PRODUCED"] == "0" and out["SECOND_SETTLED"] == "false", (
         f"同一时刻第二次结算又写库了：{out}"
     )
-    assert out["STOCK2"] == "20" and out["UNITS2"] == "20"
+    assert out["STOCK2"] == "7" and out["UNITS2"] == "7"
     assert out["UPDATES"] == "1", f"第二次没有时间可结算时不该发 UPDATE：{out}"
 
 
 def test_settle_facility_cas_retries_without_double_counting():
-    """读到 last_tick=0 后被别人结算到 300：第一次 CAS 失败，重算后只产 10。"""
+    """读到 last_tick=0 后被别人结算到 300：第一次 CAS 失败，重算后只产 3。"""
     out = run_db("""
         __reset()
         __facilitySeed('mining_co', { workstations = 10, stock = 0, last_tick_epoch = 0 })
@@ -356,11 +356,12 @@ def test_settle_facility_cas_retries_without_double_counting():
         __emit('UPDATES', tostring(__productionUpdates))
     """)
     assert out["OK"] == "true" and out["ERR"] == "nil", f"CAS 冲突重试失败：{out}"
-    assert out["PRODUCED"] == "10", f"重算后的产量不对（应只补 300 秒）：{out}"
-    assert out["STOCK"] == "20" and out["UNITS"] == "20", (
+    # 45 单位/小时 × 300 秒 = 3（向下取整）。
+    assert out["PRODUCED"] == "3", f"重算后的产量不对（应只补 300 秒）：{out}"
+    assert out["STOCK"] == "13" and out["UNITS"] == "13", (
         f"CAS 冲突后双算了：{out}"
     )
-    assert out["LAST"] == "600"
+    assert out["LAST"] == "540"
     assert out["UPDATES"] == "2", f"第一次 CAS 失败后没有重试：{out}"
 
 
@@ -368,7 +369,7 @@ def test_settle_facility_full_stock_advances_time_without_touching_units():
     out = run_db("""
         __reset()
         __facilitySeed('mining_co', {
-            workstations = 10, stock = 144, produced_units = 50, last_tick_epoch = 0,
+            workstations = 10, stock = 540, produced_units = 50, last_tick_epoch = 0,
         })
         local ok, err, result = IndustryProduction.SettleFacility('mining_co', { now = 600 })
         local row = __facility('mining_co')
@@ -382,7 +383,7 @@ def test_settle_facility_full_stock_advances_time_without_touching_units():
     """)
     assert out["OK"] == "true" and out["PRODUCED"] == "0"
     assert out["BLOCKED"] == "stock_full"
-    assert out["STOCK"] == "144" and out["UNITS"] == "50", (
+    assert out["STOCK"] == "540" and out["UNITS"] == "50", (
         f"满仓时 stock / produced_units 都不能动：{out}"
     )
     assert out["LAST"] == "600", "满仓也要推进 last_tick_at，避免卖出后补算"

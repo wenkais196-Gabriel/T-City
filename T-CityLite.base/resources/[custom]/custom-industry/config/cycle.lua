@@ -1,7 +1,12 @@
 -- config/cycle.lua — S6 四阶段与 S7 结算参数（纯数据 + convar）。
 --
--- 阶段时长是**设计取值、未取证**（spec §5）：默认 30 天 = 10/10/5/3。验收时用
--- convar 压到分钟级，正式服再按真人试玩调。
+-- 周期长度（#387 数值卡）：默认 **28 天 = 10/10/5/3**。设计稿 §5 曾写「30 天 =
+-- 10/10/5/3/2」，其中 2 天是结算窗口；但 `industry_state.phase` 只有四个值，
+-- **结算不是阶段，是衰退结束边界上的一次事件**（S7 `SettleCycle`）。加第五阶段会
+-- 牵动状态机、补推逻辑与探针比较维度，收益不抵成本，所以正式值定为 28 天。
+--
+-- 阶段时长是**设计取值、未取证**（spec §5）：验收时用 convar 压到分钟级，
+-- 正式服再按真人试玩调。
 --
 -- 压缩方式（两者可叠加，PhaseSeconds 优先）：
 --   * industry_cycle_scale：real_seconds = floor(design_seconds / scale)。
@@ -15,7 +20,11 @@
 --   成熟 1.00 / 1.10 / 0.70 / 可购置
 --   衰退 0.70 / 0.80 / 0.40 / **不可购置**（但仍可卖出，否则末期卡死）
 --
--- 结算 prestige = floor(sqrt(累计销售额 / K))，K 默认 500（spec §10：$5M → 100 点）。
+-- 结算 prestige = floor(sqrt(累计销售额 / K))。
+-- #387 数值卡把 K 从 500 调到 50,000：新卡单组织单周期收入量级是 $157k（1 工位）
+-- 到 $797k（满建），K=500 会让一个周期拿 17–39 点、+20% 上限当轮就满；K=50,000
+-- 使满建约 3 点/周期（4 个周期到 10 级）、1 工位约 1 点/周期（10 个周期到顶），
+-- 且累计 $5M 正好 10 点 = +20% 封顶。
 
 local function numberConvar(name, default, minimum)
     local value = tonumber(GetConvar(name, tostring(default)))
@@ -65,8 +74,8 @@ Config.Industry.Cycle = {
     -- 结算失败后的重试节流（秒）：公告/结算每 tick 都会重试，失败日志不要每 30 秒刷一条。
     RetryLogSeconds = integerConvar('industry_cycle_retry_seconds', 300, 1),
 
-    -- prestige 公式的分母。
-    PrestigeK = integerConvar('industry_prestige_k', 500, 1),
+    -- prestige 公式的分母（#387 数值卡：50,000，见文件头的推导）。
+    PrestigeK = integerConvar('industry_prestige_k', 50000, 1),
 
     -- S8 永久加成（spec §10：每级 +2%，第 10 级封顶 +20%）。
     -- 等级 = prestige 点数；只乘**产能**，不乘售价：

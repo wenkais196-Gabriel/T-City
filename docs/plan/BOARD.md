@@ -17,6 +17,8 @@
 | [🧪 T-City Lite 自动化测试方案](automated-testing-plan.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
 | [计划：S5 产业 UI（快照 + Boss 菜单 + 手机只读 App）](industry-ops/05-plan.md) | active | 6 | 6 | 0 | - | 2026-11-26 |
 | [计划：S6 周期状态机 + S7 结算转生（同一片）](industry-ops/06-plan.md) | active | 9 | 9 | 0 | - | 2026-11-26 |
+
+| [计划：W0 — 产业数值卡与真实周期长度（#387）](industry-ops/07-plan.md) | active | 单片 | 1 | 0 | - | 2026-11-27 |
 | [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 7 | 6 | 0 | S6 wip | 2026-11-17 |
 | [热狗摊：剩余工作分片计划（2026-11-17 分工版）](jobs-content/13-hotdog-remaining-plan.md) | active | 10 | 5 | 0 | C 未开始 | - |
 | [方案 B 落地计划（已拍板）](../police/B_PLAN.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |

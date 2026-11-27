@@ -25,7 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ② **去除原生键盘与每帧禁控**：删掉 `T-CityLite.base/resources/[qb]/qb-adminmenu/client/client.lua` 的 `LocalInput` / `LocalInputInt`（`DisableAllControlActions(0)` 2 处清零，只保留 `T-CityLite.base/resources/[qb]/qb-adminmenu/client/noclip.lua` 飞行模式 3 处），删掉 `T-CityLite.base/tests/architecture/m4_focus_allowlist.json` 的 `qb-adminmenu-local-input-disable-all` 条目，修复 `godmode` 在 NUI 回调线程里阻塞的隐患；
   ③ **下线 `menuv` 与退场临时垫片**：删除 `#353` 过渡垫片 `menu_shim.lua`、去掉 `T-CityLite.base/resources/[qb]/qb-adminmenu/fxmanifest.lua` 的 `menuv` 引用和 `T-CityLite.base/configs/modules/core.cfg` 的 `ensure menuv`，清零 `T-CityLite.base/tests/architecture/input_layer_allowlist.json` 的 `unintegrated_menu_ledger`，`T-CityLite.base/tests/check_dependencies.py` 将 `menuv` 标为已下线延期，保留 `menuv` 资源目录只读；
   ④ **闸门与反向注入**：更新 `T-CityLite.base/tests/architecture/test_adminmenu_input_shim.py`、`T-CityLite.base/tests/architecture/test_input_layer_contracts.py` 与 `T-CityLite.base/tests/architecture/menu_surface_baseline.json`（`menuv_entry` 47 → 29，仅剩只读 `menuv` 目录自身；非 `menuv` 引用清零），Lua 5.4 沙箱实测全部 17 屏通过 `MenuSpec.Validate`，且把任一屏改回 `MenuV` / 恢复 `menu_shim.lua` / `LocalInput` 均变红。
-
+- **产业数值卡与真实周期长度（`custom-industry`，#387）**：周期正式定为 **28 天**（10/10/5/3）；
+  设计稿 §5 的「结算 2 天」不再当第五阶段，结算是衰退结束边界上的一次事件（`SettleCycle`），状态机不改。
+  正式数值：`industry_units_per_hour` 12→**4.5**（满建 10×4.5=45 ≥ 衰退期 50% 配额所需的 43.65）、
+  `industry_demand_seed` 10→**11,000**/阶段（单组织上限 5,500/4,675/3,850/2,200，四阶段 16,225 件/周期）、
+  `stockCap` 144→**540**（满建 12h；旧值按 1 工位算，满建 1.2h 就触顶）、
+  `industry_prestige_k` 500→**50,000**（满建约 3 点/周期，$5M 累计正好 +20% 封顶）；
+  售价 $50、`baseCost` $50,000、1.35 工位曲线、`OrgCapRatio` 0.5、每级 +2%/上限 +20% 保持不动。
+  回本口径改为**净现金** `C/(R−C)`（S7 每周期清空设施，必须扣重建成本）：设施+首工位 $100,000
+  对应 1 工位 **$157,540/周期、净回本 6.95 周**；推荐 4 工位 **$630,280/周期、6.14 周、日毛利 $22,510**；
+  满建 10 工位 **$796,812/周期、日毛利 $28,457**（配额饱和上限，非利润最优）。
+  新增 `T-CityLite.base/tests/unit/layer3_business/test_industry_balance.py` 9 条断言，
+  并把三条反向注入（阶段天数 +1 / `SeedQuota` 回 10 / `OrgCapRatio` 改 1.0）实际跑红后恢复。
+  文档同步：`docs/server-design/12-industry-operations.md` §5/§10/§20/§21、`docs/plan/industry-ops/07-plan.md`。
 - **产业面板方案 A —— 信息行语义落地（`custom-menu` / `qb-menu` / `custom-industry`，#374）**：
   ① **契约层（`T-CityLite.base/resources/[custom]/custom-menu/shared/menu_spec.lua`）**：巩固 `MenuSpec.KINDS.info = true` 语义——`info` 项为只读信息（必填 `label`，值放字符串 `hint`），校验显式拒绝 `action` / `params` / `intent`，缺失 `hint` 可正常通过，非字符串 `hint` 与非 JSON-safe 值均报错；
   ② **渲染与样式（`T-CityLite.base/resources/[custom]/custom-menu/html/renderer.js`、`T-CityLite.base/resources/[custom]/custom-menu/html/styles.css`）**：`info` 行左标签正常字重（`rgb(226,232,240)`）+ 右对齐亮值（`rgb(248,250,252)`）、无 hover、无焦点描边、无 `›` 箭头、不压暗、不加 `disabled` class（含虚拟列表分支）；方向键 `ArrowDown`/`ArrowUp` 与初始焦点跳过 `info` 行，点击无 intent/toast 副作用；卡片宽度收敛至 `300px` 且全量字号 `>= 12px`；不可用动作行维持压暗 + `disabledReason`；

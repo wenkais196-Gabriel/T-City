@@ -209,11 +209,11 @@ def test_production_uses_the_phase_multiplier():
         __emit('STOCK', tostring(__facility('mining_co').stock))
     """)
 
-    # 10 工位 × 12/h × 600s：扩张 1.25 → 25；衰退 0.70 → 14。
+    # 10 工位 × 4.5/h × 600s：扩张 1.25 → 9；衰退 0.70 → 5。
     assert expansion["OK"] == "true:nil", f"扩张期结算失败：{expansion}"
-    assert expansion["STOCK"] == "25", f"扩张期产能倍率没生效：{expansion}"
+    assert expansion["STOCK"] == "9", f"扩张期产能倍率没生效：{expansion}"
     assert recession["OK"] == "true:nil", f"衰退期结算失败：{recession}"
-    assert recession["STOCK"] == "14", f"衰退期产能倍率没生效：{recession}"
+    assert recession["STOCK"] == "5", f"衰退期产能倍率没生效：{recession}"
 
 
 def test_phase_advance_seeds_demand_with_the_quota_multiplier():
