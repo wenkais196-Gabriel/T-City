@@ -496,4 +496,33 @@ function AdminMenuSpecs.BuildPlayerMenu(lang, player)
     }
 end
 
+function AdminMenuSpecs.BuildMenu10(lang, player)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local p = type(player) == 'table' and player or {}
+    local cid = tostring(p.cid or p.name or p.id or 'Player')
+    return {
+        id = 'qb_adminmenu_menu10',
+        title = tr('menu.kick'),
+        subtitle = cid,
+        surface = 'form',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.online_players'), cid, tr('menu.kick') },
+        submitLabel = tr('info.confirm'),
+        intent = 'adminmenu:action:kick_submit',
+        items = {
+            {
+                id = 'reason',
+                kind = 'input',
+                inputType = 'text',
+                label = tr('info.reason'),
+                placeholder = tr('desc.kick_reason'),
+                hint = tr('desc.kick_reason'),
+                required = true,
+                maxLength = 255,
+            },
+        },
+    }
+end
+
 return AdminMenuSpecs

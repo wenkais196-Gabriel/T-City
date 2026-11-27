@@ -3,7 +3,6 @@ local developermode = false
 local showCoords = false
 local vehicleDevMode = false
 local banreason = 'Unknown'
-local kickreason = 'Unknown'
 local menuLocation = 'topright' -- e.g. topright (default), topleft, bottomright, bottomleft
 
 local CUSTOM_MENU_RESOURCE = 'custom-menu'
@@ -106,7 +105,6 @@ local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLoca
 
 --Sub Menus
 local menu9 = MenuV:CreateMenu(false, Lang:t('menu.ban'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test9')
-local menu10 = MenuV:CreateMenu(false, Lang:t('menu.kick'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test10')
 local menu11 = MenuV:CreateMenu(false, Lang:t('menu.permissions'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test11')
 local menu12 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_categories'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test12')
 local menu13 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_models'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test13')
@@ -278,6 +276,28 @@ customMenuHandlers['adminmenu:action:player_action'] = function(ctx)
     end
     TriggerServerEvent('qb-admin:server:' .. act, activePlayer)
     return { ok = true, dispatched = 'player_action', action = act }
+end
+
+customMenuHandlers['adminmenu:open:menu10'] = function()
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu10(Lang, activePlayer) }
+end
+
+customMenuHandlers['adminmenu:action:kick_submit'] = function(ctx)
+    if not activePlayer then
+        return { ok = false, reason = 'no_active_player' }
+    end
+    local rawReason = type(ctx.values) == 'table' and ctx.values.reason or ''
+    local reason = tostring(rawReason):match('^%s*(.-)%s*$')
+    if #reason == 0 or reason == 'Unknown' then
+        QBCore.Functions.Notify(Lang:t('error.missing_reason'), 'error')
+        return { ok = false, reason = 'missing_reason' }
+    end
+    TriggerServerEvent('qb-admin:server:kick', activePlayer, reason)
+    closeCustomMenu('kick_submitted')
+    return { ok = true, dispatched = 'kick' }
 end
 
 legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
@@ -541,35 +561,6 @@ local function OpenPermsMenu(permsply)
     end)
 end
 
-local function OpenKickMenu(kickplayer)
-    AdminMenuShim.OpenMenu(menu10)
-    menu10:ClearItems()
-    menu10:AddButton({
-        icon = '',
-        label = Lang:t('info.reason'),
-        value = 'reason',
-        description = Lang:t('desc.kick_reason'),
-        select = function(_)
-            kickreason = LocalInput(Lang:t('desc.kick_reason'), 255)
-        end
-    })
-
-    menu10:AddButton({
-        icon = '',
-        label = Lang:t('info.confirm'),
-        value = 'kick',
-        description = Lang:t('desc.confirm_kick'),
-        select = function(_)
-            if kickreason ~= 'Unknown' then
-                TriggerServerEvent('qb-admin:server:kick', kickplayer, kickreason)
-                kickreason = 'Unknown'
-            else
-                QBCore.Functions.Notify(Lang:t('error.missing_reason'), 'error')
-            end
-        end
-    })
-end
-
 local function OpenBanMenu(banplayer)
     AdminMenuShim.OpenMenu(menu9)
     menu9:ClearItems()
@@ -662,9 +653,6 @@ local function OpenBanMenu(banplayer)
     })
 end
 
-legacyBridges['adminmenu:open:menu10'] = function()
-    if activePlayer then OpenKickMenu(activePlayer) end
-end
 legacyBridges['adminmenu:open:menu9'] = function()
     if activePlayer then OpenBanMenu(activePlayer) end
 end
