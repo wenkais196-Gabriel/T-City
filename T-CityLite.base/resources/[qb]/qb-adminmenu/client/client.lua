@@ -100,7 +100,6 @@ if type(exports) == 'function' then
 end
 
 -- Main Menus (pending per-screen migration)
-local menu3 = MenuV:CreateMenu(false, Lang:t('menu.manage_server'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test3')
 local menu4 = MenuV:CreateMenu(false, Lang:t('menu.online_players'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test4')
 local menu5 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test5')
 local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test6')
@@ -169,7 +168,30 @@ customMenuHandlers['adminmenu:action:give_weapon'] = function(ctx)
     return { ok = true, dispatched = 'give_weapon' }
 end
 
-legacyBridges['adminmenu:open:menu3'] = function() AdminMenuShim.OpenMenu(menu3) end
+customMenuHandlers['adminmenu:open:menu3'] = function()
+    local hour = type(GetClockHours) == 'function' and GetClockHours() or 12
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu3(Lang, hour) }
+end
+
+customMenuHandlers['adminmenu:open:menu3_time'] = function()
+    local hour = type(GetClockHours) == 'function' and GetClockHours() or 12
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu3Time(Lang, hour) }
+end
+
+customMenuHandlers['adminmenu:action:set_time'] = function(ctx)
+    local rawVal = type(ctx.values) == 'table' and ctx.values.value or nil
+    local hr = tonumber(rawVal)
+    if not hr then
+        return { ok = false, reason = 'invalid_hour' }
+    end
+    hr = math.floor(hr + 0.5)
+    if hr < 0 then hr = 0 elseif hr > 23 then hr = 23 end
+    local timeStr = ('%02d'):format(hr)
+    TriggerServerEvent('qb-weathersync:server:setTime', timeStr, timeStr)
+    QBCore.Functions.Notify(Lang:t('time.changed', { time = timeStr }))
+    return { ok = true, dispatched = 'set_time', hour = timeStr }
+end
+
 legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
 legacyBridges['adminmenu:open:menu7'] = function() AdminMenuShim.OpenMenu(menu7) end
 
@@ -180,117 +202,6 @@ end)
 --[[
     Sub Menus for the above main menu's
 --]]
-
--- Server Options Menu Buttons
-local menu3_server_weather = menu3:AddButton({
-    icon = '🌡️',
-    label = Lang:t('menu.weather_options'),
-    value = menu8,
-    description = Lang:t('desc.weather_desc')
-})
-
-local menu3_server_time = menu3:AddSlider({
-    icon = '⏲️',
-    label = Lang:t('menu.server_time'),
-    value = GetClockHours(),
-    values = { {
-        label = '00',
-        value = '00',
-        description = Lang:t('menu.time')
-    }, {
-        label = '01',
-        value = '01',
-        description = Lang:t('menu.time')
-    }, {
-        label = '02',
-        value = '02',
-        description = Lang:t('menu.time')
-    }, {
-        label = '03',
-        value = '03',
-        description = Lang:t('menu.time')
-    }, {
-        label = '04',
-        value = '04',
-        description = Lang:t('menu.time')
-    }, {
-        label = '05',
-        value = '05',
-        description = Lang:t('menu.time')
-    }, {
-        label = '06',
-        value = '06',
-        description = Lang:t('menu.time')
-    }, {
-        label = '07',
-        value = '07',
-        description = Lang:t('menu.time')
-    }, {
-        label = '08',
-        value = '08',
-        description = Lang:t('menu.time')
-    }, {
-        label = '09',
-        value = '09',
-        description = Lang:t('menu.time')
-    }, {
-        label = '10',
-        value = '10',
-        description = Lang:t('menu.time')
-    }, {
-        label = '11',
-        value = '11',
-        description = Lang:t('menu.time')
-    }, {
-        label = '12',
-        value = '12',
-        description = Lang:t('menu.time')
-    }, {
-        label = '13',
-        value = '13',
-        description = Lang:t('menu.time')
-    }, {
-        label = '14',
-        value = '14',
-        description = Lang:t('menu.time')
-    }, {
-        label = '15',
-        value = '15',
-        description = Lang:t('menu.time')
-    }, {
-        label = '16',
-        value = '16',
-        description = Lang:t('menu.time')
-    }, {
-        label = '17',
-        value = '17',
-        description = Lang:t('menu.time')
-    }, {
-        label = '18',
-        value = '18',
-        description = Lang:t('menu.time')
-    }, {
-        label = '19',
-        value = '19',
-        description = Lang:t('menu.time')
-    }, {
-        label = '20',
-        value = '20',
-        description = Lang:t('menu.time')
-    }, {
-        label = '21',
-        value = '21',
-        description = Lang:t('menu.time')
-    }, {
-        label = '22',
-        value = '22',
-        description = Lang:t('menu.time')
-    }, {
-        label = '23',
-        value = '23',
-        description = Lang:t('menu.time')
-    } }
-})
 
 -- Vehicle Spawner Menu Buttons
 local menu5_vehicles_spawn = menu5:AddButton({
@@ -787,7 +698,7 @@ end
 --]]
 
 -- Adjust weather on change
-menu3_server_weather:On('select', function()
+legacyBridges['adminmenu:open:menu8'] = function()
     menu8:ClearItems()
     local elements = {
         [1] = {
@@ -895,13 +806,8 @@ menu3_server_weather:On('select', function()
             end
         })
     end
-end)
-
--- Adjust time on change
-menu3_server_time:On('select', function(_, value)
-    TriggerServerEvent('qb-weathersync:server:setTime', value, value)
-    QBCore.Functions.Notify(Lang:t('time.changed', { time = value }))
-end)
+    AdminMenuShim.OpenMenu(menu8)
+end
 
 --[[
     Vehicle Spawner functions

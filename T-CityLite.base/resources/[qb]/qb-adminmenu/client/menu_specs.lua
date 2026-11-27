@@ -265,4 +265,76 @@ function AdminMenuSpecs.BuildMenu15(lang, weapons)
     }
 end
 
+local function clampNumber(value, minVal, maxVal, fallback)
+    local n = tonumber(value)
+    if not n then
+        return fallback
+    end
+    n = math.floor(n + 0.5)
+    if n < minVal then return minVal end
+    if n > maxVal then return maxVal end
+    return n
+end
+
+function AdminMenuSpecs.BuildMenu3(lang, hour)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local hr = clampNumber(hour, 0, 23, 12)
+    return {
+        id = 'qb_adminmenu_menu3',
+        title = tr('menu.manage_server'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.manage_server') },
+        items = {
+            {
+                id = 'weather_options',
+                kind = 'nav',
+                icon = '🌡️',
+                label = tr('menu.weather_options'),
+                description = tr('desc.weather_desc'),
+                intent = 'adminmenu:open:menu8',
+            },
+            {
+                id = 'server_time',
+                kind = 'nav',
+                icon = '⏲️',
+                label = tr('menu.server_time'),
+                description = tr('menu.time'),
+                badge = ('%02d:00'):format(hr),
+                intent = 'adminmenu:open:menu3_time',
+            },
+        },
+    }
+end
+
+function AdminMenuSpecs.BuildMenu3Time(lang, hour)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    local hr = clampNumber(hour, 0, 23, 12)
+    return {
+        id = 'qb_adminmenu_menu3_time',
+        title = tr('menu.server_time'),
+        surface = 'range',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.manage_server'), tr('menu.server_time') },
+        intent = 'adminmenu:action:set_time',
+        items = {
+            {
+                id = 'server_hour',
+                kind = 'range',
+                label = tr('menu.server_time'),
+                description = tr('menu.time'),
+                min = 0,
+                max = 23,
+                step = 1,
+                value = hr,
+                defaultValue = hr,
+                unit = 'h',
+                intent = 'adminmenu:action:set_time',
+            },
+        },
+    }
+end
+
 return AdminMenuSpecs
