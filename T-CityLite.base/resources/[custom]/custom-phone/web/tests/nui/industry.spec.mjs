@@ -11,6 +11,7 @@ import {
   openIndustry,
   openPhone,
   waitFor,
+  waitLoaded,
 } from './harness.mjs';
 
 const INDUSTRY_APP = {
@@ -206,7 +207,7 @@ export const industryScenarios = [
       await tile.waitFor({ state: 'visible', timeout: 10000 });
       await tile.click();
 
-      await page.locator('.dynamic-app').waitFor({ state: 'visible', timeout: 5000 });
+      await waitLoaded(page, '.dynamic-app', 'DynamicApp');
       checkEqual('没有专用页面时才走 DynamicApp', await page.locator('.industry-app').count(), 0);
       const text = (await page.locator('.dynamic-app').textContent()) ?? '';
       checkIncludes('DynamicApp 仍渲染服务端只读行', text, '洛圣都矿业公司');

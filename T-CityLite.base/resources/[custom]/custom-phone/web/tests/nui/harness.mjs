@@ -581,6 +581,23 @@ export async function openQuests(page, surface = 'phone') {
 }
 
 /** 打开手机里的「产业」瓦片（服务端注册的 industry app）。 */
+/**
+ * 等某个容器把"加载中…"换成真实数据。
+ *
+ * 手机 App 普遍先从服务端查快照再渲染，容器会先画出 loading 态 —— 快照是下一轮 NUI
+ * 往返才填进来的。只 `waitFor({state:'visible'})` 会在慢 runner（CI）上读到 loading，
+ * 断言就拿"加载中…"去比文案了（2026-11-27 CI 两次实测：产业 App 4 failed / 1 failed，
+ * 本地全绿）。凡是要读容器文案的地方，都先过这一步。
+ */
+export async function waitLoaded(page, selector, label = selector, timeout = 10000) {
+  await page.locator(selector).waitFor({ state: 'visible', timeout: 5000 });
+  await waitFor(
+    async () => !(((await page.locator(selector).textContent()) ?? '').includes('加载中')),
+    timeout,
+    `${label} 必须结束加载态`,
+  );
+}
+
 export async function openIndustry(page, surface = 'phone') {
   await openPhone(page, surface);
   const tile = page.locator('button[aria-label="产业"]');
@@ -594,15 +611,7 @@ export async function openIndustry(page, surface = 'phone') {
   }
   await tile.click();
   try {
-    await page.locator('.industry-app').waitFor({ state: 'visible', timeout: 5000 });
-    // 光等容器出现不够：容器先画出"加载中…"，快照是下一轮 NUI 往返才填进来的。
-    // CI（慢 runner）上这一步常被读到 loading 态，断言就拿着"加载中…"去比文案了
-    // （2026-11-27 CI 实测 4 failed，本地 0 failed）。这里显式等快照落地。
-    await waitFor(
-      async () => !(((await page.locator('.industry-app').textContent()) ?? '').includes('加载中')),
-      10000,
-      '产业 App 必须结束加载态（快照来自 appQuery:snapshot）',
-    );
+    await waitLoaded(page, '.industry-app', '产业 App');
   } catch {
     throw new CheckError('点击产业图标后没有进入产业页', {
       期望: '出现 .industry-app（appRegistry 里 industry → Industry.svelte）',
