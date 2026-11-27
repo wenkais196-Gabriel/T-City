@@ -253,6 +253,9 @@ local DEVCMD_ALLOWED = {
     '^backup surround$',
     '^lockdown$',
     '^lockdown clear$',
+    -- 真机验收：把玩家挪到世界交互点。GTA 把光标锁在屏幕角、合成点击进不了 CEF，
+    -- 想站到 qb-target 的 box zone 上只能靠这个。坐标由调用方（agent）给。
+    '^tpme %-?%d+%.?%d* %-?%d+%.?%d* %-?%d+%.?%d*$',
 }
 
 -- 一条 devcmd 最多这么长：手机命令都短，超长的要么是误用，要么是想塞别的
@@ -265,6 +268,25 @@ local function devcmdAllowed(cmd)
     end
     return false
 end
+
+-- ---------------------------------------------------------------------------
+-- 开发用：/tpme x y z —— 把自己挪到坐标。
+-- 为什么需要它：真机验收要站到 qb-target 的 box zone（老板菜单等）上，但 GTA 把 OS 光标
+-- 锁在屏幕角、合成鼠标点击进不了 NUI，也没有任何传送命令可走。与 devcmd 同一条 convar
+-- 门禁（agent_devcmd_enabled），只在服务端下发 adc 时才会被执行。
+-- ---------------------------------------------------------------------------
+RegisterCommand('tpme', function(_, args)
+    if GetConvar('agent_devcmd_enabled', '0') ~= '1' then return end
+    local x, y, z = tonumber(args[1]), tonumber(args[2]), tonumber(args[3])
+    if not (x and y and z) then
+        print('[agent-client][tpme] usage: tpme <x> <y> <z>')
+        return
+    end
+    local ped = PlayerPedId()
+    if not ped or ped == 0 then return end
+    SetEntityCoords(ped, x + 0.0, y + 0.0, z + 0.0, false, false, false, true)
+    print(('[agent-client][tpme] moved to %.2f, %.2f, %.2f'):format(x, y, z))
+end, false)
 
 RegisterNetEvent('tcity:agent:devcmd', function(raw)
     if GetConvar('agent_devcmd_enabled', '0') ~= '1' then return end
