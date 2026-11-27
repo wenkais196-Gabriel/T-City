@@ -166,7 +166,12 @@ AddEventHandler('playerDropped', function()
         -- 走 CloseOnDrop 塞进待退队列，下次登录由 ClaimPendingRefund 补。
         if type(QuestRental) == 'table' and type(QuestRental.CloseOnDrop) == 'function' then
             local okRent, rentRes = pcall(QuestRental.CloseOnDrop, citizenid)
-            if okRent and rentRes and not rentRes.idempotent then
+            -- CloseOnDrop 有两种合法返回：boolean（关成功了 / 本来就没会话）与
+            -- { idempotent = bool, refund = number }。直接 `rentRes.idempotent` 会在
+            -- boolean 上索引 → 抛错 → 整个 playerDropped 处理器中断，后面的
+            -- ClearAllLogisticsBindings 再也不执行，重连后旧 plate/netId 还挂在内存里
+            -- （2026-11-27 真机日志实锤：attempt to index a boolean value (local 'rentRes')）。
+            if okRent and type(rentRes) == 'table' and not rentRes.idempotent then
                 print(('[quest-cache] 🏁 rental closed on drop: %s (refund $%s deferred)'):format(
                     citizenid, tostring(rentRes.refund)))
             end

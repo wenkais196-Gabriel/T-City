@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **两条「下线/落盘」处理器把不同返回形状当成一种，抛错后整段中断（`custom-quest` / `custom-security`）**：
+  ① `T-CityLite.base/resources/[custom]/custom-quest/server/quest_cache.lua` 的 `playerDropped` 里
+  `QuestRental.CloseOnDrop` 可能返回 **boolean**，`rentRes.idempotent` 在 boolean 上索引会抛错
+  （真机日志：`attempt to index a boolean value (local 'rentRes')`），导致后面的
+  `ClearAllLogisticsBindings` 不再执行 —— 重连后旧 plate/netId 还挂在内存里，等于「车没还但费率还在」。
+  改为先判 `type(rentRes) == 'table'`。
+  ② `T-CityLite.base/resources/[custom]/custom-security/server/security.lua` 的落盘回调里
+  oxmysql 定制版 update 可能回数字、也可能回 `{ affectedRows = n }`，`rowsChanged > 0` 拿表比数字
+  会抛错并连锁 `oxmysql Error in nested ref call ... the reference wasn't valid`。改为先归一成数字。
+  两条都在 `T-CityLite.base/tests/architecture/test_drop_handlers_defensive.py` 里钉住
+  （含自证：拿掉守卫 → 红）。
+
+### Fixed
 - **通知时间回退成 `--:--` + qb-input 把「菜单关着」当成「被拒」（`custom-phone` / `qb-input`）**：
   ① 真机日志 `[phone] notifications: 时间字段无法解析 … "2026-11-27T18:49:23.000Z"` —— 值本身是合法
   ISO，node 与 Chrome 都能解析；实测**只有被多包一层 JSON 引号**的字符串会 `NaN`
