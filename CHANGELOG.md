@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   （2 成员 + 1 非成员 → 恰好 2 条、重复 tick → 0 条新增、`industry_enable=false` → 0 条、
   推送抛错结算照常完成、`app_id` 与 PII、结果推送）；反向注入删掉 warning 水位后
   重复 tick 用例变红（2 → 6），还原后绿。
+- **M6b —— `qb-management` 老板菜单与组织菜单合并为单入口，关闭按 owner 归因（#385）**：
+  ① **单入口与单菜单面板**：删除重复的 `cl_boss.lua` 与 `cl_gang.lua`，统一收敛至 `T-CityLite.base/resources/[qb]/qb-management/client/cl_org.lua`，同一坐标在 `[E]` 提示与 `qb-target` 下均仅注册一次，并将「老板视图 · 人事与库存」（成员管理、招新、仓库、更衣室）与「组织视图 · 治理与扩展」（退位交接、`custom-industry` 「产业」等动态挂载项）分区合并进同一菜单；保留全部 `qb-bossmenu:client:*` / `qb-gangmenu:client:*` 兼容事件、Cartel 个人面板与帮派地图标记；
+  ② **owner 归因关闭与焦点防叠**：拆分提示条显示状态与菜单持有权 `activeMenuOwner` / 区域锚点 `activeZoneCoords`，`CloseMenuFull(owner)` 仅在归属本资源且 `custom-ui` 栈顶属于菜单平面时才关闭对应 `qb-menu`，解决无坐标 `/orgmenu` 自闭及误关其它资源（如 `/industry`）界面问题，同时在打开前通过 `custom-ui:IsTaken()` / `Top()` 拦截在手机等活跃界面上叠开（`qb-management` 保持 `0` 处 `SetNuiFocus`）；
+  ③ **取证与闸门**：`menu_surface_census.py` `qb_menu_entry` 由 159 降至 139（`qb-management` 22 → 2）、`orgmenu_export` 由 10 降至 6（`qb-management` 8 → 4）、`setnui_focus` 保持 195（`qb-management` 0）；更新 `T-CityLite.base/tests/architecture/test_management_feedback_contract.py` 增加单入口与归因关闭反向注入 + Lua 5.4 运行时沙箱验证，并同步 `T-CityLite.base/tests/architecture/menu_surface_baseline.json` 与 `docs/plan/next-wave/01-candidates.md`。
 - **手机端产业动作入口（卖出 / 雇工位，`custom-phone` / `custom-industry`，#388）**：
   ① **服务端**：`T-CityLite.base/resources/[custom]/custom-industry/server/ui.lua` 新增导出
   `HireIndustryWorkstation`，直接复用 `IndustryUi.HireWorkstation`——成员身份与

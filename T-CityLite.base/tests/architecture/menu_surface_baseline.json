@@ -197,9 +197,8 @@
     ]
   },
   "qb_menu_entry": {
-    "total": 159,
+    "total": 139,
     "resources": {
-      "qb-management": 22,
       "qb-menu": 21,
       "qb-mechanicjob": 19,
       "qb-vehicleshop": 14,
@@ -215,6 +214,7 @@
       "custom-mining": 3,
       "qb-adminmenu": 3,
       "custom-justice": 2,
+      "qb-management": 2,
       "custom-admin": 1,
       "qb-hud": 1,
       "qb-input": 1,
@@ -313,22 +313,18 @@
     ]
   },
   "orgmenu_export": {
-    "total": 10,
+    "total": 6,
     "resources": {
-      "qb-management": 8,
+      "qb-management": 4,
       "custom-industry": 2
     },
     "samples": [
       "resources/[custom]/custom-industry/client/main.lua:207",
       "resources/[custom]/custom-industry/client/main.lua:210",
-      "resources/[qb]/qb-management/client/cl_boss.lua:13",
-      "resources/[qb]/qb-management/client/cl_boss.lua:19",
-      "resources/[qb]/qb-management/client/cl_gang.lua:179",
-      "resources/[qb]/qb-management/client/cl_gang.lua:185",
-      "resources/[qb]/qb-management/client/cl_org.lua:63",
-      "resources/[qb]/qb-management/client/cl_org.lua:73",
-      "resources/[qb]/qb-management/client/cl_org.lua:75",
-      "resources/[qb]/qb-management/client/cl_org.lua:77"
+      "resources/[qb]/qb-management/client/cl_org.lua:238",
+      "resources/[qb]/qb-management/client/cl_org.lua:255",
+      "resources/[qb]/qb-management/client/cl_org.lua:257",
+      "resources/[qb]/qb-management/client/cl_org.lua:259"
     ]
   },
   "client_wait_zero": {
