@@ -702,4 +702,62 @@ function AdminMenuSpecs.BuildMenu11Confirm(lang, player, group)
     }
 end
 
+function AdminMenuSpecs.BuildMenu5(lang)
+    local tr = function(key)
+        return AdminMenuSpecs.Translate(lang, key)
+    end
+    return {
+        id = 'qb_adminmenu_menu5',
+        title = tr('menu.vehicle_options'),
+        surface = 'list',
+        breadcrumbs = { tr('menu.admin_menu'), tr('menu.vehicle_options') },
+        items = {
+            {
+                id = 'spawn_vehicle',
+                kind = 'nav',
+                icon = '🚗',
+                label = tr('menu.spawn_vehicle'),
+                description = tr('desc.spawn_vehicle_desc'),
+                intent = 'adminmenu:open:menu12',
+            },
+            {
+                id = 'fix_vehicle',
+                kind = 'action',
+                icon = '🔧',
+                label = tr('menu.fix_vehicle'),
+                description = tr('desc.fix_vehicle_desc'),
+                intent = 'adminmenu:action:veh_command',
+                args = { cmd = 'fix' },
+            },
+            {
+                id = 'buy_vehicle',
+                kind = 'action',
+                icon = '💲',
+                label = tr('menu.buy'),
+                description = tr('desc.buy_desc'),
+                intent = 'adminmenu:action:veh_command',
+                args = { cmd = 'admincar' },
+            },
+            {
+                id = 'remove_vehicle',
+                kind = 'action',
+                icon = '🗑️',
+                label = tr('menu.remove_vehicle'),
+                description = tr('desc.remove_vehicle_desc'),
+                intent = 'adminmenu:action:veh_command',
+                args = { cmd = 'dv' },
+            },
+            {
+                id = 'max_mods',
+                kind = 'action',
+                icon = '⚡️',
+                label = tr('menu.max_mods'),
+                description = tr('desc.max_mod_desc'),
+                intent = 'adminmenu:action:veh_command',
+                args = { cmd = 'maxmods' },
+            },
+        },
+    }
+end
+
 return AdminMenuSpecs

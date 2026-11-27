@@ -97,7 +97,6 @@ if type(exports) == 'function' then
 end
 
 -- Main Menus (pending per-screen migration)
-local menu5 = MenuV:CreateMenu(false, Lang:t('menu.vehicle_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test5')
 local menu6 = MenuV:CreateMenu(false, Lang:t('menu.dealer_list'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test6')
 local menu7 = MenuV:CreateMenu(false, Lang:t('menu.developer_options'), menuLocation, 220, 20, 60, 'size-125', 'none', 'menuv', 'test7')
 
@@ -372,7 +371,27 @@ customMenuHandlers['adminmenu:action:perms_confirm'] = function()
     return { ok = true, dispatched = 'set_permissions' }
 end
 
-legacyBridges['adminmenu:open:menu5'] = function() AdminMenuShim.OpenMenu(menu5) end
+customMenuHandlers['adminmenu:open:menu5'] = function()
+    return { ok = true, spec = AdminMenuSpecs.BuildMenu5(Lang) }
+end
+
+customMenuHandlers['adminmenu:action:veh_command'] = function(ctx)
+    local args = type(ctx.args) == 'table' and ctx.args or {}
+    local cmd = args.cmd
+    if type(cmd) ~= 'string' or #cmd == 0 then
+        return { ok = false, reason = 'missing_veh_command' }
+    end
+    if cmd == 'car' then
+        if type(args.model) ~= 'string' or #args.model == 0 then
+            return { ok = false, reason = 'missing_vehicle_model' }
+        end
+        TriggerServerEvent('QBCore:CallCommand', 'car', { args.model })
+    else
+        TriggerServerEvent('QBCore:CallCommand', cmd, {})
+    end
+    return { ok = true, dispatched = 'veh_command', cmd = cmd }
+end
+
 legacyBridges['adminmenu:open:menu7'] = function() AdminMenuShim.OpenMenu(menu7) end
 
 RegisterNetEvent('qb-admin:client:openMenu', function()
@@ -382,42 +401,6 @@ end)
 --[[
     Sub Menus for the above main menu's
 --]]
-
--- Vehicle Spawner Menu Buttons
-local menu5_vehicles_spawn = menu5:AddButton({
-    icon = '🚗',
-    label = Lang:t('menu.spawn_vehicle'),
-    value = menu12,
-    description = Lang:t('desc.spawn_vehicle_desc')
-})
-
-local menu5_vehicles_fix = menu5:AddButton({
-    icon = '🔧',
-    label = Lang:t('menu.fix_vehicle'),
-    value = 'fix',
-    description = Lang:t('desc.fix_vehicle_desc')
-})
-
-local menu5_vehicles_buy = menu5:AddButton({
-    icon = '💲',
-    label = Lang:t('menu.buy'),
-    value = 'buy',
-    description = Lang:t('desc.buy_desc')
-})
-
-local menu5_vehicles_remove = menu5:AddButton({
-    icon = '🗑️',
-    label = Lang:t('menu.remove_vehicle'),
-    value = 'remove',
-    description = Lang:t('desc.remove_vehicle_desc')
-})
-
-local menu5_vehicles_max_upgrades = menu5:AddButton({
-    icon = '⚡️',
-    label = Lang:t('menu.max_mods'),
-    value = 'maxmods',
-    description = Lang:t('desc.max_mod_desc')
-})
 
 -- Developer Options Menu Buttons
 local menu7_dev_copy_vec3 = menu7:AddButton({
@@ -612,7 +595,7 @@ local function OpenCarModelsMenu(category)
     end
 end
 
-menu5_vehicles_spawn:On('Select', function(_)
+legacyBridges['adminmenu:open:menu12'] = function()
     menu12:ClearItems()
     for k, v in pairs(vehicles) do
         menu12:AddButton({
@@ -625,23 +608,8 @@ menu5_vehicles_spawn:On('Select', function(_)
             end
         })
     end
-end)
-
-menu5_vehicles_fix:On('Select', function(_)
-    TriggerServerEvent('QBCore:CallCommand', 'fix', {})
-end)
-
-menu5_vehicles_buy:On('Select', function(_)
-    TriggerServerEvent('QBCore:CallCommand', 'admincar', {})
-end)
-
-menu5_vehicles_remove:On('Select', function(_)
-    TriggerServerEvent('QBCore:CallCommand', 'dv', {})
-end)
-
-menu5_vehicles_max_upgrades:On('Select', function(_)
-    TriggerServerEvent('QBCore:CallCommand', 'maxmods', {})
-end)
+    AdminMenuShim.OpenMenu(menu12)
+end
 
 --[[
     Developer Options functions
