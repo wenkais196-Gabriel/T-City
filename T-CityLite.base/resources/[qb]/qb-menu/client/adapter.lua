@@ -25,7 +25,10 @@ local CUSTOM_MENU = 'custom-menu'
 local function isEnabled()
     local shared = GlobalState and GlobalState.qb_menu_use_custom_menu
     if shared == true then return true end
-    if shared == false then return false end
+    -- `false` **不能**短路：server/adapter_state.lua 是在资源启动时把 convar 快照写进
+    -- GlobalState 的。运维 `setr qb_menu_use_custom_menu true` 之后若没重启本资源，
+    -- GlobalState 还是启动时那个 false —— 一短路，convar 兜底就成了死代码，
+    -- 表现是"改了开关但一点反应都没有"（2026-11-27 真机踩到）。
     return GetConvar('qb_menu_use_custom_menu', 'false') == 'true'
 end
 
@@ -328,6 +331,20 @@ local function buildSpec(list, owner)
     return spec, legacyItems
 end
 
+--- custom-menu 的 Open 会因为"这个 intent 没登记"而整单拒绝。
+--- 这种拒绝是可以自愈的（重新 RegisterIntent 就行），和 MenuSpec 本身不合法不是一回事。
+local function isUnknownIntent(reason)
+    return type(reason) == 'string' and reason:find('Unknown intent', 1, true) ~= nil
+end
+
+-- custom-menu 重启后 intent 注册表清空：必须把本地的"已注册"记忆一起清掉，
+-- 否则之后每一次 open 都会跳过注册、被 Open 拒掉。
+AddEventHandler('onClientResourceStart', function(resourceName)
+    if resourceName == CUSTOM_MENU then
+        state.routes = {}
+    end
+end)
+
 local function adaptOpen(data, sort, skipFirst, legacyOpen)
     if not isEnabled() then
         -- 回滚路径：与改造前完全一致，一行行为都不变。
@@ -373,6 +390,16 @@ local function adaptOpen(data, sort, skipFirst, legacyOpen)
     state.menus[spec.id] = { owner = owner, items = legacyItems }
     state.current = { owner = owner, rootId = spec.id }
     local opened, err = invoke('Open', spec)
+    if opened ~= true and isUnknownIntent(err) then
+        -- custom-menu 被 restart 过：它的 intent 注册表已经空了，而我们这边的
+        -- state.routes 还记着"注册过"，于是 Open 被拒、菜单根本打不开
+        -- （2026-11-27 真机实测：restart custom-menu 之后 /orgmenu 全部失效）。
+        -- 这里自愈：清掉记忆 → 重注册 → 再开一次。
+        state.routes = {}
+        if ensureRoutes(owner) then
+            opened, err = invoke('Open', spec)
+        end
+    end
     if opened ~= true then
         clearState()
         print(('[qb-menu] custom-menu 打开失败：%s'):format(tostring(err or opened)))

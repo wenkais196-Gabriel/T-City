@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **菜单宽度被静默压窄 + 适配层重启后菜单全打不开（`custom-menu` / `qb-menu`）**：
+  ① **宽度回归**：#383 的标题是「产业面板方案 A —— 信息行语义」，却顺手把共享的
+  `.menu-shell` 宽度从 **520px 改成 300px**，所有走新菜单的界面一起变窄（标题折行、配额折行、
+  禁用行说明折成两行）。现改为声明式：`:root` 新增 `--menu-width: 520px` /
+  `--menu-width-min: 320px` / `--menu-width-max: 640px`，`.menu-shell` 只许引用
+  `var(--menu-width*)`，并新增基线 `T-CityLite.base/tests/architecture/menu_theme_baseline.json`
+  —— **改宽度必须同 commit 改基线**，review 时是一行显式 diff；
+  `T-CityLite.base/tests/architecture/test_menu_width_tokens.py` 钉住四件事（token 存在、
+  引用而非字面量、与基线一致、区间 300–640），并自证「改回 300 / 改成看着也合理的 440 /
+  删 token」三种偷改都会红。
+  ② **适配层重启自愈**：`qb-menu` 用 `state.routes` 记住 intent 注册过，而 `custom-menu`
+  一被 `restart` 注册表就空了 —— 之后每次 open 都跳过注册、被 `Open` 整单拒绝
+  `Unknown intent "qb-menu:qb-management:menu"`，玩家按 E / `/orgmenu` 什么都开不出来。
+  现在 `onClientResourceStart('custom-menu')` 会清空记忆，且 `Open` 因 `Unknown intent`
+  失败时会重注册并重试一次。
+  ③ **运行期开关生效**：`isEnabled()` 原来在 `GlobalState == false` 处短路，而
+  `server/adapter_state.lua` 是启动时把 convar 快照写进 `GlobalState` —— 于是运维
+  `setr qb_menu_use_custom_menu true` 之后不重启就永远不生效（convar 兜底成死代码）。
+  现在 `false` 不再短路，`setr` 即时生效。
+
 ### Changed
 - **产业周期公告推送（警告 + 结果，`custom-industry` / `custom-phone`，#389）**：
   ① `T-CityLite.base/resources/[custom]/custom-industry/server/announce.lua` 在既有公告水位

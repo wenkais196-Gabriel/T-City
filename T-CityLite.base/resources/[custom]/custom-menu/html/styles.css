@@ -10,6 +10,13 @@
   --font-body: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
   --font-mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
 
+  /* 菜单宽度：唯一的宽度事实源。.menu-shell 只许引用这里的变量，
+     不允许再写字面量 px —— 2026-11-27 #383 把 520px 顺手改成 300px，
+     一个「产业面板」的 PR 静默压窄了所有走新菜单的界面（#402）。 */
+  --menu-width: 520px;
+  --menu-width-min: 320px;
+  --menu-width-max: 640px;
+
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 15px;
@@ -200,8 +207,9 @@ button, input {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  width: 300px;
-  max-width: 100%;
+  width: var(--menu-width);
+  min-width: var(--menu-width-min);
+  max-width: min(var(--menu-width-max), 100%);
   max-height: calc(100vh - 72px);
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
@@ -1069,7 +1077,7 @@ button, input {
     padding: 20px 24px;
   }
   .menu-shell {
-    width: 300px;
+    width: min(var(--menu-width), 100vw);
     max-height: calc(100vh - 40px);
   }
   .vlist-viewport {

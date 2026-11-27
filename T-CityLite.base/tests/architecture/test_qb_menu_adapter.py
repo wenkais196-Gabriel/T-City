@@ -742,3 +742,90 @@ print('OK')
     )
     assert bad_proc.returncode != 0, "反向注入失效：把适配层改回全 disabled 后用例竟然仍通过"
 
+
+# ══════════════════════════════════════════════════════════════════════════
+# custom-menu 重启后的自愈（2026-11-27 真机故障）
+#
+# 故障链：qb-menu 用 state.routes 记住"这两个 intent 注册过了"。custom-menu 一被
+# restart，它的注册表就空了，但 qb-menu 还记着 → 之后每次 open 都跳过注册 →
+# `Open` 整单拒绝 `Unknown intent "qb-menu:qb-management:menu"` →
+# 玩家按 E / 敲 /orgmenu 什么都开不出来，直到 qb-menu 也重启。
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_unknown_intent_rejection_self_heals() -> None:
+    """custom-menu 拒单说 Unknown intent 时，适配层必须重注册并重试一次。"""
+    _run(
+        """
+INVOKING = 'qb-management'
+exports['qb-menu']:openMenu({ __ROOT_MENU__ })
+assert(exports['custom-menu']:IsOpen() == true, '首次打开必须成功')
+exports['qb-menu']:closeMenu()
+
+-- 模拟 custom-menu 重启后的拒单：第一次 Open 直接回 Unknown intent
+local realOpen = exportFns['custom-menu'].Open
+local rejected = 0
+exportFns['custom-menu'].Open = function(self, spec)
+  if rejected == 0 then
+    rejected = rejected + 1
+    return false, 'Unknown intent "qb-menu:qb-management:menu" at items[2]'
+  end
+  return realOpen(self, spec)
+end
+
+exports['qb-menu']:openMenu({ __ROOT_MENU__ })
+assert(rejected == 1, '测试前提没生效：Open 没有被拒一次')
+assert(exports['custom-menu']:IsOpen() == true,
+    'Unknown intent 之后必须自愈（重注册 + 重试），不能整单放弃')
+print('OK')
+""".replace("__ROOT_MENU__", ROOT_MENU)
+    )
+
+
+def _selfheal_contract(source: str) -> list[str]:
+    """静态契约：两条自愈路径必须都在。抽出来才能自证闸门会红。"""
+    errors: list[str] = []
+    # 注意别用子串判断：把事件名改长成 `onClientResourceStartDisabled`，
+    # 旧写法 `"onClientResourceStart" in source` 仍然为真，闸门就成了橡皮章。
+    if "AddEventHandler('onClientResourceStart'" not in source:
+        errors.append("缺少 onClientResourceStart 监听：custom-menu 重启后不会清 routes 记忆")
+    elif "state.routes = {}" not in source:
+        errors.append("onClientResourceStart 里没有清空 state.routes")
+    if "Unknown intent" not in source:
+        errors.append("缺少 Unknown intent 自愈重试")
+    return errors
+
+
+def test_adapter_keeps_restart_selfheal_paths() -> None:
+    source = pathlib.Path(QB_MENU_ADAPTER).read_text(encoding="utf-8")
+    errors = _selfheal_contract(source)
+    assert not errors, "适配层自愈契约被破坏：\n" + "\n".join(errors)
+
+
+def test_selfheal_contract_gate_is_not_a_rubber_stamp() -> None:
+    """自证：把两条自愈路径删掉，契约检查必须报错。"""
+    source = pathlib.Path(QB_MENU_ADAPTER).read_text(encoding="utf-8")
+    assert not _selfheal_contract(source)
+    gutted = source.replace("onClientResourceStart", "onClientResourceStartDisabled")
+    assert _selfheal_contract(gutted), "删掉资源启动监听后闸门仍然全绿 —— 这条闸门是假的"
+    no_retry = source.replace("Unknown intent", "unknown-intent")
+    assert _selfheal_contract(no_retry), "删掉 Unknown intent 判定后闸门仍然全绿 —— 这条闸门是假的"
+
+
+def test_runtime_convar_switch_wins_over_stale_boot_globalstate() -> None:
+    """启动时 convar=false 把 GlobalState 写成 false，之后 `setr ... true` 必须能生效。
+
+    没有这条，`isEnabled()` 会在 `shared == false` 处短路，convar 兜底永远走不到 ——
+    表现就是"开关改了但菜单还是原版"（2026-11-27 真机：要靠 restart qb-menu 才生效）。
+    """
+    _run(
+        """
+GlobalState.qb_menu_use_custom_menu = false   -- 启动快照（convar 当时是 false）
+-- convar 侧此时已经是 'true'（_run 的 USE_ADAPTER=true 就是这个含义）
+assert(GetConvar('qb_menu_use_custom_menu', 'false') == 'true', '测试前提：convar 必须为 true')
+INVOKING = 'resource-runtime'
+exports['qb-menu']:openMenu({ __ROOT_MENU__ })
+assert(exports['custom-menu']:IsOpen() == true,
+    'GlobalState 的启动快照不许压掉运行期的 convar 开关')
+print('OK')
+""".replace("__ROOT_MENU__", ROOT_MENU)
+    )
