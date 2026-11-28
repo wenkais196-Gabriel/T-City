@@ -30,6 +30,7 @@ from industry_harness import (
     SCHEMA_FIXTURE,
     TREASURY_PROBE,
     TREASURY_SRC,
+    UI_SRC,
     UNIQUE_REF_KEY,
     _run,
     read_text,
@@ -67,7 +68,8 @@ def run_withdraw(body: str) -> dict[str, str]:
 
 
 # 固定「现在」：2026-01-05（周一）12:00 本地时区；下一周 = +7 天。
-# 周额度判断只通过 IndustryCommands.Now 取时间，不真等 7 天。
+# 周额度判断通过两个注入点取时间：命令路径用 IndustryCommands.Now（仿真器也用它），
+# 手机导出路径用 Treasury.Now；这里把两者都钉在同一时刻，不真等 7 天。
 WITHDRAW_PRELUDE = r"""
 __nowEpoch = os.time({ year = 2026, month = 1, day = 5, hour = 12, min = 0, sec = 0 })
 __nextWeekEpoch = __nowEpoch + 7 * 86400
@@ -142,6 +144,7 @@ exports = setmetatable({}, {
 function Money(value) return tostring(value) end
 function TriggerClientEvent() end
 IndustryCommands.Now = function() return __nowEpoch end
+Treasury.Now = function() return __nowEpoch end
 IndustryCommands.Register()
 """
 
@@ -252,6 +255,38 @@ def test_failed_payout_refunds_full_amount_and_does_not_burn_tax():
     assert out["TAX"] == "true", "发放失败仍把税烧掉了"
     assert out["BANK2"] == "20000", "退款后同一周重试被额度误伤（净额应回到 0）"
     assert out["BAL2"] == "25000", "重试成功的提现没有按全额扣金库"
+
+
+def test_withdraw_rules_live_only_in_the_shared_treasury_function():
+    """单一实现：命令与手机导出都只调用 Treasury.WithdrawForPlayer。
+
+    这条是静态护栏：额度 / 税 / 串行化 / 审计的规则只能写在 treasury.lua；
+    commands.lua 与 ui.lua 里出现任何一份副本，都说明「删共享判断 → 两边同时
+    变红」的证明会失效（副本会替调用方兜底）。
+    """
+    treasury = TREASURY_SRC.read_text(encoding="utf-8")
+    commands = COMMANDS_SRC.read_text(encoding="utf-8")
+    ui = UI_SRC.read_text(encoding="utf-8")
+
+    assert "function Treasury.WithdrawForPlayer" in treasury
+    assert "if already + value > quota then" in treasury, "共享函数的周额度判断不见了"
+
+    handler = commands[
+        commands.index("local function withdrawHandler"):
+        commands.index("QBCore.Commands.Add('orgfundwithdraw'")
+    ]
+    assert "Treasury.WithdrawForPlayer(Player, orgId" in handler
+    for token in ("GetWithdrawnThisWeek", "Treasury.Withdraw(orgId", "TaxFor", "withdrawBusy"):
+        assert token not in handler, f"命令层复制了提现规则：{token}"
+
+    exported = ui[
+        ui.index("function IndustryUi.WithdrawFunds"):
+        ui.index("-- 跨资源只读入口在加载期注册")
+    ]
+    assert "Treasury.WithdrawForPlayer(Player, orgId, amount)" in exported
+    for token in ("GetWithdrawnThisWeek", "TaxFor", "withdrawBusy", "IsOrgBoss"):
+        assert token not in exported, f"导出层复制了提现规则：{token}"
+    assert "exports('WithdrawIndustryFunds', IndustryUi.WithdrawFunds)" in ui
 
 
 # ══════════════════════════════════════════════════════════════════

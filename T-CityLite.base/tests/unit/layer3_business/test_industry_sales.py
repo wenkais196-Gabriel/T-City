@@ -691,7 +691,9 @@ ADD_MONEY_CALL = re.compile(r"Player\.Functions\.AddMoney\s*\(")
 EXPECTED_DEPOSIT_SITES = [
     ("custom-industry/server/commands.lua", "deposit"),                  # 先 RemoveMoney 再存
     ("custom-industry/server/commands.lua", "reason"),                   # /orgfundgrant 控制台
-    ("custom-industry/server/commands.lua", "withdraw-rollback"),        # 发放失败退回
+    # P5（#418）：提现规则（含发放失败退回）抽到 Treasury.WithdrawForPlayer，
+    # 命令与手机导出共用；回滚点随实现搬到 treasury.lua，性质不变。
+    ("custom-industry/server/treasury.lua", "withdraw-rollback"),        # 发放失败退回
     ("custom-industry/server/facility.lua", "facility-build-rollback"),  # 建施失败退回
     ("custom-industry/server/facility.lua", "workstation-rollback"),     # 工位 CAS 失败退回
     ("custom-industry/server/facility.lua", "workstation-rollback"),     # updateErr 分支
@@ -768,9 +770,10 @@ def test_no_new_player_money_mint_in_custom_industry_or_dashboard():
         for argument in _third_arguments(text, ADD_MONEY_CALL):
             industry_add_money.append((path.name, _literal(argument)))
 
+    # P5（#418）：提现的 AddMoney 随唯一实现搬到 treasury.lua；入口仍是命令 + 手机导出。
     assert sorted(industry_add_money) == [
         ("commands.lua", "orgfunddeposit-refund"),
-        ("commands.lua", "orgfundwithdraw"),
+        ("treasury.lua", "orgfundwithdraw"),
     ], f"custom-industry 的 AddMoney 列表变了：{industry_add_money}"
 
     assert "Player.Functions.AddMoney" not in SALE_SRC.read_text(encoding="utf-8")

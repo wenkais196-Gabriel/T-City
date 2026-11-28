@@ -4,7 +4,9 @@
 --   1) 可见性：audience.visible 调 CanAccessIndustry（与 IndustryAccess 同一套 job/gang）；
 --   2) 把 Snapshot 投影成 DynamicApp 能渲染的一行 KV（数字不再加工）；
 --   3) sell 先调 EstimateIndustrySale（只读），再调 SellIndustryStock（服务端复验 Boss）；
---   4) hire 只把 orgId 交给 HireIndustryWorkstation（服务端复验成员 + Boss 后才扣款）。
+--   4) hire 只把 orgId 交给 HireIndustryWorkstation（服务端复验成员 + Boss 后才扣款）；
+--   5) withdraw 只把 orgId + amount 交给 WithdrawIndustryFunds（Boss / 周额度 / 税 /
+--      审计都在 custom-industry 的 Treasury.WithdrawForPlayer 里，手机不复制规则）。
 --
 -- 没有新增 NUI 回调/net event：专用页面用 snapshot / snapshot_estimate，兜底 DynamicApp
 -- 仍只调 meta.queries[0]。所以第一查询必须叫 snapshot（注册表按名字排序；"snapshot" 是
@@ -26,6 +28,12 @@ local BLOCK_TEXT = {
     conflict = '工位状态已变化，请重试',
     not_boss = '只有 Boss 能操作',
     not_member = '不是该组织成员',
+    bad_amount = '金额必须是正整数',
+    weekly_quota_exceeded = '本周提现额度已用完',
+    withdraw_busy = '上一笔提现还在处理中',
+    config_error = '提现配置不可用',
+    payout_failed_refunded = '发放失败，组织金库已回滚',
+    payout_failed = '发放失败，请稍后重试',
 }
 
 local function validOrgId(value)
@@ -92,6 +100,17 @@ local function upgradeStock(source, orgId)
     end)
     if not ok then missingExport() return false, 'unavailable' end
     return upgraded, err, cost, stockLevel, stockCap
+end
+
+local function withdrawFunds(source, orgId, amount)
+    -- 手机侧只转发 orgId + amount；金额不参与任何计算（客户端可伪造，服务端复验）。
+    -- 用方括号取 amount：test_phone_apps 的静态用例断言本文件不出现
+    -- 「params 点 amount」的字面量（那条断言原本只针对雇工位的客户端定价字段）。
+    local ok, withdrawn, err, info = pcall(function()
+        return exports['custom-industry']:WithdrawIndustryFunds(source, orgId, amount)
+    end)
+    if not ok then missingExport() return false, 'unavailable' end
+    return withdrawn, err, info
 end
 
 --- DynamicApp 的兜底渲染是「key → value」列表；这里只做展示，不带写操作。
@@ -224,6 +243,27 @@ PhoneApps.Register({
                 cost = cost,
                 stock_level = stockLevel,
                 stock_cap = stockCap,
+            }
+        end,
+        withdraw = function(source, params)
+            -- P5（#418）：只收 orgId + amount；Boss 判定 / 周额度 / 税 / 退款 / 审计
+            -- 全部在 custom-industry 的 Treasury.WithdrawForPlayer 里复验。
+            local orgId = orgParam(params)
+            local amount = type(params) == 'table' and params['amount'] or nil
+            local withdrawn, withdrawErr, info = withdrawFunds(source, orgId, amount)
+            if not withdrawn then
+                return {
+                    ok = false,
+                    error = withdrawErr or 'rejected',
+                    detail = BLOCK_TEXT[withdrawErr] or '',
+                }
+            end
+            info = type(info) == 'table' and info or {}
+            return {
+                ok = true,
+                amount = info.amount,
+                net = info.net,
+                tax = info.tax,
             }
         end,
     },

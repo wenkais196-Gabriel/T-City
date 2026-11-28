@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **产业提现进手机：规则抽成单一实现 + 跨资源导出（`custom-industry` + 手机）**：
+  `/orgfundwithdraw` 的 Boss 校验 / 自然周额度（`org_ledger` 派生）/ 20% 销毁税 /
+  同组织在途串行化 / 发放失败全额退款 / `treasury.withdraw` 审计全部收进
+  `Treasury.WithdrawForPlayer`；命令与新增导出 `WithdrawIndustryFunds` 都只调用
+  这一个函数（删掉共享函数里的额度判断，命令用例与导出用例会同时变红）。
+  `GetIndustrySnapshot` 增加只读 `treasury = { weeklyQuota, withdrawnThisWeek, taxRate }`；
+  手机产业 App 新增提现区（金额输入、本周已提/额度、按 `taxRate` 预估税后到账），
+  额度用尽或非 Boss 时按钮禁用并显示原因；动作只发 `orgId + amount`，服务端
+  复验后才动钱。无新增 net event，手机端不复制任何金钱规则。
 - **产业仿真器 MVP：驱动真实 Lua + 指标基线（`tools/dev/industry_sim`，#412）**：
   `run_sim.py` 复用 `tests/unit/layer3_business/industry_harness.py` 的假 DB 装配链，
   加载真实 `production / sale / settlement / cycle / commands` 跑 N 周，**不复制任何
