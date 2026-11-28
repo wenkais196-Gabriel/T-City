@@ -62,7 +62,7 @@ P2/P3 都是 P1 结算钩子上的行为；P4 必须在规则稳定后才有意�
 
 ## 3. P2 —— 提现额度/税 + 季度分配 → **#410**
 
-**前序核验**：P1 已合并（存在季度结算钩子）；确认 `/orgfundwithdraw` 当前**无税无额度**（`server/commands.lua`）。
+**前序核验**：P1 已合并（存在季度结算钩子）；确认 `/orgfundwithdraw` 当前**无税无额度**（`T-CityLite.base/resources/[custom]/custom-industry/server/commands.lua`）。
 
 | 项 | 内容 |
 |---|---|
@@ -73,7 +73,7 @@ P2/P3 都是 P1 结算钩子上的行为；P4 必须在规则稳定后才有意�
 
 ## 4. P3 —— 库存上限可升级 → **#411**
 
-**前序核验**：P1 已合并；确认 `stockCap` 当前是配置常量 540（`config/facility.lua`）。
+**前序核验**：P1 已合并；确认 `stockCap` 当前是配置常量 540（`T-CityLite.base/resources/[custom]/custom-industry/config/facility.lua`）。
 
 | 项 | 内容 |
 |---|---|
