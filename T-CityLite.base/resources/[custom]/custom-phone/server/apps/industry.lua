@@ -19,6 +19,7 @@ local BLOCK_TEXT = {
     funds = '金库余额不足',
     phase = '当前阶段不可购置',
     cap_reached = '工位已满',
+    max_level = '库存已满级',
     insufficient_funds = '金库余额不足',
     purchases_closed = '当前阶段不可购置',
     not_built = '尚未建设施',
@@ -82,6 +83,15 @@ local function hireWorkstation(source, orgId)
     end)
     if not ok then missingExport() return false, 'unavailable' end
     return hired, err, cost, workstations
+end
+
+local function upgradeStock(source, orgId)
+    -- 与雇工位共用同一个导出（第三参选择动作），不扩 custom-industry 的导出面。
+    local ok, upgraded, err, cost, stockLevel, stockCap = pcall(function()
+        return exports['custom-industry']:HireIndustryWorkstation(source, orgId, 'stock')
+    end)
+    if not ok then missingExport() return false, 'unavailable' end
+    return upgraded, err, cost, stockLevel, stockCap
 end
 
 --- DynamicApp 的兜底渲染是「key → value」列表；这里只做展示，不带写操作。
@@ -196,6 +206,25 @@ PhoneApps.Register({
                 }
             end
             return { ok = true, cost = cost, workstations = workstations }
+        end,
+        upgrade_stock = function(source, params)
+            -- P3（#411）：只收 orgId；价格 / 等级 / 上限全部由 custom-industry 计算。
+            local orgId = orgParam(params)
+            local upgraded, upgradeErr, cost, stockLevel, stockCap =
+                upgradeStock(source, orgId)
+            if not upgraded then
+                return {
+                    ok = false,
+                    error = upgradeErr or 'rejected',
+                    detail = BLOCK_TEXT[upgradeErr] or '',
+                }
+            end
+            return {
+                ok = true,
+                cost = cost,
+                stock_level = stockLevel,
+                stock_cap = stockCap,
+            }
         end,
     },
 })

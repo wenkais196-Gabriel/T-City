@@ -21,7 +21,16 @@ Config.Industry.Facilities = {
         -- 满建时 1.2 小时就触顶，离线闸门等于失效；540 把口径改成「满建 12 小时」。
         -- 540 同时等于 1 工位在成熟期（5 天 × 1.0 倍）的产量，单工位也够得着。
         -- 满了就冻结，不产生任何回执；离线通胀闸靠这一列。
+        --
+        -- P3（#411）：这只是 **0 级** 的上限。实际上限 = stockCap + 900 × stock_level，
+        -- 等级落库在 industry_facility.stock_level；价格 = floor(40000 × 1.6^等级)。
+        -- 仿真（docs/plan/industry-ops/10-plan.md §2）：+900/级时「囤货过冬」与
+        -- 「能卖就卖」打平（+0.6%），满级 5,940 ≈ 一周满建产量的 79%。
         stockCap = 540,
+        stockCapPerLevel = 900,
+        stockLevelMax = 6,
+        stockUpgradeBaseCost = 40000,
+        stockUpgradeGrowth = 1.6,
 
         recipes = {
             {

@@ -24,11 +24,27 @@ from __future__ import annotations
 
 from industry_harness import (
     COMMANDS_PRODUCTION_SRC,
+    FACILITY_SRC,
+    PROBE_COMMON,
+    PRODUCTION_MODULES,
+    PRODUCTION_PROBE,
     PRODUCTION_SRC,
+    _run,
+    read_text,
     run_production as run,
-    run_production_db as run_db,
     run_wiring as _run_wiring,
 )
+
+
+def run_db(body: str) -> dict[str, str]:
+    """S3 写库链补上 facility.lua：截断上限必须来自 Facility.StockCapFor（#411）。
+
+    共享 harness 的 `run_production_db` 不加载 facility.lua；这里只在本文件补一段，
+    让「升级后的上限真的生效」跑在**真实**的 StockCapFor 上，而不是测试内复刻公式。
+    """
+    stubs = read_text(PROBE_COMMON, PRODUCTION_PROBE) + "\n"
+    stubs += "function GetConvar(_, default) return default end\n"
+    return _run(body, stubs=stubs, modules=PRODUCTION_MODULES + (FACILITY_SRC,))
 
 
 def run_wiring(debug: bool) -> dict[str, str]:
@@ -387,6 +403,43 @@ def test_settle_facility_full_stock_advances_time_without_touching_units():
         f"满仓时 stock / produced_units 都不能动：{out}"
     )
     assert out["LAST"] == "600", "满仓也要推进 last_tick_at，避免卖出后补算"
+    assert out["UPDATES"] == "1"
+
+
+def test_settle_facility_truncates_at_the_upgraded_stock_cap():
+    """1 级库存（上限 1,440）只剩 10 格时，期望 45 只能产 10。
+
+    反向注入：把 production.lua 的 `cap` 改回常量 540 → 这里会产 0（原因误判为满仓），
+    这条用例必须红。
+    """
+    out = run_db("""
+        __reset()
+        __facilitySeed('mining_co', {
+            workstations = 10, stock = 1430, last_tick_epoch = 0,
+        })
+        __facilities['mining_co'].stock_level = 1
+
+        local ok, err, result = IndustryProduction.SettleFacility('mining_co', { now = 3600 })
+        local row = __facility('mining_co')
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('CAP', tostring(Facility.StockCapFor(1, 'mine')))
+        __emit('EXPECTED', tostring(result and result.expected))
+        __emit('PRODUCED', tostring(result and result.produced))
+        __emit('BLOCKED', tostring(result and result.blocked))
+        __emit('STOCK', tostring(row.stock))
+        __emit('LAST', tostring(row.last_tick_epoch))
+        __emit('UPDATES', tostring(__productionUpdates))
+    """)
+    assert out["OK"] == "true" and out["ERR"] == "nil", f"升级后结算失败：{out}"
+    assert out["CAP"] == "1440", f"StockCapFor(1) 不是 1,440：{out}"
+    assert out["EXPECTED"] == "45", f"测试前提不对：{out}"
+    assert out["PRODUCED"] == "10", (
+        f"截断仍按旧上限 540 算（应产 10，实际 {out['PRODUCED']}）"
+    )
+    assert out["BLOCKED"] == "stock_full"
+    assert out["STOCK"] == "1440", f"库存必须停在新上限：{out}"
+    assert out["LAST"] == "3600", "被库存截断时仍要整段前进，避免卖出后补算"
     assert out["UPDATES"] == "1"
 
 
