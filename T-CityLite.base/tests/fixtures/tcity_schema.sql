@@ -1215,6 +1215,8 @@ CREATE TABLE IF NOT EXISTS `industry_sales` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `org_id` varchar(64) NOT NULL,
   `cycle_no` int(11) NOT NULL DEFAULT 0,
+  `phase` varchar(24) NOT NULL DEFAULT 'legacy',
+  `season` int(11) NOT NULL DEFAULT 0,
   `item_name` varchar(64) NOT NULL,
   `qty` int(11) NOT NULL,
   `unit_price` bigint(20) NOT NULL,

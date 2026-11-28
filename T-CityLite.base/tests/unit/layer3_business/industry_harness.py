@@ -18,6 +18,10 @@ SonarCloud 把 PR #373 的新代码重复率算到 20.8%（issue #377）。
 S8 的 `test_industry_prestige.py` 只需把本地的 `run()` 换成
 `from industry_harness import run_full as run`：body / convars 签名一致，
 完整模块链（含 settlement / commands_cycle）由 `FULL_MODULES` 提供。
+
+跨阶段（#408）：S4 用例在 body 里覆写 `IndustryCycle.Current` 控制当前
+`(cycle_no, phase)`；假 DB 的 `SUM(qty)` 按 SQL 里真的写出来的 WHERE 列求值，
+不会替调用方补 `phase` 条件 —— 删掉守卫时用例必须变红。
 """
 
 from __future__ import annotations

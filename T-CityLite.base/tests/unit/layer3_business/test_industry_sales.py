@@ -183,6 +183,126 @@ def test_second_org_over_half_the_quota_is_org_cap_reached():
     assert out["STOCK_SAME"] == "true" and out["BAL_SAME"] == "true"
 
 
+def test_quota_is_per_phase_not_per_cycle():
+    """#408：扩张期卖满单组织上限后，竞争期必须从 0 重新起算。
+
+    口径是「每阶段」单组织上限 = 当阶段配额 × 50%，不是「全周期累计」：
+    quota_total 11,000（cap 5,500）卖满 → quota_total 9,350（cap 4,675）还能卖满。
+
+    反向注入：删掉 `readOrgUsed` 的 `phase = ?`（连同参数），本用例必须变红 ——
+    扩张期的 5,500 会被当成竞争期已用，第一件就 `org_cap_reached`；
+    `readDemand` 的流水合计若仍按全周期，也会把 5,500 回填进竞争期 quota_used。
+    """
+    out = run("""
+        __reset()
+        __seedOrg('mining_co', 0)
+        __seedFacility('mining_co', 11000)
+
+        -- S4 用静态回落值；本用例把「当前阶段」显式钉在 industry_state 的读点上。
+        local phase = 'expansion'
+        IndustryCycle.Current = function()
+            return { cycle_no = 1, phase = phase, price = 1.0, quota = 1.0 }
+        end
+
+        __seedDemand('iron_ore', 11000, 0, 1, 'expansion')
+        __seedDemand('iron_ore', 9350, 0, 1, 'competition')
+
+        local okExpansion, errExpansion = IndustrySales.SettleSale(
+            'mining_co', 'iron_ore', 5500, 'expansion-full')
+        local expansionUsed = __demandRow('iron_ore', 1, 'expansion').quota_used
+
+        phase = 'competition'
+        local okFirst, errFirst = IndustrySales.SettleSale(
+            'mining_co', 'iron_ore', 1, 'competition-first')
+        local okCap, errCap = IndustrySales.SettleSale(
+            'mining_co', 'iron_ore', 4674, 'competition-rest')
+        local okOver, errOver = IndustrySales.SettleSale(
+            'mining_co', 'iron_ore', 1, 'competition-over')
+
+        local competition = __demandRow('iron_ore', 1, 'competition')
+        local rows = __salesRows()
+        local last = rows[#rows]
+
+        __emit('EXPANSION_OK', tostring(okExpansion))
+        __emit('EXPANSION_ERR', tostring(errExpansion or 'nil'))
+        __emit('EXPANSION_USED', tostring(expansionUsed))
+        __emit('FIRST_OK', tostring(okFirst))
+        __emit('FIRST_ERR', tostring(errFirst or 'nil'))
+        __emit('CAP_OK', tostring(okCap))
+        __emit('CAP_ERR', tostring(errCap or 'nil'))
+        __emit('OVER_OK', tostring(okOver))
+        __emit('OVER_ERR', tostring(errOver or 'nil'))
+        __emit('COMPETITION_USED', tostring(competition and competition.quota_used))
+        __emit('FIRST_PHASE', tostring(rows[1] and rows[1].phase))
+        __emit('LAST_PHASE', tostring(last and last.phase))
+        __emit('SEASON', tostring(rows[1] and rows[1].season))
+        __emit('SALES', tostring(__salesCount()))
+    """)
+    assert out["EXPANSION_OK"] == "true" and out["EXPANSION_ERR"] == "nil", (
+        f"扩张期 5,500 件应当成功：{out}"
+    )
+    assert out["EXPANSION_USED"] == "5500", f"扩张期 quota_used 不对：{out}"
+    assert out["FIRST_OK"] == "true", (
+        f"竞争期第一件被扩张期销量挡住（配额必须每阶段独立）：{out}"
+    )
+    assert out["FIRST_ERR"] == "nil"
+    assert out["CAP_OK"] == "true" and out["CAP_ERR"] == "nil", (
+        f"竞争期应能卖满本阶段 4,675：{out}"
+    )
+    assert out["OVER_OK"] == "false" and out["OVER_ERR"] == "org_cap_reached", (
+        f"竞争期超过本阶段 50% 必须拒绝：{out}"
+    )
+    assert out["COMPETITION_USED"] == "4675", (
+        f"竞争期配额被扩张期流水回填/少扣：{out}"
+    )
+    assert out["FIRST_PHASE"] == "expansion" and out["LAST_PHASE"] == "competition", (
+        f"卖单没有按阶段落库：{out}"
+    )
+    assert out["SEASON"] == "0", f"卖单没有带 season（P1 预留列）：{out}"
+    assert out["SALES"] == "3", "被拒绝的卖单不能落库"
+
+
+def test_two_orgs_each_get_half_of_the_phase_quota():
+    """#408 验收：同阶段两家各卖 5,500 后，该阶段 quota_used 恰好等于 quota_total。"""
+    out = run("""
+        __reset()
+        __seedOrg('mining_co', 0)
+        __seedOrg('cartel', 0)
+        __seedFacility('mining_co', 5500)
+        __seedFacility('cartel', 5500)
+
+        IndustryCycle.Current = function()
+            return { cycle_no = 1, phase = 'expansion', price = 1.0, quota = 1.0 }
+        end
+        __seedDemand('iron_ore', 11000, 0, 1, 'expansion')
+
+        local okA, errA = IndustrySales.SettleSale('mining_co', 'iron_ore', 5500, 'a-full')
+        local okB, errB = IndustrySales.SettleSale('cartel', 'iron_ore', 5500, 'b-full')
+        local demand = __demandRow('iron_ore', 1, 'expansion')
+        local okOver, errOver = IndustrySales.SettleSale('mining_co', 'iron_ore', 1, 'a-over')
+
+        __emit('A_OK', tostring(okA))
+        __emit('A_ERR', tostring(errA or 'nil'))
+        __emit('B_OK', tostring(okB))
+        __emit('B_ERR', tostring(errB or 'nil'))
+        __emit('USED', tostring(demand and demand.quota_used))
+        __emit('TOTAL', tostring(demand and demand.quota_total))
+        __emit('OVER_OK', tostring(okOver))
+        __emit('OVER_ERR', tostring(errOver or 'nil'))
+        __emit('SALES', tostring(__salesCount()))
+    """)
+    assert out["A_OK"] == "true" and out["A_ERR"] == "nil", f"第一家 5,500 失败：{out}"
+    assert out["B_OK"] == "true" and out["B_ERR"] == "nil", f"第二家 5,500 失败：{out}"
+    assert out["USED"] == "11000" and out["TOTAL"] == "11000", (
+        f"同阶段两家各 50% 后 quota_used 必须等于 quota_total：{out}"
+    )
+    assert out["OVER_OK"] == "false", f"卖满后第三笔必须被拒：{out}"
+    assert out["OVER_ERR"] == "demand_exhausted", (
+        f"两家各卖 50% 后全服已满，第三笔应是 demand_exhausted：{out}"
+    )
+    assert out["SALES"] == "2"
+
+
 def test_quota_update_carries_both_global_and_org_cap_cas():
     """静态钉子：两条 CAS 必须写在同一条 UPDATE 里。"""
     source = SALE_SRC.read_text(encoding="utf-8")

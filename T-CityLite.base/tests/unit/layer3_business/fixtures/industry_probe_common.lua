@@ -77,11 +77,15 @@ function __industryDemandRow(cycleNo, phase, item, total, used)
     }
 end
 
+--- 卖单行。phase/season 是 #408 引入的配额维度；种子行（S5/S6 的 `__seedSale`）
+--- 不传时按 S4 的静态回落阶段 'static' / season 0 处理，与真库默认值一致。
 function __industrySaleRow(fields)
     return {
         id = fields.id,
         org_id = fields.org_id,
         cycle_no = fields.cycle_no,
+        phase = fields.phase or 'static',
+        season = tonumber(fields.season) or 0,
         item_name = fields.item_name,
         qty = tonumber(fields.qty),
         unit_price = tonumber(fields.unit_price),
@@ -254,18 +258,47 @@ function __auditActions()
     return table.concat(actions, ',')
 end
 
---- 卖单流水合计。orgId 为 nil 时统计全服（读路径对账用），否则只统计该组织。
-function __industrySaleQty(orgId, cycleNo, item)
+--- 单行卖单是否满足一组 `{ column = ..., value = ... }` 条件。
+--- 只认 industry_sales 的维度列；出现未知列一律不匹配（不兜底成「全表命中」）。
+local function saleMatches(row, filters)
+    for _, filter in ipairs(filters) do
+        local actual
+        if filter.column == 'org_id' then actual = row.org_id
+        elseif filter.column == 'cycle_no' then actual = row.cycle_no
+        elseif filter.column == 'phase' then actual = row.phase
+        elseif filter.column == 'season' then actual = row.season
+        elseif filter.column == 'item_name' then actual = row.item_name
+        else return false end
+        if tostring(actual) ~= tostring(filter.value) then return false end
+    end
+    return true
+end
+
+--- 按一组条件对卖单流水求和（`field` = 'qty' / 'revenue'）。
+function __industrySaleSum(filters, field)
     local total = 0
     for _, row in ipairs(__sales) do
-        local sameOrg = orgId == nil or tostring(row.org_id) == tostring(orgId)
-        if sameOrg
-            and tostring(row.cycle_no) == tostring(cycleNo)
-            and tostring(row.item_name) == tostring(item) then
-            total = total + (tonumber(row.qty) or 0)
+        if saleMatches(row, filters) then
+            total = total + (tonumber(row[field]) or 0)
         end
     end
     return total
+end
+
+--- 把 SQL 里**真的写出来的** `列 = ?` 按出现顺序映射到 values，再对卖单逐行求值。
+--- 这是假 DB 必须遵守的规则：SQL 里没写 `phase = ?`，跨阶段流水就会被一起统计 ——
+--- 反向注入删掉条件时用例必须变红（2026-11：删掉 WHERE 守卫后 25 条用例仍全绿）。
+function __industrySaleWhere(sql, values, field)
+    local whereStart = sql:find('WHERE', 1, true)
+    local filters = {}
+    if whereStart then
+        local index = 0
+        for column in sql:sub(whereStart):gmatch('([%a_][%w_]*)%s*=%s*%?') do
+            index = index + 1
+            filters[#filters + 1] = { column = column, value = values[index] }
+        end
+    end
+    return __industrySaleSum(filters, field)
 end
 
 --- 写语句日志。`__writeCount` 只在 S6 存在（dry-run 断言用）。
@@ -420,8 +453,23 @@ function __industryUpdateDemand(sql, values)
         if row.quota_used + qty > row.quota_total then return { affectedRows = 0 } end
 
         if sql:find('SUM(s.qty)', 1, true) then
-            local used = __industrySaleQty(values[6], values[7], values[8]) + qty
-            local ratio = tonumber(values[10]) or 0.5
+            -- 子查询里 `s.<列> = ?` 与参数按出现顺序对应；子查询之前的 `?`
+            -- （SET、外层 WHERE、quota_used CAS）先数出来当偏移。
+            -- 只在 SQL 真写了 `s.phase = ?` 时按阶段过滤 —— 删掉它，本组织累计
+            -- 就会跨阶段相加，反向注入必须变红。
+            local subStart = sql:find('FROM industry_sales s', 1, true)
+            local filters = {}
+            if subStart then
+                local index = 0
+                for _ in sql:sub(1, subStart - 1):gmatch('%?') do index = index + 1 end
+                local seen = 0
+                for column in sql:sub(subStart):gmatch('s%.([%a_][%w_]*)%s*=%s*%?') do
+                    seen = seen + 1
+                    filters[#filters + 1] = { column = column, value = values[index + seen] }
+                end
+            end
+            local used = __industrySaleSum(filters, 'qty') + qty
+            local ratio = tonumber(values[#values]) or 0.5
             local cap = math.floor(row.quota_total * ratio + 1e-9)
             if used > cap then return { affectedRows = 0 } end
         end
@@ -490,22 +538,13 @@ function __industryReadSales(sql, values)
     end
 
     if sql:find('SUM(revenue)', 1, true) then
-        local total = 0
-        for _, row in ipairs(__sales) do
-            if tostring(row.org_id) == tostring(values[1])
-                and tostring(row.cycle_no) == tostring(values[2]) then
-                total = total + (tonumber(row.revenue) or 0)
-            end
-        end
-        return { total = total }
+        return { total = __industrySaleWhere(sql, values, 'revenue') }
     end
 
     if sql:find('SUM(qty)', 1, true) then
-        -- 带 org_id 的是单组织累计；不带的是全服流水（读路径对账）。
-        if sql:find('org_id = ?', 1, true) then
-            return { used = __industrySaleQty(values[1], values[2], values[3]) }
-        end
-        return { used = __industrySaleQty(nil, values[1], values[2]) }
+        -- 单组织累计与全服对账都按 SQL 的 WHERE 求值：有没有 org_id / phase /
+        -- season 条件由查询文本决定，假 DB 不替调用方补条件。
+        return { used = __industrySaleWhere(sql, values, 'qty') }
     end
 
     for _, row in ipairs(__sales) do
@@ -518,9 +557,20 @@ end
 
 --- `INSERT INTO industry_sales`。S4 的 `__saleRefs` 模拟 UNIQUE(org_id, ref)；
 --- S6 不维护这张映射，重复键不会被拦（预置卖单本来也不走 INSERT）。
-function __industryInsertSales(values)
-    local orgId = tostring(values[1])
-    local ref = tostring(values[7])
+function __industryInsertSales(sql, values)
+    -- 按 INSERT 的列名映射参数，不猜位置：加 phase/season 或调整列序时，
+    -- 假 DB 会像真库一样把值写进对应的列。
+    local list = sql:match('INSERT%s+INTO%s+industry_sales%s*%(([^)]*)%)')
+    if not list then return nil end
+    local fields = {}
+    local index = 0
+    for column in list:gmatch('`?([%a_][%w_]*)`?') do
+        index = index + 1
+        fields[column] = values[index]
+    end
+
+    local orgId = tostring(fields.org_id)
+    local ref = tostring(fields.ref)
     local key = orgId .. '\0' .. ref
     if __saleRefs and __saleRefs[key] then
         error("Duplicate entry '" .. ref .. "' for key 'industry_sales.uniq_org_ref'")
@@ -530,11 +580,13 @@ function __industryInsertSales(values)
     local row = __industrySaleRow({
         id = __nextSaleId,
         org_id = orgId,
-        cycle_no = values[2],
-        item_name = values[3],
-        qty = values[4],
-        unit_price = values[5],
-        revenue = values[6],
+        cycle_no = fields.cycle_no,
+        phase = fields.phase,
+        season = fields.season,
+        item_name = fields.item_name,
+        qty = fields.qty,
+        unit_price = fields.unit_price,
+        revenue = fields.revenue,
         ref = ref,
     })
     __sales[#__sales + 1] = row
@@ -728,7 +780,7 @@ function __industryInsert(sql, values)
         return __industryInsertDemand(values)
     end
     if sql:find('INSERT INTO industry_sales', 1, true) then
-        return __industryInsertSales(values)
+        return __industryInsertSales(sql, values)
     end
     if sql:find('INSERT INTO industry_audit', 1, true) then
         return __industryInsertAudit(values)

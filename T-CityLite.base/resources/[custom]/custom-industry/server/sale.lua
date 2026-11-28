@@ -57,6 +57,11 @@ local function activeConfig()
     for key, value in pairs(salesConfig()) do cfg[key] = value end
     cfg.CycleNo = state.cycle_no
     cfg.Phase = state.phase
+    -- P1 的两时钟还没有 season_no：当前恒 0（迁移默认值也是 0）。写库与 SUM
+    -- 都带这个维度，等 P1 让 IndustryCycle.Current() 返回 season 后自动生效。
+    local season = tonumber(state.season)
+    if not season or season ~= season or season < 0 then season = 0 end -- NaN / 负数兜底
+    cfg.Season = math.floor(season)
     cfg.PriceMultiplier = tonumber(state.price) or 1
     cfg.QuotaMultiplier = tonumber(state.quota) or 1
     return cfg, nil
@@ -128,7 +133,9 @@ local function audit(orgId, amount, result, ref, item, qty)
     IndustryAudit.Write(orgId, nil, 'industry.sale', auditPayload(amount, result, ref, item, qty))
 end
 
---- 全服配额漂移（计数器欠账）：条件回填到流水合计，并在真正改到行时写一条审计。
+--- 全服配额漂移（计数器欠账）：条件回填到**当前阶段**的流水合计，并在真正改到行时
+--- 写一条审计。`flow` 由 readDemand 按 (cycle_no, phase, season) 统计后传入 ——
+--- 不能拿全周期流水回填当前阶段（#408）。
 --- `quota_used < ?` 是幂等闸：并发 / 重复读取只有一次 affectedRows = 1，不会重复留痕。
 --- payload 只放数字，不含玩家身份；漂移没有归属组织，org_id 用 '*'（IndustryOrgId
 --- 不允许 '*'，不会与真实组织撞名）。
@@ -165,11 +172,12 @@ local function readDemand(cfg, item)
     local counter = toInt(row.quota_used)
     if not total or not counter or total < 0 or counter < 0 then return nil, 'db_error' end
 
-    -- 流水合计按 (cycle_no, item_name) 统计全服；phase 不属于 industry_sales 的维度。
+    -- 流水合计按**当前阶段**统计全服：配额行是 (cycle_no, phase, item)，
+    -- 全周期流水回填到当前阶段会把上一阶段的销量算进本阶段（#408）。
     local flowRow, flowErr = Db.Single(
         'SELECT COALESCE(SUM(qty), 0) AS used FROM industry_sales '
-            .. 'WHERE cycle_no = ? AND item_name = ? LIMIT 1',
-        { cfg.CycleNo, item })
+            .. 'WHERE cycle_no = ? AND phase = ? AND season = ? AND item_name = ? LIMIT 1',
+        { cfg.CycleNo, cfg.Phase, cfg.Season, item })
     if flowErr then return nil, 'db_error' end
 
     local flow = toInt(flowRow and flowRow.used or 0)
@@ -195,12 +203,14 @@ local function readStock(orgId)
     return stock, nil
 end
 
---- 本组织在本周期 / 本物品上的累计销量（50% 上限的分子）。
+--- 本组织在**本阶段** / 本物品上的累计销量（50% 上限的分子）。
+--- 配额是每阶段独立的：同一 cycle 的扩张期销量不能算进竞争期（#408）。
 local function readOrgUsed(orgId, cfg, item)
     local row, err = Db.Single(
         'SELECT COALESCE(SUM(qty), 0) AS used FROM industry_sales '
-            .. 'WHERE org_id = ? AND cycle_no = ? AND item_name = ? LIMIT 1',
-        { orgId, cfg.CycleNo, item })
+            .. 'WHERE org_id = ? AND cycle_no = ? AND phase = ? AND season = ? '
+            .. 'AND item_name = ? LIMIT 1',
+        { orgId, cfg.CycleNo, cfg.Phase, cfg.Season, item })
     if err then return nil, 'db_error' end
 
     local used = toInt(row and row.used or 0)
@@ -270,9 +280,10 @@ end
 --- 宁可拒绝也不能再入一次账。
 local function insertSale(orgId, cfg, item, qty, unitPrice, revenue, ref)
     local id = Db.Insert(
-        'INSERT INTO industry_sales (org_id, cycle_no, item_name, qty, unit_price, revenue, ref) '
-            .. 'VALUES (?, ?, ?, ?, ?, ?, ?)',
-        { orgId, cfg.CycleNo, item, qty, unitPrice, revenue, ref })
+        'INSERT INTO industry_sales '
+            .. '(org_id, cycle_no, phase, season, item_name, qty, unit_price, revenue, ref) '
+            .. 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        { orgId, cfg.CycleNo, cfg.Phase, cfg.Season, item, qty, unitPrice, revenue, ref })
     if id then return id, nil end
 
     local row, lookupErr = Db.Single(
@@ -382,17 +393,22 @@ local function settleLocked(cfg, orgId, item, requested, ref)
     if stockUpdateErr then return false, 'db_error' end
     if stockAffected ~= 1 then return false, 'conflict' end
 
-    -- ② 扣配额：全服剩余与本组织累计（子查询 industry_sales）在同一条 UPDATE 里。
+    -- ② 扣配额：全服剩余与本组织**本阶段**累计（子查询 industry_sales）在同一条
+    -- UPDATE 里。子查询必须与 readOrgUsed 同维度（cycle/phase/season/item）：
+    -- 少了 phase 时，扩张期销量会在并发交错下顶掉竞争期的 50% 闸门（#408）。
     local quotaAffected, quotaErr = Db.Update(
         'UPDATE industry_demand SET quota_used = quota_used + ? '
             .. 'WHERE cycle_no = ? AND phase = ? AND item_name = ? '
             .. 'AND quota_used + ? <= quota_total '
             .. 'AND (SELECT COALESCE(SUM(s.qty), 0) FROM industry_sales s '
-            .. 'WHERE s.org_id = ? AND s.cycle_no = ? AND s.item_name = ?) + ? '
+            .. 'WHERE s.org_id = ? AND s.cycle_no = ? AND s.phase = ? '
+            .. 'AND s.season = ? AND s.item_name = ?) + ? '
             .. '<= FLOOR(quota_total * ?)',
         {
             sellable, cfg.CycleNo, cfg.Phase, item,
-            sellable, orgId, cfg.CycleNo, item, sellable, cfg.OrgCapRatio,
+            sellable,
+            orgId, cfg.CycleNo, cfg.Phase, cfg.Season, item,
+            sellable, cfg.OrgCapRatio,
         })
     if quotaErr then
         if not restoreStock(orgId, sellable) then
