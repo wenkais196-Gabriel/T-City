@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Verified
+- **产业运营 MVP 真机收口（P0–P4）**：完整闭环在真机跑通 —— 建施 → 雇工位 → 生产 → 卖出 →
+  提现 → 季度结算 → 新季度起跑。关键读数：季度结算 `facility=1 sales=16 demand=11 prestige=+1
+  starter=410000 distributed=90246`；提现 $20,000 → 净 $16,000（税 $4,000），第二次 $25,000 被
+  `weekly_quota_exceeded` 拒；库存升级 $40,000（0→1）/ $64,000（1→2）与 `40k×1.6^n` 一致；
+  账户逐笔对账 34,427 + 19,840 + 90,246 + 180（工资）= **144,693**，与游戏内一致；
+  `cycle.settle` 与 `treasury.distribute` 各 **1 次**（中途 `restart custom-industry` 与手工改库
+  均未造成重复）。记录见 `docs/plan/industry-ops/12-plan.md`。
+- **三个真机坑**：单时钟升级首季沿用旧阶段窗口（最长 10 天，**#418**）；`phase` 与 `season` 不一致
+  让季节推进静默卡死且无日志（**#420**）；qb-core `AddMoney` 走内存优先 + DirtyFlush，DB 落盘滞后
+  （非缺陷，约 2 分钟内一致）。
+- **起服方式**：必须用 `start.cmd` / `start-tcity.ps1`（`Start-Process -WindowStyle Hidden` 脱离调用方）；
+  用后台进程直接拉 FXServer 会在调用方清理时收到 SIGTERM（实测 `exit -15`，玩家客户端随即卡死）。
+
 ### Added
 - **产业提现进手机：规则抽成单一实现 + 跨资源导出（`custom-industry` + 手机）**：
   `/orgfundwithdraw` 的 Boss 校验 / 自然周额度（`org_ledger` 派生）/ 20% 销毁税 /
