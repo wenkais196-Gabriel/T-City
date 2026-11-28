@@ -44,6 +44,48 @@ from industry_harness import (
 )
 
 
+#: P5 提现导出用的假 DB 扩展（S5 的假 DB 只按 ref 查流水，没有 SUM 聚合）。
+#: 真库口径：org_ledger 里 withdraw / withdraw-rollback 的 -delta 合计。
+WITHDRAW_UI_PRELUDE = r"""
+local __baseSingleForWithdraw = MySQL.single.await
+MySQL.single.await = function(sql, values)
+    if sql:find('SUM(-delta)', 1, true) then
+        local total = 0
+        for _, row in ipairs(__ledger) do
+            local reason = tostring(row.reason)
+            local counted = reason == 'withdraw' or reason == 'withdraw-rollback'
+            if row.org_id == values[1] and counted and (row.delta or 0) ~= 0 then
+                total = total - row.delta
+            end
+        end
+        return { total = total }
+    end
+    return __baseSingleForWithdraw(sql, values)
+end
+
+--- 会记账的 Boss：AddMoney 只允许 bank / orgfundwithdraw；
+--- bank.fail = true 时模拟发放失败（用于验证全额退回）。
+function __withdrawBoss(bank)
+    local player = boss()
+    player.Functions = {
+        AddMoney = function(kind, amount, reason)
+            if kind ~= 'bank' then
+                error('AddMoney moneytype 必须是 bank，实际 ' .. tostring(kind))
+            end
+            if reason ~= 'orgfundwithdraw' then
+                error('AddMoney reason 必须是 orgfundwithdraw，实际 ' .. tostring(reason))
+            end
+            if bank and bank.fail then return false end
+            if bank then bank.total = (bank.total or 0) + amount end
+            return true
+        end,
+        RemoveMoney = function() return false end,
+    }
+    return player
+end
+"""
+
+
 # ══════════════════════════════════════════════════════════════════
 # 1. Snapshot：逐字段与假 DB 一致
 # ══════════════════════════════════════════════════════════════════
@@ -413,6 +455,18 @@ _G.exports = {
       __hireArgs = { source = source, orgId = orgId }
       return true, nil, 67500, 3
     end,
+    WithdrawIndustryFunds = function(_, source, orgId, amount)
+      __calls[#__calls + 1] = 'withdraw'
+      __withdrawArgs = { source = source, orgId = orgId, amount = amount }
+      if __withdrawErr then return false, __withdrawErr end
+      local value = tonumber(amount) or 0
+      return true, nil, {
+        amount = value,
+        net = math.floor(value * 0.8),
+        tax = math.floor(value * 0.2),
+        result = 'ok',
+      }
+    end,
   },
 }
 function Money(value) return tostring(value) end
@@ -616,6 +670,7 @@ def test_ui_wiring_registers_callbacks_and_exports():
         "EstimateIndustrySale",
         "SellIndustryStock",
         "HireIndustryWorkstation",
+        "WithdrawIndustryFunds",
     }, f"export 注册面变了：{sorted(exports)}"
     # S5 只加 callback/export，不新增服务端事件或线程。
     assert out["QBCORE_COUNT"] == "7"
@@ -683,7 +738,7 @@ def test_disabled_resource_still_answers_the_ui_probe():
     # 所以在关闭状态下调用只会拿到 disabled 错误码，不会真的读库或给钱。
     assert out["EXPORTS"] == (
         "CanAccessIndustry,GetIndustrySnapshot,EstimateIndustrySale,"
-        "SellIndustryStock,HireIndustryWorkstation"
+        "SellIndustryStock,HireIndustryWorkstation,WithdrawIndustryFunds"
     ), f"导出面变了：{out['EXPORTS']}"
     assert out["QBCORE_COUNT"] == "0", f"关闸时不该注册命令：{out}"
     assert out["NATIVE"] == "", f"关闸时不该注册原生命令：{out['NATIVE']}"
@@ -953,3 +1008,220 @@ def test_phone_member_forged_sell_returns_not_boss_without_writes():
     assert out["STOCK"] == "10"
     assert out["BAL"] == "0"
     assert out["QUOTA"] == "0", "被拒绝的卖单占了配额"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 14. P5（#418）提现：快照只读字段 + 跨资源导出 + 手机动作
+#
+# 规则只在 Treasury.WithdrawForPlayer；导出与命令只是入口。这里钉住：
+#   * 快照的 treasury 三字段来自配置/流水（不参与判定）；
+#   * 导出与命令同一组金额断言（税 20% 销毁、周额度超额拒绝）；
+#   * 导出拒绝非 Boss / 非正整数；
+#   * 同组织在途提现串行化（withdraw_busy）；
+#   * 手机动作只转发 orgId + amount，错误码原样穿过。
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_snapshot_exposes_read_only_withdraw_quota():
+    """treasury = { weeklyQuota, withdrawnThisWeek, taxRate } 来自配置 + 流水。"""
+    out = run(WITHDRAW_UI_PRELUDE + r"""
+        __reset()
+        __seedOrg('mining_co', 50000)
+        -- 本周已提 15,000 的两条流水（-delta 合计 = 额度已用）。
+        Treasury.Withdraw('mining_co', 10000, 'withdraw', { ref = 'seed-w1' })
+        Treasury.Withdraw('mining_co', 5000, 'withdraw', { ref = 'seed-w2' })
+
+        local snap, err = IndustryUi.Snapshot(boss(), 'mining_co')
+        __emit('OK', tostring(snap ~= nil))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('QUOTA', tostring(snap and snap.treasury and snap.treasury.weeklyQuota))
+        __emit('WITHDRAWN', tostring(snap and snap.treasury and snap.treasury.withdrawnThisWeek))
+        __emit('RATE', tostring(snap and snap.treasury and snap.treasury.taxRate))
+        __emit('BAL', tostring(snap and snap.balance))
+        __emit('FACILITY', tostring(snap and snap.facility))
+        __emit('SALES', tostring(__salesCount()))
+    """)
+
+    assert out["OK"] == TRUE
+    assert out["ERR"] == NIL, f"快照失败：{out}"
+    assert out["QUOTA"] == "25000", "周额度必须来自 config/cycle.lua"
+    assert out["WITHDRAWN"] == "15000", "本周已提必须从 org_ledger 的 -delta 派生"
+    assert out["RATE"] == "0.2", "税率必须来自 config/cycle.lua"
+    assert out["BAL"] == "35000"
+    assert out["FACILITY"] == NIL, "未建厂也必须能读到 treasury 字段"
+    assert out["SALES"] == "0"
+
+
+def test_withdraw_export_burns_tax_and_enforces_weekly_quota():
+    """导出与命令同一组断言：25,000 → 银行 +20,000 / 金库 −25,000 / 税 5,000。"""
+    out = run(WITHDRAW_UI_PRELUDE + r"""
+        __reset()
+        __seedOrg('mining_co', 50000)
+        local bank = { total = 0 }
+        local Player = __withdrawBoss(bank)
+
+        local ok1, err1, info1 =
+            __exportFns.WithdrawIndustryFunds(Player, 'mining_co', 25000)
+        local payload1 = __lastAuditPayload('treasury.withdraw')
+        __emit('OK1', tostring(ok1))
+        __emit('ERR1', tostring(err1 or 'nil'))
+        __emit('BANK1', tostring(bank.total))
+        __emit('BAL1', tostring(__balance('mining_co')))
+        __emit('LEDGER1', tostring(__ledgerCount()))
+        __emit('DELTA1', tostring(__ledger[1] and __ledger[1].delta))
+        __emit('PAYLOAD1', tostring(payload1))
+        __emit('NET1', tostring(info1 and info1.net))
+        __emit('TAX1', tostring(info1 and info1.tax))
+
+        local ok2, err2 = __exportFns.WithdrawIndustryFunds(Player, 'mining_co', 25000)
+        local payload2 = __lastAuditPayload('treasury.withdraw')
+        __emit('OK2', tostring(ok2))
+        __emit('ERR2', tostring(err2 or 'nil'))
+        __emit('BANK2', tostring(bank.total))
+        __emit('BAL2', tostring(__balance('mining_co')))
+        __emit('LEDGER2', tostring(__ledgerCount()))
+        __emit('REJECTED', tostring(payload2
+            and payload2:find('weekly_quota_exceeded', 1, true) ~= nil))
+    """)
+
+    assert out["OK1"] == TRUE, f"导出提现失败：{out}"
+    assert out["ERR1"] == NIL
+    assert out["BANK1"] == "20000", "导出没有按 20% 税只把净值打进银行"
+    assert out["BAL1"] == "25000", "金库没有按全额扣 25,000"
+    assert out["LEDGER1"] == "1", "提现应恰好一条流水"
+    assert out["DELTA1"] == "-25000", "流水 delta 必须是税前全额"
+    assert '"result":"ok"' in out["PAYLOAD1"], out["PAYLOAD1"]
+    assert '"tax_burned":5000' in out["PAYLOAD1"], out["PAYLOAD1"]
+    assert '"net":20000' in out["PAYLOAD1"], out["PAYLOAD1"]
+    assert out["NET1"] == "20000" and out["TAX1"] == "5000", "info 没有回净值/税"
+
+    assert out["OK2"] == FALSE
+    assert out["ERR2"] == "weekly_quota_exceeded", (
+        f"导出超额没有返回 weekly_quota_exceeded：{out['ERR2']}"
+    )
+    assert out["BANK2"] == "20000", "被额度拒绝的导出提现动了个人银行"
+    assert out["BAL2"] == "25000", "被额度拒绝的导出提现动了金库"
+    assert out["LEDGER2"] == "1", "被额度拒绝的导出提现写了流水"
+    assert out["REJECTED"] == TRUE
+
+
+def test_withdraw_export_rejects_non_boss_and_bad_amounts():
+    out = run(WITHDRAW_UI_PRELUDE + r"""
+        __reset()
+        __seedOrg('mining_co', 50000)
+        local bank = { total = 0 }
+        local Player = __withdrawBoss(bank)
+
+        local okMember, errMember =
+            __exportFns.WithdrawIndustryFunds(member(), 'mining_co', 1000)
+        local okOut, errOut =
+            __exportFns.WithdrawIndustryFunds(outsider(), 'mining_co', 1000)
+        __emit('MEMBER', tostring(okMember) .. ':' .. tostring(errMember))
+        __emit('OUTSIDER', tostring(okOut) .. ':' .. tostring(errOut))
+
+        local codes = {}
+        for _, bad in ipairs({ 0, -5, 1.5 }) do
+            local ok, err = __exportFns.WithdrawIndustryFunds(Player, 'mining_co', bad)
+            codes[#codes + 1] = tostring(ok) .. ':' .. tostring(err)
+        end
+        local okText, errText =
+            __exportFns.WithdrawIndustryFunds(Player, 'mining_co', 'abc')
+        codes[#codes + 1] = tostring(okText) .. ':' .. tostring(errText)
+        __emit('AMOUNTS', table.concat(codes, ','))
+        __emit('BANK', tostring(bank.total))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+
+    assert out["MEMBER"] == "false:not_boss"
+    assert out["OUTSIDER"] == "false:not_boss", "非组织成员的导出提现没有被拒绝"
+    assert out["AMOUNTS"] == ",".join(["false:bad_amount"] * 4), (
+        f"非正整数金额必须统一返回 bad_amount：{out['AMOUNTS']}"
+    )
+    assert out["BANK"] == "0"
+    assert out["BAL"] == "50000", "被拒绝的导出提现动了金库"
+    assert out["LEDGER"] == "0", "被拒绝的导出提现写了流水"
+
+
+def test_withdraw_export_serializes_in_flight_requests_per_org():
+    """额度查询的 await 点插入第二个请求 → 必须拿到 withdraw_busy，钱只动一次。"""
+    out = run(WITHDRAW_UI_PRELUDE + r"""
+        __reset()
+        __seedOrg('mining_co', 50000)
+        local bank = { total = 0 }
+        local Player = __withdrawBoss(bank)
+
+        local inner = {}
+        local baseSingle = MySQL.single.await
+        local fired = false
+        MySQL.single.await = function(sql, values)
+            if sql:find('SUM(-delta)', 1, true) and not fired then
+                fired = true
+                inner.ok, inner.err =
+                    __exportFns.WithdrawIndustryFunds(Player, 'mining_co', 1000)
+            end
+            return baseSingle(sql, values)
+        end
+
+        local ok, err = __exportFns.WithdrawIndustryFunds(Player, 'mining_co', 25000)
+        __emit('INNER_FIRED', tostring(fired))
+        __emit('OUTER', tostring(ok) .. ':' .. tostring(err or 'nil'))
+        __emit('INNER', tostring(inner.ok) .. ':' .. tostring(inner.err))
+        __emit('BANK', tostring(bank.total))
+        __emit('LEDGER', tostring(__ledgerCount()))
+        __emit('BAL', tostring(__balance('mining_co')))
+    """)
+
+    assert out["INNER_FIRED"] == TRUE, "交错点没有触发（用例没咬到串行化）"
+    assert out["OUTER"] == "true:nil"
+    assert out["INNER"] == "false:withdraw_busy", (
+        f"同组织在途的第二个提现没有被串行化：{out['INNER']}"
+    )
+    assert out["BANK"] == "20000", "第二个请求也发了钱"
+    assert out["LEDGER"] == "1", "第二个请求写了流水"
+    assert out["BAL"] == "25000"
+
+
+def test_phone_withdraw_forwards_only_org_id_and_amount():
+    """手机动作只发 orgId + amount；净值/税只认服务端返回值。"""
+    out = run_phone("""
+        local ok, result = PhoneApps.Action(1, 'industry', 'withdraw', {
+            orgId = 'mining_co', amount = 5000,
+            price = 1, unit_price = 1, net = 999999, tax = 0, multiplier = 99,
+        })
+        __emit('OK', tostring(ok))
+        __emit('AMOUNT', tostring(result and result.amount))
+        __emit('NET', tostring(result and result.net))
+        __emit('TAX', tostring(result and result.tax))
+        __emit('CALLS', table.concat(__calls, ','))
+        __emit('ARG_ORG', tostring(__withdrawArgs and __withdrawArgs.orgId))
+        __emit('ARG_AMOUNT', tostring(__withdrawArgs and __withdrawArgs.amount))
+        __emit('ARG_SRC', tostring(__withdrawArgs and __withdrawArgs.source))
+    """)
+
+    assert out["OK"] == TRUE, f"{out}"
+    assert out["AMOUNT"] == "5000"
+    assert out["NET"] == "4000", "手机层必须回服务端算出的净值（不能自己乘）"
+    assert out["TAX"] == "1000"
+    assert out["CALLS"] == "withdraw"
+    assert out["ARG_ORG"] == "mining_co"
+    assert out["ARG_AMOUNT"] == "5000", "amount 必须原样转发给导出"
+    assert out["ARG_SRC"] == "1"
+
+
+def test_phone_withdraw_forwards_server_error_codes():
+    out = run_phone("""
+        __withdrawErr = 'weekly_quota_exceeded'
+        local ok1, err1 = PhoneApps.Action(1, 'industry', 'withdraw', {
+            orgId = 'mining_co', amount = 25000,
+        })
+        __withdrawErr = 'not_boss'
+        local ok2, err2 = PhoneApps.Action(1, 'industry', 'withdraw', {
+            orgId = 'mining_co', amount = 1000,
+        })
+        __emit('QUOTA', tostring(ok1) .. ':' .. tostring(err1))
+        __emit('NOT_BOSS', tostring(ok2) .. ':' .. tostring(err2))
+    """)
+
+    assert out["QUOTA"] == "false:weekly_quota_exceeded", "额度错误码被手机层折叠了"
+    assert out["NOT_BOSS"] == "false:not_boss", "Boss 错误码被手机层折叠了"

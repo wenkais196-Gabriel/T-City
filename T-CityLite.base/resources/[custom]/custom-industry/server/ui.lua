@@ -13,7 +13,8 @@
 -- 本文件没有 net event；对客户端只暴露 QBCore callback（Register 时注册）。
 -- 跨资源入口是 exports：CanAccessIndustry / GetIndustrySnapshot /
 -- EstimateIndustrySale / SellIndustryStock / HireIndustryWorkstation
--- （第三参 kind='stock' 时升级库存上限，不另开导出）。
+-- （第三参 kind='stock' 时升级库存上限，不另开导出）/
+-- WithdrawIndustryFunds（与 /orgfundwithdraw 共用 Treasury.WithdrawForPlayer）。
 
 IndustryUi = {}
 
@@ -191,6 +192,18 @@ function IndustryUi.Snapshot(value, orgId)
             quotaMultiplier = cycleState.quota,
             purchasable = cycleState.purchasable == true,
         },
+    }
+
+    -- P5 提现（#418）：只读展示字段，不参与任何判定。额度与税率来自 Config；
+    -- 「本周已提」与 Treasury.WithdrawForPlayer 的额度判断同一口径（org_ledger 派生）。
+    local weeklyQuota, taxRate, treasuryErr = Treasury.WithdrawalConfig()
+    if not weeklyQuota then return nil, treasuryErr or 'config_error' end
+    local withdrawnThisWeek, withdrawnErr = Treasury.GetWithdrawnThisWeek(resolved, Treasury.Now())
+    if not withdrawnThisWeek then return nil, withdrawnErr or 'db_error' end
+    snapshot.treasury = {
+        weeklyQuota = weeklyQuota,
+        withdrawnThisWeek = withdrawnThisWeek,
+        taxRate = taxRate,
     }
 
     local row, facilityErr = Facility.Get(resolved)
@@ -423,9 +436,26 @@ function IndustryUi.UpgradeStock(value, orgId)
     })
 end
 
+--- 手机提现入口（P5）：与 /orgfundwithdraw 共用 Treasury.WithdrawForPlayer。
+---
+--- 这里只做「source → Player」的解析；Boss 判定、周额度、税、串行化、退款与审计
+--- 全部在那一个函数里，避免手机端出现第二份金钱规则。
+---@param value number|table source 或 QBCore 玩家对象
+---@param orgId string
+---@param amount number|string 不可信输入
+---@return boolean ok, string|nil errcode, table|nil info
+function IndustryUi.WithdrawFunds(value, orgId, amount)
+    if not enabled() then return false, 'disabled' end
+
+    local Player = resolvePlayer(value)
+    if not Player then return false, 'not_player' end
+
+    return Treasury.WithdrawForPlayer(Player, orgId, amount)
+end
+
 -- 跨资源只读入口在加载期注册：手机 App 的 audience.visible 需要它稳定存在，
 -- 否则 industry_enable=false 时每次拉 App 列表都会在 pcall 里撞一次 No such export。
--- 四个函数自己都先判 Config.Industry.Enabled（关闭时返回 false / 'disabled'），
+-- 这些函数自己都先判 Config.Industry.Enabled（关闭时返回 false / 'disabled'），
 -- 所以「注册了但整套不启动」不会产生任何业务副作用。
 exports('CanAccessIndustry', IndustryUi.CanAccess)
 exports('GetIndustrySnapshot', IndustryUi.Snapshot)
@@ -436,6 +466,8 @@ exports('SellIndustryStock', IndustryUi.Sell)
 -- `kind='stock'` 走库存上限升级；其余走雇工位。手机 App 的 action 只把 orgId
 -- 交给这里（Boss 复验与扣款都在服务端完成，NUI 隐藏 ≠ 权限）。
 exports('HireIndustryWorkstation', IndustryUi.HireWorkstation)
+-- 手机提现入口：与 /orgfundwithdraw 共用 Treasury.WithdrawForPlayer（P5/#418）。
+exports('WithdrawIndustryFunds', IndustryUi.WithdrawFunds)
 
 local function respond(cb, ok, data, errcode)
     if ok then

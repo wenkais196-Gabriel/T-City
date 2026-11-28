@@ -19,7 +19,7 @@ const INDUSTRY_APP = {
   label: '产业',
   icon: '⛏️',
   queries: ['snapshot', 'snapshot_estimate'],
-  actions: ['sell', 'hire'],
+  actions: ['sell', 'hire', 'withdraw'],
 };
 
 const SNAPSHOT = {
@@ -63,6 +63,8 @@ const SNAPSHOT = {
     orgRemaining: 5,
   },
   sellable: { maxQty: 5, blocked: null },
+  // 服务端快照的只读提现字段：本周已提 10,000 / 额度 25,000 / 税 20%。
+  treasury: { weeklyQuota: 25000, withdrawnThisWeek: 10000, taxRate: 0.2 },
 };
 
 function withIndustry(world, overrides = {}) {
@@ -188,9 +190,11 @@ export const industryScenarios = [
 
       checkEqual('非 Boss 不该有估价按钮', await page.locator('.estimate-btn').count(), 0);
       checkEqual('非 Boss 不该有雇工位按钮', await page.locator('.hire-btn').count(), 0);
+      checkEqual('非 Boss 提现按钮禁用', await page.locator('.withdraw-btn').isDisabled(), true);
       const text = (await page.locator('.industry-app').textContent()) ?? '';
       checkIncludes('要告诉成员为什么没有按钮', text, '只有 Boss');
       checkIncludes('成员仍能看库存', text, '45 / 540');
+      checkIncludes('非 Boss 提现原因', text, '只有 Boss 能提现');
     },
   },
   {
@@ -320,6 +324,77 @@ export const industryScenarios = [
         '满级时不该出现「下一级价格」',
         await page.locator('.industry-app').textContent().then((t) => (t ?? '').includes('下一级价格')),
         false,
+      );
+    },
+  },
+  {
+    surfaces: ['phone'],
+    name: '产业 App：提现显示本周额度/税后到账，动作只带 orgId/amount',
+    async run({ page, world }) {
+      withIndustry(world);
+      await openIndustry(page, 'phone');
+
+      const text = (await page.locator('.industry-app').textContent()) ?? '';
+      checkIncludes('本周已提/额度来自服务端快照', text, '本周已提 $10,000 / 额度 $25,000');
+      checkIncludes('税率来自服务端快照', text, '20%');
+      checkIncludes('本周还可提由快照算', text, '本周还可提 $15,000');
+
+      await page.locator('#industry-withdraw-amount').fill('5000');
+      const net = await page.locator('.withdraw-net b').textContent();
+      checkEqual('税后到账按 taxRate 预估', net?.trim(), '$4,000');
+      checkEqual('额度未用尽时提现按钮可点', await page.locator('.withdraw-btn').isDisabled(), false);
+
+      await page.locator('.withdraw-btn').click();
+      await waitFor(
+        () => world.calls.some(
+          (call) => call.callback === 'appAction' && call.payload?.action === 'withdraw',
+        ),
+        5000,
+        '点提现必须发 appAction(withdraw)',
+      );
+      const call = world.calls.find(
+        (item) => item.callback === 'appAction' && item.payload?.action === 'withdraw',
+      );
+      checkEqual('withdraw 必须带 app_id', call.payload.app_id, 'industry');
+      // 前端不许把净值/税/价格塞回服务端。
+      checkEqual(
+        'withdraw 只带 orgId/amount',
+        Object.keys(call.payload.params ?? {}).sort().join(','),
+        'amount,orgId',
+      );
+      checkEqual('withdraw 的 orgId 是自己的组织', call.payload.params?.orgId, 'mining_co');
+      checkEqual('withdraw 的 amount 来自输入框', call.payload.params?.amount, 5000);
+
+      const feedback = await waitFor(
+        async () => {
+          const value = (await page.locator('.feedback').textContent()) ?? '';
+          return value.includes('已提现') ? value : false;
+        },
+        5000,
+        '提现结果要显示在页面上',
+      );
+      checkIncludes('税后到账用服务端返回值', feedback, '$4,000');
+    },
+  },
+  {
+    surfaces: ['phone'],
+    name: '产业 App：本周额度用尽时提现按钮禁用并说明原因',
+    async run({ page, world }) {
+      withIndustry(world, {
+        treasury: { weeklyQuota: 25000, withdrawnThisWeek: 25000, taxRate: 0.2 },
+      });
+      await openIndustry(page, 'phone');
+
+      const text = (await page.locator('.industry-app').textContent()) ?? '';
+      checkIncludes('额度显示已提满', text, '本周已提 $25,000 / 额度 $25,000');
+      checkIncludes('说明额度已用尽', text, '本周提现额度已用完');
+      checkEqual('额度用尽时按钮禁用', await page.locator('.withdraw-btn').isDisabled(), true);
+      checkEqual(
+        '额度用尽时不该发出提现动作',
+        world.calls.filter(
+          (call) => call.callback === 'appAction' && call.payload?.action === 'withdraw',
+        ).length,
+        0,
       );
     },
   },

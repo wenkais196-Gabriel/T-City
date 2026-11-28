@@ -138,6 +138,8 @@ Config.Industry.Cycle = {
 -- 可被再次分配的池，也不会把 Boss 的提现变成公共收入。
 -- 周额度的「周」= 服务器本地时区的自然周（周一 00:00 起）；派生口径见
 -- Treasury.GetWithdrawnThisWeek（org_ledger 的 withdraw / withdraw-rollback 净额）。
+-- P5（#418）：额度/税/串行化/退款的唯一实现在 Treasury.WithdrawForPlayer，
+-- /orgfundwithdraw 与 exports('WithdrawIndustryFunds') 都只调用它。
 Config.Industry.WeeklyWithdrawQuota = integerConvar('industry_weekly_withdraw_quota', 25000, 0)
 Config.Industry.WithdrawTaxRate = math.min(
     numberConvar('industry_withdraw_tax_rate', 0.20, 0), 1)

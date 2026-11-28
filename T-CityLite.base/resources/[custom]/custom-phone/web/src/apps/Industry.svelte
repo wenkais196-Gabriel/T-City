@@ -48,6 +48,8 @@
     orgRemaining: number;
   };
   type Sellable = { maxQty: number; blocked: string | null };
+  // 服务端快照的只读展示字段：额度/已提/税率都不参与前端判定（服务端复验）。
+  type Treasury = { weeklyQuota: number; withdrawnThisWeek: number; taxRate: number };
   type Snapshot = {
     orgId: string;
     orgLabel: string;
@@ -59,6 +61,7 @@
     facility?: Facility;
     demand?: Demand;
     sellable?: Sellable;
+    treasury?: Treasury;
   };
   type SnapshotData = {
     rows: Record<string, unknown>[];
@@ -79,6 +82,7 @@
   type SellResult = { qty?: number; revenue?: number };
   type HireResult = { cost?: number; workstations?: number };
   type StockUpgradeResult = { cost?: number; stock_level?: number; stock_cap?: number };
+  type WithdrawResult = { amount?: number; net?: number; tax?: number };
 
   // 与服务端错误码一一对应；未知码原样显示，不折叠成「失败」。
   const BLOCK_TEXT: Record<string, string> = {
@@ -125,6 +129,8 @@
   let selling = $state(false);
   let hiring = $state(false);
   let upgrading = $state(false);
+  let withdrawAmount = $state(1000);
+  let withdrawing = $state(false);
 
   const facility = $derived(snapshot?.facility ?? null);
   const demand = $derived(snapshot?.demand ?? null);
@@ -136,6 +142,29 @@
   const canConfirm = $derived(
     estimate !== null && estimate.ok === true && estimateFor === sellQty && !selling,
   );
+
+  const treasury = $derived(snapshot?.treasury ?? null);
+  const withdrawRemaining = $derived(
+    Math.max(0, (treasury?.weeklyQuota ?? 0) - (treasury?.withdrawnThisWeek ?? 0)),
+  );
+  // 展示层的禁用原因；真正的额度/税/Boss 判定仍由服务端复验（NUI 隐藏 ≠ 权限）。
+  const withdrawBlocked = $derived.by(() => {
+    if (!isBoss) return '只有 Boss 能提现';
+    if (!treasury) return '提现信息不可用';
+    if (withdrawRemaining <= 0) return '本周提现额度已用完';
+    const amount = Math.floor(Number(withdrawAmount));
+    if (!Number.isFinite(amount) || amount < 1) return '金额必须是正整数';
+    if (amount > withdrawRemaining) return `超过本周剩余额度 ${money(withdrawRemaining)}`;
+    return '';
+  });
+  // 与服务端 Treasury.TaxFor 同一取整：floor(amount × rate + 1e-9)，仅作预估。
+  const withdrawNet = $derived.by(() => {
+    const amount = Math.floor(Number(withdrawAmount));
+    if (!treasury || !Number.isFinite(amount) || amount < 1) return 0;
+    const tax = Math.min(amount, Math.max(0, Math.floor(amount * treasury.taxRate + 1e-9)));
+    return amount - tax;
+  });
+  const canWithdraw = $derived(withdrawBlocked === '' && !withdrawing);
 
   function blockText(code: string | null | undefined): string {
     if (!code) return '';
@@ -232,6 +261,30 @@
     hiring = false;
   }
 
+  function onWithdrawInput(event: Event) {
+    const value = Number((event.currentTarget as HTMLInputElement).value);
+    withdrawAmount = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  }
+
+  async function withdrawFunds() {
+    if (!isBoss || !snapshot || !treasury || !canWithdraw) return;
+    const amount = Math.floor(Number(withdrawAmount));
+    withdrawing = true;
+    feedback = '';
+    // 只发 orgId + amount：税后金额是展示预估，服务端用同一函数重新算并复验。
+    const res = await appAction('industry', 'withdraw', { orgId: snapshot.orgId, amount });
+    if (res.success) {
+      const result = res.data as WithdrawResult;
+      const net = typeof result.net === 'number' ? result.net : withdrawNet;
+      feedback = `已提现，税后到账 ${money(net)}`;
+      // 已提额度必须回服务端快照回读，不在本地累加。
+      await load();
+    } else {
+      feedback = `提现失败：${blockText(res.error)}`;
+    }
+    withdrawing = false;
+  }
+
   async function upgradeStock() {
     if (!isBoss || !snapshot || !facility || upgrading) return;
     if (facility.nextStockUpgradeCost == null) return;
@@ -289,6 +342,43 @@
       {/if}
     </section>
 
+    <section class="card action-card withdraw-card">
+      <h3>提现</h3>
+      {#if treasury}
+        <div class="kv withdraw-quota">
+          <span>本周已提</span>
+          <b>{money(treasury.withdrawnThisWeek)} / 额度 {money(treasury.weeklyQuota)}</b>
+        </div>
+        <div class="kv">
+          <span>税率</span><b>{Math.round(treasury.taxRate * 100)}%</b>
+        </div>
+        <div class="withdraw-row">
+          <label for="industry-withdraw-amount">金额</label>
+          <input
+            id="industry-withdraw-amount"
+            type="number"
+            min="1"
+            step="1"
+            value={withdrawAmount}
+            oninput={onWithdrawInput}
+            disabled={!isBoss || withdrawRemaining <= 0}
+          />
+          <button class="primary withdraw-btn" onclick={withdrawFunds} disabled={!canWithdraw}>
+            {withdrawing ? '提现中…' : '提现'}
+          </button>
+        </div>
+        <div class="kv withdraw-net">
+          <span>税后到账</span><b class="revenue">{money(withdrawNet)}</b>
+        </div>
+        <p class="hint">本周还可提 {money(withdrawRemaining)}</p>
+        {#if withdrawBlocked}
+          <p class="note">{withdrawBlocked}</p>
+        {/if}
+      {:else}
+        <p class="note">提现信息不可用（服务端未返回额度）</p>
+      {/if}
+    </section>
+
     {#if !facility}
       <p class="empty">尚未建设施 —— 先在 Boss 菜单里建厂</p>
     {:else}
@@ -310,7 +400,7 @@
       </section>
 
       {#if !isBoss}
-        <p class="note">只有 Boss 可以卖出或雇工位。你可以查看当前库存与配额。</p>
+        <p class="note">只有 Boss 可以卖出、雇工位或提现。你可以查看当前库存、配额与提现额度。</p>
       {:else}
         <section class="card action-card">
           <h3>卖出</h3>
@@ -419,9 +509,11 @@
   .kv b { margin-left: auto; font-weight: 600; text-align: right; }
   .revenue { color: #86efac; }
   .note { font-size: 11px; color: #fbbf24; margin: 6px 0 0; line-height: 1.45; }
-  .sell-row { display: flex; align-items: center; gap: 8px; }
-  .sell-row label { font-size: 12px; opacity: 0.75; }
-  .sell-row input { width: 72px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.25); color: inherit; padding: 7px 8px; font-size: 12px; }
+  .sell-row, .withdraw-row { display: flex; align-items: center; gap: 8px; }
+  .sell-row label, .withdraw-row label { font-size: 12px; opacity: 0.75; }
+  .sell-row input, .withdraw-row input { width: 72px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.25); color: inherit; padding: 7px 8px; font-size: 12px; }
+  .withdraw-row .withdraw-btn { margin-left: auto; }
+  .withdraw-net { margin-top: 6px; }
   .hint { font-size: 11px; opacity: 0.55; }
   .estimate { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
   .primary { border: 0; border-radius: 9px; padding: 7px 14px; background: #2563eb; color: #fff; font-size: 12px; }

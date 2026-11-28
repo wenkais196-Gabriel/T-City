@@ -110,6 +110,178 @@ function Treasury.GetWithdrawnThisWeek(orgId, now)
     return nonNegative(row and row.total), nil
 end
 
+-- ── 提现（P5）：命令与手机导出的唯一实现 ──────────────────────────
+-- 规则只写这一份（/orgfundwithdraw 与 exports('WithdrawIndustryFunds') 都是薄包装）：
+--   * 仅 Boss（IndustryAccess.IsOrgBoss）；
+--   * 自然周额度从 org_ledger 派生（Treasury.GetWithdrawnThisWeek），超额整笔拒绝；
+--   * 税 = 销毁：金库扣全额，个人银行只进净值；
+--   * 同一组织的在途提现按 orgId 串行化（额度在 await 之间不能有第二个请求）；
+--   * AddMoney 失败退回**全额**（税不烧）；
+--   * 每一笔（含被拒绝的）都写 industry_audit 的 treasury.withdraw。
+--
+-- 时钟是测试注入点：命令路径传 opts.now（沿用 IndustryCommands.Now 的仿真开关），
+-- 导出路径用 Treasury.Now。
+Treasury.Now = os.time
+
+local withdrawBusy = {}
+local withdrawSeq = 0
+
+--- 周额度与税率只从 Config.Industry 读；缺配置时 fail closed（不猜默认值，避免
+--- 「配置漏加载 → 静默无税提现」）。
+---@return number|nil quota, number|nil rate, string|nil errcode
+function Treasury.WithdrawalConfig()
+    local quota = tonumber(Config.Industry.WeeklyWithdrawQuota)
+    if not quota or quota ~= quota or quota < 0 then return nil, nil, 'config_error' end
+    local rate = tonumber(Config.Industry.WithdrawTaxRate)
+    if not rate or rate ~= rate or rate < 0 or rate > 1 then return nil, nil, 'config_error' end
+    return quota, rate, nil
+end
+
+--- 税向下取整到整美元；净值 = 全额 - 税。
+---@return number tax, number net
+function Treasury.TaxFor(amount, rate)
+    local tax = math.floor(amount * rate + 1e-9)
+    if tax < 0 then tax = 0 end
+    if tax > amount then tax = amount end
+    return tax, amount - tax
+end
+
+--- 导出路径的 ref：与命令层 makeRef 同一形状，便于日志/审计按 ref 串联。
+local function withdrawRef(orgId, cid, now)
+    withdrawSeq = withdrawSeq + 1
+    local actor = tostring(cid or 'player'):gsub('[^%w_%-%.]', '_')
+    return ('wd:%s:%s:%d:%d'):format(orgId, actor, math.floor(now), withdrawSeq)
+end
+
+--- treasury.withdraw 的审计 payload：金额 / 净值 / 销毁税 / 结果 / ref。
+--- 只有数字与白名单字符，不含 citizenid 以外的身份信息（actor_cid 单独成列）。
+local function withdrawPayload(amount, net, taxBurned, result, ref)
+    local safeResult = tostring(result or 'unknown'):gsub('[^%w_%-%.]', '_')
+    local safeRef = tostring(ref or ''):gsub('[^%w:_%-%.]', '_')
+    return ('{"amount":%d,"net":%d,"tax_burned":%d,"result":"%s","ref":"%s"}'):format(
+        math.floor(tonumber(amount) or 0),
+        math.floor(tonumber(net) or 0),
+        math.floor(tonumber(taxBurned) or 0),
+        safeResult, safeRef)
+end
+
+local function auditWithdraw(orgId, cid, amount, net, taxBurned, result, ref)
+    IndustryAudit.Write(orgId, cid, 'treasury.withdraw',
+        withdrawPayload(amount, net, taxBurned, result, ref))
+end
+
+--- 提现的唯一实现。
+---
+--- 返回的 info 只含展示/审计需要的事实（金额、净值、税、额度、结果、ref），
+--- 调用方按 errcode 分支拼文案，不重新计算任何金额规则。
+---@param Player table QBCore 玩家对象
+---@param orgId string
+---@param amount number|string 不可信输入
+---@param opts table|nil { ref = string|nil, now = number|nil }
+---@return boolean ok, string|nil errcode, table info
+function Treasury.WithdrawForPlayer(Player, orgId, amount, opts)
+    opts = opts or {}
+    local info = { amount = 0, net = 0, tax = 0 }
+
+    if type(Player) ~= 'table' or type(Player.PlayerData) ~= 'table' then
+        info.result = 'not_player'
+        return false, 'not_player', info
+    end
+    local cid = Player.PlayerData.citizenid
+
+    local value = tonumber(amount)
+    if not validAmount(value) then
+        info.result = 'bad_amount'
+        auditWithdraw(orgId, cid, value or 0, 0, 0, 'bad_amount', nil)
+        return false, 'bad_amount', info
+    end
+    info.amount = value
+
+    --- 被拒绝的路径统一走这里：审计与返回码成对，ref 只在钱已经动过时才有。
+    local function reject(code, ref)
+        info.result = code
+        auditWithdraw(orgId, cid, value, 0, 0, code, ref)
+        return false, code, info
+    end
+
+    if not IndustryAccess.IsOrgBoss(Player, orgId) then
+        return reject('not_boss')
+    end
+
+    local quota, taxRate, configErr = Treasury.WithdrawalConfig()
+    if not quota then
+        return reject(configErr or 'config_error')
+    end
+
+    -- 同一组织的在途提现串行化：额度从流水派生，读与写之间不能有第二个请求。
+    if withdrawBusy[orgId] then
+        return reject('withdraw_busy')
+    end
+    withdrawBusy[orgId] = true
+
+    local now = tonumber(opts.now) or Treasury.Now()
+    local already, quotaErr = Treasury.GetWithdrawnThisWeek(orgId, now)
+    if already == nil then
+        withdrawBusy[orgId] = nil
+        return reject(quotaErr or 'db_error')
+    end
+    info.withdrawnThisWeek = already
+    info.weeklyQuota = quota
+    info.taxRate = taxRate
+
+    -- 超额直接拒绝，不截断：静默截断会让玩家以为提了全额。
+    if already + value > quota then
+        withdrawBusy[orgId] = nil
+        return reject('weekly_quota_exceeded')
+    end
+
+    local tax, net = Treasury.TaxFor(value, taxRate)
+    info.tax, info.net = tax, net
+
+    local ref = opts.ref
+    if type(ref) ~= 'string' or ref == '' then
+        ref = withdrawRef(orgId, cid, now)
+    end
+    info.ref = ref
+
+    local ok, err = Treasury.Withdraw(orgId, value, 'withdraw', { actor = cid, ref = ref })
+    if not ok then
+        withdrawBusy[orgId] = nil
+        info.net, info.tax = 0, 0
+        return reject(err or 'db_error', ref)
+    end
+
+    -- 税 = 销毁：只把净值记进个人银行；AddMoney 失败时退回**全额**（税不烧）。
+    local paid = true
+    if net > 0 then
+        local called, credited = pcall(function()
+            return Player.Functions.AddMoney('bank', net, 'orgfundwithdraw')
+        end)
+        paid = called and credited == true
+    end
+    if not paid then
+        local refunded, refundErr = Treasury.Deposit(orgId, value, 'withdraw-rollback', {
+            actor = cid,
+            ref = ref .. ':rb',
+        })
+        withdrawBusy[orgId] = nil
+        info.net, info.tax = 0, 0
+        local result = refunded and 'payout_failed_refunded' or 'payout_failed'
+        info.result = result
+        auditWithdraw(orgId, cid, value, 0, 0, result, ref)
+        if not refunded then
+            print(('[custom-industry] CRITICAL payout+rollback failed org=%s ref=%s err=%s'):format(
+                orgId, ref, tostring(refundErr)))
+        end
+        return false, result, info
+    end
+
+    withdrawBusy[orgId] = nil
+    info.result = 'ok'
+    auditWithdraw(orgId, cid, value, net, tax, 'ok', ref)
+    return true, nil, info
+end
+
 --- 余额 UPDATE 之后读一次余额，只为流水的 balance_after。
 --- 授权判断已经由 affectedRows 完成，这次读**不**参与放行/拒绝。
 local function readBalance(orgId)
