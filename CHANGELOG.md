@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **产业提现周额度 + 20% 税 + 季度按比例分配（`custom-industry`，#410）**：
+  `/orgfundwithdraw` 从「直接全额进个人银行」改为 **自然周（周一 00:00 起）$25,000 额度 +
+  20% 税**；超额整笔拒绝并返回 `weekly_quota_exceeded`，不静默截断。已提现额度从
+  `org_ledger` 派生（`reason IN ('withdraw','withdraw-rollback')` 的 `-delta` 合计，
+  不新建表）；发放失败退回全额时同一周额度净消耗回到 0。**税 = 销毁**：金库扣全额，
+  个人银行只进净值，税不进任何账户、不进城市账本（代码注释与本节都写死这个去处）。
+  季度 `SettleQuarter` 把剩余金库按 **Boss 40% / 非 Boss 成员平分** 发放；
+  没有非 Boss 成员时 Boss 拿 100%（单人组织不是 40%），除不尽的余数给第一个 Boss，
+  保证分配总额等于剩余金库。成员名单取 QBCore 在线玩家 + `IndustryAccess.OrgMembership`
+  （仓库没有 `org_members` 表；与 `announce.lua` 的推送名单同一判定），离线成员不在
+  本轮分配范围。两条路径都写 `industry_audit`（`treasury.withdraw` /
+  `treasury.distribute`），payload 只有金额/人数/结果码，不含 citizenid 以外的身份信息。
+  参数在 custom-industry 的 config/cycle.lua：`WeeklyWithdrawQuota = 25000`、`WithdrawTaxRate = 0.20`、
+  `QuarterBossShare = 0.40`（均有 `industry_*` convar 覆盖）。
+  测试钉住「同周第二次顶格提现被拒 / 下一周恢复 / 25,000 → 银行 +20,000 + 金库 −25,000 +
+  审计 tax_burned=5,000 / 3 人组织 40k+30k+30k / 单人组织 100k / players 表除 bank 外
+  checksum 逐字节不变」；反向注入删额度判断、税率改 0 均会红。
+
 - **产业两时钟：周 = 四季 / 13 周 = 季度（`custom-industry`，#409）**：
   单时钟 `SettleCycle` 一次清空设施/金库 → 第二个周期所有组织收入恒为 0。现在拆成
   `RollSeason`（季节倍率 + 本季配额，**不动**设施/工位/库存/金库）与 `SettleQuarter`

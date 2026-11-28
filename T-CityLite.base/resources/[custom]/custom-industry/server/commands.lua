@@ -11,6 +11,10 @@
 
 IndustryCommands = {}
 
+-- 测试注入点：生产恒为 os.time()。周额度判断只通过这里取「现在」，
+-- 用例可以把时钟拨到同一周/下一周，不需要真等 7 天。
+IndustryCommands.Now = os.time
+
 -- 本资源没有全局 QBCore：qb-core 是另一个资源，FiveM 不跨资源共享 Lua 全局；
 -- main.lua 里就算写 local 也看不见。按 [custom]/AGENTS.md 的已知坑，惰性解析
 -- 一次并缓存。Register() 开头把它取成局部变量，命令闭包会一起捕获。
@@ -59,6 +63,49 @@ end
 
 local function audit(orgId, actorCid, action, amount, result, ref)
     IndustryAudit.Write(orgId, actorCid, action, IndustryAudit.Payload(amount, result, ref))
+end
+
+-- ── 提现额度 / 税（P2 #410）────────────────────────────────────────
+-- 额度与税率只从 Config.Industry 读；缺配置时 fail closed（不猜默认值，避免
+-- 「配置漏加载 → 静默无税提现」）。
+-- 税 = 销毁：Treasury.Withdraw 扣全额，Player.Functions.AddMoney 只进净值。
+-- 同一组织的在途提现按 orgId 串行化：额度是从流水派生的，两个请求在 await
+-- 之间交错会都读到旧额度（与 sale.lua 的 `busy` 同一理由）。
+local withdrawBusy = {}
+
+---@return number|nil quota, number|nil rate, string|nil errcode
+local function withdrawalConfig()
+    local quota = tonumber(Config.Industry.WeeklyWithdrawQuota)
+    if not quota or quota ~= quota or quota < 0 then return nil, nil, 'config_error' end
+    local rate = tonumber(Config.Industry.WithdrawTaxRate)
+    if not rate or rate ~= rate or rate < 0 or rate > 1 then return nil, nil, 'config_error' end
+    return quota, rate, nil
+end
+
+--- 税向下取整到整美元；净值 = 全额 - 税。
+---@return number tax, number net
+local function taxFor(amount, rate)
+    local tax = math.floor(amount * rate + 1e-9)
+    if tax < 0 then tax = 0 end
+    if tax > amount then tax = amount end
+    return tax, amount - tax
+end
+
+--- treasury.withdraw 的审计 payload：金额 / 净值 / 销毁税 / 结果 / ref。
+--- 只有数字与白名单字符，不含 citizenid 以外的身份信息（actor_cid 单独成列）。
+local function treasuryWithdrawPayload(amount, net, taxBurned, result, ref)
+    local safeResult = tostring(result or 'unknown'):gsub('[^%w_%-%.]', '_')
+    local safeRef = tostring(ref or ''):gsub('[^%w:_%-%.]', '_')
+    return ('{"amount":%d,"net":%d,"tax_burned":%d,"result":"%s","ref":"%s"}'):format(
+        math.floor(tonumber(amount) or 0),
+        math.floor(tonumber(net) or 0),
+        math.floor(tonumber(taxBurned) or 0),
+        safeResult, safeRef)
+end
+
+local function auditTreasuryWithdraw(orgId, cid, amount, net, taxBurned, result, ref)
+    IndustryAudit.Write(orgId, cid, 'treasury.withdraw',
+        treasuryWithdrawPayload(amount, net, taxBurned, result, ref))
 end
 
 function IndustryCommands.Register()
@@ -164,10 +211,9 @@ function IndustryCommands.Register()
         reply(src, ('已存入 $%s 到 %s'):format(moneyText(amount), orgId))
     end, 'user')
 
-    QBCore.Commands.Add('orgfundwithdraw', '从组织金库取款到个人银行', {
-        { name = 'orgId', help = '组织名，例如 mining_co' },
-        { name = 'amount', help = '正整数美元' },
-    }, false, function(source, args)
+    -- 提现处理单独成函数：命令清单扫描器的 balanced_call 上限是 4000 字，
+    -- 内联闭包会把末尾的权限参数 'user' 截掉，文档会被误写成「无判权」。
+    local function withdrawHandler(source, args)
         local src = source
         if src < 1 then
             reply(src, '该命令只能由在线玩家执行')
@@ -184,30 +230,75 @@ function IndustryCommands.Register()
         local orgId = tostring(args[1] or '')
         local amount = tonumber(args[2])
         if not validCommandAmount(amount) then
-            audit(orgId, cid, 'fund.withdraw', amount or 0, 'bad_amount', nil)
+            auditTreasuryWithdraw(orgId, cid, amount or 0, 0, 0, 'bad_amount', nil)
             reply(src, '金额必须是正整数')
             return
         end
         if not IndustryAccess.IsOrgBoss(Player, orgId) then
-            audit(orgId, cid, 'fund.withdraw', amount, 'not_boss', nil)
+            auditTreasuryWithdraw(orgId, cid, amount, 0, 0, 'not_boss', nil)
             reply(src, 'not_boss')
             return
         end
 
+        local quota, taxRate, configErr = withdrawalConfig()
+        if not quota then
+            auditTreasuryWithdraw(orgId, cid, amount, 0, 0, configErr or 'config_error', nil)
+            reply(src, '提现配置不可用，请联系管理员')
+            return
+        end
+
+        -- 同一组织的在途提现串行化：额度从流水派生，读与写之间不能有第二个请求。
+        if withdrawBusy[orgId] then
+            auditTreasuryWithdraw(orgId, cid, amount, 0, 0, 'withdraw_busy', nil)
+            reply(src, 'withdraw_busy：上一笔提现还在处理中')
+            return
+        end
+        withdrawBusy[orgId] = true
+
+        local clock = IndustryCommands.Now
+        local now = type(clock) == 'function' and clock() or os.time()
+        local already, quotaErr = Treasury.GetWithdrawnThisWeek(orgId, now)
+        if not already then
+            withdrawBusy[orgId] = nil
+            auditTreasuryWithdraw(orgId, cid, amount, 0, 0, quotaErr or 'db_error', nil)
+            reply(src, ('取款失败: %s'):format(tostring(quotaErr or 'db_error')))
+            return
+        end
+
+        -- 超额直接拒绝，不截断：静默截断会让玩家以为提了全额。
+        if already + amount > quota then
+            withdrawBusy[orgId] = nil
+            auditTreasuryWithdraw(orgId, cid, amount, 0, 0, 'weekly_quota_exceeded', nil)
+            reply(src, ('weekly_quota_exceeded：本周已提 $%s / 周额度 $%s'):format(
+                moneyText(already), moneyText(quota)))
+            return
+        end
+
+        local tax, net = taxFor(amount, taxRate)
         local ref = makeRef('wd', orgId, cid)
         local ok, err = Treasury.Withdraw(orgId, amount, 'withdraw', { actor = cid, ref = ref })
         if not ok then
-            audit(orgId, cid, 'fund.withdraw', amount, err or 'db_error', ref)
+            withdrawBusy[orgId] = nil
+            auditTreasuryWithdraw(orgId, cid, amount, 0, 0, err or 'db_error', ref)
             reply(src, ('取款失败: %s'):format(tostring(err)))
             return
         end
 
-        if not Player.Functions.AddMoney('bank', amount, 'orgfundwithdraw') then
+        -- 税 = 销毁：只把净值记进个人银行；AddMoney 失败时退回**全额**（税不烧）。
+        local paid = true
+        if net > 0 then
+            local called, credited = pcall(function()
+                return Player.Functions.AddMoney('bank', net, 'orgfundwithdraw')
+            end)
+            paid = called and credited == true
+        end
+        if not paid then
             local refunded, refundErr = Treasury.Deposit(orgId, amount, 'withdraw-rollback', {
                 actor = cid,
                 ref = ref .. ':rb',
             })
-            audit(orgId, cid, 'fund.withdraw', amount,
+            withdrawBusy[orgId] = nil
+            auditTreasuryWithdraw(orgId, cid, amount, 0, 0,
                 refunded and 'payout_failed_refunded' or 'payout_failed', ref)
             if not refunded then
                 print(('[custom-industry] CRITICAL payout+rollback failed org=%s ref=%s err=%s'):format(
@@ -217,9 +308,16 @@ function IndustryCommands.Register()
             return
         end
 
-        audit(orgId, cid, 'fund.withdraw', amount, 'ok', ref)
-        reply(src, ('已从 %s 取出 $%s'):format(orgId, moneyText(amount)))
-    end, 'user')
+        withdrawBusy[orgId] = nil
+        auditTreasuryWithdraw(orgId, cid, amount, net, tax, 'ok', ref)
+        reply(src, ('已从 %s 取出 $%s（税前 $%s，税 $%s 已销毁）'):format(
+            orgId, moneyText(net), moneyText(amount), moneyText(tax)))
+    end
+
+    QBCore.Commands.Add('orgfundwithdraw', '从组织金库取款到个人银行（周额度 + 20% 税）', {
+        { name = 'orgId', help = '组织名，例如 mining_co' },
+        { name = 'amount', help = '正整数美元' },
+    }, false, withdrawHandler, 'user')
 
     QBCore.Commands.Add('orgfundgrant', '系统向组织金库注入资金（仅控制台）', {
         { name = 'orgId', help = '组织名，例如 mining_co' },

@@ -67,6 +67,49 @@ local function normalizeActor(actor)
     return nil
 end
 
+local function nonNegative(value)
+    local number = tonumber(value)
+    if not number or number ~= number or number < 0 then return 0 end -- NaN / 负数兜底
+    return math.floor(number)
+end
+
+--- 自然周起点（周一 00:00，服务器本地时区）。
+--- 周额度桶必须与 org_ledger.created_at 的时区一致：SQL 用 FROM_UNIXTIME(?)
+--- 把 epoch 交给 MySQL 按会话时区换算，Lua 侧只算 epoch。
+---@param now number|nil
+---@return number epoch
+function Treasury.WeekStart(now)
+    local epoch = math.floor(tonumber(now) or os.time())
+    local t = os.date('*t', epoch)
+    -- Lua 的 wday：周日=1 … 周六=7；周一是 2 → (2+5)%7 = 0。
+    local daysSinceMonday = (tonumber(t.wday) + 5) % 7
+    local midnight = os.time({
+        year = t.year, month = t.month, day = t.day,
+        hour = 0, min = 0, sec = 0, isdst = t.isdst,
+    })
+    return midnight - daysSinceMonday * 86400
+end
+
+--- 本组织本周已提现金额（自然周桶，周一 00:00 起）。
+--- 口径：org_ledger 里 reason='withdraw' 与其补偿 reason='withdraw-rollback'
+--- 的 delta 合计（-delta 求和）。发放失败会全额退回金库，那笔必须从额度里扣掉，
+--- 否则一次 qb-core 故障会白占 Boss 一周的额度。派生而不是建表：已提现额度只是
+--- 流水的投影，独立计数器在崩溃/手工修数后会与流水分叉。
+---@param orgId string
+---@param now number|nil
+---@return number|nil withdrawn, string|nil errcode
+function Treasury.GetWithdrawnThisWeek(orgId, now)
+    if not validOrg(orgId) then return nil, 'bad_org' end
+    local since = Treasury.WeekStart(now)
+    local row, err = Db.Single(
+        'SELECT COALESCE(SUM(-delta), 0) AS total FROM org_ledger '
+            .. "WHERE org_id = ? AND reason IN ('withdraw', 'withdraw-rollback') "
+            .. 'AND delta <> 0 AND created_at >= FROM_UNIXTIME(?) LIMIT 1',
+        { orgId, since })
+    if err then return nil, 'db_error' end
+    return nonNegative(row and row.total), nil
+end
+
 --- 余额 UPDATE 之后读一次余额，只为流水的 balance_after。
 --- 授权判断已经由 affectedRows 完成，这次读**不**参与放行/拒绝。
 local function readBalance(orgId)

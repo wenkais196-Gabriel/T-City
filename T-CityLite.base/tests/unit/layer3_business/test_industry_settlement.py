@@ -394,13 +394,27 @@ def test_personal_layer_scanner_detects_injected_writes():
 
 
 def test_settlement_never_writes_the_personal_layer():
-    for path in (SETTLEMENT_SRC, CYCLE_SRC, ANNOUNCE_SRC, COMMANDS_CYCLE_SRC):
+    # 不参与季度分配的三个文件：完全不许碰个人层。
+    for path in (CYCLE_SRC, ANNOUNCE_SRC, COMMANDS_CYCLE_SRC):
         source = path.read_text(encoding="utf-8")
         assert written_tables(source) == [], f"{path.name} 出现了个人层写语句"
         code = lua_source.blank_noise(source, keep_strings=True)
         assert "Player.Functions" not in code, (
             f"{path.name} 调用了玩家钱接口（结算不该碰个人层）"
         )
+
+    # settlement.lua：季度分配（#410）只允许 AddMoney('bank', ...)。
+    # 仍然禁止任何个人层写 SQL 与 RemoveMoney/SetMoney 等其它接口。
+    source = SETTLEMENT_SRC.read_text(encoding="utf-8")
+    assert written_tables(source) == [], "settlement.lua 出现了个人层写 SQL"
+    code = lua_source.blank_noise(source, keep_strings=True)
+    calls = re.findall(r"\.Functions\.(\w+)\s*\(", code)
+    assert set(calls) <= {"AddMoney"}, f"结算碰了 bank 以外的个人层接口：{calls}"
+    for match in re.finditer(r"\.Functions\.AddMoney\s*\(\s*([^,]+),", code):
+        assert match.group(1).strip() == "'bank'", (
+            f"季度分配只能写个人银行：{match.group(0)}"
+        )
+    assert "RemoveMoney" not in code, "季度分配不许从个人银行扣钱"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -911,3 +925,207 @@ def test_restart_does_not_settle_the_same_quarter_twice():
         "INIT_UNCHANGED", "TICK", "QUARTER", "SEASON", "BALANCE", "PRESTIGE",
         "RESULTS", "REPEAT", "ALREADY", "WRITES_ADDED", "BALANCE_AFTER",
         "PRESTIGE_AFTER", "RESULTS_AFTER")})
+
+
+# ══════════════════════════════════════════════════════════════════
+# P2 季度分配（#410）：Boss 40% / 非 Boss 成员平分
+# ══════════════════════════════════════════════════════════════════
+#
+# 仓库没有 `org_members` 表；成员来源是 QBCore 在线玩家 + IndustryAccess.OrgMembership
+# （与 announce.lua 的推送名单同一判定）。这里用假 qb-core 提供在线成员，AddMoney
+# 只改 `__players[cid].money.bank`，其余字段用 checksum 钉住逐字段不变。
+
+DISTRIBUTE_HARNESS = r"""
+__fakePlayers = {}
+function __fakeMember(cid, grade)
+    __fakePlayers[cid] = {
+        PlayerData = {
+            citizenid = cid,
+            source = 1,
+            job = { name = 'miner', grade = { level = grade } },
+        },
+        Functions = {
+            AddMoney = function(kind, amount, reason)
+                if kind ~= 'bank' then
+                    error('quarter share moneytype 必须是 bank，实际 ' .. tostring(kind))
+                end
+                __players[cid].money.bank = __players[cid].money.bank + amount
+                return true
+            end,
+        },
+    }
+end
+
+local __baseExports = exports
+exports = setmetatable({}, {
+    __index = function(_, resource)
+        if resource == 'qb-core' then
+            return {
+                GetCoreObject = function()
+                    return {
+                        Functions = {
+                            GetQBPlayers = function() return __fakePlayers end,
+                        },
+                    }
+                end,
+            }
+        end
+        return __baseExports[resource]
+    end,
+    __call = function(_, name, fn) return __baseExports(name, fn) end,
+})
+
+--- players 表的 checksum，但把 money.bank 归零后再算：
+--- 分配前后除 bank 外的所有字段必须逐字节一致。
+function __checksumNoBank()
+    local saved = {}
+    for cid, row in pairs(__players) do
+        if type(row.money) == 'table' then
+            saved[cid] = row.money.bank
+            row.money.bank = 0
+        end
+    end
+    local sum = __playersChecksum()
+    for cid, row in pairs(__players) do
+        if saved[cid] ~= nil then row.money.bank = saved[cid] end
+    end
+    return sum
+end
+"""
+
+DISTRIBUTE_CONVARS = {
+    "industry_prestige_k": "500",
+    "industry_quarter_starter": "0",
+    "industry_quarter_stipend": "0",
+}
+
+
+def test_quarter_settlement_splits_treasury_boss_40_and_members_30_each():
+    out = run(TWO_CLOCK_HARNESS + DISTRIBUTE_HARNESS + r"""
+        __reset()
+        __seedTwoClock({
+            cycle_no = 13, quarter_no = 1, season = 'winter', season_no = 4,
+            season_started_epoch = 900, season_ends_epoch = 1000,
+            quarter_started_epoch = 0, quarter_ends_epoch = 1000,
+        })
+        __seedTreasury('mining_co', 100000, 0)
+        __seedPlayers({
+            cid_boss = { citizenid = 'cid_boss', name = 'Boss',
+                         money = { cash = 11, bank = 100 }, inventory = '[]' },
+            cid_m1 = { citizenid = 'cid_m1', name = 'M1',
+                       money = { cash = 22, bank = 200 }, inventory = '[]' },
+            cid_m2 = { citizenid = 'cid_m2', name = 'M2',
+                       money = { cash = 33, bank = 300 }, inventory = '[]' },
+        })
+        __fakeMember('cid_boss', 4)
+        __fakeMember('cid_m1', 1)
+        __fakeMember('cid_m2', 1)
+
+        local before = __checksumNoBank()
+        local ok, err, summary = IndustrySettlement.SettleQuarter(1, { trigger = 'test' })
+        local after = __checksumNoBank()
+        local payload = __lastAuditPayload('treasury.distribute')
+        local distribution = __ledgerRow('quarter-distribute:1')
+        local result = __result('mining_co', 1)
+
+        __emit('OK', tostring(ok) .. ':' .. tostring(err or 'nil'))
+        __emit('BANK_BOSS', tostring(__players.cid_boss.money.bank))
+        __emit('BANK_M1', tostring(__players.cid_m1.money.bank))
+        __emit('BANK_M2', tostring(__players.cid_m2.money.bank))
+        __emit('CASH_BOSS', tostring(__players.cid_boss.money.cash))
+        __emit('TREASURY', tostring(__treasury('mining_co').balance))
+        __emit('CLEARED', tostring(result and result.balance_cleared))
+        __emit('DISTRIBUTED', tostring(summary and summary.distributed))
+        __emit('PAID', tostring(summary and summary.distribute_paid))
+        __emit('FAILED', tostring(summary and summary.distribute_failed))
+        __emit('LEDGER_DELTA', tostring(distribution and distribution.delta))
+        __emit('SETTLE_CLEAR', tostring(__ledgerRow('settle-quarter:1') ~= nil))
+        __emit('PAYLOAD', tostring(payload))
+        __emit('AUDIT_COUNT', tostring(__auditCount('treasury.distribute')))
+        __emit('CHECKSUM_BEFORE', before)
+        __emit('CHECKSUM_AFTER', after)
+
+        local repeatOk, repeatErr, repeatSummary = IndustrySettlement.SettleQuarter(
+            1, { trigger = 'again' })
+        __emit('REPEAT', tostring(repeatOk) .. ':' .. tostring(repeatErr or 'nil'))
+        __emit('REPEAT_ALREADY', tostring(repeatSummary and repeatSummary.already_settled))
+        __emit('BANK_AFTER_REPEAT', tostring(__players.cid_boss.money.bank))
+        __emit('AUDIT_COUNT_AFTER', tostring(__auditCount('treasury.distribute')))
+        print('CHECKSUM_BEFORE=' .. before)
+        print('CHECKSUM_AFTER=' .. after)
+    """, convars=DISTRIBUTE_CONVARS)
+
+    print("CHECKSUM_BEFORE=" + out["CHECKSUM_BEFORE"])
+    print("CHECKSUM_AFTER=" + out["CHECKSUM_AFTER"])
+    assert out["OK"] == "true:nil", f"季度分配失败：{out}"
+    assert out["BANK_BOSS"] == "40100", "Boss 应拿 40,000（100 + 40,000）"
+    assert out["BANK_M1"] == "30200", "成员 1 应拿 30,000"
+    assert out["BANK_M2"] == "30300", "成员 2 应拿 30,000"
+    assert out["CASH_BOSS"] == "11", "分配动了个人银行的 cash 字段"
+    assert out["TREASURY"] == "0", "分配后金库应清零（起跑金为 0）"
+    assert out["CLEARED"] == "100000", "结果表快照应记录结算前的 100,000"
+    assert out["DISTRIBUTED"] == "100000"
+    assert out["PAID"] == "100000"
+    assert out["FAILED"] == "0"
+    assert out["LEDGER_DELTA"] == "-100000", "分配没有从金库扣款/写流水"
+    assert out["SETTLE_CLEAR"] == "false", "已分配的钱又写了一次 settlement-clear（重复记账）"
+    assert out["AUDIT_COUNT"] == "1", "treasury.distribute 必须恰好一条"
+    payload = out["PAYLOAD"]
+    for fragment in (
+        '"boss_total":40000', '"member_each":30000', '"boss_count":1',
+        '"member_count":2', '"paid":100000', '"failed":0', '"result":"ok"',
+    ):
+        assert fragment in payload, f"分配审计缺 {fragment}：{payload}"
+    assert "cid_" not in payload, f"分配审计出现 citizenid/PII：{payload}"
+    assert out["CHECKSUM_BEFORE"] == out["CHECKSUM_AFTER"], (
+        "分配改动了 players 表 bank 以外的字段："
+        f"{out['CHECKSUM_BEFORE']} != {out['CHECKSUM_AFTER']}"
+    )
+    assert out["REPEAT_ALREADY"] == TRUE, "重复结算没有走 already_settled"
+    assert out["BANK_AFTER_REPEAT"] == "40100", "重复结算又发了一次分配"
+    assert out["AUDIT_COUNT_AFTER"] == "1", "重复结算重复写了分配审计"
+
+
+def test_single_person_org_takes_the_whole_treasury_as_boss():
+    """单人组织 = 没有非 Boss 成员：Boss 拿 100%，不是 40%。"""
+    out = run(TWO_CLOCK_HARNESS + DISTRIBUTE_HARNESS + r"""
+        __reset()
+        __seedTwoClock({
+            cycle_no = 13, quarter_no = 1, season = 'winter', season_no = 4,
+            season_started_epoch = 900, season_ends_epoch = 1000,
+            quarter_started_epoch = 0, quarter_ends_epoch = 1000,
+        })
+        __seedTreasury('mining_co', 100000, 0)
+        __seedPlayers({
+            cid_boss = { citizenid = 'cid_boss', name = 'Boss',
+                         money = { cash = 11, bank = 0 }, inventory = '[]' },
+        })
+        __fakeMember('cid_boss', 4)
+
+        local before = __checksumNoBank()
+        local ok, err, summary = IndustrySettlement.SettleQuarter(1, { trigger = 'test' })
+        local after = __checksumNoBank()
+        local payload = __lastAuditPayload('treasury.distribute')
+
+        __emit('OK', tostring(ok) .. ':' .. tostring(err or 'nil'))
+        __emit('BANK_BOSS', tostring(__players.cid_boss.money.bank))
+        __emit('TREASURY', tostring(__treasury('mining_co').balance))
+        __emit('DISTRIBUTED', tostring(summary and summary.distributed))
+        __emit('PAYLOAD', tostring(payload))
+        __emit('CHECKSUM_BEFORE', before)
+        __emit('CHECKSUM_AFTER', after)
+    """, convars=DISTRIBUTE_CONVARS)
+
+    print("CHECKSUM_BEFORE=" + out["CHECKSUM_BEFORE"])
+    print("CHECKSUM_AFTER=" + out["CHECKSUM_AFTER"])
+    assert out["OK"] == "true:nil", f"单人组织季度分配失败：{out}"
+    assert out["BANK_BOSS"] == "100000", "单人组织 Boss 没有拿 100%（写成了 40%？）"
+    assert out["TREASURY"] == "0"
+    assert out["DISTRIBUTED"] == "100000"
+    payload = out["PAYLOAD"]
+    assert '"boss_total":100000' in payload, f"审计的 Boss 份额不是全额：{payload}"
+    assert '"member_each":0' in payload, f"单人组织不应有成员份额：{payload}"
+    assert '"member_count":0' in payload, f"单人组织成员数应为 0：{payload}"
+    assert out["CHECKSUM_BEFORE"] == out["CHECKSUM_AFTER"], (
+        "单人分配改动了 players 表 bank 以外的字段"
+    )
