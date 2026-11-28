@@ -147,7 +147,7 @@ end
 ---@return table|nil row, string|nil errcode
 local function readFacility(orgId)
     local row, err = Db.Single(
-        'SELECT org_id, facility_type, workstations, stock, '
+        'SELECT org_id, facility_type, workstations, stock_level, stock, '
             .. 'UNIX_TIMESTAMP(last_tick_at) AS last_tick_epoch '
             .. 'FROM industry_facility WHERE org_id = ? LIMIT 1',
         { orgId })
@@ -200,8 +200,14 @@ function IndustryProduction.SettleFacility(orgId, opts)
         local prestige, prestigeErr = IndustryCycle.PrestigeForOrg(orgId)
         if not prestige then return false, prestigeErr or 'db_error' end
 
+        -- 截断上限跟 `industry_facility.stock_level` 走（#411）：Facility.StockCapFor
+        -- 是唯一公式；拿不到模块时 fail closed，不退回「常量 540」静默放行。
+        if type(Facility) ~= 'table' or not Facility.StockCapFor then
+            return false, 'db_error'
+        end
+        local cap = Facility.StockCapFor(row.stock_level, facilityType)
+
         local config = productionConfig()
-        local cap = nonNegativeInt(facility.stockCap, 0)
         local plan = IndustryProduction.Compute({
             now = now,
             lastTickAt = tonumber(row.last_tick_epoch),

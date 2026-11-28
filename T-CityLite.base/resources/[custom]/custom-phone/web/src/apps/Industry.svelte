@@ -29,7 +29,11 @@
     workstations: number;
     workstationCap: number;
     stock: number;
+    stockLevel: number;
+    stockMaxLevel: number;
     stockCap: number;
+    nextStockUpgradeCost: number | null;
+    stockUpgradeBlocked: string | null;
     nextWorkstationCost: number | null;
     hireBlocked: string | null;
   };
@@ -74,6 +78,7 @@
   type EstimateData = { ok: boolean; estimate?: Estimate; error?: string };
   type SellResult = { qty?: number; revenue?: number };
   type HireResult = { cost?: number; workstations?: number };
+  type StockUpgradeResult = { cost?: number; stock_level?: number; stock_cap?: number };
 
   // 与服务端错误码一一对应；未知码原样显示，不折叠成「失败」。
   const BLOCK_TEXT: Record<string, string> = {
@@ -83,6 +88,7 @@
     none: '当前不可卖出',
     cap: '工位已满',
     cap_reached: '工位已满',
+    max_level: '库存已满级',
     funds: '金库余额不足',
     insufficient_funds: '金库余额不足',
     phase: '当前阶段不可购置',
@@ -118,6 +124,7 @@
   let estimating = $state(false);
   let selling = $state(false);
   let hiring = $state(false);
+  let upgrading = $state(false);
 
   const facility = $derived(snapshot?.facility ?? null);
   const demand = $derived(snapshot?.demand ?? null);
@@ -225,6 +232,24 @@
     hiring = false;
   }
 
+  async function upgradeStock() {
+    if (!isBoss || !snapshot || !facility || upgrading) return;
+    if (facility.nextStockUpgradeCost == null) return;
+    upgrading = true;
+    feedback = '';
+    // 只发 orgId：价格 / 新等级 / 新上限都由服务端算，刷新后从快照回读。
+    const res = await appAction('industry', 'upgrade_stock', { orgId: snapshot.orgId });
+    if (res.success) {
+      const upgraded = res.data as StockUpgradeResult;
+      await load();
+      const cap = upgraded.stock_cap ?? snapshot?.facility?.stockCap;
+      feedback = `库存上限已升级${cap == null ? '' : `为 ${cap}`}`;
+    } else {
+      feedback = `升级库存失败：${blockText(res.error)}`;
+    }
+    upgrading = false;
+  }
+
   onMount(load);
 </script>
 
@@ -271,6 +296,11 @@
         <h3>{facility.label} L{facility.level}/{facility.maxLevel}</h3>
         <div class="kv"><span>工位</span><b>{facility.workstations} / {facility.workstationCap}</b></div>
         <div class="kv"><span>库存</span><b>{facility.stock} / {facility.stockCap}</b></div>
+        {#if facility.stockLevel != null}
+          <div class="kv">
+            <span>库存等级</span><b>L{facility.stockLevel} / {facility.stockMaxLevel}</b>
+          </div>
+        {/if}
         <div class="kv"><span>累计产出</span><b>{snapshot.producedUnits}</b></div>
         {#if demand}
           <div class="kv"><span>单位售价</span><b>{money(demand.unitPrice)}</b></div>
@@ -341,6 +371,33 @@
             </button>
           {/if}
         </section>
+
+        {#if facility.stockLevel != null}
+          <section class="card action-card">
+            <h3>库存升级</h3>
+            <div class="kv">
+              <span>当前上限</span><b>{facility.stockCap}</b>
+            </div>
+            {#if facility.nextStockUpgradeCost == null || facility.stockUpgradeBlocked === 'max_level'}
+              <p class="note">库存已满级（L{facility.stockMaxLevel}）</p>
+              <button class="primary stock-upgrade-btn" disabled>已满级</button>
+            {:else}
+              <div class="kv">
+                <span>下一级价格</span><b>{money(facility.nextStockUpgradeCost)}</b>
+              </div>
+              {#if facility.stockUpgradeBlocked === 'funds'}
+                <p class="note">金库余额不足</p>
+              {/if}
+              <button
+                class="primary stock-upgrade-btn"
+                onclick={upgradeStock}
+                disabled={upgrading || facility.stockUpgradeBlocked === 'funds'}
+              >
+                {upgrading ? '升级中…' : '升级库存上限'}
+              </button>
+            {/if}
+          </section>
+        {/if}
       {/if}
     {/if}
   {/if}

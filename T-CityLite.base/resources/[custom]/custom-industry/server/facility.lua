@@ -40,6 +40,21 @@ local function audit(orgId, actor, action, amount, result, ref, workstations)
         auditPayload(amount, result, ref, workstations))
 end
 
+--- 库存升级的审计 payload：在金额/结果码/ref 之外带库存等级。
+--- 单独一份而不是改 `auditPayload`，避免既有设施动作的 payload 形状变化。
+local function stockAuditPayload(amount, result, ref, stockLevel)
+    local safeResult = tostring(result or 'unknown'):gsub('[^%w_%-%.]', '_')
+    local safeRef = tostring(ref or ''):gsub('[^%w:_%-%.]', '_')
+    local level = math.floor(tonumber(stockLevel) or 0)
+    return ('{"amount":%s,"result":"%s","ref":"%s","stock_level":%d}'):format(
+        tostring(tonumber(amount) or 0), safeResult, safeRef, level)
+end
+
+local function stockAudit(orgId, actor, amount, result, ref, stockLevel)
+    IndustryAudit.Write(orgId, actor, 'facility.stock_upgrade',
+        stockAuditPayload(amount, result, ref, stockLevel))
+end
+
 --- Treasury 的错误码里只有三个属于设施动作；其余一律折叠成 db_error。
 --- （Withdraw 不会返回 no_account：账户不存在时 S1 报 insufficient_funds。）
 local function treasuryCode(err)
@@ -80,13 +95,50 @@ function Facility.WorkstationCost(facilityType, workstations)
     return math.floor(config.baseCost * (1.35 ^ current))
 end
 
+--- 库存上限 = 基础上限 + 每级增量 × 等级（#411）。
+--- 等级来自 `industry_facility.stock_level`，这里夹到配置的 [0, stockLevelMax]：
+--- 坏数据（负数 / 超过上限）不能让生产算出更小或更大的闸门。
+--- 第二参默认 'mine'：当前只有一种设施类型，保持 `StockCapFor(level)` 的调用形状。
+---@param level number|nil
+---@param facilityType string|nil
+---@return number cap 0 when the facility type is unknown（fail closed）
+function Facility.StockCapFor(level, facilityType)
+    local config = Config.Industry.Facilities[facilityType or 'mine']
+    if type(config) ~= 'table' then return 0 end
+
+    local base = math.floor(tonumber(config.stockCap) or 0)
+    local step = math.floor(tonumber(config.stockCapPerLevel) or 0)
+    local maxLevel = math.floor(tonumber(config.stockLevelMax) or 0)
+    local current = math.floor(tonumber(level) or 0)
+    if current < 0 then current = 0 end
+    if current > maxLevel then current = maxLevel end
+    return base + step * current
+end
+
+--- 从 level 升到 level+1 的价格：floor(baseCost × growth^level)（#411）。
+--- 满级返回 nil：快照用 nil 表示「不可再升」，手机端据此禁用按钮。
+---@return number|nil cost, string|nil errcode
+function Facility.StockUpgradeCost(facilityType, level)
+    local config = Config.Industry.Facilities[facilityType]
+    if type(config) ~= 'table' then return nil, 'bad_type' end
+
+    local current = math.floor(tonumber(level) or 0)
+    local maxLevel = math.floor(tonumber(config.stockLevelMax) or 0)
+    if current < 0 or current >= maxLevel then return nil, 'max_level' end
+
+    local baseCost = tonumber(config.stockUpgradeBaseCost) or 0
+    local growth = tonumber(config.stockUpgradeGrowth) or 1
+    return math.floor(baseCost * (growth ^ current)), nil
+end
+
 --- 读整行（只读）。显式列名 + LIMIT，禁止 SELECT *。
 ---@return table|nil row, string|nil errcode
 function Facility.Get(orgId)
     if not validOrg(orgId) then return nil, 'bad_org' end
     local row, err = Db.Single(
-        'SELECT org_id, facility_type, level, workstations, recipe_id, stock, last_tick_at, created_at, '
-            .. 'produced_units FROM industry_facility WHERE org_id = ? LIMIT 1',
+        'SELECT org_id, facility_type, level, workstations, stock_level, recipe_id, stock, '
+            .. 'last_tick_at, created_at, produced_units '
+            .. 'FROM industry_facility WHERE org_id = ? LIMIT 1',
         { orgId })
     if err then return nil, 'db_error' end
     if not row then return nil, 'not_built' end
@@ -283,4 +335,122 @@ function Facility.AddWorkstation(orgId, opts)
     local workstations = current + 1
     audit(orgId, actor, 'facility.hire', cost, 'ok', ref, workstations)
     return true, nil, cost, workstations
+end
+
+--- 退回一次失败的库存升级扣款。补偿失败只记录（钱与等级的不一致必须留痕）。
+local function refundStockUpgrade(orgId, actor, cost, ref)
+    local refunded, refundErr = Treasury.Deposit(orgId, cost, 'stock-upgrade-rollback', {
+        actor = actor,
+        ref = ref .. ':rb',
+    })
+    if not refunded then
+        print(('[custom-industry] CRITICAL stock upgrade rollback failed org=%s ref=%s err=%s'):format(
+            orgId, ref, tostring(refundErr)))
+    end
+    return refunded
+end
+
+--- 升级库存上限（P3/#411）。
+---
+--- Boss / 成员身份由 ui.lua 的玩家入口复验（本模块不持 Player 对象，避免出现第二份
+--- 权限判定）；本函数只负责组织层：等级上限、金库扣款、等级行 CAS。
+---
+--- 顺序与工位一致：先扣钱（Treasury.Withdraw 的余额判定与扣减在同一条 UPDATE），
+--- 再改等级；改行失败（DB 错误 / 并发冲突 / 读后别人升满）一律退回。
+--- 等级上限与乐观锁都写在 UPDATE 的 WHERE 里，affectedRows 是唯一裁决依据：
+---   UPDATE industry_facility SET stock_level = stock_level + 1
+---    WHERE org_id = ? AND stock_level = ? AND stock_level < ?
+---
+---@param orgId string
+---@param opts table|nil { actor = citizenid|nil, ref = string|nil }
+---@return boolean ok, string|nil errcode, number|nil cost, number|nil stockLevel, number|nil stockCap
+function Facility.UpgradeStock(orgId, opts)
+    if not validOrg(orgId) then return false, 'bad_org' end
+
+    opts = opts or {}
+    local actor = normalizeActor(opts.actor)
+    local ref = opts.ref or makeRef('stockup', orgId, 0)
+
+    local row, readErr = Db.Single(
+        'SELECT facility_type, stock_level FROM industry_facility WHERE org_id = ? LIMIT 1',
+        { orgId })
+    if readErr then
+        stockAudit(orgId, actor, 0, 'db_error', ref, 0)
+        return false, 'db_error'
+    end
+    if not row then
+        stockAudit(orgId, actor, 0, 'not_built', ref, 0)
+        return false, 'not_built'
+    end
+
+    local facilityType = tostring(row.facility_type or '')
+    local config = Config.Industry.Facilities[facilityType]
+    if type(config) ~= 'table' then
+        stockAudit(orgId, actor, 0, 'bad_type', ref, 0)
+        return false, 'bad_type'
+    end
+
+    local current = math.floor(tonumber(row.stock_level) or 0)
+    if current < 0 then current = 0 end
+    local maxLevel = math.floor(tonumber(config.stockLevelMax) or 0)
+    if current >= maxLevel then
+        stockAudit(orgId, actor, 0, 'max_level', ref, current)
+        return false, 'max_level'
+    end
+
+    local cost = Facility.StockUpgradeCost(facilityType, current)
+    if not cost then
+        stockAudit(orgId, actor, 0, 'max_level', ref, current)
+        return false, 'max_level'
+    end
+
+    -- 余额不足由 Treasury.Withdraw 的同一条守卫 UPDATE 拒绝；不先读余额（TOCTOU）。
+    local paid, payErr = Treasury.Withdraw(orgId, cost, 'stock-upgrade', {
+        actor = actor,
+        ref = ref,
+    })
+    if not paid then
+        local code = treasuryCode(payErr)
+        stockAudit(orgId, actor, cost, code, ref, current)
+        return false, code
+    end
+
+    local affected, updateErr = Db.Update(
+        'UPDATE industry_facility SET stock_level = stock_level + 1 '
+            .. 'WHERE org_id = ? AND stock_level = ? AND stock_level < ?',
+        { orgId, current, maxLevel })
+
+    if updateErr then
+        refundStockUpgrade(orgId, actor, cost, ref)
+        stockAudit(orgId, actor, cost, 'db_error', ref, current)
+        return false, 'db_error'
+    end
+
+    if affected ~= 1 then
+        -- 重读一次只为分类：max_level（别人升满）还是 conflict（别人改了等级）。
+        local after, afterErr = Db.Single(
+            'SELECT stock_level FROM industry_facility WHERE org_id = ? LIMIT 1',
+            { orgId })
+        local code
+        local level = current
+        if afterErr then
+            code = 'db_error'
+        elseif not after then
+            code = 'not_built'
+        else
+            level = math.floor(tonumber(after.stock_level) or 0)
+            if level < 0 then level = 0 end
+            code = level >= maxLevel and 'max_level' or 'conflict'
+        end
+
+        local refunded = refundStockUpgrade(orgId, actor, cost, ref)
+        if not refunded then code = 'db_error' end
+        stockAudit(orgId, actor, cost, code, ref, level)
+        return false, code
+    end
+
+    local newLevel = current + 1
+    local newCap = Facility.StockCapFor(newLevel, facilityType)
+    stockAudit(orgId, actor, cost, 'ok', ref, newLevel)
+    return true, nil, cost, newLevel, newCap
 end

@@ -12,7 +12,8 @@
 --
 -- 本文件没有 net event；对客户端只暴露 QBCore callback（Register 时注册）。
 -- 跨资源入口是 exports：CanAccessIndustry / GetIndustrySnapshot /
--- EstimateIndustrySale / SellIndustryStock / HireIndustryWorkstation。
+-- EstimateIndustrySale / SellIndustryStock / HireIndustryWorkstation
+-- （第三参 kind='stock' 时升级库存上限，不另开导出）。
 
 IndustryUi = {}
 
@@ -212,6 +213,14 @@ function IndustryUi.Snapshot(value, orgId)
     local levelNum = math.floor(tonumber(row.level) or 1)
     local nextCost = Facility.WorkstationCost(facilityType, workstations)
 
+    -- P3（#411）：库存等级落库，上限/下一级价格都由服务端算；前端只渲染。
+    local stockMaxLevel = math.floor(tonumber(facilityConfig.stockLevelMax) or 0)
+    local stockLevel = math.floor(tonumber(row.stock_level) or 0)
+    if stockLevel < 0 then stockLevel = 0 end
+    if stockLevel > stockMaxLevel then stockLevel = stockMaxLevel end
+    local stockCap = Facility.StockCapFor(stockLevel, facilityType)
+    local nextStockUpgradeCost = Facility.StockUpgradeCost(facilityType, stockLevel)
+
     local hireBlocked
     if cycleState.purchasable ~= true then
         hireBlocked = 'phase' -- 衰退期：买不了，但卖得掉
@@ -219,6 +228,13 @@ function IndustryUi.Snapshot(value, orgId)
         hireBlocked = 'cap'
     elseif nextCost == nil or balance < nextCost then
         hireBlocked = 'funds'
+    end
+
+    local stockUpgradeBlocked
+    if nextStockUpgradeCost == nil then
+        stockUpgradeBlocked = 'max_level'
+    elseif balance < nextStockUpgradeCost then
+        stockUpgradeBlocked = 'funds'
     end
 
     snapshot.producedUnits = math.floor(tonumber(row.produced_units) or 0)
@@ -231,7 +247,11 @@ function IndustryUi.Snapshot(value, orgId)
         workstations = workstations,
         workstationCap = workstationCap,
         stock = stock,
-        stockCap = math.floor(tonumber(facilityConfig.stockCap) or 0),
+        stockLevel = stockLevel,
+        stockMaxLevel = stockMaxLevel,
+        stockCap = stockCap,
+        nextStockUpgradeCost = nextStockUpgradeCost,
+        stockUpgradeBlocked = stockUpgradeBlocked,
         nextWorkstationCost = nextCost,
         hireBlocked = hireBlocked,
     }
@@ -360,9 +380,13 @@ function IndustryUi.Sell(value, orgId, qty, untrusted)
     return true, nil, result
 end
 
---- 玩家侧雇工位。金额只走设施模块既有的 Treasury 扣款路径。
----@return boolean ok, string|nil errcode, number|nil cost, number|nil workstations
-function IndustryUi.HireWorkstation(value, orgId)
+--- 玩家侧设施投资入口：默认雇工位；`kind == 'stock'` 时升级库存上限。
+---
+--- 两个动作共用同一个导出，是为了不改 W1 已钉死的导出面（`test_industry_ui.py`
+--- 的接线契约）；Boss 判定仍然只在这里做一次，扣款/写库都委托 facility.lua。
+---@param kind string|nil 'stock' = 库存上限升级，其余 = 雇工位
+---@return boolean ok, string|nil errcode, number|nil cost, number|nil value, number|nil cap
+function IndustryUi.HireWorkstation(value, orgId, kind)
     if not enabled() then return false, 'disabled' end
 
     local Player = resolvePlayer(value)
@@ -373,7 +397,28 @@ function IndustryUi.HireWorkstation(value, orgId)
 
     if not IndustryAccess.IsOrgBoss(Player, resolved) then return false, 'not_boss' end
 
+    if kind == 'stock' then return IndustryUi.UpgradeStock(value, orgId) end
+
     return Facility.AddWorkstation(resolved, {
+        actor = Player.PlayerData.citizenid,
+    })
+end
+
+--- 玩家侧库存上限升级（P3/#411）。Boss 判定只在服务端这一处；
+--- 价格 / 等级 / 上限全部由 facility 模块从配置与 SQL 计算，客户端只带 orgId。
+---@return boolean ok, string|nil errcode, number|nil cost, number|nil stockLevel, number|nil stockCap
+function IndustryUi.UpgradeStock(value, orgId)
+    if not enabled() then return false, 'disabled' end
+
+    local Player = resolvePlayer(value)
+    if not Player then return false, 'not_player' end
+
+    local resolved, orgErr = resolveOrgId(Player, orgId)
+    if not resolved then return false, orgErr end
+
+    if not IndustryAccess.IsOrgBoss(Player, resolved) then return false, 'not_boss' end
+
+    return Facility.UpgradeStock(resolved, {
         actor = Player.PlayerData.citizenid,
     })
 end
@@ -388,6 +433,8 @@ exports('EstimateIndustrySale', IndustryUi.EstimateSale)
 exports('SellIndustryStock', IndustryUi.Sell)
 -- 手机 App 的雇工位入口：与 Boss 菜单回调复用同一个玩家侧函数，
 -- 成员/Boss 判定只在 IndustryUi.HireWorkstation 里执行一次。
+-- `kind='stock'` 走库存上限升级；其余走雇工位。手机 App 的 action 只把 orgId
+-- 交给这里（Boss 复验与扣款都在服务端完成，NUI 隐藏 ≠ 权限）。
 exports('HireIndustryWorkstation', IndustryUi.HireWorkstation)
 
 local function respond(cb, ok, data, errcode)

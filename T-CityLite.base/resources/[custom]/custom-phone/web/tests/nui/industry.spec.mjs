@@ -214,4 +214,113 @@ export const industryScenarios = [
       checkTruthy('DynamicApp 标题是服务端 label', text.includes('产业（旧）'));
     },
   },
+  {
+    surfaces: ['phone'],
+    name: '产业 App：升级库存上限后上限/等级/下一级价格随快照更新',
+    async run({ page, world }) {
+      const before = {
+        ...SNAPSHOT,
+        balance: 1000000,
+        facility: {
+          ...SNAPSHOT.facility,
+          stockLevel: 0,
+          stockMaxLevel: 6,
+          stockCap: 540,
+          nextStockUpgradeCost: 40000,
+          stockUpgradeBlocked: null,
+        },
+      };
+      const after = {
+        ...before,
+        balance: 960000,
+        facility: {
+          ...before.facility,
+          stockLevel: 1,
+          stockCap: 1440,
+          nextStockUpgradeCost: 64000,
+        },
+      };
+      withIndustry(world);
+      // 模拟服务端：收到 upgrade_stock 后，后续 snapshot 返回升级后的状态。
+      // 前端必须靠重新拉快照显示新值，而不是自己 +900 或 +1 级。
+      Object.defineProperty(world, 'industry', {
+        configurable: true,
+        get() {
+          const upgraded = world.calls.some(
+            (call) => call.callback === 'appAction' && call.payload?.action === 'upgrade_stock',
+          );
+          return upgraded ? after : before;
+        },
+      });
+
+      await openIndustry(page, 'phone');
+      const initial = (await page.locator('.industry-app').textContent()) ?? '';
+      checkIncludes('升级前库存上限来自快照', initial, '45 / 540');
+      checkIncludes('升级前库存等级来自快照', initial, 'L0 / 6');
+      checkIncludes('升级前下一级价格来自快照', initial, '$40,000');
+
+      await page.locator('.stock-upgrade-btn').click();
+      await waitFor(
+        () => world.calls.some(
+          (call) => call.callback === 'appAction' && call.payload?.action === 'upgrade_stock',
+        ),
+        5000,
+        '点升级必须发 appAction(upgrade_stock)',
+      );
+      const upgradeCall = world.calls.find(
+        (call) => call.callback === 'appAction' && call.payload?.action === 'upgrade_stock',
+      );
+      checkEqual('upgrade 必须带 app_id', upgradeCall.payload.app_id, 'industry');
+      checkEqual(
+        'upgrade 只带 orgId',
+        Object.keys(upgradeCall.payload.params ?? {}).join(','),
+        'orgId',
+      );
+      checkEqual('upgrade 的 orgId 是自己的组织', upgradeCall.payload.params?.orgId, 'mining_co');
+
+      // 组件在动作成功后自己 load()；等新快照渲染出来。
+      const upgraded = await waitFor(
+        async () => {
+          const text = (await page.locator('.industry-app').textContent()) ?? '';
+          return text.includes('45 / 1440') ? text : false;
+        },
+        5000,
+        '升级后库存上限必须变成 1,440（说明重新拉取了服务端快照）',
+      );
+      checkIncludes('升级后库存等级来自快照', upgraded, 'L1 / 6');
+      checkIncludes('升级后下一级价格来自快照', upgraded, '$64,000');
+      checkIncludes('升级结果要显示在页面上', upgraded, '库存上限已升级');
+    },
+  },
+  {
+    surfaces: ['phone'],
+    name: '产业 App：库存满级时升级按钮禁用并说明原因',
+    async run({ page, world }) {
+      withIndustry(world, {
+        facility: {
+          ...SNAPSHOT.facility,
+          stockLevel: 6,
+          stockMaxLevel: 6,
+          stockCap: 5940,
+          nextStockUpgradeCost: null,
+          stockUpgradeBlocked: 'max_level',
+        },
+      });
+      await openIndustry(page, 'phone');
+
+      const text = (await page.locator('.industry-app').textContent()) ?? '';
+      checkIncludes('满级库存上限来自快照', text, '45 / 5940');
+      checkIncludes('满级时说明原因', text, '库存已满级');
+      checkEqual(
+        '满级时升级按钮必须禁用',
+        await page.locator('.stock-upgrade-btn').isDisabled(),
+        true,
+      );
+      checkEqual(
+        '满级时不该出现「下一级价格」',
+        await page.locator('.industry-app').textContent().then((t) => (t ?? '').includes('下一级价格')),
+        false,
+      );
+    },
+  },
 ];

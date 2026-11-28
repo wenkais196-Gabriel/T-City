@@ -1188,11 +1188,13 @@ CREATE TABLE IF NOT EXISTS `industry_audit` (
 -- v4.1_industry_facility.sql — S2 设施 / 工位 / 库存
 -- v4.2_industry_production.sql — S3 累计产出埋点 produced_units
 -- v4.3_industry_sales.sql — S4 需求配额 / 卖单流水
+-- v4.6_industry_stock_level.sql — P3 库存上限等级（0–6，上限 = 540 + 900 × 等级）
 CREATE TABLE IF NOT EXISTS `industry_facility` (
   `org_id` varchar(64) NOT NULL,
   `facility_type` varchar(48) NOT NULL,
   `level` int(11) NOT NULL DEFAULT 1,
   `workstations` int(11) NOT NULL DEFAULT 0,
+  `stock_level` tinyint(4) NOT NULL DEFAULT 0,
   `recipe_id` varchar(48) DEFAULT NULL,
   `stock` bigint(20) NOT NULL DEFAULT 0,
   `produced_units` bigint(20) NOT NULL DEFAULT 0,

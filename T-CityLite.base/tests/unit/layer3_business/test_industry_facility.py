@@ -15,15 +15,45 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from industry_harness import (
     MIGRATION_FACILITY,
     SCHEMA_FIXTURE,
     run_facility as run,
+    run_ui,
     run_wiring,
 )
 
 MIGRATION = MIGRATION_FACILITY
+MIGRATION_STOCK = Path(__file__).resolve().parents[3] / "migrations" / "v4.6_industry_stock_level.sql"
+
+#: P3（#411）：facility / UI 两套假 DB 都还不认识 `stock_level = stock_level + 1`
+#: 这条 CAS。用例在加载完真实脚本后补上它（探针属于共享文件，不在本片改动范围）。
+STOCK_UPGRADE_DB = """
+local __baseStockUpdate = MySQL.update.await
+MySQL.update = { await = function(sql, values)
+    if sql:find('stock_level = stock_level + 1', 1, true) then
+        if __stockRace and not __stockRaceFired then
+            __stockRaceFired = true
+            local hook = __stockRace
+            __stockRace = nil
+            hook()
+        end
+        local orgId = values[1]
+        local current = tonumber(values[2])
+        local cap = tonumber(values[3])
+        local row = (__facilityRows and __facilityRows[orgId]) or __facilities[orgId]
+        if not row then return { affectedRows = 0 } end
+        local level = tonumber(row.stock_level) or 0
+        if level ~= current then return { affectedRows = 0 } end
+        if cap and level >= cap then return { affectedRows = 0 } end
+        row.stock_level = level + 1
+        return { affectedRows = 1 }
+    end
+    return __baseStockUpdate(sql, values)
+end }
+"""
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -309,4 +339,251 @@ def test_all_server_scripts_register_all_commands_without_global_qbcore():
     )
     assert out["HAS_GLOBAL"] == "false", (
         "用例自己定义了全局 QBCore —— 生产环境缺它的 bug 会被永远掩盖"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
+# P3（#411）库存等级：上限曲线 / 价格曲线 / 升级扣款 / Boss 闸门
+# ══════════════════════════════════════════════════════════════════
+
+
+def test_stock_upgrade_config_cap_and_price_curve():
+    """上限 = 540 + 900 × 等级（0–6）；价格 = floor(40000 × 1.6^等级)。"""
+    out = run("""
+        local mine = Config.Industry.Facilities.mine
+        __emit('BASE_CAP', tostring(mine.stockCap))
+        __emit('STEP', tostring(mine.stockCapPerLevel))
+        __emit('MAX_LEVEL', tostring(mine.stockLevelMax))
+        __emit('BASE_COST', tostring(mine.stockUpgradeBaseCost))
+        __emit('GROWTH', tostring(mine.stockUpgradeGrowth))
+
+        local caps, costs = {}, {}
+        for level = 0, 7 do
+            caps[#caps + 1] = tostring(Facility.StockCapFor(level, 'mine'))
+            costs[#costs + 1] = tostring(Facility.StockUpgradeCost('mine', level) or 'nil')
+        end
+        __emit('CAPS', table.concat(caps, ','))
+        __emit('COSTS', table.concat(costs, ','))
+        __emit('NEGATIVE', tostring(Facility.StockCapFor(-3, 'mine')))
+    """)
+    assert out["BASE_CAP"] == "540", "#387 数值卡：基础上限必须保持 540"
+    assert out["STEP"] == "900", "每级增量必须是 +900"
+    assert out["MAX_LEVEL"] == "6", "库存等级范围必须是 0–6"
+    assert out["BASE_COST"] == "40000"
+    assert out["GROWTH"] == "1.6"
+    assert out["CAPS"] == "540,1440,2340,3240,4140,5040,5940,5940", (
+        f"库存上限曲线不对：{out['CAPS']}"
+    )
+    # 6 级是上限：0→1 … 5→6 共六次可买，6 级再问价格必须是 nil。
+    assert out["COSTS"] == "40000,64000,102400,163840,262144,419430,nil,nil", (
+        f"升级价格曲线不对：{out['COSTS']}"
+    )
+    assert out["NEGATIVE"] == "540", "非法负等级必须夹回 0"
+
+
+def test_upgrade_stock_charges_treasury_and_returns_new_cap():
+    """1→2→3 级：每次只走 Treasury，余额按 40k/64k/102.4k 递减。"""
+    out = run(STOCK_UPGRADE_DB + """
+        __reset()
+        __seed('mining_co', 1000000)
+        __facilitySeed('mining_co', { workstations = 3 })
+        __facilities['mining_co'].stock_level = 0
+
+        local ok1, err1, cost1, level1, cap1 = Facility.UpgradeStock(
+            'mining_co', { actor = 'cid1', ref = 'su1' })
+        local ok2, err2, cost2, level2, cap2 = Facility.UpgradeStock(
+            'mining_co', { actor = 'cid1', ref = 'su2' })
+        local ok3, err3, cost3, level3, cap3 = Facility.UpgradeStock(
+            'mining_co', { actor = 'cid1', ref = 'su3' })
+
+        __emit('OKS', table.concat({ tostring(ok1), tostring(ok2), tostring(ok3) }, ','))
+        __emit('ERRS', table.concat({
+            tostring(err1 or 'nil'), tostring(err2 or 'nil'), tostring(err3 or 'nil'),
+        }, ','))
+        __emit('COSTS', table.concat({ tostring(cost1), tostring(cost2), tostring(cost3) }, ','))
+        __emit('LEVELS', table.concat({ tostring(level1), tostring(level2), tostring(level3) }, ','))
+        __emit('CAPS', table.concat({ tostring(cap1), tostring(cap2), tostring(cap3) }, ','))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('STOCK_LEVEL', tostring(__facility('mining_co').stock_level))
+        __emit('LEDGER', tostring(__ledgerCount()))
+        local deltas = {}
+        for _, row in ipairs(__ledger) do deltas[#deltas + 1] = tostring(row.delta) end
+        __emit('DELTAS', table.concat(deltas, ','))
+        local payload = __lastAuditPayload('facility.stock_upgrade') or ''
+        __emit('AUDIT', (payload:match('"result":"([^"]+)"') or '?') .. ':'
+            .. (payload:match('"stock_level":(%d+)') or '?'))
+    """)
+    assert out["OKS"] == "true,true,true", f"三级升级应全部成功：{out}"
+    assert out["ERRS"] == "nil,nil,nil"
+    assert out["COSTS"] == "40000,64000,102400", f"价格曲线不对：{out['COSTS']}"
+    assert out["LEVELS"] == "1,2,3"
+    assert out["CAPS"] == "1440,2340,3240", f"升级后的上限不对：{out['CAPS']}"
+    assert out["BAL"] == "793600", f"金库扣款合计不对：{out['BAL']}"
+    assert out["STOCK_LEVEL"] == "3"
+    assert out["LEDGER"] == "3", f"每次升级都应有 Treasury 流水：{out}"
+    assert out["DELTAS"] == "-40000,-64000,-102400"
+    assert out["AUDIT"] == "ok:3", f"审计缺结果或等级：{out['AUDIT']}"
+
+
+def test_upgrade_stock_insufficient_funds_leaves_everything_untouched():
+    out = run(STOCK_UPGRADE_DB + """
+        __reset()
+        __seed('mining_co', 63999)
+        __facilitySeed('mining_co', { workstations = 3 })
+        __facilities['mining_co'].stock_level = 1
+
+        local ok, err = Facility.UpgradeStock('mining_co', { actor = 'cid1', ref = 'su1' })
+
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEVEL', tostring(__facility('mining_co').stock_level))
+        __emit('LEDGER', tostring(__ledgerCount()))
+    """)
+    assert out["OK"] == "false" and out["ERR"] == "insufficient_funds", (
+        f"余额 63,999 < 64,000 时必须拒绝：{out}"
+    )
+    assert out["BAL"] == "63999", "被拒的升级动了金库"
+    assert out["LEVEL"] == "1" and out["LEDGER"] == "0"
+
+
+def test_upgrade_stock_rejects_at_max_level_without_charging():
+    out = run(STOCK_UPGRADE_DB + """
+        __reset()
+        __seed('mining_co', 1000000)
+        __facilitySeed('mining_co', { workstations = 3 })
+        __facilities['mining_co'].stock_level = 6
+
+        local ok, err = Facility.UpgradeStock('mining_co', { actor = 'cid1', ref = 'su1' })
+
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEVEL', tostring(__facility('mining_co').stock_level))
+        __emit('LEDGER', tostring(__ledgerCount()))
+        __emit('NEXT', tostring(Facility.StockUpgradeCost('mine', 6) or 'nil'))
+        __emit('CAP', tostring(Facility.StockCapFor(6, 'mine')))
+    """)
+    assert out["OK"] == "false" and out["ERR"] == "max_level", (
+        f"满级必须拒绝：{out}"
+    )
+    assert out["BAL"] == "1000000" and out["LEVEL"] == "6" and out["LEDGER"] == "0"
+    assert out["NEXT"] == "nil", "满级后快照不能给出下一级价格"
+    assert out["CAP"] == "5940", "满级上限必须是 540 + 900 × 6"
+
+
+def test_upgrade_stock_cas_conflict_refunds_the_payment():
+    """预读 0 级后别人先升到 1 级：CAS 失败 → conflict，钱原路退回。"""
+    out = run(STOCK_UPGRADE_DB + """
+        __reset()
+        __seed('mining_co', 1000000)
+        __facilitySeed('mining_co', { workstations = 3 })
+        __facilities['mining_co'].stock_level = 0
+        __stockRace = function()
+            __facilities['mining_co'].stock_level = 1
+        end
+
+        local ok, err = Facility.UpgradeStock('mining_co', { actor = 'cid1', ref = 'su1' })
+        local deltas = {}
+        for _, row in ipairs(__ledger) do deltas[#deltas + 1] = tostring(row.delta) end
+
+        __emit('OK', tostring(ok))
+        __emit('ERR', tostring(err or 'nil'))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEVEL', tostring(__facility('mining_co').stock_level))
+        __emit('LEDGER', tostring(__ledgerCount()))
+        __emit('DELTAS', table.concat(deltas, ','))
+    """)
+    assert out["OK"] == "false" and out["ERR"] == "conflict", (
+        f"CAS 冲突必须报 conflict：{out}"
+    )
+    assert out["BAL"] == "1000000", "冲突后扣款没有退回"
+    assert out["LEVEL"] == "1", "冲突后不能覆盖别人写入的等级"
+    assert out["LEDGER"] == "2" and out["DELTAS"] == "-40000,40000", (
+        f"退款流水不对：{out['DELTAS']}"
+    )
+
+
+def test_snapshot_exposes_stock_level_and_next_upgrade_cost():
+    out = run_ui("""
+        __reset()
+        __seedOrg('mining_co', 1000000)
+        __seedFacilityRow('mining_co', 42, { workstations = 3, level = 1, produced_units = 7 })
+        __facilityRows['mining_co'].stock_level = 1
+        __seedDemand('iron_ore', 10, 0)
+
+        local snap = IndustryUi.Snapshot(boss(), 'mining_co')
+        __emit('L1_LEVEL', tostring(snap and snap.facility and snap.facility.stockLevel))
+        __emit('L1_MAX', tostring(snap and snap.facility and snap.facility.stockMaxLevel))
+        __emit('L1_CAP', tostring(snap and snap.facility and snap.facility.stockCap))
+        __emit('L1_NEXT', tostring(snap and snap.facility and snap.facility.nextStockUpgradeCost))
+        __emit('L1_BLOCK', tostring(snap and snap.facility and snap.facility.stockUpgradeBlocked))
+
+        __facilityRows['mining_co'].stock_level = 6
+        local maxed = IndustryUi.Snapshot(boss(), 'mining_co')
+        __emit('MAX_LEVEL', tostring(maxed and maxed.facility and maxed.facility.stockLevel))
+        __emit('MAX_CAP', tostring(maxed and maxed.facility and maxed.facility.stockCap))
+        __emit('MAX_NEXT', tostring(maxed and maxed.facility and maxed.facility.nextStockUpgradeCost))
+        __emit('MAX_BLOCK', tostring(maxed and maxed.facility and maxed.facility.stockUpgradeBlocked))
+    """)
+    assert out["L1_LEVEL"] == "1" and out["L1_MAX"] == "6", f"快照缺库存等级：{out}"
+    assert out["L1_CAP"] == "1440", f"快照的 stockCap 没按等级算：{out}"
+    assert out["L1_NEXT"] == "64000", f"下一级价格不对：{out}"
+    assert out["L1_BLOCK"] == "nil"
+    assert out["MAX_LEVEL"] == "6" and out["MAX_CAP"] == "5940"
+    assert out["MAX_NEXT"] == "nil", "满级快照必须给 nil（手机端据此禁用）"
+    assert out["MAX_BLOCK"] == "max_level"
+
+
+def test_upgrade_stock_is_boss_only_and_non_boss_is_not_charged():
+    """服务端判 Boss：成员 / 外部玩家都拿不到升级，金库分文不动。"""
+    out = run_ui(STOCK_UPGRADE_DB + """
+        __reset()
+        __seedOrg('mining_co', 1000000)
+        __seedFacilityRow('mining_co', 0, { workstations = 3 })
+        __facilityRows['mining_co'].stock_level = 0
+
+        local ok, err = IndustryUi.UpgradeStock(member(), 'mining_co')
+        __emit('MEMBER_OK', tostring(ok))
+        __emit('MEMBER_ERR', tostring(err or 'nil'))
+        __emit('BAL_AFTER_MEMBER', tostring(__balance('mining_co')))
+        __emit('LEVEL_AFTER_MEMBER', tostring(__facilityRows['mining_co'].stock_level))
+        __emit('LEDGER_AFTER_MEMBER', tostring(#__ledger))
+
+        local _, outsiderErr = IndustryUi.UpgradeStock(outsider(), 'mining_co')
+        __emit('OUTSIDER_ERR', tostring(outsiderErr or 'nil'))
+
+        local bossOk, bossErr, cost, level, cap = IndustryUi.UpgradeStock(boss(), 'mining_co')
+        __emit('BOSS_OK', tostring(bossOk))
+        __emit('BOSS_ERR', tostring(bossErr or 'nil'))
+        __emit('BOSS_COST', tostring(cost))
+        __emit('BOSS_LEVEL', tostring(level))
+        __emit('BOSS_CAP', tostring(cap))
+        __emit('BOSS_BAL', tostring(__balance('mining_co')))
+    """)
+    assert out["MEMBER_OK"] == "false" and out["MEMBER_ERR"] == "not_boss", (
+        f"普通成员调用升级必须被服务端拒：{out}"
+    )
+    assert out["BAL_AFTER_MEMBER"] == "1000000", "非 Boss 被拒后仍扣了钱"
+    assert out["LEVEL_AFTER_MEMBER"] == "0" and out["LEDGER_AFTER_MEMBER"] == "0"
+    assert out["OUTSIDER_ERR"] == "not_member"
+    assert out["BOSS_OK"] == "true" and out["BOSS_ERR"] == "nil", f"Boss 升级失败：{out}"
+    assert out["BOSS_COST"] == "40000" and out["BOSS_LEVEL"] == "1" and out["BOSS_CAP"] == "1440"
+    assert out["BOSS_BAL"] == "960000"
+
+
+def test_stock_level_migration_is_idempotent_and_reflected_in_fixture():
+    text = MIGRATION_STOCK.read_text(encoding="utf-8")
+    assert "stock_level" in text and re.search(r"TINYINT", text, re.I), (
+        "v4.6 迁移必须加 stock_level TINYINT"
+    )
+    assert "information_schema.COLUMNS" in text, "必须用 information_schema 判存在"
+    assert "PREPARE" in text and "DEALLOCATE PREPARE" in text, (
+        "必须沿用 v4.3 的 PREPARE/EXECUTE 幂等形状"
+    )
+    assert re.search(r"DEFAULT\s+0", text, re.I), "stock_level 默认值必须是 0"
+
+    fixture = SCHEMA_FIXTURE.read_text(encoding="utf-8")
+    assert re.search(r"`stock_level`\s+tinyint", fixture, re.I), (
+        "tests/fixtures/tcity_schema.sql 必须反映 v4.6 的新列"
     )

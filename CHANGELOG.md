@@ -33,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `T-CityLite.base/migrations/v4.5_industry_quarter.sql` 在活库连跑两遍幂等。
   测试钉住「13 周 52 季 → quarter_no +1 / 季节滚动设施逐值不变 / 季度才清空并发
   起跑金 / 重启不跳季不重复结算」，反向注入「季节到期就重置设施」会让断言变红。
+- **产业库存上限可升级：+900/级、价格 40k × 1.6^等级（`custom-industry` + 手机，#411）**：
+  `industry_facility` 增加 `stock_level`（0–6），上限 = 540 + 900 × 等级（满级 5,940），
+  价格 = `floor(40,000 × 1.6^level)`（0→1 $40,000、1→2 $64,000、2→3 $102,400）。
+  生产截断改读 `Facility.StockCapFor(stock_level)`，不再读常量 540；升级入口
+  `Facility.UpgradeStock` 用「Treasury 扣款 → `stock_level = stock_level + 1` 的
+  CAS UPDATE」保证钱与等级成对，失败/并发冲突原路退回。手机产业页显示
+  `库存 x / 上限 y`、库存等级、下一级价格，满级禁用；动作只带 orgId，Boss 复验
+  在服务端（复用 `HireIndustryWorkstation` 导出，第三参 `kind='stock'`，不扩导出面，
+  无新增 net event）。`T-CityLite.base/migrations/v4.6_industry_stock_level.sql`
+  在活库连跑两遍幂等（information_schema + PREPARE）。测试钉住上限曲线、三级价格、
+  余额不足不扣款、满级拒绝、非 Boss 拒绝、CAS 冲突退款与生产截断，反向注入
+  「生产改回常量 540」/「删掉 Boss 校验」都会让对应用例变红。
 
 ### Fixed
 - **产业配额被按「全周期累计」计算，跨阶段卖单一律 `org_cap_reached`（`custom-industry`，#408）**：
