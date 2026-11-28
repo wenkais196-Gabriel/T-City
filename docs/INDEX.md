@@ -2,9 +2,9 @@
 
 > 由 `python tools/docs_lifecycle.py --index` 生成。规范：[`standards/doc-lifecycle.md`](standards/doc-lifecycle.md)。
 
-**文档总数**：346 ｜ **已登记**：346 ｜ **未登记**：0
+**文档总数**：348 ｜ **已登记**：348 ｜ **未登记**：0
 
-**状态分布**：✅ active 193 ・ 🟡 draft 22 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
+**状态分布**：✅ active 194 ・ 🟡 draft 23 ・ 🔍 review 0 ・ 📌 final 77 ・ ♻️ superseded 3 ・ 📦 archived 51
 
 ## 按系统
 
@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|---|
 | [角色与出生 · UX 设计](client/ux/modules/identity.md) | manual | ✅ active | 2026-11-11 | 2027-02-28 |  | `docs/client/ux/modules/identity.md` |
 
-### economy（18）
+### economy（20）
 
 | 文档 | 类型 | 状态 | 更新 | 复审 | SoT | 路径 |
 |---|---|---|---|---|---|---|
@@ -31,6 +31,8 @@
 | [计划：W2 — 周期公告推送（警告 + 结果，#389）](plan/industry-ops/09-plan.md) | plan | ✅ active | 2026-11-27 | 2027-03-31 |  | `docs/plan/industry-ops/09-plan.md` |
 | [计划：产业两时钟（四季 × 季度结算）与参数定值](plan/industry-ops/10-plan.md) | plan | ✅ active | 2026-11-28 | 2027-03-31 |  | `docs/plan/industry-ops/10-plan.md` |
 | [计划：产业两时钟落地施工（P0–P4）](plan/industry-ops/11-plan.md) | plan | ✅ active | 2026-11-28 | 2027-03-31 |  | `docs/plan/industry-ops/11-plan.md` |
+| [计划：产业线下一轮优化（Hermes 方案 × CC 调研 合并）](plan/industry-ops/13-plan.md) | plan | ✅ active | 2026-11-28 | 2027-03-31 |  | `docs/plan/industry-ops/13-plan.md` |
+| [产业线 MVP 之后的优化调研](research/industry-optimization.md) | research | 🟡 draft | 2026-11-28 | 2027-02-28 |  | `docs/research/industry-optimization.md` |
 | [Kittens Game 循环拆解 → T-City 产业周期映射（调研 + demo 规格）](research/kittens-game-loop.md) | research | 🟡 draft | 2026-11-28 | 2027-02-28 |  | `docs/research/kittens-game-loop.md` |
 | [🏙️ T-City 宏观经济模拟层 — 施工蓝图](../T-CityLite.base/docs/architecture/economic-simulation-blueprint.md) | spec | ✅ active | 2026-10-25 | 2027-04-30 |  | `T-CityLite.base/docs/architecture/economic-simulation-blueprint.md` |
 | [v0.3 基础设施层](archive/QBCore_Lite_versions/v0.3-economy.md) | spec | 📦 archived | 2026-10-23 | 2027-04-30 |  | `docs/archive/QBCore_Lite_versions/v0.3-economy.md` |
