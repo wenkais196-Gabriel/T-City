@@ -400,3 +400,408 @@ def test_compressed_cycle_completes_four_phases_in_four_minutes():
     assert out["FINAL_CYCLE"] == "2"
     assert out["SETTLED"] == "1"
     assert out["RESULTS"] == "0", "无组织时应只推进、不写结果"
+
+
+# ══════════════════════════════════════════════════════════════════
+# P1 两时钟（#409）：周 = 四季，13 周 = 季度
+# ══════════════════════════════════════════════════════════════════
+#
+# 探针文件 `fixtures/industry_cycle_probe.lua` 不在本片可改范围，所以两时钟
+# 需要的「industry_state 多列 + 按季滚动 SQL」在测试体内补一层假 DB 扩展。
+# 扩展只认本片真实写出来的 SQL 形状；形状对不上返回 affectedRows = 0（不兜底）。
+
+TWO_CLOCK_HARNESS = r"""
+local __tcBaseUpdate = MySQL.update.await
+local __tcBaseSingle = MySQL.single.await
+
+local function __tcIsStateUpdate(sql)
+    return sql:find('UPDATE industry_state', 1, true) ~= nil
+        and sql:find('season_no', 1, true) ~= nil
+end
+
+--- 两时钟状态的种子：字段名与真实表列一一对应（season 存 varchar 季名）。
+function __seedTwoClock(values)
+    values = values or {}
+    local phases = {
+        spring = 'expansion', summer = 'competition',
+        autumn = 'maturity', winter = 'recession',
+    }
+    __state = {
+        cycle_no = tonumber(values.cycle_no) or 1,
+        phase = values.phase or phases[values.season or 'spring'] or 'expansion',
+        started_epoch = tonumber(values.season_started_epoch) or 0,
+        ends_epoch = tonumber(values.season_ends_epoch) or 0,
+        warning_epoch = values.warning_epoch,
+        settled_cycle_no = tonumber(values.settled_cycle_no) or 0,
+        result_announced_cycle = tonumber(values.result_announced_cycle) or 0,
+        quarter_no = tonumber(values.quarter_no) or 1,
+        season = values.season or 'spring',
+        season_no = tonumber(values.season_no) or 1,
+        season_started_epoch = tonumber(values.season_started_epoch) or 0,
+        season_ends_epoch = tonumber(values.season_ends_epoch) or 0,
+        quarter_started_epoch = tonumber(values.quarter_started_epoch) or 0,
+        quarter_ends_epoch = tonumber(values.quarter_ends_epoch) or 0,
+    }
+end
+
+MySQL.single.await = function(sql, values)
+    if __state and __state.season and sql:find('FROM industry_state', 1, true) then
+        if sql:find('SELECT settled_cycle_no', 1, true) then
+            return { settled_cycle_no = __state.settled_cycle_no }
+        end
+        if sql:find('SELECT result_announced_cycle', 1, true) then
+            return { result_announced_cycle = __state.result_announced_cycle }
+        end
+        return {
+            id = 1,
+            cycle_no = __state.cycle_no,
+            phase = __state.phase,
+            started_epoch = __state.season_started_epoch,
+            ends_epoch = __state.season_ends_epoch,
+            warning_done = __state.warning_epoch ~= nil and 1 or 0,
+            warning_epoch = __state.warning_epoch,
+            settled_cycle_no = __state.settled_cycle_no,
+            result_announced_cycle = __state.result_announced_cycle,
+            quarter_no = __state.quarter_no,
+            season = __state.season,
+            season_no = __state.season_no,
+            season_started_epoch = __state.season_started_epoch,
+            season_ends_epoch = __state.season_ends_epoch,
+            quarter_started_epoch = __state.quarter_started_epoch,
+            quarter_ends_epoch = __state.quarter_ends_epoch,
+        }
+    end
+    return __tcBaseSingle(sql, values)
+end
+
+MySQL.update.await = function(sql, values)
+    if __tcIsStateUpdate(sql) then
+        local row = __state
+        if not row then return { affectedRows = 0 } end
+
+        -- Initialize 的迁移接线（旧单时钟 → 两时钟），只允许写一次。
+        if sql:find('season_started_at IS NULL', 1, true) then
+            if row.season_started_epoch ~= nil then return { affectedRows = 0 } end
+            row.phase = values[1]
+            row.quarter_no = tonumber(values[2]) or 1
+            row.season = values[3]
+            row.season_no = tonumber(values[4]) or 1
+            row.season_started_epoch = tonumber(values[5])
+            row.season_ends_epoch = tonumber(values[6])
+            row.quarter_started_epoch = tonumber(values[7])
+            row.quarter_ends_epoch = tonumber(values[8])
+            row.started_epoch = row.season_started_epoch
+            row.ends_epoch = row.season_ends_epoch
+            row.warning_epoch = nil
+            row.settled_cycle_no = 0
+            row.result_announced_cycle = 0
+            return { affectedRows = 1 }
+        end
+
+        -- SetPhase 的两时钟覆盖：无到期闸门，只要求 season 已初始化。
+        if sql:find('AND season_started_at IS NOT NULL', 1, true) then
+            row.cycle_no = tonumber(values[1])
+            row.phase = values[2]
+            row.started_epoch = tonumber(values[3])
+            row.ends_epoch = tonumber(values[4])
+            row.quarter_no = tonumber(values[5])
+            row.season = values[6]
+            row.season_no = tonumber(values[7])
+            row.season_started_epoch = tonumber(values[8])
+            row.season_ends_epoch = tonumber(values[9])
+            row.quarter_started_epoch = tonumber(values[10])
+            row.quarter_ends_epoch = tonumber(values[11])
+            return { affectedRows = 1 }
+        end
+
+        -- RollSeason：四道闸（cycle / phase / season_no / 到期时间）+ 可选结算水位。
+        if sql:find('SET cycle_no = ?', 1, true) then
+            if row.cycle_no ~= tonumber(values[12]) then return { affectedRows = 0 } end
+            if row.phase ~= values[13] then return { affectedRows = 0 } end
+            if row.season_no ~= tonumber(values[14]) then return { affectedRows = 0 } end
+            if row.season_ends_epoch > tonumber(values[15]) then
+                return { affectedRows = 0 }
+            end
+            if sql:find('settled_cycle_no >= ?', 1, true)
+                and row.settled_cycle_no < tonumber(values[16]) then
+                return { affectedRows = 0 }
+            end
+            row.cycle_no = tonumber(values[1])
+            row.phase = values[2]
+            row.started_epoch = tonumber(values[3])
+            row.ends_epoch = tonumber(values[4])
+            row.quarter_no = tonumber(values[5])
+            row.season = values[6]
+            row.season_no = tonumber(values[7])
+            row.season_started_epoch = tonumber(values[8])
+            row.season_ends_epoch = tonumber(values[9])
+            row.quarter_started_epoch = tonumber(values[10])
+            row.quarter_ends_epoch = tonumber(values[11])
+            if sql:find('warning_announced_at = NULL', 1, true) then
+                row.warning_epoch = nil
+            end
+            return { affectedRows = 1 }
+        end
+        return { affectedRows = 0 }
+    end
+    return __tcBaseUpdate(sql, values)
+end
+"""
+
+
+def test_thirteen_weeks_make_one_quarter_and_reset_to_spring():
+    """13 周 = 52 个季节：season_no 1→4 轮 13 次后 quarter_no +1、season 归 spring。"""
+    out = run(TWO_CLOCK_HARNESS + """
+        __reset()
+        __seedTwoClock({
+            cycle_no = 1, quarter_no = 1, season = 'spring', season_no = 1,
+            season_started_epoch = 0, season_ends_epoch = 1,
+            quarter_started_epoch = 0, quarter_ends_epoch = 52,
+        })
+
+        local seasons, seasonNos, weeks = {}, {}, {}
+        for tick = 1, 52 do
+            local ok, err = IndustryCycle.Tick(tick)
+            if not ok then
+                __emit('FAILED_AT', tostring(tick) .. ':' .. tostring(err))
+                break
+            end
+            local state = __stateRow()
+            seasons[#seasons + 1] = state.season
+            seasonNos[#seasonNos + 1] = tostring(state.season_no)
+            if state.season_no == 4 then weeks[#weeks + 1] = tostring(state.cycle_no) end
+        end
+
+        local state = __stateRow()
+        __emit('SEASON_SEQ', table.concat(seasons, ','))
+        __emit('SEASON_NO_SEQ', table.concat(seasonNos, ','))
+        __emit('WINTER_WEEKS', table.concat(weeks, ','))
+        __emit('QUARTER', tostring(state.quarter_no))
+        __emit('SEASON', state.season)
+        __emit('SEASON_NO', tostring(state.season_no))
+        __emit('CYCLE', tostring(state.cycle_no))
+        __emit('SETTLED', tostring(state.settled_cycle_no))
+        __emit('QUARTER_START', tostring(state.quarter_started_epoch))
+        __emit('QUARTER_END', tostring(state.quarter_ends_epoch))
+        __emit('QUARTER_SECONDS', tostring(IndustryCycle.QuarterSeconds(1, 1)))
+    """, convars={"industry_season_seconds": "1"})
+
+    # 每 tick 记录的是**滚动之后**的状态：第一次 tick 已从 spring 滚到 summer。
+    expected_seasons = ",".join(["summer", "autumn", "winter", "spring"] * 13)
+    expected_numbers = ",".join(["2", "3", "4", "1"] * 13)
+    assert out["SEASON_SEQ"] == expected_seasons, (
+        f"13 周必须走完 13 个四季循环，实际：{out['SEASON_SEQ']}"
+    )
+    assert out["SEASON_NO_SEQ"] == expected_numbers, (
+        f"season_no 必须 1→4 反复，实际：{out['SEASON_NO_SEQ']}"
+    )
+    assert out["WINTER_WEEKS"] == ",".join(str(week) for week in range(1, 14)), (
+        f"每个冬天的周号应是 1..13：{out['WINTER_WEEKS']}"
+    )
+    assert out["QUARTER"] == "2", "13 周结束后 quarter_no 必须 +1"
+    assert out["SEASON"] == "spring", "新季度必须从 spring 开始"
+    assert out["SEASON_NO"] == "1"
+    assert out["CYCLE"] == "14", "周号跨季度继续递增（第 14 周 = 季度 2 第 1 周）"
+    assert out["SETTLED"] == "1", "跨季度前必须完成第 1 季度结算"
+    assert out["QUARTER_START"] == "52", "新季度从旧季度边界开始（补推不重算）"
+    assert out["QUARTER_END"] == "104", "季度长度 = 13 周 × 4 季（压缩后 52 秒）"
+    assert out["QUARTER_SECONDS"] == "52"
+    print({
+        "WINTER_WEEKS": out["WINTER_WEEKS"],
+        "QUARTER": out["QUARTER"],
+        "SEASON": out["SEASON"],
+        "SEASON_NO": out["SEASON_NO"],
+        "CYCLE": out["CYCLE"],
+        "SETTLED": out["SETTLED"],
+        "QUARTER_START": out["QUARTER_START"],
+        "QUARTER_END": out["QUARTER_END"],
+    })
+
+
+def test_season_rotation_is_deterministic_and_matches_the_seven_allocations():
+    """7 组天数确定性轮转：第 n 周取 ROTATION[(n-1) % 7]，第 8 周回到第 1 组。"""
+    out = run("""
+        local function row(week)
+            return table.concat({
+                IndustryCycle.SeasonSeconds(week, 1),
+                IndustryCycle.SeasonSeconds(week, 2),
+                IndustryCycle.SeasonSeconds(week, 3),
+                IndustryCycle.SeasonSeconds(week, 4),
+            }, ',')
+        end
+        local rows = {}
+        for week = 1, 8 do rows[#rows + 1] = row(week) end
+        __emit('ROWS', table.concat(rows, '|'))
+        __emit('ORDER', table.concat(IndustryCycle.SeasonOrder(), ','))
+        local winter = IndustryCycle.SeasonMultipliers('winter')
+        __emit('WINTER', ('%.2f,%.2f,%.2f'):format(
+            winter.prod, winter.quota, winter.price))
+    """, convars={"industry_cycle_scale": "86400"})
+
+    assert out["ROWS"] == (
+        "2,3,1,1|1,1,3,2|2,2,2,1|1,2,2,2|3,1,1,2|1,3,1,2|2,1,2,2|2,3,1,1"
+    ), f"季节天数轮转不对：{out['ROWS']}"
+    assert out["ORDER"] == "spring,summer,autumn,winter"
+    assert out["WINTER"] == "0.25,1.30,1.50", (
+        f"冬天（黑五）倍率必须读配置 0.25/1.30/1.50：{out['WINTER']}"
+    )
+
+
+def test_season_roll_keeps_facility_workstations_stock_and_treasury():
+    """季节滚动只清本季配额；设施 / 工位 / 库存 / 库存等级 / 金库必须逐值不变。"""
+    out = run(TWO_CLOCK_HARNESS + """
+        __reset()
+        __seedTwoClock({
+            cycle_no = 5, quarter_no = 1, season = 'summer', season_no = 2,
+            season_started_epoch = 100, season_ends_epoch = 200,
+            quarter_started_epoch = 0, quarter_ends_epoch = 10000,
+        })
+        __seedTreasury('mining_co', 777, 3)
+        __seedFacility('mining_co', {
+            stock = 42, workstations = 4, level = 2,
+            produced_units = 99, last_tick_epoch = 0,
+        })
+        -- 库存等级是 P3 才落库的字段；探针行构造器不认，但“季节滚动不动它”必须钉住。
+        __facilities['mining_co'].stock_level = 5
+
+        local facility = __facility('mining_co')
+        local stockBefore, wsBefore = facility.stock, facility.workstations
+        local levelBefore, stockLevelBefore = facility.level, facility.stock_level
+        local producedBefore = facility.produced_units
+        local balanceBefore = __treasury('mining_co').balance
+        local prestigeBefore = __treasury('mining_co').prestige
+
+        local ok, err, info = IndustryCycle.Tick(200)
+
+        local after = __facility('mining_co')
+        __emit('OK', tostring(ok) .. ':' .. tostring(err or 'nil'))
+        __emit('FROM', tostring(info and info.from))
+        __emit('TO', tostring(info and info.to))
+        __emit('STOCK', tostring(stockBefore) .. ':' .. tostring(after and after.stock))
+        __emit('WS', tostring(wsBefore) .. ':' .. tostring(after and after.workstations))
+        __emit('LEVEL', tostring(levelBefore) .. ':' .. tostring(after and after.level))
+        __emit('STOCK_LEVEL', tostring(stockLevelBefore) .. ':'
+            .. tostring(after and after.stock_level))
+        __emit('PRODUCED', tostring(producedBefore) .. ':'
+            .. tostring(after and after.produced_units))
+        __emit('BALANCE', tostring(balanceBefore) .. ':'
+            .. tostring(__treasury('mining_co').balance))
+        __emit('PRESTIGE', tostring(prestigeBefore) .. ':'
+            .. tostring(__treasury('mining_co').prestige))
+        __emit('FACILITY_ROWS', tostring(__facilityCount()))
+        __emit('SEASON', __stateRow().season)
+        local current = IndustryCycle.Current()
+        -- sale.lua 写 industry_sales.season 时读的就是这个数字；不能再恒 0。
+        __emit('SALE_SEASON', tostring(current and current.season))
+        __emit('SEASON_NAME', tostring(current and current.season_name))
+    """, convars={"industry_season_seconds": "1"})
+
+    assert out["OK"] == "true:nil", f"季节滚动失败：{out}"
+    assert out["FROM"] == "summer" and out["TO"] == "autumn"
+    assert out["STOCK"] == "42:42", f"季节滚动改了库存：{out['STOCK']}"
+    assert out["WS"] == "4:4", f"季节滚动改了工位：{out['WS']}"
+    assert out["LEVEL"] == "2:2", f"季节滚动改了设施等级：{out['LEVEL']}"
+    assert out["STOCK_LEVEL"] == "5:5", f"季节滚动改了库存等级：{out['STOCK_LEVEL']}"
+    assert out["PRODUCED"] == "99:99", f"季节滚动改了累计产量：{out['PRODUCED']}"
+    assert out["BALANCE"] == "777:777", f"季节滚动动了金库：{out['BALANCE']}"
+    assert out["PRESTIGE"] == "3:3", f"季节滚动动了威望：{out['PRESTIGE']}"
+    assert out["FACILITY_ROWS"] == "1", "季节滚动删了设施行"
+    assert out["SEASON"] == "autumn"
+    assert out["SALE_SEASON"] == "3", "industry_sales.season 仍是 0（销售维度没接线）"
+    assert out["SEASON_NAME"] == "autumn"
+    print({key: out[key] for key in (
+        "STOCK", "WS", "LEVEL", "STOCK_LEVEL", "PRODUCED", "BALANCE",
+        "PRESTIGE", "FACILITY_ROWS", "SEASON", "SALE_SEASON")})
+
+
+def test_restart_resumes_season_clock_without_skipping_or_recalibrating():
+    """重启续跑：已过季节边界但未滚动时，一次 Tick 只滚一格，边界从 DB 续算。"""
+    out = run(TWO_CLOCK_HARNESS + """
+        __reset()
+        __seedTwoClock({
+            cycle_no = 3, quarter_no = 1, season = 'spring', season_no = 1,
+            season_started_epoch = 900, season_ends_epoch = 1000,
+            quarter_started_epoch = 0, quarter_ends_epoch = 5000,
+        })
+
+        -- 模拟 restart custom-industry：Initialize 只能接时钟，不能重算边界。
+        local started = IndustryCycle.Start()
+        local seeded = __stateRow()
+        __emit('INIT', tostring(started))
+        __emit('INIT_UNCHANGED', tostring(seeded.season_ends_epoch == 1000
+            and seeded.season_started_epoch == 900))
+
+        local ok1, err1, info1 = IndustryCycle.Tick(1500)
+        local first = __stateRow()
+        __emit('ROLL1', tostring(ok1) .. ':' .. tostring(err1 or 'nil')
+            .. ':' .. tostring(info1 and info1.to or 'none'))
+        __emit('S1_SEASON_NO', tostring(first.season_no))
+        __emit('S1_CYCLE', tostring(first.cycle_no))
+        __emit('S1_START', tostring(first.season_started_epoch))
+        __emit('S1_END', tostring(first.season_ends_epoch))
+
+        local ok2, err2, info2 = IndustryCycle.Tick(1500)
+        local second = __stateRow()
+        __emit('ROLL2', tostring(ok2) .. ':' .. tostring(err2 or 'nil')
+            .. ':' .. tostring(info2 and info2.to or 'none'))
+        __emit('S2_SEASON_NO', tostring(second.season_no))
+        __emit('S2_START', tostring(second.season_started_epoch))
+        __emit('S2_END', tostring(second.season_ends_epoch))
+    """, convars={"industry_season_seconds": "1"})
+
+    assert out["INIT"] == TRUE, "Initialize 失败"
+    assert out["INIT_UNCHANGED"] == TRUE, "重启把已运行季节的边界重算了"
+    assert out["ROLL1"] == "true:nil:summer", f"第一次 Tick 没有只滚一格：{out}"
+    assert out["S1_SEASON_NO"] == "2"
+    assert out["S1_CYCLE"] == "3", "周内换季不得改周号"
+    assert out["S1_START"] == "1000", "新季节必须从旧季节的计划结束时间开始（补推）"
+    assert out["S1_END"] == "1001", "新季节长度必须按配置算，不按 now 重算"
+    assert out["ROLL2"] == "true:nil:autumn", "第二次 Tick 没有继续补推下一格"
+    assert out["S2_SEASON_NO"] == "3"
+    assert out["S2_START"] == "1001"
+    assert out["S2_END"] == "1002"
+    print({key: out[key] for key in (
+        "INIT", "INIT_UNCHANGED", "ROLL1", "S1_SEASON_NO", "S1_CYCLE",
+        "S1_START", "S1_END", "ROLL2", "S2_SEASON_NO", "S2_START", "S2_END")})
+
+
+def test_initialize_upgrades_single_clock_state_to_two_clocks_once():
+    """迁移后首次启动：旧 phase 接上 season，已有 phase 边界原样保留。"""
+    out = run(TWO_CLOCK_HARNESS + """
+        __reset()
+        __seedState({
+            cycle_no = 3, phase = 'maturity', started_epoch = 4000, ends_epoch = 5000,
+            settled_cycle_no = 2, result_announced_cycle = 1,
+        })
+
+        local ok, err = IndustryCycle.Initialize(4500)
+        local state = __stateRow()
+        __emit('OK', tostring(ok) .. ':' .. tostring(err or 'nil'))
+        __emit('SEASON', state.season)
+        __emit('SEASON_NO', tostring(state.season_no))
+        __emit('STARTED', tostring(state.season_started_epoch))
+        __emit('ENDS', tostring(state.season_ends_epoch))
+        __emit('QUARTER', tostring(state.quarter_no))
+        __emit('QUARTER_END', tostring(state.quarter_ends_epoch))
+        -- 旧 cycle 水位不能带进新季度：否则 quarter_no=1 会被旧 settled=2 直接跳过。
+        __emit('SETTLED_RESET', tostring(state.settled_cycle_no))
+        __emit('ANNOUNCED_RESET', tostring(state.result_announced_cycle))
+
+        IndustryCycle.Initialize(4600)
+        __emit('ENDS_AGAIN', tostring(__stateRow().season_ends_epoch))
+    """, convars={"industry_season_seconds": "1"})
+
+    assert out["OK"] == "true:nil", f"旧单时钟状态接不上两时钟：{out}"
+    assert out["SEASON"] == "autumn", "maturity 应映射到 autumn"
+    assert out["SEASON_NO"] == "3"
+    assert out["STARTED"] == "4000", "已有 phase 开始时间不能被重算"
+    assert out["ENDS"] == "5000", "已有 phase 结束时间不能被重算"
+    assert out["QUARTER"] == "1", "cycle_no=3 → 第 1 季度第 3 周"
+    # 第 3 周剩 winter（1 秒）+ 第 4..13 周（40 秒）= 41 秒。
+    assert out["QUARTER_END"] == "5041"
+    assert out["SETTLED_RESET"] == "0", "旧 cycle 的 settled 水位带进了新季度"
+    assert out["ANNOUNCED_RESET"] == "0", "旧 cycle 的公告水位带进了新季度"
+    assert out["ENDS_AGAIN"] == "5000", "第二次 Initialize 又重写了边界"
+    print({key: out[key] for key in (
+        "OK", "SEASON", "SEASON_NO", "STARTED", "ENDS", "QUARTER",
+        "QUARTER_END", "SETTLED_RESET", "ANNOUNCED_RESET", "ENDS_AGAIN")})

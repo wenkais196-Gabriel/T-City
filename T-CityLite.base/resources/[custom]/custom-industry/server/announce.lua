@@ -29,33 +29,74 @@ function IndustryAnnounce.RemainingText(seconds)
 end
 
 --- 结算前警告文案（<= 200 字符，CityFeed 的硬上限）。
+--- opts.twoClock 时告警的是**季度**（13 周），不是旧的 28 天周期。
 ---@param cycleNo number
 ---@param remainingSeconds number
+---@param opts table|nil { twoClock = boolean|nil }
 ---@return string
-function IndustryAnnounce.WarningText(cycleNo, remainingSeconds)
+function IndustryAnnounce.WarningText(cycleNo, remainingSeconds, opts)
+    local period = math.floor(tonumber(cycleNo) or 0)
+    local remaining = IndustryAnnounce.RemainingText(remainingSeconds)
+    if type(opts) == 'table' and opts.twoClock == true then
+        return ('产业季度 #%d 将在%s后结算：设施、工位、库存与金库余额将清零，'
+            .. '威望按本季累计销售额折算，下季发放起跑金。清库存、停购置。'):format(
+            period, remaining)
+    end
     return ('产业周期 #%d 将在%s后结算：设施、库存、配额与金库余额将清零，'
         .. '威望按累计销售额折算。清库存、停购置，别把资产留到结算后。'):format(
-        math.floor(tonumber(cycleNo) or 0),
-        IndustryAnnounce.RemainingText(remainingSeconds))
+        period, remaining)
 end
 
 --- 结算结果文案。top 为 nil 表示本周期没有组织产生结果。
 ---@param cycleNo number
 ---@param top table|nil { org_id, revenue, prestige_awarded }
+---@param opts table|nil { twoClock = boolean|nil }
 ---@return string
-function IndustryAnnounce.ResultText(cycleNo, top)
-    local cycle = math.floor(tonumber(cycleNo) or 0)
+function IndustryAnnounce.ResultText(cycleNo, top, opts)
+    local period = math.floor(tonumber(cycleNo) or 0)
+    local twoClock = type(opts) == 'table' and opts.twoClock == true
+    local label = twoClock and '产业季度' or '产业周期'
     if type(top) == 'table' and top.org_id ~= nil then
         -- `$%d` 是闸门 G-B1 的债形态（小数金额会抛 format 错）；这里先渲染成字符串。
         local revenueText = tostring(math.floor(tonumber(top.revenue) or 0))
+        if twoClock then
+            return ('%s #%d 已结算：榜首 %s，本季累计销售额 $%s，威望 +%d。'
+                .. '新季度已开始，设施与配额已重置，起跑金已发放。'):format(
+                label, period, tostring(top.org_id), revenueText,
+                math.floor(tonumber(top.prestige_awarded) or 0))
+        end
         return ('产业周期 #%d 已结算：榜首 %s，累计销售额 $%s，威望 +%d。'
             .. '新一轮已开始，设施与配额已重置。'):format(
-            cycle,
+            period,
             tostring(top.org_id),
             revenueText,
             math.floor(tonumber(top.prestige_awarded) or 0))
     end
-    return ('产业周期 #%d 已结算：本轮没有组织产生结算结果。新一轮已开始。'):format(cycle)
+    if twoClock then
+        return ('%s #%d 已结算：本季度没有组织产生结算结果。新季度已开始，起跑金已发放。'):format(
+            label, period)
+    end
+    return ('产业周期 #%d 已结算：本轮没有组织产生结算结果。新一轮已开始。'):format(period)
+end
+
+--- 季节切换的轻提示（不发 CityFeed，只推在线组织成员；季度结算才是重公告）。
+---@param season string spring/summer/autumn/winter
+---@param seasonNo number 1..4
+---@param weekIndex number 季度内周序 1..13
+---@param quarterNo number
+---@return string
+function IndustryAnnounce.SeasonText(season, seasonNo, weekIndex, quarterNo)
+    local order = { 'spring', 'summer', 'autumn', 'winter' }
+    local labels = { spring = '春', summer = '夏', autumn = '秋', winter = '冬' }
+    local cfg = (Config.Industry.Cycle and Config.Industry.Cycle.Seasons or {})[season] or {}
+    local production = tonumber(cfg.production) or 1
+    local quota = tonumber(cfg.quota) or 1
+    local price = tonumber(cfg.price) or 1
+    return ('产业换季：第 %d 季度第 %d 周 · %s（产能 ×%.2f / 配额 ×%.2f / 售价 ×%.2f）'):format(
+        math.floor(tonumber(quarterNo) or 0),
+        math.floor(tonumber(weekIndex) or 0),
+        tostring(labels[season] or season or order[tonumber(seasonNo) or 1] or '?'),
+        production, quota, price)
 end
 
 --- 发一条城市公告。返回 false 时调用方保留「未发布」状态，下一轮再试。
@@ -168,42 +209,49 @@ end
 
 ---@param cycleNo number
 ---@param remainingSeconds number
+---@param opts table|nil { twoClock = boolean|nil }
 ---@return boolean ok
-function IndustryAnnounce.Warning(cycleNo, remainingSeconds)
-    local cycle = math.floor(tonumber(cycleNo) or 0)
-    local text = IndustryAnnounce.WarningText(cycle, remainingSeconds)
+function IndustryAnnounce.Warning(cycleNo, remainingSeconds, opts)
+    local period = math.floor(tonumber(cycleNo) or 0)
+    local twoClock = type(opts) == 'table' and opts.twoClock == true
+    local text = IndustryAnnounce.WarningText(period, remainingSeconds, opts)
     if not IndustryAnnounce.Publish(text) then return false end
 
     -- 挂在既有 warning 水位的发布路径上：cycle.lua 只在 warning_done=false 时调用
     -- 本函数，发布成功后才写 warning_announced_at。下一 tick 不会再走到这里。
-    pushSafely(cycle, ('产业周期 #%d 即将结算'):format(cycle), text)
+    local title = twoClock and ('产业季度 #%d 即将结算'):format(period)
+        or ('产业周期 #%d 即将结算'):format(period)
+    pushSafely(period, title, text)
     return true
 end
 
---- 公告结算结果；成功后把 state.result_announced_cycle 推到该周期。
+--- 公告结算结果；成功后把 state.result_announced_cycle 推到该周期/季度。
 --- 读结果表失败/无结果都不算失败：文案会退化成「本轮没有组织参与」。
 ---@param cycleNo number
+---@param opts table|nil { twoClock = boolean|nil }
 ---@return boolean ok
-function IndustryAnnounce.Result(cycleNo)
-    local cycle = math.floor(tonumber(cycleNo) or 0)
-    if cycle < 1 then return false end
+function IndustryAnnounce.Result(cycleNo, opts)
+    local period = math.floor(tonumber(cycleNo) or 0)
+    if period < 1 then return false end
+    local twoClock = type(opts) == 'table' and opts.twoClock == true
 
-    -- 幂等：同一周期的结果公告只发一次（结算重试/手工重跑都不该再喊一遍）。
+    -- 幂等：同一周期/季度的结果公告只发一次（结算重试/手工重跑都不该再喊一遍）。
     local stateRow, stateErr = Db.Single(
         'SELECT result_announced_cycle FROM industry_state WHERE id = 1 LIMIT 1', {})
     if not stateErr and stateRow
-        and math.floor(tonumber(stateRow.result_announced_cycle) or 0) >= cycle then
+        and math.floor(tonumber(stateRow.result_announced_cycle) or 0) >= period then
         return true
     end
 
     local top
+    -- 两时钟的历史行键是 quarter_no；老库行 quarter_no 为 NULL，回落到 cycle_no。
     local row, err = Db.Single(
         'SELECT org_id, revenue, prestige_awarded FROM industry_cycle_results '
-            .. 'WHERE cycle_no = ? ORDER BY revenue DESC LIMIT 1',
-        { cycle })
+            .. 'WHERE COALESCE(quarter_no, cycle_no) = ? ORDER BY revenue DESC LIMIT 1',
+        { period })
     if not err and row then top = row end
 
-    local text = IndustryAnnounce.ResultText(cycle, top)
+    local text = IndustryAnnounce.ResultText(period, top, opts)
     if not IndustryAnnounce.Publish(text) then
         return false
     end
@@ -212,9 +260,33 @@ function IndustryAnnounce.Result(cycleNo)
     Db.Update(
         'UPDATE industry_state SET result_announced_cycle = ? '
             .. 'WHERE id = 1 AND result_announced_cycle < ?',
-        { cycle, cycle })
+        { period, period })
 
     -- 先写水位再推送：下一次调用会在函数开头直接返回，不会重复推送同一周期。
-    pushSafely(cycle, ('产业周期 #%d 已结算'):format(cycle), text)
+    local title = twoClock and ('产业季度 #%d 已结算'):format(period)
+        or ('产业周期 #%d 已结算'):format(period)
+    pushSafely(period, title, text)
     return true
+end
+
+--- 季节切换的**轻提示**：只推在线组织成员，不写 CityFeed（季度结算才发重公告）。
+--- 挂在 RollSeason 的 guarded UPDATE 之后，同一季节只会走到一次。
+---@param season string
+---@param seasonNo number
+---@param weekIndex number
+---@param quarterNo number
+---@return number sent
+function IndustryAnnounce.SeasonRoll(season, seasonNo, weekIndex, quarterNo)
+    local quarter = math.floor(tonumber(quarterNo) or 0)
+    if quarter < 1 then return 0 end
+    local cfg = (Config.Industry.Cycle and Config.Industry.Cycle.Seasons or {})[season] or {}
+    local title = ('产业换季：%s'):format(tostring(cfg.label or season or '?'))
+    local content = IndustryAnnounce.SeasonText(season, seasonNo, weekIndex, quarter)
+    local called, sent = pcall(IndustryAnnounce.PushToMembers, quarter, title, content)
+    if not called then
+        print(('[custom-industry] season push crashed quarter=%d: %s'):format(
+            quarter, tostring(sent)))
+        return 0
+    end
+    return tonumber(sent) or 0
 end

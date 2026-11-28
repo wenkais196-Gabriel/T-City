@@ -429,13 +429,25 @@ def test_prestige_formula_matches_the_spec():
 
 def test_migration_and_fixture_declare_the_settlement_idempotency_key():
     migration = strip_sql_comments(MIGRATION.read_text(encoding="utf-8"))
+    quarter = strip_sql_comments(MIGRATION_QUARTER.read_text(encoding="utf-8"))
     fixture = strip_sql_comments(SCHEMA_FIXTURE.read_text(encoding="utf-8"))
 
-    unique = re.compile(
+    old_unique = re.compile(
         r"UNIQUE\s+KEY\s+`uniq_org_cycle`\s*\(\s*`org_id`\s*,\s*`cycle_no`\s*\)", re.I
     )
-    assert unique.search(migration), "迁移缺 industry_cycle_results.UNIQUE(org_id, cycle_no)"
-    assert unique.search(fixture), "fixture 与迁移不一致：缺 uniq_org_cycle"
+    new_unique = re.compile(
+        r"UNIQUE\s+KEY\s+`uniq_org_quarter`\s*\(\s*`org_id`\s*,\s*`quarter_no`\s*\)", re.I
+    )
+    assert old_unique.search(migration), (
+        "v4.4 初版必须保留 UNIQUE(org_id, cycle_no)，否则历史行无从解释"
+    )
+    assert new_unique.search(quarter), (
+        "v4.5 迁移缺 industry_cycle_results.UNIQUE(org_id, quarter_no)"
+    )
+    assert new_unique.search(fixture), "fixture 与迁移不一致：缺 uniq_org_quarter"
+    assert not old_unique.search(fixture), (
+        "fixture 是最终形状：旧 uniq_org_cycle 必须已被 v4.5 替换"
+    )
     assert re.search(r"CHECK\s*\(\s*`id`\s*=\s*1\s*\)", migration, re.I), (
         "industry_state 必须是单行表（CHECK id = 1）"
     )
@@ -526,3 +538,376 @@ def test_announcement_failure_does_not_block_settlement_and_retries_once():
     assert out["RETRY"] == "true:nil"
     assert out["BULLETINS_AFTER"] == "1", "恢复后没有补发（或补发了多条）"
     assert out["ANNOUNCED_AFTER"] == "1"
+
+
+# ══════════════════════════════════════════════════════════════════
+# P1 两时钟（#409）：季度结算 = 软重置 + 威望 + 起跑金
+# ══════════════════════════════════════════════════════════════════
+#
+# 探针文件 `fixtures/industry_cycle_probe.lua` 不在本片可改范围；两时钟需要的
+# `industry_state` 多列、按季/按季度范围的 DELETE 在测试体内补一层假 DB 扩展。
+# SQL 形状对不上时返回 affectedRows = 0，不兜底。
+
+MIGRATION_QUARTER = BASE / "migrations" / "v4.5_industry_quarter.sql"
+
+TWO_CLOCK_HARNESS = r"""
+local __tcBaseUpdate = MySQL.update.await
+local __tcBaseSingle = MySQL.single.await
+
+local function __tcIsStateUpdate(sql)
+    return sql:find('UPDATE industry_state', 1, true) ~= nil
+        and sql:find('season_no', 1, true) ~= nil
+end
+
+function __seedTwoClock(values)
+    values = values or {}
+    local phases = {
+        spring = 'expansion', summer = 'competition',
+        autumn = 'maturity', winter = 'recession',
+    }
+    __state = {
+        cycle_no = tonumber(values.cycle_no) or 1,
+        phase = values.phase or phases[values.season or 'spring'] or 'expansion',
+        started_epoch = tonumber(values.season_started_epoch) or 0,
+        ends_epoch = tonumber(values.season_ends_epoch) or 0,
+        warning_epoch = values.warning_epoch,
+        settled_cycle_no = tonumber(values.settled_cycle_no) or 0,
+        result_announced_cycle = tonumber(values.result_announced_cycle) or 0,
+        quarter_no = tonumber(values.quarter_no) or 1,
+        season = values.season or 'spring',
+        season_no = tonumber(values.season_no) or 1,
+        season_started_epoch = tonumber(values.season_started_epoch) or 0,
+        season_ends_epoch = tonumber(values.season_ends_epoch) or 0,
+        quarter_started_epoch = tonumber(values.quarter_started_epoch) or 0,
+        quarter_ends_epoch = tonumber(values.quarter_ends_epoch) or 0,
+    }
+end
+
+MySQL.single.await = function(sql, values)
+    if __state and __state.season and sql:find('FROM industry_state', 1, true) then
+        if sql:find('SELECT settled_cycle_no', 1, true) then
+            return { settled_cycle_no = __state.settled_cycle_no }
+        end
+        if sql:find('SELECT result_announced_cycle', 1, true) then
+            return { result_announced_cycle = __state.result_announced_cycle }
+        end
+        return {
+            id = 1,
+            cycle_no = __state.cycle_no,
+            phase = __state.phase,
+            started_epoch = __state.season_started_epoch,
+            ends_epoch = __state.season_ends_epoch,
+            warning_done = __state.warning_epoch ~= nil and 1 or 0,
+            warning_epoch = __state.warning_epoch,
+            settled_cycle_no = __state.settled_cycle_no,
+            result_announced_cycle = __state.result_announced_cycle,
+            quarter_no = __state.quarter_no,
+            season = __state.season,
+            season_no = __state.season_no,
+            season_started_epoch = __state.season_started_epoch,
+            season_ends_epoch = __state.season_ends_epoch,
+            quarter_started_epoch = __state.quarter_started_epoch,
+            quarter_ends_epoch = __state.quarter_ends_epoch,
+        }
+    end
+    return __tcBaseSingle(sql, values)
+end
+
+MySQL.update.await = function(sql, values)
+    -- 季度软重置：清掉本组织全部卖单（本季度结束后不该再有更早的流水）。
+    if sql:find('DELETE FROM industry_sales', 1, true)
+        and sql:find('WHERE org_id = ?', 1, true)
+        and not sql:find('cycle_no', 1, true) then
+        local removed = 0
+        for index = #__sales, 1, -1 do
+            if tostring(__sales[index].org_id) == tostring(values[1]) then
+                table.remove(__sales, index)
+                removed = removed + 1
+            end
+        end
+        return { affectedRows = removed }
+    end
+
+    -- 季度配额行：按周号区间删除（只清本季度 13 周）。
+    if sql:find('DELETE FROM industry_demand', 1, true)
+        and sql:find('BETWEEN', 1, true) then
+        local from, to = tonumber(values[1]), tonumber(values[2])
+        local removed = 0
+        for key, row in pairs(__demands) do
+            local cycle = tonumber(row.cycle_no)
+            if cycle and cycle >= from and cycle <= to then
+                __demands[key] = nil
+                removed = removed + 1
+            end
+        end
+        return { affectedRows = removed }
+    end
+
+    if __tcIsStateUpdate(sql) then
+        local row = __state
+        if not row then return { affectedRows = 0 } end
+
+        if sql:find('season_started_at IS NULL', 1, true) then
+            if row.season_started_epoch ~= nil then return { affectedRows = 0 } end
+            row.phase = values[1]
+            row.quarter_no = tonumber(values[2]) or 1
+            row.season = values[3]
+            row.season_no = tonumber(values[4]) or 1
+            row.season_started_epoch = tonumber(values[5])
+            row.season_ends_epoch = tonumber(values[6])
+            row.quarter_started_epoch = tonumber(values[7])
+            row.quarter_ends_epoch = tonumber(values[8])
+            row.started_epoch = row.season_started_epoch
+            row.ends_epoch = row.season_ends_epoch
+            row.warning_epoch = nil
+            row.settled_cycle_no = 0
+            row.result_announced_cycle = 0
+            return { affectedRows = 1 }
+        end
+
+        if sql:find('AND season_started_at IS NOT NULL', 1, true) then
+            row.cycle_no = tonumber(values[1])
+            row.phase = values[2]
+            row.started_epoch = tonumber(values[3])
+            row.ends_epoch = tonumber(values[4])
+            row.quarter_no = tonumber(values[5])
+            row.season = values[6]
+            row.season_no = tonumber(values[7])
+            row.season_started_epoch = tonumber(values[8])
+            row.season_ends_epoch = tonumber(values[9])
+            row.quarter_started_epoch = tonumber(values[10])
+            row.quarter_ends_epoch = tonumber(values[11])
+            return { affectedRows = 1 }
+        end
+
+        if sql:find('SET cycle_no = ?', 1, true) then
+            if row.cycle_no ~= tonumber(values[12]) then return { affectedRows = 0 } end
+            if row.phase ~= values[13] then return { affectedRows = 0 } end
+            if row.season_no ~= tonumber(values[14]) then return { affectedRows = 0 } end
+            if row.season_ends_epoch > tonumber(values[15]) then
+                return { affectedRows = 0 }
+            end
+            if sql:find('settled_cycle_no >= ?', 1, true)
+                and row.settled_cycle_no < tonumber(values[16]) then
+                return { affectedRows = 0 }
+            end
+            row.cycle_no = tonumber(values[1])
+            row.phase = values[2]
+            row.started_epoch = tonumber(values[3])
+            row.ends_epoch = tonumber(values[4])
+            row.quarter_no = tonumber(values[5])
+            row.season = values[6]
+            row.season_no = tonumber(values[7])
+            row.season_started_epoch = tonumber(values[8])
+            row.season_ends_epoch = tonumber(values[9])
+            row.quarter_started_epoch = tonumber(values[10])
+            row.quarter_ends_epoch = tonumber(values[11])
+            if sql:find('warning_announced_at = NULL', 1, true) then
+                row.warning_epoch = nil
+            end
+            return { affectedRows = 1 }
+        end
+        return { affectedRows = 0 }
+    end
+    return __tcBaseUpdate(sql, values)
+end
+"""
+
+
+def test_quarter_settlement_soft_resets_and_pays_the_starter_grant():
+    """季度边界：设施/工位/库存清零、威望增加、起跑金到账、个人层逐字节不变。"""
+    out = run(TWO_CLOCK_HARNESS + """
+        __reset()
+        __seedTwoClock({
+            cycle_no = 13, quarter_no = 1, season = 'winter', season_no = 4,
+            season_started_epoch = 900, season_ends_epoch = 1000,
+            quarter_started_epoch = 0, quarter_ends_epoch = 1000,
+        })
+        __seedTreasury('mining_co', 500, 0)
+        __seedFacility('mining_co', {
+            stock = 40, workstations = 3, produced_units = 777, last_tick_epoch = 1000,
+        })
+        __seedSale('mining_co', 13, 'iron_ore', 1000, 50, 50000)
+        __seedDemand(1, 'spring', 'iron_ore', 10, 0)
+        __seedDemand(13, 'winter', 'iron_ore', 10, 2)
+        __seedDemand(14, 'spring', 'iron_ore', 10, 0) -- 下一季度，不能被本季清掉
+        __seedPlayers({
+            ap = { citizenid = 'ap', money = '{"cash":100,"bank":200}',
+                   inventory = '[{"name":"water","count":2}]' },
+        })
+
+        local before = __playersChecksum()
+        local ok, err, info = IndustryCycle.Tick(1000)
+        local after = __playersChecksum()
+        local treasury = __treasury('mining_co')
+        local result = __result('mining_co', 1)
+        local state = __stateRow()
+
+        __emit('OK', tostring(ok) .. ':' .. tostring(err or 'nil'))
+        __emit('ADVANCED_TO', tostring(info and info.to))
+        __emit('QUARTER', tostring(state.quarter_no))
+        __emit('SEASON', state.season)
+        __emit('CYCLE', tostring(state.cycle_no))
+        __emit('SETTLED', tostring(state.settled_cycle_no))
+        __emit('FACILITY_ROWS', tostring(__facilityCount()))
+        __emit('SALES_ROWS', tostring(__salesCount()))
+        __emit('DEMAND_13', tostring(__demandCount(13)))
+        -- 新季节会 EnsureSeed 自己的配额行；这里只看我们预置的第 14 周行是否被越界删除。
+        __emit('DEMAND_14_KEPT', tostring(
+            __demandRow(14, 'spring', 'iron_ore') ~= nil))
+        __emit('BALANCE', tostring(treasury.balance))
+        __emit('PRESTIGE', tostring(treasury.prestige))
+        __emit('RESULTS', tostring(__resultCount(1)))
+        __emit('REVENUE', tostring(result and result.revenue))
+        __emit('PRODUCED', tostring(result and result.produced_units))
+        __emit('CLEARED', tostring(result and result.balance_cleared))
+        __emit('AWARDED', tostring(result and result.prestige_awarded))
+        __emit('APPLIED', tostring(result and result.applied))
+        __emit('STARTER_LEDGER', tostring(__ledgerRow('quarter-starter:1')
+            and __ledgerRow('quarter-starter:1').delta))
+        __emit('CLEAR_LEDGER', tostring(__ledgerRow('settle-quarter:1')
+            and __ledgerRow('settle-quarter:1').delta))
+        __emit('LAST_BULLETIN', tostring(__lastBulletin()))
+        __emit('PLAYERS_BEFORE', before)
+        __emit('PLAYERS_AFTER', after)
+    """, convars={
+        "industry_prestige_k": "500",
+        "industry_season_seconds": "1",
+        "industry_quarter_starter": "200000",
+        "industry_quarter_stipend": "10000",
+    })
+
+    print("PLAYERS_BEFORE=" + out["PLAYERS_BEFORE"])
+    print("PLAYERS_AFTER=" + out["PLAYERS_AFTER"])
+    assert out["OK"] == "true:nil", f"季度结算失败：{out}"
+    assert out["ADVANCED_TO"] == "spring"
+    assert out["QUARTER"] == "2", "季度号没有 +1"
+    assert out["SEASON"] == "spring"
+    assert out["CYCLE"] == "14"
+    assert out["SETTLED"] == "1"
+    assert out["FACILITY_ROWS"] == "0", "季度结算没有清空设施/工位/库存"
+    assert out["SALES_ROWS"] == "0", "季度结算没有清空卖单"
+    assert out["DEMAND_13"] == "0", "本季度配额行没有清掉"
+    assert out["DEMAND_14_KEPT"] == TRUE, "季度清算范围越界，删掉了下一季度的配额行"
+    assert out["BALANCE"] == "300000", "起跑金 = 200,000 + 10 × 10,000"
+    assert out["PRESTIGE"] == "10"
+    assert out["RESULTS"] == "1", "季度结果必须恰好一行（键是 quarter_no）"
+    assert out["REVENUE"] == "50000"
+    assert out["PRODUCED"] == "777"
+    assert out["CLEARED"] == "500"
+    assert out["AWARDED"] == "10"
+    assert out["APPLIED"] == "1"
+    assert out["STARTER_LEDGER"] == "300000", "起跑金没有写流水"
+    assert out["CLEAR_LEDGER"] == "-500", "清分没有写 settlement-clear 流水"
+    assert "产业季度 #1 已结算" in out["LAST_BULLETIN"], (
+        f"季度结算公告文案不对：{out['LAST_BULLETIN']}"
+    )
+    assert out["PLAYERS_BEFORE"] == out["PLAYERS_AFTER"], (
+        "季度结算改动了个人层："
+        f"{out['PLAYERS_BEFORE']} != {out['PLAYERS_AFTER']}"
+    )
+    print({key: out[key] for key in (
+        "QUARTER", "SEASON", "CYCLE", "SETTLED", "FACILITY_ROWS", "SALES_ROWS",
+        "DEMAND_13", "DEMAND_14_KEPT", "BALANCE", "PRESTIGE", "RESULTS",
+        "REVENUE", "PRODUCED", "CLEARED", "AWARDED", "STARTER_LEDGER",
+        "CLEAR_LEDGER", "LAST_BULLETIN")})
+
+
+def test_settle_command_maps_the_current_week_to_its_quarter():
+    """commands_cycle.lua 不改：它传当前周号，SettleCycle 薄包装换算成季度号。"""
+    out = run(TWO_CLOCK_HARNESS + """
+        __reset()
+        __seedTwoClock({
+            cycle_no = 14, quarter_no = 2, season = 'spring', season_no = 1,
+            season_started_epoch = 1000, season_ends_epoch = 2000,
+            quarter_started_epoch = 1000, quarter_ends_epoch = 6000,
+        })
+        __seedTreasury('mining_co', 100, 0)
+        __seedFacility('mining_co', { stock = 5, workstations = 1, produced_units = 5 })
+
+        IndustryCycleCommands.Register()
+        local dryOk, dryErr, report = IndustryCycleCommands.Settle(0, 'dry', 14, 1500)
+        __emit('DRY', tostring(dryOk) .. ':' .. tostring(dryErr or 'nil'))
+        __emit('REPORT_QUARTER', tostring(report and report.quarter_no))
+        __emit('WRITES', tostring(__sqlWrites()))
+
+        local ok, err = IndustryCycleCommands.Settle(0, 'confirm', 14, 1500)
+        __emit('CONFIRM', tostring(ok) .. ':' .. tostring(err or 'nil'))
+        __emit('SETTLED', tostring(__stateRow().settled_cycle_no))
+        __emit('FACILITY_ROWS', tostring(__facilityCount()))
+        __emit('BALANCE', tostring(__treasury('mining_co').balance))
+        __emit('RESULTS', tostring(__resultCount(2)))
+    """, convars={
+        "industry_prestige_k": "500",
+        "industry_quarter_starter": "200000",
+        "industry_quarter_stipend": "10000",
+    })
+
+    assert out["DRY"] == "true:nil", f"两时钟 dry-run 失败：{out}"
+    assert out["REPORT_QUARTER"] == "2", "dry-run 没有落到季度号"
+    assert out["WRITES"] == "0", "dry-run 写了库"
+    assert out["CONFIRM"] == "true:nil", f"两时钟 confirm 失败：{out}"
+    assert out["SETTLED"] == "2", "SettleCycle 没有把周号换算成季度号"
+    assert out["FACILITY_ROWS"] == "0"
+    assert out["BALANCE"] == "200000", "季度起跑金没有到账"
+    assert out["RESULTS"] == "1"
+
+
+def test_restart_does_not_settle_the_same_quarter_twice():
+    """重启续跑：水位已到位的季度边界只滚季，不重复发放威望/起跑金。"""
+    out = run(TWO_CLOCK_HARNESS + """
+        __reset()
+        __seedTwoClock({
+            cycle_no = 13, quarter_no = 1, season = 'winter', season_no = 4,
+            season_started_epoch = 900, season_ends_epoch = 1000,
+            quarter_started_epoch = 0, quarter_ends_epoch = 1000,
+            settled_cycle_no = 1, result_announced_cycle = 1,
+        })
+        __seedTreasury('mining_co', 0, 10)
+        __seedFacility('mining_co', { stock = 0, workstations = 0, produced_units = 999 })
+
+        -- restart custom-industry：Initialize 不得重算时钟。
+        IndustryCycle.Start()
+        __emit('INIT_UNCHANGED', tostring(__stateRow().season_ends_epoch == 1000))
+
+        local ok, err, info = IndustryCycle.Tick(1000)
+        __emit('TICK', tostring(ok) .. ':' .. tostring(err or 'nil'))
+        __emit('QUARTER', tostring(__stateRow().quarter_no))
+        __emit('SEASON', __stateRow().season)
+        __emit('BALANCE', tostring(__treasury('mining_co').balance))
+        __emit('PRESTIGE', tostring(__treasury('mining_co').prestige))
+        __emit('RESULTS', tostring(__resultCount(1)))
+
+        local writes = __sqlWrites()
+        local repeated, repeatedErr, summary = IndustrySettlement.SettleQuarter(
+            1, { trigger = 'restart' })
+        __emit('REPEAT', tostring(repeated) .. ':' .. tostring(repeatedErr or 'nil'))
+        __emit('ALREADY', tostring(summary and summary.already_settled))
+        __emit('WRITES_ADDED', tostring(__sqlWrites() - writes))
+        __emit('BALANCE_AFTER', tostring(__treasury('mining_co').balance))
+        __emit('PRESTIGE_AFTER', tostring(__treasury('mining_co').prestige))
+        __emit('RESULTS_AFTER', tostring(__resultCount(1)))
+    """, convars={
+        "industry_prestige_k": "500",
+        "industry_season_seconds": "1",
+        "industry_quarter_starter": "200000",
+        "industry_quarter_stipend": "10000",
+    })
+
+    assert out["INIT_UNCHANGED"] == TRUE, "重启把已运行季节的边界重算了"
+    assert out["TICK"] == "true:nil", f"季度边界 tick 失败：{out}"
+    assert out["QUARTER"] == "2", "季度边界没有滚到下一季度"
+    assert out["SEASON"] == "spring"
+    assert out["BALANCE"] == "0", "重复结算又发了一次起跑金"
+    assert out["PRESTIGE"] == "10", "重复结算又加了一次威望"
+    assert out["RESULTS"] == "0", "重复结算写了结果行"
+    assert out["REPEAT"] == "true:nil", f"重复结算应幂等返回而不是报错：{out}"
+    assert out["ALREADY"] == TRUE, "重复结算没有走 already_settled"
+    assert out["WRITES_ADDED"] == "0", "重复结算写了库（水位闸失效）"
+    assert out["BALANCE_AFTER"] == "0"
+    assert out["PRESTIGE_AFTER"] == "10"
+    assert out["RESULTS_AFTER"] == "0"
+    print({key: out[key] for key in (
+        "INIT_UNCHANGED", "TICK", "QUARTER", "SEASON", "BALANCE", "PRESTIGE",
+        "RESULTS", "REPEAT", "ALREADY", "WRITES_ADDED", "BALANCE_AFTER",
+        "PRESTIGE_AFTER", "RESULTS_AFTER")})

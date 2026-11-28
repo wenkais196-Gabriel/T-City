@@ -696,6 +696,9 @@ EXPECTED_DEPOSIT_SITES = [
     ("custom-industry/server/facility.lua", "workstation-rollback"),     # 工位 CAS 失败退回
     ("custom-industry/server/facility.lua", "workstation-rollback"),     # updateErr 分支
     ("custom-industry/server/sale.lua", "sale"),                         # S4 唯一净增
+    # P1 两时钟（#409）：季度软重置后的起跑金，ref = quarter-starter:<quarter>。
+    # 这是**第二个**净增点，显式登记；额度与 prestige 挂钩，且每季度只发一次。
+    ("custom-industry/server/settlement.lua", "quarter-starter"),
 ]
 
 

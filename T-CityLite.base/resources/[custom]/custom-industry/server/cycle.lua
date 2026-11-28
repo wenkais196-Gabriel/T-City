@@ -108,12 +108,206 @@ function IndustryCycle.PhaseSeconds(phase)
     return math.max(1, math.floor(days * 86400 / scale))
 end
 
+-- ── P1 两时钟（#409）：季节（内层）与季度（外层）────────────────────
+-- 一周 = 四季；13 周 = 1 季度。周内天数按 7 组分配确定性轮转。
+-- 旧单时钟状态（season_started_at IS NULL）继续走上面的 Phases；迁移后
+-- Initialize 把旧状态接上 season 时间戳，之后走这里。两套配置并存是有意的：
+-- 迁移日不能把正在跑的旧阶段时长重算一遍。
+
+local DEFAULT_SEASON_ORDER = { 'spring', 'summer', 'autumn', 'winter' }
+local DEFAULT_SEASON_DAYS = {
+    { 2, 3, 1, 1 }, { 1, 1, 3, 2 }, { 2, 2, 2, 1 }, { 1, 2, 2, 2 },
+    { 3, 1, 1, 2 }, { 1, 3, 1, 2 }, { 2, 1, 2, 2 },
+}
+
+local function seasonConfigTable()
+    local seasons = cycleConfig().Seasons
+    if type(seasons) ~= 'table' then return {} end
+    return seasons
+end
+
+local function seasonConfig(season)
+    local cfg = seasonConfigTable()[season]
+    if type(cfg) ~= 'table' then return nil end
+    return cfg
+end
+
+---@return string[]
+function IndustryCycle.SeasonOrder()
+    local order = cycleConfig().SeasonOrder
+    if type(order) ~= 'table' or #order == 0 then return DEFAULT_SEASON_ORDER end
+    return order
+end
+
+---@return number
+function IndustryCycle.SeasonsPerWeek()
+    return #IndustryCycle.SeasonOrder()
+end
+
+---@return number
+function IndustryCycle.WeeksPerQuarter()
+    local weeks = math.floor(tonumber(cycleConfig().WeeksPerQuarter) or 13)
+    if weeks < 1 then weeks = 1 end
+    return weeks
+end
+
+--- cycle_no 是**全局周号**，季度内周序是 1..WeeksPerQuarter。
+---@param cycleNo number|nil
+---@return number
+function IndustryCycle.WeekOfQuarter(cycleNo)
+    local weeks = IndustryCycle.WeeksPerQuarter()
+    local cycle = math.floor(tonumber(cycleNo) or 1)
+    if cycle < 1 then cycle = 1 end
+    return ((cycle - 1) % weeks) + 1
+end
+
+--- 第 weekIndex 周（季度内 1 基）第 seasonIndex 季（1 基）的真实秒数。
+--- 覆盖顺序与 PhaseSeconds 一致：SeasonSecondsOverride > SeasonDays × Scale。
+---@param weekIndex number
+---@param seasonIndex number
+---@return number
+function IndustryCycle.SeasonSeconds(weekIndex, seasonIndex)
+    local weeks = IndustryCycle.WeeksPerQuarter()
+    local week = math.floor(tonumber(weekIndex) or 1)
+    if week < 1 then week = 1 end
+    week = ((week - 1) % weeks) + 1
+
+    local seasons = IndustryCycle.SeasonsPerWeek()
+    local index = math.floor(tonumber(seasonIndex) or 1)
+    if index < 1 then index = 1 end
+    if index > seasons then index = seasons end
+
+    local override = tonumber(cycleConfig().SeasonSecondsOverride) or 0
+    if override > 0 then return math.max(1, math.floor(override)) end
+
+    local rotation = cycleConfig().SeasonDays
+    if type(rotation) ~= 'table' or #rotation == 0 then rotation = DEFAULT_SEASON_DAYS end
+    local row = rotation[((week - 1) % #rotation) + 1]
+    local days = tonumber(row and row[index]) or 1
+
+    local scale = tonumber(cycleConfig().Scale) or 1
+    if scale <= 0 then scale = 1 end
+    return math.max(1, math.floor(days * 86400 / scale))
+end
+
+--- 从 (startWeekIndex, startSeasonIndex) 到本季度结束还剩多少秒。
+---@param startWeekIndex number
+---@param startSeasonIndex number
+---@return number
+function IndustryCycle.QuarterSeconds(startWeekIndex, startSeasonIndex)
+    local weeks = IndustryCycle.WeeksPerQuarter()
+    local seasons = IndustryCycle.SeasonsPerWeek()
+    local week = math.floor(tonumber(startWeekIndex) or 1)
+    week = ((week - 1) % weeks) + 1
+    local season = math.floor(tonumber(startSeasonIndex) or 1)
+    if season < 1 then season = 1 end
+    if season > seasons then season = seasons end
+
+    local total = 0
+    for currentWeek = week, weeks do
+        local from = (currentWeek == week) and season or 1
+        for currentSeason = from, seasons do
+            total = total + IndustryCycle.SeasonSeconds(currentWeek, currentSeason)
+        end
+    end
+    return total
+end
+
+--- 季节序号（1..4）→ 旧 phase 名（expansion/competition/maturity/recession）。
+--- 旧读点（销售 / 生产 / 购置 / UI）继续只认 phase，不复制第二套倍率读取。
+---@param season string
+---@return string|nil
+function IndustryCycle.PhaseForSeason(season)
+    local order = IndustryCycle.SeasonOrder()
+    local phases = IndustryCycle.PhaseOrder()
+    for index = 1, #order do
+        if order[index] == season then return phases[index] end
+    end
+    return nil
+end
+
+---@param phase string
+---@return string|nil
+function IndustryCycle.SeasonForPhase(phase)
+    local order = IndustryCycle.SeasonOrder()
+    local phases = IndustryCycle.PhaseOrder()
+    for index = 1, #phases do
+        if phases[index] == phase then return order[index] end
+    end
+    return nil
+end
+
+---@param index number
+---@return string|nil
+function IndustryCycle.SeasonByIndex(index)
+    local order = IndustryCycle.SeasonOrder()
+    local wanted = math.floor(tonumber(index) or 0)
+    if wanted < 1 or wanted > #order then return nil end
+    return order[wanted]
+end
+
+---@param season string
+---@return number|nil
+function IndustryCycle.SeasonIndexOf(season)
+    local order = IndustryCycle.SeasonOrder()
+    for index = 1, #order do
+        if order[index] == season then return index end
+    end
+    return nil
+end
+
+--- 当前季节倍率（读配置）。不传 season 时读当前权威状态。
+---@param season string|nil
+---@return table|nil multipliers, string|nil errcode
+function IndustryCycle.SeasonMultipliers(season)
+    local name = season
+    if type(name) ~= 'string' or name == '' then
+        local state, err = IndustryCycle.Current()
+        if not state then return nil, err end
+        if not state.two_clock then return nil, 'not_two_clock' end
+        name = state.season_name
+    end
+    local cfg = seasonConfig(name)
+    if not cfg then return nil, 'bad_season' end
+    return {
+        prod = tonumber(cfg.production) or 1,
+        quota = tonumber(cfg.quota) or 1,
+        price = tonumber(cfg.price) or 1,
+        purchasable = cfg.purchasable == true,
+        label = tostring(cfg.label or name),
+    }, nil
+end
+
+--- 当前季节读数（不传 state 时读当前状态）。
+---@param state table|nil
+---@return table|nil season, string|nil errcode
+function IndustryCycle.CurrentSeason(state)
+    if type(state) ~= 'table' then
+        local current, err = IndustryCycle.Current()
+        if not current then return nil, err end
+        state = current
+    end
+    if not state.two_clock then return nil, 'not_two_clock' end
+    return {
+        name = state.season_name,
+        index = state.season_no,
+        week_index = IndustryCycle.WeekOfQuarter(state.cycle_no),
+        quarter_no = state.quarter_no,
+        started_epoch = state.season_started_epoch,
+        ends_epoch = state.season_ends_epoch,
+        label = state.label,
+    }, nil
+end
+
 --- 本 **周期** 的结束时间（衰退阶段结束），不是当前阶段的结束时间。
 --- 公告提前量是「结算前 7 天」，所以必须拿周期末端做比较。
+--- 两时钟状态下，公告/结算的「末端」是季度末（季度结算，不是季节切换）。
 ---@param state table
 ---@return number
 function IndustryCycle.CycleEndsAt(state)
     if type(state) ~= 'table' then return 0 end
+    if state.two_clock then return tonumber(state.quarter_ends_epoch) or 0 end
+
     local endEpoch = tonumber(state.ends_epoch) or 0
     if state.legacy then return endEpoch end
 
@@ -173,6 +367,7 @@ local function fallbackState()
         quota = 1,
         purchasable = true,
         legacy = true,
+        two_clock = false,
     }
 end
 
@@ -181,7 +376,12 @@ local STATE_SELECT =
         .. 'UNIX_TIMESTAMP(phase_started_at) AS started_epoch, '
         .. 'UNIX_TIMESTAMP(phase_ends_at) AS ends_epoch, '
         .. '(warning_announced_at IS NOT NULL) AS warning_done, '
-        .. 'settled_cycle_no, result_announced_cycle '
+        .. 'settled_cycle_no, result_announced_cycle, '
+        .. 'quarter_no, season, season_no, '
+        .. 'UNIX_TIMESTAMP(season_started_at) AS season_started_epoch, '
+        .. 'UNIX_TIMESTAMP(season_ends_at) AS season_ends_epoch, '
+        .. 'UNIX_TIMESTAMP(quarter_started_at) AS quarter_started_epoch, '
+        .. 'UNIX_TIMESTAMP(quarter_ends_at) AS quarter_ends_epoch '
         .. 'FROM industry_state WHERE id = 1 LIMIT 1'
 
 --- 当前权威周期状态。读库失败返回 nil, 'db_error'（**不**回落成倍率 1：
@@ -201,12 +401,58 @@ function IndustryCycle.Current()
         return state, nil
     end
 
-    local cfg = phaseConfig(phase)
-    if not cfg then return nil, 'bad_phase' end
-
     local cycleNo = tonumber(row.cycle_no)
     local started = tonumber(row.started_epoch)
     local ends = tonumber(row.ends_epoch)
+
+    -- 两时钟：season_started_at 非 NULL 即已接线（迁移默认 NULL = 旧单时钟）。
+    local seasonStarted = tonumber(row.season_started_epoch)
+    if seasonStarted ~= nil then
+        local season = tostring(row.season or '')
+        local seasonNo = math.floor(tonumber(row.season_no) or 0)
+        local quarterNo = math.floor(tonumber(row.quarter_no) or 0)
+        local seasonEnds = tonumber(row.season_ends_epoch)
+        local quarterEnds = tonumber(row.quarter_ends_epoch)
+        local seasonCfg = seasonConfig(season)
+        local mappedPhase = IndustryCycle.PhaseForSeason(season)
+        if not seasonCfg or not mappedPhase or seasonNo < 1 or quarterNo < 1
+            or not seasonEnds or not quarterEnds or not cycleNo then
+            return nil, 'bad_season'
+        end
+
+        return {
+            cycle_no = math.floor(cycleNo),
+            phase = mappedPhase,
+            -- sale.lua 的 (cycle_no, phase, season) 维度要一个数字：季内序号 1..4。
+            season = seasonNo,
+            season_name = season,
+            season_no = seasonNo,
+            quarter_no = quarterNo,
+            label = tostring(seasonCfg.label or season),
+            started_epoch = seasonStarted,
+            ends_epoch = seasonEnds,
+            season_started_epoch = seasonStarted,
+            season_ends_epoch = seasonEnds,
+            quarter_started_epoch = tonumber(row.quarter_started_epoch) or seasonStarted,
+            quarter_ends_epoch = quarterEnds,
+            -- 用 boolean 列而不是 UNIX_TIMESTAMP(NULL)：不同驱动对 NULL 的回包形状不一致。
+            warning_done = row.warning_done == true
+                or tonumber(row.warning_done) == 1
+                or row.warning_done == '1',
+            settled_cycle_no = math.max(0, math.floor(tonumber(row.settled_cycle_no) or 0)),
+            result_announced_cycle = math.max(
+                0, math.floor(tonumber(row.result_announced_cycle) or 0)),
+            production = tonumber(seasonCfg.production) or 1,
+            price = tonumber(seasonCfg.price) or 1,
+            quota = tonumber(seasonCfg.quota) or 1,
+            purchasable = seasonCfg.purchasable == true,
+            legacy = false,
+            two_clock = true,
+        }, nil
+    end
+
+    local cfg = phaseConfig(phase)
+    if not cfg then return nil, 'bad_phase' end
     if not cycleNo or not started or not ends then return nil, 'db_error' end
 
     return {
@@ -215,7 +461,6 @@ function IndustryCycle.Current()
         label = tostring(cfg.label or phase),
         started_epoch = started,
         ends_epoch = ends,
-        -- 用 boolean 列而不是 UNIX_TIMESTAMP(NULL)：不同驱动对 NULL 的回包形状不一致。
         warning_done = row.warning_done == true
             or tonumber(row.warning_done) == 1
             or row.warning_done == '1',
@@ -227,45 +472,107 @@ function IndustryCycle.Current()
         quota = tonumber(cfg.quota) or 1,
         purchasable = cfg.purchasable == true,
         legacy = false,
+        two_clock = false,
     }, nil
 end
 
---- 首次启动：把种子行（或缺失行）写成 cycle 1 / expansion。
---- 已有真实阶段的库**一律不动** —— 重启必须从 DB 续跑。
+--- 旧单时钟状态（真实 phase、season_started_at 还是 NULL）接上两时钟。
+--- 铁律：已有 phase 边界原样保留，只补 season 列；重复调用是 no-op。
+---@param state table
+---@param now number
+---@return boolean ok, string|nil errcode
+local function upgradeToTwoClock(state, now)
+    local season = IndustryCycle.SeasonForPhase(state.phase) or IndustryCycle.SeasonByIndex(1)
+    local seasonNo = IndustryCycle.SeasonIndexOf(season) or 1
+    local weeks = IndustryCycle.WeeksPerQuarter()
+    local weekIndex = IndustryCycle.WeekOfQuarter(state.cycle_no)
+    local quarterNo = math.max(1, math.floor((math.max(1, state.cycle_no) - 1) / weeks) + 1)
+
+    local seasonStarted = tonumber(state.started_epoch) or now
+    local seasonEnds = tonumber(state.ends_epoch) or (now + IndustryCycle.SeasonSeconds(
+        weekIndex, seasonNo))
+    if seasonEnds < seasonStarted then seasonEnds = seasonStarted end
+
+    -- 季度末 = 本季结束 + 本季之后（本周余下 + 后续周）的所有季节。
+    local remaining = 0
+    for index = seasonNo + 1, IndustryCycle.SeasonsPerWeek() do
+        remaining = remaining + IndustryCycle.SeasonSeconds(weekIndex, index)
+    end
+    for week = weekIndex + 1, weeks do
+        for index = 1, IndustryCycle.SeasonsPerWeek() do
+            remaining = remaining + IndustryCycle.SeasonSeconds(week, index)
+        end
+    end
+    local quarterEnds = seasonEnds + remaining
+
+    local affected, updateErr = Db.Update(
+        'UPDATE industry_state SET phase = ?, quarter_no = ?, season = ?, season_no = ?, '
+            .. 'season_started_at = FROM_UNIXTIME(?), season_ends_at = FROM_UNIXTIME(?), '
+            .. 'quarter_started_at = FROM_UNIXTIME(?), quarter_ends_at = FROM_UNIXTIME(?), '
+            .. 'warning_announced_at = NULL, settled_cycle_no = 0, '
+            .. 'result_announced_cycle = 0 '
+            .. 'WHERE id = 1 AND season_started_at IS NULL AND cycle_no = ?',
+        { IndustryCycle.PhaseForSeason(season) or state.phase, quarterNo, season, seasonNo,
+            seasonStarted, seasonEnds, seasonStarted, quarterEnds, state.cycle_no })
+    if updateErr then return false, 'db_error' end
+
+    local fresh = IndustryCycle.Current()
+    if not fresh or not fresh.two_clock then
+        -- affected = 0 也可能是另一个进程刚写完；读回失败才是真错误。
+        return false, affected == 0 and 'conflict' or 'db_error'
+    end
+    return true, nil
+end
+
+--- 首次启动：把种子行（或缺失行）写成两时钟的 cycle 1 / spring / quarter 1。
+--- 已有真实阶段的库：只补 season 时钟，**不重算** phase 边界（重启从 DB 续跑）。
 ---@param now number|nil epoch 秒
 ---@return boolean ok, string|nil errcode
 function IndustryCycle.Initialize(now)
     now = math.floor(tonumber(now) or os.time())
     local state, err = IndustryCycle.Current()
     if not state then return false, err end
-    if not state.legacy then return true, nil end
+    if state.two_clock then return true, nil end
+    if not state.legacy then return upgradeToTwoClock(state, now) end
 
-    local duration = IndustryCycle.PhaseSeconds('expansion')
-    if not duration then return false, 'bad_phase' end
+    local season = IndustryCycle.SeasonByIndex(1) or 'spring'
+    local seasonNo = 1
+    local duration = IndustryCycle.SeasonSeconds(1, seasonNo)
+    local quarterDuration = IndustryCycle.QuarterSeconds(1, seasonNo)
     local ends = now + duration
+    local quarterEnds = now + quarterDuration
+    local phase = IndustryCycle.PhaseForSeason(season)
+    if not phase then return false, 'bad_season' end
 
     -- 并发启动只有一个 INSERT 能成功；PK id = 1 是锁。
     Db.Insert(
         'INSERT IGNORE INTO industry_state (id, cycle_no, phase, '
-            .. 'phase_started_at, phase_ends_at) '
-            .. 'VALUES (1, 1, ?, FROM_UNIXTIME(?), FROM_UNIXTIME(?))',
-        { 'expansion', now, ends })
+            .. 'phase_started_at, phase_ends_at, quarter_no, season, season_no, '
+            .. 'season_started_at, season_ends_at, quarter_started_at, quarter_ends_at) '
+            .. 'VALUES (1, 1, ?, FROM_UNIXTIME(?), FROM_UNIXTIME(?), 1, ?, ?, '
+            .. 'FROM_UNIXTIME(?), FROM_UNIXTIME(?), FROM_UNIXTIME(?), FROM_UNIXTIME(?))',
+        { phase, now, ends, season, seasonNo, now, ends, now, quarterEnds })
 
     -- 只改写占位阶段；真实阶段（哪怕刚好被别人写了）保持原样。
     local affected, updateErr = Db.Update(
         'UPDATE industry_state SET cycle_no = 1, phase = ?, '
             .. 'phase_started_at = FROM_UNIXTIME(?), phase_ends_at = FROM_UNIXTIME(?), '
+            .. 'quarter_no = 1, season = ?, season_no = ?, '
+            .. 'season_started_at = FROM_UNIXTIME(?), season_ends_at = FROM_UNIXTIME(?), '
+            .. 'quarter_started_at = FROM_UNIXTIME(?), quarter_ends_at = FROM_UNIXTIME(?), '
             .. 'warning_announced_at = NULL, settled_cycle_no = 0, '
             .. 'result_announced_cycle = 0 '
             .. 'WHERE id = 1 AND phase IN (?, ?)',
-        { 'expansion', now, ends, 'uninitialized', 'static' })
+        { phase, now, ends, season, seasonNo, now, ends, now, quarterEnds,
+            'uninitialized', 'static' })
     if updateErr then return false, 'db_error' end
 
     local fresh = IndustryCycle.Current()
-    if not fresh or fresh.legacy then
+    if not fresh or fresh.legacy or not fresh.two_clock then
         -- 迁移没跑 / 写不进去：不要假装初始化成功，Tick 会持续报错。
         return false, 'db_error'
     end
+    if affected == 0 and fresh.cycle_no ~= 1 then return true, nil end
     return true, nil
 end
 
@@ -284,6 +591,49 @@ function IndustryCycle.SetPhase(phase, cycleNo, now)
     local target = tonumber(cycleNo) or current.cycle_no
     target = math.floor(target)
     if target < 0 or target > MAX_ORG_CYCLE then return false, 'bad_cycle' end
+
+    -- 两时钟：控制台换 phase 等价于跳到对应季节，并把季节边界重置为 now。
+    if current.two_clock then
+        local season = IndustryCycle.SeasonForPhase(phase)
+        local seasonNo = IndustryCycle.SeasonIndexOf(season)
+        if not season or not seasonNo then return false, 'bad_season' end
+
+        local weekIndex = IndustryCycle.WeekOfQuarter(target)
+        local duration = IndustryCycle.SeasonSeconds(weekIndex, seasonNo)
+        local ends = now + duration
+        local remaining = 0
+        for index = seasonNo + 1, IndustryCycle.SeasonsPerWeek() do
+            remaining = remaining + IndustryCycle.SeasonSeconds(weekIndex, index)
+        end
+        for week = weekIndex + 1, IndustryCycle.WeeksPerQuarter() do
+            for index = 1, IndustryCycle.SeasonsPerWeek() do
+                remaining = remaining + IndustryCycle.SeasonSeconds(week, index)
+            end
+        end
+        local quarterStarts = current.quarter_started_epoch or now
+
+        local affected, updateErr = Db.Update(
+            'UPDATE industry_state SET cycle_no = ?, phase = ?, '
+                .. 'phase_started_at = FROM_UNIXTIME(?), phase_ends_at = FROM_UNIXTIME(?), '
+                .. 'quarter_no = ?, season = ?, season_no = ?, '
+                .. 'season_started_at = FROM_UNIXTIME(?), season_ends_at = FROM_UNIXTIME(?), '
+                .. 'quarter_started_at = FROM_UNIXTIME(?), quarter_ends_at = FROM_UNIXTIME(?) '
+                .. 'WHERE id = 1 AND season_started_at IS NOT NULL',
+            { target, phase, now, ends, current.quarter_no, season, seasonNo,
+                now, ends, quarterStarts, ends + remaining })
+        if updateErr then return false, 'db_error' end
+        if affected ~= 1 then return false, 'no_state' end
+
+        if IndustrySales and IndustrySales.EnsureSeed then IndustrySales.EnsureSeed() end
+        return true, nil, {
+            cycle_no = target,
+            phase = phase,
+            season = season,
+            season_no = seasonNo,
+            started_epoch = now,
+            ends_epoch = ends,
+        }
+    end
 
     local duration = IndustryCycle.PhaseSeconds(phase)
     if not duration then return false, 'bad_phase' end
@@ -341,7 +691,11 @@ local function maybeWarn(state, now)
     lastWarnAttempt = now
 
     if not IndustryAnnounce or not IndustryAnnounce.Warning then return end
-    if not IndustryAnnounce.Warning(state.cycle_no, cycleEndsAt - now) then return end
+
+    -- 两时钟下被公告的是**季度结算**；旧单时钟仍按周期号公告。
+    local period = state.two_clock and state.quarter_no or state.cycle_no
+    local options = { twoClock = state.two_clock == true, season = state.season_name }
+    if not IndustryAnnounce.Warning(period, cycleEndsAt - now, options) then return end
 
     Db.Update(
         'UPDATE industry_state SET warning_announced_at = FROM_UNIXTIME(?) '
@@ -356,7 +710,126 @@ local function maybeResultAnnounce(state, now)
     if now - lastResultAttempt < retrySeconds() then return end
     lastResultAttempt = now
     if not IndustryAnnounce or not IndustryAnnounce.Result then return end
-    IndustryAnnounce.Result(state.settled_cycle_no)
+    IndustryAnnounce.Result(state.settled_cycle_no, { twoClock = state.two_clock == true })
+end
+
+--- 推进**一个季节**。一次调用最多一格；停机跨多个季节由后续 tick 依次补推。
+--- 跨季度那一格必须先完成 `SettleQuarter`：guarded UPDATE 里的
+--- `settled_cycle_no >= ?` 是第二道闸，绕过 Tick 直接调用也推不过去。
+---@param now number|nil epoch 秒
+---@return boolean ok, string|nil errcode, table|nil info
+function IndustryCycle.RollSeason(now)
+    now = math.floor(tonumber(now) or os.time())
+    local state, err = IndustryCycle.Current()
+    if not state then return false, err end
+    if not state.two_clock then return false, 'not_two_clock' end
+    if now < state.season_ends_epoch then return false, 'not_due' end
+
+    local order = IndustryCycle.SeasonOrder()
+    local seasons = #order
+    local weeks = IndustryCycle.WeeksPerQuarter()
+    local weekIndex = IndustryCycle.WeekOfQuarter(state.cycle_no)
+
+    local nextSeasonNo = state.season_no + 1
+    local nextCycle = state.cycle_no
+    local nextQuarter = state.quarter_no
+    local quarterCrossed = false
+    if nextSeasonNo > seasons then
+        nextSeasonNo = 1
+        nextCycle = state.cycle_no + 1
+        if weekIndex >= weeks then
+            quarterCrossed = true
+            nextQuarter = state.quarter_no + 1
+        end
+    end
+
+    local nextSeason = order[nextSeasonNo]
+    local nextPhase = IndustryCycle.PhaseForSeason(nextSeason)
+    if not nextSeason or not nextPhase then return false, 'bad_season' end
+
+    local nextWeekIndex = IndustryCycle.WeekOfQuarter(nextCycle)
+    -- 新季节从旧季节的**计划结束时间**开始：停机越久，补推越快追平绝对日程。
+    local startEpoch = state.season_ends_epoch
+    local endEpoch = startEpoch + IndustryCycle.SeasonSeconds(nextWeekIndex, nextSeasonNo)
+
+    local quarterStarts = state.quarter_started_epoch
+    local quarterEnds = state.quarter_ends_epoch
+    if quarterCrossed then
+        quarterStarts = startEpoch
+        quarterEnds = startEpoch + IndustryCycle.QuarterSeconds(1, 1)
+    end
+
+    local sql = 'UPDATE industry_state SET cycle_no = ?, phase = ?, '
+        .. 'phase_started_at = FROM_UNIXTIME(?), phase_ends_at = FROM_UNIXTIME(?), '
+        .. 'quarter_no = ?, season = ?, season_no = ?, '
+        .. 'season_started_at = FROM_UNIXTIME(?), season_ends_at = FROM_UNIXTIME(?), '
+        .. 'quarter_started_at = FROM_UNIXTIME(?), quarter_ends_at = FROM_UNIXTIME(?)'
+        .. (quarterCrossed and ', warning_announced_at = NULL ' or ' ')
+        .. 'WHERE id = 1 AND cycle_no = ? AND phase = ? AND season_no = ? '
+        .. 'AND season_ends_at <= FROM_UNIXTIME(?)'
+        .. (quarterCrossed and ' AND settled_cycle_no >= ?' or '')
+    local params = {
+        nextCycle, nextPhase, startEpoch, endEpoch,
+        nextQuarter, nextSeason, nextSeasonNo,
+        startEpoch, endEpoch, quarterStarts, quarterEnds,
+        state.cycle_no, state.phase, state.season_no, now,
+    }
+    if quarterCrossed then params[#params + 1] = state.quarter_no end
+
+    local affected, updateErr = Db.Update(sql, params)
+    if updateErr then return false, 'db_error' end
+    if affected ~= 1 then return false, 'conflict' end
+
+    -- 新季度：公告重试节流清零，避免压缩验收里沿用上一季度的冷却。
+    if quarterCrossed then
+        lastWarnAttempt = 0
+        lastResultAttempt = 0
+    end
+    if IndustrySales and IndustrySales.EnsureSeed then IndustrySales.EnsureSeed() end
+    auditAdvance(state.phase, nextPhase, nextCycle, startEpoch, endEpoch)
+
+    return true, nil, {
+        advanced = true,
+        from = state.season_name,
+        to = nextSeason,
+        season = nextSeason,
+        season_no = nextSeasonNo,
+        week_index = nextWeekIndex,
+        quarter_no = nextQuarter,
+        cycle_no = nextCycle,
+        started_epoch = startEpoch,
+        ends_epoch = endEpoch,
+    }
+end
+
+--- 两时钟 Tick：先判季节到期 → RollSeason；季度末那一格先结算再滚。
+local function tickTwoClock(state, now)
+    if now < state.season_ends_epoch then
+        return true, nil, { advanced = false, season = state.season_name }
+    end
+
+    local weekIndex = IndustryCycle.WeekOfQuarter(state.cycle_no)
+    local atQuarterEnd = state.season_no >= IndustryCycle.SeasonsPerWeek()
+        and weekIndex >= IndustryCycle.WeeksPerQuarter()
+    if atQuarterEnd and state.settled_cycle_no < state.quarter_no then
+        if type(IndustrySettlement) ~= 'table' or not IndustrySettlement.SettleQuarter then
+            return false, 'settlement_unavailable'
+        end
+        local settled, settleErr = IndustrySettlement.SettleQuarter(
+            state.quarter_no, { trigger = 'quarter_end', cycleNo = state.cycle_no })
+        if not settled then return false, settleErr or 'settlement_failed' end
+    end
+
+    local ok, rollErr, info = IndustryCycle.RollSeason(now)
+    if not ok then return false, rollErr end
+
+    -- 季度结算的重公告在 SettleQuarter 里发；季节切换只推一条轻提示。
+    if info and info.advanced
+        and IndustryAnnounce and IndustryAnnounce.SeasonRoll then
+        IndustryAnnounce.SeasonRoll(
+            info.season, info.season_no, info.week_index, info.quarter_no)
+    end
+    return true, nil, info
 end
 
 local ticking = false
@@ -392,6 +865,9 @@ function IndustryCycle.TickOnce(now)
 
     maybeResultAnnounce(state, now)
     maybeWarn(state, now)
+
+    -- 两时钟：季节是内层时钟，季度结算是外层事件。
+    if state.two_clock then return tickTwoClock(state, now) end
 
     if now < state.ends_epoch then
         return true, nil, { advanced = false, phase = state.phase }
