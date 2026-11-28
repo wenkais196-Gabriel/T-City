@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8"><title>产业参数报告 v4</title>
+<style>
+  :root{--bg:#0f1116;--card:#171a21;--border:#252a34;--fg:#e6e9ef;--muted:#9aa3b2;
+         --accent:#f0b429;--good:#7bd88f;--bad:#e8695b;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:14px/1.6 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif}
+  header{padding:22px 30px 12px;border-bottom:1px solid var(--border)}
+  h1{margin:0 0 4px;font-size:20px} h1 b{color:var(--accent)}
+  .sub{color:var(--muted);font-size:12.5px}
+  main{padding:18px 30px 44px;max-width:1120px}
+  section{background:var(--card);border:1px solid var(--border);border-radius:8px;
+           padding:14px 16px;margin-bottom:14px}
+  h2{margin:0 0 8px;font-size:14px;color:var(--accent)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{padding:5px 8px;border-bottom:1px solid var(--border);text-align:left}
+  th{color:var(--muted);font-size:12px;font-weight:600}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .kpi div{background:#1d222b;border:1px solid var(--border);border-radius:6px;padding:8px 10px}
+  .kpi span{display:block;color:var(--muted);font-size:11.5px}
+  .kpi b{font-size:15px;font-variant-numeric:tabular-nums}
+  .note{color:var(--muted);font-size:12px;margin-top:8px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11.5px;
+        border:1px solid #2c4a33;color:var(--good);margin-left:6px}
+  .warn{color:var(--bad)}
+  code{background:#11141a;border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:12px}
+</style></head><body>
+<header>
+  <h1>产业参数 <b>v4</b> · 全部由仿真定值</h1>
+  <div class="sub">口径：一周一个四季（天数每周不同）／季度 13 周／冬天＝黑五／设施跨季保留／提现抽税+周额度／结算按比例分。
+    数值来源 <code>sim_v4.py</code>，本页现算生成。</div>
+</header>
+<main>
+
+<section>
+  <h2>① 推荐参数（可直接落设计）</h2>
+  <div class="kpi">
+    <div><span>库存升级</span><b>+900/级</b><span>满级 5,940 · $40k×1.6^级</span></div>
+    <div><span>提现周额度</span><b>$25,000</b><span>≈ 季度收入 1%</span></div>
+    <div><span>提现税</span><b>20%</b><span>税是次要杠杆</span></div>
+    <div><span>结算分配</span><b>Boss 40%</b><span>其余成员平分</span></div>
+    <div><span>冬天（黑五）</span><b>0.25 / 1.30 / 1.50</b><span>产 / 配额 / 价</span></div>
+    <div><span>设施</span><b>跨季保留</b><span>季度末才重置</span></div>
+  </div>
+  <div class="note">依据见下面四张表。<span class="warn">注意：这些数字是在「配额按阶段独立」的设计口径下算的；
+    线上现在是「全周期累计」口径（`industry_sales` 缺 phase），会得到完全不同的结果 —— 那个 bug 要先修。</span></div>
+</section>
+
+<section>
+  <h2>② 库存升级步长：+900 是"囤货与卖光打平"的点</h2>
+  <table class=""><thead><tr><th>每级 +</th><th class="n">满级上限</th><th class="n">能卖就卖</th><th class="n">囤货过冬</th><th class="n">囤货增益</th></tr></thead><tbody><tr><td>+180</td><td class="n">1,620</td><td class="n">$2,328,808</td><td class="n">$1,371,865</td><td class="n">-41.1%</td></tr><tr><td>+450</td><td class="n">3,240</td><td class="n">$2,328,808</td><td class="n">$1,755,730</td><td class="n">-24.6%</td></tr><tr><td>+900</td><td class="n">5,940</td><td class="n">$2,328,808</td><td class="n">$2,341,785</td><td class="n">+0.6%</td></tr><tr><td>+1,200</td><td class="n">7,740</td><td class="n">$2,328,808</td><td class="n">$2,397,355</td><td class="n">+2.9%</td></tr><tr><td>+1,800</td><td class="n">11,340</td><td class="n">$2,328,808</td><td class="n">$2,415,540</td><td class="n">+3.7%</td></tr></tbody></table>
+  <div class="note">+180（现状）囤货 −41%；+900 打平（+0.6%）；+1,200 起囤货略占优但优势饱和（+3.7%）。</div>
+</section>
+
+<section>
+  <h2>③ 提现：额度是主开关，税是次要</h2>
+  <table class=""><thead><tr><th>周额度</th><th class="n">税率</th><th class="n">季度收入</th><th class="n">Boss 个人</th><th class="n">每成员</th><th class="n">Boss/成员</th></tr></thead><tbody><tr><td>0</td><td class="n">0%</td><td class="n">$2,590,058</td><td class="n">$49,142</td><td class="n">$24,571</td><td class="n">2.0x</td></tr><tr><td>0</td><td class="n">20%</td><td class="n">$2,590,058</td><td class="n">$49,142</td><td class="n">$24,571</td><td class="n">2.0x</td></tr><tr><td>0</td><td class="n">40%</td><td class="n">$2,590,058</td><td class="n">$49,142</td><td class="n">$24,571</td><td class="n">2.0x</td></tr><tr><td>25,000</td><td class="n">0%</td><td class="n">$2,328,808</td><td class="n">$452,219</td><td class="n">$74,384</td><td class="n">6.1x</td></tr><tr><td>25,000</td><td class="n">20%</td><td class="n">$2,328,808</td><td class="n">$391,528</td><td class="n">$74,384</td><td class="n">5.3x</td></tr><tr><td>25,000</td><td class="n">40%</td><td class="n">$2,328,808</td><td class="n">$330,838</td><td class="n">$74,384</td><td class="n">4.4x</td></tr><tr><td>50,000</td><td class="n">0%</td><td class="n">$1,942,545</td><td class="n">$719,449</td><td class="n">$47,368</td><td class="n">15.2x</td></tr><tr><td>50,000</td><td class="n">20%</td><td class="n">$1,942,545</td><td class="n">$594,506</td><td class="n">$47,368</td><td class="n">12.6x</td></tr><tr><td>50,000</td><td class="n">40%</td><td class="n">$1,942,545</td><td class="n">$469,564</td><td class="n">$47,368</td><td class="n">9.9x</td></tr><tr><td>100,000</td><td class="n">0%</td><td class="n">$921,940</td><td class="n">$914,440</td><td class="n">$0</td><td class="n">914440.0x</td></tr><tr><td>100,000</td><td class="n">20%</td><td class="n">$921,940</td><td class="n">$731,552</td><td class="n">$0</td><td class="n">731552.0x</td></tr><tr><td>100,000</td><td class="n">40%</td><td class="n">$921,940</td><td class="n">$548,664</td><td class="n">$0</td><td class="n">548664.0x</td></tr></tbody></table>
+  <div class="note">额度 $100k/周 时金库被搬空、成员一分没有；额度 ≤ $25k 时 Boss/成员 ≈ 5x，属于"老板工资"的合理区间。
+    税率从 0→40% 只把 Boss 压掉约 35%，而额度从 $50k→$25k 直接砍掉 34% 且成员收入翻倍。</div>
+</section>
+
+<section>
+  <h2>④ 黑五参数：对结果不敏感，按观感定</h2>
+  <table class=""><thead><tr><th>冬产能</th><th class="n">冬配额</th><th class="n">冬价</th><th class="n">能卖就卖</th><th class="n">囤货过冬</th><th class="n">囤货增益</th></tr></thead><tbody><tr><td>0.25</td><td class="n">0.70</td><td class="n">1.50</td><td class="n">$2,328,808</td><td class="n">$2,341,785</td><td class="n">+0.6%</td></tr><tr><td>0.25</td><td class="n">1.00</td><td class="n">1.50</td><td class="n">$2,328,808</td><td class="n">$2,341,785</td><td class="n">+0.6%</td></tr><tr><td>0.25</td><td class="n">1.30</td><td class="n">1.50</td><td class="n">$2,328,808</td><td class="n">$2,341,785</td><td class="n">+0.6%</td></tr><tr><td>0.25</td><td class="n">0.70</td><td class="n">1.35</td><td class="n">$2,288,670</td><td class="n">$2,295,128</td><td class="n">+0.3%</td></tr><tr><td>0.25</td><td class="n">1.00</td><td class="n">1.35</td><td class="n">$2,288,670</td><td class="n">$2,295,128</td><td class="n">+0.3%</td></tr><tr><td>0.25</td><td class="n">1.30</td><td class="n">1.35</td><td class="n">$2,288,670</td><td class="n">$2,295,128</td><td class="n">+0.3%</td></tr><tr><td>0.40</td><td class="n">0.70</td><td class="n">1.35</td><td class="n">$2,537,670</td><td class="n">$2,832,922</td><td class="n">+11.6%</td></tr><tr><td>0.40</td><td class="n">1.00</td><td class="n">1.35</td><td class="n">$2,537,670</td><td class="n">$2,832,922</td><td class="n">+11.6%</td></tr></tbody></table>
+  <div class="note">上面是按"囤货增益 ≈ +5%"排出的前 8 组。推荐 <b>0.25 / 1.30 / 1.50</b>：冬天产不出、卖得掉、价格高。</div>
+</section>
+
+<section>
+  <h2>⑤ 结算分配比例：影响远小于提现额度</h2>
+  <table class=""><thead><tr><th>Boss 比例</th><th class="n">Boss 个人</th><th class="n">每成员</th><th class="n">Boss/成员</th></tr></thead><tbody><tr><td>20%</td><td class="n">$317,145</td><td class="n">$99,178</td><td class="n">3.2x</td></tr><tr><td>30%</td><td class="n">$354,337</td><td class="n">$86,781</td><td class="n">4.1x</td></tr><tr><td>40%</td><td class="n">$391,528</td><td class="n">$74,384</td><td class="n">5.3x</td></tr><tr><td>50%</td><td class="n">$428,720</td><td class="n">$61,986</td><td class="n">6.9x</td></tr><tr><td>70%</td><td class="n">$503,104</td><td class="n">$37,192</td><td class="n">13.5x</td></tr></tbody></table>
+  <div class="note">因为大钱已经被周提现拿走了，结算分的是"剩下的"。先定额度，再谈比例。</div>
+</section>
+
+<section>
+  <h2>⑥ 推荐组合跑一个季度（囤货过冬）</h2>
+  <div class="kpi">
+    <div><span>囤货过冬 · 季度收入</span><b>$2,341,785</b></div><div><span>卖光 · 季度收入</span><b>$2,328,808</b></div><div><span>库存升级投入</span><b>$370,240</b></div><div><span>工位投入</span><b>$1,483,198</b></div><div><span>季度末工位</span><b>8/10</b></div><div><span>库存等级</span><b>4/6（上限 4,140）</b></div><div><span>Boss 个人（含提现）</span><b>$405,339</b></div><div><span>每成员</span><b>$72,669</b></div><div><span>威望</span><b>6</b></div>
+  </div>
+  <div class="note">同一参数下"卖光"策略季度收入 $2,328,808，与囤货 $2,341,785
+    相差 +0.6% —— 两种玩法都成立，这正是要的。</div>
+</section>
+
+<section>
+  <h2>⑦ 这份报告没有证明什么</h2>
+  <table>
+    <tr><th>没有证明</th><th>为什么</th></tr>
+    <tr><td>多名玩家/多组织互相抢配额时的均衡</td><td>这里是单组织模型；多组织抢配额要把"谁先卖"的时序也建模</td></tr>
+    <tr><td>线上真实逻辑</td><td>用的是设计口径；线上 `industry_sales` 缺 `phase`，跨阶段卖单会被 <code>org_cap_reached</code> 拒</td></tr>
+    <tr><td>玩家真的会这么玩</td><td>"老板顶格提现""只在高价季卖"都是脚本策略，真人会犯懒、会误判</td></tr>
+    <tr><td>通胀</td><td>售价只吃季节倍率，没并有 core_economy 的全局系数与活动热度</td></tr>
+  </table>
+</section>
+
+</main></body></html>

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>产业循环 demo v3 · 一周一个四季</title>
+<style>
+  :root{
+    --bg:#0f1116; --card:#171a21; --card2:#1d222b; --border:#252a34;
+    --fg:#e6e9ef; --muted:#9aa3b2; --accent:#f0b429; --good:#7bd88f; --bad:#e8695b; --info:#4ea3ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:14px/1.55 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif}
+  header{padding:18px 26px 10px;border-bottom:1px solid var(--border)}
+  h1{margin:0 0 4px;font-size:19px}
+  h1 b{color:var(--accent)}
+  .sub{color:var(--muted);font-size:12.5px}
+  main{padding:16px 26px 36px;max-width:1180px}
+  .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:14px}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  section{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+  h2{margin:0 0 10px;font-size:14px;color:var(--accent)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .pill{background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:5px 9px;
+        font-size:12.5px;color:var(--muted)}
+  .pill b{color:var(--fg);font-variant-numeric:tabular-nums}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:5px 7px;border-bottom:1px solid var(--border);text-align:left}
+  th{color:var(--muted);font-size:12px;font-weight:600}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  button{background:var(--card2);color:var(--fg);border:1px solid var(--border);border-radius:6px;
+         padding:8px 11px;font:inherit;cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  button:disabled{opacity:.42;cursor:not-allowed}
+  button.primary{background:#2a2314;border-color:#5c4a1c;color:var(--accent)}
+  .week{display:flex;gap:6px;margin:10px 0}
+  .week div{flex:1;text-align:center;border-radius:5px;padding:6px 4px;font-size:12px;
+            border:1px solid var(--border);background:var(--card2)}
+  .week b{display:block;font-size:13px}
+  .week span{color:var(--muted);font-size:11px}
+  .log{max-height:180px;overflow:auto;font-size:12.5px}
+  .log div{padding:4px 0;border-bottom:1px dashed #232733;color:var(--muted)}
+  .chart{width:100%;height:110px;display:block}
+  .axis{fill:#8b93a7;font-size:10px}
+  .gridline{stroke:#232833}
+  .kpi{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+  .kpi div{min-width:88px}
+  .kpi span{display:block;color:var(--muted);font-size:11.5px}
+  .kpi b{font-size:15px;font-variant-numeric:tabular-nums}
+  .note{color:var(--muted);font-size:12px;margin-top:8px}
+  .modal{position:fixed;inset:0;background:rgba(8,10,14,.84);display:none;align-items:center;
+         justify-content:center;padding:22px}
+  .modal.on{display:flex}
+  .modal .box{background:var(--card);border:1px solid var(--accent);border-radius:10px;padding:18px 20px;max-width:540px}
+  .modal h3{margin:0 0 8px;color:var(--accent);font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <h1>产业循环 <b>demo v3</b> · 一周走完一个四季</h1>
+  <div class="sub">季节天数每周不同（暖冬/寒冬）；一个现实季度 13 周；冬天有牙齿；库存与工位都要花钱升级。
+    数值抄自 <code>custom-industry/config/*.lua</code>，模型用的是**设计口径**。</div>
+</header>
+
+<main>
+  <div class="row">
+    <div class="pill">大周期 <b id="p-q">1</b>/4</div>
+    <div class="pill">第 <b id="p-w">1</b>/13 周</div>
+    <div class="pill">金库 <b id="p-cash">—</b></div>
+    <div class="pill">工位 <b id="p-ws">0</b>/10</div>
+    <div class="pill">库存 <b id="p-stock">0</b>/<span id="p-cap">540</span></div>
+    <div class="pill">威望 <b id="p-prestige">0</b></div>
+  </div>
+
+  <div class="grid">
+    <section>
+      <h2>这一周的季节分配</h2>
+      <div class="week" id="week"></div>
+      <div class="row">
+        <button class="primary" id="b-ws">建工位 <span id="c-ws"></span></button>
+        <button id="b-stock">升级库存 <span id="c-stock"></span></button>
+      </div>
+      <div class="row">
+        <button id="b-sell">走这一周：能卖就卖</button>
+        <button id="b-hoard">走这一周：只在高价季卖</button>
+      </div>
+      <div class="row">
+        <button id="b-fast">快进到季度末</button>
+        <button id="b-all">跑完 4 个季度</button>
+        <button id="b-reset">重开</button>
+      </div>
+      <div class="note" id="hint"></div>
+      <h2 style="margin-top:14px">事件</h2>
+      <div class="log" id="log"></div>
+    </section>
+
+    <section>
+      <h2>监控面板</h2>
+      <div class="kpi">
+        <div><span>本周收入</span><b id="k-rev">$0</b></div>
+        <div><span>累计</span><b id="k-cum">$0</b></div>
+        <div><span>本周产量</span><b id="k-prod">0</b></div>
+        <div><span>库存利用率</span><b id="k-stockuse">0%</b></div>
+        <div><span>个人银行</span><b id="k-bank">$0</b></div>
+        <div><span>本周提现</span><b id="k-wd">$0</b></div>
+        <div><span>状态</span><b id="k-state">—</b></div>
+      </div>
+      <svg class="chart" id="ch-rev" viewBox="0 0 520 110"></svg>
+      <svg class="chart" id="ch-cap" viewBox="0 0 520 110"></svg>
+      <div class="note">上：每周收入（锯齿＝季节分配不同）｜下：库存上限（升级）与工位数</div>
+    </section>
+  </div>
+
+  <section style="margin-top:14px">
+    <h2>两种玩法在同一周里的差别（用当前数值现算）</h2>
+    <table id="tbl">
+      <thead><tr><th>季节</th><th class="n">天数</th><th class="n">产能/售价/配额</th>
+        <th class="n">能卖就卖</th><th class="n">只在高价季卖</th><th>说明</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="note" id="tbl-note"></div>
+  </section>
+
+  <section style="margin-top:14px">
+    <h2>这个 demo 想让你判断的三件事</h2>
+    <table>
+      <tr><th>要判断的</th><th>怎么看</th></tr>
+      <tr><td>一周一个四季，节奏够不够快</td><td>点「走这一周」看事件流：一周内 4 个季节各结算一次，冬天产量塌下来</td></tr>
+      <tr><td>冬天牙齿够不够、会不会劝退</td><td>对比「能卖就卖」在春/冬两季的收入落差；冬天产能现在是 <b>0.40</b>（约 −60%）</td></tr>
+      <tr><td>库存升级值不值</td><td>升级后看两张图的间距；如果收入没涨，说明瓶颈在配额/工位，不在库存</td></tr>
+    </table>
+  </section>
+</main>
+
+<div class="modal" id="modal"><div class="box">
+  <h3 id="m-t"></h3><div id="m-b"></div>
+  <div class="row" style="margin-top:12px"><button class="primary" id="m-ok">开始新的大周期</button></div>
+</div></div>
+
+<script>
+"use strict";
+// ── 数值（config/*.lua + 本次新增的升级项）────────────────────────────
+const SEASONS=[
+  {k:"春",prod:1.25,price:1.00,quota:1.00,color:"#7bd88f"},
+  {k:"夏",prod:1.00,price:0.95,quota:0.85,color:"#4ea3ff"},
+  {k:"秋",prod:1.10,price:1.10,quota:0.70,color:"#f0b429"},
+  {k:"冬",prod:0.25,price:1.50,quota:1.30,color:"#e8695b"},  // 黑五：产不出、卖得掉、价高
+];
+const SPLITS=[[2,3,1,1],[1,1,3,2],[2,2,2,1],[1,2,2,2],[3,1,1,2],[1,3,1,2],[2,1,2,2]];
+const WEEKS_PER_QUARTER=13, QUARTERS=4;
+const H=24, UPH=4.5, PRICE=50, SEED_QUOTA=11000, ORG_CAP=.5;
+const FACILITY=50000, WS_CAP=10, GROWTH=1.35;
+const STOCK_BASE=540, STOCK_STEP=900, STOCK_MAX_LV=6;   // +900/级：囤货与卖光打平（仿真定值）
+const STOCK_COST=lv=>Math.floor(40000*Math.pow(1.6,lv));
+const STARTER=200000, PRESTIGE_K=50000, STIPEND=10000, BONUS=.02, BONUS_CAP=10;
+// 提现口径（仿真定值）：周额度 $25k、税 20%、季度结算剩余金库 Boss 40%
+const WEEK_QUOTA=25000, TAX=0.20, BOSS_SHARE=0.40, MEMBERS=3;
+
+const wsCost=n=>Math.floor(FACILITY*Math.pow(GROWTH,n-1));
+const money=v=>"$"+Math.round(v).toLocaleString("en-US");
+
+const S={quarter:1,week:1,cash:STARTER,stock:0,ws:0,built:false,stockLv:0,
+         prestige:0,cum:0,hist:[],log:[],buildSpend:0,stockSpend:0,
+         bank:0,taxPaid:0,withdrawn:0,weekWithdrawn:0};
+const cap=()=>STOCK_BASE+STOCK_STEP*S.stockLv;
+const bonus=()=>1+Math.min(S.prestige,BONUS_CAP)*BONUS;
+const splitOf=w=>SPLITS[(w-1)%SPLITS.length];
+
+function log(m){ S.log.unshift(m); if(S.log.length>50)S.log.pop(); renderLog(); }
+
+// 走一周：4 个季节各按天数推
+function playWeek(policy){
+  if(S.quarter>QUARTERS) return;
+  const split=splitOf(S.week);
+  S.weekWithdrawn=0;
+  let rev=0,prod=0,sold=0,sat=0,quotaCap=0;
+  const per=[];
+  for(let i=0;i<4;i++){
+    const se=SEASONS[i], days=split[i];
+    const gq=SEED_QUOTA*se.quota, capOrg=gq*ORG_CAP, quotaTotal=gq;
+    let left=gq, orgLeft=capOrg, sRev=0;
+    for(let h=0;h<days*H;h++){
+      if(S.ws>0){
+        let made=S.ws*UPH*se.prod*bonus();
+        made=Math.min(made,Math.max(0,cap()-S.stock));
+        S.stock+=made; prod+=made;
+      }
+      const sell=(policy==="sell")||(policy==="hoard"&&se.price>=1.10);
+      if(sell&&S.stock>0){
+        const q=Math.min(Math.floor(S.stock),left,orgLeft);
+        if(q>0){
+          S.stock-=q; left-=q; orgLeft-=q;
+          const r=q*PRICE*se.price; S.cash+=r; rev+=r; sRev+=r; sold+=q;
+        }
+      }
+    }
+    sat+= (gq-left); quotaCap+=quotaTotal;
+    per.push({season:se.k,days,rev:sRev,quotaUsed:gq-left,quotaTotal:gq,
+              prodMult:se.prod,priceMult:se.price,quotaMult:se.quota});
+  }
+  S.cum+=rev;
+  S.hist.push({week:S.week,split:split.join("/"),rev,prod,ws:S.ws,stockLv:S.stockLv,cap:cap()});
+  const usage=quotaCap? (sat/quotaCap*100).toFixed(0):"0";
+  log(`第 ${S.quarter} 季 · 第 ${S.week} 周 (${split.join("/")})：产 ${Math.round(prod)} · 卖 ${Math.round(sold)}`
+      +` · 收入 <b>${money(rev)}</b> · 配额用掉 ${usage}%`);
+  const take=Math.min(WEEK_QUOTA,S.cash);
+  if(take>0){
+    const tax=take*TAX;
+    S.cash-=take; S.bank+=take-tax; S.taxPaid+=tax; S.withdrawn+=take; S.weekWithdrawn+=take;
+    log(`Boss 提现 ${money(take)}（税 ${money(tax)}）→ 个人银行 ${money(S.bank)}`);
+  }
+  S.week++;
+  renderTable(per,policy);
+  if(S.week>WEEKS_PER_QUARTER) quarterSettle();
+  render();
+}
+
+function quarterSettle(){
+  const gain=Math.floor(Math.sqrt(Math.max(0,S.cum)/PRESTIGE_K));
+  S.prestige+=gain;
+  const bossCut=S.cash*BOSS_SHARE, memberPool=S.cash-bossCut, perMember=memberPool/MEMBERS;
+  S.bank+=bossCut;
+  const next=STARTER+S.prestige*STIPEND;
+  showModal(`大周期结算（第 ${S.quarter} 个）`,
+    `<table>
+      <tr><th>本季度收入</th><td class="n">${money(S.cum)}</td></tr>
+      <tr><th>工位投入 / 库存投入</th><td class="n">${money(S.buildSpend)} / ${money(S.stockSpend)}</td></tr>
+      <tr><th>季度内已提现（税 ${money(S.taxPaid)}）</th><td class="n">${money(S.withdrawn)}</td></tr>
+      <tr><th>结算剩余金库</th><td class="n">${money(S.cash)}</td></tr>
+      <tr><th>Boss 分 ${Math.round(BOSS_SHARE*100)}%</th><td class="n">${money(bossCut)}</td></tr>
+      <tr><th>成员 ${MEMBERS} 人平分</th><td class="n">${money(memberPool)}（每人 ${money(perMember)}）</td></tr>
+      <tr><th>Boss 个人银行（累计）</th><td class="n">${money(S.bank)}</td></tr>
+      <tr><th>威望</th><td class="n">+${gain}（累计 ${S.prestige}）</td></tr>
+      <tr><th>软重置</th><td class="n">设施/工位/库存清零，威望保留</td></tr>
+      <tr><th>下一轮起跑金</th><td class="n">${money(next)}</td></tr>
+    </table>`);
+  S.quarter++; S.week=1; S.cash=next; S.stock=0; S.ws=0; S.built=false;
+  S.stockLv=0; S.cum=0; S.buildSpend=0; S.stockSpend=0;
+}
+
+function showModal(t,html){
+  document.getElementById("m-t").textContent=t;
+  document.getElementById("m-b").innerHTML=html;
+  document.getElementById("modal").classList.add("on");
+}
+
+// ── 渲染 ──────────────────────────────────────────────────────────────
+function render(){
+  const done=S.quarter>QUARTERS;
+  document.getElementById("p-q").textContent=Math.min(S.quarter,QUARTERS);
+  document.getElementById("p-w").textContent=Math.min(S.week,WEEKS_PER_QUARTER);
+  document.getElementById("p-cash").textContent=money(S.cash);
+  document.getElementById("p-ws").textContent=S.ws;
+  document.getElementById("p-stock").textContent=Math.round(S.stock);
+  document.getElementById("p-cap").textContent=cap();
+  document.getElementById("p-prestige").textContent=S.prestige;
+
+  const split=splitOf(S.week);
+  document.getElementById("week").innerHTML=split.map((d,i)=>{
+    const se=SEASONS[i];
+    return `<div style="border-color:${se.color}55">
+      <b style="color:${se.color}">${se.k}</b>
+      <span>${d} 天 · 产${se.prod.toFixed(2)} 价${se.price.toFixed(2)}</span></div>`;
+  }).join("");
+
+  const wc=S.built?wsCost(S.ws+1):FACILITY+wsCost(1);
+  const bws=document.getElementById("b-ws");
+  bws.disabled=done||S.ws>=WS_CAP||S.cash<wc;
+  document.getElementById("c-ws").textContent=`(${money(wc)})`;
+  const sc=S.stockLv<STOCK_MAX_LV?STOCK_COST(S.stockLv):0;
+  const bst=document.getElementById("b-stock");
+  bst.disabled=done||S.stockLv>=STOCK_MAX_LV||S.cash<sc;
+  document.getElementById("c-stock").textContent= S.stockLv<STOCK_MAX_LV
+    ? `(${money(sc)} → ${cap()+STOCK_STEP})` : "（已满级）";
+
+  document.getElementById("b-sell").disabled=done;
+  document.getElementById("b-hoard").disabled=done;
+  document.getElementById("b-fast").disabled=done;
+  document.getElementById("b-all").disabled=done;
+
+  const last=S.hist[S.hist.length-1];
+  document.getElementById("k-rev").textContent=last?money(last.rev):"$0";
+  document.getElementById("k-cum").textContent=money(S.hist.reduce((a,x)=>a+x.rev,0));
+  document.getElementById("k-prod").textContent=last?Math.round(last.prod):0;
+  document.getElementById("k-stockuse").textContent=Math.round(S.stock/cap()*100)+"%";
+  document.getElementById("k-bank").textContent=money(S.bank);
+  document.getElementById("k-wd").textContent=money(S.weekWithdrawn);
+
+  const st=document.getElementById("k-state");
+  if(!last){ st.textContent="—"; st.style.color="var(--muted)"; }
+  else if(last.rev<=0){ st.textContent="停摆"; st.style.color="var(--bad)"; }
+  else if(S.ws>=WS_CAP&&S.stockLv>=STOCK_MAX_LV){ st.textContent="已满级"; st.style.color="var(--good)"; }
+  else { st.textContent="正常"; st.style.color="var(--good)"; }
+
+  draw("ch-rev",S.hist.map(x=>x.rev),"#f0b429","每周收入");
+  draw("ch-cap",S.hist.map(x=>x.cap),"#4ea3ff","库存上限");
+  renderLog();
+}
+
+function draw(id,vals,color,label){
+  const svg=document.getElementById(id),W=520,Hh=110,padL=42,padR=8,padT=12,padB=16;
+  if(!vals.length){ svg.innerHTML=`<text x="10" y="56" class="axis">还没有数据</text>`; return; }
+  const max=Math.max(...vals,1), step=(W-padL-padR)/Math.max(vals.length-1,1);
+  let path="";
+  vals.forEach((v,i)=>{
+    const x=padL+i*step,y=padT+(Hh-padT-padB)*(1-v/max);
+    path+=(i?" L":"M")+x.toFixed(1)+","+y.toFixed(1);
+  });
+  let g="";
+  for(let i=0;i<=2;i++){
+    const y=padT+(Hh-padT-padB)*i/2;
+    g+=`<line class="gridline" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"/>
+        <text class="axis" x="${padL-6}" y="${y+3}" text-anchor="end">${max>999?(max*(1-i/2)/1000).toFixed(0)+"k":Math.round(max*(1-i/2))}</text>`;
+  }
+  svg.innerHTML=g+`<path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>`
+    +`<text class="axis" x="${padL}" y="${Hh-3}">${label}</text>`;
+}
+
+function renderLog(){
+  document.getElementById("log").innerHTML=S.log.map(x=>`<div>${x}</div>`).join("");
+}
+
+function renderTable(per,policy){
+  const tb=document.querySelector("#tbl tbody");
+  tb.innerHTML=per.map(p=>{
+    const diff=policy==="hoard"&&p.priceMult<1.10?"（未卖：等高价）":"—";
+    return `<tr><td>${p.season}</td><td class="n">${p.days} 天</td>
+      <td class="n">${p.prodMult.toFixed(2)} / ${p.priceMult.toFixed(2)} / ${p.quotaMult.toFixed(2)}</td>
+      <td class="n">${money(p.rev)}</td>
+      <td class="n">${policy==="hoard"?"见左":"同左"}</td>
+      <td>配额用 ${p.quotaUsed}/${Math.round(p.quotaTotal)}${diff!=="—"?" · "+diff:""}</td></tr>`;
+  }).join("");
+  document.getElementById("tbl-note").textContent=
+    "配额按季节独立计数：这一季没卖掉的额度，下一季不会补给你 —— 所以「囤货等高价」要先确认能补回损失。";
+}
+
+// ── 交互 ──────────────────────────────────────────────────────────────
+document.getElementById("b-ws").onclick=()=>{
+  const c=S.built?wsCost(S.ws+1):FACILITY+wsCost(1);
+  if(S.cash<c||S.ws>=WS_CAP) return;
+  S.cash-=c; S.buildSpend+=c;
+  if(!S.built){ S.built=true; S.ws=1; log(`建设施 + 首工位（${money(c)}）`); }
+  else { S.ws++; log(`加第 ${S.ws} 个工位（${money(c)}）`); }
+  render();
+};
+document.getElementById("b-stock").onclick=()=>{
+  if(S.stockLv>=STOCK_MAX_LV) return;
+  const c=STOCK_COST(S.stockLv);
+  if(S.cash<c) return;
+  S.cash-=c; S.stockSpend+=c; S.stockLv++;
+  log(`库存上限升到 ${cap()}（花了 ${money(c)}）`);
+  render();
+};
+document.getElementById("b-sell").onclick=()=>playWeek("sell");
+document.getElementById("b-hoard").onclick=()=>playWeek("hoard");
+document.getElementById("b-fast").onclick=()=>{
+  let guard=0;
+  while(S.week<=WEEKS_PER_QUARTER&&guard++<20) playWeek("sell");
+};
+document.getElementById("b-all").onclick=()=>{
+  let guard=0;
+  while(S.quarter<=QUARTERS&&guard++<80){
+    playWeek("sell");
+    document.getElementById("modal").classList.remove("on");
+    if(S.week>WEEKS_PER_QUARTER) break;
+  }
+  if(S.quarter>QUARTERS) log("4 个季度跑完 —— 看两张图的形状");
+  render();
+};
+document.getElementById("b-reset").onclick=()=>location.reload();
+document.getElementById("m-ok").onclick=()=>{
+  document.getElementById("modal").classList.remove("on");
+  render();
+};
+
+document.getElementById("hint").textContent=
+  "开局金库 "+money(STARTER)+"。先建工位（设施 $50,000 + 首工位 $50,000）才有产出；库存上限是可买的第二项。";
+log("开局：还没有设施。冬天是黑五 —— 产不出（0.25）但卖得掉（配额 1.30、价 1.50）：把春秋的货囤到冬天卖。");
+renderTable([], "sell");
+render();
+</script>
+</body></html>
