@@ -17,9 +17,22 @@ from __future__ import annotations
 import re
 
 from industry_harness import (
+    ACCESS_SRC,
+    AUDIT_SRC,
+    COMMANDS_SRC,
+    COMMAND_STUBS,
+    CONFIG_SRC,
+    CYCLE_CONFIG_SRC,
+    CYCLE_SRC,
     MIGRATION_TREASURY,
+    ORG_ID_SRC,
+    PROBE_COMMON,
     SCHEMA_FIXTURE,
+    TREASURY_PROBE,
+    TREASURY_SRC,
     UNIQUE_REF_KEY,
+    _run,
+    read_text,
     run_grant,
     run_treasury as run,
     run_treasury_commands as run_commands,
@@ -29,6 +42,216 @@ from industry_harness import (
 MIGRATION = MIGRATION_TREASURY
 TABLES = ("org_treasury", "org_ledger", "industry_audit")
 UNIQUE_KEY = UNIQUE_REF_KEY
+
+# ── 提现命令（P2 #410）：真配置 + 真 treasury/audit/access/commands ──
+# 不能用 run_grant：它的 Command 桩里没有 access.lua，也没有 config/cycle.lua，
+# 额度与税率就读不到真实配置（反向注入改配置时用例也不会红）。
+WITHDRAW_MODULES = (
+    CONFIG_SRC,
+    CYCLE_CONFIG_SRC,
+    ORG_ID_SRC,
+    CYCLE_SRC,
+    TREASURY_SRC,
+    AUDIT_SRC,
+    ACCESS_SRC,
+    COMMANDS_SRC,
+)
+
+
+def run_withdraw(body: str) -> dict[str, str]:
+    return _run(
+        body,
+        stubs=read_text(PROBE_COMMON, TREASURY_PROBE) + "\n" + COMMAND_STUBS,
+        modules=WITHDRAW_MODULES,
+    )
+
+
+# 固定「现在」：2026-01-05（周一）12:00 本地时区；下一周 = +7 天。
+# 周额度判断只通过 IndustryCommands.Now 取时间，不真等 7 天。
+WITHDRAW_PRELUDE = r"""
+__nowEpoch = os.time({ year = 2026, month = 1, day = 5, hour = 12, min = 0, sec = 0 })
+__nextWeekEpoch = __nowEpoch + 7 * 86400
+
+-- 假 DB 扩展：给流水打上入库时刻；额度查询按 (org, reason, since) 求和。
+-- 真库的 created_at 是 TIMESTAMP，这里只用 epoch 表示；SQL 形状必须真的带
+-- reason 与时间闸门，删掉时额度用例会红。
+local baseSingle = MySQL.single.await
+local baseInsert = MySQL.insert.await
+MySQL.insert.await = function(sql, values)
+    local result = baseInsert(sql, values)
+    if sql:find('org_ledger', 1, true) then
+        local row = __ledger[#__ledger]
+        if row and row.created_at_epoch == nil then row.created_at_epoch = __nowEpoch end
+    end
+    return result
+end
+MySQL.single.await = function(sql, values)
+    if sql:find('SUM(-delta)', 1, true) then
+        local total = 0
+        for _, row in ipairs(__ledger) do
+            local reason = tostring(row.reason)
+            local counted = reason == 'withdraw' or reason == 'withdraw-rollback'
+            if row.org_id == values[1] and counted and (row.delta or 0) ~= 0
+                and (row.created_at_epoch or 0) >= values[2] then
+                total = total + (-row.delta)
+            end
+        end
+        return { total = total }
+    end
+    return baseSingle(sql, values)
+end
+
+__bank = 0
+__payoutOk = true
+local boss = {
+    PlayerData = {
+        citizenid = 'cid-boss',
+        job = { name = 'miner', grade = { level = 4 } },
+    },
+    Functions = {
+        AddMoney = function(kind, amount, reason)
+            if kind ~= 'bank' then
+                error('AddMoney moneytype 必须是 bank，实际 ' .. tostring(kind))
+            end
+            if __payoutOk == false then return false end
+            __bank = __bank + amount
+            return true
+        end,
+        RemoveMoney = function() return false end,
+    },
+}
+local coreObject = {
+    Commands = {
+        Add = function(name, help, args, required, handler)
+            __handlers[name] = handler
+        end,
+    },
+    Functions = {
+        GetPlayer = function() return boss end,
+        HasPermission = function() return false end,
+    },
+}
+exports = setmetatable({}, {
+    __index = function(_, resource)
+        if resource == 'qb-core' then
+            return { GetCoreObject = function() return coreObject end }
+        end
+        return nil
+    end,
+})
+function Money(value) return tostring(value) end
+function TriggerClientEvent() end
+IndustryCommands.Now = function() return __nowEpoch end
+IndustryCommands.Register()
+"""
+
+
+def test_withdraw_burns_twenty_percent_tax_and_enforces_the_weekly_quota():
+    """提 25,000 → 个人银行 +20,000 / 金库 −25,000 / 审计 tax_burned=5,000。
+
+    同一周再提 25,000 必须被 `weekly_quota_exceeded` 拒绝；把时钟拨到下一周后
+    额度重新归零，同一笔能成功。全程没有真等 7 天。
+    """
+    out = run_withdraw(WITHDRAW_PRELUDE + r"""
+        __reset()
+        __seed('mining_co', 50000)
+
+        __handlers.orgfundwithdraw(1, { 'mining_co', '25000' })
+        local payload1 = __lastAuditPayload('treasury.withdraw')
+        __emit('BANK1', tostring(__bank))
+        __emit('BAL1', tostring(__balance('mining_co')))
+        __emit('LEDGER1', tostring(__ledgerCount()))
+        __emit('DELTA1', tostring(__ledger[1] and __ledger[1].delta))
+        __emit('PAYLOAD1', tostring(payload1))
+        __emit('IS_OK1', tostring(payload1 and payload1:find('"result":"ok"', 1, true) ~= nil))
+        __emit('TAX1', tostring(payload1 and payload1:find('"tax_burned":5000', 1, true) ~= nil))
+        __emit('NET1', tostring(payload1 and payload1:find('"net":20000', 1, true) ~= nil))
+
+        __handlers.orgfundwithdraw(1, { 'mining_co', '25000' })
+        local payload2 = __lastAuditPayload('treasury.withdraw')
+        __emit('BANK2', tostring(__bank))
+        __emit('BAL2', tostring(__balance('mining_co')))
+        __emit('LEDGER2', tostring(__ledgerCount()))
+        __emit('REJECTED', tostring(payload2
+            and payload2:find('weekly_quota_exceeded', 1, true) ~= nil))
+
+        __nowEpoch = __nextWeekEpoch
+        __handlers.orgfundwithdraw(1, { 'mining_co', '25000' })
+        local payload3 = __lastAuditPayload('treasury.withdraw')
+        __emit('BANK3', tostring(__bank))
+        __emit('BAL3', tostring(__balance('mining_co')))
+        __emit('LEDGER3', tostring(__ledgerCount()))
+        __emit('IS_OK3', tostring(payload3 and payload3:find('"result":"ok"', 1, true) ~= nil))
+    """)
+
+    assert out["BANK1"] == "20000", f"净值没有按 20% 税入个人银行：{out}"
+    assert out["BAL1"] == "25000", "金库没有按全额扣 25,000"
+    assert out["LEDGER1"] == "1", "提现应恰好一条流水"
+    assert out["DELTA1"] == "-25000", "流水 delta 必须是税前全额"
+    assert out["IS_OK1"] == "true", f"第一次提现审计不是 ok：{out['PAYLOAD1']}"
+    assert out["TAX1"] == "true", f"审计缺 tax_burned=5000：{out['PAYLOAD1']}"
+    assert out["NET1"] == "true", f"审计缺 net=20000：{out['PAYLOAD1']}"
+
+    assert out["BANK2"] == "20000", "被额度拒绝的提现动了个人银行"
+    assert out["BAL2"] == "25000", "被额度拒绝的提现动了金库"
+    assert out["LEDGER2"] == "1", "被额度拒绝的提现写了流水"
+    assert out["REJECTED"] == "true", (
+        f"同一周第二次顶格提现没有返回 weekly_quota_exceeded：{out}"
+    )
+
+    assert out["BANK3"] == "40000", "下一周没有恢复额度（个人银行只多了 20,000）"
+    assert out["BAL3"] == "0", "下一周提现没有扣金库"
+    assert out["LEDGER3"] == "2", "下一周提现没有新增流水"
+    assert out["IS_OK3"] == "true", "下一周提现没有被放行"
+
+
+def test_withdraw_over_quota_is_rejected_not_silently_truncated():
+    out = run_withdraw(WITHDRAW_PRELUDE + r"""
+        __reset()
+        __seed('mining_co', 50000)
+        __handlers.orgfundwithdraw(1, { 'mining_co', '25001' })
+        local payload = __lastAuditPayload('treasury.withdraw')
+        __emit('BANK', tostring(__bank))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+        __emit('REJECTED', tostring(payload
+            and payload:find('weekly_quota_exceeded', 1, true) ~= nil))
+    """)
+
+    assert out["BANK"] == "0", "超额提现被静默截断成 25,000 并发了钱"
+    assert out["BAL"] == "50000", "超额提现动了金库"
+    assert out["LEDGER"] == "0", "超额提现写了流水"
+    assert out["REJECTED"] == "true", f"超额提现没有明确错误码：{out}"
+
+
+def test_failed_payout_refunds_full_amount_and_does_not_burn_tax():
+    """AddMoney 失败时退款全额：税不烧、金库复原、本周额度净消耗为 0。"""
+    out = run_withdraw(WITHDRAW_PRELUDE + r"""
+        __reset()
+        __seed('mining_co', 50000)
+        __payoutOk = false
+        __handlers.orgfundwithdraw(1, { 'mining_co', '25000' })
+        local payload = __lastAuditPayload('treasury.withdraw')
+        __emit('BANK', tostring(__bank))
+        __emit('BAL', tostring(__balance('mining_co')))
+        __emit('LEDGER', tostring(__ledgerCount()))
+        __emit('REFUNDED', tostring(payload
+            and payload:find('payout_failed_refunded', 1, true) ~= nil))
+        __emit('TAX', tostring(payload and payload:find('"tax_burned":0', 1, true) ~= nil))
+
+        __payoutOk = true
+        __handlers.orgfundwithdraw(1, { 'mining_co', '25000' })
+        __emit('BANK2', tostring(__bank))
+        __emit('BAL2', tostring(__balance('mining_co')))
+    """)
+
+    assert out["BANK"] == "0", "发放失败却给个人银行加了钱"
+    assert out["BAL"] == "50000", "发放失败没有把全额退回金库"
+    assert out["LEDGER"] == "2", "退款没有写 withdraw-rollback 流水"
+    assert out["REFUNDED"] == "true", f"审计没有记录 refunded：{out}"
+    assert out["TAX"] == "true", "发放失败仍把税烧掉了"
+    assert out["BANK2"] == "20000", "退款后同一周重试被额度误伤（净额应回到 0）"
+    assert out["BAL2"] == "25000", "重试成功的提现没有按全额扣金库"
 
 
 # ══════════════════════════════════════════════════════════════════

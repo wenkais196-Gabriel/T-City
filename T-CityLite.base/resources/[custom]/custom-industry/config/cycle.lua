@@ -128,3 +128,18 @@ Config.Industry.Cycle = {
     QuarterStarterGrant = integerConvar('industry_quarter_starter', 200000, 0),
     QuarterPrestigeStipend = integerConvar('industry_quarter_stipend', 10000, 0),
 }
+
+-- ── P2 提现额度 / 税 + 季度分配（#410）──────────────────────────────
+-- 依据：docs/plan/industry-ops/10-plan.md §1 的仿真定值 ——
+--   周额度 $25,000（$50k 时 Boss/成员收入比 12.6x，$100k 时成员为 0）；
+--   提现税 20%；结算分配 Boss 40% / 非 Boss 成员平分。
+-- 税的去处：**销毁**。金子从金库扣全额，只有扣除税后的净值进个人银行；税不进
+-- 任何账户、不进城市账本（issue #410 要求二选一并写清）。销毁比进城市账本少一个
+-- 可被再次分配的池，也不会把 Boss 的提现变成公共收入。
+-- 周额度的「周」= 服务器本地时区的自然周（周一 00:00 起）；派生口径见
+-- Treasury.GetWithdrawnThisWeek（org_ledger 的 withdraw / withdraw-rollback 净额）。
+Config.Industry.WeeklyWithdrawQuota = integerConvar('industry_weekly_withdraw_quota', 25000, 0)
+Config.Industry.WithdrawTaxRate = math.min(
+    numberConvar('industry_withdraw_tax_rate', 0.20, 0), 1)
+Config.Industry.QuarterBossShare = math.min(
+    numberConvar('industry_quarter_boss_share', 0.40, 0), 1)

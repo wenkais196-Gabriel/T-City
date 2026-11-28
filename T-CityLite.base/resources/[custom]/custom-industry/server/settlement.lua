@@ -77,6 +77,195 @@ local function starterGrantFor(result)
     return amount
 end
 
+-- ── 季度分配（P2 #410）──────────────────────────────────────────────
+-- 本仓库没有 `org_members` 表（全仓 grep 0 命中）。当前成员名单取 QBCore 在线
+-- 玩家，判定与 announce.lua 的推送名单完全一致（IndustryAccess.OrgMembership）；
+-- 离线成员不在本轮分配范围 —— 分配只走 Player.Functions.AddMoney（个人层只写
+-- bank），离线对象要落盘会重写整行，越过「其它字段一个字节都不能动」的边界。
+-- 没有在线 Boss 时不分配：余额仍按旧口径由 ApplySettlement 清零。
+--
+-- 比例：Boss 组拿 total × QuarterBossShare，其余成员平分剩余；没有非 Boss 成员
+-- 时（单人组织）Boss 拿 100%。除不尽的余数给排序后的第一个 Boss，保证
+-- 「分配总额 == 剩余金库」，不会把零头留在账上。
+local QBCore
+
+local function core()
+    if QBCore then return QBCore end
+    local ok, value = pcall(function() return exports['qb-core']:GetCoreObject() end)
+    if ok and type(value) == 'table' then QBCore = value end
+    return QBCore
+end
+
+local DISTRIBUTE_REASON = 'industry-quarter-share'
+
+--- 在线且属于该组织的玩家。失败返回 nil（调用方按「本轮不分配」处理）。
+---@param orgId string
+---@return table|nil members sorted by citizenid
+local function collectMembers(orgId)
+    if type(IndustryAccess) ~= 'table' or not IndustryAccess.OrgMembership then return nil end
+    local coreObject = core()
+    if not coreObject then return nil end
+    local functions = coreObject.Functions
+    if type(functions) ~= 'table' then return nil end
+
+    local called, players = pcall(function() return functions.GetQBPlayers() end)
+    if not called or type(players) ~= 'table' then return nil end
+
+    local members = {}
+    for _, Player in pairs(players) do
+        local data = type(Player) == 'table' and Player.PlayerData or nil
+        local cid = type(data) == 'table' and data.citizenid or nil
+        if type(cid) == 'string' and cid ~= '' then
+            local member, grade = IndustryAccess.OrgMembership(Player, orgId)
+            if member then
+                members[#members + 1] = {
+                    player = Player,
+                    citizenid = cid,
+                    grade = tonumber(grade) or 0,
+                }
+            end
+        end
+    end
+    table.sort(members, function(a, b) return a.citizenid < b.citizenid end)
+    return members
+end
+
+--- 把总额拆成每个在线成员的份额。
+---@param total number
+---@param members table
+---@param bossShare number 0..1
+---@return table|nil shares, table|nil info
+local function planShares(total, members, bossShare)
+    local bossGrade = tonumber(Config.Industry.BossGrade) or 4
+    local bosses, regular = {}, {}
+    for _, member in ipairs(members) do
+        if member.grade >= bossGrade then
+            bosses[#bosses + 1] = member
+        else
+            regular[#regular + 1] = member
+        end
+    end
+    if #bosses == 0 then return nil end
+
+    local memberEach = 0
+    if #regular > 0 then
+        memberEach = math.floor(total * (1 - bossShare) / #regular + 1e-9)
+    end
+    local bossTotal = total - memberEach * #regular
+    local shares = {}
+    local perBoss = math.floor(bossTotal / #bosses)
+    local remainder = bossTotal - perBoss * #bosses
+    for index, member in ipairs(bosses) do
+        shares[#shares + 1] = {
+            player = member.player,
+            amount = perBoss + (index == 1 and remainder or 0),
+        }
+    end
+    for _, member in ipairs(regular) do
+        if memberEach > 0 then
+            shares[#shares + 1] = { player = member.player, amount = memberEach }
+        end
+    end
+    return shares, {
+        boss_total = bossTotal,
+        member_each = memberEach,
+        boss_count = #bosses,
+        member_count = #regular,
+    }
+end
+
+---@return number paid, number failed
+local function payoutShares(orgId, periodNo, shares)
+    local paid, failed = 0, 0
+    for _, share in ipairs(shares) do
+        -- 分成到整美元后可能为 0（小金额/多人）：AddMoney 不接受 0，直接跳过。
+        if share.amount > 0 then
+            local ok, credited = pcall(function()
+                return share.player.Functions.AddMoney('bank', share.amount, DISTRIBUTE_REASON)
+            end)
+            if ok and credited == true then
+                paid = paid + share.amount
+            else
+                failed = failed + share.amount
+                -- 日志不带 citizenid / 姓名：金额与组织足够定位。
+                print(('[custom-industry] quarter share failed org=%s quarter=%d amount=%d'):format(
+                    tostring(orgId), periodNo, share.amount))
+            end
+        end
+    end
+    return paid, failed
+end
+
+local function distributePayload(periodNo, total, info, paid, failed, resultCode)
+    return ('{"quarter_no":%d,"total":%d,"boss_total":%d,"member_each":%d,'
+        .. '"boss_count":%d,"member_count":%d,"paid":%d,"failed":%d,"result":"%s"}'):format(
+        periodNo, total, info.boss_total, info.member_each,
+        info.boss_count, info.member_count, paid, failed, resultCode)
+end
+
+--- 把 result.balance_cleared 从金库提出并按比例发给在线成员。
+--- 幂等事实是 org_ledger 的 UNIQUE(org_id, ref)（ref = quarter-distribute:<季度>）：
+--- 重试时看到这一行就不再发第二次（钱宁可少发也不发两遍）。
+---@return table|nil info, string|nil errcode
+local function distributeQuarter(orgId, periodNo, result, cycleNo)
+    local shareRate = tonumber(Config.Industry.QuarterBossShare)
+    if not shareRate or shareRate ~= shareRate or shareRate < 0 or shareRate > 1 then
+        return nil
+    end
+    local total = nonNegative(result and result.balance_cleared)
+    if total <= 0 then return nil end
+
+    local members = collectMembers(orgId)
+    if not members or #members == 0 then return nil end
+    local shares, info = planShares(total, members, shareRate)
+    if not shares then return nil end
+
+    local ref = 'quarter-distribute:' .. tostring(periodNo)
+    local existing, lookupErr = Db.Single(
+        'SELECT id FROM org_ledger WHERE org_id = ? AND ref = ? LIMIT 1',
+        { orgId, ref })
+    if lookupErr then return nil, 'db_error' end
+    if existing then
+        print(('[custom-industry] quarter distribute already claimed org=%s quarter=%d total=%d'):format(
+            tostring(orgId), periodNo, total))
+        return { already = true, total = total, paid = 0, failed = 0, result = 'already' }
+    end
+
+    local withdrawn, withdrawErr = Treasury.Withdraw(orgId, total, 'quarter-distribute', {
+        ref = ref,
+        cycleNo = cycleNo,
+    })
+    if not withdrawn then
+        if withdrawErr == 'duplicate_ref' then
+            return { already = true, total = total, paid = 0, failed = 0, result = 'already' }
+        end
+        if withdrawErr == 'insufficient_funds' then
+            -- 快照之后余额被提走：本轮不分配，交给 ApplySettlement 按旧口径清零。
+            print(('[custom-industry] quarter distribute skipped org=%s quarter=%d: balance changed'):format(
+                tostring(orgId), periodNo))
+            return nil
+        end
+        return nil, withdrawErr or 'db_error'
+    end
+
+    local paid, failed = payoutShares(orgId, periodNo, shares)
+    local resultCode = failed == 0 and 'ok' or (paid > 0 and 'partial' or 'failed')
+    if IndustryAudit and IndustryAudit.Write then
+        IndustryAudit.Write(orgId, nil, 'treasury.distribute',
+            distributePayload(periodNo, total, info, paid, failed, resultCode))
+    end
+    return {
+        total = total,
+        paid = paid,
+        failed = failed,
+        result = resultCode,
+        boss_total = info.boss_total,
+        member_each = info.member_each,
+        boss_count = info.boss_count,
+        member_count = info.member_count,
+    }
+end
+
 --- 本周期/季度需要处理的组织：有设施、有卖单、或金库有行。
 --- 显式列名 + LIMIT；结果在 Lua 里排序，保证执行顺序稳定。
 --- 两时钟的卖单跨 13 周，所以不再按单个 cycle_no 过滤 —— 设施/金库兜住绝大多数
@@ -271,11 +460,26 @@ local function settleOrg(orgId, periodNo, opts)
         starterDone = paidRow ~= nil
     end
 
+    -- 先分配、后清零：分配要真的从金库扣款（Treasury.Withdraw 的余额守卫），
+    -- 清零则是绝对值幂等操作。分配失败时 settlement 停下重试；已扣过（唯一 ref）
+    -- 的轮次不再发第二次。
+    local distribution = nil
+    if not legacy and not starterDone then
+        local distributeErr
+        distribution, distributeErr = distributeQuarter(orgId, periodNo, result, cycleNoForLedger)
+        if distributeErr then return false, distributeErr end
+    end
+    local distributed = distribution and nonNegative(distribution.total) or 0
+
     if not starterDone then
+        -- 已分配的金额已经以 quarter-distribute 流水离开金库，不能再写一次
+        -- settlement-clear（否则同一笔钱在流水里出现两次）。
+        local cleared = nonNegative(result.balance_cleared) - distributed
+        if cleared < 0 then cleared = 0 end
         local applied, treasuryErr = Treasury.ApplySettlement(orgId, {
             prestigeAfter = nonNegative(result.prestige_after),
             cycleNo = cycleNoForLedger,
-            clearedBalance = nonNegative(result.balance_cleared),
+            clearedBalance = cleared,
             ref = ref,
         })
         if not applied then return false, treasuryErr or 'db_error' end
@@ -330,6 +534,10 @@ local function settleOrg(orgId, periodNo, opts)
         revenue = nonNegative(result.revenue),
         produced_units = nonNegative(result.produced_units),
         starter_granted = starterGranted,
+        distributed = distributed,
+        distribute_paid = distribution and nonNegative(distribution.paid) or 0,
+        distribute_failed = distribution and nonNegative(distribution.failed) or 0,
+        distribute_result = distribution and distribution.result or nil,
     }
 end
 
@@ -531,6 +739,9 @@ function IndustrySettlement.SettleQuarterLocked(period, opts)
             demand_deleted = 0,
             prestige_awarded = 0,
             starter_granted = 0,
+            distributed = 0,
+            distribute_paid = 0,
+            distribute_failed = 0,
             revenue = 0,
         }
         return true, nil, summary
@@ -552,6 +763,9 @@ function IndustrySettlement.SettleQuarterLocked(period, opts)
         demand_deleted = 0,
         prestige_awarded = 0,
         starter_granted = 0,
+        distributed = 0,
+        distribute_paid = 0,
+        distribute_failed = 0,
         revenue = 0,
     }
     local firstErr
@@ -571,6 +785,9 @@ function IndustrySettlement.SettleQuarterLocked(period, opts)
             addCount(summary, 'sales_deleted', info and info.sales_deleted)
             addCount(summary, 'prestige_awarded', info and info.prestige_awarded)
             addCount(summary, 'starter_granted', info and info.starter_granted)
+            addCount(summary, 'distributed', info and info.distributed)
+            addCount(summary, 'distribute_paid', info and info.distribute_paid)
+            addCount(summary, 'distribute_failed', info and info.distribute_failed)
             addCount(summary, 'revenue', info and info.revenue)
         end
     end
@@ -620,12 +837,12 @@ function IndustrySettlement.SettleQuarterLocked(period, opts)
             IndustryAudit.Write('*', nil, 'cycle.settle', ('{"quarter_no":%d,"trigger":"%s",'
                 .. '"orgs":%d,"settled":%d,"skipped":%d,"facility_deleted":%d,'
                 .. '"sales_deleted":%d,"demand_deleted":%d,"prestige_awarded":%d,'
-                .. '"starter_granted":%d}'):format(
+                .. '"starter_granted":%d,"distributed":%d}'):format(
                 period, trigger,
                 summary.orgs, summary.settled, summary.skipped,
                 summary.facility_deleted, summary.sales_deleted,
                 summary.demand_deleted, summary.prestige_awarded,
-                summary.starter_granted))
+                summary.starter_granted, summary.distributed))
         end
     end
 
@@ -635,10 +852,11 @@ function IndustrySettlement.SettleQuarterLocked(period, opts)
     end
 
     print(('[custom-industry] settlement done %s=%d orgs=%d settled=%d skipped=%d '
-        .. 'facility=%d sales=%d demand=%d prestige=+%d starter=%d'):format(
+        .. 'facility=%d sales=%d demand=%d prestige=+%d starter=%d distributed=%d'):format(
         periodLabel(legacy), period, summary.orgs, summary.settled, summary.skipped,
         summary.facility_deleted, summary.sales_deleted,
-        summary.demand_deleted, summary.prestige_awarded, summary.starter_granted))
+        summary.demand_deleted, summary.prestige_awarded, summary.starter_granted,
+        summary.distributed))
     return true, nil, summary
 end
 
