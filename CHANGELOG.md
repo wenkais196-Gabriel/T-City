@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **产业仿真器 MVP：驱动真实 Lua + 指标基线（`tools/dev/industry_sim`，#412）**：
+  `run_sim.py` 复用 `tests/unit/layer3_business/industry_harness.py` 的假 DB 装配链，
+  加载真实 `production / sale / settlement / cycle / commands` 跑 N 周，**不复制任何
+  业务公式**。策略只暴露一个 `decide(ctx) -> {build, sell, upgrade_stock}`，四种参数
+  预设：`idle`（什么都不做）/ `steady`（保持工位、能卖就卖）/ `max`（有钱就建工位）/
+  `hoard`（只在价格 ≥1.2 倍时卖，钱优先升库存）。输出 JSONL：每周一行
+  `week/quarter/season/workstations/stock/stock_cap/quota_used/revenue/treasury/
+  prestige/withdrawals/tax_burned` + 末尾 summary 行；时间从固定周一零点按 3600 秒
+  注入，同参数两次跑逐字节一致。`--baseline` 读
+  `T-CityLite.base/tests/architecture/industry_sim_baseline.json`，季度收入 / 工位数 /
+  库存等级偏离 ±10% 时打印差异并以退出码 2 失败；`--sale-price 60`（服务端 convar
+  50→60）会让基线报 +20% 偏离，证明价格确实来自服务端配置。
+  `sim_seasons.py` 保留为 Python 复刻的形状参考，验收以跑真实 Lua 的 runner 为准。
+
 - **产业提现周额度 + 20% 税 + 季度按比例分配（`custom-industry`，#410）**：
   `/orgfundwithdraw` 从「直接全额进个人银行」改为 **自然周（周一 00:00 起）$25,000 额度 +
   20% 税**；超额整笔拒绝并返回 `weekly_quota_exceeded`，不静默截断。已提现额度从

@@ -1,0 +1,11 @@
+{
+  "_comment": "P4 #412 产业仿真基线。生成方式：python tools/dev/industry_sim/run_sim.py --weeks 13 --policy steady --out <tmp>.jsonl --write-baseline T-CityLite.base/tests/architecture/industry_sim_baseline.json。口径：驱动真实 Lua（production/sale/settlement/cycle），单组织 mining_co，初始金库 200000（Treasury.Deposit），每周顶格提现 WeeklyWithdrawQuota，第 13 周末调用 SettleQuarter(1) 后 Tick 跨入下一季度。metrics 为季度结算口径：quarter_revenue = industry_cycle_results.revenue（本季卖单流水合计）；workstations / stock_level 是结算**前**的设施行快照。仿真为了防漂移而不做在线成员分配（GetQBPlayers 返回空）。",
+  "policy": "steady",
+  "weeks": 13,
+  "sale_price": 50,
+  "metrics": {
+    "quarter_revenue": 401760,
+    "workstations": 1,
+    "stock_level": 0
+  }
+}
