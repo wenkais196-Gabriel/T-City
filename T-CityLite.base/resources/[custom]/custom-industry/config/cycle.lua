@@ -88,4 +88,43 @@ Config.Industry.Cycle = {
 
     -- 单次结算最多处理多少组织（查询带 LIMIT；MVP 只有 2 个组织）。
     MaxOrgsPerSettle = integerConvar('industry_settle_org_limit', 500, 1),
+
+    -- ── P1 两时钟（#409）：周 = 四季，13 周 = 季度 ──────────────────────
+    -- 内层「季节」仍然是四个倍率槽，只是长度不再固定：每周 7 天按下面的 7 组
+    -- 分配轮转（确定性，做数值监控必须可复现）。外层「季度」= 13 周 × 4 季。
+    -- 季节倍率与旧 Phases 分开存：旧 phase 状态机（没有 season 时间戳的库）
+    -- 继续读 Phases，两时钟状态读 Seasons —— 迁移日不需要一次性改历史行为。
+    --
+    -- 冬天 = 黑五：产不出 / 卖得掉 / 价格高（2026-11-28 定值，见 10-plan §2）。
+    -- 顺序即推进顺序，和 SeasonOrder 一一对应。
+    SeasonOrder = { 'spring', 'summer', 'autumn', 'winter' },
+    SeasonDays = {
+        { 2, 3, 1, 1 }, { 1, 1, 3, 2 }, { 2, 2, 2, 1 }, { 1, 2, 2, 2 },
+        { 3, 1, 1, 2 }, { 1, 3, 1, 2 }, { 2, 1, 2, 2 },
+    },
+    Seasons = {
+        spring = {
+            label = '春', production = 1.25, price = 1.00, quota = 1.00, purchasable = true,
+        },
+        summer = {
+            label = '夏', production = 1.00, price = 0.95, quota = 0.85, purchasable = true,
+        },
+        autumn = {
+            label = '秋', production = 1.10, price = 1.10, quota = 0.70, purchasable = true,
+        },
+        winter = {
+            label = '冬', production = 0.25, price = 1.50, quota = 1.30, purchasable = false,
+        },
+    },
+    SeasonsPerWeek = 4,
+    -- 季度 = 13 周（≈91 设计天）。改这个值等于改所有已写库的季度边界，
+    -- 只在开新季度时生效；验收压缩不需要改它。
+    WeeksPerQuarter = integerConvar('industry_weeks_per_quarter', 13, 1),
+    -- 每季秒数覆盖（0 = 用 SeasonDays × Scale 推导）。验收旋钮：
+    -- set industry_season_seconds 1 → 52 秒跑完一个季度。
+    SeasonSecondsOverride = integerConvar('industry_season_seconds', 0, 0),
+    -- 季度软重置后的起跑金：base + prestige × stipend（demo 口径）。
+    -- 这是新货币点，写进审计与流水；prestige 用结算后的绝对值。
+    QuarterStarterGrant = integerConvar('industry_quarter_starter', 200000, 0),
+    QuarterPrestigeStipend = integerConvar('industry_quarter_stipend', 10000, 0),
 }

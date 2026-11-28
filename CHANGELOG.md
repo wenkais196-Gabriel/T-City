@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **产业两时钟：周 = 四季 / 13 周 = 季度（`custom-industry`，#409）**：
+  单时钟 `SettleCycle` 一次清空设施/金库 → 第二个周期所有组织收入恒为 0。现在拆成
+  `RollSeason`（季节倍率 + 本季配额，**不动**设施/工位/库存/金库）与 `SettleQuarter`
+  （13 周软重置 + 威望 + 起跑金）。`industry_state` 增加
+  `quarter_no / season / season_no / season_*_at / quarter_*_at`（时间戳 NULL 是
+  迁移哨兵：旧 phase 边界由 `Initialize` 原样接上，不重算）；`industry_demand` 主键
+  加 `season`；`industry_cycle_results` 幂等键换成 `(org_id, quarter_no)`，旧
+  `cycle_no` 列保留。季节天数按 7 组分配确定性轮转，冬天 = 黑五（产 0.25 / 配额 1.30 /
+  价 1.50）；`industry_sales.season` 由 `IndustryCycle.Current()` 返回真实序号。
+  公告分两级：换季只推手机轻提示，季度结算才发 CityFeed + 推送（无新增 net event）。
+  `T-CityLite.base/migrations/v4.5_industry_quarter.sql` 在活库连跑两遍幂等。
+  测试钉住「13 周 52 季 → quarter_no +1 / 季节滚动设施逐值不变 / 季度才清空并发
+  起跑金 / 重启不跳季不重复结算」，反向注入「季节到期就重置设施」会让断言变红。
+
 ### Fixed
 - **产业配额被按「全周期累计」计算，跨阶段卖单一律 `org_cap_reached`（`custom-industry`，#408）**：
   设计口径是**每阶段**单组织上限 = 当阶段 `quota_total × 50%`，但 `readOrgUsed` 只按

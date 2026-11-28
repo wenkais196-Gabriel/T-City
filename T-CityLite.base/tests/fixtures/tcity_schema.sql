@@ -1205,10 +1205,11 @@ CREATE TABLE IF NOT EXISTS `industry_facility` (
 CREATE TABLE IF NOT EXISTS `industry_demand` (
   `cycle_no` int(11) NOT NULL DEFAULT 0,
   `phase` varchar(24) NOT NULL DEFAULT 'static',
+  `season` int(11) NOT NULL DEFAULT 0,
   `item_name` varchar(64) NOT NULL,
   `quota_total` int(11) NOT NULL DEFAULT 0,
   `quota_used` int(11) NOT NULL DEFAULT 0,
-  PRIMARY KEY (`cycle_no`,`phase`,`item_name`)
+  PRIMARY KEY (`cycle_no`,`phase`,`season`,`item_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `industry_sales` (
@@ -1237,6 +1238,13 @@ CREATE TABLE IF NOT EXISTS `industry_state` (
   `id` tinyint(4) NOT NULL,
   `cycle_no` int(11) NOT NULL DEFAULT 0,
   `phase` varchar(24) NOT NULL DEFAULT 'uninitialized',
+  `quarter_no` int(11) NOT NULL DEFAULT 1,
+  `season` varchar(16) NOT NULL DEFAULT 'spring',
+  `season_no` int(11) NOT NULL DEFAULT 1,
+  `season_started_at` datetime DEFAULT NULL,
+  `season_ends_at` datetime DEFAULT NULL,
+  `quarter_started_at` datetime DEFAULT NULL,
+  `quarter_ends_at` datetime DEFAULT NULL,
   `phase_started_at` datetime NOT NULL DEFAULT '1970-01-02 00:00:00',
   `phase_ends_at` datetime NOT NULL DEFAULT '1970-01-02 00:00:00',
   `warning_announced_at` datetime DEFAULT NULL,
@@ -1250,6 +1258,7 @@ CREATE TABLE IF NOT EXISTS `industry_state` (
 CREATE TABLE IF NOT EXISTS `industry_cycle_results` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `org_id` varchar(64) NOT NULL,
+  `quarter_no` int(11) DEFAULT NULL,
   `cycle_no` int(11) NOT NULL,
   `revenue` bigint(20) NOT NULL DEFAULT 0,
   `produced_units` bigint(20) NOT NULL DEFAULT 0,
@@ -1262,7 +1271,7 @@ CREATE TABLE IF NOT EXISTS `industry_cycle_results` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `applied_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_org_cycle` (`org_id`,`cycle_no`),
+  UNIQUE KEY `uniq_org_quarter` (`org_id`,`quarter_no`),
   KEY `idx_cycle` (`cycle_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
