@@ -536,6 +536,72 @@ def server_script_files() -> list[Path]:
     return files
 
 
+# ── P4 #412：产业仿真器的装配链（只新增，不改变既有 helper 的行为）─────────
+#: 仿真需要「周期 + 结算 + 生产 + 销售 + 提现命令」同时在场。
+#: 提现额度/税在 commands.lua，不在 FULL_MODULES 的 commands_cycle 里；
+#: 其余模块顺序与 fxmanifest 一致。
+SIM_MODULES = tuple(path for path in FULL_MODULES if path != COMMANDS_CYCLE_SRC) + (
+    COMMANDS_SRC,
+)
+
+
+def _lua_chunk(source: str, name: str) -> str:
+    """把一段 Lua 源码包成独立 chunk 执行（每个 chunk 有自己的 200 local 上限）。
+
+    仿真装配链 = 探针 + 扩展 + db.lua + 全部 server 模块，直接拼成一个主 chunk 会
+    撞 Lua 的「too many local variables (limit is 200)」；`load(...)()` 让每个文件
+    保持独立作用域，跨文件依赖仍然只走全局（与 fxmanifest 一致）。
+    """
+    level = 0
+    while f"]{'=' * level}]" in source:
+        level += 1
+    opener = f"[{'=' * level}["
+    closer = f"]{'=' * level}]"
+    safe_name = name.replace("\\", "/").replace("'", "")
+    return f"assert(load({opener}{source}{closer}, '@{safe_name}'))()"
+
+
+def sim_script(
+    body: str,
+    *,
+    convars: dict[str, str] | None = None,
+    glue: str = "",
+) -> str:
+    """拼出「假 DB 探针 → 仿真扩展 → db.lua → convar → 模块链 → driver body」。
+
+    `glue` 是仿真器私有的假 DB 扩展（两时钟 `industry_state` / 设施 rich 读 /
+    提现周额度流水 / 季度 DELETE）。它必须排在探针之后、模块之前；业务公式
+    仍然只来自 `server/*.lua`，这里只补探针没有的 SQL 形状。
+    """
+    sources: list[tuple[str, str]] = [
+        (PROBE_COMMON.read_text(encoding="utf-8"), PROBE_COMMON.name),
+        (CYCLE_PROBE.read_text(encoding="utf-8"), CYCLE_PROBE.name),
+    ]
+    if glue:
+        sources.append((glue, "industry_sim_glue.lua"))
+    sources.append((DB_ADAPTER.read_text(encoding="utf-8"), DB_ADAPTER.name))
+    if convars is not None:
+        sources.append((f"__convars = {lua_table(convars)}\n", "industry_sim_convars.lua"))
+    sources.extend((path.read_text(encoding="utf-8"), path.name) for path in SIM_MODULES)
+    sources.append((textwrap.dedent(body), "industry_sim_driver.lua"))
+    return "\n".join(_lua_chunk(source, name) for source, name in sources)
+
+
+def run_sim_script(
+    body: str,
+    *,
+    convars: dict[str, str] | None = None,
+    glue: str = "",
+) -> str:
+    """跑一段仿真 driver，返回**原始 stdout**（`WEEK|...` / `SUMMARY|...` 行）。"""
+    script = sim_script(body, convars=convars, glue=glue)
+    proc = subprocess.run(
+        [lua(), "-"], input=script, capture_output=True, text=True, timeout=180
+    )
+    assert proc.returncode == 0, f"Lua 仿真失败:\n{proc.stderr}\n{proc.stdout[-4000:]}"
+    return proc.stdout
+
+
 def run_wiring(
     debug: bool = False,
     *,
