@@ -6,10 +6,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import sim_v4 as S
+import sim_seasons as S
 
 HERE = Path(__file__).parent
-OUT = HERE / "report_v4.html"
+OUT = HERE / "report.html"
 
 
 def money(v):

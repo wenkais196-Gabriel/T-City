@@ -84,7 +84,7 @@ P2/P3 都是 P1 结算钩子上的行为；P4 必须在规则稳定后才有意�
 
 ## 5. P4 —— 仿真器 MVP（驱动真实 Lua + 指标基线）→ **#412**
 
-**前序核验**：P1–P3 已合并；`tools/dev/industry_sim/sim_v4.py` 仅作参考（它用 Python 复刻规则，会漂移）。
+**前序核验**：P1–P3 已合并；`tools/dev/industry_sim/sim_seasons.py` 仅作参考（它用 Python 复刻规则，会漂移）。
 
 | 项 | 内容 |
 |---|---|
