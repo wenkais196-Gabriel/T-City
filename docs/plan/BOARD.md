@@ -21,6 +21,7 @@
 | [计划：W1 — 手机端产业动作入口（#388）](industry-ops/08-plan.md) | active | 单片 | 1 | 0 | - | 2026-11-27 |
 | [计划：W2 — 周期公告推送（警告 + 结果，#389）](industry-ops/09-plan.md) | active | 单片 | 1 | 0 | - | 2026-11-27 |
 | [计划：产业两时钟（四季 × 季度结算）与参数定值](industry-ops/10-plan.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-28 |
+| [计划：产业两时钟落地施工（P0–P4）](industry-ops/11-plan.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-28 |
 | [热狗摊：开发计划（据 UX 规格 §10 拆片）](jobs-content/11-hotdog-dev-plan.md) | active | 7 | 6 | 0 | S6 wip | 2026-11-17 |
 | [热狗摊：剩余工作分片计划（2026-11-17 分工版）](jobs-content/13-hotdog-remaining-plan.md) | active | 10 | 5 | 0 | C 未开始 | - |
 | [方案 B 落地计划（已拍板）](../police/B_PLAN.md) | active | 单片 | 0 | 0 | 整体 wip | 2026-11-17 |
