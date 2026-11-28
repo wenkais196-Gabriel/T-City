@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **产业配额被按「全周期累计」计算，跨阶段卖单一律 `org_cap_reached`（`custom-industry`，#408）**：
+  设计口径是**每阶段**单组织上限 = 当阶段 `quota_total × 50%`，但 `readOrgUsed` 只按
+  `(org_id, cycle_no, item_name)` 求和，50% 的分母却是当前阶段的配额 —— 扩张期卖满 5,500 后，
+  竞争期上限 4,675 立刻被判已超，后三阶段全部锁死；同一 bug 还让 `readDemand` 的流水对账
+  把全周期流水回填进当前阶段（竞争期 `quota_used` 被写成 5,500）。
+  `T-CityLite.base/migrations/v4.3_industry_sales.sql` 给 `industry_sales` 补 `phase`（顺带
+  P1 预留的 `season`，历史行默认 `legacy`/0，information_schema 幂等补列）；卖单写入、
+  `readOrgUsed`、配额 CAS 子查询、`readDemand` 对账全部按当前 `(cycle_no, phase, season)` 求和。
+  跨阶段用例钉住「扩张卖 5,500 → 竞争仍可卖满 4,675 → 再卖 1 件 `org_cap_reached`」，
+  反向注入删掉 `readOrgUsed` 的 `phase` 条件会变红。
+
+### Fixed
 - **两条「下线/落盘」处理器把不同返回形状当成一种，抛错后整段中断（`custom-quest` / `custom-security`）**：
   ① `T-CityLite.base/resources/[custom]/custom-quest/server/quest_cache.lua` 的 `playerDropped` 里
   `QuestRental.CloseOnDrop` 可能返回 **boolean**，`rentRes.idempotent` 在 boolean 上索引会抛错
